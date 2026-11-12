@@ -755,7 +755,7 @@ def test_personal_prefs_are_grouped_and_include_events_where_i_was_picked(client
 # 審查 h8（2026-11-13）：H1 勞報單不可經泛用 module_activity 推到 LINE；外包名冊／承攬商往來紀錄 LINE 不放姓名
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_h1_payslip_module_activity_never_reaches_line_even_when_generic_event_is_on(env):
+def test_payslip_module_activity_never_reaches_line_even_when_generic_event_is_on(env):
     """hichan-8 的重現：最高管理者把 module_activity 勾起來，勞報單的建立／刪除／調閱／作廢不可以有任何一則 LINE（含受款人姓名）。"""
     from helpers import line_notify as L, email_notify as EN
     L.set_event("module_activity", True)
@@ -787,7 +787,7 @@ def _payroll_call_sites():
     return out
 
 
-def test_h1_every_payroll_module_activity_call_site_passes_line_skip():
+def test_every_payroll_module_activity_call_site_passes_line_skip():
     """掃描 modules/payroll 全部 notify_module_activity 呼叫點：一律帶 line_skip=True（日後新增的呼叫點忘了帶就會紅）。"""
     sites = _payroll_call_sites()
     assert sites, "掃不到任何呼叫點——掃描器壞了（勞報單頁面至少有 4 個）"

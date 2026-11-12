@@ -8,6 +8,8 @@ import os
 
 import pytest
 
+from core import source_tree
+
 from tests.test_line_events_all_2026_11_13 import _grant_crm, _hdr, _mk, _targets, env, login_ready  # noqa: F401  夾具與小工具共用
 
 _BASE = os.path.join(os.path.dirname(__file__), "..")
@@ -98,13 +100,13 @@ def test_m3_every_non_mail_event_has_who_text_and_settings_page_shows_it(client,
     assert "Email 通知的收件設定相同" in cat.follows_text("approval_review_edit")
     ev = {e["key"]: e for e in client.get("/api/settings/line-notify", headers=_hdr(client, "sa")).json()["events"]}
     assert ev["dev_case_unassigned"]["follows"].startswith("原本收件人：") and "前任負責人" in ev["dev_case_unassigned"]["follows"]
-    html = open(os.path.join(_BASE, "..", "frontend", "pages", "notification-settings.html"), encoding="utf-8").read()
+    html = source_tree.page_file("notification-settings.html").read_text(encoding="utf-8")
     assert 'x-text="e.follows"' in html and "沿用相近的 Email" not in html
 
 
 # ── L2／L3／L4／L7 ─────────────────────────────────────────────────────────────
 
-def test_l2_high_volume_events_have_a_15_percent_monthly_cap(env):
+def test_high_volume_events_have_a_15_percent_monthly_cap(env):
     from helpers import line_notify as L
     for k in ("module_activity", "crm_visit_logged", "crm_case_progress", "daily_task_assigned", "daily_task_completed",
               "daily_task_overdue", "daily_task_overdue_manager", "daily_task_edited"):
@@ -119,7 +121,7 @@ def _line_event_calls():
             yield n.args[0].value, n
 
 
-def test_l3_daily_task_line_has_fixed_text_only_no_free_text_title(env):
+def test_daily_task_line_has_fixed_text_only_no_free_text_title(env):
     seen = set()
     for ev, call in _line_event_calls():
         if not (ev.startswith("daily_task_") or ev == "range_task_deadline"):
@@ -136,7 +138,7 @@ def test_l3_daily_task_line_has_fixed_text_only_no_free_text_title(env):
     assert {"daily_task_assigned", "daily_task_completed", "daily_task_overdue", "daily_task_overdue_manager", "daily_task_edited"} <= seen
 
 
-def test_l4_scan_events_keyed_by_entity_not_date_and_dated_keys_never_parked(env):
+def test_scan_events_keyed_by_entity_not_date_and_dated_keys_never_parked(env):
     import helpers.email_notify as EN
     from helpers import line_notify as L
     from helpers.settings import _get_setting
@@ -152,13 +154,13 @@ def test_l4_scan_events_keyed_by_entity_not_date_and_dated_keys_never_parked(env
     assert not any(x.endswith("|2026-11-13") for x in pend), "每日告警（鑰匙以日期結尾）不進補發佇列"
 
 
-def test_l4_retry_and_daily_check_share_the_per_key_lock(env):
+def test_retry_and_daily_check_share_the_per_key_lock(env):
     from helpers import line_notify as L
     assert L._key_lock("approval_reminder|Q-9") is L._key_lock("approval_reminder|Q-9")
     assert "deliver_event(" in inspect.getsource(L.retry_pending), "補發走 deliver_event（內含 per-key 鎖）"
 
 
-def test_l7_prefs_view_reads_settings_once(env, monkeypatch):
+def test_prefs_view_reads_settings_once(env, monkeypatch):
     from helpers import line_notify as L, line_recipients as LR
     for k in L.WIRED_EVENTS:
         L.set_event(k, True)
@@ -231,7 +233,7 @@ def test_m2_vendor_file_delete_request_sends_one_line_per_action(env):
 
 # ── L6：沒有簽核層的附件刪除申請也要有專屬 LINE ─────────────────────────────────
 
-def test_l6_delete_request_without_tiers_goes_to_superadmins_with_dedicated_line(env):
+def test_delete_request_without_tiers_goes_to_superadmins_with_dedicated_line(env):
     from modules.subcontract.api import vendor_contractors as VC
     src = inspect.getsource(VC)
     assert "_line_delete_request(first_tier or _superadmin_usernames()" in src, "沒有簽核層時也要有專屬 LINE（發給最高管理者）"
@@ -241,7 +243,7 @@ def test_l6_delete_request_without_tiers_goes_to_superadmins_with_dedicated_line
 
 # ── L5：提醒綁定 ───────────────────────────────────────────────────────────────
 
-def test_l5_remind_marks_each_person_as_sent_so_a_midway_failure_does_not_resend(env, login_ready, monkeypatch):
+def test_remind_marks_each_person_as_sent_so_a_midway_failure_does_not_resend(env, login_ready, monkeypatch):
     from helpers import line_binding as LB
     for n in ("zed", "yan", "xia"):
         _mk(env["make_user"], n, "engineer", line=False)
@@ -263,6 +265,6 @@ def test_l5_remind_marks_each_person_as_sent_so_a_midway_failure_does_not_resend
     assert "yan" in sent, "失敗的那位下次補發"
 
 
-def test_l5_remind_runs_one_at_a_time(env, login_ready):
+def test_remind_runs_one_at_a_time(env, login_ready):
     from helpers import line_binding as LB
     assert hasattr(LB, "_remind_lock") and "with _remind_lock" in inspect.getsource(LB.remind)

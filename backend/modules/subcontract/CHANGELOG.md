@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`api/vendor_contractors.py` 承攬商報價單附件刪除申請接上 LINE 獨立通道（僅 LINE 事件 `dispatch_file_delete_request`；申請送出與輪到下一層時各整批發一則，沒有簽核層時由最高管理者收；不放檔名與原因），泛用的 module_activity 對這件事加 `line_skip` 不重複推；`dispatch_notify.py` 信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`。
+
 ## 1.1.44（next，未取號）— 2026-11-13（fix/mobile-cases-layout-v2；手機／平板 UI：頂欄頭像個人選單、手機主選單抽屜）
 - 前端：`pages/contractor-voucher-approval-settings.html` （「此設定已搬移」頁）載入 Alpine，頂欄通知鈴才會正確顯示／隱藏（少了它手機頂欄被撐寬）；其餘為全站頂欄／主選單樣式（核心）。不動 API／資料／權限判斷。
 - 測試：`tests/test_e2e_mobile_nav_cases_2026_11_13.py`（真瀏覽器：頂欄矩陣 375／390／430 × 三種字級 × 深淺色、頭像個人選單 a11y、手機主選單抽屜、徽章形狀）。

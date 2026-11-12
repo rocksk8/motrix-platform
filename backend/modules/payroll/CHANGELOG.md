@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`api/payslips.py` 勞報單的模組動態通知（送出／核准／退回／作廢）加 `line_skip=True`——薪資與勞報屬敏感資料，模組動態永不發 LINE。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`（勞報單／獎金／薪資的模組動態不發 LINE）。
+
 ## 1.2.26（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `payslips.html`：手機與直立平板（768–1023px）改為卡片列，操作欄不再被推出右緣；月份篩選框滿寬。
 - `payslip-form.html`、`bonus.html`、`bonus-corrections.html`、`bank-account.html`：手機版面——輸入框 16px／44px 高、列可換行、清單高度依字級縮放換算；`bank-account.html` 銀行代碼欄補數字鍵盤提示（`inputmode`）；`payslip-form.html` 的 `.page-wrap` 上方留白不再把頂欄高度加兩次（**全寬度都生效，桌機上方空白會比以前少一個頂欄高**）。
