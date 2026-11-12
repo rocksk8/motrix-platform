@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 935,
-  "endpoints_api": 931,
-  "write_total": 504,
-  "write_api": 504,
-  "get_api": 427,
-  "distinct_paths_api": 789,
+  "endpoints_total": 937,
+  "endpoints_api": 933,
+  "write_total": 505,
+  "write_api": 505,
+  "get_api": 428,
+  "distinct_paths_api": 791,
   "write_with_body_api": 370,
   "write_with_path_param_api": 360
  },
@@ -4692,6 +4692,16 @@
    "w": true,
    "pp": 1,
    "body": true
+  },
+  "GET /api/license/overview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/license/import": {
+   "w": true,
+   "pp": 0,
+   "body": false
   }
  }
 }

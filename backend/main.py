@@ -305,6 +305,8 @@ _COMPANY_SETUP_ALLOWED = {
     ("PATCH", "/api/auth/change-password"): "帳號本身必要：改密碼（同「必須先改密碼」白名單；首次登入要先改密碼）",
     ("GET", "/api/ping"): "健康檢查：部署工具與前端判斷服務是否在線（不含任何資料）",
     ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
+    ("GET", "/api/license/overview"): "授權頁讀取目前授權概況（licensing.LICENSE_EXEMPT_PATHS；限最高管理者且非示範帳號，端點自己驗權限）",
+    ("POST", "/api/license/import"): "授權頁預覽與匯入新授權檔（licensing.LICENSE_EXEMPT_PATHS；限最高管理者，有大小上限、頻率限制與稽核，端點自己驗權限）",
     ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理者才看得到完整內容，端點自己驗權限）",
     ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理者，端點自己驗權限）",
     ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理者，端點自己驗權限）",
@@ -673,6 +675,8 @@ async def license_gate_middleware(request: Request, call_next):
     # （公開端點的回應沒有標頭，不可以讓橫幅閃掉）。
     if getattr(request.state, "authed", False):
         response.headers[license_core.LICENSE_HEADER] = license_core.license_banner(status, emergency) or "none"
+        # 到期提醒（T83）：獨立的第二個標頭，與上面的橫幅互不影響；同樣「已登入的回應一定帶：有提醒＝值、沒有＝none」。
+        response.headers[license_core.EXPIRY_HEADER] = license_core.expiry_banner(status) or "none"
     return response
 
 

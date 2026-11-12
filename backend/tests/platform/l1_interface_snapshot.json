@@ -1,5 +1,5 @@
 {
- "core_version": "1.162",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1132,8 +1132,25 @@
   "helper:license_alerts": {
    "dev_key_in_use": "def(status, background=…)",
    "emergency_in_use": "def(info, background=…)",
+   "expiry_notice": "def(rem, status)",
    "flush": "def(timeout=…)",
    "startup_check": "def()"
+  },
+  "helper:license_manager": {
+   "BACKUP_DIR_NAME": "const",
+   "BACKUP_KEEP": "const",
+   "MAX_UPLOAD_BYTES": "const",
+   "RATE_MAX": "const",
+   "RATE_WINDOW_S": "const",
+   "REJECT_MESSAGES": "const",
+   "backup_dir": "def()",
+   "describe_current": "def(machine_fn)",
+   "modules_view": "def(mods)",
+   "normalize_upload": "def(raw)",
+   "rate_allow": "def(now=…)",
+   "recent_activity": "def(conn, limit=…)",
+   "reset_for_tests": "def()",
+   "run_import": "def(raw, *, apply, confirm, machine_fn)"
   },
   "helper:licensing": {
    "EMERGENCY_COVERS": "const",
@@ -1141,6 +1158,8 @@
    "EMERGENCY_MAX_BYTES": "const",
    "EMERGENCY_MAX_DAYS": "const",
    "EMERGENCY_PURPOSE": "const",
+   "EXPIRY_HEADER": "const",
+   "EXPIRY_THRESHOLDS": "const",
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
    "LICENSE_HEADER": "const",
@@ -1152,6 +1171,8 @@
    "emergency_pass": "def(status)",
    "emergency_path": "def()",
    "emergency_status": "def(status)",
+   "expiry_banner": "def(status)",
+   "expiry_reminder": "def(status)",
    "license_banner": "def(status, emergency)",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",

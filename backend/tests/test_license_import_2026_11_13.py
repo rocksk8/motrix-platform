@@ -1,0 +1,765 @@
+# -*- coding: utf-8 -*-
+"""授權匯入（T83）：授權頁的檢視／匯入端點、到期提醒、402 說明頁連結。
+
+這份檔案守的是 helpers/license_manager.py 的 [不變式]（① 驗章不重寫 ② 只換驗過 ok 的、換後複驗失敗就還原 ③ 先備份、原子寫入
+④ 驗的與存的是同一個字串 ⑤ 大小上限 ⑥ 頻率限制 ⑦ 有差異要確認 ⑧ 一次只有一個匯入 ⑨ 白話）與路由層的權限（最高管理者、非示範帳號）。
+
+每題都走**真的簽章路徑**（真的 `sign_license`／`verify_license`，只換公鑰、機器指紋與授權檔路徑，見 conftest `license_test_key`）；
+**每題都把 `LICENSE_PATH` 換到自己的暫存目錄**——conftest 的 session 金鑰檔是所有測試共用的，匯入會真的覆蓋檔案。
+"""
+import base64
+import datetime as _dt
+import json
+import os
+
+import pytest
+
+from conftest import TEST_LICENSE_MACHINE
+from helpers import license_manager as mgr
+from helpers import licensing as lic
+
+_MAKE_USER_DEFAULT_ROLE = "superadmin"
+BUSINESS_API = "/api/customers"
+TODAY = _dt.date.today()
+
+
+def _in(days):
+    return (TODAY + _dt.timedelta(days=days)).isoformat()
+
+
+# ── 固件 ─────────────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _isolated(monkeypatch, tmp_path):
+    """授權檔指到暫存目錄、重置頻率限制、封死外部指令（本檔不碰硬體）。"""
+    def _boom(*a, **kw):
+        pytest.fail("授權匯入測試不該跑外部指令：%r" % (a,))
+    monkeypatch.setattr(lic, "_run", _boom)
+    d = tmp_path / "lic"
+    d.mkdir()
+    monkeypatch.setattr(lic, "LICENSE_PATH", str(d / "license.key"))
+    lic._LICENSE_FILE_CACHE = None
+    lic._EMERGENCY_CACHE = None
+    mgr.reset_for_tests()
+    yield
+    mgr.reset_for_tests()
+    lic._LICENSE_FILE_CACHE = None
+
+
+@pytest.fixture()
+def sign(license_test_key):
+    def _sign(priv_pem=None, **overrides):
+        payload = {"customer": "測試用公司", "tax_id": "00000000", "machine": TEST_LICENSE_MACHINE, "modules": ["*"],
+                   "issued": "2026-01-01", "expires": _in(365), "kind": lic.LICENSE_KIND_SUBSCRIPTION}
+        payload.update(overrides)
+        return lic.sign_license(payload, priv_pem or license_test_key["priv_pem"])
+    return _sign
+
+
+@pytest.fixture()
+def put_current(sign):
+    """把一段文字當成目前的 license.key（None＝沒有）。"""
+    def _put(blob):
+        path = lic.LICENSE_PATH
+        if blob is None:
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(blob + "\n")
+            st = os.stat(path)
+            os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+        lic._LICENSE_FILE_CACHE = None
+        return path
+    return _put
+
+
+@pytest.fixture()
+def hdr(client, make_user):
+    username, password = make_user(role="superadmin")
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _post(client, hdr, content, **kw):
+    body = {"content": content}
+    body.update(kw)
+    return client.post("/api/license/import", headers=hdr, json=body)
+
+
+def _current_text():
+    with open(lic.LICENSE_PATH, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _backups():
+    d = mgr.backup_dir()
+    return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+
+def _other_key():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    return ed25519.Ed25519PrivateKey.generate().private_bytes(
+        encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption())
+
+
+def _audit_rows(*actions):
+    import db
+    conn = db.get_db()
+    try:
+        ph = ",".join("?" * len(actions))
+        return [dict(r) for r in conn.execute(
+            "SELECT action, detail, username FROM audit_log WHERE action IN (%s) ORDER BY id" % ph, actions).fetchall()]
+    finally:
+        conn.close()
+
+
+# ── 權限 ─────────────────────────────────────────────────────────────────────
+
+def test_endpoints_require_login(client):
+    assert client.get("/api/license/overview").status_code == 401
+    assert client.post("/api/license/import", json={"content": "x"}).status_code == 401
+
+
+@pytest.mark.parametrize("role", ["admin", "sales", "engineer", "viewer"])
+def test_only_superadmin_may_view_or_import(client, make_user, put_current, sign, role):
+    put_current(sign())
+    username, password = make_user(username="u_" + role, role=role)
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    h = {"Authorization": "Bearer " + r.json()["token"]}
+    assert client.get("/api/license/overview", headers=h).status_code == 403
+    before = _current_text()
+    assert _post(client, h, sign(customer="別人想換的")).status_code == 403
+    assert _current_text() == before and _backups() == []
+
+
+def test_demo_account_cannot_touch_the_license(client, put_current, sign):
+    """示範帳號 role＝superadmin、操作的是隔離庫，但授權檔是整台機器共用的 ⇒ 一律擋。"""
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    conn.execute("UPDATE users SET password_hash = ? WHERE username = 'demo'", (_hash_pw("60575481"),))
+    conn.commit()
+    conn.close()
+    r = client.post("/api/auth/login", json={"username": "demo", "password": "60575481"})
+    assert r.status_code == 200, r.text
+    h = {"Authorization": "Bearer " + r.json()["token"]}
+    assert h["Authorization"].startswith("Bearer DEMO_")
+    put_current(sign())
+    before = _current_text()
+    assert client.get("/api/license/overview", headers=h).status_code == 403
+    r = _post(client, h, sign(customer="示範帳號想換"), apply=True, confirm=True)
+    assert r.status_code == 403
+    assert _current_text() == before and _backups() == []
+
+
+# ── 授權壞掉時也要能用（豁免）→ 匯入新授權 → 系統恢復 ──────────────────────────────
+
+def test_rescue_flow_from_missing_license(client, hdr, put_current, sign):
+    """核心情境：這台機器沒有授權，業務 API 全 402；最高管理者在授權頁匯入後，同一個 session 立刻恢復（不需要重啟）。"""
+    put_current(sign())
+    assert client.get(BUSINESS_API, headers=hdr).status_code == 200      # 登入要在有授權時
+    put_current(None)
+    assert client.get(BUSINESS_API, headers=hdr).status_code == 402      # 正對照：擋的是授權
+    ov = client.get("/api/license/overview", headers=hdr)
+    assert ov.status_code == 200, ov.text
+    assert ov.json()["state"] == "missing" and ov.json()["level"] == "bad"
+    r = _post(client, hdr, sign(customer="新客戶股份有限公司"), apply=True)
+    assert r.status_code == 200 and r.json()["applied"] is True, r.text
+    assert client.get(BUSINESS_API, headers=hdr).status_code == 200
+    ov = client.get("/api/license/overview", headers=hdr).json()
+    assert ov["state"] == "ok" and ov["license"]["customer"] == "新客戶股份有限公司" and ov["level"] == "ok"
+    assert _backups() == []                                                # 原本沒有檔，沒東西可備份
+
+
+@pytest.mark.parametrize("why", ["expired", "machine_mismatch", "bad_signature"])
+def test_rescue_flow_from_each_blocked_state(client, hdr, put_current, sign, why):
+    put_current(sign())
+    tok = hdr
+    if why == "expired":
+        put_current(sign(expires=_in(-3)))
+    elif why == "machine_mismatch":
+        put_current(sign(machine="ffffffffffffffff"))
+    else:
+        put_current(sign(_other_key()))
+    assert client.get(BUSINESS_API, headers=tok).status_code == 402
+    ov = client.get("/api/license/overview", headers=tok).json()
+    assert ov["level"] == "bad" and ov["headline"]
+    r = _post(client, tok, sign(customer="修好了"), apply=True, confirm=True)
+    assert r.status_code == 200 and r.json()["applied"] is True, r.text
+    assert client.get(BUSINESS_API, headers=tok).status_code == 200
+    assert len(_backups()) == 1                                            # 舊的壞檔也備份了（要能還原）
+
+
+# ── 預覽與匯入 ───────────────────────────────────────────────────────────────
+
+def test_preview_writes_nothing(client, hdr, put_current, sign):
+    put_current(sign())
+    before = _current_text()
+    r = _post(client, hdr, sign(customer="預覽用"))
+    assert r.status_code == 200 and r.json()["reason"] == "preview" and r.json()["applied"] is False, r.text
+    assert r.json()["license"]["customer"] == "預覽用"
+    assert _current_text() == before and _backups() == []
+    assert _audit_rows("license.import") == []
+
+
+def test_apply_backs_up_old_file_and_replaces_atomically(client, hdr, put_current, sign):
+    old = sign(customer="舊客戶")
+    put_current(old)
+    new = sign(customer="舊客戶", expires=_in(700))
+    r = _post(client, hdr, new, apply=True)
+    assert r.status_code == 200 and r.json()["applied"] is True, r.text
+    assert r.json()["backup"] and r.json()["backup"] in _backups()
+    assert _current_text().strip() == new
+    with open(os.path.join(mgr.backup_dir(), r.json()["backup"]), "r", encoding="utf-8") as fh:
+        assert fh.read().strip() == old                                    # 備份＝換掉之前的內容
+    assert not os.path.exists(lic.LICENSE_PATH + ".import-tmp")
+    assert lic.verify_license()["expires"] == _in(700)                     # 快取已更新，馬上讀得到新到期日
+
+
+def test_backups_are_pruned_to_the_newest_n(client, hdr, put_current, sign, monkeypatch):
+    monkeypatch.setattr(mgr, "BACKUP_KEEP", 3)
+    put_current(sign(customer="C0", expires=_in(100)))
+    for i in range(1, 7):
+        r = _post(client, hdr, sign(customer="C0", expires=_in(100 + i)), apply=True, confirm=True)
+        assert r.status_code == 200, r.text
+        mgr.reset_for_tests()
+    assert len(_backups()) == 3
+
+
+def test_upload_is_normalised_and_what_is_stored_is_what_was_verified(client, hdr, put_current, sign):
+    """BOM、折行、前後空白都收；存下去的是單行、只含 base64 字元的那一串。"""
+    put_current(None)
+    blob = sign(customer="折行")
+    wrapped = "﻿  " + "\r\n".join(blob[i:i + 40] for i in range(0, len(blob), 40)) + "  \r\n\r\n"
+    r = _post(client, hdr, wrapped, apply=True)
+    assert r.status_code == 200, r.text
+    assert _current_text() == blob + "\n"
+    assert lic.verify_license()["reason"] == "ok"
+
+
+@pytest.mark.parametrize("junk", ["本文夾雜中文" , "abc def!!!", "{\"customer\": \"x\"}", "AAAA\x00BBBB"])
+def test_non_base64_characters_are_rejected_not_silently_dropped(client, hdr, put_current, sign, junk):
+    """`base64.b64decode` 預設會悄悄丟掉非字母表字元；若不先擋，「驗過的」與「存下去的」可能不是同一份。"""
+    put_current(sign())
+    before = _current_text()
+    blob = sign(customer="夾雜")
+    r = _post(client, hdr, blob[:20] + junk + blob[20:], apply=True)
+    assert r.status_code == 400 and r.json()["reason"] == "malformed", r.text
+    assert _current_text() == before and _backups() == []
+
+
+# ── 拒絕（每一種都白話、都不動檔案、都有稽核）────────────────────────────────────
+
+REJECTS = {
+    "bad_signature":    (lambda sign: sign(_other_key()), 400, "沒有通過驗證"),
+    "machine_mismatch": (lambda sign: sign(machine="0123456789abcdef"), 400, "給另一台電腦"),
+    "expired":          (lambda sign: sign(expires=_in(-1)), 400, "已經過期"),
+    "malformed":        (lambda sign: base64.b64encode(b'{"hello":"world"}').decode(), 400, "不是有效的授權檔"),
+    "empty":            (lambda sign: "  \n ", 400, "沒有收到授權內容"),
+}
+
+
+@pytest.mark.parametrize("reason", sorted(REJECTS))
+def test_rejects_with_plain_reason_and_leaves_everything_alone(client, hdr, put_current, sign, reason):
+    put_current(sign())
+    before = _current_text()
+    make, status, phrase = REJECTS[reason]
+    for apply in (False, True):
+        mgr.reset_for_tests()
+        r = _post(client, hdr, make(sign), apply=apply, confirm=True)
+        assert r.status_code == status, r.text
+        j = r.json()
+        assert j["ok"] is False and j["reason"] == reason and phrase in j["message"] and j["detail"] == j["message"], j
+    assert _current_text() == before and _backups() == []
+    assert not os.path.exists(lic.LICENSE_PATH + ".import-tmp")
+    rows = _audit_rows("license.import_rejected")
+    assert len(rows) == 2 and all(json.loads(x["detail"])["reason"] == reason for x in rows)
+    assert not _audit_rows("license.import")
+
+
+def test_expired_perpetual_license_is_also_rejected(client, hdr, put_current, sign):
+    """永久授權「已過維護期」閘門雖不擋，但匯入的目的是讓系統能用 ⇒ 只收 reason=ok 的。"""
+    put_current(sign())
+    r = _post(client, hdr, sign(kind=lic.LICENSE_KIND_PERPETUAL, expires=_in(-30)), apply=True)
+    assert r.status_code == 400 and r.json()["reason"] == "expired"
+
+
+def test_machine_mismatch_names_the_customer_only_after_signature_is_verified(client, hdr, put_current, sign):
+    put_current(sign())
+    r = _post(client, hdr, sign(machine="0123456789abcdef", customer="別台的客戶"))
+    assert r.json()["license"]["customer"] == "別台的客戶"                 # 簽章驗過，欄位才可信
+    r = _post(client, hdr, sign(_other_key(), customer="偽造的客戶"))
+    assert r.json().get("license") is None                                  # 簽章沒過：不回任何欄位
+    assert "偽造的客戶" not in r.text
+
+
+def test_machine_unreadable_is_not_reported_as_wrong_machine(client, hdr, put_current, sign, monkeypatch):
+    put_current(sign())
+    blob = sign(customer="讀不到指紋")
+    def _cannot():
+        raise RuntimeError("no hardware")
+    monkeypatch.setattr(lic, "machine_fingerprint", _cannot)
+    import routers.licensing as rl
+    monkeypatch.setattr(rl, "_FP_FAIL_UNTIL", 0.0)
+    r = _post(client, hdr, blob, apply=True)
+    assert r.status_code == 400 and r.json()["reason"] == "machine_unreadable", r.text
+
+
+def test_same_license_as_current_is_a_noop(client, hdr, put_current, sign):
+    blob = sign()
+    put_current(blob)
+    r = _post(client, hdr, blob, apply=True)
+    assert r.status_code == 400 and r.json()["reason"] == "same_as_current"
+    assert _backups() == []
+
+
+# ── 大小上限／本文格式 ───────────────────────────────────────────────────────
+
+def test_oversized_upload_is_refused_without_parsing(client, hdr, put_current, sign):
+    put_current(sign())
+    before = _current_text()
+    big = "A" * (mgr.MAX_UPLOAD_BYTES + 1)
+    r = _post(client, hdr, big, apply=True)
+    assert r.status_code == 413 and r.json()["reason"] == "too_big", r.text
+    # 連 JSON 外殼都超過上限的本文：在路由層讀到上限就停（413），不進解析
+    r = client.post("/api/license/import", headers=hdr, content=b'{"content":"' + b"A" * (mgr.MAX_UPLOAD_BYTES * 3) + b'"}')
+    assert r.status_code == 413 and r.json()["reason"] == "too_big"
+    assert _current_text() == before and _backups() == []
+
+
+def test_oversized_without_content_length_is_still_capped(client, hdr, put_current, sign):
+    """chunked（沒有 Content-Length）也要在讀到上限時停。"""
+    put_current(sign())
+    def _gen():
+        for _ in range(40):
+            yield b"A" * 4096
+    r = client.post("/api/license/import", headers=hdr, content=_gen())
+    assert r.status_code == 413, r.text
+
+
+@pytest.mark.parametrize("body", [b"not json", b"[]", b'{"content": 123}', b'{"apply": true}', b""])
+def test_bad_body_shapes_are_400(client, hdr, put_current, sign, body):
+    put_current(sign())
+    r = client.post("/api/license/import", headers={**hdr, "Content-Type": "application/json"}, content=body)
+    assert r.status_code == 400 and r.json()["reason"] == "malformed", r.text
+
+
+# ── 有差異要確認 ─────────────────────────────────────────────────────────────
+
+def test_changes_need_confirmation_before_apply(client, hdr, put_current, sign):
+    put_current(sign(customer="甲公司", expires=_in(400)))
+    before = _current_text()
+    new = sign(customer="乙公司", expires=_in(100))
+    pv = _post(client, hdr, new).json()
+    assert pv["reason"] == "preview" and len(pv["warnings"]) == 2         # 客戶不同＋到期日較早
+    assert any("客戶名稱" in w for w in pv["warnings"]) and any("還早" in w for w in pv["warnings"])
+    r = _post(client, hdr, new, apply=True)
+    assert r.status_code == 409 and r.json()["reason"] == "needs_confirm" and r.json()["applied"] is False, r.text
+    assert _current_text() == before and _backups() == []                   # 沒確認，什麼都沒動
+    assert not _audit_rows("license.import", "license.import_rejected")      # 要求確認不是失敗，不寫稽核
+    r = _post(client, hdr, new, apply=True, confirm=True)
+    assert r.status_code == 200 and r.json()["applied"] is True
+    assert len(_backups()) == 1
+
+
+def test_confirm_must_be_literal_true(client, hdr, put_current, sign):
+    put_current(sign(customer="甲公司"))
+    new = sign(customer="乙公司")
+    for bad in ("true", 1, "yes", None):
+        r = _post(client, hdr, new, apply=True, confirm=bad)
+        assert r.status_code == 409, (bad, r.text)
+
+
+def test_dev_signed_license_is_flagged_as_test_license(client, hdr, put_current, sign, license_test_key, monkeypatch):
+    """開發金鑰簽的授權：閘門照舊收（既有行為，不削弱也不放寬），但匯入要明講「測試用」並要確認。"""
+    monkeypatch.setattr(lic, "_PUBKEY_DEV", license_test_key["pub_pem"])
+    monkeypatch.setattr(lic, "_PUBKEY_PROD", b"")
+    lic._LICENSE_FILE_CACHE = None
+    put_current(None)
+    blob = sign(customer="測試客戶")
+    pv = _post(client, hdr, blob).json()
+    assert pv["license"]["test_key"] is True and any("測試用" in w for w in pv["warnings"])
+    assert _post(client, hdr, blob, apply=True).status_code == 409
+    assert _post(client, hdr, blob, apply=True, confirm=True).status_code == 200
+
+
+def test_losing_modules_is_warned_with_names(client, hdr, put_current, sign, monkeypatch):
+    from core import registry
+    snap = registry.snapshot()
+    registry._reset()                  # 只留本題登記的模組（真實登錄表有幾十個）
+    try:
+        registry.set_state("alpha_mod", "loaded", manifest={"name": "甲模組", "license_key": "alpha_mod"})
+        registry.set_state("beta_mod", "unlicensed", reason="未授權", manifest={"name": "乙模組", "license_key": "beta_mod"})
+        put_current(sign(modules=["*"]))
+        pv = _post(client, hdr, sign(modules=["beta_mod"])).json()
+        assert pv["modules_after_restart"] == {"gain": ["乙模組"], "lose": ["甲模組"]}
+        assert any("甲模組" in w and "停用" in w for w in pv["warnings"])
+        assert _post(client, hdr, sign(modules=["beta_mod"]), apply=True).status_code == 409
+        r = _post(client, hdr, sign(modules=["beta_mod"]), apply=True, confirm=True)
+        assert r.status_code == 200 and r.json()["restart_needed"] is True
+        assert "重新啟動" in r.json()["message"]
+    finally:
+        registry.restore(snap)
+
+
+# ── 失敗時的保護：寫入失敗、換後複驗失敗、備份失敗 ──────────────────────────────────
+
+def test_write_failure_leaves_old_license_untouched(client, hdr, put_current, sign, monkeypatch):
+    old = sign(customer="舊的")
+    put_current(old)
+    real_replace = os.replace
+    def _deny(src, dst):
+        raise PermissionError("locked")
+    monkeypatch.setattr(os, "replace", _deny)
+    monkeypatch.setattr(mgr.time, "sleep", lambda s: None)
+    r = _post(client, hdr, sign(customer="舊的", expires=_in(900)), apply=True)
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert r.status_code == 500 and r.json()["reason"] == "write_failed", r.text
+    assert _current_text().strip() == old
+    assert not os.path.exists(lic.LICENSE_PATH + ".import-tmp")
+
+
+def test_verify_after_write_failure_restores_the_old_license(client, hdr, put_current, sign, monkeypatch):
+    old = sign(customer="舊的")
+    put_current(old)
+    real = mgr._atomic_write
+    def _corrupting(path, text):
+        real(path, text[:-10])           # 模擬磁碟寫壞：存下去的和驗過的不一樣
+    monkeypatch.setattr(mgr, "_atomic_write", _corrupting)
+    r = _post(client, hdr, sign(customer="舊的", expires=_in(900)), apply=True)
+    assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed", r.text
+    monkeypatch.setattr(mgr, "_atomic_write", real)
+    assert _current_text().strip() == old                                    # 還原成原本的
+    assert lic.verify_license()["reason"] == "ok"
+    assert client.get(BUSINESS_API, headers=hdr).status_code == 200
+
+
+def test_verify_after_write_failure_with_no_prior_license_removes_the_new_file(client, hdr, put_current, sign, monkeypatch):
+    put_current(None)
+    real = mgr._atomic_write
+    monkeypatch.setattr(mgr, "_atomic_write", lambda path, text: real(path, text[:-10]))
+    r = _post(client, hdr, sign(), apply=True)
+    assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed"
+    assert not os.path.exists(lic.LICENSE_PATH)
+
+
+def test_backup_failure_means_no_replacement(client, hdr, put_current, sign, monkeypatch):
+    old = sign(customer="舊的")
+    put_current(old)
+    def _nope(path):
+        raise OSError("disk full")
+    monkeypatch.setattr(mgr, "_backup_current", _nope)
+    r = _post(client, hdr, sign(customer="舊的", expires=_in(900)), apply=True)
+    assert r.status_code == 500 and r.json()["reason"] == "backup_failed", r.text
+    assert _current_text().strip() == old
+
+
+def test_concurrent_import_is_refused_as_busy(client, hdr, put_current, sign):
+    put_current(sign())
+    assert mgr._IMPORT_LOCK.acquire(blocking=False)
+    try:
+        r = _post(client, hdr, sign(customer="搶著換", expires=_in(900)), apply=True, confirm=True)
+    finally:
+        mgr._IMPORT_LOCK.release()
+    assert r.status_code == 409 and r.json()["reason"] == "busy", r.text
+
+
+# ── 頻率限制 ─────────────────────────────────────────────────────────────────
+
+def test_rate_limit_counts_every_attempt_and_audits_only_the_first_block(client, hdr, put_current, sign):
+    put_current(sign())
+    codes = [_post(client, hdr, "AAAA").status_code for _ in range(mgr.RATE_MAX)]
+    assert set(codes) == {400}
+    r = _post(client, hdr, sign())                                           # 第 RATE_MAX+1 次：連有效授權也擋
+    assert r.status_code == 429 and r.json()["reason"] == "rate_limited" and int(r.headers["Retry-After"]) > 0, r.text
+    assert r.json()["retryAfter"] == int(r.headers["Retry-After"])
+    for _ in range(3):
+        assert _post(client, hdr, sign()).status_code == 429
+    limited = [x for x in _audit_rows("license.import_rejected") if json.loads(x["detail"]).get("reason") == "rate_limited"]
+    assert len(limited) == 1                                                  # 被灌時不連稽核表一起灌爆
+
+
+def test_rate_window_slides():
+    t = 1000.0
+    for i in range(mgr.RATE_MAX):
+        assert mgr.rate_allow(now=t + i)[0] is True
+    ok, retry, first = mgr.rate_allow(now=t + 20)
+    assert (ok, first) == (False, True) and 1 <= retry <= mgr.RATE_WINDOW_S
+    assert mgr.rate_allow(now=t + 21)[2] is False                              # 同一視窗第二次被擋：不再是「第一次」
+    assert mgr.rate_allow(now=t + mgr.RATE_WINDOW_S + 1)[0] is True            # 視窗過了就恢復
+
+
+# ── 稽核 ─────────────────────────────────────────────────────────────────────
+
+def test_success_is_audited_without_license_content(client, hdr, put_current, sign):
+    put_current(sign(customer="舊客戶"))
+    new = sign(customer="舊客戶", expires=_in(800))
+    assert _post(client, hdr, new, apply=True).status_code == 200
+    rows = _audit_rows("license.import")
+    assert len(rows) == 1
+    d = json.loads(rows[0]["detail"])
+    assert d["customer"] == "舊客戶" and d["expires"] == _in(800) and d["backup"] and d["apply"] is True
+    assert len(d["file_id"]) == 12
+    assert new not in rows[0]["detail"] and new[:30] not in rows[0]["detail"]   # 稽核不存授權內容
+    assert rows[0]["username"]                                                  # 記得是誰
+
+
+# ── 白話：授權頁資料不出現簽章／雜湊字樣 ─────────────────────────────────────────
+
+BANNED = ("簽章", "指紋", "hash", "Hash", "sha256", "base64", "bad_signature", "machine_mismatch", "fingerprint", "Ed25519", "payload")
+
+
+def _strings(o):
+    if isinstance(o, str):
+        yield o
+    elif isinstance(o, dict):
+        for k, v in o.items():
+            if k not in ("machine_code", "state", "level", "kind", "reason", "bucket"):   # 機器代碼是給供應商的值；其餘是給程式判斷的代碼
+                yield from _strings(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _strings(v)
+
+
+@pytest.mark.parametrize("state", ["ok", "soon", "expired", "perpetual_ended", "machine_mismatch", "missing", "bad_signature", "malformed"])
+def test_overview_is_plain_language_in_every_state(client, hdr, put_current, sign, state):
+    if state == "ok":
+        put_current(sign())
+    elif state == "soon":
+        put_current(sign(expires=_in(10)))
+    elif state == "expired":
+        put_current(sign(expires=_in(-2)))
+    elif state == "perpetual_ended":
+        put_current(sign(kind=lic.LICENSE_KIND_PERPETUAL, expires=_in(-2)))
+    elif state == "machine_mismatch":
+        put_current(sign(machine="0123456789abcdef"))
+    elif state == "missing":
+        put_current(None)
+    elif state == "bad_signature":
+        put_current(sign(_other_key()))
+    else:
+        put_current("AAAA")
+    r = client.get("/api/license/overview", headers=hdr)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    for s in _strings(d):
+        for w in BANNED:
+            assert w not in s, (state, w, s)
+    assert d["headline"] and d["level"] in ("ok", "notice", "warning", "critical", "bad", "info")
+    assert d["machine_text"]
+
+
+def test_overview_shows_customer_expiry_modules_and_machine_binding(client, hdr, put_current, sign):
+    from core import registry
+    snap = registry.snapshot()
+    registry._reset()                  # 只留本題登記的模組（真實登錄表有幾十個）
+    try:
+        registry.set_state("alpha_mod", "loaded", manifest={"name": "甲模組", "license_key": "alpha_mod"})
+        put_current(sign(customer="顯示用公司", expires=_in(200), modules=["alpha_mod", "gone_mod"]))
+        d = client.get("/api/license/overview", headers=hdr).json()
+    finally:
+        registry.restore(snap)
+    L = d["license"]
+    assert L["customer"] == "顯示用公司" and L["expires"] == _in(200) and L["days_left"] == 200 and "200" in L["days_text"]
+    assert L["modules"] == {"all": False, "names": ["甲模組"], "unknown": 1, "invalid": False}
+    assert d["machine_text"] == "已綁定這台電腦" and d["machine_code"] == TEST_LICENSE_MACHINE
+    assert d["max_upload_bytes"] == mgr.MAX_UPLOAD_BYTES
+
+
+def test_overview_lists_recent_imports(client, hdr, put_current, sign):
+    put_current(sign())
+    _post(client, hdr, sign(machine="0123456789abcdef"), apply=True)
+    _post(client, hdr, sign(customer="測試用公司", expires=_in(900)), apply=True, confirm=True)
+    rec = client.get("/api/license/overview", headers=hdr).json()["recent"]
+    assert len(rec) == 2 and "成功" in rec[0]["what"] and "另一台電腦" in rec[1]["what"]
+    assert all(r["who"] and r["at"] for r in rec)
+
+
+# ── 到期提醒 ─────────────────────────────────────────────────────────────────
+
+def _status(days, kind=lic.LICENSE_KIND_SUBSCRIPTION, reason="ok"):
+    return {"valid": reason == "ok", "reason": reason, "days_left": days, "kind": kind, "expires": _in(days), "env": "prod"}
+
+
+@pytest.mark.parametrize("days,level,bucket", [(31, None, None), (30, "notice", 30), (15, "notice", 30), (14, "warning", 14),
+                                               (8, "warning", 14), (7, "critical", 7), (0, "critical", 7)])
+def test_expiry_reminder_thresholds(days, level, bucket):
+    r = lic.expiry_reminder(_status(days))
+    if level is None:
+        assert r is None
+    else:
+        assert (r["level"], r["bucket"], r["days"]) == (level, bucket, days)
+
+
+def test_expiry_reminder_only_for_usable_licenses():
+    assert lic.expiry_reminder(_status(5, reason="machine_mismatch")) is None
+    assert lic.expiry_reminder(_status(-2, reason="expired")) is None                      # 年費過期＝閘門 402，說明頁處理
+    ended = lic.expiry_reminder(_status(-2, kind=lic.LICENSE_KIND_PERPETUAL, reason="expired"))
+    assert ended["level"] == "ended" and ended["bucket"] == "ended"
+    assert lic.expiry_reminder(None) is None and lic.expiry_reminder({"days_left": "x"}) is None
+    assert lic.expiry_reminder({"reason": "ok", "days_left": True, "kind": "subscription"}) is None
+    assert lic.expiry_banner(_status(20)) == "days=20;level=notice;kind=subscription"
+    assert lic.expiry_banner(_status(10)) == "days=10;level=warning;kind=subscription"
+    assert lic.expiry_banner(_status(100)) is None
+
+
+def test_expiry_header_on_authed_responses(client, hdr, put_current, sign):
+    put_current(sign(expires=_in(100)))
+    assert client.get(BUSINESS_API, headers=hdr).headers[lic.EXPIRY_HEADER] == "none"
+    put_current(sign(expires=_in(20)))
+    assert client.get(BUSINESS_API, headers=hdr).headers[lic.EXPIRY_HEADER] == "days=20;level=notice;kind=subscription"
+    put_current(sign(expires=_in(5)))
+    assert client.get(BUSINESS_API, headers=hdr).headers[lic.EXPIRY_HEADER] == "days=5;level=critical;kind=subscription"
+    put_current(sign(kind=lic.LICENSE_KIND_PERPETUAL, expires=_in(-4)))
+    assert client.get(BUSINESS_API, headers=hdr).headers[lic.EXPIRY_HEADER] == "days=-4;level=ended;kind=perpetual"
+    # 未登入／公開端點：沒有標頭（不洩漏授權狀態，也不讓前端橫幅閃掉）
+    assert lic.EXPIRY_HEADER not in client.get("/api/ping").headers
+
+
+def test_expiry_header_is_independent_of_the_existing_banner_header(client, hdr, put_current, sign):
+    put_current(sign(expires=_in(5)))
+    r = client.get(BUSINESS_API, headers=hdr)
+    assert r.headers[lic.LICENSE_HEADER] == "none" and r.headers[lic.EXPIRY_HEADER].startswith("days=5;")
+
+
+# ── 每日通知（30／14／7 各一次）──────────────────────────────────────────────────
+
+@pytest.fixture()
+def notices(monkeypatch, client):
+    from helpers import license_alerts as la
+    got = []
+    monkeypatch.setattr(la, "expiry_notice", lambda rem, st: got.append(dict(rem)) or True)
+    import helpers.system_checks as sc
+    real_thread = sc.threading.Thread
+
+    class _Sync:
+        def __init__(self, target=None, args=(), **kw):
+            self._t, self._a = target, args
+        def start(self):
+            self._t(*self._a)
+    monkeypatch.setattr(sc.threading, "Thread", _Sync)
+    from helpers import _set_setting
+    _set_setting("license_expiry_notified", "")
+    yield got
+
+
+def test_daily_check_notifies_once_per_threshold(notices, put_current, sign):
+    import helpers.system_checks as sc
+    put_current(sign(expires=_in(100)))
+    sc._check_license_expiry()
+    assert notices == []                                                       # 還很遠
+    put_current(sign(expires=_in(29)))
+    sc._check_license_expiry(); sc._check_license_expiry()
+    assert [n["bucket"] for n in notices] == [30]                              # 同一檔位只一次
+    put_current(sign(expires=_in(14)))
+    sc._check_license_expiry(); sc._check_license_expiry()
+    put_current(sign(expires=_in(6)))
+    sc._check_license_expiry(); sc._check_license_expiry()
+    assert [n["bucket"] for n in notices] == [30, 14, 7]
+    put_current(sign(expires=_in(400)))                                          # 續約 ⇒ 旗標清掉
+    sc._check_license_expiry()
+    put_current(sign(expires=_in(20)))                                           # 下一年又快到期 ⇒ 重新通知
+    sc._check_license_expiry()
+    assert [n["bucket"] for n in notices] == [30, 14, 7, 30]
+
+
+def test_daily_check_retries_tomorrow_when_the_send_did_not_go_out(monkeypatch, notices, put_current, sign):
+    import helpers.system_checks as sc
+    from helpers import license_alerts as la
+    put_current(sign(expires=_in(20)))
+    monkeypatch.setattr(la, "expiry_notice", lambda rem, st: False)              # 沒寄成（例如沒有收件人）
+    sc._check_license_expiry()
+    monkeypatch.setattr(la, "expiry_notice", lambda rem, st: notices.append(dict(rem)) or True)
+    sc._check_license_expiry()
+    assert [n["bucket"] for n in notices] == [30]
+
+
+def test_daily_check_does_nothing_when_gate_is_off(notices, put_current, sign, monkeypatch):
+    import helpers.system_checks as sc
+    put_current(sign(expires=_in(3)))
+    monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
+    called = []
+    monkeypatch.setattr(lic, "verify_license", lambda *a, **k: called.append(1))
+    sc._check_license_expiry()
+    assert notices == [] and called == []
+
+
+def test_expiry_mail_type_is_registered_for_superadmins_and_locked():
+    from helpers import mail_types, notify_matrix
+    mt = mail_types.get("license_expiry")
+    assert mt is not None and mt.group == "superadmins"
+    assert "license_expiry" in notify_matrix.MAIL_OFF_LOCKED
+
+
+# ── 前端：402 說明頁連結、授權頁、橫幅 ───────────────────────────────────────────
+
+def _read(rel):
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "..", rel), "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_402_page_links_to_license_page_for_superadmin_only():
+    html = _read("frontend/pages/license-required.html")
+    assert 'id="lr-import"' in html and 'href="license-settings.html"' in html and "前往授權頁匯入" in html
+    i = html.index('id="lr-import"')
+    assert "hidden" in html[i:i + 120]                                          # 預設隱藏
+    assert "sess.role === 'superadmin'" in html                                 # 只有最高管理者才顯示
+
+
+def test_license_page_is_registered_and_not_redirected_away_by_402():
+    pages = json.loads(_read("backend/core/l1_pages.json"))
+    assert "license-settings.html" in pages
+    menu = json.loads(_read("backend/core/menu_l1.json"))
+    items = [m for m in (menu["items"] if isinstance(menu, dict) else menu) if m.get("href") == "license-settings.html"]
+    assert len(items) == 1 and items[0]["perm"] == "superadmin"
+    assert "here402 !== 'license-settings.html'" in _read("frontend/static/notif.js")   # 402 時不被導離這一頁（否則救不回來）
+    import re
+    page = re.sub(r"<!--.*?-->", "", _read("frontend/pages/license-settings.html"), flags=re.S)   # 註解可以講它刻意沒做的事
+    assert "innerHTML" not in page                                              # 伺服器回的文字一律 textContent
+    for forbidden in ("/api/customers", "sidebar", "auth-guard", "Alpine", "x-data"):
+        assert forbidden not in page, forbidden                                  # 只碰豁免端點，不載入會打業務 API 的東西
+    assert page.count("/api/license/") == 2 and "/api/license/overview" in page and "/api/license/import" in page
+
+
+# ── 不削弱 T80：沒有私鑰、沒有繞過 ─────────────────────────────────────────────
+
+def test_import_code_has_no_signing_no_private_keys_and_no_download():
+    here = os.path.dirname(os.path.abspath(__file__))
+    for rel in ("helpers/license_manager.py", "routers/licensing.py"):
+        with open(os.path.join(here, "..", rel), "r", encoding="utf-8") as fh:
+            src = fh.read()
+        code = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
+        for needle in ("sign_license", "issue_license", "PRIVATE KEY", "private_key", "_license_private_key", "FileResponse",
+                       "_PUBKEY_DEV =", "_PUBKEY_PROD =", "LICENSE_GATE_ENABLED ="):
+            assert needle not in code, (rel, needle)
+    # 驗章只有一條路：license_manager 呼叫 licensing.verify_license，沒有自己的 Ed25519／base64 驗證
+    import ast
+    with open(os.path.join(here, "..", "helpers/license_manager.py"), "r", encoding="utf-8") as fh:
+        src = fh.read()
+    tree = ast.parse(src)
+    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    imported |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert not ({"base64", "binascii", "cryptography"} & imported), imported      # 沒有自己的驗章／編解碼
+    calls = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    assert "verify_license" in calls                                               # 驗章只走 licensing.verify_license
+
+
+def test_an_emergency_pass_is_not_an_importable_license(client, hdr, put_current, sign, license_test_key):
+    """通行證（purpose=emergency_pass）缺授權金鑰必要欄位 ⇒ 不是授權：匯入端不可以把它當授權換上去。"""
+    put_current(sign())
+    before = _current_text()
+    token = lic.sign_license({"purpose": lic.EMERGENCY_PURPOSE, "tax_id": "00000000", "machine": TEST_LICENSE_MACHINE,
+                              "issued": TODAY.isoformat(), "expires": _in(5), "reason": "試試看"}, license_test_key["priv_pem"])
+    r = _post(client, hdr, token, apply=True, confirm=True)
+    assert r.status_code == 400 and r.json()["reason"] == "malformed", r.text
+    assert _current_text() == before and _backups() == []
+
+
+def test_backups_and_temp_files_are_never_tracked():
+    ignore = _read(".gitignore")
+    assert "backend/license_backups/" in ignore and "backend/license.key.*-tmp" in ignore
