@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>開始使用 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    「開始使用」7 步清單（批次「開始使用清單面板」）：資料全來自 GET /api/getting-started（自動偵測＋伺服器端進度），本頁只負責畫。
+    所有文字都用 textContent 輸出（不拼 HTML 字串）；可中途離開，回來會從還沒做完的那一步繼續。
+  -->
+  <style>
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px 64px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .gs-inner{max-width:860px;margin:0 auto}
+    .gs-inner h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.01em;font-family:var(--font-zh)}
+    .gs-sub{font-size:12.5px;color:var(--text-secondary);margin:4px 0 16px}
+    .gs-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 18px}
+    .gs-track{flex:1 1 220px;height:8px;border-radius:99px;background:var(--surface-sunken);overflow:hidden}
+    .gs-fill{height:100%;background:var(--accent);width:0;transition:width .3s}
+    .gs-count{font-size:13px;font-weight:700;font-family:var(--font-zh)}
+    .gs-btn{border:1px solid var(--border-light);background:var(--surface);color:var(--text-primary);border-radius:var(--radius);padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:var(--font-zh);text-decoration:none;display:inline-block}
+    .gs-btn:hover{border-color:var(--accent)}
+    .gs-btn--main{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+    .gs-step{border:1px solid var(--border-light);border-radius:var(--radius-lg);background:var(--surface);margin:0 0 10px}
+    .gs-step>summary{list-style:none;display:flex;gap:12px;align-items:center;padding:12px 16px;cursor:pointer}
+    .gs-step>summary::-webkit-details-marker{display:none}
+    .gs-no{flex:0 0 28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:var(--surface-sunken);color:var(--text-secondary)}
+    .gs-step[data-status="done"] .gs-no{background:var(--tone-ok-bg);color:var(--tone-ok-fg)}
+    .gs-step[data-status="skipped"] .gs-no{opacity:.55}
+    .gs-title{font-size:15px;font-weight:700;font-family:var(--font-zh);flex:1 1 auto}
+    .gs-badge{font-size:12px;border-radius:99px;padding:2px 10px;border:1px solid var(--border-light);color:var(--text-secondary);white-space:nowrap}
+    .gs-step[data-status="done"] .gs-badge{border-color:var(--tone-ok-border);background:var(--tone-ok-bg);color:var(--tone-ok-fg)}
+    .gs-step[data-status="todo"] .gs-badge{border-color:var(--tone-info-border);background:var(--tone-info-bg);color:var(--tone-info-fg)}
+    .gs-body{padding:2px 16px 16px 56px;font-size:13px;line-height:1.7}
+    .gs-body dl{margin:8px 0;display:grid;grid-template-columns:96px 1fr;gap:4px 12px}
+    .gs-body dt{color:var(--text-secondary)}
+    .gs-body dd{margin:0}
+    .gs-body ul{margin:0;padding-left:18px}
+    .gs-detail{margin:8px 0;padding:8px 12px;border-radius:var(--radius);background:var(--surface-sunken);font-size:12.5px}
+    .gs-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .gs-error{margin:0 0 14px;padding:10px 14px;border:1px solid var(--tone-bad-border);background:var(--tone-bad-bg);color:var(--tone-bad-fg);border-radius:var(--radius);font-size:12.5px}
+    .gs-done-all{margin:0 0 16px;padding:12px 16px;border:1px solid var(--tone-ok-border);background:var(--tone-ok-bg);color:var(--tone-ok-fg);border-radius:var(--radius-lg);font-size:13px;font-weight:600}
+    @media (max-width:900px){.page-main{margin-left:0;padding:20px 16px 48px}.gs-body{padding-left:16px}.gs-body dl{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="app-shell">
+    <main class="page-main">
+      <div class="gs-inner">
+        <h1>開始使用</h1>
+        <div class="gs-sub" data-testid="gs-subtitle">新公司照這 7 步設定就能開始用。每一步都可以先略過、之後再回來；中途離開也沒關係，下次會從還沒做完的那一步繼續。</div>
+        <div id="gs-error" class="gs-error" role="alert" style="display:none"></div>
+        <div id="gs-all-done" class="gs-done-all" data-testid="gs-all-done" style="display:none">7 步都處理完了，可以開始使用系統。需要調整時隨時可以回到這一頁。</div>
+        <div class="gs-bar">
+          <div class="gs-track" aria-hidden="true"><div class="gs-fill" id="gs-fill"></div></div>
+          <div class="gs-count" id="gs-count" data-testid="gs-count" role="status"></div>
+          <button type="button" class="gs-btn" id="gs-refresh" data-testid="gs-refresh">重新檢查</button>
+        </div>
+        <div id="gs-list" data-testid="gs-list"></div>
+      </div>
+    </main>
+  </div>
+
+<script>
+(function () {
+  'use strict'
+  var session = {}
+  try { session = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {} } catch (e) { session = {} }
+  var H = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session.token || '') }
+  var listEl = document.getElementById('gs-list')
+  var errEl = document.getElementById('gs-error')
+  var userToggled = {}
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag)
+    if (cls) n.className = cls
+    if (text != null) n.textContent = text
+    return n
+  }
+  function showError(msg) { errEl.textContent = msg || ''; errEl.style.display = msg ? '' : 'none' }
+  var LABEL = { done: '已完成', todo: '待處理', skipped: '已略過' }
+
+  function btn(text, cls, onClick, testid) {
+    var b = el('button', 'gs-btn' + (cls ? ' ' + cls : ''), text)
+    b.type = 'button'
+    if (testid) b.setAttribute('data-testid', testid)
+    b.addEventListener('click', onClick)
+    return b
+  }
+
+  function row(dl, k, v) {
+    dl.appendChild(el('dt', null, k))
+    var dd = el('dd')
+    if (Array.isArray(v)) { var ul = el('ul'); v.forEach(function (x) { ul.appendChild(el('li', null, x)) }); dd.appendChild(ul) } else dd.textContent = v
+    dl.appendChild(dd)
+  }
+
+  function render(d) {
+    listEl.textContent = ''
+    var p = d.progress || { done: 0, skipped: 0, total: 7 }
+    document.getElementById('gs-fill').style.width = (p.total ? Math.round(p.done * 100 / p.total) : 0) + '%'
+    document.getElementById('gs-count').textContent = '已完成 ' + p.done + '／' + p.total + (p.skipped ? '，略過 ' + p.skipped : '')
+    document.getElementById('gs-all-done').style.display = d.allDone ? '' : 'none'
+    var nextId = d.next && d.next.id
+    ;(d.steps || []).forEach(function (s) {
+      var det = el('details', 'gs-step')
+      det.setAttribute('data-testid', 'gs-step-' + s.id)
+      det.setAttribute('data-status', s.status)
+      var open = (s.id in userToggled) ? userToggled[s.id] : s.id === nextId
+      if (open) det.open = true
+      det.addEventListener('toggle', function () { userToggled[s.id] = det.open })
+      var sum = el('summary')
+      sum.appendChild(el('span', 'gs-no', String(s.n)))
+      sum.appendChild(el('span', 'gs-title', s.title))
+      sum.appendChild(el('span', 'gs-badge', LABEL[s.status] || s.status))
+      det.appendChild(sum)
+      var body = el('div', 'gs-body')
+      body.appendChild(el('div', null, s.why))
+      var dl = el('dl')
+      row(dl, '大約時間', s.minutes)
+      row(dl, '要準備', s.prepare || [])
+      row(dl, '怎麼確認完成', s.confirm)
+      body.appendChild(dl)
+      if (s.detail) { var dd = el('div', 'gs-detail', s.detail); dd.setAttribute('data-testid', 'gs-detail-' + s.id); body.appendChild(dd) }
+      var act = el('div', 'gs-actions')
+      var a = el('a', 'gs-btn' + (s.status === 'todo' ? ' gs-btn--main' : ''), s.link + ' →')
+      a.href = s.href
+      a.setAttribute('data-testid', 'gs-link-' + s.id)
+      act.appendChild(a)
+      if (s.canMarkDone && s.status !== 'done') act.appendChild(btn(s.id === 'quote_style' ? '我已預覽確認' : '資料已備妥', null, function () { put(s.id, 'done') }, 'gs-done-' + s.id))
+      if (s.canMarkDone && s.manualDone) act.appendChild(btn('取消確認', null, function () { put(s.id, 'undone') }, 'gs-undone-' + s.id))
+      if (s.status === 'skipped') act.appendChild(btn('回來做這一步', null, function () { put(s.id, 'unskip') }, 'gs-unskip-' + s.id))
+      else if (s.status === 'todo') act.appendChild(btn('先略過', null, function () { put(s.id, 'skip') }, 'gs-skip-' + s.id))
+      body.appendChild(act)
+      det.appendChild(body)
+      listEl.appendChild(det)
+    })
+  }
+
+  var seq = 0
+  function fail(r) {
+    if (r && r.status === 403) return '只有最高管理者可以使用「開始使用」清單。'
+    return '暫時讀不到「開始使用」的進度，請稍後按「重新檢查」。'
+  }
+  function load() {
+    var mine = ++seq
+    return fetch('/api/getting-started', { headers: H })
+      .then(function (r) { if (!r.ok) { showError(fail(r)); return null } return r.json() })
+      .then(function (d) { if (d && mine === seq) { showError(''); render(d) } })
+      .catch(function () { showError(fail()) })
+  }
+  function put(id, action) {
+    var mine = ++seq
+    return fetch('/api/getting-started/steps/' + encodeURIComponent(id), { method: 'PUT', headers: H, body: JSON.stringify({ action: action }) })
+      .then(function (r) { if (!r.ok) { showError('這個動作沒有成功，請再試一次。'); return null } return r.json() })
+      .then(function (d) { if (d && mine === seq) { showError(''); render(d) } })
+      .catch(function () { showError('這個動作沒有成功，請再試一次。') })
+  }
+  document.getElementById('gs-refresh').addEventListener('click', function () { load() })
+  load()
+})()
+</script>
+<script src="../static/sidebar.js"></script>
+<script src="../static/notif.js"></script>
+</body>
+</html>

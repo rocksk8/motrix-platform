@@ -69,10 +69,11 @@ def _no_manager(conn):
 def _finance_mode(conn) -> str:
     """旗標 `finance_via_effective`（off／shadow／on），直接讀、不走快取、不寫入；讀不到＝off（與 helpers.auth 的預設一致）。"""
     from helpers.auth import FINANCE_FLAG_KEY
-    row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (FINANCE_FLAG_KEY,)).fetchone()
     try:
+        row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (FINANCE_FLAG_KEY,)).fetchone()
         v = json.loads(row[0]) if row else "off"
-    except (TypeError, ValueError):
+    except Exception:  # noqa: BLE001 — 讀不到／壞掉＝off（較嚴的角色規則），不讓整個檢查靜默消失
+        logger.warning("org_gaps 讀不到財務旗標，當作 off", exc_info=True)
         v = "off"
     return v if v in ("shadow", "on") else "off"
 

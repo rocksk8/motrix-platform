@@ -112,6 +112,8 @@
   "helpers/custom_modules.py::ref_options::custom_records": "unscoped",
   "helpers/duty_roles.py::list_changes::<arg:sql>": "dynamic",
   "helpers/expense_types.py::last_value_hook._fn::case_extra_expenses": "unscoped",
+  "helpers/getting_started.py::_d_import::customers": "unscoped",
+  "helpers/getting_started.py::_latest_audit_at::audit_log": "unscoped",
   "helpers/google_calendar.py::push_event_for_case_stage_done::case_stages": "unscoped",
   "helpers/google_calendar.py::push_event_for_case_stage_done::quotations": "unscoped",
   "helpers/google_calendar.py::push_event_for_case_stage_due::case_stages": "unscoped",

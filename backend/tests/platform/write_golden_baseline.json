@@ -241,6 +241,12 @@
   ],
   "s": 400
  },
+ "PUT /api/getting-started/steps/{step_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/ledger/roles": {
   "k": [
    "detail"

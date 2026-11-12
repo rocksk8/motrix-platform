@@ -4,6 +4,10 @@
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.org_gaps`（`check`、`GAP_KEYS`、`finance_holder_exists`）——只讀的組織設定缺口檢查（沒部門的人／沒主管的部門／沒人擔任財務）。
 - 登記：`helper:org_gaps`、`router:org_gaps`、`js:static/org-gaps.js`、`js:static/role-label.js` 歸 L1（`docs/platform/modules.json`）。
 - 不改任何既有介面、不加資料表、不加 migration。
+- **（併入）(next) — 2026-11-13（feat/getting-started-h10；「開始使用」7 步清單）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.getting_started`（`STEPS`、`STEP_IDS`、`STATE_KEY`、`MANUAL_DONE_IDS`、`BACKUP_HREF`、`BACKUP_OK_ACTIONS`、`EMAIL_TEST_ACTION`、`overview`、`set_step`）——每步的自動偵測（只讀）＋存在 `system_settings.getting_started_v1` 的人工旗標（略過／手動確認）。
+- 新端點（只限最高管理者）：`GET /api/getting-started`、`PUT /api/getting-started/steps/{step_id}`；新頁 `getting-started.html`、系統中心卡片 `getting-started`、系統中心進度卡 `static/getting-started-card.js`。不改既有設定值、欄位、API。
+- 測試：`tests/test_getting_started_2026_11_13.py`。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。

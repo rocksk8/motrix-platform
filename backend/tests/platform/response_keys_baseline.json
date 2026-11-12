@@ -2930,6 +2930,40 @@
   ],
   "s": 200
  },
+ "/api/getting-started": {
+  "k": [
+   "allDone",
+   "next",
+   "next.href",
+   "next.id",
+   "next.link",
+   "next.minutes",
+   "next.title",
+   "progress",
+   "progress.done",
+   "progress.skipped",
+   "progress.total",
+   "steps",
+   "steps[].at",
+   "steps[].auto",
+   "steps[].by",
+   "steps[].canMarkDone",
+   "steps[].confirm",
+   "steps[].detail",
+   "steps[].href",
+   "steps[].id",
+   "steps[].link",
+   "steps[].manualDone",
+   "steps[].minutes",
+   "steps[].n",
+   "steps[].optional",
+   "steps[].prepare",
+   "steps[].status",
+   "steps[].title",
+   "steps[].why"
+  ],
+  "s": 200
+ },
  "/api/inventory/batches": {
   "k": [
    "items"
