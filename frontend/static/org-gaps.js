@@ -9,8 +9,14 @@
   'use strict'
   var mounted = []
 
-  function token() {
-    try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).token || '' } catch (e) { return '' }
+  function session() {
+    try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') || {} } catch (e) { return {} }
+  }
+  function token() { return session().token || '' }
+  // 只有管理者以上看得到；已知不是管理者就不發請求（沒存角色的舊登入照舊發，由後端擋）
+  function canSee() {
+    var r = session().role
+    return !r || r === 'superadmin' || r === 'admin'
   }
 
   function el(tag, props, text) {
@@ -55,13 +61,16 @@
     host.appendChild(box)
   }
 
+  var seq = 0   // 連續重查時，只認最後一次發出的回應（晚到的舊回應不可蓋掉新的）
   function load(host) {
     var tk = token()
-    if (!tk) { host.style.display = 'none'; return Promise.resolve() }
+    if (!tk || !canSee()) { host.style.display = 'none'; return Promise.resolve() }
+    var mine = ++seq
+    host.setAttribute('data-org-gaps-seq', String(mine))
     return fetch('/api/org/gaps', { headers: { Authorization: 'Bearer ' + tk } })
       .then(function (r) { return r.ok ? r.json() : null })
-      .then(function (d) { render(host, d) })
-      .catch(function () { host.style.display = 'none' })
+      .then(function (d) { if (host.getAttribute('data-org-gaps-seq') === String(mine)) render(host, d) })
+      .catch(function () { if (host.getAttribute('data-org-gaps-seq') === String(mine)) host.style.display = 'none' })
   }
 
   function mount(host) {

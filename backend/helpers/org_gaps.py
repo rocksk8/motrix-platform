@@ -2,14 +2,16 @@
 """組織設定缺口檢查（選單去工程師化 批次 5a，2026-11-13）：只讀，不改任何資料。
 
 [單位] helper:org_gaps    [層] L1    [穩定度] 實驗
-[公開介面] check, GAP_KEYS
+[公開介面] check, GAP_KEYS, finance_holder_exists
 [檢查項目] ①在職但沒有部門的人 ②有在職成員、卻沒有主管（或主管已停用）的部門 ③沒有任何人持有「財務」職務
 [不變式] ①只讀（不寫、不 DELETE）；任何一項查不到資料表／欄位 ⇒ 該項視為「沒有缺口」並記 log，不丟 500（缺口檢查壞了不該擋住頁面）。
-    ②「持有財務職務」走 `helpers.auth.finance_duty_person`（與實際權限同一條規則，旗標 off／on 都對）；最高管理者不算（他本來就全能，缺口是「日常沒人負責財務」）。
-    ③沒有在職成員的空部門不算缺口（沒有人需要它的主管）。
+    ②「持有財務職務」與 `helpers.auth.finance_duty_person` 同一條規則（旗標 off／shadow／on 都對；測試逐一比對），但**一次查詢、不逐人呼叫**
+      （逐人呼叫在旗標 `on` 時每人開一條連線，300 人約 2 秒；`shadow` 時還會寫稽核）⇒ 本檔任何旗標模式都不寫入任何東西。最高管理者不算（他本來就全能，缺口是「日常沒人負責財務」）。
+    ③沒有在職成員的空部門不算缺口（沒有人需要它的主管）。最高管理者不算「沒有部門」（主要是簽核、不是送審）；全新安裝（沒有任何在職的非最高管理者）整個檢查不出任何缺口。
     ④回傳的人名／部門名只給呼叫端（路由限管理者以上），單項最多列 `MAX_ITEMS` 筆，`count` 一律是完整數量。
     ⑤文字用白話、不含程式字眼；`fix.href` 指向實際能修的頁面（不新增頁面）。
 """
+import json
 import logging
 
 logger = logging.getLogger("motrix.org_gaps")
@@ -29,14 +31,14 @@ def _label(row) -> str:
 
 def _no_department(conn):
     rows = conn.execute(
-        "SELECT id, username, display_name FROM users WHERE active=1 AND (department_id IS NULL OR department_id=0) ORDER BY id"
+        "SELECT id, username, display_name FROM users WHERE active=1 AND role!='superadmin' AND (department_id IS NULL OR department_id=0) ORDER BY id"
     ).fetchall()
     if not rows:
         return None
     return {
         "key": GAP_NO_DEPARTMENT, "severity": "warn", "count": len(rows),
         "title": "有 %d 位同仁還沒有歸屬部門" % len(rows),
-        "detail": "沒有部門的人，簽核流程找不到他的部門主管，單據會卡住或改送給最高管理者。",
+        "detail": "沒有部門的人，送審時會被擋下（系統找不到他的部門主管），要先補上部門才能送審。最高管理者若要送審，仍然需要歸屬部門。",
         "items": [{"id": r["id"], "name": _label(r)} for r in rows[:MAX_ITEMS]],
         "fix": {"label": "到使用者管理補上部門", "href": "users.html"},
     }
@@ -64,14 +66,50 @@ def _no_manager(conn):
     }
 
 
+def _finance_mode(conn) -> str:
+    """旗標 `finance_via_effective`（off／shadow／on），直接讀、不走快取、不寫入；讀不到＝off（與 helpers.auth 的預設一致）。"""
+    from helpers.auth import FINANCE_FLAG_KEY
+    row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (FINANCE_FLAG_KEY,)).fetchone()
+    try:
+        v = json.loads(row[0]) if row else "off"
+    except (TypeError, ValueError):
+        v = "off"
+    return v if v in ("shadow", "on") else "off"
+
+
+def finance_holder_exists(conn) -> bool:
+    """是否有任何在職、非最高管理者的人擔任「財務」職務。與 `helpers.auth.finance_duty_person` 同一條規則，但一次查完、完全唯讀：
+    `off`／`shadow`＝角色是 finance；`on`＝（角色是 finance ∪ 已啟用職責角色給的 `finance` 鍵）− 個人扣項。
+    新規則查不到（表不存在等）⇒ 退回角色規則（與 helpers.auth 的退路相同）。一致性由測試逐模式比對。"""
+    from helpers.auth import FINANCE_ROLE
+    rows = conn.execute("SELECT id, role FROM users WHERE active=1 AND role!='superadmin'").fetchall()
+    base = {r["id"] for r in rows if r["role"] == FINANCE_ROLE}
+    if _finance_mode(conn) != "on":
+        return bool(base)
+    try:
+        granted = set()
+        for r in conn.execute("SELECT b.user_id, r.permissions FROM user_duty_roles b JOIN duty_roles r ON r.id=b.role_id WHERE r.active=1").fetchall():
+            try:
+                if "finance" in (json.loads(r["permissions"] or "[]") or []):
+                    granted.add(r["user_id"])
+            except (TypeError, ValueError):
+                pass
+        subs = {r["user_id"] for r in conn.execute("SELECT user_id FROM user_perm_subtracts WHERE perm_key='finance'").fetchall()}
+    except Exception:  # noqa: BLE001 — 與 helpers.auth 相同：新規則算不出來就用角色規則
+        return bool(base)
+    active = {r["id"] for r in rows}
+    return bool(((base | granted) & active) - subs)
+
+
+def _has_regular_staff(conn) -> bool:
+    return conn.execute("SELECT 1 FROM users WHERE active=1 AND role!='superadmin' LIMIT 1").fetchone() is not None
+
+
 def _no_finance(conn):
-    from helpers.auth import finance_duty_person
-    rows = conn.execute("SELECT id, username, role, modules FROM users WHERE active=1").fetchall()
-    for r in rows:
-        if finance_duty_person({"id": r["id"], "username": r["username"], "role": r["role"], "modules": r["modules"]}):
-            return None
-    if not rows:
-        return None                                  # 還沒有任何人員（全新安裝）：不提醒，免得開機第一眼就一堆紅字
+    if not _has_regular_staff(conn):
+        return None                                  # 還沒有任何一般同仁（全新安裝）：不提醒，免得開機第一眼就一堆紅字
+    if finance_holder_exists(conn):
+        return None
     return {
         "key": GAP_NO_FINANCE, "severity": "warn", "count": 1,
         "title": "目前沒有人擔任「財務」職務",
@@ -89,6 +127,11 @@ def check(conn=None) -> dict:
         conn = get_db()
     gaps = []
     try:
+        try:
+            if not _has_regular_staff(conn):         # 全新安裝：只有最高管理者（或沒有人）⇒ 三項都不提醒
+                return {"ok": True, "count": 0, "gaps": []}
+        except Exception:  # noqa: BLE001
+            logger.warning("org_gaps 判斷是否全新安裝失敗，照常檢查", exc_info=True)
         for fn in (_no_department, _no_manager, _no_finance):
             try:
                 g = fn(conn)

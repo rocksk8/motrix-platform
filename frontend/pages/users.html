@@ -1373,6 +1373,7 @@
         })
         if (!res.ok) { alert((await res.json().catch(()=>({}))).detail || '刪除失敗'); return }
         await this.loadUsers()
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()        // 刪掉的可能是主管或唯一的財務
         this.toast('帳號已刪除')
       },
 
