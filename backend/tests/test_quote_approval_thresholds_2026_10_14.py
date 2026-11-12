@@ -197,7 +197,7 @@ def test_page_has_no_hard_coded_30_in_the_check_and_defaults_to_today():
     body = html.split("checkApproval() {")[1].split("const taxRate")[0]
     assert "> 30" not in body and "超過 30 天" not in body
     assert "maxValidDays: 30, discountReviewAbove: 0" in html
-    assert "q.validDays > pmCfg.maxValidDays" in html and "'超過 ' + pmCfg.maxValidDays + ' 天需主管審核'" in html
+    assert "q.validDays > pmCfg.maxValidDays" in html and "'超過 ' + pmCfg.maxValidDays + ' 天需主管簽核'" in html
     assert "this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0" in html, "預設不多做任何事"
 
 

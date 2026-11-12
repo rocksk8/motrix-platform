@@ -68,13 +68,14 @@ _TONE0 = {r[0]: r[3] for r in _RAW}
 
 #: 今天各畫面的情境簡稱（原樣保留）：quotations.html:653-664 `statusBadge()`。
 _NAMES0 = {
-    "待審核": {"quote_list": "審核中"}, "已拒絕": {"quote_list": "已退回"},
+    "待審核": {"quote_list": "待簽核"}, "已拒絕": {"quote_list": "已退回"},
     "已成案": {"quote_list": "執行中"}, "已提供": {"quote_list": "待決定"},
     "finalized": {"report": "已結算", "case": "已定稿", "settlement": "精算完結"},     # reports.html:1251／case-management.html:2699／settlement.html:307
     "draft": {"settlement": "精算草稿"},
 }
 # 沒有情境簡稱時的預設標籤；其餘＝鍵本身（原值照印，與今天相同）
-_LABEL0 = {"finalized": "已完結"}
+#（2026-11-13 使用者裁示：畫面一律「待簽核」；資料鍵『待審核』不變。UX-PRINCIPLES §6）
+_LABEL0 = {"finalized": "已完結", "待審核": "待簽核", "差額待審核": "差額待簽核"}
 
 
 def _tone_allowed(key, tone):

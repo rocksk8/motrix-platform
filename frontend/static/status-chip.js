@@ -2,7 +2,7 @@
 // 用法（Alpine）：<span :class="MotrixStatus.chipClass(e.status)" x-text="MotrixStatus.label(e.status)"></span>
 // 未知狀態 ⇒ 只回基底 `st-chip`（中性），不會誤上色；要新增狀態只改這張表（並補 backend/tests/test_status_chip_t51.py 的詞彙）。
 //
-// S-X2：旗標 builder_status_display.enabled 關（預設）或表還沒載入 ⇒ 下面所有函式回傳與過去完全相同的值（label 原值照印、chipClass 用 MAP）。
+// S-X2：旗標 builder_status_display.enabled 關（預設）或表還沒載入 ⇒ chipClass 用 MAP、label 照頁面的 fallback／原值——唯一例外是 DEFAULTS 內建改名（待審核→待簽核，UX P1）。
 // 旗標開且管理者改過某個狀態的字或色 ⇒ 只有『被改過的欄位』覆寫畫面原本的做法（server 回的 changed 清單），沒改的欄位維持畫面自己的字與色。
 // 邏輯（x-show／篩選／權限）永遠用原始狀態值，不要用 label() 的結果判斷。
 (function () {
@@ -17,6 +17,14 @@
   }
   // badge--* 家族（寫死 hex 的舊色表）對應：色調 → class；neutral/沒有對應 ⇒ 空字串（呼叫端自己的 class 不被覆寫）
   var BADGE = { draft: 'badge--draft', pending: 'badge--pending', signing: 'badge--signing', approved: 'badge--approved', rejected: 'badge--rejected', paid: 'badge--done', 'void': 'badge--lost' }
+
+  // 內建預設顯示名（旗標關閉、或表還沒載入時也生效）。2026-11-13 使用者裁示：『待審核』畫面一律顯示『待簽核』（資料鍵不變）。
+  // 必須與 backend/helpers/status_display.py 的 _LABEL0／_NAMES0 一致——由 backend/tests/test_status_display_default_parity_2026_11_13.py 守住。
+  // 只列『有改名』的鍵；其他鍵仍照頁面自己的 fallback（今天的做法）。管理者在名稱表改過的字仍優先於這裡。
+  var DEFAULTS = {
+    '待審核': { label: '待簽核', names: { quote_list: '待簽核' } },
+    '差額待審核': { label: '差額待簽核', names: {} }
+  }
 
   var state = { table: null, changed: {}, ver: 0, loading: null }
 
@@ -68,6 +76,10 @@
   // 顯示名稱。ctx＝情境（quote_list／quote_form／case／cashier／report／settlement）；fallback＝畫面原本會印的字（省略 ⇒ 原值）
   function label(status, ctx, fallback) {
     var k = key(status), base = fallback == null ? (status == null ? '' : String(status)) : fallback
+    if (own(DEFAULTS, k)) {      // 內建預設改名優先於頁面舊的 fallback（頁面的 fallback 可能還是舊字）
+      var d = DEFAULTS[k]
+      base = ctx && d.names && d.names[ctx] ? d.names[ctx] : d.label
+    }
     var e = entry(k)
     if (!e) return base
     var ch = changedFields(k)
@@ -116,7 +128,7 @@
     return initOnce
   }
 
-  var api = { chipClass: chipClass, badgeClass: badgeClass, label: label, tone: tone, load: load, init: init, apply: apply, reset: reset, MAP: MAP, BADGE: BADGE }
+  var api = { chipClass: chipClass, badgeClass: badgeClass, label: label, tone: tone, load: load, init: init, apply: apply, reset: reset, MAP: MAP, BADGE: BADGE, DEFAULTS: DEFAULTS }
   if (typeof window !== 'undefined') window.MotrixStatus = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api
 })()

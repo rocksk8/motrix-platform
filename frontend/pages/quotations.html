@@ -134,7 +134,7 @@
         <div class="summary-item__val" x-text="'NT$ ' + MotrixFormat.num(summaryData.thisMonthTotal)"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
-        <div class="summary-item__label">待審核</div>
+        <div class="summary-item__label">待簽核</div>
         <div class="summary-item__val" :style="summaryData.pending > 0 ? 'color:var(--warning)' : ''" x-text="summaryData.pending + ' 張'"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
@@ -223,7 +223,7 @@
     <!-- ── 生命週期壓力帶（2026-09-14，比照簽核佇列的跑道）────────────────
          原本 9 個分頁是互斥的：一次只能看一個階段，看不到整條線的形狀，
          「有幾張草稿放著沒送審」得自己一個一個分頁點過去數。
-         四段＝草稿→送審中→已送出→已結束，點任一段就篩。 -->
+         四段＝草稿→待簽核→已送出→已結束，點任一段就篩。 -->
     <div class="vm-andon" style="margin-bottom:14px" x-show="!loading && quotes.length > 0" x-cloak>
       <template x-for="ph in LIFECYCLES" :key="ph.key">
         <button type="button" class="vm-andon__seg ql-phase"
@@ -499,7 +499,7 @@
       // 分頁保留不動——它的粒度比較細（已核准/已送出/已確認分得開）。
       LIFECYCLES: [
         { key: 'draft',  label: '草稿',   desc: '尚未送審',           color: 'var(--text-dim)' },
-        { key: 'review', label: '送審中', desc: '簽核流程進行中',      color: 'var(--warning)' },
+        { key: 'review', label: '待簽核', desc: '簽核流程進行中',      color: 'var(--warning)' },
         { key: 'sent',   label: '已送出', desc: '簽核完成、已對外報價', color: 'var(--success)' },
         { key: 'closed', label: '已結束', desc: '未成案／已結案／取消', color: '#6D28D9' },  // 沿用 badge--settled 既有的紫
       ],
@@ -587,7 +587,7 @@
         { key: 'all',    label: '進行中',
           title: '不含「未成案」與「已結案」。\n分頁上的草稿～已確認是報價單的簽核狀態；\n已結案、未成案是案件的成案標記，兩者是不同的欄位。' },
         { key: '草稿',   label: '草稿'  },
-        { key: '待審核', label: '待審核' },
+        { key: '待審核', label: '待簽核' },
         { key: '已核准', label: '已核准' },
         { key: '已送出', label: '已送出' },
         { key: '已確認', label: '已確認' },
@@ -740,7 +740,7 @@
         const s   = q.status   || ''
         const tag = q.deal_tag || ''
         if (s === '草稿')   return { text: '草稿',  cls: 'badge--draft' }
-        if (s === '待審核') return { text: '審核中', cls: 'badge--pending' }
+        if (s === '待審核') return { text: '待簽核', cls: 'badge--pending' }
         if (s === '簽核中') return { text: '簽核中', cls: 'badge--signing' }
         if (s === '已核准') return { text: '已核准', cls: 'badge--approved' }
         if (s === '已取消') return { text: '已取消', cls: 'badge--danger' }

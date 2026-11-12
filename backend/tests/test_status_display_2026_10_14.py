@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """S-X2 狀態顯示名稱與顏色（旗標 builder_status_display.enabled 預設關）。純函式／node 題可用 --noconftest 單跑。
-- 預設表＝今天：色調與 static/status-chip.js 的 MAP 逐鍵相同（用 node 實際讀 JS），情境簡稱＝報價單列表既有的 審核中／已退回／執行中／待決定
+- 預設表＝今天（唯一刻意例外：2026-11-13 使用者裁示『待審核』畫面改『待簽核』，見 UX-PRINCIPLES §6）：色調與 static/status-chip.js 的 MAP 逐鍵相同（用 node 實際讀 JS），情境簡稱＝報價單列表既有的 待簽核／已退回／執行中／待決定
 - 驗證器：鍵由程式擁有（未知鍵、改鍵一律拒絕）；色調限調色盤；非核准語意不可用官方用語（預設值除外）；核准／付款語意只能用對應色調；未知欄位拒絕
 - 比較器：核准／付款類改名改色＝放寬，其餘＝中性；看不懂＝放寬；突變正對照
 - changed_fields：只列與預設不同的欄位
@@ -40,7 +40,7 @@ def test_default_tones_equal_the_status_chip_map():
 
 def test_default_context_names_are_todays_strings():
     d = S.defaults()
-    assert d["待審核"]["names"]["quote_list"] == "審核中" and d["已拒絕"]["names"]["quote_list"] == "已退回"
+    assert d["待審核"]["names"]["quote_list"] == "待簽核" and d["待審核"]["label"] == "待簽核" and d["差額待審核"]["label"] == "差額待簽核" and d["已拒絕"]["names"]["quote_list"] == "已退回"
     assert d["已成案"]["names"]["quote_list"] == "執行中" and d["已提供"]["names"]["quote_list"] == "待決定"
     assert d["已核准"]["label"] == "已核准" and d["草稿"]["label"] == "草稿" and S.changed_fields(d) == {}
 
@@ -159,7 +159,7 @@ JS_PRELUDE = "global.window=undefined;const S=require('./static/status-chip.js')
 def test_js_off_and_unloaded_behaviour_is_todays():
     out = node(JS_PRELUDE + """console.log(JSON.stringify([S.label('待審核'), S.label('待審核','quote_list'), S.label('待審核','quote_list','審核中'), S.label(null), S.label(undefined,'x','y'),
       S.chipClass('已核准'), S.chipClass('不存在'), S.chipClass(null), S.badgeClass('草稿','badge--draft'), S.badgeClass('草稿'), S.apply(null), S.apply({enabled:false}), S.apply({enabled:true})]))""")
-    assert out == ["待審核", "待審核", "審核中", "", "y", "st-chip st-chip--approved", "st-chip", "st-chip", "badge--draft", "", False, False, False]
+    assert out == ["待簽核", "待簽核", "待簽核", "", "y", "st-chip st-chip--approved", "st-chip", "st-chip", "badge--draft", "", False, False, False]
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
@@ -172,7 +172,7 @@ def test_js_loaded_table_overrides_only_changed_fields():
       S.label('已核准'), S.label('簽核中','case','簽核中'), S.chipClass('簽核中'), S.badgeClass('簽核中','badge--signing'),
       S.label('不存在','case','原字')]))""")
     assert out == ["起草", "起草", "st-chip st-chip--pending", "badge--pending",
-                   "等待中", "待審核", "待審核", "st-chip st-chip--pending",
+                   "等待中", "待簽核", "待簽核", "st-chip st-chip--pending",
                    "已確認", "簽核中", "st-chip st-chip--signing", "badge--signing",
                    "原字"]
 
@@ -181,7 +181,7 @@ def test_js_loaded_table_overrides_only_changed_fields():
 def test_js_default_alias_is_kept_when_only_the_main_label_changes():
     payload = {"enabled": True, "statuses": S.effective_table({"statuses": {"待審核": {"label": "排隊中"}}}), "changed": {"待審核": ["label"]}}
     out = node(JS_PRELUDE + "S.apply(%s);" % json.dumps(payload, ensure_ascii=False) + "console.log(JSON.stringify([S.label('待審核','quote_list','審核中'), S.label('待審核','case','待審核'), S.label('待審核')]))")
-    assert out == ["審核中", "排隊中", "排隊中"]          # 報價單列表有預設簡稱 ⇒ 簡稱優先；其他情境用新名稱
+    assert out == ["待簽核", "排隊中", "排隊中"]          # 報價單列表有預設簡稱 ⇒ 簡稱優先；其他情境用新名稱
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
@@ -189,7 +189,7 @@ def test_js_load_is_silent_on_failure_and_when_flag_is_off():
     out = node("global.window=undefined;global.localStorage={getItem:()=>JSON.stringify({token:'t'})};"
                "let calls=[];global.fetch=(u,o)=>{calls.push(u);return Promise.resolve({ok:true,json:()=>Promise.resolve({enabled:false})})};"
                "const S=require('./static/status-chip.js');S.load().then(r=>{console.log(JSON.stringify([r,calls,S.label('待審核')]))})")
-    assert out == [False, ["/api/status-display"], "待審核"]
+    assert out == [False, ["/api/status-display"], "待簽核"]
     out = node("global.window=undefined;global.localStorage={getItem:()=>JSON.stringify({token:'t'})};global.fetch=()=>Promise.reject(new Error('x'));"
                "const S=require('./static/status-chip.js');S.load().then(r=>console.log(JSON.stringify([r,S.chipClass('已核准')])))")
     assert out == [False, "st-chip st-chip--approved"]
@@ -264,7 +264,7 @@ def test_m1_a_plain_key_cannot_take_an_approved_or_paid_meaning(key, text):
 
 
 def test_m1_names_cannot_collide_within_a_context():
-    assert any("重複" in p["message"] for p in v({"草稿": {"label": "待審核"}}))                        # 草稿 顯示成 待審核（預設情境撞到）
+    assert any("重複" in p["message"] for p in v({"草稿": {"label": "待簽核"}}))                        # 草稿 顯示成 待簽核（預設情境撞到）
     assert any("重複" in p["message"] for p in v({"待審核": {"names": {"case": "簽核中"}}}))            # 案件情境撞到 簽核中
     assert v({"草稿": {"label": "起草中"}}) == []                                                       # 沒撞就過
     assert v({"待審核": {}}) == [] and v({"已拒絕": {}}) == []                                         # 沒改的欄位不檢查（預設值本身有 已退回 重複）
@@ -332,7 +332,7 @@ def test_quotations_list_goes_through_the_helper_with_the_old_function_as_base()
         assert tag in src
     # 原本的對照一字不改（旗標關時就是它）
     base = src.split("_dealDisplayBase(q) {")[1].split("\n      },")[0]
-    for line in ("{ text: '審核中', cls: 'badge--pending' }", "{ text: '已退回', cls: 'badge--rejected' }", "{ text: '執行中', cls: 'badge--running' }",
+    for line in ("{ text: '待簽核', cls: 'badge--pending' }", "{ text: '已退回', cls: 'badge--rejected' }", "{ text: '執行中', cls: 'badge--running' }",
                  "{ text: '待決定', cls: 'badge--sent' }", "{ text: '報價中', cls: 'badge--sent' }", "{ text: s || '—', cls: '' }"):
         assert line in base, line
 
@@ -362,7 +362,7 @@ def test_quotation_list_function_is_identical_off_and_overrides_only_changed_whe
            "console.log(JSON.stringify([off.every(Boolean), disp({status:'待審核'}), disp({status:'已送出',deal_tag:'已成案'}), disp({status:'草稿'})]))"
     out = node(code)
     assert out[0] is True                                                                              # 未載入表時 14 種輸入都與原函式逐字相同
-    assert out[1] == {"text": "審核中", "cls": "badge--pending"}                                       # 只改了 label、報價單列表有自己的簡稱 ⇒ 維持簡稱
+    assert out[1] == {"text": "待簽核", "cls": "badge--pending"}                                       # 只改了 label、報價單列表有自己的簡稱 ⇒ 維持簡稱
     assert out[2] == {"text": "施工中", "cls": "badge--signing"}                                       # 改了簡稱與色調 ⇒ 兩者都換
     assert out[3] == {"text": "草稿", "cls": "badge--draft"}
 
@@ -454,7 +454,7 @@ const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx,fb);
 const out=[];
 for (const received of [true,false]) out.push([ stLabel(received ? '已收款' : '待收款','cashier'), received ? '已收款' : '待收款' ]);
 const remit=(s)=>{const raw=s==='pending'?'差額待審核':(s==='approved'?'差額已核可':'');return raw?stLabel(raw,'cashier',raw):''};
-const remitOld=(s)=>s==='pending'?'差額待審核':(s==='approved'?'差額已核可':'');
+const remitOld=(s)=>s==='pending'?'差額待簽核':(s==='approved'?'差額已核可':'');
 for (const s of ['pending','approved','',null,undefined,'weird']) out.push([remit(s),remitOld(s)]);
 for (const st of ['finalized','draft','',null]) {
   out.push([st==='finalized'?stLabel('finalized','report','已結算'):stLabel('draft','report','草稿'), st==='finalized'?'已結算':'草稿']);
@@ -511,7 +511,7 @@ const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx,fb);
 const out=[];
 for (const voided of ['', null, '2026-10-01T00:00:00'])
   for (const status of ['草稿','待審核','簽核中','已核准','已過帳','',null,undefined])
-    out.push([stLabel(voided ? '已作廢' : status), voided ? '已作廢' : status]);
+    out.push([stLabel(voided ? '已作廢' : status), voided ? '已作廢' : (status === '待審核' ? '待簽核' : status)]);   // 待審核 → 待簽核 為刻意的預設改名
 out.push([stLabel('draft','settlement','精算草稿'),'精算草稿'],[stLabel('finalized','settlement','精算完結'),'精算完結']);
 console.log(JSON.stringify(out.every(p=>(p[0]==null?'':p[0])===(p[1]==null?'':p[1]))));"""
     assert node(code) is True
