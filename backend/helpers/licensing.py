@@ -49,6 +49,7 @@ import re
 import stat as _stat
 import subprocess
 import sys
+import threading
 import time
 from datetime import date
 
@@ -722,6 +723,9 @@ def license_banner(status, emergency):
 # 也會得到同一個答案（見 test_07b）——不是啟動時產生的隨機值快取起來，那種做法能
 # 通過「連呼叫兩次相同」，但客戶重啟服務之後金鑰就全部失效了。
 _FINGERPRINT_CACHE = None  # None 或 (digest, is_stable, 算出時的time.monotonic(), 連續partial次數)
+_FP_LOCK = threading.Lock()   # LG-S5：同一時間只有一條在探測硬體
+_FP_ATTEMPTS = 0              # 已完成幾輪探測嘗試（成功或失敗都算）；排隊的執行緒靠它知道「我等的時候有人探完了」
+_FP_LAST_ERROR = None         # 最近一輪嘗試若失敗：那個 RuntimeError；成功 ⇒ None
 
 
 def _run(cmd, timeout=30):
@@ -903,16 +907,53 @@ def machine_fingerprint():
     不到完整結果就愈慢重試。兩項齊全、或走 `_stable_machine_id` 後路的，一律快取到行程結束
     （跟原本一樣，不會退避、也不會因為之後 CPU 忙就被重新觸發）。
     """
-    global _FINGERPRINT_CACHE
-    if _FINGERPRINT_CACHE is not None:
-        digest, is_stable, cached_at, strikes = _FINGERPRINT_CACHE
-        if is_stable:
-            return digest
-        backoff = _FP_PARTIAL_BACKOFF_S[min(strikes, len(_FP_PARTIAL_BACKOFF_S) - 1)]
-        if (time.monotonic() - cached_at) <= backoff:
-            return digest
-        # 退避到期：重探一次，見下方「沿用 strikes」。
+    global _FP_ATTEMPTS, _FP_LAST_ERROR
+    digest = _fingerprint_from_cache()
+    if digest is not None:
+        return digest
 
+    # ⚠️ T80稽核LG-S5：single-flight。快取沒有答案（沒探過／殘缺值的退避剛到期／持續讀不到）時，
+    # 以前每個並行請求都各自跑一輪探測——正式機上＝同時好幾個 PowerShell（每輪最多 3 次、每次最長 30 秒）。
+    # 現在同一時間只有一條在探；**排隊的請求不再自己探**，直接拿「我排隊期間完成的那一次探測」的結果
+    # （成功 ⇒ 快取裡的值；失敗 ⇒ 同樣的 RuntimeError）。沒有排隊（循序呼叫）時行為與以前完全相同：
+    # 每次快取沒答案都探一次，不另外加時間窗（否則硬體恢復後要多等一個窗才認得到）。
+    seen = _FP_ATTEMPTS
+    with _FP_LOCK:
+        if _FP_ATTEMPTS != seen:                       # 我排隊的時候，別的執行緒已經探完了一輪
+            digest = _fingerprint_from_cache()
+            if digest is not None:
+                return digest
+            if _FP_LAST_ERROR is not None:
+                raise RuntimeError(str(_FP_LAST_ERROR))
+        try:
+            digest = _probe_fingerprint()
+        except Exception as exc:                       # noqa: BLE001  任何失敗都讓排隊的人看到同一個結論
+            _FP_LAST_ERROR = exc
+            raise
+        else:
+            _FP_LAST_ERROR = None
+            return digest
+        finally:
+            _FP_ATTEMPTS += 1
+
+
+def _fingerprint_from_cache():
+    """快取裡現在算數的指紋，沒有（沒探過、或殘缺值的退避到期）⇒ None。"""
+    cached = _FINGERPRINT_CACHE
+    if cached is None:
+        return None
+    digest, is_stable, cached_at, strikes = cached
+    if is_stable:
+        return digest
+    backoff = _FP_PARTIAL_BACKOFF_S[min(strikes, len(_FP_PARTIAL_BACKOFF_S) - 1)]
+    if (time.monotonic() - cached_at) <= backoff:
+        return digest
+    return None                                       # 退避到期：重探一次，見 _probe_fingerprint 的「沿用 strikes」
+
+
+def _probe_fingerprint():
+    """真的去探測硬體並更新 `_FINGERPRINT_CACHE`。**只准在持有 `_FP_LOCK` 時呼叫**（machine_fingerprint 保證）。"""
+    global _FINGERPRINT_CACHE
     uuid_, mac = _probe_hardware_once()
     for _ in range(_FP_PROBE_RETRIES - 1):
         if uuid_ and mac:
