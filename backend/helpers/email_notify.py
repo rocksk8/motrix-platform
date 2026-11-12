@@ -2163,7 +2163,7 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
         "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 有沒有內容"
         "<br>3. 雲端碟是否掛得起來（任一磁碟機代號下要找得到 "
         "<code>我的雲端硬碟\\系統存檔</code>）"
-        "<br>4. <code>backend\\logs\\server.log</code> 搜尋 <code>_daily_backup</code>"
+        "<br>4. <code>backend\\logs\\app.log</code> 搜尋 <code>_daily_backup</code>（錯誤也會寫在 <code>server.log</code>）"
         "<br>5. <b>是否有第二台機器掛載同一個雲端資料夾</b>："
         "先執行的機器會寫入當日 <code>.done</code>，正式機將略過備份，且不留下錯誤紀錄"
         "<br><br><b>立即補救</b>：在正式機執行 "
