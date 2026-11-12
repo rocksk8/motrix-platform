@@ -17,10 +17,10 @@ from pathlib import Path
 import pytest
 
 from core import source_tree
+from tests import _frontend_sources as FS
 from helpers import static_cache as sc
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
-MODULES = Path(__file__).resolve().parents[1] / "modules"
 
 #: 本站資源引用（不含 vendor）——寬鬆版，用來找「改寫器沒辦法處理」的寫法
 _LOCAL_ATTR = re.compile(r"""\b(?:src|href)\s*=\s*(["'])(?P<v>[^"']*?(?:static|js|css)/[^"']*?\.(?:js|css|png|svg|jpg|jpeg|webp|gif|ico)[^"']*)\1""")
@@ -32,7 +32,7 @@ def _version(client):
 
 
 def _page_files():
-    # 頁面位置一律經 source_tree（frontend/pages 與各模組 pages/；有些頁面已搬進模組，列車上不在 frontend/pages）
+    # 頁面位置一律經 source_tree（含各模組 pages/；有些頁面已搬進模組，不在 frontend 底下）
     return [FRONTEND / "index.html"] + list(source_tree.page_files())
 
 
@@ -61,13 +61,11 @@ _CONCAT = re.compile(r"""(["'`])(?:\.\./|\./|/)?(?:static|js|css)/\1\s*\+|(?:sta
 
 
 def _js_sources():
-    for sub in ("static", "js"):
-        for f in sorted((FRONTEND / sub).rglob("*.js")):
-            if "vendor" in f.parts:
-                continue
-            yield f
-    for f in sorted(MODULES.glob("*/js/*.js")) + sorted(MODULES.glob("*/pages/*.js")):
-        yield f
+    yield from FS.all_js()                       # frontend 全部 .js（不含 vendor）∪ 模組自有 js/（共用列舉入口）
+    for d in source_tree.module_dirs():          # 模組 pages/ 底下的 .js（地圖覆蓋層等；不在共用入口的範圍）
+        pd = d / "pages"
+        if pd.is_dir():
+            yield from sorted(q for q in pd.iterdir() if q.suffix == ".js")
     for f in _page_files():
         yield f
 
