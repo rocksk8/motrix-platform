@@ -393,7 +393,7 @@
       "id": "overhead-settings",
       "section": "settings",
       "title": "利潤口徑與管銷比率",
-      "desc": "營業利益口徑、管銷分攤比率與遷移狀態（設定頁尚未提供）",
+      "desc": "營業利益口徑與管銷分攤比率（設定頁還在開發中）",
       "impact": "影響：改管銷比率後，只影響之後算出的利潤；已結案的案件不變。",
       "href": "overhead-settings.html",
       "perm": "superadmin",

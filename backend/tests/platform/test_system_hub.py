@@ -669,3 +669,13 @@ def test_backup_card_description_promises_only_what_the_target_group_offers():
     assert card["href"] == "settings-center.html#retention"
     for promised in ("最近一次備份", "還原說明"):
         assert promised not in card["desc"], "卡片承諾了目標頁面沒有的功能：%s" % promised
+
+
+def test_planned_cards_are_not_clickable_and_do_not_use_engineering_words():
+    html = source_tree.page_file("system-hub.html").read_text(encoding="utf-8")
+    assert html.count("(it.denied || it.planned) ? null : it.href") == 2, "搜尋結果與分組兩處的連結都要在規劃中時拿掉 href"
+    assert "if (it.denied || it.planned)" in html, "點擊處理也要擋（保險，不只靠沒有 href）"
+    planned = [c for c in _all_cards() if c.get("planned")]
+    assert planned, "目前沒有規劃中的卡片 ⇒ 這題量不到東西，請改成合成資料"
+    for c in planned:
+        assert "遷移" not in c["desc"] and "遷移" not in c["impact"] and "遷移" not in c["title"], c["id"]
