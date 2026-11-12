@@ -2613,8 +2613,38 @@ def _strip_json_f2(raw, list_key, keys):
     return json.dumps(obj, ensure_ascii=False)
 
 
+_SECRET_KEY_RE = re.compile(r"password|secret|token|app_pw", re.I)
+
+
+def _redact_secret_values(value):
+    """名稱含 password／secret／token／app_pw 的鍵，值一律換成遮蔽字樣（遞迴；不管是哪一個設定、哪一層）。"""
+    if isinstance(value, dict):
+        return {k: ("[已遮蔽]" if _SECRET_KEY_RE.search(str(k)) else _redact_secret_values(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_secret_values(v) for v in value]
+    return value
+
+
+def _redact_settings_row(row: dict) -> dict:
+    """「系統設定」匯出的總括遮蔽：設定鍵本身含祕密字樣 ⇒ 整個值遮蔽；否則往 JSON 值裡一層層遮蔽（SQL 那層的 json_remove 照舊，這是第二層）。"""
+    out = dict(row)
+    if _SECRET_KEY_RE.search(str(out.get("key", ""))):
+        out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
+        return out
+    raw = out.get("value_json")
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) and raw else None
+    except Exception:  # noqa: BLE001
+        return out
+    if isinstance(parsed, (dict, list)):
+        out["value_json"] = json.dumps(_redact_secret_values(parsed), ensure_ascii=False)
+    return out
+
+
 def _general_row(fname: str, row: dict) -> dict:
     """一般份的一列：拿掉 F2 欄位，再抽掉內嵌影像。沒有 F2 宣告的表只做後者（行為同 V9）。"""
+    if fname == "系統設定":
+        row = _redact_settings_row(row)
     spec = _F2_FIELDS.get(fname)
     if spec:
         row = {k: v for k, v in row.items() if k not in spec.get("columns", ())}

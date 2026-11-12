@@ -516,19 +516,32 @@ def test_settings_export_has_no_live_secrets(client):
     把它們挖掉，這題確認真的挖乾淨了，而且**新增的祕密設定也會被抓到**。
     """
     import db, json as _json
+    import archive
     sql = _json_backup_queries()["系統設定"]
     conn = db.get_db()
     try:
-        rows = conn.execute(sql).fetchall()
+        # 守門要真的碰到「還不存在的新祕密」：種一個沒人事先寫進 SQL 的新設定（巢狀 token、鍵名含 secret 的整列），
+        # 匯出（SQL ＋ archive._general_row 的總括遮蔽）之後兩個值都不能出現
+        conn.execute("INSERT OR REPLACE INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)",
+                     ("zz_future_feature", _json.dumps({"enabled": True, "service_token": "seeded-token-xyz"}), "2026-01-01T00:00:00"))
+        conn.execute("INSERT OR REPLACE INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)",
+                     ("zz_future_hmac_secret", _json.dumps("seeded-secret-xyz"), "2026-01-01T00:00:00"))
+        conn.commit()
+        rows = [archive._general_row("系統設定", dict(r)) for r in conn.execute(sql).fetchall()]
+        conn.execute("DELETE FROM system_settings WHERE key IN ('zz_future_feature','zz_future_hmac_secret')")
+        conn.commit()
     finally:
         conn.close()
+    rows = [(r["key"], r["value_json"]) for r in rows]
 
     assert rows, "系統設定匯出是空的——這題會變成永遠綠的假斷言，先確認查詢是否壞了"
+    assert {"zz_future_feature", "zz_future_hmac_secret"} <= {r[0] for r in rows}, "沒種到新祕密那兩列——守門沒碰到它們"
+    assert not any("seeded-" in (r[1] or "") for r in rows), "新增的祕密設定（沒寫進 SQL 的）進了每日匯出——總括遮蔽失效"
 
     def walk(obj, path):
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if _SECRET_NAME.search(k) and k not in _SECRET_NAME_OK:
+                if _SECRET_NAME.search(k) and k not in _SECRET_NAME_OK and v != "[已遮蔽]":
                     yield f"{path}.{k}"
                 yield from walk(v, f"{path}.{k}")
         elif isinstance(obj, list):

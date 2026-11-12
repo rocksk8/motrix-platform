@@ -56,7 +56,7 @@ def _set(**kw):
 
 def _activate_ready(client, h, sent):
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 200
-    r = client.post("/api/settings/email-notify/wizard/activate", headers=h)
+    r = client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h)
     assert r.status_code == 200 and _cfg()["enabled"] is True
 
 
@@ -67,7 +67,7 @@ def test_password_never_in_responses_audit_or_logs(client, make_user, sent, capl
     ok = client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h)
     sent["raise"] = smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted " + PW.encode())
     bad = client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h)
-    act = client.post("/api/settings/email-notify/wizard/activate", headers=h)
+    act = client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h)
     get = client.get("/api/settings/email-notify", headers=h)
     from db import get_db
     c = get_db()
@@ -96,7 +96,7 @@ def test_every_wizard_endpoint_is_superadmin_only(client, make_user, sent):
         h = _h(client, make_user, "atk_e_" + role, role=role)
         assert client.get("/api/settings/email-notify/providers", headers=h).status_code == 403
         assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 403
-        assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 403
+        assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 403
         assert client.put("/api/settings/email-notify", json={"enabled": True}, headers=h).status_code == 403
     assert client.post("/api/settings/email-notify/wizard/activate").status_code in (401, 403)
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD).status_code in (401, 403)
@@ -114,7 +114,7 @@ def test_test_mail_goes_only_to_the_callers_own_account_address(client, make_use
 # ── 綠燈：啟用必須有證明 ────────────────────────────────────────────────
 def test_activate_without_proof_is_refused(client, make_user, sent):
     h = _h(client, make_user, "atk_e_np")
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400
     assert _cfg().get("enabled") in (None, False)
 
 
@@ -123,23 +123,23 @@ def test_activate_refused_after_config_changed_or_proof_stale(client, make_user,
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 200
     # 測試成功之後，帳密被改掉（PUT）⇒ 指紋不符
     assert client.put("/api/settings/email-notify", json={**_cfg(), "smtp_user": "other@gmail.com", "smtp_password": "zzzz"}, headers=h).status_code == 200
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400
     # 重測成功 ⇒ 可以啟用；證明過期（>24h）⇒ 不行
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 200
     import importlib
     S = importlib.import_module("routers.system")
     proof = S._get_setting(S._EMAIL_WIZARD_PROOF, {})
     S._set_setting(S._EMAIL_WIZARD_PROOF, {**proof, "at": (datetime.now() - timedelta(hours=25)).isoformat(timespec="seconds")})
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400
     S._set_setting(S._EMAIL_WIZARD_PROOF, {**proof, "at": "not-a-date"})
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400
 
 
 def test_failed_test_does_not_create_a_proof(client, make_user, sent):
     h = _h(client, make_user, "atk_e_fp")
     sent["raise"] = smtplib.SMTPAuthenticationError(535, b"x")
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 502
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400
     sent["raise"] = None
 
 
@@ -203,9 +203,9 @@ def test_test_me_uses_the_candidate_settings_and_only_activate_writes_them(clien
     assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 200
     assert seen["cfg"]["smtp_user"] == "co@gmail.com" and seen["cfg"]["smtp_password"] == PW      # 測的是候選設定
     assert _cfg().get("smtp_user", "") == ""                                                       # 還沒寫進正式設定
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 200
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 200
     assert _cfg()["smtp_user"] == "co@gmail.com" and _cfg()["enabled"] is True
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400  # 證明只能用一次
+    assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 400  # 證明只能用一次
 
 
 def test_put_can_enable_when_the_same_settings_were_tested_within_24h(client, make_user, sent):

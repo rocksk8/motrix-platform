@@ -1,4 +1,5 @@
 """System: approval-flow settings, notifications, audit log, work logs."""
+import threading
 import inspect
 import json
 import logging
@@ -2580,6 +2581,9 @@ _MASKED = "••••••••"
 def get_email_notify(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     cfg = _get_setting("email_notify", {}) or {}
+    _p = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
+    if _p and not _wizard_fresh(_p):                # 過期的測試證明（內含候選密碼）順手清掉
+        _set_setting(_EMAIL_WIZARD_PROOF, {})
     safe = {**_EMAIL_DEFAULTS, **cfg}
     safe.pop("admin_emails", None)
     safe["smtp_password"] = _MASKED if cfg.get("smtp_password") else ""
@@ -2604,6 +2608,12 @@ def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
             data[k] = data[k].strip()
     if data.get("smtp_password") in ("", _MASKED):
         data["smtp_password"] = current.get("smtp_password", "")
+    try:
+        new_port, old_port = int(data.get("smtp_port") or 0), int(current.get("smtp_port") or 0)
+    except (TypeError, ValueError):
+        new_port, old_port = 0, 0
+    if new_port != old_port and new_port not in _WIZARD_PORTS:       # 和精靈同一條：寄信埠只准 25／465／587／2525（沒改埠的舊設定照常可存）
+        raise HTTPException(422, "寄信埠只能是 25、465、587 或 2525；請向信箱或網域代管廠商確認。")
     # 由「未啟用」改成「啟用」＝一定要有這份設定剛剛測試成功的證明（24 小時內、帳密與主機埠完全相同）；精靈與舊頁面都一樣，伺服器端把關
     if data.get("enabled") and not current.get("enabled") and not _wizard_proof_matches(
             data.get("smtp_host"), data.get("smtp_port"), data.get("smtp_user"), data.get("smtp_password")):
@@ -2968,6 +2978,8 @@ def unlink_line_of(username: str, authorization: str = Header(None)):
 @router.post("/api/settings/email-notify/test")
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
+    if not _wizard_rate_ok(user["id"]):               # 舊的「寄測試信」也走同一個頻率限制（不然可繞過精靈的限制反覆探測）
+        raise HTTPException(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。")
     from helpers.email_notify import _send_raising, _admin_emails, _build_html, _base_url
     from helpers import mail_types as _mt
     to = _admin_emails("system_test_mail")
@@ -2992,8 +3004,9 @@ def test_email_notify(authorization: str = Header(None)):
 # 流程：①選信箱服務 ②貼信箱與密碼 ③寄測試信給「目前登入的人」，按「我收到了」才啟用。
 # 不變式：測試信成功之前不會啟用；啟用只認「剛剛測試成功的那一份設定」（指紋比對，設定改過就要重測）；密碼不進稽核、不進回應。
 
-_EMAIL_WIZARD_PROOF = "email_setup_test_proof"      # {fp, at, to, cfg, base_fp}：最近一次精靈測試信成功的「候選設定」與它的指紋（啟用時才寫入正式設定）
+_EMAIL_WIZARD_PROOF = "email_setup_test_proof"      # {fp, fp_full, base_fp, at, to, host, port, user}：最近一次精靈測試信成功的證明；**不存密碼**，只存帶金鑰的 HMAC 指紋
 _WIZARD_PROOF_HOURS = 24
+_WIZARD_HMAC_KEY = "email_setup_hmac_secret"         # 測試證明的簽章金鑰（隨機、存系統設定；名稱含 secret ⇒ 每日備份匯出一律遮蔽）
 _WIZARD_HITS_KEY = "email_setup_test_hits"          # {user_id: [時間…]}：test-me 的頻率限制（存資料庫，重啟不歸零）
 _WIZARD_TEST_LIMIT, _WIZARD_TEST_WINDOW_MIN = 5, 10  # 每個帳號 10 分鐘最多寄 5 次測試信
 _WIZARD_PORTS = (25, 465, 587, 2525)                # 寄信埠只准這四個（內網主機仍允許：客戶可能自己架信件伺服器；回應只說成敗與白話分類，不回原始錯誤）
@@ -3006,20 +3019,53 @@ def _wizard_fresh(proof) -> bool:
         return False
 
 
+def _wiz_hmac(*parts) -> str:
+    """帶金鑰的指紋（HMAC-SHA256）：證明裡不存密碼，也不存密碼的純雜湊（純雜湊可離線猜）；金鑰是隨機產生、存系統設定、備份匯出遮蔽。"""
+    import hashlib
+    import hmac
+    key = _get_setting(_WIZARD_HMAC_KEY, "") or ""
+    if not key:
+        key = secrets.token_hex(32)
+        _set_setting(_WIZARD_HMAC_KEY, key)
+    return hmac.new(bytes.fromhex(key), "\x1f".join(str(x) for x in parts).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _port_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _wiz_creds_fp(host, port, user, pw) -> str:
+    return _wiz_hmac("creds", host or "", _port_int(port), user or "", pw or "")
+
+
+def _wiz_full_fp(cand) -> str:
+    return _wiz_hmac("full", cand.get("smtp_host", ""), _port_int(cand.get("smtp_port")), cand.get("smtp_user", ""), cand.get("smtp_password", ""),
+                     cand.get("from_name", ""), cand.get("base_url", ""))
+
+
 def _wizard_proof_matches(host, port, user, pw) -> bool:
-    from helpers import email_setup as _es
     proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
-    return bool(proof) and _wizard_fresh(proof) and proof.get("fp") == _es.config_fingerprint(host, port, user, pw)
+    return bool(proof) and _wizard_fresh(proof) and proof.get("fp") == _wiz_creds_fp(host, port, user, pw)
 
 
 def _live_fp(cfg) -> str:
     """正在使用的設定（含是否啟用）的指紋：測試之後設定被別處改過 ⇒ 啟用前要重測。"""
-    from helpers import email_setup as _es
-    return "%s:%d" % (_es.config_fingerprint(cfg.get("smtp_host"), cfg.get("smtp_port"), cfg.get("smtp_user"), cfg.get("smtp_password")),
-                      1 if cfg.get("enabled") else 0)
+    return _wiz_hmac("live", cfg.get("smtp_host", ""), _port_int(cfg.get("smtp_port")), cfg.get("smtp_user", ""), cfg.get("smtp_password", ""),
+                     1 if cfg.get("enabled") else 0)
+
+
+_WIZARD_RATE_LOCK = threading.Lock()
 
 
 def _wizard_rate_ok(user_id) -> bool:
+    with _WIZARD_RATE_LOCK:                            # 讀－改－寫要不可分割：同一帳號同時送出多個請求也不能超過上限
+        return _wizard_rate_ok_locked(user_id)
+
+
+def _wizard_rate_ok_locked(user_id) -> bool:
     now = datetime.now()
     hits = _get_setting(_WIZARD_HITS_KEY, {}) or {}
     mine = []
@@ -3060,16 +3106,12 @@ def _wizard_error(status: int, detail: str, **extra):
     return JSONResponse(status_code=status, content={"detail": detail, **extra})
 
 
-@router.post("/api/settings/email-notify/wizard/test-me")
-def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True)
+def _wizard_candidate(body, current):
+    """把精靈送來的內容整理成「候選設定」並檢查（test-me 與 activate 共用同一份，兩邊算出的指紋才會一致）。回 (provider, cand)。"""
     from helpers import email_setup as _es
-    from helpers.email_notify import _send_raising, _build_html, _base_url
-    from helpers import mail_types as _mt
     prov = _es.provider_by_key(body.provider)
     if not prov:
         raise HTTPException(422, "請先選擇信箱服務。")
-    current = _get_setting("email_notify", {}) or {}
     pw = body.smtp_password
     if pw in ("", _MASKED):
         pw = current.get("smtp_password", "")
@@ -3086,6 +3128,23 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
         raise HTTPException(422, "請填寄件人信箱。")
     if not pw:
         raise HTTPException(422, "請填密碼（%s）。" % prov["passwordLabel"])
+    if port not in _WIZARD_PORTS:
+        raise HTTPException(422, "寄信埠只能是 25、465、587 或 2525；請向信箱或網域代管廠商確認。")
+    cand = {"smtp_user": body.smtp_user.strip(), "smtp_password": pw, "smtp_host": host, "smtp_port": port}
+    cand["from_name"] = body.from_name.strip() or current.get("from_name") or _EMAIL_DEFAULTS["from_name"]
+    cand["base_url"] = body.base_url.strip() or current.get("base_url") or ""
+    return prov, cand
+
+
+@router.post("/api/settings/email-notify/wizard/test-me")
+def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    from helpers.email_notify import _send_raising, _build_html, _base_url
+    from helpers import mail_types as _mt
+    current = _get_setting("email_notify", {}) or {}
+    prov, cand = _wizard_candidate(body, current)
+    host, port = cand["smtp_host"], cand["smtp_port"]
     # 收件人＝目前登入的人；他沒有 Email ⇒ 這一步補填並存回帳號
     conn = get_db()
     try:
@@ -3102,12 +3161,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
             to_addr = rec
     finally:
         conn.close()
-    if int(port) not in _WIZARD_PORTS:
-        raise HTTPException(422, "寄信埠只能是 25、465、587 或 2525；請向信箱或網域代管廠商確認。")
     # 候選設定只放在記憶體裡測試，**不存進系統設定**：測試失敗時，正在使用的設定一個字都不會變；測試成功＋按「我收到了」才寫入
-    cand = {"smtp_user": body.smtp_user.strip(), "smtp_password": pw, "smtp_host": host, "smtp_port": port}
-    cand["from_name"] = body.from_name.strip() or current.get("from_name") or _EMAIL_DEFAULTS["from_name"]
-    cand["base_url"] = body.base_url.strip() or current.get("base_url") or ""
     full = {**_EMAIL_DEFAULTS, **current, **cand}
     if not _wizard_rate_ok(user["id"]):
         return _wizard_error(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。", category="rate_limited")
@@ -3119,6 +3173,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
     except RuntimeError as e:                       # 「這台機器不寄真實信件」等：訊息本身就是白話
         return _wizard_error(400, str(e), category="blocked")
     except Exception as e:                          # noqa: BLE001
+        _set_setting(_EMAIL_WIZARD_PROOF, {})       # 重測失敗 ⇒ 先前的測試證明作廢
         tid = trace_id()
         logger.exception("email_notify wizard test failed trace=%s", tid)
         c = _es.classify_error(e, host, body.provider)
@@ -3126,25 +3181,28 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
         if c["ticketKind"]:
             prof = _get_setting("company_profile", {})
             company = (prof.get("name", "") if isinstance(prof, dict) else "") or ""
-            extra["ticket"] = _es.build_ticket(c["ticketKind"], user=body.smtp_user.strip(), host=host, port=port,
+            extra["ticket"] = _es.build_ticket(c["ticketKind"], user=cand["smtp_user"], host=host, port=port,
                                                company=company, requester=user.get("display_name") or user["username"])
         return _wizard_error(502, c["title"] + "。" + c["hint"], **extra)
-    _set_setting(_EMAIL_WIZARD_PROOF, {"fp": _es.config_fingerprint(host, port, cand["smtp_user"], pw), "cfg": cand, "base_fp": _live_fp(current),
-                                       "at": datetime.now().isoformat(timespec="seconds"), "to": to_addr})
+    # 證明不存密碼：只存帶金鑰的 HMAC 指紋＋非機密的主機／埠／帳號與時間（24 小時內有效；沒用到的在讀設定時清掉）
+    _set_setting(_EMAIL_WIZARD_PROOF, {"fp": _wiz_creds_fp(host, port, cand["smtp_user"], cand["smtp_password"]), "fp_full": _wiz_full_fp(cand),
+                                       "base_fp": _live_fp(current), "at": datetime.now().isoformat(timespec="seconds"), "to": to_addr,
+                                       "host": host, "port": port, "user": cand["smtp_user"]})
     _audit(_tok(authorization), "settings.email_notify.wizard_test", "settings", "email_notify", "寄信精靈測試信",
            {"provider": body.provider, "host": host, "port": port})
     return {"ok": True, "sent_to": to_addr}
 
 
 @router.post("/api/settings/email-notify/wizard/activate")
-def email_notify_wizard_activate(authorization: str = Header(None)):
+def email_notify_wizard_activate(body: EmailWizardIn = None, authorization: str = Header(None)):
+    """按「我收到了」：畫面把整份候選設定再送一次；伺服器重算 HMAC，**相符且 24 小時內**才寫進正式設定並啟用（密碼只在這個請求裡出現，不存在證明裡）。"""
     _require_user(authorization, require_superadmin=True)
-    from helpers import email_setup as _es
     cfg = _get_setting("email_notify", {}) or {}
     proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
-    cand = proof.get("cfg") or {}
-    fp = _es.config_fingerprint(cand.get("smtp_host"), cand.get("smtp_port"), cand.get("smtp_user"), cand.get("smtp_password")) if cand else ""
-    if not proof or not cand or proof.get("fp") != fp or not _wizard_fresh(proof):
+    if body is None or not proof or not _wizard_fresh(proof):
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+    _prov, cand = _wizard_candidate(body, cfg)
+    if proof.get("fp_full") != _wiz_full_fp(cand):
         raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
     if proof.get("base_fp") != _live_fp(cfg):
         raise HTTPException(400, "寄信設定在測試之後被改過，請重新寄一次測試信。")

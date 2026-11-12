@@ -4116,7 +4116,7 @@
   "POST /api/settings/email-notify/wizard/activate": {
    "w": true,
    "pp": 0,
-   "body": false
+   "body": true
   },
   "POST /api/settings/email-notify/wizard/test-me": {
    "w": true,

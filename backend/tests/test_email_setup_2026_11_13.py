@@ -198,19 +198,19 @@ def test_providers_endpoint_superadmin_only(client, make_user):
     ha = _h(client, make_user, "es_adm", role="admin")
     assert client.get("/api/settings/email-notify/providers", headers=ha).status_code == 403
     assert client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=ha).status_code == 403
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=ha).status_code == 403
+    assert client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=ha).status_code == 403
 
 
 def test_wizard_happy_path_test_then_activate(client, make_user, sent):
     h = _h(client, make_user, "es_su3", email="boss@example.com")
     # 沒測試過就想啟用 ⇒ 擋
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h).status_code == 400
     r = client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=h)
     assert r.status_code == 200 and r.json() == {"ok": True, "sent_to": "boss@example.com"}
     assert sent["calls"][0]["to"] == ["boss@example.com"] and sent["calls"][0]["ignore_enabled"] is True
     cfg = client.get("/api/settings/email-notify", headers=h).json()
     assert cfg["enabled"] is False and cfg["smtp_user"] == ""                                   # 測試成功還不會寫進正式設定（要按「我收到了」）
-    ra = client.post("/api/settings/email-notify/wizard/activate", headers=h)
+    ra = client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h)
     assert ra.status_code == 200 and ra.json()["enabled"] is True
     cfg = client.get("/api/settings/email-notify", headers=h).json()
     assert cfg["enabled"] is True and cfg["smtp_user"] == "co@gmail.com" and cfg["smtp_host"] == "smtp.gmail.com"
@@ -222,7 +222,7 @@ def test_activation_requires_the_same_config_that_was_tested(client, make_user, 
     assert client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=h).status_code == 200
     # 測試成功後改了帳號 ⇒ 指紋不符 ⇒ 不能啟用
     client.put("/api/settings/email-notify", json={"enabled": False, "smtp_user": "other@gmail.com", "smtp_host": "smtp.gmail.com", "smtp_port": 587}, headers=h)
-    r = client.post("/api/settings/email-notify/wizard/activate", headers=h)
+    r = client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h)
     assert r.status_code == 400 and "測試" in r.json()["detail"]
 
 
@@ -235,7 +235,7 @@ def test_failed_test_never_activates_and_returns_plain_category(client, make_use
     assert r.status_code == 502 and d["category"] == "auth"
     assert d["ticket"]["title"] and "Set-CASMailbox" in d["ticket"]["text"] and "abcd" not in d["ticket"]["text"]
     assert "5.7.139" not in json.dumps(d, ensure_ascii=False)           # 不顯示錯誤碼
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 400
+    assert client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h).status_code == 400
     assert client.get("/api/settings/email-notify", headers=h).json()["enabled"] is False
 
 
@@ -276,7 +276,7 @@ def test_missing_fields_get_plain_422(client, make_user, sent):
 def test_masked_password_keeps_the_stored_one(client, make_user, sent):
     h = _h(client, make_user, "es_su9", email="boss@example.com")
     assert client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=h).status_code == 200
-    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 200        # 密碼先存進正式設定
+    assert client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h).status_code == 200        # 密碼先存進正式設定
     r = client.post("/api/settings/email-notify/wizard/test-me", json={**BODY, "smtp_password": "••••••••"}, headers=h)
     assert r.status_code == 200                                                                          # 遮罩 ⇒ 沿用已存的密碼
     from helpers.settings import _get_setting
@@ -291,7 +291,7 @@ def test_masked_password_keeps_the_stored_one(client, make_user, sent):
 def test_audit_has_no_password(client, make_user, sent):
     h = _h(client, make_user, "es_su10", email="boss@example.com")
     client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=h)
-    client.post("/api/settings/email-notify/wizard/activate", headers=h)
+    client.post("/api/settings/email-notify/wizard/activate", json=BODY, headers=h)
     from db import get_db
     c = get_db()
     try:

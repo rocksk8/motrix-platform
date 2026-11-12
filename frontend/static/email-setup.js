@@ -359,7 +359,8 @@
         w.activating = true
         let r, d = {}
         try {
-          r = await fetch('/api/settings/email-notify/wizard/activate', { method: 'POST', headers: { Authorization: 'Bearer ' + token() } })
+          // 伺服器不存測試時的密碼，只存指紋：按「我收到了」要把整份候選設定再送一次，伺服器重算指紋、相符才寫入
+          r = await fetch('/api/settings/email-notify/wizard/activate', { method: 'POST', headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' }, body: JSON.stringify(this._wzBody()) })
           d = await r.json().catch(() => ({}))
         } catch (e) { r = { ok: false } }
         w.activating = false
