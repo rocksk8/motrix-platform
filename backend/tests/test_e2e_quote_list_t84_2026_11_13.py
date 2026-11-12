@@ -119,6 +119,11 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     # 點數字／清除條件只是暫時的檢視：重新整理後回到記住的選擇（預設「只看我負責的」）
     page.get_by_test_id("ql-clear-conditions").click()
     assert page.evaluate("() => %s._mineLimit" % DATA) is False and page.get_by_test_id("ql-cond-mine").count() == 0
+    # 清除條件後，「只看我負責的」不再顯示為按下；按一次就回到我負責的，而且不改寫記住的選擇
+    assert page.get_by_test_id("ql-mine-toggle").get_attribute("aria-pressed") == "false"
+    page.get_by_test_id("ql-mine-toggle").click()
+    assert page.evaluate("() => %s._mineLimit" % DATA) is True and page.evaluate("() => localStorage.getItem('motrix_quote_mine:t84e_sales')") in (None, "1")
+    page.get_by_test_id("ql-clear-conditions").click()
     page.reload()
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
     assert page.evaluate("() => %s._mineLimit" % DATA) is True, "清除條件不改寫記住的選擇"

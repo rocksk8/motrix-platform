@@ -260,7 +260,7 @@
           <template x-for="k in COL_OPTIONAL" :key="k">
             <label><input type="checkbox" :checked="!colPrefs.hidden.includes(k)" @change="toggleCol(k)" :data-testid="'ql-col-' + k"> <span x-text="cLabel(k, LV_LABELS[k])"></span></label>
           </template>
-          <div style="margin-top:6px;color:var(--text-dim)">單號、狀態、案件進度、報價日期以外的欄位都可以增減。</div>
+          <div style="margin-top:6px;color:var(--text-dim)">單號、狀態、案件進度、報價日期以外的欄位都可以增減；客戶、填單人取消勾選後，會併入單號、日期格顯示。</div>
         </div>
       </div>
       <button type="button" class="action-btn action-btn--ghost" data-testid="ql-density" @click="toggleCompact()" :title="colPrefs.compact ? '切回標準列高' : '列高縮小、一頁看更多張'" x-text="colPrefs.compact ? '標準密度' : '緊湊'"></button>
@@ -275,9 +275,9 @@
       </template>
       <button type="button" class="action-btn action-btn--ghost" style="min-height:32px" data-testid="ql-clear-conditions"
               x-show="hasActiveFilter" @click="clearFilters()">清除條件</button>
-      <button type="button" class="ql-cond__toggle" data-testid="ql-mine-toggle" :aria-pressed="onlyMine ? 'true' : 'false'" @click="setMine(!onlyMine)"
+      <button type="button" class="ql-cond__toggle" data-testid="ql-mine-toggle" :aria-pressed="(onlyMine && !showAll) ? 'true' : 'false'" @click="toggleMine()"
               title="開啟＝預設只列你負責的報價單（會記住你的選擇）；關閉＝預設列出你看得到的全部">
-        <span x-text="onlyMine ? '✓ 只看我負責的' : '只看我負責的'"></span>
+        <span x-text="(onlyMine && !showAll) ? '✓ 只看我負責的' : '只看我負責的'"></span>
       </button>
       <span class="ql-note" data-testid="ql-mine-note" x-show="mineNote" x-text="mineNote"></span>
     </div>
@@ -739,6 +739,11 @@
         if (!this.onlyMine || this.showAll || this.focus || this.search.trim() || this.loading) return ''
         if (!this.mineOk) return '暫時無法判斷哪些是你負責的，先顯示全部'
         return this.mineSet.size === 0 ? '你目前沒有負責的報價，先顯示全部' : ''
+      },
+      // 清除條件後（暫時看全部）再按一下＝回到記住的「只看我負責的」，不改寫記住的選擇；其餘情況才是明確切換（會記住）
+      toggleMine() {
+        if (this.showAll && this.onlyMine) { this.showAll = false; this.focus = ''; return }
+        this.setMine(!(this.onlyMine && !this.showAll))
       },
       setMine(v) {
         this.onlyMine = v; this.showAll = false; this.focus = ''
