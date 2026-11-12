@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
+- 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
+- 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。
+
 ## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
 - 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
 
