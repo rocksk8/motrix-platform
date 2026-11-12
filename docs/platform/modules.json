@@ -48,6 +48,7 @@
    "helper:dates",
    "helper:doc_template",
    "helper:doc_render",
+   "helper:doc_type",
    "helper:pdf_scripts",
    "helper:expense_types",
    "helper:edit_log",

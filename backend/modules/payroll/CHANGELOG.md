@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.2.26（next，未取號）— 2026-11-13（feat/estimate-quote-type；單號辨識改用單據類型規則）
+- 修正（後端）：`api/bonus.py` 從獎金操作的對象／標籤中抓「案件單號」時，原本寫死 `MQ-YYYYMM-NNN`，現改用 `helpers.doc_type.case_no_re()`（報價單 `MQ` ＋估價單字首，依設定中心規則導出）；舊的 `MQ-` 單號辨識結果不變。不動 API 形狀、資料、權限。
+
 ## 1.2.25 — 2026-11-11（fix/payslip-create-write-lock-leak；修勞報單建立失敗後寫鎖沒放；金額相關；L1 介面不變；K 審 hichan-9 通過）
 - 修正（後端，真 bug）：`POST /api/payslips`（`create_payslip`）一開頭 `INSERT INTO payslip_seq … ON CONFLICT DO NOTHING` 就開了寫交易，之後任何錯誤路徑——`contractorHasUnionInsurance` 傳字串 `"false"` 的 `body_flag` 422、`grossAmount` 非數字的 `int()` ValueError、其他沒預期的例外——丟出去時**沒有 rollback、沒有關連線**，寫鎖留到連線被垃圾回收；這段時間其他連線的寫入（含下一個 `POST /api/payslips`）卡滿 busy timeout（30 秒）後 500「database is locked」。整段交易改包進 `core.txn.write_txn`（與 `update_payslip` 稽核 D-2 同一招）：區塊內任何例外都 rollback＋關連線；正常路徑行為不變（commit／close 仍由原位置做）。
 - 起因與判定：`tests/test_strict_bool_sites_t49.py::test_payslip_union_insurance_flag_changes_withholding_so_it_must_be_strict` 在乾淨 train 穩定紅（單獨跑也紅，109 秒；不是 xdist／並行造成）。第一個 POST 回 422，第二個 POST 等 busy timeout 後 500。T49 把 `bool(...)` 換成會 raise 的 `body_flag` 之後，這一行在「已開寫交易」之後多了一個丟例外的點；回收時機決定紅綠（GC 剛好跑過就綠），所以時紅時綠。

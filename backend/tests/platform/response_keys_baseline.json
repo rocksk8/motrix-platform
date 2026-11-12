@@ -3793,6 +3793,7 @@
  },
  "/api/next-quote-no": {
   "k": [
+   "doc_type",
    "quote_no"
   ],
   "s": 200
@@ -4687,6 +4688,7 @@
    "items[].customer_name",
    "items[].deal_tag",
    "items[].direct_margin_pct",
+   "items[].doc_type",
    "items[].edit_count",
    "items[].edit_last",
    "items[].historical",
@@ -4797,9 +4799,11 @@
    "created_by",
    "customer_name",
    "data",
+   "data.docType",
    "data.status",
    "deal_tag",
    "direct_margin_pct",
+   "doc_type",
    "export_count",
    "export_log",
    "id",
@@ -5076,9 +5080,11 @@
    "quotation.created_by",
    "quotation.customer_name",
    "quotation.data",
+   "quotation.data.docType",
    "quotation.data.status",
    "quotation.deal_tag",
    "quotation.direct_margin_pct",
+   "quotation.doc_type",
    "quotation.export_count",
    "quotation.export_log",
    "quotation.id",
@@ -6297,6 +6303,7 @@
    "groups[].values.enforce_output_template",
    "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
+   "groups[].values.estimate_no_prefix",
    "groups[].values.hidden_terms_pdf_mode",
    "groups[].values.include_headers",
    "groups[].values.k01_seed",

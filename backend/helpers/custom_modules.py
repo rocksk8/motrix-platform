@@ -123,6 +123,35 @@ def templates(include_gaps: bool = False):
     return (out, gaps) if include_gaps else out
 
 
+def used_prefixes(conn=None) -> dict:
+    """⇒ `{前綴: 說明}`：站內表單範本（隨時可能被發布成自訂模組）與公司已發布的自訂模組用的單號前綴。
+    單號前綴撞到別的單據會讓「從單號認單據」的地方（稽核、獎金推導案件單號）誤判，估價單字首設定用它擋撞號。"""
+    out = {}
+    if os.path.isdir(_TEMPLATE_DIR):
+        for name in sorted(os.listdir(_TEMPLATE_DIR)):
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(_TEMPLATE_DIR, name), encoding="utf-8") as fh:
+                    t = json.load(fh)
+                p = str(((t.get("body") or {}).get("numbering") or {}).get("prefix") or "")
+                if p:
+                    out.setdefault(p, "表單範本「%s」" % (t.get("name") or t.get("key") or name))
+            except (OSError, ValueError, AttributeError, TypeError):
+                continue
+    if conn is not None:
+        try:
+            for r in conn.execute("SELECT key, MAX(version) AS v FROM ui_definitions WHERE kind='custom_module' AND scope='company' "
+                                  "AND status='published' GROUP BY key").fetchall():
+                d = _load_def(conn, r["key"], r["v"])
+                p = str(((d["body"] or {}).get("numbering") or {}).get("prefix") or "")
+                if p:
+                    out.setdefault(p, "自訂模組「%s」" % (d["body"].get("name") or r["key"]))
+        except Exception:                                                                    # noqa: BLE001 — 讀不到就只用範本
+            pass
+    return out
+
+
 def template_body(key: str):
     """範本的整份定義（深拷貝）；不存在或沒通過載入驗證 ⇒ None。"""
     if not any(t["key"] == key for t in templates()):
@@ -309,6 +338,10 @@ def _validate_numbering(n):
     out = []
     if not PREFIX_RE.match(str(n.get("prefix") or "")):
         out.append(_p("numbering.prefix", "前綴只能用大寫英文與數字、英文開頭，最長 6 字"))
+    else:
+        from helpers import doc_type as _DT          # 不可與估價單字首（含曾用過的）相同：單號會被誤認成案件單號
+        if n["prefix"] in _DT.estimate_prefixes_in_use():
+            out.append(_p("numbering.prefix", "前綴 %s 是估價單單號字首（含曾經用過的），請換一組" % n["prefix"]))
     if n.get("date", "YYYYMMDD") not in DATE_FORMATS:
         out.append(_p("numbering.date", "日期格式只能是 YYYYMMDD、YYYYMM 或空白"))
     d = n.get("digits", 4)

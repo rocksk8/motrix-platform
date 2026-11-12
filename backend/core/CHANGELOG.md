@@ -1,5 +1,13 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（feat/estimate-quote-type；估價單：單號規則依單據類型導出）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.doc_type`（`QUOTE`／`ESTIMATE`／`LABELS`／`DEFAULT_ESTIMATE_PREFIX`、`NumberRule`、`rule_for`／`all_rules`／`rule_of_no`／`prefix_for`、`case_no_re`、`seq_key` 等）——單據類型（報價單／估價單）的單號規則（字首／日期格式／流水號位數）與用語；稽核、獎金、通知、PDF 的單號正則由規則導出，不寫死 `MQ-`。
+- 串接點（新增，IP-ESTQ1，編號暫定）：`case.estimate_prefixes`（M01 提供、L1 `helpers/doc_type` 取用）——曾開過估價單的單號字首；L1 不讀 `quotations` 表。
+- 設定中心新增項目「估價單單號字首」（預設 `ME`；`helpers/settings_groups_profit.py`，部署基準 `settings_deploy_baseline.json` 同步）。
+- 行為：不改既有報價單單號（`MQ-YYYYMM-NNN`）與 `quote_seq` 鍵；`helpers/audit.py` 的案件單號推導改用規則導出的正則（對舊 `MQ-` 單號結果不變）。凍結的歷史遷移副本 `core/migrations.py` 刻意不動。
+- L1（審查修正，只增）：`helpers.doc_type` 再加 `used_prefixes`（現在實際有效的各單據單號前綴：靜態保底＋表單範本檔＋已發布自訂模組＋費用類型）、`estimate_prefixes_in_use`（目前＋曾用過的估價單字首）；`validate_prefix` 改查 `used_prefixes`。`helpers.expense_types.used_prefixes(conn)`（新公開介面）／`helpers.custom_modules.used_prefixes(conn)` 為兩邊各自提供的前綴清單；`custom_modules._validate_numbering` 與 `expense_types.validate_expense_type` 存前綴時不可等於估價單字首（目前與曾用過的）。
+- 測試：`tests/test_estimate_doc_type_2026_11_13.py`、`tests/test_e2e_estimate_ui_2026_11_13.py`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

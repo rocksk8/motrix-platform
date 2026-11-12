@@ -1,5 +1,18 @@
 # 案件 更新紀錄
 
+## 1.0.219（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
+- 新增：`quotations.doc_type`（migration v10：`quote`＝報價單〔預設，舊資料一律是它〕｜`estimate`＝估價單）。流程（簽核、狀態、權限、轉單、業績）兩種完全相同。
+- 單號：估價單字首預設 `ME`（`ME-YYYYMM-NNN`），流水號與報價單（`MQ`）各自獨立（`quote_seq` 鍵＝`ME-YYYYMM`，MQ 維持 `YYYYMM`）；字首在設定中心「報價單預設值」→「估價單單號字首」可改（恰 2 個大寫字母、不可與其他單據字首相撞）；改字首只影響之後新開的單，舊單照常。`GET /api/next-quote-no` 加選填 `doc_type`。
+- 類型開立（第一次存檔）時定案、**之後不可改**（PUT 一律以資料庫現值為準；單號字首隨類型，要換類型請「複製到新單」）；補登歷史單一律是報價單。
+- 用語：PDF 標題「估　價　單」、站內通知與簽核 Email（標題／內文／按鈕／主旨）隨類型換名稱；報價單文字逐字不變。`email_notify` 五支簽核通知只加選填 `doc_label`，核心不動。
+- 清單：`GET /api/quotations` 加選填 `doc_type` 篩選、每列回 `doc_type`；前端清單有「新增估價單」、類型篩選與「估價單」標籤。
+- 已知未涵蓋（另開後續票）：案件批次匯出欄位未加類型欄；API 錯誤訊息、簽核逾期提醒（`system_checks`）、成本結算／獎金等其他 Email 仍寫「報價單」。
+- 審查修正（hichan-2）：① 取用戶端暫定單號時，`quote_seq` 記在**單號自己的月份**（上個月取號、跨午夜才存檔不會把本月序號推高；本分支改寫時一度寫成「現在的月份」，已改回原行為，附測試）。② `docType` 加進編輯紀錄的忽略鍵（舊單第一次原樣存檔不再憑空多一筆「其他內容」）。③ 估價單字首不可撞任何現在實際有效的單據前綴：`helpers/doc_type.used_prefixes()`＝靜態保底（補上 BT／LN／HC／LV／OT／QT）＋站內表單範本檔＋已發布的自訂模組＋費用類型（預設與公司另外發布）；反方向，自訂模組與費用類型編輯器存前綴時不可等於目前或曾用過的估價單字首。**這個完整檢查只在「存設定」時跑**；執行期的 `estimate_prefix()`（每次稽核寫入／取號／PDF／通知）只做格式＋靜態保留清單的便宜檢查，不碰資料庫（測試釘住：200 次 `case_no_re()` 不呼叫 `used_prefixes`、不開連線、每次 < 0.1 ms）。④ 前端估價單換字時，使用者自己輸入、本身含「報價單」的內容（客戶名、專案名、條款…）原樣保留；歷史字首快取改為單一物件、一次讀寫。
+- 回滾須知：migration 0010 只加欄位（預設 `quote`），回滾程式碼不需動資料；但回滾後舊程式的 `_next_revision_no` 只認 `MQ-`，退回修改的估價單會變成 `ME-…-R1-R1`；舊指紋程式把 `docType` 算進內容，部署後被碰過的待簽估價單與舊單的已存指紋會對不上（需重新對帳）。已開出的估價單回滾前先結案或另行處理。
+- 內容指紋：`docType` 加進 `content_fp.EXCLUDED_KEYS`（讀取時由資料庫欄位注入、開立後不可改，同 `status`；舊單沒有這個鍵，既有指紋不失效、`FP_VERSION` 不變）。否則 GET 回的 `contentFp` 含 docType、伺服器用已存內容重算不含 ⇒ 複查編輯／核准一律 409「內容已更新」。複查編輯端點同 PUT：頁面送回的 `docType` 一律改回資料庫現值。**排除清單變動，請 K 審。**
+- 測試：`tests/test_estimate_doc_type_2026_11_13.py`。
+- 串接點（新增）：提供 `case.estimate_prefixes`（IP-ESTQ1，編號暫定）——曾開過估價單的單號字首，供 L1 `helpers/doc_type` 在字首改過後仍認得舊估價單號（L1 不讀 `quotations`）；`modules/case/quotations.py::_estimate_prefixes`。
+
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。

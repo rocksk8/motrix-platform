@@ -1099,6 +1099,22 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 
 ---
 
+## IP-ESTQ1　`case.estimate_prefixes`：曾開過估價單的單號字首（M01 → L1 `helpers/doc_type.py`）
+
+估價單（2026-11-13）的單號字首可在設定中心改；改了之後，舊字首開出去的單號仍要被稽核搜尋、獎金推導案件單號認得。資料（quotations.doc_type）屬 M01，L1 不讀那張表。**編號暫定，列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `modules/case/quotations.py::_estimate_prefixes`（`SELECT DISTINCT SUBSTR(quote_no,1,2) … WHERE doc_type='estimate'`，只回字首） |
+| 使用方 | L1 `helpers/doc_type.py::_historical_estimate_prefixes`（依設定世代快取） |
+| 形式 | provider，單一提供者 |
+| 語法 | `registry.single_provider("case.estimate_prefixes")(conn)` ⇒ 字首字串的可迭代物 |
+| 對方不在時 | 空集合（只認目前的估價單字首與 MQ；沒有 M01 就沒有估價單） |
+| 契約版本 | 1（2026-11-13） |
+| 守門 | `backend/tests/test_estimate_doc_type_2026_11_13.py`（改字首後舊單號仍可辨識）；`backend/tests/platform/test_integration_points_registered.py` |
+
+---
+
 ## IP-ALT1　`case.alt_view`：擇一方案報價的客戶版輸出資料（M01 → L1 `pdf_gen`；單一提供者；暫定號，列車定號；2026-10-13，M3 T7／T8）
 
 | 欄位 | 內容 |

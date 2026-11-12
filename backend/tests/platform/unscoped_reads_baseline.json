@@ -448,6 +448,7 @@
   "modules/case/purchase_items.py::pr_lines_view::case_extra_expenses": "unscoped",
   "modules/case/quotations.py::_CaseLocations.fingerprint::quotations": "unscoped",
   "modules/case/quotations.py::_CaseLocations.list::quotations": "unscoped",
+  "modules/case/quotations.py::_estimate_prefixes::quotations": "unscoped",
   "modules/case/quotations.py::_record_doc_version::quotations": "unscoped",
   "modules/case/quotations.py::case_extra_expenses::case_extra_expenses": "unscoped",
   "modules/case/quotations.py::case_summary::<from>": "dynamic",

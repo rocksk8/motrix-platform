@@ -437,8 +437,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         route = request.scope.get("route")
         template = getattr(route, "path", "") or request.url.path.split("?")[0]
         pp = request.scope.get("path_params") or {}
-        from helpers.audit import _CASE_NO_RE, _audit_failure
-        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        from helpers.audit import _case_no_re, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_case_no_re().search(str(v))] if m), "")
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,

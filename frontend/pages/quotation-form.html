@@ -914,10 +914,23 @@
     <div class="form-toolbar__left">
       <a href="quotations.html" style="color:var(--text-dim);font-size:12px;text-decoration:none;display:flex;align-items:center;gap:4px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>
-        報價單
+        <span x-text="docLabel()">報價單</span>
       </a>
       <span style="color:var(--border-light)">/</span>
       <span class="form-quote-no" x-text="q.quoteNo || '（儲存後自動編號）'"></span>
+      <!-- 單據類型：還沒存過的新單可以選（選了重新取號，兩種類型單號各自獨立）；存過就鎖定，只顯示標籤 -->
+      <template x-if="isNewRecord !== false && !hb.on">
+        <div role="group" aria-label="單據類型" data-testid="qf-doc-type"
+             style="display:inline-flex;border:1px solid var(--border-light);border-radius:6px;overflow:hidden;margin-left:6px">
+          <button type="button" data-testid="qf-doc-type-quote" @click="setDocType('quote')"
+                  :style="'border:none;padding:3px 10px;font-size:12px;cursor:pointer;' + (q.docType !== 'estimate' ? 'background:var(--text-primary);color:var(--surface)' : 'background:var(--surface);color:var(--text-secondary)')">報價單</button>
+          <button type="button" data-testid="qf-doc-type-estimate" @click="setDocType('estimate')"
+                  :style="'border:none;padding:3px 10px;font-size:12px;cursor:pointer;' + (q.docType === 'estimate' ? 'background:var(--text-primary);color:var(--surface)' : 'background:var(--surface);color:var(--text-secondary)')">估價單</button>
+        </div>
+      </template>
+      <template x-if="isNewRecord === false && q.docType === 'estimate'">
+        <span class="badge" data-testid="qf-doc-type-badge" title="單據類型：估價單（開立後不可更改；要改請複製到新單）">估價單</span>
+      </template>
       <template x-if="session.role === 'superadmin'">
         <div class="status-wrap-admin badge"
              :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
@@ -1286,7 +1299,7 @@
         </div>
         <div class="form-grid form-grid-4">
           <div class="form-group" x-show="fShown('qbasic', 'quoteNo')" :style="fo('qbasic', 'quoteNo')">
-            <label class="form-label"><span x-text="fLabel('qbasic', 'quoteNo', '報價單號')">報價單號</span></label>
+            <label class="form-label"><span x-text="fLabel('qbasic', 'quoteNo', docLabel() + '號')">報價單號</span></label>
             <input class="form-input readonly" :value="q.quoteNo" readonly>
           </div>
           <!-- QL13/QL14：據點選擇器。
@@ -2564,7 +2577,8 @@
   // V3.41（2026-11-11，多人同時編輯保護）：存檔撞樂觀鎖 409（手動／自動／送審共用 apiSave）時，頂端顯示持續橫幅「有人在你之後也改過」＋「載入最新版」鈕，並暫停自動存檔；
   //   原本只有手動「儲存草稿」會 alert，60 秒自動存檔撞 409 是無聲失敗（使用者不知道自己的修改一直沒存進去）。
   // V3.42（2026-11-11，ops）：待審核／簽核中，非簽核人（最高管理者、申請人、其他人）開著單時整張表單鎖唯讀＋上方橫幅「僅簽核人可編輯」（原本欄位可編輯、存檔必 403、自動存檔靜默失敗）。
-  const FORM_VERSION = 'V3.42'
+  // V3.43（2026-11-13，估價單）：開單時可選「報價單／估價單」（存檔前可改、存檔後鎖定）；單號字首、標題與通知用語隨類型，版型與流程不變。
+  const FORM_VERSION = 'V3.43'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2689,6 +2703,9 @@
 
       q: {
         quoteNo: '',
+        // 單據類型：'quote'＝報價單（預設）｜'estimate'＝估價單。開立（第一次存檔）時定案、之後不可改：單號字首隨類型，
+        // 改了就要換號（要換類型請「複製到新單」再選）。後端以資料庫欄位為準，這裡只是開單時的選擇。
+        docType: 'quote',
         // QL13：這張單屬於哪一個據點。空字串 = 主要據點（既有安裝的行為）。
         locationId: '',
         quoteDate: MotrixDate.today(),
@@ -4612,7 +4629,7 @@
           // 放寬到 10 秒，跟本頁其他 API 呼叫一致。
           const _nc = new AbortController()
           setTimeout(() => _nc.abort(), 10000)
-          const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
+          const res = await fetch(`${this.API}/next-quote-no?doc_type=${encodeURIComponent(this.q.docType || 'quote')}`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
           const _peeked = res.ok ? (await res.json()).quote_no : ''
           // ⚠️ 這個 peek 是非同步的，可能在使用者已經按下存檔／送審**之後**才回來。
           // 直接指派會把存檔回應剛回填的「真正的單號」蓋成新 peek 到的下一號
@@ -4634,7 +4651,7 @@
         let newNo = ''
         if (this.backendOnline) {
           try {
-            const r = await fetch(`${this.API}/next-quote-no`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            const r = await fetch(`${this.API}/next-quote-no?doc_type=${encodeURIComponent(this.q.docType || 'quote')}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
             if (r.ok) newNo = (await r.json()).quote_no
           } catch {}
         }
@@ -4783,6 +4800,79 @@
         this.setDirty()
       },
 
+      // ── 單據類型（報價單／估價單）──────────────────────────────────────────────
+      // 版面與流程完全相同，只有名稱不同。名稱取法：docLabel()；畫面上其餘寫死的「報價單」字樣，
+      // 估價單時由 _applyDocSkin() 在這一頁統一換成「估價單」（靜態文字、Alpine 動態文字、toast／alert／confirm 都涵蓋）。
+      docLabel() { return this.q.docType === 'estimate' ? '估價單' : '報價單' },
+      // 開立前（還沒存過）可以選類型；選了就重新取號（兩種類型的單號各自獨立）。存過就鎖定。
+      async setDocType(t) {
+        t = t === 'estimate' ? 'estimate' : 'quote'
+        if (this.isNewRecord === false || this.q.docType === t) return
+        this.q.docType = t
+        this.q.quoteNo = ''
+        this._quoteNoFrozen = false
+        this.isDirty = true
+        this._applyDocSkin()
+        await this._peekQuoteNo()
+      },
+      _applyDocSkin() {
+        const est = this.q.docType === 'estimate'
+        window.__motrixDocEstimate = est
+        document.title = (est ? '估價單' : '報價單') + ' - MOTRIX 專案管理系統'
+        if (!est) return
+        // 使用者自己輸入的內容（客戶名、專案名、條款…）本身若含「報價單」要原樣保留：只換系統寫死的用語。
+        // 做法：把表單資料裡含「報價單」的字串先換成佔位符、換完再還原（只有節點含「報價單」時才掃一次，很少發生）。
+        const userStrings = () => {
+          const out = new Set(), seen = new Set()
+          const dig = (v, d) => {
+            if (out.size > 300 || d > 6 || v == null) return
+            if (typeof v === 'string') { if (v.indexOf('報價單') >= 0 && v.length <= 2000) out.add(v); return }
+            if (typeof v !== 'object' || seen.has(v)) return
+            seen.add(v)
+            for (const k in v) dig(v[k], d + 1)
+          }
+          dig(this.q, 0)
+          return Array.from(out).sort((a, b) => b.length - a.length)
+        }
+        const swap = (t) => {
+          if (typeof t !== 'string' || t.indexOf('報價單') < 0) return t
+          const prot = userStrings(), tok = []
+          prot.forEach((u) => { if (t.indexOf(u) >= 0) { tok.push(u); t = t.split(u).join('\u0001' + (tok.length - 1) + '\u0002') } })
+          t = t.split('報價單').join('估價單')
+          return t.replace(/\u0001(\d+)\u0002/g, (_m, i) => tok[+i])
+        }
+        const walk = (root) => {
+          if (!root) return
+          const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: (n) => {
+              const p = n.parentNode
+              if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION|IFRAME)$/.test(p.nodeName)) return NodeFilter.FILTER_REJECT
+              return n.nodeValue && n.nodeValue.indexOf('報價單') >= 0 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            }
+          })
+          const hits = []
+          while (tw.nextNode()) hits.push(tw.currentNode)
+          hits.forEach(n => { const v = swap(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v })     // 內容沒變就不寫回（寫回會再觸發 MutationObserver；受保護的使用者文字換完還是原樣）
+          if (root.querySelectorAll) root.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e => {
+            for (const a of ['title', 'aria-label', 'placeholder']) { const v = e.getAttribute(a); if (v && v.indexOf('報價單') >= 0) e.setAttribute(a, swap(v)) }
+          })
+        }
+        walk(document.body)
+        if (!this._docSkinObserver) {
+          this._docSkinObserver = new MutationObserver((muts) => {
+            if (!window.__motrixDocEstimate) return
+            for (const m of muts) {
+              if (m.type === 'characterData') { const v = m.target.nodeValue; if (v && v.indexOf('報價單') >= 0) { const w = swap(v); if (w !== v) m.target.nodeValue = w } }
+              else m.addedNodes.forEach(n => { if (n.nodeType === 3) { if (n.nodeValue.indexOf('報價單') >= 0) { const w = swap(n.nodeValue); if (w !== n.nodeValue) n.nodeValue = w } } else if (n.nodeType === 1) walk(n) })
+            }
+          })
+          this._docSkinObserver.observe(document.body, { childList: true, subtree: true, characterData: true })
+          // 原生對話框（alert／confirm）也是使用者看得到的字：估價單時同樣換名稱
+          const _al = window.alert.bind(window), _cf = window.confirm.bind(window)
+          window.alert = (m) => _al(window.__motrixDocEstimate ? swap(String(m)) : m)
+          window.confirm = (m) => _cf(window.__motrixDocEstimate ? swap(String(m)) : m)
+        }
+      },
       toast(msg, duration = 2500) {
         const el = document.createElement('div')
         el.textContent = msg
@@ -4960,6 +5050,7 @@
             if (matches) {
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
+              this._applyDocSkin()
               this._fillMissingTerms(t)
               this.isNewRecord = true
               this.isDirty = true
@@ -5014,6 +5105,7 @@
                 if (matched) this.q.salesPersonUsername = matched.username
               }
               this._lastUpdatedAt = row.updated_at || null
+              this._applyDocSkin()                // 估價單：載入後把頁面用語換成「估價單」
               // 簽核綁版本＋S5 彈窗資料：這條 `?id=` 載入路徑原本沒設 `_contentFp`（只有 loadQuote() 設）⇒ 直接開單簽核時 expectedFp 永遠是空的
               this._contentFp = row.contentFp || null
               this._approveReview = row.approveReview || null
@@ -5036,6 +5128,7 @@
         } else {
           // ── 新增模式：每次由 API 派發單號 ──
           this._loadBackfillConfig()           // T70-1：最高管理者且補登開關有效時才會出現「補登歷史案件」
+          if (params.get('type') === 'estimate') { this.q.docType = 'estimate'; this._applyDocSkin() }   // 估價單：清單頁「新增估價單」帶 ?type=estimate
           await this._peekQuoteNo()
           this.isNewRecord = true
           this.q.validDays = this.pmCfg.defaultValidDays      // T64 A Q7：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝原本的值；取不到＝30）
