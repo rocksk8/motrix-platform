@@ -42,6 +42,15 @@ def _no_external_commands(monkeypatch):
 
 
 @pytest.fixture()
+def su_hdr(client, make_user):
+    """最高管理者：完整授權狀態（客戶、到期日、機器代碼…）只給他（T83 L5 追加，PM 裁示）；其他角色的精簡版見 test_license_import_2026_11_13.py。"""
+    username, password = make_user(username="lic_su_status", role="superadmin")
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+@pytest.fixture()
 def hdr(client, make_user):
     """已登入的一般管理者。登入端點在豁免清單裡，所以先登入再換金鑰也行；這裡在金鑰有效時登入。"""
     username, password = make_user(role="admin")
@@ -124,10 +133,10 @@ def test_the_conftest_key_is_a_real_signed_key_not_a_stub(license_test_key):
 
 # ── 情境 4：金鑰有效 ─────────────────────────────────────────────────────────
 
-def test_valid_key_lets_business_api_through(client, hdr):
+def test_valid_key_lets_business_api_through(client, hdr, su_hdr):
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 200, r.text
-    s = client.get("/api/license/status", headers=hdr)
+    s = client.get("/api/license/status", headers=su_hdr)
     assert s.status_code == 200 and s.json()["valid"] is True and s.json()["reason"] == "ok", s.text
 
 
@@ -164,12 +173,12 @@ def test_license_expiring_today_is_still_valid(client, hdr, install_key, sign):
     assert client.get(BUSINESS_API, headers=hdr).status_code == 200
 
 
-def test_expired_perpetual_is_not_blocked(client, hdr, install_key, sign):
+def test_expired_perpetual_is_not_blocked(client, hdr, install_key, sign, su_hdr):
     """永久授權過期的是維護期，不是使用權：不擋，只在 status 帶 expired 讓畫面提示。"""
     yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
     install_key(sign(expires=yesterday, kind=lic.LICENSE_KIND_PERPETUAL))
     assert client.get(BUSINESS_API, headers=hdr).status_code == 200
-    s = client.get("/api/license/status", headers=hdr).json()
+    s = client.get("/api/license/status", headers=su_hdr).json()
     assert (s["valid"], s["reason"], s["kind"]) == (False, "expired", "perpetual"), s
 
 
@@ -307,7 +316,7 @@ def test_exempt_paths_are_pinned():
 
 def test_without_a_key_the_customer_can_still_log_in_and_see_why(client, make_user, install_key):
     """客戶沒有金鑰時仍要能自救：登入、看 /api/license/status（知道為什麼被擋）、非 /api/ 的頁面載得出來。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     install_key(None)
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text

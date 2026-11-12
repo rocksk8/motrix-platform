@@ -5,7 +5,18 @@
 > `backend/helpers/licensing.py`（`expiry_reminder`／`expiry_banner`、豁免清單）、`backend/helpers/system_checks.py::_check_license_expiry`、
 > `frontend/pages/license-settings.html`、`frontend/pages/license-required.html`（連結）、`frontend/static/notif.js`（橫幅）。
 > 測試：`backend/tests/test_license_import_2026_11_13.py`、`backend/tests/test_e2e_license_import_2026_11_13.py`。
-> **T80 的安全性一律沒有動**：驗章流程、公鑰、`LICENSE_GATE_ENABLED`、緊急放行通行證判定、402 行為、`/api/license/status` 都與 T80 相同。
+> **T80 的安全性一律沒有動**：驗章流程、公鑰、`LICENSE_GATE_ENABLED`、緊急放行通行證判定、402 行為都與 T80 相同。**唯一的契約變更**：`GET /api/license/status` 對非最高管理者（含示範帳號）只回精簡欄位（見下節「status 契約」），最高管理者拿到的與以前完全一樣。
+
+## status 契約（PM 裁示，T83 追加）
+
+`GET /api/license/status` 是授權豁免端點（授權失效時前端也要能讀它來決定要不要擋），所以任何已登入者都讀得到；為了不把客戶名稱、到期日、機器指紋給一般同仁，依身分分兩種：
+
+| 誰 | 回什麼 |
+|---|---|
+| 最高管理者（非示範） | 與以前完全相同的完整欄位（`customer`／`expires`／`days_left`／`modules`／`env`／`machine`／`emergency`／`gate`／`blocked`／`modules_unlicensed` …） |
+| 其他所有人（admin／sales／engineer／viewer、示範帳號） | 只有 `valid`、`reason`（原因代碼）、`gate`、`blocked`、`emergency`（只剩 `{active}` 或 `null`）、`modules_unlicensed_count`（件數，不列模組名） |
+
+前端用到的欄位（402 說明頁、守門、橫幅）精簡版都有；非最高管理者的 402 頁只顯示「系統暫時無法使用，請聯絡系統管理員」，不顯示到期日或模組清單。
 
 ## 1. 買家能做什麼（白話）
 
@@ -34,7 +45,7 @@
 3. **驗的與存的是同一個字串**：上傳先正規化（去 BOM、去所有空白，只准 base64／base64url 字元，其餘 `malformed`）。`base64.b64decode` 預設會悄悄丟掉非字母表字元，不先擋的話「驗過的」與「存下去的」可能不是同一份。
 4. **先備份、原子寫入、換後複驗、失敗還原**：備份失敗 ⇒ 不換；寫同資料夾暫存檔再 `os.replace`；換完走**讀檔路徑**（`verify_license()`）再驗一次，客戶與到期日必須與剛驗過的一致，否則用備份檔原樣還原（原本沒有檔就刪掉剛寫的）。備份在授權檔旁的 `license_backups/license_<時間>.key`，留最近 30 份。
 5. **大小上限 32 KB**：路由層串流讀、讀到上限就停（不先整包讀進記憶體；有無 `Content-Length` 都擋）。**頻率限制**：**每個帳號**滑動視窗 10 點／10 分鐘（正式匯入 1 點、預覽 0.5 點）＋較寬的全域上限 60 點／10 分鐘——一個被盜的 session 只鎖得住自己，鎖不到其他最高管理者；不依 IP（X-Forwarded-For 可偽造）；被擋時稽核只寫該帳號該視窗第一筆。**本文巢狀深度**：`[`／`{` 總數超過 16 直接當格式不對（400），`json.loads` 的 `RecursionError` 也接住（不會變 500）。
-6. **稽核**：成功 `license.import`、失敗（含預覽被拒）`license.import_rejected`；只記檔案編號（前 12 碼）、驗證後的客戶／到期日、原因碼，**不記授權內容**；要求確認（`needs_confirm`）與預覽成功不寫。
+6. **稽核**：成功 `license.import`、失敗（含預覽被拒）`license.import_rejected`、新檔複驗不過且舊檔也還原不回去 `license.import_restore_failed`（另有伺服器 ERROR log；回應 500 `restore_failed`，不會說「已自動還原」）；只記檔案編號（前 12 碼）、驗證後的客戶／到期日、原因碼，**不記授權內容**；要求確認（`needs_confirm`）與預覽成功不寫。
 7. **示範帳號一律擋**：示範帳號 role 也是 superadmin，但授權檔是整台機器共用的——不擋就能換掉正式機的授權。
 8. **沒有私鑰、沒有繞過**：不提供下載、不簽發、不改 `LICENSE_GATE_ENABLED`、不碰公鑰（測試掃原始碼釘住）。**LG-O1（開發私鑰／`_PUBKEY_DEV` 不進出貨包）與本功能獨立**：LG-O1 落地後（包內 `_PUBKEY_DEV` 清空），開發金鑰簽的授權在正式機上自然驗不過（`bad_signature`）；在那之前，**只要正式公鑰（`_PUBKEY_PROD`）已經內建，開發金鑰簽的授權匯入一律拒絕（`dev_license_not_allowed`，沒有確認後仍要換的出口）**；正式公鑰還是空的（開發機）時，才會標成「測試用」並要求確認（閘門本身照舊收，行為與 T80 一致）。
 9. **有差異要確認**：客戶名稱不同、新授權沒包含目前正在用的功能（用載入器同一個 `module_licensed` 判斷）、到期日變早、永久改年費、測試用授權。
