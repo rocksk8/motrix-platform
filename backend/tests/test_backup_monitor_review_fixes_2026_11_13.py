@@ -1040,7 +1040,11 @@ def test_disable_request_text_does_not_leak_paths(client, make_user, hb_cfg):
 
 # ══ N1：scrub_paths 不能被長串破折號拖慢 ═══════════════════════════════════════════
 
-@pytest.mark.parametrize("text", ["-" * 20000, "a-" * 40000, "-." * 10000, "a/" * 20000, "a\\" * 20000, "a-b/" * 10000, "x" * 100000])
+_LINEAR_CASES = {"dashes": "-" * 20000, "a-dash": "a-" * 40000, "dash-dot": "-." * 10000, "a-slash": "a/" * 20000,
+                 "a-backslash": "a\\" * 20000, "a-b-slash": "a-b/" * 10000, "plain": "x" * 100000}
+
+
+@pytest.mark.parametrize("text", list(_LINEAR_CASES.values()), ids=list(_LINEAR_CASES))     # 短 id：id 是整串會超過 Windows 環境變數 32767 字上限（PYTEST_CURRENT_TEST）
 def test_scrub_paths_is_linear_and_bounded(text):
     """審查 N1：lookbehind 沒排除 `-` 而 token 字元含 `-`，每個破折號之後都重掃一遍＝O(n²)（4 萬字 30 秒）。
     現在 lookbehind 補上 `-`，輸入另外截到 2000 字。"""
@@ -1193,3 +1197,29 @@ def test_mail_failure_is_reported_to_the_user_not_swallowed(client, make_user, h
     h = _login(client, make_user, "n2_l")
     r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": SECRET})
     assert r.status_code == 200 and "通知信沒有寄出去" in r.json()["message"]
+
+
+# ══ N5：待核准的新網址檔等同密碼，要和 heartbeat_config.json 一樣不進 git、不進回滾快照、不被還原蓋掉 ══════════════
+
+def _repo_root():
+    return Path(__file__).resolve().parents[2]
+
+
+def test_pending_url_file_is_gitignored():
+    lines = [l.strip() for l in (_repo_root() / ".gitignore").read_text(encoding="utf-8").splitlines()]
+    assert "backend/heartbeat_config.json" in lines and "backend/heartbeat_config.json.pending" in lines
+
+
+def test_update_and_rollback_scripts_exclude_the_pending_url_file_wherever_they_exclude_the_config():
+    """每個排除 heartbeat_config.json 的 robocopy 行都要同時排除 .pending；備份 backend/ 的快照行也要排除 .pending。"""
+    checked = 0
+    for name in ("apply_update.ps1", "rollback_update.ps1"):
+        text = (_repo_root() / "backend" / "tools" / name).read_text(encoding="utf-8-sig")
+        for n, line in enumerate(text.splitlines(), 1):
+            if "heartbeat_config.json" in line and "/XF" in line:
+                checked += 1
+                assert "heartbeat_config.json.pending" in line, "%s:%d 排除了設定檔卻沒排除 .pending" % (name, n)
+        if name == "apply_update.ps1":
+            snap = [l for l in text.splitlines() if 'robocopy $BackendDir (Join-Path $rollbackDir "backend")' in l]
+            assert snap and all("/XF" in l and "heartbeat_config.json.pending" in l for l in snap)
+    assert checked >= 8                                                  # 掃得到才算數（不是掃空）

@@ -16,6 +16,7 @@
     - N3：解析網域放進整體時限（背景執行緒＋逾時，`safe_ping.public_addresses(host, port, timeout=5.0)` 新增選填 `timeout`，逾時＝`PingFailed("timeout")`）。
     - N4：備份鎖檔打不開時不再安靜退回只用執行緒鎖：手動備份拒絕（`archive.BackupLockUnavailable` → `helpers.backup_monitor.BackupLockProblem` → 路由 503，白話訊息，不寫「最後啟動」時間）；排程備份照跑，但記 ERROR 並寫系統告警（每行程一次）。`archive.backup_run_lock(strict=False)` 新增選填參數。
     - 測試：同檔新增 N1～N4 題（慢 DNS、破折號線性、換主機核准全流程、鎖檔不可開）。
+    - N5／T1（第三輪）：`heartbeat_config.json.pending`（含完整新網址）加進 `.gitignore`，以及 `apply_update.ps1`（回滾快照複製、各還原／覆蓋 robocopy）與 `rollback_update.ps1` 所有 `/XF` 清單（與 `heartbeat_config.json` 並列）；`apply_update.version.json` 只更新 sha256（比照 9de4cc8e4 加 `/XF` 檔名的先例，`$ApplyScriptVersion` 不動）。測試：兩個守門題；`test_scrub_paths_is_linear_and_bounded` 改用短 `ids`（4 萬字的 id 會讓 Windows 的 `PYTEST_CURRENT_TEST` 超過 32767 字上限而 setup 出錯）。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
