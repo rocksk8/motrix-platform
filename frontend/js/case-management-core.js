@@ -115,11 +115,7 @@ window.CM_PARTS.push(() => ({
       this.$watch('moDirty', v => { window.motrixIsDirty = !!v || !!this.dirty })   // 材料申請有未儲存的新增／修改：離頁（beforeunload）與站內切換都提示
       this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
-      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
-      // 而這一頁的主體（案件矩陣）不應該等它。
-      this.loadLocations()
       MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
-      this.detectFileCenter()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
@@ -133,6 +129,11 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，而這一頁的主體（案件矩陣）不應該等它。
+      // D3：這兩支要帶 session.token，所以**必須在 session 就緒之後**（以前放在 init() 最前面、`_initDone` 擋之前：
+      // Alpine 自動呼叫的那一輪 session 還是空的 ⇒ `Bearer undefined` ⇒ 401，而且 init 跑兩遍所以還各送兩次）。
+      this.loadLocations()
+      this.detectFileCenter()
       try {
         const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }

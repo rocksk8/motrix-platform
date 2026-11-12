@@ -41,3 +41,14 @@ def test_d2_approval_queue_reads_the_company_profile_with_the_api_prefix(live_se
     _page, seen = _load(live_server, make_user, new_page, login_as, role, "approval-queue.html")
     assert not [x for x in seen if "company-profile" in x[1] and x[0] >= 400], _bad(seen)
     assert any(st == 200 and u.startswith("/api/settings/company-profile") for st, u in seen), "對照：據點清單那支請求要真的成功"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("role", ["superadmin", "sales"])
+def test_d3_case_management_has_no_401_on_load(live_server, make_user, new_page, login_as, role):
+    """401 的原因是 init() 在 session 就緒前就帶著 `Bearer undefined` 打 API，不是權限設計：已登入的人載入頁面不該有任何 401。"""
+    _page, seen = _load(live_server, make_user, new_page, login_as, role, "case-management.html")
+    assert not [x for x in seen if x[0] == 401], _bad(seen)
+    assert any(st == 200 and u.startswith("/api/system/modules/availability") for st, u in seen), "對照：模組狀態請求要成功"
+    assert any(st == 200 and u.startswith("/api/settings/company-profile") for st, u in seen), "對照：據點清單請求要成功"
+    assert not _bad(seen), _bad(seen)
