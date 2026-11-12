@@ -160,6 +160,7 @@
    "js:static/gov-lookup.js",
    "js:static/layout-editor.js",
    "js:static/custom-fields.js",
+   "js:static/role-label.js",
    "js:static/user-buttons.js",
    "js:static/layout-runtime.js",
    "js:static/legal-round.js",
