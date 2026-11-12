@@ -123,6 +123,7 @@
    "helper:startup",
    "helper:storage_locations",
    "helper:storage_slots",
+   "helper:static_cache",
    "helper:system_checks",
    "helper:heartbeat_status",
    "helper:line_recipients",

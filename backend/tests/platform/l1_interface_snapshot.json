@@ -1,5 +1,5 @@
 {
- "core_version": "1.161",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1959,6 +1959,19 @@
    "manifest_drift": "def()",
    "run_edge_pdf": "def(cmd)",
    "version_sort_key": "def(version)"
+  },
+  "helper:static_cache": {
+   "AssetVersion": "class",
+   "AssetVersion.__init__": "def(self, frontend_dir, sidebar_source=…, module_assets=…)",
+   "AssetVersion.current": "def(self)",
+   "AssetVersion.has_digest": "def(self, raw_body_sha1)",
+   "IMMUTABLE": "const",
+   "REF_RE": "const",
+   "REVALIDATE": "const",
+   "TTL_S": "const",
+   "classify": "def(path)",
+   "handle": "async def(request, call_next, version, legacy)",
+   "rewrite_refs": "def(text, version)"
   },
   "helper:status_display": {
    "CONTEXTS": "const",

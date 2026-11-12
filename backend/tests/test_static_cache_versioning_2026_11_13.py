@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from core import source_tree
 from helpers import static_cache as sc
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
@@ -31,10 +32,8 @@ def _version(client):
 
 
 def _page_files():
-    out = [FRONTEND / "index.html"]
-    out += sorted((FRONTEND / "pages").glob("*.html"))
-    out += sorted(MODULES.glob("*/pages/*.html"))
-    return out
+    # 頁面位置一律經 source_tree（frontend/pages 與各模組 pages/；有些頁面已搬進模組，列車上不在 frontend/pages）
+    return [FRONTEND / "index.html"] + list(source_tree.page_files())
 
 
 def _is_vendor(path_text):
@@ -115,7 +114,7 @@ def test_every_served_page_references_only_the_current_version(client):
     """伺服器**實際送出**的每一頁：本站資源引用一律帶目前版本（不是只看原始碼）。"""
     ver = _version(client)
     bad = []
-    names = ["/"] + ["/pages/" + p.name for p in sorted((FRONTEND / "pages").glob("*.html"))]
+    names = ["/"] + ["/pages/" + p.name for p in source_tree.page_files()]
     for url in names:
         r = client.get(url)
         assert r.status_code == 200, url
@@ -368,7 +367,7 @@ def test_online_users_polling_is_slow_and_pauses_when_hidden():
     assert not re.search(r"setInterval\(\s*refreshOnlineWidget", side)
     helper = side[side.index("window.motrixVisiblePoll = "):side.index("function refreshOnlineWidget")]
     assert "document.hidden" in helper and "visibilitychange" in helper
-    stats = (FRONTEND / "pages" / "online-stats.html").read_text(encoding="utf-8")
+    stats = source_tree.page_file("online-stats.html").read_text(encoding="utf-8")
     assert "motrixVisiblePoll(() => this.loadOnline()" in stats
 
 
@@ -389,7 +388,7 @@ def test_kill_switch_restores_legacy_headers_and_unrewritten_bodies(client, monk
     monkeypatch.setattr(main, "_STATIC_CACHE_ON", False)
     r = client.get("/pages/account-items.html")
     assert "no-store" in r.headers["cache-control"]
-    assert r.content == (FRONTEND / "pages" / "account-items.html").read_bytes()
+    assert r.content == source_tree.page_file("account-items.html").read_bytes()
     r = client.get("/static/notif.js?v=anything")
     assert "no-store" in r.headers["cache-control"] and "immutable" not in r.headers["cache-control"]
     assert client.get("/static/vendor/alpine-3.17.1.min.js").headers["cache-control"] == "public, max-age=31536000, immutable"
