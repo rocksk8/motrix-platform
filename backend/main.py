@@ -587,6 +587,12 @@ async def license_gate_middleware(request: Request, call_next):
     # emergency_pass() 與 license_alerts 都不丟例外，任何不確定都當沒有通行證 ⇒ 照擋。
     emergency = await run_in_threadpool(license_core.emergency_pass, status) if blocked else None
     if blocked and emergency is None and not exempt:
+        # T80稽核 LG-S1：能走到這裡又「沒通過身分驗證」的非豁免請求，只剩 auth_middleware 刻意放行的
+        # `/api/uploads/*?pt=…`（簽章由路由處理函式驗，這裡看不到結果）。任何人帶一個亂填的 `pt` 就能走到這一步，
+        # 若回 402＋reason 就違反上面「先確認是誰」的設計：對陌生人洩漏「這台機器沒有授權」以及原因碼。
+        # 一律回與 auth_middleware 同樣的 401（同一句話，不含任何授權字樣）。
+        if not getattr(request.state, "authed", False):
+            return JSONResponse(status_code=401, content={"detail": "未登入"})
         # 402 Payment Required，不是 403。
         # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。
         return JSONResponse(

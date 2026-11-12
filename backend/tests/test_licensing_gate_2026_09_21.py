@@ -334,6 +334,23 @@ def test_g_unauthenticated_request_gets_401_not_402(client, install_key):
     assert "license" not in r.text.lower()
 
 
+@pytest.mark.parametrize("qs", ["pt=garbage", "pt=1", "pt=%00"])
+def test_lg_s1_unauthenticated_uploads_pt_request_gets_401_not_402(client, install_key, qs):
+    """T80稽核 LG-S1：`/api/uploads/*?pt=…` 是 auth_middleware 唯一放行「沒帶 Authorization」的非公開路徑，
+    任何亂填的 pt 都會走進授權守門。沒有金鑰時它以前回 402＋完整 reason，對陌生人洩漏授權狀態。"""
+    install_key(None)
+    r = client.get("/api/uploads/anything/x.png?" + qs)
+    assert r.status_code == 401, f"沒登入只帶 pt 的請求要 401，不可以是 {r.status_code}：{r.text}"
+    assert "license" not in r.text.lower() and "reason" not in r.json(), r.text
+
+
+def test_lg_s1_uploads_pt_request_still_reaches_the_route_when_licensed(client, install_key, sign):
+    """正對照：有授權時 `?pt=` 照舊進路由（亂填的簽章 ⇒ 路由自己回 403，而不是被守門吃掉）。"""
+    install_key(sign())
+    r = client.get("/api/uploads/anything/x.png?pt=garbage")
+    assert r.status_code == 403, r.text
+
+
 def test_402_is_not_403(client, hdr, install_key):
     """402＝這台機器沒買、403＝這個人沒權限。客服現場要分得開。"""
     install_key(None)
