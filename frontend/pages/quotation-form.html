@@ -878,14 +878,14 @@
     </div>
   </div>
 
-  <!-- ══ 拒絕結案 Modal ══ -->
+  <!-- ══ 駁回結案 Modal ══ -->
   <div x-show="showRejectFinalModal" x-cloak
        style="position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"
        @keydown.escape.window="showRejectFinalModal=false">
     <div style="background:#fff;border-radius:12px;width:460px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.3);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden" @click.stop>
       <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px;background:#1C1917">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-        <span style="font-size:13px;font-weight:600;color:#fff">拒絕結案（永久鎖定）</span>
+        <span style="font-size:13px;font-weight:600;color:#fff">駁回結案（永久鎖定）</span>
         <button @click="showRejectFinalModal=false" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0 4px">&times;</button>
       </div>
       <div style="padding:18px 20px">
@@ -893,7 +893,7 @@
           ⚠ 此操作<b>不可撤銷</b>。報價單將永久標記為「已拒絕」，申請人無法再修改或重新送審。
         </div>
         <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;margin-top:14px">拒絕原因 <span style="font-weight:400;color:#9CA3AF">（必填）</span></div>
-        <textarea x-model="rejectFinalNote" placeholder="請說明拒絕結案原因（申請人將收到通知）…"
+        <textarea x-model="rejectFinalNote" placeholder="請說明駁回結案原因（申請人將收到通知）…"
                   style="width:100%;height:90px;border:1.5px solid #D1D5DB;border-radius:6px;padding:9px 10px;font-size:12px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none"
                   :style="rejectFinalNote.trim() ? '' : 'border-color:#FCA5A5'"
                   @focus="$el.style.borderColor='#374151'" @blur="$el.style.borderColor=rejectFinalNote.trim()?'#D1D5DB':'#FCA5A5'"></textarea>
@@ -904,7 +904,7 @@
         <button @click="confirmRejectFinal()" :disabled="!rejectFinalNote.trim() || rejectingFinal"
                 style="padding:7px 18px;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif"
                 :style="!rejectFinalNote.trim() || rejectingFinal ? 'background:#9CA3AF;color:#fff;cursor:not-allowed' : 'background:#1C1917;color:#fff'">
-          <span x-text="rejectingFinal ? '處理中…' : '確認拒絕結案'"></span>
+          <span x-text="rejectingFinal ? '處理中…' : '確認駁回結案'"></span>
         </button>
       </div>
     </div>
@@ -1087,7 +1087,7 @@
       <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
         <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="rejectFinalQuote()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-          拒絕結案
+          駁回結案
         </button>
       </template>
       <template x-if="(q.status === '待審核' || q.status === '簽核中') && !isCurrentTierApprover() && q.approval?.requestedBy !== session.username">
@@ -2471,7 +2471,7 @@
         <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
           <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="previewMode=null; rejectFinalQuote()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-            拒絕結案
+            駁回結案
           </button>
         </template>
         <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
@@ -4288,13 +4288,13 @@
         this.rejectingFinal = false
         if (!r.ok) {
           const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
-          alert('拒絕結案失敗：' + (err.detail || '未知錯誤'))
+          alert('駁回結案失敗：' + (err.detail || '未知錯誤'))
           return
         }
         this.showRejectFinalModal = false
         await this.loadQuote()
         const msg = document.createElement('div')
-        msg.textContent = '✗ 報價單已永久拒絕結案'
+        msg.textContent = '✗ 報價單已永久駁回結案'
         msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#1C1917;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
         document.body.appendChild(msg)
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 3000)

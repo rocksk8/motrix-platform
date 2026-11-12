@@ -639,7 +639,7 @@
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                  拒絕結案
+                  駁回結案
                 </button>
               </div>
             </template>
@@ -654,7 +654,7 @@
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                  拒絕結案
+                  駁回結案
                 </button>
               </div>
             </template>
@@ -976,7 +976,7 @@
           </button>
           <button x-show="!isVoucher(selected)" class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-            拒絕結案
+            駁回結案
           </button>
           <span class="aq-actbar__note">
             <span x-text="'第 ' + ((selected?.currentTier ?? 0) + 1) + '/' + (selected?.tierCount || 1) + ' 層'"></span>
@@ -984,7 +984,7 @@
           </span>
           <p class="aq-actbar__hint" data-testid="aq-reject-hint">
             <strong x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'"></strong>：送回申請人修改，改好可以重新送簽。
-            <template x-if="!isVoucher(selected)"><span><strong>拒絕結案</strong>：這張單不再處理，不會再回到簽核。</span></template>
+            <template x-if="!isVoucher(selected)"><span><strong>駁回結案</strong>：這張單不再處理，不會再回到簽核。</span></template>
           </p>
         </div>
 
@@ -1038,7 +1038,7 @@
   <!-- Reject-final modal -->
   <div class="reject-modal-overlay" x-show="rejectFinalModalOpen" @click.self="rejectFinalModalOpen=false">
     <div class="reject-modal" style="border-top:4px solid #1C1917">
-      <h3 style="color:#1C1917">拒絕結案</h3>
+      <h3 style="color:#1C1917">駁回結案</h3>
       <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:7px;padding:10px 13px;margin-bottom:14px;font-size:12px;color:#B91C1C;line-height:1.6">
         ⚠ 此操作<strong>不可逆</strong>。報價單將永久鎖定為「已拒絕」狀態，申請人無法再修改或重送。
       </div>
@@ -1908,7 +1908,7 @@
               return
             }
             this.rejectFinalModalOpen = false
-            this._toast('✗ 已永久拒絕結案', '#1C1917')
+            this._toast('✗ 已永久駁回結案', '#1C1917')
             this.selected = null
             await this.loadQueue()
           } catch (e) {

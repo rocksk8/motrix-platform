@@ -2438,7 +2438,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                     raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
         if existing["status"] == "已拒絕":
             conn.close()
-            raise HTTPException(403, "已拒絕結案的報價單不可修改")
+            raise HTTPException(403, "已駁回結案的報價單不可修改")
         try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
             _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
@@ -5758,7 +5758,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
 
 @router.post("/api/quotations/{quote_no}/reject-final")
 def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
-    """拒絕結案：永久鎖定，不可再修改或送審。"""
+    """駁回結案：永久鎖定，不可再修改或送審。"""
     user = _require_user(authorization)
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
@@ -5812,11 +5812,11 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         if requester:
             suffix = f"：{note}" if note else ""
             _notify(requester, "approval_rejected", quote_no, quote_no,
-                    f"報價單 {quote_no}（{cname}）已被拒絕結案{suffix}")
+                    f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}")
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"note": note})
-        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 拒絕結案：所有人的待簽核／待複查通知失效
+        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 駁回結案：所有人的待簽核／待複查通知失效
         return {"ok": True}
 
 
@@ -7137,7 +7137,7 @@ def approval_history(month: Optional[str] = None, q: Optional[str] = None,
     finally:
         conn.close()
 
-    ACTION_LABELS = {"approve": "核准", "reject": "退回", "reject_final": "拒絕結案",
+    ACTION_LABELS = {"approve": "核准", "reject": "退回", "reject_final": "駁回結案",
                      "reassign": "轉簽"}
     items = []
     for r in rows:

@@ -37,18 +37,19 @@ def mine_groups(user: dict) -> list:
             def n(extra_sql, extra_params):
                 return conn.execute(base + " AND " + extra_sql, fp + extra_params).fetchone()[0]
             active = n(f"{SQL_DEAL_TAG} = '已成案' AND " + _q._CASE_MINE_SQL, mine_params)
-            stage = n(_q._CASE_STAGE_OVERDUE_SQL + " AND " + _q._CASE_MINE_SQL, [today] + mine_params)
-            recv = n(_q._CASE_RECV_OVERDUE_SQL + " AND " + _q._CASE_MINE_SQL, [today] + mine_params)
+            # 與案件清單「全部」頁籤同一個母體（已成案、未結案）⇒ 點進去看到的件數＝首頁寫的件數
+            stage = n(f"{SQL_DEAL_TAG} = '已成案' AND " + _q._CASE_STAGE_OVERDUE_SQL + " AND " + _q._CASE_MINE_SQL, [today] + mine_params)
+            recv = n(f"{SQL_DEAL_TAG} = '已成案' AND " + _q._CASE_RECV_OVERDUE_SQL + " AND " + _q._CASE_MINE_SQL, [today] + mine_params)
             items = []
             if stage:
-                items.append({"title": "有階段已過預定日", "sub": "%d 件案件" % stage, "href": HREF + "?quick=stage_overdue", "tone": "crit"})
+                items.append({"title": "有階段已過預定日", "sub": "%d 件案件" % stage, "href": HREF + "?quick=mine,stage_overdue", "tone": "crit"})
             if recv:
-                items.append({"title": "有款項已過預計收款日", "sub": "%d 件案件" % recv, "href": HREF + "?quick=recv_overdue", "tone": "crit"})
+                items.append({"title": "有款項已過預計收款日", "sub": "%d 件案件" % recv, "href": HREF + "?quick=mine,recv_overdue", "tone": "crit"})
             out.append({"key": "my_cases", "title": "我的案件", "count": active, "href": HREF + "?quick=mine",
                         "hrefLabel": "看我的案件", "items": items, "kind": "work", "order": 40,
                         "empty": "目前沒有進行中的案件"})
         if money:
-            recv_all = conn.execute(base + " AND " + _q._CASE_RECV_OVERDUE_SQL, fp + [today]).fetchone()[0]
+            recv_all = conn.execute(base + f" AND {SQL_DEAL_TAG} = '已成案' AND " + _q._CASE_RECV_OVERDUE_SQL, fp + [today]).fetchone()[0]
             items = ([{"title": "款項已過預計收款日", "sub": "%d 件案件" % recv_all, "href": HREF + "?quick=recv_overdue", "tone": "crit"}]
                      if recv_all else [])
             out.append({"key": "receivable_overdue", "title": "應收款項追蹤", "count": recv_all, "href": HREF + "?quick=recv_overdue",
