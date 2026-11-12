@@ -337,4 +337,5 @@ main.py auth_middleware：token.startswith('DEMO_') → set_demo_mode(True)，
 | 換檔 | 先備份舊檔（`license_backups/`，留 30 份）→ 原子寫入 → 讀檔複驗 → 失敗自動還原 |
 | 限制 | 上傳 ≤ 32 KB；每帳號 10 點／10 分鐘（預覽 0.5 點）＋全域 60 點；本文巢狀深度上限；正式公鑰已內建時拒收開發金鑰簽的授權；稽核 `license.import`／`license.import_rejected`（不記授權內容） |
 | 豁免 | `/api/license/overview`、`/api/license/import` 在授權豁免清單內（授權失效時唯一能救回系統的動作）；豁免只跳過授權閘門，端點自己驗權限 |
+| status | `GET /api/license/status`（授權豁免、任何已登入者可讀）：**只有非示範最高管理者拿完整欄位**；其餘身分（含示範）只拿 `valid／reason／gate／blocked／emergency{active}／modules_unlicensed_count`，不含客戶名、到期日、機器指紋、模組清單 |
 | 到期提醒 | 剩 30／14／7 天頂端橫幅（`X-Motrix-License-Expiry`，**只有最高管理者**的回應帶、看得到）＋每日通知（信件；LINE 待事件登記表併入）；詳見 `docs/platform/LICENSE-IMPORT.md` |

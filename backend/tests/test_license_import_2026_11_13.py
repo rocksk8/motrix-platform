@@ -957,3 +957,136 @@ def test_verify_package_refuses_license_backups_and_import_tmp_files():
     for name in ("license.key.import-tmp", "license.key.restore-tmp"):
         assert bad["license-tmp"]("backend/" + name, name)
     assert not bad["license-tmp"]("backend/helpers/licensing.py", "licensing.py")
+
+
+# ── GET /api/license/status：完整狀態只給最高管理者（PM 裁示，T83 L5 追加）────────────────
+
+_SLIM_KEYS = {"valid", "reason", "gate", "blocked", "emergency", "modules_unlicensed_count"}
+
+
+def _login(client, make_user, name, role):
+    username, password = make_user(username=name, role=role)
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def test_status_is_complete_for_superadmin_exactly_as_before(client, hdr, put_current, sign):
+    put_current(sign(customer="某某股份有限公司", expires=_in(20)))
+    s = client.get("/api/license/status", headers=hdr).json()
+    assert s["customer"] == "某某股份有限公司" and s["expires"] == _in(20) and s["days_left"] == 20
+    for k in ("valid", "reason", "modules", "env", "machine", "emergency", "gate", "blocked", "modules_unlicensed"):
+        assert k in s, k
+    assert "modules_unlicensed_count" not in s
+
+
+@pytest.mark.parametrize("role", ["admin", "sales", "engineer", "viewer"])
+def test_status_is_slim_for_every_other_role(client, make_user, put_current, sign, role):
+    put_current(sign(customer="某某股份有限公司", expires=_in(20)))
+    h = _login(client, make_user, "st_" + role, role)
+    r = client.get("/api/license/status", headers=h)
+    assert r.status_code == 200 and set(r.json()) == _SLIM_KEYS, r.text
+    s = r.json()
+    assert s["valid"] is True and s["reason"] == "ok" and s["blocked"] is False and s["gate"] is True and s["emergency"] is None
+    for leak in ("某某股份有限公司", _in(20), TEST_LICENSE_MACHINE):
+        assert leak not in r.text, leak
+    for k in ("days_left", "expires", "customer", "machine", "modules", "env"):      # 以鍵名判斷（modules 是 modules_unlicensed_count 的子字串）
+        assert k not in s, k
+
+
+@pytest.mark.parametrize("state", ["missing", "expired", "machine_mismatch", "bad_signature"])
+def test_slim_status_still_tells_the_front_end_to_block(client, make_user, put_current, sign, state):
+    """精簡版仍然夠前端判斷「擋不擋」：blocked／reason 與完整版一致。"""
+    blobs = {"missing": None, "expired": lambda: sign(expires=_in(-3)), "machine_mismatch": lambda: sign(machine="0123456789abcdef"),
+             "bad_signature": lambda: sign(_other_key())}
+    b = blobs[state]
+    put_current(b() if callable(b) else None)
+    h = _login(client, make_user, "slim_" + state, "admin")
+    s = client.get("/api/license/status", headers=h).json()
+    assert s["reason"] == state and s["valid"] is False and s["blocked"] is True and set(s) == _SLIM_KEYS
+
+
+def test_demo_account_gets_the_slim_status(client, put_current, sign):
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    conn.execute("UPDATE users SET password_hash = ? WHERE username = 'demo'", (_hash_pw("60575481"),))
+    conn.commit()
+    conn.close()
+    r = client.post("/api/auth/login", json={"username": "demo", "password": "60575481"})
+    assert r.status_code == 200, r.text
+    h = {"Authorization": "Bearer " + r.json()["token"]}
+    put_current(sign(customer="正式客戶不給示範看", expires=_in(20)))
+    resp = client.get("/api/license/status", headers=h)
+    assert resp.status_code == 200 and set(resp.json()) == _SLIM_KEYS and "正式客戶不給示範看" not in resp.text
+
+
+def test_402_page_works_with_the_slim_status_for_non_superadmin():
+    html = _page("license-required.html")
+    assert "modules_unlicensed_count" in html                                   # 精簡版只帶件數
+    assert "s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)" in html   # 判斷用的欄位精簡版都有
+
+
+# ── L6：還原也失敗時，不可以對使用者說「已自動還原」 ────────────────────────────────────
+
+def _force_after_swap_failure(monkeypatch, deny_restore):
+    import shutil
+    real = lic.verify_license
+    n = {"c": 0}
+
+    def flaky(blob=None):
+        if blob is None:
+            n["c"] += 1
+            if n["c"] >= 2:                                       # 第 1 次＝匯入前讀目前授權；第 2 次＝換檔後複驗
+                return dict(real(), reason="machine_mismatch", valid=False)
+        return real(blob)
+    monkeypatch.setattr(lic, "verify_license", flaky)
+    if deny_restore:
+        real_copy, real_remove = shutil.copyfile, os.remove
+
+        def deny_copy(src, dst, *a, **k):
+            if str(dst).endswith(".restore-tmp"):
+                raise OSError("denied")
+            return real_copy(src, dst, *a, **k)
+
+        def deny_rm(path, *a, **k):
+            if os.path.abspath(str(path)) == os.path.abspath(lic.LICENSE_PATH):
+                raise OSError("denied")
+            return real_remove(path, *a, **k)
+        monkeypatch.setattr(shutil, "copyfile", deny_copy)
+        monkeypatch.setattr(os, "remove", deny_rm)
+
+
+@pytest.mark.parametrize("had_old", [True, False])
+def test_l6_restore_failure_is_reported_honestly(client, hdr, put_current, sign, monkeypatch, caplog, had_old):
+    if had_old:
+        put_current(sign(customer="原本"))
+    _force_after_swap_failure(monkeypatch, deny_restore=True)
+    with caplog.at_level("ERROR"):
+        r = client.post("/api/license/import", headers=hdr, json={"content": sign(customer="新的", expires=_in(900)), "apply": True, "confirm": True})
+    j = r.json()
+    assert r.status_code == 500 and j["reason"] == "restore_failed", r.text
+    assert "已自動還原" not in j["message"] and "無法自動還原舊授權" in j["message"] and "聯絡供應商" in j["message"]
+    assert any("還原舊授權失敗" in m for m in caplog.messages)
+    import db
+    conn = db.get_db()
+    try:
+        rows = conn.execute("SELECT detail FROM audit_log WHERE action = 'license.import_restore_failed'").fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 1 and "新的" not in rows[0]["detail"]                 # 有這一筆稽核，且不含授權內容
+
+
+def test_l6_restore_success_still_says_restored(client, hdr, put_current, sign, monkeypatch):
+    put_current(sign(customer="原本"))
+    _force_after_swap_failure(monkeypatch, deny_restore=False)
+    r = client.post("/api/license/import", headers=hdr, json={"content": sign(customer="新的", expires=_in(900)), "apply": True, "confirm": True})
+    assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed" and "已自動還原" in r.json()["message"]
+
+
+def test_l6_restore_helper_returns_a_bool():
+    import inspect
+    from helpers import license_manager as M
+    src = inspect.getsource(M._restore)
+    assert "return ok" in src and "restore_failed" in inspect.getsource(M._after_swap_failed)
+    assert "license.import_restore_failed" in open(M.__file__.replace("helpers", "routers").replace("license_manager", "licensing"), encoding="utf-8").read()

@@ -103,7 +103,8 @@
           })
           .then(function (s) {
             if (!s) return
-            var unloaded = s.modules_unlicensed || []
+            // 完整狀態（最高管理者）帶模組清單；其他角色只帶件數（modules_unlicensed_count）——只需要知道「有沒有」
+            var unloaded = s.modules_unlicensed || (s.modules_unlicensed_count > 0 ? [null] : [])
             if (s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)) {
               // 授權（或通行證）已恢復，但載入器只在開機時決定模組要不要載入：開機時被擋的模組要重啟服務才會出現。
               if (unloaded.length) { render(s); showRestart(unloaded); return }
@@ -117,7 +118,7 @@
         document.getElementById('lr-title').textContent = '授權已恢復，但有模組要重啟服務才會出現'
         document.getElementById('lr-msg').textContent = '業務功能已經可以使用。不過服務是在授權失效的狀態下啟動的，下列模組當時沒有載入，需要重新啟動服務才會載入。'
         var box = document.getElementById('lr-restart'); box.hidden = false
-        box.textContent = '尚未載入的模組：' + keys.join('、') + '。請聯絡系統管理員重新啟動服務；在那之前，這些模組的頁面會找不到。'
+        box.textContent = (isSuper ? '尚未載入的模組：' + keys.join('、') + '。' : '部分功能尚未載入。') + '請聯絡系統管理員重新啟動服務；在那之前，這些功能的頁面會找不到。'
         var go = document.getElementById('lr-retry'); go.textContent = '先進入系統'; go.dataset.mode = 'enter'
       }
       document.getElementById('lr-retry').addEventListener('click', function () {
