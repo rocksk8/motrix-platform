@@ -2,7 +2,7 @@
 """LINE 通知的收件人過濾：角色允許清單＋個人勾選（2026-11-12；PM 裁示 D1／D2）。
 
 [單位] helper:line_recipients    [層] L1    [穩定度] 實作
-[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, is_muted, muted_events, prefs_view, resolve_audience, role_choices, set_muted, visible_to
+[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, ineligible_users, is_muted, muted_events, permitted_users, prefs_view, resolve_audience, role_choices, set_muted, visible_to
 [契約題] tests/test_line_recipients_2026_11_12.py
 [不變式]
   ① 語意是**交集（只縮不擴）**：LINE 最終收件人 ＝ 呼叫端給的帳號（2026-11-12 起＝`helpers.event_audience` 解析出的「事件業務收件人」，**不看 Email、不看信件退訂**）
@@ -161,6 +161,55 @@ def _picked_usernames(a: dict) -> list:
     return list(dict.fromkeys(first + got))
 
 
+def _has_need(need, role, mods) -> bool:
+    """`need`＝`line_catalog.modules_needed`：`()`＝不檢查；含 `"@admin"`＝角色要是 admin 以上；否則任一模組在 `mods` 內。superadmin 一律通過。"""
+    if role == "superadmin" or not need:
+        return True
+    if "@admin" in need:
+        return role == "admin"
+    return any(m in mods for m in need)
+
+
+def _perm_rows(usernames, active_only=True) -> dict:
+    """{username: (role, 有效模組清單)}（有效模組＝套過職責角色與財務規則；與選單／API 看到的同一份）。查不到的帳號不在結果裡。"""
+    from db import get_db
+    from .auth import effective_modules
+    names = [u for u in dict.fromkeys(usernames or []) if isinstance(u, str) and u]
+    out = {}
+    if not names:
+        return out
+    conn = get_db()
+    try:
+        for i in range(0, len(names), _CHUNK):
+            chunk = names[i:i + _CHUNK]
+            rows = conn.execute("SELECT id, username, role, modules FROM users WHERE %susername IN (%s)"
+                                % ("active=1 AND " if active_only else "", ",".join("?" * len(chunk))), chunk).fetchall()
+            for r in rows:
+                out[r["username"]] = (r["role"], effective_modules(r["role"], r["modules"], user_id=r["id"], conn=conn))
+    finally:
+        conn.close()
+    return out
+
+
+def permitted_users(event_key: str, usernames) -> set:
+    """這些帳號裡，具備該事件所屬模組權限的（在職）。永不丟例外；查不到 ⇒ 空集合（fail-closed）。"""
+    try:
+        from . import line_catalog as _cat
+        need = _cat.modules_needed(event_key)
+        return {u for u, (role, mods) in _perm_rows(usernames).items() if _has_need(need, role, mods)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LINE 權限檢查失敗（event=%r），這些人這一則不推：%s", event_key, type(exc).__name__)
+        return set()
+
+
+def ineligible_users(event_key: str, usernames) -> list:
+    """設定「誰要發」時用：指定的人裡沒有該事件所屬模組權限的（含停用的帳號也算入檢查；不存在的由呼叫端另外擋）。保持輸入順序。"""
+    from . import line_catalog as _cat
+    need = _cat.modules_needed(event_key)
+    rows = _perm_rows(usernames, active_only=False)
+    return [u for u in dict.fromkeys(usernames or []) if u in rows and not _has_need(need, *rows[u])]
+
+
 def resolve_audience(event_key: str, business_usernames) -> list:
     """LINE 最終收件人（帳號）＝依該事件的「誰要發」模式，把業務收件人與管理員指定的人合成一份，再套個人退訂（見不變式 ⑦）。
     `business_usernames`＝呼叫端（`line_notify.deliver_event`）解析好的業務收件人。永不丟例外；出錯 ⇒ 空清單。"""
@@ -171,26 +220,37 @@ def resolve_audience(event_key: str, business_usernames) -> list:
         base = [] if a["mode"] == "only" else filter_usernames(event_key, business_usernames)
         if a["mode"] == "business":
             return base
-        picked = [u for u in _picked_usernames(a) if event_key not in muted_events(u)]
+        picked_all = _picked_usernames(a)
+        ok = permitted_users(event_key, picked_all)                     # 審查 h8 M1：指定的人（含角色成員）要有該事件所屬模組的權限，沒有就不發
+        picked = [u for u in picked_all if u in ok and event_key not in muted_events(u)]
         return list(dict.fromkeys(base + picked))
     except Exception as exc:  # noqa: BLE001
         logger.warning("LINE 收件人解析失敗（event=%r），這一則不推：%s", event_key, type(exc).__name__)
         return []
 
 
-def visible_to(event_key: str, username: str, role) -> bool:
-    """這位使用者的個人設定頁要不要列這個事件：業務模式＝角色被允許；另外加上＝角色被允許或被管理員指定；只發＝被管理員指定。"""
-    a = audience_of(event_key)
+def _visible(event_key: str, username: str, role, mods, roles_map: dict, aud_map: dict) -> bool:
+    """`visible_to` 的本體（設定已讀好；`prefs_view` 一次讀完設定後逐事件呼叫，不是每個事件各讀一次設定／資料庫）。"""
+    a = _audience_from(aud_map, event_key, False)
     if a["mode"] == "invalid":
         return False
-    picked = username in a["users"] or (role in a["roles"])
+    from . import line_catalog as _cat
+    perm = _has_need(_cat.modules_needed(event_key), role, mods)
+    picked = perm and (username in a["users"] or (role in a["roles"]))        # 指定的人要有該事件所屬模組權限（審查 h8 M1）
     if a["mode"] == "only":
         return picked
-    allowed = allowed_roles(event_key)
+    allowed = _allowed_from(roles_map, event_key)
     business = allowed is None or role in allowed
     if business and (_ln_spec(event_key).get("audience") == "group") and not _in_group(event_key, username):
         business = False                     # 這個事件的業務收件人只有群組收件人（例：登入失敗告警）；同仁不是收件人，列出來只會誤導
     return business or (a["mode"] == "business_plus" and picked)
+
+
+def visible_to(event_key: str, username: str, role) -> bool:
+    """這位使用者的個人設定頁要不要列這個事件：業務模式＝角色被允許；另外加上＝角色被允許或被管理員指定（且有該事件所屬模組的權限）；只發＝被管理員指定（同上）。"""
+    rows = _perm_rows([username])
+    mods = rows[username][1] if username in rows else []
+    return _visible(event_key, username, role, mods, _roles_map(), _audiences_map())
 
 
 def filter_usernames(event_key: str, usernames) -> list:
@@ -241,10 +301,13 @@ def prefs_view(username: str, role: str) -> list:
     out = []
     muted = muted_events(username)
     sw = _ln.events_view()
+    roles_map, aud_map = _roles_map(), _audiences_map()                      # 一次讀完（審查 h8 L7）：不是每個事件各讀一次設定／資料庫
+    rows = _perm_rows([username])
+    mods = rows[username][1] if username in rows else []
     for k in _ln.WIRED_EVENTS:
         if not sw.get(k):
             continue
-        if not visible_to(k, username, role):
+        if not _visible(k, username, role, mods, roles_map, aud_map):
             continue
         out.append({"key": k, "name": _cat.name_of(k), "enabled": k not in muted, "group": _cat.group_of(k), "kind": _cat.kind_of(k)})
     return out

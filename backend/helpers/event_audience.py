@@ -67,6 +67,16 @@ def _superadmins() -> list:
     return _query("role='superadmin'", ())
 
 
+def _members_of_group(g: str) -> list:
+    if g == "admins":
+        return _query("role IN ('admin','superadmin')", ())
+    if g == "finance":
+        return _query("role IN ('finance','superadmin')", ())
+    if g == "superadmins":
+        return _superadmins()
+    return []
+
+
 def group_usernames(event_key: str, group: str = None, *, mail_key: str = None) -> list:
     """群組收件人（登記的預設群組，或超級管理員在設定頁的覆寫）的帳號。對應 `email_notify._group_emails`。
     `group`（選填）：用這個群組（`mail_types.GROUPS` 的鍵）取代**登記的預設群組**——給「LINE 的群組與信件不同」的事件用（`line_notify.LINE_EVENTS[key]["line_group"]`）。
@@ -83,28 +93,26 @@ def group_usernames(event_key: str, group: str = None, *, mail_key: str = None) 
             return _superadmins()
         if o["mode"] == "custom":
             return _custom(o)
-        g = group if group in _mt.GROUPS else t.group
-        if g == "admins":
-            return _query("role IN ('admin','superadmin')", ())
-        if g == "finance":
-            return _query("role IN ('finance','superadmin')", ())
-        if g == "superadmins":
-            return _superadmins()
-        return []
+        return _members_of_group(group if group in _mt.GROUPS else t.group)
     except Exception as exc:  # noqa: BLE001
         logger.warning("群組收件人（帳號）查詢失敗（%s）：%s", event_key, type(exc).__name__)
         return []
 
 
-def resolve_usernames(event_key: str, usernames=None, to_group: bool = False, *, group: str = None, exclude=None, mail_key: str = None) -> list:
+def resolve_usernames(event_key: str, usernames=None, to_group: bool = False, *, group: str = None, exclude=None, mail_key: str = None,
+                      own: bool = False) -> list:
     """事件的業務收件人（帳號，保持順序、去重）＝（事件收件人 `usernames` 套覆寫）＋（`to_group` 時的群組收件人）。
     與 `email_notify.send_registered` 同一個參數形狀：`usernames`＝事件收件人（送審人、案件業務負責人…），`to_group`＝要不要加登記的群組。
     `group`：用另一個群組取代登記的預設群組（見 `group_usernames`）；`exclude`：要排除的帳號（例如操作者本人；套在最後，連群組與覆寫指定的也排除）；
-    `mail_key`：收件人設定借用另一個信件類型（見 `group_usernames`）。"""
+    `mail_key`：收件人設定借用另一個信件類型（見 `group_usernames`）。
+    `own=True`（LINE-only／細項事件，審查 h8 M3）：**依事件本身的語意決定收件人**——呼叫端給的 `usernames` 就是收件人（只取在職），
+    **不套任何 Email 收件設定的覆寫**（沒有對應的信件類型，借用別的類型的覆寫會讓人意外：例如「超管專收」會把前任負責人換成超管）。"""
     try:
         event_key = mail_key or event_key
         names = []
-        if usernames:
+        if usernames and own:
+            names += _by_usernames(usernames)
+        elif usernames:
             event_part = _by_usernames(usernames)
             t = _mt.get(event_key) if event_key else None
             o = _override_of(event_key) if t is not None else {"mode": "superadmin_only"}
@@ -113,7 +121,10 @@ def resolve_usernames(event_key: str, usernames=None, to_group: bool = False, *,
             elif o["mode"] == "custom":
                 event_part = event_part + _custom(o)              # 事件收件人＋指定帳號／角色
             names += event_part
-        if to_group:
+        if to_group and own:
+            if group in _mt.GROUPS:                               # 事件自己指定了群組才加；沒指定＝只發給事件收件人（不借別的信件類型的群組）
+                names += _members_of_group(group)
+        elif to_group:
             names += group_usernames(event_key, group)
         skip = {u for u in (exclude or []) if isinstance(u, str)}
         return [u for u in dict.fromkeys(names) if u not in skip]

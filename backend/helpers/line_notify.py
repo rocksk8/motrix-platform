@@ -333,9 +333,23 @@ LINE_EVENTS = {
     "company_setup_alert": {"priority": "critical", "digest": False, "line_group": "inherit"},
     # 「核准完成」LINE 預設只給申請人（信件另寄管理員群組；PM 2026-11-13）
     "approved": {"priority": "normal", "digest": False, "line_group": None},
+    # 量大的事件（模組動態、工作事項、CRM 拜訪／進度）：每月最多佔 LINE 月額度 15%（PM 裁示，審查 h8 L2；超過只發 Email，LINE 預設無上限方案不套）
+    "module_activity": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "daily_task_assigned": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "daily_task_completed": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "daily_task_overdue": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "daily_task_overdue_manager": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "daily_task_edited": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": 15},
+    "crm_visit_logged": {"priority": "normal", "digest": False, "line_group": None, "audience": "any", "month_cap_percent": 15},
+    "crm_case_progress": {"priority": "normal", "digest": False, "line_group": None, "audience": "any", "month_cap_percent": 15},
 }
 #: 沒列在 `LINE_EVENTS` 的事件的預設屬性（簽核與指派類都是一般）
 DEFAULT_EVENT_SPEC = {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": None}
+
+
+def _cat_kind(event_key: str) -> str:
+    from . import line_catalog as _cat
+    return _cat.kind_of(event_key)
 
 
 def event_spec(event_key: str) -> dict:
@@ -501,6 +515,10 @@ def set_audience(event_key: str, mode: str, roles=None, users=None) -> None:
         missing = [u for u in users if u not in known]
         if missing:
             raise ValueError("找不到帳號：%s" % "、".join(missing[:5]))
+        from . import line_recipients as _lr2
+        denied = _lr2.ineligible_users(event_key, users)                              # 審查 h8 M1：指定的人要有該事件所屬模組的權限
+        if denied:
+            raise ValueError("這些人沒有這種通知所屬模組的使用權限，不能指定：%s" % "、".join(denied[:5]))
     with _lock:
         c = dict(_cfg())
         aud = dict(c.get("audiences") if isinstance(c.get("audiences"), dict) else {})
@@ -609,6 +627,8 @@ PENDING_TTL_DAYS = 3
 MONTHLY_LIMIT_FALLBACK = 200
 _marks_lock = threading.Lock()
 _pending_lock = threading.Lock()
+#: 鑰匙以「|YYYY-MM-DD」結尾＝每日告警（沒有特定對象）：隔天的檢查會自己重新評估，**不進補發佇列**（補發昨天的只會讓隔天雙推；審查 h8 L4）
+_DAY_SUFFIX_RE = re.compile(r"\|\d{4}-\d{2}-\d{2}$")
 _key_locks = {}                       # dedupe_key -> Lock（每把鑰匙一個：「查已推播→推播→寫記號」不可並發）
 _key_locks_guard = threading.Lock()
 _KEY_LOCKS_MAX = 512
@@ -776,7 +796,7 @@ def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False,
                        reason=reason, link=link, exclude=list(exclude or []), group=group)
 
         def _park(outcome):
-            if dedupe_key and outcome in ("paused_quota", SEND_TRANSIENT_FAIL, SEND_SKIPPED):
+            if dedupe_key and not _DAY_SUFFIX_RE.search(dedupe_key) and outcome in ("paused_quota", SEND_TRANSIENT_FAIL, SEND_SKIPPED):
                 _pending_add(dedupe_key, payload)
             return outcome
 
@@ -790,7 +810,7 @@ def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False,
         lg = group or spec.get("line_group", "inherit")            # 呼叫端指定的群組（例如財務類的 module_activity）優先於事件字典
         given = _ea.resolve_usernames(event_key, usernames, bool(to_group) and lg is not None,
                                       group=lg if lg not in (None, "inherit") else None, exclude=exclude,
-                                      mail_key=spec.get("mail_key"))
+                                      own=(_cat_kind(event_key) != "mail"))     # LINE-only／細項事件：依事件本身語意（不借信件類型的覆寫；審查 h8 M3）
         allowed = _lr.resolve_audience(event_key, given)             # 業務收件人 ∩ 角色允許清單 →（可選）管理員指定 → 個人退訂（見 line_recipients）
         ids = ids_for(allowed)
         if not ids:

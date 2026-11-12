@@ -118,7 +118,7 @@ priority：簽核與指派類＝`normal`；系統告警＝`critical`（`backup_e
 ### v2-6 測試（每個事件至少一組；以參數化涵蓋全清單）
 
 1. **LINE 有發**：對清單每個事件，打開開關、綁定測試收件人，觸發 → `_http` 被呼叫且收件人正確（參數化跑全事件；觸發函式用統一的「事件夾具表」）。
-2. **Email 不受影響**：同一觸發在 LINE 開／關兩種情況下，信件收件人、主旨、內容逐字相同；LINE 失敗（429／500）不影響信件與呼叫端回傳值。
+2. **Email 不受影響**：同一觸發在 LINE 開／關兩種情況下，信件收件人、主旨、內容逐字相同；LINE 失敗（429／500）不影響信件與呼叫端回傳值。**〔已核准的例外〕**「逐字相同」指**同一版程式碼下 LINE 開／關兩種情況**；本分支另外做了一次**通知層用語更名**（PM 核准，審查 h8 L1），所以**與更名之前的版本相比，部分 Email 的主旨與內文用字不同**——這是核准的例外，不是回歸。更名清單見 §10。
 3. **管理員指定生效**：`business`／`business_plus`／`only` 三模式各驗；指定個人收得到、沒指定的收不到；個人自行退訂仍尊重；停用帳號濾掉；`only` 模式下業務收件人不收。
 4. **獎金／薪資／勞報單不在清單**：清單、設定頁 API、`event_enabled`、`set_event` 對這些 key 全部拒絕；新增一個假的 payroll 類型也被擋。
 5. **分組守門**：每個已接線事件都有模組分組；每個事件字典項都有 priority。
@@ -494,3 +494,32 @@ WIRED_EVENTS = tuple(LINE_EVENTS)          # 相容舊用法
 - 每日檢查：`backend/helpers/system_checks.py`（`run_all` 於 T80 分支 :819）；案件期限排程 `backend/modules/case/case_deadlines.py`
 - T80（分支 `feat/auth-lockout-alert`／`wip/audit-t80-notify-17`）：`helpers/line_quota.py`、`helpers/line_recipients.py`、`system_checks.py:327`（心跳）、`:808`（額度備援）
 - 免費額度與方案：網路搜尋資料互相矛盾（輕用量 200 則免費；另有舊制 500／4000／25000 的報導），**未經 LINE 官方確認**；以 LINE Official Account Manager 與系統用量條為準。
+
+---
+
+## 10. 通知層用語更名與審查 h8 修正清單（2026-11-13）
+
+### 10.1 用語更名（核准的「Email 逐字相同」例外）
+
+- **範圍**：通知層的**顯示用字**——`mail_types.py` 登記表名稱、`notification_prefs.py` 偏好頁名稱、`notify_templates.py` 預設範本、`email_notify.py` 的主旨與內文、LINE 事件名稱（與信件類型共用同一份登記表）。
+- **改了什麼**：「待審核」→「**待簽核**」、「審核」→「**簽核**」（簽核流程）；「最高管理員」→「**最高管理者**」；「簽核佇列」→「**待我簽核**」。
+- **沒改（刻意）**：① 資料值與事件代碼（`approval_request`、`shipping_submitted`、資料庫裡的狀態「待審核」…）；② 範本變數 `{最終審核人}`（客戶已存的範本可能引用）；
+  ③ **會計傳票審核**（`voucher_*`）與**總帳申請**（`ledger_action_submitted`）——會計慣用語維持「審核」；④ **自訂模組定義**（`custom_def_*`）與「開發記錄審核通過」；⑤ 站內通知（`_notify`）與各模組畫面上的字（不在本次範圍）。
+- **對照**：更名前後 Email 主旨／內文用字會不同；**同一版程式碼下，LINE 開／關兩種情況的 Email 仍然逐字相同**（守門測試以 `_norm_mails` 比對，寄出時間到分鐘會先正規化）。
+
+### 10.2 審查 h8 修正
+
+| 項 | 修正 |
+|---|---|
+| H1 | 勞報單（payslip）等薪資類模組永不走泛用 `module_activity` LINE：呼叫端 `line_skip=True`＋`notify_module_activity` 依模組名擋（雙重保險）；守門測試掃 payroll 模組全部呼叫點 |
+| 使用者裁示 | 外包名冊、承攬商往來紀錄的 LINE 不放姓名，只說「外包名冊有一筆新增／異動」；Email 不變 |
+| M1 | 「指定誰要發」的人必須有事件所屬模組權限：`set_audience` 設定時擋下、`resolve_audience` 發送時再查一次；設定頁下拉只列有權限的人（`line_catalog.GROUP_MODULES`／`EVENT_MODULES`／`modules_needed`） |
+| M2 | 每位收件人各呼叫一次的 LINE 改成整批一則：`notify_actions._line_batch`（標題用最低權限版本，金額與內部占位符略）、`vendor_contractors._line_delete_request`；守門測試掃兩個檔案「迴圈內不得呼叫 LINE 事件」 |
+| M3 | LINE-only／細項事件不借用 `mail_key` 的收件覆寫（`resolve_usernames(..., own=True)`）；設定頁每個事件顯示「原本收件人」依循哪裡（`line_catalog.follows_text`） |
+| L1 | 本節 |
+| L2 | 量大事件預設每月上限 15%（`module_activity`、`crm_visit_logged`、`crm_case_progress`、`daily_task_*`） |
+| L3 | `daily_task_*`、`range_task_deadline` 的 LINE 只有固定句子，不放自由文字標題 |
+| L4 | 綁定對象的掃描型事件鑰匙改為「事件＋對象」（不含日期）；日期結尾的鑰匙不進補發佇列；補發與當天檢查共用 per-key 鎖 |
+| L5 | 「提醒未綁定的人」加鎖、每人發完立刻存記號、docstring 更正 |
+| L6 | 附件刪除申請沒有簽核層時，也發專屬 LINE 給最高管理者（並略過同一動作的泛用 LINE） |
+| L7 | `prefs_view` 設定只讀一次 |

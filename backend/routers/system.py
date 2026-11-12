@@ -2726,7 +2726,7 @@ def get_line_notify(authorization: str = Header(None)):
     names = _line_user_names({u for a in aud.values() for u in a["users"]})
     safe["event_groups"] = list(_cat.GROUP_ORDER)
     safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
-                       "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"],
+                       "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
                        "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
 

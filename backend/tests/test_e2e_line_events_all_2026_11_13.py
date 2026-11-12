@@ -98,7 +98,10 @@ def test_audience_editor_saves_modes_roles_and_people(live_server, make_user, ne
     page.locator("[data-testid=line-msg]").filter(has_text="的收件人").wait_for(state="visible", timeout=10000)
     assert L.audience_view()[key] == {"mode": "business_plus", "roles": ["finance"], "users": ["e2e_pick"]}
     assert page.locator("[data-testid=line-aud-editor-%s]" % key).count() == 0, "儲存後收合"
-    s = page.locator("[data-testid=line-aud-summary-%s]" % key).inner_text()
+    summ = page.locator("[data-testid=line-aud-summary-%s]" % key)
+    page.wait_for_function("(sel) => (document.querySelector(sel) || {innerText: ''}).innerText.startsWith('原本的收件人，另加：')",
+                           arg="[data-testid=line-aud-summary-%s]" % key, timeout=10000)      # 訊息先出現、load() 重抓設定後摘要才更新
+    s = summ.inner_text()
     assert s.startswith("原本的收件人，另加：") and "財務" in s and "e2e_pick" in s
     page.reload()
     page.locator("[data-testid=line-aud-summary-%s]" % key).wait_for(state="visible", timeout=20000)
@@ -153,7 +156,8 @@ def test_binding_status_list_remind_button_and_unlink(live_server, make_user, ne
     page.locator("[data-testid=line-bind-remind]").click()
     page.locator("[data-testid=line-msg]").filter(has_text="略過").wait_for(state="visible", timeout=10000)
     assert len(fake) == n_before
-    # 解除綁定：兩段確認
+    # 解除綁定：兩段確認（先等綁定名單的重新載入結束：它會重建列、把「確認中」狀態清掉）
+    page.wait_for_load_state("networkidle")
     row = page.locator("[data-testid=line-bind-row-e2e_bound]")
     row.get_by_role("button", name="解除綁定").click()
     row.get_by_role("button", name="取消").click()

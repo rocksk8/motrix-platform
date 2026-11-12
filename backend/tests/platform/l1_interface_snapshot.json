@@ -808,7 +808,7 @@
   },
   "helper:event_audience": {
    "group_usernames": "def(event_key, group=…, *, mail_key=…)",
-   "resolve_usernames": "def(event_key, usernames=…, to_group=…, *, group=…, exclude=…, mail_key=…)"
+   "resolve_usernames": "def(event_key, usernames=…, to_group=…, *, group=…, exclude=…, mail_key=…, own=…)"
   },
   "helper:expense_types": {
    "CODE_RE": "const",
@@ -1134,17 +1134,22 @@
    "status": "def()"
   },
   "helper:line_catalog": {
+   "EVENT_MODULES": "const",
    "EXCLUDED_KEYS": "const",
    "EXCLUDED_OWNERS": "const",
    "EXCLUDED_PREFIXES": "const",
+   "GROUP_MODULES": "const",
    "GROUP_ORDER": "const",
    "LINE_ONLY_EVENTS": "const",
+   "WHO_OF": "const",
    "exclusion_reason": "def(key, mail_type=…)",
+   "follows_text": "def(key)",
    "group_of": "def(key)",
    "is_known": "def(key)",
    "kind_of": "def(key)",
    "line_only_names": "def()",
    "mail_key_of": "def(key)",
+   "modules_needed": "def(key)",
    "name_of": "def(key)"
   },
   "helper:line_login": {
@@ -1258,8 +1263,10 @@
    "audience_of": "def(event_key, for_view=…)",
    "audience_view": "def(keys)",
    "filter_usernames": "def(event_key, usernames)",
+   "ineligible_users": "def(event_key, usernames)",
    "is_muted": "def(username, event_key)",
    "muted_events": "def(username)",
+   "permitted_users": "def(event_key, usernames)",
    "prefs_view": "def(username, role)",
    "resolve_audience": "def(event_key, business_usernames)",
    "role_choices": "def()",

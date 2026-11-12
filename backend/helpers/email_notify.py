@@ -984,8 +984,17 @@ def _line_event(event_key: str, *, title: str, rows=None, usernames=None, to_gro
 
 
 def _line_day_key(*parts) -> str:
-    """掃描型事件的 LINE「已推播」鑰匙：事件＋識別資訊＋今天日期——同一天內 Email 重試不會重推 LINE，隔天（仍逾期）才會再推一次。"""
+    """**沒有特定對象**的掃描型告警（憑證、備份、心跳、磁碟、標案）的 LINE「已推播」鑰匙：事件＋識別資訊＋今天日期——同一天內 Email 重試不會重推 LINE，
+    隔天（仍有狀況）才會再推一次。⚠️ 帶日期的鑰匙**不進補發佇列**（`line_notify` 見尾碼日期就不 park）：隔天的檢查本來就會重新評估並重新推，
+    補發昨天的只會讓同一件事在隔天推兩則（審查 h8 L4）。"""
     return "|".join([str(p) for p in parts] + [datetime.now().strftime("%Y-%m-%d")])
+
+
+def _line_entity_key(*parts) -> str:
+    """**綁定在某個對象**（某張單、某個工作事項、某個案件）的掃描型事件的 LINE「已推播」鑰匙：事件＋對象，**不含日期**（PM 裁示，審查 h8 L4）。
+    同一個對象的同一件事在記號保存期（`line_notify.MARK_KEEP_DAYS` 天）內只推一次——不會「每逾期一天推一則」，補發佇列（額度保留／暫時失敗）重送時
+    鑰匙與當天檢查完全相同，不會隔天雙推；兩條路徑共用 `line_notify` 的 per-key 鎖。"""
+    return "|".join(str(p) for p in parts)
 
 
 def _department_manager_usernames(department_id) -> list:
@@ -1266,7 +1275,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
     （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
     統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
     分開連結。"""
-    _line_event("approval_reminder", usernames=approver_usernames, to_group=also_superadmin, title=f"{doc_type_label}簽核逾期提醒", rows=[("單號", doc_no), ("已等待", f"{days_elapsed} 個工作日")], reason="請儘速登入系統完成簽核", line_key=_line_day_key("approval_reminder", doc_type_label, doc_no))
+    _line_event("approval_reminder", usernames=approver_usernames, to_group=also_superadmin, title=f"{doc_type_label}簽核逾期提醒", rows=[("單號", doc_no), ("已等待", f"{days_elapsed} 個工作日")], reason="請儘速登入系統完成簽核", line_key=_line_entity_key("approval_reminder", doc_type_label, doc_no))
     to = list(set(_lookup_emails(approver_usernames, "approval_reminder")
                   + (_superadmin_emails("approval_reminder") if also_superadmin else [])))
     if not to:
@@ -1334,7 +1343,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
                                assignee_usernames: list,
                                description: str = '') -> None:
     """工作事項指派 → 通知被指派人"""
-    _line_event("daily_task_assigned", usernames=assignee_usernames, title="工作事項指派", rows=[("執行日期", task_date), ("工作事項", title)], reason="您有新的工作事項")
+    _line_event("daily_task_assigned", usernames=assignee_usernames, title="工作事項指派", rows=[("執行日期", task_date)], reason="有一項工作事項指派給您")
     to = _lookup_emails(assignee_usernames, "daily_task_assigned")
     if not to:
         logger.warning("notify_daily_task_assigned: 指派對象 %s 皆無設定 email（task_id=%d）",
@@ -1404,7 +1413,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
                                 old_report: str = "") -> None:
     """工作事項完成回報 → 通知指定主管；未指定則通知所有 admin/superadmin。
     is_edit=True 時使用「已修改」格式並顯示修改前後對照。"""
-    _line_event("daily_task_completed", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項完成回報", rows=[("執行日期", task_date), ("工作事項", title), ("完成人員", completed_by_display or completed_by_username)])
+    _line_event("daily_task_completed", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項完成回報", rows=[("執行日期", task_date), ("完成人員", completed_by_display or completed_by_username)], reason="有一項工作事項已完成")
     if supervisor_usernames:
         to = _lookup_emails(supervisor_usernames, "daily_task_completed")
         if not to:
@@ -1452,7 +1461,7 @@ def notify_daily_task_overdue(task_id: int, title: str, task_date: str,
                               assignee_username: str, assignee_display: str,
                               supervisor_usernames: list = None) -> None:
     """逾期未完成工作事項 → 通知被指派人 + 指定主管（若有），否則通知所有 admin/superadmin"""
-    _line_event("daily_task_overdue", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項逾期未完成", rows=[("執行日期", task_date), ("工作事項", title), ("負責人員", assignee_display or assignee_username)], reason="工作事項已超過期限", line_key=_line_day_key("daily_task_overdue", task_id))
+    _line_event("daily_task_overdue", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項逾期未完成", rows=[("執行日期", task_date), ("負責人員", assignee_display or assignee_username)], reason="有一項工作事項已超過期限", line_key=_line_entity_key("daily_task_overdue", task_id))
     assignee_to = _lookup_emails([assignee_username], "daily_task_overdue")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "daily_task_overdue")
@@ -1495,7 +1504,7 @@ def notify_daily_task_overdue_manager(task_id: int, title: str, task_date: str,
     這裡走的是組織架構（departments.manager_user_id），department_id
     是空值或部門沒有主管時直接安靜跳過，不當錯誤處理（純通知性質，
     不像簽核路由那樣需要擋下流程）。"""
-    _line_event("daily_task_overdue_manager", usernames=_department_manager_usernames(department_id), title="部門成員工作事項逾期", rows=[("執行日期", task_date), ("工作事項", title), ("負責人員", assignee_display or assignee_username)], reason="部門成員的工作事項已超過期限", line_key=_line_day_key("daily_task_overdue_manager", task_id))
+    _line_event("daily_task_overdue_manager", usernames=_department_manager_usernames(department_id), title="部門成員工作事項逾期", rows=[("執行日期", task_date), ("負責人員", assignee_display or assignee_username)], reason="部門成員有一項工作事項已超過期限", line_key=_line_entity_key("daily_task_overdue_manager", task_id))
     to = _department_manager_emails(department_id, "daily_task_overdue_manager")
     if not to:
         return
@@ -1525,7 +1534,7 @@ def notify_range_task_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """區間工作事項即將到期 → 指派人 + 主管"""
-    _line_event("range_task_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="區間工作事項即將到期", rows=[("工作事項", title), ("截止日期", end_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期" if days_left == 0 else "尚餘 %s 天到期" % days_left, line_key=_line_day_key("range_task_deadline", task_id))
+    _line_event("range_task_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="區間工作事項即將到期", rows=[("截止日期", end_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期" if days_left == 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("range_task_deadline", task_id))
     assignee_to = _lookup_emails([assignee_username], "range_task_deadline")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "range_task_deadline")
@@ -1568,7 +1577,7 @@ def notify_case_stage_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """案件執行進度階段即將到期／已逾期 → 負責人 + 主管（無則 admin）"""
-    _line_event("case_stage_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="案件執行進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_day_key("case_stage_deadline", quote_no, stage_label))
+    _line_event("case_stage_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="案件執行進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("case_stage_deadline", quote_no, stage_label))
     assignee_to = _lookup_emails([assignee_username], "case_stage_deadline")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "case_stage_deadline")
@@ -1615,7 +1624,7 @@ def notify_case_stage_deadline_manager(
     比照 notify_daily_task_overdue_manager 的既有原則：獨立事件 key，跟負責人自己收到的
     case_stage_deadline 分開訂閱/取消訂閱；department_id 是空值或部門沒有主管時安靜跳過，
     純通知性質，不擋流程。"""
-    _line_event("case_stage_deadline_manager", usernames=_department_manager_usernames(department_id), title="部門成員案件進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_day_key("case_stage_deadline_manager", quote_no, stage_label))
+    _line_event("case_stage_deadline_manager", usernames=_department_manager_usernames(department_id), title="部門成員案件進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("case_stage_deadline_manager", quote_no, stage_label))
     to = _department_manager_emails(department_id, "case_stage_deadline_manager")
     if not to:
         return
@@ -1643,7 +1652,7 @@ def notify_case_stage_deadline_manager(
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
     """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
-    _line_event("dev_case_stale", usernames=usernames, title="業務開發案件逾期未跟進", rows=[("案件名稱", case_name), ("客戶", customer_name or "（未指定）"), ("停滯天數", "%s 天" % days_since_update)], reason="請聯繫客戶並登錄開發紀錄", line_key=_line_day_key("dev_case_stale", case_id))
+    _line_event("dev_case_stale", usernames=usernames, title="業務開發案件逾期未跟進", rows=[("案件名稱", case_name), ("客戶", customer_name or "（未指定）"), ("停滯天數", "%s 天" % days_since_update)], reason="請聯繫客戶並登錄開發紀錄", line_key=_line_entity_key("dev_case_stale", case_id))
     to = _lookup_emails(usernames, "dev_case_stale")
     if not to:
         logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
@@ -1685,7 +1694,7 @@ def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
 def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: str,
                                   days_overdue: int, assignee_display: str, usernames: list) -> None:
     """業務開發案件回覆期限已過、被指派人自指派後沒有任何進度回報 → 通知被指派人與指派人（每案每期限只寄一次，由呼叫端的 guard key 保證）"""
-    _line_event("dev_case_reply_overdue", usernames=usernames, title="業務開發案件回覆期限已過", rows=[("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"), ("回覆期限", reply_deadline), ("逾期天數", "%s 天" % days_overdue)], line_key=_line_day_key("dev_case_reply_overdue", case_id, reply_deadline))
+    _line_event("dev_case_reply_overdue", usernames=usernames, title="業務開發案件回覆期限已過", rows=[("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"), ("回覆期限", reply_deadline), ("逾期天數", "%s 天" % days_overdue)], line_key=_line_entity_key("dev_case_reply_overdue", case_id, reply_deadline))
     to = _lookup_emails(usernames, "dev_case_reply_overdue")
     if not to:
         logger.warning("notify_dev_case_reply_overdue: 無有效收件人（case_id=%d）", case_id)
@@ -1731,7 +1740,7 @@ def notify_daily_task_edited(
     supervisor_usernames: list = None,
 ) -> None:
     """工作事項編輯 → 通知指定主管；未指定則通知所有 admin/superadmin"""
-    _line_event("daily_task_edited", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項內容已編輯", rows=[("執行日期", task_date), ("工作事項", title), ("編輯人員", editor_display or editor_username)])
+    _line_event("daily_task_edited", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項內容已編輯", rows=[("執行日期", task_date), ("編輯人員", editor_display or editor_username)], reason="有一項工作事項內容已被編輯")
     if supervisor_usernames:
         to = _lookup_emails(supervisor_usernames, "daily_task_edited")
         if not to:
@@ -2167,7 +2176,7 @@ def notify_case_project_overdue(
     days_overdue: int,
 ) -> None:
     """案件專案期間已超期 → 所有 admin/superadmin"""
-    _line_event("case_project_overdue", to_group=True, title="案件專案期間已超期", rows=[("案件號", quote_no), ("客戶", customer_name), ("專案名稱", project_name or "（未填）"), ("預計結束日期", end_date)], reason="已超過預定的專案期間", line_key=_line_day_key("case_project_overdue", quote_no))
+    _line_event("case_project_overdue", to_group=True, title="案件專案期間已超期", rows=[("案件號", quote_no), ("客戶", customer_name), ("專案名稱", project_name or "（未填）"), ("預計結束日期", end_date)], reason="已超過預定的專案期間", line_key=_line_entity_key("case_project_overdue", quote_no))
     to = _admin_emails("case_project_overdue")
     if not to:
         return

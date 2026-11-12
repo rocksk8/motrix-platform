@@ -2,7 +2,7 @@
 """LINE 事件目錄：哪些事件可以發 LINE、怎麼分組、哪些永遠不發（2026-11-13；使用者裁示「寄信有的 LINE 都要」）。
 
 [單位] helper:line_catalog    [層] L1    [穩定度] 實作
-[公開介面] EXCLUDED_KEYS, EXCLUDED_OWNERS, EXCLUDED_PREFIXES, GROUP_ORDER, LINE_ONLY_EVENTS, exclusion_reason, group_of, is_known, kind_of, line_only_names, mail_key_of, name_of
+[公開介面] EVENT_MODULES, EXCLUDED_KEYS, EXCLUDED_OWNERS, EXCLUDED_PREFIXES, GROUP_MODULES, GROUP_ORDER, LINE_ONLY_EVENTS, WHO_OF, exclusion_reason, follows_text, group_of, is_known, kind_of, line_only_names, mail_key_of, modules_needed, name_of
 [契約題] tests/test_line_events_all_2026_11_13.py
 [不變式]
   ① **接線單位是「信件登記表」**（`mail_types`）：登記過的信件類型，除非被明確排除，一律可以發 LINE（預設關，由最高管理者逐項勾選）。
@@ -76,6 +76,42 @@ _GROUP_RULES = (
 )
 
 
+#: ── 「指定的人要有該事件所屬模組的權限」（使用者裁示 2026-11-13，審查 h8 M1）──────────────────────────
+#: 分組 ⇒ 需要的模組（**任一個**即可，與各模組 API 的 `require_any_module` 同一組鍵）。`()`＝不檢查模組；`"@admin"`＝角色要是管理員以上。
+#: superadmin 一律通過。管理員在「誰要發」指定的人（含角色成員），**沒有這組權限就不發**（設定時擋下、發送時再查一次：權限被拿掉的人自動不發）。
+#: 對照來源：各 API 的 require_any_module 字面值；「自訂模組」的權限是動態的（建構器），目前不檢查模組、只要在職。
+GROUP_MODULES = {
+    "報價單與簽核": ("quotation", "case_manage"),
+    "出貨單": ("quotation", "case_manage"),
+    "請款與開票": ("case_manage", "finance", "cashier", "quotation"),
+    "承攬商": ("procurement", "case_manage", "contractor_list"),
+    "費用與完工": ("case_manage", "quotation", "expense_forms"),
+    "材料申請": ("case_manage", "quotation", "project_manage"),
+    "會計": ("finance", "cashier"),
+    "自訂模組": (),
+    "業務開發": ("dev_crm",),
+    "工作事項": ("daily_task", "case_manage"),
+    "案件管理": ("case_manage", "quotation"),
+    "財務提醒": ("finance", "cashier", "case_manage"),
+    "標案雷達": ("tender_radar",),
+    "系統告警": ("settings",),
+    "通知與報表": ("@admin",),
+    "其他": ("@admin",),
+}
+#: 個別事件覆寫（優先於分組）
+EVENT_MODULES = {
+    "monthly_report": ("reports",),
+    "user_notice": (),
+}
+
+
+def modules_needed(key: str) -> tuple:
+    """這個事件要求「指定的人」具備的模組（任一個）；`()`＝不檢查；含 `"@admin"`＝角色要是管理員以上。"""
+    if key in EVENT_MODULES:
+        return EVENT_MODULES[key]
+    return GROUP_MODULES.get(group_of(key), ("@admin",))
+
+
 def _mt():
     from . import mail_types as mt          # 惰性 import（見檔頭 ⑥）
     return mt
@@ -113,6 +149,28 @@ def kind_of(key: str) -> str:
 def mail_key_of(key: str) -> str:
     """收件人設定（覆寫）的來源信件類型；一般事件就是自己。"""
     return LINE_ONLY_EVENTS.get(key, {}).get("mail_key") or key
+
+
+#: LINE-only／細項事件「原本收件人」的說明（依事件本身語意決定，**不借用任何 Email 收件設定**；審查 h8 M3）。設定頁顯示用。
+WHO_OF = {
+    "dev_case_unassigned": "被取消指派的前任負責人",
+    "dev_case_deadline_changed": "被指派人",
+    "dev_log_directive_reply": "下批示的人",
+    "dispatch_file_delete_request": "當層簽核人（沒有簽核層級時為最高管理者）",
+    "crm_case_created": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_status": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_progress": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_visit_logged": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_log_approved": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_converted": "案件相關人員（業務負責人與主管，不含操作者本人）",
+}
+
+
+def follows_text(key: str) -> str:
+    """設定頁每個事件的「收件人依循哪個設定」說明。Email 類型＝同名 Email 通知的收件設定；LINE-only／細項＝事件本身（不跟任何 Email 設定）。"""
+    if kind_of(key) == "mail":
+        return "原本收件人：與這則 Email 通知的收件設定相同（在「Email 通知」頁調整）；LINE 只是多一個管道。"
+    return "原本收件人：" + WHO_OF.get(key, "由事件本身決定") + "。這則通知不跟任何 Email 收件設定，要調整請用「指定誰要發」。"
 
 
 def name_of(key: str) -> str:

@@ -444,9 +444,9 @@ def test_explicit_picks_are_not_filtered_by_role_allowlist_but_business_recipien
 def test_actor_exclusion_applies_only_to_business_recipients(env):
     from helpers import line_notify as L
     L.set_event("module_activity", True)
-    L.set_audience("module_activity", "business_plus", [], ["amy"])
-    L.deliver_event("module_activity", usernames=["amy", "dan"], title="t", exclude=["amy", "dan"])
-    assert _targets(env) == ["amy"], "操作者 dan 被排除；管理員指定的 amy 就算是操作者也收得到"
+    L.set_audience("module_activity", "business_plus", [], ["bob"])         # 泛用事件沒有單一模組 ⇒ 只能指定管理員以上（M1）
+    L.deliver_event("module_activity", usernames=["bob", "dan"], title="t", exclude=["bob", "dan"])
+    assert _targets(env) == ["bob"], "操作者 dan 被排除；管理員指定的 bob 就算是操作者也收得到"
 
 
 def test_bad_audience_config_fails_closed_and_never_raises(env, caplog):

@@ -577,10 +577,8 @@ def _send_mail(user, action_id, title, text) -> str:
     from helpers import email_notify as EN
     from helpers import mail_types as MT
     from helpers import notification_prefs as NP
-    # LINE 獨立通道（2026-11-13）：「這個動作勾了信件」的收件人，同時走 LINE（不看信箱／信件關閉／信件預算；LINE 有自己的個人關閉與額度保留）。
-    # 只放標題（管理員在動作範本寫的），不放內文——內文可能帶金額或客戶資料；詳細請登入系統看站內通知。
-    EN._line_event("user_notice", usernames=[user.get("username")] if user.get("username") else None, title=title,
-                   reason="詳細內容請登入系統，於站內通知查看")
+    # LINE 不在這裡發（審查 h8 M2）：這個函式「每位收件人呼叫一次」，LINE 若跟著逐人發會變成 N 則、標題還逐人不同。
+    # 改由 `_dispatch` 收完收件人後**整批只發一則**（`_line_batch`）。
     if not user.get("email") or EN._mail_off(MAIL_KEY):
         return "skipped"
     if not (NP.is_enabled(user.get("notification_muted"), MAIL_KEY) and NP.is_enabled(user.get("notification_muted"), "na:" + action_id)):
@@ -590,6 +588,24 @@ def _send_mail(user, action_id, title, text) -> str:
     html = EN._build_html("user_notice", title, "額外通知", "#1D4ED8", [], None, EN._base_url(), intro=text, button_text="前往系統")
     EN._async_send([user["email"]], MT.subject("user_notice", title), html)
     return "sent"
+
+
+_LINE_VIEWER = {"role": "viewer"}                            # 最低權限的收件人：金額與內部占位符一律「（略）」
+
+
+def _line_batch(ev, payload, body, labels, names) -> None:
+    """LINE 獨立通道（2026-11-13；審查 h8 M2）：「這個動作勾了信件」的收件人，**整批只發一則 LINE**（不看信箱／信件關閉／信件預算；
+    LINE 有自己的個人關閉與額度保留）。標題用**最低權限**版本展開（金額、內部占位符一律略）——一則訊息要給所有人看，不能用某一位的權限展開。
+    只放標題（管理員在動作範本寫的），不放內文（內文可能帶金額或客戶資料）；詳細請登入系統看站內通知。永不丟例外。"""
+    if not names:
+        return
+    try:
+        from helpers import email_notify as EN
+        EN._line_event("user_notice", usernames=list(names),
+                       title=_expand_text(body["template"]["title"], ev, payload, _LINE_VIEWER, labels),
+                       reason="詳細內容請登入系統，於站內通知查看")
+    except Exception:                                        # noqa: BLE001
+        _log.warning("notify_actions: LINE 發送失敗（%s）", body.get("label", ""), exc_info=True)
 
 
 def dispatch(event, payload, conn=None) -> int:
@@ -636,6 +652,7 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
         names = names[:CAPS["recipients"]]
         dropped = n_sent = mail_over = 0
         degraded = False
+        line_names = []                                      # 這個動作要走 LINE 的人（勾了信件者），迴圈後整批發一則
         ref = aid + ":" + ":".join(str(payload.get(k, "")) for k in ev["ref"])         # 去重鍵＝動作＋這件事的識別（事件登記的 ref 欄位；階段到期含階段、狀態改變含新狀態）
         for n in names:
             if time.monotonic() - t0 > CAPS["seconds"]:             # 時間預算也要在收件人迴圈裡檢查（一個動作 25 人也可能超時）
@@ -652,11 +669,13 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
             _notify(n, NOTIF_TYPE, ref, title, text, _link(ev, payload) or None)
             n_sent += 1
             if "email" in body["channels"]:
+                line_names.append(n)
                 try:
                     if _send_mail(user, aid, title, text) == "over_budget":
                         mail_over += 1
                 except Exception:                            # noqa: BLE001  信件失敗不影響站內通知與其他人
                     _log.warning("notify_actions: 寄信失敗（%s）", aid, exc_info=True)
+        _line_batch(ev, payload, body, labels, line_names)
         sent += n_sent
         _audit("", "notify_action.dispatch", "notify_action", aid, body.get("label", ""),
                {"event": event, "recipients": n_sent, "droppedNoAccess": dropped, "overCap": capped, "channels": body["channels"]})

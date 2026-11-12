@@ -517,12 +517,12 @@
                               </div>
                               <select :data-testid="'line-aud-pick-' + e.key" @change="audAddUser(e, $event.target.value); $event.target.value = ''" style="max-width:260px">
                                 <option value="">＋ 加入人員…</option>
-                                <template x-for="u in bind.users.filter(x => !aud[e.key].users.includes(x.username))" :key="u.username">
+                                <template x-for="u in bind.users.filter(x => !aud[e.key].users.includes(x.username) && audCanPick(e, x))" :key="u.username">
                                   <option :value="u.username" x-text="u.display + '（' + roleName(u.role) + '）' + (u.linked ? '' : '・尚未綁定')"></option>
                                 </template>
                               </select>
                             </div>
-                            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定的人不受上面「可收的角色」限制；本人在自己頁面關閉的仍不會收到；離職或還沒綁定 LINE 的人收不到。<span x-show="e.kind !== 'mail'">這則通知的「原本收件人」沿用相近的 Email 通知的收件設定。</span></div>
+                            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定的人不受上面「可收的角色」限制；本人在自己頁面關閉的仍不會收到；離職或還沒綁定 LINE 的人收不到。只有對「這個事件所屬模組」有權限的人才能被指定、也才收得到（沒有權限的人這裡不會列出）。<span x-text="e.follows"></span></div>
                             <div class="ns-actions" style="margin-top:8px">
                               <button type="button" class="btn btn-primary" :data-testid="'line-aud-save-' + e.key" style="padding:4px 12px;font-size:13px" @click="saveAudience(e)" :disabled="!!audBusy[e.key]">儲存</button>
                               <button type="button" class="btn btn-ghost" style="padding:4px 12px;font-size:13px" @click="toggleAudEditor(e)">取消</button>
@@ -785,6 +785,14 @@
         audToggleRole(e, r, on) {
           const cur = this.aud[e.key].roles
           this.aud[e.key].roles = on ? (cur.includes(r) ? cur : cur.concat([r])) : cur.filter(x => x !== r)
+        },
+        // 「誰要發」的人員選單只列有該通知所屬模組權限的人（最高管理者永遠可以；伺服器端 set_audience 仍會再檢查一次）
+        audCanPick(e, u) {
+          const need = e.need || []
+          if (u.role === 'superadmin' || !need.length) return true
+          if (need.includes('@admin')) return u.role === 'admin'
+          const mods = u.modules || []
+          return need.some(m => mods.includes(m))
         },
         audAddUser(e, username) { if (username && !this.aud[e.key].users.includes(username)) this.aud[e.key].users = this.aud[e.key].users.concat([username]) },
         audRemoveUser(e, username) { this.aud[e.key].users = this.aud[e.key].users.filter(x => x !== username) },
