@@ -23,6 +23,11 @@
 - **合併順序**：本分支的帳號鎖告警依賴 hichan-3 的 `feat/auth-lockout-alert`（`auth_alert.on_lockout(scope="account")`），必須在它之後合併。
 - 測試：`tests/test_external_login_hardening_2026_11_12.py`、`tests/test_attack_h1_extlogin_2026_11_12.py`（hichan-1 8 題攻擊翻成防線測試）；文件 `docs/quick/security.md` §3.3d、`docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`。
 
+## (next) — 2026-11-13（perf/static-cache-20261113-h11；外網載入效能第一階段：靜態資源內容版本化＋長效快取）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新單位 `helpers.static_cache`（`AssetVersion`、`handle`、`rewrite_refs`、`classify`、`IMMUTABLE`、`REVALIDATE` 等），已登記為 L1（`docs/platform/modules.json`）；`main.ASSET_VERSION`（全域內容版本，給測試與診斷讀）。
+- 行為變更（效能，不影響對外介面）：`main.py` 靜態資源（`/static`、`/js`、`/css`、模組 JS、動態 sidebar.js）回應依內容雜湊自動帶 `?v=<hash>`、`immutable` 長效快取；HTML 走弱 ETag／304；請求耗時 `Server-Timing`（只給靜態檔與已登入的 API）與慢請求日誌；`/api/online-users` 輪詢降頻並在回前景時補一次。緊急退回：環境變數 `MOTRIX_STATIC_CACHE=0`（重啟生效）。
+- 測試：`tests/test_static_cache_versioning_2026_11_13.py`（33 題；頁面位置一律經 `core.source_tree`）。說明：`docs/platform/PERF-STATIC-CACHE-20261113.md`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：
