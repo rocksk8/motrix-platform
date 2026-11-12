@@ -1,6 +1,10 @@
 """Parts master data CRUD."""
+import hashlib
+import json
+import logging
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime
 from typing import Optional
 
@@ -9,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from core.txn import write_txn
 from db import get_db
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers.audit import _DETAIL_MAX, _derive_fields
 from helpers.procurement import clean_lead_time
 
 router = APIRouter()
@@ -114,17 +119,30 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
 
 # ── Excel 匯入（票 fix/excel-import-dataloss）────────────────────────────────
 # 舊行為：逐列 PUT，空白儲存格被預設值覆蓋（成本 0、單位「台」）、只給廠牌會洗掉既有型號、亂碼成本變 0、安全庫存／前置天數無法匯入。
-# 新規則：空白儲存格＝不更新（新增時才用預設）；廠牌與型號各自獨立（brand 欄的格式仍是「廠牌 / 型號」）；數字不合法＝這一列報錯；
-#         先 dryRun 回計畫讓畫面確認，確認後整批一個交易。
+# 規則：空白儲存格＝不更新（新增時才用預設）；廠牌與型號各自獨立（brand 欄的格式仍是「廠牌 / 型號」；廠牌格自己含「 / 」就先拆開）；
+#       數字不合法／超過 1e9＝這一列報錯；料號比對不分大小寫與全半形；
+#       預覽（dryRun 不是 False 一律當預覽）回每列「舊→新」差異與 planHash，確認時帶回，預覽後資料有變 ⇒ 409；整批一個交易。
 _IMPORT_MAX_ROWS = 5000
+_IMPORT_MAX_NUMBER = 1e9
+_IMPORT_MAX_TEXT = 500
+_IMPORT_MAX_DIFF_ROWS = 200
+_PART_FIELD_LABELS = {"name": "品名", "brand": "廠牌 / 型號", "unit": "單位", "cost": "成本", "listPrice": "定價", "category": "類別",
+                      "note": "備註", "safetyStock": "安全庫存", "leadTimeDays": "前置天數"}
+_PART_COLS = (("name", "name"), ("brand", "brand"), ("unit", "unit"), ("cost", "cost"), ("listPrice", "list_price"), ("category", "category"),
+              ("note", "note"), ("safetyStock", "safety_stock"), ("leadTimeDays", "lead_time_days"))
 
 
 def _imp_text(v):
-    return "" if v is None else str(v).strip()
+    return "" if v is None else str(v).strip()[:_IMPORT_MAX_TEXT]
+
+
+def _part_key(s):
+    """料號比對用：全形半形、大小寫、前後空白都不當成差異。"""
+    return unicodedata.normalize("NFKC", str(s or "")).strip().upper()
 
 
 def _imp_number(v, label, integer=False):
-    """⇒ (數字, None)；空白 ⇒ (None, None)；不合法／負數 ⇒ (None, 白話原因)。去掉 NT$、$、逗號、空白。"""
+    """⇒ (數字, None)；空白 ⇒ (None, None)；不合法／負數／太大 ⇒ (None, 白話原因)。去掉 NT$、$、逗號、空白。"""
     s = re.sub(r"(?i)nt\$|\$|,|，|\s", "", _imp_text(v))
     if not s:
         return None, None
@@ -132,8 +150,8 @@ def _imp_number(v, label, integer=False):
         n = float(s)
     except ValueError:
         return None, "「%s」不是數字（%s）" % (label, _imp_text(v))
-    if n != n or n in (float("inf"), float("-inf")) or n < 0:
-        return None, "「%s」不可為負數或無效數字（%s）" % (label, _imp_text(v))
+    if n != n or n < 0 or n > _IMPORT_MAX_NUMBER:
+        return None, "「%s」不可為負數或超過 %d（%s）" % (label, int(_IMPORT_MAX_NUMBER), _imp_text(v))
     if integer:
         if n != int(n):
             return None, "「%s」必須是整數（%s）" % (label, _imp_text(v))
@@ -146,13 +164,19 @@ def _split_brand(brand):
     return (bn or "").strip(), "/".join(rest).strip()
 
 
+def _show(v):
+    return "" if v is None else str(v)[:120]
+
+
 def _plan_part_import(conn, rows: list) -> list:
-    """每列 ⇒ {row, partNo, name, action: create|update|error, fields:{欄位: 值}（只含檔案有給的欄位）, ...}。唯讀。"""
-    existing = {r["part_no"]: dict(r) for r in conn.execute("SELECT * FROM parts").fetchall()}
+    """每列 ⇒ {row, partNo, name, action: create|update|error, fields:{欄位: 值}（只含檔案有給的欄位）, diff, ...}。唯讀。"""
+    existing = {_part_key(r["part_no"]): dict(r) for r in conn.execute(
+        "SELECT id, part_no, name, brand, unit, cost, list_price, category, note, safety_stock, lead_time_days, updated_at FROM parts").fetchall()}
     seen, plan = set(), []
     for raw in rows:
         raw = raw if isinstance(raw, dict) else {}
-        item = {"row": raw.get("row"), "partNo": _imp_text(raw.get("partNo")), "name": _imp_text(raw.get("name"))}
+        part_no = unicodedata.normalize("NFKC", _imp_text(raw.get("partNo"))).strip()
+        item = {"row": raw.get("row"), "partNo": part_no, "name": _imp_text(raw.get("name"))}
         errs, f = [], {}
         for key, label, integer in (("cost", "成本", False), ("listPrice", "定價", False), ("safetyStock", "安全庫存", True), ("leadTimeDays", "前置天數", True)):
             n, e = _imp_number(raw.get(key), label, integer)
@@ -163,38 +187,91 @@ def _plan_part_import(conn, rows: list) -> list:
         for key in ("unit", "category", "note"):
             if _imp_text(raw.get(key)):
                 f[key] = _imp_text(raw.get(key))
-        item.update(brandName=_imp_text(raw.get("brand")), brandModel=_imp_text(raw.get("model")))
+        # 廠牌格若自己就是「廠牌 / 型號」格式，先拆開；另外有填的「型號」欄優先
+        bn, bm = _split_brand(_imp_text(raw.get("brand")))
+        item.update(brandName=bn, brandModel=_imp_text(raw.get("model")) or bm)
         if item["name"]:
             f["name"] = item["name"]
         item["fields"] = f
-        old = existing.get(item["partNo"]) if item["partNo"] else None
+        key = _part_key(part_no)
+        old = existing.get(key) if key else None
         if errs:
             item.update(action="error", reason="；".join(errs))
-        elif item["partNo"] and item["partNo"] in seen:
-            item.update(action="error", reason="同一個檔案裡料號 %s 出現多次，這一列未匯入" % item["partNo"])
+        elif key and key in seen:
+            item.update(action="error", reason="同一個檔案裡料號 %s 出現多次，這一列未匯入" % part_no)
         elif old:
-            item.update(action="update", target=old)
+            item.update(action="update", target=old, partNo=old["part_no"])
         elif not item["name"]:
-            item.update(action="error", reason="品名不可空白" if item["partNo"] else "品名不可空白（新增料號必填）")
-        elif not item["partNo"] and not _prefix_for(f.get("category", "")):
+            item.update(action="error", reason="品名不可空白" if part_no else "品名不可空白（新增料號必填）")
+        elif not part_no and not _prefix_for(f.get("category", "")):
             item.update(action="error", reason="請填料號，或填有對應前綴的類別以自動產生")
         else:
             item.update(action="create")
-        if item["partNo"]:
-            seen.add(item["partNo"])
+        if key:
+            seen.add(key)
+        if item["action"] == "update":
+            t = old
+            diff = []
+            new_vals = {k: v for k, v in f.items()}
+            if item["brandName"] or item["brandModel"]:
+                tbn, tm = _split_brand(t["brand"])
+                new_vals["brand"] = " / ".join(x for x in (item["brandName"] or tbn, item["brandModel"] or tm) if x)
+            for k, col in _PART_COLS:
+                if k in new_vals and new_vals[k] != t[col]:
+                    diff.append({"field": k, "label": _PART_FIELD_LABELS[k], "old": _show(t[col]), "new": _show(new_vals[k])})
+            item["diff"] = diff
         plan.append(item)
     return plan
 
 
+def _audit_rows(token: str, entries: list) -> None:
+    """匯入的逐列稽核：同一條連線、一次 commit（逐列呼叫 `_audit` ＝每列各開連線各 commit，1500 列要十幾秒）。每列內容與 `_audit` 相同。
+    entries＝[(action, target_type, target_id, target_label, detail)]；永不丟例外。呼叫前資料交易必須已 commit。"""
+    if not entries:
+        return
+    try:
+        conn = get_db()
+        try:
+            user_id, username, display_name = None, "", ""
+            row = conn.execute("SELECT u.id, u.username, u.display_name FROM sessions s JOIN users u ON s.user_id=u.id WHERE s.token=?", (token,)).fetchone() if token else None
+            if row:
+                user_id, username, display_name = row["id"], row["username"], row["display_name"]
+            now = datetime.now().isoformat()
+            for action, ttype, tid, tlabel, detail in entries:
+                d = _derive_fields(action, ttype, tid, tlabel, detail)
+                payload = json.dumps(detail or {}, ensure_ascii=False)
+                if len(payload) > _DETAIL_MAX:
+                    payload = json.dumps({"_truncated": True, "originalLength": len(payload), "preview": payload[:_DETAIL_MAX - 200]}, ensure_ascii=False)
+                conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code) "
+                             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+                             (now, user_id, username, display_name, action, ttype, tid, tlabel, payload, d["module"], d["case_no"], d["ref_no"]))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:                                      # noqa: BLE001
+        logging.getLogger(__name__).warning("part import audit rows failed", exc_info=True)
+
+
+def _part_plan_hash(plan: list) -> str:
+    sig = [{"r": p["row"], "n": p["partNo"], "nm": p["name"], "bn": p["brandName"], "bm": p["brandModel"], "f": p["fields"], "a": p["action"],
+            "t": (p.get("target") or {}).get("id"), "u": (p.get("target") or {}).get("updated_at")} for p in plan]
+    return hashlib.sha256(json.dumps(sig, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+
+
 def _part_plan_summary(plan: list) -> dict:
     count = lambda a: sum(1 for p in plan if p["action"] == a)               # noqa: E731
+    changes = [{"row": p["row"], "name": p["partNo"] or p["name"], "action": "update", "fields": p["diff"]}
+               for p in plan if p["action"] == "update" and p.get("diff")]
     return {"created": count("create"), "updated": count("update"), "failed": count("error"), "duplicates": [],
-            "errors": ["第 %s 行：%s" % (p["row"], p["reason"]) for p in plan if p["action"] == "error"]}
+            "errors": ["第 %s 行：%s" % (p["row"], p["reason"]) for p in plan if p["action"] == "error"],
+            "changes": changes[:_IMPORT_MAX_DIFF_ROWS], "changesTruncated": len(changes) > _IMPORT_MAX_DIFF_ROWS,
+            "planHash": _part_plan_hash(plan)}
 
 
 @router.post("/api/parts/import-rows")
 def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
-    """Excel 匯入（已在瀏覽器解析成列）。`dryRun:true` ⇒ 只回計畫（新增／更新幾筆），不寫入。"""
+    """Excel 匯入（已在瀏覽器解析成列）。**只有 `dryRun` 明確是 false 才會寫入**，其他一律只回預覽（新增／更新幾筆、每列差異）。
+    正式寫入要帶預覽時拿到的 `planHash`；資料在預覽後有變 ⇒ 409。"""
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'inventory'), "供應商／料號／採購")
     rows = body.get("rows")
@@ -202,15 +279,19 @@ def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
         raise HTTPException(400, "沒有可匯入的資料列")
     if len(rows) > _IMPORT_MAX_ROWS:
         raise HTTPException(400, "一次最多匯入 %d 列，請分檔" % _IMPORT_MAX_ROWS)
-    dry = body.get("dryRun") is True
+    real = body.get("dryRun") is False
     conn = get_db()
     written = []
     try:
-        if dry:
+        if not real:
             return _part_plan_summary(_plan_part_import(conn, rows))
+        if not isinstance(body.get("planHash"), str) or not body["planHash"]:
+            raise HTTPException(400, "請先預覽再確認匯入")
         now = datetime.now().isoformat()
         with write_txn(conn):                    # 整批一個交易；拿鎖之後重算計畫
             plan = _plan_part_import(conn, rows)
+            if _part_plan_hash(plan) != body["planHash"]:
+                raise HTTPException(409, "資料在你預覽之後有變動，請重新預覽再確認")
             for p in plan:
                 f = p["fields"]
                 if p["action"] == "create":
@@ -227,16 +308,14 @@ def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
                 elif p["action"] == "update":
                     t = p["target"]
                     sets, params = [], []
-                    for key, col in (("name", "name"), ("unit", "unit"), ("cost", "cost"), ("listPrice", "list_price"), ("category", "category"),
-                                     ("note", "note"), ("safetyStock", "safety_stock"), ("leadTimeDays", "lead_time_days")):
+                    for key, col in _PART_COLS:
                         if key in f:
                             sets.append(col + "=?")
                             params.append(f[key])
                     if p["brandName"] or p["brandModel"]:               # 廠牌、型號各自獨立：沒給的那一半沿用既有值
                         bn, model = _split_brand(t["brand"])
-                        brand = " / ".join(x for x in (p["brandName"] or bn, p["brandModel"] or model) if x)
                         sets.append("brand=?")
-                        params.append(brand)
+                        params.append(" / ".join(x for x in (p["brandName"] or bn, p["brandModel"] or model) if x))
                     if sets:
                         sets.append("updated_at=?")
                         conn.execute("UPDATE parts SET " + ", ".join(sets) + " WHERE id=?", params + [now, t["id"]])
@@ -245,18 +324,21 @@ def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
     except HTTPException:
         raise
     except Exception:
-        import logging
         logging.getLogger(__name__).exception("part import failed")
         raise HTTPException(409, "匯入失敗，沒有任何資料被寫入")
     finally:
         conn.close()
     result = _part_plan_summary(plan)
-    if written:
-        tok = _tok(authorization)
-        for action, part_no, label in written:
-            _audit(tok, action, 'part', part_no, label, {"via": "excel_import"})
-        notify_module_activity("供應商／料號／採購", "匯入", user.get("display_name") or user["username"],
-                               "Excel 匯入料號：新增 %d 筆、更新 %d 筆" % (result["created"], result["updated"]), "parts.html")
+    try:                                         # 資料已經寫入：後續稽核／通知失敗只記錄，不能讓畫面誤以為失敗而重匯
+        if written:
+            tok = _tok(authorization)
+            _audit(tok, 'part.import', 'part', '', "Excel 匯入料號", {         # 批次一列（總數）；逐料號的稽核另列
+                "created": result["created"], "updated": result["updated"], "failed": result["failed"]})
+            _audit_rows(tok, [(action, 'part', part_no, label, {"via": "excel_import"}) for action, part_no, label in written])
+            notify_module_activity("供應商／料號／採購", "匯入", user.get("display_name") or user["username"],
+                                   "Excel 匯入料號：新增 %d 筆、更新 %d 筆" % (result["created"], result["updated"]), "parts.html")
+    except Exception:                            # noqa: BLE001
+        logging.getLogger(__name__).exception("part import post-commit steps failed (data already written)")
     return result
 
 
@@ -267,12 +349,16 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT part_no, name, safety_stock, lead_time_days FROM parts WHERE id=?",
+            "SELECT part_no, name, brand, unit, cost, list_price, category, note, safety_stock, lead_time_days FROM parts WHERE id=?",
             (part_id,)).fetchone()
         if not row:
             raise HTTPException(404, "料號不存在")
         now = datetime.now().isoformat()
-        new_name = body.get("name", "")
+        # 請求沒帶的欄位 ⇒ 沿用現值（不是改成預設值）。一般編輯表單永遠整包送，行為不變；
+        # 只送部分欄位的呼叫路徑（舊的逐列 Excel 匯入、批次改名）才不會把成本歸零、單位改回「台」、清掉廠牌／備註。
+        new_name = body["name"] if "name" in body else row["name"]
+        keep = lambda key, col: body[key] if key in body else row[col]       # noqa: E731
+        new_list_price = (body.get("listPrice") or body.get("list_price") or 0) if ("listPrice" in body or "list_price" in body) else row["list_price"]
         # safety_stock 只有請求明確帶了 safetyStock/safety_stock 鍵才更新，否則沿用
         # 現值——沒有這個保護的話，brand 批次改名／Excel 匯入等不知道這個新欄位的
         # 既有呼叫路徑會因為沒帶這個鍵而把每個料號的安全庫存悄悄清零
@@ -295,12 +381,12 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
             WHERE id=?
         """, (
             new_name,
-            body.get("brand",""),
-            body.get("unit","台"),
-            body.get("cost",0),
-            body.get("listPrice") or body.get("list_price") or 0,
-            body.get("category",""),
-            body.get("note",""),
+            keep("brand", "brand"),
+            keep("unit", "unit"),
+            keep("cost", "cost"),
+            new_list_price,
+            keep("category", "category"),
+            keep("note", "note"),
             safety_stock,
             lead_time_days,
             now, part_id,

@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 925,
-  "endpoints_api": 921,
-  "write_total": 498,
-  "write_api": 498,
-  "get_api": 423,
-  "distinct_paths_api": 779,
-  "write_with_body_api": 364,
-  "write_with_path_param_api": 358
+  "endpoints_total": 930,
+  "endpoints_api": 926,
+  "write_total": 501,
+  "write_api": 501,
+  "get_api": 425,
+  "distinct_paths_api": 784,
+  "write_with_body_api": 367,
+  "write_with_path_param_api": 359
  },
  "select_star": {
   "modules": 287,
@@ -3168,6 +3168,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/customers/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/customers/{cid}/contacts/{ctid}/privacy-notice/ack": {
    "w": true,
    "pp": 2,
@@ -3589,6 +3594,11 @@
    "body": true
   },
   "POST /api/parts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/parts/import-rows": {
    "w": true,
    "pp": 0,
    "body": true

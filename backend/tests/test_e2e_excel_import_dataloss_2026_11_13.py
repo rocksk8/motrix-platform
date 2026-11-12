@@ -248,3 +248,22 @@ def test_part_import_asks_for_confirmation_with_counts(env, tmp_path):
     txt = _import(env, "parts", path)
     assert txt, "匯入前沒有顯示確認"
     assert "新增 2 筆" in txt and "更新 1 筆" in txt, txt
+
+
+def test_customer_same_tax_different_name_is_listed_and_written_only_when_ticked(env, tmp_path):
+    _mk_customer(env, "甲公司", "12345678", phone="02-1")
+    path = _xlsx(tmp_path / "c.xlsx", CUSTOMER_COLS, [["乙公司", "12345678", "02-9", "", "", ""]])
+    page = env["page"]
+    page.goto(env["base"] + "/pages/customers.html")
+    page.wait_for_selector('input[type="file"][accept*="xlsx"]', state="attached")
+    page.wait_for_load_state("networkidle")
+    page.set_input_files('input[type="file"][accept*="xlsx"]', path)
+    page.wait_for_selector('[data-testid="import-confirm-list"]', timeout=8000)
+    body = page.locator('[data-testid="import-confirm"]').inner_text()
+    assert "甲公司" in body and "乙公司" in body, "要把系統裡的舊名稱與檔案的新名稱並排顯示"
+    assert page.locator('[data-testid="import-confirm-ok"]').is_disabled(), "沒勾選、也沒有其他可匯入的列時不可確認"
+    page.check('[data-testid="import-confirm-tick-2"]')
+    page.click('[data-testid="import-confirm-ok"]')
+    page.get_by_text("失敗", exact=True).first.wait_for(timeout=20000)
+    c = _by_tax(env, "12345678")[0]
+    assert c["name"] == "甲公司" and c["phone"] == "02-9"

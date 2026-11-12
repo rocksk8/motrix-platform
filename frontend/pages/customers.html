@@ -577,8 +577,38 @@
           <div data-testid="import-confirm">
             <div style="font-size:15px;font-weight:600;margin-bottom:10px">確認匯入</div>
             <div style="font-size:13px;line-height:1.8" data-testid="import-confirm-summary"
-                 x-text="'將新增 ' + importPlan.created + ' 筆、更新 ' + importPlan.updated + ' 筆、可能重複 ' + importPlan.duplicates.length + ' 筆（可能重複的不會匯入）' + (importPlan.failed ? '、有問題 ' + importPlan.failed + ' 筆（不會匯入）' : '')"></div>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">空白的儲存格不會覆蓋既有資料；統一編號相同才會更新既有客戶，只有名稱相同的列不會自動合併。</div>
+                 x-text="'將新增 ' + importPlan.created + ' 筆、更新 ' + (importPlan.updated + importTickedCount()) + ' 筆、可能重複 ' + importPlan.duplicates.length + ' 筆（可能重複的不會匯入）' + (importPlan.confirms.length ? '、需確認 ' + importPlan.confirms.length + ' 筆（沒勾選的不會匯入）' : '') + (importPlan.failed ? '、有問題 ' + importPlan.failed + ' 筆（不會匯入）' : '')"></div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">空白的儲存格不會覆蓋既有資料（備註是追加在後面）；統一編號相同且名稱相同才會更新既有客戶，只有名稱相同的列不會自動合併。</div>
+            <template x-if="importNotice"><div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-top:8px" x-text="importNotice"></div></template>
+            <template x-if="importPlan.confirms.length > 0">
+              <div style="margin-top:10px" data-testid="import-confirm-list">
+                <div style="font-size:12px;font-weight:600;color:#92400E;margin-bottom:4px">統編相同但公司名稱不同——請確認是同一家再勾選（可能是統編打錯）</div>
+                <div style="max-height:130px;overflow-y:auto;background:#FFFBEB;border-radius:var(--radius);padding:8px 12px">
+                  <template x-for="(c, ci) in importPlan.confirms" :key="ci">
+                    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#92400E;margin-bottom:5px;cursor:pointer">
+                      <input type="checkbox" x-model="c.tick" :data-testid="'import-confirm-tick-' + c.row" style="margin-top:2px">
+                      <span x-text="'第 ' + c.row + ' 行｜系統：' + c.oldName + '　→　檔案：' + c.name + '（統編 ' + c.taxId + '）'"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <template x-if="importPlan.changes && importPlan.changes.length > 0">
+              <details style="margin-top:10px" data-testid="import-confirm-changes">
+                <summary style="font-size:12px;cursor:pointer;color:var(--text-secondary)">查看將被更新的內容（舊 → 新）</summary>
+                <div style="max-height:150px;overflow-y:auto;background:var(--surface-2,#F8FAFC);border-radius:var(--radius);padding:8px 12px;margin-top:6px">
+                  <template x-for="(ch, hi) in importPlan.changes" :key="hi">
+                    <div style="font-size:12px;margin-bottom:6px">
+                      <div style="font-weight:600" x-text="'第 ' + ch.row + ' 行 ' + ch.name"></div>
+                      <template x-for="(f, fi) in ch.fields" :key="fi">
+                        <div style="color:var(--text-secondary);padding-left:8px" x-text="f.label + '：' + (f.old || '（空）') + '  →  ' + f.new"></div>
+                      </template>
+                    </div>
+                  </template>
+                  <div x-show="importPlan.changesTruncated" style="font-size:12px;color:var(--text-dim)">（只列前 200 筆）</div>
+                </div>
+              </details>
+            </template>
             <template x-if="importPlan.duplicates.length > 0">
               <div style="max-height:120px;overflow-y:auto;background:#FFFBEB;border-radius:var(--radius);padding:8px 12px;margin-top:10px">
                 <template x-for="(d, di) in importPlan.duplicates" :key="di">
@@ -588,7 +618,7 @@
             </template>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
               <button class="btn btn-ghost" data-testid="import-confirm-cancel" @click="cancelImport()">取消</button>
-              <button class="btn btn-primary" data-testid="import-confirm-ok" @click="runImport()" :disabled="importPlan.created + importPlan.updated === 0">確認匯入</button>
+              <button class="btn btn-primary" data-testid="import-confirm-ok" @click="runImport()" :disabled="importPlan.created + importPlan.updated + importTickedCount() === 0">確認匯入</button>
             </div>
           </div>
         </template>
@@ -1045,6 +1075,7 @@
       showImportModal: false,
       importing: false,
       importResults: null,
+      importNotice: '',
       importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, duplicates[], errors[]}
       _importRows: null,
 
@@ -1129,33 +1160,48 @@
             .filter(x => Object.values(x.r).some(v => String(v ?? '').trim()))
             .map(x => { const { name, taxId, phone, ...data } = this._parseCustomerRow(x.r); return { row: x.row, name, taxId, phone, data } })
           if (!this._importRows.length) throw new Error('檔案裡沒有資料列')
-          this.importPlan = await this._importPost(true)
+          this.importNotice = ''
+          this.importPlan = this._withTicks(await this._importPost(true))
         } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message], duplicates: [] } }
         this.importing = false
       },
 
+      // 預覽回來的「需確認」列加上勾選狀態（預設不勾：沒勾的不會寫入）
+      _withTicks(plan) { return { ...plan, confirms: (plan.confirms || []).map(c => ({ ...c, tick: false })) } },
+      importTickedCount() { return this.importPlan ? (this.importPlan.confirms || []).filter(c => c.tick).length : 0 },
+
       async _importPost(dryRun) {
+        const ticked = new Set(this.importPlan ? (this.importPlan.confirms || []).filter(c => c.tick).map(c => c.row) : [])
+        const rows = dryRun ? this._importRows : this._importRows.map(r => ticked.has(r.row) ? { ...r, confirm: true } : r)
         const r = await fetch(`${API}/customers/import-rows`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
-          body: JSON.stringify({ rows: this._importRows, dryRun })
+          body: JSON.stringify({ rows, dryRun, planHash: dryRun ? undefined : this.importPlan?.planHash })     // 只有 dryRun:false 才會真的寫入；寫入要帶預覽拿到的 planHash
         })
-        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || ('HTTP ' + r.status)) }
+        if (!r.ok) { const e = await r.json().catch(() => ({})); const err = new Error(e.detail || ('HTTP ' + r.status)); err.status = r.status; throw err }
         return r.json()
       },
 
       async runImport() {
-        this.importing = true; this.importPlan = null
+        this.importing = true
         try {
           this.importResults = await this._importPost(false)
+          this.importPlan = null
           const res = await fetch(`${API}/customers`, { headers: { Authorization:`Bearer ${this.session.token}` } })
           if (res.ok) this.customers = await res.json()
-        } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message], duplicates: [] } }
-        this._importRows = null
+          this._importRows = null
+        } catch(e) {
+          if (e.status === 409 && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
+            try { this.importPlan = this._withTicks(await this._importPost(true)); this.importNotice = '資料在你預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）'; this.importing = false; return } catch(e2) { e = e2 }
+          }
+          this.importPlan = null
+          this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message], duplicates: [] }
+          this._importRows = null
+        }
         this.importing = false
       },
 
-      cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null },
+      cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null; this.importNotice = '' },
 
       _parseCustomerRow(row) {
         const n = {}

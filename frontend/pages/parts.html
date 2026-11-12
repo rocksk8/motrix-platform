@@ -341,6 +341,23 @@
           <div style="font-size:13px;line-height:1.8" data-testid="import-confirm-summary"
                x-text="'將新增 ' + importPlan.created + ' 筆、更新 ' + importPlan.updated + ' 筆' + (importPlan.failed ? '、有問題 ' + importPlan.failed + ' 筆（不會匯入）' : '')"></div>
           <div style="font-size:12px;color:var(--text-dim);margin-top:6px">空白的儲存格不會覆蓋既有資料（成本、單位等維持原值）。</div>
+          <template x-if="importNotice"><div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-top:8px" x-text="importNotice"></div></template>
+          <template x-if="importPlan.changes && importPlan.changes.length > 0">
+            <details style="margin-top:10px" data-testid="import-confirm-changes">
+              <summary style="font-size:12px;cursor:pointer;color:var(--text-secondary)">查看將被更新的內容（舊 → 新）</summary>
+              <div style="max-height:150px;overflow-y:auto;background:var(--surface-2,#F8FAFC);border-radius:var(--radius);padding:8px 12px;margin-top:6px">
+                <template x-for="(ch, hi) in importPlan.changes" :key="hi">
+                  <div style="font-size:12px;margin-bottom:6px">
+                    <div style="font-weight:600" x-text="'第 ' + ch.row + ' 行 ' + ch.name"></div>
+                    <template x-for="(f, fi) in ch.fields" :key="fi">
+                      <div style="color:var(--text-secondary);padding-left:8px" x-text="f.label + '：' + (f.old || '（空）') + '  →  ' + f.new"></div>
+                    </template>
+                  </div>
+                </template>
+                <div x-show="importPlan.changesTruncated" style="font-size:12px;color:var(--text-dim)">（只列前 200 筆）</div>
+              </div>
+            </details>
+          </template>
           <template x-if="importPlan.errors.length > 0">
             <div style="max-height:120px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:8px 12px;margin-top:10px">
               <template x-for="(e, ei) in importPlan.errors" :key="ei">
@@ -423,7 +440,8 @@ function app() {
     showImportModal: false,
     importing: false,
     importResults: null,
-    importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
+    importNotice: '',
+    importPlan: null,        //匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
     _importRows: null,
 
     get categories() {
@@ -677,6 +695,7 @@ function app() {
           .filter(x => Object.values(x.r).some(v => String(v ?? '').trim()))
           .map(x => ({ row: x.row, ...this._parsePartRow(x.r) }))
         if (!this._importRows.length) throw new Error('檔案裡沒有資料列')
+        this.importNotice = ''
         this.importPlan = await this._importPost(true)
       } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] } }
       this.importing = false
@@ -686,23 +705,31 @@ function app() {
       const r = await fetch(`${API}/parts/import-rows`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
-        body: JSON.stringify({ rows: this._importRows, dryRun })
+        body: JSON.stringify({ rows: this._importRows, dryRun, planHash: dryRun ? undefined : this.importPlan?.planHash })     // 只有 dryRun:false 才會真的寫入；寫入要帶預覽拿到的 planHash
       })
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || ('HTTP ' + r.status)) }
+      if (!r.ok) { const e = await r.json().catch(() => ({})); const err = new Error(e.detail || ('HTTP ' + r.status)); err.status = r.status; throw err }
       return r.json()
     },
 
     async runImport() {
-      this.importing = true; this.importPlan = null
+      this.importing = true
       try {
         this.importResults = await this._importPost(false)
+        this.importPlan = null
         await this.load()
-      } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] } }
-      this._importRows = null
+        this._importRows = null
+      } catch(e) {
+        if (e.status === 409 && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
+          try { this.importPlan = await this._importPost(true); this.importNotice = '資料在你預覽之後有變動，已重新預覽，請再確認一次'; this.importing = false; return } catch(e2) { e = e2 }
+        }
+        this.importPlan = null
+        this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] }
+        this._importRows = null
+      }
       this.importing = false
     },
 
-    cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null },
+    cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null; this.importNotice = '' },
 
     _parsePartRow(row) {
       const n = {}
