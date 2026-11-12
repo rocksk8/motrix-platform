@@ -202,8 +202,7 @@ def test_unusable_hmac_key_is_regenerated_not_a_500(client, make_user, fake_smtp
 
 
 # ── 新發現 L ────────────────────────────────────────────────────────────────
-@pytest.mark.xfail(strict=True, reason="L（Low）：窄化後『全是數字的字串』不再遮蔽；純數字密碼／PIN／token（例如 \"12345678\"）會原樣進備份匯出")
-def test_atk_numeric_string_secrets_must_still_be_masked_in_the_backup_export(client):
+def test_numeric_string_secrets_are_masked_in_the_backup_export(client):
     import archive
     row = {"key": "some_integration", "updated_at": "x",
            "value_json": json.dumps({"api_token": "123456789012", "login_password": "12345678", "pin_secret": "0000", "enabled": True, "password_min_len": 8}, ensure_ascii=False)}
