@@ -414,8 +414,10 @@ def test_head_matches_get_headers_and_length(client, url):
 
 def test_304_carries_server_timing_and_vary(client):
     """P2：暖載入的 HTML 就是 304 的情形——要帶內層的 Server-Timing 與 Vary（CORS 的 Vary: Origin），不帶實體表頭。"""
-    r1 = client.get("/pages/account-items.html")
-    r2 = client.get("/pages/account-items.html", headers={"If-None-Match": r1.headers["etag"]})
+    import main
+    origin = {"Origin": main._DEFAULT_CORS_ORIGINS[0]}              # 帶白名單內的 Origin ⇒ CORS 中介層才會加 Vary: Origin（沒帶就沒有，測試不可依賴別題的副作用）
+    r1 = client.get("/pages/account-items.html", headers=origin)
+    r2 = client.get("/pages/account-items.html", headers={"If-None-Match": r1.headers["etag"], **origin})
     assert r2.status_code == 304 and r2.content == b""
     assert "server-timing" in r2.headers
     assert r2.headers.get("vary") == r1.headers.get("vary") and r1.headers.get("vary")

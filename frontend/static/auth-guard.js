@@ -15,8 +15,8 @@
   if (window.MOTRIX_PREVIEW) return;
   // ── 啟動資料（2026-11-13「外網載入效能」第二階段）────────────────────────────────────────────
   // 原本每一頁載入都各自打 auth/me、platform/menu、modules/availability、build-info、approval-queue/count、notifications/mine、
-  // reads/module-counts、system/branding、online-users、totp/status…（外網每支約 1 s）。現在這支守門腳本改打 **一支** `GET /api/bootstrap`
-  // （同時當登入驗證用），結果放在 `window.MotrixBoot`（Promise → bootstrap JSON；null＝不可用，各處退回打原端點）。
+  // reads/module-counts、system/branding、online-users、totp/status…（外網每支約 1 s）。現在這支守門腳本在驗證登入（`auth/me`，放行頁面只看它）的**同時**並行打 **一支** `GET /api/bootstrap`
+  // 取其餘啟動資料（不擋首繪），結果放在 `window.MotrixBoot`（Promise → bootstrap JSON；null＝不可用，各處退回打原端點）。
   //   window.motrixBootFetch(url, opts)：與 fetch 同簽章。**第一次**要某個啟動區段時（且在 20 秒內、同一個 token）回一個由 bootstrap 內容
   //     組成的 Response（r.ok／r.json() 與原端點完全相同），否則就是真的 fetch ⇒ 呼叫端只要把 fetch 換成它，其餘邏輯不用動；
   //     之後的重抓（輪詢、focus、reads-changed）一律是真的請求，不會拿到舊資料。
@@ -153,21 +153,18 @@
   // 啟動資料等不到就不等：6 秒後讓 MotrixBoot 變 null，各處退回打原端點（與改版前一樣）
   var bootTimer = setTimeout(function () { bootResolve(null); }, 6000);
 
+  // 首繪不可以比改版前慢（B1）：**放行只看快的 `auth/me`**（與改版前逐字相同的路徑），`/api/bootstrap` 同時並行發出、
+  // 只負責供應資料——它慢（11 個區段）不會擋住頁面顯示；它失敗（401／403／428／404／5xx／逾時）只是 MotrixBoot＝null、各處退回打原端點。
   fetch('/api/bootstrap', { headers: authHeaders })
     .then(function (r) {
-      if (r.status === 200) {
-        return r.json().then(function (d) {
-          if (!d || !d.me) throw new Error('bootstrap without me');
-          boot.data = d; boot.at = Date.now(); boot.token = session.token;
-          boot.hdr = { license: r.headers.get('X-Motrix-License'), setup: r.headers.get('X-Motrix-Company-Setup') };
-          clearTimeout(bootTimer); bootResolve(d);
-          handleStatus(r);
-        });
-      }
-      clearTimeout(bootTimer); bootResolve(null);
-      if (r.status === 401 || r.status === 402) return handleStatus(r);     // 與 auth/me 同樣的結果
-      // 403（必須先改密碼）、428、404（舊伺服器沒有這支）、5xx：退回打 auth/me，行為與改版前完全相同
-      return legacyMe();
+      if (r.status !== 200) { clearTimeout(bootTimer); bootResolve(null); return; }
+      return r.json().then(function (d) {
+        if (!d || !d.me) throw new Error('bootstrap without me');
+        boot.data = d; boot.at = Date.now(); boot.token = session.token;
+        boot.hdr = { license: r.headers.get('X-Motrix-License'), setup: r.headers.get('X-Motrix-Company-Setup') };
+        clearTimeout(bootTimer); bootResolve(d);
+      });
     })
-    .catch(function () { clearTimeout(bootTimer); bootResolve(null); return legacyMe(); });
+    .catch(function () { clearTimeout(bootTimer); bootResolve(null); });
+  legacyMe();
 })();

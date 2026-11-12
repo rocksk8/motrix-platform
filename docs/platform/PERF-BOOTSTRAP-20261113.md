@@ -34,7 +34,8 @@
 **index.html 的改用由 hichan-7（P1.5 角色化儀表板）負責**（協調結果：本分支不碰 index.html 的 fetch；hichan-7 以 `/api/dashboard/bundle` 取代首頁六支、失敗退回舊端點；`/api/customers`、`/api/org/tree` 改延後載入也在他那邊）。
 
 ## 前端：`window.MotrixBoot`、`motrixBoot(name)`、`motrixBootFetch(url, opts)`（`static/auth-guard.js`）
-- `auth-guard.js`（每頁最先載入、本來就要驗登入）改打 **一支** `/api/bootstrap` 當登入驗證；結果放 `window.MotrixBoot`（Promise → bootstrap JSON 或 `null`）。非 200 的處理：401／402 同 `auth/me`；403（必須改密碼）、428、404（舊伺服器）、5xx ⇒ 退回打 `/api/auth/me`，行為與改版前完全相同；6 秒等不到 ⇒ `MotrixBoot` 變 `null`。
+- `auth-guard.js`（每頁最先載入）：**放行頁面只看快的 `/api/auth/me`**（與改版前逐字相同的處理：ok ⇒ 顯示、402 ⇒ 授權頁、其他 ⇒ 轉登入），**同時並行**發出 `/api/bootstrap` 取其餘啟動資料，結果放 `window.MotrixBoot`（Promise → bootstrap JSON 或 `null`）。bootstrap 慢（11 個區段）不擋首繪；它非 200（401／402／403／404／428／5xx）或 6 秒等不到 ⇒ `MotrixBoot` ＝ `null`、各處退回打原端點（放行／轉頁的結果仍只由 `auth/me` 決定）。（審查 B1：第一版讓 guard 等整包 bootstrap 才放行，首繪慢 0.2～0.3 s，已改。）
+- 後端 `/api/bootstrap` 的區段**並行**執行（專用執行緒池、每段在 `copy_context()` 複本裡跑，demo 旗標照帶；回應鍵序仍固定）；`buildInfo` 區段快取 60 s（`stale` 要能在套用更新後出現，所以不是行程內永久快取；原端點 `/api/build-info` 不快取）。區段內的請求脈絡設成原端點路徑（稽核「是哪支端點被拒」不會記成 `/api/bootstrap`）。`/api/bootstrap`、`/api/dashboard/bundle` 回 `Cache-Control: no-store`。守門：每支被直接呼叫的處理函式的參數必須恰好是 `authorization`（bundle 的 6 支各自與 bundle 傳的一致）。
 - `motrixBootFetch(url, opts)` 與 `fetch` 同簽章：**第一次**要某區段時（同一個 token、20 秒內、GET、無 query、帶 Authorization）回一個由 bootstrap 內容組成的 `Response`（`r.ok`／`r.json()` 與原端點相同），否則就是真的 fetch。同一資料有兩個載入點的（`me`、`branding`、`approvalCount`）可供應 2 次，其餘 1 次。⇒ 呼叫端只要把 `fetch(` 換成 `(window.motrixBootFetch || fetch)(`，其餘邏輯不動。
 - 使用者動作事件（`motrix:approval-changed`、`motrix:reads-changed`、`motrix:item-read`、`motrix:item-read-failed`）⇒ 整份啟動資料作廢，之後一律真的請求（重抓拿到真資料）。
 - 第一次供應時補上 bootstrap 那次回應的橫幅標頭（`X-Motrix-License`、`X-Motrix-Company-Setup`），由 `notif.js` 匯出的 `motrixApplyBanners` 處理（原本每個 `/api` 回應都會過橫幅邏輯）。
@@ -42,9 +43,18 @@
 - `index.html` 自己的 `/api/system/branding`、`/api/approval-queue/count` 還是原本的 fetch——hichan-7 改 index.html 時可直接用 `motrixBootFetch`（同簽章）。
 
 ## 實測（同第一階段的方法：真 Chromium，130 ms 往返、2.5 Mbps、HTTP 快取有效；本機）
-首頁（暖）API 請求 **22 → 13**（剩下的 11 支是 index.html 自己的 fetch：dashboard 六支、branding、approval count、customers、org tree、daily-tasks…，等 hichan-7 改用 bundle 後預計 ≈ 4）；第二頁（暖）**17 → 8**；wire 請求首頁 23 → 14、第二頁 29 → 20。頂欄 0.22 s、load 0.33 s（第一階段 0.24／0.36）。外網每支約 1 s，**省的是瀑布深度**：頁面不再等 `auth-guard` 的 `auth/me` 之後才發 sidebar／notif 的一串請求。
+（B1 修正後重測，見文末）首頁（暖）API 請求 **22 → 13**（剩下的 11 支是 index.html 自己的 fetch：dashboard 六支、branding、approval count、customers、org tree、daily-tasks…，等 hichan-7 改用 bundle 後預計 ≈ 4）；第二頁（暖）**17 → 8**；wire 請求首頁 23 → 14、第二頁 29 → 20。頂欄 0.22 s、load 0.33 s（第一階段 0.24／0.36）。外網每支約 1 s，**省的是瀑布深度**：頁面不再等 `auth-guard` 的 `auth/me` 之後才發 sidebar／notif 的一串請求。
 
 ## 相容與退路
 - 原端點全部保留；舊前端（沒有 `motrixBootFetch`）照舊各自打原端點。
 - 新前端打到舊伺服器（沒有 `/api/bootstrap`）：`auth-guard` 退回 `auth/me`，`MotrixBoot` ＝ `null`，所有 `motrixBootFetch` 變成一般 fetch。
 - 既有測試的調整：`test_e2e_approval_dot`（待簽數由 bootstrap 供應，等待條件放寬為 bootstrap 或原端點）、`test_login_return_to`（node 測試的 fetch 模擬加上 bootstrap）、`golden_case_page`（`99 API 請求` 一行：+`/api/bootstrap`，`bonus-module-status` 2→1、`availability` 3→2；其餘 22 段行為快照不變，已重錄）。
+
+## B1 修正後重測（真 Chromium，130 ms 往返、2.5 Mbps、HTTP 快取有效；各跑兩次，與第一階段 5f17749ac 並排）
+| 指標（暖載入） | 第一階段 5f17749ac | 本分支 |
+|---|---|---|
+| 頁面放行（auth-guard reveal） 首頁 | 307／320 ms | 324／325 ms |
+| 頁面放行 第二頁（quotations） | 327～495 ms | 326～479 ms（兩邊都有同樣的雜訊，單次 ≈ 0.33 或 ≈ 0.48） |
+| 頂欄出現 首頁／第二頁 | 0.35～0.37／0.63～0.64 s | 0.36～0.37／0.72～0.74 s（第二頁 +0.09 s：sidebar 等 bootstrap 一次到齊，不再各自並行發） |
+| API 請求數 首頁／第二頁 | 22／17 | 14／9（比第二階段第一版多 1：guard 自己的 `auth/me`） |
+放行時間持平（B1 的驗收）；請求數仍大幅減少（22→14、17→9）。頂欄在第二頁慢約 0.1 s 是取捨：想拿回可以把 sidebar 的首次載入改成不等 bootstrap（那就回到各自發請求）。

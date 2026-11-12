@@ -236,3 +236,97 @@ def test_bundle_failing_section_is_null_and_others_survive(client, world, monkey
 def test_bundle_is_grouped_with_the_dashboard_in_the_trail():
     import trail
     assert "/api/dashboard/bundle" in dict((g[0], g[2]) for g in trail._FANOUT_GROUPS)["/api/dashboard"]
+
+
+# ── 審查補強（hichan-2：B1～B4）─────────────────────────────────────────────────────
+
+def test_every_called_handler_takes_only_authorization():
+    """B2：bootstrap 是『直接呼叫處理函式』——任何一支日後多一個 Query／Depends 參數，直接呼叫會把 Query 物件當成值傳進去而不報錯。
+    所以每支被呼叫的處理函式的參數必須恰好只有 authorization；bundle 呼叫的 6 支各自的參數也要與 bundle 傳的一致。"""
+    import inspect
+    from modules.analytics.api import dashboard as D
+    for name, fn in B._handlers().items():
+        params = list(inspect.signature(fn).parameters)
+        assert params == ["authorization"], (name, params)
+    want = {"dashboard_stats": ["department_id", "authorization"], "dashboard_monthly": ["department_id", "authorization"],
+            "dashboard_expenses_monthly": ["department_id", "authorization"], "dashboard_funnel": ["authorization"],
+            "dashboard_ops_alerts": ["authorization"], "dashboard_activity_feed": ["limit", "department_id", "authorization"]}
+    for fname, params in want.items():
+        assert list(inspect.signature(getattr(D, fname)).parameters) == params, fname
+
+
+def test_bootstrap_and_bundle_are_never_cached(client, world):
+    """B4：每人不同、最大的 JSON、每頁都打。"""
+    h = world["admin"]
+    assert client.get("/api/bootstrap", headers=h).headers["cache-control"] == "no-store"
+    assert client.get("/api/dashboard/bundle", headers=h).headers["cache-control"] == "no-store"
+
+
+def test_section_runs_with_the_original_endpoint_path_as_request_context(client, world, monkeypatch):
+    """B3：區段內的診斷（例如 403 稽核記『是哪支端點被拒』）要記原端點路徑，不是 /api/bootstrap；且不洩到別的區段／請求。"""
+    import db
+    from routers import system
+    seen = {}
+
+    def _spy(authorization=None):
+        seen["ctx"] = db.get_request_ctx()
+        return {"ok": True}
+    monkeypatch.setattr(system, "get_bonus_module_status", _spy)
+    d = client.get("/api/bootstrap", headers=world["admin"]).json()
+    assert d["bonusModuleStatus"] == {"ok": True}
+    assert seen["ctx"] == ("GET", "/api/system/bonus-module-status")
+
+
+def test_sections_run_concurrently_and_keep_response_order(client, world, monkeypatch):
+    """B1：區段並行（最慢那段決定總時間），回應鍵序仍固定。兩段各睡 0.4 s，總時間要遠小於 0.8 s。"""
+    import time
+    from routers import system
+
+    def _slow(authorization=None):
+        time.sleep(0.4)
+        return {"slow": True}
+    monkeypatch.setattr(system, "get_bonus_module_status", _slow)
+    monkeypatch.setattr(system, "module_availability", _slow)
+    t0 = time.monotonic()
+    r = client.get("/api/bootstrap", headers=world["superadmin"])
+    dt = time.monotonic() - t0
+    d = r.json()
+    assert d["bonusModuleStatus"] == {"slow": True} and d["moduleAvailability"] == {"slow": True}
+    assert dt < 0.75, dt
+    assert [k for k in d if k not in ("v", "errors")] == B.sections_for("superadmin", False)
+
+
+def test_concurrent_sections_keep_demo_mode_context(client, world):
+    """並行區段在 copy_context 的複本裡跑 ⇒ demo 旗標等 contextvars 要帶進去（否則會打到正式庫）。"""
+    import contextvars
+    import db
+    from routers import bootstrap as BS
+    db.set_demo_mode(True)
+    try:
+        v = BS._POOL.submit(contextvars.copy_context().run, db.is_demo_mode).result()
+    finally:
+        db.set_demo_mode(False)
+    assert v is True
+
+
+def test_build_info_section_is_cached_but_still_requires_login_and_refreshes(client, world, monkeypatch):
+    """B1：build_info 是最慢的一段（每次 git／讀檔）。bootstrap 的 buildInfo 區段快取 60 s（stale 欄位要看得到套用更新，所以不永久快取）；
+    快取不繞過登入；原端點 /api/build-info 不受影響（每次都現算）。"""
+    from helpers import build_info as BI
+    from routers import bootstrap as BS
+    calls = []
+
+    def _fake():
+        calls.append(1)
+        return {"commit": "abc", "n": len(calls)}
+    monkeypatch.setattr(BI, "build_info", _fake)
+    BS._bi_cache.update(at=0.0, value=None)
+    h = world["admin"]
+    a = client.get("/api/bootstrap", headers=h).json()["buildInfo"]
+    b = client.get("/api/bootstrap", headers=h).json()["buildInfo"]
+    assert a == b and len(calls) == 1                                       # 第二次沒重算
+    assert client.get("/api/build-info", headers=h).json()["n"] == 2        # 原端點每次都現算
+    BS._bi_cache["at"] -= BS._BUILD_INFO_TTL_S + 1                          # 過期 ⇒ 重算
+    assert client.get("/api/bootstrap", headers=h).json()["buildInfo"]["n"] == 3
+    with pytest.raises(Exception):
+        BS._build_info_cached(None)                                         # 沒帶 Authorization 一律 401，不吃快取

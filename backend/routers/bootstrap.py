@@ -17,9 +17,13 @@ approval-queue/count、notifications/mine、reads/module-counts、system/brandin
 
 原端點全部保留（相容；也是前端的退路）。守門：tests/test_bootstrap_bundle_2026_11_13.py 逐區段、逐角色比對 bootstrap 與原端點的回應。
 """
+import contextvars
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Response
 
 from helpers import _require_user
 
@@ -47,6 +51,33 @@ _SA_ONLY = frozenset({"onlineUsers"})
 _ADMIN_UP = frozenset({"totp", "moduleCounts"})
 
 
+#: 各區段並行跑（B1）：區段彼此獨立、都只讀；序列跑 11 段實測 ≈ 250～280 ms，並行 ≈ 最慢那一段。
+#: 專用執行緒池（不佔 FastAPI 的請求執行緒池，免得巢狀等待互卡）；每個區段在 `copy_context()` 的複本裡跑，
+#: ⇒ demo 模式旗標（get_db 導向 demo 庫）與診斷用的請求脈絡都照樣帶進去。
+_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="bootstrap")
+
+#: `build_info`（B1）：每次請求都 `git rev-parse` 一次（開發機）／讀檔，實測 90～240 ms，是 bootstrap 最慢的一段。
+#: 內容只在重新啟動（commit）或套用更新（disk_commit／stale）時才會變 ⇒ 快取 `_BUILD_INFO_TTL_S` 秒。
+#: ⚠️ **不能「行程內永遠快取」**：`stale`＝磁碟上的版本比執行中的新，正是套用更新**不重啟**時才會變的欄位。
+#: 代價：套用更新後最多晚這麼久才在畫面上看到「要重新啟動」。原端點 `/api/build-info` 不快取、照舊即時。
+_BUILD_INFO_TTL_S = 60.0
+_bi_lock = threading.Lock()
+_bi_cache = {"at": 0.0, "value": None}
+
+
+def _build_info_cached(authorization=None):
+    _require_user(authorization)
+    now = time.monotonic()
+    with _bi_lock:
+        if _bi_cache["value"] is not None and now - _bi_cache["at"] < _BUILD_INFO_TTL_S:
+            return _bi_cache["value"]
+    from helpers.build_info import build_info
+    v = build_info()
+    with _bi_lock:
+        _bi_cache["at"], _bi_cache["value"] = now, v
+    return v
+
+
 def _handlers():
     """區段 → 原端點的處理函式（呼叫時才 import：避免與各 router 循環匯入）。"""
     from routers import approval_queue, auth, item_reads, platform_menu, system
@@ -54,7 +85,7 @@ def _handlers():
         "me": auth.auth_me,
         "menu": platform_menu.platform_menu,
         "branding": auth.system_branding,
-        "buildInfo": auth.build_info_endpoint,
+        "buildInfo": _build_info_cached,
         "bonusModuleStatus": system.get_bonus_module_status,
         "moduleAvailability": system.module_availability,
         "approvalCount": approval_queue.get_approval_queue_count,
@@ -91,29 +122,44 @@ def _setup_blocked():
     return kind == _cs.GATE_REQUIRED
 
 
+def _run_section(name, fn, authorization):
+    """在複製的 context 裡跑一個區段（由執行緒池呼叫）。回 `(ok, 值或狀態碼)`。"""
+    from db import set_request_ctx
+    from helpers import company_setup as _cs
+    # B3：診斷用的「是哪支端點」要記原端點的路徑，不是 /api/bootstrap（例如區段內的 403 稽核）
+    set_request_ctx("GET", ORIGINAL_PATH[name])
+    try:
+        return True, fn(authorization)
+    except HTTPException as e:
+        return False, e.status_code
+    except _cs.CompanySetupRequired:
+        return False, 428
+    except Exception:                                       # noqa: BLE001  一個區段壞了不拖垮其他區段；前端對缺的區段退回原端點
+        logger.exception("bootstrap section %s failed", name)
+        return False, 500
+
+
 @router.get("/api/bootstrap")
-def bootstrap(authorization: str = Header(None)):
+def bootstrap(response: Response, authorization: str = Header(None)):
     """登入後的啟動資料（見模組說明）。回 `{"v": 1, "<區段>": <原端點的回應>, …, "errors": {"<區段>": <狀態碼>}}`。"""
+    response.headers["Cache-Control"] = "no-store"          # B4：每人不同、最大的 JSON、每頁都打
     user = _require_user(authorization)
     try:
         blocked = _setup_blocked()
     except Exception:                                       # noqa: BLE001  閘門判定失敗 ⇒ 當作被擋（只給白名單區段，保守）
         logger.exception("bootstrap: company setup gate failed")
         blocked = True
-    from helpers import company_setup as _cs
     handlers = _handlers()
+    names = sections_for(user.get("role"), blocked)
+    futs = [(n, _POOL.submit(contextvars.copy_context().run, _run_section, n, handlers[n], authorization)) for n in names]
     out = {"v": 1}
     errors = {}
-    for name in sections_for(user.get("role"), blocked):
-        try:
-            out[name] = handlers[name](authorization)
-        except HTTPException as e:
-            errors[name] = e.status_code
-        except _cs.CompanySetupRequired:
-            errors[name] = 428
-        except Exception:                                   # noqa: BLE001  一個區段壞了不拖垮其他區段；前端對缺的區段退回原端點
-            logger.exception("bootstrap section %s failed", name)
-            errors[name] = 500
+    for name, fut in futs:                                  # 依 sections_for 的順序收（回應的鍵序固定）
+        ok, val = fut.result()
+        if ok:
+            out[name] = val
+        else:
+            errors[name] = val
     if blocked:                                             # 閘門擋掉的區段：明講是 428（前端不必退回打原端點——原端點也是 428）
         for name in set(sections_for(user.get("role"), False)) - set(sections_for(user.get("role"), True)):
             errors[name] = 428

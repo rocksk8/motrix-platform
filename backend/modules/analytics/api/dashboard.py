@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Response
 
 from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
@@ -1045,9 +1045,11 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
 # 區段名 → 原端點：stats＝/stats、monthly＝/monthly、expenses＝/expenses-monthly、funnel＝/funnel、opsAlerts＝/ops-alerts、
 # activityFeed＝/activity-feed?limit=<activity_limit>。`department_id` 的套用範圍與原端點一樣（funnel／ops-alerts 本來就不吃）。
 @router.get("/api/dashboard/bundle")
-def dashboard_bundle(department_id: Optional[int] = Query(None),
+def dashboard_bundle(response: Response,
+                     department_id: Optional[int] = Query(None),
                      activity_limit: int = Query(8, ge=1, le=100),
                      authorization: str = Header(None)):
+    response.headers["Cache-Control"] = "no-store"          # 每人不同、每次開首頁都打
     _require_user(authorization)
     sections = (
         ("stats",        lambda: dashboard_stats(department_id, authorization)),

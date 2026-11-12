@@ -26,6 +26,7 @@ pytestmark = pytest.mark.skipif(not NODE, reason="需要 node")
 HARNESS = r"""
 const fs = require('fs'); const src = fs.readFileSync(process.argv[2], 'utf8'); const inp = JSON.parse(process.argv[3])
 let now = 1000000; Date.now = () => now
+let guardMeSeen = false
 const handlers = {}; const real = []; const banners = []
 const win = { addEventListener: (ev, fn) => { (handlers[ev] = handlers[ev] || []).push(fn) }, motrixApplyBanners: h => banners.push(h) }
 const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() {} }
@@ -35,6 +36,7 @@ const doc = { createElement: () => ({}), head: { appendChild() {} }, getElementB
 const bootBody = Object.assign({ v: 1, me: { username: 'u' }, menu: { groups: [1] }, approvalCount: { count: 3 }, notifications: { items: [], unread: 0 }, errors: {} }, inp.extra || {})
 const fetchFn = (url, opts) => {
   if (url === '/api/bootstrap') return Promise.resolve({ ok: true, status: 200, headers: { get: k => ({ 'X-Motrix-License': 'dev_key', 'X-Motrix-Company-Setup': null })[k] }, json: () => Promise.resolve(bootBody) })
+  if (url === '/api/auth/me' && !guardMeSeen) { guardMeSeen = true; return Promise.resolve({ ok: true, status: 200 }) }   // auth-guard 自己的放行請求（不算頁面載入點）
   real.push(url)
   return Promise.resolve(new Response(JSON.stringify({ real: url }), { status: 200 }))
 }
@@ -58,6 +60,56 @@ const J = async p => { const r = await p; return await r.json() }
   console.log(JSON.stringify(out))
 })()
 """
+
+
+GUARD_HARNESS = r"""
+const fs = require('fs'); const src = fs.readFileSync(process.argv[2], 'utf8'); const inp = JSON.parse(process.argv[3])
+const log = []; let revealed = false; let removedSession = false; let replaced = null
+const style = { remove() { revealed = true } }
+const win = { addEventListener() {}, motrixApplyBanners() {} }
+const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() { removedSession = true } }
+const ss = { setItem() {}, getItem: () => null, removeItem() {} }
+const loc = { pathname: '/pages/x.html', search: '', hash: '', replace(u) { replaced = u } }
+const doc = { createElement: () => style, head: { appendChild() {} }, getElementById: () => style }
+const pending = new Promise(() => {})
+const resp = (st, body) => ({ ok: st >= 200 && st < 300, status: st, headers: { get: () => null }, json: () => Promise.resolve(body) })
+const fetchFn = (url) => {
+  log.push(url)
+  if (url === '/api/bootstrap') return inp.boot === 'pending' ? pending : inp.boot === 'reject' ? Promise.reject(new Error('net')) : Promise.resolve(resp(inp.boot, { v: 1, me: { username: 'u' }, errors: {} }))
+  if (url === '/api/auth/me') return Promise.resolve(resp(inp.me, {}))
+  return Promise.reject(new Error('unexpected ' + url))
+}
+const f = new Function('window', 'location', 'localStorage', 'sessionStorage', 'document', 'fetch', 'setTimeout', 'clearTimeout', src)
+f(win, loc, ls, ss, doc, fetchFn, () => 0, () => {})
+const tick = () => new Promise(r => setImmediate(r))
+;(async () => { for (let i = 0; i < 5; i++) await tick(); console.log(JSON.stringify({ log, revealed, removedSession, replaced })) })()
+"""
+
+
+def _guard(me, boot):
+    r = subprocess.run([NODE, "-e", GUARD_HARNESS, "x", str(GUARD), json.dumps({"me": me, "boot": boot})],
+                       capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def test_page_is_revealed_by_the_fast_me_call_without_waiting_for_bootstrap():
+    """B1：放行只看 auth/me；bootstrap 還沒回來（甚至永遠不回）頁面照樣顯示——啟動資料慢不能拖慢首繪。"""
+    out = _guard(me=200, boot="pending")
+    assert out["revealed"] is True and out["replaced"] is None
+    assert sorted(out["log"]) == ["/api/auth/me", "/api/bootstrap"]          # 兩支同時發出（並行，不是先後）
+    assert out["log"][0] == "/api/bootstrap"                                 # bootstrap 不排在 me 後面等
+
+
+@pytest.mark.parametrize("boot", [401, 403, 428, 404, 500, "reject"])
+def test_bootstrap_failure_never_blocks_or_changes_the_guard_outcome(boot):
+    out = _guard(me=200, boot=boot)
+    assert out["revealed"] is True and out["replaced"] is None and out["removedSession"] is False
+
+
+def test_guard_outcome_follows_auth_me_only():
+    assert _guard(me=401, boot=200)["replaced"] == "login.html"              # bootstrap 說好也不能讓一個過期的登入放行
+    assert _guard(me=402, boot=200)["replaced"] == "license-required.html"
+    assert _guard(me=401, boot=200)["removedSession"] is True
 
 
 def _run(steps, extra=None):
