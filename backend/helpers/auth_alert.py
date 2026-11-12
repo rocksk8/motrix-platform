@@ -2,13 +2,14 @@
 """登入鎖定告警（2026-11-12「登入失敗告警」票；外網 go-live 補上的門檻）。
 
 [單位] helper:auth_alert    [層] L1    [穩定度] 實作
-[公開介面] DAILY_CAP, DAY_SECONDS, DEDUP_EVENT, HOURLY_CAP, LIMITS_KEY, WINDOW_SECONDS, flush_summary, limits, mask_name, on_lockout, reset_for_tests
+[公開介面] DAILY_CAP, DAY_SECONDS, DEDUP_EVENT, HOURLY_CAP, LIMITS_KEY, WINDOW_SECONDS, flush_summary, limits, mask_for_log, mask_name, on_lockout, reset_for_tests
 [契約題] tests/test_auth_lockout_alert_2026_11_12.py
 [不變式]
   ① 觸發點只有一個：`routers.auth._rl_fail` 的「達到鎖定」那一刻呼叫 `on_lockout`（不是每次失敗）。內容只有：嘗試過的帳號（最多 5 個、**遮蔽**、去控制字元）、
      來源 IP、失敗次數、鎖定到幾點。**絕不放密碼、驗證碼、token。**
      嘗試的帳號是攻擊者可控的字串，常見有人把密碼或網址誤填進帳號欄：存在於 users 的帳號原樣顯示（管理者要知道誰被打），
      **不存在的帳號只留前 2 個字＋`***`＋字數**，長得像密碼的（長度≥8 且含 3 類以上字元）整個遮掉，網址前綴（`xxx://`、`www.`）先剝掉。遮蔽在背景發送端做（要查資料庫）。
+     同一套遮蔽也用在鎖定當下寫的 server log（`mask_for_log`）。**稽核表（`audit_log.username`）仍記嘗試的帳號原文**（管理者要查是誰被打；表只有管理者看得到）——已知限制，見 security.md。
   ② 節流（都在記憶體、同步判斷、不碰資料庫與網路；上限數字另存設定，見 ⑦）：
      a. 同一個鎖定範圍（IPv4 原樣／IPv6 /64＝`_rl_key`）在它的鎖定期間只通知一次（`_alerted[key]`＝鎖定結束的 monotonic 時間）。
      b. 全系統每個滾動 `WINDOW_SECONDS`（1 小時）最多 `HOURLY_CAP`（預設 10）則、每個滾動 `DAY_SECONDS`（24 小時）最多 `DAILY_CAP`（預設 20）則（摘要也算）；
@@ -124,6 +125,15 @@ def _existing_users(names) -> set:
     except Exception as exc:  # noqa: BLE001
         logger.warning("登入鎖定告警：查帳號是否存在失敗，全部遮蔽（%s）", type(exc).__name__)
         return set()
+
+
+def mask_for_log(name) -> str:
+    """寫進 server log 的帳號顯示：存在的帳號原樣、其餘遮蔽（同 `mask_name`；要查一次資料庫，只用在「鎖定」這種罕見事件上）。永不丟例外。"""
+    try:
+        n = _clean(name)
+        return mask_name(n, _existing_users([n]) if n else ()) or "（空）"
+    except Exception:  # noqa: BLE001
+        return "（已遮蔽）"
 
 
 def _spawn(fn, *args) -> threading.Thread:

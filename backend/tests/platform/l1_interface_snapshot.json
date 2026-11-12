@@ -259,6 +259,7 @@
    "WINDOW_SECONDS": "const",
    "flush_summary": "def(now=…)",
    "limits": "def()",
+   "mask_for_log": "def(name)",
    "mask_name": "def(name, existing=…)",
    "on_lockout": "def(key, ip, usernames, fails, lock_seconds, now=…, scope=…)",
    "reset_for_tests": "def()"

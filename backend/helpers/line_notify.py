@@ -26,7 +26,8 @@
      `notify_users`（舊入口：收件人由呼叫端給、不做業務收件人解析）**只剩相容與測試用，業務碼不可再呼叫**——新程式一律走 `deliver_event`／`notify_event`／`email_notify.send_registered`。
   ⑨ 額度：推播成功後呼叫 `helpers.line_quota.after_push()`（背景、去抖動、永不丟例外）；用量判斷與告警在 `line_quota`。
   ⑩ 額度保留與每月上限（2026-11-12 使用者裁示）：用量 ≥ `line_quota.RESERVE_PERCENT`（90%）時非 critical 事件暫停；**帶 `month_cap_percent` 的事件**（登入失敗鎖定告警＝25%）
-     本月累計推播則數（每位收件人算一則，記在 `system_settings.line_event_usage`）超過「月上限（LINE 回報的上限；讀不到用 `MONTHLY_LIMIT_FALLBACK`＝200）× 百分比」後，
+     本月累計推播則數（每位收件人算一則，記在 `system_settings.line_event_usage`）超過「月上限（LINE 回報的上限）× 百分比」後，**LINE 回報無上限（付費方案）時沒有每月上限**（`_monthly_limit()` 回 None）；
+     本月狀態讀不到時才保守用 `MONTHLY_LIMIT_FALLBACK`＝200（免費方案）。超過後
      LINE 不再發（`deliver_event` 回 "monthly_cap"），Email 照寄。百分比可在 `system_settings.line_notify.month_cap_percent = {事件: 整數}` 覆寫（0＝完全不發 LINE；設定頁沒有欄位）。
   ⑪ 補發佇列（同樣 2026-11-12）：帶 `dedupe_key` 的呼叫（每日檢查型，如保固到期）若 LINE 因額度保留／暫時失敗／token 失效（skipped）沒送出，
      連同參數記進 `system_settings.line_pending`；每日檢查（`system_checks._check_line_pending` → `retry_pending`）重送，成功／永久失敗就移除，超過 `PENDING_TTL_DAYS` 天放棄。
@@ -476,6 +477,22 @@ PENDING_TTL_DAYS = 3
 MONTHLY_LIMIT_FALLBACK = 200
 _marks_lock = threading.Lock()
 _pending_lock = threading.Lock()
+_key_locks = {}                       # dedupe_key -> Lock（每把鑰匙一個：「查已推播→推播→寫記號」不可並發）
+_key_locks_guard = threading.Lock()
+_KEY_LOCKS_MAX = 512
+
+
+def _key_lock(key: str):
+    """這把 dedupe_key 專用的鎖（同一把鑰匙的並發呼叫——當日發送與補發佇列、多執行緒——串行化，第二個進來時記號已寫好 ⇒ `already_pushed`）。
+    字典過大時順手丟掉目前沒人持有的鎖（鑰匙只會越用越多；丟掉的鎖若剛好被人拿在手上，最壞＝那一瞬間同鑰匙多一把鎖，機率極低）。"""
+    with _key_locks_guard:
+        lk = _key_locks.get(key)
+        if lk is None:
+            if len(_key_locks) >= _KEY_LOCKS_MAX:
+                for k in [k for k, v in _key_locks.items() if not v.locked()]:
+                    del _key_locks[k]
+            lk = _key_locks[key] = threading.Lock()
+        return lk
 
 
 def _mark_seen(key: str) -> bool:
@@ -544,14 +561,20 @@ def _usage_add(event_key: str, n: int) -> None:
         logger.warning("LINE 事件用量記錄寫入失敗：%s", type(exc).__name__)
 
 
-def _monthly_limit() -> int:
-    """LINE 月額度上限：用 `line_quota` 記下的 LINE 回報值；讀不到（或無上限方案）用 `MONTHLY_LIMIT_FALLBACK`。"""
+def _monthly_limit():
+    """LINE 月額度上限（整數），或 `None`＝**LINE 回報無上限（付費方案）⇒ 每月上限不適用**。
+    本月狀態有讀到用量但沒有上限 ⇒ `None`（只剩 `auth_alert` 的每小時／每日上限）；有上限 ⇒ 該值；
+    **讀不到／不是本月的狀態**（沒讀過、讀取失敗）⇒ 保守用 `MONTHLY_LIMIT_FALLBACK`（免費方案 200）。"""
     try:
         from . import line_quota as _lq
         st = _lq._state()
-        lim = st.get("limit")
-        if st.get("month") == _lq.month_key() and isinstance(lim, int) and not isinstance(lim, bool) and lim > 0:
-            return lim
+        if st.get("month") == _lq.month_key():
+            lim = st.get("limit")
+            if isinstance(lim, int) and not isinstance(lim, bool) and lim > 0:
+                return lim
+            used = st.get("used")
+            if lim is None and isinstance(used, int) and not isinstance(used, bool):
+                return None
     except Exception:  # noqa: BLE001
         pass
     return MONTHLY_LIMIT_FALLBACK
@@ -590,7 +613,24 @@ def deliver_event(event_key: str, *, usernames=None, to_group: bool = False, tit
     `dedupe_key`（選填，給每日檢查型、會被重試的呼叫端）：LINE 自己的「已推播」記號——同一把鑰匙只推一次，**結果不是暫時失敗（sent／permanent）就記**，
     與 Email 的重試脫鉤（Email 暫時失敗隔天重試時，LINE 不會天天重推）。記號存在 `system_settings.line_push_marks`，保存 `MARK_KEEP_DAYS` 天。
     鑰匙的第一段必須是事件 key（`<event_key>|…`，補發佇列靠它找回事件）。
-    帶 `dedupe_key` 且這次因額度保留／暫時失敗／token 失效（skipped）沒送出 ⇒ 記進補發佇列（不變式 ⑪），由每日檢查重送——Email 寄成功不會讓 LINE 被當成完成。"""
+    帶 `dedupe_key` 且這次因額度保留／暫時失敗／token 失效（skipped）沒送出 ⇒ 記進補發佇列（不變式 ⑪），由每日檢查重送——Email 寄成功不會讓 LINE 被當成完成。
+    **同一把 `dedupe_key` 的並發呼叫串行化**（per-key 鎖包住「查記號→推播→寫記號」；暫時失敗不寫記號，所以之後仍可重試）。"""
+    if dedupe_key:
+        try:
+            lk = _key_lock(dedupe_key)
+        except Exception:  # noqa: BLE001
+            lk = None
+        if lk is not None:
+            with lk:
+                return _deliver_unlocked(event_key, usernames=usernames, to_group=to_group, title=title, rows=rows,
+                                         reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key)
+    return _deliver_unlocked(event_key, usernames=usernames, to_group=to_group, title=title, rows=rows,
+                             reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key)
+
+
+def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
+                      exclude=None, dedupe_key: str = "") -> str:
+    """`deliver_event` 的本體（呼叫端負責 per-key 鎖）。永不丟例外。"""
     try:
         if not event_enabled(event_key):
             return "off"
@@ -623,7 +663,8 @@ def deliver_event(event_key: str, *, usernames=None, to_group: bool = False, tit
             logger.info("LINE：%r 沒有可推播的收件人（業務收件人 %d 人；角色／個人勾選後 %d 人；已綁定 0 人）", event_key, len(given), len(allowed))
             return "no_recipient"
         cap = month_cap_percent(event_key)
-        if cap is not None and _usage_of(event_key) + len(ids) > _monthly_limit() * cap // 100:
+        lim = _monthly_limit() if cap is not None else None            # None＝無上限方案 ⇒ 沒有每月上限
+        if cap is not None and lim is not None and _usage_of(event_key) + len(ids) > lim * cap // 100:
             logger.warning("LINE 每月上限：%r 本月已推 %d 則，達月額度 %d%% 的上限，這一則只發 Email", event_key, _usage_of(event_key), cap)
             return "monthly_cap"
         out = push(ids, build_text(title, rows, reason=reason, link=link))

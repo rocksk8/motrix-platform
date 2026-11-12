@@ -881,3 +881,101 @@ def test_totp_401_for_inactive_account_still_writes_audit(client, make_user):
     assert r.status_code == 401
     rows = _rows_of("action='auth.login_failed'")
     assert len(rows) == 1 and rows[0]["reason_code"] == "totp_failed" and rows[0]["username"] == u
+
+
+# ══ 6. hichan-7 複驗 5af3b4aa5 的收尾（N1 並發鎖、N2 無上限方案、N5 log 遮蔽）════════════════════════════════════
+
+def _slow_push(env, delay):
+    from helpers import line_notify
+    real = line_notify.push
+
+    def push(ids, text):
+        time.sleep(delay)
+        return real(ids, text)
+    return push
+
+
+def test_n1_same_dedupe_key_concurrent_deliveries_push_once(env, monkeypatch):
+    """N1：同一把鑰匙 3 條執行緒同時進 `deliver_event` ⇒ 只推 1 次（per-key 鎖包住查記號→推播→寫記號）。"""
+    from helpers import line_notify as L
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    monkeypatch.setattr(L, "push", _slow_push(env, 0.3))
+    res = []
+    ts = [threading.Thread(target=lambda: res.append(L.deliver_event("warranty_expiry", to_group=True, title="t", rows=[("k", "v")],
+                                                                      dedupe_key="warranty_expiry|Q|S|7"))) for _ in range(3)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert len(env["line"]) == 1 and sorted(res) == ["already_pushed", "already_pushed", "sent"]
+
+
+def test_n1_retry_pending_and_fresh_send_same_key_push_once(env, monkeypatch):
+    from helpers import line_notify as L
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    key = "warranty_expiry|Q-7|S7|3"
+    _set_usage(95)
+    L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key)          # 額度保留 ⇒ 進補發佇列
+    _set_usage(10)
+    monkeypatch.setattr(L, "push", _slow_push(env, 0.3))
+    ts = [threading.Thread(target=L.retry_pending),
+          threading.Thread(target=lambda: L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key))]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert len(env["line"]) == 1 and _pending() == {}
+
+
+def test_n1_transient_failure_does_not_poison_the_key_lock(env):
+    """暫時失敗不寫記號、鎖也會釋放：下一次同鑰匙仍能重試成功。"""
+    from helpers import line_notify as L
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    env["line_fail"] = True
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key="warranty_expiry|Q|S|1") == L.SEND_TRANSIENT_FAIL
+    env["line_fail"] = False
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key="warranty_expiry|Q|S|1") == L.SEND_SENT
+
+
+def test_n1_key_lock_table_is_bounded(monkeypatch):
+    from helpers import line_notify as L
+    monkeypatch.setattr(L, "_key_locks", {})
+    for i in range(L._KEY_LOCKS_MAX + 50):
+        L._key_lock("k%d" % i)
+    assert len(L._key_locks) <= L._KEY_LOCKS_MAX + 1
+
+
+def test_n2_unlimited_plan_has_no_monthly_cap_but_unreadable_state_falls_back(env):
+    """N2：LINE 回報無上限（讀到用量、limit=None）⇒ 沒有每月上限；狀態讀不到／不是本月 ⇒ 保守 200；每小時／每日上限（auth_alert）不受影響。"""
+    from helpers import line_notify as L, line_quota
+    from helpers.settings import _set_setting
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    _set_setting(line_quota.STATE_KEY, {"month": line_quota.month_key(), "used": 10, "limit": None, "alerted": []})
+    assert L._monthly_limit() is None
+    for _ in range(60):                                                                # 超過 200×25%＝50 仍照發
+        assert L.deliver_event("auth_lockout", to_group=True, title="t") == L.SEND_SENT
+    assert len(env["line"]) == 60
+    _set_setting(line_quota.STATE_KEY, {"month": "2020-01", "used": 10, "limit": None, "alerted": []})     # 不是本月 ⇒ 當成讀不到
+    assert L._monthly_limit() == L.MONTHLY_LIMIT_FALLBACK
+    _set_setting(line_quota.STATE_KEY, {"month": line_quota.month_key(), "used": None, "limit": None, "alerted": []})   # 本月但沒有用量 ⇒ 讀不到
+    assert L._monthly_limit() == L.MONTHLY_LIMIT_FALLBACK
+    _set_setting(line_quota.STATE_KEY, {"month": line_quota.month_key(), "used": 5, "limit": 100, "alerted": []})
+    assert L._monthly_limit() == 100
+
+
+def test_n5_lockout_server_log_masks_unknown_username(client, make_user, caplog):
+    """N5：鎖定當下的 server log 不寫嘗試帳號原文（可能是誤填的密碼）；存在的帳號原樣。"""
+    import logging
+    _user(make_user, "realuser", "sales")
+    with caplog.at_level(logging.WARNING, logger="routers.auth"):
+        for _ in range(5):
+            _bad_login(client, name="TypedP@ssw0rd!9", ip="203.0.113.61")
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "Login lockout" in text and "TypedP@ssw0rd" not in text
+    caplog.clear()
+    from routers.auth import _rl_clear
+    _rl_clear("testclient")                                                            # 解除上一輪的鎖定，才會再走到 _rl_fail
+    with caplog.at_level(logging.WARNING, logger="routers.auth"):
+        for _ in range(5):
+            _bad_login(client, name="realuser", ip="203.0.113.62")
+    assert "username=realuser" in "\n".join(r.getMessage() for r in caplog.records)

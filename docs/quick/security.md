@@ -48,8 +48,8 @@
 - **節流**：同一個鎖定範圍在鎖定期間只發一次；全系統每個滾動 1 小時最多 10 則（`HOURLY_CAP`）、每個滾動 24 小時最多 20 則（`DAILY_CAP`，摘要也算），超過的合併成**一則摘要**（件數＋最多 5 個 IP），等兩個視窗都有空位才送。節流狀態在記憶體，重啟後清空（鎖定本身存 DB，仍有效）。**兩個上限可調**：`system_settings.auth_alert_limits = {"hourly_cap": n, "daily_cap": n}`（各 1～1000；設定頁沒有欄位，維運寫資料庫）。
 - **不拖慢登入**：只做記憶體判斷，發送在背景執行緒；任何例外只記 log，不影響登入回應（仍回 401／429）。
 - **收件人**：沿用「信件與通知收件設定」（預設最高管理者；可覆寫）。**Email 與 LINE 是獨立通道**：Email 只寄有 Email 且未退訂的人；LINE 不看 Email，依同一份收件設定解析帳號 ⇒ LINE「可收的角色」⇒ 本人 LINE 勾選 ⇒ 已綁定。同一個人兩邊都有就兩邊都發。
-- **LINE 條件**：LINE 公司層事件開關**預設關**（LINE 設定頁勾選「登入失敗鎖定告警」才發）；等級是 critical，**額度保留（用量 ≥ 90%）時照發**，推播後額度告警照常。**每月累計上限**：本事件 LINE 每月累計不超過月額度的 25%（`LINE_EVENTS["auth_lockout"]["month_cap_percent"]`；月額度用 LINE 回報值，讀不到用 200＝免費方案），超過只寄 Email；可用 `system_settings.line_notify.month_cap_percent = {"auth_lockout": n}` 調（0＝不發 LINE）。只有收件人才會在「我要收的 LINE 通知」看到這一項（`audience="group"`）。
-- **已知限制**：①LINE 開關預設關，上線後要有人勾；②節流與未送出的摘要在重啟時遺失；③被灌爆時（超過每小時上限）細節只留在稽核與 log，通知只有摘要；④每則通知給 N 位收件人耗 N 則 LINE 額度（最壞每天 20×N，且受每月 25% 上限約束）。
+- **LINE 條件**：LINE 公司層事件開關**預設關**（LINE 設定頁勾選「登入失敗鎖定告警」才發）；等級是 critical，**額度保留（用量 ≥ 90%）時照發**，推播後額度告警照常。**每月累計上限**：本事件 LINE 每月累計不超過月額度的 25%（`LINE_EVENTS["auth_lockout"]["month_cap_percent"]`；月額度用 LINE 回報值；**LINE 回報無上限（付費方案）時沒有每月上限**；本月用量讀不到時保守用 200＝免費方案），超過只寄 Email；可用 `system_settings.line_notify.month_cap_percent = {"auth_lockout": n}` 調（0＝不發 LINE）。只有收件人才會在「我要收的 LINE 通知」看到這一項（`audience="group"`）。
+- **已知限制**：⓪稽核表 `audit_log.username` 仍記嘗試帳號原文（可能是誤填的密碼；server log 與告警內容已遮蔽）；①LINE 開關預設關，上線後要有人勾；②節流與未送出的摘要在重啟時遺失；③被灌爆時（超過每小時上限）細節只留在稽核與 log，通知只有摘要；④每則通知給 N 位收件人耗 N 則 LINE 額度（最壞每天 20×N，且受每月 25% 上限約束）。
 - **上線步驟（F10，缺一則 LINE 告警是靜默的）**：套用步驟檔要加：①到「通知設定」→「LINE 通知」勾選「登入失敗鎖定告警」；②確認至少一位最高管理者（或「信件與通知收件設定」指定的收件人）已綁定 LINE；③（可選）確認 `auth_alert_limits`／`month_cap_percent` 的數字符合預期。Email 不受①②影響。
 - 通用規則（LINE 獨立通道、額度保留、已推播記號、事件字典）見 `helpers/line_notify.py`（`LINE_EVENTS`／`deliver_event`）與 `helpers/event_audience.py`。
 

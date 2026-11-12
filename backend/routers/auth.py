@@ -158,6 +158,7 @@ def _rl_fail(ip: str, username: str, source: str = "password") -> None:
     key = _rl_key(ip)
     now = time.monotonic()
     lockout_until = 0.0
+    log_lockout = False
     alert_names = []
     alert_fails = 0
     with _rl_lock:
@@ -174,9 +175,15 @@ def _rl_fail(ip: str, username: str, source: str = "password") -> None:
             alert_names = list(names)
             state["fails"] = 0
             state["names"] = []
-            logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, username, _LOGIN_LOCKOUT_S)
+            log_lockout = True
         _rl_prune_locked(now)
     _audit_login_failed(username, ip, source=source)
+    if log_lockout:
+        try:
+            from helpers.auth_alert import mask_for_log as _mask_for_log      # 嘗試的帳號可能是誤填的密碼：log 只留遮蔽後的（存在的帳號原樣）
+            logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, _mask_for_log(username), _LOGIN_LOCKOUT_S)
+        except Exception:  # noqa: BLE001
+            logger.warning("Login lockout: key=%s IP=%s locked for %ds", key, ip, _LOGIN_LOCKOUT_S)
     if lockout_until:
         _rl_db_write(key, lockout_until)
         try:
