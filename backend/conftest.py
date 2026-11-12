@@ -687,6 +687,14 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     monkeypatch.setattr(_auth_alert_module, "_suppressed", [])
     monkeypatch.setattr(_auth_alert_module, "_timer", None)
     monkeypatch.setattr(_auth_alert_module, "_spawn", lambda fn, *a: None)
+    # 外網登入強化（2026-11-12）：帳號鎖定表（helpers/account_lock）是同一個形狀的第三個 process-global dict——不清的話，
+    # 一支測試累積的失敗會讓同帳號名（admin 等）在之後的測試被鎖。另外 TestClient 的對端叫 "testclient"（不是 IP），
+    # 正式規則「判斷不出來＝外網」「本機直連 loopback 預設不算內網」會讓全套測試（含 e2e 的 live server，對端 127.0.0.1）的管理員登入都被要求 TOTP；這裡讓這幾個對端視為內網。
+    # 要測外網的題目自己帶 CF 標頭／Host，或把 INTERNAL_PEER_NAMES 蓋回空集合。
+    import helpers.account_lock as _account_lock_module
+    import helpers.external_access as _external_access_module
+    _account_lock_module.reset_for_tests()
+    monkeypatch.setattr(_external_access_module, "INTERNAL_PEER_NAMES", frozenset({"testclient", "127.0.0.1", "::1"}))
 
     # pdf_gen.py 的 6 類 PDF 存檔目錄（報價單／出貨單／承攬商匯款申請／開票申請
     # 憑據／請款單／結案報表）各自算自己的路徑，跟上面 uploads/photos 一樣**不受

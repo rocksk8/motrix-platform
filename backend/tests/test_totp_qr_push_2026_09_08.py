@@ -84,79 +84,32 @@ def test_qr_status_pending_before_approval(client, make_user):
     assert r.json() == {"pending": True}
 
 
-def test_qr_approve_wrong_password_then_lockout_after_max_fails(client, make_user):
-    # 比照既有 test_login_totp_wrong_code_rejected_and_lockout_after_max_fails
-    # 的隔離慣例，用專屬假 IP 避免跟同批次其他測試的 per-IP 鎖定互相干擾。
-    headers = {"X-Forwarded-For": "203.0.113.201"}
+def test_qr_approve_password_branch_is_gone(client, make_user):
+    """2026-11-12（F1 hotfix，hichan-1 審查）：手機核准**不再接受輸入密碼**。以前只驗密碼就把 challenge 標成 approved、
+    qr-status 接著發 session ⇒ 只知道密碼的人自己呼叫就繞過 TOTP。現在密碼（對或錯）一律 400＋白話訊息，challenge 不被核准、不被消耗。"""
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)["token"]
     _enable_totp(client, token)
-    challenge = client.post(
-        "/api/auth/login", json={"username": username, "password": password}, headers=headers
-    ).json()["challengeToken"]
-
-    for _ in range(4):
-        bad = client.post(
-            "/api/auth/login/qr-approve",
-            json={"challenge_token": challenge, "password": "wrong-password"},
-            headers=headers,
-        )
-        assert bad.status_code == 401, bad.text
-
-    # 第 5 次錯誤：challenge 直接作廢
-    last = client.post(
-        "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "password": "wrong-password"},
-        headers=headers,
-    )
-    assert last.status_code == 401, last.text
-
-    again = client.post(
-        "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "password": password},
-        headers=headers,
-    )
-    assert again.status_code == 400, again.text  # 逾時/工作階段無效，不是密碼錯誤
+    challenge = client.post("/api/auth/login", json={"username": username, "password": password}).json()["challengeToken"]
+    for pw in (password, "wrong-password", ""):
+        r = client.post("/api/auth/login/qr-approve", json={"challenge_token": challenge, "password": pw})
+        assert r.status_code == 400, r.text
+        assert "先登入同一個帳號" in r.json()["detail"]
+    status = client.get("/api/auth/login/qr-status", headers={"X-Login-Challenge": challenge})
+    assert status.status_code == 200 and status.json() == {"pending": True}        # 沒被核准、也沒被消耗
 
 
-def test_qr_approve_and_manual_code_share_fail_counter(client, make_user):
-    # qr-approve 錯密碼跟手動輸入驗證碼錯誤，共用同一組 pending["fails"]
-    # 上限（不是各自獨立 5 次、變相可猜 10 次）。
-    headers = {"X-Forwarded-For": "203.0.113.202"}
+def test_manual_code_path_unaffected_by_qr_password_removal(client, make_user):
+    """手動輸入驗證碼的路徑照舊：QR 密碼嘗試不佔用 challenge 的失敗次數，正確驗證碼仍可登入。"""
+    import pyotp
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)["token"]
-    _enable_totp(client, token)
-    challenge = client.post(
-        "/api/auth/login", json={"username": username, "password": password}, headers=headers
-    ).json()["challengeToken"]
-
-    # 2 次錯密碼 + 2 次錯驗證碼
-    for _ in range(2):
-        r = client.post(
-            "/api/auth/login/qr-approve",
-            json={"challenge_token": challenge, "password": "wrong-password"},
-            headers=headers,
-        )
-        assert r.status_code == 401, r.text
-    for _ in range(2):
-        r = client.post(
-            "/api/auth/login/totp",
-            json={"challenge_token": challenge, "code": "000000"},
-            headers=headers,
-        )
-        assert r.status_code == 401, r.text
-
-    # 累計第 5 次錯誤（不論從哪條路徑）：challenge 整個作廢
-    last = client.post(
-        "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "password": "wrong-password"},
-        headers=headers,
-    )
-    assert last.status_code == 401, last.text
-
-    again = client.get("/api/auth/login/qr-status",
-                      headers={"X-Login-Challenge": challenge})
-    assert again.status_code == 400, again.text
+    secret, _ = _enable_totp(client, token)
+    challenge = client.post("/api/auth/login", json={"username": username, "password": password}).json()["challengeToken"]
+    for _ in range(8):                                                      # 反覆打密碼核准：不計 fails、不作廢 challenge
+        assert client.post("/api/auth/login/qr-approve", json={"challenge_token": challenge, "password": password}).status_code == 400
+    ok = client.post("/api/auth/login/totp", json={"challenge_token": challenge, "code": pyotp.TOTP(secret).now()})
+    assert ok.status_code == 200 and ok.json()["token"]
 
 
 def test_qr_approve_via_session_token_same_account_succeeds(client, make_user):
@@ -237,7 +190,7 @@ def test_qr_approve_without_password_or_session_token_400(client, make_user):
 def test_qr_approve_via_session_token_does_not_consume_shared_fail_counter(client, make_user):
     # session token 不是「猜測型」憑證，錯的 session token 不該計入跟密碼/
     # 驗證碼共用的 fails 上限——連續打錯 session token 很多次，之後改用
-    # 正確密碼仍然要能核准成功。
+    # 正確的手機 session 仍然要能核准成功（2026-11-12：密碼核准已移除，改用同帳號的手機 session）。
     headers = {"X-Forwarded-For": "203.0.113.203"}
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)["token"]
@@ -256,13 +209,13 @@ def test_qr_approve_via_session_token_does_not_consume_shared_fail_counter(clien
 
     approve = client.post(
         "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "password": password},
+        json={"challenge_token": challenge, "session_token": token},
         headers=headers,
     )
     assert approve.status_code == 200, approve.text
 
 
-def test_qr_approve_correct_password_then_status_issues_session_once(client, make_user):
+def test_qr_approve_with_phone_session_then_status_issues_session_once(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)["token"]
     _enable_totp(client, token)
@@ -272,7 +225,7 @@ def test_qr_approve_correct_password_then_status_issues_session_once(client, mak
 
     approve = client.post(
         "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "password": password},
+        json={"challenge_token": challenge, "session_token": token},
     )
     assert approve.status_code == 200, approve.text
     assert approve.json() == {"ok": True}

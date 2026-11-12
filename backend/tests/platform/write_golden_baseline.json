@@ -47,6 +47,12 @@
   ],
   "s": 400
  },
+ "POST /api/auth/account-locks/unlock": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"

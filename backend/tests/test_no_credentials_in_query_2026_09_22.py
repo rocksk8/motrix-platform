@@ -558,7 +558,9 @@ def test_fx23c_the_allow_list_points_at_something_real():
 #: 🔑 這個 repo 早就有這個慣例（`test_totp_qr_push_2026_09_08.py` 用
 #: `203.0.113.201`／`.202`／`.203`），而我寫這個檔時沒有跟上。
 #: 📌 `203.0.113.0/24` 是 RFC 5737 保留給文件用的網段，不會撞到真實位址。
-RL_IP = {"X-Forwarded-For": "203.0.113.221"}
+#: 2026-11-12：T80 起 XFF 不再被信任，而帶 `X-Forwarded-For` 的請求現在會被判成「外網」（外網登入強化）⇒ 沒啟用 TOTP 的 superadmin 會被 403。
+#: 這個標頭早就不再隔離任何東西（conftest 每題重置 `_rl_state`），所以改成不帶。
+RL_IP = {}
 
 
 def _login(client, make_user, **kw):

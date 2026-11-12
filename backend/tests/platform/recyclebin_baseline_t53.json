@@ -13,6 +13,10 @@
    "count": 2,
    "reason": "exempt: 展示庫（demo）重置時清空表，不是使用者刪除"
   },
+  "helpers/account_lock.py::login_rate_limit": {
+   "count": 1,
+   "reason": "exempt: 登入限流（暫態）"
+  },
   "helpers/audit.py::notifications": {
    "count": 2,
    "reason": "exempt: 站內通知（保留期輪替）"

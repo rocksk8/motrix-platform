@@ -62,6 +62,8 @@ _FAIL_REASON_LABELS = {
     "validation": "資料不合格", "gate_blocked": "被閘門擋下", "server_error": "系統錯誤", "login_failed": "登入失敗",
     # 2026-11-12 登入失敗告警票：密碼以外的登入失敗來源（`_audit_login_failed` 的 reason_code；action 一律 auth.login_failed）
     "totp_failed": "驗證碼錯誤（兩步驟）", "qr_failed": "QR 核准失敗", "passkey_failed": "Passkey 驗證失敗",
+    # 2026-11-12 外網登入強化票：單一帳號鎖定／外網強制兩步驟（helpers/account_lock.py、routers/auth.py 的稽核列 reason_code）
+    "account_locked": "帳號登入失敗過多而鎖定", "ext_totp_required": "外網登入須先啟用兩步驟驗證",
 }
 #: 登入失敗稽核列的來源 ⇒ reason_code（密碼維持歷史值 login_failed，既有查詢與報表不變）
 LOGIN_FAIL_REASONS = {"password": "login_failed", "totp": "totp_failed", "qr": "qr_failed", "passkey": "passkey_failed"}
