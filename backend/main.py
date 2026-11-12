@@ -575,11 +575,17 @@ async def license_gate_middleware(request: Request, call_next):
     #   不包       → 那一支 API 回 500
     # 選最後一條：500 會被報修，「出錯就放行」是降級，而**降級不會有人報修**。
     # 授權模組壞掉本來就該是全站停下來的等級。（A 於 2026-09-21 覆核通過）
-    status = license_core.verify_license()
+    #
+    # T80稽核LG-M2：這兩支是同步函式，冷啟動（指紋第一次探測、通行證無快取命中）
+    # 可以吃到秒級（machine_fingerprint()底層跑PowerShell、逾時30秒）；直接在async
+    # 中介層呼叫會整個卡住事件迴圈，連公開的/api/ping都一起停。比照T80 R6（同步SQLite
+    # 寫入）同一個做法，搬進run_in_threadpool：快取命中時只是多一次執行緒切換
+    # （微秒級），換掉「冷啟動時全站停擺數秒」。
+    status = await run_in_threadpool(license_core.verify_license)
     blocked = license_core.license_blocks_request(status)
     # 緊急放行通行證（licensing.py 的「緊急放行通行證」一節）：只有「會被擋」時才看它；
     # emergency_pass() 與 license_alerts 都不丟例外，任何不確定都當沒有通行證 ⇒ 照擋。
-    emergency = license_core.emergency_pass(status) if blocked else None
+    emergency = await run_in_threadpool(license_core.emergency_pass, status) if blocked else None
     if blocked and emergency is None and not exempt:
         # 402 Payment Required，不是 403。
         # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。

@@ -2,7 +2,7 @@
 """可信的來源 IP（2026-11-11，外網存取 go-live 前必修的安全項）。
 
 [單位] helper:client_ip    [層] L1    [穩定度] 契約
-[公開介面] CLOUDFLARE_HEADERS, client_ip, has_proxy_headers, is_loopback
+[公開介面] CLOUDFLARE_HEADERS, client_ip, has_proxy_headers, is_loopback, rate_limit_key
 [不變式] ① **永遠不讀 `X-Forwarded-For`**（用戶端可任意填；以前 `routers/auth.py::_client_ip` 無條件信第一個值 ⇒ 登入鎖定
            〔5 次失敗／15 分鐘，以來源 IP 計〕只要每次換一個 XFF 就繞過 ⇒ 無限次猜密碼）。
          ② 只有「TCP 對端本身是 loopback」才採信 `CF-Connecting-IP`（cloudflared 與本程式同機時，所有外部使用者對本程式而言
@@ -70,6 +70,23 @@ def client_ip(request) -> str:
             if ok:
                 return ok
     return peer or "unknown"
+
+
+def rate_limit_key(ip: str) -> str:
+    """登入鎖定（`routers/auth.py` 的 `_rl_state`）用的鍵。**只用在鎖定，不要用在稽核紀錄**
+    ——稽核要留完整位址，呼叫端另外存那份，不要改成只存這支的回傳值。
+
+    IPv4：原樣。IPv6：取 /64 前綴（T80 稽核 IP-M1：一般住宅網路就分得到一個 /64，
+    等於 2^64 個位址；鎖完整位址＝攻擊者每次換一個就繞過鎖定，與不鎖沒有差別）。
+    不是合法 IP（"unknown"、測試用的假值）就原樣回傳，交給呼叫端自己的桶。
+    """
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if addr.version == 6:
+        return str(ipaddress.ip_network(f"{addr}/64", strict=False))
+    return str(addr)
 
 
 def has_proxy_headers(headers) -> bool:

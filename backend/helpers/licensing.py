@@ -48,6 +48,7 @@ import re
 import stat as _stat
 import subprocess
 import sys
+import time
 from datetime import date
 
 from cryptography.hazmat.primitives import serialization
@@ -281,7 +282,7 @@ def _days_left(expires):
 # 執行緒安全：uvicorn 的同步端點跑在 threadpool 裡。這裡只做「整個 tuple 一次指派」，
 # GIL 底下是原子的；最壞情況是兩個執行緒各算一次、其中一個蓋掉另一個，無害。
 # 不上鎖是刻意的——為了一個 0.1 ms 的東西引入鎖，風險比它省下來的多。
-_LICENSE_FILE_CACHE = None   # (快取鍵, status 複本)
+_LICENSE_FILE_CACHE = None   # (快取鍵, status 複本, 算出時的 time.monotonic()——machine_mismatch 的短TTL要用)
 
 
 def _license_cache_key(path, st_result):
@@ -293,6 +294,9 @@ def _license_cache_key(path, st_result):
         _PUBKEY_PROD,
         date.today().toordinal(),
     )
+
+
+_MISMATCH_CACHE_TTL_S = 60  # T80稽核LG-M1：machine_mismatch只快取這麼久（見下方理由）
 
 
 def _verify_license_file():
@@ -312,8 +316,17 @@ def _verify_license_file():
     key    = _license_cache_key(path, st_result)
     cached = _LICENSE_FILE_CACHE
     if cached is not None and cached[0] == key:
-        # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西。
-        return dict(cached[1])
+        cached_status, cached_at = cached[1], cached[2]
+        # T80稽核LG-M1：machine_mismatch的快取只活 _MISMATCH_CACHE_TTL_S 秒。快取鍵
+        # 不含指紋（見上方①～⑤），硬體在開機初期讀不到／讀一半時會算出錯的指紋、判
+        # mismatch；這個結果若像其他結果一樣整天／整個行程快取，硬體之後恢復正常，
+        # 同一把金鑰仍會卡在「機器不符」直到檔案被碰、跨日或重啟——短TTL把這個停擺
+        # 視窗從「不定期、可能整天」收斂成「最多一分鐘」，同時避免每一次請求都重算
+        # （`machine_fingerprint()` 持續失敗時本身有重試，直接每個請求都跑代價不小，
+        # 見 K審S6 `routers/licensing.py::_FP_FAIL_UNTIL` 同一類考量）。
+        if cached_status.get("reason") != "machine_mismatch" or (time.monotonic() - cached_at) <= _MISMATCH_CACHE_TTL_S:
+            # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西。
+            return dict(cached_status)
 
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -325,7 +338,7 @@ def _verify_license_file():
         return _unverified("malformed")
 
     status = _verify_blob(text)
-    _LICENSE_FILE_CACHE = (key, dict(status))
+    _LICENSE_FILE_CACHE = (key, dict(status), time.monotonic())
     return status
 
 
@@ -633,12 +646,47 @@ def emergency_blob_problem(blob):
     return None if why == "license_not_covered" else why
 
 
+_EMERGENCY_CACHE = None   # (快取鍵, result 複本或 None)；結構與 _LICENSE_FILE_CACHE 同理（見上方①～⑤）
+
+
+def _emergency_cache_key(status):
+    def _stat_pair(path):
+        try:
+            st_result = os.stat(path)
+        except OSError:
+            return None
+        return (st_result.st_mtime_ns, st_result.st_size)
+
+    return (
+        _stat_pair(emergency_path()),
+        _stat_pair(LICENSE_PATH),
+        _PUBKEY_DEV,
+        _PUBKEY_PROD,
+        date.today().toordinal(),
+        (status or {}).get("reason"),  # _emergency_judge 的分支依賴它（見 EMERGENCY_COVERS 判斷）
+    )
+
+
 def emergency_pass(status):
     """這個（會被擋的）授權狀態有沒有生效中的通行證 → dict 或 None。**不丟例外；任何不確定都當沒有。**
 
-    不確定就不放行：把「讀不懂」當成放行，是把鎖拆掉。"""
+    不確定就不放行：把「讀不懂」當成放行，是把鎖拆掉。
+
+    T80稽核LG-M2：被擋期間**每個請求**（含公開端點、未登入）都會呼叫到這支，而且在
+    exempt 判斷之前；沒有快取的話每次都是讀通行證檔＋讀授權金鑰檔＋兩次Ed25519驗章，
+    被擋本來就是事故期間，不該再疊一個「每個請求多付近1ms」的放大器。快取比照
+    `_LICENSE_FILE_CACHE`：鍵含兩個檔案的 stat、兩把公鑰、今天日期，外加 `status.reason`
+    （判定邏輯會依它分支）。"""
+    global _EMERGENCY_CACHE
+    key = _emergency_cache_key(status)
+    cached = _EMERGENCY_CACHE
+    if cached is not None and cached[0] == key:
+        return dict(cached[1]) if cached[1] is not None else None
+
     info = emergency_status(status)
-    return info if info and info.get("active") else None
+    result = info if info and info.get("active") else None
+    _EMERGENCY_CACHE = (key, dict(result) if result is not None else None)
+    return result
 
 
 def license_banner(status, emergency):
@@ -803,6 +851,16 @@ def _stable_machine_id():
     return ""
 
 
+_FP_PROBE_RETRIES = 3    # T80稽核LG-M1：開機初期WMI／裝置列舉可能還沒就緒，重試幾次再定案
+_FP_PROBE_DELAY_S = 1.5  # 只有「這次讀到的比上次還不完整」時才等；行程一輩子只在第一次冷啟動付這個代價
+
+
+def _probe_hardware_once():
+    if sys.platform == "win32":
+        return _windows_hardware()
+    return _posix_hardware()
+
+
 def machine_fingerprint():
     """這台機器的指紋：sha256 前 16 碼（小寫 hex）。
 
@@ -812,15 +870,26 @@ def machine_fingerprint():
     一個硬體來源都讀不到就丟 `RuntimeError`：算不出來就什麼都不要回，不要回一個
     看起來像指紋的假值——那會讓「機器不符」這道鎖在不知不覺間失效。
     呼叫端（`verify_license`）接住它並拒絕該筆，不是放行。
+
+    ⚠️ T80稽核LG-M1：第一次呼叫（通常是開機時）若兩項來源都讀到空的，或只讀到一項，
+    **重試幾次**才把結果定案——開機初期 WMI／網卡列舉可能還沒就緒，不重試的話一個
+    偶發的「這次讀一半」會被 `_FINGERPRINT_CACHE` 永遠鎖住（重啟才會重算）。硬體穩定
+    的機器（絕大多數情況）每次重試都讀到同一個答案，只是多付幾次探測的時間，不會
+    改變最終結果。
     """
     global _FINGERPRINT_CACHE
     if _FINGERPRINT_CACHE is not None:
         return _FINGERPRINT_CACHE
 
-    if sys.platform == "win32":
-        uuid_, mac = _windows_hardware()
-    else:
-        uuid_, mac = _posix_hardware()
+    uuid_, mac = _probe_hardware_once()
+    for _ in range(_FP_PROBE_RETRIES - 1):
+        if uuid_ and mac:
+            break  # 兩項都有了，不用再等
+        time.sleep(_FP_PROBE_DELAY_S)
+        next_uuid, next_mac = _probe_hardware_once()
+        # 只採「更完整」的那次：已經拿到的那一半不會因為下一次探測讀到空值就被丟掉。
+        uuid_ = uuid_ or next_uuid
+        mac = mac or next_mac
 
     parts = []
     if uuid_:
