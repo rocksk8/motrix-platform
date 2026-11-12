@@ -150,8 +150,10 @@
     return fetch('/api/auth/me', { headers: authHeaders }).then(handleStatus).catch(onNetworkError);
   }
 
-  // 啟動資料等不到就不等：6 秒後讓 MotrixBoot 變 null，各處退回打原端點（與改版前一樣）
-  var bootTimer = setTimeout(function () { bootResolve(null); }, 6000);
+  // 啟動資料等不到就不等：BOOT_WAIT_MS（1.5 秒）後讓 MotrixBoot 變 null，各處退回打原端點（與改版前一樣）。
+  // 之前是 6 秒：bootstrap 卡住時，等它的頁面資料會卡 6 秒，比沒有 bootstrap 還糟。逾時後才到的 bootstrap 回應一律丟掉（呼叫端已經改打原端點了）。
+  var BOOT_WAIT_MS = 1500, bootDead = false;
+  var bootTimer = setTimeout(function () { bootDead = true; bootResolve(null); }, BOOT_WAIT_MS);
 
   // 首繪不可以比改版前慢（B1）：**放行只看快的 `auth/me`**（與改版前逐字相同的路徑），`/api/bootstrap` 同時並行發出、
   // 只負責供應資料——它慢（11 個區段）不會擋住頁面顯示；它失敗（401／403／428／404／5xx／逾時）只是 MotrixBoot＝null、各處退回打原端點。
@@ -160,6 +162,7 @@
       if (r.status !== 200) { clearTimeout(bootTimer); bootResolve(null); return; }
       return r.json().then(function (d) {
         if (!d || !d.me) throw new Error('bootstrap without me');
+        if (bootDead) return;
         boot.data = d; boot.at = Date.now(); boot.token = session.token;
         boot.hdr = { license: r.headers.get('X-Motrix-License'), setup: r.headers.get('X-Motrix-Company-Setup') };
         clearTimeout(bootTimer); bootResolve(d);

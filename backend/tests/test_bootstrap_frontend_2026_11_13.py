@@ -86,6 +86,50 @@ const tick = () => new Promise(r => setImmediate(r))
 """
 
 
+HUNG_HARNESS = r"""
+// 真的計時器：bootstrap 永遠不回，頁面要資料的 motrixBootFetch 必須在逾時後退回真的 fetch（B1 追加：等待上限 1.5 s，不是 6 s）
+const fs = require('fs'); const src = fs.readFileSync(process.argv[2], 'utf8')
+const win = { addEventListener() {}, motrixApplyBanners() {} }
+const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() {} }
+const ss = { setItem() {}, getItem: () => null, removeItem() {} }
+const loc = { pathname: '/pages/x.html', search: '', hash: '', replace() {} }
+const el = { remove() {} }
+const doc = { createElement: () => el, head: { appendChild() {} }, getElementById: () => el }
+const t0 = Date.now(); const log = []
+const lateBody = { v: 1, me: { username: 'u' }, menu: { late: true }, errors: {} }
+let releaseBoot
+const fetchFn = (url) => {
+  if (url === '/api/bootstrap') return new Promise(res => { releaseBoot = () => res({ ok: true, status: 200, headers: { get: () => null }, json: () => Promise.resolve(lateBody) }) })
+  if (url === '/api/auth/me') return Promise.resolve({ ok: true, status: 200 })
+  log.push(url); return Promise.resolve(new Response(JSON.stringify({ real: url }), { status: 200 }))
+}
+const f = new Function('window', 'location', 'localStorage', 'sessionStorage', 'document', 'fetch', 'setTimeout', 'clearTimeout', src)
+f(win, loc, ls, ss, doc, fetchFn, setTimeout, clearTimeout)
+;(async () => {
+  const r = await win.motrixBootFetch('/api/platform/menu', { headers: { Authorization: 'Bearer T' } })
+  const body = await r.json(); const ms = Date.now() - t0
+  releaseBoot()                                                   // 逾時之後才到的 bootstrap：要被丟掉
+  await new Promise(res => setTimeout(res, 50))
+  const r2 = await win.motrixBootFetch('/api/platform/menu', { headers: { Authorization: 'Bearer T' } })
+  console.log(JSON.stringify({ ms, body, log, later: await r2.json() }))
+})()
+"""
+
+
+def test_hung_bootstrap_delays_page_data_by_at_most_two_seconds():
+    """PM：bootstrap 卡住時，等它的頁面資料不能卡 6 秒（比沒有 bootstrap 還糟）。上限 ~1.5 s 後退回原端點；晚到的 bootstrap 不得再被拿來供應。"""
+    r = subprocess.run([NODE, "-e", HUNG_HARNESS, "x", str(GUARD)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    assert out["body"] == {"real": "/api/platform/menu"}
+    assert 1200 <= out["ms"] < 2000, out["ms"]                       # 下限＝確實等了逾時（不是根本沒等）；上限＝PM 要求的 2 秒內
+    assert out["later"] == {"real": "/api/platform/menu"}, out       # 逾時後才回的 bootstrap（menu.late）不得被供應
+    assert out["log"] == ["/api/platform/menu", "/api/platform/menu"]   # 兩次都是真的請求
+
+
+def test_boot_wait_constant_is_one_and_a_half_seconds():
+    assert "var BOOT_WAIT_MS = 1500," in GUARD.read_text(encoding="utf-8")
+
+
 def _guard(me, boot):
     r = subprocess.run([NODE, "-e", GUARD_HARNESS, "x", str(GUARD), json.dumps({"me": me, "boot": boot})],
                        capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
