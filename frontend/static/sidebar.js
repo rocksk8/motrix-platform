@@ -302,7 +302,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // 輪詢頻率（2026-11-13「外網載入效能」）：外網一趟約 1 秒、閒置分頁也每分鐘打一次很不划算 ⇒ 120 秒，且**分頁看不見時不打**
-  // （切到別的分頁／縮到工作列），回到前景時若距上次已超過間隔就立刻補一次。精度上限本來就是 last_active 的 5 分鐘節流，120 秒夠用。
+  // （切到別的分頁／縮到工作列），回到前景時若距上次已超過 30 秒就立刻補一次。精度上限本來就是 last_active 的 5 分鐘節流，120 秒夠用。
   var ONLINE_POLL_MS = 120000
   window.motrixVisiblePoll = window.motrixVisiblePoll || function (fn, ms) {
     var last = Date.now()
@@ -312,8 +312,9 @@ if (typeof module !== 'undefined' && module.exports) {
       fn()
     }
     setInterval(tick, ms)
+    // 回到前景：距上次已超過 30 秒就立刻補一次（hichan-2 審查 P5：等滿整個間隔會讓名單最多舊到 2 倍間隔）
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden && Date.now() - last >= ms) tick()
+      if (!document.hidden && Date.now() - last >= Math.min(ms, 30000)) tick()
     })
   }
 

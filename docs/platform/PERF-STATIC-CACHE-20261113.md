@@ -20,25 +20,28 @@
 | 請求 | Cache-Control | 其他 |
 |---|---|---|
 | `/static`、`/js`、`/css` 的 js／css／圖，`?v=` ＝目前版本 | `public, max-age=31536000, immutable` | 拿掉 Pragma／Expires |
-| 同上，沒帶 `v` 或 `v` 是舊的（舊分頁、手打網址） | `no-cache`（不是 no-store） | ETag／304；回的是**現在**的內容，不會把新內容用 immutable 釘在舊網址上 |
+| 同上，但 query 不是剛好 `v=<目前版本>`（沒帶、`v` 是舊的、`?v=<版本>&x=1`、`?x=1&v=<版本>`），**或**送出前的原始本體不在這次版本快照裡（檔案剛改完、版本還沒重算的窗口，見下） | `no-cache`（不是 no-store） | ETag／304；回的是**現在**的內容，不會把新內容用 immutable 釘在舊網址上，也不讓每個不同的 query 在 CDN 各佔一份 |
 | HTML（`/`、`/pages/*`、`*.html`） | `no-cache` | 弱 ETag（改寫後內容的雜湊），`If-None-Match` 命中回 **304** 空本體 |
 | `/static/vendor/*` | `public, max-age=31536000, immutable`（不變） | |
 | `/fonts/*` | `public, max-age=604800`（不變） | |
 | `/api/*` 與其他 | 不動（沒有表頭或端點自己設的 no-store） | |
 | 非 200（404 等） | 舊規則（no-store） | 錯誤頁不可被快取 |
 
-4. **緊急開關**：環境變數 `MOTRIX_STATIC_CACHE=0` 重啟 ⇒ 整套退回舊行為（no-store、不改寫、不加版本）。預設開。
+   immutable 要**同時**符合三件事（hichan-2 審查 P3／P4）：① query 完全等於 `v=<目前版本>`；② `v` 等於目前版本；③ 送出前的原始本體（檔案位元組；動態 sidebar.js 為其來源字串）的 sha1 在**這次快照**的集合裡。③ 補的是版本重算的 ≤ 3 秒窗口：檔案剛改完、舊 `v` 的請求會拿到新內容，這時本體不在快照裡 ⇒ 只給 no-cache，不會把新內容用 immutable 釘在舊網址上。
+   GET 與 HEAD 同一條路：HEAD 先當 GET 取內層本體，ETag、Content-Length、Cache-Control 與 GET 一致、只丟掉本體；304 帶內層的 Server-Timing／Vary／CORS／安全標頭（不帶實體表頭）。圖檔也緩衝後走同一條路（不支援 Range，最大的圖不到 100 KB）。
+4. **緊急開關**：環境變數 `MOTRIX_STATIC_CACHE=0` ⇒ 整套退回舊行為（no-store、不改寫、不加版本）。⚠️ **在行程啟動（import main）時讀取，改了要重啟服務才生效**。關掉只影響版本化／快取表頭；`Server-Timing`、`REQ` 耗時日誌、輪詢降頻**不受影響、照常**（要關耗時日誌用 `MOTRIX_REQ_LOG_MS`＝很大的數字）。預設開。
 
 ## 請求耗時（log）
 `slow_request_log`（既有）擴充：
-- **每個請求**回應帶 `Server-Timing: app;dur=<ms>`（不寫碟）。瀏覽器 DevTools → Network → Timing 看得到伺服器耗時；與整體耗時相減＝路途。
+- 回應帶 `Server-Timing: app;dur=<ms>`（不寫碟）。瀏覽器 DevTools → Network → Timing 看得到伺服器耗時；與整體耗時相減＝路途。
+  **只給兩種請求**（hichan-2 審查 P1）：與使用者無關的靜態內容（非 `/api/`），以及**已登入**的 `/api/` 請求。公開／未登入的 `/api/*`（`/api/auth/login`、`/api/system/branding`…）**不帶**：登入端點對「帳號不存在」（不雜湊）與「密碼錯誤」（要雜湊）的耗時不同，毫秒級耗時等於帳號列舉的尺。`REQ` 日誌是伺服器端的，不受此限。
 - 慢於 `MOTRIX_REQ_LOG_MS`（預設 100 ms）或狀態碼 ≥ 400 ⇒ 寫一行 INFO，logger `motrix.req`：`REQ GET /pages/x.html 200 123ms`（只記路徑、不記 query）。設 `0` ＝全記。
   常駐程式的磁碟寫入是預算，所以預設只記慢的與失敗的。原本的 `SLOW REQUEST`（`/api/` 且 ≥ 5 s，WARNING）不變。
 - ⚠️ 與 hichan-2 的日誌分流（`fix/backlog-bugs-20261113`，`helpers/log_setup.py`）的銜接：該分支把 INFO 分到 `app.log`，`motrix.req` 會跟著進 `app.log`。若要改進 `access.log`，在 `log_setup.install()` 掛一個只接 `motrix.req` 的 handler 即可；本分支不碰那支檔（避免衝突），**兩分支合併後由整合者決定**。
 - 位置限制：`slow_request_log` 在 `auth_middleware`／授權閘門的**內側**，未登入 401、被閘門擋下的請求不會經過它（既有行為，沒改），所以這些請求沒有 `Server-Timing`、也不進 `motrix.req`。
 
 ## 輪詢
-- `/api/online-users`（只有最高管理者的頂欄）：60 s → **120 s**，且分頁看不見（`document.hidden`）時不打、回到前景若已超過間隔就補一次。`online-stats.html` 的 60 s 輪詢同樣處理。共用 `window.motrixVisiblePoll`（sidebar.js 提供，沒有就退回原本的 setInterval）。
+- `/api/online-users`（只有最高管理者的頂欄）：60 s → **120 s**，且分頁看不見（`document.hidden`）時不打、回到前景若距上次已超過 30 秒就補一次（hichan-2 審查 P5：原本等滿整個間隔，名單最多舊到 2 倍間隔）。`online-stats.html` 的 60 s 輪詢同樣處理。共用 `window.motrixVisiblePoll`（sidebar.js 提供，沒有就退回原本的 setInterval）。
 - `/api/reads` **沒有輪詢**：只在載頁、`motrix:reads-changed`、回前景（60 s 節流）時打；沒有可降的定時器，沒動。整個前端只剩 `change-password`／`login`（QR 輪詢）、`custom-records`、`edit-presence`（編輯中心跳）還有 `setInterval`，都不是這張票的對象。
 
 ## 實測（本機 uvicorn＋真瀏覽器，CDP 模擬 130 ms 往返、2.5 Mbps；持久化 context，HTTP 快取有效）

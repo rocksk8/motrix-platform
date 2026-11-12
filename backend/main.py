@@ -376,7 +376,11 @@ async def slow_request_log(request: Request, call_next):
     response = await call_next(request)
     _elapsed = time.monotonic() - _t0
     _ms = _elapsed * 1000.0
-    response.headers["Server-Timing"] = "app;dur=%.1f" % _ms
+    # 🔴 Server-Timing 只給「與使用者無關的靜態內容」與「已登入的 API 請求」（hichan-2 審查 P1）：公開／未登入的 /api（登入、品牌…）
+    # 不帶——登入端點對「帳號不存在」與「密碼錯誤」的耗時不同（後者要雜湊），把毫秒級耗時直接交給呼叫者等於給帳號列舉一把尺。
+    # `request.state.authed` 由 auth_middleware 驗過 session 才設（本 middleware 在它的內側，看得到）。
+    if getattr(request.state, "authed", False) or not request.url.path.startswith("/api/"):
+        response.headers["Server-Timing"] = "app;dur=%.1f" % _ms
     if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
         logger.warning(
             "SLOW REQUEST %.1fs  %s %s  status=%s"

@@ -320,16 +320,19 @@ def test_etag_differs_when_version_differs():
 
 # ── 5. 請求耗時 ─────────────────────────────────────────────────────────────────
 
-def test_server_timing_header_on_every_response(client):
-    resps = {
-        "/pages/login.html": client.get("/pages/login.html"),
-        "/static/notif.js": client.get("/static/notif.js"),
-        # 公開端點才會走到 slow_request_log（auth_middleware 在它外面，未登入的 401 在那裡就回了）
-        "/api/auth/login": client.post("/api/auth/login", json={"username": "x", "password": "y"}),
-    }
-    for url, r in resps.items():
-        st = r.headers.get("server-timing", "")
-        assert re.fullmatch(r"app;dur=\d+(\.\d+)?", st), (url, st)
+def test_server_timing_only_on_static_content_and_authenticated_api(client, make_user):
+    """P1：登入端點對「帳號不存在」與「密碼錯」的耗時不同 ⇒ 公開／未登入的 /api 不可帶 Server-Timing（帳號列舉的尺）。"""
+    pat = r"app;dur=\d+(\.\d+)?"
+    assert re.fullmatch(pat, client.get("/pages/login.html").headers.get("server-timing", ""))
+    assert re.fullmatch(pat, client.get("/static/notif.js").headers.get("server-timing", ""))
+    u, pw = make_user(username="st_user", role="admin")
+    assert "server-timing" not in client.post("/api/auth/login", json={"username": "st_user", "password": "wrong-pass"}).headers
+    assert "server-timing" not in client.post("/api/auth/login", json={"username": "no_such_user", "password": "wrong-pass"}).headers
+    assert "server-timing" not in client.get("/api/system/branding").headers
+    assert "server-timing" not in client.get("/api/notifications/mine").headers          # 未登入 ⇒ 401，不帶
+    tok = client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]
+    r = client.get("/api/notifications/mine", headers={"Authorization": "Bearer " + tok})
+    assert r.status_code == 200 and re.fullmatch(pat, r.headers.get("server-timing", ""))
 
 
 def test_request_ms_logged_for_slow_and_failed_requests(client, caplog, monkeypatch):
@@ -390,3 +393,109 @@ def test_kill_switch_restores_legacy_headers_and_unrewritten_bodies(client, monk
     r = client.get("/static/notif.js?v=anything")
     assert "no-store" in r.headers["cache-control"] and "immutable" not in r.headers["cache-control"]
     assert client.get("/static/vendor/alpine-3.17.1.min.js").headers["cache-control"] == "public, max-age=31536000, immutable"
+
+
+# ── 7. 審查修正（hichan-2：P2 HEAD／304 表頭、P3 內容快照、P4 query）──────────────────────────
+
+@pytest.mark.parametrize("url", ["/pages/account-items.html", "/static/notif.js", "/css/style.css", "/static/logo.png"])
+def test_head_matches_get_headers_and_length(client, url):
+    """P2：HEAD 與 GET 一樣改寫——ETag、Content-Length、Cache-Control 一致，本體為空。"""
+    ver = _version(client)
+    if not url.startswith("/pages"):
+        url += "?v=" + ver
+    g, h = client.get(url), client.head(url)
+    assert g.status_code == h.status_code == 200
+    assert h.content == b""
+    assert h.headers["etag"] == g.headers["etag"]
+    assert h.headers["content-length"] == str(len(g.content)) == g.headers["content-length"]
+    assert h.headers["cache-control"] == g.headers["cache-control"]
+    assert "server-timing" in h.headers and "server-timing" in g.headers
+
+
+def test_304_carries_server_timing_and_vary(client):
+    """P2：暖載入的 HTML 就是 304 的情形——要帶內層的 Server-Timing 與 Vary（CORS 的 Vary: Origin），不帶實體表頭。"""
+    r1 = client.get("/pages/account-items.html")
+    r2 = client.get("/pages/account-items.html", headers={"If-None-Match": r1.headers["etag"]})
+    assert r2.status_code == 304 and r2.content == b""
+    assert "server-timing" in r2.headers
+    assert r2.headers.get("vary") == r1.headers.get("vary") and r1.headers.get("vary")
+    assert r2.headers["cache-control"] == "no-cache" and r2.headers["etag"] == r1.headers["etag"]
+    assert "content-type" not in r2.headers and r2.headers.get("content-length") in (None, "0")
+    assert "x-content-type-options" in r2.headers          # 外層的安全標頭照樣加得上（不是 304 專屬的光禿回應）
+    h = client.head("/pages/account-items.html", headers={"If-None-Match": r1.headers["etag"]})
+    assert h.status_code == 304
+
+
+def _mini_app(tmp_path, av, sidebar=None):
+    """只裝 static_cache.handle 的最小 app（根目錄＝暫存樹）：不經過 main，可以自由改檔、控制 TTL。"""
+    from starlette.applications import Starlette
+    from starlette.responses import Response
+    from starlette.routing import Mount, Route
+    from starlette.staticfiles import StaticFiles
+    from starlette.testclient import TestClient
+    routes = []
+    if sidebar is not None:
+        routes.append(Route("/static/sidebar.js", lambda request: Response(sidebar(), media_type="application/javascript"), methods=["GET", "HEAD"]))
+    routes.append(Mount("/", StaticFiles(directory=str(tmp_path))))
+    app = Starlette(routes=routes)
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class _MW(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            return await sc.handle(request, call_next, av, lambda p, r: r)
+    app.add_middleware(_MW)
+    return TestClient(app)
+
+
+def test_immutable_requires_body_in_the_snapshot(tmp_path, monkeypatch):
+    """P3：`?v=` 字串對、但本體不是快照裡的內容（檔案剛改完、版本還沒重算的窗口）⇒ 不給 immutable；版本重算後才給。"""
+    monkeypatch.setattr(sc, "TTL_S", 3600.0)
+    root = _tree(tmp_path)
+    (tmp_path / "static" / "logo.png").write_bytes(b"PNG-old")
+    av = sc.AssetVersion(root)
+    c = _mini_app(tmp_path, av)
+    ver = av.current()
+    for u in ("/static/a.js", "/js/b.js", "/css/c.css", "/static/logo.png"):
+        assert c.get(u + "?v=" + ver).headers["cache-control"] == sc.IMMUTABLE, u
+    (tmp_path / "static" / "a.js").write_text("var a=2;", encoding="utf-8")
+    (tmp_path / "static" / "logo.png").write_bytes(b"PNG-new")
+    assert c.get("/static/a.js?v=" + ver).headers["cache-control"] == sc.REVALIDATE, "改完後版本還沒重算：舊 v 配新本體不可 immutable"
+    assert c.get("/static/logo.png?v=" + ver).headers["cache-control"] == sc.REVALIDATE
+    assert c.get("/js/b.js?v=" + ver).headers["cache-control"] == sc.IMMUTABLE, "沒改的檔不受影響"
+    monkeypatch.setattr(sc, "TTL_S", 0.0)
+    ver2 = av.current()
+    assert ver2 != ver
+    assert c.get("/static/a.js?v=" + ver2).headers["cache-control"] == sc.IMMUTABLE
+    assert c.get("/static/a.js?v=" + ver).headers["cache-control"] == sc.REVALIDATE
+
+
+def test_dynamic_sidebar_body_must_match_snapshot_too(tmp_path, monkeypatch):
+    monkeypatch.setattr(sc, "TTL_S", 3600.0)
+    root = _tree(tmp_path)
+    box = {"src": "window.MOTRIX_MENU={a:1};"}
+    av = sc.AssetVersion(root, sidebar_source=lambda: box["src"])
+    c = _mini_app(tmp_path, av, sidebar=lambda: box["src"])
+    ver = av.current()
+    assert c.get("/static/sidebar.js?v=" + ver).headers["cache-control"] == sc.IMMUTABLE
+    box["src"] = "window.MOTRIX_MENU={a:2};"                     # 模組狀態變了、版本還沒重算
+    assert c.get("/static/sidebar.js?v=" + ver).headers["cache-control"] == sc.REVALIDATE
+
+
+def test_immutable_only_when_query_is_exactly_the_version(tmp_path):
+    """P4：`?v=<ver>&x=1`、`?x=1&v=<ver>` 之類不給 immutable（每種 query 在 CDN 各佔一份；也擋掉用 query 灌快取）。"""
+    root = _tree(tmp_path)
+    av = sc.AssetVersion(root)
+    c = _mini_app(tmp_path, av)
+    ver = av.current()
+    assert c.get("/static/a.js?v=" + ver).headers["cache-control"] == sc.IMMUTABLE
+    for q in ("v=%s&x=1", "x=1&v=%s", "v=%s&", "v=%s&v=%s", "V=%s"):
+        r = c.get("/static/a.js?" + (q % ((ver,) * q.count("%s"))))
+        assert r.status_code == 200 and r.headers["cache-control"] == sc.REVALIDATE, q
+    assert c.get("/static/a.js?v=").headers["cache-control"] == sc.REVALIDATE
+
+
+def test_visible_poll_refreshes_on_return_after_30s():
+    """P5：回到前景距上次 >= 30 秒就補一次（不是等滿整個 120 秒）。"""
+    side = (FRONTEND / "static" / "sidebar.js").read_text(encoding="utf-8")
+    assert "Date.now() - last >= Math.min(ms, 30000)" in side

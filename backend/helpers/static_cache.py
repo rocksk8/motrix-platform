@@ -80,6 +80,8 @@ class AssetVersion:
         self._checked = 0.0
         self._sig = None
         self._content_digest = ""
+        self._file_digests = frozenset()      # 快照內每個檔案的原始內容 sha1
+        self._sidebar_digest = None           # 快照內動態 sidebar.js 的 sha1
         self._version = None
 
     def _files(self):
@@ -112,18 +114,24 @@ class AssetVersion:
         return tuple(sig)
 
     def _digest_files(self, paths):
+        """⇒ (全部檔案內容的合併雜湊, {每個檔案原始位元組的 sha1})。後者是 P3 用的：immutable 只給「內容真的在這次快照裡」的本體。"""
         h = hashlib.sha1()
+        per_file = set()
         for p in paths:
             h.update(os.path.relpath(p, self.frontend_dir).replace("\\", "/").encode("utf-8", "replace") if p.startswith(self.frontend_dir) else p.replace("\\", "/").encode("utf-8", "replace"))
             h.update(b"\0")
+            fh = hashlib.sha1()
             try:
                 with open(p, "rb") as f:
                     for chunk in iter(lambda: f.read(1 << 20), b""):
                         h.update(chunk)
+                        fh.update(chunk)
             except OSError:
                 h.update(b"<missing>")
+                fh.update(b"<missing>")
+            per_file.add(fh.hexdigest())
             h.update(b"\1")
-        return h.hexdigest()
+        return h.hexdigest(), per_file
 
     def current(self):
         now = time.monotonic()
@@ -136,12 +144,16 @@ class AssetVersion:
             paths = self._files()
             sig = self._stat_sig(paths)
             if sig != self._sig:
-                self._content_digest = self._digest_files(paths)      # mtime 變而內容沒變 ⇒ 雜湊相同 ⇒ 版本不變
+                self._content_digest, digests = self._digest_files(paths)      # mtime 變而內容沒變 ⇒ 雜湊相同 ⇒ 版本不變
+                self._file_digests = frozenset(digests)
                 self._sig = sig
             h = hashlib.sha1(self._content_digest.encode("ascii"))
+            self._sidebar_digest = None
             if self._sidebar_source is not None:
                 try:
-                    h.update(self._sidebar_source().encode("utf-8"))
+                    sb = self._sidebar_source().encode("utf-8")
+                    h.update(sb)
+                    self._sidebar_digest = hashlib.sha1(sb).hexdigest()
                 except Exception:                                      # noqa: BLE001
                     logger.exception("static_cache: sidebar source failed")
             self._version = h.hexdigest()[:12]
@@ -149,9 +161,18 @@ class AssetVersion:
             return self._version
 
 
+    def has_digest(self, raw_body_sha1):
+        """這份**送出前的原始本體**是不是目前快照裡的內容（P3）。"""
+        return raw_body_sha1 in self._file_digests or raw_body_sha1 == self._sidebar_digest
+
+
 # ── 回應處理 ────────────────────────────────────────────────────────────────
 
-_SKIP_HEADERS = {b"content-length", b"etag", b"last-modified", b"cache-control", b"pragma", b"expires", b"content-encoding", b"transfer-encoding"}
+#: 改寫過本體的 200 回應：這些內層表頭一律由我們重算（其餘內層表頭——Server-Timing、Vary、CORS…——原樣保留）
+_SKIP_HEADERS = {b"content-length", b"etag", b"last-modified", b"cache-control", b"pragma", b"expires", b"content-encoding",
+                 b"transfer-encoding", b"accept-ranges", b"content-range"}
+#: 304 不帶實體表頭（RFC 9110 §15.4.5）；其餘內層表頭（Server-Timing、Vary、CORS、安全標頭…）要帶
+_SKIP_304 = _SKIP_HEADERS | {b"content-type", b"content-language", b"content-location"}
 _CONDITIONAL = (b"if-none-match", b"if-modified-since", b"if-range")
 
 _REWRITE_CACHE = {}          # (sha1(body), version) -> (bytes, etag)
@@ -202,44 +223,58 @@ def _strip_conditional_headers(request):
     return inm
 
 
+def _cache_control(kind, request, ver, raw_digest, version):
+    """HTML ⇒ no-cache。資源 ⇒ **三個條件同時成立**才 immutable：
+    ① query 完全等於 `v=<目前版本>`（`?v=…&x=1` 這種每個不同的 query 在 CDN 各佔一份，不給）；
+    ② 送出前的原始本體在**這次快照**裡（檔案剛改完、版本重算之前的窗口內，舊 `v` 拿到新內容時，本體不在快照裡 ⇒ 不給 immutable）。"""
+    if kind == "html":
+        return REVALIDATE
+    if request.url.query == "v=" + ver and version.has_digest(raw_digest):
+        return IMMUTABLE
+    return REVALIDATE
+
+
 async def handle(request, call_next, version, legacy):
-    """取代原本的 `no_cache_static` middleware 本體。`legacy(path, response)` 套用舊規則（vendor／fonts／其他 no-store）。"""
+    """取代原本的 `no_cache_static` middleware 本體。`legacy(path, response)` 套用舊規則（vendor／fonts／其他 no-store）。
+
+    GET 與 HEAD 走同一條路：HEAD 先當 GET 取內層本體（才算得出改寫後的長度與 ETag），回應時只丟掉本體、表頭與 GET 完全一致。"""
     path = request.url.path
     kind = classify(path)
     if kind == "other":
         return legacy(path, await call_next(request))
 
-    is_get = request.method == "GET"
-    inm = _strip_conditional_headers(request) if is_get and kind != "asset_bin" else None
-    response = await call_next(request)
+    is_head = request.method == "HEAD"
+    if request.method != "GET" and not is_head:
+        return legacy(path, await call_next(request))
+    inm = _strip_conditional_headers(request)
+    if is_head:
+        request.scope["method"] = "GET"
+    try:
+        response = await call_next(request)
+    finally:
+        if is_head:
+            request.scope["method"] = "HEAD"
 
     if response.status_code != 200:
         return legacy(path, response)
-
-    ver = version.current()
-    if kind == "html":
-        cache_control = REVALIDATE
-    else:
-        cache_control = IMMUTABLE if request.query_params.get("v") == ver else REVALIDATE
-
-    if not is_get or kind == "asset_bin":
-        # HEAD 不改寫（Content-Length 會對不上）；圖不改寫。只決定快取表頭。
-        response.headers["Cache-Control"] = cache_control
-        for h in ("Pragma", "Expires"):
-            if h in response.headers:
-                del response.headers[h]
-        return response
 
     chunks = []
     async for chunk in response.body_iterator:
         chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode("utf-8"))
     body = b"".join(chunks)
-    new_body, etag = _rewritten(body, ver)
+    raw_digest = hashlib.sha1(body).hexdigest()
+    ver = version.current()
+    cache_control = _cache_control(kind, request, ver, raw_digest, version)
+    new_body, etag = _rewritten(body, ver, rewrite=(kind != "asset_bin"))
 
     if _etag_matches(inm, etag):
-        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache_control})
+        out = Response(status_code=304)
+        raw = [(k, v) for (k, v) in response.raw_headers if k.lower() not in _SKIP_304]
+        raw += [(b"etag", etag.encode("ascii")), (b"cache-control", cache_control.encode("ascii"))]
+        out.raw_headers = raw
+        return out
 
-    out = Response(content=new_body, status_code=200)
+    out = Response(content=b"" if is_head else new_body, status_code=200)
     raw = [(k, v) for (k, v) in response.raw_headers if k.lower() not in _SKIP_HEADERS and k.lower() != b"content-type"]
     ctype = response.headers.get("content-type")
     if ctype:
