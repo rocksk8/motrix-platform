@@ -1,5 +1,9 @@
 # 會計 更新紀錄
 
+## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`notify.py` 的傳票／總帳申請通知多了 LINE 獨立通道（`voucher_submitted`／`voucher_next_tier`／`voucher_approved`／`voucher_returned`／`ledger_action_submitted`／`ledger_action_approved`／`ledger_action_returned`；只放單號與狀態，不放摘要與退回說明）；信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`（全信件對應的 LINE 事件）。
+
 ## 1.1.66（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `voucher.html`、`account-items.html`、`ledger-hub.html`、`ledger-periods.html`、`ledger-reports.html`、`ledger-settings.html`、`ledger-statements.html`：手機（≤767px）／直立平板（768–1023px）版面——工具列與科目列可換行、輸入框 16px／44px 高（避免 iOS 聚焦放大、觸控目標不足）、分頁籤可橫向捲動、傳票版面單欄；`ledger-periods.html` 的表格加橫向捲動＋表頭固定（`m-scroll m-sticky`）。桌機版不變。
 

@@ -1,5 +1,9 @@
 # 業務開發 更新紀錄
 
+## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`api.py` 接上 LINE 獨立通道——案件建立／狀態變更（`crm_case_created`／`crm_case_status`，收件人＝業務、企劃、被指派人、建立者）、指派／取消指派／期限調整（`dev_case_assigned`／`dev_case_unassigned`／`dev_case_deadline_changed`）；泛用的 module_activity 對這幾件事不重複推 LINE。LINE 只送給有業務開發權限（`dev_crm`）的人。無 API／資料變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`、`tests/test_line_crm_perm_filter_2026_11_13.py`。
+
 ## 1.2.2（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `dev-crm.html`：手機（≤767px）案件清單與詳情改上下切換——詳情開啟時清單收起，新增「← 案件列表」返回鈕（`data-testid="dc-m-back"`，僅手機顯示）；其餘為觸控目標與間距調整。桌機版不變。
 
