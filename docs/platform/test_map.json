@@ -42544,9 +42544,12 @@
    "kind": "api",
    "units": [
     "core:main",
+    "dir:frontend/js/",
     "dir:frontend/static/vendor/",
     "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_frontend_sources.py",
     "file:frontend/css/style.css",
     "file:frontend/static/logo.png",
     "file:frontend/static/vendor/alpine-3.17.1.min.js",
@@ -42573,7 +42576,9 @@
      "backend/helpers/static_cache.py",
      "backend/main.py",
      "backend/routers/__init__.py",
-     "backend/routers/platform_menu.py"
+     "backend/routers/platform_menu.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_frontend_sources.py"
     ],
     "api": [
      "backend/routers/auth.py",
@@ -42594,6 +42599,7 @@
     "path": [
      "frontend/css/style.css",
      "frontend/index.html",
+     "frontend/js/",
      "frontend/pages/account-items.html",
      "frontend/pages/login.html",
      "frontend/static/logo.png",
