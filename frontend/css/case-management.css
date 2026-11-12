@@ -34,7 +34,7 @@
 .cm-card.selected { background:var(--tone-info-bg); border-left-color:var(--accent) !important; }
 .cm-card:has(.cm-card__tag--active) { border-left-color:var(--tone-success-solid); }
 .cm-card:has(.cm-card__tag--stage)  { border-left-color:var(--tone-warning-border); }
-.cm-card:has(.cm-card__tag--closed) { border-left-color:var(--tone-violet-border); }
+.cm-card:has(.cm-card__tag--closed) { border-left-color:var(--tone-slate-border); }
 .cm-card__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .cm-card__no { font-size:12px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-primary); letter-spacing:.02em; }
 .cm-card__tag { font-size:12px; padding:2px 6px; border-radius:4px; font-weight:600; font-family:var(--font-zh); }
@@ -222,13 +222,13 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 /* deal-tag badge inline */
 .deal-tag-badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); white-space:nowrap; }
 .deal-tag-badge--active { background:var(--tone-success-bg-strong); color:var(--tone-success-fg); border:1px solid var(--tone-success-border); }
-.deal-tag-badge--closed { background:var(--tone-violet-bg); color:var(--tone-violet-fg); border:1px solid var(--tone-violet-border); }
+.deal-tag-badge--closed { background:var(--tone-slate-bg); color:var(--tone-slate-fg); border:1px solid var(--tone-slate-border); }
 .deal-tag-badge--stage  { background:var(--tone-warning-bg); color:var(--tone-warning-fg); border:1px solid var(--tone-warning-border); }
 .cm-project-btn { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; border:1px solid var(--tone-violet-border); background:var(--tone-violet-bg); color:var(--tone-violet-fg); font-size:12px; font-family:var(--font-zh); font-weight:500; cursor:pointer; transition:background .12s; flex-shrink:0; }
 .cm-project-btn:hover { background:var(--tone-violet-bg); }
 
 .tag-active { display:inline-flex; align-items:center; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-success-bg-strong); color:var(--tone-success-fg); border:1px solid var(--tone-success-border); }
-.tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-violet-bg); color:var(--tone-violet-fg); border:1px solid var(--tone-violet-border); }
+.tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-slate-bg); color:var(--tone-slate-fg); border:1px solid var(--tone-slate-border); }
 
 /* KPI pills */
 /* 2026-09-14：原本是 4 張有框小卡單獨一列，加上下方的 meta 列，
@@ -732,7 +732,7 @@ transition:background .1s;
 :root[data-theme="dark"] body.cm-page .badge--pending  { background: var(--tone-warning-bg);  color: var(--tone-warning-fg); }
 :root[data-theme="dark"] body.cm-page .badge--signing  { background: var(--tone-info-bg);     color: var(--tone-info-fg); }
 :root[data-theme="dark"] body.cm-page .badge--running  { background: var(--tone-success-bg);  color: var(--tone-success-fg); }
-:root[data-theme="dark"] body.cm-page .badge--settled  { background: var(--tone-violet-bg);   color: var(--tone-violet-fg); }
+:root[data-theme="dark"] body.cm-page .badge--settled  { background: var(--tone-slate-bg);    color: var(--tone-slate-fg); }
 :root[data-theme="dark"] body.cm-page .badge--rejected { background: var(--tone-danger-bg);   color: var(--tone-danger-fg);  border-color: var(--tone-danger-border); }
 :root[data-theme="dark"] body.cm-page .badge--lost     { background: var(--surface-neutral); color: var(--ink-secondary); }
 :root[data-theme="dark"] body.cm-page .btn-ghost       { background: var(--surface); }
