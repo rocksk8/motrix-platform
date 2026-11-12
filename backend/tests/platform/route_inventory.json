@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 925,
-  "endpoints_api": 921,
-  "write_total": 498,
-  "write_api": 498,
-  "get_api": 423,
-  "distinct_paths_api": 779,
-  "write_with_body_api": 364,
-  "write_with_path_param_api": 358
+  "endpoints_total": 932,
+  "endpoints_api": 928,
+  "write_total": 501,
+  "write_api": 501,
+  "get_api": 427,
+  "distinct_paths_api": 785,
+  "write_with_body_api": 367,
+  "write_with_path_param_api": 359
  },
  "select_star": {
   "modules": 287,
@@ -409,6 +409,11 @@
    "body": false
   },
   "GET /api/audit-log/tree": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/greeting": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1344,6 +1349,11 @@
    "body": false
   },
   "GET /api/lodging/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/login-greeting/phrases": {
    "w": false,
    "pp": 0,
    "body": false
@@ -4263,6 +4273,11 @@
    "pp": 1,
    "body": true
   },
+  "PUT /api/auth/greeting/pref": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "PUT /api/bank-accounts/{user_id}": {
    "w": true,
    "pp": 1,
@@ -4421,6 +4436,11 @@
   "PUT /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/mail-types/{key}/recipients": {

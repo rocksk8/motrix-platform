@@ -760,6 +760,23 @@
   ],
   "s": 200
  },
+ "/api/auth/greeting": {
+  "k": [
+   "action",
+   "action.href",
+   "action.label",
+   "awayLine",
+   "category",
+   "companyStyle",
+   "kind",
+   "line",
+   "pref",
+   "style",
+   "title",
+   "todoLine"
+  ],
+  "s": 200
+ },
  "/api/auth/login/qr-info": {
   "k": [
    "detail"
@@ -3606,6 +3623,23 @@
   ],
   "s": 200
  },
+ "/api/login-greeting/phrases": {
+  "k": [
+   "categories",
+   "categories[].category",
+   "categories[].formal",
+   "categories[].formal.builtin",
+   "categories[].formal.custom",
+   "categories[].humor",
+   "categories[].humor.builtin",
+   "categories[].humor.custom",
+   "categories[].label",
+   "maxLen",
+   "maxLines",
+   "placeholders"
+  ],
+  "s": 200
+ },
  "/api/mail-types": {
   "k": [
    "calendarOnly",
@@ -6057,10 +6091,7 @@
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "k": [
-   "detail"
-  ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6181,10 +6212,11 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "k": [
-   "detail"
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "銷項發票清單|銷項發票清單（全部區間）"
   ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6371,9 +6403,11 @@
    "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
+   "groups[].values.style",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
+   "groups[].values.tagline",
    "groups[].values.thousands",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
@@ -6963,6 +6997,7 @@
    "companyName",
    "companyNameEn",
    "shortName",
+   "tagline",
    "taxId"
   ],
   "s": 200

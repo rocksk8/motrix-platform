@@ -74,8 +74,9 @@ def test_lunar_table_matches_official_calendar_2026_2027():
         cny_days = sorted(k for k, v in hol.items() if v == "春節")
         eve = [k for k, v in hol.items() if v == "農曆除夕"][0]
         assert date.fromisoformat(eve) == GC.spring_festival(y) - timedelta(days=1)
-        # 春節假期的第一天＝初一（除夕之後）
-        assert GC.spring_festival(y).isoformat() == cny_days[0]
+        # 初一落在週末時辦公日曆表不列（2027 初一是週六）⇒ 不能拿「第一個標春節的日子」當初一；改驗：標「春節」的日子都在初一～初五內
+        for k in cny_days:
+            assert GC.spring_festival(y) <= date.fromisoformat(k) <= GC.spring_festival(y) + timedelta(days=4), (y, k)
         assert [k for k, v in hol.items() if v == "端午節"] == [date(y, *GC._LUNAR[y]["dragon_boat"]).isoformat()]
         assert [k for k, v in hol.items() if v == "中秋節"] == [date(y, *GC._LUNAR[y]["mid_autumn"]).isoformat()]
 
@@ -163,7 +164,7 @@ def test_priority_weekday_beats_month_edge_and_season():
 
 def test_priority_month_edge_beats_season():
     assert build(at(2026, 7, 1), last=None)["category"] == "month_start"          # 週三、夏
-    assert build(at(2026, 1, 30 + 0), last=None)["category"] in ("weekday_fri",)  # 週五先贏
+    assert build(at(2026, 1, 30), last=None)["category"] == "weekday_fri"            # 月底但週五：星期先贏
     assert build(at(2026, 7, 30), last=None)["category"] == "month_end"           # 週四
 
 
@@ -193,10 +194,11 @@ def test_season_boundaries():
 
 
 def test_month_end_handles_leap_february():
-    assert LG.choose_category(at(2028, 2, 28), first=False, logged_today=False, prev_date=None)[1] == "month_end" or \
-        LG.choose_category(at(2028, 2, 28), first=False, logged_today=False, prev_date=None)[0] in ("weekday",)
     assert LG._months_last_day(date(2028, 2, 1)) == 29 and LG._months_last_day(date(2027, 2, 1)) == 28
     assert LG._months_last_day(date(2026, 12, 1)) == 31
+    # 2027-02-27（週六）：星期優先；2027-02-26 是週五同理——挑一個週二：2030-02-27（週三、月底前一天）
+    assert LG.choose_category(at(2030, 2, 27), first=False, logged_today=False, prev_date=None)[1] in ("month_end", "winter")         and LG.choose_category(at(2030, 2, 27), first=False, logged_today=False, prev_date=None)[0] != "weekday"
+    assert LG.choose_category(at(2030, 2, 27), first=False, logged_today=False, prev_date=None)[1] == "month_end"
 
 
 # ── 久未登入：天數邊界 ───────────────────────────────────────────────────────
