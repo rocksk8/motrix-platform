@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1539,
+  "tests": 1540,
   "unmapped": 13,
   "kinds": {
    "api": 855,
    "e2e": 341,
-   "audit": 199,
+   "audit": 200,
    "unit": 144
   },
   "routes": 908
@@ -37083,6 +37083,29 @@
      "backend/helpers/legal_params.py",
      "backend/helpers/settings_groups.py",
      "backend/helpers/settings_registry.py"
+    ]
+   }
+  },
+  "backend/tests/test_lg_o1_dev_pubkey_policy_2026_11_12.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/helpers/",
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/tools/build_deploy_package.ps1",
+    "file:backend/tools/verify_package.py",
+    "file:tools/platform/pubkey_policy.py",
+    "helper:licensing"
+   ],
+   "evidence": {
+    "path": [
+     "backend/helpers/",
+     "backend/helpers/licensing.py",
+     "backend/tools/",
+     "backend/tools/build_deploy_package.ps1",
+     "backend/tools/verify_package.py",
+     "tools/platform/",
+     "tools/platform/pubkey_policy.py"
     ]
    }
   },
