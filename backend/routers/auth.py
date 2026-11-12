@@ -45,6 +45,8 @@ _LOGIN_MAX_FAILS = 5       # consecutive failures before lockout
 _LOGIN_LOCKOUT_S = 900     # 15 minutes
 _RL_MAX_ENTRIES = 10_000   # T80 稽核 IP-M1：位址輪換會讓這個表無上限成長，超過就清
 _RL_STALE_S = 3600         # 沒鎖定、1 小時沒再失敗的列，清表時當成可丟
+_RL_PRUNE_BATCH = 1000       # LG-S6：一次清到「上限 - 這個數」，讓清表的成本攤在這麼多次失敗上
+_rl_prune_next_at = _RL_MAX_ENTRIES + 1   # 表長到這個數才掃（見 _rl_prune_locked）
 
 _rl_lock = threading.Lock()
 # key(＝_rl_key(ip)，IPv4 原樣／IPv6 取/64) -> {"fails": int, "locked_until": float (monotonic epoch), "last_fail": float}
@@ -52,16 +54,32 @@ _rl_state: dict = {}
 
 
 def _rl_prune_locked(now: float) -> None:
-    """超過上限才清，清掉沒鎖定且久未失敗的列。呼叫端要先持有 `_rl_lock`。"""
-    if len(_rl_state) <= _RL_MAX_ENTRIES:
-        return
-    stale = [
-        k for k, st in _rl_state.items()
-        if st["locked_until"] <= now and now - st.get("last_fail", 0) > _RL_STALE_S
-    ]
-    for k in stale:
-        del _rl_state[k]
+    """鎖定表的**硬**上限。呼叫端要先持有 `_rl_lock`。
 
+    T80稽核 LG-S6：以前只丟「沒鎖定且 1 小時沒再失敗」的列——一小時內灌大量不同前綴，這些列全都不算 stale，
+    表照長、超過上限後**每次失敗登入都掃整張表**（又丟不掉東西）。現在：
+      · 表長 ≤ 上限 ⇒ 什麼都不做（也重設下面的掃描門檻）。
+      · 超過上限 ⇒ 先丟 stale；還是超過就**丟最久沒失敗的未鎖定列**，一路丟到 `上限 - _RL_PRUNE_BATCH`，
+        這樣下一次掃描要等再長 `_RL_PRUNE_BATCH` 列之後（攤提：每 _RL_PRUNE_BATCH 次失敗才掃一次，不是每次）。
+      · **鎖定中的列不丟**（丟了＝解除那個位址的鎖）。若只剩鎖定列還超過上限，表長會暫時超出上限
+        （每一列都要先花 5 次失敗才能鎖定），掃描門檻順延 `_RL_PRUNE_BATCH`，不會變回每次都掃。
+    丟掉未鎖定列只是讓那個前綴的「連續失敗次數」歸零；攻擊者本來就能換前綴重來，不會因此多得到什麼。"""
+    global _rl_prune_next_at
+    n = len(_rl_state)
+    if n <= _RL_MAX_ENTRIES:
+        _rl_prune_next_at = _RL_MAX_ENTRIES + 1
+        return
+    if n < _rl_prune_next_at:
+        return
+    for k in [k for k, st in _rl_state.items()
+              if st["locked_until"] <= now and now - st.get("last_fail", 0) > _RL_STALE_S]:
+        del _rl_state[k]
+    excess = len(_rl_state) - (_RL_MAX_ENTRIES - _RL_PRUNE_BATCH)
+    if excess > 0:
+        unlocked = sorted((st.get("last_fail", 0), k) for k, st in _rl_state.items() if st["locked_until"] <= now)
+        for _t, k in unlocked[:excess]:
+            del _rl_state[k]
+    _rl_prune_next_at = max(_RL_MAX_ENTRIES + 1, len(_rl_state) + _RL_PRUNE_BATCH)
 
 
 def _min_pw() -> int:
