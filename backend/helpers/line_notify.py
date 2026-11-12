@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
-[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, public_base, push, push_async, quota, retry_pending, safe_link, set_confirmed, set_event, set_event_roles, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
+[公開介面] AUDIENCE_MODES, CALLBACK_PATH, DEFAULT_EVENT_SPEC, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_AUDIENCE_USERS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_KEY, WIRED_EVENTS, audience_view, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, event_spec, events_view, ids_for, is_linked, is_wired, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, public_base, push, push_async, quota, retry_pending, safe_link, set_audience, set_confirmed, set_event, set_event_roles, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token, wired_events
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -32,6 +32,11 @@
   ⑪ 補發佇列（同樣 2026-11-12）：帶 `dedupe_key` 的呼叫（每日檢查型，如保固到期）若 LINE 因額度保留／暫時失敗／token 失效（skipped）沒送出，
      連同參數記進 `system_settings.line_pending`；每日檢查（`system_checks._check_line_pending` → `retry_pending`）重送，成功／永久失敗就移除，超過 `PENDING_TTL_DAYS` 天放棄。
      收件人在**重送當下**才重新解析（成員／綁定可能已變）。⇒ LINE 的送達狀態與 Email 分開記錄：Email 寄成功不代表 LINE 完成。
+  ⑫ 接線單位是信件登記表（2026-11-13）：`wired_events()`＝已登記的信件類型（扣掉 `line_catalog` 的排除清單：獎金／薪資／勞報單等）＋LINE-only／細項事件；
+     `LINE_EVENTS` 只是「覆寫表」（priority／digest／line_group／mail_key），沒列的事件用 `DEFAULT_EVENT_SPEC`（normal、不彙整、LINE 群組同信件）。
+     `WIRED_EVENTS` 是相容名稱：惰性序列，每次迭代／`in` 都讀 `wired_events()`（模組在 import 之後才登記信件類型，靜態 tuple 會漏）。
+  ⑬ 「誰要發」三層（`line_recipients.resolve_audience`）：業務收件人 ∩ 角色允許清單（`event_roles`）→（可選）管理員指定的角色與個人（`audiences`，本檔 `set_audience`）→ 個人退訂最後；
+     預設 `business`＝與 2026-11-12 行為逐位元相同。
 """
 import json
 import logging
@@ -305,20 +310,83 @@ def push_async(user_ids, text: str) -> threading.Thread:
 
 
 # ── 事件開關：哪些信件類型「同時發 LINE」（公司層、預設全關、逐類由最高管理者勾選）──────────────────────────
-#: 已接上 LINE 的信件類型（＝設定頁可勾選的清單）。**接一個事件就加一個**；沒接線的類型不開放勾選（勾了也不會有任何東西送出，只會誤導）。
-#: 付款／薪資／獎金類（含金額或個資）先不開放——PM 裁示（2026-11-11）；要開放須逐類確認內容不含金額。
+#: 已接上 LINE 的事件（＝設定頁可勾選的清單）＝信件登記表扣掉排除清單，加上 LINE-only／細項事件（見不變式 ⑫、`line_catalog`）；沒接線的不開放勾選。
+#: 獎金、薪資、勞報單類**永遠排除**（使用者裁示 2026-11-13，`line_catalog.exclusion_reason`）；付款類（請款單、付款日提醒…）已開放，內容一律不帶金額（不變式 ⑤，呼叫端負責）。
 #: 事件登記字典（單一來源）：每個已接線事件的屬性。
 #:   priority   "critical"＝系統／資安告警，**永不因額度保留而暫停**；"normal"＝一般事件，本月用量達 `line_quota.RESERVE_PERCENT`（90%）後自動暫停（記 log）。
 #:   digest     False＝逐則發送；（保留欄位：之後的批次用 "daily" 表示每日彙整，彙整事件在**發送當下**才解析收件人——`deliver_event` 本來就是發送當下才解析）。
 #:   line_group "inherit"＝LINE 的群組收件人與信件相同（登記的預設群組）；None＝LINE 只發給事件收件人（不加群組）；或 `mail_types.GROUPS` 的鍵＝LINE 用另一個群組。
 #:   audience   "any"＝所有角色都可能是收件人（本人設定頁列出該事件）；"group"＝只有群組收件人（管理者）才會收到，不是收件人的同仁在「我要收的 LINE 通知」看不到這個事件。
 #:   month_cap_percent  None＝沒有每月上限；整數＝本月這個事件累計推播則數最多佔 LINE 月額度的幾 %（超過只發 Email；見不變式 ⑩）。
+#:   mail_key  （選填）收件人設定（覆寫）借用哪個信件類型；沒給＝自己。LINE-only／細項事件由 `line_catalog` 帶入。
+#: 這張表只列「與預設不同」的事件；其餘一律用 `DEFAULT_EVENT_SPEC`（見 `event_spec`）。
 LINE_EVENTS = {
     "approval_review_edit": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": None},
     "warranty_expiry": {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": None},
     "auth_lockout": {"priority": "critical", "digest": False, "line_group": "inherit", "audience": "group", "month_cap_percent": 25},
+    # 系統告警（critical：永不因額度保留而暫停）
+    "backup_error": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "backup_stale": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "heartbeat_stale": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "disk_space_low": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "cert_expiry": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "company_setup_alert": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    # 「核准完成」LINE 預設只給申請人（信件另寄管理員群組；PM 2026-11-13）
+    "approved": {"priority": "normal", "digest": False, "line_group": None},
 }
-WIRED_EVENTS = tuple(LINE_EVENTS)
+#: 沒列在 `LINE_EVENTS` 的事件的預設屬性（簽核與指派類都是一般）
+DEFAULT_EVENT_SPEC = {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": None}
+
+
+def event_spec(event_key: str) -> dict:
+    """事件的完整屬性（預設 ＜ LINE-only／細項事件的目錄資料 ＜ `LINE_EVENTS` 覆寫）。回新的 dict（呼叫端改它不影響表）。"""
+    from . import line_catalog as _cat
+    spec = dict(DEFAULT_EVENT_SPEC)
+    extra = _cat.LINE_ONLY_EVENTS.get(event_key)
+    if extra:
+        spec["line_group"] = extra.get("line_group", spec["line_group"])
+        spec["mail_key"] = extra["mail_key"]
+    ov = LINE_EVENTS.get(event_key)
+    if isinstance(ov, dict):
+        spec.update(ov)
+    return spec
+
+
+def is_wired(event_key) -> bool:
+    """這個 key 有沒有接上 LINE（O(1)；不建清單）。"""
+    from . import line_catalog as _cat
+    return _cat.is_known(event_key)
+
+
+def wired_events() -> tuple:
+    """所有已接線的事件 key：信件登記表（扣掉排除清單）＋LINE-only／細項事件；依「分組順序、登記順序」排列。"""
+    from . import line_catalog as _cat
+    from . import mail_types as _mt
+    keys = [t.key for t in _mt.all_types() if not _cat.exclusion_reason(t.key, t)]
+    keys += [k for k in _cat.LINE_ONLY_EVENTS if k not in keys and not _cat.exclusion_reason(k)]
+    order = {g: i for i, g in enumerate(_cat.GROUP_ORDER)}
+    return tuple(sorted(keys, key=lambda k: order.get(_cat.group_of(k), len(order))))        # sorted 是穩定排序：同組維持登記順序
+
+
+class _WiredEvents:
+    """`WIRED_EVENTS` 的相容外殼：看起來像 tuple，但每次都讀 `wired_events()`（見不變式 ⑩）。"""
+    def __iter__(self):
+        return iter(wired_events())
+
+    def __contains__(self, key):
+        return is_wired(key)
+
+    def __len__(self):
+        return len(wired_events())
+
+    def __getitem__(self, i):
+        return wired_events()[i]
+
+    def __repr__(self):
+        return "WIRED_EVENTS%r" % (wired_events(),)
+
+
+WIRED_EVENTS = _WiredEvents()
 #: ⚠️ 2026-11-12（使用者裁示「全部改獨立」）：LINE **不再依附 Email**。收件人由 `helpers.event_audience` 直接依事件的業務收件人＋T80 收件設定解析成帳號，
 #: 再 ⇒ LINE 角色允許清單 ⇒ 本人 LINE 勾選 ⇒ 已綁定（`deliver_event`）。沒有 Email、Email 退訂、信件類型被整個關掉，都不影響 LINE；
 #: LINE 有自己的公司開關（`event_enabled`）與個人勾選，Email 退訂與 LINE 勾選互不影響。
@@ -337,7 +405,7 @@ def event_enabled(event_key: str) -> bool:
 def event_roles_view() -> dict:
     """⇒ {key: [role…]|None}（只含已接線的類型；None＝所有角色，沿用現行行為）。壞值照 `line_recipients.allowed_roles` 的規則（[]＝fail-closed）。"""
     from . import line_recipients as _lr
-    return {k: _lr.allowed_roles(k) for k in WIRED_EVENTS}
+    return _lr.allowed_roles_view(wired_events())
 
 
 def set_event_roles(event_key: str, roles) -> None:
@@ -382,6 +450,70 @@ def set_event(event_key: str, on: bool) -> None:
         ev = dict(_events())
         ev[event_key] = on
         c["events"] = ev
+        _set_setting(SETTING_KEY, c)
+
+
+# ── 管理員指定「誰要發」（2026-11-13）：每個事件一份 {mode, roles, users}，存 `system_settings.line_notify.audiences` ──────────────────
+#: mode：`business`（預設，不存＝此模式）＝業務收件人∩角色允許清單；`business_plus`＝再加上指定的角色與個人；`only`＝只發指定的角色與個人。
+#: 讀取與套用在 `line_recipients.resolve_audience`；這裡只負責寫入與驗證（與事件開關、角色允許清單共用 `_lock`）。
+AUDIENCE_MODES = ("business", "business_plus", "only")
+MAX_AUDIENCE_USERS = 200
+
+
+def audience_view() -> dict:
+    """⇒ {key: {"mode", "roles", "users"}}（只含已接線事件；沒設定＝`business`、空清單）。壞值照 `line_recipients.audience_of` 的規則。"""
+    from . import line_recipients as _lr
+    return _lr.audience_view(wired_events())
+
+
+def set_audience(event_key: str, mode: str, roles=None, users=None) -> None:
+    """寫入單一事件的「誰要發」。不是已接線事件、mode 不合法、角色不在 `mail_types.ROLES`、帳號不存在 ⇒ `ValueError`。
+    `business` 模式且沒有角色與個人 ⇒ 把該事件的設定拿掉（設定值不會越長越大）；`business_plus`／`only` 至少要有一個角色或個人。"""
+    if not is_wired(event_key):
+        raise ValueError("這種通知尚未支援 LINE：%s" % event_key)
+    if mode not in AUDIENCE_MODES:
+        raise ValueError("mode 必須是 %s" % "、".join(AUDIENCE_MODES))
+    from .mail_types import ROLES
+    roles = [] if roles is None else roles
+    users = [] if users is None else users
+    if not isinstance(roles, list) or not all(isinstance(r, str) and r in ROLES for r in roles):
+        raise ValueError("roles 必須是角色清單（%s）" % "、".join(ROLES))
+    if not isinstance(users, list) or not all(isinstance(u, str) and u.strip() for u in users):
+        raise ValueError("users 必須是帳號清單")
+    roles = list(dict.fromkeys(roles))
+    users = list(dict.fromkeys(u.strip() for u in users))
+    if len(users) > MAX_AUDIENCE_USERS:
+        raise ValueError("指定的人員最多 %d 位" % MAX_AUDIENCE_USERS)
+    if mode != "business" and not roles and not users:
+        raise ValueError("「%s」模式至少要指定一個角色或一位人員" % ("另外加上" if mode == "business_plus" else "只發給"))
+    if mode == "business" and (roles or users):
+        raise ValueError("「照原本的收件人」模式不需要指定角色或人員（要加人請選「另外加上」）")
+    if users:                                                                     # 帳號必須存在（停用的也可以存；發送時才濾掉）
+        from db import get_db
+        conn = get_db()
+        try:
+            known = set()
+            for i in range(0, len(users), 400):
+                chunk = users[i:i + 400]
+                known |= {r["username"] for r in conn.execute("SELECT username FROM users WHERE username IN (%s)" % ",".join("?" * len(chunk)), chunk).fetchall()}
+        finally:
+            conn.close()
+        missing = [u for u in users if u not in known]
+        if missing:
+            raise ValueError("找不到帳號：%s" % "、".join(missing[:5]))
+    with _lock:
+        c = dict(_cfg())
+        aud = dict(c.get("audiences") if isinstance(c.get("audiences"), dict) else {})
+        if mode == "business":
+            if event_key not in aud:
+                return
+            aud.pop(event_key)
+        else:
+            new = {"mode": mode, "roles": roles, "users": users}
+            if aud.get(event_key) == new:
+                return
+            aud[event_key] = new
+        c["audiences"] = aud
         _set_setting(SETTING_KEY, c)
 
 
@@ -605,11 +737,12 @@ def _pending_remove(key: str) -> None:
 
 
 def deliver_event(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
-                  exclude=None, dedupe_key: str = "") -> str:
+                  exclude=None, dedupe_key: str = "", group: str = None) -> str:
     """獨立通道的**單一入口（同步）**：事件業務收件人 ⇒ LINE 角色允許清單／個人勾選 ⇒ 已綁定 ⇒ 推播（成功後觸發額度刷新與 T80 額度告警）。
     回傳：`"off"`（LINE 未啟用／類型沒接線或沒勾選）、`"already_pushed"`（同 `dedupe_key` 已推過）、`"paused_quota"`（額度保留：非 critical 且本月用量已達 90%）、
     `"monthly_cap"`（這個事件的每月上限已滿，只發 Email）、`"no_recipient"`（沒有可推播的人）、或 `SEND_*`。**永不丟例外。**
-    `usernames`／`to_group`／`group`（見字典 `line_group`）／`exclude`（要排除的帳號，例如操作者本人）見 `helpers.event_audience.resolve_usernames`。
+    `usernames`／`to_group`／`group`（呼叫端指定群組，優先於字典 `line_group`）／`exclude`（要排除的帳號，例如操作者本人）見 `helpers.event_audience.resolve_usernames`；
+    LINE-only／細項事件的收件人設定借用 `mail_key`（`event_spec`）。
     `dedupe_key`（選填，給每日檢查型、會被重試的呼叫端）：LINE 自己的「已推播」記號——同一把鑰匙只推一次，**結果不是暫時失敗（sent／permanent）就記**，
     與 Email 的重試脫鉤（Email 暫時失敗隔天重試時，LINE 不會天天重推）。記號存在 `system_settings.line_push_marks`，保存 `MARK_KEEP_DAYS` 天。
     鑰匙的第一段必須是事件 key（`<event_key>|…`，補發佇列靠它找回事件）。
@@ -634,7 +767,7 @@ def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False,
     try:
         if not event_enabled(event_key):
             return "off"
-        spec = LINE_EVENTS.get(event_key) or {}
+        spec = event_spec(event_key)
         if dedupe_key and _mark_seen(dedupe_key):
             _pending_remove(dedupe_key)
             return "already_pushed"
@@ -654,10 +787,11 @@ def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False,
                 return _park("paused_quota")
         from . import event_audience as _ea
         from . import line_recipients as _lr
-        lg = spec.get("line_group", "inherit")
+        lg = group or spec.get("line_group", "inherit")            # 呼叫端指定的群組（例如財務類的 module_activity）優先於事件字典
         given = _ea.resolve_usernames(event_key, usernames, bool(to_group) and lg is not None,
-                                      group=lg if lg not in (None, "inherit") else None, exclude=exclude)
-        allowed = _lr.filter_usernames(event_key, given)
+                                      group=lg if lg not in (None, "inherit") else None, exclude=exclude,
+                                      mail_key=spec.get("mail_key"))
+        allowed = _lr.resolve_audience(event_key, given)             # 業務收件人 ∩ 角色允許清單 →（可選）管理員指定 → 個人退訂（見 line_recipients）
         ids = ids_for(allowed)
         if not ids:
             logger.info("LINE：%r 沒有可推播的收件人（業務收件人 %d 人；角色／個人勾選後 %d 人；已綁定 0 人）", event_key, len(given), len(allowed))
@@ -721,14 +855,14 @@ def retry_pending() -> dict:
 
 
 def notify_event(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
-                 exclude=None, dedupe_key: str = ""):
+                 exclude=None, dedupe_key: str = "", group: str = None):
     """獨立通道的**背景**發送（不擋呼叫端；收件人解析的資料庫查詢也在背景執行緒）。LINE 未啟用／類型沒勾選 ⇒ 回 None（不開執行緒）；否則回 daemon 執行緒。永不丟例外。"""
     try:
         if not event_enabled(event_key):
             return None
         t = threading.Thread(target=deliver_event, args=(event_key,), name="line-event", daemon=True,
                              kwargs=dict(usernames=usernames, to_group=to_group, title=title, rows=rows, reason=reason, link=link,
-                                         exclude=exclude, dedupe_key=dedupe_key))
+                                         exclude=exclude, dedupe_key=dedupe_key, group=group))
         t.start()
         return t
     except Exception as exc:  # noqa: BLE001

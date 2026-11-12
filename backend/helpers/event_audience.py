@@ -67,11 +67,13 @@ def _superadmins() -> list:
     return _query("role='superadmin'", ())
 
 
-def group_usernames(event_key: str, group: str = None) -> list:
+def group_usernames(event_key: str, group: str = None, *, mail_key: str = None) -> list:
     """群組收件人（登記的預設群組，或超級管理員在設定頁的覆寫）的帳號。對應 `email_notify._group_emails`。
     `group`（選填）：用這個群組（`mail_types.GROUPS` 的鍵）取代**登記的預設群組**——給「LINE 的群組與信件不同」的事件用（`line_notify.LINE_EVENTS[key]["line_group"]`）。
-    超級管理員在設定頁的覆寫（superadmin_only／custom）仍然優先（收件人只有一個來源），所以 `group` 只在覆寫為 default 時生效。"""
+    超級管理員在設定頁的覆寫（superadmin_only／custom）仍然優先（收件人只有一個來源），所以 `group` 只在覆寫為 default 時生效。
+    `mail_key`（選填）：收件人設定（登記的群組與覆寫）改借用另一個信件類型——給 LINE-only／細項事件用（見 `line_catalog`）；沒給＝用 `event_key` 自己。"""
     try:
+        event_key = mail_key or event_key
         t = _mt.get(event_key) if event_key else None
         if t is None:
             logger.error("信件類型 %r 未登記（helpers/mail_types.py）⇒ 只通知超級管理員", event_key)
@@ -94,11 +96,13 @@ def group_usernames(event_key: str, group: str = None) -> list:
         return []
 
 
-def resolve_usernames(event_key: str, usernames=None, to_group: bool = False, *, group: str = None, exclude=None) -> list:
+def resolve_usernames(event_key: str, usernames=None, to_group: bool = False, *, group: str = None, exclude=None, mail_key: str = None) -> list:
     """事件的業務收件人（帳號，保持順序、去重）＝（事件收件人 `usernames` 套覆寫）＋（`to_group` 時的群組收件人）。
     與 `email_notify.send_registered` 同一個參數形狀：`usernames`＝事件收件人（送審人、案件業務負責人…），`to_group`＝要不要加登記的群組。
-    `group`：用另一個群組取代登記的預設群組（見 `group_usernames`）；`exclude`：要排除的帳號（例如操作者本人；套在最後，連群組與覆寫指定的也排除）。"""
+    `group`：用另一個群組取代登記的預設群組（見 `group_usernames`）；`exclude`：要排除的帳號（例如操作者本人；套在最後，連群組與覆寫指定的也排除）；
+    `mail_key`：收件人設定借用另一個信件類型（見 `group_usernames`）。"""
     try:
+        event_key = mail_key or event_key
         names = []
         if usernames:
             event_part = _by_usernames(usernames)

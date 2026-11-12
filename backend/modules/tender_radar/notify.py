@@ -65,6 +65,9 @@ def notify_tender_found(tenders: list, watch_names: list = None,
     ⚠️ 但這句話**只能出現在那一封**：每封都寫的話，第 8 天恢復後的信也會這樣說，
     收件人會第二次以為它壞了。判斷在呼叫端（`_quiet_period_starts_after_this_mail`）。
     """
+    # LINE 獨立通道（2026-11-13）：不看 Email、不受 SMTP 例外影響（`_line_event` 永不丟例外）；每天同一事件最多推一次（Email 重試不重推）。
+    _en._line_event("tender_found", to_group=True, title="標案雷達：新標案", rows=[("新標案", "%d 筆" % len(tenders or []))],
+                    reason="請登入系統，於標案雷達頁檢視內容並決定是否投標", line_key=_en._line_day_key("tender_found"))
     to = _en._admin_emails("tender_found")
     if not to:
         return
@@ -149,6 +152,9 @@ def notify_tender_fetch_failed(error: str, since: str = "") -> None:
     ⚠️ 跟 `notify_tender_source_changed` 是**不同的事件 key**：
     抓不到只要等它好，改版要改解析器。
     """
+    # LINE 獨立通道（2026-11-13）：不看 Email、不受 SMTP 例外影響（`_line_event` 永不丟例外）；每天同一事件最多推一次（Email 重試不重推）。
+    _en._line_event("tender_fetch_failed", to_group=True, title="標案雷達：無法連線來源網站", rows=[("上次成功", since or "—")],
+                    reason="本次沒有取得任何標案；系統會於下次排程自動重試", line_key=_en._line_day_key("tender_fetch_failed"))
     to = _en._admin_emails("tender_fetch_failed")
     if not to:
         return
@@ -173,6 +179,10 @@ def notify_tender_source_changed(parsed: int, dropped: int) -> None:
     ⚠️ 這跟「抓不到」是兩件事：那邊等它好就行，**這邊不動手就永遠抓不到東西**，
     而且畫面上看起來一切正常（雷達還在跑、只是每天都 0 筆）。
     """
+    # LINE 獨立通道（2026-11-13）：不看 Email、不受 SMTP 例外影響（`_line_event` 永不丟例外）；每天同一事件最多推一次（Email 重試不重推）。
+    _en._line_event("tender_source_changed", to_group=True, title="標案雷達：來源網站格式異動",
+                    rows=[("成功解析", "%d 筆" % parsed), ("解析失敗", "%d 筆" % dropped)],
+                    reason="需要請系統維護人員調整解析器", line_key=_en._line_day_key("tender_source_changed"))
     to = _en._admin_emails("tender_source_changed")
     if not to:
         return
@@ -196,6 +206,9 @@ def notify_tender_detail_blocked() -> None:
     ⚠️ 跟 `notify_tender_source_changed` 是不同的事件 key：改版要改解析器；驗證碼是對方的防機器人措施，
     **解析器改不好它，也不該去繞它**——處置是評估改用官方開放資料或人工補地點。
     """
+    # LINE 獨立通道（2026-11-13）：不看 Email、不受 SMTP 例外影響（`_line_event` 永不丟例外）；每天同一事件最多推一次（Email 重試不重推）。
+    _en._line_event("tender_detail_blocked", to_group=True, title="標案雷達：詳細頁被要求驗證碼", rows=[("影響", "履約地點、招標方式暫時無法自動取得")],
+                    reason="系統不會破解驗證碼；請評估改用官方開放資料或人工補地點", line_key=_en._line_day_key("tender_detail_blocked"))
     to = _en._admin_emails("tender_detail_blocked")
     if not to:
         return

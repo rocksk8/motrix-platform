@@ -520,9 +520,12 @@ def test_quota_reserve_ignores_unreadable_usage_and_other_month(env):
 
 def test_event_dictionary_shape_and_priorities():
     from helpers import line_notify as L
-    assert set(L.LINE_EVENTS) == set(L.WIRED_EVENTS) >= {"auth_lockout", "approval_review_edit", "warranty_expiry"}
+    # 2026-11-13：接線單位改為「信件登記表」（`LINE_EVENTS` 只剩逐項覆寫：優先級／群組），所以覆寫表是已接線事件的子集
+    assert set(L.LINE_EVENTS) <= set(L.WIRED_EVENTS) and set(L.WIRED_EVENTS) >= {"auth_lockout", "approval_review_edit", "warranty_expiry"}
     for k, spec in L.LINE_EVENTS.items():
-        assert set(spec) == {"priority", "digest", "line_group", "audience", "month_cap_percent"}, k
+        assert set(spec) <= {"priority", "digest", "line_group", "mail_key", "audience", "month_cap_percent"}, k
+        spec = L.event_spec(k)                                  # 合併預設後的完整規格
+        assert set(spec) >= {"priority", "digest", "line_group", "audience", "month_cap_percent"}, k
         assert spec["audience"] in ("any", "group") and (spec["month_cap_percent"] is None or 0 <= spec["month_cap_percent"] <= 100)
         assert spec["priority"] in ("critical", "normal") and spec["digest"] is False
         assert spec["line_group"] in (None, "inherit") or spec["line_group"] in __import__("helpers.mail_types", fromlist=["GROUPS"]).GROUPS

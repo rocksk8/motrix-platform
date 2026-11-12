@@ -49,6 +49,8 @@ def _page(name):
 
 
 def notify_voucher_submitted(voucher_no, summary, approver_usernames):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("voucher_submitted", usernames=[u for u in approver_usernames if u], title="會計傳票待審核", rows=[("傳票號碼", voucher_no)], reason="輪到您簽核，請登入系統處理")
     to = _en._lookup_emails([u for u in approver_usernames if u], "voucher_submitted")
     if not to:
         logger.warning("voucher_submitted：收件人皆無設定 email")
@@ -60,6 +62,8 @@ def notify_voucher_submitted(voucher_no, summary, approver_usernames):
 
 
 def notify_voucher_next_tier(voucher_no, summary, tier_no, total_tiers, approver_usernames):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("voucher_next_tier", usernames=[u for u in approver_usernames if u], title="會計傳票輪到您簽核", rows=[("傳票號碼", voucher_no), ("目前進度", "第 %d 層（共 %d 層）" % (tier_no, total_tiers))], reason="前一層已完成，請登入系統處理")
     to = _en._lookup_emails([u for u in approver_usernames if u], "voucher_next_tier")
     if not to:
         logger.warning("voucher_next_tier：收件人皆無設定 email")
@@ -71,6 +75,8 @@ def notify_voucher_next_tier(voucher_no, summary, tier_no, total_tiers, approver
 
 
 def notify_voucher_approved(voucher_no, summary, approved_by, requester_username):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("voucher_approved", usernames=[u for u in [requester_username] if u], title="會計傳票審核完成", rows=[("傳票號碼", voucher_no), ("最後核准人", approved_by)], reason="已核准，可以過帳")
     to = _en._lookup_emails([u for u in [requester_username] if u], "voucher_approved")
     if not to:
         logger.warning("voucher_approved：收件人皆無設定 email")
@@ -82,6 +88,8 @@ def notify_voucher_approved(voucher_no, summary, approved_by, requester_username
 
 
 def notify_voucher_returned(voucher_no, summary, note, requester_username):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("voucher_returned", usernames=[u for u in [requester_username] if u], title="會計傳票退回修改", rows=[("傳票號碼", voucher_no)], reason="請登入系統依退回說明修改後重新送審")
     to = _en._lookup_emails([u for u in [requester_username] if u], "voucher_returned")
     if not to:
         logger.warning("voucher_returned：收件人皆無設定 email")
@@ -93,6 +101,8 @@ def notify_voucher_returned(voucher_no, summary, note, requester_username):
 
 
 def notify_ledger_action_submitted(request_no, action_label, requester, approver_usernames):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("ledger_action_submitted", usernames=[u for u in approver_usernames if u], title="總帳申請待審核", rows=[("申請號", request_no), ("申請內容", action_label), ("申請人", requester)], reason="輪到您簽核，請登入系統處理")
     to = _en._lookup_emails([u for u in approver_usernames if u], "ledger_action_submitted")
     if not to:
         logger.warning("ledger_action_submitted：收件人皆無設定 email")
@@ -104,6 +114,8 @@ def notify_ledger_action_submitted(request_no, action_label, requester, approver
 
 
 def notify_ledger_action_approved(request_no, action_label, approved_by, requester_username):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("ledger_action_approved", usernames=[u for u in [requester_username] if u], title="總帳申請已核准並執行", rows=[("申請號", request_no), ("申請內容", action_label), ("核准人", approved_by)], reason="已核准並執行")
     to = _en._lookup_emails([u for u in [requester_username] if u], "ledger_action_approved")
     if not to:
         logger.warning("ledger_action_approved：收件人皆無設定 email")
@@ -115,6 +127,8 @@ def notify_ledger_action_approved(request_no, action_label, approved_by, request
 
 
 def notify_ledger_action_returned(request_no, action_label, note, requester_username):
+    # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
+    _en._line_event("ledger_action_returned", usernames=[u for u in [requester_username] if u], title="總帳申請被退回", rows=[("申請號", request_no), ("申請內容", action_label)], reason="動作沒有執行，請登入系統依退回說明修改後重新申請")
     to = _en._lookup_emails([u for u in [requester_username] if u], "ledger_action_returned")
     if not to:
         logger.warning("ledger_action_returned：收件人皆無設定 email")

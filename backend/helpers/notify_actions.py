@@ -577,6 +577,10 @@ def _send_mail(user, action_id, title, text) -> str:
     from helpers import email_notify as EN
     from helpers import mail_types as MT
     from helpers import notification_prefs as NP
+    # LINE 獨立通道（2026-11-13）：「這個動作勾了信件」的收件人，同時走 LINE（不看信箱／信件關閉／信件預算；LINE 有自己的個人關閉與額度保留）。
+    # 只放標題（管理員在動作範本寫的），不放內文——內文可能帶金額或客戶資料；詳細請登入系統看站內通知。
+    EN._line_event("user_notice", usernames=[user.get("username")] if user.get("username") else None, title=title,
+                   reason="詳細內容請登入系統，於站內通知查看")
     if not user.get("email") or EN._mail_off(MAIL_KEY):
         return "skipped"
     if not (NP.is_enabled(user.get("notification_muted"), MAIL_KEY) and NP.is_enabled(user.get("notification_muted"), "na:" + action_id)):

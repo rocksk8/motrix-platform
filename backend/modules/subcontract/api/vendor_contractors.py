@@ -16,6 +16,7 @@ from helpers import (_require_user, _tok, _audit, _notify, notify_module_activit
                      setting_to_active_tiers)
 from core.txn import begin_write, write_txn
 from core import registry as _registry
+from helpers import email_notify as _en           # LINE 專屬事件（`dispatch_file_delete_request`）走 `_en._line_event`
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -942,6 +943,8 @@ def delete_dispatch_file(did: int, file_id: str, body: dict = Body(default={}), 
     for a in (tiers[0].get("approvers") or []) if tiers else []:
         _notify(a["username"], "dispatch_file_delete_request", str(did), row["quote_no"],
                 "承攬商報價單附件「%s」（案件 %s）申請刪除，需要您審核" % (f.get("filename", ""), row["quote_no"]))
+        _en._line_event("dispatch_file_delete_request", usernames=[a["username"]], title="承攬商報價單附件刪除申請待審核",     # 僅 LINE 事件（信件沒有）；不放檔名與原因
+                        rows=[("案件", row["quote_no"]), ("申請人", user.get("display_name") or user["username"])], reason="需要您審核，請登入系統處理")
     if not tiers:
         notify_module_activity("承攬商報價單", "申請刪除附件（待最高管理者審核）", user.get("display_name") or user["username"],
                                row["quote_no"], "case-management.html", detail=f.get("filename", ""))
@@ -1014,6 +1017,8 @@ def approve_dispatch_file_delete(did: int, file_id: str, authorization: str = He
         for na in (tiers[req["currentTier"]].get("approvers") or []) if req["currentTier"] < len(tiers) else []:
             _notify(na["username"], "dispatch_file_delete_request", str(did), quote_no,
                     "承攬商報價單附件「%s」（案件 %s）刪除申請輪到您審核" % (filename, quote_no))
+            _en._line_event("dispatch_file_delete_request", usernames=[na["username"]], title="承攬商報價單附件刪除申請輪到您審核",
+                            rows=[("案件", quote_no), ("申請人", req.get("requestedByDisplay") or req.get("requestedBy") or "")], reason="前一層已完成，請登入系統處理")
     return {"ok": True, "deleted": done, "allDone": done, "updated_at": now}
 
 
