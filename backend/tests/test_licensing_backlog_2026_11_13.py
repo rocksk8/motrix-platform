@@ -145,3 +145,31 @@ def test_lg_s5_concurrent_callers_when_a_partial_backoff_just_expired_share_one_
     out = _run_concurrently(lic.machine_fingerprint)
     assert all(ok and v == first for ok, v in out), out
     assert len(calls) == lic._FP_PROBE_RETRIES, "退避到期瞬間並行的請求各自重探了：%d 次探測呼叫（一輪是 %d）" % (len(calls), lic._FP_PROBE_RETRIES)
+
+
+# ── M9：穩定指紋「快取到行程結束」這個性質本身 ───────────────────────────────
+
+@pytest.mark.real_fingerprint
+def test_m9_a_stable_fingerprint_is_never_reprobed_however_old_the_cache_is(monkeypatch):
+    """T80 M9（測試缺口）：既有 `test_lgm1_all_empty_then_full_recovers…` 只驗「同一瞬間不會重探」。
+    這題直接驗性質：穩定結果的 cached_at 往前撥 2 小時（比最長退避 3600 秒還久），仍然不重探；
+    對照：同樣撥法對「殘缺」結果要重探（證明這題量得到差別，不是兩邊都不探）。"""
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", None)
+    monkeypatch.setattr(lic, "_FP_PROBE_DELAY_S", 0)
+    monkeypatch.setattr(lic, "_probe_hardware_once", lambda: ("uuid-x", "mac-y"))
+    digest = lic.machine_fingerprint()
+    cache = lic._FINGERPRINT_CACHE
+    assert cache[1] is True
+
+    def boom():
+        raise AssertionError("穩定結果被重新探測了")
+    monkeypatch.setattr(lic, "_probe_hardware_once", boom)
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", (cache[0], True, time.monotonic() - 7200, cache[3]))
+    assert lic.machine_fingerprint() == digest
+
+    # 對照組
+    calls = []
+    monkeypatch.setattr(lic, "_probe_hardware_once", lambda: calls.append(1) or ("uuid-only", ""))
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", ("deadbeefdeadbeef", False, time.monotonic() - 7200, 0))
+    lic.machine_fingerprint()
+    assert calls, "對照組：殘缺值撥過 2 小時應該重探"
