@@ -1008,7 +1008,7 @@ def _department_manager_usernames(department_id) -> list:
 
 def _monthly_report_line_targets() -> tuple:
     """每月營運報表的 LINE 收件人 ⇒ (帳號清單, 是否發給登記群組)。與信件同一個來源（`monthly_report_recipients` 設定）：
-    從沒存過設定＝沿用舊行為發給最高管理員群組；存過＝照 `userIds`（只取啟用中的帳號）。"""
+    從沒存過設定＝沿用舊行為發給最高管理者群組；存過＝照 `userIds`（只取啟用中的帳號）。"""
     try:
         raw = _get_setting("monthly_report_recipients")
         if raw is None:
@@ -1262,7 +1262,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
     第 1／3／5 個工作日、之後每 5 個工作日（10、15、20…）由
     routers/daily_tasks.py 的每日排程呼叫（階梯見 `reminder_stage`）。
     days_elapsed 決定
-    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理員收件人
+    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理者收件人
     （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
     統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
     分開連結。"""
@@ -1295,7 +1295,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
         # ☠️ 順手把參數刪掉的話，**管理員會安靜地不再收到信**。
         # 🔑 文案與收件人是兩件事，而它們現在共用同一個旗標。
         intro=f"您好，以下{doc_type_label}已送出簽核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成簽核作業。",
-        button_text="前往簽核佇列",
+        button_text="前往待我簽核",
     )
     # 🔴 **同步寄，並把結果回給呼叫端。**
     # ⚠️ 原本走 `_async_send` ⇒ 丟進 `Thread` ⇒ **呼叫端拿不到任何結果**，
@@ -1845,7 +1845,7 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
 
 
 def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_bytes: bytes) -> None:
-    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理員（2026-08-25）。
+    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理者（2026-08-25）。
     報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
     發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
     _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
@@ -1878,7 +1878,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     """完結案防呆擋下（2026-08-26）：三項前置條件（執行進度100%／款項全收齊／
     相關單據簽核完成）任一未達成時，完結案動作被擋下，通知尚未完成該項的
     簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
-    概念）＋最高管理員（不論如何都通知，即使 pending_usernames 已涵蓋所有
+    概念）＋最高管理者（不論如何都通知，即使 pending_usernames 已涵蓋所有
     superadmin，重複的 email 由呼叫端 set() 去重）。"""
     _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
     to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
@@ -1901,7 +1901,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
 
 def notify_case_change_requested(quote_no: str, customer: str, project: str,
                                  summary: str, requester_display: str) -> None:
-    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理員審核
+    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理者審核
     （modules/case/api/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
@@ -1918,8 +1918,8 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
         [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
-        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列簽核後才會套用。",
-        button_text="前往簽核佇列",
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於「待我簽核」簽核後才會套用。",
+        button_text="前往待我簽核",
     )
     _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待簽核：{quote_no}（{customer}）"), html)
 
@@ -2106,8 +2106,8 @@ def notify_module_activity(module_label: str, action_label: str,
 
     LINE（2026-11-13）：**信件一律不變**（收件人／主旨／內文照舊）。LINE 端——
     ① 呼叫端傳 `line_event`（`line_catalog.LINE_ONLY_EVENTS` 裡 kind="sub" 的細項事件，例如 `crm_case_status`）＋`line_usernames`（事件收件人＝案件相關人）：發該細項事件，
-       `line_exclude`＝要排除的帳號（操作者本人）；預設只發給 `line_usernames`（沒人＝不發），最高管理員想收可在設定頁用「另加指定人員」。
-    ② 沒傳 `line_event`：發泛用的 `module_activity`（群組收件人，財務類走財務群組）；預設關，由最高管理員決定要不要開。
+       `line_exclude`＝要排除的帳號（操作者本人）；預設只發給 `line_usernames`（沒人＝不發），最高管理者想收可在設定頁用「另加指定人員」。
+    ② 沒傳 `line_event`：發泛用的 `module_activity`（群組收件人，財務類走財務群組）；預設關，由最高管理者決定要不要開。
     ③ `line_skip=True`：這個操作的 LINE 已由專屬事件負責（例如指派案件＝`dev_case_assigned`），這裡不再發泛用的那一則（避免同一件事推兩次）。
     🔴 LINE 只放「模組／動作／項目名稱」，**不放 `detail`**（自由文字：留言、記錄內容、備註）。"""
     _line_rows = [("項目", item_label)]
