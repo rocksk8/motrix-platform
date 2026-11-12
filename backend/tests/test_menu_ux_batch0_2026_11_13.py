@@ -112,3 +112,12 @@ def test_dev_mode_row_is_hidden_unless_this_machine_does_not_send():
 def test_blocked_send_message_is_plain():
     src = _read(BACK / "helpers" / "email_notify.py")
     assert "_smtp_send_blocked 說明" not in src
+
+
+def test_role_keys_are_not_shown_as_labels():
+    users = _read(FRONT / "pages" / "users.html")
+    for k in ("superadmin", "admin", "sales", "engineer", "finance", "viewer"):
+        assert ('letter-spacing:.05em">%s</div>' % k) not in users, k
+    assert "（僅 superadmin 可修改" not in _read(FRONT / "pages" / "cashier.html")
+    ns = _read(FRONT / "pages" / "notification-settings.html")
+    assert "為 admin 或 superadmin 帳號" not in ns and "<strong>superadmin</strong>" not in ns
