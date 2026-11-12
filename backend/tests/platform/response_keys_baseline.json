@@ -7634,7 +7634,9 @@
  "/api/settings/line-notify/bindings": {
   "k": [
    "available",
+   "expired",
    "linked",
+   "needBind",
    "total",
    "unlinked",
    "users",
@@ -7644,8 +7646,11 @@
    "users[].lastReminded",
    "users[].linked",
    "users[].linkedAt",
+   "users[].missed",
+   "users[].missedCount",
    "users[].modules",
    "users[].role",
+   "users[].state",
    "users[].username"
   ],
   "s": 200

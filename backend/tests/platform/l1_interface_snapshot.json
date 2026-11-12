@@ -1131,6 +1131,7 @@
    "REMIND_KEY": "const",
    "REMIND_MIN_HOURS": "const",
    "remind": "def(usernames=…, now=…)",
+   "state_of": "def(b)",
    "status": "def()"
   },
   "helper:line_catalog": {

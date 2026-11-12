@@ -400,7 +400,7 @@
             <input data-saved-field type="password" x-model="cfg.login_channel_secret" autocomplete="off" placeholder="Channel secret（32 位英數字）">
             <div style="font-size:12px;color:var(--text-dim);margin-top:4px">
               LINE Login channel 必須與上面的 Messaging API channel 在<strong>同一個 Provider</strong>，且狀態是 Published。已儲存的 secret 會顯示成圓點，不修改請保持不動。
-              填好 Channel ID／secret 與對外網址後，同仁可在「修改密碼」頁自己綁定 LINE。
+              填好 Channel ID／secret 與對外網址後，同仁可在「我的帳號」的「通知」分頁自己綁定 LINE。
             </div>
           </div>
 
@@ -413,12 +413,12 @@
           <!-- LINE 綁定狀況（只有最高管理者看得到；資料來源 GET .../bindings、POST .../bindings/remind、DELETE /api/line/binding/{帳號}） -->
           <div class="ns-field" style="margin:16px 0" data-testid="line-bindings">
             <label>LINE 綁定狀況</label>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定，並可一鍵用 Email 和系統內通知提醒還沒綁定的人（信裡附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定、誰的綁定失效（綁了但收不到），以及他們綁好之後原本會收到哪些通知；可一鍵用 Email 和系統內通知提醒他們（信裡附「我的帳號」通知分頁的連結；同一個人 24 小時內只提醒一次）。畫面上不會顯示 LINE 的識別碼。</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span data-testid="line-bind-summary" style="font-size:13px;font-weight:600" x-text="bindSummary"></span>
               <button type="button" class="btn btn-ghost" data-testid="line-bind-toggle" style="padding:2px 10px;font-size:12px" @click="bind.open = !bind.open" x-text="bind.open ? '收合名單' : '看名單'"></button>
-              <button type="button" class="btn btn-primary" data-testid="line-bind-remind" style="padding:4px 12px;font-size:13px" @click="remindUnbound()" :disabled="reminding || !bind.available || !bind.unlinked">
-                <span x-show="!reminding" x-text="'提醒未綁定的人（' + bind.unlinked + ' 人）'"></span>
+              <button type="button" class="btn btn-primary" data-testid="line-bind-remind" style="padding:4px 12px;font-size:13px" @click="remindUnbound()" :disabled="reminding || !bind.available || !bind.needBind">
+                <span x-show="!reminding" x-text="'提醒綁定（' + bind.needBind + ' 人）'"></span>
                 <span x-show="reminding">寄送中…</span>
               </button>
             </div>
@@ -429,11 +429,16 @@
                 <tbody>
                   <template x-for="u in bind.users" :key="u.username">
                     <tr :data-testid="'line-bind-row-' + u.username" style="border-top:1px solid var(--border)">
-                      <td style="padding:4px 8px" x-text="u.display"></td>
+                      <td style="padding:4px 8px">
+                        <div x-text="u.display"></div>
+                        <div x-show="u.state !== 'bound' && u.missedCount" :data-testid="'line-bind-missed-' + u.username" style="font-size:11.5px;color:var(--text-dim);white-space:normal;max-width:260px;margin-top:2px"
+                             x-text="'綁好後會收到：' + u.missed.join('、') + (u.missedCount > u.missed.length ? '…等 ' + u.missedCount + ' 種' : '')"></div>
+                      </td>
                       <td style="padding:4px 8px" x-text="roleName(u.role)"></td>
                       <td style="padding:4px 8px">
-                        <span x-show="u.linked" style="color:var(--success);font-weight:600" x-text="'已綁定' + (u.linkedAt ? '（' + u.linkedAt.slice(0, 10) + '）' : '') + (u.confirmed === false ? '・測試訊息沒送達' : '')"></span>
-                        <span x-show="!u.linked" style="color:var(--text-dim)">尚未綁定</span>
+                        <span x-show="u.state === 'bound'" style="color:var(--success);font-weight:600" x-text="'已綁定' + (u.linkedAt ? '（' + u.linkedAt.slice(0, 10) + '）' : '')"></span>
+                        <span x-show="u.state === 'expired'" style="color:var(--warning);font-weight:600" title="綁定了，但 LINE 沒收下測試訊息（可能封鎖了官方帳號或換了手機），需要重新綁定">綁定失效，需重新綁定</span>
+                        <span x-show="u.state === 'unbound'" style="color:var(--text-dim)">尚未綁定</span>
                       </td>
                       <td style="padding:4px 8px;color:var(--text-dim)" x-text="u.lastReminded ? u.lastReminded.replace('T', ' ').slice(0, 16) : '—'"></td>
                       <td style="padding:4px 8px;white-space:nowrap">
@@ -518,7 +523,7 @@
                               <select :data-testid="'line-aud-pick-' + e.key" @change="audAddUser(e, $event.target.value); $event.target.value = ''" style="max-width:260px">
                                 <option value="">＋ 加入人員…</option>
                                 <template x-for="u in bind.users.filter(x => !aud[e.key].users.includes(x.username) && audCanPick(e, x))" :key="u.username">
-                                  <option :value="u.username" x-text="u.display + '（' + roleName(u.role) + '）' + (u.linked ? '' : '・尚未綁定')"></option>
+                                  <option :value="u.username" x-text="u.display + '（' + roleName(u.role) + '）' + (u.state === 'bound' || !u.state && u.linked ? '' : (u.state === 'expired' ? '・綁定失效' : '・尚未綁定'))"></option>
                                 </template>
                               </select>
                             </div>
@@ -684,7 +689,7 @@
       return {
         cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], event_groups: [], role_choices: [], quota_thresholds: [80, 100] },
         quota: null, quotaLoading: false, thText: '80,100', rolesBusy: {},
-        bind: { loaded: false, available: false, open: false, total: 0, linked: 0, unlinked: 0, users: [] }, reminding: false,
+        bind: { loaded: false, available: false, open: false, total: 0, linked: 0, unlinked: 0, expired: 0, needBind: 0, users: [] }, reminding: false,
         groupOpen: {}, audOpen: {}, aud: {}, audBusy: {},
         audModes: [
           { v: 'business', t: '照原本的收件人（預設）' },
@@ -728,7 +733,7 @@
         // ── 綁定狀況 ──
         get bindSummary() {
           if (!this.bind.loaded) return '讀取中…'
-          return '已綁定 ' + this.bind.linked + '／在職 ' + this.bind.total + ' 人（還沒綁定 ' + this.bind.unlinked + ' 人）'
+          return '已綁定 ' + (this.bind.linked - this.bind.expired) + '／在職 ' + this.bind.total + ' 人（還沒綁定 ' + this.bind.unlinked + ' 人' + (this.bind.expired ? '、綁定失效 ' + this.bind.expired + ' 人' : '') + '）'
         },
         async loadBindings() {
           const r = await fetch('/api/settings/line-notify/bindings', { headers: hdr(false) })
@@ -767,7 +772,7 @@
           if (a && a.muted) return '已自行關閉'
           const b = this.bind.users.find(x => x.username === username)
           if (!b) return a ? '' : '已離職'
-          return b.linked ? '' : '尚未綁定'
+          return b.state === 'bound' ? '' : (b.state === 'expired' ? '綁定失效' : '尚未綁定')
         },
         audSummary(e) {
           const a = e.audience || { mode: 'business', roles: [], users: [] }
