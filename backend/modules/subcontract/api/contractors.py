@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import download_name
+from helpers.image_guard import ImageRejected, open_checked, with_decode_slot
 from helpers import _require_user, _tok, _audit, notify_module_activity, has_finance_access, require_any_module
 from modules.subcontract import bank_mask as _bm
 from helpers import export_templates as _ET
@@ -22,12 +23,13 @@ if not os.path.exists(_FONT_PATH):
     _FONT_PATH = r"C:\Windows\Fonts\msjh.ttc"
 
 
+@with_decode_slot
 def _stamp_id_card(data_uri: str) -> str:
     """在身分證影本中央加浮水印後回傳 data URI（JPEG）。"""
     if not data_uri or not data_uri.startswith("data:image/"):
         return data_uri
     _, b64 = data_uri.split(",", 1)
-    img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGBA")
+    img = open_checked(base64.b64decode(b64)).convert("RGBA")      # 先看長寬，超過上限／HEIF 丟 ImageRejected 子類（呼叫端轉 400／503）
     w, h = img.size
     MAX_W = 1800
     if w > MAX_W:
@@ -79,12 +81,13 @@ def _stamp_id_card(data_uri: str) -> str:
     return f"data:image/jpeg;base64,{encoded}"
 
 
+@with_decode_slot
 def _stamp_passbook(data_uri: str) -> str:
     """在銀行存簿影本底部加用途說明橫幅後回傳 data URI（JPEG）。"""
     if not data_uri or not data_uri.startswith("data:image/"):
         return data_uri
     _, b64 = data_uri.split(",", 1)
-    img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGBA")
+    img = open_checked(base64.b64decode(b64)).convert("RGBA")      # 先看長寬，超過上限／HEIF 丟 ImageRejected 子類（呼叫端轉 400／503）
     w, h = img.size
     MAX_W = 1800
     if w > MAX_W:
@@ -529,12 +532,15 @@ def upload_id_card(cid: int, body: dict = Body(...), authorization: str = Header
     # 身分證加法律浮水印；存簿加輕量用途說明浮水印
     if image_front:
         try: image_front = _stamp_id_card(image_front)
+        except ImageRejected as e: raise HTTPException(e.status, e.user_message)
         except Exception: pass
     if image_back:
         try: image_back = _stamp_id_card(image_back)
+        except ImageRejected as e: raise HTTPException(e.status, e.user_message)
         except Exception: pass
     if passbook:
         try: passbook = _stamp_passbook(passbook)
+        except ImageRejected as e: raise HTTPException(e.status, e.user_message)
         except Exception: pass
     now = datetime.now().isoformat()
     conn = get_db()
