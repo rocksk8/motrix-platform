@@ -34,7 +34,7 @@
   ],
   "whitelist": {
     "_doc": "頁面（檔名）→ 允許出現的詞。LINE 設定卡片需出現 Channel／token（使用者要到 LINE 後台對照貼值，旁邊須附白話說明）。",
-    "notification-settings.html": ["token", "channel", "Callback URL", "Provider", "public_base_url"],
+    "notification-settings.html": ["token", "channel", "Callback URL", "Provider", "public_base_url", "SMTP"],
     "mail-settings.html": ["SMTP", "token"],
     "system-hub.html": ["Schema", "migration", "JSON", "endpoint", "token", "channel", "Provider", "public_base_url", "影子模式", "閘門", "版本帳本"],
     "schema-status.html": ["Schema", "migration", "JSON", "endpoint"],

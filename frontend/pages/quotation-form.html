@@ -15,6 +15,7 @@
   <script src="../static/alt-items.js"></script>
   <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -936,7 +937,7 @@
       <template x-if="session.role !== 'superadmin'">
         <span class="badge"
           :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
-          x-text="q.status"></span>
+          x-text="MotrixStatus.label(q.status)"></span>
       </template>
       <template x-if="q.editHistory && q.editHistory.length > 0">
         <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A">
@@ -1110,7 +1111,7 @@
     <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
       <template x-if="pendingReadOnlyBanner()">
         <div data-testid="qf-pending-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
-          <strong>此單目前<span x-text="q.status"></span>，僅簽核人可編輯。</strong>
+          <strong>此單目前<span x-text="MotrixStatus.label(q.status)"></span>，僅簽核人可編輯。</strong>
           您目前是唯讀；要修改內容，申請人請先按上方「收回草稿」，或請簽核人（<span x-text="pendingApproverLabel()"></span>）退回修改。
         </div>
       </template>

@@ -10,6 +10,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -142,7 +143,7 @@
               <td style="font-size:12px;font-family:LINE Seed TW_OTF, monospace" x-text="p.slip_date || '—'"></td>
               <td>
                 <span class="tag" :class="statusCls(p.status)"
-                      x-text="p.status"></span>
+                      x-text="MotrixStatus.label(p.status)"></span>
                 <span class="exp-chip" x-show="p.export_count > 0"
                       x-text="'×' + p.export_count"
                       :title="'已匯出 ' + p.export_count + ' 次，點擊查看紀錄'"
@@ -180,7 +181,7 @@
           <div style="font-weight:600;font-size:14px" x-text="selectedSlip.contractor_name || '—'"></div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
             <span class="tag" :class="statusCls(selectedSlip.status)"
-                  x-text="selectedSlip.status"></span>
+                  x-text="MotrixStatus.label(selectedSlip.status)"></span>
             <span class="itype" x-text="selectedSlip.income_type"></span>
             <button x-show="selectedSlip.contractor_guess_id != null && selectedSlip.contractor_id == null && ['已簽回','已付款','已作廢'].indexOf(selectedSlip.status) < 0" data-testid="ps-confirm-contractor" @click.stop="confirmContractor(selectedSlip)"
                     style="font-size:12px;padding:2px 8px;border:1px solid #D97706;border-radius:6px;background:#FFFBEB;color:#92400E;cursor:pointer">確認受領人對應</button>
@@ -301,7 +302,7 @@
             <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-submit" @click="submitSlip(selectedSlip)">送審</button>
           </div>
           <div x-show="selectedSlip.status === '待審核'" style="display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:12px;color:var(--text-dim)" data-testid="ps-review-note">待審核：由簽核人簽核；退回後回到草稿，可修改後重新送審</div>
+            <div style="font-size:12px;color:var(--text-dim)" data-testid="ps-review-note">待簽核：由簽核人簽核；退回後回到草稿，可修改後重新送審</div>
             <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-approve" @click="approveSlip(selectedSlip)">簽核（核准）</button>
             <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-testid="ps-reject" @click="rejectSlip(selectedSlip)">退回（需填原因）</button>
           </div>

@@ -11,6 +11,7 @@
   <script src="../static/ui.js"></script>
   <script src="../js/bonus.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -157,7 +158,7 @@
                    @click="select(it.quote_no)">
                 <div>
                   <span class="bn-case-no" x-text="it.quote_no"></span>
-                  <span class="bn-badge" :class="badgeClass(it.status)" x-text="it.status"></span>
+                  <span class="bn-badge" :class="badgeClass(it.status)" x-text="MotrixStatus.label(it.status)"></span>
                   <span class="bn-badge st-gray" x-show="it.noBonus">無獎金</span>
                 </div>
                 <div class="bn-case-name" x-text="(it.customer_name || '') + (it.project_name ? '／' + it.project_name : '')"></div>
@@ -177,7 +178,7 @@
                   <div class="bn-sec">
                     <span x-text="detail.case.quote_no"></span>
                     <span x-text="'　' + (detail.case.customer_name || '') + (detail.case.project_name ? '／' + detail.case.project_name : '')"></span>
-                    <span class="bn-badge" :class="badgeClass(detail.status)" x-text="detail.status" data-testid="bn-status"></span>
+                    <span class="bn-badge" :class="badgeClass(detail.status)" x-text="MotrixStatus.label(detail.status)" data-testid="bn-status"></span>
                   </div>
 
                   <!-- 還沒有草稿（最高管理者） -->
@@ -384,7 +385,7 @@
                         <span x-text="voucherKindLabel(v.kind)"></span>
                         <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
                         <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bn-voucher-unavailable"></span>
-                        <span x-text="v.voided ? '已作廢' : v.status"></span>
+                        <span x-text="MotrixStatus.label(v.voided ? '已作廢' : v.status)"></span>
                       </div>
                     </template>
                   </div>

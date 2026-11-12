@@ -464,7 +464,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _shippingStatusLabel(s) {
-      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+      return { '草稿': '草稿', '待審核': '待簽核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
     },
 
     _shippingStatusClass(s) {
