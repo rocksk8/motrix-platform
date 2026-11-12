@@ -80,14 +80,15 @@ def _audit_rows(action):
     (None, {}, True, "unknown_ip"),
     ("192.168.1.20", {"CF-Ray": "x"}, True, "cloudflare_header"),
     ("127.0.0.1", {"CF-Connecting-IP": "198.51.100.7"}, True, "cloudflare_header"),
-    ("192.168.1.20", {"Host": "motrix-platform.miactw.com"}, True, "external_host"),
-    ("192.168.1.20", {"Host": "MOTRIX-Platform.MIACTW.com:443"}, True, "external_host"),
+    ("192.168.1.20", {"Host": "erp.example.com"}, True, "external_host"),
+    ("192.168.1.20", {"Host": "ERP.Example.COM:443"}, True, "external_host"),
     ("192.168.1.20", {"X-Forwarded-For": "10.0.0.9"}, True, "proxy_header"),
     ("192.168.1.20", {"Forwarded": "for=10.0.0.9"}, True, "proxy_header"),
     ("192.168.1.20", {"X-Real-IP": "10.0.0.9"}, True, "proxy_header"),
     ("192.168.1.20", {"Host": "192.168.1.5:666"}, False, "internal_network"),
 ])
-def test_classify(peer, headers, external, why):
+def test_classify(peer, headers, external, why, monkeypatch):
+    monkeypatch.setattr(external_access, "_get", lambda k, d: "erp.example.com" if k == "external_hosts" else d)
     assert external_access.classify(_req(peer, **headers)) == (external, why)
 
 
@@ -121,7 +122,7 @@ def test_internal_networks_all_invalid_falls_back_to_defaults(monkeypatch):
 def test_external_hosts_setting_is_configurable(monkeypatch):
     monkeypatch.setattr(external_access, "_get", lambda k, d: "erp.example.com" if k == "external_hosts" else d)
     assert external_access.classify(_req("192.168.1.20", Host="erp.example.com"))[0] is True
-    assert external_access.classify(_req("192.168.1.20", Host="motrix-platform.miactw.com"))[0] is False
+    assert external_access.classify(_req("192.168.1.20", Host="other.example.com"))[0] is False
 
 
 def test_classify_never_raises_and_defaults_to_external():
@@ -142,7 +143,7 @@ def test_settings_group_registered_with_the_agreed_defaults():
     assert d["ext_totp_enabled"] == 1
     assert [r for r in external_access.ENFORCEABLE_ROLES if d["ext_totp_role_" + r] == 1] == ["superadmin", "admin", "finance"]
     assert (d["lock_threshold"], d["lock_window_min"], d["lock_minutes"], d["lock_scope"]) == (10, 30, 30, 1)
-    assert d["external_hosts"] == "motrix-platform.miactw.com"
+    assert d["external_hosts"] == ""                      # 不寫死公司網域（正式機由超管填）
     # 放寬方向一律走確認期間（loosen／requires_pending）
     by = {f["key"]: f for f in g["fields"]}
     assert by["ext_totp_enabled"]["loosen"] == "down" and by["lock_threshold"]["loosen"] == "up"

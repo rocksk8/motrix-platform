@@ -110,7 +110,7 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | 順序 | 條件 | 理由 |
 |---|---|---|
 | a | 帶 Cloudflare 標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`） | 經隧道進來的請求一定有；區網直連不會有 |
-| b | `Host` 是設定的外網網域（預設 `motrix-platform.miactw.com`） | 設定可調（`external_hosts`） |
+| b | `Host` 是設定的外網網域（預設空；要加第二層就在設定中心填網域，正式機填 Tunnel 的網域） | 設定可調（`external_hosts`） |
 | c | 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` | 有代理介入就不當內網 |
 | d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來、是 loopback（127.x／::1），或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、169.254/16、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段、0.0.0.0/0 與 loopback 會被忽略 |
 | e | 其餘（無代理痕跡且 IP 在內網網段） | ＝內網 |

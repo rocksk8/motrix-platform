@@ -160,7 +160,7 @@ def test_static_guards():
 
 def test_client_status_and_preview_are_closed_when_off(client, make_user):
     u, pw = make_user(username="nt_sa", role="superadmin")[:2]
-    t = client.post("/api/auth/login", json={"username": u, "password": pw}, headers={"X-Forwarded-For": "203.0.113.88"}).json()["token"]
+    t = client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]
     h = {"Authorization": "Bearer " + t}
     assert client.get("/api/notify-templates/%s/status" % KEY, headers=h).json() == {"enabled": False, "canEdit": False}
     assert client.post("/api/notify-templates/%s/preview" % KEY, headers=h, json={"template": {}}).status_code == 404

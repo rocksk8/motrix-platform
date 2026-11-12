@@ -4,8 +4,8 @@
 [單位] helper:account_lock    [層] L1    [穩定度] 實作
 [公開介面] DEFAULTS, KEY_PREFIX, SETTINGS_GROUP, audit_event, begin_attempt, check, clear, clear_failures, config, is_locked, list_locks, load_from_db, record_failure, release, reset_for_tests, safe_label, unlock
 [契約題] tests/test_external_login_hardening_2026_11_12.py、tests/test_attack_h1_extlogin_2026_11_12.py
-[為什麼要有] 原本只有「每個來源 IP 錯 5 次鎖 15 分鐘」：攻擊者換很多 IP（或經 Cloudflare 換出口）就能對同一個帳號持續猜密碼。這裡補「同一個帳號、不分 IP」的鎖。
-[取捨與預設（模式 1＝只鎖外網，預設）]
+[注意] 為什麼要有：原本只有「每個來源 IP 錯 5 次鎖 15 分鐘」：攻擊者換很多 IP（或經 Cloudflare 換出口）就能對同一個帳號持續猜密碼。這裡補「同一個帳號、不分 IP」的鎖。
+       取捨與預設（模式 1＝只鎖外網，預設）：
   經典做法（任何來源失敗 N 次就整個帳號鎖死）有 DoS：任何人故意輸錯就能把別人鎖在門外，包含在公司內網的本人。所以預設：
     · **只計外網來源的嘗試**（內網打錯不計入——內網使用者已受區網與每 IP 鎖定保護）；
     · 鎖住時**只擋外網來源**的登入，內網照常能登入——攻擊者最多讓「這個帳號暫時不能從外網登入」，不能讓人進不了系統；

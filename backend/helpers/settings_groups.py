@@ -1026,7 +1026,7 @@ register_group(
           impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響帳號鎖定是否也擋內網。", "reversible": True, "effective": "pending"},
           choices=[(1, "只擋外網（建議）", "只有外網來源的失敗會計數、被鎖時只擋外網登入；內網照常登入並可解除鎖定。"),
                    (2, "全部來源", "不分來源計數，被鎖時內網也擋；有被故意輸錯鎖住的風險。")]),
-        S("external_hosts", "str", "motrix-platform.miactw.com", risk="security", requires_pending=True, advanced=True,
+        S("external_hosts", "str", "", risk="security", requires_pending=True, advanced=True,
           question="哪些網域代表「從外網進來」？（多個用逗號分隔）", label="外網網域",
           help="請求的網址網域在這份清單裡，就一律當外網（除此之外，經外網通道進來、或來源位址不在內網網段的請求也都是外網）。",
           impact="只影響之後的外網判定；變更須經確認期間後才生效。",

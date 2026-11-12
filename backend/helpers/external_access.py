@@ -8,7 +8,7 @@
 [不變式]
   ① **「外網」＝請求不是從公司內網來的**。判斷順序（任何一條成立就是外網；**判斷不出來一律當外網**，保守預設）：
        a. 帶 Cloudflare 隧道標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`）⇒ 外網（經隧道進來的請求一定有，本機／區網直連不會有）；
-       b. `Host` 標頭是設定的外網網域（預設 motrix-platform.miactw.com）⇒ 外網；
+       b. `Host` 標頭是設定的外網網域（預設空：外網通道的標頭與來源位址已能判出；要加第二層就在設定中心填網域）⇒ 外網；
        c. 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` 任一代理標頭 ⇒ 外網（區網使用者的瀏覽器不會送；有代理介入就不當內網）；
        d. 來源 IP（`helpers.client_ip.client_ip`，**永遠不讀偽造得了的 XFF**，只信 T80 的可信判斷）解析不出來、是 loopback（除非打開開關，見②b）、或不在「內網網段」⇒ 外網；
        e. 其餘（沒有任何代理痕跡、且來源 IP 在內網網段）⇒ 內網。
@@ -34,7 +34,7 @@ from helpers.client_ip import CLOUDFLARE_HEADERS, client_ip as _trusted_client_i
 logger = logging.getLogger(__name__)
 
 SETTINGS_GROUP = "external_login"
-DEFAULT_EXTERNAL_HOSTS = "motrix-platform.miactw.com"
+DEFAULT_EXTERNAL_HOSTS = ""            # 不寫死公司網域（框架優先）；正式機由超管在設定中心填
 DEFAULT_INTERNAL_NETWORKS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10"
 #: 可以被設定「外網強制 TOTP」的角色（= `helpers.auth.VALID_ROLES`）；預設前三種開
 ENFORCEABLE_ROLES = ("superadmin", "admin", "finance", "sales", "engineer", "viewer")
