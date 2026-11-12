@@ -41,6 +41,7 @@
 """
 import base64
 import binascii
+import copy
 import hashlib
 import json
 import os
@@ -300,6 +301,19 @@ def _license_cache_key(path, st_result):
 _MISMATCH_CACHE_TTL_S = 60  # T80稽核LG-M1：machine_mismatch只快取這麼久（見下方理由）
 
 
+def _copy_status(d):
+    """狀態 dict 的複本，**連裡面的清單／字典一起複製**（T80稽核 LG-S3）。
+
+    `dict(d)` 是淺拷貝：`modules` 這種清單會在快取與每個呼叫端之間共用，任何一個呼叫端對回傳值 `append`／`remove`
+    就會污染快取、影響下一個請求拿到的授權範圍（授權模組清單被改＝別人的權限被改）。目前沒有呼叫端這樣做，是潛在風險。
+    只複製容器型別的值：純量值是不可變的，不必花成本（這支在每個 /api 請求的熱路徑上）。"""
+    out = dict(d)
+    for k, v in out.items():
+        if isinstance(v, (list, dict, set)):
+            out[k] = copy.deepcopy(v)
+    return out
+
+
 def _verify_license_file():
     """讀 `LICENSE_PATH` 並驗它。**在函式裡讀模組層級的名字**，所以測試換得掉。"""
     global _LICENSE_FILE_CACHE
@@ -326,8 +340,8 @@ def _verify_license_file():
         # （`machine_fingerprint()` 持續失敗時本身有重試，直接每個請求都跑代價不小，
         # 見 K審S6 `routers/licensing.py::_FP_FAIL_UNTIL` 同一類考量）。
         if cached_status.get("reason") != "machine_mismatch" or (time.monotonic() - cached_at) <= _MISMATCH_CACHE_TTL_S:
-            # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西。
-            return dict(cached_status)
+            # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西（LG-S3：連 modules 清單也是複本）。
+            return _copy_status(cached_status)
 
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -339,7 +353,7 @@ def _verify_license_file():
         return _unverified("malformed")
 
     status = _verify_blob(text)
-    _LICENSE_FILE_CACHE = (key, dict(status), time.monotonic())
+    _LICENSE_FILE_CACHE = (key, _copy_status(status), time.monotonic())
     return status
 
 
@@ -682,11 +696,11 @@ def emergency_pass(status):
     key = _emergency_cache_key(status)
     cached = _EMERGENCY_CACHE
     if cached is not None and cached[0] == key:
-        return dict(cached[1]) if cached[1] is not None else None
+        return _copy_status(cached[1]) if cached[1] is not None else None
 
     info = emergency_status(status)
     result = info if info and info.get("active") else None
-    _EMERGENCY_CACHE = (key, dict(result) if result is not None else None)
+    _EMERGENCY_CACHE = (key, _copy_status(result) if result is not None else None)
     return result
 
 
