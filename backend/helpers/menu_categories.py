@@ -199,6 +199,10 @@ def set_override(patch: dict, user: str = "", token: str = "") -> dict:
             if "name" in o:
                 if not _clean_name(o["name"]):
                     raise ValueError("%s 的名稱不合法（1～%d 字、不含標記）" % (k, _NAME_MAX))
+                from .settings_help import term_problems
+                hits = term_problems(o["name"])
+                if hits:
+                    raise ValueError("%s 的名稱含%s；請用一般人看得懂的說法" % (k, "、".join(hits[:3])))
                 clean["name"] = o["name"].strip()
             if "order" in o:
                 if not isinstance(o["order"], int) or isinstance(o["order"], bool) or not (-1000 <= o["order"] <= 100000):

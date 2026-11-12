@@ -144,7 +144,10 @@ def test_forbidden_term_matching_works(tmp_path, monkeypatch):
     ok = {"what": "這是什麼", "when": "什麼時候", "impact": "會怎樣"}
     assert SH.problems_in(ok, terms=t) == []
     assert any("Token" in x or "token" in x for x in SH.problems_in({**ok, "what": "給你的 Token"}, terms=t)), "不分大小寫"
-    assert not any("smtp" in x for x in SH.problems_in({**ok, "what": "用 smtp"}, terms=t)), "區分大小寫的詞不誤判"
+    assert any("SMTP" in x for x in SH.problems_in({**ok, "what": "用 smtp"}, terms=t)), "英文一律不分大小寫（不看共用檔的 ci 旗標）"
+    assert any("SMTP" in x for x in SH.problems_in({**ok, "what": "用 ＳＭＴＰ"}, terms=t)), "全形英文也擋（NFKC）"
+    assert not SH.problems_in({**ok, "what": "capital 與 rapid 不是工程用語"}, terms={"forbidden": [("API", False)], "deprecated": []}), "詞前面緊接英文字母不誤擋"
+    assert SH.problems_in({**ok, "what": "APIs"}, terms={"forbidden": [("API", False)], "deprecated": []}), "詞後面接英文字母仍擋"
     assert any("待簽核" in x for x in SH.problems_in({**ok, "impact": "進入待審核"}, terms=t)), "舊用語要提示新用語"
     monkeypatch.setenv("MOTRIX_UX_AUDIT_CONFIG", str(tmp_path / "missing.json"))
     t2 = SH.forbidden_terms()
@@ -163,6 +166,18 @@ def test_builtin_terms_stay_in_sync_with_the_shared_file():
     assert not missing_f and not missing_d, "內建清單有共用檔沒有的詞（共用檔改過？請同步 helpers/settings_help.py）：%s %s" % (missing_f, missing_d)
     new_f = [x for x in shared["forbidden"] if x not in SH.BUILTIN_SHARED_TERMS["forbidden"]]
     assert not new_f, "共用檔新增了禁用詞，內建清單要一起加：%s" % new_f
+
+
+def test_category_names_go_through_the_jargon_guard_too(client, make_user, tmp_path, monkeypatch):
+    monkeypatch.setenv("MOTRIX_UX_AUDIT_CONFIG", str(tmp_path / "missing.json"))
+    sa = _login(client, make_user, "b9_sa_cn")
+    for bad in ("SMTP 設定", "smtp 設定", "ＳＭＴＰ 設定", "Webhook 通知", "待審核清單"):
+        r = client.put("/api/menu/categories/override", headers=sa, json={"items": {"settings_group:uploads": {"name": bad}}})
+        assert r.status_code == 400 and ("工程用語" in r.text or "舊用語" in r.text), (bad, r.text)
+        r = client.put("/api/menu/categories/override", headers=sa, json={"categories": {"notify": {"name": bad}}})
+        assert r.status_code == 400, bad
+    ok = client.put("/api/menu/categories/override", headers=sa, json={"items": {"settings_group:uploads": {"name": "上傳限制"}}})
+    assert ok.status_code == 200
 
 
 def test_override_api_rejects_engineering_terms_even_when_the_shared_file_is_absent(client, make_user, tmp_path, monkeypatch):
