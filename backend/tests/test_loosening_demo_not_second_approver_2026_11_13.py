@@ -135,3 +135,30 @@ def test_no_remaining_second_approver_count_includes_demo():
             if needle.search(line):
                 bad.append("%s:%d %s" % (rel, i, line.strip()[:110]))
     assert not bad, "這些地方自己數『另一位最高管理者』且沒排除展示帳號（改用 config_ledger.real_superadmins）：" + chr(10) + chr(10).join(bad)
+
+
+def _review_state(submitter, mode="on"):
+    import db
+    from helpers import custom_def_review as R
+    c = db.get_db()
+    try:
+        R.set_review_settings(c, mode=mode)
+        c.commit()
+        return R.review_state(c, submitter)
+    finally:
+        c.close()
+
+
+def test_custom_module_review_one_real_superadmin_plus_demo_publishes_directly(make_user):
+    """審核模式「開」、沒指定審核人：預設審核人＝申請人以外的最高管理者。只有一位真人（旁邊有 demo）⇒ 不啟用審核（直接發布），
+    不是等一個不會來的 demo（hichan-12 M1）。"""
+    make_user(username="real_a", role="superadmin")
+    _set_superadmins(["real_a", "demo"])
+    st = _review_state("real_a")
+    assert st["active"] is False and st["reviewers"] == [] and "沒有申請人以外的審核人" in st["reason"], st
+
+
+def test_custom_module_review_two_real_superadmins_review_by_the_other_real_one(two_real):
+    _set_superadmins(["real_a", "real_b", "demo"])
+    st = _review_state("real_a")
+    assert st["active"] is True and [r["username"] for r in st["reviewers"]] == ["real_b"], st
