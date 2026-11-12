@@ -134,8 +134,8 @@ def remind(usernames=None, now: datetime = None) -> dict:
                 res["noEmail"] += 1
                 continue
             try:
-                html = EN._build_html(_NOTICE_KEY, _TITLE, "請綁定", "#2563EB", [], "", link, intro=_TEXT, button_text="前往綁定")
-                EN._async_send([addr], MT.subject(_NOTICE_KEY, _TITLE), html)
+                html = EN._build_html("user_notice", _TITLE, "請綁定", "#2563EB", [], "", link, intro=_TEXT, button_text="前往綁定")
+                EN._async_send([addr], MT.subject("user_notice", _TITLE), html)
                 res["emailed"] += 1
             except Exception as exc:                # 信件失敗不影響站內通知與其他人
                 logger.warning("line_binding.remind: 寄信失敗：%s", type(exc).__name__)
