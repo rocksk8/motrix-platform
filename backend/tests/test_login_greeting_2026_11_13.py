@@ -364,7 +364,6 @@ def _login(client, u):
 
 def test_endpoint_requires_login(client):
     assert client.get("/api/auth/greeting").status_code == 401
-    assert client.put("/api/auth/greeting/pref", json={"style": "off"}).status_code == 401
 
 
 def test_first_login_then_second_login(client, make_user, monkeypatch):
@@ -378,32 +377,35 @@ def test_first_login_then_second_login(client, make_user, monkeypatch):
     assert client.get("/api/auth/greeting", headers=h2).json()["kind"] != "first_login"
 
 
-def test_record_login_keeps_previous_login_and_personal_pref(client, make_user):
+def test_record_login_keeps_previous_login(client, make_user):
     u = make_user("bob", role="sales")
-    uid = client.app and None
     _, h = _login(client, u)
     me = client.get("/api/auth/me", headers=h).json()["userId"]
     st1 = LG.get_state(me)
-    assert st1["n"] == 1 and st1["prev"] is None and st1["last"]
-    assert client.put("/api/auth/greeting/pref", json={"style": "humor"}, headers=h).json()["pref"] == "humor"
+    assert st1["n"] == 1 and st1["prev"] is None and st1["last"] and "pref" not in st1
     _login(client, u)
     st2 = LG.get_state(me)
-    assert st2["n"] == 2 and st2["prev"] == st1["last"] and st2["pref"] == "humor"
+    assert st2["n"] == 2 and st2["prev"] == st1["last"]
 
 
-def test_pref_validation(client, make_user):
-    _, h = _login(client, make_user("carol", role="sales"))
-    assert client.put("/api/auth/greeting/pref", json={"style": "bogus"}, headers=h).status_code == 400
-    for v in ("follow", "formal", "humor", "off"):
-        assert client.put("/api/auth/greeting/pref", json={"style": v}, headers=h).status_code == 200
+def test_personal_pref_reads_user_prefs_with_safe_fallback(monkeypatch):
+    import sys, types
+    fake = types.SimpleNamespace(get=lambda uid, key, default=None: {"login_greeting": "humor"}.get(key, default))
+    monkeypatch.setitem(sys.modules, "helpers.user_prefs", fake)
+    assert LG.personal_pref(1) == "humor"
+    for raw, want in (("follow_company", "follow"), ("formal", "formal"), ("off", "off"), ("亂寫", "follow"), (None, "follow")):
+        fake.get = lambda uid, key, default=None, _r=raw: _r
+        assert LG.personal_pref(1) == want, raw
+    def boom(uid, key, default=None): raise RuntimeError("x")
+    fake.get = boom
+    assert LG.personal_pref(1) == "follow"                          # 讀不到 ⇒ 跟隨公司
 
 
 def test_personal_off_and_company_off(client, make_user, monkeypatch):
-    from helpers.settings import _set_setting
     _, h = _login(client, make_user("dave", role="sales"))
-    client.put("/api/auth/greeting/pref", json={"style": "off"}, headers=h)
+    monkeypatch.setattr(LG, "personal_pref", lambda uid: "off")
     assert client.get("/api/auth/greeting", headers=h).json()["kind"] == "off"
-    client.put("/api/auth/greeting/pref", json={"style": "humor"}, headers=h)
+    monkeypatch.setattr(LG, "personal_pref", lambda uid: "humor")
     g = client.get("/api/auth/greeting", headers=h).json()
     assert g["style"] == "humor" and g["kind"] != "off"
     from helpers import settings_registry as SR
@@ -429,7 +431,7 @@ def test_away_via_endpoint_uses_server_state_and_same_pending_count_as_badge(cli
     me = client.get("/api/auth/me", headers=h).json()["userId"]
     now = at(2026, 11, 11, 10)
     monkeypatch.setattr(LG, "taipei_now", lambda: now)
-    _set_setting(LG.STATE_PREFIX + str(me), {"last": now.isoformat(), "prev": iso(2026, 10, 20), "n": 9, "pref": "follow"})
+    _set_setting(LG.STATE_PREFIX + str(me), {"last": now.isoformat(), "prev": iso(2026, 10, 20), "n": 9})
     g = client.get("/api/auth/greeting", headers=h).json()
     badge = client.get("/api/approval-queue/count", headers=h).json()["count"]
     assert g["kind"] == "away" and g["category"] == "away_14"
@@ -451,7 +453,7 @@ def test_new_quotes_count_only_for_superadmin(client, make_user, monkeypatch):
     for name, role in (("sa1", "superadmin"), ("sales1", "sales")):
         _, h = _login(client, make_user(name, role=role))
         me = client.get("/api/auth/me", headers=h).json()["userId"]
-        _set_setting(LG.STATE_PREFIX + str(me), {"last": now.isoformat(), "prev": iso(2026, 10, 20), "n": 9, "pref": "follow"})
+        _set_setting(LG.STATE_PREFIX + str(me), {"last": now.isoformat(), "prev": iso(2026, 10, 20), "n": 9})
         out[role] = client.get("/api/auth/greeting", headers=h).json()["awayLine"]
     assert "新增 2 張報價單" in out["superadmin"] and "新增" not in out["sales"]
 

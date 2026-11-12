@@ -1510,22 +1510,6 @@ def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query
     return LG.greeting_for_user(u, todo=todo, pending=_pending, new_quotes=_new_quotes)
 
 
-class GreetingPrefIn(BaseModel):
-    style: str
-
-
-@router.put("/api/auth/greeting/pref")
-def auth_greeting_pref(body: GreetingPrefIn, authorization: str = Header(None)):
-    """個人自選問候語風格：follow（跟隨公司）／formal／humor／off。公司設定為「關閉」時，這個選擇不會讓問候語出現。"""
-    from helpers import login_greeting as LG
-    u = _require_user(authorization)
-    try:
-        LG.set_personal_style(u["id"], body.style)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"ok": True, "pref": body.style}
-
-
 class GreetingPhrasesIn(BaseModel):
     category: str
     style: str

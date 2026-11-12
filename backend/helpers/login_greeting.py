@@ -101,21 +101,24 @@ def record_login(user_id, now=None) -> None:
         st = get_state(user_id)
         if not st:
             back = _last_audit_login(user_id)
-            st = {"last": back.isoformat() if back else None, "n": 1 if back else 0, "pref": "follow"}
-        new = {"prev": st.get("last"), "last": now.isoformat(), "n": int(st.get("n") or 0) + 1,
-               "pref": st.get("pref") if st.get("pref") in PERSONAL_STYLES else "follow"}
+            st = {"last": back.isoformat() if back else None, "n": 1 if back else 0}
+        new = {"prev": st.get("last"), "last": now.isoformat(), "n": int(st.get("n") or 0) + 1}
         _set(STATE_PREFIX + str(user_id), new)
     except Exception:  # noqa: BLE001
         log.warning("login_greeting.record_login failed (user %s)", user_id, exc_info=True)
 
 
-def set_personal_style(user_id, value: str) -> str:
-    if value not in PERSONAL_STYLES:
-        raise ValueError("風格只能是 跟隨公司／溫和正式／輕鬆幽默／關閉")
-    st = dict(get_state(user_id))
-    st["pref"] = value
-    _set(STATE_PREFIX + str(user_id), st)
-    return value
+#: 個人偏好值（helpers/user_prefs 的 login_greeting；hichan-1 的「我的帳號」偏好頁負責畫面與寫入）→ 這裡的風格名
+_PREF_MAP = {"follow_company": "follow", "formal": "formal", "humor": "humor", "off": "off"}
+
+
+def personal_pref(user_id) -> str:
+    """個人自選：'follow'（跟隨公司）／'formal'／'humor'／'off'。user_prefs 不在或讀不到 ⇒ 'follow'（問候語是加值，不可因此壞掉）。"""
+    try:
+        from helpers import user_prefs
+        return _PREF_MAP.get(user_prefs.get(int(user_id), "login_greeting"), "follow")
+    except Exception:  # noqa: BLE001
+        return "follow"
 
 
 # ── 風格 ───────────────────────────────────────────────────────────────────
@@ -346,10 +349,11 @@ def build_greeting(*, now: datetime, user_id, name: str, style: str, state: dict
 def greeting_for_user(user: dict, *, todo=None, pending=None, new_quotes=None, now: datetime = None) -> dict:
     """端點用：讀登入紀錄、公司風格、自訂句庫，然後 build_greeting。"""
     state = get_state(user["id"])
-    style = effective_style(company_style(), state.get("pref"))
+    pref = personal_pref(user["id"])
+    style = effective_style(company_style(), pref)
     name = (user.get("display_name") or user.get("username") or "").strip()
     out = build_greeting(now=now or taipei_now(), user_id=user["id"], name=name, style=style, state=state,
                          custom=get_custom(), todo=todo, pending=pending, new_quotes=new_quotes)
-    out["pref"] = state.get("pref") if state.get("pref") in PERSONAL_STYLES else "follow"
+    out["pref"] = pref
     out["companyStyle"] = company_style()
     return out

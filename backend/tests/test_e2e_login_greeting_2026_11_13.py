@@ -28,7 +28,7 @@ def test_first_login_shows_welcome_and_start_button(live_server, make_user, new_
 
 
 @pytest.mark.e2e
-def test_second_login_is_not_a_welcome_and_off_hides_everything(live_server, make_user, new_page, login_as, client):
+def test_second_login_is_not_a_welcome_and_off_hides_everything(live_server, make_user, new_page, login_as, client, monkeypatch):
     user = make_user(username="e2e_greet_off", role="superadmin")
     page = new_page(viewport={"width": 1440, "height": 900})
     login_as(page, user)                                              # 第 1 次登入（吃掉「第一次」）
@@ -38,9 +38,9 @@ def test_second_login_is_not_a_welcome_and_off_hides_everything(live_server, mak
     line.wait_for(state="visible", timeout=20000)
     assert not line.inner_text().startswith("歡迎加入")
     assert not page.locator("[data-testid=login-greeting-action]").is_visible()
-    # 個人關閉 ⇒ 整塊不出現，標題退回原本的算法
-    h = {"Authorization": "Bearer " + sess["token"]}
-    assert client.put("/api/auth/greeting/pref", json={"style": "off"}, headers=h).status_code == 200
+    # 個人選關閉 ⇒ 整塊不出現，標題退回原本的算法
+    from helpers import login_greeting as LG
+    monkeypatch.setattr(LG, "personal_pref", lambda uid: "off")        # 個人偏好存在 user_prefs（我的帳號偏好頁）；這裡直接模擬「個人選了關閉」
     page.reload()
     page.wait_for_selector("h1.h-hero__t", timeout=20000)
     page.wait_for_timeout(1500)

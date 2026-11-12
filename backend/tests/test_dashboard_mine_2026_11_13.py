@@ -106,3 +106,20 @@ def test_approvals_count_matches_badge_and_submitted_shows_blocker(client, make_
         assert g["count"] == client.get("/api/approval-queue/count", headers=h).json()["count"]
     sent = next(g for g in client.get("/api/dashboard/mine?fresh=1", headers=_h(client, *b)).json()["groups"] if g["key"] == "submitted")
     assert "卡在：dm_a" in sent["items"][0]["sub"]
+
+
+def test_cache_is_per_user_never_shared(client, make_user):
+    """30 秒快取以使用者為單位：A 剛讀過（命中快取）時 B 讀到的仍是 B 自己的，不是 A 的；B 看不到 A 才有的分組。"""
+    sa = make_user("dm_cache_sa", role="superadmin")
+    sales = make_user("dm_cache_sales", role="sales", modules=["quotation"])
+    _seed("MQ-DM-CACHE", ["dm_cache_sa"], requested_by="dm_cache_sales")
+    DM.reset_cache()
+    a1 = client.get("/api/dashboard/mine", headers=_h(client, *sa)).json()
+    b1 = client.get("/api/dashboard/mine", headers=_h(client, *sales)).json()
+    a2 = client.get("/api/dashboard/mine", headers=_h(client, *sa)).json()          # 命中快取
+    assert a1 == a2
+    ka, kb = {g["key"] for g in a1["groups"]}, {g["key"] for g in b1["groups"]}
+    assert "receivable_overdue" in ka and "receivable_overdue" not in kb and "stuck" not in kb
+    appr = next(g for g in a1["groups"] if g["key"] == "approvals")["count"]
+    assert appr == 1 and next(g for g in b1["groups"] if g["key"] == "approvals")["count"] == 0
+    assert any(g["key"] == "submitted" for g in b1["groups"]) and not any(g["key"] == "submitted" for g in a1["groups"])
