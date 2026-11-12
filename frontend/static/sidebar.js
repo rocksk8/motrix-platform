@@ -391,7 +391,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<span x-show="unread>0" x-text="unread>9?\'9+\':unread"'
       + ' class="mbadge" style="background:var(--danger);color:#fff;font-family:LINE Seed TW_OTF, sans-serif"></span>'
       + '</button>'
-      + '<div x-show="open" @click.outside="open=false"'
+      + '<div x-show="open" @click.outside="open=false" class="tb-notif-dd"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
       // UR1：下拉列的是**通知本身**（原本是近期操作紀錄，而紅色數字數的是通知 ⇒ 兩者對不起來）。
       //      點一則 ⇒ 當下只把那一則標成已讀（`markOne`），打開下拉不再全部清掉。
@@ -733,6 +733,7 @@ if (typeof module !== 'undefined' && module.exports) {
       return
     }
 
+    // 注意：抽屜容器不要加 id——_rebuildNav 會把選單內「有 id 的元素」整個以 textContent 還原（為了保留徽章狀態），容器加 id 會被攤平成純文字。aria-controls 因此指向 #app-mainnav。
     var html = '<div class="mnav__in">' + groups.map(function (g, gi) {
       var anyActive = g.items.some(function (it) { return it.active })
       if (g.items.length === 1) {
@@ -781,7 +782,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // 手機（≤767px）：主選單收成「☰ 主選單」鈕＋抽屜（CSS 把 .mnav__in 變成左側抽屜、群組變成可展開的清單；桌機這顆鈕不顯示）。
     // 鈕上顯示目前所在的群組名稱；任何群組有待處理紅點時，鈕上也要有一顆（抽屜收起來看不到群組標題的紅點）。
     var _curGrp = groups.filter(function (g) { return g.items.some(function (it) { return it.active }) })[0]
-    html = '<button type="button" class="mnav__burger" aria-expanded="false" aria-label="\u958b\u555f\u4e3b\u9078\u55ae" data-testid="mnav-burger">'
+    html = '<button type="button" class="mnav__burger" aria-expanded="false" aria-controls="app-mainnav" aria-label="\u958b\u555f\u4e3b\u9078\u55ae" data-testid="mnav-burger">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
       + '<span>\u4e3b\u9078\u55ae</span><span class="mnav__cur">' + (_curGrp ? esc(_curGrp.label) : '') + '</span></button>'
       + html + '<div class="mnav__backdrop" data-testid="mnav-backdrop"></div>'
@@ -805,6 +806,15 @@ if (typeof module !== 'undefined' && module.exports) {
         document.documentElement.classList.toggle('mnav-lock', open)
         var b = bar.querySelector('.mnav__burger')
         if (b) { b.setAttribute('aria-expanded', open ? 'true' : 'false'); b.setAttribute('aria-label', open ? '\u95dc\u9589\u4e3b\u9078\u55ae' : '\u958b\u555f\u4e3b\u9078\u55ae') }
+        // 抽屜開著時是「對話框」（modal）：讀屏知道範圍、焦點限制在裡面；收起或桌機時拿掉，不改桌機導覽語意
+        var dr = bar.querySelector('.mnav__in')
+        if (dr) {
+          if (open) { dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-modal', 'true'); dr.setAttribute('aria-label', '主選單') }
+          else { dr.removeAttribute('role'); dr.removeAttribute('aria-modal'); dr.removeAttribute('aria-label') }
+        }
+      }
+      var _drawerFocusables = function () {
+        return [].filter.call(bar.querySelectorAll('.mnav__in a[href], .mnav__in .mnav__grp[tabindex], .mnav__in button'), function (x) { return x.offsetParent !== null })
       }
       bar.addEventListener('click', function (e) {
         if (!_mq || !_mq.matches) return
@@ -816,6 +826,7 @@ if (typeof module !== 'undefined' && module.exports) {
             var on = bar.querySelector('.mnav__grp.is-on')
             if (on) on.classList.add('is-open')
           }
+          if (willOpen && e.detail === 0) { var f0 = _drawerFocusables()[0]; if (f0) try { f0.focus() } catch (_e) {} }   // 鍵盤開啟 ⇒ 焦點進抽屜第一項
           return
         }
         if (t.closest('.mnav__backdrop')) { _setOpen(false); return }
@@ -829,6 +840,15 @@ if (typeof module !== 'undefined' && module.exports) {
         if (t.closest('a[href]')) _setOpen(false)                              // 點了連結（導向其他頁）⇒ 收起抽屜
       })
       document.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab' && bar.classList.contains('mnav--open') && _mq && _mq.matches) {   // focus trap：Tab 在抽屜內循環
+          var fl = _drawerFocusables(); if (!fl.length) return
+          var first = fl[0], last = fl[fl.length - 1], act = document.activeElement
+          var inside = bar.querySelector('.mnav__in').contains(act)
+          if (!inside) { e.preventDefault(); first.focus() }
+          else if (e.shiftKey && act === first) { e.preventDefault(); last.focus() }
+          else if (!e.shiftKey && act === last) { e.preventDefault(); first.focus() }
+          return
+        }
         if (e.key === 'Escape' && bar.classList.contains('mnav--open')) {
           _setOpen(false)
           var bb = bar.querySelector('.mnav__burger'); if (bb) try { bb.focus() } catch (_e) {}     // 焦點還給觸發鈕

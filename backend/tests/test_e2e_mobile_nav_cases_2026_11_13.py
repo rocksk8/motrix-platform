@@ -277,6 +277,56 @@ def test_avatar_menu_and_more_panel_are_mutually_exclusive(live_server, make_use
     assert page.evaluate("() => [document.querySelector('#app-topbar').classList.contains('tb-more-open'), document.querySelector('#tb-acct-menu').hidden]") == [True, True]
 
 
+# ── 複驗補修（hichan-2：N1 通知下拉被切、N2 未讀 9+ 擠掉頭像、N4 抽屜 a11y）────────────────
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("w,h,fz", [(375, 667, 1.15), (390, 844, 1.0), (390, 844, 1.15)], ids=["375-large", "390-std", "390-large"])
+def test_phone_bell_dropdown_stays_in_viewport_and_9plus_keeps_avatar(live_server, make_user, e2e_browser, w, h, fz):
+    u = make_user(username=f"mob_bell_{w}_{int(fz * 100)}")
+    page = _open(e2e_browser, live_server, u, w, h, True, name="customers.html", fz=fz)
+    # N2：把鈴鐺徽章撐成「9+」，頭像仍要在畫面內、頂欄不溢出
+    page.evaluate("""() => { const b = document.querySelector('#app-topbar .topbar__right > div[x-data] > button .mbadge');
+      b.textContent = '9+'; b.style.display = 'inline-block'; }""")
+    m = page.evaluate(_TB)
+    assert m["tbSW"] <= m["tbCW"] + 1, m
+    assert m["avatar"]["r"] <= m["vw"] + 0.5 and m["avatar"]["w"] >= 43.5, m["avatar"]
+    # N1：通知下拉左右都在畫面內
+    page.click("#app-topbar .topbar__right > div[x-data] > button")
+    page.wait_for_timeout(300)
+    r = page.evaluate("() => { const b = document.querySelector('.tb-notif-dd').getBoundingClientRect(); return [b.left, b.right, innerWidth] }")
+    assert r[0] >= -0.5 and r[1] <= r[2] + 0.5, "通知下拉超出畫面：%r" % (r,)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("w,h,fz", [(375, 667, 1.15), (390, 844, 1.0)], ids=["375-large", "390-std"])
+def test_phone_drawer_a11y_focus_trap_and_backdrop_strip(live_server, make_user, e2e_browser, w, h, fz):
+    u = make_user(username=f"mob_dr_a11y_{w}_{int(fz * 100)}")
+    _seed_cases()
+    page = _open(e2e_browser, live_server, u, w, h, True, name="case-management.html", fz=fz)
+    ctl = page.evaluate("() => document.querySelector('.mnav__burger').getAttribute('aria-controls')")
+    assert ctl == "app-mainnav" and page.evaluate("() => !!document.getElementById('app-mainnav')")
+    assert page.evaluate("() => document.querySelector('.mnav__in').getAttribute('role')") is None, "收起時不該是 dialog"
+    page.focus(".mnav__burger")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => document.querySelector('#app-mainnav').classList.contains('mnav--open')", timeout=3000)
+    assert page.evaluate("() => [document.querySelector('.mnav__in').getAttribute('role'), document.querySelector('.mnav__in').getAttribute('aria-modal')]") == ["dialog", "true"]
+    # focus trap：Tab 30 次，焦點一直留在抽屜內
+    outside = 0
+    for _ in range(30):
+        page.keyboard.press("Tab")
+        if not page.evaluate("() => document.querySelector('.mnav__in').contains(document.activeElement)"):
+            outside += 1
+    assert outside == 0, "Tab 跑出抽屜 %d 次" % outside
+    page.keyboard.press("Shift+Tab")
+    assert page.evaluate("() => document.querySelector('.mnav__in').contains(document.activeElement)")
+    # 遮罩條：抽屜右緣到視窗右緣至少 16px（實際畫面），點遮罩收起
+    gap = page.evaluate("() => innerWidth - document.querySelector('.mnav__in').getBoundingClientRect().right")
+    assert gap >= 16, "字級大時抽屜蓋滿畫面、沒有可點的遮罩：gap=%r" % gap
+    page.mouse.click(w - 6, h // 2)
+    page.wait_for_function("() => !document.querySelector('#app-mainnav').classList.contains('mnav--open')", timeout=3000)
+    assert page.evaluate("() => document.querySelector('.mnav__in').getAttribute('role')") is None
+
+
 # ── 桌機不變 ────────────────────────────────────────────────────────────────
 
 @pytest.mark.e2e
@@ -372,7 +422,9 @@ def test_webkit_iphone_outside_tap_closes_more_panel(live_server, make_user):
             try:
                 browser = p.webkit.launch()
             except Exception as e:                                                          # noqa: BLE001
-                pytest.skip("沒有安裝 WebKit（設 MOTRIX_WEBKIT_PATH 指向含 webkit 的瀏覽器目錄）：%s" % str(e)[:80].encode("ascii", "replace").decode())
+                if os.environ.get("MOTRIX_REQUIRE_WEBKIT") == "1":                          # 驗收時設 1：找不到／啟動不了 WebKit 就紅，不要靜默略過
+                    raise
+                pytest.skip("沒有安裝 WebKit（版本要與 playwright 相符；設 MOTRIX_WEBKIT_PATH 指向含 webkit 的瀏覽器目錄；MOTRIX_REQUIRE_WEBKIT=1 則改為失敗）（設 MOTRIX_WEBKIT_PATH 指向含 webkit 的瀏覽器目錄）：%s" % str(e)[:80].encode("ascii", "replace").decode())
             ctx = browser.new_context(**p.devices["iPhone 13"])
             page = ctx.new_page()
             inject_login(page, live_server, *u)
@@ -384,6 +436,18 @@ def test_webkit_iphone_outside_tap_closes_more_panel(live_server, make_user):
             page.wait_for_function("() => !document.querySelector('#app-topbar').classList.contains('tb-more-open')", timeout=3000)
             m = page.evaluate("() => { const t = document.querySelector('#app-topbar'); return [t.scrollWidth, t.clientWidth, document.documentElement.scrollWidth, innerWidth] }")
             assert m[0] <= m[1] + 1 and m[2] <= m[3] + 1, m
+            # 頭像選單：外點也要收合（iOS 引擎）。上一步的外點可能點到頁面內容、開了彈窗 ⇒ 重新載入再測
+            page.goto(f"{live_server}/pages/customers.html")
+            page.wait_for_selector("#tb-avatar", timeout=20000)
+            page.tap("#tb-avatar")
+            assert page.evaluate("() => !document.querySelector('#tb-acct-menu').hidden")
+            page.touchscreen.tap(60, 150)
+            page.wait_for_function("() => document.querySelector('#tb-acct-menu').hidden", timeout=3000)
+            # 通知下拉不可超出畫面（N1）
+            page.tap("#app-topbar .topbar__right > div[x-data] > button")
+            page.wait_for_timeout(300)
+            r = page.evaluate("() => { const d = document.querySelector('.tb-notif-dd'); const b = d.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth] }")
+            assert r[0] >= 0 and r[1] <= r[2], r
             browser.close()
     finally:
         if wk:

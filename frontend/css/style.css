@@ -1586,7 +1586,12 @@ body.sidebar-lock { overflow: hidden; }
    不另做一份選單：沿用同一份 DOM（.mnav__in 變抽屜、.mnav__grp 變可展開清單、.mnav__item 變 44px 高的列），
    所以權限、徽章、紅點、自訂選單項都自動一致；桌機（>767px）完全不受影響；768–1023px 維持橫向捲動＋右緣漸層提示。 */
 @media (max-width: 767px) {
-  .tb-lbl { display: none; }                                  /* 通知鈴：手機只留圖示（H2：標準字級下 ⋯ 不再被擠出畫面） */
+  .tb-lbl { display: none; }
+  /* 通知下拉：鈴鐺在「⋯」與頭像的左邊，原本 right:0＋寬 310 會往左超出畫面 ⇒ 手機改成固定在頂欄下緣、左右各留 8px（N1） */
+  .tb-notif-dd { position: fixed !important; left: 8px !important; right: 8px !important; width: auto !important; top: calc(var(--topbar-bar-h) + 6px) !important; max-height: calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 20px); overflow-y: auto !important; }
+  /* 鈴鐺的未讀數字疊在圖示右上角（絕對定位）：未讀 ≥10 顯示「9+」時不再把頭像擠出畫面（N2）；提醒小點移到左上 */
+  .topbar__right > div[x-data] > button .mbadge { position: absolute; top: -4px; right: -4px; margin: 0; }
+  .topbar__right > div[x-data] > button [data-testid="bell-reminder-dot"] { left: 6px !important; right: auto !important; }                                  /* 通知鈴：手機只留圖示（H2：標準字級下 ⋯ 不再被擠出畫面） */
   .topbar__logo img { height: 18px; }                         /* 字級「大」在 375 寬仍放得下：logo 縮小、右側間距收緊、搜尋框保底 84px（L3） */
   .topbar__right { gap: 4px; }
   .topbar { padding: 0 6px; gap: 4px; }
@@ -1601,7 +1606,8 @@ body.sidebar-lock { overflow: hidden; }
   .mnav__burger.has-dot::after { content: ''; position: absolute; left: 28px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px #fff; }
   .mnav::after { display: none; }                             /* 橫向捲動的右緣漸層只用在 768–1023px */
   .mnav__in {
-    position: fixed; top: var(--topbar-h); left: 0; bottom: 0; width: min(86vw, 340px); height: auto; z-index: 96;
+    position: fixed; top: var(--topbar-h); left: 0; bottom: 0; width: min(calc(86vw / var(--fz, 1)), 340px);   /* vw 不隨字級縮放，字級「大」時要除回去，否則抽屜蓋滿畫面、沒有可點的遮罩（N4） */
+    height: auto; z-index: 96;
     display: block; padding: 6px 0 28px; gap: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
     background: #fff; box-shadow: 8px 0 28px rgba(20,24,30,.18);
     transform: translateX(-104%); visibility: hidden; transition: transform .2s var(--v4-ease), visibility 0s linear .2s;
