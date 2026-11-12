@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## 1.0.16（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- `network-plans.html`、`network-plan-form.html`、`topology-quick.html`：手機／平板版面——彈窗在手機改為全寬（最大高度依字級縮放換算 `calc(92vh / var(--fz,1))`）、表格勾選欄間距；`network-plan-form.html`、`topology-quick.html` 的 `.page-wrap` 上方留白不再把頂欄高度加兩次（**全寬度都生效，桌機上方空白會比以前少一個頂欄高**）。
+
 ## 1.0.15 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 選單宣告：`network-plans.html` 從「設備管理」（已併除）移到「採購與庫存」群組（order 90），入口與權限不變；頁頭改用麵包屑規格（B6）。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
