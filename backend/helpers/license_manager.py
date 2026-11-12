@@ -2,7 +2,7 @@
 """授權匯入與授權頁的邏輯（T83；SYSTEM-MENU-UX-PROPOSAL 批次「授權匯入」）。
 
 [單位] helper:license_manager    [層] L1    [穩定度] 實作
-[公開介面] BACKUP_DIR_NAME, BACKUP_KEEP, MAX_UPLOAD_BYTES, RATE_MAX, RATE_WINDOW_S, REJECT_MESSAGES, backup_dir, describe_current, modules_view, normalize_upload, rate_allow, recent_activity, reset_for_tests, run_import
+[公開介面] BACKUP_DIR_NAME, BACKUP_KEEP, MAX_UPLOAD_BYTES, PREVIEW_WEIGHT, RATE_GLOBAL_MAX, RATE_MAX, RATE_WINDOW_S, REJECT_MESSAGES, backup_dir, describe_current, modules_view, normalize_upload, rate_allow, recent_activity, reset_for_tests, run_import
 [契約題] tests/test_license_import_2026_11_13.py
 [不變式]
   ① **驗章、機器綁定、到期判定一律走 `helpers/licensing`**（`verify_license(blob)`＝`_verify_blob`＝`_open_blob`＋機器指紋＋到期）。本檔不碰簽章、不碰公鑰、
@@ -14,7 +14,8 @@
   ④ **寫進去的是驗過的那一串**：上傳內容先正規化（去 BOM、去所有空白，只准 base64／base64url 字元），**驗的與存的是同一個字串**
      （`base64.b64decode` 預設會悄悄丟掉非字母表字元；不正規化的話「驗過的」與「存下去的」可能不是同一份）。
   ⑤ 大小上限 `MAX_UPLOAD_BYTES`（授權檔只有幾百個字）；超過一律拒絕、不解析。路由層用串流讀、讀到上限就停（不先整包讀進記憶體）。
-  ⑥ 頻率限制：全域滑動視窗（`RATE_WINDOW_S` 秒內最多 `RATE_MAX` 次，**預覽與正式匯入都算**；不依 IP——X-Forwarded-For 可偽造，與 `line_login` 同一個取捨）。
+  ⑥ 頻率限制：**每個帳號**滑動視窗（`RATE_WINDOW_S` 秒內 `RATE_MAX` 點；正式匯入 1 點、預覽 `PREVIEW_WEIGHT` 點）＋較寬的全域上限 `RATE_GLOBAL_MAX`
+     （一個被盜的 session 只鎖得住自己，不會把所有最高管理者都鎖在授權頁外面）；不依 IP——X-Forwarded-For 可偽造，與 `line_login` 同一個取捨。
   ⑦ 需要使用者確認才換的情況（客戶名稱不同／功能變少／到期日變早／永久改年費／測試用授權）：**預覽**回 `warnings`；正式匯入沒帶 `confirm` ⇒ 409，不換。
   ⑧ 同時只有一個匯入在換檔（`_IMPORT_LOCK`，拿不到鎖＝回忙碌，不排隊）。
   ⑨ 所有給人看的字都是白話：不出現簽章、指紋、hash、base64、reason 代碼（機器代碼只在「向供應商申請或換發授權」那一格出現，與授權無法使用頁同一個說法）。
@@ -34,17 +35,21 @@ logger = logging.getLogger(__name__)
 
 #: 授權檔的上限（位元組）。實際一把授權約 400～1500 位元組；模組清單很長也到不了 32 KB。
 MAX_UPLOAD_BYTES = 32 * 1024
-#: 頻率限制：`RATE_WINDOW_S` 秒內最多 `RATE_MAX` 次（預覽與正式匯入合計）。
+#: 頻率限制：每個帳號 `RATE_WINDOW_S` 秒內最多 `RATE_MAX` 點（正式匯入 1 點、預覽 `PREVIEW_WEIGHT` 點）；
+#: 全域另有較寬的 `RATE_GLOBAL_MAX` 點。
 RATE_WINDOW_S = 600
 RATE_MAX = 10
+RATE_GLOBAL_MAX = 60
+PREVIEW_WEIGHT = 0.5
 BACKUP_DIR_NAME = "license_backups"
 BACKUP_KEEP = 30
 
 _BLOB_CHARS = re.compile(r"^[A-Za-z0-9+/=_-]+$")
 _IMPORT_LOCK = threading.Lock()
 _RATE_LOCK = threading.Lock()
-_rate_hits = []            # time.monotonic() 清單
-_rate_block_noted = False  # 這個視窗內是否已經回報過「被擋」（稽核只寫第一筆，避免被灌爆）
+_rate_hits = {}            # 帳號 → [(time.monotonic(), 點數)]
+_global_hits = []          # [(time.monotonic(), 點數)]
+_rate_block_noted = set()  # 這個視窗內已經回報過「被擋」的帳號（"*"＝全域）——稽核只寫第一筆，避免被灌爆
 
 #: 拒絕原因 ⇒ 白話說明（`{expires}`／`{customer}` 由 `_reject` 代入）。系統不會因為任何一種原因更換授權。
 REJECT_MESSAGES = {
@@ -62,35 +67,51 @@ REJECT_MESSAGES = {
     "write_failed":     "寫入新授權時失敗，目前的授權沒有被更動。請確認伺服器的磁碟空間與資料夾權限，或聯絡供應商。",
     "verify_after_write_failed": "更換後的最後確認沒有通過，系統已自動還原成原本的授權。請聯絡供應商。",
     "demo":             "示範帳號不能查看或更換授權。",
+    "dev_license_not_allowed": "這是「測試用」授權，正式使用的系統不能匯入。請向供應商取得正式授權。",
 }
 
 #: reason 代碼 ⇒ HTTP 狀態碼（拒絕時）
 _REJECT_HTTP = {"too_big": 413, "rate_limited": 429, "busy": 409, "backup_failed": 500, "write_failed": 500,
-                "verify_after_write_failed": 500, "demo": 403}
+                "verify_after_write_failed": 500, "demo": 403, "dev_license_not_allowed": 400}
 
 
 # ── 頻率限制 ─────────────────────────────────────────────────────────────────
 
-def rate_allow(now=None):
-    """記一次嘗試。回 `(允許, 幾秒後可再試, 是否為這個視窗第一次被擋)`。"""
-    global _rate_block_noted
+def _prune(hits, t):
+    hits[:] = [h for h in hits if t - h[0] < RATE_WINDOW_S]
+    return sum(h[1] for h in hits)
+
+
+def rate_allow(account="", weight=1.0, now=None):
+    """記一次嘗試。回 `(允許, 幾秒後可再試, 是否為這個視窗第一次被擋)`。
+
+    兩層：**每個帳號** `RATE_WINDOW_S` 秒內最多 `RATE_MAX` 點（一個被盜的 session 只鎖得住自己，鎖不到其他最高管理者）；
+    另有**全域**上限 `RATE_GLOBAL_MAX` 點（寬鬆，只擋「很多帳號一起灌」）。預覽計 `PREVIEW_WEIGHT` 點、正式匯入計 1 點（路由分兩次記）。
+    兩層都放行才記；任何一層擋住就一點都不記。"""
     t = time.monotonic() if now is None else now
+    acct = str(account or "")
     with _RATE_LOCK:
-        _rate_hits[:] = [h for h in _rate_hits if t - h < RATE_WINDOW_S]
-        if len(_rate_hits) >= RATE_MAX:
-            first = not _rate_block_noted
-            _rate_block_noted = True
-            return False, max(1, int(RATE_WINDOW_S - (t - _rate_hits[0]))), first
-        _rate_hits.append(t)
-        _rate_block_noted = False
+        mine = _rate_hits.setdefault(acct, [])
+        used_acct, used_all = _prune(mine, t), _prune(_global_hits, t)
+        for k in [k for k, v in _rate_hits.items() if not v and k != acct]:     # 沒有紀錄的帳號不留（字典不無限長大）
+            del _rate_hits[k]
+        for key, used, cap, hits in ((acct, used_acct, RATE_MAX, mine), ("*", used_all, RATE_GLOBAL_MAX, _global_hits)):
+            if used + weight > cap + 1e-9:
+                first = key not in _rate_block_noted
+                _rate_block_noted.add(key)
+                return False, max(1, int(RATE_WINDOW_S - (t - hits[0][0]))) if hits else 1, first
+        mine.append((t, weight))
+        _global_hits.append((t, weight))
+        _rate_block_noted.discard(acct)
+        _rate_block_noted.discard("*")
         return True, 0, False
 
 
 def reset_for_tests():
-    global _rate_block_noted
     with _RATE_LOCK:
         _rate_hits.clear()
-        _rate_block_noted = False
+        _global_hits.clear()
+        _rate_block_noted.clear()
 
 
 # ── 上傳內容正規化 ───────────────────────────────────────────────────────────
@@ -306,6 +327,11 @@ def recent_activity(conn, limit=5):
     return out
 
 
+def _prod_key_installed():
+    """正式公鑰是否已經內建（`_PUBKEY_PROD` 非空）。"""
+    return bool(getattr(_lic, "_PUBKEY_PROD", b""))
+
+
 # ── 比對（新授權 vs 目前授權）────────────────────────────────────────────────
 
 def _read_current_text():
@@ -439,6 +465,13 @@ def run_import(raw, *, apply, confirm, machine_fn):
         return _reject("write_failed")
 
 
+def _with(info, **fields):
+    """結果 dict ＝ 明列的欄位 ＋ 預覽明細（`info` 的欄位在後，同名以明細為準）。"""
+    out = dict(fields)
+    out.update(info)
+    return out
+
+
 def _run_import(raw, *, apply, confirm, machine_fn):
     text, why = normalize_upload(raw)
     if text is None:
@@ -461,6 +494,9 @@ def _run_import(raw, *, apply, confirm, machine_fn):
             return _reject(reason if reason in REJECT_MESSAGES else "malformed", st=new,
                            license=_license_view(new) if new.get("customer") is not None else None)
 
+        if new.get("env") == "dev" and _prod_key_installed():
+            # 正式公鑰已經裝上的機器：開發金鑰簽的授權（誰都拿得到開發私鑰）一律不收，也沒有「確認後仍要換」的出口。
+            return _reject("dev_license_not_allowed", license=_license_view(new))
         if _read_current_text() == text:
             return _reject("same_as_current", license=_license_view(new))
 
@@ -470,11 +506,11 @@ def _run_import(raw, *, apply, confirm, machine_fn):
         info = {"license": _license_view(new), "warnings": warnings, "modules_after_restart": {"gain": gain, "lose": lose}}
 
         if not apply:
-            return dict({"ok": True, "applied": False, "reason": "preview", "http": 200,
-                         "message": "這份授權可以使用。確認內容無誤後，按「確認更換」才會正式換上。"}, **info)
+            return _with(info, ok=True, applied=False, reason="preview", http=200,
+                         message="這份授權可以使用。確認內容無誤後，按「確認更換」才會正式換上。")
         if warnings and not confirm:
-            return dict({"ok": False, "applied": False, "reason": "needs_confirm", "http": 409,
-                         "message": "這份授權和目前的有差異，請確認後再更換。"}, **info)
+            return _with(info, ok=False, applied=False, reason="needs_confirm", http=409,
+                         message="這份授權和目前的有差異，請確認後再更換。")
 
         path = _lic.LICENSE_PATH
         try:
@@ -488,17 +524,24 @@ def _run_import(raw, *, apply, confirm, machine_fn):
             logger.exception("license_manager: 寫入新授權失敗")
             _clear_caches()
             return _reject("write_failed")
-        _clear_caches()
-        after = _lic.verify_license()                      # 讀檔路徑複驗
-        if after.get("reason") != "ok" or after.get("customer") != new.get("customer") or after.get("expires") != new.get("expires"):
-            logger.error("license_manager: 換檔後複驗不通過（%s），還原", after.get("reason"))
+        # 從這一行起新檔已經換上去：之後**任何**例外（複驗丟例外、記憶體不足、…）都要先還原再往外丟，
+        # 不可以留下「換了一半、沒複驗」的檔案（L2）。
+        try:
+            _clear_caches()
+            after = _lic.verify_license()                  # 讀檔路徑複驗
+            if after.get("reason") != "ok" or after.get("customer") != new.get("customer") or after.get("expires") != new.get("expires"):
+                logger.error("license_manager: 換檔後複驗不通過（%s），還原", after.get("reason"))
+                _restore(path, backup)
+                return _reject("verify_after_write_failed")
+            restart = bool(gain or lose)
+            return _with(info, ok=True, applied=True, reason="applied", http=200,
+                         backup=os.path.basename(backup) if backup else None,
+                         restart_needed=restart,
+                         message="已更換成新的授權。" + ("要讓功能的增減生效，需要重新啟動服務。" if restart else "馬上生效，不需要重新啟動。"))
+        except Exception:  # noqa: BLE001
+            logger.exception("license_manager: 換檔後的步驟發生未預期的錯誤，還原成原本的授權")
             _restore(path, backup)
             return _reject("verify_after_write_failed")
-        restart = bool(gain or lose)
-        return dict({"ok": True, "applied": True, "reason": "applied", "http": 200,
-                     "backup": os.path.basename(backup) if backup else None,
-                     "restart_needed": restart,
-                     "message": "已更換成新的授權。" + ("要讓功能的增減生效，需要重新啟動服務。" if restart else "馬上生效，不需要重新啟動。")}, **info)
     finally:
         if apply:
             _IMPORT_LOCK.release()

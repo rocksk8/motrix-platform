@@ -25,7 +25,7 @@
 
 兩條都在 `licensing.LICENSE_EXEMPT_PATHS`（也在 `main.py::_COMPANY_SETUP_ALLOWED`）。**豁免只跳過授權閘門，不跳過任何其他檢查**：端點自己要求已登入＋最高管理者＋非示範帳號。
 回應：成功 200（`applied`、`warnings`、`license`、`backup`、`restart_needed`、`message`）；失敗一律有白話 `message`（同 `detail`）與給程式判斷的 `reason`：
-`empty`／`malformed`／`bad_signature`／`machine_mismatch`／`machine_unreadable`／`expired`／`same_as_current`（400）、`too_big`（413）、`needs_confirm`／`busy`（409）、`rate_limited`（429＋`Retry-After`）、`backup_failed`／`write_failed`／`verify_after_write_failed`（500）、非最高管理者／示範帳號（403）。
+`empty`／`malformed`／`bad_signature`／`machine_mismatch`／`machine_unreadable`／`expired`／`same_as_current`／`dev_license_not_allowed`（400）、`too_big`（413）、`needs_confirm`／`busy`（409）、`rate_limited`（429＋`Retry-After`）、`backup_failed`／`write_failed`／`verify_after_write_failed`（500）、非最高管理者／示範帳號（403）。
 
 ## 3. 安全設計（審查請逐條對）
 
@@ -33,21 +33,22 @@
 2. **只換驗過 `reason == "ok"` 的授權**；永久授權「已過維護期」也不收（匯入的目的是讓系統能用）。簽章沒驗過之前不回任何 payload 欄位（`_unverified`）。
 3. **驗的與存的是同一個字串**：上傳先正規化（去 BOM、去所有空白，只准 base64／base64url 字元，其餘 `malformed`）。`base64.b64decode` 預設會悄悄丟掉非字母表字元，不先擋的話「驗過的」與「存下去的」可能不是同一份。
 4. **先備份、原子寫入、換後複驗、失敗還原**：備份失敗 ⇒ 不換；寫同資料夾暫存檔再 `os.replace`；換完走**讀檔路徑**（`verify_license()`）再驗一次，客戶與到期日必須與剛驗過的一致，否則用備份檔原樣還原（原本沒有檔就刪掉剛寫的）。備份在授權檔旁的 `license_backups/license_<時間>.key`，留最近 30 份。
-5. **大小上限 32 KB**：路由層串流讀、讀到上限就停（不先整包讀進記憶體；有無 `Content-Length` 都擋）。**頻率限制**：全域滑動視窗 10 次／10 分鐘（預覽與匯入都算；不依 IP——X-Forwarded-For 可偽造）；被擋時稽核只寫該視窗第一筆。
+5. **大小上限 32 KB**：路由層串流讀、讀到上限就停（不先整包讀進記憶體；有無 `Content-Length` 都擋）。**頻率限制**：**每個帳號**滑動視窗 10 點／10 分鐘（正式匯入 1 點、預覽 0.5 點）＋較寬的全域上限 60 點／10 分鐘——一個被盜的 session 只鎖得住自己，鎖不到其他最高管理者；不依 IP（X-Forwarded-For 可偽造）；被擋時稽核只寫該帳號該視窗第一筆。**本文巢狀深度**：`[`／`{` 總數超過 16 直接當格式不對（400），`json.loads` 的 `RecursionError` 也接住（不會變 500）。
 6. **稽核**：成功 `license.import`、失敗（含預覽被拒）`license.import_rejected`；只記檔案編號（前 12 碼）、驗證後的客戶／到期日、原因碼，**不記授權內容**；要求確認（`needs_confirm`）與預覽成功不寫。
 7. **示範帳號一律擋**：示範帳號 role 也是 superadmin，但授權檔是整台機器共用的——不擋就能換掉正式機的授權。
-8. **沒有私鑰、沒有繞過**：不提供下載、不簽發、不改 `LICENSE_GATE_ENABLED`、不碰公鑰（測試掃原始碼釘住）。**LG-O1（開發私鑰／`_PUBKEY_DEV` 不進出貨包）與本功能獨立**：LG-O1 落地後（包內 `_PUBKEY_DEV` 清空），開發金鑰簽的授權在正式機上自然驗不過（`bad_signature`）；在那之前，開發金鑰簽的授權匯入時會被標成「測試用」並要求確認（閘門本身照舊收，行為與 T80 一致）。
+8. **沒有私鑰、沒有繞過**：不提供下載、不簽發、不改 `LICENSE_GATE_ENABLED`、不碰公鑰（測試掃原始碼釘住）。**LG-O1（開發私鑰／`_PUBKEY_DEV` 不進出貨包）與本功能獨立**：LG-O1 落地後（包內 `_PUBKEY_DEV` 清空），開發金鑰簽的授權在正式機上自然驗不過（`bad_signature`）；在那之前，**只要正式公鑰（`_PUBKEY_PROD`）已經內建，開發金鑰簽的授權匯入一律拒絕（`dev_license_not_allowed`，沒有確認後仍要換的出口）**；正式公鑰還是空的（開發機）時，才會標成「測試用」並要求確認（閘門本身照舊收，行為與 T80 一致）。
 9. **有差異要確認**：客戶名稱不同、新授權沒包含目前正在用的功能（用載入器同一個 `module_licensed` 判斷）、到期日變早、永久改年費、測試用授權。
 10. **模組載入只在開機決定一次**（`core/loader.py`）：匯入後業務 API 立刻依新授權放行／擋，但功能的增減要**重啟服務**才生效——預覽與成功訊息都如實講（`modules_after_restart.gain／lose`、`restart_needed`）。
 
 ## 4. 到期提醒
 
-- 橫幅：已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=12;level=warning;kind=subscription`，或 `none`；未登入／公開端點沒有此標頭）。`notif.js` 據此在每頁頂端顯示橫幅；剩 ≤30 天 `notice`、≤14 天 `warning`、≤7 天（含當天）`critical`；永久授權已過維護期顯示 `ended`（仍可使用，只是不再提供更新）。最高管理者的橫幅帶「前往授權頁」，其他人看到「請通知最高管理者向供應商續約」。**只在授權仍可用時提醒**（年費過期＝402，由說明頁處理）。獨立於 T80 的 `X-Motrix-License`，兩者互不影響。
+- 橫幅：已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=12;level=warning;kind=subscription`，或 `none`；未登入／公開端點沒有此標頭）。`notif.js` 據此在每頁頂端顯示橫幅；剩 ≤30 天 `notice`、≤14 天 `warning`、≤7 天（含當天）`critical`；永久授權已過維護期顯示 `ended`（仍可使用，只是不再提供更新）。**只有最高管理者**的回應帶這個標頭、看得到橫幅（帶「前往授權頁」）；其他角色的回應根本沒有這個標頭，402 說明頁也只對他們說「請聯絡您的系統管理員」（不顯示狀態代碼、機器代碼、客戶、到期日；注意 `GET /api/license/status` 是 T80 既有端點，任何已登入角色仍讀得到——是否也要對非最高管理者遮蔽，待裁示）。**只在授權仍可用時提醒**（年費過期＝402，由說明頁處理）。獨立於 T80 的 `X-Motrix-License`，兩者互不影響。
 - 通知：每日 08:00 的 `system_checks.run_all` 多一步 `_check_license_expiry`，跨過 30／14／7 天（與永久授權已過維護期）各寄一次 `license_expiry` 信給最高管理者；旗標 `system_settings.license_expiry_notified`＝「到期日|檔位」，**寄成功才寫**（沒寄成明天重試），續約換了到期日或回復正常就重新計。信件類型 `license_expiry`（`mail_types`：系統類、`superadmins`、信件格鎖住不可關）。
 - **LINE**：信件走 `email_notify.send_registered`，它附帶的 LINE 通道只對 `line_notify.WIRED_EVENTS` 內的事件生效。hichan-6 的事件登記表（`feat/line-events-all`）併入後，**在 `LINE_EVENTS` 加一筆 `license_expiry`（`priority: critical`、`digest: False`）即可**——本分支沒有動 `line_notify`（避免與該分支衝突）。
 
 ## 5. 營運備忘
 
+- 套用／回滾（`apply_update.ps1`／`rollback_update.ps1`）的 robocopy 排除清單都列了 `license_backups`（/XD）與 `license.key.import-tmp`／`license.key.restore-tmp`（/XF）——它們是這台機器的東西，還原快照時不可被清掉或寫回舊版（測試釘住；腳本版本 2026-11-13a）。
 - 備份還原：把 `license_backups/` 內要還原的檔複製成 `backend/license.key`（授權檔每次讀取都會重新驗證，不需重啟）。
 - 授權頁的「機器代碼」是申請／換發授權時要給供應商的值（與 402 說明頁同一個說法），不是祕密。
 - 正式機上線前提不變：先有有效的 `license.key`（見 `helpers/licensing.py` 的 `LICENSE_GATE_ENABLED` 註解）；本功能讓之後的換約不需要工程師。

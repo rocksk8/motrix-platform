@@ -3543,6 +3543,38 @@
   ],
   "s": 200
  },
+ "/api/license/overview": {
+  "k": [
+   "backup_count",
+   "backup_latest",
+   "detail",
+   "emergency",
+   "gate_enabled",
+   "headline",
+   "level",
+   "license",
+   "license.customer",
+   "license.days_left",
+   "license.days_text",
+   "license.expires",
+   "license.kind",
+   "license.kind_label",
+   "license.modules",
+   "license.modules.all",
+   "license.modules.invalid",
+   "license.modules.names",
+   "license.modules.unknown",
+   "license.test_key",
+   "machine_code",
+   "machine_text",
+   "max_upload_bytes",
+   "modules_not_loaded",
+   "recent",
+   "reminder",
+   "state"
+  ],
+  "s": 200
+ },
  "/api/license/status": {
   "k": [
    "blocked",
