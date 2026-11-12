@@ -4,6 +4,7 @@
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
 - 修正（UX 提案 D2）：簽核佇列的報價單項目新增 `locationId`（`approval_queue_items`），簽核頁「據點」列才有資料來源；同時簽核頁改向 `/api/settings/company-profile` 取據點清單（原本少了 `/api`，404）。
+- 前端（UX T84 簽核頁重排）：`approval-queue.html` 卡片加「簽核依據」（單據自帶 `reasons` 前兩項，其餘點開看）；只有一欄有單時改單欄、整頁沒單時改一句話＋三個去處（今日工作事項／報價單／首頁）；摘要前兩格可點、捲到對應欄。核准／退回仍走同一組處理函式與同一批端點（手機底部簽核列、桌機卡片快速鍵、抽屜按鈕），不新增寫入路徑；不動 API、資料、權限。
 - 文字：『拒絕結案』全改『駁回結案』（報價單頁訊息、稽核動作名稱、擇一方案設定說明）；案件頁新增 `?quick=` 深連結（mine／stage_overdue／recv_overdue／missing_docs）。
 
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）

@@ -52,6 +52,18 @@
       align-items: start;
     }
     .aq-col { min-width: 0; }
+    /* 其中一欄是空的時候不留一整欄空白（T84，提案 §3.5 #7）：單欄、不超過 880px */
+    .aq-runway--one { grid-template-columns: minmax(0, 1fr); max-width: 880px; }
+    .aq-empty {
+      max-width: 880px; padding: 28px 22px; text-align: center;
+      border: 1px dashed var(--border-light); border-radius: var(--radius);
+    }
+    .aq-empty strong { display: block; font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
+    .aq-empty p { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); }
+    .aq-empty__acts { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .vm-andon__seg--go { cursor: pointer; }
+    .vm-andon__seg--go:hover { filter: brightness(.97); }
+    .vm-andon__seg--go:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .aq-col__head {
       display: flex; align-items: center; gap: 8px;
       padding-bottom: 8px; margin-bottom: 10px;
@@ -98,6 +110,10 @@
       font-size: 12.5px; color: var(--text-secondary);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    /* 簽核依據（T84）：這張單為什麼要簽——來自單據本身的 reasons（與詳情抽屜同一份資料），卡片上只放前兩項，其餘點開看 */
+    .aq-card__why { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+    .aq-card__why .aq-reason-tag { padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .aq-card__why-more { font-size: 12px; color: var(--text-dim); }
     .aq-card__r3 { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
     .aq-card__amt {
       font-size: 12.5px; font-weight: 600; color: var(--text-primary);
@@ -422,13 +438,15 @@
          比例條的三段顏色跟下方泳道是同一套，所以「紅色比較長」跟「逾時泳道比較長」
          講的是同一件事，不需要另外解讀。 -->
     <div class="vm-andon" x-show="!loading && totalPending > 0" x-cloak>
-      <div class="vm-andon__seg vm-andon__seg--mine">
+      <div class="vm-andon__seg vm-andon__seg--mine vm-andon__seg--go" role="button" tabindex="0" data-testid="aq-kpi-mine"
+           @click="scrollToCol('mine')" @keydown.enter="scrollToCol('mine')">
         <span class="vm-andon__val" x-text="myPendingCount"></span>
         <span class="vm-andon__lbl">待我簽核
           <small x-text="myOverdueCount > 0 ? '其中 ' + myOverdueCount + ' 件已逾時' : '沒有逾時項目'"></small>
         </span>
       </div>
-      <div class="vm-andon__seg">
+      <div class="vm-andon__seg vm-andon__seg--go" role="button" tabindex="0" data-testid="aq-kpi-flow"
+           @click="scrollToCol('flow')" @keydown.enter="scrollToCol('flow')">
         <span class="vm-andon__val" x-text="flowItems.length"></span>
         <span class="vm-andon__lbl">流程中<small>等其他簽核人</small></span>
       </div>
@@ -446,10 +464,21 @@
       </div>
     </div>
 
-    <div class="aq-runway">
+    <!-- 整頁都沒有單（T84，提案 §3.5）：一句話＋兩個去處，不是兩個空欄 -->
+    <div class="aq-empty" data-testid="aq-empty" x-show="!loading && totalPending === 0" x-cloak>
+      <strong x-text="isAdmin ? '目前沒有待簽核的單' : '你送審的單據都簽完了，也沒有需要你簽核的項目'"></strong>
+      <p>有新的單送來時，這裡會出現，上方選單的紅點也會亮起。</p>
+      <div class="aq-empty__acts">
+        <a href="daily-tasks.html" class="btn btn-ghost btn-sm">看今日工作事項</a>
+        <a href="quotations.html" class="btn btn-ghost btn-sm" x-show="canQuotation">去報價單</a>
+        <a href="../index.html" class="btn btn-ghost btn-sm">回首頁</a>
+      </div>
+    </div>
+
+    <div class="aq-runway" :class="{'aq-runway--one': isOneColumn}" x-show="loading || totalPending > 0">
 
       <!-- ── 左欄：待我簽核（canApprove() 為真的項目）───────────────────── -->
-      <section class="aq-col">
+      <section class="aq-col" id="aq-col-mine">
         <div class="aq-col__head">
           <span class="vm-lamp" :class="myItems.length ? 'vm-lamp--crit' : 'vm-lamp--idle'"></span>
           <span class="aq-col__title">待我簽核</span>
@@ -488,6 +517,10 @@
                     <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
                   </div>
                   <div class="aq-card__r2" x-text="cardSubtitle(item)"></div>
+                  <div class="aq-card__why" data-testid="aq-why" x-show="reasonsOf(item).length > 0">
+                    <template x-for="(rs, ri) in reasonsOf(item).slice(0, 2)" :key="ri"><span class="aq-reason-tag" :title="rs" x-text="rs"></span></template>
+                    <span class="aq-card__why-more" x-show="reasonsOf(item).length > 2" x-text="'還有 ' + (reasonsOf(item).length - 2) + ' 項，點開看'"></span>
+                  </div>
                   <div class="aq-card__r3">
                     <span class="aq-card__amt" x-text="amountDisplay(item)"></span>
                     <span class="aq-card__flow">
@@ -527,7 +560,7 @@
       <!-- ── 右欄：流程中（等別人）依「卡在誰身上」分組 ──────────────────
            要催件的時候找的是人不是單，所以分組標頭直接寫這個人手上最久那件
            卡了幾天。 -->
-      <aside class="aq-col">
+      <aside class="aq-col" id="aq-col-flow">
         <div class="aq-col__head">
           <span class="vm-lamp vm-lamp--idle"></span>
           <span class="aq-col__title">流程中（等別人）</span>
@@ -1068,6 +1101,24 @@
         // **不是**權限判斷本身——真正的過濾在後端）。
         get isAdmin() {
           return ['superadmin', 'admin'].includes(this.session.role)
+        },
+        // 空狀態的「去報價單」只給看得到報價單的人（與首頁 canQuotation 同規則；導覽用，不是權限判斷）
+        get canQuotation() {
+          const r = this.session.role, m = this.session.modules || []
+          return r === 'superadmin' || r === 'admin' || m.includes('quotation')
+        },
+        // 簽核依據：單據自帶的 reasons（字串陣列；不是字串的丟掉）。卡片放前兩項、詳情抽屜放全部
+        reasonsOf(item) {
+          const rs = item && Array.isArray(item.reasons) ? item.reasons : []
+          return rs.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim())
+        },
+        // 其中一欄是空的 ⇒ 單欄版面（有單的時候才判斷；載入中維持雙欄，避免畫面跳動）
+        get isOneColumn() {
+          return !this.loading && this.totalPending > 0 && (this.myItems.length === 0 || this.flowItems.length === 0)
+        },
+        scrollToCol(which) {
+          const el = document.getElementById(which === 'flow' ? 'aq-col-flow' : 'aq-col-mine')
+          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
         },
         queue: [],
         totalPending: 0,
