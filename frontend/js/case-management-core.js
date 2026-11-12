@@ -129,11 +129,6 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
-      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，而這一頁的主體（案件矩陣）不應該等它。
-      // D3：這兩支要帶 session.token，所以**必須在 session 就緒之後**（以前放在 init() 最前面、`_initDone` 擋之前：
-      // Alpine 自動呼叫的那一輪 session 還是空的 ⇒ `Bearer undefined` ⇒ 401，而且 init 跑兩遍所以還各送兩次）。
-      this.loadLocations()
-      this.detectFileCenter()
       try {
         const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
@@ -141,6 +136,13 @@ window.CM_PARTS.push(() => ({
         this.session.displayName = me.displayName
         this.session.id = me.userId
       } catch {}
+      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，而這一頁的主體（案件矩陣）不應該等它。
+      // D3：這兩支要帶 session.token，所以**必須在 session 就緒之後**（以前放在 init() 最前面、`_initDone` 擋之前：
+      // Alpine 自動呼叫的那一輪 session 還是空的 ⇒ `Bearer undefined` ⇒ 401，而且 init 跑兩遍所以還各送兩次）。
+      // 審查 L3：更進一步放在 /api/auth/me 確認 token 有效**之後**——token 已過期時 me 先 401 就導回登入頁，
+      // 不會先打出這兩支 401（它們不 await，me 之前發出去就收不回來）。
+      this.loadLocations()
+      this.detectFileCenter()
       try {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
