@@ -6,7 +6,9 @@
   - `helpers.licensing`：`EXPIRY_HEADER`／`EXPIRY_THRESHOLDS`／`expiry_reminder`／`expiry_banner`（剩 30／14／7 天提醒的判定；只在授權仍可用時提醒）；`LICENSE_EXEMPT_PATHS` 新增 `/api/license/overview`、`/api/license/import`（授權失效時唯一能救回系統的動作就是匯入新授權；豁免只跳過閘門，端點自己驗最高管理者＋非示範帳號）。
   - `helpers.license_alerts.expiry_notice`：寄 `license_expiry` 信（新信件類型，`superadmins`、信件格鎖住不可關）；`system_checks._check_license_expiry` 每日 08:00 檢查，同一把授權同一檔位（30／14／7／永久已過維護期）只通知一次。
 - 行為變更（對外介面）：新端點 `GET /api/license/overview`、`POST /api/license/import`（最高管理者；匯入有大小上限 32 KB、頻率限制（每帳號 10 點／10 分鐘，預覽半點，另有全域 60 點；本文巢狀深度上限）、稽核 `license.import`／`license.import_rejected`、換檔前自動備份、換後複驗失敗自動還原）；已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=…;level=…;kind=…`／`none`）；新頁 `pages/license-settings.html`（獨立頁，不載入側欄／不打業務 API，授權失效時也開得起來）、系統選單「授權」、系統中心「公司與參數設定」卡；`license-required.html` 對最高管理者多一個「前往授權頁匯入」。
-- 不變：`LICENSE_GATE_ENABLED`、驗章流程、公鑰、緊急放行通行證判定、402 行為、`GET /api/license/status` 一律沒動。
+- 不變：`LICENSE_GATE_ENABLED`、驗章流程、公鑰、緊急放行通行證判定、402 行為一律沒動。
+- **L6（複審）：換檔後複驗不過、而還原舊授權也失敗時**，回應不再說「已自動還原」，改回 500 `restore_failed`（「新授權未通過驗證，且無法自動還原舊授權；系統可能已被鎖住，請重新匯入有效授權或聯絡供應商」），伺服器寫 ERROR log、稽核 `license.import_restore_failed`；`license_manager._restore` 改回傳 bool。
+- **契約變更（PM 裁示）：`GET /api/license/status` 對非最高管理者（admin／sales／engineer／viewer、示範帳號）改回精簡欄位**——只有 `valid`、`reason`、`gate`、`blocked`、`emergency`（`{active}` 或 `null`）、`modules_unlicensed_count`；不再帶 `customer`／`expires`／`days_left`／`modules`／`env`／`machine`／`modules_unlicensed`。非示範最高管理者拿到的與以前完全相同。前端（402 說明頁、守門、橫幅）判斷用的欄位都在精簡版內；T80 的測試改用最高管理者讀完整狀態。
 - 審查修正（hichan-3 L1～L5＋PM 追加）：`license_manager` 公開介面新增 `PREVIEW_WEIGHT`／`RATE_GLOBAL_MAX`，`rate_allow(now=…)` → `rate_allow(account=…, weight=…, now=…)`（尚無外部呼叫端；快照以 `core_bump.py --pending` 重產）；正式公鑰已內建時拒收開發金鑰簽的授權（`dev_license_not_allowed`）；到期提醒標頭 `X-Motrix-License-Expiry` 只給最高管理者；`apply_update.ps1`（腳本版本 2026-11-13a）／`rollback_update.ps1` 的排除清單加 `license_backups`、`license.key.import-tmp`、`license.key.restore-tmp`；`verify_package` 擋授權備份資料夾與換檔暫存檔。
 - 測試：`tests/test_license_import_2026_11_13.py`。
 

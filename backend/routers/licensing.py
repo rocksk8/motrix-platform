@@ -46,9 +46,17 @@ def _machine_or_none():
         return None
 
 
+def _is_full_status_viewer(user, authorization) -> bool:
+    """看得到完整授權狀態（客戶、到期日…）的人：最高管理者，而且不是示範帳號（示範帳號 role 也是 superadmin，
+    但授權檔是整台機器共用的，示範環境不該看到正式客戶的授權資料）。"""
+    if is_demo_mode() or (authorization or "").startswith("Bearer DEMO_"):
+        return False
+    return (user or {}).get("role") == "superadmin"
+
+
 @router.get("/api/license/status")
 def license_status(authorization: str = Header(None)):
-    """回 LicenseStatus 七個欄位。**沒裝金鑰不是錯誤，是客戶第一次開機的樣子。**
+    """回 LicenseStatus 七個欄位（**最高管理者**；其他角色與示範帳號只回 `valid／reason／gate／blocked／emergency{active}／modules_unlicensed_count`）。**沒裝金鑰不是錯誤，是客戶第一次開機的樣子。**
 
     所以這裡永遠回 200，沒金鑰時回 `{valid: false, reason: "missing", ...}`：
     - 402 是第 3 步用來擋業務 API 的，不是這一支的事
@@ -57,7 +65,7 @@ def license_status(authorization: str = Header(None)):
     `verify_license()` 不帶參數 → 它自己去讀 `helpers.licensing.LICENSE_PATH`，
     而且**每次呼叫都重讀**（第 6 步的到期提醒要能每天重新判定 `days_left`）。
     """
-    _require_user(authorization)
+    user = _require_user(authorization)
     status = verify_license()
     # 在 LicenseStatus 八個欄位之外另外帶（2026-11-11，T80；前端「授權無法使用」頁與橫幅用，既有欄位不動）：
     #   machine    本機指紋——被擋（機器不符）時簽發方要拿它重簽；不是祕密。讀不到 ⇒ None
@@ -70,6 +78,13 @@ def license_status(authorization: str = Header(None)):
     if em and em.get("active") and not _lic.LICENSE_GATE_ENABLED:
         # 閘門關著＝沒有東西在擋、通行證不會被讀：不可以回 active（K 審 N2；狀態欄位語意）
         em = dict(em, active=False, why="gate_off")
+    if not _is_full_status_viewer(user, authorization):
+        # 非最高管理者（含示範帳號）：只回「前端要判斷擋不擋」的欄位（T83 L5 追加，PM 裁示）——沒有客戶、到期日、剩餘天數、機器代碼、
+        # 簽發環境、通行證細節、模組清單。402 說明頁對這些人只說「請聯絡您的系統管理員」，不需要更多。
+        return {"valid": bool(status.get("valid")), "reason": status.get("reason"),
+                "gate": bool(_lic.LICENSE_GATE_ENABLED), "blocked": _lic.license_blocks_request(status),
+                "emergency": ({"active": bool(em.get("active"))} if em else None),
+                "modules_unlicensed_count": len(unlicensed)}
     return dict(status, machine=_machine_or_none(), emergency=em,
                 gate=bool(_lic.LICENSE_GATE_ENABLED), blocked=_lic.license_blocks_request(status),
                 modules_unlicensed=unlicensed)
@@ -158,6 +173,9 @@ def _audit_import(token, result, *, apply, file_id):
         _audit(token, "license.import", "settings", "license", lic.get("customer") or "", dict(
             base, kind=lic.get("kind"), backup=result.get("backup"), restart_needed=result.get("restart_needed"),
             warnings=len(result.get("warnings") or [])))
+    elif result.get("reason") == "restore_failed":          # 新檔複驗不過、舊檔也還原不回去：系統可能已被鎖住，要單獨一種稽核紀錄（L6）
+        logger.error("授權匯入：新授權未通過複驗且還原舊授權失敗（檔案編號 %s）——授權檔可能無效，請人工處理", file_id)
+        _audit(token, "license.import_restore_failed", "settings", "license", "", dict(base, reason="restore_failed"))
     elif result.get("reason") not in ("preview", "needs_confirm"):
         _audit(token, "license.import_rejected", "settings", "license", "", dict(base, reason=result.get("reason")))
 

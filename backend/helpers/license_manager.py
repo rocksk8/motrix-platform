@@ -66,13 +66,14 @@ REJECT_MESSAGES = {
     "backup_failed":    "無法備份目前的授權檔，為了安全起見沒有更換。請確認伺服器的磁碟空間與資料夾權限。",
     "write_failed":     "寫入新授權時失敗，目前的授權沒有被更動。請確認伺服器的磁碟空間與資料夾權限，或聯絡供應商。",
     "verify_after_write_failed": "更換後的最後確認沒有通過，系統已自動還原成原本的授權。請聯絡供應商。",
+    "restore_failed":   "新授權未通過驗證，且無法自動還原舊授權；系統可能已被鎖住，請重新匯入有效授權或聯絡供應商。",
     "demo":             "示範帳號不能查看或更換授權。",
     "dev_license_not_allowed": "這是「測試用」授權，正式使用的系統不能匯入。請向供應商取得正式授權。",
 }
 
 #: reason 代碼 ⇒ HTTP 狀態碼（拒絕時）
 _REJECT_HTTP = {"too_big": 413, "rate_limited": 429, "busy": 409, "backup_failed": 500, "write_failed": 500,
-                "verify_after_write_failed": 500, "demo": 403, "dev_license_not_allowed": 400}
+                "verify_after_write_failed": 500, "restore_failed": 500, "demo": 403, "dev_license_not_allowed": 400}
 
 
 # ── 頻率限制 ─────────────────────────────────────────────────────────────────
@@ -311,7 +312,7 @@ def recent_activity(conn, limit=5):
     """最近的匯入紀錄（稽核表）⇒ 白話清單。`conn` 由呼叫端開關。"""
     import json
     rows = conn.execute(
-        "SELECT at, display_name, action, detail FROM audit_log WHERE action IN ('license.import','license.import_rejected')"
+        "SELECT at, display_name, action, detail FROM audit_log WHERE action IN ('license.import','license.import_rejected','license.import_restore_failed')"
         " ORDER BY id DESC LIMIT ?", (int(limit),)).fetchall()
     out = []
     for r in rows:
@@ -321,6 +322,8 @@ def recent_activity(conn, limit=5):
             d = {}
         if r["action"] == "license.import":
             what = "匯入新授權成功" + ("（客戶：%s，到期日：%s）" % (d.get("customer") or "—", d.get("expires") or "—"))
+        elif r["action"] == "license.import_restore_failed":
+            what = "匯入失敗：" + REJECT_MESSAGES["restore_failed"]
         else:
             what = "匯入失敗：" + REJECT_MESSAGES.get(d.get("reason"), "授權檔無法使用").replace("{expires}", d.get("expires") or "—")
         out.append({"at": (r["at"] or "")[:16].replace("T", " "), "who": r["display_name"] or "—", "what": what})
@@ -439,7 +442,9 @@ def _atomic_write(path, text):
 
 
 def _restore(path, backup):
-    """複驗失敗時還原：原本有檔 ⇒ 用備份檔**原樣位元組**換回去；原本沒有 ⇒ 刪掉剛寫的。"""
+    """複驗失敗時還原：原本有檔 ⇒ 用備份檔**原樣位元組**換回去；原本沒有 ⇒ 刪掉剛寫的。
+    回 True＝還原成功；False＝還原也失敗（新檔留在原地）——呼叫端**不可**再對使用者說「已自動還原」（L6）。"""
+    ok = True
     try:
         if backup is None:
             if os.path.exists(path):
@@ -449,8 +454,18 @@ def _restore(path, backup):
             shutil.copyfile(backup, tmp)
             os.replace(tmp, path)
     except OSError:
+        ok = False
         logger.exception("license_manager: 還原授權檔失敗（%s）——請人工檢查，備份在 %s", path, backup_dir())
     _clear_caches()
+    return ok
+
+
+def _after_swap_failed(path, backup):
+    """換檔後複驗不過（或丟例外）：還原；還原成功 ⇒ `verify_after_write_failed`，還原也失敗 ⇒ `restore_failed`（ERROR log）。"""
+    if _restore(path, backup):
+        return _reject("verify_after_write_failed")
+    logger.error("license_manager: 新授權複驗不通過，且還原舊授權失敗——授權檔可能停在無效的新檔（%s）；備份在 %s", path, backup_dir())
+    return _reject("restore_failed")
 
 
 def run_import(raw, *, apply, confirm, machine_fn):
@@ -531,8 +546,7 @@ def _run_import(raw, *, apply, confirm, machine_fn):
             after = _lic.verify_license()                  # 讀檔路徑複驗
             if after.get("reason") != "ok" or after.get("customer") != new.get("customer") or after.get("expires") != new.get("expires"):
                 logger.error("license_manager: 換檔後複驗不通過（%s），還原", after.get("reason"))
-                _restore(path, backup)
-                return _reject("verify_after_write_failed")
+                return _after_swap_failed(path, backup)
             restart = bool(gain or lose)
             return _with(info, ok=True, applied=True, reason="applied", http=200,
                          backup=os.path.basename(backup) if backup else None,
@@ -540,8 +554,7 @@ def _run_import(raw, *, apply, confirm, machine_fn):
                          message="已更換成新的授權。" + ("要讓功能的增減生效，需要重新啟動服務。" if restart else "馬上生效，不需要重新啟動。"))
         except Exception:  # noqa: BLE001
             logger.exception("license_manager: 換檔後的步驟發生未預期的錯誤，還原成原本的授權")
-            _restore(path, backup)
-            return _reject("verify_after_write_failed")
+            return _after_swap_failed(path, backup)
     finally:
         if apply:
             _IMPORT_LOCK.release()
