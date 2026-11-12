@@ -484,7 +484,7 @@
             </div>
           </div>
           <div class="h-state">
-            <div><span>登入身分</span><b x-text="(session.displayName || session.username || '') + ' · ' + (session.role || '')"></b></div>
+            <div><span>登入身分</span><b x-text="(session.displayName || session.username || '') + ' · ' + MotrixRole.label(session.role)"></b></div>
             <div><span>進行中案件</span><b x-text="stats.activeCases + ' 件'"></b></div>
             <div><span>最後更新</span><b x-text="now"></b></div>
           </div>
@@ -1287,6 +1287,7 @@ feedCount(key) {
   /* 2026-09-14：initCharts() 已隨圖表一起移至營運報表。
      畫布不在了，這裡再呼叫 getContext() 會直接 null 錯誤。 */
   </script>
+  <script src="static/role-label.js"></script>
   <script src="static/notif.js"></script>
   <script src="static/sidebar.js"></script>
 </body>

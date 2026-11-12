@@ -121,3 +121,17 @@ def test_role_keys_are_not_shown_as_labels():
     assert "（僅 superadmin 可修改" not in _read(FRONT / "pages" / "cashier.html")
     ns = _read(FRONT / "pages" / "notification-settings.html")
     assert "為 admin 或 superadmin 帳號" not in ns and "<strong>superadmin</strong>" not in ns
+
+
+def test_role_codes_are_never_printed_on_screen():
+    """儀表板右上「登入身分」、職責角色清單、選單／按鈕預覽：一律走中文名（MotrixRole.label／roleLabel），不直接印 role 代碼。"""
+    idx = _read(FRONT / "index.html")
+    assert "' · ' + (session.role || '')" not in idx and "MotrixRole.label(session.role)" in idx
+    assert "static/role-label.js" in idx
+    dr = _read(FRONT / "pages" / "duty-roles.html")
+    assert 'x-text="u.role"' not in dr and "MotrixRole.label(u.role)" in dr and "static/role-label.js" in dr
+    assert "st.preview.role + '）" not in _read(FRONT / "static" / "menu-editor.js")
+    assert "previewResult.role + " not in _read(FRONT / "static" / "user-buttons.js")
+    js = _read(FRONT / "static" / "role-label.js")
+    for code, zh in (("superadmin", "最高管理者"), ("finance", "財務"), ("admin", "管理員")):
+        assert "%s: '%s'" % (code, zh) in js

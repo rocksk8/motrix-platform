@@ -409,7 +409,7 @@
       ;(st.order[g.key] || []).forEach(function (id) { body.appendChild(itemRow(id)) })
     })
     if (st.preview) {
-      body.appendChild(el('div', { class: 'me-g', text: '預覽（' + st.preview.user + '／' + st.preview.role + '）：左＝目前已發布，右＝套用草稿後（黃底＝有變）' }))
+      body.appendChild(el('div', { class: 'me-g', text: '預覽（' + st.preview.user + '／' + roleLabel(st.preview.role) + '）：左＝目前已發布，右＝套用草稿後（黃底＝有變）' }))
       body.appendChild(el('div', { class: 'me-pv', 'data-testid': 'me-preview' }, [groupsList(st.preview.current), groupsList(st.preview.preview, st.preview.current)]))
     }
     var who = whoControl()

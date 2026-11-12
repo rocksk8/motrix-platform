@@ -121,7 +121,7 @@
             <template x-for="u in users" :key="u.id">
               <tr>
                 <td><b x-text="u.displayName || u.username"></b><div class="dr-sub" x-text="u.username + (u.active ? '' : '（已停用）')"></div></td>
-                <td x-text="u.role"></td>
+                <td x-text="MotrixRole.label(u.role)"></td>
                 <td>
                   <span class="dr-sub" x-show="u.role === 'superadmin'">最高管理者：全功能，不受角色影響</span>
                   <div class="dr-chips" x-show="u.role !== 'superadmin'"><template x-for="r in roles.filter(x => x.active || u.roles.some(b => b.id === x.id))" :key="r.id">
@@ -179,6 +179,7 @@
       <p class="dr-sub" style="max-width:1200px">紀錄只增不改不刪（資料庫層強制）；保留 7 年。</p>
     </section>
   </main>
+  <script src="../static/role-label.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
   <script>

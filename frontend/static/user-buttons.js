@@ -143,7 +143,7 @@
 '  <div class="ub-row"><input type="text" data-testid="ub-preview-user" x-model="previewUser" placeholder="帳號（留空＝我自己）" style="flex:1">' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-preview-btn" @click="previewAs()" :disabled="busy || loading">預覽</button></div>' +
 '  <div data-testid="ub-preview" x-show="previewResult">' +
-'   <div class="ub-sub" x-text="previewResult && (\'以「\' + previewResult.user + \'」（\' + previewResult.role + \'）的權限\')"></div>' +
+'   <div class="ub-sub" x-text="previewResult && (\'以「\' + previewResult.user + \'」（\' + (window.MotrixRole ? MotrixRole.label(previewResult.role) : previewResult.role) + \'）的權限\')"></div>' +
 '   <ul><template x-for="v in (previewResult ? previewResult.visible : [])" :key="v.key"><li x-text="\'看得到：\' + v.label"></li></template>' +
 '    <template x-for="h in (previewResult ? previewResult.hidden : [])" :key="h.key"><li x-text="\'看不到：\' + h.label + \'（\' + h.reason + \'）\'"></li></template></ul></div>' +
 '  <div x-show="diffShown" data-testid="ub-diff"><div class="ub-h">與目前發布版的差異</div><div class="ub-sub" x-show="!diffLines.length">沒有差異。</div>' +

@@ -298,7 +298,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   function _roleLabel(r) {
-    return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者' }[r] || r
+    return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', finance: '財務', user: '一般使用者', viewer: '檢視者' }[r] || r
   }
 
   function refreshOnlineWidget() {
