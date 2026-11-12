@@ -19525,10 +19525,6 @@
    "units": [
     "dir:backend/helpers/form_templates/",
     "dir:frontend/pages/",
-    "file:.pytest-basetemp/license0/license.key",
-    "file:.pytest-basetemp/motrix_app0/initial_admin_credentials.txt",
-    "file:.pytest-basetemp/motrix_app0/initial_demo_credentials.txt",
-    "file:.pytest-basetemp/motrix_app0/motrix_erp_demo.db",
     "file:backend/autostart.bat",
     "file:backend/version_manifest.json",
     "plat:__init__",
@@ -19540,10 +19536,6 @@
      "backend/core/paths.py"
     ],
     "path": [
-     ".pytest-basetemp/license0/license.key",
-     ".pytest-basetemp/motrix_app0/initial_admin_credentials.txt",
-     ".pytest-basetemp/motrix_app0/initial_demo_credentials.txt",
-     ".pytest-basetemp/motrix_app0/motrix_erp_demo.db",
      "backend/autostart.bat",
      "backend/helpers/form_templates/",
      "backend/version_manifest.json",
@@ -29289,8 +29281,6 @@
   "backend/tests/test_conftest_credentials_isolation_2026_09_28.py": {
    "kind": "api",
    "units": [
-    "file:.pytest-basetemp/motrix_app0/initial_admin_credentials.txt",
-    "file:.pytest-basetemp/motrix_app0/initial_demo_credentials.txt",
     "helper:auth",
     "helper:startup",
     "plat:__init__",
@@ -29302,10 +29292,6 @@
      "backend/core/paths.py",
      "backend/helpers/auth.py",
      "backend/helpers/startup.py"
-    ],
-    "path": [
-     ".pytest-basetemp/motrix_app0/initial_admin_credentials.txt",
-     ".pytest-basetemp/motrix_app0/initial_demo_credentials.txt"
     ]
    }
   },
@@ -33051,7 +33037,6 @@
   "backend/tests/test_e2e_license_gate_2026_11_11.py": {
    "kind": "e2e",
    "units": [
-    "file:.pytest-basetemp/license0/license.key",
     "file:backend/helpers/__init__.py",
     "helper:license_alerts",
     "helper:licensing",
@@ -33071,7 +33056,6 @@
      "frontend/pages/license-required.html"
     ],
     "path": [
-     ".pytest-basetemp/license0/license.key",
      "frontend/pages/customers.html"
     ]
    }
@@ -37105,7 +37089,6 @@
   "backend/tests/test_licensing_core_2026_09_21.py": {
    "kind": "api",
    "units": [
-    "file:.pytest-basetemp/license0/license.key",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_routes.py",
     "file:backend/tests/_subproc.py",
@@ -37121,9 +37104,6 @@
     ],
     "api": [
      "backend/routers/licensing.py"
-    ],
-    "path": [
-     ".pytest-basetemp/license0/license.key"
     ]
    },
    "login_fixture": true
@@ -37134,7 +37114,6 @@
     "core:db",
     "dir:backend/core/",
     "dir:frontend/static/",
-    "file:.pytest-basetemp/license0/license.key",
     "file:backend/core/l1_pages.json",
     "file:backend/helpers/__init__.py",
     "file:backend/tools/issue_license.py",
@@ -37174,7 +37153,6 @@
      "frontend/static/notif.js"
     ],
     "path": [
-     ".pytest-basetemp/license0/license.key",
      "backend/core/",
      "backend/core/l1_pages.json",
      "backend/tools/issue_license.py",
