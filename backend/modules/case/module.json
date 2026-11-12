@@ -393,14 +393,13 @@
       "id": "overhead-settings",
       "section": "settings",
       "title": "利潤口徑與管銷比率",
-      "desc": "營業利益口徑與管銷分攤比率（設定頁還在開發中）",
+      "desc": "新報價單預設的管銷分攤比率；口徑切換在精算相關的管銷設定入口",
       "impact": "影響：改管銷比率後，只影響之後算出的利潤；已結案的案件不變。",
-      "href": "overhead-settings.html",
+      "href": "settings-center.html#overhead",
       "perm": "superadmin",
       "order": 50,
       "keywords": "利潤 管銷 營業利益 比率 口徑",
-      "icon": "gear",
-      "planned": true
+      "icon": "gear"
     }
   ]
 }

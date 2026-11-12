@@ -675,7 +675,14 @@ def test_planned_cards_are_not_clickable_and_do_not_use_engineering_words():
     html = source_tree.page_file("system-hub.html").read_text(encoding="utf-8")
     assert html.count("(it.denied || it.planned) ? null : it.href") == 2, "搜尋結果與分組兩處的連結都要在規劃中時拿掉 href"
     assert "if (it.denied || it.planned)" in html, "點擊處理也要擋（保險，不只靠沒有 href）"
-    planned = [c for c in _all_cards() if c.get("planned")]
-    assert planned, "目前沒有規劃中的卡片 ⇒ 這題量不到東西，請改成合成資料"
-    for c in planned:
+    for c in _all_cards():                       # 所有卡片（不只規劃中的）都不可出現工程用語
         assert "遷移" not in c["desc"] and "遷移" not in c["impact"] and "遷移" not in c["title"], c["id"]
+
+
+def test_overhead_card_opens_the_settings_center_group_and_is_no_longer_planned():
+    """T67 設計（SO-S1）：hub 卡片 overhead-settings 改連設定中心的 overhead 群組、拿掉 planned（不新增 overhead-settings.html）。
+    PM 2026-11-13 裁示現在就改。"""
+    card = next(c for c in _all_cards() if c["id"] == "overhead-settings")
+    assert card["href"] == "settings-center.html#overhead" and not card.get("planned"), card
+    assert "overhead-settings.html" not in json.dumps(card, ensure_ascii=False)
+    assert not (ROOT / "frontend" / "pages" / "overhead-settings.html").exists()
