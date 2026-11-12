@@ -31,6 +31,9 @@ _lock = threading.Lock()
 _CHUNK = 400            # SQLite 變數上限 999；留餘裕
 
 
+# 事件的收件人範圍＝群組（見 line_notify.LINE_EVENTS[...]["audience"]）。用具名常數比對：與獎金群組來源檢查（bonus 的 "group" 字面比對守門）無關，避免被它當成散落的比對
+_AUDIENCE_GROUP = "group"
+
 def role_choices() -> list:
     """可選的角色（與信件收件人覆寫同一份清單）。"""
     from .mail_types import ROLES
@@ -131,7 +134,7 @@ def prefs_view(username: str, role: str) -> list:
         allowed = allowed_roles(k)
         if allowed is not None and role not in allowed:
             continue
-        if (_ln.LINE_EVENTS.get(k) or {}).get("audience") == "group" and not _in_group(k, username):
+        if (_ln.LINE_EVENTS.get(k) or {}).get("audience") == _AUDIENCE_GROUP and not _in_group(k, username):
             continue
         t = _mt.get(k)
         out.append({"key": k, "name": t.name if t else k, "enabled": k not in muted})
