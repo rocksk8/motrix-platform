@@ -178,10 +178,10 @@
       </div>
     </div>
 
-    <!-- 超管提示 -->
+    <!-- 最高管理者提示 -->
     <div x-show="!isSuperAdmin"
          style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:12px;color:#92400E">
-      ⚠ 僅超級管理員可新增或編輯使用者帳號
+      ⚠ 僅最高管理者可新增或編輯使用者帳號
     </div>
 
     <!-- 統計 -->
@@ -265,27 +265,27 @@
         <div x-show="roleLabelsMgrOpen" style="padding:14px 16px">
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
-              <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="超級管理員" style="font-size:12px;padding:7px 9px">
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：最高管理者</div>
+              <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="最高管理者" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">admin</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：管理員</div>
               <input class="form-input" type="text" x-model="rlForm.admin" placeholder="管理員" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">sales</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：業務</div>
               <input class="form-input" type="text" x-model="rlForm.sales" placeholder="業務" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">engineer</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：工程師</div>
               <input class="form-input" type="text" x-model="rlForm.engineer" placeholder="工程師" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">finance</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：財務</div>
               <input class="form-input" type="text" x-model="rlForm.finance" placeholder="財務" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">viewer</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">原名稱：檢視者</div>
               <input data-saved-field class="form-input" type="text" x-model="rlForm.viewer" placeholder="檢視者" style="font-size:12px;padding:7px 9px">
             </div>
           </div>
@@ -561,7 +561,7 @@
         <div class="form-group">
           <label class="form-label">角色層級（系統功能基礎）</label>
           <select class="form-select" x-model="form.role" style="font-size:12px" @change="dutySchedule && dutySchedule()">
-            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="superadmin" x-text="(roleLabels.superadmin||'最高管理者') + '（所有系統功能）'"></option>
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
@@ -704,7 +704,7 @@
             <input class="form-input" type="password" x-model="form.confirmPassword" placeholder="再輸入一次">
           </div>
         </template>
-        <!-- 解鎖密碼：僅編輯超級管理員時顯示 -->
+        <!-- 解鎖密碼：僅編輯最高管理者時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-light)">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
@@ -724,7 +724,7 @@
             </div>
           </div>
         </template>
-        <!-- 每日工作事項密碼：僅編輯超級管理員時顯示 -->
+        <!-- 每日工作事項密碼：僅編輯最高管理者時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:12px;padding-top:14px;border-top:1px solid var(--border-light)">
             <div style="font-size:12px;font-weight:600;color:#7C3AED;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px">
@@ -733,7 +733,7 @@
               <span style="font-weight:400;font-size:12px;color:var(--text-dim);text-transform:none;letter-spacing:0">（解鎖管理視角所需密碼）</span>
             </div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:4px;padding:6px 9px">
-              ⓘ 在「每日工作事項」頁面，超管需輸入此密碼才能解鎖查看全體人員工作事項。
+              ⓘ 在「每日工作事項」頁面，最高管理者需輸入此密碼才能解鎖查看全體人員工作事項。
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="form-group" style="margin-bottom:0">
@@ -774,7 +774,7 @@
         <div class="form-group">
           <label class="form-label">基礎角色層級</label>
           <select class="form-select" x-model="crForm.baseRole" @change="applyCrBaseRole()" style="font-size:12px">
-            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="superadmin" x-text="(roleLabels.superadmin||'最高管理者') + '（所有系統功能）'"></option>
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
@@ -888,9 +888,9 @@
       userSearch: '',
       customRoles:       [],
       customRoleMgrOpen: false,
-      roleLabels: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
+      roleLabels: {superadmin:'最高管理者', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
       roleLabelsMgrOpen: false,
-      rlForm: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', viewer:'檢視者'},
+      rlForm: {superadmin:'最高管理者', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', viewer:'檢視者'},
       showModal: false,
       editingId: null,
       formError: '',
@@ -909,7 +909,7 @@
       form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
       get systemPresets() {
         return [
-          {key:'superadmin', label: this.roleLabels.superadmin || '超級管理員'},
+          {key:'superadmin', label: this.roleLabels.superadmin || '最高管理者'},
           {key:'admin',      label: this.roleLabels.admin      || '管理員'},
           {key:'sales',      label: this.roleLabels.sales      || '業務'},
           {key:'engineer',   label: this.roleLabels.engineer   || '工程師'},
@@ -1145,6 +1145,7 @@
         })
         if (!r.ok) { this.toast((await r.json().catch(()=>({}))).detail || '儲存失敗'); return }
         this.roleLabels = await r.json()
+        try { sessionStorage.removeItem('motrix_role_labels') } catch (e) {}      // 全站共用的角色名稱快取（static/role-label.js）：下一頁重新抓
         this.rlForm = {...this.roleLabels}
         this.roleLabelsMgrOpen = false
         this.toast('角色名稱已儲存')
@@ -1359,7 +1360,7 @@
 
       async deleteUser(user) {
         if (!this.isSuperAdmin) return
-        if (user.builtinAdmin) { alert('不可刪除超級管理員帳號'); return }
+        if (user.builtinAdmin) { alert('不可刪除最高管理者帳號'); return }
         if (!confirm(`確定要刪除帳號「${user.username}」？此操作無法復原。`)) return
         const res = await fetch(`/api/users/${user.id}`, {
           method: 'DELETE', headers: this._headers()

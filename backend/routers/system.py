@@ -342,7 +342,7 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
     user = _require_user(authorization)
     # 安全審查 W3（2026-09-30）：這支直接數 audit_log，原本只要求登入 ⇒ 與歷史紀錄頁同一個權限（模組 audit_log）。
     # 舊端點，前端已改用 /api/reads/module-counts，沒有活的呼叫端。
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    require_any_module(user, ["audit_log"], "操作紀錄")
     modules_since = (body.get("modules") or {}) if isinstance(body, dict) else {}
     if not isinstance(modules_since, dict) or not modules_since:
         return {}
@@ -442,7 +442,7 @@ def _require_audit_view(authorization):
     # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死（`admin` 以上）。
     # 建了 key（`audit_log`）後跟其他模組一樣可逐帳號勾選；列表、樹、失敗摘要同一個權限。
     user = _require_user(authorization)
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    require_any_module(user, ["audit_log"], "操作紀錄")
     return user
 
 
@@ -1898,7 +1898,7 @@ def company_setup_status(authorization: str = Header(None)):
            "grace": {"until": grace.get("until")} if grace else None, "canFix": can_fix,
            "settingsUrl": _cs.SETTINGS_URL}
     if can_fix:
-        # CG-S5：只有一位最高管理員 ⇒ 設定頁建議再設一位（唯一的人不在時只剩本機暫時放行）
+        # CG-S5：只有一位最高管理者 ⇒ 設定頁建議再設一位（唯一的人不在時只剩本機暫時放行）
         conn = _gdb()
         try:
             out["superadminCount"] = conn.execute(
@@ -2129,11 +2129,11 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
 
 # ── Google 額度治理（§16 GB）────────────────────────────────────────────────
 #
-# 使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據現在 google 的
+# 使用者 2026-09-22：「你做一個真實計算器，並讓最高管理者可以依據現在 google 的
 # 免費額度去調整，當準備到達上限額度自動寄信並將附近客戶跟查找功能先回歸免費，
 # 待月週期結束開放」
 #
-# 🔑 只有超級管理員改得動（`GB6`，比照 `SA1`）：這幾個欄位決定的是**錢**。
+# 🔑 只有最高管理者改得動（`GB6`，比照 `SA1`）：這幾個欄位決定的是**錢**。
 # ⚠️ 反向控制那一題用的是 `role=viewer` ＋ `modules` 含 `settings` ——
 #    那正是 §10 查出來的那個真實帳號形狀，所以這裡**不可以**用 `module=` 放行。
 
@@ -2218,7 +2218,7 @@ def set_google_quota_setting(body: GoogleQuotaBody,
 
 
 # ── 儲存位置（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）────────────────────
-# 三個位置（雲端存檔根目錄、個資資料夾、更新交付資料夾）由最高管理員設定；留空＝照原本自動判斷。
+# 三個位置（雲端存檔根目錄、個資資料夾、更新交付資料夾）由最高管理者設定；留空＝照原本自動判斷。
 # 解析一律在 helpers.storage_locations（這裡只做讀寫與驗證）。本機上傳檔目錄不開放（改位置＝搬資料）。
 
 class StorageLocationsBody(BaseModel):
@@ -2267,7 +2267,7 @@ def set_storage_locations(body: StorageLocationsBody, authorization: str = Heade
 
 @router.post("/api/settings/storage-locations/create")
 def create_storage_location(body: StorageCreateBody, authorization: str = Header(None)):
-    """最高管理員明確建立資料夾（背景程式永不自動建）：只建最後一層。畫面同時提醒到雲端硬碟確認共用權限。"""
+    """最高管理者明確建立資料夾（背景程式永不自動建）：只建最後一層。畫面同時提醒到雲端硬碟確認共用權限。"""
     _require_user(authorization, require_superadmin=True)
     from helpers import storage_locations as SL
     if body.kind not in SL.KINDS:
@@ -2364,7 +2364,7 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
 #
 # 使用者裁示：「報價單可以增加付款條件的選項，名稱也可以自定義，例如純購料，
 # 他有自己的付款條件、驗收標準、保固條件，可由報價人手動點選方塊做切換，
-# 只有超級管理員可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語
+# 只有最高管理者可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語
 # 這樣的選項」。
 #
 # 形狀：`system_settings.quote_terms_presets = {presets: [...], defaultKey: "..."}`
@@ -2568,7 +2568,7 @@ _EMAIL_DEFAULTS = {
     "smtp_user":     "",
     "smtp_password": "",
     "from_name":     "MOTRIX專案管理系統",
-    "base_url":      "https://172.16.10.177:666",  # 2026-08-27：見 backend/tools/https_setup.ps1
+    "base_url":      "",  # 2026-11-13：新安裝不預填內部位址（畫面預填目前網址）；已儲存的值不動。舊預設見 email_notify._LEGACY_DEFAULT_BASE_URL
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
 }
@@ -2945,12 +2945,12 @@ def unlink_own_line(authorization: str = Header(None)):
 
 @router.delete("/api/line/binding/{username}")
 def unlink_line_of(username: str, authorization: str = Header(None)):
-    """最高管理員替別人解除綁定（例如手機換號、同仁離職）。"""
+    """最高管理者替別人解除綁定（例如手機換號、同仁離職）。"""
     _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln
     done = _ln.unlink_user(username)
     if done:
-        _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理員解除 LINE 綁定")
+        _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理者解除 LINE 綁定")
     return {"ok": True, "unlinked": done}
 
 
@@ -2972,7 +2972,7 @@ def test_email_notify(authorization: str = Header(None)):
     except Exception as e:
         tid = trace_id()
         logger.exception("email_notify test failed trace=%s", tid)
-        raise HTTPException(502, f"SMTP 連線失敗（代碼 {tid}）")
+        raise HTTPException(502, f"寄信失敗：連不上寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
     _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
 
@@ -3055,7 +3055,7 @@ def delete_custom_role(rid: str, authorization: str = Header(None)):
 # ── Role Labels ────────────────────────────────────────────────────────────────
 
 _DEFAULT_ROLE_LABELS = {
-    "superadmin": "超級管理員",
+    "superadmin": "最高管理者",
     "admin":      "管理員",
     "sales":      "業務",
     "engineer":   "工程師",
@@ -3111,7 +3111,7 @@ def get_role_labels(authorization: str = Header(None)):
 
 
 class RoleLabelsBody(BaseModel):
-    superadmin: str = "超級管理員"
+    superadmin: str = "最高管理者"
     admin:      str = "管理員"
     sales:      str = "業務"
     engineer:   str = "工程師"

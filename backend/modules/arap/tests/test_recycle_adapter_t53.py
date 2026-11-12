@@ -212,7 +212,7 @@ def test_fallback_hard_delete_when_bin_absent(client, who, monkeypatch):
     assert _row("payment_requests", "request_no", "PR-1") is None and _row("invoice_vouchers", "voucher_no", "IV-1") is None
     assert _bin("payment_request") == [] and _bin("invoice_voucher") == []
     labels = [a["target_label"] for a in _q("SELECT target_label FROM audit_log WHERE action IN ('payment_request.delete','invoice_voucher.delete')")]
-    assert len(labels) == 2 and all("暫存區未啟用" in x for x in labels)
+    assert len(labels) == 2 and all("資源回收筒未啟用" in x for x in labels)
 
 
 def test_adapters_registered_and_guard_baseline_shrunk():

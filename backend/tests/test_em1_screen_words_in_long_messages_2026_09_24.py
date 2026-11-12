@@ -18,7 +18,7 @@ BACKEND = ROOT / "backend"
 #: ③ 凍結清單：(檔案, 訊息原文)。⚠️ 這張表紅的時候，先確認是不是有人「順手改」了文案。
 _UNTOUCHED = (
     ('routers/approval_delegates.py',
-     '僅能設定自己的簽核代理人，如需代替他人設定請聯絡最高管理員'),
+     '僅能設定自己的簽核代理人，如需代替他人設定請聯絡最高管理者'),
     ('routers/auth.py',
      '驗證碼不正確，請確認驗證 App 時間與密鑰輸入無誤'),
     ('routers/auth.py',
@@ -71,7 +71,7 @@ _UNTOUCHED = (
     ('modules/case/api/quotations.py',
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
     ('modules/case/api/quotations.py',
-     '案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，或聯繫最高管理員）'),
+     '案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，或聯繫最高管理者）'),
     ('modules/case/api/quotations.py',
      '報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」'),
     ('modules/case/api/quotations.py',

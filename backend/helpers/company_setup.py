@@ -370,7 +370,7 @@ class ConfirmRefused(Exception):
 
 
 def confirm(conn, username: str, root=None, via="settings_page") -> dict:
-    """設定頁「確認本公司資料」（最高管理員）。呼叫端負責權限、交易、commit 與稽核。"""
+    """設定頁「確認本公司資料」（最高管理者）。呼叫端負責權限、交易、commit 與稽核。"""
     profile = _get(conn, "company_profile", {}) or {}
     missing = required_problems(profile)
     if missing:
@@ -397,7 +397,7 @@ def backfill_once(conn, root=None) -> str:
             profile = _get(conn, "company_profile", {}) or {}
             waiting = _get(conn, BACKFILL_WAITING_SETTING)
             if required_problems(profile):
-                result = "skipped_fields"          # 欄位不合格（含全新安裝）：之後由最高管理員在設定頁按確認
+                result = "skipped_fields"          # 欄位不合格（含全新安裝）：之後由最高管理者在設定頁按確認
             elif is_developer_identity(profile) and signed_file_state(profile, root) != "valid":
                 result = "waiting_signature"       # 開發者資料、簽章檔未到：先用暫時放行升級的那條路
                 if not waiting:
@@ -417,7 +417,7 @@ def backfill_once(conn, root=None) -> str:
         if result != "waiting_signature" and _get(conn, BACKFILL_WAITING_SETTING):
             conn.execute("DELETE FROM system_settings WHERE key=?", (BACKFILL_WAITING_SETTING,))
         # 🔴 CGI-M1（D 稽核）：waiting_signature **不記做過** ⇒ 簽章檔到位後下次啟動再試一次（否則 status 永遠停在
-        #    no_record、只能一再重建放行）。skipped_fields **要記**：全新安裝（欄位空）之後由最高管理員填好欄位時，
+        #    no_record、只能一再重建放行）。skipped_fields **要記**：全新安裝（欄位空）之後由最高管理者填好欄位時，
         #    不可以被下一次啟動自動確認——「有人決定過」必須是設定頁的確認。
         if result != "waiting_signature":
             _set(conn, BACKFILL_DONE_SETTING, {"at": datetime.now().isoformat(timespec="seconds"), "result": result})
@@ -434,7 +434,7 @@ def startup_install_check(conn, root=None) -> str:
         if not created:
             return "present" if ih else "error"
         if isinstance(_get(conn, CONFIRMATION_SETTING), dict):
-            msg = ("安裝識別檔遺失，已重建；本公司資料確認紀錄失效，請最高管理員重新確認"
+            msg = ("安裝識別檔遺失，已重建；本公司資料確認紀錄失效，請最高管理者重新確認"
                    "（開發者正式機：需新的簽章確認檔或暫時放行）")
             logger.error("company_setup: %s", msg)
             alert(conn, "install_id_recreated", msg)
@@ -480,7 +480,7 @@ def observe_expiry(conn, root=None, now=None) -> None:
         if g.get("active") and g.get("until"):
             left = datetime.fromisoformat(g["until"]) - now
             if left <= timedelta(hours=GRACE_EXPIRY_WARN_HOURS):
-                alert(conn, "grace_expiring", "本公司資料暫時放行將於 %s 到期，請最高管理員儘快確認本公司資料" % g["until"])
+                alert(conn, "grace_expiring", "本公司資料暫時放行將於 %s 到期，請最高管理者儘快確認本公司資料" % g["until"])
     except Exception:  # noqa: BLE001
         logger.exception("company_setup: 放行到期檢查失敗")
     try:
@@ -512,7 +512,7 @@ _ALERTED_IN_PROCESS = {}
 
 
 def alert(conn, code: str, text: str) -> bool:
-    """系統告警（同備份告警：邊緣觸發、同一代碼每日一次）：ERROR log＋系統稽核＋寄超級管理員。回是否這次有發。"""
+    """系統告警（同備份告警：邊緣觸發、同一代碼每日一次）：ERROR log＋系統稽核＋寄最高管理者。回是否這次有發。"""
     today = datetime.now().date().isoformat()
     if _ALERTED_IN_PROCESS.get(code) == today:           # CG5-S2：庫讀不到節流紀錄時，行程內這一層仍擋得住
         return False

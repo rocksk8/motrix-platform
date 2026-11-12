@@ -183,7 +183,7 @@ window.CM_PARTS.push(() => ({
 
     async unlockCase() {
       if (!this.selected) return
-      if (!(await MotrixUI.confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。', {danger: true}))) return
+      if (!(await MotrixUI.confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理者於簽核佇列審核通過後才會套用。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-unlock`, {
           method: 'POST',

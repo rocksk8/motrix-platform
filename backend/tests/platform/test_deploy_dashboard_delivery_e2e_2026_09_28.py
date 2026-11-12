@@ -2,7 +2,7 @@
 """瀏覽器端對端：部署儀表板「6. 套用更新」（UPDATE-DELIVERY §3／§4；A，2026-09-28）。
 
 儀表板以 uvicorn 起在本機（它自己的 app，有「只限本機」middleware）；「本機 ERP」指到測試用的 live_server，
-帳密驗證是真的登入一次（最高管理員）。apply_update 不真的跑：delivery._run_powershell 換成假執行器（照 §9.2 寫 result.json）。
+帳密驗證是真的登入一次（最高管理者）。apply_update 不真的跑：delivery._run_powershell 換成假執行器（照 §9.2 寫 result.json）。
 交付資料夾、安裝目錄、staging 都是 tmp；不碰正式機與真的雲端資料夾。
 觀測點：畫面上的確認內容與結果（DOM）、交付資料夾 results\\ 的結果檔、安裝目錄的 tools 已換上包裡的版本。
 """

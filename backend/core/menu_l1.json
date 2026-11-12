@@ -231,7 +231,7 @@
   {
    "group": "system",
    "href": "audit-log.html",
-   "label": "歷史紀錄",
+   "label": "操作紀錄",
    "order": 90,
    "perm": [
     "audit_log"
@@ -249,14 +249,14 @@
   {
    "group": "system",
    "href": "online-stats.html",
-   "label": "在線時數統計",
+   "label": "使用狀況",
    "order": 120,
    "perm": "superadmin"
   },
   {
    "group": "system",
    "href": "schema-status.html",
-   "label": "Schema 狀態",
+   "label": "資料庫版本",
    "order": 130,
    "perm": "superadmin"
   }

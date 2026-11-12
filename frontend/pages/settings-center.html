@@ -94,7 +94,7 @@
         <template x-for="p in plannedFeatures" :key="p.code">
           <div class="sc-gbtn" style="opacity:.65;cursor:default;display:block" :data-testid="'sc-soon-' + p.code">
             <span x-text="p.label"></span>
-            <div class="sc-help" :data-testid="'sc-soon-text-' + p.code" x-text="'開發中，預計 ' + p.plannedTrain + ' 版提供'"></div>
+            <div class="sc-help" :data-testid="'sc-soon-text-' + p.code" x-text="'開發中，尚未開放'"></div>
           </div>
         </template>
       </nav>
@@ -388,8 +388,8 @@ function settingsCenterPage() {
       return all.filter(f => !f.advanced || this.showAdv || this.isDirty(f))
     },
     isPlanned() { return !!(this.detail && this.detail.status === 'planned') },
-    // 「開發中，預計 MSn 版提供」只由 plannedTrain 組出（不取名稱、說明、備註；不寫日期）
-    plannedSentence() { const t = this.detail && this.detail.plannedTrain; return '開發中' + (t ? '，預計 ' + t + ' 版提供' : '') },
+    // 2026-11-13（選單去工程師化 批 0）：畫面不再露出內部班次代號（MSn）；只說「開發中，尚未開放」（不取名稱、說明、備註；不寫日期）。plannedTrain 仍在資料裡，只是不顯示
+    plannedSentence() { return '開發中，尚未開放' },
     advancedCount() { return ((this.detail && this.detail.fields) || []).filter(f => f.advanced).length },
 
     // ── 值的呈現 ─────────────────────────────────────────────

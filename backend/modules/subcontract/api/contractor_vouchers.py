@@ -50,7 +50,7 @@ from helpers.legal_params import round_half_up
 from modules.subcontract import payable_due as _PD
 from modules.subcontract import remit as _remit
 from modules.subcontract import remit_create as _rc
-from modules.subcontract import recycle_adapter as _rb_adapter  # 第53班 P1：刪除暫存區 adapter
+from modules.subcontract import recycle_adapter as _rb_adapter  # 第53班 P1：資源回收筒 adapter
 from helpers import recycle_bin
 
 router = APIRouter()
@@ -515,9 +515,9 @@ def preview_contractor_voucher(body: VoucherPreviewIn, authorization: str = Head
 
 @router.delete("/api/contractor-vouchers/{voucher_no}")
 def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)):
-    """刪除匯款申請＝送進刪除暫存區（30 天內最高管理者可還原）。規則不變：只有草稿；分期草稿守 LIFO
-    （已送審／已核准的只有最高管理者能走暫存區的『刪除已核可』入口，`/api/recycle-bin/delete-approved`；已匯款不可）。
-    暫存區模組不在 ⇒ 照舊刪資料列並在回應 notice 與稽核明說。"""
+    """刪除匯款申請＝送進資源回收筒（30 天內最高管理者可還原）。規則不變：只有草稿；分期草稿守 LIFO
+    （已送審／已核准的只有最高管理者能走資源回收筒的『刪除已核可』入口，`/api/recycle-bin/delete-approved`；已匯款不可）。
+    資源回收筒模組不在 ⇒ 照舊刪資料列並在回應 notice 與稽核明說。"""
     user = _require_user(authorization)
     _require_admin(user)
     conn = get_db()
@@ -533,14 +533,14 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
             except recycle_bin.BinError as e:
                 conn.close()
                 raise HTTPException(409, str(e))
-            if res is None:                                                      # 暫存區模組不在：照舊刪並明說
+            if res is None:                                                      # 資源回收筒模組不在：照舊刪並明說
                 ad = _rb_adapter.VoucherBinAdapter()
                 ok, why = ad.can_delete(conn, voucher_no, user)
                 if not ok:
                     conn.close()
                     raise HTTPException(409, why)
                 ad.delete_in_tx(conn, voucher_no)
-                notice = "刪除暫存區未啟用：此申請已永久刪除，無法還原"
+                notice = "資源回收筒未啟用：此申請已永久刪除，無法還原"
             conn.commit()
         conn.close()
     if res and res.get("after_commit"):
@@ -752,7 +752,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow  = resolve_active_flow_setting("contractor_voucher")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))

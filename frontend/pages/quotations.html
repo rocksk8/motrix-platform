@@ -849,7 +849,7 @@
         } catch { if (inDlg) { this.voidDlg.err = '網路錯誤，作廢失敗'; return false } alert('網路錯誤，刪除失敗'); return false }
         this.quotes = this.quotes.filter(q => q.quote_no !== quoteNo)
         if (notice) this.toast('報價單已刪除。' + notice, '#B45309', 8000)
-        else this.toast(reason ? '補登單已作廢（進暫存區，可復原）' : '報價單已刪除')
+        else this.toast(reason ? '補登單已作廢（進資源回收筒，可復原）' : '報價單已刪除')
         return true
       },
 
@@ -1077,7 +1077,7 @@
 <div x-show="voidDlg.open" x-cloak style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" data-testid="ql-void-dlg">
   <div style="background:#fff;border-radius:8px;padding:20px;width:min(440px,92vw)">
     <div style="font-weight:600;margin-bottom:8px">作廢補登單 <span x-text="voidDlg.quoteNo"></span></div>
-    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">作廢後進暫存區（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">作廢後進資源回收筒（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
     <input class="form-input" style="width:100%" type="text" placeholder="作廢原因" x-model="voidDlg.reason" @keydown.enter="!$event.isComposing && $event.keyCode !== 229 && submitVoid()" data-testid="ql-void-reason">
     <div style="color:var(--danger);font-size:12px;min-height:18px;margin-top:6px" x-text="voidDlg.err" data-testid="ql-void-err"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">

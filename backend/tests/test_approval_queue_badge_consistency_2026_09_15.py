@@ -74,7 +74,7 @@ def test_badge_counts_no_tier_document_waiting_for_superadmin(client, make_user)
     """**這是使用者回報的那個症狀**。
 
     沒有設定簽核流程時，規則是「任一 superadmin 皆可簽核」——`approve_quotation()`
-    的 no-tier 分支就是這樣走的（`detail_status = "超級管理員簽核"`），佇列頁的
+    的 no-tier 分支就是這樣走的（`detail_status = "最高管理者簽核"`），佇列頁的
     `canApprove()` 也是這樣判。但 count 端點的迴圈是 `if tiers and ...`，
     **沒有 tiers 的整批被跳過**，所以 topbar 顯示 0。
     """

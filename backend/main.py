@@ -304,11 +304,11 @@ _COMPANY_SETUP_ALLOWED = {
     ("PATCH", "/api/auth/change-password"): "帳號本身必要：改密碼（同「必須先改密碼」白名單；首次登入要先改密碼）",
     ("GET", "/api/ping"): "健康檢查：部署工具與前端判斷服務是否在線（不含任何資料）",
     ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
-    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理員才看得到完整內容，端點自己驗權限）",
-    ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理員，端點自己驗權限）",
-    ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理員，端點自己驗權限）",
-    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理員，端點自己驗權限）",
-    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理員，端點自己驗權限）",
+    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理者才看得到完整內容，端點自己驗權限）",
+    ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理者，端點自己驗權限）",
+    ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理者，端點自己驗權限）",
+    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理者，端點自己驗權限）",
+    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理者，端點自己驗權限）",
     ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
     ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
@@ -389,7 +389,7 @@ async def slow_request_log(request: Request, call_next):
 
 @app.middleware("http")
 async def recycle_bin_request_scope(request: Request, call_next):
-    """刪除暫存區的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
+    """資源回收筒的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
     （後續步驟失敗而 rollback），就搬回原處。平常沒有刪除 ⇒ 只是設一個空 list。細節見 helpers/recycle_bin.request_scope_end。"""
     from helpers import recycle_bin as _rb
     state = _rb.request_scope_begin()

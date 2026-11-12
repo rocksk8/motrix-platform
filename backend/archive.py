@@ -86,7 +86,7 @@ def _detect_archive_base() -> str:
 
 def _archive_base() -> str:
     """目前生效的雲端存檔根目錄，找不到 ⇒ ""。一律經 helpers.storage_locations：
-    最高管理員有設定 ⇒ 用設定（不存在就 ""，不退回自動判斷）；留空 ⇒ `_auto_archive_base`（掃磁碟機）。"""
+    最高管理者有設定 ⇒ 用設定（不存在就 ""，不退回自動判斷）；留空 ⇒ `_auto_archive_base`（掃磁碟機）。"""
     return _storage.path("archive_root")
 
 
@@ -548,9 +548,9 @@ def _alert_email_failed(reason: str, why: str) -> None:
 
 
 def _send_backup_error_email(reason: str, ts: str):
-    """備份嚴重錯誤（ERROR 級）寄給超級管理員：備份基礎設施出問題（例如雲端硬碟磁碟機代號跑掉）
+    """備份嚴重錯誤（ERROR 級）寄給最高管理者：備份基礎設施出問題（例如雲端硬碟磁碟機代號跑掉）
     需要有權限處理伺服器與磁碟機掛載的人知道，不是一般管理員的職務範圍。
-    收件人經信件類型登記表（`backup_error`，系統技術類，只寄超級管理員）；**找不到超級管理員時
+    收件人經信件類型登記表（`backup_error`，系統技術類，只寄最高管理者）；**找不到最高管理者時
     不退回一般管理員**（使用者 2026-09-26：「普通管理員不需要收到這類信」），改由下面的
     `_alert_email_failed()` 寫警示檔。
 
@@ -562,7 +562,7 @@ def _send_backup_error_email(reason: str, ts: str):
     from helpers import mail_types as _mt
     to = _superadmin_emails("backup_error")
     if not to:
-        _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的超級管理員）")
+        _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的最高管理者）")
         return None
     html = _build_html("backup_error", "備份嚴重錯誤", "錯誤", "#DC2626",
                        [("發生時間", ts), ("錯誤原因", reason)], "", _base_url(),
@@ -2679,7 +2679,7 @@ _F2_FIELDS = {
     # 2026-10-02（31-C 叫料匯款）：供應商（可能是個人）的收款帳戶凍結在申請的 snapshot_json 最上層（戶名、帳號）⇒ 一般份拿掉、完整列只進個資資料夾；
     # 銀行代碼／名稱是機構資訊不列入。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-case-case_material_payments`）；模組未載入時略過。
     "模組-case-case_material_payments": {"table": "case_material_payments", "json": ("snapshot_json", ("bankAccountName", "bankAccountNumber"))},
-    # 2026-10-10（第 53 班 P0，刪除暫存區）：被刪單據的完整快照（含銀行帳號、身分證、電話等原文，還原要用）與隔離檔清單 ⇒ 兩欄整欄是 F2：
+    # 2026-10-10（第 53 班 P0，資源回收筒）：被刪單據的完整快照（含銀行帳號、身分證、電話等原文，還原要用）與隔離檔清單 ⇒ 兩欄整欄是 F2：
     # 一般每日 JSON 備份排除，完整列只進個資資料夾（本機 sqlite 備份含整表）。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-recyclebin-recycle_bin`）；模組未載入時略過。
     "模組-recyclebin-recycle_bin": {"table": "recycle_bin", "columns": ("snapshot_json", "files_manifest_json")},
 }

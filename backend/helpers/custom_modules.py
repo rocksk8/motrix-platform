@@ -1235,7 +1235,7 @@ def create_record(conn, module_key, values, user) -> dict:
 
 
 def can_edit_draft(rec, body, user) -> bool:
-    """U14（使用者 2026-09-26 裁示）：草稿（起始狀態）只有建立者與超級管理員可以修改、送出；同權限的其他人只能看。"""
+    """U14（使用者 2026-09-26 裁示）：草稿（起始狀態）只有建立者與最高管理者可以修改、送出；同權限的其他人只能看。"""
     if rec["status"] != body["workflow"]["initial"]:
         return False
     return user.get("role") == "superadmin" or user.get("username") == rec.get("created_by")
@@ -1243,7 +1243,7 @@ def can_edit_draft(rec, body, user) -> bool:
 
 def _require_draft_owner(rec, body, user):
     if rec["status"] == body["workflow"]["initial"] and not can_edit_draft(rec, body, user):
-        raise CustomModuleError("這張草稿只有建立者（%s）或超級管理員可以修改、送出" % rec.get("created_by"), status=403)
+        raise CustomModuleError("這張草稿只有建立者（%s）或最高管理者可以修改、送出" % rec.get("created_by"), status=403)
 
 
 def update_record(conn, module_key, record_no, values, user) -> dict:

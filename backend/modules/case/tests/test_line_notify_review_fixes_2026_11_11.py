@@ -85,7 +85,7 @@ def test_superadmin_only_override_with_shared_mailbox_does_not_leak_line_to_the_
     _set_setting(mt.OVERRIDES_KEY, {"approval_review_edit": {"mode": "superadmin_only", "users": [], "roles": []}})
     assert RN.fire_edited(NO, customer="甲", editor="e", requester="sale_a", fields=["數量"]) is True
     line.wait(1)
-    assert line.targets() == [_uid(2)], "覆寫成僅超級管理員：送審人被丟掉，即使跟超管共用信箱也不收 LINE"
+    assert line.targets() == [_uid(2)], "覆寫成僅最高管理者：送審人被丟掉，即使跟超管共用信箱也不收 LINE"
 
 
 def test_custom_override_adds_people_without_dropping_the_requester(client, make_user, line):

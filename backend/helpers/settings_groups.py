@@ -248,7 +248,7 @@ register_group(
 
 
 
-# 材料卡片認列已核准採購單（T57；MATERIAL-LINK-BUG-T57）：預設＝使用者 10-13 的話「非超級管理員自動帶入要取消、寄信通知管理員」。
+# 材料卡片認列已核准採購單（T57；MATERIAL-LINK-BUG-T57）：預設＝使用者 10-13 的話「非最高管理者自動帶入要取消、寄信通知管理員」。
 # 放寬（讓有案件權限的人也能認列、關閉通知、提高寄信上限）要另一位最高管理者核准並等確認期間；收緊立即生效。收件人在「信件與通知收件設定」維護（只有一個來源）。
 register_group(
     "material_recognition", "材料卡片認列採購單",
@@ -653,7 +653,7 @@ register_group(
 
 
 # ── BP-1（建構器 第一刀）：各畫面是否啟用「管理者自訂版面」（欄位顯示／順序／標籤）。預設全關＝上線前的畫面（部署零行為變更）。 ──
-# 一個畫面一個欄位（builder.layout.<畫面>）；啟用後該畫面才會讀版面定義（公司／角色），超級管理員才看得到「編輯版面」。
+# 一個畫面一個欄位（builder.layout.<畫面>）；啟用後該畫面才會讀版面定義（公司／角色），最高管理者才看得到「編輯版面」。
 import json as _json
 from core import paths as _paths
 
@@ -1130,7 +1130,7 @@ from helpers import settings_groups_legal_reminder as _legal_reminder  # noqa: E
 
 _legal_reminder._register(S, _register_core)
 
-# T69 SO-S2：刪除暫存區保留天數（拆檔，同屬 core）
+# T69 SO-S2：資源回收筒保留天數（拆檔，同屬 core）
 from helpers import settings_groups_recycle_bin as _recycle_bin  # noqa: E402
 
 _recycle_bin._register(S, _register_core)

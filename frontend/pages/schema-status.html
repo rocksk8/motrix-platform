@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>Schema 狀態 — MOTRIX 專案管理系統</title>
+  <title>資料庫版本 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -70,14 +70,14 @@
   <main class="schema-main">
     <div class="page-header">
       <div>
-        <div class="page-header__title">Schema 狀態</div>
-        <div class="page-header__sub">資料庫結構版本與 migration 歷史（唯讀）</div>
+        <div class="page-header__title">資料庫版本</div>
+        <div class="page-header__sub">資料庫的版本與升級歷史（唯讀）</div>
       </div>
     </div>
 
     <div class="readonly-note">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      本頁僅供檢視，migration 於伺服器每次啟動時自動套用，此處不提供任何操作。
+      本頁僅供檢視，資料庫升級會在系統每次啟動時自動完成，此處不提供任何操作。
     </div>
 
     <div x-show="!loading" class="schema-summary">

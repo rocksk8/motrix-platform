@@ -58,7 +58,7 @@ LOCATION_CODES = dict([
     # 不經 save_document_files、自有存檔邏輯：只列出，不受插槽管理（設計 §3.5）
     _L("projects", "工作日誌／專案照片", "core", managed=False, note="GPS／浮水印處理，自有端點"),
     _L("payslips", "勞報單簽回檔", "payroll", managed=False, note="自有存檔與歸檔路徑"),
-    _L("branding", "品牌圖檔", "", managed=False, note="僅超級管理員、自有大小與格式上限"),
+    _L("branding", "品牌圖檔", "", managed=False, note="僅最高管理者、自有大小與格式上限"),
 ])
 
 #: 待核准變更的暫存前綴（`_pending_case_changes/{id}`）：實體資料夾是前綴，政策取自它最後要併入的目標代號。

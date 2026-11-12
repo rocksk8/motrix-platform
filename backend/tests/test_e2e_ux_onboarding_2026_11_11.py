@@ -56,7 +56,7 @@ def _type_login(page, live_server, user, pw):
     page.keyboard.press("Enter")
 
 
-# ── A1／A2：首次設定精靈（最高管理員 4 步）────────────────────────────────────
+# ── A1／A2：首次設定精靈（最高管理者 4 步）────────────────────────────────────
 
 @pytest.mark.e2e
 @pytest.mark.company_gate

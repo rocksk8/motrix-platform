@@ -11,7 +11,7 @@
  *   change-password.html?forced=1        ⇒ 步驟「設新密碼」
  *   change-password.html?wizard=totp     ⇒ 步驟「兩步驟驗證」
  *   company-profile-settings.html?setup=1 ⇒ 步驟「確認公司資料」
- * 步驟數依角色：最高管理員 4 步（要確認公司資料）；其他人 2 步（改完密碼就能用）。
+ * 步驟數依角色：最高管理者 4 步（要確認公司資料）；其他人 2 步（改完密碼就能用）。
  *
  * 「步驟 n／N」只在**真的走過第 1 步**時顯示（sessionStorage 旗標 motrix_wizard，第 1 步載入時寫入）：
  * 之後某天因為「資料庫搬家需要重新確認公司資料」再被擋到閘門頁時，不會冒出一個沒頭沒尾的「步驟 2／4」，
@@ -37,7 +37,7 @@
   var idx = mode === 'pw' ? 0 : mode === 'company' ? 1 : 2
   function flagGet() { try { return sessionStorage.getItem(FLAG) === '1' } catch (e) { return false } }
   function flagSet() { try { sessionStorage.setItem(FLAG, '1') } catch (e) {} }
-  // 只有最高管理員後面還有步驟（公司資料、兩步驟驗證）才需要旗標；其他人改完密碼就結束，不留痕跡
+  // 只有最高管理者後面還有步驟（公司資料、兩步驟驗證）才需要旗標；其他人改完密碼就結束，不留痕跡
   if (mode === 'pw' && isSuper) flagSet()
   var counted = mode === 'pw' || flagGet()          // 第 1 步本身一定顯示步數；之後要走過第 1 步才顯示
 

@@ -1063,7 +1063,7 @@ def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
         except requests.RequestException:
             pass
     if me.get("role") != "superadmin":
-        raise ValueError("只有最高管理員可以套用更新")
+        raise ValueError("只有最高管理者可以套用更新")
     return me.get("username") or username
 
 

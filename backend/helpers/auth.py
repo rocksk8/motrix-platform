@@ -484,9 +484,9 @@ def _require_user(authorization: str, require_superadmin: bool = False, module: 
         if module:
             user_mods = effective_modules(row["role"], row["modules"], user_id=row["id"])
             if module not in user_mods:
-                raise HTTPException(403, "僅超級管理員或具授權模組的使用者可執行此操作")
+                raise HTTPException(403, "僅最高管理者或具授權模組的使用者可執行此操作")
         else:
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
     return dict(row)
 
 

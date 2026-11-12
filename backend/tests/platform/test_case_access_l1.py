@@ -3,7 +3,7 @@
 ① 同一份規則：modules.case.quotations 的同名匯入就是 L1 那一份，row_access 登錄的也是它
 ② 已知例外只有一個：L1（含 L0 core/）新增讀寫 M01 `quotations` 表的檔案 ⇒ 紅；既有的讀寫列在基線、只准變少。
    判準用 dep_scan 的 SQL 解析（與 dep_graph 同一份，CA-S1），另補逗號 join。f-string 插入的表名靜態無從得知（已知限制）。
-③ 反向控制（CA-M1）：**表在、資料在、M01 沒載入** ⇒ `guard_case_access` 404、`case_access_allowed` False，連超級管理員也一樣。
+③ 反向控制（CA-M1）：**表在、資料在、M01 沒載入** ⇒ `guard_case_access` 404、`case_access_allowed` False，連最高管理者也一樣。
    用真實 schema 的庫（`client` 夾具），不是空庫。
 ④ 只有 `no such table` 當成查無此案；資料庫被鎖等其他錯誤照樣丟出（CA-S2）
 """
@@ -167,7 +167,7 @@ def _seed_case(quote_no, owner_id):
 
 
 def test_without_m01_access_is_404_even_though_the_table_and_row_exist(client, make_user, monkeypatch):
-    """反向控制（主持裁示條件 3、稽核 D CA-M1）：真實 schema、案件列在、使用者是擁有者也是超級管理員 ⇒ M01 在時放行；
+    """反向控制（主持裁示條件 3、稽核 D CA-M1）：真實 schema、案件列在、使用者是擁有者也是最高管理者 ⇒ M01 在時放行；
     M01 沒載入 ⇒ 404「找不到」，不放行。"""
     import db
     from helpers.case_access import case_access_allowed, case_module_present, guard_case_access

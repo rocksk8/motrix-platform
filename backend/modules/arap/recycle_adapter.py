@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""M05 應收應付的刪除暫存區 adapter（第 53 班 P1；IP-RB1，契約 `helpers/recycle_bin.py`）：請款單、開票申請憑據。
+"""M05 應收應付的資源回收筒 adapter（第 53 班 P1；IP-RB1，契約 `helpers/recycle_bin.py`）：請款單、開票申請憑據。
 
 兩種單據都是『對客戶的文件』：沒有總帳、收款、獎金的下游連結（總帳事件來自案件收款明細，不是這兩張單據），
 所以影響清單只有資訊性項目（已匯出幾次、有幾個已開立附件、行事曆事件）——不擋刪除。
 - 一般刪除：沿用現行規則（只准草稿；使用者 D1 不放寬）。
 - 『刪除已核可』（superadmin 專用入口 POST /api/recycle-bin/delete-approved）：只支援『已核准』。
-- 還原：單號被占用 ⇒ `conflict:`；案件（quote_no）不在 ⇒ `parent_missing:`；剩餘額度（金額／品項數量）被其他單據用掉 ⇒ `conflict:`（與建立同一套規則）；已開立附件已由暫存區搬回（路徑被占用時改寫）。
+- 還原：單號被占用 ⇒ `conflict:`；案件（quote_no）不在 ⇒ `parent_missing:`；剩餘額度（金額／品項數量）被其他單據用掉 ⇒ `conflict:`（與建立同一套規則）；已開立附件已由資源回收筒搬回（路徑被占用時改寫）。
 本檔只 import L1 契約 `helpers.recycle_bin`，不 import `modules.recyclebin`。
 """
 import json
@@ -71,12 +71,12 @@ class _ArapDocAdapter(RB.Adapter):
         r = conn.execute("SELECT * FROM %s WHERE %s=?" % (self.table, self.key_col), (entity_id,)).fetchone()
         if r is None:
             return []
-        out = [{"kind": "approved", "label": "此%s已核准（簽核紀錄會一併進暫存區，還原時恢復）" % self.noun, "blocking": False}]
+        out = [{"kind": "approved", "label": "此%s已核准（簽核紀錄會一併進資源回收筒，還原時恢復）" % self.noun, "blocking": False}]
         if (r["export_count"] or 0) > 0:
             out.append({"kind": "exported", "label": "已匯出 %d 次（既有匯出 PDF 存檔不會被刪除，留在原存檔目錄）" % r["export_count"], "blocking": False})
         n_files = len(self._files(r))
         if n_files:
-            out.append({"kind": "files", "label": "已開立附件 %d 個（隨單據進暫存區，還原時搬回）" % n_files, "blocking": False})
+            out.append({"kind": "files", "label": "已開立附件 %d 個（隨單據進資源回收筒，還原時搬回）" % n_files, "blocking": False})
         try:
             d = json.loads(r["data_json"] or "{}")
         except ValueError:

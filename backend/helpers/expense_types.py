@@ -392,7 +392,7 @@ def validate_values(conn, defn: dict, data, lines, *, viewer: dict, prior=None, 
     """`(clean_data, clean_lines, total_cost, problems)`；`problems`＝`[{"key","message"}]`（空＝通過）。
     - 預設值 token 由伺服器換（來源見 helpers/prefill_sources；註冊表未上線時只有 requester／today）；`locked` 的欄位建立時一律以伺服器預填為準（前端送什麼都不採用）
     - `prior`＝修改時舊單的 data：不重新解析任何來源，`locked` 的欄位沿用舊值；`case`＝`{"customer","project"}` 或 None；`type_code`＝「我上一次填過的內容」要查的類型
-    - `editableBy:"cashier"` 的欄位：不是出納／超級管理員送來的值 ⇒ 丟掉並回報
+    - `editableBy:"cashier"` 的欄位：不是出納／最高管理者送來的值 ⇒ 丟掉並回報
     - 定義沒有的鍵 ⇒ 回報（不靜默丟）；欄位型別／必填／公式／參照沿用建構器（`custom_modules.clean_values`）
     - 明細：逐列逐欄驗證（必填、型別、列數），儲存用的列由 `normalize_lines` 算（保留所有未知鍵）；`total_cost` 是唯一來源
     - `clean_data` 含公式欄位的結果（例 `total`），不含 `lines`"""

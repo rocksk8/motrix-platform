@@ -1,6 +1,6 @@
 {
   "key": "recyclebin",
-  "name": "刪除暫存區",
+  "name": "資源回收筒",
   "version": "1.0.8",
   "core": ">=1.0,<2.0",
   "license_key": "recyclebin",
@@ -26,7 +26,7 @@
   "pages": [
     {
       "path": "recycle-bin.html",
-      "menu": {"group": "system", "label": "刪除暫存區", "order": 90, "perm": ["superadmin"]}
+      "menu": {"group": "system", "label": "資源回收筒", "order": 90, "perm": ["superadmin"]}
     }
   ],
   "customization": {
@@ -39,15 +39,15 @@
     {
       "id": "recycle-bin",
       "section": "data",
-      "title": "刪除暫存區",
+      "title": "資源回收筒",
       "desc": "刪除的單據與附件先放在這裡保留一段時間，可還原或永久刪除",
-      "impact": "影響：還原會把單據與附件放回原處；永久刪除後無法還原（需寫原因並等確認期）。",
+      "impact": "影響：還原會把單據與附件放回原處；永久刪除後無法還原（要再輸入確認字樣）；把已核可的單據送進來時必須寫原因。",
       "href": "recycle-bin.html",
       "perm": [
         "superadmin"
       ],
       "order": 30,
-      "keywords": "刪除 還原 回收 暫存",
+      "keywords": "刪除 還原 回收 暫存 暫存區 刪除暫存區",
       "icon": "trash"
     }
   ]

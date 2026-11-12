@@ -251,11 +251,14 @@
 
         <!-- 開發機測試模式（2026-08-26 新增）：這個設定值存在本機 DB，不隨部署
              流程移動到正式機，只需要在開發機自己開啟即可 -->
-        <div class="ns-toggle">
-          <input data-saved-field type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
-          <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
-          <span x-show="cfg.dev_mode" style="font-size:12px;color:var(--warning);font-weight:600">(測試模式已開啟)</span>
-        </div>
+        <details data-testid="ns-dev-section" style="margin-bottom:12px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">開發用設定（一般使用不需要）</summary>
+          <div class="ns-toggle" style="margin-top:8px" data-testid="ns-dev-mode-row">
+            <input data-saved-field type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
+            <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
+            <span x-show="cfg.dev_mode" style="font-size:12px;color:var(--warning);font-weight:600">(測試模式已開啟)</span>
+          </div>
+        </details>
 
         <div class="ns-desc">
           請使用 Gmail <strong>應用程式密碼</strong>（App Password），而非 Google 帳號的登入密碼。<br>
@@ -291,7 +294,8 @@
           </div>
           <div class="ns-field">
             <label>系統網址（信件中的連結前綴）</label>
-            <input type="text" x-model="cfg.base_url" placeholder="https://172.16.10.177:666">
+            <input type="text" x-model="cfg.base_url" placeholder="例：https://erp.你的公司.com" data-testid="ns-base-url">
+            <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="baseUrlWarn()" x-text="baseUrlWarn()" data-testid="ns-base-url-warn"></div>
           </div>
         </div>
 
@@ -313,7 +317,7 @@
             </template>
           </div>
           <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
-            自動讀取角色為 <strong>admin</strong> 或 <strong>superadmin</strong> 且已填寫 Email 的使用者，無需手動維護
+            自動讀取角色為 <strong>管理員</strong> 或 <strong>最高管理者</strong> 且已填寫 Email 的使用者，無需手動維護
           </div>
         </div>
 
@@ -667,7 +671,7 @@
           smtp_user: '',
           smtp_password: '',
           from_name: 'MOTRIX ERP',
-          base_url: 'https://172.16.10.177:666',
+          base_url: '',
           dev_mode: false,
           admin_email_preview: [],
         },
@@ -676,6 +680,27 @@
         saved: false,
         msg: '',
         isError: false,
+
+        // 系統網址的白話提醒：沒填、是這台電腦自己（localhost）、或是公司內部才連得到的位址（私有 IP、.local／.lan 之類的內部名稱、單一名稱的主機）
+        baseUrlWarn() {
+          const u = String(this.cfg.base_url || '').trim()
+          if (!u) return '還沒有填系統網址：信件裡的按鈕會沒有連結，收信的人只能自己打開系統。'
+          let h = ''
+          try { h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase().replace(/^\[|\]$/g, '') } catch (e) { return '這個網址看起來不完整，請填完整網址（例：https://erp.你的公司.com）。' }
+          const m4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
+          if (m4) {
+            const o = m4.slice(1).map(Number)
+            if (o.some(n => n > 255)) return '這個網址看起來不完整，請填完整網址（例：https://erp.你的公司.com）。'
+            if (o[0] === 127) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
+            if (o[0] === 10 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168) || (o[0] === 169 && o[1] === 254) || (o[0] === 100 && o[1] >= 64 && o[1] <= 127))
+              return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+            return ''
+          }
+          if (h === '::1' || h === 'localhost' || h.endsWith('.localhost')) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
+          if (/^(fc|fd|fe80)/.test(h) && h.includes(':')) return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+          if (!h.includes('.') || /\.(local|lan|internal|intranet|home|localdomain|home\.arpa)$/.test(h)) return '這看起來是公司內部才認得的名稱：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+          return ''
+        },
 
         mrRecipients: [],
         mrAllUsers: [],
@@ -733,7 +758,7 @@
             {
               label: '管理員收件人 Email',
               ok: !!(this.cfg.admin_email_preview && this.cfg.admin_email_preview.length > 0),
-              hint: '請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email 欄位',
+              hint: '請至「使用者管理」為管理員或最高管理者帳號填寫 Email 欄位',
             },
           ]
         },
@@ -758,6 +783,9 @@
             const data = await r.json()
             this.cfg = { ...this.cfg, ...data }
             if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
+            // 2026-11-13：伺服器沒存系統網址時，預填你現在開的這個網址（不寫死任何一台機器；按「儲存」才生效）
+            // （用 localhost／127.x 開頁時不預填：那只有這台電腦連得到，預填反而誤導）
+            if (!this.cfg.base_url && !/^(localhost|127\.|\[?::1)/i.test(location.hostname)) this.cfg.base_url = location.origin
           }
 
           const [usersRes, mrRes] = await Promise.all([

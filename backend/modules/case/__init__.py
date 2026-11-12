@@ -18,7 +18,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
                               quotations as _api_quotations, quotation_stages as _api_quotation_stages, settlement_api as _api_settlement_api, overhead as _api_overhead, alt_plan as _api_alt_plan,
                               project_margin as _api_project_margin, field_cases as _api_field_cases)
-from modules.case import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
+from modules.case import recycle_adapter as _recycle_adapter   # 資源回收筒 adapter（IP-RB1）
 from modules.case import rule_provider as _rule_provider         # BP-2：標示規則的案件紀錄提供者（唯讀、逐筆讀取權限過濾）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import invoice_notify as _invoice_notify       # noqa: F401 — 載入時登記案件發票上傳通知的信件類型
@@ -106,7 +106,7 @@ MODULE = ModuleSpec(
         ("material.shippable", "case"): material_shippable.material_shippable,
         # 第 43 班（IP-SH5）：整案「訂購／已出貨／占用中」數量小計（營運報表匯出用；只有數量）
         ("case.shipped_summary", "case"): item_shipped.case_shipped_summary,
-        # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）
+        # IP-RB1（第 53 班 P1）：資源回收筒的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）
         ("recyclebin.adapter", "quotation"): _recycle_adapter.QuotationAdapter,                 # 字面字串：整合點登記表守門掃字面值
         ("recyclebin.adapter", "extra_expense"): _recycle_adapter.ExtraExpenseAdapter,
         ("recyclebin.adapter", "completion_note"): _recycle_adapter.CompletionNoteAdapter,

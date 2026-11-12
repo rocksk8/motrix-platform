@@ -3,8 +3,8 @@
 
 [單位] case:review_edit_notify    [層] L2（M01）    [穩定度] 實作
 [公開介面] fire_edited(quote_no, *, customer, editor, requester, fields, chain_reset) → bool；永不丟例外
-[收件人] 信件類型 `approval_review_edit`（群組＝superadmins、事件＝送審人）＝**送審人（`approval.requestedBy`）＋全部超級管理員**
-         （在職、有 Email、未退訂該類型者才收；超級管理員可在「信件與通知收件設定」頁覆寫）。編輯者本人若也是收件人（例如是超管）照寄，不特別排除。
+[收件人] 信件類型 `approval_review_edit`（群組＝superadmins、事件＝送審人）＝**送審人（`approval.requestedBy`）＋全部最高管理者**
+         （在職、有 Email、未退訂該類型者才收；最高管理者可在「信件與通知收件設定」頁覆寫）。編輯者本人若也是收件人（例如是超管）照寄，不特別排除。
 [內容] 單號、客戶、編輯人、變動的**欄位名稱**；**不帶新舊值與金額**（收件人不一定有金額檢視權限，信走外部郵件系統）。
        第 3 層（含）以後的編輯會多一行「已回到第 1 層、整條簽核鏈重新進行」。
 [失敗] 寄信是附帶動作：任何例外只記 log，絕不讓已存檔的編輯失敗；沒有收件人只記 warning。

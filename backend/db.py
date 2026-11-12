@@ -2085,7 +2085,7 @@ def _m061_case_semi_unlock(conn):
     """已結案案件解鎖／半解鎖機制（2026-08-26）：deal_tag='已結案' 的案件目前
     完全鎖定（quotations.py 的相關端點沒有例外）；使用者要求能解鎖成「半解鎖」
     狀態，讓案件記錄（case-record 整包存檔、款項標記收款、款項/叫料附件上傳）
-    可以繼續變更，但每一筆變更/上傳都要先送最高管理員審核通過才真的套用，不能
+    可以繼續變更，但每一筆變更/上傳都要先送最高管理者審核通過才真的套用，不能
     像未結案案件一樣立即生效。
 
     quotations 新增三欄記錄目前解鎖狀態（任何登入使用者皆可解鎖/重新上鎖，
@@ -2111,7 +2111,7 @@ def _m061_case_semi_unlock(conn):
     刪除拜訪，共 10 支）與款項稅額沖銷申請/撤銷/核准（3 支）——這些端點在
     案件已結案時一律直接 403 擋下（不論
     是否半解鎖都不支援），需要修正時請透過 case-record 整包編輯或款項標記
-    收款這幾支已支援排隊審核的端點處理，或聯繫最高管理員直接於資料庫層級
+    收款這幾支已支援排隊審核的端點處理，或聯繫最高管理者直接於資料庫層級
     校正。之後如果要擴大涵蓋範圍，比照本次 case_record_update 的「暫存
     payload_json、核准時重放同一段套用邏輯」模式即可，不需要另立新架構。"""
     if not _col_exists(conn, "quotations", "case_semi_unlocked"):
@@ -3738,7 +3738,7 @@ def _m078_completion_contact_phone(conn):
 
 def _m079_user_activity(conn):
     """在線時間統計（2026-09-14 使用者要求：「右上角顯示在線成員與數量，並統計每個
-    成員在線上的時間，這些數據只有超級管理員看得到」）。
+    成員在線上的時間，這些數據只有最高管理者看得到」）。
 
     **為什麼是「每人每天一列」而不是逐次登入的區間表**：需求是「累計時數」，
     而 session 可以同時多個（同一個人電腦＋手機）、可以被閒置逾時砍掉、也可能
@@ -5923,14 +5923,14 @@ def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> s
     """Return next available code like C-202507-001 (or DN-202508-001 for a
     multi-char prefix) for entity tables. table/prefix/code_col must be
     trusted internal constants (not user input).
-    `reserved`（第 53 班）：暫存區裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號。
-    自己向暫存區要保留號（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發暫存區裡的號碼；暫存區模組不在 ⇒ 空集合。
+    `reserved`（第 53 班）：資源回收筒裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號。
+    自己向資源回收筒要保留號（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發資源回收筒裡的號碼；資源回收筒模組不在 ⇒ 空集合。
     """
     month = datetime.now().strftime("%Y%m")
     try:
         from helpers import recycle_bin as _rb
         reserved = _rb.reserved_ids(conn, "") or ()
-    except Exception:                                      # noqa: BLE001 — 暫存區讀不到不可讓開單失敗（最壞＝回到舊行為）
+    except Exception:                                      # noqa: BLE001 — 資源回收筒讀不到不可讓開單失敗（最壞＝回到舊行為）
         reserved = ()
     pattern = f"{prefix}-{month}-???"
     code_len = len(prefix) + 11   # prefix '-' YYYYMM '-' NNN

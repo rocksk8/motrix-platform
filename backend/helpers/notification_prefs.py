@@ -92,7 +92,7 @@ EVENT_GROUPS = [
     ]),
     ("系統與報表", [
         ("settlement_finalized", "成本精算完結通知"),
-        ("case_closing_report", "案件結案報表 PDF（僅最高管理員）"),
+        ("case_closing_report", "案件結案報表 PDF（僅最高管理者）"),
         ("monthly_report",       "每月營運報表"),
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
         ("user_notice",         "管理者自訂的額外通知（站內通知另有各動作的個別退訂）"),
@@ -119,7 +119,7 @@ EVENT_GROUPS = [
     ]),
     ("已結案案件解鎖", [
         ("case_close_blocked",   "結案被防呆機制擋下（未達成前置條件）"),
-        ("case_change_requested","已結案案件半解鎖期間的變更/上傳待審核（僅最高管理員）"),
+        ("case_change_requested","已結案案件半解鎖期間的變更/上傳待審核（僅最高管理者）"),
     ]),
 ]
 

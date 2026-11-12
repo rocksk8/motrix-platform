@@ -504,7 +504,7 @@ def _require_t100_superadmin(authorization: str) -> dict:
     """T100 確認／取消確認（寫入總帳狀態）：僅 superadmin（第42班，預設 Q7）。匯出預覽／下載仍是財務角色。"""
     u = _require_user(authorization)
     if u["role"] != "superadmin":
-        raise HTTPException(403, "T100 確認／取消確認僅超級管理員可執行")
+        raise HTTPException(403, "T100 確認／取消確認僅最高管理者可執行")
     return u
 
 

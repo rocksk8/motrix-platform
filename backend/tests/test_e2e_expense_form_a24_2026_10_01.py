@@ -268,7 +268,7 @@ def test_my_requests_document_buttons(live_server, make_user, new_context, clien
 
 @pytest.mark.e2e
 def test_form_shows_a_published_edit_of_a_default_type(live_server, make_user, new_context, client):
-    """超級管理員改預設類型（差旅：加一個欄位）→ 發布 v1 → 請款表單立刻依新定義渲染該欄位；送出的單據釘 v1、欄位值存進 data_json。
+    """最高管理者改預設類型（差旅：加一個欄位）→ 發布 v1 → 請款表單立刻依新定義渲染該欄位；送出的單據釘 v1、欄位值存進 data_json。
     發布前先開的一張單（v0）不受影響。"""
     _seed()
     su = make_user(username="a24_ui_su", role="superadmin")
@@ -286,7 +286,7 @@ def test_form_shows_a_published_edit_of_a_default_type(live_server, make_user, n
     page.select_option("#pr-type", "travel")
     page.wait_for_selector("#pr-df .df-root", timeout=15000)
     assert page.locator('#pr-df [data-field="trip_purpose"]').count() == 0
-    # 超級管理員改定義：加「出差事由」欄位（放進第一組版面）→ 草稿 → 驗證 → 發布
+    # 最高管理者改定義：加「出差事由」欄位（放進第一組版面）→ 草稿 → 驗證 → 發布
     h = tok(su)
     body = client.get("/api/expense-types/travel", headers=h).json()["definition"]
     body["fields"].insert(len(body["fields"]) - 1, {"key": "trip_purpose", "label": "出差事由（測試新增）", "type": "text", "required": True, "maxLength": 100})

@@ -8,22 +8,22 @@ key、名稱、分類（業務／簽核／系統技術）、預設收件人、�
 ```
 事件收件人   notify_* 依事件決定的人（簽核人、申請人、負責人…）
 群組收件人   登記的預設群組：none（只寄事件收件人）／admins／superadmins
-超級管理員在「信件與通知收件設定」頁可逐類覆寫（`OVERRIDES_KEY`）：
+最高管理者在「信件與通知收件設定」頁可逐類覆寫（`OVERRIDES_KEY`）：
   default          照登記
-  superadmin_only  只寄超級管理員（事件收件人也不寄）
+  superadmin_only  只寄最高管理者（事件收件人也不寄）
   custom           事件收件人＋指定帳號＋指定角色（取代群組收件人）
 ```
-- 系統技術類預設**只寄超級管理員**（一般管理員不收）。
+- 系統技術類預設**只寄最高管理者**（一般管理員不收）。
 - 個人的通知設定只能退訂自己收得到的類型（`notification_muted`），不能把自己加進受限的類型。
-- 沒有登記的 key：執行時記 ERROR、只寄超級管理員（fail closed）；守門在靜態掃描時就擋下。
+- 沒有登記的 key：執行時記 ERROR、只寄最高管理者（fail closed）；守門在靜態掃描時就擋下。
 """
 
 import re
 from dataclasses import dataclass, field
 
 CATEGORIES = {"business": "業務", "approval": "簽核", "system": "系統技術"}
-GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與超級管理員", "superadmins": "僅超級管理員",
-          "finance": "財務角色與超級管理員"}   # 2026-10-05（第42班）：付款／匯款類跟「財務」角色走，不再寄全體 admin
+GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與最高管理者", "superadmins": "僅最高管理者",
+          "finance": "財務角色與最高管理者"}   # 2026-10-05（第42班）：付款／匯款類跟「財務」角色走，不再寄全體 admin
 MODES = ("default", "superadmin_only", "custom")
 ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
 
@@ -60,7 +60,7 @@ def register(key, name, category, group, event, impact, action, owner="core"):
     if group not in GROUPS:
         raise ValueError("信件類型 %s：預設群組 %r 不存在" % (key, group))
     if category == "system" and group != "superadmins":
-        raise ValueError("信件類型 %s：系統技術類的預設收件人必須是僅超級管理員" % key)
+        raise ValueError("信件類型 %s：系統技術類的預設收件人必須是僅最高管理者" % key)
     if key in _REGISTRY and _REGISTRY[key].owner != owner:
         raise ValueError("信件類型 %s 重複登記（%s／%s）" % (key, _REGISTRY[key].owner, owner))
     _REGISTRY[key] = MailType(key, name, category, group, event, impact, action, owner)
@@ -223,7 +223,7 @@ register("geo_quota_warning", "地圖定位額度達警戒線", _S, "superadmins
          "達到額度上限後，系統改用精度較低的免費定位來源；功能不會關閉。", "如需維持定位精度，請調整額度設定；下一個計費週期開始時自動恢復。")
 register("company_setup_alert", "本公司資料設定狀態告警", _S, "superadmins", "",
          "本公司資料未確認、判定失敗或暫時放行中時，對外文件可能暫停輸出或使用未經確認的公司資料。",
-         "請最高管理員至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
+         "請最高管理者至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
 register("system_test_mail", "測試信", _S, "superadmins", "",
          "本信僅用於確認寄信設定。", "收到本信表示寄信設定正確，無需處理。")
 

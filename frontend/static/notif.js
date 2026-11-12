@@ -3,11 +3,11 @@
   var _origFetch = window.fetch
   var _redirecting = false
   // ── 本公司資料設定閘門（COMPANY-SETUP-GATE §3.6、§4.2）──────────────────────────
-  // ① 428 company_setup_required ⇒ 最高管理員導向設定頁、其他人導向說明頁（這兩頁本身與登入頁不導）
+  // ① 428 company_setup_required ⇒ 最高管理者導向設定頁、其他人導向說明頁（這兩頁本身與登入頁不導）
   // ② 回應標頭 X-Motrix-Company-Setup（status_error／grace）⇒ 所有頁面頂端橫幅；之後的 /api 回應沒有這個標頭 ⇒ 移除
   var _SETUP_BANNER_TEXT = {
     status_error: '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員',
-    grace: '本公司資料尚未確認，目前為暫時放行（有期限），請最高管理員儘快到「公司資料設定」確認',
+    grace: '本公司資料尚未確認，目前為暫時放行（有期限），請最高管理者儘快到「公司資料設定」確認',
   }
   function _setupBanner(kind) {
     var el = document.getElementById('motrix-company-setup-banner')

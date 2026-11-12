@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """信件與通知收件設定（L1；CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。
 
-- `GET  /api/mail-types`：所有登記的信件類型（分類、預設收件人、影響、建議處理）＋目前的覆寫（僅超級管理員）
+- `GET  /api/mail-types`：所有登記的信件類型（分類、預設收件人、影響、建議處理）＋目前的覆寫（僅最高管理者）
 - `PUT  /api/mail-types/{key}/recipients`：{mode: default|superadmin_only|custom, users: [...], roles: [...],
   mailOff?: bool（信件關閉，MAIL-CAL 階段 1）, confirm?: bool（關閉簽核／系統類要帶 true）}
 - `GET  /api/mail-types/receivable?user_id=`：某位使用者**收得到**哪些類型（使用者管理頁的個人退訂清單用）
 
 個人退訂（`users.notification_muted`）只能移除自己收得到的類型；受限的類型不會出現在可勾選的清單裡，
-也沒有任何設定能把自己加進去（加人只能由超級管理員在本頁設定）。
+也沒有任何設定能把自己加進去（加人只能由最高管理者在本頁設定）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -75,7 +75,7 @@ def list_mail_types(authorization: str = Header(None)):
     for v in items:
         v["noRecipient"] = _no_recipient(mt.get(v["key"]))
     return {"items": items, "categories": mt.CATEGORIES, "groups": mt.GROUPS, "roles": list(mt.ROLES),
-            "modes": {"default": "照預設", "superadmin_only": "僅超級管理員", "custom": "指定帳號／角色"},
+            "modes": {"default": "照預設", "superadmin_only": "僅最高管理者", "custom": "指定帳號／角色"},
             "calendarOnly": cal_only, "calendarStatus": cal_status}
 
 
@@ -146,7 +146,7 @@ def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_
 
     以「套用這個請求之後」的狀態判斷（D 稽核 M-1）：這位使用者套用 new_muted／new_email／new_role（None＝不變）
     之後，某個系統技術類型的收件人若從「至少一人」變成「零人」⇒ 回傳該類型名稱（空＝放行）。
-    收件人依目前的覆寫計算，與寄信端（email_notify._group_emails）同一套規則：預設與 superadmin_only＝超級管理員；
+    收件人依目前的覆寫計算，與寄信端（email_notify._group_emails）同一套規則：預設與 superadmin_only＝最高管理者；
     custom＝指定的帳號與角色（D 稽核 O-2：custom 名單也會因為名單上的人退訂、清空 Email、改角色而變成沒人收得到）。
     「收得到」＝啟用中、有 Email（與 SQL `email != ''` 同判準）、未退訂。"""
     import json
@@ -166,7 +166,7 @@ def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_
         if mode == "custom":
             custom_roles = ov.get("roles") or []
             return username in (ov.get("users") or []) or role in custom_roles
-        return role == "superadmin"          # 系統技術類的預設群組一律是僅超級管理員（mail_types.register 已守）
+        return role == "superadmin"          # 系統技術類的預設群組一律是僅最高管理者（mail_types.register 已守）
 
     def receivers(key, ov, swap):
         n = 0
