@@ -385,11 +385,11 @@ if (typeof module !== 'undefined' && module.exports) {
       notifOpen('style="position:relative"')
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
-      + '通知'
+      + '<span class="tb-lbl">通知</span>'
       + '<i x-show="reminders.length>0" data-testid="bell-reminder-dot" aria-label="有提醒"'
       + ' style="position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;background:var(--warning);box-shadow:0 0 0 2px #fff;display:none"></i>'
       + '<span x-show="unread>0" x-text="unread>9?\'9+\':unread"'
-      + ' style="background:var(--danger);color:#fff;font-size:12px;padding:1px 5px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
+      + ' class="mbadge" style="background:var(--danger);color:#fff;font-family:LINE Seed TW_OTF, sans-serif"></span>'
       + '</button>'
       + '<div x-show="open" @click.outside="open=false"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
@@ -446,6 +446,8 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<div class="topbar__right">'
       // 手機版（≤767px）：次要項目（姓名／字級／深淺色／在線／？／修改密碼）收進「⋯」面板，頂欄只留 搜尋／通知／⋯／登出。
       // 桌機與平板 .topbar__sec 是 display:contents（版面等同沒有這層）；通知鈴移到 ？／修改密碼 之後、緊貼登出。
+      + bell
+      + '<button type="button" class="topbar__btn topbar__more" id="tb-more" aria-label="更多" aria-haspopup="true" aria-expanded="false" title="更多">⋯</button>'
       + '<div class="topbar__sec" id="tb-sec">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
@@ -454,8 +456,6 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:12px">修改密碼</a>'
       + '</div>'
-      + bell
-      + '<button type="button" class="topbar__btn topbar__more" id="tb-more" aria-label="更多" aria-haspopup="true" aria-expanded="false" title="更多">⋯</button>'
       + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:12px">登出</button>'
       + '<div class="topbar__avatar">' + esc(av) + '</div>'
       + '</div>'
@@ -470,17 +470,22 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // ── 手機版頂欄「⋯」面板開關（≤767px 才看得到按鈕；面板內容是 .topbar__sec）──────────
   function bindMoreMenu(bar) {
-    var btn = bar.querySelector('#tb-more')
-    if (!btn) return
-    function setOpen(v) {
+    var btn = bar.querySelector('#tb-more'), sec = bar.querySelector('#tb-sec')
+    if (!btn || !sec) return
+    function isOpen() { return bar.classList.contains('tb-more-open') }
+    function setOpen(v, restoreFocus) {
       bar.classList.toggle('tb-more-open', v)
       btn.setAttribute('aria-expanded', v ? 'true' : 'false')
+      if (!v && restoreFocus) { try { btn.focus() } catch (_e) {} }
+      if (v) { var f = sec.querySelector('button, a[href]'); if (f && window.matchMedia && window.matchMedia('(pointer: fine)').matches) { try { f.focus() } catch (_e) {} } }
     }
-    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!bar.classList.contains('tb-more-open')) })
-    document.addEventListener('click', function (e) {
-      if (bar.classList.contains('tb-more-open') && !bar.querySelector('#tb-sec').contains(e.target)) setOpen(false)
-    })
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false) })
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!isOpen()) })
+    // 外點收合用 pointerdown（不用 click）：iOS Safari 對「非互動元素」不一定送 click；而且 pointerdown 當下目標還在 DOM 裡——
+    // 面板內按「深淺色」會換掉按鈕內容，用 click 判斷時目標已脫離 DOM、被誤判成外點而收起面板（L1）。
+    document.addEventListener('pointerdown', function (e) {
+      if (isOpen() && !sec.contains(e.target) && !btn.contains(e.target)) setOpen(false)
+    }, true)
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen()) setOpen(false, true) })
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
@@ -618,7 +623,7 @@ if (typeof module !== 'undefined' && module.exports) {
     'daily-tasks.html':        'daily_task',
   }
 
-  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
+  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto'
 
   // 2026-09-13（模組權限稽核）：頁面層守門的資料來源。
   //
@@ -664,6 +669,12 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // 分組下拉選單。每個 sec() 是一個頂層項目，底下的 ni() 排成多欄面板。
   // 只有一個子項的分組（例如「主選單／儀表板」）直接當成連結，不開面板。
+  function _mnavBurgerDot(bar) {
+    var b = bar.querySelector('.mnav__burger')
+    if (!b) return
+    var any = [].some.call(bar.querySelectorAll('.mnav__dot'), function (d) { return d.style.display !== 'none' })
+    b.classList.toggle('has-dot', any)
+  }
   function renderMainNav() {
     var groups = _navGroups.filter(function (g) { return g.items.length > 0 })
     if (!groups.length) {
@@ -702,7 +713,7 @@ if (typeof module !== 'undefined' && module.exports) {
           return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '"'
             + (it.customKey ? ' data-custom-nav="' + esc(it.customKey) + '"' : '') + ' href="' + it.href + '">'
             + '<span>' + esc(it.label) + '</span>'
-            + (it.badgeId ? '<span id="' + it.badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : '')
+            + (it.badgeId ? '<span id="' + it.badgeId + '" class="mbadge" style="' + _SB_BADGE_STYLE + '"></span>' : '')
             + it.extraBadge
             + '</a>'
         }).join('') + '</div>'
@@ -718,6 +729,14 @@ if (typeof module !== 'undefined' && module.exports) {
         + '</span>' + panel + '</div>'
     }).join('') + '</div>'
 
+    // 手機（≤767px）：主選單收成「☰ 主選單」鈕＋抽屜（CSS 把 .mnav__in 變成左側抽屜、群組變成可展開的清單；桌機這顆鈕不顯示）。
+    // 鈕上顯示目前所在的群組名稱；任何群組有待處理紅點時，鈕上也要有一顆（抽屜收起來看不到群組標題的紅點）。
+    var _curGrp = groups.filter(function (g) { return g.items.some(function (it) { return it.active }) })[0]
+    html = '<button type="button" class="mnav__burger" aria-expanded="false" aria-label="\u958b\u555f\u4e3b\u9078\u55ae" data-testid="mnav-burger">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
+      + '<span>\u4e3b\u9078\u55ae</span><span class="mnav__cur">' + (_curGrp ? esc(_curGrp.label) : '') + '</span></button>'
+      + html + '<div class="mnav__backdrop" data-testid="mnav-backdrop"></div>'
+
     var bar = document.getElementById('app-mainnav')
     if (!bar) {
       bar = document.createElement('nav')
@@ -729,6 +748,49 @@ if (typeof module !== 'undefined' && module.exports) {
       else document.body.insertBefore(bar, document.body.firstChild)
     }
     bar.innerHTML = html
+    if (!bar._drawerBound) {
+      bar._drawerBound = true
+      var _mq = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null
+      var _setOpen = function (open) {
+        bar.classList.toggle('mnav--open', open)
+        document.documentElement.classList.toggle('mnav-lock', open)
+        var b = bar.querySelector('.mnav__burger')
+        if (b) { b.setAttribute('aria-expanded', open ? 'true' : 'false'); b.setAttribute('aria-label', open ? '\u95dc\u9589\u4e3b\u9078\u55ae' : '\u958b\u555f\u4e3b\u9078\u55ae') }
+      }
+      bar.addEventListener('click', function (e) {
+        if (!_mq || !_mq.matches) return
+        var t = e.target
+        if (t.closest('.mnav__burger')) {
+          var willOpen = !bar.classList.contains('mnav--open')
+          _setOpen(willOpen)
+          if (willOpen && !bar.querySelector('.mnav__grp.is-open')) {            // 打開時預設展開目前所在的群組
+            var on = bar.querySelector('.mnav__grp.is-on')
+            if (on) on.classList.add('is-open')
+          }
+          return
+        }
+        if (t.closest('.mnav__backdrop')) { _setOpen(false); return }
+        var top = t.closest('span.mnav__top')                                  // 有下拉的群組標題：點一下展開／收合（手風琴，一次一個）
+        if (top && top.parentNode.classList.contains('mnav__grp')) {
+          var grp = top.parentNode, was = grp.classList.contains('is-open')
+          bar.querySelectorAll('.mnav__grp.is-open').forEach(function (x) { x.classList.remove('is-open') })
+          if (!was) { grp.classList.add('is-open'); try { grp.scrollIntoView({ block: 'nearest' }) } catch (_e) {} }
+          return
+        }
+        if (t.closest('a[href]')) _setOpen(false)                              // 點了連結（導向其他頁）⇒ 收起抽屜
+      })
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && bar.classList.contains('mnav--open')) {
+          _setOpen(false)
+          var bb = bar.querySelector('.mnav__burger'); if (bb) try { bb.focus() } catch (_e) {}     // 焦點還給觸發鈕
+        }
+      })
+      window.addEventListener('resize', function () { if (_mq && !_mq.matches && bar.classList.contains('mnav--open')) _setOpen(false) })
+      // 群組標題的紅點由 notif.js 事後改 style.display ⇒ 觀察它，把「有紅點」同步到 ☰ 鈕
+      if (window.MutationObserver) new MutationObserver(function () { _mnavBurgerDot(bar) })
+        .observe(bar, { subtree: true, attributes: true, attributeFilter: ['style'] })
+    }
+    _mnavBurgerDot(bar)
   }
 
 
@@ -767,8 +829,8 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function _extraBadge(x) {
     if (!x || !x.id) return ''
-    return '<span id="' + esc(x.id) + '" style="display:none;background:' + esc(x.color || 'var(--accent)')
-      + ';color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'
+    return '<span id="' + esc(x.id) + '" class="mbadge" style="display:none;background:' + esc(x.color || 'var(--accent)')
+      + ';color:#fff;font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto"></span>'
   }
 
   function _setMenuState(st) { document.documentElement.setAttribute('data-menu-state', st) }

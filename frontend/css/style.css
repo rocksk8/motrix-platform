@@ -274,6 +274,7 @@ body {
 }
 
 .topbar__title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;   /* 長頁名不可把 ⋯／登出擠出畫面 */
   /* 2026-09-14：這裡已改成顯示中文頁名，原本那套（英文字體 + uppercase +
      .14em 大字距）是給英文系統名用的，套在中文上會變成寬鬆的怪東西。 */
   font-family: var(--font-zh);
@@ -439,17 +440,32 @@ body {
 }
 .nav__sub-item.active::before { background: var(--accent); }
 
+/* 數字徽章（主選單下拉、頂欄鈴鐺、舊側欄 .nav__badge 共用同一個形狀）：
+   一位數＝正圓（寬＝高＝20px）、兩位數／「9+」＝膠囊（左右各留 6px）。
+   ⚠️ 以前只寫 min-width:16px＋padding:1px 5px＋line-height:1.6：flex 容器裡的徽章會被擠到只剩 min-width，
+   而高度是 12px×1.6＋2px＝21px ⇒ 窄又高的橢圓（不是圓）。這裡：flex:none（不被擠）、height 固定、line-height＝height、
+   box-sizing:border-box，寬度由 min-width＝height 保證「一位數一定是圓」。顯示／隱藏仍由各處的 inline display 控制（本類別不設 display）。 */
+.mbadge,
+.nav__badge {
+  box-sizing: border-box;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 20px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .nav__badge {
   margin-left: auto;
   background: var(--danger);
   color: #fff;
-  font-size: 12px;
   font-family: var(--font-en);
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 10px;
-  min-width: 18px;
-  text-align: center;
 }
 .nav__badge--warn { background: var(--warning); }
 
@@ -521,6 +537,7 @@ body {
 .mnav__item:hover { background: #F5F4F0; color: var(--accent); }
 .mnav__item.is-on { color: var(--accent); font-weight: 600; }
 
+.mnav__burger, .mnav__backdrop { display: none; }
 /* 窄螢幕：横向捲動。捲動容器會裁掉下拉面板，
    所以只在真的放不下時才啟用。 */
 @media (max-width: 1100px) {
@@ -1352,8 +1369,11 @@ body.sidebar-lock { overflow: hidden; }
     top: 4px; right: 4px;
     margin-left: 0 !important;
     font-size: 12px !important;
-    padding: 1px 3px;
-    min-width: 14px;
+    padding: 0 3px;
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    border-radius: 8px;
   }
 
   /* Topbar logo: shrink to match icon rail */
@@ -1498,6 +1518,7 @@ body.sidebar-lock { overflow: hidden; }
    作法：次要項目收進「⋯」面板（sidebar.js 的 .topbar__sec；桌機是 display:contents，版面不變）。
    ═══════════════════════════════════════ */
 .topbar__sec { display: contents; }
+@media (min-width: 1024px) { .topbar__sec > * { order: -1; } }
 .topbar__more { display: none; }
 
 /* 頂欄與主導覽：手機＋平板（≤1023px）共用——768px 時 12 個項目一樣放不下，文字被擠成直排 */
@@ -1509,9 +1530,9 @@ body.sidebar-lock { overflow: hidden; }
   .topbar__divider, .topbar__title, .topbar__avatar { display: none; }
   .topbar__right { gap: 8px; flex-shrink: 0; }
   /* 搜尋吃掉剩餘寬度；16px 避免 iOS 聚焦時自動放大 */
-  .topbar > div[x-data="globalSearchStore()"] { margin: 0 !important; min-width: 0; }
-  .global-search-input { font-size: 16px !important; min-height: 40px; }
-  .topbar__btn { min-width: 40px; min-height: 40px; justify-content: center; }
+  .topbar > div[x-data="globalSearchStore()"] { margin: 0 !important; min-width: 96px; flex: 1 1 96px; }   /* 搜尋框保底 96px：字級放大時不被擠到不能用（L3） */
+  #app-topbar .global-search-input { font-size: 16px !important; min-height: calc(44px / var(--fz, 1)); }   /* 用 id 選擇器：下面「表單控制項 40px」通則的 :not() 鏈特異度更高，會把它蓋回 40 */
+  .topbar__btn { min-width: calc(44px / var(--fz, 1)); min-height: calc(44px / var(--fz, 1)); justify-content: center; }   /* 觸控目標：實際畫面上 ≥44px（字級縮放 zoom 會連 px 一起縮，所以除回去） */
   .topbar__more { display: flex; font-size: 20px; line-height: 1; padding: 0 8px; }
   .topbar__more[aria-expanded="true"] { background: var(--sidebar-hover); color: var(--text-on-dark); }
 
@@ -1524,7 +1545,7 @@ body.sidebar-lock { overflow: hidden; }
   }
   .topbar.tb-more-open .topbar__sec #tb-display-name { flex: 1 0 100%; font-size: 14px !important; }
   .topbar.tb-more-open .topbar__sec > div:has(#fz-0) { margin-right: 0 !important; }
-  .topbar.tb-more-open .topbar__sec button[id^="fz-"] { height: 40px !important; line-height: 40px !important; min-width: 44px; padding: 0 10px !important; font-size: 14px !important; }
+  .topbar.tb-more-open .topbar__sec button[id^="fz-"] { height: calc(44px / var(--fz, 1)) !important; line-height: calc(44px / var(--fz, 1)) !important; min-width: calc(44px / var(--fz, 1)); padding: 0 10px !important; font-size: 14px !important; }
   .topbar.tb-more-open .topbar__sec .topbar__btn { font-size: 14px !important; padding: 0 14px; }
   #tb-online-pop { position: fixed !important; left: 12px !important; right: 12px !important; top: calc(var(--topbar-bar-h) + 8px) !important; width: auto !important; }
 
@@ -1536,6 +1557,52 @@ body.sidebar-lock { overflow: hidden; }
     background: linear-gradient(to right, rgba(255,255,255,0), #fff 85%);
   }
   .mnav__top { min-height: 44px; }
+}
+
+/* 手機（≤767px）：主選單收成「☰ 主選單」鈕＋左側抽屜（2026-11-13，使用者：390 寬主選單橫向捲動、被截在「報表」，後面的群組點不到）。
+   不另做一份選單：沿用同一份 DOM（.mnav__in 變抽屜、.mnav__grp 變可展開清單、.mnav__item 變 44px 高的列），
+   所以權限、徽章、紅點、自訂選單項都自動一致；桌機（>767px）完全不受影響；768–1023px 維持橫向捲動＋右緣漸層提示。 */
+@media (max-width: 767px) {
+  .tb-lbl { display: none; }                                  /* 通知鈴：手機只留圖示（H2：標準字級下 ⋯ 不再被擠出畫面） */
+  .topbar__logo img { height: 18px; }                         /* 字級「大」在 375 寬仍放得下：logo 縮小、右側間距收緊、搜尋框保底 84px（L3） */
+  .topbar__right { gap: 4px; }
+  .topbar { padding: 0 6px; gap: 4px; }
+  .topbar > div[x-data="globalSearchStore()"] { min-width: 84px; flex-basis: 84px; }
+  .mnav__burger {
+    display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; padding: 0 14px;
+    border: 0; background: transparent; cursor: pointer; text-align: left; position: relative;
+    font-family: var(--font-zh); font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .mnav__burger svg { width: 20px; height: 20px; flex: none; }
+  .mnav__burger .mnav__cur { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+  .mnav__burger.has-dot::after { content: ''; position: absolute; left: 28px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px #fff; }
+  .mnav::after { display: none; }                             /* 橫向捲動的右緣漸層只用在 768–1023px */
+  .mnav__in {
+    position: fixed; top: var(--topbar-h); left: 0; bottom: 0; width: min(86vw, 340px); height: auto; z-index: 96;
+    display: block; padding: 6px 0 28px; gap: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+    background: #fff; box-shadow: 8px 0 28px rgba(20,24,30,.18);
+    transform: translateX(-104%); visibility: hidden; transition: transform .2s var(--v4-ease), visibility 0s linear .2s;
+  }
+  .mnav--open .mnav__in { transform: none; visibility: visible; transition: transform .2s var(--v4-ease); }
+  .mnav--open .mnav__backdrop { display: block; position: fixed; left: 0; right: 0; top: var(--topbar-h); bottom: 0; z-index: 95; background: rgba(0,0,0,.35); }
+  html.mnav-lock { overflow: hidden; }
+  .mnav__grp { display: block; }
+  .mnav__top { display: flex; box-sizing: border-box; width: 100%; height: auto; min-height: 46px; padding: 0 16px; font-size: 15px; }
+  .mnav__top svg { margin-left: auto; width: 11px; height: 11px; transition: transform .2s var(--v4-ease); }
+  .mnav__grp.is-open > .mnav__top svg { transform: rotate(180deg); }
+  .mnav__dot { margin-top: 0; align-self: center; }
+  .mnav__grp.is-on > .mnav__top::after, a.mnav__top.is-on::after { left: 0; right: auto; top: 9px; bottom: 9px; width: 3px; height: auto; }
+  .mnav__panel,
+  .mnav__grp:hover .mnav__panel,
+  .mnav__grp:focus-within .mnav__panel {
+    position: static; display: none; opacity: 1; visibility: visible; transform: none; transition: none;
+    border: 0; border-radius: 0; box-shadow: none; padding: 0 10px 8px 22px; max-height: none; overflow: visible;
+  }
+  .mnav__grp.is-open > .mnav__panel { display: block; }
+  .mnav__cols { flex-direction: column; flex-wrap: nowrap; gap: 0; }
+  .mnav__col { min-width: 0; }
+  .mnav__col + .mnav__col { border-left: 0; padding-left: 0; }
+  .mnav__item { min-height: 44px; padding: 8px 10px; font-size: 14px; white-space: normal; }
 }
 
 @media (max-width: 767px) {

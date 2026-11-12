@@ -640,7 +640,11 @@ transition:background .1s;
   .mob-back-cm { display:none; }
   @media (max-width:767px) {
 .cm-layout { flex-direction:column; height:auto; min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); overflow:visible; }
-.cm-list { width:100%; min-width:0; max-height:calc(44vh / var(--fz,1)); border-right:none; border-bottom:1px solid var(--border-light); }
+/* 手機清單（2026-11-12）：舊寫法 .cm-list 用視窗高度比例當上限＋overflow:hidden，清單標頭（標題列／搜尋／排序／分頁／篩選晶片）
+   就佔掉 ~320px，內層 .cm-list__body 只剩 70–150px ⇒ 只看到半張卡片，下方整片空白。
+   手機整頁本來就可捲（.cm-layout height:auto），清單改成跟著內容長高、由頁面捲動，不再自成一個小捲動區。 */
+.cm-list { width:100%; min-width:0; max-height:none; overflow:visible; border-right:none; border-bottom:1px solid var(--border-light); }
+.cm-list__body { flex:none; overflow:visible; }
 .cm-detail { min-height:calc(54vh / var(--fz,1)); }
 .cm-list.mob-hidden  { display:none !important; }
 .cm-detail.mob-hidden { display:none !important; }
