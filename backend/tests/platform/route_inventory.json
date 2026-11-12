@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 932,
-  "endpoints_api": 928,
+  "endpoints_total": 933,
+  "endpoints_api": 929,
   "write_total": 501,
   "write_api": 501,
-  "get_api": 427,
-  "distinct_paths_api": 785,
+  "get_api": 428,
+  "distinct_paths_api": 786,
   "write_with_body_api": 367,
   "write_with_path_param_api": 359
  },
@@ -864,6 +864,11 @@
    "body": false
   },
   "GET /api/dashboard/funnel": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/mine": {
    "w": false,
    "pp": 0,
    "body": false

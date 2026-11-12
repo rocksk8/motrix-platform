@@ -161,16 +161,9 @@ def _counts_for_me(item: dict, my_usernames: set, my_username: str, is_sa: bool)
     return is_sa and (item.get("requestedBy") or "") != my_username
 
 
-@router.get("/api/approval-queue")
-def get_approval_queue(authorization: str = Header(None)):
-    """待我簽核佇列：各模組提供的項目（IP-10）→ 可見性過濾 → 依送審人分組。
-
-    欄位沿用報價單的名稱（quoteNo/customer/projectName/total/quoteDate/salesPerson）承載各類型資料，
-    `type` 供前端分流動作按鈕與連結（見 approval-queue.html）。
-
-    `myDelegatedFor`（2026-08-28）：目前使用者正在代理誰的簽核權限——前端 canApprove()/myPendingCount
-    要一併比對，否則代理人看不到任何「輪到我」。"""
-    user = _require_user(authorization)
+def visible_queue_items(user: dict):
+    """使用者看得到的佇列項目（每項已帶 `mine`）＋他目前代理的人。⇒ (items, my_delegated_for)。
+    列表端點與首頁「我的工作」共用（卡在誰、幾天）；過濾在分組之前（2026-09-15）。"""
     conn = get_db()
     try:
         my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
@@ -186,7 +179,20 @@ def get_approval_queue(authorization: str = Header(None)):
         it["mine"] = bool(_counts_for_me(it, _mine_names, user["username"], _is_sa))
 
     # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
-    items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
+    return [it for it in items if _queue_visible_to(user, it, my_delegated_for)], my_delegated_for
+
+
+@router.get("/api/approval-queue")
+def get_approval_queue(authorization: str = Header(None)):
+    """待我簽核佇列：各模組提供的項目（IP-10）→ 可見性過濾 → 依送審人分組。
+
+    欄位沿用報價單的名稱（quoteNo/customer/projectName/total/quoteDate/salesPerson）承載各類型資料，
+    `type` 供前端分流動作按鈕與連結（見 approval-queue.html）。
+
+    `myDelegatedFor`（2026-08-28）：目前使用者正在代理誰的簽核權限——前端 canApprove()/myPendingCount
+    要一併比對，否則代理人看不到任何「輪到我」。"""
+    user = _require_user(authorization)
+    items, my_delegated_for = visible_queue_items(user)
 
     if user.get("role") != "superadmin":          # 收款帳號：只有最高管理者看得到完整（使用者裁示 2026-10-01）
         items = [_mask_bank_deep(it) for it in items]

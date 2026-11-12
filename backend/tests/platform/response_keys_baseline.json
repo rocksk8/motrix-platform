@@ -627,6 +627,7 @@
  },
  "/api/approval-queue": {
   "k": [
+   "myCount",
    "myDelegatedFor",
    "queue",
    "queue[].count",
@@ -641,6 +642,7 @@
    "queue[].items[].customer",
    "queue[].items[].isEditApproval",
    "queue[].items[].linkedQuoteNo",
+   "queue[].items[].mine",
    "queue[].items[].projectName",
    "queue[].items[].quoteDate",
    "queue[].items[].quoteNo",
@@ -2489,6 +2491,28 @@
    "funnel.totalSubmitted",
    "funnel.winRate",
    "funnel.won"
+  ],
+  "s": 200
+ },
+ "/api/dashboard/mine": {
+  "k": [
+   "empty",
+   "errors",
+   "generatedAt",
+   "groups",
+   "groups[].count",
+   "groups[].empty",
+   "groups[].href",
+   "groups[].hrefLabel",
+   "groups[].items",
+   "groups[].items[].href",
+   "groups[].items[].sub",
+   "groups[].items[].title",
+   "groups[].items[].tone",
+   "groups[].key",
+   "groups[].kind",
+   "groups[].order",
+   "groups[].title"
   ],
   "s": 200
  },

@@ -392,6 +392,25 @@
     .h-state div:first-child { border-top: 1px solid rgba(245,244,240,.14); }
     .h-state b { font-family: var(--font-en); font-weight: 600; font-size: 13px; color: #F5F4F0; }
 
+    /* 我的工作（UX P1.5）：依角色／權限出現的分組卡；顏色只用既有語意色，不寫 inline style */
+    .h-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .h-mine__c { background: #fff; border: 1px solid var(--border-light); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .h-mine__h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .h-mine__t { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .h-mine__n { font-family: var(--font-en); font-size: 28px; font-weight: 600; line-height: 1; color: var(--text-primary); }
+    .h-mine__n.is-zero { color: var(--text-secondary); }
+    .h-mine__l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .h-mine__i { display: block; text-decoration: none; color: inherit; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--border-light); background: var(--white); min-width: 0; }
+    .h-mine__i:hover { background: var(--danger-hover-bg); }
+    .h-mine__i b { display: block; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .h-mine__i span { display: block; font-size: 12.5px; color: var(--text-secondary); }
+    .h-mine__i--warn { border-left-color: var(--warning); }
+    .h-mine__i--crit { border-left-color: var(--danger); }
+    .h-mine__e { font-size: 13px; color: var(--text-secondary); margin: 0; }
+    .h-mine__go { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; margin-top: auto; }
+    .h-mine__empty { background: #fff; border: 1px dashed var(--border-light); border-radius: 10px; padding: 18px 20px; }
+    .h-mine__empty p { margin: 0 0 10px; font-size: 14px; }
+    .h-mine__acts { display: flex; gap: 10px; flex-wrap: wrap; }
     .h-band { background: #2A2A2A; color: #F5F4F0; }
     .h-band__g { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
     .h-band__c { display: block; padding: clamp(20px, 2.6vw, 30px) clamp(18px, 2.2vw, 28px); border-left: 1px solid rgba(245,244,240,.14); text-decoration: none; color: inherit; transition: background .22s var(--v4-ease); }
@@ -496,6 +515,42 @@
             <div><span>進行中案件</span><b x-text="stats.activeCases + ' 件'"></b></div>
             <div><span>最後更新</span><b x-text="now"></b></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 我的工作（UX P1.5）：依「使用者實際有的權限」由伺服器決定出現哪幾組（GET /api/dashboard/mine）。
+         讀不到 ⇒ 整區不出現（不顯示成 0）；每一組都 0 ⇒ 只顯示一句話＋兩個去處。 -->
+    <section class="h-sec" data-testid="home-mine-work" x-show="mineWork.loaded && (mineWork.groups.length > 0)" x-cloak>
+      <div class="h-wrap">
+        <div class="h-head">
+          <div>
+            <h2 class="h-title">我的工作</h2>
+            <p class="h-sub">依您的權限，列出現在輪到您處理的事</p>
+          </div>
+        </div>
+        <template x-if="mineWork.empty">
+          <div class="h-mine__empty" data-testid="home-mine-empty">
+            <p>目前沒有需要您處理的事。</p>
+            <div class="h-mine__acts">
+              <a href="pages/daily-tasks.html" class="h-ghost">看今日工作事項</a>
+              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">去報價單</a>
+            </div>
+          </div>
+        </template>
+        <div class="h-mine" x-show="!mineWork.empty">
+          <template x-for="g in mineWork.groups" :key="g.key">
+            <div class="h-mine__c" :data-testid="'home-mine-' + g.key">
+              <div class="h-mine__h"><span class="h-mine__t" x-text="g.title"></span><span class="h-mine__n" :class="g.count === 0 ? 'is-zero' : ''" x-text="g.count"></span></div>
+              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '目前沒有需要處理的項目'"></p>
+              <ul class="h-mine__l" x-show="g.items.length > 0">
+                <template x-for="(it, ix) in g.items" :key="ix">
+                  <li><a class="h-mine__i" :class="'h-mine__i--' + it.tone" :href="it.href || g.href"><b x-text="it.title"></b><span x-text="it.sub"></span></a></li>
+                </template>
+              </ul>
+              <a class="h-mine__go" :href="g.href" x-show="g.href" x-text="g.hrefLabel + ' →'"></a>
+            </div>
+          </template>
         </div>
       </div>
     </section>
@@ -1058,6 +1113,17 @@ feedCount(key) {
           if (r.ok) { const d = await r.json(); if (d && d.kind !== 'off') this.greet = d }
         } catch (e) { /* 問候語是加值：讀不到就維持原本的標題 */ }
       },
+      //: 首頁「我的工作」（/api/dashboard/mine）：分組由伺服器依權限決定；讀不到 ⇒ loaded=false、整區不出現
+      mineWork: { loaded: false, groups: [], empty: false }, _mineWorkN: 0,
+      async loadMineWork() {
+        const fresh = this._mineWorkN++ > 0          // 第一次吃 30 秒快取；之後（回到分頁、簽完回來）一律重算
+        try {
+          const r = await fetch(`${API}/dashboard/mine` + (fresh ? '?fresh=1' : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) { this.mineWork = { loaded: false, groups: [], empty: false }; return }
+          const d = await r.json()
+          this.mineWork = { loaded: true, groups: Array.isArray(d.groups) ? d.groups : [], empty: !!d.empty }
+        } catch { this.mineWork = { loaded: false, groups: [], empty: false } }
+      },
       mineItems: [],
       mineCount: 0,
       //: S1（W2 稽核）：focus 與 visibilitychange 會在同一次回到分頁時連發 ⇒ 同時只飛一趟（共用同一個 Promise）、
@@ -1082,6 +1148,7 @@ feedCount(key) {
           this.stats.waitingForMe = this.mineCount
           this.mineItems = d.items || []
           this.mineLoaded = true
+          this.loadMineWork()
           this.loadGreeting(this.mineCount)      // 只做一次；待辦件數用來決定要不要帶「0 件／超過 10 件」那句
         } catch { if (seq === this._mineSeq) this.mineLoaded = false }
       },
