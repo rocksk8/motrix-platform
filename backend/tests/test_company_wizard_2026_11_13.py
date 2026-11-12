@@ -242,6 +242,33 @@ def test_non_superadmin_gets_plain_notice_not_a_form(live_server, make_user, new
 
 
 @pytest.mark.e2e
+def test_non_superadmin_opening_wizard_url_directly_sees_no_form_or_data(client, live_server, make_user, new_page, login_as):
+    """直接打網址（書籤、轉貼連結；notif.js 對這頁不做 428 導向）：只顯示「沒有權限」，不顯示表單，
+    也不把統編、收款帳戶放進頁面（後端 GET 對任何登入者都回 200，所以擋在前端不渲染）。"""
+    from tests.test_company_setup_core_2026_09_28 import make_ubn
+    from helpers import company_setup as cs
+    cs.reset_cache()
+    boss = make_user(username="e2e_cw_dboss", role="superadmin")
+    tok = client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]
+    ubn = make_ubn("2456789")
+    assert client.put("/api/settings/company-profile", headers={"Authorization": "Bearer " + tok}, json={
+        "name": "機密測試股份有限公司", "tax_id": ubn, "phone": "02-1111-2222",
+        "bank_account_number": "123456789012", "confirmIdentity": True}).status_code == 200
+    cs.reset_cache()
+    clerk = make_user(username="e2e_cw_direct", role="admin")
+    page = new_page(viewport={"width": 390, "height": 844})
+    login_as(page, tuple(clerk)[:2])
+    page.goto(f"{live_server}/pages/company-setup-wizard.html")
+    page.locator("[data-testid=cw-denied]").wait_for(state="visible", timeout=15000)
+    assert page.locator("[data-testid=cw-card]").count() == 0
+    assert page.locator("#cw-root input, #cw-root textarea").count() == 0
+    body = page.locator("body").inner_text()
+    for secret in (ubn, "123456789012", "機密測試股份有限公司"):
+        assert secret not in body
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+
+
+@pytest.mark.e2e
 def test_editing_required_field_after_confirmed_goes_to_reconfirm_step(client, live_server, make_user, new_page, login_as):
     """已確認的安裝再從精靈改必填欄位：後端回 409 company_setup_reconfirm ⇒ 精靈不存、跳到確認步驟，勾選後一併確認才存。"""
     from tests.test_company_setup_core_2026_09_28 import make_ubn
@@ -280,3 +307,46 @@ def test_editing_required_field_after_confirmed_goes_to_reconfirm_step(client, l
     finally:
         conn.close()
     _no_hscroll(page)
+
+
+@pytest.mark.e2e
+def test_skip_keeps_pending_reconfirm_edits_and_asks_before_dropping_own_step(client, live_server, make_user, new_page, login_as):
+    """409 後留在畫面上的修改：略過別的步驟不能把它清掉；略過「自己有未存修改」的那一步要先講、再按一次才丟。"""
+    from tests.test_company_setup_core_2026_09_28 import make_ubn
+    from helpers import company_setup as cs
+    cs.reset_cache()
+    user = make_user(username="e2e_cw_skip", role="superadmin")
+    tok = client.post("/api/auth/login", json={"username": user[0], "password": user[1]}).json()["token"]
+    assert client.put("/api/settings/company-profile", headers={"Authorization": "Bearer " + tok}, json={
+        "name": "原本股份有限公司", "tax_id": make_ubn("2456789"), "phone": "02-1111-2222", "confirmIdentity": True}).status_code == 200
+    cs.reset_cache()
+    page = new_page(viewport={"width": 390, "height": 844})
+    login_as(page, tuple(user)[:2])
+    page.goto(f"{live_server}/pages/company-setup-wizard.html")
+    page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=15000)
+    page.click("[data-testid=cw-step-1]")
+    page.fill("[data-testid=cw-field-name]", "待確認改名股份有限公司")
+    page.click("[data-testid=cw-next]")                                   # 409 → 跳到第 5 步
+    page.locator("[data-testid=cw-summary]").wait_for(state="visible", timeout=10000)
+    page.click("[data-testid=cw-step-3]")
+    page.click("[data-testid=cw-skip]")                                   # 第 3 步沒有自己的未存內容 ⇒ 直接略過
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('放上公司 Logo')", timeout=10000)
+    page.click("[data-testid=cw-step-5]")
+    assert "待確認改名股份有限公司" in page.locator("[data-testid=cw-summary]").inner_text(), "略過別步不能丟掉等待確認的修改"
+    # 第 3 步自己有未存修改：第一次按略過只提醒
+    page.click("[data-testid=cw-step-3]")
+    page.fill("[data-testid=cw-field-bank_name]", "測試銀行")
+    page.click("[data-testid=cw-skip]")
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要把錢匯到哪裡")
+    assert "再按一次" in page.locator("[data-testid=cw-msg]").inner_text()
+    page.click("[data-testid=cw-skip]")
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('放上公司 Logo')", timeout=10000)
+    _no_hscroll(page)
+
+
+def test_step_labels_match_their_content_and_sidebar_points_to_wizard():
+    src = _js()
+    titles = re.search(r"STEP_TITLES\s*=\s*\[([^\]]*)\]", src).group(1)
+    assert "收款帳戶" in titles and "報價單與單據" not in titles and "列印抬頭" not in titles
+    import routers.platform_menu as pm
+    assert pm._SETUP_ONLY_TARGET == "company-setup-wizard.html?setup=1"
