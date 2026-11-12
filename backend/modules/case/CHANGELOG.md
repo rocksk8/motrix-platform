@@ -4,6 +4,11 @@
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
 - 文字：『拒絕結案』全改『駁回結案』（報價單頁訊息、稽核動作名稱、擇一方案設定說明）；案件頁新增 `?quick=` 深連結（mine／stage_overdue／recv_overdue／missing_docs）。
+- **（併入）(next) — 2026-11-13（feat/quote-list-ux；T84 報價清單重排，版號由列車取）**
+- 新增（API，選用）：`GET /api/quotations?with_waiting_on=1`——每列多 `waiting_on`（目前這一層還沒簽的人的顯示名稱清單，名稱取自 users 現名；只對狀態為待審核／簽核中的列算，其他列為空陣列）。只對本來就看得到的列；一次批次 IN 讀這一頁的 data_json（不逐列查）；資料壞掉或簽核結構怪 ⇒ 該列空陣列，清單不會失敗。沒帶參數 ⇒ 回應沒有這個鍵（舊呼叫端不變）。
+- 前端（`quotations.html`，資料狀態值不變）：頁頂改三個可點的數字——要我處理（我的草稿＋被退回待修＋已核准尚未送客戶）／等別人（我的待簽核＋簽核中）／本月已成案；預設條件「我負責的、進行中」＋目前條件列＋清除條件（每人記住上次選擇；名單空或讀不到時不套用）；新欄「下一步」（等誰簽核、被退回、已核准待寄客戶、有效期）；預設欄位精簡（客戶併進單號格、填單人併進日期格、毛利率／有效天數預設不顯示），新增「欄位」按鈕可加欄與「緊湊」密度（只影響本人，存瀏覽器）；毛利率空值改灰色「—」；案件進度小選單保留；手機（≤767px）改卡片、操作按鈕常駐且 ≥44px。「我負責的」沿用 `?mine=1` 同一個判斷（頁面多一次 `mine=1` 讀取）。
+- `module.json`：報價清單欄位目錄與預設版面新增 `next`（下一步）；`static/list-view-prefs.js` 的欄位表同步。
+- 測試：`tests/test_quote_list_waiting_on_t84_2026_11_13.py`（可見性／壞資料／查詢次數／現名／不帶參數鍵不存在）、`tests/test_e2e_quote_list_t84_2026_11_13.py`（1280／390 瀏覽器）；更新被釘住的 t55／bp1／list_view_c1／p1_review_fixes／e2e_on_state 與 `quotations_list_off.json` golden。
 
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
