@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-11（fix/trusted-client-ip；來源 IP 只信該信的，登入鎖定不可被 X-Forwarded-For 繞過）
+## 1.158 — 2026-11-11（fix/trusted-client-ip；來源 IP 只信該信的，登入鎖定不可被 X-Forwarded-For 繞過）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.client_ip`（`client_ip`、`is_loopback`、`has_proxy_headers`、`CLOUDFLARE_HEADERS`；L0，只依賴標準庫）。
 - 行為變更（安全）：`routers/auth.py::_client_ip` 不再信 `X-Forwarded-For`（以前無條件信第一個值 ⇒ 登入鎖定每次換 XFF 就繞過）；只有 TCP 對端是 loopback 才採信 `CF-Connecting-IP`（須為合法 IP），其餘一律用對端位址。登入鎖定／TOTP／passkey 限流、`duty_roles` 與 `settings_center` 稽核 IP 全走這支。
 - `tools/deploy_dashboard.py`：loopback 對端但帶 Cloudflare／代理標頭的請求 fail closed（HTTP 403／WebSocket 1008）。**部署設定：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
@@ -23,6 +23,17 @@
 - core migration（未取號，PLAYBOOK §G6）：新表 `idempotency_keys`（PK username+key；7 天前的列在寫入時順手清，不開排程）。
 - 套用端點：`POST /api/work-logs`、`POST /api/work-logs/{id}/photos`（其餘見 `modules/case/CHANGELOG.md`）。
 - 測試：`tests/test_idempotency_2026_11_11.py`。
+- **（併入）(next) — 2026-11-11（feat/heartbeat-watch；心跳監控「看守看守者」：helpers.heartbeat_status、heartbeat_stale 信件、每日檢查）**
+- L1（新增，只增）：新公開介面 `helpers.heartbeat_status`（唯讀判斷 `logs/heartbeat_state.json`：`assess／read_state／config_exists／ping_url_set`＋常數）；`helpers.email_notify.notify_heartbeat_stale`；信件類型 `heartbeat_stale`（superadmins、列入 `MAIL_OFF_LOCKED` 不可關）。
+- 行為：`system_checks.run_all` 新增 `_check_heartbeat_health`（每日；app 活著卻看到心跳回報壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 寄信給最高管理者；同日一次、等寄送結果才記旗標、恢復清旗標；啟動後 15 分鐘內不判斷（冷開機時狀態檔是舊的）；開發機沒有心跳＝不動作）。新端點 `GET /api/system/heartbeat`（僅最高管理者）與通知設定頁唯讀卡片。
+- 外部：`backend/heartbeat_job.py` 本機檢查 https＋http 兩種都試（原只打 http，正式機自 2026-09-07 起 666 埠只講 https ⇒ 兩個多月誤報、healthchecks.io 卡紅燈、斷電無新告警）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。`tools/prod_status_snapshot.py` 新增 `heartbeat` 區塊（白名單欄位，ping_url 只回布林）。
+- 測試：`tests/test_heartbeat_watch_2026_11_11.py`（含 job 埠與 `autostart.bat`／`start.bat` 的 `--port` 防背離守門）、`tests/test_heartbeat_https_ping_2026_11_11.py`。
+- **（併入）(next) — 2026-11-12（feat/line-recipient-quota；LINE 收件人粒度（角色＋個人）、額度常駐監控與門檻告警）**
+- L1（新增，只增）：新公開介面 `helpers.line_recipients`（`filter_usernames／allowed_roles／muted_events／is_muted／set_muted／prefs_view／role_choices／PREFS_KEY`）與 `helpers.line_quota`（`snapshot／refresh／check_and_alert／after_push／evaluate／thresholds／normalize_thresholds／month_key` ＋常數）；`helpers.line_notify.set_event_roles／event_roles_view`；`helpers.email_notify.notify_line_quota_warning`；信件類型 `line_quota_warning`（superadmins、列入 `MAIL_OFF_LOCKED` 不可關）。
+- 行為：`line_notify.notify_users` 的收件人改為「呼叫端給的帳號（信件已解析）∩ 該類型允許的角色 ∩ 本人沒退訂 ∩ 已綁定」（只縮不擴；角色清單缺省＝所有角色、個人預設收＝與舊行為相同；壞值 fail-closed）。資料存 `system_settings.line_notify.event_roles` 與 `system_settings.line_prefs`（不動 DB schema）。
+- 額度：用量以 LINE 回的 `totalUsage` 為準；觸發點＝設定頁載入（5 分鐘快取）、推播成功後（去抖動、同時只排一個）、每日 08:00 備援（`system_checks._check_line_quota`）。門檻 `line_notify.quota_thresholds`（預設 80、100；1～5 個、可自訂）；同一門檻同月只寄一次、一次跨多個只寄一封、等寄送結果才記、換月／用量回落重置；無上限方案不告警；100% 時只告警不停推播。
+- 端點：`PUT /api/settings/line-notify/events/{key}/roles`、`GET /api/settings/line-notify/quota`（皆最高管理者）；`GET /api/line/prefs`、`PUT /api/line/prefs/{key}`（本人）。UI：通知設定頁 LINE 卡（用量條、門檻、各類型可收角色）、帳號安全頁（我要收的 LINE 通知）。
+- 測試：`tests/test_line_recipients_2026_11_12.py`、`tests/test_line_quota_2026_11_12.py`、`tests/test_e2e_line_recipients_quota_2026_11_12.py`。
 
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 

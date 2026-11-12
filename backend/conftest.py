@@ -2433,6 +2433,21 @@ def _custom_module_engine_on_for_tests(request, monkeypatch):
     monkeypatch.setattr(_sr, "_defaults", _defaults_with_engine_on)
 
 
+# ── LINE 額度檢查的推播後計時器（2026-11-12）──
+# `helpers.line_notify.push_async` 推播成功後會呼叫 `helpers.line_quota.after_push()`，它排一個 5 秒以上的 `threading.Timer`。
+# 測試裡這個計時器會**活過那一題**，在之後某一題才觸發、打到那一題換上的假 LINE（`line_notify._http`）而讓「沒有任何呼叫」之類的斷言隨機紅。
+# 所以預設把 `after_push` 換成空動作；要驗它本身（去抖動、排程）的題標 `@pytest.mark.line_quota_real_timer`（並自己換掉 `threading.Timer`）。
+@pytest.fixture(autouse=True)
+def _line_quota_no_timers_for_tests(request, monkeypatch):
+    if request.node.get_closest_marker("line_quota_real_timer"):
+        return
+    try:
+        from helpers import line_quota as _lq
+    except Exception:
+        return
+    monkeypatch.setattr(_lq, "after_push", lambda *a, **k: None)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 31-A 相容殼：舊測試用 API 建立／編輯「帶 status 的派發」（例如直接 completed）來造「既有資料」。
 # 第 31 班起 API 忽略建立時的 status、編輯不可改狀態（寫入口的閘，見 modules/subcontract/dispatch_flow.py）；

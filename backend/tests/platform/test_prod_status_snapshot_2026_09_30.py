@@ -42,6 +42,11 @@ def _build(tmp_path):
         _w(be / "logs" / ("apply_update_%s.result.json" % ts), json.dumps(
             {"protocol": 2, "status": st, "rolled_back": "restored", "service": "up", "exit": 1, "timestamp": ts}))
     _w(be / "logs" / "apply_module_update_20991231_000000.result.json", "{}")          # 不同工具的結果檔不算
+    _w(be / "logs" / "heartbeat_state.json", json.dumps(
+        {"status": "ok", "day": "2026-09-30", "hour": "2026-09-30 10", "since": "2026-09-29T10:00:00", "seen_at": "2026-09-30T10:00:00",
+         "scheme": "https", "local_ok_at": "2026-09-30T10:00:00", "ext_ok_at": "2026-09-30T10:00:00",
+         "ping_url": "https://hc-ping.example/LEAK-ME"}))                                   # 就算有人誤寫進狀態檔也不可帶出
+    _w(be / "heartbeat_config.json", json.dumps({"ping_url": "https://hc-ping.example/LEAK-ME"}))
     _w(be / "db_backups" / "2026-09-28" / ".done", "")
     _w(be / "db_backups" / "2026-09-29" / ".done", "")
     _w(be / "motrix_erp.db", "not really sqlite")
@@ -142,6 +147,9 @@ def test_all_fields_present(tmp_path, server):
     assert b["alerts_since"]["timestamp"] == "2026-09-30T03:00:00" and b["alerts_since"]["level"] == "ERROR"
     assert b["sticky_alert_file"] is True
     assert isinstance(s["disk_free_gb"], float) and s["disk_free_gb"] > 0
+    assert s["heartbeat"] == {"status": "ok", "since": "2026-09-29T10:00:00", "seen_at": "2026-09-30T10:00:00", "scheme": "https",
+                              "local_ok_at": "2026-09-30T10:00:00", "ext_ok_at": "2026-09-30T10:00:00", "ping_url_set": True}
+    assert "LEAK-ME" not in json.dumps(s), "ping_url 等同密碼，不可進快照"
 
 
 def _port_visible_in_netstat(text, port):
@@ -182,6 +190,7 @@ def test_service_pids_include_own_listener(tmp_path, server):
     ("backend/logs/apply_update_*.result.json", "last_apply"),
     ("CLOUD", "backups.daily_done_latest"),
     ("backend/db_backups", "backups.local_snapshot_done_latest"),
+    ("backend/logs/heartbeat_state.json", "heartbeat"),
 ])
 def test_each_source_missing_is_null_with_reason(tmp_path, server, remove, field):
     root, cloud = _build(tmp_path)

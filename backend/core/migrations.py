@@ -738,4 +738,4 @@ def _core_next_idempotency_keys(conn):
     return None
 
 
-register("core", NEXT, _core_next_idempotency_keys)
+register("core", 12, _core_next_idempotency_keys)

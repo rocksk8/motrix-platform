@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）
+## 1.0.36 — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）
 - 修正（後端）：`POST /api/inventory/batches`（`create_batch`）整段改在 `write_txn` 內：重複序號檢查與逐筆 INSERT 之間原本沒有寫鎖（先查再寫的 TOCTOU），併發進貨同序號時 INSERT 丟 `IntegrityError`，連線沒 rollback／close ⇒ 寫鎖留到被 GC，下一個寫入者卡 30 秒。寫鎖現在在檢查之前拿，`next_entity_code` 取批號也在鎖內。正常路徑回應不變。
 - 測試：`tests/test_create_batch_write_lock_t80.py`（重複檢查那一刻已在寫交易內，舊碼紅、新碼綠；序號撞 UNIQUE 後鎖已放）。
 - 來源：`docs/platform/GET-DB-CONNECTION-LEAK-AUDIT-T80.md` §6／R5。無 migration、無新表。

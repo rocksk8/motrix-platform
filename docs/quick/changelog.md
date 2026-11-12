@@ -26,6 +26,20 @@
 - **沒動／已知限制**：IPv6 同 /64 內換位址仍可繞過「以單一位址計」的鎖定（另案）；本機使用者共用 127.0.0.1 桶（與以前相同）；uvicorn 預設的 proxy-headers 行為不受影響（本 helper 不論它開不開都給同一個答案）。
 - 測試：`backend/tests/test_trusted_client_ip_2026_11_11.py`（規則單元＋登入端點整合＋同機隧道各自一桶＋uvicorn 層＋守門，含各種繞過寫法的正對照）、`backend/tests/test_deploy_dashboard_local_only_2026_09_22.py` HC1d。
 
+## 2026-11-11 心跳監控「看守看守者」（feat/heartbeat-watch，隨 T79 出貨）
+
+- **事故**：正式機心跳（工作排程每 5 分鐘 → healthchecks.io）自 2026-09-07 起壞了兩個多月沒人知道。根因＝`heartbeat_job.py` 打 `http://127.0.0.1:666`，伺服器早已只講 https ⇒ 每 5 分鐘誤報 local_down 並 `/fail`；healthchecks.io「已紅燈」不再重寄 ⇒ 9/8 斷電也沒有新告警。最後一次成功打卡 2026-09-07 20:12。
+- **A（job）**：本機檢查 https＋http 兩種都試（autostart.bat 依 `certs/cert.pem` 決定協定，協定會跟著憑證檔變）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。防背離守門：`test_heartbeat_watch_2026_11_11.py` 比對 job 的埠與 `autostart.bat`／`start.bat` 的 `--port`。
+- **D（看守看守者）**：新 L1 `helpers/heartbeat_status.py`（唯讀判斷）；每日檢查 `system_checks._check_heartbeat_health`（壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 信 `heartbeat_stale` 給最高管理者，列入不可關）；`GET /api/system/heartbeat`＋通知設定頁唯讀卡片；`prod_status_snapshot` 新增 `heartbeat` 區塊（`ping_url` 只回布林，網址等同密碼，永不外露）。告警只走 email。
+- **上線後人工步驟**：部署後第一次對外打卡成功，需**人工登入 healthchecks.io** 確認收件人仍有效、check 回到綠燈（卡住的 down 狀態不會自己恢復告警能力）。
+- 測試：`test_heartbeat_watch_2026_11_11.py`、`test_heartbeat_https_ping_2026_11_11.py`、`tests/platform/test_prod_status_snapshot_2026_09_30.py`（heartbeat 區塊）。
+
+## 2026-11-12 LINE 通知：收件人粒度（角色＋個人）與額度常駐監控／告警（feat/line-recipient-quota）
+
+- **收件人（只縮不擴）**：LINE 收件人＝信件已解析的帳號 ∩ 該類型允許的角色 ∩ 本人沒退訂 ∩ 已綁定。角色清單缺省＝所有角色、個人預設收（升版後行為不變）。超管在通知設定頁每個類型勾「可收的角色」；同仁在帳號安全頁自行退訂（只列公司已開啟且自己角色被允許的類型）。
+- **額度**：通知設定頁常駐用量條（本月已用／上限，不必按「驗證 token」）；門檻由最高管理者自訂（預設 80%、100%，最多 5 個）；跨過門檻寄信給最高管理者（`line_quota_warning`，不可關），同一門檻同月一次、一次跨多個只寄一封、換月重置。觸發：設定頁載入、推播成功後（去抖動）、每日 08:00 備援。LINE 100% 後會回 429，本票只告警、不自動停推播。
+- 測試：`test_line_recipients_2026_11_12.py`、`test_line_quota_2026_11_12.py`、`test_e2e_line_recipients_quota_2026_11_12.py`。
+
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 
 - **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。

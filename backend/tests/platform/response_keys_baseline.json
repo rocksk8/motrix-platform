@@ -3462,6 +3462,13 @@
  "/api/line/callback": {
   "s": 400
  },
+ "/api/line/prefs": {
+  "k": [
+   "events",
+   "linked"
+  ],
+  "s": 200
+ },
  "/api/list-prefs/{list_key}": {
   "k": [
    "customOrder",
@@ -6646,10 +6653,29 @@
    "events[].enabled",
    "events[].key",
    "events[].name",
+   "events[].roles",
    "include_links",
    "login_channel_id",
    "login_channel_secret",
-   "public_base_url"
+   "public_base_url",
+   "quota_thresholds",
+   "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/quota": {
+  "k": [
+   "alerted",
+   "checked_at",
+   "error",
+   "level",
+   "limit",
+   "month",
+   "ok",
+   "percent",
+   "thresholds",
+   "unlimited",
+   "used"
   ],
   "s": 200
  },
@@ -6955,6 +6981,22 @@
  },
  "/api/system/deployed-version": {
   "k": [],
+  "s": 200
+ },
+ "/api/system/heartbeat": {
+  "k": [
+   "alert",
+   "ext_ok_at",
+   "level",
+   "local_ok_at",
+   "ping_url_set",
+   "problems",
+   "scheme",
+   "seen_at",
+   "since",
+   "status",
+   "summary"
+  ],
   "s": 200
  },
  "/api/system/modules": {

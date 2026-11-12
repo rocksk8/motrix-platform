@@ -2699,7 +2699,7 @@ def test_google_calendar(authorization: str = Header(None)):
 # public_base_url（Tunnel 公開網域，LINE Login callback 用）與 include_links（訊息是否帶連結）是**兩個獨立開關**：
 # 有公開網域不代表訊息帶連結（PM 裁示）。include_links 預設關，且要有 public_base_url 才能開。
 _LINE_DEFAULTS = {"enabled": False, "channel_access_token": "", "public_base_url": "", "include_links": False,
-                  "login_channel_id": "", "login_channel_secret": ""}
+                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
 
 
 @router.get("/api/settings/line-notify")
@@ -2716,8 +2716,39 @@ def get_line_notify(authorization: str = Header(None)):
     # 「同時發 LINE」的信件類型開關（只列已接線的類型；預設全關）
     from helpers import mail_types as _mt
     sw = _ln.events_view()
-    safe["events"] = [{"key": k, "name": (_mt.get(k).name if _mt.get(k) else k), "enabled": sw[k]} for k in _ln.WIRED_EVENTS]
+    roles = _ln.event_roles_view()
+    from helpers import line_recipients as _lr, line_quota as _lq
+    safe["quota_thresholds"] = _lq.thresholds()
+    safe["role_choices"] = _lr.role_choices()
+    # roles＝該類型允許哪些角色收 LINE；null＝所有角色（缺省，沿用現行行為）
+    safe["events"] = [{"key": k, "name": (_mt.get(k).name if _mt.get(k) else k), "enabled": sw[k], "roles": roles[k]} for k in _ln.WIRED_EVENTS]
     return safe
+
+
+@router.put("/api/settings/line-notify/events/{key}/roles")
+def set_line_notify_event_roles(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """設定某種 LINE 通知「允許哪些角色收」。`roles: null`＝所有角色；`roles: []`＝沒有任何角色。只接受已接線的類型與合法角色。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    if key not in _ln.WIRED_EVENTS:
+        raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
+    if "roles" not in (body or {}):
+        raise HTTPException(400, "缺少 roles（角色清單，或 null＝所有角色）")
+    roles = body["roles"]
+    try:
+        _ln.set_event_roles(key, roles)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.event_roles", "settings", key, "LINE 通知可收角色：%s → %s" % (key, "所有角色" if roles is None else ("、".join(roles) or "（無）")))
+    return {"ok": True, "key": key, "roles": roles}
+
+
+@router.get("/api/settings/line-notify/quota")
+def get_line_notify_quota(refresh: bool = False, authorization: str = Header(None)):
+    """本月 LINE 訊息用量（設定頁常駐用量條）。5 分鐘內用快取；`refresh=true` 強制重讀。讀不到＝`ok:false`＋原因（不丟錯）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_quota as _lq
+    return _lq.snapshot(force=bool(refresh))
 
 
 @router.put("/api/settings/line-notify/events/{key}")
@@ -2741,6 +2772,12 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     from helpers import line_notify as _ln
     if "include_links" in body and not isinstance(body["include_links"], bool):
         raise HTTPException(400, "include_links 必須是 true／false")      # 不把 "false" 字串當 true
+    if "quota_thresholds" in body:
+        from helpers import line_quota as _lq
+        try:
+            body = {**body, "quota_thresholds": _lq.normalize_thresholds(body["quota_thresholds"])}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     with _ln.settings_lock():            # 讀改寫要在鎖內：否則會把同時間 set_event 寫的事件開關用舊值蓋回去（K 審 L1）
         current = _get_setting("line_notify", {}) or {}
         if not isinstance(current, dict):
@@ -2784,7 +2821,7 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",
            {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", ""),
             "publicBaseUrl": data["public_base_url"], "includeLinks": data["include_links"],
-            "loginChannelId": data["login_channel_id"],
+            "loginChannelId": data["login_channel_id"], "quotaThresholds": data.get("quota_thresholds"),
             "loginSecretChanged": data["login_channel_secret"] != current.get("login_channel_secret", "")})
     return {"ok": True}
 
@@ -2849,6 +2886,32 @@ def get_line_binding(authorization: str = Header(None)):
     v = _ln.binding_view(user["username"])
     v["available"] = bool(cid and sec and _ln.callback_url())
     return v
+
+
+@router.get("/api/line/prefs")
+def get_line_prefs(authorization: str = Header(None)):
+    """我要收哪些 LINE 通知：只列「公司已勾選、且我的角色被允許」的類型（預設全收，可自行退訂）。`linked`＝我有沒有綁定 LINE。"""
+    user = _require_user(authorization)
+    from helpers import line_notify as _ln, line_recipients as _lr
+    return {"linked": _ln.is_linked(user["username"]), "events": _lr.prefs_view(user["username"], user.get("role"))}
+
+
+@router.put("/api/line/prefs/{key}")
+def set_line_pref(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """本人退訂／恢復某類 LINE 通知（`enabled: true`＝要收）。只能改自己；類型要已接線、且我的角色被允許。"""
+    user = _require_user(authorization)
+    from helpers import line_notify as _ln, line_recipients as _lr
+    on = (body or {}).get("enabled")
+    if not isinstance(on, bool):
+        raise HTTPException(400, "enabled 必須是 true 或 false")
+    if key not in _ln.WIRED_EVENTS:
+        raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
+    try:
+        _lr.set_muted(user["username"], key, not on, role=user.get("role"))
+    except ValueError as e:
+        raise HTTPException(403, str(e))
+    _audit(_tok(authorization), "line.prefs.update", "line_prefs", user["username"], "LINE 通知個人設定：%s → %s" % (key, "收" if on else "不收"))
+    return {"ok": True, "key": key, "enabled": on}
 
 
 @router.post("/api/line/binding/start")
@@ -2999,6 +3062,15 @@ _DEFAULT_ROLE_LABELS = {
     "finance":    "財務",
     "viewer":     "檢視者",
 }
+
+
+@router.get("/api/system/heartbeat")
+def get_heartbeat_status(authorization: str = Header(None)):
+    """心跳監控「本身」的狀態（唯讀；僅最高管理者）：狀態、開始時間、本機協定、上次對外打卡成功、有沒有設對外網址（只回布林）。
+    判斷邏輯在 helpers/heartbeat_status.assess（只讀 logs/heartbeat_state.json；不回 ping 網址）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import heartbeat_status as _hs
+    return _hs.assess()
 
 
 @router.get("/api/system/schema-status")
