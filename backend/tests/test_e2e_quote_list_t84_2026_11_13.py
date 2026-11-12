@@ -60,7 +60,7 @@ def _seed_set(owner):
     _seed("MQ-T84E-006", owner, "已送出", deal_tag="已成案")
 
 
-def _open(live_server, make_user, new_page, login_as, name, width=1280):
+def _open(live_server, make_user, new_page, login_as, name, width=1280, height=900, prep=None):
     sales = make_user(username=name, role="sales")
     make_user(username="t84e_boss", role="admin")
     import db
@@ -69,8 +69,10 @@ def _open(live_server, make_user, new_page, login_as, name, width=1280):
     c.commit()
     c.close()
     _seed_set(_uid(name))
-    page = new_page(viewport={"width": width, "height": 900})
+    page = new_page(viewport={"width": width, "height": height})
     login_as(page, sales)
+    if prep:
+        prep(page)
     page.goto(live_server + "/pages/quotations.html")
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
     return page
@@ -89,7 +91,7 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     assert "1 張" in page.get_by_test_id("ql-sum-won").inner_text()
     # 預設條件：我負責的、進行中；有清除條件
     cond = page.get_by_test_id("ql-cond").inner_text()
-    assert "我負責的" in cond and "進行中" in cond and page.get_by_test_id("ql-clear-conditions").is_visible()
+    assert page.get_by_test_id("ql-cond-mine").count() == 1 and "進行中" in cond and page.get_by_test_id("ql-clear-conditions").is_visible()
     # 預設欄位 ≤ 7（不含「操作」）
     heads = [h for h in page.evaluate(VIS_HEADS) if h != "操作"]
     assert len(heads) <= 7 and heads[:1] == ["報價單號"] and "下一步" in heads and "案件進度" in heads, heads
@@ -114,13 +116,24 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     page.get_by_test_id("ql-sum-todo").click()
     assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") == 3
     page.get_by_test_id("ql-sum-todo").click()                                  # 再點一次取消
-    # 清除條件 ⇒ 不再限縮「我負責的」；重新整理後記得這個選擇
+    # 點數字／清除條件只是暫時的檢視：重新整理後回到記住的選擇（預設「只看我負責的」）
     page.get_by_test_id("ql-clear-conditions").click()
+    assert page.evaluate("() => %s._mineLimit" % DATA) is False and page.get_by_test_id("ql-cond-mine").count() == 0
+    page.reload()
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => %s._mineLimit" % DATA) is True, "清除條件不改寫記住的選擇"
+    # 只有明確切換「只看我負責的」才會記住
+    page.get_by_test_id("ql-mine-toggle").click()
     assert page.evaluate("() => %s.onlyMine" % DATA) is False
     page.reload()
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
-    assert page.evaluate("() => %s.onlyMine" % DATA) is False, "記住上次選擇"
-    assert "我負責的" not in page.get_by_test_id("ql-cond").inner_text()
+    assert page.evaluate("() => %s.onlyMine" % DATA) is False, "記住上次明確的選擇"
+    assert page.get_by_test_id("ql-cond-mine").count() == 0
+    # 點「要我處理」不會把記住的選擇改成「只看我負責的」
+    page.get_by_test_id("ql-sum-todo").click()
+    page.reload()
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => %s.onlyMine" % DATA) is False
 
 
 @pytest.mark.e2e
@@ -155,15 +168,25 @@ def test_superadmin_with_no_owned_quotes_is_not_shown_an_empty_page(live_server,
     login_as(page, admin)
     page.goto(live_server + "/pages/quotations.html")
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
-    assert page.evaluate("() => %s.onlyMine" % DATA) is False
+    assert page.evaluate("() => %s._mineLimit" % DATA) is False
     assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 5
+    assert "你目前沒有負責的報價，先顯示全部" in page.get_by_test_id("ql-mine-note").inner_text()
     assert owner  # 夾具已建帳號
 
 
 @pytest.mark.e2e
 def test_phone_390_cards_show_actions_with_44px_targets_and_no_horizontal_scroll(live_server, make_user, new_page, login_as):
-    page = _open(live_server, make_user, new_page, login_as, "t84e_sales3", width=390)
+    page = _open(live_server, make_user, new_page, login_as, "t84e_sales3", width=390, height=844)
     page.wait_for_timeout(300)
+    # 第一屏（390x844）要看得到第一張卡片：三個數字一排、篩選收進「篩選」鈕、壓力帶收起
+    ys = {page.get_by_test_id(t).bounding_box()["y"] for t in ("ql-sum-todo", "ql-sum-waiting", "ql-sum-won")}
+    assert len(ys) == 1, "三個數字併成一排：%s" % ys
+    assert not page.get_by_test_id("ql-filters").is_visible() and page.get_by_test_id("ql-filter-btn").is_visible()
+    first = page.locator("tr.ql-row").first.bounding_box()
+    assert first["y"] + 120 <= 844, "第一張卡片在第一屏內：y=%s" % first["y"]
+    page.get_by_test_id("ql-filter-btn").click()
+    page.get_by_test_id("ql-filters").wait_for(state="visible", timeout=3000)
+    page.get_by_test_id("ql-filter-btn").click()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "手機寬度不橫向捲動"
     assert page.evaluate("() => getComputedStyle(document.querySelector('thead')).display") == "none"
     row = page.locator("tr.ql-row[data-quote-no='MQ-T84E-002']")
@@ -175,9 +198,96 @@ def test_phone_390_cards_show_actions_with_44px_targets_and_no_horizontal_scroll
     assert float(page.evaluate("() => getComputedStyle(document.querySelector('.row-actions')).opacity")) == 1, "手機上操作按鈕不靠 hover"
     sel = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] td[data-col=dealTag] select")
     sel.scroll_into_view_if_needed()
-    assert sel.bounding_box()["height"] >= 44
+    sb = sel.bounding_box()
+    assert sb["height"] >= 44
+    act = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] .row-actions").bounding_box()
+    assert abs((sb["y"] + sb["height"] / 2) - (act["y"] + act["height"] / 2)) < 30, "進度選單與操作按鈕同一列"
     # 三個數字在 390px 都看得到、可點
     for t in ("ql-sum-todo", "ql-sum-waiting", "ql-sum-won"):
         assert page.get_by_test_id(t).is_visible()
     # 每張卡片不超出視窗寬度
     assert page.evaluate("() => [...document.querySelectorAll('tr.ql-row')].every(r => r.getBoundingClientRect().right <= window.innerWidth + 1)")
+
+
+def _admin_world(make_user):
+    adm = make_user(username="t84e_adm", role="admin")
+    make_user(username="t84e_col", role="sales")
+    make_user(username="t84e_boss", role="admin")
+    _seed("MQ-T84E-101", _uid("t84e_adm"), "草稿")
+    _seed("MQ-T84E-102", _uid("t84e_col"), "已送出")
+    return adm
+
+
+@pytest.mark.e2e
+def test_search_ignores_mine_and_says_so_without_an_extra_click(live_server, make_user, new_page, login_as):
+    """E4：找別人負責的單，打字就找得到（不必先清除條件）；清掉搜尋回到原本的條件。"""
+    adm = _admin_world(make_user)
+    page = new_page(viewport={"width": 1280, "height": 900})
+    login_as(page, adm)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 2" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") == 1, "預設只列我負責的"
+    page.locator("input.search-input[placeholder*='搜尋報價單號']").fill("客戶102")
+    page.wait_for_function("() => document.querySelectorAll(\"tr.ql-row[data-quote-no='MQ-T84E-102']\").length === 1", timeout=5000)
+    assert "搜尋範圍：全部你可看的報價" in page.get_by_test_id("ql-cond").inner_text()
+    page.locator("input.search-input[placeholder*='搜尋報價單號']").fill("")
+    page.wait_for_function("() => document.querySelectorAll('tr.ql-row').length === 1", timeout=5000)
+    assert page.get_by_test_id("ql-cond-mine").count() == 1
+
+
+@pytest.mark.e2e
+def test_remembered_mine_with_empty_list_and_failed_mine_fetch_never_show_an_empty_or_wrong_page(live_server, make_user, new_page, login_as):
+    adm = make_user(username="t84e_adm2", role="admin")
+    make_user(username="t84e_col", role="sales")
+    make_user(username="t84e_boss", role="admin")
+    _seed("MQ-T84E-102", _uid("t84e_col"), "已送出")
+    page = new_page(viewport={"width": 1280, "height": 900})
+    login_as(page, adm)
+    page.add_init_script("try { localStorage.setItem('motrix_quote_mine:t84e_adm2', '1') } catch (e) {}")
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 1" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 1, "記住「只看我負責的」但名單是空的 ⇒ 仍顯示全部"
+    # 第二個請求（我負責的名單）失敗：數字顯示「暫時無法計算」，不是 0 張；列表照常
+    page2 = new_page(viewport={"width": 1280, "height": 900})
+    login_as(page2, adm)
+    page2.route("**/api/quotations?*mine=1*", lambda r: r.abort())
+    page2.goto(live_server + "/pages/quotations.html")
+    page2.wait_for_function("() => %s.loading === false && %s.quotes.length >= 1" % (DATA, DATA), timeout=20000)
+    assert "暫時無法計算" in page2.get_by_test_id("ql-sum-todo").inner_text() and "0 張" not in page2.get_by_test_id("ql-sum-todo").inner_text()
+    assert page2.get_by_test_id("ql-sum-todo").is_disabled()
+    assert page2.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 1
+
+
+@pytest.mark.e2e
+def test_hidden_columns_hide_their_folded_data_and_compact_keeps_the_customer(live_server, make_user, new_page, login_as):
+    page = _open(live_server, make_user, new_page, login_as, "t84e_sales4")
+    row = "tr.ql-row[data-quote-no='MQ-T84E-001']"
+    assert "客戶001" in page.locator(row + " td[data-col=quoteNo]").inner_text(), "預設精簡：客戶折進單號格"
+    page.get_by_test_id("ql-density").click()
+    assert "客戶001" in page.locator(row + " td[data-col=quoteNo]").inner_text() and "業務甲" in page.locator(row + " td[data-col=date]").inner_text(), "緊湊不丟客戶與填單人"
+    page.get_by_test_id("ql-density").click()
+    # 設定中心的個人檢視（或公司版面）隱藏客戶／填單人 ⇒ 資料也不從別的格漏出來
+    page.evaluate("() => { const d = %s; d.lvOn = { columns: true, tab: false, size: false }; d.pv = { ...d.pv, hidden: ['customer', 'filler'] } }" % DATA)
+    page.wait_for_function("(js) => !eval(js)().includes('客戶名稱')", arg=VIS_HEADS, timeout=5000)
+    assert "客戶001" not in page.locator(row + " td[data-col=quoteNo]").inner_text()
+    assert "業務甲" not in page.locator(row + " td[data-col=date]").inner_text()
+
+
+@pytest.mark.e2e
+def test_confirmed_quote_next_step_and_no_lane_headers_while_a_number_is_selected(live_server, make_user, new_page, login_as):
+    sales = make_user(username="t84e_sales5", role="sales")
+    make_user(username="t84e_boss", role="admin")
+    uid = _uid("t84e_sales5")
+    _seed_set(uid)
+    _seed("MQ-T84E-007", uid, "已確認")
+    page = new_page(viewport={"width": 1280, "height": 900})
+    login_as(page, sales)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 7" % (DATA, DATA), timeout=20000)
+    nxt = page.locator("tr.ql-row[data-quote-no='MQ-T84E-007'] td[data-col=next]").inner_text()
+    assert "客戶已確認，請轉案件" in nxt and "有效期" not in nxt
+    assert page.locator("tr.ql-lane:visible").count() >= 1
+    page.get_by_test_id("ql-sum-todo").click()
+    page.wait_for_function("() => document.querySelectorAll('tr.ql-row').length === 3", timeout=5000)
+    assert page.locator("tr.ql-lane:visible").count() == 0, "選了數字就不分階段標題"
+    assert page.locator(".filter-tab.active").count() == 0, "選了數字時分頁不亮「進行中」"

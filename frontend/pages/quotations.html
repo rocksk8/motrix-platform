@@ -91,8 +91,13 @@
     .ql-colpick { position:absolute; z-index:30; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid var(--border-light); border-radius:var(--radius); box-shadow:var(--shadow-sm); padding:10px 12px; min-width:200px; font-size:12px; }
     .ql-colpick label { display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer; }
     table.ql-compact td { padding-top:4px; padding-bottom:4px; }
-    table.ql-compact .ql-sub, table.ql-compact .ql-age { display:none; }
     .ql-table td[data-col=dealTag] select { max-width:86px; }
+    .ql-filters { display:contents; }
+    .ql-only-m { display:none; }
+    .ql-cond__toggle { margin-left:auto; display:inline-flex; align-items:center; gap:4px; padding:3px 10px; min-height:28px; border-radius:999px; background:#fff; border:1px solid var(--border-light); color:var(--text-secondary); font-family:var(--font-zh); font-size:12px; cursor:pointer; }
+    .ql-cond__toggle[aria-pressed=true] { border-color:var(--accent); color:var(--accent); font-weight:600; }
+    .ql-note { flex-basis:100%; color:var(--text-dim); }
+    .ql-sum[disabled] { cursor:default; opacity:.7; }
     @media (hover: none) { .row-actions { opacity:1; } }
     @media (max-width: 767px) {
       /* 手機（390px）：每張報價單一張卡片；操作按鈕一直看得到、至少 44px */
@@ -111,17 +116,30 @@
       .ql-table td[data-col=amount] { grid-column:1; grid-row:4; text-align:left; }
       .ql-table td[data-col=margin] { grid-column:2; grid-row:4; text-align:right; }
       .ql-table td[data-col=next] { grid-column:1 / -1; grid-row:5; }
-      .ql-table td[data-col=dealTag] { grid-column:1; grid-row:6; }
-      .ql-table td[data-col=validDays] { grid-column:2; grid-row:6; text-align:right; }
-      .ql-table td[data-col=filler] { grid-column:1; grid-row:7; }
+      .ql-table td[data-col=dealTag] { grid-column:1; grid-row:6; align-self:center; }
+      .ql-table tr.ql-row > td:last-child { grid-column:2; grid-row:6; justify-self:end; }
+      .ql-table td[data-col=validDays] { grid-column:1; grid-row:7; }
       .ql-table td[data-col=date] { grid-column:2; grid-row:7; text-align:right; }
-      .ql-table tr.ql-row > td:last-child { grid-column:1 / -1; grid-row:8; }
+      .ql-table td[data-col=filler] { grid-column:1 / -1; grid-row:8; }
       .ql-table .row-actions { opacity:1; gap:8px; }
       .ql-table .row-actions .icon-btn { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
       .ql-table td[data-col=dealTag] select { min-height:44px; max-width:none; font-size:13px; }
       .ql-table .ql-sub { max-width:none; white-space:normal; }
-      .ql-sum { flex:1 1 100%; border-left:none !important; border-top:1px solid var(--border-light); border-radius:0; }
-      .ql-sum:first-child { border-top:none; }
+      /* 手機第一屏要看得到第一張卡片：三個數字併成一排、篩選收進「篩選」鈕、壓力帶收起（分頁與階段標題仍可用） */
+      .summary-row { flex-wrap:nowrap; gap:0; padding:4px; margin-bottom:10px; }
+      .ql-sum { flex:1 1 0; padding:4px 6px; }
+      .ql-sum__val { font-size:17px; }
+      .ql-sum__sub { display:none; }
+      .vm-andon { display:none !important; }
+      .ql-only-m { display:inline-flex; }
+      .ql-filters { display:none; }
+      .ql-filters.open { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
+      .ql-filters.open .search-input { max-width:none !important; flex:1 1 140px; }
+      .search-bar { margin-bottom:8px; }
+      .search-bar > .search-input { max-width:none !important; }
+      .ql-cond { margin-bottom:8px; }
+      .filter-tabs { margin-bottom:10px; }
+      .ql-table td[data-col=dealTag] select { width:100%; }
     }
   </style>
 </head>
@@ -175,23 +193,23 @@
 
     <!-- 頁頂三個數字（可點擊篩選；定義固定，見 UX-BUSINESS-PAGES-PROPOSAL §3.3） -->
     <div class="summary-row" data-testid="ql-summary">
-      <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" data-testid="ql-sum-todo" @click="setFocus('todo')"
-              title="你的草稿、被退回待修改的、已核准還沒送給客戶的報價單">
+      <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" :disabled="!mineOk" data-testid="ql-sum-todo" @click="setFocus('todo')"
+              title="你負責的報價單裡：草稿、被退回待修改的、已核准還沒送給客戶的">
         <span class="ql-sum__lbl">要我處理</span>
-        <span class="ql-sum__val" :style="summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="summaryData.todo + ' 張'"></span>
-        <span class="ql-sum__sub">草稿、被退回、已核准待寄客戶</span>
+        <span class="ql-sum__val" :style="mineOk && summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="mineOk ? summaryData.todo + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="mineOk ? '草稿、被退回、已核准待寄客戶' : '暫時無法計算'"></span>
       </button>
-      <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
-              title="你送出、正在簽核的報價單（待簽核與簽核中）">
+      <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" :disabled="!mineOk" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
+              title="你負責的報價單裡，正在簽核的（待簽核與簽核中）">
         <span class="ql-sum__lbl">等別人</span>
-        <span class="ql-sum__val" x-text="summaryData.waiting + ' 張'"></span>
-        <span class="ql-sum__sub" x-text="'待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing"></span>
+        <span class="ql-sum__val" x-text="mineOk ? summaryData.waiting + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="mineOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
       </button>
-      <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" data-testid="ql-sum-won" @click="setFocus('won')"
-              title="依成案標記計算：本月報價中標記為「已成案」或「已結案」的張數與合計金額">
+      <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" :disabled="!mineOk" data-testid="ql-sum-won" @click="setFocus('won')"
+              title="你負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統沒有另外記成案日）。全公司的數字在儀表板。">
         <span class="ql-sum__lbl">本月已成案</span>
-        <span class="ql-sum__val" x-text="summaryData.wonCount + ' 張'"></span>
-        <span class="ql-sum__sub" x-text="'NT$ ' + MotrixFormat.num(summaryData.wonTotal)"></span>
+        <span class="ql-sum__val" x-text="mineOk ? summaryData.wonCount + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="mineOk ? 'NT$ ' + MotrixFormat.num(summaryData.wonTotal) + '・以報價日期計' : '暫時無法計算'"></span>
       </button>
     </div>
 
@@ -199,6 +217,9 @@
     <div class="search-bar">
       <input class="search-input" type="text" placeholder="搜尋報價單號、客戶名稱、案件名稱…"
              x-model="search" style="max-width:380px">
+      <button type="button" class="action-btn action-btn--ghost ql-only-m" data-testid="ql-filter-btn" :aria-expanded="filterOpen" @click="filterOpen = !filterOpen" style="min-height:44px"
+              x-text="filterOpen ? '收起篩選' : '篩選' + (extraFilterCount ? '（' + extraFilterCount + '）' : '')"></button>
+      <div class="ql-filters" :class="{ open: filterOpen }" data-testid="ql-filters">
       <select class="search-input" x-model="filterSales" style="max-width:140px;cursor:pointer"
               x-show="['superadmin','admin'].includes(session.role)">
         <option value="">所有填單人</option>
@@ -239,10 +260,11 @@
           <template x-for="k in COL_OPTIONAL" :key="k">
             <label><input type="checkbox" :checked="!colPrefs.hidden.includes(k)" @change="toggleCol(k)" :data-testid="'ql-col-' + k"> <span x-text="cLabel(k, LV_LABELS[k])"></span></label>
           </template>
-          <div style="margin-top:6px;color:var(--text-dim)">單號、狀態、案件進度、下一步以外的欄位都可以增減。</div>
+          <div style="margin-top:6px;color:var(--text-dim)">單號、狀態、案件進度、報價日期以外的欄位都可以增減。</div>
         </div>
       </div>
       <button type="button" class="action-btn action-btn--ghost" data-testid="ql-density" @click="toggleCompact()" :title="colPrefs.compact ? '切回標準列高' : '列高縮小、一頁看更多張'" x-text="colPrefs.compact ? '標準密度' : '緊湊'"></button>
+      </div>
     </div>
 
     <!-- 目前條件（一眼看出為什麼只有這些單）＋清除條件 -->
@@ -253,6 +275,11 @@
       </template>
       <button type="button" class="action-btn action-btn--ghost" style="min-height:32px" data-testid="ql-clear-conditions"
               x-show="hasActiveFilter" @click="clearFilters()">清除條件</button>
+      <button type="button" class="ql-cond__toggle" data-testid="ql-mine-toggle" :aria-pressed="onlyMine ? 'true' : 'false'" @click="setMine(!onlyMine)"
+              title="開啟＝預設只列你負責的報價單（會記住你的選擇）；關閉＝預設列出你看得到的全部">
+        <span x-text="onlyMine ? '✓ 只看我負責的' : '只看我負責的'"></span>
+      </button>
+      <span class="ql-note" data-testid="ql-mine-note" x-show="mineNote" x-text="mineNote"></span>
     </div>
 
     <!-- T65 C1：個人檢視設定（設定中心 list_view 開啟才出現；只能在公司允許的範圍內調整，金額欄位只能隱藏或調順序） -->
@@ -316,7 +343,7 @@
 
     <div class="filter-tabs">
       <template x-for="tab in tabs" :key="tab.key">
-        <button class="filter-tab" :class="{active: activeTab === tab.key}" :title="tab.title || ''" @click="activeTab = tab.key; phaseFilter = ''; focus = ''">
+        <button class="filter-tab" :class="{active: activeTab === tab.key && !focus}" :title="tab.title || ''" @click="activeTab = tab.key; phaseFilter = ''; focus = ''">
           <span x-text="tab.label"></span>
           <span x-show="tabCount(tab.key) > 0" style="margin-left:4px;font-size:12px;color:var(--text-dim)" x-text="'(' + tabCount(tab.key) + ')'"></span>
         </button>
@@ -367,7 +394,7 @@
                     <span style="font-size:12px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FED7AA;color:#7C2D12;letter-spacing:.03em;flex-shrink:0">改版</span>
                   </template>
                 </div>
-                <template x-if="!cShown('customer')">
+                <template x-if="fold('customer')">
                   <div class="ql-sub" style="font-weight:500;color:var(--text-primary)" :title="q.customer_name || ''" x-text="q.customer_name || '—'"></div>
                 </template>
                 <template x-if="q.edit_count > 0">
@@ -396,7 +423,7 @@
               <td data-col="filler" x-show="cShown('filler')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
               <td data-col="status" x-show="cShown('status')">
                 <span class="badge" :class="dealDisplayStatus(q).cls" x-text="dealDisplayStatus(q).text"></span>
-                <template x-if="!cShown('next')">
+                <template x-if="fold('next')">
                   <div class="ql-sub ql-next" :class="'ql-next--' + nextStep(q).tone" x-text="nextStep(q).text + (nextStep(q).sub ? '・' + nextStep(q).sub : '')"></div>
                 </template>
               </td>
@@ -430,7 +457,7 @@
               </td>
               <td data-col="date" x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-dim)">
                 <div x-text="(q.quote_date || q.created_at || '').slice(0,10)"></div>
-                <template x-if="!cShown('filler')">
+                <template x-if="fold('filler')">
                   <div class="ql-sub" title="填單人" x-text="q.sales_person || '—'"></div>
                 </template>
               </td>
@@ -569,7 +596,10 @@
       filterMonth: '',
       filterDealTag: '',
       // T84：預設「我負責的、進行中」；每人記住上次選擇（localStorage，讀寫失敗就用預設）
-      onlyMine: true,
+      onlyMine: true,                // 記住的選擇（只有「只看我負責的」開關會改寫它）
+      showAll: false,                // 「清除條件」＝這次暫時看全部（不改寫記住的選擇）
+      mineOk: false,                 // 「我負責的」名單讀到了嗎（沒讀到 ⇒ 數字顯示「暫時無法計算」、不限縮）
+      filterOpen: false,             // 手機：篩選收納
       mineSet: new Set(),            // 後端 ?mine=1 的單號（與案件頁「我負責的」同一個判斷）
       focus: '',                      // '' | 'todo' | 'waiting' | 'won'（頁頂三個數字）
       colPickOpen: false,
@@ -632,7 +662,7 @@
       // 自訂排序要拖曳，Sortable 綁在單一 tbody 上（initSortable 讀 $refs.quotesTbody），
       // 分成多個 tbody 會讓拖曳跨不過去；分頁已經選定單一階段時分段也沒有意義。
       get useLanes() {
-        return this.activeTab === 'all' && this.sortPref.sortMode !== 'custom' && !this.phaseFilter
+        return this.activeTab === 'all' && this.sortPref.sortMode !== 'custom' && !this.phaseFilter && !this.focus
       },
 
       get displayLanes() {
@@ -700,20 +730,33 @@
       },
 
       // ═══ T84 ═══
-      // 「我負責的」：只在 onlyMine 開著、且摘要數字的「本月已成案」以外才限縮；後端沒回名單（mineSet 空且載入失敗）時 onlyMine 已被關掉
-      _matchMine(q) { return !this.onlyMine || this.focus === 'won' || this.mineSet.has(q.quote_no) },
+      // 「我負責的」限縮（PM 裁示 2026-11-13）：搜尋時不限縮（搜尋範圍＝全部你看得到的）；點三個數字是暫時的檢視（各自就是「我負責的」）；
+      // 「清除條件」只是暫時看全部；只有「只看我負責的」開關會記住。名單是空的（或讀不到）⇒ 自動顯示全部並說明。
+      get _mineLimit() { return this.onlyMine && !this.showAll && this.mineOk && this.mineSet.size > 0 && !this.focus && !this.search.trim() },
+      _matchMine(q) { return !this._mineLimit || this.mineSet.has(q.quote_no) },
+      _isMineQ(q) { return this.mineSet.has(q.quote_no) },
+      get mineNote() {
+        if (!this.onlyMine || this.showAll || this.focus || this.search.trim() || this.loading) return ''
+        if (!this.mineOk) return '暫時無法判斷哪些是你負責的，先顯示全部'
+        return this.mineSet.size === 0 ? '你目前沒有負責的報價，先顯示全部' : ''
+      },
+      setMine(v) {
+        this.onlyMine = v; this.showAll = false; this.focus = ''
+        try { localStorage.setItem('motrix_quote_mine:' + this._uk(), v ? '1' : '0') } catch (e) {}
+      },
+      get extraFilterCount() { return [this.filterSales, this.filterMonth, this.filterDealTag].filter(Boolean).length },
       _isWaiting(q) { return q.status === '待審核' || q.status === '簽核中' },
       // 要我處理＝我的草稿＋被退回待修＋已核准尚未送客戶（資料狀態值不變，只是這一頁怎麼數）
       _isTodo(q) { return q.status === '已拒絕' || ((q.status === '草稿' || q.status === '已核准') && this.lifecycleOf(q) !== 'closed') },
       _isWon(q) { return (q.deal_tag === '已成案' || q.deal_tag === '已結案') && (q.quote_date || q.created_at || '').startsWith(MotrixDate.thisMonth()) },
       setFocus(k) {
+        if (!this.mineOk) return
         this.focus = this.focus === k ? '' : k
         this.phaseFilter = ''; this.activeTab = 'all'
-        if (this.focus === 'todo' || this.focus === 'waiting') this.onlyMine = true
       },
       get conditions() {
         const c = []
-        if (this.onlyMine) c.push({ key: 'mine', label: '我負責的', hint: '你是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
+        if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '你是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
         const f = { todo: '要我處理', waiting: '等別人', won: '本月已成案' }[this.focus]
         if (f) c.push({ key: 'focus', label: f })
         const ph = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
@@ -722,7 +765,7 @@
           const tab = this.tabs.find(t => t.key === this.activeTab)
           c.push({ key: 'tab', label: this.activeTab === 'all' ? '進行中' : (tab ? tab.label : this.activeTab) })
         }
-        if (this.search.trim()) c.push({ key: 'search', label: '搜尋「' + this.search.trim() + '」' })
+        if (this.search.trim()) { c.push({ key: 'search', label: '搜尋「' + this.search.trim() + '」' }); if (!this.focus) c.push({ key: 'scope', label: '搜尋範圍：全部你可看的報價' }) }
         if (this.filterSales) c.push({ key: 'sales', label: '填單人 ' + this.filterSales })
         if (this.filterMonth) c.push({ key: 'month', label: this.filterMonth })
         if (this.filterDealTag) c.push({ key: 'deal', label: '案件進度：' + this.filterDealTag })
@@ -742,6 +785,7 @@
         }
         if (s === '已核准') return { text: '簽完了，請寄給客戶', tone: 'act' }
         if (tag === '已成案') return { text: '已成案，請到案件管理跟進', tone: '' }
+        if (s === '已確認') return { text: '客戶已確認，請轉案件', tone: '' }
         const left = this._validLeft(q)
         if (left === null) return { text: '等客戶回覆', tone: '' }
         return left < 0 ? { text: '等客戶回覆', tone: 'warn', sub: '已過有效期 ' + (-left) + ' 天', subCls: 'vm-age--stale' }
@@ -798,11 +842,11 @@
       // E1：空狀態分三種（none 從未有資料／filtered 篩選後沒有／error 載入失敗）
       get emptyKind() { return this.loadErr ? 'error' : (this.quotes.length ? 'filtered' : 'none') },
       get hasActiveFilter() {
-        return !!(this.onlyMine || this.focus || this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.phaseFilter || this.activeTab !== 'all')
+        return !!(this._mineLimit || this.focus || this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.phaseFilter || this.activeTab !== 'all')
       },
       clearFilters() {
         this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.phaseFilter = ''; this.activeTab = 'all'
-        this.focus = ''; this.onlyMine = false
+        this.focus = ''; this.showAll = true
       },
 
       get filtered() {
@@ -826,7 +870,7 @@
           const matchMonth   = !this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth)
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
           const matchPhase   = !this.phaseFilter || this.lifecycleOf(q) === this.phaseFilter
-          const matchFocus   = !this.focus || (this.focus === 'todo' ? this._isTodo(q) : this.focus === 'waiting' ? this._isWaiting(q) : this._isWon(q))
+          const matchFocus   = !this.focus || (this._isMineQ(q) && (this.focus === 'todo' ? this._isTodo(q) : this.focus === 'waiting' ? this._isWaiting(q) : this._isWon(q)))
           return this._matchMine(q) && matchFocus && matchTab && matchSearch && matchSales && matchMonth && matchDealTag && matchPhase
         })
         return applyListSort(base, this.sortPref, {
@@ -841,7 +885,7 @@
       // 三個數字的定義固定（見 UX-BUSINESS-PAGES-PROPOSAL §3.3）：要我處理／等別人 只算「我負責的」；本月已成案沿用既有口徑（成案標記為已成案／已結案、本月報價的張數與金額）
       _computeSummary() {
         const mine = this.quotes.filter(q => this.mineSet.has(q.quote_no))
-        const won = this.quotes.filter(q => this._isWon(q))
+        const won = mine.filter(q => this._isWon(q))
         this.summaryData = {
           todo:     mine.filter(q => this._isTodo(q)).length,
           waiting:  mine.filter(q => this._isWaiting(q)).length,
@@ -888,13 +932,10 @@
         await this.loadQuotes()
       },
 
-      // 第一次載入決定「我負責的」要不要開：有記住上次選擇就照辦；沒記過 ⇒ 預設開，但名單讀不到或是空的（例如只看不負責的人）就不要讓畫面一片空白
+      // 第一次載入：讀回記住的選擇（沒記過 ⇒ 預設開）；名單空或讀不到時畫面自動顯示全部（見 _mineLimit／mineNote），不改寫記住的選擇
       _applyMineDefault(mineOk) {
-        if (this._mineApplied) { if (!mineOk) this.onlyMine = false; return }
-        this._mineApplied = true
-        const choice = this._mineChoice
-        this.onlyMine = mineOk && (choice !== null && choice !== undefined ? choice : this.mineSet.size > 0)
-        this.$watch('onlyMine', v => { try { localStorage.setItem('motrix_quote_mine:' + this._uk(), v ? '1' : '0') } catch (e) {} })
+        this.mineOk = mineOk
+        if (!this._mineApplied) { this._mineApplied = true; this.onlyMine = this._mineChoice !== false }     // 記住的選擇：只有明確關掉過才是 false；沒記過 ⇒ 開
       },
 
       // S-X2：狀態顯示名稱與顏色（旗標 builder_status_display 關或沒改過 ⇒ 與下面的 _dealDisplayBase 逐字相同）。邏輯一律用 q.status／q.deal_tag 原值。
@@ -1167,6 +1208,9 @@
       _qcols() { return this.layoutOn ? window.Alpine.store('layout').cols('quotes') : [] },
       // T84：預設欄位精簡（客戶併進單號格、填單人併進日期格、毛利率／有效天數預設不顯示）；使用者自己用「欄位」按鈕增減。
       // 設定中心的個人檢視（lvOn.columns）開著時由它全權決定（不套預設精簡）。
+      // 折進其他格的子行（客戶→單號格、填單人→日期格、下一步→狀態格）：只有「這一頁預設精簡」藏起來的欄位才折；
+      // 公司版面或個人檢視設定隱藏的欄位，資料也一起不顯示（不能從別的格漏出去）。
+      fold(f) { return !this.lvOn.columns && this.colPrefs.hidden.includes(f) && (!this.layoutOn || this._qcols().some(c => c.field === f)) },
       cShown(f) { return (!this.layoutOn || this._qcols().some(c => c.field === f)) && !(this.lvOn.columns && this.pv.hidden.includes(f)) && !(!this.lvOn.columns && this.colPrefs.hidden.includes(f)) },      // T65 C1：個人偏好只能再隱藏公司版面允許的欄位
       // 分群標題列／空狀態／載入中的 colspan＝表格實際的欄數（版面隱藏欄位後要跟著減；關閉時恆為 12，與先前相同）
       colSpan() { return 13 - ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'next', 'date'].filter(k => !this.cShown(k)).length },

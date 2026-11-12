@@ -194,3 +194,20 @@ def test_waiting_on_costs_a_constant_number_of_queries(client, make_user):
     assert (with3 - base3) == (with40 - base40), "多的查詢次數與列數無關（不是 N+1）：%s vs %s" % (with3 - base3, with40 - base40)
     assert (with40 - base40) >= 1, "計數器有在數（否則上面的相等沒有意義）"
     assert (with40 - base40) <= 3, "只多一次 users 對照＋一次批次讀 data_json"
+
+
+def test_user_without_quote_money_sees_the_same_waiting_on_but_masked_totals(client, make_user):
+    """沒有 quote_money 的人（例如工程師）看得到的列：金額照舊遮蔽，「等誰」和有權限的人看到的一樣（不因遮蔽而多給或少給）。"""
+    eng = make_user(username="t84_eng", role="engineer")
+    sales = make_user(username="t84_sales_m", role="sales")
+    make_user(username="t84_boss_m", role="admin")
+    _name("t84_boss_m", "陳主管")
+    _seed("MQ-T84-020", _uid("t84_eng"), approval=_approval(_approvers("t84_boss_m")))
+    mine = _items(client, _login(client, *eng))
+    assert "MQ-T84-020" in mine, "夾具：工程師看得到自己的單"
+    it = mine["MQ-T84-020"]
+    assert it["waiting_on"] == ["陳主管"]
+    assert not it.get("total") and not it.get("pretax"), "金額維持遮蔽：%s／%s" % (it.get("total"), it.get("pretax"))
+    # 對照：有權限的人看同一張單（以業務為擁有者），等的人相同
+    _seed("MQ-T84-021", _uid("t84_sales_m"), approval=_approval(_approvers("t84_boss_m")))
+    assert _items(client, _login(client, *sales))["MQ-T84-021"]["waiting_on"] == it["waiting_on"]
