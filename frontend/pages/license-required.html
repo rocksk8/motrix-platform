@@ -28,7 +28,7 @@
   <div class="lr-wrap" data-license-required>
     <h1 class="lr-title" id="lr-title">授權無法使用</h1>
     <p id="lr-msg">系統目前無法確認這台伺服器的使用授權，所以暫停使用。這不是系統故障，您的資料都還在。</p>
-    <p class="lr-dim">請聯絡<strong>系統供應商</strong>（提供這套系統授權金鑰的廠商），並把下方的「狀態代碼」與「機器代碼」一併提供，對方才能處理。</p>
+    <p class="lr-dim" id="lr-vendor">請聯絡<strong>系統供應商</strong>（提供這套系統授權金鑰的廠商），並把下方的「狀態代碼」與「機器代碼」一併提供，對方才能處理。</p>
     <div class="lr-box" id="lr-emergency" hidden></div>
     <div class="lr-box" id="lr-restart" hidden></div>
     <dl class="lr-kv" id="lr-kv"></dl>
@@ -45,7 +45,15 @@
       if (!sess.token) { location.replace('login.html'); return }
       var H = { Authorization: 'Bearer ' + sess.token }
       // 只有最高管理者看得到「前往授權頁匯入」（授權頁與匯入端點本身仍由伺服器驗權限；這裡只是不讓其他人看到一個點了會被擋的連結）
-      if (sess.role === 'superadmin') document.getElementById('lr-import').hidden = false
+      var isSuper = sess.role === 'superadmin'
+      if (isSuper) document.getElementById('lr-import').hidden = false
+      // 其他角色（T83 L5）：只看到「請聯絡系統管理員」——不顯示狀態代碼、機器代碼、客戶、到期日、通行證狀態，也不叫他去找供應商
+      // （授權細節是商務資訊，只給最高管理者；這裡只是畫面，伺服器端的標頭另外擋）。
+      if (!isSuper) {
+        document.getElementById('lr-vendor').hidden = true
+        document.getElementById('lr-title').textContent = '系統暫時無法使用'
+        document.getElementById('lr-msg').textContent = '系統目前無法使用，這不是系統故障，您的資料都還在。請聯絡您的系統管理員處理。'
+      }
       // 狀態代碼 ⇒ 給人看的說明（與後端 helpers/licensing.py::_GATE_MESSAGES 同義；這裡多講「該怎麼辦」）
       var REASON = {
         missing: ['尚未安裝授權金鑰', '這台伺服器上找不到授權金鑰。請向供應商取得，並放到伺服器的指定位置。'],
@@ -70,6 +78,7 @@
       }
       function render(s) {
         document.getElementById('lr-kv').textContent = ''
+        if (!isSuper) return
         var em = document.getElementById('lr-emergency'); em.hidden = true
         document.getElementById('lr-restart').hidden = true
         var r = REASON[s.reason]

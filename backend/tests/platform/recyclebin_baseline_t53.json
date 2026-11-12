@@ -291,6 +291,10 @@
    "count": 1,
    "reason": "p2: 自訂記錄附件刪除"
   },
+  "helpers/license_manager.py": {
+   "count": 4,
+   "reason": "tmp: 授權換檔：刪自己的換檔暫存檔（.import-tmp／.restore-tmp）、備份複製驗證失敗時刪自己剛複製的檔、舊備份輪替（只留最近 30 份；授權備份，非用戶單據）"
+  },
   "helpers/startup.py": {
    "count": 1,
    "reason": "tmp: 啟動時暫存目錄清理"

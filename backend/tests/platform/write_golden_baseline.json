@@ -59,6 +59,17 @@
   ],
   "s": 404
  },
+ "POST /api/license/import": {
+  "k": [
+   "applied",
+   "detail",
+   "license",
+   "message",
+   "ok",
+   "reason"
+  ],
+  "s": 400
+ },
  "POST /api/line/binding/start": {
   "k": [
    "detail"

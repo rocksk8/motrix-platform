@@ -5,8 +5,9 @@
   - 新單位 `helpers/license_manager.py`（授權頁與匯入的邏輯；**驗章／機器綁定／到期一律呼叫既有 `licensing.verify_license`，不重寫**）：`run_import`（預覽或匯入）、`describe_current`、`recent_activity`、`normalize_upload`、`rate_allow`、`backup_dir` 與常數。
   - `helpers.licensing`：`EXPIRY_HEADER`／`EXPIRY_THRESHOLDS`／`expiry_reminder`／`expiry_banner`（剩 30／14／7 天提醒的判定；只在授權仍可用時提醒）；`LICENSE_EXEMPT_PATHS` 新增 `/api/license/overview`、`/api/license/import`（授權失效時唯一能救回系統的動作就是匯入新授權；豁免只跳過閘門，端點自己驗最高管理者＋非示範帳號）。
   - `helpers.license_alerts.expiry_notice`：寄 `license_expiry` 信（新信件類型，`superadmins`、信件格鎖住不可關）；`system_checks._check_license_expiry` 每日 08:00 檢查，同一把授權同一檔位（30／14／7／永久已過維護期）只通知一次。
-- 行為變更（對外介面）：新端點 `GET /api/license/overview`、`POST /api/license/import`（最高管理者；匯入有大小上限 32 KB、頻率限制 10 次／10 分鐘、稽核 `license.import`／`license.import_rejected`、換檔前自動備份、換後複驗失敗自動還原）；已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=…;level=…;kind=…`／`none`）；新頁 `pages/license-settings.html`（獨立頁，不載入側欄／不打業務 API，授權失效時也開得起來）、系統選單「授權」、系統中心「公司與參數設定」卡；`license-required.html` 對最高管理者多一個「前往授權頁匯入」。
+- 行為變更（對外介面）：新端點 `GET /api/license/overview`、`POST /api/license/import`（最高管理者；匯入有大小上限 32 KB、頻率限制（每帳號 10 點／10 分鐘，預覽半點，另有全域 60 點；本文巢狀深度上限）、稽核 `license.import`／`license.import_rejected`、換檔前自動備份、換後複驗失敗自動還原）；已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=…;level=…;kind=…`／`none`）；新頁 `pages/license-settings.html`（獨立頁，不載入側欄／不打業務 API，授權失效時也開得起來）、系統選單「授權」、系統中心「公司與參數設定」卡；`license-required.html` 對最高管理者多一個「前往授權頁匯入」。
 - 不變：`LICENSE_GATE_ENABLED`、驗章流程、公鑰、緊急放行通行證判定、402 行為、`GET /api/license/status` 一律沒動。
+- 審查修正（hichan-3 L1～L5＋PM 追加）：`license_manager` 公開介面新增 `PREVIEW_WEIGHT`／`RATE_GLOBAL_MAX`，`rate_allow(now=…)` → `rate_allow(account=…, weight=…, now=…)`（尚無外部呼叫端；快照以 `core_bump.py --pending` 重產）；正式公鑰已內建時拒收開發金鑰簽的授權（`dev_license_not_allowed`）；到期提醒標頭 `X-Motrix-License-Expiry` 只給最高管理者；`apply_update.ps1`（腳本版本 2026-11-13a）／`rollback_update.ps1` 的排除清單加 `license_backups`、`license.key.import-tmp`、`license.key.restore-tmp`；`verify_package` 擋授權備份資料夾與換檔暫存檔。
 - 測試：`tests/test_license_import_2026_11_13.py`。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
