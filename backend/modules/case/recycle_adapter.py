@@ -166,7 +166,7 @@ class ExtraExpenseAdapter(RB.Adapter):
         out = []
         keys = r.keys()
         if (r["paid_date"] or "").strip():
-            out.append({"kind": "paid", "label": "已登錄付款（%s）：請先由最高管理員更正付款日（退回待付款）再刪除" % r["paid_date"][:10], "blocking": True})
+            out.append({"kind": "paid", "label": "已登錄付款（%s）：請先由最高管理者更正付款日（退回待付款）再刪除" % r["paid_date"][:10], "blocking": True})
         if "kind" in keys and (r["kind"] or "") == "purchase_req" and (r["doc_code"] or ""):
             used = [x["doc_code"] for x in conn.execute(
                 "SELECT doc_code, data_json FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order' AND status NOT IN ('草稿','已駁回','已作廢')", (r["quote_no"],)).fetchall()

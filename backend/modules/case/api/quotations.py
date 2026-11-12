@@ -278,7 +278,7 @@ from helpers.approval_queue import (  # noqa: E402
 # 已結案案件解鎖後的「半解鎖」機制：deal_tag='已結案' 時，quotations 表
 # case_semi_unlocked 欄位若為 0，_gate_case_edit() 涵蓋的端點一律 403；若為 1，
 # 這些端點不直接套用變更，而是寫入 case_change_requests 一筆 pending 記錄、
-# 背景寄信通知最高管理員，回傳 pending 回應給前端；等 superadmin 於簽核佇列
+# 背景寄信通知最高管理者，回傳 pending 回應給前端；等 superadmin 於簽核佇列
 # 核准後才由 _apply_case_change_request() 真正套用。涵蓋範圍與設計取捨（哪些
 # 端點刻意不支援排隊、一律直接 403）見 db.py _m061_case_semi_unlock() docstring。
 
@@ -493,7 +493,7 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
     稅額沖銷申請/撤銷/核准 3 支，合計 13 支）用：已結案案件
     一律 403，不論是否半解鎖都不例外（設計取捨見 db.py migration docstring —
     需要修正時請透過已支援排隊審核的案件資料整體編輯/款項標記收款/附件上傳
-    端點處理，或聯繫最高管理員直接校正）。
+    端點處理，或聯繫最高管理者直接校正）。
 
     2026-08-28：這道 403 牆原本被擋下時完全不留紀錄，之後要評估「是否該擴大
     半解鎖排隊審核的涵蓋範圍」時沒有任何實際使用頻率數據可看——這裡補上一筆
@@ -520,7 +520,7 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
         raise HTTPException(
             403,
             "案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，"
-            "或聯繫最高管理員）",
+            "或聯繫最高管理者）",
         )
 
 
@@ -2298,7 +2298,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if is_unlock_edit:
         editor = _require_user(authorization)
         if editor["role"] != "superadmin":
-            raise HTTPException(403, "解鎖編輯需要超級管理員權限")
+            raise HTTPException(403, "解鎖編輯需要最高管理者權限")
         # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
         try:
             _h0 = (json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}).get("editHistory")
@@ -2608,7 +2608,7 @@ _STATUS_PATCH_WHITELIST = {"草稿", "待審核", "已送出", "已取消", "已
 def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
     if user["role"] != "superadmin":
-        raise HTTPException(403, "僅超級管理員可直接變更報價單狀態")
+        raise HTTPException(403, "僅最高管理者可直接變更報價單狀態")
     if body.status not in _STATUS_PATCH_WHITELIST:
         raise HTTPException(400, f"不支援的狀態值：{body.status}")
     conn = get_db()
@@ -3000,7 +3000,7 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
     """完結案前置條件檢查（2026-08-25 使用者提出，見 QUICK.md §11）。
     回傳 (reasons, pending_usernames)：reasons 非空時應擋下完結案；
     pending_usernames 是③相關單據簽核人（①②④⑤沒有對應的「簽核人」概念，
-    維持空清單，通知只會落到最高管理員，見 notify_case_close_blocked() docstring）。
+    維持空清單，通知只會落到最高管理者，見 notify_case_close_blocked() docstring）。
 
     2026-09-14：判定本體搬到 _case_close_gates()，這裡只做投影。
     ③的 reason 在關卡裡是用「；」把逐表的句子接起來的，這裡拆回獨立項目，
@@ -3153,7 +3153,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         # 完結案防呆（2026-08-25 使用者提出、2026-08-26 施作）：①執行管理進度100%
         # ②款項明細全部收齊③相關單據（報價單/承攬商匯款申請/開票申請憑據/出貨單/
         # 請款單）簽核流程全部完成，三項須同時達成才能完結案；任一未達成直接 400
-        # 擋下，並通知尚未完成該項的簽核人＋最高管理員（見 _case_close_block_reasons()）。
+        # 擋下，並通知尚未完成該項的簽核人＋最高管理者（見 _case_close_block_reasons()）。
         if body.deal_tag == "已結案":
             reasons, pending_usernames = _case_close_block_reasons(conn, quote_no, d)
             if reasons:
@@ -3169,7 +3169,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         # 已結案不可逆轉（僅 superadmin 可例外覆寫）
         if old_tag == "已結案" and user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "案件已結案，僅超級管理員可變更案件進度")
+            raise HTTPException(403, "案件已結案，僅最高管理者可變更案件進度")
         d["dealTag"] = body.deal_tag or ''
         if body.log_entry:
             if "statusLog" not in d or not isinstance(d["statusLog"], list):
@@ -3784,7 +3784,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         if gated:
             conn.close()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理者審核通過後才會套用"}
         old_devices = (data.get("caseRecord") or {}).get("devices") or []
         new_devices = (body.case_record or {}).get("devices") or []
         # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
@@ -4468,7 +4468,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         )
         if gated:
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理者審核通過後才會套用"}
         _pay_before = _RC.snapshot(pits)        # 行事曆比對用（原地修改前）
         _apply_payment_mark(pits, idx, body, received_by)
         if "invoiceNo" in body:
@@ -4561,7 +4561,7 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
                          (json.dumps(new_files, ensure_ascii=False), change_id))
             conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
@@ -4594,7 +4594,7 @@ def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, itemId: Op
                 f"{no} {label} 刪除發票附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = pits[idx].get("invoiceFiles") or []
         pits[idx]["invoiceFiles"] = delete_document_file("quotation_payment_items", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -4643,7 +4643,7 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
                          (json.dumps(new_files, ensure_ascii=False), change_id))
             conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
@@ -4673,7 +4673,7 @@ def delete_material_file(no: str, idx: int, file_id: str, itemId: Optional[str] 
                 f"{no} {name} 刪除附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = mats[idx].get("files") or []
         mats[idx]["files"] = delete_document_file("quotation_materials", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -4709,7 +4709,7 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
                          (json.dumps(new_files, ensure_ascii=False), change_id))
             conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
@@ -4742,7 +4742,7 @@ def delete_material_invoice_file(no: str, idx: int, file_id: str, itemId: Option
                 f"{no} {name} 刪除發票附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
-                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = mats[idx].get("invoiceFiles") or []
         mats[idx]["invoiceFiles"] = delete_document_file("quotation_materials_invoices", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -5444,7 +5444,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             # no tiers on this quotation — check global settings first
             if user["role"] != "superadmin":
                 conn.close()
-                raise HTTPException(403, "僅超級管理員可執行此操作")
+                raise HTTPException(403, "僅最高管理者可執行此操作")
             # If global approval_flow has tiers configured, block the no-tier fallback.
             # This prevents a quotation submitted before flow was set (tiers missing)
             # from being approved without going through the flow.
@@ -5467,7 +5467,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 raise HTTPException(403, self_block_msg)
             _guard_expected_fp(conn, d, body)
             all_done      = True
-            detail_status = "超級管理員簽核"
+            detail_status = "最高管理者簽核"
             _signed_tier_nos = []
 
         if all_done:
@@ -5528,7 +5528,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
     """
     user = _require_user(authorization)
     if user["role"] == "superadmin":
-        raise HTTPException(403, "超級管理員請使用解鎖編輯")
+        raise HTTPException(403, "最高管理者請使用解鎖編輯")
     if not _tier_allowed("quote_money", user):                       # ＝quote_money_visible（欄位政策的報價單層級；出口不再直接呼叫角色函式，t65 棘輪）
         raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
     q   = body.data
@@ -5653,7 +5653,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
                 notify_approval_request(quote_no, q.get("customerName") or "", _t0)
         except Exception:                                  # noqa: BLE001
             logger.exception("整條重跑後通知第 1 層簽核人失敗（quote_no=%s）", quote_no)
-    # 通知信（commit 之後才寄；送審人＋全部超級管理員；收件人與退訂規則在 review_edit_notify）。信件失敗不影響已存檔的編輯
+    # 通知信（commit 之後才寄；送審人＋全部最高管理者；收件人與退訂規則在 review_edit_notify）。信件失敗不影響已存檔的編輯
     try:
         _REN.fire_edited(quote_no, customer=q.get("customerName") or "", editor=user.get("display_name") or user["username"],
                          requester=appr.get("requestedBy") or "", fields=[c.get("field") for c in _changes[:30]],     # 只傳欄位名稱、不帶新舊值（收件人不一定有金額檢視權限）
@@ -5785,7 +5785,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         else:
             if user["role"] != "superadmin":
                 conn.close()
-                raise HTTPException(403, "僅超級管理員可執行此操作")
+                raise HTTPException(403, "僅最高管理者可執行此操作")
 
         note = require_reject_reason(body.note)
         now  = datetime.now().isoformat()

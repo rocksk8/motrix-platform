@@ -151,7 +151,7 @@ def denied_reason(perm, module_labels=None):
 
 def build_sections(cards, denied=(), module_labels=None):
     """已過濾的卡片 ⇒ [{key,title,sub,count,items:[…]}]（只含有項目的分組；組內依 order、再依 id）。
-    denied：使用者**沒有權限**的卡片（超級管理員在設定打開『顯示沒有權限的項目』時才給；預設不給）——列出但標 denied＋白話原因，不可點。
+    denied：使用者**沒有權限**的卡片（最高管理者在設定打開『顯示沒有權限的項目』時才給；預設不給）——列出但標 denied＋白話原因，不可點。
     count＝能開的項數（不含 denied）。badge／pending 由呼叫端（routers/system_hub.py）補上。"""
     by = {s["key"]: [] for s in SECTIONS}
     for c in cards:

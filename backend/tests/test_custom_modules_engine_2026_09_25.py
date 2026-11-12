@@ -759,7 +759,7 @@ def test_publish_and_restore_take_the_write_lock(monkeypatch):
     conn.close()
 
 
-# ── U14（使用者 2026-09-26 裁示）：草稿只有建立者與超級管理員可以修改、送出 ─────────
+# ── U14（使用者 2026-09-26 裁示）：草稿只有建立者與最高管理者可以修改、送出 ─────────
 
 def test_draft_can_only_be_changed_by_its_creator_or_a_superadmin(loan, make_user, client):
     c, h = loan
@@ -773,7 +773,7 @@ def test_draft_can_only_be_changed_by_its_creator_or_a_superadmin(loan, make_use
     assert c.post(url + "/transitions/submit", headers=other, json={}).status_code == 403
     assert c.get(url, headers=h["req"]).json()["canEdit"] is True                        # 正對照：建立者
     assert c.put(url, headers=h["req"], json={"values": {"item": "改", "qty": 1}}).status_code == 200
-    assert c.get(url, headers=h["super"]).json()["canEdit"] is True                      # 超級管理員
+    assert c.get(url, headers=h["super"]).json()["canEdit"] is True                      # 最高管理者
     assert c.post(url + "/transitions/submit", headers=h["super"], json={}).status_code == 200
     assert c.get(url, headers=h["req"]).json()["canEdit"] is False                       # 送出之後誰都不能改內容
 

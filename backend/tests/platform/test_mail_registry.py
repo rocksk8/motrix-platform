@@ -6,7 +6,7 @@
   ② 寄送呼叫（_async_send／_send_raising／_send／_send_with_attachments）的主旨一律由 `subject(key, 事由)` 產生
   ③ `_build_html` 的第一個參數是已登記的字面 key（內文的影響／建議處理從登記表來）
   ④ 信件內文與主旨的字串不可以出現禁用詞（MODULE-GUIDE §11）
-行為：預設收件群組、僅超級管理員、指定帳號／角色、未登記 fail closed、系統技術類一般管理員不收、
+行為：預設收件群組、僅最高管理者、指定帳號／角色、未登記 fail closed、系統技術類一般管理員不收、
       個人退訂只能移除、收得到的清單、設定端點驗證。
 正對照用合成原始碼（不綁 L2 模組）；另斷言真實掃描抓得到已知的呼叫。
 """
@@ -288,7 +288,7 @@ def test_pages_bind_the_registry():
 # ── 稽核 D（AUDIT-D-A-mail-settings）────────────────────────────────────────────
 
 def test_no_superadmin_does_not_fall_back_to_admins(staff, caplog):
-    """M-M1：找不到可收信的超級管理員時，系統技術類**不退回一般管理員**（使用者：「普通管理員不需要收到這類信」）。"""
+    """M-M1：找不到可收信的最高管理者時，系統技術類**不退回一般管理員**（使用者：「普通管理員不需要收到這類信」）。"""
     import db
     from helpers import email_notify as en
     conn = db.get_db()
@@ -299,11 +299,11 @@ def test_no_superadmin_does_not_fall_back_to_admins(staff, caplog):
         conn.close()
     assert en._group_emails("backup_stale") == []                    # 不是 ["ms_adm@example.com"]
     assert en._lookup_emails(["ms_eng"], "zz_not_registered") == []  # 未登記 fail closed 也不退回
-    assert any("超級管理員" in r.message for r in caplog.records)
+    assert any("最高管理者" in r.message for r in caplog.records)
 
 
 def test_settings_page_says_when_nobody_receives(client, staff):
-    """M-S1：所有超級管理員都退訂某一種系統技術類 ⇒ 設定頁標出「目前沒有人會收到」。"""
+    """M-S1：所有最高管理者都退訂某一種系統技術類 ⇒ 設定頁標出「目前沒有人會收到」。"""
     import db
     conn = db.get_db()
     try:
@@ -318,7 +318,7 @@ def test_settings_page_says_when_nobody_receives(client, staff):
 
 
 def test_receivable_in_superadmin_only_mode(client, staff):
-    """M-S2：「僅超級管理員」模式下，一般管理員的清單裡這一類是收不到的。"""
+    """M-S2：「僅最高管理者」模式下，一般管理員的清單裡這一類是收不到的。"""
     import db
     h = staff["sa"]
     conn = db.get_db()

@@ -113,12 +113,12 @@
     </div>
 
     <template x-if="!isSuperadmin">
-      <div class="ns-card"><div class="ns-locked">僅超級管理員可檢視／修改此頁面</div></div>
+      <div class="ns-card"><div class="ns-locked">僅最高管理者可檢視／修改此頁面</div></div>
     </template>
 
     <template x-if="isSuperadmin">
       <div>
-        <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：未確認 ⇒ 其他功能暫停；最高管理員在這裡按「確認本公司資料」。
+        <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：未確認 ⇒ 其他功能暫停；最高管理者在這裡按「確認本公司資料」。
              一般的「儲存」不算確認（複製來的資料庫只要存一次任何設定就「確認」了）。 -->
         <div class="ns-card" data-company-setup-card x-show="(setup && setup.configured !== true) || reconfirm">
           <div class="ns-card-head">
@@ -194,9 +194,9 @@
           </div>
         </div>
         <div x-show="!gateMode && !confirmedNow" data-company-advanced>
-        <!-- CG-S5：只有一位最高管理員 ⇒ 他不在時只剩伺服器本機的暫時放行（DR-SOP〈本公司資料設定〉） -->
+        <!-- CG-S5：只有一位最高管理者 ⇒ 他不在時只剩伺服器本機的暫時放行（DR-SOP〈本公司資料設定〉） -->
         <div class="ns-desc" data-company-setup-single-admin x-show="setup && setup.superadminCount === 1"
-             style="margin:0 0 12px">建議再設一位最高管理員：本公司資料需要最高管理員確認，唯一的最高管理員不在時，只能由系統負責人在伺服器本機使用暫時放行。</div>
+             style="margin:0 0 12px">建議再設一位最高管理者：本公司資料需要最高管理者確認，唯一的最高管理者不在時，只能由系統負責人在伺服器本機使用暫時放行。</div>
         <!-- 品牌（2026-09-27 H10；使用者：「公司名稱、公司LOGO這些都要能在設定中上傳跟修改」）
              公司名稱存在 company_profile（與下方各卡同一支 save()）；三種圖檔各自上傳、立即生效。
              只收 PNG／JPG／WebP，伺服器以檔案內容判斷格式並重新編碼（去掉拍攝資訊等 metadata）。 -->
@@ -519,7 +519,7 @@
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
-              僅超級管理員可修改。設定後將顯示於請款單 PDF，供客戶財務單位辦理匯款。
+              僅最高管理者可修改。設定後將顯示於請款單 PDF，供客戶財務單位辦理匯款。
             </div>
             <div class="ns-row">
               <div class="ns-field">
@@ -656,7 +656,7 @@
         </div>
 
         <!-- Google 額度治理（§16 GB5／GB6）
-             使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據
+             使用者 2026-09-22：「你做一個真實計算器，並讓最高管理者可以依據
              現在 google 的免費額度去調整…」
              🔑 每一個數字都從實際資料算，一個都不是估的。
              ⚠️ 免費額度與單價**不寫死在程式裡** —— Google 2025-03-01 廢掉了
@@ -1134,7 +1134,7 @@
           if (s === '00000000') return { cls: 'bad', text: '00000000 是系統保留的示範統編，請填貴公司的統一編號' }
           return this._ubnValid(s) ? { cls: 'ok', text: '✓ 統編格式正確' } : { cls: 'bad', text: '統編檢查碼不符，請再核對' }
         },
-        // 精靈：最高管理員走完公司資料後還有「兩步驟驗證」一步（要走過第 1 步才有；否則直接開始使用）
+        // 精靈：最高管理者走完公司資料後還有「兩步驟驗證」一步（要走過第 1 步才有；否則直接開始使用）
         wizardNext() {
           const w = window.MotrixWizard
           return (w && w.isSuper && w.counted) ? 'totp' : 'start'

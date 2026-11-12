@@ -534,7 +534,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow  = resolve_active_flow_setting("shipping")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
@@ -552,7 +552,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
             raise HTTPException(403, self_block_msg)
         all_done      = True
         _signed_tier_nos = []
-        detail_status = "超級管理員簽核"
+        detail_status = "最高管理者簽核"
 
     if all_done:
         # 庫存扣減：品項若引用 part_no/serials，核准即視為「確認出貨」。全部序號都還在庫才放行，

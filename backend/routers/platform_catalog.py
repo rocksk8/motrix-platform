@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""能力目錄端點（CUSTOMIZATION-SPEC P1）：`GET /api/platform/catalog`，僅超級管理員、唯讀。
+"""能力目錄端點（CUSTOMIZATION-SPEC P1）：`GET /api/platform/catalog`，僅最高管理者、唯讀。
 
 內容由 `core.catalog.build()` 收集；本檔只負責權限與把 L1 輸出引擎登記成 `outputs` 區段
 （輸出引擎是 L1 helper，core 不 import helpers）。

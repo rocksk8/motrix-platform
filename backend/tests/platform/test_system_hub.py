@@ -331,7 +331,7 @@ def test_first_time_hint_is_plain_dismissible_and_remembered():
     assert H.plain_problem(m.group(1)) == "" and "dismissHint()" in html and "motrix_system_hub_hint" in html
 
 
-# ── 7 使用者決定：沒有權限的項目預設隱藏（超級管理員可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
+# ── 7 使用者決定：沒有權限的項目預設隱藏（最高管理者可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
 def test_show_denied_is_a_registered_setting_with_ledger_and_loosening_rules(client, make_user):
     """可見度放寬走設定登錄表：群組已登錄、放寬方向＝up、風險＝security、有白話影響與風險說明；預設隱藏。"""
     from helpers import settings_registry as sr
@@ -425,7 +425,7 @@ def test_cache_is_per_user_so_a_filtered_view_never_leaks_to_someone_else(client
     sh, vh = _login(client, su, sp), _login(client, vu, vp)
     full = _hub(client, sh)
     assert full["total"] > 0
-    assert _hub(client, vh)["sections"] == [], "同一個 15 秒窗口內，沒有權限的人不能拿到超級管理員的快取"
+    assert _hub(client, vh)["sections"] == [], "同一個 15 秒窗口內，沒有權限的人不能拿到最高管理者的快取"
     assert _hub(client, sh)["total"] == full["total"]
     from routers import system_hub as R
     keys = list(R._CACHE)

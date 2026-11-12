@@ -22,7 +22,7 @@
 [等待上限] 每封最多等 `SEND_WAIT_TIMEOUT_SECONDS`（45 秒）；一次掃描**總共最多等 `MAX_WAIT_SECONDS_PER_RUN`**（超過就停止寄送，剩下的不寫 guard、等下一次重試），
        且出現 `SEND_UNKNOWN`（SMTP 卡住）就立刻停止本次掃描——後面的信多半也會卡。每日檢查在排程執行緒裡循序執行，不能被卡死的 SMTP 拖住。
 [收件人] 信件類型 `payable_due_soon`／`payable_due_today` 登記在「財務」群組（`mail_types` group `finance`），寄信一律 `to_group=True`、**不另帶 usernames**：
-         收件人＝`helpers.email_notify.finance_recipient_emails`（在職、有 Email、**未退訂**該類型的財務角色＋最高管理者），並套超級管理員在
+         收件人＝`helpers.email_notify.finance_recipient_emails`（在職、有 Email、**未退訂**該類型的財務角色＋最高管理者），並套最高管理者在
          「信件與通知收件設定」頁的覆寫（僅超管／自訂）。沒有收件人 ⇒ 不寄、**不寫 guard**（下次有收件人再發）。
 [信內容] 不放金額（使用者裁示：金額可見性只給簽核人／申請人／財務；信件走外部郵件系統）。
 """

@@ -238,7 +238,7 @@
       </div>
       <template x-if="session.role !== 'superadmin'">
         <span style="font-size:12px;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:5px 12px">
-          僅超級管理員可修改設定
+          僅最高管理者可修改設定
         </span>
       </template>
     </div>
@@ -392,7 +392,7 @@
             <template x-if="flows[key] && flows[key].steps.length > 0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             </template>
-            <span x-text="flows[key] && flows[key].steps.length === 0 ? '預設模式（任一超級管理員簽核）' : '自訂順序模式（共 ' + (flows[key] ? flows[key].steps.length : 0) + ' 個簽核步驟）'"></span>
+            <span x-text="flows[key] && flows[key].steps.length === 0 ? '預設模式（任一最高管理者簽核）' : '自訂順序模式（共 ' + (flows[key] ? flows[key].steps.length : 0) + ' 個簽核步驟）'"></span>
           </div>
 
           <!-- 系統內建：申請人部門主管自動簽核（永遠排在最前面，不參與拖曳排序） -->
@@ -409,7 +409,7 @@
               <details class="as-fold-more">
               <summary>詳細規則</summary>
               <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
-                申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他超級管理員簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
+                申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他最高管理者簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
               </div>
               </details>
             </div>
@@ -564,9 +564,9 @@
             <li>每種文件類型依「套用範圍」設定走統一流程或自己的獨立設定，送出審核後系統依當下設定生成簽核步驟，並快照當時的設定（之後修改設定不影響已在審核中的單據）</li>
             <li>勾選套用範圍＝走統一流程；取消勾選＝改用該類型自己的獨立設定（會在下方各自一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層；每一類的「調整」裡，左邊一列是現在生效的設定、另一列是切過去之後會變成的設定</li>
             <li>每位簽核人員在自己的步驟輪到時，才能在「簽核佇列」頁面執行簽核</li>
-            <li>任何步驟皆可由超級管理員退回草稿</li>
+            <li>任何步驟皆可由最高管理者退回草稿</li>
             <li>所有步驟完成後，該單據狀態自動更新為完成狀態（報價單為「已送出」，其餘為「已核准」）</li>
-            <li>未設定任何步驟時，回歸預設行為：任一超級管理員皆可簽核</li>
+            <li>未設定任何步驟時，回歸預設行為：任一最高管理者皆可簽核</li>
           </ul>
         </div>
       </details>
@@ -672,7 +672,7 @@
 
         sectionDesc(key) {
           // 🔴 2026-09-23：這一句以前在 `steps.length === 0` 時**一律**寫
-          //    「由任何超級管理員簽核即可通過」，而 `includeSubmitterManagerTier`
+          //    「由任何最高管理者簽核即可通過」，而 `includeSubmitterManagerTier`
           //    缺鍵視為 true ⇒ 後端 `setting_to_active_tiers()` 實際上會先插一層
           //    **申請人的部門主管**。
           // ☠️ ⇒ 畫面對「誰要簽核」說了一句不是真的話 —— 而那是最不能說謊的一格。
@@ -695,7 +695,7 @@
           if (flow.includeSubmitterManagerTier) {
             return `目前為預設模式：${label}${sep}送出後，由${who}簽核。`
           }
-          return `目前為預設模式：${label}${sep}送出後，由任何超級管理員簽核即可通過。`
+          return `目前為預設模式：${label}${sep}送出後，由任何最高管理者簽核即可通過。`
         },
 
         flowUrl(key) {
@@ -897,7 +897,7 @@
             const who = (st.approvers || []).map(ap => this.approverDigestName(ap)).filter(Boolean)
             parts.push(who.length ? who.join('／') : '（這一層沒有指定簽核人）')
           }
-          if (!parts.length) return '預設模式：任一超級管理員簽核即可'
+          if (!parts.length) return '預設模式：任一最高管理者簽核即可'
           return parts.join(' → ')
         },
 
@@ -1016,7 +1016,7 @@
         },
 
         resetToDefault(key) {
-          if (!confirm('確定要清除所有簽核步驟，還原為預設模式（任一超級管理員可簽核）？')) return
+          if (!confirm('確定要清除所有簽核步驟，還原為預設模式（任一最高管理者可簽核）？')) return
           this.flows[key].steps = []
           // 2026-08-28：清空只是本機畫面狀態，還沒送出儲存——加一個明顯提示，
           // 避免使用者誤以為「清除」本身就已經生效，接著又順手按了儲存把空
@@ -1038,10 +1038,10 @@
               )
             }))
           }
-          // 2026-08-28：儲存空的簽核層清單是重大操作（之後任一超級管理員都能簽核所有
+          // 2026-08-28：儲存空的簽核層清單是重大操作（之後任一最高管理者都能簽核所有
           // 單據），額外多一道跟「清除」按鈕文字不同的確認，避免「清除→順手存檔」
           // 一步誤觸就把設定洗空。
-          if (payload.tiers.length === 0 && !confirm('即將儲存空的簽核設定，儲存後任一位超級管理員都可以簽核所有單據，確定要儲存嗎？')) {
+          if (payload.tiers.length === 0 && !confirm('即將儲存空的簽核設定，儲存後任一位最高管理者都可以簽核所有單據，確定要儲存嗎？')) {
             return
           }
           flow.saving = true
@@ -1101,7 +1101,7 @@
         },
 
         roleLabel(role) {
-          return { superadmin: '超級管理員', admin: '管理員', sales: '業務', viewer: '檢視者' }[role] || role
+          return { superadmin: '最高管理者', admin: '管理員', sales: '業務', viewer: '檢視者' }[role] || role
         },
 
         logout() {

@@ -2,10 +2,10 @@
 """員工收款帳號 API（payroll v3；規則與遮蔽見 `modules/payroll/bank_account.py`）。
 
 - `GET／PUT /api/me/bank-account`：**本人**（端點不收 user_id ⇒ 沒有 IDOR）。
-- `GET /api/bank-accounts`：有資格的人（超級管理員／財務／出納）看「誰登錄了帳號」清單（只有末四碼）。
+- `GET /api/bank-accounts`：有資格的人（最高管理者／財務／出納）看「誰登錄了帳號」清單（只有末四碼）。
 - `GET /api/bank-accounts/{user_id}?reveal=1`：有資格的人看某人；預設遮蔽，`reveal=1` 才回完整並寫稽核。
-- `PUT /api/bank-accounts/{user_id}`：超級管理員或財務改別人的。
-- `GET /api/bank-accounts/{user_id}/history`：超級管理員／財務看變更歷史（只有末四碼）。
+- `PUT /api/bank-accounts/{user_id}`：最高管理者或財務改別人的。
+- `GET /api/bank-accounts/{user_id}/history`：最高管理者／財務看變更歷史（只有末四碼）。
 沒有資格 ⇒ 404（當作不存在，不洩漏「這個人有沒有帳號」）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException

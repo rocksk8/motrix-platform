@@ -3,10 +3,10 @@
 
 - layout 驗證器（P5 × P3）：發布前經 `catalog.check_layout`，只能動模組登記、且經 `layout_points` 過濾後的點；
   問題的 path 以 body 為根（`ops[i].…`），給排版器標回畫面。
-- `GET /api/layout/{module}`：任何登入者讀**自己角色**的版面（角色 ＞ 公司 ＞ 程式預設）；`?role=` 只給超級管理員；
+- `GET /api/layout/{module}`：任何登入者讀**自己角色**的版面（角色 ＞ 公司 ＞ 程式預設）；`?role=` 只給最高管理者；
   已發布但現在不合法的操作不套用、列在 dropped。
 
-⚙️ 反向控制：未登記的點、核心欄位的隱藏、打錯的鍵、非超級管理員預覽別的角色——每一條都有一題證明它真的擋。
+⚙️ 反向控制：未登記的點、核心欄位的隱藏、打錯的鍵、非最高管理者預覽別的角色——每一條都有一題證明它真的擋。
 """
 import json
 
@@ -141,7 +141,7 @@ def test_effective_layout_drops_ops_that_are_no_longer_valid(client, make_user):
 
 
 def test_non_superadmin_cannot_write_layout_definitions(client, make_user):
-    """個人層不經定義庫：非超級管理員寫 layout 草稿／發布 ⇒ 403。"""
+    """個人層不經定義庫：非最高管理者寫 layout 草稿／發布 ⇒ 403。"""
     admin = _h(client, make_user, "p9_admin2", "admin")
     assert client.put(BASE + "/draft", headers=admin, json={"body": {"ops": []}}).status_code == 403
     assert client.post(BASE + "/publish", headers=admin, json={}).status_code == 403

@@ -84,7 +84,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         existing_settlement = data.get("settlement") or {}
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+            raise HTTPException(403, "精算已完結，僅最高管理者可重新修改")
         was_final = existing_settlement.get("status") == "finalized"
         reopen_reason = (body.reason or "").strip()
         if was_final and not reopen_reason:                    # 35c（使用者裁示）：已完結的精算要重新開啟或修改，必須填理由（留稽核軌跡）

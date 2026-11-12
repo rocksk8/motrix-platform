@@ -2,8 +2,8 @@
 """自訂模組的通用 API（P8，CUSTOMIZATION-SPEC §3.1／§8.1）。定義的草稿／發布／差異／還原走 `/api/definitions/custom_module/…`。
 
 - 單據：列表、新增、讀取、修改（只限起始狀態）、轉換、簽核（核准／退回）、輸出（HTML／PDF）。
-  權限：超級管理員，或使用者的模組清單裡有該模組的權限 key（預設 `custom.<key>`）；簽核人另外可以讀與簽自己那一層。
-- 建構器輔助（僅超級管理員）：欄位型別目錄、參照對象目錄、公式語法檢查（回錯誤位置）、編號預覽、輸出預覽（樣本資料）。
+  權限：最高管理者，或使用者的模組清單裡有該模組的權限 key（預設 `custom.<key>`）；簽核人另外可以讀與簽自己那一層。
+- 建構器輔助（僅最高管理者）：欄位型別目錄、參照對象目錄、公式語法檢查（回錯誤位置）、編號預覽、輸出預覽（樣本資料）。
 """
 import json
 from datetime import date
@@ -390,7 +390,7 @@ def custom_finance_of_case(case_no: str, authorization: str = Header(None)):
 
 @router.get("/api/custom-modules/finance/summary")
 def custom_finance_summary(basis: str = Query("cash"), authorization: str = Header(None)):
-    """建構器／管理者對帳用：待補登（缺該口徑日期）與因關聯內建案件而略過的收入。僅超級管理員。"""
+    """建構器／管理者對帳用：待補登（缺該口徑日期）與因關聯內建案件而略過的收入。僅最高管理者。"""
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
@@ -469,7 +469,7 @@ def get_custom_definition_review(authorization: str = Header(None)):
 
 @router.put("/api/custom-modules/definition-review")
 def set_custom_definition_review(payload: dict = Body(...), authorization: str = Header(None)):
-    """設定「模組審核人」名單與手動覆寫（`mode`：auto 預設＝依名單、on 強制送審、off 強制直接發布）。僅超級管理員；寫稽核。
+    """設定「模組審核人」名單與手動覆寫（`mode`：auto 預設＝依名單、on 強制送審、off 強制直接發布）。僅最高管理者；寫稽核。
     名單裡有申請人以外至少一人 ⇒ 送審自動啟用；沒有 ⇒ 發布維持直接發布（稽核記「未經第二人審核」）。"""
     u = _require_user(authorization, require_superadmin=True)
     if "mode" not in payload and "reviewers" not in payload:
@@ -486,7 +486,7 @@ def set_custom_definition_review(payload: dict = Body(...), authorization: str =
     return _def_review_state(u["username"])
 
 
-# ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
+# ── 建構器輔助（僅最高管理者）──────────────────────────────────────────────
 
 @router.get("/api/custom-modules/catalog")
 def custom_module_catalog(authorization: str = Header(None)):
@@ -507,7 +507,7 @@ def custom_module_catalog(authorization: str = Header(None)):
 
 @router.get("/api/custom-modules/templates/{tkey}")
 def custom_module_template(tkey: str, authorization: str = Header(None)):
-    """範本的整份定義（新建模組時「從範本開始」用；套用後與範本脫鉤）。僅超級管理員。"""
+    """範本的整份定義（新建模組時「從範本開始」用；套用後與範本脫鉤）。僅最高管理者。"""
     _require_user(authorization, require_superadmin=True)
     body = CM.template_body(tkey)
     if body is None:

@@ -157,7 +157,7 @@ def require_for_output(kind: str = None, ident: dict = None) -> None:
         missing = [label for field, label in PAYMENT_BANK_FIELDS if not str(ident.get(field) or "").strip()]
         if missing:
             raise _cs.CompanySetupRequired(
-                CODE_BANK_REQUIRED, "請款單需要本公司匯款資料（" + "、".join(missing) + "），請最高管理員到「公司資料設定」填寫",
+                CODE_BANK_REQUIRED, "請款單需要本公司匯款資料（" + "、".join(missing) + "），請最高管理者到「公司資料設定」填寫",
                 missing)
 
 

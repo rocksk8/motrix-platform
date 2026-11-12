@@ -1,7 +1,7 @@
 """§16 GB1–GB16 · Google 額度治理（真實計算器＋自動降回免費）。
 
 使用者 2026-09-22：
-> 「你做一個真實計算器，並讓超級管理員可以依據現在 google 的免費額度去調整，
+> 「你做一個真實計算器，並讓最高管理者可以依據現在 google 的免費額度去調整，
 >   當準備到達上限額度自動寄信並將附近客戶跟查找功能先回歸免費，待月週期結束開放」
 
 ---
@@ -405,7 +405,7 @@ def test_gb5_the_calculator_reads_real_rows_not_estimates(client):
     """GB5：計算器的數字一律從**實際資料**算。
 
     使用者要的「真實」兩個字是重點。
-    ⚠️ 單價與免費額度都是**超級管理員填的欄位**（GB6），不可以寫死在程式裡 ——
+    ⚠️ 單價與免費額度都是**最高管理者填的欄位**（GB6），不可以寫死在程式裡 ——
     🔑 **Google 改過不止一次，而寫死的價格不會報錯，只會算錯。**
     """
     import db
@@ -430,7 +430,7 @@ def test_gb5_the_calculator_reads_real_rows_not_estimates(client):
 
 
 def test_gb6_only_a_superadmin_can_change_the_quota_settings(client, make_user):
-    """GB6：額度設定只有超級管理員可以改（比照 SA1）。
+    """GB6：額度設定只有最高管理者可以改（比照 SA1）。
 
     📌 它決定的是**錢**：額度、單價、警戒線、硬上限。
     ⚠️ 反向控制用 `role=viewer` ＋ `modules` 含 `settings` ——
@@ -538,7 +538,7 @@ def test_gb11_recovery_is_computed_not_stored(client):
 
 def test_gb12_the_warning_mail_is_sent_once_per_cycle_and_raises(
         client, monkeypatch):
-    """🔴 GB12：達警戒線寄信給超級管理員，**一個週期只寄一次**，且走 `_send_raising`。
+    """🔴 GB12：達警戒線寄信給最高管理者，**一個週期只寄一次**，且走 `_send_raising`。
 
     ☠️ 走 `_async_send` 的話會**射後不理**：
     「已通知」被標起來而信沒出去（同 §3s 的標案雷達）。

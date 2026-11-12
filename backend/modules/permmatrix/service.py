@@ -622,7 +622,7 @@ def create_delegation(conn, actor, delegator, delegate, scope_kind, caps=(), doc
         _require_reason(reason)
     elif not is_super:
         if _name(actor) != delegator or not delegation_policy().get("selfDelegateNonRisky", True):
-            raise PermError("僅能設定自己的代理，如需代替他人設定請聯絡最高管理員", 403)
+            raise PermError("僅能設定自己的代理，如需代替他人設定請聯絡最高管理者", 403)
     begin_write(conn)
     try:
         if risky:

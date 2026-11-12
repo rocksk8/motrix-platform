@@ -8,7 +8,7 @@
   只能做該點允許的操作（核心欄位不可隱藏或改名）、只能帶該操作認得的鍵、move 有容器限制、
   select_template 只能選程式提供的版型
 - 單一入口守門：`customization._raw_points`／`_check_ops` 只准在 `core.catalog._module_points`／`check_layout` 呼叫
-- 端點：僅超級管理員；已載入的真實模組逐一驗「登記＝列出、沒有 problems」（不點名任何 L2 模組）
+- 端點：僅最高管理者；已載入的真實模組逐一驗「登記＝列出、沒有 problems」（不點名任何 L2 模組）
 
 正對照一律用合成模組（MODULE-GUIDE §7：不綁特定 L2 模組）。
 突變清單與預期轉紅的題：同目錄 `_mutations_p1p3.md`。

@@ -181,7 +181,7 @@
     <!-- 超管提示 -->
     <div x-show="!isSuperAdmin"
          style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:12px;color:#92400E">
-      ⚠ 僅超級管理員可新增或編輯使用者帳號
+      ⚠ 僅最高管理者可新增或編輯使用者帳號
     </div>
 
     <!-- 統計 -->
@@ -266,7 +266,7 @@
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
             <div>
               <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
-              <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="超級管理員" style="font-size:12px;padding:7px 9px">
+              <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="最高管理者" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
               <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">admin</div>
@@ -561,7 +561,7 @@
         <div class="form-group">
           <label class="form-label">角色層級（系統功能基礎）</label>
           <select class="form-select" x-model="form.role" style="font-size:12px" @change="dutySchedule && dutySchedule()">
-            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="superadmin" x-text="(roleLabels.superadmin||'最高管理者') + '（所有系統功能）'"></option>
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
@@ -704,7 +704,7 @@
             <input class="form-input" type="password" x-model="form.confirmPassword" placeholder="再輸入一次">
           </div>
         </template>
-        <!-- 解鎖密碼：僅編輯超級管理員時顯示 -->
+        <!-- 解鎖密碼：僅編輯最高管理者時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-light)">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
@@ -724,7 +724,7 @@
             </div>
           </div>
         </template>
-        <!-- 每日工作事項密碼：僅編輯超級管理員時顯示 -->
+        <!-- 每日工作事項密碼：僅編輯最高管理者時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:12px;padding-top:14px;border-top:1px solid var(--border-light)">
             <div style="font-size:12px;font-weight:600;color:#7C3AED;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px">
@@ -774,7 +774,7 @@
         <div class="form-group">
           <label class="form-label">基礎角色層級</label>
           <select class="form-select" x-model="crForm.baseRole" @change="applyCrBaseRole()" style="font-size:12px">
-            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="superadmin" x-text="(roleLabels.superadmin||'最高管理者') + '（所有系統功能）'"></option>
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
@@ -888,9 +888,9 @@
       userSearch: '',
       customRoles:       [],
       customRoleMgrOpen: false,
-      roleLabels: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
+      roleLabels: {superadmin:'最高管理者', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
       roleLabelsMgrOpen: false,
-      rlForm: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', viewer:'檢視者'},
+      rlForm: {superadmin:'最高管理者', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', viewer:'檢視者'},
       showModal: false,
       editingId: null,
       formError: '',
@@ -909,7 +909,7 @@
       form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
       get systemPresets() {
         return [
-          {key:'superadmin', label: this.roleLabels.superadmin || '超級管理員'},
+          {key:'superadmin', label: this.roleLabels.superadmin || '最高管理者'},
           {key:'admin',      label: this.roleLabels.admin      || '管理員'},
           {key:'sales',      label: this.roleLabels.sales      || '業務'},
           {key:'engineer',   label: this.roleLabels.engineer   || '工程師'},
@@ -1359,7 +1359,7 @@
 
       async deleteUser(user) {
         if (!this.isSuperAdmin) return
-        if (user.builtinAdmin) { alert('不可刪除超級管理員帳號'); return }
+        if (user.builtinAdmin) { alert('不可刪除最高管理者帳號'); return }
         if (!confirm(`確定要刪除帳號「${user.username}」？此操作無法復原。`)) return
         const res = await fetch(`/api/users/${user.id}`, {
           method: 'DELETE', headers: this._headers()

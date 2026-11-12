@@ -1,7 +1,7 @@
 """`PX1` · 權限訊息說的角色，與程式實際檢查的角色，要是同一件事（`STATE.md` 總表 `PX1`）。
 
 ```
-說得比實際嚴  訊息說「只有最高管理員」，而 admin 也放行  ⇒ 有人進得去而不該進（安全缺陷，不會報錯）
+說得比實際嚴  訊息說「只有最高管理者」，而 admin 也放行  ⇒ 有人進得去而不該進（安全缺陷，不會報錯）
 說得比實際鬆  訊息泛稱「管理員」，而只有 superadmin 放行  ⇒ admin 被誤導、卡住
 ```
 量尺照 `docs/windows/tools/px1_scan.py`（`STATE §267／§269` 盤點過：0 處不一致）搬進 pytest，
@@ -20,7 +20,7 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 _SKIP = {"tests", "tools", "rollback_snapshots", "scripts"}
 
-CLAIM_SUPER = re.compile(r"超級管理員|最高管理者|最高管理員")
+CLAIM_SUPER = re.compile(r"最高管理者|最高管理者|最高管理者")
 CLAIM_ADMIN = re.compile(r"(?<!超級)(?<!最高)管理員")
 CLAIM_MODULE = re.compile(r"模組")
 
@@ -108,7 +108,7 @@ def test_px1_no_permission_message_disagrees_with_its_role_guard():
         looser_all += looser
     assert ok_all, "量尺一個一致的案例都沒掃到 —— 掃描器壞了，下面的「0 不一致」是空綠"
     assert not tighter_all, (
-        "權限訊息說「只有最高管理員」，而程式讓 admin 也過（有人進得去而不該進）：\n  "
+        "權限訊息說「只有最高管理者」，而程式讓 admin 也過（有人進得去而不該進）：\n  "
         + "\n  ".join("%s:%d %r 允許 %s" % r for r in tighter_all))
     assert not looser_all, (
         "權限訊息泛稱「管理員」，而程式只放 superadmin（admin 會被誤導）：\n  "
@@ -118,7 +118,7 @@ def test_px1_no_permission_message_disagrees_with_its_role_guard():
 _DECOY_TIGHTER = '''
 def f(user):
     if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅最高管理員可以執行這個動作")
+        raise HTTPException(403, "僅最高管理者可以執行這個動作")
 '''
 _DECOY_LOOSER = '''
 def g(user):
@@ -128,7 +128,7 @@ def g(user):
 _CONTROL_OK = '''
 def h(user):
     if user["role"] != "superadmin":
-        raise HTTPException(403, "僅最高管理員可以執行這個動作")
+        raise HTTPException(403, "僅最高管理者可以執行這個動作")
 '''
 
 

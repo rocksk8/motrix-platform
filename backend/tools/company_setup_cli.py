@@ -116,7 +116,7 @@ def cmd_sign(a):
     tax = re.sub(r"\D", "", a.tax or "")
     fp = cs.identity_fp("tax", tax)
     if fp not in cs.DEVELOPER_IDENTITY_FP:
-        return _emit({"ok": False, "error": "--tax 不是開發者公司的統編：確認檔只簽開發者身分（其他安裝在設定頁由最高管理員確認）"}, EXIT_ERROR)
+        return _emit({"ok": False, "error": "--tax 不是開發者公司的統編：確認檔只簽開發者身分（其他安裝在設定頁由最高管理者確認）"}, EXIT_ERROR)
     if a.permanent and a.days is not None:
         return _emit({"ok": False, "error": "--permanent 與 --days 只能擇一"}, EXIT_ERROR)
     days = SIGN_MAX_DAYS if a.days is None else a.days

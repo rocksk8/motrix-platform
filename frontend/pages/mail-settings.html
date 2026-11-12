@@ -46,7 +46,7 @@
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
         <h1 class="pg__t">信件與通知收件設定</h1>
-        <p class="pg__s">每一種系統寄出的信件都在這裡指定收件人。「照預設」依信件類型的預設收件人寄送；「僅超級管理員」只寄給超級管理員；「指定帳號／角色」除了事件相關人員之外，另寄給指定的帳號與角色。系統技術類預設只寄超級管理員。個人仍可在使用者管理中退訂自己收得到的類型。每一列另有兩個互相獨立的公司層勾選：「信件」取消勾選＝這種信不寄給任何人（原本的收件人設定保留，重新勾選即恢復）；「行事曆」勾選＝同步到公司 Google 行事曆。只進行事曆、不寄信也可以；沒有日期或沒有信件範本的格子停用。</p>
+        <p class="pg__s">每一種系統寄出的信件都在這裡指定收件人。「照預設」依信件類型的預設收件人寄送；「僅最高管理者」只寄給最高管理者；「指定帳號／角色」除了事件相關人員之外，另寄給指定的帳號與角色。系統技術類預設只寄最高管理者。個人仍可在使用者管理中退訂自己收得到的類型。每一列另有兩個互相獨立的公司層勾選：「信件」取消勾選＝這種信不寄給任何人（原本的收件人設定保留，重新勾選即恢復）；「行事曆」勾選＝同步到公司 Google 行事曆。只進行事曆、不寄信也可以；沒有日期或沒有信件範本的格子停用。</p>
       </div>
     </div>
 
@@ -102,7 +102,7 @@
               <td>
                 <div class="ms-sub" x-show="t.calOnly">沒有信件範本，只有行事曆。</div>
                 <div class="ms-sub" x-show="t.mailOff && !t.calOnly" :data-testid="'ms-off-' + t.key">信件已關閉（收件人設定保留）。</div>
-                <div class="ms-bad" x-show="t.noRecipient" :data-testid="'ms-norecip-' + t.key">目前沒有任何人會收到這類信（超級管理員都退訂了，或沒有人設定 email）。</div>
+                <div class="ms-bad" x-show="t.noRecipient" :data-testid="'ms-norecip-' + t.key">目前沒有任何人會收到這類信（最高管理者都退訂了，或沒有人設定 email）。</div>
                 <template x-if="t.managedElsewhere">
                   <div class="ms-sub" :data-testid="'ms-elsewhere-' + t.key" x-text="t.managedElsewhere"></div>
                 </template>
@@ -147,7 +147,7 @@
   <script src="../static/sidebar.js"></script>
   <script>
     function mailSettingsPage() {
-      const ROLE_LABELS = { superadmin: '超級管理員', admin: '管理員', sales: '業務', engineer: '工程', user: '一般使用者', viewer: '檢視者' }
+      const ROLE_LABELS = { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程', user: '一般使用者', viewer: '檢視者' }
       return {
         items: [], categories: {}, modes: {}, roles: [], users: [], cat: '', errMsg: '', calStatus: null,
         _initDone: false,

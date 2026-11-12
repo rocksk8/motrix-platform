@@ -104,7 +104,7 @@ def test_flag_on_loads_fields_and_mounts_editor_only_for_superadmin():
     resp = "{ enabled: true, fields: [{ key: 'f1', label: '工頭', type: 'text' }] }"
     r = _node(_INIT + "const S = window.MotrixCustomFields._state()\n" + _OUT, resp)
     assert r["s"]["enabled"] is True and [f["key"] for f in r["s"]["list"]] == ["f1"]
-    assert r["calls"]["appended"] == 1                                   # 超級管理員：編輯器掛上
+    assert r["calls"]["appended"] == 1                                   # 最高管理者：編輯器掛上
     r = _node(_INIT + "const S = window.MotrixCustomFields._state()\n" + _OUT, resp, role="'sales'")
     assert r["s"]["enabled"] is True and r["calls"]["appended"] == 0     # 一般人：看得到欄位，沒有編輯器
 

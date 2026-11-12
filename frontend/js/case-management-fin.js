@@ -763,7 +763,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item) {
@@ -785,7 +785,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)

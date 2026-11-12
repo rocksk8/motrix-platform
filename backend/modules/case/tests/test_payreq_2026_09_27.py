@@ -295,7 +295,7 @@ def test_cashier_sets_the_paid_date_but_only_admin_changes_or_clears_it_with_its
     assert _paid(req) == "2031-03-12" and _pending_keys() == []
     assert "extra_expense.paid_date_override" not in _acts()
     r = client.patch(dates, json={"paidDate": "2031-03-13"}, headers=hc)
-    assert r.status_code == 403 and "只限最高管理員" in r.json()["detail"], r.text
+    assert r.status_code == 403 and "只限最高管理者" in r.json()["detail"], r.text
     assert _paid(req) == "2031-03-12"
     ha = _peer(client, make_user, req, "pr_boss", role="admin")
     r = client.patch(dates, json={"paidDate": ""}, headers=ha)                                  # admin（主管等級）不可推翻已付款（使用者 2026-10-01）；第42班起 admin 連登錄付款日都不行（財務角色專屬）

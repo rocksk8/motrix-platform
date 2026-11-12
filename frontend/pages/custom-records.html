@@ -421,7 +421,7 @@
           </div>
 
           <div class="cr-note" id="cr-draft-locked" x-show="draftLocked()">
-            這張草稿只有建立者（<span x-text="record.created_by"></span>）或超級管理員可以修改、送出；你可以檢視與輸出。
+            這張草稿只有建立者（<span x-text="record.created_by"></span>）或最高管理者可以修改、送出；你可以檢視與輸出。
           </div>
           <div class="cr-actions">
             <template x-if="canEdit()">
@@ -1019,7 +1019,7 @@
           return (t.approvers || []).some(function (a) { return a.username === me && a.status !== 'approved' })
         },
         draftLocked() {
-          // U14：草稿只有建立者與超級管理員可以修改、送出。以伺服器回的 canEdit 為準（後端另外擋 403）；
+          // U14：草稿只有建立者與最高管理者可以修改、送出。以伺服器回的 canEdit 為準（後端另外擋 403）；
           // 沒帶這個欄位的回應（建立／修改的回傳）不當成「不能改」——null 不等於 false
           var d = this.recDef
           return !!(d && this.record && this.record.status === d.workflow.initial && this.record.canEdit === false)

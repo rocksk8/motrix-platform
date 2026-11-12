@@ -85,7 +85,7 @@ def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, e
     - M01 不在，或沒掛案件，或**掛的案件已不存在**（孤兒單；稽核 D 建議、主持採納）⇒ DENY（每案守門一定查無）
       `existing`：已知存在的案件單號集合（佇列一次查完）；None ⇒ 這裡查這一筆（詳情）——同一個 `_case_names`
     - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）
-    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋超級管理員 ⇒ OPEN，其餘 DENY"""
+    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋最高管理者 ⇒ OPEN，其餘 DENY"""
     if _on_chain(conn, user, approval_raw):
         return OPEN
     if caseless:

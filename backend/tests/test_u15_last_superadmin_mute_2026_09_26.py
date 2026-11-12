@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""U15（使用者 2026-09-26 表單）：系統技術類信件，超級管理員可以退訂，但不可以是最後一位收得到的超管。
+"""U15（使用者 2026-09-26 表單）：系統技術類信件，最高管理者可以退訂，但不可以是最後一位收得到的超管。
 斷言打在伺服器（API 狀態碼＋DB 的 notification_muted），不打在畫面文字。"""
 import json
 
@@ -118,7 +118,7 @@ def test_the_last_receiving_superadmin_cannot_lose_email_or_role_either(client, 
     boss, key = two_superadmins
     h = _make_last(client, boss, key)
     r = client.put("/api/users/%d" % _id("u15_b"), json=change, headers=h)
-    assert r.status_code == 400 and "沒有任何超級管理員" in r.json()["detail"], r.text
+    assert r.status_code == 400 and "沒有任何最高管理者" in r.json()["detail"], r.text
     row = _q("SELECT email, role FROM users WHERE username='u15_b'")[0]
     assert row == {"email": "u15_b@example.test", "role": "superadmin"}, row
 

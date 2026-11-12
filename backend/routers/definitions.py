@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """定義文件庫 API（CUSTOMIZATION-SPEC §3.5；§8 建構器／排版器需要的「草稿、驗證、預覽、發布、差異、還原」）。
 
-`/api/definitions/…` 僅超級管理員。kind：layout／output_template／custom_fields／custom_module；scope：company 或 role:<角色>。
+`/api/definitions/…` 僅最高管理者。kind：layout／output_template／custom_fields／custom_module；scope：company 或 role:<角色>。
 例外：`GET /api/layout/{module}`（P9 執行時套用，§3.10）任何登入者可讀**自己角色**的版面（唯讀、只有 layout）。
 """
 import json
@@ -124,7 +124,7 @@ _SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view, "payslip": _pa
 
 
 #: 第二人審核只涵蓋「自訂模組定義（company 範圍）」——它會新增頁面、資料表與金流串接。
-#: 版面／輸出版型／自訂欄位 是超級管理員直接發布（不審核）；**每一條直接發布的路徑都寫稽核
+#: 版面／輸出版型／自訂欄位 是最高管理者直接發布（不審核）；**每一條直接發布的路徑都寫稽核
 #: `definitions.publish_unreviewed`**（同一個動作名，稽核一次篩得到）。W3 #3：不准有沒留痕的直接發布。
 _UNREVIEWED_KIND_REASON = "此類定義不走第二人審核（只有自訂模組定義有審核流程）"
 
@@ -258,7 +258,7 @@ def _err(e: D.DefinitionError, status=400):
 
 @router.get("/api/definition-kinds")
 def list_definition_kinds(authorization: str = Header(None)):
-    """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
+    """定義種類清單（內建＋模組登記的）——編輯畫面用；只有最高管理者。"""
     _require_user(authorization, require_superadmin=True)
     _lazy_kinds()
     return {"kinds": [m for m in D.kinds_meta() if m.get("kind") not in _disabled_lazy_kinds()]}
@@ -266,7 +266,7 @@ def list_definition_kinds(authorization: str = Header(None)):
 
 @router.get("/api/expense-types")
 def list_expense_types(authorization: str = Header(None)):
-    """費用單據類型清單（已啟用；任何登入者——新增表單的下拉用）。定義的編輯走 `/api/definitions/expense_type`（超級管理員）。"""
+    """費用單據類型清單（已啟用；任何登入者——新增表單的下拉用）。定義的編輯走 `/api/definitions/expense_type`（最高管理者）。"""
     _require_user(authorization)
     from helpers import expense_types as ET
     conn = get_db()
@@ -668,7 +668,7 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
     """P9 執行時套用（CUSTOMIZATION-SPEC §3.10）：目前使用者角色的版面＝`resolve(layout, module:<key>, 角色)`
     （角色 ＞ 公司 ＞ 程式預設），連同這個模組的可自訂點（`catalog.layout_points`，前端據此算出畫面）。
 
-    - 任何登入者可讀**自己角色**的版面；`?role=` 只給超級管理員（排版器的「以某角色預覽」）。
+    - 任何登入者可讀**自己角色**的版面；`?role=` 只給最高管理者（排版器的「以某角色預覽」）。
     - 已發布的操作逐一再過 `check_layout`：之後模組拿掉了某個點 ⇒ 那一筆**不套用**並列在 `dropped`
       （讀不懂的拒絕那一筆，不讓整頁壞掉，也不悄悄略過）。
     - 讀定義失敗 ⇒ 程式預設＋`error`（覆寫層出錯不可以讓頁面打不開）。"""
@@ -676,7 +676,7 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
     from core import catalog, registry
     u = _require_user(authorization)
     if role is not None and u["role"] != "superadmin":
-        raise HTTPException(403, "只有超級管理員可以預覽其他角色的版面")
+        raise HTTPException(403, "只有最高管理者可以預覽其他角色的版面")
     if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not catalog.owner_loaded(module_key):
         raise HTTPException(404, "模組未載入")
     who = role if role is not None else u["role"]

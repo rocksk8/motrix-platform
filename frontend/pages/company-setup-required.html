@@ -16,13 +16,13 @@
   </style>
 </head>
 <body>
-  <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：非最高管理員在「未設定」時看到這一頁。
+  <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：非最高管理者在「未設定」時看到這一頁。
        不用 Alpine（不增加 Alpine 頁面母體）；只讀 /api/settings/company-setup/status（白名單內），不讀任何公司資料值。 -->
   <div class="cs-wrap" data-company-setup-required>
     <h1 class="cs-title" id="cs-title">尚未完成本公司資料設定</h1>
     <p id="cs-msg">系統輸出的報價單、請款單等文件需要使用貴公司的名稱與統一編號。<br>
-      請最高管理員先到「公司資料設定」確認本公司資料；完成之前，系統其他功能暫停使用。</p>
-    <p class="cs-dim" id="cs-absent">最高管理員不在時：請貴公司的系統負責人依《DR-SOP》〈本公司資料設定〉，
+      請最高管理者先到「公司資料設定」確認本公司資料；完成之前，系統其他功能暫停使用。</p>
+    <p class="cs-dim" id="cs-absent">最高管理者不在時：請貴公司的系統負責人依《DR-SOP》〈本公司資料設定〉，
       在伺服器本機使用「暫時放行」（最長 72 小時，會留下紀錄）。</p>
     <div class="cs-row">
       <button type="button" class="btn btn-primary" id="cs-retry">重新檢查</button>

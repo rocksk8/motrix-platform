@@ -126,7 +126,7 @@ def test_users_view_excludes_superadmin_and_lists_overrides(client, su, make_use
     finally:
         conn.close()
     users = client.get("/api/permmatrix/users", headers=su).json()["users"]
-    assert all(u["roleLabel"] != "超級管理員" for u in users)
+    assert all(u["roleLabel"] != "最高管理者" for u in users)
     me = [u for u in users if u["id"] == uid][0]
     assert me["overrides"][0]["effect"] == "deny" and me["overrides"][0]["label"] == "檢視測試單"
 

@@ -2037,7 +2037,7 @@ def approve_case_bonus(quote_no: str, body: dict = Body(default={}), authorizati
             nxt = "待發放" if int(appr.get("currentTier") or 0) >= len(tiers) else "待審核"
         else:
             if user.get("role") != "superadmin":
-                raise HTTPException(403, "僅超級管理員可執行此操作")
+                raise HTTPException(403, "僅最高管理者可執行此操作")
             err = check_no_tier_self_approval(conn, appr, user)
             if err:
                 raise HTTPException(403, err)

@@ -1662,7 +1662,7 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         blocked = last_superadmin_blockers(conn, user_id, body.notification_muted, body.email, body.role)
         if blocked:
             conn.close()
-            raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何超級管理員收得到"
+            raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何最高管理者收得到"
                                      "（至少要有一位；最後一位不能退訂、清空 Email 或改成非超管）：%s" % "、".join(blocked))
     if body.department_id is not None:
         sets.append("department_id=?")
@@ -1734,7 +1734,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     from helpers.startup import builtin_admin_username   # H10：全新安裝是 admin，既有安裝是 jeff
     if row["username"] == builtin_admin_username():
         conn.close()
-        raise HTTPException(400, "不可刪除超級管理員帳號")
+        raise HTTPException(400, "不可刪除最高管理者帳號")
     uname  = row["username"]
     ulabel = row["display_name"] or uname
     try:
@@ -1774,7 +1774,7 @@ def toggle_user_active(user_id: int, authorization: str = Header(None)):
     from helpers.startup import builtin_admin_username
     if row["username"] == builtin_admin_username():
         conn.close()
-        raise HTTPException(400, "不可停用超級管理員帳號")
+        raise HTTPException(400, "不可停用最高管理者帳號")
     new_active = 0 if row["active"] else 1
     conn.execute("UPDATE users SET active=? WHERE id=?", (new_active, user_id))
     conn.commit()
@@ -1850,7 +1850,7 @@ def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: 
         if not row:
             raise HTTPException(404, "使用者不存在")
         if row['role'] != 'superadmin':
-            raise HTTPException(400, "僅超級管理員帳號可設定解鎖密碼")
+            raise HTTPException(400, "僅最高管理者帳號可設定解鎖密碼")
         conn.execute(
             "UPDATE users SET unlock_password_hash=? WHERE id=?",
             (_hash_pw(body.unlock_password), user_id)
@@ -1899,7 +1899,7 @@ def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
         if not row:
             raise HTTPException(404, "使用者不存在")
         if row['role'] != 'superadmin':
-            raise HTTPException(400, "僅超級管理員帳號可設定每日工作事項密碼")
+            raise HTTPException(400, "僅最高管理者帳號可設定每日工作事項密碼")
         conn.execute(
             "UPDATE users SET daily_task_pw_hash=? WHERE id=?",
             (_hash_pw(body.daily_task_password), user_id)

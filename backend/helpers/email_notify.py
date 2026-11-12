@@ -210,7 +210,7 @@ def _apply_dev_subject_prefix(cfg: dict, subject: str) -> str:
 # ── 收件人：一律經信件類型登記表（helpers/mail_types.py）───────────────────────
 # 使用者 2026-09-26：「所有的信件都要能指定誰能收到，普通管理員不需要收到這類信」。
 # 群組收件人（原 _admin_emails／_superadmin_emails）與事件收件人（原 _lookup_emails）
-# 都先看登記表與超級管理員的覆寫；未登記的 key ⇒ 記 ERROR、只寄超級管理員（fail closed）。
+# 都先看登記表與最高管理者的覆寫；未登記的 key ⇒ 記 ERROR、只寄最高管理者（fail closed）。
 
 def _mail_off(event_key) -> bool:
     """公司在「信件與行事曆」矩陣把這種信關掉了（`mail_recipient_overrides[key].off`）？鎖住的類型一律不算關（helpers/notify_matrix）。"""
@@ -258,13 +258,13 @@ def _users_emails(where: str, params, event_key) -> list:
 
 
 def _only_superadmins(event_key) -> list:
-    """超級管理員。⚠️ 找不到時**不退回**一般管理員（使用者：「普通管理員不需要收到這類信」）——
+    """最高管理者。⚠️ 找不到時**不退回**一般管理員（使用者：「普通管理員不需要收到這類信」）——
     記 ERROR，呼叫端照「沒有收件人」處理（備份告警另有 _alert_email_failed 的警示檔）。"""
     if _mail_off(event_key):
         return []
     emails = _users_emails("role='superadmin'", (), event_key)
     if not emails:
-        logger.error("信件類型 %r：沒有啟用中、設定了 email 且未退訂的超級管理員 ⇒ 不寄", event_key)
+        logger.error("信件類型 %r：沒有啟用中、設定了 email 且未退訂的最高管理者 ⇒ 不寄", event_key)
     return emails
 
 
@@ -291,12 +291,12 @@ def _custom_emails(o: dict, event_key) -> list:
 def _registered(event_key):
     t = _mt.get(event_key) if event_key else None
     if t is None:
-        logger.error("信件類型 %r 未登記（helpers/mail_types.py）⇒ 只寄超級管理員", event_key)
+        logger.error("信件類型 %r 未登記（helpers/mail_types.py）⇒ 只寄最高管理者", event_key)
     return t
 
 
 def _group_emails(event_key: str = None) -> list:
-    """群組收件人：登記的預設群組，或超級管理員在設定頁的覆寫。"""
+    """群組收件人：登記的預設群組，或最高管理者在設定頁的覆寫。"""
     t = _registered(event_key)
     if t is None:
         return _only_superadmins(event_key)
@@ -322,7 +322,7 @@ def finance_recipient_emails(event_key: str = None) -> list:
 
 
 def _finance_audience_emails(event_key: str) -> list:
-    """`notify_module_activity(audience="finance")` 用：先套超級管理員在收件設定頁的覆寫（僅超管／自訂），
+    """`notify_module_activity(audience="finance")` 用：先套最高管理者在收件設定頁的覆寫（僅超管／自訂），
     預設才是財務收件人。"""
     o = _override_of(event_key)
     if o["mode"] == "superadmin_only":
@@ -333,7 +333,7 @@ def _finance_audience_emails(event_key: str) -> list:
 
 
 def _with_event_recipients(event_emails: list, event_key) -> list:
-    """事件收件人套上覆寫：superadmin_only ⇒ 換成超級管理員；custom ⇒ 加上指定的人。"""
+    """事件收件人套上覆寫：superadmin_only ⇒ 換成最高管理者；custom ⇒ 加上指定的人。"""
     if _mail_off(event_key):                   # 公司關閉這種信：不論覆寫模式都沒有收件人（鎖定類型 _mail_off 恆為 False）
         return []
     t = _registered(event_key)
@@ -981,7 +981,7 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
                     reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
                     link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None) -> bool:
     """模組用的通用寄信入口（A2-0 #6）：信件類型由模組自己 `mail_types.register()` 登記，這裡只負責收件人＋內文＋主旨。
-    收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套超級管理員的覆寫與個人退訂。
+    收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套最高管理者的覆寫與個人退訂。
     `event_key` 必須是呼叫端寫死的字面字串（守門 test_mail_registry 逐一核對已登記）；其餘參數一律用關鍵字。
     回 True＝有收件人、已排入寄送；False＝沒有收件人（不寄、記 warning）。
     `wait=True`（要寫「已通知」記號的呼叫端用）：等寄送結果（最多 `SEND_WAIT_TIMEOUT_SECONDS`），回 True＝**可以寫記號**，照 `system_checks` 的「先寄成功才記」前例：
@@ -1201,7 +1201,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
     第 1／3／5 個工作日、之後每 5 個工作日（10、15、20…）由
     routers/daily_tasks.py 的每日排程呼叫（階梯見 `reminder_stage`）。
     days_elapsed 決定
-    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理員收件人
+    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理者收件人
     （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
     統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
     分開連結。"""
@@ -1756,7 +1756,7 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
 
 
 def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_bytes: bytes) -> None:
-    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理員（2026-08-25）。
+    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理者（2026-08-25）。
     報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
     發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
     to = _superadmin_emails("case_closing_report")
@@ -1788,7 +1788,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     """完結案防呆擋下（2026-08-26）：三項前置條件（執行進度100%／款項全收齊／
     相關單據簽核完成）任一未達成時，完結案動作被擋下，通知尚未完成該項的
     簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
-    概念）＋最高管理員（不論如何都通知，即使 pending_usernames 已涵蓋所有
+    概念）＋最高管理者（不論如何都通知，即使 pending_usernames 已涵蓋所有
     superadmin，重複的 email 由呼叫端 set() 去重）。"""
     to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
                   + _superadmin_emails("case_close_blocked")))
@@ -1810,7 +1810,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
 
 def notify_case_change_requested(quote_no: str, customer: str, project: str,
                                  summary: str, requester_display: str) -> None:
-    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理員審核
+    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理者審核
     （modules/case/api/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
@@ -1826,7 +1826,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
         [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
-        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列審核後才會套用。",
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於簽核佇列審核後才會套用。",
         button_text="前往簽核佇列",
     )
     _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待審核：{quote_no}（{customer}）"), html)
@@ -2008,7 +2008,7 @@ def notify_module_activity(module_label: str, action_label: str,
     in full, never truncated — the point is recipients can read the whole thing in the email
     itself without having to log into the system. Pass the real content here instead of
     folding a truncated snippet into item_label."""
-    # audience="finance"（第42班）：付款／匯款／沖銷這類財務事件只寄「財務」角色＋超級管理員，不寄全體 admin
+    # audience="finance"（第42班）：付款／匯款／沖銷這類財務事件只寄「財務」角色＋最高管理者，不寄全體 admin
     to = _finance_audience_emails("module_activity") if audience == "finance" else _admin_emails("module_activity")
     if not to:
         return

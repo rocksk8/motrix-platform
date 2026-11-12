@@ -12,7 +12,7 @@
     草稿 ──submit──▶ 待審核 ──(分層簽核)──▶ 簽核中 ──▶ 已核准
       ▲                                                │
       └──────────── 已駁回 ◀──reject────────────────────┘
-    （已駁回可以再編輯、再送審；已核准要改只能請最高管理員處理）
+    （已駁回可以再編輯、再送審；已核准要改只能請最高管理者處理）
 
 **權限**（跟這個專案既有的作法一致）
 
@@ -789,8 +789,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                 if _PB._po_bank_missing(row, _PB.po_bank_block_since()):
                     raise HTTPException(409, _PB.PO_BANK_BLOCK_MSG)
             if old_paid and changes["paid_date"] != old_paid:
-                if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理員（admin 只是主管等級）
-                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理員" % old_paid)
+                if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理者（admin 只是主管等級）
+                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理者" % old_paid)
                 override = True
         now = datetime.now().isoformat(timespec="seconds")
         sets = ", ".join("%s=?" % k for k in changes)
@@ -817,14 +817,14 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
     if override:                                          # AB-M1：已付的付款日被清除或更改 ⇒ 另一個查得到的動作
         _audit(_tok(authorization), "extra_expense.paid_date_override", *_audit_target(quote_no, exp_id),
-               "%s 額外支出 #%s 付款日 %s → %s（最高管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
+               "%s 額外支出 #%s 付款日 %s → %s（最高管理者更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
     return {"ok": True, "updatedAt": now,
             **{_DATE_KEYS[k]: v for k, v in changes.items()}}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}")
 def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header(None)):
-    """刪除（僅草稿／已駁回）。已核准的要移除只能請最高管理員從資料庫處理——
+    """刪除（僅草稿／已駁回）。已核准的要移除只能請最高管理者從資料庫處理——
     已經計入成本與報表的數字不該被單方面刪掉。"""
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
@@ -859,14 +859,14 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
 @router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/void")
 def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={}),
                        authorization: str = Header(None)):
-    """作廢（僅最高管理員 superadmin；僅「已核准且尚未付款」；理由必填）。列保留（狀態＝已作廢）供稽核與申請人查詢，不計入任何合計／應付／出納／營運報表。
+    """作廢（僅最高管理者 superadmin；僅「已核准且尚未付款」；理由必填）。列保留（狀態＝已作廢）供稽核與申請人查詢，不計入任何合計／應付／出納／營運報表。
 
     GL 不另寫反向分錄：E11／E11b 只對 status='已核准' 的列產生，狀態離開後來源事件消失 ⇒ 總帳引擎自動作廢草稿或對已過帳傳票產生反向草稿
     （`ledger/engine.py::_orphans`；有測試）。已付款的列不可直接作廢：付款已是現金事件，請管理員先更正付款日（退回待付款）再作廢。"""
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     if user["role"] != "superadmin":
-        raise HTTPException(403, "只有最高管理員可以作廢已核准的額外支出")
+        raise HTTPException(403, "只有最高管理者可以作廢已核准的額外支出")
     reason = ((body or {}).get("reason") or "").strip()
     if not reason:
         raise HTTPException(400, "請填寫作廢理由")
@@ -881,7 +881,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
         if row["status"] != "已核准":
             raise HTTPException(409, "「%s」狀態不可作廢（草稿與已駁回請直接刪除；送審中請先駁回）" % row["status"])
         if (row["paid_date"] or "").strip():
-            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理員更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
+            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理者更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
         change = _change_of(row)
         now = datetime.now().isoformat(timespec="seconds")
         begin_write(conn)
@@ -1308,7 +1308,7 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
 # 也不會被結案報表撈到。撤銷或駁回後撤銷時，實體檔案一併刪掉，不留孤兒檔。
 #
 # 刻意**不支援**「刪除已核准的既有附件」：已經被簽核人看過、已計入成本的憑證不該
-# 被單方面移除，語意跟「已核准的項目不可刪除」一致（要移除請找最高管理員）。
+# 被單方面移除，語意跟「已核准的項目不可刪除」一致（要移除請找最高管理者）。
 
 CHANGE_EDITABLE = ("", "草稿", "已駁回")
 

@@ -209,7 +209,7 @@
       <div class="mp-note warn" data-testid="map-quota-zero" x-show="info && info.quota && info.quota.disabledByZero">
         <div><strong>Google 定位已停用</strong>：Google 地圖定位額度設定為 0，系統不會向 Google 查詢，
           定位來源一律使用免費服務，<strong>精度較低</strong>（可能僅至路段或行政區），<strong>不會自動恢復</strong>。
-          <br><span style="opacity:.8">如要使用 Google 定位，請由最高管理員於「公司資料設定」調整額度（留空＝不設上限）。</span></div>
+          <br><span style="opacity:.8">如要使用 Google 定位，請由最高管理者於「公司資料設定」調整額度（留空＝不設上限）。</span></div>
       </div>
       <div class="mp-note warn" data-testid="map-quota-degraded" x-show="info && info.quota && info.quota.degraded && !info.quota.disabledByZero">
         <div><strong>目前為節費模式</strong>：本週期的 Google 地圖額度已用畢
@@ -219,7 +219,7 @@
           <br>清單與距離仍可正常使用；<strong>下一個計費週期開始後自動恢復</strong>。
           <br><span style="opacity:.8">週期起日
             <span x-text="((info || {}).quota && (info || {}).quota.periodStart) || '—'"></span>；
-            額度與起算日可由最高管理員於「公司資料設定」調整。</span></div>
+            額度與起算日可由最高管理者於「公司資料設定」調整。</span></div>
       </div>
       <div class="mp-note warn" x-show="info && !info.geoEnabled">
         <span>⚠️</span>

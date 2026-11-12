@@ -75,7 +75,7 @@ def test_cli_grace_limits(tmp_path):
     conn.close()
     assert run_cli("grace", "--root", root, "--hours", "73", "--reason", "x")[0] == 2
     assert run_cli("grace", "--root", root, "--hours", "72", "--reason", " ")[0] == 2
-    code, out = run_cli("grace", "--root", root, "--hours", "72", "--reason", "最高管理員出差")
+    code, out = run_cli("grace", "--root", root, "--hours", "72", "--reason", "最高管理者出差")
     assert code == 0
     code, out = run_cli("status", "--db", str(tmp_path / "t.db"), "--root", root)
     assert code == 0 and out["configured"] is False and out["grace"] is True

@@ -109,7 +109,7 @@ def test_deleting_a_recognized_card_is_undone_in_both_the_list_and_the_base():
 
 @needs_node
 def test_success_text_only_when_the_save_really_succeeded():
-    for res, expect in ((False, "認列尚未儲存"), ("pending", "待最高管理員審核"), (None, "認列尚未儲存")):
+    for res, expect in ((False, "認列尚未儲存"), ("pending", "待最高管理者審核"), (None, "認列尚未儲存")):
         r = _run(scenario="pick", saveResult=res)
         assert expect in r["msgAfter"] and "已認列採購單" not in r["msgAfter"], (res, r["msgAfter"])
     assert "已認列採購單 PO-1" in _run(scenario="pick", saveResult=True)["msgAfter"]

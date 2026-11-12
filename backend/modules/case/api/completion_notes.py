@@ -673,7 +673,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow = resolve_active_flow_setting("completion")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
@@ -689,7 +689,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
             raise HTTPException(403, self_block_msg)
         all_done      = True
         _signed_tier_nos = []
-        detail_status = "超級管理員簽核"
+        detail_status = "最高管理者簽核"
 
     if all_done:
         appr["approvedBy"]        = user["username"]

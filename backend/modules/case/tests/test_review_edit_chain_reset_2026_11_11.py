@@ -3,7 +3,7 @@
 
 1. 第 3 層（含）以後（`currentTier>=2`，0 起算）編輯 ⇒ **整條簽核鏈回第 1 層重跑**：所有已簽條目（含舊單沒有 signedFp 的、編輯者自己的）回待簽，`currentTier=0`。
 2. 第 1、2 層編輯 ⇒ 維持原行為（不整條重跑）。
-3. 存檔成功後寄信給「送審人＋全部啟用中、有 email 的超級管理員」；`editHistory` 照常寫一筆 `review_edit`。
+3. 存檔成功後寄信給「送審人＋全部啟用中、有 email 的最高管理者」；`editHistory` 照常寫一筆 `review_edit`。
 兩種情境各自分開驗。
 """
 import json

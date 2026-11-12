@@ -752,7 +752,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow  = resolve_active_flow_setting("contractor_voucher")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))

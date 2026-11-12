@@ -921,7 +921,7 @@
       <template x-if="session.role === 'superadmin'">
         <div class="status-wrap-admin badge"
              :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
-             title="超級管理員可手動調整狀態">
+             title="最高管理者可手動調整狀態">
           <select class="status-select-admin" :value="q.status"
                   @change="patchStatus($event.target.value, $event.target)">
             <option value="草稿">草稿</option>
@@ -3188,8 +3188,8 @@
         if (!appr) return false
         const tiers = appr.tiers || []
         if (!tiers.length) {
-          // 無設定簽核層 — 任一超級管理員皆可簽核，含申請人本人；後端會擋下申請人自簽，
-          // 除非申請人是目前唯一在職的超級管理員（見 quotations.py approve_quotation()）
+          // 無設定簽核層 — 任一最高管理者皆可簽核，含申請人本人；後端會擋下申請人自簽，
+          // 除非申請人是目前唯一在職的最高管理者（見 quotations.py approve_quotation()）
           return this.session.role === 'superadmin'
         }
         // 2026-09-15：有簽核層時不再一律排除申請人——組織流程算出「這一關本來就

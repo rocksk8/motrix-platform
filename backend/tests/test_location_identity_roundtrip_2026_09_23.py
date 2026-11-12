@@ -64,7 +64,7 @@ SENT = {
 
 
 def _token(client, make_user, username):
-    """超級管理員 —— 抬頭欄位只有他改得動（使用者原話）。"""
+    """最高管理者 —— 抬頭欄位只有他改得動（使用者原話）。"""
     u, p = make_user(username=username, role="superadmin")
     r = client.post("/api/auth/login", json={"username": u, "password": p},
                     headers={"X-Forwarded-For": "203.0.113.240"})
