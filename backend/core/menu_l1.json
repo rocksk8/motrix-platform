@@ -216,6 +216,13 @@
   },
   {
    "group": "system",
+   "href": "license-settings.html",
+   "label": "授權",
+   "order": 72,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "settings-center.html",
    "label": "設定中心",
    "order": 75,

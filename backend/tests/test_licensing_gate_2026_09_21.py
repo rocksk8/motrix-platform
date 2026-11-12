@@ -299,6 +299,9 @@ def test_exempt_paths_are_pinned():
     """豁免清單是具名常數，少一條或多一條都要被看見。"""
     assert lic.LICENSE_EXEMPT_PATHS == frozenset({
         "/api/ping", "/api/auth/login", "/api/auth/logout", "/api/license/status",
+        # T83（授權匯入）：授權失效時唯一能救回系統的動作就是匯入新授權；兩條端點自己驗「最高管理者＋非示範帳號」
+        # （tests/test_license_import_2026_11_13.py 釘住）
+        "/api/license/overview", "/api/license/import",
     })
 
 

@@ -816,6 +816,41 @@ def _check_line_quota() -> None:
         _logger.warning("_check_line_quota failed: %s", exc)
 
 
+def _check_license_expiry() -> None:
+    """每日檢查（T83）：授權剩 30／14／7 天（含）以內、或永久授權已過維護期 ⇒ 寄 `license_expiry` 給最高管理者（LINE 由登記表的事件開關另外決定）。
+    **同一把授權同一個檔位只通知一次**（`license_expiry_notified`＝「到期日|檔位」；續約換了到期日、或回復正常就會重新計）。
+    旗標在**寄信確認可記之後**才寫（比照 `_check_backup_freshness`：寄不出去隔天重試）。授權閘門關著＝什麼都不做（連 `verify_license` 都不呼叫）。例外只記 log。"""
+    try:
+        from helpers import license_alerts as _la, licensing as _lic
+        if not _lic.LICENSE_GATE_ENABLED:
+            return
+        status = _lic.verify_license()
+        rem = _lic.expiry_reminder(status)
+        guard_key = "license_expiry_notified"
+        if rem is None:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")            # 沒有要提醒了（續約或狀態改變）→ 清旗標，下次再快到期會重新通知
+            return
+        mark = "%s|%s" % (rem.get("expires"), rem["bucket"])
+        if _get_setting(guard_key) == mark:
+            return
+
+        def _send():
+            try:
+                ok = _la.expiry_notice(rem, status)
+            except Exception:  # noqa: BLE001
+                _logger.exception("license_expiry 通知失敗——旗標不寫，明天會再試")
+                return
+            if ok:
+                _set_setting(guard_key, mark)
+
+        # 排程觸發、不掛在任何 request 上（§3.5 例外 (a)），同 `_check_backup_freshness`
+        threading.Thread(target=_send, args=(), daemon=True, name="license-expiry-daily").start()
+        _logger.warning("授權到期提醒：剩 %s 天（到期日 %s）", rem["days"], rem.get("expires"))
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("_check_license_expiry failed: %s", exc)
+
+
 def run_all(prune: bool = False) -> None:
     """每日系統檢查（順序同搬移前）。prune：08:00 那一輪另清理請求紀錄（啟動補跑不清）。"""
     _check_approval_reminders()
@@ -825,5 +860,6 @@ def run_all(prune: bool = False) -> None:
     _check_disk_space()
     _check_temp_bloat()
     _check_line_quota()
+    _check_license_expiry()
     if prune:
         _prune_request_log()

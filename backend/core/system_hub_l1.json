@@ -198,6 +198,18 @@
    "icon": "gear"
   },
   {
+   "id": "license-settings",
+   "section": "settings",
+   "title": "授權",
+   "desc": "查看目前的授權（客戶、到期日、可用功能），並匯入供應商提供的新授權檔",
+   "impact": "影響：換上新授權後，可用的功能與到期日以新授權為準；換上之前會自動備份目前的授權。",
+   "href": "license-settings.html",
+   "perm": "superadmin",
+   "order": 25,
+   "keywords": "授權 到期 續約 匯入 授權檔 啟用 購買",
+   "icon": "shield"
+  },
+  {
    "id": "legal-params",
    "section": "settings",
    "title": "法規參數設定",

@@ -204,6 +204,9 @@ register("user_notice", "管理者自訂的額外通知", _B, "none", "管理者
 
 register("cert_expiry", "HTTPS 憑證即將到期", _S, "superadmins", "",
          "憑證到期後，使用者開啟系統時瀏覽器會出現安全性警告。", "請依系統說明更新憑證，並於更新後重新啟動服務。")
+register("license_expiry", "系統授權即將到期", _S, "superadmins", "",
+         "授權到期後（年費授權）系統會暫停使用，所有人都無法登入操作；永久授權過了維護期則不再提供更新。",
+         "請向供應商取得續約的新授權檔，並由最高管理者到「授權」頁匯入；匯入前系統會自動備份目前的授權。")
 register("backup_stale", "備份已停止運作", _S, "superadmins", "",
          "超過規定時間沒有成功的備份，發生故障時可能遺失資料。", "請檢查備份排程、雲端硬碟掛載與磁碟空間，處理後確認下一次備份成功。")
 register("heartbeat_stale", "心跳監控本身異常", _S, "superadmins", "",

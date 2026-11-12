@@ -41,6 +41,7 @@ MAIL_OFF_LOCKED = {
     "disk_space_low": "磁碟空間不足沒有通知時，備份與上傳會失敗",
     "line_quota_warning": "額度告警被關掉時，LINE 額度用完後通知會靜默停止送達",
     "cert_expiry": "憑證到期沒有通知時，使用者開啟系統會出現瀏覽器安全性警告",
+    "license_expiry": "授權到期沒有通知時，年費授權到期後整個系統會暫停使用",
     "company_setup_alert": "本公司資料未確認沒有通知時，對外文件可能使用未經確認的公司資料",
     "system_test_mail": "測試信用來確認寄信設定，關閉後無法驗證",
 }
@@ -55,6 +56,7 @@ CALENDAR_DISABLED_SPECIAL = {
     "daily_task_assigned": "個人事項，不放公司行事曆", "daily_task_edited": "個人事項，不放公司行事曆",
     "daily_task_overdue": "日期已過的逾期提醒，不建事件", "daily_task_overdue_manager": "日期已過的逾期提醒，不建事件",
     "cert_expiry": "受眾是技術人員，不放公司行事曆",
+    "license_expiry": "授權到期提醒只給最高管理者，不放公司行事曆",
     **{k: _EVENT_DAY for k in (
         "approved", "bonus_correction_approved", "contractor_voucher_approved", "custom_def_approved", "custom_record_approved",
         "ledger_action_approved", "material_change_approved", "material_order_approved", "material_payment_approved",
