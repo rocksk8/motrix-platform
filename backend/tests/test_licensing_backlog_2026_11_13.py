@@ -169,7 +169,7 @@ def test_lg_s5_concurrent_callers_when_a_partial_backoff_just_expired_share_one_
 # ── M9：穩定指紋「快取到行程結束」這個性質本身 ───────────────────────────────
 
 @pytest.mark.real_fingerprint
-def test_licbacklog_m9_a_stable_fingerprint_is_never_reprobed_however_old_the_cache_is(monkeypatch):
+def test_a_stable_fingerprint_is_never_reprobed_however_old_the_cache_is(monkeypatch):
     """T80 M9（測試缺口）：既有 `test_lgm1_all_empty_then_full_recovers…` 只驗「同一瞬間不會重探」。
     這題直接驗性質：穩定結果的 cached_at 往前撥 2 小時（比最長退避 3600 秒還久），仍然不重探；
     對照：同樣撥法對「殘缺」結果要重探（證明這題量得到差別，不是兩邊都不探）。"""

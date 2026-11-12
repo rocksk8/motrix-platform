@@ -3,6 +3,10 @@
 ## 1.2.2（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `dev-crm.html`：手機（≤767px）案件清單與詳情改上下切換——詳情開啟時清單收起，新增「← 案件列表」返回鈕（`data-testid="dc-m-back"`，僅手機顯示）；其餘為觸控目標與間距調整。桌機版不變。
 
+## (next) — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 前端（`dev-crm.html`）：無權限說明加上「剛被開通請重新登入」；擋人前先查 `/api/auth/me` 的即時模組清單（審查 L4）。無 API／資料／權限判斷變更。
+- 測試：`tests/test_e2e_dev_crm_no_access_notice_2026_11_13.py`。
+
 ## 1.2.1 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；K 審後補：業務開發名次欄放寬；L1 介面不變）
 - 頁頭（B6）：`customers.html` 眉標改為麵包屑（客戶與業務 › 客戶管理）；客戶管理從「廠商與採購」移到「客戶與業務」群組（order 30），入口與權限不變。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。

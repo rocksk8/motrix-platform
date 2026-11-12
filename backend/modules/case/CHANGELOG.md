@@ -3,6 +3,10 @@
 ## 1.0.219 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）
 - 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
 
+## (next) — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
+- 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
+
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。
