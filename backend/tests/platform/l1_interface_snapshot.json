@@ -1,5 +1,5 @@
 {
- "core_version": "1.159",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1423,6 +1423,15 @@
    "request_stage_defaults": "def()",
    "request_stage_label": "def(code, fallback=…)",
    "request_stage_names": "def()"
+  },
+  "helper:org_gaps": {
+   "GAP_KEYS": "const",
+   "GAP_NO_DEPARTMENT": "const",
+   "GAP_NO_FINANCE": "const",
+   "GAP_NO_MANAGER": "const",
+   "MAX_ITEMS": "const",
+   "check": "def(conn=…)",
+   "finance_holder_exists": "def(conn)"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
