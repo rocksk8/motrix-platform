@@ -37093,6 +37093,7 @@
     "dir:backend/tools/",
     "dir:tools/platform/",
     "file:backend/tools/build_deploy_package.ps1",
+    "file:backend/tools/stepfile_drill.py",
     "file:backend/tools/verify_package.py",
     "file:tools/platform/pubkey_policy.py",
     "helper:licensing"
@@ -37103,6 +37104,7 @@
      "backend/helpers/licensing.py",
      "backend/tools/",
      "backend/tools/build_deploy_package.ps1",
+     "backend/tools/stepfile_drill.py",
      "backend/tools/verify_package.py",
      "tools/platform/",
      "tools/platform/pubkey_policy.py"

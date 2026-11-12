@@ -100,6 +100,14 @@ def build_drill(base, write_ignore_list=True):
     sys.path.insert(0, str(REPO / "tools" / "platform"))
     import product_select as PS                  # 與 build_deploy_package 相同：選配 full、寫 modules.lock.json
     PS.apply(pkg, PS.load_product("full"))
+    import pubkey_policy as PP   # 與 build_deploy_package.ps1 Step 5.52 相同（LG-O1）：正式公鑰非空 ⇒ 包內不帶開發公鑰（strip 再 check）；
+    lic = pkg / PP.LICENSING_REL  # 不做的話 verify_package (8) 會正確地擋下這個演練包。直接呼叫函式，不走 main()（它會改行程的 stdout 編碼）
+    new_src, _changed = PP.strip_source(PP._read(str(lic)))
+    with open(str(lic), "w", encoding="utf-8", newline="") as f:
+        f.write(new_src)
+    left = PP.policy_problems(PP._read(str(lic)))
+    if left:
+        raise DrillError("演練包 licensing.py 仍違反 LG-O1：%s" % "；".join(left))
     if write_ignore_list:      # 與 build_deploy_package.ps1 Step 5.55 相同：建包端讓 git 算好不出貨清單、寫進包
         import export_ignore_list as EI
         (pkg / "backend" / "export_ignore.json").write_text(

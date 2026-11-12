@@ -284,3 +284,11 @@ def test_build_script_calls_strip_then_check_before_export_ignore():
 def test_verify_package_main_runs_the_gate():
     src = _read(VERIFY_PY)
     assert re.search(r"^\s+check_dev_pubkey\(pkg\)\s*$", src, flags=re.M), "verify_package.main 沒有呼叫 check_dev_pubkey"
+
+
+def test_stepfile_drill_strips_its_package_like_the_build_script_does():
+    """🔴 第一次官方閘門在 366f03416 紅在 test_stepfile_drill：演練包用 git archive 自己做、沒走建包腳本的 Step 5.52，
+    所以真的 verify_package 的 (8) 正確地擋下它。演練必須跟建包腳本一樣先 strip 再 check（否則這個守門與演練永遠互相打架）。"""
+    src = _read(REPO / "backend" / "tools" / "stepfile_drill.py")
+    assert "import pubkey_policy" in src and "PP.strip_source(" in src and "PP.policy_problems(" in src
+    assert src.index("PS.apply(pkg") < src.index("PP.strip_source(") < src.index("EI.build("), "演練包的 strip 要在選配之後、寫 export_ignore 之前"
