@@ -520,7 +520,7 @@
                             <div style="font-weight:600;margin-bottom:4px">這則通知誰要收？</div>
                             <template x-for="m in audModes" :key="m.v">
                               <label style="display:block;margin:2px 0;cursor:pointer">
-                                <input type="radio" :name="'aud-mode-' + e.key" :data-testid="'line-aud-mode-' + e.key + '-' + m.v" :value="m.v" x-model="aud[e.key].mode" style="vertical-align:-2px">
+                                <input data-saved-field type="radio" :name="'aud-mode-' + e.key" :data-testid="'line-aud-mode-' + e.key + '-' + m.v" :value="m.v" x-model="aud[e.key].mode" style="vertical-align:-2px">
                                 <span x-text="m.t"></span>
                               </label>
                             </template>
