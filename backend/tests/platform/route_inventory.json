@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 935,
-  "endpoints_api": 931,
-  "write_total": 504,
-  "write_api": 504,
-  "get_api": 427,
-  "distinct_paths_api": 789,
-  "write_with_body_api": 370,
+  "endpoints_total": 939,
+  "endpoints_api": 935,
+  "write_total": 506,
+  "write_api": 506,
+  "get_api": 429,
+  "distinct_paths_api": 793,
+  "write_with_body_api": 372,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -1041,6 +1041,16 @@
   "GET /api/filehub/search": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/templates/{kind}": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/inventory/batches": {
@@ -3333,6 +3343,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/importer/parse": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/inventory/batches": {
    "w": true,
    "pp": 0,
@@ -4229,6 +4244,11 @@
    "body": true
   },
   "POST /api/users": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/import-rows": {
    "w": true,
    "pp": 0,
    "body": true

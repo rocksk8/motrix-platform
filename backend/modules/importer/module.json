@@ -1,0 +1,40 @@
+{
+  "key": "importer",
+  "name": "匯入精靈",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "importer",
+  "permissions": [],
+  "tables": [],
+  "data": {
+    "tables": [],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": ["/api/importer"],
+    "probes": ["/api/importer/status"]
+  },
+  "pages": [
+    {"path": "import-wizard.html"}
+  ],
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  },
+  "system_cards": [
+    {
+      "id": "import-wizard",
+      "section": "data",
+      "title": "匯入精靈",
+      "desc": "下載範本、上傳 Excel，先預覽再確認，把既有的客戶、料號、員工資料搬進系統",
+      "impact": "影響：確認後才會新增或更新客戶、料號、員工資料；員工匯入會建立可登入的帳號（臨時密碼只顯示一次）。需先在設定中心開啟。",
+      "href": "import-wizard.html",
+      "perm": ["superadmin"],
+      "order": 40,
+      "keywords": "匯入 Excel 範本 客戶 料號 員工 搬資料 上傳",
+      "icon": "file"
+    }
+  ]
+}

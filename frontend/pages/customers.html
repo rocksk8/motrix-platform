@@ -272,6 +272,7 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           匯入 Excel
         </button>
+        <a href="import-wizard.html" class="btn btn-ghost" data-testid="import-wizard-link" x-show="importerOn" x-cloak style="font-size:12px;text-decoration:none">或用匯入精靈（含範本與預覽）</a>
         <button class="btn btn-ghost" @click="exportExcel()" :disabled="!customers.length" style="font-size:12px">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           匯出 Excel
@@ -1097,6 +1098,13 @@
       importResults: null,
       importNotice: '',
       importRefreshFailed: false,
+      importerOn: false,       // 設定中心 import_wizard.enabled（T85）
+      loadImporterFlag() {         // T85：匯入精靈開放時，在原本的匯入按鈕旁多一個連結（原按鈕照舊）
+        fetch('/api/settings-center/public?groups=import_wizard', { headers: { Authorization: 'Bearer ' + ((this.session && this.session.token) || '') } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { const g = d && d.groups && d.groups.import_wizard; this.importerOn = !!(g && Number(g.enabled) === 1) })
+          .catch(() => {})
+      },
       importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, duplicates[], errors[]}
       _importRows: null,
 
@@ -1525,6 +1533,7 @@
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'login.html'; return }
         this.initLayout()
+        this.loadImporterFlag()
         window.addEventListener('motrix-options', () => { this.optVer++ })     // census #4：選項清單到了（或換了）就重算
         this.loadTagPresets()
         this.pnLoadNotice()     // 個資蒐集告知文字（聯絡人用；列印告知書）

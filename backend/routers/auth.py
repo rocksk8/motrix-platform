@@ -14,7 +14,7 @@ from typing import Optional, List
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, HTTPException, Header, Query, Request, Depends
+from fastapi import APIRouter, HTTPException, Header, Query, Request, Depends, Response
 from pydantic import BaseModel
 from webauthn import (
     generate_registration_options,
@@ -24,6 +24,7 @@ from webauthn import (
     options_to_json,
 )
 
+from core.txn import write_txn
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers.module_registry import refuse_unknown_new_keys
 from helpers.auth import effective_modules, require_any_module, VALID_ROLES
@@ -31,6 +32,7 @@ from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
 
+from helpers.errors import trace_id
 from helpers.audit import _audit_login_failed
 from helpers.client_ip import client_ip as _trusted_client_ip
 from helpers.client_ip import rate_limit_key as _rl_key
@@ -1653,6 +1655,15 @@ def list_users(authorization: str = Header(None)):
     return result
 
 
+def _insert_new_user(conn, username, password_hash, display_name, role, email, phone, modules_json, muted_json, now, department_id):
+    """新增一個帳號的唯一 INSERT（不 commit）：`create_user` 與員工匯入（`import_user_rows`）共用。一律啟用、`must_change_password=1`（第一次登入必須改密碼）。"""
+    conn.execute("""
+        INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
+                           notification_muted, active, created_at, must_change_password, department_id)
+        VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
+    """, (username, password_hash, display_name, role, email, phone, modules_json, muted_json, now, department_id))
+
+
 @router.post("/api/users", status_code=201)
 def create_user(body: UserIn, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
@@ -1673,11 +1684,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
         raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
     conn = get_db()
     try:
-        conn.execute("""
-            INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password, department_id)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
-        """, (
+        _insert_new_user(
+            conn,
             body.username.strip(),
             _hash_pw(body.password),
             body.display_name or '',
@@ -1688,7 +1696,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
             body.department_id or None,
-        ))
+        )
         conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     except sqlite3.IntegrityError:
@@ -1699,6 +1707,76 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     notify_module_activity("使用者管理", "建立帳號", actor.get("display_name") or actor["username"],
                             body.display_name or body.username, "users.html")
     return {"id": user_id, "created_at": now, "mustChangePassword": True}
+
+
+@router.post("/api/users/import-rows")
+def import_user_rows(body: dict, response: Response, authorization: str = Header(None)):
+    """員工匯入（T85 匯入精靈；規劃邏輯在 `helpers/user_import.py`）。**只有最高管理者**。契約與客戶／料號的 `import-rows` 相同：
+    只有 `dryRun` 明確是 false 才會寫入，其他一律只回預覽；寫入要帶預覽拿到的 `planHash`，資料在預覽後有變 ⇒ 409；整批一個交易。
+    只新增（既有帳號一律略過、不更新）；角色只允許業務／工程師／檢視者；模組勾選一律空；一律 `must_change_password=1`。
+    🔴 臨時密碼在寫入當下才產生，只出現在**這一次**成功回應的 `credentials`（`Cache-Control: no-store`）；不進計畫雜湊、預覽回應、錯誤訊息、日誌、稽核、任何資料表。"""
+    from helpers import user_import as UI
+    actor = _require_user(authorization, require_superadmin=True)
+    rows = body.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "沒有可匯入的資料列")
+    if len(rows) > UI.IMPORT_MAX_ROWS:
+        raise HTTPException(400, "一次最多匯入 %d 列，請分檔" % UI.IMPORT_MAX_ROWS)
+    response.headers["Cache-Control"] = "no-store"
+    real = body.get("dryRun") is False
+    min_pw = _min_pw()
+    conn = get_db()
+    created = []
+    try:
+        if not real:
+            return UI.plan_summary(UI.plan_users_import(conn, rows))
+        if not isinstance(body.get("planHash"), str) or not body["planHash"]:
+            raise HTTPException(400, "請先預覽再確認匯入")
+        stale = {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"}
+        plan = UI.plan_users_import(conn, rows)
+        if UI.plan_hash(plan) != body["planHash"]:
+            raise HTTPException(409, stale)
+        # 密碼雜湊很慢（每個約 0.1 秒）：拿寫鎖之前先算好，鎖內只做 INSERT
+        secrets_by_name = {}
+        for p in plan:
+            if p["action"] == "create":
+                pw = UI.new_password(min_pw)
+                secrets_by_name[p["username"]] = (pw, _hash_pw(pw))
+        now = datetime.now().isoformat()
+        with write_txn(conn):
+            plan = UI.plan_users_import(conn, rows)                  # 拿鎖之後重算
+            if UI.plan_hash(plan) != body["planHash"]:
+                raise HTTPException(409, stale)
+            for p in plan:
+                if p["action"] != "create":
+                    continue
+                pw, pwh = secrets_by_name[p["username"]]
+                _insert_new_user(conn, p["username"], pwh, p["displayName"], p["role"], p["in"]["email"], p["in"]["phone"],
+                                 "[]", "[]", now, p.get("departmentId"))
+                created.append((p["username"], p["displayName"], pw, p["role"]))
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:                                         # noqa: BLE001 — 訊息不帶例外內容（避免任何機敏值外流）
+        tid = trace_id()
+        logger.error("user import failed trace=%s type=%s", tid, type(exc).__name__)
+        raise HTTPException(500, {"code": "import_failed", "message": f"匯入失敗，沒有任何帳號被建立（代碼 {tid}）"})
+    finally:
+        conn.close()
+    result = UI.plan_summary(plan)
+    result["credentials"] = [{"username": u, "displayName": d, "password": pw} for u, d, pw, _r in created]
+    try:                                                              # 帳號已建立：之後的稽核／通知失敗只記錄；稽核在 commit 之後（`_audit` 自己開連線）
+        if created:
+            from routers.customers import _audit_rows
+            tok = _tok(authorization)
+            _audit(tok, "user.import", "user", "", "Excel 匯入員工", {"created": len(created), "skipped": len(result["skipped"]),
+                                                                    "manual": len(result["manual"]), "failed": result["failed"]})
+            _audit_rows(tok, [("user.create", "user", u, d, {"via": "excel_import", "role": r}) for u, d, _pw, r in created])
+            notify_module_activity("使用者管理", "匯入", actor.get("display_name") or actor["username"],
+                                   "Excel 匯入：新增 %d 個帳號" % len(created), "users.html")
+    except Exception:                                                 # noqa: BLE001
+        logger.warning("user import post-commit steps failed (accounts already created)")
+    return result
 
 
 #: 秒級退場旗標（R2 第 2 步 2c）：`system_settings.users_put_reject_subtracted`；預設開（拒絕）；設 0／"0"／false／"off" ⇒ 回舊行為（不檢查）
