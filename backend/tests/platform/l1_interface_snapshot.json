@@ -1140,6 +1140,8 @@
    "BACKUP_DIR_NAME": "const",
    "BACKUP_KEEP": "const",
    "MAX_UPLOAD_BYTES": "const",
+   "PREVIEW_WEIGHT": "const",
+   "RATE_GLOBAL_MAX": "const",
    "RATE_MAX": "const",
    "RATE_WINDOW_S": "const",
    "REJECT_MESSAGES": "const",
@@ -1147,7 +1149,7 @@
    "describe_current": "def(machine_fn)",
    "modules_view": "def(mods)",
    "normalize_upload": "def(raw)",
-   "rate_allow": "def(now=…)",
+   "rate_allow": "def(account=…, weight=…, now=…)",
    "recent_activity": "def(conn, limit=…)",
    "reset_for_tests": "def()",
    "run_import": "def(raw, *, apply, confirm, machine_fn)"

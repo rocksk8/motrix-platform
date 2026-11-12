@@ -99,7 +99,12 @@ def test_admin_does_not_see_the_import_link_and_is_refused_by_the_page(
     lic._LICENSE_FILE_CACHE = None
     page.goto(f"{live_server}/pages/customers.html")
     page.wait_for_url("**/license-required.html", timeout=20000)
-    page.locator("#lr-kv dd", has_text="missing").wait_for(state="visible", timeout=10000)
+    page.locator("#lr-title").filter(has_text="系統暫時無法使用").wait_for(state="visible", timeout=10000)
+    text = page.locator("[data-license-required]").inner_text()
+    assert "請聯絡您的系統管理員" in text                                  # 其他角色：只有這一句
+    for leaked in ("狀態代碼", "機器代碼", "missing", "授權到期日", "供應商"):
+        assert leaked not in text, leaked
+    assert page.locator("#lr-kv dd").count() == 0
     assert page.locator("#lr-import").is_hidden()
     page.goto(f"{live_server}/pages/license-settings.html")             # 手打網址進授權頁
     page.locator("#ls-denied").wait_for(state="visible", timeout=10000)
@@ -123,9 +128,9 @@ def test_expiring_license_shows_a_banner_with_a_link_for_superadmin_only(
     p2 = new_page()
     login_as(p2, tuple(ad)[:2])
     p2.goto(f"{live_server}/pages/customers.html")
-    b2 = p2.locator("#motrix-license-expiry-banner")
-    b2.wait_for(state="visible", timeout=20000)
-    assert "請通知最高管理者" in b2.inner_text() and b2.locator("a").count() == 0
+    p2.wait_for_load_state("networkidle")
+    assert p2.locator("#motrix-license-expiry-banner").count() == 0        # 一般管理者：看不到剩幾天（T83 L5）
+    assert "天後到期" not in p2.locator("body").inner_text()
 
     _put(lic_dir, sign(expires=_in(200)))                                 # 續約之後下一個請求就沒有橫幅
     p1.goto(f"{live_server}/pages/customers.html")
