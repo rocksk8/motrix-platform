@@ -105,8 +105,13 @@ def test_fresh_install_saving_an_empty_base_url_keeps_it_empty(client, make_user
     assert client.get("/api/settings/email-notify", headers=h).json()["base_url"] == ""
 
 
+def _notif_page_src():
+    """通知設定頁＋從它抽出去的寄信卡元件（批次 3：static/email-setup.js）。"""
+    return _read(FRONT / "pages" / "notification-settings.html") + _read(FRONT / "static" / "email-setup.js")
+
+
 def test_frontend_no_longer_hardcodes_the_internal_address():
-    html = _read(FRONT / "pages" / "notification-settings.html")
+    html = _notif_page_src()
     assert "172.16.10.177" not in html
     assert "location.origin" in html and "baseUrlWarn" in html
 
@@ -118,7 +123,7 @@ def test_email_defaults_base_url_is_empty():
 
 def test_dev_mode_toggle_always_lives_in_the_collapsed_dev_section():
     """M1：不用環境判斷顯示／隱藏（那樣寫反了）；一律放進預設收合的「開發用設定」區，且回應不再多帶 send_allowed_here。"""
-    html = _read(FRONT / "pages" / "notification-settings.html")
+    html = _notif_page_src()
     m = re.search(r'<details data-testid="ns-dev-section"[^>]*>(.*?)</details>', html, re.S)
     assert m and 'data-testid="ns-dev-mode-row"' in m.group(1) and "chk-dev-mode" in m.group(1)
     assert " open" not in m.group(0).split(">")[0], "預設要收合"
@@ -127,7 +132,7 @@ def test_dev_mode_toggle_always_lives_in_the_collapsed_dev_section():
 
 
 def test_empty_base_url_has_a_plain_hint_and_the_private_check_parses_ips():
-    html = _read(FRONT / "pages" / "notification-settings.html")
+    html = _notif_page_src()
     assert "信件裡的按鈕會沒有連結" in html
     assert "10\." not in html or "o[0] === 10" in html            # 不再用 /^(10\.…)/ 前綴比對（會誤報 10.example.com）
     assert "o[0] === 100 && o[1] >= 64 && o[1] <= 127" in html       # 100.64.0.0/10
@@ -145,7 +150,7 @@ def test_role_keys_are_not_shown_as_labels():
     for k in ("superadmin", "admin", "sales", "engineer", "finance", "viewer"):
         assert ('letter-spacing:.05em">%s</div>' % k) not in users, k
     assert "（僅 superadmin 可修改" not in _read(FRONT / "pages" / "cashier.html")
-    ns = _read(FRONT / "pages" / "notification-settings.html")
+    ns = _notif_page_src()
     assert "為 admin 或 superadmin 帳號" not in ns and "<strong>superadmin</strong>" not in ns
 
 
