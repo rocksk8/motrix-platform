@@ -785,6 +785,8 @@
  },
  "/api/auth/preferences": {
   "k": [
+   "company",
+   "company.login_greeting_off",
    "defaults",
    "defaults.avatar_color",
    "defaults.font_size",

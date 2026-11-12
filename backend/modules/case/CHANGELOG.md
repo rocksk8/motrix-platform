@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/menu-ux-myaccount；報價單的聯絡信箱改用「報價用信箱」）
+- 變更：新增／更新報價單時，伺服器端驗證 `salesEmail`——必須是該業務可用的三個信箱之一（報價用信箱、公司對外信箱、本人 Email），否則改寫成系統解析出的值；舊報價單沒動它就維持原樣。（用戶端寫進去的值不再被信任，信件 Reply-To 靠它。）
+- 前端：`quotation-form.html` 讀業務聯絡資料時優先用 `quoteEmailEffective`（舊名 `quoteEmail` 還在、值相同，保留一版）。
+- 測試：`tests/test_quote_email_2026_11_13.py`（偽造信箱被覆蓋、舊值保留、其他通知信同帶 Reply-To）。
+
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。

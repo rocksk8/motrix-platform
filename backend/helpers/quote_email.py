@@ -2,7 +2,7 @@
 """報價用公司信箱（2026-11-13，使用者需求）：有些人用私人信箱註冊帳號，但報價單要用公司信箱。
 
 [單位] helper:quote_email    [層] L1    [穩定度] 實驗
-[公開介面] valid, domain_hint, resolve, resolve_for_user_id, reply_to_for_quote, PROFILE_KEY
+[公開介面] valid, domain_hint, resolve, resolve_for_user_id, enforce_sales_email, reply_to_for_quote, PROFILE_KEY
 [優先順序] ①該使用者的「報價用公司信箱」`users.quote_email`（只有最高管理者能設）
           ②公司層「公司對外信箱」`company_profile.external_email`
           ③個人信箱 `users.email`（沿用現況；此時畫面提示「尚未設定公司信箱」）
@@ -25,8 +25,9 @@ _PERSONAL_DOMAINS = {
 
 
 def valid(email) -> bool:
+    """合法信箱：只接受 ASCII 可列印字元（\x21-\x7e）。全形空白、零寬字元、中文字等一律不合（避免看起來像信箱、實際寄不到或夾帶不可見字元）。"""
     e = str(email or "").strip()
-    return bool(e) and len(e) <= 254 and bool(_EMAIL_RE.match(e))
+    return bool(e) and len(e) <= 254 and all(0x21 <= ord(c) <= 0x7e for c in e) and bool(_EMAIL_RE.match(e))
 
 
 def _domain(email) -> str:
@@ -96,13 +97,41 @@ def reply_to_for_quote(quote_no) -> str:
     try:
         import json
         from db import get_db
+        from helpers.case_access import case_data_json     # L1 讀 quotations 只准經 case_access（DEPENDENCY-MAP §3.2）
         conn = get_db()
         try:
-            row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (str(quote_no),)).fetchone()
+            raw = case_data_json(conn, str(quote_no))
         finally:
             conn.close()
-        if not row:
+        if raw is None:
             return ""
-        return _clean((json.loads(row["data_json"] or "{}")).get("salesEmail"))
+        return _clean((json.loads(raw or "{}")).get("salesEmail"))
     except Exception:  # noqa: BLE001
         return ""
+
+
+def enforce_sales_email(conn, q: dict, old_data=None) -> None:
+    """儲存報價單時，在伺服器端驗證 `salesEmail`（Reply-To 與 PDF 都讀這個快照，不能信任客戶端寫入）。
+    規則：①和資料庫現值相同（`old_data` 有值且沒改）⇒ 不動，舊單維持原樣；②否則必須等於 `salesPersonUsername` 這個人三層解析（報價用信箱／公司對外信箱／個人信箱）
+    的其中一個合法值，不符合就用解析結果覆寫（解析不出來＝空字串）。只改 `q["salesEmail"]`，不丟例外（驗證出錯不擋儲存）。"""
+    try:
+        username = str(q.get("salesPersonUsername") or "").strip()
+        incoming = str(q.get("salesEmail") or "").strip()
+        if old_data is not None:
+            if incoming == str((old_data or {}).get("salesEmail") or "").strip():
+                return
+        elif "salesEmail" not in q and not username:
+            return
+        row = None
+        if username:
+            row = conn.execute("SELECT email, quote_email FROM users WHERE username=?", (username,)).fetchone()
+        if not row:
+            q["salesEmail"] = ""
+            return
+        allowed = {_clean(row["quote_email"]).lower(), _clean(company_external_email()).lower(), _clean(row["email"]).lower()} - {""}
+        if incoming and valid(incoming) and incoming.lower() in allowed:
+            q["salesEmail"] = incoming
+            return
+        q["salesEmail"] = resolve_for_row(row)["email"]
+    except Exception:  # noqa: BLE001
+        pass

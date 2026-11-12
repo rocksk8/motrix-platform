@@ -4775,7 +4775,7 @@
             phone = ''; email = ''
             try {
               const r = await fetch(`${this.API}/users/sales-contact?username=${encodeURIComponent(uname)}`, { headers: { 'Authorization': `Bearer ${this.session.token}` } })
-              if (r.ok) { const c = await r.json(); phone = c.phone || ''; email = (c.quoteEmail !== undefined ? c.quoteEmail : c.email) || ''; src = c.quoteEmailSource || '' }
+              if (r.ok) { const c = await r.json(); phone = c.phone || ''; email = (c.quoteEmailEffective !== undefined ? c.quoteEmailEffective : (c.quoteEmail !== undefined ? c.quoteEmail : c.email)) || ''; src = c.quoteEmailSource || '' }
             } catch (e) { /* 查不到就留空，使用者可手動補 */ }
           }
           if (this.q.salesPersonUsername === uname) {            // 等待期間使用者又換人 ⇒ 不用過期的結果覆蓋

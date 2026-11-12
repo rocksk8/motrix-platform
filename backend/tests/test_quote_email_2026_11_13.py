@@ -231,3 +231,106 @@ def test_pages_are_wired_to_the_resolved_quote_email():
     assert "quote_email" in users and 'data-testid="quote-email-input"' in users and ':disabled="!isSuperAdmin"' in users
     comp = source_tree.page_file("company-profile-settings.html").read_text(encoding="utf-8")
     assert "external_email" in comp and "公司對外信箱" in comp
+
+
+# ── hichan-3 審查修正（L1／L2／L4／L5）──────────────────────────────────────────
+
+@pytest.mark.parametrize("bad", ["é@corp.com", "a　b@corp.com", "a​b@corp.com", "ａ@corp.com", "名字@corp.com", "a b@corp.com"])
+def test_valid_is_ascii_printable_only(bad):
+    assert not QE.valid(bad)
+    assert QE.valid("a.b+c@corp.com")
+
+
+def _create_quote(client, h, data):
+    r = client.post("/api/quotations", headers=h, json={"data": data, "status": "草稿"})
+    assert r.status_code in (200, 201), r.text
+    return r.json().get("quote_no") or r.json().get("quoteNo") or data.get("quoteNo")
+
+
+def _snap(qno):
+    from db import get_db
+    conn = get_db()
+    try:
+        return json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()["data_json"])
+    finally:
+        conn.close()
+
+
+def test_server_overrides_forged_sales_email_on_create(client, make_user, su):
+    u, p = make_user(username="qe_forge", role="sales")
+    _set_personal(u, "forge@corp.com")
+    h = _login(client, u, p)
+    qno = _create_quote(client, h, {"customerName": "甲", "items": [], "tot": {}, "salesPerson": u, "salesPersonUsername": u, "salesEmail": "attacker@evil.example"})
+    assert _snap(qno)["salesEmail"] == "forge@corp.com"            # 偽造值被解析結果覆寫
+    assert QE.reply_to_for_quote(qno) == "forge@corp.com"
+
+
+def test_server_keeps_a_legitimate_value_and_fills_a_blank_one(client, make_user, su):
+    u, p = make_user(username="qe_legit", role="sales")
+    _set_personal(u, "legit@corp.com")
+    client.put(f"/api/users/{_uid(u)}", json={"quote_email": "quote@corp.com"}, headers=su)
+    h = _login(client, u, p)
+    q1 = _create_quote(client, h, {"customerName": "甲", "items": [], "tot": {}, "salesPerson": u, "salesPersonUsername": u, "salesEmail": "legit@corp.com"})
+    assert _snap(q1)["salesEmail"] == "legit@corp.com"             # 個人信箱也是三層之一 ⇒ 合法值保留
+    q2 = _create_quote(client, h, {"customerName": "乙", "items": [], "tot": {}, "salesPerson": u, "salesPersonUsername": u, "salesEmail": ""})
+    assert _snap(q2)["salesEmail"] == "quote@corp.com"             # 空白 ⇒ 填入解析值（報價用信箱優先）
+
+
+def test_update_forged_email_is_overridden_but_an_untouched_old_value_stays(client, make_user, su):
+    u, p = make_user(username="qe_upd", role="sales")
+    _set_personal(u, "upd@corp.com")
+    h = _login(client, u, p)
+    qno = _create_quote(client, h, {"customerName": "甲", "items": [], "tot": {}, "salesPerson": u, "salesPersonUsername": u})
+    from db import get_db
+    conn = get_db()
+    d = _snap(qno)
+    d["salesEmail"] = "stale@old.example"                          # 舊單：快照是已不在三層裡的舊信箱
+    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), qno))
+    conn.commit()
+    conn.close()
+    body = {**_snap(qno)}
+    r = client.put(f"/api/quotations/{qno}", headers=h, json={"data": body, "status": "草稿"})
+    assert r.status_code == 200, r.text
+    assert _snap(qno)["salesEmail"] == "stale@old.example"         # 沒改 ⇒ 舊單維持原樣
+    body["salesEmail"] = "attacker@evil.example"
+    r = client.put(f"/api/quotations/{qno}", headers=h, json={"data": body, "status": "草稿"})
+    assert r.status_code == 200, r.text
+    assert _snap(qno)["salesEmail"] == "upd@corp.com"              # 改成不合法的值 ⇒ 覆寫成解析值
+
+
+def test_other_quote_mails_also_carry_reply_to(monkeypatch):
+    """next_tier／approved／returned／resubmit_requester 與 approval_request 一致：有快照才加 Reply-To，沒有就維持舊呼叫形狀。"""
+    from db import get_db
+    from helpers import email_notify as EN
+    conn = get_db()
+    conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at) VALUES (?,?,?,?)",
+                 ("QE-RT-2", "簽核中", json.dumps({"salesEmail": "rick@corp.com"}), "2026-01-01"))
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(EN, "_lookup_emails", lambda users, key: ["x@corp.com"])
+    monkeypatch.setattr(EN, "_admin_emails", lambda key=None: [])
+    calls = []
+    monkeypatch.setattr(EN, "_async_send", lambda *a: calls.append(a))
+    EN.notify_next_tier("QE-RT-2", "客戶", 2, 3, ["a"])
+    EN.notify_approved("QE-RT-2", "客戶", "boss", "a")
+    EN.notify_returned("QE-NONE", "QE-RT-2", "客戶", "備註", "a")
+    EN.notify_resubmit_requester("QE-RT-2", "QE-NONE", "客戶", "a", ["b"])
+    assert len(calls) == 4 and all(len(c) == 4 and c[3] == "rick@corp.com" for c in calls), [len(c) for c in calls]
+    calls.clear()
+    EN.notify_next_tier("QE-NONE", "客戶", 2, 3, ["a"])
+    assert len(calls) == 1 and len(calls[0]) == 3                  # 沒有快照 ⇒ 舊呼叫形狀
+
+
+def test_sales_contact_new_field_name_and_old_name_kept(client, make_user, su):
+    u, _ = make_user(username="qe_sc", role="sales")
+    _set_personal(u, "sc@corp.com")
+    sc = client.get("/api/users/sales-contact", params={"username": u}, headers=su).json()
+    assert sc["quoteEmailEffective"] == "sc@corp.com" and sc["quoteEmail"] == sc["quoteEmailEffective"] and sc["quoteEmailSource"] == "personal"
+
+
+def test_profile_copy_distinguishes_personal_email_from_quote_email():
+    import pathlib
+    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "my-account.html").read_text(encoding="utf-8")
+    assert "報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」" in html
+    assert "profile-quote-email-none" in html and "尚未設定：目前報價單上不會有你的信箱" in html
+    assert "（尚未設定）" in html

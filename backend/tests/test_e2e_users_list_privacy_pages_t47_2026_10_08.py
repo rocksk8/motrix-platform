@@ -89,7 +89,7 @@ def test_sales_picking_another_quoter_gets_phone_and_email_without_the_sensitive
     pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return d && d.q && d.q.salesEmail === 'boss@example.test' }", timeout=10000)
     data = pg.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return { phone: d.q.salesPhone, email: d.q.salesEmail, who: d.q.salesPerson } }")
     assert data["phone"] == "0911222333" and data["email"] == "boss@example.test"
-    assert contacts and contacts[-1][0] == 200 and set(contacts[-1][1]) == {"id", "displayName", "phone", "email"}
+    assert contacts and contacts[-1][0] == 200 and set(contacts[-1][1]) == {"id", "displayName", "phone", "email", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"}
     for body in lists:
         for row in body:
             if row["username"] != u[0]:

@@ -108,3 +108,81 @@ def test_my_account_page_structure():
     prof = src[src.index('data-testid="tab-profile"'):src.index('data-testid="tab-prefs"')]
     for m in __import__("re").finditer(r"<input[^>]*>", prof):
         assert "disabled" in m.group(0), m.group(0)[:100]
+
+
+# ── hichan-3 審查修正（M1／L3／L5）──────────────────────────────────────────────
+
+def test_font_size_options_map_onto_the_four_topbar_steps():
+    from helpers import user_prefs as UP
+    assert [v for v, _ in UP.SCHEMA["font_size"]["options"]] == ["small", "normal", "large", "xlarge"]
+    import pathlib
+    ag = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "static" / "auth-guard.js").read_text(encoding="utf-8")
+    assert "{ small: 0.85, normal: 1, large: 1.15, xlarge: 1.3 }" in ag
+    assert "style.zoom = ZOOM[" not in ag, "字級偏好不可另開第二套 zoom（要走 motrix_font_zoom／motrixSetZoom）"
+    assert "motrix_font_zoom" in ag and "motrixSetZoom" in ag
+
+
+def test_logout_login_and_no_session_clear_prefs_caches():
+    import pathlib
+    fe = pathlib.Path(__file__).resolve().parents[2] / "frontend"
+    for rel in ("static/sidebar.js", "pages/login.html", "static/auth-guard.js"):
+        s = (fe / rel).read_text(encoding="utf-8")
+        for key in ("motrix_prefs'", "motrix_prefs_synced", "motrix_home_done"):
+            assert "removeItem('%s" % key.rstrip("'") in s, (rel, key)
+
+
+def test_deleting_a_user_removes_their_prefs_and_keeps_others(client, make_user):
+    from db import get_db
+    su, sp = make_user(username="pf_root", role="superadmin")
+    a, ap = make_user(username="pf_a", role="sales")
+    b, bp = make_user(username="pf_b", role="sales")
+    hs = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": su, "password": sp}).json()["token"]}
+    for u, p in ((a, ap), (b, bp)):
+        h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+        assert client.put("/api/auth/preferences", json={"font_size": "large"}, headers=h).status_code == 200
+    conn = get_db()
+    aid = conn.execute("SELECT id FROM users WHERE username=?", (a,)).fetchone()["id"]
+    conn.close()
+    r = client.delete(f"/api/users/{aid}", headers=hs)
+    assert r.status_code == 200, r.text
+    conn = get_db()
+    rows = [r2["user_id"] for r2 in conn.execute("SELECT user_id FROM user_prefs").fetchall()]
+    conn.close()
+    assert aid not in rows and len(rows) >= 1
+
+
+def test_profile_and_preferences_are_allowed_before_company_setup():
+    import main
+    for key in (("GET", "/api/auth/profile"), ("GET", "/api/auth/preferences"), ("PUT", "/api/auth/preferences")):
+        assert key in main._COMPANY_SETUP_ALLOWED and len(main._COMPANY_SETUP_ALLOWED[key]) >= 20
+
+
+def test_user_prefs_is_in_the_daily_json_backup():
+    import archive
+    assert any("user_prefs" in sql for sql in archive._daily_backup_tables().values())
+
+
+# ── 公司關閉問候語＝總開關（PM 裁示）：偏好頁選單停用並說明，個人值照舊保留 ─────────────────────
+def test_company_greeting_off_is_reported_and_picker_is_locked_in_page(client, make_user, monkeypatch):
+    from helpers import settings_registry as sr
+    u, p = make_user(username="pref_g1", role="sales")
+    h = _login(client, u, p)
+    client.put("/api/auth/preferences", json={"login_greeting": "humor"}, headers=h)
+    real = sr.get_group
+    for style, off in ((0, True), (1, False), (2, False)):
+        monkeypatch.setattr(sr, "get_group", lambda g, *a, _s=style, **k: {"style": _s} if g == "login_greeting" else real(g, *a, **k))
+        d = client.get("/api/auth/preferences", headers=h).json()
+        assert d["company"] == {"login_greeting_off": off}
+        assert d["prefs"]["login_greeting"] == "humor"                       # 個人值不被改，公司重新開啟後照個人選擇
+
+    def boom(*a, **k):
+        raise RuntimeError("registry down")
+    monkeypatch.setattr(sr, "get_group", boom)
+    assert client.get("/api/auth/preferences", headers=h).json()["company"] == {"login_greeting_off": False}   # 讀不到 ⇒ 不鎖，偏好頁照常
+
+
+def test_page_disables_greeting_picker_with_plain_reason():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "my-account.html").read_text(encoding="utf-8")
+    assert "公司已關閉登入問候語" in src and ':disabled="locked(k)"' in src and "d.company" in src
+    assert "login_greeting_off" in src

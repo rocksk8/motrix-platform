@@ -11,10 +11,22 @@ from helpers import user_prefs as UP
 router = APIRouter()
 
 
+def _company_greeting_off():
+    """公司把「登入問候語」設成「關閉」＝總開關：個人選什麼都不會讓問候語出現（判斷在 helpers/login_greeting.effective_style）。
+    讀不到設定 ⇒ 當作沒關（問候語是加值，不因此讓偏好頁壞掉）。"""
+    try:
+        from helpers import settings_registry as sr
+        v = (sr.get_group("login_greeting") or {}).get("style")
+        return v == 0 and not isinstance(v, bool)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _view(user_id):
     prefs = UP.get_all(user_id)
     return {
         "prefs": prefs,
+        "company": {"login_greeting_off": _company_greeting_off()},
         "defaults": UP.defaults(),
         "options": {k: {"label": s["label"], "choices": [{"value": v, "label": l} for v, l in s["options"]]} for k, s in UP.SCHEMA.items()},
     }

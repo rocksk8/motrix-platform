@@ -343,7 +343,7 @@
     <div x-show="tab === 'profile' && !wiz" x-cloak x-data="accountProfile()" data-testid="tab-profile">
       <div class="card">
         <div class="card-title">個人資料</div>
-        <div class="card-sub">這些資料由管理者維護，會顯示在報價單、PDF 與信件上，所以這裡只能看、不能改。需要更正請聯絡管理者。</div>
+        <div class="card-sub">這些資料由管理者維護，所以這裡只能看、不能改，需要更正請聯絡管理者。報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」，不是這裡的個人 Email。</div>
         <div x-show="err" class="alert alert-err" x-text="err"></div>
         <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
           <div :style="'width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;background:' + avatarBg()" x-text="initial()" data-testid="profile-avatar"></div>
@@ -356,14 +356,15 @@
         <div class="form-group"><label class="form-label">登入帳號</label><input class="form-input" type="text" :value="p.username" disabled></div>
         <div class="form-group"><label class="form-label">所屬部門</label><input class="form-input" type="text" :value="p.department || '（尚未歸屬部門）'" disabled></div>
         <div class="form-group"><label class="form-label">Email（登入與系統通知用）</label><input class="form-input" type="text" :value="p.email || '（未填）'" disabled data-testid="profile-email">
-          <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
+          <div class="hint">登入與系統通知信會寄到這個信箱，由管理者維護。報價單上帶的是下方的「報價用信箱」。</div></div>
         <div class="form-group"><label class="form-label">手機／電話</label><input class="form-input" type="text" :value="p.phone || '（未填）'" disabled data-testid="profile-phone">
           <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
         <div class="form-group" data-testid="profile-quote-email-group"><label class="form-label">報價用信箱（開報價單時帶入）</label>
-          <input class="form-input" type="text" :value="p.quoteEmailEffective || '（未設定）'" disabled data-testid="profile-quote-email">
+          <input class="form-input" type="text" :value="p.quoteEmailEffective || '（尚未設定）'" disabled data-testid="profile-quote-email">
           <div class="hint" x-show="p.quoteEmailSource === 'user'">此資料由管理者維護，會顯示在報價單上。這是管理者幫你設定的報價用公司信箱。</div>
           <div class="hint" x-show="p.quoteEmailSource === 'company'">此資料由管理者維護，會顯示在報價單上。你沒有自己的報價用信箱，所以使用公司對外信箱。</div>
-          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定公司信箱：目前報價單會帶入你的個人信箱。請聯絡管理者設定報價用公司信箱。</div></div>
+          <div class="hint" x-show="p.quoteEmailSource === 'personal'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定報價用公司信箱：目前報價單會帶入你的個人信箱。請聯絡管理者設定報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company' && p.quoteEmailSource !== 'personal'" data-testid="profile-quote-email-none" style="color:#B45309">尚未設定：目前報價單上不會有你的信箱。請聯絡管理者設定報價用信箱。</div></div>
       </div>
       <div class="card" style="margin-top:20px">
         <div class="card-title">頭像顏色</div>
@@ -389,10 +390,11 @@
         <template x-for="k in keys" :key="k">
           <div class="form-group" style="margin-top:14px">
             <label class="form-label" x-text="opt[k]?.label"></label>
-            <select class="form-input" :data-testid="'pref-' + k" :value="prefs[k]" @change="save(k, $event.target.value)">
+            <select class="form-input" :data-testid="'pref-' + k" :value="prefs[k]" :disabled="locked(k)" @change="save(k, $event.target.value)">
               <template x-for="c in (opt[k]?.choices || [])" :key="c.value"><option :value="c.value" :selected="prefs[k] === c.value" x-text="c.label"></option></template>
             </select>
-            <div class="hint" x-show="help[k]" x-text="help[k]"></div>
+            <div class="hint" x-show="locked(k)" style="color:var(--warning)" x-text="lockedMsg[k]" :data-testid="'pref-locked-' + k"></div>
+            <div class="hint" x-show="help[k] && !locked(k)" x-text="help[k]"></div>
           </div>
         </template>
         <div x-show="ok" class="alert alert-ok" style="margin-top:12px" x-text="ok" data-testid="pref-saved"></div>
@@ -542,18 +544,21 @@
     }
     window.accountPrefs = function () {
       return {
-        keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, err: '', ok: '', _t: null,
+        keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, company: {}, err: '', ok: '', _t: null,
         help: {
           font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
           theme: '只是你自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
-          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格。',
+          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選別的就以你的選擇為準。',
           home_page: '每次登入後第一個看到的頁面（只有你的權限看得到的頁面才會生效）。',
         },
+        // 公司設為「關閉」是總開關：個人選什麼都不會讓問候語出現，所以選單停用並說明原因（個人值照舊保留，公司重新開啟後依個人選擇）
+        lockedMsg: { login_greeting: '公司已關閉登入問候語' },
+        locked(k) { return k === 'login_greeting' && !!(this.company && this.company.login_greeting_off) },
         async init() {
           const r = await fetch('/api/auth/preferences', { headers: hdr() }).catch(() => null)
           if (!r || !r.ok) { this.err = '偏好設定暫時讀不到，請重新整理'; return }
           const d = await r.json()
-          this.opt = d.options; this.prefs = d.prefs
+          this.opt = d.options; this.prefs = d.prefs; this.company = d.company || {}
         },
         async save(k, v) {
           this.err = ''; this.ok = ''

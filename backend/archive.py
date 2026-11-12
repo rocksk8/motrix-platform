@@ -2195,6 +2195,7 @@ def _daily_backup_tables() -> dict:
         "組織單位":         "SELECT * FROM org_units ORDER BY id",
         "組織單位層級":     "SELECT * FROM org_unit_closure ORDER BY ancestor_id, descendant_id",
         "使用者單位歸屬":   "SELECT * FROM user_units ORDER BY user_id, unit_id",
+        "個人偏好":         "SELECT user_id, key, value_json, updated_at, owner_unit_id FROM user_prefs ORDER BY user_id, key",          # 「我的帳號」票（字級、外觀、問候語、首頁、頭像色）：每人每鍵一列，純文字小資料
         "單位設定覆寫":     "SELECT * FROM system_settings_unit ORDER BY unit_id, key",
         "單位序列":         "SELECT * FROM seq_by_entity ORDER BY entity_id, kind, period",
         # ── 帳號與組織（2026-09-14 補）──

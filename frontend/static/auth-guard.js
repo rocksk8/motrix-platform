@@ -40,6 +40,7 @@
   function forgetReturn() { try { sessionStorage.removeItem('motrix_return_to'); } catch (e) {} }
 
   if (!session || !session.token) {
+    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 沒登入（含各頁自己登出的路徑）：個人偏好快取一併清掉
     rememberReturn();
     location.replace(loginPath);
     return;
@@ -47,16 +48,50 @@
 
   // ── 個人偏好（「我的帳號」票，2026-11-13）：字級／深色模式／登入後首頁 ──────────────────────────
   // 先套用本機快取（避免閃一下），每個登入期間再向伺服器同步一次（換裝置也保留）。偏好只影響自己看到的畫面。
-  var ZOOM = { normal: '', large: '1.1', xlarge: '1.2' };
-  function applyPrefs(p) {
+  // 字級偏好與頂欄「小／標／大／特」共用同一套（motrix_font_zoom／--fz／motrixSetZoom），不另開第二套 zoom：
+  // 偏好值 → 倍率；頂欄改倍率時反過來把偏好寫回伺服器（saveFont），兩邊永遠一致，換頁、換裝置都保留。
+  var ZOOM = { small: 0.85, normal: 1, large: 1.15, xlarge: 1.3 };
+  function setZoom(z) {
+    try {
+      localStorage.setItem('motrix_font_zoom', String(z));
+      if (typeof window.motrixSetZoom === 'function') { window.motrixSetZoom(z, true); return; }   // sidebar.js 已載入：連頂欄按鈕狀態一起更新
+      document.documentElement.style.zoom = z;
+      document.documentElement.style.setProperty('--fz', String(z));
+    } catch (e) {}
+  }
+  function zoomToPref(z) {
+    var best = 'normal', d = 9;
+    for (var k in ZOOM) { if (Math.abs(ZOOM[k] - z) < d) { d = Math.abs(ZOOM[k] - z); best = k; } }
+    return best;
+  }
+  // force：使用者剛在「我的帳號」明確改了字級 ⇒ 一定套用。同步（非 force）時：伺服器值和上次快取相同 ⇒ 不動這台裝置的目前倍率
+  // （使用者可能剛在頂欄改過）；沒有快取且是預設值 ⇒ 也不動（舊使用者只用過頂欄，不該被預設值重設）。
+  function applyPrefs(p, force) {
     try {
       if (!p) return;
-      if (p.font_size in ZOOM) document.documentElement.style.zoom = ZOOM[p.font_size];
+      if (p.font_size in ZOOM) {
+        var prev = null; try { prev = JSON.parse(localStorage.getItem('motrix_prefs') || 'null'); } catch (e) {}
+        var changed = prev ? prev.font_size !== p.font_size : p.font_size !== 'normal';
+        if (force || changed) setZoom(ZOOM[p.font_size]);
+      }
       if (p.theme === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('motrix_theme', 'dark'); }
       else if (p.theme === 'light') { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('motrix_theme', 'light'); }
     } catch (e) {}
   }
-  try { applyPrefs(JSON.parse(localStorage.getItem('motrix_prefs') || 'null')); } catch (e) {}
+  // 頂欄改字級 ⇒ 把對應的偏好值存回伺服器（失敗不影響畫面；下次同步以伺服器為準）
+  function saveFont(z) {
+    try {
+      var v = zoomToPref(z);
+      var cache = JSON.parse(localStorage.getItem('motrix_prefs') || '{}') || {};
+      if (cache.font_size === v) return;
+      cache.font_size = v;
+      localStorage.setItem('motrix_prefs', JSON.stringify(cache));
+      fetch('/api/auth/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.token },
+        body: JSON.stringify({ font_size: v }) }).catch(function () {});
+    } catch (e) {}
+  }
+  // 本機快取只套用外觀（字級由 sidebar.js 讀 motrix_font_zoom 即時套用，這裡不重複）
+  try { var _c = JSON.parse(localStorage.getItem('motrix_prefs') || 'null'); if (_c) { delete _c.font_size; applyPrefs(_c); } } catch (e) {}
   function syncPrefs() {
     try {
       var atHome = /(^|\/)(index\.html)?$/.test(location.pathname) && location.pathname.indexOf('/pages/') < 0;
@@ -66,8 +101,8 @@
         .then(function (d) {
           if (!d || !d.prefs) return;
           sessionStorage.setItem('motrix_prefs_synced', '1');
-          localStorage.setItem('motrix_prefs', JSON.stringify(d.prefs));
           applyPrefs(d.prefs);
+          localStorage.setItem('motrix_prefs', JSON.stringify(d.prefs));
           // 登入後的首頁：只在這個登入期間第一次落在儀表板時跳一次（之後使用者回儀表板不再被跳走）
           var hp = d.prefs.home_page;
           if (atHome && hp && hp !== 'index.html' && /^[a-z0-9-]+\.html$/.test(hp) && !sessionStorage.getItem('motrix_home_done')) {
@@ -78,7 +113,7 @@
         .catch(function () {});
     } catch (e) {}
   }
-  window.MotrixPrefs = { apply: applyPrefs, sync: syncPrefs };
+  window.MotrixPrefs = { apply: function (p) { applyPrefs(p, true); }, sync: syncPrefs, saveFont: saveFont };
 
   var style = document.createElement('style');
   style.id = 'auth-guard-style';

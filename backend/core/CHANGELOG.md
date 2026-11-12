@@ -1,5 +1,13 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（feat/menu-ux-myaccount；「我的帳號」＋報價用公司信箱：L1 新增 `helpers.user_prefs`、`helpers.quote_email`）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：
+  - `helpers.user_prefs`（`SCHEMA／TABLE／PrefError／defaults／get／get_all／set_many／validate`）——個人偏好（字級、外觀、登入問候語、登入後首頁、頭像色），每人每鍵一列；白名單驗證，只讀寫呼叫者自己的列。
+  - `helpers.quote_email`（`valid／domain_hint／resolve／resolve_for_row／resolve_for_user_id／company_external_email／enforce_sales_email／reply_to_for_quote／PROFILE_KEY`）——報價用公司信箱三層解析（使用者設定 → 公司對外信箱 → 個人信箱）；`enforce_sales_email` 在儲存報價單時由伺服器驗證業務員信箱快照；`reply_to_for_quote` 供報價相關通知信加 Reply-To。
+- core migration：13＝`user_prefs`、14＝`users.quote_email`（編號已佔用，其他分支請從 15 起；見 `core/migrations.py` 註解）。
+- 行為變更：每日 JSON 備份新增「個人偏好」；刪除使用者時連帶清除其 `user_prefs`；`/api/auth/profile`、`/api/auth/preferences` 列入「本公司資料未設定」放行清單（皆有理由）。
+- 測試：`tests/test_my_account_prefs_2026_11_13.py`、`tests/test_quote_email_2026_11_13.py`、`tests/test_e2e_my_account_2026_11_13.py`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

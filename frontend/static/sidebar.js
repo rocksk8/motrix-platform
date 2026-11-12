@@ -115,8 +115,9 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // ── Global font zoom (used by topbar buttons via onclick) ─────────────────
-  window.motrixSetZoom = function (z) {
+  window.motrixSetZoom = function (z, fromPrefs) {
     localStorage.setItem(FZ_KEY, String(z))
+    if (!fromPrefs && window.MotrixPrefs && window.MotrixPrefs.saveFont) window.MotrixPrefs.saveFont(z)   // 頂欄改字級 ⇒ 同步成個人偏好（兩邊一致）
     document.documentElement.style.zoom = z
     document.documentElement.style.setProperty('--fz', String(z))
     FZ_STEPS.forEach(function (step, i) {
@@ -169,6 +170,7 @@ if (typeof module !== 'undefined' && module.exports) {
       }).catch(function () {})
     }
     localStorage.removeItem('motrix_session')
+    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 個人偏好快取跟著登入者走：登出就清，下一位登入者不會繼承
     window.location.href = inPg ? 'login.html' : 'pages/login.html'
   }
 

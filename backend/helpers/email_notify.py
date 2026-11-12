@@ -613,12 +613,9 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
         intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。"),
         button_text=_tf.get("button", "前往審核報價單"),
     )
-    from helpers import quote_email as _qe
-    _rt = _qe.reply_to_for_quote(quote_no)           # 報價人的報價用公司信箱（開單當下快照）；沒有 ⇒ 不加 Reply-To，行為與舊版相同
-    if _rt:
-        _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html, _rt)
-    else:
-        _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe       # 報價人的報價用公司信箱（儲存報價單時伺服器已驗證）；沒有 ⇒ 不加 Reply-To，呼叫形狀與舊版相同
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html, *((_rt,) if _rt else ()))
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
@@ -637,7 +634,9 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
         intro=_tf.get("intro", f"您好，前層審核已完成，報價單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。"),
         button_text=_tf.get("button", "前往審核報價單"),
     )
-    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html, *((_rt,) if _rt else ()))
 
 
 def notify_approved(quote_no: str, customer: str,
@@ -655,7 +654,9 @@ def notify_approved(quote_no: str, customer: str,
         intro=_tf.get("intro", "您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。"),
         button_text=_tf.get("button", "前往查看報價單"),
     )
-    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單審核完成：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單審核完成：{quote_no}（{customer}）")), html, *((_rt,) if _rt else ()))
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
@@ -674,7 +675,9 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
         note=note,
         button_text=_tf.get("button", "前往修改報價單"),
     )
-    _async_send(to, _mt.subject("returned", _tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe       # 修改版（新單）也有自己的快照；沒有再用原單的
+    _rt = _qe.reply_to_for_quote(new_quote_no) or _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("returned", _tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）")), html, *((_rt,) if _rt else ()))
 
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
@@ -1291,7 +1294,9 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
         intro="您好，您的修改版報價單已成功送出，目前正等待簽核人員審核，請耐心等候通知。",
         button_text="前往查看報價單",
     )
-    _async_send(to, _mt.subject("resubmit_requester", f"修改版報價單已送審：{new_quote_no}（{customer}）"), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(new_quote_no)
+    _async_send(to, _mt.subject("resubmit_requester", f"修改版報價單已送審：{new_quote_no}（{customer}）"), html, *((_rt,) if _rt else ()))
 
 
 def notify_daily_task_assigned(task_id: int, title: str, task_date: str,

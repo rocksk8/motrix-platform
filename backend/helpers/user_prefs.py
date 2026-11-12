@@ -30,7 +30,7 @@ SCHEMA = {
     "font_size": {
         "default": "normal",
         "label": "字級",
-        "options": [("normal", "標準"), ("large", "大"), ("xlarge", "特大")],
+        "options": [("small", "小"), ("normal", "標準"), ("large", "大"), ("xlarge", "特大")],
     },
     "theme": {
         "default": "light",

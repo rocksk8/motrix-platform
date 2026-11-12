@@ -1764,6 +1764,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     uname  = row["username"]
     ulabel = row["display_name"] or uname
     try:
+        conn.execute("DELETE FROM user_prefs WHERE user_id=?", (user_id,))      # 個人偏好跟著帳號走：帳號刪了就清（避免新帳號沿用舊 id 的偏好）；刪不成功（有關聯資料）時下面整筆 rollback
         conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         conn.commit()
@@ -1830,7 +1831,8 @@ def users_sales_contact(username: str = Query(..., min_length=1, max_length=64),
     from helpers import quote_email as _qe
     eff = _qe.resolve_for_row(row)               # 報價用信箱：使用者設定 → 公司對外信箱 → 個人信箱
     return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or "",
-            "quoteEmail": eff["email"], "quoteEmailSource": eff["source"]}
+            "quoteEmailEffective": eff["email"], "quoteEmailSource": eff["source"],
+            "quoteEmail": eff["email"]}        # 舊欄位名（值＝解析後的信箱）保留一版以相容；新程式一律讀 quoteEmailEffective，下一版移除
 
 
 @router.get("/api/users/selectable")
