@@ -100,6 +100,44 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 
 ---
 
+### §3.3d · 外網登入防護：外網強制 TOTP＋單一帳號鎖定（2026-11-12，外網登入強化票）
+
+背景：`motrix-platform.miactw.com` 經 Cloudflare Tunnel（→ `https://localhost:666`）對外開放後，風險評估（`正式機回報/20261112_外網開放風險評估.md`）指出登入保護只有「每來源 IP 5 次／15 分鐘」，換很多 IP 就能持續猜同一個帳號的密碼；TOTP 當時只有 2 位最高管理者啟用。設定在設定中心群組「外網登入防護」（`external_login`），程式 `helpers/external_access.py`（判定＋強制規則）、`helpers/account_lock.py`（帳號鎖）、`routers/auth.py`（接線）。內網登入行為不變。
+
+**① 「外網」怎麼判定**（`external_access.classify`，**判斷不出來一律當外網**；任何一條成立＝外網）
+
+| 順序 | 條件 | 理由 |
+|---|---|---|
+| a | 帶 Cloudflare 標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`） | 經隧道進來的請求一定有；區網直連不會有 |
+| b | `Host` 是設定的外網網域（預設 `motrix-platform.miactw.com`） | 設定可調（`external_hosts`） |
+| c | 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` | 有代理介入就不當內網 |
+| d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來，或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、127/8、169.254/16、::1、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段與 0.0.0.0/0 會被忽略 |
+| e | 其餘（無代理痕跡且 IP 在內網網段） | ＝內網 |
+
+偽造只會往「更嚴」：區網自己加 CF 標頭／改 Host／塞 XFF ⇒ 被當外網；外網使用者無法把自己變內網（標頭由 Cloudflare 加、IP 由 T80 可信判斷）。
+注意：同事在辦公室用外網網址（`https://motrix-platform.miactw.com`）登入，對系統來說就是外網（走 Cloudflare），適用外網規則；用內網位址登入才是內網。
+
+**② 外網強制 TOTP**：總開關 `ext_totp_enabled`（預設開）＋每個角色一個開關（預設 superadmin／admin／finance 開；sales／engineer／viewer 關，可在設定中心調整）。外網登入、該角色被要求、帳號 `totp_enabled=0` ⇒ **403** 並提示「請先在公司內網登入並啟用兩步驟驗證」；**密碼要先正確**才會看到這個訊息（錯密碼仍是通用的 401，不洩漏帳號資訊），拒絕不算密碼失敗、不計入鎖定、寫稽核 `auth.login_refused_external_totp`（`reason_code=ext_totp_required`）。已啟用 TOTP 的人走原本的挑戰流程。Passkey 登入（目前暫緩）同樣套用。`demo` 帳號不適用。只管「登入」；已發出的 session 不綁來源。放寬方向（關總開關、取消某角色、調高門檻…）一律走設定中心的確認期間＋第二位最高管理者核准，收緊立即生效。
+
+**③ 單一帳號鎖定**（不分 IP；預設 10 次／30 分鐘窗 → 鎖 30 分鐘）
+
+| 取捨 | 內容 |
+|---|---|
+| 經典做法的問題 | 任何人故意輸錯就能把別人鎖在門外（DoS），包含在公司內網的本人 |
+| **預設（模式 1，只鎖外網）** | 只計**外網來源**的失敗；鎖住時只擋外網登入，**內網照常能登入**；內網成功登入會解除該帳號的鎖；超級管理員可手動解鎖（`GET /api/auth/account-locks`、`POST /api/auth/account-locks/unlock`）；30 分鐘自動解除。攻擊者最多讓「該帳號暫時不能從外網登入」，不能讓人進不了系統 |
+| 模式 2（設定 `lock_scope=2`） | 不分來源計數、被鎖時連內網也擋；最嚴但有 DoS 風險，只建議遭受持續攻擊時暫用 |
+| 不被延長 | 鎖定期間的嘗試被直接擋、**不計數也不延長鎖定**，攻擊者無法靠持續送請求把鎖拉長 |
+| 不洩漏帳號是否存在 | 任何帳號名（含不存在的）一視同仁計數、同樣回 429 |
+| 計數來源 | 密碼錯誤、TOTP 驗證碼錯誤、QR 核准密碼錯誤、Passkey 失敗（都經 `_rl_fail`）；成功登入清掉該帳號計數 |
+| 持久化 | 鎖定寫進 `login_rate_limit`（鍵 `acct:<小寫帳號>`），重啟後仍有效；失敗計數只在記憶體（重啟歸零，最壞情況是少算） |
+| 稽核／告警 | 鎖定那一刻寫 `auth.account_locked`（帳號、來源 IP、次數、門檻，不含密碼）；呼叫 `helpers.auth_alert.on_lockout(scope="account")`（與 IP 鎖定共用 auth_lockout 事件與每小時上限）；解鎖寫 `auth.account_unlocked` |
+
+**④ Cloudflare 限流**（使用者自己在後台設）：見 `docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`（免費方案 1 條規則、10 秒窗、依 IP；擋瞬間狂打，慢慢猜靠程式的 IP／帳號鎖定與 TOTP）。
+
+**⑤ 已知限制**：同公司同事共用對外 IP 時，IP 鎖定仍是「一人輸錯 5 次鎖全辦公室外網」（既有行為，T80 起）——帳號鎖不影響這點；TOTP 啟用要在內網先做（外網沒啟用的角色進不來）。測試：`backend/tests/test_external_login_hardening_2026_11_12.py`。
+
+---
+
 ### §3.3c · Passkey／WebAuthn 與 HTTPS 憑證（2026-09-11 起實際可用；**Passkey 已於 2026-09-16 暫緩**）
 
 > 🔴 **2026-09-16 起 Passkey 功能暫緩使用（使用者裁示）**，本節以下描述的是
