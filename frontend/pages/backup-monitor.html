@@ -191,11 +191,20 @@
                 </div>
                 <div class="bm-line">
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-save" :disabled="busy || !pingUrl.trim()" @click="ask('url')">儲存監控網址</button>
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-clear" x-show="s.heartbeat.pingUrlSet" :disabled="busy" @click="ask('clear')">停用對外打卡</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-clear" x-show="s.heartbeat.pingUrlSet && !s.heartbeat.disableRequest" :disabled="busy" @click="ask('clear')">停用對外打卡</button>
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-test" :disabled="busy || !s.heartbeat.pingUrlSet || !!testWait" @click="ask('test')">測試心跳</button>
                   <span class="bm-note" x-show="!pingUrl.trim()">貼上網址後才能儲存。</span>
                   <span class="bm-note" x-show="!s.heartbeat.pingUrlSet">先儲存網址才能測試。</span>
                   <span class="bm-note" x-show="testWait" x-text="testWait"></span>
+                </div>
+                <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
+                  <strong x-text="(s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine ? '你' : (s.heartbeat.disableRequest && s.heartbeat.disableRequest.requestedBy)) + ' 申請停用對外打卡，等待另一位最高管理者核准。'"></strong>
+                  <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，對外打卡照常進行。</div>
+                  <div class="bm-line">
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')">核准停用</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" :disabled="busy" @click="ask('cancelreq')">撤回申請</button>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine">要由另一位最高管理者按「核准停用」。</span>
+                  </div>
                 </div>
                 <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
                 <div :class="hbMsgBad ? 'bm-bad' : 'bm-ok'" x-show="hbMsg" x-text="hbMsg" data-testid="bm-ping-msg"></div>
@@ -259,9 +268,13 @@
     <div class="bm-modal" role="dialog" aria-modal="true" aria-labelledby="bm-dlg-t">
       <h2 id="bm-dlg-t" x-text="dlgTitle"></h2>
       <p x-text="dlgBody"></p>
+      <div x-show="dlg === 'clear'" style="margin-top:10px">
+        <label class="bm-label" for="bm-reason">停用的原因（必填，會留在紀錄並通知所有最高管理者）</label>
+        <textarea id="bm-reason" class="bm-in" rows="3" maxlength="300" data-testid="bm-dialog-reason" x-model="reason" style="max-width:none"></textarea>
+      </div>
       <div class="bm-modal-actions">
         <button type="button" class="btn btn-ghost" data-testid="bm-dialog-cancel" @click="dlg = ''">取消</button>
-        <button type="button" class="btn btn-primary" data-testid="bm-dialog-ok" :disabled="busy" @click="confirmDlg()" x-text="busy ? '處理中…' : dlgOk"></button>
+        <button type="button" class="btn btn-primary" data-testid="bm-dialog-ok" :disabled="busy || (dlg === 'clear' && reason.trim().length < 2)" @click="confirmDlg()" x-text="busy ? '處理中…' : dlgOk"></button>
       </div>
     </div>
   </div>
@@ -273,7 +286,7 @@
       return {
         s: null, loading: false, errMsg: '', busy: false, _initDone: false, _timer: null,
         pingUrl: '', urlErr: '', hbMsg: '', hbMsgBad: false, testWait: '', _testUntil: 0, _tick: null,
-        dlg: '', help: {},
+        dlg: '', help: {}, reason: '',
         _hdr() {
           let x = {}
           try { x = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
@@ -303,7 +316,7 @@
           if (this.s && this.s.manual && this.s.manual.running) this._timer = setTimeout(() => this.load(), 5000)
         },
         // ── 顯示 ──
-        fmt(iso) { return iso ? (window.MotrixFormat ? MotrixFormat.dt(iso, 'plain') : iso) : '—' },
+        fmt(iso) { return iso ? (window.MotrixFormat ? MotrixFormat.dt(iso, 'plain') : String(iso).replace('T', ' ').slice(0, 16)) : '—' },
         ago(iso) {
           const t = Date.parse(iso)
           if (isNaN(t)) return ''
@@ -359,11 +372,14 @@
           const host = this.s && this.s.heartbeat && this.s.heartbeat.pingHost
           const T = {
             backup: ['立即做一次備份？', '會把資料庫複製一份，並更新雲端備份；在背景進行，不影響大家使用，通常幾分鐘內完成。為避免重複，30 分鐘內只能做一次。', '開始備份'],
-            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。', '儲存監控網址'],
-            clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。確定要停用嗎？', '停用對外打卡'],
+            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
+            clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
+            approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，而且是你認得的人提出的。', '核准停用'],
+            cancelreq: ['撤回停用申請？', '撤回後對外打卡維持開啟，什麼都不會改變。', '撤回申請'],
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
           }[kind]
           this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]
+          if (kind === 'clear') this.reason = ''
         },
         dlgTitle: '', dlgBody: '', dlgOk: '',
         async confirmDlg() {
@@ -374,7 +390,11 @@
             if (kind === 'backup') await this._post('/api/system/backup-monitor/backup-now', 'POST', { confirm: true }, d => { this.hbMsg = d.message || '已開始備份'; this.hbMsgBad = false })
             else if (kind === 'test') await this._post('/api/system/backup-monitor/heartbeat-test', 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = !d.ok; this._startTestWait(60) })
             else if (kind === 'url') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: this.pingUrl.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' }, true)
-            else if (kind === 'clear') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: '' }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' })
+            else if (kind === 'clear') await this._post('/api/system/backup-monitor/heartbeat-disable', 'POST', { confirm: true, reason: this.reason.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' })
+            else if (kind === 'approve' || kind === 'cancelreq') {
+              const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
+              if (rq) await this._post('/api/system/backup-monitor/heartbeat-disable/' + rq.id + '/' + (kind === 'approve' ? 'approve' : 'cancel'), 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = false })
+            }
           } finally { this.busy = false; this.dlg = '' }
           await this.load()
         },

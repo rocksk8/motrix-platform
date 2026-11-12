@@ -47,7 +47,25 @@ def fresh_limits(monkeypatch):
     from helpers import backup_monitor as bm
     monkeypatch.setitem(bm._hb_last, "at", 0.0)
     monkeypatch.setitem(bm._running, "on", False)
-    return bm
+    bm._set_setting(bm._LAST_KEY, "")                  # 同一支測試檔共用資料庫：上一題的時間戳（可能在「未來」，題目會傳假的 now）不能擋這一題
+    yield bm
+    bm._set_setting(bm._LAST_KEY, "")
+
+
+@pytest.fixture(autouse=True)
+def _fake_dns_and_mail(monkeypatch):
+    """網域解析一律回公開位址、寄信一律記下來不寄（這支測試不碰外部網路與 SMTP）。"""
+    from core import safe_ping
+    import helpers.email_notify as en
+    monkeypatch.setattr(safe_ping, "resolve_host", lambda host, port: ["93.184.216.34"])
+    mails = []
+    monkeypatch.setattr(en, "send_registered", lambda key, **kw: (mails.append((key, kw)), True)[1])
+    return mails
+
+
+@pytest.fixture()
+def mails(_fake_dns_and_mail):
+    return _fake_dns_and_mail
 
 
 def _login(client, make_user, name="bm_sa", role="superadmin"):
@@ -80,7 +98,10 @@ def _wait_idle(bm, secs=10):
 ENDPOINTS = [("get", "/api/system/backup-monitor", None),
              ("post", "/api/system/backup-monitor/backup-now", {"confirm": True}),
              ("put", "/api/system/backup-monitor/heartbeat-url", {"pingUrl": SECRET}),
-             ("post", "/api/system/backup-monitor/heartbeat-test", {"confirm": True})]
+             ("post", "/api/system/backup-monitor/heartbeat-test", {"confirm": True}),
+             ("post", "/api/system/backup-monitor/heartbeat-disable", {"confirm": True, "reason": "不用了"}),
+             ("post", "/api/system/backup-monitor/heartbeat-disable/1/approve", {"confirm": True}),
+             ("post", "/api/system/backup-monitor/heartbeat-disable/1/cancel", {})]
 
 
 @pytest.mark.parametrize("method,url,body", ENDPOINTS)
@@ -298,12 +319,12 @@ def test_set_ping_url_writes_config_keeps_other_keys_and_never_returns_url(clien
     assert len(rows) == 1 and "SECRET-UUID" not in (rows[0][0] + rows[0][1]) and "hc-ping.example.com" in rows[0][0]
 
 
-def test_set_ping_url_empty_disables(client, make_user, hb_cfg):
+def test_set_ping_url_empty_is_refused_here_disable_has_its_own_endpoint(client, make_user, hb_cfg):
     hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
     h = _login(client, make_user)
     r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": ""})
-    assert r.status_code == 200 and r.json()["pingUrlSet"] is False
-    assert json.loads(hb_cfg.read_text(encoding="utf-8"))["ping_url"] == ""
+    assert r.status_code == 422 and "停用" in r.json()["detail"]
+    assert json.loads(hb_cfg.read_text(encoding="utf-8"))["ping_url"] == SECRET
 
 
 def test_set_ping_url_creates_config_when_missing(client, make_user, hb_cfg):
@@ -361,40 +382,54 @@ def test_heartbeat_test_ok_then_rate_limited(client, make_user, hb_cfg, fresh_li
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize("code,needle", [(404, "找不到"), (403, "拒絕"), (429, "頻繁"), (500, "錯誤")])
-def test_ping_maps_http_errors_to_plain_messages(monkeypatch, code, needle):
-    import urllib.error
-    import urllib.request
+@pytest.mark.parametrize("code,needle", [(404, "找不到"), (403, "拒絕"), (429, "頻繁"), (500, "暫時出問題"), (302, "不是成功")])
+def test_ping_maps_http_status_to_plain_messages(monkeypatch, code, needle):
+    from core import safe_ping
     from helpers import backup_monitor as bm
-
-    def fake(url, timeout=None):
-        raise urllib.error.HTTPError(url, code, "x", {}, None)
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    monkeypatch.setattr(safe_ping, "get", lambda url, **k: code)
     ok, msg = bm._ping(SECRET)
     assert ok is False and needle in msg and "SECRET-UUID" not in msg and str(code) not in msg
 
 
-def test_ping_network_failure_message_hides_exception(monkeypatch):
-    import urllib.request
+def test_ping_redirect_is_a_failure_with_explanation(monkeypatch):
+    from core import safe_ping
     from helpers import backup_monitor as bm
 
-    def fake(url, timeout=None):
+    def fake(url, **k):
+        raise safe_ping.RedirectBlocked(302)
+    monkeypatch.setattr(safe_ping, "get", fake)
+    ok, msg = bm._ping(SECRET)
+    assert ok is False and "轉" in msg and "SECRET" not in msg and "302" not in msg
+
+
+@pytest.mark.parametrize("kind,needle", [("dns", "找不到這個網站"), ("tls", "憑證"), ("timeout", "沒有回應"), ("connect", "連不到"), ("response", "連不到")])
+def test_ping_failure_kinds_have_plain_messages_and_hide_exception(monkeypatch, kind, needle):
+    from core import safe_ping
+    from helpers import backup_monitor as bm
+
+    def fake(url, **k):
+        raise safe_ping.PingFailed(kind)
+    monkeypatch.setattr(safe_ping, "get", fake)
+    ok, msg = bm._ping(SECRET)
+    assert ok is False and needle in msg and "SECRET" not in msg
+
+
+def test_ping_unexpected_error_hides_exception(monkeypatch):
+    from core import safe_ping
+    from helpers import backup_monitor as bm
+
+    def fake(url, **k):
         raise OSError("getaddrinfo failed for hc-ping.example.com SECRET-UUID")
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    monkeypatch.setattr(safe_ping, "get", fake)
     ok, msg = bm._ping(SECRET)
     assert ok is False and "連不到" in msg and "SECRET" not in msg and "getaddrinfo" not in msg
 
 
-def test_ping_success(monkeypatch):
-    import urllib.request
+def test_ping_success_uses_the_ten_second_timeout(monkeypatch):
+    from core import safe_ping
     from helpers import backup_monitor as bm
-
-    class R:
-        status = 200
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
     seen = {}
-    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: (seen.update(t=timeout), R())[1])
+    monkeypatch.setattr(safe_ping, "get", lambda url, timeout=None, **k: (seen.update(t=timeout), 200)[1])
     assert bm._ping(SECRET)[0] is True and seen["t"] == 10
 
 

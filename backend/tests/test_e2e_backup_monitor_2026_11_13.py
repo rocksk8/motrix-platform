@@ -29,6 +29,13 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(archive, "_daily_backup", lambda *a, **k: calls.__setitem__("backup", calls["backup"] + 1))
     monkeypatch.setattr(archive, "_weekly_backup", lambda *a, **k: None)
     monkeypatch.setattr(bm, "_ping", lambda u: (calls.__setitem__("ping", calls["ping"] + 1), (True, "監控服務有收到這次打卡。"))[1])
+    # 解析網域與寄信都換成假的：測試不碰網路與 SMTP
+    from core import safe_ping
+    import helpers.email_notify as en
+    monkeypatch.setattr(safe_ping, "resolve_host", lambda host, port: ["93.184.216.34"])
+    calls["mails"] = []
+    monkeypatch.setattr(en, "send_registered", lambda key, **kw: (calls["mails"].append(key), True)[1])
+    bm._set_setting(bm._LAST_KEY, "")
     return tmp_path / "heartbeat_config.json", calls
 
 
@@ -106,6 +113,34 @@ def test_heartbeat_url_save_test_and_bad_url(live_server, make_user, new_page, l
     msg = page.locator('[data-testid="bm-ping-msg"]')
     msg.wait_for(state="visible", timeout=10000)
     assert "有收到" in msg.inner_text() and calls["ping"] == 1
+
+
+@pytest.mark.e2e
+def test_disable_asks_for_a_reason_then_waits_for_a_second_superadmin(live_server, make_user, new_page, login_as, isolated):
+    cfg, calls = isolated
+    cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    make_user(username="bm_e2e_other", role="superadmin")                # 第二位最高管理者＝停用需要核准
+    page, _ = _open(live_server, make_user, new_page, login_as, "bm_e2e6")
+    page.locator('[data-testid="bm-ping-clear"]').click()
+    ok = page.locator('[data-testid="bm-dialog-ok"]')
+    reason = page.locator('[data-testid="bm-dialog-reason"]')
+    reason.wait_for(state="visible", timeout=5000)
+    assert ok.is_disabled()                                              # 沒寫原因不能送
+    reason.fill("改用別家監控")
+    assert not ok.is_disabled()
+    ok.click()
+    banner = page.locator('[data-testid="bm-disable-request"]')
+    banner.wait_for(state="visible", timeout=10000)
+    assert "等待另一位最高管理者核准" in banner.inner_text() and "改用別家監控" in banner.inner_text()
+    assert json.loads(cfg.read_text(encoding="utf-8"))["ping_url"] == SECRET        # 核准前沒有真的停用
+    assert page.locator('[data-testid="bm-disable-approve"]').count() == 0 or not page.locator('[data-testid="bm-disable-approve"]').is_visible()   # 申請人看不到「核准」
+    assert not page.locator('[data-testid="bm-ping-clear"]').is_visible()
+    # 撤回
+    page.locator('[data-testid="bm-disable-cancel"]').click()
+    page.locator('[data-testid="bm-dialog-ok"]').click()
+    banner.wait_for(state="hidden", timeout=10000)
+    assert json.loads(cfg.read_text(encoding="utf-8"))["ping_url"] == SECRET
+    assert page.locator('[data-testid="bm-ping-clear"]').is_visible()
 
 
 @pytest.mark.e2e

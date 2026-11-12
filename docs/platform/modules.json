@@ -239,6 +239,7 @@
    "plat:pages",
    "plat:paths",
    "plat:registry",
+   "plat:safe_ping",
    "plat:source_tree",
    "plat:spine",
    "plat:txn",

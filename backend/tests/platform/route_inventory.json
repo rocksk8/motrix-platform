@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 932,
-  "endpoints_api": 928,
-  "write_total": 502,
-  "write_api": 502,
+  "endpoints_total": 935,
+  "endpoints_api": 931,
+  "write_total": 505,
+  "write_api": 505,
   "get_api": 426,
-  "distinct_paths_api": 786,
-  "write_with_body_api": 368,
-  "write_with_path_param_api": 359
+  "distinct_paths_api": 789,
+  "write_with_body_api": 371,
+  "write_with_path_param_api": 361
  },
  "select_star": {
   "modules": 287,
@@ -4186,6 +4186,21 @@
   "POST /api/system/backup-monitor/backup-now": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
    "body": true
   },
   "POST /api/system/backup-monitor/heartbeat-test": {

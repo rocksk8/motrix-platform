@@ -3157,13 +3157,92 @@ def _daily_first_tick():
     _daily_tick()
 
 
+class BackupInProgress(Exception):
+    """已經有另一個備份在跑（同一行程的另一條執行緒，或另一個行程：排程的 `backup_job.py`）。"""
+
+
+_BACKUP_RUN_THREAD_LOCK = threading.Lock()
+
+
+def _backup_lock_path() -> str:
+    return os.path.join(_paths.LOGS_DIR, "backup_run.lock")
+
+
+def _os_lock(fh) -> bool:
+    """對鎖檔第 0 個位元組上不等待的互斥鎖；別人持有 ⇒ False。鎖由作業系統持有：行程不論怎麼死（含被強制終止、斷電重開）鎖都會放掉，
+    所以不需要「過期時間」，也不會留下卡死的鎖。"""
+    fh.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fh) -> None:
+    try:
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+class backup_run_lock:
+    """備份互斥（備份與監控頁 M3，2026-11-13）：「立即備份」、`_daily_tick`、`backup_job.py` 同一時間只准一個在跑
+    （否則兩邊同時寫同一個 `.done`／日資料夾／快照檔，可能互相覆蓋或留下半成品，又各自記一筆稽核）。
+    `with backup_run_lock():`——拿不到 ⇒ 立刻丟 `BackupInProgress`（不等待）。
+    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。**鎖檔打不開（權限、磁碟）時只剩執行緒鎖並記 WARNING，不會讓備份因此跑不起來。**"""
+
+    def __enter__(self):
+        if not _BACKUP_RUN_THREAD_LOCK.acquire(blocking=False):
+            raise BackupInProgress()
+        self._fh = None
+        try:
+            try:
+                os.makedirs(_paths.LOGS_DIR, exist_ok=True)
+                self._fh = open(_backup_lock_path(), "a+b")
+            except OSError:
+                logger.warning("備份鎖檔打不開，這一輪只有同行程的互斥")
+                self._fh = None
+            if self._fh is not None and not _os_lock(self._fh):
+                self._fh.close()
+                self._fh = None
+                raise BackupInProgress()
+        except BaseException:
+            _BACKUP_RUN_THREAD_LOCK.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._fh is not None:
+                _os_unlock(self._fh)
+                self._fh.close()
+        finally:
+            _BACKUP_RUN_THREAD_LOCK.release()
+        return False
+
+
 def _daily_tick():
     try:
-        _daily_backup()
+        with backup_run_lock():
+            _daily_backup()
         try:
             _cleanup_sessions()
         except Exception:  # noqa: BLE001
             logger.exception("_cleanup_sessions failed in daily schedule")
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪每日備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_daily_backup failed in daily schedule")
     finally:
@@ -3213,7 +3292,10 @@ def _schedule_weekly():
 
 def _weekly_tick():
     try:
-        _weekly_backup()
+        with backup_run_lock():
+            _weekly_backup()
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪週備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_weekly_backup failed in weekly schedule")
     finally:
