@@ -33,9 +33,19 @@ const doc = { createElement: () => ({}), head: { appendChild() {} }, getElementB
 const win = { MOTRIX_PREVIEW: inp.preview }
 if (inp.framed) win.top = {}
 const f = new Function('window', 'location', 'localStorage', 'sessionStorage', 'document', 'fetch', 'setTimeout', 'clearTimeout', src)
-const fetchFn = () => inp.me === 401 ? Promise.resolve({ ok: false }) : Promise.resolve({ ok: true })
+// 啟動資料（2026-11-13）：先打 /api/bootstrap，非 200（403／404／5xx）再退回 /api/auth/me；兩者的結果判讀與改版前的 auth/me 相同。
+// inp.me：401 ⇒ 兩支都 401；inp.boot：bootstrap 的狀態碼（預設 200，且帶 me）
+const calls = []
+const fetchFn = (url) => {
+  calls.push(url)
+  if (url === '/api/bootstrap') {
+    const st = inp.me === 401 ? 401 : (inp.boot || 200)
+    return Promise.resolve({ ok: st === 200, status: st, headers: { get: () => null }, json: () => Promise.resolve({ v: 1, me: {}, errors: {} }) })
+  }
+  return inp.me === 401 ? Promise.resolve({ ok: false, status: 401 }) : Promise.resolve({ ok: true, status: 200 })
+}
 f(win, loc, ls, ss, doc, fetchFn, (fn) => 0, () => {})
-setTimeout(() => console.log(JSON.stringify(out)), 20)
+setTimeout(() => { out.calls = calls; Promise.resolve(win.MotrixBoot).then(b => { out.boot = b ? 'data' : (win.MotrixBoot ? 'null' : 'none'); console.log(JSON.stringify(out)) }) }, 20)
 """
 
 TARGET_HARNESS = r"""
@@ -84,6 +94,26 @@ def test_expired_session_also_remembers_it():
 def test_valid_session_stores_nothing_and_does_not_redirect():
     r = _guard(pathname="/pages/bonus.html", search="?q=BN-1", session={"token": "t"}, me=200)
     assert r["replaced"] is None and r["stored"] is None
+
+
+def test_bootstrap_200_is_the_only_request_and_publishes_the_boot_data():
+    r = _guard(pathname="/pages/bonus.html", session={"token": "t"})
+    assert r["calls"] == ["/api/bootstrap"] and r["boot"] == "data" and r["replaced"] is None and r["forgot"] is True
+
+
+@pytest.mark.parametrize("code", [403, 404, 428, 500])
+def test_bootstrap_failure_falls_back_to_auth_me_like_before(code):
+    """必須先改密碼（403）、舊伺服器沒有這支（404）、428、5xx：退回 /api/auth/me，結果與改版前一樣（放行、不轉頁）。"""
+    r = _guard(pathname="/pages/bonus.html", session={"token": "t"}, boot=code)
+    assert r["calls"] == ["/api/bootstrap", "/api/auth/me"] and r["boot"] == "null"
+    assert r["replaced"] is None and r["removed"] is False
+
+
+def test_bootstrap_401_logs_out_and_402_goes_to_the_license_page():
+    r = _guard(pathname="/pages/bonus.html", search="?q=1", session={"token": "t"}, me=401)
+    assert r["calls"] == ["/api/bootstrap"] and r["removed"] is True and r["replaced"] == "login.html" and r["boot"] == "null"
+    r = _guard(pathname="/pages/bonus.html", session={"token": "t"}, boot=402)
+    assert r["replaced"] == "license-required.html" and r["removed"] is False and r["boot"] == "null"
 
 
 def test_the_login_pages_themselves_are_never_remembered():

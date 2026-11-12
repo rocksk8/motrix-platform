@@ -10,6 +10,9 @@
  * 當作備援（例如使用者清掉 localStorage 又手動改網址進來的極端情況）。
  */
 (function () {
+  // 模組建構器的即時預覽（BUILDER-UX §3.3，custom-records.html?preview=1）：不驗證、不打 API、不轉登入頁
+  // （預覽時 notif.js／sidebar.js 也讓位，不會用到下面的啟動資料；呼叫端一律寫 `window.motrixBootFetch || fetch`）
+  if (window.MOTRIX_PREVIEW) return;
   // ── 啟動資料（2026-11-13「外網載入效能」第二階段）────────────────────────────────────────────
   // 原本每一頁載入都各自打 auth/me、platform/menu、modules/availability、build-info、approval-queue/count、notifications/mine、
   // reads/module-counts、system/branding、online-users、totp/status…（外網每支約 1 s）。現在這支守門腳本改打 **一支** `GET /api/bootstrap`
@@ -38,9 +41,11 @@
     return v === null ? undefined : v;
   }
   // 使用者動作造成的重抓（簽核處理完、標已讀…）一律要拿真資料：事件一來，整份啟動資料作廢
-  ['motrix:approval-changed', 'motrix:reads-changed', 'motrix:item-read', 'motrix:item-read-failed'].forEach(function (ev) {
-    window.addEventListener(ev, function () { boot.data = null; });
-  });
+  if (window.addEventListener) {
+    ['motrix:approval-changed', 'motrix:reads-changed', 'motrix:item-read', 'motrix:item-read-failed'].forEach(function (ev) {
+      window.addEventListener(ev, function () { boot.data = null; });
+    });
+  }
   window.motrixBoot = function (name) {
     return window.MotrixBoot.then(function () {
       var tok = boot.token;
@@ -67,8 +72,6 @@
     });
   };
 
-  // 模組建構器的即時預覽（BUILDER-UX §3.3，custom-records.html?preview=1）：不驗證、不打 API、不轉登入頁
-  if (window.MOTRIX_PREVIEW) { bootResolve(null); return; }
   var raw = null;
   try { raw = localStorage.getItem('motrix_session'); } catch (e) {}
   var session = null;
