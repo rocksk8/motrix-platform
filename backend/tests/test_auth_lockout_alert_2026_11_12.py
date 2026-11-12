@@ -176,8 +176,7 @@ def test_qr_failure_writes_audit_row_with_own_reason_code(client, make_user):
     u, p = _enable_totp(client, make_user)
     hdr = {"X-Forwarded-For": "203.0.113.91"}
     ch = client.post("/api/auth/login", json={"username": u, "password": p}, headers=hdr).json()["challengeToken"]
-    # 2026-11-12 外網登入強化票（F1）：QR 核准不再收密碼，失敗型態改成「手機的 session 不是同一個帳號」
-    r = client.post("/api/auth/login/qr-approve", json={"challenge_token": ch, "session_token": "wrong-password"}, headers=hdr)
+    r = client.post("/api/auth/login/qr-approve", json={"challenge_token": ch, "password": "wrong-password"}, headers=hdr)
     assert r.status_code == 401
     rows = _rows_of("action='auth.login_failed'")
     assert len(rows) == 1 and rows[0]["reason_code"] == "qr_failed" and json.loads(rows[0]["detail"])["method"] == "qr"
@@ -896,7 +895,7 @@ def _slow_push(env, delay):
     return push
 
 
-def test_lockalert_n1_same_dedupe_key_concurrent_deliveries_push_once(env, monkeypatch):
+def test_key_lock_same_dedupe_key_concurrent_deliveries_push_once(env, monkeypatch):
     """N1：同一把鑰匙 3 條執行緒同時進 `deliver_event` ⇒ 只推 1 次（per-key 鎖包住查記號→推播→寫記號）。"""
     from helpers import line_notify as L
     _user(env["make_user"], "sa", "superadmin", line=UID_A)
@@ -911,7 +910,7 @@ def test_lockalert_n1_same_dedupe_key_concurrent_deliveries_push_once(env, monke
     assert len(env["line"]) == 1 and sorted(res) == ["already_pushed", "already_pushed", "sent"]
 
 
-def test_lockalert_n1_retry_pending_and_fresh_send_same_key_push_once(env, monkeypatch):
+def test_key_lock_retry_pending_and_fresh_send_same_key_push_once(env, monkeypatch):
     from helpers import line_notify as L
     _user(env["make_user"], "sa", "superadmin", line=UID_A)
     key = "warranty_expiry|Q-7|S7|3"
@@ -928,7 +927,7 @@ def test_lockalert_n1_retry_pending_and_fresh_send_same_key_push_once(env, monke
     assert len(env["line"]) == 1 and _pending() == {}
 
 
-def test_lockalert_n1_transient_failure_does_not_poison_the_key_lock(env):
+def test_key_lock_transient_failure_does_not_poison_the_key_lock(env):
     """暫時失敗不寫記號、鎖也會釋放：下一次同鑰匙仍能重試成功。"""
     from helpers import line_notify as L
     _user(env["make_user"], "sa", "superadmin", line=UID_A)
@@ -938,7 +937,7 @@ def test_lockalert_n1_transient_failure_does_not_poison_the_key_lock(env):
     assert L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key="warranty_expiry|Q|S|1") == L.SEND_SENT
 
 
-def test_lockalert_n1_key_lock_table_is_bounded(monkeypatch):
+def test_key_lock_table_is_bounded(monkeypatch):
     from helpers import line_notify as L
     monkeypatch.setattr(L, "_key_locks", {})
     for i in range(L._KEY_LOCKS_MAX + 50):
@@ -946,7 +945,7 @@ def test_lockalert_n1_key_lock_table_is_bounded(monkeypatch):
     assert len(L._key_locks) <= L._KEY_LOCKS_MAX + 1
 
 
-def test_lockalert_n2_unlimited_plan_has_no_monthly_cap_but_unreadable_state_falls_back(env):
+def test_unlimited_plan_unlimited_plan_has_no_monthly_cap_but_unreadable_state_falls_back(env):
     """N2：LINE 回報無上限（讀到用量、limit=None）⇒ 沒有每月上限；狀態讀不到／不是本月 ⇒ 保守 200；每小時／每日上限（auth_alert）不受影響。"""
     from helpers import line_notify as L, line_quota
     from helpers.settings import _set_setting
@@ -964,7 +963,7 @@ def test_lockalert_n2_unlimited_plan_has_no_monthly_cap_but_unreadable_state_fal
     assert L._monthly_limit() == 100
 
 
-def test_lockalert_n5_lockout_server_log_masks_unknown_username(client, make_user, caplog):
+def test_lockout_log_masks_server_log_masks_unknown_username(client, make_user, caplog):
     """N5：鎖定當下的 server log 不寫嘗試帳號原文（可能是誤填的密碼）；存在的帳號原樣。"""
     import logging
     _user(make_user, "realuser", "sales")
