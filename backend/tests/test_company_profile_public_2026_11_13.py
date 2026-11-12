@@ -188,23 +188,42 @@ def test_unreadable_switch_fails_closed_for_non_superadmin_only(client, roles, s
 
 # ── 前端：除了設定頁，沒有人讀完整端點 ──────────────────────────────────────
 
-_FULL_URL = re.compile(r"settings/company-profile(?![\w/-])")
+#: 讀完整公司資料端點的名單：設定頁，以及公司設定精靈（T84，只有最高管理者進得去，非最高管理者看到「沒有權限」卡）。
+FULL_ENDPOINT_READERS = {"company-profile-settings.html", "company-wizard.js"}
+#: 裸的 `company-profile`（不論前面是 `settings/`、拼接的變數或 %2D 編碼）——後面不是 `-xxx`（頁面檔名）也不是 `/public`。
+_FULL_URL = re.compile(r"company-profile(?![\w-])(?!/public)")
 
 
 def test_only_the_settings_page_reads_the_full_endpoint():
-    """守門：頁面／JS 讀公司資料一律打 /public；只有 company-profile-settings.html 可以讀完整端點。
-    （搬家或新頁面照抄舊寫法 ⇒ 開關一開，那一頁的據點名稱等就靜默消失。）"""
+    """守門：頁面／JS 讀公司資料一律打 /public；只有 FULL_ENDPOINT_READERS 可以讀完整端點。
+    （搬家或新頁面照抄舊寫法 ⇒ 開關一開，那一頁的據點名稱等就靜默消失。伺服器端才是真正的控制，這題只是回歸網。）
+    連拼接（`'/api/settings/' + 'company-profile'`）、變數基底（`B + '/company-profile'`）、%2D 編碼都算；純註解行不算。"""
+    from urllib.parse import unquote
     from tests import _frontend_sources as FS
     from core import source_tree
     files = [FS.FRONTEND / "index.html"] + list(source_tree.page_files()) + list(FS.all_js())
     bad = []
     for f in files:
-        if f.name == "company-profile-settings.html":
+        if f.name in FULL_ENDPOINT_READERS:
             continue
-        text = f.read_text(encoding="utf-8", errors="replace")
-        for m in _FULL_URL.finditer(text):
-            bad.append("%s: …%s" % (f.name, text[max(0, m.start() - 20):m.end() + 12].replace("\n", " ")))
-    assert not bad, "這些檔案讀的是完整公司資料端點（應改 /api/settings/company-profile/public）：\n" + "\n".join(bad)
+        for line in unquote(f.read_text(encoding="utf-8", errors="replace")).splitlines():
+            s = line.strip()
+            if s.startswith(("//", "*", "/*", "<!--")):
+                continue
+            for m in _FULL_URL.finditer(line):
+                bad.append("%s: …%s" % (f.name, line[max(0, m.start() - 24):m.end() + 12].strip()))
+    assert not bad, "這些檔案讀的是完整公司資料端點（應改 /api/settings/company-profile/public）：" + chr(10) + chr(10).join(bad)
+
+
+def test_guard_scanner_positive_control():
+    """掃描樣式要抓得到各種寫法，且不誤報 /public、頁面檔名。"""
+    from urllib.parse import unquote
+    hit = lambda s: bool(_FULL_URL.search(unquote(s)))
+    for bad in ("fetch('/api/settings/company-profile')", "fetch(`${API}/settings/company-profile`, {", "B + '/company-profile'",
+                "'/api/settings/' + 'company-profile'", "/api/settings/company%2Dprofile", "/api/settings/company-profile?x=1"):
+        assert hit(bad), bad
+    for good in ("/api/settings/company-profile/public", "location.href='company-profile-settings.html'", "company-setup-required.html"):
+        assert not hit(good), good
 
 
 @pytest.mark.parametrize("name", ["case-management-core.js", "voucher.js"])

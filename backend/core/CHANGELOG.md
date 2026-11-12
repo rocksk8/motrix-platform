@@ -2,6 +2,7 @@
 
 ## (next) — 2026-11-13（feat/company-profile-public-h11；公司資料公開子集＋「完整內容只給最高管理者」開關）
 - 行為變更：①新增 `GET /api/settings/company-profile/public`（任何登入者；白名單 name／tax_id／contact_info／locations[{id,name}]；不含匯款帳號、地址、電話、email、座標、金鑰、告知文字、據點自己的銀行與抬頭欄位）。②案件頁、核准佇列、報價單、傳票、勞報單五個呼叫者改打 /public（完整端點只剩公司資料設定頁在用；守門題鎖住）。③設定中心「登入與密碼」新增欄位 `company_profile_full_read_superadmin_only`（預設 0＝與今天相同，任何登入者仍讀得到完整資料；改 1 ＝ 非最高管理者讀完整端點回 403，改回 0 屬放寬須第二位最高管理者核准）。預設值不變，部署零行為變更；是否打開、是否推翻 SA4（A 裁）待使用者裁示。
+- **（追加 2026-11-13，hichan-12 審查 M1／L1／L2／L3 的修正，新 commit）**：①公司資料設定頁在開關開啟、非最高管理者讀到 403 時顯示「完整的公司資料只有最高管理者可以查看。」，不再是一張靜默的空表單。②開關問句改成說明統編與聯絡方式仍會顯示給所有人。③守門題的完整端點名單加上公司設定精靈（`company-wizard.js`，T84，最高管理者專用），並認得拼接、變數基底與 %2D 編碼寫法。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（逐角色：/public 只有白名單、完整端點預設不變／開關開後非超管 403／超管照讀、白名單變異、舊安裝補總公司、讀不到設定 fail-closed、前端只有設定頁讀完整端點）；route_inventory／response_keys／settings_deploy 基準同步。
 
 ## 1.162 — 2026-11-13（feat/line-events-all；LINE 全信件接線＋誰要發＋綁定狀況）〔train_number：1.161 → 1.162〕
