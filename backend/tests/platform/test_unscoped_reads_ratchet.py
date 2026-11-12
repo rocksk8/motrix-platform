@@ -13,7 +13,7 @@ from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
 # 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
-MAX_ENTRIES = 867      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
+MAX_ENTRIES = 869      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
                         # 另 `_coarse_member_sql`／`_stage_assigned` 各讀 case_stages。每一筆回傳前都被 `_is_member` 擋過、只回白名單欄位（無金額）；測試 test_membership_equals_the_existing_case_member_rule_for_every_path 釘住與 `_is_case_member` 同義）
                         # 856 = 853 + 3（T80c 外勤 S2 2026-11-12：新端點 `GET /api/field/cases/{quote_no}` 的 `get_field_case` 讀 quotations／case_stages／case_updates 各一——一律先過 `_is_member`（案件成員，CM14；不再是 `_guard_case`＋`case_manage` 放行，見上一段 861 的說明）、只回白名單欄位（無金額），與 `GET /api/quotations/{no}/stages`、`/updates` 同型；（當時列表走 row_access.filter_sql 不新增；後來列表也改成員口徑，見上一段 +5））
@@ -35,6 +35,8 @@ MAX_ENTRIES = 867      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `l
                         # 861 = 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # （併入）861 + 1（估價單 2026-11-13：`modules/case/quotations.py::_estimate_prefixes` 只回「曾開過估價單的單號字首」的 DISTINCT 聚合（不含任何案件內容、不回列），
                         # 經串接點 IP-ESTQ1 給 L1 `helpers/doc_type`；沒有逐案範圍可套，也不接使用者端點）
+                        # （併入）861 + 2（「開始使用」清單 2026-11-13：`getting_started._d_import` 數 `customers` 筆數、`_latest_audit_at` 讀 `audit_log` 最近一列的時間——
+                        # 兩者都只回計數／時間字串、不回任何一筆資料，端點只限最高管理者（GET /api/getting-started）；不得接其他使用者端點）
 #: 掃描器自己的下限：掃到的筆數太少 ⇒ 掃描壞了（假綠）
 SCAN_FLOOR = 100
 

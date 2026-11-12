@@ -4,6 +4,10 @@
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.org_gaps`（`check`、`GAP_KEYS`、`finance_holder_exists`）——只讀的組織設定缺口檢查（沒部門的人／沒主管的部門／沒人擔任財務）。
 - 登記：`helper:org_gaps`、`router:org_gaps`、`js:static/org-gaps.js`、`js:static/role-label.js` 歸 L1（`docs/platform/modules.json`）。
 - 不改任何既有介面、不加資料表、不加 migration。
+- **（併入）(next) — 2026-11-13（feat/getting-started-h10；「開始使用」7 步清單）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.getting_started`（`STEPS`、`STEP_IDS`、`STATE_KEY`、`MANUAL_DONE_IDS`、`BACKUP_HREF`、`BACKUP_OK_ACTIONS`、`EMAIL_TEST_ACTION`、`overview`、`set_step`）——每步的自動偵測（只讀）＋存在 `system_settings.getting_started_v1` 的人工旗標（略過／手動確認）。
+- 新端點（只限最高管理者）：`GET /api/getting-started`、`PUT /api/getting-started/steps/{step_id}`；新頁 `getting-started.html`、系統中心卡片 `getting-started`、系統中心進度卡 `static/getting-started-card.js`。不改既有設定值、欄位、API。
+- 測試：`tests/test_getting_started_2026_11_13.py`。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

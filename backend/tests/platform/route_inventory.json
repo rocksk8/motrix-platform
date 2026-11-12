@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 943,
-  "endpoints_api": 939,
-  "write_total": 506,
-  "write_api": 506,
-  "get_api": 433,
-  "distinct_paths_api": 795,
-  "write_with_body_api": 372,
-  "write_with_path_param_api": 360
+  "endpoints_total": 945,
+  "endpoints_api": 941,
+  "write_total": 507,
+  "write_api": 507,
+  "get_api": 434,
+  "distinct_paths_api": 797,
+  "write_with_body_api": 373,
+  "write_with_path_param_api": 361
  },
  "select_star": {
   "modules": 288,
@@ -4731,6 +4731,16 @@
   "PUT /api/auth/preferences": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "GET /api/getting-started": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/getting-started/steps/{step_id}": {
+   "w": true,
+   "pp": 1,
    "body": true
   }
  }
