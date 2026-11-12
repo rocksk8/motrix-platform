@@ -1,5 +1,13 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-12（feat/external-login-hardening；外網登入強化：外網強制 TOTP＋單一帳號鎖定）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.external_access`（外網來源判定 `classify`、`enforced_roles`、`totp_required_for`、`internal_networks`、`external_hosts`…）與 `helpers.account_lock`（單一帳號鎖定 `check`／`record_failure`／`clear`／`unlock`／`list_locks`…）；`docs/platform/modules.json` 登記兩個 helper 單位。
+- 行為變更（安全，部署後生效；**上線備註**：既有正式機升級後，superadmin／admin／finance 三種角色從外網〔Cloudflare 隧道〕登入時若帳號尚未啟用 TOTP 會被拒絕〔403，提示先在公司內網啟用〕——升級前請先確認這三種角色的帳號已在內網啟用 TOTP，或到設定中心「外網登入防護」關閉總開關／取消該角色）：
+  - 外網強制兩步驟驗證：`routers/auth.py` 密碼登入／Passkey 登入在外網＋該角色被要求＋`totp_enabled=0` 時回 403；內網不變；`demo` 帳號不適用。設定中心新群組 `external_login`（總開關預設開、角色預設 superadmin／admin／finance；放寬方向走確認期間＋第二位最高管理者核准）。
+  - 單一帳號鎖定：同帳號不分 IP，滾動 30 分鐘內失敗 10 次 ⇒ 鎖 30 分鐘；預設只計外網失敗、只擋外網（內網仍可登入、內網成功登入會解鎖）；鎖定寫 `login_rate_limit`（鍵 `acct:<帳號>`）、稽核 `auth.account_locked`／`auth.account_unlocked`、呼叫 `auth_alert.on_lockout(scope="account")`。新增端點 `GET /api/auth/account-locks`、`POST /api/auth/account-locks/unlock`（超級管理員）。
+  - `routers/auth.py::_client_ip` 順便把「是否外網」記進 per-request 的 contextvar；`init_rate_limiting` 略過 `acct:` 列並呼叫 `account_lock.load_from_db`；`conftest.py` 每題重置帳號鎖表，並讓 TestClient 的對端 `"testclient"` 視為內網對端（正式規則下「判斷不出來＝外網」）。
+- 測試：`tests/test_external_login_hardening_2026_11_12.py`；文件 `docs/quick/security.md` §3.3d、`docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

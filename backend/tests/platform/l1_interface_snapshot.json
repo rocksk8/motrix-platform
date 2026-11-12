@@ -1,5 +1,5 @@
 {
- "core_version": "1.159",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -146,6 +146,22 @@
    "should_skip": "def(path)",
    "status_label": "def(status)",
    "status_ok": "def(status)"
+  },
+  "helper:account_lock": {
+   "DEFAULTS": "const",
+   "KEY_PREFIX": "const",
+   "SETTINGS_GROUP": "const",
+   "audit_event": "def(action, username, ip, detail, reason_code, status)",
+   "check": "def(username, external=…)",
+   "clear": "def(username, ip=…, by=…, reason=…, audit=…)",
+   "clear_failures": "def(username)",
+   "config": "def()",
+   "is_locked": "def(username, external=…, now=…)",
+   "list_locks": "def()",
+   "load_from_db": "def()",
+   "record_failure": "def(username, ip, external, source=…, now=…)",
+   "reset_for_tests": "def()",
+   "unlock": "def(username, by)"
   },
   "helper:alert_settings": {
    "DEFAULTS": "const",
@@ -838,6 +854,20 @@
    "render_csv_rows": "def(export_id, template, rows, user)",
    "render_rows": "def(export_id, template, rows, user)",
    "resolve": "def(export_id, conn=…)"
+  },
+  "helper:external_access": {
+   "DEFAULT_ENFORCED_ROLES": "const",
+   "DEFAULT_EXTERNAL_HOSTS": "const",
+   "DEFAULT_INTERNAL_NETWORKS": "const",
+   "ENFORCEABLE_ROLES": "const",
+   "INTERNAL_PEER_NAMES": "const",
+   "SETTINGS_GROUP": "const",
+   "classify": "def(request, ip=…)",
+   "enforced_roles": "def()",
+   "external_hosts": "def()",
+   "internal_networks": "def()",
+   "totp_refusal_message": "def()",
+   "totp_required_for": "def(role, username=…)"
   },
   "helper:field_catalog": {
    "API_GROUPS": "const",
