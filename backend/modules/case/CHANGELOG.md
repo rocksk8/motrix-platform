@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）
+## 1.0.219 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）
 - 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
 
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
