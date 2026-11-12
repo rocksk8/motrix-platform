@@ -1682,36 +1682,91 @@ _SERVER_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 _SERVER_LOG_KEEP_GENERATIONS = 5
 
 
+def _stdio_fd_of(path: str):
+    """本行程的 stdout／stderr 若**就是** `path` 這個檔（autostart.bat 的 `uvicorn … >> server.log 2>&1`），回那個 fd；否則回 None。
+    判斷用檔案身分（`os.path.samestat`），不比路徑字串。只用 `os`，沒有別的相依（測試會把這支的原始碼抽出來丟進子行程）。"""
+    try:
+        target = os.stat(path)
+    except OSError:
+        return None
+    for fd in (1, 2):
+        try:
+            if os.path.samestat(os.fstat(fd), target):
+                return fd
+        except OSError:
+            continue
+    return None
+
+
+def _truncate_log_in_place(path: str) -> str:
+    """把 `path` 原地清成 0 bytes；回 "stdio"（用本行程自己的 stdout／stderr handle 清）或 "open"（另開檔清）。失敗丟 OSError。
+
+    **為什麼不能一律另開檔 `open(path, "r+b")`（2026-11-13 根因，在這台 Windows 上實測）**：
+    `cmd.exe` 的 `>>` 重導向開檔時**不給寫入共用**（share mode＝只准別人讀）⇒ 任何別的 handle 想開寫入都被擋，
+    `open(r+b)`／`open(ab)` ⇒ `PermissionError: [Errno 13]`，`os.replace`／`os.remove` ⇒ `WinError 32`；**只有讀（`shutil.copy2`）可以**。
+    所以舊版 copytruncate 的「複製」那一步每次都成功、「清空」那一步每次都失敗（11-11 起每輪一次）。
+    只有**持有那個 handle 的行程自己**能清它：這支行程（uvicorn）的 fd 1／2 就是 cmd 開的那個 handle ⇒ `os.ftruncate(fd, 0)`。
+    ⚠️ 清了之後還要 `os.lseek(fd, 0, SEEK_SET)`：`>>` 的寫入位置是開檔時 seek 到的結尾、不是 O_APPEND，
+    不歸零的話下一筆會寫在舊的偏移量上，檔案前面補一大段 NUL（實測：清空後再寫一行，檔案 134 bytes 其中 64 個 NUL）。
+    這個 handle 是 cmd／uvicorn.exe 殼／uvicorn 子行程共用同一個檔案物件（繼承），位置是共用的，歸零一次三邊都生效。
+    不是自己的 stdout／stderr（開發機、測試、別的啟動方式）⇒ 照舊另開檔清；那種情況沒人用獨佔共用開著它。"""
+    fd = _stdio_fd_of(path)
+    if fd is not None:
+        import sys
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except Exception:                                        # noqa: BLE001  沒有可 flush 的串流（pythonw）不影響清空
+                pass
+        os.ftruncate(fd, 0)
+        os.lseek(fd, 0, os.SEEK_SET)
+        return "stdio"
+    with open(path, "r+b") as f:
+        f.truncate(0)
+    return "open"
+
+
+#: 清空失敗（別的行程獨佔著）時的警告節流：同一個檔最多每 24 小時講一次（輪替是每 2 小時叫一次，不要每次都刷 ERROR 與堆疊）
+_SERVER_LOG_ROTATE_WARN_AT: dict = {}
+
+
 def _rotate_server_log_if_large(
     log_path: str = None, max_bytes: int = _SERVER_LOG_MAX_BYTES, keep: int = _SERVER_LOG_KEEP_GENERATIONS,
 ) -> bool:
-    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 重導向寫入的
-    （見該檔），不是走 Python `logging` 的 handler——伺服器 24/7 常駐執行，這個
-    檔案完全沒有任何大小上限或輪替機制，長期下來可能把磁碟塞滿（正式機已經
-    踩過一次「表格無限增生塞爆每日備份」的類似事故，見 §12 module_versions
-    62萬列那次）。
+    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 寫入的（不是 Python `logging` 的 handler）——
+    伺服器 24/7 常駐，這個檔沒有大小上限就會長期塞滿磁碟（正式機已踩過「表格無限增生塞爆每日備份」的類似事故）。
 
-    **這裡刻意不能用改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1`
-    的健康檢查（`$logPath = ...` 底下的 `logs/server.log`）寫死讀這個檔名判斷部署是否
-    成功，換了輪替方式會讓那個檢查永遠讀到空/舊檔案，等於整套部署安全機制
-    悄悄失效。改用 copytruncate：先複製目前內容到 `logs/server.log.N`（保留最新
-    `keep` 份，最舊的直接刪除），再原地把 `server.log` truncate 成 0 bytes——
-    `autostart.bat` 裡 `>>` 開的是 append 模式 file handle，每次寫入永遠先 seek
-    到檔案目前結尾再寫，truncate 之後下一次寫入會正確從新的（空的）結尾開始，
-    不需要通知或重啟寫入端。
+    **不能改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1` 的健康檢查寫死讀 `logs/server.log`。
+    所以用 copytruncate：複製目前內容 ⇒ 原地清空 ⇒ 依序往後推一代（最舊的直接刪）。
 
-    **⚠️ 尚未在真正跑著 autostart.bat 的正式機上驗證過**：Windows 上 cmd.exe
-    的 `>>` 重導向所開檔案的共用權限（sharing flags）是否真的允許外部行程同時
-    truncate，這裡沒有實機測試過，只能確保「truncate 失敗就整個放棄、log 檔案
-    維持原樣繼續成長」（不會比現狀更糟，只是輪替沒生效），下次正式機套用後
-    要留意 `logs/server.log` 是否真的有被清空過，見 QUICK.md §12 2026-09-07 條目。
-    回傳是否真的執行了輪替（供呼叫端寫 log/測試斷言用）。"""
+    **2026-11-13 修正（11-11 起每 2 小時一次 PermissionError）**：根因見 `_truncate_log_in_place`——`cmd.exe` 的 `>>` 不給寫入共用，
+    外部另開檔清不掉，**只有本行程用自己的 stdout／stderr handle 才清得掉**。同時改了兩件舊版會變糟的事：
+    ① 舊版先「推世代＋複製到 .1」再清空，清空失敗時每輪都白複製一份（整個 50 MB）、並把更舊的世代一層層擠掉（最舊的被刪）⇒
+       現在先複製到暫存檔 `server.log.rotating`，**清空成功才推世代**；清空失敗 ⇒ 刪暫存檔、世代原封不動；
+    ② 失敗不再每輪 `logger.exception`（每 2 小時一大串堆疊）⇒ 每 24 小時一次 WARNING，講清楚是哪一步、什麼錯。
+    清空與複製之間寫進來的幾行會留在 .1 之外被清掉（copytruncate 的固有代價，與舊版相同）。
+    回傳是否真的執行了輪替（供呼叫端寫 log／測試斷言用）。"""
     path = log_path or _SERVER_LOG_PATH
+    tmp = f"{path}.rotating"
     try:
         if not os.path.exists(path) or os.path.getsize(path) < max_bytes:
             return False
         log_dir = os.path.dirname(path)
-        # 最舊的直接砍掉（.{keep} 若存在），其餘依序往後遞增一代
+        shutil.copy2(path, tmp)
+        try:
+            how = _truncate_log_in_place(path)
+        except OSError as e:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            now = time.time()
+            if now - _SERVER_LOG_ROTATE_WARN_AT.get(path, 0) >= 24 * 3600:
+                _SERVER_LOG_ROTATE_WARN_AT[path] = now
+                logger.warning("server.log 輪替沒成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示",
+                               type(e).__name__, e)
+            return False
+        # 清空成功：現在才推世代（最舊的 .{keep} 直接砍掉）
         oldest = f"{path}.{keep}"
         if os.path.exists(oldest):
             os.remove(oldest)
@@ -1719,12 +1774,9 @@ def _rotate_server_log_if_large(
             src = f"{path}.{gen}"
             if os.path.exists(src):
                 os.replace(src, f"{path}.{gen + 1}")
-        shutil.copy2(path, f"{path}.1")
-        # copytruncate：原地清空，而不是刪除/改名，讓仍持有 append handle 的
-        # 寫入端（autostart.bat 的 `>>`）下一次寫入自然從新的檔案結尾（0）開始
-        with open(path, "r+b") as f:
-            f.truncate(0)
-        logger.info("server.log rotated (was >= %d bytes), kept %d generation(s) under %s", max_bytes, keep, log_dir)
+        os.replace(tmp, f"{path}.1")
+        _SERVER_LOG_ROTATE_WARN_AT.pop(path, None)
+        logger.info("server.log rotated (was >= %d bytes; truncated via %s), kept %d generation(s) under %s", max_bytes, how, keep, log_dir)
         return True
     except Exception:
         logger.exception("_rotate_server_log_if_large failed — server.log 維持原樣未輪替")
