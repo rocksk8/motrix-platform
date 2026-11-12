@@ -100,29 +100,29 @@ _RESULT_ACT = "請登入系統查看單據目前狀態；如有疑問請洽簽�
 _RETURN_ACT = "請登入系統依退回說明修改內容後重新送審。"
 
 for _k, _n, _doc in (
-        ("approval_request", "報價單待審核", "報價單"),
-        ("shipping_submitted", "出貨單待審核", "出貨單"),
-        ("contractor_voucher_submitted", "承攬商匯款申請待審核", "承攬商匯款申請"),
-        ("invoice_voucher_submitted", "開票申請憑據待審核", "開票申請憑據"),
-        ("payment_request_submitted", "請款單待審核", "請款單"),
+        ("approval_request", "報價單待簽核", "報價單"),
+        ("shipping_submitted", "出貨單待簽核", "出貨單"),
+        ("contractor_voucher_submitted", "承攬商匯款申請待簽核", "承攬商匯款申請"),
+        ("invoice_voucher_submitted", "開票申請憑據待簽核", "開票申請憑據"),
+        ("payment_request_submitted", "請款單待簽核", "請款單"),
 ):
     register(_k, _n, _A, "none", "當層簽核人",
              "%s在您簽核之前不會進入下一個流程。" % _doc, _APPROVE_ACT)
 for _k, _n, _doc in (
-        ("next_tier", "報價單進入下一層審核", "報價單"),
-        ("shipping_next_tier", "出貨單進入下一層審核", "出貨單"),
-        ("contractor_voucher_next_tier", "承攬商匯款申請進入下一層審核", "承攬商匯款申請"),
-        ("invoice_voucher_next_tier", "開票申請憑據進入下一層審核", "開票申請憑據"),
-        ("payment_request_next_tier", "請款單進入下一層審核", "請款單"),
+        ("next_tier", "報價單進入下一層簽核", "報價單"),
+        ("shipping_next_tier", "出貨單進入下一層簽核", "出貨單"),
+        ("contractor_voucher_next_tier", "承攬商匯款申請進入下一層簽核", "承攬商匯款申請"),
+        ("invoice_voucher_next_tier", "開票申請憑據進入下一層簽核", "開票申請憑據"),
+        ("payment_request_next_tier", "請款單進入下一層簽核", "請款單"),
 ):
     register(_k, _n, _A, "none", "該層簽核人",
              "前一層已完成，%s在本層簽核之前不會繼續。" % _doc, _APPROVE_ACT)
-register("approved", "報價單審核完成", _A, "admins", "申請人",
+register("approved", "報價單簽核完成", _A, "admins", "申請人",
          "報價單已核准，可以對外提供。", _RESULT_ACT)
-for _k, _n in (("shipping_approved", "出貨單審核完成"),
-               ("contractor_voucher_approved", "承攬商匯款申請審核完成"),
-               ("invoice_voucher_approved", "開票申請憑據審核完成"),
-               ("payment_request_approved", "請款單審核完成")):
+for _k, _n in (("shipping_approved", "出貨單簽核完成"),
+               ("contractor_voucher_approved", "承攬商匯款申請簽核完成"),
+               ("invoice_voucher_approved", "開票申請憑據簽核完成"),
+               ("payment_request_approved", "請款單簽核完成")):
     register(_k, _n, _A, "none", "申請人", "單據已核准，進入後續作業。", _RESULT_ACT)
 for _k, _n in (("returned", "報價單退回修改"), ("shipping_returned", "出貨單退回修改"),
                ("contractor_voucher_returned", "承攬商匯款申請退回修改"),
@@ -131,21 +131,21 @@ for _k, _n in (("returned", "報價單退回修改"), ("shipping_returned", "出
     register(_k, _n, _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
 # 自訂模組（建構器）：單據簽核（提交／下一層／核准／退回）與「模組定義」送審審核（送審／核可／退回）
 for _k, _n, _ev, _imp in (
-        ("custom_record_submitted", "自訂模組單據待審核", "當層簽核人", "單據在您簽核之前不會進入下一個狀態。"),
-        ("custom_record_next_tier", "自訂模組單據進入下一層審核", "該層簽核人", "前一層已完成，單據在本層簽核之前不會繼續。"),
+        ("custom_record_submitted", "自訂模組單據待簽核", "當層簽核人", "單據在您簽核之前不會進入下一個狀態。"),
+        ("custom_record_next_tier", "自訂模組單據進入下一層簽核", "該層簽核人", "前一層已完成，單據在本層簽核之前不會繼續。"),
         ("custom_def_submitted", "自訂模組定義待審核", "模組審核人", "這一版模組定義在審核之前不會發布，新單據仍用現行版。")):
     register(_k, _n, _A, "none", _ev, _imp, _APPROVE_ACT)
-register("custom_record_approved", "自訂模組單據審核完成", _A, "none", "申請人", "單據已核准，進入後續狀態。", _RESULT_ACT)
+register("custom_record_approved", "自訂模組單據簽核完成", _A, "none", "申請人", "單據已核准，進入後續狀態。", _RESULT_ACT)
 register("custom_def_approved", "自訂模組定義審核完成", _A, "none", "送審人", "這一版模組定義已核可並發布。", _RESULT_ACT)
 register("custom_record_returned", "自訂模組單據退回修改", _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
 register("custom_def_returned", "自訂模組定義退回修改", _A, "none", "送審人", "這一版模組定義已退回，現行版不變。", "請登入系統，於模組建構器依退回原因修改草稿後重新送審。")
 register("resubmit_requester", "修改版報價單重新送審確認", _A, "none", "申請人",
          "修改版已重新進入簽核流程，原版本不再流轉。", _RESULT_ACT)
-register("bonus_submitted", "獎金分潤待審核", _A, "none", "輪到的簽核人（含代理人）",
+register("bonus_submitted", "獎金分潤待簽核", _A, "none", "輪到的簽核人（含代理人）",
          "獎金分潤在您簽核之前不會進入待發放。", _APPROVE_ACT + "（信中不含金額，請登入查看）")
 register("bonus_payout_ready", "獎金分潤核准待發放", _A, "none", "出納",
          "獎金分潤已核准，等待出納發放。", "請登入系統，於出納頁「獎金待發放」確認後標記已發放。（信中不含金額）")
-register("bonus_correction_submitted", "獎金更正單待審核", _A, "none", "輪到的簽核人（含代理人）",
+register("bonus_correction_submitted", "獎金更正單待簽核", _A, "none", "輪到的簽核人（含代理人）",
          "已發放獎金的更正在您簽核之前不會生效（不會沖轉傳票、不會補發）。", _APPROVE_ACT + "（信中不含金額，請登入查看）")
 register("bonus_correction_approved", "獎金更正單核准", _A, "none", "申請人；有補發時含出納",
          "更正已生效：沖轉與重開應付的傳票草稿已產生；有補發時等待出納發放。",
@@ -160,8 +160,8 @@ register("dev_case_relink_request", "業務開發案件連結異動申請", _A, 
          "案件與報價單的連結在核准之前維持原狀。", "請登入系統，於業務開發頁確認後核准或駁回。")
 register("case_close_blocked", "結案被防呆機制擋下", _A, "superadmins", "待處理的承辦人",
          "案件在前置條件完成之前無法結案。", "請依信中列出的未完成項目逐項處理後再結案。")
-register("case_change_requested", "已結案案件變更待審核", _A, "superadmins", "",
-         "變更在審核通過之前不會套用到已結案案件。", "請登入系統，於案件頁審核變更內容後套用或退回。")
+register("case_change_requested", "已結案案件變更待簽核", _A, "superadmins", "",
+         "變更在簽核通過之前不會套用到已結案案件。", "請登入系統，於案件頁簽核變更內容後套用或退回。")
 
 register("daily_task_assigned", "工作事項指派", _B, "none", "負責人",
          "您有新的工作事項需要處理。", "請登入系統查看工作事項內容與期限。")

@@ -552,20 +552,20 @@ def _tpl_fields(event: str, ctx: dict) -> dict:
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list) -> None:
     """新報價/改版送審 → 通知當層簽核人"""
     # LINE 獨立通道（2026-11-13）：不看 Email、不看信件退訂；信件與 LINE 各自失敗互不影響。收件人規格見 docs/platform/plans/LINE-EVENTS-EXPANSION-PROPOSAL.md v2-4。
-    _line_event("approval_request", usernames=approver_usernames, title="報價單待審核", rows=[("報價單號", quote_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
+    _line_event("approval_request", usernames=approver_usernames, title="報價單待簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "approval_request")
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
     _tf = _tpl_fields("approval:submitted", {"單號": quote_no, "對象": customer})          # S-X3：旗標關／沒有範本 ⇒ {} ⇒ 下面全部走今天的字
     html = _build_html("approval_request", 
-        _tf.get("title", "報價單簽核申請"), _tf.get("badge", "待您審核"), "#2F6FD6",
+        _tf.get("title", "報價單簽核申請"), _tf.get("badge", "待您簽核"), "#2F6FD6",
         [("報價單號", quote_no), ("客戶名稱", customer)],
         quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。"),
-        button_text=_tf.get("button", "前往審核報價單"),
+        intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成簽核作業。"),
+        button_text=_tf.get("button", "前往簽核報價單"),
     )
-    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
+    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待簽核：{quote_no}（{customer}）")), html)
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
@@ -578,33 +578,33 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
         return
     _tf = _tpl_fields("approval:next_tier", {"單號": quote_no, "對象": customer, "層": tier_no, "總層": total_tiers})
     html = _build_html("next_tier", 
-        _tf.get("title", "報價單簽核流程通知"), _tf.get("badge", "輪到您審核"), "#2F6FD6",
+        _tf.get("title", "報價單簽核流程通知"), _tf.get("badge", "輪到您簽核"), "#2F6FD6",
         [("報價單號", quote_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         quote_no, _base_url(),
-        intro=_tf.get("intro", f"您好，前層審核已完成，報價單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。"),
-        button_text=_tf.get("button", "前往審核報價單"),
+        intro=_tf.get("intro", f"您好，前層簽核已完成，報價單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。"),
+        button_text=_tf.get("button", "前往簽核報價單"),
     )
-    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html)
+    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單簽核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html)
 
 
 def notify_approved(quote_no: str, customer: str,
                     approved_by: str, requester_username: str) -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
-    _line_event("approved", usernames=[requester_username], to_group=True, title="報價單審核完成", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("最終審核人", approved_by)], reason="已核准")
+    _line_event("approved", usernames=[requester_username], to_group=True, title="報價單簽核完成", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
     to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
         return
     _tf = _tpl_fields("approval:approved", {"單號": quote_no, "對象": customer, "最終審核人": approved_by})
     html = _build_html("approved", 
-        _tf.get("title", "報價單審核完成"), _tf.get("badge", "全數通過"), "#16A34A",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("最終審核人", approved_by)],
+        _tf.get("title", "報價單簽核完成"), _tf.get("badge", "全數通過"), "#16A34A",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)],
         quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。"),
+        intro=_tf.get("intro", "您好，以下報價單已完成全部層級簽核，正式生效。感謝各位簽核人員配合。"),
         button_text=_tf.get("button", "前往查看報價單"),
     )
-    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單審核完成：{quote_no}（{customer}）")), html)
+    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單簽核完成：{quote_no}（{customer}）")), html)
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
@@ -620,7 +620,7 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
         _tf.get("title", "報價單退回修改通知"), _tf.get("badge", "請修改後重新送審"), "#DC2626",
         [("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)],
         new_quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，您提交的報價單經審核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"),
+        intro=_tf.get("intro", "您好，您提交的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"),
         note=note,
         button_text=_tf.get("button", "前往修改報價單"),
     )
@@ -629,20 +629,20 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
     """出貨單送審 → 通知當層簽核人"""
-    _line_event("shipping_submitted", usernames=approver_usernames, title="出貨單待審核", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
+    _line_event("shipping_submitted", usernames=approver_usernames, title="出貨單待簽核", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "shipping_submitted")
     if not to:
         logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_submitted", 
-        "出貨單簽核申請", "待您審核", "#2F6FD6",
+        "出貨單簽核申請", "待您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核出貨單",
+        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核出貨單",
     )
-    _async_send(to, _mt.subject("shipping_submitted", f"出貨單待審核：{note_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("shipping_submitted", f"出貨單待簽核：{note_no}（{customer}）"), html)
 
 
 def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
@@ -656,29 +656,29 @@ def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_next_tier", 
-        "出貨單簽核流程通知", "輪到您審核", "#2F6FD6",
+        "出貨單簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，出貨單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核出貨單",
+        intro=f"您好，前層簽核已完成，出貨單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核出貨單",
     )
-    _async_send(to, _mt.subject("shipping_next_tier", f"出貨單審核通知（第 {tier_no}/{total_tiers} 層）：{note_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("shipping_next_tier", f"出貨單簽核通知（第 {tier_no}/{total_tiers} 層）：{note_no}（{customer}）"), html)
 
 
 def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requester_username: str) -> None:
     """出貨單全員簽核完成 → 通知申請人"""
-    _line_event("shipping_approved", usernames=[requester_username], title="出貨單審核完成", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="已核准")
+    _line_event("shipping_approved", usernames=[requester_username], title="出貨單簽核完成", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "shipping_approved")
     if not to:
         logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_approved", 
-        "出貨單審核完成", "已核准", "#16A34A",
+        "出貨單簽核完成", "已核准", "#16A34A",
         [("出貨單號", note_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下出貨單已完成審核並核准。",
+        intro="您好，以下出貨單已完成簽核並核准。",
         button_text="前往查看出貨單",
     )
     _async_send(to, _mt.subject("shipping_approved", f"出貨單已核准：{note_no}（{customer}）"), html)
@@ -696,7 +696,7 @@ def notify_shipping_returned(note_no: str, customer: str, note: str, requester_u
         "出貨單退回通知", "請修改後重新送審", "#DC2626",
         [("出貨單號", note_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的出貨單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的出貨單經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改出貨單",
     )
@@ -705,7 +705,7 @@ def notify_shipping_returned(note_no: str, customer: str, note: str, requester_u
 
 def notify_contractor_voucher_submitted(voucher_no: str, vendor_name: str, approver_usernames: list) -> None:
     """承攬商匯款申請送審 → 通知當層簽核人"""
-    _line_event("contractor_voucher_submitted", usernames=approver_usernames, title="承攬商匯款申請待審核", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="輪到您簽核，請登入系統處理")
+    _line_event("contractor_voucher_submitted", usernames=approver_usernames, title="承攬商匯款申請待簽核", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "contractor_voucher_submitted")
     if not to:
         logger.warning("notify_contractor_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -713,13 +713,13 @@ def notify_contractor_voucher_submitted(voucher_no: str, vendor_name: str, appro
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_submitted", 
-        "承攬商匯款申請簽核申請", "待您審核", "#2F6FD6",
+        "承攬商匯款申請簽核申請", "待您簽核", "#2F6FD6",
         [("申請單號", voucher_no), ("承攬商", vendor_name)],
         "", page,
-        intro="您好，以下承攬商匯款申請已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下承攬商匯款申請已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("contractor_voucher_submitted", f"承攬商匯款申請待審核：{voucher_no}（{vendor_name}）"), html)
+    _async_send(to, _mt.subject("contractor_voucher_submitted", f"承攬商匯款申請待簽核：{voucher_no}（{vendor_name}）"), html)
 
 
 def notify_contractor_voucher_next_tier(voucher_no: str, vendor_name: str, tier_no: int,
@@ -733,20 +733,20 @@ def notify_contractor_voucher_next_tier(voucher_no: str, vendor_name: str, tier_
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_next_tier", 
-        "承攬商匯款申請簽核流程通知", "輪到您審核", "#2F6FD6",
+        "承攬商匯款申請簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("申請單號", voucher_no), ("承攬商", vendor_name),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，承攬商匯款申請現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，承攬商匯款申請現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("contractor_voucher_next_tier", f"承攬商匯款申請審核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{vendor_name}）"), html)
+    _async_send(to, _mt.subject("contractor_voucher_next_tier", f"承攬商匯款申請簽核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{vendor_name}）"), html)
 
 
 def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approved_by: str,
                                        requester_username: str) -> None:
     """承攬商匯款申請全員簽核完成 → 通知申請人"""
-    _line_event("contractor_voucher_approved", usernames=[requester_username], title="承攬商匯款申請審核完成", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="已核准")
+    _line_event("contractor_voucher_approved", usernames=[requester_username], title="承攬商匯款申請簽核完成", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="已核准")
     to = _lookup_emails([requester_username], "contractor_voucher_approved")
     if not to:
         logger.warning("notify_contractor_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -754,10 +754,10 @@ def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approv
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_approved", 
-        "承攬商匯款申請審核完成", "已核准", "#16A34A",
+        "承攬商匯款申請簽核完成", "已核准", "#16A34A",
         [("申請單號", voucher_no), ("承攬商", vendor_name), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下承攬商匯款申請已完成審核並核准，可提供財務單位辦理匯款。",
+        intro="您好，以下承攬商匯款申請已完成簽核並核准，可提供財務單位辦理匯款。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("contractor_voucher_approved", f"承攬商匯款申請已核准：{voucher_no}（{vendor_name}）"), html)
@@ -777,7 +777,7 @@ def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: 
         "承攬商匯款申請退回通知", "請修改後重新送審", "#DC2626",
         [("申請單號", voucher_no), ("承攬商", vendor_name)],
         "", page,
-        intro="您好，您送出的承攬商匯款申請經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的承攬商匯款申請經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -786,7 +786,7 @@ def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: 
 
 def notify_invoice_voucher_submitted(voucher_no: str, customer: str, approver_usernames: list) -> None:
     """開票申請憑據送審 → 通知當層簽核人"""
-    _line_event("invoice_voucher_submitted", usernames=approver_usernames, title="開票申請憑據待審核", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
+    _line_event("invoice_voucher_submitted", usernames=approver_usernames, title="開票申請憑據待簽核", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "invoice_voucher_submitted")
     if not to:
         logger.warning("notify_invoice_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -794,13 +794,13 @@ def notify_invoice_voucher_submitted(voucher_no: str, customer: str, approver_us
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_submitted", 
-        "開票申請憑據簽核申請", "待您審核", "#2F6FD6",
+        "開票申請憑據簽核申請", "待您簽核", "#2F6FD6",
         [("憑據單號", voucher_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下開票申請憑據已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下開票申請憑據已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("invoice_voucher_submitted", f"開票申請憑據待審核：{voucher_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("invoice_voucher_submitted", f"開票申請憑據待簽核：{voucher_no}（{customer}）"), html)
 
 
 def notify_invoice_voucher_next_tier(voucher_no: str, customer: str, tier_no: int,
@@ -814,20 +814,20 @@ def notify_invoice_voucher_next_tier(voucher_no: str, customer: str, tier_no: in
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_next_tier", 
-        "開票申請憑據簽核流程通知", "輪到您審核", "#2F6FD6",
+        "開票申請憑據簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("憑據單號", voucher_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，開票申請憑據現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，開票申請憑據現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("invoice_voucher_next_tier", f"開票申請憑據審核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("invoice_voucher_next_tier", f"開票申請憑據簽核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{customer}）"), html)
 
 
 def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by: str,
                                     requester_username: str) -> None:
     """開票申請憑據全員簽核完成 → 通知申請人"""
-    _line_event("invoice_voucher_approved", usernames=[requester_username], title="開票申請憑據審核完成", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="已核准")
+    _line_event("invoice_voucher_approved", usernames=[requester_username], title="開票申請憑據簽核完成", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "invoice_voucher_approved")
     if not to:
         logger.warning("notify_invoice_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -835,10 +835,10 @@ def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by:
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_approved", 
-        "開票申請憑據審核完成", "已核准", "#16A34A",
+        "開票申請憑據簽核完成", "已核准", "#16A34A",
         [("憑據單號", voucher_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下開票申請憑據已完成審核並核准，可提供財務單位辦理開立發票。",
+        intro="您好，以下開票申請憑據已完成簽核並核准，可提供財務單位辦理開立發票。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("invoice_voucher_approved", f"開票申請憑據已核准：{voucher_no}（{customer}）"), html)
@@ -858,7 +858,7 @@ def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
         "開票申請憑據退回通知", "請修改後重新送審", "#DC2626",
         [("憑據單號", voucher_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的開票申請憑據經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的開票申請憑據經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -867,7 +867,7 @@ def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
 
 def notify_payment_request_submitted(request_no: str, customer: str, approver_usernames: list) -> None:
     """請款單送審 → 通知當層簽核人"""
-    _line_event("payment_request_submitted", usernames=approver_usernames, title="請款單待審核", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
+    _line_event("payment_request_submitted", usernames=approver_usernames, title="請款單待簽核", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "payment_request_submitted")
     if not to:
         logger.warning("notify_payment_request_submitted: 簽核人 %s 皆無設定 email（request_no=%r）",
@@ -875,13 +875,13 @@ def notify_payment_request_submitted(request_no: str, customer: str, approver_us
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_submitted", 
-        "請款單簽核申請", "待您審核", "#2F6FD6",
+        "請款單簽核申請", "待您簽核", "#2F6FD6",
         [("請款單號", request_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("payment_request_submitted", f"請款單待審核：{request_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("payment_request_submitted", f"請款單待簽核：{request_no}（{customer}）"), html)
 
 
 def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: int,
@@ -895,20 +895,20 @@ def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: in
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_next_tier", 
-        "請款單簽核流程通知", "輪到您審核", "#2F6FD6",
+        "請款單簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("請款單號", request_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，請款單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，請款單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("payment_request_next_tier", f"請款單審核通知（第 {tier_no}/{total_tiers} 層）：{request_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("payment_request_next_tier", f"請款單簽核通知（第 {tier_no}/{total_tiers} 層）：{request_no}（{customer}）"), html)
 
 
 def notify_payment_request_approved(request_no: str, customer: str, approved_by: str,
                                     requester_username: str) -> None:
     """請款單全員簽核完成 → 通知申請人"""
-    _line_event("payment_request_approved", usernames=[requester_username], title="請款單審核完成", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="已核准")
+    _line_event("payment_request_approved", usernames=[requester_username], title="請款單簽核完成", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "payment_request_approved")
     if not to:
         logger.warning("notify_payment_request_approved: 申請人 %r 無設定 email（request_no=%r）",
@@ -916,10 +916,10 @@ def notify_payment_request_approved(request_no: str, customer: str, approved_by:
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_approved", 
-        "請款單審核完成", "已核准", "#16A34A",
+        "請款單簽核完成", "已核准", "#16A34A",
         [("請款單號", request_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下請款單已完成審核並核准。",
+        intro="您好，以下請款單已完成簽核並核准。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("payment_request_approved", f"請款單已核准：{request_no}（{customer}）"), html)
@@ -939,7 +939,7 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
         "請款單退回通知", "請修改後重新送審", "#DC2626",
         [("請款單號", request_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的請款單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的請款單經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -1084,15 +1084,15 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
 
 def notify_custom_record_submitted(module_name: str, record_no: str, approver_usernames: list, module_key: str = "") -> None:
     """自訂模組單據送審 → 通知當層簽核人"""
-    _line_event("custom_record_submitted", usernames=approver_usernames, title=f"{module_name}待審核", rows=[("單據", module_name), ("單號", record_no)], reason="輪到您簽核，請登入系統處理")
+    _line_event("custom_record_submitted", usernames=approver_usernames, title=f"{module_name}待簽核", rows=[("單據", module_name), ("單號", record_no)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "custom_record_submitted")
     if not to:
         logger.warning("notify_custom_record_submitted: 簽核人 %s 皆無設定 email（record_no=%r）", approver_usernames, record_no)
         return
-    html = _build_html("custom_record_submitted", f"{module_name}簽核申請", "待您審核", "#2F6FD6",
+    html = _build_html("custom_record_submitted", f"{module_name}簽核申請", "待您簽核", "#2F6FD6",
                        [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，以下{module_name}已進入簽核流程，敬請於系統中完成審核作業。", button_text="前往審核")
-    _async_send(to, _mt.subject("custom_record_submitted", f"{module_name}待審核：{record_no}"), html)
+                       intro=f"您好，以下{module_name}已進入簽核流程，敬請於系統中完成簽核作業。", button_text="前往簽核")
+    _async_send(to, _mt.subject("custom_record_submitted", f"{module_name}待簽核：{record_no}"), html)
 
 
 def notify_custom_record_next_tier(module_name: str, record_no: str, tier_no: int, total_tiers: int,
@@ -1103,23 +1103,23 @@ def notify_custom_record_next_tier(module_name: str, record_no: str, tier_no: in
     if not to:
         logger.warning("notify_custom_record_next_tier: 第 %d 層簽核人 %s 皆無設定 email（record_no=%r）", tier_no, approver_usernames, record_no)
         return
-    html = _build_html("custom_record_next_tier", f"{module_name}簽核流程通知", "輪到您審核", "#2F6FD6",
-                       [("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+    html = _build_html("custom_record_next_tier", f"{module_name}簽核流程通知", "輪到您簽核", "#2F6FD6",
+                       [("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
                        "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，前層審核已完成，{module_name}現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。", button_text="前往審核")
-    _async_send(to, _mt.subject("custom_record_next_tier", f"{module_name}審核通知（第 {tier_no}/{total_tiers} 層）：{record_no}"), html)
+                       intro=f"您好，前層簽核已完成，{module_name}現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。", button_text="前往簽核")
+    _async_send(to, _mt.subject("custom_record_next_tier", f"{module_name}簽核通知（第 {tier_no}/{total_tiers} 層）：{record_no}"), html)
 
 
 def notify_custom_record_approved(module_name: str, record_no: str, approved_by: str, requester_username: str, module_key: str = "") -> None:
     """自訂模組單據全員簽核完成 → 通知申請人"""
-    _line_event("custom_record_approved", usernames=[requester_username], title=f"{module_name}審核完成", rows=[("單據", module_name), ("單號", record_no), ("核准人", approved_by)], reason="已核准")
+    _line_event("custom_record_approved", usernames=[requester_username], title=f"{module_name}簽核完成", rows=[("單據", module_name), ("單號", record_no), ("核准人", approved_by)], reason="已核准")
     to = _lookup_emails([requester_username], "custom_record_approved")
     if not to:
         logger.warning("notify_custom_record_approved: 申請人 %r 無設定 email（record_no=%r）", requester_username, record_no)
         return
-    html = _build_html("custom_record_approved", f"{module_name}審核完成", "已核准", "#16A34A",
+    html = _build_html("custom_record_approved", f"{module_name}簽核完成", "已核准", "#16A34A",
                        [("單據", module_name), ("單號", record_no), ("核准人", approved_by)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，以下{module_name}已完成審核並核准。", button_text="前往查看")
+                       intro=f"您好，以下{module_name}已完成簽核並核准。", button_text="前往查看")
     _async_send(to, _mt.subject("custom_record_approved", f"{module_name}已核准：{record_no}"), html)
 
 
@@ -1132,7 +1132,7 @@ def notify_custom_record_returned(module_name: str, record_no: str, note: str, r
         return
     html = _build_html("custom_record_returned", f"{module_name}退回通知", "請修改後重新送審", "#DC2626",
                        [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，您送出的{module_name}經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+                       intro=f"您好，您送出的{module_name}經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
                        note=note, button_text="前往修改")
     _async_send(to, _mt.subject("custom_record_returned", f"{module_name}已退回：{record_no}"), html)
 
@@ -1186,13 +1186,13 @@ def notify_bonus_submitted(quote_no: str, customer: str, approver_usernames: lis
         return
     page = f"{_base_url()}/pages/bonus.html?q={quote_no}"
     html = _build_html("bonus_submitted", 
-        "獎金分潤簽核申請", "待您審核", "#2F6FD6",
+        "獎金分潤簽核申請", "待您簽核", "#2F6FD6",
         [("案件單號", quote_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下案件的獎金分潤已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
-        button_text="前往審核",
+        intro="您好，以下案件的獎金分潤已送審，敬請於系統中完成簽核作業（金額請登入後查看）。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("bonus_submitted", f"獎金分潤待審核：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("bonus_submitted", f"獎金分潤待簽核：{quote_no}（{customer}）"), html)
 
 
 def notify_bonus_payout_ready(quote_no: str, customer: str, cashier_usernames: list) -> None:
@@ -1219,12 +1219,12 @@ def notify_bonus_correction_submitted(corr_no: str, quote_no: str, approver_user
     if not to:
         logger.warning("notify_bonus_correction_submitted: 簽核人 %s 皆無設定 email（corr_no=%r）", approver_usernames, corr_no)
         return
-    html = _build_html("bonus_correction_submitted", "獎金更正單簽核申請", "待您審核", "#2F6FD6",
+    html = _build_html("bonus_correction_submitted", "獎金更正單簽核申請", "待您簽核", "#2F6FD6",
                        [("更正單", corr_no), ("原案件單號", quote_no)], "",
                        f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
-                       intro="您好，以下已發放獎金分潤的更正單已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
-                       button_text="前往審核")
-    _async_send(to, _mt.subject("bonus_correction_submitted", f"獎金更正單待審核：{corr_no}"), html)
+                       intro="您好，以下已發放獎金分潤的更正單已送審，敬請於系統中完成簽核作業（金額請登入後查看）。",
+                       button_text="前往簽核")
+    _async_send(to, _mt.subject("bonus_correction_submitted", f"獎金更正單待簽核：{corr_no}"), html)
 
 
 def notify_bonus_correction_approved(corr_no: str, quote_no: str, usernames: list, needs_payout: bool) -> None:
@@ -1250,7 +1250,7 @@ def notify_bonus_correction_returned(corr_no: str, quote_no: str, usernames: lis
     html = _build_html("bonus_correction_returned", "獎金更正單已駁回", "請修改後重新送審", "#DC2626",
                        [("更正單", corr_no), ("原案件單號", quote_no)], "",
                        f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
-                       intro="您好，您送出的獎金更正單經審核後已駁回，請參閱下方原因修改後重新送審。",
+                       intro="您好，您送出的獎金更正單經簽核後已駁回，請參閱下方原因修改後重新送審。",
                        note=reason, button_text="前往修改")
     _async_send(to, _mt.subject("bonus_correction_returned", f"獎金更正單已駁回：{corr_no}"), html)
 
@@ -1294,7 +1294,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
         #   ② 站內通知的收件人（`daily_tasks.py` 的 `notify_targets`）
         # ☠️ 順手把參數刪掉的話，**管理員會安靜地不再收到信**。
         # 🔑 文案與收件人是兩件事，而它們現在共用同一個旗標。
-        intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。",
+        intro=f"您好，以下{doc_type_label}已送出簽核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成簽核作業。",
         button_text="前往簽核佇列",
     )
     # 🔴 **同步寄，並把結果回給呼叫端。**
@@ -1322,9 +1322,9 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
     html = _build_html("resubmit_requester", 
         "修改版報價單已送審", "重新送審確認", "#2F6FD6",
         [("修改版單號", new_quote_no), ("原始單號", original_quote_no),
-         ("客戶名稱", customer), ("待審核人員", approver_str)],
+         ("客戶名稱", customer), ("待簽核人員", approver_str)],
         new_quote_no, _base_url(),
-        intro="您好，您的修改版報價單已成功送出，目前正等待簽核人員審核，請耐心等候通知。",
+        intro="您好，您的修改版報價單已成功送出，目前正等待簽核人員簽核，請耐心等候通知。",
         button_text="前往查看報價單",
     )
     _async_send(to, _mt.subject("resubmit_requester", f"修改版報價單已送審：{new_quote_no}（{customer}）"), html)
@@ -1366,10 +1366,10 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
     if reason and reason.strip():
         rows.append(("刪除原因", reason.strip()))
     html = _build_html("dev_case_delete_request", 
-        "業務開發案件刪除申請", "請盡速審核", "#DC2626",
+        "業務開發案件刪除申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統審核。",
-        button_text="前往審核",
+        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統簽核。",
+        button_text="前往簽核",
     )
     _async_send(to, _mt.subject("dev_case_delete_request", f"業務開發案件刪除申請：{case_name}"), html)
 
@@ -1388,10 +1388,10 @@ def notify_dev_case_relink_request(case_id: int, case_name: str, requester_displ
     if reason and reason.strip():
         rows.append(("申請原因", reason.strip()))
     html = _build_html("dev_case_relink_request", 
-        "業務開發案件報價單連結異動申請", "請盡速審核", "#DC2626",
+        "業務開發案件報價單連結異動申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統審核。",
-        button_text="前往審核",
+        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統簽核。",
+        button_text="前往簽核",
     )
     _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
 
@@ -1906,7 +1906,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""
-    _line_event("case_change_requested", to_group=True, title="已結案案件變更待審核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統審核")
+    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
     to = _superadmin_emails("case_change_requested")
     if not to:
         logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1914,14 +1914,14 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     queue_page = f"{_base_url()}/pages/approval-queue.html"
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_change_requested", 
-        "已結案案件變更待審核", "待審核", "#7C3AED",
+        "已結案案件變更待簽核", "待簽核", "#7C3AED",
         [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
-        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列審核後才會套用。",
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列簽核後才會套用。",
         button_text="前往簽核佇列",
     )
-    _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待審核：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待簽核：{quote_no}（{customer}）"), html)
 
 
 # ── Monthly report ────────────────────────────────────────────────────────────

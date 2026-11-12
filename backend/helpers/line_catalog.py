@@ -40,7 +40,7 @@ LINE_ONLY_EVENTS = {
                                   "line_group": None, "kind": "line_only"},
     "dev_log_directive_reply": {"name": "業務開發記錄批示被回覆", "group": "業務開發", "mail_key": "dev_log_directive",
                                 "line_group": None, "kind": "line_only"},
-    "dispatch_file_delete_request": {"name": "承攬商報價單附件刪除申請待審核（當層簽核人）", "group": "承攬商", "mail_key": "dispatch_submitted",
+    "dispatch_file_delete_request": {"name": "承攬商報價單附件刪除申請待簽核（當層簽核人）", "group": "承攬商", "mail_key": "dispatch_submitted",
                                      "line_group": None, "kind": "line_only"},
     "crm_case_created": {"name": "業務開發：新增案件", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_case_status": {"name": "業務開發：案件狀態（階段）變更", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
@@ -51,12 +51,12 @@ LINE_ONLY_EVENTS = {
 }
 
 #: 分組顯示順序（使用者優先順序：簽核 → 指定人員／業務開發 → 其餘）
-GROUP_ORDER = ("報價單與審核", "出貨單", "請款與開票", "承攬商", "費用與完工", "材料申請", "會計", "自訂模組",
+GROUP_ORDER = ("報價單與簽核", "出貨單", "請款與開票", "承攬商", "費用與完工", "材料申請", "會計", "自訂模組",
                "業務開發", "工作事項", "案件管理", "財務提醒", "標案雷達", "系統告警", "通知與報表", "其他")
 
 #: (分組, 完全相同的 key, key 前綴)；由上往下第一個符合的為準
 _GROUP_RULES = (
-    ("報價單與審核", ("approval_request", "next_tier", "approved", "returned", "resubmit_requester", "approval_review_edit", "approval_reminder"), ()),
+    ("報價單與簽核", ("approval_request", "next_tier", "approved", "returned", "resubmit_requester", "approval_review_edit", "approval_reminder"), ()),
     ("出貨單", (), ("shipping_",)),
     ("請款與開票", (), ("payment_request_", "invoice_voucher_")),
     ("承攬商", (), ("contractor_voucher_", "dispatch_")),

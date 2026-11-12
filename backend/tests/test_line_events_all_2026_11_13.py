@@ -147,7 +147,7 @@ def test_every_wired_event_has_a_group_and_a_valid_priority(env):
     assert set(cat.group_of(k) for k in L.WIRED_EVENTS) <= set(cat.GROUP_ORDER)
     groups = [cat.group_of(k) for k in L.WIRED_EVENTS]
     assert groups == sorted(groups, key=cat.GROUP_ORDER.index), "清單依分組順序排（簽核優先）"
-    assert cat.GROUP_ORDER.index("報價單與審核") < cat.GROUP_ORDER.index("業務開發") < cat.GROUP_ORDER.index("系統告警")
+    assert cat.GROUP_ORDER.index("報價單與簽核") < cat.GROUP_ORDER.index("業務開發") < cat.GROUP_ORDER.index("系統告警")
     for k in L.WIRED_EVENTS:
         assert L.event_spec(k)["priority"] in ("critical", "normal"), k
 
@@ -716,7 +716,7 @@ def test_personal_prefs_are_grouped_and_include_events_where_i_was_picked(client
     L.set_event_roles("shipping_submitted", ["admin"])                 # dan(engineer) 角色不在允許清單 → 本來看不到
     v = lr.prefs_view("dan", "engineer")
     assert [e["key"] for e in v] == ["approval_request", "dev_case_unassigned"]
-    assert [e["group"] for e in v] == ["報價單與審核", "業務開發"] and v[1]["kind"] == "line_only"
+    assert [e["group"] for e in v] == ["報價單與簽核", "業務開發"] and v[1]["kind"] == "line_only"
     L.set_audience("shipping_submitted", "business_plus", [], ["dan"])    # 管理員指定了 dan：他要能在自己的頁面看到並關掉
     assert [e["key"] for e in lr.prefs_view("dan", "engineer")] == ["approval_request", "shipping_submitted", "dev_case_unassigned"]
     lr.set_muted("dan", "shipping_submitted", True, role="engineer")

@@ -221,7 +221,7 @@ def test_prefs_view_lists_only_company_enabled_and_role_allowed(env):
     assert names("admin") == [EV]
     lr.set_muted("amy", EV, True)
     e = lr.prefs_view("amy", "admin")[0]
-    assert e == {"key": EV, "name": e["name"], "enabled": False, "group": "報價單與審核", "kind": "mail"}
+    assert e == {"key": EV, "name": e["name"], "enabled": False, "group": "報價單與簽核", "kind": "mail"}
 
 
 # ── ⑤ notify_users 整合 ───────────────────────────────────────────────────

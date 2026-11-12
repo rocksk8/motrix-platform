@@ -56,9 +56,9 @@ def test_groups_collapse_and_show_counts_tags_and_priority(live_server, make_use
     L.set_event("approval_request", True)
     page = _open(live_server, make_user, new_page, login_as, "e2e_ev1")
     head = lambda g: page.locator("[data-testid='line-group-head-%s']" % g)          # noqa: E731
-    assert head("報價單與審核").get_attribute("aria-expanded") == "true", "第一組（簽核）預設展開"
+    assert head("報價單與簽核").get_attribute("aria-expanded") == "true", "第一組（簽核）預設展開"
     assert head("業務開發").get_attribute("aria-expanded") == "false"
-    assert page.locator("[data-testid='line-group-count-報價單與審核']").inner_text().startswith("已開 1／共 ")
+    assert page.locator("[data-testid='line-group-count-報價單與簽核']").inner_text().startswith("已開 1／共 ")
     assert page.locator("#chk-line-ev-approval_request").is_checked()
     assert page.locator("#chk-line-ev-dev_case_unassigned").count() == 0, "收合的組不渲染"
     head("業務開發").click()

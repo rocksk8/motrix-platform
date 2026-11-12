@@ -146,7 +146,7 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     assert evs["auth_lockout"]["name"] == "登入失敗鎖定告警"
     assert not any(e["enabled"] for e in evs.values()) and all(e["roles"] is None for e in evs.values())
     assert not any(k.startswith(("bonus_", "payslip_")) for k in evs) and "line_quota_warning" not in evs
-    assert g.pop("event_groups")[0] == "報價單與審核"                    # 設定頁依模組分組（簽核優先）
+    assert g.pop("event_groups")[0] == "報價單與簽核"                    # 設定頁依模組分組（簽核優先）
     assert g.pop("role_choices") == ["superadmin", "admin", "sales", "engineer", "viewer", "finance"]         # 收件人角色（2026-11-12）
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
