@@ -307,18 +307,18 @@ def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
                     written.append(("part.create", part_no, f["name"]))
                 elif p["action"] == "update":
                     t = p["target"]
-                    sets, params = [], []
-                    for key, col in _PART_COLS:
-                        if key in f:
-                            sets.append(col + "=?")
-                            params.append(f[key])
+                    # 固定的 UPDATE（沒給的欄位傳 NULL ⇒ COALESCE 沿用現值）：不組動態 SQL 字串
+                    brand_new = None
                     if p["brandName"] or p["brandModel"]:               # 廠牌、型號各自獨立：沒給的那一半沿用既有值
                         bn, model = _split_brand(t["brand"])
-                        sets.append("brand=?")
-                        params.append(" / ".join(x for x in (p["brandName"] or bn, p["brandModel"] or model) if x))
-                    if sets:
-                        sets.append("updated_at=?")
-                        conn.execute("UPDATE parts SET " + ", ".join(sets) + " WHERE id=?", params + [now, t["id"]])
+                        brand_new = " / ".join(x for x in (p["brandName"] or bn, p["brandModel"] or model) if x)
+                    vals = [f.get(key) for key, _col in _PART_COLS if key != "brand"]
+                    if brand_new is not None or any(v is not None for v in vals):
+                        conn.execute(
+                            "UPDATE parts SET name=COALESCE(?,name), unit=COALESCE(?,unit), cost=COALESCE(?,cost), list_price=COALESCE(?,list_price), "
+                            "category=COALESCE(?,category), note=COALESCE(?,note), safety_stock=COALESCE(?,safety_stock), "
+                            "lead_time_days=COALESCE(?,lead_time_days), brand=COALESCE(?,brand), updated_at=? WHERE id=?",
+                            (*vals, brand_new, now, t["id"]))
                     written.append(("part.update", t["part_no"], "%s %s" % (t["part_no"], f.get("name", t["name"]))))
             conn.commit()
     except HTTPException:

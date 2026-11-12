@@ -47,6 +47,20 @@
   ],
   "s": 400
  },
+ "POST /api/customers/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "confirms",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
+  ],
+  "s": 200
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -105,6 +119,19 @@
    "user",
    "usesSample",
    "warnings"
+  ],
+  "s": 200
+ },
+ "POST /api/parts/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
   ],
   "s": 200
  },
