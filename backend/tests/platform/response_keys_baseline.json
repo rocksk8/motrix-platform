@@ -6563,6 +6563,7 @@
    "dev_mode",
    "enabled",
    "from_name",
+   "send_allowed_here",
    "smtp_host",
    "smtp_password",
    "smtp_port",

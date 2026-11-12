@@ -437,6 +437,7 @@
       </div>
     </div>
 
+    <div x-show="loadError" x-text="loadError" role="alert" data-testid="load-error" style="margin:12px 0;padding:10px 14px;border:1px solid var(--danger,#b91c1c);border-radius:6px;color:var(--danger,#b91c1c);font-size:13px" x-cloak></div>
     <div x-show="loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
 
     <!-- 分頁 -->
@@ -461,6 +462,7 @@
       page:   1,
       perPage: 50,
       loading: false,
+      loadError: '',
       q: '',
       filterAction: '',
       fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '', fTag: '',
@@ -568,6 +570,7 @@
         })
         for (const [k, v] of this._filterParams()) params.set(k, v)
         if (this.q.trim())    params.set('q', this.q.trim())
+        this.loadError = ''
         try {
           const r = await fetch(`/api/audit-log?${params}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
@@ -578,8 +581,10 @@
             this.items = d.items || []
             this.total = d.total || 0
             this.totalCapped = !!d.totalCapped
+          } else {
+            this.loadError = (r.status) === 403 ? '你沒有權限查看這一頁。' : '載入失敗（代碼 ' + (r.status) + '），請重新整理頁面；仍然失敗請聯絡系統管理者。'
           }
-        } catch(e) {}
+        } catch(e) { this.loadError = '連不上系統，請檢查網路後再試。' }
         this.loading = false
       },
 

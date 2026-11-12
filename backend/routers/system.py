@@ -2568,7 +2568,7 @@ _EMAIL_DEFAULTS = {
     "smtp_user":     "",
     "smtp_password": "",
     "from_name":     "MOTRIX專案管理系統",
-    "base_url":      "https://172.16.10.177:666",  # 2026-08-27：見 backend/tools/https_setup.ps1
+    "base_url":      "",  # 2026-11-13：新安裝不預填內部位址（畫面預填目前網址）；已儲存的值不動。舊預設見 email_notify._LEGACY_DEFAULT_BASE_URL
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
 }
@@ -2586,6 +2586,9 @@ def get_email_notify(authorization: str = Header(None)):
     # Show which admin/superadmin users will receive admin notifications
     from helpers.email_notify import _admin_emails
     safe["admin_email_preview"] = _admin_emails("system_test_mail")
+    # 開發機測試模式只在「這台機器不寄真實信件」或已經開著時才顯示（正式機與客戶機不露出工程師選項）
+    from helpers.email_notify import email_send_policy
+    safe["send_allowed_here"] = bool(email_send_policy()[0])
     return safe
 
 
@@ -2972,7 +2975,7 @@ def test_email_notify(authorization: str = Header(None)):
     except Exception as e:
         tid = trace_id()
         logger.exception("email_notify test failed trace=%s", tid)
-        raise HTTPException(502, f"SMTP 連線失敗（代碼 {tid}）")
+        raise HTTPException(502, f"寄信失敗：連不上寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
     _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
 

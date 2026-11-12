@@ -142,8 +142,8 @@
           </ul>
           <div class="rb-bar" x-show="ap.supported">
             <input type="text" :placeholder="'再輸入一次單據編號（' + ap.entity_id + '）確認'" x-model.trim="ap.confirm_text" data-testid="rb-ap-confirm">
-            <input type="text" placeholder="原因（選填）" x-model.trim="ap.reason_text">
-            <button class="rb-btn danger" :disabled="busy || ap.confirm_text !== ap.entity_id" @click="deleteApproved()" data-testid="rb-ap-go">送進資源回收筒</button>
+            <input type="text" placeholder="原因（必填，會記錄在操作紀錄）" x-model.trim="ap.reason_text" data-testid="rb-ap-reason">
+            <button class="rb-btn danger" :disabled="busy || ap.confirm_text !== ap.entity_id || !ap.reason_text" @click="deleteApproved()" data-testid="rb-ap-go">送進資源回收筒</button>
           </div>
         </div>
       </div>

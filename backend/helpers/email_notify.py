@@ -184,11 +184,21 @@ def _cfg() -> dict:
     return _get_setting("email_notify", {}) or {}
 
 
+_LEGACY_DEFAULT_BASE_URL = "https://172.16.10.177:666"      # 只給「升級安裝、設定裡沒有 base_url」沿用；新安裝不用
+
+
 def _base_url() -> str:
     # 2026-08-27：預設值改 https（見 backend/tools/https_setup.ps1）——但這只影響
     # 「從未存過設定值」的情況，正式機若已經存過 http 版本，這裡的預設值改變不會
     # 回溯更新既有設定，套用 HTTPS 後需要 superadmin 手動去通知設定頁更新一次。
-    return (_cfg().get("base_url") or "https://172.16.10.177:666").rstrip("/")
+    # 2026-11-13（選單去工程師化 批 0）：新安裝不再預填某一台機器的內部位址——資料庫還沒有任何
+    # email_notify 設定（全新安裝）⇒ 回空字串（信件連結退成「#」／相對路徑，由最高管理者到通知設定頁填）。
+    # 資料庫**已有**設定（升級安裝）而 base_url 沒存 ⇒ 沿用舊預設，不改變既有機器的行為。
+    cfg = _cfg()
+    v = cfg.get("base_url")
+    if v:
+        return str(v).rstrip("/")
+    return _LEGACY_DEFAULT_BASE_URL if cfg else ""
 
 
 _DEV_SUBJECT_PREFIX = "【開發機測試】"
@@ -543,7 +553,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
         raise RuntimeError("Email 通知功能未啟用")
     subject = _apply_dev_subject_prefix(cfg, subject)
     if _smtp_send_blocked(subject):
-        raise RuntimeError("非正式機環境，已擋下寄送（見 _smtp_send_blocked 說明）")
+        raise RuntimeError("這台機器被設定成「不寄真實信件」（開發或測試用），所以沒有寄出。要寄信請在正式的那台機器上操作。")
     if not to_addrs:
         raise RuntimeError("收件人清單為空")
     host = cfg.get("smtp_host", "smtp.gmail.com")

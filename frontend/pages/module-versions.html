@@ -448,6 +448,7 @@
     </div>
 
     <!-- Loading -->
+    <div x-show="loadError" x-text="loadError" role="alert" data-testid="load-error" style="margin:12px 0;padding:10px 14px;border:1px solid var(--danger,#b91c1c);border-radius:6px;color:var(--danger,#b91c1c);font-size:13px" x-cloak></div>
     <div class="mv-loading" x-show="loading">載入中…</div>
 
     <!-- ── Module view (split) ── -->
@@ -646,6 +647,7 @@
     return {
       modules:        [],
       loading:        true,
+      loadError:      '',
       view:           'module',
       selected:       null,
       search:         '',
@@ -699,6 +701,7 @@
 
       fetch() {
         this.loading = true
+        this.loadError = ''
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         fetch('/api/module-versions', {
           headers: { Authorization: 'Bearer ' + (s.token || '') }
@@ -715,7 +718,10 @@
             // Auto-select first if nothing selected
             if (!this.selected && data.length > 0) this.selected = data[0]
           })
-          .catch(e => console.error('fetch failed:', e))
+          .catch(e => {
+            console.error('fetch failed:', e)
+            this.loadError = (typeof e === 'number') ? ((e) === 403 ? '你沒有權限查看這一頁。' : '載入失敗（代碼 ' + (e) + '），請重新整理頁面；仍然失敗請聯絡系統管理者。') : '連不上系統，請檢查網路後再試。'
+          })
           .finally(() => { this.loading = false })
       },
 

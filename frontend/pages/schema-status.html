@@ -96,6 +96,7 @@
       </div>
     </div>
 
+    <div x-show="loadError" x-text="loadError" role="alert" data-testid="load-error" style="margin:12px 0;padding:10px 14px;border:1px solid var(--danger,#b91c1c);border-radius:6px;color:var(--danger,#b91c1c);font-size:13px" x-cloak></div>
     <div x-show="loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
 
     <div class="migration-list" x-show="!loading">
@@ -119,6 +120,7 @@
       session: {},
       data: {},
       loading: false,
+      loadError: '',
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -141,6 +143,7 @@
 
       async load() {
         this.loading = true
+        this.loadError = ''
         try {
           const r = await fetch('/api/system/schema-status', {
             headers: { Authorization: 'Bearer ' + this.session.token }
@@ -148,8 +151,10 @@
           if (r.status === 401) { this.logout(); return }
           if (r.ok) {
             this.data = await r.json()
+          } else {
+            this.loadError = (r.status) === 403 ? '你沒有權限查看這一頁。' : '載入失敗（代碼 ' + (r.status) + '），請重新整理頁面；仍然失敗請聯絡系統管理者。'
           }
-        } catch(e) {}
+        } catch(e) { this.loadError = '連不上系統，請檢查網路後再試。' }
         this.loading = false
       },
 

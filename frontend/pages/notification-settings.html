@@ -251,7 +251,7 @@
 
         <!-- 開發機測試模式（2026-08-26 新增）：這個設定值存在本機 DB，不隨部署
              流程移動到正式機，只需要在開發機自己開啟即可 -->
-        <div class="ns-toggle">
+        <div class="ns-toggle" x-show="cfg.dev_mode || cfg.send_allowed_here === false" data-testid="ns-dev-mode-row">
           <input data-saved-field type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
           <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
           <span x-show="cfg.dev_mode" style="font-size:12px;color:var(--warning);font-weight:600">(測試模式已開啟)</span>
@@ -291,7 +291,8 @@
           </div>
           <div class="ns-field">
             <label>系統網址（信件中的連結前綴）</label>
-            <input type="text" x-model="cfg.base_url" placeholder="https://172.16.10.177:666">
+            <input type="text" x-model="cfg.base_url" placeholder="例：https://erp.你的公司.com" data-testid="ns-base-url">
+            <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="baseUrlWarn()" x-text="baseUrlWarn()" data-testid="ns-base-url-warn"></div>
           </div>
         </div>
 
@@ -667,7 +668,8 @@
           smtp_user: '',
           smtp_password: '',
           from_name: 'MOTRIX ERP',
-          base_url: 'https://172.16.10.177:666',
+          base_url: '',
+          send_allowed_here: true,
           dev_mode: false,
           admin_email_preview: [],
         },
@@ -676,6 +678,17 @@
         saved: false,
         msg: '',
         isError: false,
+
+        // 系統網址若是這台電腦自己（localhost）或公司內部才連得到的位址，外面收到信的人點連結會打不開
+        baseUrlWarn() {
+          const u = String(this.cfg.base_url || '').trim()
+          if (!u) return ''
+          let h = ''
+          try { h = new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase() } catch (e) { return '這個網址看起來不完整，請填完整網址（例：https://erp.你的公司.com）。' }
+          if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]') return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
+          if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+          return ''
+        },
 
         mrRecipients: [],
         mrAllUsers: [],
@@ -758,6 +771,8 @@
             const data = await r.json()
             this.cfg = { ...this.cfg, ...data }
             if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
+            // 2026-11-13：伺服器沒存系統網址時，預填你現在開的這個網址（不寫死任何一台機器；按「儲存」才生效）
+            if (!this.cfg.base_url) this.cfg.base_url = location.origin
           }
 
           const [usersRes, mrRes] = await Promise.all([
