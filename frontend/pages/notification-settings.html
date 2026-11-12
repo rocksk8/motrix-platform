@@ -345,7 +345,7 @@
         <div x-show="denied" style="font-size:13px;color:var(--text-dim)">LINE 通知設定只有最高管理者可以查看與修改。</div>
         <div x-show="!denied">
           <div class="ns-desc">
-            在下方勾選的通知，寄 Email 時會<strong>同時</strong>用 LINE 官方帳號推播給「已綁定 LINE」的收件人（收件人與個人退訂規則和 Email 完全相同）。
+            在下方勾選的通知，會用 LINE 官方帳號推播給該通知的收件人中「已綁定 LINE」的人；<strong>LINE 與 Email 各自獨立</strong>，到「信件與通知收件設定」頁關閉某種信件<strong>不會</strong>停止 LINE，要停請取消下方該通知的勾選。
             預設全部不發；訊息內容與 Email 相同，<strong>不含金額</strong>。
           </div>
 
@@ -429,7 +429,7 @@
               </div>
               </div>
             </template>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。收件人仍以該通知本來的收件人為準（只會縮小，不會多寄給別人）；每位同仁也可以在「帳號安全」頁自行退訂。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。LINE 與 Email 各自獨立：收件人依該通知的收件設定決定，沒有 Email 的同仁只要綁定 LINE 也會收到；Email 退訂不影響 LINE；每位同仁也可以在「帳號安全」頁自行退訂 LINE。</div>
           </div>
 
           <div class="ns-actions">

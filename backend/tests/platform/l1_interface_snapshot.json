@@ -1,5 +1,5 @@
 {
- "core_version": "1.159",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -204,12 +204,13 @@
    "slot_policy": "def(conn, doc_type, slot_key, user)"
   },
   "helper:audit": {
+   "LOGIN_FAIL_REASONS": "const",
    "NOTIFICATION_RETENTION_DAYS": "const",
    "_DETAIL_MAX": "const",
    "_FAIL_REASON_LABELS": "const",
    "_MODULE_LABELS": "const",
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
-   "_audit_login_failed": "def(username, ip=…, now=…)",
+   "_audit_login_failed": "def(username, ip=…, now=…, source=…)",
    "_derive_fields": "def(action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_filter_live_notifications": "def(conn, rows)",
    "_mark_notifications_read": "def(ref_id, types, username=…)",
@@ -248,6 +249,20 @@
    "require_any_module": "def(user, keys, label)",
    "reset_finance_mode_cache": "def()",
    "user_has_module": "def(user, key)"
+  },
+  "helper:auth_alert": {
+   "DAILY_CAP": "const",
+   "DAY_SECONDS": "const",
+   "DEDUP_EVENT": "const",
+   "HOURLY_CAP": "const",
+   "LIMITS_KEY": "const",
+   "WINDOW_SECONDS": "const",
+   "flush_summary": "def(now=…)",
+   "limits": "def()",
+   "mask_for_log": "def(name)",
+   "mask_name": "def(name, existing=…)",
+   "on_lockout": "def(key, ip, usernames, fails, lock_seconds, now=…, scope=…)",
+   "reset_for_tests": "def()"
   },
   "helper:branding": {
    "ALLOWED_FORMATS": "const",
@@ -786,10 +801,14 @@
    "notify_shipping_returned": "def(note_no, customer, note, requester_username)",
    "notify_shipping_submitted": "def(note_no, customer, approver_usernames)",
    "notify_warranty_expiry": "def(device_name, customer, quote_no, days_left, expiry_date, sales_person)",
-   "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…)"
+   "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…, line_key=…, line_exclude=…)"
   },
   "helper:errors": {
    "trace_id": "def()"
+  },
+  "helper:event_audience": {
+   "group_usernames": "def(event_key, group=…)",
+   "resolve_usernames": "def(event_key, usernames=…, to_group=…, *, group=…, exclude=…)"
   },
   "helper:expense_types": {
    "CODE_RE": "const",
@@ -1136,19 +1155,27 @@
    "CALLBACK_PATH": "const",
    "HTTP_TIMEOUT": "const",
    "LINE_API_BASE": "const",
+   "LINE_EVENTS": "const",
    "LINKS_KEY": "const",
    "LINK_PAGES": "const",
+   "MARKS_KEY": "const",
+   "MARK_KEEP_DAYS": "const",
    "MAX_TEXT": "const",
+   "MONTHLY_LIMIT_FALLBACK": "const",
    "MULTICAST_LIMIT": "const",
+   "PENDING_KEY": "const",
+   "PENDING_TTL_DAYS": "const",
    "SEND_PERMANENT_FAIL": "const",
    "SEND_SENT": "const",
    "SEND_SKIPPED": "const",
    "SEND_TRANSIENT_FAIL": "const",
    "SETTING_KEY": "const",
+   "USAGE_KEY": "const",
    "WIRED_EVENTS": "const",
    "binding_view": "def(username)",
    "build_text": "def(title, rows=…, *, reason=…, link=…)",
    "callback_url": "def()",
+   "deliver_event": "def(event_key, *, usernames=…, to_group=…, title, rows=…, reason=…, link=…, exclude=…, dedupe_key=…)",
    "enabled": "def()",
    "event_enabled": "def(event_key)",
    "event_roles_view": "def()",
@@ -1159,12 +1186,15 @@
    "links_enabled": "def()",
    "login_credentials": "def()",
    "mask": "def(token)",
+   "month_cap_percent": "def(event_key)",
    "normalize_public_base": "def(v)",
+   "notify_event": "def(event_key, *, usernames=…, to_group=…, title, rows=…, reason=…, link=…, exclude=…, dedupe_key=…)",
    "notify_users": "def(event_key, usernames, title, rows=…, *, reason=…, link=…)",
    "public_base": "def()",
    "push": "def(user_ids, text)",
    "push_async": "def(user_ids, text)",
    "quota": "def(token=…)",
+   "retry_pending": "def()",
    "safe_link": "def(link)",
    "set_confirmed": "def(username, ok)",
    "set_event": "def(event_key, on)",
@@ -1180,13 +1210,16 @@
    "CACHE_SECONDS": "const",
    "DEFAULT_THRESHOLDS": "const",
    "MAX_THRESHOLDS": "const",
+   "RESERVE_PERCENT": "const",
    "STATE_KEY": "const",
    "after_push": "def(now=…)",
+   "cached_percent": "def(now=…)",
    "check_and_alert": "def(now=…, max_age=…, force=…)",
    "evaluate": "def(used, limit, ths, alerted)",
    "month_key": "def(now=…)",
    "normalize_thresholds": "def(v)",
    "refresh": "def(now=…)",
+   "reserve_paused": "def(now=…)",
    "snapshot": "def(max_age=…, now=…, force=…)",
    "thresholds": "def()"
   },

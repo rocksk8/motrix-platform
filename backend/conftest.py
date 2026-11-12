@@ -678,6 +678,16 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     import routers.auth as auth_module
     monkeypatch.setattr(auth_module, "_rl_state", {})
 
+    # 登入鎖定告警（helpers/auth_alert，2026-11-12）：節流狀態同樣是 process-global（以鎖定範圍為鍵，TestClient 全是 "testclient"）⇒ 每題換一份乾淨的；
+    # 背景發送預設改成不做事——其他題累積 5 次登入失敗只是為了驗鎖定，不該在背景執行緒裡碰 Email／LINE／已拆掉的測試 DB。
+    # 要驗告警本身的題（tests/test_auth_lockout_alert_2026_11_12.py）自己把 `_spawn` 換成同步版。
+    import helpers.auth_alert as _auth_alert_module
+    monkeypatch.setattr(_auth_alert_module, "_alerted", {})
+    monkeypatch.setattr(_auth_alert_module, "_sent_at", [])
+    monkeypatch.setattr(_auth_alert_module, "_suppressed", [])
+    monkeypatch.setattr(_auth_alert_module, "_timer", None)
+    monkeypatch.setattr(_auth_alert_module, "_spawn", lambda fn, *a: None)
+
     # pdf_gen.py 的 6 類 PDF 存檔目錄（報價單／出貨單／承攬商匯款申請／開票申請
     # 憑據／請款單／結案報表）各自算自己的路徑，跟上面 uploads/photos 一樣**不受
     # 任何既有 patch 影響**——這是 2026-09-07 那批隔離修正唯一漏掉的一個。

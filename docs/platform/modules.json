@@ -121,6 +121,8 @@
    "helper:system_checks",
    "helper:heartbeat_status",
    "helper:line_recipients",
+   "helper:event_audience",
+   "helper:auth_alert",
    "helper:line_quota",
    "helper:tiered_approval",
    "helper:uploads",

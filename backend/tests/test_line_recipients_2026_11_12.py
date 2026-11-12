@@ -113,7 +113,7 @@ def test_corrupt_allowlist_fails_closed_with_warning(env, caplog, corrupt):
 def test_event_roles_view_lists_only_wired_events(env):
     L, _, _ = env
     L.set_event_roles(EV, ["admin"])
-    assert L.event_roles_view() == {EV: ["admin"], EV2: None}
+    assert L.event_roles_view() == {EV: ["admin"], EV2: None, "auth_lockout": None}      # auth_lockout：2026-11-12 起也是已接線事件
 
 
 # ── ③ 個人勾選 ────────────────────────────────────────────────────────────
