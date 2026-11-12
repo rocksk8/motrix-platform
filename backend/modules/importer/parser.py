@@ -161,6 +161,15 @@ def _decode_csv(data: bytes) -> str:
 def _rows_from_csv(data: bytes, max_scan: int, deadline=None):
     """只留有內容的列（空白行不算列數、也不讓讀取提早結束）；`max_scan`＝有內容的列數上限。"""
     text = _decode_csv(data)
+    try:
+        return _csv_rows(text, max_scan, deadline)
+    except csv.Error as exc:
+        if "limit" in str(exc):
+            raise ParseError("有一格的內容太長了（超過 %d 字），請確認 CSV 的引號有成對，或改用 .xlsx" % csv.field_size_limit())
+        raise ParseError("這個 CSV 的格式讀不出來（引號沒有成對？），請用 Excel 另存成 .xlsx 再上傳")
+
+
+def _csv_rows(text, max_scan, deadline):
     out = []
     for i, rec in enumerate(csv.reader(io.StringIO(text, newline=""))):
         if i & 255 == 0:
