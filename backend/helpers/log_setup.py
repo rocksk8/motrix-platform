@@ -263,6 +263,15 @@ TOKEN_MAX = 2048
 _PARAM_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-\[\]]{0,22}")          # 名字最長 23 字：再長的多半是 token 本身（base64／雜湊）
 _HEXISH_RE = re.compile(r"[0-9A-Fa-f]{12,}")                                 # 全是十六進位的長串也不當名字（`?<hex token>=`）
 _TOKEN_RE = re.compile(r"""[^\s"'<>]+""")
+
+
+def _name_is_token(name):
+    """名字的「形狀」像 token 而不像識別字（base64／雜湊／隨機串）⇒ 整段遮（hichan-11 M1）：長度不夠當名字上限也照樣抓得到
+    （`?<22 字 base64>==` 的名字只有 22 字）。蛇形（`department_id`）／駝峰（`activityLimit`）都過不了這兩條：
+    ① 長 ≥16 且大寫 ≥3；② 長 ≥8 且大寫 ≥2 且數字 ≥2。守門：test_log_query_redact 掃遍所有路由參數名，證明沒有一個被誤遮。"""
+    up = sum(1 for c in name if c.isupper())
+    dg = sum(1 for c in name if c.isdigit())
+    return (len(name) >= 16 and up >= 3) or (len(name) >= 8 and up >= 2 and dg >= 2)
 _TRAILING = ")]},.;"
 
 
@@ -273,7 +282,8 @@ def redact_query(query):
         if not piece:
             continue
         name, eq, _val = piece.partition("=")
-        keep = bool(eq) and _PARAM_NAME_RE.fullmatch(name) and not _HEXISH_RE.fullmatch(name)
+        keep = (bool(eq) and _PARAM_NAME_RE.fullmatch(name) and not _HEXISH_RE.fullmatch(name)
+                and not _name_is_token(name))
         item = name + "=" + QUERY_MASK if keep else QUERY_MASK
         if item == QUERY_MASK and parts and parts[-1] == QUERY_MASK:
             continue
@@ -307,7 +317,7 @@ def _mask_userinfo(tok):
 
 
 def _mask_token(tok):
-    if "?" not in tok and "://" not in tok:
+    if "?" not in tok and "://" not in tok and "#" not in tok:
         return tok
     if len(tok) > TOKEN_MAX and ("/" in tok):
         tok = tok[:TOKEN_MAX] + "...[+%d chars]" % (len(tok) - TOKEN_MAX)
@@ -328,8 +338,8 @@ def _mask_token(tok):
 
 
 def redact_text(text):
-    """訊息／例外文字裡的「網址?query」與網址的 userinfo 遮罩（見上）。沒有 `?` 也沒有 `://` ⇒ 原樣回傳（快路徑）。線性時間。"""
-    if not text or ("?" not in text and "://" not in text):
+    """訊息／例外文字裡的「網址?query」與網址的 userinfo 遮罩（見上）。沒有 `?`、`://`、`#` ⇒ 原樣回傳（快路徑）。線性時間。"""
+    if not text or ("?" not in text and "://" not in text and "#" not in text):
         return text
     return _TOKEN_RE.sub(lambda m: _mask_token(m.group(0)), text)
 
@@ -344,15 +354,13 @@ class QueryRedactFilter(logging.Filter):
                 record.args = a[:2] + (redact_target(a[2]),) + a[3:]       # uvicorn 的請求行：(client, method, full_path, http_version, status)
                 return True
             msg = record.getMessage()
-            if "?" in msg:
-                new = redact_text(msg)
-                if new != msg:
-                    record.msg, record.args = new, ()
+            new = redact_text(msg)                                          # 快路徑在 redact_text 裡（不能在這裡只看 `?`：fragment／userinfo 的網址沒有 `?`，hichan-11 H1）
+            if new != msg:
+                record.msg, record.args = new, ()
             ei = record.exc_info
             if ei and ei[0] is not None and not record.exc_text:
                 txt = logging.Formatter().formatException(ei)                # 先轉成文字再遮（Formatter 會沿用 exc_text）
-                if "?" in txt:
-                    record.exc_text = redact_text(txt)
+                record.exc_text = redact_text(txt)
         except Exception:                                                    # noqa: BLE001
             pass
         return True
