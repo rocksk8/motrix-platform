@@ -129,7 +129,7 @@ def test_quotations_list_off_golden(live_server, make_user, new_context):
     page.goto(live_server + "/pages/quotations.html")
     snap = _snapshot(page, reqs, "() => %s.loading === false" % DATA_JS)
     heads = page.evaluate("() => [...document.querySelectorAll('thead th')].filter(t => t.offsetParent !== null).map(t => t.textContent.trim())")
-    assert heads[:4] == ["報價單號", "客戶名稱", "案件名稱", "金額（含稅）"], heads                   # 預設欄位與順序
+    assert heads[:4] == ["報價單號", "案件名稱", "金額（含稅）", "狀態"], heads                   # 預設欄位與順序（T84：客戶併進單號格；毛利率、有效天數、填單人預設不單獨成欄）
     assert not any("/api/layout" in r for r in snap["requests"]), snap["requests"]
     _compare("quotations_list_off", snap)
 

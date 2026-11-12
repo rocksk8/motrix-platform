@@ -1,0 +1,183 @@
+"""瀏覽器端對端：報價清單重排（T84，2026-11-13）。
+
+- 三個有定義的數字（要我處理／等別人／本月已成案）、可點擊篩選
+- 預設「我負責的、進行中」＋目前條件列＋清除條件、每人記住上次選擇
+- 「下一步」欄（等誰簽核、被退回、已核准待寄客戶）
+- 預設欄位 ≤ 7、可加欄、緊湊密度；案件進度小選單仍在每一列（專家效率 E3）
+- 手機寬度（390px）：卡片、操作按鈕看得到且 ≥ 44px、頁面不橫向捲動
+"""
+import json
+from datetime import datetime
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+
+from tests._requires import requires_module  # noqa: E402
+
+pytestmark = requires_module("case", "本檔打 M01（報價單）的清單頁")
+
+DATA = "Alpine.$data(document.querySelector('[x-data]'))"
+TODAY = datetime.now().strftime("%Y-%m-%d")
+
+
+def _uid(username):
+    import db
+    c = db.get_db()
+    try:
+        return c.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()["id"]
+    finally:
+        c.close()
+
+
+def _seed(no, owner_id, status, deal_tag="", approval=None, project="案"):
+    import db
+    dj = {"quoteNo": no, "status": status}
+    if approval is not None:
+        dj["approval"] = approval
+    if deal_tag:
+        dj["dealTag"] = deal_tag
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    c = db.get_db()
+    try:
+        c.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
+            " created_at, updated_at, deal_tag, quote_date, sales_person_id, sales_person) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (no, status, "客戶" + no[-3:], project + no[-3:], 1050, 1000, json.dumps(dj, ensure_ascii=False),
+             now, now, deal_tag, TODAY, owner_id, "業務甲"))
+        c.commit()
+    finally:
+        c.close()
+
+
+def _seed_set(owner):
+    boss = {"userId": None, "username": "t84e_boss", "displayName": "舊名", "status": "pending"}
+    _seed("MQ-T84E-001", owner, "草稿")
+    _seed("MQ-T84E-002", owner, "待審核", approval={"requestedBy": "x", "currentTier": 0, "tiers": [{"order": 0, "approvers": [boss]}]})
+    _seed("MQ-T84E-003", owner, "已核准")
+    _seed("MQ-T84E-004", owner, "已拒絕")
+    _seed("MQ-T84E-005", owner, "已送出")
+    _seed("MQ-T84E-006", owner, "已送出", deal_tag="已成案")
+
+
+def _open(live_server, make_user, new_page, login_as, name, width=1280):
+    sales = make_user(username=name, role="sales")
+    make_user(username="t84e_boss", role="admin")
+    import db
+    c = db.get_db()
+    c.execute("UPDATE users SET display_name=? WHERE username='t84e_boss'", ("王經理",))
+    c.commit()
+    c.close()
+    _seed_set(_uid(name))
+    page = new_page(viewport={"width": width, "height": 900})
+    login_as(page, sales)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
+    return page
+
+
+VIS_HEADS = "() => [...document.querySelectorAll('thead th')].filter(t => t.offsetParent !== null).map(t => t.textContent.trim())"
+
+
+@pytest.mark.e2e
+def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(live_server, make_user, new_page, login_as):
+    page = _open(live_server, make_user, new_page, login_as, "t84e_sales")
+    # 三個數字的定義
+    assert page.get_by_test_id("ql-sum-todo").inner_text().count("3 張") == 1, "草稿＋被退回＋已核准＝3"
+    assert "1 張" in page.get_by_test_id("ql-sum-waiting").inner_text()
+    assert "待簽核 1・簽核中 0" in page.get_by_test_id("ql-sum-waiting").inner_text()
+    assert "1 張" in page.get_by_test_id("ql-sum-won").inner_text()
+    # 預設條件：我負責的、進行中；有清除條件
+    cond = page.get_by_test_id("ql-cond").inner_text()
+    assert "我負責的" in cond and "進行中" in cond and page.get_by_test_id("ql-clear-conditions").is_visible()
+    # 預設欄位 ≤ 7（不含「操作」）
+    heads = [h for h in page.evaluate(VIS_HEADS) if h != "操作"]
+    assert len(heads) <= 7 and heads[:1] == ["報價單號"] and "下一步" in heads and "案件進度" in heads, heads
+    assert "毛利率" not in heads and "客戶名稱" not in heads
+    # 客戶名稱併進單號格
+    first = page.locator("tr.ql-row[data-quote-no='MQ-T84E-001'] td[data-col=quoteNo]").inner_text()
+    assert "MQ-T84E-001" in first and "客戶001" in first
+    # 下一步：等誰簽核（現名）、已核准待寄客戶、被退回
+    nxt = lambda no: page.locator("tr.ql-row[data-quote-no='%s'] td[data-col=next]" % no).inner_text()   # noqa: E731
+    assert "等 王經理 簽核" in nxt("MQ-T84E-002")
+    assert "簽完了，請寄給客戶" in nxt("MQ-T84E-003")
+    assert "被退回" in nxt("MQ-T84E-004")
+    assert "還沒送簽" in nxt("MQ-T84E-001")
+    # 案件進度小選單仍在（E3：一次選擇完成），未標記有說明
+    sel = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] td[data-col=dealTag] select")
+    assert sel.count() == 1 and "未標記" in (sel.get_attribute("title") or "")
+    # E1／E2／E4 入口都還在、各一步：新增、複製、搜尋
+    assert page.get_by_role("link", name="新增報價單").is_visible()
+    assert page.locator("tr.ql-row[data-quote-no='MQ-T84E-001'] button[title='複製為新報價單']").count() == 1
+    assert page.locator("input.search-input[placeholder*='搜尋報價單號']").is_visible()
+    # 點「要我處理」→ 只剩 3 張
+    page.get_by_test_id("ql-sum-todo").click()
+    assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") == 3
+    page.get_by_test_id("ql-sum-todo").click()                                  # 再點一次取消
+    # 清除條件 ⇒ 不再限縮「我負責的」；重新整理後記得這個選擇
+    page.get_by_test_id("ql-clear-conditions").click()
+    assert page.evaluate("() => %s.onlyMine" % DATA) is False
+    page.reload()
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => %s.onlyMine" % DATA) is False, "記住上次選擇"
+    assert "我負責的" not in page.get_by_test_id("ql-cond").inner_text()
+
+
+@pytest.mark.e2e
+def test_columns_and_density_are_user_choices(live_server, make_user, new_page, login_as):
+    page = _open(live_server, make_user, new_page, login_as, "t84e_sales2")
+    # 加欄：毛利率、有效天數；空毛利率是灰色「—」
+    page.get_by_test_id("ql-cols-btn").click()
+    page.get_by_test_id("ql-col-margin").check()
+    page.get_by_test_id("ql-col-validDays").check()
+    page.wait_for_function("(js) => { const h = eval(js)(); return h.includes('毛利率') && h.includes('有效天數') }", arg=VIS_HEADS, timeout=5000)
+    heads = page.evaluate(VIS_HEADS)
+    assert "毛利率" in heads and "有效天數" in heads, heads
+    dash = page.locator("tr.ql-row[data-quote-no='MQ-T84E-001'] td[data-col=margin] span")
+    assert dash.inner_text() == "—" and "text-dim" in (dash.get_attribute("style") or "") and "danger" not in (dash.get_attribute("style") or "")
+    # 緊湊密度
+    page.get_by_test_id("ql-density").click()
+    assert page.evaluate("() => document.querySelector('table.ql-table').classList.contains('ql-compact')")
+    page.reload()
+    page.wait_for_function("() => %s.loading === false" % DATA, timeout=20000)
+    assert "毛利率" in page.evaluate(VIS_HEADS), "欄位選擇有記住"
+    assert page.evaluate("() => document.querySelector('table.ql-table').classList.contains('ql-compact')"), "密度有記住"
+
+
+@pytest.mark.e2e
+def test_superadmin_with_no_owned_quotes_is_not_shown_an_empty_page(live_server, make_user, new_page, login_as):
+    """預設「我負責的」在名單是空的時候不套用（否則最高管理者第一次開什麼都看不到）。"""
+    admin = make_user(username="t84e_super", role="superadmin")
+    owner = make_user(username="t84e_owner", role="sales")
+    make_user(username="t84e_boss", role="admin")
+    _seed_set(_uid("t84e_owner"))
+    page = new_page(viewport={"width": 1280, "height": 900})
+    login_as(page, admin)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
+    assert page.evaluate("() => %s.onlyMine" % DATA) is False
+    assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 5
+    assert owner  # 夾具已建帳號
+
+
+@pytest.mark.e2e
+def test_phone_390_cards_show_actions_with_44px_targets_and_no_horizontal_scroll(live_server, make_user, new_page, login_as):
+    page = _open(live_server, make_user, new_page, login_as, "t84e_sales3", width=390)
+    page.wait_for_timeout(300)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "手機寬度不橫向捲動"
+    assert page.evaluate("() => getComputedStyle(document.querySelector('thead')).display") == "none"
+    row = page.locator("tr.ql-row[data-quote-no='MQ-T84E-002']")
+    row.scroll_into_view_if_needed()
+    assert row.get_by_text("等 王經理 簽核").is_visible(), "下一步在卡片上"
+    edit = row.locator(".row-actions a.icon-btn")
+    box = edit.bounding_box()
+    assert edit.is_visible() and box["width"] >= 44 and box["height"] >= 44, box
+    assert float(page.evaluate("() => getComputedStyle(document.querySelector('.row-actions')).opacity")) == 1, "手機上操作按鈕不靠 hover"
+    sel = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] td[data-col=dealTag] select")
+    sel.scroll_into_view_if_needed()
+    assert sel.bounding_box()["height"] >= 44
+    # 三個數字在 390px 都看得到、可點
+    for t in ("ql-sum-todo", "ql-sum-waiting", "ql-sum-won"):
+        assert page.get_by_test_id(t).is_visible()
+    # 每張卡片不超出視窗寬度
+    assert page.evaluate("() => [...document.querySelectorAll('tr.ql-row')].every(r => r.getBoundingClientRect().right <= window.innerWidth + 1)")

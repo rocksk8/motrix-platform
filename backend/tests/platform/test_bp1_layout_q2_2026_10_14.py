@@ -22,7 +22,7 @@ MANIFEST = ROOT / "backend" / "modules" / "case" / "module.json"
 NODE = shutil.which("node")
 BASE = "/api/definitions/layout/module:case"
 
-QUOTES = ["quoteNo", "customer", "project", "amount", "margin", "validDays", "filler", "status", "dealTag", "date"]
+QUOTES = ["quoteNo", "customer", "project", "amount", "margin", "validDays", "filler", "status", "dealTag", "next", "date"]
 QUOTES_CORE = {"quoteNo", "customer", "status", "dealTag"}
 TABS = ["biz", "exec", "dispatch", "shipping", "completion", "feed", "allfiles", "fin", "xexp"]
 TABS_CORE = {"biz"}
@@ -248,7 +248,7 @@ def test_registry_entries_say_what_layout_does_not_change():
 def test_quotations_colspans_follow_the_visible_column_count():
     src = _page("quotations.html")
     assert 'colspan="12"' not in src and src.count(':colspan="colSpan()"') == 3
-    assert "colSpan() { return 12 - ['quoteNo'," in src and "filter(k => !this.cShown(k)).length }" in src      # 關閉時 cShown 恆真 ⇒ 恆為 12（與先前相同；T65 C1 起個人隱藏也會減）
+    assert "colSpan() { return 13 - ['quoteNo'," in src and "filter(k => !this.cShown(k)).length }" in src      # 版面與個人欄位都不隱藏時恆為 13（10 欄＋下一步＋操作）；T84 起預設精簡欄位會減
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
