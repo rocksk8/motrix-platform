@@ -1,0 +1,44 @@
+{
+  "_doc": "UX 守門的資料檔（UX-PRINCIPLES §6.5、§11）。只出報告、不擋 CI；詞彙與白名單由 PM 核定。改這個檔不需要改程式。",
+  "deprecated_terms": [
+    {"term": "待審核", "use": "待簽核", "note": "使用者 2026-11-13 裁示：畫面顯示改「待簽核」；資料鍵『待審核』不變，故 JS 字串內的出現多半是資料鍵，不是畫面字。"},
+    {"term": "審核中", "use": "待簽核", "note": "報價單清單的簡稱（status_display _NAMES0）"},
+    {"term": "送審中", "use": "待簽核", "note": "報價單清單分組標題"},
+    {"term": "申請送出審核", "use": "申請送出簽核"},
+    {"term": "刪除暫存區", "use": "資源回收筒", "note": "使用者裁示"},
+    {"term": "歷史紀錄", "use": "操作紀錄", "note": "使用者裁示；僅指 audit-log 頁。單據自己的『簽核歷史』『審核歷史』不在此列，需人工判讀"},
+    {"term": "等我簽核", "use": "待我簽核", "note": "儀表板卡片；與簽核頁、選單用語統一"},
+    {"term": "簽核佇列", "use": "待我簽核", "note": "簽核頁頁名；『佇列』是 IT 詞（選單項目名稱由 menu_l1.json 決定，隨 PM 裁示）"},
+    {"term": "估價單", "use": "報價單"},
+    {"term": "超級管理員", "use": "最高管理者"},
+    {"term": "最高管理員", "use": "最高管理者"},
+    {"term": "超管", "use": "最高管理者"},
+    {"term": "拒絕結案", "use": "駁回結案"},
+    {"term": "提交", "use": "送出"},
+    {"term": "保存", "use": "儲存", "note": "『保存期限』作為名詞可保留"}
+  ],
+  "forbidden_terms": [
+    {"term": "token", "ci": true},
+    {"term": "SMTP", "ci": false},
+    {"term": "Schema", "ci": false},
+    {"term": "migration", "ci": true},
+    {"term": "JSON", "ci": false},
+    {"term": "endpoint", "ci": true},
+    {"term": "Callback URL", "ci": true},
+    {"term": "Provider", "ci": false},
+    {"term": "channel", "ci": true},
+    {"term": "public_base_url", "ci": true},
+    {"term": "影子模式", "ci": false},
+    {"term": "閘門", "ci": false},
+    {"term": "版本帳本", "ci": false}
+  ],
+  "whitelist": {
+    "_doc": "頁面（檔名）→ 允許出現的詞。LINE 設定卡片需出現 Channel／token（使用者要到 LINE 後台對照貼值，旁邊須附白話說明）。",
+    "notification-settings.html": ["token", "channel", "Callback URL", "Provider", "public_base_url"],
+    "mail-settings.html": ["SMTP", "token"],
+    "system-hub.html": ["Schema", "migration", "JSON", "endpoint", "token", "channel", "Provider", "public_base_url", "影子模式", "閘門", "版本帳本"],
+    "schema-status.html": ["Schema", "migration", "JSON", "endpoint"],
+    "module-builder.html": ["JSON", "Schema", "endpoint", "Provider", "token", "channel"]
+  },
+  "ratchet_metrics": ["inline_styles", "to_locale_string", "primary_in_header_over1", "forbidden_hits", "th_count"]
+}

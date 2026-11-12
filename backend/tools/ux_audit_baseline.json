@@ -1,0 +1,334 @@
+{
+ "deprecated_text": {
+  "保存": 7,
+  "刪除暫存區": 2,
+  "審核中": 12,
+  "待審核": 31,
+  "拒絕結案": 9,
+  "提交": 7,
+  "最高管理員": 11,
+  "歷史紀錄": 10,
+  "申請送出審核": 2,
+  "等我簽核": 3,
+  "簽核佇列": 9,
+  "超管": 1,
+  "超級管理員": 23,
+  "送審中": 5
+ },
+ "files": {
+  "frontend/index.html": {
+   "inline_styles": 75,
+   "th_count": 8,
+   "to_locale_string": 3
+  },
+  "frontend/pages/account-items.html": {
+   "inline_styles": 11
+  },
+  "frontend/pages/approval-delegates.html": {
+   "inline_styles": 11,
+   "th_count": 7
+  },
+  "frontend/pages/approval-history.html": {
+   "inline_styles": 9,
+   "th_count": 6
+  },
+  "frontend/pages/approval-queue.html": {
+   "inline_styles": 108,
+   "th_count": 5,
+   "to_locale_string": 3
+  },
+  "frontend/pages/approval-settings.html": {
+   "inline_styles": 57
+  },
+  "frontend/pages/audit-log.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 10,
+   "to_locale_string": 3
+  },
+  "frontend/pages/bank-account.html": {
+   "inline_styles": 7
+  },
+  "frontend/pages/bonus-corrections.html": {
+   "inline_styles": 22,
+   "to_locale_string": 3
+  },
+  "frontend/pages/bonus.html": {
+   "inline_styles": 29,
+   "th_count": 6,
+   "to_locale_string": 3
+  },
+  "frontend/pages/case-management.html": {
+   "inline_styles": 1557,
+   "th_count": 37,
+   "to_locale_string": 3
+  },
+  "frontend/pages/case-stage-board.html": {
+   "inline_styles": 17
+  },
+  "frontend/pages/cashier.html": {
+   "inline_styles": 178,
+   "th_count": 95,
+   "to_locale_string": 3
+  },
+  "frontend/pages/change-password.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 50,
+   "to_locale_string": 3
+  },
+  "frontend/pages/company-profile-settings.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 122
+  },
+  "frontend/pages/completion-note-form.html": {
+   "inline_styles": 62
+  },
+  "frontend/pages/contractors.html": {
+   "inline_styles": 86,
+   "th_count": 9,
+   "to_locale_string": 3
+  },
+  "frontend/pages/custom-def-review.html": {
+   "inline_styles": 4,
+   "th_count": 9
+  },
+  "frontend/pages/custom-records.html": {
+   "inline_styles": 6,
+   "th_count": 12
+  },
+  "frontend/pages/customer-log.html": {
+   "inline_styles": 20
+  },
+  "frontend/pages/customers.html": {
+   "inline_styles": 175,
+   "th_count": 19,
+   "to_locale_string": 3
+  },
+  "frontend/pages/daily-tasks.html": {
+   "inline_styles": 241
+  },
+  "frontend/pages/dev-crm.html": {
+   "inline_styles": 111
+  },
+  "frontend/pages/devices.html": {
+   "inline_styles": 35,
+   "th_count": 10
+  },
+  "frontend/pages/duty-roles.html": {
+   "inline_styles": 17,
+   "th_count": 18
+  },
+  "frontend/pages/expense-types.html": {
+   "forbidden_hits": 2,
+   "inline_styles": 19,
+   "th_count": 33
+  },
+  "frontend/pages/file-center.html": {
+   "inline_styles": 8,
+   "th_count": 8
+  },
+  "frontend/pages/google-calendar-settings.html": {
+   "inline_styles": 28
+  },
+  "frontend/pages/inventory.html": {
+   "inline_styles": 91,
+   "th_count": 39,
+   "to_locale_string": 3
+  },
+  "frontend/pages/ledger-hub.html": {
+   "inline_styles": 21,
+   "th_count": 47,
+   "to_locale_string": 3
+  },
+  "frontend/pages/ledger-periods.html": {
+   "inline_styles": 19,
+   "th_count": 27,
+   "to_locale_string": 3
+  },
+  "frontend/pages/ledger-reports.html": {
+   "inline_styles": 7,
+   "th_count": 20,
+   "to_locale_string": 3
+  },
+  "frontend/pages/ledger-settings.html": {
+   "inline_styles": 15,
+   "th_count": 26
+  },
+  "frontend/pages/ledger-statements.html": {
+   "inline_styles": 7,
+   "to_locale_string": 3
+  },
+  "frontend/pages/legal-params.html": {
+   "inline_styles": 5,
+   "th_count": 10
+  },
+  "frontend/pages/lodging-records.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 18,
+   "th_count": 23,
+   "to_locale_string": 3
+  },
+  "frontend/pages/login-qr-approve.html": {
+   "inline_styles": 3
+  },
+  "frontend/pages/login.html": {
+   "inline_styles": 9
+  },
+  "frontend/pages/mail-settings.html": {
+   "inline_styles": 6,
+   "th_count": 8
+  },
+  "frontend/pages/map.html": {
+   "inline_styles": 54,
+   "th_count": 7
+  },
+  "frontend/pages/module-builder.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 96,
+   "th_count": 26
+  },
+  "frontend/pages/module-settings.html": {
+   "th_count": 5
+  },
+  "frontend/pages/module-versions.html": {
+   "inline_styles": 11
+  },
+  "frontend/pages/network-plan-form.html": {
+   "inline_styles": 64,
+   "th_count": 6
+  },
+  "frontend/pages/network-plans.html": {
+   "inline_styles": 41,
+   "th_count": 6
+  },
+  "frontend/pages/notification-settings.html": {
+   "forbidden_hits": 4,
+   "inline_styles": 92,
+   "th_count": 5
+  },
+  "frontend/pages/online-stats.html": {
+   "inline_styles": 38,
+   "th_count": 13
+  },
+  "frontend/pages/org-structure.html": {
+   "inline_styles": 32
+  },
+  "frontend/pages/parts.html": {
+   "inline_styles": 70,
+   "th_count": 10,
+   "to_locale_string": 3
+  },
+  "frontend/pages/payment-request-form.html": {
+   "inline_styles": 42,
+   "to_locale_string": 3
+  },
+  "frontend/pages/payment-request.html": {
+   "inline_styles": 44,
+   "th_count": 23,
+   "to_locale_string": 3
+  },
+  "frontend/pages/payslip-form.html": {
+   "inline_styles": 85,
+   "to_locale_string": 3
+  },
+  "frontend/pages/payslips.html": {
+   "inline_styles": 104,
+   "th_count": 8,
+   "to_locale_string": 3
+  },
+  "frontend/pages/permission-matrix.html": {
+   "inline_styles": 8,
+   "th_count": 9
+  },
+  "frontend/pages/procurement.html": {
+   "inline_styles": 27,
+   "th_count": 12
+  },
+  "frontend/pages/quotation-form.html": {
+   "inline_styles": 462,
+   "th_count": 28,
+   "to_locale_string": 3
+  },
+  "frontend/pages/quotations.html": {
+   "inline_styles": 85,
+   "th_count": 12,
+   "to_locale_string": 3
+  },
+  "frontend/pages/recycle-bin.html": {
+   "inline_styles": 22,
+   "th_count": 8
+  },
+  "frontend/pages/remit-kinds-settings.html": {
+   "forbidden_hits": 1,
+   "inline_styles": 12,
+   "th_count": 13
+  },
+  "frontend/pages/report-templates.html": {
+   "th_count": 1
+  },
+  "frontend/pages/reports.html": {
+   "inline_styles": 288,
+   "th_count": 203,
+   "to_locale_string": 3
+  },
+  "frontend/pages/schema-status.html": {
+   "inline_styles": 2,
+   "to_locale_string": 3
+  },
+  "frontend/pages/settings-center.html": {
+   "inline_styles": 24,
+   "th_count": 22
+  },
+  "frontend/pages/settlement.html": {
+   "inline_styles": 273,
+   "th_count": 51,
+   "to_locale_string": 3
+  },
+  "frontend/pages/shipping-export-history.html": {
+   "inline_styles": 2
+  },
+  "frontend/pages/supplier-log.html": {
+   "inline_styles": 20
+  },
+  "frontend/pages/suppliers.html": {
+   "inline_styles": 167,
+   "th_count": 11
+  },
+  "frontend/pages/tender-radar.html": {
+   "inline_styles": 69,
+   "th_count": 1,
+   "to_locale_string": 3
+  },
+  "frontend/pages/topology-quick.html": {
+   "inline_styles": 31,
+   "th_count": 6
+  },
+  "frontend/pages/users.html": {
+   "inline_styles": 217,
+   "th_count": 4
+  },
+  "frontend/pages/vendor-contractors.html": {
+   "inline_styles": 124,
+   "th_count": 11,
+   "to_locale_string": 3
+  },
+  "frontend/pages/voucher.html": {
+   "inline_styles": 47,
+   "th_count": 6,
+   "to_locale_string": 3
+  },
+  "frontend/pages/warranty.html": {
+   "inline_styles": 7,
+   "th_count": 6
+  },
+  "frontend/pages/work-log.html": {
+   "inline_styles": 7,
+   "th_count": 5
+  },
+  "frontend/static/form-designer.js": {
+   "to_locale_string": 1
+  },
+  "frontend/static/motrix-format.js": {
+   "to_locale_string": 7
+  }
+ }
+}
