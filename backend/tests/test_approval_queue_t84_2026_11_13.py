@@ -34,11 +34,11 @@ def test_every_approve_and_reject_button_goes_through_the_same_handlers():
 
 def test_reasons_chip_uses_the_items_own_reasons_only():
     s = _page()
-    assert "reasonsOf(item).slice(0, 2)" in s and 'data-testid="aq-why"' in s
+    assert "cardReasons(item).slice(0, 2)" in s and 'data-testid="aq-why"' in s
     assert "reasonsOf(item) {" in s and "typeof x === 'string'" in s          # 只收字串，其他形狀丟掉
     card = s.split('data-testid="aq-why"')[1][:700]
-    assert "margin" not in card.split("</div>")[0].lower() or "reasonsOf" in card   # 卡片只放 reasons，不放毛利數字
     assert "netMargin" not in card and "net_margin" not in card
+    assert "/毛利/.test(t) ? '毛利率低於門檻' : t" in s         # 毛利類原因在卡片上合併成一句、不帶數字（PM 2026-11-13）
 
 
 # ── e2e ───────────────────────────────────────────────────────────────────────────────────────
@@ -180,3 +180,55 @@ def test_mobile_and_desktop_hit_the_same_endpoint_with_the_same_body_shape(live_
         page.close()
     assert out["desktop"] == out["mobile"], out
     assert out["desktop"][0] == "POST" and out["desktop"][1].endswith("/" + action)
+
+
+@pytest.mark.e2e
+def test_card_margin_reasons_show_no_numbers_but_drawer_keeps_them(live_server, make_user, new_page, login_as):
+    u = make_user(username="t84_margin", role="superadmin")
+    _seed("MQ-T84-MARGIN", "t84_margin", reasons=["第 1 項毛利率 12.50% 低於 30%", "第 3 項毛利率 -100.00% 低於 30%", "付款條件特殊"])
+    page = new_page(viewport={"width": 390, "height": 800})
+    _open(page, live_server, login_as, u, "MQ-T84-MARGIN")
+    card = page.locator("[data-testid='aq-item-MQ-T84-MARGIN']").first
+    why = card.locator("[data-testid=aq-why]")
+    assert why.locator(".aq-reason-tag").all_inner_texts() == ["毛利率低於門檻", "付款條件特殊"]    # 兩項毛利合成一句
+    assert not re.search(r"\d", why.inner_text()), why.inner_text()
+    card.click()                                                                                    # 完整數字在詳情抽屜
+    page.locator(".aq-reasons").first.wait_for(state="visible", timeout=10000)
+    assert "12.50%" in page.locator(".aq-reasons").first.inner_text()
+
+
+@pytest.mark.e2e
+def test_load_failure_shows_retry_and_recovers(live_server, make_user, new_page, login_as):
+    u = make_user(username="t84_retry", role="superadmin")
+    _seed("MQ-T84-RETRY", "t84_retry")
+    page = new_page(viewport={"width": 1440, "height": 900})
+    state = {"fail": True}
+
+    def handler(route):
+        if state["fail"]:
+            route.fulfill(status=500, content_type="application/json", body=json.dumps({"detail": "boom"}))
+        else:
+            route.continue_()
+    page.route("**/api/approval-queue", handler)
+    _open(page, live_server, login_as, u)
+    err = page.locator("[data-testid=aq-load-error]")
+    err.wait_for(state="visible", timeout=20000)
+    assert "讀取失敗，請重試" in err.inner_text() and not page.locator("[data-testid=aq-empty]").is_visible()
+    state["fail"] = False
+    page.locator("[data-testid=aq-retry]").click()
+    page.locator("[data-testid='aq-item-MQ-T84-RETRY']").first.wait_for(state="visible", timeout=20000)
+    assert not err.is_visible()
+
+
+@pytest.mark.e2e
+def test_summary_tiles_respond_to_space(live_server, make_user, new_page, login_as):
+    a = make_user(username="t84_space_a", role="sales", modules=["quotation"])
+    make_user(username="t84_space_b", role="sales", modules=["quotation"])
+    _seed("MQ-T84-SP1", "t84_space_a")
+    _seed("MQ-T84-SP2", "t84_space_b", requested_by="t84_space_a")
+    page = new_page(viewport={"width": 390, "height": 600})
+    _open(page, live_server, login_as, a, "MQ-T84-SP2")
+    page.evaluate("window.__sc = []; Element.prototype.scrollIntoView = function () { window.__sc.push(this.id) }")
+    page.locator("[data-testid=aq-kpi-flow]").focus()
+    page.keyboard.press("Space")
+    assert page.evaluate("window.__sc")[-1] == "aq-col-flow"
