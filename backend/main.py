@@ -361,18 +361,31 @@ def _record_user_activity(user_id: int, now_dt, gap_seconds: float) -> None:
         pass
 
 
+#: 每個請求的耗時毫秒（2026-11-13「外網載入效能」票）：≥ 這個毫秒數、或狀態碼 ≥ 400 才寫一行 INFO（logger `motrix.req`）；0＝全寫。
+#: 預設 100 ms：本機 14–24 ms 的正常請求不寫（常駐程式的磁碟寫入是預算），慢的與失敗的才留下，足以回答「外網慢是伺服器還是路上」。
+#: `Server-Timing: app;dur=<ms>` 表頭**每個請求都帶**（不寫碟）——瀏覽器 DevTools Network 的 Timing 頁籤直接看得到伺服器耗時，
+#: 與外網整體耗時相減就是網路路途。logger 接到哪個檔由 helpers/log_setup（日誌分流）決定，這裡不重做一套。
+_REQ_LOG_MS = float(os.environ.get("MOTRIX_REQ_LOG_MS", "100"))
+_req_log = logging.getLogger("motrix.req")
+
+
 @app.middleware("http")
 async def slow_request_log(request: Request, call_next):
     _t0 = time.monotonic()
     request.state.t0 = _t0      # W-6：給 _unhandled_handler 算「開始到出錯」幾秒
     response = await call_next(request)
     _elapsed = time.monotonic() - _t0
+    _ms = _elapsed * 1000.0
+    response.headers["Server-Timing"] = "app;dur=%.1f" % _ms
     if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
         logger.warning(
             "SLOW REQUEST %.1fs  %s %s  status=%s"
             "（DB 寫入鎖等待上限 30s，見 db.py::_connect）",
             _elapsed, request.method, request.url.path, response.status_code,
         )
+    elif _ms >= _REQ_LOG_MS or response.status_code >= 400:
+        # path 只記路徑不記 query（session token 曾經放在 query string，見 auth_middleware 註解）
+        _req_log.info("REQ %s %s %s %.0fms", request.method, request.url.path, response.status_code, _ms)
     return response
 
 
@@ -391,10 +404,10 @@ async def recycle_bin_request_scope(request: Request, call_next):
             _rb.request_scope_end(state)
 
 
-@app.middleware("http")
-async def no_cache_static(request: Request, call_next):
-    response = await call_next(request)
-    p = request.url.path
+def _legacy_cache_headers(p, response):
+    """靜態檔快取表頭的舊規則（vendor／fonts 長效、.html/.css/.js 與 "/" 一律 no-store）。
+    2026-11-13 起版本化的資源與 HTML 改走 `helpers/static_cache.handle`；這裡只剩它不處理的路徑（vendor／fonts／其他）
+    與非 200 回應（404 等錯誤頁不可以被快取）。"""
     # 2026-09-08 修復：外部函式庫自架後（見 §9「外部函式庫自架」），vendor 目錄下的
     # 檔案是版本號釘死在檔名裡的第三方函式庫（如 alpine-3.17.1.min.js），跟會頻繁
     # 覆寫的頁面 .html/.css/.js 完全不同類——版本升級一定會改檔名，同名檔案內容
@@ -415,6 +428,36 @@ async def no_cache_static(request: Request, call_next):
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+
+from helpers import static_cache as _static_cache
+
+
+def _sidebar_source_for_version():
+    return platform_menu.sidebar_js_source(_PAGE_MAP, FRONTEND_DIR)
+
+
+def _module_assets_for_version():
+    from helpers.module_assets import served_assets
+    return served_assets()
+
+
+#: 全站資源的內容版本（見 helpers/static_cache 檔頭）：HTML 與 JS／CSS 本體裡的資源引用送出前一律補 `?v=<版本>`，
+#: 帶版本的資源 `immutable`、HTML `no-cache`＋ETag／304。不手改每一頁，守門見 tests/test_static_cache_versioning。
+ASSET_VERSION = _static_cache.AssetVersion(FRONTEND_DIR, sidebar_source=_sidebar_source_for_version,
+                                           module_assets=_module_assets_for_version)
+
+
+#: 緊急開關：`MOTRIX_STATIC_CACHE=0` ⇒ 整套退回舊行為（.html/.css/.js 一律 no-store、不改寫引用、不加版本）。正式機出狀況時改環境變數
+#: 重啟即可，不必換包。預設開。
+_STATIC_CACHE_ON = os.environ.get("MOTRIX_STATIC_CACHE", "1") != "0"
+
+
+@app.middleware("http")
+async def no_cache_static(request: Request, call_next):
+    if not _STATIC_CACHE_ON:
+        return _legacy_cache_headers(request.url.path, await call_next(request))
+    return await _static_cache.handle(request, call_next, ASSET_VERSION, lambda p, r: _legacy_cache_headers(p, r))
 
 
 # 逐條操作軌跡（2026-09-14，DB v80）

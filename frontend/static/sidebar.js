@@ -277,7 +277,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // 而不是心跳或 WebSocket：
   //   ①「在線」的資料來源是 sessions.last_active，那個欄位本來就在更新，不需要
   //     為了這個功能讓每個閒置分頁定時打伺服器
-  //   ② 這是內網 ERP，60 秒的延遲對「誰在線上」完全夠用，不值得為它常駐連線
+  //   ② 這是內網 ERP，（2026-11-13 起 120 秒、分頁看不見時暫停）延遲對「誰在線上」完全夠用，不值得為它常駐連線
   // 精度上限就是 last_active 的節流（5 分鐘），所以剛登入的人最慢 5 分鐘後才出現，
   // 這一點寫在下拉選單的說明文字裡，免得有人以為是壞掉。
   function buildOnlineWidget() {
@@ -299,6 +299,22 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function _roleLabel(r) {
     return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者' }[r] || r
+  }
+
+  // 輪詢頻率（2026-11-13「外網載入效能」）：外網一趟約 1 秒、閒置分頁也每分鐘打一次很不划算 ⇒ 120 秒，且**分頁看不見時不打**
+  // （切到別的分頁／縮到工作列），回到前景時若距上次已超過間隔就立刻補一次。精度上限本來就是 last_active 的 5 分鐘節流，120 秒夠用。
+  var ONLINE_POLL_MS = 120000
+  window.motrixVisiblePoll = window.motrixVisiblePoll || function (fn, ms) {
+    var last = Date.now()
+    function tick() {
+      if (document.hidden) return
+      last = Date.now()
+      fn()
+    }
+    setInterval(tick, ms)
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && Date.now() - last >= ms) tick()
+    })
   }
 
   function refreshOnlineWidget() {
@@ -459,7 +475,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (window.Alpine && window.Alpine.initTree) window.Alpine.initTree(el)
     bindOnlineWidget()
     refreshOnlineWidget()
-    if (sa) setInterval(refreshOnlineWidget, 60000)
+    if (sa) window.motrixVisiblePoll(refreshOnlineWidget, ONLINE_POLL_MS)
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
