@@ -42,6 +42,65 @@ def test_lgm1b_three_partial_probes_are_not_cached_permanently(monkeypatch):
 
 
 @pytest.mark.real_fingerprint
+def test_lgm1b_strikes_escalate_the_backoff_instead_of_caching_forever(monkeypatch):
+    """hichan-16複驗抓到的題目缺口：原本的題目分不清「永久快取」與「退避」（兩者在第二次呼叫
+    回的值都一樣），也沒有走真正的 machine_fingerprint() 去累積 strikes。這題走完整流程：
+
+    1. 殘缺×3 ⇒ `_FINGERPRINT_CACHE` 要是 unstable、strikes=0。
+    2. 退避（60s）到期、硬體仍殘缺 ⇒ 重探一次、strikes 要變成 1（退避升級到下一檔 300s）。
+    3. 只倒回 61 秒（上一檔的退避值，不夠蓋過新的 300s 退避）、硬體這次其實已經完整了，
+       也不該重探——證明退避真的升級了，不是永遠 60 秒（否則這裡就會錯誤地重探、變穩定）。
+    4. 倒回 301 秒（蓋過 300s 退避）⇒ 這次才重探，讀到完整結果，升級成穩定值。
+
+    突變 M6（is_stable 永遠 True，等於 LG-M1b 整個退回「殘缺也永久快取」）與 M8（退避永遠
+    60s、不升級）都會在步驟 2／3 紅。"""
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", None)
+    monkeypatch.setattr(lic, "_FP_PROBE_DELAY_S", 0)
+    calls = []
+
+    def always_partial():
+        calls.append(1)
+        return ("uuid-only-never-complete", "")
+
+    # 步驟 1：殘缺 ×3
+    monkeypatch.setattr(lic, "_probe_hardware_once", always_partial)
+    first = lic.machine_fingerprint()
+    cache = lic._FINGERPRINT_CACHE
+    assert cache[1] is False, "殘缺結果被標成穩定了（M6）：%r" % (cache,)
+    assert cache[3] == 0, "第一次殘缺不該就有 strike：%r" % (cache,)
+
+    # 步驟 2：倒回剛好超過第 0 檔退避（60s），硬體仍殘缺 ⇒ 重探、strikes 要變成 1
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", (cache[0], cache[1], time.monotonic() - 61, cache[3]))
+    calls_before = len(calls)
+    second = lic.machine_fingerprint()
+    assert len(calls) > calls_before, "退避到期了卻沒有重探"
+    assert second == first  # 硬體還是殘缺，算出同一個值
+    cache = lic._FINGERPRINT_CACHE
+    assert cache[3] == 1, "退避到期重探後，strikes 應該要累加（否則永遠停在第 0 檔退避，M8）：%r" % (cache,)
+
+    # 步驟 3：只倒回 61 秒——這不夠蓋過「升級後」的第 1 檔退避（300s）。硬體這次其實已經
+    # 完整了，但退避沒到期就不該去看；能撐住代表退避真的升級了，不是永遠 60s（M8）。
+    monkeypatch.setattr(lic, "_probe_hardware_once", lambda: ("uuid-full", "mac-full"))
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", (cache[0], cache[1], time.monotonic() - 61, cache[3]))
+    calls_before = len(calls)
+    third = lic.machine_fingerprint()
+    assert len(calls) == calls_before, "退避還沒到期（只過了61秒，第1檔要300秒）卻重探了，退避沒升級（M8）"
+    assert third == first, "退避期內理當沿用舊值"
+
+    # 步驟 4：倒回 301 秒，蓋過第 1 檔退避 ⇒ 這次重探，硬體完整 ⇒ 升級成穩定值。
+    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", (cache[0], cache[1], time.monotonic() - 301, cache[3]))
+    fourth = lic.machine_fingerprint()
+    assert fourth != first, "退避到期、硬體已完整，應該升級成新的穩定值"
+    cache = lic._FINGERPRINT_CACHE
+    assert cache[1] is True, "硬體完整之後應該標成穩定（M6）：%r" % (cache,)
+
+    def boom():
+        raise AssertionError("穩定之後不該再探測硬體")
+    monkeypatch.setattr(lic, "_probe_hardware_once", boom)
+    assert lic.machine_fingerprint() == fourth
+
+
+@pytest.mark.real_fingerprint
 def test_lgm1_all_empty_then_full_recovers_within_the_retry_window(monkeypatch):
     """第一次探測空的，重試時讀到完整 ⇒ 當次就要拿到完整、穩定的結果（不是永遠殘缺）。"""
     monkeypatch.setattr(lic, "_FINGERPRINT_CACHE", None)
@@ -61,27 +120,6 @@ def test_lgm1_all_empty_then_full_recovers_within_the_retry_window(monkeypatch):
 
     monkeypatch.setattr(lic, "_probe_hardware_once", boom)
     assert lic.machine_fingerprint() == digest
-
-
-@pytest.mark.real_fingerprint
-def test_lgm1b_partial_result_upgrades_to_stable_after_backoff_expires(monkeypatch):
-    """殘缺值快取之後，退避到期＋這次硬體已經完整 ⇒ 要升級成穩定值，且之後不再退避（突變 M1：
-    machine_mismatch／殘缺指紋又「if True」整天快取的話，這裡升級不了，測試會紅）。"""
-    monkeypatch.setattr(lic, "_FP_PROBE_DELAY_S", 0)
-
-    # 模擬「已經有一個殘缺結果被快取，且已經超過 60 秒退避」
-    monkeypatch.setattr(lic, "_FINGERPRINT_CACHE",
-                         ("deadbeefdeadbeef", False, time.monotonic() - 61, 0))
-    monkeypatch.setattr(lic, "_probe_hardware_once", lambda: ("uuid-full", "mac-full"))
-
-    upgraded = lic.machine_fingerprint()
-    assert upgraded != "deadbeefdeadbeef"
-
-    def boom():
-        raise AssertionError("升級成穩定值之後不該再探測硬體")
-
-    monkeypatch.setattr(lic, "_probe_hardware_once", boom)
-    assert lic.machine_fingerprint() == upgraded
 
 
 def test_lgm1_machine_mismatch_is_cached_only_for_a_short_ttl(monkeypatch, tmp_path):
@@ -153,10 +191,15 @@ def _asgi_get(app, path):
     return run()
 
 
-def test_lgm2a_cold_license_check_does_not_block_the_event_loop(monkeypatch):
+def test_lgm2a_cold_license_check_does_not_block_the_event_loop(client, monkeypatch):
     """授權判定冷啟動（模擬硬體探測很慢）時，同一個事件迴圈的心跳不可以被卡住
     （突變 M5：把 run_in_threadpool 還原成同步呼叫，這裡會紅，比照 T80 R6 的
-    test_async_middleware_writes_do_not_block_the_event_loop 同一手法）。"""
+    test_async_middleware_writes_do_not_block_the_event_loop 同一手法）。
+
+    ⚠️ hichan-16複驗抓到：這題原本沒要 `client` 固件就 `import main`，會讓 main.py
+    在整合測試固件（換 DB／LICENSE_PATH 等檔案路徑）有機會接手之前就被 import 進
+    sys.modules，污染同一個 pytest 行程裡**後面**的 client 類測試。一定要先經過
+    `client` 固件再 import main。"""
     import main
 
     monkeypatch.setattr(main.license_core, "LICENSE_GATE_ENABLED", True)
