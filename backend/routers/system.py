@@ -2595,6 +2595,13 @@ def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
     current = _get_setting("email_notify", {}) or {}
     data = {k: body[k] for k in _EMAIL_DEFAULTS if k in body}
     data = {**_EMAIL_DEFAULTS, **data}
+    from helpers import email_setup as _es
+    bad = _es.validate_config(data)                  # 批次 3：存之前先檢查格式，白話回報（不是存了之後才在寄信時出錯）
+    if bad:
+        raise HTTPException(422, bad)
+    for k in ("smtp_user", "smtp_host", "base_url", "from_name"):
+        if isinstance(data.get(k), str):
+            data[k] = data[k].strip()
     if data.get("smtp_password") in ("", _MASKED):
         data["smtp_password"] = current.get("smtp_password", "")
     _set_setting("email_notify", data)
@@ -2975,6 +2982,132 @@ def test_email_notify(authorization: str = Header(None)):
         raise HTTPException(502, f"寄信失敗：連不上寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
     _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
+
+
+# ── 寄信帳號精靈（批次 3，2026-11-13）──────────────────────────────────────────
+# 流程：①選信箱服務 ②貼信箱與密碼 ③寄測試信給「目前登入的人」，按「我收到了」才啟用。
+# 不變式：測試信成功之前不會啟用；啟用只認「剛剛測試成功的那一份設定」（指紋比對，設定改過就要重測）；密碼不進稽核、不進回應。
+
+_EMAIL_WIZARD_PROOF = "email_setup_test_proof"      # {fp, at, to}：最近一次精靈測試信成功的設定指紋
+_WIZARD_PROOF_HOURS = 24
+
+
+@router.get("/api/settings/email-notify/providers")
+def email_notify_providers(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    return {"providers": _es.provider_list()}
+
+
+class EmailWizardIn(BaseModel):
+    provider: str = "gmail"
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    from_name: str = ""
+    base_url: str = ""
+    recipient: str = ""          # 登入的人沒有 Email 時，在這一步補填（同時存回他的帳號）
+
+
+def _wizard_error(status: int, detail: str, **extra):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=status, content={"detail": detail, **extra})
+
+
+@router.post("/api/settings/email-notify/wizard/test-me")
+def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    from helpers.email_notify import _send_raising, _build_html, _base_url
+    from helpers import mail_types as _mt
+    prov = _es.provider_by_key(body.provider)
+    if not prov:
+        raise HTTPException(422, "請先選擇信箱服務。")
+    current = _get_setting("email_notify", {}) or {}
+    pw = body.smtp_password
+    if pw in ("", _MASKED):
+        pw = current.get("smtp_password", "")
+    pw = _es.normalize_password(body.provider, pw)
+    host = (body.smtp_host or prov["host"]).strip()
+    port = int(body.smtp_port or prov["port"])
+    bad = _es.validate_config({"smtp_user": body.smtp_user, "smtp_host": host, "smtp_port": port,
+                               "base_url": body.base_url, "from_name": body.from_name})
+    if bad:
+        raise HTTPException(422, bad)
+    if not host:
+        raise HTTPException(422, "請填寄信主機（向你的信箱或網域代管廠商詢問）。")
+    if not body.smtp_user.strip():
+        raise HTTPException(422, "請填寄件人信箱。")
+    if not pw:
+        raise HTTPException(422, "請填密碼（%s）。" % prov["passwordLabel"])
+    # 收件人＝目前登入的人；他沒有 Email ⇒ 這一步補填並存回帳號
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT email FROM users WHERE id=?", (user["id"],)).fetchone()
+        to_addr = (row["email"] if row else "") or ""
+        if not to_addr.strip():
+            rec = (body.recipient or "").strip()
+            if not rec:
+                return _wizard_error(400, "你的帳號還沒有 Email，請在下方填上你的 Email，測試信才寄得到你。", needEmail=True)
+            if not _es.valid_email(rec):
+                raise HTTPException(422, "你填的 Email 格式不對。")
+            conn.execute("UPDATE users SET email=? WHERE id=?", (rec, user["id"]))
+            conn.commit()
+            to_addr = rec
+    finally:
+        conn.close()
+    # 先把這份設定存起來（維持原本的啟用狀態；全新安裝＝未啟用），測試信才用得到
+    data = {**_EMAIL_DEFAULTS, **current}
+    data.update(smtp_user=body.smtp_user.strip(), smtp_password=pw, smtp_host=host, smtp_port=port)
+    if body.from_name.strip():
+        data["from_name"] = body.from_name.strip()
+    if body.base_url.strip():
+        data["base_url"] = body.base_url.strip()
+    _set_setting("email_notify", data)
+    html = _build_html("system_test_mail", "測試信", "測試", "#2563EB",
+                       [("觸發者", user.get("display_name") or user["username"])], "", _base_url(),
+                       intro="本信為寄信設定測試。收到這封信，代表寄信帳號設定成功。")
+    try:
+        _send_raising([to_addr], _mt.subject("system_test_mail", "寄信設定測試"), html, ignore_enabled=True)
+    except RuntimeError as e:                       # 「這台機器不寄真實信件」等：訊息本身就是白話
+        return _wizard_error(400, str(e), category="blocked")
+    except Exception as e:                          # noqa: BLE001
+        tid = trace_id()
+        logger.exception("email_notify wizard test failed trace=%s", tid)
+        c = _es.classify_error(e, host, body.provider)
+        extra = {"category": c["category"], "title": c["title"], "hint": c["hint"], "traceId": tid}
+        if c["ticketKind"]:
+            prof = _get_setting("company_profile", {})
+            company = (prof.get("name", "") if isinstance(prof, dict) else "") or ""
+            extra["ticket"] = _es.build_ticket(c["ticketKind"], user=body.smtp_user.strip(), host=host, port=port,
+                                               company=company, requester=user.get("display_name") or user["username"])
+        return _wizard_error(502, c["title"] + "。" + c["hint"], **extra)
+    _set_setting(_EMAIL_WIZARD_PROOF, {"fp": _es.config_fingerprint(host, port, body.smtp_user, pw),
+                                       "at": datetime.now().isoformat(timespec="seconds"), "to": to_addr})
+    _audit(_tok(authorization), "settings.email_notify.wizard_test", "settings", "email_notify", "寄信精靈測試信",
+           {"provider": body.provider, "host": host, "port": port})
+    return {"ok": True, "sent_to": to_addr}
+
+
+@router.post("/api/settings/email-notify/wizard/activate")
+def email_notify_wizard_activate(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    cfg = _get_setting("email_notify", {}) or {}
+    proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
+    fp = _es.config_fingerprint(cfg.get("smtp_host"), cfg.get("smtp_port"), cfg.get("smtp_user"), cfg.get("smtp_password"))
+    fresh = False
+    try:
+        fresh = datetime.now() - datetime.fromisoformat(proof.get("at", "")) < timedelta(hours=_WIZARD_PROOF_HOURS)
+    except (TypeError, ValueError):
+        pass
+    if not proof or proof.get("fp") != fp or not fresh:
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+    if not cfg.get("enabled"):
+        _set_setting("email_notify", {**_EMAIL_DEFAULTS, **cfg, "enabled": True})
+        _audit(_tok(authorization), "settings.email_notify.wizard_activate", "settings", "email_notify", "寄信精靈啟用 Email 通知")
+    return {"ok": True, "enabled": True}
 
 
 # ── Custom roles ───────────────────────────────────────────────────────────────

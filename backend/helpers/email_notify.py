@@ -15,7 +15,9 @@ import logging
 from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError
 import os
 import re
+import contextlib
 import smtplib
+import ssl
 import threading
 from email.encoders import encode_base64 as _encode_b64
 from email.mime.base import MIMEBase as _MIMEBase
@@ -401,6 +403,27 @@ SEND_PERMANENT_FAIL = "permanent_fail"
 SEND_SKIPPED = "skipped"
 
 
+@contextlib.contextmanager
+def _smtp_open(host: str, port: int, timeout: int):
+    """開一條 SMTP 連線（登入前）：連接埠 465 用隱含 SSL，其餘用 STARTTLS（批次 3：「其他信箱」可能是 465）。"""
+    if int(port) == 465:
+        s = smtplib.SMTP_SSL(host, int(port), timeout=timeout, context=ssl.create_default_context())
+        try:
+            s.ehlo()
+            yield s
+        finally:
+            try:
+                s.quit()
+            except Exception:  # noqa: BLE001
+                pass
+        return
+    with smtplib.SMTP(host, int(port), timeout=timeout) as s:
+        s.ehlo()
+        s.starttls()
+        s.ehlo()
+        yield s
+
+
 def _send(to_addrs: list, subject: str, html: str) -> str:
     """寄一封信，**回傳四種結果之一**（見 `SEND_*`）。
 
@@ -450,10 +473,7 @@ def _send(to_addrs: list, subject: str, html: str) -> str:
     msg["To"]      = ", ".join(to_addrs)
     msg.attach(MIMEText(html, "html", "utf-8"))
     try:
-        with smtplib.SMTP(host, port, timeout=15) as s:
-            s.ehlo()
-            s.starttls()
-            s.ehlo()
+        with _smtp_open(host, port, 15) as s:
             s.login(user, pw)
             s.sendmail(user, to_addrs, msg.as_string())
         logger.info("email sent to %s — %r", to_addrs, subject)
@@ -545,10 +565,11 @@ def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
     return handle
 
 
-def _send_raising(to_addrs: list, subject: str, html: str) -> None:
-    """同 _send，但 SMTP 失敗時直接拋出例外（供測試端點用）。"""
+def _send_raising(to_addrs: list, subject: str, html: str, ignore_enabled: bool = False) -> None:
+    """同 _send，但 SMTP 失敗時直接拋出例外（供測試端點用）。
+    `ignore_enabled=True`：寄信精靈在「啟用之前」就要寄測試信，所以略過「未啟用」這一關；開發機硬擋與帳密檢查照舊。"""
     cfg = _cfg()
-    if not cfg.get("enabled"):
+    if not cfg.get("enabled") and not ignore_enabled:
         raise RuntimeError("Email 通知功能未啟用")
     subject = _apply_dev_subject_prefix(cfg, subject)
     if _smtp_send_blocked(subject):
@@ -567,10 +588,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
     msg["From"]    = f"{from_name} <{user}>"
     msg["To"]      = ", ".join(to_addrs)
     msg.attach(MIMEText(html, "html", "utf-8"))
-    with smtplib.SMTP(host, port, timeout=15) as s:
-        s.ehlo()
-        s.starttls()
-        s.ehlo()
+    with _smtp_open(host, port, 15) as s:
         s.login(user, pw)
         s.sendmail(user, to_addrs, msg.as_string())
 
@@ -1956,8 +1974,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
         outer.attach(part)
 
     try:
-        with smtplib.SMTP(host, port, timeout=60) as s:
-            s.ehlo(); s.starttls(); s.ehlo()
+        with _smtp_open(host, port, 60) as s:
             s.login(user, pw)
             s.sendmail(user, to_addrs, outer.as_string())
         logger.info("email+attachments sent to %s — %r", to_addrs, subject)
