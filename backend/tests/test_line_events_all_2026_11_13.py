@@ -705,3 +705,19 @@ def test_crm_assignment_flow_sends_assignee_events_and_leaves_email_alone(client
     r = client.patch("/api/dev-cases/%d/status" % cid, json={"status": "成案"}, headers=bob)
     assert r.status_code == 200, r.text
     assert _targets(env) == ["amy", "dan"], "狀態變更（細項 crm_case_status）：案件相關人＝業務 amy＋被指派人 dan（建立者 bob 是操作者，排除）"
+
+
+# ── 個人頁：分組、被指定的人看得到（即使角色不在允許清單）─────────────────────────
+
+def test_personal_prefs_are_grouped_and_include_events_where_i_was_picked(client, env):
+    from helpers import line_notify as L, line_recipients as lr
+    for k in ("approval_request", "dev_case_unassigned", "shipping_submitted"):
+        L.set_event(k, True)
+    L.set_event_roles("shipping_submitted", ["admin"])                 # dan(engineer) 角色不在允許清單 → 本來看不到
+    v = lr.prefs_view("dan", "engineer")
+    assert [e["key"] for e in v] == ["approval_request", "dev_case_unassigned"]
+    assert [e["group"] for e in v] == ["報價單與審核", "業務開發"] and v[1]["kind"] == "line_only"
+    L.set_audience("shipping_submitted", "business_plus", [], ["dan"])    # 管理員指定了 dan：他要能在自己的頁面看到並關掉
+    assert [e["key"] for e in lr.prefs_view("dan", "engineer")] == ["approval_request", "shipping_submitted", "dev_case_unassigned"]
+    lr.set_muted("dan", "shipping_submitted", True, role="engineer")
+    assert [e["enabled"] for e in lr.prefs_view("dan", "engineer")] == [True, False, True]
