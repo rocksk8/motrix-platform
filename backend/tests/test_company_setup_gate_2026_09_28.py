@@ -55,7 +55,7 @@ def test_unconfigured_blocks_business_api_with_428(client, boss, clerk):
         assert r.status_code == 428, r.text
         d = r.json()
         assert d["code"] == "company_setup_required" and d["canFix"] is can
-        assert d["settingsUrl"] == "/pages/company-profile-settings.html?setup=1"
+        assert d["settingsUrl"] == "/pages/company-setup-wizard.html?setup=1"
     assert client.get("/api/auth/me", headers=clerk).status_code == 200
     assert client.get("/api/ping").status_code == 200
     st = client.get("/api/settings/company-setup/status", headers=clerk).json()
