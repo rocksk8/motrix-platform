@@ -106,6 +106,17 @@ _startup_step("import_routers")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# 日誌分流與輪替（2026-11-13）：access.log／app.log 由本行程用 RotatingFileHandler 自己輪替（gzip、10 份）；
+# server.log（cmd 的 `>>`）縮成開機那一段＋WARNING 以上的兜底。整套設計與「為什麼開機那一段要留」見 helpers/log_setup.py 檔頭。
+# 打不開檔 ⇒ install() 回 None、維持舊行為；測試（pytest）不建檔。客戶端斷線噪音（WinError 10054）的 filter 到處都掛。
+from helpers import log_setup as _log_setup
+_log_setup.attach_noise_filter()
+if _log_setup.enabled_by_environment():
+    from core import paths as _log_paths
+    _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
+else:
+    _LOG_SPLIT = None
+
 # L2 模組（modules/*）由載入器登錄；main 不指名任何 L2 模組（CORE-SPEC §2）。
 # 載入失敗的模組只記 ERROR，不擋啟動。
 # CORE-SPEC §9c：② 未授權（helpers/licensing）> ③ 管理者停用（system_settings.modules_disabled，

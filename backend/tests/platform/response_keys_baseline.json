@@ -6316,6 +6316,7 @@
    "groups[].values.local_db_keep_days",
    "groups[].values.local_pre_update_keep",
    "groups[].values.lock_scope",
+   "groups[].values.log_keep_days",
    "groups[].values.login_days",
    "groups[].values.mail_cap",
    "groups[].values.mail_window_minutes",

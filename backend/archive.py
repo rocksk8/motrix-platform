@@ -1811,6 +1811,26 @@ def _rotate_server_log_if_large(
         return False
 
 
+def _prune_old_logs(log_dir: str = None, keep_days=None) -> list:
+    """輪替出來的舊日誌（access.log.N.gz／app.log.N.gz／server.log.N）超過 `retention.log_keep_days`（設定中心，預設 30）就刪。
+    現行檔與 `server.log.rotating` 永遠不刪。整套日誌分流的設計見 `helpers/log_setup.py` 檔頭。永不丟例外（清日誌不可以拖累備份）。回被刪的檔名。"""
+    try:
+        from helpers import log_setup as _ls
+        if keep_days is None:
+            from helpers import settings_groups as _sg, settings_registry as _sr      # noqa: F401
+            keep_days = _sr.get("retention", "log_keep_days")
+        removed = _ls.prune_rotated_logs(log_dir or os.path.dirname(_SERVER_LOG_PATH), keep_days)
+        if removed:
+            logger.info("已刪除超過 %s 天的舊日誌 %d 個：%s", keep_days, len(removed), "、".join(sorted(removed)))
+        n = _ls.noise_count()
+        if n:
+            logger.info("本行程累計濾掉客戶端突然斷線（WinError 10054）%d 次——Windows asyncio 已知無害現象，不寫入日誌", n)
+        return removed
+    except Exception:                                                # noqa: BLE001
+        logger.exception("_prune_old_logs failed")
+        return []
+
+
 # ── S-CC07（STATES-DATA-OPS）：時鐘異常 ⇒ 暫停清理，每一輪都告警 ─────────────────────
 # 清理以 `date.today()` 算 cutoff ⇒ 系統時鐘往前跳超過保留天數時，**真實的快照會全部被判成過期**
 # （本機 >30 天全刪、雲端每日 >60 天全刪）。
@@ -2942,6 +2962,7 @@ def _daily_backup():
     # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
     # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
     _rotate_server_log_if_large()
+    _prune_old_logs()
 
     if not _archive_ok():
         _write_backup_alert(
