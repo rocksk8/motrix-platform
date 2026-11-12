@@ -634,3 +634,38 @@ def test_perm_can_raising_hides_only_that_card_and_the_hub_still_answers(client,
     u, p = make_user(username="hub_permboom", role="viewer", modules=["audit_log"])
     R.clear_cache()
     assert _hub(client, _login(client, u, p)) is not None, "perm.can 例外時整個系統中心仍要回 200"
+
+
+# ── 2026-11-13 回報：卡片連到不存在的錨點／規劃中的頁面 404／文字承諾頁面沒有的東西 ──────────────────────
+def test_card_fragments_land_somewhere_real():
+    """卡片 href 帶 `#xxx` ⇒ 目標頁面必須真的接得住：頁面裡有 `id="xxx"`，或目標是設定中心且 xxx 是登錄過的設定群組代碼。
+    （「備份與保留」曾指向 company-profile-settings.html#backup，那頁沒有這個錨點，使用者點進去只是停在頁首。）"""
+    import helpers.settings_groups  # noqa: F401  載入時登錄設定群組
+    from helpers import settings_registry as SR
+    group_keys = set(SR.groups())
+    assert {"retention", "overhead"} <= group_keys, "前提：設定群組有登錄（否則下面的判斷是空的）"
+    checked = 0
+    for c in _all_cards():
+        href = c["href"]
+        if "#" not in href or c.get("planned"):
+            continue
+        page, frag = href.split("#", 1)
+        html = source_tree.page_file(page).read_text(encoding="utf-8")
+        ok = ('id="%s"' % frag) in html or ("id='%s'" % frag) in html
+        if page == "settings-center.html":
+            ok = frag in group_keys
+        assert ok, "卡片 %s 的 %s 沒有地方接得住 #%s" % (c["id"], href, frag)
+        checked += 1
+    assert checked >= 1, "掃不到任何帶錨點的卡片 ⇒ 守門壞了"
+
+
+def test_settings_center_opens_the_group_named_in_the_url_hash():
+    html = source_tree.page_file("settings-center.html").read_text(encoding="utf-8")
+    assert "location.hash" in html and "g.group === want" in html
+
+
+def test_backup_card_description_promises_only_what_the_target_group_offers():
+    card = next(c for c in _all_cards() if c["id"] == "backup-retention")
+    assert card["href"] == "settings-center.html#retention"
+    for promised in ("最近一次備份", "還原說明"):
+        assert promised not in card["desc"], "卡片承諾了目標頁面沒有的功能：%s" % promised
