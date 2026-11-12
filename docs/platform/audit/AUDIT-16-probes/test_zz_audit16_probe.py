@@ -71,7 +71,7 @@ def test_probe_cold_fingerprint_blocks_event_loop(live_server, client, make_user
     res = {}
     def a(): res["A"] = call("/api/customers", hdr)
     ta = threading.Thread(target=a); ta.start(); time.sleep(0.6)
-    res["B"] = call("/api/ping")            # 公開端點、不需要授權，只是想走一般請求
+    res["B"] = call("/"); res["C"] = call("/api/ping")      # 靜態頁（不需授權判定）與公開 API 各量一次
     ta.join()
-    print("COLD A (triggers fingerprint):", res["A"], " B (/api/ping started 0.6s later):", res["B"])
+    print("COLD A (triggers fingerprint):", res["A"], " B (static / at 0.6s):", res["B"], " C (/api/ping after /):", res["C"])
     assert res["A"][0] == 200

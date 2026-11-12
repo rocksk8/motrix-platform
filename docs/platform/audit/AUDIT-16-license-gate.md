@@ -155,6 +155,53 @@
 | LG-S1～S4 | | | |
 | LG-O1～O7 | | | |
 
+## 5. 複驗（稽核者，2026-11-12；對象 `b7d08799b`，在基準 `ffd4b8a90` 之上，中間夾 `8a46893a3` 填入 `_PUBKEY_PROD`）
+
+> 結論：**LG-M2 修好了；IP-M1 的主要洞（/64）修好了；LG-M1 只修了一半。三項都還不能關**——主因是**三個修正都沒有任何新題目**（`b7d08799b` 只動了 5 個檔，測試只改了 `test_licensing_core` 一處），我把每個修正個別還原，現有測試全部照綠（見下表）。我自己上一輪「補題」那條建議沒有被採納，所以關閉條件不變：要有會紅的題。
+
+基準（`b7d08799b`，未突變）：上一輪 5 檔＋`test_totp`＋`test_conn_reaper_t80` 共 **224 passed**（約 68 秒）。
+
+### 5.1 修正是否有效（`probe_pure.py` 的 C／D 改寫版＋`test_zz_audit16_probe.py` 的 `COLD`）
+
+| 情境 | 修正前 | 修正後 | 判讀 |
+|---|---|---|---|
+| C：第一次指紋全空、之後恢復，**同一個金鑰檔** | 一直 `machine_mismatch` 到午夜／碰檔／重啟 | 60 秒內仍 mismatch（TTL 內），**TTL 過後 `ok`** | ✅ 達成 |
+| D4：第一次只讀到一半、重試時讀到完整 | 殘缺指紋永久 | `ok` | ✅ 達成 |
+| **D1–D3：三次探測都只讀到一半**（或 WMI 比 ≈3 秒慢） | 殘缺指紋永久 | **仍然永久**：`machine_fingerprint()` 仍回殘缺值並存進 `_FINGERPRINT_CACHE`；TTL 過後重算還是同一個錯值 ⇒ 持續 `machine_mismatch`，要重啟 | ❌ **LG-M1 剩下的部分（見 LG-M1b）** |
+| 事件迴圈：冷指紋（假指令 3 秒／次） | `/api/ping` 2.44 秒 | 同一時間 `GET /`（靜態）**0.04 秒**；`/api/ping` 仍等（它要等授權判定），但不再是事件迴圈被擋 | ✅ LG-M2(a) 達成 |
+| 被擋＋有效通行證，`emergency_pass` 每次 | 718–812 µs | **77 µs**（8 KB 垃圾檔 114 µs；無通行證檔 72 µs，因為多了兩次 stat 做快取鍵，比修正前的 28–40 µs 高，可以接受） | ✅ LG-M2(b) 達成 |
+| 正常快取命中 | 43–63 µs | 38 µs（`verify_license` 本身；中介層多一次 threadpool 往返） | ✅ |
+| IPv6 同 /64 三個位址的鎖定鍵 | 三個不同字串 | `2001:db8:1:2::/64`（單一桶）；IPv4 原樣 | ✅ IP-M1 主要洞達成 |
+
+> 撤回一項顧慮：我一度擔心「每個請求都 `await run_in_threadpool`」讓公開端點多一個對 threadpool 的依賴。實測（45 個同步慢處理函式占滿 threadpool，量 `/api/ping`）**基準 `ffd4b8a90` 就已經 3.26 秒、修正後 3.33 秒**——不是這次修正造成的，不列為發現。
+
+### 5.2 新發現（都不大，但 LG-M1b 要處理）
+
+- **LG-M1b（必修，LG-M1 的殘餘）　殘缺指紋仍永久快取**：`licensing.py` 的 `machine_fingerprint()` 重試 3 次後，只要最後仍是「只有 UUID」或「只有 MAC」，就把它存進 `_FINGERPRINT_CACHE`（行程內永久）。重試只改變「剛好慢一點點」的機率，沒有改變「慢到超過 ≈3 秒」或「某一項持續讀不到」時的結局。建議：殘缺結果不進永久快取，而是帶 TTL（例如 60 秒，之後退避到 5 分鐘、1 小時）重新探測；真的長期只有一項來源的機器（部分 VM 的 UUID 是 `_USELESS_UUIDS`）也能自我收斂到穩定值，每次探測是 threadpool 內的一次 PowerShell，成本可接受。
+- **LG-S5（建議）　指紋仍在失敗時，TTL 到期的瞬間沒有 single-flight**：`_verify_license_file` 沒有鎖。實測（`_windows_hardware` 睡 0.3 秒並持續回空、30 個並行 `verify_license` 在 TTL 剛過時進來）：**30 次各自重算、共 90 次硬體探測**（正式機＝90 個 PowerShell，每個 1–數秒，會占滿 threadpool 的 40 個執行緒）。只發生在「指紋持續讀不到」的退化狀態，每 60 秒一次。建議加一把鎖或「已有人在算就回上一次的結果」。同理冷啟動（無金鑰開機後放金鑰）時所有並行請求各自探測。
+- **LG-S6（建議）　`_rl_state` 上限是軟的**：`_rl_prune_locked` 只在 `len > 10000` 時清**沒鎖定且 1 小時沒失敗**的列；一小時內來的新列不會被清，所以「一小時內灌 10 萬個不同 /64」仍會長到 10 萬列，而且超過上限後**每次失敗登入都掃整張表**（O(n)，持鎖）。攻擊者要有大量不同前綴（/48 有 65 536 個 /64），比修正前難很多，列建議即可。硬上限＝超過就淘汰最舊的。
+- **LG-S7（建議，潛在）　`rate_limit_key` 沒處理 IPv4-mapped IPv6**：`::ffff:1.2.3.4` 與 `::ffff:5.6.7.8` 都變成 `::/64`——全部 IPv4 用戶端共用一個桶（一個人輸錯 5 次鎖住所有人）。`client_ip()` 從 `CF-Connecting-IP` 取值時會先解 mapped，但對端位址路徑（`return peer`）不會；目前四個 launcher 都綁 `0.0.0.0`（IPv4 socket，對端是純 IPv4），所以**現在不會發生**，改綁 `::`（雙棧）才會。一行 `addr.ipv4_mapped` 就能補。
+- **LG-O1 升級（建議，上線前決定）**：`8a46893a3` 已填入 `_PUBKEY_PROD`，但 `_PUBKEY_DEV` 仍在、仍受信（`licensing.py:382` 兩把都試）。現在這個閘門的實際強度＝「開發私鑰與正式私鑰兩者中最弱的那一把的保管」。握有開發私鑰的人可以對正式機指紋 `93ece768770e4ccd` 簽出一把 `env=dev` 的授權，結果只有橫幅（`dev_key`）與一筆每日稽核，**不擋**。我不知道開發私鑰在哪些機器上。建議在建包／`verify_package.py` 加：`_PUBKEY_PROD` 非空時，部署包內的 `_PUBKEY_DEV` 必須被移除或置空（作者在 `licensing.py` 的註解已寫成備忘，現在是時候變成守門）。另外請確認該筆授權簽成 `perpetual` 是預期：永久授權過期**不擋**，只剩維護期提示。
+
+### 5.3 突變：把每個修正還原，現有測試是否會紅（結果：全部存活 ⇒ 沒有題目守這些修正）
+
+| 突變（修正被還原成什麼） | 跑的測試 | 結果 |
+|---|---|---|
+| M1 `machine_mismatch` 又整天快取（`if True:`） | gate／emergency／core／em6 共 127 題 | 🟢 **存活** |
+| M2 `_FP_PROBE_RETRIES = 1`（不重試） | core／em6 共 29 題 | 🟢 **存活** |
+| M3 `rate_limit_key` 不再取 /64 | trusted_client_ip／totp／system_audit 共 82 題 | 🟢 **存活** |
+| M4 `emergency_pass` 快取鍵拿掉 `status.reason` | emergency 63 題 | 🟢 **存活**（鍵變弱沒人發現） |
+| M5 `await run_in_threadpool(verify_license)` 還原成同步 | conn_reaper＋gate 共 57 題 | 🟢 **存活**（LG-M2 回退沒人發現） |
+
+每次突變後 `git checkout` 還原，`git status` 乾淨。
+
+### 5.4 關閉條件（稽核者會確認的項目）
+
+1. **LG-M1／LG-M1b**：題目——`_windows_hardware` 先回空／殘缺、再回完整 ⇒ 同一個金鑰檔在 TTL 後 `ok`；**三次探測都殘缺、之後完整 ⇒ 最終 `ok`**（目前紅）。突變 M1、M2 要紅。
+2. **LG-M2**：題目——仿 `test_async_middleware_writes_do_not_block_the_event_loop`，冷指紋（假指令睡 ≥1 秒）時同迴圈心跳最大間隔 <0.6 秒；被擋＋通行證時同樣。突變 M5 要紅。`emergency_pass` 快取題：換通行證檔／授權檔／日期／`status.reason` 各要重算；突變 M4 要紅。
+3. **IP-M1**：題目——同 /64 不同位址連續失敗第 5 次起 429；IPv4 不受影響；稽核紀錄仍是完整位址；`_rl_state` 超過上限會被清。突變 M3 要紅。
+4. 建議項（LG-S5～S7、LG-O1）可在回覆欄表態，不阻擋關閉。
+
 ## 附錄：重現檔
 
 - `docs/platform/audit/AUDIT-16-probes/probe_pure.py`：純 Python，A（正常成本）、B（被擋＋通行證成本）、C／D（LG-M1）、E1（LG-S3）、E2（IP-M1）、E3（LG-O2）。指令見檔頭。
