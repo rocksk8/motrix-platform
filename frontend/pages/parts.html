@@ -798,7 +798,7 @@ function app() {
         cost: pick('成本(未稅)', '成本', 'cost'),
         listPrice: pick('定價(含稅)', '定價', '售價', 'list_price'),
         category: pick('類別', '分類', 'category'),
-        note: pick('備註', '備注', 'note'),
+        note: n['備註']||n['備注']||n['note']||'',
         safetyStock: pick('安全庫存', 'safety_stock'),
         leadTimeDays: pick('前置天數', '前置天數(天)', 'lead_time_days')
       }

@@ -67,7 +67,7 @@ def _commit(api, rows, plan_hash, url="/api/customers/import-rows"):
 
 # ── M1 ───────────────────────────────────────────────────────────────
 
-def test_m1_same_tax_different_name_needs_confirmation_and_is_not_written_by_default(api):
+def test_rev_m1_same_tax_different_name_needs_confirmation_and_is_not_written_by_default(api):
     _cust(api, "甲公司", "12345678", phone="02-1")
     rows = [_row(2, "乙公司", "12345678", phone="02-9", email="x@example.com")]
     p = _preview(api, rows)
@@ -79,7 +79,7 @@ def test_m1_same_tax_different_name_needs_confirmation_and_is_not_written_by_def
     assert cu["name"] == "甲公司" and cu["phone"] == "02-1" and not cu.get("email"), "名稱不同的統編命中不可預設寫入"
 
 
-def test_m1_ticked_confirm_row_is_written_but_keeps_system_name(api):
+def test_rev_m1_ticked_confirm_row_is_written_but_keeps_system_name(api):
     _cust(api, "甲公司", "12345678", phone="02-1")
     rows = [dict(_row(2, "乙公司", "12345678", phone="02-9"), confirm=True)]
     p = _preview(api, rows)                       # 預覽時就帶了勾選：計入更新
@@ -90,7 +90,7 @@ def test_m1_ticked_confirm_row_is_written_but_keeps_system_name(api):
     assert cu["name"] == "甲公司" and cu["phone"] == "02-9"
 
 
-def test_m1_name_differences_that_are_only_formatting_still_match(api):
+def test_rev_m1_name_differences_that_are_only_formatting_still_match(api):
     _cust(api, "台灣大哥大股份有限公司", "11111111")
     p = _preview(api, [_row(2, "臺灣大哥大 公司", "11111111", phone="02-2")])
     assert p["updated"] == 1 and p["confirms"] == []
@@ -98,7 +98,7 @@ def test_m1_name_differences_that_are_only_formatting_still_match(api):
 
 # ── M2 ───────────────────────────────────────────────────────────────
 
-def test_m2_preview_lists_old_to_new_per_row(api):
+def test_rev_m2_preview_lists_old_to_new_per_row(api):
     _cust(api, "既有科技", "22222222", phone="02-1", industry="資訊")
     p = _preview(api, [_row(2, "既有科技", "22222222", phone="02-2", industry="製造")])
     fields = {f["field"]: f for f in p["changes"][0]["fields"]}
@@ -106,14 +106,14 @@ def test_m2_preview_lists_old_to_new_per_row(api):
     assert fields["industry"]["old"] == "資訊" and fields["industry"]["new"] == "製造"
 
 
-def test_m2_commit_without_plan_hash_is_rejected(api):
+def test_rev_m2_commit_without_plan_hash_is_rejected(api):
     rows = [_row(2, "新公司", "33333333")]
     r = api.post("/api/customers/import-rows", {"rows": rows, "dryRun": False})
     assert r.status_code == 400
     assert not [x for x in _all(api) if x.get("taxId") == "33333333"]
 
 
-def test_m2_commit_after_data_changed_since_preview_returns_409(api):
+def test_rev_m2_commit_after_data_changed_since_preview_returns_409(api):
     cid = _cust(api, "既有科技", "44444444", phone="02-1")
     rows = [_row(2, "既有科技", "44444444", phone="02-2")]
     p = _preview(api, rows)
@@ -124,7 +124,7 @@ def test_m2_commit_after_data_changed_since_preview_returns_409(api):
     assert [x for x in _all(api) if x.get("taxId") == "44444444"][0]["phone"] == "02-7", "409 時不可寫入"
 
 
-def test_m2_commit_with_stale_new_customer_appearing_returns_409(api):
+def test_rev_m2_commit_with_stale_new_customer_appearing_returns_409(api):
     rows = [_row(2, "全新公司", "55555555")]
     p = _preview(api, rows)
     _cust(api, "有人先建了", "55555555")
@@ -134,7 +134,7 @@ def test_m2_commit_with_stale_new_customer_appearing_returns_409(api):
 # ── M3 ───────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("flag", ["__missing__", True, "false", 0, "0", None, 1])
-def test_m3_only_boolean_false_writes(api, flag):
+def test_rev_m3_only_boolean_false_writes(api, flag):
     rows = [_row(2, "預覽用公司", "66666666")]
     body = {"rows": rows}
     if flag != "__missing__":
@@ -150,7 +150,7 @@ def test_m3_only_boolean_false_writes(api, flag):
 
 # ── M4 ───────────────────────────────────────────────────────────────
 
-def test_m4_notes_are_appended_not_overwritten_and_not_duplicated(api):
+def test_rev_m4_notes_are_appended_not_overwritten_and_not_duplicated(api):
     _cust(api, "備註公司", "77777777", notes="原備註")
     rows = [_row(2, "備註公司", "77777777", notes="新備註")]
     p = _preview(api, rows)
@@ -162,7 +162,7 @@ def test_m4_notes_are_appended_not_overwritten_and_not_duplicated(api):
     assert [x for x in _all(api) if x.get("taxId") == "77777777"][0]["notes"] == n
 
 
-def test_m4_notes_blank_existing_gets_plain_text(api):
+def test_rev_m4_notes_blank_existing_gets_plain_text(api):
     _cust(api, "空備註公司", "88888888")
     rows = [_row(2, "空備註公司", "88888888", notes="第一則")]
     assert _commit(api, rows, _preview(api, rows)["planHash"]).status_code == 200
@@ -175,7 +175,7 @@ def _part_rows(api):
     return {p["part_no"]: p for p in api.get("/api/parts").json()["items"]}
 
 
-def test_m5_legacy_combined_brand_cell_is_split_before_merging(api):
+def test_rev_m5_legacy_combined_brand_cell_is_split_before_merging(api):
     r = api.post("/api/parts", {"partNo": "NET-001", "name": "交換器", "brand": "Cisco / OLD-MODEL", "unit": "台", "cost": 100, "listPrice": 200, "category": "網通設備"})
     assert r.status_code == 201, r.text
     url = "/api/parts/import-rows"
@@ -195,7 +195,7 @@ def test_m5_legacy_combined_brand_cell_is_split_before_merging(api):
 
 # ── M7 ───────────────────────────────────────────────────────────────
 
-def test_m7_put_customer_without_server_owned_keys_keeps_them(api):
+def test_rev_m7_put_customer_without_server_owned_keys_keeps_them(api):
     cid = _cust(api, "保留公司", "99999999", alias="舊別名", active=False)
     assert api.patch("/api/customers/%d/visits" % cid, {"visits": [{"id": 1, "date": "2026-10-01", "note": "拜訪"}]}).status_code == 200
     cur = api.get("/api/customers/%d" % cid).json()
@@ -207,7 +207,7 @@ def test_m7_put_customer_without_server_owned_keys_keeps_them(api):
     assert after["visits"] == cur["visits"], "只送部分欄位的 PUT 洗掉了拜訪紀錄"
 
 
-def test_m7_put_customer_full_body_from_edit_form_behaves_as_before(api):
+def test_rev_m7_put_customer_full_body_from_edit_form_behaves_as_before(api):
     cid = _cust(api, "表單公司", "10101010", alias="舊別名", active=True, visits=[{"id": 1, "note": "a"}])
     cur = api.get("/api/customers/%d" % cid).json()
     data = {k: v for k, v in cur.items() if k not in ("id", "name", "taxId", "phone", "code", "createdAt", "updatedAt")}
@@ -219,7 +219,7 @@ def test_m7_put_customer_full_body_from_edit_form_behaves_as_before(api):
     assert after["alias"] == "新別名" and after["visits"] == [] and after["active"] is False
 
 
-def test_m7_put_part_partial_body_keeps_other_fields_but_full_body_replaces(api):
+def test_rev_m7_put_part_partial_body_keeps_other_fields_but_full_body_replaces(api):
     r = api.post("/api/parts", {"partNo": "CAM-007", "name": "攝影機", "brand": "Hik / DS", "unit": "支", "cost": 1200, "listPrice": 2500,
                                 "category": "監控設備", "note": "原備註", "safetyStock": 5, "leadTimeDays": 7})
     assert r.status_code == 201, r.text
@@ -235,7 +235,7 @@ def test_m7_put_part_partial_body_keeps_other_fields_but_full_body_replaces(api)
 
 # ── L ────────────────────────────────────────────────────────────────
 
-def test_l1_contacts_are_capped_and_unknown_keys_dropped(api):
+def test_rev_l1_contacts_are_capped_and_unknown_keys_dropped(api):
     contacts = [{"id": i, "name": "人%d" % i, "phone": "1", "evil": {"x": [1] * 10}, "title": "T"} for i in range(80)]
     rows = [_row(2, "多聯絡人", "12121212", contacts=contacts)]
     assert _commit(api, rows, _preview(api, rows)["planHash"]).status_code == 200
@@ -244,7 +244,7 @@ def test_l1_contacts_are_capped_and_unknown_keys_dropped(api):
     assert all(set(ct) <= {"id", "name", "title", "phone", "email"} for ct in c["contacts"])
 
 
-def test_l2_corrupt_data_json_skips_only_that_row(api):
+def test_rev_l2_corrupt_data_json_skips_only_that_row(api):
     import db
     cid = _cust(api, "壞資料公司", "13131313")
     gid = _cust(api, "好公司", "14141414", phone="02-1")
@@ -261,7 +261,7 @@ def test_l2_corrupt_data_json_skips_only_that_row(api):
     assert api.get("/api/customers/%d" % gid).json()["phone"] == "02-2"      # 列表端點本身讀不了損毀列（既有行為），所以用單筆讀
 
 
-def test_l3_part_no_matches_case_and_width_insensitively(api):
+def test_rev_l3_part_no_matches_case_and_width_insensitively(api):
     assert api.post("/api/parts", {"partNo": "NET-002", "name": "交換器", "unit": "台", "cost": 100, "category": "網通設備"}).status_code == 201
     url = "/api/parts/import-rows"
     rows = [{"row": 2, "partNo": "ｎｅｔ－002", "cost": "150"}, {"row": 3, "partNo": "net-002", "cost": "160"}]
@@ -271,13 +271,13 @@ def test_l3_part_no_matches_case_and_width_insensitively(api):
     assert _part_rows(api)["NET-002"]["cost"] == 150 and len(_part_rows(api)) == 1
 
 
-def test_l4_numbers_above_cap_are_rejected(api):
+def test_rev_l4_numbers_above_cap_are_rejected(api):
     url = "/api/parts/import-rows"
     p = _preview(api, [{"row": 2, "partNo": "NET-003", "name": "x", "cost": "1e300"}, {"row": 3, "partNo": "NET-004", "name": "y", "cost": "999999999"}], url)
     assert p["failed"] == 1 and p["created"] == 1
 
 
-def test_l5_audit_or_notify_failure_after_commit_does_not_turn_response_into_error(api, monkeypatch):
+def test_rev_l5_audit_or_notify_failure_after_commit_does_not_turn_response_into_error(api, monkeypatch):
     import routers.customers as rc
     monkeypatch.setattr(rc, "_audit", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("audit down")))
     rows = [_row(2, "稽核壞掉公司", "15151515")]
@@ -288,7 +288,7 @@ def test_l5_audit_or_notify_failure_after_commit_does_not_turn_response_into_err
 
 # ── M6（效能；PM：1500 列超過 10 秒就要修）：批次取號、批次稽核 ─────────────────
 
-def test_m6_batch_codes_are_unique_and_continue_after_existing_ones_and_audit_rows_are_written(api):
+def test_rev_m6_batch_codes_are_unique_and_continue_after_existing_ones_and_audit_rows_are_written(api):
     import db
     _cust(api, "先有的一家", "20202020")
     before = {c["code"] for c in _all(api)}
