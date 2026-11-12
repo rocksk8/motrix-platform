@@ -4365,14 +4365,14 @@
             this.q.approval = prevApproval
             alert(this._saveConflict
               ? '這張報價單已被其他人更新，為避免覆蓋對方的修改，送審未生效。請重新載入頁面後再試一次。'
-              : '送出審核失敗，報價單仍是「' + (prevStatus || '草稿') + '」狀態，尚未送出。\n原因：' + this._saveFailReason())
+              : '送出簽核失敗，報價單仍是「' + (prevStatus || '草稿') + '」狀態，尚未送出。\n原因：' + this._saveFailReason())
             return
           }
           this.isNewRecord = false
           this.isDirty = false
           this.submitNote = ''
           const msg = document.createElement('div')
-          msg.textContent = '✓ 已送出審核申請，等待主管簽核'
+          msg.textContent = '✓ 已送出簽核申請，等待主管簽核'
           msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
           document.body.appendChild(msg)
           setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
@@ -4829,7 +4829,8 @@
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
           // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format', 'builder_status_display'], { token: tk })
+          if (window.MotrixStatus) window.MotrixStatus.init({ token: tk, flags: g })      // 管理者自訂的狀態名稱（旗標關 ⇒ 什麼都不改；與上面同一次請求，不多打）
           if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
           this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)   // S-ST2：開啟且有發布樣板 ⇒ 不自動建立預設階段
           // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）

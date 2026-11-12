@@ -277,7 +277,7 @@
               <span x-text="saving ? '儲存中…' : isDirty ? '儲存草稿' : '已儲存'"></span>
             </button>
             <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669" x-show="q.status === '草稿' && !isNew"
-                    @click="submitReq()">送出審核</button>
+                    @click="submitReq()">送出簽核</button>
             <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669"
                     x-show="q.status === '待審核' || q.status === '簽核中'" @click="approveReq()">簽核</button>
             <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);border-color:#FCA5A5"

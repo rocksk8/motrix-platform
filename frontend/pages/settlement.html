@@ -1655,7 +1655,7 @@ function settlementPage() {
       if (!this._actualsOk) return []
       const L = [], ms = this.mapSummary, sm = this.summary, C = STL_CONFIG, f = n => this.fmt(n)
       if (ms.unCount) L.push({ key: 'unassigned', lv: C.BLOCK_ON_UNASSIGNED ? 'r' : 'a', ic: '⚠', t: '未對應 ' + ms.unCount + ' 件，NT$ ' + f(ms.unTotal), s: '仍計入總成本；對應到品項才會取代估計', go: '[data-testid="stl-unassigned"]' })
-      if (C.PENDING_WARN && this.pendingAllAmount) L.push({ key: 'pending', lv: 'a', ic: '⏳', t: '待簽核金額 NT$ ' + f(this.pendingAllAmount), s: '待簽照計成本，核准前可能變動', go: '[data-testid="stl-unassigned"]' })
+      if (C.PENDING_WARN && this.pendingAllAmount) L.push({ key: 'pending', lv: 'a', ic: '⏳', t: '待簽核金額 NT$ ' + f(this.pendingAllAmount), s: '待簽核的單據已先計入成本，核准前可能變動', go: '[data-testid="stl-unassigned"]' })
       this.settlement.items.forEach(i => {
         const name = '#' + this.itemNo(i.id) + ' ' + (i.origDescription || ''), pf = this.itemProfit(i), dpp = this.itemDpp(i)
         if (pf < C.LOSS_GP_BELOW) L.push({ key: 'loss-' + i.id, lv: 'r', ic: '✖', t: name + '：虧損 ' + f(pf) + '（毛利比 ' + this.pctTxt(this.itemPct(i)) + '）', s: '報價 ' + f(this.itemQuote(i)) + '，實際成本 ' + f(this.itemActual(i)), go: '#stl-row-' + i.id, item: i.id })

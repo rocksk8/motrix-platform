@@ -22,7 +22,7 @@
   // 必須與 backend/helpers/status_display.py 的 _LABEL0／_NAMES0 一致——由 backend/tests/test_status_display_default_parity_2026_11_13.py 守住。
   // 只列『有改名』的鍵；其他鍵仍照頁面自己的 fallback（今天的做法）。管理者在名稱表改過的字仍優先於這裡。
   var DEFAULTS = {
-    '待審核': { label: '待簽核', names: { quote_list: '待簽核' } },
+    '待審核': { label: '待簽核', names: { quote_list: '待簽核', voucher: '待審核' } },     // 會計傳票維持「審核」（PM 裁示 2026-11-13）
     '差額待審核': { label: '差額待簽核', names: {} }
   }
 

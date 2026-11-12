@@ -507,11 +507,11 @@ def test_batch3_pages_wire_the_helper_without_changing_logic():
 @pytest.mark.skipif(not NODE, reason="需要 node")
 def test_batch3_voucher_and_settlement_expressions_equal_the_old_ones_when_not_loaded():
     code = """global.window={};const M=require('./static/status-chip.js');window.MotrixStatus=M;
-const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx,fb);
+const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx||'voucher',fb);       // 與 voucher.js 的 stLabel 同一行為
 const out=[];
 for (const voided of ['', null, '2026-10-01T00:00:00'])
   for (const status of ['草稿','待審核','簽核中','已核准','已過帳','',null,undefined])
-    out.push([stLabel(voided ? '已作廢' : status), voided ? '已作廢' : (status === '待審核' ? '待簽核' : status)]);   // 待審核 → 待簽核 為刻意的預設改名
+    out.push([stLabel(voided ? '已作廢' : status), voided ? '已作廢' : status]);   // 傳票保留「待審核」（會計用語；PM 裁示 2026-11-13）：傳票情境的預設名＝原字
 out.push([stLabel('draft','settlement','精算草稿'),'精算草稿'],[stLabel('finalized','settlement','精算完結'),'精算完結']);
 console.log(JSON.stringify(out.every(p=>(p[0]==null?'':p[0])===(p[1]==null?'':p[1]))));"""
     assert node(code) is True

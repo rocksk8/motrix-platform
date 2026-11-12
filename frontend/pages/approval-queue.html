@@ -901,7 +901,7 @@
 
         <!-- Reasons -->
         <div class="aq-section" x-show="(selected?.reasons||[]).length > 0">
-          <div class="aq-section-title">審核原因</div>
+          <div class="aq-section-title">簽核原因</div>
           <div class="aq-reasons">
             <template x-for="r in (selected?.reasons||[])" :key="r">
               <div class="aq-reason-tag">
@@ -1163,17 +1163,17 @@
 
         // 卡在誰身上：tiers 型單據取當層第一個未簽的人（跟 canApprove／
         // waitingForText 的判斷完全一致）；case_change 與沒有流程的預設超管
-        // 情形本來就不指定特定人，歸到「最高管理員」。
+        // 情形本來就不指定特定人，歸到「最高管理者」。
         blockerOf(item) {
-          if (!item) return { key: '__admin__', display: '最高管理員' }
-          if (item.type === 'case_change') return { key: '__admin__', display: '最高管理員' }
+          if (!item) return { key: '__admin__', display: '最高管理者' }
+          if (item.type === 'case_change') return { key: '__admin__', display: '最高管理者' }
           const tiers = item.tiers || []
           const cur = item.currentTier ?? 0
           if (tiers.length > 0 && cur < tiers.length) {
             const pending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
             if (pending) return { key: pending.username, display: pending.displayName || pending.username }
           }
-          return { key: '__admin__', display: '最高管理員' }
+          return { key: '__admin__', display: '最高管理者' }
         },
 
         get blockedGroups() {
@@ -1212,7 +1212,7 @@
 
         tierText(item) {
           const tiers = item && item.tiers ? item.tiers : []
-          if (!tiers.length) return item && item.type === 'case_change' ? '最高管理員審核' : '單層審核'
+          if (!tiers.length) return item && item.type === 'case_change' ? '最高管理者簽核' : '單層簽核'
           const cur = (item.currentTier ?? 0) + 1
           return '第 ' + cur + '/' + tiers.length + ' 層'
         },
@@ -1705,7 +1705,7 @@
 
         waitingForText(item) {
           if (!item) return ''
-          if (item.type === 'case_change') return '需最高管理員審核'
+          if (item.type === 'case_change') return '需最高管理者簽核'
           const tiers = item.tiers || []
           if (tiers.length > 0) {
             const cur = item.currentTier ?? 0

@@ -20,6 +20,8 @@ sys.path.insert(0, BACKEND)
 from helpers import status_display as S  # noqa: E402
 
 NODE = shutil.which("node")
+#: UX P1 之前就存在、顯示字交給各頁 fallback 的舊鍵（凍結；見 test_legacy_fallback_key_list_is_frozen）
+LEGACY_PAGE_FALLBACK_KEYS = {"finalized", "draft", "已拒絕", "已成案", "已提供"}
 
 
 def _node(code):
@@ -37,10 +39,35 @@ def test_js_builtin_defaults_equal_backend_defaults():
         assert k in d, k
         assert e["label"] == d[k]["label"], (k, "label 兩邊不一致")
         assert e.get("names", {}) == d[k]["names"], (k, "names 兩邊不一致")
-    # 反向：後端凡是『label 與鍵不同』或『有情境簡稱』且屬於這次改名的鍵，JS 都要有（finalized 等舊的由頁面自己的 fallback 保留，不在此列）
-    renamed = [k for k in d if d[k]["label"] != k and "待審核" in k]
-    for k in renamed:
-        assert k in js, k
+    # 反向（L2，hichan-9 審查）：**後端預設表裡每一個**「某情境顯示的字 ≠ 鍵本身」的鍵，JS 都要有——
+    # 唯一的例外是下面這份 UX P1 之前就存在、刻意交給各頁 fallback 的舊鍵（不准再增加；新的改名一律進 JS DEFAULTS）。
+    for k in d:
+        shows_other = any(t != k for t in S._texts(d, k).values())
+        if shows_other and k not in LEGACY_PAGE_FALLBACK_KEYS:
+            assert k in js, "後端預設把『%s』顯示成別的字，但 JS DEFAULTS 沒有（旗標關閉時畫面會不一致）" % k
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_js_label_equals_backend_text_in_every_context_for_every_default_key():
+    """逐鍵逐情境：JS 有的鍵 ⇒ label(k, ctx) 與後端 `_texts` 完全相同；JS 沒有的鍵 ⇒ 回頁面給的 fallback（舊鍵）。"""
+    d = S.defaults()
+    ctxs = ["default"] + list(S.CONTEXTS)
+    out = _node("global.window=undefined;const S=require('./static/status-chip.js');const ks=%s,cs=%s,r={};"
+                "for(const k of ks){r[k]={};for(const c of cs){r[k][c]=S.label(k,c==='default'?undefined:c,'__FB__')}}console.log(JSON.stringify(r))"
+                % (json.dumps(list(d), ensure_ascii=False), json.dumps(ctxs)))
+    js_keys = _node("global.window=undefined;const S=require('./static/status-chip.js');console.log(JSON.stringify(Object.keys(S.DEFAULTS)))")
+    for k in d:
+        texts = S._texts(d, k)
+        for c in ctxs:
+            if k in js_keys:
+                assert out[k][c] == texts[c], (k, c, out[k][c], texts[c])
+            else:
+                assert out[k][c] == "__FB__", (k, c, "JS 沒有這個鍵卻改了字")
+
+
+def test_legacy_fallback_key_list_is_frozen():
+    """舊鍵清單只能是 UX P1 之前就有非恆等預設的那幾個；有人想把新鍵塞進來躲過反向契約，這題會擋。"""
+    assert LEGACY_PAGE_FALLBACK_KEYS == {"finalized", "draft", "已拒絕", "已成案", "已提供"}
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")

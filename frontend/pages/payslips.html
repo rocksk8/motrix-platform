@@ -11,6 +11,7 @@
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/status-chip.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -520,6 +521,7 @@ function payslipsPage() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
+      if (window.MotrixStatus) window.MotrixStatus.init()      // 管理者自訂的狀態名稱；旗標關 ⇒ 什麼都不改
       const mods = this.session.modules || []
       if (this.session.role !== 'superadmin' && !mods.includes('payslip')) {
         alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return

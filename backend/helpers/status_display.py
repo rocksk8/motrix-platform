@@ -26,7 +26,7 @@ _log = logging.getLogger(__name__)
 #: 色調調色盤 ⇒ 前端 class（`neutral` 只有基底 `st-chip`）。與 css/style.css:952-965 一致。
 TONES = ("neutral", "draft", "pending", "signing", "approved", "rejected", "paid", "void")
 #: 情境（各畫面用的簡稱槽）。`default` 就是 label 本身，不放在 names 裡。
-CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement")
+CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement", "voucher")
 OFFICIAL_WORDS = (
     # 繁體
     "核准", "核準", "批准", "核可", "已簽核", "簽核完成", "簽核通過", "審核通過", "已通過", "通過", "生效", "確認", "已批", "批示", "已准", "准予", "承認", "認可", "同意",
@@ -68,7 +68,7 @@ _TONE0 = {r[0]: r[3] for r in _RAW}
 
 #: 今天各畫面的情境簡稱（原樣保留）：quotations.html:653-664 `statusBadge()`。
 _NAMES0 = {
-    "待審核": {"quote_list": "待簽核"}, "已拒絕": {"quote_list": "已退回"},
+    "待審核": {"quote_list": "待簽核", "voucher": "待審核"}, "已拒絕": {"quote_list": "已退回"},
     "已成案": {"quote_list": "執行中"}, "已提供": {"quote_list": "待決定"},
     "finalized": {"report": "已結算", "case": "已定稿", "settlement": "精算完結"},     # reports.html:1251／case-management.html:2699／settlement.html:307
     "draft": {"settlement": "精算草稿"},
@@ -184,6 +184,33 @@ def _conflicts(body_table):
                         out.append(_p("statuses.%s" % k, "『%s』在%s已被『%s』使用，名稱不可重複" % (t, "預設" if ctx == "default" else ctx, k2)))
                     break
     return out
+
+
+#: 已知、有意保留的重複顯示字（今天就是這樣：quotations.html `statusBadge()` 把『已拒絕』在報價單列表顯示成『已退回』）。其他重複一律警告。
+_KNOWN_DUPLICATES = {("quote_list", "已退回")}
+
+
+def duplicate_warnings(table=None) -> list:
+    """L3（hichan-9 審查，PM 2026-11-13）：不同狀態在**同一個畫面情境**顯示成同一個字時提出警告（不擋存檔——有時是刻意合併，但使用者要知道）。
+    與 `_conflicts` 的差別：後者只擋「被改過的欄位」撞名；這裡看**整張有效表**（含沒改過的預設值），
+    所以像「待審核」內建改成「待簽核」之後若又有別的狀態也叫「待簽核」就會被抓到。⇒ `[{path, message}]`（沒有重複＝空）。永不丟例外。"""
+    try:
+        tbl = table if table is not None else defaults()
+        out = []
+        for ctx in ("default",) + tuple(CONTEXTS):
+            seen = {}
+            for k in STATUS_KEYS:
+                t = _texts(tbl, k)[ctx]
+                m = _mk(t)
+                if m:
+                    seen.setdefault(m, []).append((k, t))
+            for m, rows in seen.items():
+                if len(rows) > 1 and (ctx, rows[0][1]) not in _KNOWN_DUPLICATES:
+                    out.append(_p("statuses.%s" % rows[-1][0], "『%s』在%s同時是%s的顯示名稱，畫面上會分不出來" % (
+                        rows[0][1], "預設" if ctx == "default" else ctx, "、".join("『%s』" % r[0] for r in rows))))
+        return out
+    except Exception:                                                # noqa: BLE001
+        return []
 
 
 def validate_table(body, key=KEY) -> list:
@@ -360,6 +387,7 @@ def public_payload(conn=None) -> dict:
                 c.close()
         ensure_registered()
         tbl = effective_table(published_body(conn))
-        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl), "meta": meta(), "defaults": defaults()}
+        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl), "meta": meta(), "defaults": defaults(),
+                "warnings": [w["message"] for w in duplicate_warnings(tbl)]}
     except Exception:                                                # noqa: BLE001
         return {"enabled": False}

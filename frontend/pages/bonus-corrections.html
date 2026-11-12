@@ -11,6 +11,7 @@
   <script src="../static/ui.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/status-chip.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -25,7 +26,7 @@
     .bc-item-no{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .bc-badge{display:inline-block;font-size:12px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
     .st-gray{background:#F3F4F6;color:var(--text-secondary)}.st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
-    .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
+    .st-green{background:#DCFCE7;color:#15803D}.st-slate{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 已完成＝結束狀態：深灰藍 */
     .bc-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
     .bc-sec{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 10px;font-family:var(--font-zh)}
     .bc-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:12px;font-family:var(--font-zh)}
@@ -77,7 +78,7 @@
             <div style="padding:10px;border-bottom:1px solid var(--border-light)">
               <select class="bc-sel filter" style="width:100%" x-model="statusFilter" @change="loadList()" data-testid="bc-filter">
                 <option value="">全部狀態</option>
-                <template x-for="s in statuses" :key="s"><option :value="s" x-text="s"></option></template>
+                <template x-for="s in statuses" :key="s"><option :value="s" x-text="MotrixStatus.label(s)"></option></template>
               </select>
             </div>
             <template x-for="it in items" :key="it.corr_no">
@@ -252,7 +253,7 @@
       _h(json) { const h = { Authorization: 'Bearer ' + this._token() }; if (json) h['Content-Type'] = 'application/json'; return h },
       money(n) { return 'NT$ ' + MotrixFormat.num(Number(n || 0)) },
       signed(n) { n = Number(n || 0); return (n > 0 ? '+' : '') + MotrixFormat.num(n) },
-      badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-purple', '已作廢': 'st-gray' }[st] || 'st-gray' },
+      badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-slate', '已作廢': 'st-gray' }[st] || 'st-gray' },
       async _err(r) { try { const d = await r.json(); return typeof d.detail === 'string' ? d.detail : ('HTTP ' + r.status) } catch (e) { return 'HTTP ' + r.status } },
 
       _initDone: false,
@@ -260,6 +261,7 @@
         // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
         if (this._initDone) return
         this._initDone = true
+        if (window.MotrixStatus) window.MotrixStatus.init()      // 管理者自訂的狀態名稱；旗標關 ⇒ 什麼都不改
         try {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}
           this.isSuper = s.role === 'superadmin'
