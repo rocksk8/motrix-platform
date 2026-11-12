@@ -68,10 +68,13 @@ _PUBKEY_DEV = (
     b"-----END PUBLIC KEY-----\n"
 )
 
-# 正式公鑰。**本輪刻意留空**——正式私鑰還沒產生，保管方式是 STATE §4 第 1 項的未決事項。
-# 空的時候 verify_license() 略過這一把，不丟例外。
-# ⚠️ 這裡一天是空的，這套系統就一天不能真的賣出去。
-_PUBKEY_PROD = b""
+# 正式公鑰（2026-11-12 產生，私鑰依 STATE §4 2026-09-21 裁示存密碼管理器，開發機上直接簽發，
+# 不落地在任何 repo／worktree；機器指紋 93ece768770e4ccd，統編 60575481）。
+_PUBKEY_PROD = (
+    b"-----BEGIN PUBLIC KEY-----\n"
+    b"MCowBQYDK2VwAyEAdfv+I3XFU/ptNcjmFuQAk9ZufbS5JAXzLykMHgnbnMc=\n"
+    b"-----END PUBLIC KEY-----\n"
+)
 
 # ── 總開關 ───────────────────────────────────────────────────────────────────
 #
