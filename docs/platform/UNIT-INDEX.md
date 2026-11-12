@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 138 個；有單位卡 87 個。
+單位 144 個；有單位卡 92 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -21,17 +21,17 @@
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 10 | 3 | `tests/test_definitions_store_2026_09_25.py`、`tests/platform/test_migration_incomplete.py` |
 | `plat:mounts` | L0 | 內建頁面開放給自訂模組的「掛載點」（建構器方案 B；設計 docs/platform/plans/BUILDER-B-DESIGN.md）。 | 6 | 3 | `tests/test_builder_b_mounts_2026_10_01.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
-| `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 28 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 94 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 29 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 95 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 10 | `backend/tests/platform/test_spine_e_b.py` |
 | `plat:system_hub` | L0 | 系統中心（System Hub）登錄表：『系統』底下所有設定／管理／稽核入口的索引（第 54 班 P1；設計 docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md）。 | 13 | 1 | `tests/platform/test_system_hub.py` |
-| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 42 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
+| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 45 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 156 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 160 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 17 | — |
@@ -42,15 +42,16 @@
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 14 | 93 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 128 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 129 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:builtin_fields` | L1 | 內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。 | 12 | 6 | `backend/tests/test_builtin_custom_fields_2026_10_14.py` |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |
 | `helper:calendar_sync` | L1 | 日期型行事曆事件的每日對帳（L1；MAIL-CAL 階段 2：保固到期／區間事項結束／專案預計完成）。 | 4 | 2 | `tests/test_notify_matrix_phase2_2026_10_06.py` |
-| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 25 | 32 | — |
-| `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
+| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 25 | 33 | — |
+| `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 4 | — |
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
+| `helper:client_ip` | L1 | 可信的來源 IP（2026-11-11，外網存取 go-live 前必修的安全項）。 | 4 | 3 | `backend/tests/test_trusted_client_ip_2026_11_11.py` |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
 | `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 6 | `backend/tests/platform/test_config_ledger_t54.py` |
@@ -71,7 +72,7 @@
 | `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 21 | `tests/test_download_name_p1_2026_10_13.py` |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 19 | 3 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 4 | — |
-| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 74 | 49 | — |
+| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 76 | 50 | — |
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
 | `helper:expense_types` | L1 | 費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。 | 14 | 5 | `tests/platform/test_expense_types_2026_10_01.py` |
 | `helper:export_templates` | L1 | 匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。 | 30 | 14 | `tests/platform/test_export_templates_bp3.py` |
@@ -83,14 +84,19 @@
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
 | `helper:gl_status` | L1 | [單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版） | 2 | 4 | `tests/test_gl_source_status_2026_09_30.py` |
 | `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 19 | 13 | — |
+| `helper:heartbeat_status` | L1 | 心跳監控「本身」的健康判斷（2026-11-11；正式機監控壞了兩個多月沒人知道之後補的「看守看守者」）。 | 11 | 2 | `tests/test_heartbeat_watch_2026_11_11.py` |
+| `helper:idempotency` | L1 | 請求冪等鍵（`Idempotency-Key` 標頭）：弱訊號下「回應掉了、伺服器其實已經存好」時，重送不會產生第二份資料。 | 11 | 2 | `backend/tests/test_idempotency_2026_11_11.py` |
 | `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 35 | — |
-| `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
+| `helper:license_alerts` | L1 | 授權相關的告警：log ＋ 系統稽核（audit_log）。（無單位卡） | 4 | 2 | — |
+| `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 24 | 5 | — |
 | `helper:line_login` | L1 | LINE Login 綁定流程（2026-11-11，T79；「電腦發起、手機授權」）。 | 22 | 1 | `tests/platform/test_line_login_t79.py` |
-| `helper:line_notify` | L1 | LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。 | 40 | 4 | `tests/platform/test_line_notify_t79.py`、`modules/case/tests/test_line_review_edit_2026_11_11.py` |
+| `helper:line_notify` | L1 | LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。 | 42 | 6 | `tests/platform/test_line_notify_t79.py`、`modules/case/tests/test_line_review_edit_2026_11_11.py` |
+| `helper:line_quota` | L1 | LINE 本月訊息額度的常駐監控與門檻告警（2026-11-12；PM 裁示 D3／D4／D5／D6）。 | 12 | 3 | `tests/test_line_quota_2026_11_12.py` |
+| `helper:line_recipients` | L1 | LINE 通知的收件人過濾：角色允許清單＋個人勾選（2026-11-12；PM 裁示 D1／D2）。 | 8 | 2 | `tests/test_line_recipients_2026_11_12.py` |
 | `helper:list_catalog` | L1 | 清單目錄（T66 L0：只登記與驗證、不改行為）。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.1。 | 13 | 3 | `backend/tests/platform/test_list_catalog_t66.py` |
 | `helper:list_pref_policy` | L1 | 清單偏好的公司政策（T66 L1）：定義種類 `list_pref_policy`＋寬嚴比較＋讀取。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.2。 | 14 | 4 | `backend/tests/platform/test_list_pref_policy_t66.py` |
 | `helper:list_view_prefs` | L1 | 清單檢視偏好（T66 L2）：每人每清單的「每頁筆數」，以及公司政策＋欄位可見（F7）對版面引擎輸出的限制。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.3、§3、§5。 | 15 | 1 | `backend/tests/platform/test_list_view_prefs_t66.py` |
-| `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 20 | — |
+| `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 22 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
 | `helper:menu_builder` | L1 | 選單建構器（BP-1）：側欄項改名、換到另一個既有群組、整份選單的發布前預覽。 | 10 | 3 | `tests/platform/test_menu_builder_bp1.py` |
 | `helper:module_assets` | L1 | L1 模組自有前端 JS（STAGE-C-DESIGN §3；模組資產 POC）。 | 5 | 1 | `tests/platform/test_module_assets_contract_2026_11_08.py` |
@@ -117,13 +123,13 @@
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
 | `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 4 | 3 | — |
 | `helper:recycle_bin` | L1 | 刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。 | 20 | 22 | `backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`、`backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py`、`backend/tests/platform/test_recyclebin_guards_t53.py` |
-| `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 11 | — |
+| `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 12 | — |
 | `helper:rule_catalog` | L1 | 規則的欄位目錄轉接層（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §5）。 | 8 | 2 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:rule_engine` | L1 | 規則評估器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §6）。 | 2 | 1 | `backend/tests/test_rule_engine_2026_10_14.py` |
 | `helper:rule_grammar` | L1 | 規則文法與驗證器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §4）。 | 9 | 4 | `backend/tests/test_rule_engine_2026_10_14.py` |
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:safe_text` | L1 | 使用者可編輯的短文字（樣板名稱、階段名稱…）共用的安全檢查（S-ST1 起；通知用語編輯器有一份同規則的副本，之後併入這裡）。 | 4 | 1 | `tests/platform/test_stage_templates_t62.py` |
-| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 54 | — |
+| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 56 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 14 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
