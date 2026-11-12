@@ -419,6 +419,19 @@ def test_lock_triggers_the_auth_lockout_alert_with_account_scope(client, make_us
     assert acct[0]["key"] == account_lock.KEY_PREFIX + account_lock._key(u) and "victim11" not in acct[0]["key"] and acct[0]["usernames"] == [u] and acct[0]["lock_seconds"] == 1800 and acct[0]["fails"] == 10
 
 
+def test_lock_with_the_real_auth_alert_sends_once_and_dedups(client, make_user, monkeypatch):
+    """不用假模組：走 hichan-3 的 helpers.auth_alert（conftest 已把節流狀態與背景發送隔離）；同一帳號鎖定期間只通知一次、標題不含帳號雜湊以外的明文密碼。"""
+    from helpers import auth_alert
+    delivered = []
+    monkeypatch.setattr(auth_alert, "_deliver", lambda title, rows, reason: delivered.append((title, rows, reason)))
+    monkeypatch.setattr(auth_alert, "_spawn", lambda fn, *a: fn(*a))
+    u, _ = make_user(username="victim11b", password=PW, role="sales")
+    _fail_from_many_ips(client, u, 11)
+    assert len(delivered) == 1
+    assert "wrong-password" not in repr(delivered) and PW not in repr(delivered)
+    assert auth_alert.on_lockout(account_lock.KEY_PREFIX + account_lock._key(u), "198.51.100.1", [u], 10, 1800, scope="account") == "dedup"
+
+
 def test_alert_failure_never_breaks_the_login_response(client, make_user, monkeypatch):
     _fake_alert(monkeypatch, behaviour=RuntimeError("line down"))
     u, _ = make_user(username="victim12", password=PW, role="sales")

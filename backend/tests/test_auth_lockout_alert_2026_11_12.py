@@ -176,7 +176,8 @@ def test_qr_failure_writes_audit_row_with_own_reason_code(client, make_user):
     u, p = _enable_totp(client, make_user)
     hdr = {"X-Forwarded-For": "203.0.113.91"}
     ch = client.post("/api/auth/login", json={"username": u, "password": p}, headers=hdr).json()["challengeToken"]
-    r = client.post("/api/auth/login/qr-approve", json={"challenge_token": ch, "password": "wrong-password"}, headers=hdr)
+    # 2026-11-12 外網登入強化票（F1）：QR 核准不再收密碼，失敗型態改成「手機的 session 不是同一個帳號」
+    r = client.post("/api/auth/login/qr-approve", json={"challenge_token": ch, "session_token": "wrong-password"}, headers=hdr)
     assert r.status_code == 401
     rows = _rows_of("action='auth.login_failed'")
     assert len(rows) == 1 and rows[0]["reason_code"] == "qr_failed" and json.loads(rows[0]["detail"])["method"] == "qr"

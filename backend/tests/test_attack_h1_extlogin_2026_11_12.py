@@ -263,7 +263,9 @@ def test_A6c_known_account_shown_by_name_and_sanitised(client, make_user):
 # ── F7／A7：auth_alert 缺失 → error 層級的 log ────────────────────────────
 def test_A7_missing_auth_alert_module_logs_at_error_level(caplog, monkeypatch):
     account_lock.reset_for_tests()
+    import helpers
     monkeypatch.setitem(sys.modules, "helpers.auth_alert", None)           # 讓 import 丟 ImportError（等同模組不存在）
+    monkeypatch.delattr(helpers, "auth_alert", raising=False)              # 套件屬性已存在時 `from helpers import x` 不查 sys.modules
     caplog.set_level(logging.WARNING)
     for i in range(10):
         account_lock.record_failure("alertless", "203.0.113.5", True)
