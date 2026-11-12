@@ -63,7 +63,7 @@ def notify_voucher_submitted(voucher_no, summary, approver_usernames):
 
 def notify_voucher_next_tier(voucher_no, summary, tier_no, total_tiers, approver_usernames):
     # LINE 獨立通道（2026-11-13）：不看 Email；內容只放單號／狀態，不放摘要與退回說明（自由文字）。
-    _en._line_event("voucher_next_tier", usernames=[u for u in approver_usernames if u], title="會計傳票輪到您簽核", rows=[("傳票號碼", voucher_no), ("目前進度", "第 %d 層（共 %d 層）" % (tier_no, total_tiers))], reason="前一層已完成，請登入系統處理")
+    _en._line_event("voucher_next_tier", usernames=[u for u in approver_usernames if u], title="會計傳票輪到您簽核", rows=[("傳票號碼", voucher_no), ("目前進度", "第 %s 層（共 %s 層）" % (tier_no, total_tiers))], reason="前一層已完成，請登入系統處理")
     to = _en._lookup_emails([u for u in approver_usernames if u], "voucher_next_tier")
     if not to:
         logger.warning("voucher_next_tier：收件人皆無設定 email")

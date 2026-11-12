@@ -27,7 +27,7 @@ def test_default_template_is_valid_and_equals_the_old_hard_coded_strings():
     assert NT.definition_problems(KEY, d) == []
     q = "MQ-202610-001"
     assert NT._expand(d["inapp"]["message"], CTX) == f"報價單 {q}（退回改版）（甲公司）需要您簽核"
-    assert NT._expand(d["mail"]["reason"], CTX) == f"報價單待審核：{q}（甲公司）"
+    assert NT._expand(d["mail"]["reason"], CTX) == f"報價單待簽核：{q}（甲公司）"
     src = inspect.getsource(EN.notify_approval_request)
     for f in ("title", "badge", "intro", "button"):
         assert NT.EVENTS[KEY]["fields"]["mail." + f]["default"] in src, f
@@ -70,13 +70,13 @@ def test_mail_is_byte_identical_when_no_template_and_changes_only_the_template_f
     _tpl(monkeypatch, None)
     EN.notify_approval_request("MQ-9", "丙公司", ["u"])
     off = dict(sent)
-    assert off["subject"] == "【MOTRIX 系統通知】簽核－報價單待審核：MQ-9（丙公司）"
-    assert "報價單簽核申請" in off["html"] and "待您審核" in off["html"] and "前往審核報價單" in off["html"]
+    assert off["subject"] == "【MOTRIX 系統通知】簽核－報價單待簽核：MQ-9（丙公司）"
+    assert "報價單簽核申請" in off["html"] and "待您簽核" in off["html"] and "前往簽核報價單" in off["html"]
     _tpl(monkeypatch, {"version": 1, "mail": {"reason": "請審核 {單號}", "intro": "有一張 {對象} 的單，麻煩您。", "badge": "請處理"}})
     EN.notify_approval_request("MQ-9", "丙公司", ["u"])
     assert sent["subject"] == "【MOTRIX 系統通知】簽核－請審核 MQ-9", "主旨前綴與分類固定，只換事由"
     assert "有一張 丙公司 的單，麻煩您。" in sent["html"] and "請處理" in sent["html"]
-    assert "報價單簽核申請" in sent["html"] and "前往審核報價單" in sent["html"], "沒設定的欄位維持預設"
+    assert "報價單簽核申請" in sent["html"] and "前往簽核報價單" in sent["html"], "沒設定的欄位維持預設"
 
 
 def test_mail_expansion_is_html_escaped(monkeypatch):
@@ -216,7 +216,7 @@ def test_approval_mails_escape_user_data_even_with_no_template(monkeypatch):
     _tpl(monkeypatch, None)
     EN.notify_approval_request("MQ-9", "<img src=x onerror=1>公司", ["u"])
     assert "<img" not in sent["html"] and "&lt;img src=x onerror=1&gt;公司" in sent["html"]
-    assert sent["subject"].endswith("報價單待審核：MQ-9（<img src=x onerror=1>公司）"), "主旨是純文字，維持原樣"
+    assert sent["subject"].endswith("報價單待簽核：MQ-9（<img src=x onerror=1>公司）"), "主旨是純文字，維持原樣"
     monkeypatch.setattr(EN, "_lookup_emails", lambda names, key: ["a@example.com"])
     EN.notify_returned("MQ-9", "MQ-9-R1", "甲<b>", "備註 <script>x</script>", "u")
     assert "<script>" not in sent["html"] and "&lt;script&gt;x&lt;/script&gt;" in sent["html"] and "<b>" not in sent["html"].split("報價單號")[0] + sent["html"].split("客戶名稱")[1]
@@ -297,8 +297,8 @@ def test_quote_family_mails_are_byte_identical_when_off_and_change_only_the_temp
     for c in calls:
         c()
         off.append((sent["subject"], sent["html"]))
-    assert off[0][0] == "【MOTRIX 系統通知】簽核－報價單審核通知（第 2/3 層）：MQ-9（丙公司）"
-    assert off[1][0] == "【MOTRIX 系統通知】簽核－報價單審核完成：MQ-9（丙公司）"
+    assert off[0][0] == "【MOTRIX 系統通知】簽核－報價單簽核通知（第 2/3 層）：MQ-9（丙公司）"
+    assert off[1][0] == "【MOTRIX 系統通知】簽核－報價單簽核完成：MQ-9（丙公司）"
     assert off[2][0] == "【MOTRIX 系統通知】簽核－報價單退回修改：MQ-9（丙公司）"
     # 發布範本但沒有任何欄位對上 ⇒ 仍與關閉時相同（沒設定的欄位維持預設）
     _tpl_ev(monkeypatch, {"approval:next_tier": {"version": 1, "mail": {}}, "approval:approved": {"version": 1, "mail": {}}, "approval:returned": {"version": 1, "mail": {}}})

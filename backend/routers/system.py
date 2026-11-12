@@ -3000,7 +3000,7 @@ def unlink_line_of(username: str, authorization: str = Header(None)):
     from helpers import line_notify as _ln
     done = _ln.unlink_user(username)
     if done:
-        _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理員解除 LINE 綁定")
+        _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理者解除 LINE 綁定")
     return {"ok": True, "unlinked": done}
 
 

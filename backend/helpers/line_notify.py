@@ -773,7 +773,7 @@ def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False,
             return "already_pushed"
         payload = dict(usernames=list(usernames or []), to_group=bool(to_group), title=title,
                        rows=[list(r) for r in (rows or []) if isinstance(r, (list, tuple)) and len(r) == 2],
-                       reason=reason, link=link, exclude=list(exclude or []))
+                       reason=reason, link=link, exclude=list(exclude or []), group=group)
 
         def _park(outcome):
             if dedupe_key and outcome in ("paused_quota", SEND_TRANSIENT_FAIL, SEND_SKIPPED):
@@ -839,7 +839,7 @@ def retry_pending() -> dict:
                 ev = key.split("|", 1)[0]
                 r = deliver_event(ev, usernames=args.get("usernames"), to_group=args.get("to_group", False), title=args.get("title", ""),
                                   rows=args.get("rows"), reason=args.get("reason", ""), link=args.get("link", ""),
-                                  exclude=args.get("exclude"), dedupe_key=key)
+                                  exclude=args.get("exclude"), dedupe_key=key, group=args.get("group"))
                 out["retried"] += 1
                 if r in ("paused_quota", SEND_TRANSIENT_FAIL, SEND_SKIPPED):
                     out["left"] += 1

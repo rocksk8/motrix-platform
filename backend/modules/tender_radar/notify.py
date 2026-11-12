@@ -181,7 +181,7 @@ def notify_tender_source_changed(parsed: int, dropped: int) -> None:
     """
     # LINE 獨立通道（2026-11-13）：不看 Email、不受 SMTP 例外影響（`_line_event` 永不丟例外）；每天同一事件最多推一次（Email 重試不重推）。
     _en._line_event("tender_source_changed", to_group=True, title="標案雷達：來源網站格式異動",
-                    rows=[("成功解析", "%d 筆" % parsed), ("解析失敗", "%d 筆" % dropped)],
+                    rows=[("成功解析", "%s 筆" % parsed), ("解析失敗", "%s 筆" % dropped)],
                     reason="需要請系統維護人員調整解析器", line_key=_en._line_day_key("tender_source_changed"))
     to = _en._admin_emails("tender_source_changed")
     if not to:

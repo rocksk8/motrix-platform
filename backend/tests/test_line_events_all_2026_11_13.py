@@ -221,6 +221,16 @@ _ARG_OVERRIDES = {
 }
 
 
+def _norm_mails(mails) -> list:
+    """信件內文有「寄出時間（到分鐘）」；兩次寄送剛好跨分鐘就會不同（偶發）。比對前把 `YYYY-MM-DD HH:MM` 時間戳換成固定字樣。"""
+    import re as _re
+    ts = _re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+    out = []
+    for m in mails:
+        out.append(tuple(ts.sub("<TS>", x) if isinstance(x, str) else x for x in m))
+    return out
+
+
 def _auto_args(fn, dept_id):
     args = {}
     for name, p in inspect.signature(fn).parameters.items():
@@ -298,16 +308,16 @@ def test_legacy_notify_pushes_line_and_leaves_email_byte_identical(env, dept, fu
         return "ok"
 
     base_state = run()                                          # LINE 關（事件沒勾選）：Email 基準
-    base_mail, base_line = list(env["mail"]), list(env["line"])
+    base_mail, base_line = _norm_mails(env["mail"]), list(env["line"])
     assert base_line == [], "事件沒勾選時 LINE 不可以推"
     L.set_event(event, True)
     on_state = run()
     assert on_state == base_state, "LINE 開關不可以改變 Email 路徑的結果（例外型別／是否寄出）"
-    assert env["mail"] == base_mail, "Email 的收件人、主旨、內文在 LINE 開／關兩種狀態必須逐字相同"
+    assert _norm_mails(env["mail"]) == base_mail, "Email 的收件人、主旨、內文在 LINE 開／關兩種狀態必須逐字相同"
     assert env["line"], "%s 應該推 LINE（%s）" % (func, event)
     # LINE 失敗不影響 Email
     env["line_fail"] = True
-    assert run() == base_state and env["mail"] == base_mail
+    assert run() == base_state and _norm_mails(env["mail"]) == base_mail
     env["line_fail"] = False
 
 
@@ -513,13 +523,13 @@ def test_module_activity_generic_goes_to_group_and_finance_audience_to_finance(e
 def test_module_activity_with_line_event_goes_to_case_people_only_and_email_unchanged(env):
     from helpers import email_notify as EN, line_notify as L
     EN.notify_module_activity("業務開發", "狀態變更", "某人", "案件甲", "dev-crm.html")
-    base_mail = list(env["mail"])
+    base_mail = _norm_mails(env["mail"])
     env["mail"].clear()
     L.set_event("crm_case_status", True)
     L.set_event("module_activity", True)
     EN.notify_module_activity("業務開發", "狀態變更", "某人", "案件甲", "dev-crm.html",
                               line_event="crm_case_status", line_usernames=["amy", "dan"], line_exclude=["dan"])
-    assert env["mail"] == base_mail
+    assert _norm_mails(env["mail"]) == base_mail
     assert _targets(env) == ["amy"], "細項事件只發案件相關人（排除操作者）；泛用的 module_activity 不重複推"
     env["line"].clear()
     EN.notify_module_activity("業務開發", "指派案件", "某人", "案件甲", "dev-crm.html", line_skip=True)
