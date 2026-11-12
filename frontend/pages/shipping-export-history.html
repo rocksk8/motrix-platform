@@ -163,7 +163,7 @@
         })
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
           .then(data => { this.events = data; this.loadErr = '' })
-          .catch(e => { console.error('load failed:', e); this.loadErr = MotrixError.loadText(e) })
+          .catch(e => { if (e === 401) { MotrixError.sessionExpired(); return } console.error('load failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
       retryLoad() { this.loadErr = ''; this.load() },

@@ -152,7 +152,7 @@
           const r = await fetch('/api/system/schema-status', {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          if (r.status === 401) { this.logout(); return }
+          if (r.status === 401) { MotrixError.sessionExpired(); return }
           if (r.ok) {
             this.data = await r.json()
             this.loadErr = ''

@@ -314,6 +314,7 @@
             if (this.trailUser) qs.set('user', this.trailUser)
             if (more && this.trailNextId) qs.set('before_id', this.trailNextId)
             const r = await fetch(`/api/user-activity/trail?${qs}`, { headers: this._auth() })
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
             if (!r.ok) { this.loadErrs.trail = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.trail = more ? this.trail.concat(d.items || []) : (d.items || [])
@@ -340,6 +341,7 @@
         async loadOnline() {
           try {
             const r = await fetch('/api/online-users', { headers: this._auth() })
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
             if (r.ok) { this.online = await r.json(); this.loadErrs.online = ''; this._onlineOk = true }
             else if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(r.status)    // 每 60 秒的背景更新失敗不吵人；第一次就失敗才要說
           } catch (e) { if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(e) }
@@ -349,6 +351,7 @@
           try {
             const r = await fetch(`/api/user-activity?start=${this.start}&end=${this.end}`,
                                   { headers: this._auth() })
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
             if (!r.ok) { this.items = []; this.loadErrs.hours = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.items = d.items || []

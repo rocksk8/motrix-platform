@@ -41,5 +41,6 @@ def test_detail_text_never_returns_object_object(live_server, new_page):
     out = page.evaluate("(cs) => cs.map(c => MotrixError.detailText(c[0], c[1]))", [list(c) for c in cases])
     for r in out:
         assert isinstance(r, str) and r and "[object" not in r, out
-    assert out[0] == "x" and "HTTP 422" in out[1] and "HTTP 500" in out[2]
+    assert out[0] == "x"
+    assert all("HTTP" not in r and "422" not in r and "500" not in r for r in out[1:3]), "使用者看到的訊息不可以有狀態碼：%r" % out
     assert out[6] == "f：m"

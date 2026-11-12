@@ -9,6 +9,9 @@
  * 用法（頁面要在 Alpine 之前載入，放在 auth-guard.js 後面）：
  *   MotrixError.loadText(r.status)            // 讀取失敗（給狀態碼，或 fetch 丟出的例外）
  *   MotrixError.detailText(body.detail, r.status)  // 儲存失敗（給後端 detail）
+ *   MotrixError.sessionExpired()              // 401：登入過期 ⇒ 登出並導回登入頁（不顯示錯誤訊息）
+ *
+ * 使用者看到的訊息一律不含 HTTP 狀態碼（UX 規範：只給白話原因＋重試）；狀態碼只用來「挑哪一句白話」。
  */
 (function () {
   function str(v) { return typeof v === 'string' ? v.trim() : '' }
@@ -42,19 +45,28 @@
       var one = itemText(detail);
       if (one) return one;
     }
-    return status ? '伺服器回應錯誤（HTTP ' + status + '）' : '伺服器沒有說明原因';
+    return '伺服器沒有說明原因，請稍後再試。';
   }
 
   // 讀取失敗 → 一句話。x＝HTTP 狀態碼（數字），或 fetch 丟出的例外（連不上伺服器）。
   function loadText(x) {
     if (typeof x !== 'number') return '連不上伺服器，請確認網路連線。';
-    if (x === 401) return '登入已過期，請重新登入。';
+    if (x === 401) return '登入已過期，請重新登入。';      // 頁面應改呼叫 sessionExpired()，這句只是保險
     if (x === 403) return '你沒有權限查看這份資料。';
     if (x === 404) return '找不到這份資料（頁面與伺服器版本可能不一致）。';
     if (x === 429) return '操作太頻繁，請稍後再試。';
-    if (x >= 500) return '伺服器暫時無法回應（HTTP ' + x + '）。';
-    return '資料讀取失敗（HTTP ' + x + '）。';
+    if (x >= 500) return '伺服器暫時無法回應。';
+    return '資料讀取失敗。';
   }
 
-  window.MotrixError = { detailText: detailText, loadText: loadText };
+  // 登入過期（401）：與各頁既有的 logout() 同一套——通知伺服器登出（盡力而為）、清掉本機 session、回登入頁。
+  function sessionExpired() {
+    var token = '';
+    try { token = (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).token || ''; } catch (e) { token = ''; }
+    if (token) { try { fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }).catch(function () {}); } catch (e) { /* ignore */ } }
+    try { localStorage.removeItem('motrix_session'); } catch (e) { /* ignore */ }
+    location.href = (location.pathname.indexOf('/pages/') >= 0 ? '' : 'pages/') + 'login.html';
+  }
+
+  window.MotrixError = { detailText: detailText, loadText: loadText, sessionExpired: sessionExpired };
 })();

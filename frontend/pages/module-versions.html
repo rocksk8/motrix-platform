@@ -724,7 +724,7 @@
             // Auto-select first if nothing selected
             if (!this.selected && data.length > 0) this.selected = data[0]
           })
-          .catch(e => { console.error('fetch failed:', e); this.loadErr = MotrixError.loadText(e) })
+          .catch(e => { if (e === 401) { MotrixError.sessionExpired(); return } console.error('fetch failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
       retryLoad() { this.loadErr = ''; this.fetch() },

@@ -39,6 +39,7 @@ def test_load_failure_shows_a_plain_reason_and_retry_recovers(live_server, make_
     text = banner.inner_text()
     assert "伺服器暫時無法回應" in text and "重試" in text, text
     assert "[object" not in text and "undefined" not in text and "boom" not in text, "錯誤條不可以出現程式碼樣式的字：" + text
+    assert "HTTP" not in text and "500" not in text, "錯誤條不可以出現狀態碼（UX 規範：只給白話原因＋重試）：" + text
     if empty_text:
         assert not page.get_by_text(empty_text).first.is_visible(), "讀取失敗時不可以顯示空狀態「%s」（會被當成真的沒資料）" % empty_text
     # 後端恢復 ⇒ 按重試 ⇒ 錯誤條消失
@@ -57,3 +58,21 @@ def test_network_failure_says_the_server_is_unreachable(live_server, make_user, 
     banner = page.locator('[data-testid="load-error"]')
     banner.wait_for(state="visible", timeout=20000)
     assert "連不上伺服器" in banner.inner_text()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("page_name,pattern,empty_text", PAGES, ids=[p[0] for p in PAGES])
+def test_401_logs_out_and_returns_to_the_login_page(live_server, make_user, new_page, login_as, page_name, pattern, empty_text):
+    """登入過期（401）：五頁一致——清掉本機 session、導回登入頁，不是停在錯誤條上叫人重試（重試永遠不會成功）。"""
+    user = make_user(username="e2e_loaderr401_" + page_name.split(".")[0].replace("-", "_"))
+    page = new_page()
+    login_as(page, tuple(user)[:2])
+    page.route(pattern, lambda route: route.fulfill(status=401, content_type="application/json", body=json.dumps({"detail": "未登入"})))
+    # login_as 的 init script 每次載入都會重新寫入 session，所以不能事後查 localStorage；改看「通知伺服器登出」那支請求有送出
+    logouts = []
+    page.on("request", lambda rq: logouts.append(rq.url) if rq.url.endswith("/api/auth/logout") and rq.method == "POST" else None)
+    page.goto(f"{live_server}/pages/{page_name}")
+    page.wait_for_url("**/login.html*", timeout=20000)
+    page.wait_for_timeout(300)
+    assert logouts, "401 要走登出（通知伺服器）而不是停在錯誤條上"
+    assert not page.locator('[data-testid="load-error"]').count(), "401 不該顯示載入失敗錯誤條"
