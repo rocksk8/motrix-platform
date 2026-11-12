@@ -99,6 +99,7 @@ _NOT_IN_JSON_BACKUP = {
     "user_activity_daily": "時數統計，同 user_request_log",
     "user_list_prefs": "每個人的排序偏好，重設一次就好",
     "user_list_view_prefs": "每個人的清單每頁筆數偏好（T66），重設一次就好",
+    "user_prefs": "每個人的個人偏好（字級、深色模式、問候語、首頁…；「我的帳號」票），救回系統後重選一次就好",
     "idempotency_keys": "請求冪等鍵（T80c）：只留 7 天的重送去重狀態，救回系統不需要它",
     "tender_fetch_log":
         "標案雷達的抓取軌跡。它回答的是「雷達瞎了沒」，而還原之後要看的是"
