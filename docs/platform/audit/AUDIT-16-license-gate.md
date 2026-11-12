@@ -202,6 +202,58 @@
 3. **IP-M1**：題目——同 /64 不同位址連續失敗第 5 次起 429；IPv4 不受影響；稽核紀錄仍是完整位址；`_rl_state` 超過上限會被清。突變 M3 要紅。
 4. 建議項（LG-S5～S7、LG-O1）可在回覆欄表態，不阻擋關閉。
 
+## 6. 第二次複驗（稽核者，2026-11-12；對象 `a75a51067`）
+
+> 結論：**程式修正全部成立**（LG-M1、LG-M1b、LG-M2、IP-M1、LG-S7 都用函式層級實測確認）；補的題殺得掉 §5.3 的 M1／M2／M3／M4／M5＋新增的 M3b、M7'。**剩兩件事要處理才能關：①新測試檔會讓同一個 pytest 行程裡之後所有用 `client` 的測試全部 error（必修，一個字就能修）；②LG-M1b 的核心邏輯（殘缺 ⇒ 不永久快取）仍有突變存活（M6、M8）。**
+
+### 6.1 程式修正（`a75a51067`，已逐項實測）
+
+| 項目 | 實測 | 判讀 |
+|---|---|---|
+| LG-M1b 殘缺不永久快取 | 三次探測只有 MAC ⇒ `stable? False strikes 0`；60 秒內回同一個殘缺值；撥過 61 秒、硬體完整 ⇒ 升級為穩定值（`True`）；再次殘缺過期 ⇒ `strikes` 加 1 | ✅ |
+| LG-S7 IPv4-mapped | `rate_limit_key("::ffff:1.2.3.4")` 現在回 `1.2.3.4`（`test_rate_limit_key_unwraps_ipv4_mapped…` 守） | ✅ |
+| LG-M1／LG-M2／IP-M1 | 與 §5.1 相同，行為未變 | ✅ |
+
+小備註（不阻擋）：`machine_fingerprint()` 在「先前已快取殘缺值、退避已過、這次探測**全空**」時會丟 `RuntimeError`，而快取沒更新（`cached_at` 仍是舊的、退避仍是過期）⇒ **之後每次呼叫都重新探測**（3 次探測＋2×1.5 秒睡眠），直到有一次探測成功。外層 `_verify_license_file` 的 60 秒 TTL 擋掉大部分，但與 LG-S5（沒有 single-flight）疊在一起。這是 LG-S5 的另一個入口（讀碼推論，未另做實測），修 S5 時一起處理即可。
+
+### 6.2 新測試檔 `test_t80_audit16_fixes_2026_11_12.py`
+
+**必修（測試檔本身）：`test_lgm2a_cold_license_check_does_not_block_the_event_loop` 沒有要 `client`／`_app` 固件就直接 `import main`**，會讓同一個 pytest 行程裡之後每個用 `client` 的測試噴
+`Failed: main.py was already imported before the integration-test fixture could patch its file paths…`（BK19 類守門）。
+- 重現（在 `a75a51067`，serial）：`pytest tests/test_t80_audit16_fixes_2026_11_12.py tests/test_trusted_client_ip_2026_11_11.py` ⇒ `52 passed, 6 errors`；`pytest "tests/test_t80_audit16_fixes_2026_11_12.py::test_lgm2a_…" tests/test_licensing_gate_2026_09_21.py` ⇒ `5 passed, 31 errors`。再加上 emergency／core／totp／conn_reaper 的大集合跑出 `106 passed, 131 errors`。
+- 為什麼會漏掉：全量按字母序時，`test_t80…` 之前已經有別的檔經 `client` 固件匯入 `main`，所以不會紅；但 xdist 分 worker、modtest 的差異題選題、或單獨／少數檔案執行時，只要這個檔案是某個行程第一個碰 `main` 的，後面就全爆。這是「順序相依」的問題，不是產品壞了。
+- 修法（一個字，我已驗證）：簽名改成 `def test_lgm2a_cold_license_check_does_not_block_the_event_loop(client, monkeypatch):`（比照 `test_conn_reaper_t80` 同類題）。改完同樣兩個指令 ⇒ `88 passed`。我沒有把這個改動 commit 進你的分支。
+
+### 6.3 突變（對 `a75a51067`；跑 `test_licensing_core`＋新檔＋`test_trusted_client_ip`，基準 85 passed；每次 `git checkout` 還原，`git status` 乾淨）
+
+| 突變 | 結果 | 轉紅的題 |
+|---|---|---|
+| M1 mismatch 又整天快取 | 🔴 紅 | `test_lgm1_machine_mismatch_is_cached_only_for_a_short_ttl` |
+| M2 `_FP_PROBE_RETRIES = 1` | 🔴 紅 | `test_lgm1b_three_partial_probes_are_not_cached_permanently` |
+| M3 `rate_limit_key` 不取 /64 | 🔴 紅（2 題） | `test_rate_limit_key_aggregates_ipv6_to_slash_64`、`test_login_lockout_shares_one_bucket_across_the_same_v64_but_not_across_v4` |
+| M3b 不展開 IPv4-mapped | 🔴 紅 | `test_rate_limit_key_unwraps_ipv4_mapped_ipv6_before_decidin_v4_vs_v6` |
+| M4 `emergency_pass` 快取鍵拿掉 `status.reason` | 🔴 紅 | `test_lgm2b_emergency_pass_cache_recomputes_when_status_reason_changes` |
+| M5 `verify_license` 還原成同步 | 🔴 紅 | `test_lgm2a_cold_license_check_does_not_block_the_event_loop` |
+| M7' 退避改成 `(-1,)`（退避期內也重探） | 🔴 紅 | `test_lgm1b_three_partial_probes_are_not_cached_permanently` |
+| **M6 `is_stable = True`（殘缺值當穩定、永久快取，＝LG-M1b 還原）** | 🟢 **存活** | —（85 passed） |
+| **M8 退避不升級（永遠 `_FP_PARTIAL_BACKOFF_S[0]`）** | 🟢 **存活** | — |
+| M7 退避改 `(0,)` | 🟢 存活，但這是 Windows `time.monotonic()` 解析度（約 15 ms）讓 `差 <= 0` 偶爾成立，突變本身太弱；換 `(-1,)`（M7'）就紅，不算漏洞 | — |
+
+M6、M8 存活的原因：三題 LG-M1b 的題目裡，第一題只驗「重試 3 次、退避內不重探」（永久快取與否它看不出來，因為兩種實作第二次呼叫都回同一個值）；第三題**手動塞**一個 `is_stable=False` 的快取列再驗升級，沒有走 `machine_fingerprint()` 自己存進去的那一列。
+補題建議（一題就夠 M6＋M8）：用真實流程——殘缺×3（`_probe_hardware_once` 回只有一半）⇒ 讀 `lic._FINGERPRINT_CACHE`，斷言 `is_stable is False`、`strikes == 0`；把 `cached_at` 撥早 61 秒、硬體仍殘缺 ⇒ `strikes == 1`；再撥早 61 秒（<300）、硬體完整 ⇒ **不重探**（退避已升級到 300 秒）；撥早 301 秒 ⇒ 重探並升級為 `is_stable is True`。
+
+### 6.4 關閉判定
+
+| # | 判定 | 條件 |
+|---|---|---|
+| LG-M1 | ✅ 關閉 | M1 被抓到；情境 C 實測恢復 |
+| LG-M2 | ✅ 關閉（待 §6.2 修好測試檔） | M4、M5 被抓到；`COLD` 實測事件迴圈不再被擋 |
+| IP-M1 | ✅ 關閉 | M3 被抓到；/64 實測 |
+| LG-S7 | ✅ 關閉 | M3b 被抓到 |
+| LG-M1b | ⏳ **程式 ✅、題目未收**（M6、M8 存活） | 補 §6.3 那一題即可關 |
+| §6.2 測試檔 `client` 固件 | ❌ 未關（必修） | 一個字；修完請把兩個指令重跑 |
+| LG-S5、LG-S6、LG-O1 | 作者表態先不動；`perpetual` 是刻意且已與使用者確認 | 不阻擋 T80；請在回覆欄寫明「接受／不修＋理由」，我會依此標記 |
+
 ## 附錄：重現檔
 
 - `docs/platform/audit/AUDIT-16-probes/probe_pure.py`：純 Python，A（正常成本）、B（被擋＋通行證成本）、C／D（LG-M1）、E1（LG-S3）、E2（IP-M1）、E3（LG-O2）。指令見檔頭。
