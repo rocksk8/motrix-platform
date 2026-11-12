@@ -346,8 +346,8 @@
         } catch (e) { r = { ok: false, status: 0 }; d = { detail: '連不上系統，請確認這台電腦的網路後再試一次。' } }
         w.sending = false
         if (r.ok) {
-          w.sentTo = d.sent_to || ''; w.step = 3; w.needEmail = false; w.password = ''; w.hasSavedPw = true
-          await this._reloadCfg()
+          // 測試成功只代表「這份候選設定能寄」；到按下「我收到了」才寫進正式設定，所以密碼先留著給「重寄」用，這裡不重讀設定
+          w.sentTo = d.sent_to || ''; w.step = 3; w.needEmail = false
           return
         }
         if (d.needEmail) { w.needEmail = true; w.err = d.detail || ''; w.step = 2; return }
@@ -363,7 +363,7 @@
           d = await r.json().catch(() => ({}))
         } catch (e) { r = { ok: false } }
         w.activating = false
-        if (r.ok) { w.done = true; await this._reloadCfg(); return }
+        if (r.ok) { w.done = true; w.password = ''; w.hasSavedPw = true; await this._reloadCfg(); return }
         w.sentTo = ''; w.fail = { title: d.detail || '啟用失敗，請重新寄一次測試信', hint: '', ticket: null }
       },
       async _reloadCfg() {

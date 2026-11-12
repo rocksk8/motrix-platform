@@ -171,7 +171,7 @@ def sent(monkeypatch):
     from helpers import email_notify as EN
     box = {"calls": [], "raise": None}
 
-    def fake(to, subject, html, ignore_enabled=False):
+    def fake(to, subject, html, ignore_enabled=False, cfg=None):
         box["calls"].append({"to": to, "subject": subject, "ignore_enabled": ignore_enabled})
         if box["raise"]:
             raise box["raise"]
@@ -209,11 +209,12 @@ def test_wizard_happy_path_test_then_activate(client, make_user, sent):
     assert r.status_code == 200 and r.json() == {"ok": True, "sent_to": "boss@example.com"}
     assert sent["calls"][0]["to"] == ["boss@example.com"] and sent["calls"][0]["ignore_enabled"] is True
     cfg = client.get("/api/settings/email-notify", headers=h).json()
-    assert cfg["enabled"] is False and cfg["smtp_user"] == "co@gmail.com" and cfg["smtp_host"] == "smtp.gmail.com"
-    assert cfg["smtp_password"] != "abcdefghijklmnop" and "abcd" not in json.dumps(cfg)        # 回應只有遮罩
+    assert cfg["enabled"] is False and cfg["smtp_user"] == ""                                   # 測試成功還不會寫進正式設定（要按「我收到了」）
     ra = client.post("/api/settings/email-notify/wizard/activate", headers=h)
     assert ra.status_code == 200 and ra.json()["enabled"] is True
-    assert client.get("/api/settings/email-notify", headers=h).json()["enabled"] is True
+    cfg = client.get("/api/settings/email-notify", headers=h).json()
+    assert cfg["enabled"] is True and cfg["smtp_user"] == "co@gmail.com" and cfg["smtp_host"] == "smtp.gmail.com"
+    assert cfg["smtp_password"] != "abcdefghijklmnop" and "abcd" not in json.dumps(cfg)        # 回應只有遮罩
 
 
 def test_activation_requires_the_same_config_that_was_tested(client, make_user, sent):
@@ -275,10 +276,16 @@ def test_missing_fields_get_plain_422(client, make_user, sent):
 def test_masked_password_keeps_the_stored_one(client, make_user, sent):
     h = _h(client, make_user, "es_su9", email="boss@example.com")
     assert client.post("/api/settings/email-notify/wizard/test-me", json=BODY, headers=h).status_code == 200
+    assert client.post("/api/settings/email-notify/wizard/activate", headers=h).status_code == 200        # 密碼先存進正式設定
     r = client.post("/api/settings/email-notify/wizard/test-me", json={**BODY, "smtp_password": "••••••••"}, headers=h)
-    assert r.status_code == 200
+    assert r.status_code == 200                                                                          # 遮罩 ⇒ 沿用已存的密碼
     from helpers.settings import _get_setting
     assert _get_setting("email_notify", {})["smtp_password"] == "abcdefghijklmnop"
+    h2 = _h(client, make_user, "es_su9b", email="boss2@example.com")
+    from db import get_db
+    c = get_db(); c.execute("DELETE FROM system_settings WHERE key='email_notify'"); c.commit(); c.close()
+    r = client.post("/api/settings/email-notify/wizard/test-me", json={**BODY, "smtp_password": "••••••••"}, headers=h2)
+    assert r.status_code == 422                                                                          # 沒有已存密碼又只給遮罩 ⇒ 要填密碼
 
 
 def test_audit_has_no_password(client, make_user, sent):

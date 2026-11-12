@@ -565,10 +565,11 @@ def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
     return handle
 
 
-def _send_raising(to_addrs: list, subject: str, html: str, ignore_enabled: bool = False) -> None:
+def _send_raising(to_addrs: list, subject: str, html: str, ignore_enabled: bool = False, cfg: dict = None) -> None:
     """同 _send，但 SMTP 失敗時直接拋出例外（供測試端點用）。
-    `ignore_enabled=True`：寄信精靈在「啟用之前」就要寄測試信，所以略過「未啟用」這一關；開發機硬擋與帳密檢查照舊。"""
-    cfg = _cfg()
+    `ignore_enabled=True`：寄信精靈在「啟用之前」就要寄測試信，所以略過「未啟用」這一關；開發機硬擋與帳密檢查照舊。
+    `cfg`：寄信精靈拿「候選設定」直接測試，**不先存進系統設定**（測試失敗時，正在使用的設定一個字都不會變）；沒給就讀目前已存的設定。"""
+    cfg = cfg if cfg is not None else _cfg()
     if not cfg.get("enabled") and not ignore_enabled:
         raise RuntimeError("Email 通知功能未啟用")
     subject = _apply_dev_subject_prefix(cfg, subject)

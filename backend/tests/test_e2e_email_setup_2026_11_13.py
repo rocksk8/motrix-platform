@@ -48,7 +48,7 @@ def fake_send(monkeypatch):
     from helpers import email_notify as EN
     box = {"calls": [], "raise": None}
 
-    def fake(to, subject, html, ignore_enabled=False):
+    def fake(to, subject, html, ignore_enabled=False, cfg=None):
         box["calls"].append(to)
         if box["raise"]:
             raise box["raise"]

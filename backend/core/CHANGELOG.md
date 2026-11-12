@@ -2,9 +2,10 @@
 
 ## (next) — 2026-11-13（feat/menu-ux-3；選單去工程師化 批 3：寄信帳號精靈）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.email_setup`（`PROVIDERS`、`provider_list`、`provider_by_key`、`valid_email`、`normalize_password`、`validate_config`、`config_fingerprint`、`classify_error`、`build_ticket`）——寄信帳號精靈的供應商清單、設定檢查、失敗分類與「設定單」。
-- L1（相容擴充）：`helpers.email_notify._send_raising` 新增選填參數 `ignore_enabled=False`（精靈在啟用前寄測試信用；既有呼叫不受影響）。
+- L1（相容擴充）：`helpers.email_notify._send_raising` 新增選填參數 `ignore_enabled=False`（精靈在啟用前寄測試信用）與 `cfg=None`（精靈拿候選設定直接測試、不先存進系統設定）；既有呼叫不受影響。
 - 行為變更：寄信連線改走共用的 `_smtp_open`——埠 465 用 SMTP_SSL、其餘用 STARTTLS（原本一律 STARTTLS，465 的信箱寄不出去）。
 - 新端點：`GET /api/settings/email-notify/providers`、`POST /api/settings/email-notify/wizard/test-me`、`POST /api/settings/email-notify/wizard/activate`；`PUT /api/settings/email-notify` 加格式驗證（422）。
+- 行為變更（hichan-3 審查 C／D／E／F）：測試信用候選設定寄、**測試失敗不動正在用的設定**，按「我收到了」才寫入；`PUT` 由未啟用改啟用必須有同一份設定 24 小時內的測試證明（否則 422）；`PUT` 缺欄位改為併入現有設定（不再重設成預設）；`test-me` 每帳號 10 分鐘最多 5 次、埠限 25／465／587／2525（內網主機仍可，回應不回原始錯誤）。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
