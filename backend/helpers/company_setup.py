@@ -555,7 +555,7 @@ CODE_REQUIRED = "company_setup_required"
 CODE_UNDETERMINED = "company_setup_undetermined"
 MSG_REQUIRED = "尚未完成本公司資料設定"
 MSG_UNDETERMINED = "本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員"
-SETTINGS_URL = "/pages/company-profile-settings.html?setup=1"
+SETTINGS_URL = "/pages/company-setup-wizard.html?setup=1"
 _GATE_CACHE = {"key": None, "value": None}
 #: 判定失敗的短時快取（CG5-S2）：{demo: 到期時間}
 _GATE_ERROR_UNTIL = {}

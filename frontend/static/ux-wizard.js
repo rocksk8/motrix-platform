@@ -10,7 +10,7 @@
  * 判定（只看網址與 session，不打任何 API——強制改密碼期間大部分 API 本來就會被擋）：
  *   change-password.html?forced=1        ⇒ 步驟「設新密碼」
  *   change-password.html?wizard=totp     ⇒ 步驟「兩步驟驗證」
- *   company-profile-settings.html?setup=1 ⇒ 步驟「確認公司資料」
+ *   company-setup-wizard.html?setup=1（公司設定精靈；舊的 company-profile-settings.html?setup=1 也算）⇒ 步驟「確認公司資料」
  * 步驟數依角色：最高管理者 4 步（要確認公司資料）；其他人 2 步（改完密碼就能用）。
  *
  * 「步驟 n／N」只在**真的走過第 1 步**時顯示（sessionStorage 旗標 motrix_wizard，第 1 步載入時寫入）：
@@ -25,7 +25,7 @@
   var mode = ''
   if (file === 'change-password.html' && q.get('forced') === '1') mode = 'pw'
   else if (file === 'change-password.html' && q.get('wizard') === 'totp') mode = 'totp'
-  else if (file === 'company-profile-settings.html' && q.get('setup') === '1') mode = 'company'
+  else if ((file === 'company-profile-settings.html' || file === 'company-setup-wizard.html') && q.get('setup') === '1') mode = 'company'
   if (!mode) { window.MotrixWizard = { mode: '' }; return }
 
   var sess = {}

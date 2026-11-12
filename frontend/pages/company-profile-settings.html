@@ -97,7 +97,8 @@
       text-align: center;
     }
   </style>
-  <script src="../static/ux-wizard.js"></script><!-- A1：?setup=1 時套用首次設定精靈外殼（隱藏頂欄、步驟條） -->
+  <script>(function () { try { if (new URLSearchParams(location.search).get('setup') === '1') location.replace('company-setup-wizard.html?setup=1') } catch (e) {} })()</script><!-- T84：首次設定（閘門）改由「公司設定精靈」處理 -->
+  <script src="../static/ux-wizard.js"></script><!-- A1：?setup=1 時套用首次設定精靈外殼（已被上面導向精靈；留著給舊書籤的瞬間） -->
 </head>
 <body x-data="companyProfilePage()" x-init="init()" x-cloak>
   <header id="app-topbar" class="topbar"></header>

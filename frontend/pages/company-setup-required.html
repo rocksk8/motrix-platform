@@ -41,7 +41,7 @@
           .then(function (s) {
             if (!s) return
             if (s.configured === true || s.grace) { location.replace('../index.html'); return }
-            if (s.canFix) { location.replace('company-profile-settings.html?setup=1'); return }
+            if (s.canFix) { location.replace('company-setup-wizard.html?setup=1'); return }
             if (s.configured === null) {
               document.getElementById('cs-title').textContent = '本公司設定狀態無法判定'
               document.getElementById('cs-msg').textContent = '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員。'
