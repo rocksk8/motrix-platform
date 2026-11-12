@@ -136,11 +136,11 @@ def test_binding_status_list_remind_button_and_unlink(live_server, make_user, ne
     page.locator("[data-testid=line-bind-toggle]").click()
     assert "已綁定" in page.locator("[data-testid=line-bind-row-e2e_bound]").inner_text()
     assert "尚未綁定" in page.locator("[data-testid=line-bind-row-e2e_free]").inner_text()
-    # 提醒：站內通知＋Email（附修改密碼頁連結）
+    # 提醒：站內通知＋Email（附「我的帳號」通知分頁連結）
     page.locator("[data-testid=line-bind-remind]").click()
     page.locator("[data-testid=line-msg]").filter(has_text="已提醒").wait_for(state="visible", timeout=10000)
     mails = [m for m in fake if "free@example.com" in m[0]]
-    assert mails and "change-password.html" in mails[0][2]
+    assert mails and "my-account.html?tab=notify" in mails[0][2]
     c = get_db()
     try:
         assert c.execute("SELECT COUNT(*) n FROM notifications WHERE username='e2e_free' AND type='line_binding_reminder'").fetchone()["n"] == 1

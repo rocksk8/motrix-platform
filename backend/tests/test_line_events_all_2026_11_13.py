@@ -607,11 +607,11 @@ def test_remind_notifies_unlinked_by_email_and_in_app_with_link_and_throttles(cl
     assert j["targets"] == 2 and j["notified"] == 2 and j["emailed"] == 2 and j["skippedRecent"] == []
     mails = {m[0][0]: m for m in env["mail"]}
     assert set(mails) == {"dan@example.com", "carol@example.com"}, "只寄給未綁定的人"
-    assert "change-password.html" in mails["dan@example.com"][2] and "LINE" in mails["dan@example.com"][2]
+    assert "my-account.html?tab=notify" in mails["dan@example.com"][2] and "LINE" in mails["dan@example.com"][2]
     c = get_db()
     try:
         rows = c.execute("SELECT username, link FROM notifications WHERE type='line_binding_reminder' ORDER BY username").fetchall()
-        assert [(r_["username"], r_["link"]) for r_ in rows] == [("carol", "change-password.html"), ("dan", "change-password.html")]
+        assert [(r_["username"], r_["link"]) for r_ in rows] == [("carol", "my-account.html?tab=notify"), ("dan", "my-account.html?tab=notify")]
         assert c.execute("SELECT COUNT(*) n FROM audit_log WHERE action='line.binding.remind'").fetchone()["n"] == 1
     finally:
         c.close()
