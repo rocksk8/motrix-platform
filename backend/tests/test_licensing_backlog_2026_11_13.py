@@ -118,6 +118,25 @@ def test_lg_s5_concurrent_callers_share_one_failure_when_hardware_is_persistentl
 
 
 @pytest.mark.real_fingerprint
+def test_lg_s5_probe_and_queued_callers_get_the_same_exception_type_even_for_non_runtime_errors(slow_probe, monkeypatch):
+    """審查 L1：探測底層丟的不是 RuntimeError（例如 PowerShell 起不來的 OSError）時，探測者與排隊者都要拿到 RuntimeError、同一個訊息；
+    以前探測者拿到 OSError、排隊者拿到 RuntimeError(str(OSError))。呼叫端（verify_license／狀態端點）都是 `except Exception`，所以不會當機，
+    但契約寫的是 RuntimeError，兩邊不一致會讓以後依型別分流的人踩雷。"""
+    calls, _ = slow_probe
+
+    def boom():
+        calls.append(1)
+        time.sleep(0.15)
+        raise OSError(2, "powershell.exe 不存在")
+    monkeypatch.setattr(lic, "_probe_hardware_once", boom)
+    out = _run_concurrently(lic.machine_fingerprint)
+    assert all((not ok) and type(v) is RuntimeError for ok, v in out), [(ok, type(v).__name__) for ok, v in out]
+    assert len({str(v) for _, v in out}) == 1, "探測者與排隊者的訊息要一致：%r" % [str(v) for _, v in out]
+    assert len(calls) == 1, "OSError 不重試、也不各自探：%d 次" % len(calls)
+    assert any(isinstance(v.__cause__, OSError) for _, v in out), "原例外要掛在 __cause__（探測者那條）"
+
+
+@pytest.mark.real_fingerprint
 def test_lg_s5_sequential_callers_are_not_held_back_by_an_old_failure(slow_probe):
     """反向：single-flight 只合併「並行」的人，不是加一個時間窗——硬體恢復後下一個請求馬上認得到。"""
     calls, result = slow_probe

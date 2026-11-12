@@ -928,6 +928,14 @@ def machine_fingerprint():
         try:
             digest = _probe_fingerprint()
         except Exception as exc:                       # noqa: BLE001  任何失敗都讓排隊的人看到同一個結論
+            # 審查 L1：探測者與排隊者拿到的例外**型別要一致**——契約（見 docstring）是「讀不到就丟 RuntimeError」。
+            # 探測底層丟別的型別（OSError、subprocess 的例外…）時一律包成 RuntimeError（原例外掛在 __cause__），
+            # 兩邊都是同一型別同一訊息；不重拋同一個例外物件（多執行緒共用一個物件會互相疊 traceback）。
+            if not isinstance(exc, RuntimeError):
+                wrapped = RuntimeError("%s: %s" % (type(exc).__name__, exc))
+                wrapped.__cause__ = exc
+                _FP_LAST_ERROR = wrapped
+                raise wrapped from exc
             _FP_LAST_ERROR = exc
             raise
         else:
