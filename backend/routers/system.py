@@ -3036,7 +3036,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
     if bad:
         raise HTTPException(422, bad)
     if not host:
-        raise HTTPException(422, "請填寄信主機（向你的信箱或網域代管廠商詢問）。")
+        raise HTTPException(422, "請填寄信主機（向信箱或網域代管廠商詢問）。")
     if not body.smtp_user.strip():
         raise HTTPException(422, "請填寄件人信箱。")
     if not pw:
@@ -3049,9 +3049,9 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
         if not to_addr.strip():
             rec = (body.recipient or "").strip()
             if not rec:
-                return _wizard_error(400, "你的帳號還沒有 Email，請在下方填上你的 Email，測試信才寄得到你。", needEmail=True)
+                return _wizard_error(400, "您的帳號還沒有 Email，請在下方填上 Email，測試信才寄得到。", needEmail=True)
             if not _es.valid_email(rec):
-                raise HTTPException(422, "你填的 Email 格式不對。")
+                raise HTTPException(422, "Email 格式不對，請檢查後再填一次。")
             conn.execute("UPDATE users SET email=? WHERE id=?", (rec, user["id"]))
             conn.commit()
             to_addr = rec

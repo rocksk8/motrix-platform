@@ -1,5 +1,5 @@
 {
- "core_version": "1.159",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -722,7 +722,7 @@
    "_admin_emails": "def(event_key=…)",
    "_base_url": "def()",
    "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
-   "_send_raising": "def(to_addrs, subject, html)",
+   "_send_raising": "def(to_addrs, subject, html, ignore_enabled=…)",
    "email_send_policy": "def(env=…)",
    "finance_recipient_emails": "def(event_key=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
@@ -787,6 +787,17 @@
    "notify_shipping_submitted": "def(note_no, customer, approver_usernames)",
    "notify_warranty_expiry": "def(device_name, customer, quote_no, days_left, expiry_date, sales_person)",
    "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…)"
+  },
+  "helper:email_setup": {
+   "PROVIDERS": "const",
+   "build_ticket": "def(kind, *, user, host, port, company=…, requester=…)",
+   "classify_error": "def(exc, host=…, provider_key=…)",
+   "config_fingerprint": "def(host, port, user, password)",
+   "normalize_password": "def(provider_key, pw)",
+   "provider_by_key": "def(key)",
+   "provider_list": "def()",
+   "valid_email": "def(v)",
+   "validate_config": "def(data)"
   },
   "helper:errors": {
    "trace_id": "def()"

@@ -6570,6 +6570,22 @@
   ],
   "s": 200
  },
+ "/api/settings/email-notify/providers": {
+  "k": [
+   "providers",
+   "providers[].helpLabel",
+   "providers[].helpUrl",
+   "providers[].host",
+   "providers[].key",
+   "providers[].label",
+   "providers[].note",
+   "providers[].passwordHelp",
+   "providers[].passwordLabel",
+   "providers[].port",
+   "providers[].userHint"
+  ],
+  "s": 200
+ },
  "/api/settings/google-calendar": {
   "k": [
    "calendar_id",

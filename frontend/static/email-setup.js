@@ -7,6 +7,143 @@
 (function () {
   'use strict'
 
+  // 精靈卡（3 步）；下面的 TEMPLATE 是舊的「設定狀態＋手動填寫」兩張卡，保留當作進階設定
+  var WIZARD = [
+    '<!-- 寄信帳號精靈（3 步）：選信箱服務 → 貼信箱與密碼 → 寄測試信給自己，按「我收到了」才啟用 -->',
+    '<div class="ns-card" data-testid="es-wizard-card">',
+    '  <div class="ns-card-head">',
+    '    <div class="ns-card-head-title">設定公司寄信帳號</div>',
+    '    <span x-show="wz.done || (!wz.open && cfg.enabled && cfg.smtp_user)" style="font-size:12px;color:var(--success);font-weight:600" data-testid="es-status-on">● 已啟用</span>',
+    '  </div>',
+    '  <div class="ns-card-body">',
+    '',
+    '    <!-- 已設定好：只顯示摘要，要改再展開 -->',
+    '    <div x-show="!wz.open" data-testid="es-summary">',
+    '      <div style="font-size:13px;margin-bottom:10px">',
+    '        目前的寄件信箱：<strong x-text="cfg.smtp_user || \'（尚未設定）\'"></strong>',
+    '        <span x-show="cfg.enabled" style="color:var(--success);font-weight:600">（Email 通知已啟用）</span>',
+    '        <span x-show="!cfg.enabled" style="color:var(--warning);font-weight:600">（尚未啟用）</span>',
+    '      </div>',
+    '      <button class="btn btn-ghost" @click="wzOpen()" data-testid="es-reopen">重新設定寄信帳號</button>',
+    '    </div>',
+    '',
+    '    <div x-show="wz.open" data-testid="es-steps">',
+    '      <div class="ns-desc" style="margin-bottom:12px">',
+    '        只要 3 步：選信箱服務 → 填信箱與密碼 → 系統寄一封測試信給你，你收到就完成。',
+    '        <strong x-text="\'第 \' + wz.step + \' 步／共 3 步\'" data-testid="es-step-label"></strong>',
+    '      </div>',
+    '',
+    '      <!-- 第 1 步 -->',
+    '      <div x-show="wz.step === 1" data-testid="es-step1">',
+    '        <div style="font-size:13px;font-weight:600;margin-bottom:8px">你的公司用哪一種信箱？</div>',
+    '        <div style="display:grid;gap:8px">',
+    '          <template x-for="p in providers" :key="p.key">',
+    '            <label style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px;cursor:pointer"',
+    '                   :style="wz.provider === p.key ? \'border-color:var(--primary,#2563EB);background:rgba(37,99,235,.06)\' : \'\'">',
+    '              <input type="radio" name="es-provider" :value="p.key" x-model="wz.provider" :data-testid="\'es-provider-\' + p.key" style="margin-top:3px">',
+    '              <span>',
+    '                <span style="font-weight:600" x-text="p.label"></span>',
+    '                <span x-show="p.note" style="display:block;font-size:12px;color:var(--text-dim)" x-text="p.note"></span>',
+    '              </span>',
+    '            </label>',
+    '          </template>',
+    '        </div>',
+    '        <div class="ns-actions" style="margin-top:12px">',
+    '          <button class="btn btn-primary" @click="wzNext1()" :disabled="!wz.provider" data-testid="es-next1">下一步</button>',
+    '        </div>',
+    '      </div>',
+    '',
+    '      <!-- 第 2 步 -->',
+    '      <div x-show="wz.step === 2" data-testid="es-step2">',
+    '        <div style="font-size:13px;font-weight:600;margin-bottom:8px" x-text="\'填寫「\' + (curProv.label || \'\') + \'」的信箱與密碼\'"></div>',
+    '        <div class="ns-row">',
+    '          <div class="ns-field">',
+    '            <label>寄件人信箱（完整的 Email）</label>',
+    '            <input type="text" x-model="wz.user" :placeholder="curProv.userHint" autocomplete="off" data-testid="es-user">',
+    '          </div>',
+    '          <div class="ns-field">',
+    '            <label x-text="curProv.passwordLabel"></label>',
+    '            <input type="password" x-model="wz.password" autocomplete="new-password" :placeholder="wz.hasSavedPw ? \'已儲存（不改就留空）\' : \'\'" data-testid="es-password">',
+    '          </div>',
+    '        </div>',
+    '        <div class="ns-desc" x-text="curProv.passwordHelp" data-testid="es-password-help"></div>',
+    '        <div class="ns-desc" x-show="curProv.helpUrl">',
+    '          <a :href="curProv.helpUrl" target="_blank" rel="noopener" x-text="curProv.helpLabel + \'（會開新分頁）\'" data-testid="es-help-link"></a>',
+    '        </div>',
+    '        <div class="ns-row" x-show="wz.provider === \'other\'" data-testid="es-other-fields">',
+    '          <div class="ns-field">',
+    '            <label>寄信主機</label>',
+    '            <input type="text" x-model="wz.host" placeholder="例：mail.你的公司.com" data-testid="es-host">',
+    '          </div>',
+    '          <div class="ns-field">',
+    '            <label>連接埠</label>',
+    '            <input type="number" x-model.number="wz.port" placeholder="587" data-testid="es-port">',
+    '          </div>',
+    '        </div>',
+    '        <div class="ns-desc" x-show="wz.provider === \'other\'">這兩個值（寄信主機、連接埠）請向信箱或網域代管廠商詢問，常見的連接埠是 587 或 465。</div>',
+    '        <div class="ns-field" style="margin-top:6px">',
+    '          <label>系統網址（信件裡的連結會指向這裡）</label>',
+    '          <input type="text" x-model="wz.baseUrl" placeholder="例：https://erp.你的公司.com" data-testid="es-base-url">',
+    '          <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="wzBaseWarn()" data-testid="es-base-url-warn">',
+    '            <span x-text="wzBaseWarn()"></span> 外部收件人打不開這個連結，請填公司對外網址。',
+    '          </div>',
+    '        </div>',
+    '        <div x-show="wz.needEmail" class="ns-field" data-testid="es-need-email">',
+    '          <label>你的帳號還沒有 Email：請填你的 Email（測試信會寄到這裡，也會存回你的帳號）</label>',
+    '          <input type="text" x-model="wz.recipient" placeholder="例：you@公司.com" data-testid="es-recipient">',
+    '        </div>',
+    '        <div x-show="wz.err" style="margin-top:8px;color:var(--danger);font-size:13px;font-weight:600" x-text="wz.err" data-testid="es-err2"></div>',
+    '        <div class="ns-actions" style="margin-top:12px">',
+    '          <button class="btn btn-ghost" @click="wz.step = 1">上一步</button>',
+    '          <button class="btn btn-primary" @click="wzSendTest()" :disabled="wz.sending" data-testid="es-next2">',
+    '            <span x-show="!wz.sending">下一步：寄測試信給我</span><span x-show="wz.sending">寄送中…</span>',
+    '          </button>',
+    '        </div>',
+    '      </div>',
+    '',
+    '      <!-- 第 3 步 -->',
+    '      <div x-show="wz.step === 3" data-testid="es-step3">',
+    '        <!-- 成功 -->',
+    '        <div x-show="wz.sentTo && !wz.done" data-testid="es-sent">',
+    '          <div style="font-size:14px;font-weight:600;margin-bottom:6px">測試信已寄到 <span x-text="wz.sentTo" data-testid="es-sent-to"></span></div>',
+    '          <div class="ns-desc">請到這個信箱確認有沒有收到（沒收到請也看一下垃圾信件匣）。收到之後按「我收到了」，系統就會開始寄通知信。</div>',
+    '          <div class="ns-actions" style="margin-top:12px">',
+    '            <button class="btn btn-primary" @click="wzActivate()" :disabled="wz.activating" data-testid="es-got-it">我收到了，啟用通知</button>',
+    '            <button class="btn btn-ghost" @click="wzSendTest()" :disabled="wz.sending">沒收到，重寄一次</button>',
+    '          </div>',
+    '        </div>',
+    '        <!-- 失敗 -->',
+    '        <div x-show="wz.fail" data-testid="es-fail">',
+    '          <div style="font-size:14px;font-weight:700;color:var(--danger);margin-bottom:6px" x-text="wz.fail && wz.fail.title" data-testid="es-fail-title"></div>',
+    '          <div class="ns-desc" x-text="wz.fail && wz.fail.hint" data-testid="es-fail-hint"></div>',
+    '          <div class="ns-actions" style="margin-top:12px">',
+    '            <button class="btn btn-ghost" @click="wz.step = 2; wz.fail = null" data-testid="es-back">回上一步修改</button>',
+    '            <button class="btn btn-primary" @click="wzSendTest()" :disabled="wz.sending">再試一次</button>',
+    '            <button class="btn btn-ghost" x-show="wz.fail && wz.fail.ticket" @click="wz.showTicket = !wz.showTicket" data-testid="es-ticket-btn">產生設定單</button>',
+    '          </div>',
+    '          <div x-show="wz.showTicket && wz.fail && wz.fail.ticket" style="margin-top:12px" data-testid="es-ticket">',
+    '            <div style="font-size:13px;font-weight:600;margin-bottom:4px" x-text="wz.fail && wz.fail.ticket && wz.fail.ticket.title"></div>',
+    '            <pre id="es-ticket-text" style="white-space:pre-wrap;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px;font-size:12px" x-text="wz.fail && wz.fail.ticket && wz.fail.ticket.text" data-testid="es-ticket-text"></pre>',
+    '            <div class="ns-actions">',
+    '              <button class="btn btn-ghost" @click="wzCopyTicket()" data-testid="es-ticket-copy">複製</button>',
+    '              <button class="btn btn-ghost" @click="wzPrintTicket()">列印</button>',
+    '              <a class="btn btn-ghost" :href="wzMailto()" data-testid="es-ticket-mail">用郵件寄給資訊廠商</a>',
+    '            </div>',
+    '            <div class="ns-desc" x-show="wz.copied" style="color:var(--success)">已複製</div>',
+    '          </div>',
+    '        </div>',
+    '        <!-- 完成 -->',
+    '        <div x-show="wz.done" data-testid="es-done">',
+    '          <div style="font-size:14px;font-weight:700;color:var(--success)">寄信帳號已啟用：之後的簽核、退回、精算完結通知都會自動寄出。</div>',
+    '          <div class="ns-actions" style="margin-top:12px"><button class="btn btn-ghost" @click="wz.open = false">關閉</button></div>',
+    '        </div>',
+    '      </div>',
+    '    </div>',
+    '',
+    '  </div>',
+    '</div>',
+  ].join('\n')
+
   var TEMPLATE = [
     '<!-- 設定狀態 checklist -->',
     '<div class="ns-card">',
@@ -45,7 +182,7 @@
     '<!-- SMTP 設定 -->',
     '<div class="ns-card">',
     '  <div class="ns-card-head">',
-    '    <div class="ns-card-head-title">Gmail SMTP 設定</div>',
+    '    <div class="ns-card-head-title">進階設定（手動填寫）</div>',
     '    <span x-show="saved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>',
     '  </div>',
     '  <div class="ns-card-body">',
@@ -170,6 +307,93 @@
       msg: '',
       isError: false,
 
+      // ── 精靈（3 步）──────────────────────────────────────────────────────────
+      providers: [],
+      wz: {
+        open: false, step: 1, provider: 'gmail', user: '', password: '', hasSavedPw: false, host: '', port: 587, baseUrl: '', recipient: '',
+        needEmail: false, sending: false, activating: false, sentTo: '', fail: null, err: '', done: false, showTicket: false, copied: false,
+      },
+      get curProv() { return this.providers.find(p => p.key === this.wz.provider) || {} },
+      wzOpen() {
+        this.wz = { ...this.wz, open: true, step: 1, fail: null, err: '', sentTo: '', done: false, showTicket: false, needEmail: false }
+      },
+      wzNext1() { if (this.wz.provider) { this.wz.step = 2; this.wz.err = '' } },
+      wzBaseWarn() {
+        const keep = this.cfg.base_url
+        this.cfg.base_url = this.wz.baseUrl
+        const w = this.baseUrlWarn()
+        this.cfg.base_url = keep
+        return w
+      },
+      _wzBody() {
+        const w = this.wz
+        return {
+          provider: w.provider, smtp_user: (w.user || '').trim(),
+          smtp_password: w.password || (w.hasSavedPw ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : ''),
+          smtp_host: w.provider === 'other' ? (w.host || '').trim() : '', smtp_port: w.provider === 'other' ? (w.port || 587) : (this.curProv.port || 587),
+          base_url: (w.baseUrl || '').trim(), recipient: (w.recipient || '').trim(),
+        }
+      },
+      async wzSendTest() {
+        const w = this.wz
+        w.sending = true; w.err = ''; w.fail = null; w.copied = false
+        let r, d = {}
+        try {
+          r = await fetch('/api/settings/email-notify/wizard/test-me', {
+            method: 'POST', headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' }, body: JSON.stringify(this._wzBody()),
+          })
+          d = await r.json().catch(() => ({}))
+        } catch (e) { r = { ok: false, status: 0 }; d = { detail: '連不上系統，請確認這台電腦的網路後再試一次。' } }
+        w.sending = false
+        if (r.ok) {
+          w.sentTo = d.sent_to || ''; w.step = 3; w.needEmail = false; w.password = ''; w.hasSavedPw = true
+          await this._reloadCfg()
+          return
+        }
+        if (d.needEmail) { w.needEmail = true; w.err = d.detail || ''; w.step = 2; return }
+        if (r.status === 502 || d.category) { w.fail = { title: d.title || d.detail || '寄信失敗', hint: d.hint || '', ticket: d.ticket || null }; w.sentTo = ''; w.step = 3; return }
+        w.err = d.detail || '寄送失敗，請確認設定'; w.step = 2
+      },
+      async wzActivate() {
+        const w = this.wz
+        w.activating = true
+        let r, d = {}
+        try {
+          r = await fetch('/api/settings/email-notify/wizard/activate', { method: 'POST', headers: { Authorization: 'Bearer ' + token() } })
+          d = await r.json().catch(() => ({}))
+        } catch (e) { r = { ok: false } }
+        w.activating = false
+        if (r.ok) { w.done = true; await this._reloadCfg(); return }
+        w.sentTo = ''; w.fail = { title: d.detail || '啟用失敗，請重新寄一次測試信', hint: '', ticket: null }
+      },
+      async _reloadCfg() {
+        try {
+          const r = await fetch('/api/settings/email-notify', { headers: { Authorization: 'Bearer ' + token() } })
+          if (r.ok) { const data = await r.json(); this.cfg = { ...this.cfg, ...data }; if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = [] }
+        } catch (e) { /* 重新整理頁面即可 */ }
+      },
+      wzCopyTicket() {
+        const txt = (this.wz.fail && this.wz.fail.ticket && this.wz.fail.ticket.text) || ''
+        const done = () => { this.wz.copied = true; setTimeout(() => { this.wz.copied = false }, 2000) }
+        try { navigator.clipboard.writeText(txt).then(done, () => {}) } catch (e) { /* 瀏覽器不允許時，請用手動選取複製 */ }
+      },
+      wzPrintTicket() {
+        const tk = this.wz.fail && this.wz.fail.ticket
+        if (!tk) return
+        const win = window.open('', '_blank')
+        if (!win) return
+        const pre = win.document.createElement('pre')
+        pre.style.cssText = 'white-space:pre-wrap;font:14px/1.6 sans-serif'
+        pre.textContent = tk.text
+        win.document.title = tk.title
+        win.document.body.appendChild(pre)
+        win.print()
+      },
+      wzMailto() {
+        const tk = this.wz.fail && this.wz.fail.ticket
+        return tk ? ('mailto:?subject=' + encodeURIComponent(tk.title) + '&body=' + encodeURIComponent(tk.text)) : '#'
+      },
+
       // 系統網址的白話提醒：沒填、是這台電腦自己（localhost）、或是公司內部才連得到的位址（私有 IP、.local／.lan 之類的內部名稱、單一名稱的主機）
       baseUrlWarn() {
         const u = String(this.cfg.base_url || '').trim()
@@ -236,6 +460,18 @@
           // （用 localhost／127.x 開頁時不預填：那只有這台電腦連得到，預填反而誤導）
           if (!this.cfg.base_url && !/^(localhost|127\.|\[?::1)/i.test(location.hostname)) this.cfg.base_url = location.origin
         }
+        try {
+          const pr = await fetch('/api/settings/email-notify/providers', { headers: { Authorization: 'Bearer ' + tk } })
+          if (pr.ok) this.providers = (await pr.json()).providers || []
+        } catch (e) { /* 清單讀不到：精靈第 1 步會是空的，進階設定仍可手動填寫 */ }
+        const w = this.wz
+        w.user = this.cfg.smtp_user || ''
+        w.hasSavedPw = !!(this.cfg.smtp_password)
+        w.baseUrl = this.cfg.base_url || ''
+        const hit = this.providers.find(p => p.host && p.host === this.cfg.smtp_host)
+        w.provider = hit ? hit.key : (this.cfg.smtp_user && this.cfg.smtp_host ? 'other' : 'gmail')
+        if (w.provider === 'other') { w.host = this.cfg.smtp_host || ''; w.port = this.cfg.smtp_port || 587 }
+        w.open = !(this.cfg.enabled && this.cfg.smtp_user)            // 還沒設定好 ⇒ 預設展開精靈；設定好了只顯示摘要
       },
 
       async save() {
@@ -280,7 +516,7 @@
     if (!host || host.getAttribute('data-mounted')) return
     host.setAttribute('data-mounted', '1')
     host.setAttribute('x-data', 'emailSetupCard()')
-    host.innerHTML = TEMPLATE
+    host.innerHTML = WIZARD + TEMPLATE
   }
   // 同步載入時 mount 通常已在 DOM（腳本放在 mount 之後）；否則等 DOMContentLoaded（早於 deferred 的 Alpine 啟動）
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount)

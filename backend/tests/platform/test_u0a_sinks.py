@@ -212,6 +212,8 @@ SIDE_EFFECT_GET_CLASSIFIED = {
     "/api/mail-types": "read",
     "/api/mail-types/receivable": "read",
     "/api/settings/email-notify": "read",
+    # 寄信精靈：只讀供應商清單（Gmail／Microsoft 365／Yahoo／Zoho／其他的主機、埠與白話說明，寫死在 helpers/email_setup.py）；不連線、不寄信 ⇒ read
+    "/api/settings/email-notify/providers": "read",
     # T79 LINE：只讀設定（token 已遮罩）回 {enabled, channel_access_token}；不對外連線（verify 是 POST）⇒ read
     "/api/settings/line-notify": "read",
     # LINE 額度用量條：只讀 LINE 的 quota／consumption（唯讀、不耗額度），結果只快取不寄信；沒 token 時根本不連線 ⇒ read（記錄器環境無 token）
