@@ -769,7 +769,7 @@ function voucherPage() {
     async loadCompany() {
       // ⚠️ 抬頭從設定讀。**不要寫死** —— 這個 repo 已經寫死在 14 個檔、56 行。
       try {
-        const r = await fetch('/api/settings/company-profile', { headers: this._auth() })
+        const r = await fetch('/api/settings/company-profile/public', { headers: this._auth() })
         if (!r.ok) throw new Error('HTTP ' + r.status)
         this.company = (await r.json()).name || ''
       } catch (e) {

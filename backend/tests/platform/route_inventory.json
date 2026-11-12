@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 935,
-  "endpoints_api": 931,
+  "endpoints_total": 936,
+  "endpoints_api": 932,
   "write_total": 504,
   "write_api": 504,
-  "get_api": 427,
-  "distinct_paths_api": 789,
+  "get_api": 428,
+  "distinct_paths_api": 790,
   "write_with_body_api": 370,
   "write_with_path_param_api": 360
  },
@@ -2104,6 +2104,11 @@
    "body": false
   },
   "GET /api/settings/company-profile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/company-profile/public": {
    "w": false,
    "pp": 0,
    "body": false

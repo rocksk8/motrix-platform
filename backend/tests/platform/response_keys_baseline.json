@@ -6283,6 +6283,7 @@
    "groups[].values.cloud_weekly_keep_days",
    "groups[].values.combo_view_default_open",
    "groups[].values.combo_view_max",
+   "groups[].values.company_profile_full_read_superadmin_only",
    "groups[].values.confirm_period_days",
    "groups[].values.confirmed",
    "groups[].values.contact_email_hideable",
@@ -6554,6 +6555,15 @@
   ],
   "s": 200
  },
+ "/api/settings/company-profile/public": {
+  "k": [
+   "contact_info",
+   "locations",
+   "name",
+   "tax_id"
+  ],
+  "s": 200
+ },
  "/api/settings/company-setup/status": {
   "k": [
    "canFix",
@@ -6695,6 +6705,25 @@
    "public_base_url",
    "quota_thresholds",
    "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  },
@@ -7653,25 +7682,6 @@
    "[].photos",
    "[].user_id",
    "[].username"
-  ],
-  "s": 200
- },
- "/api/settings/line-notify/bindings": {
-  "k": [
-   "available",
-   "linked",
-   "total",
-   "unlinked",
-   "users",
-   "users[].confirmed",
-   "users[].display",
-   "users[].hasEmail",
-   "users[].lastReminded",
-   "users[].linked",
-   "users[].linkedAt",
-   "users[].modules",
-   "users[].role",
-   "users[].username"
   ],
   "s": 200
  }
