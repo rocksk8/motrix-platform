@@ -3,10 +3,10 @@
 
 - `GET  /api/system/backup-monitor`                    一頁看完的狀態（最近各種備份、雲端鏡像、硬碟、心跳、告警、保留天數、告警門檻）
 - `POST /api/system/backup-monitor/backup-now`         {confirm: true} 立即備份（背景；同時只能一個、兩次至少隔 30 分鐘）
-- `PUT  /api/system/backup-monitor/heartbeat-url`      {pingUrl: str} 設定／更換心跳網址（網址不會被回傳；更換會寄信給所有最高管理者）
+- `PUT  /api/system/backup-monitor/heartbeat-url`      {pingUrl: str, reason?: str} 設定／更換心跳網址（網址不會被回傳；更換會寄信給所有最高管理者；換成另一個主機要原因、有其他最高管理者時要核准）
 - `POST /api/system/backup-monitor/heartbeat-test`     {confirm: true} 對目前網址打一次卡（至少隔 60 秒）
 - `POST /api/system/backup-monitor/heartbeat-disable`  {confirm: true, reason} 停用對外打卡（必填原因；有多位最高管理者時要另一位核准）
-- `POST /api/system/backup-monitor/heartbeat-disable/{id}/approve|cancel`   核准／撤回停用申請
+- `POST /api/system/backup-monitor/heartbeat-disable/{id}/approve|cancel`   核准／撤回申請（停用，或換成另一個監控主機）
 
 資料與規則都在 `helpers/backup_monitor.py`（不變式見該檔）；告警門檻在設定中心 `monitoring` 群組（放寬要第二人核准，不在這裡改）。
 錯誤訊息一律白話、不含路徑與網址；危險動作沒有 `confirm: true` 一律 400（前端先跳確認再送）。
@@ -67,6 +67,8 @@ def post_backup_now(body: dict = Body(default=None), authorization: str = Header
         res = bm.run_backup_now()
     except bm.BackupBusy:
         raise HTTPException(409, bm.MSG_BUSY)
+    except bm.BackupLockProblem:
+        raise HTTPException(503, bm.BackupLockProblem.MESSAGE)
     except bm.BackupRateLimited as exc:
         raise HTTPException(429, "剛做過一次備份，請 %d 分鐘後再試。" % max(1, -(-exc.wait_seconds // 60)))
     _safe_audit(authorization, "system.backup_now", "system", "backup", "手動立即備份")
@@ -79,19 +81,24 @@ def put_heartbeat_url(request: Request, body: dict = Body(default=None), authori
     if not isinstance(body, dict) or not isinstance(body.get("pingUrl", ""), str):
         raise HTTPException(400, "請貼上監控服務給你的網址。")
     try:
-        res = bm.set_ping_url(body.get("pingUrl", ""), user)
-    except bm.InvalidPingUrl as exc:
+        res = bm.set_ping_url(body.get("pingUrl", ""), user, body.get("reason", ""), _ip(request))
+    except (bm.InvalidPingUrl, bm.DisableError) as exc:
         raise HTTPException(422, str(exc))
     except OSError:
         raise HTTPException(500, "沒有存成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間。")
-    # 稽核只記主機名，不記完整網址（網址等同密碼）；換網址時一併記舊主機名
+    # 稽核只記主機名，不記完整網址（網址等同密碼）；換網址時一併記舊主機名（申請待核准的那一筆，ledger 自己已記稽核）
+    if res["pending"]:
+        return {"ok": True, "pingUrlSet": res["pingUrlSet"], "pingHost": res["pingHost"], "changed": False, "pending": True, "id": res["id"],
+                "message": "換成另一個監控主機需要另一位最高管理者核准，已送出申請並寄信通知所有最高管理者。核准前仍使用原本的網址。"}
     if res["changed"]:
         _safe_audit(authorization, "system.heartbeat_url_set", "system", "heartbeat", res["pingHost"],
                     {"pingUrlSet": True, "host": res["pingHost"], "oldHost": res["oldHost"], "mailed": res["mailed"]})
         msg = "已儲存，並寄信通知所有最高管理者。心跳排程下一次執行（最多 5 分鐘內）就會用新的網址，不用重新啟動。"
+        if not res["mailed"]:
+            msg += "但通知信沒有寄出去（可能沒有設定收件人或郵件服務），請自己告知其他最高管理者。"
     else:
         msg = "這個網址和目前的一樣，沒有變更。"
-    return {"ok": True, "pingUrlSet": res["pingUrlSet"], "pingHost": res["pingHost"], "changed": res["changed"], "message": msg}
+    return {"ok": True, "pingUrlSet": res["pingUrlSet"], "pingHost": res["pingHost"], "changed": res["changed"], "pending": False, "message": msg}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-disable")
@@ -122,7 +129,7 @@ def post_heartbeat_disable_approve(change_id: int, request: Request, body: dict 
         raise HTTPException(422, str(exc))
     except OSError:
         raise HTTPException(500, "沒有核准成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間，再按一次。")
-    return {"ok": True, **res, "message": "已核准，對外打卡已停用。" if res["disabled"] else "已記錄你的核准。"}
+    return {"ok": True, **res, "message": "已核准，對外打卡已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄你的核准。")}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-disable/{change_id}/cancel")
@@ -132,7 +139,7 @@ def post_heartbeat_disable_cancel(change_id: int, body: dict = Body(default=None
         bm.cancel_disable(change_id, user)
     except bm.DisableError as exc:
         raise HTTPException(422, str(exc))
-    return {"ok": True, "message": "已撤回停用申請，對外打卡維持開啟。"}
+    return {"ok": True, "message": "已撤回申請，目前的設定維持不變。"}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-test")

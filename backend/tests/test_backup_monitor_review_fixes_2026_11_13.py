@@ -561,9 +561,7 @@ def test_lock_excludes_another_process_and_dies_with_it(lock_dir):
             time.sleep(0.1)
 
 
-def test_lock_file_unopenable_falls_back_to_thread_lock_only(lock_dir, monkeypatch):
-    """鎖檔打不開（權限、磁碟）⇒ 不讓備份因此跑不起來，只剩同行程的互斥。"""
-    import archive
+def _unopenable(monkeypatch):
     real_open = open
 
     def fake_open(file, *a, **k):
@@ -571,10 +569,43 @@ def test_lock_file_unopenable_falls_back_to_thread_lock_only(lock_dir, monkeypat
             raise PermissionError("denied")
         return real_open(file, *a, **k)
     monkeypatch.setattr("builtins.open", fake_open)
-    with archive.backup_run_lock():
-        with pytest.raises(archive.BackupInProgress):
-            with archive.backup_run_lock():
-                pass
+
+
+def test_scheduled_backup_with_unopenable_lock_file_still_runs_but_logs_error_and_raises_an_alert(lock_dir, monkeypatch, caplog):
+    """審查 N4／PM：鎖檔打不開時排程備份照常跑（不能因此整天沒備份），但不安靜降級：記 ERROR、寫系統告警（同一行程只寫一次）。"""
+    import logging
+    import archive
+    alerts = []
+    monkeypatch.setattr(archive, "_write_backup_alert", lambda reason, level="WARN": alerts.append((reason, level)))
+    monkeypatch.setitem(archive._LOCK_ALERTED, "on", False)
+    _unopenable(monkeypatch)
+    with caplog.at_level(logging.ERROR, logger="archive"):
+        with archive.backup_run_lock():
+            with pytest.raises(archive.BackupInProgress):          # 同行程的互斥還在
+                with archive.backup_run_lock():
+                    pass
+        with archive.backup_run_lock():
+            pass
+    assert len(alerts) == 1 and alerts[0][1] == "ERROR" and "鎖檔" in alerts[0][0]
+    assert "鎖檔打不開" in caplog.text
+
+
+def test_manual_backup_is_refused_when_the_lock_file_cannot_be_opened(client, make_user, fresh, lock_dir, monkeypatch):
+    import archive
+    called = []
+    monkeypatch.setattr(archive, "_daily_backup", lambda: called.append(1))
+    _unopenable(monkeypatch)
+    with pytest.raises(archive.BackupLockUnavailable):
+        with archive.backup_run_lock(strict=True):
+            pass
+    h = _login(client, make_user, "n4_sa")
+    r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
+    assert r.status_code == 503 and "無法確認" in r.json()["detail"] and "權限" in r.json()["detail"]
+    assert called == [] and fresh._running["on"] is False
+    assert (fresh._get_setting(fresh._LAST_KEY, "") or "") == ""
+    monkeypatch.undo()
+    with archive.backup_run_lock():                                    # 嚴格模式失敗後執行緒鎖有放掉
+        pass
 
 
 def test_daily_and_weekly_ticks_yield_to_a_running_backup(lock_dir, monkeypatch):
@@ -833,7 +864,7 @@ def only_me(monkeypatch):
 
 
 def test_changing_the_url_mails_every_superadmin_and_audits_old_and_new_host(client, make_user, hb_cfg, mails):
-    hb_cfg.write_text(json.dumps({"ping_url": "https://old-host.example.com/OLD-SECRET"}), encoding="utf-8")
+    hb_cfg.write_text(json.dumps({"ping_url": "https://hc-ping.example.com/OLD-SECRET"}), encoding="utf-8")
     h = _login(client, make_user, "m4_sa")
     r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": SECRET})
     assert r.status_code == 200 and r.json()["changed"] is True and "SECRET" not in r.text
@@ -841,9 +872,9 @@ def test_changing_the_url_mails_every_superadmin_and_audits_old_and_new_host(cli
     key, kw = mails[0]
     assert key == "heartbeat_stale" and kw["to_group"] is True
     blob = json.dumps(kw, ensure_ascii=False, default=str)
-    assert "old-host.example.com" in blob and "hc-ping.example.com" in blob and "SECRET" not in blob
+    assert "hc-ping.example.com" in blob and "SECRET" not in blob
     (row,) = _audit_actions("system.heartbeat_url_set")
-    assert "SECRET" not in (row[1] + row[2]) and "old-host.example.com" in row[2] and "hc-ping.example.com" in row[2]
+    assert "SECRET" not in (row[1] + row[2]) and "oldHost" in row[2] and "hc-ping.example.com" in row[2]
 
 
 def test_first_time_setting_also_mails_and_same_url_does_not(client, make_user, hb_cfg, mails):
@@ -978,10 +1009,10 @@ def test_setting_a_new_url_voids_a_pending_disable_request(client, make_user, hb
     ha, hb = _two_admins(client, make_user, "m4_k", "m4_l")
     hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
     cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
-    assert client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": "https://other.example.com/NEW"}).status_code == 200
+    assert client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": "https://hc-ping.example.com/NEW"}).status_code == 200
     assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"] is None
     assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422
-    assert _cfg_url(hb_cfg) == "https://other.example.com/NEW"
+    assert _cfg_url(hb_cfg) == "https://hc-ping.example.com/NEW"
 
 
 def test_approval_that_cannot_write_the_config_is_rolled_back_and_can_be_retried(client, make_user, hb_cfg, mails, monkeypatch):
@@ -1005,3 +1036,160 @@ def test_disable_request_text_does_not_leak_paths(client, make_user, hb_cfg):
     client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": r"檔案在 C:\Users\Jane Doe\x.txt 之後"})
     body = client.get("/api/system/backup-monitor", headers=ha).text
     assert "Jane" not in body and "SECRET" not in body
+
+
+# ══ N1：scrub_paths 不能被長串破折號拖慢 ═══════════════════════════════════════════
+
+@pytest.mark.parametrize("text", ["-" * 20000, "a-" * 40000, "-." * 10000, "a/" * 20000, "a\\" * 20000, "a-b/" * 10000, "x" * 100000])
+def test_scrub_paths_is_linear_and_bounded(text):
+    """審查 N1：lookbehind 沒排除 `-` 而 token 字元含 `-`，每個破折號之後都重掃一遍＝O(n²)（4 萬字 30 秒）。
+    現在 lookbehind 補上 `-`，輸入另外截到 2000 字。"""
+    from helpers.backup_monitor import scrub_paths, _PATH_RE
+    t0 = time.perf_counter()
+    scrub_paths(text)
+    assert time.perf_counter() - t0 < 0.05
+    t0 = time.perf_counter()                                           # 正則本身（不靠截斷）也要是線性
+    _PATH_RE.sub("x", text[:40000])
+    assert time.perf_counter() - t0 < 0.5
+
+
+def test_scrub_paths_still_masks_after_the_cap_and_after_dashes():
+    from helpers.backup_monitor import scrub_paths
+    assert "Jane" not in scrub_paths("a-b " + "C:\\Users\\Jane Doe\\x.db")
+    assert "秘密" not in scrub_paths("失敗-- /srv/秘密/x.db 了")
+    assert len(scrub_paths("z" * 5000)) <= 2000
+
+
+# ══ N3：解析網域也算在整體時限內 ═══════════════════════════════════════════════════
+
+def test_slow_dns_is_inside_the_overall_deadline(monkeypatch):
+    from core import safe_ping
+
+    def slow(host, port):
+        time.sleep(6)
+        return ["93.184.216.34"]
+    monkeypatch.setattr(safe_ping, "resolve_host", slow)
+    t0 = time.monotonic()
+    with pytest.raises(safe_ping.PingFailed) as ei:
+        safe_ping.get("https://slow-dns.example.com/x", deadline=1.5)
+    assert time.monotonic() - t0 < 4 and ei.value.kind == "timeout"
+
+
+def test_slow_dns_at_save_time_does_not_hang_and_is_let_through(client, make_user, hb_cfg, monkeypatch):
+    from core import safe_ping
+    monkeypatch.setattr(safe_ping, "resolve_host", lambda h, p: (time.sleep(8), ["93.184.216.34"])[1])
+    h = _login(client, make_user, "n3_sa")
+    t0 = time.monotonic()
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": SECRET})
+    assert r.status_code == 200 and time.monotonic() - t0 < 7
+
+
+# ══ N2：換成另一個主機＝等於關掉原本的監控，同樣要原因＋第二人核准 ══════════════════════
+
+OTHER = "https://other-monitor.example.org/NEW-SECRET-0001"
+
+
+def _pending_file(hb_cfg):
+    return Path(str(hb_cfg) + ".pending")
+
+
+def test_first_time_and_same_host_path_change_are_immediate_with_mail(client, make_user, hb_cfg, mails):
+    h = _login(client, make_user, "n2_a")
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": SECRET})
+    assert r.status_code == 200 and r.json()["changed"] is True and r.json()["pending"] is False and _cfg_url(hb_cfg) == SECRET
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": "https://hc-ping.example.com/ROTATED-CHECK-ID"})
+    assert r.status_code == 200 and r.json()["pending"] is False and _cfg_url(hb_cfg).endswith("ROTATED-CHECK-ID")
+    assert len(mails) == 2
+
+
+def test_host_change_needs_a_reason(client, make_user, hb_cfg, mails):
+    h = _login(client, make_user, "n2_b")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    for body in ({"pingUrl": OTHER}, {"pingUrl": OTHER, "reason": ""}, {"pingUrl": OTHER, "reason": "a"}, {"pingUrl": OTHER, "reason": 5}):
+        r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json=body)
+        assert r.status_code == 422 and "原因" in r.json()["detail"], body
+    assert _cfg_url(hb_cfg) == SECRET and mails == [] and not _pending_file(hb_cfg).exists()
+
+
+def test_host_change_with_only_one_superadmin_is_immediate_and_mailed(client, make_user, hb_cfg, mails, only_me):
+    h = _login(client, make_user, "n2_c")
+    only_me("n2_c")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": OTHER, "reason": "換成公司自己的監控"})
+    assert r.status_code == 200 and r.json()["changed"] is True and r.json()["pending"] is False and _cfg_url(hb_cfg) == OTHER
+    assert len(mails) == 1 and "換成公司自己的監控" in json.dumps(mails[0][1], ensure_ascii=False, default=str)
+    assert "NEW-SECRET" not in r.text
+
+
+def test_host_change_with_other_superadmins_waits_for_approval_then_applies(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "n2_d", "n2_e")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET, "keep": 1}), encoding="utf-8")
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "換成公司自己的監控"})
+    assert r.status_code == 200 and r.json()["pending"] is True and r.json()["changed"] is False
+    cid = r.json()["id"]
+    assert "NEW-SECRET" not in r.text
+    assert json.loads(hb_cfg.read_text(encoding="utf-8")) == {"ping_url": SECRET, "keep": 1}        # 核准前不動
+    assert json.loads(_pending_file(hb_cfg).read_text(encoding="utf-8")) == {"ping_url": OTHER}
+    # 網址不進資料庫與稽核、不在畫面上；ledger 只有主機名
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT old_json, new_json, reason FROM config_changes WHERE id=?", (cid,)).fetchone()
+        audit = " ".join((a[1] or "") + (a[2] or "") for a in _audit_actions("system.heartbeat_change_requested"))
+    finally:
+        conn.close()
+    assert "NEW-SECRET" not in (row[0] + row[1] + row[2] + audit) and "other-monitor.example.org" in row[1]
+    page = client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"]
+    assert page["kind"] == "change" and page["newHost"] == "other-monitor.example.org" and page["mine"] is False and "NEW-SECRET" not in json.dumps(page)
+    assert len(mails) == 1 and "other-monitor.example.org" in json.dumps(mails[0][1], ensure_ascii=False, default=str)
+    # 自己不能核准；第二位核准後才生效，其他設定鍵保留、暫存檔清掉
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=ha, json={"confirm": True}).status_code == 422
+    r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True})
+    assert r.status_code == 200 and r.json()["changed"] is True and r.json()["disabled"] is False
+    assert json.loads(hb_cfg.read_text(encoding="utf-8")) == {"ping_url": OTHER, "keep": 1}
+    assert not _pending_file(hb_cfg).exists()
+    assert [a[0] for a in _audit_actions("system.heartbeat_change_requested", "system.heartbeat_changed")] == ["system.heartbeat_change_requested", "system.heartbeat_changed"]
+    assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["pingHost"] == "other-monitor.example.org"
+
+
+def test_cancel_or_replace_removes_the_pending_url_file(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "n2_f", "n2_g")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "要換"}).json()["id"]
+    assert _pending_file(hb_cfg).exists()
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=hb, json={}).status_code == 200
+    assert not _pending_file(hb_cfg).exists() and _cfg_url(hb_cfg) == SECRET
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422
+    # 新的停用申請取代舊的換主機申請
+    cid2 = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "要換"}).json()["id"]
+    cid3 = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "改成停用"}).json()["id"]
+    assert not _pending_file(hb_cfg).exists()
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid2, headers=hb, json={"confirm": True}).status_code == 422
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid3, headers=hb, json={"confirm": True}).status_code == 200
+    assert _cfg_url(hb_cfg) == ""
+
+
+def test_approving_a_change_whose_pending_file_is_gone_fails_cleanly_and_keeps_the_vote(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "n2_h", "n2_i")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "要換"}).json()["id"]
+    _pending_file(hb_cfg).unlink()
+    r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True})
+    assert r.status_code == 422 and "暫存檔" in r.json()["detail"] and _cfg_url(hb_cfg) == SECRET
+
+
+def test_a_later_immediate_change_voids_a_pending_host_change(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "n2_j", "n2_k")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "要換"}).json()["id"]
+    assert client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": "https://hc-ping.example.com/ANOTHER"}).status_code == 200
+    assert not _pending_file(hb_cfg).exists()
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422
+    assert _cfg_url(hb_cfg).endswith("ANOTHER")
+
+
+def test_mail_failure_is_reported_to_the_user_not_swallowed(client, make_user, hb_cfg, monkeypatch):
+    monkeypatch.setattr(en, "send_registered", lambda key, **kw: False)
+    h = _login(client, make_user, "n2_l")
+    r = client.put("/api/system/backup-monitor/heartbeat-url", headers=h, json={"pingUrl": SECRET})
+    assert r.status_code == 200 and "通知信沒有寄出去" in r.json()["message"]

@@ -3161,6 +3161,10 @@ class BackupInProgress(Exception):
     """已經有另一個備份在跑（同一行程的另一條執行緒，或另一個行程：排程的 `backup_job.py`）。"""
 
 
+class BackupLockUnavailable(Exception):
+    """備份鎖檔打不開（權限、磁碟）⇒ 無法確認有沒有另一個行程在備份。嚴格模式（手動備份）直接拒絕。"""
+
+
 _BACKUP_RUN_THREAD_LOCK = threading.Lock()
 
 
@@ -3197,11 +3201,33 @@ def _os_unlock(fh) -> None:
         pass
 
 
+_LOCK_ALERTED = {"on": False}
+
+
+def _alert_lock_unavailable() -> None:
+    """排程備份遇到鎖檔打不開：照常備份（不能因此整天沒備份），但**不安靜地降級**——記 ERROR、寫系統告警（同一行程只寫一次，不洗版）。"""
+    logger.error("備份互斥鎖檔打不開：這一輪備份沒有跨行程互斥（可能與另一個備份同時寫入）。請檢查 logs 資料夾權限，以及排程帳號與服務帳號是否相同。")
+    if _LOCK_ALERTED["on"]:
+        return
+    _LOCK_ALERTED["on"] = True
+    try:
+        _write_backup_alert("備份互斥鎖檔打不開（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
+                            "但可能與另一個備份同時寫入。請聯絡維運檢查資料夾權限。", level="ERROR")
+    except Exception:  # noqa: BLE001
+        logger.exception("鎖檔告警寫入失敗")
+
+
 class backup_run_lock:
     """備份互斥（備份與監控頁 M3，2026-11-13）：「立即備份」、`_daily_tick`、`backup_job.py` 同一時間只准一個在跑
     （否則兩邊同時寫同一個 `.done`／日資料夾／快照檔，可能互相覆蓋或留下半成品，又各自記一筆稽核）。
     `with backup_run_lock():`——拿不到 ⇒ 立刻丟 `BackupInProgress`（不等待）。
-    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。**鎖檔打不開（權限、磁碟）時只剩執行緒鎖並記 WARNING，不會讓備份因此跑不起來。**"""
+    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。
+    **鎖檔打不開（權限、磁碟、排程與服務不同帳號）時不安靜降級（審查 N4）**：`strict=True`（手動備份）⇒ 丟 `BackupLockUnavailable`、拒絕執行；
+    排程備份（預設）⇒ 照常備份（不能因此整天沒備份），但記 ERROR 並寫系統告警。"""
+
+    def __init__(self, strict: bool = False):
+        self._strict = bool(strict)
+        self._fh = None
 
     def __enter__(self):
         if not _BACKUP_RUN_THREAD_LOCK.acquire(blocking=False):
@@ -3212,7 +3238,9 @@ class backup_run_lock:
                 os.makedirs(_paths.LOGS_DIR, exist_ok=True)
                 self._fh = open(_backup_lock_path(), "a+b")
             except OSError:
-                logger.warning("備份鎖檔打不開，這一輪只有同行程的互斥")
+                if self._strict:
+                    raise BackupLockUnavailable() from None
+                _alert_lock_unavailable()
                 self._fh = None
             if self._fh is not None and not _os_lock(self._fh):
                 self._fh.close()

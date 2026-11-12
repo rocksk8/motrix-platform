@@ -10,6 +10,12 @@
   - L1（新增，只增）：`archive.backup_run_lock`／`BackupInProgress`（備份互斥：跨行程檔案鎖 `logs/backup_run.lock`，由作業系統持有，行程死掉自動放掉）；`_daily_tick`、`_weekly_tick`、`backup_job.py`（排程 02:00，獨立行程）與網頁「立即備份」同一時間只准一個，拿不到鎖就略過／回「已有備份在進行中」。`helpers.backup_monitor` 新增 `request_disable`／`approve_disable`／`cancel_disable`／`pending_disable`／`DisableError`／`MSG_*`，`set_ping_url(url, actor=None)`（原 `set_ping_url(url)`，新增選填參數）。路由新增 `POST …/heartbeat-disable`、`POST …/heartbeat-disable/{id}/approve`、`POST …/heartbeat-disable/{id}/cancel`（route_inventory 重錄）。
   - 行為變更：①換心跳網址一定寄信給所有最高管理者（信裡只有舊／新主機名）並留稽核；**停用對外打卡**改走獨立申請：必填原因，只有一位最高管理者 ⇒ 立刻停用＋寄信，有其他最高管理者 ⇒ 待核准（`config_ledger` domain `monitor:heartbeat`，申請人不能核准自己的），`PUT …/heartbeat-url` 傳空字串不再能停用（422）。②`scrub_paths` 重寫：含空白／中文的磁碟代號與 UNC 路徑、相對路徑、單段 `/data` 整段遮到句尾（寧可多遮）。③「立即備份」的 30 分鐘時間戳改為執行緒真的啟動後才寫；時鐘往回撥（時間戳在未來，1 天內）照樣擋；稽核寫入失敗不再回 500；今天已備份過時結果訊息為「今天的雲端每日備份已經完成，沒有重做」。
   - 測試：`tests/test_backup_monitor_review_fixes_2026_11_13.py`（161 題；審查者的同款探針：兩台本機伺服器驗證 302 不被跟隨、解析只做一次且釘 IP、慢速滴水的整體時限、跨行程鎖與行程死掉自動放鎖、停用的雙人核准全流程）。
+  - **第二輪複審修補（hichan-11：N1／N2 Medium、N3／N4 Low；PM 裁示）**：
+    - N1：`scrub_paths` 的 lookbehind 補 `-`、輸入先截到 2000 字（原本 4 萬字 `a-a-…` 要 30 秒＝二次方）；測試鎖 `"a-"*40000` < 50 ms。
+    - N2：**換成另一個主機＝等於關掉原本的監控，同樣走第二人核准**：必填原因；有其他最高管理者 ⇒ 待核准（沿用 `config_ledger` `monitor:heartbeat`，ledger／稽核／信只有主機名；新網址存設定檔旁邊的 `heartbeat_config.json.pending`，核准才寫入、撤回／取代／作廢時刪除）；只有一位 ⇒ 立即＋寄信（含原因）；第一次設定與同主機換路徑 ⇒ 立即＋寄信。`PUT …/heartbeat-url` 新增選填 `reason`；`GET` 的 `heartbeat.disableRequest` 新增 `kind`（`disable`／`change`）與 `newHost`；`approve_disable` 回傳新增 `changed`／`kind`；`set_ping_url(url, actor=None, reason="", ip="")`。
+    - N3：解析網域放進整體時限（背景執行緒＋逾時，`safe_ping.public_addresses(host, port, timeout=5.0)` 新增選填 `timeout`，逾時＝`PingFailed("timeout")`）。
+    - N4：備份鎖檔打不開時不再安靜退回只用執行緒鎖：手動備份拒絕（`archive.BackupLockUnavailable` → `helpers.backup_monitor.BackupLockProblem` → 路由 503，白話訊息，不寫「最後啟動」時間）；排程備份照跑，但記 ERROR 並寫系統告警（每行程一次）。`archive.backup_run_lock(strict=False)` 新增選填參數。
+    - 測試：同檔新增 N1～N4 題（慢 DNS、破折號線性、換主機核准全流程、鎖檔不可開）。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。

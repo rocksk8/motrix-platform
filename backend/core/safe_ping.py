@@ -138,16 +138,34 @@ def check_url(url: str) -> tuple:
     return sp.scheme, host, port
 
 
-def public_addresses(host: str, port: int) -> list:
-    """解析並確認「每一個」位址都是公開的；回清單。任何一個不是 ⇒ `UnsafeTarget`（不讓攻擊者用一組混合的答案挑位址）。"""
+def _resolve_within(host: str, port: int, timeout: float) -> list:
+    """在背景執行緒解析、最多等 `timeout` 秒（`getaddrinfo` 本身沒有逾時；DNS 慢或被卡住時不能把呼叫端拖到系統預設的逾時）。
+    超時 ⇒ `PingFailed("timeout")`；解析失敗 ⇒ `PingFailed("dns")`。逾時的執行緒是 daemon，結果丟棄。"""
+    box = {}
+
+    def run():
+        try:
+            box["v"] = resolve_host(host, port)
+        except Exception as exc:  # noqa: BLE001
+            box["e"] = exc
+    t = threading.Thread(target=run, name="safe-ping-dns", daemon=True)
+    t.start()
+    t.join(max(0.05, timeout))
+    if t.is_alive():
+        raise PingFailed("timeout")
+    if "e" in box:
+        raise PingFailed("dns") from None
+    return box.get("v") or []
+
+
+def public_addresses(host: str, port: int, timeout: float = 5.0) -> list:
+    """解析並確認「每一個」位址都是公開的；回清單。任何一個不是 ⇒ `UnsafeTarget`（不讓攻擊者用一組混合的答案挑位址）。
+    解析最多等 `timeout` 秒（`get` 傳入整體時限剩下的時間）。"""
     try:
         ipaddress.ip_address(host)
         addrs = [host]
     except ValueError:
-        try:
-            addrs = resolve_host(host, port)
-        except OSError:
-            raise PingFailed("dns") from None
+        addrs = _resolve_within(host, port, timeout)
     if not addrs:
         raise PingFailed("dns")
     if not all(ip_is_public(a) for a in addrs):
@@ -182,13 +200,14 @@ def get(url: str, *, timeout: float = _CONNECT_TIMEOUT, deadline: float = None) 
     deadline = DEADLINE_SECONDS if deadline is None else deadline
     scheme, host, port = check_url(url)
     started = time.monotonic()
-    addrs = public_addresses(host, port)
+    addrs = public_addresses(host, port, timeout=deadline)
     sp = urllib.parse.urlsplit(url.strip())
     target = (sp.path or "/") + ("?" + sp.query if sp.query else "")
     last = PingFailed("connect")
     for ip in addrs:
         left = deadline - (time.monotonic() - started)
         if left <= 0:
+            last = PingFailed("timeout")
             break
         conn = (_PinnedHTTPS if scheme == "https" else _PinnedHTTP)(host, port, timeout=min(timeout, left))
         conn._pin_ip = ip

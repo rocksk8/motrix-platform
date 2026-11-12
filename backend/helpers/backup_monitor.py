@@ -2,7 +2,7 @@
 """「備份與監控」專頁的資料與動作（2026-11-13；系統選單提案 v2 批次 4a）。
 
 [單位] helper:backup_monitor    [層] L1    [穩定度] 實作
-[公開介面] DisableError, HEARTBEAT_TEST_MIN_INTERVAL_SECONDS, InvalidPingUrl, BackupBusy, BackupRateLimited, HeartbeatRateLimited, MSG_ALREADY_DONE, MSG_BUSY,
+[公開介面] BackupLockProblem, DisableError, HEARTBEAT_TEST_MIN_INTERVAL_SECONDS, InvalidPingUrl, BackupBusy, BackupRateLimited, HeartbeatRateLimited, MSG_ALREADY_DONE, MSG_BUSY,
     RUN_MIN_INTERVAL_SECONDS, approve_disable, cancel_disable, pending_disable, ping_host, request_disable, run_backup_now, scrub_paths, set_ping_url, status, test_heartbeat
 [契約題] tests/test_backup_monitor_2026_11_13.py
 [不變式]
@@ -15,14 +15,17 @@
      `system_settings.backup_now_last`，**只在背景執行緒真的啟動後才寫**，重啟後仍有效；時鐘往回撥也照樣擋）。結果存 `system_settings.backup_now_result`。永不丟例外到背景。
      今天的每日備份已完成 ⇒ 結果訊息寫 `MSG_ALREADY_DONE`（不是含糊的「完成」）。
   ④ **設定心跳網址**（`set_ping_url`）：只收 http／https、≤ 300 字、無空白／帳密、連接埠只能 80／443、主機不能是本機／內網／單標籤名／舊式數字位址，且**解析後每個位址都必須是公開位址**
-     （`core.safe_ping`）。寫 `heartbeat_config.json`（保留其他鍵、先寫暫存檔再 `os.replace`）。**換網址一定寄信給所有最高管理者並留稽核（舊→新主機名，不含完整網址）。**
+     （`core.safe_ping`；解析網域算在整體時限內，最多 5 秒）。寫 `heartbeat_config.json`（保留其他鍵、先寫暫存檔再 `os.replace`）。**換網址一定寄信給所有最高管理者並留稽核（舊→新主機名，不含完整網址）。**
+     **換成「另一個主機」＝等於關掉原本的監控，比照 ⑧：必填原因；有其他最高管理者 ⇒ 待核准（新網址只放旁邊的 `heartbeat_config.json.pending`，不進資料庫／稽核／信／畫面，核准後才寫入設定檔）；
+     只有一位 ⇒ 立即＋寄信。第一次設定（原本空白）與同主機只換路徑 ⇒ 立即＋寄信。**輸入先截到 2000 字再遮路徑（`scrub_paths` 線性時間，lookbehind 含 `-`）。
   ⑤ **測試心跳**（`test_heartbeat`／`_ping`）：走 `core.safe_ping.get`——**不跟隨轉址**（3xx＝失敗並白話說明）、連線釘在檢查過的 IP（防 DNS rebinding）、整體 15 秒。兩次測試至少隔 60 秒（記憶體計時）。
      回白話結果，不回網址、不回例外名稱；不寫狀態檔。
   ⑥ 權限在路由（最高管理者）；本檔不判斷身分。`status()` 永不丟例外：每一塊各自 try，壞掉的那塊回 `{"error": "…"}`，其他照給。
   ⑦ **備份互斥**：立即備份在 `archive.backup_run_lock()` 之內跑，與每 2 小時的 `_daily_tick`、排程的 `backup_job.py` 同一時間只准一個（跨行程檔案鎖，行程死掉鎖自動放掉）；
-     拿不到鎖 ⇒ `BackupBusy`（「已有備份在進行中」）。
+     拿不到鎖 ⇒ `BackupBusy`（「已有備份在進行中」）。**鎖檔打不開**：手動備份**拒絕**（`BackupLockProblem`，白話說明可能是已有備份在跑或資料夾權限問題，路由回 503，不寫「最後啟動」時間）；
+     排程備份照跑（不能因此整天沒備份），但記 ERROR 並寫系統告警（每個行程一次），**不安靜降級**。
   ⑧ **停用對外打卡**（`request_disable`／`approve_disable`／`cancel_disable`）：必填原因；只有一位在職最高管理者 ⇒ 立即停用＋寄信；有其他最高管理者 ⇒ 建立待核准申請
-     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址會讓待核准的停用申請作廢。
+     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址（立即生效的那種）會讓待核准的停用／換主機申請作廢；新的申請也會取代舊的；撤回或作廢時一併刪掉 `.pending` 暫存檔。
 """
 import json
 import logging
@@ -63,6 +66,13 @@ class BackupBusy(Exception):
     """已經有一次備份在跑。"""
 
 
+class BackupLockProblem(Exception):
+    """備份鎖檔打不開（資料夾權限？），無法確認有沒有另一個備份在跑 ⇒ 手動備份不執行（審查 N4）。"""
+
+    MESSAGE = ("現在無法確認是不是已經有備份在進行（備份的鎖檔打不開，可能是資料夾權限問題，也可能有另一個備份正在進行）。"
+               "為了避免兩份備份同時寫入，這次不執行。請稍後再試；問題持續請聯絡維運檢查資料夾權限。")
+
+
 class BackupRateLimited(Exception):
     """距離上次手動備份太近；`wait_seconds`＝還要等多久。"""
 
@@ -90,11 +100,13 @@ _TAIL = r"[^，。；、）」』\"'<>|\r\n\t]*?(?=[:;,.]\s|[，。；、）」�
 _PATH_RE = re.compile(
     r"(?:(?<![A-Za-z0-9])[A-Za-z]:[\\/]" + _TAIL +                                  # C:\x\y z、C:/x/y
     r"|\\\\[^\\\s]" + _TAIL +                                         # \\server\share\x y
-    r"|(?<![\w.~\\/:])[\w.~\-]+\\" + _TAIL +                          # backend\db_backups\a.db（相對、反斜線）
+    r"|(?<![\w.~\\/:\-])[\w.~\-]+\\" + _TAIL +                        # backend\db_backups\a.db（相對、反斜線）
     r"|(?<![\w.:/\\])/(?=[\w.~\-])[^\s，。；、）)」』\"'<>|]+"          # /data、/home/x/y（單段也算）
-    r"|(?<![\w.~:/\\])[A-Za-z0-9_.~\-]+(?:/[A-Za-z0-9_.\-]+){2,}"    # a/b/c、../x/y、~/x/y/z（至少兩個斜線）
-    r"|(?<![\w.~:/\\])[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)*/[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,8}(?![\w/])"  # data/a.db（一層斜線但結尾是檔名）
+    r"|(?<![\w.~:/\\\-])[A-Za-z0-9_.~\-]+(?:/[A-Za-z0-9_.\-]+){2,}"    # a/b/c、../x/y、~/x/y/z（至少兩個斜線）
+    r"|(?<![\w.~:/\\\-])[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)*/[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,8}(?![\w/])"  # data/a.db（一層斜線但結尾是檔名）
     r")")
+#: 輸入上限：例外文字可能很長（審查 N1：一長串破折號曾讓這個函式跑到 O(n²)）；畫面上本來就不會顯示更長的內容
+_SCRUB_MAX = 2000
 _DATE_LIKE = re.compile(r"^[\d./\-]+$")
 
 
@@ -105,7 +117,7 @@ def _mask(m):
 def scrub_paths(text) -> str:
     """把文字裡的檔案路徑換成「（路徑已隱藏）」（不變式 ②）：磁碟代號、UNC、含反斜線的相對路徑、`/` 開頭的絕對路徑（單段也算）、
     兩層以上的 `a/b/c` 相對路徑、`data/a.db` 這種「資料夾/檔名」；路徑中間有空白、中文也整段遮。純日期（`2026/11/13`）不遮。"""
-    return _PATH_RE.sub(_mask, str(text or ""))
+    return _PATH_RE.sub(_mask, str(text or "")[:_SCRUB_MAX])
 
 
 # ── 狀態 ──────────────────────────────────────────────────────────────────────
@@ -386,11 +398,13 @@ def run_backup_now(now: datetime = None) -> dict:
         wait = _wait_after(_get_setting(_LAST_KEY, "") or "", now)
         if wait > 0:
             raise BackupRateLimited(wait)
-        lock = _archive.backup_run_lock()
+        lock = _archive.backup_run_lock(strict=True)
         try:
             lock.__enter__()
         except _archive.BackupInProgress:
             raise BackupBusy() from None
+        except _archive.BackupLockUnavailable:
+            raise BackupLockProblem() from None
         _running["on"] = True
         stamp = now.isoformat(timespec="seconds")
         try:
@@ -494,34 +508,46 @@ def _notify_superadmins(title: str, rows: list, reason: str) -> bool:
         return False
 
 
-def set_ping_url(url: str, actor=None) -> dict:
-    """驗證並寫入心跳網址。**空字串不在這裡處理**（停用要走 `request_disable`：多位最高管理者時需另一位核准）。
-    不合格 ⇒ `InvalidPingUrl`。換網址（含第一次設定）⇒ **寄信給所有最高管理者**（只寫主機名，不寫完整網址）。
-    回 `{pingUrlSet, pingHost, changed, oldHost, mailed}`（不回網址）。"""
-    clean = _validate_ping_url(url)
-    if not clean:
-        raise InvalidPingUrl("要停用對外打卡，請按「停用對外打卡」，並寫下原因；有多位最高管理者時需要另一位核准。")
-    old = _read_ping_url()
-    if clean == old:
-        return {"pingUrlSet": True, "pingHost": _host_of(clean), "changed": False, "oldHost": _host_of(old), "mailed": False}
-    _write_config(clean)
-    _supersede_pending_disable(actor)
-    new_host, old_host = _host_of(clean), _host_of(old)
-    mailed = _notify_superadmins(
-        "對外心跳監控的網址被更換", [("操作人", _display(actor)), ("時間", datetime.now().strftime("%Y-%m-%d %H:%M")),
-                                  ("原本的監控主機", old_host or "（原本沒有設定）"), ("新的監控主機", new_host)],
-        "%s 更換了心跳監控網址（新主機：%s）" % (_display(actor), new_host))
-    return {"pingUrlSet": True, "pingHost": new_host, "changed": True, "oldHost": old_host, "mailed": mailed}
-
-
-# ── 動作：停用對外打卡（停用＝讓外部監控收不到「我還活著」，多位最高管理者時要第二人核准）──────────────────
-
 _MON_DOMAIN = "monitor:heartbeat"
-_MON_FIELD = "external_ping"
+_FIELD_DISABLE = "external_ping"
+_FIELD_CHANGE = "external_ping_host"
+_MON_FIELDS = (_FIELD_DISABLE, _FIELD_CHANGE)
+_REASON_MIN = 2
+_REASON_MAX = 300
 
 
 class DisableError(ValueError):
-    """停用申請不能做（訊息是給使用者看的白話）。"""
+    """停用／換監控服務的申請不能做（訊息是給使用者看的白話）。"""
+
+
+def _pending_file() -> str:
+    """待核准的新網址暫存檔（與 `heartbeat_config.json` 同資料夾、同樣的保護）。**網址不進資料庫**（資料庫備份會被複製到雲端硬碟，ledger 又會在畫面上列出內容）；
+    ledger 只記舊／新主機名。"""
+    return _paths.HEARTBEAT_CONFIG + ".pending"
+
+
+def _read_pending_url() -> str:
+    try:
+        with open(_pending_file(), "r", encoding="utf-8") as f:
+            return (json.load(f).get("ping_url") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _clear_pending_file() -> None:
+    try:
+        os.remove(_pending_file())
+    except OSError:
+        pass
+
+
+def _clean_reason(reason) -> str:
+    r = (reason or "").strip() if isinstance(reason, str) else ""
+    if len(r) < _REASON_MIN:
+        raise DisableError("請寫下原因（至少兩個字），會留在紀錄裡並通知所有最高管理者。")
+    if len(r) > _REASON_MAX:
+        raise DisableError("原因太長了（最多 %d 個字）。" % _REASON_MAX)
+    return r
 
 
 def _begin(conn):
@@ -535,11 +561,74 @@ def _other_superadmins(conn, username: str) -> int:
 
 def _pending_rows(conn) -> list:
     from . import config_ledger as L
-    return [r for r in L.pending(conn, _MON_DOMAIN) if r["field"] == _MON_FIELD]
+    return [r for r in L.pending(conn, _MON_DOMAIN) if r["field"] in _MON_FIELDS]
 
+
+def _mail_now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def set_ping_url(url: str, actor=None, reason: str = "", ip: str = "") -> dict:
+    """驗證並設定心跳網址。**空字串不在這裡處理**（停用走 `request_disable`）。不合格 ⇒ `InvalidPingUrl`。
+    - 第一次設定（原本沒有）、或只換同一個主機上的路徑／檢查碼 ⇒ **立即生效**，寄信給所有最高管理者＋稽核（只寫主機名）。
+    - **換成另一個主機**（等於把外部監控換給別人；指向任何永遠回 200 的主機就等於關掉監控，審查 N2）⇒ 必填原因；
+      有其他在職最高管理者 ⇒ **待另一位核准**（新網址暫存在 `heartbeat_config.json.pending`，核准後才寫入設定）；只有一位 ⇒ 立即生效＋寄信。
+    回 `{pingUrlSet, pingHost, changed, pending, id?, oldHost, newHost, mailed}`（不回網址）。"""
+    from . import config_ledger as L
+    clean = _validate_ping_url(url)
+    if not clean:
+        raise InvalidPingUrl("要停用對外打卡，請按「停用對外打卡」，並寫下原因；有多位最高管理者時需要另一位核准。")
+    old = _read_ping_url()
+    old_host, new_host = _host_of(old), _host_of(clean)
+    base = {"pingUrlSet": bool(old), "pingHost": old_host, "oldHost": old_host, "newHost": new_host}
+    if clean == old:
+        return {**base, "changed": False, "pending": False, "mailed": False}
+    host_changes = bool(old) and old_host != new_host
+    why = _clean_reason(reason) if host_changes else (reason.strip() if isinstance(reason, str) else "")
+    user = _username(actor)
+    if host_changes:
+        conn = get_db()
+        try:
+            others = _other_superadmins(conn, user)
+        finally:
+            conn.close()
+        if others > 0:
+            conn = get_db()
+            try:
+                _begin(conn)
+                for r in _pending_rows(conn):
+                    L.supersede(conn, r["id"], user, "被較新的申請取代")
+                with open(_pending_file(), "w", encoding="utf-8") as f:
+                    json.dump({"ping_url": clean}, f)
+                rec = L.record(conn, _MON_DOMAIN, "heartbeat", [{"field": _FIELD_CHANGE, "old": old_host, "new": new_host}], why, actor, ip=ip,
+                               risk="security", effective_at=datetime.now().isoformat(timespec="seconds"), approvals_required=1,
+                               audit_action="system.heartbeat_change_requested", target_label="對外心跳監控", link="backup-monitor.html")
+                conn.commit()
+            except BaseException:
+                if conn.in_transaction:
+                    conn.rollback()
+                _clear_pending_file()
+                raise
+            finally:
+                conn.close()
+            mailed = _notify_superadmins(
+                "有人申請把對外心跳監控換到另一個主機，等待另一位最高管理者核准",
+                [("申請人", _display(actor)), ("時間", _mail_now()), ("原本的監控主機", old_host), ("要換成的主機", new_host), ("原因", why)],
+                "%s 申請把心跳監控換到 %s" % (_display(actor), new_host))
+            return {**base, "changed": False, "pending": True, "id": rec["ids"][0], "mailed": mailed}
+    _write_config(clean)
+    _void_pending(actor)
+    mailed = _notify_superadmins(
+        "對外心跳監控的網址被更換", [("操作人", _display(actor)), ("時間", _mail_now()),
+                                  ("原本的監控主機", old_host or "（原本沒有設定）"), ("新的監控主機", new_host)] + ([("原因", why)] if why else []),
+        "%s 更換了心跳監控網址（新主機：%s）" % (_display(actor), new_host))
+    return {**base, "pingUrlSet": True, "pingHost": new_host, "changed": True, "pending": False, "mailed": mailed}
+
+
+# ── 動作：停用對外打卡／換監控主機（讓外部監控收不到「我還活著」，多位最高管理者時要第二人核准）──────────────
 
 def pending_disable() -> dict:
-    """目前待核准的停用申請（沒有 ⇒ None）。不含網址。"""
+    """目前待核准的申請（停用或換主機；沒有 ⇒ None）。不含網址。"""
     conn = get_db()
     try:
         rows = _pending_rows(conn)
@@ -548,12 +637,14 @@ def pending_disable() -> dict:
     if not rows:
         return None
     r = rows[0]
-    return {"id": r["id"], "requestedBy": r.get("actor_display") or r["actor"], "requestedByUser": r["actor"], "at": r["at"],
+    return {"id": r["id"], "kind": "change" if r["field"] == _FIELD_CHANGE else "disable",
+            "newHost": (r.get("new") or "") if r["field"] == _FIELD_CHANGE else "",
+            "requestedBy": r.get("actor_display") or r["actor"], "requestedByUser": r["actor"], "at": r["at"],
             "reason": scrub_paths(r.get("reason") or ""), "approvals": len(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)}
 
 
-def _supersede_pending_disable(actor) -> None:
-    """設了新網址 ⇒ 舊的停用申請作廢（監控又開著了）。盡力而為，失敗不影響換網址。"""
+def _void_pending(actor) -> None:
+    """已經用新網址立即生效 ⇒ 舊的待核准申請作廢（含暫存網址檔）。盡力而為，失敗不影響換網址。"""
     try:
         from . import config_ledger as L
         conn = get_db()
@@ -566,29 +657,29 @@ def _supersede_pending_disable(actor) -> None:
                 conn.rollback()
         finally:
             conn.close()
+        _clear_pending_file()
     except Exception:  # noqa: BLE001
-        logger.warning("停用申請作廢失敗", exc_info=True)
+        logger.warning("待核准申請作廢失敗", exc_info=True)
+
+
+_void_pending_disable = _void_pending       # 舊名（相容）
 
 
 def request_disable(actor, reason: str, ip: str = "") -> dict:
-    """停用對外打卡。必填原因。只有一位最高管理者 ⇒ 立刻停用並寄信通知；有其他最高管理者 ⇒ 建立待核准申請（要另一位按核准才真的停用）。
-    回 `{disabled, pending, id?}`。已經沒設網址 ⇒ `DisableError`。"""
+    """停用對外打卡。必填原因。只有一位在職最高管理者 ⇒ 立刻停用並寄信通知；有其他最高管理者 ⇒ 建立待核准申請
+    （要另一位按核准才真的停用）。回 `{disabled, pending, id?}`。已經沒設網址 ⇒ `DisableError`。"""
     from . import config_ledger as L
-    reason = (reason or "").strip()
-    if len(reason) < 2:
-        raise DisableError("請寫下停用的原因（至少兩個字），會留在紀錄裡並通知所有最高管理者。")
-    if len(reason) > 300:
-        raise DisableError("原因太長了（最多 300 個字）。")
+    reason = _clean_reason(reason)
     if not _read_ping_url():
         raise DisableError("目前沒有設定對外打卡，不需要停用。")
     user = _username(actor)
     conn = get_db()
     try:
-        began = _begin(conn)
+        _begin(conn)
         for r in _pending_rows(conn):
             L.supersede(conn, r["id"], user, "被較新的申請取代")
         others = _other_superadmins(conn, user)
-        change = [{"field": _MON_FIELD, "old": "已設定", "new": "停用"}]
+        change = [{"field": _FIELD_DISABLE, "old": "已設定", "new": "停用"}]
         if others == 0:
             _write_config("")
             L.record(conn, _MON_DOMAIN, "heartbeat", change, reason, actor, ip=ip, risk="security",
@@ -607,62 +698,76 @@ def request_disable(actor, reason: str, ip: str = "") -> dict:
         raise
     finally:
         conn.close()
+    _clear_pending_file()
     if out["disabled"]:
-        _notify_superadmins("對外心跳監控已被停用", [("操作人", _display(actor)), ("時間", datetime.now().strftime("%Y-%m-%d %H:%M")), ("原因", reason)],
+        _notify_superadmins("對外心跳監控已被停用", [("操作人", _display(actor)), ("時間", _mail_now()), ("原因", reason)],
                             "%s 停用了對外心跳監控" % _display(actor))
     else:
         _notify_superadmins("有人申請停用對外心跳監控，等待另一位最高管理者核准",
-                            [("申請人", _display(actor)), ("時間", datetime.now().strftime("%Y-%m-%d %H:%M")), ("原因", reason)],
+                            [("申請人", _display(actor)), ("時間", _mail_now()), ("原因", reason)],
                             "%s 申請停用對外心跳監控" % _display(actor))
     return out
 
 
 def approve_disable(change_id: int, actor, ip: str = "") -> dict:
-    """第二位最高管理者核准停用申請：票數夠就真的停用（寫設定檔失敗 ⇒ 整筆回復、票不算，可以重按）。申請人自己不能核准。"""
+    """第二位最高管理者核准申請（停用或換主機）：票數夠就真的執行（寫設定檔失敗 ⇒ 整筆回復、票不算，可以重按）。申請人自己不能核准。
+    回 `{disabled, changed, kind}`。"""
     from . import config_ledger as L
     user = _username(actor)
     conn = get_db()
     try:
-        began = _begin(conn)
-        row = conn.execute("SELECT domain, field, actor, reason FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
-        if row is None or row["domain"] != _MON_DOMAIN or row["field"] != _MON_FIELD:
-            raise DisableError("找不到這筆停用申請。")
+        _begin(conn)
+        row = conn.execute("SELECT domain, field, actor, reason, old_json, new_json FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
+        if row is None or row["domain"] != _MON_DOMAIN or row["field"] not in _MON_FIELDS:
+            raise DisableError("找不到這筆申請。")
+        kind = "change" if row["field"] == _FIELD_CHANGE else "disable"
         res = L.approve(conn, int(change_id), actor, "")
         if not res["ok"]:
             raise DisableError({"申請人不能核准自己的變更": "這是你自己提出的申請，要由另一位最高管理者核准。",
                                 "這筆變更已不是待生效狀態": "這筆申請已經處理過了（可能已被核准、撤回或被新的申請取代）。",
                                 "你已經核准過了": "你已經核准過了。"}.get(res["why"], "沒有核准成功。"))
-        if res["approvals"] >= res["required"]:
-            _write_config("")
+        done = res["approvals"] >= res["required"]
+        if done:
+            if kind == "disable":
+                _write_config("")
+            else:
+                new_url = _read_pending_url()
+                if not new_url:
+                    raise DisableError("申請的新網址暫存檔不見了（可能伺服器資料夾被清理過）。請申請人重新送出申請。")
+                _validate_ping_url(new_url, resolve=False)
+                _write_config(new_url)
             L.promote_due(conn, domain=_MON_DOMAIN)
-            L.audit_event(conn, actor, "system.heartbeat_disabled", "heartbeat",
+            L.audit_event(conn, actor, "system.heartbeat_disabled" if kind == "disable" else "system.heartbeat_changed", "heartbeat",
                           {"requestedBy": row["actor"], "approvedBy": user, "reason": row["reason"], "changeId": int(change_id)},
                           target_label="對外心跳監控")
         conn.commit()
-        disabled = res["approvals"] >= res["required"]
         requested_by, reason = row["actor"], row["reason"]
+        new_host = json.loads(row["new_json"] or "null") if kind == "change" else ""
     except BaseException:
         if conn.in_transaction:
             conn.rollback()
         raise
     finally:
         conn.close()
-    if disabled:
-        _notify_superadmins("對外心跳監控已被停用", [("申請人", requested_by), ("核准人", _display(actor)),
-                                                 ("時間", datetime.now().strftime("%Y-%m-%d %H:%M")), ("原因", reason or "")],
-                            "對外心跳監控已停用（%s 申請、%s 核准）" % (requested_by, _display(actor)))
-    return {"disabled": disabled}
+    if done:
+        if kind == "change":
+            _clear_pending_file()
+        _notify_superadmins("對外心跳監控已被停用" if kind == "disable" else "對外心跳監控已換到另一個主機",
+                            [("申請人", requested_by), ("核准人", _display(actor)), ("時間", _mail_now())]
+                            + ([("新的監控主機", new_host)] if kind == "change" else []) + [("原因", reason or "")],
+                            "對外心跳監控已%s（%s 申請、%s 核准）" % ("停用" if kind == "disable" else "換主機", requested_by, _display(actor)))
+    return {"disabled": done and kind == "disable", "changed": done and kind == "change", "kind": kind}
 
 
 def cancel_disable(change_id: int, actor) -> dict:
-    """撤回停用申請（申請人或任何最高管理者都可以）。"""
+    """撤回申請（申請人或任何最高管理者都可以）。"""
     from . import config_ledger as L
     conn = get_db()
     try:
         _begin(conn)
         row = conn.execute("SELECT domain, field FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
-        if row is None or row["domain"] != _MON_DOMAIN or row["field"] != _MON_FIELD:
-            raise DisableError("找不到這筆停用申請。")
+        if row is None or row["domain"] != _MON_DOMAIN or row["field"] not in _MON_FIELDS:
+            raise DisableError("找不到這筆申請。")
         if not L.cancel(conn, int(change_id), actor, "撤回"):
             raise DisableError("這筆申請已經處理過了。")
         L.audit_event(conn, actor, "system.heartbeat_disable_cancelled", "heartbeat", {"changeId": int(change_id)}, target_label="對外心跳監控")
@@ -673,6 +778,7 @@ def cancel_disable(change_id: int, actor) -> dict:
         raise
     finally:
         conn.close()
+    _clear_pending_file()
     return {"cancelled": True}
 
 

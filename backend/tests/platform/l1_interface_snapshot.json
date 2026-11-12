@@ -3,6 +3,7 @@
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
+   "BackupLockUnavailable": "class",
    "MODULE_BACKUP_PREFIX": "const",
    "PRUNE_KEEP_NEWEST": "const",
    "PiiFolderMissing": "class",
@@ -18,6 +19,7 @@
    "_backup_suppliers": "def()",
    "backed_up_table_names": "def()",
    "backup_run_lock": "class",
+   "backup_run_lock.__init__": "def(self, strict=…)",
    "bytes_per_audit_row": "def(db_bytes, audit_rows)",
    "cloud_archive_enabled": "def()",
    "merge_general_and_pii": "def(fname, general_rows, pii_rows)",
@@ -253,6 +255,7 @@
   },
   "helper:backup_monitor": {
    "BackupBusy": "class",
+   "BackupLockProblem": "class",
    "BackupRateLimited": "class",
    "BackupRateLimited.__init__": "def(self, wait_seconds)",
    "DisableError": "class",
@@ -270,7 +273,7 @@
    "request_disable": "def(actor, reason, ip=…)",
    "run_backup_now": "def(now=…)",
    "scrub_paths": "def(text)",
-   "set_ping_url": "def(url, actor=…)",
+   "set_ping_url": "def(url, actor=…, reason=…, ip=…)",
    "status": "def(now=…)",
    "test_heartbeat": "def()"
   },
@@ -2323,7 +2326,7 @@
    "check_url": "def(url)",
    "get": "def(url, *, timeout=…, deadline=…)",
    "ip_is_public": "def(ip)",
-   "public_addresses": "def(host, port)",
+   "public_addresses": "def(host, port, timeout=…)",
    "resolve_host": "def(host, port)"
   },
   "plat:source_tree": {

@@ -198,12 +198,12 @@
                   <span class="bm-note" x-show="testWait" x-text="testWait"></span>
                 </div>
                 <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
-                  <strong x-text="(s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine ? '你' : (s.heartbeat.disableRequest && s.heartbeat.disableRequest.requestedBy)) + ' 申請停用對外打卡，等待另一位最高管理者核准。'"></strong>
-                  <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，對外打卡照常進行。</div>
+                  <strong x-text="(s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine ? '你' : (s.heartbeat.disableRequest && s.heartbeat.disableRequest.requestedBy)) + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? ' 申請把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '），等待另一位最高管理者核准。' : ' 申請停用對外打卡，等待另一位最高管理者核准。')"></strong>
+                  <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
                   <div class="bm-line">
-                    <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')">核准停用</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
                     <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" :disabled="busy" @click="ask('cancelreq')">撤回申請</button>
-                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine">要由另一位最高管理者按「核准停用」。</span>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine">要由另一位最高管理者按「核准」。</span>
                   </div>
                 </div>
                 <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
@@ -268,13 +268,13 @@
     <div class="bm-modal" role="dialog" aria-modal="true" aria-labelledby="bm-dlg-t">
       <h2 id="bm-dlg-t" x-text="dlgTitle"></h2>
       <p x-text="dlgBody"></p>
-      <div x-show="dlg === 'clear'" style="margin-top:10px">
-        <label class="bm-label" for="bm-reason">停用的原因（必填，會留在紀錄並通知所有最高管理者）</label>
+      <div x-show="needsReason" style="margin-top:10px">
+        <label class="bm-label" for="bm-reason">原因（必填，會留在紀錄並通知所有最高管理者）</label>
         <textarea id="bm-reason" class="bm-in" rows="3" maxlength="300" data-testid="bm-dialog-reason" x-model="reason" style="max-width:none"></textarea>
       </div>
       <div class="bm-modal-actions">
         <button type="button" class="btn btn-ghost" data-testid="bm-dialog-cancel" @click="dlg = ''">取消</button>
-        <button type="button" class="btn btn-primary" data-testid="bm-dialog-ok" :disabled="busy || (dlg === 'clear' && reason.trim().length < 2)" @click="confirmDlg()" x-text="busy ? '處理中…' : dlgOk"></button>
+        <button type="button" class="btn btn-primary" data-testid="bm-dialog-ok" :disabled="busy || (needsReason && reason.trim().length < 2)" @click="confirmDlg()" x-text="busy ? '處理中…' : dlgOk"></button>
       </div>
     </div>
   </div>
@@ -286,7 +286,7 @@
       return {
         s: null, loading: false, errMsg: '', busy: false, _initDone: false, _timer: null,
         pingUrl: '', urlErr: '', hbMsg: '', hbMsgBad: false, testWait: '', _testUntil: 0, _tick: null,
-        dlg: '', help: {}, reason: '',
+        dlg: '', help: {}, reason: '', urlNeedsReason: false,
         _hdr() {
           let x = {}
           try { x = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
@@ -379,9 +379,20 @@
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
           }[kind]
           this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]
-          if (kind === 'clear') this.reason = ''
+          this.urlNeedsReason = false
+          if (kind === 'url' && this.s && this.s.heartbeat && this.s.heartbeat.pingUrlSet) {
+            let nh = ''
+            try { nh = new URL(this.pingUrl.trim()).hostname.toLowerCase().replace(/\.$/, '') } catch (e) { nh = '' }
+            if (nh && nh !== (this.s.heartbeat.pingHost || '').toLowerCase()) {
+              this.urlNeedsReason = true
+              this.dlgBody = '這會把外部監控換到另一個主機（' + nh + '）。這等於換掉「誰來接收我還活著的訊號」，所以要寫下原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
+              this.dlgOk = '送出'
+            }
+          }
+          if (kind === 'clear' || this.urlNeedsReason) this.reason = ''
         },
         dlgTitle: '', dlgBody: '', dlgOk: '',
+        get needsReason() { return this.dlg === 'clear' || (this.dlg === 'url' && this.urlNeedsReason) },
         async confirmDlg() {
           if (this.busy) return
           const kind = this.dlg
@@ -389,7 +400,7 @@
           try {
             if (kind === 'backup') await this._post('/api/system/backup-monitor/backup-now', 'POST', { confirm: true }, d => { this.hbMsg = d.message || '已開始備份'; this.hbMsgBad = false })
             else if (kind === 'test') await this._post('/api/system/backup-monitor/heartbeat-test', 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = !d.ok; this._startTestWait(60) })
-            else if (kind === 'url') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: this.pingUrl.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' }, true)
+            else if (kind === 'url') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: this.pingUrl.trim(), reason: this.urlNeedsReason ? this.reason.trim() : '' }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' }, true)
             else if (kind === 'clear') await this._post('/api/system/backup-monitor/heartbeat-disable', 'POST', { confirm: true, reason: this.reason.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' })
             else if (kind === 'approve' || kind === 'cancelreq') {
               const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
