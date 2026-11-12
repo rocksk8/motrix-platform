@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-11-13（perf/bootstrap-bundle-20261113；外網載入效能第二階段）
+- 新增 `GET /api/dashboard/bundle`（`?department_id=&activity_limit=`）：把首頁儀表板的六支（stats／monthly／expenses-monthly／funnel／ops-alerts／activity-feed）合成一支，每個區段**直接呼叫原端點的處理函式**（權限檢查與遮蔽同一份、不比原端點多給任何資料）；某段被拒／出錯 ⇒ 該段 null＋`errors`。回 `Cache-Control: no-store`。守門：`tests/test_bootstrap_bundle_2026_11_13.py`（逐區段、逐角色比對）。無 migration、無設定變動。
+
 ## 1.0.48 — 2026-11-11（feat/report-param-templates；T79 候選：客戶需求缺口「自助報表」第一階段＝套用參數化範本）
 - 新增頁面 `report-templates.html`（選單「報表」→ 營運 → 自選條件報表）＋ 3 支端點 `GET /api/report-templates`（範本清單、參數與欄位目錄）、`GET /api/report-templates/{id}/run`（依條件重新查詢）、`GET /api/report-templates/{id}/excel`（同條件下載）。使用者**不自訂版面**，只選條件：日期區間、部門、案件狀態、業務、精算狀態、客戶、收款狀態（各範本只提供用得到的）。
 - 第一版 3 個範本：案件清單、收款明細、業務員績效。母體＝已成案／已結案（與營運報表相同）；報價中等狀態需直查報價單與逐案權限，列第二批。
