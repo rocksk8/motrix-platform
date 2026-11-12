@@ -179,8 +179,27 @@
     @keyframes spin { to { transform: rotate(360deg); } }
   
   /* -- Mobile RWD -- */
+  @media (max-width:1023px) { .data-table td:nth-child(2) { min-width: 200px } }
   @media (max-width:767px) {
     .detail-pane { width:100% !important; left:0 !important; right:0; }
+    /* 2026-11-12 手機版：頁面邊距收小、搜尋列與匯入匯出各佔一行、分類籤改單列橫滑、表格每列變卡片 */
+    .page-main { padding: 14px 12px 28px; }
+    .cs-cats { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; margin-right: -12px; padding-right: 12px; }
+    .cs-cats > * { flex-shrink: 0; }
+    .cs-cat { min-height: 40px; align-items: center; padding: 4px 12px; }
+    .search-bar { flex-wrap: wrap; }
+    .search-wrap { flex: 1 1 100%; }
+    .search-input { max-width: none; width: 100%; box-sizing: border-box; min-height: 44px; }
+    .search-bar > div[style*="margin-left:auto"] { margin-left: 0 !important; width: 100%; }
+    .search-bar > div[style*="margin-left:auto"] .btn { flex: 1; justify-content: center; min-height: 44px; }
+    .data-table.m-cards td[data-layout-cell="name"], .data-table.m-cards td:nth-child(2):not([data-layout-cell]) { flex: 1 1 calc(100% - 52px); font-size: 15px; }
+    .data-table.m-cards td:last-child { flex: 1 0 100%; margin-top: 4px; }
+    .data-table.m-cards .row-actions { display: flex; gap: 8px; }
+    .data-table.m-cards .row-actions .btn { flex: 1; justify-content: center; min-height: 44px; }
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+    .detail-body { padding: 14px 14px 28px; }
+    .detail-close { width: 44px; height: 44px; }
+    .detail-row { font-size: 13px; }
   }
   </style>
 </head>
@@ -269,7 +288,7 @@
           <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
           <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
           <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
-          <table class="data-table">
+          <table class="data-table m-cards">
             <thead><tr>
               <th style="width:32px"></th>
               <template x-for="c in $store.layout.cols('customers')" :key="c.field">
@@ -330,7 +349,7 @@
         </div>
       </template>
       <div class="table-scroll" x-show="!layoutOn">
-      <table class="data-table">
+      <table class="data-table m-cards">
         <thead>
           <tr>
             <th style="width:32px"></th>
@@ -362,7 +381,7 @@
                   <span x-show="c.nameEn" style="font-size:12px;color:var(--text-dim)" x-text="c.nameEn"></span>
                 </div>
               </td>
-              <td>
+              <td :class="{'m-hide': !((c.tags&&c.tags.length) || c.alias)}">
                 <template x-if="(c.tags&&c.tags.length) || c.alias">
                   <div style="display:flex;flex-wrap:wrap;gap:3px">
                     <template x-for="t in (c.tags&&c.tags.length ? c.tags : (c.alias?[c.alias]:[]))" :key="t">
@@ -372,20 +391,20 @@
                 </template>
                 <span x-show="!(c.tags&&c.tags.length) && !c.alias" style="color:var(--text-dim)">—</span>
               </td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.taxId || '—'"></td>
-              <td>
+              <td :class="{'m-hide': !c.taxId}" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.taxId || '—'"></td>
+              <td :class="{'m-hide': !c.contacts?.[0]?.name}">
                 <div x-text="c.contacts?.[0]?.name || '—'"></div>
                 <div style="font-size:12px;color:var(--text-dim)" x-text="c.contacts?.[0]?.title || ''"></div>
               </td>
-              <td style="font-size:12px" x-text="c.contacts?.[0]?.phone || c.phone || '—'"></td>
-              <td>
+              <td :class="{'m-hide': !(c.contacts?.[0]?.phone || c.phone)}" style="font-size:12px;white-space:nowrap" x-text="c.contacts?.[0]?.phone || c.phone || '—'"></td>
+              <td :class="{'m-hide': !c.industry}">
                 <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:#F3F4F6;color:#4B5563"
                       x-text="c.industry || '—'"></span>
               </td>
-              <td style="font-size:12px" x-text="c.ownerName || '—'"></td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;text-align:right"
+              <td :class="{'m-hide': !c.ownerName}" style="font-size:12px" x-text="c.ownerName || '—'"></td>
+              <td :class="{'m-hide': !c.quoteCount}" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;text-align:right"
                   x-text="c.quoteCount ? c.quoteCount + ' 份' : '—'"></td>
-              <td style="font-size:12px;color:var(--text-dim)" x-text="c.lastContact || '—'"></td>
+              <td :class="{'m-hide': !c.lastContact}" style="font-size:12px;color:var(--text-dim)" x-text="c.lastContact || '—'"></td>
               <td>
                 <span class="tag"
                       :class="c.type==='VIP' ? 'tag-vip' : c.active ? 'tag-active' : 'tag-inactive'"

@@ -46,7 +46,19 @@
       color: var(--text-secondary); font-size: 13px; line-height: 1.9;
     }
     .rh-empty b { display: block; font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .rh-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .rh-main select,
+      .rh-main textarea { font-size: 16px; min-height: 44px; }
+      .rh-main .btn { min-height: 44px; }
+      .rh-main input[type=checkbox],
+      .rh-main input[type=radio] { width: 22px; height: 22px; }
+    }
+    @media (max-width: 767px) {
+      .rh-main { padding: 20px 16px 60px; }
+    }
+</style>
 </head>
 <body x-data="reportsHubPage()" x-cloak>
 

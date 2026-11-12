@@ -96,6 +96,37 @@
       padding: 16px;
       text-align: center;
     }
+    /* 單欄 `.ns-field`（內聯 flex:1 1 100%）被放進兩欄格線的 `.ns-row`：flex 在 grid 內無效 ⇒ 說明文字與金鑰欄被擠在左半邊（桌面也一樣）。
+       ⇒ 這類單欄一律橫跨整列。另外 password／number／select／textarea 原本沒有套用統一欄位樣式（只有 type=text 有）。 */
+    .ns-row > .ns-field[style*="flex:1 1 100%"]{grid-column:1 / -1}
+    .ns-field input[type="password"],.ns-field input[type="number"],.ns-field input[type="url"],.ns-field select{
+      width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text-main);background:var(--white);box-sizing:border-box}
+    .ns-field div[style*="flex-wrap:wrap"] > input[type="password"]{width:auto}
+    .ns-field div[style*="flex-wrap:wrap"] > input[type="text"]{width:auto}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：頁面 36px＋卡片 24px 內距在 375px 只剩 ~235px 可用寬度（輸入框、說明文字被擠成窄條）；
+       兩欄格線沒有斷點；輸入 13px（iOS 自動放大）；儲存鈕文字太長衝出卡片。 */
+    @media (max-width:767px){
+      .ns-main{padding:16px 12px 28px}
+      .ns-card{margin-top:16px;max-width:none;border-radius:10px}
+      .ns-card-head{padding:14px}
+      .ns-card-body{padding:14px}
+      .ns-row{grid-template-columns:1fr;gap:12px;margin-bottom:12px}
+      .ns-desc{padding:10px 12px;margin-bottom:14px}
+      .ns-field input[type="text"],.ns-field input[type="password"],.ns-field input[type="number"],.ns-field input[type="url"],.ns-field select,.ns-field textarea{
+        font-size:16px;min-height:44px}
+      .ns-field textarea{min-height:120px;font-size:16px !important}
+      .ns-field div[style*="flex-wrap:wrap"] > input{flex:1 1 100% !important;width:100%}
+      .ns-actions{flex-wrap:wrap}
+      .ns-actions > *,.ns-done-actions > *{max-width:100%;min-height:46px;white-space:normal;flex:1 1 100%;justify-content:center}
+      .ns-field .btn,.ns-card-body .btn{min-height:44px}
+      .ns-field label[style],.ns-field label{line-height:1.5}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .ns-main{padding:24px 20px}
+      .ns-card{max-width:none}
+      .ns-field input[type="text"],.ns-field input[type="password"],.ns-field input[type="number"],.ns-field select{min-height:40px}
+      .ns-card-body .btn{min-height:40px}
+    }
   </style>
   <script src="../static/ux-wizard.js"></script><!-- A1：?setup=1 時套用首次設定精靈外殼（隱藏頂欄、步驟條） -->
 </head>
@@ -151,11 +182,11 @@
                 <div class="ns-row">
                   <div class="ns-field">
                     <label for="gate-phone">電話</label>
-                    <input id="gate-phone" type="text" :value="gateGet('phone')" @input="gateSet('phone', $event.target.value)" data-gate-field="phone" placeholder="例：02-1234-5678" autocomplete="tel">
+                    <input id="gate-phone" type="text" inputmode="tel" :value="gateGet('phone')" @input="gateSet('phone', $event.target.value)" data-gate-field="phone" placeholder="例：02-1234-5678" autocomplete="tel">
                   </div>
                   <div class="ns-field">
                     <label for="gate-email">Email</label>
-                    <input id="gate-email" type="text" :value="gateGet('email')" @input="gateSet('email', $event.target.value)" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
+                    <input id="gate-email" type="text" inputmode="email" :value="gateGet('email')" @input="gateSet('email', $event.target.value)" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
                   </div>
                 </div>
                 <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料當抬頭；Logo、據點、收款帳戶等其餘設定，確認後再慢慢補。</div>
@@ -278,7 +309,7 @@
             <div class="ns-row">
               <div class="ns-field">
                 <label>統一編號</label>
-                <input type="text" x-model="cfg.tax_id" placeholder="例：12345678">
+                <input type="text" x-model="cfg.tax_id" inputmode="numeric" placeholder="例：12345678">
               </div>
               <div class="ns-field">
                 <label>聯絡方式（顯示用）</label>
@@ -289,11 +320,11 @@
             <div class="ns-row">
               <div class="ns-field">
                 <label>電話</label>
-                <input type="text" x-model="cfg.phone" placeholder="例：02-1234-5678">
+                <input type="text" x-model="cfg.phone" inputmode="tel" autocomplete="tel" placeholder="例：02-1234-5678">
               </div>
               <div class="ns-field">
                 <label>Email</label>
-                <input type="text" x-model="cfg.email" placeholder="例：service@example.com">
+                <input type="text" x-model="cfg.email" inputmode="email" autocomplete="email" placeholder="例：service@example.com">
               </div>
             </div>
             <!-- ── 據點（分公司）──────────────────────────────────────
@@ -375,13 +406,13 @@
                                  placeholder="公司名稱（選填）">
                           <input type="text" style="flex:1 1 200px" x-model="loc.company_name_en"
                                  placeholder="英文名稱（選填）">
-                          <input type="text" style="flex:1 1 130px" x-model="loc.tax_id"
+                          <input type="text" style="flex:1 1 130px" x-model="loc.tax_id" inputmode="numeric"
                                  placeholder="統一編號（選填）">
                         </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-                          <input type="text" style="flex:1 1 160px" x-model="loc.phone"
+                          <input type="text" style="flex:1 1 160px" x-model="loc.phone" inputmode="tel"
                                  placeholder="電話（選填）">
-                          <input type="text" style="flex:1 1 200px" x-model="loc.email"
+                          <input type="text" style="flex:1 1 200px" x-model="loc.email" inputmode="email"
                                  placeholder="Email（選填）">
                         </div>
                         <div style="font-size:12px;color:var(--text-secondary);margin:8px 0 4px">

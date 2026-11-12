@@ -49,7 +49,19 @@
     .rt-wrap { overflow-x: auto; }
     .rt-wrap td.r, .rt-wrap th.r { text-align: right; }
     .rt-empty { border: 1px dashed var(--border); border-radius: var(--radius); padding: 28px 24px; text-align: center; color: var(--text-secondary); font-size: 13px; }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .rt-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .rt-main select,
+      .rt-main textarea { font-size: 16px; min-height: 44px; }
+      .rt-main .btn { min-height: 44px; }
+      .rt-main input[type=checkbox],
+      .rt-main input[type=radio] { width: 22px; height: 22px; }
+    }
+    @media (max-width: 767px) {
+      .rt-main { padding: 20px 16px 60px; }
+    }
+</style>
 </head>
 <body x-data="reportTemplatesPage()" x-cloak>
 

@@ -118,6 +118,26 @@
     html[data-embed="1"] #app-topbar, html[data-embed="1"] #app-sidebar, html[data-embed="1"] .sidebar-overlay, html[data-embed="1"] .pg { display: none !important; }
     html[data-embed="1"] .cr-main { margin: 0; padding: 8px 4px 12px; }
     html[data-embed="1"] body { background: transparent; min-height: 0; height: auto; }
+    /* 手機／平板直式補強（2026-11-12 UI 檢查）：既有手機版已把列表轉成卡片；補上觸控尺寸——備註輸入 16px、動作按鈕 ≥44px 且撐滿
+       （核可／退回／送審並排時間距 8px 易誤觸）、篩選列控制項 ≥44px。 */
+    @media (max-width: 767px) {
+      .cr-note-in { font-size: 16px; min-height: 44px; }
+      textarea.cr-note-in { min-height: 88px; }
+      .cr-actions { gap: 10px; }
+      .cr-actions .btn { min-height: 46px; flex: 1 1 calc(50% - 10px); justify-content: center; }
+      .cr-bar { gap: 10px; }
+      .cr-bar .btn { min-height: 44px; }
+      .cr-bar input, .cr-bar select { font-size: 16px; min-height: 44px; box-sizing: border-box; }
+      .cr-bar .grow { flex: 1 1 100%; }
+      .cr-table tr { padding: 10px 0; }
+      .cr-opt { min-height: 36px; }
+      .cr-flist a { display: inline-block; padding: 6px 4px; }
+    }
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .cr-main { padding: 22px 20px 48px; }
+      .cr-actions .btn, .cr-bar .btn { min-height: 40px; }
+      .cr-bar input, .cr-bar select, .cr-note-in { min-height: 40px; box-sizing: border-box; }
+    }
   </style>
 </head>
 <body x-data="customRecordsPage()" x-init="init()" x-cloak>

@@ -164,6 +164,30 @@
       flex-shrink: 0;
       white-space: nowrap;
     }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       ① 左右內距 32/36px 讓卡片只剩 ~250px 寬；兩欄並排的欄位（Email、App 密碼、主機）內容被截斷看不全 → 手機內距縮小、單欄
+       ② 欄位 13px（iOS 聚焦放大）→ 16px、高度 ≥44px
+       ③ 勾選框 16px（開關「啟用 Email／LINE 通知」是這頁最重要的動作）→ 24px，整條開關列都能點 */
+    @media (max-width: 1023px) {
+      .ns-field input[type="text"], .ns-field input[type="number"], .ns-field input[type="password"], .ns-field input[type="email"],
+      .ns-email-input-row input, .ns-card select { font-size: 16px !important; min-height: 44px; box-sizing: border-box; }
+      .ns-card input[type="checkbox"] { width: 24px !important; height: 24px !important; flex-shrink: 0; }
+      .ns-card .btn { min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .ns-main { padding: 16px 12px 28px; }
+      .ns-card { margin-top: 16px; }
+      .ns-card-head { padding: 14px; }
+      .ns-card-body { padding: 16px 14px; }
+      .ns-row { grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+      .ns-field label { font-size: 13px; }
+      .ns-toggle { padding: 12px 14px; min-height: 52px; }
+      .ns-toggle label { flex: 1; padding: 6px 0; }
+      .ns-email-input-row { flex-wrap: wrap; }
+      .ns-email-tag { padding: 6px 12px; font-size: 13px; }
+      .ns-email-tag button { font-size: 20px; min-width: 32px; min-height: 32px; }
+    }
   </style>
 </head>
 <body x-data="notifSettingsPage()" x-init="init()" x-cloak>

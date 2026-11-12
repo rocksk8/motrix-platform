@@ -37,6 +37,25 @@
     .hb-tag.on{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
     .hb-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
     .hb-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+
+    /* ── 手機版（2026-11-12）：頁籤單列橫滑、表格橫向捲動（第一欄固定）、功能清單改卡片 ── */
+    @media (max-width: 767px) {
+      .page-main { margin-left: 0; padding: 16px 12px 32px }
+      label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px }
+      .hb-title { font-size: 18px }
+      .hb-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch }
+      .hb-tab { white-space: nowrap; flex-shrink: 0; min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .hb-card { padding: 14px 12px; max-width: none }
+      .hb-input, .hb-card select, .hb-card input:not([type="checkbox"]):not([type="radio"]) { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .hb-btn { min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .hb-row { gap: 8px }
+      .hb-tag { padding: 4px 12px; min-height: 36px; display: inline-flex; align-items: center }
+      .hb-features td:nth-child(1) { flex: 1 0 calc(100% - 110px); font-weight: 700; font-size: 15px }
+      .hb-features td:nth-child(2) { order: 3; flex: 1 0 100%; color: var(--text-secondary); font-size: 13px; line-height: 1.6 }
+      .hb-features td:nth-child(3) { order: 1 }
+      .hb-features td:nth-child(4) { order: 4; flex: 1 0 100%; text-align: left !important }
+      .hb-features td:nth-child(4) .hb-btn { width: 100% }
+    }
   </style>
 </head>
 <body x-data="ledgerHubPage()" x-init="init()" x-cloak>
@@ -72,7 +91,7 @@
               <div class="hb-note">來源模組沒有的憑證資料（實際進項稅額、發票日期）在這裡補登，補登值優先於來源值。下面列出稅額是估計或來源未拆稅的分錄事件。</div>
               <div class="hb-row"><button class="hb-btn" :disabled="an.busy" @click="anLoad()" data-testid="hb-an-load">重新整理</button></div>
               <div style="overflow-x:auto">
-              <table class="hb-table" data-testid="hb-an-table" style="min-width:860px">
+              <table class="hb-table m-scroll m-sticky" data-testid="hb-an-table" style="min-width:860px">
                 <thead><tr style="white-space:nowrap"><th>事件日</th><th>事件</th><th>來源</th><th>單據</th><th class="hb-num">金額</th><th>狀況</th><th>實際進項稅額（元）</th><th>發票日期</th><th></th></tr></thead>
                 <tbody>
                   <template x-for="i in an.items" :key="anKey(i)">
@@ -111,7 +130,7 @@
                     <div :class="c.ok ? 'hb-ok' : 'hb-warn'" :data-testid="'hb-wh-check-' + c.key"
                          x-text="c.label + '：清單 ' + fmt(c.left) + ' ／ 帳上 ' + fmt(c.right) + (c.ok ? '（相符）' : '（不符：' + c.note + '）')"></div>
                   </template>
-                  <table class="hb-table" data-testid="hb-wh-groups">
+                  <table class="hb-table m-scroll m-sticky" data-testid="hb-wh-groups">
                     <thead><tr><th>所屬月</th><th>種類</th><th>繳庫期限</th><th class="hb-num">筆數</th><th class="hb-num">合計</th><th class="hb-num">未繳庫</th><th>狀態</th></tr></thead>
                     <tbody>
                       <template x-for="g in wh.data.groups" :key="g.period_ym + g.kind">
@@ -120,7 +139,7 @@
                       </template>
                     </tbody>
                   </table>
-                  <table class="hb-table" style="margin-top:12px" data-testid="hb-wh-items">
+                  <table class="hb-table m-scroll m-sticky" style="margin-top:12px" data-testid="hb-wh-items">
                     <thead><tr><th></th><th>所屬月</th><th>種類</th><th>來源</th><th>對象（受款人）</th><th>所得類別</th><th class="hb-num">給付總額</th><th class="hb-num">代扣金額</th><th>繳庫日</th></tr></thead>
                     <tbody>
                       <template x-for="i in wh.data.items" :key="i.id">
@@ -164,7 +183,7 @@
               <template x-if="tax.data">
                 <div>
                   <template x-for="w in tax.data.warnings" :key="w.key"><div class="hb-warn" x-text="w.text" :data-testid="'hb-tax-warn-' + w.key"></div></template>
-                  <table class="hb-table" data-testid="hb-tax-rows">
+                  <table class="hb-table m-scroll m-sticky" data-testid="hb-tax-rows">
                     <thead><tr style="white-space:nowrap"><th>稅碼</th><th>說明</th><th>欄位（金額／稅額／零稅率）</th><th class="hb-num">金額</th><th class="hb-num">稅額</th><th class="hb-num">零稅率銷售額</th></tr></thead>
                     <tbody>
                       <template x-for="r in tax.data.rows" :key="r.tax_code">
@@ -173,7 +192,7 @@
                       </template>
                     </tbody>
                   </table>
-                  <table class="hb-table" style="margin-top:12px" data-testid="hb-tax-calc">
+                  <table class="hb-table m-scroll m-sticky" style="margin-top:12px" data-testid="hb-tax-calc">
                     <tbody>
                       <tr><td>101 銷項稅額合計</td><td class="hb-num" x-text="fmt(tax.data.calc['101'])"></td></tr>
                       <tr><td>107 得扣抵進項稅額合計</td><td class="hb-num" x-text="fmt(tax.data.calc['107'])"></td></tr>
@@ -183,7 +202,7 @@
                       <tr><td><b>112 本期申報留抵稅額</b></td><td class="hb-num"><b x-text="fmt(tax.data.calc['112'])"></b></td></tr>
                     </tbody>
                   </table>
-                  <table class="hb-table" style="margin-top:12px" data-testid="hb-tax-checks">
+                  <table class="hb-table m-scroll m-sticky" style="margin-top:12px" data-testid="hb-tax-checks">
                     <thead><tr><th>對帳</th><th>結果</th><th class="hb-num">左</th><th class="hb-num">右</th></tr></thead>
                     <tbody>
                       <template x-for="c in tax.data.checks" :key="c.key">
@@ -229,7 +248,7 @@
                 <button class="hb-btn" :disabled="eng.busy" @click="engBatch('post')">整批過帳</button>
                 <button class="hb-btn primary" :disabled="eng.busy" @click="engBatch('all')" data-testid="hb-eng-all">一鍵確認到過帳</button>
               </div>
-              <table class="hb-table" data-testid="hb-eng-table">
+              <table class="hb-table m-scroll m-sticky" data-testid="hb-eng-table">
                 <thead><tr><th></th><th>事件日</th><th>事件</th><th>來源鍵</th><th class="hb-num">金額</th><th>狀態</th><th>傳票</th><th>備註</th></tr></thead>
                 <tbody>
                   <template x-for="e in eng.events" :key="e.id">
@@ -257,7 +276,7 @@
 
       <div class="hb-card">
         <div class="hb-title" style="font-size:14px">功能清單</div>
-        <table class="hb-table" data-testid="hb-features">
+        <table class="hb-table m-cards hb-features" data-testid="hb-features">
           <thead><tr><th>功能</th><th>說明</th><th>狀態</th><th></th></tr></thead>
           <tbody>
             <template x-for="f in features" :key="f.key">

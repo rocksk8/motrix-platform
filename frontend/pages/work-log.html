@@ -148,7 +148,22 @@
       .wl-field-row { grid-template-columns: 1fr; }
       .wl-table th:nth-child(4), .wl-table td:nth-child(4) { display: none; }
     }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .wl-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .wl-modal-overlay input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .wl-main select,
+      .wl-modal-overlay select,
+      .wl-main textarea,
+      .wl-modal-overlay textarea { font-size: 16px; min-height: 44px; }
+      .wl-main .btn,
+      .wl-modal-overlay .btn { min-height: 44px; }
+      .wl-main input[type=checkbox],
+      .wl-modal-overlay input[type=checkbox],
+      .wl-main input[type=radio],
+      .wl-modal-overlay input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="workLogApp()" x-init="init()" x-cloak>
 

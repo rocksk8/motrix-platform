@@ -54,6 +54,37 @@
     .ah-act.approve { background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; }
     .ah-act.reject, .ah-act.reject_final { background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
     .ah-act.reassign { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+    /* 手機（2026-11-12 UI 檢查）：六欄表格在 375px 把「案件／客戶、備註」擠成一字一行 ⇒ 每筆紀錄改成一張卡：
+       第一行＝動作＋時間，其次單據號、案件／客戶、簽核人、備註。篩選列：搜尋框獨佔一行、籤與按鈕 ≥40px、輸入 16px。 */
+    @media (max-width:767px){
+      .ah-main{padding:16px 12px 28px}
+      .ah-search{flex:1 1 100%;min-width:0;order:5;padding:0 12px}
+      .ah-search input{font-size:16px;padding:11px 0}
+      .ah-month{padding:9px 14px;font-size:13px;min-height:40px;box-sizing:border-box}
+      .ah-bar .btn{min-height:44px;flex:1 1 auto;order:6;justify-content:center;font-size:14px}
+      .ah-table,.ah-table tbody{display:block}
+      .ah-table thead{display:none}
+      .ah-table tr{display:grid;grid-template-columns:1fr auto;grid-template-areas:"doc act" "label label" "who time" "note note";
+        gap:6px 10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff}
+      .ah-table td{display:block;padding:0;border:0;min-width:0;overflow-wrap:anywhere}
+      .ah-table td:nth-child(1){grid-area:time;text-align:right;color:var(--text-dim)}
+      .ah-table td:nth-child(2){grid-area:act;text-align:right}
+      .ah-table td:nth-child(3){grid-area:who;color:var(--text-secondary);font-size:12px}
+      .ah-table td:nth-child(3)::before{content:"簽核人　";color:var(--text-dim)}
+      .ah-table td:nth-child(4){grid-area:doc;font-weight:600}
+      .ah-table td:nth-child(5){grid-area:label}
+      .ah-table td:nth-child(6){grid-area:note;font-size:12px}
+      .ah-table td:nth-child(6)::before{content:"備註　";color:var(--text-dim)}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .ah-main{padding:22px 20px}
+      .ah-search{min-width:200px}
+      .ah-search input{font-size:14px;padding:10px 0}
+      .ah-month{padding:8px 14px;min-height:38px;box-sizing:border-box}
+      .ah-table th,.ah-table td{padding:9px 8px}
+      .ah-table th:nth-child(1){width:110px !important}
+      .ah-table th:nth-child(4){width:130px !important}
+    }
   </style>
 </head>
 <body x-data="approvalHistory()" x-cloak>

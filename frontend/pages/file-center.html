@@ -29,7 +29,7 @@
       cursor: pointer; text-align: left; font-size: 13px; color: inherit; font-family: inherit; }
     .fc-cat:hover { background: var(--surface-muted, #FAFAF8); }
     .fc-cat.is-on { background: var(--tone-info-bg); color: var(--tone-info-fg); }
-    .fc-cat small { color: var(--text-secondary); }
+    .fc-cat small { color: var(--text-secondary); font-size: 12px; }
     .fc-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .fc-bar input, .fc-bar select { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
     .fc-chip { padding: 4px 11px; border: 1px solid var(--border); border-radius: 14px; background: none; cursor: pointer; font-size: 12.5px; font-family: inherit; color: inherit; }
@@ -46,6 +46,40 @@
     .fc-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
     .fc-pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
     @media (max-width: 900px) { .fc-grid { grid-template-columns: 1fr; } .fc-main { margin-left: 0; padding: 16px; } }
+    @media (min-width: 768px) and (max-width: 900px) {
+      /* 平板直式：分類樹已疊在檔案清單上方（單欄）⇒ 同手機改成單列橫滑膠囊，否則 17 列把篩選與結果推到 1000px 以下 */
+      .fc-tree { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
+      .fc-tree h3 { flex-shrink: 0; margin: 0 2px 0 8px; white-space: nowrap; align-self: center }
+      .fc-tree h3:first-child { margin-left: 0 }
+      .fc-tree > div { display: contents }
+      .fc-cat { width: auto; flex-shrink: 0; white-space: nowrap; min-height: 40px; align-items: center; padding: 6px 12px; border: 1px solid var(--border-light); border-radius: 20px; background: #fff; gap: 6px }
+      .fc-cat.is-on { border-color: var(--tone-info-fg) }
+    }
+    @media (max-width: 767px) {
+      /* 分類樹（17 個分類）佔掉整個首屏 ⇒ 改成單列橫滑的膠囊；群組名稱縮成列內小標 */
+      .fc-tree { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
+      .fc-tree h3 { flex-shrink: 0; margin: 0 2px 0 8px; white-space: nowrap; align-self: center }
+      .fc-tree h3:first-child { margin-left: 0 }
+      .fc-tree > div { display: contents }
+      .fc-cat { width: auto; flex-shrink: 0; white-space: nowrap; min-height: 40px; align-items: center; padding: 6px 12px; border: 1px solid var(--border-light); border-radius: 20px; background: #fff; gap: 6px }
+      .fc-cat.is-on { border-color: var(--tone-info-fg) }
+      /* 條件列：關鍵字整列、日期並排、其餘各自一格；輸入 16px 不觸發 iOS 放大 */
+      .fc-bar input, .fc-bar select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .fc-bar #fc-q { flex: 1 1 100%; min-width: 0 !important }
+      .fc-bar #fc-from, .fc-bar #fc-to { flex: 1 1 40% }
+      .fc-bar #fc-uploader, .fc-bar #fc-quote, .fc-bar #fc-doc { flex: 1 1 30%; width: auto !important; min-width: 0 }
+      .fc-chip { min-height: 40px; padding: 6px 16px; font-size: 14px }
+      .fc-bar .btn { min-height: 44px; flex: 1 1 40%; justify-content: center }
+      .fc-tbl tbody tr { cursor: pointer }
+      .fc-tbl td:nth-child(1) { flex: 1 0 100%; font-size: 15px; font-weight: 600 }
+      .fc-tbl td:nth-child(2) { background: var(--surface-muted, #F3F4F6) !important; padding: 2px 8px !important; border-radius: 4px; font-size: 12px }
+      .fc-tbl td:nth-child(3), .fc-tbl td:nth-child(5), .fc-tbl td:nth-child(6), .fc-tbl td:nth-child(7) { font-size: 12px; color: var(--text-secondary) }
+      .fc-tbl td:nth-child(4) { flex: 1 0 100% }
+      .fc-tbl td:nth-child(8) { flex: 1 0 100%; white-space: normal; display: flex !important; align-items: center; gap: 12px; margin-top: 4px }
+      .fc-tbl td:nth-child(8) .btn { min-height: 44px; flex: 1 }
+      .fc-tbl td:nth-child(8) a { min-height: 44px; display: inline-flex; align-items: center; margin: 0 !important; font-size: 13px !important }
+      .fc-pager .btn, .fc-pager button { min-height: 44px }
+    }
   </style>
 </head>
 <body x-data="fileCenterPage()" x-init="init()" x-cloak>
@@ -103,7 +137,7 @@
           </div>
 
           <div class="fc-empty" id="fc-loading" x-show="loading">載入中…</div>
-          <table class="fc-tbl" id="fc-table" x-show="items.length">
+          <table class="fc-tbl m-cards" id="fc-table" x-show="items.length">
             <thead><tr><th>檔名</th><th>類別</th><th>單號</th><th>客戶／案名</th><th>上傳者</th><th>上傳日</th><th>大小</th><th></th></tr></thead>
             <tbody>
               <template x-for="(it, i) in items" :key="it.sourceType + '|' + it.docNo + '|' + it.fileId">
