@@ -335,6 +335,25 @@
           <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
         </div>
       </template>
+      <template x-if="!importing && importPlan && !importResults">
+        <div data-testid="import-confirm">
+          <div style="font-size:15px;font-weight:600;margin-bottom:10px">確認匯入</div>
+          <div style="font-size:13px;line-height:1.8" data-testid="import-confirm-summary"
+               x-text="'將新增 ' + importPlan.created + ' 筆、更新 ' + importPlan.updated + ' 筆' + (importPlan.failed ? '、有問題 ' + importPlan.failed + ' 筆（不會匯入）' : '')"></div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">空白的儲存格不會覆蓋既有資料（成本、單位等維持原值）。</div>
+          <template x-if="importPlan.errors.length > 0">
+            <div style="max-height:120px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:8px 12px;margin-top:10px">
+              <template x-for="(e, ei) in importPlan.errors" :key="ei">
+                <div style="font-size:12px;color:var(--danger);margin-bottom:3px" x-text="e"></div>
+              </template>
+            </div>
+          </template>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+            <button class="btn btn-ghost" data-testid="import-confirm-cancel" @click="cancelImport()">取消</button>
+            <button class="btn btn-primary" data-testid="import-confirm-ok" @click="runImport()" :disabled="importPlan.created + importPlan.updated === 0">確認匯入</button>
+          </div>
+        </div>
+      </template>
       <template x-if="!importing && importResults">
         <div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
@@ -404,6 +423,8 @@ function app() {
     showImportModal: false,
     importing: false,
     importResults: null,
+    importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
+    _importRows: null,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -646,43 +667,57 @@ function app() {
       const file = event.target.files[0]
       if (!file) return
       event.target.value = ''
-      this.importing = true; this.showImportModal = true; this.importResults = null
-      const results = { created: 0, updated: 0, failed: 0, errors: [] }
+      // 兩步：先 dryRun 拿計畫顯示確認，按「確認匯入」才真的寫。空白儲存格＝不更新（由後端判斷），數字原樣以字串送出由後端驗證。
+      this.importing = true; this.showImportModal = true; this.importResults = null; this.importPlan = null; this._importRows = null
       try {
         const wb = XLSX.read(await file.arrayBuffer())
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
-        for (let i = 0; i < rows.length; i++) {
-          try {
-            const obj = this._parsePartRow(rows[i])
-            if (!obj.name) { results.failed++; results.errors.push(`第 ${i+2} 行：品名不可空白`); continue }
-            const match = obj.partNo ? this.items.find(p => p.part_no === obj.partNo) : null
-            const body = { partNo: obj.partNo, name: obj.name, brand: obj.brand, unit: obj.unit, cost: obj.cost, listPrice: obj.listPrice, category: obj.category, note: obj.note }
-            const r = await fetch(match ? `${API}/parts/${match.id}` : `${API}/parts`, {
-              method: match ? 'PUT' : 'POST',
-              headers: { 'Content-Type':'application/json', Authorization:`Bearer ${this.session.token}` },
-              body: JSON.stringify(body)
-            })
-            if (r.ok) { match ? results.updated++ : results.created++ }
-            else { const e = await r.json().catch(()=>({})); results.failed++; results.errors.push(`${obj.partNo || obj.name}：${match?'更新':'新增'}失敗（${e.detail || r.status}）`) }
-          } catch(e) { results.failed++; results.errors.push(`第 ${i+2} 行：${e.message}`) }
-        }
-        await this.load()
-      } catch(e) { results.failed++; results.errors.push('檔案解析失敗：' + e.message) }
-      this.importResults = results; this.importing = false
+        this._importRows = rows
+          .map((r, i) => ({ r, row: i + 2 }))
+          .filter(x => Object.values(x.r).some(v => String(v ?? '').trim()))
+          .map(x => ({ row: x.row, ...this._parsePartRow(x.r) }))
+        if (!this._importRows.length) throw new Error('檔案裡沒有資料列')
+        this.importPlan = await this._importPost(true)
+      } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] } }
+      this.importing = false
     },
+
+    async _importPost(dryRun) {
+      const r = await fetch(`${API}/parts/import-rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
+        body: JSON.stringify({ rows: this._importRows, dryRun })
+      })
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || ('HTTP ' + r.status)) }
+      return r.json()
+    },
+
+    async runImport() {
+      this.importing = true; this.importPlan = null
+      try {
+        this.importResults = await this._importPost(false)
+        await this.load()
+      } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] } }
+      this._importRows = null
+      this.importing = false
+    },
+
+    cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null },
 
     _parsePartRow(row) {
       const n = {}
       for (const [k, v] of Object.entries(row)) n[k.trim()] = String(v ?? '').trim()
-      const brand = [n['廠牌']||n['brand']||'', n['型號']||n['model']||''].map(s=>s.trim()).filter(Boolean).join(' / ')
-      const toNum = (s) => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(x) ? 0 : x }
+      const pick = (...keys) => { for (const k of keys) if (n[k]) return n[k]; return '' }
       return {
-        partNo: n['料號']||n['part_no']||'', name: n['品名']||n['名稱']||n['name']||'',
-        brand, unit: n['單位']||n['unit']||'台',
-        cost: toNum(n['成本(未稅)']||n['成本']||n['cost']||0),
-        listPrice: toNum(n['定價(含稅)']||n['定價']||n['售價']||n['list_price']||0),
-        category: n['類別']||n['分類']||n['category']||'',
-        note: n['備註']||n['備注']||n['note']||''
+        partNo: pick('料號', 'part_no'), name: pick('品名', '名稱', 'name'),
+        brand: pick('廠牌', 'brand'), model: pick('型號', 'model'),        // 廠牌、型號各自獨立送，後端組成「廠牌 / 型號」
+        unit: pick('單位', 'unit'),
+        cost: pick('成本(未稅)', '成本', 'cost'),
+        listPrice: pick('定價(含稅)', '定價', '售價', 'list_price'),
+        category: pick('類別', '分類', 'category'),
+        note: pick('備註', '備注', 'note'),
+        safetyStock: pick('安全庫存', 'safety_stock'),
+        leadTimeDays: pick('前置天數', '前置天數(天)', 'lead_time_days')
       }
     },
 
