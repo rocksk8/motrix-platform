@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 929,
-  "endpoints_api": 925,
-  "write_total": 499,
-  "write_api": 499,
-  "get_api": 426,
-  "distinct_paths_api": 783,
-  "write_with_body_api": 365,
+  "endpoints_total": 932,
+  "endpoints_api": 928,
+  "write_total": 501,
+  "write_api": 501,
+  "get_api": 427,
+  "distinct_paths_api": 786,
+  "write_with_body_api": 367,
   "write_with_path_param_api": 359
  },
  "select_star": {
@@ -1389,6 +1389,11 @@
    "body": false
   },
   "GET /api/me/bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/menu/categories": {
    "w": false,
    "pp": 0,
    "body": false
@@ -4434,6 +4439,16 @@
    "body": true
   },
   "PUT /api/me/bank-account": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/categories/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/settings-help/override": {
    "w": true,
    "pp": 0,
    "body": true
