@@ -322,7 +322,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!sa) return
     var btn = document.getElementById('tb-online-btn')
     if (!btn) return
-    fetch('/api/online-users', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/online-users', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d) return
@@ -1029,7 +1029,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var sess = {}
     try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') }
     catch (e) { sess = {} }
-    fetch('/api/build-info', {
+    (window.motrixBootFetch || fetch)('/api/build-info', {
       headers: { Authorization: 'Bearer ' + (sess.token || '') },
     }).then(function (r) {
       // 🔴 **404／405 本身就是答案。**
@@ -1345,7 +1345,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!s || !s.token) return
     var my = ++_menuSeq
     _setMenuState('pending')
-    fetch('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
       .then(function (d) {
         if (my !== _menuSeq) return
@@ -1395,7 +1395,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ── Async session refresh（背景刷新模組權限，有變動立即重建 sidebar）──────────
   function _refreshSession() {
     if (!s || !s.token) return
-    fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         // 🔴 **一個決定，管住下面兩件事**（寫回 localStorage ＋ 重算 mods）。
@@ -1447,7 +1447,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function _hideBonusEntryIfModuleDisabled() {
     if (!s || !s.token) return
-    fetch('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d || d.enabled) return
@@ -1521,7 +1521,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function _hideUnavailableModulePages() {
     if (!s || !s.token) return
-    fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d || typeof d !== 'object') return

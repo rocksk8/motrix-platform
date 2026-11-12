@@ -59,12 +59,16 @@
     u = (u && u.url) || String(u || '')
     return u.indexOf('/api/') >= 0
   }
+  // 橫幅標頭的處理（每個 /api 回應都過這裡）。啟動資料（auth-guard.js 的 motrixBootFetch）第一次供應時也呼叫它，
+  // 帶的是 bootstrap 那次回應的標頭——否則合併請求之後，只靠啟動資料的頁面會漏掉授權／本公司資料的橫幅。
+  function _applyBanners(h) {
+    try { _setupBanner(h.setup) } catch (e) {}
+    try { var lh = h.license; if (lh !== null && lh !== undefined) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
+  }
+  window.motrixApplyBanners = _applyBanners
   window.fetch = async function () {
     var r = await _origFetch.apply(this, arguments)
-    if (_isApi(arguments) && r.status < 500) {
-      try { _setupBanner(r.headers.get('X-Motrix-Company-Setup')) } catch (e) {}
-      try { var lh = r.headers.get('X-Motrix-License'); if (lh !== null) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
-    }
+    if (_isApi(arguments) && r.status < 500) _applyBanners({ setup: r.headers.get('X-Motrix-Company-Setup'), license: r.headers.get('X-Motrix-License') })
     if (r.status === 402 && !_redirecting && _isApi(arguments)) {
       try {
         var d402 = await r.clone().json()
@@ -344,7 +348,7 @@ function notifStore() {
         st = st.startsWith(who + ':') ? st.slice(who.length + 1) : ''
         if (st === 'on') return
         if (st !== 'off') {
-          const r = await fetch('/api/auth/totp/status', {
+          const r = await (window.motrixBootFetch || fetch)('/api/auth/totp/status', {
             headers: { Authorization: 'Bearer ' + this._sess.token }
           })
           if (!r.ok) return
@@ -363,7 +367,7 @@ function notifStore() {
 
     async _fetchNotifications() {
       try {
-        const r = await fetch('/api/notifications/mine', {
+        const r = await (window.motrixBootFetch || fetch)('/api/notifications/mine', {
           headers: { Authorization: 'Bearer ' + this._sess.token }
         })
         if (!r.ok) return
@@ -385,7 +389,7 @@ function notifStore() {
         // UR1：「看過」時間存伺服器（`/api/reads`），不再讀 localStorage
         //   ⇒ 換電腦、上一頁回來、其他分頁都看到同一個結果。
         if (window.MotrixReads) await window.MotrixReads.ready
-        var r = await fetch('/api/reads/module-counts', {
+        var r = await (window.motrixBootFetch || fetch)('/api/reads/module-counts', {
           headers: { Authorization: 'Bearer ' + this._sess.token }
         })
         if (!r.ok) return
@@ -413,7 +417,7 @@ function notifStore() {
 
     async _fetchApprovalCount() {
       try {
-        const r = await fetch('/api/approval-queue/count', {
+        const r = await (window.motrixBootFetch || fetch)('/api/approval-queue/count', {
           headers: { Authorization: 'Bearer ' + this._sess.token }
         })
         if (!r.ok) return
