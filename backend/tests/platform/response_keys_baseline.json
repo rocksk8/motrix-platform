@@ -3041,6 +3041,18 @@
   ],
   "s": 200
  },
+ "/api/importer/status": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "/api/importer/templates/{kind}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/inventory/batches": {
   "k": [
    "items"
@@ -4650,6 +4662,9 @@
    "pageModules.file-center.html",
    "pageModules.file-center.html.key",
    "pageModules.file-center.html.name",
+   "pageModules.import-wizard.html",
+   "pageModules.import-wizard.html.key",
+   "pageModules.import-wizard.html.name",
    "pageModules.inventory.html",
    "pageModules.inventory.html.key",
    "pageModules.inventory.html.name",
@@ -7235,6 +7250,10 @@
    "filehub.label",
    "filehub.name",
    "filehub.state",
+   "importer",
+   "importer.label",
+   "importer.name",
+   "importer.state",
    "lodging",
    "lodging.label",
    "lodging.name",
