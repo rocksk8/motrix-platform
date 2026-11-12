@@ -73,7 +73,7 @@ _register_core(
           impact="只影響之後的清理：超過天數的操作軌跡會被刪除；保留越久，個人行為紀錄累積越多，外洩時的影響也越大。", advanced=True),
         S("log_keep_days", "int", 30, min=7, max=3650, unit="天", risk="ops", loosen="down", recommended=30,
           question="系統日誌（程式運作與連線紀錄的壓縮舊檔）要保留幾天？", label="系統日誌保留天數",
-          help="伺服器的 app.log／access.log 滿 15 MB 會自動壓縮成舊檔，超過這個天數的舊檔就刪除；目前正在寫的檔不受影響。",
+          help="伺服器的運作紀錄與連線紀錄檔各自滿 15 MB 就會自動壓縮成舊檔，超過這個天數的舊檔就刪除；目前正在寫的檔不受影響。",
           impact="只影響之後的清理：超過天數的壓縮舊日誌會被刪除。日誌是出問題時查原因用的，保留越短越難追查一週前的事件；日誌檔本身有大小上限（單檔 15 MB、最多 10 份），不會無限變大。", advanced=True),
     ],
     sensitive=True, risk="ops", legacy_key="backup_retention",

@@ -685,4 +685,5 @@ def test_overhead_card_opens_the_settings_center_group_and_is_no_longer_planned(
     card = next(c for c in _all_cards() if c["id"] == "overhead-settings")
     assert card["href"] == "settings-center.html#overhead" and not card.get("planned"), card
     assert "overhead-settings.html" not in json.dumps(card, ensure_ascii=False)
-    assert not (ROOT / "frontend" / "pages" / "overhead-settings.html").exists()
+    with pytest.raises(FileNotFoundError):                       # 不新增 overhead-settings.html（page_file 找不到頁面會丟 FileNotFoundError）
+        source_tree.page_file("overhead-settings.html")
