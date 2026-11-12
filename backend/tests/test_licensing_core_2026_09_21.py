@@ -469,6 +469,7 @@ def test_06b_truncated_valid_blob_is_malformed(make_blob):
 
 # ── 條件 7：機器指紋穩定 ────────────────────────────────────────────────────
 
+@pytest.mark.real_fingerprint      # conftest 預設換成固定指紋；這題量的就是真的那支
 def test_07_machine_fingerprint_is_stable_in_process():
     """STATE §3 驗收 7：同一台機器連呼叫兩次結果相同。"""
     machine_fingerprint = _need("machine_fingerprint")
@@ -482,6 +483,7 @@ def test_07_machine_fingerprint_is_stable_in_process():
     assert all(c in "0123456789abcdef" for c in first), f"指紋不是小寫 hex：{first!r}"
 
 
+@pytest.mark.real_fingerprint
 def test_07b_machine_fingerprint_is_stable_across_processes():
     """條件 7 的補強：換一個**全新行程**算出來的指紋要一樣。
 

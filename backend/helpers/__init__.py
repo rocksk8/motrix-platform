@@ -125,6 +125,7 @@ from .startup import (
     init_unlock_passwords,
     _cleanup_sessions,
     _prune_login_locks,
+    _license_startup_check,
     _sync_module_versions,
 )
 

@@ -3401,12 +3401,17 @@
  },
  "/api/license/status": {
   "k": [
+   "blocked",
    "customer",
    "days_left",
+   "emergency",
    "env",
    "expires",
+   "gate",
    "kind",
+   "machine",
    "modules",
+   "modules_unlicensed",
    "reason",
    "valid"
   ],

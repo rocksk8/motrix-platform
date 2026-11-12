@@ -635,14 +635,37 @@ def test_do3_pages_declared_by_a_kept_module_are_kept(env):
     assert PG + "/b.html" not in {d["rel"] for d in plan["delete"]}
 
 
-def test_do3_real_license_check_with_the_gate_off_treats_everything_as_licensed(env):
-    """正對照（不注入）：授權閘門關閉 ⇒ 全部視為有授權 ⇒ 包少了安裝目錄的模組就拒絕。"""
+def test_do3_real_license_check_with_the_gate_off_treats_everything_as_licensed(env, monkeypatch):
+    """正對照（不注入）：授權閘門**關閉**（用 monkeypatch 明著關；出貨預設已是開）⇒ 全部視為有授權
+    ⇒ 包少了安裝目錄的模組就拒絕。關著時連金鑰檔都不讀。"""
     root, pkg = env
     ap._license_check = None
     from helpers import licensing
-    assert licensing.LICENSE_GATE_ENABLED is False, "這一題的前提改了：授權閘門已開，請改寫成讀測試金鑰"
+    monkeypatch.setattr(licensing, "LICENSE_GATE_ENABLED", False)
+    monkeypatch.setattr(licensing, "verify_license", lambda blob=None: pytest.fail("閘門關著不該讀金鑰"))
     with pytest.raises(ap.Refuse):
         ap.make_plan(root, pkg, 200)
+
+
+def test_do3_real_license_check_with_the_gate_on_reads_the_install_dirs_key(env, license_test_key):
+    """2026-11-11 改寫（原本釘「閘門必須是 False」，註解預告了「閘門打開後請改寫成讀測試金鑰」）：
+    出貨預設是**開**，真的判定讀「安裝目錄 backend/license.key」（`_license_check_for` 會把 LICENSE_PATH 指過去）。
+    ① 安裝目錄放一把授權全部模組（`*`）的測試金鑰 ⇒ 全部有授權 ⇒ 包少了安裝目錄的模組就拒絕（與閘門關著時同結果）
+    ② 反向：安裝目錄**沒有**金鑰 ⇒ 全部判未授權 ⇒ 只停用不刪、不拒絕（保守方向：不因為沒金鑰而動模組檔案）"""
+    from helpers import licensing
+    root, pkg = env
+    ap._license_check = None
+    assert licensing.LICENSE_GATE_ENABLED is True, "出貨預設值變了：這一題在驗閘門開著時的真實判定"
+
+    key_file = Path(root, "backend", "license.key")
+    key_file.write_text(Path(license_test_key["path"]).read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(ap.Refuse):
+        ap.make_plan(root, pkg, 200)
+
+    key_file.unlink()                                           # ② 沒有金鑰
+    assert licensing.verify_license()["reason"] != "ok"         # 量尺：LICENSE_PATH 已被工具指到沒有金鑰的安裝目錄
+    plan = ap.make_plan(root, pkg, 200)
+    assert not [d for d in plan["delete"] if d["rel"].startswith(("backend/modules/b/", "backend/modules/c/"))]
 
 
 # ── D 複核 D2-S1：trap 重啟與 plan_refused 分流 ──

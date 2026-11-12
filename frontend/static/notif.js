@@ -24,6 +24,36 @@
     el.setAttribute('data-kind', kind)
     el.textContent = _SETUP_BANNER_TEXT[kind]
   }
+  // ── 授權閘門（helpers/licensing.py；T80）──────────────────────────────────────
+  // ① 402 license_required ⇒ 導向「授權無法使用」說明頁（不是系統壞了；頁上講原因與找誰）。說明頁與登入頁本身不導。
+  // ② 回應標頭 X-Motrix-License：`emergency;until=YYYY-MM-DD`（授權金鑰失效、靠緊急放行通行證撐著）／`dev_key`
+  //    （裝的是開發金鑰簽的授權）⇒ 所有頁面頂端橫幅；值 `none` ⇒ 移除橫幅。**已登入**的請求回應一定帶這個標頭（有提示＝值、沒有＝none）；
+  //    公開／未登入的回應沒有標頭 ⇒ 不動橫幅（不然呼叫一次公開端點橫幅就閃掉）。
+  function _licenseBanner(value) {
+    var el = document.getElementById('motrix-license-banner')
+    var text = ''
+    if (value) {
+      if (value.indexOf('emergency') === 0) {
+        var m = /until=([0-9-]+)/.exec(value)
+        text = '授權金鑰目前無法通過驗證，系統暫時靠「緊急放行通行證」運作' + (m ? '（至 ' + m[1] + '）' : '') +
+          '。請盡快聯絡供應商處理；通行證到期後系統將停止使用。'
+      } else if (value === 'dev_key') {
+        text = '這台伺服器使用的是開發用授權金鑰，不是正式金鑰。請聯絡供應商換發正式授權金鑰。'
+      }
+    }
+    if (!text) { if (el) el.remove(); return }
+    if (!document.body) return
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'motrix-license-banner'
+      el.setAttribute('role', 'alert')
+      el.style.cssText = 'position:sticky;top:0;z-index:9998;padding:8px 14px;font-size:13px;text-align:center;' +
+        'background:var(--warning-light);color:var(--warning);border-bottom:1px solid var(--warning)'
+      document.body.insertBefore(el, document.body.firstChild)
+    }
+    el.setAttribute('data-kind', value.indexOf('emergency') === 0 ? 'emergency' : 'dev_key')
+    el.textContent = text
+  }
   function _isApi(args) {
     var u = args && args[0]
     u = (u && u.url) || String(u || '')
@@ -33,6 +63,19 @@
     var r = await _origFetch.apply(this, arguments)
     if (_isApi(arguments) && r.status < 500) {
       try { _setupBanner(r.headers.get('X-Motrix-Company-Setup')) } catch (e) {}
+      try { var lh = r.headers.get('X-Motrix-License'); if (lh !== null) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
+    }
+    if (r.status === 402 && !_redirecting && _isApi(arguments)) {
+      try {
+        var d402 = await r.clone().json()
+        if (d402 && d402.code === 'license_required') {
+          var here402 = window.location.pathname.split('/').pop()
+          if (['license-required.html', 'login.html'].indexOf(here402) < 0) {
+            _redirecting = true
+            window.location.replace(window.location.pathname.includes('/pages/') ? 'license-required.html' : 'pages/license-required.html')
+          }
+        }
+      } catch (e) {}
     }
     if (r.status === 428 && !_redirecting) {
       try {
