@@ -268,7 +268,7 @@
  },
  "file_removals": {
   "archive.py": {
-   "count": 7,
+   "count": 8,
    "reason": "tmp: 備份輪替／鏡像清理（非用戶單據）"
   },
   "core/upgrade.py": {
@@ -290,6 +290,10 @@
   "helpers/custom_files.py": {
    "count": 1,
    "reason": "p2: 自訂記錄附件刪除"
+  },
+  "helpers/log_setup.py": {
+   "count": 3,
+   "reason": "tmp: 日誌輪替／保留期清理——只刪自己寫的 app.log／access.log 舊檔與壓縮暫存檔（非用戶資料）"
   },
   "helpers/startup.py": {
    "count": 1,
