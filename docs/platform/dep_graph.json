@@ -26605,7 +26605,7 @@
    "api_prefixes": [
     "/api/parts"
    ],
-   "dynamic_sql": true,
+   "dynamic_sql": false,
    "helpers_transitive": [
     "helper:alert_settings",
     "helper:audit",
