@@ -5,6 +5,7 @@
 畫面停在空清單／「暫無紀錄」，使用者以為真的沒資料。現在：白話原因＋「重試」按鈕，重試成功後錯誤條消失。
 """
 import json
+import time
 
 import pytest
 
@@ -71,9 +72,16 @@ def test_401_logs_out_and_returns_to_the_login_page(live_server, make_user, new_
     # login_as 的 init script 每次載入都會重新寫入 session，所以不能事後查 localStorage；改看「通知伺服器登出」那支請求有送出
     logouts = []
     page.on("request", lambda rq: logouts.append(rq.url) if rq.url.endswith("/api/auth/logout") and rq.method == "POST" else None)
+    # ⚠️ 不用 wait_for_url（它等 load 事件）：login_as 的 init script 每次載入都重寫 session，登入頁看到有效 session 會再轉走，
+    # 負載高時 load 事件前就被轉走 ⇒ 抓不到登入頁那一瞬間（2026-11-13 作者閘門 online-stats 逾時 20 s、單獨重跑 3 秒過）。
+    # 改成記下「主框架到過的網址」，只要到過 login.html 就算導回登入頁。
+    navs = []
+    page.on("framenavigated", lambda fr: navs.append(fr.url) if fr == page.main_frame else None)
     page.goto(f"{live_server}/pages/{page_name}")
-    page.wait_for_url("**/login.html*", timeout=20000)
-    page.wait_for_timeout(300)
+    deadline = time.time() + 20
+    while time.time() < deadline and not (any("/login.html" in u for u in navs) and logouts):
+        page.wait_for_timeout(100)
+    assert any("/login.html" in u for u in navs), "401 要導回登入頁；主框架到過的網址：%s" % navs
     assert logouts, "401 要走登出（通知伺服器）而不是停在錯誤條上"
     assert not page.locator('[data-testid="load-error"]').count(), "401 不該顯示載入失敗錯誤條"
 
