@@ -33,3 +33,11 @@ def test_d1_case_management_reads_the_company_profile_from_the_api(live_server, 
     assert not [x for x in seen if "company-profile" in x[1] and x[0] == 404], _bad(seen)
     assert not [x for x in seen if "undefined" in x[1]], "網址裡有 undefined：%r" % [x for x in seen if "undefined" in x[1]]
     assert any(u.startswith("/api/settings/company-profile") for st, u in seen), "對照：據點清單那支請求要打到正確的網址"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("role", ["superadmin", "sales"])
+def test_d2_approval_queue_reads_the_company_profile_with_the_api_prefix(live_server, make_user, new_page, login_as, role):
+    _page, seen = _load(live_server, make_user, new_page, login_as, role, "approval-queue.html")
+    assert not [x for x in seen if "company-profile" in x[1] and x[0] >= 400], _bad(seen)
+    assert any(st == 200 and u.startswith("/api/settings/company-profile") for st, u in seen), "對照：據點清單那支請求要真的成功"
