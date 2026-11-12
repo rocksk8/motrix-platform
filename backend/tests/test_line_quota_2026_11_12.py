@@ -42,7 +42,7 @@ def q(client, monkeypatch):
     fake = _Line()
     monkeypatch.setattr(L, "_http", fake)
     monkeypatch.setattr("helpers.email_notify.email_send_policy", lambda env=None: (True, "測試允許"))
-    lq._mem.update(checked_at=None, failed_at=None, error="")
+    lq._mem.update(checked_at=None, failed_at=None, error="", fp=None)
     lq._pending = False
     mails = []
     ret = {"v": True}
@@ -50,7 +50,7 @@ def q(client, monkeypatch):
                         lambda used, limit, threshold, thresholds=None, month="": (mails.append((used, limit, threshold, list(thresholds or []), month)), ret["v"])[1])
     lq.fake, lq.mails, lq.ret = fake, mails, ret
     yield lq
-    lq._mem.update(checked_at=None, failed_at=None, error="")
+    lq._mem.update(checked_at=None, failed_at=None, error="", fp=None)
     lq._pending = False
 
 
@@ -597,3 +597,29 @@ def test_failed_read_is_negatively_cached_for_a_minute_and_force_bypasses(q):
     assert q.snapshot(now=T0 + timedelta(seconds=63), force=True)["ok"] is True
     n = len(q.fake.calls)
     assert q.snapshot(now=T0 + timedelta(seconds=64))["used"] == 5 and len(q.fake.calls) == n, "成功後負快取清掉、改用正快取"
+
+
+# ══ T80 閘門 e2e 紅燈根因：負快取沒有跟著 token 失效 ═══════════════════════════════
+
+def test_negative_cache_is_dropped_when_the_token_changes(q):
+    """沒設 token 時打開設定頁 ⇒ 讀取失敗並記負快取；60 秒內設好 token 再開頁（非強制重讀），必須重新向 LINE 讀，不能回舊的失敗。
+    （閘門 e2e：同一行程裡前一題開了通知設定頁＝失敗，下一題設好 token 再開頁卻 10 秒都顯示 null / null。）"""
+    from helpers.settings import _get_setting, _set_setting
+    good = _get_setting("line_notify", {})
+    _set_setting("line_notify", {})                              # 沒 token
+    assert q.snapshot(now=T0)["ok"] is False
+    _set_setting("line_notify", good)                            # 管理員設好 token（可能是另一個人／另一個分頁）
+    q.fake.used = 40
+    v = q.snapshot(now=T0 + timedelta(seconds=5))
+    assert v["ok"] is True and v["used"] == 40, v
+
+
+def test_positive_cache_is_dropped_when_the_token_changes(q):
+    from helpers.settings import _get_setting, _set_setting
+    q.fake.used = 40
+    assert q.snapshot(now=T0)["used"] == 40
+    c = _get_setting("line_notify", {})
+    c["channel_access_token"] = TOKEN + "B"              # 換成另一個官方帳號：舊帳號的用量不能留著
+    _set_setting("line_notify", c)
+    q.fake.used = 7
+    assert q.snapshot(now=T0 + timedelta(seconds=5))["used"] == 7

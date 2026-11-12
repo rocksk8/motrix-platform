@@ -36,6 +36,9 @@ def fake(monkeypatch):
 
 def _configure(events=True):
     from helpers.settings import _set_setting
+    from helpers import line_quota
+    # 額度快取在行程記憶體裡、活過這一題：前一題（含別的檔，例如心跳卡片 e2e 開了通知設定頁）留下的讀取失敗不能帶進來
+    line_quota._mem.update(checked_at=None, failed_at=None, error="", fp=None)
     _set_setting("line_notify", {"enabled": True, "channel_access_token": "tok-e2e-quota-0123456789", "events": {EV: events, EV2: events},
                                  "public_base_url": "https://line.example.com", "login_channel_id": "1234567890",
                                  "login_channel_secret": "0123456789abcdef0123456789abcdef"})

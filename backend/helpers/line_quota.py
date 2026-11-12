@@ -44,10 +44,21 @@ _HYSTERESIS_POINTS = 5
 #: 讀取失敗（LINE 連不上、欄位缺失）的負快取秒數
 _FAIL_CACHE_SECONDS = 60
 
+def _fp() -> str:
+    """目前 channel access token 的指紋（只用來比對「快取是不是用同一個 token 讀的」；不含也不外露 token）。"""
+    try:
+        import hashlib
+        from . import line_notify as _ln
+        tk = str(_ln._cfg().get("channel_access_token") or "")
+        return hashlib.sha256(tk.encode("utf-8")).hexdigest()[:16] if tk else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 _lock = threading.Lock()          # 評估＋寄信＋記旗標（避免雙寄）
 _state_lock = threading.Lock()    # 狀態的讀→改→寫（短鎖；不包網路呼叫與寄信）
 _mem_lock = threading.Lock()
-_mem = {"checked_at": None, "failed_at": None, "error": ""}       # 行程內：最近一次「成功讀到 LINE 用量」／「讀取失敗」的時間
+_mem = {"checked_at": None, "failed_at": None, "error": "", "fp": None}       # 行程內：最近一次「成功讀到 LINE 用量」／「讀取失敗」的時間；fp＝當時用的 token 指紋
 _pending = False
 
 
@@ -125,13 +136,14 @@ def refresh(now: datetime = None) -> dict:
     ths = thresholds()
     try:
         from . import line_notify as _ln
+        fp = _fp()                                        # 讀之前先取指紋：讀的途中換 token ⇒ 這次結果不算新 token 的快取
         q = _ln.quota()                                   # 網路呼叫在任何鎖之外
         used = _int_or_none(q.get("used")) if q.get("ok") else None
         limit = _int_or_none(q.get("limit")) if (q.get("ok") and q.get("limit") is not None) else None
         if not q.get("ok") or used is None or (q.get("limit") is not None and limit is None):
             err = str(q.get("error") or "LINE 回傳的用量資料不完整")      # 欄位缺失／型別不對＝讀不到（K 審 F2：不補 0）
             with _mem_lock:
-                _mem["failed_at"], _mem["error"] = now, err
+                _mem["failed_at"], _mem["error"], _mem["fp"] = now, err, fp
             return _view(_state(), ths, ok=False, error=err)
         month = month_key(now)
         with _state_lock:                                 # 讀→改→寫：與 check_and_alert 記旗標互斥（K 審 F1）
@@ -145,7 +157,7 @@ def refresh(now: datetime = None) -> dict:
             new = {"month": month, "used": used, "limit": limit, "type": str(q.get("type") or ""), "alerted": alerted,
                    "checked_at": now.isoformat(timespec="seconds")}
             with _mem_lock:
-                _mem["checked_at"], _mem["failed_at"], _mem["error"] = now, None, ""
+                _mem["checked_at"], _mem["failed_at"], _mem["error"], _mem["fp"] = now, None, "", fp
             cmp_keys = ("month", "used", "limit", "type", "alerted")
             if any(prev.get(k) != new[k] for k in cmp_keys):
                 _set_setting(STATE_KEY, new)              # 只有內容變了才寫；checked_at 只在寫入時順便更新（新鮮度看記憶體）
@@ -161,7 +173,9 @@ def snapshot(max_age: int = CACHE_SECONDS, now: datetime = None, force: bool = F
     now = now or datetime.now()
     try:
         with _mem_lock:
-            at, failed_at, err = _mem["checked_at"], _mem["failed_at"], _mem["error"]
+            at, failed_at, err, fp = _mem["checked_at"], _mem["failed_at"], _mem["error"], _mem["fp"]
+        if fp != _fp():
+            at = failed_at = None                         # token 換了／剛設好：舊的成功與失敗快取都作廢（閘門 e2e 紅燈根因：負快取不認 token）
         st = _state()
         if not force and at is not None and st.get("month") == month_key(now) and 0 <= (now - at).total_seconds() < max_age:
             return _view(st, thresholds())
@@ -245,7 +259,7 @@ def after_push(now: datetime = None) -> None:
         with _mem_lock:
             if _pending:
                 return
-            at = _mem["checked_at"]
+            at = _mem["checked_at"] if _mem["fp"] == _fp() else None
             age = (now - at).total_seconds() if at is not None else CACHE_SECONDS
             delay = max(float(_SETTLE_SECONDS), CACHE_SECONDS - max(age, 0.0))
             _pending = True
