@@ -12,7 +12,9 @@
   - 外網強制兩步驟驗證：`routers/auth.py` 密碼登入／Passkey 登入在外網＋該角色被要求＋`totp_enabled=0` 時回 403；內網不變；`demo` 帳號不適用。設定中心新群組 `external_login`（總開關預設開、角色預設 superadmin／admin／finance；放寬方向走確認期間＋第二位最高管理者核准）。
   - 單一帳號鎖定：同帳號不分 IP，滾動 30 分鐘內失敗 10 次 ⇒ 鎖 30 分鐘；預設只計外網失敗、只擋外網（內網仍可登入、內網成功登入會解鎖）；鎖定寫 `login_rate_limit`（鍵 `acct:<帳號>`）、稽核 `auth.account_locked`／`auth.account_unlocked`、呼叫 `auth_alert.on_lockout(scope="account")`。新增端點 `GET /api/auth/account-locks`、`POST /api/auth/account-locks/unlock`（超級管理員）。
   - `routers/auth.py::_client_ip` 順便把「是否外網」記進 per-request 的 contextvar；`init_rate_limiting` 略過 `acct:` 列並呼叫 `account_lock.load_from_db`；`conftest.py` 每題重置帳號鎖表，並讓 TestClient 的對端 `"testclient"` 視為內網對端（正式規則下「判斷不出來＝外網」）。
-- 測試：`tests/test_external_login_hardening_2026_11_12.py`；文件 `docs/quick/security.md` §3.3d、`docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`。
+- hichan-1 對抗式審查修補（同一 (next) 段）：F1 `login_qr_approve` 拿掉「輸入密碼核准」（只知道密碼就能自己核准自己的登入、繞過 TOTP），只保留同帳號 `session_token`；前端 `login-qr-approve.html` 改成「請在手機上先登入同一個帳號再掃碼」；`login_qr_status` 補外網判定（帳號鎖、外網強制 TOTP）。F2 本機直連（loopback）預設不算內網（新設定 `loopback_is_internal`，預設 0）；`conftest.py` 讓測試對端 127.0.0.1／::1／testclient 視為內網。F4 帳號鎖改預占計數（`account_lock.begin_attempt`／`release`；登入入口在同一把鎖裡檢查＋計數）。F5 清表保留接近門檻的列。F6 帳號鎖的鍵改雜湊、資料庫不存帳號明文，稽核／告警／log 不含不存在帳號的明文與控制字元。F7 `auth_alert` 缺失記 error。
+- **合併順序**：本分支的帳號鎖告警依賴 hichan-3 的 `feat/auth-lockout-alert`（`auth_alert.on_lockout(scope="account")`），必須在它之後合併。
+- 測試：`tests/test_external_login_hardening_2026_11_12.py`、`tests/test_attack_h1_extlogin_2026_11_12.py`（hichan-1 8 題攻擊翻成防線測試）；文件 `docs/quick/security.md` §3.3d、`docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。

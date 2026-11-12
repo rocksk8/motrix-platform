@@ -70,8 +70,8 @@ def _audit_rows(action):
     ("192.168.1.20", {}, False, "internal_network"),
     ("10.1.2.3", {}, False, "internal_network"),
     ("172.20.0.5", {}, False, "internal_network"),
-    ("127.0.0.1", {}, False, "internal_network"),
-    ("::1", {}, False, "internal_network"),
+    ("127.0.0.1", {}, True, "loopback"),          # 本機直連預設不算內網（F2）
+    ("::1", {}, True, "loopback"),
     ("::ffff:192.168.1.20", {}, False, "internal_network"),
     ("203.0.113.9", {}, True, "public_ip"),
     ("2001:db8::1", {}, True, "public_ip"),
@@ -308,7 +308,7 @@ def test_internal_failures_do_not_count_toward_the_account_lock(client, make_use
 
 def test_attacker_cannot_extend_the_lock_by_hammering(client, make_user):
     u, _ = make_user(username="victim6", password=PW, role="sales")
-    _fail_from_many_ips(client, u, 10)
+    _fail_from_many_ips(client, u, 11)                        # 第 11 次嘗試當場鎖
     before = account_lock.is_locked(u, True)
     assert before > 0
     _fail_from_many_ips(client, u, 30, start=100)             # 鎖定期間持續送請求
@@ -353,7 +353,7 @@ def test_scope_2_blocks_internal_too_and_counts_internal_failures(client, make_u
 
 def test_lock_is_persisted_and_reloaded(client, make_user):
     u, _ = make_user(username="victim9", password=PW, role="sales")
-    _fail_from_many_ips(client, u, 10)
+    _fail_from_many_ips(client, u, 11)
     account_lock.reset_for_tests()                                           # 模擬重啟：記憶體清空
     assert account_lock.is_locked(u, True) == 0
     assert account_lock.load_from_db() >= 1
@@ -364,25 +364,29 @@ def test_lock_is_persisted_and_reloaded(client, make_user):
     assert not [k for k in auth._rl_state if str(k).startswith("acct:")]
 
 
-def test_failures_from_totp_and_passkey_style_paths_count_too(client, make_user):
-    """TOTP 步驟的錯誤驗證碼同樣走 `_rl_fail` ⇒ 計入帳號鎖。"""
+def test_failures_from_the_totp_step_count_too(client, make_user):
+    """TOTP 步驟的錯誤驗證碼同樣計入帳號鎖（密碼步驟正確時退回預占，只有猜錯的驗證碼累積）。"""
     u, _ = make_user(username="vt1", password=PW, role="admin")
     _enable_totp(client, u)
-    for i in range(4):
+    wrong = 0
+    i = 0
+    while wrong < 10:
+        i += 1
         ch = _login(_tunnel(client, f"198.51.100.{60 + i}"), u).json()["challengeToken"]
-        for j in range(3):
-            if i * 3 + j >= 10:
+        for j in range(4):
+            if wrong >= 10:
                 break
-            c = _tunnel(client, f"198.51.100.{80 + i * 3 + j}")
-            c.post("/api/auth/login/totp", json={"challenge_token": ch, "code": "000000"})
-    assert account_lock.is_locked(u, True) > 0
+            c = _tunnel(client, f"198.51.100.{120 + wrong}")
+            assert c.post("/api/auth/login/totp", json={"challenge_token": ch, "code": "000000"}).status_code == 401
+            wrong += 1
+    assert _login(_tunnel(client, "198.51.100.200"), u).status_code == 429
 
 
 # ── 稽核與告警 ──────────────────────────────────────────────────────────────
 
 def test_lock_writes_audit_without_secrets(client, make_user):
     u, _ = make_user(username="victim10", password=PW, role="sales")
-    _fail_from_many_ips(client, u, 10)
+    _fail_from_many_ips(client, u, 11)
     rows = _audit_rows("auth.account_locked")
     assert len(rows) == 1
     assert rows[0]["username"] == u and rows[0]["reason_code"] == "account_locked" and rows[0]["result"] == "fail"
@@ -409,17 +413,17 @@ def _fake_alert(monkeypatch, behaviour=None):
 def test_lock_triggers_the_auth_lockout_alert_with_account_scope(client, make_user, monkeypatch):
     calls = _fake_alert(monkeypatch)
     u, _ = make_user(username="victim11", password=PW, role="sales")
-    _fail_from_many_ips(client, u, 10)
+    _fail_from_many_ips(client, u, 11)
     acct = [c for c in calls if c.get("scope") == "account"]
     assert len(acct) == 1
-    assert acct[0]["key"] == "acct:victim11" and acct[0]["usernames"] == [u] and acct[0]["lock_seconds"] == 1800 and acct[0]["fails"] == 10
+    assert acct[0]["key"] == account_lock.KEY_PREFIX + account_lock._key(u) and "victim11" not in acct[0]["key"] and acct[0]["usernames"] == [u] and acct[0]["lock_seconds"] == 1800 and acct[0]["fails"] == 10
 
 
 def test_alert_failure_never_breaks_the_login_response(client, make_user, monkeypatch):
     _fake_alert(monkeypatch, behaviour=RuntimeError("line down"))
     u, _ = make_user(username="victim12", password=PW, role="sales")
-    r = _fail_from_many_ips(client, u, 10)
-    assert r.status_code == 401
+    r = _fail_from_many_ips(client, u, 11)
+    assert r.status_code == 429                               # 告警例外沒有讓回應變 500
     assert account_lock.is_locked(u, True) > 0
 
 
@@ -428,7 +432,7 @@ def test_alert_failure_never_breaks_the_login_response(client, make_user, monkey
 def test_superadmin_can_list_and_unlock(client, make_user):
     admin, _ = make_user(username="boss", password=PW, role="superadmin")
     u, _ = make_user(username="victim13", password=PW, role="sales")
-    _fail_from_many_ips(client, u, 10)
+    _fail_from_many_ips(client, u, 11)
     tok = _login(client, admin).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     lst = client.get("/api/auth/account-locks", headers=h).json()

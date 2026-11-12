@@ -152,6 +152,7 @@
    "KEY_PREFIX": "const",
    "SETTINGS_GROUP": "const",
    "audit_event": "def(action, username, ip, detail, reason_code, status)",
+   "begin_attempt": "def(username, ip, external, source=…, now=…)",
    "check": "def(username, external=…)",
    "clear": "def(username, ip=…, by=…, reason=…, audit=…)",
    "clear_failures": "def(username)",
@@ -160,7 +161,9 @@
    "list_locks": "def()",
    "load_from_db": "def()",
    "record_failure": "def(username, ip, external, source=…, now=…)",
+   "release": "def(username)",
    "reset_for_tests": "def()",
+   "safe_label": "def(username)",
    "unlock": "def(username, by)"
   },
   "helper:alert_settings": {

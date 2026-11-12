@@ -96,6 +96,7 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | `users.totp_secret`/`totp_enabled`/`totp_recovery_codes` | DB v72，見 `_m072_totp()` |
 | 停用 | 需重新輸入目前密碼確認（比照既有敏感操作慣例），不需再帶驗證碼 |
 | 登入第二階段防暴力破解 | 每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼），錯誤同時也計入既有 per-IP 登入鎖定 |
+| 手機掃 QR 核准（2026-11-12 起） | **只接受「這支手機已登入同一個帳號」（`session_token` 分支）**；原本的「輸入密碼核准」已移除——它讓只知道密碼的人能自己核准自己的登入、繞過 TOTP（hichan-1 審查 F1）。手機沒登入時頁面顯示「請在手機上先登入同一個帳號再掃碼」；`qr-status`（發 session 的最後一步）也套帳號鎖與外網強制 TOTP |
 | Demo 帳號 | 不支援（`auth_login()` 的 demo 分支在檢查 totp 之前就已回傳，設計上就不會走到） |
 
 ---
@@ -111,10 +112,11 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | a | 帶 Cloudflare 標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`） | 經隧道進來的請求一定有；區網直連不會有 |
 | b | `Host` 是設定的外網網域（預設 `motrix-platform.miactw.com`） | 設定可調（`external_hosts`） |
 | c | 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` | 有代理介入就不當內網 |
-| d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來，或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、127/8、169.254/16、::1、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段與 0.0.0.0/0 會被忽略 |
+| d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來、是 loopback（127.x／::1），或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、169.254/16、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段、0.0.0.0/0 與 loopback 會被忽略 |
 | e | 其餘（無代理痕跡且 IP 在內網網段） | ＝內網 |
 
 偽造只會往「更嚴」：區網自己加 CF 標頭／改 Host／塞 XFF ⇒ 被當外網；外網使用者無法把自己變內網（標頭由 Cloudflare 加、IP 由 T80 可信判斷）。
+**本機直連（loopback）預設不算內網**（F2）：同一台電腦上的非 Cloudflare 代理（netsh portproxy、frp、同機 nginx 去掉標頭）會讓外部使用者看起來像本機，若算內網就會免除 TOTP 與帳號鎖定。影響：直接在正式機上開 `https://localhost:666` 登入時適用外網規則——被要求 TOTP 的角色必須已啟用（最高管理者已啟用；管理員／財務未啟用者本機也登入不了，請從區網登入）；`tools/deploy_dashboard.py` 等本機工具的登入同理（它支援輸入 TOTP 碼）。真的需要本機免 TOTP：設定中心「本機直連算內網」（`loopback_is_internal`，放寬方向、走確認期間＋第二位最高管理者核准）。
 注意：同事在辦公室用外網網址（`https://motrix-platform.miactw.com`）登入，對系統來說就是外網（走 Cloudflare），適用外網規則；用內網位址登入才是內網。
 
 **② 外網強制 TOTP**：總開關 `ext_totp_enabled`（預設開）＋每個角色一個開關（預設 superadmin／admin／finance 開；sales／engineer／viewer 關，可在設定中心調整）。外網登入、該角色被要求、帳號 `totp_enabled=0` ⇒ **403** 並提示「請先在公司內網登入並啟用兩步驟驗證」；**密碼要先正確**才會看到這個訊息（錯密碼仍是通用的 401，不洩漏帳號資訊），拒絕不算密碼失敗、不計入鎖定、寫稽核 `auth.login_refused_external_totp`（`reason_code=ext_totp_required`）。已啟用 TOTP 的人走原本的挑戰流程。Passkey 登入（目前暫緩）同樣套用。`demo` 帳號不適用。只管「登入」；已發出的 session 不綁來源。放寬方向（關總開關、取消某角色、調高門檻…）一律走設定中心的確認期間＋第二位最高管理者核准，收緊立即生效。
@@ -128,13 +130,19 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | 模式 2（設定 `lock_scope=2`） | 不分來源計數、被鎖時連內網也擋；最嚴但有 DoS 風險，只建議遭受持續攻擊時暫用 |
 | 不被延長 | 鎖定期間的嘗試被直接擋、**不計數也不延長鎖定**，攻擊者無法靠持續送請求把鎖拉長 |
 | 不洩漏帳號是否存在 | 任何帳號名（含不存在的）一視同仁計數、同樣回 429 |
-| 計數來源 | 密碼錯誤、TOTP 驗證碼錯誤、QR 核准密碼錯誤、Passkey 失敗（都經 `_rl_fail`）；成功登入清掉該帳號計數 |
+| 預占計數（F4） | 登入入口（密碼、TOTP 步驟、Passkey）一進來就在**同一把鎖裡**檢查鎖＋把這次嘗試先算進去；窗口內放行滿門檻次後，第「門檻＋1」次當場鎖並拒絕 ⇒ 併發的猜測最多放行門檻次（以前是驗完才計數，40 個併發都能通過）。密碼正確時退回預占，成功登入清計數 |
+| 清表（F5） | 計數表上限 10,000 列；超過先丟整窗沒再嘗試的，再依（窗內次數少 → 最近一次舊）丟前半，**保留接近門檻的列**，塞滿一次性帳號名擠不掉已累積的受害帳號 |
+| 帳號名是攻擊者可控字串（F6） | 記憶體與資料庫的鍵都是雜湊（`acct:`＋SHA-256 前 20 碼），**資料庫不存帳號明文**；稽核／告警／log 只顯示「已存在的帳號」名稱（去控制字元、限長），不存在的帳號名（可能是被貼進帳號欄的密碼）只顯示雜湊前 8 碼與長度，明文不進鎖定稽核、告警、log。注意：既有的「登入失敗」稽核（`auth.login_failed`，helpers/audit.py）原本就記嘗試的帳號名，本票沒改它 |
 | 持久化 | 鎖定寫進 `login_rate_limit`（鍵 `acct:<小寫帳號>`），重啟後仍有效；失敗計數只在記憶體（重啟歸零，最壞情況是少算） |
 | 稽核／告警 | 鎖定那一刻寫 `auth.account_locked`（帳號、來源 IP、次數、門檻，不含密碼）；呼叫 `helpers.auth_alert.on_lockout(scope="account")`（與 IP 鎖定共用 auth_lockout 事件與每小時上限）；解鎖寫 `auth.account_unlocked` |
 
 **④ Cloudflare 限流**（使用者自己在後台設）：見 `docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`（免費方案 1 條規則、10 秒窗、依 IP；擋瞬間狂打，慢慢猜靠程式的 IP／帳號鎖定與 TOTP）。
 
-**⑤ 已知限制**：同公司同事共用對外 IP 時，IP 鎖定仍是「一人輸錯 5 次鎖全辦公室外網」（既有行為，T80 起）——帳號鎖不影響這點；TOTP 啟用要在內網先做（外網沒啟用的角色進不來）。測試：`backend/tests/test_external_login_hardening_2026_11_12.py`。
+**⑤ 已知限制與交使用者決定的風險**（hichan-1 審查，維持原取捨）：
+- **F3 外網持續 DoS**：外網攻擊者可反覆讓某帳號「無法從外網登入」（鎖到期後立刻續鎖）。內網登入不受影響、內網成功登入會解鎖、超管可手動解鎖；若要連這個也消除，只能放棄帳號鎖（改靠 TOTP＋Cloudflare 限流）或改成「帳號鎖只在密碼驗證成功後才套」——都有更大代價，交使用者決定。模式 2 會把這個 DoS 擴大到內網。
+- **F8 403 當密碼探針**：外網、角色被要求 TOTP 而帳號未啟用時，密碼正確回 403（白話訊息）、錯誤回 401，攻擊者可據此得知密碼是否正確（不會拿到 session）。該拒絕刻意不計入鎖定（否則本人被鎖）；緩解：被要求 TOTP 的角色都盡快在內網啟用 TOTP（啟用後外網只會看到 TOTP 挑戰）。
+- **F7 合併順序**：帳號鎖定告警呼叫 `helpers.auth_alert.on_lockout(scope="account")`（hichan-3 的 auth_lockout 告警）；本分支必須在它**之後**合併，缺它時鎖定與稽核仍有效，但告警不會發出，並記 `logger.error`。
+- 同公司同事共用對外 IP 時，IP 鎖定仍是「一人輸錯 5 次鎖全辦公室外網」（既有行為，T80 起）——帳號鎖不影響這點；TOTP 啟用要在內網先做（外網沒啟用的角色進不來）。測試：`backend/tests/test_external_login_hardening_2026_11_12.py`。
 
 ---
 

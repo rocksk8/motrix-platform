@@ -10,10 +10,14 @@
        a. 帶 Cloudflare 隧道標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`）⇒ 外網（經隧道進來的請求一定有，本機／區網直連不會有）；
        b. `Host` 標頭是設定的外網網域（預設 motrix-platform.miactw.com）⇒ 外網；
        c. 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` 任一代理標頭 ⇒ 外網（區網使用者的瀏覽器不會送；有代理介入就不當內網）；
-       d. 來源 IP（`helpers.client_ip.client_ip`，**永遠不讀偽造得了的 XFF**，只信 T80 的可信判斷）解析不出來、或不在「內網網段」⇒ 外網；
+       d. 來源 IP（`helpers.client_ip.client_ip`，**永遠不讀偽造得了的 XFF**，只信 T80 的可信判斷）解析不出來、是 loopback（除非打開開關，見②b）、或不在「內網網段」⇒ 外網；
        e. 其餘（沒有任何代理痕跡、且來源 IP 在內網網段）⇒ 內網。
      偽造只會往「更嚴」的方向：區網使用者自己加 CF 標頭或改 Host ⇒ 被當外網（要 TOTP）；外網使用者**無法**把自己變成內網——標頭由 Cloudflare 加上、
      來源 IP 由 T80 可信判斷（對端 loopback 才採信 `CF-Connecting-IP`；其餘用 TCP 對端）。
+  ②b **本機直連（loopback：127.x／::1）預設不算內網**（hichan-1 審查 F2）：對端是 loopback、又沒有任何 Cloudflare／代理標頭的請求，
+     可能是在伺服器本機操作的人，也可能是同機的非 Cloudflare 代理（netsh portproxy、frp、同機 nginx 去掉標頭後轉進來）——後者代表任何外部使用者都能變成「內網」
+     而免除 TOTP 與帳號鎖定，所以保守判成外網。影響：直接在正式機上開 `https://localhost:666` 登入的人，若角色被要求 TOTP 就必須已啟用（最高管理者已啟用）；
+     真的需要本機免 TOTP，由最高管理者在設定中心打開「本機直連算內網」（`loopback_is_internal`，放寬方向，走確認期間＋第二位最高管理者核准）。
   ② 「內網網段」可在設定中心調整，但**只收私有／loopback／link-local 網段**（`ipaddress` 的 `is_private`）：填公網網段或 0.0.0.0/0 的那一筆直接忽略，
      所以設定不可能把「全世界」變成內網（安全類設定只准加嚴，不能被濫用成放行）。全部都被忽略／讀不到 ⇒ 退回預設的私有網段。
   ③ 強制 TOTP 的角色清單與總開關存在設定中心群組 `external_login`；讀不到設定 ⇒ `settings_registry.get` 回程式預設（總開關開、三種角色）＝**往嚴的一邊**。
@@ -31,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 SETTINGS_GROUP = "external_login"
 DEFAULT_EXTERNAL_HOSTS = "motrix-platform.miactw.com"
-DEFAULT_INTERNAL_NETWORKS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,169.254.0.0/16,::1/128,fc00::/7,fe80::/10"
+DEFAULT_INTERNAL_NETWORKS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10"
 #: 可以被設定「外網強制 TOTP」的角色（= `helpers.auth.VALID_ROLES`）；預設前三種開
 ENFORCEABLE_ROLES = ("superadmin", "admin", "finance", "sales", "engineer", "viewer")
 DEFAULT_ENFORCED_ROLES = ("superadmin", "admin", "finance")
@@ -66,7 +70,10 @@ def internal_networks() -> list:
         except ValueError:
             logger.warning("external_access: 內網網段格式不合法，忽略：%r", raw[:64])
             continue
-        if not (net.is_private or net.is_loopback or net.is_link_local):
+        if net.is_loopback:                                  # loopback 不由網段清單決定（見不變式②b），只看 `loopback_is_internal`
+            logger.warning("external_access: loopback 網段不收進內網清單（請用「本機直連算內網」開關），忽略：%s", net)
+            continue
+        if not (net.is_private or net.is_link_local):
             logger.warning("external_access: 內網網段不是私有網段，忽略：%s", net)
             continue
         nets.append(net)
@@ -104,6 +111,8 @@ def classify(request, ip: Optional[str] = None) -> tuple:
         mapped = getattr(parsed, "ipv4_mapped", None)
         if mapped is not None:
             parsed = mapped
+        if parsed.is_loopback:
+            return (False, "loopback_internal") if _get("loopback_is_internal", 0) not in (0, False, "0") else (True, "loopback")
         for net in internal_networks():
             if parsed.version == net.version and parsed in net:
                 return False, "internal_network"

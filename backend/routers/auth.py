@@ -98,9 +98,12 @@ def _is_external() -> bool:
     return bool(_REQ_CTX.get()[1])
 
 
-def _acct_lock_guard(username) -> None:
-    """帳號鎖定中 ⇒ 429（所有帳號名一視同仁，不洩漏帳號是否存在）。內網來源在「只鎖外網」模式下不受影響。"""
-    wait = _acct.check(username, _is_external())
+def _acct_begin(username, source: str = "password") -> None:
+    """登入入口（預占計數，見 `helpers/account_lock` 不變式①）：帳號鎖定中 ⇒ 429（所有帳號名一視同仁，不洩漏帳號是否存在）；
+    否則把這次嘗試先算進去（併發的猜測最多放行門檻次）。成功登入由 `_acct_success` 清掉；密碼對但走 TOTP 第二步／被拒絕由 `_acct.release` 退回。
+    內網來源在「只鎖外網」模式下不受影響。"""
+    ctx = _REQ_CTX.get()
+    wait = _acct.begin_attempt(username, ctx[0], _is_external(), source)
     if wait:
         mins = max(1, (wait + 59) // 60)
         hint = "；若是本人，也可以在公司內網登入以解除" if _acct.config()["scope"] == 1 else ""
@@ -114,6 +117,7 @@ def _external_totp_guard(row, ip: str) -> None:
         return
     if not _ext.totp_required_for(row["role"], row["username"]):
         return
+    _acct.release(row["username"])                      # 密碼是對的：不算猜錯，退回這次預占的計數
     _acct.audit_event("auth.login_refused_external_totp", row["username"], ip,
                       {"ip": ip, "role": row["role"], "reason": _REQ_CTX.get()[2]}, "ext_totp_required", 403)
     raise HTTPException(403, _ext.totp_refusal_message())
@@ -238,7 +242,6 @@ def _rl_fail(ip: str, username: str, source: str = "password") -> None:
             _auth_alert.on_lockout(key, ip, alert_names, alert_fails, _LOGIN_LOCKOUT_S)
         except Exception as exc:  # noqa: BLE001  告警永遠不能讓登入失敗回應變成 500
             logger.warning("登入鎖定告警呼叫失敗（不影響登入）：%s", type(exc).__name__)
-    _acct.record_failure(username, ip, _is_external())     # 同一帳號、不分 IP 的鎖（helpers/account_lock）；永不丟例外
 
 
 def _rl_clear(ip: str) -> None:
@@ -513,7 +516,7 @@ def build_info_endpoint(authorization: str = Header(None)):
 def auth_login(body: LoginIn, request: Request):
     ip = _client_ip(request)
     _rl_check(ip)
-    _acct_lock_guard(body.username.strip())
+    _acct_begin(body.username.strip(), "password")      # 同一帳號、不分 IP 的鎖：鎖定中 ⇒ 429；否則預占這次嘗試的計數
     conn = get_db()
     row = conn.execute(
         "SELECT id, username, display_name, role, modules, password_hash, "
@@ -531,6 +534,7 @@ def auth_login(body: LoginIn, request: Request):
     except HTTPException:
         conn.close()
         raise
+    _acct.release(row["username"])                     # 密碼正確：退回預占（直接發 session 的路徑由 _acct_success 清計數；TOTP 第二步會自己再預占）
     must_change = bool(row["must_change_password"])
     # Legacy weak password still works once, but forces rotation
     if is_weak_password(body.password):
@@ -701,7 +705,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
         raise HTTPException(401, "帳號不存在或已停用")
 
     try:
-        _acct_lock_guard(row["username"])
+        _acct_begin(row["username"], "totp")
     except HTTPException:
         conn.close()
         raise
@@ -818,9 +822,8 @@ def login_qr_info(request: Request, x_login_challenge: str = Header(None)):
 
 @router.post("/api/auth/login/qr-approve")
 def login_qr_approve(body: QrApproveIn, request: Request):
-    """Public — phone approves the pending login here, either by password or
-    (2026-09-08 新增) by an existing session token already held by that
-    phone's browser. Does NOT issue a session for the phone itself (it
+    """Public — phone approves the pending login here by the existing session token
+    already held by that phone's browser (2026-11-12：密碼核准已移除，見下方 F1 說明). Does NOT issue a session for the phone itself (it
     shouldn't hold the desktop's token) — it just flips pending["approved"],
     which login_qr_status() below (polled by the desktop) picks up."""
     ip = _client_ip(request)
@@ -850,7 +853,7 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         conn.close()
         if not sess or not row or sess["user_id"] != row["id"]:
             _audit_login_failed(row["username"] if row else "", ip, source="qr")     # 只留稽核（不計鎖定：session token 不可猜）
-            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請改用密碼核准")
+            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請在手機上先登入同一個帳號再掃碼")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)
             if still:
@@ -860,33 +863,12 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         return {"ok": True}
 
     conn.close()
-    if not body.password:
-        raise HTTPException(400, "請輸入密碼")
-
-    if row:
-        _acct_lock_guard(row["username"])
-    if not row or not _verify_pw(body.password, row["password_hash"]):
-        _rl_fail(ip, row["username"] if row else "", "qr")
-        # 共用同一個 pending["fails"] 計數器（跟手動輸入驗證碼那條路徑同一組上限），
-        # 不是另開一組獨立的失敗次數——避免同一張 challenge 變相有兩倍可猜次數。
-        with _totp_lock:
-            still = _totp_pending.get(body.challenge_token)
-            if still:
-                still["fails"] += 1
-                if still["fails"] >= _TOTP_MAX_FAILS:
-                    del _totp_pending[body.challenge_token]
-                    raise HTTPException(401, "密碼錯誤次數過多，請回到電腦重新登入")
-        raise HTTPException(401, "密碼不正確")
-
-    with _totp_lock:
-        still = _totp_pending.get(body.challenge_token)
-        if still:
-            still["approved"] = True
-    _rl_clear(ip)
-    # 密碼核准：呼叫端沒有 session ⇒ 以被核准的帳號記在 target（username 欄留空）。
-    _audit(None, "auth.login_qr_approve", "user", row["username"], row["username"],
-           {"method": "password", "ip": ip})
-    return {"ok": True}
+    # 🔴 2026-11-12（F1 hotfix，hichan-1 對抗式審查）：**不再接受「輸入密碼核准」**。
+    # 以前這裡只驗密碼就把 challenge 標成 approved，而 qr-status 接著直接發 session ⇒ 只知道密碼的人
+    # 自己呼叫 qr-approve（任何來源、不需要手機）就繞過 TOTP。手機核准的前提必須是「這支手機已經登入同一個帳號」
+    # （上面的 session_token 分支，session 本身就是通過密碼＋TOTP 取得的）。`body.password` 欄位保留只為了讓舊版前端送出時
+    # 收到白話訊息而不是 422；值一律不看、不驗證。
+    raise HTTPException(400, "請在手機上先登入同一個帳號再掃碼")
 
 
 @router.get("/api/auth/login/qr-status")
@@ -900,6 +882,7 @@ def login_qr_status(request: Request, x_login_challenge: str = Header(None)):
     🔑 而這一支是**每 2 秒一次**的那一支。
     """
     challenge = _login_challenge(request, x_login_challenge)
+    ip = _client_ip(request)                           # 記下這個請求是否外網（發 session 的這一步也要套外網規則）
     _totp_sweep_expired()
     with _totp_lock:
         pending = _totp_pending.get(challenge)
@@ -911,12 +894,22 @@ def login_qr_status(request: Request, x_login_challenge: str = Header(None)):
 
     conn = get_db()
     row = conn.execute(
-        "SELECT id, username, display_name, role, modules FROM users WHERE id=?",
+        "SELECT id, username, display_name, role, modules, COALESCE(totp_enabled, 0) AS totp_enabled FROM users WHERE id=? AND active=1",
         (pending["user_id"],),
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(400, "帳號不存在或已停用")
+    try:
+        # 發 session 的最後一關（F1 審查）：帳號鎖定中不發；外網＋該角色要求 TOTP 而帳號沒有啟用 ⇒ 不發
+        # （正常情況下這裡的 challenge 一定來自已啟用 TOTP 的帳號；中途被停用 TOTP 時才會走到）。
+        wait = _acct.check(row["username"], _is_external())
+        if wait:
+            raise HTTPException(429, "此帳號登入失敗次數過多，已暫時鎖定，請稍後再試")
+        _external_totp_guard(row, ip)
+    except HTTPException:
+        conn.close()
+        raise
     result = _issue_session(conn, row, pending["must_change"])
     conn.close()
     return result
@@ -1341,7 +1334,7 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
 def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
     """完成 Passkey 登入：驗證認證器簽名、檢查 sign_count 防重放、發行 session。"""
     _client_ip(request)                                # 記下這個請求是否外網（帳號鎖定／外網強制 TOTP 用）
-    _acct_lock_guard(body.username)
+    _acct_begin(body.username, "passkey")
     # Get and consume challenge
     challenge_token = body.dict().get("challengeToken")
     if not challenge_token:
