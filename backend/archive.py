@@ -1730,6 +1730,25 @@ def _truncate_log_in_place(path: str) -> str:
 _SERVER_LOG_ROTATE_WARN_AT: dict = {}
 
 
+def _promote_rotating_log(path: str, tmp: str, keep: int) -> None:
+    """把暫存檔 `tmp` 推成 `path.1`：最舊的 `.{keep}` 先砍、其餘依序往後推一代。任何一步失敗丟 OSError，**暫存檔原封不動**。"""
+    oldest = f"{path}.{keep}"
+    if os.path.exists(oldest):
+        os.remove(oldest)
+    for gen in range(keep - 1, 0, -1):
+        src = f"{path}.{gen}"
+        if os.path.exists(src):
+            os.replace(src, f"{path}.{gen + 1}")
+    os.replace(tmp, f"{path}.1")
+
+
+def _warn_rotate_throttled(path: str, message: str) -> None:
+    now = time.time()
+    if now - _SERVER_LOG_ROTATE_WARN_AT.get(path, 0) >= 24 * 3600:
+        _SERVER_LOG_ROTATE_WARN_AT[path] = now
+        logger.warning("%s", message)
+
+
 def _rotate_server_log_if_large(
     log_path: str = None, max_bytes: int = _SERVER_LOG_MAX_BYTES, keep: int = _SERVER_LOG_KEEP_GENERATIONS,
 ) -> bool:
@@ -1749,6 +1768,15 @@ def _rotate_server_log_if_large(
     path = log_path or _SERVER_LOG_PATH
     tmp = f"{path}.rotating"
     try:
+        # 上一輪留下的 .rotating（清空成功、推世代失敗／當機）**可能是唯一的一份舊內容** ⇒ 先接手它，絕不可被這輪的 copy2 覆蓋。
+        # （若是「複製完、清空前」當機留下的，內容與現行檔重複——多佔一代而已，不丟資料，比誤刪好。）
+        if os.path.exists(tmp):
+            try:
+                _promote_rotating_log(path, tmp, keep)
+            except OSError as e:
+                _warn_rotate_throttled(path, "上一輪留下的暫存檔 %s 接手失敗（%s: %s）——本輪不輪替，以免覆蓋它" % (tmp, type(e).__name__, e))
+                return False
+            logger.warning("server.log 上一輪留下的暫存檔 %s 已接手成為 %s.1（先前清空成功但推世代沒做完）", tmp, path)
         if not os.path.exists(path) or os.path.getsize(path) < max_bytes:
             return False
         log_dir = os.path.dirname(path)
@@ -1760,21 +1788,21 @@ def _rotate_server_log_if_large(
                 os.remove(tmp)
             except OSError:
                 pass
-            now = time.time()
-            if now - _SERVER_LOG_ROTATE_WARN_AT.get(path, 0) >= 24 * 3600:
-                _SERVER_LOG_ROTATE_WARN_AT[path] = now
-                logger.warning("server.log 輪替沒成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示",
-                               type(e).__name__, e)
+            _warn_rotate_throttled(path, "server.log 輪替沒成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示" % (type(e).__name__, e))
             return False
-        # 清空成功：現在才推世代（最舊的 .{keep} 直接砍掉）
-        oldest = f"{path}.{keep}"
-        if os.path.exists(oldest):
-            os.remove(oldest)
-        for gen in range(keep - 1, 0, -1):
-            src = f"{path}.{gen}"
-            if os.path.exists(src):
-                os.replace(src, f"{path}.{gen + 1}")
-        os.replace(tmp, f"{path}.1")
+        # 清空成功：現在才推世代。**從這裡起舊內容只存在 .rotating**——推世代任何一步失敗都不可以讓它消失、log 也不可以說「rotated」。
+        try:
+            _promote_rotating_log(path, tmp, keep)
+        except OSError as e:
+            saved = tmp
+            try:
+                if not os.path.exists(f"{path}.1"):
+                    os.replace(tmp, f"{path}.1")
+                    saved = f"{path}.1"
+            except OSError:
+                pass
+            logger.error("server.log 已清空，但推世代失敗（%s: %s）——舊內容的副本保存在 %s，下一輪會接手；沒有資料遺失", type(e).__name__, e, saved)
+            return True                                              # 檔案確實已清空；呼叫端要知道
         _SERVER_LOG_ROTATE_WARN_AT.pop(path, None)
         logger.info("server.log rotated (was >= %d bytes; truncated via %s), kept %d generation(s) under %s", max_bytes, how, keep, log_dir)
         return True

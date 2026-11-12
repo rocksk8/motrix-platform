@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="cmd.exe 的 `>>` 重導
 
 def _child_source(log_path, result_path, max_bytes=2000, keep=3, mode="own"):
     """子行程：stdout／stderr 被 cmd 的 `>>` 導進 log_path；把 archive 裡輪替用的三個函式原始碼抽出來執行（不 import archive——它要整個應用）。"""
-    funcs = "\n\n".join(inspect.getsource(f) for f in (archive._stdio_fd_of, archive._truncate_log_in_place, archive._rotate_server_log_if_large))
+    funcs = "\n\n".join(inspect.getsource(f) for f in (archive._stdio_fd_of, archive._truncate_log_in_place, archive._promote_rotating_log, archive._warn_rotate_throttled, archive._rotate_server_log_if_large))
     head = (
         "import os, shutil, time, logging, sys\n"
         "logger = logging.getLogger('child')\n"
