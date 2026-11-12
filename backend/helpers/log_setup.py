@@ -260,7 +260,8 @@ def noise_count():
 QUERY_MASK = "***"
 #: 網址型 token（含 `/` 或 `://`）超過這個長度就截斷：日誌行本來就不需要幾 KB 的路徑；同時是 O(n) 之外的第二道上限
 TOKEN_MAX = 2048
-_PARAM_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-\[\]]{0,39}")
+_PARAM_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-\[\]]{0,22}")          # 名字最長 23 字：再長的多半是 token 本身（base64／雜湊）
+_HEXISH_RE = re.compile(r"[0-9A-Fa-f]{12,}")                                 # 全是十六進位的長串也不當名字（`?<hex token>=`）
 _TOKEN_RE = re.compile(r"""[^\s"'<>]+""")
 _TRAILING = ")]},.;"
 
@@ -272,7 +273,8 @@ def redact_query(query):
         if not piece:
             continue
         name, eq, _val = piece.partition("=")
-        item = name + "=" + QUERY_MASK if (eq and _PARAM_NAME_RE.fullmatch(name)) else QUERY_MASK
+        keep = bool(eq) and _PARAM_NAME_RE.fullmatch(name) and not _HEXISH_RE.fullmatch(name)
+        item = name + "=" + QUERY_MASK if keep else QUERY_MASK
         if item == QUERY_MASK and parts and parts[-1] == QUERY_MASK:
             continue
         parts.append(item)
@@ -309,6 +311,9 @@ def _mask_token(tok):
         return tok
     if len(tok) > TOKEN_MAX and ("/" in tok):
         tok = tok[:TOKEN_MAX] + "...[+%d chars]" % (len(tok) - TOKEN_MAX)
+    h = tok.find("#")
+    if h >= 0 and ("/" in tok[:h] or "://" in tok[:h]):               # 網址的 fragment 可能帶憑證（#access_token=…，requests 的錯誤文字會回顯整個網址）⇒ 一律丟掉
+        tok = tok[:h]
     k = tok.find("?")
     if k >= 0 and k + 1 < len(tok) and "/" in tok[:k]:               # 像網址或路徑（`a/b?c`）而且 `?` 後面真的有東西才處理；一般句子裡的問號不動
         base, rest = tok[:k], tok[k + 1:]

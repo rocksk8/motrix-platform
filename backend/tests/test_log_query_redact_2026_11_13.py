@@ -38,7 +38,11 @@ SECRETS = ("SECRETPT", "SECRETTOKEN", "SECRETCODE", "AIzaSIMKEY", "TRBKEY123")
     ("abc123&def456", "***"),                                            # 相鄰的整段遮合併成一個
     ("=SECRET", "***"),
     ("%70t=SECRET", "***"),                                              # 名字有 `%`（編碼過）不當名字留
-    ("a" * 41 + "=SECRET", "***"),                                      # 名字太長（像 token 本身）
+    ("a" * 24 + "=SECRET", "***"),                                      # 名字太長（像 token 本身）
+    ("g" * 23 + "=SECRET", "g" * 23 + "=***"),                            # 23 字以內的識別字名字照留
+    ("ZXlKaGJHY2lPaUpJVXpJMU5pSjk=&v=1", "***&v=***"),                   # hichan-10 L-a：base64 補位的 token 當名字
+    ("0123456789abcdef0123=SECRET", "***"),                              # 十六進位長串當名字
+    ("deadbeef=x", "deadbeef=***"),                                      # 短的十六進位字（可能是一般名字）照留
     ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig==", "***"),   # JWT 當 key＋`=` 補位
     ("a=%26pt=SECRET", "a=***"),                                         # `%26` 夾帶不會被拆成新參數
     ("", ""),
@@ -75,6 +79,9 @@ def test_redact_text_handles_urls_in_sentences():
     assert ls.redact_text("沒有問號的訊息") == "沒有問號的訊息"
     assert ls.redact_text("為什麼這樣？不確定 a/b?") == "為什麼這樣？不確定 a/b?"            # 不誤傷一般句子
     assert ls.redact_text("Is it OK? yes?no") == "Is it OK? yes?no"
+    assert ls.redact_text("cb https://h.example.com/cb#access_token=SECRET done") == "cb https://h.example.com/cb done"     # hichan-10 L-b：沒有 ? 的 fragment 也丟掉
+    assert "SECRET" not in ls.redact_text("see https://h.example.com/p?x=1#access_token=SECRET.")
+    assert ls.redact_text("anchor #section and issue #123") == "anchor #section and issue #123"                              # 非網址的 # 不動
 
 
 @pytest.mark.parametrize("text", [
