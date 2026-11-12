@@ -514,6 +514,8 @@
 - 說明固定四段：**這是什麼**、**什麼時候要改**、**改了會影響什麼**、**建議值或範例**。
 - 文字集中在資料檔 `settings_help.json`（key＝設定欄位 key），與分類資料檔同一套機制：支援「全部可自定」（公司可覆寫說明文字，覆寫存在設定中心；沒覆寫用系統預設）。**不寫在 HTML 裡。**
 - 共用元件依 hichan-7 的 UX-PRINCIPLES 做成標準 `.form-hint`／`?` popover，放 `static/`，全站共用（設定中心先用，業務頁隨後沿用）。
+- **元件規格（與 hichan-7 對齊；UX-PRINCIPLES 目前沒有 `?` 規格，以本文為準，hichan-7 會在 UX-PRINCIPLES 交叉引用）：** 標籤旁 16px 的 `?` 按鈕，可用鍵盤聚焦（Enter／Space 開、Esc 關）、`aria-describedby`；彈出內容四小段「這是什麼／什麼時候要改／改了會怎樣／預設值」，白話、每段至多兩行；第四段的預設值取自設定群組 metadata（`help`／`impact`／`recommended`），不手寫以免與程式漂移；一份共用元件與 CSS，不在各頁各寫標記；手機點一下開底部面板（bottom sheet），桌機滑過或聚焦顯示。
+- **禁用詞單一來源：** 守門讀 `backend/tools/ux_audit_config.json`（`forbidden_terms`、`whitelist`、`deprecated_terms`，由 `ux_audit.py` 使用；在 hichan-7 的 `feat/ux-p0-p1-text` 分支，尚未落地）。不複製清單；檔案不存在時守門以明確訊息略過，落地後自動生效。
 - 盤點：先用既有 inventory A～D 的「工程化」評級挑出需要說明的欄位（評級高者先寫），其餘標籤本身夠清楚者列入白名單；盤點結果寫回 inventory 作為驗收清單。
 
 **9.3 守門測試**
