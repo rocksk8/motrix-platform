@@ -17,11 +17,13 @@ def test_fonts_are_cacheable_and_revalidatable(client):
 
 
 def test_pages_css_js_are_still_not_cached(client):
-    """反向控制：字型規則不可以吃到頁面、css、js（它們會頻繁覆寫，一律 no-store）。"""
+    """反向控制：字型規則不可以吃到頁面、css、js（它們會頻繁覆寫）。2026-11-13 起不再 no-store：沒帶版本的請求 ⇒ no-cache＋ETag
+    （每次都問、沒變回 304）；帶目前版本的才 immutable（見 test_static_cache_versioning_2026_11_13）。"""
     for path in ("/css/style.css", "/pages/login.html"):
         r = client.get(path)
         assert r.status_code == 200, path
-        assert "no-store" in r.headers.get("cache-control", ""), (path, r.headers.get("cache-control"))
+        cc = r.headers.get("cache-control", "")
+        assert cc == "no-cache" and "max-age" not in cc and "immutable" not in cc, (path, cc)
 
 
 

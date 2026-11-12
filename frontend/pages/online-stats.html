@@ -310,7 +310,9 @@
           }
           this.thisMonth()
           this.loadOnline()
-          setInterval(() => this.loadOnline(), 60000)
+          // 看不見的分頁不打（2026-11-13「外網載入效能」）；motrixVisiblePoll 由 sidebar.js 提供，沒有就退回原本的 60 秒
+          if (window.motrixVisiblePoll) window.motrixVisiblePoll(() => this.loadOnline(), 120000)
+          else setInterval(() => this.loadOnline(), 60000)
         },
 
         _auth() { return { Authorization: 'Bearer ' + this.session.token } },
