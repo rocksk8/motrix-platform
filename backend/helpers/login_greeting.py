@@ -3,7 +3,7 @@
 
 [單位] helper:login_greeting    [層] L1    [穩定度] 實驗
 [公開介面] record_login(user_id)、build_greeting(...)、greeting_for_user(...)、company_style()、effective_style(...)、
-          set_personal_style(user_id, v)、get_custom()、set_custom(cat, style, lines)、phrases_table()、taipei_now()
+          personal_pref(user_id)、get_custom()、set_custom(cat, style, lines)、phrases_table()、taipei_now()
 [不變式] 設計見 docs/platform/plans/UX-BUSINESS-PAGES-PROPOSAL.md §3.1.2（使用者 2026-11-13 已裁示）。
     1. **所有判斷在伺服器端**，單一端點（GET /api/auth/greeting）回「標題＋問候句＋離開期間摘要＋待辦句」；前端只顯示。
        時間一律台北時間（Asia/Taipei；環境沒有時區資料庫時退回固定 UTC+8——台灣沒有夏令時間，兩者相同）。
