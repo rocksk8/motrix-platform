@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
-[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, enabled, event_enabled, event_roles_view, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_confirmed, set_event, set_event_roles, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
+[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, normalize_public_base, notify_event, notify_users, public_base, push, push_async, quota, safe_link, set_confirmed, set_event, set_event_roles, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -31,7 +31,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .settings import _get_setting, _set_setting
 
@@ -298,7 +298,19 @@ def push_async(user_ids, text: str) -> threading.Thread:
 # ── 事件開關：哪些信件類型「同時發 LINE」（公司層、預設全關、逐類由最高管理者勾選）──────────────────────────
 #: 已接上 LINE 的信件類型（＝設定頁可勾選的清單）。**接一個事件就加一個**；沒接線的類型不開放勾選（勾了也不會有任何東西送出，只會誤導）。
 #: 付款／薪資／獎金類（含金額或個資）先不開放——PM 裁示（2026-11-11）；要開放須逐類確認內容不含金額。
-WIRED_EVENTS = ("approval_review_edit", "warranty_expiry")
+#: 事件登記字典（單一來源）：每個已接線事件的屬性。
+#:   priority   "critical"＝系統／資安告警，**永不因額度保留而暫停**；"normal"＝一般事件，本月用量達 `line_quota.RESERVE_PERCENT`（90%）後自動暫停（記 log）。
+#:   digest     False＝逐則發送；（保留欄位：之後的批次用 "daily" 表示每日彙整，彙整事件在**發送當下**才解析收件人——`deliver_event` 本來就是發送當下才解析）。
+#:   line_group "inherit"＝LINE 的群組收件人與信件相同（登記的預設群組）；None＝LINE 只發給事件收件人（不加群組）；或 `mail_types.GROUPS` 的鍵＝LINE 用另一個群組。
+LINE_EVENTS = {
+    "approval_review_edit": {"priority": "normal", "digest": False, "line_group": "inherit"},
+    "warranty_expiry": {"priority": "normal", "digest": False, "line_group": "inherit"},
+    "auth_lockout": {"priority": "critical", "digest": False, "line_group": "inherit"},
+}
+WIRED_EVENTS = tuple(LINE_EVENTS)
+#: ⚠️ 2026-11-12（使用者裁示「全部改獨立」）：LINE **不再依附 Email**。收件人由 `helpers.event_audience` 直接依事件的業務收件人＋T80 收件設定解析成帳號，
+#: 再 ⇒ LINE 角色允許清單 ⇒ 本人 LINE 勾選 ⇒ 已綁定（`deliver_event`）。沒有 Email、Email 退訂、信件類型被整個關掉，都不影響 LINE；
+#: LINE 有自己的公司開關（`event_enabled`）與個人勾選，Email 退訂與 LINE 勾選互不影響。
 
 
 def event_enabled(event_key: str) -> bool:
@@ -441,6 +453,94 @@ def ids_for(usernames) -> list:
         if _USER_ID_RE.match(uid) and uid not in out:
             out.append(uid)
     return out
+
+
+MARKS_KEY = "line_push_marks"
+#: 「已推播」記號的保存天數（超過就清掉；每日檢查型事件最多隔天重試，14 天綽綽有餘）
+MARK_KEEP_DAYS = 14
+_marks_lock = threading.Lock()
+
+
+def _mark_seen(key: str) -> bool:
+    try:
+        v = _get_setting(MARKS_KEY, {}) or {}
+        return isinstance(v, dict) and key in v
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _mark_write(key: str) -> None:
+    """記下「這一則已經推過了」（只在有 `dedupe_key` 且結果不是暫時失敗時才寫；順手清掉過期的）。永不丟例外。"""
+    try:
+        now = datetime.now()
+        with _marks_lock:
+            v = _get_setting(MARKS_KEY, {}) or {}
+            v = dict(v) if isinstance(v, dict) else {}
+            cut = (now - timedelta(days=MARK_KEEP_DAYS)).isoformat(timespec="seconds")
+            v = {k: t for k, t in v.items() if isinstance(t, str) and t >= cut}
+            v[key] = now.isoformat(timespec="seconds")
+            _set_setting(MARKS_KEY, v)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LINE 已推播記號寫入失敗：%s", type(exc).__name__)
+
+
+def deliver_event(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
+                  exclude=None, dedupe_key: str = "") -> str:
+    """獨立通道的**單一入口（同步）**：事件業務收件人 ⇒ LINE 角色允許清單／個人勾選 ⇒ 已綁定 ⇒ 推播（成功後觸發額度刷新與 T80 額度告警）。
+    回傳：`"off"`（LINE 未啟用／類型沒接線或沒勾選）、`"already_pushed"`（同 `dedupe_key` 已推過）、`"paused_quota"`（額度保留：非 critical 且本月用量已達 90%）、
+    `"no_recipient"`（沒有可推播的人）、或 `SEND_*`。**永不丟例外。**
+    `usernames`／`to_group`／`group`（見字典 `line_group`）／`exclude`（要排除的帳號，例如操作者本人）見 `helpers.event_audience.resolve_usernames`。
+    `dedupe_key`（選填，給每日檢查型、會被重試的呼叫端）：LINE 自己的「已推播」記號——同一把鑰匙只推一次，**結果不是暫時失敗（sent／permanent）就記**，
+    與 Email 的重試脫鉤（Email 暫時失敗隔天重試時，LINE 不會天天重推）。記號存在 `system_settings.line_push_marks`，保存 `MARK_KEEP_DAYS` 天。"""
+    try:
+        if not event_enabled(event_key):
+            return "off"
+        spec = LINE_EVENTS.get(event_key) or {}
+        if dedupe_key and _mark_seen(dedupe_key):
+            return "already_pushed"
+        if spec.get("priority") != "critical":
+            from . import line_quota as _lq
+            if _lq.reserve_paused():
+                logger.warning("LINE 額度保留：本月用量已達 %d%%，暫停非 critical 事件 %r（critical 照發）", _lq.RESERVE_PERCENT, event_key)
+                return "paused_quota"
+        from . import event_audience as _ea
+        from . import line_recipients as _lr
+        lg = spec.get("line_group", "inherit")
+        given = _ea.resolve_usernames(event_key, usernames, bool(to_group) and lg is not None,
+                                      group=lg if lg not in (None, "inherit") else None, exclude=exclude)
+        allowed = _lr.filter_usernames(event_key, given)
+        ids = ids_for(allowed)
+        if not ids:
+            logger.info("LINE：%r 沒有可推播的收件人（業務收件人 %d 人；角色／個人勾選後 %d 人；已綁定 0 人）", event_key, len(given), len(allowed))
+            return "no_recipient"
+        out = push(ids, build_text(title, rows, reason=reason, link=link))
+        if out != SEND_SENT:
+            logger.info("LINE 推播結果：%s（對象 %d 人）", out, len(ids))
+        else:
+            from . import line_quota as _lq            # 推成功＝額度可能變了：去抖動後刷新用量、跨門檻就告警（永不丟例外）
+            _lq.after_push()
+        if dedupe_key and out in (SEND_SENT, SEND_PERMANENT_FAIL):
+            _mark_write(dedupe_key)
+        return out
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LINE deliver_event 失敗（event=%r）：%s", event_key, type(exc).__name__)
+        return SEND_TRANSIENT_FAIL
+
+
+def notify_event(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
+                 exclude=None, dedupe_key: str = ""):
+    """獨立通道的**背景**發送（不擋呼叫端；收件人解析的資料庫查詢也在背景執行緒）。LINE 未啟用／類型沒勾選 ⇒ 回 None（不開執行緒）；否則回 daemon 執行緒。永不丟例外。"""
+    try:
+        if not event_enabled(event_key):
+            return None
+        t = threading.Thread(target=deliver_event, args=(event_key,), name="line-event", daemon=True,
+                             kwargs=dict(usernames=usernames, to_group=to_group, title=title, rows=rows, reason=reason, link=link,
+                                         exclude=exclude, dedupe_key=dedupe_key))
+        t.start()
+        return t
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LINE notify_event 失敗（event=%r）：%s", event_key, type(exc).__name__)
+        return None
 
 
 def notify_users(event_key: str, usernames, title: str, rows=None, *, reason: str = "", link: str = ""):

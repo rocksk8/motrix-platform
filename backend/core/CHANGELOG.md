@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-12（feat/auth-lockout-alert；登入失敗告警＋LINE 全面改獨立通道＋共用「事件→業務收件人」解析層，批次 0）
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.auth_alert`（`on_lockout`／`flush_summary`／`HOURLY_CAP`…）、`helpers.event_audience`（`resolve_usernames`／`group_usernames`）；`helpers.line_notify` 加 `LINE_EVENTS`（事件字典：priority／digest／line_group）、`deliver_event`（單一入口，同步）、`notify_event`（背景）、`MARKS_KEY`／`MARK_KEEP_DAYS`；`helpers.line_quota` 加 `RESERVE_PERCENT`／`cached_percent`／`reserve_paused`；`helpers.audit` 加 `LOGIN_FAIL_REASONS`、`_audit_login_failed` 多一個選填參數 `source`；`helpers.email_notify.send_registered` 多兩個選填關鍵字 `line_key`／`line_exclude`。
+- 行為變更：①`auth_lockout`（登入失敗鎖定告警）新信件類型（系統技術類、預設只給最高管理者、信件關閉被鎖住）；`_rl_fail` 達到鎖定那一刻發一次（同範圍鎖定期間一次、全系統每小時 10 則上限、超過合併成摘要、背景執行）。②TOTP／QR／Passkey 登入失敗也寫 `auth.login_failed` 稽核列（`reason_code`＝`totp_failed`／`qr_failed`／`passkey_failed`；密碼維持 `login_failed`），統一由 `routers/auth.py::_rl_fail(ip, username, source)` 寫。③**LINE 不再依附 Email（三個已接線事件全部）**：收件人由 `event_audience` 依事件業務收件人＋「信件與通知收件設定」解析成帳號（不看 Email、不看信件退訂、不看信件類型關閉；停用帳號排除）⇒ LINE 角色允許清單 ⇒ 本人 LINE 勾選 ⇒ 已綁定；`send_registered` 的 LINE 先於信件處理、各自失敗；移除 `_resolved.pairs` 收集器。④額度保留：本月用量 ≥ 90% 時非 critical 事件暫停（critical＝`auth_lockout` 照發）。⑤`send_registered(wait=True)` 的 LINE 改為獨立：同步發、用 `line_key` 的「已推播」記號（`system_settings.line_push_marks`，14 天）擋重試重推（取代舊的「LINE 跟著信件成敗走」）；沒有任何 Email 收件人時，LINE 推成功才回 True。保固到期傳 `line_key`（每單每設備每階段一次）。
+- 測試：`tests/test_auth_lockout_alert_2026_11_12.py`；文件：`docs/quick/security.md` §3.1b、`docs/platform/guides/LINE-NOTIFY-USER-GUIDE.md`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

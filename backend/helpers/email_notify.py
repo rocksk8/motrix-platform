@@ -221,22 +221,6 @@ def _mail_off(event_key) -> bool:
         return False
 
 
-#: LINE 通道要知道「信件收件人是哪些帳號」，但收件人解析（覆寫／退訂／關閉）只有 `_users_emails` 這一個漏斗，不可複製第二份。
-#: 做法：`send_registered` 在解析期間打開這個執行緒區域的收集器（`_resolved.pairs`＝[(信箱, 帳號)]），漏斗把「實際回傳的人」記進去；
-#: 覆寫模式把事件收件人丟掉（`superadmin_only`）時，連同那一段 pair 一起丟（`event_span`），所以共用信箱的人也不會因此多收 LINE
-#: （K 審 L2）。最後只取**最終寄出信箱**對應的帳號。沒開收集器＝行為與原本完全相同。
-_resolved = threading.local()
-
-
-def _drop_event_pairs() -> None:
-    """覆寫把事件收件人換掉時，把 `_lookup_emails` 剛記下的那一段 (信箱, 帳號) 一起丟掉。沒開收集器＝什麼都不做。"""
-    sink = getattr(_resolved, "pairs", None)
-    span = getattr(_resolved, "event_span", None)
-    if sink is not None and span:
-        del sink[span[0]:span[1]]
-        _resolved.event_span = (span[0], span[0])
-
-
 def _users_emails(where: str, params, event_key) -> list:
     if _mail_off(event_key):                   # 所有收件人查詢的唯一漏斗：關了就沒有收件人（呼叫端照「沒有收件人」處理）
         return []
@@ -248,9 +232,6 @@ def _users_emails(where: str, params, event_key) -> list:
             "AND email IS NOT NULL AND email != '' AND (%s)" % where, list(params)).fetchall()
         conn.close()
         kept = [r for r in rows if _pref_enabled(r["notification_muted"], event_key)]
-        sink = getattr(_resolved, "pairs", None)
-        if sink is not None:
-            sink.extend((r["email"], r["username"]) for r in kept)
         return [r["email"] for r in kept]
     except Exception as exc:
         logger.warning("收件人查詢失敗（%s）：%s", event_key, exc)
@@ -338,11 +319,9 @@ def _with_event_recipients(event_emails: list, event_key) -> list:
         return []
     t = _registered(event_key)
     if t is None:
-        _drop_event_pairs()
         return _only_superadmins(event_key)
     o = _override_of(event_key)
     if o["mode"] == "superadmin_only":
-        _drop_event_pairs()
         return _only_superadmins(event_key)
     if o["mode"] == "custom":
         return list(dict.fromkeys(event_emails + _custom_emails(o, event_key)))
@@ -357,16 +336,9 @@ def _admin_emails(event_key: str = None) -> list:
 def _lookup_emails(usernames: list, event_key: str = None) -> list:
     """事件收件人（依帳號）＋覆寫。"""
     found = []
-    sink = getattr(_resolved, "pairs", None)
-    start = len(sink) if sink is not None else 0
     if usernames:
         found = _users_emails("username IN (%s)" % ",".join("?" * len(usernames)), usernames, event_key)
-    if sink is not None:
-        _resolved.event_span = (start, len(sink))        # 這一段是「事件收件人」；覆寫若把它丟掉，pair 也一起丟（見 `_drop_event_pairs`）
-    try:
-        return _with_event_recipients(found, event_key)
-    finally:
-        _resolved.event_span = None
+    return _with_event_recipients(found, event_key)
 
 
 
@@ -979,7 +951,8 @@ def _rows_plain(rows) -> list:
 
 def send_registered(event_key: str, *, title: str, rows: list, usernames: list = None, to_group: bool = False,
                     reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
-                    link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None) -> bool:
+                    link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None,
+                    line_key: str = "", line_exclude: list = None) -> bool:
     """模組用的通用寄信入口（A2-0 #6）：信件類型由模組自己 `mail_types.register()` 登記，這裡只負責收件人＋內文＋主旨。
     收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套超級管理員的覆寫與個人退訂。
     `event_key` 必須是呼叫端寫死的字面字串（守門 test_mail_registry 逐一核對已登記）；其餘參數一律用關鍵字。
@@ -987,29 +960,36 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     `wait=True`（要寫「已通知」記號的呼叫端用）：等寄送結果（最多 `SEND_WAIT_TIMEOUT_SECONDS`），回 True＝**可以寫記號**，照 `system_checks` 的「先寄成功才記」前例：
     `SEND_SENT`（寄出了）、`SEND_UNKNOWN`（等不到結果——不知道有沒有出去，重寄可能雙寄）、`SEND_PERMANENT_FAIL`（這一封永遠寄不出去——重試只是天天失敗）都回 True（保留記號）；
     只有明確的暫時失敗（`SEND_TRANSIENT_FAIL`）、機器層級略過（`SEND_SKIPPED`）或沒有收件人才回 False（不寫記號，下次重試）。
+    **LINE 是獨立通道**（2026-11-12）：已接線的事件（`line_notify.LINE_EVENTS`）同時由 `line_notify.deliver_event` 發 LINE，收件人用同樣的 `usernames`／`to_group`
+    經 `helpers.event_audience` 直接解析（不看 Email、不看信件退訂／關閉、不因信件失敗而跳過）。`line_exclude`：LINE 要排除的帳號（例如操作者本人；不影響信件）。
+    `line_key`：LINE 自己的「已推播」記號鑰匙（`wait=True` 的每日檢查型呼叫端請傳；同一把鑰匙只推一次，Email 暫時失敗隔天重試時 LINE 不重推）。
+    `wait=True` 時 LINE 同步發送，結果寫進 `out["line"]`；**沒有任何 Email 收件人**時，回 True 的條件改看 LINE：LINE 推成功／永久失敗／同鑰匙已推過 ⇒ True（寫記號、不再每天重試）。
     `out`（選填 dict）：寄送結果寫進 `out["outcome"]`（`SEND_*`；沒有收件人＝`"no_recipient"`），讓呼叫端分得出「真的寄出」與「保留記號但不確定」。"""
-    _resolved.pairs = []                    # 收集 (信箱, 帳號) 給 LINE 通道用（見 `_resolved` 說明）
-    try:
-        to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
-                                + (_group_emails(event_key) if to_group else [])))
-        pairs = list(_resolved.pairs)
-    finally:
-        _resolved.pairs = None
-        _resolved.event_span = None
-    final = set(to)
-    line_users = sorted({u for e, u in pairs if e in final})
+    def _line(fn):      # 明列關鍵字（守門禁止 ** 傳參數）；fn＝`line_notify.deliver_event`（同步）或 `notify_event`（背景）
+        return fn(event_key, usernames=usernames, to_group=to_group, title=title, rows=_rows_plain(rows), reason=reason, link=link,
+                  exclude=line_exclude, dedupe_key=line_key)
+    # LINE 先於信件處理：信件這一段的任何例外都不會讓 LINE 漏發；沒啟用／沒勾選／沒人綁定＝什麼都不做；連結經 safe_link（預設不帶）
+    lo = None
+    if wait:
+        lo = _line(_ln.deliver_event)                         # 同步：回傳值決定「沒有 Email 收件人」時能不能寫記號
+        if out is not None:
+            out["line"] = lo
+    else:
+        _line(_ln.notify_event)                               # 背景執行緒
+    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
+                            + (_group_emails(event_key) if to_group else [])))
     if not to:
-        logger.warning("send_registered: %r 沒有收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
+        logger.warning("send_registered: %r 沒有 Email 收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
         if out is not None:
             out["outcome"] = "no_recipient"
+        if wait:
+            # 沒有任何 Email 收件人＝信件永遠寄不出去，隔天重試也不會有結果；此時 LINE 是唯一通道：推成功／永久失敗／已推過 ⇒ True（寫記號、不再重試）；
+            # 沒開 LINE／沒人可推／暫時失敗／額度保留暫停 ⇒ False（照舊：不寫記號、下次重試）。
+            return lo in (_ln.SEND_SENT, _ln.SEND_PERMANENT_FAIL, "already_pushed")
         return False
     html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
                        intro=reason, button_text=button_text, note=note)
     handle = _async_send(to, _mt.subject(event_key, reason or title), html)
-    def _line():
-        # LINE 通道（附帶、背景、失敗只記 log；沒勾選／沒啟用／沒人綁定＝什麼都不做）。收件人＝信件最終寄出的那些帳號；連結經 safe_link（預設不帶）
-        _ln.notify_users(event_key, line_users, title, _rows_plain(rows), reason=reason, link=link)
-
     if wait:
         outcome = handle.wait()
         if out is not None:
@@ -1018,13 +998,8 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
             logger.error("send_registered: %r 寄送結果 %s——保留記號（不重寄），請人工確認收件人是否收到／補齊收件人 Email", event_key, outcome)
         elif outcome != SEND_SENT:
             logger.warning("send_registered: %r 寄送結果 %s（呼叫端不寫記號，下次重試）", event_key, outcome)
-        may_mark = outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
-        # 要寫「已通知」記號的呼叫端（wait=True）會在 False 時隔天重試：LINE 只在「可以寫記號」時才發，
-        # 否則同一件事每次重試都會再推一次 LINE（K 審 S1）；LINE 因此跟著信件的成敗走，信件機器層級沒設好時 LINE 也等它一起補發。
-        if may_mark:
-            _line()
-        return may_mark
-    _line()
+        # 呼叫端（wait=True）在 False 時隔天重試；LINE 已在上面先發，重試時由 `line_key` 的「已推播」記號擋住，不會重推（取代舊的「LINE 跟著信件成敗走」）。
+        return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
     return True
 
 
@@ -1723,6 +1698,13 @@ def notify_warranty_expiry(
     _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
 
 
+def _warranty_line_key(quote_no, device_name, days_left) -> str:
+    """保固到期的 LINE「已推播」鑰匙：每張報價單＋每台設備＋每個提醒階段（緊急／提早）只推一次——與 `case_deadlines` 的 `warranty_notif.*` 已通知記號同一個粒度。"""
+    from helpers.alert_settings import warranty_mail_days
+    urgent, early = warranty_mail_days()
+    return "warranty_expiry|%s|%s|%s" % (quote_no, device_name, urgent if days_left <= urgent else early)
+
+
 def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
                          owner_username: str = "", out: dict = None) -> bool:
     """保固即將到期 → 案件業務（帳號）＋群組收件人，**等寄送結果**。回 True＝呼叫端可以寫「已通知」記號
@@ -1733,7 +1715,8 @@ def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_l
         return send_registered("warranty_expiry", title=m["title"], rows=m["rows"], usernames=[owner_username] if owner_username else [],
                                to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
                                link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
-                               button_text=m["button_text"], note=m["intro"], wait=True, out=out)
+                               button_text=m["button_text"], note=m["intro"], wait=True, out=out,
+                               line_key=_warranty_line_key(quote_no, device_name, days_left))
     except Exception:
         logger.exception("_send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
         return False

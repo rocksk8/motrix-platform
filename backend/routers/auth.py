@@ -149,22 +149,41 @@ def _rl_check(ip: str) -> None:
             del _rl_state[key]
 
 
-def _rl_fail(ip: str, username: str) -> None:
+def _rl_fail(ip: str, username: str, source: str = "password") -> None:
+    """一次登入失敗：記進鎖定計數、寫稽核列、達到鎖定的那一刻發告警。
+
+    `source`：password／totp／qr／passkey——決定稽核列的 reason_code（`helpers.audit.LOGIN_FAIL_REASONS`）。
+    2026-11-12：以前只有密碼錯誤會寫稽核（呼叫端自己另外呼叫），TOTP／QR／Passkey 失敗只計數不留紀錄；現在四種來源都由這支統一寫（沿用 60 秒合併 repeat）。
+    告警（`helpers.auth_alert.on_lockout`）只在「達到鎖定」那一刻發一次、背景執行、任何例外只記 log，不影響登入回應。"""
     key = _rl_key(ip)
     now = time.monotonic()
     lockout_until = 0.0
+    alert_names = []
+    alert_fails = 0
     with _rl_lock:
         state = _rl_state.setdefault(key, {"fails": 0, "locked_until": 0.0, "last_fail": now})
         state["fails"] += 1
         state["last_fail"] = now
+        names = state.setdefault("names", [])               # 這一輪失敗嘗試過的帳號（告警內容用；最多 5 個，鎖定後清空）
+        if username and username not in names and len(names) < 5:
+            names.append(str(username)[:64])
         if state["fails"] >= _LOGIN_MAX_FAILS:
             state["locked_until"] = now + _LOGIN_LOCKOUT_S
             lockout_until = state["locked_until"]
+            alert_fails = state["fails"]
+            alert_names = list(names)
             state["fails"] = 0
+            state["names"] = []
             logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, username, _LOGIN_LOCKOUT_S)
         _rl_prune_locked(now)
+    _audit_login_failed(username, ip, source=source)
     if lockout_until:
         _rl_db_write(key, lockout_until)
+        try:
+            from helpers import auth_alert as _auth_alert
+            _auth_alert.on_lockout(key, ip, alert_names, alert_fails, _LOGIN_LOCKOUT_S)
+        except Exception as exc:  # noqa: BLE001  告警永遠不能讓登入失敗回應變成 500
+            logger.warning("登入鎖定告警呼叫失敗（不影響登入）：%s", type(exc).__name__)
 
 
 def _rl_clear(ip: str) -> None:
@@ -449,8 +468,7 @@ def auth_login(body: LoginIn, request: Request):
     ).fetchone()
     if not row or not _verify_pw(body.password, row["password_hash"]):
         conn.close()
-        _rl_fail(ip, body.username.strip())
-        _audit_login_failed(body.username.strip(), ip)
+        _rl_fail(ip, body.username.strip())             # 計數＋稽核（reason_code=login_failed）＋達鎖定時告警
         raise HTTPException(401, "帳號或密碼錯誤")
     must_change = bool(row["must_change_password"])
     # Legacy weak password still works once, but forces rotation
@@ -640,7 +658,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
 
     if not ok:
         conn.close()
-        _rl_fail(ip, row["username"])
+        _rl_fail(ip, row["username"], "totp")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)
             if still:
@@ -777,7 +795,7 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         raise HTTPException(400, "請輸入密碼")
 
     if not row or not _verify_pw(body.password, row["password_hash"]):
-        _rl_fail(ip, row["username"] if row else "")
+        _rl_fail(ip, row["username"] if row else "", "qr")
         # 共用同一個 pending["fails"] 計數器（跟手動輸入驗證碼那條路徑同一組上限），
         # 不是另開一組獨立的失敗次數——避免同一張 challenge 變相有兩倍可猜次數。
         with _totp_lock:
@@ -1254,12 +1272,12 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
     # Get and consume challenge
     challenge_token = body.dict().get("challengeToken")
     if not challenge_token:
-        _rl_fail(_client_ip(request), body.username)
+        _rl_fail(_client_ip(request), body.username, "passkey")
         raise HTTPException(400, "缺少 challengeToken")
 
     challenge = _retrieve_webauthn_challenge(challenge_token)
     if not challenge:
-        _rl_fail(_client_ip(request), body.username)
+        _rl_fail(_client_ip(request), body.username, "passkey")
         raise HTTPException(401, "Challenge 已過期或無效")
 
     conn = get_db()
@@ -1270,7 +1288,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         ).fetchone()
         if not user_row:
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "帳號不存在或已停用")
 
         cred_raw_id = _b64url_decode(body.rawId)
@@ -1281,7 +1299,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         ).fetchone()
         if not cred_row:
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "認證失敗")
 
         # 2026-09-11（DB v74）：這張憑證是在別的 RP ID 下註冊的 → 一定驗不過。
@@ -1291,7 +1309,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         # 全都是被這種籠統錯誤蓋掉才拖了那麼久才找到的。
         if cred_row["rp_id"] and cred_row["rp_id"] != _webauthn_rp_id():
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             logger.warning(
                 "WebAuthn login rejected: credential id=%s registered under rp_id=%s, "
                 "current rp_id=%s", cred_row["id"], cred_row["rp_id"], _webauthn_rp_id(),
@@ -1348,7 +1366,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         except Exception as e:
             conn.close()
             logger.error("WebAuthn authentication failed: %s", str(e))
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "認證失敗")
     finally:
         if conn:

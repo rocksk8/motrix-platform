@@ -195,6 +195,9 @@ register("settlement_finalized", "成本精算完結", _B, "admins", "",
          "案件成本已精算完結，可進行獎金分潤與結案。", "請登入系統查看精算結果。")
 register("case_closing_report", "案件結案報表", _B, "superadmins", "",
          "案件已結案，結案報表如附件。", "請檢閱附件；如需修正請於案件頁處理。")
+register("auth_lockout", "登入失敗鎖定告警", "system", "superadmins", "",
+         "有來源 IP 連續登入失敗而被鎖定（可能是有人在猜密碼）。LINE 為獨立通道：不需要 Email 也能收到。",
+         "請確認該 IP 與帳號是否為本人操作；非本人請檢查該帳號並考慮更換密碼。")
 register("monthly_report", "每月營運報表", _B, "superadmins", "報表收件人設定",
          "上月營運報表已產生。", "請檢閱附件或登入系統查看報表。")
 register("module_activity", "模組新增與異動", _B, "admins", "",

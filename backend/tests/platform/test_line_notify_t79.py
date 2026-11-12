@@ -142,7 +142,8 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     sa = _hdr(client, make_user, "ln_sa", "superadmin")
     g = client.get("/api/settings/line-notify", headers=sa).json()
     assert g.pop("events") == [{"key": "approval_review_edit", "name": "報價單審核中被簽核人編輯", "enabled": False, "roles": None},
-                               {"key": "warranty_expiry", "name": "設備保固即將到期", "enabled": False, "roles": None}]      # 預設全關
+                               {"key": "warranty_expiry", "name": "設備保固即將到期", "enabled": False, "roles": None},
+                               {"key": "auth_lockout", "name": "登入失敗鎖定告警", "enabled": False, "roles": None}]      # 預設全關
     assert g.pop("role_choices") == ["superadmin", "admin", "sales", "engineer", "viewer", "finance"]         # 收件人角色（2026-11-12）
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
