@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
+- 變更（內部，不影響對外介面）：案件頁（`case-management-core.js`）、核准佇列（`approval-queue.html`）、報價單（`quotation-form.html`）讀據點清單／公司名稱改打 `GET /api/settings/company-profile/public`（只含名稱、統編、聯絡方式、據點 id＋名稱）；顯示與行為不變。完整端點只剩公司資料設定頁在用（後端新增「完整內容只給最高管理者」開關，預設關）。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
+
 ## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
 - 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
 
