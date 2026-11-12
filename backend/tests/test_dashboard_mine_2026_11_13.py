@@ -123,3 +123,19 @@ def test_cache_is_per_user_never_shared(client, make_user):
     appr = next(g for g in a1["groups"] if g["key"] == "approvals")["count"]
     assert appr == 1 and next(g for g in b1["groups"] if g["key"] == "approvals")["count"] == 0
     assert any(g["key"] == "submitted" for g in b1["groups"]) and not any(g["key"] == "submitted" for g in a1["groups"])
+
+
+def test_cache_key_changes_with_permissions(client, make_user):
+    """改權限（模組勾選）後不需等 30 秒：快取鍵含權限指紋，下一次讀到新的分組。"""
+    import db, json
+    u = make_user("dm_perm", role="sales", modules=["customer"])
+    h = _h(client, *u)
+    DM.reset_cache()
+    assert "my_cases" not in [g["key"] for g in client.get("/api/dashboard/mine", headers=h).json()["groups"]]
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET modules=? WHERE username=?", (json.dumps(["customer", "case_manage"]), "dm_perm"))
+        conn.commit()
+    finally:
+        conn.close()
+    assert "my_cases" in [g["key"] for g in client.get("/api/dashboard/mine", headers=h).json()["groups"]]

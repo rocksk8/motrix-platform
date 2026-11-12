@@ -8,7 +8,7 @@
   - 分組由「使用者實際有的模組權限」決定（模組不在、沒權限 ⇒ 那一組不出現，不是 0）；每組各自 try/except，
     壞一組只少那一組（`errors` 記 key），不會讓首頁整塊空白。
   - 待簽核的數字與 `/api/approval-queue/count` 同一個來源（`visible_queue_items` → `mine`），不另算。
-  - 每人 30 秒記憶體快取（首頁每次開都會呼叫；簽核動作後前端以 `?fresh=1` 略過）。
+  - 每人 30 秒記憶體快取（首頁每次開都會呼叫；簽核動作後前端以 `?fresh=1` 略過）；快取鍵含權限指紋，改權限立即換新。
   - 提供者回傳的 group 形狀：{key,title,count,href,hrefLabel,items:[{title,sub,href,tone}],kind?,order?}；
     `tone` 只用 ok／warn／crit；`kind`＝work（預設）／money／remind，前端據此分區；缺 key／title 的丟棄。
 [契約題] tests/test_dashboard_mine_2026_11_13.py
@@ -22,6 +22,7 @@ from fastapi import APIRouter, Header, Query
 
 from core import registry
 from helpers import _require_user
+from helpers.auth import has_finance_access
 from routers.approval_queue import visible_queue_items
 
 logger = logging.getLogger(__name__)
@@ -178,7 +179,8 @@ def build_mine(user: dict) -> dict:
 @router.get("/api/dashboard/mine")
 def dashboard_mine(fresh: int = Query(0), authorization: str = Header(None)):
     user = _require_user(authorization)
-    key = user["username"]
+    # 快取鍵含權限指紋（角色、模組勾選、財務權）：權限一改，下一次就是新的鍵、不會吃到舊分組（不需要掛任何「改權限」的勾點）
+    key = (user["username"], user.get("role"), str(user.get("modules") or ""), bool(has_finance_access(user)))
     t = time.monotonic()
     if not fresh:
         with _lock:
