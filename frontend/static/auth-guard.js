@@ -40,7 +40,7 @@
   function forgetReturn() { try { sessionStorage.removeItem('motrix_return_to'); } catch (e) {} }
 
   if (!session || !session.token) {
-    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 沒登入（含各頁自己登出的路徑）：個人偏好快取一併清掉
+    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 沒登入（含各頁自己登出的路徑）：個人偏好快取一併清掉
     rememberReturn();
     location.replace(loginPath);
     return;
@@ -74,8 +74,15 @@
         var changed = prev ? prev.font_size !== p.font_size : p.font_size !== 'normal';
         if (force || changed) setZoom(ZOOM[p.font_size]);
       }
-      if (p.theme === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('motrix_theme', 'dark'); }
-      else if (p.theme === 'light') { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('motrix_theme', 'light'); }
+      if (p.theme === 'dark' || p.theme === 'light') {
+        // 同字級：伺服器值「有變」才套用（頂欄切換是這台電腦當下的選擇，不能被沒變的舊偏好蓋回去）；「我的帳號」存檔時 force 一定套用
+        var prevT = null; try { prevT = JSON.parse(localStorage.getItem('motrix_prefs') || 'null'); } catch (e) {}
+        var changedT = prevT ? prevT.theme !== p.theme : p.theme !== 'light';
+        if (force || changedT) {
+          if (p.theme === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('motrix_theme', 'dark'); }
+          else { document.documentElement.removeAttribute('data-theme'); localStorage.removeItem('motrix_theme'); }
+        }
+      }
     } catch (e) {}
   }
   // 頂欄改字級 ⇒ 把對應的偏好值存回伺服器（失敗不影響畫面；下次同步以伺服器為準）
@@ -90,8 +97,20 @@
         body: JSON.stringify({ font_size: v }) }).catch(function () {});
     } catch (e) {}
   }
-  // 本機快取只套用外觀（字級由 sidebar.js 讀 motrix_font_zoom 即時套用，這裡不重複）
-  try { var _c = JSON.parse(localStorage.getItem('motrix_prefs') || 'null'); if (_c) { delete _c.font_size; applyPrefs(_c); } } catch (e) {}
+  // 頂欄切深色／淺色 ⇒ 把對應的偏好值存回伺服器（同 saveFont；失敗不影響畫面）
+  function saveTheme(dark) {
+    try {
+      var v = dark ? 'dark' : 'light';
+      var cache = JSON.parse(localStorage.getItem('motrix_prefs') || '{}') || {};
+      if (cache.theme === v) return;
+      cache.theme = v;
+      localStorage.setItem('motrix_prefs', JSON.stringify(cache));
+      fetch('/api/auth/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.token },
+        body: JSON.stringify({ theme: v }) }).catch(function () {});
+    } catch (e) {}
+  }
+  // 本機快取不再套用字級與外觀：兩者都由 sidebar.js 讀自己的本機值（motrix_font_zoom／motrix_theme）即時套用，頂欄切換才不會被舊快取蓋掉
+  try { var _c = JSON.parse(localStorage.getItem('motrix_prefs') || 'null'); if (_c) { delete _c.font_size; delete _c.theme; applyPrefs(_c); } } catch (e) {}
   function syncPrefs() {
     try {
       var atHome = /(^|\/)(index\.html)?$/.test(location.pathname) && location.pathname.indexOf('/pages/') < 0;
@@ -113,7 +132,7 @@
         .catch(function () {});
     } catch (e) {}
   }
-  window.MotrixPrefs = { apply: function (p) { applyPrefs(p, true); }, sync: syncPrefs, saveFont: saveFont };
+  window.MotrixPrefs = { apply: function (p) { applyPrefs(p, true); }, sync: syncPrefs, saveFont: saveFont, saveTheme: saveTheme };
 
   var style = document.createElement('style');
   style.id = 'auth-guard-style';

@@ -143,6 +143,7 @@ if (typeof module !== 'undefined' && module.exports) {
     }
     var btn = document.getElementById('theme-toggle-btn')
     if (btn) btn.innerHTML = _themeIcon(next)
+    try { if (window.MotrixPrefs && window.MotrixPrefs.saveTheme) window.MotrixPrefs.saveTheme(next) } catch (e) {}   // 同步存回個人偏好（換電腦也保留）
   }
 
   function _themeIcon(isDark) {
@@ -170,7 +171,7 @@ if (typeof module !== 'undefined' && module.exports) {
       }).catch(function () {})
     }
     localStorage.removeItem('motrix_session')
-    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 個人偏好快取跟著登入者走：登出就清，下一位登入者不會繼承
+    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 個人偏好快取跟著登入者走：登出就清，下一位登入者不會繼承
     window.location.href = inPg ? 'login.html' : 'pages/login.html'
   }
 

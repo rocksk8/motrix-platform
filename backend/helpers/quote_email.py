@@ -118,7 +118,9 @@ def enforce_sales_email(conn, q: dict, old_data=None) -> None:
         username = str(q.get("salesPersonUsername") or "").strip()
         incoming = str(q.get("salesEmail") or "").strip()
         if old_data is not None:
-            if incoming == str((old_data or {}).get("salesEmail") or "").strip():
+            # 信箱沒改、而且業務員也沒換 ⇒ 舊單維持原樣；換了業務員但信箱還是舊的 ⇒ 要重新驗證（舊信箱可能是前一位業務員的）
+            if (incoming == str((old_data or {}).get("salesEmail") or "").strip()
+                    and username == str((old_data or {}).get("salesPersonUsername") or "").strip()):
                 return
         elif "salesEmail" not in q and not username:
             return

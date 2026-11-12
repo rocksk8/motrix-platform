@@ -147,3 +147,61 @@ def test_logout_clears_prefs_caches(live_server, make_user, new_page, login_as):
     # 在同一個同步區塊內讀（導向發生之前）：測試夾具會在每個新頁面重放登入，登入頁會被帶回首頁、重新同步，事後讀會讀到新一輪的快取
     left = page.evaluate("() => { window.motrixLogout(); return [localStorage.getItem('motrix_prefs'), localStorage.getItem('motrix_font_zoom'), sessionStorage.getItem('motrix_prefs_synced'), sessionStorage.getItem('motrix_home_done')] }")
     assert left == [None, None, None, None]
+
+
+# ── hichan-3 審查 A：頂欄深色切換與偏好是同一套（寫回伺服器、換頁／重新整理仍在）────────────────
+def _theme_state(page):
+    return page.evaluate("""() => ({attr: document.documentElement.getAttribute('data-theme'), ls: localStorage.getItem('motrix_theme'),
+        prefs: JSON.parse(localStorage.getItem('motrix_prefs') || 'null')})""")
+
+
+def _server_theme(page):
+    return page.evaluate("""async () => { const s = JSON.parse(localStorage.getItem('motrix_session'));
+        const r = await fetch('/api/auth/preferences', {headers:{Authorization:'Bearer ' + s.token}}); return (await r.json()).prefs.theme }""")
+
+
+@pytest.mark.e2e
+def test_topbar_dark_toggle_is_saved_as_the_preference_and_survives_reload_and_sync(live_server, make_user, new_page, login_as):
+    u = make_user(username="th_user", role="superadmin")
+    page = new_page(viewport={"width": 1440, "height": 900})
+    login_as(page, u)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_function("() => localStorage.getItem('motrix_prefs') !== null", timeout=10000)
+    page.evaluate("() => window.motrixToggleTheme()")                                    # 頂欄切成深色
+    page.wait_for_function("""async () => { const s = JSON.parse(localStorage.getItem('motrix_session'));
+        const r = await fetch('/api/auth/preferences', {headers:{Authorization:'Bearer ' + s.token}}); return (await r.json()).prefs.theme === 'dark' }""", timeout=10000)
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(500)
+    assert _theme_state(page)["attr"] == "dark"                                          # ① 重新整理後還是深色
+    page.evaluate("() => { sessionStorage.clear() }")                                    # ② 模擬新的登入期間 ⇒ 向伺服器同步
+    page.goto(live_server + "/pages/customers.html")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(800)
+    s = _theme_state(page)
+    assert s["attr"] == "dark" and s["prefs"]["theme"] == "dark"
+    page.evaluate("() => window.motrixToggleTheme()")                                    # ③ 再切回淺色 ⇒ 也存回
+    page.wait_for_function("""async () => { const s = JSON.parse(localStorage.getItem('motrix_session'));
+        const r = await fetch('/api/auth/preferences', {headers:{Authorization:'Bearer ' + s.token}}); return (await r.json()).prefs.theme === 'light' }""", timeout=10000)
+    page.evaluate("() => { sessionStorage.clear() }")
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(800)
+    assert _theme_state(page)["attr"] is None
+
+
+@pytest.mark.e2e
+def test_default_light_pref_does_not_reset_a_topbar_dark_choice_and_logout_clears_it(live_server, make_user, new_page, login_as):
+    u = make_user(username="th_user2", role="superadmin")
+    page = new_page(viewport={"width": 1440, "height": 900})
+    login_as(page, u)
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_load_state("networkidle")
+    page.evaluate("() => { localStorage.setItem('motrix_theme', 'dark'); localStorage.removeItem('motrix_prefs'); sessionStorage.clear() }")   # 舊使用者：只用過頂欄、伺服器是預設值
+    page.goto(live_server + "/pages/quotations.html")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(800)
+    assert _theme_state(page)["attr"] == "dark"
+    left = page.evaluate("() => { window.motrixLogout(); return localStorage.getItem('motrix_theme') }")
+    assert left is None                                                                  # 登出清掉，下一位使用者不會繼承這台電腦的深色

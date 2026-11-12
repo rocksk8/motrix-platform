@@ -334,3 +334,47 @@ def test_profile_copy_distinguishes_personal_email_from_quote_email():
     assert "報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」" in html
     assert "profile-quote-email-none" in html and "尚未設定：目前報價單上不會有你的信箱" in html
     assert "（尚未設定）" in html
+
+
+# ── hichan-3 審查 B：補登歷史案件也要驗證；換業務員時舊信箱要重驗 ─────────────────────────────
+def test_historical_backfill_also_overrides_forged_sales_email(client, make_user, su):
+    import db
+    from helpers import settings_registry as SR
+    conn = db.get_db()
+    try:
+        SR.publish("quote_backfill", {"enabled": 1}, reason="測試", user="qe_hist", conn=conn)
+        conn.commit()
+        SR.invalidate("quote_backfill")
+    finally:
+        conn.close()
+    try:
+        u, _p = make_user(username="qe_hist_sales", role="sales")
+        _set_personal(u, "hist@corp.com")
+        body = {"data": {"customerName": "補登客戶", "projectName": "歷史案件", "quoteDate": "2026-07-15", "items": [],
+                         "salesPerson": u, "salesPersonUsername": u, "salesEmail": "attacker@evil.example"},
+                "reason": "補登 7 月舊案件，紙本單據遺失重建"}
+        r = client.post("/api/quotations/historical", headers=su, json=body)
+        assert r.status_code == 201, r.text
+        assert _snap(r.json()["quote_no"])["salesEmail"] == "hist@corp.com"       # 偽造值被解析結果覆寫（PDF 會印出來）
+    finally:
+        conn = db.get_db()
+        try:
+            SR.publish("quote_backfill", {"enabled": 0}, reason="測試", user="qe_hist", conn=conn)
+            conn.commit()
+            SR.invalidate("quote_backfill")
+        finally:
+            conn.close()
+
+
+def test_changing_the_salesperson_revalidates_an_unchanged_old_email(client, make_user, su):
+    ua, pa = make_user(username="qe_swap_a", role="sales")
+    ub, _pb = make_user(username="qe_swap_b", role="sales")
+    _set_personal(ua, "a@corp.com")
+    _set_personal(ub, "b@corp.com")
+    h = _login(client, ua, pa)
+    qno = _create_quote(client, h, {"customerName": "甲", "items": [], "tot": {}, "salesPerson": ua, "salesPersonUsername": ua})
+    assert _snap(qno)["salesEmail"] == "a@corp.com"
+    body = {**_snap(qno), "salesPerson": ub, "salesPersonUsername": ub}               # 換成 B，信箱欄位還是 A 的舊值
+    r = client.put(f"/api/quotations/{qno}", headers=su, json={"data": body, "status": "草稿"})
+    assert r.status_code == 200, r.text
+    assert _snap(qno)["salesEmail"] == "b@corp.com"                                    # 不是沿用前一位業務員的信箱

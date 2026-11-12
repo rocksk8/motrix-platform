@@ -2217,6 +2217,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["quoteNo"] = qno
         sp_name = (q.get("salesPerson") or "").strip()
         sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
+        _QE.enforce_sales_email(conn, q, None)          # 補登也一樣：業務員信箱快照不信任客戶端（PDF 會印出來）
         MG.enforce(conn, qno, q, actor=user)
         try:
             conn.execute("""
