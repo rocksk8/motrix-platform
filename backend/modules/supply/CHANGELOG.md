@@ -1,5 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）
+- 修正（後端）：`POST /api/inventory/batches`（`create_batch`）整段改在 `write_txn` 內：重複序號檢查與逐筆 INSERT 之間原本沒有寫鎖（先查再寫的 TOCTOU），併發進貨同序號時 INSERT 丟 `IntegrityError`，連線沒 rollback／close ⇒ 寫鎖留到被 GC，下一個寫入者卡 30 秒。寫鎖現在在檢查之前拿，`next_entity_code` 取批號也在鎖內。正常路徑回應不變。
+- 測試：`tests/test_create_batch_write_lock_t80.py`（重複檢查那一刻已在寫交易內，舊碼紅、新碼綠；序號撞 UNIQUE 後鎖已放）。
+- 來源：`docs/platform/GET-DB-CONNECTION-LEAK-AUDIT-T80.md` §6／R5。無 migration、無新表。
+
 ## 1.0.35 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 頁頭（B6）：`suppliers.html`／`procurement.html`／`inventory.html`／`parts.html` 的眉標改為自動麵包屑（「採購與庫存 › 頁名」，由 sidebar.js 依選單群組填入）；群組顯示名稱「廠商與採購」改為「採購與庫存」。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。

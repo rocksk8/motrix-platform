@@ -4,6 +4,7 @@ MOTRIX ERP — FastAPI 後端
 """
 import os
 import time
+import threading
 import logging
 from datetime import datetime
 
@@ -135,6 +136,47 @@ _DOCS = _docs_kwargs()
 # ⚠️ 明列關鍵字，不用 `**`（守門 test_case_summary_purpose：非字面值的 ** 呼叫基線 0）
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0", docs_url=_DOCS["docs_url"],
               redoc_url=_DOCS["redoc_url"], openapi_url=_DOCS["openapi_url"])
+
+import db as _db_for_reaper     # noqa: E402
+
+
+class _ConnReaperMiddleware:
+    """T80 R1：回收這個請求內沒 close 的 `get_db()` 連線（見 db._track_request_connections）。兩個時間點：
+
+    1. **回應開始送出前**（處理函式已經回來）：只回收「在交易中」的——握著寫鎖的。🔴 這一步不能省：`auth_middleware`
+       在 `call_next` 回來（＝收到回應標頭）之後還有**同步**寫入（操作軌跡、失敗稽核）；處理函式漏掉的寫鎖若要等到
+       請求結束才回收，那幾筆寫入會先卡滿 busy timeout（30 秒、而且是在事件迴圈上，全站一起卡）。
+       只收在交易中的，是因為沒在交易中的連線仍可能被串流回應的產生器用到。
+    2. **請求結束**（含未處理例外）：其餘全部回收。
+
+    放在最內層（本檔最先 add_middleware）：登記簿的 context 由它複製給 worker 執行緒。**只涵蓋路由處理函式開的連線**，外層 middleware
+    （auth／授權閘門／操作軌跡寫入）自己開的不在網內（見 docs/platform/GET-DB-CONNECTION-LEAK-AUDIT-T80.md §8.1 與 R6）。
+    ⚠️ 串流回應的產生器必須自己開連線，不可繼承一條在 response.start 時仍在交易中的連線（會被 rollback＋close）。
+    純 ASGI（不是 BaseHTTPMiddleware）⇒ 不多開 task。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not _db_for_reaper._REAP_REQUEST_CONNECTIONS:
+            return await self.app(scope, receive, send)
+        token, registry = _db_for_reaper._track_request_connections()
+        started = False
+
+        async def send_wrapper(message):
+            nonlocal started
+            if not started and message["type"] == "http.response.start":
+                started = True
+                _db_for_reaper._reap_request_connections(None, registry, only_in_tx=True)
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            _db_for_reaper._reap_request_connections(token, registry)
+
+
+app.add_middleware(_ConnReaperMiddleware)       # T80：最先加 ＝ 最內層（理由見類別說明）
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:666",
@@ -404,6 +446,29 @@ def _record_failure_audit(request, row, status: int) -> None:
         pass
 
 
+#: 操作軌跡的去重「認領」（T80 R6）。去重原本靠「SELECT 最後一列→沒有才 INSERT」，沒有鎖——因為它一直在事件迴圈上跑，
+#: 所有請求的軌跡寫入天然排隊。搬進 threadpool 之後多條執行緒會同時做：同一群組（開一張案件＝base＋finance-summary＋…
+#: 六支同時回來）各自 SELECT 都沒看到前一列、各自 INSERT ⇒ 重複列。所以先在記憶體裡**認領**（持鎖只做字典操作，不碰資料庫；
+#: 不能用鎖包住 SELECT＋INSERT：資料庫忙時每條執行緒各等 busy timeout 30 秒，會一條一條串起來）；認領失敗＝同群組在去重
+#: 秒數內已有人記了。資料庫那道檢查保留（跨行程／重啟）。key 含庫檔路徑：測試每題一個庫、demo 與正式庫的使用者 id 互不相干。
+_TRAIL_CLAIMS = {}
+_TRAIL_CLAIM_LOCK = threading.Lock()
+_TRAIL_CLAIMS_PRUNE_AT = 2000
+
+
+def _trail_claim(key, now_dt) -> bool:
+    with _TRAIL_CLAIM_LOCK:
+        t = _TRAIL_CLAIMS.get(key)
+        if t is not None and abs((now_dt - t).total_seconds()) < trail.DEDUPE_SECONDS:
+            return False
+        _TRAIL_CLAIMS[key] = now_dt
+        if len(_TRAIL_CLAIMS) > _TRAIL_CLAIMS_PRUNE_AT:
+            for k, v in list(_TRAIL_CLAIMS.items()):
+                if abs((now_dt - v).total_seconds()) >= trail.DEDUPE_SECONDS:
+                    del _TRAIL_CLAIMS[k]
+        return True
+
+
 def _record_request_trail(user_id: int, now_dt, method: str, path: str,
                           referer: str, status: int) -> None:
     """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
@@ -416,12 +481,18 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         except Exception:
             page = ""
     now_iso = now_dt.isoformat()
+    tc = claim_key = None
     try:
         tc = get_db()
         # 開一張案件會同時撈 base + finance-summary + material-orders + …，那是
         # 一次點擊而不是六次。同一個群組在去重秒數內只留第一筆（見
         # trail.collapse_group 的說明，包含為什麼不能只用 LIKE 前綴比對）。
         group = trail.collapse_group(method, path)
+        claim_key = ((_db_for_reaper.DEMO_DB_PATH if _db_for_reaper.is_demo_mode() else _db_for_reaper.DB_PATH),      # 與 get_db() 同一條路由
+                     user_id, method, group[0] if group else path)
+        if not _trail_claim(claim_key, now_dt):
+            tc.close()
+            return
         if group:
             last = tc.execute(
                 "SELECT at FROM user_request_log WHERE user_id=? AND method=? "
@@ -448,7 +519,14 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         tc.commit()
         tc.close()
     except Exception:
-        pass
+        if claim_key is not None:
+            with _TRAIL_CLAIM_LOCK:             # 沒寫成（例如資料庫忙到逾時）⇒ 放掉認領，下一個同群組請求可以再試
+                _TRAIL_CLAIMS.pop(claim_key, None)
+        if tc is not None:
+            try:
+                tc.close()
+            except Exception:
+                pass
 
 
 # ⚠️ 這支**寫在 auth_middleware 前面**是刻意的，不是排版隨意。
@@ -526,6 +604,35 @@ async def _company_setup_required_handler(request: Request, exc):
     return JSONResponse(status_code=428, content=body)
 
 
+def _after_response_records(request, row, now_dt, path: str, status: int) -> None:
+    """回應之後的兩筆觀測紀錄（操作軌跡、失敗稽核）合成一次 threadpool 呼叫——省一次執行緒切換（pool 與所有同步端點共用，
+    慢處理函式把它占滿時，每多一次 hop 輕量請求就多等一次空位；K 審 hichan-12 N1）。各自吞例外。"""
+    _record_request_trail(row["id"], now_dt, request.method, path, request.headers.get("Referer", ""), status)
+    _record_failure_audit(request, row, status)
+
+
+def _expire_session(token: str) -> None:
+    """閒置逾時：刪掉這個 session。失敗吞掉（呼叫端照回 401）。同步 SQLite 寫入 ⇒ 由 async 中介層經 run_in_threadpool 呼叫（T80 R6）。"""
+    try:
+        ec = get_db()
+        ec.execute("DELETE FROM sessions WHERE token=?", (token,))
+        ec.commit()
+        ec.close()
+    except Exception:
+        pass
+
+
+def _touch_session(token: str, now_iso: str) -> None:
+    """更新 session 的 last_active。失敗吞掉。同步 SQLite 寫入 ⇒ 由 async 中介層經 run_in_threadpool 呼叫（T80 R6）。"""
+    try:
+        uc = get_db()
+        uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
+        uc.commit()
+        uc.close()
+    except Exception:
+        pass
+
+
 def _company_setup_gate_kind(token: str) -> str:
     """這個請求看到的閘門狀態。demo 帳號與正式帳號同一套判定（demo 登入時種虛構示範公司＋demo 專用確認紀錄，
     `gate` 依 db.is_demo_mode 取 demo 庫判定；〔~~第三段前 demo 先不擋~~ 段③ 拿掉豁免〕）。
@@ -595,35 +702,17 @@ async def auth_middleware(request: Request, call_next):
         idle_secs = (now_dt - datetime.fromisoformat(la_str)).total_seconds()
         if idle_secs > idle_limit:
             # Expire this session
-            try:
-                ec = get_db()
-                ec.execute("DELETE FROM sessions WHERE token=?", (token,))
-                ec.commit()
-                ec.close()
-            except Exception:
-                pass
+            await run_in_threadpool(_expire_session, token)       # T80 R6：async 中介層不做同步 SQLite 寫入（別人握著寫鎖會卡事件迴圈到 30 秒）
             limit_label = "2 小時" if is_high_priv else "8 小時"
             return JSONResponse(status_code=401, content={"detail": f"閒置超過 {limit_label}，請重新登入"})
         if idle_secs > 300:
-            try:
-                uc = get_db()
-                uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
-                uc.commit()
-                uc.close()
-            except Exception:
-                pass
+            await run_in_threadpool(_touch_session, token, now_iso)
             # 在線時間統計（2026-09-14）：沿用同一個節流點，不額外增加寫入頻率——
             # 每 5 分鐘一列 UPDATE，跟原本就在做的 last_active 同一個數量級。
-            _record_user_activity(row["id"], now_dt, idle_secs)
+            await run_in_threadpool(_record_user_activity, row["id"], now_dt, idle_secs)
     else:
         # First request after migration — stamp last_active without any check
-        try:
-            uc = get_db()
-            uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
-            uc.commit()
-            uc.close()
-        except Exception:
-            pass
+        await run_in_threadpool(_touch_session, token, now_iso)
 
     if row["must_change_password"] and path not in _MUST_CHANGE_PW_ALLOWED:
         return JSONResponse(
@@ -639,7 +728,7 @@ async def auth_middleware(request: Request, call_next):
         if _demo_why:
             return JSONResponse(status_code=404, content={"detail": _demo_why})
     # 本公司資料設定閘門（COMPANY-SETUP-GATE §4.1、§3.6）：未設定 ⇒ 白名單外一律 428；判定失敗 ⇒ 放行＋標頭（Q7＝C）
-    _gate_kind = _company_setup_gate_kind(token)
+    _gate_kind = await run_in_threadpool(_company_setup_gate_kind, token)       # 內含 commit（可能寫入）⇒ 不在事件迴圈上做
     if _gate_kind == _company_setup.GATE_REQUIRED and not _company_setup.is_allowed(
             _COMPANY_SETUP_ALLOWED_COMPILED, request.method, path):
         return JSONResponse(status_code=428, content={
@@ -648,9 +737,7 @@ async def auth_middleware(request: Request, call_next):
     response = await call_next(request)
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
-    _record_request_trail(row["id"], now_dt, request.method, path,
-                          request.headers.get("Referer", ""), response.status_code)
-    _record_failure_audit(request, row, response.status_code)
+    await run_in_threadpool(_after_response_records, request, row, now_dt, path, response.status_code)       # 一次 hop：軌跡＋失敗稽核
     if _gate_kind in (_company_setup.GATE_UNDETERMINED, _company_setup.GATE_GRACE):
         response.headers[_company_setup.HEADER] = (
             "status_error" if _gate_kind == _company_setup.GATE_UNDETERMINED else "grace")
