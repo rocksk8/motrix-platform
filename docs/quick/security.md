@@ -111,12 +111,14 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 |---|---|---|
 | a | 帶 Cloudflare 標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`） | 經隧道進來的請求一定有；區網直連不會有 |
 | b | `Host` 是設定的外網網域（預設空；要加第二層就在設定中心填網域，正式機填 Tunnel 的網域） | 設定可調（`external_hosts`） |
-| c | 帶 `X-Forwarded-*`／`Forwarded`／`X-Real-IP` | 有代理介入就不當內網 |
+| c | 帶任何代理痕跡標頭：`X-Forwarded-*`（含 `-Host`／`-Proto`）、`Forwarded`、`X-Real-IP`、`Via`、`X-Client-IP`、`True-Client-IP`、`X-Original-Forwarded-For`、`X-Originating-IP` 等，底線寫法（`X_Forwarded_For`）也算 | 有代理介入就不當內網（只看「有沒有出現」，不讀值） |
 | d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來、是 loopback（127.x／::1），或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、169.254/16、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段、0.0.0.0/0 與 loopback 會被忽略 |
 | e | 其餘（無代理痕跡且 IP 在內網網段） | ＝內網 |
 
 偽造只會往「更嚴」：區網自己加 CF 標頭／改 Host／塞 XFF ⇒ 被當外網；外網使用者無法把自己變內網（標頭由 Cloudflare 加、IP 由 T80 可信判斷）。
 **本機直連（loopback）預設不算內網**（F2）：同一台電腦上的非 Cloudflare 代理（netsh portproxy、frp、同機 nginx 去掉標頭）會讓外部使用者看起來像本機，若算內網就會免除 TOTP 與帳號鎖定。影響：直接在正式機上開 `https://localhost:666` 登入時適用外網規則——被要求 TOTP 的角色必須已啟用（最高管理者已啟用；管理員／財務未啟用者本機也登入不了，請從區網登入）；`tools/deploy_dashboard.py` 等本機工具的登入同理（它支援輸入 TOTP 碼）。真的需要本機免 TOTP：設定中心「本機直連算內網」（`loopback_is_internal`，放寬方向、走確認期間＋第二位最高管理者核准）。
+⚠ **`internal_networks` 只填實際使用者所在的網段**（L-b）：預設是整組私有網段，範圍很寬。區網內若有 **NAT 偽裝**（來源位址被改寫成區網位址）或**非 Cloudflare 的反向代理且會去掉代理標頭**，外網請求到達本機時來源就是區網位址、也沒有代理標頭 ⇒ 會被**誤判為內網**，免除外網強制 TOTP 與帳號鎖定。
+  所以：① 把設定中心的「內網網段」縮到使用者真正在的網段（例如只填 `192.168.1.0/24`）；② 不要在區網內另架不加標頭的轉發（netsh portproxy、frp、同機 nginx 等）把外網導進來；③ 該設定放寬方向須經確認期間。這是設定前提，程式無法自己分辨「NAT 後的外網」。
 注意：同事在辦公室用外網網址（`https://motrix-platform.miactw.com`）登入，對系統來說就是外網（走 Cloudflare），適用外網規則；用內網位址登入才是內網。
 
 **② 外網強制 TOTP**：總開關 `ext_totp_enabled`（預設開）＋每個角色一個開關（預設 superadmin／admin／finance 開；sales／engineer／viewer 關，可在設定中心調整）。外網登入、該角色被要求、帳號 `totp_enabled=0` ⇒ **403** 並提示「請先在公司內網登入並啟用兩步驟驗證」；**密碼要先正確**才會看到這個訊息（錯密碼仍是通用的 401，不洩漏帳號資訊），拒絕不算密碼失敗、不計入鎖定、寫稽核 `auth.login_refused_external_totp`（`reason_code=ext_totp_required`）。已啟用 TOTP 的人走原本的挑戰流程。Passkey 登入（目前暫緩）同樣套用。`demo` 帳號不適用。只管「登入」；已發出的 session 不綁來源。放寬方向（關總開關、取消某角色、調高門檻…）一律走設定中心的確認期間＋第二位最高管理者核准，收緊立即生效。

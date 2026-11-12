@@ -475,3 +475,16 @@ def test_per_ip_lock_still_works_and_is_independent(client, make_user):
     for _i in range(5):
         assert _login(c, u, "wrong-password").status_code == 401
     assert _login(c, u, PW).status_code == 429                # 同 IP 第 6 次起被 IP 鎖擋（既有 5 次／15 分鐘）
+
+
+# ── L-a（hichan-1 複驗）：代理痕跡標頭清單補全＋底線寫法 ───────────────────────────────
+@pytest.mark.parametrize("hdr", ["Via", "X-Client-IP", "True-Client-IP", "X-Original-Forwarded-For", "X-Forwarded-Host",
+                                 "X-Forwarded-Proto", "X-Originating-IP", "X_Forwarded_For", "X_Real_IP", "True_Client_IP", "VIA"])
+def test_more_proxy_headers_make_a_request_external(hdr):
+    assert external_access.classify(_req("192.168.1.20", **{hdr: "10.0.0.9"})) == (True, "proxy_header")
+
+
+def test_plain_browser_headers_are_not_proxy_headers():
+    from starlette.datastructures import Headers
+    from helpers.client_ip import has_proxy_headers
+    assert not has_proxy_headers(Headers({"User-Agent": "x", "Accept": "*/*", "Host": "192.168.1.5:666", "X-Requested-With": "fetch"}))
