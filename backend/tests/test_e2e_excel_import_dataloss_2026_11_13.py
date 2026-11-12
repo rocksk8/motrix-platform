@@ -267,3 +267,19 @@ def test_customer_same_tax_different_name_is_listed_and_written_only_when_ticked
     page.get_by_text("失敗", exact=True).first.wait_for(timeout=20000)
     c = _by_tax(env, "12345678")[0]
     assert c["name"] == "甲公司" and c["phone"] == "02-9"
+
+
+def test_customer_refresh_failure_after_successful_write_is_not_reported_as_import_failure(env, tmp_path):
+    path = _xlsx(tmp_path / "c.xlsx", CUSTOMER_COLS, [["刷新失敗公司", "16161616", "02-1", "", "", ""]])
+    page = env["page"]
+    page.goto(env["base"] + "/pages/customers.html")
+    page.wait_for_selector('input[type="file"][accept*="xlsx"]', state="attached")
+    page.wait_for_load_state("networkidle")
+    page.set_input_files('input[type="file"][accept*="xlsx"]', path)
+    page.wait_for_selector('[data-testid="import-confirm-ok"]', timeout=8000)
+    page.route("**/api/customers", lambda route: route.abort() if route.request.method == "GET" else route.continue_())   # 寫入成功後重新載入清單會失敗
+    page.click('[data-testid="import-confirm-ok"]')
+    page.wait_for_selector('[data-testid="import-refresh-failed"]', timeout=20000)
+    body = page.locator("body").inner_text()
+    assert "匯入完成，清單重新整理失敗，請重新整理頁面" in body and "匯入失敗" not in body
+    assert _by_tax(env, "16161616"), "資料其實已經寫入"

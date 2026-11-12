@@ -354,7 +354,7 @@ def import_customer_rows(body: dict, authorization: str = Header(None)):
         with write_txn(conn):                    # 整批一個交易：中途失敗不留半批
             plan = _plan_customer_import(conn, rows)      # 拿鎖之後重算：預覽到確認之間資料可能已被別人改
             if _plan_hash(plan) != body["planHash"]:
-                raise HTTPException(409, "資料在你預覽之後有變動，請重新預覽再確認")
+                raise HTTPException(409, {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"})
             next_code = _code_allocator(conn)
             for p in plan:
                 r = p["in"]
@@ -378,7 +378,7 @@ def import_customer_rows(body: dict, authorization: str = Header(None)):
     except Exception:
         tid = trace_id()
         logger.exception("customer import failed trace=%s", tid)
-        raise HTTPException(409, f"匯入失敗，沒有任何資料被寫入（代碼 {tid}）")
+        raise HTTPException(500, {"code": "import_failed", "message": f"匯入失敗，沒有任何資料被寫入（代碼 {tid}）"})
     finally:
         conn.close()
     result = _plan_summary(plan)

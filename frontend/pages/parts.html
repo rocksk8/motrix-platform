@@ -373,6 +373,7 @@
       </template>
       <template x-if="!importing && importResults">
         <div>
+          <template x-if="importRefreshFailed"><div data-testid="import-refresh-failed" style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-bottom:12px">匯入完成，清單重新整理失敗，請重新整理頁面</div></template>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
             <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
               <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
@@ -441,7 +442,8 @@ function app() {
     importing: false,
     importResults: null,
     importNotice: '',
-    importPlan: null,        //匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
+    importRefreshFailed: false,
+    importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
     _importRows: null,
 
     get categories() {
@@ -707,25 +709,38 @@ function app() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
         body: JSON.stringify({ rows: this._importRows, dryRun, planHash: dryRun ? undefined : this.importPlan?.planHash })     // 只有 dryRun:false 才會真的寫入；寫入要帶預覽拿到的 planHash
       })
-      if (!r.ok) { const e = await r.json().catch(() => ({})); const err = new Error(e.detail || ('HTTP ' + r.status)); err.status = r.status; throw err }
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}))
+        const d = e.detail      // 後端：{code: 'plan_changed' | 'import_failed', message}；其他錯誤是字串
+        const err = new Error((d && d.message) || (typeof d === 'string' ? d : 'HTTP ' + r.status))
+        err.status = r.status; err.code = (d && d.code) || ''
+        throw err
+      }
       return r.json()
     },
 
     async runImport() {
-      this.importing = true
+      this.importing = true; this.importRefreshFailed = false
       try {
         this.importResults = await this._importPost(false)
         this.importPlan = null
-        await this.load()
         this._importRows = null
       } catch(e) {
-        if (e.status === 409 && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
+        if (e.code === 'plan_changed' && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
           try { this.importPlan = await this._importPost(true); this.importNotice = '資料在你預覽之後有變動，已重新預覽，請再確認一次'; this.importing = false; return } catch(e2) { e = e2 }
         }
         this.importPlan = null
-        this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] }
+        this.importResults = { created: 0, updated: 0, failed: 1, errors: [(e.code === 'import_failed' ? '' : '匯入失敗：') + e.message] }
         this._importRows = null
+        this.importing = false
+        return
       }
+      // 資料已經寫入：之後重新載入清單失敗不能說成「匯入失敗」，只提示重新整理頁面
+      try {
+        const res = await fetch(`${API}/parts`, { headers: { Authorization: 'Bearer ' + this.session.token } })     // load() 會吞掉錯誤，這裡要知道有沒有失敗
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        this.items = (await res.json()).items || []
+      } catch(e) { this.importRefreshFailed = true }
       this.importing = false
     },
 

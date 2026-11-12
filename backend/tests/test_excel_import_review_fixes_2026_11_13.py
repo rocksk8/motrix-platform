@@ -306,3 +306,25 @@ def test_m6_batch_codes_are_unique_and_continue_after_existing_ones_and_audit_ro
     finally:
         conn.close()
     assert n == 40 and s == 1, "逐客戶稽核 40 筆＋批次總數 1 筆"
+
+
+# ── Low：409 拆碼（plan_changed／import_failed）─────────────────────────────
+
+def test_plan_changed_has_its_own_error_code(api):
+    rows = [_row(2, "全新公司", "17171717")]
+    p = _preview(api, rows)
+    _cust(api, "有人先建了", "17171717")
+    r = _commit(api, rows, p["planHash"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "plan_changed"
+    assert "請重新預覽" in r.json()["detail"]["message"]
+
+
+def test_real_write_failure_has_its_own_code_and_writes_nothing(api, monkeypatch):
+    import routers.customers as rc
+    rows = [_row(2, "壞掉的新增", "18181818")]
+    p = _preview(api, rows)
+    with monkeypatch.context() as m:
+        m.setattr(rc, "_code_allocator", lambda conn: (_ for _ in ()).throw(RuntimeError("boom")))
+        r = _commit(api, rows, p["planHash"])
+    assert r.status_code == 500 and r.json()["detail"]["code"] == "import_failed" and "沒有任何資料被寫入" in r.json()["detail"]["message"]
+    assert not [x for x in _all(api) if x.get("taxId") == "18181818"]
