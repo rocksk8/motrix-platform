@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>出貨單歷史紀錄 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -97,6 +98,11 @@
               @click="q='';filterYear='';filterMonth=''">清除篩選</button>
     </div>
 
+<div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span> 請按「重試」；如果還是失敗，請聯絡系統管理員。</div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <div x-show="loading" style="padding:60px;text-align:center;color:var(--text-dim)">載入中…</div>
 
     <div class="seh-list" x-show="!loading">
@@ -121,7 +127,7 @@
           </div>
         </div>
       </template>
-      <div class="seh-empty" x-show="filtered.length===0">尚無符合條件的匯出紀錄</div>
+      <div class="seh-empty" x-show="filtered.length===0 && !loadErr">尚無符合條件的匯出紀錄</div>
     </div>
   </main>
 
@@ -132,6 +138,7 @@
     return {
       events: [],
       loading: true,
+      loadErr: '',                     // 讀取失敗的白話原因；失敗時不可以顯示「尚無符合條件的匯出紀錄」（會被當成從沒匯出過）
       q: '',
       filterYear: '',
       filterMonth: '',
@@ -155,10 +162,11 @@
           headers: { Authorization: 'Bearer ' + (s.token || '') }
         })
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
-          .then(data => { this.events = data })
-          .catch(e => console.error('load failed:', e))
+          .then(data => { this.events = data; this.loadErr = '' })
+          .catch(e => { console.error('load failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
+      retryLoad() { this.loadErr = ''; this.load() },
 
       get yearOptions() {
         return [...new Set(this.events.map(e => (e.exportedAt || '').slice(0, 4)).filter(Boolean))].sort().reverse()

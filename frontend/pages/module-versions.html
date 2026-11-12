@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>版本紀錄 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -450,8 +451,14 @@
     <!-- Loading -->
     <div class="mv-loading" x-show="loading">載入中…</div>
 
+    <!-- 讀取失敗：蓋住下面空的清單（否則畫面是「無符合結果」，像是真的沒有版本紀錄） -->
+    <div class="mv-loading" x-show="!loading && loadErr" x-cloak role="alert" data-testid="load-error" style="flex-direction:column;gap:12px;text-align:center;padding:0 24px">
+      <div style="color:var(--danger)"><span x-text="loadErr"></span> 請按「重試」；如果還是失敗，請聯絡系統管理員。</div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <!-- ── Module view (split) ── -->
-    <div class="mv-split" x-show="!loading && view==='module'">
+    <div class="mv-split" x-show="!loading && !loadErr && view==='module'">
 
       <!-- Left: module list -->
       <div class="mv-left-panel">
@@ -532,7 +539,7 @@
     </div><!-- /mv-split -->
 
     <!-- ── Timeline view ── -->
-    <div class="mv-timeline-view" x-show="!loading && view==='timeline'">
+    <div class="mv-timeline-view" x-show="!loading && !loadErr && view==='timeline'">
       <div x-show="timelineGroups.length===0"
            style="padding:60px;text-align:center;color:var(--text-dim);font-size:14px">
         無符合結果
@@ -646,6 +653,7 @@
     return {
       modules:        [],
       loading:        true,
+      loadErr:        '',            // 讀取失敗的白話原因
       view:           'module',
       selected:       null,
       search:         '',
@@ -705,6 +713,7 @@
         })
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
           .then(data => {
+            this.loadErr = ''
             this.modules = data
             this.computeStaleness()
             // Restore selection after refresh
@@ -715,9 +724,10 @@
             // Auto-select first if nothing selected
             if (!this.selected && data.length > 0) this.selected = data[0]
           })
-          .catch(e => console.error('fetch failed:', e))
+          .catch(e => { console.error('fetch failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
+      retryLoad() { this.loadErr = ''; this.fetch() },
 
       selectModule(m) {
         this.selected = m
