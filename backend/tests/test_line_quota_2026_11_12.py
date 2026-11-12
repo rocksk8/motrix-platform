@@ -623,3 +623,44 @@ def test_positive_cache_is_dropped_when_the_token_changes(q):
     _set_setting("line_notify", c)
     q.fake.used = 7
     assert q.snapshot(now=T0 + timedelta(seconds=5))["used"] == 7
+
+
+# ══ AUDIT-17 r2 S-2：指紋的兩條次要路徑也要有測試守（變異 M2／M5 原本活下來）════════════
+
+def _swap_token(tok):
+    from helpers.settings import _get_setting, _set_setting
+    c = _get_setting("line_notify", {})
+    c["channel_access_token"] = tok
+    _set_setting("line_notify", c)
+
+
+@pytest.mark.line_quota_real_timer
+def test_after_push_ignores_stale_checked_at_after_token_swap(q, monkeypatch):
+    """換 token 後，舊 token 的 checked_at 不能拿來算推播後檢查的延遲（只等 _SETTLE_SECONDS）；同 token 則照常排到滿 CACHE_SECONDS。"""
+    timers = _Timers()
+    monkeypatch.setattr(q.threading, "Timer", timers)
+    q.refresh(T0)
+    q.after_push(T0 + timedelta(seconds=10))
+    assert timers.made[-1].delay == pytest.approx(q.CACHE_SECONDS - 10), "對照：同 token 要等到滿 5 分鐘"
+    q._pending = False
+    _swap_token(TOKEN + "B")
+    q.after_push(T0 + timedelta(seconds=10))
+    assert timers.made[-1].delay == q._SETTLE_SECONDS, "換 token 後舊的 checked_at 不能算數"
+
+
+def test_token_swapped_during_read_is_not_cached_as_new_token(q, monkeypatch):
+    """讀的途中換 token：這次結果屬於舊 token，不能標成新 token 的快取（要『讀之前』取指紋，不是讀完才取）。"""
+    from helpers import line_notify as L
+    real = L._http
+    state = {"swapped": False}
+
+    def swapping(method, path, token, payload=None):
+        if not state["swapped"]:
+            state["swapped"] = True
+            _swap_token(TOKEN + "B")                     # 第一個 GET 進行中，管理員換了 token
+        return real(method, path, token, payload)
+    monkeypatch.setattr(L, "_http", swapping)
+    q.snapshot(now=T0)
+    n = len(q.fake.calls)
+    q.snapshot(now=T0 + timedelta(seconds=5))
+    assert len(q.fake.calls) > n, "換 token 之後必須重讀，不能沿用讀途中換掉的舊結果"
