@@ -178,6 +178,13 @@ def get_approval_queue(authorization: str = Header(None)):
     finally:
         conn.close()
 
+    # 「輪到我」只在這裡判一次（與 `/api/approval-queue/count` 同一個 `_counts_for_me`）：每一項帶 `mine`，頁面的摘要數字、
+    # 「待我簽核」欄與角標都從它來——不再各自用自己的算法（2026-11-13 UX P1.5；之前摘要 `myPendingCount` 與列表 `myItems` 可能分歧）。
+    _mine_names = {user["username"]} | set(my_delegated_for)
+    _is_sa = user.get("role") == "superadmin"
+    for it in items:
+        it["mine"] = bool(_counts_for_me(it, _mine_names, user["username"], _is_sa))
+
     # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
     items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
 
@@ -199,7 +206,7 @@ def get_approval_queue(authorization: str = Header(None)):
         })
     queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
 
-    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for,
+    return {"queue": queue, "total": len(items), "myCount": sum(1 for it in items if it.get("mine")), "myDelegatedFor": my_delegated_for,
             "reassignTypes": _reassign_types()}
 
 
