@@ -111,6 +111,7 @@ logger = logging.getLogger(__name__)
 # 打不開檔 ⇒ install() 回 None、維持舊行為；測試（pytest）不建檔。客戶端斷線噪音（WinError 10054）的 filter 到處都掛。
 from helpers import log_setup as _log_setup
 _log_setup.attach_noise_filter()
+_log_setup.attach_redact_filter()      # 查詢字串遮罩：token 不進任何日誌檔（access 行只留 path、值一律 ***）；分流有沒有啟用都要
 if _log_setup.enabled_by_environment():
     from core import paths as _log_paths
     _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
@@ -886,7 +887,10 @@ app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不
 
 @app.exception_handler(RequestValidationError)
 async def _validation_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error %s %s: %s", request.method, request.url.path, exc.errors())
+    # 2026-11-13：不記 `input`／`ctx`——`input` 是使用者送來的原值（query 的 token、body 的密碼欄位缺別的欄位時整包 body 都在裡面），
+    # 只留位置與訊息就足以除錯；原值進日誌＝憑證進日誌（見 helpers/log_setup「查詢字串遮罩」）。
+    _errs = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+    logger.warning("Validation error %s %s: %s", request.method, request.url.path, _errs)
     return JSONResponse(status_code=422, content={"detail": "請求格式錯誤，請確認欄位是否完整"})
 
 

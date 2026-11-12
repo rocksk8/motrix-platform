@@ -244,6 +244,103 @@ def noise_count():
     return _NOISE.count
 
 
+# ── 查詢字串遮罩（2026-11-13）：token 不可以進任何日誌檔 ─────────────────────────────
+# 為什麼：uvicorn 的 access 行會把**整個 URL 含 query** 寫進去（`GET /api/x?pt=<token> HTTP/1.1`）；`<script src>`／下載連結帶不了
+# Authorization，所以有些端點的憑證放在 query（`?pt=`、`?token=`、`?code=` 這一類，見 auth_middleware 註解）——那些值就會躺在
+# access.log／app.log／server.log 裡（保留 30 天、還會被備份、被人貼進工單）。對外呼叫失敗時 requests 的錯誤訊息也會帶完整網址
+# （`...url: /maps/api/geocode/json?address=...&key=AIza...`）。
+# 規則：**只留 path**；query 的值一律遮成 `***`；只有白名單裡的參數「名字」會留下（`v=***`，除錯時看得出是哪一類請求），
+# 其餘整段換成 `***`（所以 `?pt=...`、`?token=...`、`?code=...` 連名字都不會出現）。沒有 `=` 的（`?abc123` 這種裸 token）一律遮。
+# 兩層：① `uvicorn.access` logger 的 filter 精準改請求行的 path 參數（access.log、server.log 兜底都吃到，不論分流有沒有啟用）；
+# ② 文字層保險網：其他 logger 的訊息與例外文字裡出現的「網址?query」同樣遮罩（掛在每個 handler 上）。
+# 用 `***` 不用 `…`：Windows 主控台／檔案編碼不一定吃得下全形符號，日誌輸出不可以因此丟例外。
+QUERY_MASK = "***"
+#: 值一律遮、但名字可以留的參數（只放「名字本身不敏感」的；絕對不要放 token／code／key／pt／password 這類）
+SAFE_QUERY_NAMES = frozenset({"v", "page", "limit", "offset", "sort", "order", "date", "from", "to", "month", "year", "status", "type"})
+
+
+def redact_query(query):
+    """`a=1&pt=SECRET&abc` ⇒ `a=***`（白名單名字）／`***`（其他）。相鄰的 `***` 併成一個。"""
+    from urllib.parse import unquote
+    parts = []
+    for piece in (query or "").split("&"):
+        if not piece:
+            continue
+        name, eq, _val = piece.partition("=")
+        keep = bool(eq) and unquote(name) in SAFE_QUERY_NAMES
+        item = name + "=" + QUERY_MASK if keep else QUERY_MASK
+        if item == QUERY_MASK and parts and parts[-1] == QUERY_MASK:
+            continue
+        parts.append(item)
+    return "&".join(parts)
+
+
+def redact_target(target):
+    """請求目標（path＋可有 query）⇒ path＋遮過的 query。沒有 query ⇒ 原樣。`#fragment` 一併丟掉。"""
+    if not isinstance(target, str) or "?" not in target:
+        return target
+    path, _, rest = target.partition("?")
+    rest = rest.partition("#")[0]
+    masked = redact_query(rest)
+    return path + "?" + masked if masked else path
+
+
+#: 文字層：`https://host/path?query`、`/path?query`（前面不是字母數字／點／括號，避免誤傷「a/b?」之類的句子）
+_URL_QUERY_RE = re.compile(
+    r"""(?P<base>https?://[^\s"'<>?#]+|(?<![\w.)\]])/[\w%~.\-/]*)\?(?P<q>[^\s"'<>#)\]]*)""")
+
+
+def redact_text(text):
+    """訊息／例外文字裡的「網址?query」遮罩（見上）。沒有 `?` ⇒ 原樣回傳（快路徑）。"""
+    if not text or "?" not in text:
+        return text
+
+    def _sub(m):
+        masked = redact_query(m.group("q"))
+        return m.group("base") + ("?" + masked if masked else "")
+    return _URL_QUERY_RE.sub(_sub, text)
+
+
+class QueryRedactFilter(logging.Filter):
+    """見上。掛在 `uvicorn.access` logger（精準）與每個 handler（保險網）。filter 永遠回 True、任何例外都吞掉——日誌遮罩壞了不可以讓請求或日誌本身壞掉。"""
+
+    def filter(self, record):
+        try:
+            a = record.args
+            if record.name == "uvicorn.access" and isinstance(a, tuple) and len(a) >= 3 and isinstance(a[2], str):
+                record.args = a[:2] + (redact_target(a[2]),) + a[3:]       # uvicorn 的請求行：(client, method, full_path, http_version, status)
+                return True
+            msg = record.getMessage()
+            if "?" in msg:
+                new = redact_text(msg)
+                if new != msg:
+                    record.msg, record.args = new, ()
+            ei = record.exc_info
+            if ei and ei[0] is not None and not record.exc_text:
+                txt = logging.Formatter().formatException(ei)                # 先轉成文字再遮（Formatter 會沿用 exc_text）
+                if "?" in txt:
+                    record.exc_text = redact_text(txt)
+        except Exception:                                                    # noqa: BLE001
+            pass
+        return True
+
+
+_REDACT = QueryRedactFilter()
+
+
+def attach_redact_filter():
+    """掛上查詢字串遮罩：`uvicorn.access` logger（精準）＋ root／uvicorn／uvicorn.access 現有的每個 handler（保險網）。
+    重複呼叫無妨；`install()` 在加完檔案 handler 後會再呼叫一次。開發機／測試／分流沒啟用時 main.py 也呼叫它。"""
+    acc = logging.getLogger("uvicorn.access")
+    if _REDACT not in acc.filters:
+        acc.addFilter(_REDACT)
+    for lg in (logging.getLogger(), logging.getLogger("uvicorn"), acc):
+        for h in lg.handlers:
+            if _REDACT not in h.filters:
+                h.addFilter(_REDACT)
+    return acc
+
+
 # ── 安裝 ──────────────────────────────────────────────────────────────────
 
 class Installed:
@@ -331,6 +428,7 @@ def install(log_dir, max_bytes=DEFAULT_MAX_BYTES, backups=DEFAULT_BACKUPS, boot_
     acc.addHandler(access_h)
 
     out.noise_logger = attach_noise_filter()
+    attach_redact_filter()                        # 新加的檔案 handler 也要有（查詢字串遮罩）
     return out
 
 
