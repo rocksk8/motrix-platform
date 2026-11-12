@@ -8,6 +8,7 @@
 """
 import hashlib
 import logging
+import threading
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Response, UploadFile
@@ -17,6 +18,9 @@ from modules.importer import parser as P
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# 同時解析的檔案數上限（解析吃 CPU／記憶體：不讓多人同時丟大檔把機器拖慢）
+_PARSE_SLOTS = threading.BoundedSemaphore(2)
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _OFF = "匯入精靈目前沒有開放（請最高管理者到「設定中心 → 匯入精靈」開啟）。"
@@ -72,6 +76,8 @@ def importer_parse(response: Response, kind: str = Form(...), file: UploadFile =
     _check_access(user, kind)
     limit = int(_setting("max_file_mb", 5) or 5) << 20
     data = file.file.read(limit + 1)
+    if not _PARSE_SLOTS.acquire(timeout=5):
+        raise HTTPException(429, "目前有其他人正在匯入檔案，請稍等幾秒再試")
     try:
         res = P.parse_file(data, file.filename or "", kind, max_bytes=limit)
     except P.ParseError as e:
@@ -79,6 +85,8 @@ def importer_parse(response: Response, kind: str = Form(...), file: UploadFile =
     except Exception as exc:                                              # noqa: BLE001 — 訊息不帶例外內容
         logger.error("importer parse failed kind=%s type=%s", kind, type(exc).__name__)
         raise HTTPException(400, "這個檔案讀不出來，請確認是依範本填的 .xlsx 或 .csv")
+    finally:
+        _PARSE_SLOTS.release()
     response.headers["Cache-Control"] = "no-store"
     # 稽核只記「誰、什麼對象、哪個檔（雜湊）、幾列」，不放任何儲存格內容
     _audit(_tok(authorization), "import.parse", "import", kind, P.KIND_NAMES[kind],

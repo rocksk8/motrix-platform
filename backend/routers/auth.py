@@ -1738,6 +1738,16 @@ def _checked_quote_email(v):
     return s
 
 
+def _password_problem(pw, min_len=None):
+    """設定新密碼的規則檢查（最短長度＋弱密碼清單）⇒ 問題訊息或 None。`create_user` 與員工匯入的臨時密碼用同一支，訊息逐字相同。"""
+    n = _min_pw() if min_len is None else min_len
+    if len(pw) < n:
+        return f"密碼至少 {n} 碼"
+    if is_weak_password(pw):
+        return "密碼過於簡單或為已知弱密碼，請改用更強的密碼"
+    return None
+
+
 def _insert_new_user(conn, username, password_hash, display_name, role, email, phone, modules_json, muted_json, now, department_id, quote_email=''):
     """新增一個帳號的唯一 INSERT（不 commit）：`create_user` 與員工匯入（`import_user_rows`）共用。一律啟用、`must_change_password=1`（第一次登入必須改密碼）。"""
     conn.execute("""
@@ -1752,10 +1762,9 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
-    if len(body.password) < _min_pw():
-        raise HTTPException(400, f"密碼至少 {_min_pw()} 碼")
-    if is_weak_password(body.password):
-        raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+    _pw_problem = _password_problem(body.password)
+    if _pw_problem:
+        raise HTTPException(400, _pw_problem)
     now = datetime.now().isoformat()
     _qe_new = _checked_quote_email(body.quote_email)
     refuse_unknown_new_keys(body.modules)
@@ -1795,11 +1804,14 @@ def create_user(body: UserIn, authorization: str = Header(None)):
 
 
 @router.post("/api/users/import-rows")
-def import_user_rows(body: dict, response: Response, authorization: str = Header(None)):
+def import_user_rows(body: dict, response: Response, authorization: str = Header(None), idempotency_key: str = Header(None)):
     """員工匯入（T85 匯入精靈；規劃邏輯在 `helpers/user_import.py`）。**只有最高管理者**。契約與客戶／料號的 `import-rows` 相同：
     只有 `dryRun` 明確是 false 才會寫入，其他一律只回預覽；寫入要帶預覽拿到的 `planHash`，資料在預覽後有變 ⇒ 409；整批一個交易。
     只新增（既有帳號一律略過、不更新）；角色只允許業務／工程師／檢視者；模組勾選一律空；一律 `must_change_password=1`。
-    🔴 臨時密碼在寫入當下才產生，只出現在**這一次**成功回應的 `credentials`（`Cache-Control: no-store`）；不進計畫雜湊、預覽回應、錯誤訊息、日誌、稽核、任何資料表。"""
+    🔴 臨時密碼在寫入當下才產生，只出現在**這一次**成功回應的 `credentials`（`Cache-Control: no-store`）；不進計畫雜湊、預覽回應、錯誤訊息、日誌、稽核、任何資料表。
+    **冪等（M3）**：寫入請求可帶 `Idempotency-Key`；回應掉了、頁面重送同一把 key ⇒ 回第一次的結果（建了哪些帳號 `createdAccounts`），
+    **不再建立、不含任何密碼**（`replayed: true`、`passwordsShown: false`）；密碼已遺失的帳號請用既有的重設流程（`PUT /api/users/{id}` 設新密碼，會強制第一次登入改密碼）。
+    帳號規則（M1）：正規化（NFKC＋小寫）後 `^[a-z0-9._-]{3,32}$`，存的是正規化後的值（見 `helpers/user_import.py`）。"""
     from helpers import user_import as UI
     actor = _require_user(authorization, require_superadmin=True)
     rows = body.get("rows")
@@ -1812,21 +1824,31 @@ def import_user_rows(body: dict, response: Response, authorization: str = Header
     min_pw = _min_pw()
     conn = get_db()
     created = []
+    call = None
     try:
         if not real:
             return UI.plan_summary(UI.plan_users_import(conn, rows))
         if not isinstance(body.get("planHash"), str) or not body["planHash"]:
             raise HTTPException(400, "請先預覽再確認匯入")
+        from helpers import idempotency as _idem
+        key = _idem.parse_key(idempotency_key)
+        if key:                                                       # 重送同一把 key ⇒ 回第一次的結果（不含密碼），不再建立
+            call = _idem.begin(actor["username"], key, "POST /api/users/import-rows", _idem.request_hash(rows, body["planHash"]))
+            if call.replay is not None:
+                rp = _idem.replay_response(call)
+                rp.headers["Cache-Control"] = "no-store"
+                return rp
         stale = {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"}
         plan = UI.plan_users_import(conn, rows)
         if UI.plan_hash(plan) != body["planHash"]:
             raise HTTPException(409, stale)
-        # 密碼雜湊很慢（每個約 0.1 秒）：拿寫鎖之前先算好，鎖內只做 INSERT
-        secrets_by_name = {}
-        for p in plan:
-            if p["action"] == "create":
-                pw = UI.new_password(min_pw)
-                secrets_by_name[p["username"]] = (pw, _hash_pw(pw))
+        # 密碼雜湊很慢（每個約 0.1 秒、300 個約 28 秒）：拿寫鎖之前先算好（多執行緒：hashlib 會放掉 GIL），鎖內只做 INSERT
+        names = [p["username"] for p in plan if p["action"] == "create"]
+        pws = {u: UI.new_password(min_pw, lambda pw: _password_problem(pw, min_pw)) for u in names}
+        from concurrent.futures import ThreadPoolExecutor
+        import os as _os
+        with ThreadPoolExecutor(max_workers=max(1, min(8, _os.cpu_count() or 2))) as pool:
+            hashes = dict(zip(names, pool.map(_hash_pw, [pws[u] for u in names])))
         now = datetime.now().isoformat()
         with write_txn(conn):
             plan = UI.plan_users_import(conn, rows)                  # 拿鎖之後重算
@@ -1835,28 +1857,38 @@ def import_user_rows(body: dict, response: Response, authorization: str = Header
             for p in plan:
                 if p["action"] != "create":
                     continue
-                pw, pwh = secrets_by_name[p["username"]]
-                _insert_new_user(conn, p["username"], pwh, p["displayName"], p["role"], p["in"]["email"], p["in"]["phone"],
+                _insert_new_user(conn, p["username"], hashes[p["username"]], p["displayName"], p["role"], p["in"]["email"], p["in"]["phone"],
                                  "[]", "[]", now, p.get("departmentId"))
-                created.append((p["username"], p["displayName"], pw, p["role"]))
+                uid = conn.execute("SELECT id FROM users WHERE username=?", (p["username"],)).fetchone()["id"]
+                created.append((uid, p["username"], p["displayName"], pws[p["username"]], p["role"]))
             conn.commit()
     except HTTPException:
+        if call is not None:
+            call.abort()                                              # 失敗（含 409 重新預覽）⇒ 釋放這把 key
         raise
     except Exception as exc:                                         # noqa: BLE001 — 訊息不帶例外內容（避免任何機敏值外流）
+        if call is not None:
+            call.abort()
         tid = trace_id()
         logger.error("user import failed trace=%s type=%s", tid, type(exc).__name__)
         raise HTTPException(500, {"code": "import_failed", "message": f"匯入失敗，沒有任何帳號被建立（代碼 {tid}）"})
     finally:
         conn.close()
     result = UI.plan_summary(plan)
-    result["credentials"] = [{"username": u, "displayName": d, "password": pw} for u, d, pw, _r in created]
+    accounts = [{"id": i, "username": u, "displayName": d} for i, u, d, _pw, _r in created]
+    if call is not None:                                              # 存起來重播的版本：有建了哪些帳號，沒有任何密碼
+        call.finish(200, dict(result, createdAccounts=accounts, replayed=True, passwordsShown=False))
+    result["createdAccounts"] = accounts
+    result["credentials"] = [{"id": i, "username": u, "displayName": d, "password": pw} for i, u, d, pw, _r in created]
+    result["replayed"] = False
+    result["passwordsShown"] = True
     try:                                                              # 帳號已建立：之後的稽核／通知失敗只記錄；稽核在 commit 之後（`_audit` 自己開連線）
         if created:
             from routers.customers import _audit_rows
             tok = _tok(authorization)
             _audit(tok, "user.import", "user", "", "Excel 匯入員工", {"created": len(created), "skipped": len(result["skipped"]),
                                                                     "manual": len(result["manual"]), "failed": result["failed"]})
-            _audit_rows(tok, [("user.create", "user", u, d, {"via": "excel_import", "role": r}) for u, d, _pw, r in created])
+            _audit_rows(tok, [("user.create", "user", u, d, {"via": "excel_import", "role": r}) for _i, u, d, _pw, r in created])
             notify_module_activity("使用者管理", "匯入", actor.get("display_name") or actor["username"],
                                    "Excel 匯入：新增 %d 個帳號" % len(created), "users.html")
     except Exception:                                                 # noqa: BLE001
