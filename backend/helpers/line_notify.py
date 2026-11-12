@@ -756,13 +756,13 @@ def deliver_event(event_key: str, *, usernames=None, to_group: bool = False, tit
         if lk is not None:
             with lk:
                 return _deliver_unlocked(event_key, usernames=usernames, to_group=to_group, title=title, rows=rows,
-                                         reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key)
+                                         reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key, group=group)
     return _deliver_unlocked(event_key, usernames=usernames, to_group=to_group, title=title, rows=rows,
-                             reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key)
+                             reason=reason, link=link, exclude=exclude, dedupe_key=dedupe_key, group=group)
 
 
 def _deliver_unlocked(event_key: str, *, usernames=None, to_group: bool = False, title: str, rows=None, reason: str = "", link: str = "",
-                      exclude=None, dedupe_key: str = "") -> str:
+                      exclude=None, dedupe_key: str = "", group: str = None) -> str:
     """`deliver_event` 的本體（呼叫端負責 per-key 鎖）。永不丟例外。"""
     try:
         if not event_enabled(event_key):
