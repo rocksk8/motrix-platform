@@ -140,7 +140,6 @@
    "js:static/attachment-slots.js",
    "js:static/auth-guard.js",
    "js:static/motrix-error.js",
-   "js:static/role-label.js",
    "js:static/motrix-date.js",
    "js:js/module-builder-consts.js",
    "js:js/module-builder-core.js",
