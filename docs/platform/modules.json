@@ -1079,6 +1079,20 @@
    "api_prefixes": [
     "/api/permmatrix"
    ]
+  },
+  "M17": {
+   "key": "importer",
+   "name": "匯入精靈",
+   "units": [
+    "mod:importer/__init__",
+    "mod:importer/api",
+    "mod:importer/parser",
+    "page:pages/import-wizard.html"
+   ],
+   "tables": [],
+   "api_prefixes": [
+    "/api/importer"
+   ]
   }
  },
  "retired": {
