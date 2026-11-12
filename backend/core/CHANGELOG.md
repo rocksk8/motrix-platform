@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（feat/backup-monitor-page；「備份與監控」專頁，系統選單提案 v2 批次 4a）
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.backup_monitor`（`status`／`run_backup_now`／`set_ping_url`／`test_heartbeat`／`scrub_paths`／`ping_host`…）、`routers.backup_monitor`（`GET /api/system/backup-monitor`、`POST …/backup-now`、`PUT …/heartbeat-url`、`POST …/heartbeat-test`，全部最高管理者）；`helpers.system_checks.alert_thresholds`（新公開介面）；頁面 `pages/backup-monitor.html`（系統選單「資料與備份」、系統中樞卡片）。
+- 行為變更：①設定中心新群組 `monitoring`（備份停擺小時數 `backup_stale_hours`＝36、硬碟剩餘 `disk_free_min_gb`＝50／`disk_free_min_pct`＝10；放寬須第二位最高管理者核准），`system_checks` 的備份停擺與硬碟空間檢查改讀這三個值（預設與原寫死值相同，讀不到回預設）。②新頁一頁看完最近各種備份的時間與結果、雲端鏡像、硬碟、心跳、告警紀錄、保留天數；全部取自既有來源（稽核紀錄 `backup.*`、警示檔、心跳狀態檔），不新增表、不新增寫入。③「立即備份」＝跑與排程相同的每日＋每週備份（背景、同時一個、30 分鐘一次，結果存 `system_settings.backup_now_*`）；心跳網址可在頁面設定（只收 http／https、擋內網與本機、網址不回傳、稽核只記主機名）並可「測試心跳」（1 分鐘一次）。④備份嚴重錯誤信（`backup_error`）不再顯示伺服器路徑；公司資料設定的備份區塊加連結到新頁。
+- 測試：`tests/test_backup_monitor_2026_11_13.py`。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

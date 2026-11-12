@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 925,
-  "endpoints_api": 921,
-  "write_total": 498,
-  "write_api": 498,
-  "get_api": 423,
-  "distinct_paths_api": 779,
-  "write_with_body_api": 364,
-  "write_with_path_param_api": 358
+  "endpoints_total": 932,
+  "endpoints_api": 928,
+  "write_total": 502,
+  "write_api": 502,
+  "get_api": 426,
+  "distinct_paths_api": 786,
+  "write_with_body_api": 368,
+  "write_with_path_param_api": 359
  },
  "select_star": {
   "modules": 287,
@@ -2258,6 +2258,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/system/backup-monitor": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/system/bonus-module-status": {
    "w": false,
    "pp": 0,
@@ -4178,6 +4183,16 @@
    "pp": 2,
    "body": false
   },
+  "POST /api/system/backup-monitor/backup-now": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-test": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/tender-radar/scan": {
    "w": true,
    "pp": 0,
@@ -4616,6 +4631,11 @@
   "PUT /api/suppliers/{sid}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/system/backup-monitor/heartbeat-url": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/system/modules/{key}": {

@@ -1,5 +1,5 @@
 {
- "core_version": "1.159",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -248,6 +248,22 @@
    "require_any_module": "def(user, keys, label)",
    "reset_finance_mode_cache": "def()",
    "user_has_module": "def(user, key)"
+  },
+  "helper:backup_monitor": {
+   "BackupBusy": "class",
+   "BackupRateLimited": "class",
+   "BackupRateLimited.__init__": "def(self, wait_seconds)",
+   "HEARTBEAT_TEST_MIN_INTERVAL_SECONDS": "const",
+   "HeartbeatRateLimited": "class",
+   "HeartbeatRateLimited.__init__": "def(self, wait_seconds)",
+   "InvalidPingUrl": "class",
+   "RUN_MIN_INTERVAL_SECONDS": "const",
+   "ping_host": "def()",
+   "run_backup_now": "def(now=…)",
+   "scrub_paths": "def(text)",
+   "set_ping_url": "def(url)",
+   "status": "def(now=…)",
+   "test_heartbeat": "def()"
   },
   "helper:branding": {
    "ALLOWED_FORMATS": "const",
@@ -1881,6 +1897,7 @@
    "REMINDER_FAILURE_SETTING": "const",
    "REMINDER_FIRST_STAGES": "const",
    "REMINDER_STEP_AFTER": "const",
+   "alert_thresholds": "def()",
    "reminder_dedup_key": "def(stage)",
    "reminder_send_failures": "def()",
    "reminder_stages_at_or_below": "def(days)",
