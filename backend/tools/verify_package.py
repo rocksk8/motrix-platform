@@ -504,8 +504,71 @@ def main():
 
     print("### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）")
     check_product_selection(pkg)
+    print()
+
+    print("### (8) 出貨包不帶開發公鑰（🔴 擋關，LG-O1）")
+    check_dev_pubkey(pkg)
 
     sys.exit(R.finish())
+
+
+def check_dev_pubkey(pkg):
+    """`LG-O1`：`_PUBKEY_PROD` 一填入，包內 `licensing.py` 就不可以再帶非空的 `_PUBKEY_DEV`。
+
+    判定與建包改寫是同一支（tools/platform/pubkey_policy.py::policy_problems），不另寫一份。
+    ⚠️ 正式機跑的是**已安裝版本**的這支檔（delivery.py 刻意用正式機上受信任的程式），所以這一項要等本班裝上去之後
+       才在正式機生效；本班的把關靠建包（strip＋check）與步驟檔。
+    🔑 正對照：①自造一份『兩把都在』的原始碼，這一項必須判它有問題、而改寫後必須乾淨；②工作樹的 licensing.py
+       若 `_PUBKEY_PROD` 非空而 `_PUBKEY_DEV` 也非空（repo 的常態），同一個判定也必須判它有問題——
+       否則「包裡 0 個問題」可能只是比對器壞了。
+    """
+    import importlib.util
+    src = os.path.join(WT, "tools", "platform", "pubkey_policy.py")
+    if not os.path.isfile(src):
+        R.fail("開發公鑰", "找不到 %s ⇒ 這一項無法檢驗（**不是 PASS**）" % src)
+        return
+    spec = importlib.util.spec_from_file_location("_pubkey_policy", src)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    nl = chr(10)
+    pem = lambda tag: nl.join(["-----BEGIN PUBLIC KEY-----", tag, "-----END PUBLIC KEY-----", ""]).encode("ascii")
+    decoy = nl.join(["_PUBKEY_DEV = (", "    %r" % pem("AAAA"), ")",
+                     "_PUBKEY_PROD = (", "    %r" % pem("BBBB"), ")", ""])
+    if not mod.policy_problems(decoy):
+        R.void("LG-O1 比對器判不出『兩把公鑰都在』的自造誘餌 ⇒ 比對器壞了，包側的 0 不可解讀")
+        return
+    try:
+        stripped, changed = mod.strip_source(decoy)
+    except ValueError as e:
+        R.void("LG-O1 改寫誘餌失敗：%s" % e)
+        return
+    if not changed or mod.policy_problems(stripped):
+        R.void("LG-O1 改寫後的誘餌仍被判有問題（或沒改寫）⇒ 比對器／改寫器壞了")
+        return
+    wt_path = os.path.join(WT, mod.LICENSING_REL)
+    if os.path.isfile(wt_path):
+        wt_src = io.open(wt_path, encoding="utf-8", newline="").read()
+        dev, prod, _n, wt_probs = mod.inspect_source(wt_src)
+        if wt_probs:
+            R.fail("開發公鑰", "工作樹 licensing.py 看不懂：%s" % "；".join(wt_probs))
+            return
+        if mod._nonempty(prod) and mod._nonempty(dev) and not mod.policy_problems(wt_src):
+            R.void("LG-O1 工作樹『兩把都在』卻沒被判有問題 ⇒ 比對器壞了")
+            return
+        print("  正對照通過：誘餌（兩把都在）被判有問題、改寫後乾淨；工作樹 %s" % (
+            "兩把都在且被判有問題（符合預期，包側必須已被改寫）" if (mod._nonempty(prod) and mod._nonempty(dev))
+            else "不需處理（正式公鑰為空或開發公鑰已空）"))
+    pkg_path = os.path.join(pkg, mod.LICENSING_REL)
+    if not os.path.isfile(pkg_path):
+        R.fail("開發公鑰", "包內找不到 %s ⇒ 這一項無法檢驗（**不是 PASS**）" % mod.LICENSING_REL)
+        return
+    probs = mod.policy_problems(io.open(pkg_path, encoding="utf-8", newline="").read())
+    if probs:
+        for p in probs:
+            R.fail("開發公鑰", p)
+        return
+    print("  ✅ 包內 licensing.py 沒有違反 LG-O1（%s／%s 的組合符合規則）" % (mod.DEV, mod.PROD))
 
 
 def check_product_selection(pkg):
