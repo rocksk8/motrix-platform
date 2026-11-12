@@ -331,7 +331,7 @@ def test_daily_backup_calls_the_log_prune_even_when_the_cloud_is_unavailable():
 
 # ── 接線 ────────────────────────────────────────────────────────────────────
 
-def test_tests_never_create_log_files_and_main_wires_the_split():
+def test_tests_never_create_log_files_and_main_wires_the_split(client):      # client：先讓 conftest 以暫存路徑 import main（T81 官方閘門 not_e2e 11 紅）
     assert ls.enabled_by_environment() is False, "pytest 底下不可以建檔（import main 不能往真的 logs 目錄開檔）"
     import main
     assert hasattr(main, "_LOG_SPLIT") and main._LOG_SPLIT is None
