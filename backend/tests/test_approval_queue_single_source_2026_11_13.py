@@ -9,6 +9,7 @@ import pathlib
 
 import pytest
 
+from core import source_tree
 from tests._requires import requires_module
 
 pytestmark = requires_module("case", "題目打 M01 的簽核佇列端點")
@@ -76,7 +77,7 @@ def test_delegate_counts_as_mine_in_the_same_way_as_badge(client, make_user):
 
 
 def test_page_uses_the_server_flag_and_has_no_second_algorithm():
-    s = (REPO / "frontend/pages/approval-queue.html").read_text(encoding="utf-8")
+    s = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
     assert "isMine(i) { return i && typeof i.mine === 'boolean' ? i.mine : this.canApprove(i) }" in s
     assert "get myPendingCount() { return this.myItems.length }" in s
     assert "_isMeOrDelegate(a.username) && a.status !== 'approved')\n          }).length" not in s, "摘要又自己另算了一次"
@@ -85,13 +86,13 @@ def test_page_uses_the_server_flag_and_has_no_second_algorithm():
 
 
 def test_flow_rows_say_stuck_with_whom_and_how_long():
-    s = (REPO / "frontend/pages/approval-queue.html").read_text(encoding="utf-8")
+    s = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
     assert 'data-testid="aq-stuck" x-text="stuckText(item)"' in s
     assert "'卡在：' + this.blockerOf(item).display" in s
 
 
 def test_reject_vs_final_reject_is_explained_on_the_page():
-    s = (REPO / "frontend/pages/approval-queue.html").read_text(encoding="utf-8")
+    s = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
     assert 'data-testid="aq-reject-hint"' in s and "送回申請人修改" in s and "這張單不再處理" in s
 
 

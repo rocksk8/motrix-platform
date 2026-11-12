@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5：登入問候語、首頁「我的工作」、系統標語、簽核單一來源）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.login_greeting`（`record_login`、`greeting_for_user`、`personal_pref`、`company_style`…；登入紀錄存系統設定 `login_state.<uid>`，個人偏好讀 `helpers.user_prefs`）、`helpers.greeting_calendar`（內建 2026～2032 台灣節慶日期表、`coverage_warning`）、`helpers.greeting_phrases`（句庫與內容守門）、`helpers.settings_groups_brand`（設定群組 `brand.tagline`、`login_greeting.style`）、`helpers.status_display.duplicate_warnings`（顯示名稱重複警告）。
+- L1（新增端點）：`GET /api/auth/greeting`、`GET／PUT /api/login-greeting/phrases`（最高管理者）、`GET /api/dashboard/mine`（`routers/dashboard_mine.py`：首頁「我的工作」；待簽核三組每次現算、模組提供者分組每人快取 30 秒、`partial` 旗標）；`routers/approval_queue.py` 新增 `visible_queue_items(user)`／`my_pending_items(user)`，佇列回應每項帶 `mine`、另有 `myCount`——頁面摘要、列表與角標同一個來源（`_counts_for_me`）。
+- 串接點（新增）：IP-DB1 `dashboard.mine_groups`（各模組 → L1 `dashboard_mine`；分組由使用者實際權限決定、`href` 白名單）、IP-GR1 `greeting.new_quotes`（M01 → L1 問候語；L1 不直接讀 `quotations` 表）。
+- 行為變更：`routers/auth.py::_issue_session` 登入成功時記錄登入時間（永不丟例外）；顯示名稱表新增情境 `voucher`（傳票維持「待審核」）。
+- 測試：`tests/test_login_greeting_2026_11_13.py`、`test_dashboard_mine_2026_11_13.py`、`test_approval_queue_single_source_2026_11_13.py`、`test_brand_tagline_2026_11_13.py`、e2e 三支。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：

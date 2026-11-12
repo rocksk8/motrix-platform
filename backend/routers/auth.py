@@ -1499,15 +1499,12 @@ def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query
         prev = LG._parse(st.get("prev"))
         if not prev:
             return None
-        conn = get_db()
-        try:
-            # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較；
-            # 精確到時分秒（原本只比日期，上一次登入當天建立的單會漏算；審查 L4）
-            r = conn.execute("SELECT COUNT(*) AS n FROM quotations WHERE created_at > ?",
-                             (prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"),)).fetchone()
-            return int(r["n"] or 0)
-        finally:
-            conn.close()
+        from core import registry
+        fn = registry.single_provider("greeting.new_quotes")      # 案件模組提供（L1 不直接讀 quotations 表）；模組不在 ⇒ 不附這個數字
+        if fn is None:
+            return None
+        # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較，精確到時分秒
+        return fn(prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"))
 
     return LG.greeting_for_user(u, todo=todo, pending=_pending, new_quotes=_new_quotes)
 

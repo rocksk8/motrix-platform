@@ -892,7 +892,19 @@ def list_quotations(
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
     第 501 件以後看不到也搜不到）。新參數皆選填，舊呼叫端行為不變。"""
-    user   = _require_user(authorization)
+    user = _require_user(authorization)
+    return list_quotations_for(
+        user, status=status, customer=customer, month=month, deal_tag=deal_tag, limit=limit, offset=offset, q=q,
+        settle=settle, sort=sort, dir=dir, counts=counts, mine=mine, stage_overdue=stage_overdue, recv_overdue=recv_overdue,
+        missing_docs=missing_docs, unread=unread, include_project_margin=include_project_margin,
+        with_sales_owner=with_sales_owner)
+
+
+def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=None, limit=100, offset=0, q=None,
+                        settle=None, sort=None, dir=None, counts=0, mine=0, stage_overdue=0, recv_overdue=0,
+                        missing_docs=0, unread=0, include_project_margin=0, with_sales_owner=0):
+    """`list_quotations` 的本體（已驗過身分的使用者字典進來）。首頁「我的工作」的案件分組（dashboard_groups）用它取件數：
+    與案件頁清單同一份篩選與權限（row_access），數字才對得起來；端點行為不變。"""
     conn   = get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     select_cols = (

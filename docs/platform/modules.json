@@ -321,6 +321,9 @@
    "webauthn_credentials",
    "work_logs"
   ],
+  "routes": [
+   "/api/dashboard/mine"
+  ],
   "api_prefixes": [
    "/api/approval-delegates",
    "/api/approval-queue",
@@ -352,6 +355,7 @@
    "/api/legal-params",
    "/api/license",
    "/api/line",
+   "/api/login-greeting",
    "/api/list-prefs",
    "/api/list-views",
    "/api/mail-types",

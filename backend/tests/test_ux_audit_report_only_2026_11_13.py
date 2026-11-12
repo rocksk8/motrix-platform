@@ -41,11 +41,11 @@ const s = '待審核'; const n = (1234).toLocaleString('zh-TW');
 
 def test_positive_control_scanner_finds_known_bad_things(tmp_path):
     root = str(tmp_path)
-    _write(root, "frontend/pages/bad.html", BAD_PAGE)
-    _write(root, "frontend/pages/notification-settings.html", "<p>請貼上 Channel access token</p>")
+    _write(root, "backend/modules/demo/pages/bad.html", BAD_PAGE)
+    _write(root, "backend/modules/demo/pages/notification-settings.html", "<p>請貼上 Channel access token</p>")
     cfg = UA.load_config()
     rep = UA.run(root, cfg)
-    e = rep["files"]["frontend/pages/bad.html"]
+    e = rep["files"]["backend/modules/demo/pages/bad.html"]
     assert e["has_pg_header"] and e["h1_count"] == 1
     assert e["primary_in_header"] == 2 and e["primary_in_header_over1"] == 1
     assert e["inline_styles"] == 1 and e["to_locale_string"] == 1 and e["th_count"] == 2
@@ -55,7 +55,7 @@ def test_positive_control_scanner_finds_known_bad_things(tmp_path):
     assert d["等我簽核"]["text"] == 1, "x-text 內的字串字面要算畫面文字"
     assert e["forbidden"]["token"]["text"] == 1 and e["forbidden"]["SMTP"]["text"] == 1
     # 白名單：LINE 設定頁可出現 token／channel
-    w = rep["files"]["frontend/pages/notification-settings.html"]
+    w = rep["files"]["backend/modules/demo/pages/notification-settings.html"]
     assert w["forbidden"] == {} and w["forbidden_hits"] == 0
     # 報告可輸出、ratchet 比對可跑
     md = UA.to_markdown(rep, cfg, [])
@@ -63,7 +63,7 @@ def test_positive_control_scanner_finds_known_bad_things(tmp_path):
     base = UA.baseline_view(rep, cfg)
     assert UA.compare(rep, base, cfg) == []
     worse = json.loads(json.dumps(base))
-    worse["files"]["frontend/pages/bad.html"]["inline_styles"] = 0
+    worse["files"]["backend/modules/demo/pages/bad.html"]["inline_styles"] = 0
     probs = UA.compare(rep, worse, cfg)
     assert probs and probs[0][1] == 0 and probs[0][2] == 1, "現在 > 基準 ＝ 倒退"
 

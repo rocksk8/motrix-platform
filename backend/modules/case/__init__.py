@@ -67,6 +67,8 @@ MODULE = ModuleSpec(
         ("case.alt_view", "case"): alt_view.view,
         # IP-DB1：首頁「我的工作」的案件分組（L1 routers/dashboard_mine.py 彙整，2026-11-13）
         ("dashboard.mine_groups", "case"): _dashboard_groups.mine_groups,
+        # IP-GR1：登入問候語的「離開期間新增 N 張報價單」（L1 routers/auth.py 取用；2026-11-13）
+        ("greeting.new_quotes", "case"): _dashboard_groups.new_quotes_since,
         # IP-11：每日到期檢查
         ("daily.check", "case_deadlines"): case_deadlines.run_daily_checks,
         # IP-10：「待我簽核」佇列上 M01 的五種單據（彙整在 L1 routers/approval_queue.py，2026-09-27）

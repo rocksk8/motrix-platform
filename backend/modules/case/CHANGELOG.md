@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+- 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
+- 文字：『拒絕結案』全改『駁回結案』（報價單頁訊息、稽核動作名稱、擇一方案設定說明）；案件頁新增 `?quick=` 深連結（mine／stage_overdue／recv_overdue／missing_docs）。
+
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。

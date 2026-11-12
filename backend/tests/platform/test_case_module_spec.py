@@ -41,6 +41,7 @@ EXPECTED = {
     ("approval.queue_items", "case_material_change"), ("approval.detail", "material_change"),       # 33-M2b 材料申請變更
     ("payables.pending", "case_material"), ("remit.reviews", "case_material"), ("expense.entries", "remit_fee_case_material"),
     ("dashboard.mine_groups", "case"),                                                              # 首頁「我的工作」案件分組（2026-11-13 UX P1.5）
+    ("greeting.new_quotes", "case"),                                                                # 登入問候語：離開期間新增報價單數（2026-11-13）
 }
 
 
