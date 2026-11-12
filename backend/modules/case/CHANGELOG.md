@@ -1,9 +1,9 @@
 # 案件 更新紀錄
 
-## 1.0.219 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）
+## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
 - 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
 
-## (next) — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+## 1.0.219 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
 - 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
 - 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
 

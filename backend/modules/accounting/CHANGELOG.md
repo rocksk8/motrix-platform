@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+## 1.1.67 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`notify.py` 的傳票／總帳申請通知多了 LINE 獨立通道（`voucher_submitted`／`voucher_next_tier`／`voucher_approved`／`voucher_returned`／`ledger_action_submitted`／`ledger_action_approved`／`ledger_action_returned`；只放單號與狀態，不放摘要與退回說明）；信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`（全信件對應的 LINE 事件）。
 

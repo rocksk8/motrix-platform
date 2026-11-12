@@ -1,6 +1,6 @@
 # 刪除暫存區 更新紀錄
 
-## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+## 1.0.9 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（前端）：`recycle-bin.html` 手機（≤767px）與直立平板（≤1023px）版面——8 欄表格改一筆一張卡，「還原」「永久刪除」並排且加大間距避免誤觸，輸入框 16px／44px 高。桌機版不變。（由 fix/mobile-cases-layout-v2 合入；條目於 T81 整合補記。）無 API／資料／權限判斷變更。
 
 ## 1.0.8 — 2026-11-11（fix/t80-conn-leak-net；每日清除失敗分支先放寫鎖；L1 介面不變）

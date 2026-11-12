@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+## 1.0.37 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
 - 前端：`shipping-export-history.html` 等頁的載入失敗訊息改用 UX 規範的白話（403／連線失敗／其他），狀態碼只進 console。無 API／資料／權限變更。
 - 測試：`tests/test_e2e_load_error_banner_2026_11_13.py`。
 

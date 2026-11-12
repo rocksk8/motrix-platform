@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+## 1.1.45 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api/vendor_contractors.py` 承攬商報價單附件刪除申請接上 LINE 獨立通道（僅 LINE 事件 `dispatch_file_delete_request`；申請送出與輪到下一層時各整批發一則，沒有簽核層時由最高管理者收；不放檔名與原因），泛用的 module_activity 對這件事加 `line_skip` 不重複推；`dispatch_notify.py` 信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`。
 
