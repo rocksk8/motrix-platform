@@ -1501,8 +1501,10 @@ def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query
             return None
         conn = get_db()
         try:
-            r = conn.execute("SELECT COUNT(*) AS n FROM quotations WHERE substr(created_at,1,10) > ?",
-                             (prev.astimezone(LG.TZ).date().isoformat(),)).fetchone()
+            # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較；
+            # 精確到時分秒（原本只比日期，上一次登入當天建立的單會漏算；審查 L4）
+            r = conn.execute("SELECT COUNT(*) AS n FROM quotations WHERE created_at > ?",
+                             (prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"),)).fetchone()
             return int(r["n"] or 0)
         finally:
             conn.close()

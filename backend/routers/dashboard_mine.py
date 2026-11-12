@@ -6,11 +6,14 @@
 [不變式]
   - 「我的」定義＝UX-BUSINESS-PAGES-PROPOSAL §3.1：待我簽核／我送出的單／卡住的單（最高管理者）＋各模組自己交出的分組。
   - 分組由「使用者實際有的模組權限」決定（模組不在、沒權限 ⇒ 那一組不出現，不是 0）；每組各自 try/except，
-    壞一組只少那一組（`errors` 記 key），不會讓首頁整塊空白。
-  - 待簽核的數字與 `/api/approval-queue/count` 同一個來源（`visible_queue_items` → `mine`），不另算。
-  - 每人 30 秒記憶體快取（首頁每次開都會呼叫；簽核動作後前端以 `?fresh=1` 略過）；快取鍵含權限指紋，改權限立即換新。
+    壞一組只少那一組（回應 `partial=true`），不會讓首頁整塊空白；**有任何一組讀不到 ⇒ 不當成「沒事」（empty=false）、結果不進快取**。
+  - 簽核三組（待我簽核／我送出的單／卡住的單）**每次現算、不快取**：與 `/api/approval-queue/count` 同一個來源
+    （`visible_queue_items` → `mine`），簽完回首頁、別人簽掉、代理人生效／撤銷都立刻反映（審查 M1／M2）。
+  - 只有各模組提供者的分組（案件數字等，查詢較重、變動慢）每人快取 30 秒；快取鍵含使用者 id、示範模式旗標與權限指紋
+    （角色、模組勾選、財務權）；`?fresh=1` 略過快取但同一人 5 秒內最多重算一次（防迴圈灌）。
   - 提供者回傳的 group 形狀：{key,title,count,href,hrefLabel,items:[{title,sub,href,tone}],kind?,order?}；
-    `tone` 只用 ok／warn／crit；`kind`＝work（預設）／money／remind，前端據此分區；缺 key／title 的丟棄。
+    `tone` 只用 ok／warn／crit；`kind`＝work（預設）／money／remind，前端據此分區；缺 key／title 的丟棄；
+    `href` 只收站內相對路徑或 http(s)（`javascript:` 等一律清成空字串，前端用 :href 綁定）。
 [契約題] tests/test_dashboard_mine_2026_11_13.py
 """
 import logging
@@ -23,12 +26,14 @@ from fastapi import APIRouter, Header, Query
 from core import registry
 from helpers import _require_user
 from helpers.auth import has_finance_access
+from db import is_demo_mode
 from routers.approval_queue import visible_queue_items
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _TTL = 30.0
+_FRESH_MIN_GAP = 5.0
 _cache: dict = {}
 _lock = threading.Lock()
 _TZ = timezone(timedelta(hours=8))
@@ -130,6 +135,18 @@ def _approval_groups(user: dict, now) -> list:
     return out
 
 
+def _safe_href(v) -> str:
+    """站內相對路徑或 http(s)；其他（javascript:、data:、//host、含控制字元）一律當空字串。"""
+    h = str(v or "").strip()
+    if not h or any(ord(c) < 32 for c in h) or h.startswith("//") or "\\" in h:
+        return ""
+    low = h.lower()
+    if low.startswith(("http://", "https://")):
+        return h
+    head = h.split("?", 1)[0].split("#", 1)[0]
+    return "" if ":" in head else h
+
+
 def _clean_group(g, order_default=50):
     """提供者回傳的分組做最低限度的形狀檢查；不合格丟棄（不信任第三方模組的輸出形狀）。"""
     if not isinstance(g, dict) or not g.get("key") or not g.get("title"):
@@ -137,7 +154,7 @@ def _clean_group(g, order_default=50):
     items = []
     for it in (g.get("items") or [])[:_MAX_ITEMS]:
         if isinstance(it, dict) and it.get("title"):
-            items.append({"title": str(it["title"]), "sub": str(it.get("sub") or ""), "href": str(it.get("href") or ""),
+            items.append({"title": str(it["title"]), "sub": str(it.get("sub") or ""), "href": _safe_href(it.get("href")),
                           "tone": it.get("tone") if it.get("tone") in _TONES else "ok"})
     try:
         count = int(g.get("count", len(items)))
@@ -148,19 +165,14 @@ def _clean_group(g, order_default=50):
         order = int(g.get("order", order_default))
     except (TypeError, ValueError):
         order = order_default
-    return {"key": str(g["key"]), "title": str(g["title"]), "count": count, "href": str(g.get("href") or ""),
+    return {"key": str(g["key"]), "title": str(g["title"]), "count": count, "href": _safe_href(g.get("href")),
             "hrefLabel": str(g.get("hrefLabel") or "看全部"), "items": items, "kind": kind, "order": order,
             "empty": str(g.get("empty") or "")}
 
 
-def build_mine(user: dict) -> dict:
-    now = _now()
-    groups, errors = [], []
-    try:
-        groups.extend(_approval_groups(user, now))
-    except Exception:                                     # noqa: BLE001
-        logger.exception("首頁我的工作：簽核分組失敗")
-        errors.append("approvals")
+def _provider_groups(user: dict):
+    """各模組提供者的分組 ⇒ (groups, failed:bool)。"""
+    groups, failed = [], False
     for name, fn in sorted(registry.providers("dashboard.mine_groups").items()):
         try:
             for g in (fn(user) or []):
@@ -169,25 +181,46 @@ def build_mine(user: dict) -> dict:
                     groups.append(c)
         except Exception:                                 # noqa: BLE001
             logger.exception("首頁我的工作：提供者 %s 失敗（這一類不列出）", name)
-            errors.append(name)
+            failed = True
+    return groups, failed
+
+
+def _cache_key(user: dict) -> tuple:
+    # 權限指紋＋使用者 id＋示範模式：刪掉重建同名帳號、示範（獨立資料庫）與正式帳號同名，都不會吃到別人的快取
+    return (user.get("id"), user["username"], bool(is_demo_mode()), user.get("role"), str(user.get("modules") or ""),
+            bool(has_finance_access(user)))
+
+
+def build_mine(user: dict, *, fresh: bool = False) -> dict:
+    now = _now()
+    failed = False
+    groups = []
+    try:
+        groups.extend(_approval_groups(user, now))        # 每次現算，不快取（M1／M2）
+    except Exception:                                     # noqa: BLE001
+        logger.exception("首頁我的工作：簽核分組失敗")
+        failed = True
+
+    key, t = _cache_key(user), time.monotonic()
+    with _lock:
+        hit = _cache.get(key)
+    use_cache = bool(hit) and (t - hit[0] < _FRESH_MIN_GAP if fresh else t - hit[0] < _TTL)
+    if use_cache:
+        pg = hit[1]
+    else:
+        pg, pfailed = _provider_groups(user)
+        failed = failed or pfailed
+        if not pfailed:                                   # 有失敗的結果不進快取（M3）
+            with _lock:
+                _cache[key] = (t, pg)
+    groups.extend(pg)
     groups.sort(key=lambda g: (g["order"], g["key"]))
-    # 空白狀態＝每一組都沒事可做（待簽核 0 且其他組都 0 筆）：前端據此顯示「目前沒有待辦」＋兩個去處
-    empty = all(g["count"] == 0 for g in groups)
-    return {"groups": groups, "empty": empty, "errors": errors, "generatedAt": now.strftime("%Y-%m-%d %H:%M:%S")}
+    # 空白狀態＝每一組都沒事可做；**有任何一組讀不到就不算「沒事」**（M3）：前端改顯示「部分資料暫時讀不到」
+    empty = (not failed) and all(g["count"] == 0 for g in groups)
+    return {"groups": groups, "empty": empty, "partial": failed, "generatedAt": now.strftime("%Y-%m-%d %H:%M:%S")}
 
 
 @router.get("/api/dashboard/mine")
 def dashboard_mine(fresh: int = Query(0), authorization: str = Header(None)):
     user = _require_user(authorization)
-    # 快取鍵含權限指紋（角色、模組勾選、財務權）：權限一改，下一次就是新的鍵、不會吃到舊分組（不需要掛任何「改權限」的勾點）
-    key = (user["username"], user.get("role"), str(user.get("modules") or ""), bool(has_finance_access(user)))
-    t = time.monotonic()
-    if not fresh:
-        with _lock:
-            hit = _cache.get(key)
-        if hit and t - hit[0] < _TTL:
-            return hit[1]
-    data = build_mine(user)
-    with _lock:
-        _cache[key] = (t, data)
-    return data
+    return build_mine(user, fresh=bool(fresh))

@@ -2497,7 +2497,6 @@
  "/api/dashboard/mine": {
   "k": [
    "empty",
-   "errors",
    "generatedAt",
    "groups",
    "groups[].count",
@@ -2512,7 +2511,8 @@
    "groups[].key",
    "groups[].kind",
    "groups[].order",
-   "groups[].title"
+   "groups[].title",
+   "partial"
   ],
   "s": 200
  },

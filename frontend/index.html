@@ -521,7 +521,7 @@
 
     <!-- ─── 我的工作（UX P1.5）：依「使用者實際有的權限」由伺服器決定出現哪幾組（GET /api/dashboard/mine）。
          讀不到 ⇒ 整區不出現（不顯示成 0）；每一組都 0 ⇒ 只顯示一句話＋兩個去處。 -->
-    <section class="h-sec" data-testid="home-mine-work" x-show="mineWork.loaded && (mineWork.groups.length > 0)" x-cloak>
+    <section class="h-sec" data-testid="home-mine-work" x-show="mineWork.loaded && (mineWork.groups.length > 0 || mineWork.partial)" x-cloak>
       <div class="h-wrap">
         <div class="h-head">
           <div>
@@ -529,6 +529,7 @@
             <p class="h-sub">依您的權限，列出現在輪到您處理的事</p>
           </div>
         </div>
+        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；稍後重新整理看看。</p>
         <template x-if="mineWork.empty">
           <div class="h-mine__empty" data-testid="home-mine-empty">
             <p>目前沒有需要您處理的事。</p>
@@ -1114,15 +1115,15 @@ feedCount(key) {
         } catch (e) { /* 問候語是加值：讀不到就維持原本的標題 */ }
       },
       //: 首頁「我的工作」（/api/dashboard/mine）：分組由伺服器依權限決定；讀不到 ⇒ loaded=false、整區不出現
-      mineWork: { loaded: false, groups: [], empty: false }, _mineWorkN: 0,
+      mineWork: { loaded: false, groups: [], empty: false, partial: false }, _mineWorkN: 0,
       async loadMineWork() {
         const fresh = this._mineWorkN++ > 0          // 第一次吃 30 秒快取；之後（回到分頁、簽完回來）一律重算
         try {
           const r = await fetch(`${API}/dashboard/mine` + (fresh ? '?fresh=1' : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (!r.ok) { this.mineWork = { loaded: false, groups: [], empty: false }; return }
+          if (!r.ok) { this.mineWork = { loaded: false, groups: [], empty: false, partial: false }; return }
           const d = await r.json()
-          this.mineWork = { loaded: true, groups: Array.isArray(d.groups) ? d.groups : [], empty: !!d.empty }
-        } catch { this.mineWork = { loaded: false, groups: [], empty: false } }
+          this.mineWork = { loaded: true, groups: Array.isArray(d.groups) ? d.groups : [], empty: !!d.empty, partial: !!d.partial }
+        } catch { this.mineWork = { loaded: false, groups: [], empty: false, partial: false } }
       },
       mineItems: [],
       mineCount: 0,

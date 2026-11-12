@@ -57,3 +57,18 @@ def test_mine_work_lists_pending_item_with_blocker_and_days(live_server, make_us
     assert "待我簽核" in txt and "測試客戶 測試專案" in txt and "已 " in txt and "天" in txt
     assert not page.locator("[data-testid=home-mine-empty]").is_visible()
     assert card.locator("a.h-mine__go").get_attribute("href") == "pages/approval-queue.html"
+
+
+@pytest.mark.e2e
+def test_mine_work_partial_shows_notice_not_the_empty_sentence(live_server, make_user, new_page, login_as):
+    """審查 M3：有一組讀不到時，不可以對使用者說「目前沒有需要您處理的事」。"""
+    user = make_user(username="e2e_mw_partial", role="sales", modules=["quotation"])
+    page = new_page(viewport={"width": 1440, "height": 900})
+    login_as(page, user)
+    body = '{"groups":[],"empty":false,"partial":true,"generatedAt":"2026-11-13 10:00:00"}'
+    page.route("**/api/dashboard/mine*", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    page.goto(f"{live_server}/index.html")
+    note = page.locator("[data-testid=home-mine-partial]")
+    note.wait_for(state="visible", timeout=20000)
+    assert "暫時讀不到" in note.inner_text()
+    assert not page.locator("[data-testid=home-mine-empty]").is_visible()

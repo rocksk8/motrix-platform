@@ -34,8 +34,8 @@ def test_provider_failure_only_drops_that_group(monkeypatch):
     def ok(u): return [{"key": "zz", "title": "好的", "count": 2, "order": 99}]
     monkeypatch.setattr(registry, "providers", lambda cap: {"a": boom, "b": ok} if cap == "dashboard.mine_groups" else {})
     monkeypatch.setattr(DM, "_approval_groups", lambda u, now: [DM._group("approvals", "待我簽核", [], order=10)])
-    r = DM.build_mine({"username": "u", "role": "sales"})
-    assert r["errors"] == ["a"]
+    r = DM.build_mine({"id": 1, "username": "u", "role": "sales"})
+    assert r["partial"] is True and "errors" not in r
     assert [g["key"] for g in r["groups"]] == ["approvals", "zz"]
     assert r["empty"] is False
 
@@ -44,7 +44,7 @@ def test_empty_when_all_zero(monkeypatch):
     from core import registry
     monkeypatch.setattr(registry, "providers", lambda cap: {})
     monkeypatch.setattr(DM, "_approval_groups", lambda u, now: [DM._group("approvals", "待我簽核", [], order=10)])
-    assert DM.build_mine({"username": "u", "role": "sales"})["empty"] is True
+    assert DM.build_mine({"id": 2, "username": "u2", "role": "sales"})["empty"] is True
 
 
 def _h(client, u, p):
@@ -76,12 +76,12 @@ def test_api_shape_cache_and_permission_groups(client, make_user):
     r = client.get("/api/dashboard/mine", headers=_h(client, *u))
     assert r.status_code == 200, r.text
     d = r.json()
-    assert set(d) >= {"groups", "empty", "errors", "generatedAt"} and d["errors"] == []
+    assert set(d) >= {"groups", "empty", "partial", "generatedAt"} and d["partial"] is False
     keys = [g["key"] for g in d["groups"]]
     assert keys[0] == "approvals" and "my_cases" in keys
     assert "receivable_overdue" not in keys          # 業務沒有財務權限 ⇒ 沒有「錢」那一組
     h = _h(client, *u)
-    assert client.get("/api/dashboard/mine", headers=h).json()["generatedAt"] == d["generatedAt"]   # 快取
+    assert client.get("/api/dashboard/mine", headers=h).json()["groups"] == d["groups"]   # 同一人連續讀（提供者分組命中快取）結果一致
     assert client.get("/api/dashboard/mine?fresh=1", headers=h).status_code == 200
 
 
@@ -117,7 +117,7 @@ def test_cache_is_per_user_never_shared(client, make_user):
     a1 = client.get("/api/dashboard/mine", headers=_h(client, *sa)).json()
     b1 = client.get("/api/dashboard/mine", headers=_h(client, *sales)).json()
     a2 = client.get("/api/dashboard/mine", headers=_h(client, *sa)).json()          # 命中快取
-    assert a1 == a2
+    assert a1["groups"] == a2["groups"]
     ka, kb = {g["key"] for g in a1["groups"]}, {g["key"] for g in b1["groups"]}
     assert "receivable_overdue" in ka and "receivable_overdue" not in kb and "stuck" not in kb
     appr = next(g for g in a1["groups"] if g["key"] == "approvals")["count"]
@@ -139,3 +139,118 @@ def test_cache_key_changes_with_permissions(client, make_user):
     finally:
         conn.close()
     assert "my_cases" in [g["key"] for g in client.get("/api/dashboard/mine", headers=h).json()["groups"]]
+
+
+# ── 審查 hichan-12（2026-11-13）M1／M2／M3／L1／L2／L3／L5 ─────────────────────────────────────────
+def test_m1_approvals_group_is_never_cached(client, make_user):
+    """簽完回首頁：不等 30 秒，「待我簽核」數字立刻與角標一致。"""
+    a = make_user("dm_m1_a", role="sales", modules=["quotation"])
+    h = _h(client, *a)
+    DM.reset_cache()
+    _seed("MQ-DM-M1", ["dm_m1_a"], requested_by="dm_m1_x")
+    n1 = next(g for g in client.get("/api/dashboard/mine", headers=h).json()["groups"] if g["key"] == "approvals")["count"]
+    assert n1 == 1
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET status='已核准' WHERE quote_no='MQ-DM-M1'")        # 別人簽掉／退回／撤回
+        conn.commit()
+    finally:
+        conn.close()
+    g = next(g for g in client.get("/api/dashboard/mine", headers=h).json()["groups"] if g["key"] == "approvals")   # 沒帶 fresh
+    assert g["count"] == 0 == client.get("/api/approval-queue/count", headers=h).json()["count"]
+
+
+def test_m2_delegation_change_takes_effect_immediately(client, make_user, monkeypatch):
+    """代理生效／撤銷後，立刻反映；撤銷後原代理人不會在快取期間還看到被代理人的單。"""
+    make_user("dm_m2_boss", role="sales", modules=["quotation"])
+    dele = make_user("dm_m2_dele", role="sales", modules=["quotation"])
+    _seed("MQ-DM-M2", ["dm_m2_boss"], requested_by="dm_m2_x")
+    hd = _h(client, *dele)
+    DM.reset_cache()
+
+    def cnt():
+        return next(g for g in client.get("/api/dashboard/mine", headers=hd).json()["groups"] if g["key"] == "approvals")["count"]
+    assert cnt() == 0
+    from routers import approval_queue as AQ
+    monkeypatch.setattr(AQ, "active_delegators_for", lambda conn, username: {"dm_m2_boss"} if username == "dm_m2_dele" else set())
+    assert cnt() == 1
+    monkeypatch.setattr(AQ, "active_delegators_for", lambda conn, username: set())
+    assert cnt() == 0
+
+
+def test_m3_failure_is_not_empty_and_not_cached(monkeypatch):
+    from core import registry
+    calls = {"n": 0}
+
+    def flaky(u):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("x")
+        return [{"key": "ok", "title": "好", "count": 3}]
+    monkeypatch.setattr(registry, "providers", lambda cap: {"p": flaky} if cap == "dashboard.mine_groups" else {})
+    monkeypatch.setattr(DM, "_approval_groups", lambda u, now: [DM._group("approvals", "待我簽核", [], order=10)])
+    DM.reset_cache()
+    u = {"id": 77, "username": "m3", "role": "sales"}
+    r1 = DM.build_mine(u)
+    assert r1["partial"] is True and r1["empty"] is False            # 讀不到 ≠ 沒事
+    r2 = DM.build_mine(u)                                              # 失敗的結果沒進快取 ⇒ 馬上重試成功
+    assert r2["partial"] is False and [g["key"] for g in r2["groups"]] == ["approvals", "ok"]
+    DM.build_mine(u)
+    assert calls["n"] == 2                                             # 成功的結果才進快取
+
+
+def test_m3_approvals_failure_is_partial(monkeypatch):
+    from core import registry
+    monkeypatch.setattr(registry, "providers", lambda cap: {})
+
+    def boom(u, now):
+        raise RuntimeError("x")
+    monkeypatch.setattr(DM, "_approval_groups", boom)
+    r = DM.build_mine({"id": 5, "username": "m3b", "role": "sales"})
+    assert r["partial"] is True and r["empty"] is False
+
+
+def test_l1_cache_key_has_user_id_and_demo_flag(monkeypatch):
+    k1 = DM._cache_key({"id": 1, "username": "x", "role": "sales", "modules": "[]"})
+    k2 = DM._cache_key({"id": 2, "username": "x", "role": "sales", "modules": "[]"})
+    assert k1 != k2                                                    # 刪掉重建同名帳號
+    monkeypatch.setattr(DM, "is_demo_mode", lambda: True)
+    assert DM._cache_key({"id": 1, "username": "x", "role": "sales", "modules": "[]"}) != k1       # 示範 vs 正式
+
+
+def test_l2_fresh_cannot_hammer_providers(monkeypatch):
+    from core import registry
+    calls = {"n": 0}
+
+    def p(u):
+        calls["n"] += 1
+        return [{"key": "k", "title": "T", "count": 1}]
+    monkeypatch.setattr(registry, "providers", lambda cap: {"p": p} if cap == "dashboard.mine_groups" else {})
+    monkeypatch.setattr(DM, "_approval_groups", lambda u, now: [])
+    DM.reset_cache()
+    u = {"id": 9, "username": "l2", "role": "sales"}
+    for _ in range(20):
+        DM.build_mine(u, fresh=True)
+    assert calls["n"] == 1                                             # 5 秒內不論帶不帶 fresh 都只算一次
+
+
+@pytest.mark.parametrize("bad", ["javascript:alert(1)", "JaVaScRiPt:x", "data:text/html,x", "//evil.example/x", "vbscript:x",
+                                 "pages\\x", "pages/a\n.html", " javascript:x"])
+def test_l3_unsafe_hrefs_are_dropped(bad):
+    g = DM._clean_group({"key": "k", "title": "T", "href": bad, "items": [{"title": "a", "href": bad}]})
+    assert g["href"] == "" and g["items"][0]["href"] == ""
+
+
+@pytest.mark.parametrize("good", ["pages/case-management.html?quick=mine,stage_overdue", "pages/approval-queue.html", "/pages/x.html#a",
+                                  "https://example.com/a?b=c", "http://example.com/"])
+def test_l3_safe_hrefs_pass(good):
+    assert DM._clean_group({"key": "k", "title": "T", "href": good})["href"] == good
+
+
+def test_l5_finance_without_case_module_gets_count_but_no_link(client, make_user):
+    u = make_user("dm_l5_fin", role="finance", modules=[])
+    DM.reset_cache()
+    g = next((g for g in client.get("/api/dashboard/mine", headers=_h(client, *u)).json()["groups"] if g["key"] == "receivable_overdue"), None)
+    assert g is not None, "財務角色應該有「應收款項追蹤」這一組"
+    assert g["href"] == "" and all(i["href"] == "" for i in g["items"])

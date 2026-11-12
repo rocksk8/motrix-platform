@@ -50,9 +50,11 @@ def mine_groups(user: dict) -> list:
                         "empty": "目前沒有進行中的案件"})
         if money:
             recv_all = conn.execute(base + f" AND {SQL_DEAL_TAG} = '已成案' AND " + _q._CASE_RECV_OVERDUE_SQL, fp + [today]).fetchone()[0]
-            items = ([{"title": "款項已過預計收款日", "sub": "%d 件案件" % recv_all, "href": HREF + "?quick=recv_overdue", "tone": "crit"}]
+            # 沒有案件頁權限的財務帳號：只給數字、不給連結（連過去是打不開的頁面）
+            link = (HREF + "?quick=recv_overdue") if can_case else ""
+            items = ([{"title": "款項已過預計收款日", "sub": "%d 件案件" % recv_all, "href": link, "tone": "crit"}]
                      if recv_all else [])
-            out.append({"key": "receivable_overdue", "title": "應收款項追蹤", "count": recv_all, "href": HREF + "?quick=recv_overdue",
+            out.append({"key": "receivable_overdue", "title": "應收款項追蹤", "count": recv_all, "href": link,
                         "hrefLabel": "去追款", "items": items, "kind": "money", "order": 60,
                         "empty": "沒有逾期未收的款項"})
     return out
