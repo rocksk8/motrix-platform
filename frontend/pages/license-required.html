@@ -17,6 +17,7 @@
     .lr-kv { margin:14px 0 0; font-size:13px; }
     .lr-kv dt { color:var(--text-secondary); float:left; clear:left; width:6.5em; }
     .lr-kv dd { margin:0 0 2px 6.5em; word-break:break-all; }
+    [hidden] { display:none !important; }   /* .btn／.lr-row 的 display 會蓋掉 hidden 屬性（T83：授權頁連結只給最高管理者） */
     .lr-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
   </style>
 </head>
@@ -33,6 +34,7 @@
     <dl class="lr-kv" id="lr-kv"></dl>
     <div class="lr-row">
       <button type="button" class="btn btn-primary" id="lr-retry">重新檢查</button>
+      <a class="btn btn-ghost" id="lr-import" href="license-settings.html" hidden>前往授權頁匯入</a>
       <button type="button" class="btn btn-ghost" id="lr-logout">登出</button>
     </div>
   </div>
@@ -42,6 +44,8 @@
       try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { sess = {} }
       if (!sess.token) { location.replace('login.html'); return }
       var H = { Authorization: 'Bearer ' + sess.token }
+      // 只有最高管理者看得到「前往授權頁匯入」（授權頁與匯入端點本身仍由伺服器驗權限；這裡只是不讓其他人看到一個點了會被擋的連結）
+      if (sess.role === 'superadmin') document.getElementById('lr-import').hidden = false
       // 狀態代碼 ⇒ 給人看的說明（與後端 helpers/licensing.py::_GATE_MESSAGES 同義；這裡多講「該怎麼辦」）
       var REASON = {
         missing: ['尚未安裝授權金鑰', '這台伺服器上找不到授權金鑰。請向供應商取得，並放到伺服器的指定位置。'],

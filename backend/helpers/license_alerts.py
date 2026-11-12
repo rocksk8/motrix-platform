@@ -2,10 +2,12 @@
 
 `helpers/licensing.py` 的契約是「完全離線、不進資料庫」，所以寫稽核的部分放這裡。
 
-三種事件（都**不可以悄悄放過去**；這裡只負責「留紀錄」，畫面上的橫幅走 `X-Motrix-License` 標頭，見 notif.js）：
+四種事件（都**不可以悄悄放過去**；這裡只負責「留紀錄」，畫面上的橫幅走 `X-Motrix-License` 標頭，見 notif.js）：
   · `license.emergency_pass`   靠緊急放行通行證撐著（授權金鑰失效、通行證生效）——ERROR log＋稽核，每個通行證每天一次
   · `license.dev_key`          驗章通過但簽發方是**開發金鑰**（env=dev）——WARNING log＋稽核，每天一次
   · `license.startup_blocked`  啟動時授權就不通過（業務 API 會回 402）——ERROR log＋稽核
+  · 授權快到期（T83）：不在這裡去重——每日排程 `system_checks._check_license_expiry` 用「到期日|檔位」旗標控制，
+    這裡只負責 `expiry_notice`（寄 `license_expiry` 信；LINE 走登記表）。
 
 去重：同一個代碼同一天只寫一次（行程內節流，同 `company_setup.alert` 的做法）。**「今天已寫」是寫成功之後才標記**
 （LG-S2）；寫失敗（資料庫忙到逾時）⇒ 只記 log、不丟例外，過 `_RETRY_AFTER_S` 秒後下一個請求會再試一次，直到寫成功為止。
@@ -177,3 +179,33 @@ def startup_check():
     except Exception:  # noqa: BLE001
         logger.exception("license_alerts: 啟動檢查失敗（服務照常啟動）")
         return None
+
+
+def expiry_notice(rem, status):
+    """寄「授權即將到期」給最高管理者（`license_expiry`；T83）。`rem`＝`licensing.expiry_reminder()`、`status`＝`verify_license()`。
+
+    回傳＝呼叫端可以寫「這個檔位已通知」旗標（寄出／結果不明／永久失敗＝True；沒有收件人、暫時失敗＝False，隔天重試）。
+    全白話：不放機器代碼、簽章等字樣。LINE 通道由 `send_registered` 附帶（事件開關與重要程度在 LINE 登記表；沒登記就只有信）。"""
+    from helpers import email_notify as _en
+    days = rem["days"]
+    perpetual = rem.get("kind") == _lic.LICENSE_KIND_PERPETUAL
+    if rem["level"] == "ended":
+        badge, color = "維護期已結束", "#D97706"
+        reason = "系統授權的維護期已於 %s 結束（已過 %d 天）。系統仍可繼續使用，但不再提供更新。" % (rem.get("expires"), -days)
+    elif days == 0:
+        badge, color = "今天到期", "#DC2626"
+        reason = "系統授權將於今天（%s）%s。" % (rem.get("expires"), "結束維護期" if perpetual else "到期")
+    else:
+        badge, color = "剩 %d 天" % days, ("#DC2626" if days <= _lic.EXPIRY_THRESHOLDS[-1] else "#D97706")
+        reason = "系統授權將於 %s %s，剩下 %d 天。" % (rem.get("expires"), "結束維護期" if perpetual else "到期", days)
+    rows = [("客戶", status.get("customer") or "—"), ("到期日", rem.get("expires") or "—"),
+            ("授權種類", "永久授權（到期日為維護期結束日）" if perpetual else "年費授權")]
+    note = ("年費授權到期後，系統會暫停使用，所有人都無法登入操作（資料不會遺失）。" if not perpetual
+            else "永久授權過了維護期仍可繼續使用，但不再提供更新。") +         "請向供應商取得新的授權檔，再由最高管理者到系統的「授權」頁匯入；匯入前系統會自動備份目前的授權。"
+    out = {}
+    ok = _en.send_registered("license_expiry", title="系統授權即將到期", rows=rows, to_group=True, reason=reason,
+                             badge_text=badge, badge_color=color, note=note, button_text="前往授權頁",
+                             link=_en._base_url() + "/pages/license-settings.html", wait=True, out=out)
+    if not ok:
+        logger.warning("license_alerts.expiry_notice：沒有寄成（%s），明天會再試", out.get("outcome"))
+    return ok
