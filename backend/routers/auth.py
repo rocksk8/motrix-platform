@@ -635,6 +635,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
         conn.close()
         with _totp_lock:
             _totp_pending.pop(body.challenge_token, None)
+        _audit_login_failed(row["username"] if row else "", ip, source="totp")     # 只留稽核（不計鎖定：不是猜測型失敗）
         raise HTTPException(401, "帳號不存在或已停用")
 
     code = (body.code or "").strip()
@@ -781,6 +782,7 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         ).fetchone()
         conn.close()
         if not sess or not row or sess["user_id"] != row["id"]:
+            _audit_login_failed(row["username"] if row else "", ip, source="qr")     # 只留稽核（不計鎖定：session token 不可猜）
             raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請改用密碼核准")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)

@@ -5,8 +5,8 @@
 [公開介面] PREFS_KEY, allowed_roles, filter_usernames, is_muted, muted_events, prefs_view, role_choices, set_muted
 [契約題] tests/test_line_recipients_2026_11_12.py
 [不變式]
-  ① 語意是**交集（只縮不擴）**：LINE 最終收件人 ＝ 呼叫端給的帳號（＝信件已解析、已套超管覆寫與個人信件退訂的收件人）
-     ∩ 該類型的「允許角色」 ∩ 沒有被本人退訂 ∩（之後由 `line_notify.ids_for`）已綁定。
+  ① 語意是**交集（只縮不擴）**：LINE 最終收件人 ＝ 呼叫端給的帳號（2026-11-12 起＝`helpers.event_audience` 解析出的「事件業務收件人」，**不看 Email、不看信件退訂**）
+     ∩ 該類型的「允許角色」 ∩ 沒有被本人退訂 LINE ∩（之後由 `line_notify.ids_for`）已綁定。
      這個檔**絕不會讓不在呼叫端清單裡的人收到任何東西**。
   ② 角色允許清單存 `system_settings.line_notify.event_roles = {event_key: [role…]}`（寫入在 `line_notify.set_event_roles`，與事件開關共用同一把鎖）：
      **鍵不存在＝所有角色**（沿用現行行為，既有部署不變）；`[]`＝沒有任何角色；角色只收 `mail_types.ROLES`；以 `users.role` 判斷（與信件 custom 覆寫同一來源）。
@@ -106,8 +106,21 @@ def filter_usernames(event_key: str, usernames) -> list:
         return []
 
 
+def _in_group(event_key: str, username: str) -> bool:
+    """我是不是這個事件的群組收件人（查不到＝False，fail-closed：寧可不列）。"""
+    try:
+        from . import event_audience as _ea
+        from . import line_notify as _ln
+        lg = (_ln.LINE_EVENTS.get(event_key) or {}).get("line_group", "inherit")
+        return username in set(_ea.group_usernames(event_key, group=lg if lg not in (None, "inherit") else None))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("line_recipients: 查群組收件人失敗（%r）：%s", event_key, type(exc).__name__)
+        return False
+
+
 def prefs_view(username: str, role: str) -> list:
-    """本人設定頁用：`[{key, name, enabled}]`——只列「已接線、公司已勾選、且我的角色被允許」的類型；enabled＝我有沒有要收。"""
+    """本人設定頁用：`[{key, name, enabled}]`——只列「已接線、公司已勾選、我的角色被允許、且**我真的可能收到**」的類型；enabled＝我有沒有要收。
+    字典 `audience="group"` 的事件（例如登入失敗告警）只列給群組收件人（`event_audience.group_usernames`）；其他同仁不是收件人，列出來只會讓人以為勾了會收到。"""
     from . import line_notify as _ln
     from . import mail_types as _mt
     out = []
@@ -117,6 +130,8 @@ def prefs_view(username: str, role: str) -> list:
             continue
         allowed = allowed_roles(k)
         if allowed is not None and role not in allowed:
+            continue
+        if (_ln.LINE_EVENTS.get(k) or {}).get("audience") == "group" and not _in_group(k, username):
             continue
         t = _mt.get(k)
         out.append({"key": k, "name": t.name if t else k, "enabled": k not in muted})

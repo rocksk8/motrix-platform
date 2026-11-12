@@ -963,21 +963,21 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     **LINE 是獨立通道**（2026-11-12）：已接線的事件（`line_notify.LINE_EVENTS`）同時由 `line_notify.deliver_event` 發 LINE，收件人用同樣的 `usernames`／`to_group`
     經 `helpers.event_audience` 直接解析（不看 Email、不看信件退訂／關閉、不因信件失敗而跳過）。`line_exclude`：LINE 要排除的帳號（例如操作者本人；不影響信件）。
     `line_key`：LINE 自己的「已推播」記號鑰匙（`wait=True` 的每日檢查型呼叫端請傳；同一把鑰匙只推一次，Email 暫時失敗隔天重試時 LINE 不重推）。
-    `wait=True` 時 LINE 同步發送，結果寫進 `out["line"]`；**沒有任何 Email 收件人**時，回 True 的條件改看 LINE：LINE 推成功／永久失敗／同鑰匙已推過 ⇒ True（寫記號、不再每天重試）。
+    LINE 預設背景發送（不擋信件與呼叫端）；只有 `wait=True` 且**沒有任何 Email 收件人**時才同步等 LINE，結果寫進 `out["line"]`，回 True 的條件改看 LINE：LINE 推成功／永久失敗／同鑰匙已推過 ⇒ True（寫記號、不再每天重試）。
     `out`（選填 dict）：寄送結果寫進 `out["outcome"]`（`SEND_*`；沒有收件人＝`"no_recipient"`），讓呼叫端分得出「真的寄出」與「保留記號但不確定」。"""
     def _line(fn):      # 明列關鍵字（守門禁止 ** 傳參數）；fn＝`line_notify.deliver_event`（同步）或 `notify_event`（背景）
         return fn(event_key, usernames=usernames, to_group=to_group, title=title, rows=_rows_plain(rows), reason=reason, link=link,
                   exclude=line_exclude, dedupe_key=line_key)
     # LINE 先於信件處理：信件這一段的任何例外都不會讓 LINE 漏發；沒啟用／沒勾選／沒人綁定＝什麼都不做；連結經 safe_link（預設不帶）
     lo = None
-    if wait:
-        lo = _line(_ln.deliver_event)                         # 同步：回傳值決定「沒有 Email 收件人」時能不能寫記號
+    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
+                            + (_group_emails(event_key) if to_group else [])))
+    if wait and not to:
+        lo = _line(_ln.deliver_event)                         # 同步：只有「沒有 Email 收件人」時才要等——回傳值決定能不能寫記號
         if out is not None:
             out["line"] = lo
     else:
-        _line(_ln.notify_event)                               # 背景執行緒
-    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
-                            + (_group_emails(event_key) if to_group else [])))
+        _line(_ln.notify_event)                               # 背景執行緒：有 Email 收件人時，LINE 慢（逾時最久 10 秒）不拖住信件與每日檢查；補發靠 `line_pending`
     if not to:
         logger.warning("send_registered: %r 沒有 Email 收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
         if out is not None:
@@ -1698,25 +1698,26 @@ def notify_warranty_expiry(
     _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
 
 
-def _warranty_line_key(quote_no, device_name, days_left) -> str:
-    """保固到期的 LINE「已推播」鑰匙：每張報價單＋每台設備＋每個提醒階段（緊急／提早）只推一次——與 `case_deadlines` 的 `warranty_notif.*` 已通知記號同一個粒度。"""
+def _warranty_line_key(quote_no, sn, days_left) -> str:
+    """保固到期的 LINE「已推播」鑰匙：每張報價單＋每台設備（序號／MAC／名稱，**與 `case_deadlines` 的 `warranty_notif.*` 記號同一個 `sn`**）＋每個提醒階段（緊急／提早）只推一次。
+    不能用顯示名：同一張單兩台同名設備會共用鑰匙，第二台被誤判成「已推過」。"""
     from helpers.alert_settings import warranty_mail_days
     urgent, early = warranty_mail_days()
-    return "warranty_expiry|%s|%s|%s" % (quote_no, device_name, urgent if days_left <= urgent else early)
+    return "warranty_expiry|%s|%s|%s" % (quote_no, sn, urgent if days_left <= urgent else early)
 
 
 def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
-                         owner_username: str = "", out: dict = None) -> bool:
+                         owner_username: str = "", out: dict = None, sn: str = "") -> bool:
     """保固即將到期 → 案件業務（帳號）＋群組收件人，**等寄送結果**。回 True＝呼叫端可以寫「已通知」記號
     （寄出／結果不明／永久失敗）；False＝沒有收件人或暫時失敗（不寫記號，下次每日檢查重試）。
-    `owner_username` 由呼叫端用案件的 `sales_person_id` 外鍵解出（`helpers/case_access.case_owner_username`），**不是**報價單上的顯示名。永不丟例外。"""
+    `sn`＝設備識別（呼叫端與已通知記號同一個值；沒傳退回顯示名），用在 LINE 的已推播鑰匙。`owner_username` 由呼叫端用案件的 `sales_person_id` 外鍵解出（`helpers/case_access.case_owner_username`），**不是**報價單上的顯示名。永不丟例外。"""
     try:
         m = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
         return send_registered("warranty_expiry", title=m["title"], rows=m["rows"], usernames=[owner_username] if owner_username else [],
                                to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
                                link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
                                button_text=m["button_text"], note=m["intro"], wait=True, out=out,
-                               line_key=_warranty_line_key(quote_no, device_name, days_left))
+                               line_key=_warranty_line_key(quote_no, sn or device_name, days_left))
     except Exception:
         logger.exception("_send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
         return False

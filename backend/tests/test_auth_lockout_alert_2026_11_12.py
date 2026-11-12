@@ -81,16 +81,17 @@ def test_alert_content_has_ip_account_count_until_but_no_secret(client, delivere
     title, rows, reason = delivered[0]
     text = json.dumps([title, rows, reason], ensure_ascii=False)
     d = dict(rows)
-    assert "ghost" in d["嘗試的帳號"] and "5" in d["連續失敗"] and "分鐘" in d["鎖定至"]
+    assert "gh***" in d["嘗試的帳號"] and "ghost" not in d["嘗試的帳號"] and "5" in d["連續失敗"] and "分鐘" in d["鎖定至"]      # 不存在的帳號名被遮蔽
     assert "SuperSecret" not in text and TOKEN not in text
     assert "203.0.113.7" in text or "testclient" in text or d["來源 IP"]      # 來源 IP 一定有值
 
 
 def test_alert_names_are_sanitized_and_capped(delivered, sync):
-    AA.on_lockout("k1", "1.2.3.4", ["a\nb" + "x" * 200, "u2", "u3", "u4", "u5", "u6", "u7"], 5, 900, now=100.0)
+    AA.on_lockout("k1", "1.2.3.4", ["a\nb" + "x" * 200, "bbbb2", "cccc3", "dddd4", "eeee5", "ffff6", "gggg7"], 5, 900, now=100.0)
     d = dict(delivered[0][1])
     assert "\n" not in d["嘗試的帳號"] and len(d["嘗試的帳號"].split("、")) == 5
     assert all(len(n) <= 64 for n in d["嘗試的帳號"].split("、"))
+    assert "bbbb2" not in d["嘗試的帳號"]                                                           # 遮蔽：不存在的帳號只留前幾字
 
 
 # ── 2. 節流：同範圍鎖定期間一次；全系統每小時上限＋摘要 ───────────────────────────
@@ -129,7 +130,7 @@ def test_account_scope_alert_has_own_title_and_dedups_separately(delivered, sync
     assert AA.on_lockout("acct:alice", "1.1.1.1", ["alice"], 5, 900, now=101.0, scope="account") == "sent"
     assert AA.on_lockout("acct:alice", "2.2.2.2", ["alice"], 5, 900, now=102.0, scope="account") == "dedup"
     title, rows, reason = delivered[-1]
-    assert "帳號" in title and dict(rows)["帳號"] == "alice" and dict(rows)["觸發來源 IP"] == "1.1.1.1"
+    assert "帳號" in title and dict(rows)["帳號"].startswith("al***") and dict(rows)["觸發來源 IP"] == "1.1.1.1"
     assert "來源 IP" not in dict(rows)
 
 
@@ -442,10 +443,10 @@ def test_wait_true_email_transient_retry_does_not_repush_line(env):
     env["mail_outcome"] = "transient_fail"
     out = {}
     assert _send("warranty_expiry", usernames=[], to_group=True, wait=True, out=out, line_key="k1") is False      # 呼叫端不寫記號 ⇒ 明天重試
-    assert out["line"] == "sent" and len(env["line"]) == 1
+    assert len(env["line"]) == 1                                            # 有 Email 收件人 ⇒ LINE 走背景（測試把背景換成同步）
     out2 = {}
     assert _send("warranty_expiry", usernames=[], to_group=True, wait=True, out=out2, line_key="k1") is False       # 重試
-    assert out2["line"] == "already_pushed" and len(env["line"]) == 1                                         # 沒有第二則
+    assert len(env["line"]) == 1                                            # 已推播記號擋住：沒有第二則
     env["mail_outcome"] = "sent"
     assert _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key="k1") is True              # 信這次寄成功 ⇒ 可寫記號；LINE 仍不重推
     assert len(env["line"]) == 1
@@ -521,7 +522,8 @@ def test_event_dictionary_shape_and_priorities():
     from helpers import line_notify as L
     assert set(L.LINE_EVENTS) == set(L.WIRED_EVENTS) >= {"auth_lockout", "approval_review_edit", "warranty_expiry"}
     for k, spec in L.LINE_EVENTS.items():
-        assert set(spec) == {"priority", "digest", "line_group"}, k
+        assert set(spec) == {"priority", "digest", "line_group", "audience", "month_cap_percent"}, k
+        assert spec["audience"] in ("any", "group") and (spec["month_cap_percent"] is None or 0 <= spec["month_cap_percent"] <= 100)
         assert spec["priority"] in ("critical", "normal") and spec["digest"] is False
         assert spec["line_group"] in (None, "inherit") or spec["line_group"] in __import__("helpers.mail_types", fromlist=["GROUPS"]).GROUPS
     assert L.LINE_EVENTS["auth_lockout"]["priority"] == "critical"
@@ -535,15 +537,15 @@ def test_line_group_override_and_exclude(env, monkeypatch):
     _user(mk, "sa", "superadmin", line=UID_A)
     _user(mk, "ad", "admin", line=UID_B)
     _user(mk, "req", "sales", line=UID_C)
-    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": None})
+    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": None, "audience": "any", "month_cap_percent": None})
     _send("warranty_expiry", usernames=["req"], to_group=True)                                # 保固信件群組＝admins；LINE 只給事件收件人
     assert _line_targets(env) == [UID_C]
     env["line"].clear()
-    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": "superadmins"})
+    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": "superadmins", "audience": "any", "month_cap_percent": None})
     _send("warranty_expiry", usernames=["req"], to_group=True)
     assert _line_targets(env) == [UID_A, UID_C]
     env["line"].clear()
-    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": "inherit"})
+    monkeypatch.setitem(line_notify.LINE_EVENTS, "warranty_expiry", {"priority": "normal", "digest": False, "line_group": "inherit", "audience": "any", "month_cap_percent": None})
     _send("warranty_expiry", usernames=["req"], to_group=True, line_exclude=["req", "sa"])
     assert _line_targets(env) == [UID_B]                                                      # admins 群組（sa 被排除、req 被排除）
     assert _mail_targets(env) == []                                                           # 沒有人有 Email（排除只影響 LINE，這裡只是確認信件路徑沒被動到）
@@ -625,3 +627,257 @@ def test_on_lockout_exception_inside_rl_fail_is_swallowed(client, monkeypatch):
     for _ in range(5):
         assert _bad_login(client).status_code == 401
     assert _bad_login(client).status_code == 429
+
+
+# ══ 5. PM 裁示 F1–F10（2026-11-13）：保固鑰匙、補發佇列、每日／每月上限、帳號遮蔽、受眾、稽核補洞 ═════════════
+
+def test_warranty_line_key_uses_sn_so_same_name_devices_do_not_collide(env):
+    """F1：同一張報價單兩台同名設備（不同序號）⇒ 兩把不同鑰匙；第二台不會被第一台的「已推過」記號誤擋。"""
+    from helpers import email_notify as EN
+    _user(env["make_user"], "sa", "superadmin", email="s@example.com", line=UID_A)
+    k1, k2 = EN._warranty_line_key("Q1", "SN-1", 5), EN._warranty_line_key("Q1", "SN-2", 5)
+    assert k1 != k2 and k1.startswith("warranty_expiry|Q1|SN-1|")
+    _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key=k1)
+    _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key=k2)
+    assert len(env["line"]) == 2                                                    # 兩台各推一次
+    _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key=k1)
+    assert len(env["line"]) == 2                                                    # 同一台再來＝已推過
+
+
+def test_send_warranty_expiry_passes_sn_into_line_key(monkeypatch):
+    from helpers import email_notify as EN
+    seen = []
+    monkeypatch.setattr(EN, "send_registered", lambda *a, **k: seen.append(k["line_key"]) or True)
+    EN._send_warranty_expiry("Camera", "C", "Q1", 5, "2026-12-01", sn="SN-1")
+    EN._send_warranty_expiry("Camera", "C", "Q1", 5, "2026-12-01", sn="SN-2")
+    EN._send_warranty_expiry("Camera", "C", "Q1", 5, "2026-12-01")                  # 沒傳 sn ⇒ 退回顯示名（相容）
+    assert len(set(seen)) == 3 and "SN-1" in seen[0] and "SN-2" in seen[1] and "Camera" in seen[2]
+
+
+def test_case_deadlines_call_site_passes_sn():
+    import inspect
+    from modules.case import case_deadlines
+    assert "out=out, sn=sn)" in inspect.getsource(case_deadlines)                    # 呼叫端把與已通知記號同一個 sn 傳進來
+
+
+def _pending():
+    from helpers import line_notify
+    from helpers.settings import _get_setting
+    return _get_setting(line_notify.PENDING_KEY, {}) or {}
+
+
+def test_pending_queue_retries_after_quota_pause_then_marks(env):
+    """F2：額度保留暫停的每日檢查型 LINE 進補發佇列；額度恢復後 `retry_pending` 補發，補發成功寫已推播記號並移出佇列。"""
+    from helpers import line_notify as L
+    from helpers.settings import _get_setting
+    _user(env["make_user"], "sa", "superadmin", email="s@example.com", line=UID_A)
+    key = "warranty_expiry|Q1|SN-1|3"
+    _set_usage(95)
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key) == "paused_quota"
+    assert key in _pending() and env["line"] == []
+    assert L.retry_pending() == {"retried": 1, "sent": 0, "dropped": 0, "left": 1}   # 額度還是滿的 ⇒ 留著
+    _set_usage(10)
+    assert L.retry_pending() == {"retried": 1, "sent": 1, "dropped": 0, "left": 0}
+    assert _pending() == {} and key in _get_setting(L.MARKS_KEY, {}) and len(env["line"]) == 1
+    assert L.retry_pending() == {"retried": 0, "sent": 0, "dropped": 0, "left": 0}   # 空佇列 ⇒ 什麼都不做
+
+
+def test_pending_queue_transient_failure_stays_and_expires_after_ttl(env):
+    from helpers import line_notify as L
+    from helpers.settings import _get_setting, _set_setting
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    env["line_fail"] = True
+    key = "warranty_expiry|Q2|SN-9|3"
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key) == L.SEND_TRANSIENT_FAIL
+    assert key in _pending() and key not in (_get_setting(L.MARKS_KEY, {}) or {})
+    created = _pending()[key]["created"]
+    L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key)       # 再失敗一次不會重設 TTL 起點
+    assert _pending()[key]["created"] == created
+    p = _pending()
+    p[key]["created"] = "2020-01-01T00:00:00"
+    _set_setting(L.PENDING_KEY, p)
+    assert L.retry_pending()["dropped"] == 1 and _pending() == {}                     # 超過 TTL ⇒ 放棄
+
+
+def test_pending_queue_not_used_without_dedupe_key_and_resolves_recipients_at_retry_time(env):
+    from helpers import line_notify as L
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    _set_usage(95)
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t") == "paused_quota"
+    assert _pending() == {}                                                           # 沒有鑰匙 ⇒ 不排補發（即時事件過期就不補）
+    key = "warranty_expiry|Q3|S|3"
+    L.deliver_event("warranty_expiry", to_group=True, title="t", dedupe_key=key)
+    _user(env["make_user"], "sa2", "superadmin", line=UID_B)                          # 補發前才新增的管理者
+    _set_usage(10)
+    L.retry_pending()
+    assert _line_targets(env) == [UID_A, UID_B]                                       # 收件人在重送當下才解析
+
+
+def test_send_registered_with_email_sends_line_in_background(env, monkeypatch):
+    """F8：有 Email 收件人時（即使 wait=True）LINE 走背景 `notify_event`，不在同步路徑等 LINE。"""
+    from helpers import line_notify
+    _user(env["make_user"], "sa", "superadmin", email="s@example.com", line=UID_A)
+    calls = []
+    monkeypatch.setattr(line_notify, "deliver_event", lambda *a, **k: calls.append("sync") or "sent")
+    monkeypatch.setattr(line_notify, "notify_event", lambda *a, **k: calls.append("bg") or None)
+    assert _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key="k") is True
+    assert calls == ["bg"]
+    calls.clear()
+    from db import get_db
+    c = get_db()
+    c.execute("UPDATE users SET email=NULL")
+    c.commit()
+    c.close()
+    _send("warranty_expiry", usernames=[], to_group=True, wait=True, line_key="k2")    # 沒有任何 Email 收件人 ⇒ 同步（要靠結果決定寫不寫記號）
+    assert calls == ["sync"]
+
+
+def test_auth_lockout_monthly_cap_stops_line_but_email_continues(env):
+    """F3：auth_lockout 每月累計不得超過月額度的 25%；超過後只剩 Email。"""
+    from helpers import line_notify as L
+    _user(env["make_user"], "sa", "superadmin", email="s@example.com", line=UID_A)
+    _set_usage(0, limit=100)                                                           # 月上限 100 ⇒ auth_lockout 最多 25 則
+    for _ in range(25):
+        assert L.deliver_event("auth_lockout", to_group=True, title="t") == L.SEND_SENT
+    assert L.deliver_event("auth_lockout", to_group=True, title="t") == "monthly_cap"
+    assert len(env["line"]) == 25
+    AA._deliver("t", [("k", "v")], "r")                                                # Email 照寄
+    assert len(env["line"]) == 25 and _mail_targets(env) == ["s@example.com"]
+    assert L.deliver_event("warranty_expiry", to_group=True, title="t") == L.SEND_SENT  # 其他事件不受影響
+
+
+def test_auth_lockout_monthly_cap_is_configurable_and_resets_next_month(env):
+    from helpers import line_notify as L
+    from helpers.settings import _get_setting, _set_setting
+    _user(env["make_user"], "sa", "superadmin", line=UID_A)
+    _set_usage(0, limit=100)
+    c = _get_setting("line_notify", {})
+    c["month_cap_percent"] = {"auth_lockout": 0}
+    _set_setting("line_notify", c)
+    assert L.month_cap_percent("auth_lockout") == 0
+    assert L.deliver_event("auth_lockout", to_group=True, title="t") == "monthly_cap"   # 0＝完全不發 LINE
+    c["month_cap_percent"] = {"auth_lockout": 2}
+    _set_setting("line_notify", c)
+    assert L.deliver_event("auth_lockout", to_group=True, title="t") == L.SEND_SENT
+    assert L.deliver_event("auth_lockout", to_group=True, title="t") == L.SEND_SENT
+    assert L.deliver_event("auth_lockout", to_group=True, title="t") == "monthly_cap"
+    c["month_cap_percent"] = {"auth_lockout": "bad"}                                    # 壞值 ⇒ 回到字典預設 25
+    _set_setting("line_notify", c)
+    assert L.month_cap_percent("auth_lockout") == 25
+    _set_setting(L.USAGE_KEY, {"month": "2020-01", "events": {"auth_lockout": 999}})   # 舊月份的用量 ⇒ 歸零
+    assert L._usage_of("auth_lockout") == 0
+
+
+def test_monthly_limit_falls_back_to_200_when_line_does_not_report(env):
+    from helpers import line_notify as L
+    assert L.MONTHLY_LIMIT_FALLBACK == 200 and L._monthly_limit() == 200               # 沒讀過用量 ⇒ 免費方案假設
+    _set_usage(0, limit=500)
+    assert L._monthly_limit() == 500
+
+
+def test_daily_cap_defaults_and_overflow_defers_to_one_summary(delivered, sync):
+    """F3：每日上限預設 20；超過的合併成一則，等每日視窗騰出空位才送（不會每小時一則摘要）。"""
+    assert AA.limits() == (10, 20) and AA.DAILY_CAP == 20
+    t = 1000.0
+    for i in range(20):                                                                # 每 1000 秒一則：不碰每小時上限（每小時 ≤ 4 則）
+        assert AA.on_lockout("k%d" % i, "10.0.0.%d" % i, ["a"], 5, 900, now=t + i * 1000.0) == "sent"
+    t_end = t + 19 * 1000.0
+    assert AA.on_lockout("over", "9.9.9.9", ["a"], 5, 900, now=t_end + 10) == "capped"
+    assert len(delivered) == 20
+    assert AA.flush_summary(now=t_end + 20) == "deferred"                              # 每日視窗還滿
+    assert AA.flush_summary(now=t + AA.DAY_SECONDS + 5) == "sent"
+    assert len(delivered) == 21 and "摘要" in delivered[-1][0] and "9.9.9.9" in dict(delivered[-1][1])["來源 IP"]
+
+
+def test_limits_are_configurable_and_bad_values_fall_back(delivered, sync):
+    from helpers.settings import _set_setting
+    _set_setting(AA.LIMITS_KEY, {"hourly_cap": 2, "daily_cap": 3})
+    assert AA.limits() == (2, 3)
+    assert AA.on_lockout("a", "1.1.1.1", [], 5, 900, now=10.0) == "sent"
+    assert AA.on_lockout("b", "1.1.1.2", [], 5, 900, now=11.0) == "sent"
+    assert AA.on_lockout("c", "1.1.1.3", [], 5, 900, now=12.0) == "capped"            # 每小時 2
+    assert AA.on_lockout("d", "1.1.1.4", [], 5, 900, now=4000.0) == "sent"             # 過了一小時 ⇒ 空位；每日 3
+    assert AA.on_lockout("e", "1.1.1.5", [], 5, 900, now=4001.0) == "capped"          # 每日 3 滿了
+    for bad in ({"hourly_cap": 0, "daily_cap": -1}, {"hourly_cap": "x", "daily_cap": True}, "nope", None):
+        _set_setting(AA.LIMITS_KEY, bad)
+        assert AA.limits() == (AA.HOURLY_CAP, AA.DAILY_CAP)
+    _set_setting(AA.LIMITS_KEY, {"hourly_cap": 99999, "daily_cap": 5})                  # 超過 1000 的值不收
+    assert AA.limits() == (AA.HOURLY_CAP, 5)
+
+
+def test_mask_name_rules():
+    m = AA.mask_name
+    assert m("alice", existing={"alice"}) == "alice"                                  # 存在的帳號原樣
+    assert m("ghost") == "gh***（5 字）" and "ghost" not in m("ghost")
+    assert m("ab") == "a***（2 字）"
+    assert m("Admin123!x") == "（疑似密碼，已遮蔽）"                                     # 長度≥8 且 3 類以上
+    assert "://" not in m("https://evil.example/path") and "www." not in m("www.evil.example")
+    assert m("https://evil.example/path").startswith("ev***")                         # 剝掉網址前綴後再遮蔽
+    assert m("") == "" and m("   ") == ""
+    assert "\n" not in m("a\nb" + "x" * 200)
+
+
+def test_alert_masks_unknown_names_but_shows_existing_accounts(client, make_user, delivered):
+    _user(make_user, "realuser", "sales")
+    for name in ("realuser", "ghost", "P@ssw0rd-Real1", "realuser", "nope"):
+        _bad_login(client, name=name, ip="203.0.113.50")
+    title, rows, reason = delivered[0]
+    shown = dict(rows)["嘗試的帳號"]
+    text = json.dumps(rows, ensure_ascii=False)
+    assert "realuser" in shown                                                        # 存在的帳號顯示真名
+    assert "ghost" not in text and "nope" not in text and "P@ssw0rd" not in text      # 不存在的被遮蔽；像密碼的整個遮掉
+    assert "gh***" in shown and "疑似密碼" in shown
+
+
+def test_db_lookup_failure_masks_everything(monkeypatch):
+    monkeypatch.setattr("db.get_db", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")))
+    assert AA._existing_users(["alice"]) == set()                                     # 查不到＝全部遮蔽（fail-closed）
+    assert "alice" not in AA.mask_name("alice", AA._existing_users(["alice"]))
+
+
+def test_line_prefs_view_hides_group_only_event_from_non_recipients(env):
+    """F5：audience="group" 的事件（登入失敗告警）只列給群組收件人；一般同仁的「我要收的 LINE 通知」看不到。"""
+    from helpers import line_recipients
+    from helpers.settings import _set_setting
+    mk = env["make_user"]
+    _user(mk, "sa", "superadmin", line=UID_A)
+    _user(mk, "eng", "engineer", line=UID_B)
+    keys = lambda u, r: [x["key"] for x in line_recipients.prefs_view(u, r)]
+    assert "auth_lockout" in keys("sa", "superadmin")
+    assert "auth_lockout" not in keys("eng", "engineer")
+    assert "approval_review_edit" in keys("eng", "engineer") and "warranty_expiry" in keys("eng", "engineer")   # audience="any" 照列
+    _set_setting("mail_recipient_overrides", {"auth_lockout": {"mode": "custom", "users": ["eng"], "roles": []}})
+    assert "auth_lockout" in keys("eng", "engineer")                                  # 被指定成收件人 ⇒ 看得到
+
+
+def test_event_dictionary_has_audience_and_month_cap():
+    from helpers import line_notify as L
+    assert L.LINE_EVENTS["auth_lockout"]["audience"] == "group" and L.LINE_EVENTS["auth_lockout"]["month_cap_percent"] == 25
+    assert L.LINE_EVENTS["warranty_expiry"]["audience"] == "any" and L.LINE_EVENTS["warranty_expiry"]["month_cap_percent"] is None
+    assert L.PENDING_TTL_DAYS == 3
+
+
+def test_run_all_schedules_line_pending_retry(monkeypatch):
+    import inspect
+    from helpers import system_checks as SC
+    src = inspect.getsource(SC.run_all)
+    assert src.index("_check_line_quota()") < src.index("_check_line_pending()")       # 每日檢查有補發這一步，且在額度檢查之後
+    called = []
+    monkeypatch.setattr(SC.threading, "Thread", lambda **k: type("T", (), {"start": lambda self: called.append(k["target"].__name__)})())
+    SC._check_line_pending()
+    assert called == ["retry_pending"]
+
+
+def test_totp_401_for_inactive_account_still_writes_audit(client, make_user):
+    """F9：TOTP 步驟的「帳號不存在或已停用」401 也留 auth.login_failed 稽核列（不計鎖定）。"""
+    u, p = _enable_totp(client, make_user)
+    ch = client.post("/api/auth/login", json={"username": u, "password": p}).json()["challengeToken"]
+    from db import get_db
+    c = get_db()
+    c.execute("UPDATE users SET active=0 WHERE username=?", (u,))
+    c.commit()
+    c.close()
+    r = client.post("/api/auth/login/totp", json={"challenge_token": ch, "code": "000000"})
+    assert r.status_code == 401
+    rows = _rows_of("action='auth.login_failed'")
+    assert len(rows) == 1 and rows[0]["reason_code"] == "totp_failed" and rows[0]["username"] == u

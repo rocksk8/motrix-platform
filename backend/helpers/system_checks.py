@@ -816,6 +816,16 @@ def _check_line_quota() -> None:
         _logger.warning("_check_line_quota failed: %s", exc)
 
 
+def _check_line_pending() -> None:
+    """每日補發（2026-11-12）：重送 `line_pending` 佇列（保固到期等每日檢查型事件，LINE 因額度保留／暫時失敗／token 失效沒送出的）。
+    LINE 沒啟用或本機不允許對外發送時 `deliver_event` 自己回 "off"／略過；背景執行緒（LINE API 可能慢）；例外只記 log。"""
+    try:
+        from helpers import line_notify as _ln
+        threading.Thread(target=_ln.retry_pending, args=(), daemon=True, name="line-pending-daily").start()
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("_check_line_pending failed: %s", exc)
+
+
 def run_all(prune: bool = False) -> None:
     """每日系統檢查（順序同搬移前）。prune：08:00 那一輪另清理請求紀錄（啟動補跑不清）。"""
     _check_approval_reminders()
@@ -825,5 +835,6 @@ def run_all(prune: bool = False) -> None:
     _check_disk_space()
     _check_temp_bloat()
     _check_line_quota()
+    _check_line_pending()
     if prune:
         _prune_request_log()
