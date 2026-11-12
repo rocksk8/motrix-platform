@@ -1,5 +1,5 @@
 {
- "core_version": "1.157",
+ "core_version": "1.159",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -345,6 +345,13 @@
    "freeze": "def(q)",
    "title": "def(key, data=…, conn=…)",
    "titles_for": "def(data=…, conn=…)"
+  },
+  "helper:client_ip": {
+   "CLOUDFLARE_HEADERS": "const",
+   "client_ip": "def(request)",
+   "has_proxy_headers": "def(headers)",
+   "is_loopback": "def(host)",
+   "rate_limit_key": "def(ip)"
   },
   "helper:company_identity": {
    "CODE_BANK_REQUIRED": "const",
@@ -757,10 +764,12 @@
    "notify_dev_case_stale": "def(case_id, case_name, customer_name, days_since_update, usernames)",
    "notify_dev_log_directive": "def(case_id, case_name, usernames, directive_by_display=…)",
    "notify_disk_space_low": "def(problems, temp_bloat=…, temp_total_gb=…)",
+   "notify_heartbeat_stale": "def(summary, problems, state=…)",
    "notify_invoice_voucher_approved": "def(voucher_no, customer, approved_by, requester_username)",
    "notify_invoice_voucher_next_tier": "def(voucher_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_invoice_voucher_returned": "def(voucher_no, customer, note, requester_username)",
    "notify_invoice_voucher_submitted": "def(voucher_no, customer, approver_usernames)",
+   "notify_line_quota_warning": "def(used, limit, threshold, thresholds=…, month=…)",
    "notify_module_activity": "def(module_label, action_label, actor, item_label, page_path=…, detail=…, audience=…)",
    "notify_monthly_report": "def(period_label, period_str, excel_bytes, pdf_bytes)",
    "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames)",
@@ -1008,6 +1017,36 @@
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
   },
+  "helper:heartbeat_status": {
+   "BAD_GRACE_MINUTES": "const",
+   "EXT_UNSET_ALERT_HOURS": "const",
+   "LEVEL_ERROR": "const",
+   "LEVEL_NA": "const",
+   "LEVEL_OK": "const",
+   "LEVEL_WARN": "const",
+   "OK_STALE_HOURS": "const",
+   "assess": "def(now=…, state=…)",
+   "config_exists": "def()",
+   "ping_url_set": "def()",
+   "read_state": "def()"
+  },
+  "helper:idempotency": {
+   "Call": "class",
+   "Call.__init__": "def(self, username, key, replay=…, stamp=…)",
+   "Call.abort": "def(self)",
+   "Call.finish": "def(self, status_code, body)",
+   "Call.guard": "def(self)",
+   "HEADER": "const",
+   "REPLAY_HEADER": "const",
+   "RETENTION_DAYS": "const",
+   "STALE_SECONDS": "const",
+   "begin": "def(username, key, endpoint, req_hash)",
+   "parse_key": "def(raw)",
+   "replay_response": "def(call)",
+   "request_hash": "def(*parts)",
+   "run": "async def(username, key, endpoint, req_hash, handler, status_code=…, abort_on_cancel=…)",
+   "run_sync": "def(username, key, endpoint, req_hash, handler, status_code=…)"
+  },
   "helper:legal_params": {
    "ARTICLE_8_DELETED": "const",
    "ARTICLE_8_ITEMS": "const",
@@ -1037,13 +1076,30 @@
    "validate_versions": "def(versions)",
    "year_status": "def(versions, today)"
   },
+  "helper:license_alerts": {
+   "dev_key_in_use": "def(status, background=…)",
+   "emergency_in_use": "def(info, background=…)",
+   "flush": "def(timeout=…)",
+   "startup_check": "def()"
+  },
   "helper:licensing": {
+   "EMERGENCY_COVERS": "const",
+   "EMERGENCY_FILE_NAME": "const",
+   "EMERGENCY_MAX_BYTES": "const",
+   "EMERGENCY_MAX_DAYS": "const",
+   "EMERGENCY_PURPOSE": "const",
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
+   "LICENSE_HEADER": "const",
    "LICENSE_KIND_PERPETUAL": "const",
    "LICENSE_KIND_SUBSCRIPTION": "const",
    "LICENSE_PATH": "const",
    "MODULE_LICENSE_NOT_CHECKED": "const",
+   "emergency_blob_problem": "def(blob)",
+   "emergency_pass": "def(status)",
+   "emergency_path": "def()",
+   "emergency_status": "def(status)",
+   "license_banner": "def(status, emergency)",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",
    "machine_fingerprint": "def()",
@@ -1095,6 +1151,7 @@
    "callback_url": "def()",
    "enabled": "def()",
    "event_enabled": "def(event_key)",
+   "event_roles_view": "def()",
    "events_view": "def()",
    "ids_for": "def(usernames)",
    "is_linked": "def(username)",
@@ -1111,12 +1168,37 @@
    "safe_link": "def(link)",
    "set_confirmed": "def(username, ok)",
    "set_event": "def(event_key, on)",
+   "set_event_roles": "def(event_key, roles)",
    "settings_lock": "def()",
    "unlink_user": "def(username)",
    "valid_login_id": "def(v)",
    "valid_login_secret": "def(v)",
    "valid_token": "def(tk)",
    "verify_token": "def(token=…)"
+  },
+  "helper:line_quota": {
+   "CACHE_SECONDS": "const",
+   "DEFAULT_THRESHOLDS": "const",
+   "MAX_THRESHOLDS": "const",
+   "STATE_KEY": "const",
+   "after_push": "def(now=…)",
+   "check_and_alert": "def(now=…, max_age=…, force=…)",
+   "evaluate": "def(used, limit, ths, alerted)",
+   "month_key": "def(now=…)",
+   "normalize_thresholds": "def(v)",
+   "refresh": "def(now=…)",
+   "snapshot": "def(max_age=…, now=…, force=…)",
+   "thresholds": "def()"
+  },
+  "helper:line_recipients": {
+   "PREFS_KEY": "const",
+   "allowed_roles": "def(event_key)",
+   "filter_usernames": "def(event_key, usernames)",
+   "is_muted": "def(username, event_key)",
+   "muted_events": "def(username)",
+   "prefs_view": "def(username, role)",
+   "role_choices": "def()",
+   "set_muted": "def(username, event_key, muted, role=…)"
   },
   "helper:list_catalog": {
    "MAX_PAGE_SIZE_CEILING": "const",

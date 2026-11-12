@@ -1179,6 +1179,25 @@ foreach ($d in $strayPyc) {
     Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# --- Step 5.52: LG-O1 出貨包不帶開發公鑰（正式公鑰一填入就生效）---
+# 為什麼：licensing.py 同時內嵌 _PUBKEY_DEV／_PUBKEY_PROD、兩把都受信，而它會進每一個出貨包；開發私鑰沒有受控保管，
+# 握有它的人可以簽出 env=dev 的授權，license_gate_middleware 不會擋。做法不靠「這台是不是正式機」的猜測，
+# 而是包裡根本沒有那把公鑰：_PUBKEY_PROD 非空 ⇒ 把「包內」licensing.py 的 _PUBKEY_DEV 賦值改寫成 b""（只改包，不改 git）。
+# 兩道都要過（fail-closed）：strip 改寫（看不懂原始碼會直接失敗）→ check 再驗一次。細節見 tools/platform/pubkey_policy.py。
+# ⚠️ 要放在 git archive／產品選配之後、寫入 deploy_manifest.json 之前（之後算雜湊的步驟看到的才是出貨的那一份）。
+$pubkeyPolicy = Join-Path $projectRoot "tools\platform\pubkey_policy.py"
+if (-not (Test-Path -LiteralPath $pubkeyPolicy)) {
+    Fail "找不到 $pubkeyPolicy ⇒ 無法確認包內不帶開發公鑰（LG-O1），部署包未完成，已中止。"
+}
+& $pyExe $pubkeyPolicy strip --pkg $pkgDir
+if ($LASTEXITCODE -ne 0) {
+    Fail "LG-O1：包內開發公鑰處理失敗（pubkey_policy.py strip，exit code $LASTEXITCODE），部署包未完成，已中止。"
+}
+& $pyExe $pubkeyPolicy check --pkg $pkgDir
+if ($LASTEXITCODE -ne 0) {
+    Fail "LG-O1：包內仍帶開發公鑰或看不懂 licensing.py（pubkey_policy.py check，exit code $LASTEXITCODE），部署包未完成，已中止。"
+}
+
 # --- Step 5.55: 寫入「不出貨清單」backend/export_ignore.json（T22-2）---
 # verify_package 4a（排除清單 ∩ MUST_EXIST）在正式機安裝目錄沒有 .git，問不了 `git check-attr`（第二十二班兩次被擋下）。
 # 判斷不自己重新實作 git 語意 ⇒ 在有 git 的這裡讓 git 算好（export-ignore 為 set 的已追蹤檔），寫進包；

@@ -206,8 +206,13 @@ register("cert_expiry", "HTTPS 憑證即將到期", _S, "superadmins", "",
          "憑證到期後，使用者開啟系統時瀏覽器會出現安全性警告。", "請依系統說明更新憑證，並於更新後重新啟動服務。")
 register("backup_stale", "備份已停止運作", _S, "superadmins", "",
          "超過規定時間沒有成功的備份，發生故障時可能遺失資料。", "請檢查備份排程、雲端硬碟掛載與磁碟空間，處理後確認下一次備份成功。")
+register("heartbeat_stale", "心跳監控本身異常", _S, "superadmins", "",
+         "心跳監控壞掉時，伺服器當機或斷電可能沒有人被通知。", "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。")
 register("disk_space_low", "磁碟空間不足", _S, "superadmins", "",
          "磁碟空間不足時，備份與上傳可能失敗。", "請清理暫存檔案或擴充磁碟空間。")
+register("line_quota_warning", "LINE 本月訊息額度告警", _S, "superadmins", "",
+         "LINE 官方帳號免費方案每月有訊息上限，用完後 LINE 通知會停止送達（Email 不受影響）。",
+         "請確認本月用量，必要時減少勾選「同時發 LINE」的通知類型，或調整 LINE 方案。")
 register("backup_error", "備份嚴重錯誤", _S, "superadmins", "",
          "本次備份沒有完成，發生故障時可能遺失資料。",
          "請確認雲端硬碟是否已掛載、本機快照（backend/db_backups/）是否存在，以及伺服器磁碟空間。")

@@ -127,6 +127,21 @@ def _is_local(client) -> bool:
     return bool(host) and host in LOCAL_CLIENT_HOSTS
 
 
+#: 2026-11-11（外網存取 go-live 前的防線）：Cloudflare 隧道（cloudflared）與本工具同機時，被轉進來的外部請求對端也是
+#: 127.0.0.1——光看 `request.client` 會把它們當成「本機」。隧道轉進來的請求一定帶這些標頭、本機瀏覽器直連不會帶，
+#: 所以帶了就 fail closed（403）。這是第二道；第一道仍是「隧道 ingress 只指到主程式的 port，不要指到 8765」。
+#: 自成一體（不 import helpers）：這支工具要能單獨跑。
+_PROXY_MARKER_HEADERS = frozenset({"cf-connecting-ip", "cf-ray", "cf-visitor", "cf-ipcountry",
+                                   "x-forwarded-for", "forwarded", "x-real-ip"})
+
+
+def _came_through_proxy(headers) -> bool:
+    try:
+        return bool({str(k).lower() for k in headers.keys()} & _PROXY_MARKER_HEADERS)
+    except Exception:  # noqa: BLE001
+        return True      # 看不懂標頭 ⇒ 不當成本機（fail closed）
+
+
 _NOT_LOCAL_DETAIL = (
     "部署儀表板只接受本機（127.0.0.1）的請求。"
     "它可以部署與回滾正式機，所以不對外開放。"
@@ -142,7 +157,7 @@ async def _local_only(request, call_next):
     ⇒ `/ws/prod-status` 自己也要檢查一次（見那支函式）。
     🔑 「一道只有一層、而第二層明著不覆蓋的防線」是今天記過兩次的形狀。
     """
-    if not _is_local(request.client):
+    if not _is_local(request.client) or _came_through_proxy(request.headers):
         return JSONResponse(status_code=403, content={"detail": _NOT_LOCAL_DETAIL})
     return await call_next(request)
 
@@ -1230,7 +1245,7 @@ async def ws_prod_status(websocket: WebSocket):
     # 🔴 **WebSocket 不經過 `@app.middleware("http")`** —— 要自己檢查一次。
     # ⚠️ 少了這一行，HTTP 那一面關起來了而這一面還開著，
     # 🔑 而「關起來了」這件事在畫面上完全看不出差別。
-    if not _is_local(websocket.client):
+    if not _is_local(websocket.client) or _came_through_proxy(websocket.headers):
         await websocket.close(code=1008)      # 1008 = policy violation
         return
     await websocket.accept()

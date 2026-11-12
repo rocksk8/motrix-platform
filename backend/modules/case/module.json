@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.216",
+  "version": "1.0.218",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -292,6 +292,7 @@
       "/api/case-changes",
       "/api/completion-notes",
       "/api/extra-expenses",
+      "/api/field",
       "/api/material-payments",
       "/api/material-suppliers",
       "/api/next-quote-no",

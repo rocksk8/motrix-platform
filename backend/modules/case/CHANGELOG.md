@@ -1,5 +1,17 @@
 # 案件 更新紀錄
 
+## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
+- 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
+- **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。
+- 分頁改游標（K 審 M2）：`before_id` 請求、`next_before_id`／`has_more` 回應（`offset` 廢除）；掃描上限到了回已湊到的＋游標，續掃必到更舊的案件。壞 JSON 每（案號，欄位）行程內只記一次 ERROR；`before_id` 夾在 2**62（超過 SQLite INTEGER 上限不再 500，K 複審 N1）。`mine` 只對 admin 有差別（「我的」與 `_CASE_MINE_SQL` 逐項同義）；`scope` 預設只看已成案。登記：`case_read_scope.json`、module.json `api_prefixes`。
+- 測試：`tests/test_field_cases_2026_11_12.py`（含金額不外洩、別人案件單件 404〔刪掉成員檢查會紅〕、與 `_is_case_member` 11 案差分、兩種 JSON 編碼＋中文顯示名、游標到得了舊案、巢狀值不外流、no-store、壞 token 401、同名不同 id 不可見）。
+
+## 1.0.217 — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：冪等鍵＋補檔案端點）
+- 新增：`POST /api/quotations/{quote_no}/updates/{uid}/files`——把照片／檔案補進**已存在**的案件留言（外勤上傳形狀 B：文字先存、照片逐張補）。留言作者或 admin 以上、案件權限同發留言；選填 `geo`＝「lat,lng[,accuracy]」（前端定位，盡力而為，格式不對就當沒有；只存進該檔 metadata，不印在浮水印上）；拿寫鎖後重讀再追加，存檔期間留言被刪 ⇒ 清掉剛存的檔回 404；上傳登記 `upload_points.json`（目錄 case_update）。
+- 變更（只加選填）：`POST /api/quotations/{quote_no}/updates` 與上面的補檔案端點支援選填標頭 `Idempotency-Key`（見 `helpers/idempotency.py`）；沒帶＝行為不變（原實作改名 `_post_case_update_impl`，邏輯未動）。
+- 測試：`tests/test_idempotency_2026_11_11.py`。
+
+
 ## 1.0.216（next，未取號）— 2026-11-11（fix/t79-versions-mask-field-policy；t65 棘輪收尾）
 - 重構（行為不變）：`versions` 修改紀錄遮金額那一行（T79 N1 加入）由直接呼叫 `quote_money_visible(user)` 改走 `_tier_allowed("quote_money", user)`（欄位政策的報價單層級，＝同一支角色函式）。原本把 `quotations.py` 的直接角色函式呼叫從基準 5 推到 6，`tests/platform/test_field_policy_exits_t65.py::test_no_exit_file_grows_its_direct_role_function_calls` 轉紅；**基準檔沒有調高**。沒有 API／畫面／遮蔽結果的變動，既有 `test_collaborator_passes_and_versions_history_masks_money_for_non_money_accounts` 守行為。
 

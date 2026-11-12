@@ -68,7 +68,7 @@ from .email_notify import (
     notify_case_stage_deadline,
     notify_case_stage_deadline_manager,
     notify_case_project_overdue,
-    notify_cert_expiry, notify_backup_stale, notify_disk_space_low,
+    notify_cert_expiry, notify_backup_stale, notify_disk_space_low, notify_heartbeat_stale, notify_line_quota_warning,
     notify_dev_case_stale,
     notify_dev_case_assigned,
     notify_dev_case_reply_overdue,
@@ -125,6 +125,7 @@ from .startup import (
     init_unlock_passwords,
     _cleanup_sessions,
     _prune_login_locks,
+    _license_startup_check,
     _sync_module_versions,
 )
 
@@ -159,7 +160,7 @@ __all__ = [
     "notify_range_task_deadline", "notify_dev_case_delete_request", "notify_dev_case_relink_request",
     "notify_case_stage_deadline", "notify_case_stage_deadline_manager",
     "notify_case_project_overdue", "notify_cert_expiry",
-    "notify_backup_stale", "notify_disk_space_low",
+    "notify_backup_stale", "notify_disk_space_low", "notify_heartbeat_stale", "notify_line_quota_warning",
     "notify_dev_case_stale",
     "notify_dev_case_assigned",
     "notify_dev_case_reply_overdue",

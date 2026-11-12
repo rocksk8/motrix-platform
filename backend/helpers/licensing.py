@@ -44,9 +44,11 @@ import binascii
 import hashlib
 import json
 import os
+import re
 import stat as _stat
 import subprocess
 import sys
+import time
 from datetime import date
 
 from cryptography.hazmat.primitives import serialization
@@ -67,16 +69,32 @@ _PUBKEY_DEV = (
     b"-----END PUBLIC KEY-----\n"
 )
 
-# 正式公鑰。**本輪刻意留空**——正式私鑰還沒產生，保管方式是 STATE §4 第 1 項的未決事項。
-# 空的時候 verify_license() 略過這一把，不丟例外。
-# ⚠️ 這裡一天是空的，這套系統就一天不能真的賣出去。
-_PUBKEY_PROD = b""
+# 正式公鑰（2026-11-12 產生，私鑰依 STATE §4 2026-09-21 裁示存密碼管理器，開發機上直接簽發，
+# 不落地在任何 repo／worktree）。對應的正式機指紋與客戶資料不寫在這裡——這支會進出貨包，
+# 不可以帶著任何一台客戶安裝的識別資料（test_no_our_company_literals 這類守門就是防這個）。
+_PUBKEY_PROD = (
+    b"-----BEGIN PUBLIC KEY-----\n"
+    b"MCowBQYDK2VwAyEAdfv+I3XFU/ptNcjmFuQAk9ZufbS5JAXzLykMHgnbnMc=\n"
+    b"-----END PUBLIC KEY-----\n"
+)
 
 # ── 總開關 ───────────────────────────────────────────────────────────────────
 #
-# **預設關。要打開必須是刻意的動作。**
+# **預設開（2026-11-11 起；原本預設關）。** False 時守門完全不介入的行為仍在，測試釘著。
 #
-# 為什麼一定要有它（A 於 2026-09-21 查證，非推論）：
+# ── 預設值的沿革（稽核紀錄）──
+#   fb329becb（2026-09-21）：做成預設 False，「第 2 輪的第一件事是總開關，不是 middleware」。
+#   a63cc4978（同日）：掛 middleware，仍是預設不生效；STATE 另把「解凍的程式強制前置」
+#       定為「補寫 backend/tests/test_licensing_gate_2026_09_21.py」（第 2 輪那十來條驗收條件
+#       除了「關著時不介入」之外沒有任何一條被測試跑過——開著時的行為零覆蓋）。
+#   2026-11-11：使用者裁示重新打開，認定當年關閉的理由（下一段）現在不成立。
+#       這一版同時補了那份測試（test_licensing_gate_2026_09_21.py：沒金鑰／過期／無效／有效四種情境）、
+#       並讓 conftest 對整個測試 session 提供一把測試金鑰（驗章走真的簽章路徑，只換公鑰與機器指紋）。
+#   ⚠️ 這個 commit 只改程式與測試，**沒有部署**。截至 2026-11-11，正式機沒有 license.key，
+#       `_PUBKEY_PROD` 仍是空的（正式私鑰尚未產生）⇒ 在簽發機制與正式機金鑰就緒之前，
+#       不可以把這個預設值帶上正式機（見下一段與「上正式機的順序」）。
+#
+# 當年為什麼要預設關（A 於 2026-09-21 查證，非推論）：
 #   - build_deploy_package.ps1:394 用 `git archive` 打包 → 只含已追蹤且已 commit 的內容
 #   - backend/license.key 在 .gitignore:11 → **金鑰永遠不會進部署包**（這是對的，
 #     金鑰本來就是 per-installation）
@@ -87,11 +105,11 @@ _PUBKEY_PROD = b""
 # False 時守門**完全不介入**：連 verify_license() 都不呼叫。不要有「算了但不擋」
 # 的中間狀態——那會付出效能成本卻換不到任何好處。
 #
-# 打開的順序不可以顛倒：
-#   ① 把 license.key 放進那台機器
-#   ② 確認 GET /api/license/status 回 valid:true
-#   ③ 才把這個開關打開並重啟
-LICENSE_GATE_ENABLED = False
+# 上正式機的順序不可以顛倒（預設已是 True，所以「先放金鑰」變成**部署前**的條件）：
+#   ① 簽出一把綁這台機器指紋、由 `_PUBKEY_PROD` 對應私鑰簽的金鑰（env 要是 "prod"）
+#   ② 把 license.key 放進那台機器
+#   ③ 確認 GET /api/license/status 回 valid:true，**之後**才部署這個版本並重啟
+LICENSE_GATE_ENABLED = True
 
 # ── 授權種類 ─────────────────────────────────────────────────────────────────
 #
@@ -265,7 +283,7 @@ def _days_left(expires):
 # 執行緒安全：uvicorn 的同步端點跑在 threadpool 裡。這裡只做「整個 tuple 一次指派」，
 # GIL 底下是原子的；最壞情況是兩個執行緒各算一次、其中一個蓋掉另一個，無害。
 # 不上鎖是刻意的——為了一個 0.1 ms 的東西引入鎖，風險比它省下來的多。
-_LICENSE_FILE_CACHE = None   # (快取鍵, status 複本)
+_LICENSE_FILE_CACHE = None   # (快取鍵, status 複本, 算出時的 time.monotonic()——machine_mismatch 的短TTL要用)
 
 
 def _license_cache_key(path, st_result):
@@ -277,6 +295,9 @@ def _license_cache_key(path, st_result):
         _PUBKEY_PROD,
         date.today().toordinal(),
     )
+
+
+_MISMATCH_CACHE_TTL_S = 60  # T80稽核LG-M1：machine_mismatch只快取這麼久（見下方理由）
 
 
 def _verify_license_file():
@@ -296,8 +317,17 @@ def _verify_license_file():
     key    = _license_cache_key(path, st_result)
     cached = _LICENSE_FILE_CACHE
     if cached is not None and cached[0] == key:
-        # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西。
-        return dict(cached[1])
+        cached_status, cached_at = cached[1], cached[2]
+        # T80稽核LG-M1：machine_mismatch的快取只活 _MISMATCH_CACHE_TTL_S 秒。快取鍵
+        # 不含指紋（見上方①～⑤），硬體在開機初期讀不到／讀一半時會算出錯的指紋、判
+        # mismatch；這個結果若像其他結果一樣整天／整個行程快取，硬體之後恢復正常，
+        # 同一把金鑰仍會卡在「機器不符」直到檔案被碰、跨日或重啟——短TTL把這個停擺
+        # 視窗從「不定期、可能整天」收斂成「最多一分鐘」，同時避免每一次請求都重算
+        # （`machine_fingerprint()` 持續失敗時本身有重試，直接每個請求都跑代價不小，
+        # 見 K審S6 `routers/licensing.py::_FP_FAIL_UNTIL` 同一類考量）。
+        if cached_status.get("reason") != "machine_mismatch" or (time.monotonic() - cached_at) <= _MISMATCH_CACHE_TTL_S:
+            # 回複本：呼叫端改了回傳值也不會污染下一個人拿到的東西。
+            return dict(cached_status)
 
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -309,7 +339,7 @@ def _verify_license_file():
         return _unverified("malformed")
 
     status = _verify_blob(text)
-    _LICENSE_FILE_CACHE = (key, dict(status))
+    _LICENSE_FILE_CACHE = (key, dict(status), time.monotonic())
     return status
 
 
@@ -328,34 +358,41 @@ def verify_license(blob=None):
     return _verify_blob(blob)
 
 
-def _verify_blob(text):
-    """驗一個已經拿到手的 blob 字串。不碰檔案系統。"""
+def _open_blob(text, required=None):
+    """blob 字串 → `(payload, env, None)`（簽章驗過）或 `(None, None, reason)`。
+
+    **簽章驗過之前 payload 沒有任何一個欄位可信**，所以失敗時一律不回 payload。
+    授權金鑰與緊急放行通行證（見下方）共用這一條驗章路徑，只差 `required`（必要欄位）。
+    reason ∈ missing／malformed／bad_signature；檢查順序固定，與 `verify_license` 的契約一致。
+    """
+    if required is None:
+        required = _REQUIRED_FIELDS
     if isinstance(text, (bytes, bytearray)):
         try:
             text = bytes(text).decode("utf-8")
         except UnicodeDecodeError:
-            return _unverified("malformed")
+            return None, None, "malformed"
     elif not isinstance(text, str):
-        return _unverified("malformed")
+        return None, None, "malformed"
 
     # 空字串／只有空白 ＝ 沒有金鑰，不是壞掉的金鑰。
     if not text.strip():
-        return _unverified("missing")
+        return None, None, "missing"
 
     payload = _decode_blob(text)
     if payload is None:
-        return _unverified("malformed")
-    if any(k not in payload for k in _REQUIRED_FIELDS):
-        return _unverified("malformed")
+        return None, None, "malformed"
+    if any(k not in payload for k in required):
+        return None, None, "malformed"
 
     sig_b64 = payload.get("sig")
     if not isinstance(sig_b64, str) or not sig_b64:
-        return _unverified("malformed")
+        return None, None, "malformed"
     try:
         signature = base64.b64decode(sig_b64.encode("ascii"), validate=True)
     except (binascii.Error, ValueError, UnicodeEncodeError):
         # 結構是對的，壞的是簽章本身 → 這是簽章問題不是格式問題。
-        return _unverified("bad_signature")
+        return None, None, "bad_signature"
 
     signed_bytes = _signing_bytes(payload)
     env = None
@@ -373,7 +410,15 @@ def _verify_blob(text):
         break
 
     if env is None:
-        return _unverified("bad_signature")
+        return None, None, "bad_signature"
+    return payload, env, None
+
+
+def _verify_blob(text):
+    """驗一個已經拿到手的 blob 字串。不碰檔案系統。"""
+    payload, env, why = _open_blob(text)
+    if payload is None:
+        return _unverified(why)
 
     # ── 到這裡 payload 才可信 ────────────────────────────────────────────────
     customer  = payload.get("customer")
@@ -450,12 +495,219 @@ def license_block_message(status):
     )
 
 
+# ── 緊急放行通行證（break-glass；2026-11-11，T80）────────────────────────────
+#
+# 為什麼要有：授權閘門沒有任何「程式以外」的出口時，正式機只要金鑰失效（最典型：換主機板／網卡造成機器指紋漂移，
+# 這台機器有過 BSOD 0x124 記憶體 MCE 紀錄，換硬體不是假設）就是全站 402，唯一的解法是重新發版。
+#
+# 怎麼做（**不是「放一個檔案就放行」**——那個口本身會變成新的繞過漏洞）：
+#   ① 通行證是**簽章過的**（與授權金鑰同一條驗章路徑、同兩把公鑰）：只有握有私鑰的簽發方做得出來，
+#      伺服器管理員自己建檔、改日期、改內容都會 bad_signature。
+#   ② `purpose` 必須是 "emergency_pass"：授權金鑰不能拿來當通行證，通行證也不是授權金鑰（缺 machine／modules ⇒ malformed）。
+#   ③ **綁被救的那把授權金鑰**：不綁目標機器「現在」的指紋（指紋漂移正是它存在的理由）。綁 `tax_id` 與 `machine`
+#      （授權金鑰裡那個值），都必須等於**驗章通過**的那把授權金鑰的值——別家客戶的、同客戶另一個安裝的通行證、
+#      或沒有可信授權金鑰時，不放行（K 審 S5）。**簽發環境**（開發／正式）也必須與那把授權金鑰相同（K 審 M2：開發私鑰
+#      不在受控保管下，正式公鑰一上線，這是唯一擋住「拿開發金鑰簽通行證」的東西）。擋不住的：把授權金鑰與通行證兩個檔
+#      一起複製到別台——那台指紋也對不上，所以仍由 14 天上限兜底。
+#   ④ **只救兩種狀況**：`machine_mismatch`（換硬體）、`expired`（續約作業來不及）。沒有金鑰／損毀／簽章不符
+#      都不放行——那是「重新簽一把授權」的事，不是通行證該蓋掉的事。
+#   ⑤ **有期限且上限寫死在驗證端**：`issued ≤ 今天 ≤ expires`，且 `expires − issued ≤ EMERGENCY_MAX_DAYS`。
+#      簽發方多簽幾年也沒用。過期的通行證自動失效，不需要有人去刪。
+#   ⑥ 放行時**不安靜**：log＋稽核（helpers/license_alerts.py）、每個 /api 回應帶 `X-Motrix-License: emergency;until=…`
+#      （前端橫幅）、`GET /api/license/status` 的 `emergency` 欄位講出生效或不生效的原因。
+#
+# 位置：與授權金鑰同一個資料夾的 `license_emergency.key`（`emergency_path()`，跟著 `LICENSE_PATH` 走，測試換得掉）。
+# 簽發：`python tools/issue_license.py emergency --license <被救的 license.key> --days 7 --reason "…" --out license_emergency.key`。
+# 生效時間：業務 API 下一個請求就恢復；**但模組是否載入只在開機時決定一次**（core/loader.py）：服務若是在授權失效時
+# 啟動的（換主機板後重開機最常見），被擋的模組要在放好通行證之後**重啟服務**才會載入（`/api/license/status` 的
+# `modules_unlicensed` 列出它們；K 審 M1）。
+# 〔上正式金鑰時的另一張票（K 審 nit）：`_PUBKEY_PROD` 填入之後，部署包不要再帶 `_PUBKEY_DEV`（build／git archive 那一步），
+#   不要靠「這台是不是正式機」的猜測——那是唯一可靠的訊號。〕
+EMERGENCY_FILE_NAME = "license_emergency.key"
+EMERGENCY_PURPOSE = "emergency_pass"
+EMERGENCY_MAX_DAYS = 14                                   # 驗證端的硬上限（簽發端再長也只認這麼久）
+EMERGENCY_MAX_BYTES = 8192                                # 通行證是小檔；超過就不讀
+EMERGENCY_COVERS = frozenset({"machine_mismatch", "expired"})
+LICENSE_HEADER = "X-Motrix-License"                       # 前端橫幅用（notif.js）
+_EMERGENCY_REQUIRED = ("purpose", "tax_id", "machine", "issued", "expires", "reason")
+# date.fromisoformat（py3.11+）也收 20261111／週曆格式；通行證只收 YYYY-MM-DD
+_ISO_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+
+
+def emergency_path():
+    """通行證檔案位置：與授權金鑰同一個資料夾。**呼叫時才算**（測試會換 `LICENSE_PATH`）。"""
+    return os.path.join(os.path.dirname(os.path.abspath(LICENSE_PATH)), EMERGENCY_FILE_NAME)
+
+
+def _read_small_text(path, limit=None):
+    """讀一個小檔 → `(text, None)` 或 `(None, 原因)`。原因：missing／unreadable／too_big。不丟例外。"""
+    try:
+        st_result = os.stat(path)
+    except OSError:
+        return None, "missing"
+    if not _stat.S_ISREG(st_result.st_mode):
+        return None, "missing"
+    if st_result.st_size > (EMERGENCY_MAX_BYTES if limit is None else limit):
+        return None, "too_big"
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read(), None
+    except (OSError, UnicodeDecodeError):
+        return None, "unreadable"
+
+
+def _emergency_judge(status, token_text):
+    """通行證判定（純函式，不碰檔案系統除了讀授權金鑰）→ dict：present／active／why（＋ until／pass_id／note／env）。"""
+    pass_id = hashlib.sha256(token_text.strip().encode("utf-8", "replace")).hexdigest()[:12]
+    base = {"present": True, "active": False, "pass_id": pass_id}
+
+    def no(why, extra=None):
+        out = dict(base, why=why)
+        out.update(extra or {})
+        return out
+
+    payload, env, why = _open_blob(token_text, _EMERGENCY_REQUIRED)
+    if payload is None:
+        return no("token_bad_signature" if why == "bad_signature" else "token_malformed")
+    if payload.get("purpose") != EMERGENCY_PURPOSE:
+        return no("token_wrong_purpose", {"env": env})
+
+    issued, expires = payload.get("issued"), payload.get("expires")
+    try:
+        if not (_ISO_DATE.match(issued.strip()) and _ISO_DATE.match(expires.strip())):
+            raise ValueError("not YYYY-MM-DD")
+        d_issued = date.fromisoformat(issued.strip())
+        d_expires = date.fromisoformat(expires.strip())
+    except (AttributeError, ValueError):
+        return no("token_bad_dates", {"env": env})
+    until = d_expires.isoformat()
+    note = payload.get("reason") if isinstance(payload.get("reason"), str) else ""
+    info = {"until": until, "note": note, "env": env}
+    if (d_expires - d_issued).days > EMERGENCY_MAX_DAYS or d_expires < d_issued:
+        return no("token_span_too_long", info)
+    today = date.today()
+    if today < d_issued:
+        return no("token_not_yet_valid", info)
+    if today > d_expires:
+        return no("token_expired", info)
+
+    # ③④：只在授權金鑰「驗章通過、但機器不符或過期」時才有意義；綁的是那把金鑰的 tax_id。
+    if not isinstance(status, dict) or status.get("reason") not in EMERGENCY_COVERS:
+        return no("not_needed" if (status or {}).get("reason") == "ok" else "license_not_covered", info)
+    if not license_blocks_request(status):       # 例：永久授權過期（reason=expired 但不擋）⇒ 沒有東西要放行，不可以報「生效」
+        return no("not_needed", info)
+    # 授權金鑰讀法與 verify_license 一致（不設 8 KB 上限，否則「驗得過卻救不了」）
+    lic_text, err = _read_small_text(LICENSE_PATH, limit=1 << 30)
+    lic_payload, lic_env, _why = _open_blob(lic_text) if lic_text is not None else (None, None, None)
+    if lic_payload is None:
+        return no("license_untrusted", info)
+    # 簽發方環境必須相同：開發金鑰簽的通行證不能救正式金鑰的授權（反之亦然）。開發私鑰不在受控保管下，
+    # 正式公鑰一進 _PUBKEY_PROD，這一條就是唯一擋住「拿開發金鑰簽通行證」的東西（K 審 M2）。
+    if env != lic_env:
+        return no("env_mismatch", info)
+    if not _same_text(lic_payload.get("tax_id"), payload.get("tax_id"), lower=False):
+        return no("tax_id_mismatch", info)
+    # 通行證也綁被救的那把授權金鑰的 machine 值：只能救「那一個安裝」，不是客戶的任何一份授權（K 審 S5）。
+    # （擋不住「同時複製授權金鑰與通行證到別台」——那台的指紋也對不上，所以仍是同一條 14 天上限在兜底。）
+    if not _same_text(lic_payload.get("machine"), payload.get("machine"), lower=True):
+        return no("machine_mismatch", info)
+
+    out = dict(base, why="ok", active=True)
+    out.update(info)
+    return out
+
+
+def _same_text(a, b, lower):
+    """兩個欄位都是非空字串、去頭尾空白後相等（型別不對、空字串一律不相等）。"""
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
+    a, b = a.strip(), b.strip()
+    if lower:
+        a, b = a.lower(), b.lower()
+    return a != "" and a == b
+
+
+def emergency_status(status):
+    """給狀態端點用：沒有通行證檔 → None；有 → dict（active／why …）。**任何情況都不丟例外。**"""
+    try:
+        text, err = _read_small_text(emergency_path())
+        if text is None:
+            if err == "missing":
+                return None
+            return {"present": True, "active": False, "why": "token_" + err, "pass_id": None}
+        return _emergency_judge(status, text)
+    except Exception:  # noqa: BLE001 — 狀態端點不可以因為通行證壞掉而 500
+        return {"present": True, "active": False, "why": "token_error", "pass_id": None}
+
+
+def emergency_blob_problem(blob):
+    """簽發端自我複驗用：通行證 blob 的**簽章、用途、日期**都過 ⇒ None，否則原因碼（token_*）。
+    不看授權金鑰綁定（那要在目標機器上、有那把授權金鑰才判得了）。"""
+    why = _emergency_judge(None, blob)["why"]
+    return None if why == "license_not_covered" else why
+
+
+_EMERGENCY_CACHE = None   # (快取鍵, result 複本或 None)；結構與 _LICENSE_FILE_CACHE 同理（見上方①～⑤）
+
+
+def _emergency_cache_key(status):
+    def _stat_pair(path):
+        try:
+            st_result = os.stat(path)
+        except OSError:
+            return None
+        return (st_result.st_mtime_ns, st_result.st_size)
+
+    return (
+        _stat_pair(emergency_path()),
+        _stat_pair(LICENSE_PATH),
+        _PUBKEY_DEV,
+        _PUBKEY_PROD,
+        date.today().toordinal(),
+        (status or {}).get("reason"),  # _emergency_judge 的分支依賴它（見 EMERGENCY_COVERS 判斷）
+    )
+
+
+def emergency_pass(status):
+    """這個（會被擋的）授權狀態有沒有生效中的通行證 → dict 或 None。**不丟例外；任何不確定都當沒有。**
+
+    不確定就不放行：把「讀不懂」當成放行，是把鎖拆掉。
+
+    T80稽核LG-M2：被擋期間**每個請求**（含公開端點、未登入）都會呼叫到這支，而且在
+    exempt 判斷之前；沒有快取的話每次都是讀通行證檔＋讀授權金鑰檔＋兩次Ed25519驗章，
+    被擋本來就是事故期間，不該再疊一個「每個請求多付近1ms」的放大器。快取比照
+    `_LICENSE_FILE_CACHE`：鍵含兩個檔案的 stat、兩把公鑰、今天日期，外加 `status.reason`
+    （判定邏輯會依它分支）。"""
+    global _EMERGENCY_CACHE
+    key = _emergency_cache_key(status)
+    cached = _EMERGENCY_CACHE
+    if cached is not None and cached[0] == key:
+        return dict(cached[1]) if cached[1] is not None else None
+
+    info = emergency_status(status)
+    result = info if info and info.get("active") else None
+    _EMERGENCY_CACHE = (key, dict(result) if result is not None else None)
+    return result
+
+
+def license_banner(status, emergency):
+    """前端橫幅用的標頭值；沒有要提示的 → None。
+
+    emergency ＝ 靠通行證撐著（最優先）；dev_key ＝ 驗章通過但簽發方是開發金鑰（env=dev）——
+    正式機上裝了開發金鑰簽的東西，不可以悄悄放過去（開發私鑰不在受控保管下）。"""
+    if emergency:
+        return "emergency;until=%s" % emergency.get("until", "")
+    if isinstance(status, dict) and status.get("valid") and status.get("env") == "dev":
+        return "dev_key"
+    return None
+
+
 # ── 機器指紋 ─────────────────────────────────────────────────────────────────
 
 # 同一個行程內算一次就好。**這個快取存的是從硬體讀出來的值**，所以換一個行程重算
 # 也會得到同一個答案（見 test_07b）——不是啟動時產生的隨機值快取起來，那種做法能
 # 通過「連呼叫兩次相同」，但客戶重啟服務之後金鑰就全部失效了。
-_FINGERPRINT_CACHE = None
+_FINGERPRINT_CACHE = None  # None 或 (digest, is_stable, 算出時的time.monotonic(), 連續partial次數)
 
 
 def _run(cmd, timeout=30):
@@ -600,6 +852,21 @@ def _stable_machine_id():
     return ""
 
 
+_FP_PROBE_RETRIES = 3    # T80稽核LG-M1：開機初期WMI／裝置列舉可能還沒就緒，重試幾次再定案
+_FP_PROBE_DELAY_S = 1.5  # 只有「這次讀到的比上次還不完整」時才等；行程一輩子只在第一次冷啟動付這個代價
+# T80稽核LG-M1b：重試完仍只拿到「一半」（uuid／mac 只有一項，不是走 _stable_machine_id 那條
+# 穩定後路）時，不能跟「兩項都拿到」一樣直接快取到行程結束——那台機器可能是 WMI 持續偏慢，
+# 之後終究會補齊。退避依序變長：60 秒、5 分鐘、1 小時（到最後一檔不再加長），愈久沒等到完整
+# 結果，愈不急著重探；完整結果一旦拿到，照舊快取到行程結束（不會再退避）。
+_FP_PARTIAL_BACKOFF_S = (60, 300, 3600)
+
+
+def _probe_hardware_once():
+    if sys.platform == "win32":
+        return _windows_hardware()
+    return _posix_hardware()
+
+
 def machine_fingerprint():
     """這台機器的指紋：sha256 前 16 碼（小寫 hex）。
 
@@ -609,34 +876,65 @@ def machine_fingerprint():
     一個硬體來源都讀不到就丟 `RuntimeError`：算不出來就什麼都不要回，不要回一個
     看起來像指紋的假值——那會讓「機器不符」這道鎖在不知不覺間失效。
     呼叫端（`verify_license`）接住它並拒絕該筆，不是放行。
+
+    ⚠️ T80稽核LG-M1：第一次呼叫（通常是開機時）若兩項來源都讀到空的，或只讀到一項，
+    **重試幾次**才把結果定案——開機初期 WMI／網卡列舉可能還沒就緒，不重試的話一個
+    偶發的「這次讀一半」會被 `_FINGERPRINT_CACHE` 永遠鎖住（重啟才會重算）。硬體穩定
+    的機器（絕大多數情況）每次重試都讀到同一個答案，只是多付幾次探測的時間，不會
+    改變最終結果。
+
+    ⚠️ T80稽核LG-M1b：重試完還是只有一半（既不是兩項齊全、也不是走 `_stable_machine_id`
+    那條「本來就只有一個穩定來源」的後路）⇒ **不永久快取**，改用退避（`_FP_PARTIAL_BACKOFF_S`）：
+    退避到期前直接回同一個殘缺值（契約仍然是「跨呼叫一致」），到期後才重新探測一次，愈探
+    不到完整結果就愈慢重試。兩項齊全、或走 `_stable_machine_id` 後路的，一律快取到行程結束
+    （跟原本一樣，不會退避、也不會因為之後 CPU 忙就被重新觸發）。
     """
     global _FINGERPRINT_CACHE
     if _FINGERPRINT_CACHE is not None:
-        return _FINGERPRINT_CACHE
+        digest, is_stable, cached_at, strikes = _FINGERPRINT_CACHE
+        if is_stable:
+            return digest
+        backoff = _FP_PARTIAL_BACKOFF_S[min(strikes, len(_FP_PARTIAL_BACKOFF_S) - 1)]
+        if (time.monotonic() - cached_at) <= backoff:
+            return digest
+        # 退避到期：重探一次，見下方「沿用 strikes」。
 
-    if sys.platform == "win32":
-        uuid_, mac = _windows_hardware()
-    else:
-        uuid_, mac = _posix_hardware()
+    uuid_, mac = _probe_hardware_once()
+    for _ in range(_FP_PROBE_RETRIES - 1):
+        if uuid_ and mac:
+            break  # 兩項都有了，不用再等
+        time.sleep(_FP_PROBE_DELAY_S)
+        next_uuid, next_mac = _probe_hardware_once()
+        # 只採「更完整」的那次：已經拿到的那一半不會因為下一次探測讀到空值就被丟掉。
+        uuid_ = uuid_ or next_uuid
+        mac = mac or next_mac
 
     parts = []
     if uuid_:
         parts.append("uuid=" + uuid_)
     if mac:
         parts.append("mac=" + mac)
+    is_stable = bool(uuid_ and mac)
     if not parts:
         fallback = _stable_machine_id()
         if fallback:
             parts.append("machineid=" + fallback)
+            is_stable = True  # 只有這一個來源可用是這台機器本來的樣子，不是暫時讀一半
     if not parts:
         raise RuntimeError(
             "無法取得任何硬體識別（主機板 UUID／實體網卡 MAC／機器 ID 都讀不到），"
             "算不出機器指紋"
         )
 
-    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-    _FINGERPRINT_CACHE = digest[:16]
-    return _FINGERPRINT_CACHE
+    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+    now = time.monotonic()
+    if is_stable:
+        _FINGERPRINT_CACHE = (digest, True, now, 0)
+    else:
+        prev = _FINGERPRINT_CACHE
+        strikes = prev[3] + 1 if prev is not None else 0
+        _FINGERPRINT_CACHE = (digest, False, now, strikes)
+    return digest
 
 
 # ── 模組授權（CORE-SPEC §9c ②，2026-09-25 裁示 (b)）──────────────────────────
@@ -670,4 +968,12 @@ def module_licensed(manifest, status, gate_enabled):
 def module_license_check(manifest):
     """載入器用（main.py 注入 core.loader.load_all）。每次呼叫當下讀開關與金鑰。"""
     gate = LICENSE_GATE_ENABLED
-    return module_licensed(manifest, verify_license() if gate else {}, gate)
+    if not gate:
+        return module_licensed(manifest, {}, False)
+    status = verify_license()
+    if license_blocks_request(status):
+        # 靠緊急放行通行證撐著時，重啟也不能讓模組全部不載入（那等於「放行」只撐到下次重啟）。
+        # 模組清單取自驗章通過的那把授權金鑰（machine_mismatch／expired 時 status.modules 仍是可信的）。
+        if emergency_pass(status):
+            status = dict(status, valid=True, reason="ok")
+    return module_licensed(manifest, status, gate)

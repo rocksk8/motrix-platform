@@ -214,6 +214,8 @@ SIDE_EFFECT_GET_CLASSIFIED = {
     "/api/settings/email-notify": "read",
     # T79 LINE：只讀設定（token 已遮罩）回 {enabled, channel_access_token}；不對外連線（verify 是 POST）⇒ read
     "/api/settings/line-notify": "read",
+    # LINE 額度用量條：只讀 LINE 的 quota／consumption（唯讀、不耗額度），結果只快取不寄信；沒 token 時根本不連線 ⇒ read（記錄器環境無 token）
+    "/api/settings/line-notify/quota": "read",
     "/api/settings/reminder-send-failures": "read",
     # S-X3：名稱含 notify，但兩支都只讀設定回 {enabled, canEdit}（最高管理者另得欄位清單與預設字）；不寄信、不對外連線、不寫資料 ⇒ read
     "/api/notify-actions/status": "read",

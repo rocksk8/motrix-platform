@@ -158,7 +158,9 @@ def test_main_answers_demo_requests_for_demo_absent_modules_after_the_session_ch
     fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.AsyncFunctionDef) and n.name == "auth_middleware")
     body = ast.unparse(fn)
     assert "demo_absent_reason(path)" in body and "DEMO_TOKEN_PREFIX" in body
-    assert body.index("FROM sessions s JOIN users u") < body.index("demo_absent_reason(path)") < body.index("call_next(request)\n    _record_request_trail")
+    # fix/t80-conn-leak-net（K 審 hichan-12 N1）把回應之後的軌跡＋失敗稽核合成一次 threadpool 呼叫
+    # （_after_response_records），call_next 後面不再是 _record_request_trail 本身，改用它的呼叫點當錨點。
+    assert body.index("FROM sessions s JOIN users u") < body.index("demo_absent_reason(path)") < body.rindex("call_next(request)\n    await run_in_threadpool(_after_response_records")
 
 
 _V1_NEEDS_READY = ("from core.registry import ModuleSpec\n"

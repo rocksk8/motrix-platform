@@ -87,6 +87,9 @@ _tmp = tempfile.mkdtemp()
 import atexit as _ax, shutil as _sh; _ax.register(_sh.rmtree, _tmp, True)   # 2026-09-30 寫入量：結束時刪暫存目錄（原本每跑一次留一個含 1.3MB 庫的目錄）
 db.DB_PATH = os.path.join(_tmp, "t.db")
 db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
+# T80：子行程沒有 conftest，而授權閘門預設開——沒有金鑰就不載任何模組、API 回 402 ⇒ 比照 conftest 裝一把測試用自簽金鑰
+from tests._license_boot import install_test_license
+install_test_license()
 
 class _Stub(types.ModuleType):
     def __getattr__(self, name):

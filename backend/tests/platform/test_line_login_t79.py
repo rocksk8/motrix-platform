@@ -41,6 +41,10 @@ class _FakeLine:
 
     def __call__(self, method, path, token, payload=None):
         self.calls.append((method, path, token, payload))
+        if path.endswith("/quota/consumption"):                 # quota() 嚴格驗證欄位（K 審 F2）：回合乎格式的本文
+            return self.status, {"totalUsage": 3}
+        if path.endswith("/message/quota"):
+            return self.status, {"type": "limited", "value": 200}
         return self.status, {}
 
 

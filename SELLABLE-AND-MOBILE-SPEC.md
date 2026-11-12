@@ -34,7 +34,9 @@
 | 3 無效／過期擋住 | ✅ 完成（`fb329be` 總開關＋kind＋快取、`a63cc49` middleware、`3f969c2` 註解） |
 | 4 模組閘 / 5 抬頭 / 6 到期提醒 / 7 換機 | 🧊 **凍結，未開始** |
 
-**為什麼停在這裡零風險**：`LICENSE_GATE_ENABLED = False` 是預設值，
+> **2026-11-11 更正（使用者裁示重新打開授權閘門，T80 票）**：下面這段「`LICENSE_GATE_ENABLED = False` 是預設值」與「解凍第一件事是補寫 `test_licensing_gate_2026_09_21.py`」**已過期**——預設值已改 `True`，那份測試已補（開著時的有效／沒有／過期／無效四種情境，走 HTTP）。**尚未部署**：正式機沒有 `license.key`、`_PUBKEY_PROD` 仍空，兩者就緒前不可上正式機。沿革見 `backend/helpers/licensing.py` 開關上方的註解。以下保留原文作為當年的設計脈絡。
+
+**為什麼停在這裡零風險**：~~`LICENSE_GATE_ENABLED = False` 是預設值，~~
 middleware **完全不介入**（連 `verify_license()` 都不呼叫）。
 整套授權程式碼在 repo 裡是**惰性的**——它存在、被測試涵蓋、但不做任何事。
 

@@ -32,6 +32,8 @@ from helpers import (
     notify_module_activity)
 
 from helpers.audit import _audit_login_failed
+from helpers.client_ip import client_ip as _trusted_client_ip
+from helpers.client_ip import rate_limit_key as _rl_key
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +43,24 @@ router = APIRouter()
 
 _LOGIN_MAX_FAILS = 5       # consecutive failures before lockout
 _LOGIN_LOCKOUT_S = 900     # 15 minutes
+_RL_MAX_ENTRIES = 10_000   # T80 稽核 IP-M1：位址輪換會讓這個表無上限成長，超過就清
+_RL_STALE_S = 3600         # 沒鎖定、1 小時沒再失敗的列，清表時當成可丟
 
 _rl_lock = threading.Lock()
-# ip -> {"fails": int, "locked_until": float (monotonic epoch)}
+# key(＝_rl_key(ip)，IPv4 原樣／IPv6 取/64) -> {"fails": int, "locked_until": float (monotonic epoch), "last_fail": float}
 _rl_state: dict = {}
+
+
+def _rl_prune_locked(now: float) -> None:
+    """超過上限才清，清掉沒鎖定且久未失敗的列。呼叫端要先持有 `_rl_lock`。"""
+    if len(_rl_state) <= _RL_MAX_ENTRIES:
+        return
+    stale = [
+        k for k, st in _rl_state.items()
+        if st["locked_until"] <= now and now - st.get("last_fail", 0) > _RL_STALE_S
+    ]
+    for k in stale:
+        del _rl_state[k]
 
 
 
@@ -58,10 +74,12 @@ def _min_pw() -> int:
         raise HTTPException(503, "密碼規則暫時讀不到，為了安全暫時無法設定密碼，請稍後再試")
 
 def _client_ip(request: Request) -> str:
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """來源 IP（登入鎖定、TOTP／Passkey 失敗計數、登入稽核都用這支）。
+
+    🔴 2026-11-11：以前無條件信 `X-Forwarded-For` 第一個值——用戶端自己填的——登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）
+    只要每次攻擊換一個 XFF 就繞過（無限次猜密碼）。現在走 `helpers.client_ip.client_ip`：永遠不讀 XFF；只有 TCP 對端本身是
+    loopback（cloudflared 與本程式同機）才採信 `CF-Connecting-IP`。"""
+    return _trusted_client_ip(request)
 
 
 def _rl_db_write(ip: str, locked_until_mono: float) -> None:
@@ -112,38 +130,48 @@ def init_rate_limiting() -> None:
 
 
 def _rl_check(ip: str) -> None:
-    """Raise 429 if IP is currently locked out."""
+    """Raise 429 if IP is currently locked out.
+
+    鎖定查/寫一律先經 `_rl_key()`（T80稽核IP-M1）：IPv4原樣、IPv6取/64前綴，
+    否則一般住宅IPv6的/64有2^64個位址，攻擊者每次換位址就是新的桶＝鎖定形同沒鎖。
+    `ip` 參數本身（完整位址）只給呼叫端自己的稽核紀錄用，這支不處理稽核。
+    """
+    key = _rl_key(ip)
     now = time.monotonic()
     with _rl_lock:
-        state = _rl_state.get(ip)
+        state = _rl_state.get(key)
         if not state:
             return
         if now < state["locked_until"]:
             wait = int(state["locked_until"] - now)
             raise HTTPException(429, f"登入嘗試次數過多，請於 {wait} 秒後再試")
         if state["locked_until"] > 0:
-            del _rl_state[ip]
+            del _rl_state[key]
 
 
 def _rl_fail(ip: str, username: str) -> None:
+    key = _rl_key(ip)
     now = time.monotonic()
     lockout_until = 0.0
     with _rl_lock:
-        state = _rl_state.setdefault(ip, {"fails": 0, "locked_until": 0.0})
+        state = _rl_state.setdefault(key, {"fails": 0, "locked_until": 0.0, "last_fail": now})
         state["fails"] += 1
+        state["last_fail"] = now
         if state["fails"] >= _LOGIN_MAX_FAILS:
             state["locked_until"] = now + _LOGIN_LOCKOUT_S
             lockout_until = state["locked_until"]
             state["fails"] = 0
-            logger.warning("Login lockout: IP=%s username=%s locked for %ds", ip, username, _LOGIN_LOCKOUT_S)
+            logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, username, _LOGIN_LOCKOUT_S)
+        _rl_prune_locked(now)
     if lockout_until:
-        _rl_db_write(ip, lockout_until)
+        _rl_db_write(key, lockout_until)
 
 
 def _rl_clear(ip: str) -> None:
+    key = _rl_key(ip)
     with _rl_lock:
-        _rl_state.pop(ip, None)
-    _rl_db_clear(ip)
+        _rl_state.pop(key, None)
+    _rl_db_clear(key)
 
 
 # ── TOTP two-factor login (2026-09-07, self-service — see db.py::_m072_totp) ──

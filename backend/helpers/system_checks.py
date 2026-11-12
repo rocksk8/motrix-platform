@@ -9,6 +9,7 @@ import calendar
 import json
 import os
 import threading
+import time
 from datetime import date as _date, timedelta as _timedelta, datetime, timezone as _timezone
 from typing import Optional, List
 
@@ -20,7 +21,7 @@ from helpers import (
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
     notify_case_project_overdue,
-    notify_cert_expiry, notify_backup_stale, notify_disk_space_low,
+    notify_cert_expiry, notify_backup_stale, notify_disk_space_low, notify_heartbeat_stale,
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
@@ -310,6 +311,56 @@ def _check_backup_freshness() -> None:
                                 for l, t in stale))
     except Exception as exc:
         _logger.warning("_check_backup_freshness failed: %s", exc)
+
+
+#: 本行程啟動時間（單調時鐘）。啟動後要先讓心跳排程（每 5 分鐘一次）有機會重新跑過，狀態檔才反映「現在」。
+_STARTED_AT = time.monotonic()
+#: 啟動寬限（分鐘）：3 個心跳週期。K 審 S1：斷電／冷開機後 app 一起來，狀態檔還是停電前（或停電期間）寫的，
+#: 立刻判斷會在「真正的當機恢復」之後、以及每次久關後開機時誤寄「監控本身壞了」。
+_HEARTBEAT_STARTUP_GRACE_MINUTES = 15
+
+
+def _uptime_seconds() -> float:
+    return time.monotonic() - _STARTED_AT
+
+
+def _check_heartbeat_health() -> None:
+    """每日檢查「心跳監控本身」（2026-11-11）：app 活著、卻看到心跳回報壞的狀態很久／心跳排程停了 ⇒ 寄信給 superadmin。
+
+    背景：正式機心跳壞了兩個多月沒人知道（http/https 不符 ⇒ 每 5 分鐘 /fail ⇒ healthchecks.io 一直紅燈，
+    真正的斷電沒有新告警）。判斷邏輯在 helpers/heartbeat_status.assess（只讀狀態檔）。
+    沒有心跳（開發機：沒設定檔也沒狀態檔）⇒ 什麼都不做。同一天最多寄一次；寄成功才記旗標（`notify_heartbeat_stale` 等寄送結果，回 False＝不寫、下次重試）、恢復正常就清旗標。
+    ⚠️ 啟動後 `_HEARTBEAT_STARTUP_GRACE_MINUTES` 分鐘內不判斷（斷電／久關後冷開機時狀態檔是舊的，心跳排程還沒重新跑；K 審 S1）。
+    """
+    try:
+        if _uptime_seconds() < _HEARTBEAT_STARTUP_GRACE_MINUTES * 60:
+            return          # 剛啟動：心跳排程還沒重新跑過，狀態檔可能是停電前的舊資料；每日 08:00 那次會補判斷
+        from helpers import heartbeat_status as _hs
+        res = _hs.assess()
+        guard_key = "heartbeat_stale_last_notified"
+        if not res["alert"]:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")
+            return
+        today = _date.today().isoformat()
+        if _get_setting(guard_key) == today:
+            return
+        state = {k: res[k] for k in ("status", "since", "seen_at", "scheme", "ext_ok_at")}
+
+        def _send_alert():
+            try:
+                may_mark = notify_heartbeat_stale(res["summary"], res["problems"], state)
+            except Exception:  # noqa: BLE001
+                _logger.exception("notify_heartbeat_stale failed —— 旗標不寫，今天仍會重試")
+                return
+            if may_mark is False:       # 沒收件人／暫時失敗／略過：不寫旗標，明天（或下次檢查）重試
+                return
+            _set_setting(guard_key, today)
+
+        threading.Thread(target=_send_alert, args=(), daemon=True).start()
+        _logger.error("心跳監控異常：%s", res["summary"])
+    except Exception as exc:
+        _logger.warning("_check_heartbeat_health failed: %s", exc)
 
 
 def _disk_targets() -> list:
@@ -754,12 +805,25 @@ def _prune_request_log(keep_days: int = None) -> None:
 
 
 
+def _check_line_quota() -> None:
+    """每日備援（2026-11-12）：讀 LINE 本月訊息用量，跨過門檻就寄信（同一門檻同月一次）。主要觸發點是「推播成功後」（helpers/line_quota.after_push）；
+    這裡涵蓋 LINE 控制台手動發送也耗額度、以及重開機後第一次檢查。LINE 沒啟用（沒 token／被停用）或本機不允許對外發送（開發機標記）＝不連網、不寄信（`line_quota.check_and_alert` 自己判斷）。
+    背景執行緒（LINE API 與寄信都可能慢）；例外只記 log。"""
+    try:
+        from helpers import line_quota as _lq
+        threading.Thread(target=_lq.check_and_alert, args=(), daemon=True, name="line-quota-daily").start()
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("_check_line_quota failed: %s", exc)
+
+
 def run_all(prune: bool = False) -> None:
     """每日系統檢查（順序同搬移前）。prune：08:00 那一輪另清理請求紀錄（啟動補跑不清）。"""
     _check_approval_reminders()
     _check_cert_expiry()
     _check_backup_freshness()
+    _check_heartbeat_health()
     _check_disk_space()
     _check_temp_bloat()
+    _check_line_quota()
     if prune:
         _prune_request_log()

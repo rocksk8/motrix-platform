@@ -25,6 +25,7 @@ import time
 from datetime import datetime, timedelta
 
 from db import get_db
+from core.txn import begin_write
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +356,9 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
 
     **不記請求內容**：只有方法、路由樣板、單號、狀態碼、原因碼（固定詞彙）。
     **限流**：同 (人, 方法, 路由樣板, 狀態) 60 秒內只寫第一筆，後續只在那一列的 detail 累加 `repeat`；
-    另有每人每小時 200 筆上限（超過只記 log）。鉤子本身絕不丟例外、不擋回應。"""
+    另有每人每小時 200 筆上限（超過只記 log）。鉤子本身絕不丟例外、不擋回應。
+    ⚠️ `repeat` 是**節流用的近似計數，不是精確次數**：第一筆還在寫的當下並行進來的同 key 呼叫（T80 R6 起本函式由多條 threadpool
+    執行緒同時呼叫）併入那一筆但來不及計數（列 id 還不知道），所以 detail.repeat 會少算那幾次。"""
     try:
         if method not in ("POST", "PUT", "PATCH", "DELETE") or int(status) not in _FAIL_STATUSES:
             return "skip"
@@ -369,6 +372,8 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
             last = _FAIL_LAST.get(key)
             if last and mono - last[0] < _FAIL_WINDOW_SECONDS:
                 row_id = last[1]
+                if row_id is None:                  # 同一把 key 另一條執行緒正在寫第一筆（認領中，見下）⇒ 這筆併入它，不另開一列
+                    return "repeat"
             else:
                 row_id = None
                 bucket = int(mono // 3600)
@@ -380,9 +385,13 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
                     logger.warning("audit failure cap reached for user %s (%d/hour): further failure rows dropped", user_id, _FAIL_HOURLY_CAP)
                     return "capped"
                 _FAIL_HOUR[user_id] = (hb, cnt + 1)
+                # 先**認領**這把 key（T80 R6：本函式現在由多條 threadpool 執行緒同時呼叫；原本靠「事件迴圈上一次一個」）：
+                # 認領之後同窗口內的其他呼叫走上面的「併入」分支；寫成功才填入列 id，寫失敗 ⇒ 放掉（見最下面）。
+                _FAIL_LAST[key] = (mono, None)
         conn = get_db()
         try:
             if row_id is not None:
+                begin_write(conn)                   # 讀 detail → +1 → 寫回 要原子（否則併發的 repeat 會互相蓋掉計數）
                 r = conn.execute("SELECT detail FROM audit_log WHERE id=?", (row_id,)).fetchone()
                 if r is not None:
                     try:
@@ -409,6 +418,12 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
             conn.close()
     except Exception:                                         # noqa: BLE001
         logger.exception("_audit_failure failed")
+        try:
+            with _FAIL_LOCK:
+                if _FAIL_LAST.get(key, (None, 0))[1] is None:       # 認領了但沒寫成 ⇒ 放掉，下一次可以重試
+                    del _FAIL_LAST[key]
+        except Exception:                                     # noqa: BLE001
+            pass
         return "error"
 
 

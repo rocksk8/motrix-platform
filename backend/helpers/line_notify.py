@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
-[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_confirmed, set_event, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
+[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, enabled, event_enabled, event_roles_view, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_confirmed, set_event, set_event_roles, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -20,6 +20,9 @@
      `login_channel_id`（純數字）不是祕密。兩者格式不合一律不收、不用（`login_credentials()` 回 ("", "")）。
   ⑦ 綁定紀錄 `line_links[username] = {userId, linkedAt[, confirmed]}`；`confirmed` 是綁定後推確認訊息的結果（True／False／None＝沒驗），只由
      `set_confirmed` 寫；重新綁定（`link_user`）會清掉舊的 `confirmed`。
+  ⑧ 收件人只縮不擴（2026-11-12）：`notify_users` 對呼叫端給的帳號再經 `helpers.line_recipients.filter_usernames`（角色允許清單∩個人沒退訂）才轉成 userId；
+     角色允許清單 `line_notify.event_roles` 的寫入在本檔 `set_event_roles`（與事件開關共用 `_lock`），讀取與過濾在 `line_recipients`。
+  ⑨ 額度：推播成功後（`push_async`）呼叫 `helpers.line_quota.after_push()`（背景、去抖動、永不丟例外）；用量判斷與告警在 `line_quota`。
 """
 import json
 import logging
@@ -282,6 +285,9 @@ def push_async(user_ids, text: str) -> threading.Thread:
             out = push(user_ids, text)
             if out != SEND_SENT:
                 logger.info("LINE 推播結果：%s（對象 %d 人）", out, len(list(user_ids or [])))
+            else:
+                from . import line_quota as _lq            # 推成功＝額度可能變了：去抖動後刷新用量、跨門檻就告警（永不丟例外）
+                _lq.after_push()
         except Exception as exc:                                # push 本身不丟例外；這裡是最後一道
             logger.warning("LINE 背景推播的執行緒自己炸了：%s", type(exc).__name__)
     t = threading.Thread(target=_run, daemon=True, name="line-push")
@@ -303,6 +309,37 @@ def event_enabled(event_key: str) -> bool:
                     and _events().get(event_key) is True)
     except Exception:
         return False
+
+
+def event_roles_view() -> dict:
+    """⇒ {key: [role…]|None}（只含已接線的類型；None＝所有角色，沿用現行行為）。壞值照 `line_recipients.allowed_roles` 的規則（[]＝fail-closed）。"""
+    from . import line_recipients as _lr
+    return {k: _lr.allowed_roles(k) for k in WIRED_EVENTS}
+
+
+def set_event_roles(event_key: str, roles) -> None:
+    """設定單一類型「允許哪些角色收」。`roles=None` ⇒ 移除限制（所有角色）；list ⇒ 只收這些角色（可為空＝沒有角色）。
+    不是已接線的類型、角色不在 `mail_types.ROLES`、不是 list／None ⇒ `ValueError`。"""
+    if event_key not in WIRED_EVENTS:
+        raise ValueError("這種通知尚未支援 LINE：%s" % event_key)
+    if roles is not None:
+        from .mail_types import ROLES
+        if not isinstance(roles, list) or not all(isinstance(r, str) and r in ROLES for r in roles):
+            raise ValueError("roles 必須是角色清單（%s）或 null" % "、".join(ROLES))
+        roles = list(dict.fromkeys(roles))
+    with _lock:
+        c = dict(_cfg())
+        er = dict(c.get("event_roles") if isinstance(c.get("event_roles"), dict) else {})
+        if roles is None:
+            if event_key not in er:
+                return
+            er.pop(event_key)
+        else:
+            if er.get(event_key) == roles:
+                return
+            er[event_key] = roles
+        c["event_roles"] = er
+        _set_setting(SETTING_KEY, c)
 
 
 def events_view() -> dict:
@@ -412,9 +449,12 @@ def notify_users(event_key: str, usernames, title: str, rows=None, *, reason: st
     try:
         if not event_enabled(event_key):
             return None
-        ids = ids_for(usernames)
+        given = list(dict.fromkeys(usernames or []))
+        from . import line_recipients as _lr            # 惰性 import：line_recipients 不 import 本檔於模組層
+        allowed = _lr.filter_usernames(event_key, given)
+        ids = ids_for(allowed)
         if not ids:
-            logger.info("LINE：%r 沒有已綁定 LINE 的收件人（收件 %d 人）", event_key, len(list(usernames or [])))
+            logger.info("LINE：%r 沒有可推播的收件人（收件 %d 人；角色／個人勾選後 %d 人；已綁定 0 人）", event_key, len(given), len(allowed))
             return None
         return push_async(ids, build_text(title, rows, reason=reason, link=link))
     except Exception as exc:
@@ -454,8 +494,17 @@ def quota(token: str = None) -> dict:
         s2, b2 = _http("GET", "/v2/bot/message/quota/consumption", tk)
         if s1 != 200 or s2 != 200:
             return {"ok": False, "error": "LINE 回應 %s／%s" % (s1, s2)}
-        return {"ok": True, "type": b1.get("type", ""), "limit": b1.get("value") if b1.get("type") == "limited" else None,
-                "used": b2.get("totalUsage", 0)}
+        # 欄位缺失或型別不對＝讀不到（不補 0、不當無上限）：補 0 會讓額度告警誤判「用量歸零」而清掉已警示紀錄、重寄同一門檻的信（K 審 F2）
+        used, qtype, value = b2.get("totalUsage"), b1.get("type"), b1.get("value")
+        if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+            return {"ok": False, "error": "LINE 回傳的本月用量欄位缺失或格式不對"}
+        if qtype == "limited":
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                return {"ok": False, "error": "LINE 回傳的訊息上限欄位缺失或格式不對"}
+            return {"ok": True, "type": qtype, "limit": value, "used": used}
+        if qtype == "none":
+            return {"ok": True, "type": qtype, "limit": None, "used": used}
+        return {"ok": False, "error": "LINE 回傳了不認得的額度類型（%r）" % (qtype,)}
     except Exception as exc:
         logger.warning("LINE quota error: %s", type(exc).__name__)
         return {"ok": False, "error": "連不到 LINE（%s）" % type(exc).__name__}

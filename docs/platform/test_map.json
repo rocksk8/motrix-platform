@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1524,
+  "tests": 1540,
   "unmapped": 13,
   "kinds": {
-   "api": 844,
-   "e2e": 338,
-   "audit": 199,
-   "unit": 143
+   "api": 855,
+   "e2e": 341,
+   "audit": 200,
+   "unit": 144
   },
-  "routes": 900
+  "routes": 908
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -14449,6 +14449,30 @@
    },
    "module": "recyclebin"
   },
+  "backend/modules/recyclebin/tests/test_run_daily_releases_lock_t80.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/recyclebin/",
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/jobs",
+    "mod:recyclebin/service",
+    "plat:txn"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/txn.py",
+     "backend/db.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/jobs.py",
+     "backend/modules/recyclebin/service.py"
+    ],
+    "module_dir": [
+     "backend/modules/recyclebin/"
+    ]
+   },
+   "module": "recyclebin"
+  },
   "backend/modules/subcontract/tests/test_api_integration.py": {
    "kind": "api",
    "units": [
@@ -16565,6 +16589,33 @@
     ]
    },
    "login_fixture": true,
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_create_batch_write_lock_t80.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/test_stock_batch_payment_2026_09_01.py",
+    "mod:supply/api/__init__",
+    "mod:supply/api/inventory",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/supply/api/__init__.py",
+     "backend/modules/supply/api/inventory.py",
+     "backend/tests/test_stock_batch_payment_2026_09_01.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/routers/parts.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
    "module": "supply"
   },
   "backend/modules/supply/tests/test_e2e_boolean_status_select_2026_09_25.py": {
@@ -29244,6 +29295,34 @@
     ]
    }
   },
+  "backend/tests/test_conn_reaper_t80_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_stock_batch_payment_2026_09_01.py",
+    "helper:audit",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/audit.py",
+     "backend/main.py",
+     "backend/tests/test_stock_batch_payment_2026_09_01.py"
+    ],
+    "api": [
+     "backend/routers/parts.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/_t80_leak",
+    "/api/t80/yy",
+    "/api/t80/zz"
+   ]
+  },
   "backend/tests/test_core.py": {
    "kind": "audit",
    "units": [
@@ -29865,10 +29944,12 @@
    "kind": "api",
    "units": [
     "file:backend/tests/_routes.py",
-    "file:backend/tools/deploy_dashboard.py"
+    "file:backend/tools/deploy_dashboard.py",
+    "helper:client_ip"
    ],
    "evidence": {
     "import": [
+     "backend/helpers/client_ip.py",
      "backend/tests/_routes.py"
     ],
     "path": [
@@ -32791,6 +32872,26 @@
     ]
    }
   },
+  "backend/tests/test_e2e_heartbeat_card_2026_11_12.py": {
+   "kind": "e2e",
+   "units": [
+    "page:pages/notification-settings.html",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py"
+    ],
+    "page": [
+     "frontend/pages/notification-settings.html"
+    ],
+    "path": [
+     "frontend/pages/notification-settings.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_home_mine_w2fix_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -32933,6 +33034,32 @@
     ]
    }
   },
+  "backend/tests/test_e2e_license_gate_2026_11_11.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:license_alerts",
+    "helper:licensing",
+    "page:index.html",
+    "page:pages/customers.html",
+    "page:pages/license-required.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/license_alerts.py",
+     "backend/helpers/licensing.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/license-required.html"
+    ],
+    "path": [
+     "frontend/pages/customers.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_line_binding_2026_11_11.py": {
    "kind": "e2e",
    "units": [
@@ -32982,6 +33109,37 @@
      "frontend/pages/notification-settings.html"
     ],
     "path": [
+     "frontend/pages/notification-settings.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_line_recipients_quota_2026_11_12.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:line_notify",
+    "helper:line_quota",
+    "helper:line_recipients",
+    "helper:settings",
+    "page:pages/change-password.html",
+    "page:pages/notification-settings.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/line_notify.py",
+     "backend/helpers/line_quota.py",
+     "backend/helpers/line_recipients.py",
+     "backend/helpers/settings.py"
+    ],
+    "page": [
+     "frontend/pages/change-password.html",
+     "frontend/pages/notification-settings.html"
+    ],
+    "path": [
+     "frontend/pages/change-password.html",
      "frontend/pages/notification-settings.html"
     ]
    }
@@ -35746,6 +35904,30 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_field_cases_2026_11_12.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/_requires.py",
+    "mod:case/api/__init__",
+    "mod:case/api/field_cases",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/field_cases.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/field_cases.py",
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_filehub_leak_a3_2026_10_01.py": {
    "kind": "api",
    "units": [
@@ -36612,6 +36794,41 @@
     ]
    }
   },
+  "backend/tests/test_heartbeat_watch_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:heartbeat_job",
+    "file:backend/autostart.bat",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tools/prod_status_snapshot.py",
+    "helper:email_notify",
+    "helper:heartbeat_status",
+    "helper:mail_types",
+    "helper:notify_matrix",
+    "helper:settings",
+    "helper:system_checks",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/heartbeat_job.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/heartbeat_status.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notify_matrix.py",
+     "backend/helpers/settings.py",
+     "backend/helpers/system_checks.py",
+     "backend/tools/prod_status_snapshot.py"
+    ],
+    "path": [
+     "backend/autostart.bat"
+    ]
+   }
+  },
   "backend/tests/test_high_risk_routes_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -36648,6 +36865,38 @@
      "MULTIWIN-PROTOCOL.md"
     ]
    }
+  },
+  "backend/tests/test_idempotency_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:idempotency",
+    "helper:uploads",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/idempotency.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/__init__.py",
+     "backend/routers/system.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_install_defaults_2026_09_27.py": {
    "kind": "api",
@@ -36837,6 +37086,31 @@
     ]
    }
   },
+  "backend/tests/test_lg_o1_dev_pubkey_policy_2026_11_12.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/helpers/",
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/tools/build_deploy_package.ps1",
+    "file:backend/tools/stepfile_drill.py",
+    "file:backend/tools/verify_package.py",
+    "file:tools/platform/pubkey_policy.py",
+    "helper:licensing"
+   ],
+   "evidence": {
+    "path": [
+     "backend/helpers/",
+     "backend/helpers/licensing.py",
+     "backend/tools/",
+     "backend/tools/build_deploy_package.ps1",
+     "backend/tools/stepfile_drill.py",
+     "backend/tools/verify_package.py",
+     "tools/platform/",
+     "tools/platform/pubkey_policy.py"
+    ]
+   }
+  },
   "backend/tests/test_licensing_core_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -36855,6 +37129,142 @@
     ],
     "api": [
      "backend/routers/licensing.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_licensing_emergency_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/core/",
+    "dir:frontend/static/",
+    "file:backend/core/l1_pages.json",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tools/issue_license.py",
+    "helper:license_alerts",
+    "helper:licensing",
+    "js:static/notif.js",
+    "page:pages/license-required.html",
+    "page:pages/login.html",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:auth",
+    "router:customers",
+    "router:licensing",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/license_alerts.py",
+     "backend/helpers/licensing.py",
+     "backend/routers/licensing.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/customers.py",
+     "backend/routers/licensing.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/license-required.html",
+     "frontend/pages/login.html",
+     "frontend/static/notif.js"
+    ],
+    "path": [
+     "backend/core/",
+     "backend/core/l1_pages.json",
+     "backend/tools/issue_license.py",
+     "frontend/static/",
+     "frontend/static/notif.js"
+    ]
+   }
+  },
+  "backend/tests/test_licensing_gate_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/conftest.py",
+    "file:backend/helpers/__init__.py",
+    "helper:licensing",
+    "router:auth",
+    "router:customers",
+    "router:licensing"
+   ],
+   "evidence": {
+    "import": [
+     "backend/conftest.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/licensing.py",
+     "backend/main.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/customers.py",
+     "backend/routers/licensing.py"
+    ]
+   }
+  },
+  "backend/tests/test_line_quota_2026_11_12.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:line_notify",
+    "helper:line_quota",
+    "helper:mail_types",
+    "helper:notify_matrix",
+    "helper:settings",
+    "helper:system_checks",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/line_notify.py",
+     "backend/helpers/line_quota.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notify_matrix.py",
+     "backend/helpers/settings.py",
+     "backend/helpers/system_checks.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_line_recipients_2026_11_12.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:line_notify",
+    "helper:line_quota",
+    "helper:line_recipients",
+    "helper:settings",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/line_notify.py",
+     "backend/helpers/line_quota.py",
+     "backend/helpers/line_recipients.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
     ]
    },
    "login_fixture": true
@@ -39092,6 +39502,7 @@
     "mod:case/api/alt_plan",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/field_cases",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
     "mod:case/api/project_margin",
@@ -39187,6 +39598,7 @@
      "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/field_cases.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/project_margin.py",
@@ -42088,6 +42500,25 @@
    ],
    "login_fixture": true
   },
+  "backend/tests/test_t80_audit16_fixes_2026_11_12.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "helper:licensing",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/licensing.py",
+     "backend/main.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
+    ]
+   }
+  },
   "backend/tests/test_tax401_invoice_round_2026_10_14.py": {
    "kind": "audit",
    "units": [
@@ -42240,6 +42671,31 @@
      "backend/routers/system.py"
     ]
    }
+  },
+  "backend/tests/test_trusted_client_ip_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/autostart.bat",
+    "file:backend/restart.bat",
+    "file:backend/routers/__init__.py",
+    "file:backend/tools/deploy_dashboard.py",
+    "helper:client_ip",
+    "router:duty_roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/client_ip.py",
+     "backend/routers/__init__.py",
+     "backend/routers/duty_roles.py"
+    ],
+    "path": [
+     "backend/autostart.bat",
+     "backend/helpers/client_ip.py",
+     "backend/restart.bat",
+     "backend/tools/deploy_dashboard.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_u15_last_superadmin_mute_2026_09_26.py": {
    "kind": "api",
@@ -43092,7 +43548,8 @@
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/dispatch_approval.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/auth.py"
+     "backend/routers/auth.py",
+     "backend/routers/system.py"
     ]
    }
   },

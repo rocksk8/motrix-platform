@@ -202,19 +202,14 @@ def test_01b_new_row_really_gets_null_not_zero(client, make_user):
 def test_08_license_gate_disabled_means_no_key_still_200(client, make_user, monkeypatch, tmp_path):
     """§3 條件 8：`LICENSE_GATE_ENABLED = False` 時，**沒有金鑰也照樣 200**。
 
-    這是正式機現況的安全保證：`git archive` 只打包已追蹤內容 ⇒ 正式機**沒有**
-    `license.key`。開關若不小心被打開，正式機會全站 402。
-
-    ⚠️ 本輪之前 `grep -rn "LICENSE_GATE_ENABLED" backend/tests/` 是**零命中**，
-    而 middleware 第一行就是 `if not ...: return` —— 代表守門主體從未被任何測試
-    執行過。這題是它的第一個涵蓋。
+    〔2026-11-11 改寫〕原本這題還釘「出貨預設值必須是 False」。使用者裁示重新打開閘門，出貨預設值改為 True
+    （釘它的是 `test_licensing_gate_2026_09_21.py::test_gate_ships_enabled`）。**「關著時不介入」這條分支仍在**
+    （測試環境、開發機、之後可能的關閉情境都會走到），所以這題改成用 monkeypatch 明著關掉閘門再驗：
+    關著時，連沒有金鑰也照樣 200。守門主體開著時的行為見 `test_licensing_gate_2026_09_21.py`。
     """
     from helpers import licensing as lic
 
-    assert lic.LICENSE_GATE_ENABLED is False, (
-        f"LICENSE_GATE_ENABLED 的出貨預設值是 {lic.LICENSE_GATE_ENABLED!r}，必須是 False。"
-        "正式機沒有 license.key，開關預設開著會讓全站 402。"
-    )
+    monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
     # 保證真的處在「沒有金鑰」的狀態，不要靠開發機上剛好沒有那個檔
     monkeypatch.setattr(lic, "LICENSE_PATH", str(tmp_path / "no_such_dir" / "license.key"))
     assert lic.verify_license()["reason"] == "missing"
@@ -224,6 +219,10 @@ def test_08_license_gate_disabled_means_no_key_still_200(client, make_user, monk
     assert r.status_code == 200, (
         f"開關關著、又沒有金鑰，業務 API 仍必須是 200，實際 {r.status_code}：{r.text}"
     )
+    # 正對照：同一個請求，把開關打開（仍然沒有金鑰）⇒ 402。證明上面的 200 是「開關關著」造成的，不是路由本來就不擋。
+    monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", True)
+    r2 = client.get("/api/customers", headers=hdr)
+    assert r2.status_code == 402, f"開關打開、沒有金鑰，必須 402，實際 {r2.status_code}：{r2.text}"
 
 
 # ── 條件 8b：三個呼叫點在邊界值上燈號一致 ──────────────────────────────────

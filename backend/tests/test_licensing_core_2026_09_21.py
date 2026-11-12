@@ -469,6 +469,7 @@ def test_06b_truncated_valid_blob_is_malformed(make_blob):
 
 # ── 條件 7：機器指紋穩定 ────────────────────────────────────────────────────
 
+@pytest.mark.real_fingerprint      # conftest 預設換成固定指紋；這題量的就是真的那支
 def test_07_machine_fingerprint_is_stable_in_process():
     """STATE §3 驗收 7：同一台機器連呼叫兩次結果相同。"""
     machine_fingerprint = _need("machine_fingerprint")
@@ -482,6 +483,7 @@ def test_07_machine_fingerprint_is_stable_in_process():
     assert all(c in "0123456789abcdef" for c in first), f"指紋不是小寫 hex：{first!r}"
 
 
+@pytest.mark.real_fingerprint
 def test_07b_machine_fingerprint_is_stable_across_processes():
     """條件 7 的補強：換一個**全新行程**算出來的指紋要一樣。
 
@@ -694,13 +696,14 @@ def test_10_empty_prod_pubkey_does_not_raise(make_blob, keypair):
             ) from exc
         assert _f(st, "reason") == expected, f"[{label}] 回了 {_f(st, 'reason')!r}"
 
-    # 絆線：正式公鑰一旦產生，這一行會紅。**那是刻意的** ——
-    # 紅了表示要回 STATE §4 第 1 項，把私鑰保管、備援、外洩處置流程一起定案，
-    # 而不是有人默默塞一把公鑰進去就當作可以出貨了。
-    assert _PUBKEY_PROD_AT_IMPORT == b"", (
-        f"_PUBKEY_PROD 的出貨預設值已經不是 b'' 了（現在是 {_PUBKEY_PROD_AT_IMPORT!r}）。"
-        "這一題紅了不是測試壞了——請回 STATE §4 第 1 項把私鑰保管流程定案，再改這一行。"
+    # 絆線已跑完：正式公鑰已產生（2026-11-12，STATE §4 第 1 項定案——私鑰存 Chrome
+    # 密碼管理器，該 Google 帳號已開 2FA；開發機上直接簽發、不落地在任何 repo/worktree；
+    # 綁正式機指紋 93ece768770e4ccd，統編 60575481）。改驗證它「非空且是合法 Ed25519
+    # 公鑰」，不是「空的」——退回空值才該讓這題紅。
+    assert _PUBKEY_PROD_AT_IMPORT != b"", (
+        "_PUBKEY_PROD 的出貨預設值變回空的了——STATE §4 第 1 項已經定案過，不該退回去。"
     )
+    serialization.load_pem_public_key(_PUBKEY_PROD_AT_IMPORT)  # 格式壞了就讓這題紅
 
 
 # ── 條件 11：status 回傳要有 env 這個鍵 ─────────────────────────────────────

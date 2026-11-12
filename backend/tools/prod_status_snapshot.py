@@ -166,13 +166,33 @@ def pids_on_port(port):
     return sorted(pids)
 
 
+_HEARTBEAT_KEYS = ("status", "since", "seen_at", "scheme", "local_ok_at", "ext_ok_at")
+
+
+def heartbeat(root):
+    """心跳監控本身的狀態（2026-11-11）：`backend/logs/heartbeat_state.json` 的白名單欄位＋ ping_url 有沒有設（**只回布林**，
+    ping 網址等同密碼，永遠不放進快照）。唯讀、只用標準庫。狀態檔不存在 ⇒ FileNotFoundError（呼叫端記進 errors）。
+    不在這裡下「異常」的判斷（那是 app 端 helpers/heartbeat_status 的事）；這裡只給原始事實，開發機看了自己判斷：
+    例如 status=local_down 且 ping=200 ⇒ 監控誤判。"""
+    st = _read_json(os.path.join(root, "backend", "logs", "heartbeat_state.json"))
+    if not isinstance(st, dict):
+        raise ValueError("heartbeat_state.json 不是 JSON 物件")
+    out = {k: (str(st.get(k)) if st.get(k) is not None else None) for k in _HEARTBEAT_KEYS}
+    try:
+        cfg = _read_json(os.path.join(root, "backend", "heartbeat_config.json"))
+        out["ping_url_set"] = bool(str((cfg or {}).get("ping_url") or "").strip())
+    except Exception:
+        out["ping_url_set"] = None
+    return out
+
+
 # ── 組裝 ─────────────────────────────────────────────────────────────────────
 def collect(root, port=666, archive_arg=None, timeout=3.0):
     root = os.path.abspath(root)
     snap = {"schema": SCHEMA, "taken_at": datetime.now().isoformat(timespec="seconds"),
             "hostname": socket.gethostname(), "install_root": root,
             "deployed_commit": None, "deployed": None, "api_version": None, "ping": None, "api_base_url": None,
-            "modules": None, "modules_started_at": None, "last_apply": None,
+            "modules": None, "modules_started_at": None, "last_apply": None, "heartbeat": None,
             "backups": {"archive_root": None, "archive_root_source": None, "daily_done_latest": None,
                         "local_snapshot_done_latest": None, "alerts_since": None,
                         "sticky_alert_file": None, "sticky_alert_at": None},
@@ -194,6 +214,11 @@ def collect(root, port=666, archive_arg=None, timeout=3.0):
         snap["last_apply"] = last_apply(root)
     except Exception as e:
         errors["last_apply"] = _err(e)
+
+    try:
+        snap["heartbeat"] = heartbeat(root)
+    except Exception as e:
+        errors["heartbeat"] = _err(e)
 
     b = snap["backups"]
     try:

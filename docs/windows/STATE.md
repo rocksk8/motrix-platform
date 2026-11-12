@@ -12652,6 +12652,11 @@ GET  / /api/dev-status /api/prod-status /api/packages /api/history /api/jobs/{id
   ☠️ 那會在測試期間真的開一個無驗證的部署控制端點。
 - **HC1c.** ✅ **結構上掛不上去這一半已經驗過，不用再做**（D 實查）：
   它是 `FastAPI()` 不是 `APIRouter` ⇒ `include_router` 吃不下；全 repo 零 `.py` 引用它。
+- **HC1d.** ✅（T80，fix/trusted-client-ip，2026-11-11）**隧道（cloudflared）轉進來的請求不可被當成「本機」**：
+  cloudflared 與本工具同機時，被轉進來的外部請求對端也是 127.0.0.1——光看 `request.client` 會把它們當成本機，
+  而這個工具可以部署與回滾正式機。第一道防線是設定面（隧道 ingress 只指到主程式 port、不要指到 8765）；
+  這是第二道（程式面）：帶 Cloudflare／代理標頭的請求即使對端是 loopback 也 fail closed（HTTP 403／WebSocket 1008）；
+  本機瀏覽器直連不帶這些標頭，不受影響。測試：`tests/test_deploy_dashboard_local_only_2026_09_22.py`（`test_hc1d_*`）。
 
 ---
 

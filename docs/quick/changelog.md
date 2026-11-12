@@ -16,6 +16,30 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 T79：來源 IP 只信該信的——登入鎖定不可被 X-Forwarded-For 繞過（fix/trusted-client-ip）
+
+- **現象／風險**（外網存取 go-live 前必修）：`routers/auth.py::_client_ip` 無條件信第一個 `X-Forwarded-For` ⇒ 登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）每次換 XFF 就繞過 ⇒ 無限次猜密碼。cloudflared 與本程式同機時，所有外部使用者對本程式都是 127.0.0.1 ⇒ 若只改成「不信 XFF」，一個人輸錯 5 次會鎖住全部外部使用者，稽核 IP 也全變 127.0.0.1。
+- **修法**：新增 `helpers/client_ip.py`（L0）——永遠不讀 XFF；**只有 TCP 對端本身是 loopback 才採信 `CF-Connecting-IP`**（且須是合法 IP，正規化後使用），否則用對端位址。`auth.py`（登入鎖定／TOTP／passkey）、`duty_roles.py`、`settings_center.py` 稽核 IP 全走這支；既有呼叫點不動。
+- **部署儀表板第二道防線**：`tools/deploy_dashboard.py` 以「對端是 loopback」判斷本機——隧道同機轉進來的外部請求也是 loopback。現在帶 Cloudflare／代理標頭（CF-Connecting-IP、CF-Ray、X-Forwarded-For、Forwarded、X-Real-IP…）的請求一律 403（WebSocket 關 1008）；本機瀏覽器直連不帶這些標頭，不受影響。**第一道仍是設定面：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
+- **守門**：AST 守門禁止 `helpers/client_ip.py`、`tools/deploy_dashboard.py` 以外的程式碼讀 `X-Forwarded-For` 或 `.client.host`（含正對照）。
+- **uvicorn 一層（K 審 hichan-13 S1）**：uvicorn 預設的 ProxyHeadersMiddleware 在對端為 127.0.0.1 時會用 XFF 最右邊不受信任的位址改寫 `request.client`（Cloudflare 把真實 IP 附加在最右邊，攻擊者塞的假值在左邊被略過）——本 helper 在它之上，仍然安全，但前提是 `forwarded_allow_ips` 維持 127.0.0.1：若被環境變數／複製來的指令設成 `*`，uvicorn 會對任何對端取 XFF 第一個值、原漏洞回來。因此所有綁 0.0.0.0 的啟動行（`backend/autostart.bat`、`restart.bat`、`start.bat`、根目錄 `start_server.ps1`）都明寫 `--forwarded-allow-ips 127.0.0.1`（＝uvicorn 預設值，行為不變，只是釘死；命令列優先於環境變數 FORWARDED_ALLOW_IPS），守門測試 `test_every_launcher_that_binds_all_interfaces_pins_uvicorn_forwarded_allow_ips`（掃每個啟動行，掃空會失敗）；另有包上真 ProxyHeadersMiddleware 的整合測試（Cloudflare 形狀、區網對端）。**部署端注意**：這幾個啟動檔要隨下次套用更新到正式機才生效。
+- **沒動／已知限制**：IPv6 同 /64 內換位址仍可繞過「以單一位址計」的鎖定（另案）；本機使用者共用 127.0.0.1 桶（與以前相同）；uvicorn 預設的 proxy-headers 行為不受影響（本 helper 不論它開不開都給同一個答案）。
+- 測試：`backend/tests/test_trusted_client_ip_2026_11_11.py`（規則單元＋登入端點整合＋同機隧道各自一桶＋uvicorn 層＋守門，含各種繞過寫法的正對照）、`backend/tests/test_deploy_dashboard_local_only_2026_09_22.py` HC1d。
+
+## 2026-11-11 心跳監控「看守看守者」（feat/heartbeat-watch，隨 T79 出貨）
+
+- **事故**：正式機心跳（工作排程每 5 分鐘 → healthchecks.io）自 2026-09-07 起壞了兩個多月沒人知道。根因＝`heartbeat_job.py` 打 `http://127.0.0.1:666`，伺服器早已只講 https ⇒ 每 5 分鐘誤報 local_down 並 `/fail`；healthchecks.io「已紅燈」不再重寄 ⇒ 9/8 斷電也沒有新告警。最後一次成功打卡 2026-09-07 20:12。
+- **A（job）**：本機檢查 https＋http 兩種都試（autostart.bat 依 `certs/cert.pem` 決定協定，協定會跟著憑證檔變）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。防背離守門：`test_heartbeat_watch_2026_11_11.py` 比對 job 的埠與 `autostart.bat`／`start.bat` 的 `--port`。
+- **D（看守看守者）**：新 L1 `helpers/heartbeat_status.py`（唯讀判斷）；每日檢查 `system_checks._check_heartbeat_health`（壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 信 `heartbeat_stale` 給最高管理者，列入不可關）；`GET /api/system/heartbeat`＋通知設定頁唯讀卡片；`prod_status_snapshot` 新增 `heartbeat` 區塊（`ping_url` 只回布林，網址等同密碼，永不外露）。告警只走 email。
+- **上線後人工步驟**：部署後第一次對外打卡成功，需**人工登入 healthchecks.io** 確認收件人仍有效、check 回到綠燈（卡住的 down 狀態不會自己恢復告警能力）。
+- 測試：`test_heartbeat_watch_2026_11_11.py`、`test_heartbeat_https_ping_2026_11_11.py`、`tests/platform/test_prod_status_snapshot_2026_09_30.py`（heartbeat 區塊）。
+
+## 2026-11-12 LINE 通知：收件人粒度（角色＋個人）與額度常駐監控／告警（feat/line-recipient-quota）
+
+- **收件人（只縮不擴）**：LINE 收件人＝信件已解析的帳號 ∩ 該類型允許的角色 ∩ 本人沒退訂 ∩ 已綁定。角色清單缺省＝所有角色、個人預設收（升版後行為不變）。超管在通知設定頁每個類型勾「可收的角色」；同仁在帳號安全頁自行退訂（只列公司已開啟且自己角色被允許的類型）。
+- **額度**：通知設定頁常駐用量條（本月已用／上限，不必按「驗證 token」）；門檻由最高管理者自訂（預設 80%、100%，最多 5 個）；跨過門檻寄信給最高管理者（`line_quota_warning`，不可關），同一門檻同月一次、一次跨多個只寄一封、換月重置。觸發：設定頁載入、推播成功後（去抖動）、每日 08:00 備援。LINE 100% 後會回 429，本票只告警、不自動停推播。
+- 測試：`test_line_recipients_2026_11_12.py`、`test_line_quota_2026_11_12.py`、`test_e2e_line_recipients_quota_2026_11_12.py`。
+
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 
 - **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。
@@ -23,6 +47,7 @@
 - **修法**：`photos.py` 在讀完 GPS 之後 `ImageOps.exif_transpose` 把方向烘進像素，再貼浮水印（浮水印貼在轉正後畫面的底部）；沒有方向標記的橫拍照片與 PNG logo 行為不變；GPS 仍從原圖讀。L1 介面（`_photo_root`、`_process_project_photo` 簽章）不變。已存在的舊照片不會被回頭修正（舊檔 EXIF 已被丟掉，無從得知原本方向）。
 - **沒動**：`modules/subcontract/api/contractors.py` 的身分證／存簿浮水印（另一條讀圖路徑，同樣沒處理方向）——只在這裡記一筆，未列入這張票。 另有兩個這條路徑本來就有、與方向無關的小問題（K 審 hichan-12 指出，沒動）：①`routers/system.py` work-log 白名單收 `.gif`／`.webp`／`.heic`，但 `_process_project_photo` 對非 PNG 一律輸出 JPEG ⇒ 「副檔名 .webp／.gif、內容是 JPEG」的不一致仍在（動畫 GIF 也被壓成單張）；②GPS 只從 `_getexif()` 讀（僅 JPEG），PNG／WEBP 的 EXIF 帶 GPS 時浮水印沒有 GPS 字串。
 - 測試：`backend/tests/test_photo_exif_orientation_2026_11_11.py`——Orientation 1～8 逐一驗**像素位置**（期望值取自 EXIF 規格表，不是 Pillow 對照表）、hichan-9 的重現尺寸、GPS 在轉正後仍讀得到且浮水印在底部、PNG 帶方向仍保留 alpha；舊 `photos.py` 上 10 題紅（對照組 Orientation=1、無 EXIF 橫拍各自綠）；另有非法方向值（0／9／99）不炸、`exif_transpose` 丟例外時退回舊行為共 4 題鎖住 `try/except`。
+
 
 ## 2026-11-11 正式機評估衍生：webauthn-config 404、case.access_denied（fix/ops-webauthn404-case-denied）
 

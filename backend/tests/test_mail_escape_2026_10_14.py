@@ -78,6 +78,14 @@ def _args(fn, evil, variant):
             out[n] = [{"label": _tok("l", evil), "old": _tok("o", evil), "new": _tok("n", evil)}]
         elif n == "stale":
             out[n] = [(_tok("stale_label", evil), None), (_tok("stale_label2", evil), _dt.datetime(2026, 10, 10, 9, 0))]
+        elif fn.__name__ == "notify_heartbeat_stale" and n == "problems":
+            out[n] = [_tok("hb_problem", evil)]
+        elif fn.__name__ == "notify_heartbeat_stale" and n == "state":
+            out[n] = {k: _tok("hb_" + k, evil) for k in ("status", "since", "scheme", "ext_ok_at", "seen_at")}
+        elif fn.__name__ == "notify_line_quota_warning" and n in ("used", "limit", "threshold"):
+            out[n] = {"used": 170, "limit": 200, "threshold": 80}[n]
+        elif fn.__name__ == "notify_line_quota_warning" and n == "thresholds":
+            out[n] = [80, 100]
         elif n == "problems":
             out[n] = [{"label": _tok("plabel", evil), "path": _tok("ppath", evil), "free_gb": 1.5, "total_gb": 10, "free_pct": 15}]
         elif n == "temp_bloat":
@@ -149,9 +157,14 @@ def _install(monkeypatch, sink, build):
     monkeypatch.setattr(EN, "datetime", _Clock)
     monkeypatch.setattr(EN, "_build_html", build)
 
+    class _Sent(str):
+        """`_send*` 回結果字串；`_async_send` 回的把手要有 `.wait()`（要寫旗標的 notify_*，如 notify_heartbeat_stale，會等結果）。"""
+        def wait(self):
+            return str(self)
+
     def cap(to, subject, html, *rest):
         sink.append((subject, html))
-        return EN.SEND_SENT
+        return _Sent(EN.SEND_SENT)
     monkeypatch.setattr(EN, "_async_send", cap)
     monkeypatch.setattr(EN, "_send_raising", cap)
     monkeypatch.setattr(EN, "_send", cap)

@@ -1,6 +1,49 @@
 # L0／L1 底層 更新紀錄
 
+## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
+- L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
+- 行為變更（安全／效能，不影響對外介面）：
+  - `helpers.licensing`：`machine_fingerprint()`硬體探測不完整時重試（LG-M1，開機初期WMI／裝置列舉可能還沒就緒）；重試後仍只讀到一半的結果改用退避式短期快取（60s→5min→1h，LG-M1b），不像原本一樣永久鎖住「機器不符」；`_verify_license_file()`的`machine_mismatch`改60秒TTL快取（原本跟其他結果一樣整天／整個行程快取）；新增`emergency_pass()`快取（LG-M2，比照授權金鑰快取同構）。
+  - `main.py::license_gate_middleware`：`verify_license()`／`emergency_pass()`搬進`run_in_threadpool`（LG-M2，避免指紋冷啟動卡住整個事件迴圈，比照T80 R6同步SQLite寫入的做法）。
+- 測試：`tests/test_licensing_core_2026_09_21.py`（絆線改驗證正式公鑰非空且合法）；稽核報告 `docs/platform/audit/AUDIT-16-license-gate.md`。
+
+## 1.158 — 2026-11-11（fix/trusted-client-ip；來源 IP 只信該信的，登入鎖定不可被 X-Forwarded-For 繞過）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.client_ip`（`client_ip`、`is_loopback`、`has_proxy_headers`、`CLOUDFLARE_HEADERS`；L0，只依賴標準庫）。
+- 行為變更（安全）：`routers/auth.py::_client_ip` 不再信 `X-Forwarded-For`（以前無條件信第一個值 ⇒ 登入鎖定每次換 XFF 就繞過）；只有 TCP 對端是 loopback 才採信 `CF-Connecting-IP`（須為合法 IP），其餘一律用對端位址。登入鎖定／TOTP／passkey 限流、`duty_roles` 與 `settings_center` 稽核 IP 全走這支。
+- `tools/deploy_dashboard.py`：loopback 對端但帶 Cloudflare／代理標頭的請求 fail closed（HTTP 403／WebSocket 1008）。**部署設定：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
+- `backend/autostart.bat`、`restart.bat`、`start.bat`、`start_server.ps1`：uvicorn 啟動行加 `--forwarded-allow-ips 127.0.0.1`（＝預設值，釘死以防被環境變數設成 `*`）。
+- 測試：`tests/test_trusted_client_ip_2026_11_11.py`、`tests/test_deploy_dashboard_local_only_2026_09_22.py`（HC1d）。
+- **（併入）(next) — 2026-11-11（feat/license-gate-default-on；T80 授權閘門預設開啟＋緊急放行通行證＋402 說明頁＋env=dev 啟動警告）**
+
+- **行為變更（T80 票，使用者 2026-11-11 裁示；本票自己的 (next) 段落）**：`helpers.licensing.LICENSE_GATE_ENABLED` 出貨預設值 `False` → `True`（L1 常數，值不進介面快照，`l1_interface_snapshot.json` 不變）。開著時：業務 `/api/*` 在沒有金鑰／過期（年費）／簽章不符／格式損毀／發給別台機器時回 402（`code=license_required`）；`module_license_check` 也會依金鑰的 `modules` 決定模組載入；`tools/apply_plan.py`、`tools/platform/module_update.py` 讀安裝目錄 `backend/license.key` 判模組授權。當年（fb329becb／a63cc4978，2026-09-21）預設關的理由：正式機沒有 `license.key`（git archive、`.gitignore:11`、apply_update 只加不刪），守門一開全站 402。**⚠️ 截至 2026-11-11 正式機仍沒有 `license.key`、`_PUBKEY_PROD` 仍是空的：這個預設值在簽發機制與正式機金鑰就緒、`/api/license/status` 回 `valid:true` 之前不可以部署。**
+- **新增（使用者 2026-11-11 追加，同票）**：
+  - **緊急放行通行證**（`helpers.licensing`：`EMERGENCY_FILE_NAME`／`EMERGENCY_PURPOSE`／`EMERGENCY_MAX_DAYS`／`EMERGENCY_MAX_BYTES`／`EMERGENCY_COVERS`／`LICENSE_HEADER`、`emergency_path`／`emergency_status`／`emergency_blob_problem`／`emergency_pass`／`license_banner`）：授權金鑰失效時的行程外逃生口，不是繞過——用同一套 Ed25519 驗章（`purpose=emergency_pass`）、綁客戶統編（必須等於「驗章通過的授權金鑰」的統編）、只涵蓋 `machine_mismatch`／`expired`（沒有金鑰／簽章不符／格式損毀不放行）、期間上限 14 天由驗證端強制、檔案上限 8 KB、放在 `LICENSE_PATH` 旁的 `license_emergency.key`（行程外，不用改程式、不用重啟）。生效時 `module_license_check` 照樣載模組（重啟後不會因此掉模組）。簽發：`tools/issue_license.py emergency`。L1 新增（只增）。
+  - **告警**（新模組 `helpers/license_alerts.py`）：通行證生效／開發金鑰／啟動時授權不通過 ⇒ log＋系統稽核（`license.emergency_pass`／`license.dev_key`／`license.startup_blocked`），同代碼每天一次；寫稽核失敗只記 log、不丟例外。`main.py` 啟動多一步 `license_check`（`_startup_step`，已補 `test_startup_timing`；啟動寫入只能經 `helpers/startup.py`，所以走 `startup._license_startup_check`，K-O2 守門）。`docs/platform/modules.json` 登記 `helper:license_alerts`、`page:pages/license-required.html`；`/api/license/status` 回應鍵基準更新。
+  - **env=dev 啟動檢查：只警告、不拒絕啟動**（`_PUBKEY_PROD` 目前是空的，所有實際簽出的金鑰都是 env=dev，拒絕＝全部起不來；警告走 log＋稽核＋每頁橫幅＋`/api/license/status.env`，不是靜默；評估見 `license_alerts.py` docstring）。
+  - **前端**：已登入的 `/api` 回應帶 `X-Motrix-License`（`emergency;until=…`／`dev_key`／`none`），`notif.js` 據此在每頁頂端顯示橫幅；任何 `/api` 回 402 `license_required` ⇒ 導向新頁 `pages/license-required.html`（講原因、機器代碼、找誰；`auth-guard.js` 對 402 不當成登出）。`/api/license/status` 多回 `machine`／`emergency`／`gate`／`blocked`。
+- **K 審（hichan-11，2026-11-11）修正**：①通行證再綁被救授權金鑰的 `machine` 值（`machine` 為必填欄位）與**簽發環境**（開發金鑰簽的通行證救不了正式金鑰的授權）；②通行證只在授權「真的會擋」時才算生效（永久授權過期不再誤報 active）；③`X-Motrix-License` 只給已登入請求（已登入沒有提示時值為 `none`，前端據此移除橫幅；公開端點沒有標頭、前端不動橫幅）；④告警稽核改背景執行緒＋一律寫正式庫（`license_alerts.flush()` 給測試等寫完）；⑤狀態端點多回 `modules_unlicensed`（開機時因授權被擋而沒載入的模組——放通行證後業務 API 立刻恢復，但這些模組要重啟服務才會載入，runbook／說明頁／簽發工具輸出都已如實寫）；指紋讀不到時 5 分鐘內不重試；⑥說明頁遇 401 回登入頁；⑦簽發工具改 `emergency --license <被救的 license.key>`（或 `--tax-id`＋`--machine`）；日期只收 YYYY-MM-DD；救援讀授權金鑰不設 8 KB 上限；runbook §9 記開發機怎麼跑與上正式金鑰時要另開的票（部署包不帶 `_PUBKEY_DEV`）。
+- 測試（T80 票）：新增 `backend/tests/test_licensing_gate_2026_09_21.py`（開著時：有效／沒有／過期／無效四種情境走 HTTP，另含豁免清單、401 先於 402、換檔／跨日重算、模組授權）；`conftest.py` 新增 session 固件 `license_test_key`（自簽測試金鑰，驗章走真路徑，只換公鑰／金鑰路徑／機器指紋）與每題固件 `_license_per_test_defaults`（`LICENSE_PATH` 每題還原；標記 `real_fingerprint` 的題才用真指紋）；`test_procurement_leadtime` 條件 8、`test_apply_plan` DO3 正對照改寫（原本釘「預設必須是 False」）。
+- 測試（追加）：`test_licensing_emergency_2026_11_11.py`（通行證各種壞法仍 402：竄改／亂碼／超大／目錄／錯用途／過期／超過 14 天／統編不符／授權本身不可信；工具；env=dev；`startup_check`；前端靜態檢查）、`test_e2e_license_gate_2026_11_11.py`（瀏覽器：被擋→說明頁→補金鑰恢復、機器不符、通行證橫幅與拿掉後 402、開發金鑰橫幅）；`conftest.py` 的測試機器指紋固定為 `TEST_LICENSE_MACHINE`；`real_fingerprint` 標記登記於 `pytest.ini`。
+- 營運：`license_emergency.key` 進 `.gitignore`（同 `license.key`，per-installation）；操作手冊 `docs/platform/LICENSE-EMERGENCY-PASS.md`。
+- **（併入）(next) — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：請求冪等鍵）**
+- L1（新增，只增）：`helpers.idempotency`（`parse_key／request_hash／begin／run／run_sync／Call`）——選填標頭 `Idempotency-Key`：弱訊號重送時，同 key＋同內容 ⇒ 重播第一次的回應（`Idempotent-Replay: true`），不再存檔、不再寫資料、不再通知；同 key 不同內容 422；處理中 409；處理失敗不留列；key 只在同一使用者內唯一。沒帶標頭＝行為與先前逐位元相同。
+- core migration（未取號，PLAYBOOK §G6）：新表 `idempotency_keys`（PK username+key；7 天前的列在寫入時順手清，不開排程）。
+- 套用端點：`POST /api/work-logs`、`POST /api/work-logs/{id}/photos`（其餘見 `modules/case/CHANGELOG.md`）。
+- 測試：`tests/test_idempotency_2026_11_11.py`。
+- **（併入）(next) — 2026-11-11（feat/heartbeat-watch；心跳監控「看守看守者」：helpers.heartbeat_status、heartbeat_stale 信件、每日檢查）**
+- L1（新增，只增）：新公開介面 `helpers.heartbeat_status`（唯讀判斷 `logs/heartbeat_state.json`：`assess／read_state／config_exists／ping_url_set`＋常數）；`helpers.email_notify.notify_heartbeat_stale`；信件類型 `heartbeat_stale`（superadmins、列入 `MAIL_OFF_LOCKED` 不可關）。
+- 行為：`system_checks.run_all` 新增 `_check_heartbeat_health`（每日；app 活著卻看到心跳回報壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 寄信給最高管理者；同日一次、等寄送結果才記旗標、恢復清旗標；啟動後 15 分鐘內不判斷（冷開機時狀態檔是舊的）；開發機沒有心跳＝不動作）。新端點 `GET /api/system/heartbeat`（僅最高管理者）與通知設定頁唯讀卡片。
+- 外部：`backend/heartbeat_job.py` 本機檢查 https＋http 兩種都試（原只打 http，正式機自 2026-09-07 起 666 埠只講 https ⇒ 兩個多月誤報、healthchecks.io 卡紅燈、斷電無新告警）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。`tools/prod_status_snapshot.py` 新增 `heartbeat` 區塊（白名單欄位，ping_url 只回布林）。
+- 測試：`tests/test_heartbeat_watch_2026_11_11.py`（含 job 埠與 `autostart.bat`／`start.bat` 的 `--port` 防背離守門）、`tests/test_heartbeat_https_ping_2026_11_11.py`。
+- **（併入）(next) — 2026-11-12（feat/line-recipient-quota；LINE 收件人粒度（角色＋個人）、額度常駐監控與門檻告警）**
+- L1（新增，只增）：新公開介面 `helpers.line_recipients`（`filter_usernames／allowed_roles／muted_events／is_muted／set_muted／prefs_view／role_choices／PREFS_KEY`）與 `helpers.line_quota`（`snapshot／refresh／check_and_alert／after_push／evaluate／thresholds／normalize_thresholds／month_key` ＋常數）；`helpers.line_notify.set_event_roles／event_roles_view`；`helpers.email_notify.notify_line_quota_warning`；信件類型 `line_quota_warning`（superadmins、列入 `MAIL_OFF_LOCKED` 不可關）。
+- 行為：`line_notify.notify_users` 的收件人改為「呼叫端給的帳號（信件已解析）∩ 該類型允許的角色 ∩ 本人沒退訂 ∩ 已綁定」（只縮不擴；角色清單缺省＝所有角色、個人預設收＝與舊行為相同；壞值 fail-closed）。資料存 `system_settings.line_notify.event_roles` 與 `system_settings.line_prefs`（不動 DB schema）。
+- 額度：用量以 LINE 回的 `totalUsage` 為準；觸發點＝設定頁載入（5 分鐘快取）、推播成功後（去抖動、同時只排一個）、每日 08:00 備援（`system_checks._check_line_quota`）。門檻 `line_notify.quota_thresholds`（預設 80、100；1～5 個、可自訂）；同一門檻同月只寄一次、一次跨多個只寄一封、等寄送結果才記、換月／用量回落重置；無上限方案不告警；100% 時只告警不停推播。
+- 端點：`PUT /api/settings/line-notify/events/{key}/roles`、`GET /api/settings/line-notify/quota`（皆最高管理者）；`GET /api/line/prefs`、`PUT /api/line/prefs/{key}`（本人）。UI：通知設定頁 LINE 卡（用量條、門檻、各類型可收角色）、帳號安全頁（我要收的 LINE 通知）。
+- 測試：`tests/test_line_recipients_2026_11_12.py`、`tests/test_line_quota_2026_11_12.py`、`tests/test_e2e_line_recipients_quota_2026_11_12.py`。
+
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
+
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。
 - 前端：公司設定頁不再用 `GET /api/settings/webauthn-config` 的 404 當 Passkey 開關（每開一次頁就一筆 404，正式機 32 次），改問 `/api/system/webauthn-config-status`；簽核佇列的「預覽」改白名單，勞報單走 `/api/payslips/{no}/pdf-download`，沒有 PDF 端點的類型不再落到報價單端點（原本必 404＋audit not_found）。
@@ -21,6 +64,7 @@
   設定：`line_notify.login_channel_id`（純數字）、`login_channel_secret`（32 位十六進位；**照 token 慣例**：GET 遮罩、PUT 遮罩值＝保留、稽核只記「有沒有換」、每日 JSON 匯出挖掉、不寫 log）。
   端點：`GET /api/line/callback`（**免登入**，列入 `main._PUBLIC_API_PATHS`；Tunnel 唯一對外路徑，ingress 精確比對 `^/api/line/callback$`，不可改路徑；只回固定頁面、不含任何 ERP 資料、no-store／no-referrer；對外查詢總量保護每分鐘 60 次，**只計 state 有效的請求**〔垃圾請求不計，避免被拿來鎖死綁定功能〕，被限流的 state 也已銷毀；發起綁定每人每 3 秒一次）、`GET /api/line/binding`、`POST /api/line/binding/start`（回 QR）、`DELETE /api/line/binding`、`DELETE /api/line/binding/{username}`（僅最高管理者）。`test_no_credentials_in_query` 的 `ALLOWED` 新增 `code`（OAuth 授權碼，理由寫在該列）。
   連帶：刪除使用者帳號時一併解除 LINE 綁定（`routers/auth.py`）；畫面：`change-password.html`（帳號安全頁）新增「LINE 通知」綁定卡片、`notification-settings.html` LINE 卡片新增 Login channel 欄位。測試：`tests/platform/test_line_login_t79.py`。
+
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。

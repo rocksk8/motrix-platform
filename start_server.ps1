@@ -77,7 +77,7 @@ Write-Host "📁 前端位置：$(Join-Path $ProjectRoot 'frontend')" -Foregroun
 Write-Host "🛑 關閉此視窗可停止伺服器`n" -ForegroundColor Yellow
 
 # 啟動 uvicorn
-uvicorn main:app --host 0.0.0.0 --port $Port --reload
+uvicorn main:app --host 0.0.0.0 --port $Port --forwarded-allow-ips 127.0.0.1 --reload
 
 if ($?) {
     Write-Host "`n✓ 伺服器已優雅關閉" -ForegroundColor Green
