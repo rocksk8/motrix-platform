@@ -981,15 +981,18 @@ def test_cannot_approve_some_other_ledger_row(client, make_user, hb_cfg):
     assert r.status_code == 422
 
 
-def test_requester_or_anyone_can_cancel_and_config_stays(client, make_user, hb_cfg, mails):
+def test_only_the_requester_can_cancel_and_config_stays(client, make_user, hb_cfg, mails):
     ha, hb = _two_admins(client, make_user, "m4_g", "m4_h")
     hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
     cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
-    r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=hb, json={})
+    r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=hb, json={})       # 別人不能撤回
+    assert r.status_code == 422 and "申請" in r.json()["detail"] and _audit_actions("system.heartbeat_disable_cancelled") == []
+    assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]["id"] == cid
+    r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=ha, json={})
     assert r.status_code == 200 and _cfg_url(hb_cfg) == SECRET
     assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"] is None
     assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422   # 撤回後不能再核准
-    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=hb, json={}).status_code == 422
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=ha, json={}).status_code == 422
     assert [r[0] for r in _audit_actions("system.heartbeat_disable_cancelled")] == ["system.heartbeat_disable_cancelled"]
 
 
@@ -1161,7 +1164,7 @@ def test_cancel_or_replace_removes_the_pending_url_file(client, make_user, hb_cf
     hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
     cid = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "要換"}).json()["id"]
     assert _pending_file(hb_cfg).exists()
-    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=hb, json={}).status_code == 200
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=ha, json={}).status_code == 200
     assert not _pending_file(hb_cfg).exists() and _cfg_url(hb_cfg) == SECRET
     assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422
     # 新的停用申請取代舊的換主機申請
@@ -1223,3 +1226,42 @@ def test_update_and_rollback_scripts_exclude_the_pending_url_file_wherever_they_
             snap = [l for l in text.splitlines() if 'robocopy $BackendDir (Join-Path $rollbackDir "backend")' in l]
             assert snap and all("/XF" in l and "heartbeat_config.json.pending" in l for l in snap)
     assert checked >= 8                                                  # 掃得到才算數（不是掃空）
+
+
+# ══ PM 追加：待核准時畫面要說清楚在等誰、等多久，只有申請人能撤回 ═══════════════════════════════
+
+def test_pending_request_tells_who_it_waits_for_and_for_how_long(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "w_a", "w_b")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
+    rq = client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]
+    assert rq["mine"] is True and rq["hoursWaiting"] == 0 and "w_b" in rq["waitingFor"] and "w_a" not in rq["waitingFor"] and "requestedByUser" not in rq
+    # 送出 5 小時又 20 分鐘後：整小時
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT at FROM config_changes WHERE id=?", (cid,)).fetchone()
+    finally:
+        conn.close()
+    from helpers import backup_monitor as bm
+    real = bm.datetime
+    start = datetime.fromisoformat(row[0])
+
+    class _Later(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return start + timedelta(hours=5, minutes=20)
+    bm.datetime = _Later
+    try:
+        assert client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"]["hoursWaiting"] == 5
+    finally:
+        bm.datetime = real
+    assert bm._hours_waiting("not a time") == 0 and bm._hours_waiting(None) == 0
+
+
+def test_the_page_text_for_a_pending_request_is_wired():
+    """頁面文字（e2e 才能點的畫面，這裡先鎖字串，避免被改掉）。"""
+    html = (_repo_root() / "frontend" / "pages" / "backup-monitor.html").read_text(encoding="utf-8")
+    for needle in ("若對方長期不在，可請對方登入核准，或撤回這次變更", "已送出", "bm-disable-waiting", "bm-disable-cancel",
+                   "s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine\" :disabled=\"busy\" @click=\"ask('cancelreq')\""):
+        assert needle in html, needle

@@ -198,12 +198,14 @@
                   <span class="bm-note" x-show="testWait" x-text="testWait"></span>
                 </div>
                 <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
-                  <strong x-text="(s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine ? '你' : (s.heartbeat.disableRequest && s.heartbeat.disableRequest.requestedBy)) + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? ' 申請把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '），等待另一位最高管理者核准。' : ' 申請停用對外打卡，等待另一位最高管理者核准。')"></strong>
+                  <strong data-testid="bm-disable-waiting" x-text="waitingTitle()"></strong>
+                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'你的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外打卡。')"></div>
                   <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
                   <div class="bm-line">
                     <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
-                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" :disabled="busy" @click="ask('cancelreq')">撤回申請</button>
-                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine">要由另一位最高管理者按「核准」。</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('cancelreq')">撤回</button>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-hint">若對方長期不在，可請對方登入核准，或撤回這次變更。</span>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">只有提出申請的人可以撤回；你可以核准，或另外提出自己的申請取代這一筆。</span>
                   </div>
                 </div>
                 <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
@@ -316,6 +318,15 @@
           if (this.s && this.s.manual && this.s.manual.running) this._timer = setTimeout(() => this.load(), 5000)
         },
         // ── 顯示 ──
+        waitingTitle() {
+          const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
+          if (!rq) return ''
+          const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外打卡'
+          if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待你或另一位最高管理者核准。'
+          const hrs = rq.hoursWaiting > 0 ? rq.hoursWaiting + ' 小時' : '不到 1 小時'
+          const who = (rq.waitingFor && rq.waitingFor.length) ? rq.waitingFor.join('、') : '另一位最高管理者'
+          return '等待 ' + who + ' 核准（已送出 ' + hrs + '）'
+        },
         fmt(iso) { return iso ? (window.MotrixFormat ? MotrixFormat.dt(iso, 'plain') : String(iso).replace('T', ' ').slice(0, 16)) : '—' },
         ago(iso) {
           const t = Date.parse(iso)
@@ -375,7 +386,7 @@
             url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
             clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
             approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，而且是你認得的人提出的。', '核准停用'],
-            cancelreq: ['撤回停用申請？', '撤回後對外打卡維持開啟，什麼都不會改變。', '撤回申請'],
+            cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
           }[kind]
           this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]

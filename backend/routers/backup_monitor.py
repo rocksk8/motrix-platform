@@ -6,7 +6,7 @@
 - `PUT  /api/system/backup-monitor/heartbeat-url`      {pingUrl: str, reason?: str} 設定／更換心跳網址（網址不會被回傳；更換會寄信給所有最高管理者；換成另一個主機要原因、有其他最高管理者時要核准）
 - `POST /api/system/backup-monitor/heartbeat-test`     {confirm: true} 對目前網址打一次卡（至少隔 60 秒）
 - `POST /api/system/backup-monitor/heartbeat-disable`  {confirm: true, reason} 停用對外打卡（必填原因；有多位最高管理者時要另一位核准）
-- `POST /api/system/backup-monitor/heartbeat-disable/{id}/approve|cancel`   核准／撤回申請（停用，或換成另一個監控主機）
+- `POST /api/system/backup-monitor/heartbeat-disable/{id}/approve|cancel`   核准申請（停用，或換成另一個監控主機）／撤回申請（只有提出申請的人，留稽核）
 
 資料與規則都在 `helpers/backup_monitor.py`（不變式見該檔）；告警門檻在設定中心 `monitoring` 群組（放寬要第二人核准，不在這裡改）。
 錯誤訊息一律白話、不含路徑與網址；危險動作沒有 `confirm: true` 一律 400（前端先跳確認再送）。

@@ -25,7 +25,7 @@
      拿不到鎖 ⇒ `BackupBusy`（「已有備份在進行中」）。**鎖檔打不開**：手動備份**拒絕**（`BackupLockProblem`，白話說明可能是已有備份在跑或資料夾權限問題，路由回 503，不寫「最後啟動」時間）；
      排程備份照跑（不能因此整天沒備份），但記 ERROR 並寫系統告警（每個行程一次），**不安靜降級**。
   ⑧ **停用對外打卡**（`request_disable`／`approve_disable`／`cancel_disable`）：必填原因；只有一位在職最高管理者 ⇒ 立即停用＋寄信；有其他最高管理者 ⇒ 建立待核准申請
-     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址（立即生效的那種）會讓待核准的停用／換主機申請作廢；新的申請也會取代舊的；撤回或作廢時一併刪掉 `.pending` 暫存檔。
+     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址（立即生效的那種）會讓待核准的停用／換主機申請作廢；新的申請也會取代舊的；撤回或作廢時一併刪掉 `.pending` 暫存檔。**撤回只有申請人能做**（留稽核）；畫面對申請人顯示「等待 ○○ 核准（已送出 N 小時）」與提示。
 """
 import json
 import logging
@@ -559,6 +559,25 @@ def _other_superadmins(conn, username: str) -> int:
     return conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (username or "",)).fetchone()[0]
 
 
+def _hours_waiting(at) -> int:
+    """申請送出後過了幾個整小時（讀不懂時間 ⇒ 0）。"""
+    try:
+        return max(0, int((datetime.now() - datetime.fromisoformat(str(at))).total_seconds() // 3600))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _approver_names(requester: str) -> list:
+    """可以核准的人（在職的其他最高管理者）的顯示名稱；畫面只有最高管理者看得到。"""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT username, display_name FROM users WHERE active=1 AND role='superadmin' AND username<>? ORDER BY username",
+                            (requester or "",)).fetchall()
+    finally:
+        conn.close()
+    return [(r["display_name"] or r["username"]) for r in rows]
+
+
 def _pending_rows(conn) -> list:
     from . import config_ledger as L
     return [r for r in L.pending(conn, _MON_DOMAIN) if r["field"] in _MON_FIELDS]
@@ -638,6 +657,7 @@ def pending_disable() -> dict:
         return None
     r = rows[0]
     return {"id": r["id"], "kind": "change" if r["field"] == _FIELD_CHANGE else "disable",
+            "hoursWaiting": _hours_waiting(r["at"]), "waitingFor": _approver_names(r["actor"]),
             "newHost": (r.get("new") or "") if r["field"] == _FIELD_CHANGE else "",
             "requestedBy": r.get("actor_display") or r["actor"], "requestedByUser": r["actor"], "at": r["at"],
             "reason": scrub_paths(r.get("reason") or ""), "approvals": len(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)}
@@ -760,17 +780,20 @@ def approve_disable(change_id: int, actor, ip: str = "") -> dict:
 
 
 def cancel_disable(change_id: int, actor) -> dict:
-    """撤回申請（申請人或任何最高管理者都可以）。"""
+    """撤回申請（**只有提出申請的人**；PM 裁示。對方長期不在、想反悔的別人，可另外提出自己的申請取代這一筆）。留稽核。"""
     from . import config_ledger as L
     conn = get_db()
     try:
         _begin(conn)
-        row = conn.execute("SELECT domain, field FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
+        row = conn.execute("SELECT domain, field, actor FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
         if row is None or row["domain"] != _MON_DOMAIN or row["field"] not in _MON_FIELDS:
             raise DisableError("找不到這筆申請。")
+        if L.state_of(conn, int(change_id)) == "pending" and (row["actor"] or "") != _username(actor):
+            raise DisableError("只有提出這筆申請的人可以撤回。")
         if not L.cancel(conn, int(change_id), actor, "撤回"):
             raise DisableError("這筆申請已經處理過了。")
-        L.audit_event(conn, actor, "system.heartbeat_disable_cancelled", "heartbeat", {"changeId": int(change_id)}, target_label="對外心跳監控")
+        L.audit_event(conn, actor, "system.heartbeat_disable_cancelled", "heartbeat",
+                      {"changeId": int(change_id), "kind": "change" if row["field"] == _FIELD_CHANGE else "disable"}, target_label="對外心跳監控")
         conn.commit()
     except BaseException:
         if conn.in_transaction:

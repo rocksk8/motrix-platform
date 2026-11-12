@@ -131,7 +131,9 @@ def test_disable_asks_for_a_reason_then_waits_for_a_second_superadmin(live_serve
     ok.click()
     banner = page.locator('[data-testid="bm-disable-request"]')
     banner.wait_for(state="visible", timeout=10000)
-    assert "等待另一位最高管理者核准" in banner.inner_text() and "改用別家監控" in banner.inner_text()
+    txt = banner.inner_text()
+    assert "bm_e2e_other" in txt and "核准（已送出 不到 1 小時）" in txt and txt.startswith("等待 ") and "改用別家監控" in txt and "停用對外打卡" in txt
+    assert "若對方長期不在，可請對方登入核准，或撤回這次變更" in txt
     assert json.loads(cfg.read_text(encoding="utf-8"))["ping_url"] == SECRET        # 核准前沒有真的停用
     assert page.locator('[data-testid="bm-disable-approve"]').count() == 0 or not page.locator('[data-testid="bm-disable-approve"]').is_visible()   # 申請人看不到「核准」
     assert not page.locator('[data-testid="bm-ping-clear"]').is_visible()
