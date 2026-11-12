@@ -1,0 +1,165 @@
+# -*- coding: utf-8 -*-
+"""AUDIT-17 探針（稽核者臨時檔，跑完即刪，不進 commit）。"""
+import json
+import sys
+import time
+
+import pytest
+
+TOKEN = "tok-SECRET-0123456789"
+EV = "approval_review_edit"
+
+
+def _uid(n):
+    return "U" + ("%032x" % n)
+
+
+class _Fake:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, method, path, token, payload=None):
+        self.calls.append((method, path, payload))
+        return 200, {}
+
+    def targets(self):
+        out = set()
+        for _m, p, pl in self.calls:
+            if p.endswith("/push"):
+                out.add(pl["to"])
+            elif p.endswith("/multicast"):
+                out.update(pl["to"])
+        return out
+
+
+class _H:
+    def wait(self):
+        return "sent"
+
+
+@pytest.fixture
+def env(client, monkeypatch, make_user):
+    import helpers.email_notify as en
+    from helpers import line_notify as L, line_quota
+    from helpers.settings import _set_setting
+    from db import get_db
+    _set_setting("line_notify", {"enabled": True, "channel_access_token": TOKEN, "events": {EV: True}})
+    fake = _Fake()
+    monkeypatch.setattr(L, "_http", fake)
+    monkeypatch.setattr(en, "email_send_policy", lambda env=None: (True, "t"))
+    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: _H())
+    monkeypatch.setattr(line_quota, "after_push", lambda *a, **k: None)
+    users = {}
+    spec = [("amy", "sales", "amy@x.test"), ("noemail", "sales", ""),
+            ("muted", "sales", "muted@x.test"), ("eng", "engineer", "eng@x.test"),
+            ("boss", "superadmin", "boss@x.test")]
+    for name, role, mail in spec:
+        make_user(username=name, role=role)
+    conn = get_db()
+    for name, role, mail in spec:
+        conn.execute("UPDATE users SET email=? WHERE username=?", (mail, name))
+    conn.commit()
+    conn.close()
+    for i, (name, role, mail) in enumerate(spec, start=1):
+        L.link_user(name, _uid(i))
+        users[name] = _uid(i)
+    return en, L, fake, users
+
+
+def _wait(fake, n=1, t=3.0):
+    end = time.time() + t
+    while time.time() < end and len(fake.calls) < n:
+        time.sleep(0.05)
+    time.sleep(0.2)
+
+
+def test_P1_bound_user_without_email_never_gets_line(env):
+    en, L, fake, u = env
+    en.send_registered(EV, title="t", rows=[("a", "b")], usernames=["amy", "noemail"], wait=False)
+    _wait(fake)
+    print("P1 targets:", sorted(fake.targets()), "noemail uid:", u["noemail"])
+    assert u["noemail"] not in fake.targets() and u["amy"] in fake.targets()
+
+
+def test_P2_email_mute_silently_kills_line_while_prefs_view_says_enabled(env):
+    en, L, fake, u = env
+    from db import get_db
+    from helpers import line_recipients as lr
+    conn = get_db()
+    conn.execute("UPDATE users SET notification_muted=? WHERE username='muted'", (json.dumps([EV]),))
+    conn.commit()
+    conn.close()
+    en.send_registered(EV, title="t", rows=[], usernames=["amy", "muted"], wait=False)
+    _wait(fake)
+    view = {e["key"]: e["enabled"] for e in lr.prefs_view("muted", "sales")}
+    print("P2 targets:", sorted(fake.targets()), "prefs_view(muted):", view)
+    assert u["muted"] not in fake.targets()
+    assert view.get(EV) is True          # UI 仍顯示「要收」
+
+
+def test_P3_inactive_bound_user_fast_path_vs_restricted_path(env):
+    en, L, fake, u = env
+    from db import get_db
+    from helpers import line_recipients as lr
+    conn = get_db()
+    conn.execute("UPDATE users SET active=0 WHERE username='amy'")
+    conn.commit()
+    conn.close()
+    a = lr.filter_usernames(EV, ["amy", "eng"])
+    L.set_event_roles(EV, ["sales", "engineer"])
+    b = lr.filter_usernames(EV, ["amy", "eng"])
+    print("P3 unrestricted:", a, " restricted:", b, " still_linked:", L.is_linked("amy"))
+    assert "amy" in a and "amy" not in b and L.is_linked("amy")
+
+
+def test_P4_superadmin_only_override_still_lists_event_for_engineer(env):
+    en, L, fake, u = env
+    from helpers import line_recipients as lr
+    from helpers import mail_types as mt
+    from helpers.settings import _set_setting
+    _set_setting(mt.OVERRIDES_KEY, {EV: {"mode": "superadmin_only"}})
+    en.send_registered(EV, title="t", rows=[], usernames=["eng"], wait=False)
+    _wait(fake)
+    view = [e["key"] for e in lr.prefs_view("eng", "engineer")]
+    print("P4 targets:", sorted(fake.targets()), " eng prefs_view:", view)
+    assert u["eng"] not in fake.targets() and EV in view
+
+
+def test_P5_deleted_user_keeps_prefs_new_same_name_inherits_mutes(env):
+    en, L, fake, u = env
+    from helpers import line_recipients as lr
+    lr.set_muted("amy", EV, True, role="sales")
+    L.unlink_user("amy")        # delete_user 做的事
+    from helpers.settings import _get_setting
+    print("P5 line_prefs after unlink:", _get_setting("line_prefs", {}))
+    assert lr.is_muted("amy", EV)
+
+
+def test_P6_all_roles_unchecked_event_silently_dead(env):
+    en, L, fake, u = env
+    L.set_event_roles(EV, [])
+    en.send_registered(EV, title="t", rows=[], usernames=["amy", "boss"], wait=False)
+    _wait(fake, t=1.0)
+    print("P6 pushes:", len(fake.calls), " event_enabled:", L.event_enabled(EV))
+    assert fake.calls == [] and L.event_enabled(EV) is True
+
+
+def test_P7_heartbeat_import_leaks_open_log_handle(monkeypatch, tmp_path):
+    import importlib
+    import logging
+    from core import paths
+    logs = tmp_path / "joblogs"
+    monkeypatch.setattr(paths, "LOGS_DIR", str(logs))
+    monkeypatch.setattr(paths, "HEARTBEAT_CONFIG", str(tmp_path / "hbj.json"))
+    sys.modules.pop("heartbeat_job", None)
+    importlib.import_module("heartbeat_job")
+    sys.modules.pop("heartbeat_job", None)
+    root_handlers = [h for h in logging.getLogger().handlers if getattr(h, "baseFilename", "").startswith(str(logs))]
+    log = logs / "heartbeat_job.log"
+    try:
+        log.unlink()
+        removable = True
+    except OSError as e:
+        removable = False
+        print("P7 unlink error:", e)
+    print("P7 attached_to_root:", len(root_handlers), " log_exists_before_unlink: True  removable:", removable)
