@@ -64,14 +64,14 @@ def test_only_a_real_false_writes_and_preview_has_no_passwords(client, make_user
 
 def test_commit_needs_the_plan_hash_and_a_stale_plan_is_409(client, make_user):
     h = _super(client, make_user)
-    rows = [_row(2, "a1")]
+    rows = [_row(2, "aa1")]
     assert client.post("/api/users/import-rows", json={"rows": rows, "dryRun": False}, headers=h).status_code == 400
     ph = _plan(client, h, rows).json()["planHash"]
-    make_user(username="a1", role="viewer")                       # 預覽之後有人先建了同名帳號
+    make_user(username="aa1", role="viewer")                       # 預覽之後有人先建了同名帳號
     r = _commit(client, h, rows, ph)
     assert r.status_code == 409 and r.json()["detail"]["code"] == "plan_changed"
-    r2 = _commit(client, h, [_row(2, "a2")], ph)                    # 換了列的內容 ⇒ 雜湊不符
-    assert r2.status_code == 409 and "a2" not in _users()
+    r2 = _commit(client, h, [_row(2, "aa2")], ph)                    # 換了列的內容 ⇒ 雜湊不符
+    assert r2.status_code == 409 and "aa2" not in _users()
 
 
 def test_creates_accounts_must_change_password_empty_modules_and_one_time_passwords(client, make_user):
@@ -111,14 +111,15 @@ def test_high_privilege_roles_are_listed_as_manual_and_not_created(client, make_
 
 def test_unknown_role_blank_name_and_in_file_duplicates_are_errors(client, make_user):
     h = _super(client, make_user)
-    rows = [_row(2, "e1", "甲", "老大"), _row(3, "e2", ""), _row(4, "dup", "乙"), _row(5, "DUP", "丙"), _row(6, "", "丁"), _row(7, "has space", "戊")]
+    rows = [_row(2, "ee1", "甲", "老大"), _row(3, "ee2", ""), _row(4, "dup", "乙"), _row(5, "DUP", "丙"), _row(6, "", "丁"), _row(7, "has space", "戊")]
     body = _plan(client, h, rows).json()
     assert body["failed"] == 5 and body["created"] == 1
     assert any("不認得的角色" in e for e in body["errors"])
     assert any("出現多次" in e for e in body["errors"])
+    assert any("只能用英文字母" in e for e in body["errors"])
     r = _commit(client, h, rows, body["planHash"])
     assert [c["username"] for c in r.json()["credentials"]] == ["dup"]
-    assert set(_users()) >= {"dup"} and not ({"e1", "e2", "DUP", "has space"} & set(_users()))
+    assert set(_users()) >= {"dup"} and not ({"ee1", "ee2", "DUP", "has space"} & set(_users()))
 
 
 def test_existing_accounts_are_skipped_even_when_only_case_or_width_differs(client, make_user):
@@ -168,13 +169,13 @@ def test_department_and_email_warnings_and_department_match(client, make_user):
     dep = c.execute("SELECT id FROM departments WHERE name='業務一部'").fetchone()["id"]
     c.close()
     h = _super(client, make_user)
-    rows = [_row(2, "d1", "甲", "業務", department="業務一部"), _row(3, "d2", "乙", "業務", department="不存在部", email="not-an-email")]
+    rows = [_row(2, "dd1", "甲", "業務", department="業務一部"), _row(3, "dd2", "乙", "業務", department="不存在部", email="not-an-email")]
     body = _plan(client, h, rows).json()
     msgs = [w["message"] for w in body["warnings"]]
     assert any("不存在部" in m for m in msgs) and any("Email" in m for m in msgs)
     _commit(client, h, rows, body["planHash"])
     users = _users()
-    assert users["d1"]["department_id"] == dep and users["d2"]["department_id"] is None
+    assert users["dd1"]["department_id"] == dep and users["dd2"]["department_id"] is None
 
 
 def test_row_cap_and_empty_rows(client, make_user):
@@ -209,3 +210,136 @@ def test_create_user_endpoint_still_works_after_sharing_the_insert(client, make_
     assert r.status_code == 201 and r.json()["mustChangePassword"] is True
     assert _users()["plain1"]["must_change_password"] == 1
     assert client.post("/api/users", json={"username": "plain1", "password": "Str0ng#Passw0rd"}, headers=h).status_code == 409
+
+
+# ── 審查修正（hichan-9 M1／M3／L3／L4／L5）──────────────────────────────────────
+
+@pytest.mark.parametrize("bad", [
+    "ali\u200bce2", "x\u202eyz", "ab", "a" * 33, "bob=1", "王小明", "a b c", "tab\tname", "=cmd", "a/b/c", "x\u2060yz", "\ufeffabc",
+])
+def test_username_rule_rejects_lookalikes_invisible_and_odd_characters(client, make_user, bad):
+    h = _super(client, make_user)
+    body = _plan(client, h, [_row(2, bad, "某人")]).json()
+    assert body["created"] == 0 and body["failed"] == 1, (bad, body)
+    assert any("帳號" in e for e in body["errors"])
+    r = _commit(client, h, [_row(2, bad, "某人")])
+    assert r.status_code == 200 and r.json()["created"] == 0
+    assert not [u for u in _users() if u not in ("imp_super", "demo")]
+
+
+def test_lookalike_of_an_existing_account_is_skipped_not_created(client, make_user):
+    h = _super(client, make_user)
+    make_user(username="Alice.Wang", role="sales")
+    before = set(_users())
+    for variant in ("alice.wang", "ＡＬＩＣＥ．ＷＡＮＧ", "ali\u200bce.wang", "ALICE.WANG\u200d", "Alice.\u202cWang"):
+        body = _plan(client, h, [_row(2, variant, "冒名")]).json()
+        assert body["created"] == 0 and len(body["skipped"]) == 1 and body["failed"] == 0, variant
+    r = _commit(client, h, [_row(2, "ali\u200bce.wang", "冒名"), _row(3, "real.one", "真人")])
+    assert r.json()["created"] == 1
+    assert set(_users()) - before == {"real.one"}
+
+
+def test_created_username_is_the_normalized_one_and_the_preview_says_so(client, make_user):
+    h = _super(client, make_user)
+    rows = [_row(2, "ＢＯＢ１２３", "鮑伯"), _row(3, "Mixed.Case", "混合"), _row(4, "plain_ok", "一般")]
+    body = _plan(client, h, rows).json()
+    msgs = {w["username"]: w["message"] for w in body["warnings"]}
+    assert "將建立為「bob123」" in msgs["bob123"] and "將建立為「mixed.case」" in msgs["mixed.case"] and "plain_ok" not in msgs
+    r = _commit(client, h, rows, body["planHash"])
+    assert sorted(c["username"] for c in r.json()["credentials"]) == ["bob123", "mixed.case", "plain_ok"]
+    users = _users()
+    assert {"bob123", "mixed.case", "plain_ok"} <= set(users) and "Mixed.Case" not in users
+    assert _login(client, "bob123", [c for c in r.json()["credentials"] if c["username"] == "bob123"][0]["password"])
+
+
+def _key(n="k"):
+    return ("idem-%s-" % n) + "x" * 12
+
+
+def _commit_k(client, h, rows, plan_hash, key):
+    return client.post("/api/users/import-rows", json={"rows": rows, "dryRun": False, "planHash": plan_hash},
+                       headers=dict(h, **{"Idempotency-Key": key}))
+
+
+def test_same_key_replays_the_first_result_without_passwords_and_creates_nothing_twice(client, make_user):
+    h = _super(client, make_user)
+    rows = [_row(2, "idem_a", "甲"), _row(3, "idem_b", "乙")]
+    ph = _plan(client, h, rows).json()["planHash"]
+    r1 = _commit_k(client, h, rows, ph, _key())
+    assert r1.status_code == 200 and len(r1.json()["credentials"]) == 2 and r1.json()["replayed"] is False
+    ids = {a["username"]: a["id"] for a in r1.json()["createdAccounts"]}
+    assert ids == {"idem_a": _users()["idem_a"]["id"], "idem_b": _users()["idem_b"]["id"]}
+    before = {u: v["password_hash"] for u, v in _users().items()}
+    r2 = _commit_k(client, h, rows, ph, _key())                      # 回應掉了，頁面用同一把 key 重送
+    assert r2.status_code == 200 and r2.headers.get("idempotent-replay") == "true" and r2.headers.get("cache-control") == "no-store"
+    b2 = r2.json()
+    assert b2["replayed"] is True and b2["passwordsShown"] is False and "credentials" not in b2
+    assert [a["username"] for a in b2["createdAccounts"]] == ["idem_a", "idem_b"] and b2["created"] == 2
+    pw = [c["password"] for c in r1.json()["credentials"]]
+    assert not any(p in r2.text for p in pw)
+    assert {u: v["password_hash"] for u, v in _users().items()} == before, "沒有重建、沒有重設任何密碼"
+    # 沒帶 key 再送一次 ⇒ planHash 已經不符（帳號已存在）＝ 409，不會重複建立
+    assert _commit(client, h, rows, ph).status_code == 409
+
+
+def test_same_key_with_different_content_is_422_and_a_failed_commit_frees_the_key(client, make_user, monkeypatch):
+    import routers.auth as A
+    h = _super(client, make_user)
+    rows = [_row(2, "frk_a", "甲")]
+    ph = _plan(client, h, rows).json()["planHash"]
+    real = A._insert_new_user
+    monkeypatch.setattr(A, "_insert_new_user", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Secret#Leak123")))
+    r = _commit_k(client, h, rows, ph, _key("f"))
+    assert r.status_code == 500 and r.json()["detail"]["code"] == "import_failed" and "frk_a" not in _users()
+    monkeypatch.setattr(A, "_insert_new_user", real)
+    r = _commit_k(client, h, rows, ph, _key("f"))                       # 失敗不佔著 key：修好後同一把 key 重送就能成功
+    assert r.status_code == 200 and r.json()["created"] == 1
+    other = [_row(2, "frk_b", "乙")]
+    ph2 = _plan(client, h, other).json()["planHash"]
+    assert _commit_k(client, h, other, ph2, _key("f")).status_code == 422   # 同一把 key 不能送不同的內容
+    assert "frk_b" not in _users()
+
+
+def test_bad_key_format_is_400_and_no_key_behaves_as_before(client, make_user):
+    h = _super(client, make_user)
+    rows = [_row(2, "nokey_a", "甲")]
+    ph = _plan(client, h, rows).json()["planHash"]
+    assert _commit_k(client, h, rows, ph, "short").status_code == 400
+    assert "nokey_a" not in _users()
+    assert _commit(client, h, rows, ph).status_code == 200
+
+
+def test_temp_passwords_use_the_same_rule_as_create_user(client, make_user, monkeypatch):
+    import routers.auth as A
+    assert A._password_problem("short1A") is not None and "至少" in A._password_problem("short1A")
+    assert "弱密碼" in A._password_problem("Password1")
+    assert A._password_problem("Str0ng#Passw0rd") is None
+    h = _super(client, make_user)
+    calls = {"n": 0}
+    real = A._password_problem
+
+    def picky(pw, min_len=None):                                     # 前 5 組都當成弱密碼：必須重新產生
+        calls["n"] += 1
+        return "弱" if calls["n"] <= 5 else real(pw, min_len)
+    monkeypatch.setattr(A, "_password_problem", picky)
+    r = _commit(client, h, [_row(2, "pwrule_a", "甲")])
+    assert r.status_code == 200 and calls["n"] >= 6
+    from helpers.auth import is_weak_password
+    assert not is_weak_password(r.json()["credentials"][0]["password"])
+    r = client.post("/api/users", json={"username": "plain_weak", "password": "Password1"}, headers=h)
+    assert r.status_code == 400
+
+
+@pytest.mark.real_pbkdf2
+def test_three_hundred_users_finish_within_ten_seconds_with_the_real_hash(client, make_user):
+    import time
+    h = _super(client, make_user)
+    rows = [_row(i + 2, "bulk_%03d" % i, "員工%d" % i) for i in range(300)]
+    ph = _plan(client, h, rows).json()["planHash"]
+    t0 = time.monotonic()
+    r = _commit(client, h, rows, ph)
+    took = time.monotonic() - t0
+    assert r.status_code == 200 and r.json()["created"] == 300
+    assert took < 10, "300 人匯入花了 %.1f 秒" % took
+    c = r.json()["credentials"][0]
+    assert _login(client, c["username"], c["password"])

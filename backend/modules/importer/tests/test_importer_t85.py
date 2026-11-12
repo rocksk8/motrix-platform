@@ -200,26 +200,147 @@ def test_file_size_limit_and_row_cap():
     assert P.parse_file(_xlsx(ok), "u.xlsx", "users")["rowCount"] == 300
 
 
-def test_huge_declared_dimension_with_few_cells_stops_at_blank_run():
+def _raw_xlsx(sheet_xml_body, declared="A1:B2"):
+    """用 openpyxl 做一個正常的 xlsx，再把「資料」工作表的 XML 換成自己寫的內容（模擬惡意／不正常的檔案）。"""
+    good = _xlsx([["x"]])
+    src = zipfile.ZipFile(io.BytesIO(good))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for n in src.namelist():
+            data = src.read(n)
+            if n == "xl/worksheets/sheet1.xml":
+                data = ('<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                        '<dimension ref="%s"/><sheetData>%s</sheetData></worksheet>' % (declared, sheet_xml_body)).encode("utf-8")
+            z.writestr(n, data)
+    return out.getvalue()
+
+
+def _grid_xml(rows, cols):
+    """rows×cols 個空格（每格都有各自的 r 屬性）。"""
+    from openpyxl.utils import get_column_letter
+    letters = [get_column_letter(c + 1) for c in range(cols)]
+    return "".join('<row r="%d">%s</row>' % (r, "".join('<c r="%s%d" s="1"/>' % (L, r) for L in letters)) for r in range(1, rows + 1))
+
+
+def test_one_million_cell_file_is_rejected_fast_and_with_small_memory():
+    import time
+    import tracemalloc
+    data = _raw_xlsx(_grid_xml(20000, 50), declared="A1:AX20000")        # 100 萬格，壓縮後只有幾 MB
+    assert len(data) < (5 << 20)
+    t = time.monotonic()                                                  # ① 時間（不開 tracemalloc：它會讓純 Python 迴圈慢十倍以上）
+    with pytest.raises(P.ParseError, match="儲存格太多"):
+        P.parse_file(data, "bomb.xlsx", "customers")
+    took = time.monotonic() - t
+    assert took < 2, "1M 格的檔案花了 %.2f 秒才拒絕" % took
+    tracemalloc.start()                                                   # ② 尖峰記憶體
+    try:
+        with pytest.raises(P.ParseError, match="儲存格太多"):
+            P.parse_file(data, "bomb.xlsx", "customers")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 100 * 1024 * 1024, "尖峰記憶體 %.0fMB" % (peak / 1048576)
+
+
+def test_lying_dimension_does_not_pad_rows_or_slow_the_parse():
+    import time
+    head = "".join('<c r="%s1" t="inlineStr"><is><t>%s</t></is></c>' % (L, v) for L, v in (("A", "公司名稱"), ("B", "統一編號")))
+    row2 = '<c r="A2" t="inlineStr"><is><t>甲公司</t></is></c>'
+    data = _raw_xlsx('<row r="1">%s</row><row r="2">%s</row>' % (head, row2), declared="A1:XFD1048576")
+    t = time.monotonic()
+    res = P.parse_file(data, "lie.xlsx", "customers")
+    assert res["rowCount"] == 1 and res["rows"][0]["name"] == "甲公司" and time.monotonic() - t < 2
+
+
+def test_row_numbers_far_below_the_data_are_rejected_not_scanned():
+    row = '<row r="1"><c r="A1" t="inlineStr"><is><t>公司名稱</t></is></c></row><row r="%d"><c r="A%d" t="inlineStr"><is><t>x</t></is></c></row>' % (P.MAX_SHEET_ROWNUM + 5, P.MAX_SHEET_ROWNUM + 5)
+    with pytest.raises(P.ParseError, match="太多或資料放得太下面"):
+        P.parse_file(_raw_xlsx(row), "far.xlsx", "customers")
+
+
+def test_oversized_sheet_xml_is_rejected_before_reading_it():
+    big = _raw_xlsx('<row r="1">%s</row>' % ('<c r="A1" t="inlineStr"><is><t>%s</t></is></c>' % ("x" * (P.MAX_SHEET_XML + 10))))
+    with pytest.raises(P.ParseError):
+        P.parse_file(big, "big.xlsx", "customers", max_bytes=50 << 20)
+
+
+def test_deadline_is_enforced(monkeypatch):
+    monkeypatch.setattr(P, "DEADLINE_SECONDS", -1.0)
+    with pytest.raises(P.ParseError, match="處理太久"):
+        _parse([CUST_HEAD, ["甲", ""]])
+    with pytest.raises(P.ParseError, match="處理太久"):
+        P.parse_file("公司名稱\n甲\n".encode("utf-8"), "d.csv", "customers")
+
+
+def test_blank_gap_does_not_stop_reading_and_warns_with_the_row_number():
     wb = Workbook()
     ws = wb.active
     ws.title = "資料"
     ws.append(CUST_HEAD)
     ws.append(["甲", ""])
-    ws["A1000000"] = None
-    ws.cell(row=900000, column=1).value = ""
+    ws.cell(row=900, column=1, value="乙公司")                            # 中間空 897 列（舊版 500 列空白就會停）
+    ws.cell(row=2000, column=1, value="丙公司")
     bio = io.BytesIO()
     wb.save(bio)
-    import time
-    t = time.time()
-    res = P.parse_file(bio.getvalue(), "d.xlsx", "customers")
-    assert res["rowCount"] == 1 and time.time() - t < 5
+    res = P.parse_file(bio.getvalue(), "gap.xlsx", "customers")
+    assert [r["name"] for r in res["rows"]] == ["甲", "乙公司", "丙公司"]
+    msgs = [w["message"] for w in res["warnings"]]
+    assert "第 2 列後有空白區段，之後的資料已一併讀取" in msgs and "第 900 列後有空白區段，之後的資料已一併讀取" in msgs
 
 
-def test_too_many_columns_is_rejected():
+def test_row_cap_counts_filled_rows_not_blank_ones():
+    rows = [CUST_HEAD] + [["公司%d" % i, ""] if i % 2 == 0 else [] for i in range(2 * P.MAX_ROWS["customers"])]
+    res = _parse(rows)
+    assert res["rowCount"] == P.MAX_ROWS["customers"]
+    with pytest.raises(P.ParseError, match="太多"):
+        _parse([CUST_HEAD] + [["公司%d" % i, ""] for i in range(P.MAX_ROWS["customers"] + 1)])
+
+
+def test_too_many_columns_names_the_column_letter():
     head = ["公司名稱"] + ["欄%d" % i for i in range(P.MAX_COLS + 5)]
-    with pytest.raises(P.ParseError, match="欄位太多"):
+    with pytest.raises(P.ParseError, match="AY 欄"):
         _parse([head, ["甲"] + [""] * (P.MAX_COLS + 5)])
+    with pytest.raises(P.ParseError, match="AY 欄"):                      # 孤零零一格放在很右邊
+        _parse([CUST_HEAD, ["甲"], ["乙"] + [""] * (P.MAX_COLS) + ["雜訊"]])
+    csv_head = ",".join(["公司名稱"] + ["c%d" % i for i in range(P.MAX_COLS + 2)])
+    with pytest.raises(P.ParseError, match="欄"):
+        P.parse_file((csv_head + "\n甲\n").encode("utf-8"), "w.csv", "customers")
+
+
+def test_csv_blank_lines_do_not_count_toward_the_cap_or_stop_reading():
+    text = "公司名稱,統一編號\n" + "\n" * 6000 + "甲公司,\n" + "\n" * 600 + "乙公司,\n"
+    res = P.parse_file(text.encode("utf-8"), "g.csv", "customers")
+    assert [r["name"] for r in res["rows"]] == ["甲公司", "乙公司"]
+    assert any("空白區段" in w["message"] for w in res["warnings"])
+
+
+def test_junk_tax_id_is_reported_per_row_not_dropped_silently():
+    res = _parse([CUST_HEAD, ["甲", "N/A"], ["乙", "無"], ["丙", "統編 12345675"], ["丁", "12345675"]])
+    by = {}
+    for w in res["warnings"]:
+        by.setdefault(w["row"], []).append(w["message"])
+    assert any("不是統編" in m and "N/A" in m for m in by[2]) and any("不是統編" in m and "無" in m for m in by[3])
+    assert any("只取出數字" in m for m in by[4])
+    assert 5 not in by
+    assert [r["taxId"] for r in res["rows"]] == ["", "", "12345675", "12345675"]
+
+
+def test_numeric_phone_and_part_no_cells_warn_that_leading_zeros_may_be_lost_and_text_cells_do_not():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "資料"
+    ws.append(CUST_HEAD)
+    ws.append(["甲", "", 912345678])                                      # 數字格：0912… 的 0 被吃掉了
+    ws.append(["乙", "", "0912345678"])                                    # 文字格：沒事
+    ws.append(["丙", "", 223456789])
+    bio = io.BytesIO()
+    wb.save(bio)
+    res = P.parse_file(bio.getvalue(), "z.xlsx", "customers")
+    warned = {w["row"] for w in res["warnings"] if "開頭的 0" in w["message"]}
+    assert warned == {2, 4}
+    pw = _parse([["料號", "品名"], [1234, "A"], ["01234", "B"]], kind="parts")
+    assert any("料號" in w["field"] and "數字格式" in w["message"] for w in pw["warnings"])
+    assert [r["partNo"] for r in pw["rows"]] == ["1234", "01234"]
 
 
 # ── CSV ──────────────────────────────────────────────────────────────────────
@@ -280,7 +401,7 @@ def test_template_round_trips_through_the_parser_and_example_row_is_skipped(kind
 def test_template_text_format_keeps_leading_zeros_and_users_role_has_dropdown():
     wb = load_workbook(io.BytesIO(P.build_template("users")))
     ws = wb["資料"]
-    assert ws["A5"].number_format == "@"
+    assert ws.column_dimensions["A"].number_format == "@" and ws.column_dimensions["F"].number_format == "@"   # 整欄文字格式，不只前幾百列
     assert any("業務" in (dv.formula1 or "") for dv in ws.data_validations.dataValidation)
 
 
@@ -382,3 +503,19 @@ def test_parse_writes_no_business_tables_and_keeps_no_upload(client, make_user, 
     before = snap()
     assert _post(client, h, "customers", _xlsx([CUST_HEAD, ["甲", ""]])).status_code == 200
     assert snap() == before
+
+
+def test_parse_concurrency_is_limited_and_busy_is_a_plain_429(client, make_user, monkeypatch):
+    import modules.importer.api as API
+
+    class _Busy:
+        def acquire(self, timeout=None):
+            return False
+
+        def release(self):
+            raise AssertionError("沒拿到就不該釋放")
+    h = _login(client, *make_user(username="imp_busy", role="superadmin"))
+    _flag(True)
+    monkeypatch.setattr(API, "_PARSE_SLOTS", _Busy())
+    r = _post(client, h, "customers", _xlsx([CUST_HEAD, ["甲", ""]]))
+    assert r.status_code == 429 and "稍等" in r.json()["detail"]
