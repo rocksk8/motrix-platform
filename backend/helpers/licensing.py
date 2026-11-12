@@ -70,7 +70,8 @@ _PUBKEY_DEV = (
 )
 
 # 正式公鑰（2026-11-12 產生，私鑰依 STATE §4 2026-09-21 裁示存密碼管理器，開發機上直接簽發，
-# 不落地在任何 repo／worktree；機器指紋 93ece768770e4ccd，統編 60575481）。
+# 不落地在任何 repo／worktree）。對應的正式機指紋與客戶資料不寫在這裡——這支會進出貨包，
+# 不可以帶著任何一台客戶安裝的識別資料（test_no_our_company_literals 這類守門就是防這個）。
 _PUBKEY_PROD = (
     b"-----BEGIN PUBLIC KEY-----\n"
     b"MCowBQYDK2VwAyEAdfv+I3XFU/ptNcjmFuQAk9ZufbS5JAXzLykMHgnbnMc=\n"

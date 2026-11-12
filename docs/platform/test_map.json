@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1538,
+  "tests": 1539,
   "unmapped": 13,
   "kinds": {
-   "api": 854,
+   "api": 855,
    "e2e": 341,
    "audit": 199,
    "unit": 144
@@ -42474,6 +42474,25 @@
     "/api/def-governance/layout/{}"
    ],
    "login_fixture": true
+  },
+  "backend/tests/test_t80_audit16_fixes_2026_11_12.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "helper:licensing",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/licensing.py",
+     "backend/main.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
+    ]
+   }
   },
   "backend/tests/test_tax401_invoice_round_2026_10_14.py": {
    "kind": "audit",
