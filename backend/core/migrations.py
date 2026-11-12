@@ -739,3 +739,24 @@ def _core_next_idempotency_keys(conn):
 
 
 register("core", 12, _core_next_idempotency_keys)
+
+
+# ── 個人偏好（「我的帳號」票；未取號 core 遷移，PLAYBOOK §G6）─────────────────────────────
+# `user_prefs`：每人每個偏好鍵一列（鍵與值域由 helpers/user_prefs.SCHEMA 白名單驗證，這裡只存）。純新增、冪等；
+# 帶 owner_unit_id（單位守門要求，預設 1）。主鍵 (user_id, key)；只存使用者自己選的值，沒存＝用預設。不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_user_prefs(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_prefs (
+            user_id       INTEGER NOT NULL,
+            key           TEXT    NOT NULL,
+            value_json    TEXT    NOT NULL DEFAULT 'null',
+            updated_at    TEXT    NOT NULL DEFAULT '',
+            owner_unit_id INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (user_id, key)
+        )
+    """)
+    conn.commit()
+    return None
+
+
+register("core", 13, _core_next_user_prefs)
