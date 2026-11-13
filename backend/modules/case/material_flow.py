@@ -3,7 +3,7 @@
 
 [不變式]
 - **沒有任何金額欄位**：只回狀態、單號、日期、數量。看不看得到金額與這個畫面無關，所以不需要逐人遮罩，也不可能漏。
-- 只顯示今天算得出來的格子：叫料、採購、到貨、入庫（部分）、出貨、設備、保固；算不出來的標「尚未提供」，不編。
+- 只顯示今天算得出來的格子：材料申請、採購、到貨、入庫（部分）、出貨、設備、保固；算不出來的標「尚未提供」，不編。
 - 其他模組的資料只經串接點：入庫格 `stock.case_summary`（IP-117，M03）、出貨格 `shipping.list_for_case`（IP-18，M03）；
   M03 不在 ⇒ 兩格整格隱藏；M03 在但讀取出錯 ⇒ 該格顯示「暫時讀不到」（不隱藏，免得被誤認沒有倉儲）；出貨單無權限 ⇒ 該段整段不回傳。
 - 格子狀態四種：`inprogress` 進行中、`done` 完成、`skipped` 略過、`na` 不適用或尚未提供（P1' 還算不出「略過（直送）」，所以目前不會出現 skipped）。
@@ -22,7 +22,7 @@ STATES = ("inprogress", "done", "skipped", "na")
 _KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單"}
 _VOIDED = "已作廢"
 _NEXT = {  # 各格「下一步」要開的頁（只帶案號；開了就是現有頁面）
-    "call": ("去叫料", "case-management.html?q={q}&tab=exec&sub=materials"),
+    "call": ("去送材料申請", "case-management.html?q={q}&tab=exec&sub=materials"),
     "purchase": ("開請購單", "payment-request.html?case={q}&type=purchase_req"),
     "arrive": ("去確認到貨", "case-management.html?q={q}&tab=fin"),
     "ship": ("去開出貨單", "case-management.html?q={q}&tab=shipping"),
@@ -56,15 +56,15 @@ def _call_and_arrive(conn, quote_no, data):
     rows = conn.execute("SELECT item_id, doc_code, status, received_on FROM case_material_approvals WHERE quote_no=? AND status<>'已作廢' ORDER BY doc_code, item_id", (quote_no,)).fetchall()
     items = [{"docCode": r["doc_code"] or "", "name": names.get(str(r["item_id"]), ""), "status": r["status"] or "", "receivedOn": r["received_on"] or ""} for r in rows]
     if not items:
-        return _cell("call", "叫料", "na", "還沒有叫料單"), _cell("arrive", "到貨", "na", "還沒有叫料單")
+        return _cell("call", "材料申請", "na", "還沒有材料申請單"), _cell("arrive", "到貨", "na", "還沒有材料申請單")
     approved = [i for i in items if i["status"] == "已核准"]
-    call = _cell("call", "叫料", "done" if len(approved) == len(items) else "inprogress",
-                 "%d 張叫料單，%d 張已核准" % (len(items), len(approved)), items)
+    call = _cell("call", "材料申請", "done" if len(approved) == len(items) else "inprogress",
+                 "%d 張材料申請單，%d 張已核准" % (len(items), len(approved)), items)
     if not approved:
-        return call, _cell("arrive", "到貨", "na", "叫料單核准後才會有到貨")
+        return call, _cell("arrive", "到貨", "na", "材料申請單核准後才會有到貨")
     got = [i for i in approved if i["receivedOn"]]
     arrive = _cell("arrive", "到貨", "done" if len(got) == len(approved) else "inprogress",
-                   "%d 張已核准的叫料單，%d 張已到貨" % (len(approved), len(got)),
+                   "%d 張已核准的材料申請單，%d 張已到貨" % (len(approved), len(got)),
                    [{"docCode": i["docCode"], "name": i["name"], "arrived": bool(i["receivedOn"]), "receivedOn": i["receivedOn"]} for i in approved])
     return call, arrive
 

@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
-## (next) — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`、`onepipe.timeline`，預設關＝畫面與今天逐位元相同；L1 介面不變）
+## (next) — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設關＝畫面與今天逐位元相同；L1 介面不變）
+- 守門補登：`docs/platform/case_read_scope.json` 登記 `GET /api/quotations/{quote_no}/material-flow`（row_access）；`modules.json` 補歸屬（M01：`case/material_flow`、`case/api/material_flow`）；畫面字串「叫料」依 2026-10-02 用詞守門改稱「材料申請」。
 - 案件管理頁：旗標開時，「執行管理 › 材料申請」頂端多「開請購單」「開採購單」兩個連結（帶案號與單據類型到 `payment-request.html`）；網址 `?q=<案號>&sub=materials` 直接落在該子頁。`payment-request.html` 吃 `?case=<案號>&type=purchase_req|purchase_order`：案件與類型已選好（看不到該案件 ⇒ 維持原本的挑案件畫面）。
 - 新增 `frontend/static/onepipe.js`（讀既有的 `GET /api/settings-center/public?groups=onepipe`；讀不到＝全關）。旗標關時以上全部不出現、不生效。無 migration、無新端點。
 - P1' 物料流程時間軸：新端點 `GET /api/quotations/{no}/material-flow`（唯讀；旗標 `onepipe.timeline` 關 ⇒ 404；案件成員才看得到，非成員同一個 404）＋新頁 `material-flow.html?q=<案號>`＋案件頁上方連結列「物料流程」（旗標開才出現）。七格：叫料、採購、到貨（逐張叫料單到了／沒到）、入庫（只顯示已安裝／已出貨台數，其餘標「第 2 階段後提供」）、出貨、設備、保固；入庫與出貨經 `stock.case_summary`（IP-117）與 `shipping.list_for_case`（IP-18）：M03 不在 ⇒ 該格隱藏、讀取出錯 ⇒「暫時讀不到」、出貨單無權限 ⇒ 該段不回傳。**回應沒有任何金額欄位**。無 migration、不動權限。

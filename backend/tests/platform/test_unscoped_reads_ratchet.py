@@ -12,7 +12,8 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-MAX_ENTRIES = 861      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
+MAX_ENTRIES = 865      # 861 + 4（一條龍 P0a／P0c／P1' 2026-11-13：①`email_notify.shipping_link` 與 `inventory._StockSerials.release` 各讀 `shipping_notes` 一次，只用單號查「存在／仍是已核准」（`release` 是案件存檔交易內、舊資料維持 in_stock 的判斷；`shipping_link` 是通知連結的查案號），不回傳資料給使用者；②`case/material_flow._purchase` 讀 `case_extra_expenses`，**端點先過 `require_case`（案件成員）**且只取單據代號／狀態／日期、沒有金額；③`supply/case_summary` 讀 `stock_items` 彙總該案台數，案件可見性由案件側先檢查、呼叫者另要有檢視庫存的模組權限。測試 modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py）
+                        # 861 = 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
                         # 另 `_coarse_member_sql`／`_stage_assigned` 各讀 case_stages。每一筆回傳前都被 `_is_member` 擋過、只回白名單欄位（無金額）；測試 test_membership_equals_the_existing_case_member_rule_for_every_path 釘住與 `_is_case_member` 同義）
                         # 856 = 853 + 3（T80c 外勤 S2 2026-11-12：新端點 `GET /api/field/cases/{quote_no}` 的 `get_field_case` 讀 quotations／case_stages／case_updates 各一——一律先過 `_is_member`（案件成員，CM14；不再是 `_guard_case`＋`case_manage` 放行，見上一段 861 的說明）、只回白名單欄位（無金額），與 `GET /api/quotations/{no}/stages`、`/updates` 同型；（當時列表走 row_access.filter_sql 不新增；後來列表也改成員口徑，見上一段 +5））

@@ -110,7 +110,7 @@ def test_flag_on_full_picture_and_per_document_arrival(client, make_user, monkey
     assert r.status_code == 200, r.text
     b = r.json()
     c = _cells(b)
-    assert c["call"]["state"] == "inprogress" and "3 張叫料單，2 張已核准" in c["call"]["summary"]
+    assert c["call"]["state"] == "inprogress" and "3 張材料申請單，2 張已核准" in c["call"]["summary"]
     assert [(i["docCode"], i["arrived"]) for i in c["arrive"]["items"]] == [("MO-1", True), ("MO-2", False)]      # 逐張：到了／沒到
     assert c["arrive"]["state"] == "inprogress"
     assert [i["docCode"] for i in c["purchase"]["items"]] == ["PR-1", "PO-1"]                                      # 作廢的不列
