@@ -43,7 +43,7 @@ SIDEBAR = (Path(__file__).resolve().parent.parent.parent
            / "frontend" / "static" / "sidebar.js")
 
 #: 要搬的三項（使用者原話的順序）。
-MOVED = ("簽核歷史", "簽核佇列", "簽核代理人")
+MOVED = ("簽核歷史", "待我簽核", "簽核代理人")
 
 #: 它們的頁面檔名 —— `MN5` 要搜的就是這三個的所有引用點。
 MOVED_PAGES = ("approval-history.html", "approval-queue.html",

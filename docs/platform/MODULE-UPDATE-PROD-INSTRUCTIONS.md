@@ -65,7 +65,7 @@
 | `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`package_missing`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`package_missing`＝`-PackagePath` 指錯（檢查 staging 路徑後重下指令，這一項可以自己修正再跑一次）；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
 | `not_prod_machine` | 腳本不是在正式機安裝目錄執行（身分守門） | **停**：回報使用者；不要把腳本複製到別處或改腳本裡的路徑 |
 | `user_cancelled` | 腳本在互動確認時被取消（這份指示一律帶 `-Yes`，不應出現） | 回報使用者；確認指令有沒有漏 `-Yes` |
-| `refused_company_setup` | 本公司資料設定預檢不過（未設定、無法判定、或預檢工具不在），正式機沒被碰 | 回報使用者；處置見 COMPANY-SETUP-GATE §6.2／§6.3（通常是請最高管理員到設定頁確認本公司資料）；不要自己改設定或建檔 |
+| `refused_company_setup` | 本公司資料設定預檢不過（未設定、無法判定、或預檢工具不在），正式機沒被碰 | 回報使用者；處置見 COMPANY-SETUP-GATE §6.2／§6.3（通常是請最高管理者到設定頁確認本公司資料）；不要自己改設定或建檔 |
 | `backup_failed`、`migration_dryrun_failed`、`module_load_dryrun_failed` | 套用前的檢查擋下，正式機沒被碰 | 原文回報（開發機要修模組） |
 | `module_copy_failed`（rolled_back＝restored） | 換檔中途失敗，已自動還原到套用前 | 原文回報 |
 | `unhealthy_rolled_back`、`module_unhealthy_rolled_back`（rolled_back＝restored） | 新版本起不來或模組沒載入，已自動回滾到套用前，服務正常 | 原文回報（開發機要修模組） |

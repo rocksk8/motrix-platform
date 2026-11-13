@@ -76,11 +76,11 @@ def test_a_failing_create_does_not_leak_the_write_lock(client, make_user, monkey
     real = Q._peek_next_no
     state = {"boom": True}
 
-    def flaky(conn, month):
+    def flaky(conn, month, *a, **k):                              # 取號函式多了單號規則參數（估價單）：替身照單全收
         if state["boom"]:
             state["boom"] = False
             raise RuntimeError("模擬中途失敗")
-        return real(conn, month)
+        return real(conn, month, *a, **k)
     monkeypatch.setattr(Q, "_peek_next_no", flaky)
     with pytest.raises(RuntimeError) as excinfo:                 # excinfo 讓失敗請求的堆疊框（與連線）在探針執行時仍然活著
         client.post("/api/quotations", headers=h, json=_body())

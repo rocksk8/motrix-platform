@@ -120,7 +120,7 @@ POST /api/bonus/awards/{award_id}/reject      退回 -> 草稿（清除簽核）
 ### 🔴 權限：**只有最高管理者**（`superadmin`），不要用 `_is_manager`
 
 ```
-使用者 2026-09-23 逐字：「**產生獎金分潤單這些也只有最高管理員可見**」
+使用者 2026-09-23 逐字：「**產生獎金分潤單這些也只有最高管理者可見**」
 而 _is_manager 回 role in ("superadmin", **"admin"**)
    —— 那支 docstring 自己標了「A 🟡 預設沿用，**未經使用者確認**」
 ⇒ **現在確認了。三支端點一律 require_superadmin=True。**

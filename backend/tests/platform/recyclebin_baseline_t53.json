@@ -233,6 +233,10 @@
    "count": 4,
    "reason": "exempt: 登入 session（暫態）"
   },
+  "routers/auth.py::user_prefs": {
+   "count": 1,
+   "reason": "exempt: 刪除帳號時連帶清除該人的個人偏好（字級、外觀、首頁等，純偏好、無單據價值；帳號刪不成功時同一交易 rollback）"
+  },
   "routers/auth.py::users": {
    "count": 1,
    "reason": "exempt: 使用者帳號（有自己的生命週期規則）"

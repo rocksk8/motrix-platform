@@ -1,5 +1,11 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.2.28（next，未取號）— 2026-11-13（feat/estimate-quote-type；單號辨識改用單據類型規則）
+- 修正（後端）：`api/bonus.py` 從獎金操作的對象／標籤中抓「案件單號」時，原本寫死 `MQ-YYYYMM-NNN`，現改用 `helpers.doc_type.case_no_re()`（報價單 `MQ` ＋估價單字首，依設定中心規則導出）；舊的 `MQ-` 單號辨識結果不變。不動 API 形狀、資料、權限。
+
 ## 1.2.27 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api/payslips.py` 勞報單的模組動態通知（送出／核准／退回／作廢）加 `line_skip=True`——薪資與勞報屬敏感資料，模組動態永不發 LINE。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`（勞報單／獎金／薪資的模組動態不發 LINE）。

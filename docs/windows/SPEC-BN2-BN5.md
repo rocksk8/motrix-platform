@@ -55,7 +55,7 @@ bonus.html:109  <section x-show="isManager && itemsLoaded">     ← 整個區塊
 ② 🔴 `itemErr`／載入失敗的呈現**移到 section 外面**
    （或 section 的條件改成 `isManager && (itemsLoaded || itemErr)`）
 ③ 403 的文案要**說得出原因與出路**，不是「請重新整理」
-   ✅「獎金項目僅最高管理員（superadmin）可檢視。若需調整，請洽最高管理員。」
+   ✅「獎金項目僅最高管理者（superadmin）可檢視。若需調整，請洽最高管理者。」
    ☠️「載入失敗，請重新整理」—— **重新整理不會有幫助**，
       而它會讓使用者一直按，然後回報一個沒有壞的東西
 ```

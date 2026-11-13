@@ -18,6 +18,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
                               quotations as _api_quotations, quotation_stages as _api_quotation_stages, settlement_api as _api_settlement_api, overhead as _api_overhead, alt_plan as _api_alt_plan,
                               project_margin as _api_project_margin, field_cases as _api_field_cases)
+from modules.case.api import dashboard_groups as _dashboard_groups   # 首頁「我的工作」案件分組（2026-11-13）
 from modules.case import recycle_adapter as _recycle_adapter   # 資源回收筒 adapter（IP-RB1）
 from modules.case import rule_provider as _rule_provider         # BP-2：標示規則的案件紀錄提供者（唯讀、逐筆讀取權限過濾）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
@@ -38,14 +39,16 @@ _m0006 = importlib.import_module("modules.case.migrations.0006_material_changes"
 _m0007 = importlib.import_module("modules.case.migrations.0007_planned_pay_date")
 _m0008 = importlib.import_module("modules.case.migrations.0008_material_payment_planned_pay_date")
 _m0009 = importlib.import_module("modules.case.migrations.0009_stage_key")
+_m0010 = importlib.import_module("modules.case.migrations.0010_quote_doc_type")
 
 MODULE = ModuleSpec(
     key="case",
     # v6：case_material_changes（材料申請變更申請覆核表，33-M2a，2026-10-03）
     # v9：case_stages.stage_key（階段樣板 S-ST2，2026-10-14；NULL＝手動階段）
+    # v10：quotations.doc_type（單據類型 quote／estimate，2026-11-13；舊資料＝quote）
     # v7：case_extra_expenses.planned_pay_date（預定付款日，2026-10-05；提醒信＋行事曆「付款待辦」）
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up), (10, _m0010.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_quotation_stages.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router, _api_project_margin.router, _api_field_cases.router],
@@ -62,8 +65,14 @@ MODULE = ModuleSpec(
         # IP-91／IP-92：報價預設條款（L1 system）、PDF 版本紀錄（L1 pdf_gen）
         ("case.default_terms", "case"): quotations._default_terms,
         ("case.doc_version", "case"): quotations._record_doc_version,
+        # IP-ESTQ1：曾開過估價單的單號字首（L1 helpers/doc_type 改字首後仍認得舊單號）
+        ("case.estimate_prefixes", "case"): quotations._estimate_prefixes,
         # IP-ALT1：擇一方案客戶版輸出資料（L1 pdf_gen 取用；只含客戶看得到的內容）
         ("case.alt_view", "case"): alt_view.view,
+        # IP-DB1：首頁「我的工作」的案件分組（L1 routers/dashboard_mine.py 彙整，2026-11-13）
+        ("dashboard.mine_groups", "case"): _dashboard_groups.mine_groups,
+        # IP-GR1：登入問候語的「離開期間新增 N 張報價單」（L1 routers/auth.py 取用；2026-11-13）
+        ("greeting.new_quotes", "case"): _dashboard_groups.new_quotes_since,
         # IP-11：每日到期檢查
         ("daily.check", "case_deadlines"): case_deadlines.run_daily_checks,
         # IP-10：「待我簽核」佇列上 M01 的五種單據（彙整在 L1 routers/approval_queue.py，2026-09-27）

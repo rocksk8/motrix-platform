@@ -7,10 +7,12 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>獎金分潤 - MOTRIX 專案管理系統</title>
+  <title>獎金分潤 - MOTRIX PLATFORM</title>
   <script src="../static/ui.js"></script>
   <script src="../js/bonus.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -32,7 +34,7 @@
     .bn-badge{display:inline-block;font-size:12px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
     .st-gray{background:#F3F4F6;color:var(--text-secondary)}.st-blue{background:#DBEAFE;color:#1D4ED8}
     .st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
-    .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
+    .st-green{background:#DCFCE7;color:#15803D}.st-slate{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 已發放＝結束狀態：深灰藍（紫色只留給內部／機密；2026-11-13） */
     .bn-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
     .bn-sec{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 10px;font-family:var(--font-zh)}
     .bn-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:12px;font-family:var(--font-zh)}
@@ -177,7 +179,7 @@
               <div class="bn-tabs">
                 <button class="bn-tab" :class="{on: statusFilter === ''}" @click="statusFilter = ''; loadList()">全部</button>
                 <template x-for="st in statuses" :key="st">
-                  <button class="bn-tab" :class="{on: statusFilter === st}" @click="statusFilter = st; loadList()" x-text="st"></button>
+                  <button class="bn-tab" :class="{on: statusFilter === st}" @click="statusFilter = st; loadList()" x-text="MotrixStatus.label(st)"></button>
                 </template>
               </div>
             </div>
@@ -189,7 +191,7 @@
                    @click="select(it.quote_no)">
                 <div>
                   <span class="bn-case-no" x-text="it.quote_no"></span>
-                  <span class="bn-badge" :class="badgeClass(it.status)" x-text="it.status"></span>
+                  <span class="bn-badge" :class="badgeClass(it.status)" x-text="MotrixStatus.label(it.status)"></span>
                   <span class="bn-badge st-gray" x-show="it.noBonus">無獎金</span>
                 </div>
                 <div class="bn-case-name" x-text="(it.customer_name || '') + (it.project_name ? '／' + it.project_name : '')"></div>
@@ -209,7 +211,7 @@
                   <div class="bn-sec">
                     <span x-text="detail.case.quote_no"></span>
                     <span x-text="'　' + (detail.case.customer_name || '') + (detail.case.project_name ? '／' + detail.case.project_name : '')"></span>
-                    <span class="bn-badge" :class="badgeClass(detail.status)" x-text="detail.status" data-testid="bn-status"></span>
+                    <span class="bn-badge" :class="badgeClass(detail.status)" x-text="MotrixStatus.label(detail.status)" data-testid="bn-status"></span>
                   </div>
 
                   <!-- 還沒有草稿（最高管理者） -->
@@ -416,7 +418,7 @@
                         <span x-text="voucherKindLabel(v.kind)"></span>
                         <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
                         <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bn-voucher-unavailable"></span>
-                        <span x-text="v.voided ? '已作廢' : v.status"></span>
+                        <span x-text="MotrixStatus.label(v.voided ? '已作廢' : v.status)"></span>
                       </div>
                     </template>
                   </div>

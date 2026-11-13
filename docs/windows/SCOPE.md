@@ -628,7 +628,7 @@ EM6  ☠️ licensing.py `_stable_machine_id -> ''` => **機器綁定靜默降�
 ## ✅ 2026-09-23 追加：`BN9`（`STATE.md` §233）—— **使用者要的已經做了一半**
 
 使用者逐字：「非最高管理者只能看見自己可領到錢的獎金分潤單，其餘選項都看不到，
-產生獎金分潤單這些也只有最高管理員可見」
+產生獎金分潤單這些也只有最高管理者可見」
 
 ```
 ✅ 已實作  routers/bonus.py:307-310  `if not manager and not lines: continue`

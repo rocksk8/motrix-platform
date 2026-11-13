@@ -100,7 +100,7 @@
   {
    "group": "mywork",
    "href": "approval-queue.html",
-   "label": "簽核佇列",
+   "label": "待我簽核",
    "order": 30,
    "perm": [
     "quotation"

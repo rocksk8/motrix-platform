@@ -172,7 +172,7 @@ def test_raw_sites_formatter_is_request_free_and_pages_use_their_existing_read()
     assert "maxFrac: 4, raw: true" in (FRONT / "js/case-management-mchange.js").read_text(encoding="utf-8")
     qf = page_file("quotation-form.html").read_text(encoding="utf-8")
     assert "MotrixFormat.num(unit, {raw: true})" in qf and "MotrixFormat.num(d, {raw: true})" in qf
-    for name, needle in (("quotation-form.html", "'builder_stage_templates', 'ui_format']"), ("case-management.html", "'builder_stage_templates', 'ui_format']")):
+    for name, needle in (("quotation-form.html", "'builder_stage_templates', 'ui_format', 'builder_status_display']"), ("case-management.html", "'builder_stage_templates', 'ui_format']")):
         html = page_file(name).read_text(encoding="utf-8")
         assert needle in html and "MotrixFormat.apply(g.ui_format)" in html, name
         assert not re.search(r"read\(\['ui_format'\]", html), "%s：不可另發只讀 ui_format 的請求" % name

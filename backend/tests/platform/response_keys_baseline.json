@@ -627,6 +627,7 @@
  },
  "/api/approval-queue": {
   "k": [
+   "myCount",
    "myDelegatedFor",
    "queue",
    "queue[].count",
@@ -641,6 +642,7 @@
    "queue[].items[].customer",
    "queue[].items[].isEditApproval",
    "queue[].items[].linkedQuoteNo",
+   "queue[].items[].mine",
    "queue[].items[].projectName",
    "queue[].items[].quoteDate",
    "queue[].items[].quoteNo",
@@ -771,6 +773,23 @@
   ],
   "s": 200
  },
+ "/api/auth/greeting": {
+  "k": [
+   "action",
+   "action.href",
+   "action.label",
+   "awayLine",
+   "category",
+   "companyStyle",
+   "kind",
+   "line",
+   "pref",
+   "style",
+   "title",
+   "todoLine"
+  ],
+  "s": 200
+ },
  "/api/auth/login/qr-info": {
   "k": [
    "detail"
@@ -790,6 +809,65 @@
    "mustChangePassword",
    "role",
    "userId",
+   "username"
+  ],
+  "s": 200
+ },
+ "/api/auth/preferences": {
+  "k": [
+   "company",
+   "company.login_greeting_off",
+   "defaults",
+   "defaults.avatar_color",
+   "defaults.font_size",
+   "defaults.home_page",
+   "defaults.login_greeting",
+   "defaults.theme",
+   "options",
+   "options.avatar_color",
+   "options.avatar_color.choices",
+   "options.avatar_color.choices[].label",
+   "options.avatar_color.choices[].value",
+   "options.avatar_color.label",
+   "options.font_size",
+   "options.font_size.choices",
+   "options.font_size.choices[].label",
+   "options.font_size.choices[].value",
+   "options.font_size.label",
+   "options.home_page",
+   "options.home_page.choices",
+   "options.home_page.choices[].label",
+   "options.home_page.choices[].value",
+   "options.home_page.label",
+   "options.login_greeting",
+   "options.login_greeting.choices",
+   "options.login_greeting.choices[].label",
+   "options.login_greeting.choices[].value",
+   "options.login_greeting.label",
+   "options.theme",
+   "options.theme.choices",
+   "options.theme.choices[].label",
+   "options.theme.choices[].value",
+   "options.theme.label",
+   "prefs",
+   "prefs.avatar_color",
+   "prefs.font_size",
+   "prefs.home_page",
+   "prefs.login_greeting",
+   "prefs.theme"
+  ],
+  "s": 200
+ },
+ "/api/auth/profile": {
+  "k": [
+   "department",
+   "displayName",
+   "email",
+   "phone",
+   "quoteEmail",
+   "quoteEmailEffective",
+   "quoteEmailSource",
+   "role",
    "username"
   ],
   "s": 200
@@ -2486,6 +2564,28 @@
   ],
   "s": 200
  },
+ "/api/dashboard/mine": {
+  "k": [
+   "empty",
+   "generatedAt",
+   "groups",
+   "groups[].count",
+   "groups[].empty",
+   "groups[].href",
+   "groups[].hrefLabel",
+   "groups[].items",
+   "groups[].items[].href",
+   "groups[].items[].sub",
+   "groups[].items[].title",
+   "groups[].items[].tone",
+   "groups[].key",
+   "groups[].kind",
+   "groups[].order",
+   "groups[].title",
+   "partial"
+  ],
+  "s": 200
+ },
  "/api/dashboard/monthly": {
   "k": [
    "items",
@@ -3617,6 +3717,23 @@
   ],
   "s": 200
  },
+ "/api/login-greeting/phrases": {
+  "k": [
+   "categories",
+   "categories[].category",
+   "categories[].formal",
+   "categories[].formal.builtin",
+   "categories[].formal.custom",
+   "categories[].humor",
+   "categories[].humor.builtin",
+   "categories[].humor.custom",
+   "categories[].label",
+   "maxLen",
+   "maxLines",
+   "placeholders"
+  ],
+  "s": 200
+ },
  "/api/mail-types": {
   "k": [
    "calendarOnly",
@@ -3804,6 +3921,7 @@
  },
  "/api/next-quote-no": {
   "k": [
+   "doc_type",
    "quote_no"
   ],
   "s": 200
@@ -4698,6 +4816,7 @@
    "items[].customer_name",
    "items[].deal_tag",
    "items[].direct_margin_pct",
+   "items[].doc_type",
    "items[].edit_count",
    "items[].edit_last",
    "items[].historical",
@@ -4808,9 +4927,11 @@
    "created_by",
    "customer_name",
    "data",
+   "data.docType",
    "data.status",
    "deal_tag",
    "direct_margin_pct",
+   "doc_type",
    "export_count",
    "export_log",
    "id",
@@ -5087,9 +5208,11 @@
    "quotation.created_by",
    "quotation.customer_name",
    "quotation.data",
+   "quotation.data.docType",
    "quotation.data.status",
    "quotation.deal_tag",
    "quotation.direct_margin_pct",
+   "quotation.doc_type",
    "quotation.export_count",
    "quotation.export_log",
    "quotation.id",
@@ -6068,10 +6191,7 @@
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "k": [
-   "detail"
-  ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6192,10 +6312,11 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "k": [
-   "detail"
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "銷項發票清單|銷項發票清單（全部區間）"
   ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6308,6 +6429,7 @@
    "groups[].values.enforce_output_template",
    "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
+   "groups[].values.estimate_no_prefix",
    "groups[].values.ext_totp_enabled",
    "groups[].values.ext_totp_role_admin",
    "groups[].values.ext_totp_role_engineer",
@@ -6396,9 +6518,11 @@
    "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
+   "groups[].values.style",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
+   "groups[].values.tagline",
    "groups[].values.thousands",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
@@ -6539,6 +6663,7 @@
    "company_name_en",
    "contact_info",
    "email",
+   "external_email",
    "google_maps_api_key",
    "google_maps_browser_key",
    "google_maps_map_id",
@@ -6695,6 +6820,25 @@
    "public_base_url",
    "quota_thresholds",
    "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  },
@@ -6998,6 +7142,7 @@
    "companyName",
    "companyNameEn",
    "shortName",
+   "tagline",
    "taxId"
   ],
   "s": 200
@@ -7362,6 +7507,9 @@
    "[].modules",
    "[].notificationMuted",
    "[].phone",
+   "[].quoteEmail",
+   "[].quoteEmailEffective",
+   "[].quoteEmailSource",
    "[].role",
    "[].username"
   ],
@@ -7653,25 +7801,6 @@
    "[].photos",
    "[].user_id",
    "[].username"
-  ],
-  "s": 200
- },
- "/api/settings/line-notify/bindings": {
-  "k": [
-   "available",
-   "linked",
-   "total",
-   "unlinked",
-   "users",
-   "users[].confirmed",
-   "users[].display",
-   "users[].hasEmail",
-   "users[].lastReminded",
-   "users[].linked",
-   "users[].linkedAt",
-   "users[].modules",
-   "users[].role",
-   "users[].username"
   ],
   "s": 200
  }

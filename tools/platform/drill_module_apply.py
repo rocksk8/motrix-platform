@@ -201,7 +201,7 @@ def _api(port, path, data=None, token=None, method=None):
 
 
 def setup_company(root, port):
-    """本公司資料設定閘門（E4，COMPANY-SETUP-GATE §3.2）走**正式路徑**：新庫的最高管理員（臨時密碼）登入 → 改密碼 →
+    """本公司資料設定閘門（E4，COMPANY-SETUP-GATE §3.2）走**正式路徑**：新庫的最高管理者（臨時密碼）登入 → 改密碼 →
     設定頁存檔並「確認本公司資料」（PUT /api/settings/company-profile，confirmIdentity=true）→ status＝configured。
     公司資料是演練用的虛構資料（不命中開發者指紋 ⇒ 不需要開發者簽章檔）。回 status 回應。"""
     cred = (Path(root) / "backend" / ".initial_admin_credentials.txt").read_text(encoding="utf-8")
