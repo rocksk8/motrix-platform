@@ -265,33 +265,48 @@ SettingsMatrix.mount(el, {
 3. **維持立即生效、但存檔後要發通知**：**獎金預設、營運目標、報價條款**（§13-7 的通知元件）。
 4. 這些項目的原頁面也套用 §13 的草稿＋儲存列＋離開警告。
 
-### 15.A S5 補強：四項變更管制怎麼接（r3.3；PM 2026-11-13 使用者選單裁示後；依據＝`h3/S5-WRITE-POINTS.md` 的實際寫入點）
+### 15.A S5 補強：四項變更管制怎麼接（r3.4＝依 h11 規格審 MUST-FIX 1–8 修訂；原 r3.3 見 git `62defafcd`；依據＝`h3/S5-WRITE-POINTS.md`）
 
-**原則**：**不做第二條等待路徑**。四項都登記成登錄表群組，用「舊儲存轉接器（legacy adapter）」讀寫原本的儲存位置，讓 `plan()`／`publish()`／待生效／第二位最高管理者核准（`otherSuperadmins`）／帳本／通知全部沿用。讀取端（9 處扣繳、獎金傳票、T100 匯出、`profit_guard`）**不改**：待生效期間讀取端仍讀舊值，生效時才由轉接器寫入舊鍵（與現有雙寫機制同行為）。
+**原則**：**不做第二條等待路徑**。四項都登記成登錄表群組，用「舊儲存轉接器（legacy adapter）」讀寫原本的儲存位置，讓 `plan()`／`publish()`／待生效／第二位最高管理者核准（`otherSuperadmins`）／帳本／通知全部沿用。**讀取端**：只改 4 個咽喉點，改為經登錄表讀「生效值」（§15.A.5-1）；舊鍵雙寫保留作回退。
 
-#### 15.A.1 登錄表要新增的三個通用能力（S5 前置，與 S1c 同一檔，由 h4 實作，h12 審）
-1. **多鍵／自訂舊儲存轉接器**：`register_group(..., legacy_adapter=Adapter(read(conn)->{欄位:值}, write(conn, values, *, old=None))`；有 adapter 時忽略 `legacy_key`。`write` 在**生效當下的同一筆交易**內執行（可一次寫多鍵、刪標記）。`_legacy_values`／`_write_legacy` 先看 adapter。
-2. **`json` 欄位型別（不透明）**：值是 list／dict，儲存為 JSON；沒有逐欄差異、沒有預設組合；以欄位的 `summarize(old,new)->[白話行]` 產生「改了什麼」（確認視窗與通知用，例如「新增 1 個版本（2027-01-01 起）」「銀行帳戶 A 的科目 1113→1112」）；驗證交給群組的 `cross_check`（沿用原本的 `validate_versions`／pydantic）。**CAS（`expected_values`）對 json 欄位以內容雜湊比對**。
-3. **`loosen="both"` 擴到非數字欄位**（str／json／choice）：「任何變更都算放寬」＝需要第二位最高管理者核准（只有一位時改為原因＋等待 N 天＋警告＋通知）。現行限制「`loosen` 只能用在 int／float」要改成「`both` 可用於所有型別，`up`／`down` 仍只限數字」。
+#### 15.A.1 登錄表要新增的通用能力（S5 前置；與 S1c 同一檔，h4 實作、h12 審）
+1. **自訂舊儲存轉接器**：`register_group(..., legacy_adapter=Adapter(read, write))`；有 adapter 時忽略 `legacy_key`。
+   - `read(conn) -> {欄位: 值}`：讀舊儲存並**經原本的正規化**（扣繳走 `load_versions`：`tax_rules` 舊鍵退路、`_backfill`、`sort_versions`；預設值必須等於各模組原有預設——`DEFAULT_TAX_RULE_VERSIONS`、傳票科目 6111／2191／2252／2252／1113、口徑與公益比例取 `profit_guard` 的預設）。
+   - `write(conn, values, *, old=None)`：**只用傳入的 `conn`、在生效當下的同一筆交易內執行**，可一次寫多鍵、刪標記，**必須冪等**。**不得**呼叫 `legal_params.save_versions`／`_set_setting` 這類自開連線並 commit 的函式（會與登錄表寫鎖互相卡「database is locked」，或在交易外 commit）；要各自提供「接受 conn」的版本。
+2. **`json` 欄位型別（不透明）**：值是 list／dict，儲存為 JSON；沒有逐欄差異、沒有預設組合；`summarize(old,new)->[白話行]` 產生「改了什麼」（確認視窗、通知、待生效頁用，例如「新增 1 個版本（2027-01-01 起）」「銀行帳戶 A 的科目 1113→1112」；**畫面一律顯示摘要，不傾倒原始內容**）。驗證交給群組 `cross_check`。CAS 與大小限制見 §15.A.5-5／6。
+3. **`loosen="both"` 擴到非數字欄位**（str／json／choice）：任何變更都算放寬＝需要第二位最高管理者核准（只有一位時改為原因＋等待 N 天＋警告＋通知）。要改的位置：`SettingDef` 建構子的型別限制（`settings_registry.py` ~139–141；**對應的既有測試要反過來**：`both` 可用於所有型別，`up`／`down` 仍只限數字）、`_split._loosens`（~665；數字走原邏輯，str／json 用正規化後的 `!=`）、`banner_of`（~582–587；非數字欄位目前會落到 `if f.loosen:` 分支，要確認文字）、`show_value`（json 走 `summarize`）。`impact_scope` 一致性檢查（~107）不用改。**新增差異測試**：改完後所有現有群組的 `plan()` 輸出與改前逐字相同（目前沒有任何群組對非數字欄位設 `loosen`，預期零回歸）。
+4. **`cross_check(values, conn=None)`**：現行 `cross_check(合併後的值)` 沒有連線，但「科目存在且未停用」「T100 科目存在」「遷移標記存在」都要查資料庫。改成可接 `conn`（`publish` 傳它的交易連線；覆蓋層與 materialize 傳各自的）。**注意部分驗證**（覆蓋層、materialize）合併的是**預設值**而不是目前值——每條檢查都要寫成對「只有單一欄位」也成立。
+5. **`external=True` 群組旗標**（§15.A.5-7）：登記但不出現在設定中心一般群組清單與全域搜尋；待生效與最近變更仍會顯示它們。
+6. **`pending_exists` 衝突碼與 `supersede`**（§15.A.5-6，僅限 json 欄位）。
 
-#### 15.A.2 四項各自的接法
-| 項目 | 群組（風險） | 接法 | 放寬方向 | 舊端點改成 |
-|---|---|---|---|---|
-| 傳票科目（憑證帳戶＝獎金傳票科目） | `bonus_voucher`（money） | 5 個 `str` 欄位（expense／payable／withholding／nhi／bank）；轉接器讀寫 `bonus_case_voucher_*_code` 五個鍵；原 PUT 的「科目存在且未停用」（`account_problem`）搬進 `cross_check`（一個不合格整批不寫） | 5 欄都 `loosen="both"`（科目代號沒有大小方向，**任何變更都要第二人核准／等待**） | `PUT /cases/voucher-accounts` 改呼叫 `publish()`；回傳待生效資訊（與設定中心同形狀） |
-| 扣繳參數 | `tax_rules`（legal） | 一個 `json` 欄位 `versions`，轉接器讀寫 `tax_rules_versions`；`cross_check` 沿用 `validate_versions`＋`frozen_changes`（已生效版本鎖定不得改）；`summarize` 逐版列出新增／修改。**新增版本的「生效日」不得早於「待生效完成日」**（否則 409 白話提示），避免版本先生效、核准後才寫入的時間倒置 | `loosen="both"`（費率調高或調低都算；法令變動本來就應雙人看） | `PUT /api/legal-params/tax-rules` 改呼叫 `publish()` |
-| T100 科目代號 | `t100_export`（money） | 一個 `json` 欄位 `config`，轉接器讀寫 `t100_export_config`；`cross_check` 沿用 pydantic 驗證；**新增：儲存時檢查科目存在**（目前只在 GET 警示，儲存不擋）→ 不存在列入 `cross_check` 問題 | `loosen="both"` | `PUT /api/settings/t100-export-config` 改呼叫 `publish()`；GET 仍回 `codeIssues` |
-| 管銷／公益口徑 | `overhead_basis`（money） | **兩個 `str`＋`choices` 欄位**（`ruleMode`：legacy／v2；`charityMode`：direct／total）。口徑切換的連動（退回 legacy 時公益強制改回 direct 並刪兩個遷移標記）放在轉接器 `write`（同交易）；**前置檢查放 `cross_check`**（切到 v2／total 需遷移完成標記存在，否則該群組驗證失敗＝原本的 409）；原 `confirm:true` 的語意由「確認視窗＋第二人核准」取代。**遷移本身仍由工程師用 `tools/overhead_migrate.py`／`charity_migrate.py` 執行**（mockup 已這樣畫）。`overhead.default_pct` 與 `profit_rules.charity_rate_pct` **已在登錄表且已有變更管制，不動** | 兩欄 `loosen="both"` | `PUT /api/overhead/settings` 的 `ruleMode`／`charityMode` 部分改呼叫 `publish()`；`defaultPct` 維持現狀 |
+#### 15.A.2 四項各自的接法（共 **9 個新欄位**，S5 範圍就是這 9 個）
+| 項目 | 群組（風險） | 欄位 | 接法 | 放寬方向 | 舊端點改成 |
+|---|---|---|---|---|---|
+| 傳票科目（憑證帳戶＝獎金傳票科目） | `bonus_voucher`（money） | 5 個 `str`：expense／payable／withholding／nhi／bank | 轉接器讀寫 `bonus_case_voucher_*_code` 五個鍵；原 PUT 的「科目存在且未停用」（`account_problem`）搬進 `cross_check(values, conn)`（一個不合格整批不寫；單欄位部分驗證也成立） | 5 欄都 `loosen="both"` | `PUT /cases/voucher-accounts` 改呼叫 `publish()`；回傳待生效資訊（與設定中心同形狀） |
+| 扣繳參數 | `tax_rules`（legal） | 1 個 `json`：`versions` | 轉接器讀寫 `tax_rules_versions`（`read` 走 `load_versions` 的正規化）；`cross_check` 沿用 `validate_versions`＋`frozen_changes`；日期規則見 §15.A.5-8 | `loosen="both"` | `PUT /api/legal-params/tax-rules` 改呼叫 `publish()` |
+| T100 科目代號 | `t100_export`（money） | 1 個 `json`：`config` | 轉接器讀寫 `t100_export_config`；`cross_check` 沿用 pydantic 驗證，**新增「科目存在」檢查**（目前只在 GET 警示）；大小上限見 §15.A.5-5（`inventoryExpenseAccounts` 隨分類增長） | `loosen="both"` | `PUT /api/settings/t100-export-config` 改呼叫 `publish()`；GET 仍回 `codeIssues` |
+| 管銷／公益口徑 | `overhead_basis`（money） | 2 個 `str`＋`choices`：`ruleMode`（legacy／v2）、`charityMode`（direct／total） | **連動寫進「值」，不放轉接器**：`cross_check` 規則＝`ruleMode=legacy` 時 `charityMode` 必須是 `direct`（畫面同一次送出兩個欄位）；切到 v2／total 需遷移完成標記存在（`cross_check(values, conn)` 查）。轉接器 `write` 只寫兩個鍵＋刪標記（冪等）——否則舊鍵與登錄表定義列會分歧。遷移本身仍由工程師用 `tools/overhead_migrate.py`／`charity_migrate.py` 執行。`overhead.default_pct` 與 `profit_rules.charity_rate_pct` 已在登錄表且已有管制，**不動** | 兩欄 `loosen="both"` | `PUT /api/overhead/settings` 的 `ruleMode`／`charityMode` 部分改呼叫 `publish()`；`defaultPct` 維持現狀 |
+
+**每個新欄位都要有 `risk_text` 與 `impact_scope`（`effective="pending"`）**，否則治理檢查 `_spine_check_settings` 會失敗；擁有者功能要宣告這 4 個群組。9 欄＝5＋1＋1＋2。
 
 #### 15.A.3 邊界與注意
-1. **待生效中的一致性**：核准／到期寫入時，轉接器 `write` 要重新驗一次前置條件（例如遷移標記在等待期間被工程師刪掉）；不成立 ⇒ 該筆待生效標「無法套用」並通知最高管理者，不靜默失敗。
-2. **同一鍵的其他寫入者**：S5 開工第一步要全專案 grep 上述舊鍵的所有寫入點（tools／migrations／測試夾具除外），其餘寫入點若存在必須同樣改走 `publish()`，否則變更管制可被旁路。這一步的結果要貼進 S5 的 PR 說明。
-3. **維持立即生效、存檔後通知的三項**（獎金預設比例＝`bonus.py` PUT `/cases/settings`、營運目標＝`system.py` PUT `/api/settings/operating-targets`、報價條款／預設付款條件＝`system.py` 兩個 PUT）：各自 PUT 成功後呼叫 S1d 的 `notify_change(...)` 即可，**不進登錄表**。獎金預設的「兩次分開寫入」與營運目標「一次只存一年」屬 INVENTORY §七的後續票，S5 不處理但不得更糟。
-4. **復原（「復原這一批」）**：四項屬 money／legal，依 §4 影響大欄位規則**不適用復原這一批**；要改回去走一般修改（一樣要等待／核准）。
-5. **誰在畫面看得到**：四個原頁面（傳票科目在獎金設定、扣繳在法定參數、T100 在會計匯出設定、口徑在管銷設定）顯示「已送出，N 天後生效／等第二位最高管理者核准」＋連到設定中心的「待生效」；設定中心導覽「其他位置的設定」區仍只放連結。待生效頁文字取自 `plan().kind`／`otherSuperadmins`（§4-13），單一最高管理者時不得出現「第二位」。
-6. **測試（S5 自帶，單檔）**：每項一組——待生效（讀取端仍舊值）、核准後寫入舊鍵、撤銷、單一最高管理者情境、`cross_check` 拒絕（科目不存在／已凍結版本被改／遷移標記缺）、轉接器寫入多鍵一致、CAS（json 以雜湊）、舊端點回傳形狀；另加「舊鍵不得被登錄表以外的程式碼寫入」的守門（掃 `bonus_case_voucher_*`、`tax_rules_versions`、`t100_export_config`、`overhead_rule_mode`／`charity_basis_mode` 的 `_set_setting`／`INSERT`）。
+1. **待生效當下的前置條件重驗**：materialize 寫入時轉接器要重驗（見 §15.A.5-2 的失敗處理）。
+2. **同一鍵的其他寫入者**：S5 開工第一步全專案 grep 上述舊鍵的所有寫入點（tools／migrations／測試夾具除外），其餘寫入點也要改走 `publish()`，結果貼進 PR 說明；**但 grep 擋不住未來新增的旁路**，所以另加每日漂移檢查（§15.A.5-1）。
+3. **維持立即生效、存檔後通知的三項**（獎金預設比例＝`bonus.py` PUT `/cases/settings`、營運目標＝`system.py` PUT `/api/settings/operating-targets`、報價條款／預設付款條件＝`system.py` 兩個 PUT）：各自 PUT 成功後呼叫 S1d 的 `notify_change(...)`，**不進登錄表**。獎金預設「兩次分開寫入」、營運目標「一次只存一年」屬 INVENTORY §七的後續票，S5 不處理但不得更糟。**這三項不受上面的 MUST-FIX 影響，h3 可以先做。**
+4. **復原**：四項屬 money／legal，依 §4 影響大欄位規則**不適用「復原這一批」**；要改回去走一般修改（一樣要等待／核准）。
+5. **畫面**：四個原頁面顯示「已送出，N 天後生效／等第二位最高管理者核准」＋連到設定中心「待生效」；設定中心導覽「其他位置的設定」只放連結。文字取自 `plan().kind`／`otherSuperadmins`（§4-13），單一最高管理者時不得出現「第二位」。
+6. **測試（S5 自帶，單檔）**：每項一組——待生效、生效後讀取端立刻看到新值（不等排程）、核准後寫入舊鍵、撤銷、單一最高管理者情境、`cross_check` 拒絕（科目不存在／已凍結版本被改／遷移標記缺／legacy 時 charityMode≠direct）、轉接器寫入多鍵一致、CAS（json 正規化雜湊）、`pending_exists`、json 超大（>15000）、materialize 單群組失敗隔離（其他群組照常生效）、舊端點回傳形狀；加守門測試「舊鍵不得被登錄表以外的程式碼寫入」（掃 `bonus_case_voucher_*`、`tax_rules_versions`、`t100_export_config`、`overhead_rule_mode`／`charity_basis_mode` 的 `_set_setting`／`INSERT`）。
 
-#### 15.A.4 請 h11 規格審時特別看的點（h4 自己不確定）
-- **`loosen="both"` 擴到非數字**會不會影響現有任何群組（目前只有數字欄位設 `loosen`，應不影響；請確認 `_loosens()`、`requires_pending` 與 `impact_scope.effective` 一致性檢查）。
-- **json 欄位的 CAS 雜湊**與 `plan()` 的差異摘要在「到期 pending 覆蓋層」下是否正確。
-- 轉接器 `write` 在 `materialize_due`（排程）與核准路徑兩處都會被呼叫，**交易邊界**是否與現有 `_write_legacy` 一致。
-- 扣繳「新增版本生效日不得早於待生效完成日」的規則是否太硬（實務上法令公布後常有數週緩衝，應足夠；若使用者要補登已生效的更正版，需另開管道）。
+#### 15.A.5 h11 規格審 MUST-FIX 1–8 的決定
+1. **讀取端落差（選 A）**：待生效只在 `materialize_due()` 寫進舊鍵，而它由每日排程（`daily_checks.run_once`）執行；若讀取端直接讀舊鍵，會出現「設定頁說已生效、薪資／傳票／T100 還在用舊值」最多一天（排程失敗則更久）。**決定**：只改 4 個咽喉點，改為經登錄表讀生效值（含到期待生效覆蓋層）——`legal_params.load_versions`、`bonus_vouchers.configured_accounts`、`accounting_export._t100_config`、`profit_guard.rule_mode`／`charity_mode`／`migration_done`；體量小、其餘 9 處扣繳讀取端因此自動正確；舊鍵雙寫保留作回退。**另加每日漂移檢查**（併入 `daily_checks`）：`adapter.read(conn)` 對比登錄表「已 materialize 後的生效值」，不一致就警示最高管理者（`_stored` 偏好定義列，任何登錄表以外對舊鍵的寫入——工具、還原——都會讓登錄表看不見，光靠 §15.A.3-2 的 grep 擋不住未來新增的）。
+2. **`adapter.write` 的交易**：(a) 只用傳入的 `conn`（§15.A.1-1）；為 `legal_params`、獎金科目、T100、口徑各提供 conn 版寫入函式，原函式改成它的薄包裝。(b) `materialize_due` 目前所有群組同一筆交易，一個 `write` 丟例外會整批回滾、隔天又失敗，餓死其他群組。**決定**：每個群組各包一個 `SAVEPOINT`；轉接器失敗時 `config_ledger.cancel` 該群組的到期列並帶原因、**通知最高管理者**（現行取消路徑只有 `logger.warning`）、其餘群組照常。
+3. **`cross_check` 接 conn**：§15.A.1-4。
+4. **口徑連動放進「值」**：§15.A.2 最後一列。
+5. **json 待生效大小懸崖**：待生效列把新值放在 `config_changes.new_json`，`config_ledger._dump` 對超過 `_VALUE_MAX=20000` 字元的值會換成 `{"_truncated":true,…}`，覆蓋層讀到的是垃圾、驗證失敗、待生效被取消，復原與差異也會錯。**決定**：送出時 json 欄位超過 **15000 字元**就拒絕並回白話訊息（「這份設定太大，請聯絡工程師」）；上限放在欄位定義可調；加強制超大值的測試。
+6. **整份文件的遺失更新**：`publish` 會取代同一欄位先前未到期的待生效列，而 CAS 比對的是**生效值**（不含未到期待生效）。兩位管理者編輯扣繳參數時，B 的 CAS 通過並無聲覆蓋 A 的待生效整份文件——純量無妨，整份 json 不行。**決定**：json 欄位送出時若同欄位已有另一筆未到期待生效，回 409 新代碼 `pending_exists`（含 `by`、`at`），除非呼叫端帶 `supersede=true`（畫面確認後才帶）。**CAS 雜湊**＝標準 JSON（`sort_keys`、`separators=(",",":")`、`ensure_ascii=False`），**兩邊都對「正規化後的值」計算**（`adapter.read` 已經過 `_backfill`／`sort_versions`；送進來的值也先正規化），避免儲存形狀與讀出形狀不同造成假衝突。
+7. **群組集合守門**：註冊 4 個群組後登錄表由 50 變 54 個，會自動出現在一般清單，S2 的「頁面登錄＝登錄表群組集合」守門與 gen_seed／INVENTORY 的數字（①68／②65、186 欄）都會動。**決定**：新增 `external=True` 旗標（§15.A.1-5）——只放連結、不進批次／草稿、**排除在 ①② 之外**；S2 守門改成「頁面登錄 ∪ external 群組 ＝ 登錄表群組集合」；`gen_seed.py` 要跳過 external 群組（`--check` 也要認得），重跑後 ①②與群組／欄位數**不得因這 4 群組 9 欄而改變**（現行 ①68／②65；T83 凍結後預期 51 群組／186 欄，都不含這 9 欄）。
+8. **治理檢查**：每個新 money／legal 欄位要有 `risk_text` 與 `impact_scope`（`effective="pending"`），共 9 欄（§15.A.2）。
+- **(d) 扣繳生效日規則改為兩段**：送出時**軟檢查**——新增／修改的版本 `effectiveFrom` 必須晚於「今天＋確認天數」，白話提示；**硬檢查在 materialize**——以 `frozen_changes` 對當時的實際狀態重驗，若期間已變成凍結 ⇒ 取消該筆並通知（同 §15.A.5-2b）。「完成日」在需要核准時送出當下算不出來（實際生效＝max(生效日、核准時間、下次 materialize)），所以不在送出時硬擋。**緊急追溯更正**的逃生口明講：由工程師用工具處理（類似 `overhead_migrate`），設定中心做不到。
+
+#### 15.A.6 請 h11 複核的範圍
+只複核 §15.A.5 的 1–8 與 (a)(d)；h3 可先做不受影響的部分（§15.A.3-3 的三項通知）。

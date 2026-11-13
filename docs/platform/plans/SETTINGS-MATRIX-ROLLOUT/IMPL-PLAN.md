@@ -67,7 +67,7 @@
 - 檔案：`backend/helpers/settings_registry.py`、`backend/routers/settings_center.py`、`backend/helpers/config_ledger.py`（by／at 退路）、`backend/helpers/settings_groups.py`（`when` 與禁用詞原文）。
 - 內容：
   1. **逐欄 CAS**（SPEC §5-5）：`publish(group, values, ..., expected_values=None)` 在 `begin_write` 之後、寫入前逐欄比對目前**生效值**（含到期的 pending 覆蓋層）；不符丟 `SettingConflict(keys, by, at)`；路由接受 `expectedValues`，衝突回 409 `{code:'conflict', keys, by, at}`；沒有 `config_changes` 紀錄時 `by`＝「系統預設」或「舊路徑寫入，時間不明」。復原＝以 `expected_values=套用後的值` 回寫套用前的值，原因固定「復原批次」。
-  1b. **S5 前置的三個通用能力（SPEC §15.A.1，同一檔；h12 審，h11 先做規格審）**：`legacy_adapter`（多鍵／自訂舊儲存讀寫，生效當下同一筆交易）、不透明 `json` 欄位型別（含 `summarize`、CAS 用內容雜湊）、`loosen="both"` 擴到非數字欄位。這三項在 h11 規格審通過前不開工；S5（h3）依賴它們，所以 **S1c 的目標班次若延誤，S5 也跟著延**。
+  1b. **S5 前置的通用能力（SPEC §15.A.1／§15.A.5，同一檔；h12 審；h11 已做規格審，MUST-FIX 1–8 修訂版 r3.4 待其複核）**：`legacy_adapter`（`read`／`write(conn…)`，只用傳入連線、冪等）、不透明 `json` 欄位型別（`summarize`、正規化標準 JSON 雜湊 CAS、15000 字元上限、`pending_exists`／`supersede`）、`loosen="both"` 擴到非數字欄位、`cross_check(values, conn)`、`external=True` 群組旗標；`materialize_due` 每群組 SAVEPOINT＋失敗取消並通知；4 個讀取咽喉點改讀登錄表生效值＋每日漂移檢查。這三項在 h11 規格審通過前不開工；S5（h3）依賴它們，所以 **S1c 的目標班次若延誤，S5 也跟著延**。
   2. `SettingDef.when`（選填）；`field_views` 加 `source:{kind,by,at,reason}` 與 `help:{what,when,impact,recommend}`；`needs_external`（SPEC §7）。
   3. **禁用詞原文修正**：h12 的掃描（`h12/scan_banned_words.py`，AST＋tokenize；清單 `h12/banned-word-sites.csv`；從 repo 根目錄 `python -I -X utf8 …/h12/scan_banned_words.py [--csv out]`）：使用者可見處 **51 處「確認期間」**（`settings_groups.py` 43、`settings_registry.py` 8，含 plan()／警告句約 588／590／730／732／742／854 行）＋**4 處「影子」**（`settings_groups.py` 433／436／437／439；選項標籤「影子（只記錄）」改成「只記錄、不生效」）；兩處 true/false 是開發者 ValueError 訊息（registry 103／163 行），不算使用者介面，守門豁免或改字；「閘門」只出現在註解。（先前說的「約 35 處」是以不同句子計，實際是 51 處。）機械式改寫成「要等 N 天才生效」（N 由參數帶入，注意 plan()／警告句用 `%d` 天）；docstring 與註解豁免。守門測試掃 `question／help／impact／risk_text／choices／when` 的字串常數＋registry `plan()`／`effect()` 句子。`when` 輸入：甲 `h3/when_texts.json`（76 欄）、乙 `h12/when-texts.csv`（107 欄／30 群組；同群組同類欄位共用一句，「when 不得等於 help」守門要逐欄比對）。
   4. 兩種等待的文字分開（SPEC §4-13）：確認視窗與待生效頁的提示文字由 `plan().kind`／`otherSuperadmins` 決定，API 回傳，前端不寫死（B 類 1）。
@@ -110,8 +110,8 @@ h9 的 8 項（來源：h9 2026-11-13 訊息）：
 ### S5 §15 設定中心以外的變更管制（h3；審查 h10；T87，後端為主）
 - **使用者 2026-11-13 選單裁示**：選「影響金額的加（建議）」——傳票科目（含憑證帳戶＝獎金傳票科目）、扣繳參數、T100 科目、管銷／公益口徑改成要等待或核准；獎金預設、營運目標、報價條款維持立即生效，但存檔後要通知。PM 在 S5 上線前截圖時會再提醒使用者這是行為改變。
 - **開工前必須先決定的設計（h11 意見，採納）**：變更管制（`change_control`／pending／`plan()`）全在 `settings_registry.publish` 裡，而這四項的資料存在**登錄表之外**（例如傳票科目 `PUT /api/bonus/cases/voucher-accounts`）。「接既有機制不另造」的做法＝**把它們登記成登錄表群組＋舊儲存轉接器（legacy-store adapter）**，讓 `plan()`、待生效、放寬／第二位核准、`otherSuperadmins`、帳本全部沿用；**不做第二條 pending 路徑**。h4 先把這段寫進 SPEC §15（含每一項的「放寬方向」定義：哪種變更算放寬、哪些一律只等待），交 h11 做規格審，**過了 h3 才動程式**。h3 目前也在查這四處的寫入位置與能否不動核心，結果先回報再動。
-- 順序：SPEC §15.A 補強（h4，已寫，r3.3）→ h11 規格審 → S1c 的三個前置能力（h4）→ h3 實作四個群組與舊端點改造＋三項通知 → h10 審查。依據＝`h3/S5-WRITE-POINTS.md`（h3 的寫入點盤點，含 9 處讀取端、5 個傳票科目鍵、巢狀 T100 設定、口徑連動與標記）。
-- 四項放寬方向：全部 `loosen="both"`（沒有有意義的大小方向；任何變更都要第二位最高管理者核准，只有一位時改為原因＋等待＋警告＋通知）；讀取端不改。
+- 順序：SPEC §15.A 補強（h4，r3.4）→ h11 複核 MUST-FIX 1–8 → S1c 的三個前置能力（h4）→ h3 實作四個群組與舊端點改造＋三項通知 → h10 審查。依據＝`h3/S5-WRITE-POINTS.md`（h3 的寫入點盤點，含 9 處讀取端、5 個傳票科目鍵、巢狀 T100 設定、口徑連動與標記）。
+- 四項放寬方向：全部 `loosen="both"`（沒有有意義的大小方向；任何變更都要第二位最高管理者核准，只有一位時改為原因＋等待＋警告＋通知）。**讀取端：只改 4 個咽喉點（`load_versions`、`configured_accounts`、`_t100_config`、`profit_guard` 三個函式）改讀登錄表生效值**，不是「讀取端不改」（h11 MUST-FIX 1）。S5 範圍＝4 群組 9 欄（傳票科目 5、扣繳 1、T100 1、口徑 2），每欄要有 `risk_text`＋`impact_scope`；這 4 個群組是 `external=True`（不進設定中心一般清單、不計入 ①②）。h3 可先做不受影響的部分：三項「立即生效＋存檔後通知」。
 - 範圍（SPEC §15）：傳票科目（含**憑證帳戶＝獎金傳票科目**，PM 已裁示）、扣繳參數、T100 科目、管銷／公益口徑 → 確認期或第二位最高管理者核准才生效（接既有 `change_control`／`config_ledger`，不另造機制；是否需第二人看 `otherSuperadmins`，SPEC §4-13）；獎金預設、營運目標、報價條款維持立即生效、存檔後發通知（S1d）。
 - 原頁面改白話並加標示（名稱＋代碼＋標籤＋「?」），設定中心導覽「其他位置的設定」放連結。
 - 同票**不處理**「整包寫入沒有並行控制」（INVENTORY §七，後續票），但實作時不得讓問題更糟（例如 operating-targets 只存一年）。
