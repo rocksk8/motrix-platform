@@ -22,6 +22,8 @@ def _open(live_server, make_user, new_page, login_as, name):
 def test_extracted_email_card_renders_loads_and_saves(live_server, make_user, new_page, login_as):
     page = _open(live_server, make_user, new_page, login_as, "e2e_es1")
     page.locator("[data-testid=ns-base-url]").wait_for(state="visible", timeout=20000)
+    # 等卡片把伺服器設定讀回來（Alpine `loaded`）再填：欄位在讀取完成前就看得到，太早填會被「讀回的空值」蓋掉（T84 診斷：GET 回來後 base_url 被覆蓋成空字串）
+    page.wait_for_function("(() => { const el = document.querySelector('[data-testid=ns-base-url]'); return !!(window.Alpine && el && Alpine.$data(el).loaded) })()", timeout=20000)
     assert page.locator("#chk-enabled").count() == 1
     assert page.locator("#line-panel").count() == 1                      # 與 LINE 卡並存
     page.locator("[data-testid=ns-base-url]").fill("https://erp.example.com")
