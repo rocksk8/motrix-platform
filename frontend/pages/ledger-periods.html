@@ -124,8 +124,8 @@
                   </td>
                   <td x-text="p.closed_by ? (p.closed_by + '　' + (p.closed_at || '').slice(0, 16).replace('T', ' ')) : ''"></td>
                   <td style="text-align:right">
-                    <button class="lp-btn" x-show="p.status === 'open'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openClose(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '結帳'" data-testid="lp-close">結帳</button>
-                    <button class="lp-btn" x-show="p.status === 'closed'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openReopen(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '重開'" data-testid="lp-reopen">重開</button>
+                    <button class="lp-btn" x-show="p.status === 'open'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openClose(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請簽核中' : '結帳'" data-testid="lp-close">結帳</button>
+                    <button class="lp-btn" x-show="p.status === 'closed'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openReopen(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請簽核中' : '重開'" data-testid="lp-reopen">重開</button>
                     <button class="lp-btn" x-show="p.status === 'closed' && isSuper()" @click="lock(p)" data-testid="lp-lock">鎖定</button>
                     <button class="lp-btn" x-show="p.status === 'locked' && isSuper()" @click="openUnlock(p)" data-testid="lp-unlock">解鎖</button>
                   </td>

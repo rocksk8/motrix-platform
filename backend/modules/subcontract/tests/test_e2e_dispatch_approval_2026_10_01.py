@@ -127,7 +127,7 @@ def test_dispatch_card_review_flow(live_server, make_user, e2e_browser):
     assert row["approval_status"] == "待審核" and row["status"] == "draft"
     assert page.locator('[data-testid="dispatch-edit"]').first.is_disabled()
     assert page.locator('[data-testid="dispatch-withdraw"]').first.is_visible()
-    assert "含待審核 1 筆" in page.locator('[data-testid="dispatch-pending-note"]').first.inner_text()
+    assert "含待簽核 1 筆" in page.locator('[data-testid="dispatch-pending-note"]').first.inner_text()
     _shot(page, "3-pending")
 
     # 簽核人核准（簽核佇列頁另有自己的 e2e；這裡用同一支後端端點）

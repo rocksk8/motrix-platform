@@ -504,7 +504,7 @@
                 <th></th>
                 <th></th>
                 <th class="col-orig" style="border-left:2px solid #E5E7EB;width:55px">數量</th>
-                <th class="col-orig" style="width:84px" title="已核准出貨單的累計出貨數量／報價數量；小字＝待審核、簽核中的出貨單占用量；「—」＝沒有可歸屬的出貨紀錄（舊單、庫存出貨）">已出貨/數量</th>
+                <th class="col-orig" style="width:84px" title="已核准出貨單的累計出貨數量／報價數量；小字＝待簽核、簽核中的出貨單占用量；「—」＝沒有可歸屬的出貨紀錄（舊單、庫存出貨）">已出貨/數量</th>
                 <th class="col-orig" style="width:90px">報價金額</th>
                 <th class="col-actual" style="border-left:2px solid #FDE68A;width:55px">實際數量</th>
                 <th class="col-actual" style="width:104px">實際單位成本</th>
@@ -673,7 +673,7 @@
         </div>
         <div class="stl-sumbar" data-testid="stl-sumbar" :class="mapSummary.unCount === 0 ? 'stl-sumbar--ok' : (mapSummary.unPending ? 'stl-sumbar--bad' : 'stl-sumbar--warn')">
           <b x-text="mapSummary.unCount === 0 ? '✔ 全部已對應' : '⚠ 未對應 ' + mapSummary.unCount + ' 件'"></b>
-          <span x-show="mapSummary.unCount > 0" x-text="'NT$ ' + fmt(mapSummary.unTotal) + '（仍計入總成本）' + (mapSummary.unPending ? '・含待審核' : '')"></span>
+          <span x-show="mapSummary.unCount > 0" x-text="'NT$ ' + fmt(mapSummary.unTotal) + '（仍計入總成本）' + (mapSummary.unPending ? '・含待簽核' : '')"></span>
           <span x-show="settlement.status === 'finalized'" style="margin-left:auto;font-weight:700">已完結・唯讀</span>
         </div>
         <div style="overflow-x:auto" x-show="unmappedRows().length">
@@ -685,8 +685,8 @@
                   <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span><div class="stl-basis" :data-testid="'stl-kindbasis-' + u.kind + '-' + u.ref" x-text="kindBasis(u.kind)"></div></td>
                   <td>
                     <span x-text="u.label"></span>
-                    <span x-show="u.status" class="stl-badge-st" x-text="u.status"></span>
-                    <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
+                    <span x-show="u.status" class="stl-badge-st" x-text="MotrixStatus.label(u.status)"></span>
+                    <span x-show="u.pending" style="font-size:10px;color:#B45309">（待簽核）</span>
                     <span x-show="u.noPo" style="font-size:10px;color:#92400E">（未申請採購單）</span>
                     <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                   </td>
@@ -724,8 +724,8 @@
                     <td>
                       <span class="stl-badge-mapped" data-testid="stl-badge-mapped">已對應</span>
                       <span x-text="u.label"></span>
-                      <span x-show="u.status" class="stl-badge-st" x-text="u.status"></span>
-                      <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
+                      <span x-show="u.status" class="stl-badge-st" x-text="MotrixStatus.label(u.status)"></span>
+                      <span x-show="u.pending" style="font-size:10px;color:#B45309">（待簽核）</span>
                       <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                     </td>
                     <td>
@@ -1097,7 +1097,7 @@
         <div class="stl-card__head"><div class="stl-card__title">六、對帳與稽核</div></div>
         <div class="stl-card__body" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12px">
           <div><div style="color:var(--text-secondary)">金額口徑</div><b>報價／原始成本為未稅；精算後成本一律含稅（派發成本＝未稅承攬費＋稅額＋外包人員）</b></div>
-          <div><div style="color:var(--text-secondary)">認列基礎</div><b>待審核單據照計；已取消、草稿、已退回不計</b></div>
+          <div><div style="color:var(--text-secondary)">認列基礎</div><b>待簽核單據照計；已取消、草稿、已退回不計</b></div>
           <div><div style="color:var(--text-secondary)">狀態</div><b data-testid="stl-audit-status" x-text="settlement.status === 'finalized' ? '已完結（凍結）' : '草稿（未凍結）'"></b></div>
           <div><div style="color:var(--text-secondary)">凍結時間／人員</div><b data-testid="stl-audit-frozen" x-text="settlement.status === 'finalized' ? (settlement.finalizedAt ? MotrixFormat.dt(new Date(settlement.finalizedAt), 'plain') : '') + '／' + (settlement.finalizedBy || '') : '—'"></b></div>
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="MotrixFormat.dt(_loadedAt, { hour12: false })"></b></div>
@@ -1694,7 +1694,7 @@ function settlementPage() {
       if (!this._actualsOk) return []
       const L = [], ms = this.mapSummary, sm = this.summary, C = STL_CONFIG, f = n => this.fmt(n)
       if (ms.unCount) L.push({ key: 'unassigned', lv: C.BLOCK_ON_UNASSIGNED ? 'r' : 'a', ic: '⚠', t: '未對應 ' + ms.unCount + ' 件，NT$ ' + f(ms.unTotal), s: '仍計入總成本；對應到品項才會取代估計', go: '[data-testid="stl-unassigned"]' })
-      if (C.PENDING_WARN && this.pendingAllAmount) L.push({ key: 'pending', lv: 'a', ic: '⏳', t: '待審核金額 NT$ ' + f(this.pendingAllAmount), s: '待審照計成本，核准前可能變動', go: '[data-testid="stl-unassigned"]' })
+      if (C.PENDING_WARN && this.pendingAllAmount) L.push({ key: 'pending', lv: 'a', ic: '⏳', t: '待簽核金額 NT$ ' + f(this.pendingAllAmount), s: '待簽核的單據已先計入成本，核准前可能變動', go: '[data-testid="stl-unassigned"]' })
       this.settlement.items.forEach(i => {
         const name = '#' + this.itemNo(i.id) + ' ' + (i.origDescription || ''), pf = this.itemProfit(i), dpp = this.itemDpp(i)
         if (pf < C.LOSS_GP_BELOW) L.push({ key: 'loss-' + i.id, lv: 'r', ic: '✖', t: name + '：虧損 ' + f(pf) + '（毛利比 ' + this.pctTxt(this.itemPct(i)) + '）', s: '報價 ' + f(this.itemQuote(i)) + '，實際成本 ' + f(this.itemActual(i)), go: '#stl-row-' + i.id, item: i.id })
@@ -1713,7 +1713,7 @@ function settlementPage() {
       if (ms.unCount) (C.BLOCK_ON_UNASSIGNED ? hard : warns).push('有未對應項目（仍計入成本）：' + ms.unCount + ' 件，NT$ ' + this.fmt(ms.unTotal))
       const dlw = this.dlWarnings()
       if (dlw.length) warns.push('已存的派發單逐行對應有 ' + dlw.length + ' 處未生效（金額已回到未對應、仍計入成本，品項成本會因此少算）：' + dlw.map(w => w.message).join('；'))
-      if (this._actualsOk && this.pendingAllAmount) (C.BLOCK_ON_PENDING ? hard : warns).push('有待審核金額 NT$ ' + this.fmt(this.pendingAllAmount) + '（照計，核准前可能變動）')
+      if (this._actualsOk && this.pendingAllAmount) (C.BLOCK_ON_PENDING ? hard : warns).push('有待簽核金額 NT$ ' + this.fmt(this.pendingAllAmount) + '（照計，核准前可能變動）')
       if (this.settlement.items.some(i => this._noRecord(i))) (C.BLOCK_ON_NO_RECORD ? hard : warns).push('有品項無採購／對應紀錄且未手填（暫以估計計）')
       const state = hard.length ? 'blocked' : warns.length ? 'warn' : 'ok'
       return { hard, warns, state, icon: hard.length ? '✖' : warns.length ? '⚠' : '✔', title: hard.length ? '不可完結' : warns.length ? '可完結（有提醒，仍計入成本）' : '可完結' }

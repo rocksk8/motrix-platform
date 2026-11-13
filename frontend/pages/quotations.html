@@ -162,7 +162,7 @@
       </div>
       <a href="approval-queue.html" class="view-switch__btn" style="text-decoration:none">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        前往簽核佇列
+        前往待我簽核
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
       </a>
     </div>
@@ -181,7 +181,7 @@
         <div class="summary-item__val" x-text="'NT$ ' + MotrixFormat.num(summaryData.thisMonthTotal)"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
-        <div class="summary-item__label">待審核</div>
+        <div class="summary-item__label">待簽核</div>
         <div class="summary-item__val" :style="summaryData.pending > 0 ? 'color:var(--warning)' : ''" x-text="summaryData.pending + ' 張'"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
@@ -270,7 +270,7 @@
     <!-- ── 生命週期壓力帶（2026-09-14，比照簽核佇列的跑道）────────────────
          原本 9 個分頁是互斥的：一次只能看一個階段，看不到整條線的形狀，
          「有幾張草稿放著沒送審」得自己一個一個分頁點過去數。
-         四段＝草稿→送審中→已送出→已結束，點任一段就篩。 -->
+         四段＝草稿→送審中→已送出→已結束，點任一段就篩。（泳道的「送審中」＝待簽核＋簽核中；摘要卡與分頁的「待簽核」只算狀態值「待審核」——兩個名字不同、範圍也不同，刻意如此） -->
     <div class="vm-andon" style="margin-bottom:14px" x-show="!loading && quotes.length > 0" x-cloak>
       <template x-for="ph in LIFECYCLES" :key="ph.key">
         <button type="button" class="vm-andon__seg ql-phase"
@@ -546,9 +546,9 @@
       // 分頁保留不動——它的粒度比較細（已核准/已送出/已確認分得開）。
       LIFECYCLES: [
         { key: 'draft',  label: '草稿',   desc: '尚未送審',           color: 'var(--text-dim)' },
-        { key: 'review', label: '送審中', desc: '簽核流程進行中',      color: 'var(--warning)' },
+        { key: 'review', label: '送審中', desc: '簽核流程進行中',      color: 'var(--warning)' },      // 泳道保留「送審中」：它包含待簽核與簽核中兩種狀態；摘要卡／分頁的「待簽核」只算待審核（PM 裁示 2026-11-13）
         { key: 'sent',   label: '已送出', desc: '簽核完成、已對外報價', color: 'var(--success)' },
-        { key: 'closed', label: '已結束', desc: '未成案／已結案／取消', color: '#6D28D9' },  // 沿用 badge--settled 既有的紫
+        { key: 'closed', label: '已結束', desc: '未成案／已結案／取消', color: 'var(--tone-slate-fg)' },  // 沿用 badge--settled（2026-11-13 起深灰藍，紫色只留給內部／機密）
       ],
       phaseFilter: '',
 
@@ -634,7 +634,7 @@
         { key: 'all',    label: '進行中',
           title: '不含「未成案」與「已結案」。\n分頁上的草稿～已確認是報價單的簽核狀態；\n已結案、未成案是案件的成案標記，兩者是不同的欄位。' },
         { key: '草稿',   label: '草稿'  },
-        { key: '待審核', label: '待審核' },
+        { key: '待審核', label: '待簽核' },
         { key: '已核准', label: '已核准' },
         { key: '已送出', label: '已送出' },
         { key: '已確認', label: '已確認' },
@@ -787,7 +787,7 @@
         const s   = q.status   || ''
         const tag = q.deal_tag || ''
         if (s === '草稿')   return { text: '草稿',  cls: 'badge--draft' }
-        if (s === '待審核') return { text: '審核中', cls: 'badge--pending' }
+        if (s === '待審核') return { text: '待簽核', cls: 'badge--pending' }
         if (s === '簽核中') return { text: '簽核中', cls: 'badge--signing' }
         if (s === '已核准') return { text: '已核准', cls: 'badge--approved' }
         if (s === '已取消') return { text: '已取消', cls: 'badge--danger' }

@@ -1,0 +1,113 @@
+{
+ "notes": {
+  "sales:index": [
+   "{\"url\": \"/pages/index.html\", \"title\": \"\", \"h1\": [], \"primary\": [], \"buttons\": 0, \"inputs\": 0, \"hasPg\": false, \"hscroll\": false, \"text\": \"{\\\"detail\\\":\\\"Not Found\\\"}\"}",
+   "{\"url\": \"/pages/index.html\", \"title\": \"\", \"h1\": [], \"primary\": [], \"buttons\": 0, \"inputs\": 0, \"hasPg\": false, \"hscroll\": false, \"text\": \"{\\\"detail\\\":\\\"Not Found\\\"}\"}"
+  ],
+  "sales:case-management": [
+   "{\"url\": \"/pages/case-management.html\", \"title\": \"案件管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [\"前往報價單\"], \"buttons\": 23, \"inputs\": 3, \"hasPg\": false, \"hscroll\": false, \"text\": \"案件管理 0 件 清單 看板 矩陣 排序：預設 排序：日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 進行中 已成案 已結案 待精算 多選 我負責的 0逾期階段 0應收逾期 0缺單據 0 沒有符合的案件 第一次來？案件多半從報價單「成案」而來。左邊挑一個案件，右邊就會出現它的進度、文件與費用。 看說明 我知道了 還沒有案件 案件由報價單「成案」而來：報價單送出並完成簽核、客戶確定採用後，標記「已成案」，案件就會出現在左側清單。 前往報價單\"}",
+   "{\"url\": \"/pages/case-management.html\", \"title\": \"案件管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 20, \"inputs\": 3, \"hasPg\": false, \"hscroll\": false, \"text\": \"案件管理 0 件 清單 看板 矩陣 排序：預設 排序：日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 進行中 已成案 已結案 待精算 多選 我負責的 0逾期階段 0應收逾期 0缺單據 0 沒有符合的案件\"}"
+  ],
+  "sales:quotations": [
+   "{\"url\": \"/pages/quotations.html\", \"title\": \"報價單管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 19, \"inputs\": 5, \"hasPg\": false, \"hscroll\": false, \"text\": \"第一次來？這裡列出所有報價單。要開新單，按右上的「新增報價單」；已存在的單子點一下就能打開。 看說明 我知道了 報價單管理 共 0 張報價單 新增報價單 報價單列表 前往簽核佇列 本月報價 0 張 本月金額（已成案） NT$ 0 待審核 0 張 已確認 0 張 平均毛利率 —% 所有月份 所有案件進度 未提供 已提供 未成案 已成案 已結案 排序：預設 排序：報價日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 進行中 草稿 待審核 已核准 已送出 已確認 已結案 已取消 未成案 報價單號 客戶名稱 案件名稱 金額（含稅） 毛利率 有效天數 填單人 狀態 案件進度 報價日期 操作 載入中… 共 0 筆 · 顯示 0 / 0 筆\"}",
+   "{\"url\": \"/pages/quotations.html\", \"title\": \"報價單管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 19, \"inputs\": 5, \"hasPg\": false, \"hscroll\": false, \"text\": \"第一次來？這裡列出所有報價單。要開新單，按右上的「新增報價單」；已存在的單子點一下就能打開。 看說明 我知道了 報價單管理 共 0 張報價單 新增報價單 報價單列表 前往簽核佇列 本月報價 0 張 本月金額（已成案） NT$ 0 待審核 0 張 已確認 0 張 平均毛利率 —% 所有月份 所有案件進度 未提供 已提供 未成案 已成案 已結案 排序：預設 排序：報價日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 進行中 草稿 待審核 已核准 已送出 已確認 已結案 已取消 未成案 報價單號 客戶名稱 案件名稱 金額（含稅） 毛利率 有效天數 填單人 狀態 案件進度 報價日期 操作 載入中… 共 0 筆 · 顯示 0 / 0 筆\"}"
+  ],
+  "sales:quotation-form": [
+   "{\"url\": \"/pages/quotation-form.html\", \"title\": \"報價單 - MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [\"申請送出審核\"], \"buttons\": 28, \"inputs\": 32, \"hasPg\": false, \"hscroll\": false, \"text\": \"報價單 h7_sales 小 標 大 特 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 財務會計 我的工作 報價單 / MQ-202611-004 草稿 草稿已儲存 ● DB 案件進度 未標記 未提供 已提供 未成案 已成案 需完成簽核（已送出）才能標記「已成案」 儲存草稿 預覽報價單 申請送出審核 第一次來？由上而下填：客戶 → 品項 → 價格與條款。草稿可隨時儲存，確認無誤再送出審核。 看說明 我知道了 基 報價資訊 顯示成本欄 報價單號 報價日期 有效天數 * 版本 報價人 展示帳號 h7_sales h7_sa 聯繫電話 E-MAIL 一 客戶資訊 欄位旁的眼睛＝這一欄要不要印在報價單上（綠色＝印出，灰色斜線＝不印） 公司名稱 * 統一編號 聯絡人 電話 / 分機 E-MAIL 傳真 ▸ 個資蒐集告知紀錄 送貨地址 / 發票地址 二 案件資訊 案件名稱 * 交貨地點 三 品項明細 # 品名 / 規格說明 廠牌 / 型號 數量 單位 售價 未稅 NT$ 金額 未稅 NT$ 1 ＋備註 擇一方案 新增品項 新增區段標題 四 報價合計 運費 NT$ 折讓 申請折讓 NT$ \"}"
+  ],
+  "sales:approval-queue": [
+   "{\"url\": \"/pages/approval-queue.html\", \"title\": \"簽核佇列 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 10, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"簽核佇列 h7_sales 小 標 大 特 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 財務會計 我的工作 第一次來？「待我簽核」是輪到你處理的單據；點開一筆可以看內容，再選核准或退回。 看說明 我知道了 簽核佇列 你送審的單據都簽完了，也沒有需要你簽核的項目 待我簽核 0 件 沒有輪到你的項目 佇列是空的 流程中（等別人） 0 件 沒有等待其他簽核人的項目\"}",
+   "{\"url\": \"/pages/approval-queue.html\", \"title\": \"簽核佇列 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 10, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"簽核佇列 h7_sales 小 標 大 特 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 財務會計 我的工作 第一次來？「待我簽核」是輪到你處理的單據；點開一筆可以看內容，再選核准或退回。 看說明 我知道了 簽核佇列 你送審的單據都簽完了，也沒有需要你簽核的項目 待我簽核 0 件 沒有輪到你的項目 佇列是空的 流程中（等別人） 0 件 沒有等待其他簽核人的項目\"}"
+  ],
+  "sales:customers": [
+   "{\"url\": \"/pages/customers.html\", \"title\": \"客戶管理 — MOTRIX 專案管理系統\", \"h1\": [\"客戶管理\"], \"primary\": [\"新增客戶\"], \"buttons\": 33, \"inputs\": 2, \"hasPg\": true, \"hscroll\": false, \"text\": \"h7_sales 小 標 大 特 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 財務會計 我的工作 客戶與業務›客戶管理 客戶管理 共 3 筆客戶資料 新增客戶 客戶等級 3 全部 0 一般 0 VIP 0 潛在 3 未填 3 已停用 產業 0 製造業 0 科技業 0 流通業 0 服務業 0 建設業 0 其他 3 未填 匯入 Excel 匯出 Excel 公司名稱 內部簡稱 統一編號 主要聯絡人 電話 產業 負責業務 累計報價 最後往來 狀態 大 大明建設有限公司 — 23456789 — 03-1234567 — — — — 停用 編輯 報價 日誌 宏 宏達科技股份有限公司 — 12345678 — 02-2345-6789 — — — — 停用 編輯 報價 日誌 王 王小明 — — — 0912-345-678 — — — — 停用 編輯 報價 日誌\"}",
+   "{\"url\": \"/pages/customers.html\", \"title\": \"客戶管理 — MOTRIX 專案管理系統\", \"h1\": [\"客戶管理\"], \"primary\": [\"新增客戶\"], \"buttons\": 33, \"inputs\": 2, \"hasPg\": true, \"hscroll\": true, \"text\": \"h7_sales 小 標 大 特 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 財務會計 我的工作 客戶與業務›客戶管理 客戶管理 共 3 筆客戶資料 新增客戶 客戶等級 3 全部 0 一般 0 VIP 0 潛在 3 未填 3 已停用 產業 0 製造業 0 科技業 0 流通業 0 服務業 0 建設業 0 其他 3 未填 匯入 Excel 匯出 Excel 公司名稱 內部簡稱 統一編號 主要聯絡人 電話 產業 負責業務 累計報價 最後往來 狀態 大 大明建設有限公司 — 23456789 — 03-1234567 — — — — 停用 編輯 報價 日誌 宏 宏達科技股份有限公司 — 12345678 — 02-2345-6789 — — — — 停用 編輯 報價 日誌 王 王小明 — — — 0912-345-678 — — — — 停用 編輯 報價 日誌\"}"
+  ],
+  "sales:dev-crm": [
+   "{\"url\": \"/index.html\", \"title\": \"MOTRIX 專案管理系統 — 營運儀表板\", \"h1\": [\"晚安，h7_sales。目前沒有待您簽核的項目。\"], \"primary\": [\"前往簽核佇列\"], \"buttons\": 9, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"等我簽核 前往審核 → 單據 單號 客戶／案件 申請人 清單是空的：沒有輪到您的簽核單\"}"
+  ],
+  "sales:procurement": [
+   "{\"url\": \"/pages/procurement.html\", \"title\": \"採購管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 8, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"🔒 你沒有這個頁面的權限 這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。 左側選單中的項目才是你目前可以使用的功能。\"}"
+  ],
+  "sales:inventory": [
+   "{\"url\": \"/pages/inventory.html\", \"title\": \"庫存管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 8, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"🔒 你沒有這個頁面的權限 這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。 左側選單中的項目才是你目前可以使用的功能。\"}"
+  ],
+  "sales:cashier": [
+   "{\"url\": \"/pages/cashier.html\", \"title\": \"出納 - MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 8, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"🔒 你沒有這個頁面的權限 這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。 左側選單中的項目才是你目前可以使用的功能。\"}"
+  ],
+  "sa:index": [
+   "{\"url\": \"/pages/index.html\", \"title\": \"\", \"h1\": [], \"primary\": [], \"buttons\": 0, \"inputs\": 0, \"hasPg\": false, \"hscroll\": false, \"text\": \"{\\\"detail\\\":\\\"Not Found\\\"}\"}"
+  ],
+  "sa:case-management": [
+   "{\"url\": \"/pages/case-management.html\", \"title\": \"案件管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 23, \"inputs\": 3, \"hasPg\": false, \"hscroll\": false, \"text\": \"案件管理 2 件 清單 看板 矩陣 排序：預設 排序：日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 進行中 2 已成案 2 已結案 待精算 多選 我負責的 0逾期階段 0應收逾期 0缺單據 0 MQ-202610-005 已成案 王小明 NT$ 31,500 2026-10-20 MQ-202610-004 已成案 大明建設有限公司 NT$ 210,000 2026-10-12 第一次來？案件多半從報價單「成案」而來。左邊挑一個案件，右邊就會出現它的進度、文件與費用。 看說明 我知道了 從左側選擇案件開始作業 目前共 2 件已成案 / 已結案\"}"
+  ],
+  "sa:quotations": [
+   "{\"url\": \"/pages/quotations.html\", \"title\": \"報價單管理 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [], \"buttons\": 30, \"inputs\": 9, \"hasPg\": false, \"hscroll\": false, \"text\": \"第一次來？這裡列出所有報價單。要開新單，按右上的「新增報價單」；已存在的單子點一下就能打開。 看說明 我知道了 報價單管理 共 5 張報價單 新增報價單 報價單列表 前往簽核佇列 本月報價 3 張 本月金額（已成案） NT$ 0 待審核 1 張 已確認 0 張 平均毛利率 —% 所有填單人 所有月份 2026-11 2026-10 所有案件進度 未提供 已提供 未成案 已成案 已結案 排序：預設 排序：報價日期 排序：金額 排序：客戶名稱 排序：自訂（可拖曳） 1 草稿 尚未送審 1 送審中 簽核流程進行中 3 已送出 簽核完成、已對外報價 0 已結束 未成案／已結案／取消 進行中 (5) 草稿 (1) 待審核 (1) 已核准 (1) 已送出 (2) 已確認 已結案 已取消 未成案 報價單號 客戶名稱 案件名稱 金額（含稅） 毛利率 有效天數 填單人 狀態 案件進度 報價日期 操作 草稿 尚未送審 1 件 MQ-202611-001 宏達科技股份有限公司 辦公室監視系統 NT$ 126,000 — 30 天 — 草稿 2 天未異動 未標記 未提供 已提供 未成案 已成案 2026-11\"}"
+  ],
+  "sa:quotation-form": [
+   "{\"url\": \"/pages/quotation-form.html\", \"title\": \"報價單 - MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [\"申請送出審核\"], \"buttons\": 32, \"inputs\": 33, \"hasPg\": false, \"hscroll\": false, \"text\": \"報價單 h7_sa 小 標 大 特 在線 2 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 採購與庫存 報表 財務會計 勞務管理 我的工作 系統 報價單 / MQ-202611-004 草稿 待審核 已送出 已取消 已拒絕 草稿已儲存 ● DB 案件進度 未標記 未提供 已提供 未成案 已成案 需完成簽核（已送出）才能標記「已成案」 儲存草稿 預覽報價單 匯出次數 申請送出審核 第一次來？由上而下填：客戶 → 品項 → 價格與條款。草稿可隨時儲存，確認無誤再送出審核。 看說明 我知道了 基 報價資訊 顯示成本欄 報價單號 報價日期 有效天數 * 版本 報價人 展示帳號 h7_sales h7_sa 聯繫電話 E-MAIL 一 客戶資訊 欄位旁的眼睛＝這一欄要不要印在報價單上（綠色＝印出，灰色斜線＝不印） 公司名稱 * 統一編號 聯絡人 電話 / 分機 E-MAIL 傳真 ▸ 個資蒐集告知紀錄 送貨地址 / 發票地址 二 案件資訊 案件名稱 * 交貨地點 三 品項明細 # 品名 / 規格說明 廠牌 / 型號 數量 單位 售價 未稅 NT$ 金額 未稅 NT$ 1 ＋備註 擇一方\"}"
+  ],
+  "sa:approval-queue": [
+   "{\"url\": \"/pages/approval-queue.html\", \"title\": \"簽核佇列 — MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [\"核准\"], \"buttons\": 13, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"簽核佇列 h7_sa 小 標 大 特 在線 2 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 採購與庫存 報表 財務會計 勞務管理 我的工作 系統 第一次來？「待我簽核」是輪到你處理的單據；點開一筆可以看內容，再選核准或退回。 看說明 我知道了 簽核佇列 共 1 件待簽核，依「輪不輪到我」與停留天數排列 0 待我簽核 沒有逾時項目 0 流程中 等其他簽核人 0 全站逾時 停留 ≥ 4 天 待我簽核 1 件 今日／昨日送審 1 MQ-202611-002 報價單 今日 大明建設有限公司｜社區門禁 NT$ 315,000 單層審核 核准 退回 流程中（等別人） 0 件 沒有等待其他簽核人的項目 報價單 1 333ee07 · 啟動 2026-11-13 00:55\"}"
+  ],
+  "sa:customers": [
+   "{\"url\": \"/pages/customers.html\", \"title\": \"客戶管理 — MOTRIX 專案管理系統\", \"h1\": [\"客戶管理\"], \"primary\": [\"新增客戶\"], \"buttons\": 34, \"inputs\": 2, \"hasPg\": true, \"hscroll\": false, \"text\": \"h7_sa 小 標 大 特 在線 2 通知 ？ 修改密碼 登出 h 儀表板 客戶與業務 案件 採購與庫存 報表 財務會計 勞務管理 我的工作 系統 客戶與業務›客戶管理 客戶管理 共 3 筆客戶資料 新增客戶 客戶等級 3 全部 0 一般 0 VIP 0 潛在 3 未填 3 已停用 產業 0 製造業 0 科技業 0 流通業 0 服務業 0 建設業 0 其他 3 未填 匯入 Excel 匯出 Excel 公司名稱 內部簡稱 統一編號 主要聯絡人 電話 產業 負責業務 累計報價 最後往來 狀態 大 大明建設有限公司 — 23456789 — 03-1234567 — — — — 停用 編輯 報價 日誌 宏 宏達科技股份有限公司 — 12345678 — 02-2345-6789 — — — — 停用 編輯 報價 日誌 王 王小明 — — — 0912-345-678 — — — — 停用 編輯 報價 日誌 333ee07 · 啟動 2026-11-13 00:55\"}"
+  ],
+  "sa:dev-crm": [
+   "{\"url\": \"/pages/dev-crm.html\", \"title\": \"業務開發 - MOTRIX 專案管理系統\", \"h1\": [], \"primary\": [\"新增案件\"], \"buttons\": 15, \"inputs\": 6, \"hasPg\": false, \"hscroll\": false, \"text\": \"0 洽談中 都在 30 天內更新過 → 0 成案 已連結報價單 → 0 未成案 已結束 0 暫擱置 等條件成熟 — 成案率 成案 ÷（成案＋未成案） 業務開發 新增案件 所有人員 只看我負責的 最後更新 建立日期 案件名稱 客戶名稱 ↓ 由新到舊 年份 月份 1月 2月 3月 4月 5月 6月 7月 8月 9月 10月 11月 12月 無符合案件 從左側選取案件，或新增第一筆業務開發案件\"}"
+  ],
+  "sa:procurement": [
+   "{\"url\": \"/pages/procurement.html\", \"title\": \"採購管理 — MOTRIX 專案管理系統\", \"h1\": [\"採購管理\"], \"primary\": [], \"buttons\": 13, \"inputs\": 2, \"hasPg\": true, \"hscroll\": false, \"text\": \"採購與庫存›採購管理 採購管理 材料申請需求與採購進度追蹤 0 材料申請項目 全部顯示 0 待採購 尚未下單 → 0 已下單待料 等供應商出貨 → 0 已到料 可領用 0 筆 🗂 尚無材料申請資料，請至案件管理的材料申請頁面新增\"}"
+  ],
+  "sa:inventory": [
+   "{\"url\": \"/pages/inventory.html\", \"title\": \"庫存管理 — MOTRIX 專案管理系統\", \"h1\": [\"庫存管理\"], \"primary\": [\"進貨\"], \"buttons\": 11, \"inputs\": 3, \"hasPg\": true, \"hscroll\": false, \"text\": \"採購與庫存›庫存管理 庫存管理 現有庫存與安全存量，出貨時自動扣帳 全部類別 0 項料號 庫存總金額：NT$ 0 進貨批次（供應商/付款） 進貨 📦 尚無庫存料號，點擊「進貨」開始建立\"}"
+  ],
+  "sa:cashier": [
+   "{\"url\": \"/pages/cashier.html\", \"title\": \"出納 - MOTRIX 專案管理系統\", \"h1\": [\"出納\"], \"primary\": [], \"buttons\": 17, \"inputs\": 1, \"hasPg\": false, \"hscroll\": false, \"text\": \"出納 NT$ 0 待付款總額 NT$ 0 待收款總額 NT$ 0 本期已匯款 NT$ 0 本期已收款 0 逾期待處理筆數 待付款0 待收款0 獎金待發放0 待付款申請0 差額審核0 執行歷史 銀行對帳單比對 T100匯出 目前沒有待匯款的申請\"}"
+  ]
+ },
+ "log": {
+  "sales:index": [
+   "HTTP 404 /pages/index.html",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 404 /pages/index.html",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "sales:case-management": [
+   "HTTP 401 /api/system/modules/availability",
+   "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 401 /api/system/modules/availability",
+   "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "sales:approval-queue": [
+   "HTTP 404 /settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 404 /settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "sa:index": [
+   "HTTP 404 /pages/index.html",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "sa:case-management": [
+   "HTTP 401 /api/system/modules/availability",
+   "console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "HTTP 404 /pages/undefined/settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "sa:approval-queue": [
+   "HTTP 404 /settings/company-profile",
+   "console.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ }
+}

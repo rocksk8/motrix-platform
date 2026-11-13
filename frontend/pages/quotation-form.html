@@ -15,6 +15,7 @@
   <script src="../static/alt-items.js"></script>
   <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -792,7 +793,7 @@
       </div>
       <div style="padding:20px">
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.6">
-          此報價單已審核完成。輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定。
+          此報價單已簽核完成。輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定。
         </div>
         <div style="margin-bottom:4px">
           <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
@@ -824,14 +825,14 @@
       <!-- Header -->
       <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4B5563" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-        <span style="font-size:13px;font-weight:600;color:#0A0A0A">申請送出審核</span>
+        <span style="font-size:13px;font-weight:600;color:#0A0A0A">申請送出簽核</span>
         <button @click="showSubmitModal=false" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0 4px">&times;</button>
       </div>
       <!-- Body -->
       <div style="padding:18px 20px">
         <!-- A6（2026-11-11 UX）：按下去之前先講「這會做什麼」 -->
         <div data-testid="qf-submit-consequence" style="font-size:12px;color:#374151;line-height:1.7;margin-bottom:12px">
-          確認送出後，這張報價單會交給主管簽核並通知對方，狀態變成「待審核」；核准後才能標記「已成案」。
+          確認送出後，這張報價單會交給主管簽核並通知對方，狀態變成「待簽核」；核准後才能標記「已成案」。
         </div>
         <!-- 報價資訊 -->
         <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:11px 14px;font-size:12px;color:#374151;line-height:1.9">
@@ -853,7 +854,7 @@
           <div style="margin-top:14px">
             <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">
               代理送出原因 <span style="color:#ef4444">*</span>
-              <span style="font-weight:400;color:#9CA3AF;margin-left:4px">（將附於審核記錄）</span>
+              <span style="font-weight:400;color:#9CA3AF;margin-left:4px">（將附於簽核記錄）</span>
             </label>
             <textarea x-model="submitNote" @input="if(submitNote.trim()) submitNoteError=false"
                       placeholder="請說明代理送出的原因…"
@@ -1016,7 +1017,7 @@
           <select class="status-select-admin" :value="q.status"
                   @change="patchStatus($event.target.value, $event.target)">
             <option value="草稿">草稿</option>
-            <option value="待審核">待審核</option>
+            <option value="待審核">待簽核</option>
             <option value="已送出">已送出</option>
             <option value="已取消">已取消</option>
             <option value="已拒絕">已拒絕</option>
@@ -1027,7 +1028,7 @@
       <template x-if="session.role !== 'superadmin'">
         <span class="badge"
           :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
-          x-text="q.status"></span>
+          x-text="MotrixStatus.label(q.status)"></span>
       </template>
       <template x-if="q.editHistory && q.editHistory.length > 0">
         <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A">
@@ -1159,7 +1160,7 @@
                 :class="needsApproval ? 'btn-warning' : 'btn-primary'"
                 title="A6：送出後會交給主管簽核並通知對方；核准後才能標記「已成案」。">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出審核'"></span>
+          <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出簽核'"></span>
         </button>
       </template>
       <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !reviewEditing">
@@ -1181,7 +1182,7 @@
         </button>
       </template>
       <template x-if="(q.status === '待審核' || q.status === '簽核中') && !isCurrentTierApprover() && q.approval?.requestedBy !== session.username">
-        <span style="font-size:11px;color:#6B7280;padding:6px 10px;background:#F3F4F6;border-radius:var(--radius);border:1px solid #E5E7EB">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 審核</span>
+        <span style="font-size:11px;color:#6B7280;padding:6px 10px;background:#F3F4F6;border-radius:var(--radius);border:1px solid #E5E7EB">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 簽核</span>
       </template>
       <template x-if="(q.status === '待審核' || q.status === '簽核中') && q.approval?.requestedBy === session.username && !isCurrentTierApprover()">
         <span style="font-size:11px;color:#B45309;padding:6px 10px;background:#FEF3C7;border-radius:var(--radius);border:1px solid #FDE68A">⚠ 您為申請人，等待 <span x-text="pendingApproverLabel()"></span> 簽核</span>
@@ -1201,7 +1202,7 @@
     <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
       <template x-if="pendingReadOnlyBanner()">
         <div data-testid="qf-pending-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
-          <strong>此單目前<span x-text="q.status"></span>，僅簽核人可編輯。</strong>
+          <strong>此單目前<span x-text="MotrixStatus.label(q.status)"></span>，僅簽核人可編輯。</strong>
           您目前是唯讀；要修改內容，申請人請先按上方「收回草稿」，或請簽核人（<span x-text="pendingApproverLabel()"></span>）退回修改。
         </div>
       </template>
@@ -1424,7 +1425,7 @@
             <label class="form-label"><span x-text="fLabel('qbasic', 'validDays', '有效天數')">有效天數</span> <span class="req">*</span></label>
             <input class="form-input" type="number" min="1" x-model.number="q.validDays"
                    :class="q.validDays > pmCfg.maxValidDays ? 'warn' : ''" @change="setDirty(); checkApproval()">
-            <div class="form-hint warn" x-show="q.validDays > pmCfg.maxValidDays" x-text="'超過 ' + pmCfg.maxValidDays + ' 天需主管審核'">超過 30 天需主管審核</div>
+            <div class="form-hint warn" x-show="q.validDays > pmCfg.maxValidDays" x-text="'超過 ' + pmCfg.maxValidDays + ' 天需主管簽核'">超過 30 天需主管簽核</div>
           </div>
           <div class="form-group" x-show="fShown('qbasic', 'version')" :style="fo('qbasic', 'version')">
             <label class="form-label"><span x-text="fLabel('qbasic', 'version', '版本')">版本</span></label>
@@ -1845,7 +1846,7 @@
                         <span style="font-size:11px;color:var(--text-dim)">%</span>
                       </div>
                       <div x-show="item.margin < pmCfg.minItemMarginPct / 100 && item.cost > 0"
-                           style="font-size:9px;color:var(--danger);font-weight:600;text-align:center">需審核</div>
+                           style="font-size:9px;color:var(--danger);font-weight:600;text-align:center">需簽核</div>
                     </td>
                   </template>
                   <td class="qf-c-price">
@@ -1939,7 +1940,7 @@
                          @blur="$el.value = numShown(q.discount, $el, 'discount', true)"
                          @input="if (setNumField(q, 'discount', 'discount', $event.target.value)) { calcTotals(); setDirty(); checkApproval() }">
                 </div>
-                <div class="form-hint warn" x-show="q.showDiscount">折讓需主管審核</div>
+                <div class="form-hint warn" x-show="q.showDiscount">折讓需主管簽核</div>
               </div>
               <div class="form-group">
                 <label class="form-label">
@@ -1960,7 +1961,7 @@
                 </select>
                 <div class="form-hint warn" x-show="taxKind() === ''" data-legacy-tax
                      x-text="'此單使用已停用的稅率 ' + q.taxRate + '%，數字維持原樣；存檔前請改選法定稅別'"></div>
-                <div class="form-hint warn" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status !== 'approved'">非應稅需主管審核</div>
+                <div class="form-hint warn" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status !== 'approved'">非應稅需主管簽核</div>
                 <div class="form-hint" style="color:var(--success)" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status === 'approved'">已核准</div>
                 <!-- R2（營業稅法 §7、§8）：零稅率／免稅的依據。送出審核時必填；草稿可以先存 -->
                 <div x-show="taxKind() === 'zero' || taxKind() === 'exempt'" data-tax-basis style="margin-top:6px">
@@ -2126,7 +2127,7 @@
       <div class="approval-box" x-show="needsApproval" style="margin-bottom:14px">
         <div class="approval-box__title">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-          需要主管審核
+          需要主管簽核
         </div>
         <ul>
           <template x-for="r in approvalReasons" :key="r">
@@ -2139,12 +2140,12 @@
       <div class="approval-record" x-show="q.approval" style="margin-bottom:14px">
         <div class="approval-record__title">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
-          審核紀錄
+          簽核紀錄
         </div>
         <div><b>申請人：</b><span x-text="q.approval?.requestedByDisplay || q.approval?.requestedBy || ''"></span></div>
         <div><b>申請時間：</b><span x-text="q.approval?.requestedAt ? MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') : ''"></span></div>
         <div x-show="q.approval?.reasons?.length">
-          <b>審核品項</b>
+          <b>簽核品項</b>
           <ul style="margin:2px 0 0 14px;padding:0">
             <template x-for="r in (q.approval?.reasons||[])" :key="r">
               <li x-text="r"></li>
@@ -2152,7 +2153,7 @@
           </ul>
         </div>
         <template x-if="q.approval?.status === 'pending'">
-          <div style="margin-top:6px;color:#B45309;font-size:10px">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 審核</div>
+          <div style="margin-top:6px;color:#B45309;font-size:10px">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 簽核</div>
         </template>
         <template x-if="q.approval?.status === 'approved'">
           <div class="approval-record__approved">
@@ -4456,14 +4457,14 @@
             this.q.approval = prevApproval
             alert(this._saveConflict
               ? '這張報價單已被其他人更新，為避免覆蓋對方的修改，送審未生效。請重新載入頁面後再試一次。'
-              : '送出審核失敗，報價單仍是「' + (prevStatus || '草稿') + '」狀態，尚未送出。\n原因：' + this._saveFailReason())
+              : '送出簽核失敗，報價單仍是「' + (prevStatus || '草稿') + '」狀態，尚未送出。\n原因：' + this._saveFailReason())
             return
           }
           this.isNewRecord = false
           this.isDirty = false
           this.submitNote = ''
           const msg = document.createElement('div')
-          msg.textContent = '✓ 已送出審核申請，等待主管簽核'
+          msg.textContent = '✓ 已送出簽核申請，等待主管簽核'
           msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
           document.body.appendChild(msg)
           setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
@@ -4920,7 +4921,8 @@
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
           // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format', 'builder_status_display'], { token: tk })
+          if (window.MotrixStatus) window.MotrixStatus.init({ token: tk, flags: g })      // 管理者自訂的狀態名稱（旗標關 ⇒ 什麼都不改；與上面同一次請求，不多打）
           if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
           this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)   // S-ST2：開啟且有發布樣板 ⇒ 不自動建立預設階段
           // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）

@@ -476,7 +476,7 @@
             <p class="h-hero__sub" x-text="heroSummary"></p>
             <div class="h-hero__acts">
               <a href="pages/approval-queue.html" class="btn btn-primary" style="text-decoration:none" x-show="canQuotation">
-                前往簽核佇列
+                前往待我簽核
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </a>
               <a href="pages/daily-tasks.html" class="h-ghost">今日工作事項</a>
@@ -497,9 +497,9 @@
       <div class="h-wrap">
         <div class="h-band__g">
           <a href="pages/approval-queue.html" class="h-band__c">
-            <div class="h-band__k">等我簽核</div>
+            <div class="h-band__k">待我簽核</div>
             <div class="h-band__n" x-text="mineLoaded ? stats.waitingForMe : '—'"></div>
-            <div class="h-band__t">簽核佇列</div>
+            <div class="h-band__t">前往簽核</div>
             <p class="h-band__p" x-text="!mineLoaded ? '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '目前沒有待您簽核的單據。')"></p>
           </a>
           <!-- 這兩格的資料來自營運分析模組（/api/dashboard/funnel、/stats）；模組不在 ⇒ 顯示「—」＋明說，
@@ -745,9 +745,9 @@
       <div class="panel" data-testid="home-mine-panel">
         <div class="panel__head">
           <div class="panel__title">
-            等我簽核
+            待我簽核
           </div>
-          <a href="pages/approval-queue.html" class="panel__action">前往審核 →</a>
+          <a href="pages/approval-queue.html" class="panel__action">前往簽核 →</a>
         </div>
         <div class="table-scroll">
         <table class="data-table">
@@ -764,7 +764,7 @@
               </tr>
             </template>
             <tr x-show="mineLoaded && stats.waitingForMe > mineItems.length">
-              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往簽核佇列'"></td>
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往待我簽核'"></td>
             </tr>
             <tr x-show="!loading && mineLoaded && !mineItems.length">
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">清單是空的：沒有輪到您的簽核單</td>

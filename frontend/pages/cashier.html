@@ -75,7 +75,7 @@
     .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600}
     .rb-active{background:#DCFCE7;color:#15803D}
     .rb-closed{background:#F3F4F6;color:#374151}
-    .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-fin{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 結束狀態：深灰藍（2026-11-13） */
     .rb-received{background:var(--success-light);color:var(--success)}
     .rb-pending{background:#FEF3C7;color:#92400E}
     .rb-invoiced{background:#ECFDF5;color:#065F46}
@@ -718,7 +718,7 @@
               <div class="alert-bar" x-show="remitReviewNotice" x-text="remitReviewNotice" data-testid="cashier-remit-result"></div>
               <div class="alert-bar" x-show="remitReviews.notice" x-text="remitReviews.notice"></div>
               <template x-if="remitReviews.available && remitReviews.items.length===0">
-                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待審核的匯款差額</div>
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待簽核的匯款差額</div>
               </template>
               <template x-if="remitReviews.items.length>0">
                 <div class="panel">
@@ -1205,7 +1205,7 @@
           <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.actual" data-testid="pay-remit-actual"></div>
         </div>
         <div class="alert-bar" x-show="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0)) !== 0" data-testid="pay-remit-diff-warn">
-          ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+          ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></b> 元：標記後單據會標「差額待簽核」並通知管理員，核可前請確認金額。
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="payRemit.hasFee" data-testid="pay-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
         <div x-show="payRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.fee" data-testid="pay-remit-fee"></div>
@@ -1346,7 +1346,7 @@
           <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.actual" data-testid="bank-remit-actual"></div>
         </div>
         <div class="alert-bar" x-show="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0)) !== 0" data-testid="bank-remit-diff-warn">
-          ⚠ 實付與應付差 <b x-text="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+          ⚠ 實付與應付差 <b x-text="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></b> 元：標記後單據會標「差額待簽核」並通知管理員，核可前請確認金額。
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="bankRemit.hasFee" data-testid="bank-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
         <div x-show="bankRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.fee" data-testid="bank-remit-fee"></div>
