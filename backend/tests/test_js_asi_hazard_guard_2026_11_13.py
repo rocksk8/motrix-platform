@@ -7,20 +7,18 @@ JS **不會**補分號——兩行被解析成同一個運算式：
     _setMenuState('pending')
     (window.motrixBootFetch || fetch)('/api/platform/menu', …)     // ⇒ _setMenuState('pending')(window…) ⇒ TypeError
 
-結果整個選單排版在真的瀏覽器裡都不會套用（e2e 全紅，單元測試與靜態斷言看不到）。這支守門逐行掃 frontend/static、frontend/js 與頁面的行內 `<script>`：
+結果整個選單排版在真的瀏覽器裡都不會套用（e2e 全紅，單元測試與靜態斷言看不到）。這支守門逐行掃所有前端 JS（列舉走 `_frontend_sources.all_js()`，含模組自有 JS）與頁面的行內 `<script>`（頁面走 `source_tree.page_files()`）：
 每一個「以 `(`／`[` 開頭的程式行」，它前一個有內容的程式行必須是「語句已經結束或還在等下文」的結尾——`;` `{` `}` `,` `(` `[` `=` `:` `?` `&&` `||` `=>` 與二元運算子，
 或 `return`／`else` 等關鍵字（`return` 後換行會補分號，本來就安全）。修法：在 `(`／`[` 開頭的那一行最前面加 `;`（`;(window.motrixBootFetch || fetch)(…)`），或把上一行補分號。
 
 守門的判準是「上一行的結尾」，不是「下一行的樣子」；字串、註解、範本字串、行內 script 的行號都先處理過（正對照見最後兩題）。
 """
 import re
-from pathlib import Path
 
 import pytest
 
-from core import paths as _paths
-
-FRONTEND = Path(_paths.FRONTEND_DIR)
+from core import source_tree
+from tests import _frontend_sources as FS
 
 #: 上一行以這些結尾 ⇒ 語句已結束或還在等下文，下一行以 ( / [ 開頭是安全的
 _SAFE_END = (";", "{", "}", ",", "(", "[", "=", ":", "?", "&", "|", "+", "-", "*", "/", "%", "<", ">", "!", "^", "~")
@@ -96,12 +94,12 @@ def hazards(js_text):
 
 
 def _files():
-    for d in ("static", "js"):
-        for p in sorted((FRONTEND / d).glob("*.js")):
-            yield p
-    from core import source_tree
-    for p in source_tree.page_files():                    # frontend/pages ∪ modules/*/pages
-        yield p
+    yield from FS.all_js()                                # 前端 JS（不含 vendor）∪ 模組自有 JS
+    yield from source_tree.page_files()                   # 頁面（行內 <script>）
+
+
+def _name(p):
+    return FS.display(p) if p.suffix == ".js" else source_tree.rel(p)
 
 
 def _scan(p):
@@ -118,7 +116,7 @@ def test_no_line_starting_with_paren_or_bracket_follows_a_complete_expression():
             continue
         h = _scan(p)
         if h:
-            found[p.relative_to(FRONTEND).as_posix()] = h
+            found[_name(p)] = h
     assert not found, "下一行以 ( 或 [ 開頭、上一行沒有結尾分號 ⇒ 兩行會被黏成同一個運算式（在該行最前面加 `;`）：\n" + "\n".join(
         "  %s:%d  …%s ⏎ %s" % (f, no, a, b) for f, hs in found.items() for no, a, b in hs)
 
