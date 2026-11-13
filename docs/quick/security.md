@@ -30,6 +30,29 @@
   → 改密成功 → must_change_password=0 → 重新登入
 ```
 
+### §3.1b · 登入失敗稽核與鎖定告警（2026-11-12）
+
+**稽核**：四種登入失敗來源都寫 `audit_log`（`action='auth.login_failed'`、`result='fail'`、`status_code=401`），以 `reason_code` 區分；同帳號＋同 IP＋同來源 60 秒內合併成一列（累加 `detail.repeat`）。**不記密碼、驗證碼、token。**
+
+| 來源 | `reason_code` | `detail` | 寫入點 |
+|---|---|---|---|
+| 密碼錯誤 | `login_failed`（歷史值，不變） | `{ip, repeat}` | `routers/auth.py` 登入 |
+| TOTP 驗證碼／救援碼錯誤 | `totp_failed` | `{ip, repeat, method:"totp"}` | `/api/auth/login/totp` |
+| QR 核准（密碼）錯誤 | `qr_failed` | `{..., method:"qr"}` | `/api/auth/login/qr-approve` |
+| Passkey 失敗 | `passkey_failed` | `{..., method:"passkey"}` | `/api/auth/webauthn/login/complete`（六個失敗點） |
+
+四種都統一由 `_rl_fail(ip, username, source)` 寫稽核＋計入鎖定計數（以前只有密碼會寫稽核）。標籤對照在 `helpers.audit._FAIL_REASON_LABELS`／`LOGIN_FAIL_REASONS`。
+
+**鎖定告警**（`helpers/auth_alert.py`，信件類型 `auth_lockout`＝系統技術類、預設只給最高管理者、信件關閉被鎖住）：
+- **觸發**：`_rl_fail` 達到鎖定（5 次失敗／15 分鐘，以 IP；IPv6 取 /64）的那一刻發**一次**，不是每次失敗。內容：來源 IP、嘗試過的帳號（最多 5 個，**遮蔽**：存在的帳號原樣、不存在的只留前 2 字＋字數、像密碼的整個遮掉）、失敗次數、鎖定到幾點。
+- **節流**：同一個鎖定範圍在鎖定期間只發一次；全系統每個滾動 1 小時最多 10 則（`HOURLY_CAP`）、每個滾動 24 小時最多 20 則（`DAILY_CAP`，摘要也算），超過的合併成**一則摘要**（件數＋最多 5 個 IP），等兩個視窗都有空位才送。節流狀態在記憶體，重啟後清空（鎖定本身存 DB，仍有效）。**兩個上限可調**：`system_settings.auth_alert_limits = {"hourly_cap": n, "daily_cap": n}`（各 1～1000；設定頁沒有欄位，維運寫資料庫）。
+- **不拖慢登入**：只做記憶體判斷，發送在背景執行緒；任何例外只記 log，不影響登入回應（仍回 401／429）。
+- **收件人**：沿用「信件與通知收件設定」（預設最高管理者；可覆寫）。**Email 與 LINE 是獨立通道**：Email 只寄有 Email 且未退訂的人；LINE 不看 Email，依同一份收件設定解析帳號 ⇒ LINE「可收的角色」⇒ 本人 LINE 勾選 ⇒ 已綁定。同一個人兩邊都有就兩邊都發。
+- **LINE 條件**：LINE 公司層事件開關**預設關**（LINE 設定頁勾選「登入失敗鎖定告警」才發）；等級是 critical，**額度保留（用量 ≥ 90%）時照發**，推播後額度告警照常。**每月累計上限**：本事件 LINE 每月累計不超過月額度的 25%（`LINE_EVENTS["auth_lockout"]["month_cap_percent"]`；月額度用 LINE 回報值；**LINE 回報無上限（付費方案）時沒有每月上限**；本月用量讀不到時保守用 200＝免費方案），超過只寄 Email；可用 `system_settings.line_notify.month_cap_percent = {"auth_lockout": n}` 調（0＝不發 LINE）。只有收件人才會在「我要收的 LINE 通知」看到這一項（`audience="group"`）。
+- **已知限制**：⓪稽核表 `audit_log.username` 仍記嘗試帳號原文（可能是誤填的密碼；server log 與告警內容已遮蔽）；①LINE 開關預設關，上線後要有人勾；②節流與未送出的摘要在重啟時遺失；③被灌爆時（超過每小時上限）細節只留在稽核與 log，通知只有摘要；④每則通知給 N 位收件人耗 N 則 LINE 額度（最壞每天 20×N，且受每月 25% 上限約束）。
+- **上線步驟（F10，缺一則 LINE 告警是靜默的）**：套用步驟檔要加：①到「通知設定」→「LINE 通知」勾選「登入失敗鎖定告警」；②確認至少一位最高管理者（或「信件與通知收件設定」指定的收件人）已綁定 LINE；③（可選）確認 `auth_alert_limits`／`month_cap_percent` 的數字符合預期。Email 不受①②影響。
+- 通用規則（LINE 獨立通道、額度保留、已推播記號、事件字典）見 `helpers/line_notify.py`（`LINE_EVENTS`／`deliver_event`）與 `helpers/event_audience.py`。
+
 ---
 
 ### §3.2 · 解鎖密碼（報價單解鎖編輯）
@@ -73,7 +96,55 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | `users.totp_secret`/`totp_enabled`/`totp_recovery_codes` | DB v72，見 `_m072_totp()` |
 | 停用 | 需重新輸入目前密碼確認（比照既有敏感操作慣例），不需再帶驗證碼 |
 | 登入第二階段防暴力破解 | 每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼），錯誤同時也計入既有 per-IP 登入鎖定 |
+| 手機掃 QR 核准（2026-11-12 起） | **只接受「這支手機已登入同一個帳號」（`session_token` 分支）**；原本的「輸入密碼核准」已移除——它讓只知道密碼的人能自己核准自己的登入、繞過 TOTP（hichan-1 審查 F1）。手機沒登入時頁面顯示「請在手機上先登入同一個帳號再掃碼」；`qr-status`（發 session 的最後一步）也套帳號鎖與外網強制 TOTP |
 | Demo 帳號 | 不支援（`auth_login()` 的 demo 分支在檢查 totp 之前就已回傳，設計上就不會走到） |
+
+---
+
+### §3.3d · 外網登入防護：外網強制 TOTP＋單一帳號鎖定（2026-11-12，外網登入強化票）
+
+背景：`motrix-platform.miactw.com` 經 Cloudflare Tunnel（→ `https://localhost:666`）對外開放後，風險評估（`正式機回報/20261112_外網開放風險評估.md`）指出登入保護只有「每來源 IP 5 次／15 分鐘」，換很多 IP 就能持續猜同一個帳號的密碼；TOTP 當時只有 2 位最高管理者啟用。設定在設定中心群組「外網登入防護」（`external_login`），程式 `helpers/external_access.py`（判定＋強制規則）、`helpers/account_lock.py`（帳號鎖）、`routers/auth.py`（接線）。內網登入行為不變。
+
+**① 「外網」怎麼判定**（`external_access.classify`，**判斷不出來一律當外網**；任何一條成立＝外網）
+
+| 順序 | 條件 | 理由 |
+|---|---|---|
+| a | 帶 Cloudflare 標頭（`CF-Connecting-IP`／`CF-Ray`／`CF-Visitor`／`CF-IPCountry`） | 經隧道進來的請求一定有；區網直連不會有 |
+| b | `Host` 是設定的外網網域（預設空；要加第二層就在設定中心填網域，正式機填 Tunnel 的網域） | 設定可調（`external_hosts`） |
+| c | 帶任何代理痕跡標頭：`X-Forwarded-*`（含 `-Host`／`-Proto`）、`Forwarded`、`X-Real-IP`、`Via`、`X-Client-IP`、`True-Client-IP`、`X-Original-Forwarded-For`、`X-Originating-IP` 等，底線寫法（`X_Forwarded_For`）也算 | 有代理介入就不當內網（只看「有沒有出現」，不讀值） |
+| d | 來源 IP（`helpers.client_ip.client_ip`，T80 的可信判斷，**不讀 XFF**）解析不出來、是 loopback（127.x／::1），或不在內網網段 | 內網網段預設＝私有網段（10/8、172.16/12、192.168/16、169.254/16、fc00::/7、fe80::/10），設定可調（`internal_networks`）但**只收私有網段**，公網網段、0.0.0.0/0 與 loopback 會被忽略 |
+| e | 其餘（無代理痕跡且 IP 在內網網段） | ＝內網 |
+
+偽造只會往「更嚴」：區網自己加 CF 標頭／改 Host／塞 XFF ⇒ 被當外網；外網使用者無法把自己變內網（標頭由 Cloudflare 加、IP 由 T80 可信判斷）。
+**本機直連（loopback）預設不算內網**（F2）：同一台電腦上的非 Cloudflare 代理（netsh portproxy、frp、同機 nginx 去掉標頭）會讓外部使用者看起來像本機，若算內網就會免除 TOTP 與帳號鎖定。影響：直接在正式機上開 `https://localhost:666` 登入時適用外網規則——被要求 TOTP 的角色必須已啟用（最高管理者已啟用；管理員／財務未啟用者本機也登入不了，請從區網登入）；`tools/deploy_dashboard.py` 等本機工具的登入同理（它支援輸入 TOTP 碼）。真的需要本機免 TOTP：設定中心「本機直連算內網」（`loopback_is_internal`，放寬方向、走確認期間＋第二位最高管理者核准）。
+⚠ **`internal_networks` 只填實際使用者所在的網段**（L-b）：預設是整組私有網段，範圍很寬。區網內若有 **NAT 偽裝**（來源位址被改寫成區網位址）或**非 Cloudflare 的反向代理且會去掉代理標頭**，外網請求到達本機時來源就是區網位址、也沒有代理標頭 ⇒ 會被**誤判為內網**，免除外網強制 TOTP 與帳號鎖定。
+  所以：① 把設定中心的「內網網段」縮到使用者真正在的網段（例如只填 `192.168.1.0/24`）；② 不要在區網內另架不加標頭的轉發（netsh portproxy、frp、同機 nginx 等）把外網導進來；③ 該設定放寬方向須經確認期間。這是設定前提，程式無法自己分辨「NAT 後的外網」。
+注意：同事在辦公室用外網網址（`https://motrix-platform.miactw.com`）登入，對系統來說就是外網（走 Cloudflare），適用外網規則；用內網位址登入才是內網。
+
+**② 外網強制 TOTP**：總開關 `ext_totp_enabled`（預設開）＋每個角色一個開關（預設 superadmin／admin／finance 開；sales／engineer／viewer 關，可在設定中心調整）。外網登入、該角色被要求、帳號 `totp_enabled=0` ⇒ **403** 並提示「請先在公司內網登入並啟用兩步驟驗證」；**密碼要先正確**才會看到這個訊息（錯密碼仍是通用的 401，不洩漏帳號資訊），拒絕不算密碼失敗、不計入鎖定、寫稽核 `auth.login_refused_external_totp`（`reason_code=ext_totp_required`）。已啟用 TOTP 的人走原本的挑戰流程。Passkey 登入（目前暫緩）同樣套用。`demo` 帳號不適用。只管「登入」；已發出的 session 不綁來源。放寬方向（關總開關、取消某角色、調高門檻…）一律走設定中心的確認期間＋第二位最高管理者核准，收緊立即生效。
+
+**③ 單一帳號鎖定**（不分 IP；預設 10 次／30 分鐘窗 → 鎖 30 分鐘）
+
+| 取捨 | 內容 |
+|---|---|
+| 經典做法的問題 | 任何人故意輸錯就能把別人鎖在門外（DoS），包含在公司內網的本人 |
+| **預設（模式 1，只鎖外網）** | 只計**外網來源**的失敗；鎖住時只擋外網登入，**內網照常能登入**；內網成功登入會解除該帳號的鎖；超級管理員可手動解鎖（`GET /api/auth/account-locks`、`POST /api/auth/account-locks/unlock`）；30 分鐘自動解除。攻擊者最多讓「該帳號暫時不能從外網登入」，不能讓人進不了系統 |
+| 模式 2（設定 `lock_scope=2`） | 不分來源計數、被鎖時連內網也擋；最嚴但有 DoS 風險，只建議遭受持續攻擊時暫用 |
+| 不被延長 | 鎖定期間的嘗試被直接擋、**不計數也不延長鎖定**，攻擊者無法靠持續送請求把鎖拉長 |
+| 不洩漏帳號是否存在 | 任何帳號名（含不存在的）一視同仁計數、同樣回 429 |
+| 預占計數（F4） | 登入入口（密碼、TOTP 步驟、Passkey）一進來就在**同一把鎖裡**檢查鎖＋把這次嘗試先算進去；窗口內放行滿門檻次後，第「門檻＋1」次當場鎖並拒絕 ⇒ 併發的猜測最多放行門檻次（以前是驗完才計數，40 個併發都能通過）。密碼正確時退回預占，成功登入清計數 |
+| 清表（F5） | 計數表上限 10,000 列；超過先丟整窗沒再嘗試的，再依（窗內次數少 → 最近一次舊）丟前半，**保留接近門檻的列**，塞滿一次性帳號名擠不掉已累積的受害帳號 |
+| 帳號名是攻擊者可控字串（F6） | 記憶體與資料庫的鍵都是雜湊（`acct:`＋SHA-256 前 20 碼），**資料庫不存帳號明文**；稽核／告警／log 只顯示「已存在的帳號」名稱（去控制字元、限長），不存在的帳號名（可能是被貼進帳號欄的密碼）只顯示雜湊前 8 碼與長度，明文不進鎖定稽核、告警、log。注意：既有的「登入失敗」稽核（`auth.login_failed`，helpers/audit.py）原本就記嘗試的帳號名，本票沒改它 |
+| 持久化 | 鎖定寫進 `login_rate_limit`（鍵 `acct:<小寫帳號>`），重啟後仍有效；失敗計數只在記憶體（重啟歸零，最壞情況是少算） |
+| 稽核／告警 | 鎖定那一刻寫 `auth.account_locked`（帳號、來源 IP、次數、門檻，不含密碼）；呼叫 `helpers.auth_alert.on_lockout(scope="account")`（與 IP 鎖定共用 auth_lockout 事件與每小時上限）；解鎖寫 `auth.account_unlocked` |
+
+**④ Cloudflare 限流**（使用者自己在後台設）：見 `docs/platform/guides/CLOUDFLARE-RATE-LIMIT-GUIDE.md`（免費方案 1 條規則、10 秒窗、依 IP；擋瞬間狂打，慢慢猜靠程式的 IP／帳號鎖定與 TOTP）。
+
+**⑤ 已知限制與交使用者決定的風險**（hichan-1 審查，維持原取捨）：
+- **F3 外網持續 DoS**：外網攻擊者可反覆讓某帳號「無法從外網登入」（鎖到期後立刻續鎖）。內網登入不受影響、內網成功登入會解鎖、超管可手動解鎖；若要連這個也消除，只能放棄帳號鎖（改靠 TOTP＋Cloudflare 限流）或改成「帳號鎖只在密碼驗證成功後才套」——都有更大代價，交使用者決定。模式 2 會把這個 DoS 擴大到內網。
+- **F8 403 當密碼探針**：外網、角色被要求 TOTP 而帳號未啟用時，密碼正確回 403（白話訊息）、錯誤回 401，攻擊者可據此得知密碼是否正確（不會拿到 session）。該拒絕刻意不計入鎖定（否則本人被鎖）；緩解：被要求 TOTP 的角色都盡快在內網啟用 TOTP（啟用後外網只會看到 TOTP 挑戰）。
+- **F7 合併順序**：帳號鎖定告警呼叫 `helpers.auth_alert.on_lockout(scope="account")`（hichan-3 的 auth_lockout 告警）；本分支必須在它**之後**合併，缺它時鎖定與稽核仍有效，但告警不會發出，並記 `logger.error`。
+- 同公司同事共用對外 IP 時，IP 鎖定仍是「一人輸錯 5 次鎖全辦公室外網」（既有行為，T80 起）——帳號鎖不影響這點；TOTP 啟用要在內網先做（外網沒啟用的角色進不來）。測試：`backend/tests/test_external_login_hardening_2026_11_12.py`。
 
 ---
 
@@ -252,3 +323,19 @@ main.py auth_middleware：token.startswith('DEMO_') → set_demo_mode(True)，
 - **路由 handler 內用 `threading.Thread(...)` 起的背景工作，一律要用 `db.spawn_bg_thread()` 取代直接呼叫 `threading.Thread`**（2026-08-01i 修復，見 §12）：`contextvars.ContextVar`（`_demo_mode`）只在建立當下的 context 裡有效，一般 `threading.Thread(...).start()` 起的新執行緒拿到的是全新、空白 context，裡面的 `is_demo_mode()`/`get_db()` 會誤判成正式環境——即使觸發的 request 其實是 demo session。`spawn_bg_thread()` 用 `contextvars.copy_context()` 把呼叫當下的 context 原封不動帶進新執行緒，修正後 demo 帳號核准出貨單/報價單不會再把 PDF 寫進正式共用資料夾、每日工作事項通知也不會再誤連正式庫寄信給真實同仁。**例外**（不需要、也不該用 `spawn_bg_thread()`）：(a) 伺服器啟動/排程觸發、不掛在任何 request 上的背景工作（如 `daily_tasks.py` 的 `_startup_catchup`、`reports.py` 的 `_catchup_monthly_reports`），本來就該永遠連正式庫；(b) 只吃呼叫端已解析好的純值參數、本身不呼叫 `get_db()`/`is_demo_mode()` 的葉節點執行緒（如 `email_notify.py` 的 `_async_send()`/`_send()`）
 - `reset_demo_db()` 用 SQL `DELETE`+`VACUUM`（同一連線內完成），不刪 `.db/-wal/-shm` 檔案本身 — 避免 Windows 掃毒/索引服務短暫鎖住剛建立的 WAL 檔案導致 `os.remove()` 失敗
 - `db.demo_reset_lock`（`threading.Lock`）包住整個「reset + 建立 demo 使用者/session」流程 — 兩個 demo 登入同時到達會搶跑同一個共用 db，造成 `IntegrityError`/database-is-locked；已用併發壓力測試驗證修正
+
+---
+
+### §3.6 · 授權（匯入、到期提醒；T83，2026-11-13）
+
+授權閘門（T80）本身的規則見 `docs/platform/LICENSE-EMERGENCY-PASS.md` 與 `helpers/licensing.py`；**匯入新授權**不需要工程師：最高管理者在「系統 → 授權」頁選擇授權檔、預覽、確認更換。
+
+| 規則 | 說明 |
+|------|------|
+| 誰可以 | 只有最高管理者；**示範帳號一律擋**（授權檔是整台機器共用的） |
+| 驗證 | 一律走 `licensing.verify_license(blob)`（不重寫驗章）；只換 `reason == ok` 的授權；驗的與存的是同一個字串 |
+| 換檔 | 先備份舊檔（`license_backups/`，留 30 份）→ 原子寫入 → 讀檔複驗 → 失敗自動還原 |
+| 限制 | 上傳 ≤ 32 KB；每帳號 10 點／10 分鐘（預覽 0.5 點）＋全域 60 點；本文巢狀深度上限；正式公鑰已內建時拒收開發金鑰簽的授權；稽核 `license.import`／`license.import_rejected`（不記授權內容） |
+| 豁免 | `/api/license/overview`、`/api/license/import` 在授權豁免清單內（授權失效時唯一能救回系統的動作）；豁免只跳過授權閘門，端點自己驗權限 |
+| status | `GET /api/license/status`（授權豁免、任何已登入者可讀）：**只有非示範最高管理者拿完整欄位**；其餘身分（含示範）只拿 `valid／reason／gate／blocked／emergency{active}／modules_unlicensed_count`，不含客戶名、到期日、機器指紋、模組清單 |
+| 到期提醒 | 剩 30／14／7 天頂端橫幅（`X-Motrix-License-Expiry`，**只有最高管理者**的回應帶、看得到）＋每日通知（信件；LINE 待事件登記表併入）；詳見 `docs/platform/LICENSE-IMPORT.md` |

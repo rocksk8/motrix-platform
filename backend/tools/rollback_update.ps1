@@ -301,6 +301,7 @@ function Stop-InstallService {
 }
 
 function Start-InstallService {
+    $script:RestartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore：舊行程在此之前已停；server.log.1 比這晚才算「本次行程輪替出來的」
     $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
     if ($task -and $task.State -ne "Disabled") {
         Start-ScheduledTask -TaskName $AutostartTaskName
@@ -440,14 +441,14 @@ $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_SNAPCL
 # 🔴 還原寫回要檢查結束碼（`RP3`）—— 與 `apply_update.ps1` 的自動回滾同一件事。
 # ☠️ 失敗不中止 ⇒ 流進下面的健康檢查 ⇒ 碰巧過了就報「已還原」，
 #    **而磁碟上是還原到一半的殘骸。**
-robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
+robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs license_backups /XF license.key license_emergency.key license.key.import-tmp license.key.restore-tmp autostart.bat .apply.lock heartbeat_config.json heartbeat_config.json.pending .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_backend" }
-robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
+robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs license_backups /XF license.key license_emergency.key license.key.import-tmp license.key.restore-tmp autostart.bat .apply.lock heartbeat_config.json heartbeat_config.json.pending .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_frontend" }
 foreach ($d in $RootProgramDirs) {
     $snap = Join-Path $rollbackDir $d
     if (-not (Test-Path $snap)) { continue }
-    robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
+    robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs license_backups /XF license.key license_emergency.key license.key.import-tmp license.key.restore-tmp autostart.bat .apply.lock heartbeat_config.json heartbeat_config.json.pending .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt .deployed_modules.json | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_root_dirs" }
 }
 # 程式檔清單（.deployed_files.json）要跟著程式回到快照那一版：快照裡有 ⇒ 上面已寫回；

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""定義治理 API（BP-1，t59）：版本帳本、任兩版差異、發布前影響預覽。僅超級管理員；旗標 `builder_governance.enabled` 關閉時一律 404。
+"""定義治理 API（BP-1，t59）：版本帳本、任兩版差異、發布前影響預覽。僅最高管理者；旗標 `builder_governance.enabled` 關閉時一律 404。
 
 邏輯與路由同檔（不新增 L0 公開介面；不改資料庫結構、不寫任何定義）。只讀（預覽會留一筆『看過預覽』稽核，不記內容）。還原沿用 `POST /api/definitions/{kind}/{key}/restore/{version}`。
 """

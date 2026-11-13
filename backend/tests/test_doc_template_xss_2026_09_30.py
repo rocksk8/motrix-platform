@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""W3 #2：輸出版型的儲存型 XSS。版型（超級管理員可存）裡的 class／width／count／colspan 會落進 HTML 屬性或決定輸出量，
+"""W3 #2：輸出版型的儲存型 XSS。版型（最高管理者可存）裡的 class／width／count／colspan 會落進 HTML 屬性或決定輸出量，
 `_esc` 沒跳脫引號＝可跳出屬性塞事件處理。修法：`_esc` 跳脫 `"`／`'`；屬性值走白名單（`_css_class`／`_css_width`／`_int_in`）；
 儲存驗證（`problems`）與渲染用同一組檢查，壞值存不進去、也渲染不出去。
 """

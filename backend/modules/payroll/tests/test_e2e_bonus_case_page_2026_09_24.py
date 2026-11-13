@@ -110,7 +110,7 @@ def test_superadmin_builds_draft_and_submits_in_page(live_server, make_user, e2e
     page.locator('[data-testid="bn-submit"]').click()
     page.wait_for_function(f"() => {DATA_JS}.msg === '已送審'", timeout=15000)
     assert _award()[0]["status"] == "待審核"
-    assert "待審核" in page.inner_text('[data-testid="bn-status"]')
+    assert "待簽核" in page.inner_text('[data-testid="bn-status"]')
 
 
 @pytest.mark.e2e

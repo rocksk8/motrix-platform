@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 from helpers import row_access
+from helpers import doc_type as _DT   # 估價單：轉建通知依單號字首顯示「報價單」或「估價單」
 from helpers import perm as _perm
+from helpers import email_notify as _en            # LINE 專屬事件（僅 LINE／細項）走 `_en._line_event`
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
@@ -251,6 +253,26 @@ def _user_map(conn) -> dict:
     return {r["id"]: (r["display_name"] or r["username"]) for r in rows}
 
 
+def _case_people_usernames(conn, row) -> list:
+    """案件相關人的帳號（LINE 細項事件的預設收件人）＝業務＋企劃＋被指派人＋建立者（只取啟用中的帳號）。
+    與停滯提醒、`row_access` 的「這個案件誰有權限」同一組人；管理員不在內（要收的話在設定頁「另加指定人員」）。"""
+    ids = []
+    for col in ("sales_persons", "planners"):
+        try:
+            ids += [int(i) for i in json.loads(row[col] or "[]")]
+        except Exception:
+            pass
+    keys = row.keys()
+    for col in ("assigned_to", "created_by"):
+        if col in keys and row[col]:
+            ids.append(row[col])
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return []
+    rs = conn.execute("SELECT username FROM users WHERE active=1 AND id IN (%s)" % ",".join("?" * len(ids)), ids).fetchall()
+    return [r["username"] for r in rs]
+
+
 REFERRER_MAX = 60
 
 
@@ -478,6 +500,7 @@ def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
             "業務開發", "新增案件",
             user.get("display_name") or user["username"],
             body.case_name.strip(), "dev-crm.html",
+            line_event="crm_case_created", line_usernames=_case_people_usernames(conn, row), line_exclude=[user["username"]],
         )
         return _case_out(conn, row, umap)
     finally:
@@ -682,7 +705,8 @@ def update_dev_case_status(
         _audit(_tok(authorization), "dev_case.status", "dev_case",
                str(case_id), f"{row['case_name']} → {body.status}")
         notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
-                                row["case_name"], "dev-crm.html")
+                                row["case_name"], "dev-crm.html",
+                                line_event="crm_case_status", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         return _case_out(conn, updated)
     finally:
         conn.close()
@@ -771,18 +795,25 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
                 args=(case_id, row["case_name"], new_dl, assignee["username"],
                       assignee_display, actor_display),
             )
-        if assignee_changed and old_user:                                 # 前任失去存取卻不知情（T73 稽核 S5）：站內通知，不寄信
+        if assignee_changed and old_user:                                 # 前任失去存取卻不知情（T73 稽核 S5）：站內通知，不寄信（LINE：僅 LINE 事件 `dev_case_unassigned`）
             _notify(old_user["username"], "dev_case_unassigned", str(case_id), row["case_name"],
                     f"{actor_display} 已將業務開發案件「{row['case_name']}」"
                     + (f"改指派給 {umap.get(new_to, '他人')}" if new_to else "取消指派") + "，您不再負責此案件。",
                     link="dev-crm.html")
-        if not assignee_changed and assignee:                             # 只改期限：站內，不寄信
+            _en._line_event("dev_case_unassigned", usernames=[old_user["username"]], exclude=[user["username"]],
+                            title="業務開發案件已不由您負責", rows=[("案件名稱", row["case_name"]), ("操作人", actor_display)],
+                            reason=("已改指派給 %s" % umap.get(new_to, "他人")) if new_to else "已取消指派")
+        if not assignee_changed and assignee:                             # 只改期限：站內，不寄信（LINE：僅 LINE 事件 `dev_case_deadline_changed`）
             _notify(assignee["username"], "dev_case_deadline_changed", str(case_id), row["case_name"],
                     f"{actor_display} 將業務開發案件「{row['case_name']}」的回覆期限"
                     + (f"改為 {new_dl}" if new_dl else "清除（目前未設定）") + "。",
                     link="dev-crm.html")
+            _en._line_event("dev_case_deadline_changed", usernames=[assignee["username"]], exclude=[user["username"]],
+                            title="業務開發案件回覆期限已調整", rows=[("案件名稱", row["case_name"]), ("新的回覆期限", new_dl or "已清除"), ("操作人", actor_display)],
+                            reason="請依新的期限回覆")
+        # 指派／調整期限的 LINE 已由 dev_case_assigned／dev_case_unassigned／dev_case_deadline_changed 負責 ⇒ 泛用的 module_activity 不再重複推（line_skip）
         notify_module_activity("業務開發", "指派案件" if assignee_changed else "調整回覆期限", actor_display,
-                               row["case_name"], "dev-crm.html")
+                               row["case_name"], "dev-crm.html", line_skip=True)
         return _case_out(conn, updated, umap)
     finally:
         conn.close()
@@ -842,7 +873,8 @@ def add_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: 
         _audit(_tok(authorization), "dev_case.progress", "dev_case", str(case_id), label,
                {"progressId": cur.lastrowid, "length": len(content)})
         notify_module_activity("業務開發", "更新進度回報", user.get("display_name") or user["username"],
-                                row["case_name"], "dev-crm.html", detail=content)
+                                row["case_name"], "dev-crm.html", detail=content,
+                                line_event="crm_case_progress", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         return {"entry": _progress_out(entry, umap), "case": _case_out(conn, updated, umap)}
     finally:
         conn.close()
@@ -870,7 +902,7 @@ def mark_converted(
         # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
         # converted_quote_no 就是一個從一開始就沒有意義的懸空參照。
         if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
-            raise HTTPException(400, f"報價單 {quote_no} 不存在，無法連結")
+            raise HTTPException(400, f"{_DT.label_of_no(quote_no)} {quote_no} 不存在，無法連結")
         conn.execute(
             "UPDATE dev_cases SET converted_quote_no=?, status='成案', updated_at=? WHERE id=?",
             (quote_no, now, case_id),
@@ -879,8 +911,9 @@ def mark_converted(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
                str(case_id), f"{row['case_name']} → {quote_no}")
-        notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
-                                f"{row['case_name']} → {quote_no}", "dev-crm.html")
+        notify_module_activity("業務開發", "轉建" + _DT.label_of_no(quote_no), user.get("display_name") or user["username"],
+                                f"{row['case_name']} → {quote_no}", "dev-crm.html",
+                                line_event="crm_case_converted", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))
         return _case_out(conn, updated)
     finally:
@@ -913,7 +946,7 @@ def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
         if target and not conn.execute(
             "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
         ).fetchone():
-            raise HTTPException(400, f"報價單 {target} 不存在，無法連結")
+            raise HTTPException(400, f"{_DT.label_of_no(target)} {target} 不存在，無法連結")
         requester_display = user.get("display_name") or user["username"]
         conn.execute(
             "UPDATE dev_cases SET pending_relink=1, relink_requested_by=?,"
@@ -989,7 +1022,7 @@ def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
             if target and not conn.execute(
                 "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
             ).fetchone():
-                raise HTTPException(400, f"報價單 {target} 已不存在，無法核准，請申請人取消或重新申請")
+                raise HTTPException(400, f"{_DT.label_of_no(target)} {target} 已不存在，無法核准，請申請人取消或重新申請")
             new_status = "洽談中" if not target else row["status"]
             conn.execute(
                 "UPDATE dev_cases SET converted_quote_no=?, status=?, pending_relink=0,"
@@ -1212,6 +1245,7 @@ async def create_dev_log(case_id: int,
             case_name_str,
             "dev-crm.html",
             detail="\n".join(_detail_lines),
+            line_event="crm_visit_logged", line_usernames=_case_people_usernames(conn, case_row_chk), line_exclude=[user["username"]],
         )
         _sync_customer_visit(conn, case_id, cur.lastrowid, "upsert", body.dict())
         # 行事曆「業務開發案件更新」（2026-09-30，預設關；開關在 L1 判斷）：同一案件同一天合併成一個事件
@@ -1355,8 +1389,11 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
         updated = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
         _audit(_tok(authorization), "dev_log.approve", "dev_log", str(log_id), "")
         case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
+        _case_full = conn.execute("SELECT * FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
         notify_module_activity("業務開發", "審核通過開發記錄", user.get("display_name") or user["username"],
-                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
+                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html",
+                                line_event="crm_log_approved", line_usernames=_case_people_usernames(conn, _case_full) if _case_full else [],
+                                line_exclude=[user["username"]])
         return _log_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -1548,6 +1585,10 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
                 mail_to.append(u["username"])
         if mail_to:                                   # 信件只寄「要回覆」的人，本文不放批示全文
             spawn_bg_thread(notify_dev_log_directive, args=(case_id, case_row["case_name"], mail_to, actor))
+        info_only = [urows[uid]["username"] for uid, must in want.items() if not must]
+        if info_only:                                 # LINE 也要通知「僅知會」的人（信件不寄；要回覆的人由 notify_dev_log_directive 內的 LINE 負責）；不放批示全文
+            _en._line_event("dev_log_directive", usernames=info_only, title="業務開發記錄批示（僅知會）",
+                            rows=[("案件名稱", case_row["case_name"]), ("批示人", actor)], reason="請登入系統查看")
         items = _directive_items(conn, user, case_id, only_root=did)
         return items[0]
     finally:
@@ -1603,6 +1644,9 @@ def reply_dev_log_directive(body: DevLogDirectiveReplyIn, case_id: int = Path(..
             _notify(u["username"], "dev_log_directive_reply", str(directive_id), case_row["case_name"],
                     "%s 回覆了業務開發案件「%s」的批示：%s" % (actor, case_row["case_name"], _snippet(content)),
                     link="dev-crm.html")
+        if recips:                                    # LINE：僅 LINE 事件 `dev_log_directive_reply`（信件沒有）；不放回覆內容
+            _en._line_event("dev_log_directive_reply", usernames=[u["username"] for u in recips],
+                            title="業務開發記錄批示有新回覆", rows=[("案件名稱", case_row["case_name"]), ("回覆人", actor)], reason="請登入系統查看回覆內容")
         return _directive_items(conn, user, case_id, only_root=directive_id)[0]
     finally:
         conn.close()

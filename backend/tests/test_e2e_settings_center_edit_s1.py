@@ -134,7 +134,7 @@ def test_choice_field_shows_each_options_impact_and_blocks_other_groups_while_di
 
 @pytest.mark.e2e
 def test_planned_group_shows_only_the_grey_card_with_the_train(live_server, make_user, e2e_browser):
-    """脊柱 E-b：planned 群組在清單裡標『開發中』，點開只有灰色卡片『開發中，預計 MSn 版提供』（句子只由 planned_train 組出），沒有欄位、分頁、儲存列。"""
+    """脊柱 E-b：planned 群組在清單裡標『開發中』，點開只有灰色卡片『開發中，尚未開放』（畫面不露出 MSn 班次代號），沒有欄位、分頁、儲存列。"""
     from core import spine
     from helpers import settings_registry as R
     snap = spine.snapshot()
@@ -150,7 +150,7 @@ def test_planned_group_shows_only_the_grey_card_with_the_train(live_server, make
         page.locator('[data-testid="sc-planned-chip-zz_e2e_plan"]').wait_for(timeout=20000)
         page.locator('[data-testid="sc-group-zz_e2e_plan"]').click()
         page.locator('[data-testid="sc-planned"]').wait_for(timeout=10000)
-        assert page.locator('[data-testid="sc-planned-text"]').inner_text() == "開發中，預計 MS3 版提供"
+        assert page.locator('[data-testid="sc-planned-text"]').inner_text() == "開發中，尚未開放"
         assert not page.locator('[data-testid="sc-tab-values"]').is_visible()
         assert not page.locator('[data-testid="sc-bar"]').is_visible()
         assert page.locator('[data-testid="sc-field-n"]').count() == 0

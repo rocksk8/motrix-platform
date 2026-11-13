@@ -146,10 +146,10 @@ def recworld(client, make_user, sent):
 def test_custom_record_approval_sends_four_kinds_of_mail(recworld):
     client, user, m1, m2, no, sent = recworld
     assert client.post("/api/custom/%s/records/%s/transitions/submit" % (CR, no), headers=user, json={}).status_code == 200
-    assert any("待審核" in s and no in s for s in _subjects(sent)) and ("wr_m1@example.invalid",) in [t for t, _s, _h in sent]
+    assert any("待簽核" in s and no in s for s in _subjects(sent)) and ("wr_m1@example.invalid",) in [t for t, _s, _h in sent]
     sent.clear()
     assert client.post("/api/custom/%s/records/%s/approve" % (CR, no), headers=m1, json={"note": ""}).status_code == 200
-    assert any("審核通知（第 2/2 層）" in s for s in _subjects(sent)) and ("wr_m2@example.invalid",) in [t for t, _s, _h in sent]
+    assert any("簽核通知（第 2/2 層）" in s for s in _subjects(sent)) and ("wr_m2@example.invalid",) in [t for t, _s, _h in sent]
     sent.clear()
     assert client.post("/api/custom/%s/records/%s/approve" % (CR, no), headers=m2, json={"note": ""}).status_code == 200
     assert any("已核准" in s for s in _subjects(sent)) and ("wr_ruser@example.invalid",) in [t for t, _s, _h in sent]

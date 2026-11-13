@@ -42,6 +42,15 @@ def _no_external_commands(monkeypatch):
 
 
 @pytest.fixture()
+def su_hdr(client, make_user):
+    """最高管理者：完整授權狀態（客戶、到期日、機器代碼…）只給他（T83 L5 追加，PM 裁示）；其他角色的精簡版見 test_license_import_2026_11_13.py。"""
+    username, password = make_user(username="lic_su_status", role="superadmin")
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+@pytest.fixture()
 def hdr(client, make_user):
     """已登入的一般管理者。登入端點在豁免清單裡，所以先登入再換金鑰也行；這裡在金鑰有效時登入。"""
     username, password = make_user(role="admin")
@@ -124,10 +133,10 @@ def test_the_conftest_key_is_a_real_signed_key_not_a_stub(license_test_key):
 
 # ── 情境 4：金鑰有效 ─────────────────────────────────────────────────────────
 
-def test_valid_key_lets_business_api_through(client, hdr):
+def test_valid_key_lets_business_api_through(client, hdr, su_hdr):
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 200, r.text
-    s = client.get("/api/license/status", headers=hdr)
+    s = client.get("/api/license/status", headers=su_hdr)
     assert s.status_code == 200 and s.json()["valid"] is True and s.json()["reason"] == "ok", s.text
 
 
@@ -164,12 +173,12 @@ def test_license_expiring_today_is_still_valid(client, hdr, install_key, sign):
     assert client.get(BUSINESS_API, headers=hdr).status_code == 200
 
 
-def test_expired_perpetual_is_not_blocked(client, hdr, install_key, sign):
+def test_expired_perpetual_is_not_blocked(client, hdr, install_key, sign, su_hdr):
     """永久授權過期的是維護期，不是使用權：不擋，只在 status 帶 expired 讓畫面提示。"""
     yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
     install_key(sign(expires=yesterday, kind=lic.LICENSE_KIND_PERPETUAL))
     assert client.get(BUSINESS_API, headers=hdr).status_code == 200
-    s = client.get("/api/license/status", headers=hdr).json()
+    s = client.get("/api/license/status", headers=su_hdr).json()
     assert (s["valid"], s["reason"], s["kind"]) == (False, "expired", "perpetual"), s
 
 
@@ -299,12 +308,15 @@ def test_exempt_paths_are_pinned():
     """豁免清單是具名常數，少一條或多一條都要被看見。"""
     assert lic.LICENSE_EXEMPT_PATHS == frozenset({
         "/api/ping", "/api/auth/login", "/api/auth/logout", "/api/license/status",
+        # T83（授權匯入）：授權失效時唯一能救回系統的動作就是匯入新授權；兩條端點自己驗「最高管理者＋非示範帳號」
+        # （tests/test_license_import_2026_11_13.py 釘住）
+        "/api/license/overview", "/api/license/import",
     })
 
 
 def test_without_a_key_the_customer_can_still_log_in_and_see_why(client, make_user, install_key):
     """客戶沒有金鑰時仍要能自救：登入、看 /api/license/status（知道為什麼被擋）、非 /api/ 的頁面載得出來。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     install_key(None)
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -332,6 +344,23 @@ def test_g_unauthenticated_request_gets_401_not_402(client, install_key):
     r = client.get(BUSINESS_API)
     assert r.status_code == 401, f"沒登入的請求要 401，不可以是 {r.status_code}：{r.text}"
     assert "license" not in r.text.lower()
+
+
+@pytest.mark.parametrize("qs", ["pt=garbage", "pt=1", "pt=%00"])
+def test_lg_s1_unauthenticated_uploads_pt_request_gets_401_not_402(client, install_key, qs):
+    """T80稽核 LG-S1：`/api/uploads/*?pt=…` 是 auth_middleware 唯一放行「沒帶 Authorization」的非公開路徑，
+    任何亂填的 pt 都會走進授權守門。沒有金鑰時它以前回 402＋完整 reason，對陌生人洩漏授權狀態。"""
+    install_key(None)
+    r = client.get("/api/uploads/anything/x.png?" + qs)
+    assert r.status_code == 401, f"沒登入只帶 pt 的請求要 401，不可以是 {r.status_code}：{r.text}"
+    assert "license" not in r.text.lower() and "reason" not in r.json(), r.text
+
+
+def test_lg_s1_uploads_pt_request_still_reaches_the_route_when_licensed(client, install_key, sign):
+    """正對照：有授權時 `?pt=` 照舊進路由（亂填的簽章 ⇒ 路由自己回 403，而不是被守門吃掉）。"""
+    install_key(sign())
+    r = client.get("/api/uploads/anything/x.png?pt=garbage")
+    assert r.status_code == 403, r.text
 
 
 def test_402_is_not_403(client, hdr, install_key):

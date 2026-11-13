@@ -73,7 +73,7 @@ MODULES = (
     ("contractor_list", "外包名冊", "勞務"),
     ("payslip", "勞報單", "勞務"),
     ("settings", "系統設定", "系統"),
-    ("audit_log", "歷史紀錄（全系統操作軌跡）", "系統"),
+    ("audit_log", "操作紀錄（全系統操作軌跡）", "系統"),
     ("shipping_export_log", "出貨單歷史紀錄", "系統"),
     ("module_versions", "版本紀錄", "系統"),
     ("file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"),

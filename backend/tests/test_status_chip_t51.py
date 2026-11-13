@@ -201,7 +201,7 @@ def test_e2e_chips_render_with_different_colours(live_server, make_user, new_con
     look = {}
     for st, i in ids.items():
         el = page.locator('[data-st-chip="%d"]' % i)
-        assert el.inner_text() == st
+        assert el.inner_text() == ("待簽核" if st == "待審核" else st)      # 2026-11-13 刻意改名：待審核 → 待簽核（資料鍵不變）
         look[st] = el.evaluate("e => { const c = getComputedStyle(e); return [e.className, c.backgroundColor, c.color] }")
     assert "st-chip--approved" in look["已核准"][0] and "st-chip--rejected" in look["已駁回"][0]
     assert "st-chip--void" in look["已作廢"][0] and "st-chip--pending" in look["待審核"][0] and "st-chip--draft" in look["草稿"][0]

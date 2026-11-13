@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """請款類型定義編輯頁（`expense-types.html`）v1：新增類型 → 驗證紅字 → 修正 → 存草稿 → 發布 → 改動 → 差異 → 還原；
-非超級管理員進不了定義 API。終點狀態＝畫面＋資料庫（ui_definitions.body_json）。
+非最高管理者進不了定義 API。終點狀態＝畫面＋資料庫（ui_definitions.body_json）。
 
 `expense_type` 種類與驗證器由 W1 的 A2-2（`helpers.expense_types`）登記；四個預設類型在定義庫裡沒有列，編輯頁要把它們併進清單、
 開得起來（以目前生效的預設當起點），改了發布成新版；已送審的單據仍釘在自己的 def_version。

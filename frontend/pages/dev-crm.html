@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>業務開發 - MOTRIX 專案管理系統</title>
+  <title>業務開發 - MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/public-flags.js"></script>
@@ -493,6 +493,26 @@
       .dc-form-row, .dc-form-row.triple { grid-template-columns: 1fr; }
     }
 
+    /* ── 手機版（2026-11-12）──────────────────────────────────────────
+       原本手機版把案件列表藏起來（display:none，要 mobileListOpen 才會開），但整頁沒有任何按鈕能把它打開 ⇒
+       手機上根本進不了案件。改成單欄流程：沒選案件＝列表（全寬）＋總覽；點案件＝詳情＋「← 案件列表」回上一層。 */
+    .dc-m-back { display: none; }
+    @media (max-width: 767px) {
+      .dc-shell { height: auto; min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); }
+      .dc-layout { flex-direction: column; overflow: visible; }
+      .dc-layout .dc-list, .dc-layout .dc-list.show { position: static; display: flex; width: 100%; min-width: 0; height: auto; border-right: none; border-bottom: 1px solid var(--border-light); overflow: visible; }
+      .dc-layout .dc-list.dc-has-sel { display: none; }
+      .dc-list__body { overflow: visible; }
+      .dc-right { overflow: visible; }
+      .dc-m-back { display: inline-flex; margin-bottom: 8px; min-height: 44px; }
+      .dc-detail-head { padding: 12px 14px 10px; }
+      .dc-case-card { padding: 14px; margin-bottom: 8px; }
+      .dc-case-card__name { font-size: 15px; }
+      .dc-funnel { padding: 8px 10px; }
+      .dc-funnel__s { flex: 1 1 calc(50% - 6px); min-height: 56px; }
+      .dc-shell input:not([type="checkbox"]):not([type="radio"]), .dc-shell select, .dc-shell textarea { font-size: 16px; }
+    }
+
     /* 深色模式：**刻意不在這裡寫任何色彩覆寫**（2026-09-14）。
        全站深色模式是對 body 的非 chrome 子元素套 `filter: invert(1) hue-rotate(180deg)`
        （見 style.css「DARK MODE」區塊），不是另一套色票。這裡原本有 11 條
@@ -530,7 +550,7 @@
     <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
             @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
       <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
-      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單／估價單</small></span>
     </button>
     <span class="dc-funnel__arrow" aria-hidden="true">→</span>
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
@@ -552,7 +572,7 @@
   <div class="dc-layout">
 
     <!-- ── 左欄：案件列表 ── -->
-    <div class="dc-list" :class="{'show': mobileListOpen}">
+    <div class="dc-list" :class="{'show': mobileListOpen, 'dc-has-sel': !!selectedCase}">
       <div class="dc-list__head">
         <div class="dc-list__title-row">
           <span class="dc-list__title">業務開發</span>
@@ -800,7 +820,7 @@
             <circle cx="9" cy="7" r="4"/>
             <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
           </svg>
-          <p>從左側選取案件，或新增第一筆業務開發案件</p>
+          <p>從案件列表選取案件，或新增第一筆業務開發案件</p>
         </div>
       </div>
 
@@ -808,6 +828,7 @@
         <div>
           <!-- detail header -->
           <div class="dc-detail-head">
+            <button type="button" class="btn btn-ghost btn-sm dc-m-back" data-testid="dc-m-back" @click="selectedCase = null">← 案件列表</button>
             <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
               <div style="flex:1;min-width:0">
                 <h2 class="dc-detail-title" x-text="selectedCase.caseName"></h2>
@@ -826,7 +847,7 @@
                   </a>
                   <button x-show="selectedCase.convertedQuoteNo && isAdmin && !selectedCase.pendingRelink"
                           class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
-                          @click="openRelinkModal()" title="申請修改／解除報價單連結">
+                          @click="openRelinkModal()" title="申請修改／解除報價單／估價單連結">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
                   <template x-if="selectedCase.pendingRelink">
@@ -851,7 +872,7 @@
               <template x-if="selectedCase.status === '成案' && !selectedCase.convertedQuoteNo">
                 <button class="btn btn-primary btn-sm" @click="openConvertModal()">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
-                  轉建報價單
+                  轉建報價單／估價單
                 </button>
               </template>
               <template x-if="selectedCase.status !== '洽談中'">
@@ -1348,39 +1369,39 @@
       </div>
     </div>
 
-    <!-- ── Modal：轉建報價單 ── -->
+    <!-- ── Modal：轉建報價單／估價單 ── -->
     <div class="dc-modal-bg" x-show="showConvertModal" x-cloak @click.self="showConvertModal=false">
       <div class="dc-modal" style="max-width:420px">
         <div class="dc-modal-head">
-          <h3>轉建報價單</h3>
+          <h3>轉建報價單／估價單</h3>
           <button class="btn btn-ghost btn-icon" @click="showConvertModal=false">✕</button>
         </div>
         <div class="dc-modal-body">
           <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;font-family:var(--font-zh)">
-            系統將開啟報價單表單，並預填以下資訊。
+            系統將開啟報價單／估價單表單，並預填以下資訊。
           </p>
           <div style="background:#F8FAFF;border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:14px;font-family:var(--font-zh)">
             <div style="margin-bottom:5px"><b>客戶名稱：</b><span x-text="selectedCase && selectedCase.customerName || '（未填）'"></span></div>
             <div><b>案件名稱：</b><span x-text="selectedCase && selectedCase.caseName"></span></div>
           </div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
-            報價單建立後，可輸入單號完成連結（選填）：
+            報價單／估價單建立後，可輸入單號完成連結（選填）：
           </div>
           <input class="dc-input" type="text" x-model="convertQuoteNo"
-            placeholder="MQ-YYYYMM-NNN（留空可後續補填）">
+            placeholder="輸入單號（留空可後續補填）">
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showConvertModal=false">取消</button>
-          <button class="btn btn-primary" @click="doConvert()">開啟報價單表單</button>
+          <button class="btn btn-primary" @click="doConvert()">開啟報價單／估價單表單</button>
         </div>
       </div>
     </div>
 
-    <!-- ── Modal：申請修改／解除報價單連結 ── -->
+    <!-- ── Modal：申請修改／解除報價單／估價單連結 ── -->
     <div class="dc-modal-bg" x-show="showRelinkModal" x-cloak @click.self="showRelinkModal=false">
       <div class="dc-modal" style="max-width:420px">
         <div class="dc-modal-head">
-          <h3>申請修改／解除報價單連結</h3>
+          <h3>申請修改／解除報價單／估價單連結</h3>
           <button class="btn btn-ghost btn-icon" @click="showRelinkModal=false">✕</button>
         </div>
         <div class="dc-modal-body">
@@ -1390,13 +1411,13 @@
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
             目前連結：<b x-text="selectedCase && selectedCase.convertedQuoteNo"></b>
           </div>
-          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單號（留空＝申請解除連結）</label>
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單／估價單號（留空＝申請解除連結）</label>
           <input class="dc-input" type="text" x-model="relinkQuoteNo"
-            placeholder="MQ-YYYYMM-NNN，留空表示案件變更需取消連結">
+            placeholder="輸入單號，留空表示案件變更需取消連結">
           <label style="display:block;font-size:12px;color:var(--text-secondary);margin:10px 0 4px;font-family:var(--font-zh)">申請原因（選填）</label>
           <textarea class="dc-input" x-model="relinkReason" rows="3"
             style="resize:vertical;min-height:56px"
-            placeholder="例如：報價單已取消，案件需求變更…"></textarea>
+            placeholder="例如：報價單／估價單已取消，案件需求變更…"></textarea>
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showRelinkModal=false">取消</button>
@@ -1961,6 +1982,31 @@ function devCrmPage() {
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
 
+    _showNoAccess() {
+      const main = document.querySelector('main')
+      if (!main || document.querySelector('[data-testid="dev-crm-no-access"]')) return
+      main.style.display = 'none'
+      const box = document.createElement('div')
+      box.className = main.className
+      box.setAttribute('data-testid', 'dev-crm-no-access')
+      box.innerHTML = '<div style="max-width:560px;margin:64px auto;padding:24px 28px;text-align:center;line-height:1.8">'
+        + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
+        + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">你目前沒有「業務開發」的使用權限</div>'
+        + '<div style="font-size:13px;color:var(--text-secondary,#4B5563);margin-bottom:18px">這個功能要由最高管理者在「使用者管理」替你的帳號開啟後才能使用。需要的話，請聯絡你的主管或系統管理員。若你剛被開通權限，請登出後重新登入。</div>'
+        + '<a class="btn btn-primary" href="../index.html">回首頁</a></div>'
+      main.parentNode.insertBefore(box, main.nextSibling)
+    },
+
+    // 向伺服器要這個人**現在**的角色與模組清單；失敗（網路、401）回 null（呼叫端當作「沒有新資訊」，照舊顯示無權限說明）。
+    async _liveModules() {
+      try {
+        const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + this.token } })
+        if (!r.ok) return null
+        const d = await r.json()
+        return Array.isArray(d.modules) ? { role: d.role || '', modules: d.modules } : null
+      } catch (e) { return null }
+    },
+
     async init() {
       if (this._initDone) return
       this._initDone = true
@@ -1973,7 +2019,26 @@ function devCrmPage() {
       const mods = Array.isArray(this.session.modules) ? this.session.modules : []
       this.isAdmin = role === 'superadmin' || role === 'admin'
       if (!this.isAdmin && !mods.includes('dev_crm')) {
-        location.href = '../index.html'; return
+        // 審查 L4：localStorage 的 session.modules 是登入當下的快照，之後只靠 sidebar.js 背景刷新（非同步、而且在這個判斷之後才回來）。
+        // 剛被最高管理者開通權限的人，這裡會讀到舊清單而被擋。擋之前先向 /api/auth/me 要**即時**的模組清單（一支小請求，只在要擋人時才發）：
+        // 已經有權限 ⇒ 把 localStorage 補成最新的並放行；真的沒有 ⇒ 才顯示說明。
+        const live = await this._liveModules()
+        if (live && (live.role === 'superadmin' || live.role === 'admin' || live.modules.includes('dev_crm'))) {
+          try {
+            const st = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+            st.role = live.role
+            st.modules = live.modules
+            localStorage.setItem('motrix_session', JSON.stringify(st))
+          } catch (e) { /* 寫不回去不影響這次放行 */ }
+          this.session.role = live.role
+          this.session.modules = live.modules
+          this.isAdmin = live.role === 'superadmin' || live.role === 'admin'
+        } else {
+          // 業務角色預設沒有「業務開發 CRM」（要由最高管理者在使用者管理逐人開啟）。以前直接導回儀表板、沒有任何說明，
+          // 使用者以為頁面壞了或被擋錯。現在留在原頁、講清楚為什麼、該找誰。
+          this._showNoAccess()
+          return
+        }
       }
       // UR1：上一頁回來／其他分頁標了已讀 ⇒ 重抓未讀（事件由 notif.js 發出）。
       window.addEventListener('motrix:reads-changed', () => this.loadUnread())
@@ -2503,7 +2568,7 @@ function devCrmPage() {
         this.selectedCase = updated
         const idx = this.cases.findIndex(c => c.id === updated.id)
         if (idx >= 0) this.cases.splice(idx, 1, updated)
-        this._toast('已連結至報價單 ' + quoteNo)
+        this._toast('已連結至報價單／估價單 ' + quoteNo)
       }
     },
 

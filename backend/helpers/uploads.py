@@ -20,6 +20,8 @@ __l1_public__ = (
 
 import json
 import os
+import re
+import sys
 import uuid
 from datetime import datetime
 from typing import List, NamedTuple
@@ -27,6 +29,20 @@ from typing import List, NamedTuple
 from fastapi import HTTPException, UploadFile
 
 from core import paths as _paths
+from core.txn import write_txn
+from helpers.image_guard import ImageRejected, open_checked, run_decode
+
+_PIXEL_CHECKED_EXTS = frozenset(('.jpg', '.jpeg', '.png', '.gif', '.webp'))
+
+
+def _reject_oversize_image(raw, filename):
+    """超過像素上限 ⇒ 400；打不開的檔（壞檔、非 Pillow 格式）這裡不管，維持原本行為。"""
+    try:
+        open_checked(raw, draft_long_side=None)          # 只驗長寬，不需要縮小解碼
+    except ImageRejected as e:
+        raise HTTPException(e.status, f"{e.user_message}（{filename}）")
+    except Exception:
+        pass
 UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
@@ -241,34 +257,49 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         cap = limits.get('max_request_bytes')
         if cap and total > cap:
             raise HTTPException(400, f"這次上傳的檔案合計超過 {cap // (1024 * 1024)}MB，請分批上傳")
+        if ext in _PIXEL_CHECKED_EXTS:                          # 解壓縮炸彈：幾 KB 的檔宣告 2 萬×2 萬像素；只讀檔頭長寬，不解碼
+            _reject_oversize_image(raw, upload.filename)
         prepared.append((upload, ext, raw))
 
     # 第二階段：寫入
     os.makedirs(save_dir, exist_ok=True)
     saved = []
     now = datetime.now().isoformat()
-    for upload, ext, raw in prepared:
-        if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
+    written = []
+    try:
+        for upload, ext, raw in prepared:
+            if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
+                try:
+                    from photos import _process_project_photo
+                    raw = (await run_decode(_process_project_photo, raw, watermark_by))[0]     # 解碼會等名額：在事件迴圈上排隊、不占執行緒池
+                except ImageRejected as e:
+                    raise HTTPException(e.status, f"{e.user_message}（{upload.filename}）")
+                except Exception:
+                    # 浮水印失敗不該讓整次上傳失敗——原圖照存，比丟掉使用者的檔案好。
+                    # （Pillow 沒裝時 _process_project_photo 本身就會原樣回傳。）
+                    pass
+            fname = uuid.uuid4().hex[:16] + ext
+            written.append(os.path.join(save_dir, fname))
+            with open(written[-1], 'wb') as f:
+                f.write(raw)
+            saved.append({
+                "id":         uuid.uuid4().hex[:8],
+                "filename":   upload.filename or fname,
+                "path":       f"{subfolder}/{doc_no}/{fname}",
+                "size":       len(raw),
+                "mime":       upload.content_type or '',
+                "uploadedBy": uploaded_by,
+                "uploadedAt": now,
+                **({"slot": policy.slot} if policy is not None and policy.slot else {}),
+            })
+    except BaseException:
+        # 整批全收或全不收：後面某張被擋（400／503）或斷線 ⇒ 刪掉這次已寫的檔，不留孤兒
+        for _p in written:
             try:
-                from photos import _process_project_photo
-                raw = _process_project_photo(raw, watermark_by)[0]
-            except Exception:
-                # 浮水印失敗不該讓整次上傳失敗——原圖照存，比丟掉使用者的檔案好。
-                # （Pillow 沒裝時 _process_project_photo 本身就會原樣回傳。）
+                os.remove(_p)
+            except OSError:
                 pass
-        fname = uuid.uuid4().hex[:16] + ext
-        with open(os.path.join(save_dir, fname), 'wb') as f:
-            f.write(raw)
-        saved.append({
-            "id":         uuid.uuid4().hex[:8],
-            "filename":   upload.filename or fname,
-            "path":       f"{subfolder}/{doc_no}/{fname}",
-            "size":       len(raw),
-            "mime":       upload.content_type or '',
-            "uploadedBy": uploaded_by,
-            "uploadedAt": now,
-            **({"slot": policy.slot} if policy is not None and policy.slot else {}),
-        })
+        raise
     return saved
 
 
@@ -278,6 +309,12 @@ def delete_document_file(subfolder: str, doc_no: str, existing_files: list, file
     target = next((f for f in existing_files if f.get("id") == file_id), None)
     if not target:
         raise HTTPException(404, "找不到指定的檔案")
+    _remove_physical(target)
+    return [f for f in existing_files if f.get("id") != file_id]
+
+
+def _remove_physical(target: dict) -> None:
+    """刪一筆附件 metadata 指的實體檔（失敗不丟例外）。"""
     try:
         # 直接用 target["path"] 存的完整相對路徑（已含 demo 前綴，若有的話）解析，
         # 不要重新呼叫 _effective_subfolder() 再組一次——避免刪除當下的 demo
@@ -287,7 +324,6 @@ def delete_document_file(subfolder: str, doc_no: str, existing_files: list, file
             os.remove(full)
     except Exception:
         pass
-    return [f for f in existing_files if f.get("id") != file_id]
 
 
 def purge_document_files(existing_files: list) -> int:
@@ -314,6 +350,125 @@ def purge_document_files(existing_files: list) -> int:
         except OSError:
             pass
     return n
+
+
+# ── 附件清單寫回 JSON 欄（T83，2026-11-13）：不留孤兒檔、不整份蓋掉別人剛加的附件 ───────────────────────────
+# 舊寫法：先讀出 existing（上傳之前）→ 慢動作（存檔，數秒）→ existing + new 整份寫回。兩個請求同時進來，後寫的蓋掉
+# 先寫的紀錄（那批檔成孤兒、而先寫的請求早已回 201）；寫庫失敗則檔留在磁碟上沒有紀錄。
+# 新寫法：慢動作做完才拿寫鎖 → 重讀目前的清單 → 只加自己這批 → commit；任何失敗都回收這次剛存的檔。
+#   with files_txn(conn, new_files):
+#       append_json_list(conn, "invoice_vouchers", "issued_files_json", "voucher_no", no, new_files, extra_set={"updated_at": now})
+# 刪除：remove_json_item() 在寫鎖內重讀並濾掉那一筆、commit 之後才刪實體檔（寫庫失敗＝紀錄與檔都還在）。
+
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _idents(*names):
+    for n in names:
+        if not _IDENT.match(str(n)):
+            raise ValueError("不合法的表／欄名：%r" % (n,))
+
+
+class files_txn:
+    """`with files_txn(conn, new_files):` ＝ 拿寫鎖（BEGIN IMMEDIATE）＋離開時 commit；
+    區塊內任何例外（含 HTTPException／取消）或 commit 失敗 ⇒ rollback、關閉連線、並**刪掉 `new_files` 這次剛存的檔**。
+
+    ⚠️ 先把慢動作（`save_document_files`）做完再進來——拿著寫鎖時別 await 慢事。
+    ⚠️ 區塊內不要自己 commit（commit 交給離開區塊；否則例外時無法判斷檔該不該收回）。
+    ⚠️ 例外時連線會被關掉（同 `core.txn.write_txn`）；正常離開時連線仍開著，由呼叫端關。"""
+
+    def __init__(self, conn, new_files):
+        self.conn = conn
+        self.new_files = new_files
+        self._w = write_txn(conn)
+
+    def __enter__(self):
+        try:
+            self._w.__enter__()                   # BEGIN IMMEDIATE 可能失敗（database is locked）：with 不會再呼叫 __exit__ ⇒ 這裡自己回收
+        except BaseException:
+            purge_document_files(self.new_files)
+            raise
+        return self.conn
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            try:
+                self.conn.commit()
+                return False
+            except BaseException:
+                self._w.__exit__(*sys.exc_info())      # 先 rollback＋關連線（放掉寫鎖），再刪檔
+                purge_document_files(self.new_files)
+                raise
+        suppress = self._w.__exit__(exc_type, exc, tb)  # 先 rollback＋關連線（放掉寫鎖），再刪檔：unlink 不在持鎖時做
+        purge_document_files(self.new_files)
+        return suppress
+
+
+def _read_json_list(conn, table, col, where_col, key):
+    """目前的清單（列不存在也回 []；列是否存在由寫回時的 rowcount 判斷）。讀取沿用已登記的 `files_from_json_column`。"""
+    cur = files_from_json_column(conn, table, where_col, key, col)
+    return cur if isinstance(cur, list) else []
+
+
+def _row_exists(conn, table, col, where_col, key) -> bool:
+    """列在不在（`UPDATE … SET col=col` 的 rowcount；在寫交易內、不改任何資料）。
+    ⚠️ 這個 no-op UPDATE 會觸發該表的 UPDATE 觸發器（含 `UPDATE OF col`）：目前呼叫端的表（invoice_vouchers／completion_notes／
+    shipping_notes／quotations／contractor_dispatches）都沒有 UPDATE 觸發器；之後替這些表加了觸發器要回頭看這裡。"""
+    return conn.execute("UPDATE %s SET %s=%s WHERE %s = ?" % (table, col, col, where_col), (key,)).rowcount > 0
+
+
+def _write_json_list(conn, table, col, where_col, key, items, extra_set) -> bool:
+    """寫回；列不存在（rowcount 0）回 False。"""
+    sets = [col] + list((extra_set or {}).keys())
+    _idents(*sets)
+    cur = conn.execute("UPDATE %s SET %s WHERE %s = ?" % (table, ", ".join("%s=?" % c for c in sets), where_col),
+                       (json.dumps(items, ensure_ascii=False), *(extra_set or {}).values(), key))
+    return cur.rowcount > 0
+
+
+def append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=None, not_found="找不到單據", guard=None) -> list:
+    """寫鎖內重讀 `<table>.<col>`（JSON 陣列），只把 `new_items` 加到最新清單後面並寫回；回合併後的清單。
+    列不存在（上傳途中單據被刪）⇒ 404（`files_txn` 會回收新檔）。`extra_set`＝同一列順便要寫的欄位（例：updated_at）。
+    `guard(cur_list)`＝選填，重讀後的狀態／數量重驗，不過就 raise HTTPException。必須在 `files_txn`／`write_txn` 區塊內呼叫。
+    表名／欄名由呼叫端寫死（不接使用者輸入）。"""
+    _idents(table, col, where_col)
+    if not conn.in_transaction:
+        raise RuntimeError("append_json_list 必須在 files_txn／write_txn 區塊內呼叫")
+    cur = _read_json_list(conn, table, col, where_col, key)
+    if guard is not None:
+        guard(cur)
+    merged = cur + list(new_items)
+    if not _write_json_list(conn, table, col, where_col, key, merged, extra_set):
+        raise HTTPException(404, not_found)                      # 列不存在（上傳途中單據被刪）⇒ 回收新檔、404
+    return merged
+
+
+def remove_json_item(conn, table, col, where_col, key, file_id, *, extra_set=None, not_found="找不到單據",
+                     missing_ok=False, inside=None) -> list:
+    """刪除一筆附件：寫鎖內重讀清單、濾掉 `file_id`、commit；**commit 之後才刪實體檔**（寫庫失敗＝紀錄與檔都還在）。
+    列不存在 ⇒ 404（`not_found`）；附件不存在 ⇒ 404，`missing_ok=True` 時改為略過（不改清單，仍執行 `inside`）。
+    `inside(conn)`＝選填，在同一個寫交易、commit 之前執行（例：簽核流程要把自己的申請列改成「已核可」，與刪附件同生共死）。
+    回刪除後的清單。連線在例外時會被關掉（同 `write_txn`）。"""
+    _idents(table, col, where_col)
+    target = None
+    with write_txn(conn):
+        cur = _read_json_list(conn, table, col, where_col, key)
+        target = next((f for f in cur if isinstance(f, dict) and f.get("id") == file_id), None)
+        if target is None and not missing_ok:
+            if not _row_exists(conn, table, col, where_col, key):
+                raise HTTPException(404, not_found)
+            raise HTTPException(404, "找不到指定的檔案")
+        remaining = cur
+        if target is not None:
+            remaining = [f for f in cur if not (isinstance(f, dict) and f.get("id") == file_id)]
+            if not _write_json_list(conn, table, col, where_col, key, remaining, extra_set):
+                raise HTTPException(404, not_found)
+        if inside is not None:
+            inside(conn)
+        conn.commit()
+    if target is not None:
+        _remove_physical(target)
+    return remaining
 
 
 # ── 附件來源（`attachments.for_document`，主持裁示 M06-b，2026-09-26）──────────────────────────

@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>帳簿報表 - MOTRIX 專案管理系統</title>
+  <title>帳簿報表 - MOTRIX PLATFORM</title>
   <script src="../js/ledger-reports.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -36,6 +36,19 @@
     .lr-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
     .lr-empty{padding:32px;text-align:center;color:var(--text-secondary);font-size:13px;font-family:var(--font-zh)}
     .lr-vhead{font-weight:700;padding:8px;background:var(--surface-muted);font-family:var(--font-zh);font-size:13px}
+
+    /* ── 手機版（2026-11-12）── */
+    @media (max-width: 767px) {
+      .page-main { margin-left: 0; padding: 16px 12px 32px }
+      .lr-title { font-size: 18px }
+      .lr-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch }
+      .lr-tab { white-space: nowrap; flex-shrink: 0; min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .lr-bar { gap: 8px }
+      .lr-input, .lr-bar input, .lr-bar select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .lr-btn { min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .lr-table td, .lr-table th { padding-top: 10px; padding-bottom: 10px }
+      label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px }
+    }
   </style>
 </head>
 <body x-data="ledgerReportsPage()" x-init="init()" x-cloak>
@@ -84,7 +97,7 @@
           <div class="lr-err" x-show="!tb.balanced" data-testid="lr-unbalanced">
             試算表借貸不平衡（本期借方 <span x-text="fmt(tb.totals.period_debit)"></span>、貸方 <span x-text="fmt(tb.totals.period_credit)"></span>）：帳上資料有問題，請先查明再結帳。
           </div>
-          <table class="lr-table" data-testid="lr-tb-table">
+          <table class="lr-table m-scroll m-sticky" data-testid="lr-tb-table">
             <thead><tr><th>科目</th><th>名稱</th><th class="lr-num">期初借</th><th class="lr-num">期初貸</th><th class="lr-num">本期借</th><th class="lr-num">本期貸</th><th class="lr-num">期末借</th><th class="lr-num">期末貸</th></tr></thead>
             <tbody>
               <template x-for="r in tb.rows" :key="r.code + r.name">
@@ -111,7 +124,7 @@
         <div>
           <div class="lr-empty" x-show="!gl">請輸入科目代號後查詢。</div>
           <template x-if="gl">
-            <table class="lr-table" data-testid="lr-gl-table">
+            <table class="lr-table m-scroll m-sticky" data-testid="lr-gl-table">
               <thead><tr><th colspan="6" x-text="gl.account + ' ' + gl.name"></th></tr>
                 <tr><th>日期</th><th>傳票號</th><th>摘要</th><th class="lr-num">借方</th><th class="lr-num">貸方</th><th class="lr-num">餘額</th></tr></thead>
               <tbody>
@@ -133,7 +146,7 @@
         <div>
           <div class="lr-empty" x-show="!sub">請輸入科目代號後查詢（例如 1191 應收帳款，依交易對象或案件展開）。</div>
           <template x-if="sub">
-            <table class="lr-table" data-testid="lr-sub-table">
+            <table class="lr-table m-scroll m-sticky" data-testid="lr-sub-table">
               <thead><tr><th x-text="dimLabel(sub.dimension)"></th><th class="lr-num">期初</th><th class="lr-num">本期借</th><th class="lr-num">本期貸</th><th class="lr-num">期末</th></tr></thead>
               <tbody>
                 <template x-for="r in sub.rows" :key="r.key">
@@ -155,7 +168,7 @@
           <template x-for="v in jr.vouchers" :key="v.id">
             <div style="margin-bottom:12px">
               <div class="lr-vhead" x-text="(v.voucher_date || '').slice(0, 10) + '　' + v.voucher_no + '　' + v.category + '　' + v.summary + (v.status !== '已過帳' ? '　【' + v.status + '】' : '')"></div>
-              <table class="lr-table">
+              <table class="lr-table m-scroll m-sticky">
                 <tbody>
                   <template x-for="l in v.lines" :key="l.line_no">
                     <tr><td style="width:90px" x-text="l.account_code"></td><td x-text="l.account_name"></td><td x-text="l.summary"></td>

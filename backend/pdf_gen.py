@@ -29,6 +29,7 @@ from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_c
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
 from helpers import pdf_scripts as _PS
+from helpers import doc_type as _DT              # 估價單：標題與浮水印用語依單據類型（版型沿用報價單）
 from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
@@ -294,6 +295,11 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                            watermark_font_size: int = 30,
                            show_notice: bool = False, notice_text: str = '',
                            unapproved_status: str = None) -> str:
+    # 估價單：版型完全沿用報價單，只有標題與浮水印／橫幅用語的「報價單」換成「估價單」（報價單 ⇒ 字串逐位元不變）
+    _dlabel = _DT.label(q.get('docType'))
+    if _dlabel != '報價單':
+        watermark_text = (watermark_text or '').replace('報價單', _dlabel)
+        notice_text = (notice_text or '').replace('報價單', _dlabel)
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -422,7 +428,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '<html lang="zh-Hant">\n'
         '<head>\n'
         '<meta charset="UTF-8">\n'
-        f'<title>{esc(q.get("quoteNo",""))} 報價單</title>\n'
+        f'<title>{esc(q.get("quoteNo",""))} {_dlabel}</title>\n'
         '<style>\n'
         '  *{box-sizing:border-box;margin:0;padding:0}\n'
         '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
@@ -495,7 +501,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + '</div>\n'
         if show_watermark else '')
         + '<div id="root">\n'
-        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text='報價單預覽稿・\n尚未正式生效')
+        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text=_dlabel + '預覽稿・\n尚未正式生效')
            if unapproved_status is not None else '')
         + ('<div class="hist-badge" data-historical="1" style="margin:0 0 8px;padding:5px 10px;border:1px solid #94A3B8;border-radius:4px;'
            'background:#F1F5F9;color:#334155;font-size:11px;font-weight:700;font-family:Arial,sans-serif">'
@@ -514,7 +520,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + _identity_head(_ident) +
         '  </div>\n'
         '  <div>\n'
-        '    <div class="doc-title">報　價　單</div>\n'
+        f'    <div class="doc-title">{"　".join(_dlabel)}</div>\n'
         '  </div>\n'
         '</div>\n'
         '<div class="meta">\n'
@@ -697,13 +703,14 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     row  = conn.execute(
         # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
         # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
-        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "SELECT data_json, status, deal_tag, location_id, doc_type FROM quotations "
         "WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
     if not row:
         raise ValueError("報價單不存在")
     q            = json.loads(row["data_json"] or "{}")
+    q["docType"] = _DT.norm(row["doc_type"])     # 估價單：單據類型以欄位為準（標題／浮水印用語）
     # 用欄位覆蓋 payload：`data_json` 裡若有舊的 `locationId`，**欄位才是權威**。
     q["locationId"] = row["location_id"] or ""
     deal_tag     = row["deal_tag"] or q.get("dealTag") or ""
@@ -1355,7 +1362,7 @@ def _build_shipping_html(n: dict) -> str:
         '<div class="meta">\n'
         f'  <div><span>出貨單號：</span><strong style="font-family:Arial,sans-serif">{esc(n.get("noteNo",""))}</strong></div>\n'
         f'  <div><span>出貨日期：</span>{esc(n.get("shipDate",""))}</div>\n'
-        f'  <div><span>關聯報價單：</span>{esc(n.get("quoteNo",""))}</div>\n'
+        f'  <div><span>關聯{_DT.label_of_no(n.get("quoteNo"))}：</span>{esc(n.get("quoteNo",""))}</div>\n'
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'
@@ -2000,7 +2007,7 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     from helpers.builtin_fields import finance_rows as _fin_rows
     _fr = _fin_rows(v.get("quoteNo"))
     if _fr and "</body>" in out:
-        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（報價單）</div>'
+        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（' + _DT.label_of_no(v.get("quoteNo")) + '）</div>'
                 + ''.join(f'<div><span style="color:#666">{_html_text(lb, falsy_empty=True)}：</span>{_html_text(val, falsy_empty=True)}</div>' for lb, val in _fr)
                 + '</div>')
         out = out.replace("</body>", _blk + "</body>", 1)
@@ -2286,7 +2293,7 @@ def _build_payment_request_html_core(v: dict) -> str:
     _fr = _fin_rows(v.get('quoteNo'))
     if _fr:
         terms_section += (
-            '<div class="section-label">其他資訊（報價單）</div>'
+            '<div class="section-label">其他資訊（' + _DT.label_of_no(v.get('quoteNo')) + '）</div>'
             + ''.join(term_block(lb, val) for lb, val in _fr)
         )
 
@@ -3127,14 +3134,45 @@ def _project_execution_report_data(quote_no: str) -> dict:
             "assignedNames": [dn_map.get(u, u) for u in assigned],
         })
 
-    # 叫料管控
-    materials = [{
-        "name":     m.get("name") or m.get("description") or "（未命名料件）",
-        "spec":     m.get("spec") or "",
-        "qty":      m.get("qty") or "",
-        "status":   m.get("status") or "",
-        "eta":      m.get("eta") or "",
-    } for m in (cr.get("materials") or [])]
+    # 材料申請（T84：舊版讀 spec／status／eta，材料卡根本沒有這三個鍵 ⇒ 規格永遠空白、狀態與預計到貨永遠「—」，也沒讀 materialOrders）
+    # ① 材料卡 caseRecord.materials[]：實際只有 name／model／qty／unit／ordered／arrived／note，認列採購單後 poLink.arrivedOn 是到貨日
+    # ② 材料申請單 caseRecord.materialOrders[]＋疊加簽核列 case_material_approvals（簽核狀態、到貨確認日）
+    # 只取名稱／規格／數量／狀態／日期，不碰任何金額欄位（單價、小計、已付）
+    # 舊鍵 status／eta 有意放棄：沒有任何程式寫過，狀態改由 ordered／arrived 旗標、日期改由 poLink.arrivedOn 決定
+    def _qty_text(q, unit):
+        if q in (None, ""):
+            return ""
+        if isinstance(q, float) and q == int(q):
+            q = int(q)
+        return ("%s %s" % (q, unit or "")).strip()
+
+    materials = []
+    for m in (cr.get("materials") or []):
+        if not isinstance(m, dict):
+            continue
+        link = m.get("poLink") if isinstance(m.get("poLink"), dict) else {}
+        materials.append({
+            "name":      m.get("name") or m.get("description") or "（未命名料件）",
+            "spec":      m.get("model") or m.get("spec") or "",      # 舊鍵 spec 只當匯入／手改資料的後備
+            "qty":       _qty_text(m.get("qty"), m.get("unit")),
+            "status":    "已到料" if m.get("arrived") else "已申購" if m.get("ordered") else "待申購",
+            "arrivedOn": link.get("arrivedOn") or "",
+        })
+    _appr = {
+        str(a["item_id"]): a for a in conn.execute(
+            "SELECT item_id, status, received_on FROM case_material_approvals WHERE quote_no=?", (quote_no,)).fetchall()
+    }
+    material_orders = []
+    for o in (cr.get("materialOrders") or []):
+        if not isinstance(o, dict):
+            continue
+        a = _appr.get(str(o.get("itemId")))
+        material_orders.append({
+            "name":       o.get("itemName") or "（未命名項目）",
+            "qty":        _qty_text(o.get("quantity"), o.get("unit")),
+            "status":     (a["status"] if a else "") or "（未走簽核）",
+            "receivedOn": (a["received_on"] if a else "") or "",
+        })
 
     # 代辦事項（兩階段簽核）
     action_items = [{
@@ -3189,6 +3227,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
         "assignedNames": assigned_names,
         "stages":       stages,
         "materials":    materials,
+        "materialOrders": material_orders,
         "actionItems":  action_items,
         "workLogs":     work_logs,
         "feed":         feed,
@@ -3232,16 +3271,25 @@ def _build_project_execution_report_html(data: dict) -> str:
     )
 
     mat_rows_html = "".join(
-        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"])}</td><td class="c">{esc(m["qty"])}</td>'
-        f'<td class="c">{esc(m["status"]) or "—"}</td><td class="c">{esc(m["eta"]) or "—"}</td></tr>'
+        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"]) or "—"}</td><td class="c">{esc(m["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(m["status"])}</td><td class="c">{esc(m["arrivedOn"]) or "—"}</td></tr>'
         for m in data["materials"]
     )
     _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無材料申請資料</td></tr>'
+    mo_rows_html = "".join(
+        f'<tr><td>{esc(o["name"])}</td><td class="c">{esc(o["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(o["status"])}</td><td class="c">{esc(o["receivedOn"]) or "—"}</td></tr>'
+        for o in data.get("materialOrders") or []
+    )
     materials_section = (
         '<div class="section-label">二、材料申請</div>'
-        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:70px">數量</th>'
-        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">預計到貨</th></tr></thead>'
+        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:90px">數量</th>'
+        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">到貨日</th></tr></thead>'
         f'<tbody>{mat_rows_html or _no_mat_row}</tbody></table>'
+        + ('<div style="margin:8px 0 3px;font-size:12px;color:#6B7280">材料申請單（簽核）</div>'
+           '<table><thead><tr><th>申請項目</th><th class="c" style="width:90px">數量</th>'
+           '<th class="c" style="width:90px">簽核狀態</th><th class="c" style="width:100px">到貨確認日</th></tr></thead>'
+           f'<tbody>{mo_rows_html}</tbody></table>' if mo_rows_html else '')
     )
 
     def _item_status(it):

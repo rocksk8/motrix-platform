@@ -1,4 +1,4 @@
-/* expense-types.js — 請款類型定義編輯頁 v1（A2-2 的編輯畫面；超級管理員）
+/* expense-types.js — 請款類型定義編輯頁 v1（A2-2 的編輯畫面；最高管理者）
  * 契約：docs／plan-expense-a2.md §8。沿用既有定義庫路由 /api/definitions/expense_type[/{key}/…]，不新增編輯端點；
  * 伺服器端驗證為準（POST …/validate 回 problems），前端只把 [{path,message}] 列出來。
  * 工作副本是 clone 出來的：本頁不認得的鍵（例如 output.template）原樣保留、存回去。 */

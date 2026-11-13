@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""M03 採購・庫存・出貨的刪除暫存區 adapter（第 53 班 P1；契約 helpers/recycle_bin.py、IP-RB1／IP-RB2）：出貨單 `shipping_note`。
+"""M03 採購・庫存・出貨的資源回收筒 adapter（第 53 班 P1；契約 helpers/recycle_bin.py、IP-RB1／IP-RB2）：出貨單 `shipping_note`。
 
 規則（使用者 D1）：不放寬現行『只有草稿能刪』；已核准／簽核中的只走 superadmin 的『刪除已核可』（`can_delete_approved`）：
-已核准且已扣庫存序號的出貨單**明確拒絕**（要先用『撤銷核准』歸還庫存序號，再刪）——不在暫存區裡悄悄放掉庫存扣帳。
+已核准且已扣庫存序號的出貨單**明確拒絕**（要先用『撤銷核准』歸還庫存序號，再刪）——不在資源回收筒裡悄悄放掉庫存扣帳。
 本檔名為 `recycle_adapter.py`：裡面的 `DELETE FROM` 免進三道守門基線（就是 `delete_in_tx`）。
 """
 import json
@@ -12,8 +12,8 @@ from typing import List, Tuple
 from helpers import recycle_bin as RB
 from helpers.uploads import canonical_upload_path
 
-#: 暫存區模組不在時，刪除端點的明說（IP-RB2「對方不在時」）
-BIN_ABSENT_NOTICE = "刪除暫存區模組未安裝：這張出貨單已直接刪除，無法還原"
+#: 資源回收筒模組不在時，刪除端點的明說（IP-RB2「對方不在時」）
+BIN_ABSENT_NOTICE = "資源回收筒模組未安裝：這張出貨單已直接刪除，無法還原"
 
 
 def _walk_paths(obj, out: list) -> None:
@@ -43,13 +43,13 @@ def _paths_of(*raws) -> List[str]:
 
 
 def reserved(conn, entity_type) -> set:
-    """暫存區裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
-    暫存區模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
-    return set(RB.reserved_ids(conn, entity_type) or ())            # 暫存區模組不在 ⇒ 空集合（IP-RB3）
+    """資源回收筒裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
+    資源回收筒模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
+    return set(RB.reserved_ids(conn, entity_type) or ())            # 資源回收筒模組不在 ⇒ 空集合（IP-RB3）
 
 
 def _rm_empty_dirs(rels) -> None:
-    """附件被搬進暫存區後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
+    """附件被搬進資源回收筒後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
     import os
     from helpers.uploads import UPLOADS_ROOT
     for d in {os.path.dirname(os.path.join(UPLOADS_ROOT, *r.split("/"))) for r in rels or []}:
@@ -113,7 +113,7 @@ class ShippingNoteAdapter(RB.Adapter):
         if n:
             out.append({"kind": "stock_deducted", "label": "已扣庫存序號 %d 個：請先用『撤銷核准』歸還庫存，再刪除" % n, "blocking": True})
         if r["is_signed"]:
-            out.append({"kind": "signed_back", "label": "客戶已回簽（%s）；回簽檔會一併進暫存區" % (r["signed_at"] or "")[:10], "blocking": False})
+            out.append({"kind": "signed_back", "label": "客戶已回簽（%s）；回簽檔會一併進資源回收筒" % (r["signed_at"] or "")[:10], "blocking": False})
         if r["status"] == "已核准":
             out.append({"kind": "approved", "label": "已核准的出貨單：刪除後材料申請的『已出貨量』會減少", "blocking": False})
         return out
@@ -142,7 +142,7 @@ class ShippingNoteAdapter(RB.Adapter):
             except sqlite3.OperationalError:                      # 案件模組不在：沒有父層可檢查
                 has = True
             if not has:
-                raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在暫存區）：請先還原報價單" % qn)
+                raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在資源回收筒）：請先還原報價單" % qn)
         if self._row(conn, row["note_no"]) is not None:
             raise RB.BinError("conflict: 出貨單號 %s 已被占用" % row["note_no"])
         if "id" in row and conn.execute("SELECT 1 FROM shipping_notes WHERE id=?", (row["id"],)).fetchone():

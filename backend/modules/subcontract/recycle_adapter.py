@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""外包工班的刪除暫存區 adapter（第 53 班 P1；契約 helpers/recycle_bin.py，IP-RB1／IP-RB2）：承攬商派發、承攬商匯款申請。
+"""外包工班的資源回收筒 adapter（第 53 班 P1；契約 helpers/recycle_bin.py，IP-RB1／IP-RB2）：承攬商派發、承攬商匯款申請。
 
 - 刪除條件**沿用現行規則，不放寬**（使用者 D1）：派發＝審核中／已核准不可刪、已有匯款申請不可刪；匯款申請＝只有草稿、分期草稿守 LIFO。
   已核准的單據只能走最高管理者的『刪除已核可』入口（`can_delete_approved`＋`impact`）。
 - 快照＝單據列＋子表列（派發：勞報單連結、附件刪除申請）＋附件清單；還原放回**原值**（同欄位、同主鍵）；單號被占用 ⇒ 換新單號並回報。
 - 遮罩：用 L1 預設 `mask_obj`（會展開 JSON 字串欄位再遮罩帳號類欄位）；還原用未遮罩原文。
-- 這個檔案內的 `DELETE FROM` 是 `delete_in_tx` 的實作（暫存區守門免登記）；刪除端點在暫存區模組缺席時也呼叫它（照舊刪資料列、不刪檔，並明說）。
+- 這個檔案內的 `DELETE FROM` 是 `delete_in_tx` 的實作（資源回收筒守門免登記）；刪除端點在資源回收筒模組缺席時也呼叫它（照舊刪資料列、不刪檔，並明說）。
 """
 import json
 import sqlite3
@@ -135,7 +135,7 @@ class DispatchBinAdapter(RB.Adapter):
         if _has_table(conn, _LINK_TBL):
             n = conn.execute("SELECT COUNT(*) FROM %s WHERE dispatch_id=?" % _LINK_TBL, (int(entity_id),)).fetchone()[0]
             if n:
-                out.append({"kind": "payslip_link", "label": "已關聯 %d 張勞報單（連結隨派發進暫存區，還原時復原）" % n, "blocking": False})
+                out.append({"kind": "payslip_link", "label": "已關聯 %d 張勞報單（連結隨派發進資源回收筒，還原時復原）" % n, "blocking": False})
         gl = _gl_note(conn, "contractor_dispatch", str(entity_id))
         if gl:
             out.append({"kind": "gl", "label": gl, "blocking": False})
@@ -173,7 +173,7 @@ class DispatchBinAdapter(RB.Adapter):
         if d.get("vendor_id") and not conn.execute("SELECT 1 FROM vendor_contractors WHERE id=?", (d["vendor_id"],)).fetchone():
             raise RB.BinError("parent_missing: 承攬商 #%s 已不存在，請先還原該承攬商" % d["vendor_id"])
         if meta.get("quote_exists") and not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (d["quote_no"],)).fetchone():
-            raise RB.BinError("parent_missing: 報價單 %s 已不存在（可能在暫存區），請先還原報價單" % d["quote_no"])
+            raise RB.BinError("parent_missing: 報價單 %s 已不存在（可能在資源回收筒），請先還原報價單" % d["quote_no"])
         notes, renumbered = [], False
         if d.get("doc_code") and conn.execute("SELECT 1 FROM %s WHERE doc_code=?" % _DISPATCH_TBL, (d["doc_code"],)).fetchone():
             from modules.subcontract import dispatch_flow as _flow
@@ -209,7 +209,7 @@ class DispatchBinAdapter(RB.Adapter):
 
 
     def after_commit(self, event, entity_id, snap, result):
-        """commit 之後（L1 hook）：派發進暫存區 ⇒ 清掉簽核人手上的待辦通知（審核中的派發走『刪除已核可』時才有）。"""
+        """commit 之後（L1 hook）：派發進資源回收筒 ⇒ 清掉簽核人手上的待辦通知（審核中的派發走『刪除已核可』時才有）。"""
         if event == "delete":
             from helpers import _purge_notifications
             _purge_notifications(str(entity_id), ["dispatch_approval_request", "dispatch_completion_request"])
@@ -289,7 +289,7 @@ class VoucherBinAdapter(RB.Adapter):
     def restore_in_tx(self, conn, snap, ctx):
         d = dict(snap["rows"][_VOUCHER_TBL][0])
         if not conn.execute("SELECT 1 FROM %s WHERE id=?" % _DISPATCH_TBL, (d["dispatch_id"],)).fetchone():
-            raise RB.BinError("parent_missing: 所屬派發 #%s 已不存在（可能在暫存區），請先還原派發" % d["dispatch_id"])
+            raise RB.BinError("parent_missing: 所屬派發 #%s 已不存在（可能在資源回收筒），請先還原派發" % d["dispatch_id"])
         notes, renumbered = [], False
         if conn.execute("SELECT 1 FROM %s WHERE id=?" % _VOUCHER_TBL, (d["id"],)).fetchone():
             raise RB.BinError("conflict: 申請 id #%s 已存在，不覆蓋既有資料" % d["id"])

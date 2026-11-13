@@ -21,7 +21,7 @@ def _page():
 def test_page_calls_the_existing_settings_endpoint_and_explains_the_lock():
     s = _page()
     assert "/api/recycle-bin/settings" in s and "method: 'PUT'" in s
-    assert "暫存區還有項目時不能換目錄" in s              # 停用時的白話說明
+    assert "資源回收筒還有項目時不能換目錄" in s              # 停用時的白話說明
     assert "不可放在網站上傳資料夾（uploads）底下" in s    # 提示和伺服器規則一致
     assert "rb-dir-default" in s and "改回預設位置" in s
     assert "dirLocked" in s
@@ -68,7 +68,7 @@ def test_server_refuses_a_new_directory_while_items_are_in_the_bin(client, make_
         rid = cn.execute("INSERT INTO recycle_bin (%s) VALUES (%s)" % (",".join(vals), ",".join("?" * len(vals))), tuple(vals.values())).lastrowid
         cn.commit()
         r = client.put("/api/recycle-bin/settings", headers=su, json={"dir": ""})
-        assert r.status_code == 409 and "暫存區還有" in r.text, r.text
+        assert r.status_code == 409 and "資源回收筒還有" in r.text, r.text
     finally:
         if rid is not None:
             cn.execute("DELETE FROM recycle_bin WHERE id=?", (rid,))      # 只清自己插的那一列

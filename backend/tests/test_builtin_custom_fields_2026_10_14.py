@@ -58,7 +58,7 @@ def _validate(client, h, fields, key=KEY):
 
 @pytest.fixture
 def case(client, make_user):
-    """種子庫裡的一張案件（quote_no 'x'）＋超級管理員。"""
+    """種子庫裡的一張案件（quote_no 'x'）＋最高管理者。"""
     import db
     from tests.platform import _response_keys as RK
     h = _boss(client, make_user)
@@ -476,7 +476,7 @@ def test_usage_counts_are_read_only_flag_guarded_and_superadmin_only(client, mak
     client.post("/api/suppliers", headers=h, json={"name": "乙", "data": {}})
     r = client.get("/api/custom-fields/supplier/usage", headers=h).json()
     assert r["counts"] == {"f1": 1} and r["records"] == 1 and sid
-    # 只有超級管理員；未知類型 404
+    # 只有最高管理者；未知類型 404
     u, p = make_user("cf_adm", "Lay-Pass-123", role="admin")[:2]
     adm = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
     assert client.get("/api/custom-fields/case_info/usage", headers=adm).status_code == 403

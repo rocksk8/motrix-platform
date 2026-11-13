@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>營運報表 — MOTRIX 專案管理系統</title>
+  <title>營運報表 — MOTRIX PLATFORM</title>
   <meta name="motrix-export-id" content="reports:financial">   <!-- S-F2 B：builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（營運報表的工作表選擇）；關著＝沒有任何額外請求 -->
   <script src="../static/vendor/chart-4.4.0.umd.min.js"></script>
   <script src="../static/legal-round.js"></script>
@@ -79,7 +79,7 @@
     .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600}
     .rb-active{background:#DCFCE7;color:#15803D}
     .rb-closed{background:#F3F4F6;color:#374151}
-    .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-fin{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 已結算／已結案＝結束狀態：深灰藍（紫色只留給內部／機密；2026-11-13） */
     .rb-received{background:var(--success-light);color:var(--success)}
     .rb-pending{background:#FEF3C7;color:#92400E}
     .rb-invoiced{background:#ECFDF5;color:#065F46}
@@ -214,9 +214,44 @@
 
     .chart-card__title{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
     @media(max-width:800px){.chart-2col{grid-template-columns:1fr}}
+    /* 平板（≤1023px）也是手指操作：點擊區 ≥40px、鈕與鈕之間留縫（量測：768 寬時 24 組相鄰小目標，全站最高） */
+    @media(max-width:1023px){
+      .period-bar{gap:10px}
+      .period-type-btn{min-height:44px;padding:0 16px;font-size:13px}
+      .period-nav{gap:10px}
+      .period-nav button{width:44px;height:44px}
+      .period-bar select,.period-nav select{font-size:16px;min-height:44px}
+      .btn-export,.btn-load,.kpi-more-btn{min-height:44px}
+      .tab-bar--grouped{gap:14px 22px}
+      .tab-group{gap:6px;border-bottom:none}
+      .tab-group .tab{min-height:44px;display:inline-flex;align-items:center;padding:0 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff}
+      .tab-group .tab.on{border-color:var(--accent)}
+    }
     @media(max-width:767px){
       .panel{overflow-x:auto!important;-webkit-overflow-scrolling:touch}
       .data-table{min-width:520px}
+      /* 期間列、匯出鈕、分頁籤：原本 28px 方鈕／12px 下拉／並排頁籤，手指一碰就誤觸鄰近的鈕（全站最密集的一頁） */
+      .page-main{padding:20px 16px}
+      .period-bar{gap:8px}
+      .period-type-btn{min-height:44px;min-width:64px;padding:0 16px;font-size:13px}
+      .period-nav{width:100%;flex-wrap:wrap;gap:8px}
+      .period-nav button{width:44px;height:44px}
+      .period-label{flex:1;min-width:0}
+      .period-bar select,.period-nav select{font-size:16px;min-height:44px;padding:0 10px}
+      .export-wrap{margin-left:0;width:100%}
+      .btn-export{flex:1;justify-content:center;min-height:44px}
+      .btn-load{min-height:44px}
+      /* 三組頁籤（業績／現金／風險）：每組一個小標獨佔一行，其下的頁籤換行排、每顆 44px 高 */
+      .tab-bar--grouped{gap:14px}
+      .tab-group{gap:4px 6px;border-bottom:none}
+      .tab-group__lbl{flex:1 1 100%;padding:0}
+      .tab-group .tab{min-height:44px;display:inline-flex;align-items:center;padding:0 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff}
+      .tab-group .tab.on{border-color:var(--accent)}
+      .kpi-more-btn{min-height:44px}
+      /* 客戶歷史：左清單＋右明細並排 → 上下排 */
+      .cust-layout{flex-direction:column}
+      .cust-list-col{width:100%;min-width:0;max-height:280px;border-right:none;border-bottom:1px solid var(--border-light)}
+      .cust-search,.cust-sort{font-size:16px;min-height:44px}
     }
 
     /* Customer history */

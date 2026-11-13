@@ -36,7 +36,7 @@
           this._initDone = true
           this.loadPreviewLib()
           try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
-          if (this.me.role !== 'superadmin') { this.errMsg = '模組建構器僅限超級管理員使用'; return }
+          if (this.me.role !== 'superadmin') { this.errMsg = '模組建構器僅限最高管理者使用'; return }
           var cat = await this.api('GET', '/api/custom-modules/catalog')
           if (!cat.ok) { this.errMsg = '讀取能力目錄失敗：' + ((cat.data && cat.data.detail) || cat.status); return }
           this.catalog = cat.data

@@ -2,7 +2,7 @@
 """費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。
 
 [單位] helper:expense_types    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CODE_RE, DEFAULT_KINDS, KIND, MAX_LINES, MAX_TEXT, PREFIX_RE, RESERVED_KEYS, cashier_field_keys, get_type, last_value_hook, list_types, normalize_lines, validate_expense_type, validate_values
+[公開介面] CODE_RE, DEFAULT_KINDS, KIND, MAX_LINES, MAX_TEXT, PREFIX_RE, RESERVED_KEYS, cashier_field_keys, get_type, last_value_hook, list_types, normalize_lines, used_prefixes, validate_expense_type, validate_values
 [不變式] 明細金額與合計只在 `normalize_lines` 算一次（W1 §7.1；整數 TWD、每列 round_half_up）；`validate_values` 不丟任何未知的明細鍵
 [契約題] tests/platform/test_expense_types_2026_10_01.py
 
@@ -193,6 +193,7 @@ def _prefill_problems(fields) -> list:
 def validate_expense_type(body, key: str = "") -> list:
     """類型定義 ⇒ `[{"path","message"}]`（空＝可以發布）。形狀同建構器的驗證結果。"""
     from helpers import custom_modules as CM
+    from helpers import doc_type as _DT
     from helpers.tiered_approval import APPROVAL_DOC_TYPES
     if not isinstance(body, dict):
         return [_p("", "定義必須是 JSON 物件")]
@@ -204,6 +205,8 @@ def validate_expense_type(body, key: str = "") -> list:
     num = body.get("numbering")
     if not isinstance(num, dict) or not PREFIX_RE.match(str(num.get("prefix") or "")):
         out.append(_p("numbering.prefix", "必須有單號前綴：大寫英文開頭、英數、最長 4 字"))
+    elif num["prefix"] in _DT.estimate_prefixes_in_use():
+        out.append(_p("numbering.prefix", "前綴 %s 是估價單單號字首（含曾經用過的），請換一組" % num["prefix"]))
     elif num.get("date", "YYYYMMDD") != "YYYYMMDD" or num.get("digits", 4) != 4:
         out.append(_p("numbering", "單號格式固定為 {前綴}-YYYYMMDD-NNNN（date／digits 不可改）"))
     else:
@@ -277,6 +280,28 @@ def list_types(conn) -> list:
         b = t["body"]
         out.append({"code": c, "name": b.get("name", c), "prefix": (b.get("numbering") or {}).get("prefix", ""),
                     "payable": bool(b.get("payable")), "docType": b.get("docType", "extra_expense"), "defVersion": t["version"]})
+    return out
+
+
+def used_prefixes(conn) -> dict:
+    """⇒ `{前綴: 說明}`：全部費用類型（預設四種＋公司另外發布的，含停用的）的單號前綴。"""
+    out = {}
+    codes = list(DEFAULT_KINDS)
+    try:
+        for r in D.list_definitions(conn, KIND):
+            if r["key"] not in codes:
+                codes.append(r["key"])
+    except Exception:                                                                        # noqa: BLE001 — 讀不到就只用預設
+        pass
+    for c in codes:
+        try:
+            t = get_type(conn, c)
+        except Exception:                                                                    # noqa: BLE001
+            t = None
+        if t:
+            p = str((t["body"].get("numbering") or {}).get("prefix") or "")
+            if p:
+                out.setdefault(p, "費用類型「%s」" % (t["body"].get("name") or c))
     return out
 
 
@@ -392,7 +417,7 @@ def validate_values(conn, defn: dict, data, lines, *, viewer: dict, prior=None, 
     """`(clean_data, clean_lines, total_cost, problems)`；`problems`＝`[{"key","message"}]`（空＝通過）。
     - 預設值 token 由伺服器換（來源見 helpers/prefill_sources；註冊表未上線時只有 requester／today）；`locked` 的欄位建立時一律以伺服器預填為準（前端送什麼都不採用）
     - `prior`＝修改時舊單的 data：不重新解析任何來源，`locked` 的欄位沿用舊值；`case`＝`{"customer","project"}` 或 None；`type_code`＝「我上一次填過的內容」要查的類型
-    - `editableBy:"cashier"` 的欄位：不是出納／超級管理員送來的值 ⇒ 丟掉並回報
+    - `editableBy:"cashier"` 的欄位：不是出納／最高管理者送來的值 ⇒ 丟掉並回報
     - 定義沒有的鍵 ⇒ 回報（不靜默丟）；欄位型別／必填／公式／參照沿用建構器（`custom_modules.clean_values`）
     - 明細：逐列逐欄驗證（必填、型別、列數），儲存用的列由 `normalize_lines` 算（保留所有未知鍵）；`total_cost` 是唯一來源
     - `clean_data` 含公式欄位的結果（例 `total`），不含 `lines`"""

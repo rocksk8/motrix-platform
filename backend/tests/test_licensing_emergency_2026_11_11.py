@@ -41,6 +41,26 @@ def _fresh_alert_state():
     la._ALERTED.clear()
 
 
+_SU = {}
+
+
+@pytest.fixture(autouse=True)
+def _su_for_helpers(su_hdr):
+    """模組層級的輔助函式（`_assert_still_blocked`）也要用最高管理者的標頭讀完整授權狀態。"""
+    _SU["h"] = su_hdr
+    yield
+    _SU.clear()
+
+
+@pytest.fixture()
+def su_hdr(client, make_user):
+    """最高管理者：完整授權狀態（客戶、到期日、機器代碼…）只給他（T83 L5 追加，PM 裁示）；其他角色的精簡版見 test_license_import_2026_11_13.py。"""
+    username, password = make_user(username="lic_su_status", role="superadmin")
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
 @pytest.fixture()
 def hdr(client, make_user):
     username, password = make_user(role="admin")
@@ -117,7 +137,7 @@ def test_without_the_pass_a_drifted_machine_is_blocked(client, hdr, box, drifted
     assert r.status_code == 402 and r.json()["reason"] == "machine_mismatch", r.text
 
 
-def test_a_valid_pass_lets_a_drifted_machine_through_and_says_so(client, hdr, box, drifted):
+def test_a_valid_pass_lets_a_drifted_machine_through_and_says_so(client, hdr, box, drifted, su_hdr):
     box.install_license()
     assert client.get(BUSINESS_API, headers=hdr).status_code == 402
     box.install_pass(days=7)
@@ -128,7 +148,7 @@ def test_a_valid_pass_lets_a_drifted_machine_through_and_says_so(client, hdr, bo
     # 標頭只給「已登入」的請求（K 審 S4）：公開端點／未登入的呼叫者看不到這台靠通行證在跑
     assert lic.LICENSE_HEADER not in client.get("/api/ping").headers
     assert client.get("/api/ping", headers=hdr).headers.get(lic.LICENSE_HEADER) is None      # 公開端點即使帶了 token 也不算已登入
-    s = client.get("/api/license/status", headers=hdr).json()
+    s = client.get("/api/license/status", headers=su_hdr).json()
     assert s["valid"] is False and s["reason"] == "machine_mismatch" and s["blocked"] is True   # 授權本身仍是不通過
     e = s["emergency"]
     assert (e["present"], e["active"], e["why"], e["until"]) == (True, True, "ok", until), e
@@ -173,7 +193,7 @@ def _assert_still_blocked(client, hdr, why=None):
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 402, f"不該放行，實際 {r.status_code}：{r.text}"
     if why:
-        e = client.get("/api/license/status", headers=hdr).json()["emergency"]
+        e = client.get("/api/license/status", headers=_SU['h']).json()["emergency"]
         assert e and e["active"] is False and e["why"] == why, e
 
 
@@ -190,12 +210,12 @@ def test_an_empty_file_is_not_a_pass(client, hdr, box, drifted):
     ("簽章欄位亂填", json.dumps({"purpose": "emergency_pass", "tax_id": TAX_ID, "issued": "2026-01-01",
                                  "expires": "2099-01-01", "reason": "x", "sig": "AAAA"})),
 ])
-def test_unsigned_or_garbage_files_are_not_a_pass(client, hdr, box, drifted, label, body):
+def test_unsigned_or_garbage_files_are_not_a_pass(client, hdr, box, drifted, label, body, su_hdr):
     box.install_license()
     box.token.write_text(body, encoding="utf-8")
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 402, label
-    e = client.get("/api/license/status", headers=hdr).json()["emergency"]
+    e = client.get("/api/license/status", headers=su_hdr).json()["emergency"]
     assert e["active"] is False and e["why"] in ("token_malformed", "token_bad_signature"), e
 
 
@@ -278,7 +298,7 @@ def test_the_last_day_still_counts_and_the_day_after_does_not(client, hdr, box, 
 
 
 @pytest.mark.parametrize("license_state", ["missing", "malformed", "bad_signature"])
-def test_the_pass_only_covers_machine_mismatch_and_expired(client, hdr, box, drifted, license_state):
+def test_the_pass_only_covers_machine_mismatch_and_expired(client, hdr, box, drifted, license_state, su_hdr):
     """沒有金鑰／損毀／簽章不符是「重新簽一把授權」的事，不是通行證該蓋掉的事（也沒有可信的授權金鑰可以對統編）。"""
     if license_state == "malformed":
         box.license.write_text("garbage", encoding="utf-8")
@@ -291,7 +311,7 @@ def test_the_pass_only_covers_machine_mismatch_and_expired(client, hdr, box, dri
     box.install_pass()
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 402 and r.json()["reason"] == license_state, r.text
-    e = client.get("/api/license/status", headers=hdr).json()["emergency"]
+    e = client.get("/api/license/status", headers=su_hdr).json()["emergency"]
     assert e["active"] is False and e["why"] == "license_not_covered", e
 
 
@@ -301,32 +321,32 @@ def test_an_oversized_file_is_not_read(client, hdr, box, drifted):
     _assert_still_blocked(client, hdr, "token_too_big")
 
 
-def test_a_directory_in_place_of_the_file_is_not_a_pass(client, hdr, box, drifted):
+def test_a_directory_in_place_of_the_file_is_not_a_pass(client, hdr, box, drifted, su_hdr):
     box.install_license()
     box.token.mkdir()
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 402
-    assert client.get("/api/license/status", headers=hdr).json()["emergency"] is None
+    assert client.get("/api/license/status", headers=su_hdr).json()["emergency"] is None
 
 
-def test_a_pass_does_nothing_while_the_license_is_fine(client, hdr, box):
+def test_a_pass_does_nothing_while_the_license_is_fine(client, hdr, box, su_hdr):
     box.install_license()
     box.install_pass()
     r = client.get(BUSINESS_API, headers=hdr)
     assert r.status_code == 200 and r.headers.get(lic.LICENSE_HEADER) == "none"          # 已登入：沒有要提示 ⇒ none（前端據此移除橫幅）
-    e = client.get("/api/license/status", headers=hdr).json()["emergency"]
+    e = client.get("/api/license/status", headers=su_hdr).json()["emergency"]
     assert e["present"] is True and e["active"] is False and e["why"] == "not_needed", e
     assert _audit_rows() == []                                          # 沒用到就不留「使用」紀錄
 
 
-def test_the_status_endpoint_never_500s_on_a_broken_pass(client, hdr, box, drifted, monkeypatch):
+def test_the_status_endpoint_never_500s_on_a_broken_pass(client, hdr, box, drifted, monkeypatch, su_hdr):
     box.install_license()
     box.install_pass()
 
     def _boom(*a, **kw):
         raise RuntimeError("boom")
     monkeypatch.setattr(lic, "_emergency_judge", _boom)
-    s = client.get("/api/license/status", headers=hdr)
+    s = client.get("/api/license/status", headers=su_hdr)
     assert s.status_code == 200 and s.json()["emergency"]["active"] is False
     assert client.get(BUSINESS_API, headers=hdr).status_code == 402    # 判不了 ⇒ 照擋
 
@@ -392,12 +412,12 @@ def test_kfix_n1_the_tool_refuses_to_sign_in_the_wrong_environment(client, box, 
                       "--key", str(key), "--out", str(out)]) == 0 and out.exists()
 
 
-def test_kfix_n2_status_does_not_report_a_pass_active_when_the_gate_is_off(client, hdr, box, drifted, monkeypatch):
+def test_kfix_n2_status_does_not_report_a_pass_active_when_the_gate_is_off(client, hdr, box, drifted, monkeypatch, su_hdr):
     box.install_license()
     box.token.write_text(box.pass_blob(), encoding="utf-8")
-    assert client.get("/api/license/status", headers=hdr).json()["emergency"]["active"] is True     # 正對照：閘門開＋機器不符
+    assert client.get("/api/license/status", headers=su_hdr).json()["emergency"]["active"] is True     # 正對照：閘門開＋機器不符
     monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
-    em = client.get("/api/license/status", headers=hdr).json()["emergency"]
+    em = client.get("/api/license/status", headers=su_hdr).json()["emergency"]
     assert em["active"] is False and em["why"] == "gate_off" and em["present"] is True
 
 
@@ -412,7 +432,7 @@ def dev_signed(monkeypatch, box, license_test_key):
     assert lic.verify_license()["env"] == "dev"
 
 
-def test_a_dev_signed_key_still_works_but_is_never_silent(client, hdr, dev_signed, caplog):
+def test_a_dev_signed_key_still_works_but_is_never_silent(client, hdr, dev_signed, caplog, su_hdr):
     with caplog.at_level(logging.WARNING, logger="helpers.license_alerts"):
         r = client.get(BUSINESS_API, headers=hdr)
         assert r.status_code == 200                                       # 只警告，不擋（理由見 license_alerts.py）
@@ -420,7 +440,7 @@ def test_a_dev_signed_key_still_works_but_is_never_silent(client, hdr, dev_signe
         assert client.get(BUSINESS_API, headers=hdr).headers.get(lic.LICENSE_HEADER) == "dev_key"
     assert [a for a, _ in _audit_rows()] == ["license.dev_key"]            # 稽核每天一次
     assert sum("開發金鑰" in r.getMessage() for r in caplog.records) == 1
-    assert client.get("/api/license/status", headers=hdr).json()["env"] == "dev"
+    assert client.get("/api/license/status", headers=su_hdr).json()["env"] == "dev"
 
 
 def test_a_prod_signed_key_has_no_banner_and_no_alert(client, hdr, box):
@@ -554,11 +574,11 @@ def test_kfix_s5_a_pass_without_a_machine_value_is_malformed(client, hdr, box, d
     _assert_still_blocked(client, hdr, "token_malformed")
 
 
-def test_kfix_s2_a_pass_is_not_reported_active_when_nothing_is_blocked(client, hdr, box):
+def test_kfix_s2_a_pass_is_not_reported_active_when_nothing_is_blocked(client, hdr, box, su_hdr):
     """S2：永久授權過期（reason=expired 但不擋）＋有效通行證 ⇒ 通行證不是『生效』，狀態端點不可以這樣講。"""
     box.install_license(kind=lic.LICENSE_KIND_PERPETUAL, expires=(_dt.date.today() - _dt.timedelta(days=30)).isoformat())
     box.install_pass()
-    s = client.get("/api/license/status", headers=hdr).json()
+    s = client.get("/api/license/status", headers=su_hdr).json()
     assert s["reason"] == "expired" and s["blocked"] is False
     assert s["emergency"]["active"] is False and s["emergency"]["why"] == "not_needed", s["emergency"]
     r = client.get(BUSINESS_API, headers=hdr)
@@ -623,7 +643,73 @@ def test_kfix_s1_the_audit_goes_to_the_main_db_even_when_the_request_is_a_demo_s
     assert [a for a, _ in _audit_rows()] == ["license.emergency_pass"]
 
 
-def test_kfix_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(client, hdr, monkeypatch):
+def _break_audit_db(monkeypatch):
+    """讓稽核寫入的連線開不起來（模擬「資料庫忙到逾時」）；回一個函式把它修好。"""
+    import db
+    import sqlite3
+    real = db._connect
+
+    def _busy(*a, **kw):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(db, "_connect", _busy)
+    return lambda: monkeypatch.setattr(db, "_connect", real)
+
+
+@pytest.mark.parametrize("which", ["emergency", "dev_key", "startup_blocked"])
+def test_lg_s2_a_failed_audit_write_is_retried_not_lost_for_the_day(client, monkeypatch, caplog, which):
+    """T80稽核 LG-S2：「今天已警告」以前在寫稽核**之前**就標記；庫忙到逾時那天的稽核紀錄永遠補不回來。
+    現在：失敗 ⇒ 不標記；retry 視窗內不重寫（不要每個請求都開一條 30 秒的寫入）；視窗過後下一次會補上；補上之後同一天不再寫。"""
+    if which == "emergency":
+        info = {"pass_id": "abc123abc123", "until": "2099-01-01", "note": "n", "env": "prod"}
+        fire, action = (lambda: la.emergency_in_use(info)), "license.emergency_pass"
+    elif which == "dev_key":
+        st = {"valid": True, "env": "dev", "customer": "測試", "expires": "2099-01-01"}
+        fire, action = (lambda: la.dev_key_in_use(st)), "license.dev_key"
+    else:
+        monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", True)
+        monkeypatch.setattr(lic, "verify_license", lambda: {"valid": False, "reason": "missing", "customer": None})
+        monkeypatch.setattr(lic, "emergency_pass", lambda status: None)
+        fire, action = (lambda: la.startup_check() == "blocked"), "license.startup_blocked"
+    repair = _break_audit_db(monkeypatch)
+    with caplog.at_level(logging.ERROR, logger=la.logger.name):
+        fire()
+    assert any("稽核寫入失敗" in r.getMessage() for r in caplog.records), "寫入失敗要有 ERROR log（不是悄悄吞掉）"
+    repair()
+    la.flush()
+    assert _audit_rows() == [], "前提：第一次真的沒寫進去"
+    # retry 視窗內：不重寫（庫還是忙的時候不要每個請求都再打一次）
+    fire()
+    assert _audit_rows() == []
+    # 視窗過後：補上
+    monkeypatch.setattr(la, "_RETRY_AFTER_S", 0.0)
+    fire()
+    assert [a for a, _ in _audit_rows()] == [action], "失敗那天的稽核紀錄要補得回來"
+    # 補上之後同一天不再寫
+    fire()
+    fire()
+    assert [a for a, _ in _audit_rows()] == [action]
+
+
+def test_lg_s2_concurrent_requests_do_not_start_a_second_write_while_one_is_in_flight(client, monkeypatch):
+    """正在寫的時候（名額被領走、還沒結算），別的請求不可以再開一條。"""
+    st = {"valid": True, "env": "dev", "customer": "測試", "expires": "2099-01-01"}
+    assert la._claim("dev_key") is True
+    assert la.dev_key_in_use(st) is False, "名額還被領著（pending）⇒ 不再寫"
+    la._settle("dev_key", False)
+    assert la._claim("dev_key") is False, "剛失敗、還在 retry 視窗內"
+    monkeypatch.setattr(la, "_RETRY_AFTER_S", 0.0)
+    assert la._claim("dev_key") is True
+
+
+def test_lg_s2_a_claim_that_never_settles_goes_stale(monkeypatch):
+    """領了名額卻沒結算（例如執行緒被砍）不可以讓這個告警永遠沒人寫。"""
+    assert la._claim("dev_key") is True
+    assert la._claim("dev_key") is False
+    monkeypatch.setattr(la, "_PENDING_STALE_S", 0.0)
+    assert la._claim("dev_key") is True
+
+
+def test_kfix_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(client, hdr, monkeypatch, su_hdr):
     """S6：指紋讀不到時 machine_fingerprint() 不快取（每次都跑硬體查詢）；狀態端點被前端反覆呼叫，不可以每次都打。"""
     import routers.licensing as rl
     calls = []
@@ -635,12 +721,12 @@ def test_kfix_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_
     monkeypatch.setattr(lic, "_LICENSE_FILE_CACHE", None)
     monkeypatch.setattr(rl, "_FP_FAIL_UNTIL", 0.0)
     for _ in range(4):
-        s = client.get("/api/license/status", headers=hdr)
+        s = client.get("/api/license/status", headers=su_hdr)
         assert s.status_code == 200 and s.json()["machine"] is None
     assert len(calls) <= 2, calls         # 端點自己至多 1 次、verify_license 快取未命中至多 1 次；絕不是每次呼叫都來一次
 
 
-def test_kfix_m1_modules_skipped_at_start_stay_unloaded_until_a_restart(client, hdr, box, drifted):
+def test_kfix_m1_modules_skipped_at_start_stay_unloaded_until_a_restart(client, hdr, box, drifted, su_hdr):
     """M1（如實記下行為）：載入器只在開機時決定模組要不要載入。開機時授權被擋（還沒有通行證）⇒ 模組登記為 unlicensed；
     之後才放通行證 ⇒ 業務 API 立刻恢復，但那些模組**沒有**變成已載入——要重啟。狀態端點要講出有哪些模組在等重啟。"""
     from core import registry
@@ -652,7 +738,7 @@ def test_kfix_m1_modules_skipped_at_start_stay_unloaded_until_a_restart(client, 
         registry.set_state("zz_probe_mod", registry.STATE_UNLICENSED, why, {"key": "zz_probe_mod"})   # 載入器看到 False 時做的事
         box.install_pass()                                                    # 開機之後才放通行證
         assert client.get(BUSINESS_API, headers=hdr).status_code == 200      # 業務 API 恢復
-        s = client.get("/api/license/status", headers=hdr).json()
+        s = client.get("/api/license/status", headers=su_hdr).json()
         assert s["modules_unlicensed"] == ["zz_probe_mod"], s                        # 但 case 還在等重啟
         assert registry.is_loaded("zz_probe_mod") is False                            # 沒有任何東西會自己把它載入
         assert lic.module_license_check({"key": "zz_probe_mod"})[0] is True           # 『重啟』時才會判成通過

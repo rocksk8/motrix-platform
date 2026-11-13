@@ -3,11 +3,11 @@
   var _origFetch = window.fetch
   var _redirecting = false
   // ── 本公司資料設定閘門（COMPANY-SETUP-GATE §3.6、§4.2）──────────────────────────
-  // ① 428 company_setup_required ⇒ 最高管理員導向設定頁、其他人導向說明頁（這兩頁本身與登入頁不導）
+  // ① 428 company_setup_required ⇒ 最高管理者導向設定頁、其他人導向說明頁（這兩頁本身與登入頁不導）
   // ② 回應標頭 X-Motrix-Company-Setup（status_error／grace）⇒ 所有頁面頂端橫幅；之後的 /api 回應沒有這個標頭 ⇒ 移除
   var _SETUP_BANNER_TEXT = {
     status_error: '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員',
-    grace: '本公司資料尚未確認，目前為暫時放行（有期限），請最高管理員儘快到「公司資料設定」確認',
+    grace: '本公司資料尚未確認，目前為暫時放行（有期限），請最高管理者儘快到「公司資料設定」確認',
   }
   function _setupBanner(kind) {
     var el = document.getElementById('motrix-company-setup-banner')
@@ -54,6 +54,43 @@
     el.setAttribute('data-kind', value.indexOf('emergency') === 0 ? 'emergency' : 'dev_key')
     el.textContent = text
   }
+  // ③ 回應標頭 X-Motrix-License-Expiry（T83）：`days=12;level=warning;kind=subscription`（授權剩 30 天內、或永久授權已過維護期）⇒ 頂端橫幅，
+  //    30／14／7 天各一個嚴重程度（notice／warning／critical）；值 `none` ⇒ 移除。規則同上（已登入的回應一定帶；沒有標頭 ⇒ 不動）。
+  //    **只有最高管理者**收到標頭、看到橫幅（橫幅帶「前往授權頁」連結；頁面本身仍由伺服器驗權限）；其他角色不顯示剩餘天數。
+  function _licenseExpiryBanner(value) {
+    var el = document.getElementById('motrix-license-expiry-banner')
+    var m = value ? /days=(-?[0-9]+);level=([a-z]+);kind=([a-z]+)/.exec(value) : null
+    if (!m) { if (el) el.remove(); return }
+    if (!document.body) return
+    var days = parseInt(m[1], 10), level = m[2], perpetual = m[3] === 'perpetual'
+    var what = perpetual ? '授權的維護期' : '系統授權'
+    var text
+    if (level === 'ended') text = what + '已結束 ' + (-days) + ' 天，系統仍可繼續使用，但不再提供更新。'
+    else if (days === 0) text = what + '今天' + (perpetual ? '結束' : '到期') + '。'
+    else text = what + '將在 ' + days + ' 天後' + (perpetual ? '結束' : '到期') + (perpetual ? '，之後仍可繼續使用但不再提供更新' : '，到期後系統會暫停使用') + '。'
+    // 只有最高管理者看得到（伺服器只對最高管理者回這個標頭；這裡再擋一次，萬一標頭被別的角色收到也不顯示）
+    var role = ''
+    try { role = (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).role || '' } catch (e) {}
+    if (role !== 'superadmin') { if (el) el.remove(); return }
+    text += ' 請向供應商取得新授權檔後匯入。'
+    var critical = level === 'critical'
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'motrix-license-expiry-banner'
+      el.setAttribute('role', 'alert')
+      document.body.insertBefore(el, document.body.firstChild)
+    }
+    el.style.cssText = 'position:sticky;top:0;z-index:9997;padding:8px 14px;font-size:13px;text-align:center;' +
+      (critical ? 'background:var(--danger-light);color:var(--danger);border-bottom:1px solid var(--danger-border)'
+                : 'background:var(--warning-light);color:var(--warning);border-bottom:1px solid var(--warning)')
+    el.setAttribute('data-level', level)
+    el.textContent = text
+    var a = document.createElement('a')
+    a.href = (window.location.pathname.includes('/pages/') ? '' : 'pages/') + 'license-settings.html'
+    a.textContent = '前往授權頁'
+    a.style.cssText = 'margin-left:8px;color:inherit;font-weight:600;text-decoration:underline'
+    el.appendChild(a)
+  }
   function _isApi(args) {
     var u = args && args[0]
     u = (u && u.url) || String(u || '')
@@ -64,17 +101,19 @@
   function _applyBanners(h) {
     try { _setupBanner(h.setup) } catch (e) {}
     try { var lh = h.license; if (lh !== null && lh !== undefined) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
+    try { var xh = h.expiry; if (xh !== null && xh !== undefined) _licenseExpiryBanner(xh === 'none' ? '' : xh) } catch (e) {}
   }
   window.motrixApplyBanners = _applyBanners
   window.fetch = async function () {
     var r = await _origFetch.apply(this, arguments)
-    if (_isApi(arguments) && r.status < 500) _applyBanners({ setup: r.headers.get('X-Motrix-Company-Setup'), license: r.headers.get('X-Motrix-License') })
+    if (_isApi(arguments) && r.status < 500) _applyBanners({ setup: r.headers.get('X-Motrix-Company-Setup'), license: r.headers.get('X-Motrix-License'), expiry: r.headers.get('X-Motrix-License-Expiry') })
     if (r.status === 402 && !_redirecting && _isApi(arguments)) {
       try {
         var d402 = await r.clone().json()
         if (d402 && d402.code === 'license_required') {
           var here402 = window.location.pathname.split('/').pop()
-          if (['license-required.html', 'login.html'].indexOf(here402) < 0) {
+          // 授權頁（license-settings.html）也不導：授權失效時它正是用來匯入新授權的頁面（它只呼叫授權豁免端點，不會走到這裡；保險用）
+          if (['license-required.html', 'login.html'].indexOf(here402) < 0 && here402 !== 'license-settings.html') {
             _redirecting = true
             window.location.replace(window.location.pathname.includes('/pages/') ? 'license-required.html' : 'pages/license-required.html')
           }
@@ -106,10 +145,10 @@
             localStorage.setItem('motrix_session', JSON.stringify(sess))
           } catch (e) {}
           var currentFile = window.location.pathname.split('/').pop()
-          if (currentFile !== 'change-password.html') {
+          if (currentFile !== 'my-account.html' && currentFile !== 'change-password.html') {
             _redirecting = true
             var isPages = window.location.pathname.includes('/pages/')
-            window.location.replace(isPages ? 'change-password.html?forced=1' : 'pages/change-password.html?forced=1')
+            window.location.replace(isPages ? 'my-account.html?forced=1' : 'pages/my-account.html?forced=1')
           }
         }
       } catch (e) {}
@@ -328,12 +367,12 @@ function notifStore() {
       // 架構地圖 §6.2：superadmin/admin 自助啟用 TOTP，非強制——見
       // routers/auth.py totp_* 端點與 db.py::_m072_totp() docstring。這裡只是
       // 提醒，每個分頁（sessionStorage）最多彈一次，不會每換頁就再跳出來，
-      // 且刻意不在 change-password.html 本身顯示（那裡就是設定入口，重複無意義）。
+      // 且刻意不在 my-account.html 本身顯示（那裡就是設定入口，重複無意義）。
       try {
         const role = this._sess?.role || ''
         if (role !== 'superadmin' && role !== 'admin') return
         const currentFile = window.location.pathname.split('/').pop()
-        if (currentFile === 'change-password.html') {
+        if (currentFile === 'my-account.html' || currentFile === 'change-password.html') {
           // 狀態會在這一頁改變 ⇒ 離開後重新查一次（不沿用舊快取）
           try { sessionStorage.removeItem('motrix_totp_status') } catch (_e) { /* 無痕／禁用儲存：下次多查一次而已 */ }
           return
@@ -360,7 +399,7 @@ function notifStore() {
         this._setReminder({
           id: 'totp', tone: 'warning', title: '尚未啟用兩步驟驗證',
           msg: '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。',
-          href: isPages ? 'change-password.html' : 'pages/change-password.html', linkText: '前往設定 →'
+          href: isPages ? 'my-account.html?tab=security' : 'pages/my-account.html?tab=security', linkText: '前往設定 →'
         })
       } catch (e) {}
     },
@@ -589,7 +628,7 @@ function notifStore() {
         'auth.login':              '使用者登入',
         'auth.change_password':    '修改密碼',
         'quotation.create':        '新增報價單',
-        'quotation.submit':        '送出審核',
+        'quotation.submit':        '送出簽核',
         'quotation.approve':       '簽核通過',
         'quotation.reject':        '退回草稿',
         'quotation.update':        '更新報價單',

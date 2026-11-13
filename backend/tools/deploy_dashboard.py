@@ -1063,7 +1063,7 @@ def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
         except requests.RequestException:
             pass
     if me.get("role") != "superadmin":
-        raise ValueError("只有最高管理員可以套用更新")
+        raise ValueError("只有最高管理者可以套用更新")
     return me.get("username") or username
 
 
@@ -1884,7 +1884,8 @@ class LogTailIn(BaseModel):
 def log_tail(body: LogTailIn):
     """純讀取正式機 server.log 最後 N 行，供 apply_update.ps1 健康檢查失敗
     （healthy=False, log 錯誤筆數=N）時人工診斷用——不動任何東西，跟
-    list_snapshots 是同一種同步呼叫模式。"""
+    list_snapshots 是同一種同步呼叫模式。
+    server.log 剛被輪替（清成 0 byte）時，遠端腳本會用 server.log.1 的最後幾行補滿（2026-11-13，見 _dashboard_remote.ps1）。"""
     cmd = _ps_cmd(
         TOOLS_DIR / "_dashboard_remote.ps1",
         {"Action": "tail-log", "Username": body.username, "Lines": str(body.lines)},

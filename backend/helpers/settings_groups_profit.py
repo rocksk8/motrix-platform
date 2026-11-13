@@ -47,6 +47,16 @@ def _valid_days_cross_check(values):
     return []
 
 
+def _estimate_prefix_cross_check(values):
+    """估價單單號字首：2 個大寫英文字母，且不可跟其他單據的字首撞（單號是主鍵）。"""
+    if "estimate_no_prefix" not in values:
+        return []
+    from helpers import doc_type as _DT
+    p = values.get("estimate_no_prefix")
+    bad = _DT.validate_prefix(p.strip() if isinstance(p, str) else p)
+    return ["估價單單號字首：%s。" % bad] if bad else []
+
+
 def register(S, _register_core):
     def pct(name, default, label, question, where, lo=0, hi=100, extra=""):
         return S(name, "float", default, min=lo, max=hi, unit="%", risk="none", recommended=default,
@@ -83,9 +93,13 @@ def register(S, _register_core):
               question="新報價單預設的有效天數要幾天？", label="新報價單預設有效天數",
               help="新增報價單時，「有效天數」欄位預先帶入的數字，業務仍可逐張修改。不可超過「報價單有效天數上限」，否則每張新單一開始就會被列為『有效期限過長』。預設 30。",
               impact="只影響之後新增的報價單的預設值；已存的報價單不變。這個預設值本身不放寬也不收緊審核（超過上限仍由伺服器列為審核原因）。立即生效。注意：之後若把「報價單有效天數上限」調到低於這個預設，每張新報價單一開始就會被列為『有效期限過長』而需要審核，請一併調整。"),
+            S("estimate_no_prefix", "str", "ME", risk="none", recommended="ME",
+              question="估價單的單號要用哪兩個英文字母開頭？", label="估價單單號字首",
+              help="開立「估價單」時，單號最前面的兩個大寫英文字母就是這裡設定的字首，後面的年月與流水號跟報價單各自獨立計算、互不搶號。必須是 2 個大寫英文字母，且不能跟報價單或其他單據已使用的字首相同。",
+              impact="只影響之後新開立的估價單的單號；已經開出去的估價單單號不變、仍可正常開啟與搜尋。不影響報價單的單號。立即生效。"),
         ],
-        sensitive=False, risk="none", cross_check=_valid_days_cross_check,
-        help="新增報價單時預先帶入的值；業務可逐張修改。",
+        sensitive=False, risk="none", cross_check=lambda v: _valid_days_cross_check(v) + _estimate_prefix_cross_check(v),
+        help="新增報價單時預先帶入的值（業務可逐張修改），以及估價單的單號字首。",
     )
 
     _register_core(

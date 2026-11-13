@@ -19,7 +19,7 @@ import pytest
 from core import source_tree
 
 LOGIN = source_tree.page_file("login.html")
-CHANGE_PW = source_tree.page_file("change-password.html")
+CHANGE_PW = source_tree.page_file("my-account.html")
 
 CAPS_MSG = "大寫鎖定已開啟"
 IME_MSG = "輸入法可能不是英文"
@@ -264,7 +264,7 @@ def test_change_password_every_field_gets_the_hint(live_server, make_user, e2e_b
     u, pw = make_user(username="pwhint_chg", role="admin")
     p = e2e_browser.new_context().new_page()
     inject_login(p, live_server, u, pw)
-    p.goto(f"{live_server}/pages/change-password.html")
+    p.goto(f"{live_server}/pages/my-account.html?tab=security")
     fields = p.locator("input[data-pw-hint]")
     p.wait_for_function("() => document.querySelectorAll('input[data-pw-hint]').length >= 3")
     assert fields.count() >= 3
@@ -320,7 +320,7 @@ def test_change_password_submit_by_mouse_works_while_the_hint_is_showing(live_se
     u, pw = make_user(username="pwhint_chg2", role="admin")
     p = e2e_browser.new_context().new_page()
     inject_login(p, live_server, u, pw)
-    p.goto(f"{live_server}/pages/change-password.html")
+    p.goto(f"{live_server}/pages/my-account.html?tab=security")
     p.wait_for_function("() => document.querySelectorAll('input[data-pw-hint]').length >= 3")
     f = p.locator("input[data-pw-hint]")
     f.nth(0).fill(pw); f.nth(1).fill("NewPassw0rd!x1"); f.nth(2).fill("NewPassw0rd!x1")

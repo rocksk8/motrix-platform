@@ -15,7 +15,7 @@ from helpers import perm as _perm
 
 #: 預設角色名稱；與 `routers/system.py::_DEFAULT_ROLE_LABELS` 相同（守門題核對相等，避免漂移）。實際顯示以系統設定 `role_labels` 為準。
 ROLE_LABELS_DEFAULT = {
-    "superadmin": "超級管理員",
+    "superadmin": "最高管理者",
     "admin": "管理員",
     "sales": "業務",
     "engineer": "工程師",

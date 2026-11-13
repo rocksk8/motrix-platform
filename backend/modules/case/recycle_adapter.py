@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""M01 案件的刪除暫存區 adapter（第 53 班 P1；契約 helpers/recycle_bin.py、IP-RB1／IP-RB2；進度 docs/platform/plans/RECYCLE-BIN-P1-CASE-T53.md）。
+"""M01 案件的資源回收筒 adapter（第 53 班 P1；契約 helpers/recycle_bin.py、IP-RB1／IP-RB2；進度 docs/platform/plans/RECYCLE-BIN-P1-CASE-T53.md）。
 
 四種單據：`quotation`（報價單＋它名下的階段／拜訪／進度更新／行動事項）、`extra_expense`（額外支出；含請購單／採購單／費用單據，同一張表）、
 `completion_note`（完工單）、`material_order`（材料申請＝`quotations.data_json` 的 materialOrders 一列＋審核疊加列）。
@@ -13,10 +13,11 @@ from datetime import datetime
 from typing import List, Tuple
 
 from helpers import recycle_bin as RB
+from helpers import doc_type as _DT          # 估價單：訊息／標籤依單號字首顯示「報價單」或「估價單」
 from helpers.uploads import canonical_upload_path
 
-#: 暫存區模組不在時，刪除端點的明說（IP-RB2「對方不在時」）：照舊硬刪、附件不留
-BIN_ABSENT_NOTICE = "刪除暫存區模組未安裝：這張單據已直接刪除，無法還原"
+#: 資源回收筒模組不在時，刪除端點的明說（IP-RB2「對方不在時」）：照舊硬刪、附件不留
+BIN_ABSENT_NOTICE = "資源回收筒模組未安裝：這張單據已直接刪除，無法還原"
 
 
 # ── 共用小工具（本檔內用；不 import 其他模組）────────────────────────────────────
@@ -76,13 +77,13 @@ def _paths_of(*raws) -> List[str]:
 
 
 def reserved(conn, entity_type) -> set:
-    """暫存區裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
-    暫存區模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
-    return set(RB.reserved_ids(conn, entity_type) or ())            # 暫存區模組不在 ⇒ 空集合（IP-RB3）
+    """資源回收筒裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
+    資源回收筒模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
+    return set(RB.reserved_ids(conn, entity_type) or ())            # 資源回收筒模組不在 ⇒ 空集合（IP-RB3）
 
 
 def _rm_empty_dirs(rels) -> None:
-    """附件被搬進暫存區後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
+    """附件被搬進資源回收筒後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
     import os
     from helpers.uploads import UPLOADS_ROOT
     for d in {os.path.dirname(os.path.join(UPLOADS_ROOT, *r.split("/"))) for r in rels or []}:
@@ -126,7 +127,7 @@ def _quote_exists(conn, quote_no) -> bool:
 
 def _need_parent(conn, quote_no) -> None:
     if quote_no and not _quote_exists(conn, quote_no):
-        raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在暫存區）：請先還原報價單" % quote_no)
+        raise RB.BinError("parent_missing: %s %s 不在了（可能也在資源回收筒）：請先還原%s" % (_DT.label_of_no(quote_no), quote_no, _DT.label_of_no(quote_no)))
 
 
 # ── 額外支出（請購單／採購單／費用單據同一張表）─────────────────────────────────────
@@ -166,7 +167,7 @@ class ExtraExpenseAdapter(RB.Adapter):
         out = []
         keys = r.keys()
         if (r["paid_date"] or "").strip():
-            out.append({"kind": "paid", "label": "已登錄付款（%s）：請先由最高管理員更正付款日（退回待付款）再刪除" % r["paid_date"][:10], "blocking": True})
+            out.append({"kind": "paid", "label": "已登錄付款（%s）：請先由最高管理者更正付款日（退回待付款）再刪除" % r["paid_date"][:10], "blocking": True})
         if "kind" in keys and (r["kind"] or "") == "purchase_req" and (r["doc_code"] or ""):
             used = [x["doc_code"] for x in conn.execute(
                 "SELECT doc_code, data_json FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order' AND status NOT IN ('草稿','已駁回','已作廢')", (r["quote_no"],)).fetchall()
@@ -212,7 +213,7 @@ class ExtraExpenseAdapter(RB.Adapter):
 
 
 def _need_parent_if_live(conn, quote_no) -> None:
-    """額外支出可以沒有案件（quote_no=''）；有案件才要求報價單在（它可能在暫存區，要先還原）。"""
+    """額外支出可以沒有案件（quote_no=''）；有案件才要求報價單在（它可能在資源回收筒，要先還原）。"""
     if quote_no:
         _need_parent(conn, quote_no)
 
@@ -246,7 +247,7 @@ class CompletionNoteAdapter(RB.Adapter):
             return []
         out = []
         if r["is_signed"]:
-            out.append({"kind": "signed_back", "label": "客戶已回簽（%s）；回簽檔會一併進暫存區" % (r["signed_at"] or "")[:10], "blocking": False})
+            out.append({"kind": "signed_back", "label": "客戶已回簽（%s）；回簽檔會一併進資源回收筒" % (r["signed_at"] or "")[:10], "blocking": False})
         if r["status"] in ("已核准", "已完成") or (r["completion_date"] or ""):
             out.append({"kind": "warranty", "label": "完工日 %s：保固起算與工期以它為準，刪除後案件頁不再有這張完工單" % ((r["completion_date"] or "")[:10] or "—"), "blocking": False})
         return out
@@ -281,7 +282,7 @@ def _id_taken(conn, table, row) -> bool:
 
 
 # ── 報價單（連同它名下的階段／拜訪／進度更新／行動事項）──────────────────────────────────
-#: 報價單被刪時『隨它走』的名下資料（目前的硬刪只刪 quotations 一列、這些成了孤兒；進暫存區後一起搬走、一起還原）
+#: 報價單被刪時『隨它走』的名下資料（目前的硬刪只刪 quotations 一列、這些成了孤兒；進資源回收筒後一起搬走、一起還原）
 _OWNED = (("case_stages", "quote_no"), ("case_updates", "quote_no"), ("case_action_items", "quote_no"))
 #: 其他『單獨存在的單據』：報價單被刪時**不連帶刪**；『刪除已核可』時只要還有就明確拒絕（要先處理那些單據）
 _DEPENDENTS = (("case_extra_expenses", "額外支出／請購單／採購單"), ("completion_notes", "完工單"), ("shipping_notes", "出貨單"), ("contractor_dispatches", "承攬商派發"),
@@ -294,7 +295,7 @@ _DEPENDENT_WHERE = {"stock_items": " AND status='shipped'"}
 
 class QuotationAdapter(RB.Adapter):
     entity_type = "quotation"
-    label = "報價單／案件"
+    label = "報價單／估價單／案件"
 
     def _row(self, conn, entity_id):
         return conn.execute("SELECT * FROM quotations WHERE quote_no=?", (str(entity_id),)).fetchone()
@@ -302,8 +303,8 @@ class QuotationAdapter(RB.Adapter):
     def can_delete(self, conn, entity_id, user) -> Tuple[bool, str]:
         r = self._row(conn, entity_id)
         if r is None:
-            return False, "報價單 %s 不存在" % entity_id
-        return (True, "") if r["status"] == "草稿" else (False, "只有草稿狀態的報價單可以刪除（目前狀態：%s）" % r["status"])
+            return False, "%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id)
+        return (True, "") if r["status"] == "草稿" else (False, "只有草稿狀態的%s可以刪除（目前狀態：%s）" % (_DT.label_of_no(entity_id), r["status"]))
 
     def _dependents(self, conn, quote_no) -> List[Tuple[str, int]]:
         out = []
@@ -319,7 +320,7 @@ class QuotationAdapter(RB.Adapter):
     def can_delete_approved(self, conn, entity_id, user) -> Tuple[bool, str]:
         r = self._row(conn, entity_id)
         if r is None:
-            return False, "報價單 %s 不存在" % entity_id
+            return False, "%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id)
         dep = self._dependents(conn, str(entity_id))
         if dep:
             return False, "這個案件底下還有其他單據，不連帶刪除（請先逐張處理）：" + "、".join("%s %d 張" % d for d in dep)
@@ -333,7 +334,7 @@ class QuotationAdapter(RB.Adapter):
             return []
         out = []
         if r["is_signed"]:
-            out.append({"kind": "signed_back", "label": "客戶已回簽；回簽檔會一併進暫存區", "blocking": False})
+            out.append({"kind": "signed_back", "label": "客戶已回簽；回簽檔會一併進資源回收筒", "blocking": False})
         for label, n in self._dependents(conn, str(entity_id)):
             out.append({"kind": "dependents", "label": "底下還有 %s %d 張（不連帶刪除；刪除已核可會被拒絕）" % (label, n), "blocking": True})
         if (r["deal_tag"] or "") == "已結案" or (r["settle_status"] or "") == "finalized":
@@ -345,7 +346,7 @@ class QuotationAdapter(RB.Adapter):
     def snapshot(self, conn, entity_id) -> dict:
         r = self._row(conn, entity_id)
         if r is None:
-            raise RB.BinError("報價單 %s 不存在" % entity_id)
+            raise RB.BinError("%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id))
         qn = str(entity_id)
         row = dict(r)
         rows = {"quotations": [row]}
@@ -366,7 +367,7 @@ class QuotationAdapter(RB.Adapter):
             if p not in seen:
                 seen.add(p)
                 files.append(p)
-        return {"rows": rows, "files": _files(files), "label": "報價單 %s（%s）" % (qn, row.get("customer_name") or ""), "parent": None,
+        return {"rows": rows, "files": _files(files), "label": "%s %s（%s）" % (_DT.label_of_no(qn), qn, row.get("customer_name") or ""), "parent": None,
                 "meta": {"status": row.get("status") or "", "crm_unlink": "業務開發案件的轉建連結不會自動恢復"}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
@@ -388,7 +389,7 @@ class QuotationAdapter(RB.Adapter):
         q = rows["quotations"][0]
         qn = q["quote_no"]
         if self._row(conn, qn) is not None:
-            raise RB.BinError("conflict: 報價單號 %s 已被占用（請先處理現有那張）" % qn)
+            raise RB.BinError("conflict: %s號 %s 已被占用（請先處理現有那張）" % (_DT.label_of_no(qn), qn))
         _insert(conn, "quotations", _remap_json_cols(q, ctx, "signed_files_json", "data_json"), drop_id=_id_taken(conn, "quotations", q))
         idmap = {}
         for s in rows.get("case_stages", []):
@@ -506,7 +507,7 @@ class MaterialOrderAdapter(RB.Adapter):
                 cr["materialOrders"] = kept
                 from modules.case import content_fp as _cfp
                 _cfp.reconcile_txn(conn, qn, data, source="material_recycle")      # 簽核二擇一 S3b：直接 UPDATE 繞過漏斗，要自己對帳（off ⇒ 零查詢）
-                # updated_at 要跟著動：存檔流程之外（刪除已核可、還原）改了 JSON，舊畫面的 _expectedUpdatedAt 才會對不上而得到 409（否則舊畫面存檔會把這一列救活／再丟進暫存區）
+                # updated_at 要跟著動：存檔流程之外（刪除已核可、還原）改了 JSON，舊畫面的 _expectedUpdatedAt 才會對不上而得到 409（否則舊畫面存檔會把這一列救活／再丟進資源回收筒）
                 conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
 
     def restore_in_tx(self, conn, snap, ctx) -> dict:
@@ -514,14 +515,14 @@ class MaterialOrderAdapter(RB.Adapter):
         qn, iid = meta.get("quote_no", ""), str(meta.get("item_id", ""))
         r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qn,)).fetchone()
         if r is None:
-            raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在暫存區）：請先還原報價單" % qn)
+            raise RB.BinError("parent_missing: %s %s 不在了（可能也在資源回收筒）：請先還原%s" % (_DT.label_of_no(qn), qn, _DT.label_of_no(qn)))
         data = _jload(r["data_json"], {})
         cr = data.setdefault("caseRecord", {}) if isinstance(data.get("caseRecord", {}), dict) else None
         if cr is None:
-            raise RB.BinError("conflict: 這張報價單的案件資料格式不對，無法放回材料申請")
+            raise RB.BinError("conflict: 這張%s的案件資料格式不對，無法放回材料申請" % _DT.label_of_no(qn))
         orders = cr.setdefault("materialOrders", [])
         if any(isinstance(o, dict) and str(o.get("itemId")) == iid for o in orders):
-            raise RB.BinError("conflict: 材料申請編號 %s 已存在於這張報價單" % iid)
+            raise RB.BinError("conflict: 材料申請編號 %s 已存在於這張%s" % (iid, _DT.label_of_no(qn)))
         a_rows = (snap.get("rows") or {}).get("case_material_approvals") or []
         for a in a_rows:
             if self._approval(conn, qn, iid) is not None:
@@ -535,7 +536,7 @@ class MaterialOrderAdapter(RB.Adapter):
 
 
 def legacy_delete_quotation(conn, quote_no) -> None:
-    """暫存區模組不在時的舊行為：只刪報價單本體那一列（名下資料維持原樣成孤兒，與暫存區上線前相同）。"""
+    """資源回收筒模組不在時的舊行為：只刪報價單本體那一列（名下資料維持原樣成孤兒，與資源回收筒上線前相同）。"""
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (str(quote_no),))
 
 

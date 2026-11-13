@@ -5,8 +5,9 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>在線時數統計 — MOTRIX 專案管理系統</title>
+  <title>使用狀況 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票
@@ -59,6 +60,48 @@
       font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px;
       color: var(--text-dim); word-break: break-all; margin-top: 2px;
     }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       兩張寬表格（成員時數 7 欄、操作軌跡 6 欄）把頁面撐到 441px、表頭與「做了什麼」被擠成直排 → 各改成一筆一張卡；
+       日期框 16px（iOS 聚焦不放大）、快速鍵（本月／近 30 天）放大。 */
+    @media (max-width: 1023px) {
+      .os-bar input, .os-bar select, .os-main select { font-size: 16px; min-height: 44px; box-sizing: border-box; }
+    }
+    @media (max-width: 767px) {
+      .os-main { padding: 14px 12px 28px; }
+      .os-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+      .os-bar .os-field input { width: 100%; }
+      .os-bar .btn, .os-main .btn-sm { min-height: 44px; }
+      .os-bar > span { grid-column: 1 / -1; margin-left: 0 !important; }
+      .os-online { padding: 12px; }
+      .os-main select { max-width: 100%; }
+
+      .os-table, .os-table tbody { display: block; width: 100%; }
+      .os-table thead { display: none; }
+      .os-table tbody tr { display: grid; gap: 4px 10px; padding: 12px 4px; border-bottom: 1px solid var(--border-light); align-items: center; }
+      .os-table td { display: block; padding: 0; border: 0; min-width: 0; width: auto; text-align: left; }
+      .os-table td.num { text-align: right; }
+      /* 成員時數 */
+      .os-stats tbody tr { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .os-stats td:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .os-stats td:nth-child(2) { grid-column: 2; grid-row: 1; font-size: 15px; font-weight: 600; }
+      .os-stats td:nth-child(4) { grid-column: 3; grid-row: 1; font-size: 15px; font-weight: 700; }
+      .os-stats td:nth-child(3) { grid-column: 2 / -1; grid-row: 2; font-size: 12px; }
+      .os-stats td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; }
+      .os-stats td:nth-child(6) { grid-column: 1 / 3; grid-row: 4; text-align: left; font-size: 12px; color: var(--text-secondary); }
+      .os-stats td:nth-child(7) { grid-column: 3; grid-row: 4; font-size: 12px; color: var(--text-secondary); }
+      .os-stats td:nth-child(6)::before { content: "有紀錄天數 "; color: var(--text-dim); font-family: var(--font-zh); }
+      .os-stats td:nth-child(7)::before { content: "日均 "; color: var(--text-dim); font-family: var(--font-zh); }
+      /* 操作軌跡 */
+      .os-trail tbody tr { grid-template-columns: minmax(0, 1fr) auto; }
+      .os-trail td:nth-child(1) { grid-column: 1; grid-row: 1; color: var(--text-dim); }
+      .os-trail td:nth-child(3) { grid-column: 2; grid-row: 1; }
+      .os-trail td:nth-child(4) { grid-column: 1 / -1; grid-row: 2; font-size: 14px; }
+      .os-trail td:nth-child(2) { grid-column: 1; grid-row: 3; font-size: 12px; color: var(--text-secondary); }
+      .os-trail td:nth-child(5) { grid-column: 2; grid-row: 3; text-align: right; }
+      .os-trail td:nth-child(6) { grid-column: 1 / -1; grid-row: 4; text-align: left !important; }
+      .os-trail td:nth-child(6):not(:empty)::before { content: "結果 "; color: var(--text-dim); }
+    }
   </style>
 </head>
 <body x-data="onlineStatsPage()" x-cloak>
@@ -74,9 +117,14 @@
     <div class="pg">
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
-        <h1 class="pg__t">在線時數統計</h1>
+        <h1 class="pg__t">使用狀況</h1>
         <p class="pg__s">只統計有實際操作的活躍時間，每 5 分鐘累計一次</p>
       </div>
+    </div>
+
+<div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
     </div>
 
     <div class="os-online">
@@ -109,7 +157,7 @@
             x-text="items.length + ' 位成員有紀錄'"></span>
     </div>
 
-    <table class="os-table">
+    <table class="os-table os-stats">
       <thead>
         <tr>
           <th style="width:30px">#</th>
@@ -139,7 +187,7 @@
       </tbody>
     </table>
 
-    <div x-show="items.length === 0" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
+    <div x-show="items.length === 0 && !loadErrs.hours" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
       這個期間還沒有任何活躍紀錄
     </div>
 
@@ -174,7 +222,7 @@
         </span>
       </div>
 
-      <table class="os-table">
+      <table class="os-table os-trail">
         <thead>
           <tr>
             <th style="width:120px">時間</th>
@@ -210,7 +258,7 @@
 
       <!-- 這一頁撈回來的 200 筆有可能整批都是 90 天內的舊雜訊（被讀取端藏起來），
            那時候還有更早的資料可以翻，不能說「沒有紀錄」。 -->
-      <div x-show="trail.length === 0 && !trailNextId"
+      <div x-show="trail.length === 0 && !trailNextId && !loadErrs.trail"
            style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">
         這個期間沒有操作紀錄
       </div>
@@ -228,7 +276,7 @@
     <div class="os-note">
       <span>ℹ️</span>
       <span>
-        這裡統計的是**有實際操作的活躍時間**，不是分頁開著的時間——開著畫面去開會不會被算進去。
+        這裡統計的是「有實際操作的活躍時間」，不是分頁開著的時間——開著畫面去開會不會被算進去。
         系統每 5 分鐘累計一次，因此當天的數字最多會少算 5 分鐘。<br>
         這份資料只有最高管理者看得到。
       </span>
@@ -244,6 +292,10 @@
         items: [],
         start: '',
         end: '',
+        // 讀取失敗的白話原因（三支各一格）：失敗時不可以只顯示「還沒有任何活躍紀錄」，使用者會以為真的沒人上線過
+        loadErrs: { online: '', hours: '', trail: '' },
+        get loadErr() { return this.loadErrs.hours || this.loadErrs.trail || this.loadErrs.online },
+        retryLoad() { this.loadErrs = { online: '', hours: '', trail: '' }; this.loadOnline(); this.load() },
 
         // 這一頁只有最高管理者能用；後端兩支端點也都是 superadmin 限定，
         // 前端這道只是讓非授權者看到的是說明而不是一片載入失敗。
@@ -253,7 +305,7 @@
               '<div style="max-width:520px;margin:64px auto;text-align:center">'
               + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
               + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>'
-              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">在線時數統計僅限最高管理者檢視。</div></div>'
+              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">使用狀況僅限最高管理者檢視。</div></div>'
             return
           }
           this.thisMonth()
@@ -306,12 +358,14 @@
             if (this.trailUser) qs.set('user', this.trailUser)
             if (more && this.trailNextId) qs.set('before_id', this.trailNextId)
             const r = await fetch(`/api/user-activity/trail?${qs}`, { headers: this._auth() })
-            if (!r.ok) return
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (!r.ok) { this.loadErrs.trail = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.trail = more ? this.trail.concat(d.items || []) : (d.items || [])
             this.trailNextId = d.nextBeforeId
             this.trailNote = d.note || ''
-          } catch (e) {}
+            this.loadErrs.trail = ''
+          } catch (e) { this.loadErrs.trail = MotrixError.loadText(e) }
         },
 
         // 「今天 20:13」比「09-15 20:13:45」好認：看軌跡的人在意的是「剛剛」還是
@@ -331,19 +385,23 @@
         async loadOnline() {
           try {
             const r = await fetch('/api/online-users', { headers: this._auth() })
-            if (r.ok) this.online = await r.json()
-          } catch (e) {}
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (r.ok) { this.online = await r.json(); this.loadErrs.online = ''; this._onlineOk = true }
+            else if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(r.status)    // 每 60 秒的背景更新失敗不吵人；第一次就失敗才要說
+          } catch (e) { if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(e) }
         },
 
         async load() {
           try {
             const r = await fetch(`/api/user-activity?start=${this.start}&end=${this.end}`,
                                   { headers: this._auth() })
-            if (!r.ok) { this.items = []; return }
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (!r.ok) { this.items = []; this.loadErrs.hours = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.items = d.items || []
             this.members = d.members || []
-          } catch (e) { this.items = [] }
+            this.loadErrs.hours = ''
+          } catch (e) { this.items = []; this.loadErrs.hours = MotrixError.loadText(e) }
           this.reloadTrail()
         },
 

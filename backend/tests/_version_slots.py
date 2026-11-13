@@ -8,6 +8,8 @@
   core migration               `register("core", NEXT, fn)`（runtime 不記版號、每次啟動重跑；列車換成連續整數）
 准不准：MOTRIX_TRAIN=1、分支 platform／master／main／train/*、HEAD 是 prod/* 標籤 ⇒ 不准（有就紅）；
         其他（wip/*、一般分支、detached）⇒ 准。git 查不到 ⇒ 不准（寧可紅）。
+        例外：MOTRIX_PLACEHOLDERS_BY_BRANCH=1（只有整合守門題組帶）⇒ 忽略 MOTRIX_TRAIN、只看分支／標籤——作者在分支上跑列車模式守門時，
+        `(next)` 佔位是預期；格式／一致性（標題寫錯、快照與 CHANGELOG 不一致、manifest 條目不完整）的守門不受影響，仍會紅。
 """
 import json
 import os
@@ -24,6 +26,9 @@ HEADING_LOOSE = re.compile(r"^##[ \t]+\(?\s*next\b", re.M | re.I)
 #: 只認行首的登記（docstring／註解裡提到的不算；與 train_number.MIG_LINE 同一個錨點）
 MIGRATION = re.compile(r"""^register\(\s*["']core["']\s*,\s*NEXT\s*,""", re.M)
 PROTECTED_BRANCHES = ("platform", "master", "main")
+#: =1 ⇒ 准不准**只看分支**（忽略 MOTRIX_TRAIN）。只有整合守門題組（preflight_guards）給它：作者在分支上跑列車模式的守門，
+#: 但分支上的 `(next)` 佔位本來就是預期（列車 train_number assign 取號）；列車／platform／prod 標籤上仍然不准（分支規則照舊）。
+BY_BRANCH_ENV = "MOTRIX_PLACEHOLDERS_BY_BRANCH"
 
 
 def _git(repo, *args):
@@ -34,7 +39,7 @@ def _git(repo, *args):
 def placeholders_allowed(repo=ROOT, environ=None):
     """⇒ (准不准, 理由)。"""
     env = os.environ if environ is None else environ
-    if env.get("MOTRIX_TRAIN") == "1":
+    if env.get("MOTRIX_TRAIN") == "1" and env.get(BY_BRANCH_ENV) != "1":
         return False, "MOTRIX_TRAIN=1（列車）"
     branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     if branch is None:

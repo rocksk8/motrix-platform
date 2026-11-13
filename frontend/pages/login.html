@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>登入 — MOTRIX 專案管理系統</title>
+  <title>登入 — MOTRIX PLATFORM</title>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,7 +130,7 @@
     .footer-note {
       text-align: center;
       font-size: 12px;
-      color: #444;
+      color: #7A7A7A;
       line-height: 1.7;
     }
     .spinner {
@@ -179,6 +179,14 @@
       text-align: center;
       margin: 14px 0;
     }
+
+    /* ── 手機／平板觸控（2026-11-12）：輸入 16px（iOS 聚焦不自動放大）、按鈕 48px、提示字對比拉高 ── */
+    .form-input::placeholder { color: #7A7A7A; }
+    @media (max-width: 1023px) {
+      .form-input { font-size: 16px; min-height: 48px; padding: 12px 14px; }
+      .btn-login, .btn-secondary { min-height: 48px; font-size: 15px; }
+      .eye-btn { min-width: 44px; min-height: 44px; }
+    }
   </style>
 </head>
 <!-- Alpine 3 會自動呼叫 x-data 物件上的 init()，所以這裡刻意不寫 x-init。
@@ -219,7 +227,7 @@
           <label class="form-label">帳號</label>
           <input class="form-input" :class="{error: error}"
                  type="text" x-model="username" x-ref="username" @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
-                 placeholder="輸入帳號" autocomplete="username" autofocus>
+                 placeholder="輸入帳號" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
         </div>
 
         <div class="form-group">
@@ -282,7 +290,7 @@
         <div class="form-group">
           <label class="form-label">兩步驟驗證碼</label>
           <input class="form-input" :class="{error: error}"
-                 type="text" inputmode="numeric" x-model="totpCode" x-ref="totpCode"
+                 type="text" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" x-model="totpCode" x-ref="totpCode"
                  @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                  placeholder="請輸入驗證 App 顯示的 6 位數字，或救援碼" autocomplete="one-time-code" autofocus>
           <div class="error-msg" x-show="error">
@@ -312,7 +320,7 @@
       <hr class="divider">
       <div class="footer-note">
         如需開立帳號或重設密碼，請聯繫系統管理員<br>
-        <span style="color:#333" x-text="'MOTRIX 專案管理系統 ' + (systemVersion || 'v1.0') + (branding.shortName ? ' · ' + branding.shortName : '')"></span>
+        <span style="color:#333" x-text="'MOTRIX PLATFORM ' + (systemVersion || 'v1.0') + (branding.shortName ? ' · ' + branding.shortName : '')"></span>
       </div>
     </div>
   </div>
@@ -687,6 +695,7 @@
 
       _storeSessionAndRedirect(data) {
         if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
+        try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 換人登入：前一位的個人偏好快取不留（登入後第一個頁面會向伺服器重新同步）
         localStorage.setItem('motrix_session', JSON.stringify({
           token:       data.token,
           userId:      data.userId,

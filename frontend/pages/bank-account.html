@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>收款帳號 - MOTRIX 專案管理系統</title>
+  <title>收款帳號 - MOTRIX PLATFORM</title>
   <script src="../static/ui.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -32,6 +32,24 @@
     .ba-hist{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin:6px 0 0;padding:0;list-style:none}
     .ba-hist li{padding:3px 0;border-bottom:1px dashed var(--border-light)}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：輸入框 14px/高 ~32px（iOS 聚焦會自動放大頁面）、「顯示／隱藏」鈕 2px 內距太小、
+       說明文字貼著下一個欄位標籤。 */
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 28px}
+      .ba-card{padding:14px;max-width:none}
+      .ba-f input,.ba-f select{font-size:16px;min-height:44px;padding:9px 11px}
+      .ba-btn{min-height:44px;padding:10px 20px}
+      .ba-btn[style*="padding:2px 10px"]{padding:8px 14px !important;min-height:40px;margin-left:0 !important;margin-top:6px}
+      .ba-card .ba-note + form,.ba-card .ba-note + .ba-grid{margin-top:10px}
+      [data-testid="ba-none"]{margin-bottom:12px}
+      .ba-row .ba-btn{flex:1 1 auto}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .ba-f input,.ba-f select{min-height:40px}
+      .ba-btn{min-height:40px}
+      .ba-btn[style*="padding:2px 10px"]{padding:6px 12px !important;min-height:36px}
+      [data-testid="ba-none"]{margin-bottom:12px}
+    }
   </style>
 </head>
 <body x-data="bankAccountPage()" x-init="init()" x-cloak>
@@ -44,7 +62,7 @@
     <main class="page-main">
       <div class="ba-head">
         <div class="ba-title">收款帳號</div>
-        <span class="ba-note">報銷、代墊款與勞務報酬匯給你的銀行帳號。只有你本人、超級管理員、財務與出納看得到完整帳號；其他人只看到末四碼。</span>
+        <span class="ba-note">報銷、代墊款與勞務報酬匯給你的銀行帳號。只有你本人、最高管理者、財務與出納看得到完整帳號；其他人只看到末四碼。</span>
       </div>
 
       <!-- ── 我的收款帳號 ── -->
@@ -73,7 +91,7 @@
         </form>
       </section>
 
-      <!-- ── 管理：查看／維護別人的（超級管理員、財務、出納） ── -->
+      <!-- ── 管理：查看／維護別人的（最高管理者、財務、出納） ── -->
       <section class="ba-card" data-testid="ba-admin" x-show="canList" x-cloak>
         <h3 class="ba-sec">同仁收款帳號<span class="ba-note" style="font-weight:400" x-text="canEdit ? '（可維護）' : '（只能查看，付款用）'"></span></h3>
         <div class="ba-f" style="max-width:320px">
@@ -94,11 +112,11 @@
           </div>
           <div x-show="canEdit" style="margin-top:12px">
             <div class="ba-grid">
-              <div class="ba-f"><label>銀行代碼</label><input data-testid="ba-a-bank-code" x-model="af.bankCode" maxlength="3" autocomplete="off"></div>
+              <div class="ba-f"><label>銀行代碼</label><input data-testid="ba-a-bank-code" x-model="af.bankCode" maxlength="3" inputmode="numeric" autocomplete="off"></div>
               <div class="ba-f"><label>銀行名稱</label><input data-testid="ba-a-bank-name" x-model="af.bankName" maxlength="40" autocomplete="off"></div>
               <div class="ba-f"><label>分行</label><input data-testid="ba-a-branch" x-model="af.bankBranch" maxlength="40" autocomplete="off"></div>
               <div class="ba-f"><label>戶名</label><input data-testid="ba-a-account-name" x-model="af.accountName" maxlength="40" autocomplete="off"></div>
-              <div class="ba-f"><label>帳號</label><input class="ba-num" data-testid="ba-a-account-number" x-model="af.accountNumber" maxlength="24" autocomplete="off"></div>
+              <div class="ba-f"><label>帳號</label><input class="ba-num" data-testid="ba-a-account-number" x-model="af.accountNumber" maxlength="24" inputmode="numeric" autocomplete="off"></div>
             </div>
             <div class="ba-row">
               <button type="button" class="ba-btn" data-testid="ba-a-save" :disabled="busy" @click="saveTarget()">儲存（代為維護）</button>

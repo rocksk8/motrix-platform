@@ -2,7 +2,7 @@
 """D4 後半（CUSTOMIZATION-SPEC §8.3）：用排版器調整內建模組（標案雷達）的列表欄位與表單區塊，並依角色套用。
 
 一條細線（瀏覽器操作；斷言打在伺服器狀態＝ui_definitions、user_list_prefs、/api/layout 的回應，畫面只當作「套上了」的證據）：
-  ① 超級管理員在標案雷達頁按「編輯版面」（同一頁）：列表隱藏一欄、拖曳一欄、改一欄標題；表單把欄位移到另一個區塊、區塊改名
+  ① 最高管理者在標案雷達頁按「編輯版面」（同一頁）：列表隱藏一欄、拖曳一欄、改一欄標題；表單把欄位移到另一個區塊、區塊改名
      ⇒ 存草稿 ⇒ 看差異 ⇒ 發布（公司預設）
   ② 同一個排版器切到「角色：管理員」（以公司預設為起點）再多隱藏一欄 ⇒ 發布；右上角以「業務」「管理員」預覽
   ③ 管理員看到角色版面；業務（另一個角色）看到的仍然是公司預設
@@ -202,7 +202,7 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
                                                ("scope", "[data-layout-section='watch:scope']"),
                                                ("budgetMin", "[data-layout-field='watch:budgetMin']"))}
     assert o["excludes"] < o["org"] < o["scope"] < o["budgetMin"], o                 # 條件：…排除詞、機關 ｜範圍：預算…
-    assert sales.get_by_test_id("ml-edit-open").count() == 0                         # 非超級管理員沒有排版器
+    assert sales.get_by_test_id("ml-edit-open").count() == 0                         # 非最高管理者沒有排版器
 
     # ④ 公司預設發布第 2 版（地點打開）⇒ 還原第 1 版 ⇒ 畫面跟著回去
     ed = _editor(boss)
@@ -227,7 +227,7 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     assert "location" not in sales.evaluate(HEADS)
     assert _api(sales, live_server, sales_sess, "/api/layout/" + MOD)[1]["source"] == "company v3"
     ed.get_by_test_id("ml-close").click()
-    assert "location" not in boss.evaluate(HEADS)                                    # 超級管理員自己的畫面（公司 v3）也回去
+    assert "location" not in boss.evaluate(HEADS)                                    # 最高管理者自己的畫面（公司 v3）也回去
 
 
 @pytest.mark.e2e
@@ -288,7 +288,7 @@ def test_personal_layer_only_hides_and_reorders(live_server, make_user, no_tile_
     sales.wait_for_function(READY)
     heads = sales.evaluate(HEADS)
     assert "org" in heads and "caseNo" in heads and "location" not in heads, heads
-    # 非超級管理員不能寫公司／角色層
+    # 非最高管理者不能寫公司／角色層
     st, _ = _api(sales, live_server, sales_sess, "/api/definitions/layout/%s/draft" % KEY, "PUT", {"body": {"ops": []}})
     assert st == 403
     # 別人的畫面不受業務的個人設定影響

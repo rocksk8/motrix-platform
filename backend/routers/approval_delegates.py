@@ -63,7 +63,7 @@ def create_approval_delegate(body: dict = Body(...), authorization: str = Header
     reason     = (body.get("reason") or "").strip()
 
     if delegator_username != user["username"] and user["role"] != "superadmin":
-        raise HTTPException(403, "僅能設定自己的簽核代理人，如需代替他人設定請聯絡最高管理員")
+        raise HTTPException(403, "僅能設定自己的簽核代理人，如需代替他人設定請聯絡最高管理者")
     if not delegate_username:
         raise HTTPException(400, "請指定代理人")
     if delegate_username == delegator_username:
@@ -113,7 +113,7 @@ def deactivate_approval_delegate(delegate_id: int, authorization: str = Header(N
         if not row:
             raise HTTPException(404, "找不到此代理設定")
         if row["delegator_username"] != user["username"] and user["role"] != "superadmin":
-            raise HTTPException(403, "僅委託人本人或最高管理員可停用此代理設定")
+            raise HTTPException(403, "僅委託人本人或最高管理者可停用此代理設定")
         if not row["active"]:
             raise HTTPException(409, "此代理設定已是停用狀態")
         now = datetime.now().isoformat()

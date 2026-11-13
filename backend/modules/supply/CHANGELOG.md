@@ -1,5 +1,16 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）
+- 變更（內部）：出貨單回簽附件（`api/shipping_notes.py` signed-files 上傳／刪除）。附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
+
+## 1.0.38 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）
+- 文字（T82 用詞整理）：出貨單「僅草稿狀態可送出審核」409 訊息 → 「…可送出簽核」；僅訊息文字，狀態判斷不變
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.0.37 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 前端：`shipping-export-history.html` 等頁的載入失敗訊息改用 UX 規範的白話（403／連線失敗／其他），狀態碼只進 console。無 API／資料／權限變更。
+- 測試：`tests/test_e2e_load_error_banner_2026_11_13.py`。
+
 ## 1.0.36 — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）
 - 修正（後端）：`POST /api/inventory/batches`（`create_batch`）整段改在 `write_txn` 內：重複序號檢查與逐筆 INSERT 之間原本沒有寫鎖（先查再寫的 TOCTOU），併發進貨同序號時 INSERT 丟 `IntegrityError`，連線沒 rollback／close ⇒ 寫鎖留到被 GC，下一個寫入者卡 30 秒。寫鎖現在在檢查之前拿，`next_entity_code` 取批號也在鎖內。正常路徑回應不變。
 - 測試：`tests/test_create_batch_write_lock_t80.py`（重複檢查那一刻已在寫交易內，舊碼紅、新碼綠；序號撞 UNIQUE 後鎖已放）。

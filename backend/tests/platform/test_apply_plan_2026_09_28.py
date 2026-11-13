@@ -579,8 +579,22 @@ def test_ds5_restores_never_write_back_config_files(name):
     writes = [l for l in code.splitlines() if re.search(r"robocopy\s+(\(Join-Path \$rollbackDir|\$snap\s)", l)]
     assert writes, "量法壞了：沒抓到任何寫回"
     for l in writes:
-        for token in ("/XD certs", "license.key", "autostart.bat", ".apply.lock", ".deployed_commit.json"):
+        for token in ("/XD certs", "license.key", "license_emergency.key", "autostart.bat", ".apply.lock", ".deployed_commit.json"):
             assert token in l, (token, l.strip())
+
+
+@pytest.mark.parametrize("name", ("apply_update.ps1", "rollback_update.ps1"))
+def test_every_xf_list_that_protects_license_key_also_protects_the_emergency_pass(name):
+    """LG-S4（T80 授權閘門上線備忘）：`license_emergency.key`（緊急放行通行證）跟 `license.key` 一樣是 per-installation 檔，
+    不在部署包裡；任何一份 robocopy 的 /XF 清單只排除 license.key、沒排除它 ⇒ 還原快照時（快照裡沒有它）會被當成「快照沒有的檔」
+    清掉，或寫回舊版——正式機被救的那一把通行證在回滾那一刻消失，授權閘門又把業務 API 擋成 402。
+    含 apply_update.ps1 的「建快照」那一行（目的地是快照，沒有 /XD certs）與健檢用的 /XF 續行。"""
+    code = _ps_code(name)
+    xf_lines = [l for l in code.splitlines() if "/XF" in l and re.search(r"(?<![\w.])license\.key(?![\w.])", l)]
+    expected = {"apply_update.ps1": 7, "rollback_update.ps1": 3}[name]
+    assert len(xf_lines) == expected, "量法壞了或有人新增／刪掉一份 /XF 清單（要同步檢查）：%d vs %d" % (len(xf_lines), expected)
+    for l in xf_lines:
+        assert re.search(r"(?<![\w.])license_emergency\.key(?![\w.])", l), l.strip()[:160]
 
 
 # ── D 稽核 DS4：兩支腳本的所有狀態值都在儀表板值域裡 ──

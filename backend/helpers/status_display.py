@@ -2,7 +2,7 @@
 """狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。**
 
 [單位] helper:status_display    [層] L1    [穩定度] 實驗（旗標 builder_status_display.enabled 關＝所有畫面與今天逐位元相同）
-[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, ENGLISH_TOKENS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, meta, public_payload, flag_on, enabled, ensure_registered, published_body
+[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, ENGLISH_TOKENS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, meta, public_payload, flag_on, enabled, ensure_registered, published_body, duplicate_warnings
 [不變式] ①**鍵集合由程式擁有**（`STATUS_KEYS`）：使用者不能新增或刪除鍵，也不能改鍵；表只存 `label`／`names`（各情境簡稱）／`tone`／`order`；
     ②顏色只能從固定調色盤選（`TONES`，對應 css `.st-chip--*` 語意 token），不收自由色碼；
     ③官方用語保護：非『已核准』語意的鍵，名稱不可含官方用語（核准／批准／核可／已簽核／簽核完成／審核通過）——預設值本身除外；
@@ -26,7 +26,7 @@ _log = logging.getLogger(__name__)
 #: 色調調色盤 ⇒ 前端 class（`neutral` 只有基底 `st-chip`）。與 css/style.css:952-965 一致。
 TONES = ("neutral", "draft", "pending", "signing", "approved", "rejected", "paid", "void")
 #: 情境（各畫面用的簡稱槽）。`default` 就是 label 本身，不放在 names 裡。
-CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement")
+CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement", "voucher")
 OFFICIAL_WORDS = (
     # 繁體
     "核准", "核準", "批准", "核可", "已簽核", "簽核完成", "簽核通過", "審核通過", "已通過", "通過", "生效", "確認", "已批", "批示", "已准", "准予", "承認", "認可", "同意",
@@ -68,13 +68,14 @@ _TONE0 = {r[0]: r[3] for r in _RAW}
 
 #: 今天各畫面的情境簡稱（原樣保留）：quotations.html:653-664 `statusBadge()`。
 _NAMES0 = {
-    "待審核": {"quote_list": "審核中"}, "已拒絕": {"quote_list": "已退回"},
+    "待審核": {"quote_list": "待簽核", "voucher": "待審核"}, "已拒絕": {"quote_list": "已退回"},
     "已成案": {"quote_list": "執行中"}, "已提供": {"quote_list": "待決定"},
     "finalized": {"report": "已結算", "case": "已定稿", "settlement": "精算完結"},     # reports.html:1251／case-management.html:2699／settlement.html:307
     "draft": {"settlement": "精算草稿"},
 }
 # 沒有情境簡稱時的預設標籤；其餘＝鍵本身（原值照印，與今天相同）
-_LABEL0 = {"finalized": "已完結"}
+#（2026-11-13 使用者裁示：畫面一律「待簽核」；資料鍵『待審核』不變。UX-PRINCIPLES §6）
+_LABEL0 = {"finalized": "已完結", "待審核": "待簽核", "差額待審核": "差額待簽核"}
 
 
 def _tone_allowed(key, tone):
@@ -183,6 +184,33 @@ def _conflicts(body_table):
                         out.append(_p("statuses.%s" % k, "『%s』在%s已被『%s』使用，名稱不可重複" % (t, "預設" if ctx == "default" else ctx, k2)))
                     break
     return out
+
+
+#: 已知、有意保留的重複顯示字（今天就是這樣：quotations.html `statusBadge()` 把『已拒絕』在報價單列表顯示成『已退回』）。其他重複一律警告。
+_KNOWN_DUPLICATES = {("quote_list", "已退回")}
+
+
+def duplicate_warnings(table=None) -> list:
+    """L3（hichan-9 審查，PM 2026-11-13）：不同狀態在**同一個畫面情境**顯示成同一個字時提出警告（不擋存檔——有時是刻意合併，但使用者要知道）。
+    與 `_conflicts` 的差別：後者只擋「被改過的欄位」撞名；這裡看**整張有效表**（含沒改過的預設值），
+    所以像「待審核」內建改成「待簽核」之後若又有別的狀態也叫「待簽核」就會被抓到。⇒ `[{path, message}]`（沒有重複＝空）。永不丟例外。"""
+    try:
+        tbl = table if table is not None else defaults()
+        out = []
+        for ctx in ("default",) + tuple(CONTEXTS):
+            seen = {}
+            for k in STATUS_KEYS:
+                t = _texts(tbl, k)[ctx]
+                m = _mk(t)
+                if m:
+                    seen.setdefault(m, []).append((k, t))
+            for m, rows in seen.items():
+                if len(rows) > 1 and (ctx, rows[0][1]) not in _KNOWN_DUPLICATES:
+                    out.append(_p("statuses.%s" % rows[-1][0], "『%s』在%s同時是%s的顯示名稱，畫面上會分不出來" % (
+                        rows[0][1], "預設" if ctx == "default" else ctx, "、".join("『%s』" % r[0] for r in rows))))
+        return out
+    except Exception:                                                # noqa: BLE001
+        return []
 
 
 def validate_table(body, key=KEY) -> list:
@@ -359,6 +387,7 @@ def public_payload(conn=None) -> dict:
                 c.close()
         ensure_registered()
         tbl = effective_table(published_body(conn))
-        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl), "meta": meta(), "defaults": defaults()}
+        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl), "meta": meta(), "defaults": defaults(),
+                "warnings": [w["message"] for w in duplicate_warnings(tbl)]}
     except Exception:                                                # noqa: BLE001
         return {"enabled": False}

@@ -213,7 +213,8 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
         if queue_source is None:
             queue_source = _func_body_text(src, "get_approval_queue")
         if count_source is None:
-            count_source = _func_body_text(src, "get_approval_queue_count")
+            # 2026-11-13（UX P1.5）：「輪到我」的項目抽成 my_pending_items()（角標、首頁、問候語共用），count 端點呼叫它——兩段原始碼一起看
+            count_source = _func_body_text(src, "get_approval_queue_count") + chr(10) + _func_body_text(src, "my_pending_items")
 
     missing_from_map, missing_from_queue, missing_from_count = [], [], []
     missing_extra = []

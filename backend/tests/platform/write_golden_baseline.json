@@ -47,6 +47,26 @@
   ],
   "s": 400
  },
+ "POST /api/auth/account-locks/unlock": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "POST /api/customers/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "confirms",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
+  ],
+  "s": 200
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -58,6 +78,17 @@
    "detail"
   ],
   "s": 404
+ },
+ "POST /api/license/import": {
+  "k": [
+   "applied",
+   "detail",
+   "license",
+   "message",
+   "ok",
+   "reason"
+  ],
+  "s": 400
  },
  "POST /api/line/binding/start": {
   "k": [
@@ -105,6 +136,19 @@
    "user",
    "usesSample",
    "warnings"
+  ],
+  "s": 200
+ },
+ "POST /api/parts/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
   ],
   "s": 200
  },
@@ -235,11 +279,98 @@
   ],
   "s": 201
  },
+ "POST /api/settings/line-notify/bindings/remind": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/settings/line-notify/verify": {
   "k": [
    "detail"
   ],
   "s": 400
+ },
+ "POST /api/system/backup-monitor/backup-now": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-test": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/auth/preferences": {
+  "k": [
+   "company",
+   "company.login_greeting_off",
+   "defaults",
+   "defaults.avatar_color",
+   "defaults.font_size",
+   "defaults.home_page",
+   "defaults.login_greeting",
+   "defaults.theme",
+   "options",
+   "options.avatar_color",
+   "options.avatar_color.choices",
+   "options.avatar_color.choices[].label",
+   "options.avatar_color.choices[].value",
+   "options.avatar_color.label",
+   "options.font_size",
+   "options.font_size.choices",
+   "options.font_size.choices[].label",
+   "options.font_size.choices[].value",
+   "options.font_size.label",
+   "options.home_page",
+   "options.home_page.choices",
+   "options.home_page.choices[].label",
+   "options.home_page.choices[].value",
+   "options.home_page.label",
+   "options.login_greeting",
+   "options.login_greeting.choices",
+   "options.login_greeting.choices[].label",
+   "options.login_greeting.choices[].value",
+   "options.login_greeting.label",
+   "options.theme",
+   "options.theme.choices",
+   "options.theme.choices[].label",
+   "options.theme.choices[].value",
+   "options.theme.label",
+   "prefs",
+   "prefs.avatar_color",
+   "prefs.font_size",
+   "prefs.home_page",
+   "prefs.login_greeting",
+   "prefs.theme"
+  ],
+  "s": 200
  },
  "PUT /api/ledger/roles": {
   "k": [
@@ -287,6 +418,12 @@
   ],
   "s": 200
  },
+ "PUT /api/login-greeting/phrases": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"
@@ -299,7 +436,19 @@
   ],
   "s": 400
  },
+ "PUT /api/settings/line-notify/events/{key}/audience": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify/events/{key}/roles": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/system/backup-monitor/heartbeat-url": {
   "k": [
    "detail"
   ],

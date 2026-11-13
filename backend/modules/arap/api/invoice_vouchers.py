@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from core.txn import begin_write, write_txn
-from helpers import recycle_bin   # 第 53 班：刪除暫存區 L1 契約（IP-RB1／RB2）
+from helpers import recycle_bin   # 第 53 班：資源回收筒 L1 契約（IP-RB1／RB2）
 from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -40,7 +40,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files, files_txn, append_json_list, remove_json_item,
     guard_case_access, require_any_module,
 
     can_see_financial, is_document_approver,
@@ -472,7 +472,7 @@ def delete_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
     conn = get_db()
     recycled = True
     try:
-        with write_txn(conn):                                            # 第 53 班（刪除暫存區 P1）：讀狀態→進暫存區在同一個寫交易
+        with write_txn(conn):                                            # 第 53 班（資源回收筒 P1）：讀狀態→進資源回收筒在同一個寫交易
             row = conn.execute("SELECT status FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
             if not row:
                 raise HTTPException(404, "憑據不存在")
@@ -483,16 +483,16 @@ def delete_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
                     res = recycle_bin.delete(conn, "invoice_voucher", voucher_no, user)
                 except recycle_bin.BinError as e:
                     raise HTTPException(409, str(e))
-                if res is None:                                              # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
+                if res is None:                                              # 資源回收筒模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
                     from modules.arap.recycle_adapter import InvoiceVoucherBinAdapter
-                    InvoiceVoucherBinAdapter().delete_in_tx(conn, voucher_no)     # 與進暫存區同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
+                    InvoiceVoucherBinAdapter().delete_in_tx(conn, voucher_no)     # 與進資源回收筒同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
                     recycled = False
                 conn.commit()
     finally:
         conn.close()
     _purge_notifications(voucher_no, ['invoice_voucher_approval_request', 'invoice_voucher_approved',
                                        'invoice_voucher_returned', 'approval_reminder'])
-    _audit(_tok(authorization), "invoice_voucher.delete", "invoice_voucher", voucher_no, voucher_no if recycled else voucher_no + "（暫存區未啟用，已直接刪除）")
+    _audit(_tok(authorization), "invoice_voucher.delete", "invoice_voucher", voucher_no, voucher_no if recycled else voucher_no + "（資源回收筒未啟用，已直接刪除）")
     notify_module_activity("開票申請憑據", "刪除", user.get("display_name") or user["username"],
                             voucher_no, "case-management.html", audience="finance")
     return {"ok": True, "recycled": recycled}
@@ -513,7 +513,7 @@ def submit_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
         raise HTTPException(404, "憑據不存在")
     if row["status"] != "草稿":
         conn.close()
-        raise HTTPException(409, "僅草稿狀態可送出審核")
+        raise HTTPException(409, "僅草稿狀態可送出簽核")
 
     snap  = json.loads(row["snapshot_json"] or "{}")
     cname = snap.get("customerName") or ""
@@ -620,7 +620,7 @@ def approve_invoice_voucher(voucher_no: str, body: dict = Body(default={}), auth
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow  = resolve_active_flow_setting("invoice_voucher")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
@@ -825,16 +825,16 @@ async def upload_invoice_voucher_issued_files(voucher_no: str, files: List[Uploa
     if not row:
         conn.close()
         raise HTTPException(404, "憑據不存在")
-    _guard_voucher(conn, row, user)
-    existing = json.loads(row["issued_files_json"] or "[]")
-    new_files = await save_document_files("invoice_vouchers", voucher_no, files,
-                                          user.get("display_name") or user["username"])
-    all_files = existing + new_files
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
-                 (json.dumps(all_files, ensure_ascii=False), now, voucher_no))
-    conn.commit()
-    conn.close()
+    try:
+        _guard_voucher(conn, row, user)
+        new_files = await save_document_files("invoice_vouchers", voucher_no, files,
+                                              user.get("display_name") or user["username"])
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔（不再「讀舊清單＋整份寫回」）
+        with files_txn(conn, new_files):
+            append_json_list(conn, "invoice_vouchers", "issued_files_json", "voucher_no", voucher_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="憑據不存在")
+    finally:
+        conn.close()
     _audit(_tok(authorization), "invoice_voucher.upload_issued_files", "invoice_voucher", voucher_no,
            f"{voucher_no}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files}
@@ -852,12 +852,9 @@ def delete_invoice_voucher_issued_file(voucher_no: str, file_id: str, authorizat
         conn.close()
         raise HTTPException(404, "憑據不存在")
     _guard_voucher(conn, row, user)
-    existing = json.loads(row["issued_files_json"] or "[]")
-    remaining = delete_document_file("invoice_vouchers", voucher_no, existing, file_id)
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
-                 (json.dumps(remaining, ensure_ascii=False), now, voucher_no))
-    conn.commit()
+    # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔
+    remove_json_item(conn, "invoice_vouchers", "issued_files_json", "voucher_no", voucher_no, file_id,
+                     extra_set={"updated_at": datetime.now().isoformat()}, not_found="憑據不存在")
     conn.close()
     _audit(_tok(authorization), "invoice_voucher.delete_issued_file", "invoice_voucher", voucher_no, voucher_no)
     return {"ok": True}

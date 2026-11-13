@@ -48,13 +48,13 @@ def _env(monkeypatch):
     monkeypatch.setattr(MT, "record_for_build", lambda *a, **k: (False, "test"))
 
 
-def _run(monkeypatch, codes_by_window, capture):
-    """假 run_pytest：依 window 後綴回 exit code；capture 收 (window, targets, args, env_extra)。"""
+def _run(monkeypatch, codes_by_window, capture, **flags):
+    """假 run_pytest：依 window 後綴回 exit code；capture 收 (window, targets, args, env_extra)。flags＝額外的 CLI 旗標（如 keep_going=True）。"""
     def fake(targets, args, window, full, collect_only=False, env_extra=None):
         capture.append((window, list(targets), list(args), dict(env_extra or {})))
         return codes_by_window.get(window, 0), SUMMARY
     monkeypatch.setattr(MT, "run_pytest", fake)
-    return MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+    return MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w", **flags))
 
 
 # ── O1：清單單一來源 ─────────────────────────────────────────────────────────────
@@ -134,6 +134,36 @@ def test_red_slice0_stops_everything_and_is_not_green(monkeypatch):
     rc = _run(monkeypatch, {"ws0": 1}, cap)
     assert [c[0] for c in cap] == ["ws0"]
     assert rc != 0 and written[-1]["ok"] is False and written[-1]["slice_stopped"] == "slice0"
+
+
+def test_keep_going_runs_every_slice_and_e2e_even_when_slice0_is_red_and_stays_red(monkeypatch, capsys):
+    """T82 預跑：`--keep-going`＝不中斷，找出全部紅。slice0 紅了照跑其餘片與 e2e；整體仍是紅（exit≠0、ok False），不能當放行證據。"""
+    cap, written = [], []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    monkeypatch.setenv("MOTRIX_FAILFAST", "1")                  # 使用者環境開著 failfast ⇒ --keep-going 的旗標優先
+    monkeypatch.setenv("MOTRIX_FAILFAST_N", "5")
+    rc = _run(monkeypatch, {"ws0": 1}, cap, keep_going=True)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"], "slice0 紅也照跑第二片與 e2e"
+    assert all(c[3].get("MOTRIX_FAILFAST") == "0" for c in cap), "failfast／紅燈上限關閉（每一段）"
+    assert rc != 0 and written[-1]["ok"] is False and written[-1]["keep_going"] is True and "slice_stopped" not in written[-1]
+    assert "--keep-going" in capsys.readouterr().out
+
+
+def test_keep_going_all_green_is_a_normal_green_and_without_the_flag_nothing_changes(monkeypatch):
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    assert _run(monkeypatch, {}, [], keep_going=True) == 0
+    assert written[-1]["ok"] is True and written[-1]["passed"] == 10, "全綠＝與正常全量同一份證據"
+    cap = []
+    _run(monkeypatch, {"ws0": 1}, cap)
+    assert [c[0] for c in cap] == ["ws0"], "沒帶旗標：行為與以前完全相同（slice0 紅就停）"
+    assert all(c[3].get("MOTRIX_FAILFAST") == "1" for c in cap)
+    assert MT.keep_going(types.SimpleNamespace()) is False and MT.keep_going(types.SimpleNamespace(keep_going=True)) is True
+
+
+def test_keep_going_flag_is_wired_to_the_cli():
+    src = (REPO / "tools" / "platform" / "modtest.py").read_text(encoding="utf-8")
+    assert '"--keep-going", dest="keep_going"' in src
 
 
 def test_red_rest_still_runs_e2e_like_before_and_is_red(monkeypatch):

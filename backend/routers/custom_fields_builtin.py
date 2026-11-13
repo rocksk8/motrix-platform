@@ -4,8 +4,8 @@
 - `GET /api/custom-fields/{record_type}`（登入即可）：⇒ `{recordType, enabled, fields:[{key,label,type,options?,maxLength?,help?}]}`。
   旗標 `builder_custom_fields.enabled` 關閉 ⇒ `enabled:false, fields:[]`（頁面什麼都不畫）。內容只有已發布且未停用欄位的
   名稱與型別（不含任何單據的值；值跟著單據走，由單據自己的讀取權限保護）。
-- `GET /api/custom-fields/{record_type}/usage`（僅超級管理員，唯讀）：⇒ `{recordType, enabled, counts:{key:筆數}, records}`，編輯器停用欄位前顯示「已有幾筆單據填了」。
-- 欄位定義的編輯、預覽、發布、還原走既有的 `/api/definitions/custom_fields/{record_type}/…`（僅超級管理員）。
+- `GET /api/custom-fields/{record_type}/usage`（僅最高管理者，唯讀）：⇒ `{recordType, enabled, counts:{key:筆數}, records}`，編輯器停用欄位前顯示「已有幾筆單據填了」。
+- 欄位定義的編輯、預覽、發布、還原走既有的 `/api/definitions/custom_fields/{record_type}/…`（僅最高管理者）。
 """
 from fastapi import APIRouter, Header, HTTPException
 

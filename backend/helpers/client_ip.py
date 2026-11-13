@@ -94,10 +94,17 @@ def rate_limit_key(ip: str) -> str:
     return str(addr)
 
 
+#: 代理／反向代理常加的「客戶端 IP」類標頭（外網判定只看「有沒有出現」，不讀值）。2026-11-12 外網登入強化 L-a：補 Via 與常見變體
+_OTHER_PROXY_HEADERS = frozenset({"forwarded", "x-real-ip", "via", "x-client-ip", "true-client-ip", "x-original-forwarded-for",
+                                  "x-forwarded-host", "x-originating-ip", "x-cluster-client-ip", "proxy-client-ip", "wl-proxy-client-ip"})
+
+
 def has_proxy_headers(headers) -> bool:
-    """請求帶了 Cloudflare 隧道的標頭、或任何 X-Forwarded-*／Forwarded？（`headers` 是 Starlette Headers／dict，鍵不分大小寫取）"""
+    """請求帶了 Cloudflare 隧道的標頭、或任何代理痕跡（X-Forwarded-*／Forwarded／X-Real-IP／Via／X-Client-IP／True-Client-IP／X-Original-Forwarded-For …）？
+    底線寫法（X_Forwarded_For）也算：有些伺服器／代理會把底線標頭原樣放行。`headers` 是 Starlette Headers／dict，鍵不分大小寫取。"""
     try:
-        keys = {str(k).lower() for k in headers.keys()}
+        keys = {str(k).lower().replace("_", "-") for k in headers.keys()}
     except Exception:  # noqa: BLE001
         return False
-    return bool(keys & set(CLOUDFLARE_HEADERS)) or "x-forwarded-for" in keys or "forwarded" in keys or "x-real-ip" in keys
+    return (bool(keys & set(CLOUDFLARE_HEADERS)) or bool(keys & _OTHER_PROXY_HEADERS)
+            or any(k.startswith("x-forwarded-") for k in keys))

@@ -627,6 +627,7 @@
  },
  "/api/approval-queue": {
   "k": [
+   "myCount",
    "myDelegatedFor",
    "queue",
    "queue[].count",
@@ -641,6 +642,7 @@
    "queue[].items[].customer",
    "queue[].items[].isEditApproval",
    "queue[].items[].linkedQuoteNo",
+   "queue[].items[].mine",
    "queue[].items[].projectName",
    "queue[].items[].quoteDate",
    "queue[].items[].quoteNo",
@@ -760,6 +762,34 @@
   ],
   "s": 200
  },
+ "/api/auth/account-locks": {
+  "k": [
+   "config",
+   "config.lockMinutes",
+   "config.scope",
+   "config.threshold",
+   "config.windowMinutes",
+   "locks"
+  ],
+  "s": 200
+ },
+ "/api/auth/greeting": {
+  "k": [
+   "action",
+   "action.href",
+   "action.label",
+   "awayLine",
+   "category",
+   "companyStyle",
+   "kind",
+   "line",
+   "pref",
+   "style",
+   "title",
+   "todoLine"
+  ],
+  "s": 200
+ },
  "/api/auth/login/qr-info": {
   "k": [
    "detail"
@@ -779,6 +809,65 @@
    "mustChangePassword",
    "role",
    "userId",
+   "username"
+  ],
+  "s": 200
+ },
+ "/api/auth/preferences": {
+  "k": [
+   "company",
+   "company.login_greeting_off",
+   "defaults",
+   "defaults.avatar_color",
+   "defaults.font_size",
+   "defaults.home_page",
+   "defaults.login_greeting",
+   "defaults.theme",
+   "options",
+   "options.avatar_color",
+   "options.avatar_color.choices",
+   "options.avatar_color.choices[].label",
+   "options.avatar_color.choices[].value",
+   "options.avatar_color.label",
+   "options.font_size",
+   "options.font_size.choices",
+   "options.font_size.choices[].label",
+   "options.font_size.choices[].value",
+   "options.font_size.label",
+   "options.home_page",
+   "options.home_page.choices",
+   "options.home_page.choices[].label",
+   "options.home_page.choices[].value",
+   "options.home_page.label",
+   "options.login_greeting",
+   "options.login_greeting.choices",
+   "options.login_greeting.choices[].label",
+   "options.login_greeting.choices[].value",
+   "options.login_greeting.label",
+   "options.theme",
+   "options.theme.choices",
+   "options.theme.choices[].label",
+   "options.theme.choices[].value",
+   "options.theme.label",
+   "prefs",
+   "prefs.avatar_color",
+   "prefs.font_size",
+   "prefs.home_page",
+   "prefs.login_greeting",
+   "prefs.theme"
+  ],
+  "s": 200
+ },
+ "/api/auth/profile": {
+  "k": [
+   "department",
+   "displayName",
+   "email",
+   "phone",
+   "quoteEmail",
+   "quoteEmailEffective",
+   "quoteEmailSource",
+   "role",
    "username"
   ],
   "s": 200
@@ -1219,9 +1308,9 @@
  "/api/cashier/export": {
   "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "hdr": [
-   "已匯款明細|出納執行紀錄 — 已匯款（2026-11-01 ~ 2026-11-04）",
-   "已收款明細|出納執行紀錄 — 已收款（2026-11-01 ~ 2026-11-04）",
-   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-11-01 ~ 2026-11-04）"
+   "已匯款明細|出納執行紀錄 — 已匯款（2026-11-01 ~ 2026-11-13）",
+   "已收款明細|出納執行紀錄 — 已收款（2026-11-01 ~ 2026-11-13）",
+   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-11-01 ~ 2026-11-13）"
   ],
   "s": 200
  },
@@ -2475,6 +2564,28 @@
   ],
   "s": 200
  },
+ "/api/dashboard/mine": {
+  "k": [
+   "empty",
+   "generatedAt",
+   "groups",
+   "groups[].count",
+   "groups[].empty",
+   "groups[].href",
+   "groups[].hrefLabel",
+   "groups[].items",
+   "groups[].items[].href",
+   "groups[].items[].sub",
+   "groups[].items[].title",
+   "groups[].items[].tone",
+   "groups[].key",
+   "groups[].kind",
+   "groups[].order",
+   "groups[].title",
+   "partial"
+  ],
+  "s": 200
+ },
  "/api/dashboard/monthly": {
   "k": [
    "items",
@@ -3432,6 +3543,38 @@
   ],
   "s": 200
  },
+ "/api/license/overview": {
+  "k": [
+   "backup_count",
+   "backup_latest",
+   "detail",
+   "emergency",
+   "gate_enabled",
+   "headline",
+   "level",
+   "license",
+   "license.customer",
+   "license.days_left",
+   "license.days_text",
+   "license.expires",
+   "license.kind",
+   "license.kind_label",
+   "license.modules",
+   "license.modules.all",
+   "license.modules.invalid",
+   "license.modules.names",
+   "license.modules.unknown",
+   "license.test_key",
+   "machine_code",
+   "machine_text",
+   "max_upload_bytes",
+   "modules_not_loaded",
+   "recent",
+   "reminder",
+   "state"
+  ],
+  "s": 200
+ },
  "/api/license/status": {
   "k": [
    "blocked",
@@ -3603,6 +3746,23 @@
    "nextAllowedAt",
    "stale",
    "staleDays"
+  ],
+  "s": 200
+ },
+ "/api/login-greeting/phrases": {
+  "k": [
+   "categories",
+   "categories[].category",
+   "categories[].formal",
+   "categories[].formal.builtin",
+   "categories[].formal.custom",
+   "categories[].humor",
+   "categories[].humor.builtin",
+   "categories[].humor.custom",
+   "categories[].label",
+   "maxLen",
+   "maxLines",
+   "placeholders"
   ],
   "s": 200
  },
@@ -3793,6 +3953,7 @@
  },
  "/api/next-quote-no": {
   "k": [
+   "doc_type",
    "quote_no"
   ],
   "s": 200
@@ -4687,6 +4848,7 @@
    "items[].customer_name",
    "items[].deal_tag",
    "items[].direct_margin_pct",
+   "items[].doc_type",
    "items[].edit_count",
    "items[].edit_last",
    "items[].historical",
@@ -4797,9 +4959,11 @@
    "created_by",
    "customer_name",
    "data",
+   "data.docType",
    "data.status",
    "deal_tag",
    "direct_margin_pct",
+   "doc_type",
    "export_count",
    "export_log",
    "id",
@@ -5076,9 +5240,11 @@
    "quotation.created_by",
    "quotation.customer_name",
    "quotation.data",
+   "quotation.data.docType",
    "quotation.data.status",
    "quotation.deal_tag",
    "quotation.direct_margin_pct",
+   "quotation.doc_type",
    "quotation.export_count",
    "quotation.export_log",
    "quotation.id",
@@ -6044,7 +6210,7 @@
    "執行摘要|營運報表",
    "目標達成率|2026 年度目標達成率",
    "本期收款明細|本期收款明細 — 2026 年 11 月",
-   "未收款清單|未收款清單 — 截至 2026-11-04",
+   "未收款清單|未收款清單 — 截至 2026-11-13",
    "當月收支|2026-11 當月收支明細",
    "今年度收支|2026年度收支總表",
    "案件清單|全部案件清單（本期新成案：0 件）",
@@ -6052,15 +6218,12 @@
    "毛利分析|利潤分析 — 精算利潤對照（已結案案件）",
    "保固到期預警|保固到期預警（90 天內，共 0 筆）",
    "已結案未精算|已結案未完成精算（共 0 件）",
-   "帳齡分析|應收帳款帳齡分析（截至 2026-11-04，合計未收 NT$ 0）"
+   "帳齡分析|應收帳款帳齡分析（截至 2026-11-13，合計未收 NT$ 0）"
   ],
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "k": [
-   "detail"
-  ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6181,10 +6344,11 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "k": [
-   "detail"
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "銷項發票清單|銷項發票清單（全部區間）"
   ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6272,6 +6436,7 @@
    "groups[].values.cloud_weekly_keep_days",
    "groups[].values.combo_view_default_open",
    "groups[].values.combo_view_max",
+   "groups[].values.company_profile_full_read_superadmin_only",
    "groups[].values.confirm_period_days",
    "groups[].values.confirmed",
    "groups[].values.contact_email_hideable",
@@ -6297,13 +6462,25 @@
    "groups[].values.enforce_output_template",
    "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
+   "groups[].values.estimate_no_prefix",
+   "groups[].values.ext_totp_enabled",
+   "groups[].values.ext_totp_role_admin",
+   "groups[].values.ext_totp_role_engineer",
+   "groups[].values.ext_totp_role_finance",
+   "groups[].values.ext_totp_role_sales",
+   "groups[].values.ext_totp_role_superadmin",
+   "groups[].values.ext_totp_role_viewer",
+   "groups[].values.external_hosts",
    "groups[].values.hidden_terms_pdf_mode",
    "groups[].values.include_headers",
+   "groups[].values.internal_networks",
    "groups[].values.k01_seed",
    "groups[].values.label_bonus_award",
    "groups[].values.label_close_report",
    "groups[].values.label_completion",
    "groups[].values.label_contractor_voucher",
+   "groups[].values.label_estimate",
+   "groups[].values.label_estimate_version",
    "groups[].values.label_execution_report",
    "groups[].values.label_expense_form",
    "groups[].values.label_invoice_voucher",
@@ -6315,8 +6492,13 @@
    "groups[].values.label_voucher",
    "groups[].values.local_db_keep_days",
    "groups[].values.local_pre_update_keep",
+   "groups[].values.lock_minutes",
    "groups[].values.lock_scope",
+   "groups[].values.lock_threshold",
+   "groups[].values.lock_window_min",
+   "groups[].values.log_keep_days",
    "groups[].values.login_days",
+   "groups[].values.loopback_is_internal",
    "groups[].values.mail_cap",
    "groups[].values.mail_window_minutes",
    "groups[].values.max_file_mb",
@@ -6371,9 +6553,11 @@
    "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
+   "groups[].values.style",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
+   "groups[].values.tagline",
    "groups[].values.thousands",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
@@ -6514,6 +6698,7 @@
    "company_name_en",
    "contact_info",
    "email",
+   "external_email",
    "google_maps_api_key",
    "google_maps_browser_key",
    "google_maps_map_id",
@@ -6525,6 +6710,15 @@
    "privacy_notice",
    "privacy_notice_contact",
    "privacy_notice_user",
+   "tax_id"
+  ],
+  "s": 200
+ },
+ "/api/settings/company-profile/public": {
+  "k": [
+   "contact_info",
+   "locations",
+   "name",
    "tax_id"
   ],
   "s": 200
@@ -6649,10 +6843,20 @@
    "callback_url",
    "channel_access_token",
    "enabled",
+   "event_groups",
    "events",
+   "events[].audience",
+   "events[].audience.mode",
+   "events[].audience.roles",
+   "events[].audience.users",
    "events[].enabled",
+   "events[].follows",
+   "events[].group",
    "events[].key",
+   "events[].kind",
    "events[].name",
+   "events[].need",
+   "events[].priority",
    "events[].roles",
    "include_links",
    "login_channel_id",
@@ -6660,6 +6864,25 @@
    "public_base_url",
    "quota_thresholds",
    "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  },
@@ -6963,6 +7186,7 @@
    "companyName",
    "companyNameEn",
    "shortName",
+   "tagline",
    "taxId"
   ],
   "s": 200
@@ -7327,6 +7551,9 @@
    "[].modules",
    "[].notificationMuted",
    "[].phone",
+   "[].quoteEmail",
+   "[].quoteEmailEffective",
+   "[].quoteEmailSource",
    "[].role",
    "[].username"
   ],

@@ -86,7 +86,7 @@ def _detect_archive_base() -> str:
 
 def _archive_base() -> str:
     """目前生效的雲端存檔根目錄，找不到 ⇒ ""。一律經 helpers.storage_locations：
-    最高管理員有設定 ⇒ 用設定（不存在就 ""，不退回自動判斷）；留空 ⇒ `_auto_archive_base`（掃磁碟機）。"""
+    最高管理者有設定 ⇒ 用設定（不存在就 ""，不退回自動判斷）；留空 ⇒ `_auto_archive_base`（掃磁碟機）。"""
     return _storage.path("archive_root")
 
 
@@ -548,9 +548,9 @@ def _alert_email_failed(reason: str, why: str) -> None:
 
 
 def _send_backup_error_email(reason: str, ts: str):
-    """備份嚴重錯誤（ERROR 級）寄給超級管理員：備份基礎設施出問題（例如雲端硬碟磁碟機代號跑掉）
+    """備份嚴重錯誤（ERROR 級）寄給最高管理者：備份基礎設施出問題（例如雲端硬碟磁碟機代號跑掉）
     需要有權限處理伺服器與磁碟機掛載的人知道，不是一般管理員的職務範圍。
-    收件人經信件類型登記表（`backup_error`，系統技術類，只寄超級管理員）；**找不到超級管理員時
+    收件人經信件類型登記表（`backup_error`，系統技術類，只寄最高管理者）；**找不到最高管理者時
     不退回一般管理員**（使用者 2026-09-26：「普通管理員不需要收到這類信」），改由下面的
     `_alert_email_failed()` 寫警示檔。
 
@@ -560,9 +560,16 @@ def _send_backup_error_email(reason: str, ts: str):
     from helpers.email_notify import (_superadmin_emails, _async_send, _build_html, _base_url,
                                       SEND_SENT, SEND_SKIPPED)
     from helpers import mail_types as _mt
+    # LINE 獨立通道（2026-11-13）：不看 Email（沒有信箱也要通知）；同一原因同一天只推一次（與信件「每日最多一次」同粒度）；critical＝額度 90% 以上照發。
+    try:
+        from helpers.email_notify import _line_event, _line_day_key
+        _line_event("backup_error", to_group=True, title="備份嚴重錯誤", rows=[("發生時間", ts), ("錯誤原因", reason[:80])],
+                    reason="本次備份發生嚴重錯誤，未完成；請處理伺服器與備份磁碟", line_key=_line_day_key("backup_error", reason[:80]))
+    except Exception:
+        logger.exception("_send_backup_error_email: LINE 通知失敗（不影響信件）")
     to = _superadmin_emails("backup_error")
     if not to:
-        _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的超級管理員）")
+        _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的最高管理者）")
         return None
     html = _build_html("backup_error", "備份嚴重錯誤", "錯誤", "#DC2626",
                        [("發生時間", ts), ("錯誤原因", reason)], "", _base_url(),
@@ -1682,53 +1689,221 @@ _SERVER_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 _SERVER_LOG_KEEP_GENERATIONS = 5
 
 
+def _stdio_fd_of(path: str):
+    """本行程的 stdout／stderr 若**就是** `path` 這個檔（autostart.bat 的 `uvicorn … >> server.log 2>&1`），回那個 fd；否則回 None。
+    判斷用檔案身分（`os.path.samestat`），不比路徑字串。只用 `os`，沒有別的相依（測試會把這支的原始碼抽出來丟進子行程）。"""
+    try:
+        target = os.stat(path)
+    except OSError:
+        return None
+    for fd in (1, 2):
+        try:
+            if os.path.samestat(os.fstat(fd), target):
+                return fd
+        except OSError:
+            continue
+    return None
+
+
+def _truncate_log_in_place(path: str) -> str:
+    """把 `path` 原地清成 0 bytes；回 "stdio"（用本行程自己的 stdout／stderr handle 清）或 "open"（另開檔清）。失敗丟 OSError。
+
+    **為什麼不能一律另開檔 `open(path, "r+b")`（2026-11-13 根因，在這台 Windows 上實測）**：
+    `cmd.exe` 的 `>>` 重導向開檔時**不給寫入共用**（share mode＝只准別人讀）⇒ 任何別的 handle 想開寫入都被擋，
+    `open(r+b)`／`open(ab)` ⇒ `PermissionError: [Errno 13]`，`os.replace`／`os.remove` ⇒ `WinError 32`；**只有讀（`shutil.copy2`）可以**。
+    所以舊版 copytruncate 的「複製」那一步每次都成功、「清空」那一步每次都失敗（11-11 起每輪一次）。
+    只有**持有那個 handle 的行程自己**能清它：這支行程（uvicorn）的 fd 1／2 就是 cmd 開的那個 handle ⇒ `os.ftruncate(fd, 0)`。
+    ⚠️ 清了之後還要 `os.lseek(fd, 0, SEEK_SET)`：`>>` 的寫入位置是開檔時 seek 到的結尾、不是 O_APPEND，
+    不歸零的話下一筆會寫在舊的偏移量上，檔案前面補一大段 NUL（實測：清空後再寫一行，檔案 134 bytes 其中 64 個 NUL）。
+    這個 handle 是 cmd／uvicorn.exe 殼／uvicorn 子行程共用同一個檔案物件（繼承），位置是共用的，歸零一次三邊都生效。
+    不是自己的 stdout／stderr（開發機、測試、別的啟動方式）⇒ 照舊另開檔清；那種情況沒人用獨佔共用開著它。"""
+    fd = _stdio_fd_of(path)
+    if fd is not None:
+        import sys
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except Exception:                                        # noqa: BLE001  沒有可 flush 的串流（pythonw）不影響清空
+                pass
+        os.ftruncate(fd, 0)
+        os.lseek(fd, 0, os.SEEK_SET)
+        return "stdio"
+    with open(path, "r+b") as f:
+        f.truncate(0)
+    return "open"
+
+
+#: 清空失敗（別的行程獨佔著）時的警告節流：同一個檔最多每 24 小時講一次（輪替是每 2 小時叫一次，不要每次都刷 ERROR 與堆疊）
+_SERVER_LOG_ROTATE_WARN_AT: dict = {}
+
+
+def _promote_rotating_log(path: str, tmp: str, keep: int) -> None:
+    """把暫存檔 `tmp` 推成 `path.1`：最舊的 `.{keep}` 先砍、其餘依序往後推一代。任何一步失敗丟 OSError，**暫存檔原封不動**。"""
+    oldest = f"{path}.{keep}"
+    if os.path.exists(oldest):
+        os.remove(oldest)
+    for gen in range(keep - 1, 0, -1):
+        src = f"{path}.{gen}"
+        if os.path.exists(src):
+            os.replace(src, f"{path}.{gen + 1}")
+    os.replace(tmp, f"{path}.1")
+
+
+def _warn_rotate_throttled(path: str, message: str) -> None:
+    now = time.time()
+    if now - _SERVER_LOG_ROTATE_WARN_AT.get(path, 0) >= 24 * 3600:
+        _SERVER_LOG_ROTATE_WARN_AT[path] = now
+        logger.warning("%s", message)
+
+
 def _rotate_server_log_if_large(
     log_path: str = None, max_bytes: int = _SERVER_LOG_MAX_BYTES, keep: int = _SERVER_LOG_KEEP_GENERATIONS,
 ) -> bool:
-    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 重導向寫入的
-    （見該檔），不是走 Python `logging` 的 handler——伺服器 24/7 常駐執行，這個
-    檔案完全沒有任何大小上限或輪替機制，長期下來可能把磁碟塞滿（正式機已經
-    踩過一次「表格無限增生塞爆每日備份」的類似事故，見 §12 module_versions
-    62萬列那次）。
+    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 寫入的（不是 Python `logging` 的 handler）——
+    伺服器 24/7 常駐，這個檔沒有大小上限就會長期塞滿磁碟（正式機已踩過「表格無限增生塞爆每日備份」的類似事故）。
 
-    **這裡刻意不能用改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1`
-    的健康檢查（`$logPath = ...` 底下的 `logs/server.log`）寫死讀這個檔名判斷部署是否
-    成功，換了輪替方式會讓那個檢查永遠讀到空/舊檔案，等於整套部署安全機制
-    悄悄失效。改用 copytruncate：先複製目前內容到 `logs/server.log.N`（保留最新
-    `keep` 份，最舊的直接刪除），再原地把 `server.log` truncate 成 0 bytes——
-    `autostart.bat` 裡 `>>` 開的是 append 模式 file handle，每次寫入永遠先 seek
-    到檔案目前結尾再寫，truncate 之後下一次寫入會正確從新的（空的）結尾開始，
-    不需要通知或重啟寫入端。
+    **不能改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1` 的健康檢查寫死讀 `logs/server.log`。
+    所以用 copytruncate：複製目前內容 ⇒ 原地清空 ⇒ 依序往後推一代（最舊的直接刪）。
 
-    **⚠️ 尚未在真正跑著 autostart.bat 的正式機上驗證過**：Windows 上 cmd.exe
-    的 `>>` 重導向所開檔案的共用權限（sharing flags）是否真的允許外部行程同時
-    truncate，這裡沒有實機測試過，只能確保「truncate 失敗就整個放棄、log 檔案
-    維持原樣繼續成長」（不會比現狀更糟，只是輪替沒生效），下次正式機套用後
-    要留意 `logs/server.log` 是否真的有被清空過，見 QUICK.md §12 2026-09-07 條目。
-    回傳是否真的執行了輪替（供呼叫端寫 log/測試斷言用）。"""
+    **2026-11-13 修正（11-11 起每 2 小時一次 PermissionError）**：根因見 `_truncate_log_in_place`——`cmd.exe` 的 `>>` 不給寫入共用，
+    外部另開檔清不掉，**只有本行程用自己的 stdout／stderr handle 才清得掉**。同時改了兩件舊版會變糟的事：
+    ① 舊版先「推世代＋複製到 .1」再清空，清空失敗時每輪都白複製一份（整個 50 MB）、並把更舊的世代一層層擠掉（最舊的被刪）⇒
+       現在先複製到暫存檔 `server.log.rotating`，**清空成功才推世代**；清空失敗 ⇒ 刪暫存檔、世代原封不動；
+    ② 失敗不再每輪 `logger.exception`（每 2 小時一大串堆疊）⇒ 每 24 小時一次 WARNING，講清楚是哪一步、什麼錯。
+    清空與複製之間寫進來的幾行會留在 .1 之外被清掉（copytruncate 的固有代價，與舊版相同）。
+    回傳是否真的執行了輪替（供呼叫端寫 log／測試斷言用）。"""
     path = log_path or _SERVER_LOG_PATH
+    tmp = f"{path}.rotating"
     try:
+        # 上一輪留下的 .rotating（清空成功、推世代失敗／當機）**可能是唯一的一份舊內容** ⇒ 先接手它，絕不可被這輪的 copy2 覆蓋。
+        # （若是「複製完、清空前」當機留下的，內容與現行檔重複——多佔一代而已，不丟資料，比誤刪好。）
+        if os.path.exists(tmp):
+            try:
+                _promote_rotating_log(path, tmp, keep)
+            except OSError as e:
+                _warn_rotate_throttled(path, "上一輪留下的暫存檔 %s 接手失敗（%s: %s）——本輪不輪替，以免覆蓋它" % (tmp, type(e).__name__, e))
+                return False
+            logger.warning("server.log 上一輪留下的暫存檔 %s 已接手成為 %s.1（先前清空成功但推世代沒做完）", tmp, path)
         if not os.path.exists(path) or os.path.getsize(path) < max_bytes:
             return False
         log_dir = os.path.dirname(path)
-        # 最舊的直接砍掉（.{keep} 若存在），其餘依序往後遞增一代
-        oldest = f"{path}.{keep}"
-        if os.path.exists(oldest):
-            os.remove(oldest)
-        for gen in range(keep - 1, 0, -1):
-            src = f"{path}.{gen}"
-            if os.path.exists(src):
-                os.replace(src, f"{path}.{gen + 1}")
-        shutil.copy2(path, f"{path}.1")
-        # copytruncate：原地清空，而不是刪除/改名，讓仍持有 append handle 的
-        # 寫入端（autostart.bat 的 `>>`）下一次寫入自然從新的檔案結尾（0）開始
-        with open(path, "r+b") as f:
-            f.truncate(0)
-        logger.info("server.log rotated (was >= %d bytes), kept %d generation(s) under %s", max_bytes, keep, log_dir)
+        shutil.copy2(path, tmp)
+        try:
+            how = _truncate_log_in_place(path)
+        except OSError as e:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            _warn_rotate_throttled(path, "server.log 輪替沒成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示" % (type(e).__name__, e))
+            return False
+        # 清空成功：現在才推世代。**從這裡起舊內容只存在 .rotating**——推世代任何一步失敗都不可以讓它消失、log 也不可以說「rotated」。
+        try:
+            _promote_rotating_log(path, tmp, keep)
+        except OSError as e:
+            saved = tmp
+            try:
+                if not os.path.exists(f"{path}.1"):
+                    os.replace(tmp, f"{path}.1")
+                    saved = f"{path}.1"
+            except OSError:
+                pass
+            logger.error("server.log 已清空，但推世代失敗（%s: %s）——舊內容的副本保存在 %s，下一輪會接手；沒有資料遺失", type(e).__name__, e, saved)
+            return True                                              # 檔案確實已清空；呼叫端要知道
+        _SERVER_LOG_ROTATE_WARN_AT.pop(path, None)
+        logger.info("server.log rotated (was >= %d bytes; truncated via %s), kept %d generation(s) under %s", max_bytes, how, keep, log_dir)
         return True
     except Exception:
         logger.exception("_rotate_server_log_if_large failed — server.log 維持原樣未輪替")
         return False
+
+
+#: 行程啟動後這麼久之內不輪替 server.log（秒）。**為什麼**（2026-11-13 T81 正式機實況）：每日備份第一輪在啟動後 30 秒就跑，
+#: 而 `apply_update.ps1`／`apply_module_update.ps1` 的健康檢查正好在這個時間窗內讀 server.log 找「MOTRIX ERP starting／Uvicorn running on」
+#: 並掃錯誤——輪替把檔案清成 0 byte、啟動行搬去 server.log.1 ⇒ 檢查字面不符（最好）或掃到空檔假綠、模組更新路徑還可能假回滾。
+_ROTATE_BOOT_GRACE_SECONDS = 120
+#: 套用／回滾鎖（apply_update.ps1／apply_module_update.ps1 的 `Enter-InstallLock` 建立）超過這麼久視為殘留，不再擋輪替（秒）。
+_APPLY_LOCK_MAX_AGE_SECONDS = 2 * 3600
+#: 本行程的啟動時間（monotonic）。archive 在啟動 import 階段載入，等於行程啟動時間。
+_PROCESS_STARTED_MONO = time.monotonic()
+
+
+def _apply_lock_path() -> str:
+    return os.path.join(_paths.BACKEND_DIR, ".apply.lock")
+
+
+def _server_log_rotation_deferred_reason(now_mono: float = None, lock_path: str = None, now_wall: float = None) -> str:
+    """要不要延後這一輪 server.log 輪替？回理由字串（延後）或 ""（可以輪替）。永不丟例外（拿不準就不延後之外的行為不變：讀鎖檔失敗視為沒有鎖）。
+    延後 ⇒ 不做任何事，下一個 tick（`_DAILY_INTERVAL_SECONDS`）自然再試——檔案多長 2 小時的量，不會爆。
+    ① 行程啟動未滿 `_ROTATE_BOOT_GRACE_SECONDS`；② `backend/.apply.lock` 存在且未過期（套用或回滾正在進行，健康檢查會讀 server.log）。"""
+    now_mono = time.monotonic() if now_mono is None else now_mono
+    up = now_mono - _PROCESS_STARTED_MONO
+    if up < _ROTATE_BOOT_GRACE_SECONDS:
+        return "行程啟動僅 %d 秒（< %d 秒）" % (up, _ROTATE_BOOT_GRACE_SECONDS)
+    lock_path = lock_path or _apply_lock_path()
+    try:
+        if os.path.exists(lock_path):
+            now_wall = time.time() if now_wall is None else now_wall
+            age = now_wall - os.path.getmtime(lock_path)
+            if age < _APPLY_LOCK_MAX_AGE_SECONDS:
+                return "套用／回滾鎖 %s 存在（%d 秒前建立）" % (lock_path, max(age, 0))
+    except OSError:
+        pass
+    return ""
+
+
+#: 延後之後的補輪替：寬限／鎖解除後約這麼久再試一次（秒）。沒有它，行程若每 < 2 小時就重啟一次（崩潰重啟迴圈），
+#: 每次都只跑到寬限內的第一輪 ⇒ 永遠輪替不到。
+_ROTATE_RETRY_AFTER_SECONDS = 5
+_ROTATE_RETRY_LOCK_POLL_SECONDS = 60
+_ROTATE_RETRY_PENDING = False
+
+
+def _schedule_rotation_retry():
+    """被延後時排「一次」補輪替（旗標防止堆疊）：寬限剩多少就等多少再 +5 秒；因鎖延後就 60 秒後再看。永不丟例外。"""
+    global _ROTATE_RETRY_PENDING
+    if _ROTATE_RETRY_PENDING:
+        return
+    try:
+        up = time.monotonic() - _PROCESS_STARTED_MONO
+        delay = (_ROTATE_BOOT_GRACE_SECONDS - up + _ROTATE_RETRY_AFTER_SECONDS) if up < _ROTATE_BOOT_GRACE_SECONDS else _ROTATE_RETRY_LOCK_POLL_SECONDS
+        _ROTATE_RETRY_PENDING = True
+        _start_timer(max(delay, 1), _rotation_retry_tick)
+    except Exception:  # noqa: BLE001
+        _ROTATE_RETRY_PENDING = False
+        logger.exception("_schedule_rotation_retry failed")
+
+
+def _rotation_retry_tick():
+    global _ROTATE_RETRY_PENDING
+    _ROTATE_RETRY_PENDING = False
+    try:
+        if _server_log_rotation_deferred_reason():
+            _schedule_rotation_retry()           # 還在延後（例如套用鎖還在）⇒ 再排一次；鎖 2 小時後視為殘留，不會無限排
+        else:
+            _rotate_server_log_if_large()
+    except Exception:  # noqa: BLE001
+        logger.exception("_rotation_retry_tick failed")
+
+
+def _prune_old_logs(log_dir: str = None, keep_days=None) -> list:
+    """輪替出來的舊日誌（access.log.N.gz／app.log.N.gz／server.log.N）超過 `retention.log_keep_days`（設定中心，預設 30）就刪。
+    現行檔與 `server.log.rotating` 永遠不刪。整套日誌分流的設計見 `helpers/log_setup.py` 檔頭。永不丟例外（清日誌不可以拖累備份）。回被刪的檔名。"""
+    try:
+        from helpers import log_setup as _ls
+        if keep_days is None:
+            from helpers import settings_groups as _sg, settings_registry as _sr      # noqa: F401
+            keep_days = _sr.get("retention", "log_keep_days")
+        removed = _ls.prune_rotated_logs(log_dir or os.path.dirname(_SERVER_LOG_PATH), keep_days)
+        if removed:
+            logger.info("已刪除超過 %s 天的舊日誌 %d 個：%s", keep_days, len(removed), "、".join(sorted(removed)))
+        n = _ls.noise_count()
+        if n:
+            logger.info("本行程累計濾掉客戶端突然斷線（WinError 10054）%d 次——Windows asyncio 已知無害現象，不寫入日誌", n)
+        return removed
+    except Exception:                                                # noqa: BLE001
+        logger.exception("_prune_old_logs failed")
+        return []
 
 
 # ── S-CC07（STATES-DATA-OPS）：時鐘異常 ⇒ 暫停清理，每一輪都告警 ─────────────────────
@@ -2195,6 +2370,7 @@ def _daily_backup_tables() -> dict:
         "組織單位":         "SELECT * FROM org_units ORDER BY id",
         "組織單位層級":     "SELECT * FROM org_unit_closure ORDER BY ancestor_id, descendant_id",
         "使用者單位歸屬":   "SELECT * FROM user_units ORDER BY user_id, unit_id",
+        "個人偏好":         "SELECT user_id, key, value_json, updated_at, owner_unit_id FROM user_prefs ORDER BY user_id, key",          # 「我的帳號」票（字級、外觀、問候語、首頁、頭像色）：每人每鍵一列，純文字小資料
         "單位設定覆寫":     "SELECT * FROM system_settings_unit ORDER BY unit_id, key",
         "單位序列":         "SELECT * FROM seq_by_entity ORDER BY entity_id, kind, period",
         # ── 帳號與組織（2026-09-14 補）──
@@ -2207,7 +2383,7 @@ def _daily_backup_tables() -> dict:
         # 走到最後手段本來就該這樣做（來路不明的舊憑證不該直接沿用）。
         "使用者":           ("SELECT id, username, display_name, role, email, phone, "
                              "modules, active, created_at, must_change_password, "
-                             "notification_muted, department_id, totp_enabled "
+                             "notification_muted, department_id, totp_enabled, quote_email "
                              "FROM users ORDER BY id"),
         "部門":             "SELECT * FROM departments ORDER BY id",
         "事業處":           "SELECT * FROM divisions ORDER BY id",
@@ -2579,7 +2755,7 @@ _F2_FIELDS = {
     # 2026-10-02（31-C 叫料匯款）：供應商（可能是個人）的收款帳戶凍結在申請的 snapshot_json 最上層（戶名、帳號）⇒ 一般份拿掉、完整列只進個資資料夾；
     # 銀行代碼／名稱是機構資訊不列入。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-case-case_material_payments`）；模組未載入時略過。
     "模組-case-case_material_payments": {"table": "case_material_payments", "json": ("snapshot_json", ("bankAccountName", "bankAccountNumber"))},
-    # 2026-10-10（第 53 班 P0，刪除暫存區）：被刪單據的完整快照（含銀行帳號、身分證、電話等原文，還原要用）與隔離檔清單 ⇒ 兩欄整欄是 F2：
+    # 2026-10-10（第 53 班 P0，資源回收筒）：被刪單據的完整快照（含銀行帳號、身分證、電話等原文，還原要用）與隔離檔清單 ⇒ 兩欄整欄是 F2：
     # 一般每日 JSON 備份排除，完整列只進個資資料夾（本機 sqlite 備份含整表）。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-recyclebin-recycle_bin`）；模組未載入時略過。
     "模組-recyclebin-recycle_bin": {"table": "recycle_bin", "columns": ("snapshot_json", "files_manifest_json")},
 }
@@ -2861,7 +3037,14 @@ def _daily_backup():
 
     # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
     # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
-    _rotate_server_log_if_large()
+    # 開機 120 秒內或套用鎖在時不輪替（健康檢查正在讀 server.log，見 _ROTATE_BOOT_GRACE_SECONDS）——延到下一個 tick
+    _deferred = _server_log_rotation_deferred_reason()
+    if _deferred:
+        logger.info("server.log 輪替延後：%s", _deferred)
+        _schedule_rotation_retry()
+    else:
+        _rotate_server_log_if_large()
+    _prune_old_logs()
 
     if not _archive_ok():
         _write_backup_alert(
@@ -3056,13 +3239,120 @@ def _daily_first_tick():
     _daily_tick()
 
 
+class BackupInProgress(Exception):
+    """已經有另一個備份在跑（同一行程的另一條執行緒，或另一個行程：排程的 `backup_job.py`）。"""
+
+
+class BackupLockUnavailable(Exception):
+    """備份鎖檔打不開（權限、磁碟）⇒ 無法確認有沒有另一個行程在備份。嚴格模式（手動備份）直接拒絕。"""
+
+
+_BACKUP_RUN_THREAD_LOCK = threading.Lock()
+
+
+def _backup_lock_path() -> str:
+    return os.path.join(_paths.LOGS_DIR, "backup_run.lock")
+
+
+def _os_lock(fh) -> bool:
+    """對鎖檔第 0 個位元組上不等待的互斥鎖；別人持有 ⇒ False。鎖由作業系統持有：行程不論怎麼死（含被強制終止、斷電重開）鎖都會放掉，
+    所以不需要「過期時間」，也不會留下卡死的鎖。"""
+    fh.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fh) -> None:
+    try:
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+_LOCK_ALERTED = {"on": False}
+
+
+def _alert_lock_unavailable() -> None:
+    """排程備份遇到鎖檔打不開：照常備份（不能因此整天沒備份），但**不安靜地降級**——記 ERROR、寫系統告警（同一行程只寫一次，不洗版）。"""
+    logger.error("備份互斥鎖檔打不開：這一輪備份沒有跨行程互斥（可能與另一個備份同時寫入）。請檢查 logs 資料夾權限，以及排程帳號與服務帳號是否相同。")
+    if _LOCK_ALERTED["on"]:
+        return
+    _LOCK_ALERTED["on"] = True
+    try:
+        _write_backup_alert("備份互斥鎖檔打不開（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
+                            "但可能與另一個備份同時寫入。請聯絡維運檢查資料夾權限。", level="ERROR")
+    except Exception:  # noqa: BLE001
+        logger.exception("鎖檔告警寫入失敗")
+
+
+class backup_run_lock:
+    """備份互斥（備份與監控頁 M3，2026-11-13）：「立即備份」、`_daily_tick`、`backup_job.py` 同一時間只准一個在跑
+    （否則兩邊同時寫同一個 `.done`／日資料夾／快照檔，可能互相覆蓋或留下半成品，又各自記一筆稽核）。
+    `with backup_run_lock():`——拿不到 ⇒ 立刻丟 `BackupInProgress`（不等待）。
+    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。
+    **鎖檔打不開（權限、磁碟、排程與服務不同帳號）時不安靜降級（審查 N4）**：`strict=True`（手動備份）⇒ 丟 `BackupLockUnavailable`、拒絕執行；
+    排程備份（預設）⇒ 照常備份（不能因此整天沒備份），但記 ERROR 並寫系統告警。"""
+
+    def __init__(self, strict: bool = False):
+        self._strict = bool(strict)
+        self._fh = None
+
+    def __enter__(self):
+        if not _BACKUP_RUN_THREAD_LOCK.acquire(blocking=False):
+            raise BackupInProgress()
+        self._fh = None
+        try:
+            try:
+                os.makedirs(_paths.LOGS_DIR, exist_ok=True)
+                self._fh = open(_backup_lock_path(), "a+b")
+            except OSError:
+                if self._strict:
+                    raise BackupLockUnavailable() from None
+                _alert_lock_unavailable()
+                self._fh = None
+            if self._fh is not None and not _os_lock(self._fh):
+                self._fh.close()
+                self._fh = None
+                raise BackupInProgress()
+        except BaseException:
+            _BACKUP_RUN_THREAD_LOCK.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._fh is not None:
+                _os_unlock(self._fh)
+                self._fh.close()
+        finally:
+            _BACKUP_RUN_THREAD_LOCK.release()
+        return False
+
+
 def _daily_tick():
     try:
-        _daily_backup()
+        with backup_run_lock():
+            _daily_backup()
         try:
             _cleanup_sessions()
         except Exception:  # noqa: BLE001
             logger.exception("_cleanup_sessions failed in daily schedule")
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪每日備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_daily_backup failed in daily schedule")
     finally:
@@ -3112,7 +3402,10 @@ def _schedule_weekly():
 
 def _weekly_tick():
     try:
-        _weekly_backup()
+        with backup_run_lock():
+            _weekly_backup()
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪週備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_weekly_backup failed in weekly schedule")
     finally:

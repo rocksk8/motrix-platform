@@ -30,7 +30,7 @@ let guardMeSeen = false
 const handlers = {}; const real = []; const banners = []
 const win = { addEventListener: (ev, fn) => { (handlers[ev] = handlers[ev] || []).push(fn) }, motrixApplyBanners: h => banners.push(h) }
 const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() {} }
-const ss = { setItem() {}, getItem: () => null, removeItem() {} }
+const ss = { setItem() {}, getItem: k => (k === 'motrix_prefs_synced' ? '1' : null), removeItem() {} }   // 偏好同步（t82 syncPrefs）已做過 ⇒ 不發 /api/auth/preferences，不干擾請求清單
 const loc = { pathname: '/pages/x.html', search: '', hash: '', replace() {} }
 const doc = { createElement: () => ({}), head: { appendChild() {} }, getElementById: () => null }
 const bootBody = Object.assign({ v: 1, me: { username: 'u' }, menu: { groups: [1] }, approvalCount: { count: 3 }, notifications: { items: [], unread: 0 }, errors: {} }, inp.extra || {})
@@ -68,7 +68,7 @@ const log = []; let revealed = false; let removedSession = false; let replaced =
 const style = { remove() { revealed = true } }
 const win = { addEventListener() {}, motrixApplyBanners() {} }
 const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() { removedSession = true } }
-const ss = { setItem() {}, getItem: () => null, removeItem() {} }
+const ss = { setItem() {}, getItem: k => (k === 'motrix_prefs_synced' ? '1' : null), removeItem() {} }   // 偏好同步（t82 syncPrefs）已做過 ⇒ 不發 /api/auth/preferences，不干擾請求清單
 const loc = { pathname: '/pages/x.html', search: '', hash: '', replace(u) { replaced = u } }
 const doc = { createElement: () => style, head: { appendChild() {} }, getElementById: () => style }
 const pending = new Promise(() => {})
@@ -91,7 +91,7 @@ HUNG_HARNESS = r"""
 const fs = require('fs'); const src = fs.readFileSync(process.argv[2], 'utf8')
 const win = { addEventListener() {}, motrixApplyBanners() {} }
 const ls = { getItem: () => JSON.stringify({ token: 'T' }), removeItem() {} }
-const ss = { setItem() {}, getItem: () => null, removeItem() {} }
+const ss = { setItem() {}, getItem: k => (k === 'motrix_prefs_synced' ? '1' : null), removeItem() {} }   // 偏好同步（t82 syncPrefs）已做過 ⇒ 不發 /api/auth/preferences，不干擾請求清單
 const loc = { pathname: '/pages/x.html', search: '', hash: '', replace() {} }
 const el = { remove() {} }
 const doc = { createElement: () => el, head: { appendChild() {} }, getElementById: () => el }

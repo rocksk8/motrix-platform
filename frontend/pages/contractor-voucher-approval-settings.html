@@ -5,9 +5,10 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>此設定已搬移 — MOTRIX 專案管理系統</title>
+  <title>此設定已搬移 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>   <!-- 頂欄鈴鐺要靠 Alpine 才會正確顯示／隱藏；少了它手機頂欄會被撐寬 -->
   <style>
     .moved-main {
       margin-left: var(--sidebar-w);
@@ -38,6 +39,10 @@
     @media (max-width: 767px) {
       .moved-main { margin-left: 0 !important; padding: 20px 16px; }
     }
+    /* 前往連結的點擊熱區（原 ~38px 高）放大到 ≥44px；平板直式的內距比照手機收斂。 */
+    .moved-link { min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
+    @media (max-width: 767px) { .moved-card { padding: 28px 20px; } .moved-link { width: 100%; } }
+    @media (min-width: 768px) and (max-width: 1023px) { .moved-main { padding: 24px 20px; } }
   </style>
 </head>
 <body>

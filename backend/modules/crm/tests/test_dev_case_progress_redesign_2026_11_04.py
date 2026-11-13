@@ -145,7 +145,7 @@ def test_progress_endpoints_require_login(client, world):
 
 def test_only_the_current_assignee_can_add_progress_and_admins_are_read_only(client, world):
     assert _assign(client, world.admin, world.cid, world.ida, FUT()).status_code == 200
-    for who, h in (("管理員", world.admin), ("超級管理員", world.sup), ("建立者（業務）", world.owner),
+    for who, h in (("管理員", world.admin), ("最高管理者", world.sup), ("建立者（業務）", world.owner),
                    ("另一位成員", world.b), ("沒有模組權限的人", world.out)):
         r = _post(client, h, world.cid, "我亂寫")
         assert r.status_code == 403, (who, r.text)
@@ -219,7 +219,7 @@ def test_progress_list_is_newest_first_and_visible_to_everyone_who_can_see_the_c
     assert _assign(client, world.admin, world.cid, world.ida, FUT()).status_code == 200
     for t in ("第一次", "第二次", "第三次"):
         assert _post(client, world.a, world.cid, t).status_code == 201
-    for who, h in (("被指派人", world.a), ("建立者", world.owner), ("管理員", world.admin), ("超級管理員", world.sup)):
+    for who, h in (("被指派人", world.a), ("建立者", world.owner), ("管理員", world.admin), ("最高管理者", world.sup)):
         r = client.get(f"/api/dev-cases/{world.cid}/progress", headers=h)
         assert r.status_code == 200, (who, r.text)
         assert [e["content"] for e in r.json()] == ["第三次", "第二次", "第一次"], who

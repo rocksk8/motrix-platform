@@ -2,7 +2,7 @@
  *
  * 只有編輯器，沒有執行時 store：頁面（案件管理頁的完工單分頁）在**已經送出的那一個設定請求**裡看到旗標 `builder_slots.enabled` 為 1
  * 才呼叫 `MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })`；旗標關閉 ⇒ 這個檔只是被載入、什麼都不做、不發任何請求。
- * 編輯器（僅超級管理員）：側邊面板，新增／改名／勾選可收的檔案類型（只列系統允許的 `slotExts`）／件數與大小上限／可上傳的人（只能收窄）／子資料夾，
+ * 編輯器（僅最高管理者）：側邊面板，新增／改名／勾選可收的檔案類型（只列系統允許的 `slotExts`）／件數與大小上限／可上傳的人（只能收窄）／子資料夾，
  * 「模擬上傳」（呼叫 `POST /api/attachment-slots/<單據類型>/simulate`，唯讀：不寫檔、不建資料夾，只回收不收、顯示用路徑、誰能讀的人數）、
  * 存草稿、看差異、發布、版本還原。發布與還原前先走 `MotrixDefGovernance.review`（治理旗標開時帶 preview_hash）與頁內兩段式確認（不用原生對話框）；
  * 放寬類變更後端回 {pending:true}，面板如實說「已送出，待第二位最高管理者核准」。
@@ -64,7 +64,7 @@
 '     <label>一次合計 MB <input type="number" min="1" :max="catalog.platform.maxRequestMb" data-testid="as-req-mb" x-model="s.maxRequestMb" placeholder="50"></label></div>' +
 '    <div class="as-row" style="margin-top:4px"><span>誰可以上傳</span>' +
 '     <template x-for="r in catalog.roles" :key="r"><label class="as-chk"><input type="checkbox" :data-role="r" :checked="s.roles.indexOf(r) >= 0" @change="toggleRole(s, r, $event.target.checked)"> <span x-text="r"></span></label></template></div>' +
-'    <div class="as-sub">一個都不勾＝維持原本的上傳權限；勾選只會「縮小」成這些角色（超級管理員一律可以）。</div>' +
+'    <div class="as-sub">一個都不勾＝維持原本的上傳權限；勾選只會「縮小」成這些角色（最高管理者一律可以）。</div>' +
 '    <div class="as-row" style="margin-top:4px"><label>子資料夾 <input type="text" data-testid="as-sub" x-model="s.subfolder" maxlength="40" placeholder="（選填）" :disabled="!subfolderOk()"></label>' +
 '     <span class="as-sub" x-show="!subfolderOk()">這個位置的讀取還不支援子資料夾</span></div>' +
 '    <div class="as-row" style="margin-top:4px"><label class="as-chk"><input type="checkbox" x-model="s.required"> 提示必須有（只標紅，不擋）</label>' +

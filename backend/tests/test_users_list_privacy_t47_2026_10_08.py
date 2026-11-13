@@ -90,7 +90,8 @@ def test_sales_contact_returns_exactly_four_fields_for_a_quotation_editor(client
     r = client.get("/api/users/sales-contact", params={"username": "pl_admin"}, headers=h)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == {"id", "displayName", "phone", "email"} and body["email"] == "pl_admin@example.test" and body["phone"].startswith("09")
+    # 2026-11-13「報價用公司信箱」：多回解析後的報價信箱與來源（只有信箱字串與來源代碼；仍沒有角色、權限勾選、信件退訂）
+    assert set(body) == {"id", "displayName", "phone", "email", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"} and body["email"] == "pl_admin@example.test" and body["phone"].startswith("09")
     assert client.get("/api/users/sales-contact", params={"username": "pl_super"}, headers=_tok(client, people["pl_super"])).status_code == 200
 
 

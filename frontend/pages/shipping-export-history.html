@@ -5,8 +5,9 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>出貨單歷史紀錄 — MOTRIX 專案管理系統</title>
+  <title>出貨單歷史紀錄 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -65,7 +66,19 @@
     .seh-empty {
       text-align: center; padding: 60px 20px; color: var(--text-dim); font-size: 13px;
     }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .seh-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .seh-main select,
+      .seh-main textarea { font-size: 16px; min-height: 44px; }
+      .seh-main .btn { min-height: 44px; }
+      .seh-main input[type=checkbox],
+      .seh-main input[type=radio] { width: 22px; height: 22px; }
+    }
+    @media (max-width: 767px) {
+      .seh-main { padding: 20px 16px 60px; }
+    }
+</style>
 </head>
 <body x-data="shippingExportHistory()" x-init="init()" x-cloak>
 
@@ -97,6 +110,11 @@
               @click="q='';filterYear='';filterMonth=''">清除篩選</button>
     </div>
 
+<div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <div x-show="loading" style="padding:60px;text-align:center;color:var(--text-dim)">載入中…</div>
 
     <div class="seh-list" x-show="!loading">
@@ -121,7 +139,7 @@
           </div>
         </div>
       </template>
-      <div class="seh-empty" x-show="filtered.length===0">尚無符合條件的匯出紀錄</div>
+      <div class="seh-empty" x-show="filtered.length===0 && !loadErr">尚無符合條件的匯出紀錄</div>
     </div>
   </main>
 
@@ -132,6 +150,7 @@
     return {
       events: [],
       loading: true,
+      loadErr: '',                     // 讀取失敗的白話原因；失敗時不可以顯示「尚無符合條件的匯出紀錄」（會被當成從沒匯出過）
       q: '',
       filterYear: '',
       filterMonth: '',
@@ -155,10 +174,11 @@
           headers: { Authorization: 'Bearer ' + (s.token || '') }
         })
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
-          .then(data => { this.events = data })
-          .catch(e => console.error('load failed:', e))
+          .then(data => { this.events = data; this.loadErr = '' })
+          .catch(e => { if (e === 401) { MotrixError.sessionExpired(); return } console.error('load failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
+      retryLoad() { this.loadErr = ''; this.load() },
 
       get yearOptions() {
         return [...new Set(this.events.map(e => (e.exportedAt || '').slice(0, 4)).filter(Boolean))].sort().reverse()

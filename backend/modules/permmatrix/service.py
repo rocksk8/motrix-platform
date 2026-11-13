@@ -82,7 +82,7 @@ def _audit_tx(conn, actor, action, target_type, target_id, label, detail):
 
 
 def _superadmins(conn):
-    return [r[0] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()]
+    return L.real_superadmins(conn)          # 展示帳號不算（第二位核准與通知名單都只看真人）
 
 
 def _send(notices):
@@ -622,7 +622,7 @@ def create_delegation(conn, actor, delegator, delegate, scope_kind, caps=(), doc
         _require_reason(reason)
     elif not is_super:
         if _name(actor) != delegator or not delegation_policy().get("selfDelegateNonRisky", True):
-            raise PermError("僅能設定自己的代理，如需代替他人設定請聯絡最高管理員", 403)
+            raise PermError("僅能設定自己的代理，如需代替他人設定請聯絡最高管理者", 403)
     begin_write(conn)
     try:
         if risky:

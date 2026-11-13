@@ -81,6 +81,8 @@ def test_daily_backup_triggers_rotation_regardless_of_cloud_availability(client,
     log_path.write_bytes(b"x" * (60 * 1024 * 1024))  # 超過預設 50MB 門檻
     monkeypatch.setattr(archive, "_SERVER_LOG_PATH", str(log_path))
     monkeypatch.setattr(archive, "_archive_base", lambda: "")  # 模擬雲端磁碟機未掛載
+    # 2026-11-13：開機 120 秒內不輪替（見 test_log_rotation_boot_race_2026_11_13）——本題要驗的是「與雲端無關」，所以把行程當成已跑很久
+    monkeypatch.setattr(archive, "_PROCESS_STARTED_MONO", archive.time.monotonic() - 3600)
 
     archive._daily_backup()
 

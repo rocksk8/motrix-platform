@@ -80,7 +80,7 @@ from core.internal_cols import InternalColsMiddleware
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
+from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
 from routers import bootstrap as _bootstrap_router     # 登入後啟動資料合併（2026-11-13，外網載入效能第二階段）
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
@@ -101,11 +101,25 @@ from routers import platform_menu_preview
 from routers import export_templates as export_templates_router
 from routers import option_lists as option_lists_router
 from routers import system_hub
+# 備份與監控專頁（批次 4a；註解不寫在 import 行尾，test_router_registration 以行解析）
+from routers import backup_monitor
 from routers import platform_catalog
 _startup_step("import_routers")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# 日誌分流與輪替（2026-11-13）：access.log／app.log 由本行程用 RotatingFileHandler 自己輪替（gzip、10 份）；
+# server.log（cmd 的 `>>`）縮成開機那一段＋WARNING 以上的兜底。整套設計與「為什麼開機那一段要留」見 helpers/log_setup.py 檔頭。
+# 打不開檔 ⇒ install() 回 None、維持舊行為；測試（pytest）不建檔。客戶端斷線噪音（WinError 10054）的 filter 到處都掛。
+from helpers import log_setup as _log_setup
+_log_setup.attach_noise_filter()
+_log_setup.attach_redact_filter()      # 查詢字串遮罩：token 不進任何日誌檔（access 行只留 path、值一律 ***）；分流有沒有啟用都要
+if _log_setup.enabled_by_environment():
+    from core import paths as _log_paths
+    _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
+else:
+    _LOG_SPLIT = None
 
 # L2 模組（modules/*）由載入器登錄；main 不指名任何 L2 模組（CORE-SPEC §2）。
 # 載入失敗的模組只記 ERROR，不擋啟動。
@@ -294,17 +308,22 @@ _COMPANY_SETUP_ALLOWED = {
     ("PATCH", "/api/auth/change-password"): "帳號本身必要：改密碼（同「必須先改密碼」白名單；首次登入要先改密碼）",
     ("GET", "/api/ping"): "健康檢查：部署工具與前端判斷服務是否在線（不含任何資料）",
     ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
-    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理員才看得到完整內容，端點自己驗權限）",
-    ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理員，端點自己驗權限）",
-    ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理員，端點自己驗權限）",
-    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理員，端點自己驗權限）",
-    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理員，端點自己驗權限）",
+    ("GET", "/api/license/overview"): "授權頁讀取目前授權概況（licensing.LICENSE_EXEMPT_PATHS；限最高管理者且非示範帳號，端點自己驗權限）",
+    ("POST", "/api/license/import"): "授權頁預覽與匯入新授權檔（licensing.LICENSE_EXEMPT_PATHS；限最高管理者，有大小上限、頻率限制與稽核，端點自己驗權限）",
+    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理者才看得到完整內容，端點自己驗權限）",
+    ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理者，端點自己驗權限）",
+    ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理者，端點自己驗權限）",
+    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理者，端點自己驗權限）",
+    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理者，端點自己驗權限）",
     ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
     ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
     ("GET", "/api/bootstrap"): "登入後啟動資料合併端點：只放原本在白名單內的區段（me／menu／branding／totp），其餘區段在未設定時自己回 428 標記，不給資料",
     ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
     ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
+    ("GET", "/api/auth/profile"): "帳號本身必要：「我的帳號」讀自己的顯示名稱、部門與報價用信箱（只回自己這一列，無他人資料）；未設定公司資料時使用者仍要看得到自己的帳號頁",
+    ("GET", "/api/auth/preferences"): "帳號本身必要：每個登入期間載入頁面時同步自己的字級、外觀與首頁偏好（只讀寫自己的列）；擋住會讓字級與深色模式在未設定期間失效",
+    ("PUT", "/api/auth/preferences"): "帳號本身必要：頂欄調字級會把偏好存回伺服器、「我的帳號」儲存偏好（只改自己的列，白名單值域，不碰任何公司資料）",
 }
 
 
@@ -397,7 +416,7 @@ async def slow_request_log(request: Request, call_next):
 
 @app.middleware("http")
 async def recycle_bin_request_scope(request: Request, call_next):
-    """刪除暫存區的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
+    """資源回收筒的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
     （後續步驟失敗而 rollback），就搬回原處。平常沒有刪除 ⇒ 只是設一個空 list。細節見 helpers/recycle_bin.request_scope_end。"""
     from helpers import recycle_bin as _rb
     state = _rb.request_scope_begin()
@@ -486,8 +505,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         route = request.scope.get("route")
         template = getattr(route, "path", "") or request.url.path.split("?")[0]
         pp = request.scope.get("path_params") or {}
-        from helpers.audit import _CASE_NO_RE, _audit_failure
-        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        from helpers.audit import _case_no_re, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_case_no_re().search(str(v))] if m), "")
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,
@@ -636,6 +655,12 @@ async def license_gate_middleware(request: Request, call_next):
     # emergency_pass() 與 license_alerts 都不丟例外，任何不確定都當沒有通行證 ⇒ 照擋。
     emergency = await run_in_threadpool(license_core.emergency_pass, status) if blocked else None
     if blocked and emergency is None and not exempt:
+        # T80稽核 LG-S1：能走到這裡又「沒通過身分驗證」的非豁免請求，只剩 auth_middleware 刻意放行的
+        # `/api/uploads/*?pt=…`（簽章由路由處理函式驗，這裡看不到結果）。任何人帶一個亂填的 `pt` 就能走到這一步，
+        # 若回 402＋reason 就違反上面「先確認是誰」的設計：對陌生人洩漏「這台機器沒有授權」以及原因碼。
+        # 一律回與 auth_middleware 同樣的 401（同一句話，不含任何授權字樣）。
+        if not getattr(request.state, "authed", False):
+            return JSONResponse(status_code=401, content={"detail": "未登入"})
         # 402 Payment Required，不是 403。
         # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。
         return JSONResponse(
@@ -657,6 +682,10 @@ async def license_gate_middleware(request: Request, call_next):
     # （公開端點的回應沒有標頭，不可以讓橫幅閃掉）。
     if getattr(request.state, "authed", False):
         response.headers[license_core.LICENSE_HEADER] = license_core.license_banner(status, emergency) or "none"
+        # 到期提醒（T83）：獨立的第二個標頭，與上面的橫幅互不影響；同樣「已登入的回應一定帶：有提醒＝值、沒有＝none」。
+        # **只給最高管理者**（L5）：剩幾天到期是商務資訊，其他角色（含被盜用的一般帳號）不需要知道、也不該知道 ⇒ 其他角色的回應根本不帶這個標頭。
+        if getattr(request.state, "role", None) == "superadmin":
+            response.headers[license_core.EXPIRY_HEADER] = license_core.expiry_banner(status) or "none"
     return response
 
 
@@ -763,6 +792,7 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
     request.state.authed = True      # 授權閘門的橫幅標頭只給已登入的請求（license_gate_middleware；K 審 S4）
+    request.state.role = row["role"]  # 到期提醒標頭只給最高管理者（license_gate_middleware；T83 L5）
 
     is_high_priv = row["role"] in ("superadmin", "admin")
     idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS
@@ -918,7 +948,10 @@ app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不
 
 @app.exception_handler(RequestValidationError)
 async def _validation_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error %s %s: %s", request.method, request.url.path, exc.errors())
+    # 2026-11-13：不記 `input`／`ctx`——`input` 是使用者送來的原值（query 的 token、body 的密碼欄位缺別的欄位時整包 body 都在裡面），
+    # 只留位置與訊息就足以除錯；原值進日誌＝憑證進日誌（見 helpers/log_setup「查詢字串遮罩」）。
+    _errs = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+    logger.warning("Validation error %s %s: %s", request.method, request.url.path, _errs)
     return JSONResponse(status_code=422, content={"detail": "請求格式錯誤，請確認欄位是否完整"})
 
 
@@ -1111,6 +1144,7 @@ app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
+app.include_router(my_account.router)
 app.include_router(list_prefs.router)
 app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
@@ -1127,6 +1161,7 @@ app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
+app.include_router(dashboard_mine.router)     # 首頁「我的工作」（L1，2026-11-13 UX P1.5；提供者 dashboard.mine_groups）
 app.include_router(licensing.router)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)
@@ -1142,6 +1177,7 @@ app.include_router(platform_menu_preview.router)
 app.include_router(export_templates_router.router)
 app.include_router(option_lists_router.router)
 app.include_router(system_hub.router)
+app.include_router(backup_monitor.router)         # 備份與監控專頁（最高管理者；批次 4a）
 app.include_router(platform_catalog.router)
 _startup_step("include_routers")
 

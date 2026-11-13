@@ -100,7 +100,7 @@
   {
    "group": "mywork",
    "href": "approval-queue.html",
-   "label": "簽核佇列",
+   "label": "待我簽核",
    "order": 30,
    "perm": [
     "quotation"
@@ -188,6 +188,13 @@
   },
   {
    "group": "system",
+   "href": "backup-monitor.html",
+   "label": "備份與監控",
+   "order": 46,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "storage-settings.html",
    "label": "儲存位置",
    "order": 47,
@@ -216,6 +223,13 @@
   },
   {
    "group": "system",
+   "href": "license-settings.html",
+   "label": "授權",
+   "order": 72,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "settings-center.html",
    "label": "設定中心",
    "order": 75,
@@ -231,7 +245,7 @@
   {
    "group": "system",
    "href": "audit-log.html",
-   "label": "歷史紀錄",
+   "label": "操作紀錄",
    "order": 90,
    "perm": [
     "audit_log"
@@ -249,14 +263,14 @@
   {
    "group": "system",
    "href": "online-stats.html",
-   "label": "在線時數統計",
+   "label": "使用狀況",
    "order": 120,
    "perm": "superadmin"
   },
   {
    "group": "system",
    "href": "schema-status.html",
-   "label": "Schema 狀態",
+   "label": "資料庫版本",
    "order": 130,
    "perm": "superadmin"
   }

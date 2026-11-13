@@ -1991,7 +1991,8 @@ def _sole_approver_bypass(appr, tiers, user, reason, code, msg):
 def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
     """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。"""
     import re
-    m = re.search(r"MQ-\d{6}-\d{3}", str(target_id) + " " + str(label))        # 與 L1 稽核的 module／case_no 推導同規則（module＝動作第一段、case_no＝單號）；不 import L1 私有函式
+    from helpers.doc_type import case_no_re           # 報價單 MQ＋估價單字首（公開介面）
+    m = case_no_re().search(str(target_id) + " " + str(label))        # 與 L1 稽核的 module／case_no 推導同規則（module＝動作第一段、case_no＝單號）；不 import L1 私有函式
     d = {"module": (action or "").split(".", 1)[0], "case_no": m.group(0) if m else "", "ref_no": ""}
     conn.execute(
         "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
@@ -2037,7 +2038,7 @@ def approve_case_bonus(quote_no: str, body: dict = Body(default={}), authorizati
             nxt = "待發放" if int(appr.get("currentTier") or 0) >= len(tiers) else "待審核"
         else:
             if user.get("role") != "superadmin":
-                raise HTTPException(403, "僅超級管理員可執行此操作")
+                raise HTTPException(403, "僅最高管理者可執行此操作")
             err = check_no_tier_self_approval(conn, appr, user)
             if err:
                 raise HTTPException(403, err)

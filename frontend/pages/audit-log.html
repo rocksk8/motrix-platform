@@ -7,8 +7,9 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>歷史紀錄 — MOTRIX 專案管理系統</title>
+  <title>操作紀錄 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -100,6 +101,55 @@
       background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius);
       padding: 8px 14px; font-size: 12px; color: #166534; margin-bottom: 16px;
     }
+    /* 手機／平板直式（2026-11-12 UI 檢查）：
+       ① 篩選控制項寬度參差（搜尋框 220、下拉 140…）、互相錯位 ⇒ 手機統一兩欄格線，下拉／搜尋／日期都 16px 字、≥44px 高
+       ② 「分層瀏覽」排在紀錄上方，要先滑過一大塊才看到時間線 ⇒ 手機把時間線排前面、分層瀏覽放後面
+       ③ 時間線的目標名稱 nowrap＋省略號被截斷 ⇒ 手機允許換行；翻頁鈕與失敗原因籤放大到好點 */
+    @media (max-width:767px){
+      .audit-main{padding:16px 12px 28px}
+      .filter-bar{gap:8px}
+      .filter-bar > input,.filter-bar > select{flex:1 1 100%;width:100%;min-width:0;box-sizing:border-box;font-size:16px;min-height:44px}
+      .filter-bar > span[x-text]{flex:1 1 100%;margin-left:0 !important;text-align:right}
+      .filter-bar2{display:grid;grid-template-columns:1fr 1fr}
+      .filter-bar2 > *{width:100% !important;min-width:0 !important;box-sizing:border-box;margin-left:0 !important}
+      .filter-bar2 > select,.filter-bar2 > input{font-size:16px;min-height:44px}
+      .filter-bar2 > input:nth-of-type(3),.filter-bar2 > .seg,.filter-bar2 > button{grid-column:1 / -1}
+      .seg button{flex:1;min-height:44px}
+      .filter-bar2 > button.filter{min-height:44px}
+      .audit-list{order:1;width:100%}
+      .drill{order:2;max-height:280px}
+      .drill-node{padding:10px 8px}
+      .drill .crumb a{display:inline-block;padding:6px 2px}
+      .chip{padding:8px 12px;min-height:36px}
+      .tl-item{gap:10px}
+      .tl-dot{width:30px;height:30px}
+      .tl-label{white-space:normal;overflow-wrap:anywhere}
+      .pager{flex-wrap:wrap}
+      .pager button{min-height:44px;padding:8px 16px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .audit-main{padding:22px 20px}
+      .filter-bar input,.filter-bar select{min-height:40px}
+      .seg button{min-height:40px}
+      .filter-bar2 input{width:130px}
+      .audit-list{order:1;width:100%}
+      .drill{order:2;max-height:260px}
+      .chip{padding:6px 12px}
+      .pager button{min-height:40px}
+    }
+    /* 進階篩選的摺疊摘要：桌面／平板不顯示（永遠展開），手機才是可點的收合列 */
+    .al-adv__sum { display: none; }
+    /* 觸控：「擴大到 N 天」文字鈕只有 17px 高 ⇒ 撐到 40px（K 審 D） */
+    @media (hover:none){ [data-testid="tree-widen"]{ min-height:40px; padding:0 8px } }
+    @media (max-width:767px){
+      .al-adv{margin-bottom:14px}
+      .al-adv__sum{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0 14px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:14px;cursor:pointer;list-style:none}
+      .al-adv__sum::-webkit-details-marker{display:none}
+      .al-adv__sum::after{content:"▾";color:var(--text-dim)}
+      .al-adv[open] > .al-adv__sum::after{content:"▴"}
+      .al-adv[open] > .al-adv__sum{margin-bottom:10px}
+      .al-adv .filter-bar{margin-bottom:0}
+    }
   </style>
 </head>
 <body x-data="auditApp()" x-init="init()" x-cloak>
@@ -114,14 +164,14 @@
   <main class="audit-main">
     <div class="page-header">
       <div>
-        <div class="page-header__title">歷史紀錄</div>
+        <div class="page-header__title">操作紀錄</div>
         <div class="page-header__sub" x-text="'共 ' + total + (totalCapped ? '＋' : '') + ' 筆操作紀錄' + (totalCapped ? '（只數到 1 萬筆，請加條件縮小範圍）' : '')"></div>
       </div>
     </div>
 
     <div class="immutable-note">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      歷史紀錄不可修改或刪除，所有操作均永久保存以供稽核。
+      操作紀錄不可修改或刪除，所有操作均永久保存以供稽核。
     </div>
 
     <!-- 篩選列 -->
@@ -131,7 +181,7 @@
         <option value="">所有操作</option>
         <optgroup label="報價單">
           <option value="quotation.create">新增報價單</option>
-          <option value="quotation.submit">送出審核</option>
+          <option value="quotation.submit">送出簽核</option>
           <option value="quotation.approve">簽核通過</option>
           <option value="quotation.review_edit">複查編輯</option>
           <option value="quotation.reconfirm">內容變動複查</option>
@@ -153,7 +203,7 @@
         </optgroup>
         <optgroup label="承攬商匯款申請">
           <option value="contractor_voucher.create">建立匯款申請</option>
-          <option value="contractor_voucher.submit">送出審核</option>
+          <option value="contractor_voucher.submit">送出簽核</option>
           <option value="contractor_voucher.approve">簽核通過</option>
           <option value="contractor_voucher.reject">退回</option>
           <option value="contractor_voucher.revoke_approval">撤銷核准</option>
@@ -164,7 +214,7 @@
         </optgroup>
         <optgroup label="開票申請憑據">
           <option value="invoice_voucher.create">建立開票憑據</option>
-          <option value="invoice_voucher.submit">送出審核</option>
+          <option value="invoice_voucher.submit">送出簽核</option>
           <option value="invoice_voucher.approve">簽核通過</option>
           <option value="invoice_voucher.reject">退回</option>
           <option value="invoice_voucher.revoke_approval">撤銷核准</option>
@@ -355,6 +405,9 @@
     </div>
 
     <!-- 分層搜尋：模組／案件單號／單據號／人員／日期／結果 -->
+    <!-- 手機（≤767px）預設收合「進階篩選」，紀錄清單才不會被擠到一大片篩選欄之後；桌面／平板維持展開、不顯示摘要列。 -->
+    <details class="al-adv" open>
+    <summary class="al-adv__sum">進階篩選（模組／案件／單據／人員／日期／結果）</summary>
     <div class="filter-bar filter-bar2">
       <select class="filter" x-model="fModule" @change="applyFilter()">
         <option value="">所有模組</option>
@@ -377,6 +430,8 @@
       </span>
       <button class="filter" style="padding:7px 12px" @click="resetFilter()">清除</button>
     </div>
+    </details>
+    <script>(function(){try{if(window.matchMedia('(max-width:767px)').matches){var d=document.querySelector('.al-adv');if(d)d.open=false}}catch(e){}})()</script>
 
     <!-- 失敗原因前 10（點一下＝套用篩選） -->
     <div class="chips" x-show="failSummary.total > 0">
@@ -409,6 +464,11 @@
     </aside>
     <div class="audit-list">
 
+    <div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <!-- 時間線 -->
     <div class="timeline" x-show="!loading">
       <template x-for="item in items" :key="item.id">
@@ -432,7 +492,7 @@
           </div>
         </div>
       </template>
-      <div x-show="items.length===0 && !loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">
+      <div x-show="items.length===0 && !loading && !loadErr" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">
         暫無紀錄
       </div>
     </div>
@@ -461,6 +521,7 @@
       page:   1,
       perPage: 50,
       loading: false,
+      loadErr: '',                    // 讀取失敗的白話原因；空字串＝沒事（失敗時不可以只顯示「暫無紀錄」）
       q: '',
       filterAction: '',
       fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '', fTag: '',
@@ -572,16 +633,20 @@
           const r = await fetch(`/api/audit-log?${params}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          if (r.status === 401) { this.logout(); return }
+          if (r.status === 401) { MotrixError.sessionExpired(); return }
           if (r.ok) {
             const d = await r.json()
             this.items = d.items || []
             this.total = d.total || 0
             this.totalCapped = !!d.totalCapped
+            this.loadErr = ''
+          } else {
+            this.loadErr = MotrixError.loadText(r.status)
           }
-        } catch(e) {}
+        } catch(e) { this.loadErr = MotrixError.loadText(e) }
         this.loading = false
       },
+      retryLoad() { this.loadErr = ''; this.load(); this.loadTree(); this.loadFailSummary() },
 
       prevPage() { if (this.page > 1) { this.page--; this.load() } },
       nextPage() { if (this.page * this.perPage < this.total) { this.page++; this.load() } },
@@ -601,7 +666,7 @@
           'auth.change_password':            '修改密碼',
           // 報價單
           'quotation.create':                '新增報價單',
-          'quotation.submit':                '送出審核',
+          'quotation.submit':                '送出簽核',
           'quotation.approve':               '簽核通過',
           'quotation.review_edit':           '複查編輯',
           'quotation.reconfirm':             '內容變動複查',
@@ -628,7 +693,7 @@
           'payment.mark':                    '收款標記',
           // 承攬商匯款申請
           'contractor_voucher.create':          '建立匯款申請',
-          'contractor_voucher.submit':          '送出審核',
+          'contractor_voucher.submit':          '送出簽核',
           'contractor_voucher.approve':         '簽核通過',
           'contractor_voucher.reject':          '退回',
           'contractor_voucher.revoke_approval': '撤銷核准',
@@ -638,7 +703,7 @@
           'contractor_voucher.unpay':           '取消已匯款',
           // 開票申請憑據
           'invoice_voucher.create':          '建立開票憑據',
-          'invoice_voucher.submit':          '送出審核',
+          'invoice_voucher.submit':          '送出簽核',
           'invoice_voucher.approve':         '簽核通過',
           'invoice_voucher.reject':          '退回',
           'invoice_voucher.revoke_approval': '撤銷核准',

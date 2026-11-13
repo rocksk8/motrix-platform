@@ -24,7 +24,7 @@ import logging
 from helpers.auth import user_has_module, has_finance_access, finance_duty_person
 from helpers.dates import normalize_date
 from helpers.financial_mask import money_visible, material_money_visible
-from helpers import recycle_bin as RB                 # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from helpers import recycle_bin as RB                 # 第 53 班 P1：刪除先進資源回收筒（IP-RB2）
 from modules.case import material_approval as MA
 from modules.case import recycle_adapter as RA
 from modules.case import material_payment as MP
@@ -358,14 +358,14 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
         elif st in MA.IN_FLIGHT or st in (MA.S_APPROVED, MA.S_CANCELLED):
             _rej(rejected, iid, "*", "delete_blocked", "審核中或已核准的材料申請不可刪除（請先撤回，或改用取消）")
             out.append(old)
-        else:                                                                            # 草稿／已退回（或舊單沒有審核列）：進暫存區，連審核單一起搬
+        else:                                                                            # 草稿／已退回（或舊單沒有審核列）：進資源回收筒，連審核單一起搬
             try:
                 res = RB.delete(conn, "material_order", "%s|%s" % (quote_no, iid), actor or {})
             except RB.BinError as e:
                 _rej(rejected, iid, "*", "delete_blocked", str(e))
                 out.append(old)
                 continue
-            if res is None and st:                                                       # 暫存區模組不在 ⇒ 照舊硬刪審核單（IP-RB2）
+            if res is None and st:                                                       # 資源回收筒模組不在 ⇒ 照舊硬刪審核單（IP-RB2）
                 RA.MaterialOrderAdapter().delete_in_tx(conn, "%s|%s" % (quote_no, iid))
     return out
 

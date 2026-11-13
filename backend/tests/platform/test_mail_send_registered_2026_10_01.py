@@ -33,7 +33,7 @@ def test_module_registered_type_joins_prefs_but_core_does_not(clean_mail):
 
 def test_ensure_event_is_idempotent_and_keeps_existing(clean_mail):
     assert np_.ensure_event("approval_request", "別的說明") is False
-    assert dict(dict(np_.EVENT_GROUPS)["簽核流程"])["approval_request"] == "報價單待審核通知（當層簽核人）"
+    assert dict(dict(np_.EVENT_GROUPS)["簽核流程"])["approval_request"] == "報價單／估價單待簽核通知（當層簽核人）"
     assert np_.ensure_event("zz_k1", "甲") is True and np_.ensure_event("zz_k1", "乙") is False
     assert np_.EVENT_KEYS.count("zz_k1") == 1 and np_.ensure_event("", "x") is False
 

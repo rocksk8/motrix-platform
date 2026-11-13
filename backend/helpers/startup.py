@@ -533,7 +533,7 @@ def init_default_admin() -> None:
             "(username, password_hash, display_name, role, email, modules, active, "
             "created_at, must_change_password) "
             # 2026-09-27 H10：不寫入本公司人員的姓名與 email（產品會安裝在客戶端；
-            # 系統技術類信件寄給超級管理員，寫死的 email 會讓客戶的告警寄到我們這裡）。
+            # 系統技術類信件寄給最高管理者，寫死的 email 會讓客戶的告警寄到我們這裡）。
             "VALUES (?, ?, '系統管理員', 'superadmin', '', ?, 1, ?, 1)",
             (
                 username,

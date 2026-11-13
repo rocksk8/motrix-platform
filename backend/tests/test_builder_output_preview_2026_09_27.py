@@ -4,7 +4,7 @@
 ① 同一筆樣本資料：預覽與正式匯出（單據輸出）的 HTML 完全一致——走同一個 renderer、同一份版型。
 ② 預覽跟著正式樣板走：改正式樣板（`default_template`），預覽立刻跟著變（不是另一份複本）。
 ③ 只讀：呼叫前後每一張表的列數不變（含半成品、PDF）。
-④ 只給有建構器權限的人（超級管理員）：有模組使用權也不行（403），沒登入 401。
+④ 只給有建構器權限的人（最高管理者）：有模組使用權也不行（403），沒登入 401。
 ⑤ 邊拖邊看：編到一半的草稿照畫，未完成的欄位畫成「〈名稱〉尚未完成」並列在回應標頭；
    只有連一個欄位都畫不出來才 422；任何半成品都不可以 500。
 """
@@ -151,7 +151,7 @@ def test_preview_writes_nothing(client, make_user, monkeypatch):
 
 
 def test_preview_is_only_for_builders(client, make_user):
-    """④：有這個模組的使用權限也不能預覽（建構器僅超級管理員）；沒登入 401。"""
+    """④：有這個模組的使用權限也不能預覽（建構器僅最高管理者）；沒登入 401。"""
     user = _h(client, make_user, "bo_user", modules=["custom.%s" % KEY])
     assert _preview(client, user, _definition()).status_code == 403
     assert client.post("/api/custom-modules/%s/output/preview" % KEY, json={"body": _definition()}).status_code == 401

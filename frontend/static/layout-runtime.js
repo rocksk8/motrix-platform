@@ -127,7 +127,7 @@
     return out
   }
 
-  /** 讀目前使用者的版面（或 role 參數：超級管理員預覽）。回 {points, ops, source, dropped} 或丟例外。 */
+  /** 讀目前使用者的版面（或 role 參數：最高管理者預覽）。回 {points, ops, source, dropped} 或丟例外。 */
   async function fetchLayout(role) {
     var url = '/api/layout/' + encodeURIComponent(cfg.module) + (role ? ('?role=' + encodeURIComponent(role)) : '')
     var r = await fetch(url, { headers: headers() })
