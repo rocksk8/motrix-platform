@@ -2,6 +2,7 @@
 
 ## (next) — 2026-11-13（fix/company-profile-full-read-default；公司資料完整版預設只限最高管理者）
 - 行為變更（對外介面）：設定中心開關 `account_security.company_profile_full_read_superadmin_only` 預設 `0→1`（使用者裁示 2026-11-13，方案 A）。`GET /api/settings/company-profile`（完整版）對非最高管理者預設回 403；公開子集 `GET /api/settings/company-profile/public`（name／tax_id／contact_info／locations[id,name]）不變、任何登入者可讀。開關保留：關閉（0）＝登入即可讀完整版，屬放寬，需第二位最高管理者核准（既有機制，沒動）。
+- 適用範圍（重要）：新預設只對全新安裝、以及從沒存過「登入與密碼」（account_security）群組的環境生效——設定中心存檔會把整個群組（含此開關）存成明確值，曾存過的環境仍是舊值 0，需手動改為開啟（或另案遷移）。
 - 設定登錄（`helpers/settings_groups.py`、`core/settings_help.json`）：預設值、選項文字（拿掉「(目前的做法)」，改標「預設、建議」）、說明同步；`tests/platform/settings_deploy_baseline.json` 同步為 `[1, 0, 1, false]`。
 - `main.py` 公司設定 428 閘門放行理由改正：設定頁與公司設定精靈讀取本公司資料，預設只有最高管理者讀得到完整內容。
 - 不變：PUT company-profile／branding 仍限最高管理者；L1 公開介面無變動。
