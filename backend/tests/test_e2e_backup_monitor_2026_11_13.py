@@ -9,6 +9,7 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import expect  # noqa: E402
 
 _MAKE_USER_DEFAULT_ROLE = "superadmin"
 SECRET = "https://hc-ping.example.com/E2E-SECRET-UUID"
@@ -127,7 +128,7 @@ def test_disable_asks_for_a_reason_then_waits_for_a_second_superadmin(live_serve
     reason.wait_for(state="visible", timeout=5000)
     assert ok.is_disabled()                                              # 沒寫原因不能送
     reason.fill("改用別家監控")
-    assert not ok.is_disabled()
+    expect(ok).to_be_enabled()                                           # 按鈕解鎖由前端事件更新：用自動重試的斷言，不立刻讀 is_disabled
     ok.click()
     banner = page.locator('[data-testid="bm-disable-request"]')
     banner.wait_for(state="visible", timeout=10000)

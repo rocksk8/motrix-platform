@@ -7,6 +7,7 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import expect  # noqa: E402
 
 
 def _open(live_server, make_user, new_page, login_as, name):
@@ -82,8 +83,8 @@ def test_wizard_three_steps_then_activate(live_server, make_user, new_page, logi
     page.locator("[data-testid=es-got-it]").click()
     page.locator("[data-testid=es-done]").wait_for(state="visible", timeout=10000)
     page.reload()
-    page.locator("[data-testid=es-summary]").wait_for(state="visible", timeout=20000)         # 設定好了 ⇒ 只顯示摘要
-    assert "co@gmail.com" in page.locator("[data-testid=es-summary]").inner_text()
+    page.locator("[data-testid=es-summary]").wait_for(state="visible", timeout=20000)         # 設定好了 ⇒ 只顯示摘要（設定讀回來才會出現）
+    expect(page.locator("[data-testid=es-summary]")).to_contain_text("co@gmail.com", timeout=20000)   # 自動重試：慢機器上也等到內容換成已存的信箱
     assert not page.locator("[data-testid=es-steps]").is_visible()
     page.locator("[data-testid=es-reopen]").click()
     page.locator("[data-testid=es-step1]").wait_for(state="visible", timeout=10000)

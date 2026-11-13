@@ -7,6 +7,7 @@
 觀測點：頁面上沒有任何 #approval-notif-banner／#totp-reminder-banner／.mui-toasts 浮層；鈴鐺裡有提醒；
         頁面所有可見操作元件都沒有被任何浮層蓋住；按 × 之後同分頁不再出現。
 """
+from tests._e2e_login import bootstrap_unavailable  # noqa: E402
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 #: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
 needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
@@ -128,12 +129,17 @@ def test_reminder_stays_across_pages_until_dismissed_then_stays_closed(live_serv
 
 
 @pytest.mark.e2e
-def test_totp_status_is_asked_once_per_tab_not_once_per_page(live_server, client, make_user, new_context):
+@pytest.mark.parametrize("via_bootstrap", [False, True], ids=["direct", "bootstrap"])
+def test_totp_status_is_asked_once_per_tab_not_once_per_page(live_server, client, make_user, new_context, via_bootstrap):
     """提醒改成每頁都在（按 × 才收）之後，「有沒有啟用兩步驟驗證」仍只能每個分頁查一次：
-    否則每換一頁多打一支 /api/auth/totp/status（case-page golden 的 API 請求清單就是釘這個）。"""
-    u = make_user(username="nb_totpq", role="admin")
+    否則每換一頁多打一支 /api/auth/totp/status（case-page golden 的 API 請求清單就是釘這個）。
+    2026-11-13（bootstrap）：第一次由 /api/bootstrap 供應（原端點 0 次）；bootstrap 不可用時退回原端點（1 次）。兩條路都要是「每分頁只問一次」：
+    direct＝bootstrap 關掉，原端點恰 1 次；bootstrap＝原端點 0 次（第一頁由 bootstrap 供應，之後兩頁沿用分頁快取、不再補打）。"""
+    u = make_user(username="nb_totpq%s" % ("b" if via_bootstrap else "d"), role="admin")
     ctx = new_context(viewport={"width": 1440, "height": 900})
     _session_only(client, ctx, u)
+    if not via_bootstrap:
+        bootstrap_unavailable(ctx)
     page = ctx.new_page()
     hits = []
     page.on("request", lambda r: hits.append(r.url) if r.url.endswith("/api/auth/totp/status") else None)
@@ -141,4 +147,5 @@ def test_totp_status_is_asked_once_per_tab_not_once_per_page(live_server, client
     for path in ("/pages/quotations.html", "/pages/customers.html", "/pages/quotations.html"):
         page.goto(live_server + path)
         page.wait_for_function(f"() => document.querySelectorAll('{sel}').length === 1", timeout=15000)
-    assert len(hits) == 1, "三頁共查了 %d 次 totp/status：%s" % (len(hits), hits)
+    want = 0 if via_bootstrap else 1
+    assert len(hits) == want, "三頁共查了 %d 次 totp/status（預期 %d；via_bootstrap=%s）：%s" % (len(hits), want, via_bootstrap, hits)

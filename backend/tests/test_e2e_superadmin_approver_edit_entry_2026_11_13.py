@@ -49,6 +49,7 @@ def test_superadmin_who_is_the_current_approver_gets_an_unlock_entry_on_a_pendin
     assert not page.is_visible('[data-testid="qf-review-edit-start"]'), "最高管理者不走複查編輯（不改後端權限）"
     # 解鎖：輸入個人解鎖密碼 ⇒ 欄位真的可編輯
     btn.click()
+    page.locator('[data-testid="qf-unlock-consequence"]').wait_for(state="visible", timeout=5000)     # 點完先等彈窗出現再讀字
     cons = page.inner_text('[data-testid="qf-unlock-consequence"]')
     assert "已簽的層需重新簽核，並通知他們" in cons and "送審人維持" in cons, "彈窗要講清楚後果（PM）：" + cons
     page.fill('input[placeholder="輸入解鎖密碼"]', _UNLOCK_PW)
@@ -151,8 +152,10 @@ def test_relock_with_unsaved_edit_asks_first_and_discards_to_the_server_version(
     assert page.input_value(QTY) == "37"
     page.once("dialog", lambda d: d.dismiss())                                               # 先按「取消」：維持解鎖、修改還在
     page.click('[data-testid="qf-relock"]')
-    page.wait_for_timeout(500)
-    assert page.is_visible('[data-testid="qf-unlocked-banner"]') and page.input_value(QTY) == "37"
+    page.wait_for_timeout(500)                                                               # 給「取消」的處理一點時間（下面再用狀態等待確認，不靠這個睡眠）
+    page.wait_for_selector('[data-testid="qf-unlocked-banner"]', state="visible", timeout=5000)      # 維持解鎖：橫幅還在
+    page.wait_for_function("(q) => document.querySelector(q).value === '37'", arg=QTY, timeout=5000)   # 修改還在
+    assert page.input_value(QTY) == "37"
     page.once("dialog", lambda d: d.accept())                                                # 再按一次、這次確認
     page.click('[data-testid="qf-relock"]')
     page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
