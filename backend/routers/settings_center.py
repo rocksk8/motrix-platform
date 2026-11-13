@@ -29,6 +29,7 @@ from core import spine as _spine
 from helpers import _require_user
 from helpers import config_ledger as ledger
 from helpers.client_ip import client_ip
+from helpers.validation import body_flag
 from helpers import settings_groups  # noqa: F401  登錄群組
 from helpers import settings_registry as sr
 from helpers import settings_notify as _SN
@@ -183,7 +184,7 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
     expected = body.get("expectedValues")
     if expected is not None and not isinstance(expected, dict):
         raise HTTPException(400, "expectedValues 必須是物件")
-    return _do_publish(group, values, reason, request, actor, expected, supersede=bool(body.get("supersede")))
+    return _do_publish(group, values, reason, request, actor, expected, supersede=body_flag(body, "supersede"))
 
 
 def conflict_body(group, e):
@@ -250,7 +251,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
             raise HTTPException(400, "「%s」送出的比對資料沒有涵蓋所有要改的項目（缺：%s），請重新整理畫面後再試。" % (sr.groups()[g]["label"], "、".join((sr.field_defs(g)[k].label or k) if k in sr.field_defs(g) else k for k in vals if k not in exp)))
         if exp:
             expected_by[g] = exp
-        if spec.get("supersede") is True:                      # 畫面確認「取代別人還在等待的申請」後才帶（json 欄位）
+        if body_flag(spec, "supersede"):                      # 畫面確認「取代別人還在等待的申請」後才帶（json 欄位）
             supersede_by.add(g)
     preview = body.get("preview") is True
     reason = _clip(str(body.get("reason") or "").strip())
