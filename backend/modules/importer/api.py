@@ -14,6 +14,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, Form, Header, HTTPException, Response, UploadFile
 
 from helpers import _audit, _require_user, _tok, require_any_module
+from helpers import xlsx_guard as XG
 from modules.importer import parser as P
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,8 @@ def importer_parse(response: Response, kind: str = Form(...), file: UploadFile =
         raise HTTPException(429, "目前有其他人正在匯入檔案，請稍等幾秒再試")
     try:
         res = P.parse_file(data, file.filename or "", kind, max_bytes=limit)
+    except XG.XlsxBusy as e:
+        raise HTTPException(429, str(e))
     except P.ParseError as e:
         raise HTTPException(400, str(e))
     except Exception as exc:                                              # noqa: BLE001 — 訊息不帶例外內容

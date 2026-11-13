@@ -1,5 +1,9 @@
 # 匯入精靈 更新紀錄
 
+## 1.0.3 — 2026-11-13（rebase 到 T82 凍結 head f66dfd9ef；改用共用守門）
+- 內部（行為與回應形狀不變）：xlsx 解析改走 `helpers.xlsx_guard.read_rows(slot_name="importer")`（T82 已有；預掃＋子行程隔離讀取＋硬逾時／記憶體上限＋同時解析數），刪掉自己的串流預掃（`_check_zip`／`_prescan_sheet`／`_sheet_part`）與 `MAX_UNZIPPED`／`MAX_CELLS`／`MAX_ROW_TAGS`／`MAX_SHEET_XML`。守門拒絕的白話訊息原樣轉成 ParseError（400）；同時解析太多 ⇒ XlsxBusy ⇒ 429。守門上限改採 helper 預設（單張工作表 XML 12MB、解壓總量 40MB；其餘同前）。
+- 仍由本模組負責：選資料工作表（「資料」優先、否則第一張非「說明」的可見表）、公式儲存格不匯入、數字格警告、列數上限只算有內容的列。
+
 ## 1.0.2 — 2026-11-13（hichan-9 Low＋全量守門收尾）
 - CSV：單格內容過長、引號不成對給具體訊息（不再是籠統的「讀不出來」）。
 - 範本 .xlsx 的所有文字寫入都經 `helpers.xlsx_out.xl_safe_xlsx`（公式注入中和；範本內容本來都是程式自己的字，這是讓守門掃描器認得）。
