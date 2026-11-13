@@ -102,8 +102,7 @@ def test_driver_exception_falls_back_to_plain_merge(monkeypatch, tmp_path):
     monkeypatch.setitem(MD.MERGERS, "changelog", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
     assert MD.main(["changelog", str(tmp_path / "o"), str(tmp_path / "a"), str(tmp_path / "b")]) == 0
     merged = (tmp_path / "a").read_text(encoding="utf-8")
-    assert "- A
-" in merged and "- OLD" in merged                       # 兩邊的改動都在（不同行 ⇒ 一般合併無衝突）
+    assert "- A" in merged and "- OLD" in merged                      # 兩邊的改動都在（不同行 ⇒ 一般合併無衝突）
 
 
 # ── e2e lint ──────────────────────────────────────────────────────────────
