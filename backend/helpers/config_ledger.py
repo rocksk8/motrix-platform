@@ -2,7 +2,7 @@
 """設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。
 
 [單位] helper:config_ledger    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEMO_USERNAME, EVENTS, HIGH_RISK, RISKS, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, promote_due, real_superadmins, record, register_domain,
+[公開介面] DEMO_USERNAME, EVENTS, HIGH_RISK, RISKS, approve, audit_event, cancel, cancel_pending_for, domains, field_rows, history, in_effect, last_effective_change, pending, promote_due, real_superadmins, record, register_domain,
     restore_version, snapshot_version, state_of, supersede
 [不變式] ①`config_changes` 與 `config_change_events` 只增不改不刪（資料庫觸發器擋）；②狀態**不是欄位**：目前狀態＝該變更最後一個事件
     （`pending`／`activated`／`cancelled`／`superseded`），沒有事件＝立即生效；③`record()` 在**呼叫端的交易內**寫變更明細、稽核與

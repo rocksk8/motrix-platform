@@ -69,7 +69,7 @@
       .sc-body { flex-direction: column; gap: 10px; align-items: stretch; }
       .sc-pane { width: 100%; }
       .sc-nav { position: static; width: 100%; flex: none; max-height: none; display: none; }
-      .sc-nav.open { display: block; max-height: 60vh; overflow: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 8px; }
+      .sc-nav.open { display: block; max-height: calc(60vh / var(--fz, 1)); overflow: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 8px; }
       .sc-navtoggle { display: flex; width: 100%; align-items: center; justify-content: space-between; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); font-size: 15px; font-weight: 700; color: inherit; cursor: pointer; }
       .sc-searchbox { flex-basis: 100%; max-width: none; }
       .sc-searchbox input { font-size: 16px; min-height: 44px; }
