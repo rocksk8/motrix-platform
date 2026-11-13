@@ -377,6 +377,8 @@
 2. 取號（§G6 `train_number.py assign`）**放在最後一個程式修正之後**，單獨一個 commit；之後又有程式修正就重新取號（第 45 班曾 revert 後重取）。**一班一個版本**：同一模組在整合分支上的兩段 `(next)` 要併成一段（第 47 班 payroll 例）。
 3. 重產產生檔：`python tools/platform/regen_all.py`（取號 → `dep_graph.json` → `UNIT-INDEX.md` → `test_map.json`，`--check` 不寫檔）。**`CACHE-INDEX.md` 不在其中**（它是手寫摘要，沒有產生工具；見下方「過期的摘要」）。
 4. 預檢：`python tools/platform/train_preflight.py`（`TRAIN-PREFLIGHT-T47.md`）。在**已整合的列車樹**上一次列出登記類紅燈（CHANGELOG `(next)` 位置、IP 登記、`bottom_layer.json` 全域清單、approval-flow 登記、`BEGIN` 白名單、golden、產生檔過期、`--expect-db-version` 寫死、`get_db()` 缺夾具）。預檢綠 ≠ 閘門綠，但第 47 班它在閘門之前就抓到 3 項，第 46 班同類紅燈曾讓全閘門重跑約 5 次。
+4b. **整合守門題組**（T82 起，每合併一支分支就跑）：`python tools/platform/preflight_guards.py --window <整合者視窗>`（`PREFLIGHT-GUARDS-T82.md`）。把 T76／T81 整合閘門 14 輪實際紅過的守門類別（CHANGELOG 跟著程式、版號佔位、version_manifest、規格編號、page_paths／JS 列舉、modules.json 歸屬、L1 快照、route_inventory／route table golden、response_keys／write_golden／unscoped_reads、U0a sinks、view_filter、mail_registry、回收桶、產生檔、AH-O7…）收成一份固定題組，約 5 分鐘、不 fail-fast，**依守門種類分組一次列出全部紅，並從最近的合併指出可能肇因＋標準修法**。修完用 `--only <組id>` 只重跑出紅的組。題組綠 ≠ 閘門綠（功能題互踩仍靠完整閘門）。
+4c. **閘門鎖**：整合者開閘門／合併窗口時 `python tools/platform/heavy_run.py --gate-lock acquire --window <視窗> --note "T82 閘門"`，收尾 `--gate-lock release`。持有期間所有「不是閘門」的重型（heavy／e2e／watcher 排隊、沒排隊的直接 `-n≥2` pytest）**自動等或被拒**，不靠口頭約定；`--class official`、持有者視窗、帶 token 的行程放行；預設 6 小時自動過期。重型一律走 `heavy_run`（直接跑會被 conftest 警告，閘門鎖期間會被拒）。
 
 **2. 官方閘門（跑在凍結的 head 上）**
 1. 先宣告「凍結 head」（commit SHA、模組版號）。從這一刻到發布，**整合分支上的每一個 commit（包含只改文件的）都會改變 tree 指紋，使已跑的結果不能沿用**（`build_test_reuse.py`：指紋＝tracked tree＋環境，文件不排除；同日、12 小時內、兩段都綠才沿用）。所以：要補文件或修字，先全部做完再凍結；凍結後只修必修項。
