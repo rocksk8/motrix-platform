@@ -9,11 +9,10 @@
 import hashlib
 import logging
 import threading
-from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Response, UploadFile
 
-from helpers import _audit, _require_user, _tok, require_any_module
+from helpers import _audit, _require_user, _tok, download_name, require_any_module
 from helpers import xlsx_guard as XG
 from modules.importer import parser as P
 
@@ -67,7 +66,7 @@ def importer_template(kind: str, authorization: str = Header(None)):
     data = P.build_template(kind)
     name = "MOTRIX_匯入範本_%s.xlsx" % P.KIND_NAMES[kind]
     return Response(content=data, media_type=_XLSX, headers={
-        "Content-Disposition": "attachment; filename=\"import_template_%s.xlsx\"; filename*=UTF-8''%s" % (kind, quote(name)),
+        "Content-Disposition": download_name.content_disposition(name),
         "Cache-Control": "no-store"})
 
 
