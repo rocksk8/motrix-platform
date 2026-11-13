@@ -32,6 +32,16 @@ def _rel_page(name):
     return source_tree.page_file(name).resolve().relative_to(pathlib.Path(__file__).resolve().parents[2]).as_posix()
 
 
+#: 唯一允許的 fetch 差異：據點清單那一支，舊版打 `${API}/settings/company-profile`（少 /api，D2），
+#: 新版打公開子集 `${API}/api/settings/company-profile/public`（5b6c9e270；只讀、同一支請求，不是新增）。
+#: 只認**完全相同**的字串並一對一換回舊值——不用前綴取代，所以多出來的 fetch（含多一次 /public、或完整版 /api/settings/company-profile）仍會讓比對紅燈。
+_ALLOWED_FETCH_DIFFS = {"/api/settings/company-profile/public": "/settings/company-profile"}
+
+
+def _normalize_allowed_fetch_diffs(calls):
+    return sorted(_ALLOWED_FETCH_DIFFS.get(c, c) for c in calls)
+
+
 # ── 綠燈：沒有新的寫入路徑 ───────────────────────────────────────────────
 def test_new_ui_adds_no_fetch_and_no_write_call():
     """T84 新增的介面（摘要格、空狀態、reasons 標籤、scrollToCol）不得打任何 API：整支頁面的 fetch 呼叫與重排前相同。"""
@@ -42,10 +52,21 @@ def test_new_ui_adds_no_fetch_and_no_write_call():
         return sorted(re.findall(r"fetch\(`?\$\{API\}([^`'\")]+)", s))
     new = calls(_page())
     base = calls(old)
-    new = sorted(c.replace("/api/settings/company-profile", "/settings/company-profile") for c in new)   # D2：唯一允許的差異（補 /api 前綴）
+    new = _normalize_allowed_fetch_diffs(new)
     assert new == base, sorted(set(new) ^ set(base))
     sc = _page().split("scrollToCol(which) {")[1].split("queue: []")[0]
     assert "fetch(" not in sc and "XMLHttpRequest" not in sc
+
+
+def test_fetch_whitelist_still_catches_an_added_call():
+    """正對照：白名單只放行「那一支」換名，多出來的 fetch 一律不在白名單內。"""
+    base = ["/a", "/settings/company-profile"]
+    ok = ["/a", "/api/settings/company-profile/public"]
+    assert _normalize_allowed_fetch_diffs(ok) == sorted(base)
+    assert _normalize_allowed_fetch_diffs(ok + ["/api/settings/company-profile/public"]) != sorted(base), "多一次 /public 要紅"
+    assert _normalize_allowed_fetch_diffs(ok + ["/api/settings/company-profile"]) != sorted(base), "多打完整版要紅"
+    assert _normalize_allowed_fetch_diffs(ok + ["/api/new-endpoint"]) != sorted(base), "多打新端點要紅"
+    assert _normalize_allowed_fetch_diffs(["/a", "/api/settings/company-profile"]) != sorted(base), "舊的完整版路徑加 /api 不再放行（要明確換成 /public）"
 
 
 def test_kpi_tiles_and_empty_state_only_navigate():

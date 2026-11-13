@@ -57,6 +57,7 @@ DASHBOARD_PATHS = (
     "/api/dashboard/ops-alerts",
     "/api/materials-summary",
     "/api/dashboard/activity-feed",
+    "/api/dashboard/bundle",           # perf：一次回六段（內部呼叫上面六支）；同樣驗「開的連線全關回來」與「中途丟例外仍關」
 )
 DASH_FILE = dash.__file__
 
