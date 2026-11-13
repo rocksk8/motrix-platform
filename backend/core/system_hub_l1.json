@@ -4,7 +4,7 @@
   {
    "id": "audit-log",
    "section": "audit",
-   "title": "歷史紀錄",
+   "title": "操作紀錄",
    "desc": "稽核日誌：誰在何時對哪張單做了什麼",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "audit-log.html",
@@ -12,19 +12,19 @@
     "audit_log"
    ],
    "order": 10,
-   "keywords": "稽核 紀錄 日誌 軌跡",
+   "keywords": "稽核 紀錄 日誌 軌跡 歷史紀錄",
    "icon": "log"
   },
   {
    "id": "online-stats",
    "section": "audit",
-   "title": "在線時數統計",
+   "title": "使用狀況",
    "desc": "各帳號登入與在線時數",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "online-stats.html",
    "perm": "superadmin",
    "order": 30,
-   "keywords": "在線 登入 時數 統計",
+   "keywords": "在線 登入 時數 統計 在線時數統計",
    "icon": "user"
   },
   {
@@ -43,9 +43,9 @@
    "id": "backup-retention",
    "section": "data",
    "title": "備份與保留",
-   "desc": "備份保留天數、最近一次備份、還原說明",
+   "desc": "本機與雲端備份各保留幾天、更新前快照留幾份",
    "impact": "影響：縮短保留天數後，超過天數的舊備份會在下次清理時被刪除。",
-   "href": "company-profile-settings.html#backup",
+   "href": "settings-center.html#retention",
    "perm": "superadmin",
    "order": 20,
    "keywords": "備份 還原 保留 災難",
@@ -226,13 +226,13 @@
   {
    "id": "schema-status",
    "section": "status",
-   "title": "資料庫結構",
+   "title": "資料庫版本",
    "desc": "資料庫結構版本，以及各模組的升級是否都已完成",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "schema-status.html",
    "perm": "superadmin",
    "order": 20,
-   "keywords": "資料庫 schema 遷移",
+   "keywords": "資料庫 schema 遷移 Schema 狀態 版本",
    "icon": "ver"
   },
   {

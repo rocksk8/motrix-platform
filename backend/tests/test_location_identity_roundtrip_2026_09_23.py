@@ -64,10 +64,9 @@ SENT = {
 
 
 def _token(client, make_user, username):
-    """超級管理員 —— 抬頭欄位只有他改得動（使用者原話）。"""
+    """最高管理者 —— 抬頭欄位只有他改得動（使用者原話）。"""
     u, p = make_user(username=username, role="superadmin")
-    r = client.post("/api/auth/login", json={"username": u, "password": p},
-                    headers={"X-Forwarded-For": "203.0.113.240"})
+    r = client.post("/api/auth/login", json={"username": u, "password": p})  # 2026-11-13 外網登入強化：帶 X-Forwarded-For 一律當外網（超管外網未開兩步驟會被拒）⇒ 改內網直連
     assert r.status_code == 200, r.text
     return r.json()["token"]
 

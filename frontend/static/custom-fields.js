@@ -4,7 +4,7 @@
  * ① 執行時（Alpine store 'cf'）：頁面啟動時 `MotrixCustomFields.init({ recordType: 'case_info' })` 讀 GET /api/custom-fields/<類型>
  *    ⇒ { enabled, fields }。旗標關閉 ⇒ enabled=false、fields=[]，頁面什麼都不畫（唯一多出的動作就是這一個 GET）。
  *    頁面用 `$store.cf.enabled` 決定畫不畫「自訂欄位」區塊，用 `$store.cf.list()` 取欄位（編輯器開啟時＝草稿，其餘＝已發布）。
- * ② 欄位編輯器（僅超級管理員；旗標開啟才掛上）：側邊面板，新增／改名／排序／停用欄位，草稿即時畫在頁面上（預覽），
+ * ② 欄位編輯器（僅最高管理者；旗標開啟才掛上）：側邊面板，新增／改名／排序／停用欄位，草稿即時畫在頁面上（預覽），
  *    存草稿、看差異、發布、版本還原；發布與還原前先在頁內兩段式確認（不用原生對話框）；治理旗標開啟時放寬的發布會回
  *    {pending:true}，面板如實說「已送出，待第二位最高管理者核准」。發布走 /api/definitions/custom_fields/<類型>/…（既有定義文件庫）。
  *

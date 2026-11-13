@@ -5,7 +5,7 @@
  *    buttons=[]，頁面什麼都不畫（唯一多出的動作是這一個 GET）。頁面用 `$store.ub.list('toolbar')` 取某插槽的按鈕、`MotrixUserButtons.run(b)` 執行。
  *    按鈕只是入口、不授權：開頁＝導向目標頁（目標自己驗證）；匯出＝用**點擊者自己的 token** 呼叫目錄裡的 GET 端點（端點自己驗證、遮蔽、稽核）。
  *    端點路徑來自伺服器的目錄，不來自使用者存的定義。按鈕文字一律當純文字渲染（頁面用 x-text）。
- * ② 按鈕編輯器（僅超級管理員；旗標開啟才掛上）：側邊面板，新增／改文字／選動作與目標／排序／移除，草稿即時畫在頁面插槽上（預覽，不可點），
+ * ② 按鈕編輯器（僅最高管理者；旗標開啟才掛上）：側邊面板，新增／改文字／選動作與目標／排序／移除，草稿即時畫在頁面插槽上（預覽，不可點），
  *    「以某位使用者預覽」（伺服器用該使用者的真實權限算出哪些會出現、哪些不會與原因，唯讀）、存草稿、看差異、發布、版本還原；
  *    發布與還原前先在頁內兩段式確認（不用原生對話框）；治理旗標開啟時匯出類按鈕屬放寬，後端回 {pending:true}，面板如實說「已送出，待第二位最高管理者核准」。
  * e2e 等待點：#ub-editor 的 data-busy（'0'／'1'）與 data-state（idle／saved／problems／published／restored／pending）。
@@ -143,7 +143,7 @@
 '  <div class="ub-row"><input type="text" data-testid="ub-preview-user" x-model="previewUser" placeholder="帳號（留空＝我自己）" style="flex:1">' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-preview-btn" @click="previewAs()" :disabled="busy || loading">預覽</button></div>' +
 '  <div data-testid="ub-preview" x-show="previewResult">' +
-'   <div class="ub-sub" x-text="previewResult && (\'以「\' + previewResult.user + \'」（\' + previewResult.role + \'）的權限\')"></div>' +
+'   <div class="ub-sub" x-text="previewResult && (\'以「\' + previewResult.user + \'」（\' + (window.MotrixRole ? MotrixRole.label(previewResult.role) : previewResult.role) + \'）的權限\')"></div>' +
 '   <ul><template x-for="v in (previewResult ? previewResult.visible : [])" :key="v.key"><li x-text="\'看得到：\' + v.label"></li></template>' +
 '    <template x-for="h in (previewResult ? previewResult.hidden : [])" :key="h.key"><li x-text="\'看不到：\' + h.label + \'（\' + h.reason + \'）\'"></li></template></ul></div>' +
 '  <div x-show="diffShown" data-testid="ub-diff"><div class="ub-h">與目前發布版的差異</div><div class="ub-sub" x-show="!diffLines.length">沒有差異。</div>' +

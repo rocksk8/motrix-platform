@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系統選單改版 前後對照</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:20px;margin:48px 0 6px;padding-top:16px;border-top:2px solid var(--red)}
+.sub{color:var(--mute);margin:0 0 16px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+nav.toc a{border:1px solid var(--line);background:var(--card);padding:4px 12px;border-radius:999px;color:var(--ink);text-decoration:none;font-size:14px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+@media(max-width:860px){.pair{grid-template-columns:1fr}}
+.col{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.col>.tag{padding:6px 14px;font-weight:700;font-size:13px;letter-spacing:.04em}
+.before>.tag{background:var(--warnbg);color:var(--warn)}.after>.tag{background:var(--okbg);color:var(--ok)}
+.pad{padding:14px}
+.shot{height:430px;overflow:auto;border-top:1px solid var(--line)}
+.shot img{display:block;width:100%}
+.note{font-size:13px;color:var(--mute);margin:8px 14px 12px}
+.issues{margin:0;padding:10px 14px 12px 32px;font-size:13.5px;color:var(--warn);background:var(--warnbg)}
+.gains{margin:0;padding:10px 14px 12px 32px;font-size:13.5px;color:var(--ok);background:var(--okbg)}
+/* mock widgets */
+.ui{font-size:14px}
+.ui .card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--card)}
+.ui h4{margin:0 0 4px;font-size:15px}.ui p{margin:2px 0 8px;color:var(--mute);font-size:13px}
+.btn{display:inline-block;padding:6px 14px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line);color:var(--mute)}
+.pill.ok{background:var(--okbg);color:var(--ok);border-color:transparent}.pill.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}.pill.red{background:var(--redbg);color:var(--red);border-color:transparent}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)}
+.tile b{display:block}.tile span{font-size:12.5px;color:var(--mute)}
+.steps{display:flex;gap:6px;margin-bottom:12px}.steps i{flex:1;height:6px;border-radius:3px;background:var(--line)}.steps i.on{background:var(--red)}
+.field{margin:8px 0}.field label{display:block;font-size:13px;font-weight:600;margin-bottom:2px}
+.inp{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--bg);color:var(--ink);font-size:13.5px}
+.sel{display:flex;gap:8px;flex-wrap:wrap}.opt{border:2px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13.5px}.opt.on{border-color:var(--red);background:var(--redbg)}
+table.m{width:100%;border-collapse:collapse;font-size:13px}table.m td,table.m th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+.rail{display:grid;grid-template-columns:150px 1fr;gap:12px}
+@media(max-width:600px){.rail{grid-template-columns:1fr}}
+.rail ul{list-style:none;margin:0;padding:0}.rail li{padding:6px 10px;border-radius:6px;font-size:13.5px;display:flex;justify-content:space-between}
+.rail li.on{background:var(--redbg);color:var(--red);font-weight:700}.rail li.adv{color:var(--mute);border-top:1px dashed var(--line);margin-top:8px;padding-top:10px}
+.callout{border-left:4px solid var(--blue);background:var(--bluebg);padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px;margin:8px 0}
+.foot{margin-top:40px;color:var(--mute);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>系統選單改版：前後對照（示意稿）</h1>
+<p class="sub">第 2 版（依 hichan-7 評審修訂）。「前」＝2026-11-13 在本機獨立實例截的真實畫面（圖檔在 <code>../SYSTEM-MENU-UX-shots/</code>）；「後」＝提案的畫面示意，只是靜態稿，不是已實作的功能。文字內容為示意。</p>
+<nav class="toc"><a href="#m1">① 系統首頁（新分類）</a><a href="#m2">② 設定寄信帳號（精靈）</a><a href="#m3">③ 設定中心（分類＋進階收起）</a><a href="#m4">④ 新增員工（選職務）</a><a href="#m5">⑤ 備份與監控</a></nav>
+
+<!-- ① -->
+<h2 id="m1">① 系統首頁：從「技術清單」改成「我要做什麼」</h2>
+<p class="sub">現況：頂端導覽的「系統」只是一個連結，點進去是 8 個分類；分類名稱依功能元件命名，另有 24 個頁面名稱在選單資料裡平鋪。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">前（真實畫面）</div>
+  <div class="shot"><img src="../SYSTEM-MENU-UX-shots/01-system-hub.png" alt="現況系統總覽"></div>
+  <ul class="issues"><li>分類名稱依功能元件命名，沒有「還缺什麼」的完成度提示；同一件事（例如寄信）要跑 4 頁</li><li>「Schema 狀態」「模組建構器」「版本紀錄」與「使用者管理」排在同一層</li><li>最高管理者（常常就是老闆）沒有「日常／進階」的分別</li></ul></div>
+ <div class="col after"><div class="tag">後（示意）</div><div class="pad ui">
+  <div class="rail"><ul>
+   <li class="on">開始使用 <span>2／7</span></li><li>公司與基本規則</li><li>人員與權限</li><li>單據與流程</li><li>單據與編號</li><li>通知與提醒</li><li>資料安全與備份</li><li>紀錄與查詢</li><li>畫面與客製</li><li class="adv">進階（開發商）▸</li></ul>
+   <div>
+    <div class="callout"><b>歡迎使用。</b>照順序做完這 7 步，系統就能正常送簽、寄信、備份。可以隨時離開，下次從「下一步」接著做。<br><span class="pill warn">已完成 2／7</span></div>
+    <table class="m">
+     <tr><td>1 公司資料</td><td><span class="pill ok">完成</span></td><td>約 5 分</td></tr>
+     <tr><td>2 報價單樣式</td><td><span class="pill ok">完成</span></td><td>約 10 分</td></tr>
+     <tr><td><b>3 人員與簽核</b>（有 2 個部門還沒有主管）</td><td><span class="pill red">下一步</span></td><td>約 15 分</td></tr>
+     <tr><td>4 寄信</td><td><span class="pill">未開始</span></td><td>約 10 分</td></tr>
+     <tr><td>5 備份（做一次備份測試）</td><td><span class="pill">未開始</span></td><td>約 5 分</td></tr>
+     <tr><td>6 LINE（可略過）：邀請全員綁定</td><td><span class="pill">未開始</span></td><td>約 20 分</td></tr>
+     <tr><td>7 匯入資料（客戶、料號、員工）</td><td><span class="pill">未開始</span></td><td>視資料量</td></tr>
+    </table>
+    <p style="margin-top:12px">搜尋：<span class="inp" style="display:inline-block;min-width:60%">例如：怎麼讓系統寄信、誰能看金額、備份有沒有成功</span></p>
+   </div></div></div>
+  <ul class="gains"><li>分類名稱＝使用者要完成的事</li><li>首頁是一條可中途離開的 7 步清單，顯示下一步與完成度</li><li>只有「僅開發商」的頁面收進「進階（開發商）」；客戶必要的設定不藏起來</li><li>「畫面與客製」獨立成類，建構器不收進進階</li></ul></div>
+</div>
+
+<!-- ② -->
+<h2 id="m2">② 設定寄信帳號：一頁 4 種工作 → 3 步精靈</h2>
+<p class="sub">現況「通知設定」一頁塞了寄信帳號、LINE、月報收件人、寄不出去清單；寄信帳號要懂 SMTP／埠號／應用程式密碼，系統網址預設值是開發方的內網 IP。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">前（真實畫面）</div>
+  <div class="shot"><img src="../SYSTEM-MENU-UX-shots/03-notification-settings.png" alt="現況通知設定"></div>
+  <ul class="issues"><li>「Gmail SMTP」「SMTP 主機」「連接埠」「App Password」</li><li>系統網址預設 https://172.16.10.177:666（別人公司的位址）</li><li>「開發機測試模式」與正式開關同一排</li><li>儲存時不檢查，要按「寄送測試信」才知道錯</li></ul></div>
+ <div class="col after"><div class="tag">後（示意）</div><div class="pad ui">
+  <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+  <h4>設定寄信帳號　第 2 步／共 3 步</h4>
+  <p>系統要用一個信箱幫你寄通知信（簽核、退回、提醒）。</p>
+  <div class="field"><label>你的信箱用哪個服務？</label><div class="sel"><span class="opt on">Gmail</span><span class="opt">Microsoft 365／Outlook</span><span class="opt">Yahoo 奇摩</span><span class="opt">Zoho</span><span class="opt">其他信箱（公司網域信箱）</span></div></div>
+  <div class="field"><label>寄信用的信箱</label><span class="inp">office@your-company.com</span></div>
+  <div class="field"><label>Google 的「應用程式密碼」（16 位；需先開兩步驟驗證）　<a href="#m2" style="color:var(--blue)">怎麼取得？（開新分頁，附圖解）</a></label><span class="inp">•••• •••• •••• ••••</span></div>
+  <div class="callout">信裡的連結會指向 <b>https://erp.your-company.com</b>（已自動帶入目前網址），正確嗎？　<span class="btn">正確</span> <span class="btn">我要修改</span></div>
+  <div style="margin-top:10px"><span class="btn">上一步</span> <span class="btn pri">下一步：寄一封測試信給我</span></div>
+  <p style="margin-top:10px">第 3 步會直接寄到你登入的信箱，顯示「已寄到 you@…，請確認收到」；成功就自動啟用。</p></div>
+  <ul class="gains"><li>選常見供應商就自動帶入主機與埠；選「其他信箱」才露出兩格，並說明向誰問</li><li>Microsoft 365 擋 SMTP 時，產生一張「設定單」給資訊廠商，不卡死</li><li>網址自動帶入；若是 192.168.x.x 或 localhost 會警告「外部收件人打不開」</li><li>測試與啟用合成一步</li><li>LINE 另成一張卡，由 LINE 精靈處理</li></ul></div>
+</div>
+
+<!-- ③ -->
+<h2 id="m3">③ 設定中心：47 個平鋪群組 → 與系統總覽共用同一份分類（6＋11＋1＋1＋3＋3＋22＝47）</h2>
+<p class="sub">現況：47 個群組單層排列、依程式註冊順序；其中 13 個「自訂…／…建構器」只是「要不要開放某功能」的總開關。搜尋只比對群組名稱。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">前（真實畫面）</div>
+  <div class="shot"><img src="../SYSTEM-MENU-UX-shots/02-settings-center.png" alt="現況設定中心"></div>
+  <ul class="issues"><li>「變更管制」「建構器治理（版本帳本與發布前影響預覽）」排在報價設定旁邊</li><li>備份保留天數同時在這裡與「公司資料設定」</li><li>「預計 MS2 版提供」這類內部代號外露</li></ul></div>
+ <div class="col after"><div class="tag">後（示意）</div><div class="pad ui">
+  <div class="rail"><ul>
+   <li>公司與基本規則 <span>6</span></li><li class="on">單據與流程 <span>11</span></li><li>單據與編號 <span>1</span></li><li>通知與提醒 <span>1</span></li><li>人員與權限 <span>3</span></li><li>資料安全與備份 <span>3</span></li><li>畫面與客製 <span>22</span></li></ul>
+   <div>
+    <p>搜尋：<span class="inp" style="display:inline-block;min-width:70%">報價單有效天數、毛利低於多少要提醒…（搜到的是「問題」，不只是群組名）</span></p>
+    <div class="card"><h4>報價單要不要多人簽核？</h4><p>毛利低於 <b>15 %</b> 或單張折讓超過 <b>5 萬元</b>，送審時要主管簽核。</p><span class="pill">推薦值 15 %</span> <span class="pill ok">目前同推薦值</span></div>
+    <div class="card"><h4>報價單預設有效天數</h4><div class="sel"><span class="opt">14 天</span><span class="opt on">30 天</span><span class="opt">60 天</span></div></div>
+    <div class="card"><h4>補登過往已成案報價單（一次性）</h4><p>最早可補登到：<span class="inp">2020 年</span> <span class="inp">1 月</span>　（不再手打 202001）</p></div>
+   </div></div></div>
+  <ul class="gains"><li>左欄分類與系統總覽同一份資料，不再兩套</li><li>YYYYMM、逗號清單、0＝永久 改成下拉／勾選</li><li>14 個「開放客製功能」開關歸「畫面與客製」，附情境說明，不藏進進階（符合「全部可自定」）</li></ul></div>
+</div>
+
+<!-- ④ -->
+<h2 id="m4">④ 新增員工：從「勾 30 個權限」改成「選職務」</h2>
+<p class="sub">現況：新增視窗要選「角色快速套用」＋「角色層級」＋30 個存取模組勾選；職責角色要建完帳號再編輯才看得到；畫面上出現 finance、purchase_req 這類英文代碼。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">前（真實畫面）</div>
+  <div class="shot"><img src="../SYSTEM-MENU-UX-shots/10-users.png" alt="現況使用者管理"></div>
+  <ul class="issues"><li>權限有 6 套並存：角色代碼、自訂角色、30 個勾選、職責角色、個人扣項、權限矩陣</li><li>「（個人勾選 ∪ 角色權限）− 個人扣項」公式直接印在頁面</li><li>新增視窗不能選職責角色</li></ul></div>
+ <div class="col after"><div class="tag">後（示意）</div><div class="pad ui">
+  <h4>新增員工</h4>
+  <div class="field"><label>姓名</label><span class="inp">王小美</span>　<label style="display:inline">登入帳號</label> <span class="inp">mei</span></div>
+  <div class="field"><label>部門</label><span class="inp">業務部 ▾</span>　<label style="display:inline">Email</label> <span class="inp">mei@…</span></div>
+  <div class="field"><label>職務（決定她能做什麼）</label><div class="sel"><span class="opt">老闆</span><span class="opt on">業務</span><span class="opt">工程</span><span class="opt">財務</span><span class="opt">採購</span><span class="opt">行政</span></div></div>
+  <div class="card"><h4>「業務」可以：</h4>
+   <p>✔ 建立與修改自己的客戶、報價單、案件　✔ 查看自己案件的進度</p>
+   <p><span class="pill red">看不到</span> 成本與毛利　<span class="pill red">不能</span> 付款、核銷、改薪資</p></div>
+  <span class="btn">進階：個別調整權限</span>　<span class="btn pri">新增</span>
+  <p style="margin-top:8px">新增後提示：「業務部目前<b>沒有主管</b>，單據送審會被擋住。<u>現在指定主管</u>」</p></div>
+  <ul class="gains"><li>職務用中文、一次選定，並預覽「可以／看不到／不能」</li><li>個別調整收進進階</li><li>新增完立刻檢查「有沒有主管」，不用等第一張單據被擋才發現</li></ul></div>
+</div>
+
+<!-- ⑤ -->
+<h2 id="m5">⑤ 備份與監控：散在 5 處 → 一頁看狀態、三步設定</h2>
+<p class="sub">現況：備份保留天數在兩個頁面、備份位置在儲存位置與公司資料、備份警示收件人在信件設定、告警門檻寫死在程式、「心跳」要手改 JSON 檔且畫面沒有任何狀態。總覽的「備份與保留」卡片連結還指到不存在的位置。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">前（真實畫面：公司資料設定的備份區，另外 4 處未列）</div>
+  <div class="shot"><img src="../SYSTEM-MENU-UX-shots/07-company-profile-settings.png" alt="現況公司資料設定"></div>
+  <ul class="issues"><li>「本機 DB 快照（天）」「更新前快照（份數，不是天數）」</li><li>S3／Bucket／Endpoint URL／Region</li><li>備份失敗要靠隔天的警示信，畫面看不到最近一次備份</li></ul></div>
+ <div class="col after"><div class="tag">後（示意）</div><div class="pad ui">
+  <h4>資料安全與備份</h4>
+  <div class="grid">
+   <div class="tile"><b>最近一次備份 <span class="pill ok">正常</span></b><span>今天 02:03　　存放：Google 雲端硬碟</span></div>
+   <div class="tile"><b>系統是否在線 <span class="pill ok">正常</span></b><span>最近一次回報：3 分鐘前</span></div>
+   <div class="tile"><b>硬碟剩餘空間 <span class="pill warn">偏低</span></b><span>剩 48 GB（低於 50 GB 會通知）</span></div>
+  </div>
+  <div class="card" style="margin-top:10px"><h4>要保留多久？</h4><div class="sel"><span class="opt">精簡（30 天）</span><span class="opt on">標準（每日 30 天＋每月 12 個月）</span><span class="opt">保守（永久每月）</span></div></div>
+  <div class="card"><h4>備份出問題要通知誰？</h4><p>老闆、行政主管（選人，不用打 Email）　<span class="btn">測試通知</span></p></div>
+  <span class="btn pri">立即做一次備份測試</span>　<span class="btn">還原說明</span>　<span class="btn">外部儲存／服務監控網址（照步驟做，可列印設定單）</span></div>
+  <ul class="gains"><li>先看「現在正不正常」，再談設定</li><li>保留天數三段選項，不再 0＝永久</li><li>S3、心跳網址標「照步驟做」並可產生設定單；出貨時也可由安裝人員先代設</li></ul></div>
+</div>
+
+<p class="foot">此檔為示意稿，不連任何後端；每個「後」的畫面都只是講清楚設計方向，實作時仍要照既有的設定中心保護機制（寬鬆方向須第二位最高管理者核准）與白話守門測試。</p>
+</div>
+</body>
+</html>

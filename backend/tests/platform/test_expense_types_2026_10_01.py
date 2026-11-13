@@ -4,7 +4,7 @@
 ③ 讀取：沒有發布版＝程式預設（版本 0）；公司發布後覆蓋；單據釘住的版本取得舊內容；停用的不列
 ④ `normalize_lines`：qty×unitCost 四捨五入、amount 權威、未知鍵原樣保留、負數／非數字報錯
 ⑤ `validate_values`：locked 預填以伺服器為準、必填／未知鍵／型別、出納欄位只有出納可填、明細未知鍵不丟、合計是唯一來源
-⑥ API：`GET /api/expense-types[/{code}]` 任何登入者；草稿→發布走既有 `/api/definitions/expense_type`（超級管理員）
+⑥ API：`GET /api/expense-types[/{code}]` 任何登入者；草稿→發布走既有 `/api/definitions/expense_type`（最高管理者）
 反向控制：`normalize_lines` 改成信任前端 amount ⇒ ④ 必須紅；`validate_values` 不蓋 locked ⇒ ⑤ 必須紅。"""
 import copy
 

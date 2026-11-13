@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""recyclebin v1（第 53 班 P0）：刪除暫存區的一張表。
+"""recyclebin v1（第 53 班 P0）：資源回收筒的一張表。
 
 - recycle_bin（T1）：每一張被刪的單據一列。`snapshot_json`（單據列＋子表列的原文，還原用）與 `files_manifest_json`（隔離檔清單）**整欄是 F2**
   （含個資原文；一般每日 JSON 備份排除、完整列只進個資資料夾，見 archive._F2_FIELDS）。清除後保留一列精簡墓碑（snapshot 清空、狀態 purged），供稽核。
-- codes：進暫存區當下從快照 `meta.codes` 抄出的單據代號（換行分隔；單號產生器每次取號都要查，不能每次去讀好幾 MB 的快照 JSON）。
+- codes：進資源回收筒當下從快照 `meta.codes` 抄出的單據代號（換行分隔；單號產生器每次取號都要查，不能每次去讀好幾 MB 的快照 JSON）。
 - token：uuid hex（隔離目錄名）；group_token：連帶刪除的一組單據共用；purge_after：刪除日 + 30 天（固定，D4）。
 - 冪等（IF NOT EXISTS）；不自己 commit（run_all 包 SAVEPOINT）；凍住的歷史：SQL 寫在這裡，不 import 會演進的程式碼。
 """

@@ -12,7 +12,8 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-MAX_ENTRIES = 865      # 861 + 4（一條龍 P0a／P0c／P1' 2026-11-13：①`email_notify.shipping_link` 與 `inventory._StockSerials.release` 各讀 `shipping_notes` 一次，只用單號查「存在／仍是已核准」（`release` 是案件存檔交易內、舊資料維持 in_stock 的判斷；`shipping_link` 是通知連結的查案號），不回傳資料給使用者；②`case/material_flow._purchase` 讀 `case_extra_expenses`，**端點先過 `require_case`（案件成員）**且只取單據代號／狀態／日期、沒有金額；③`supply/case_summary` 讀 `stock_items` 彙總該案台數，案件可見性由案件側先檢查、呼叫者另要有檢視庫存的模組權限。測試 modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py）
+# 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
+MAX_ENTRIES = 871      # 861 + 4（一條龍 P0a／P0c／P1' 2026-11-13：①`email_notify.shipping_link` 與 `inventory._StockSerials.release` 各讀 `shipping_notes` 一次，只用單號查「存在／仍是已核准」（`release` 是案件存檔交易內、舊資料維持 in_stock 的判斷；`shipping_link` 是通知連結的查案號），不回傳資料給使用者；②`case/material_flow._purchase` 讀 `case_extra_expenses`，**端點先過 `require_case`（案件成員）**且只取單據代號／狀態／日期、沒有金額；③`supply/case_summary` 讀 `stock_items` 彙總該案台數，案件可見性由案件側先檢查、呼叫者另要有檢視庫存的模組權限。測試 modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py）
                         # 861 = 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
                         # 另 `_coarse_member_sql`／`_stage_assigned` 各讀 case_stages。每一筆回傳前都被 `_is_member` 擋過、只回白名單欄位（無金額）；測試 test_membership_equals_the_existing_case_member_rule_for_every_path 釘住與 `_is_case_member` 同義）
@@ -30,6 +31,10 @@ MAX_ENTRIES = 865      # 861 + 4（一條龍 P0a／P0c／P1' 2026-11-13：①`em
                         # 847 = 845 + 2（T73：assign_dev_case／update_dev_case_progress 讀 dev_cases 後自己在 Python 層判權限
                         # ——/assign 限管理員、/progress 比對 user["id"]==assigned_to，不是 row_access 範圍查詢；
                         # 兩輪獨立稽核都已確認這個判權限方式，見 AUDIT-hichan3-t73.md／AUDIT-pm-sub-t73.md 的驗收列）
+                        # （併入）861 + 2（UX P1.5 2026-11-13：`helpers/login_greeting._last_audit_login` 以呼叫端的 user_id 讀自己最後一次 `auth.login`（舊帳號回填，只回時間、不回列）；
+                        # `modules/case/api/dashboard_groups.new_quotes_since` 只回 COUNT(*)（登入問候語「離開期間新增 N 張報價單」，呼叫端只對最高管理者呼叫，IP-GR1，L1 不直接讀 quotations）。皆無 row_access 可套、不回傳資料列）
+                        # （併入）861 + 1（估價單 2026-11-13：`modules/case/quotations.py::_estimate_prefixes` 只回「曾開過估價單的單號字首」的 DISTINCT 聚合（不含任何案件內容、不回列），
+                        # 經串接點 IP-ESTQ1 給 L1 `helpers/doc_type`；沒有逐案範圍可套，也不接使用者端點）
 #: 掃描器自己的下限：掃到的筆數太少 ⇒ 掃描壞了（假綠）
 SCAN_FLOOR = 100
 

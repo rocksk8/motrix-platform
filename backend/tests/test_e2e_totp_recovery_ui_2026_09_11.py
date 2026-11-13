@@ -75,7 +75,7 @@ def test_recovery_remaining_and_regenerate_flow(live_server, make_user, e2e_brow
     # 斷言永遠會過（實測過：把 API 欄位名打錯，這支測試照樣綠燈）。
     _burn_one_recovery_code(page, live_server, username, password, old_codes[0])
 
-    page.goto(f"{live_server}/pages/change-password.html")
+    page.goto(f"{live_server}/pages/my-account.html?tab=security")
     page.wait_for_selector(f"{CARD} .totp-badge:text-is('已啟用')", timeout=20000)
 
     card = page.locator(CARD)
@@ -125,7 +125,7 @@ def test_low_remaining_shows_warning(live_server, make_user, e2e_browser):
                                data={"challenge_token": ch, "code": c})
         assert r2.ok, r2.text()
 
-    page.goto(f"{live_server}/pages/change-password.html")
+    page.goto(f"{live_server}/pages/my-account.html?tab=security")
     page.wait_for_selector(f"{CARD} .totp-badge:text-is('已啟用')", timeout=20000)
     text = page.locator(CARD).inner_text()
     assert "救援碼剩餘" in text

@@ -29,7 +29,7 @@ MODULE = ModuleSpec(
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "payroll"): attachments._PayrollCatalog,
-        # IP-RB1（第 53 班，刪除暫存區 P1）：勞報單（含派發連結）的快照／刪除／還原
+        # IP-RB1（第 53 班，資源回收筒 P1）：勞報單（含派發連結）的快照／刪除／還原
         ("recyclebin.adapter", "payslip"): lambda: recycle_adapter.PayslipBinAdapter(),
         # IP-BK1（A2 收款人）：員工收款帳號（依檢視者回完整／遮蔽；完整必帶稽核 token）
         ("payee.bank_profile", "payroll"): bank_account.payee_bank_profile,

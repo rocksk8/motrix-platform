@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""本公司資料設定閘門（瀏覽器）：未設定 ⇒ 最高管理員導向設定頁、在那裡確認後功能開放；其他人導向說明頁；
+"""本公司資料設定閘門（瀏覽器）：未設定 ⇒ 最高管理者導向設定頁、在那裡確認後功能開放；其他人導向說明頁；
 判定失敗與暫時放行 ⇒ 所有頁面頂端橫幅（COMPANY-SETUP-GATE §3.6、§4.2）。驗 DOM／資料庫終點。
 """
 import json
@@ -68,8 +68,8 @@ def test_non_admin_sees_the_explanation_page(live_server, make_user, new_page, l
     page.wait_for_url("**/company-setup-required.html", timeout=20000)
     box = page.locator("[data-company-setup-required]")
     box.wait_for(state="visible", timeout=10000)
-    assert "請最高管理員先到「公司資料設定」確認本公司資料" in box.inner_text()
-    assert "暫時放行" in box.inner_text()                                # 最高管理員不在時的處置（CG-S5）
+    assert "請最高管理者先到「公司資料設定」確認本公司資料" in box.inner_text()
+    assert "暫時放行" in box.inner_text()                                # 最高管理者不在時的處置（CG-S5）
 
 
 @pytest.mark.e2e

@@ -179,7 +179,7 @@ def test_fallback_hard_delete_when_bin_absent(client, su, monkeypatch):
     assert client.delete("/api/payslips/%s" % SLIP, headers=su).status_code == 204
     assert _row() is None and _links() == [] and _bin() == []
     labels = [a["target_label"] for a in _q("SELECT target_label FROM audit_log WHERE action='payslip.delete'")]
-    assert labels and "暫存區未啟用" in labels[-1]
+    assert labels and "資源回收筒未啟用" in labels[-1]
 
 
 def test_adapter_registered():

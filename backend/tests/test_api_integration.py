@@ -477,7 +477,7 @@ def test_company_profile_put_refuses_non_superadmin_with_settings_module(client,
 
     ## ⚠️ 而它今天之所以被看見，只是因為**有人改了行為**
 
-    使用者說「只有超級管理員可以修改」⇒ SA1 拿掉 `module='settings'`
+    使用者說「只有最高管理者可以修改」⇒ SA1 拿掉 `module='settings'`
     ⇒ 這一題紅了。**沒有那一句話的話，它會永遠綠著。**
     📌 一個鎖住漏洞的測試**不會自己求救**：不紅、不警告、不出現在任何清單上，
     **而它的名字讀起來像一個決定。**

@@ -6,7 +6,7 @@ from modules.supply import attachments
 from modules.supply import case_summary as _case_summary
 from modules.supply import gl_events
 from modules.supply import material_link
-from modules.supply import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
+from modules.supply import recycle_adapter as _recycle_adapter   # 資源回收筒 adapter（IP-RB1）
 from modules.supply.api import inventory, shipping_notes, suppliers
 
 MODULE = ModuleSpec(
@@ -39,7 +39,7 @@ MODULE = ModuleSpec(
         ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "supply"): attachments._SupplyCatalog,
-        # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（出貨單）
+        # IP-RB1（第 53 班 P1）：資源回收筒的單據轉接（出貨單）
         ("recyclebin.adapter", "shipping_note"): _recycle_adapter.ShippingNoteAdapter,           # 字面字串：整合點登記表守門掃字面值
     },
 )

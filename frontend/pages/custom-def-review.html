@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>模組定義審核 — MOTRIX 專案管理系統</title>
+  <title>模組定義審核 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -32,6 +32,36 @@
     .dr-op { font-size: 12px; padding: 1px 6px; border-radius: 8px; background: var(--border-light); }
     .dr-note { width: 100%; box-sizing: border-box; margin-top: 8px; }
     .dr-actions { display: flex; gap: 8px; margin-top: 10px; }
+    /* 手機／平板直式（2026-11-12 UI 檢查）：審核頁的核心是「差異表」（動作／位置／原本／改成四欄）與送審歷史（五欄），
+       375px 下每格被擠成 ~60px、長字串一字一行，看不出改了什麼；核可／退回兩鈕並排偏小、靠太近易誤觸。
+       ⇒ 手機每一處差異改成一張卡：動作＋位置一行，原本、改成各占一行並標明；歷史同理；核可／退回上下排列各 ≥46px。 */
+    @media (max-width:767px){
+      .dr-main{padding:16px 12px 40px}
+      .dr-panel{padding:14px;margin-top:14px}
+      .dr-diff,.dr-diff tbody{display:block}
+      .dr-diff thead{display:none}
+      .dr-diff tr{display:block;padding:10px 0;border-bottom:1px solid var(--border-light)}
+      .dr-diff td{display:block;padding:2px 0;border:0;word-break:break-word}
+      #dr-diff td:nth-child(1){display:inline-block;margin-right:8px}
+      #dr-diff td:nth-child(2){display:inline;font-weight:600}
+      #dr-diff td:nth-child(3)::before{content:"原本　";color:var(--text-dim);font-size:11px}
+      #dr-diff td:nth-child(4)::before{content:"改成　";color:var(--text-dim);font-size:11px}
+      #dr-history tr{padding:10px 0}
+      #dr-history td:nth-child(1){display:inline-block;font-weight:700;margin-right:8px}
+      #dr-history td:nth-child(2){display:inline-block}
+      #dr-history td:nth-child(3)::before{content:"申請人　";color:var(--text-dim);font-size:11px}
+      #dr-history td:nth-child(4){color:var(--text-dim);font-size:12px}
+      #dr-history td:nth-child(5){margin-top:4px}
+      .dr-tier{padding:8px 12px;font-size:13px}
+      .dr-note{font-size:16px;min-height:88px}
+      .dr-actions{flex-direction:column;gap:12px}
+      .dr-actions .btn{min-height:46px;width:100%;justify-content:center}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .dr-main{padding:22px 20px 48px}
+      .dr-actions .btn{min-height:42px;min-width:96px}
+      .dr-actions{gap:12px}
+    }
   </style>
 </head>
 <body x-data="defReviewPage()" x-init="init()" x-cloak>

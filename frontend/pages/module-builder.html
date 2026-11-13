@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>模組建構器 — MOTRIX 專案管理系統</title>
+  <title>模組建構器 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="../css/module-builder.css">
   <link rel="stylesheet" href="../css/form-designer.css">
   <!--
-    自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
+    自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅最高管理者。
     畫面結構：3 個頁籤〔作業資訊（基本資料＋輸出設定）／表單設計／流程設計〕，發布（含差異與版本還原）是右側抽屜，不在頁籤內。
     （歷史：2026-09-27 使用者第二輪把 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，欄位直接拖進區塊；section 的 id `mb-step-N` 沿用當時的編號，
     e2e 與程式用它定位，不是「步驟數」。）

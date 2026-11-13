@@ -16,7 +16,7 @@
   <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1140px}
+    .page-wrap{padding:20px 28px 60px;max-width:1140px}
     .layout{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start}
     @media(max-width:900px){.layout{grid-template-columns:1fr}}
     .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:16px}
@@ -76,6 +76,42 @@
     .pv-foot{display:flex;justify-content:space-between;align-items:center;
              padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
     .export-hist{font-size:12px;color:var(--text-dim)}
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       ① 共用 .page-wrap 已經有 margin-top:topbar-h，這裡又把 padding-top 加了一個 topbar-h ⇒ 內容上方空一大塊（全寬度都有，手機最明顯）
+       ② 單欄時 grid 寫 1fr（沒有 minmax(0,…)），日期欄的最小寬度把整頁撐寬、卡片右緣被切掉
+       ③ 欄位 13px（iOS 聚焦會放大）、點擊區 <44px */
+    .page-wrap { padding-top: 20px; }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      .calc-card { position: static; }
+    }
+    @media (max-width: 1023px) {   /* iPad 對 <16px 的輸入框也會在聚焦時放大 */
+      .form-group input, .form-group select, .form-group textarea { font-size: 16px; min-height: 44px; padding: 10px 12px; box-sizing: border-box; }
+      .form-group textarea { min-height: 96px; }
+    }
+    @media (max-width: 767px) {
+      .page-wrap { padding: 16px 12px 40px; }
+      .card { padding: 14px; }
+      .form-group label { font-size: 13px; }
+      .form-row { gap: 10px; }
+      .calc-row { font-size: 14px; }
+      .pill-btn { min-height: 44px; padding: 10px 14px; font-size: 13px; white-space: nowrap; }
+      .pill-row .pill-btn:not(.wide) { flex: 1 1 28%; }
+      .item-row { padding: 10px 12px; }
+      .item-row label { font-size: 14px; min-height: 36px; }
+      .item-sub { grid-template-columns: 1fr 1fr; padding-left: 0; }
+      .item-sub input:last-child { grid-column: 1 / -1; }
+      .item-sub input { font-size: 16px; min-height: 40px; }
+      .pv-overlay { padding: 0; align-items: stretch; }
+      .pv-modal { width: 100vw; height: calc(100dvh / var(--fz,1)); border-radius: 0; }
+      .pv-head, .pv-foot { padding: 10px 14px; }
+      .pv-close { font-size: 28px; padding: 4px 12px; }
+      .layout .btn, .calc-card .btn { min-height: 44px; }
+    }
+    @media (max-width: 479px) {
+      .form-row, .form-row.t3 { grid-template-columns: minmax(0, 1fr); }
+    }
   </style>
 </head>
 <body x-data="paymentRequestForm()" x-init="init()">
@@ -277,7 +313,7 @@
               <span x-text="saving ? '儲存中…' : isDirty ? '儲存草稿' : '已儲存'"></span>
             </button>
             <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669" x-show="q.status === '草稿' && !isNew"
-                    @click="submitReq()">送出審核</button>
+                    @click="submitReq()">送出簽核</button>
             <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669"
                     x-show="q.status === '待審核' || q.status === '簽核中'" @click="approveReq()">簽核</button>
             <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);border-color:#FCA5A5"

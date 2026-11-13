@@ -2,7 +2,7 @@
 """P4／P5（CUSTOMIZATION-SPEC §3.5／§3.6）：定義文件庫、模組 migration 執行器、自訂欄位命名空間、定義 API。
 
 ⚙️ 反向控制：每一條「不准」都有一題證明它真的擋（發布前驗證、已發布不可改、還原不改歷史、
-自訂欄位不可與核心欄位同名、未定義的鍵被丟掉並回報、非超級管理員被拒）。
+自訂欄位不可與核心欄位同名、未定義的鍵被丟掉並回報、非最高管理者被拒）。
 """
 import json
 import sqlite3
@@ -273,7 +273,7 @@ def test_custom_fields_empty_value_is_not_zero_or_false():
     assert cf.clean({"qty": 0, "ok": False}, definition)[0] == {"qty": 0, "ok": False}
 
 
-# ── 定義 API（僅超級管理員）─────────────────────────────────────────────────
+# ── 定義 API（僅最高管理者）─────────────────────────────────────────────────
 
 def _headers(client, make_user, name, role):
     u, p = make_user(name, "Defs-Pass-123", role=role)[:2]

@@ -8,7 +8,7 @@
            雲端存檔根目錄＝掃磁碟機找「我的雲端硬碟\\系統存檔」（archive._auto_archive_base）
            個資資料夾＝雲端存檔根目錄旁的「系統存檔_個資」
            更新交付資料夾＝未設定（"")
-         **本檔永不自動建立資料夾**：只有 `create`（最高管理員在設定頁明確按「建立」）會建，而且只建最後一層。
+         **本檔永不自動建立資料夾**：只有 `create`（最高管理者在設定頁明確按「建立」）會建，而且只建最後一層。
 [契約題] tests/platform/test_storage_locations_2026_09_28.py
 [注意] 設定存在 system_settings `storage_locations`：{"archive_root": "...", "pii_root": "...", "delivery_root": "..."}，
        空字串＝自動。讀取有 30 秒快取（即時備份每一筆都會讀）；存檔後呼叫 `invalidate()`。
@@ -197,7 +197,7 @@ def validate(values: dict) -> list:
 
 
 def create(kind: str, target: str) -> str:
-    """最高管理員明確建立：只建**最後一層**（上一層必須已存在），已存在就拒絕。⇒ 建好的絕對路徑。"""
+    """最高管理者明確建立：只建**最後一層**（上一層必須已存在），已存在就拒絕。⇒ 建好的絕對路徑。"""
     if kind not in KINDS:
         raise ValueError("不認得的儲存位置：%r" % kind)
     t = str(target or "").strip()

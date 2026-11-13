@@ -285,7 +285,7 @@ def test_appears_in_approval_queue_with_unfinished_count(client, make_user):
 def test_signed_toggle_requires_approved_and_blocks_revoke(client, make_user):
     """只有已核准才能標記驗收；標記之後不可撤銷核准（客戶都簽了）。"""
     username, password = make_user(username="cn_s", role="admin")
-    # 沒有簽核層時由最高管理員直接核准，而且**申請人不得自審**
+    # 沒有簽核層時由最高管理者直接核准，而且**申請人不得自審**
     # （check_no_tier_self_approval），所以簽核人一定要是另一個人
     approver, approver_pw = make_user(username="cn_s_ap", role="superadmin")
     token = _login(client, username, password)
@@ -298,7 +298,7 @@ def test_signed_toggle_requires_approved_and_blocks_revoke(client, make_user):
     assert r.status_code == 409, "草稿不可標記驗收"
 
     client.post(f"{BASE}/{note_no}/submit", headers=_auth(token))
-    # 完工單比照出貨單：沒有設定簽核層時停在「待審核」，由最高管理員直接核准，
+    # 完工單比照出貨單：沒有設定簽核層時停在「待審核」，由最高管理者直接核准，
     # **不是**額外支出那種「送審即核准」。兩者行為不同，不要互相抄。
     assert client.post(f"{BASE}/{note_no}/approve",
                        headers=_auth(_login(client, approver, approver_pw)),

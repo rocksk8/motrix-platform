@@ -3,6 +3,12 @@
 ## (next) — 一條龍 P0a（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`，預設關＝與今天逐位元相同）
 - `warranty.html`：旗標開時案號可點進該案件頁（`case-management.html?q=<案號>`）；旗標關時照舊為純文字。不改 API、資料、權限。
 
+## 1.0.50 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.0.49（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- `reports.html`、`reports-hub.html`、`report-templates.html`、`devices.html`、`warranty.html`、`procurement.html`：手機／平板版面——報表期間列、匯出鈕、分頁籤的點擊區與間距；客戶清單改上下排；採購清單在手機改為卡片列；設備清單表格加橫向捲動＋表頭固定、搜尋框 16px／44px 高。桌機版不變。
+
 ## 1.0.48 — 2026-11-11（feat/report-param-templates；T79 候選：客戶需求缺口「自助報表」第一階段＝套用參數化範本）
 - 新增頁面 `report-templates.html`（選單「報表」→ 營運 → 自選條件報表）＋ 3 支端點 `GET /api/report-templates`（範本清單、參數與欄位目錄）、`GET /api/report-templates/{id}/run`（依條件重新查詢）、`GET /api/report-templates/{id}/excel`（同條件下載）。使用者**不自訂版面**，只選條件：日期區間、部門、案件狀態、業務、精算狀態、客戶、收款狀態（各範本只提供用得到的）。
 - 第一版 3 個範本：案件清單、收款明細、業務員績效。母體＝已成案／已結案（與營運報表相同）；報價中等狀態需直查報價單與逐案權限，列第二批。

@@ -11,7 +11,8 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     [x-cloak]{display:none!important}
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1400px}
+    /* style.css 的 .page-wrap 已經有 margin-top/left 讓出頂欄與側欄；這裡再用 padding 讓一次 → 頁首上方多出一整個頂欄高的空白（手機約 230px），左側也多縮一次 */
+    .page-wrap{padding:20px 28px 60px;max-width:1400px}
     .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:16px}
     .card-title{font-size:13px;font-weight:700;color:var(--text-secondary);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:8px;margin-bottom:14px}
     .form-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -41,6 +42,19 @@
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal-box{background:#fff;border-radius:12px;width:min(820px,96vw);max-height:none;display:flex;flex-direction:column;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
     .modal-box h3{font-size:15px;font-weight:700;margin-bottom:12px}
+    @media (max-width:767px){
+      .page-wrap{padding:16px 16px 60px}
+      .page-wrap a[href="network-plans.html"]{display:inline-block;padding:14px 0}   /* 返回連結原本只有 12px 高 */
+      .card{padding:16px}
+      .form-row{grid-template-columns:1fr}
+      .form-group input{font-size:16px;min-height:44px}
+      .tab-panel-head .btn{min-height:44px}
+      /* 編輯格（橫向捲動的試算表式輸入）：字級 16px 才不會在 iOS 聚焦時整頁被放大；列高放寬方便點 */
+      .grid-table input[type=text],.grid-table input[type=number]{font-size:16px;min-height:40px;width:130px}
+      .grid-table select{font-size:16px;min-height:40px;width:110px}
+      .row-del{min-height:40px;min-width:40px}
+      .modal-box{padding:16px;width:100%;max-height:calc(92vh / var(--fz,1));overflow-y:auto}
+    }
   </style>
 </head>
 <body x-data="topologyQuick()" x-init="init()" x-cloak>

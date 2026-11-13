@@ -1,7 +1,7 @@
 {
   "key": "supply",
   "name": "採購・庫存・出貨",
-  "version": "1.0.36",
+  "version": "1.0.38",
   "core": ">=1.0,<2.0",
   "license_key": "supply",
   "permissions": [
@@ -144,7 +144,7 @@
      "impact": "勾選後，可以更動供應商的內容與聯絡人；修改會留下紀錄，但不會自動通知供應商。",
      "question": "{who}可以修改供應商嗎？"},
     {"key": "supply.supplier.delete", "label": "刪除供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
-     "desc": "可以刪除供應商（進入刪除暫存區或依既有規則處理）。",
+     "desc": "可以刪除供應商（進入資源回收筒或依既有規則處理）。",
      "impact": "勾選後，可以刪除供應商資料；放寬這一項需要填原因、等確認期間，並由另一位最高管理者核准。",
      "question": "{who}可以刪除供應商嗎？"}
   ]

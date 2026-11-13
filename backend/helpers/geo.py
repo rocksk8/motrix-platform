@@ -538,7 +538,7 @@ def district_of(address):
 # 16 GB - Google 額度治理（真實計算器 + 自動降回免費）
 # ==========================================================================
 #
-# 使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據現在 google 的
+# 使用者 2026-09-22：「你做一個真實計算器，並讓最高管理者可以依據現在 google 的
 # 免費額度去調整，當準備到達上限額度自動寄信並將附近客戶跟查找功能先回歸免費，
 # 待月週期結束開放」
 #
@@ -569,7 +569,7 @@ USAGE_SKU_DYNAMIC_MAPS = "google:dynamic-maps"
 
 #: 預設值。`monthly_free_quota` **留空（None）= 不管制**，不是 0（GB7）。
 #:
-#: 免費額度**不寫死在程式裡**（GB5/GB6）：它是超級管理員填的欄位。
+#: 免費額度**不寫死在程式裡**（GB5/GB6）：它是最高管理者填的欄位。
 #: Google 改過不止一次，而寫死的數字不會報錯，只會算錯。
 QUOTA_DEFAULTS = {
     # 一個 SKU 一格：{"google:geocoding": 10000, ...}。**留空的 SKU = 不管制。**
@@ -587,7 +587,7 @@ QUOTA_DEFAULTS = {
 
 
 def quota_settings() -> dict:
-    """超級管理員填的額度設定。"""
+    """最高管理者填的額度設定。"""
     from helpers.settings import _get_setting
     stored = _get_setting(QUOTA_SETTING, {}) or {}
     return {**QUOTA_DEFAULTS, **stored}
@@ -776,7 +776,7 @@ def quota_status() -> dict:
 def quota_calculator() -> dict:
     """**真實**計算器 —— 每一個數字都從實際資料算，一個都不是估的（GB5）。
 
-    單價與免費額度**不寫死在程式裡**，它們是超級管理員填的欄位（GB6）。
+    單價與免費額度**不寫死在程式裡**，它們是最高管理者填的欄位（GB6）。
     Google 改過不止一次，而寫死的價格不會報錯，只會算錯。
 
     `cost_this_period` 的前提是「一次請求 = 一個計費單位」，
@@ -841,7 +841,7 @@ QUOTA_WARNED_SETTING = "google_quota_warned_period"
 
 
 def notify_quota_warning(used=None, quota=None) -> bool:
-    """達警戒線 => 寄信給超級管理員。**一個週期只寄一次。**
+    """達警戒線 => 寄信給最高管理者。**一個週期只寄一次。**
 
     告警必須有速率上限：設計時就要想「失控時怎麼關掉」。
     走 `_send_raising` **不要走 `_async_send`** ——
@@ -874,6 +874,10 @@ def notify_quota_warning(used=None, quota=None) -> bool:
         return False
 
     from helpers import mail_types as _mt
+    # LINE 獨立通道（2026-11-13）：不看 Email；鑰匙＝計費週期（每週期只推一次——這段在 Email 寄成功之前每次呼叫都會走到，不能每次都推）
+    email_notify._line_event("geo_quota_warning", to_group=True, title="地圖定位額度達警戒線",
+                             rows=[("計費週期", "%s 起" % period), ("已送出請求", "%s 次" % used), ("免費額度", "%s 次" % quota), ("警戒線", "%s%%" % warn_pct)],
+                             reason="本週期 Google 地理編碼的請求次數已達設定的警戒線", line_key="geo_quota_warning|%s" % period)
     to = email_notify._group_emails("geo_quota_warning")
     if not to:
         return False

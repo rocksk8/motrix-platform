@@ -8,6 +8,53 @@
 - 物料流程入庫格：呼叫者沒有「檢視庫存」權限（提供者回 403）⇒ 這一格只顯示「無權限檢視」，不回台數與料號。
 - 測試：`modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py`（旗標關 404、七格、逐張到貨、金額掃描、非成員 404、M03 不在／出錯／出貨無權限三種降級）、- 測試：`tests/test_onepipe_p0a_links_2026_11_13.py`、`tests/test_e2e_onepipe_p0a_2026_11_13.py`。
 
+## 1.0.224 — 2026-11-13（T82 預跑 #1 修正；整合者）
+- 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。
+- 測試：簽核佇列過濾測試改認共用的 `visible_queue_items`（P1.5 把組項目與過濾抽成共用函式，過濾仍然只有一處）；公開品牌回應測試補 `tagline`；頭像選單 e2e 認「我的帳號」。
+
+## 1.0.223 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）；併入 fix/quote-items-align（報價單表單品項明細對齊）
+- 文字（T82 用詞整理）：案件管理頁「開票憑據」「出貨單」列的按鈕「送出審核」→「送出簽核」（承攬憑據與傳票頁維持原字）；不動 API／資料／權限
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+- 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
+- 修正（UX 提案 D2）：簽核佇列的報價單項目新增 `locationId`（`approval_queue_items`），簽核頁「據點」列才有資料來源；同時簽核頁改向 `/api/settings/company-profile` 取據點清單（原本少了 `/api`，404）。
+- 前端（UX T84 簽核頁重排）：`approval-queue.html` 卡片加「簽核依據」（單據自帶 `reasons` 前兩項，其餘點開看）；只有一欄有單時改單欄、整頁沒單時改一句話＋三個去處（今日工作事項／報價單／首頁）；摘要前兩格可點、捲到對應欄。核准／退回仍走同一組處理函式與同一批端點（手機底部簽核列、桌機卡片快速鍵、抽屜按鈕），不新增寫入路徑；不動 API、資料、權限。卡片上的毛利類原因合併成一句「毛利率低於門檻」（不帶數字，完整數字在詳情抽屜）；佇列讀取失敗（非 2xx／斷線）顯示「讀取失敗，請重試」＋重試鈕，不再當成「沒有待簽核」；摘要格同時支援 Enter／空白鍵。
+- 文字：『拒絕結案』全改『駁回結案』（報價單頁訊息、稽核動作名稱、擇一方案設定說明）；案件頁新增 `?quick=` 深連結（mine／stage_overdue／recv_overdue／missing_docs）。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-myaccount；報價單的聯絡信箱改用「報價用信箱」）**
+- 變更：新增／更新／補登歷史案件時，伺服器端驗證 `salesEmail`——必須是該業務可用的三個信箱之一（報價用信箱、公司對外信箱、本人 Email），否則改寫成系統解析出的值；舊報價單沒動它（也沒換業務員）就維持原樣；換了業務員但信箱還是舊的，會重新驗證。（用戶端寫進去的值不再被信任，信件 Reply-To 靠它。）
+- 前端：`quotation-form.html` 讀業務聯絡資料時優先用 `quoteEmailEffective`（舊名 `quoteEmail` 還在、值相同，保留一版）。
+- 測試：`tests/test_quote_email_2026_11_13.py`（偽造信箱被覆蓋、舊值保留、其他通知信同帶 Reply-To）。
+- **（併入）(next) — 2026-11-13（feat/quote-list-ux；T84 報價清單重排，版號由列車取）**
+- 新增（API，選用）：`GET /api/quotations?with_waiting_on=1`——每列多 `waiting_on`（目前這一層還沒簽的人的顯示名稱清單，名稱取自 users 現名；只對狀態為待審核／簽核中的列算，其他列為空陣列）。只對本來就看得到的列；一次批次 IN 讀這一頁的 data_json（不逐列查）；資料壞掉或簽核結構怪 ⇒ 該列空陣列，清單不會失敗。沒帶參數 ⇒ 回應沒有這個鍵（舊呼叫端不變）。
+- 前端（`quotations.html`，資料狀態值不變）：頁頂三個可點的數字，**都是個人的**——要我處理（我的草稿＋被退回待修＋已核准尚未送客戶）／等別人（我的待簽核＋簽核中）／本月已成案（我的、以報價日期計算；沒有成案日欄位，畫面上直說）。點數字＝暫時的檢視，同時套用「我負責的」，所以數字和點進去的清單是同一批單；全公司合計屬於儀表板。預設條件「我負責的、進行中」＋目前條件列＋清除條件。**搜尋**：一打字就搜全部你看得到的報價（不受「我負責的」限縮），條件列顯示「搜尋範圍：全部你可看的報價」，清掉搜尋回到原條件。**記住的選擇**：只記住使用者在篩選區明確改的「只看我負責的」；點數字、清除條件都不改寫。「我負責的」名單是空的 ⇒ 顯示全部並註明「你目前沒有負責的報價，先顯示全部」；名單讀取失敗 ⇒ 數字顯示「暫時無法計算」（不是 0）、不可點。新欄「下一步」（等誰簽核、被退回、已核准待寄客戶、已確認請轉案件、有效期）；預設欄位精簡（客戶併進單號格、填單人併進日期格、毛利率／有效天數預設不顯示）——欄位在「檢視設定」或公司版面被隱藏時，併入別格的資料也一併隱藏；緊湊密度保留客戶名稱，只收次要資訊；新增「欄位」按鈕加欄（只影響本人，存瀏覽器）；毛利率空值改灰色「—」；案件進度小選單保留。手機（≤767px）改卡片：390x844 第一屏看得到第一張卡片（三個數字一排、篩選收進「篩選」鈕）、操作按鈕常駐且 ≥44px。「我負責的」沿用 `?mine=1` 同一個判斷（頁面多一次 `mine=1` 讀取）。
+- `module.json`：報價清單欄位目錄與預設版面新增 `next`（下一步）；`static/list-view-prefs.js` 的欄位表同步。
+- 測試：`tests/test_quote_list_waiting_on_t84_2026_11_13.py`（可見性／壞資料／查詢次數／現名／不帶參數鍵不存在／沒有報價金額檢視權的人看到的「等誰」與有權限者相同且金額遮蔽）、`tests/test_e2e_quote_list_t84_2026_11_13.py`（1280／390 瀏覽器）；更新被釘住的 t55／bp1／list_view_c1／p1_review_fixes／e2e_on_state 與 `quotations_list_off.json` golden。
+- 修正（前端，`quotation-form.html` FORM_VERSION V3.43→V3.44，≥768px 才套用；手機卡片版面不變）：① 品項明細同一列的輸入框改為全部貼同一條上緣（原本品名／廠牌貼列首、數量／單位／成本／毛利率／售價在列中間，列因「＋備註」「擇一方案」變高時差到 80px）；備註與擇一方案往下長，不再把別的欄推到中間。② 區段標題列（如「WiFi 7 無線AP」）在「顯示成本欄」時少了成本／毛利率／單項毛利三格，底色只到「售價」附近；補空格讓底色鋪滿整列。**已知未處理（另案，PM 2026-11-13 裁示不另修）**：已存品項若有數量與售價卻沒有 `amount`，載入後金額格會是空白、小計／合計不含該列、PDF 印 0。查證：正式機這類品項 0 筆（有數量單價但 amount 缺／0、amount 與數量×單價不符、有數量成本卻沒單價，三類皆 0）；正式機 `overhead_rule_mode`＝v2，存檔時伺服器會依數量×單價把每個品項的 `amount` 補寫回去。來源（承攬派工匯入報價單品項寫入 `unitPrice=None`／`amount=0`）另由 `fix/append-items-price` 在寫入時補算。故不做載入時正規化、不做 PDF fallback、也不對 legacy 模式做伺服器正規化（簽核中／已簽核單的內容指紋涵蓋 items.amount，正規化只能對草稿）。
+- 測試：`tests/test_e2e_quote_items_row_alignment_2026_11_13.py`（同列輸入框上緣差 ≤2px、標題列格數＝表頭欄數且鋪滿、手機無橫向捲動且標題列補格隱藏）；`tests/test_form_version_bumped_2026_09_24.py` 登記 V3.44。
+
+## 1.0.222（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
+- 新增：`quotations.doc_type`（migration v10：`quote`＝報價單〔預設，舊資料一律是它〕｜`estimate`＝估價單）。流程（簽核、狀態、權限、轉單、業績）兩種完全相同。
+- 單號：估價單字首預設 `ME`（`ME-YYYYMM-NNN`），流水號與報價單（`MQ`）各自獨立（`quote_seq` 鍵＝`ME-YYYYMM`，MQ 維持 `YYYYMM`）；字首在設定中心「報價單預設值」→「估價單單號字首」可改（恰 2 個大寫字母、不可與其他單據字首相撞）；改字首只影響之後新開的單，舊單照常。`GET /api/next-quote-no` 加選填 `doc_type`。
+- 類型開立（第一次存檔）時定案、**之後不可改**（PUT 一律以資料庫現值為準；單號字首隨類型，要換類型請「複製到新單」）；補登歷史單一律是報價單。
+- 用語：PDF 標題「估　價　單」、站內通知與簽核 Email（標題／內文／按鈕／主旨）隨類型換名稱；報價單文字逐字不變。`email_notify` 五支簽核通知只加選填 `doc_label`，核心不動。
+- 清單：`GET /api/quotations` 加選填 `doc_type` 篩選、每列回 `doc_type`；前端清單有「新增估價單」、類型篩選與「估價單」標籤。
+- 已知未涵蓋（另開後續票）：案件批次匯出欄位未加類型欄；API 錯誤訊息、簽核逾期提醒（`system_checks`）、成本結算／獎金等其他 Email 仍寫「報價單」。
+- 審查修正（hichan-2）：① 取用戶端暫定單號時，`quote_seq` 記在**單號自己的月份**（上個月取號、跨午夜才存檔不會把本月序號推高；本分支改寫時一度寫成「現在的月份」，已改回原行為，附測試）。② `docType` 加進編輯紀錄的忽略鍵（舊單第一次原樣存檔不再憑空多一筆「其他內容」）。③ 估價單字首不可撞任何現在實際有效的單據前綴：`helpers/doc_type.used_prefixes()`＝靜態保底（補上 BT／LN／HC／LV／OT／QT）＋站內表單範本檔＋已發布的自訂模組＋費用類型（預設與公司另外發布）；反方向，自訂模組與費用類型編輯器存前綴時不可等於目前或曾用過的估價單字首。**這個完整檢查只在「存設定」時跑**；執行期的 `estimate_prefix()`（每次稽核寫入／取號／PDF／通知）只做格式＋靜態保留清單的便宜檢查，不碰資料庫（測試釘住：200 次 `case_no_re()` 不呼叫 `used_prefixes`、不開連線、每次 < 0.1 ms）。④ 前端估價單換字時，使用者自己輸入、本身含「報價單」的內容（客戶名、專案名、條款…）原樣保留；歷史字首快取改為單一物件、一次讀寫。
+- 回滾須知：migration 0010 只加欄位（預設 `quote`），回滾程式碼不需動資料；但回滾後舊程式的 `_next_revision_no` 只認 `MQ-`，退回修改的估價單會變成 `ME-…-R1-R1`；舊指紋程式把 `docType` 算進內容，部署後被碰過的待簽估價單與舊單的已存指紋會對不上（需重新對帳）。已開出的估價單回滾前先結案或另行處理。
+- 內容指紋：`docType` 加進 `content_fp.EXCLUDED_KEYS`（讀取時由資料庫欄位注入、開立後不可改，同 `status`；舊單沒有這個鍵，既有指紋不失效、`FP_VERSION` 不變）。否則 GET 回的 `contentFp` 含 docType、伺服器用已存內容重算不含 ⇒ 複查編輯／核准一律 409「內容已更新」。複查編輯端點同 PUT：頁面送回的 `docType` 一律改回資料庫現值。**排除清單變動，請 K 審。**
+- 測試：`tests/test_estimate_doc_type_2026_11_13.py`。
+- 串接點（新增）：提供 `case.estimate_prefixes`（IP-ESTQ1，編號暫定）——曾開過估價單的單號字首，供 L1 `helpers/doc_type` 在字首改過後仍認得舊估價單號（L1 不讀 `quotations`）；`modules/case/quotations.py::_estimate_prefixes`。
+
+## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
+- 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
+- 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。
+
+## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
+- 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
+
+## 1.0.219 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
+- 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
+
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。

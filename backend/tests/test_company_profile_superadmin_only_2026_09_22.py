@@ -1,7 +1,7 @@
-"""§10 SA1–SA4 · 公司身分與金錢欄位只有最高管理員可以改。
+"""§10 SA1–SA4 · 公司身分與金錢欄位只有最高管理者可以改。
 
 使用者原話：
-> 「像匯款帳號\\公司名稱\\帳戶\\很多都要能改，**只有超級管理員可以修改**」
+> 「像匯款帳號\\公司名稱\\帳戶\\很多都要能改，**只有最高管理者可以修改**」
 
 ---
 
@@ -124,7 +124,7 @@ def test_sa1_an_admin_without_the_module_is_refused(client, make_user):
 
     📌 這一題與上面那題分開的理由：
     ⚠️ 只驗 viewer 的話，一個「把判準從模組換成 `role != 'viewer'`」的實作會綠，
-    🔑 而那不是使用者要的（他說的是「**只有超級管理員**」）。
+    🔑 而那不是使用者要的（他說的是「**只有最高管理者**」）。
     """
     username, password = make_user(username="sa1_admin", role="admin",
                                    modules=["settings"])
@@ -134,7 +134,7 @@ def test_sa1_an_admin_without_the_module_is_refused(client, make_user):
                    headers=_auth(token), json={"tax_id": "00000000"})
     assert r.status_code == 403, (
         f"`role=admin` 改得動公司身分欄位（回 {r.status_code}）—— "
-        "使用者說的是「只有超級管理員」。"
+        "使用者說的是「只有最高管理者」。"
     )
 
 

@@ -725,7 +725,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _ivStatusLabel(s) {
-      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+      return { '草稿': '草稿', '待審核': '待簽核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
     },
 
     _ivStatusClass(s) {
@@ -763,7 +763,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item) {
@@ -785,7 +785,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
@@ -828,7 +828,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _prStatusLabel(s) {
-      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+      return { '草稿': '草稿', '待審核': '待簽核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
     },
 
     _prStatusClass(s) {

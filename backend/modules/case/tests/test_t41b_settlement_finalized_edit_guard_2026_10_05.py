@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""第 41 班補洞（第 40 班獨立探針 S4）：已完結的成本精算，非超級管理員不可重新修改（settlement_api 的 403）。
+"""第 41 班補洞（第 40 班獨立探針 S4）：已完結的成本精算，非最高管理者不可重新修改（settlement_api 的 403）。
 突變 S4＝拿掉 `existing_settlement.status == finalized and role != superadmin` 的檢查 ⇒ 原本沒有任何測試變紅。
 """
 import json
@@ -30,7 +30,7 @@ def test_non_superadmin_cannot_edit_a_finalized_settlement_even_with_a_reason(ca
     draft["status"] = "draft"
     for st in (draft, page_payload(c, ah)):                                     # 重新開啟成草稿、再存成完結——都不行
         r = c.put(URL, json={"settlement": st, "reason": "想改一下"}, headers=ah)
-        assert r.status_code == 403 and "超級管理員" in r.json()["detail"], (r.status_code, r.text[:200])
+        assert r.status_code == 403 and "最高管理者" in r.json()["detail"], (r.status_code, r.text[:200])
     assert _status() == "finalized"
     assert json.dumps(_saved()["settlement"], sort_keys=True, ensure_ascii=False) == frozen, "被拒絕的修改不可以動到凍結的精算"
 

@@ -178,7 +178,7 @@ def _hub_cards(page):
 @pytest.mark.e2e
 def test_report_hub_only_lists_reports_this_user_can_open(live_server, make_user, new_page, login_as):
     """權限切片（K 審 N1）：只有「財務」或只有「出納」的使用者，報表中心列出的每一張卡片都必須點得進去
-    （不會出現『沒有權限』），而且不會比超級管理員多出任何一張。"""
+    （不會出現『沒有權限』），而且不會比最高管理者多出任何一張。"""
     sa = _open_as(live_server, make_user, new_page, login_as, "superadmin", [], "nav_hub_sa", "/pages/reports-hub.html")
     full = _hub_cards(sa)
     assert len(full) >= 4, full

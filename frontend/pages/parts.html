@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>料號主檔 — MOTRIX 專案管理系統</title>
+  <title>料號主檔 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/export-guard.js"></script>
@@ -76,6 +76,47 @@
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       10 欄表格在手機只看得到前 4 欄、品名被擠成一字一行 → 一個料號一張卡（料號＋類別、品名、廠牌、單位／在庫、成本／定價、備註、編輯／刪除）；
+       表頭的排序改成一排可點的排序鈕（原本點表頭排序，卡片化後表頭消失會失去排序功能）。
+       編輯／刪除兩顆鈕放大並拉開，避免誤觸刪除。 */
+    @media (max-width: 1023px) {
+      .search-input, .field-input { font-size: 16px !important; min-height: 44px; }
+    }
+    @media (max-width: 1023px) {   /* 同 quotations：平板直立 9 欄表格品名一行 3 字、操作欄被切 → 卡片 */
+      .page-main { padding: 14px 12px 28px; }
+      .toolbar { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; align-items: stretch; }
+      .toolbar .search-wrap { grid-column: 1 / -1; flex: none; }
+      .toolbar > div[style*="margin-left:auto"] { grid-column: 1 / -1; margin-left: 0 !important; }
+      .toolbar .btn { min-height: 44px; justify-content: center; }
+      .toolbar .btn-primary { grid-column: 1 / -1; }
+      .modal-box { width: 100%; max-width: 100%; padding: 18px 16px; border-radius: 16px 16px 0 0; box-sizing: border-box; max-height: calc(92dvh / var(--fz,1)); overflow-y: auto; }
+
+      .data-table, .data-table tbody, .data-table thead { display: block; width: 100%; min-width: 0 !important; }
+      .data-table thead tr { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border-light); align-items: center; }
+      .data-table thead tr::before { content: "排序"; font-size: 12px; color: var(--text-dim); margin-right: 2px; }
+      .data-table thead th { display: none; }
+      .data-table thead th.pt-sortable { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border: 1px solid var(--border-light); border-radius: 20px; background: #fff; letter-spacing: 0; text-transform: none; font-size: 13px; text-align: left !important; }
+      .data-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 14px; border-bottom: 1px solid #F0EEE9; align-items: center; }
+      .data-table tbody td { display: block; padding: 0; border: 0; min-width: 0; max-width: none !important; text-align: left !important; }
+      .data-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .data-table tbody td:nth-child(4) { grid-column: 2; grid-row: 1; text-align: right !important; }
+      .data-table tbody td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 15px !important; font-weight: 600; }
+      .data-table tbody td:nth-child(3) { grid-column: 1 / -1; grid-row: 3; font-size: 13px !important; }
+      .data-table tbody td:nth-child(5) { grid-column: 1; grid-row: 4; }
+      .data-table tbody td:nth-child(6) { grid-column: 2; grid-row: 4; text-align: right !important; }
+      .data-table tbody td:nth-child(7) { grid-column: 1; grid-row: 5; }
+      .data-table tbody td:nth-child(8) { grid-column: 2; grid-row: 5; text-align: right !important; font-size: 14px !important; }
+      .data-table tbody td:nth-child(9) { grid-column: 1 / -1; grid-row: 6; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+      .data-table tbody td:nth-child(10) { grid-column: 1 / -1; grid-row: 7; display: flex !important; gap: 10px; margin-top: 6px; }
+      .data-table tbody td:nth-child(5)::before { content: "單位 "; color: var(--text-dim); font-size: 12px; }
+      .data-table tbody td:nth-child(6)::before { content: "在庫 "; color: var(--text-dim); font-size: 12px; }
+      .data-table tbody td:nth-child(7)::before { content: "成本 "; color: var(--text-dim); font-size: 12px; }
+      .data-table tbody td:nth-child(8)::before { content: "定價 "; color: var(--text-dim); font-size: 12px; font-weight: 400; }
+      .data-table tbody td:nth-child(9):not(:empty)::before { content: "備註 "; color: var(--text-dim); font-size: 12px; }
+      .data-table tbody td:nth-child(10) .action-btn { flex: 1; min-height: 44px; margin: 0 !important; font-size: 14px; }
+    }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -335,8 +376,45 @@
           <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
         </div>
       </template>
+      <template x-if="!importing && importPlan && !importResults">
+        <div data-testid="import-confirm">
+          <div style="font-size:15px;font-weight:600;margin-bottom:10px">確認匯入</div>
+          <div style="font-size:13px;line-height:1.8" data-testid="import-confirm-summary"
+               x-text="'將新增 ' + importPlan.created + ' 筆、更新 ' + importPlan.updated + ' 筆' + (importPlan.failed ? '、有問題 ' + importPlan.failed + ' 筆（不會匯入）' : '')"></div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">空白的儲存格不會覆蓋既有資料（成本、單位等維持原值）。</div>
+          <template x-if="importNotice"><div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-top:8px" x-text="importNotice"></div></template>
+          <template x-if="importPlan.changes && importPlan.changes.length > 0">
+            <details style="margin-top:10px" data-testid="import-confirm-changes">
+              <summary style="font-size:12px;cursor:pointer;color:var(--text-secondary)">查看將被更新的內容（舊 → 新）</summary>
+              <div style="max-height:150px;overflow-y:auto;background:var(--surface-2,#F8FAFC);border-radius:var(--radius);padding:8px 12px;margin-top:6px">
+                <template x-for="(ch, hi) in importPlan.changes" :key="hi">
+                  <div style="font-size:12px;margin-bottom:6px">
+                    <div style="font-weight:600" x-text="'第 ' + ch.row + ' 行 ' + ch.name"></div>
+                    <template x-for="(f, fi) in ch.fields" :key="fi">
+                      <div style="color:var(--text-secondary);padding-left:8px" x-text="f.label + '：' + (f.old || '（空）') + '  →  ' + f.new"></div>
+                    </template>
+                  </div>
+                </template>
+                <div x-show="importPlan.changesTruncated" style="font-size:12px;color:var(--text-dim)">（只列前 200 筆）</div>
+              </div>
+            </details>
+          </template>
+          <template x-if="importPlan.errors.length > 0">
+            <div style="max-height:120px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:8px 12px;margin-top:10px">
+              <template x-for="(e, ei) in importPlan.errors" :key="ei">
+                <div style="font-size:12px;color:var(--danger);margin-bottom:3px" x-text="e"></div>
+              </template>
+            </div>
+          </template>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+            <button class="btn btn-ghost" data-testid="import-confirm-cancel" @click="cancelImport()">取消</button>
+            <button class="btn btn-primary" data-testid="import-confirm-ok" @click="runImport()" :disabled="importPlan.created + importPlan.updated === 0">確認匯入</button>
+          </div>
+        </div>
+      </template>
       <template x-if="!importing && importResults">
         <div>
+          <template x-if="importRefreshFailed"><div data-testid="import-refresh-failed" style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-bottom:12px">匯入完成，清單重新整理失敗，請重新整理頁面</div></template>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
             <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
               <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
@@ -404,6 +482,10 @@ function app() {
     showImportModal: false,
     importing: false,
     importResults: null,
+    importNotice: '',
+    importRefreshFailed: false,
+    importPlan: null,        // 匯入前確認（dryRun 的結果）：{created, updated, failed, errors[]}
+    _importRows: null,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -646,43 +728,79 @@ function app() {
       const file = event.target.files[0]
       if (!file) return
       event.target.value = ''
-      this.importing = true; this.showImportModal = true; this.importResults = null
-      const results = { created: 0, updated: 0, failed: 0, errors: [] }
+      // 兩步：先 dryRun 拿計畫顯示確認，按「確認匯入」才真的寫。空白儲存格＝不更新（由後端判斷），數字原樣以字串送出由後端驗證。
+      this.importing = true; this.showImportModal = true; this.importResults = null; this.importPlan = null; this._importRows = null
       try {
         const wb = XLSX.read(await file.arrayBuffer())
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
-        for (let i = 0; i < rows.length; i++) {
-          try {
-            const obj = this._parsePartRow(rows[i])
-            if (!obj.name) { results.failed++; results.errors.push(`第 ${i+2} 行：品名不可空白`); continue }
-            const match = obj.partNo ? this.items.find(p => p.part_no === obj.partNo) : null
-            const body = { partNo: obj.partNo, name: obj.name, brand: obj.brand, unit: obj.unit, cost: obj.cost, listPrice: obj.listPrice, category: obj.category, note: obj.note }
-            const r = await fetch(match ? `${API}/parts/${match.id}` : `${API}/parts`, {
-              method: match ? 'PUT' : 'POST',
-              headers: { 'Content-Type':'application/json', Authorization:`Bearer ${this.session.token}` },
-              body: JSON.stringify(body)
-            })
-            if (r.ok) { match ? results.updated++ : results.created++ }
-            else { const e = await r.json().catch(()=>({})); results.failed++; results.errors.push(`${obj.partNo || obj.name}：${match?'更新':'新增'}失敗（${e.detail || r.status}）`) }
-          } catch(e) { results.failed++; results.errors.push(`第 ${i+2} 行：${e.message}`) }
-        }
-        await this.load()
-      } catch(e) { results.failed++; results.errors.push('檔案解析失敗：' + e.message) }
-      this.importResults = results; this.importing = false
+        this._importRows = rows
+          .map((r, i) => ({ r, row: i + 2 }))
+          .filter(x => Object.values(x.r).some(v => String(v ?? '').trim()))
+          .map(x => ({ row: x.row, ...this._parsePartRow(x.r) }))
+        if (!this._importRows.length) throw new Error('檔案裡沒有資料列')
+        this.importNotice = ''
+        this.importPlan = await this._importPost(true)
+      } catch(e) { this.importResults = { created: 0, updated: 0, failed: 1, errors: ['匯入失敗：' + e.message] } }
+      this.importing = false
     },
+
+    async _importPost(dryRun) {
+      const r = await fetch(`${API}/parts/import-rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
+        body: JSON.stringify({ rows: this._importRows, dryRun, planHash: dryRun ? undefined : this.importPlan?.planHash })     // 只有 dryRun:false 才會真的寫入；寫入要帶預覽拿到的 planHash
+      })
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}))
+        const d = e.detail      // 後端：{code: 'plan_changed' | 'import_failed', message}；其他錯誤是字串
+        const err = new Error((d && d.message) || (typeof d === 'string' ? d : 'HTTP ' + r.status))
+        err.status = r.status; err.code = (d && d.code) || ''
+        throw err
+      }
+      return r.json()
+    },
+
+    async runImport() {
+      this.importing = true; this.importRefreshFailed = false
+      try {
+        this.importResults = await this._importPost(false)
+        this.importPlan = null
+        this._importRows = null
+      } catch(e) {
+        if (e.code === 'plan_changed' && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
+          try { this.importPlan = await this._importPost(true); this.importNotice = '資料在你預覽之後有變動，已重新預覽，請再確認一次'; this.importing = false; return } catch(e2) { e = e2 }
+        }
+        this.importPlan = null
+        this.importResults = { created: 0, updated: 0, failed: 1, errors: [(e.code === 'import_failed' ? '' : '匯入失敗：') + e.message] }
+        this._importRows = null
+        this.importing = false
+        return
+      }
+      // 資料已經寫入：之後重新載入清單失敗不能說成「匯入失敗」，只提示重新整理頁面
+      try {
+        const res = await fetch(`${API}/parts`, { headers: { Authorization: 'Bearer ' + this.session.token } })     // load() 會吞掉錯誤，這裡要知道有沒有失敗
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        this.items = (await res.json()).items || []
+      } catch(e) { this.importRefreshFailed = true }
+      this.importing = false
+    },
+
+    cancelImport() { this.showImportModal = false; this.importPlan = null; this._importRows = null; this.importNotice = '' },
 
     _parsePartRow(row) {
       const n = {}
       for (const [k, v] of Object.entries(row)) n[k.trim()] = String(v ?? '').trim()
-      const brand = [n['廠牌']||n['brand']||'', n['型號']||n['model']||''].map(s=>s.trim()).filter(Boolean).join(' / ')
-      const toNum = (s) => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(x) ? 0 : x }
+      const pick = (...keys) => { for (const k of keys) if (n[k]) return n[k]; return '' }
       return {
-        partNo: n['料號']||n['part_no']||'', name: n['品名']||n['名稱']||n['name']||'',
-        brand, unit: n['單位']||n['unit']||'台',
-        cost: toNum(n['成本(未稅)']||n['成本']||n['cost']||0),
-        listPrice: toNum(n['定價(含稅)']||n['定價']||n['售價']||n['list_price']||0),
-        category: n['類別']||n['分類']||n['category']||'',
-        note: n['備註']||n['備注']||n['note']||''
+        partNo: pick('料號', 'part_no'), name: pick('品名', '名稱', 'name'),
+        brand: pick('廠牌', 'brand'), model: pick('型號', 'model'),        // 廠牌、型號各自獨立送，後端組成「廠牌 / 型號」
+        unit: pick('單位', 'unit'),
+        cost: pick('成本(未稅)', '成本', 'cost'),
+        listPrice: pick('定價(含稅)', '定價', '售價', 'list_price'),
+        category: pick('類別', '分類', 'category'),
+        note: n['備註']||n['備注']||n['note']||'',
+        safetyStock: pick('安全庫存', 'safety_stock'),
+        leadTimeDays: pick('前置天數', '前置天數(天)', 'lead_time_days')
       }
     },
 

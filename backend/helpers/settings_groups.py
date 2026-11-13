@@ -71,9 +71,13 @@ _register_core(
         S("request_log_keep_days", "int", 90, min=7, max=3650, unit="天", risk="ops", loosen="down", recommended=90,
           question="系統操作軌跡（誰在何時開了哪個頁面）要保留幾天？", label="操作軌跡保留天數", help="用來回頭查「上個月那筆資料是誰改的」。",
           impact="只影響之後的清理：超過天數的操作軌跡會被刪除；保留越久，個人行為紀錄累積越多，外洩時的影響也越大。", advanced=True),
+        S("log_keep_days", "int", 30, min=7, max=3650, unit="天", risk="ops", loosen="down", recommended=30,
+          question="系統日誌（程式運作與連線紀錄的壓縮舊檔）要保留幾天？", label="系統日誌保留天數",
+          help="伺服器的運作紀錄與連線紀錄檔各自滿 15 MB 就會自動壓縮成舊檔，超過這個天數的舊檔就刪除；目前正在寫的檔不受影響。",
+          impact="只影響之後的清理：超過天數的壓縮舊日誌會被刪除。日誌是出問題時查原因用的，保留越短越難追查一週前的事件；日誌檔本身有大小上限（單檔 15 MB、最多 10 份），不會無限變大。", advanced=True),
     ],
     sensitive=True, risk="ops", legacy_key="backup_retention",
-    help="備份、稽核紀錄、通知與操作軌跡要保存多久。",
+    help="備份、稽核紀錄、通知、操作軌跡與系統日誌要保存多久。",
 )
 
 _register_core(
@@ -215,8 +219,8 @@ register_group(
         _alt_policy("move_out_of_sent", "已回簽的擇一單，可以被改成草稿、已取消或已拒絕嗎？", "已回簽單改變狀態", "指「改狀態」「收回」「退回」等會讓單據離開『已送出』的操作。",
                     [(1, "不行（建議）", "一律擋下並提示『請管理員取消回簽』。"),
                      (2, "可以，並自動清除選定", "比照取消回簽：通過下游檢查後同步清除選定，再進入新狀態。")]),
-        _alt_policy("reject_final_keep", "已回簽的擇一單被「拒絕結案」時，客戶選定的方案要保留還是清除？", "拒絕結案時的選定", "拒絕結案是終局動作。",
-                    [(1, "保留（建議）", "拒絕結案之後選定與金額原樣保留。"),
+        _alt_policy("reject_final_keep", "已回簽的擇一單被「駁回結案」時，客戶選定的方案要保留還是清除？", "駁回結案時的選定", "駁回結案是終局動作。",
+                    [(1, "保留（建議）", "駁回結案之後選定與金額原樣保留。"),
                      (2, "清除", "比照取消回簽：通過下游檢查後清除選定。")]),
         _alt_policy("unlock_edit_signed", "最高管理者可以對已回簽的擇一單做「解鎖修改」嗎？", "解鎖修改已回簽單", "解鎖修改會讓單據回到待審核狀態。",
                     [(1, "不行（建議）", "一律擋下並提示『請管理員取消回簽』。"),
@@ -244,7 +248,7 @@ register_group(
 
 
 
-# 材料卡片認列已核准採購單（T57；MATERIAL-LINK-BUG-T57）：預設＝使用者 10-13 的話「非超級管理員自動帶入要取消、寄信通知管理員」。
+# 材料卡片認列已核准採購單（T57；MATERIAL-LINK-BUG-T57）：預設＝使用者 10-13 的話「非最高管理者自動帶入要取消、寄信通知管理員」。
 # 放寬（讓有案件權限的人也能認列、關閉通知、提高寄信上限）要另一位最高管理者核准並等確認期間；收緊立即生效。收件人在「信件與通知收件設定」維護（只有一個來源）。
 register_group(
     "material_recognition", "材料卡片認列採購單",
@@ -649,7 +653,7 @@ register_group(
 
 
 # ── BP-1（建構器 第一刀）：各畫面是否啟用「管理者自訂版面」（欄位顯示／順序／標籤）。預設全關＝上線前的畫面（部署零行為變更）。 ──
-# 一個畫面一個欄位（builder.layout.<畫面>）；啟用後該畫面才會讀版面定義（公司／角色），超級管理員才看得到「編輯版面」。
+# 一個畫面一個欄位（builder.layout.<畫面>）；啟用後該畫面才會讀版面定義（公司／角色），最高管理者才看得到「編輯版面」。
 import json as _json
 from core import paths as _paths
 
@@ -972,6 +976,84 @@ register_group(
     help="登入與密碼的規則：只能調得更嚴，不能放寬到系統規定的底線以下。",
 )
 
+# ── 外網登入防護（2026-11-12 外網登入強化票）：外網強制兩步驟驗證（TOTP）＋單一帳號鎖定。預設＝開（保守）；放寬方向（關閉、減少角色、
+#    調高門檻、縮短鎖定、改回只鎖外網…）一律走確認期間＋第二位最高管理者核准。判定與規則見 helpers/external_access.py、helpers/account_lock.py。 ──
+_EXT_ROLE_LABELS = (("superadmin", "最高管理者", 1), ("admin", "管理員", 1), ("finance", "財務", 1),
+                    ("sales", "業務", 0), ("engineer", "工程師", 0), ("viewer", "檢視者", 0))
+
+
+def _ext_role_field(role, label, default):
+    return S("ext_totp_role_" + role, "int", default, min=0, max=1, risk="security", loosen="down", recommended=1 if default else None,
+             question="從外網登入時，「%s」必須先啟用兩步驟驗證嗎？" % label, label="外網登入強制兩步驟驗證：%s" % label,
+             help="開啟後，%s 從外網（經網際網路、不是公司內網）登入時，如果帳號還沒啟用兩步驟驗證就不能登入，要先在公司內網登入並啟用。內網登入不受影響。" % label,
+             impact="只影響之後的外網登入，已經登入的人不受影響。調成「不強制」屬於放寬，須另一位最高管理者核准並等確認期間；調成「強制」立即生效。",
+             risk_text="不強制的角色，只靠密碼就能從外網登入；帳號密碼外洩時，外人就能看到客戶、報價與財務資料。",
+             impact_scope={"documents": ["登入狀態"], "roles": [label], "amounts": "不涉及金額；只影響該角色從外網登入的條件。", "reversible": True, "effective": "pending"},
+             choices=[(1, "強制（建議）" if default else "強制", "這個角色從外網登入前必須已啟用兩步驟驗證，沒啟用的人要先在公司內網登入並啟用。"),
+                      (0, "不強制", "這個角色從外網登入只需要密碼（有啟用兩步驟驗證的人仍會被要求輸入驗證碼）。")])
+
+
+register_group(
+    "external_login", "外網登入防護",
+    [
+        S("ext_totp_enabled", "int", 1, min=0, max=1, risk="security", loosen="down", recommended=1,
+          question="要啟用「外網登入強制兩步驟驗證」嗎？", label="外網強制兩步驟驗證（總開關）",
+          help="開啟後，下面勾選的角色從外網登入時必須已啟用兩步驟驗證；沒啟用的會被拒絕並提示先在公司內網啟用。關閉＝所有角色在外網都只需密碼。",
+          impact="只影響之後的外網登入；內網登入完全不變。關閉屬於放寬，須另一位最高管理者核准並等確認期間；開啟立即生效。",
+          risk_text="關閉後，外網登入只靠密碼；帳號密碼外洩時外人可直接進入系統。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響外網登入的條件。", "reversible": True, "effective": "pending"},
+          choices=[(1, "開啟（建議）", "指定角色從外網登入必須先啟用兩步驟驗證。"), (0, "關閉", "外網登入不額外要求兩步驟驗證。")]),
+    ] + [_ext_role_field(*r) for r in _EXT_ROLE_LABELS] + [
+        S("lock_threshold", "int", 10, min=3, max=100, unit="次", risk="security", loosen="up", recommended=10,
+          question="同一個帳號在時間窗內輸錯幾次，就暫時鎖住這個帳號？", label="帳號鎖定的失敗次數",
+          help="不分來源位址：同一個帳號在「計算時間窗」內累計輸錯達這個次數，就暫時鎖住這個帳號（預設只擋外網來源，內網照常能登入）。",
+          impact="只影響之後的失敗計數。調高（更寬鬆）須另一位最高管理者核准並等確認期間；調低立即生效。",
+          risk_text="次數越高，攻擊者可以對同一個帳號猜越多次密碼才會被鎖。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響帳號鎖定的門檻。", "reversible": True, "effective": "pending"}),
+        S("lock_window_min", "int", 30, min=5, max=1440, unit="分鐘", risk="security", loosen="down", recommended=30,
+          question="帳號輸錯次數要在多長的時間窗內累計？", label="帳號鎖定的計算時間窗",
+          help="在這段時間內累計的失敗次數才算數；超過這段時間的舊失敗不計。",
+          impact="只影響之後的失敗計數。縮短（更寬鬆）須另一位最高管理者核准並等確認期間；拉長立即生效。",
+          risk_text="時間窗越短，攻擊者放慢速度猜密碼就不會被鎖。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響帳號鎖定的計算窗口。", "reversible": True, "effective": "pending"}),
+        S("lock_minutes", "int", 30, min=5, max=1440, unit="分鐘", risk="security", loosen="down", recommended=30,
+          question="帳號被鎖住之後，要鎖多久才自動解除？", label="帳號鎖定的時間",
+          help="鎖住期間，該帳號從外網（或依下面的模式連內網）無法登入；時間到自動解除。超級管理員也可以手動解除，在內網成功登入也會解除。",
+          impact="只影響之後新發生的鎖定。縮短（更寬鬆）須另一位最高管理者核准並等確認期間；拉長立即生效。",
+          risk_text="鎖定時間越短，攻擊者越快可以繼續猜；越長，帳號本人等待越久（內網登入可立即解除）。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響帳號鎖定的時間長度。", "reversible": True, "effective": "pending"}),
+        S("lock_scope", "int", 1, min=1, max=2, risk="security", loosen="down", recommended=1,
+          question="帳號被鎖住時，要連公司內網的登入也擋嗎？", label="帳號鎖定的範圍",
+          help="建議只擋外網：這樣就算有人故意亂輸密碼，帳號本人在公司內網仍然可以登入，也能藉由內網登入解除鎖定。選「全部來源」最嚴，但任何人都能故意輸錯把別人鎖在系統外。",
+          impact="只影響之後的帳號鎖定判斷。從「全部來源」改回「只擋外網」屬於放寬，須另一位最高管理者核准並等確認期間；改成「全部來源」立即生效。",
+          risk_text="「全部來源」下，任何人（包含外網的陌生人）故意輸錯就能讓指定帳號在公司內也無法登入，直到鎖定時間結束或超級管理員解鎖。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響帳號鎖定是否也擋內網。", "reversible": True, "effective": "pending"},
+          choices=[(1, "只擋外網（建議）", "只有外網來源的失敗會計數、被鎖時只擋外網登入；內網照常登入並可解除鎖定。"),
+                   (2, "全部來源", "不分來源計數，被鎖時內網也擋；有被故意輸錯鎖住的風險。")]),
+        S("external_hosts", "str", "", risk="security", requires_pending=True, advanced=True,
+          question="哪些網域代表「從外網進來」？（多個用逗號分隔）", label="外網網域",
+          help="請求的網址網域在這份清單裡，就一律當外網（除此之外，經外網通道進來、或來源位址不在內網網段的請求也都是外網）。",
+          impact="只影響之後的外網判定；變更須經確認期間後才生效。",
+          risk_text="漏填網域不會放寬太多（來源位址與外網通道的痕跡仍會判成外網），但請不要把外網網域拿掉。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響哪些請求被當成外網。", "reversible": True, "effective": "pending"}),
+        S("loopback_is_internal", "int", 0, min=0, max=1, risk="security", loosen="up", recommended=0, advanced=True,
+          question="在伺服器這台電腦上直接開網頁登入，要當成公司內網嗎？", label="本機直連算內網",
+          help="預設不算：在伺服器本機開網頁登入也適用外網規則（被要求兩步驟驗證的角色要先啟用）。因為同一台電腦上的其他程式（轉送程式、代理）也能讓外面的人看起來像是本機直連。只有確定本機沒有任何轉送外網流量的程式時才建議打開。",
+          impact="只影響之後的登入判定。改成「算內網」屬於放寬，須另一位最高管理者核准並等確認期間；改回「不算」立即生效。",
+          risk_text="打開後，只要有程式在同一台電腦上把外網流量轉進來而沒有帶外網通道的標頭，外面的人就會被當成內網，免除兩步驟驗證與帳號鎖定。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響本機直連是否被當成內網。", "reversible": True, "effective": "pending"},
+          choices=[(0, "不算內網（建議）", "本機直連也適用外網規則。"), (1, "算內網", "本機直連視為內網，免外網強制兩步驟驗證與帳號鎖定。")]),
+        S("internal_networks", "str", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10", risk="security", requires_pending=True, advanced=True,
+          question="哪些網段算「公司內網」？（多個用逗號分隔）", label="內網網段",
+          help="來源位址在這些網段、且沒有經過代理或外網通道的請求才算內網。只接受私有網段（公司內部使用的位址範圍），填公開網段會被忽略，所以不可能把外網變成內網。",
+          impact="只影響之後的內外網判定；變更須經確認期間後才生效。",
+          risk_text="內網網段越大，被當成內網（免強制兩步驟驗證）的來源越多；請只列公司實際使用的網段。",
+          impact_scope={"documents": ["登入狀態"], "roles": ["所有使用者"], "amounts": "不涉及金額；只影響哪些來源被當成內網。", "reversible": True, "effective": "pending"}),
+    ],
+    sensitive=False, risk="security",
+    help="從外網（經外網通道、不是公司內網）登入時的額外防護：指定角色必須先啟用兩步驟驗證，以及同一帳號輸錯太多次就暫時鎖住。內網登入行為不變。",
+)
+
 # ── 自訂通知用語（S-X3）：管理者決定簽核事件的站內訊息與通知信文字（先導：報價單送審）。預設關閉＝上線前的文字（部署零行為變更）。 ──
 register_group(
     "builder_notify", "自訂通知用語",
@@ -1048,10 +1130,15 @@ from helpers import settings_groups_legal_reminder as _legal_reminder  # noqa: E
 
 _legal_reminder._register(S, _register_core)
 
-# T69 SO-S2：刪除暫存區保留天數（拆檔，同屬 core）
+# T69 SO-S2：資源回收筒保留天數（拆檔，同屬 core）
 from helpers import settings_groups_recycle_bin as _recycle_bin  # noqa: E402
 
 _recycle_bin._register(S, _register_core)
+
+# UX P1.5：系統標語（拆檔，同屬 core）
+from helpers import settings_groups_brand as _brand  # noqa: E402
+
+_brand._register(S, _register_core)
 
 
 def _backfill_cross_check(values):

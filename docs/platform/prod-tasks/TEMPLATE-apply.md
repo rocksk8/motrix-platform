@@ -27,6 +27,14 @@
 
 ## 步驟 2：套用
 
+> 🔴 **前置：包內的 `apply_update` 版本 ≠ 已安裝的版本 ⇒ 先自升級，再 apply**（第 81 班踩到：第一次 apply 被擋，`status=script_not_from_package`，正式機未被觸碰）。
+> `apply_update.ps1` 開頭會比對自己與包內那份的 `$ApplyScriptVersion`，不同就拒絕；**自升級不會自己發生**（只有部署儀表板的「部署」按鈕會先自動複製）。步驟檔**不可以**寫「套用流程自己會處理」，必須寫出下列步驟（依 `UPGRADE-RUNBOOK.md` §8）：
+> 1. 讀兩個版本：`Select-String -Path <ROOT>\backend\tools\apply_update.ps1 -Pattern '^\$ApplyScriptVersion'`（已安裝）與 `<staged payload>\backend\tools\apply_update.ps1`（包內）；**相同 ⇒ 略過本前置**。
+> 2. **不同 ⇒ 先備份再複製**：把已安裝的 `apply_update.ps1`、`apply_update.version.json` 備份到 `<staging>\pre_<班次>_tools_backup\`；再**只把包內這兩個檔**複製到 `<ROOT>\backend\tools\`（整包 `robocopy <包>\backend\tools <ROOT>\backend\tools /E` 也行，但會連帶換掉其他工具，範圍較大）；用 `Get-FileHash -Algorithm SHA256` 核對安裝目錄與包內兩個檔雜湊**相同**，才執行 apply。
+> 3. 若本班 `apply_module_update.ps1`（及其 `.version.json`）也變了，同理處理。
+> 4. 回報寫出：已安裝版本、包內版本、備份位置、雜湊核對結果。複製失敗或雜湊不符 ⇒ 停下回報，不要重試 apply。
+> 整合者判斷是否需要：`git diff <基準> <head> -- backend/tools/apply_update.version.json backend/tools/apply_module_update.version.json` 有差異 ⇒ 本班需要。
+
 - log 檔名一律帶時間戳：`Tee-Object <staging>\apply_trainNN_$(Get-Date -Format yyyyMMdd_HHmmss).log`。第二十五班使用者重跑一次（`duplicate_version` 正常拒絕）把成功那次的 log 覆蓋掉，步驟 3 #3／#5 因此只能部分驗證（2026-09-30）。步驟 3 引用 log 時寫「時間戳最大且 `::RESULT::` 為 success 的那份」。
 
 ## 步驟 3：套用後檢查（逐項、可機械判定）

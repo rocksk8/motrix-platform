@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""隔離目錄：進暫存區的附件『搬』進來（不是複製），還原時搬回，清除時整個資料夾刪掉。
+"""隔離目錄：進資源回收筒的附件『搬』進來（不是複製），還原時搬回，清除時整個資料夾刪掉。
 
 位置：預設 `<安裝根目錄>\\資源回收筒`（與 報價單PDF 等並列、git 忽略、**不在 uploads/ 底下** ⇒ 不被雲端鏡像、不被檔案開啟路由服務）；
 `system_settings.recyclebin_dir` 可由最高管理者改到樹外的絕對路徑。隔離檔含個資 ⇒ F2：永不上雲、不進每日匯出。
 結構：`<根>\\<token>\\<root>\\<原相對路徑>`；token 是 uuid（不是自增 id——交易回滾後 id 會被重用，孤兒資料夾會撞上新的列）。
 
 搬移：同磁碟 `os.replace`（原子）；跨磁碟 ⇒ 複製→比對 sha256→刪原檔。搬移在 DB 刪除**之前**做、失敗就搬回；
-呼叫端的交易之後若回滾 ⇒ 暫存區沒有那一列、檔案卻在隔離區 ⇒ `reconcile_orphans()`（每日工作）把它們搬回原路徑，不會遺失。
+呼叫端的交易之後若回滾 ⇒ 資源回收筒沒有那一列、檔案卻在隔離區 ⇒ `reconcile_orphans()`（每日工作）把它們搬回原路徑，不會遺失。
 這個檔案是模組內**唯一**直接 `os.replace/os.remove/shutil.rmtree` 的地方（直接刪檔守門 tests/platform/test_recyclebin_guards_t53.py）。
 """
 import hashlib
@@ -48,7 +48,7 @@ def _token_ok(token: str) -> bool:
 
 def bin_dir(token: str) -> str:
     if not _token_ok(token):
-        raise ValueError("不合法的暫存區代號：%r" % (token,))
+        raise ValueError("不合法的資源回收筒代號：%r" % (token,))
     return os.path.join(root_dir(), token)
 
 
@@ -120,12 +120,12 @@ def move_in(token: str, files: list) -> list:
                 _move(dst, src)
             except OSError:
                 stuck.append(dst)
-                logger.exception("暫存區搬移失敗後搬回也失敗：%s", dst)
+                logger.exception("資源回收筒搬移失敗後搬回也失敗：%s", dst)
         if not stuck:                       # 全部都搬回去了才清掉資料夾；有搬不回的（防毒鎖檔…）⇒ 保留，每日工作 reconcile 會再搬回，絕不連檔案一起刪掉
             try:
                 _remove_tree(base)
             except OSError:                 # 空資料夾清不掉不要蓋掉原本的錯誤（呼叫端要的是『搬進去失敗』的原因）
-                logger.warning("暫存區搬移失敗後空資料夾清不掉：%s", base)
+                logger.warning("資源回收筒搬移失敗後空資料夾清不掉：%s", base)
         raise
     return manifest
 

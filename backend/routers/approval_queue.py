@@ -85,7 +85,7 @@ def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, e
     - M01 不在，或沒掛案件，或**掛的案件已不存在**（孤兒單；稽核 D 建議、主持採納）⇒ DENY（每案守門一定查無）
       `existing`：已知存在的案件單號集合（佇列一次查完）；None ⇒ 這裡查這一筆（詳情）——同一個 `_case_names`
     - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）
-    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋超級管理員 ⇒ OPEN，其餘 DENY"""
+    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋最高管理者 ⇒ OPEN，其餘 DENY"""
     if _on_chain(conn, user, approval_raw):
         return OPEN
     if caseless:
@@ -161,6 +161,27 @@ def _counts_for_me(item: dict, my_usernames: set, my_username: str, is_sa: bool)
     return is_sa and (item.get("requestedBy") or "") != my_username
 
 
+def visible_queue_items(user: dict):
+    """使用者看得到的佇列項目（每項已帶 `mine`）＋他目前代理的人。⇒ (items, my_delegated_for)。
+    列表端點與首頁「我的工作」共用（卡在誰、幾天）；過濾在分組之前（2026-09-15）。"""
+    conn = get_db()
+    try:
+        my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
+        items = _openable(conn, user, _queue_provider_items(conn))
+    finally:
+        conn.close()
+
+    # 「輪到我」只在這裡判一次（與 `/api/approval-queue/count` 同一個 `_counts_for_me`）：每一項帶 `mine`，頁面的摘要數字、
+    # 「待我簽核」欄與角標都從它來——不再各自用自己的算法（2026-11-13 UX P1.5；之前摘要 `myPendingCount` 與列表 `myItems` 可能分歧）。
+    _mine_names = {user["username"]} | set(my_delegated_for)
+    _is_sa = user.get("role") == "superadmin"
+    for it in items:
+        it["mine"] = bool(_counts_for_me(it, _mine_names, user["username"], _is_sa))
+
+    # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
+    return [it for it in items if _queue_visible_to(user, it, my_delegated_for)], my_delegated_for
+
+
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """待我簽核佇列：各模組提供的項目（IP-10）→ 可見性過濾 → 依送審人分組。
@@ -171,15 +192,7 @@ def get_approval_queue(authorization: str = Header(None)):
     `myDelegatedFor`（2026-08-28）：目前使用者正在代理誰的簽核權限——前端 canApprove()/myPendingCount
     要一併比對，否則代理人看不到任何「輪到我」。"""
     user = _require_user(authorization)
-    conn = get_db()
-    try:
-        my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
-        items = _openable(conn, user, _queue_provider_items(conn))
-    finally:
-        conn.close()
-
-    # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
-    items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
+    items, my_delegated_for = visible_queue_items(user)
 
     if user.get("role") != "superadmin":          # 收款帳號：只有最高管理者看得到完整（使用者裁示 2026-10-01）
         items = [_mask_bank_deep(it) for it in items]
@@ -199,7 +212,7 @@ def get_approval_queue(authorization: str = Header(None)):
         })
     queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
 
-    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for,
+    return {"queue": queue, "total": len(items), "myCount": sum(1 for it in items if it.get("mine")), "myDelegatedFor": my_delegated_for,
             "reassignTypes": _reassign_types()}
 
 
@@ -244,11 +257,9 @@ def _item_type_label(it: dict) -> str:
     return it.get("typeLabel") or "報價單"      # 模組登記的新單據類型（A2-0 #2）自帶標籤；都沒有才退回舊預設
 
 
-@router.get("/api/approval-queue/count")
-def get_approval_queue_count(authorization: str = Header(None)):
-    """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
-    （`_queue_provider_items`），兩邊才對得起來。"""
-    u = _require_user(authorization)
+def my_pending_items(u: dict) -> list:
+    """輪到使用者簽核的項目（最早送審的在前）。**「待我簽核」數字的唯一來源**：topbar 角標、首頁、登入問候語的離開期間摘要都走這裡，
+    數字才對得起來（2026-11-13 UX P1.5：簽核頁摘要與列表也改走同一份，見 `/api/approval-queue/count`）。"""
     conn = get_db()
     try:
         my_usernames = {u["username"]} | set(active_delegators_for(conn, u["username"]))
@@ -257,9 +268,18 @@ def get_approval_queue_count(authorization: str = Header(None)):
         conn.close()
     is_sa = u["role"] == "superadmin"
     mine = [it for it in items if _counts_for_me(it, my_usernames, u["username"], is_sa)]
+    mine.sort(key=lambda x: x.get("requestedAt") or "")
+    return mine
+
+
+@router.get("/api/approval-queue/count")
+def get_approval_queue_count(authorization: str = Header(None)):
+    """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
+    （`_queue_provider_items`），兩邊才對得起來。"""
+    u = _require_user(authorization)
+    mine = my_pending_items(u)
     # 首頁「等我簽核」的數字與清單同一份（2026-09-30 使用者：儀表板與簽核佇列沒有連動）：
     # 清單＝角標的那些項目（最早送審的在前，最多 10 筆），不含金額（首頁不做財務遮蔽判斷）。
-    mine.sort(key=lambda x: x.get("requestedAt") or "")
     return {"count": len(mine),
             "items": [{"type": it.get("type") or "", "typeLabel": _item_type_label(it),
                        "quoteNo": it.get("quoteNo") or "", "customer": it.get("customer") or "",

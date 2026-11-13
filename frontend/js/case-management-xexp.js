@@ -209,7 +209,7 @@ window.CM_PARTS.push(() => ({
       await this.loadExtraExpenses(this.selected.quote_no)
     },
 
-    // 作廢（僅最高管理員；已核准且尚未付款；理由必填）。列保留（已作廢）、不計入合計／出納／報表；總帳由引擎自動沖轉
+    // 作廢（僅最高管理者；已核准且尚未付款；理由必填）。列保留（已作廢）、不計入合計／出納／報表；總帳由引擎自動沖轉
     xeCanVoid(x) { return this.session.role === 'superadmin' && x.status === '已核准' && !x.paidDate && !!x.id },
 
     async xeVoid(i) {

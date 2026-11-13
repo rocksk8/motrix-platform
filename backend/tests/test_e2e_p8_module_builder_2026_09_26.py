@@ -2,10 +2,10 @@
 """D4 驗收（CUSTOMIZATION-SPEC §8.3）：用建構器從零建立「測試用設備借用單」，不改任何程式碼就能新增、送審、核准、匯出。
 
 一條細線走到底（瀏覽器操作，斷言打在伺服器狀態：定義庫、單據表、通知表、輸出端點）：
-  ① 建構器（超級管理員）：基本＋編號預覽 → 欄位（拖曳、必填、預設、公式〔先打錯看位置〕、參照）
+  ① 建構器（最高管理者）：基本＋編號預覽 → 欄位（拖曳、必填、預設、公式〔先打錯看位置〕、參照）
      → 版面（分組、列表欄）→ 流程（狀態、轉換、兩層簽核〔第二層帶 when〕、通知）→ 輸出（指定版型、預覽）
      → 發布（先故意缺參照對象：422 標回步驟與欄位；補上後看差異、發布）
-  ①′ 超級管理員在 users.html 勾選「自訂模組 › 測試用設備借用單」授權給一般使用者（走 PUT /api/users；斷言打在 DB）
+  ①′ 最高管理者在 users.html 勾選「自訂模組 › 測試用設備借用單」授權給一般使用者（走 PUT /api/users；斷言打在 DB）
   ② 一般使用者（只有 custom.equipment_loan 權限）：新增（先漏必填：400 標回欄位）→ 送審
   ③ 兩位簽核人（沒有模組權限，用 &no= 開單）依序核准 → ④ 申請人匯出 PDF
   ⑤ 改定義發布第 2 版 ⇒ 舊單仍是第 1 版（輸出照舊）、新單用第 2 版
@@ -72,7 +72,7 @@ def _user_modules(username):
 
 
 def _grant_in_users_page(page, base, username, module_label):
-    """超級管理員在帳號管理頁編輯帳號、在「自訂模組」分組勾選模組、儲存（PUT /api/users/{id}）。"""
+    """最高管理者在帳號管理頁編輯帳號、在「自訂模組」分組勾選模組、儲存（PUT /api/users/{id}）。"""
     page.goto(base + "/pages/users.html")
     row = page.locator("div", has=page.get_by_text(username, exact=True)).filter(
         has=page.get_by_role("button", name="編輯")).last
@@ -498,7 +498,7 @@ def _def_body(key, version):
 @pytest.mark.e2e
 @pytest.mark.parametrize("source", ["record-definition", "meta-version"])
 def test_old_record_uses_its_own_definition_version_for_a_regular_user(live_server, make_user, new_context, client, source):
-    """#2：一般使用者（非超級管理員）開舊單 ⇒ 欄位標籤、表單、按鈕都用該單那一版的定義，不是最新版。
+    """#2：一般使用者（非最高管理者）開舊單 ⇒ 欄位標籤、表單、按鈕都用該單那一版的定義，不是最新版。
     meta-version：攔掉單據回應裡的 definition ⇒ 頁面要改問 `meta?version=`。"""
     key = "old_def_check"
     admin = make_user(username="p8_od_admin", role="superadmin")

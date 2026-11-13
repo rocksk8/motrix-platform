@@ -12,7 +12,7 @@
     草稿 ──submit──▶ 待審核 ──(分層簽核)──▶ 簽核中 ──▶ 已核准
       ▲                                                │
       └──────────── 已駁回 ◀──reject────────────────────┘
-    （已駁回可以再編輯、再送審；已核准要改只能請最高管理員處理）
+    （已駁回可以再編輯、再送審；已核准要改只能請最高管理者處理）
 
 **權限**（跟這個專案既有的作法一致）
 
@@ -44,7 +44,7 @@ from modules.case import payable_calendar as PC   # 行事曆「付款待辦」�
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
-from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from helpers import recycle_bin                       # 第 53 班 P1：刪除先進資源回收筒（IP-RB2）
 from modules.case import recycle_adapter as _RA
 from helpers.uploads import purge_document_files, limits_for as _upload_limits_for      # 草稿刪除時一併刪實體檔案（第44班）
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
@@ -789,8 +789,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                 if _PB._po_bank_missing(row, _PB.po_bank_block_since()):
                     raise HTTPException(409, _PB.PO_BANK_BLOCK_MSG)
             if old_paid and changes["paid_date"] != old_paid:
-                if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理員（admin 只是主管等級）
-                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理員" % old_paid)
+                if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理者（admin 只是主管等級）
+                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理者" % old_paid)
                 override = True
         now = datetime.now().isoformat(timespec="seconds")
         sets = ", ".join("%s=?" % k for k in changes)
@@ -817,14 +817,14 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
     if override:                                          # AB-M1：已付的付款日被清除或更改 ⇒ 另一個查得到的動作
         _audit(_tok(authorization), "extra_expense.paid_date_override", *_audit_target(quote_no, exp_id),
-               "%s 額外支出 #%s 付款日 %s → %s（最高管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
+               "%s 額外支出 #%s 付款日 %s → %s（最高管理者更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
     return {"ok": True, "updatedAt": now,
             **{_DATE_KEYS[k]: v for k, v in changes.items()}}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}")
 def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header(None)):
-    """刪除（僅草稿／已駁回）。已核准的要移除只能請最高管理員從資料庫處理——
+    """刪除（僅草稿／已駁回）。已核准的要移除只能請最高管理者從資料庫處理——
     已經計入成本與報表的數字不該被單方面刪掉。"""
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
@@ -840,17 +840,17 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         begin_write(conn)                          # 讀快照前先拿寫鎖
         with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
-                res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進暫存區（附件一併搬走、30 天內最高管理者可還原）
+                res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進資源回收筒（附件一併搬走、30 天內最高管理者可還原）
             except recycle_bin.BinError as e:
                 conn.rollback()
                 raise HTTPException(409, str(e))
-            if res is None:                            # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+            if res is None:                            # 資源回收筒模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
                 _RA.ExtraExpenseAdapter().delete_in_tx(conn, exp_id)
             conn.commit()
         if res is None:
             purge_document_files(orphan_files)     # 草稿／已駁回的單據一併刪掉它名下的實體檔案（原本會留成孤兒檔）
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"), _asum(row))
+               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」" + ("（已進資源回收筒）" if res else "（資源回收筒未安裝，已直接刪除）"), _asum(row))
         return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
     finally:
         conn.close()
@@ -859,14 +859,14 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
 @router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/void")
 def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={}),
                        authorization: str = Header(None)):
-    """作廢（僅最高管理員 superadmin；僅「已核准且尚未付款」；理由必填）。列保留（狀態＝已作廢）供稽核與申請人查詢，不計入任何合計／應付／出納／營運報表。
+    """作廢（僅最高管理者 superadmin；僅「已核准且尚未付款」；理由必填）。列保留（狀態＝已作廢）供稽核與申請人查詢，不計入任何合計／應付／出納／營運報表。
 
     GL 不另寫反向分錄：E11／E11b 只對 status='已核准' 的列產生，狀態離開後來源事件消失 ⇒ 總帳引擎自動作廢草稿或對已過帳傳票產生反向草稿
     （`ledger/engine.py::_orphans`；有測試）。已付款的列不可直接作廢：付款已是現金事件，請管理員先更正付款日（退回待付款）再作廢。"""
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     if user["role"] != "superadmin":
-        raise HTTPException(403, "只有最高管理員可以作廢已核准的額外支出")
+        raise HTTPException(403, "只有最高管理者可以作廢已核准的額外支出")
     reason = ((body or {}).get("reason") or "").strip()
     if not reason:
         raise HTTPException(400, "請填寫作廢理由")
@@ -881,7 +881,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
         if row["status"] != "已核准":
             raise HTTPException(409, "「%s」狀態不可作廢（草稿與已駁回請直接刪除；送審中請先駁回）" % row["status"])
         if (row["paid_date"] or "").strip():
-            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理員更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
+            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理者更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
         change = _change_of(row)
         now = datetime.now().isoformat(timespec="seconds")
         begin_write(conn)
@@ -1308,7 +1308,7 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
 # 也不會被結案報表撈到。撤銷或駁回後撤銷時，實體檔案一併刪掉，不留孤兒檔。
 #
 # 刻意**不支援**「刪除已核准的既有附件」：已經被簽核人看過、已計入成本的憑證不該
-# 被單方面移除，語意跟「已核准的項目不可刪除」一致（要移除請找最高管理員）。
+# 被單方面移除，語意跟「已核准的項目不可刪除」一致（要移除請找最高管理者）。
 
 CHANGE_EDITABLE = ("", "草稿", "已駁回")
 

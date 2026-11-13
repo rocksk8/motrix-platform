@@ -171,8 +171,8 @@ def two_branches(tmp_path):
 
 def test_git_merge_with_drivers_keeps_both_sides(two_branches):
     r = two_branches
-    SETUP.install(r)
-    assert SETUP.problems(r) == []
+    SETUP.install(r, strict=False)
+    assert SETUP.problems(r, strict=False) == []
     _g(r, "merge", "-q", "--no-ff", "wip/a", "-m", "a")
     res = _g(r, "merge", "--no-ff", "wip/b", "-m", "b", check=False)
     assert res.returncode == 0, res.stdout + res.stderr
@@ -183,7 +183,7 @@ def test_git_merge_with_drivers_keeps_both_sides(two_branches):
 def test_git_cherry_pick_with_drivers_keeps_both_sides(two_branches):
     """列車是一包一包 cherry-pick 上去的：同樣要兩邊都留。"""
     r = two_branches
-    SETUP.install(r)
+    SETUP.install(r, strict=False)
     _g(r, "checkout", "-q", "-b", "train/1", "platform")
     _g(r, "cherry-pick", "wip/a")
     res = _g(r, "cherry-pick", "wip/b", check=False)
@@ -206,7 +206,7 @@ def test_rc_without_drivers_git_reports_a_conflict(two_branches):
 def test_rc_driver_falls_back_to_conflict_markers_on_unsafe_shape(two_branches):
     """驅動裝了，但兩邊改了同一段舊內容 ⇒ 驅動交給 git merge-file：衝突標記、exit≠0。"""
     r = two_branches
-    SETUP.install(r)
+    SETUP.install(r, strict=False)
     for name, txt in (("wip/c", "- 甲改"), ("wip/d", "- 乙改")):
         _g(r, "checkout", "-q", "-b", name, "platform")
         _w(r, "CHANGELOG.md", BASE.replace("- old", txt))
@@ -221,17 +221,45 @@ def test_rc_driver_falls_back_to_conflict_markers_on_unsafe_shape(two_branches):
 
 def test_setup_check_detects_stale_copy_and_missing_config(two_branches):
     r = two_branches
-    assert any("沒有登記" in p for p in SETUP.problems(r))
-    copy = SETUP.install(r)
+    assert any("沒有登記" in p for p in SETUP.problems(r, strict=False))
+    copy = SETUP.install(r, strict=False)
     copy.write_text("# 舊版\n", encoding="utf-8")
-    assert any("過期" in p for p in SETUP.problems(r))
-    SETUP.install(r)
-    assert SETUP.problems(r) == []
+    assert any("過期" in p for p in SETUP.problems(r, strict=False))
+    SETUP.install(r, strict=False)
+    assert SETUP.problems(r, strict=False) == []
     SETUP.remove(r)
-    assert SETUP.problems(r)
+    assert SETUP.problems(r, strict=False)
 
 
 def test_cli_usage_error_is_not_a_silent_success(tmp_path):
     res = subprocess.run([sys.executable, str(REPO / "tools" / "platform" / "merge_drivers.py"), "bogus"],
                          capture_output=True)
     assert res.returncode == 2
+
+
+# ── 登記的直譯器只准 .venv312（hichan-3 審查 L）────────────────────────────────
+
+@pytest.mark.parametrize("py,ok", [
+    ("D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe", True), (r"d:\motrix-platform\.VENV312\Scripts\python.exe", True),
+    ("C:/Python312/python.exe", False), ("D:/Claude-pm/runner/venv/Scripts/python.exe", False), ("D:/x/.venv312-old/python.exe", False)])
+def test_python_ok_accepts_only_the_project_venv(py, ok):
+    assert (SETUP.python_ok(py) is None) == ok
+
+
+_FOREIGN_PY = r"C:\Python312\python.exe"          # 不含 .venv312 這一層的路徑（只用字串判斷，不需要真的存在）
+
+
+def test_install_refuses_a_foreign_interpreter_and_writes_nothing(two_branches):
+    r = two_branches
+    with pytest.raises(SystemExit) as e:
+        SETUP.install(r, python=_FOREIGN_PY)                # 預設 strict：明確給一個不在 .venv312 之下的直譯器（不靠誰在跑測試——建包用 .venv312 跑時 sys.executable 就在其下）
+    assert "拒絕登記" in str(e.value)
+    assert SETUP.problems(r, strict=False) and not (SETUP.common_dir(r) / "motrix").exists()
+
+
+def test_check_flags_a_registered_driver_with_a_foreign_interpreter(two_branches):
+    r = two_branches
+    SETUP.install(r, python=_FOREIGN_PY, strict=False)      # 登記成一個不在 .venv312 的 python
+    assert SETUP.problems(r, strict=False) == []
+    bad = SETUP.problems(r)                                  # --check 預設 strict ⇒ 要抓到
+    assert bad and all(".venv312" in b for b in bad)

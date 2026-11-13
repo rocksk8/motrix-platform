@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>旅宿檔案更新 - MOTRIX 專案管理系統</title>
+  <title>旅宿檔案更新 - MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/display-labels.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -28,6 +28,17 @@
     .lg-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:8px 0; }
     .lg-form label { font-size:12px; color:var(--text-secondary); display:flex; flex-direction:column; gap:3px; }
     .lg-tag { font-size:12px; padding:1px 6px; border-radius:var(--radius); background:var(--icon-btn-bg); color:var(--text-secondary); }
+
+    /* ── 手機版（2026-11-12）：版面邊距、表格橫向捲動（第一欄固定）、表單 16px／44px ── */
+    @media (max-width: 767px) {
+      .lg-wrap { padding: 14px 12px 32px }
+      .lg-body { padding: 12px }
+      .lg-form { grid-template-columns: 1fr 1fr }
+      .lg-form input, .lg-form select, .lg-wrap input:not([type="checkbox"]):not([type="radio"]), .lg-wrap select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .lg-wrap .btn { min-height: 44px; padding: 8px 16px }
+      .lg-row { gap: 8px }
+      .lg-note { font-size: 13px; line-height: 1.6 }
+    }
   </style>
 </head>
 <body>
@@ -79,7 +90,7 @@
                   @click="compareSelected()">比較勾選的兩筆</button>
         </div>
         <p class="lg-dim" x-show="!records.length && loaded" data-lodging-empty>還沒有紀錄。</p>
-        <table class="data-table" x-show="records.length" style="margin-top:8px">
+        <table class="data-table m-scroll m-sticky" x-show="records.length" style="margin-top:8px">
           <thead><tr><th></th><th>時間</th><th>建立者</th><th>中心點</th><th>半徑</th><th>筆數</th><th>備註</th><th></th></tr></thead>
           <tbody>
             <template x-for="r in records" :key="r.id">
@@ -118,7 +129,7 @@
         </div>
         <div class="lg-note warn" x-show="detail && detail.record.googleCenter" style="margin-top:8px"
              data-lodging-google-note x-text="detail ? detail.record.googleCenterNote : ''"></div>
-        <table class="data-table" style="margin-top:8px">
+        <table class="data-table m-scroll m-sticky" style="margin-top:8px">
           <thead><tr><th>名稱</th><th>類別</th><th>登記證號</th><th>地址</th><th>直線距離</th><th>官方參考房價</th><th>最近詢價</th><th></th></tr></thead>
           <tbody>
             <template x-for="it in (detail ? detail.items : [])" :key="it.sourceId">
@@ -167,7 +178,7 @@
           <strong x-text="cmp ? ('比較：#' + cmp.a.id + '（' + fmtTime(cmp.a.createdAt) + '）與 #' + cmp.b.id + '（' + fmtTime(cmp.b.createdAt) + '）') : ''"></strong>
           <button class="btn btn-ghost btn-sm" @click="cmp = null">關閉</button>
         </div>
-        <table class="data-table" style="margin-top:8px">
+        <table class="data-table m-scroll m-sticky" style="margin-top:8px">
           <thead><tr><th>名稱</th><th>類別</th><th>A 距離</th><th>A 參考房價</th><th>B 距離</th><th>B 參考房價</th><th>說明</th></tr></thead>
           <tbody>
             <template x-for="r in (cmp ? cmp.rows : [])" :key="r.sourceId">

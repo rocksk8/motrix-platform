@@ -31,7 +31,7 @@ from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
-from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from helpers import recycle_bin                       # 第 53 班 P1：刪除先進資源回收筒（IP-RB2）
 from modules.case import recycle_adapter as _RA
 from core.txn import begin_write
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
@@ -530,18 +530,18 @@ def delete_completion_note(note_no: str, authorization: str = Header(None)):
         begin_write(conn)
         with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
-                res = recycle_bin.delete(conn, "completion_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
+                res = recycle_bin.delete(conn, "completion_note", note_no, user)    # 進資源回收筒（回簽檔一併搬走）
             except recycle_bin.BinError as e:
                 conn.rollback()
                 raise HTTPException(409, str(e))
-            if res is None:                                                         # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+            if res is None:                                                         # 資源回收筒模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
                 _RA.CompletionNoteAdapter().delete_in_tx(conn, note_no)
             conn.commit()
     finally:
         conn.close()
     _purge_notifications(note_no, ['completion_approval_request', 'completion_approved',
                                    'completion_returned'])
-    _audit(_tok(authorization), "completion.delete", "completion_note", note_no, note_no + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
+    _audit(_tok(authorization), "completion.delete", "completion_note", note_no, note_no + ("（已進資源回收筒）" if res else "（資源回收筒未安裝，已直接刪除）"))
     notify_module_activity("完工單", "刪除", user.get("display_name") or user["username"],
                            note_no, "case-management.html")
     return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
@@ -673,7 +673,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     else:
         if user["role"] != "superadmin":
             conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+            raise HTTPException(403, "僅最高管理者可執行此操作")
         _global_flow = resolve_active_flow_setting("completion")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
@@ -689,7 +689,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
             raise HTTPException(403, self_block_msg)
         all_done      = True
         _signed_tier_nos = []
-        detail_status = "超級管理員簽核"
+        detail_status = "最高管理者簽核"
 
     if all_done:
         appr["approvedBy"]        = user["username"]

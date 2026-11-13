@@ -62,10 +62,11 @@ SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
               "archive.py",            # 備份失敗告警信
               "routers/system.py",     # 寄信設定的測試信
               "helpers/geo.py",        # 地理編碼告警信
-              "helpers/company_setup.py",   # 本公司資料設定狀態告警信（寄客戶端最高管理員）
+              "helpers/company_setup.py",   # 本公司資料設定狀態告警信（寄客戶端最高管理者）
               "modules/permmatrix/service.py",   # 高風險授權待生效／生效／撤銷通知：寄給其他最高管理者與申請人（非維護者）
               "modules/case/case_deadlines.py",   # 保固到期信的觸發點（T78 R1）：寄給案件負責業務與財務群組（非維護者）；本檔只傳資料值給 email_notify._send_warranty_expiry、不含字面文案（文案在 email_notify._warranty_expiry_mail），列入掃描＝日後有人在這裡加行內文案會被 GW1 抓到
-              "helpers/notify_actions.py")   # 額外通知動作（BP-4 S4）：依管理者設定寄給單據相關人員（非維護者）
+              "helpers/notify_actions.py",   # 額外通知動作（BP-4 S4）：依管理者設定寄給單據相關人員（非維護者）
+              "helpers/line_binding.py")   # 「提醒未綁定的人」信：寄給一般同仁（非維護者）
 
 #: 有送信、而**刻意不掃**的檔：`{路徑: 理由}`。理由不可以空白；清單裡的檔必須仍是送信檔（過期要刪）。
 #: 📌 與 SCAN_FILES 合起來＝「送信檔都有人決定過」（`test_every_mail_sender_is_classified`）。

@@ -4,7 +4,7 @@
 為什麼一次加齊：之後再加欄就是第二次 migration（底層預留，使用者 2026-10-01「都要動到底層了，思考先行預留」）。
 - kind：''＝舊版案件額外支出（行為不變）；其餘由費用單據定義（請購／差旅／採購／零用金…）決定
 - doc_code：人看的單號（RQ-／TE-／PC-／PO-YYYYMM-NNN，由 `next_entity_code(…, code_col="doc_code")` 產生）；空字串不受唯一限制
-- data_json／lines_json：超級管理員定義的欄位值與明細列（讀寫都不得丟未知鍵）；def_version：建立當下的欄位定義版本
+- data_json／lines_json：最高管理者定義的欄位值與明細列（讀寫都不得丟未知鍵）；def_version：建立當下的欄位定義版本
 - department_id：費用歸屬單位（無案件時的成本中心）
 - payee_type／payee_name／payee_bank／payee_account：收款人（員工或廠商；銀行資料的權威來源是 payroll 的銀行資料表，這裡只留單據當下快照／手填）
 - pay_terms／remit_date／pay_method／pay_account_code／paid_by：出納撥款（採購單：核准後出納填匯款日＋付款條件；付款方式決定總帳貸方）

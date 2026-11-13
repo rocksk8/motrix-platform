@@ -1522,7 +1522,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat) {
@@ -1544,7 +1544,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
@@ -1566,7 +1566,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat) {
@@ -1588,7 +1588,7 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理者審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)

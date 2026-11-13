@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""刪除暫存區的核心動作：進暫存區（delete）、還原（restore）、永久清除（purge）、列表／詳情／狀態、每日工作（run_daily）。
+"""資源回收筒的核心動作：進資源回收筒（delete）、還原（restore）、永久清除（purge）、列表／詳情／狀態、每日工作（run_daily）。
 
 單據怎麼進出由擁有模組的 adapter 決定（helpers/recycle_bin.Adapter）；這裡只做『通用』的事：快照存檔、附件搬移、狀態機、稽核與通知。
 交易約定：
 - `delete()` 在**呼叫端的寫入交易內**執行，不 commit（附件先搬、再寫列、再刪資料列；任一步失敗就搬回並丟例外）。
-  呼叫端之後若回滾 ⇒ 暫存區沒有那一列、附件卻在隔離區 ⇒ 每日工作 `reconcile()` 搬回原路徑。
+  呼叫端之後若回滾 ⇒ 資源回收筒沒有那一列、附件卻在隔離區 ⇒ 每日工作 `reconcile()` 搬回原路徑。
 - `restore()`／`purge()` 自己 commit（它們由 API 呼叫，連線是 API 的）。
 """
 import json
@@ -30,7 +30,7 @@ def _now():
 
 
 def retention_days(conn=None) -> int:
-    """暫存區保留天數：設定 `recycle_bin.retention_days`（預設 30、7～365）；讀不到或不合法 ⇒ 後備 `RB.RETENTION_DAYS`（30）。"""
+    """資源回收筒保留天數：設定 `recycle_bin.retention_days`（預設 30、7～365）；讀不到或不合法 ⇒ 後備 `RB.RETENTION_DAYS`（30）。"""
     try:
         from helpers import settings_groups, settings_registry as SR      # noqa: F401  確保群組已登錄
         v = int(SR.get("recycle_bin", "retention_days", conn=conn))
@@ -75,12 +75,12 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
     cap = RB.MAX_SNAPSHOT_BYTES_ADMIN if (user or {}).get("role") in ("admin", "superadmin") else RB.MAX_SNAPSHOT_BYTES
     if len(payload.encode("utf-8")) > cap:
         more = "" if cap == RB.MAX_SNAPSHOT_BYTES_ADMIN else "（管理員可刪除到 %d MB）" % (RB.MAX_SNAPSHOT_BYTES_ADMIN // (1024 * 1024))
-        raise RB.BinError("too_large: 這張單據的資料太大，無法進暫存區（上限 %d MB）%s" % (cap // (1024 * 1024), more))
+        raise RB.BinError("too_large: 這張單據的資料太大，無法進資源回收筒（上限 %d MB）%s" % (cap // (1024 * 1024), more))
     token = uuid.uuid4().hex
     try:
         manifest = Q.move_in(token, _files_of(snap))
     except OSError as e:
-        raise RB.BinError("附件搬進暫存區失敗，單據未刪除：%s" % e)
+        raise RB.BinError("附件搬進資源回收筒失敗，單據未刪除：%s" % e)
     now = _now()
     try:
         cur = conn.execute(
@@ -101,7 +101,7 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
             Q.remove(token)
         except OSError as e:                # 單據沒刪成、附件已全部搬回；只是空的隔離資料夾暫時清不掉 ⇒ 仍以 BinError 回報（不丟裸 OSError），每日工作會清
             logger.warning("recyclebin: 單據 %s 刪除失敗後空的隔離資料夾 %s 清不掉：%s", entity_id, token, e)
-            raise RB.BinError("單據未刪除（資料與附件都在原處）；暫存區的暫存資料夾稍後會自動清理")
+            raise RB.BinError("單據未刪除（資料與附件都在原處）；資源回收筒的暫存資料夾稍後會自動清理")
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
             "purge_after": purge_after_for(now, conn), "files": sum(1 for m in manifest if m.get("state") == "moved"),
@@ -109,10 +109,10 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
 
 
 def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dict:
-    """provider `recyclebin.delete`：送進暫存區（含連帶單據與附件）。不 commit。"""
+    """provider `recyclebin.delete`：送進資源回收筒（含連帶單據與附件）。不 commit。"""
     ad = RB.get_adapter(entity_type)
     if ad is None:
-        raise RB.BinError("沒有『%s』的暫存區 adapter（擁有模組未載入？）" % entity_type)
+        raise RB.BinError("沒有『%s』的資源回收筒 adapter（擁有模組未載入？）" % entity_type)
     begin_write(conn)                       # 快照前先拿寫鎖（呼叫端已在交易內 ⇒ 不動作）：快照與刪除之間不會有別的寫入插進來
     if approved:
         if (user or {}).get("role") != "superadmin":
@@ -130,7 +130,7 @@ def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dic
         for ct, cid in ad.cascade_children(conn, entity_id) or []:   # 子單據先進（外鍵順序）；還原時父層先
             cad = RB.get_adapter(ct)
             if cad is None:
-                raise RB.BinError("連帶刪除的『%s』沒有暫存區 adapter，單據未刪除" % ct)
+                raise RB.BinError("連帶刪除的『%s』沒有資源回收筒 adapter，單據未刪除" % ct)
             children.append(_bin_one(conn, cad, ct, cid, user, reason, via, group, (entity_type, entity_id), []))
         info = _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group, None, impact)
     except Exception:
@@ -203,8 +203,8 @@ def hub_badge(conn, user) -> dict:
 
 
 def reserved_ids(conn, entity_type="") -> set:
-    """provider `recyclebin.reserved`：暫存區保留中的單號（entity_id ＋ 快照 meta.codes）；見 helpers/recycle_bin.reserved_ids。"""
-    sql = "SELECT entity_id, codes FROM recycle_bin WHERE restore_status IN (?,?)"            # codes 欄＝進暫存區當下從快照抄出（不讀快照 JSON）
+    """provider `recyclebin.reserved`：資源回收筒保留中的單號（entity_id ＋ 快照 meta.codes）；見 helpers/recycle_bin.reserved_ids。"""
+    sql = "SELECT entity_id, codes FROM recycle_bin WHERE restore_status IN (?,?)"            # codes 欄＝進資源回收筒當下從快照抄出（不讀快照 JSON）
     args = list(LIVE)
     if entity_type:
         sql += " AND entity_type=?"
@@ -223,7 +223,7 @@ def reserved_ids(conn, entity_type="") -> set:
 def _row(conn, bin_id):
     r = conn.execute("SELECT * FROM recycle_bin WHERE id=?", (bin_id,)).fetchone()
     if r is None:
-        raise RB.BinError("not_found: 暫存區沒有這一筆")
+        raise RB.BinError("not_found: 資源回收筒沒有這一筆")
     return r
 
 
@@ -283,22 +283,22 @@ def detail(conn, bin_id) -> dict:
 
 
 def restore(conn, bin_id, user, audit=None) -> dict:
-    """還原一筆。自己 commit。`audit(conn, result)`（可選）在 commit 前、同一交易內呼叫：稽核寫不進去 ⇒ 整筆還原失敗並回到暫存區。失敗 ⇒ 檔案搬回隔離區、資料列留在暫存區、狀態 restore_failed 並記原因；丟 BinError。"""
+    """還原一筆。自己 commit。`audit(conn, result)`（可選）在 commit 前、同一交易內呼叫：稽核寫不進去 ⇒ 整筆還原失敗並回到資源回收筒。失敗 ⇒ 檔案搬回隔離區、資料列留在資源回收筒、狀態 restore_failed 並記原因；丟 BinError。"""
     begin_write(conn)                       # 寫鎖＋鎖內重讀：連點兩次還原，第二個等第一個做完、重讀到 restored 就被擋下
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
         conn.rollback()
-        raise RB.BinError("這一筆不在暫存區（狀態：%s）" % r["restore_status"])
+        raise RB.BinError("這一筆不在資源回收筒（狀態：%s）" % r["restore_status"])
     ad = RB.get_adapter(r["entity_type"])
     if ad is None:
         conn.rollback()
         raise RB.BinError("adapter_missing: 『%s』的擁有模組未載入，無法還原" % r["entity_type"])
-    if r["group_token"] and r["parent_type"]:                      # 子單據：父層還在暫存區 ⇒ 先還原父層
+    if r["group_token"] and r["parent_type"]:                      # 子單據：父層還在資源回收筒 ⇒ 先還原父層
         p = conn.execute("SELECT id, entity_label FROM recycle_bin WHERE group_token=? AND entity_type=? AND entity_id=? AND restore_status IN (?,?)",
                          (r["group_token"], r["parent_type"], r["parent_id"], S_IN_BIN, S_FAILED)).fetchone()
         if p is not None:
             conn.rollback()
-            raise RB.BinError("parent_in_bin: 請先還原上層單據『%s』（暫存區 #%d）" % (p["entity_label"], p["id"]))
+            raise RB.BinError("parent_in_bin: 請先還原上層單據『%s』（資源回收筒 #%d）" % (p["entity_label"], p["id"]))
     snap = json.loads(r["snapshot_json"] or "{}")
     manifest = json.loads(r["files_manifest_json"] or "[]")
     mapping, fails = Q.move_back(r["token"], manifest)
@@ -306,7 +306,7 @@ def restore(conn, bin_id, user, audit=None) -> dict:
         Q.stash_again(r["token"], mapping)
         conn.rollback()
         _fail(conn, bin_id, "附件搬回失敗：" + "；".join("%s（%s）" % (f["rel"], f["why"]) for f in fails[:5]))
-        raise RB.BinError("附件搬回失敗，已保留在暫存區：" + "；".join(f["rel"] for f in fails[:5]))
+        raise RB.BinError("附件搬回失敗，已保留在資源回收筒：" + "；".join(f["rel"] for f in fails[:5]))
     ctx = RB.RestoreContext(files=mapping, user=user)
     now = _now().isoformat()
     try:
@@ -319,7 +319,7 @@ def restore(conn, bin_id, user, audit=None) -> dict:
             audit(conn, {"entityType": r["entity_type"], "entityId": r["entity_id"], "label": r["entity_label"], "renumbered": bool(res.get("renumbered")),
                          "notes": res.get("notes") or []})
         conn.commit()
-    except Exception as e:                                         # noqa: BLE001 — 任何失敗都要還原到『還在暫存區』
+    except Exception as e:                                         # noqa: BLE001 — 任何失敗都要還原到『還在資源回收筒』
         conn.rollback()
         Q.stash_again(r["token"], mapping)
         msg = str(e) if isinstance(e, RB.BinError) else "還原時發生錯誤：%s" % e.__class__.__name__
@@ -334,7 +334,7 @@ def restore(conn, bin_id, user, audit=None) -> dict:
 
 
 def _fail(conn, bin_id, note):
-    """記『還原失敗』——只改還在暫存區的列（條件式）：不會把已還原／已清除的列翻成失敗（連點兩次還原的第二次）。"""
+    """記『還原失敗』——只改還在資源回收筒的列（條件式）：不會把已還原／已清除的列翻成失敗（連點兩次還原的第二次）。"""
     conn.execute("UPDATE recycle_bin SET restore_status=?, restore_note=? WHERE id=? AND restore_status IN (?,?)", (S_FAILED, note[:500], bin_id, S_IN_BIN, S_FAILED))
     conn.commit()
 
@@ -345,7 +345,7 @@ def purge(conn, bin_id, by="system", audit=None) -> dict:
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
         conn.rollback()
-        raise RB.BinError("這一筆不在暫存區（狀態：%s）" % r["restore_status"])
+        raise RB.BinError("這一筆不在資源回收筒（狀態：%s）" % r["restore_status"])
     if audit is not None:                   # 稽核先寫進同一個交易（寫不進去 ⇒ 還沒刪任何東西就整筆失敗）；之後才刪隔離檔
         try:
             audit(conn, {"entityType": r["entity_type"], "entityId": r["entity_id"], "label": r["entity_label"], "deletedAt": r["deleted_at"],

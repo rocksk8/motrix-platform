@@ -183,7 +183,7 @@ window.CM_PARTS.push(() => ({
 
     async unlockCase() {
       if (!this.selected) return
-      if (!(await MotrixUI.confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。', {danger: true}))) return
+      if (!(await MotrixUI.confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理者在「待我簽核」簽核通過後才會套用。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-unlock`, {
           method: 'POST',
@@ -199,7 +199,7 @@ window.CM_PARTS.push(() => ({
 
     async lockCase() {
       if (!this.selected) return
-      if (!(await MotrixUI.confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。', {danger: true}))) return
+      if (!(await MotrixUI.confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待簽核項目不受影響）。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-lock`, {
           method: 'POST',

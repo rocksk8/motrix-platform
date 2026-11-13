@@ -3,7 +3,7 @@
 
 1. 第 3 層（含）以後（`currentTier>=2`，0 起算）編輯 ⇒ **整條簽核鏈回第 1 層重跑**：所有已簽條目（含舊單沒有 signedFp 的、編輯者自己的）回待簽，`currentTier=0`。
 2. 第 1、2 層編輯 ⇒ 維持原行為（不整條重跑）。
-3. 存檔成功後寄信給「送審人＋全部啟用中、有 email 的超級管理員」；`editHistory` 照常寫一筆 `review_edit`。
+3. 存檔成功後寄信給「送審人＋全部啟用中、有 email 的最高管理者」；`editHistory` 照常寫一筆 `review_edit`。
 兩種情境各自分開驗。
 """
 import json
@@ -255,7 +255,7 @@ def test_chain_reset_tells_tier1_it_is_their_turn_with_in_app_notice_and_mail(cl
     assert r.status_code == 200, r.text
     assert len(_notes(names[0], "approval_request")) == n0 + 1, "第 1 層收到新的站內「待簽核」通知"
     assert len(_notes(names[1], "approval_request")) == n1, "第 2 層還沒輪到：不發待簽核"
-    assert any(names[0] + "@example.test" in to and "待審核" in subj for to, subj in sent), sent
-    assert not any(names[1] + "@example.test" in to and "待審核" in subj for to, subj in sent)
+    assert any(names[0] + "@example.test" in to and "待簽核" in subj for to, subj in sent), sent
+    assert not any(names[1] + "@example.test" in to and "待簽核" in subj for to, subj in sent)
     txt = [n["message"] for n in _notes(names[1], "approval_reconfirm")]
     assert txt and "整條簽核已回到第 1 層" in txt[0] and "請重新複查確認" not in txt[0], txt

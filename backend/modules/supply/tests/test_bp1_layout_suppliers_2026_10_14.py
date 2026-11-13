@@ -92,7 +92,7 @@ def test_original_table_is_untouched():
     start = src.index('<table class="data-table">')
     block = src[start:src.index("</table>", start)]
     for th in ("公司名稱", "內部簡稱", "統一編號", "類型", "主要聯絡人", "電話", "幣別", "付款條件", "狀態"):
-        assert "<th>%s</th>" % th in block
+        assert re.search(r"<th(?: [^>]*)?>%s</th>" % th, block), th      # 手機版面（h4）給部分表頭加了 class="m-hide"，表頭文字仍逐字在
     assert '@click="selectSupplier(s)"' in block and '@click.stop="openEdit(s)"' in block
     assert "x-for=\"s in filtered\"" in block
     assert "$store.layout" not in block                               # 原表格不讀版面

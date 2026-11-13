@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>Google 行事曆設定 — MOTRIX 專案管理系統</title>
+  <title>Google 行事曆設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -153,6 +153,32 @@
       margin: 8px 0;
       overflow-x: auto;
       white-space: pre;
+    }
+
+    /* ── 手機版（2026-11-12）：欄位單欄、整列可點、按鈕整排、狀態列可換行 ── */
+    @media (max-width: 767px) {
+      .gc-main { margin-left: 0; padding: 20px 12px 40px }
+      .gc-title { font-size: 18px }
+      .gc-card { margin-top: 16px }
+      .gc-card-head { padding: 14px 14px; flex-wrap: wrap }
+      .gc-card-body { padding: 14px !important }
+      .gc-row { grid-template-columns: 1fr !important; gap: 12px }
+      .gc-field input[type="text"], .gc-field input[type="password"] { font-size: 16px; min-height: 44px; padding: 10px 12px }
+      .gc-field label { font-size: 13px }
+      .gc-toggle { min-height: 52px; padding: 10px 14px }
+      .gc-toggle input[type="checkbox"] { flex-shrink: 0 }
+      .gc-toggle label { flex: 1; font-size: 15px }
+      .gc-ev-row { padding: 12px 0; min-height: 52px; gap: 12px }
+      .gc-ev-row input[type="checkbox"] { margin-top: 2px }
+      .gc-ev-label { font-size: 14px }
+      .gc-ev-desc { font-size: 12px; line-height: 1.5 }
+      .gc-check-row { flex-wrap: wrap; gap: 6px 10px; padding: 12px 0 }
+      .gc-check-row > * { min-width: 0 }
+      .gc-check-badge { padding: 4px 10px }
+      .gc-actions { flex-direction: column; gap: 10px }
+      .gc-actions .btn { width: 100%; min-height: 48px; justify-content: center }
+      .gc-card-head .btn, .gc-card-body .btn { min-height: 44px }
+      .gc-code, code { white-space: pre-wrap; overflow-wrap: anywhere }
     }
   </style>
 </head>

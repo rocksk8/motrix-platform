@@ -416,7 +416,7 @@ def test_audience_is_the_finance_mail_group_only_no_extra_usernames(client, make
 
 
 def test_superadmin_only_override_is_respected(client, make_user, mails):
-    """收件設定頁把這類信改成「僅超級管理員」⇒ 財務角色不收、只有超級管理員收（與其他財務信一致）。"""
+    """收件設定頁把這類信改成「僅最高管理者」⇒ 財務角色不收、只有最高管理者收（與其他財務信一致）。"""
     from helpers import _set_setting
     _finance(make_user, "fin_a", role="finance")
     _finance(make_user, "sa_only", role="superadmin")

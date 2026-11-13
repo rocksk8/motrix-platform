@@ -23,7 +23,7 @@ MODULE = ModuleSpec(
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up)],
     routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, dispatch_payslip_links.router, contractor_vouchers.router, remit_kinds_api.router],
     providers={
-        # 第 53 班 P1：刪除暫存區 adapter（IP-RB1；契約 helpers/recycle_bin.py）
+        # 第 53 班 P1：資源回收筒 adapter（IP-RB1；契約 helpers/recycle_bin.py）
         (_rb.CAP_ADAPTER, recycle_adapter.ET_DISPATCH): recycle_adapter.DispatchBinAdapter,
         (_rb.CAP_ADAPTER, recycle_adapter.ET_VOUCHER): recycle_adapter.VoucherBinAdapter,
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）

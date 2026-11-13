@@ -1116,6 +1116,22 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 
 ---
 
+## IP-ESTQ1　`case.estimate_prefixes`：曾開過估價單的單號字首（M01 → L1 `helpers/doc_type.py`）
+
+估價單（2026-11-13）的單號字首可在設定中心改；改了之後，舊字首開出去的單號仍要被稽核搜尋、獎金推導案件單號認得。資料（quotations.doc_type）屬 M01，L1 不讀那張表。**編號暫定，列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `modules/case/quotations.py::_estimate_prefixes`（`SELECT DISTINCT SUBSTR(quote_no,1,2) … WHERE doc_type='estimate'`，只回字首） |
+| 使用方 | L1 `helpers/doc_type.py::_historical_estimate_prefixes`（依設定世代快取） |
+| 形式 | provider，單一提供者 |
+| 語法 | `registry.single_provider("case.estimate_prefixes")(conn)` ⇒ 字首字串的可迭代物 |
+| 對方不在時 | 空集合（只認目前的估價單字首與 MQ；沒有 M01 就沒有估價單） |
+| 契約版本 | 1（2026-11-13） |
+| 守門 | `backend/tests/test_estimate_doc_type_2026_11_13.py`（改字首後舊單號仍可辨識）；`backend/tests/platform/test_integration_points_registered.py` |
+
+---
+
 ## IP-ALT1　`case.alt_view`：擇一方案報價的客戶版輸出資料（M01 → L1 `pdf_gen`；單一提供者；暫定號，列車定號；2026-10-13，M3 T7／T8）
 
 | 欄位 | 內容 |
@@ -1142,3 +1158,32 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 契約版本 | 1 |
 | 守門 | `backend/modules/case/tests/test_rule_provider_2026_10_14.py`（逐筆權限、金額遮蔽、旗標關不被呼叫、唯讀） |
 
+
+---
+
+## IP-DB1　`dashboard.mine_groups`：首頁「我的工作」的分組（各模組 → L1 `routers/dashboard_mine.py`；多提供者，名稱＝模組；暫定號，列車定號；2026-11-13，UX P1.5）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 任一模組（選用）；目前：M01 `modules/case/api/dashboard_groups.py::mine_groups`（名稱 `case`：我的案件、應收款項追蹤） |
+| 使用方 | `backend/routers/dashboard_mine.py`（`GET /api/dashboard/mine`；待簽核三組由 L1 自己算、每次現算，提供者的分組每人快取 30 秒） |
+| 形式 | provider，多提供者；依名稱排序逐一呼叫 |
+| 語法 | 提供：`("dashboard.mine_groups", "<模組>"): fn`；`fn(user: dict) -> [{"key","title","count","href","hrefLabel","items":[{"title","sub","href","tone"}],"kind"("work"\|"money"\|"remind"),"order","empty"}]`。分組由「使用者實際有的權限」決定（沒權限 ⇒ 不回那一組，不是回 0） |
+| 回傳 | L1 逐欄檢查（缺 key／title 丟棄；`tone` 只收 ok／warn／crit；`href` 只收站內相對路徑或 http(s)，`javascript:` 等清成空字串） |
+| 對方不在時 | 沒有提供者 ⇒ 只有簽核三組；某個提供者丟例外 ⇒ 只記 log，回應 `partial=true`，首頁顯示「部分資料暫時讀不到」（不當成「沒事」），失敗的結果不進快取 |
+| 契約版本 | 1 |
+| 守門 | `backend/tests/test_dashboard_mine_2026_11_13.py`（失敗只少一組、不快取失敗、href 白名單、權限指紋、每人快取）；`backend/tests/test_e2e_home_mine_work_2026_11_13.py` |
+
+---
+
+## IP-GR1　`greeting.new_quotes`：登入問候語的「離開期間新增 N 張報價單」（M01 → L1 `routers/auth.py::auth_greeting`；單一提供者；暫定號，列車定號；2026-11-13，UX P1.5）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `modules/case/api/dashboard_groups.py::new_quotes_since`（L1 不可直接讀 `quotations` 表：`test_case_access_l1`） |
+| 使用方 | `GET /api/auth/greeting`：只對最高管理者（看得到全部案件）附這個數字 |
+| 形式 | provider，單一提供者（`core.registry.single_provider("greeting.new_quotes")`） |
+| 語法 | `fn(since_iso: str) -> int`：本地時間（ISO，精確到秒）之後建立的報價單張數 |
+| 對方不在時 | 沒有提供者 ⇒ 離開期間摘要不附新增報價單數，其餘照常 |
+| 契約版本 | 1 |
+| 守門 | `backend/tests/test_login_greeting_2026_11_13.py::test_new_quotes_count_only_for_superadmin`；`backend/tests/platform/test_case_module_spec.py` |

@@ -202,13 +202,13 @@ def resolve_submitter_org_chain(conn, requester_username: str) -> list:
     2. **主管就是申請人本人時不再「跳過換人」，而是由本人簽自己這一層**
        （回傳的項目帶 `selfApproval=True`），並繼續往上加一層處主管。
     3. 處主管也是本人（申請人已在組織職權的頂端）→ 鏈到此為止，**不再指派
-       其他超級管理員當簽核人**；改由呼叫端用 `org_chain_notice_usernames()`
+       其他最高管理者當簽核人**；改由呼叫端用 `org_chain_notice_usernames()`
        知會最高管理者（見該函式）。
     4. 只要某一層解析到的不是本人，該層就是最後一層（有人比他高就由那個人簽，
        不需要再往上疊）。
 
     ⚠️ 2026-08-22i~2026-09-14 的舊行為是「身兼主管就往上換人、換到頂就抓一個
-    別的超級管理員」——結果是**高階主管送的單一律落到另一位最高管理者頭上**，
+    別的最高管理者」——結果是**高階主管送的單一律落到另一位最高管理者頭上**，
     而且他自己在組織上的那兩關完全沒有留下簽核紀錄。新行為讓每一關都留痕
     （本人簽的那幾關標 `selfApproval`），最高管理者退居知會。
 
@@ -258,9 +258,9 @@ def submitter_manager_tiers(conn, requester_username: str) -> list:
 
 def org_chain_notice_usernames(conn, tiers: list, requester_username: str) -> list:
     """整份簽核流程**每一層都只有申請人本人**（組織職權已到頂，例如處主管送的單）
-    時，回傳應該「知會」的其他在職超級管理員帳號清單；否則回傳空清單。
+    時，回傳應該「知會」的其他在職最高管理者帳號清單；否則回傳空清單。
 
-    這是 2026-09-15 改版拿掉「抓一個別的超級管理員來簽」之後的補償機制：最高
+    這是 2026-09-15 改版拿掉「抓一個別的最高管理者來簽」之後的補償機制：最高
     管理者不再被迫當簽核人，但不能因此變成完全不知情——單子送出時發一則知會
     通知，他仍可用 superadmin 的退回權限介入（check_reject_permission() 允許
     superadmin 隨時退回）。純判斷、不發通知，發送端見 helpers/audit.py::
@@ -540,7 +540,7 @@ def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):
             return False, 403, "無退回權限（非當層簽核人員）"
         return True, None, None
     if user["role"] != "superadmin":
-        return False, 403, "僅超級管理員可執行此操作"
+        return False, 403, "僅最高管理者可執行此操作"
     return True, None, None
 
 

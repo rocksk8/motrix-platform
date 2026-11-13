@@ -290,7 +290,7 @@ def _check_warranty_expiry() -> None:
                 try:
                     sent = _en._send_warranty_expiry(
                         dev.get("name") or sn or "未知設備", row["customer_name"] or "", row["quote_no"],
-                        days_left, expiry.isoformat(), owner_username=_owner(row["quote_no"]), out=out)
+                        days_left, expiry.isoformat(), owner_username=_owner(row["quote_no"]), out=out, sn=sn)
                 except Exception as exc:
                     _logger.warning("_check_warranty_expiry: 寄送失敗（%s／%s）：%s", row["quote_no"], sn, exc)
                     sent, out = False, {"outcome": _en.SEND_TRANSIENT_FAIL}

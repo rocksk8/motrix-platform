@@ -8,22 +8,22 @@ key、名稱、分類（業務／簽核／系統技術）、預設收件人、�
 ```
 事件收件人   notify_* 依事件決定的人（簽核人、申請人、負責人…）
 群組收件人   登記的預設群組：none（只寄事件收件人）／admins／superadmins
-超級管理員在「信件與通知收件設定」頁可逐類覆寫（`OVERRIDES_KEY`）：
+最高管理者在「信件與通知收件設定」頁可逐類覆寫（`OVERRIDES_KEY`）：
   default          照登記
-  superadmin_only  只寄超級管理員（事件收件人也不寄）
+  superadmin_only  只寄最高管理者（事件收件人也不寄）
   custom           事件收件人＋指定帳號＋指定角色（取代群組收件人）
 ```
-- 系統技術類預設**只寄超級管理員**（一般管理員不收）。
+- 系統技術類預設**只寄最高管理者**（一般管理員不收）。
 - 個人的通知設定只能退訂自己收得到的類型（`notification_muted`），不能把自己加進受限的類型。
-- 沒有登記的 key：執行時記 ERROR、只寄超級管理員（fail closed）；守門在靜態掃描時就擋下。
+- 沒有登記的 key：執行時記 ERROR、只寄最高管理者（fail closed）；守門在靜態掃描時就擋下。
 """
 
 import re
 from dataclasses import dataclass, field
 
 CATEGORIES = {"business": "業務", "approval": "簽核", "system": "系統技術"}
-GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與超級管理員", "superadmins": "僅超級管理員",
-          "finance": "財務角色與超級管理員"}   # 2026-10-05（第42班）：付款／匯款類跟「財務」角色走，不再寄全體 admin
+GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與最高管理者", "superadmins": "僅最高管理者",
+          "finance": "財務角色與最高管理者"}   # 2026-10-05（第42班）：付款／匯款類跟「財務」角色走，不再寄全體 admin
 MODES = ("default", "superadmin_only", "custom")
 ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
 
@@ -60,7 +60,7 @@ def register(key, name, category, group, event, impact, action, owner="core"):
     if group not in GROUPS:
         raise ValueError("信件類型 %s：預設群組 %r 不存在" % (key, group))
     if category == "system" and group != "superadmins":
-        raise ValueError("信件類型 %s：系統技術類的預設收件人必須是僅超級管理員" % key)
+        raise ValueError("信件類型 %s：系統技術類的預設收件人必須是僅最高管理者" % key)
     if key in _REGISTRY and _REGISTRY[key].owner != owner:
         raise ValueError("信件類型 %s 重複登記（%s／%s）" % (key, _REGISTRY[key].owner, owner))
     _REGISTRY[key] = MailType(key, name, category, group, event, impact, action, owner)
@@ -95,34 +95,34 @@ def subject(key, reason):
 # ── L1 登記的類型（模組自己的類型由模組 import 時 register）─────────────────────
 
 _A, _B, _S = "approval", "business", "system"
-_APPROVE_ACT = "請登入系統，於簽核佇列開啟該單據確認內容後核准或駁回。"
+_APPROVE_ACT = "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"
 _RESULT_ACT = "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"
 _RETURN_ACT = "請登入系統依退回說明修改內容後重新送審。"
 
 for _k, _n, _doc in (
-        ("approval_request", "報價單待審核", "報價單"),
-        ("shipping_submitted", "出貨單待審核", "出貨單"),
-        ("contractor_voucher_submitted", "承攬商匯款申請待審核", "承攬商匯款申請"),
-        ("invoice_voucher_submitted", "開票申請憑據待審核", "開票申請憑據"),
-        ("payment_request_submitted", "請款單待審核", "請款單"),
+        ("approval_request", "報價單待簽核", "報價單"),
+        ("shipping_submitted", "出貨單待簽核", "出貨單"),
+        ("contractor_voucher_submitted", "承攬商匯款申請待簽核", "承攬商匯款申請"),
+        ("invoice_voucher_submitted", "開票申請憑據待簽核", "開票申請憑據"),
+        ("payment_request_submitted", "請款單待簽核", "請款單"),
 ):
     register(_k, _n, _A, "none", "當層簽核人",
              "%s在您簽核之前不會進入下一個流程。" % _doc, _APPROVE_ACT)
 for _k, _n, _doc in (
-        ("next_tier", "報價單進入下一層審核", "報價單"),
-        ("shipping_next_tier", "出貨單進入下一層審核", "出貨單"),
-        ("contractor_voucher_next_tier", "承攬商匯款申請進入下一層審核", "承攬商匯款申請"),
-        ("invoice_voucher_next_tier", "開票申請憑據進入下一層審核", "開票申請憑據"),
-        ("payment_request_next_tier", "請款單進入下一層審核", "請款單"),
+        ("next_tier", "報價單進入下一層簽核", "報價單"),
+        ("shipping_next_tier", "出貨單進入下一層簽核", "出貨單"),
+        ("contractor_voucher_next_tier", "承攬商匯款申請進入下一層簽核", "承攬商匯款申請"),
+        ("invoice_voucher_next_tier", "開票申請憑據進入下一層簽核", "開票申請憑據"),
+        ("payment_request_next_tier", "請款單進入下一層簽核", "請款單"),
 ):
     register(_k, _n, _A, "none", "該層簽核人",
              "前一層已完成，%s在本層簽核之前不會繼續。" % _doc, _APPROVE_ACT)
-register("approved", "報價單審核完成", _A, "admins", "申請人",
+register("approved", "報價單簽核完成", _A, "admins", "申請人",
          "報價單已核准，可以對外提供。", _RESULT_ACT)
-for _k, _n in (("shipping_approved", "出貨單審核完成"),
-               ("contractor_voucher_approved", "承攬商匯款申請審核完成"),
-               ("invoice_voucher_approved", "開票申請憑據審核完成"),
-               ("payment_request_approved", "請款單審核完成")):
+for _k, _n in (("shipping_approved", "出貨單簽核完成"),
+               ("contractor_voucher_approved", "承攬商匯款申請簽核完成"),
+               ("invoice_voucher_approved", "開票申請憑據簽核完成"),
+               ("payment_request_approved", "請款單簽核完成")):
     register(_k, _n, _A, "none", "申請人", "單據已核准，進入後續作業。", _RESULT_ACT)
 for _k, _n in (("returned", "報價單退回修改"), ("shipping_returned", "出貨單退回修改"),
                ("contractor_voucher_returned", "承攬商匯款申請退回修改"),
@@ -131,21 +131,21 @@ for _k, _n in (("returned", "報價單退回修改"), ("shipping_returned", "出
     register(_k, _n, _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
 # 自訂模組（建構器）：單據簽核（提交／下一層／核准／退回）與「模組定義」送審審核（送審／核可／退回）
 for _k, _n, _ev, _imp in (
-        ("custom_record_submitted", "自訂模組單據待審核", "當層簽核人", "單據在您簽核之前不會進入下一個狀態。"),
-        ("custom_record_next_tier", "自訂模組單據進入下一層審核", "該層簽核人", "前一層已完成，單據在本層簽核之前不會繼續。"),
+        ("custom_record_submitted", "自訂模組單據待簽核", "當層簽核人", "單據在您簽核之前不會進入下一個狀態。"),
+        ("custom_record_next_tier", "自訂模組單據進入下一層簽核", "該層簽核人", "前一層已完成，單據在本層簽核之前不會繼續。"),
         ("custom_def_submitted", "自訂模組定義待審核", "模組審核人", "這一版模組定義在審核之前不會發布，新單據仍用現行版。")):
     register(_k, _n, _A, "none", _ev, _imp, _APPROVE_ACT)
-register("custom_record_approved", "自訂模組單據審核完成", _A, "none", "申請人", "單據已核准，進入後續狀態。", _RESULT_ACT)
+register("custom_record_approved", "自訂模組單據簽核完成", _A, "none", "申請人", "單據已核准，進入後續狀態。", _RESULT_ACT)
 register("custom_def_approved", "自訂模組定義審核完成", _A, "none", "送審人", "這一版模組定義已核可並發布。", _RESULT_ACT)
 register("custom_record_returned", "自訂模組單據退回修改", _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
 register("custom_def_returned", "自訂模組定義退回修改", _A, "none", "送審人", "這一版模組定義已退回，現行版不變。", "請登入系統，於模組建構器依退回原因修改草稿後重新送審。")
 register("resubmit_requester", "修改版報價單重新送審確認", _A, "none", "申請人",
          "修改版已重新進入簽核流程，原版本不再流轉。", _RESULT_ACT)
-register("bonus_submitted", "獎金分潤待審核", _A, "none", "輪到的簽核人（含代理人）",
+register("bonus_submitted", "獎金分潤待簽核", _A, "none", "輪到的簽核人（含代理人）",
          "獎金分潤在您簽核之前不會進入待發放。", _APPROVE_ACT + "（信中不含金額，請登入查看）")
 register("bonus_payout_ready", "獎金分潤核准待發放", _A, "none", "出納",
          "獎金分潤已核准，等待出納發放。", "請登入系統，於出納頁「獎金待發放」確認後標記已發放。（信中不含金額）")
-register("bonus_correction_submitted", "獎金更正單待審核", _A, "none", "輪到的簽核人（含代理人）",
+register("bonus_correction_submitted", "獎金更正單待簽核", _A, "none", "輪到的簽核人（含代理人）",
          "已發放獎金的更正在您簽核之前不會生效（不會沖轉傳票、不會補發）。", _APPROVE_ACT + "（信中不含金額，請登入查看）")
 register("bonus_correction_approved", "獎金更正單核准", _A, "none", "申請人；有補發時含出納",
          "更正已生效：沖轉與重開應付的傳票草稿已產生；有補發時等待出納發放。",
@@ -160,8 +160,8 @@ register("dev_case_relink_request", "業務開發案件連結異動申請", _A, 
          "案件與報價單的連結在核准之前維持原狀。", "請登入系統，於業務開發頁確認後核准或駁回。")
 register("case_close_blocked", "結案被防呆機制擋下", _A, "superadmins", "待處理的承辦人",
          "案件在前置條件完成之前無法結案。", "請依信中列出的未完成項目逐項處理後再結案。")
-register("case_change_requested", "已結案案件變更待審核", _A, "superadmins", "",
-         "變更在審核通過之前不會套用到已結案案件。", "請登入系統，於案件頁審核變更內容後套用或退回。")
+register("case_change_requested", "已結案案件變更待簽核", _A, "superadmins", "",
+         "變更在簽核通過之前不會套用到已結案案件。", "請登入系統，於案件頁簽核變更內容後套用或退回。")
 
 register("daily_task_assigned", "工作事項指派", _B, "none", "負責人",
          "您有新的工作事項需要處理。", "請登入系統查看工作事項內容與期限。")
@@ -195,6 +195,9 @@ register("settlement_finalized", "成本精算完結", _B, "admins", "",
          "案件成本已精算完結，可進行獎金分潤與結案。", "請登入系統查看精算結果。")
 register("case_closing_report", "案件結案報表", _B, "superadmins", "",
          "案件已結案，結案報表如附件。", "請檢閱附件；如需修正請於案件頁處理。")
+register("auth_lockout", "登入失敗鎖定告警", "system", "superadmins", "",
+         "有來源 IP 連續登入失敗而被鎖定（可能是有人在猜密碼）。LINE 為獨立通道：不需要 Email 也能收到。",
+         "請確認該 IP 與帳號是否為本人操作；非本人請檢查該帳號並考慮更換密碼。")
 register("monthly_report", "每月營運報表", _B, "superadmins", "報表收件人設定",
          "上月營運報表已產生。", "請檢閱附件或登入系統查看報表。")
 register("module_activity", "模組新增與異動", _B, "admins", "",
@@ -220,7 +223,7 @@ register("geo_quota_warning", "地圖定位額度達警戒線", _S, "superadmins
          "達到額度上限後，系統改用精度較低的免費定位來源；功能不會關閉。", "如需維持定位精度，請調整額度設定；下一個計費週期開始時自動恢復。")
 register("company_setup_alert", "本公司資料設定狀態告警", _S, "superadmins", "",
          "本公司資料未確認、判定失敗或暫時放行中時，對外文件可能暫停輸出或使用未經確認的公司資料。",
-         "請最高管理員至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
+         "請最高管理者至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
 register("system_test_mail", "測試信", _S, "superadmins", "",
          "本信僅用於確認寄信設定。", "收到本信表示寄信設定正確，無需處理。")
 

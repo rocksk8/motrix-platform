@@ -331,7 +331,7 @@ def test_first_time_hint_is_plain_dismissible_and_remembered():
     assert H.plain_problem(m.group(1)) == "" and "dismissHint()" in html and "motrix_system_hub_hint" in html
 
 
-# ── 7 使用者決定：沒有權限的項目預設隱藏（超級管理員可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
+# ── 7 使用者決定：沒有權限的項目預設隱藏（最高管理者可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
 def test_show_denied_is_a_registered_setting_with_ledger_and_loosening_rules(client, make_user):
     """可見度放寬走設定登錄表：群組已登錄、放寬方向＝up、風險＝security、有白話影響與風險說明；預設隱藏。"""
     from helpers import settings_registry as sr
@@ -425,7 +425,7 @@ def test_cache_is_per_user_so_a_filtered_view_never_leaks_to_someone_else(client
     sh, vh = _login(client, su, sp), _login(client, vu, vp)
     full = _hub(client, sh)
     assert full["total"] > 0
-    assert _hub(client, vh)["sections"] == [], "同一個 15 秒窗口內，沒有權限的人不能拿到超級管理員的快取"
+    assert _hub(client, vh)["sections"] == [], "同一個 15 秒窗口內，沒有權限的人不能拿到最高管理者的快取"
     assert _hub(client, sh)["total"] == full["total"]
     from routers import system_hub as R
     keys = list(R._CACHE)
@@ -634,3 +634,56 @@ def test_perm_can_raising_hides_only_that_card_and_the_hub_still_answers(client,
     u, p = make_user(username="hub_permboom", role="viewer", modules=["audit_log"])
     R.clear_cache()
     assert _hub(client, _login(client, u, p)) is not None, "perm.can 例外時整個系統中心仍要回 200"
+
+
+# ── 2026-11-13 回報：卡片連到不存在的錨點／規劃中的頁面 404／文字承諾頁面沒有的東西 ──────────────────────
+def test_card_fragments_land_somewhere_real():
+    """卡片 href 帶 `#xxx` ⇒ 目標頁面必須真的接得住：頁面裡有 `id="xxx"`，或目標是設定中心且 xxx 是登錄過的設定群組代碼。
+    （「備份與保留」曾指向 company-profile-settings.html#backup，那頁沒有這個錨點，使用者點進去只是停在頁首。）"""
+    import helpers.settings_groups  # noqa: F401  載入時登錄設定群組
+    from helpers import settings_registry as SR
+    group_keys = set(SR.groups())
+    assert {"retention", "overhead"} <= group_keys, "前提：設定群組有登錄（否則下面的判斷是空的）"
+    checked = 0
+    for c in _all_cards():
+        href = c["href"]
+        if "#" not in href or c.get("planned"):
+            continue
+        page, frag = href.split("#", 1)
+        html = source_tree.page_file(page).read_text(encoding="utf-8")
+        ok = ('id="%s"' % frag) in html or ("id='%s'" % frag) in html
+        if page == "settings-center.html":
+            ok = frag in group_keys
+        assert ok, "卡片 %s 的 %s 沒有地方接得住 #%s" % (c["id"], href, frag)
+        checked += 1
+    assert checked >= 1, "掃不到任何帶錨點的卡片 ⇒ 守門壞了"
+
+
+def test_settings_center_opens_the_group_named_in_the_url_hash():
+    html = source_tree.page_file("settings-center.html").read_text(encoding="utf-8")
+    assert "location.hash" in html and "g.group === want" in html
+
+
+def test_backup_card_description_promises_only_what_the_target_group_offers():
+    card = next(c for c in _all_cards() if c["id"] == "backup-retention")
+    assert card["href"] == "settings-center.html#retention"
+    for promised in ("最近一次備份", "還原說明"):
+        assert promised not in card["desc"], "卡片承諾了目標頁面沒有的功能：%s" % promised
+
+
+def test_planned_cards_are_not_clickable_and_do_not_use_engineering_words():
+    html = source_tree.page_file("system-hub.html").read_text(encoding="utf-8")
+    assert html.count("(it.denied || it.planned) ? null : it.href") == 2, "搜尋結果與分組兩處的連結都要在規劃中時拿掉 href"
+    assert "if (it.denied || it.planned)" in html, "點擊處理也要擋（保險，不只靠沒有 href）"
+    for c in _all_cards():                       # 所有卡片（不只規劃中的）都不可出現工程用語
+        assert "遷移" not in c["desc"] and "遷移" not in c["impact"] and "遷移" not in c["title"], c["id"]
+
+
+def test_overhead_card_opens_the_settings_center_group_and_is_no_longer_planned():
+    """T67 設計（SO-S1）：hub 卡片 overhead-settings 改連設定中心的 overhead 群組、拿掉 planned（不新增 overhead-settings.html）。
+    PM 2026-11-13 裁示現在就改。"""
+    card = next(c for c in _all_cards() if c["id"] == "overhead-settings")
+    assert card["href"] == "settings-center.html#overhead" and not card.get("planned"), card
+    assert "overhead-settings.html" not in json.dumps(card, ensure_ascii=False)
+    with pytest.raises(FileNotFoundError):                       # 不新增 overhead-settings.html（page_file 找不到頁面會丟 FileNotFoundError）
+        source_tree.page_file("overhead-settings.html")

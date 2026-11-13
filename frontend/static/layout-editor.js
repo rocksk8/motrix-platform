@@ -1,7 +1,7 @@
 /* layout-editor.js — P9 拖曳排版器（CUSTOMIZATION-SPEC §8.2；同頁編輯模式）。
  *
  * 頁面放一個 <span data-layout-editor-slot></span>（通常在標題旁）並先呼叫 MotrixLayout.init(...)。
- * 超級管理員才會看到「編輯版面」（後端 /api/definitions/… 另外守門）；按下去 ⇒ 同一頁右側出現排版面板，
+ * 最高管理者才會看到「編輯版面」（後端 /api/definitions/… 另外守門）；按下去 ⇒ 同一頁右側出現排版面板，
  * 頁面本身即時顯示草稿的樣子（MotrixLayout.show(state, 'edit')）。
  *
  * 只能動 GET /api/layout/{模組} 帶回的可自訂點（catalog.layout_points，後端已過濾）——
@@ -506,7 +506,7 @@
   // mount：Alpine 起來時掛一次；頁面是『旗標開啟後才插入編輯位置』時，插入後再呼叫一次（已掛過就不重複）。
   function mount() {
     var sess = window.MotrixLayout && window.MotrixLayout.session()
-    if (!sess || sess.role !== 'superadmin') return          // 只有超級管理員看得到（後端另外守門）
+    if (!sess || sess.role !== 'superadmin') return          // 只有最高管理者看得到（後端另外守門）
     var slot = document.querySelector('[data-layout-editor-slot]')
     if (!slot || document.getElementById('ml-editor')) return
     var st = document.createElement('style')

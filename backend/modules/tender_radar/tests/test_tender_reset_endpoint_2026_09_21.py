@@ -111,6 +111,8 @@ import helpers.company_setup as _cs
 _cs.status = lambda conn, root=None, now=None, demo=False: {'configured': True, 'reason': 'configured', 'via': 'test_default',
                                                  'missing': [], 'developer': False, 'grace': None}
 from fastapi.testclient import TestClient
+# 外網登入強化（2026-11-12）：子行程沒有 conftest ⇒ TestClient 對端 "testclient" 不是內網 ⇒ 最高管理者登入被 403 要求 TOTP；比照 conftest 把它列為內網對端
+import helpers.external_access as _ea; _ea.INTERNAL_PEER_NAMES = frozenset({"testclient", "127.0.0.1", "::1"})
 from helpers.auth import _hash_pw
 
 conn = db.get_db()

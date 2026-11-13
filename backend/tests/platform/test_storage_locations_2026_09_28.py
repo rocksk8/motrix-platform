@@ -3,7 +3,7 @@
 
 - 解析：有設定用設定（不存在 ⇒ 雲端存檔根目錄回 ""、不退回自動）；留空照原本的自動判斷（個資＝根目錄旁）。
 - 驗證：絕對路徑、存在、可寫；個資與雲端存檔根目錄／更新交付資料夾不可互相包含或相同；不過就不存（DB 不變）。
-- 建立：只由最高管理員的明確動作；只建最後一層；背景程式永不自動建（寫個資時資料夾不在 ⇒ 失敗，不建回來）。
+- 建立：只由最高管理者的明確動作；只建最後一層；背景程式永不自動建（寫個資時資料夾不在 ⇒ 失敗，不建回來）。
 - 守門：讀這三個位置的程式一律經 helpers.storage_locations（掃描＋正對照＋反向控制）。
 全部用 tmp 目錄；不碰真實雲端資料夾。
 """
@@ -149,7 +149,7 @@ def test_writable_probe_leaves_nothing_behind(tmp_path):
     assert SL._writable(str(tmp_path)) is True and list(tmp_path.iterdir()) == []
 
 
-# ── 建立（只由最高管理員明確動作；只建最後一層）────────────────────────────────
+# ── 建立（只由最高管理者明確動作；只建最後一層）────────────────────────────────
 
 def test_create_makes_only_the_last_level(tmp_path):
     from helpers import storage_locations as SL

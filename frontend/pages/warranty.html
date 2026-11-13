@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>保固追蹤 — MOTRIX 專案管理系統</title>
+  <title>保固追蹤 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/onepipe.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -78,7 +78,16 @@
     .filter-bar { flex-direction:column; align-items:stretch; gap:8px; }
     .search-wrap { width:100%; }
   }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .page-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .page-main select,
+      .page-main textarea { font-size: 16px; min-height: 44px; }
+      .page-main .btn { min-height: 44px; }
+      .page-main input[type=checkbox],
+      .page-main input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="warrantyPage()" x-init="init()" x-cloak>
 

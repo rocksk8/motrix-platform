@@ -7,9 +7,11 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>獎金更正單 - MOTRIX 專案管理系統</title>
+  <title>獎金更正單 - MOTRIX PLATFORM</title>
   <script src="../static/ui.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -24,7 +26,7 @@
     .bc-item-no{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .bc-badge{display:inline-block;font-size:12px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
     .st-gray{background:#F3F4F6;color:var(--text-secondary)}.st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
-    .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
+    .st-green{background:#DCFCE7;color:#15803D}.st-slate{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 已完成＝結束狀態：深灰藍 */
     .bc-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
     .bc-sec{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 10px;font-family:var(--font-zh)}
     .bc-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:12px;font-family:var(--font-zh)}
@@ -45,6 +47,42 @@
     .bc-log{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
     .bc-neg{color:var(--danger)}.bc-pos{color:#15803D}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bc-layout{grid-template-columns:1fr}}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：明細列「人員／目前金額／更正後(輸入)／差額／移除」五欄一行在 375px 放不下、輸入框 12px 小又窄。
+       ⇒ 手機每位人員一塊：姓名一行、三個金額並排（各有小標）、輸入 16px／44px 高；表頭列在手機隱藏（改由各格小標說明）。 */
+    /* 觸控：頁內小連結（回獎金分潤／原單 xxx）高度只有 19px ⇒ 用 padding 撐到 ~40px、負 margin 保持原版面（K 審 D） */
+    @media (hover:none){.page-main a[href^="bonus.html"]{display:inline-block;padding:10px 6px;margin:-10px -6px}}
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 28px}
+      .bc-card{padding:14px}
+      .bc-row{flex-wrap:wrap}
+      .bc-row[style*="font-weight:600"]{display:none}
+      .bc-row:has(> .who){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;padding:10px 0;border-bottom:1px dashed var(--border-light)}
+      .bc-row > .who{grid-column:1 / -1;font-weight:600;font-size:13px}
+      .bc-row .num{min-width:0;text-align:left}
+      .bc-row[data-testid^="bc-line-"] > .num::before,.bc-row[data-testid^="bc-view-"] > .num::before{display:block;font-size:11px;font-weight:400;color:var(--text-dim)}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(2)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(2)::before{content:"目前金額"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(3)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(3)::before{content:"更正後"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(4)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(4)::before{content:"差額"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(5){grid-column:1 / -1;width:auto !important}
+      .bc-row[data-testid^="bc-ded-"]{grid-template-columns:1fr 1fr}
+      .bc-in{width:100%;min-height:44px;font-size:16px;box-sizing:border-box}
+      .bc-sel,.bc-txt{font-size:16px;min-height:44px;box-sizing:border-box}
+      .bc-sel{max-width:100%}
+      textarea.bc-txt{min-height:88px}
+      .bc-txt[style*="width:180px"]{width:100% !important}
+      .bc-row > .bc-txt[style*="flex:1"]{flex:1 1 100% !important}
+      .bc-btn{min-height:44px;padding:8px 16px}
+      .bc-actions .bc-btn{flex:1 1 auto}
+      .bc-item{padding:14px 12px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:20px}
+      .bc-layout{grid-template-columns:240px 1fr;gap:14px}
+      .bc-in{width:90px;min-height:38px}
+      .bc-sel,.bc-txt{min-height:38px}
+      .bc-btn{min-height:38px}
+      .bc-item{padding:12px}
+    }
   </style>
 </head>
 <body x-data="bonusCorrectionPage()" x-init="init()" x-cloak>
@@ -76,13 +114,13 @@
             <div style="padding:10px;border-bottom:1px solid var(--border-light)">
               <select class="bc-sel filter" style="width:100%" x-model="statusFilter" @change="loadList()" data-testid="bc-filter">
                 <option value="">全部狀態</option>
-                <template x-for="s in statuses" :key="s"><option :value="s" x-text="s"></option></template>
+                <template x-for="s in statuses" :key="s"><option :value="s" x-text="MotrixStatus.label(s)"></option></template>
               </select>
             </div>
             <template x-for="it in items" :key="it.corr_no">
               <div class="bc-item" :class="{selected: selectedNo === it.corr_no}" @click="select(it.corr_no)" :data-testid="'bc-item-' + it.corr_no">
                 <span class="bc-item-no" x-text="it.corr_no"></span>
-                <span class="bc-badge" :class="badge(it.status)" x-text="it.status"></span>
+                <span class="bc-badge" :class="badge(it.status)" x-text="MotrixStatus.label(it.status)"></span>
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:2px" x-text="'原單 ' + it.quote_no"></div>
               </div>
             </template>
@@ -140,7 +178,7 @@
               <div class="bc-card">
                 <div class="bc-sec">
                   <span x-text="detail.corr_no"></span>
-                  <span class="bc-badge" :class="badge(detail.status)" x-text="detail.status" data-testid="bc-status"></span>
+                  <span class="bc-badge" :class="badge(detail.status)" x-text="MotrixStatus.label(detail.status)" data-testid="bc-status"></span>
                   <a :href="'bonus.html?q=' + encodeURIComponent(detail.quote_no)" style="margin-left:8px;color:var(--accent);text-decoration:underline" x-text="'原單 ' + detail.quote_no"></a>
                 </div>
                 <div class="bc-kv">
@@ -216,7 +254,7 @@
                       <span x-text="{reversal: '沖轉原應付', rebook: '重開應付', supplement: '補發支出', clawback: '追回應收（待確認）'}[v.kind] || v.kind"></span>
                       <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
                       <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bc-voucher-unavailable"></span>
-                      <span x-text="v.voided ? '已作廢' : v.status"></span>
+                      <span x-text="MotrixStatus.label(v.voided ? '已作廢' : v.status)"></span>
                     </div>
                   </template>
                 </div>
@@ -234,7 +272,7 @@
             </div>
           </template>
 
-          <div class="bc-empty" x-show="!form && !detail">從左邊選一張更正單，或輸入已發放的案件單號開新單。</div>
+          <div class="bc-empty" x-show="!form && !detail">從清單選一張更正單，或輸入已發放的案件單號開新單。</div>
         </div>
       </div>
     </main>
@@ -251,7 +289,7 @@
       _h(json) { const h = { Authorization: 'Bearer ' + this._token() }; if (json) h['Content-Type'] = 'application/json'; return h },
       money(n) { return 'NT$ ' + MotrixFormat.num(Number(n || 0)) },
       signed(n) { n = Number(n || 0); return (n > 0 ? '+' : '') + MotrixFormat.num(n) },
-      badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-purple', '已作廢': 'st-gray' }[st] || 'st-gray' },
+      badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-slate', '已作廢': 'st-gray' }[st] || 'st-gray' },
       async _err(r) { try { const d = await r.json(); return typeof d.detail === 'string' ? d.detail : ('HTTP ' + r.status) } catch (e) { return 'HTTP ' + r.status } },
 
       _initDone: false,
@@ -259,6 +297,7 @@
         // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
         if (this._initDone) return
         this._initDone = true
+        if (window.MotrixStatus) window.MotrixStatus.init()      // 管理者自訂的狀態名稱；旗標關 ⇒ 什麼都不改
         try {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}
           this.isSuper = s.role === 'superadmin'

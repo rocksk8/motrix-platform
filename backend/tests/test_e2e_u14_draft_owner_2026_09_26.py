@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""U14（使用者 2026-09-26 裁示）前端：自訂模組草稿只有建立者與超級管理員可以修改、送出。
+"""U14（使用者 2026-09-26 裁示）前端：自訂模組草稿只有建立者與最高管理者可以修改、送出。
 
 後端（C，c-audit-d）已擋 403 並在 GET 單據回 `canEdit`；本檔驗頁面照它顯示：
-同權限的其他人看不到「編輯」與「送出」，並看到說明；建立者、超級管理員看得到而且送得出去（正對照，斷言打 DB）。
+同權限的其他人看不到「編輯」與「送出」，並看到說明；建立者、最高管理者看得到而且送得出去（正對照，斷言打 DB）。
 """
 import json
 
@@ -84,7 +84,7 @@ def test_peer_with_same_permission_sees_no_edit_or_submit(live_server, make_user
 @pytest.mark.e2e
 @pytest.mark.parametrize("who", ["owner", "superadmin"])
 def test_owner_and_superadmin_can_edit_and_submit(live_server, make_user, new_context, client, who):
-    """正對照：建立者、超級管理員看得到編輯與送出，按下去 DB 真的變成已送出。"""
+    """正對照：建立者、最高管理者看得到編輯與送出，按下去 DB 真的變成已送出。"""
     admin, owner, _, no = _setup(client, make_user)
     user = owner if who == "owner" else admin
     errors = []

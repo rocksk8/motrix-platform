@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from helpers import download_name
 from helpers import perm
-from helpers import recycle_bin   # 第53班：刪除暫存區 L1 契約（IP-RB1／RB2）
+from helpers import recycle_bin   # 第53班：資源回收筒 L1 契約（IP-RB1／RB2）
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity, user_has_module
@@ -406,7 +406,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,
            f"{slip_no}（{d.get('contractorName', '')}）")
     notify_module_activity("勞報單", "建立", user.get("display_name") or user["username"],
-                            f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html")
+                            f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html", line_skip=True)
     return {"slip_no": slip_no, "calc": calc, "created_at": now,
             "taxRulesVersion": d["taxRulesVersion"], "privacyNotice": d.get("privacyNotice")}
 
@@ -524,22 +524,22 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
             raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
         with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
-                res = recycle_bin.delete(conn, "payslip", slip_no, user)    # 第53班（刪除暫存區 P1）：連結列一併進暫存區（可還原）；規則仍是上面的鎖定狀態
+                res = recycle_bin.delete(conn, "payslip", slip_no, user)    # 第53班（資源回收筒 P1）：連結列一併進資源回收筒（可還原）；規則仍是上面的鎖定狀態
             except recycle_bin.BinError as e:
                 raise HTTPException(409, str(e))
-            if res is None:                                                  # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），稽核明說
+            if res is None:                                                  # 資源回收筒模組不在 ⇒ 照舊硬刪（不可還原），稽核明說
                 from modules.payroll.recycle_adapter import PayslipBinAdapter
                 try:
-                    PayslipBinAdapter().delete_in_tx(conn, slip_no)          # 連結列＋本體在同一個交易、條件式刪除（狀態剛被改 ⇒ 409）；與進暫存區同一段實作
+                    PayslipBinAdapter().delete_in_tx(conn, slip_no)          # 連結列＋本體在同一個交易、條件式刪除（狀態剛被改 ⇒ 409）；與進資源回收筒同一段實作
                 except recycle_bin.BinError as e:
                     conn.rollback()
                     raise HTTPException(409, str(e))
             conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no if res is not None else slip_no + "（暫存區未啟用，已直接刪除）")
+    _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no if res is not None else slip_no + "（資源回收筒未啟用，已直接刪除）")
     notify_module_activity("勞報單", "刪除", user.get("display_name") or user["username"],
-                            slip_no, "payslips.html")
+                            slip_no, "payslips.html", line_skip=True)
 
 
 @router.post("/api/payslips/{slip_no}/export")
@@ -614,7 +614,7 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
     conn.commit()
     conn.close()
     notify_module_activity("勞報單", "調閱存檔", user.get("display_name") or user["username"],
-                            slip_no, "payslips.html")
+                            slip_no, "payslips.html", line_skip=True)
     _audit(_tok(authorization), 'payslip.archive_redownload', 'payslip', slip_no, slip_no, {'origIdx': orig_idx, 'exportCount': new_count})
     return {"export_count": new_count}
 
@@ -753,7 +753,7 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.void', 'payslip', slip_no, slip_no, {'reason': reason})
-    notify_module_activity("勞報單", "作廢", who, slip_no, "payslips.html")
+    notify_module_activity("勞報單", "作廢", who, slip_no, "payslips.html", line_skip=True)
     return {"status": "已作廢", "voided_at": now, "voided_by": who, "void_reason": reason}
 
 

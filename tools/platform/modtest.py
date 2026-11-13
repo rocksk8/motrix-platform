@@ -1294,6 +1294,16 @@ def _int_env(name, default):
         return default
 
 
+def keep_going(a) -> bool:
+    """`--keep-going`：全閘門不因紅而提早收手（預跑「一次收齊」用）。純函式，gate_plan／run_full 共用。"""
+    return bool(getattr(a, "keep_going", False))
+
+
+def slice0_stops_the_rest(a, window, code) -> bool:
+    """第一片（slice0）紅 ⇒ 其餘片與 e2e 不跑（O1）——除非 `--keep-going`。"""
+    return window == a.window + "s0" and code != 0 and not keep_going(a)
+
+
 def gate_plan(a, extra, overlap=False, collect=None):
     """全閘門的執行計畫（O1 切片＋fail-fast）⇒ (plan, main 段的 windows, failfast 環境, failfast pytest 參數, 題數預期 exp 或 None)。
     plan 每項 (段名, targets, pytest 參數, window)。切片關閉（MOTRIX_GATE_SLICES=0）、清單讀不到／找不到檔、或預先 collect-only 驗不過
@@ -1316,6 +1326,8 @@ def gate_plan(a, extra, overlap=False, collect=None):
     env = {"MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": str(ff.get("n", 10)), "MOTRIX_FAILFAST_QUIET_MIN": str(ff.get("quiet_min", 3)),
            "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto", "MOTRIX_GATE_RECORD": "1"}
     env = {k: os.environ.get(k, v) for k, v in env.items()}                 # 使用者明確設的優先
+    if keep_going(a):
+        env["MOTRIX_FAILFAST"] = "0"                                        # --keep-going：找出全部紅，不受 N 筆紅／靜默分鐘數截斷（旗標比環境變數優先）
     env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []))
     ff_args = ["-p", "failfast", "-rf"]
     main_args = n_main + dist_args()
@@ -1445,6 +1457,9 @@ def run_full(extra, a):
         result.setdefault("slices", {}).update(_vf)
         if _warn:
             print("[全閘門] ⚠ " + _warn)
+    if keep_going(a):
+        result["keep_going"] = True
+        print("[全閘門] --keep-going：不中斷預跑（failfast 關、slice0 紅也照跑其餘片與 e2e）；紅的結果照記，不可當放行證據")
     result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
     if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
         print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
@@ -1471,7 +1486,7 @@ def run_full(extra, a):
                     result.setdefault("slice_mismatch", []).append({"window": window, "executed": got, "collected": want})
                     code = 1
             done.append((name, window, code, out))
-            if window == a.window + "s0" and code != 0:           # O1：第一片紅 => 不開第二片（整合紅在第一片就停）
+            if slice0_stops_the_rest(a, window, code):            # O1：第一片紅 => 不開第二片（整合紅在第一片就停；--keep-going 例外）
                 break
         return done
 
@@ -1496,7 +1511,7 @@ def run_full(extra, a):
             finished = box["a"] + box["b"]
         else:
             finished = exec_group(grp_a)
-            if not (finished and finished[-1][1] == a.window + "s0" and finished[-1][2] != 0):
+            if not (finished and slice0_stops_the_rest(a, finished[-1][1], finished[-1][2])):
                 finished += exec_group(grp_b)
         for name, window, code, out in finished:
             if name == "main":
@@ -1511,7 +1526,7 @@ def run_full(extra, a):
                 result.update(merge_counts(result if result.get("passed") is not None else None, counts, code))
             else:
                 result["e2e"] = dict(counts, exit=code)
-            if window == a.window + "s0" and code != 0:
+            if slice0_stops_the_rest(a, window, code):
                 sliced_out = True
                 result["slice_stopped"] = "slice0"
                 print("[全閘門] slice0（靜態／產生檔守門）紅 => %s" % ("其餘片不跑（e2e 已同時在跑，結果照記）" if overlap else "停止，不跑其餘片與 e2e"))
@@ -1561,6 +1576,9 @@ def main(argv=None):
     ap.add_argument("--no-count", action="store_true",
                     help="dry-run 不做 collect-only 計題數（只要『挑出哪些檔』時用；items／full_items 為 null）。選題本身與題數無關，挑出的檔完全相同——第 45 班 O5")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
+    ap.add_argument("--keep-going", dest="keep_going", action="store_true",
+                    help="全量「不中斷」預跑（找出全部紅）：關 fail-fast／紅燈上限（MOTRIX_FAILFAST=0）、第一片（slice0）紅了也照跑其餘片與 e2e。"
+                         "結果照寫（紅就是紅，不可當放行證據）；全綠時與正常全量是同一份證據。整合者在正式閘門前預跑用。")
     ap.add_argument("--train", action="store_true",
                     help="列車專用：設 MOTRIX_TRAIN=1，跑差異題（預設 --base origin/platform）＋tests/platform；「是否最新」三題 skip 就判紅（PLAYBOOK §G4）")
     _full = full_max_workers()

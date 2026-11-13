@@ -320,7 +320,7 @@ def test_page_exists_calls_only_real_endpoints_and_states_the_partial_effect_war
         base = re.sub(r"/\d+$", "", c).rstrip("/")
         assert any(base == r or base == re.sub(r"/\{[^}]+\}$", "", r) for r in real), "頁面呼叫不存在的端點：" + c
     assert "部分生效" in page and "財務三鍵" in page and "至少 4 個不同的字" in page
-    assert "超級管理員本身不受角色或扣項影響" in page
+    assert "最高管理者本身不受角色或扣項影響" in page
 
 
 # ── 稽核補強（hichan-cf）：(a) 逐字相同要抓得到重新序列化 (b) 登入回應路徑 (c) 原因不得敷衍 ──────────────

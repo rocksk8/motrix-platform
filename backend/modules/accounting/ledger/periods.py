@@ -170,7 +170,7 @@ def reopen_period(conn, period_id, user, reason):
     if not (reason or "").strip():
         raise PeriodError("重開期間必須填寫理由。")
     if p["status"] == LOCKED:
-        raise PeriodError("這個期間已鎖定，請先由 superadmin 解鎖。")
+        raise PeriodError("這個期間已鎖定，請先由最高管理者解鎖。")
     if p["status"] != CLOSED:
         raise PeriodError("這個期間目前是開放的，不需要重開。")
     conn.execute("UPDATE gl_periods SET status='open' WHERE id=?", (period_id,))
