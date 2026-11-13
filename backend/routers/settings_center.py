@@ -141,15 +141,28 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
         raise HTTPException(400, "沒有送出任何要變更的欄位")
     if not reason:
         raise HTTPException(400, "請填寫變更原因")
-    return _do_publish(group, values, reason, request, actor)
+    expected = body.get("expectedValues")
+    if expected is not None and not isinstance(expected, dict):
+        raise HTTPException(400, "expectedValues 必須是物件")
+    return _do_publish(group, values, reason, request, actor, expected)
 
 
-def _do_publish(group, values, reason, request, actor):
+def conflict_body(group, e):
+    """409 衝突的 body（與 LINE 事件矩陣同形）：`{code, message, keys:[{key,name}], by, at}`；name＝欄位白話名。"""
+    defs = sr.field_defs(group)
+    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。",
+            "keys": [{"key": k, "name": (defs[k].label or defs[k].question or k) if k in defs else k} for k in e.keys],
+            "by": e.by, "at": e.at}
+
+
+def _do_publish(group, values, reason, request, actor, expected=None):
     """儲存／重置共用：先算分類（與 publish 共用 `_split`，寫入前的狀態才準）、再 publish。"""
     try:
         cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
-                         ip=(client_ip(request) if request else ""), actor=actor)
+                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected)
+    except sr.SettingConflict as e:
+        raise HTTPException(409, conflict_body(group, e))
     except sr.SettingError as e:
         raise HTTPException(400, {"message": str(e), "problems": e.problems})
     except Exception as e:                                   # noqa: BLE001
@@ -175,20 +188,29 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
     groups = body.get("groups")
     if not isinstance(groups, dict) or not groups:
         raise HTTPException(400, "沒有送出任何要變更的群組")
-    if "undo" in body or any(isinstance(sp, dict) and "expectedValues" in sp for sp in groups.values()):
-        # 多群組復原（`undo`＋每群組 `expectedValues` 逐欄比對）要等 S1c 的 CAS；現在不認得就明確拒絕，絕不悄悄當成一般儲存
-        raise HTTPException(400, "多群組復原尚未開放（需要逐欄比對，之後的版本提供）；請逐一群組使用「還原到某一版」。")
+    undo = body.get("undo")
+    if undo is not None and not isinstance(undo, bool):
+        raise HTTPException(400, "undo 必須是 true／false")
     if len(groups) > _BATCH_MAX_GROUPS:
         raise HTTPException(400, "一次最多只能儲存 %d 個群組" % _BATCH_MAX_GROUPS)
-    values_by = {}
+    values_by, expected_by = {}, {}
     for g, spec in groups.items():
         _need_open(g)
         vals = spec.get("values") if isinstance(spec, dict) else None
         if not isinstance(vals, dict) or not vals:
             raise HTTPException(400, "群組 %s 沒有送出任何要變更的欄位" % g)
         values_by[g] = vals
+        exp = spec.get("expectedValues")
+        if exp is not None and (not isinstance(exp, dict) or not exp):
+            raise HTTPException(400, "群組 %s 的 expectedValues 必須是非空物件" % g)
+        if undo and not exp:                                   # 復原一定要逐欄比對：沒帶就會把別人後來改的蓋回去
+            raise HTTPException(400, "復原必須為每個群組帶 expectedValues（套用後的值），否則可能蓋掉別人後來的修改")
+        if exp:
+            expected_by[g] = exp
     preview = body.get("preview") is True
     reason = _clip(str(body.get("reason") or "").strip())
+    if undo and not reason:
+        reason = "復原批次"
     if not preview and not reason:
         raise HTTPException(400, "請填寫變更原因")
     plans = {g: sr.plan(g, v, user=actor["username"]) for g, v in values_by.items()}
@@ -201,18 +223,43 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         for g, p in plans.items():
             items += _SN_items(g, p["fields"], actor["username"])
         return {"ok": True, "groups": plans, "recipients": _SN.preview_recipients(items)}
+    if expected_by:                                            # 預檢：任何一組已被別人改動 ⇒ 整批不寫（不留下寫一半的狀態）
+        found = []
+        for g, exp in expected_by.items():
+            try:
+                c = sr.expected_conflict(g, exp)
+            except sr.SettingError as e:
+                raise HTTPException(400, {"message": str(e), "problems": e.problems})
+            if c:
+                found.append((g, c))
+        if found:
+            raise HTTPException(409, _batch_conflict_body(found, [], None, list(values_by)))
     applied, results = [], {}
-    with _SN.batch():
+    with (_SN.batch(verb="復原", header="已復原批次儲存") if undo else _SN.batch()):
         for g, v in values_by.items():
             try:
-                results[g] = sr.publish(g, v, note=reason, user=actor["username"], reason=reason, ip=client_ip(request), actor=actor)
+                results[g] = sr.publish(g, v, note=reason, user=actor["username"], reason=reason, ip=client_ip(request), actor=actor,
+                                        expected_values=expected_by.get(g))
             except Exception as e:                             # noqa: BLE001
                 rest = list(values_by)
                 rest = rest[rest.index(g) + 1:]                # 失敗那組之後根本沒試過：回 notApplied，畫面才能分「失敗」與「未處理」
+                if isinstance(e, sr.SettingConflict):          # 預檢之後、寫入之前才被別人改（極少見）：同樣回 conflict 形狀
+                    raise HTTPException(409, _batch_conflict_body([(g, e)], applied, g, rest))
                 raise HTTPException(409, {"message": "有群組沒有存成功：%s（%s）。已寫入的群組仍然有效，其餘群組未處理，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
                                           "applied": applied, "failed": g, "notApplied": rest})
             applied.append(g)
     return {"ok": True, "groups": {g: {**results[g], "classification": plans[g]["fields"]} for g in applied}}
+
+
+def _batch_conflict_body(found, applied, failed, not_applied):
+    """跨群組批次的 409 衝突 body：`{code:'conflict', message, groups:[{group,label,keys:[{key,name}],by,at}], applied, failed, notApplied}`。
+    `found`＝`[(群組, SettingConflict)]`；單群組的形狀見 `conflict_body`（每個 groups 元素＝它加上 group／label）。"""
+    out = []
+    for g, e in found:
+        b = conflict_body(g, e)
+        out.append({"group": g, "label": sr.groups()[g]["label"], "keys": b["keys"], "by": b["by"], "at": b["at"]})
+    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。", "groups": out,
+            "applied": applied, "failed": failed, "notApplied": not_applied}
 
 
 def _SN_items(group, fields, user):

@@ -202,6 +202,15 @@ def history(conn, domain=None, key=None, limit=100, offset=0):
     return out
 
 
+def last_effective_change(conn, domain, key, field, now=None):
+    """某欄位最近一次**已生效**的變更（立即、已套用、或已到時且票數夠的待生效）的 `(誰, 何時)`；沒有任何紀錄 ⇒ None。
+    給逐欄 CAS 的衝突訊息用（「這個欄位剛被某某在某時改了」）。唯讀。"""
+    for r in history(conn, domain, key, limit=300):
+        if r["field"] == field and in_effect(r, now):
+            return (r.get("actor_display") or r.get("actor") or "", r.get("effective_at") or r.get("at") or "")
+    return None
+
+
 def state_of(conn, change_id):
     r = conn.execute("SELECT effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone()
     if r is None:

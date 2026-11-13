@@ -1232,12 +1232,11 @@
             // 金鑰回的是遮蔽字（或空字串）。**不放進輸入框**，只當狀態。
             this.keyMasked = data.google_maps_api_key || ''
             this.keySet = !!this.keyMasked
-            this.keyText = ''
-            this.keyCleared = false
             this.bkMasked = data.google_maps_browser_key || ''
             this.bkSet = !!this.bkMasked
-            this.bkText = ''
-            this.bkCleared = false
+            // ⚠️ 不在這裡把 keyText／bkText／keyCleared／bkCleared 歸零：它們一開始就是空／false，init 只跑一次；
+            // 這個 GET 的回應若晚於使用者已經輸入的金鑰（或按下「清除金鑰」），歸零會把使用者剛填的值靜默吃掉，
+            // 存檔時就存成空字串（T83 e2e 閘門抓到：map 設定頁測試 fill 在回應之前）。
           } else if (r.status === 403) {
             // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
             this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true

@@ -87,6 +87,59 @@ class SettingError(ValueError):
         self.problems = problems or []
 
 
+class SettingConflict(Exception):
+    """逐欄 CAS 失敗：呼叫端看到的舊值，在送出前已被別人改掉。`keys`＝衝突欄位鍵；`by`／`at`＝最近改的人與時間
+    （沒有帳本紀錄 ⇒ by＝「系統預設」或「舊路徑寫入，時間不明」、at＝空字串）。**不是** SettingError（不是 400 的輸入問題）。"""
+    def __init__(self, keys, by="", at=""):
+        super().__init__("這些設定在你送出前已被別人改動：%s" % "、".join(keys))
+        self.keys, self.by, self.at = list(keys), by, at
+
+
+def _same_value(a, b):
+    """CAS 用的相等：數字不分 int／float（JSON 來回），布林與數字不混。"""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b       # True == 1 在 Python 成立，這裡不讓它成立
+    num = lambda v: isinstance(v, (int, float))                               # noqa: E731
+    return (float(a) == float(b)) if (num(a) and num(b)) else a == b
+
+
+def _conflict_origin(conn, group, g, eff, keys):
+    """衝突欄位裡最近一次被改的 (誰, 何時)；都查不到紀錄 ⇒ 預設值＝「系統預設」，否則「舊路徑寫入，時間不明」。"""
+    from helpers import config_ledger as L
+    best = None
+    for k in keys:
+        try:
+            hit = L.last_effective_change(conn, "setting:%s" % group, group, k)
+        except Exception:                                   # noqa: BLE001 — 沒有帳本（極舊庫）⇒ 退路
+            hit = None
+        if hit and (best is None or hit[1] > best[1]):
+            best = hit
+    if best:
+        return best
+    return ("系統預設", "") if all(_same_value(eff[k], g["fields"][k].default) for k in keys) else ("舊路徑寫入，時間不明", "")
+
+
+def expected_conflict(group, expected, *, conn=None):
+    """唯讀預檢（跨群組批次用）：`expected`＝`{欄位鍵: 呼叫端看到的值}`；有任一欄與目前生效值不同 ⇒ 回 `SettingConflict`（**不丟**），否則 `None`。
+    只是「先看一眼、別寫到一半才發現」；真正的把關仍是 `publish(expected_values=)` 在寫鎖內的逐欄比對。未知欄位 ⇒ SettingError。"""
+    g = _g(group)
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        eff = _effective(c, group)
+        unknown = [k for k in expected if k not in g["fields"]]
+        if unknown:
+            raise SettingError("expected_values 含不存在的欄位：%s" % "、".join(map(str, unknown)))
+        bad = [k for k, v in expected.items() if not _same_value(eff[k], v)]
+        if not bad:
+            return None
+        by, at = _conflict_origin(c, group, g, eff, bad)
+        return SettingConflict(bad, by, at)
+    finally:
+        if own:
+            c.close()
+
+
 def _check_impact_scope(key, s, *, pending):
     """`impact_scope` 的結構驗證（None 合法＝尚未宣告）。`effective` 必須與欄位旗標一致（有 `requires_pending`／`loosen` ⇒ pending）。"""
     if s is None:
@@ -100,7 +153,7 @@ def _check_impact_scope(key, s, *, pending):
     if not _zh(s["amounts"]):
         raise ValueError("設定欄位 %r 的 impact_scope.amounts 需要一句繁中白話" % key)
     if not isinstance(s["reversible"], bool):
-        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是 true／false" % key)
+        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是「是」或「否」" % key)
     if s["effective"] not in ("immediate", "pending"):
         raise ValueError("設定欄位 %r 的 impact_scope.effective 只能是 immediate／pending" % key)
     if (s["effective"] == "pending") != bool(pending):
@@ -160,7 +213,7 @@ class SettingDef:
         """回問題描述字串；合法回 ''."""
         if self.type == "bool":
             if not isinstance(v, bool):
-                return "必須是 true／false"
+                return "必須是「是」或「否」"
             return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if self.type == "str":
             if not isinstance(v, str):
@@ -585,9 +638,9 @@ def banner_of(f, value, *, default=None, days=None):
             return None
     n = int(days or DEFAULT_CONFIRM_DAYS)
     if f.loosen:
-        when = "需等 %d 天確認期間，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、等確認期間後生效）" % n
+        when = "需等 %d 天，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、同樣等待期滿後生效）" % n
     elif f.requires_pending:
-        when = "需等 %d 天確認期間後才會生效，期間內可以撤銷" % n
+        when = "需等 %d 天後才會生效，期間內可以撤銷" % n
     else:
         when = "儲存後立即生效"
     s = f.impact_scope
@@ -728,9 +781,9 @@ def plan(group, values, *, user="", conn=None):
         if kind == "immediate":
             when_text = "立即"
         elif kind == "pending":
-            when_text = "%d 天確認期間後（%s 起）" % (days, when[:10])
+            when_text = "%d 天後（%s 起）" % (days, when[:10])
         elif kind == "pending_approval":
-            when_text = "另一位最高管理者核准、且 %d 天確認期間後（%s 起）" % (days, when[:10])
+            when_text = "另一位最高管理者核准、且 %d 天後（%s 起）" % (days, when[:10])
         else:
             when_text = "不變"
         effect = (f.effect.replace("{名稱}", f.label).replace("{舊}", show_value(f, old)).replace("{新}", show_value(f, v))
@@ -740,7 +793,7 @@ def plan(group, values, *, user="", conn=None):
                               "effectiveAt": when if kind in ("pending", "pending_approval") else None,
                               "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
-        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。" % days)
+        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天後生效」，儲存後會留下紀錄。" % days)
     out["recipients"] = plan_recipients(group, out["fields"], user=user)
     return out
 
@@ -823,13 +876,16 @@ def _notice_watermark(c):
         return None
 
 
-def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
+def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None, expected_values=None):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
     `requires_pending` 欄位與放寬（`loosen`）：不立即生效——寫待生效明細（確認期間後，可撤銷），讀取時到期即生效。
     **本次送出的每個欄位**（不論立即或待生效），同欄位更早的待生效項一律標 superseded（避免舊的放寬事後蓋過新的收緊）。
     回 `{"changed": 一般欄位有無變更, "version"?, "values", "changes", "pending": [待生效項]}`；都沒有變更 ⇒ `{"changed": False, "pending": []}`。
-    驗證不過 ⇒ SettingError（帶 problems）；有送審中的版本 ⇒ `core.definitions.DefinitionConflict`。"""
+    驗證不過 ⇒ SettingError（帶 problems）；有送審中的版本 ⇒ `core.definitions.DefinitionConflict`。
+    `expected_values`（選填，`{欄位鍵: 呼叫端看到的值}`）＝逐欄 CAS：在 `begin_write` 之後、寫入前，逐欄比對目前**生效值**
+    （含已到時的待生效覆蓋層）；任一欄不符 ⇒ `SettingConflict(keys, by, at)`，什麼都不寫。只比對有列出的欄位——
+    同群組別的欄位被別人改，不會誤拒。復原＝以 `expected_values=套用後的值` 回寫套用前的值。"""
     from datetime import datetime, timedelta
     from core.txn import begin_write
     from helpers import config_ledger as L
@@ -851,6 +907,14 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         _items = []                                 # 變更通知項目（commit 之後才發；見 helpers/settings_notify）
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
+        if expected_values:
+            unknown = [k for k in expected_values if k not in g["fields"]]
+            if unknown:
+                raise SettingError("expected_values 含不存在的欄位：%s" % "、".join(map(str, unknown)))
+            bad = [k for k, v in expected_values.items() if not _same_value(eff[k], v)]
+            if bad:
+                by, at = _conflict_origin(c, group, g, eff, bad)
+                raise SettingConflict(bad, by, at)
         pend, imm, loose = _split(g, eff, values)
         new = _merged(base, imm)
         problems = validate_values(group, _merged(new, pend))
@@ -889,7 +953,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                     _items += [_SN.setting_item(group, x["field"], x["old"], x["new"], "pending_approval" if need else "pending", actor=_who,
                                         reason=reason or note, effective_at=when, required=need) for x in part]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
-                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天後生效」，並已留下紀錄。" % days)
         if not changes and not pend and not result["superseded"]:
             if began:
                 c.rollback()

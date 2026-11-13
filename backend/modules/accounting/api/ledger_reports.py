@@ -274,7 +274,7 @@ def put_role(body: dict = Body(...), authorization: str = Header(None)):
         _check_role_target(conn, p["account_code"])
         others = _L.real_superadmins(conn, user["username"])        # 展示帳號不算第二位
         if not others:
-            raise HTTPException(409, "角色對應的變更需要另一位在職的最高管理者核准；目前沒有第二位最高管理者，無法申請。")
+            raise HTTPException(409, "目前只有一位最高管理者，科目角色變更需要第二位核准。請先到『使用者管理』新增第二位最高管理者。")   # 展示帳號不算；單人公司先新增第二位真人最高管理者（單人直接生效另案，待使用者裁示）
         if _current_role_code(conn, p) == p["account_code"]:
             raise HTTPException(409, "這個角色目前已經是這個科目，不需要變更。")
         key = _role_key(p)

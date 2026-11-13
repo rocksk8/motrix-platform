@@ -1509,7 +1509,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!s || !s.token) return
     var my = ++_menuSeq
     _setMenuState('pending')
-    (window.motrixBootFetch || fetch)('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
+    ;(window.motrixBootFetch || fetch)('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
       .then(function (d) {
         if (my !== _menuSeq) return
