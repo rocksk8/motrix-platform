@@ -5,10 +5,11 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>使用者管理 — MOTRIX 專案管理系統</title>
+  <title>使用者管理 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/users-duty.js"></script>
+  <script src="../static/org-gaps.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -176,6 +177,8 @@
 
   <!-- MAIN -->
   <div class="users-main">
+    <!-- 組織設定缺口（批次 5a）：沒有部門的人／沒有主管的部門／沒人擔任財務；管理者以上才會顯示，沒缺口時整塊隱藏 -->
+    <div id="org-gaps" data-org-gaps style="display:none"></div>
     <!-- 頁頭 -->
     <div class="pg">
       <div class="pg__l">
@@ -502,13 +505,20 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="form-group">
-            <label class="form-label">E-mail <span style="color:var(--text-dim);font-size:12px">（自動帶入報價單）</span></label>
+            <label class="form-label">個人 E-mail <span style="color:var(--text-dim);font-size:12px">（登入與系統通知用）</span></label>
             <input class="form-input" type="email" x-model="form.email" placeholder="name@example.com">
           </div>
           <div class="form-group">
             <label class="form-label">電話 <span style="color:var(--text-dim);font-size:12px">（自動帶入報價單）</span></label>
             <input class="form-input" type="text" x-model="form.phone" placeholder="02-1234-5678">
           </div>
+        </div>
+        <!-- 報價用公司信箱（2026-11-13）：只有最高管理者能設；開報價單時優先帶入這一個。沒填 ⇒ 用公司對外信箱 ⇒ 再沒有才用上面的個人 E-mail -->
+        <div class="form-group" data-testid="quote-email-group">
+          <label class="form-label">報價用公司信箱 <span style="color:var(--text-dim);font-size:12px">（開報價單時自動帶入；沒填就用公司對外信箱）</span></label>
+          <input class="form-input" type="email" x-model="form.quoteEmail" data-testid="quote-email-input" placeholder="例：name@your-company.com" :disabled="!isSuperAdmin">
+          <div class="hint" x-show="quoteEmailHint()" x-text="quoteEmailHint()" data-testid="quote-email-hint" style="color:#B45309"></div>
+          <div class="hint" x-show="!isSuperAdmin">只有最高管理者可以設定這一欄。</div>
         </div>
         <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；告知文字在「公司資料設定」維護） -->
         <div data-privacy-card style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
@@ -923,7 +933,7 @@
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
       _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
-      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
+      form: { username:'', displayName:'', email:'', phone:'', quoteEmail:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
       get systemPresets() {
         return [
           {key:'superadmin', label: this.roleLabels.superadmin || '最高管理者'},
@@ -1220,9 +1230,20 @@
         this.toast('角色已刪除')
       },
 
+      // 報價用公司信箱的網域提醒：只提醒、不擋存檔（格式錯誤才會被後端拒絕）
+      quoteEmailHint() {
+        const e = (this.form.quoteEmail || '').trim().toLowerCase()
+        if (!e) return ''
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return '這個信箱的格式看起來不對，存檔時會被擋下。'
+        const d = e.split('@')[1]
+        const personal = ['gmail.com','yahoo.com','yahoo.com.tw','hotmail.com','outlook.com','live.com','icloud.com','msn.com','me.com','qq.com','163.com','proton.me','protonmail.com','pchome.com.tw','seed.net.tw']
+        if (personal.includes(d)) return '這看起來是私人信箱的網域（' + d + '），報價單上通常要用公司信箱，請確認。'
+        return ''
+      },
+
       openCreate() {
         this.editingId = null
-        this.form = { username:'', displayName:'', email:'', phone:'', role:'sales',
+        this.form = { username:'', displayName:'', email:'', phone:'', quoteEmail:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
                       notificationMuted: [],
                       unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'',
@@ -1243,6 +1264,7 @@
           displayName:            user.displayName || '',
           email:                  user.email || '',
           phone:                  user.phone || '',
+          quoteEmail:             user.quoteEmail || '',
           role:                   user.role,
           password:               '',
           confirmPassword:        '',
@@ -1304,6 +1326,7 @@
           display_name:        this.form.displayName,
           email:                this.form.email,
           phone:                this.form.phone,
+          quote_email:          (this.form.quoteEmail || '').trim(),
           role:                 this.form.role,
           modules:              this.form.modules,
           notification_muted:   this.form.notificationMuted,
@@ -1362,9 +1385,11 @@
           this.privacyAck = (await pr.json()).ack
           this.privacyAckRequested = false
         }
+        const _noDept = !this.editingId && !this.form.departmentId        // 5a：新增後立刻提醒缺口
         await this.loadUsers()
         this.closeModal()
-        this.toast(this.editingId ? '已儲存變更' : '帳號已建立')
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
+        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁還沒有歸屬部門（請看上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
       },
 
       async toggleActive(user) {
@@ -1373,6 +1398,7 @@
           method: 'PATCH', headers: this._headers()
         })
         await this.loadUsers()
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
       },
 
       async deleteUser(user) {
@@ -1384,6 +1410,7 @@
         })
         if (!res.ok) { alert((await res.json().catch(()=>({}))).detail || '刪除失敗'); return }
         await this.loadUsers()
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()        // 刪掉的可能是主管或唯一的財務
         this.toast('帳號已刪除')
       },
 
@@ -1398,12 +1425,12 @@
         window.location.href = 'login.html'
       },
 
-      toast(msg) {
+      toast(msg, ms) {
         const el = document.createElement('div')
         el.textContent = msg
         el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
         document.body.appendChild(el)
-        setTimeout(() => el.remove(), 2500)
+        setTimeout(() => el.remove(), ms || 2500)
       },
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，

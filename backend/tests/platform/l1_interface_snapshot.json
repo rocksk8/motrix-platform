@@ -2,6 +2,8 @@
  "core_version": "next",
  "interface": {
   "core:archive": {
+   "BackupInProgress": "class",
+   "BackupLockUnavailable": "class",
    "MODULE_BACKUP_PREFIX": "const",
    "PRUNE_KEEP_NEWEST": "const",
    "PiiFolderMissing": "class",
@@ -16,6 +18,8 @@
    "_backup_retention": "def()",
    "_backup_suppliers": "def()",
    "backed_up_table_names": "def()",
+   "backup_run_lock": "class",
+   "backup_run_lock.__init__": "def(self, strict=…)",
    "bytes_per_audit_row": "def(db_bytes, audit_rows)",
    "cloud_archive_enabled": "def()",
    "merge_general_and_pii": "def(fname, general_rows, pii_rows)",
@@ -284,6 +288,31 @@
    "on_lockout": "def(key, ip, usernames, fails, lock_seconds, now=…, scope=…)",
    "reset_for_tests": "def()"
   },
+  "helper:backup_monitor": {
+   "BackupBusy": "class",
+   "BackupLockProblem": "class",
+   "BackupRateLimited": "class",
+   "BackupRateLimited.__init__": "def(self, wait_seconds)",
+   "DisableError": "class",
+   "HEARTBEAT_TEST_MIN_INTERVAL_SECONDS": "const",
+   "HeartbeatRateLimited": "class",
+   "HeartbeatRateLimited.__init__": "def(self, wait_seconds)",
+   "InvalidPingUrl": "class",
+   "MSG_ALREADY_DONE": "const",
+   "MSG_BUSY": "const",
+   "RUN_MIN_INTERVAL_SECONDS": "const",
+   "approve_disable": "def(change_id, actor, ip=…)",
+   "cancel_disable": "def(change_id, actor)",
+   "pending_disable": "def()",
+   "ping_host": "def()",
+   "reject_disable": "def(change_id, actor, reason=…)",
+   "request_disable": "def(actor, reason, ip=…)",
+   "run_backup_now": "def(now=…)",
+   "scrub_paths": "def(text)",
+   "set_ping_url": "def(url, actor=…, reason=…, ip=…)",
+   "status": "def(now=…)",
+   "test_heartbeat": "def()"
+  },
   "helper:branding": {
    "ALLOWED_FORMATS": "const",
    "AUDIT_ACTION": "const",
@@ -479,6 +508,7 @@
    "verified_doc": "def(raw)"
   },
   "helper:config_ledger": {
+   "DEMO_USERNAME": "const",
    "EVENTS": "const",
    "HIGH_RISK": "const",
    "RISKS": "const",
@@ -491,6 +521,7 @@
    "in_effect": "def(row, now=…)",
    "pending": "def(conn, domain=…)",
    "promote_due": "def(conn, now=…, domain=…)",
+   "real_superadmins": "def(conn, exclude=…)",
    "record": "def(conn, domain, key, changes, reason, actor, *, ip=…, risk=…, ref_version=…, effective_at=…, audit_action=…, target_label=…, link=…, approvals_required=…)",
    "register_domain": "def(prefix, snapshot_fn=…, restore_fn=…, diff_fn=…, label=…)",
    "restore_version": "def(conn, domain, key, version, actor, reason=…)",
@@ -653,6 +684,7 @@
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "unique_errors": "def(conn, module_key, body, vals, exclude_id=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
+   "used_prefixes": "def(conn=…)",
    "validate_module": "def(body, key=…)",
    "visible_mounts": "def(conn, user, point, manifests=…)",
    "visible_to": "def(mods, user)"
@@ -703,6 +735,43 @@
    "unapproved_banner": "def(status=…, detail=…, cls=…, doc_no=…, wm_text=…)",
    "unapproved_overlay": "def(doc_no=…, wm_text=…)",
    "validate": "def(template, sample_view=…)"
+  },
+  "helper:doc_type": {
+   "DEFAULT_ESTIMATE_PREFIX": "const",
+   "ESTIMATE": "const",
+   "LABELS": "const",
+   "NumberRule": "class",
+   "NumberRule.__init__": "def(self, doc_type, prefix, date_fmt=…, seq_digits=…)",
+   "NumberRule.format": "def(self, month, seq)",
+   "NumberRule.glob": "def(self, month)",
+   "NumberRule.max_seq": "def(self)",
+   "NumberRule.month_of": "def(self, no)",
+   "NumberRule.owns": "def(self, no)",
+   "NumberRule.regex": "def(self, *, revision=…)",
+   "NumberRule.search_pattern": "def(self)",
+   "NumberRule.seq_key": "def(self, month)",
+   "NumberRule.seq_of": "def(self, no)",
+   "NumberRule.seq_start": "def(self)",
+   "NumberRule.total_len": "def(self)",
+   "QUOTE": "const",
+   "QUOTE_PREFIX": "const",
+   "RESERVED_PREFIXES": "const",
+   "all_rules": "def(conn=…)",
+   "case_no_re": "def(conn=…)",
+   "doc_type_of_no": "def(no, conn=…)",
+   "estimate_prefix": "def(conn=…)",
+   "estimate_prefixes_in_use": "def(conn=…)",
+   "label": "def(doc_type)",
+   "label_of_no": "def(no, conn=…)",
+   "no_re": "def(prefix_or_rule, *, revision=…)",
+   "norm": "def(v)",
+   "prefix_for": "def(doc_type, conn=…)",
+   "relabel": "def(text, doc_type)",
+   "rule_for": "def(doc_type, conn=…)",
+   "rule_of_no": "def(no, conn=…)",
+   "seq_key": "def(no)",
+   "used_prefixes": "def(conn=…)",
+   "validate_prefix": "def(p, conn=…)"
   },
   "helper:download_name": {
    "DEFAULTS": "const",
@@ -756,13 +825,13 @@
    "SendHandle.wait": "def(self, timeout=…)",
    "_admin_emails": "def(event_key=…)",
    "_base_url": "def()",
-   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
-   "_send_raising": "def(to_addrs, subject, html)",
+   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…, doc_label=…)",
+   "_send_raising": "def(to_addrs, subject, html, ignore_enabled=…, cfg=…)",
    "email_send_policy": "def(env=…)",
    "finance_recipient_emails": "def(event_key=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
-   "notify_approval_request": "def(quote_no, customer, approver_usernames)",
-   "notify_approved": "def(quote_no, customer, approved_by, requester_username)",
+   "notify_approval_request": "def(quote_no, customer, approver_usernames, doc_label=…)",
+   "notify_approved": "def(quote_no, customer, approved_by, requester_username, doc_label=…)",
    "notify_backup_stale": "def(stale, threshold_hours)",
    "notify_bonus_correction_approved": "def(corr_no, quote_no, usernames, needs_payout)",
    "notify_bonus_correction_returned": "def(corr_no, quote_no, usernames, reason)",
@@ -807,14 +876,14 @@
    "notify_line_quota_warning": "def(used, limit, threshold, thresholds=…, month=…)",
    "notify_module_activity": "def(module_label, action_label, actor, item_label, page_path=…, detail=…, audience=…, line_event=…, line_usernames=…, line_exclude=…, line_skip=…)",
    "notify_monthly_report": "def(period_label, period_str, excel_bytes, pdf_bytes)",
-   "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames)",
+   "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames, doc_label=…)",
    "notify_payment_request_approved": "def(request_no, customer, approved_by, requester_username)",
    "notify_payment_request_next_tier": "def(request_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_payment_request_returned": "def(request_no, customer, note, requester_username)",
    "notify_payment_request_submitted": "def(request_no, customer, approver_usernames)",
    "notify_range_task_deadline": "def(task_id, title, end_date, days_left, assignee_username, assignee_display, supervisor_usernames=…)",
-   "notify_resubmit_requester": "def(new_quote_no, original_quote_no, customer, requester_username, approver_names)",
-   "notify_returned": "def(quote_no, new_quote_no, customer, note, requester_username)",
+   "notify_resubmit_requester": "def(new_quote_no, original_quote_no, customer, requester_username, approver_names, doc_label=…)",
+   "notify_returned": "def(quote_no, new_quote_no, customer, note, requester_username, doc_label=…)",
    "notify_settlement_finalized": "def(quote_no, customer, finalized_by)",
    "notify_shipping_approved": "def(note_no, customer, approved_by, requester_username)",
    "notify_shipping_next_tier": "def(note_no, customer, tier_no, total_tiers, approver_usernames)",
@@ -822,6 +891,17 @@
    "notify_shipping_submitted": "def(note_no, customer, approver_usernames)",
    "notify_warranty_expiry": "def(device_name, customer, quote_no, days_left, expiry_date, sales_person)",
    "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…, line_key=…, line_exclude=…)"
+  },
+  "helper:email_setup": {
+   "PROVIDERS": "const",
+   "build_ticket": "def(kind, *, user, host, port, company=…, requester=…)",
+   "classify_error": "def(exc, host=…, provider_key=…)",
+   "config_fingerprint": "def(host, port, user, password)",
+   "normalize_password": "def(provider_key, pw)",
+   "provider_by_key": "def(key)",
+   "provider_list": "def()",
+   "valid_email": "def(v)",
+   "validate_config": "def(data)"
   },
   "helper:errors": {
    "trace_id": "def()"
@@ -843,6 +923,7 @@
    "last_value_hook": "def(type_code)",
    "list_types": "def(conn)",
    "normalize_lines": "def(lines)",
+   "used_prefixes": "def(conn)",
    "validate_expense_type": "def(body, key=…)",
    "validate_values": "def(conn, defn, data, lines, *, viewer, prior=…, case=…, type_code=…)"
   },
@@ -1045,6 +1126,17 @@
    "warm_status": "def()",
    "without_google_content": "def()"
   },
+  "helper:getting_started": {
+   "BACKUP_HREF": "const",
+   "BACKUP_OK_ACTIONS": "const",
+   "EMAIL_TEST_ACTION": "const",
+   "MANUAL_DONE_IDS": "const",
+   "STATE_KEY": "const",
+   "STEPS": "const",
+   "STEP_IDS": "const",
+   "overview": "def(conn=…)",
+   "set_step": "def(step_id, action, username)"
+  },
   "helper:gl_status": {
    "MESSAGE": "const",
    "gl_posted_warning": "def(conn, source_type, source_key, prefix=…)"
@@ -1069,6 +1161,22 @@
    "push_event_for_quotation_won": "def(quote_no)",
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
+  },
+  "helper:greeting_calendar": {
+   "COVERED_UNTIL_YEAR": "const",
+   "FESTIVAL_LABELS": "const",
+   "coverage_warning": "def(today)",
+   "festival_keys_on": "def(d)",
+   "reopen_day": "def(year)",
+   "spring_festival": "def(year)"
+  },
+  "helper:greeting_phrases": {
+   "BUILTIN": "const",
+   "CATEGORY_LABELS": "const",
+   "MAX_LEN": "const",
+   "MAX_LINES": "const",
+   "PLACEHOLDERS": "const",
+   "check_phrase": "def(text)"
   },
   "helper:heartbeat_status": {
    "BAD_GRACE_MINUTES": "const",
@@ -1156,8 +1264,27 @@
   "helper:license_alerts": {
    "dev_key_in_use": "def(status, background=…)",
    "emergency_in_use": "def(info, background=…)",
+   "expiry_notice": "def(rem, status)",
    "flush": "def(timeout=…)",
    "startup_check": "def()"
+  },
+  "helper:license_manager": {
+   "BACKUP_DIR_NAME": "const",
+   "BACKUP_KEEP": "const",
+   "MAX_UPLOAD_BYTES": "const",
+   "PREVIEW_WEIGHT": "const",
+   "RATE_GLOBAL_MAX": "const",
+   "RATE_MAX": "const",
+   "RATE_WINDOW_S": "const",
+   "REJECT_MESSAGES": "const",
+   "backup_dir": "def()",
+   "describe_current": "def(machine_fn)",
+   "modules_view": "def(mods)",
+   "normalize_upload": "def(raw)",
+   "rate_allow": "def(account=…, weight=…, now=…)",
+   "recent_activity": "def(conn, limit=…)",
+   "reset_for_tests": "def()",
+   "run_import": "def(raw, *, apply, confirm, machine_fn)"
   },
   "helper:licensing": {
    "EMERGENCY_COVERS": "const",
@@ -1165,6 +1292,8 @@
    "EMERGENCY_MAX_BYTES": "const",
    "EMERGENCY_MAX_DAYS": "const",
    "EMERGENCY_PURPOSE": "const",
+   "EXPIRY_HEADER": "const",
+   "EXPIRY_THRESHOLDS": "const",
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
    "LICENSE_HEADER": "const",
@@ -1176,6 +1305,8 @@
    "emergency_pass": "def(status)",
    "emergency_path": "def()",
    "emergency_status": "def(status)",
+   "expiry_banner": "def(status)",
+   "expiry_reminder": "def(status)",
    "license_banner": "def(status, emergency)",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",
@@ -1422,6 +1553,30 @@
    "redact_target": "def(target)",
    "redact_text": "def(text)"
   },
+  "helper:login_greeting": {
+   "CUSTOM_KEY": "const",
+   "PERSONAL_STYLES": "const",
+   "START_HREF": "const",
+   "START_LABEL": "const",
+   "STATE_PREFIX": "const",
+   "away_category": "def(prev_date, today)",
+   "away_line": "def(pending, new_quotes)",
+   "build_greeting": "def(*, now, user_id, name, style, state, custom=…, todo=…, pending=…, new_quotes=…)",
+   "choose_category": "def(now, *, first, logged_today, prev_date)",
+   "company_style": "def()",
+   "effective_style": "def(company, pref)",
+   "get_custom": "def()",
+   "get_state": "def(user_id)",
+   "greeting_for_user": "def(user, *, todo=…, pending=…, new_quotes=…, now=…)",
+   "personal_pref": "def(user_id)",
+   "phrases_table": "def()",
+   "record_login": "def(user_id, now=…)",
+   "season_category": "def(d)",
+   "set_custom": "def(cat, style, lines)",
+   "taipei_now": "def()",
+   "time_category": "def(hour)",
+   "title_category": "def(hour)"
+  },
   "helper:mail_types": {
    "CATEGORIES": "const",
    "GROUPS": "const",
@@ -1464,6 +1619,18 @@
    "preview": "def(conn, caller, body)",
    "redact_ops": "def(items)",
    "sidebar_ops_of_all": "def(conn, role, mod_items)"
+  },
+  "helper:menu_categories": {
+   "CATEGORY_KEYS": "const",
+   "OVERRIDE_KEY": "const",
+   "categories_view": "def(kind=…, labels=…)",
+   "category_of": "def(item_key)",
+   "default_data": "def()",
+   "effective": "def(override=…)",
+   "get_override": "def()",
+   "items_of": "def(category_key, kind=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "validate": "def(data)"
   },
   "helper:module_assets": {
    "ASSETS_MIN_CORE": "const",
@@ -1596,6 +1763,15 @@
    "request_stage_defaults": "def()",
    "request_stage_label": "def(code, fallback=…)",
    "request_stage_names": "def()"
+  },
+  "helper:org_gaps": {
+   "GAP_KEYS": "const",
+   "GAP_NO_DEPARTMENT": "const",
+   "GAP_NO_FINANCE": "const",
+   "GAP_NO_MANAGER": "const",
+   "MAX_ITEMS": "const",
+   "check": "def(conn=…)",
+   "finance_holder_exists": "def(conn)"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
@@ -1756,6 +1932,17 @@
    "rate_text": "def(pct)",
    "rules_config": "def(conn=…)"
   },
+  "helper:quote_email": {
+   "PROFILE_KEY": "const",
+   "company_external_email": "def()",
+   "domain_hint": "def(email, company_email=…)",
+   "enforce_sales_email": "def(conn, q, old_data=…)",
+   "reply_to_for_quote": "def(quote_no)",
+   "resolve": "def(user_quote_email, company_external_email, personal_email)",
+   "resolve_for_row": "def(row)",
+   "resolve_for_user_id": "def(user_id)",
+   "valid": "def(email)"
+  },
   "helper:quote_output": {
    "TERMS": "const",
    "hidden_terms": "def(conn=…)"
@@ -1876,6 +2063,10 @@
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
   },
+  "helper:settings_groups_brand": {
+   "DEFAULT_TAGLINE": "const",
+   "brand_tagline": "def()"
+  },
   "helper:settings_groups_legal_reminder": {},
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
@@ -1894,6 +2085,24 @@
   },
   "helper:settings_groups_recycle_bin": {},
   "helper:settings_groups_tender_closing": {},
+  "helper:settings_help": {
+   "BUILTIN_EXTRA_TERMS": "const",
+   "BUILTIN_SHARED_TERMS": "const",
+   "OVERRIDE_KEY": "const",
+   "SECTIONS": "const",
+   "SINGLE_ADMIN_NOTE": "const",
+   "forbidden_terms": "def()",
+   "get_override": "def()",
+   "has_hidden_chars": "def(s, allow_newline=…)",
+   "help_for": "def(key, override=…)",
+   "help_view": "def(group, field_view, override=…)",
+   "label_clear": "def()",
+   "problems_in": "def(entry, *, terms=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "shared_terms_file": "def()",
+   "system_data": "def()",
+   "term_problems": "def(text)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
@@ -2008,6 +2217,7 @@
    "changed_fields": "def(table)",
    "compare": "def(old, new)",
    "defaults": "def()",
+   "duplicate_warnings": "def(table=…)",
    "effective_table": "def(body)",
    "enabled": "def(conn=…)",
    "ensure_registered": "def()",
@@ -2067,6 +2277,7 @@
    "REMINDER_FAILURE_SETTING": "const",
    "REMINDER_FIRST_STAGES": "const",
    "REMINDER_STEP_AFTER": "const",
+   "alert_thresholds": "def()",
    "reminder_dedup_key": "def(stage)",
    "reminder_send_failures": "def()",
    "reminder_stages_at_or_below": "def(days)",
@@ -2166,6 +2377,16 @@
    "enabled": "def(conn=…)",
    "preview": "def(conn, caller, definition, module, page, username=…)",
    "visible_buttons": "def(conn, user, module, page)"
+  },
+  "helper:user_prefs": {
+   "PrefError": "class",
+   "SCHEMA": "const",
+   "TABLE": "const",
+   "defaults": "def()",
+   "get": "def(user_id, key, default=…)",
+   "get_all": "def(user_id)",
+   "set_many": "def(user_id, changes)",
+   "validate": "def(changes)"
   },
   "helper:validation": {
    "body_flag": "def(body, key, default=…)",
@@ -2516,6 +2737,21 @@
    "single_provider": "def(capability)",
    "snapshot": "def()",
    "unload": "def(key, reason)"
+  },
+  "plat:safe_ping": {
+   "ALLOWED_PORTS": "const",
+   "DEADLINE_SECONDS": "const",
+   "PingFailed": "class",
+   "PingFailed.__init__": "def(self, kind=…)",
+   "RedirectBlocked": "class",
+   "RedirectBlocked.__init__": "def(self, status)",
+   "UnsafeTarget": "class",
+   "UnsafeTarget.__init__": "def(self, reason)",
+   "check_url": "def(url)",
+   "get": "def(url, *, timeout=…, deadline=…)",
+   "ip_is_public": "def(ip)",
+   "public_addresses": "def(host, port, timeout=…)",
+   "resolve_host": "def(host, port)"
   },
   "plat:source_tree": {
    "BACKEND": "const",

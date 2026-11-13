@@ -5,10 +5,12 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>設定中心 — MOTRIX 專案管理系統</title>
+  <title>設定中心 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/hint-popover.css?v=20261113a">
+  <script defer src="../static/hint-popover.js"></script>
   <style>
     .sc-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 32px 120px;
       min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
@@ -16,6 +18,8 @@
     .sc-side { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px; align-self: start; position: sticky; top: calc(var(--topbar-h) + 12px); background: var(--white); }
     .sc-side input { width: 100%; padding: 7px 9px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 12px; margin-bottom: 8px; background: #fff; }
     .sc-gbtn { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 6px; text-align: left; padding: 8px 9px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-size: 13px; color: inherit; }
+    .sc-cat { display: flex; align-items: center; margin: 12px 4px 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); letter-spacing: .02em; }
+    .sc-sec { margin: 8px 9px 2px; font-size: 11px; color: var(--text-secondary); }
     .sc-gbtn:hover { background: var(--border-light); }
     .sc-gbtn.is-on { background: var(--accent-light); color: var(--accent); font-weight: 600; }
     .sc-dot { font-size: 12px; padding: 1px 6px; border-radius: 9px; background: var(--border-light); color: var(--text-secondary); white-space: nowrap; }
@@ -89,7 +93,7 @@
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
         <h1 class="pg__t">設定中心</h1>
-        <p class="pg__s">系統內可調整的數字與選項集中在這裡。每一項都有預設值、可設定範圍與影響說明；比較重要的變更會先經過確認期間，必要時還需要另一位最高管理者核准，並留下變更紀錄。</p>
+        <p class="pg__s">系統內可調整的數字與選項集中在這裡。每一項都有預設值、可設定範圍與影響說明；比較重要的變更會先等一段緩衝期才生效，必要時還需要另一位最高管理者同意，並留下變更紀錄。名稱旁的「?」可以看白話說明。</p>
       </div>
     </div>
 
@@ -103,14 +107,26 @@
           <small x-text="navOpen ? '收起 ▴' : '切換群組 ▾'"></small>
         </button>
         <div class="sc-navpanel">
-        <input type="search" x-model="search" placeholder="搜尋設定群組" data-testid="sc-search">
-        <template x-for="g in filteredGroups()" :key="g.group">
-          <button type="button" class="sc-gbtn" :class="{'is-on': g.group === current}" :data-testid="'sc-group-' + g.group" @click="pick(g.group); navOpen = false">
-            <span x-text="g.label"></span>
-            <span class="sc-dot" x-show="g.status !== 'planned' && g.lastChange">已調整過</span>
-            <span class="sc-dot sc-dot--warn" x-show="g.status === 'planned'" :data-testid="'sc-planned-chip-' + g.group">開發中</span>
-          </button>
+        <input type="search" x-model="search" placeholder="搜尋設定（名稱、說明、問題）" data-testid="sc-search">
+        <template x-for="c in groupedView()" :key="c.key">
+          <div :data-testid="'sc-cat-' + c.key">
+            <div class="sc-cat">
+              <span x-text="c.name"></span>
+              <span class="hint" x-show="c.blurb" :data-hint="JSON.stringify({what: c.blurb, when: c.when})" :data-hint-label="c.name"></span>
+            </div>
+            <template x-for="row in c.rows" :key="row.id">
+              <div>
+                <div class="sc-sec" x-show="row.sectionHead" x-text="row.sectionHead"></div>
+                <button type="button" class="sc-gbtn" :class="{'is-on': row.g.group === current}" :data-testid="'sc-group-' + row.g.group" @click="pick(row.g.group); navOpen = false">
+                  <span x-text="row.g.label"></span>
+                  <span class="sc-dot" x-show="row.g.status !== 'planned' && row.g.lastChange">已調整過</span>
+                  <span class="sc-dot sc-dot--warn" x-show="row.g.status === 'planned'" :data-testid="'sc-planned-chip-' + row.g.group">開發中</span>
+                </button>
+              </div>
+            </template>
+          </div>
         </template>
+        <div class="sc-help" style="margin:8px 4px" x-show="search.trim() && !groupedView().length" data-testid="sc-search-empty">找不到符合的設定，換個說法試試。</div>
         <div class="sc-help" style="margin:12px 4px 4px" x-show="plannedFeatures.length">即將推出</div>
         <template x-for="p in plannedFeatures" :key="p.code">
           <div class="sc-gbtn" style="opacity:.65;cursor:default;display:block" :data-testid="'sc-soon-' + p.code">
@@ -124,6 +140,8 @@
       <section x-show="detail">
         <h2 style="font-size:17px" x-text="detail ? detail.label : ''"></h2>
         <div class="sc-help" x-text="detail ? detail.help : ''"></div>
+        <div class="sc-help" x-show="curMeta() && curMeta().when" data-testid="sc-when" x-text="curMeta() ? '什麼時候需要：' + curMeta().when : ''"></div>
+        <div class="sc-help" x-show="curMeta() && curMeta().catNote" data-testid="sc-catnote" x-text="curMeta() ? '補充：' + curMeta().catNote : ''"></div>
 
         <div class="sc-card" x-show="isPlanned()" style="opacity:.8;margin-top:12px" data-testid="sc-planned">
           <div class="sc-q" data-testid="sc-planned-text" x-text="plannedSentence()"></div>
@@ -134,21 +152,21 @@
           <button type="button" class="sc-tab" :class="{'is-on': tab==='values'}" data-testid="sc-tab-values" @click="openTab('values')">目前設定</button>
           <button type="button" class="sc-tab" :class="{'is-on': tab==='pending'}" data-testid="sc-tab-pending" @click="openTab('pending')">待生效</button>
           <button type="button" class="sc-tab" :class="{'is-on': tab==='versions'}" data-testid="sc-tab-versions" @click="openTab('versions')">版本與變更紀錄</button>
-          <button type="button" class="sc-tab" :class="{'is-on': tab==='profiles'}" data-testid="sc-tab-profiles" @click="openTab('profiles')">預設組</button>
+          <button type="button" class="sc-tab" :class="{'is-on': tab==='profiles'}" data-testid="sc-tab-profiles" x-show="profiles.length || tab==='profiles'" @click="openTab('profiles')">預設組</button>
         </div>
 
         <!-- 目前設定 -->
         <div x-show="!isPlanned() && tab==='values'">
           <template x-for="f in fields()" :key="f.key">
             <div class="sc-card" :class="{'is-dirty': isDirty(f)}" :data-testid="'sc-field-' + f.key">
-              <div class="sc-q"><span x-text="f.question"></span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span></div>
+              <div class="sc-q"><span x-text="f.question"></span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span><template x-if="f.helpInfo && f.helpInfo.what"><span class="hint" :data-testid="'sc-hint-' + f.key" :data-hint="JSON.stringify(f.helpInfo)" :data-hint-label="f.label"></span></template></div>
               <div class="sc-help" x-text="f.help"></div>
 
               <!-- 選項型 -->
               <div class="sc-choices" x-show="f.choices.length">
                 <template x-for="c in f.choices" :key="String(c.value)">
-                  <label class="sc-choice" :class="{'is-on': valueOf(f) === c.value}">
-                    <input type="radio" :name="'sc-' + f.key" :checked="valueOf(f) === c.value" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
+                  <label class="sc-choice" :class="{'is-on': choiceOn(f, c)}">
+                    <input type="radio" :name="'sc-' + f.key" :checked="choiceOn(f, c)" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
                     <span x-text="c.label"></span>
                     <span class="sc-rec" x-show="f.recommended === c.value">建議</span>
                     <small x-text="c.impact"></small>
@@ -157,17 +175,17 @@
               </div>
               <!-- 數字型 -->
               <div class="sc-input" x-show="!f.choices.length && (f.type==='int' || f.type==='float')">
-                <input type="number" :min="f.min" :max="f.max" :step="f.type==='int' ? 1 : 'any'" :value="valueOf(f)" :data-testid="'sc-input-' + f.key" @input="setDraft(f, $event.target.value)">
+                <input type="number" :min="f.min" :max="f.max" :step="f.type==='int' ? 1 : 'any'" :value="curVal(f)" :data-testid="'sc-input-' + f.key" @input="setDraft(f, $event.target.value)">
                 <span x-text="f.unit"></span>
                 <span class="sc-note" x-text="rangeText(f)"></span>
               </div>
               <!-- 開關型 -->
               <div class="sc-input" x-show="!f.choices.length && f.type==='bool'">
-                <label><input type="checkbox" :checked="valueOf(f) === true" :data-testid="'sc-bool-' + f.key" @change="setDraft(f, $event.target.checked)"> 開啟</label>
+                <label><input type="checkbox" :checked="curVal(f) === true" :data-testid="'sc-bool-' + f.key" @change="setDraft(f, $event.target.checked)"> 開啟</label>
               </div>
               <!-- 文字型 -->
               <div class="sc-input" x-show="!f.choices.length && f.type==='str'">
-                <input type="text" :value="valueOf(f)" :data-testid="'sc-text-' + f.key" @input="setDraft(f, $event.target.value)">
+                <input type="text" :value="curVal(f)" :data-testid="'sc-text-' + f.key" @input="setDraft(f, $event.target.value)">
               </div>
 
               <div class="sc-err" x-show="problem(f)" x-text="problem(f)"></div>
@@ -339,7 +357,7 @@
 function settingsCenterPage() {
   return {
     // 清單與目前群組
-    groups: [], plannedFeatures: [], current: '', detail: null, search: '', showAdv: false, navOpen: false,
+    groups: [], plannedFeatures: [], categories: [], current: '', detail: null, search: '', showAdv: false, navOpen: false,
     // 編輯狀態
     drafts: {}, preview: null, impacts: {}, reason: '', ack: false, busy: false, msg: '', err: '',
     tab: 'values',
@@ -385,14 +403,36 @@ function settingsCenterPage() {
       const hit = this.groups.find(g => g.group === want)
       if (hit) await this.pick(hit.group)
       else if (this.groups.length) await this.pick(this.groups[0].group)
+      this.loadProfiles()                      // 預設組頁籤只在有預設組時才顯示
     },
     async loadGroups() {
-      try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || [] } catch (e) { this._fail(e) }
+      try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || []; this.categories = r.categories || [] } catch (e) { this._fail(e) }
     },
     filteredGroups() {
       const q = this.search.trim()
-      return this.groups.filter(g => !q || g.label.includes(q) || (g.help || '').includes(q))
+      return this.groups.filter(g => !q || [g.label, g.help, g.blurb, g.when].some(x => (x || '').includes(q)) || (g.fieldTexts || []).some(x => x.includes(q)))
     },
+    // 左欄：依共用分類資料檔分類（分類 → 區段 → 群組）；沒有登記到分類的群組（新加的、尚未歸類）放最後的「其他」，不會消失
+    groupedView() {
+      const list = this.filteredGroups()
+      const out = []
+      const byCat = {}
+      list.forEach(g => { (byCat[g.category || '_other'] = byCat[g.category || '_other'] || []).push(g) })
+      const cats = this.categories.concat(byCat._other ? [{ key: '_other', name: '其他', blurb: '', when: '' }] : [])
+      cats.forEach(c => {
+        const gs = byCat[c.key] || []
+        if (!gs.length) return
+        let last = null
+        const rows = gs.map(g => {
+          const head = g.section && g.section !== last ? g.section : ''
+          last = g.section || last
+          return { id: g.group, g, sectionHead: head }
+        })
+        out.push({ key: c.key, name: c.name, blurb: c.blurb, when: c.when, rows })
+      })
+      return out
+    },
+    curMeta() { return this.groups.find(g => g.group === this.current) || null },
     async pick(group) {
       if (this.dirtyCount() && group !== this.current) { this._fail(new Error('這個群組有尚未儲存的修改，請先儲存，或按「放棄修改」。')); return }
       this.current = group
@@ -429,10 +469,14 @@ function settingsCenterPage() {
       return ''
     },
     // 注意：用 in 而不是 hasOwnProperty.call——Alpine（Proxy）只追蹤 has／get／ownKeys，後者不會觸發重畫
-    valueOf(f) { return (f.key in this.drafts) ? this.drafts[f.key] : f.value },
+    // ⚠ 方法名不能叫 valueOf／toString 這類 Object.prototype 的成員：Alpine 的範圍代理用 Reflect.has（含原型鏈）找名稱，
+    //   x-for 迴圈範圍裡的 `valueOf(f)` 會解析到繼承來的原生 valueOf ⇒ 回傳範圍物件、所有輸入元件都顯示空白／不選取（2026-11-13 使用者回報兩次）
+    curVal(f) { return (f.key in this.drafts) ? this.drafts[f.key] : f.value },
+    // 選項是否為目前選取：代碼可能是數字或字串，一律以字串比對
+    choiceOn(f, c) { const v = this.curVal(f); return v !== null && v !== undefined && String(v) === String(c.value) },
     isDirty(f) { return f.key in this.drafts },
     dirtyCount() { return Object.keys(this.drafts).length },
-    isDefaultNow(f) { return this.valueOf(f) === f.default },
+    isDefaultNow(f) { return this.curVal(f) === f.default },
 
     // ── 編輯 ────────────────────────────────────────────────
     setDraft(f, raw) {

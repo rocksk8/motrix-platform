@@ -45,7 +45,7 @@ window.CM_PARTS.push(() => ({
     //: 讀公司資料裡的據點清單。讀不到就留空 => 那一行不顯示，其餘照常。
     async loadLocations() {
       try {
-        const r = await fetch('/api/settings/company-profile', {
+        const r = await fetch('/api/settings/company-profile/public', {
           headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
         const d = await r.json()
@@ -170,6 +170,11 @@ window.CM_PARTS.push(() => ({
         this.caseActivity = { ...this.caseActivity, [k]: true }
       })
       this.caseSortPref = await loadListPref(s.token, 'case_list')
+      // 首頁「我的工作」的深連結：?quick=mine,stage_overdue,recv_overdue,missing_docs（逗號可疊加；不認得的字略過）。
+      // 套在第一次載入之前，清單與數字一次到位（不先閃一次未篩選的清單）。
+      new URLSearchParams(location.search).get('quick') && String(new URLSearchParams(location.search).get('quick')).split(',').forEach(k => {
+        if (Object.prototype.hasOwnProperty.call(this.caseQuick, k)) this.caseQuick = { ...this.caseQuick, [k]: true }
+      })
       await this.loadCases()
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')

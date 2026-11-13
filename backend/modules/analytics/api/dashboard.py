@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Response
 
 from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
@@ -1035,3 +1035,41 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
 
     items.sort(key=lambda x: x["at"], reverse=True)
     return {"items": items[:limit], "total": len(items)}
+
+
+# ── 首頁一次撈完（2026-11-13，「外網載入效能」第二階段）────────────────────────────────
+# 首頁載入時原本打六支（stats → monthly → expenses → funnel／ops-alerts／activity-feed，前端是 4 趟串行）。外網每趟約 1 s。
+# 合成一支。🔴 **不可以比原端點多給任何資料**：每個區段都是**直接呼叫原端點的處理函式**（同一份程式、同一個權限檢查與遮蔽、
+# 同一個 `authorization`），所以區段內容與單打原端點逐欄相同（守門：tests/test_bootstrap_bundle_2026_11_13.py 逐區段比對）。
+# 某一段丟 HTTPException（403／404…）或出錯 ⇒ 該段為 null、`errors[段]` 記狀態碼；不整包失敗（前端本來就是各段各自 try）。
+# 區段名 → 原端點：stats＝/stats、monthly＝/monthly、expenses＝/expenses-monthly、funnel＝/funnel、opsAlerts＝/ops-alerts、
+# activityFeed＝/activity-feed?limit=<activity_limit>。`department_id` 的套用範圍與原端點一樣（funnel／ops-alerts 本來就不吃）。
+@router.get("/api/dashboard/bundle")
+def dashboard_bundle(response: Response,
+                     department_id: Optional[int] = Query(None),
+                     activity_limit: int = Query(8, ge=1, le=100),
+                     authorization: str = Header(None)):
+    response.headers["Cache-Control"] = "no-store"          # 每人不同、每次開首頁都打
+    _require_user(authorization)
+    sections = (
+        ("stats",        lambda: dashboard_stats(department_id, authorization)),
+        ("monthly",      lambda: dashboard_monthly(department_id, authorization)),
+        ("expenses",     lambda: dashboard_expenses_monthly(department_id, authorization)),
+        ("funnel",       lambda: dashboard_funnel(authorization)),
+        ("opsAlerts",    lambda: dashboard_ops_alerts(authorization)),
+        ("activityFeed", lambda: dashboard_activity_feed(activity_limit, department_id, authorization)),
+    )
+    from helpers import company_setup as _cs
+    out, errors = {}, {}
+    for name, call in sections:
+        try:
+            out[name] = call()
+        except HTTPException as e:
+            out[name], errors[name] = None, e.status_code
+        except _cs.CompanySetupRequired:
+            raise                                           # 輸出端閘門：整包 428，與單打原端點同形（main 有統一的 handler）
+        except Exception:                                   # noqa: BLE001  一段壞了不拖垮其他段；前端對 null 的段退回原端點
+            logger.exception("dashboard bundle section %s failed", name)
+            out[name], errors[name] = None, 500
+    out["errors"] = errors
+    return out

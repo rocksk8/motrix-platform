@@ -1,5 +1,8 @@
 # 附近旅宿 更新紀錄
 
+## 1.2.13 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.2.12（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `lodging-records.html`：手機（≤767px）表單輸入框 16px／44px 高；住宿紀錄表加橫向捲動＋表頭固定（`m-scroll m-sticky`）。桌機版不變。
 

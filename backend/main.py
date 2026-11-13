@@ -80,8 +80,10 @@ from core.internal_cols import InternalColsMiddleware
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
+from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
+# 登入後啟動資料合併（2026-11-13，外網載入效能第二階段）；註解不可放在 import 行尾：test_router_registration 以行尾整段當別名
+from routers import bootstrap as _bootstrap_router
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
 from routers import rules as rules_router
@@ -100,6 +102,11 @@ from routers import platform_menu_preview
 from routers import export_templates as export_templates_router
 from routers import option_lists as option_lists_router
 from routers import system_hub
+# 備份與監控專頁（批次 4a；註解不寫在 import 行尾，test_router_registration 以行解析）
+from routers import backup_monitor
+from routers import org_gaps as org_gaps_router
+from routers import getting_started as getting_started_router
+from routers import menu_categories as menu_categories_router
 from routers import platform_catalog
 _startup_step("import_routers")
 
@@ -305,6 +312,8 @@ _COMPANY_SETUP_ALLOWED = {
     ("PATCH", "/api/auth/change-password"): "帳號本身必要：改密碼（同「必須先改密碼」白名單；首次登入要先改密碼）",
     ("GET", "/api/ping"): "健康檢查：部署工具與前端判斷服務是否在線（不含任何資料）",
     ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
+    ("GET", "/api/license/overview"): "授權頁讀取目前授權概況（licensing.LICENSE_EXEMPT_PATHS；限最高管理者且非示範帳號，端點自己驗權限）",
+    ("POST", "/api/license/import"): "授權頁預覽與匯入新授權檔（licensing.LICENSE_EXEMPT_PATHS；限最高管理者，有大小上限、頻率限制與稽核，端點自己驗權限）",
     ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理者才看得到完整內容，端點自己驗權限）",
     ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理者，端點自己驗權限）",
     ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理者，端點自己驗權限）",
@@ -313,8 +322,12 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
     ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
+    ("GET", "/api/bootstrap"): "登入後啟動資料合併端點：只放原本在白名單內的區段（me／menu／branding／totp），其餘區段在未設定時自己回 428 標記，不給資料",
     ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
     ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
+    ("GET", "/api/auth/profile"): "帳號本身必要：「我的帳號」讀自己的顯示名稱、部門與報價用信箱（只回自己這一列，無他人資料）；未設定公司資料時使用者仍要看得到自己的帳號頁",
+    ("GET", "/api/auth/preferences"): "帳號本身必要：每個登入期間載入頁面時同步自己的字級、外觀與首頁偏好（只讀寫自己的列）；擋住會讓字級與深色模式在未設定期間失效",
+    ("PUT", "/api/auth/preferences"): "帳號本身必要：頂欄調字級會把偏好存回伺服器、「我的帳號」儲存偏好（只改自己的列，白名單值域，不碰任何公司資料）",
 }
 
 
@@ -496,8 +509,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         route = request.scope.get("route")
         template = getattr(route, "path", "") or request.url.path.split("?")[0]
         pp = request.scope.get("path_params") or {}
-        from helpers.audit import _CASE_NO_RE, _audit_failure
-        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        from helpers.audit import _case_no_re, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_case_no_re().search(str(v))] if m), "")
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,
@@ -673,6 +686,10 @@ async def license_gate_middleware(request: Request, call_next):
     # （公開端點的回應沒有標頭，不可以讓橫幅閃掉）。
     if getattr(request.state, "authed", False):
         response.headers[license_core.LICENSE_HEADER] = license_core.license_banner(status, emergency) or "none"
+        # 到期提醒（T83）：獨立的第二個標頭，與上面的橫幅互不影響；同樣「已登入的回應一定帶：有提醒＝值、沒有＝none」。
+        # **只給最高管理者**（L5）：剩幾天到期是商務資訊，其他角色（含被盜用的一般帳號）不需要知道、也不該知道 ⇒ 其他角色的回應根本不帶這個標頭。
+        if getattr(request.state, "role", None) == "superadmin":
+            response.headers[license_core.EXPIRY_HEADER] = license_core.expiry_banner(status) or "none"
     return response
 
 
@@ -779,6 +796,7 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
     request.state.authed = True      # 授權閘門的橫幅標頭只給已登入的請求（license_gate_middleware；K 審 S4）
+    request.state.role = row["role"]  # 到期提醒標頭只給最高管理者（license_gate_middleware；T83 L5）
 
     is_high_priv = row["role"] in ("superadmin", "admin")
     idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS
@@ -1130,6 +1148,7 @@ app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
+app.include_router(my_account.router)
 app.include_router(list_prefs.router)
 app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
@@ -1146,6 +1165,7 @@ app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
+app.include_router(dashboard_mine.router)     # 首頁「我的工作」（L1，2026-11-13 UX P1.5；提供者 dashboard.mine_groups）
 app.include_router(licensing.router)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)
@@ -1156,10 +1176,15 @@ app.include_router(settings_center.router)
 app.include_router(mail_settings.router)
 app.include_router(duty_roles.router)
 app.include_router(platform_menu.router)
+app.include_router(_bootstrap_router.router)        # GET /api/bootstrap：每頁都要打的啟動請求合成一支（只放原端點會回的、且只會變少）
 app.include_router(platform_menu_preview.router)
 app.include_router(export_templates_router.router)
 app.include_router(option_lists_router.router)
 app.include_router(system_hub.router)
+app.include_router(backup_monitor.router)         # 備份與監控專頁（最高管理者；批次 4a）
+app.include_router(org_gaps_router.router)
+app.include_router(getting_started_router.router)
+app.include_router(menu_categories_router.router)
 app.include_router(platform_catalog.router)
 _startup_step("include_routers")
 

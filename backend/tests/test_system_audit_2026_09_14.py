@@ -516,19 +516,32 @@ def test_settings_export_has_no_live_secrets(client):
     把它們挖掉，這題確認真的挖乾淨了，而且**新增的祕密設定也會被抓到**。
     """
     import db, json as _json
+    import archive
     sql = _json_backup_queries()["系統設定"]
     conn = db.get_db()
     try:
-        rows = conn.execute(sql).fetchall()
+        # 守門要真的碰到「還不存在的新祕密」：種一個沒人事先寫進 SQL 的新設定（巢狀 token、鍵名含 secret 的整列），
+        # 匯出（SQL ＋ archive._general_row 的總括遮蔽）之後兩個值都不能出現
+        conn.execute("INSERT OR REPLACE INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)",
+                     ("zz_future_feature", _json.dumps({"enabled": True, "service_token": "seeded-token-xyz"}), "2026-01-01T00:00:00"))
+        conn.execute("INSERT OR REPLACE INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)",
+                     ("zz_future_hmac_secret", _json.dumps("seeded-secret-xyz"), "2026-01-01T00:00:00"))
+        conn.commit()
+        rows = [archive._general_row("系統設定", dict(r)) for r in conn.execute(sql).fetchall()]
+        conn.execute("DELETE FROM system_settings WHERE key IN ('zz_future_feature','zz_future_hmac_secret')")
+        conn.commit()
     finally:
         conn.close()
+    rows = [(r["key"], r["value_json"]) for r in rows]
 
     assert rows, "系統設定匯出是空的——這題會變成永遠綠的假斷言，先確認查詢是否壞了"
+    assert {"zz_future_feature", "zz_future_hmac_secret"} <= {r[0] for r in rows}, "沒種到新祕密那兩列——守門沒碰到它們"
+    assert not any("seeded-" in (r[1] or "") for r in rows), "新增的祕密設定（沒寫進 SQL 的）進了每日匯出——總括遮蔽失效"
 
     def walk(obj, path):
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if _SECRET_NAME.search(k) and k not in _SECRET_NAME_OK:
+                if _SECRET_NAME.search(k) and k not in _SECRET_NAME_OK and v != "[已遮蔽]":
                     yield f"{path}.{k}"
                 yield from walk(v, f"{path}.{k}")
         elif isinstance(obj, list):
@@ -981,3 +994,24 @@ def test_bg1_the_exclusion_list_cannot_swallow_the_whole_database(client):
         "這幾張表兩邊都不在：%s\n" % sorted(undecided)
         + "⚠️ 與上面那道題同一件事 —— 這裡重述是為了讓「互斥」與「窮盡」"
           "在同一題裡讀得出來。")
+
+
+def test_blanket_redaction_keeps_non_secret_rules_and_masks_real_secrets():
+    """總括遮蔽只動「長得像祕密」的值：password_min_len=8 這類規則設定要原樣保留（不然拿匯出還原會把「[已遮蔽]」寫進密碼規則）。"""
+    import json as _json
+    import archive
+
+    def row(key, value):
+        return archive._general_row("系統設定", {"key": key, "value_json": _json.dumps(value), "updated_at": "x"})
+
+    kept = {"password_min_len": 8, "password_required": True, "token_ttl_hours": 12, "secret_hint": "", "app_pw_policy": "true"}
+    out = _json.loads(row("account_security", {**kept, "api_token": "seeded-token-xyz", "nested": {"client_secret": "seeded-secret-xyz", "password_min_len": 10}})["value_json"])
+    for k, v in kept.items():
+        assert out[k] == v, (k, out[k])
+    assert out["nested"]["password_min_len"] == 10
+    numeric = _json.loads(row("zz_numeric", {"api_token": "123456789012", "login_password": "12345678", "pin_secret": "0000", "password_max_age": "90"})["value_json"])
+    assert set(numeric.values()) == {"[已遮蔽]"}, numeric            # 純數字字串（PIN／數字密碼）也要遮蔽
+    assert out["api_token"] == "[已遮蔽]" and out["nested"]["client_secret"] == "[已遮蔽]"
+    # 整列鍵名含祕密字樣：字串值遮蔽、數字值保留
+    assert _json.loads(row("zz_hmac_secret", "seeded-secret-xyz")["value_json"]) == "[已遮蔽]"
+    assert _json.loads(row("password_min_len", 8)["value_json"]) == 8

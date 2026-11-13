@@ -399,7 +399,12 @@ try {
             param($Root, $N)
             $logPath = Join-Path $Root "backend\logs\server.log"
             if (-not (Test-Path $logPath)) { return "" }
-            (Get-Content $logPath -Tail $N) -join "`n"
+            # server.log 剛被輪替（≥50 MB 清成 0 byte，2026-11-13 T81）⇒ 現行檔不足 N 行時，往前用 server.log.1 的最後幾行補滿
+            $cur = @(Get-Content $logPath -Tail $N)
+            if ($cur.Count -lt $N -and (Test-Path "$logPath.1")) {
+                $cur = @(Get-Content "$logPath.1" -Tail ($N - $cur.Count)) + $cur
+            }
+            $cur -join "`n"
         }
         [string]$logText = $raw
         Write-Host "===JSON==="

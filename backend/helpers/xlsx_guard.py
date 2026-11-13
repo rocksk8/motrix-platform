@@ -71,9 +71,17 @@ class XlsxBusy(XlsxRejected):
     """同時解析的人太多（呼叫端轉 429）。"""
 
 
+def _limits_from(d):
+    """欄位名 ⇒ 值 的字典（`asdict(Limits)` 的樣子）轉成 Limits：逐欄覆寫 DEFAULT（不用 ** 傳參數；不認得的欄位名 ⇒ 同 `replace` 的 TypeError／ValueError）。"""
+    lim = DEFAULT
+    for k, v in d.items():
+        lim = replace(lim, **{k: v})
+    return lim
+
+
 def with_limits(**kw):
     """DEFAULT 的覆寫版：with_limits(max_bytes=10<<20)。"""
-    return replace(DEFAULT, **kw)
+    return _limits_from(kw)
 
 
 def col_letters(n):
@@ -376,12 +384,19 @@ def load(data, limits=DEFAULT, sheets=None, data_only=True, deadline=None):
     return _open_workbook(data, data_only)
 
 
+_ITER_ROWS_KEYS = frozenset(("min_row", "max_row", "min_col", "max_col", "values_only"))
+
+
 def rows(ws, deadline=None, limits=DEFAULT, max_rows=None, header_rows=0, **kw):
-    """ws.iter_rows(**kw) 的守門版：每 256 列檢查 deadline；讀超過 max_rows 列（含空白列）就丟 XlsxRejected；
+    """ws.iter_rows(min_row, max_row, min_col, max_col, values_only) 的守門版（`**kw` 只收這五個同名同義的關鍵字，逐一明列傳給 iter_rows）：每 256 列檢查 deadline；讀超過 max_rows 列（含空白列）就丟 XlsxRejected；
     max_col 預設 limits.max_cols（openpyxl 自己截寬／補到這個寬度，不管 XML 怎麼寫——所以每列都剛好 max_cols 欄）。
     header_rows＝max_rows 裡有幾列是表頭（只影響訊息：顯示「上限 max_rows-header_rows 列」資料列）。"""
-    kw.setdefault("max_col", limits.max_cols)
-    for i, row in enumerate(ws.iter_rows(**kw), start=1):
+    unknown = sorted(set(kw) - _ITER_ROWS_KEYS)
+    if unknown:
+        raise TypeError("rows() 不認得的參數：%s" % ", ".join(unknown))
+    for i, row in enumerate(ws.iter_rows(min_row=kw.get("min_row"), max_row=kw.get("max_row"), min_col=kw.get("min_col"),
+                                         max_col=kw.get("max_col", limits.max_cols), values_only=kw.get("values_only", False)),
+                            start=1):
         if i & 255 == 0:
             check_deadline(deadline, limits)
         if max_rows is not None and i > max_rows:
@@ -479,7 +494,7 @@ def _extract(data, limits, req):
     try:
         titles = list(wb.sheetnames)
         out, budget = [], limits.max_result_bytes
-        with_types = bool(req.get("with_types"))
+        with_types = req.get("with_types") is True      # req＝父行程組的內部字典（read_rows 的 with_types 是真布林），不是請求本文；子行程不能 import helpers.validation（會拉進整個 fastapi／helpers），所以嚴格比對 True
         for ws in _pick_sheets(wb, req.get("sheets"), req.get("pick")):
             body = []
             for row in rows(ws, deadline=deadline, limits=limits, max_rows=req.get("max_rows"),
@@ -511,7 +526,7 @@ def _worker_main():
     try:
         inp = sys.stdin.buffer
         hdr = json.loads(inp.readline().decode("utf-8"))
-        limits = Limits(**hdr["limits"])
+        limits = _limits_from(hdr["limits"])
         try:                                                   # POSIX 的記憶體上限（Windows 由父行程用 Job Object 設）
             import resource
             resource.setrlimit(resource.RLIMIT_AS, (limits.max_child_memory, limits.max_child_memory))
@@ -649,15 +664,14 @@ def _win_close(job):
 
 def _run_child(data, limits, req):
     hdr = json.dumps({"limits": asdict(limits), "req": req, "n": len(data)}).encode("utf-8") + b"\n"
-    kw = {}
-    if os.name == "nt":
-        kw["creationflags"] = 0x08000000                                # CREATE_NO_WINDOW
+    creationflags = 0x08000000 if os.name == "nt" else 0                # CREATE_NO_WINDOW（POSIX 只接受 0）
     # numpy（openpyxl 會順手 import）的 OpenBLAS 一啟動就預留約 750MB 的 commit（工作集只有 30MB）：不壓成單執行緒的話，
     # 記憶體上限（按 commit 算）要設到 1GB 以上才跑得起來，等於沒有上限。
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")
     exe, extra_paths = _child_python()
     proc = subprocess.Popen([exe, "-I", "-X", "utf8", "-c", _BOOT, os.path.abspath(__file__), json.dumps(extra_paths)],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, **kw)
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                            creationflags=creationflags)
     job = _win_job(proc.pid, limits.max_child_memory) if os.name == "nt" else None
     try:
         try:

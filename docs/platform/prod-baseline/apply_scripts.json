@@ -1,0 +1,17 @@
+{
+ "_說明": "已出貨的 apply 腳本基準（T83）：最近一次實際發布的完整包裡 apply_update.ps1／apply_module_update.ps1 的版號與內容雜湊（去 BOM、CRLF→LF 的 sha256）。**只有 `delivery.py publish` 成功之後由程式寫**（record_baseline），不要手改；寫完要 commit。守門 test_apply_script_baseline：腳本內容和這裡不同 ⇒ 版號必須嚴格大於這裡的版號。",
+ "scripts": {
+  "apply_update": {
+   "version": "2026-11-13a",
+   "sha256": "6f5240b22a70d1a477ccdae747bedfb51a1bbf4bc896983f74783e30db9c32cb",
+   "shipped_in": "20261113_095433_0147b3d5_full",
+   "commit": "0147b3d534eb2f1fb207e4de755a73e13bcaf6d9"
+  },
+  "apply_module_update": {
+   "version": "2026-09-29a",
+   "sha256": "ab02f608862ca6dbf5553ce9fd8ffa697b557825b34809fe21386b416a28280b",
+   "shipped_in": "20261113_095433_0147b3d5_full",
+   "commit": "0147b3d534eb2f1fb207e4de755a73e13bcaf6d9"
+  }
+ }
+}

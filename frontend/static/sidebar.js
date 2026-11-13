@@ -85,8 +85,8 @@ if (typeof module !== 'undefined' && module.exports) {
   var up   = inPg ? '../' : ''
 
   // 強制改密：除修改密碼頁外一律導向
-  if (s.mustChangePassword && file !== 'change-password.html' && file !== 'login.html') {
-    window.location.replace(inPg ? 'change-password.html?forced=1' : 'pages/change-password.html?forced=1')
+  if (s.mustChangePassword && file !== 'my-account.html' && file !== 'change-password.html' && file !== 'login.html') {
+    window.location.replace(inPg ? 'my-account.html?forced=1' : 'pages/my-account.html?forced=1')
   }
 
   function pg(f) { return inPg ? f : 'pages/' + f }
@@ -115,8 +115,9 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // ── Global font zoom (used by topbar buttons via onclick) ─────────────────
-  window.motrixSetZoom = function (z) {
+  window.motrixSetZoom = function (z, fromPrefs) {
     localStorage.setItem(FZ_KEY, String(z))
+    if (!fromPrefs && window.MotrixPrefs && window.MotrixPrefs.saveFont) window.MotrixPrefs.saveFont(z)   // 頂欄改字級 ⇒ 同步成個人偏好（兩邊一致）
     document.documentElement.style.zoom = z
     document.documentElement.style.setProperty('--fz', String(z))
     FZ_STEPS.forEach(function (step, i) {
@@ -142,6 +143,7 @@ if (typeof module !== 'undefined' && module.exports) {
     }
     var btn = document.getElementById('theme-toggle-btn')
     if (btn) btn.innerHTML = _themeIcon(next)
+    try { if (window.MotrixPrefs && window.MotrixPrefs.saveTheme) window.MotrixPrefs.saveTheme(next) } catch (e) {}   // 同步存回個人偏好（換電腦也保留）
   }
 
   function _themeIcon(isDark) {
@@ -169,6 +171,7 @@ if (typeof module !== 'undefined' && module.exports) {
       }).catch(function () {})
     }
     localStorage.removeItem('motrix_session')
+    try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 個人偏好快取跟著登入者走：登出就清，下一位登入者不會繼承
     window.location.href = inPg ? 'login.html' : 'pages/login.html'
   }
 
@@ -322,7 +325,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!sa) return
     var btn = document.getElementById('tb-online-btn')
     if (!btn) return
-    fetch('/api/online-users', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/online-users', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d) return
@@ -390,7 +393,7 @@ if (typeof module !== 'undefined' && module.exports) {
       return
     }
 
-    var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
+    var cpHref = inPg ? 'my-account.html?tab=security' : 'pages/my-account.html?tab=security'
 
     // Notification bell — 所有角色（第44班使用者裁示：申請人要在系統內看到核准通知）；「查看全部操作紀錄」連結只給管理員（audit-log 是管理頁）
     // notifStore 的宣告只有這一處（管理員的鈴鐺／一般使用者的隱形資料元件兩種外殼共用）：兩個分支互斥，不是兩個實例；
@@ -451,7 +454,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // 頭像個人選單（2026-11-13）：頭像（姓氏圓圈）是按鈕，展開「我的帳號／修改密碼／登出」；頂端顯示姓名＋職務中文名。
     // 「我的帳號」頁（my-account.html）由另一條線交付：MY_ACCOUNT_READY 為 false 時不顯示該項（避免點到 404）；頁面上線後改 true，
     // 屆時「修改密碼」改指向 my-account.html#security。
-    var MY_ACCOUNT_READY = false
+    var MY_ACCOUNT_READY = true
     function buildAcctMenu(cpHref) {
       var items = []
       if (MY_ACCOUNT_READY) items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + (inPg ? 'my-account.html' : 'pages/my-account.html') + '">我的帳號</a>')
@@ -1190,7 +1193,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var sess = {}
     try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') }
     catch (e) { sess = {} }
-    fetch('/api/build-info', {
+    (window.motrixBootFetch || fetch)('/api/build-info', {
       headers: { Authorization: 'Bearer ' + (sess.token || '') },
     }).then(function (r) {
       // 🔴 **404／405 本身就是答案。**
@@ -1506,7 +1509,7 @@ if (typeof module !== 'undefined' && module.exports) {
     if (!s || !s.token) return
     var my = ++_menuSeq
     _setMenuState('pending')
-    fetch('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
+    ;(window.motrixBootFetch || fetch)('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
       .then(function (d) {
         if (my !== _menuSeq) return
@@ -1556,7 +1559,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ── Async session refresh（背景刷新模組權限，有變動立即重建 sidebar）──────────
   function _refreshSession() {
     if (!s || !s.token) return
-    fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         // 🔴 **一個決定，管住下面兩件事**（寫回 localStorage ＋ 重算 mods）。
@@ -1608,7 +1611,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function _hideBonusEntryIfModuleDisabled() {
     if (!s || !s.token) return
-    fetch('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d || d.enabled) return
@@ -1682,7 +1685,7 @@ if (typeof module !== 'undefined' && module.exports) {
   }
   function _hideUnavailableModulePages() {
     if (!s || !s.token) return
-    fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + s.token } })
+    (window.motrixBootFetch || fetch)('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d || typeof d !== 'object') return

@@ -12,9 +12,11 @@
     `assert x.is_visible()` 輸給 x-show 一個影格 ⇒ 偶發紅（2026-11-11）；`assert not x.is_visible()` 更糟——更新前就讀到「還沒出現」⇒ **假綠燈**。
   - 「等待」＝ `wait_for`／`wait_for_selector`／`wait_for_function`／`wait_for_url`／`wait_for_load_state`／`wait_for_response`／`wait_for_event`／
     `expect(loc).to_be_*`／`to_have_*`；`with page.expect_response(...)／expect_navigation／expect_popup…:` 區塊**結束後**也算等過（區塊裡的 click 不會讓之後的讀取違規）。
+    `expect` 前綴只認 Playwright 的呼叫：裸的 `expect(...)` 與屬性呼叫 `page.expect_response／expect_navigation／expect_popup／expect_download／expect_event／expect_request／expect_file_chooser…`（名單 WAITS）；
+    自己寫的 `expected_total()`、`expect_rows(page, 3)`、`helper.expect_rows()` 不是等待。
     **不算等待**：`wait_for_timeout`、`time.sleep`（固定睡眠只是把賽跑拉長，不是同步點）。
     名字含 `wait` 的輔助函式**不是**自動算等待（`_wait_db` 輪詢資料庫、不等畫面）：同檔函式看**內容**——本體有上述真正的等待、而且最後一步不是動作（先等再 click 的不算）；
-    或呼叫時傳進去一個會讀 UI 的 lambda（`_wait(lambda: page.locator(..).is_visible())` 輪詢到成立）；跨檔的輔助函式只認白名單 `WAIT_HELPER_WHITELIST`。
+    或呼叫時傳進去一個會讀 UI 的 lambda（`_wait(lambda: page.locator(..).is_visible())` 輪詢到成立；lambda 只是組出一個 Locator〔永遠為真、立刻返回〕不算）；跨檔的輔助函式只認白名單 `WAIT_HELPER_WHITELIST`。
   - 動作：`fill／check／uncheck／set_checked／type／press_sequentially` 只改自己的值（SYNC_ACTIONS）：之後讀同一個元素的 `input_value()／is_checked()` 確定、不算；
     `clear()`（Python 容器也有）不當動作；`.count(x)` 有引數的是 str／list 的 count，不是 Locator.count()。迴圈體會再掃一遍（上一圈的動作帶進下一圈的開頭）。
   - 豁免：該行（或前一行）有註解 `# e2e-lint: ok <理由>`，理由至少 10 個字 ⇒ 不算違規（例：前面的動作是同步 handler）。
@@ -23,6 +25,7 @@
 [已知限制（寫明，不是漏掉）]
   - 輔助函式「裡面」才讀 UI（`assert _vis(page, '#ok')`，`_vis` 內部 is_visible）看不到；`page.evaluate(...)`／`page.content()` 這類讀取不算 READS（誤報太多）。
   - 輔助函式要不要算等待只看同檔；呼叫別檔的輔助函式一律當「沒等」（白名單或豁免註解）。
+  - 同一行兩個同名讀取各算一筆（序號依「行、欄」排；`a.is_visible() and b.is_visible()` ⇒ `#1`、`#2`），id 本身不含行號。
   - 基準 id 用「檔::函式::讀取名#序號」：同一函式裡修掉第一個 `is_visible#1`，原本的 `#2` 會變 `#1`（舊的 `#2` 變「已修好」要刪、`#1` 仍在基準）——
     所以修一個要跑一次 `--shrink`；「用同名讀取換掉同函式裡另一個違規」不會被發現（數量不變）；把測試函式改名會讓舊 id 變「已修好」＋新 id 變「新違規」。
   - 分支／例外路徑是保守近似（子區塊裡有動作就當之後仍 pending；子區塊裡等過不代表每條路都等過）。
@@ -53,7 +56,7 @@ READS = frozenset({"is_visible", "is_hidden", "is_enabled", "is_disabled", "is_c
 WAITS = frozenset({"wait_for", "wait_for_selector", "wait_for_function", "wait_for_url", "wait_for_load_state", "wait_for_response",
                    "wait_for_event", "wait_for_request", "expect", "expect_response", "expect_navigation", "expect_download",
                    "expect_popup", "expect_event", "expect_request", "expect_file_chooser", "expect_request_finished"})
-_WAIT_PREFIXES = ("wait_for", "expect", "to_be_", "to_have_", "to_contain_", "to_match_")
+_WAIT_PREFIXES = ("wait_for", "to_be_", "to_have_", "to_contain_", "to_match_")
 #: 跨檔、內容確認過會真的等畫面的輔助函式（tests/_e2e_login.py、tests/_ui_dialogs.py）
 WAIT_HELPER_WHITELIST = frozenset({"wait_logged_in", "wait_dialog"})
 _NOT_A_WAIT = frozenset({"wait_for_timeout"})
@@ -71,11 +74,18 @@ def _call_name(node):
     return None
 
 
-def _is_wait_name(name):
-    """真正的等待（名字只要含 wait 不算）。"""
+def _is_wait_name(name, node=None):
+    """真正的等待（名字只要含 wait 不算）。`expect_*` 只認 Playwright 的屬性呼叫（`page.expect_response(...)`）與裸的 `expect(...)`，
+    不認自己寫的 `expected_total()`／`expect_rows(...)` 這類函式。node＝該 Call（沒給就只看名字，給 file_waiters 之類用）。"""
     if name is None or name in _NOT_A_WAIT:
         return False
-    return name in WAITS or name in WAIT_HELPER_WHITELIST or name.startswith(_WAIT_PREFIXES)
+    if name in WAIT_HELPER_WHITELIST:
+        return True
+    if name.startswith("expect"):
+        if name == "expect":
+            return True
+        return name in WAITS and (node is None or isinstance(node.func, ast.Attribute))
+    return name in WAITS or name.startswith(_WAIT_PREFIXES)
 
 
 def _calls_in_order(node):
@@ -155,7 +165,7 @@ def _lambda_reads_ui(call):
     for a in list(call.args) + [k.value for k in call.keywords]:
         if isinstance(a, ast.Lambda):
             for n in ast.walk(a.body):
-                if isinstance(n, ast.Call) and (_call_name(n) in READS or _call_name(n) in ("evaluate", "locator", "query_selector")):
+                if isinstance(n, ast.Call) and (_call_name(n) in READS or _call_name(n) in ("evaluate", "query_selector")):
                     return True
     return False
 
@@ -172,8 +182,8 @@ def _scan_block(stmts, pending, hits, ok_lines, waiters=frozenset()):
                 if name == "count" and (c.args or c.keywords):
                     continue              # str／list 的 count(x)，不是 Locator.count()
                 if pending and c.lineno not in ok_lines and not (pending == "sync" and name in SYNC_READS):
-                    hits.append((c.lineno, name))
-            elif _is_wait_name(name) or name in waiters or (name and _lambda_reads_ui(c) and "wait" in name.lower()):
+                    hits.append((c.lineno, c.col_offset, name))
+            elif _is_wait_name(name, c) or name in waiters or (name and _lambda_reads_ui(c) and "wait" in name.lower()):
                 pending = None
             elif name in ACTIONS and isinstance(c.func, ast.Attribute):
                 if name in SYNC_ACTIONS:
@@ -202,8 +212,8 @@ def file_waiters(tree):
         for name, fn in funcs.items():
             if name in waiters:
                 continue
-            calls = [_call_name(c) for c in ast.walk(fn) if isinstance(c, ast.Call)]
-            if not any(_is_wait_name(c) or c in waiters for c in calls):
+            calls = [c for c in ast.walk(fn) if isinstance(c, ast.Call)]
+            if not any(_is_wait_name(_call_name(c), c) or _call_name(c) in waiters for c in calls):
                 continue
             end = _scan_block(fn.body, None, [], set(), frozenset(waiters))
             if end is None:
@@ -231,7 +241,7 @@ def scan_source(rel, src):
                 hits = []
                 _scan_block(ch.body, None, hits, ok_lines, frozenset(waiters - {ch.name}))
                 seen = {}
-                for ln, name in sorted(set(hits)):
+                for ln, _col, name in sorted(set(hits)):
                     seen[name] = seen.get(name, 0) + 1
                     out["%s::%s::%s#%d" % (rel, ".".join(q), name, seen[name])] = ln
                 visit(ch, q)

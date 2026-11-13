@@ -35,6 +35,7 @@ SKIP_PREFIXES = (
     # 共 485 筆（31%）——全是頁面自己打的，人一次都沒按過：
     "/api/edit-presence",            # 同時編輯心跳，每 30 秒一次（95 筆）
     "/api/approval-queue/count",     # 側欄簽核紅點的數字（77 筆）
+    "/api/bootstrap",                # 每頁載入的啟動資料（合併 auth/me、選單、通知數等自動請求；人沒按過）
     "/api/list-prefs",               # 清單欄位／篩選偏好，開頁自動讀寫（196 筆）
     # 這支是「POST 當查詢用」：案件管理清單開頁時一次問完所有案件有沒有新動態
     # （quotations.py::case_activity）。它是 POST 但沒有改任何東西，留著只會在
@@ -63,7 +64,7 @@ MODULE_LABELS = {
     "access-guide":         "門禁系統選型導覽",
     "approval-delegates":   "簽核代理人",
     "approval-history":     "簽核歷史",
-    "approval-queue":       "簽核佇列",
+    "approval-queue":       "待我簽核",
     "audit-log":            "操作紀錄",
     "auth":                 "帳號安全",
     "automation-guide":     "自動化系統選型導覽",
@@ -365,6 +366,7 @@ _FANOUT_GROUPS = (
         "/api/dashboard/stats", "/api/dashboard/monthly",
         "/api/dashboard/expenses-monthly", "/api/dashboard/ops-alerts",
         "/api/dashboard/funnel", "/api/dashboard/activity-feed",
+        "/api/dashboard/bundle",           # 2026-11-13：上面六支的合併（開頁一次撈完）
     )),
     ("/api/reports", "查看營運報表", (
         "/api/reports/financial", "/api/reports/receivables-monthly",
@@ -541,14 +543,15 @@ PAGE_LABELS = {
     "access-guide.html": "門禁系統選型導覽",
     "approval-delegates.html": "簽核代理人",
     "approval-history.html": "簽核歷史",
-    "approval-queue.html": "簽核佇列",
+    "approval-queue.html": "待我簽核",
     "approval-settings.html": "簽核設定",
     "audit-log.html": "操作紀錄",
     "automation-guide.html": "自動化系統選型導覽",
     "case-management.html": "案件管理",
     "case-stage-board.html": "案件執行看板",
     "cashier.html": "出納",
-    "change-password.html": "修改密碼",
+    "change-password.html": "我的帳號",
+    "my-account.html": "我的帳號",
     "company-profile-settings.html": "公司資料設定",
     "completion-note-form.html": "完工單",
     "contractor-voucher-approval-settings.html": "承攬商匯款申請簽核設定",

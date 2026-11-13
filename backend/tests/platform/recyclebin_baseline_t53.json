@@ -233,6 +233,10 @@
    "count": 4,
    "reason": "exempt: 登入 session（暫態）"
   },
+  "routers/auth.py::user_prefs": {
+   "count": 1,
+   "reason": "exempt: 刪除帳號時連帶清除該人的個人偏好（字級、外觀、首頁等，純偏好、無單據價值；帳號刪不成功時同一交易 rollback）"
+  },
   "routers/auth.py::users": {
    "count": 1,
    "reason": "exempt: 使用者帳號（有自己的生命週期規則）"
@@ -287,6 +291,10 @@
    "count": 1,
    "reason": "tmp: 心跳狀態檔寫入失敗時刪自己的暫存檔（.tmp，非用戶資料）"
   },
+  "helpers/backup_monitor.py": {
+   "count": 2,
+   "reason": "tmp: 心跳設定檔換檔失敗時刪自己的 .tmp、清除 .pending 待審網址檔（程式設定暫存檔，非用戶單據）"
+  },
   "helpers/branding.py": {
    "count": 1,
    "reason": "exempt: 品牌圖檔（可重新上傳，非單據）"
@@ -294,6 +302,10 @@
   "helpers/custom_files.py": {
    "count": 1,
    "reason": "p2: 自訂記錄附件刪除"
+  },
+  "helpers/license_manager.py": {
+   "count": 4,
+   "reason": "tmp: 授權換檔：刪自己的換檔暫存檔（.import-tmp／.restore-tmp）、備份複製驗證失敗時刪自己剛複製的檔、舊備份輪替（只留最近 30 份；授權備份，非用戶單據）"
   },
   "helpers/log_setup.py": {
    "count": 3,

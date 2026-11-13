@@ -43,12 +43,21 @@ AUDIT_WRAPPERS = {
     # 重播（同一把 key 重送）不執行 `_impl` ⇒ 不重複稽核，這是刻意的（沒有新的寫入）
     "_post_case_update_impl": ("modules/case/api/quotations.py", "留言成功寫 case.update_post"),
     "_add_case_update_files_impl": ("modules/case/api/quotations.py", "補附件成功寫 case.update_files_add"),
+    # T83 授權匯入：端點只呼叫 `_audit_import`（依結果寫 license.import／license.import_rejected／license.import_restore_failed；預覽與需確認不寫＝沒有狀態變動）
+    "_audit_import": ("routers/licensing.py", "匯入成功寫 license.import；被拒寫 license.import_rejected；還原失敗寫 license.import_restore_failed"),
     "_create_work_log_impl": ("routers/system.py", "建立成功寫 work_log.create"),
     "_upload_work_log_photos_impl": ("routers/system.py", "上傳成功寫 work_log.photo_upload"),
+    # 備份與監控頁：動作完成後才寫稽核，寫失敗只記 log（不讓使用者看到 500 而重按）；內部直接呼叫 `_audit`
+    "_safe_audit": ("routers/backup_monitor.py", "立即備份／設定網址／測試心跳完成後寫 system.backup_now／heartbeat_url_set／heartbeat_test"),
 }
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 選單分類／設定說明覆寫（批次 9）：稽核在 helper 的 set_override 內直接呼叫 _audit（寫入成功後才寫；驗證失敗丟 ValueError、不寫），端點本身只轉呼叫 ──
+    ("menu_categories.py", "PUT", "/api/menu/categories/override"):
+        "稽核 menu_categories.override 由 helpers/menu_categories.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
+    ("menu_categories.py", "PUT", "/api/menu/settings-help/override"):
+        "稽核 settings_help.override 由 helpers/settings_help.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
     # ── 通知用語預覽（t62 S-X3）：POST 只為帶草稿範本，不寫任何資料 ──
     ("notify_templates.py", "POST", "/api/notify-templates/{event}/preview"):
         "preview：只在記憶體內驗證草稿範本並以樣本值渲染（NT.preview 不 commit、不寫任何資料）；僅最高管理者、builder_notify 旗標關閉時 404。",
@@ -201,6 +210,15 @@ EXEMPT = {
         "純預覽：用樣本資料產生 HTML，不存檔",
     ("attachment_slots.py", "POST", "/api/attachment-slots/{doc_type}/simulate"):
         "純模擬（BP-4 S2）：判斷樣本檔收不收、顯示用路徑、誰能讀；不寫檔、不建資料夾、不存任何東西",
+    # ── 備份與監控頁：停用／換主機的申請與核准走 config_ledger，稽核在 ledger 同一交易內寫（不是「不寫稽核」，是守門認不得這條路）──
+    ("backup_monitor.py", "POST", "/api/system/backup-monitor/heartbeat-disable"):
+        "申請停用／立即停用：稽核已寫：由 helpers/backup_monitor.py 在同一個資料庫交易內經 config_ledger.audit_event 寫 audit_log（action＝system.heartbeat_disable_requested／system.heartbeat_disabled），守門只認路由內直接呼叫 _audit；每個動作的稽核列由 test_backup_monitor_review_fixes_2026_11_13.py 鎖住。",
+    ("backup_monitor.py", "POST", "/api/system/backup-monitor/heartbeat-disable/{change_id}/approve"):
+        "核准：稽核已寫：由 helpers/backup_monitor.py 在同一個資料庫交易內經 config_ledger.audit_event 寫 audit_log（action＝system.heartbeat_disabled／system.heartbeat_changed），守門只認路由內直接呼叫 _audit；每個動作的稽核列由 test_backup_monitor_review_fixes_2026_11_13.py 鎖住。",
+    ("backup_monitor.py", "POST", "/api/system/backup-monitor/heartbeat-disable/{change_id}/cancel"):
+        "申請人撤回：稽核已寫：由 helpers/backup_monitor.py 在同一個資料庫交易內經 config_ledger.audit_event 寫 audit_log（action＝system.heartbeat_disable_cancelled），守門只認路由內直接呼叫 _audit；每個動作的稽核列由 test_backup_monitor_review_fixes_2026_11_13.py 鎖住。",
+    ("backup_monitor.py", "POST", "/api/system/backup-monitor/heartbeat-disable/{change_id}/reject"):
+        "駁回：稽核已寫：由 helpers/backup_monitor.py 在同一個資料庫交易內經 config_ledger.audit_event 寫 audit_log（action＝system.heartbeat_disable_rejected），守門只認路由內直接呼叫 _audit；每個動作的稽核列由 test_backup_monitor_review_fixes_2026_11_13.py 鎖住。",
 }
 
 _VAGUE = {"", "不需要", "例外", "n/a", "na", "todo", "無", "略", "同上", "暫時"}

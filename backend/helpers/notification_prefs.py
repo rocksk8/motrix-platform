@@ -16,11 +16,11 @@ import json
 # single source of truth for which keys exist.
 EVENT_GROUPS = [
     ("簽核流程", [
-        ("approval_request",  "報價單待簽核通知（當層簽核人）"),
-        ("next_tier",         "報價單進入下一層簽核"),
-        ("approved",          "報價單簽核完成"),
-        ("returned",          "報價單退回修改"),
-        ("resubmit_requester","修改版報價單重新送審確認"),
+        ("approval_request",  "報價單／估價單待簽核通知（當層簽核人）"),
+        ("next_tier",         "報價單／估價單進入下一層簽核"),
+        ("approved",          "報價單／估價單簽核完成"),
+        ("returned",          "報價單／估價單退回修改"),
+        ("resubmit_requester","修改版報價單／估價單重新送審確認"),
         ("shipping_submitted","出貨單待簽核通知（當層簽核人）"),
         ("shipping_next_tier","出貨單進入下一層簽核"),
         ("shipping_approved", "出貨單簽核完成"),
@@ -49,7 +49,7 @@ EVENT_GROUPS = [
         ("bonus_correction_submitted","獎金更正單待簽核通知（輪到我簽，含代理；信中不含金額）"),
         ("bonus_correction_approved", "獎金更正單核准通知（申請人；有補發時含出納；信中不含金額）"),
         ("bonus_correction_returned", "獎金更正單駁回通知（申請人）"),
-        ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"),
+        ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／估價單／匯款申請／開票申請憑據／請款單）"),
     ]),
     ("會計傳票與總帳申請", [
         ("voucher_submitted",  "會計傳票待審核通知（當層簽核人）"),
@@ -97,6 +97,7 @@ EVENT_GROUPS = [
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
         ("user_notice",         "管理者自訂的額外通知（站內通知另有各動作的個別退訂）"),
         ("cert_expiry",          "HTTPS 憑證即將到期（每日檢查，依憑證種類自動調整提前天數）"),
+        ("license_expiry",       "系統授權即將到期（剩 30、14、7 天各通知一次；永久授權過了維護期通知一次）"),
         ("backup_stale",         "備份已停止運作（每日檢查，超過 36 小時沒有成功備份）"),
         ("heartbeat_stale",      "心跳監控本身異常（每日檢查：狀態壞超過 90 分鐘、排程停止更新）"),
         ("disk_space_low",       "磁碟空間不足（每日檢查，低於 10% 且低於 20 GB）"),

@@ -2,6 +2,8 @@
 
 > 範本（2026-09-30，稽核 W4 M4）：每一份 `YYYYMMDD-trainNN-apply.md` 從這裡複製。步驟 0 的第 1、2 項是**必備**，不可以刪。
 
+> **名詞（本範本的「基準」有三種，別混）**：①**正式機基準**＝正式機目前跑的 commit（`.deployed_commit.json`；步驟 0 第 1、2 項、步驟 2 的 `git diff <基準> <head>` 用的就是這個）；②**出貨腳本基準檔**＝`docs/platform/prod-baseline/apply_scripts.json`（已出貨 apply 腳本的版號＋sha256；見「發布者收尾」）；③守門測試的 `*_baseline.json` 基準檔（棘輪；與正式機無關，本範本不提）。單獨說「基準」一律指①。
+
 ## 這一班有什麼
 
 - （條列；使用者看得懂的話）
@@ -27,9 +29,21 @@
 
 ## 步驟 2：套用
 
+> 🔴 **前置：包內的 `apply_update` 版本 ≠ 已安裝的版本 ⇒ 先自升級，再 apply**（第 81 班踩到：第一次 apply 被擋，`status=script_not_from_package`，正式機未被觸碰）。
+> `apply_update.ps1` 開頭會比對自己與包內那份的 `$ApplyScriptVersion`，不同就拒絕；**自升級不會自己發生**（只有部署儀表板的「部署」按鈕會先自動複製）。步驟檔**不可以**寫「套用流程自己會處理」，必須寫出下列步驟（依 `UPGRADE-RUNBOOK.md` §8）：
+> 1. 讀兩個版本：`Select-String -Path <ROOT>\backend\tools\apply_update.ps1 -Pattern '^\$ApplyScriptVersion'`（已安裝）與 `<staged payload>\backend\tools\apply_update.ps1`（包內）；**相同 ⇒ 略過本前置**。
+> 2. **不同 ⇒ 先備份再複製**：把已安裝的 `apply_update.ps1`、`apply_update.version.json` 備份到 `<staging>\pre_<班次>_tools_backup\`；再**只把包內這兩個檔**複製到 `<ROOT>\backend\tools\`（整包 `robocopy <包>\backend\tools <ROOT>\backend\tools /E` 也行，但會連帶換掉其他工具，範圍較大）；用 `Get-FileHash -Algorithm SHA256` 核對安裝目錄與包內兩個檔雜湊**相同**，才執行 apply。
+> 3. 若本班 `apply_module_update.ps1`（及其 `.version.json`）也變了，同理處理。
+> 4. 回報寫出：已安裝版本、包內版本、備份位置、雜湊核對結果。複製失敗或雜湊不符 ⇒ 停下回報，不要重試 apply。
+> 整合者判斷是否需要：`git diff <基準> <head> -- backend/tools/apply_update.version.json backend/tools/apply_module_update.version.json` 有差異 ⇒ 本班需要。
+
 - log 檔名一律帶時間戳：`Tee-Object <staging>\apply_trainNN_$(Get-Date -Format yyyyMMdd_HHmmss).log`。第二十五班使用者重跑一次（`duplicate_version` 正常拒絕）把成功那次的 log 覆蓋掉，步驟 3 #3／#5 因此只能部分驗證（2026-09-30）。步驟 3 引用 log 時寫「時間戳最大且 `::RESULT::` 為 success 的那份」。
 
 ## 步驟 3：套用後檢查（逐項、可機械判定）
+
+> 🔴 **凡是「`server.log` 最近 N 行含 `MOTRIX ERP starting`／`Uvicorn running on`／`已載入`」這類檢查，一律寫成「`server.log`、`server.log.1`（輪替後啟動行會搬到這裡）或 `app.log` 任一份有即可」**（第 81 班 #22②：套用後 `server.log` 是 0 byte、啟動行在 `server.log.1`，字面不符）。
+> 範例：`Get-Content "$b\server.log.1","$b\server.log" -Tail 400 -Encoding UTF8 -ErrorAction SilentlyContinue | Select-String -Pattern "MOTRIX ERP starting","Uvicorn running on","已載入" | Select-Object -Last 6`（檔不存在就略過該檔）。
+> 自 `2026-11-13b` 起 archive 在開機 120 秒內與套用鎖存在時不輪替、`apply_update`／`apply_module_update` 的健檢也會往前讀 `server.log.1`；但**人工檢查仍照上面寫法**（回滾到舊版時舊腳本不會這樣做）。
 
 > 🔴 **「新功能靜態存在」這一列（慣例編號 #9）只准檢查『實際會被部署的程式檔』**：`<ROOT>\backend\**`（含 `backend\tools\*.py`、`backend\modules\*\migrations\*.py`）、`<ROOT>\frontend\**`，用「檔案存在」或 `Select-String <檔> -Pattern '<該班新增的字面值>'`（≥1）。
 > **不可以**檢查 `<ROOT>\docs\platform\*.md` 的存在或內容：`apply_update.ps1` 不部署 `docs\platform`（只還原／備份根目錄的說明檔），正式機上那些檔不是舊的就是不存在，檢查會永遠紅、或對到過期內容而誤綠（第 46 班踩到）。
@@ -42,3 +56,14 @@
 ## 步驟 5：回報
 
 - 步驟 0 第 2 項：`verification.mode`、`verification.scoped.base` 與 `.deployed_commit.json` 的 `commit`（兩個值都寫出來）。
+
+## 發布者收尾（開發機／整合者；不是正式機 Claude 做的，寫在這裡是因為每班都要記得）
+
+- `delivery.py publish` 印出 `DELIVERY_PUBLISH_OK` 後，程式會更新 `docs/platform/prod-baseline/apply_scripts.json`（已出貨 apply 腳本的版號＋sha256；見 UPDATE-DELIVERY.md §9.1「已出貨腳本基準」）。
+  - 🔴 **印出 `DELIVERY_BASELINE_UPDATED` 後要把這個檔 commit 進分支／列車**（不 commit，下一班守門就拿舊基準比，等於放鬆）。不手改它。
+  - 印出 `DELIVERY_BASELINE_FAILED`：包已發布、不用重發；補跑 `python backend/tools/delivery.py baseline-record --name <包名>`，再 commit。
+  - 印出 `DELIVERY_REFUSED …腳本版號與已出貨基準衝突`：本班改了 `apply_update.ps1`／`apply_module_update.ps1` 的內容卻沒升版號——升 `$ApplyScriptVersion`（模組那支是 `$ApplyModuleScriptVersion`）並更新 `*.version.json` 的 sha256，重建包再發布。
+  - 單模組包（`kind=module`）：印出 `DELIVERY_BASELINE_NOT_APPLICABLE` 是正常的——它不涉及 `apply_update.ps1` 的版號，沒有驗也不更新基準，不用處理。
+  - 基準檔不存在 ⇒ `delivery.py publish` 直接拒絕（先把基準檔還原：`git checkout <列車> -- docs/platform/prod-baseline/apply_scripts.json`）；真的不可用才明確帶 `--no-baseline`（會印 `DELIVERY_BASELINE_SKIPPED`，下一班守門拿舊基準比，要在回報裡寫出來）。
+  - 用 `--baseline <別的檔>` 時，發布輸出會印 `DELIVERY_BASELINE_FILE <實際路徑>`；那個檔不是守門讀的那一份，更新完要自己搬回 `docs/platform/prod-baseline/apply_scripts.json`。
+  - 「基準」一詞在本範本只指**這份腳本版號基準檔**；與步驟 0／步驟 1 裡「正式機基準（`.deployed_commit.json` 的 commit）」是兩回事（後者是正式機上實際已套用的 commit）。T83 整合時與 683e3b765 上 h8 的那句對齊。

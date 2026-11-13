@@ -3,6 +3,12 @@
 ## (next) — 2026-11-13（feat/upload-files-txn-2；T84；版號由列車取）
 - 變更（內部，API 路徑與回應形狀不變）：業務開發記錄（`POST /api/dev-cases/{id}/logs`）改用 `helpers.uploads.files_txn`：寫庫失敗，或案件在上傳途中被刪（鎖內重查 `is_deleted=0`，回 404），都回收剛存的檔。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 
+## 1.2.6 — 2026-11-13（fix/estimate-static-labels；估價單用語）
+- 用語：轉建彈窗／按鈕／連結異動彈窗與輸入框提示改為中性「報價單／估價單」（輸入框提示不再寫 MQ 字首）；「轉建」站內通知與信件主旨依連結單號字首顯示「轉建報價單」或「轉建估價單」。連結時「單號不存在」三句（轉建連結、申請修改連結、核准）依單號字首顯示「報價單」或「估價單」；其餘 API 錯誤訊息不變。
+
+## 1.2.5 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.2.4 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api.py` 接上 LINE 獨立通道——案件建立／狀態變更（`crm_case_created`／`crm_case_status`，收件人＝業務、企劃、被指派人、建立者）、指派／取消指派／期限調整（`dev_case_assigned`／`dev_case_unassigned`／`dev_case_deadline_changed`）；泛用的 module_activity 對這幾件事不重複推 LINE。LINE 只送給有業務開發權限（`dev_crm`）的人。無 API／資料變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`、`tests/test_line_crm_perm_filter_2026_11_13.py`。

@@ -169,7 +169,7 @@ def test_every_wired_event_has_a_group_and_a_valid_priority(env):
 def test_priority_critical_only_for_system_alerts_approvals_and_assignees_are_normal(env):
     from helpers import line_notify as L
     crit = {k for k in L.WIRED_EVENTS if L.event_spec(k)["priority"] == "critical"}
-    assert crit == {"backup_error", "backup_stale", "heartbeat_stale", "disk_space_low", "cert_expiry", "company_setup_alert", "auth_lockout"}
+    assert crit == {"backup_error", "backup_stale", "heartbeat_stale", "disk_space_low", "cert_expiry", "company_setup_alert", "auth_lockout", "license_expiry"}
     for k in ("approval_request", "next_tier", "approved", "returned", "approval_reminder", "shipping_submitted", "dev_case_assigned",
               "dev_case_unassigned", "daily_task_assigned", "crm_case_status", "module_activity"):
         assert L.event_spec(k)["priority"] == "normal", k
@@ -336,7 +336,7 @@ def test_legacy_notify_pushes_line_and_leaves_email_byte_identical(env, dept, fu
     env["line_fail"] = False
 
 
-def test_legacy_line_is_independent_of_email_recipients_and_mail_off(env):
+def test_legacy_line_is_independent_of_email_recipients_and_mail_off(env, client):
     """沒有 Email 的人、信件被矩陣關閉：LINE 照發（獨立通道）；個人信件退訂不影響 LINE。"""
     from helpers import email_notify as EN, line_notify as L
     from db import get_db
@@ -433,7 +433,7 @@ def test_personal_mute_is_respected_even_for_picked_people(env):
     assert _targets(env) == ["amy", "carol"]
 
 
-def test_inactive_and_unlinked_picked_people_are_dropped(env):
+def test_inactive_and_unlinked_picked_people_are_dropped(env, client):
     from helpers import email_notify as EN, line_notify as L
     from db import get_db
     L.set_event("shipping_submitted", True)

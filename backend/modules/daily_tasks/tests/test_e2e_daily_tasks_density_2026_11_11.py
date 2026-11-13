@@ -51,9 +51,11 @@ def test_calendar_defaults_to_current_month_only(live_server, make_user, e2e_bro
 def test_toolbar_primary_vs_more_menu(live_server, make_user, e2e_browser):
     page = _open(live_server, make_user, e2e_browser, "e2e_dt2")
     bar = page.locator(".dt-bar")
-    # 列上只剩主要動作
+    # init() 在 `await loadTasks()` 之後才把 calMode 設成 true，按鈕字樣才從「日曆視圖」變成「← 關閉日曆」：先等到這個狀態再斷言
+    # （只等 dt-more 會在負載下搶在字樣翻轉之前判斷 ⇒ 平行跑偶發紅；is_visible() 不重試，改用會等待的 expect）
+    page.wait_for_selector(".dt-bar-act-cal.on", timeout=20000)
     assert bar.locator("[data-testid=dt-today]").is_visible()
-    assert bar.get_by_role("button", name="← 關閉日曆").is_visible()
+    bar.get_by_role("button", name="← 關閉日曆").wait_for(state="visible", timeout=10000)
     for name in ("回報彙整", "月曆總覽", "看板", "解鎖管理視角"):
         assert not bar.get_by_role("button", name=name, exact=True).is_visible(), name + " 應該收在「更多」"
     menu = page.locator("[data-testid=dt-more-menu]")

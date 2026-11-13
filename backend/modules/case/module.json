@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.221",
+  "version": "1.0.226",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -171,6 +171,7 @@
         {"key": "filler", "label": "填單人", "core": false},
         {"key": "status", "label": "狀態", "core": true},
         {"key": "dealTag", "label": "案件進度", "core": true},
+        {"key": "next", "label": "下一步", "core": false},
         {"key": "date", "label": "報價日期", "core": false}
       ],
       "qterms": [
@@ -251,6 +252,7 @@
             {"field": "filler", "visible": true},
             {"field": "status", "visible": true},
             {"field": "dealTag", "visible": true},
+            {"field": "next", "visible": true},
             {"field": "date", "visible": true}
           ]}
         ],

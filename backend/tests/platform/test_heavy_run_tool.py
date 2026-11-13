@@ -16,6 +16,18 @@ ALIVE = lambda pid: True        # noqa: E731
 NOW = 1_000_000.0
 
 
+@pytest.fixture(autouse=True)
+def _isolated_from_the_real_gate(monkeypatch, tmp_path_factory):
+    """本檔每一題都與**真的**閘門鎖／佇列／token 完全隔離。
+    這輪 pytest 可能就是被正式閘門（或 run_stage／heavy_run）包著跑的：行程環境帶著 MOTRIX_GATE_TOKEN、MOTRIX_CI_TICKET、
+    MOTRIX_WINDOW，而 `H.run` 啟動子行程時把整份環境傳下去 ⇒ 「非閘門的票不拿 token」之類的斷言在閘門裡必紅；
+    MOTRIX_CI_DIR 也要指到暫存目錄，`status_line`／`read_gate()` 才不會讀到真的鎖（T82 預跑抓到，2026-11-13）。"""
+    for k in (H.CI_TICKET_ENV, H.GATE_TOKEN_ENV, "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_EXCLUSIVE_OWNER",
+              "MOTRIX_QUEUE_GUARD", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_WINDOW"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("MOTRIX_CI_DIR", str(tmp_path_factory.mktemp("real_gate_isolated")))
+
+
 def _t(q, name, cls, window="w", started=None, pid=1234, enq=NOW):
     q.mkdir(parents=True, exist_ok=True)
     p = q / name

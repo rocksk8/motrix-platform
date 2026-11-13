@@ -47,7 +47,7 @@ LINE_ONLY_EVENTS = {
     "crm_case_progress": {"name": "業務開發：案件進度回報（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_visit_logged": {"name": "業務開發：新增拜訪記錄（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_log_approved": {"name": "業務開發：開發記錄審核通過", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
-    "crm_case_converted": {"name": "業務開發：案件轉建報價單", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
+    "crm_case_converted": {"name": "業務開發：案件轉建報價單／估價單", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
 }
 
 #: 分組顯示順序（使用者優先順序：簽核 → 指定人員／業務開發 → 其餘）

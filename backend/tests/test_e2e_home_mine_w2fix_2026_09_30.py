@@ -43,12 +43,12 @@ def test_w2f1_focus_and_visibility_share_one_request(live_server, make_user, e2e
 def test_w2f5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e2e_browser):
     page = _home(e2e_browser, live_server, make_user, "w2fix_s5", route=lambda r: r.fulfill(status=500, body="{}"))
     page.wait_for_function(f"() => {{ try {{ return {DATA}.statsLoaded === true && !{DATA}.loading }} catch (e) {{ return false }} }}", timeout=20000)
-    assert page.locator(".h-band__c .h-band__n").first.inner_text().strip() == "—"
+    assert page.locator("[data-testid=band-approvals] .h-band__n").inner_text().strip() == "—"
     # 2026-11-11 D1：英雄區右側狀態框不再重複「我的待簽核」（同一個數字由統計卡負責）；讀不到時由上一行的統計卡顯示「—」
     assert page.locator(".h-state div:has-text('我的待簽核')").count() == 0
     hero = page.locator(".h-hero__t").inner_text()
     assert "今天有" not in hero and "目前沒有待您簽核" not in hero, hero
-    assert "讀不到待簽核清單" in page.locator(".h-band__c .h-band__p").first.inner_text()
+    assert "讀不到待簽核清單" in page.locator("[data-testid=band-approvals] .h-band__p").inner_text()
     assert page.locator('[data-testid="home-mine-unknown"]').count() == 1
 
 

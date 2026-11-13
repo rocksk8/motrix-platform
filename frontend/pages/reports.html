@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>營運報表 — MOTRIX 專案管理系統</title>
+  <title>營運報表 — MOTRIX PLATFORM</title>
   <meta name="motrix-export-id" content="reports:financial">   <!-- S-F2 B：builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（營運報表的工作表選擇）；關著＝沒有任何額外請求 -->
   <script src="../static/vendor/chart-4.4.0.umd.min.js"></script>
   <script src="../static/legal-round.js"></script>
@@ -79,7 +79,7 @@
     .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600}
     .rb-active{background:#DCFCE7;color:#15803D}
     .rb-closed{background:#F3F4F6;color:#374151}
-    .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-fin{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 已結算／已結案＝結束狀態：深灰藍（紫色只留給內部／機密；2026-11-13） */
     .rb-received{background:var(--success-light);color:var(--success)}
     .rb-pending{background:#FEF3C7;color:#92400E}
     .rb-invoiced{background:#ECFDF5;color:#065F46}

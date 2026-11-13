@@ -1,4 +1,5 @@
 """System: approval-flow settings, notifications, audit log, work logs."""
+import threading
 import inspect
 import json
 import logging
@@ -24,6 +25,7 @@ from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 from helpers.image_guard import ImageRejected, run_decode
+from core.txn import write_txn
 import trail
 
 router = APIRouter()
@@ -801,7 +803,6 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能替自己的工作日誌上傳照片")
 
-    existing = json.loads(row["photos"] or "[]")
     today = datetime.now().strftime("%Y-%m-%d")
     base_dir, url_prefix = _photo_root()
     save_dir = os.path.join(base_dir, f"worklog_{wid}", today)
@@ -834,6 +835,17 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
                 "uploaded_by": user['display_name'],
                 "uploaded_at": datetime.now().isoformat(),
             })
+        # 慢動作（解碼、寫檔）都做完了，現在才拿寫鎖、重讀目前的 photos、只加上這一批：
+        # 兩個請求同時往同一筆日誌上傳時，各自讀到上傳前的 photos 再整包寫回，後寫的會蓋掉先寫的 ⇒ 先寫那一批的檔就成了孤兒（沒有紀錄指向）；
+        # 日誌在上傳途中被刪掉（UPDATE 影響 0 列）、或這裡任何資料庫錯誤，也走下面同一個回收。
+        with write_txn(conn):
+            cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+            if not cur_row:
+                raise HTTPException(404, "找不到日誌")
+            all_photos = json.loads(cur_row["photos"] or "[]") + new_photos
+            conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                         (json.dumps(all_photos, ensure_ascii=False), wid))
+            conn.commit()
     except BaseException:
         # 整批要嘛全收要嘛全不收：任何一張失敗（400／503／斷線）⇒ 這次已寫到磁碟的檔案刪掉，免得留下孤兒、客戶端重試又重複一份
         for _p in written:
@@ -844,10 +856,6 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
         conn.close()
         raise
 
-    all_photos = existing + new_photos
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(all_photos, ensure_ascii=False), wid))
-    conn.commit()
     conn.close()
     notify_module_activity("工作日誌", "上傳照片", user['display_name'],
                             f"日誌 #{wid}（{len(new_photos)} 張）", "work-log.html")
@@ -865,10 +873,21 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
         conn.close(); raise HTTPException(404, "找不到日誌")
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能刪除自己工作日誌的照片")
-    photos = json.loads(row["photos"] or "[]")
-    photo  = next((p for p in photos if p.get('id') == photo_id), None)
-    if not photo:
-        conn.close(); raise HTTPException(404, "照片不存在")
+    # lost update：拿寫鎖之後才重讀、只濾掉這一張（讀到寫之間別人剛上傳的照片不會被整份寫回蓋掉）；
+    # 實體檔在 commit 之後才刪（資料庫寫失敗時不會留下「紀錄還在、檔案已不見」）
+    with write_txn(conn):
+        cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+        if not cur_row:
+            raise HTTPException(404, "找不到日誌")
+        photos = json.loads(cur_row["photos"] or "[]")
+        photo  = next((p for p in photos if p.get('id') == photo_id), None)
+        if not photo:
+            raise HTTPException(404, "照片不存在")
+        photos = [p for p in photos if p.get('id') != photo_id]
+        conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                     (json.dumps(photos, ensure_ascii=False), wid))
+        conn.commit()
+    conn.close()
     try:
         base_dir, _url_prefix = _photo_root()
         fp = os.path.join(base_dir, '..', photo['path'])
@@ -876,11 +895,6 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
             os.remove(fp)
     except Exception:
         pass
-    photos = [p for p in photos if p.get('id') != photo_id]
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(photos, ensure_ascii=False), wid))
-    conn.commit()
-    conn.close()
     notify_module_activity("工作日誌", "刪除照片", user.get("display_name") or user["username"],
                             f"日誌 #{wid}", "work-log.html")
     _audit(_tok(authorization), 'work_log.photo_delete', 'work_log', str(wid), str(wid), {'photoId': photo_id})
@@ -1274,6 +1288,8 @@ class CompanyProfile(BaseModel):
     company_name_en: str = ''
     phone: str = ''
     email: str = ''
+    # 2026-11-13「報價用公司信箱」：公司對外信箱。使用者沒有自己的報價用信箱時，報價單／PDF／信件 Reply-To 用它（helpers/quote_email.py）。空白＝不設。
+    external_email: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -1291,6 +1307,7 @@ _COMPANY_PROFILE_DEFAULT = {
     "privacy_notice_contact": "",   # 聯絡人用（客戶／供應商／承攬商），空白＝範本
     "privacy_notice_user": "",      # 使用者帳號用，空白＝範本
     "company_name_en": "", "phone": "", "email": "",   # 2026-09-27 H10（品牌區塊一起編輯）
+    "external_email": "",       # 2026-11-13 公司對外信箱（報價用；helpers/quote_email.py）
 }
 
 #: 設定頁編輯的鍵 ⇒ 同一欄在 company_profile 裡、解析順序排在它前面的別名（helpers.company_identity._PROFILE_ALIASES）。
@@ -1646,9 +1663,42 @@ def _migrated_locations(profile):
              "lat": profile.get("office_lat"), "lon": profile.get("office_lon")}]
 
 
+#: 公開子集（`GET /api/settings/company-profile/public`，任何登入者可讀）——**白名單**：欄位只增不自動：profile 之後新增的鍵預設是私有的。
+#: 內容＝目前所有非設定頁的畫面真的用到的東西（案件／核准／報價單的據點名稱、傳票抬頭、勞報單預填公司名稱／統編／聯絡方式）。
+#: 不含：匯款帳號四欄、地址／電話／email、座標、金鑰、告知文字、據點自己的銀行與抬頭欄位。單據列印在伺服器端組（pdf_gen／company_identity），不經這個端點。
+_PUBLIC_PROFILE_FIELDS = ("name", "tax_id", "contact_info")
+_PUBLIC_LOCATION_FIELDS = ("id", "name")
+
+#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 0 ＝ 維持原本（登入即可讀）。
+_FULL_READ_GROUP, _FULL_READ_FIELD = "account_security", "company_profile_full_read_superadmin_only"
+
+
+def _full_read_superadmin_only() -> bool:
+    """讀不到設定 ⇒ 當作開（只影響非最高管理者：他們改用 /public，不會壞）。"""
+    try:
+        from helpers import settings_registry as _sr
+        return bool(int(_sr.get(_FULL_READ_GROUP, _FULL_READ_FIELD)))
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning("公司資料讀取限制：讀不到設定，保守地只讓最高管理者讀完整內容", exc_info=True)
+        return True
+
+
+@router.get("/api/settings/company-profile/public")
+def get_company_profile_public(authorization: str = Header(None)):
+    """任何登入者可讀的公司資料子集（白名單）：名稱、統編、聯絡方式、據點（只有 id 與名稱）。"""
+    _require_user(authorization)
+    profile = {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
+    out = {k: str(profile.get(k) or "") for k in _PUBLIC_PROFILE_FIELDS}
+    out["locations"] = [{k: l.get(k, "") for k in _PUBLIC_LOCATION_FIELDS}
+                        for l in _migrated_locations(profile) if isinstance(l, dict) and l.get("id")]
+    return out
+
+
 @router.get("/api/settings/company-profile")
 def get_company_profile(authorization: str = Header(None)):
-    _require_user(authorization)
+    me = _require_user(authorization)
+    if me.get("role") != "superadmin" and _full_read_superadmin_only():
+        raise HTTPException(403, "完整的公司資料只有最高管理者可以查看。")
     # 既有安裝的 DB 值可能是新增銀行欄位前存的舊 shape，缺的鍵補上空字串，
     # 前端才不用每個欄位都自己防 undefined。
     profile = {**_COMPANY_PROFILE_DEFAULT,
@@ -1789,6 +1839,14 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     cur = {**_COMPANY_PROFILE_DEFAULT,
            **(_get_setting("company_profile", {}) or {})}
     sent = body.model_dump(include=body.model_fields_set)
+    # 2026-11-13 公司對外信箱：格式不對 ⇒ 422（先驗再寫）；網域只做提醒（回 emailHint），不擋存檔
+    _email_hint = ""
+    if "external_email" in sent:
+        from helpers import quote_email as _qe
+        sent["external_email"] = str(sent["external_email"] or "").strip()
+        if sent["external_email"] and not _qe.valid(sent["external_email"]):
+            raise HTTPException(422, "公司對外信箱的格式不正確（例：service@your-company.com）")
+        _email_hint = _qe.domain_hint(sent["external_email"], (cur.get("email") or ""))
     # 🔴 **收到遮蔽字 ⇒ 視為沒送。**
     #
     # ☠️ 遮蔽帶出來的缺陷，而它**完全安靜**：設定頁最自然的寫法是
@@ -1862,7 +1920,7 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
                value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
         return {"ok": True, "confirmed": True}
-    return {"ok": True}
+    return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
 
 RECONFIRM_CODE = "company_setup_reconfirm"
@@ -1917,8 +1975,8 @@ def company_setup_status(authorization: str = Header(None)):
         # CG-S5：只有一位最高管理者 ⇒ 設定頁建議再設一位（唯一的人不在時只剩本機暫時放行）
         conn = _gdb()
         try:
-            out["superadminCount"] = conn.execute(
-                "SELECT COUNT(*) FROM users WHERE role='superadmin' AND active=1").fetchone()[0]
+            from helpers import config_ledger as _cl
+            out["superadminCount"] = len(_cl.real_superadmins(conn))      # 展示帳號不算（建議再設一位真人最高管理者）
         finally:
             conn.close()
     return out
@@ -2596,6 +2654,9 @@ _MASKED = "••••••••"
 def get_email_notify(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     cfg = _get_setting("email_notify", {}) or {}
+    _p = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
+    if _p and not _wizard_fresh(_p):                # 過期的測試證明（內含候選密碼）順手清掉
+        _set_setting(_EMAIL_WIZARD_PROOF, {})
     safe = {**_EMAIL_DEFAULTS, **cfg}
     safe.pop("admin_emails", None)
     safe["smtp_password"] = _MASKED if cfg.get("smtp_password") else ""
@@ -2609,10 +2670,27 @@ def get_email_notify(authorization: str = Header(None)):
 def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     current = _get_setting("email_notify", {}) or {}
-    data = {k: body[k] for k in _EMAIL_DEFAULTS if k in body}
-    data = {**_EMAIL_DEFAULTS, **data}
+    incoming = {k: body[k] for k in _EMAIL_DEFAULTS if k in body}
+    data = {**_EMAIL_DEFAULTS, **current, **incoming}      # 沒帶的欄位維持原值（不是重設成預設；舊頁面照常運作）
+    from helpers import email_setup as _es
+    bad = _es.validate_config(data)                  # 批次 3：存之前先檢查格式，白話回報（不是存了之後才在寄信時出錯）
+    if bad:
+        raise HTTPException(422, bad)
+    for k in ("smtp_user", "smtp_host", "base_url", "from_name"):
+        if isinstance(data.get(k), str):
+            data[k] = data[k].strip()
     if data.get("smtp_password") in ("", _MASKED):
         data["smtp_password"] = current.get("smtp_password", "")
+    try:
+        new_port, old_port = int(data.get("smtp_port") or 0), int(current.get("smtp_port") or 0)
+    except (TypeError, ValueError):
+        new_port, old_port = 0, 0
+    if new_port != old_port and new_port not in _WIZARD_PORTS:       # 和精靈同一條：寄信埠只准 25／465／587／2525（沒改埠的舊設定照常可存）
+        raise HTTPException(422, "寄信埠只能是 25、465、587 或 2525；請向信箱或網域代管廠商確認。")
+    # 由「未啟用」改成「啟用」＝一定要有這份設定剛剛測試成功的證明（24 小時內、帳密與主機埠完全相同）；精靈與舊頁面都一樣，伺服器端把關
+    if data.get("enabled") and not current.get("enabled") and not _wizard_proof_matches(
+            data.get("smtp_host"), data.get("smtp_port"), data.get("smtp_user"), data.get("smtp_password")):
+        raise HTTPException(422, "要啟用 Email 通知，請先用上方的「設定公司寄信帳號」寄一封測試信並確認收到；這份設定還沒有測試成功。")
     _set_setting("email_notify", data)
     _audit(_tok(authorization), "settings.email_notify.update", "settings",
            "email_notify", "Email 通知設定")
@@ -3047,6 +3125,8 @@ def remind_line_bindings(body: dict = Body(default={}), authorization: str = Hea
 @router.post("/api/settings/email-notify/test")
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
+    if not _wizard_rate_ok(user["id"]):               # 舊的「寄測試信」也走同一個頻率限制（不然可繞過精靈的限制反覆探測）
+        raise HTTPException(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。")
     from helpers.email_notify import _send_raising, _admin_emails, _build_html, _base_url
     from helpers import mail_types as _mt
     to = _admin_emails("system_test_mail")
@@ -3065,6 +3145,223 @@ def test_email_notify(authorization: str = Header(None)):
         raise HTTPException(502, f"寄信失敗：連不上寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
     _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
+
+
+# ── 寄信帳號精靈（批次 3，2026-11-13）──────────────────────────────────────────
+# 流程：①選信箱服務 ②貼信箱與密碼 ③寄測試信給「目前登入的人」，按「我收到了」才啟用。
+# 不變式：測試信成功之前不會啟用；啟用只認「剛剛測試成功的那一份設定」（指紋比對，設定改過就要重測）；密碼不進稽核、不進回應。
+
+_EMAIL_WIZARD_PROOF = "email_setup_test_proof"      # {fp, fp_full, base_fp, at, to, host, port, user}：最近一次精靈測試信成功的證明；**不存密碼**，只存帶金鑰的 HMAC 指紋
+_WIZARD_PROOF_HOURS = 24
+_WIZARD_HMAC_KEY = "email_setup_hmac_secret"         # 測試證明的簽章金鑰（隨機、存系統設定；名稱含 secret ⇒ 每日備份匯出一律遮蔽）
+_WIZARD_HITS_KEY = "email_setup_test_hits"          # {user_id: [時間…]}：test-me 的頻率限制（存資料庫，重啟不歸零）
+_WIZARD_TEST_LIMIT, _WIZARD_TEST_WINDOW_MIN = 5, 10  # 每個帳號 10 分鐘最多寄 5 次測試信
+_WIZARD_PORTS = (25, 465, 587, 2525)                # 寄信埠只准這四個（內網主機仍允許：客戶可能自己架信件伺服器；回應只說成敗與白話分類，不回原始錯誤）
+
+
+def _wizard_fresh(proof) -> bool:
+    try:
+        return datetime.now() - datetime.fromisoformat((proof or {}).get("at", "")) < timedelta(hours=_WIZARD_PROOF_HOURS)
+    except (TypeError, ValueError):
+        return False
+
+
+def _wiz_hmac(*parts) -> str:
+    """帶金鑰的指紋（HMAC-SHA256）：證明裡不存密碼，也不存密碼的純雜湊（純雜湊可離線猜）；金鑰是隨機產生、存系統設定、備份匯出遮蔽。"""
+    import hashlib
+    import hmac
+    key = _get_setting(_WIZARD_HMAC_KEY, "") or ""
+    try:
+        keyb = bytes.fromhex(key) if isinstance(key, str) and len(key) == 64 else b""
+    except ValueError:
+        keyb = b""
+    if not keyb:                                    # 沒有、或被改成不能用的值（例如從備份匯出的「[已遮蔽]」還原）⇒ 重生一把；舊證明因此失效，是安全的方向
+        key = secrets.token_hex(32)
+        _set_setting(_WIZARD_HMAC_KEY, key)
+        keyb = bytes.fromhex(key)
+    return hmac.new(keyb, "\x1f".join(str(x) for x in parts).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _port_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _wiz_creds_fp(host, port, user, pw) -> str:
+    return _wiz_hmac("creds", host or "", _port_int(port), user or "", pw or "")
+
+
+def _wiz_full_fp(cand) -> str:
+    return _wiz_hmac("full", cand.get("smtp_host", ""), _port_int(cand.get("smtp_port")), cand.get("smtp_user", ""), cand.get("smtp_password", ""),
+                     cand.get("from_name", ""), cand.get("base_url", ""))
+
+
+def _wizard_proof_matches(host, port, user, pw) -> bool:
+    proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
+    return bool(proof) and _wizard_fresh(proof) and proof.get("fp") == _wiz_creds_fp(host, port, user, pw)
+
+
+def _live_fp(cfg) -> str:
+    """正在使用的設定（含是否啟用）的指紋：測試之後設定被別處改過 ⇒ 啟用前要重測。"""
+    return _wiz_hmac("live", cfg.get("smtp_host", ""), _port_int(cfg.get("smtp_port")), cfg.get("smtp_user", ""), cfg.get("smtp_password", ""),
+                     1 if cfg.get("enabled") else 0)
+
+
+_WIZARD_RATE_LOCK = threading.Lock()
+
+
+def _wizard_rate_ok(user_id) -> bool:
+    with _WIZARD_RATE_LOCK:                            # 讀－改－寫要不可分割：同一帳號同時送出多個請求也不能超過上限
+        return _wizard_rate_ok_locked(user_id)
+
+
+def _wizard_rate_ok_locked(user_id) -> bool:
+    now = datetime.now()
+    hits = _get_setting(_WIZARD_HITS_KEY, {}) or {}
+    mine = []
+    for s in hits.get(str(user_id), []):
+        try:
+            if now - datetime.fromisoformat(s) < timedelta(minutes=_WIZARD_TEST_WINDOW_MIN):
+                mine.append(s)
+        except (TypeError, ValueError):
+            pass
+    if len(mine) >= _WIZARD_TEST_LIMIT:
+        return False
+    mine.append(now.isoformat(timespec="seconds"))
+    hits[str(user_id)] = mine
+    _set_setting(_WIZARD_HITS_KEY, hits)
+    return True
+
+
+@router.get("/api/settings/email-notify/providers")
+def email_notify_providers(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    return {"providers": _es.provider_list()}
+
+
+class EmailWizardIn(BaseModel):
+    provider: str = "gmail"
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    from_name: str = ""
+    base_url: str = ""
+    recipient: str = ""          # 登入的人沒有 Email 時，在這一步補填（同時存回他的帳號）
+
+
+def _wizard_error(status: int, detail: str, extra=None, **more):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=status, content={"detail": detail, **(extra or {}), **more})
+
+
+def _wizard_candidate(body, current):
+    """把精靈送來的內容整理成「候選設定」並檢查（test-me 與 activate 共用同一份，兩邊算出的指紋才會一致）。回 (provider, cand)。"""
+    from helpers import email_setup as _es
+    prov = _es.provider_by_key(body.provider)
+    if not prov:
+        raise HTTPException(422, "請先選擇信箱服務。")
+    pw = body.smtp_password
+    if pw in ("", _MASKED):
+        pw = current.get("smtp_password", "")
+    pw = _es.normalize_password(body.provider, pw)
+    host = (body.smtp_host or prov["host"]).strip()
+    port = int(body.smtp_port or prov["port"])
+    bad = _es.validate_config({"smtp_user": body.smtp_user, "smtp_host": host, "smtp_port": port,
+                               "base_url": body.base_url, "from_name": body.from_name})
+    if bad:
+        raise HTTPException(422, bad)
+    if not host:
+        raise HTTPException(422, "請填寄信主機（向信箱或網域代管廠商詢問）。")
+    if not body.smtp_user.strip():
+        raise HTTPException(422, "請填寄件人信箱。")
+    if not pw:
+        raise HTTPException(422, "請填密碼（%s）。" % prov["passwordLabel"])
+    if port not in _WIZARD_PORTS:
+        raise HTTPException(422, "寄信埠只能是 25、465、587 或 2525；請向信箱或網域代管廠商確認。")
+    cand = {"smtp_user": body.smtp_user.strip(), "smtp_password": pw, "smtp_host": host, "smtp_port": port}
+    cand["from_name"] = body.from_name.strip() or current.get("from_name") or _EMAIL_DEFAULTS["from_name"]
+    cand["base_url"] = body.base_url.strip() or current.get("base_url") or ""
+    return prov, cand
+
+
+@router.post("/api/settings/email-notify/wizard/test-me")
+def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    from helpers import email_setup as _es
+    from helpers.email_notify import _send_raising, _build_html, _base_url
+    from helpers import mail_types as _mt
+    current = _get_setting("email_notify", {}) or {}
+    prov, cand = _wizard_candidate(body, current)
+    host, port = cand["smtp_host"], cand["smtp_port"]
+    # 收件人＝目前登入的人；他沒有 Email ⇒ 這一步補填並存回帳號
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT email FROM users WHERE id=?", (user["id"],)).fetchone()
+        to_addr = (row["email"] if row else "") or ""
+        if not to_addr.strip():
+            rec = (body.recipient or "").strip()
+            if not rec:
+                return _wizard_error(400, "您的帳號還沒有 Email，請在下方填上 Email，測試信才寄得到。", needEmail=True)
+            if not _es.valid_email(rec):
+                raise HTTPException(422, "Email 格式不對，請檢查後再填一次。")
+            conn.execute("UPDATE users SET email=? WHERE id=?", (rec, user["id"]))
+            conn.commit()
+            to_addr = rec
+    finally:
+        conn.close()
+    # 候選設定只放在記憶體裡測試，**不存進系統設定**：測試失敗時，正在使用的設定一個字都不會變；測試成功＋按「我收到了」才寫入
+    full = {**_EMAIL_DEFAULTS, **current, **cand}
+    if not _wizard_rate_ok(user["id"]):
+        return _wizard_error(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。", category="rate_limited")
+    html = _build_html("system_test_mail", "測試信", "測試", "#2563EB",
+                       [("觸發者", user.get("display_name") or user["username"])], "", _base_url(),
+                       intro="本信為寄信設定測試。收到這封信，代表寄信帳號設定成功。")
+    try:
+        _send_raising([to_addr], _mt.subject("system_test_mail", "寄信設定測試"), html, ignore_enabled=True, cfg=full)
+    except RuntimeError as e:                       # 「這台機器不寄真實信件」等：訊息本身就是白話
+        return _wizard_error(400, str(e), category="blocked")
+    except Exception as e:                          # noqa: BLE001
+        _set_setting(_EMAIL_WIZARD_PROOF, {})       # 重測失敗 ⇒ 先前的測試證明作廢
+        tid = trace_id()
+        logger.exception("email_notify wizard test failed trace=%s", tid)
+        c = _es.classify_error(e, host, body.provider)
+        extra = {"category": c["category"], "title": c["title"], "hint": c["hint"], "traceId": tid}
+        if c["ticketKind"]:
+            prof = _get_setting("company_profile", {})
+            company = (prof.get("name", "") if isinstance(prof, dict) else "") or ""
+            extra["ticket"] = _es.build_ticket(c["ticketKind"], user=cand["smtp_user"], host=host, port=port,
+                                               company=company, requester=user.get("display_name") or user["username"])
+        return _wizard_error(502, c["title"] + "。" + c["hint"], extra)
+    # 證明不存密碼：只存帶金鑰的 HMAC 指紋＋非機密的主機／埠／帳號與時間（24 小時內有效；沒用到的在讀設定時清掉）
+    _set_setting(_EMAIL_WIZARD_PROOF, {"fp": _wiz_creds_fp(host, port, cand["smtp_user"], cand["smtp_password"]), "fp_full": _wiz_full_fp(cand),
+                                       "base_fp": _live_fp(current), "at": datetime.now().isoformat(timespec="seconds"), "to": to_addr,
+                                       "host": host, "port": port, "user": cand["smtp_user"]})
+    _audit(_tok(authorization), "settings.email_notify.wizard_test", "settings", "email_notify", "寄信精靈測試信",
+           {"provider": body.provider, "host": host, "port": port})
+    return {"ok": True, "sent_to": to_addr}
+
+
+@router.post("/api/settings/email-notify/wizard/activate")
+def email_notify_wizard_activate(body: EmailWizardIn = None, authorization: str = Header(None)):
+    """按「我收到了」：畫面把整份候選設定再送一次；伺服器重算 HMAC，**相符且 24 小時內**才寫進正式設定並啟用（密碼只在這個請求裡出現，不存在證明裡）。"""
+    _require_user(authorization, require_superadmin=True)
+    cfg = _get_setting("email_notify", {}) or {}
+    proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
+    if body is None or not proof or not _wizard_fresh(proof):
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+    _prov, cand = _wizard_candidate(body, cfg)
+    if proof.get("fp_full") != _wiz_full_fp(cand):
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+    if proof.get("base_fp") != _live_fp(cfg):
+        raise HTTPException(400, "寄信設定在測試之後被改過，請重新寄一次測試信。")
+    _set_setting("email_notify", {**_EMAIL_DEFAULTS, **cfg, **cand, "enabled": True})      # 測試成功的候選設定，到這一步才寫進正式設定
+    _set_setting(_EMAIL_WIZARD_PROOF, {})                                                    # 證明只能用一次
+    _audit(_tok(authorization), "settings.email_notify.wizard_activate", "settings", "email_notify", "寄信精靈啟用 Email 通知")
+    return {"ok": True, "enabled": True}
 
 
 # ── Custom roles ───────────────────────────────────────────────────────────────

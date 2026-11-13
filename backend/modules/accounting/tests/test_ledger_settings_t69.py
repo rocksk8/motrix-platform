@@ -140,7 +140,7 @@ def test_sole_superadmin_cannot_change_roles_alone(client, sup_a, conn):
         c.close()
     before = _role_code()
     r = _put(client, sup_a)
-    assert r.status_code == 409 and "另一位" in r.json()["detail"], r.text
+    assert r.status_code == 409 and r.json()["detail"] == "目前只有一位最高管理者，科目角色變更需要第二位核准。請先到『使用者管理』新增第二位最高管理者。", r.text
     assert _role_code() == before
 
 

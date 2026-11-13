@@ -145,7 +145,7 @@ def test_material_change_request_round_trip_in_the_browser(live_server, make_use
     # 2 送審 ⇒ 待審核；原內容照常有效、不能再修改／送審、可撤回
     page.click(f'[data-testid="mc-submit-{doc}"]')
     _wait(page, lambda: _change(doc)["status"] == "待審核", "變更申請待審核")
-    page.wait_for_function(f"() => document.querySelector('[data-testid=\"mc-status-{doc}\"]')?.innerText === '待審核'", timeout=15000)
+    page.wait_for_function(f"() => document.querySelector('[data-testid=\"mc-status-{doc}\"]')?.innerText === '待簽核'", timeout=15000)
     assert _order()["quantity"] == 3 and MA.status_of(db.get_db(), NO, "m1") == "已核准"
     assert page.locator(f'[data-testid="mc-submit-{doc}"]').is_hidden() and page.locator(f'[data-testid="mc-revise-{doc}"]').is_hidden()
     assert "主管" in page.locator(f'[data-testid="mc-row-{doc}"]').inner_text()

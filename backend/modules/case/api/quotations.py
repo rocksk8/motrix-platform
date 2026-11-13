@@ -43,7 +43,9 @@ from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
 from modules.case.quotations import is_historical_json, put_approval_first, sql_hist_hint, sql_not_historical  # T70 補登單標示／靜音
+from helpers import quote_email as _QE
 from helpers import download_name
+from helpers import doc_type as _DT   # 估價單：單據類型／單號字首／顯示名稱的唯一來源
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -143,7 +145,8 @@ _TRACKED_QUOTE_FIELDS = [
 
 # 比對整包內容時要忽略的鍵：它們本身就是「紀錄」或每次存檔都會變動的欄位，
 # 拿來比對會讓每一次存檔都被判定成「有變更」。
-_DIFF_IGNORE_KEYS = {"editHistory", "docVersions", "approval", "updatedAt", "_expectedUpdatedAt"}
+_DIFF_IGNORE_KEYS = {"editHistory", "docVersions", "approval", "updatedAt", "_expectedUpdatedAt",
+                     "docType"}      # 估價單：單據類型以資料庫欄位為準、PUT 時注入；舊單第一次存檔才多出這個鍵，不是使用者改的
 
 
 def _dig(data, path: str):
@@ -192,11 +195,39 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
                         "to":   f"{len(n_items)} 項"})
 
     if not changes:
-        stripped_old = {k: v for k, v in old.items() if k not in _DIFF_IGNORE_KEYS}
-        stripped_new = {k: v for k, v in new.items() if k not in _DIFF_IGNORE_KEYS}
-        if stripped_old != stripped_new:
+        if _diff_view(old) != _diff_view(new):
             changes.append({"field": "其他內容", "from": "", "to": ""})
     return changes
+
+
+#: 款項日期欄位：PUT 存檔時一律正規化成 YYYY-MM-DD 的那三個（建單不做）；整包比對用同一份清單，兩處不會各寫一份而漂移。
+_PAYMENT_DATE_KEYS = ("receivedAt", "expectedReceiptDate", "invoiceDate")
+
+
+def _diff_view(d: dict) -> dict:
+    """整包比對用的「正規化檢視」：拿掉紀錄類／每次存檔都變的鍵與 `caseRecord.stages`，款項日期套與存檔相同的 YYYY-MM-DD 正規化。
+    只用在「有沒有『其他內容』變更」的判斷——**只讓伺服器自己會改寫、或根本不會被存檔採用的差異不算變更**：
+    ① 階段（stages）：PUT 完全忽略用戶端的 stages，case_stages 表才是權威（見 update_quotation 寫入後的 `_sync_stages_to_json`）；
+       建單時階段又被重建成表的樣子（真實 id、補齊欄位），所以任何階段差異都是「幻影」（第一次 PUT 多記一筆「其他內容」的根因，2026-11-13 修）。
+    ② 款項日期：只在 PUT 才正規化。
+    使用者真的改了、而且會被存下來的值（頂層未追蹤欄位、款項金額…）仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）、不改輸入。"""
+    out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
+    cr = out.get("caseRecord")
+    if isinstance(cr, dict):
+        cr = {k: v for k, v in cr.items() if k != "stages"}
+        pay = cr.get("payment")
+        if isinstance(pay, dict) and isinstance(pay.get("items"), list):
+            items = []
+            for it in pay["items"]:
+                if isinstance(it, dict):
+                    it = dict(it)
+                    for k in _PAYMENT_DATE_KEYS:
+                        if it.get(k):
+                            it[k] = norm_ymd(it[k])
+                items.append(it)
+            cr["payment"] = {**pay, "items": items}
+        out["caseRecord"] = cr
+    return out
 
 
 def _append_edit_history(q: dict, user: dict, now: str, entry_type: str,
@@ -221,8 +252,8 @@ def _append_edit_history(q: dict, user: dict, now: str, entry_type: str,
 
 
 def _next_revision_no(quote_no: str) -> str:
-    """MQ-202501-001 → MQ-202501-001-R1; MQ-202501-001-R2 → MQ-202501-001-R3"""
-    m = _re.match(r'^(MQ-\d{6}-\d{3})(?:-R(\d+))?$', quote_no)
+    """MQ-202501-001 → MQ-202501-001-R1; MQ-202501-001-R2 → MQ-202501-001-R3（估價單 ME-… 同）"""
+    m = _re.match(r'^([A-Z]{2}-\d{6}-\d{3})(?:-R(\d+))?$', quote_no)
     if not m:
         return quote_no + '-R1'
     base = m.group(1)
@@ -636,45 +667,45 @@ def _exclude_requester(tiers: list, requester: str) -> list:
     return result
 
 
-def _submitted_msg(quote_no, label, cname) -> str:
+def _submitted_msg(quote_no, label, cname, doc_type=None) -> str:
     """送審站內訊息（S-X3）：有已發布的自訂用語就用它（旗標關／沒有範本 ⇒ None ⇒ 今天寫死的字，逐字相同）。金額遮蔽仍由 `_notify` 逐收件人處理。"""
     try:
         from helpers import notify_templates as _NT
         t = _NT.render_inapp("approval:submitted", {"單號": quote_no, "對象": cname, "標記": label})
     except Exception:                                                  # noqa: BLE001
         t = None
-    return t or f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+    return _DT.relabel(t or f"報價單 {quote_no}{label}（{cname}）需要您簽核", doc_type)
 
 
-def _tier_msg(quote_no, label, cname, tier_no, total_tiers) -> str:
+def _tier_msg(quote_no, label, cname, tier_no, total_tiers, doc_type=None) -> str:
     """輪到下一層的站內訊息（S-X3；送審時從中間層開始、簽核推進到下一層共用）。沒有範本 ⇒ 今天寫死的字。"""
     try:
         from helpers import notify_templates as _NT
         t = _NT.render_inapp("approval:next_tier", {"單號": quote_no, "對象": cname, "標記": label, "層": tier_no, "總層": total_tiers})
     except Exception:                                                  # noqa: BLE001
         t = None
-    return t or (f"報價單 {quote_no}{label}（{cname}）"
-                 f"輪到您簽核（第 {tier_no} 層 / 共 {total_tiers} 層）")
+    return _DT.relabel(t or (f"報價單 {quote_no}{label}（{cname}）"
+                             f"輪到您簽核（第 {tier_no} 層 / 共 {total_tiers} 層）"), doc_type)
 
 
-def _approved_msg(quote_no, cname, approved_by="") -> str:
+def _approved_msg(quote_no, cname, approved_by="", doc_type=None) -> str:
     """核准完成的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
     try:
         from helpers import notify_templates as _NT
         t = _NT.render_inapp("approval:approved", {"單號": quote_no, "對象": cname, "最終審核人": approved_by})
     except Exception:                                                  # noqa: BLE001
         t = None
-    return t or "報價單 %s（%s）已核准" % (quote_no, cname)
+    return _DT.relabel(t or "報價單 %s（%s）已核准" % (quote_no, cname), doc_type)
 
 
-def _returned_msg(new_no, quote_no, cname) -> str:
+def _returned_msg(new_no, quote_no, cname, doc_type=None) -> str:
     """退回修改的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
     try:
         from helpers import notify_templates as _NT
         t = _NT.render_inapp("approval:returned", {"新單號": new_no, "原單號": quote_no, "對象": cname})
     except Exception:                                                  # noqa: BLE001
         t = None
-    return t or f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審"
+    return _DT.relabel(t or f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審", doc_type)
 
 
 def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
@@ -716,6 +747,8 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
         else:
             label = ""
         requester = appr.get("requestedBy") or ""
+        _dt = q.get("docType")                       # 估價單：通知用語依單據類型
+        _dlabel = _DT.label(_dt)
 
         ct_idx       = appr.get("currentTier", 0)
         _appr_names  = []   # usernames — for email lookup
@@ -724,21 +757,21 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             pending = [a for a in (tiers[ct_idx].get("approvers") or [])
                        if a.get("status") != "approved"]
             if ct_idx == 0:
-                msg = _submitted_msg(quote_no, label, cname)
+                msg = _submitted_msg(quote_no, label, cname, _dt)
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
-                notify_approval_request(quote_no, cname, _appr_names)
+                notify_approval_request(quote_no, cname, _appr_names, doc_label=_dlabel)
             else:
-                msg = _tier_msg(quote_no, label, cname, ct_idx + 1, len(tiers))
+                msg = _tier_msg(quote_no, label, cname, ct_idx + 1, len(tiers), _dt)
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
-                notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
+                notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names, doc_label=_dlabel)
         elif not tiers:
-            msg = _submitted_msg(quote_no, label, cname)
+            msg = _submitted_msg(quote_no, label, cname, _dt)
             _conn = get_db()
             admins = _conn.execute(
                 "SELECT username FROM users WHERE role='superadmin' AND active=1"
@@ -749,7 +782,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
                     _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(adm["username"])
                     _appr_labels.append(adm["username"])
-            notify_approval_request(quote_no, cname, _appr_names)
+            notify_approval_request(quote_no, cname, _appr_names, doc_label=_dlabel)
 
         # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已是組織職權頂端，
         # 例如處主管解鎖改版自己的報價單），最高管理者不再被塞進簽核鏈當簽核人，
@@ -759,15 +792,15 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             try:
                 notify_org_chain_notice(
                     _nconn, tiers, requester, quote_no, quote_no,
-                    f"報價單 {quote_no}{label}（{cname}）由 "
-                    f"{appr.get('requestedByDisplay') or requester} 依組織職權自行簽核，知會您")
+                    _DT.relabel(f"報價單 {quote_no}{label}（{cname}）由 "
+                                f"{appr.get('requestedByDisplay') or requester} 依組織職權自行簽核，知會您", _dt))
             finally:
                 _nconn.close()
 
         # If this is a resubmission after rejection, also send confirmation to requester
         if is_revision and requester:
             orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
-            notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
+            notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels, doc_label=_dlabel)
 
     return appr
 
@@ -865,52 +898,58 @@ class ReviewEditBody(BaseModel):
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
 
-# 正式單號格式：MQ-YYYYMM-NNN（月份 6 碼、序號 3 碼）。用來擋掉 client 送來的
-# 佔位字串／半成品號碼，見 create_quotation()。
-_QUOTE_NO_RE = re.compile(r"^MQ-\d{6}-\d{3}$")
+# 單號格式由「單號規則」決定（helpers/doc_type.py::NumberRule：字首、日期格式、流水號位數都在規則裡）；這裡不再寫死
+# `MQ-\d{6}-\d{3}`。client 送來的佔位字串／半成品號碼一律用規則的 regex 擋掉，見 create_quotation()。
+_QUOTE_RULE = _DT.rule_for(_DT.QUOTE)      # 報價單規則（字首 MQ 固定；補登歷史單只走這條）
 
 
 def _month_of_no(no: str) -> str:
-    """合法單號 MQ-YYYYMM-NNN → YYYYMM。序號永遠記在**單號自己的月份**（補登舊月份單號時不可墊高本月；T69 L0）。"""
-    return no[3:9]
+    """合法單號 → 日期段（報價單／估價單同形，YYYYMM）。序號永遠記在**單號自己的月份**（補登舊月份單號時不可墊高本月；T69 L0）。"""
+    r = _DT.rule_of_no(no) or _QUOTE_RULE
+    return r.month_of(no)
 
 
-def _peek_next_no(conn, month: str) -> str:
+def _peek_next_no(conn, month: str, rule=None) -> str:
     """Compute next available quote number without reserving it in quote_seq.
-    Reservation only happens on actual INSERT (create_quotation)."""
+    Reservation only happens on actual INSERT (create_quotation).
+    `rule`＝單號規則（helpers/doc_type.NumberRule；預設報價單）：字首／流水號位數／SQL 位移都由它決定，兩種單據的流水號各自獨立——
+    quote_seq 的鍵＝rule.seq_key(month)（MQ 維持 'YYYYMM'、其他 'XX-YYYYMM'）。"""
+    rule = rule or _QUOTE_RULE
     row_max = conn.execute(
-        "SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, 11, 3) AS INTEGER)), 0) AS mx "
-        "FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = 13",
-        (f"MQ-{month}-???",)
+        "SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, ?, ?) AS INTEGER)), 0) AS mx "
+        "FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = ?",
+        (rule.seq_start, rule.seq_digits, rule.glob(month), rule.total_len)
     ).fetchone()
     db_max = row_max["mx"] if row_max else 0
 
-    row = conn.execute("SELECT seq FROM quote_seq WHERE month=?", (month,)).fetchone()
+    row = conn.execute("SELECT seq FROM quote_seq WHERE month=?", (rule.seq_key(month),)).fetchone()
     next_seq = max(row["seq"] if row else 0, db_max) + 1
 
     while conn.execute(
-        "SELECT 1 FROM quotations WHERE quote_no=?", (f"MQ-{month}-{next_seq:03d}",)
+        "SELECT 1 FROM quotations WHERE quote_no=?", (rule.format(month, next_seq),)
     ).fetchone():
         next_seq += 1
 
-    return f"MQ-{month}-{next_seq:03d}"
+    return rule.format(month, next_seq)
 
 
 @router.get("/api/next-quote-no")
-def next_quote_no(authorization: str = Header(None)):
+def next_quote_no(doc_type: Optional[str] = None, authorization: str = Header(None)):
     """Peek-only: returns the next available number without reserving it.
-    The number is not guaranteed until the quotation is actually saved."""
+    The number is not guaranteed until the quotation is actually saved.
+    `doc_type=estimate` ⇒ 估價單的下一個號（字首依設定中心；流水號與報價單各自獨立）；沒帶／其他 ⇒ 報價單（與改版前相同）。"""
     _require_user(authorization)
-    month = datetime.now().strftime("%Y%m")
+    rule = _DT.rule_for(doc_type)
+    month = datetime.now().strftime(rule.date_fmt)
     conn  = get_db()
     conn.execute(
         "INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
-        (month,)
+        (rule.seq_key(month),)
     )
     conn.commit()
-    result = _peek_next_no(conn, month)
+    result = _peek_next_no(conn, month, rule)
     conn.close()
-    return {"quote_no": result}
+    return {"quote_no": result, "doc_type": _DT.norm(doc_type)}
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -959,12 +998,35 @@ _CASE_MISSING_NOTES_SQL = (
 _CASE_MISSING_DOCS_SQL = f"({_CASE_MISSING_INVOICE_SQL} OR {_CASE_MISSING_NOTES_SQL})"
 
 
+_WAITING_STATUSES = ("待審核", "簽核中")
+
+
+def _waiting_on_names(data_json, display_by_username) -> list:
+    """T84：報價單目前這一層「還沒簽」的人的顯示名稱（現名取自 users；查不到帳號才用簽核資料裡存的顯示名稱）。
+    任何解析／結構問題 ⇒ []（清單不能因為一筆壞資料失敗）。"""
+    try:
+        appr = (json.loads(data_json or "{}") or {}).get("approval")
+        f = _queue_tier_fields(json.dumps(appr) if isinstance(appr, dict) else "{}")
+        names = []
+        for a in f["currentApprovers"]:
+            if not isinstance(a, dict) or a.get("status") in ("approved", "skipped"):
+                continue
+            un = a.get("username")
+            nm = display_by_username.get(un) or a.get("displayName") or ""
+            if nm and nm not in names:
+                names.append(nm)
+        return names
+    except Exception:                                          # noqa: BLE001  壞資料／過深的 JSON（RecursionError）只影響該列
+        return []
+
+
 @router.get("/api/quotations")
 def list_quotations(
     status:   Optional[str] = None,
     customer: Optional[str] = None,
     month:    Optional[str] = None,
     deal_tag: Optional[str] = None,
+    doc_type: Optional[str] = None,
     limit:    int = 100,
     offset:   int = 0,
     q:        Optional[str] = None,
@@ -979,17 +1041,30 @@ def list_quotations(
     unread:        int = 0,
     include_project_margin: int = 0,
     with_sales_owner: int = 0,
+    with_waiting_on: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
     第 501 件以後看不到也搜不到）。新參數皆選填，舊呼叫端行為不變。"""
-    user   = _require_user(authorization)
+    user = _require_user(authorization)
+    return list_quotations_for(
+        user, status=status, customer=customer, month=month, deal_tag=deal_tag, doc_type=doc_type, limit=limit, offset=offset, q=q,
+        settle=settle, sort=sort, dir=dir, counts=counts, mine=mine, stage_overdue=stage_overdue, recv_overdue=recv_overdue,
+        missing_docs=missing_docs, unread=unread, include_project_margin=include_project_margin,
+        with_sales_owner=with_sales_owner, with_waiting_on=with_waiting_on)
+
+
+def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=None, limit=100, offset=0, q=None,
+                        settle=None, sort=None, dir=None, counts=0, mine=0, stage_overdue=0, recv_overdue=0,
+                        missing_docs=0, unread=0, include_project_margin=0, with_sales_owner=0, doc_type=None, with_waiting_on=0):
+    """`list_quotations` 的本體（已驗過身分的使用者字典進來）。首頁「我的工作」的案件分組（dashboard_groups）用它取件數：
+    與案件頁清單同一份篩選與權限（row_access），數字才對得起來；端點行為不變。"""
     conn   = get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     select_cols = (
         "id, quote_no, status, customer_name, project_name, total, pretax, "
         "direct_margin_pct, net_margin_pct, sales_person, quote_date, valid_days, "
-        f"{SQL_DEAL_TAG} as deal_tag, "
+        f"{SQL_DEAL_TAG} as deal_tag, doc_type, "
         "created_at, updated_at, "
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
         # CM6：只取最後一筆，不把整段 editHistory 撈回來（`[#-1]` 需要 SQLite 3.31，改用長度組路徑）
@@ -1033,7 +1108,9 @@ def list_quotations(
     if customer:
         where_sql += " AND customer_name LIKE ?"; params.append(f"%{customer}%")
     if month:
-        where_sql += " AND quote_no LIKE ?"; params.append(f"MQ-{month}%")
+        where_sql += " AND quote_no LIKE ?"; params.append(f"__-{month}%")      # 估價單：字首不限 MQ（'_' 比對任一字元）
+    if doc_type:                                                                  # 估價單：類型篩選（沒帶＝全部；舊資料一律是報價單）
+        where_sql += " AND doc_type=?"; params.append(_DT.norm(doc_type))
     if deal_tag:
         tags = [t.strip() for t in deal_tag.split(",")]
         where_sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
@@ -1142,10 +1219,24 @@ def list_quotations(
                     _owner_map[_r3["quote_no"]] = (_disp.get(_un) if _un else None) or role_display(_rs)
                 except Exception:                                  # noqa: BLE001  壞資料／過深的 JSON 只影響該列
                     _owner_map[_r3["quote_no"]] = ""
+    # T84：報價清單「下一步」——這張單目前卡在誰身上（簽核中的單才有；目前這一層還沒簽的人，顯示名稱取自使用者表的現名）。
+    # 選用（with_waiting_on=1）：只多讀「這一頁、狀態是待審核／簽核中」的列的 data_json（一次 IN 批次、每 300 筆一批，不是逐列查）；
+    # 只對本來就看得到的列算（rows 已過 row_access）；壞資料／算不出 ⇒ 該列空陣列，清單不會失敗。
+    _wait_map = {}
+    if with_waiting_on and rows:
+        _wnos = [r["quote_no"] for r in rows if r["status"] in _WAITING_STATUSES]
+        if _wnos:
+            _wdisp = {u["username"]: (u["display_name"] or u["username"]) for u in conn.execute("SELECT username, display_name FROM users")}
+            for _c3 in range(0, len(_wnos), 300):
+                _chunk3 = _wnos[_c3:_c3 + 300]
+                for _r4 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk3)), _chunk3):
+                    _wait_map[_r4["quote_no"]] = _waiting_on_names(_r4["data_json"], _wdisp)
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
+        if with_waiting_on:
+            row["waiting_on"] = _wait_map.get(row["quote_no"], [])
         if with_sales_owner:
             row["sales_owner"] = _owner_map.get(row["quote_no"], "")
         row["historical"] = is_historical_json(row.pop("hist_dj", None))
@@ -1548,6 +1639,7 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     result["cashierReadOnly"] = cashier_read_only
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
+    result["data"]["docType"] = _DT.norm(result.get("doc_type"))   # 單據類型也以資料庫欄位為準（舊資料＝quote）
     if result["status"] in _CFP.PENDING_STATES:
         # 簽核二擇一 S1：內容指紋給簽核人帶回 approve（核准綁版本）。放在 data 的**外面**（不會被前端原樣送回 PUT 存進 data_json）、
         # 遮蔽金額之前算（指紋看的是完整內容，與是否看得到金額無關）；只待審核／簽核中才有（其餘狀態回應逐位元不變）
@@ -1672,7 +1764,7 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note})
-    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+    notify_module_activity(_DT.label_of_no(quote_no), "已回簽" if action == "sign" else "取消回簽",
                             user.get("display_name") or user["username"], quote_no, "quotation-form.html",
                             detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
@@ -1715,7 +1807,7 @@ def _toggle_alt_signed(quote_no: str, action: str, note: str, picks, user: dict,
         conn.commit()
     conn.close()
     _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note, "alt": True})
-    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+    notify_module_activity(_DT.label_of_no(quote_no), "已回簽" if action == "sign" else "取消回簽",
                            user.get("display_name") or user["username"], quote_no, "quotation-form.html", detail=note or "")
     out = {"ok": True, "is_signed": action == "sign", "signed_log": log}
     out.update(result)
@@ -1865,6 +1957,9 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
+    doc_type = _DT.norm(q.get("docType"))     # 估價單：開立時選定；之後不可改（單號字首隨類型，改了就要換號）
+    q["docType"] = doc_type
+    rule = _DT.rule_for(doc_type)             # 單號規則；在開寫入連線之前取（讀設定另開短連線，不在寫鎖內做）
     _oh_change = _PG.prepare(q, user)       # 第 48 班 S2：管銷分攤比率驗證／權限（非最高管理者改比率 ⇒ 403）；v2 口徑時伺服器重算利潤欄位
     tot  = q.get("tot", {})
     # 38（稽核 H-1）：新建的報價單不可能已成案／已完結——精算本文與成案狀態只能走各自的專用端點（PATCH /deal-tag、PUT /settlement）。
@@ -1883,11 +1978,12 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
         ).fetchone() if sp_name else None
         sp_id = sp_row["id"] if sp_row else None
+        _QE.enforce_sales_email(conn, q, None)          # 業務員信箱快照（Reply-To、PDF 都讀它）：伺服器驗證，不信任客戶端
 
         # Ensure quote_seq row exists for peek helper
         conn.execute(
             "INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
-            (month,)
+            (rule.seq_key(month),)
         )
 
         # Use provisional number from client if provided; otherwise auto-assign
@@ -1899,10 +1995,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         # 前端那兩處已分別修掉，但「後端才是單號的權威」這件事要在這裡守住——
         # 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派。
         _client_no = (body.quote_no or q.get("quoteNo") or "").strip()
-        if _client_no and not _QUOTE_NO_RE.match(_client_no):
+        if _client_no and not rule.regex().match(_client_no):
             logger.warning("create_quotation 收到格式不合的單號 %r，改由後端派號", _client_no)
             _client_no = ""
-        qno = _client_no or _peek_next_no(conn, month)
+        qno = _client_no or _peek_next_no(conn, month, rule)
 
         # `QL25`（依據使用者 2026-09-23 裁示）入口①：直接建立即送審（沒有草稿
         # 步驟），離開草稿那一刻＝這裡。草稿階段仍跟著設定走，只有真的要
@@ -1922,8 +2018,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                    total, pretax, direct_margin_pct, net_margin_pct,
                    sales_person, sales_person_id, quote_date, valid_days, data_json,
                    created_at, updated_at, created_by, deal_tag, settle_status,
-                   location_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   location_id, doc_type)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 no, body.status,
                 q.get("customerName"), q.get("projectName"),
@@ -1936,13 +2032,14 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                 # 🔑 **不在這裡查一次主要據點**：那會變成「兩個地方各自決定
                 # 什麼是預設」，而 trigger 那一份管得到所有寫入路徑。
                 (body.location_id or "").strip() or None,
+                doc_type,
             ))
 
         try:
             _do_insert(qno)
         except sqlite3.IntegrityError:
             # Provisional number taken (concurrent save); auto-assign next available
-            qno = _peek_next_no(conn, month)
+            qno = _peek_next_no(conn, month, rule)
             try:
                 _do_insert(qno)
             except sqlite3.IntegrityError:
@@ -1950,10 +2047,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                 raise HTTPException(409, "報價單號衝突，請重試")
 
         # Reserve in quote_seq so future peeks don't repeat this number.
-        # 這裡的 qno 已經過 _QUOTE_NO_RE 驗證（或由 _peek_next_no 產生），序號一定是
-        # 三位數字；仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
+        # 這裡的 qno 已經過規則的 regex 驗證（或由 _peek_next_no 產生），序號一定是規則位數的數字；
+        # 仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
         try:
-            seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+            seq_no = rule.seq_of(qno) if rule.regex().match(qno) else 0
         except ValueError:
             logger.warning("create_quotation 無法從 %r 解析序號，略過 quote_seq 更新", qno)
             seq_no = 0
@@ -1961,7 +2058,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             conn.execute(
                 "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "
                 "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
-                (_month_of_no(qno), seq_no)
+                (rule.seq_key(rule.month_of(qno)), seq_no)       # 單號自己的月份（T69 L0）：月底取號、跨午夜才存檔時，序號要記在單號的月份，不是「現在」
             )
         # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
         # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
@@ -2018,10 +2115,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                 # 進行中的另一筆撞號，那條路徑本來就有 IntegrityError 重試。
                 _cleanup.execute(
                     "UPDATE quote_seq SET seq = ("
-                    "  SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, 11, 3) AS INTEGER)), 0)"
-                    "  FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = 13"
+                    "  SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, ?, ?) AS INTEGER)), 0)"
+                    "  FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = ?"
                     ") WHERE month = ?",
-                    (f"MQ-{_month_of_no(qno)}-???", _month_of_no(qno))
+                    (rule.seq_start, rule.seq_digits, rule.glob(rule.month_of(qno)), rule.total_len, rule.seq_key(rule.month_of(qno)))
                 )
                 _cleanup.commit()
                 _cleanup.close()
@@ -2067,7 +2164,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
     if _oh_change:
         _audit(_tok(authorization), 'quotation.overhead_pct_change', 'quotation', qno, f"{qno} 管銷分攤比率 {_oh_change['old']}% → {_oh_change['new']}%（預設 {_oh_change['default']}%）", _oh_change)
-    notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(qno), "建立", user.get("display_name") or user["username"],
                             f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
 
@@ -2075,7 +2172,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 # ── T69 L1：補登歷史案件（超管專用；設計 D:/Claude-pm/reports/design-backfill-quote-t69.md §9–§10）──────────────────
 # 不鬆綁一般 create 的 H-1 擋門（那裡 dealTag 一律清空）：補登走專用端點，單一交易內派號＋寫入＋保留序號，
 # 任何一步失敗整筆回滾（單據與 quote_seq 都不留痕跡）。通知／提醒靜音的其餘部分（階段到期、應收）屬 L2。
-_BACKFILL_NO_RE = re.compile(r"^MQ-(20\d{2})(0[1-9]|1[0-2])-(\d{3})$")   # 年 2000–2099、月 01–12、序號 3 碼
+_BACKFILL_NO_RE = re.compile(r"^%s-(20\d{2})(0[1-9]|1[0-2])-(\d{%d})$" % (re.escape(_QUOTE_RULE.prefix), _QUOTE_RULE.seq_digits))   # 字首／序號位數取自報價單規則；年 2000–2099、月 01–12
 _BACKFILL_BASIS_NOTE = "補登案件，以現行口徑計算"
 
 
@@ -2185,10 +2282,10 @@ def _backfill_check_date(raw):
 
 def _next_backfill_no(conn, month, reserved):
     """該月下一個可用單號：接續最大號＋1，跳過資源回收筒保留中的號碼（單號不回收）；用盡 ⇒ 409。補登與號碼預覽共用。"""
-    qno = _peek_next_no(conn, month)
-    while int(qno.rsplit("-", 1)[1]) <= 999 and qno in reserved:
-        qno = "MQ-%s-%03d" % (month, int(qno.rsplit("-", 1)[1]) + 1)
-    if int(qno.rsplit("-", 1)[1]) > 999:      # 先比整數再格式化：:03d 會把 1000 排成 4 碼
+    qno = _peek_next_no(conn, month, _QUOTE_RULE)
+    while _QUOTE_RULE.seq_of(qno) <= _QUOTE_RULE.max_seq and qno in reserved:
+        qno = _QUOTE_RULE.format(month, _QUOTE_RULE.seq_of(qno) + 1)
+    if _QUOTE_RULE.seq_of(qno) > _QUOTE_RULE.max_seq:      # 先比整數再格式化：:03d 會把 1000 排成 4 碼
         raise HTTPException(409, "該月份單號已用盡（001–999）")
     return qno
 
@@ -2277,6 +2374,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     now = datetime.now().isoformat()
     actor = user.get("display_name") or user["username"]
     q["dealTag"] = "已成案"
+    q["docType"] = _DT.QUOTE                # 補登歷史單一律是報價單（單號格式也只收 MQ；估價單不走補登）
     _case_record_of(q)                      # 用戶端的新增頁送 caseRecord:null；之後新增階段等寫入要有 dict 可寫
     q["approval"] = {"historical": True, "tiers": [], "recordedBy": user["username"], "recordedByDisplay": actor,
                      "recordedAt": now, "reason": reason, "note": "補登，無簽核"}
@@ -2304,6 +2402,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["quoteNo"] = qno
         sp_name = (q.get("salesPerson") or "").strip()
         sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
+        _QE.enforce_sales_email(conn, q, None)          # 補登也一樣：業務員信箱快照不信任客戶端（PDF 會印出來）
         MG.enforce(conn, qno, q, actor=user)
         try:
             conn.execute("""
@@ -2376,7 +2475,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
-            for _k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+            for _k in _PAYMENT_DATE_KEYS:
                 if _pi.get(_k):
                     _pi[_k] = norm_ymd(_pi[_k])
 
@@ -2467,17 +2566,22 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             # location_id：`QL25` 算「離開草稿」的有效據點要用（見下方 COALESCE
             # 同一條規則：沒送 locationId 就沿用既有欄位值）。
             "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
-            "sales_person, data_json, location_id, is_signed "
+            "sales_person, data_json, location_id, is_signed, doc_type "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not existing:
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        q["docType"] = _DT.norm(existing["doc_type"])     # 單據類型開立後不可改：一律以資料庫現值為準（用戶端送什麼都不採用）
         try:
             _pin_backfill_marker(q, json.loads(existing["data_json"] or "{}") or {},
                                  real_approval=bool(is_unlock_edit or new_status == "待審核"))   # T69：補登標記以資料庫現值為準；進入真簽核由伺服器事實判定
         except (TypeError, ValueError):
             _pin_backfill_marker(q, {})
+        try:
+            _QE.enforce_sales_email(conn, q, json.loads(existing["data_json"] or "{}") or {})   # 沒改＝舊單維持原樣；改了就必須是這位業務員三層解析的值之一
+        except (TypeError, ValueError):
+            _QE.enforce_sales_email(conn, q, {})
         # 編輯紀錄只由伺服器維護：此處（寫入交易內）放回資料庫現值；解鎖編輯的那一筆也在這裡追加
         try:
             _db_hist = (json.loads(existing["data_json"] or "{}") or {}).get("editHistory")
@@ -2527,7 +2631,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                     raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
         if existing["status"] == "已拒絕":
             conn.close()
-            raise HTTPException(403, "已拒絕結案的報價單不可修改")
+            raise HTTPException(403, "已駁回結案的報價單不可修改")
         try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
             _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
@@ -2767,7 +2871,7 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
         action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
         action = action_map.get(body.status, 'quotation.status_change')
         _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
-        notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         if body.status == '已送出':
             try:
@@ -2824,7 +2928,7 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
                f"{quote_no}（{cname}）已由申請人收回草稿")
-        notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), "收回草稿", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         return {"quote_no": quote_no, "status": "草稿"}
 
@@ -3269,7 +3373,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         conn.close()
         _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
                f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
-        notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         if body.deal_tag == '已成案' and old_tag != '已成案':
             spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
@@ -3388,7 +3492,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
                f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
-    notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(quote_no), "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
     notices = ([QUOTE_DELETED_CRM_ABSENT] if unlink is None else []) + ([_ra.BIN_ABSENT_NOTICE] if res is None else [])
     if unlink is None:
@@ -4596,7 +4700,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     if invoice_changed_from:
         _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', no,
                f"{no} {label} 發票號碼 {invoice_changed_from} → {body.get('invoiceNo')}（總帳 E01 將在下次引擎執行時沖轉並重建）")
-    notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(no), action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": now,
             **({"glWarning": _gl_doc(gl_warn, "%s／%s" % (no, pits[idx].get("label") or pits[idx].get("type") or "第%d期" % (idx + 1)))} if gl_warn else {})}
@@ -4866,7 +4970,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId:
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
-    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), "申請沖銷", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -4895,7 +4999,7 @@ def cancel_payment_writeoff(no: str, idx: int, itemId: Optional[str] = None, aut
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
-    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -4934,7 +5038,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, itemId:
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_approve' if body.approve else 'payment.writeoff_reject',
            'quotation', no, f"{no} {label}（{action_detail}）")
-    notify_module_activity("報價單", action_detail, approver_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), action_detail, approver_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "approved": body.approve, "item": item}
 
 
@@ -5176,7 +5280,7 @@ def approval_queue_items(conn) -> list:
     # 整個查詢丟例外**（`json_valid` 為假就不會執行 json_type／json_extract），其餘一切形狀（壞 JSON、沒有 approval、approval 不是
     # 物件、空字串、NULL）照舊走 Python 的 L1 `approval_json_of`（語意完全不變：壞的跳過＋ERROR、沒有簽核層照列）。
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, data_json,
+        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, data_json, location_id,
                CASE WHEN json_valid(data_json) THEN
                     CASE WHEN json_type(data_json, '$.approval') = 'object' THEN json_extract(data_json, '$.approval') END
                END AS appr_fast
@@ -5197,6 +5301,8 @@ def approval_queue_items(conn) -> list:
         f = _queue_tier_fields(raw)
         items.append({
             "type":                "quotation",
+            "typeLabel":           _DT.label_of_no(r["quote_no"]),   # 估價單：佇列卡片標籤依單號字首（前端 docTypeLabel 直接用 item.typeLabel）
+            "locationId":          r["location_id"] or "",          # 簽核頁「據點」列用（QL15；之前佇列沒帶這欄，那一列永遠不出現）
             "quoteNo":             r["quote_no"],
             "customer":            r["customer_name"] or "",
             "projectName":         r["project_name"] or "",
@@ -5508,9 +5614,9 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                         #    使用者回報簽核時整個系統卡住 3 秒；通知還可能因為等滿 busy timeout 而遺失）⇒ commit 之後才做。
                         after_commit.append(functools.partial(
                             _notify, na["username"], "approval_request", quote_no, quote_no,
-                            _tier_msg(quote_no, "", cname, landed + 1, len(tiers))))
+                            _tier_msg(quote_no, "", cname, landed + 1, len(tiers), d.get("docType"))))
                         _next_names.append(na["username"])
-                    after_commit.append(functools.partial(notify_next_tier, quote_no, cname, landed + 1, len(tiers), _next_names))
+                    after_commit.append(functools.partial(notify_next_tier, quote_no, cname, landed + 1, len(tiers), _next_names, doc_label=_DT.label(d.get("docType"))))
             else:
                 all_done = False
 
@@ -5566,11 +5672,11 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             # PDF 背景工作與通知都要等 commit 之後：背景執行緒在 commit 前啟動會讀到簽核前的狀態（浮水印錯），
             # 而且 Edge 無頭 PDF 是 2～4 秒的 CPU／GIL 工作，不該在持有寫鎖時開始。
             after_commit.append(functools.partial(spawn_bg_thread, _generate_quotation_pdf, args=(quote_no, approver_name, '簽核')))
-            after_commit.append(functools.partial(notify_approved, quote_no, cname, approver_name, appr.get("requestedBy") or ""))
+            after_commit.append(functools.partial(notify_approved, quote_no, cname, approver_name, appr.get("requestedBy") or "", doc_label=_DT.label(d.get("docType"))))
             if appr.get("requestedBy"):                       # 第44班：申請人在系統內也要看到核准通知（點了開報價單；訊息不含金額）
                 after_commit.append(functools.partial(
                     _notify, appr["requestedBy"], "quotation_approved", quote_no, quote_no,
-                    _approved_msg(quote_no, cname, approver_name), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
+                    _approved_msg(quote_no, cname, approver_name, d.get("docType")), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
             detail_status = "已送出"
         else:
             d["approval"] = appr
@@ -5626,12 +5732,13 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
     try:
         begin_write(conn)
         row = conn.execute(
-            "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person, data_json, location_id, is_signed "
+            "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person, data_json, location_id, is_signed, doc_type "
             "FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
         require_case(user, row, quote_no)
+        q["docType"] = _DT.norm(row["doc_type"])             # 估價單：單據類型開立後不可改，一律以資料庫現值為準（頁面送回的是讀取時注入的同一個值）
         if row["status"] not in _CFP.PENDING_STATES:
             conn.close()
             raise HTTPException(409, f"報價單狀態為「{row['status']}」，只有待審核／簽核中可複查編輯")
@@ -5733,9 +5840,9 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
             _t0 = [a["username"] for a in ((appr.get("tiers") or [{}])[0].get("approvers") or []) if a.get("status") != "approved" and a.get("username")]
             for _u in _t0:
                 _notify(_u, "approval_request", quote_no, quote_no,
-                        f"報價單 {quote_no}（{q.get('customerName') or ''}）內容被 {user.get('display_name') or user['username']} 修改，整條簽核回到第 1 層重新進行，輪到您簽核")
+                        _DT.relabel(f"報價單 {quote_no}（{q.get('customerName') or ''}）內容被 {user.get('display_name') or user['username']} 修改，整條簽核回到第 1 層重新進行，輪到您簽核", q.get("docType")))
             if _t0:
-                notify_approval_request(quote_no, q.get("customerName") or "", _t0)
+                notify_approval_request(quote_no, q.get("customerName") or "", _t0, doc_label=_DT.label(q.get("docType")))
         except Exception:                                  # noqa: BLE001
             logger.exception("整條重跑後通知第 1 層簽核人失敗（quote_no=%s）", quote_no)
     # 通知信（commit 之後才寄；送審人＋全部最高管理者；收件人與退訂規則在 review_edit_notify）。信件失敗不影響已存檔的編輯
@@ -5832,8 +5939,8 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
 
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname))
-            notify_returned(quote_no, new_no, cname, note, requester)
+            _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
+            notify_returned(quote_no, new_no, cname, note, requester, doc_label=_DT.label(d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
@@ -5843,7 +5950,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
 
 @router.post("/api/quotations/{quote_no}/reject-final")
 def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
-    """拒絕結案：永久鎖定，不可再修改或送審。"""
+    """駁回結案：永久鎖定，不可再修改或送審。"""
     user = _require_user(authorization)
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
@@ -5897,11 +6004,11 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         if requester:
             suffix = f"：{note}" if note else ""
             _notify(requester, "approval_rejected", quote_no, quote_no,
-                    f"報價單 {quote_no}（{cname}）已被拒絕結案{suffix}")
+                    _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"note": note})
-        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 拒絕結案：所有人的待簽核／待複查通知失效
+        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 駁回結案：所有人的待簽核／待複查通知失效
         return {"ok": True}
 
 
@@ -6316,13 +6423,14 @@ def preview_quotation_html(body: dict = Body(...), authorization: str = Header(N
         row = None
         if quote_no:
             row = conn.execute(
-                "SELECT status, deal_tag, location_id FROM quotations WHERE quote_no=?",
+                "SELECT status, deal_tag, location_id, doc_type FROM quotations WHERE quote_no=?",
                 (quote_no,)).fetchone()
         if row:
             _guard_case(conn, quote_no, user, allow_approver=True)
             status = row["status"] or ""
             deal_tag = row["deal_tag"] or q.get("dealTag") or ""
             q["locationId"] = row["location_id"] or ""
+            q["docType"] = _DT.norm(row["doc_type"])      # 估價單：單據類型以欄位為準（同 generate_pdf_bytes），不信前端帶來的 docType
         else:
             require_any_module(user, ["quotation"], "報價單")
             status = q.get("status") or "草稿"
@@ -6389,7 +6497,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
             "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
-    dn = download_name.build("quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"variant": "internal"} if internal else None)
     return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
@@ -6502,7 +6610,7 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
            {"seq": seq, "file": target.get("file")})
     # 檔名＝案件欄位＋報價單存檔版本＋單號＋事件與日期（沿用今天存檔檔名裡的事件與日期資訊）
     _stamp = "_".join(x for x in (str(target.get("event") or "").strip(), str(target.get("at") or "")[:10].replace("-", "")) if x)
-    dn = download_name.build("quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate_version" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"suffix": _stamp} if _stamp else None)
     return Response(content=content, media_type="application/pdf", headers=dn.headers())
 
@@ -7215,7 +7323,7 @@ def approval_history(month: Optional[str] = None, q: Optional[str] = None,
     finally:
         conn.close()
 
-    ACTION_LABELS = {"approve": "核准", "reject": "退回", "reject_final": "拒絕結案",
+    ACTION_LABELS = {"approve": "核准", "reject": "退回", "reject_final": "駁回結案",
                      "reassign": "轉簽"}
     items = []
     for r in rows:

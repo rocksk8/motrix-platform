@@ -220,3 +220,40 @@ def test_real_core_migrations_have_no_duplicate_numbers():
     nums = [int(n) for n in re.findall(r"""^register\(\s*["']core["']\s*,\s*(\d+)\s*,""", src, re.M)]
     assert nums and sorted(nums) == list(range(1, len(nums) + 1)), nums
     assert importlib.import_module("core.migrations").NEXT == "NEXT"
+
+
+# ── 預檢分支模式：MOTRIX_PLACEHOLDERS_BY_BRANCH（整合守門題組）──────────────────────────
+
+def test_rc_by_branch_env_ignores_motrix_train_only_for_branch_permission(grepo):
+    """MOTRIX_TRAIN=1＋BY_BRANCH=1：wip 分支准有佔位（預檢分支模式）；列車／platform／prod 標籤仍然不准；沒有 BY_BRANCH ⇒ 照舊不准。"""
+    env = {"MOTRIX_TRAIN": "1", VS.BY_BRANCH_ENV: "1"}
+    assert VS.placeholders_allowed(grepo, env)[0] is True
+    assert VS.placeholders_allowed(grepo, {"MOTRIX_TRAIN": "1"})[0] is False, "對照：列車模式沒給 BY_BRANCH 照舊不准"
+    for b in ("platform", "main", "train/t82-int"):
+        _g(grepo, "checkout", "-q", "-b", b)
+        assert VS.placeholders_allowed(grepo, env)[0] is False, "整合者在列車／platform 上跑預檢，佔位仍然要紅：" + b
+        _g(grepo, "checkout", "-q", "wip/x")
+    _g(grepo, "checkout", "-q", "--detach")
+    _g(grepo, "tag", "prod/abc")
+    assert VS.placeholders_allowed(grepo, env)[0] is False, "HEAD 是正式機標籤"
+
+
+def test_rc_branch_mode_allows_next_placeholders_but_malformed_or_inconsistent_ones_stay_red(grepo):
+    """分支模式只放行『合格的佔位』：格式錯（## (Next)）、CHANGELOG 有 (next) 而快照不是 next、manifest 條目不完整，守門仍然紅。"""
+    from tests.platform.test_l1_interface_snapshot import pending_problems
+    env = {"MOTRIX_TRAIN": "1", VS.BY_BRANCH_ENV: "1"}
+    allowed = VS.placeholders_allowed(grepo, env)
+    assert pending_problems("next", True, allowed) == [], "一致的佔位：分支模式不算紅（修好的 3 題）"
+    assert pending_problems("1.71", False, allowed) is None, "沒有佔位：照舊比號碼"
+    assert any("--pending" in x for x in pending_problems("1.71", True, allowed)), "(next) 但快照沒跑 --pending ⇒ 仍紅"
+    assert any("沒有 `## (next)`" in x for x in pending_problems("next", False, allowed)), "快照 next 而段落不見 ⇒ 仍紅"
+    assert VS.malformed_headings("## (Next) — d\n## next — d\n") == ["## (Next) — d", "## next — d"], "格式錯的標題由 test_placeholder_headings_are_well_formed 擋（與模式無關）"
+    ok, _why, found = forbidden_placeholders(grepo, env)
+    assert ok is True and found == [], "no_placeholders 題在分支模式 skip（准）"
+    train_env = {"MOTRIX_TRAIN": "1", VS.BY_BRANCH_ENV: "1"}
+    _g(grepo, "checkout", "-q", "-b", "train/x")
+    (grepo / "backend" / "core").mkdir(parents=True)
+    (grepo / "backend" / "core" / "CHANGELOG.md").write_text("# c\n\n## (next) — d\n", encoding="utf-8")
+    ok2, _w, found2 = forbidden_placeholders(grepo, train_env)
+    assert ok2 is False and found2, "在列車分支上同一組環境仍然紅"
+

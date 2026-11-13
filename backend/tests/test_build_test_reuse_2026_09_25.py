@@ -180,7 +180,9 @@ def test_the_ignore_list_is_pinned():
     assert "MOTRIX_TRAIN" not in tr._ENV_IGNORE
     for name in SPEED_ONLY:
         assert name in tr._ENV_IGNORE, name
-    assert len(tr._ENV_IGNORE) == 32, "個數變了：%s（改清單時同步這個數字並說明理由）" % sorted(tr._ENV_IGNORE)
+    for name in ("MOTRIX_CI_TICKET", "MOTRIX_GATE_TOKEN", "MOTRIX_WINDOW", "MOTRIX_CI_DIR", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_QUEUE_GUARD"):
+        assert name in tr._ENV_IGNORE, name                       # 2026-11-13：heavy_run 每輪注入的排隊／鎖變數（見 test_reuse_fingerprint_queue_env_2026_11_13）
+    assert len(tr._ENV_IGNORE) == 38, "個數變了：%s（改清單時同步這個數字並說明理由）" % sorted(tr._ENV_IGNORE)
 
 def test_green_is_reused_across_midnight_within_the_window():
     """2026-10-13 起：23:50 的綠，00:10 還能用（不再要求同一個日曆日）；窗口與其他條件不變。"""

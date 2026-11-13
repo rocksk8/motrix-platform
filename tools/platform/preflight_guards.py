@@ -203,7 +203,7 @@ def attribute(nodeids, watch, merges, top=3):
 
 
 def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, nodeid_merges=None,
-                  count_bad=(), count_skipped=(), counts=None, tail=""):
+                  count_bad=(), count_skipped=(), counts=None, tail="", notes=()):
     L = ["═══ 整合守門題組 ═══"]
     L.append("題組：%d 組、%d 個測試檔%s" % (plan["groups"], len(plan["targets"]), "（含 e2e）" if plan.get("e2e") else ""))
     for gid, pat, required in missing:
@@ -228,6 +228,8 @@ def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, 
         L.append("跑了多少（過／略過／紅）：" + "；".join("%s %d/%d/%d" % (g, c["passed"], c["skipped"], c["failed"]) for g, c in sorted(counts.items())))
     for s in count_skipped:
         L.append("⚠ 略過：" + s)
+    for n in notes:
+        L.append("ℹ " + n)
     for b in count_bad:
         L.append("✘ 未能檢查：" + b)
     total = sum(len(v) for v in grouped.values())
@@ -299,10 +301,29 @@ def build_cmd(python, targets, workers, basetemp, marker="not e2e", junit=None):
             *(["--junitxml=%s" % junit, "-o", "junit_family=xunit2"] if junit else [])]
 
 
-def _make_runner(backend, holder, budget_s, tee=True):
+def branch_mode_allowed(repo, base):
+    """要不要給 pytest 帶 MOTRIX_PLACEHOLDERS_BY_BRANCH=1（＝分支模式：(next) 佔位不算紅）。
+    - HEAD 是**具名分支** ⇒ True（train/*、platform／main／master 由 placeholders_allowed 的分支規則照樣擋）。
+    - **detached** ⇒ 只有 HEAD 領先 base（不是 base 的祖先＝有自己的新提交）才 True；HEAD 已包含在 base 裡
+      （＝整合者在凍結的列車 tip 上 `git worktree add --detach` 跑守門）⇒ False，維持 MOTRIX_TRAIN 嚴格（佔位照紅）。
+    - base 不存在、git 失敗 ⇒ False（寧可紅）。"""
+    if _git(repo, "symbolic-ref", "-q", "HEAD").strip():
+        return True
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", "HEAD", base], capture_output=True, creationflags=_NOWIN)
+    except OSError:
+        return False
+    return r.returncode == 1
+
+
+def _make_runner(backend, holder, budget_s, tee=True, by_branch=True):
     """真的跑 pytest 的 runner(cmd, env, flags) ⇒ rc。預算由 watchdog 計時器強制（牆鐘；卡住沒輸出也會被停）⇒ INCOMPLETE_RC。"""
     def runner(cmd, env, flags):
         e = dict(env, MOTRIX_TRAIN="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+        if by_branch:
+            e["MOTRIX_PLACEHOLDERS_BY_BRANCH"] = "1"
+        else:
+            e.pop("MOTRIX_PLACEHOLDERS_BY_BRANCH", None)                      # 呼叫端環境帶了也拿掉：列車 tip／detached 在 base 上要嚴格
         t0 = time.time()
         proc = subprocess.Popen(cmd, cwd=str(backend), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags | _NOWIN)
         fired = threading.Event()
@@ -331,7 +352,7 @@ def _make_runner(backend, holder, budget_s, tee=True):
     return runner
 
 
-def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True):
+def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True, by_branch=True):
     """⇒ (rc, 輸出全文, 秒數, junit xml 文字或 None)。重型（-n≥2）經 heavy_run 排隊；排不到（75）⇒ rc 75。"""
     backend = Path(repo) / "backend"
     stamp = "%d_%d" % (os.getpid(), int(time.time() * 1000))
@@ -339,7 +360,7 @@ def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None,
     junit = os.path.join(tempfile.gettempdir(), "pfg_%s.xml" % stamp)
     cmd = build_cmd(python_exe(), targets, workers, basetemp, marker, junit)
     holder = {"out": "", "secs": 0.0}
-    runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee)
+    runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee, by_branch)
     cls = queue_cls or ("heavy" if workers and workers >= 2 else "light")
     try:
         hr = hr or _load("heavy_run")
@@ -373,6 +394,20 @@ def static_findings(repo, base):
         return [{"code": "A", "where": "preflight", "msg": "未能檢查：%s" % e, "fix": "單獨跑 train_preflight.py --static-only", "unchecked": True}]
 
 
+def branch_mode_info(repo):
+    """⇒ (分支模式?, 理由, 樹裡 (next) 佔位數)。分支模式＝這棵樹的 HEAD 准有版號佔位（wip／一般分支）；列車／platform／main／prod 標籤 ⇒ False。
+    用 tests/_version_slots.py 同一支判定（忽略 MOTRIX_TRAIN）；載入失敗 ⇒ (False, 原因, 0)（不特別說明，守門自己照樣判）。"""
+    p = Path(repo) / "backend" / "tests" / "_version_slots.py"
+    try:
+        spec = importlib.util.spec_from_file_location("_pfg_version_slots", str(p))
+        vs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(vs)
+        ok, why = vs.placeholders_allowed(Path(repo), {})
+        return ok, why, (len(vs.find_placeholders(Path(repo))) if ok else 0)
+    except Exception as e:                                                   # noqa: BLE001
+        return False, "讀不到版號佔位判定：%s" % e, 0
+
+
 def estimate(repo, targets):
     """依 preflight_seconds.json 估 worker-秒（量過的檔加總；沒量過的檔數另列）。⇒ (秒, 沒量過的檔數)。"""
     try:
@@ -392,7 +427,7 @@ def estimate(repo, targets):
 
 def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e2e=False, run_static=True, base="origin/platform", since=None,
               n_merges=DEFAULT_MERGES, dry_run=False, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, runner=None, merges_fn=None, config=None, hr=None,
-              base_exists=None, skip=None):
+              base_exists=None, skip=None, branch_info=None, branch_mode_fn=None):
     """⇒ (exit_code, report_text, data)。runner(repo, targets, marker) ⇒ (rc, out, secs, junit_xml) 供測試注入。window 必填。"""
     repo = Path(repo)
     if not window:
@@ -426,6 +461,14 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
     if any(req for _g, _p, req in missing) and not targets:
         return 2, format_report(plan, [], {}, labels, fixes, watch, None, None, 0, "", missing), {}
     findings = static_findings(repo, base) if (run_static and not dry_run) else []
+    a0_note = ""
+    if "generated" not in run_groups:                                         # A0（產生檔過期）與 generated 組同進退：--skip generated／--only 沒選它 ⇒ A0 也不算
+        if any(f.get("code") == "A0" for f in findings):
+            a0_note = "A0 產生檔過期檢查：與 generated 組一致，這次沒選它 ⇒ 不算紅（由整合者重產）"
+        findings = [f for f in findings if f.get("code") != "A0"]
+    by_branch = (branch_mode_fn or branch_mode_allowed)(repo, base) if not dry_run else False
+    b_ok, b_why, b_n = (branch_info or branch_mode_info)(repo) if (by_branch and not dry_run) else (False, "", 0)
+    branch_note = ("分支模式（%s）：樹裡 %d 個 (next) 版號佔位不算紅，列車 train_number assign 取號；佔位格式／一致性問題仍會紅" % (b_why, b_n)) if (b_ok and b_n) else ""
     if dry_run:
         est, unk = estimate(repo, targets)
         lines = ["[dry-run] %d 組、%d 個測試檔；估計 %.0f worker-秒（≈ %.1f 分 @ %d worker；%d 個檔沒量過耗時）" % (plan["groups"], len(targets), est, est / max(1, workers) / 60, workers, unk)]
@@ -448,7 +491,7 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
     def go(ts, marker, w, cls=None):
         if runner is not None:
             return runner(repo, ts, marker)
-        return run_pytest(repo, ts, w, window, marker, cls, budget_min, max_wait, hr)
+        return run_pytest(repo, ts, w, window, marker, cls, budget_min, max_wait, hr, by_branch=by_branch)
     rc, out, secs, xmls = None, "", 0.0, []
     if non_e2e:
         rc, out, secs, x = go(non_e2e, "not e2e", workers)
@@ -475,7 +518,8 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
         for gid, fs in grouped.items():
             cands[gid] = attribute([f["nodeid"] for f in fs], watch.get(gid, []), merges)
     tail = "".join(out.splitlines(True)[-25:]) if rc not in (None, 0, 1, INCOMPLETE_RC) else ""
-    text = format_report(plan, findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, cands, count_bad, count_skipped, counts, tail)
+    text = format_report(plan, findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, cands, count_bad, count_skipped, counts, tail,
+                         notes=[n for n in (branch_note, a0_note) if n])
     bad = bool(grouped) or any(not f.get("unchecked") for f in findings) or (rc not in (None, 0, INCOMPLETE_RC)) or bool(count_bad)
     miss_req = any(r for _g, _p, r in missing)
     code = 3 if rc == INCOMPLETE_RC else 1 if (bad or any(f.get("unchecked") for f in findings)) else 2 if miss_req else 0

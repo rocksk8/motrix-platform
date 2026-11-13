@@ -1206,6 +1206,26 @@ def _queue_guard(config):
         _lock_say("\n[測試佇列] " + msg, flush=True)
 
 
+def _refuse_light_run_during_gate(config):
+    """閘門鎖持有期間，**輕的**臨時 pytest（單檔、單 worker）也不開始（T82：e2e 對時序敏感，PM 不必再人工通知全視窗暫停）。
+
+    判斷是 heavy_run.light_run_verdict 的純函式（持有者／閘門自己的子行程／巢狀 pytest 放行；--collect-only 放行；MOTRIX_QUEUE_GUARD=0 關掉）。
+    **找不到 heavy_run、讀檔出任何錯 ⇒ 放行**（出貨包沒有 tools/；這道只防「順手跑一下」，不能反過來擋住測試）。"""
+    try:
+        import importlib.util as _iu
+        hr_path = Path(__file__).resolve().parents[1] / "tools" / "platform" / "heavy_run.py"
+        if not hr_path.is_file():
+            return
+        spec = _iu.spec_from_file_location("_motrix_heavy_run_gate_guard", str(hr_path))
+        hr = _iu.module_from_spec(spec)
+        spec.loader.exec_module(hr)
+        level, msg = hr.light_run_verdict(os.environ, hr.read_gate(), bool(getattr(config.option, "collectonly", False)))
+    except Exception:                    # noqa: BLE001 — fail open
+        return
+    if level == "refuse":
+        raise pytest.UsageError("【閘門期間：不開始臨時 pytest】" + msg)
+
+
 def pytest_configure(config):
     """在**任何一支測試跑起來之前**擋下來。
 
@@ -1236,6 +1256,7 @@ def pytest_configure(config):
         return
     if not _is_heavy_run(config):
         _refuse_light_run_during_build(config)
+        _refuse_light_run_during_gate(config)    # 閘門鎖持有中：非持有者的單檔也不開始（判斷在 heavy_run.light_run_verdict）
         return                       # 單檔臨時跑，不搶鎖（建包獨佔期間例外：直接拒絕，見上一行）
     _queue_guard(config)             # 重型但沒經 heavy_run 排隊：閘門鎖期間拒絕、平時警告（判斷在 tools/platform/heavy_run.py）
 

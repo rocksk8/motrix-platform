@@ -151,18 +151,47 @@ def _ssl_context_for(url: str):
     return ctx
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """不跟隨轉址（回 3xx ⇒ urllib 丟 HTTPError ⇒ 算失敗）。"""
+
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _describe_failure(e: Exception) -> str:
+    """log 用：只有「狀態碼或例外類別」，不含網址與例外內文——healthchecks 這類服務的密鑰就在網址路徑裡（2026-11-13）。"""
+    code = getattr(e, "code", None)
+    if isinstance(code, int):
+        return "HTTP %d" % code
+    kind = getattr(e, "kind", "")
+    return "%s(%s)" % (type(e).__name__, kind) if kind else type(e).__name__
+
+
 def _http_get(url: str) -> bool:
+    """本機 loopback 探測用 urllib（略過自簽憑證驗證）；**對外 ping_url 走 `core.safe_ping`**
+    （不跟隨轉址、解析後每個位址都得是公開位址、連線釘在檢查過的 IP、只准 80／443、整體時限）——
+    2026-11-13 之前這裡是 `urlopen(url)`：伺服器會跟著對外服務的 302 自己去打內網（SSRF）。
+    失敗只記主機名＋狀態碼／例外類別，不記完整網址（密鑰在路徑裡）。"""
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    loopback = host in _LOOPBACK_HOSTS
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT, context=_ssl_context_for(url)) as resp:
-            return 200 <= resp.status < 300
+        if loopback:
+            opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=_ssl_context_for(url)))
+            with opener.open(url, timeout=_TIMEOUT) as resp:
+                return 200 <= resp.status < 300
+        from core import safe_ping
+        status = safe_ping.get(url, timeout=_TIMEOUT)
+        if 200 <= status < 300:
+            return True
+        logger.warning("對外打卡失敗：主機 %s，HTTP %d", host, status)
+        return False
     except Exception as e:
         # 打本機 loopback 的單次失敗只記 DEBUG（雙協定探測時，只有 http 的機器每次都會先敗一次 https）；
         # 對外 ping_url 失敗照舊 WARNING。「本機全都不通」由 main 記一筆 ERROR。
-        loopback = (urllib.parse.urlsplit(url).hostname or "").lower() in _LOOPBACK_HOSTS
         if loopback:
-            logger.debug("GET %s failed: %s", url, e)
+            logger.debug("GET %s failed: %s", host, _describe_failure(e))
         else:
-            logger.warning("GET %s failed: %s", url, e)
+            logger.warning("對外打卡失敗：主機 %s，%s", host, _describe_failure(e))
         return False
 
 

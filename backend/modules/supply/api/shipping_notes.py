@@ -410,7 +410,7 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
         raise HTTPException(404, "出貨單不存在")
     if row["status"] != "草稿":
         conn.close()
-        raise HTTPException(409, "僅草稿狀態可送出審核")
+        raise HTTPException(409, "僅草稿狀態可送出簽核")
     items = json.loads(row["items_json"] or "[]")
     if not any((it.get("description") or "").strip() for it in items if it.get("type") != "header"):
         conn.close()

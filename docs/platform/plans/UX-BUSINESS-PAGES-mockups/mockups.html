@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>業務頁改版示意（前／後）— hichan-7</title>
+<style>
+/* 沿用 frontend/css/style.css 的色票（--accent 品牌紅、tone-* 語意色）；不新增顏色。示意圖，非實作。 */
+:root{
+  --bg:#F5F4F0; --card:#fff; --ink:#0A0A0A; --ink2:#595959; --dim:#666; --line:#E5E3DE; --line2:#D2CFC8;
+  --accent:#C8102E; --accent-l:#FBE9EC;
+  --ok:#15803D; --ok-bg:#F0FDF4; --ok-bd:#BBF7D0;
+  --warn:#92400E; --warn-bg:#FFFBEB; --warn-bd:#FDE68A;
+  --info:#1D4ED8; --info-bg:#EFF6FF; --info-bd:#BFDBFE;
+  --bad:#B91C1C; --bad-bg:#FEF2F2; --bad-bd:#FECACA;
+  --draft-bg:#F0EEE9;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px} .sub{color:var(--ink2);margin:0 0 24px}
+h2{font-size:18px;margin:40px 0 4px;padding-top:16px;border-top:2px solid var(--ink)}
+.why{color:var(--ink2);margin:0 0 14px;max-width:900px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:980px){.pair{grid-template-columns:1fr}}
+.col>.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:99px;margin-bottom:8px}
+.before>.tag{background:var(--draft-bg);color:var(--ink2)} .after>.tag{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.frame{background:var(--bg);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.bar{background:var(--ink);color:#fff;padding:8px 14px;font-size:12px;display:flex;gap:14px;align-items:center}
+.nav{background:#fff;border-bottom:1px solid var(--line);padding:8px 14px;font-size:12px;color:var(--ink2);display:flex;gap:14px}
+.nav b{color:var(--ink);border-bottom:2px solid var(--accent);padding-bottom:6px}
+.body{padding:14px}
+.note{font-size:12px;color:var(--ink2);margin-top:8px}
+.note b{color:var(--accent)}
+ol.marks{margin:10px 0 0;padding-left:20px;font-size:13px} ol.marks li{margin:3px 0}
+.btn{display:inline-block;border:1px solid var(--line2);background:#fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip{display:inline-block;border:1px solid;border-radius:5px;padding:1px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+.c-draft{background:var(--draft-bg);color:var(--ink);border-color:var(--line2)} .c-wait{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+.c-sign{background:var(--info-bg);color:var(--info);border-color:var(--info-bd)} .c-ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+.c-bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-bd)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:12px} th{color:var(--ink2);text-align:left;font-weight:600;padding:7px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line)} td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.hero{background:var(--ink);color:#fff;padding:18px 20px}
+.hero h3{margin:0 0 6px;font-size:20px} .hero p{margin:0;color:#A3A3A3;font-size:12px}
+.kpi{display:flex;gap:0;background:#2A2A2A;color:#fff}
+.kpi>div{flex:1;padding:12px 18px} .kpi small{display:block;color:#ff6b81;font-size:11px;font-weight:700} .kpi b{font-size:26px}
+.todo{display:grid;gap:10px}
+.todo .grp{padding:10px 12px} .todo .grp h4{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:12px}
+.row:first-of-type{border-top:0}
+.muted{color:var(--ink2)} .red{color:var(--bad);font-weight:700} .amb{color:var(--warn);font-weight:700}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);font-size:12px;overflow:hidden}
+.tabs span{padding:7px 10px;color:var(--ink2);white-space:nowrap} .tabs .on{color:var(--accent);font-weight:700;border-bottom:2px solid var(--accent)}
+.pill{display:inline-flex;gap:4px;border:1px solid var(--line2);border-radius:99px;padding:1px 9px;font-size:11px;background:#fff;margin:2px 4px 2px 0}
+.sticky{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.callout{background:var(--info-bg);border:1px solid var(--info-bd);color:var(--info);padding:7px 12px;border-radius:6px;font-size:12px;display:flex;justify-content:space-between}
+.warnb{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn);padding:7px 12px;border-radius:6px;font-size:12px}
+.mini{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>業務頁改版示意（前／後）</h1>
+<p class="sub">對應 <code>UX-BUSINESS-PAGES-PROPOSAL.md</code> §4。「前」依 2026-11-13 在 <code>train/t79-int @ 333ee073b</code> 實際操作截圖重畫（原圖在 <code>UX-BUSINESS-PAGES-shots/</code>）；「後」（r2，已依使用者裁示與 hichan-6 評審修正）只用既有色票與元件（<code>.pg</code> 頁頭、<code>.st-chip</code>、<code>.callout</code>、<code>.btn-*</code>），<b>不新增顏色或字型</b>。示意圖，數字與人名為假資料。</p>
+
+<!-- ===================== M1 ===================== -->
+<h2>示意 1　儀表板（業務版）：從「只有簽核」變成「我的工作」</h2>
+<p class="why">新進業務登入後第一眼：大標題寫「目前沒有待您簽核的項目」，三個 KPI 都是 0，下面是一張空的簽核表——畫面上沒有任何「我的報價單／我的案件」。r2 修正：①區塊叫「<b>我的工作</b>」（與選單一致），<b>不新增「今天要做的事」</b>，原「今日工作事項」保留為第④組；②同一張單不再同時出現在兩組；③保固／有效期卡片搬進「提醒」組；④加登入問候語；⑤「等我簽核」統一為「待我簽核」。</p>
+<div class="pair">
+ <div class="col before"><span class="tag">前（截圖：01-dashboard-sales）</span>
+  <div class="frame"><div class="bar"><b>MOTRIX</b> 專案管理系統 <span style="margin-left:auto">h7_sales</span></div>
+   <div class="nav"><b>儀表板</b><span>客戶與業務</span><span>案件</span><span>財務會計</span><span>我的工作</span></div>
+   <div class="hero"><p style="color:#ff6b81;font-weight:700">MOTRIX 專案管理系統</p><h3>晚安，h7_sales。目前沒有待您簽核的項目。</h3><p>沒有需要您立刻處理的事項。</p>
+     <p style="margin-top:12px"><span class="btn p">前往簽核佇列 →</span> <span class="btn" style="background:transparent;color:#fff;border-color:#666">今日工作事項</span></p></div>
+   <div class="kpi"><div><small>等我簽核</small><b>0</b><div style="font-size:12px">簽核佇列</div></div><div><small>有效期將屆</small><b>0</b><div style="font-size:12px">報價單</div></div><div><small>90 天內到期</small><b>0</b><div style="font-size:12px">設備保固</div></div></div>
+   <div class="body"><div class="card" style="width:60%"><div style="padding:8px 12px;font-weight:700;font-size:12px">等我簽核</div><table><tr><th>單據</th><th>單號</th><th>客戶／案件</th><th>申請人</th></tr><tr><td colspan="4" class="muted" style="text-align:center;padding:16px">清單是空的：沒有輪到您的簽核單</td></tr></table></div></div>
+  </div>
+  <ol class="marks"><li>標題寫「系統名稱」與「專案」，選單與其他頁都說「案件」。</li><li>主要按鈕＝「前往簽核佇列」——對業務不是第一件事。</li><li>「有效期將屆／90天保固」沒說是「我的」還是「全公司的」。</li><li>整頁沒有「新增報價單」「新增客戶」入口；要去選單找。</li></ol>
+ </div>
+ <div class="col after"><span class="tag">後（建議）</span>
+  <div class="frame"><div class="bar"><b>MOTRIX</b> <span style="margin-left:auto">小林（業務）</span></div>
+   <div class="nav"><b>儀表板</b><span>客戶與業務</span><span>案件</span><span>財務會計</span><span>我的工作</span></div>
+   <div class="body">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:20px;font-weight:800">今天有 3 件事等您處理。</div><div class="muted" style="font-size:13px">週五了！把事情收乾淨，週末才睡得好。 <span class="mini">（問候語：星期；可關閉、可自訂）</span></div></div><div><span class="btn">待我簽核 1</span> <span class="btn p">＋ 新增報價單</span></div></div>
+    <div class="todo">
+     <div class="card grp"><h4><span>待我簽核 <span class="chip c-wait">1 件</span></span><span class="muted" style="font-weight:400">前往待我簽核 →</span></h4>
+       <div class="row"><span><b>MQ-202611-009</b> 宏達科技｜辦公室網路 <span class="muted">NT$ 88,000　申請人：陳業務</span></span><span><span class="btn p">核准</span> <span class="btn">退回</span></span></div></div>
+     <div class="card grp"><h4><span>我送出的報價單 <span class="chip c-sign">2 件進行中</span></span><span class="muted" style="font-weight:400">全部報價單 →</span></h4>
+       <div class="row"><span><b>MQ-202611-002</b> 社區門禁</span><span><span class="chip c-wait">待簽核</span> <span class="muted">卡在：王主任，已 2 天</span></span></div>
+       <div class="row"><span><b>MQ-202611-006</b> 機房網路改善</span><span><span class="chip c-ok">已核准</span> <span class="amb">尚未送給客戶 → 寄出</span></span></div></div>
+     <div class="card grp"><h4><span>我的案件要處理 <span class="chip c-bad">1 件逾期</span></span><span class="muted" style="font-weight:400">全部案件 →</span></h4>
+       <div class="row"><span><b>MQ-202610-004</b> 停車場攝影機｜階段「到貨驗收」<span class="muted">（執行負責：我）</span></span><span class="red">逾期 5 天</span></div></div>
+     <div class="card grp"><h4><span>今日工作事項 <span class="chip c-draft">2 件</span></span><span class="muted" style="font-weight:400">前往每日任務 →</span></h4>
+       <div class="row"><span>回覆宏達科技的規格詢問</span><span class="muted">今日</span></div></div>
+     <div class="card grp"><h4><span>提醒</span></h4>
+       <div class="row"><span>MQ-202611-003 報價單有效期</span><span class="amb">還有 3 天</span></div>
+       <div class="row"><span>MQ-202509-021 設備保固（我的案件）</span><span class="amb">45 天後到期</span></div></div>
+    </div>
+    <div class="note">空狀態（新人第一天）：各組都沒有內容時，顯示一句「你還沒有進行中的工作。從『新增客戶』或『新增報價單』開始。」＋兩顆按鈕。組別由「使用者實際有的模組權限」決定，不是由角色名稱決定。</div>
+   </div>
+  </div>
+  <ol class="marks"><li>區塊叫「我的工作」，與選單一致；「今日工作事項」保留為第④組，沒有撞名。</li><li>「我的」＝報價單看填單人、案件看<b>執行負責</b>（填單人、業績歸屬列為次要）。</li><li>每組都寫出卡在誰、逾期幾天；「已核准、尚未送客戶」是要業務動手的狀態，獨立呈現。</li><li>設備保固與報價單有效期卡片不消失，搬進「提醒」組（業務只看我的）。</li><li>大標題保留「今天有 N 件事等您處理」，問候語是另加的一句。</li></ol>
+ </div>
+</div>
+
+<h2>示意 1b　儀表板（老闆版）</h2>
+<p class="why">給「30 分鐘決定買不買」的人看的第一個畫面：今天要我簽什麼、錢在哪裡、本月成案與商機、哪裡卡住、哪些要到期。</p>
+<div class="frame" style="max-width:760px"><div class="bar"><b>MOTRIX</b> <span style="margin-left:auto">王總（最高管理者）</span></div>
+ <div class="body">
+  <div style="font-size:20px;font-weight:800">今天有 2 件事等您處理。</div><div class="muted" style="font-size:13px;margin-bottom:10px">新春快樂！還在看系統？紅包先收，事情晚點再說。 <span class="mini">（問候語：節慶；溫和正式版為「新春快樂，王總。」）</span></div>
+  <div style="display:flex;gap:8px;margin-bottom:10px"><span class="card" style="padding:6px 12px;flex:1"><span class="mini">待我簽核</span><div style="font-size:20px;font-weight:800">2 張</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">應收逾期</span><div style="font-size:20px;font-weight:800">NT$ 420,000</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">本月已成案（成案日在本月）</span><div style="font-size:20px;font-weight:800">NT$ 740,000 · 3 張</div></span></div>
+  <div class="todo">
+   <div class="card grp"><h4><span>待我簽核 <span class="chip c-wait">2 件</span></span><span class="muted" style="font-weight:400">前往待我簽核 →</span></h4>
+     <div class="row"><span><b>MQ-202611-009</b> 宏達科技｜辦公室網路 NT$ 88,000</span><span><span class="btn p">核准</span> <span class="btn">退回</span></span></div>
+     <div class="row"><span><b>EXP-1108</b> 支出申請 NT$ 12,300</span><span><span class="btn p">核准</span> <span class="btn">退回</span></span></div></div>
+   <div class="card grp"><h4><span>錢</span></h4>
+     <div class="row"><span>應收逾期（2 筆）</span><span class="red">NT$ 420,000</span></div>
+     <div class="row"><span>待付款（5 筆）</span><span>NT$ 186,500</span></div></div>
+   <div class="card grp"><h4><span>卡住的單</span></h4>
+     <div class="row"><span><b>MQ-202611-002</b> 社區門禁</span><span class="amb">卡在：王主任 · 已 6 天</span></div>
+     <div class="row"><span><b>案件 MQ-202610-004</b> 階段「到貨驗收」</span><span class="red">逾期 5 天 · 負責：陳業務</span></div></div>
+   <div class="card grp"><h4><span>商機漏斗 <span class="mini">（有 CRM 模組才顯示）</span></span></h4>
+     <div class="row"><span>洽談中 4 → 成案 3 → 未成案 1　暫擱置 2</span><span class="muted">成案率 75%</span></div></div>
+   <div class="card grp"><h4><span>提醒（現有「有效期將屆」「90 天內到期保固」兩張卡搬到這裡）</span></h4>
+     <div class="row"><span>報價單有效期將屆（全公司）</span><span class="amb">4 張</span></div>
+     <div class="row"><span>設備保固 90 天內到期（全公司）</span><span class="amb">7 台</span></div></div>
+  </div>
+  <div class="note">全新安裝、尚未完成「開始使用」時，最上方改顯示 hichan-1 七步清單的「下一步」。</div>
+ </div></div>
+
+<h2>示意 1c　儀表板（財務版）</h2>
+<div class="frame" style="max-width:760px"><div class="bar"><b>MOTRIX</b> <span style="margin-left:auto">林會計（財務）</span></div>
+ <div class="body">
+  <div style="font-size:20px;font-weight:800">今天有 9 件事等您處理。</div><div class="muted" style="font-size:13px;margin-bottom:10px">月底了，請款和對帳別忘了。</div>
+  <div style="display:flex;gap:8px;margin-bottom:10px"><span class="card" style="padding:6px 12px;flex:1"><span class="mini">待付款總額</span><div style="font-size:20px;font-weight:800">NT$ 186,500</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">待收款總額</span><div style="font-size:20px;font-weight:800">NT$ 612,000</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">逾期待處理</span><div style="font-size:20px;font-weight:800">2 筆</div></span></div>
+  <div class="todo">
+   <div class="card grp"><h4><span>待付款申請 <span class="chip c-wait">3 件</span></span><span class="muted" style="font-weight:400">前往出納 →</span></h4><div class="row"><span>支出申請 EXP-1108　NT$ 12,300</span><span class="muted">申請人：陳業務</span></div></div>
+   <div class="card grp"><h4><span>待付款 <span class="chip c-wait">5 筆</span>　待收款 <span class="chip c-sign">4 筆</span>　獎金待發放 <span class="chip c-draft">1 筆</span>　差額審核 <span class="chip c-draft">0</span></span></h4></div>
+  </div>
+  <div class="note">金額為 0 時用中性色，不用紅／綠（顏色只代表狀態）。</div>
+ </div></div>
+
+<!-- ===================== M2 ===================== -->
+<h2>示意 2　報價單清單：一套狀態詞＋「下一步」＋有定義的數字</h2>
+<p class="why">同一張報價單同一頁出現三種說法（分組「送審中」、分頁「待審核」、徽章「審核中」）。r2 修正：①<b>分頁維持 9 個，只改詞</b>（待審核→待簽核）；②<b>保留清單列上的「案件進度」小選單</b>與「已核准（尚未送客戶）」狀態；③頁頂三個數字的定義寫明；④「本月已成案」依「成案日在本月」重算（原稿把上月成案的兩張算成本月，錯誤）。<span class="mini">（hichan-4 負責報價單表單與頂欄，本示意僅針對「清單」頁。）</span></p>
+<div class="pair">
+ <div class="col before"><span class="tag">前（截圖：03-quotations-sa）</span>
+  <div class="frame"><div class="body">
+   <div class="callout" style="margin-bottom:8px"><span>第一次來？這裡列出所有報價單。要開新單，按右上的「新增報價單」…</span><span>看說明 ｜ 我知道了</span></div>
+   <div style="display:flex;justify-content:space-between;margin-bottom:8px"><div><b style="font-size:18px">報價單管理</b><div class="muted" style="font-size:12px">共 5 張報價單</div></div><span class="btn p">＋ 新增報價單</span></div>
+   <div class="tabs"><span class="on">進行中 (5)</span><span>草稿 (1)</span><span>待審核 (1)</span><span>已核准 (1)</span><span>已送出 (2)</span><span>已確認</span><span>已結案</span><span>已取消</span><span>未成案</span></div>
+   <div class="card" style="margin-top:8px"><table><tr><th>報價單號</th><th>客戶</th><th class="n">金額</th><th>毛利率</th><th>狀態</th><th>案件進度</th></tr>
+     <tr><td colspan="6" class="muted" style="background:var(--draft-bg);font-weight:700">草稿　尚未送審</td></tr>
+     <tr><td>MQ-202611-001</td><td>宏達科技</td><td class="n">126,000</td><td class="red">—</td><td><span class="chip c-draft">草稿</span><div class="mini">2 天未異動</div></td><td>[未標記 ▾]</td></tr>
+     <tr><td colspan="6" class="muted" style="background:var(--draft-bg);font-weight:700">送審中　簽核流程進行中</td></tr>
+     <tr><td>MQ-202611-002</td><td>大明建設</td><td class="n">315,000</td><td class="red">—</td><td><span class="chip c-wait">審核中</span><div class="mini">送審 2 天</div></td><td>[未標記 ▾]</td></tr>
+     <tr><td colspan="6" class="muted" style="background:var(--draft-bg);font-weight:700">已送出　簽核完成、已對外報價</td></tr>
+     <tr><td>MQ-202610-004</td><td>大明建設</td><td class="n">210,000</td><td class="red">—</td><td><span class="chip c-ok">執行中</span></td><td><span class="chip c-ok">已成案</span></td></tr>
+     <tr><td>MQ-202611-003</td><td>宏達科技</td><td class="n">525,000</td><td class="red">—</td><td><span class="chip c-sign">報價中</span></td><td>[未標記 ▾]</td></tr></table></div>
+  </div></div>
+  <ol class="marks"><li>分頁用「待審核」，徽章用「審核中」，分組用「送審中」：同一件事三個詞。</li><li>「已送出」分頁裡的單，狀態寫「報價中」「執行中」：看不出差別。</li><li>「毛利率」整欄紅色破折號：紅色＝有問題，但這只是沒資料。</li><li>要看「卡在誰」得點進去（徽章只寫「審核中」）。</li><li>提示框排在頁標題上方，每次進來先看到它。</li></ol>
+ </div>
+ <div class="col after"><span class="tag">後（建議）</span>
+  <div class="frame"><div class="body">
+   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div class="mini">客戶與業務 › 報價單</div><b style="font-size:18px">報價單</b><div class="muted" style="font-size:12px">向客戶報價的單據；客戶確定採用後標「已成案」，就會變成案件。</div></div><span class="btn p">＋ 新增報價單</span></div>
+   <div style="display:flex;gap:8px;margin-bottom:8px"><span class="card" style="padding:6px 12px;flex:1"><span class="mini">要我處理（草稿＋被退回＋已核准未送客戶）</span><div style="font-size:18px;font-weight:800">2 張</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">等別人（待簽核）</span><div style="font-size:18px;font-weight:800">1 張</div></span><span class="card" style="padding:6px 12px;flex:1"><span class="mini">本月已成案（成案日在本月）</span><div style="font-size:18px;font-weight:800">NT$ 180,000 · 1 張</div></span></div>
+   <div class="tabs"><span class="on">進行中 (6)</span><span>草稿 (1)</span><span>待簽核 (1)</span><span>已核准 (1)</span><span>已送出 (1)</span><span>已確認</span><span>已結案</span><span>已取消</span><span>未成案</span></div>
+   <div class="mini" style="margin:6px 0">顯示：我負責的、進行中，共 6 張　<u>清除條件</u>　｜　記住我上次的選擇　｜　<u>加欄</u>　<u>緊湊</u></div>
+   <div class="card"><table><tr><th>單號／客戶</th><th class="n">金額</th><th>狀態</th><th>下一步</th><th>案件進度</th></tr>
+     <tr><td><b>MQ-202611-002</b><div class="muted">大明建設｜社區門禁</div></td><td class="n">315,000</td><td><span class="chip c-wait">待簽核</span></td><td>等王主任簽核（2 天）</td><td>[未標記 ▾]</td></tr>
+     <tr><td><b>MQ-202611-001</b><div class="muted">宏達科技｜辦公室監視</div></td><td class="n">126,000</td><td><span class="chip c-draft">草稿</span></td><td class="amb">還沒送出（2 天未動）</td><td>[未標記 ▾]</td></tr>
+     <tr><td><b>MQ-202611-006</b><div class="muted">宏達科技｜機房網路</div></td><td class="n">96,000</td><td><span class="chip c-ok">已核准</span></td><td class="amb">簽完了，尚未送給客戶 → 寄出</td><td>[未標記 ▾]</td></tr>
+     <tr><td><b>MQ-202611-003</b><div class="muted">宏達科技｜機房網路改善</div></td><td class="n">525,000</td><td><span class="chip c-sign">已送出</span></td><td>等客戶回覆；有效期還有 3 天</td><td>[未標記 ▾]</td></tr>
+     <tr><td><b>MQ-202611-007</b><div class="muted">王小明｜住家監視器</div></td><td class="n">180,000</td><td><span class="chip c-ok">執行中</span></td><td><u>前往案件 →</u></td><td><span class="chip c-ok">已成案</span> 11/08</td></tr>
+     <tr><td><b>MQ-202610-004</b><div class="muted">大明建設｜停車場攝影機</div></td><td class="n">210,000</td><td><span class="chip c-ok">執行中</span></td><td><u>前往案件 →</u></td><td><span class="chip c-ok">已成案</span> 10/12</td></tr></table></div>
+   <div class="note">三個數字的定義與列表對得上：要我處理＝草稿 1＋已核准未送客戶 1＝2；等別人＝待簽核 1；本月已成案＝成案日在 11 月的 MQ-202611-007（NT$ 180,000），10 月成案的 MQ-202610-004 不算。毛利率改為選用欄（有權限者可加），沒有資料顯示灰色「—」。</div>
+  </div></div>
+  <ol class="marks"><li>分頁／徽章／分組用同一個詞「待簽核」；資料庫狀態值不變（<code>待審核</code>）。</li><li>新增選用欄「下一步」：寫出卡在誰或該做什麼；「已核准」獨立呈現為要業務動手的狀態。</li><li><b>清單列上的「案件進度」小選單保留</b>（一次選取，不必開詳情）。</li><li>預設「我負責的、進行中」並顯示條件、記住上次選擇、一鍵清除。</li><li>新人預設 ≤ 7 欄，可自行加欄與切「緊湊」。</li></ol>
+ </div>
+</div>
+
+<!-- ===================== M3 ===================== -->
+<h2>示意 3　案件詳情：十個分頁→五組、狀態寫清楚「待哪個階段、誰負責」、保留自動儲存</h2>
+<p class="why">案件詳情頭部有 10 個分頁；頂端有一顆「儲存」，區塊旁又有「即時儲存」標籤；狀態寫「待 訂單確認」卻沒說誰要處理。r2 修正：①<b>「待 訂單確認」是「下一個要勾完成的階段名稱」，不是客戶狀態</b>（<code>case-management.html:367</code>），所以改成「待 {階段}（{階段負責人}）」，不再編造「客戶尚未確認」；②<b>保留自動儲存</b>（CU6 刻意設計），只改標示與頂端按鈕名稱；③附十分頁→五組的逐一對應；④分頁本來就是可自定的 layout，這是預設版面預設值＋子導覽，舊分頁 id 與 <code>tab=</code> 連結全部保留。</p>
+<div class="pair">
+ <div class="col before"><span class="tag">前（截圖：02-case-management-selected-sa）</span>
+  <div class="frame"><div class="body">
+   <div style="display:flex;justify-content:space-between"><div><b style="font-size:18px">王小明</b> <span class="chip c-wait">待 訂單確認</span><div class="muted" style="font-size:12px"><span class="btn">報價單</span> MQ-202610-005　住家監視器</div></div><div><span class="btn">更多 ▾</span> <span class="btn p">儲存</span></div></div>
+   <div style="margin:8px 0;font-size:12px"><b>NT$ 31,500</b> 合約金額　收款 <b>0%</b> 已收 0 未收 31,500　執行進度 <b>0%</b> 0/5 階段完成　<u style="float:right">操作紀錄 ›</u></div>
+   <div class="tabs"><span class="on">案件資訊</span><span>執行管理</span><span>承攬商</span><span>出貨單</span><span>完工單</span><span>動態</span><span>全部附件</span><span>財務</span><span>額外支出</span><span>精算 ▶</span></div>
+   <div style="margin:10px 0"><span class="pill">進度 無階段</span><span class="pill">收款 無款項</span><span class="pill">單據 1/1</span><span class="pill">精算 未建</span><span class="pill">變更 無</span></div>
+   <div class="mini" style="font-weight:700;margin:6px 0">合約資訊</div><div class="card" style="padding:8px;font-size:12px;color:var(--dim)">交貨／安裝地址 … 交貨條件 … 現場聯絡人 … 合約備註 …</div>
+   <div style="margin:10px 0 4px;font-weight:700;font-size:12px">人員角色 <span class="chip c-ok">即時儲存</span></div>
+   <div class="card" style="padding:8px;font-size:12px">填單人 [— 選擇 —]　業績歸屬（業務負責）[— 選擇 —]　執行負責 [— 選擇 —]<div class="mini" style="margin-top:4px">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。沒填時退回報價人；有填但對不到帳號，獎金不帶人。</div></div>
+  </div></div>
+  <ol class="marks"><li>「儲存」按鈕＋「即時儲存」標籤並存：哪些欄位要按、哪些不用？</li><li>10 個分頁一字排開（1440px 寬剛好排得下，視窗再窄就要橫向捲動）。</li><li>狀態「待 訂單確認」沒有說「誰、做什麼」。</li><li>「業績歸屬」說明三行、全是規則描述；新人讀不完也不知道填哪個。</li><li>五個「無…」標籤：什麼都沒有時也佔掉一整列。</li></ol>
+ </div>
+ <div class="col after"><span class="tag">後（建議）</span>
+  <div class="frame"><div class="body">
+   <div style="display:flex;justify-content:space-between"><div><div class="mini">案件 › MQ-202610-005</div><b style="font-size:18px">王小明｜住家監視器</b> <span class="chip c-wait">待 訂單確認（負責人：王小明）</span></div><div><span class="btn">⋯</span> <span class="btn p">儲存合約資訊</span> <span class="mini">● 合約資訊有 1 處尚未儲存</span></div></div>
+   <div style="display:flex;gap:8px;margin:8px 0;font-size:12px"><span class="card" style="padding:6px 10px;flex:1"><span class="mini">合約金額</span><div><b>NT$ 31,500</b></div></span><span class="card" style="padding:6px 10px;flex:1"><span class="mini">已收款</span><div><b>0%</b>　未收 31,500</div></span><span class="card" style="padding:6px 10px;flex:1"><span class="mini">施工進度</span><div><b>0 / 5</b> 階段</div></span></div>
+   <div class="tabs"><span class="on">進度與施工</span><span>基本資料</span><span>收款與財務</span><span>文件與出貨</span><span>動態</span></div>
+   <div class="mini" style="margin:6px 0">子導覽（一次點擊跳到區塊）：<u>執行管理</u>　<u>承攬商 (0)</u></div>
+   <div class="card" style="padding:8px;font-size:12px">階段：☐ 訂單確認（負責人：王小明）<span class="chip c-ok" style="margin-left:6px">自動儲存</span> <span class="mini">勾選、日期、負責人改了就存，存成功才出現 ✓</span></div>
+   <div class="note"><b>儲存規則（<code>UX-PRINCIPLES</code> §4.6）</b>：勾選、日期、負責人＝自動儲存（區塊旁標「自動儲存」、欄旁出現「✓ 已儲存」）；文字、金額、備註＝同區塊一顆「儲存○○」。紅點與離開提示只計手動欄位。</div>
+   <table style="margin-top:8px"><tr><th>新分頁</th><th>收進來的現有分頁（id）</th></tr>
+    <tr><td>基本資料</td><td>案件資訊（biz）</td></tr><tr><td>進度與施工</td><td>執行管理（exec）＋承攬商（dispatch）</td></tr>
+    <tr><td>收款與財務</td><td>財務（fin）＋額外支出（xexp）＋「精算」連結</td></tr><tr><td>文件與出貨</td><td>出貨單（shipping）＋完工單（completion）＋全部附件（allfiles）</td></tr><tr><td>動態</td><td>動態（feed）</td></tr></table>
+  </div></div>
+  <ol class="marks"><li>狀態寫成「待 {階段}（{階段負責人}）」：階段與負責人資料本來就有，不需要新的敘述邏輯。</li><li>十個分頁→五組，逐一對應（見表）；<code>tab=dispatch／shipping／exec／fin</code> 深連結仍落在正確區塊。</li><li>保留自動儲存；頂端按鈕改名為它管的範圍。</li><li>歸屬說明預設＝報價人，規則收成說明連結；「無…」標籤沒資料時隱藏。</li></ol>
+  <div class="note">⚠ 與 hichan-4 的案件頁手機版有交集；此示意僅表達桌機資訊架構，須與其方案合併後再定稿。</div>
+ </div>
+</div>
+
+<p class="mini" style="margin-top:36px">hichan-7 ｜ 2026-11-13 ｜ 僅為示意，需經 PM 評審與使用者裁示後才進入實作。</p>
+</div>
+</body>
+</html>
