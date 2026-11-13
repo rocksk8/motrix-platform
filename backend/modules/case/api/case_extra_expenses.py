@@ -733,15 +733,13 @@ def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
 @router.get("/api/extra-expenses/suppliers")
 def po_supplier_picker(authorization: str = Header(None)):
     """一條龍 P5b（旗標 `onepipe.supplier_master`）：採購單挑廠商用的供應商選單，只回 id／code／name（沒有統編、電話、銀行、聯絡人）。
-    旗標關 ⇒ 404（與沒有這條路由相同）。對象＝會開單據的人（管理員／財務、或持採購／費用單據／案件管理／報價單模組）；其他人 403。
-    `GET /api/suppliers` 對非管理員仍是空清單，不因此放寬。"""
+    旗標關 ⇒ 404（與沒有這條路由相同）。對象＝與 `GET /api/suppliers` 看得到名單的人相同或更窄：管理員以上，或（旗標 `onepipe.buyer_access` 開＋持採購模組）；其他人 403，不因此放寬。"""
     from helpers.onepipe_flags import flag_on
     user = _require_user(authorization)
     if not flag_on("supplier_master"):
         raise HTTPException(404, "Not Found")
-    if user.get("role") not in ("superadmin", "admin", "finance") and not any(
-            user_has_module(user, m) for m in ("procurement", "expense_forms", "case_manage", "quotation")):
-        raise HTTPException(403, "您沒有開立採購單的權限，無法選擇供應商。")
+    if user.get("role") not in ("superadmin", "admin") and not (flag_on("buyer_access") and user_has_module(user, "procurement")):
+        raise HTTPException(403, "您沒有查看供應商名單的權限，無法選擇供應商；請直接輸入廠商名稱。")
     conn = get_db()
     try:
         return {"suppliers": [{"id": r["id"], "code": r["code"] or "", "name": r["name"] or ""}

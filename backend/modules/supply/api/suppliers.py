@@ -255,7 +255,7 @@ def _refs_message(name: str, refs: dict) -> str:
         parts.append("%d 張採購單（%s%s）" % (len(refs["po"]), "、".join(refs["po"][:3]), "…" if len(refs["po"]) > 3 else ""))
     if refs["orders"]:
         parts.append("%d 個案件的材料申請（%s%s）" % (len(refs["orders"]), "、".join(refs["orders"][:3]), "…" if len(refs["orders"]) > 3 else ""))
-    return "供應商「%s」已被%s使用，無法刪除。請先改掉那些單據的供應商，或將此供應商改為停用。" % (name, "與".join(parts))
+    return "供應商「%s」已被%s使用，無法刪除。請先更換這些單據的供應商，或將此供應商改為停用。" % (name, "與".join(parts))
 
 
 @router.delete("/api/suppliers/{sid}")
@@ -269,7 +269,7 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
         raise HTTPException(404, "供應商不存在")
     sname = row['name']
     from helpers.onepipe_flags import flag_on
-    if flag_on("supplier_master"):                                             # 一條龍 P5b：被採購單／材料申請引用的供應商不能刪（旗標關＝與目前相同）
+    if flag_on("supplier_master", conn=conn):                                             # 一條龍 P5b：被採購單／材料申請引用的供應商不能刪（旗標關＝與目前相同）
         refs = _supplier_references(conn, sid)
         if refs["po"] or refs["orders"]:
             conn.close()

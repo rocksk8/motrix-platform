@@ -86,6 +86,17 @@ def test_won_is_notified_once_only(W, monkeypatch):
     assert len(_notes()) == before
 
 
+def test_marking_won_again_after_switching_away_does_not_renotify(W, monkeypatch):
+    _flag(monkeypatch, True)
+    c, h = W
+    _won(c, h)
+    before = len(_notes(type_="case_won_next"))
+    assert before == 2
+    assert _won(c, h, "未成案").status_code == 200
+    assert _won(c, h).status_code == 200                        # 改回已成案
+    assert len(_notes(type_="case_won_next")) == before
+
+
 def test_other_tags_do_not_notify(W, monkeypatch):
     _flag(monkeypatch, True)
     c, h = W

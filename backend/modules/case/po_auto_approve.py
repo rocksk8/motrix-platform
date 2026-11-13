@@ -5,8 +5,9 @@
 只有同時符合下列條件才免簽，任何一項不符 ⇒ 回空字串，照原本的簽核流程走：
 1. 旗標開啟（預設關；開啟需第二位最高管理者核准）。
 2. 叫料連到同案件、狀態是「已核准」的採購單（`poDocCode`）；有填列序（`poLine`）就只看那一行，否則看該採購單中同品項的行（沒有品項時看沒有品項的行）。
-3. 叫料還沒有付款紀錄；數量不大於採購單行數量合計、小計不大於採購單行金額合計（容許 0.5 元進位誤差）。
-4. 採購單是從供應商主檔挑的、叫料也有供應商，兩者必須是同一家（沒有供應商編號者不比對，沿用採購單的供應商由 P5b 負責）。
+3. 叫料還沒有付款紀錄；本筆加上「同一採購單、涵蓋到同一行」的其他有效叫料（草稿／已退回／已取消不計），數量不大於採購單行數量合計、小計不大於採購單行金額合計（容許 0.5 元進位誤差）——
+   所以沒填列序、多筆叫料對到同一行時，是累計比較，不會每筆各自免簽而合計超出採購單。
+4. 供應商 fail-closed：採購單（從供應商主檔挑的）與叫料**兩邊都有**供應商編號、且相同；任何一邊沒有（含手動輸入廠商的採購單）或不同 ⇒ 不免簽。
 已在簽核中的單不追溯；到貨確認仍照原本的流程。旗標關 ⇒ 永遠回空字串（與目前位元組相同）。永不丟例外。
 """
 import json
@@ -27,7 +28,7 @@ def _int_id(v):
 
 
 def _covered_lines(po, order):
-    """叫料對到採購單的哪幾行 ⇒ `[line dict]`；對不上 ⇒ []。"""
+    """叫料對到採購單的哪幾行 ⇒ `[(行序, line dict)]`；對不上 ⇒ []。"""
     lines = PI._po_lines(po)
     qi = str(order.get("quoteItemId") or "").strip()
     pl = order.get("poLine")
@@ -38,12 +39,23 @@ def _covered_lines(po, order):
         li = str(lines[idx - 1].get("itemId") or "").strip()
         if li and qi and li != qi:
             return []
-        return [lines[idx - 1]]
+        return [(idx, lines[idx - 1])]
     out = []
-    for l in lines:
+    for i, l in enumerate(lines, 1):
         if isinstance(l, dict) and str(l.get("itemId") or "").strip() == qi:
-            out.append(l)
+            out.append((i, l))
     return out
+
+
+def _same_supplier(po, order) -> bool:
+    """fail-closed：採購單與叫料**兩邊都有**供應商編號、且相同才算（任何一邊缺、手動輸入廠商、編號不同 ⇒ False）。"""
+    order_sid = _int_id(order.get("supplierId"))
+    try:
+        d = json.loads(po["data_json"] or "{}") or {}
+    except (TypeError, ValueError):
+        d = {}
+    po_sid = _int_id(d.get("supplierId")) if isinstance(d, dict) else None
+    return order_sid is not None and po_sid is not None and order_sid == po_sid
 
 
 def auto_approve_note(conn, quote_no, order) -> str:
@@ -60,19 +72,25 @@ def auto_approve_note(conn, quote_no, order) -> str:
                           (quote_no, code)).fetchone()
         if po is None or (po["kind"] or "") != PI.ORD or (po["status"] or "") != "已核准":
             return ""
-        lines = _covered_lines(po, order)
-        if not lines:
+        covered = _covered_lines(po, order)
+        if not covered:
             return ""
-        amount = sum(PI._num(l.get("amount")) for l in lines)
-        qty = sum(PI._num(l.get("qty")) for l in lines)
-        if amount <= 0 or PI._num(order.get("totalPrice")) > amount + 0.5 or PI._num(order.get("quantity")) > qty + 1e-9:
+        mine = {i for i, _l in covered}
+        amount = sum(PI._num(l.get("amount")) for _i, l in covered)
+        qty = sum(PI._num(l.get("qty")) for _i, l in covered)
+        used_qty, used_amt = PI._num(order.get("quantity")), PI._num(order.get("totalPrice"))
+        data, _rows = PI._case_state(conn, quote_no)
+        from modules.case import material_approval as MA
+        me = str(order.get("itemId") or "")
+        for o, st in PI.load_material_orders(conn, quote_no, data):
+            if str(o.get("itemId") or "") == me or MA.cost_state(st) == "excluded" or str(o.get("poDocCode") or "").strip() != code:
+                continue
+            if mine & {i for i, _l in _covered_lines(po, o)}:                       # 其他有效叫料也涵蓋到同一行 ⇒ 累計
+                used_qty += PI._num(o.get("quantity"))
+                used_amt += PI._num(o.get("totalPrice"))
+        if amount <= 0 or used_amt > amount + 0.5 or used_qty > qty + 1e-9:
             return ""
-        try:
-            po_sid = _int_id((json.loads(po["data_json"] or "{}") or {}).get("supplierId"))
-        except (TypeError, ValueError, AttributeError):
-            po_sid = None
-        order_sid = _int_id(order.get("supplierId"))
-        if po_sid is not None and order_sid is not None and po_sid != order_sid:
+        if not _same_supplier(po, order):
             return ""
         return NOTE % code
     except Exception:                                                           # noqa: BLE001  判斷失敗＝不免簽（照原本流程）

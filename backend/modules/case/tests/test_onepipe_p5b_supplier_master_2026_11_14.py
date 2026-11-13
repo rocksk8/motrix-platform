@@ -20,15 +20,18 @@ def _login(client, u, p):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _flag(monkeypatch, on):
+def _flag(monkeypatch, on, *extra):
     from helpers import onepipe_flags
-    monkeypatch.setattr(onepipe_flags, "flag_on", lambda field, conn=None: bool(on) and field == "supplier_master")
+    names = {"supplier_master", *extra}
+    monkeypatch.setattr(onepipe_flags, "flag_on", lambda field, conn=None: bool(on) and field in names)
 
 
 @pytest.fixture
 def W(client, make_user):
     make_user(username="p5b_sa", role="superadmin")
     plain = make_user(username="p5b_plain", role="viewer", modules=[])
+    buyer = make_user(username="p5b_buyer", role="sales", modules=["procurement"])
+    seller = make_user(username="p5b_seller", role="sales", modules=["quotation", "case_manage", "expense_forms"])
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, sales_person, deal_tag)"
@@ -40,7 +43,7 @@ def W(client, make_user):
         ids = [r["id"] for r in conn.execute("SELECT id FROM suppliers ORDER BY code").fetchall()]
     finally:
         conn.close()
-    return client, {"sa": _login(client, "p5b_sa", "Test-Pass-123"), "plain": _login(client, *plain)}, ids
+    return client, {"sa": _login(client, "p5b_sa", "Test-Pass-123"), "plain": _login(client, *plain), "buyer": _login(client, *buyer), "seller": _login(client, *seller)}, ids
 
 
 def _po(data=None, **kw):
@@ -141,6 +144,18 @@ def test_picker_is_404_when_flag_off_and_minimal_when_on(W, monkeypatch):
     assert all(set(x) == {"id", "code", "name"} for x in rows)
     assert "012-345-6789" not in r.text and "12345678" not in r.text
     assert c.get("/api/extra-expenses/suppliers", headers=h["plain"]).status_code == 403
+
+
+def test_picker_is_never_wider_than_the_supplier_list(W, monkeypatch):
+    """與 GET /api/suppliers 同或更窄：報價單／案件管理／費用單據模組的人（名單對他們是空的）一律 403；採購同仁只在 buyer_access 開時看得到。"""
+    c, h, ids = W
+    _flag(monkeypatch, True)                                              # buyer_access 關
+    for who in ("seller", "buyer", "plain"):
+        assert c.get("/api/extra-expenses/suppliers", headers=h[who]).status_code == 403, who
+    _flag(monkeypatch, True, "buyer_access")                              # buyer_access 開
+    assert c.get("/api/extra-expenses/suppliers", headers=h["buyer"]).status_code == 200
+    for who in ("seller", "plain"):
+        assert c.get("/api/extra-expenses/suppliers", headers=h[who]).status_code == 403, who
 
 
 # ── 材料申請沿用採購單的供應商 ───────────────────────────────────────────────

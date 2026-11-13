@@ -163,7 +163,7 @@ def _inherit_po_supplier(conn, quote_no, order: dict):
     旗標關、沒連採購單、找不到採購單、採購單是手動輸入廠商（沒有 supplierId）⇒ 回 None 且不動（與目前相同）。"""
     try:
         from helpers.onepipe_flags import flag_on
-        if not flag_on("supplier_master"):
+        if not flag_on("supplier_master", conn=conn):
             return None
         po = str(order.get("poDocCode") or "").strip()
         if not po:

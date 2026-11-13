@@ -66,10 +66,16 @@ def notify_next(event: str, quote_no: str, actor: str = "", doc: str = "", usern
             return 0
         from helpers.audit import _notify_in_txn
         label = "%s（%s）" % (quote_no, (q["customer_name"] or q["project_name"] or "").strip()) if (q["customer_name"] or q["project_name"]) else quote_no
+        ref = "%s:%s" % (quote_no, doc or event)
+        if event == "won":                                                      # 重複成案（改標記再改回來）不重發：同一人同一案件已收過就略過
+            had = {r["username"] for r in conn.execute("SELECT username FROM notifications WHERE type=? AND ref_id=?", (spec[1], ref)).fetchall()}
+            names = [n for n in names if n not in had]
+            if not names:
+                return 0
         msg = spec[2] % {"case": label, "doc": doc or ""}
         link = ("payment-request.html?case=%s&type=purchase_req" % quote_no) if event == "won" else ("case-management.html?q=%s" % quote_no)
         for n in names:
-            _notify_in_txn(conn, n, spec[1], "%s:%s" % (quote_no, doc or event), quote_no, msg, link)
+            _notify_in_txn(conn, n, spec[1], ref, quote_no, msg, link)
         conn.commit()
         return len(names)
     except Exception as e:                                                      # noqa: BLE001  通知失敗不能擋住成交或核准

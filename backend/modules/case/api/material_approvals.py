@@ -177,7 +177,8 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
         conn.close()
     _audit(_tok(authorization), "material_orders.submit" if not res["autoApproved"] else "material_orders.auto_approve", "quotation", quote_no,
            "材料申請 %s（%s）%s" % (info["docCode"], info["itemName"], "送審" if not res["autoApproved"] else ("連到已核准採購單，免再簽核" if res.get("poAutoApproved") else "未設定簽核層，直接核准")),
-           {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"]})
+           {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"],
+            **({"poAutoApproved": True, "poDocCode": str(order.get("poDocCode") or "")} if res.get("poAutoApproved") else {})})
     if res["autoApproved"]:
         _notify_after("approved", info, {"requester": user["username"]})
     else:

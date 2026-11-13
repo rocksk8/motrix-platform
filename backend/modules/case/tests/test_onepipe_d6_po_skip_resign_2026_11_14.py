@@ -58,21 +58,39 @@ def _login(client, u, p):
 
 def _case(**order_kw):
     order = {"itemId": ITEM, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 1500, "totalPrice": 3000,
-             "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": "", "poDocCode": PO, "poLine": 1}
-    order.update(order_kw)
+             "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": "", "poDocCode": PO, "poLine": 1, "supplierId": 7}
+    order.update({k: v for k, v in order_kw.items() if v is not None})
+    for k, v in order_kw.items():
+        if v is None:
+            order.pop(k, None)
     data = {"dealTag": "已成案", "caseRecord": {"materialOrders": [order]}}
     _x("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at,"
        " deal_tag, sales_person, assigned_user_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
        (NO, "已送出", "叫料客", "叫料專案", 100000, 95238, json.dumps(data), "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "", "[]"))
 
 
-def _po(status="已核准", supplier_id=None, qty=2, amount=3000, doc=PO):
-    data = {"supplierId": supplier_id} if supplier_id else {}
+def _add_order(item_id, **kw):
+    """案件資料裡再加一筆叫料（模擬同一採購單的第二筆叫料）。"""
+    import copy
+    d = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (NO,))[0]["data_json"])
+    o = copy.deepcopy(d["caseRecord"]["materialOrders"][0])
+    o.update({"itemId": item_id, "itemName": item_id})
+    o.update(kw)
+    d["caseRecord"]["materialOrders"].append(o)
+    _x("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+
+
+def _supplier(sid=7, name="輝煌網通"):
+    _x("INSERT INTO suppliers (id, code, name, data_json) VALUES (?,?,?,?)", (sid, "S%03d" % sid, name, "{}"))
+
+
+def _po(status="已核准", supplier_id=7, qty=2, amount=3000, doc=PO, vendor=""):
+    data = {"supplierId": supplier_id} if supplier_id else {"vendor": vendor} if vendor else {}
     lines = [{"summary": "交換器", "qty": qty, "unit": "台", "unitCost": amount / qty if qty else 0, "amount": amount}]
     _x("INSERT INTO case_extra_expenses (quote_no, category, description, kind, doc_code, status, created_by, created_by_name,"
-       " created_at, updated_at, data_json, lines_json, total_cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+       " created_at, updated_at, data_json, lines_json, total_cost, payee_type, payee_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
        (NO, "其他", "po", "purchase_order", doc, status, "d6_eng", "d6_eng", "2026-01-01T00:00:00", "2026-01-01T00:00:00",
-        json.dumps(data), json.dumps(lines), amount))
+        json.dumps(data), json.dumps(lines), amount, "vendor", vendor))
 
 
 def _flow_one_tier(boss):
@@ -89,9 +107,9 @@ def world(client, make_user):
     return client, _login(client, eng, ep)
 
 
-def _submit(world):
+def _submit(world, item=ITEM):
     c, h = world
-    return c.post(BASE + "/submit", headers=h)
+    return c.post("/api/quotations/%s/material-orders/%s/submit" % (NO, item), headers=h)
 
 
 def _approval_json():
@@ -136,6 +154,67 @@ def test_same_supplier_is_fine(world, monkeypatch):
     assert _submit(world).json()["status"] == "已核准"
 
 
+# ── 供應商 fail-closed ──────────────────────────────────────────────────────
+def test_manual_vendor_po_never_skips_even_if_the_name_matches(world, monkeypatch):
+    _flag(monkeypatch, True)
+    _supplier(7, "輝煌網通")
+    _case(supplierId=7)
+    _po(supplier_id=None, vendor="輝煌網通")
+    r = _submit(world)
+    assert r.status_code == 200 and r.json()["status"] == "待審核" and "poAutoApproved" not in r.json()
+
+
+def test_missing_supplier_on_either_side_never_skips(world, monkeypatch):
+    _flag(monkeypatch, True)
+    import db
+    from modules.case.po_auto_approve import auto_approve_note
+    _case()
+    _po()
+    conn = db.get_db()
+    try:
+        ok = {"poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1, "supplierId": 7}
+        assert PO in auto_approve_note(conn, NO, ok)
+        assert auto_approve_note(conn, NO, dict(ok, supplierId=None)) == ""
+        assert auto_approve_note(conn, NO, dict(ok, supplierId="")) == ""
+        assert auto_approve_note(conn, NO, dict(ok, supplierId=True)) == ""
+        assert auto_approve_note(conn, NO, dict(ok, supplierId=8)) == ""
+    finally:
+        conn.close()
+
+
+# ── 累計：同一採購單行被多筆叫料涵蓋 ─────────────────────────────────────────
+def test_second_order_on_the_same_po_line_without_po_line_goes_to_normal_approval(world, monkeypatch):
+    """沒填列序（以品項／無品項對行）的兩筆叫料各 3000、採購單行只有 3000：第一筆免簽，第二筆累計 6000 超出 ⇒ 正常簽核。"""
+    _flag(monkeypatch, True)
+    _case(poLine=None)
+    _po()
+    assert _submit(world).json()["status"] == "已核准"
+    _add_order("it-d6-2")
+    r = _submit(world, "it-d6-2")
+    assert r.status_code == 200 and r.json()["status"] == "待審核" and "poAutoApproved" not in r.json(), r.text
+
+
+def test_orders_that_fit_together_both_skip_but_the_third_does_not(world, monkeypatch):
+    _flag(monkeypatch, True)
+    _case(poLine=None, quantity=1, totalPrice=1500)
+    _po()
+    assert _submit(world).json()["status"] == "已核准"
+    _add_order("it-d6-2")
+    assert _submit(world, "it-d6-2").json()["status"] == "已核准"        # 1500 + 1500 = 3000，剛好
+    _add_order("it-d6-3")
+    assert _submit(world, "it-d6-3").json()["status"] == "待審核"        # 4500 > 3000
+
+
+def test_cancelled_or_returned_orders_do_not_count(world, monkeypatch):
+    _flag(monkeypatch, True)
+    _case(poLine=None)
+    _po()
+    assert _submit(world).json()["status"] == "已核准"
+    _x("UPDATE case_material_approvals SET status='已取消' WHERE quote_no=?", (NO,))
+    _add_order("it-d6-2")
+    assert _submit(world, "it-d6-2").json()["status"] == "已核准"
+
+
 # ── 不符合 ⇒ 照原本簽核 ─────────────────────────────────────────────────────
 @pytest.mark.parametrize("order_kw,po_kw", [
     ({"quantity": 3, "totalPrice": 3000}, {}),                          # 數量超出
@@ -145,7 +224,9 @@ def test_same_supplier_is_fine(world, monkeypatch):
     ({"supplierId": 8}, {"supplier_id": 7}),                             # 供應商不同
     ({"poDocCode": "", "poLine": ""}, {}),                              # 沒連採購單
     ({"poLine": 2}, {}),                                                 # 列序不存在
-], ids=["qty-over", "total-over", "po-pending", "po-in-progress", "supplier-differs", "no-link", "bad-line"])
+    ({"supplierId": None}, {}),                                          # 叫料沒填供應商
+    ({"supplierId": None}, {"supplier_id": None, "vendor": "手打廠商"}),     # 兩邊都沒有編號
+], ids=["qty-over", "total-over", "po-pending", "po-in-progress", "supplier-differs", "no-link", "bad-line", "order-no-supplier", "manual-po-order-no-supplier"])
 def test_anything_off_goes_through_the_normal_approval(world, monkeypatch, order_kw, po_kw):
     _flag(monkeypatch, True)
     _case(**order_kw)
@@ -213,3 +294,29 @@ def test_already_in_flight_orders_are_not_retroactive(world, monkeypatch):
     assert _q("SELECT status FROM case_material_approvals WHERE quote_no=?", (NO,))[0]["status"] == "待審核"
     c, h = world
     assert c.post(BASE + "/submit", headers=h).status_code == 409, "待審核不能重複送審；不會因旗標開啟而改核准"
+
+
+def test_tolerance_edge_half_a_dollar_is_fine_but_more_is_not(world, monkeypatch):
+    _flag(monkeypatch, True)
+    import db
+    from modules.case.po_auto_approve import auto_approve_note
+    _case()
+    _po()
+    conn = db.get_db()
+    try:
+        base = {"poDocCode": PO, "poLine": 1, "quantity": 2, "supplierId": 7}
+        assert PO in auto_approve_note(conn, NO, dict(base, totalPrice=3000.5))
+        assert auto_approve_note(conn, NO, dict(base, totalPrice=3000.51)) == ""
+        assert auto_approve_note(conn, NO, dict(base, totalPrice=3000, quantity=2.000001)) == ""
+    finally:
+        conn.close()
+
+
+def test_legacy_orders_without_po_line_twice_on_the_same_po(world, monkeypatch):
+    """舊制（不強制採購單、沒填列序、沒有 quoteItemId）重複建兩筆：第二筆累計超出 ⇒ 正常簽核（不靠 po_line_taken）。"""
+    _flag(monkeypatch, True)
+    _case(poLine=None, quoteItemId=None)
+    _po()
+    assert _submit(world).json()["status"] == "已核准"
+    _add_order("it-d6-2")
+    assert _submit(world, "it-d6-2").json()["status"] == "待審核"
