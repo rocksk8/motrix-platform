@@ -392,13 +392,18 @@ def estimate(repo, targets):
 
 def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e2e=False, run_static=True, base="origin/platform", since=None,
               n_merges=DEFAULT_MERGES, dry_run=False, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, runner=None, merges_fn=None, config=None, hr=None,
-              base_exists=None):
+              base_exists=None, skip=None):
     """⇒ (exit_code, report_text, data)。runner(repo, targets, marker) ⇒ (rc, out, secs, junit_xml) 供測試注入。window 必填。"""
     repo = Path(repo)
     if not window:
         return 2, "--window 必填（沒有預設）：閘門鎖持有者用取鎖時的視窗名，其他人用自己的視窗名", {}
     cfg = config or load_config()
     only = set(only) if only else None
+    if skip:                                                                 # --skip：作者端常用 `--skip generated`（feature 分支不 commit 產生檔，列車模式下它必紅）
+        unknown_skip = set(skip) - {g["id"] for g in cfg["groups"]}
+        if unknown_skip:
+            return 2, "未知的題組 id（--skip）：%s（--list 看全部）" % "、".join(sorted(unknown_skip)), {}
+        only = (only or {g["id"] for g in cfg["groups"]}) - set(skip)
     if only:
         unknown = only - {g["id"] for g in cfg["groups"]} - ({"e2e_goldens"} if with_e2e else set())
         if unknown:
@@ -490,6 +495,7 @@ def main(argv=None):
     ap.add_argument("--window", required=True, help="排隊用的視窗名（必填，沒有預設）；閘門鎖持有者要與取鎖的視窗相同")
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     ap.add_argument("--only", help="只跑這些組 id（逗號分隔；--list 看全部）")
+    ap.add_argument("--skip", help="不跑這些組 id（逗號分隔）；分支作者用 --skip generated：feature 分支不 commit 產生檔，列車模式下那組必紅，由整合者重產")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--with-e2e-goldens", action="store_true", help="另加 e2e golden／登入類 e2e（瀏覽器、獨佔排隊）")
@@ -512,7 +518,7 @@ def main(argv=None):
                 print("  找不到：[%s] %s%s" % (g, p, "" if r else "（選用）"))
             return 2 if any(r for _g, _p, r in missing) else 0
         code, text, data = preflight(REPO, a.window, a.only.split(",") if a.only else None, a.workers, a.with_e2e_goldens, not a.no_static, a.base,
-                                     a.since, a.merges, a.dry_run, a.budget_min, a.max_wait, config=cfg)
+                                     a.since, a.merges, a.dry_run, a.budget_min, a.max_wait, config=cfg, skip=a.skip.split(",") if a.skip else None)
     except Exception as e:                                                   # noqa: BLE001
         print("預檢工具出錯：%s" % e, file=sys.stderr)
         return 2

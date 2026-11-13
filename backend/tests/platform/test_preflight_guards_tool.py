@@ -350,3 +350,13 @@ def test_gated_preflight_by_a_non_holder_window_waits_at_most_120s(tmp_path):
     seen.clear()
     P.preflight(tmp_path, config=cfg, hr=HR, **dict(KW, window="h7"))
     assert seen["max_wait"] is None, "持有者自己不限"
+
+
+def test_skip_removes_groups_and_unknown_skip_id_is_an_error(tmp_path):
+    seen = []
+    cfg = _cfg_two(tmp_path)
+    P.preflight(tmp_path, skip=["ga"], config=cfg, runner=lambda repo, ts, marker: seen.append(ts) or (0, "2 passed", 1.0, _junit(tests__test_b=(2, 0, 0))), **KW)
+    assert seen == [["tests/test_b.py"]]
+    code, text, _d = P.preflight(tmp_path, skip=["nope"], config=cfg, **KW)
+    assert code == 2 and "--skip" in text
+

@@ -10,6 +10,17 @@ T81 官方閘門 14 輪（`D:\Claude-pm\t81-gate-*.log`）紅燈絕大多數是�
 
 與既有工具分工：`train_preflight.py`（T47）＝A 靜態旗標＋窄版便宜集合＋受影響模組；`pre_train_check.py`＝分支推上月台前在拋棄式樹預演合併。本題組＝**T76／T81 實際紅過的守門類別的固定清單**＋分組＋肇因合併；A 靜態旗標也順手跑一次（`--no-static` 關）。
 
+## 分支作者：交件前怎麼跑（3～5 行）
+在你自己的 worktree 根目錄，用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`：
+```
+git fetch origin && git merge origin/platform        # 先把最新的列車基底合進來（或 rebase）
+python tools/platform/preflight_guards.py --window <你的視窗> --skip generated      # 約 5.5 分、3 worker、自動排隊；結束碼 0＝綠
+python tools/platform/preflight_guards.py --window <你的視窗> --only <紅的組id>       # 照報告的「修法」改完，只重跑出紅的組
+```
+- `--skip generated`：feature 分支不 commit 產生檔（dep_graph／UNIT-INDEX／test_map），列車模式下那組必紅，由整合者重產；其餘紅都是你的。
+- 紅的報告會點名最近哪幾次合併可能是肇因；「未能檢查」（exit 1）＝沒證明題有跑，不是綠。整合者持有閘門鎖時你會最多等 120 秒（75）——等鎖放掉再跑。
+- 題組綠 ≠ 閘門綠；交件仍要附你自己的測試結果。
+
 ## ① 整合守門題組
 
 ### 用法（整合樹根目錄；Python 用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`）
