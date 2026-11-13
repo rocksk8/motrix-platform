@@ -345,7 +345,11 @@ async def upload_custom_files(key: str, field: str, files: List[UploadFile] = Fi
                 raise HTTPException(400, "「%s」不接受 %s 檔（可用：%s）" % (f.get("label") or field, ext or "沒有副檔名", "、".join(sorted(set(e for e in ok if e != "jpeg")))))
         CFILES.purge_stale_staged(conn)
         saved = await _uploads.save_document_files("custom_records", key, files, u["username"])
-        out = CFILES.register_staged(conn, key, field, saved, u["username"])
+        try:
+            out = CFILES.register_staged(conn, key, field, saved, u["username"])
+        except BaseException:
+            _uploads.purge_document_files(saved)          # T84：暫存列寫入失敗 ⇒ 回收剛存的檔（register_staged 自己 commit，所以不用 files_txn）
+            raise
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.file_upload", "custom_record_file", "%s/%s" % (key, field),

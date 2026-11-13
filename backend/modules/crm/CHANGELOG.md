@@ -1,5 +1,8 @@
 # 業務開發 更新紀錄
 
+## (next) — 2026-11-13（feat/upload-files-txn-2；T84；版號由列車取）
+- 變更（內部，API 路徑與回應形狀不變）：業務開發記錄（`POST /api/dev-cases/{id}/logs`）改用 `helpers.uploads.files_txn`：寫庫失敗，或案件在上傳途中被刪（鎖內重查 `is_deleted=0`，回 404），都回收剛存的檔。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
+
 ## 1.2.4 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api.py` 接上 LINE 獨立通道——案件建立／狀態變更（`crm_case_created`／`crm_case_status`，收件人＝業務、企劃、被指派人、建立者）、指派／取消指派／期限調整（`dev_case_assigned`／`dev_case_unassigned`／`dev_case_deadline_changed`）；泛用的 module_activity 對這幾件事不重複推 LINE。LINE 只送給有業務開發權限（`dev_crm`）的人。無 API／資料變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`、`tests/test_line_crm_perm_filter_2026_11_13.py`。

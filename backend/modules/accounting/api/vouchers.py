@@ -48,7 +48,7 @@ from helpers.tiered_approval import (
     UnresolvedManagerError, active_delegators_for,
 )
 from helpers import _get_setting
-from helpers.uploads import save_document_files
+from helpers.uploads import save_document_files, files_txn, purge_document_files
 from modules.accounting.voucher_pdf import (
     export_voucher_pdf, preview_html, classify_attachment_kind,
 )
@@ -1238,24 +1238,27 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
     now = _dt.datetime.now().isoformat()
     who = _user_name(user)
 
-    conn = get_db()
-    try:
-        row = conn.execute("SELECT * FROM vouchers_all WHERE id = ?",
-                           (voucher_id,)).fetchone()
-        if row is None:
+    def _check_editable(r):
+        if r is None:
             raise HTTPException(404, "找不到這張傳票。")
-        if dict(row).get("voided_at"):
+        if dict(r).get("voided_at"):
             raise HTTPException(400, "這張傳票已經作廢，不能再加附件。")
         # W2 稽核 S4：與刪除同一條規則——離開草稿就不可再加（加了也刪不掉）；前端入口本來就只在草稿顯示，這裡補上後端那一半。
-        if not can_edit(dict(row).get("status")):
+        if not can_edit(dict(r).get("status")):
             raise HTTPException(
                 400, "只有「%s」的傳票可以加附件，這一張現在是「%s」。若要補附件，請作廢整張傳票再重開。"
-                     % ("／".join(EDITABLE_STATUSES), dict(row).get("status")))
+                     % ("／".join(EDITABLE_STATUSES), dict(r).get("status")))
+
+    conn = get_db()
+    try:
+        _check_editable(conn.execute("SELECT * FROM vouchers_all WHERE id = ?", (voucher_id,)).fetchone())
 
         ctype = (request.headers.get("content-type") or "").lower()
         incomplete = []
         added = 0
         added_names = []
+        pending = []        # 之後要寫進資料表的列：(file_id, 檔名, 路徑, size, mime, 來源型別, 來源單號, 來源檔 id)
+        new_files = []      # 這次剛落地的實體檔（失敗時整批回收）：[{"path": …}]
         if ctype.startswith("multipart/"):
             form = await request.form()
             files = [f for f in form.getlist("files") if getattr(f, "filename", None)]
@@ -1265,12 +1268,9 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
             #    ⚠️ 路徑的 doc_no 用 `str(voucher_id)` ⇒ **不含單號**（單號會升版）。
             saved = await save_document_files(
                 "voucher_attachments", str(voucher_id), files, who)
+            new_files = list(saved)
             for meta in saved:
-                _insert_attachment(
-                    conn, voucher_id, meta["id"], meta["filename"], meta["path"],
-                    meta.get("size"), meta.get("mime"), "", "", "", who, now)
-                added += 1
-                added_names.append(meta["filename"])
+                pending.append((meta["id"], meta["filename"], meta["path"], meta.get("size"), meta.get("mime"), "", "", ""))
         else:
             try:
                 body = await request.json()
@@ -1281,28 +1281,35 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
                 raise HTTPException(400, "請至少選擇一個檔案或一筆來源。")
             # 🔴 **全部檢查完才開始複製**（見 docstring）。
             resolved = resolve_picks(conn, picks, user)
-            for item in resolved:
-                meta = item["meta"]
-                name = meta.get("filename") or meta.get("name") or "附件"
-                file_id, rel, size = copy_into(voucher_id, item["src"], name)
-                _insert_attachment(
-                    conn, voucher_id, file_id, name, rel,
-                    meta.get("size") or size, meta.get("mime"),
-                    item["source_type"], item["source_doc_no"],
-                    item["source_file_id"], who, now)
+            try:
+                for item in resolved:
+                    meta = item["meta"]
+                    name = meta.get("filename") or meta.get("name") or "附件"
+                    file_id, rel, size = copy_into(voucher_id, item["src"], name)
+                    new_files.append({"path": rel})
+                    pending.append((file_id, name, rel, meta.get("size") or size, meta.get("mime"),
+                                    item["source_type"], item["source_doc_no"], item["source_file_id"]))
+                    if item["missing"]:
+                        incomplete.append({"filename": name,
+                                           "missing": item["missing"]})
+            except BaseException:
+                purge_document_files(new_files)        # 第三筆複製失敗 ⇒ 前兩筆已落地的複本不留
+                raise
+        # T84：慢動作（存檔／複製）做完才拿寫鎖，並在鎖內**重查**傳票還能不能加附件（上傳途中被送審／作廢 ⇒ 擋下，
+        # 不會把附件加到「加了也刪不掉」的傳票上）；任何失敗（含重查被擋、寫庫出錯）回收這次落地的實體檔。
+        with files_txn(conn, new_files):
+            _check_editable(conn.execute("SELECT status, voided_at FROM vouchers_all WHERE id = ?", (voucher_id,)).fetchone())
+            for (file_id, name, rel, size, mime, st, sdn, sfid) in pending:
+                _insert_attachment(conn, voucher_id, file_id, name, rel, size, mime, st, sdn, sfid, who, now)
                 added += 1
                 added_names.append(name)
-                if item["missing"]:
-                    incomplete.append({"filename": name,
-                                       "missing": item["missing"]})
-        # `JV22 §4` 缺口一：新增也要留「動過什麼」——先前只有 audit_log 的「+N」，
-        # 連檔名都沒有（刪除那一側早就有檔名）。
-        if added_names:
-            append_edit_log(conn, voucher_id, who,
-                            [{"field": "attachment", "from": "", "to": n}
-                             for n in added_names],
-                            table="voucher_edit_log", changed_at=now)
-        conn.commit()
+            # `JV22 §4` 缺口一：新增也要留「動過什麼」——先前只有 audit_log 的「+N」，
+            # 連檔名都沒有（刪除那一側早就有檔名）。
+            if added_names:
+                append_edit_log(conn, voucher_id, who,
+                                [{"field": "attachment", "from": "", "to": n}
+                                 for n in added_names],
+                                table="voucher_edit_log", changed_at=now)
         attachments = _attachments_of(conn, voucher_id)
     finally:
         conn.close()
