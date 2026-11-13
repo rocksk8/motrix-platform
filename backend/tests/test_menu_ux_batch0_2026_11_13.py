@@ -115,7 +115,7 @@ def test_fresh_install_saving_an_empty_base_url_keeps_it_empty(client, make_user
 
 def _notif_page_src():
     """通知設定頁＋從它抽出去的寄信卡元件（批次 3：static/email-setup.js）。"""
-    return _read(FRONT / "pages" / "notification-settings.html") + _read(FRONT / "static" / "email-setup.js")
+    return _read(_page("notification-settings.html")) + _read(FRONT / "static" / "email-setup.js")
 
 
 def test_frontend_no_longer_hardcodes_the_internal_address():

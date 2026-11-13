@@ -1261,7 +1261,8 @@ def test_pending_request_tells_who_it_waits_for_and_for_how_long(client, make_us
 
 def test_the_page_text_for_a_pending_request_is_wired():
     """頁面文字（e2e 才能點的畫面，這裡先鎖字串，避免被改掉）。"""
-    html = (_repo_root() / "frontend" / "pages" / "backup-monitor.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("backup-monitor.html").read_text(encoding="utf-8")
     for needle in ("若對方長期不在，可請對方登入核准，或撤回這次變更", "已送出", "bm-disable-waiting", "bm-disable-cancel", "bm-disable-reject",
                    "s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine\" :disabled=\"busy\" @click=\"ask('cancelreq')\""):
         assert needle in html, needle
