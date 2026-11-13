@@ -84,14 +84,39 @@ def settings_center_csv(reg):
     return len(rows)
 
 
+def _fill(cat, name, ev="", sens=False, extra=""):
+    """丙份可由資料直接推得的欄位先填好（建議名稱沿用現名稱：實測皆已是白話；有疑義的人工覆核）。順序同 FILL。"""
+    if cat == "信件類型":
+        return [name, "「%s」這封信預設寄給：%s。預設：信件開。" % (name, ev or "（無固定收件人）"),
+                "照預設＝依這種信的預設收件人；僅最高管理者＝只寄給最高管理者；指定＝除事件相關人外，另寄給指定帳號或角色",
+                "公司（改過才算）／預設", "系統技術類：關閉後告警可能沒人看到（影響大）" if sens else "簽核類：關閉後簽核人收不到通知，流程可能卡住" if extra == "approval" else "",
+                "矩陣｜勾選批次｜搜尋篩選｜套用前確認＋復原這一批｜手機卡片", "行事曆欄標「需外部設定」"]
+    if cat == "LINE 事件":
+        return [name, "有「%s」時用 LINE 推播給指定對象。預設：關。" % name, "收件對象：照 Email 收件人／只發給指定人員（建議）／原本＋指定",
+                "公司／預設", "影響別人（收件人會收到 LINE）", "矩陣｜勾選批次｜群組全開全關｜搜尋篩選｜預設組合｜套用前確認＋復原這一批｜手機卡片",
+                "沿用 hichan-6 稿；每則訊息每位收件人算一則（用量提示）"]
+    if cat == "個人 Email 通知事件":
+        return [name, "取消後，不再寄「%s」給這位同仁。預設：收。" % name, "收／不收", "個人（有個人層）／預設", "個人偏好，只影響自己；簽核類取消可能漏看待簽單據",
+                "群組全開全關｜預設組合｜搜尋篩選｜套用前確認＋復原這一批｜手機卡片", "本人入口待使用者決定（INVENTORY §五-3）"]
+    if cat == "個人權限鍵":
+        return [name, "能不能使用「%s」這項功能。預設依各人的角色範本。" % name, "有／無（個別加減會與角色範本不同）", "預設（角色範本）／個別加減",
+                "影響大：高敏感權限，要原因、寫權限變更紀錄，永不進批次" if sens else "影響別人（改變這個人的選單與操作權限）",
+                "單項表單（高敏感）" if sens else "矩陣｜勾選批次｜群組全開全關｜搜尋篩選｜預設組合｜套用前確認＋復原這一批｜手機卡片", ""]
+    if cat == "簽核單據類型":
+        return [name, "「%s」送出後要經過幾層、由誰簽核。" % name, "統一流程（共用一條）／獨立流程（各自一條）", "公司／預設", "影響別人（簽核人與進行中單據）",
+                "矩陣｜勾選批次｜預設組合｜套用前確認＋復原這一批｜手機卡片", "確認視窗要顯示進行中單據受影響件數"]
+    return [""] * len(FILL)
+
+
 def bing_csv():
     from helpers import mail_types as MT, notification_prefs as NP, module_registry as MR, tiered_approval as TA, duty_roles as DR
     from helpers import line_catalog as LC, line_notify as LN
     cols = ["類別", "頁面", "群組", "項目代碼", "現名稱", "現說明／事件", "現影響／建議處理", "預設", "備註（來源）", "可批次?"] + FILL
     rows = []
     for t in MT.all_types():
-        rows.append(["信件類型", "mail-settings", t.category, t.key, t.name, "何時寄：" + t.event, "影響：%s｜處理：%s" % (t.impact, t.action),
-                     "信件開／照預設收件人／行事曆關", "mail_types.all_types()", "是（系統技術類要紅字提醒）" if t.category == "system" else "是"] + [""] * len(FILL))
+        who = "＋".join(x for x in (t.event, {"admins": "管理者", "superadmins": "最高管理者"}.get(t.group, "")) if x)
+        rows.append(["信件類型", "mail-settings", t.category, t.key, t.name, "預設收件人：" + (who or "（無固定收件人）"), "影響：%s｜處理：%s" % (t.impact, t.action),
+                     "信件開／照預設收件人／行事曆關", "mail_types.all_types()", "是（系統技術類要紅字提醒）" if t.category == "system" else "是"] + _fill("信件類型", t.name, who, t.category == "system", t.category))
     try:
         wired = LN.wired_events()
         names = list(wired) if not isinstance(wired, dict) else list(wired.keys())
@@ -102,17 +127,17 @@ def bing_csv():
             nm, gp = LC.name_of(k), LC.group_of(k)
         except Exception:                              # noqa: BLE001
             nm, gp = k, ""
-        rows.append(["LINE 事件", "notification-settings（LINE 卡）", gp, k, nm, "", "", "關", "line_notify.wired_events()（hichan-6 稿）", "是"] + [""] * len(FILL))
+        rows.append(["LINE 事件", "notification-settings（LINE 卡）", gp, k, nm, "", "", "關", "line_notify.wired_events()（hichan-6 稿）", "是"] + _fill("LINE 事件", nm))
     for i, (gname, evs) in enumerate(NP.EVENT_GROUPS):
         for key, label in evs:
             rows.append(["個人 Email 通知事件", "users.html（管理員代設）／my-account（本人，待決）", gname, key, label, "", "", "收（opt-out 清單預設全收）",
-                         "notification_prefs.EVENT_GROUPS", "是"] + [""] * len(FILL))
+                         "notification_prefs.EVENT_GROUPS", "是"] + _fill("個人 Email 通知事件", label))
     sens = set(DR.HIGH_SENSITIVITY_KEYS)
     for key, label, grp in MR.MODULES:
         rows.append(["個人權限鍵", "users.html（存取模組）", grp, key, label, "", "高敏感權限：要原因、寫權限變更紀錄" if key in sens else "", "依角色範本", "module_registry.MODULES",
-                     "否（高敏感）" if key in sens else "是"] + [""] * len(FILL))
+                     "否（高敏感）" if key in sens else "是"] + _fill("個人權限鍵", label.split("（")[0], sens=key in sens))
     for key, label in TA.APPROVAL_DOC_TYPE_LABELS.items():
-        rows.append(["簽核單據類型", "approval-settings", "統一流程" if key in TA.DEFAULT_UNIFIED_DOC_TYPES else "獨立流程", key, label, "", "", "", "tiered_approval", "是"] + [""] * len(FILL))
+        rows.append(["簽核單據類型", "approval-settings", "統一流程" if key in TA.DEFAULT_UNIFIED_DOC_TYPES else "獨立流程", key, label, "", "", "", "tiered_approval", "是"] + _fill("簽核單據類型", label))
     with open(HERE / "bing-items.csv", "w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh); w.writerow(cols); w.writerows(rows)
     return len(rows)

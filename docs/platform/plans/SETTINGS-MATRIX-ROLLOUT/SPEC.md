@@ -2,7 +2,7 @@
 
 狀態：設計草案 r2（hichan-4；已納入 PM 2026-11-13 裁示 M1／N2／N3／N4／N5／N6 與 hichan-11 審查）。
 LINE 事件矩陣（hichan-6，`feat/line-events-matrix` @ c9ca919b4）是第一個使用者；設定中心與各設定頁共用同一套，不每頁各寫一套。
-實作時：`frontend/static/settings-matrix.js`＋`settings-matrix.css`（核心），各頁只提供「欄定義＋資料＋動作」。禁止再往 `notification-settings.html` 等大頁面塞新元件。
+實作時：核心＝hichan-6 在 `feat/line-events-matrix` 已寫好並有 6 個 e2e 的 `frontend/static/mx-table.js`＋`frontend/css/mx-table.css`，**改名為 `settings-matrix.js`／`settings-matrix.css`，對外 `window.SettingsMatrix`（`MxTable` 留別名）**；本規格的 C6～C8、C10、C11 在它之上加。`h4/index.html` 內的核心只是**示範行為的原型，不進 repo**。各頁只提供「欄定義＋資料＋動作」。禁止再往 `notification-settings.html` 等大頁面塞新元件。
 
 ## 0. 目標（使用者 2026-11-13：「介面辨識度跟選擇都很難懂；每個項目都做」）
 
@@ -91,7 +91,8 @@ SettingsMatrix.mount(el, {
 4. **寫入一律走既有路徑**：`settings_registry.publish()`／`apply_profile()`；不另開新的寫入點。`publish` 內部自己會把變更 `_split` 成待生效／立即／放寬，批次無法繞過。
 5. 同一群組內＝對 `POST /api/settings-center/groups/{group}` 一次送多欄（群組內原子）；跨群組＝逐群組各送一次，**中途失敗要明講「已套用 X 項、未套用 Y 項」**並提供復原已套用的部分（不假裝原子）。真原子跨群組端點預設不做。
 6. 批次要填「變更原因」（現有 API 必填 `reason`）：確認視窗內一個欄位，預設「批次調整（N 項）」。
-7. **非設定中心的矩陣頁**（權限、信件收件、個人通知偏好、簽核流程、LINE 事件）的批次動作是各頁自己的領域動作（授予／取消、信件開關、套用流程範本…），但同樣遵守：高敏感／影響大的列不進批次、寫入走該頁既有的驗證與稽核路徑、確認視窗＋復原這一批。
+7. **`eligible()` 可由頁面覆寫**（hichan-6 提出）：設定中心頁用本節的嚴格預設；LINE 事件頁依使用者已裁示「重要（系統告警）可批次關閉，但要第二道警告視窗列出會停止通知的情況」，由伺服器強制 `confirm_critical`。覆寫只能由頁面**自己的**裁示放寬，且守門要列出所有覆寫處（見 §9）。
+8. **非設定中心的矩陣頁**（權限、信件收件、個人通知偏好、簽核流程、LINE 事件）的批次動作是各頁自己的領域動作（授予／取消、信件開關、套用流程範本…），但同樣遵守：高敏感／影響大的列不進批次、寫入走該頁既有的驗證與稽核路徑、確認視窗＋復原這一批。
 
 ## 5. 確認與「復原這一批」（PM N2）
 
@@ -136,12 +137,12 @@ SettingsMatrix.mount(el, {
 - 鍵盤：方向鍵移動、空白鍵勾選、Shift 連選；開關／晶片用 `role="switch"`／`aria-pressed`；吐司 `aria-live="polite"`；對話框焦點圈住、Esc 關閉。
 - 手機（≤ 900px）：卡片版；批次列固定下方、按鈕 ≥ 40px；無橫向捲動（e2e 驗）。
 - 效能：列數 ≤ 200 直接渲染；更多就依群組延遲渲染。
-- 測試（實作階段）：`eligible` 判定表驅動（每種 risk／pending／loosen 組合）；復原版本衝突案例；e2e 遵守 e2e lint；守門：接入頁的 `rows` 必帶 `code／label／oneLine`，頁面不得把可批次判定覆寫成更寬鬆。
+- 測試（實作階段）：`eligible` 判定表驅動（每種 risk／pending／loosen 組合）；復原版本衝突案例；e2e 遵守 e2e lint；守門：接入頁的 `rows` 必帶 `code／label／oneLine`；`eligible()` 的覆寫處必須登記在清單裡（目前只有 LINE 事件頁的「重要」），其餘頁面不得把可批次判定覆寫成更寬鬆。
 
 ## 10. 與 hichan-6（LINE 稿）的協調
-- 上收進共用核心：工具列、群組標題列、批次列、確認視窗、復原這一批、手機卡片骨架、`.sw`／`.rc` 樣式（改 CSS 變數 token）。
+- 核心＝hichan-6 的 `mx-table.js`（已含 C1 表格／群組／列、C2 工具列、C3 批次列、依序確認視窗、手機卡片、switch／chips／select／html 欄、自訂欄內 `data-mx` 按鈕、單格 `confirm`）；本規格新增 C6 說明、C7 來源、C8 與預設不同、C10 欄註冊表擴充、C11 欄頭選取。
 - 留在 LINE 頁：角色格雙色語意、人員挑選、用量條與推估、三個預設組合、`/events/batch` 端點。
-- 需 h6 確認：(1) 改用 `SettingsMatrix.mount`（先出核心，LINE 第一個接入）；(2) 標籤配色對齊 §2.1；(3) LINE 稿的「6 秒復原」改為「復原這一批」＋版本檢查；(4)「新開啟事件預設對象」這類行為差異留在 LINE 頁。
+- h6 回覆（已採納）：(1) 核心由 `mx-table.js` 演進；(2)「復原這一批」＝批次端點接受選填 `expect`（套用後那幾個鍵的狀態），不符回 409 `{code:'conflict', keys, by, at}`（`by/at` 取自該鍵最後一筆 `settings.line_notify.*` 稽核列），吐司維持 6 秒只為避免漏看；(3) LINE 標籤：「僅 LINE」「LINE 細項」改中性灰（藍色保留給「影響別人」）、「重要」維持原字樣用 🔴、「沒人會收到」是狀態徽章（紅框）而非標籤；(4) `eligible()` 可由頁面覆寫（見 §4-7）。
 
 ## 11. 用語表（所有人遵守；mockup 與盤點表一律用這些詞）
 
