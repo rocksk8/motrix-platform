@@ -117,7 +117,7 @@
    "reason": ""
   },
   "quote_privacy": {
-   "plain": "報價單的個資欄位",
+   "plain": "報價單的個人資料欄位（能不能隱藏）",
    "category": "安全",
    "groups": [
     "quote_privacy"
@@ -216,7 +216,7 @@
    "reason": ""
   },
   "completion_note": {
-   "plain": "完工單",
+   "plain": "完工單怎麼從報價單帶入",
    "category": "業務",
    "groups": [
     "completion_note"
@@ -225,7 +225,7 @@
    "reason": ""
   },
   "alerts": {
-   "plain": "到期提醒",
+   "plain": "保固與確認檔到期提醒",
    "category": "業務",
    "groups": [
     "alerts"
@@ -243,7 +243,7 @@
    "reason": ""
   },
   "finance_reports": {
-   "plain": "財務報表選項",
+   "plain": "帳齡與未精算提醒",
    "category": "財務",
    "groups": [
     "finance_reports"
@@ -252,7 +252,7 @@
    "reason": ""
   },
   "finance_cashier": {
-   "plain": "出納作業",
+   "plain": "出納頁與銀行對帳單",
    "category": "財務",
    "groups": [
     "finance_cashier"
@@ -279,7 +279,7 @@
    "reason": ""
   },
   "overhead": {
-   "plain": "管銷分攤比率",
+   "plain": "管銷怎麼分攤",
    "category": "財務",
    "groups": [
     "overhead"
@@ -288,7 +288,7 @@
    "reason": ""
   },
   "payslip_dispatch_picker": {
-   "plain": "勞報單派發選單",
+   "plain": "勞報單「選派發」下拉一次載入幾筆",
    "category": "財務",
    "groups": [
     "payslip_dispatch_picker"
@@ -338,7 +338,7 @@
    "privacy": false
   },
   "quote_privacy": {
-   "plain": "報價單的個資欄位",
+   "plain": "報價單的個人資料欄位（能不能隱藏）",
    "category": "安全",
    "currentName": "報價單個人資料欄位",
    "privacy": true
@@ -518,13 +518,13 @@
    "privacy": false
   },
   "completion_note": {
-   "plain": "完工單",
+   "plain": "完工單怎麼從報價單帶入",
    "category": "業務",
    "currentName": "完工單",
    "privacy": false
   },
   "alerts": {
-   "plain": "到期提醒",
+   "plain": "保固與確認檔到期提醒",
    "category": "業務",
    "currentName": "到期預警",
    "privacy": false
@@ -566,13 +566,13 @@
    "privacy": false
   },
   "finance_reports": {
-   "plain": "財務報表選項",
+   "plain": "帳齡與未精算提醒",
    "category": "財務",
    "currentName": "財務報表",
    "privacy": false
   },
   "finance_cashier": {
-   "plain": "出納作業",
+   "plain": "出納頁與銀行對帳單",
    "category": "財務",
    "currentName": "出納",
    "privacy": false
@@ -590,13 +590,13 @@
    "privacy": false
   },
   "overhead": {
-   "plain": "管銷分攤比率",
+   "plain": "管銷怎麼分攤",
    "category": "財務",
    "currentName": "管銷分攤比率",
    "privacy": false
   },
   "payslip_dispatch_picker": {
-   "plain": "勞報單派發選單",
+   "plain": "勞報單「選派發」下拉一次載入幾筆",
    "category": "財務",
    "currentName": "勞報單選派發下拉",
    "privacy": false

@@ -329,7 +329,7 @@ function permCfg(){
     PEOPLE.forEach(function(p){var t=DATA.role_templates[p[2]].indexOf(k[0])>=0;d[p[0]]=t;v[p[0]]=t});
     return {id:k[0],group:k[2],label:k[1].replace(/（.*$/,''),code:k[0],one:'能不能使用「'+k[1].replace(/（.*$/,'')+'」這項功能。預設依各人的角色範本。',
       tags:[['oth','影響別人']].concat(heavy?[['heavy','影響大']]:[]).concat(ROLE_DECIDED[k[0]]?[['ext','由角色決定']]:[]).concat(NOGRANT[k[0]]?[['heavy','不可批次授予']]:[]),eligible:!ROLE_DECIDED[k[0]],nogrant:!!NOGRANT[k[0]],whyNot:'財務三鍵由角色決定，這裡唯讀；批次永遠不改角色',roleDecided:!!ROLE_DECIDED[k[0]],heavy:heavy,
-      heavyText:'高敏感權限：授予不能批次，要逐人填原因（至少 4 個字）；取消可以批次（例如離職）但同樣要填原因。原因與權限變更紀錄由伺服器端同一個共用檢查點強制，單筆修改、批次、範本套用三條路都要經過，不是只擋新的批次端點。',
+      heavyText:'高敏感權限：授予不能批次，要逐人填原因（至少 4 個字）；取消可以批次（例如離職）但同樣要填原因。原因與權限變更紀錄由伺服器端同一個共用檢查點強制，單筆修改、批次、範本套用、新增使用者（POST /api/users）<b>四條路</b>都要經過，不是只擋新的批次端點。',
       help:{what:'控制是否能進入或操作「'+k[1]+'」。',when:'新進、調職、離職，或某人臨時要代理這項工作時。',impact:'只影響這個人的選單與操作權限；已送出的單據不受影響。'+(heavy?'屬高敏感權限，變更會記進權限變更紀錄。':''),recommend:'照角色範本；只有例外才個別加減。'},
       v:v,d:d}});
   /* 兩個個人例外，示範「與預設不同」 */

@@ -1,13 +1,34 @@
 /* 第 2、3 頁籤的小互動（假資料；只示範畫面行為，不呼叫任何 API） */
 (function () {
   const dirty = new WeakMap();
+  const META = {
+    'pg-approval': ['簽核設定', '簽核人、業務', true], 'pg-delegates': ['簽核代理人', '被代理人與代理人', false], 'pg-expense': ['支出申請類型', '申請支出的同仁', false],
+    'pg-remit': ['匯款款別', '出納', true], 'pg-ledger': ['報表設定（科目歸屬）', '財務', true], 'pg-legal': ['法規參數', '最高管理者、開立勞報單的人', true], 'pg-acct': ['會計科目', '財務', true],
+    'ot-bonus': ['獎金分潤預設比例', '最高管理者、之後新建獎金草稿的人', false, false], 'ot-voucher': ['傳票科目對應', '財務', true, true], 'ot-deduct': ['獎金扣繳與補充保費', '領獎金的人、財務', true, true],
+    'ot-oh': ['管銷與公益金計算方式', '業務、財務', true, true], 'ot-target': ['年度營運目標', '看報表的人', false, false], 'ot-t100': ['T100 科目代號', '財務', true, true], 'ot-terms': ['報價條款與付款條件', '業務', false, false]
+  };
+  const origs = new Map();
+  function remember(el) {
+    if (origs.has(el)) return;
+    origs.set(el, el.hasAttribute('data-sw') ? el.getAttribute('aria-checked') : el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.selectedIndex : el.value);
+  }
   function mark(el) {
     const pg = el.closest('.pg'); if (!pg) return;
+    remember(el);
     const set = dirty.get(pg) || new Set(); set.add(el); dirty.set(pg, set);
     const td = el.closest('td'); if (td) td.classList.add('chg-cell');
     const bar = pg.querySelector('[data-bar]');
-    if (bar) { bar.classList.remove('hide'); bar.querySelector('.cnt').textContent = '已改 ' + set.size + ' 處，尚未儲存'; }
+    if (bar) { bar.classList.remove('hide'); bar.querySelector('.cnt').textContent = '已改 ' + set.size + ' 處，尚未儲存（也算進上方的儲存列）'; const pb = bar.querySelector('.btn.primary'); if (pb) pb.setAttribute('data-act', 'openSave'); }
+    const m = META[pg.id] || [pg.id, '相關同仁', false];
+    if (window.pageDirty) window.pageDirty(pg.id, set.size, m[0], m[1], m[2], !!m[3]);
   }
+  window.pageClear = function () {
+    origs.forEach((v, el) => { if (el.hasAttribute('data-sw')) el.setAttribute('aria-checked', v); else if (el.type === 'checkbox') el.checked = v; else if (el.tagName === 'SELECT') el.selectedIndex = v; else el.value = v; });
+    origs.clear();
+    document.querySelectorAll('.chg-cell').forEach(c => { const i = c.querySelector('[data-base]'); if (!i || String(i.value) === i.dataset.base) c.classList.remove('chg-cell'); });
+    document.querySelectorAll('[data-bar]').forEach(b => b.classList.add('hide'));
+    document.querySelectorAll('.pg').forEach(pg => dirty.delete(pg));
+  };
   document.addEventListener('change', e => { const t = e.target; if (t.matches && t.matches('[data-d]')) mark(t); });
   document.addEventListener('input', e => { const t = e.target; if (t.matches && t.matches('[data-d][type=number],[data-d][type=text],textarea[data-d]')) mark(t); if (t.matches && t.matches('[data-split]')) split(); });
   function split() {

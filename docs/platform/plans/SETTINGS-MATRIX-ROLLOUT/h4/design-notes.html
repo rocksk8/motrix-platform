@@ -24,7 +24,8 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}u
 <ul>
 <li><b>草稿＋固定儲存列＋離開警告＋結果吐司＋儲存通知</b>（使用者新規則，SPEC §13）：所有點擊只改草稿；頂端固定「你有 N 項未儲存的修改［放棄］［儲存］」；儲存前確認視窗含<b>通知預覽</b>；儲存後通知最高管理者與受影響角色，高風險另發 LINE，批次／範本合併一則。</li>
 <li><b>設定中心外框重新設計</b>（SPEC §14）：兩層導覽、欄位級搜尋、「待生效 N」「最近變更」、總覽首頁、表格列（見第 3 節）。</li>
-<li><b>權限頁規則</b>（SPEC §12）：伺服器單一檢查點、清單來自 API、財務三鍵「由角色決定」、授予／取消不對稱、範本逐人展開。</li>
+<li><b>權限頁規則</b>（SPEC §12）：伺服器單一檢查點（<b>四條路徑</b>）、清單來自 API、財務三鍵「由角色決定」、授予／取消不對稱、範本逐人展開。</li>
+<li><b>r3.2（h11 審查＋PM）</b>：<code>login_greeting.style</code> 的個人層還原；放寬需不需要第二人核准看實際有無其他最高管理者（<code>plan().kind</code>／<code>otherSuperadmins</code>，mockup 有切換）；可勾選數以「實際呈現的頁面」計：<b>② 65（甲 24、乙 41）</b>；分類只有一套、白話名重排。</li>
 <li><b>使用者已裁示 9 項＋C4＋甲 #2</b>（INVENTORY §五）：職責角色為主、預設組由團隊提案、個人 Email 本人可改、「影響別人」逐欄標註、預設值只在不同時顯示＋還原鈕、系統技術信可批次（紅字）、行事曆開關只留 mail-settings、影響大不批次也不復原、設定中心以外先不搬、C4 批次拒絕清單。</li>
 <li><b>復原這一批改為逐欄 compare-and-set</b>（SPEC §5）：不是群組版本號；任何一欄被別人改過就整批拒絕並指出誰、何時。</li>
 </ul>
@@ -52,7 +53,7 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}u
 <p>起因：使用者截圖的「變更管制」群組頁——一群一頁、一長串表單卡片；導覽只有 50 個偏工程的群組名；搜尋只比群組名；看不出哪些和預設不同、哪些在等待生效、最近誰改了什麼。</p>
 <table>
 <tr><th>改什麼</th><th>怎麼做</th></tr>
-<tr><td>兩層導覽</td><td>左側：分段控制（全部／業務／財務／系統／安全）→ 分類（可收合）→ <b>白話群組名</b>（原名留在群組頁小字）；群組旁「與預設不同 N」與 ● 內含高風險項目。分類與白話名是提案：<code>data/shell_groups.json</code>（50 群組：業務 15／財務 9／系統 23／安全 3）。</td></tr>
+<tr><td>兩層導覽</td><td>左側：分段控制（全部／業務／財務／系統／安全）→ 分類（可收合）→ <b>白話群組名</b>（原名留在群組頁小字）；群組旁「與預設不同 N」與 ● 內含高風險項目。分類與頁面對應：<code>data/shell_groups.json</code>（31 個設定頁、50 個登錄群組；業務 12／財務 8／系統 5／安全 6；<b>安全＝存取、登入、保存與隱私</b>）。少數頁合併多個登錄群組（<code>builder_*</code> 13 組等，PM 認可的例外）。「影響隱私」標籤用在 <code>download_name</code>、<code>quote_privacy</code>。</td></tr>
 <tr><td>欄位級搜尋</td><td>頂列搜尋比對欄位的名稱、代碼、說明、選項標籤、群組名；結果顯示「分類 › 群組 › 欄位」，點了跳過去並閃一下。</td></tr>
 <tr><td>全域入口</td><td>「待生效 N」「最近變更」「總覽」放在頂列，任何頁都看得到。</td></tr>
 <tr><td>總覽首頁</td><td>三張可點統計卡（與預設不同／待生效／內含高風險群組）＋最近 5 筆變更。</td></tr>
@@ -76,7 +77,7 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}u
 
 <h2>4. 權限頁規則（SPEC §12 摘要）</h2>
 <ul>
-<li>伺服器端<b>單一共用檢查點</b>：原因 ≥ 4 字＋寫 <code>permission_changes</code>；單筆（<code>PUT /api/users/{id}</code>）、批次、範本套用三條路都要經過。</li>
+<li>伺服器端<b>單一共用檢查點</b>：原因 ≥ 4 字＋寫 <code>permission_changes</code>；單筆（<code>PUT /api/users/{id}</code>）、批次、範本套用、<b>新增使用者（<code>POST /api/users</code>，h10 已於 9361f1033 修）</b>四條路都要經過。</li>
 <li><code>highSensitiveKeys</code>（7 鍵）與 <code>batchGrantRefused</code>（C4 的 6 鍵）都由 API 回傳，前端不寫死。</li>
 <li>財務三鍵（<code>cashier／finance／financial_view</code>）「由角色決定」，唯讀；批次永遠不動角色。</li>
 <li>授予高敏感／C4 鍵不能批次；取消可以（要原因）。範本套用逐人展開並保留每人 per-person revoked 清單；略過最高管理者；「管理者範本」只含權限鍵。</li>
@@ -91,7 +92,7 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}u
 <tr><td>簽核流程複製／範本</td><td><code>POST /api/approval/flows/copy</code>；回傳進行中單據受影響件數</td></tr>
 <tr><td>復原這一批</td><td>逐欄 CAS：<code>expected_values</code>，409 <code>{code,keys,by,at}</code>（SPEC §5）</td></tr>
 <tr><td>儲存通知</td><td>另票 <code>feat/settings-change-notify</code>（h9）；所有頁共用同一元件</td></tr>
-<tr><td>設定中心外框</td><td>唯讀 <code>overview</code>／<code>recent</code>／<code>pending</code></td></tr>
+<tr><td>設定中心外框</td><td>新增唯讀 <code>overview</code>／<code>recent</code>；待生效沿用既有 <code>GET /pending</code></td></tr>
 <tr><td>設定中心以外的變更管制（甲 #2）</td><td>傳票科目、扣繳參數、T100 科目、管銷／公益口徑 → 確認期或第二位最高管理者核准（新後端工作）</td></tr>
 </table>
 

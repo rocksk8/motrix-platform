@@ -9,7 +9,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 Y, C, S, A = "業務", "財務", "系統", "安全"
 G = {  # group: (category, plain name)
  "account_security": (A, "登入與密碼規則"), "external_login": (A, "從外網登入的防護"), "change_control": (A, "重大設定要等幾天才生效"),
- "retention": (A, "資料保存多久"), "recycle_bin": (A, "刪除的單據保留幾天"), "quote_privacy": (A, "報價單的個資欄位"),
+ "retention": (A, "資料保存多久"), "recycle_bin": (A, "刪除的單據保留幾天"), "quote_privacy": (A, "報價單的個人資料欄位（能不能隱藏）"),
  "uploads": (S, "上傳檔案的大小與數量"), "system_hub": (S, "系統中心要不要列出你沒有權限的項目"), "download_name": (S, "下載檔案怎麼命名"),
  "ui_format": (S, "數字與日期怎麼顯示"), "brand": (S, "系統標語"), "login_greeting": (S, "登入畫面問候語"),
  "list_prefs": (S, "要不要開放個人調整清單"), "list_view": (S, "清單各項個人調整"),
@@ -20,12 +20,12 @@ G = {  # group: (category, plain name)
  "builder_custom_modules": (S, "建立自訂模組"),
  "material_order": (Y, "材料申請規則"), "material_recognition": (Y, "誰能把採購單認列到材料卡片"), "quote_alt": (Y, "報價單的「擇一方案」"),
  "quote_approval": (Y, "報價單什麼時候要送審"), "quote_output": (Y, "隱藏的報價條件要不要印在 PDF"), "quote_defaults": (Y, "報價單預設值"),
- "quote_backfill": (Y, "補登歷史案件"), "case_close_gates": (Y, "案件結案前要先完成什麼"), "completion_note": (Y, "完工單"), "alerts": (Y, "到期提醒"),
+ "quote_backfill": (Y, "補登歷史案件"), "case_close_gates": (Y, "案件結案前要先完成什麼"), "completion_note": (Y, "完工單怎麼從報價單帶入"), "alerts": (Y, "保固與確認檔到期提醒"),
  "netplan_labels": (Y, "網路規劃：狀態名稱"), "procurement_labels": (Y, "採購建議：狀態名稱"), "lodging_labels": (Y, "住宿紀錄：計價單位與詢價管道"),
  "lodging_freshness": (Y, "附近旅宿：資料新舊提示"), "tender_closing": (Y, "地圖：標案即將截止標記"),
- "project_margin": (C, "專案毛利率低於多少要提醒"), "finance_reports": (C, "財務報表選項"), "finance_cashier": (C, "出納作業"),
- "profit_warning": (C, "利潤提醒色帶"), "profit_rules": (C, "公益捐款比率"), "overhead": (C, "管銷分攤比率"),
- "payslip_dispatch_picker": (C, "勞報單派發選單"), "legal_params_reminder": (C, "法規參數跨年提醒"),
+ "project_margin": (C, "專案毛利率低於多少要提醒"), "finance_reports": (C, "帳齡與未精算提醒"), "finance_cashier": (C, "出納頁與銀行對帳單"),
+ "profit_warning": (C, "利潤提醒色帶"), "profit_rules": (C, "公益捐款比率"), "overhead": (C, "管銷怎麼分攤"),
+ "payslip_dispatch_picker": (C, "勞報單「選派發」下拉一次載入幾筆"), "legal_params_reminder": (C, "法規參數跨年提醒"),
 }
 PRIVACY = {"download_name", "quote_privacy"}
 # 合併頁：頁面代碼 -> (白話頁名, 分類, 成員群組, style, 原因)

@@ -12,7 +12,7 @@
 | 信件類型 | 42 種 | **67 種**（簽核 38／業務 19／系統技術 10）＋9 列「僅行事曆」＝mail-settings 76 列 |
 | 預設組（profiles） | — | 機制與頁籤都在，但**內容 0**（`profiles()`＝`{}`） |
 | 復原 | — | 全系統**沒有**（只有版本還原、待生效撤銷）。新設計＝「復原這一批」＋版本檢查（PM N2，不做欄位層級 6 秒復原） |
-| 設定中心可批次的欄位 | — | `risk=none` 的 63 欄**沒有任何 bool**（str 30／int 25／float 8），所以設定中心的批次不是勾格切換，而是「套用建議值／預設組合／重設為預設」（PM M1）。依 M1 規則（none／ops 可批次、security／money／legal 與 change_control 管的永不進、`sensitive` 群組永不進、**文字欄位一律逐列編輯不批次**）：盤點表「可批次?」已拆兩欄（PM M4）：**① 規則上可批次 68（甲 27、乙 41）**；**② 畫面提供勾選格 51（甲 24、乙 27）——往後對使用者報的數字一律以 ② 為準**（② 排除文字欄位 30 欄〔甲 4、乙 26〕、以及沒有可重複套用對象的單項表單 17 欄〔甲 3、乙 14〕）；其餘永不進批次。`data/gen_seed.py --check` 會獨立重算驗證 |
+| 設定中心可批次的欄位 | — | `risk=none` 的 63 欄**沒有任何 bool**（str 30／int 25／float 8），所以設定中心的批次不是勾格切換，而是「套用建議值／預設組合／重設為預設」（PM M1）。依 M1 規則（none／ops 可批次、security／money／legal 與 change_control 管的永不進、`sensitive` 群組永不進、**文字欄位一律逐列編輯不批次**）：盤點表「可批次?」已拆兩欄（PM M4）：**① 規則上可批次 68（甲 27、乙 41）**；**② 畫面提供勾選格 65（甲 24、乙 41）——往後對使用者報的數字一律以 ② 為準**（判斷單位是**實際呈現的設定頁**，頁面對應見 `data/shell_groups.json`；② 排除文字欄位 30 欄〔甲 4、乙 26〕，以及本頁沒有可重複套用對象的甲份單欄頁〔`project_margin`、`quote_defaults`、`payslip_dispatch_picker`〕）；其餘永不進批次。`data/gen_seed.py --check` 會獨立重算驗證 |
 | 單據編號 | 有「單據編號設定」 | **沒有集中頁**：散在費用類型 `numbering.prefix`、module-builder 前綴＋日期格式、設定中心 `estimate_no_prefix` 一欄；全站保留字首 36 個 |
 | 個人 Email 通知偏好 | — | 78 鍵／8 組；**只有管理員能在 users.html 代改，本人看不到也改不了**（使用者已裁示：改成本人可改＋管理員可代設） |
 
@@ -67,8 +67,8 @@
 | 「?」四段說明 | `field_views` 加 `help{what,when,impact,recommend}`；`SettingDef` 加選填 `when`（不另建說明檔，PM N4） | 小（`when` 內容要補） |
 | 逐欄 CAS（復原這一批） | `publish(..., expected_values=None)`，`begin_write` 後比對；路由 `expectedValues`；409 `{code,keys,by,at}`（SPEC §5；取代 r2 的群組版本號） | 小～中（動到寫入路徑，要先審規格） |
 | 儲存通知（另票 `feat/settings-change-notify`，h9） | 站內通知＋高風險 LINE 給最高管理者＋批次合併一則；所有頁共用同一元件（SPEC §13-7） | 中 |
-| 權限頁共用檢查點 | 伺服器單一函式強制高敏感「原因 ≥4＋permission_changes」，單筆／批次／範本三路都經過；API 回 `highSensitiveKeys`、`batchGrantRefused`（SPEC §12） | 中 |
-| 設定中心外框 | `overview`（與預設不同／待生效／高風險群組數）、`recent`（最近變更）、`pending`（待生效清單）三個唯讀端點（SPEC §14） | 小～中 |
+| 權限頁共用檢查點 | 伺服器單一函式強制高敏感「原因 ≥4＋permission_changes」，單筆（`PUT /api/users/{id}`）／**新增使用者（`POST /api/users`，h10 已於 `9361f1033` 修）**／批次／範本**四路**都經過；API 回 `highSensitiveKeys`、`batchGrantRefused`（SPEC §12） | 中 |
+| 設定中心外框 | **新增** `overview`（與預設不同／待生效／內含高風險設定頁數）、`recent`（最近變更）兩個唯讀端點；待生效清單沿用**既有** `GET /pending`（SPEC §14） | 小～中 |
 | **設定中心以外的變更管制（甲 #2，新後端工作）** | 傳票科目、扣繳參數、T100 科目、管銷／公益口徑 → 確認期或第二位最高管理者核准；獎金預設、營運目標、報價條款維持立即生效但存檔後發通知（SPEC §15） | 中～大 |
 | 設定中心預設組內容 | 為 `risk=none` 欄位宣告 `presets`（目前 0 個） | 中（要決定內容） |
 | 信件批次 | `POST /api/settings/mail/batch`（照 LINE 批次端點的原子驗證模式） | 中 |
