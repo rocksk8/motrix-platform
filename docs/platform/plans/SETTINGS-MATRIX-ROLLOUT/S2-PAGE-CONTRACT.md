@@ -19,7 +19,7 @@
 來源（S1c 已提供 `h3/when_texts.json`、`h12/when-texts.csv` 的格式）：甲的 76 欄 when 在 `h3/when_texts.json`，乙的 107 欄在 `h12/when-texts.csv`。S4a／S4b 的工作＝把它們寫進登錄表，並逐群組檢查白話名、help、選項標籤。
 
 **後端回給外框的欄位資料**（`GET /api/settings-center/groups/{g}` 的 `fields[]`，S1c 第三個 commit 加）：既有 `value／valueText／isDefault／defaultText／banner／choices…`，另加
-`help: {what, when, impact, recommend}`（由上表組成，空段不出現）、`source: {kind: default|company|pending|legacy|personal, by, at, reason}`。作者**不手寫 source**。
+`helpParts: {what, when, impact, recommend}`（由上表組成，空段不出現；既有的 `help` 字串欄位不變）、`needsExternal`、`source: {kind: default|company|pending|legacy|personal, by, at, reason}`。作者**不手寫 source**。
 
 ## 2. 頁面登錄（設定頁、分類、白話名、頁內含哪些群組）
 S2 新增 `backend/helpers/settings_pages.py`（我寫，內容照 `data/shell_groups.json`：31 頁、分類、`groups[]`、白話名、隱私標籤）。**守門：頁面登錄涵蓋的群組集合＝登錄表群組集合（`external=True` 的不計）**，漏登或多登都紅。
