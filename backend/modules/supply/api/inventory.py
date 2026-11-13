@@ -406,6 +406,25 @@ def reconcile(since: Optional[str] = None, authorization: str = Header(None)):
         conn.close()
 
 
+# ── 序號歷史（一條龍 P3；旗標 onepipe.ship_device_warranty＋receive_ledger）────────────────
+
+@router.get("/api/inventory/serial-history")
+def serial_history(part_no: str, serial_no: str, authorization: str = Header(None)):
+    """一個序號從「入庫異動紀錄」啟用日起的來去（入庫、出貨、安裝、退回…）。唯讀、沒有金額；與「檢視庫存」同一組模組權限。
+    旗標關 ⇒ 404（與沒有這支端點時相同）。⚠️ 啟用日之前的歷史查不到（不回補）：`since` 回該序號最早一筆異動的時間，沒有 ⇒ 空字串。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
+    from modules.supply import serial_view as _sv
+    conn = get_db()
+    try:
+        if not _sv.enabled(conn) or not _ev.ledger_on(conn):
+            raise HTTPException(404, "Not Found")
+        events = _sv.serial_history(conn, part_no, serial_no, user)
+        return {"partNo": part_no, "serialNo": serial_no, "events": events, "since": events[0]["at"] if events else ""}
+    finally:
+        conn.close()
+
+
 # ── 序號清單 ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/inventory/stock-items")

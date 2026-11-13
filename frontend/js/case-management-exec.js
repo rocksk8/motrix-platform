@@ -66,6 +66,7 @@ window.CM_PARTS.push(() => ({
     moApprovals: {},
     moShipping: {},        // 34-S3：{itemId: {appliedQty, arrivedQty, reserved, shipped, notes}}（出貨連動；只讀）
     moBusy: '',
+    dwPre: null, dwBusy: false, dwMsg: '', dwHistSn: '', dwHist: null,     // 一條龍 P3：出貨帶入設備（預填）與序號歷史
     moWizParts: null, moWizPartsErr: '',     // 一站式到貨：料號清單（開面板才讀；null＝還沒讀）
     // 材料申請匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
     moPay: {},
@@ -1289,6 +1290,45 @@ window.CM_PARTS.push(() => ({
         if (!dev.name) dev.name = mat.name
       }
       this.setDirty()
+    },
+    // ── 一條龍 P3：出貨帶入設備（只預填，按「加入」才寫進設備清單、隨後自動存檔）與序號歷史 ──
+    dwOn() { return !!(this.onepipe && this.onepipe.shipDeviceWarranty) },
+    dwMissing() {
+      return ((this.cr && this.cr.caseRecord && this.cr.caseRecord.devices) || []).filter(d => (d.sn || d.mac || d.name) && !d.warrantyStart).length
+    },
+    dwSns() {
+      return ((this.cr && this.cr.caseRecord && this.cr.caseRecord.devices) || []).map(d => (d.sn || '').trim()).filter(Boolean)
+    },
+    async dwLoad() {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || this.dwBusy) return
+      this.dwBusy = true; this.dwMsg = ''
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/device-prefill`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) { this.dwMsg = '讀取失敗，請稍後再試'; this.dwBusy = false; return }
+        const d = await r.json()
+        d.serials = (d.serials || []).map(s => ({ ...s, start: s.suggestedStart || '' }))
+        this.dwPre = d
+        if (!d.available) this.dwMsg = '庫存模組目前不可用，無法帶入'
+        else if (!d.serials.length) this.dwMsg = '這個案件沒有「已出貨、尚未登載成設備」的序號'
+      } catch (e) { this.dwMsg = '網路錯誤：' + e.message }
+      this.dwBusy = false
+    },
+    dwAdd(s) {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.devices.push({ id: Date.now() + Math.random(), name: s.name || s.partNo || '', sn: s.serialNo || '', mac: s.mac || '', location: '',
+                                         warrantyStart: s.start || '', warrantyMonths: 12, note: '' })
+      if (this.dwPre) this.dwPre.serials = this.dwPre.serials.filter(x => x !== s)
+      this.setDirty()
+    },
+    dwAddAll() { for (const s of [...((this.dwPre && this.dwPre.serials) || [])]) this.dwAdd(s) },
+    async dwShowHistory() {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || !this.dwHistSn) { this.dwHist = null; return }
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/device-history?sn=${encodeURIComponent(this.dwHistSn)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        this.dwHist = r.ok ? await r.json() : { events: [], since: '', available: false }
+      } catch (e) { this.dwHist = { events: [], since: '', available: false } }
     },
     addDevice() {
       this.ensureCaseRecord()

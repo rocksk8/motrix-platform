@@ -1,5 +1,9 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
+- 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。
+- 新端點 `GET /api/inventory/serial-history?part_no=&serial_no=`（庫存同一組模組權限；旗標關 ⇒ 404）；庫存頁序號列多「歷史」按鈕（旗標開）。
+
 ## 1.0.43 — T85 P2b 審查補強（train/t85-p2-h1；h9／h2／PM；版號由列車取）
 - `stock.receive`（IP-118）新增 `consumable` 到貨方式：只留一筆 `delivery_mode='consumable'` 批次表頭（前綴 `CN`），讓入庫對帳表視為已處理；全部是耗材時不需入庫權限；直送／耗材的防重複依方式分開算。
 - 新提供者 `stock.receive_undo`（IP-122，暫定號；`receive.py::undo_receipt`）：案件撤銷到貨確認時收回庫存那一半——刪直送／耗材／無序號列的入庫表頭；已有為該材料申請入庫的序號、或批次已登記付款 ⇒ 回 `BLOCKED`、不動任何東西。

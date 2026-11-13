@@ -631,6 +631,8 @@
 ["GET", "/api/quotations/{quote_no}/close-gates", "case_close_gates_api_quotations__quote_no__close_gates_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/closing-report-pdf", "download_case_closing_report_pdf_api_quotations__quote_no__closing_report_pdf_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["PATCH", "/api/quotations/{quote_no}/deal-tag", "update_deal_tag_api_quotations__quote_no__deal_tag_patch", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", "#/components/schemas/QuotationDealTagUpdate"]], []]
+["GET", "/api/quotations/{quote_no}/device-history", "get_device_history_api_quotations__quote_no__device_history_get", [["header", "authorization", false], ["path", "quote_no", true], ["query", "sn", true]], [], []]
+["GET", "/api/quotations/{quote_no}/device-prefill", "get_device_prefill_api_quotations__quote_no__device_prefill_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["POST", "/api/quotations/{quote_no}/export", "record_export_api_quotations__quote_no__export_post", [["header", "authorization", false], ["path", "quote_no", true], ["query", "mode", false]], [], []]
 ["GET", "/api/quotations/{quote_no}/extra-expenses", "list_extra_expenses_api_quotations__quote_no__extra_expenses_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["POST", "/api/quotations/{quote_no}/extra-expenses", "create_extra_expense_api_quotations__quote_no__extra_expenses_post", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", "#/components/schemas/ExtraExpenseIn"]], []]

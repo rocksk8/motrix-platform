@@ -1278,6 +1278,46 @@
 
               <!-- ── 設備登錄 ── -->
               <div x-show="execSubTab==='devices'">
+                <template x-if="dwOn()">
+                  <div style="margin-bottom:12px;padding:8px 12px;border:1px solid var(--line);border-radius:7px;background:var(--surface-sunken);font-size:12px" data-testid="dw-bar">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                      <button type="button" @click="dwLoad()" :disabled="dwBusy" data-testid="dw-load"
+                              style="font-size:12px;padding:3px 12px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">從出貨帶入</button>
+                      <span style="color:var(--text-dim)">列出這個案件已出貨、尚未登載成設備的序號，並預填建議的保固起始日；按「加入」才會寫進設備清單。</span>
+                      <span x-show="dwMissing() > 0" style="color:var(--tone-warning-fg)" data-testid="dw-missing" x-text="dwMissing() + ' 台設備尚未填保固起始日，不會收到保固到期通知'"></span>
+                    </div>
+                    <span x-show="dwMsg" style="display:block;margin-top:6px;color:var(--text-dim)" x-text="dwMsg"></span>
+                    <template x-if="dwPre && dwPre.serials && dwPre.serials.length">
+                      <div style="margin-top:8px" data-testid="dw-list">
+                        <template x-for="s in dwPre.serials" :key="s.serialNo">
+                          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px">
+                            <span style="font-family:var(--font-mono,monospace)" x-text="s.serialNo"></span>
+                            <span style="color:var(--text-dim)" x-text="(s.name || s.partNo || '') + (s.shipDate ? '　出貨 ' + s.shipDate : '')"></span>
+                            <label>保固起始日 <input class="fi fi--sm" type="date" style="width:132px" x-model="s.start"></label>
+                            <span x-show="s.startSource" style="color:var(--text-dim)" x-text="'（建議取' + s.startSource + '）'"></span>
+                            <button type="button" @click="dwAdd(s)" style="font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer" data-testid="dw-add">加入</button>
+                          </div>
+                        </template>
+                        <button type="button" @click="dwAddAll()" style="font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer" data-testid="dw-add-all">全部加入</button>
+                      </div>
+                    </template>
+                    <div x-show="dwSns().length" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                      <label>序號歷史
+                        <select class="fi fi--sm" x-model="dwHistSn" @change="dwShowHistory()" data-testid="dw-hist-sn">
+                          <option value="">請選擇序號</option>
+                          <template x-for="sn in dwSns()" :key="sn"><option :value="sn" x-text="sn"></option></template>
+                        </select>
+                      </label>
+                      <span style="color:var(--text-dim)">只從入庫紀錄開啟當天起有資料；其他案件的異動只顯示「其他案件」。</span>
+                    </div>
+                    <template x-if="dwHist">
+                      <ul style="margin:6px 0 0 16px" data-testid="dw-hist">
+                        <template x-for="(e, i) in (dwHist.events || [])" :key="i"><li x-text="(e.at || '').slice(0, 10) + '　' + e.event + (e.fromStatus || e.toStatus ? '（' + (e.fromStatus || '') + ' → ' + (e.toStatus || '') + '）' : '') + (e.quoteNo ? '　' + e.quoteNo : '')"></li></template>
+                        <li x-show="!(dwHist.events || []).length" style="color:var(--text-dim)">沒有紀錄（開啟入庫紀錄之前的異動查不到）</li>
+                      </ul>
+                    </template>
+                  </div>
+                </template>
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                   <span class="cm-section-title" style="margin-bottom:0">設備 SN / MAC 記錄</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
                   <template x-if="(cr.caseRecord?.devices||[]).length > 0">

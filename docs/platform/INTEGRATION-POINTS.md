@@ -762,6 +762,43 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 契約版本 | 1（2026-11-14） |
 | 守門 | `backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py` |
 
+
+---
+
+## IP-120　`stock.shipped_serials`：案件已出貨、尚未登載成設備的序號（M03 庫存 → M01 案件設備頁；暫定號，列車定號；2026-11-14，T85 一條龍 P3）
+
+案件設備頁的「從出貨帶入」用：列出這個案件已出貨（狀態 `shipped`）、還沒被認領成設備的序號，與這個案件最早的出貨日（含已安裝的序號），讓案件側預填設備與保固起始日（決策 D4＝A：預設出貨日、只預填、由人確認）。旗標 `onepipe.ship_device_warranty`。**唯讀、沒有任何金額欄位。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/serial_view.py::shipped_serials` |
+| 使用方 | M01 案件：`modules/case/device_warranty.py::prefill`（`GET /api/quotations/{no}/device-prefill`） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.shipped_serials", "supply"): shipped_serials`；取用：`fn = registry.single_provider("stock.shipped_serials")`；`None` ⇒ 預填清單空、`available=false`。`fn(conn, quote_no, caller=None) -> {"serials": [{"partNo", "name", "serialNo", "mac", "shipDate", "noteNo"}], "firstShipDate": "YYYY-MM-DD"｜""}` |
+| 回傳 | 旗標關 ⇒ 空；`caller` 有給時需有庫存同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），否則 403；`None`＝可信內部呼叫端。**案件可見性由案件側先檢查**（supply 不認識案件成員） |
+| 交易契約 | 唯讀、不 commit |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，設備頁只是沒有「帶入」清單 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p3_device_warranty_2026_11_14.py` |
+
+---
+
+## IP-121　`stock.serial_history`：序號的來去歷史（M03 庫存 → M01 案件設備頁；暫定號，列車定號；2026-11-14，T85 一條龍 P3）
+
+案件設備頁與庫存頁查一個序號從「入庫異動紀錄」（P2a，`onepipe.receive_ledger`）啟用日起的異動（入庫、出貨、安裝、退回…）。**只有啟用日起有資料，無法回補**；旗標 `onepipe.ship_device_warranty` 或 `receive_ledger` 關 ⇒ 空。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/serial_view.py::serial_history` |
+| 使用方 | M01 案件：`modules/case/device_warranty.py::history`（`GET /api/quotations/{no}/device-history`）；M03 自己的 `GET /api/inventory/serial-history` |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.serial_history", "supply"): serial_history`；取用：`fn = registry.single_provider("stock.serial_history")`；`None` ⇒ 沒有歷史。`fn(conn, part_no, serial_no, caller=None) -> [{"event", "fromStatus", "toStatus", "quoteNo", "ref", "reason", "actor", "at"}]`（舊到新；`part_no` 可空＝只用序號查，案件設備只以序號認領庫存） |
+| 回傳 | ⚠️ `quoteNo`、`ref`、`reason` 是**原樣**（可能是別的案件）：呼叫端要依自己的可見性規則遮罩——案件頁只顯示本案編號，其他案件的異動只標「其他案件」並清掉單號與原因；案件頁只查本案設備（或已出貨給本案）的序號。沒有任何金額欄位 |
+| 交易契約 | 唯讀、不 commit |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，歷史查詢入口顯示「沒有紀錄」 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p3_device_warranty_2026_11_14.py` |
+
 ---
 
 ## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）

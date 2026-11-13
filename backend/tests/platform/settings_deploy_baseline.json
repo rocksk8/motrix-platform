@@ -217,7 +217,7 @@
   "login_greeting": {"style": [1, 0, 2, false]},
   "monitoring": {"backup_stale_hours": [36, 12, 720, false], "disk_free_min_gb": [50, 1, 10000, false], "disk_free_min_pct": [10, 1, 90, false]},
   "lodging_freshness": {"stale_days": [30, 7, 365, false]},
-  "onepipe": {"worklog_case": [1, 0, 1, false], "warranty_closed_notify": [1, 0, 1, false], "links": [1, 0, 1, false], "ship_install_ok": [1, 0, 1, false], "timeline": [1, 0, 1, false], "entry_unify": [1, 0, 1, false], "receive_ledger": [1, 0, 1, false], "receive_wizard": [1, 0, 1, false]},
+  "onepipe": {"worklog_case": [1, 0, 1, false], "warranty_closed_notify": [1, 0, 1, false], "links": [1, 0, 1, false], "ship_install_ok": [1, 0, 1, false], "timeline": [1, 0, 1, false], "entry_unify": [1, 0, 1, false], "receive_ledger": [1, 0, 1, false], "receive_wizard": [1, 0, 1, false], "ship_device_warranty": [1, 0, 1, false], "warranty_start_basis": [0, 0, 1, false]},
   "tender_closing": {"closing_soon_days": [7, 1, 60, false]},
   "import_wizard": {"enabled": [0, 0, 1, false], "max_file_mb": [5, 1, 20, false]},
   "completion_note": {"auto_prefill": [1, 0, 1, false], "prefill_unsigned": [1, 0, 1, false], "qty_mode": [0, 0, 1, false], "default_status": [0, 0, 2, false], "include_headers": [1, 0, 1, false], "brand_prefix": [1, 0, 1, false], "over_qty": [0, 0, 1, false]},

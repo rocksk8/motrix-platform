@@ -10,6 +10,7 @@ from modules.supply import gl_events
 from modules.supply import material_link
 from modules.supply import receive as _receive
 from modules.supply import recycle_adapter as _recycle_adapter   # 資源回收筒 adapter（IP-RB1）
+from modules.supply import serial_view as _serial_view            # 一條龍 P3：出貨序號預填與序號歷史（IP-120／IP-121）
 from modules.supply.api import inventory, shipping_notes, suppliers
 
 _m0001 = importlib.import_module("modules.supply.migrations.0001_receive_ledger")
@@ -31,6 +32,9 @@ MODULE = ModuleSpec(
         ("stock.receive", "supply"): _receive.receive,
         # IP-122（暫定號）：案件側撤銷確認到貨時收回庫存那一半（吃呼叫端連線、不 commit；有入庫序號 ⇒ 擋下）
         ("stock.receive_undo", "supply"): _receive.undo_receipt,
+        # IP-120／IP-121（暫定號）：M01 設備頁「從出貨帶入」與案件設備的序號歷史（唯讀、沒有金額；旗標 onepipe.ship_device_warranty）
+        ("stock.shipped_serials", "supply"): _serial_view.shipped_serials,
+        ("stock.serial_history", "supply"): _serial_view.serial_history,
         # IP-20：M06 T100 付款傳票的料件進貨段
         ("inventory.paid_batches", "supply"): inventory.paid_batches,
         # IP-GL1（W4 總帳 C4）：進貨批次入庫 E08、進貨發票進項稅額 E08b、進貨付款 E09；唯讀
