@@ -101,6 +101,11 @@ def test_last_full_states(tmp_path):
     assert di.last_full(p, sha)["state"] == "failed"
     p.write_text(json.dumps({"commit": sha, "ok": True}), encoding="utf-8")
     assert di.last_full(p, sha)["state"] == "ok"
+    # gate_only：非正式閘門的全綠（升級演練被跳過）不放行；缺欄位（舊結果）照舊放行
+    p.write_text(json.dumps({"commit": sha, "ok": True, "gate_official": False}), encoding="utf-8")
+    assert di.last_full(p, sha)["state"] == "not_official"
+    p.write_text(json.dumps({"commit": sha, "ok": True, "gate_official": True}), encoding="utf-8")
+    assert di.last_full(p, sha)["state"] == "ok"
 
 
 def test_full_result_path_is_per_commit_and_rejects_non_sha(tmp_path):

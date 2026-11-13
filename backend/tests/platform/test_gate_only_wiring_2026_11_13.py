@@ -7,7 +7,7 @@
 1. 標記 `gate_only` 有註冊在 pytest.ini，而且兩個演練檔都帶（整檔 pytestmark）。
 2. backend/conftest.py 的 `_skip_gate_only`：沒設 MOTRIX_GATE_OFFICIAL=1 ⇒ 帶標記的題 skip；設了 ⇒ 不動。
    ⚠️ 它掛在**既有**的 `pytest_collection_modifyitems` 上（同名 hook 會互相覆蓋）：本檔守「只有一個這個名字的 hook」。
-3. 兩條正式閘門路徑都會設 1：`heavy_run --class official` 的子行程、建包 `run_stage` 的子行程；
+3. 三條正式閘門路徑都會設 1：`heavy_run --class official` 的子行程、`run_stage` 的子行程、build_deploy_package.ps1 的兩段 pytest；
    非 official 的票不得設（也不得從外層環境繼承 1）。
 4. modtest：沒設 1 ⇒ 全量結果記 gate_official=False，且**不寫建包沿用紀錄**（否則一輪跳過演練的綠燈會被建包當成已跑過）；
    該旗標不進建包指紋（_ENV_IGNORE），不然 official 與非 official 的紀錄永遠對不上。
@@ -130,3 +130,25 @@ def test_modtest_reads_the_flag_and_only_records_for_build_when_official():
     m = re.search(r'if not result\["gate_official"\]:[^\n]*\n\s+done, why = False,[^\n]*\n\s+else:\n\s+done, why = record_for_build\(', src)
     assert m, "modtest 沒有「非正式閘門就不寫建包沿用紀錄」的分支（跳過演練的綠燈會被建包當成已跑過）"
     assert 'result["gate_official"] = gate_official()' in src, "全量結果沒記 gate_official"
+
+
+
+
+def test_build_script_sets_the_flag_before_both_pytest_runs_and_clears_it():
+    """第三條正式閘門路徑：build_deploy_package.ps1 自己跑的 pytest（非 e2e／e2e 兩段）。沒設 ⇒ 建包把演練靜靜 skip 還記成綠。"""
+    ps1 = _read(BACKEND / "tools" / "build_deploy_package.ps1")
+    setat = ps1.index('$env:%s = "1"' % ENV)
+    runs = [m.start() for m in re.finditer(r'& \$pyExe -m pytest -q [^\n]*-m "(?:not e2e|e2e)"', ps1)]
+    assert len(runs) == 2, "建包的兩段 pytest 呼叫找不到（腳本改寫了？）%s" % runs
+    assert setat < min(runs), "%s=1 必須在兩段 pytest 之前設" % ENV
+    assert "Env:\\%s" % ENV in ps1, "建包結束／釋放鎖時要清掉 %s" % ENV
+
+
+def test_dashboard_gate_rejects_a_non_official_green(tmp_path):
+    import deploy_insights as di
+    sha = "a" * 40
+    p = tmp_path / (sha + ".json")
+    p.write_text('{"commit": "%s", "ok": true, "dirty": false, "gate_official": false}' % sha, encoding="utf-8")
+    assert di.last_full(p, sha)["state"] == "not_official"
+    p.write_text('{"commit": "%s", "ok": true, "dirty": false}' % sha, encoding="utf-8")
+    assert di.last_full(p, sha)["state"] == "ok", "缺欄位＝舊結果，不可誤擋"

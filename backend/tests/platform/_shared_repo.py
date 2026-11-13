@@ -2,7 +2,7 @@
 """「讀整個真實 repo」的守門題共用的唯讀資料（2026-11-13 chore/test-prune，D3＋D7）。
 
 原本每個檔（甚至每個 module scope 夾具）各自把 backend 全部 .py 讀進來、parse 成 AST，再逐模組重掃；同一輪全量裡
-同一份原始碼被讀、parse 十幾次。這裡讓**每個行程（xdist worker）只做一次**：
+同一份原始碼被讀、parse 十幾次。這裡讓**原始碼每個行程（xdist worker）只讀一次、解析後的檔每個測試模組只做一次**（解析後約 1 GB，模組結束即釋放）：
 
 - `ST`：tools/platform/ship_tier.py 只載入一份（各檔原本各載一份，類別不同 ⇒ 已解析檔不能互通）。
 - `real_sources()`：{repo 相對路徑: 原始碼}，backend 底下所有 .py（不含 __pycache__）。**唯讀，不要改它。**
@@ -40,6 +40,12 @@ def real_sources():
 
 
 _SHARED_FILES = {}                                      # rel ⇒ _File；Repo.file() 會懶加載進來
+
+def release_parsed_files():
+    """放掉已解析的檔（約 1 GB）。tests/platform/conftest.py 的 module 夾具在每個測試模組結束時呼叫；
+    之後再 new_real_repo() 會懶加載重 parse（只是慢一次，結果相同）。原始碼字串（約 60 MB）與 dep_scan 圖不放。"""
+    _SHARED_FILES.clear()
+
 
 
 def new_real_repo():
