@@ -7,6 +7,7 @@
 新增路由必須在 `tests/platform/test_settings_center_status_routes.py` 的路由表裡分類，否則該測試紅。
 
 - GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）；每組多 `status`／`plannedTrain`；另有 `plannedFeatures`（開發中、尚無設定群組的功能：code／label／plannedTrain）
+- GET  /api/settings-center/overview               外框總覽（S2）：設定頁清單＋統計＋最近 5 筆；GET …/recent 最近變更；GET …/index 全域搜尋索引（唯讀）
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）；回應附 `classification`（逐欄 立即／待生效／需核准）
 - POST /api/settings-center/groups/{group}/preview 預覽（dry-run，不寫入）：逐欄分類、效果句、橫幅、驗證問題（S1-4）
@@ -107,6 +108,40 @@ def list_groups(authorization: str = Header(None)):
             g["label"] = it["name"]                                              # 公司可以改群組名稱；沒改就是登錄表的名稱
     return {"groups": out, "plannedFeatures": _spine.planned_cards(),            # 『即將推出』：開發中、還沒有設定群組的功能（只有名稱與預計班次）
             "categories": [{"key": c["key"], "name": c["name"], "tier": c["tier"], "blurb": c["blurb"], "when": c["when"]} for c in cats]}
+
+
+@router.get("/api/settings-center/overview")
+def overview(authorization: str = Header(None)):
+    """外框用（S2）：設定頁清單（分類／白話名／與預設不同／待生效／高風險）＋統計卡＋最近 5 筆＋「與預設不同」清單。唯讀；hidden 群組不出現。"""
+    _require_user(authorization, require_superadmin=True)
+    from db import get_db
+    from helpers import settings_shell as shell
+    conn = get_db()
+    try:
+        return shell.overview(conn)
+    finally:
+        conn.close()
+
+
+@router.get("/api/settings-center/recent")
+def recent_changes(limit: int = 50, high: int = 0, authorization: str = Header(None)):
+    """最近變更（新→舊；`high=1` 只看影響大）。整份文件與設定中心以外的群組只給摘要。"""
+    _require_user(authorization, require_superadmin=True)
+    from db import get_db
+    from helpers import settings_shell as shell
+    conn = get_db()
+    try:
+        return {"changes": shell.recent(conn, limit, bool(high))}
+    finally:
+        conn.close()
+
+
+@router.get("/api/settings-center/index")
+def search_index(authorization: str = Header(None)):
+    """全域搜尋索引（欄位中文名稱、代碼、說明、選項標籤、群組名；不含值）。前端比對。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import settings_shell as shell
+    return {"items": shell.search_index()}
 
 
 @router.get("/api/settings-center/groups/{group}")
