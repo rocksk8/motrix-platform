@@ -191,3 +191,27 @@ def test_main_calls_the_migration_at_startup_after_init():
     assert re.search(r"^_enable_onepipe_defaults_once\(\)", src, re.M), "main.py 沒有呼叫一次性遷移"
     assert src.index("init_unlock_passwords()\n_startup_step") < src.index("\n_enable_onepipe_defaults_once()"), "要在 init 之後"
     assert "_enable_onepipe_defaults_once," in src.split("from archive import")[0], "main.py 沒有 import"
+
+
+def test_a_flag_deliberately_turned_off_in_the_ledger_is_kept_off_by_the_migration(fresh):
+    """PM 裁示（2026-11-13）：設定變更明細對該欄位有過任何「新值＝0」的紀錄＝有人在設定中心明確關掉 ⇒ 遷移跳過不動；其餘 0 照開。
+    （存值 0 本身分不出「舊預設」與「人為關閉」，所以看明細。）這個測試放在檔案最後：明細表只增不改不刪，這筆紀錄會留在同一個測試庫裡，
+    它只影響「遷移要不要動 timeline」，不影響其他測試看的有效值。"""
+    import db
+    from helpers import config_ledger as L
+    _store()                                                  # 舊庫：每個旗標都存成 0
+    c = db.get_db()
+    try:                                                      # 先前有人在設定中心把「時間軸」1→0（明細留著）
+        L.record(c, "setting:%s" % GROUP, GROUP, [{"field": "timeline", "old": 1, "new": 0}], "管理員關閉時間軸",
+                 {"username": "admin", "display_name": "管理員"})
+        c.commit()
+    finally:
+        c.close()
+    _run()
+    eff = _effective()
+    assert eff["timeline"] == 0, "明確關掉過的欄位遷移後仍是 0"
+    assert all(v == 1 for k, v in eff.items() if k != "timeline"), "其他 0 照開"
+    m = _mark()
+    assert m["kept_off"] == ["timeline"] and "timeline" not in m["fields"] and m["result"] == "enabled"
+    d = json.loads(_audits()[0][2])
+    assert "timeline" not in {x["field"] for x in d["changes"]}, "稽核也不列被保留的欄位"
