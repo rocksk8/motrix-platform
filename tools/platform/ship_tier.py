@@ -159,9 +159,12 @@ class _File:
     def __init__(self, rel, src):
         self.rel = rel
         self.tree = ast.parse(src)
+        #: 整棵樹的節點（BFS 順序，與 ast.walk 相同）只展開一次：provider_check 對每個模組都要重掃全 repo，
+        #: 原本每次都重走 generator（iter_child_nodes／iter_fields 占掉 7 成時間）；節點物件相同，id 型的記錄不受影響
+        self.nodes = tuple(ast.walk(self.tree))
         self.names = {}          # 區域名稱 ⇒ 完整名稱（"core.registry"、"core.registry.single_provider"、"helpers.case_access.CASE_PRESENT"）
         pkg = path_to_module_name(rel).rsplit(".", 1)[0] if not rel.endswith("__init__.py") else path_to_module_name(rel)
-        for node in ast.walk(self.tree):
+        for node in self.nodes:
             if isinstance(node, ast.Import):
                 for a in node.names:
                     if a.asname:
@@ -177,7 +180,7 @@ class _File:
                 for a in node.names:
                     self.names[a.asname or a.name] = (base + "." + a.name) if base else a.name
         self.consts, self.const_nodes, assigned = {}, {}, {}
-        for node in ast.walk(self.tree):
+        for node in self.nodes:
             targets = []
             if isinstance(node, (ast.Assign,)):
                 targets = node.targets
@@ -206,9 +209,11 @@ class _File:
 class Repo:
     """原始碼集合 {repo 相對路徑: 原始碼}（呼叫端從 git 或工作樹讀）。"""
 
-    def __init__(self, sources):
+    def __init__(self, sources, files=None):
         self.sources = sources
-        self._files = {}
+        #: files：呼叫端可傳「已解析檔」的共用字典（rel ⇒ _File；測試的 session fixture 用它，避免每個 Repo 重新 parse 整個 backend）。
+        #: _File 建好後不會被改，所以共用是安全的；used_const_nodes／used_arg_nodes 是每個 Repo 自己的
+        self._files = {} if files is None else files
         #: 解析取用／登記呼叫時實際用到的常數定義節點 id（DB4-S1 ③：定義處不算「散落的能力字串」）
         self.used_const_nodes = set()
         #: 解析成功的取用呼叫 capability 引數節點 id（DB4-S1 ③：只有這些位置算「已解析的取用」）
@@ -267,13 +272,13 @@ def registry_refs(repo, rel, names):
     f = repo.file(rel)
     wanted = {"core.registry." + n: n for n in names}
     calls, out = set(), []
-    for node in ast.walk(f.tree):
+    for node in f.nodes:
         if isinstance(node, ast.Call):
             full = f.full(node.func)
             if full in wanted:
                 calls.add(id(node.func))
                 out.append((node, wanted[full], node.lineno))
-    for node in ast.walk(f.tree):
+    for node in f.nodes:
         if isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in calls:
             full = f.full(node)
             if full in wanted and not (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)):
@@ -289,7 +294,7 @@ def capabilities(repo, key):
     init = prefix + "__init__.py"
     if init in repo.sources:
         f = repo.file(init)
-        for node in ast.walk(f.tree):
+        for node in f.nodes:
             if isinstance(node, ast.Call) and (f.full(node.func) or "").endswith("ModuleSpec"):
                 for kw in node.keywords:
                     if kw.arg != "providers":
@@ -379,7 +384,7 @@ def registry_bypasses(repo, key):
         if rel in REGISTRY_INTERNALS_ALLOWED:
             continue
         f = repo.file(rel)
-        for node in ast.walk(f.tree):
+        for node in f.nodes:
             if isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names) \
                     and (node.module or "").startswith("core"):
                 out.append("%s:%s 星號 import（%s）⇒ 取用關係判不了" % (rel, node.lineno, node.module))
@@ -402,7 +407,7 @@ def stray_capability_strings(repo, key, caps, consumer_files):
             continue
         f = repo.file(rel)
         allowed = _provider_sites(f) | repo.used_arg_nodes | repo.used_const_nodes
-        for node in ast.walk(f.tree):
+        for node in f.nodes:
             if id(node) in allowed:
                 continue
             value = None
@@ -433,7 +438,7 @@ def _provider_sites(f):
     """檔內「登記提供者」位置的字串節點 id：ModuleSpec(providers={(cap, name): …}) 的 cap、provide(cap, …) 的 cap。
     同一能力可以有多個提供者（例：approval.*、attachments.for_document）——別的模組／L1 登記同一能力不是在取用它。"""
     out = set()
-    for node in ast.walk(f.tree):
+    for node in f.nodes:
         if not isinstance(node, ast.Call):
             continue
         full = f.full(node.func) or ""
