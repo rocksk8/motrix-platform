@@ -291,6 +291,8 @@ def recent_merges(repo, since=None, n=DEFAULT_MERGES):
 # ── 執行 ───────────────────────────────────────────────────────────────────────
 
 def python_exe():
+    """預跑／守門題組一律用正式閘門的直譯器（主工作樹 .venv312，與 run-stage／建包同一個）；
+    找不到它才退回目前的直譯器，並且說出來（呼叫端在 main 檢查 interpreter_mismatch）。"""
     cand = Path("D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe")
     return str(cand) if cand.exists() else sys.executable
 

@@ -207,8 +207,12 @@ def test_passkey_failure_writes_audit_row_with_own_reason_code(client, make_user
     assert len(rows) == 1 and rows[0]["reason_code"] == "passkey_failed" and json.loads(rows[0]["detail"])["method"] == "passkey"
 
 
-def test_sources_do_not_merge_into_each_other():
-    """同帳號＋同 IP 但來源不同 ⇒ 各自一列；同來源 60 秒內合併成 repeat。"""
+def test_sources_do_not_merge_into_each_other(client):
+    """同帳號＋同 IP 但來源不同 ⇒ 各自一列；同來源 60 秒內合併成 repeat。
+
+    2026-11-13（T82 閘門）：原本沒有 `client`——它寫進、並讀出「這個 worker 的 session 庫」，而同一個 worker 前面的題
+    （沒用 client 的登入失敗題）已在那裡留下 1001 列 auth.login_failed ⇒ 排序後的 reason_code 清單多了一大串 ⇒ 預跑（單檔／不同分片）綠、閘門紅。
+    要讀寫 audit_log 的題一律要 `client`（每題一份新庫）；守門：test_every_test_that_reads_audit_rows_has_a_fresh_db。"""
     from helpers.audit import _audit_login_failed
     assert _audit_login_failed("u", "1.1.1.1", source="password") == "new"
     assert _audit_login_failed("u", "1.1.1.1", source="totp") == "new"
@@ -993,3 +997,28 @@ def test_lockout_log_masks_server_log_masks_unknown_username(client, make_user, 
         for _ in range(5):
             _bad_login(client, name="realuser", ip="203.0.113.62")
     assert "username=realuser" in "\n".join(r.getMessage() for r in caplog.records)
+
+
+def test_every_test_that_reads_audit_rows_has_a_fresh_db():
+    """污染守門（T82 閘門 test_sources_do_not_merge_into_each_other 的同型）：呼叫 `_rows_of`（讀 audit_log）的題必須帶 `client`
+    （或別的換庫夾具）——否則讀到的是同一個 xdist worker 的 session 庫，前面別的題寫進去的列都在。
+    正對照：本檔確實有呼叫 `_rows_of` 的題；反向：把 client 拿掉的合成題會被抓到。"""
+    import ast
+    import inspect
+    import sys
+
+    def offenders(src):
+        out = []
+        for n in ast.parse(src).body:
+            if isinstance(n, ast.FunctionDef) and n.name.startswith("test_"):
+                uses = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "_rows_of" for c in ast.walk(n))
+                args = {a.arg for a in n.args.args}
+                if uses and not ({"client", "env"} & args):
+                    out.append(n.name)
+        return out
+    src = inspect.getsource(sys.modules[__name__])
+    callers = [n.name for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
+               and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "_rows_of" for c in ast.walk(n))]
+    assert len(callers) >= 5, callers
+    assert offenders(src) == [], offenders(src)
+    assert offenders("def test_x():" + chr(10) + "    _rows_of('1=1')" + chr(10)) == ["test_x"], "反向控制：沒有 client 的題要被抓到"
