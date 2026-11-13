@@ -124,6 +124,7 @@ from .startup import (
     init_demo_account,
     flag_weak_passwords,
     init_unlock_passwords,
+    _enable_onepipe_defaults_once,
     _cleanup_sessions,
     _prune_login_locks,
     _license_startup_check,
@@ -188,5 +189,6 @@ __all__ = [
     "_EDGE_CANDIDATES", "_get_edge_path", "EDGE_PDF_SEMAPHORE",
     "EDGE_PDF_TIMEOUT_SECONDS", "run_edge_pdf",
     "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords",
+    "_enable_onepipe_defaults_once",
     "_cleanup_sessions", "_sync_module_versions",
 ]

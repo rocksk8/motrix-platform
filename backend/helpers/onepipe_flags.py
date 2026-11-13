@@ -5,7 +5,7 @@
 [公開介面] flag_on, GROUP
 [契約題] tests/test_onepipe_p0a_links_2026_11_13.py
 
-不變式：預設關；讀不到（群組沒登錄、資料庫錯誤）一律當關——關＝與今天逐位元相同。群組 `onepipe` 的欄位登錄在 helpers/settings_groups_onepipe.py。
+不變式：設定預設開（T84 起）；**讀不到（群組沒登錄、資料庫錯誤）仍一律當關（fail-closed）**——關＝與今天逐位元相同，讀取失敗時寧可退回舊行為也不要在不確定時開新行為。群組 `onepipe` 的欄位登錄在 helpers/settings_groups_onepipe.py。
 """
 GROUP = "onepipe"
 
