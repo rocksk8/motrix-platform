@@ -43,6 +43,8 @@ AUDIT_WRAPPERS = {
     # 重播（同一把 key 重送）不執行 `_impl` ⇒ 不重複稽核，這是刻意的（沒有新的寫入）
     "_post_case_update_impl": ("modules/case/api/quotations.py", "留言成功寫 case.update_post"),
     "_add_case_update_files_impl": ("modules/case/api/quotations.py", "補附件成功寫 case.update_files_add"),
+    # T83 授權匯入：端點只呼叫 `_audit_import`（依結果寫 license.import／license.import_rejected／license.import_restore_failed；預覽與需確認不寫＝沒有狀態變動）
+    "_audit_import": ("routers/licensing.py", "匯入成功寫 license.import；被拒寫 license.import_rejected；還原失敗寫 license.import_restore_failed"),
     "_create_work_log_impl": ("routers/system.py", "建立成功寫 work_log.create"),
     "_upload_work_log_photos_impl": ("routers/system.py", "上傳成功寫 work_log.photo_upload"),
     # 備份與監控頁：動作完成後才寫稽核，寫失敗只記 log（不讓使用者看到 500 而重按）；內部直接呼叫 `_audit`

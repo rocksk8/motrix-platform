@@ -102,7 +102,7 @@ _MAX_BODY_BYTES = _mgr.MAX_UPLOAD_BYTES * 2 + 1024
 _MAX_JSON_BRACKETS = 16
 
 
-def _superadmin_not_demo(authorization):
+def _require_superadmin_not_demo(authorization):
     """已登入的最高管理者、且不是示範帳號。示範帳號（role 也是 superadmin）操作的是隔離的示範庫，
     但**授權檔是整台機器共用的**——不擋的話，示範帳號就能換掉正式機的授權。"""
     if is_demo_mode() or (authorization or "").startswith("Bearer DEMO_"):
@@ -123,7 +123,7 @@ def _fail(result, **extra):
 @router.get("/api/license/overview")
 def license_overview(authorization: str = Header(None)):
     """授權頁要的白話資料：客戶、到期日、可用功能、綁定的電腦、提醒、備份數、最近的匯入紀錄。只有最高管理者。"""
-    _superadmin_not_demo(authorization)
+    _require_superadmin_not_demo(authorization)
     data = _mgr.describe_current(_machine_or_none)
     conn = get_db()
     try:
@@ -187,7 +187,7 @@ async def license_import(request: Request, authorization: str = Header(None)):
     `apply` 省略／false ⇒ 只驗證並回預覽（不寫任何東西）；`apply: true` ⇒ 驗證通過才換（備份舊檔、原子寫入、換後複驗）；
     新授權與目前的有差異（`warnings`）時，要帶 `confirm: true` 才會換（否則 409）。
     失敗一律回白話 `message`（也放在 `detail`），`reason` 是給程式判斷的代碼。只有最高管理者；有大小上限、頻率限制、稽核紀錄。"""
-    user = await run_in_threadpool(_superadmin_not_demo, authorization)
+    user = await run_in_threadpool(lambda: _require_superadmin_not_demo(authorization))
     token = _tok(authorization)
     account = str(user.get("id") or user.get("username") or "")
 

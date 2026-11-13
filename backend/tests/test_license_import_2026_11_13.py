@@ -1040,7 +1040,7 @@ def test_402_page_works_with_the_slim_status_for_non_superadmin():
     assert "s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)" in html   # 判斷用的欄位精簡版都有
 
 
-# ── L6：還原也失敗時，不可以對使用者說「已自動還原」 ────────────────────────────────────
+# ── 還原也失敗（restore_failed）——還原也失敗時，不可以對使用者說「已自動還原」 ────────────────────────────────────
 
 def _force_after_swap_failure(monkeypatch, deny_restore):
     import shutil
@@ -1071,7 +1071,7 @@ def _force_after_swap_failure(monkeypatch, deny_restore):
 
 
 @pytest.mark.parametrize("had_old", [True, False])
-def test_l6_restore_failure_is_reported_honestly(client, hdr, put_current, sign, monkeypatch, caplog, had_old):
+def test_restore_failure_is_reported_honestly(client, hdr, put_current, sign, monkeypatch, caplog, had_old):
     if had_old:
         put_current(sign(customer="原本"))
     _force_after_swap_failure(monkeypatch, deny_restore=True)
@@ -1090,14 +1090,14 @@ def test_l6_restore_failure_is_reported_honestly(client, hdr, put_current, sign,
     assert len(rows) == 1 and "新的" not in rows[0]["detail"]                 # 有這一筆稽核，且不含授權內容
 
 
-def test_l6_restore_success_still_says_restored(client, hdr, put_current, sign, monkeypatch):
+def test_restore_success_still_says_restored(client, hdr, put_current, sign, monkeypatch):
     put_current(sign(customer="原本"))
     _force_after_swap_failure(monkeypatch, deny_restore=False)
     r = client.post("/api/license/import", headers=hdr, json={"content": sign(customer="新的", expires=_in(900)), "apply": True, "confirm": True})
     assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed" and "已自動還原" in r.json()["message"]
 
 
-def test_l6_restore_helper_returns_a_bool():
+def test_restore_helper_returns_a_bool():
     import inspect
     from helpers import license_manager as M
     src = inspect.getsource(M._restore)
