@@ -47,7 +47,8 @@ def _mail(fn, *args):
 
 
 def _supers(conn):
-    return [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1")]
+    from helpers import config_ledger as _cl
+    return _cl.real_superadmins(conn)               # 通知名單只列真人（展示帳號不是簽核人）
 
 
 def _http(exc):
@@ -157,8 +158,10 @@ def withdraw(request_id: int, authorization: str = Header(None)):
 def queue_items(conn) -> list:
     """`approval.queue_items`：待簽核的總帳申請（`type`＝`ledger_action`）。簽核層＝單層、全部在職最高管理者。"""
     from helpers import approval_queue as _aq
+    from helpers import config_ledger as _cl
+    _real = set(_cl.real_superadmins(conn))          # 「等誰簽核」只列真人（展示帳號不是簽核人）
     supers = [{"username": r["username"], "displayName": r["display_name"] or r["username"], "status": "pending"}
-              for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id")]
+              for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id") if r["username"] in _real]
     out = []
     for r in conn.execute("SELECT id, request_no, label, approval_json FROM gl_action_requests WHERE status='待審核' ORDER BY id DESC LIMIT 500"):
         raw = _aq.approval_raw_of(r["approval_json"], "ledger_action", r["request_no"])       # 壞一筆只跳過那一筆（QJ-M1）

@@ -160,6 +160,9 @@ def pending_quote(client):
     conn = db.get_db()
     try:
         conn.execute("DELETE FROM quotations WHERE quote_no LIKE 'YA-%'")
+        # 提醒名單只列真人最高管理者（展示帳號 demo 不算）；測試庫預設只有 demo ⇒ 補一位真人，才有人可以提醒
+        conn.execute("INSERT OR IGNORE INTO users (username, password_hash, display_name, role, modules, active, created_at, must_change_password) "
+                     "VALUES ('rem_boss', 'x', '提醒用最高管理者', 'superadmin', '[]', 1, '2026-01-01T00:00:00', 0)")
         conn.execute(
             "INSERT INTO quotations (quote_no, customer_name, project_name, "
             "status, data_json, created_at) VALUES (?,?,?,?,?,?)",

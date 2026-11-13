@@ -2075,7 +2075,8 @@ def _notify_bypass(quote_no, user, bypass):
     try:
         conn = get_db()
         try:
-            who = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+            from helpers import config_ledger as _cl
+            who = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
             row = conn.execute("SELECT COALESCE(customer_name, '') AS c FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
         finally:
             conn.close()

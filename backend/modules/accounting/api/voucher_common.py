@@ -174,7 +174,10 @@ def with_final_superadmin_tier(conn, tiers):
     - 這一層的簽核人＝目前所有在職最高管理者（同一層任一人核准即可，與其他層規則相同）；製票人是最高管理者可自簽（使用者 2026-09-24 裁示）。
     - 沒有任何在職最高管理者（不會發生）⇒ 不補，避免傳票永遠送不出去。
     過帳仍要求狀態＝已核准，所以沒經過這一層核准的傳票不可能過帳。"""
-    rows = conn.execute("SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
+    from helpers import config_ledger as _cl
+    _real = set(_cl.real_superadmins(conn))          # 簽核人只列真人（展示帳號不是簽核人，否則「等誰簽核」會列一個永遠不會簽的人）
+    rows = [r for r in conn.execute("SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
+            if r["username"] in _real]
     if not rows:
         return tiers
     supers = {r["username"] for r in rows}
