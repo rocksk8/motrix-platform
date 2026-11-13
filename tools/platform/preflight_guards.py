@@ -301,10 +301,29 @@ def build_cmd(python, targets, workers, basetemp, marker="not e2e", junit=None):
             *(["--junitxml=%s" % junit, "-o", "junit_family=xunit2"] if junit else [])]
 
 
-def _make_runner(backend, holder, budget_s, tee=True):
+def branch_mode_allowed(repo, base):
+    """要不要給 pytest 帶 MOTRIX_PLACEHOLDERS_BY_BRANCH=1（＝分支模式：(next) 佔位不算紅）。
+    - HEAD 是**具名分支** ⇒ True（train/*、platform／main／master 由 placeholders_allowed 的分支規則照樣擋）。
+    - **detached** ⇒ 只有 HEAD 領先 base（不是 base 的祖先＝有自己的新提交）才 True；HEAD 已包含在 base 裡
+      （＝整合者在凍結的列車 tip 上 `git worktree add --detach` 跑守門）⇒ False，維持 MOTRIX_TRAIN 嚴格（佔位照紅）。
+    - base 不存在、git 失敗 ⇒ False（寧可紅）。"""
+    if _git(repo, "symbolic-ref", "-q", "HEAD").strip():
+        return True
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", "HEAD", base], capture_output=True, creationflags=_NOWIN)
+    except OSError:
+        return False
+    return r.returncode == 1
+
+
+def _make_runner(backend, holder, budget_s, tee=True, by_branch=True):
     """真的跑 pytest 的 runner(cmd, env, flags) ⇒ rc。預算由 watchdog 計時器強制（牆鐘；卡住沒輸出也會被停）⇒ INCOMPLETE_RC。"""
     def runner(cmd, env, flags):
-        e = dict(env, MOTRIX_TRAIN="1", MOTRIX_PLACEHOLDERS_BY_BRANCH="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+        e = dict(env, MOTRIX_TRAIN="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+        if by_branch:
+            e["MOTRIX_PLACEHOLDERS_BY_BRANCH"] = "1"
+        else:
+            e.pop("MOTRIX_PLACEHOLDERS_BY_BRANCH", None)                      # 呼叫端環境帶了也拿掉：列車 tip／detached 在 base 上要嚴格
         t0 = time.time()
         proc = subprocess.Popen(cmd, cwd=str(backend), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags | _NOWIN)
         fired = threading.Event()
@@ -333,7 +352,7 @@ def _make_runner(backend, holder, budget_s, tee=True):
     return runner
 
 
-def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True):
+def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True, by_branch=True):
     """⇒ (rc, 輸出全文, 秒數, junit xml 文字或 None)。重型（-n≥2）經 heavy_run 排隊；排不到（75）⇒ rc 75。"""
     backend = Path(repo) / "backend"
     stamp = "%d_%d" % (os.getpid(), int(time.time() * 1000))
@@ -341,7 +360,7 @@ def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None,
     junit = os.path.join(tempfile.gettempdir(), "pfg_%s.xml" % stamp)
     cmd = build_cmd(python_exe(), targets, workers, basetemp, marker, junit)
     holder = {"out": "", "secs": 0.0}
-    runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee)
+    runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee, by_branch)
     cls = queue_cls or ("heavy" if workers and workers >= 2 else "light")
     try:
         hr = hr or _load("heavy_run")
@@ -408,7 +427,7 @@ def estimate(repo, targets):
 
 def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e2e=False, run_static=True, base="origin/platform", since=None,
               n_merges=DEFAULT_MERGES, dry_run=False, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, runner=None, merges_fn=None, config=None, hr=None,
-              base_exists=None, skip=None, branch_info=None):
+              base_exists=None, skip=None, branch_info=None, branch_mode_fn=None):
     """⇒ (exit_code, report_text, data)。runner(repo, targets, marker) ⇒ (rc, out, secs, junit_xml) 供測試注入。window 必填。"""
     repo = Path(repo)
     if not window:
@@ -447,7 +466,8 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
         if any(f.get("code") == "A0" for f in findings):
             a0_note = "A0 產生檔過期檢查：與 generated 組一致，這次沒選它 ⇒ 不算紅（由整合者重產）"
         findings = [f for f in findings if f.get("code") != "A0"]
-    b_ok, b_why, b_n = (branch_info or branch_mode_info)(repo) if not dry_run else (False, "", 0)
+    by_branch = (branch_mode_fn or branch_mode_allowed)(repo, base) if not dry_run else False
+    b_ok, b_why, b_n = (branch_info or branch_mode_info)(repo) if (by_branch and not dry_run) else (False, "", 0)
     branch_note = ("分支模式（%s）：樹裡 %d 個 (next) 版號佔位不算紅，列車 train_number assign 取號；佔位格式／一致性問題仍會紅" % (b_why, b_n)) if (b_ok and b_n) else ""
     if dry_run:
         est, unk = estimate(repo, targets)
@@ -471,7 +491,7 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
     def go(ts, marker, w, cls=None):
         if runner is not None:
             return runner(repo, ts, marker)
-        return run_pytest(repo, ts, w, window, marker, cls, budget_min, max_wait, hr)
+        return run_pytest(repo, ts, w, window, marker, cls, budget_min, max_wait, hr, by_branch=by_branch)
     rc, out, secs, xmls = None, "", 0.0, []
     if non_e2e:
         rc, out, secs, x = go(non_e2e, "not e2e", workers)
