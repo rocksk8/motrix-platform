@@ -181,6 +181,8 @@ def test_own_fixture_layer_change_runs_the_diff_and_does_not_ask_for_full(monkey
     monkeypatch.setattr(MT, "run_pytest", lambda picked, *a, **k: (ran.append(list(picked)) or 0, None))
     monkeypatch.setattr(MT, "record_stats", lambda *a, **k: None)
     monkeypatch.setattr(MT, "resolve_python", lambda *a, **k: sys.executable)
+    from tests.platform import _shared_repo
+    _shared_repo.patch_real_maps(monkeypatch, MT)         # D4：現算 test_map／dep_graph 每個行程只算一次（本題驗 §G3 的輸出，不是掃描器）
     code = MT.main(["--files", MT.FIXTURE_LAYER[0], "backend/core/menu.py"])
     out = capsys.readouterr().out
     assert ran, "差異題沒有跑"
