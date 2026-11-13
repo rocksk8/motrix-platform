@@ -2,14 +2,16 @@
 """報價用公司信箱（2026-11-13，使用者需求）：有些人用私人信箱註冊帳號，但報價單要用公司信箱。
 
 [單位] helper:quote_email    [層] L1    [穩定度] 實驗
-[公開介面] valid, domain_hint, resolve, resolve_for_user_id, enforce_sales_email, reply_to_for_quote, PROFILE_KEY
-[優先順序] ①該使用者的「報價用公司信箱」`users.quote_email`（只有最高管理者能設）
-          ②公司層「公司對外信箱」`company_profile.external_email`
-          ③個人信箱 `users.email`（沿用現況；此時畫面提示「尚未設定公司信箱」）
-          都沒有 ⇒ 空字串。
+[公開介面] valid, domain_hint, resolve, resolve_for_user_id, resolve_for_row, company_external_email, enforce_sales_email, reply_to_for_quote, PROFILE_KEY
+[契約題] tests/test_quote_email_2026_11_13.py
 [不變式] ①**只影響「填入」那一刻**：報價單的業務員資料在填表時就快照進 quotations.data_json，已開出的單不被追溯改（本模組不讀寫報價單內容）。
     ②格式不合法的信箱視為沒填（不會被當成有效值帶進單據）；網域提醒只是提示，不阻擋儲存（domain_hint 只回文字）。
     ③寄信只加 Reply-To，SMTP 寄件者（From）不變（寄件帳號是系統層設定，不跟人走）。
+
+取值優先順序（`resolve`）：①該使用者的「報價用公司信箱」`users.quote_email`（只有最高管理者能設）
+②公司層「公司對外信箱」`company_profile.external_email`
+③個人信箱 `users.email`（沿用現況；此時畫面提示「尚未設定公司信箱」）
+都沒有 ⇒ 空字串。
 """
 import re
 

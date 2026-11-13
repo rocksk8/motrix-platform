@@ -2,7 +2,8 @@
 """個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。
 
 [單位] helper:user_prefs    [層] L1    [穩定度] 實驗（表 `user_prefs`，core 遷移 13）
-[公開介面] SCHEMA, get, get_all, set_many, PrefError
+[公開介面] SCHEMA, TABLE, defaults, validate, get, get_all, set_many, PrefError
+[契約題] tests/test_my_account_prefs_2026_11_13.py
 [不變式] ①白名單：只有 SCHEMA 裡的鍵、值域內的值存得進去；不合法 ⇒ PrefError（422，不靜默吞掉）。
     ②只讀寫呼叫者自己的列（鍵＝user_id，路徑與請求內容都沒有別人的 id）。
     ③偏好只影響**自己看到的畫面**，不進報價單、PDF、信件簽名檔；任何會出現在單據上的資料不在這裡。
