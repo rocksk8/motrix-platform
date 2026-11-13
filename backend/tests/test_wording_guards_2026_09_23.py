@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune（PM 轉達使用者裁示）：刪 WD1 的 3 題 strict-xfail（GW1／GW2；等 helpers/wording.py，7 週沒動），已在 docs/windows/BACKLOG.md 記一條；要做時從 git 歷史取回
 """`WD1` · 通知文案的守門（`docs/windows/SPEC-WD1-WORDING.md`）。
 
 # 🔴🔴 `GW3` 是一條**給我的禁令**，不是一道守門
@@ -125,47 +126,7 @@ def _inline_text_kwargs(path):
 # GW1：呼叫端不可以有行內文案
 # ══════════════════════════════════════════════════════════════════════
 
-#: 🔴 `WD1`（`GW1`／`GW2`）：**使用者 2026-09-24 裁示的唯一例外**——
-#:    「WD1 先 xfail，併入平台化」（表單作答，hichan-0a 轉達；見
-#:    `docs/windows/HANDOFF-PENDING-2026-09-23.md`「🟢 路線裁示」）。
-#: ⚠️ strict=True：`helpers/wording.py` 做好、這三題轉綠的那一刻會**紅**（XPASS），
-#:    提醒把這個標記拿掉 —— 不是讓它永遠安靜。
-#: ⚠️ 只標這三支；本檔其餘的題（正對照、量尺）照常必須綠。
-_WD1_DEFERRED = pytest.mark.xfail(
-    strict=True,
-    reason="WD1（GW1/GW2）：使用者 2026-09-24 裁示先 xfail，併入平台化「內容層」設計；"
-           "helpers/wording.py 尚未建立")
-
-
-@_WD1_DEFERRED
-def test_gw1_no_caller_carries_its_own_wording():
-    """🔴 **`GW1`：`intro=`／`note=`／`title=` 的值不可以是字面字串。**
-
-    📌 守門驗的是「**文案有沒有被收進那份清單**」，不是「它寫得好不好」——
-       **後者沒有人有辦法自動判定，而前者可以。**
-    🔴 基準是 **0**，不是「不高於上一包」——
-       ☠️ 那會把**今天的欠帳當成明天的基準**，而欠帳會在那條線底下永遠活著。
-    """
-    offenders = []
-    scanned = 0
-    for rel in SCAN_FILES:
-        p = ROOT / rel
-        if not p.is_file():
-            pytest.fail("`%s` 不見了 —— **退回給我**改掃描範圍。" % rel)
-        scanned += 1
-        for line, kw, head in _inline_text_kwargs(p):
-            offenders.append("%s:%d  %s=%r" % (rel, line, kw, head))
-
-    assert scanned, "一個檔都沒掃到 —— **尺量不到東西**。"
-    assert len(offenders) == GW1_BASELINE, (
-        "有 %d 處行內文案（基準 %d）：\n" % (len(offenders), GW1_BASELINE)
-        + "".join("    %s\n" % o for o in offenders[:12])
-        + ("    …另外 %d 處\n" % (len(offenders) - 12)
-           if len(offenders) > 12 else "")
-        + "📌 `§2`：搬進 `helpers/wording.py` 的 `WORDING`，\n"
-          "   呼叫端寫 `intro=WORDING[\"tender.fetch_failed.intro\"]`。\n"
-        + "🔑 這道守門**完全不讀那些字** ⇒ 零誤判；\n"
-          "   而語氣變成一份可以一次讀完的清單，由人審閱。")
+# （WD1 的 3 題 strict-xfail 已於 2026-11-13 刪除，見檔頭與 docs/windows/BACKLOG.md；本檔其餘的題照常必須綠。）
 
 
 def test_gw1_a_wording_reference_is_not_flagged(tmp_path):
@@ -222,55 +183,6 @@ def test_gw1_the_scanner_cannot_see_docstrings_or_comments(tmp_path):
 # ══════════════════════════════════════════════════════════════════════
 # GW2：異常類四格齊全
 # ══════════════════════════════════════════════════════════════════════
-
-@_WD1_DEFERRED
-def test_gw2_the_error_wordings_are_listed_not_guessed():
-    """🔴 **`GW2` 的前提：哪些算「異常類」要有一張明確清單。**
-
-    ⚠️ 規格逐字：**不要用「函式名字裡有 `failed`」去猜**。
-    ☠️ 用猜的話，漏掉的永遠是**沒有人想到的那一個** ——
-       而〈守門要驗有沒有人做過決定〉：清單本身就是那個決定。
-    """
-    w = _wording()
-    listed = getattr(w, "ERROR_WORDING_KEYS", None)
-    assert listed is not None, (
-        "`helpers/wording.py` 沒有 `ERROR_WORDING_KEYS` ——\n"
-        + "📌 那是「哪些通知算異常類」的**明確清單**。\n"
-        + "⚠️ 用別的名字**退回給我**；而**不要**改成從名字猜。")
-    assert listed, (
-        "`ERROR_WORDING_KEYS` 是空的 —— **尺量不到東西**，下一題不算數。")
-    missing = [k for k in listed if k not in getattr(w, "WORDING", {})]
-    assert not missing, (
-        "清單上有 %d 個 key 不在 `WORDING` 裡：%r" % (len(missing), missing))
-
-
-@_WD1_DEFERRED
-def test_gw2_every_error_wording_answers_all_four_questions():
-    """🔴 **`GW2`：異常類的四格 `what`／`impact`／`system`／`action` 都要非空。**
-
-    ```
-    what    發生了什麼
-    impact  對使用者的影響
-    system  系統會做什麼
-    action  人要不要動、什麼時候
-    ```
-    ☠️ **`action` 留空與寫「無須人工介入」是兩回事** ——
-       留空的人**不知道該不該動**，而**不知道該不該動的人會去問人**。
-    """
-    w = _wording()
-    words = getattr(w, "WORDING", {})
-    bad = []
-    for key in getattr(w, "ERROR_WORDING_KEYS", ()):
-        entry = words.get(key) or {}
-        for f in FOUR_FIELDS:
-            if not str(entry.get(f) or "").strip():
-                bad.append("%s.%s" % (key, f))
-    assert not bad, (
-        "有 %d 格是空的：\n" % len(bad)
-        + "".join("    %s\n" % b for b in bad[:12])
-        + "☠️ `action` 留空與寫「無須人工介入」是**兩回事** ——\n"
-          "   留空的人不知道該不該動，**而不知道該不該動的人會去問人**。")
-
 
 def test_gw2_clearing_a_field_really_turns_it_red():
     """⚙️ **正對照：把 `impact` 清空，上一題必須紅。**

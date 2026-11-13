@@ -139,3 +139,15 @@ FX1c                           ⏸️ 暫緩，前提是先查清楚「更新包
 WL（白標化）                    ⏳ 等使用者決定販售形態
 私鑰／授權                      ⏸️ 使用者已裁示擱置（§3k-2）
 ```
+
+---
+
+## 🧹 測試瘦身留下的待辦（2026-11-13，chore/test-prune；PM 轉達使用者裁示）
+```
+WD1 文案守門（GW1／GW2）   ⏸️ 原本是 3 題 strict-xfail（tests/test_wording_guards_2026_09_23.py），等 helpers/wording.py（平台化「內容層」）；
+                              7 週沒動，題目已刪。要做時：GW1＝呼叫端 intro=／note=／title= 不可是字面字串（基準 0）；
+                              GW2＝異常類通知要有明確清單 ERROR_WORDING_KEYS，每項 what／impact／system／action 四格非空。從 git 歷史取回原題改寫。
+逾期提醒站內通知內容題       ⏸️ 原本是 tests/test_e2e_paydate_gap_t48.py 的佔位題（skip＋placeholder 斷言），等第 47 班 L1（payable_due_core）；
+                              L1 已進 platform 後再寫：以假日期呼叫 run_reminders(today=…)，斷言逾期站內通知落地且內容不含金額／受款人；
+                              對照 train/t47-int 或 wip/t45-paydate-l1 的 subcontract/payable_due.py、case/material_payable_event.py。
+```
