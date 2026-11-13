@@ -11,12 +11,15 @@ T81 官方閘門 14 輪（`D:\Claude-pm\t81-gate-*.log`）紅燈絕大多數是�
 與既有工具分工：`train_preflight.py`（T47）＝A 靜態旗標＋窄版便宜集合＋受影響模組；`pre_train_check.py`＝分支推上月台前在拋棄式樹預演合併。本題組＝**T76／T81 實際紅過的守門類別的固定清單**＋分組＋肇因合併；A 靜態旗標也順手跑一次（`--no-static` 關）。
 
 ## 分支作者：交件前怎麼跑（3～5 行）
-在你自己的 worktree 根目錄，用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`：
+**基底＝PM 公告的「目前列車分支」**（T82 期間是 `train/t82-int`；這份文件寫成時它只在整合者的 worktree，要先確認已 push 到 origin，沒有就用 `origin/platform`）。
+不是 `origin/main`（那是 repo 預設分支，不是整合基底），也不是你自己去猜：守門題組要驗的是「合進列車之後」會不會紅，所以要對齊列車現在的樣子。
+在你自己的 worktree 根目錄，用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`（下面 `<列車>` 一律是上面那條，例如 `origin/train/t82-int`）：
 ```
-git fetch origin && git merge origin/platform        # 先把最新的列車基底合進來（或 rebase）
-python tools/platform/preflight_guards.py --window <你的視窗> --skip generated      # 約 5.5 分、3 worker、自動排隊；結束碼 0＝綠
-python tools/platform/preflight_guards.py --window <你的視窗> --only <紅的組id>       # 照報告的「修法」改完，只重跑出紅的組
+git fetch origin && git merge <列車>        # 先把目前列車合進你的分支（或 rebase），再跑
+python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --skip generated      # 約 5.5 分、3 worker、自動排隊；結束碼 0＝綠
+python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --only <紅的組id>       # 照報告的「修法」改完，只重跑出紅的組
 ```
+- `--base <列車>`：靜態旗標比對與「可能肇因的合併」都從這條之後算；指到不存在的 rev ⇒ 結束碼 2（不是空結果）。預設值 `origin/platform` 只適合基底就是 platform 的情況。
 - `--skip generated`：feature 分支不 commit 產生檔（dep_graph／UNIT-INDEX／test_map），列車模式下那組必紅，由整合者重產；其餘紅都是你的。
 - 紅的報告會點名最近哪幾次合併可能是肇因；「未能檢查」（exit 1）＝沒證明題有跑，不是綠。整合者持有閘門鎖時你會最多等 120 秒（75）——等鎖放掉再跑。
 - 題組綠 ≠ 閘門綠；交件仍要附你自己的測試結果。
