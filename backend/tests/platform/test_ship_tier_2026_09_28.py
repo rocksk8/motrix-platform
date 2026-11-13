@@ -14,9 +14,8 @@ import pytest
 from tests._requires import requires_module  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
-_spec = importlib.util.spec_from_file_location("_ship_tier", REPO / "tools" / "platform" / "ship_tier.py")
-ST = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(ST)
+from tests.platform import _shared_repo as SR  # noqa: E402（D3：整個行程只載入一份 ship_tier、只讀／parse 一次 backend）
+ST = SR.ST
 
 PG = ST.PAGES_REL + "/"      # 宣告頁面的目錄（由 core.paths 取得；test_page_paths_centralized）
 PAGES = {"tender_radar": {PG + "tender-radar.html"},
@@ -127,11 +126,10 @@ def test_docs_are_never_read_at_runtime():
     """§4「doc」把 docs/** 當成不影響執行（完整包雖然帶著）：前提是執行期沒有程式讀 docs/。
     ☠️ 日後有人讓程式讀 docs/ 底下的檔（說明頁、範本）⇒ 這一題紅 ⇒ 回來把 ship_tier 的 docs/ 規則收窄。"""
     hits = []
-    for p in (REPO / "backend").rglob("*.py"):
-        rel = p.relative_to(REPO).as_posix()
+    for rel, text in SR.real_sources().items():
         if "/tests/" in rel or rel.startswith("backend/tools/") or rel == "backend/conftest.py" or "__pycache__" in rel:
             continue
-        hits += ["%s:%s" % (rel, n) for n in _docs_path_refs(p.read_text(encoding="utf-8"))]
+        hits += ["%s:%s" % (rel, n) for n in _docs_path_refs(text)]
     assert not hits, "執行期程式碼把 docs/ 當路徑用：\n" + "\n".join(hits)
 
 
@@ -304,7 +302,7 @@ def test_capability_string_allowlist_entries_are_live(real_repo):
     saved = dict(ST.CAPABILITY_STRING_ALLOWED)
     try:
         ST.CAPABILITY_STRING_ALLOWED.clear()
-        pc = ST.provider_check(ST.Repo(real_repo.sources), "case", ["backend/modules/case/x.py"], policy="consumers")
+        pc = ST.provider_check(SR.new_real_repo(), "case", ["backend/modules/case/x.py"], policy="consumers")   # 全新 Repo：used_* 要從空的開始
     finally:
         ST.CAPABILITY_STRING_ALLOWED.update(saved)
     assert any(u.startswith("backend/routers/approval_queue.py:") for u in pc["unresolved"]), pc["unresolved"]
@@ -330,12 +328,7 @@ def test_real_repo_every_provider_module_resolves(real_repo):
 
 @pytest.fixture(scope="module")
 def real_repo():
-    src = {}
-    for p in (REPO / "backend").rglob("*.py"):
-        rel = p.relative_to(REPO).as_posix()
-        if "__pycache__" not in rel:
-            src[rel] = p.read_text(encoding="utf-8")
-    return ST.Repo(src)
+    return SR.new_real_repo()
 
 
 @requires_module("arap", "提供者是 arap；模組不在時沒有對象")
