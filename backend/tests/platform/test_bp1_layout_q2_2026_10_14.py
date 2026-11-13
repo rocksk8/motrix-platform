@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune：刪 test_flag_gated_x_show_has_no_static_inline_display——已併入 tests/platform/test_xshow_inline_display_2026_10_14.py（頁面：quotations.html、case-management.html；旗標函式一律 `[a-zA-Z]Shown(`＋layoutOn＋store，是原四份的聯集）
 """Q2：報價單管理頁（quotations.html）清單欄位＋案件頁分頁列接上 P9 版面引擎，預設關閉。
 
 1. 登記：清單 quotes（10 欄）與分頁 tabs（9 個）；核心如設計；每個登記欄位在頁面上有綁定；金額／毛利率欄的儲存格運算式沒被動到（遮蔽仍由資料決定）。
@@ -222,20 +223,6 @@ def test_restricted_role_gets_the_same_api_answer_before_and_after(client, make_
 
 
 # ── 5. OFF 守門 ────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("name", ["quotations.html", "case-management.html"])
-def test_flag_gated_x_show_has_no_static_inline_display(name):
-    bad = []
-    for m in re.finditer(r"<[a-zA-Z][^<>]*?>", _page(name), re.S):
-        tag = m.group(0)
-        xs = re.search(r'x-show="([^"]*)"', tag)
-        if not xs or not re.search(r"\b(?:[lfctT]Shown|cShown|tShown)\(|\blayoutOn\b", xs.group(1)):
-            continue
-        st = re.search(r'(?<![:\w-])style="([^"]*)"', tag)
-        if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
-            bad.append(re.sub(r"\s+", " ", tag)[:120])
-    assert not bad, bad
-
-
 def test_registry_entries_say_what_layout_does_not_change():
     reg = {e["flag"]: e for e in json.loads((ROOT / "frontend" / "static" / "layout-pages.json").read_text(encoding="utf-8"))}
     q = reg["quotations"]
