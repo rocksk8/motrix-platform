@@ -406,3 +406,24 @@ def test_historical_backfilled_quotes_are_still_silent(cd, make_user):
     _stage("MQ-T84-HIST", "x", D3, ["t84_hist"])
     cd._check_case_stage_deadline()
     assert cd.sender.calls == [] and _notifs("t84_hist") == [] and _states() == {}
+
+
+def test_manager_digest_keeps_both_assignees_of_the_same_stage(cd, make_user):
+    for u in ("t84_l3m", "t84_l3a", "t84_l3b"):
+        make_user(username=u, role="admin")
+    _org("t84_l3m", "t84_l3a")
+    import db
+    conn = db.get_db()
+    try:
+        dep = conn.execute("SELECT department_id d FROM users WHERE username='t84_l3a'").fetchone()["d"]
+        conn.execute("UPDATE users SET department_id=? WHERE username='t84_l3b'", (dep,))
+        conn.commit()
+    finally:
+        conn.close()
+    _make_case("MQ-T84-L3")
+    _stage("MQ-T84-L3", "共同階段", D3, ["t84_l3a", "t84_l3b"])
+    cd._check_case_stage_deadline()
+    mgr = [c for c in cd.sender.calls if c["manager"] == "t84_l3m"]
+    assert len(mgr) == 1 and mgr[0]["n"] == 2                                # 兩位負責人各一列（不是併成一列而掉了第二位的名字）
+    assert len([c for c in cd.sender.calls if c["assignee"]]) == 2           # 負責人那兩封各自只列一次
+    assert all(c["n"] == 1 for c in cd.sender.calls if c["assignee"])

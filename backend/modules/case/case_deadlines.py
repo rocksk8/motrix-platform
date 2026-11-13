@@ -252,10 +252,10 @@ def _check_case_stage_deadline() -> None:
             who = kw.get("assignee_username") or ("m:" + kw.get("manager_username", ""))
             # LINE 已推播記號：不含日期——同一組階段隔天重試信件時 LINE 不重推（組成變了才是新的一則）
             lk = "casestage-%s:%s" % (who, hashlib.md5("|".join(sorted(i["key"] for i in its)).encode("utf-8"), usedforsecurity=False).hexdigest()[:10])
-            seen, digest = set(), []                          # 同一階段只列一次：3d 那封暫時失敗、到期日又有新的 deadline 項目時，同一階段會有兩筆（鍵兩把都要寫回，內容只列一次）
+            seen, digest = set(), []                          # 同一階段（同一負責人）只列一次：3d 那封暫時失敗、到期日又有新的 deadline 項目時，同一階段會有兩筆（鍵兩把都要寫回，內容只列一次）
             for i in sorted(its, key=lambda x: x["days_left"]):
-                if (i["quote_no"], i["stage_id"]) not in seen:
-                    seen.add((i["quote_no"], i["stage_id"]))
+                if (i["quote_no"], i["stage_id"], i["username"]) not in seen:      # 含負責人：主管那封同一階段有兩位負責人時，兩位的名字都要列
+                    seen.add((i["quote_no"], i["stage_id"], i["username"]))
                     digest.append(i)
             try:
                 ok = _send_stage_digest([{k: i[k] for k in ("quote_no", "label", "due", "days_left", "customer", "project", "display")} for i in digest],
