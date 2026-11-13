@@ -24,7 +24,7 @@ def test_loaded_module_serves_its_js_byte_for_byte_at_the_unchanged_url(client):
     assert r.status_code == 200
     assert "javascript" in r.headers["content-type"]
     assert r.content == JS.read_bytes()
-    assert "no-store" in r.headers.get("cache-control", "")           # no_cache_static：.js 不快取
+    assert r.headers.get("cache-control") == "no-cache"               # 沒帶 ?v= ⇒ 每次都問（帶目前版本才 immutable，見 static_cache）
     assert client.head(URL).status_code == 200
 
 

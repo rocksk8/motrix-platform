@@ -29,6 +29,7 @@ from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_c
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
 from helpers import pdf_scripts as _PS
+from helpers import doc_type as _DT              # 估價單：標題與浮水印用語依單據類型（版型沿用報價單）
 from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
@@ -294,6 +295,11 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                            watermark_font_size: int = 30,
                            show_notice: bool = False, notice_text: str = '',
                            unapproved_status: str = None) -> str:
+    # 估價單：版型完全沿用報價單，只有標題與浮水印／橫幅用語的「報價單」換成「估價單」（報價單 ⇒ 字串逐位元不變）
+    _dlabel = _DT.label(q.get('docType'))
+    if _dlabel != '報價單':
+        watermark_text = (watermark_text or '').replace('報價單', _dlabel)
+        notice_text = (notice_text or '').replace('報價單', _dlabel)
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -422,7 +428,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '<html lang="zh-Hant">\n'
         '<head>\n'
         '<meta charset="UTF-8">\n'
-        f'<title>{esc(q.get("quoteNo",""))} 報價單</title>\n'
+        f'<title>{esc(q.get("quoteNo",""))} {_dlabel}</title>\n'
         '<style>\n'
         '  *{box-sizing:border-box;margin:0;padding:0}\n'
         '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
@@ -495,7 +501,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + '</div>\n'
         if show_watermark else '')
         + '<div id="root">\n'
-        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text='報價單預覽稿・\n尚未正式生效')
+        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text=_dlabel + '預覽稿・\n尚未正式生效')
            if unapproved_status is not None else '')
         + ('<div class="hist-badge" data-historical="1" style="margin:0 0 8px;padding:5px 10px;border:1px solid #94A3B8;border-radius:4px;'
            'background:#F1F5F9;color:#334155;font-size:11px;font-weight:700;font-family:Arial,sans-serif">'
@@ -514,7 +520,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + _identity_head(_ident) +
         '  </div>\n'
         '  <div>\n'
-        '    <div class="doc-title">報　價　單</div>\n'
+        f'    <div class="doc-title">{"　".join(_dlabel)}</div>\n'
         '  </div>\n'
         '</div>\n'
         '<div class="meta">\n'
@@ -697,13 +703,14 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     row  = conn.execute(
         # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
         # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
-        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "SELECT data_json, status, deal_tag, location_id, doc_type FROM quotations "
         "WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
     if not row:
         raise ValueError("報價單不存在")
     q            = json.loads(row["data_json"] or "{}")
+    q["docType"] = _DT.norm(row["doc_type"])     # 估價單：單據類型以欄位為準（標題／浮水印用語）
     # 用欄位覆蓋 payload：`data_json` 裡若有舊的 `locationId`，**欄位才是權威**。
     q["locationId"] = row["location_id"] or ""
     deal_tag     = row["deal_tag"] or q.get("dealTag") or ""

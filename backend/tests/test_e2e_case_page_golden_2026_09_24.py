@@ -143,7 +143,8 @@ class _Net:
     #   /api/custom-modules 留在清單裡無害（別的頁還會打它）〕
     _IGNORE = ("/api/auth/me", "/api/build-info", "/api/notifications", "/api/online-users",
                "/api/approval-queue/count", "/api/reads/module-counts", "/api/edit-presence", "/api/custom-modules",
-               "/api/platform/menu")
+               "/api/platform/menu",
+               "/api/auth/preferences")   # T82：auth-guard 每個登入期間第一頁同步一次個人偏好（我的帳號）；與案件頁無關，是否被記到取決於回應與擷取的先後
 
     def _req(self, r):
         if "/api/" in r.url:

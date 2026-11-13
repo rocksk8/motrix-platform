@@ -4,7 +4,7 @@
    金額／毛利率欄位只能隱藏或調順序——被遮蔽者看到的內容仍由伺服端決定（這裡不碰資料）。 */
 (function () {
   const SIZES = [25, 50, 100, 200]
-  const COLS = ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date']
+  const COLS = ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'next', 'date']
   const FIXED = ['quoteNo', 'customer', 'status', 'dealTag']
   const empty = () => ({ hidden: [], order: COLS.slice(), tab: '', size: 0 })
   const csv = v => (v ? String(v).split(',').filter(Boolean) : [])

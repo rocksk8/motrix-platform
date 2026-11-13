@@ -67,7 +67,7 @@ def test_first_run_wizard_superadmin_four_steps(live_server, make_user, new_page
 
     # 步驟 1：設新密碼——精簡外殼（沒有頂欄）、說明「為什麼」、TOTP 卡片先不出現
     _type_login(page, live_server, username, password)
-    _wait_path(page, "/change-password.html?forced=1")
+    _wait_path(page, "/my-account.html?forced=1")
     page.locator("[data-testid=ux-wizard-count]").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard-count]").inner_text() == "步驟 1／4：設新密碼"
     assert not page.locator("#app-topbar").is_visible()
@@ -119,7 +119,7 @@ def test_first_run_wizard_superadmin_four_steps(live_server, make_user, new_page
 
     # 步驟 3：兩步驟驗證（可略過）——只剩 TOTP 卡，沒有密碼表單
     page.click("[data-testid=wizard-next]")
-    _wait_path(page, "/change-password.html?wizard=totp")
+    _wait_path(page, "/my-account.html?wizard=totp")
     page.locator("[data-testid=ux-wizard-count]").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard-count]").inner_text() == "步驟 3／4：兩步驟驗證"
     page.locator("text=兩步驟驗證（TOTP）").wait_for(state="visible", timeout=10000)
@@ -140,7 +140,7 @@ def test_wizard_for_regular_user_has_two_steps(live_server, make_user, new_page)
     _must_change(username)
     page = new_page(viewport={"width": 1440, "height": 900})
     _type_login(page, live_server, username, password)
-    _wait_path(page, "/change-password.html?forced=1")
+    _wait_path(page, "/my-account.html?forced=1")
     page.locator("[data-testid=ux-wizard-count]").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard-count]").inner_text() == "步驟 1／2：設新密碼"
     # 一般使用者不留精靈旗標（後面沒有別的步驟）
@@ -152,8 +152,8 @@ def test_plain_change_password_page_is_not_a_wizard(live_server, make_user, new_
     username, password = make_user(username="e2e_ux_plain", role="sales")
     page = new_page(viewport={"width": 1440, "height": 900})
     login_as(page, (username, password))
-    page.goto(f"{live_server}/pages/change-password.html")
-    page.locator("h1:has-text('修改密碼')").wait_for(state="visible", timeout=15000)
+    page.goto(f"{live_server}/pages/my-account.html?tab=security")
+    page.locator("h1:has-text('我的帳號')").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard]").count() == 0
     assert page.locator("#app-topbar").is_visible()
     assert page.locator("text=兩步驟驗證（TOTP）").is_visible()
@@ -321,7 +321,7 @@ def test_submit_modal_explains_the_consequence(live_server, make_user, new_page,
     page.goto(f"{live_server}/pages/quotation-form.html")
     page.locator(".form-toolbar").wait_for(state="visible", timeout=20000)
     # 送出鈕有「這會…」提示（title）；確認視窗第一段說明後果
-    btn = page.locator("button.btn:has-text('申請送出審核')")
+    btn = page.locator("button.btn:has-text('申請送出簽核')")
     btn.wait_for(state="visible", timeout=15000)
     assert "簽核" in (btn.get_attribute("title") or "")
     page.evaluate("Alpine.$data(document.querySelector('[x-data]')).showSubmitModal = true")

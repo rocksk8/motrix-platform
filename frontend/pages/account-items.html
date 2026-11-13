@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>會計科目 - MOTRIX 專案管理系統</title>
+  <title>會計科目 - MOTRIX PLATFORM</title>
   <script src="../js/account-items.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -49,6 +49,28 @@
     .ai-tag.custom{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
     .ai-lock{font-size:12px;color:var(--text-secondary);flex:none}
     .ai-empty{padding:40px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：一列原本是「單行 flex 不換行」——375px 下科目名稱被擠成一字一行、
+       右側「法定／唯讀／操作」被切掉。改成可換行：第一行＝展開鈕＋代號＋名稱，標籤與操作掉到第二行。 */
+    @media (max-width:767px){
+      .page-main{padding:16px 12px}
+      .ai-bar .ai-search{flex:1 1 100%;min-width:0;box-sizing:border-box;font-size:16px;min-height:42px}
+      .ai-btn{min-height:40px;padding:8px 14px;font-size:13px}
+      .ai-hint{margin-left:0;flex:1 1 100%}
+      .ai-row{flex-wrap:wrap;row-gap:6px;padding-top:9px;padding-bottom:9px;padding-right:10px;padding-left:calc(10px + var(--lv,0) * 14px) !important}
+      .ai-code{min-width:52px}
+      .ai-name{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+      .ai-name-en{flex:1 1 100%;min-width:0;padding-left:26px;overflow-wrap:anywhere}
+      .ai-spacer{display:none !important}
+      .ai-row > span[style*="display:flex"]{margin-left:auto}
+      .ai-row .btn{min-height:40px;min-width:44px}
+      .modal-box .ai-search{font-size:16px;min-height:42px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:22px 20px}
+      .ai-btn{min-height:40px}
+      .ai-row{padding-top:9px;padding-bottom:9px}
+      .ai-row .btn{min-height:38px}
+    }
   </style>
 </head>
 <body x-data="accountItemsPage()" x-init="init()" x-cloak>
@@ -113,7 +135,7 @@
         <template x-for="row in visibleRows" :key="row.code">
           <div class="ai-row" :class="['ai-lv' + row.level, row.kids ? 'has-kids' : '']"
                @click="row.kids && toggle(row.code)"
-               :style="'padding-left:' + (12 + (row.level - 1) * 22) + 'px'">
+               :style="'--lv:' + (row.level - 1) + ';padding-left:' + (12 + (row.level - 1) * 22) + 'px'">
             <span class="ai-toggle" :class="{leaf: !row.kids}"
                   x-text="!row.kids ? '' : (open[row.code] ? '−' : '+')"></span>
             <span class="ai-code" x-text="row.code"></span>
@@ -122,7 +144,7 @@
             <!-- 🔑 收合時這個數字是「底下還有東西」的唯一訊號 -->
             <span class="ai-kids" x-show="row.kids && !open[row.code]"
                   x-text="row.kids + ' 項'"></span>
-            <span style="flex:1"></span>
+            <span class="ai-spacer" style="flex:1"></span>
             <span class="ai-tag" :class="row.source"
                   x-text="sourceLabel[row.source] || row.source"></span>
             <!-- `CA1 §2③`：自建的要在畫面上看得出是自建的——上面那個 `.ai-tag`

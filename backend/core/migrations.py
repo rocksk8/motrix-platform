@@ -739,3 +739,41 @@ def _core_next_idempotency_keys(conn):
 
 
 register("core", 12, _core_next_idempotency_keys)
+
+
+# ── core 遷移號碼佔用（2026-11-13，hichan-1／PM 協調）────────────────────────────────────
+# 13＝user_prefs（我的帳號）、14＝users.quote_email（報價用公司信箱）已被 feat/menu-ux-myaccount 佔用。
+# 其他分支（例如 hichan-4 的估價單遷移）請從 **15** 開始取號；合併時若撞號，以先合併者為準、後者順延，並在這裡更新本註解。
+# ── 個人偏好（「我的帳號」票；未取號 core 遷移，PLAYBOOK §G6）─────────────────────────────
+# `user_prefs`：每人每個偏好鍵一列（鍵與值域由 helpers/user_prefs.SCHEMA 白名單驗證，這裡只存）。純新增、冪等；
+# 帶 owner_unit_id（單位守門要求，預設 1）。主鍵 (user_id, key)；只存使用者自己選的值，沒存＝用預設。不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_user_prefs(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_prefs (
+            user_id       INTEGER NOT NULL,
+            key           TEXT    NOT NULL,
+            value_json    TEXT    NOT NULL DEFAULT 'null',
+            updated_at    TEXT    NOT NULL DEFAULT '',
+            owner_unit_id INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (user_id, key)
+        )
+    """)
+    conn.commit()
+    return None
+
+
+register("core", 13, _core_next_user_prefs)
+
+
+# ── core v14：報價用公司信箱（2026-11-13）──────────────────────────────────────────────
+# `users.quote_email`：這個人開報價單時帶入的 Email（只有最高管理者能設；空＝沿用公司對外信箱，再沒有才用個人信箱）。
+# 純新增欄位、冪等；不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_users_quote_email(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if cols and "quote_email" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN quote_email TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+    return None
+
+
+register("core", 14, _core_next_users_quote_email)

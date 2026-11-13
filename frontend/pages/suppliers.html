@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>供應商管理 — MOTRIX 專案管理系統</title>
+  <title>供應商管理 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/export-guard.js"></script>
@@ -97,8 +97,56 @@
     @keyframes spin { to { transform: rotate(360deg); } }
   
   /* -- Mobile RWD -- */
+  .m-only { display: none; }
+  /* 平板（含詳情欄開著時）：次要欄位先收掉，名稱欄才不會被擠成一字一行 */
+  @media (max-width:1100px) {
+    .t-hide { display: none !important; }
+    .data-table td:nth-child(3), .data-table td:nth-child(5) { white-space: nowrap; }
+    .data-table th:nth-child(2) { min-width: 200px; }
+  }
+  /* 觸控平板：列尾的「編輯／日誌」收掉（點整列開詳情欄，裡面有同樣的按鈕；沒有 hover 就不該有看不見的鈕） */
+  @media (max-width:1100px) and (hover:none) {
+    .data-table th:last-child, .data-table td:last-child:not(.empty-state) { display: none; }
+  }
+  /* 觸控裝置沒有 hover：列內操作鈕不能靠 hover 才出現 */
+  @media (hover: none) { .row-actions { opacity: 1; } }
   @media (max-width:767px) {
     .detail-pane { width:100% !important; left:0 !important; right:0; }
+    /* 關著的詳情欄原本只靠 translateX 推到畫面外 → 手機瀏覽器把它算進版面寬度，整頁被撐寬縮小 */
+    .detail-pane:not(.open) { visibility: hidden; pointer-events: none; transition: transform .22s ease, visibility 0s .22s; }
+    .page-main { padding: 20px 16px; }
+    /* 頁頭：標題在上、主要動作鈕滿寬在下 */
+    .pg { flex-wrap: wrap; gap: 12px; }
+    .pg > .btn-primary { width: 100%; justify-content: center; min-height: 44px; }
+    /* 類型籤：點擊區加高、間距加大，避免誤觸鄰近的籤 */
+    .cs-cats { gap: 8px; }
+    .cs-cat { min-height: 40px; align-items: center; padding: 6px 12px; }
+    /* 搜尋列：搜尋框滿寬，匯入／匯出各半寬 */
+    .search-bar { flex-wrap: wrap; gap: 8px; }
+    .search-wrap { flex: 1 1 100%; }
+    .search-input { width: 100%; max-width: none; min-height: 44px; font-size: 16px; }
+    .search-actions { margin-left: 0 !important; width: 100%; }
+    .search-actions .btn { flex: 1; min-height: 44px; justify-content: center; }
+    /* 列表：只留「名稱／類型／狀態」，其餘資訊點進詳情看；聯絡人與電話併進名稱下方一行 */
+    .m-hide { display: none !important; }
+    .m-only { display: block; }
+    .data-table { table-layout: fixed; min-width: 0 !important; }   /* style.css 手機版給 .data-table 預設 400/520 最小寬 → 三欄表也被撐出捲軸 */
+    .data-table th:nth-child(5), .data-table th:nth-child(10) { width: 76px; }
+    .data-table th, .data-table td { padding-left: 8px; padding-right: 8px; }
+    .data-table td { padding-top: 12px; padding-bottom: 12px; }
+    .data-table td:nth-child(2) { overflow-wrap: anywhere; }
+    .data-table td .tag, .data-table td:nth-child(5) span { white-space: nowrap; }
+    .data-table tr { cursor: pointer; }
+    .m-sub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+    /* 表單視窗：貼邊、單欄、輸入框 16px 以上（iOS 聚焦不縮放） */
+    .modal-head, .modal-body, .modal-foot { padding-left: 16px; padding-right: 16px; }
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+    .form-input, .form-select, .form-textarea { font-size: 16px; min-height: 44px; }
+    .form-label { font-size: 13px; }
+    .modal-foot .btn { min-height: 44px; }
+    .detail-close { width: 40px; height: 40px; }
+    .detail-head { padding: 12px 16px; }
+    .detail-body { padding: 16px; }
   }
   </style>
 </head>
@@ -174,7 +222,7 @@
         <input class="search-input" type="text" x-model="search" placeholder="搜尋公司名稱、簡稱、統編、聯絡人…">
       </div>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
-      <div style="margin-left:auto;display:flex;gap:6px">
+      <div class="search-actions" style="margin-left:auto;display:flex;gap:6px">
         <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:12px">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           匯入 Excel
@@ -192,23 +240,23 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width:32px"></th>
+            <th class="m-hide t-hide" style="width:32px"></th>
             <th>公司名稱</th>
-            <th>內部簡稱</th>
-            <th>統一編號</th>
+            <th class="m-hide t-hide">內部簡稱</th>
+            <th class="m-hide">統一編號</th>
             <th>類型</th>
-            <th>主要聯絡人</th>
-            <th>電話</th>
-            <th>幣別</th>
-            <th>付款條件</th>
+            <th class="m-hide">主要聯絡人</th>
+            <th class="m-hide">電話</th>
+            <th class="m-hide t-hide">幣別</th>
+            <th class="m-hide t-hide">付款條件</th>
             <th>狀態</th>
-            <th style="width:80px"></th>
+            <th class="m-hide" style="width:80px"></th>
           </tr>
         </thead>
         <tbody>
           <template x-for="s in filtered" :key="s.id">
             <tr @click="selectSupplier(s)" style="cursor:pointer">
-              <td>
+              <td class="m-hide t-hide">
                 <div style="width:30px;height:30px;border-radius:50%;background:#4B5563;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700"
                      x-text="(s.name||'?')[0]"></div>
               </td>
@@ -219,8 +267,10 @@
                         style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:var(--text-secondary);padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
                   <span x-show="s.nameEn" style="font-size:12px;color:var(--text-dim)" x-text="s.nameEn"></span>
                 </div>
+                <div class="m-only m-sub" x-show="s.contacts?.[0]?.name || s.contacts?.[0]?.phone || s.phone"
+                     x-text="[s.contacts?.[0]?.name, s.contacts?.[0]?.phone || s.phone].filter(Boolean).join(' · ')"></div>
               </td>
-              <td>
+              <td class="m-hide t-hide">
                 <template x-if="(s.tags&&s.tags.length) || s.alias">
                   <div style="display:flex;flex-wrap:wrap;gap:3px">
                     <template x-for="t in (s.tags&&s.tags.length ? s.tags : (s.alias?[s.alias]:[]))" :key="t">
@@ -230,23 +280,23 @@
                 </template>
                 <span x-show="!(s.tags&&s.tags.length) && !s.alias" style="color:var(--text-dim)">—</span>
               </td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></td>
+              <td class="m-hide" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></td>
               <td>
                 <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)"
                       x-text="s.category || '—'"></span>
               </td>
-              <td>
+              <td class="m-hide">
                 <div x-text="s.contacts?.[0]?.name || '—'"></div>
                 <div style="font-size:12px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div>
               </td>
-              <td style="font-size:12px" x-text="s.contacts?.[0]?.phone || s.phone || '—'"></td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.currency || '—'"></td>
-              <td style="font-size:12px" x-text="s.paymentTerms || '—'"></td>
+              <td class="m-hide" style="font-size:12px" x-text="s.contacts?.[0]?.phone || s.phone || '—'"></td>
+              <td class="m-hide t-hide" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.currency || '—'"></td>
+              <td class="m-hide t-hide" style="font-size:12px" x-text="s.paymentTerms || '—'"></td>
               <td>
                 <span class="tag" :class="s.active !== false ? 'tag-active' : 'tag-inactive'"
                       x-text="s.active !== false ? '往來中' : '停用'"></span>
               </td>
-              <td>
+              <td class="m-hide">
                 <div class="row-actions">
                   <button class="btn btn-ghost btn-sm" @click.stop="openEdit(s)">編輯</button>
                   <a :href="'supplier-log.html?id=' + s.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none;display:inline-flex;align-items:center;gap:3px">

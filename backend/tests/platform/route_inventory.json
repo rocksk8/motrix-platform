@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 929,
-  "endpoints_api": 925,
-  "write_total": 499,
-  "write_api": 499,
-  "get_api": 426,
-  "distinct_paths_api": 783,
-  "write_with_body_api": 365,
-  "write_with_path_param_api": 359
+  "endpoints_total": 943,
+  "endpoints_api": 939,
+  "write_total": 506,
+  "write_api": 506,
+  "get_api": 433,
+  "distinct_paths_api": 795,
+  "write_with_body_api": 372,
+  "write_with_path_param_api": 360
  },
  "select_star": {
-  "modules": 287,
+  "modules": 288,
   "archive": 97,
   "routers": 11,
   "helpers": 11,
@@ -4661,6 +4661,76 @@
   "PUT /api/work-logs/{wid}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "GET /api/auth/account-locks": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/line-notify/bindings": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/auth/account-locks/unlock": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/customers/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/parts/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/bindings/remind": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify/events/{key}/audience": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "GET /api/auth/greeting": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/login-greeting/phrases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/auth/preferences": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/profile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/auth/preferences": {
+   "w": true,
+   "pp": 0,
    "body": true
   }
  }

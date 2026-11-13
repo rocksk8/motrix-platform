@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>完工單 - MOTRIX 專案管理系統</title>
+  <title>完工單 - MOTRIX PLATFORM</title>
   <meta name="motrix-export-id" content="case:completion-note-pdf">   <!-- G-A：builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（PDF 頁尾／浮水印文字，只能從預設清單挑）；關著＝沒有任何額外請求 -->
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -23,6 +23,8 @@
     .cnf-body { margin-left: var(--sidebar-w); margin-top: calc(var(--topbar-h) + 52px); padding: 0 28px 60px; }
     .cnf-card { border:1px solid var(--border-light); border-radius:10px; padding:20px 22px; margin-bottom:18px; background:#fff }
     .cnf-card-title { font-size:13px; font-weight:700; font-family:var(--font-zh); margin-bottom:14px; color:var(--text-main) }
+    .cnf-adj__sum { list-style:none; cursor:default }
+    .cnf-adj__sum::-webkit-details-marker { display:none }
     .cnf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px }
     .cnf-lbl { display:block; font-size:12px; font-family:'LINE Seed TW_OTF',sans-serif; letter-spacing:.08em;
                text-transform:uppercase; color:var(--text-dim); font-weight:500; margin-bottom:5px }
@@ -37,6 +39,31 @@
     .cnf-btn:disabled { opacity:.45; cursor:default }
     .cnf-item-row { display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap }
     .cnf-badge { padding:2px 9px; border-radius:10px; font-size:12px; font-weight:600 }
+    /* 手機／平板直式（2026-11-12 UI 檢查）：固定 52px 的單列工具列在 375px 下把「← 回案件／標題／草稿／預覽 PDF／儲存」
+       擠成直排窄條。⇒ 手機改成「隨頁面黏在頂欄下方的兩列」：第一列＝返回＋單號＋狀態，第二列＝動作按鈕（各自撐滿、≥44px）。 */
+    @media (max-width:767px){
+      .cnf-toolbar{position:sticky;top:var(--topbar-h);left:auto;right:auto;height:auto;margin-top:var(--topbar-h);
+        flex-wrap:wrap;padding:8px 12px;gap:8px}
+      .cnf-toolbar > span[style*="flex:1"]{flex:1 1 100% !important;height:0;overflow:hidden}
+      .cnf-toolbar > span:not([style*="flex:1"]){min-width:0}
+      .cnf-toolbar .cnf-btn{min-height:44px;flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+      .cnf-toolbar > a.cnf-btn{flex:0 0 auto}
+      .cnf-toolbar > span[x-text]:first-of-type{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .cnf-body{margin-top:12px;padding:0 12px 60px}
+      .cnf-card{padding:14px 14px}
+      /* 逐欄調整（11 個標題欄位）在手機預設收起，主要欄位才不會被推到 900px 以下（K 審 E） */
+      .cnf-adj__sum{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:-8px 0 6px;cursor:pointer}
+      .cnf-adj__sum::after{content:"▾";color:var(--text-dim)}
+      .cnf-adj[open] > .cnf-adj__sum::after{content:"▴"}
+      .cnf-in{font-size:16px;min-height:44px}
+      .cnf-btn{min-height:44px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .cnf-toolbar{padding:0 16px}
+      .cnf-body{padding:0 16px 60px}
+      .cnf-btn{min-height:40px}
+      .cnf-in{min-height:40px}
+    }
   </style>
 </head>
 
@@ -101,15 +128,15 @@
     <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
       <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #EDEAE4;gap:10px">
         <span style="font-size:14px;font-weight:700;flex:1" x-text="'預覽完工單　' + noteNo"></span>
-        <button @click="closePreview()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+        <button @click="closePreview()" style="width:40px;height:40px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:18px">×</button>
       </div>
       <div style="flex:1;background:#F0EEE9;overflow:hidden">
         <iframe :src="previewUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
       </div>
       <div style="padding:12px 20px;border-top:1px solid #EDEAE4;display:flex;justify-content:flex-end;gap:10px">
         <button x-show="canReturnPreview()" data-testid="preview-return" @click="returnFromPreview()"
-                style="padding:7px 16px;border:1px solid #FCA5A5;border-radius:7px;font-size:13px;background:#FEF2F2;color:#B91C1C;font-weight:600;cursor:pointer">退回修改</button>
-        <button @click="closePreview()" style="padding:7px 16px;border:1px solid #D4D4D4;border-radius:7px;font-size:13px;background:#fff;cursor:pointer">關閉</button>
+                style="padding:10px 16px;min-height:40px;border:1px solid #FCA5A5;border-radius:7px;font-size:13px;background:#FEF2F2;color:#B91C1C;font-weight:600;cursor:pointer">退回修改</button>
+        <button @click="closePreview()" style="padding:10px 16px;min-height:40px;border:1px solid #D4D4D4;border-radius:7px;font-size:13px;background:#fff;cursor:pointer">關閉</button>
       </div>
     </div>
   </div>
@@ -144,8 +171,8 @@
               <button class="cnf-btn" @click="resetLabels()" :disabled="!editable()">回到系統預設</button>
             </div>
           </div>
-          <div class="cnf-card">
-            <div class="cnf-card-title">逐欄調整</div>
+          <details class="cnf-card cnf-adj" open>
+            <summary class="cnf-card-title cnf-adj__sum">逐欄調整</summary>
             <div class="cnf-grid">
               <template x-for="f in labelFields" :key="f.key">
                 <div>
@@ -157,7 +184,8 @@
               </template>
             </div>
             <div class="cnf-hint">留空＝使用系統預設值（不會變成空白標題）。每欄上限 40 字。</div>
-          </div>
+          </details>
+          <script>(function(){try{if(window.matchMedia('(max-width:767px)').matches){var d=document.querySelector('.cnf-adj');if(d)d.open=false}}catch(e){}})()</script>
         </div>
         <div>
           <div class="cnf-card">

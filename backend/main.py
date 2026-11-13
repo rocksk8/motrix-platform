@@ -80,7 +80,7 @@ from core.internal_cols import InternalColsMiddleware
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
+from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
@@ -106,6 +106,18 @@ _startup_step("import_routers")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# 日誌分流與輪替（2026-11-13）：access.log／app.log 由本行程用 RotatingFileHandler 自己輪替（gzip、10 份）；
+# server.log（cmd 的 `>>`）縮成開機那一段＋WARNING 以上的兜底。整套設計與「為什麼開機那一段要留」見 helpers/log_setup.py 檔頭。
+# 打不開檔 ⇒ install() 回 None、維持舊行為；測試（pytest）不建檔。客戶端斷線噪音（WinError 10054）的 filter 到處都掛。
+from helpers import log_setup as _log_setup
+_log_setup.attach_noise_filter()
+_log_setup.attach_redact_filter()      # 查詢字串遮罩：token 不進任何日誌檔（access 行只留 path、值一律 ***）；分流有沒有啟用都要
+if _log_setup.enabled_by_environment():
+    from core import paths as _log_paths
+    _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
+else:
+    _LOG_SPLIT = None
 
 # L2 模組（modules/*）由載入器登錄；main 不指名任何 L2 模組（CORE-SPEC §2）。
 # 載入失敗的模組只記 ERROR，不擋啟動。
@@ -304,6 +316,9 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
     ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
     ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
+    ("GET", "/api/auth/profile"): "帳號本身必要：「我的帳號」讀自己的顯示名稱、部門與報價用信箱（只回自己這一列，無他人資料）；未設定公司資料時使用者仍要看得到自己的帳號頁",
+    ("GET", "/api/auth/preferences"): "帳號本身必要：每個登入期間載入頁面時同步自己的字級、外觀與首頁偏好（只讀寫自己的列）；擋住會讓字級與深色模式在未設定期間失效",
+    ("PUT", "/api/auth/preferences"): "帳號本身必要：頂欄調字級會把偏好存回伺服器、「我的帳號」儲存偏好（只改自己的列，白名單值域，不碰任何公司資料）",
 }
 
 
@@ -362,18 +377,35 @@ def _record_user_activity(user_id: int, now_dt, gap_seconds: float) -> None:
         pass
 
 
+#: 每個請求的耗時毫秒（2026-11-13「外網載入效能」票）：≥ 這個毫秒數、或狀態碼 ≥ 400 才寫一行 INFO（logger `motrix.req`）；0＝全寫。
+#: 預設 100 ms：本機 14–24 ms 的正常請求不寫（常駐程式的磁碟寫入是預算），慢的與失敗的才留下，足以回答「外網慢是伺服器還是路上」。
+#: `Server-Timing: app;dur=<ms>` 表頭**每個請求都帶**（不寫碟）——瀏覽器 DevTools Network 的 Timing 頁籤直接看得到伺服器耗時，
+#: 與外網整體耗時相減就是網路路途。logger 接到哪個檔由 helpers/log_setup（日誌分流）決定，這裡不重做一套。
+_REQ_LOG_MS = float(os.environ.get("MOTRIX_REQ_LOG_MS", "100"))
+_req_log = logging.getLogger("motrix.req")
+
+
 @app.middleware("http")
 async def slow_request_log(request: Request, call_next):
     _t0 = time.monotonic()
     request.state.t0 = _t0      # W-6：給 _unhandled_handler 算「開始到出錯」幾秒
     response = await call_next(request)
     _elapsed = time.monotonic() - _t0
+    _ms = _elapsed * 1000.0
+    # 🔴 Server-Timing 只給「與使用者無關的靜態內容」與「已登入的 API 請求」（hichan-2 審查 P1）：公開／未登入的 /api（登入、品牌…）
+    # 不帶——登入端點對「帳號不存在」與「密碼錯誤」的耗時不同（後者要雜湊），把毫秒級耗時直接交給呼叫者等於給帳號列舉一把尺。
+    # `request.state.authed` 由 auth_middleware 驗過 session 才設（本 middleware 在它的內側，看得到）。
+    if getattr(request.state, "authed", False) or not request.url.path.startswith("/api/"):
+        response.headers["Server-Timing"] = "app;dur=%.1f" % _ms
     if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
         logger.warning(
             "SLOW REQUEST %.1fs  %s %s  status=%s"
             "（DB 寫入鎖等待上限 30s，見 db.py::_connect）",
             _elapsed, request.method, request.url.path, response.status_code,
         )
+    elif _ms >= _REQ_LOG_MS or response.status_code >= 400:
+        # path 只記路徑不記 query（session token 曾經放在 query string，見 auth_middleware 註解）
+        _req_log.info("REQ %s %s %s %.0fms", request.method, request.url.path, response.status_code, _ms)
     return response
 
 
@@ -392,10 +424,10 @@ async def recycle_bin_request_scope(request: Request, call_next):
             _rb.request_scope_end(state)
 
 
-@app.middleware("http")
-async def no_cache_static(request: Request, call_next):
-    response = await call_next(request)
-    p = request.url.path
+def _legacy_cache_headers(p, response):
+    """靜態檔快取表頭的舊規則（vendor／fonts 長效、.html/.css/.js 與 "/" 一律 no-store）。
+    2026-11-13 起版本化的資源與 HTML 改走 `helpers/static_cache.handle`；這裡只剩它不處理的路徑（vendor／fonts／其他）
+    與非 200 回應（404 等錯誤頁不可以被快取）。"""
     # 2026-09-08 修復：外部函式庫自架後（見 §9「外部函式庫自架」），vendor 目錄下的
     # 檔案是版本號釘死在檔名裡的第三方函式庫（如 alpine-3.17.1.min.js），跟會頻繁
     # 覆寫的頁面 .html/.css/.js 完全不同類——版本升級一定會改檔名，同名檔案內容
@@ -418,6 +450,36 @@ async def no_cache_static(request: Request, call_next):
     return response
 
 
+from helpers import static_cache as _static_cache
+
+
+def _sidebar_source_for_version():
+    return platform_menu.sidebar_js_source(_PAGE_MAP, FRONTEND_DIR)
+
+
+def _module_assets_for_version():
+    from helpers.module_assets import served_assets
+    return served_assets()
+
+
+#: 全站資源的內容版本（見 helpers/static_cache 檔頭）：HTML 與 JS／CSS 本體裡的資源引用送出前一律補 `?v=<版本>`，
+#: 帶版本的資源 `immutable`、HTML `no-cache`＋ETag／304。不手改每一頁，守門見 tests/test_static_cache_versioning。
+ASSET_VERSION = _static_cache.AssetVersion(FRONTEND_DIR, sidebar_source=_sidebar_source_for_version,
+                                           module_assets=_module_assets_for_version)
+
+
+#: 緊急開關：`MOTRIX_STATIC_CACHE=0` ⇒ 整套退回舊行為（.html/.css/.js 一律 no-store、不改寫引用、不加版本）。正式機出狀況時改環境變數
+#: 重啟即可，不必換包。預設開。
+_STATIC_CACHE_ON = os.environ.get("MOTRIX_STATIC_CACHE", "1") != "0"
+
+
+@app.middleware("http")
+async def no_cache_static(request: Request, call_next):
+    if not _STATIC_CACHE_ON:
+        return _legacy_cache_headers(request.url.path, await call_next(request))
+    return await _static_cache.handle(request, call_next, ASSET_VERSION, lambda p, r: _legacy_cache_headers(p, r))
+
+
 # 逐條操作軌跡（2026-09-14，DB v80）
 #
 # 只記「人的行為」：輪詢與開頁自動打的端點一律跳過，否則每個開著的分頁每分鐘就會
@@ -438,8 +500,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         route = request.scope.get("route")
         template = getattr(route, "path", "") or request.url.path.split("?")[0]
         pp = request.scope.get("path_params") or {}
-        from helpers.audit import _CASE_NO_RE, _audit_failure
-        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        from helpers.audit import _case_no_re, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_case_no_re().search(str(v))] if m), "")
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,
@@ -588,6 +650,12 @@ async def license_gate_middleware(request: Request, call_next):
     # emergency_pass() 與 license_alerts 都不丟例外，任何不確定都當沒有通行證 ⇒ 照擋。
     emergency = await run_in_threadpool(license_core.emergency_pass, status) if blocked else None
     if blocked and emergency is None and not exempt:
+        # T80稽核 LG-S1：能走到這裡又「沒通過身分驗證」的非豁免請求，只剩 auth_middleware 刻意放行的
+        # `/api/uploads/*?pt=…`（簽章由路由處理函式驗，這裡看不到結果）。任何人帶一個亂填的 `pt` 就能走到這一步，
+        # 若回 402＋reason 就違反上面「先確認是誰」的設計：對陌生人洩漏「這台機器沒有授權」以及原因碼。
+        # 一律回與 auth_middleware 同樣的 401（同一句話，不含任何授權字樣）。
+        if not getattr(request.state, "authed", False):
+            return JSONResponse(status_code=401, content={"detail": "未登入"})
         # 402 Payment Required，不是 403。
         # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。
         return JSONResponse(
@@ -870,7 +938,10 @@ app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不
 
 @app.exception_handler(RequestValidationError)
 async def _validation_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error %s %s: %s", request.method, request.url.path, exc.errors())
+    # 2026-11-13：不記 `input`／`ctx`——`input` 是使用者送來的原值（query 的 token、body 的密碼欄位缺別的欄位時整包 body 都在裡面），
+    # 只留位置與訊息就足以除錯；原值進日誌＝憑證進日誌（見 helpers/log_setup「查詢字串遮罩」）。
+    _errs = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+    logger.warning("Validation error %s %s: %s", request.method, request.url.path, _errs)
     return JSONResponse(status_code=422, content={"detail": "請求格式錯誤，請確認欄位是否完整"})
 
 
@@ -1063,6 +1134,7 @@ app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
+app.include_router(my_account.router)
 app.include_router(list_prefs.router)
 app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
@@ -1079,6 +1151,7 @@ app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
+app.include_router(dashboard_mine.router)     # 首頁「我的工作」（L1，2026-11-13 UX P1.5；提供者 dashboard.mine_groups）
 app.include_router(licensing.router)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)

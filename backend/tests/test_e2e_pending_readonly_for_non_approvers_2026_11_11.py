@@ -44,7 +44,7 @@ def test_superadmin_who_is_not_the_approver_sees_readonly_form_and_banner(live_s
     _open(page, live_server)
     page.wait_for_selector(BANNER, state="visible", timeout=10000)
     txt = page.inner_text(BANNER)
-    assert "僅簽核人可編輯" in txt and ("待審核" in txt or "簽核中" in txt), txt
+    assert "僅簽核人可編輯" in txt and ("待簽核" in txt or "簽核中" in txt), txt
     page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     assert _is_locked(page) and page.get_attribute(".form-left", "data-approver-locked") == "1"
     _clicks_without_effect(page)

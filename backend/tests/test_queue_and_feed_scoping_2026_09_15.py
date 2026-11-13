@@ -166,9 +166,12 @@ def test_queue_filter_covers_every_document_type():
     import inspect
     import routers.approval_queue as q          # 佇列端點在 L1（2026-09-27 自 M01 搬入）
 
+    # UX P1.5（2026-11-13）：組項目＋過濾抽成 visible_queue_items（端點與首頁摘要共用同一個來源）；過濾仍然只有一處
+    fsrc = inspect.getsource(q.visible_queue_items)
+    assert fsrc.count("_queue_visible_to(") == 1, "過濾應該只有一處（套在 items 上）"
     src = inspect.getsource(q.get_approval_queue)
-    assert src.count("_queue_visible_to(") == 1, "過濾應該只有一處（套在 items 上）"
-    filter_pos = src.index("_queue_visible_to(")
+    assert src.count("_queue_visible_to(") == 0 and src.count("visible_queue_items(") == 1, "端點只能走共用的 visible_queue_items"
+    filter_pos = src.index("visible_queue_items(")
     group_pos = src.index("groups[item[")
     assert filter_pos < group_pos, "要先過濾再分組，否則會留下空群組"
 

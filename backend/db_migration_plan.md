@@ -53,7 +53,7 @@
 - 新增排程任務 `backend/deadline_check_job.py`
   - 每日執行（piggyback 到 `heartbeat_job.py` 或獨立排程）
   - 邏輯：掃描所有未結案案件，檢查 `endDate < today`
-  - 超期當天：寄一次信 → superadmin/該案件最高管理員
+  - 超期當天：寄一次信 → superadmin/該案件最高管理者
   - 之後每 7 天：若仍未結案，再寄一次
 
 - 前端：案件資訊分頁「基本資訊」新增「專案期間」卡片

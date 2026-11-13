@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>每日工作事項 — MOTRIX 專案管理系統</title>
+  <title>每日工作事項 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -738,6 +738,29 @@
     .dt-board-col-body .dt-card:last-child { margin-bottom: 0; }
     .dt-board-due { font-size: 12px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap; }
     .dt-board-empty { padding: 20px 8px; text-align: center; font-size: 12px; color: var(--text-dim); }
+
+    /* ── 手機版（2026-11-12）：左列表＋右詳情改單欄流程（沒選＝列表；點工作事項＝詳情＋「← 工作事項列表」） ── */
+    .dt-m-back { display: none; }
+    @media (max-width: 767px) {
+      .dt-wrap { height: calc(calc(100dvh / var(--fz,1)) - var(--topbar-h)); }
+      .dt-bar { gap: 8px; padding: 8px 12px; }
+      .dt-bar-sep { display: none; }
+      .dt-month-btn { width: 44px; height: 44px; }
+      .dt-month-label { font-size: 15px; }
+      .dt-bar-act { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+      .dt-more-item { min-height: 44px; font-size: 14px; }
+      .dt-body { flex-direction: column; }
+      .dt-left { width: 100%; flex: 1; min-height: 0; border-right: none; }
+      .dt-body.dt-has-sel .dt-left { display: none; }
+      .dt-body:not(.dt-has-sel) .dt-right { display: none; }
+      .dt-right { flex: 1; min-height: 0; }
+      .dt-m-back { display: inline-flex; margin: 10px 12px 0; min-height: 44px; }
+      .dt-detail { padding: 12px 14px 32px; }
+      .dt-detail-top { flex-wrap: wrap; }
+      .dt-detail-title { font-size: 18px; }
+      .dt-actions .btn { min-height: 44px; }
+      .dt-left input:not([type="checkbox"]):not([type="radio"]), .dt-left select, .dt-right textarea, .dt-right input:not([type="checkbox"]):not([type="radio"]), .dt-right select { font-size: 16px; }
+    }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -1556,7 +1579,7 @@
   </div>
 
   <!-- ── Body ── -->
-  <div class="dt-body" x-show="!reportMode && !calMode && !monthCalMode && !boardMode">
+  <div class="dt-body" :class="{'dt-has-sel': !!selected}" x-show="!reportMode && !calMode && !monthCalMode && !boardMode">
 
     <!-- ── Left panel ── -->
     <div class="dt-left">
@@ -1799,6 +1822,8 @@
 
     <!-- ── Right panel ── -->
     <div class="dt-right">
+      <!-- 手機版：單欄流程，選了工作事項後用這顆回到列表（桌機隱藏） -->
+      <button type="button" class="btn btn-ghost dt-m-back" data-testid="dt-m-back" x-show="selected" @click="selected = null; selectedOccDate = ''">← 工作事項列表</button>
 
       <!-- Placeholder -->
       <div x-show="!selected" class="dt-placeholder">

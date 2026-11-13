@@ -81,14 +81,15 @@ def _scenario(client, make_user):
 
 
 def test_review_edit_also_pushes_line_to_linked_recipients_only(client, make_user, line):
+    """2026-11-12：LINE 獨立於 Email——收件人＝業務收件人（送審人＋全部在職超管）∩ 已綁定；沒有 Email 的超管（sa_noemail）也收得到。"""
     hs = _scenario(client, make_user)
     r = _edit(client, hs[0], qty=9)
     assert r.status_code == 200, r.text
     line.wait(1)
     assert line.mails == [sorted(["req@example.test", "sa1@example.test", "sa2@example.test"])], "信件收件人不變"
-    # LINE：只有「信件收件人 ∩ 已綁定」＝送審人與 sa1。sa2 沒綁；bystander（一般管理員）／停用／沒信箱的超管不是收件人，即使綁了也不收
+    # LINE：業務收件人 ∩ 已綁定＝送審人、sa1、**沒有 Email 的 sa_noemail**。sa2 沒綁；bystander（一般管理員）不是收件人、停用的 sa_off 兩個通道都不發，即使綁了也不收
     assert len(line.calls) == 1 and line.calls[0]["path"] == "/v2/bot/message/multicast"
-    assert line.targets() == sorted([_uid(1), _uid(2)])
+    assert line.targets() == sorted([_uid(1), _uid(2), _uid(5)])
     assert line.calls[0]["token"] == TOKEN
     t = line.text()
     assert "報價單審核中被編輯" in t and NO in t and "編輯人" in t
@@ -107,7 +108,8 @@ def test_event_not_ticked_or_line_disabled_sends_nothing_but_mail_still_goes(cli
     assert line.wait(1, timeout=0.6) == [] and len(line.mails) == 2
 
 
-def test_personally_muted_user_gets_no_line(client, make_user, line):
+def test_email_unsubscribed_user_still_gets_line(client, make_user, line):
+    """使用者管理的「Email 通知偏好」只管信件；LINE 另有自己的個人勾選（line_prefs），Email 退訂不影響 LINE。"""
     import db
     hs = _scenario(client, make_user)
     c = db.get_db()
@@ -116,16 +118,19 @@ def test_personally_muted_user_gets_no_line(client, make_user, line):
     c.close()
     assert _edit(client, hs[0], qty=9).status_code == 200
     line.wait(1)
-    assert line.targets() == [_uid(1)], "sa1 在使用者管理退訂了這類通知 ⇒ 信與 LINE 都不給"
+    assert line.targets() == sorted([_uid(1), _uid(2), _uid(5)]), "sa1 退訂的是 Email；LINE 照發"
+    assert line.mails == [sorted(["req@example.test", "sa2@example.test"])], "信件這邊 sa1 確實沒收到"
 
 
-def test_company_mail_off_means_no_line_either(client, make_user, line):
+def test_company_mail_off_stops_mail_but_not_line(client, make_user, line):
+    """「信件與通知收件設定」把這種信關掉只影響信件；LINE 有自己的公司開關與事件勾選。"""
     from helpers import mail_types as mt
     from helpers.settings import _set_setting
     hs = _scenario(client, make_user)
     _set_setting(mt.OVERRIDES_KEY, {"approval_review_edit": {"mode": "default", "users": [], "roles": [], "off": True}})
     assert _edit(client, hs[0], qty=9).status_code == 200
-    assert line.wait(1, timeout=0.6) == [] and line.mails == []
+    line.wait(1)
+    assert line.mails == [] and line.targets() == sorted([_uid(1), _uid(2), _uid(5)])
 
 
 def test_dev_machine_marker_blocks_line_but_not_the_edit(client, make_user, line, monkeypatch):

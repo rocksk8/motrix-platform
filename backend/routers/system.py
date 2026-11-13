@@ -23,6 +23,8 @@ from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PL
 from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
+from helpers.image_guard import ImageRejected, run_decode
+from core.txn import write_txn
 import trail
 
 router = APIRouter()
@@ -800,38 +802,59 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能替自己的工作日誌上傳照片")
 
-    existing = json.loads(row["photos"] or "[]")
     today = datetime.now().strftime("%Y-%m-%d")
     base_dir, url_prefix = _photo_root()
     save_dir = os.path.join(base_dir, f"worklog_{wid}", today)
     os.makedirs(save_dir, exist_ok=True)
 
     new_photos = []
-    for upload in files:
-        raw_bytes = await upload.read()
-        ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
-        # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
-        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
-            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
-        _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
-        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
-        fname = uuid.uuid4().hex[:14] + ext.lower()
-        with open(os.path.join(save_dir, fname), 'wb') as f:
-            f.write(processed)
-        new_photos.append({
-            "id":          uuid.uuid4().hex[:8],
-            "filename":    fname,
-            "path":        f"{url_prefix}/worklog_{wid}/{today}/{fname}",
-            "gps":         gps_str,
-            "watermark":   wm_str,
-            "uploaded_by": user['display_name'],
-            "uploaded_at": datetime.now().isoformat(),
-        })
+    written = []
+    try:
+        for upload in files:
+            raw_bytes = await upload.read()
+            ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
+            # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
+            if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
+                raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
+            _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
+            try:
+                processed, gps_str, wm_str = await run_decode(_process_project_photo, raw_bytes, user['display_name'])
+            except ImageRejected as e:
+                raise HTTPException(e.status, f"{e.user_message}（{upload.filename}）")
+            fname = uuid.uuid4().hex[:14] + ext.lower()
+            written.append(os.path.join(save_dir, fname))
+            with open(written[-1], 'wb') as f:
+                f.write(processed)
+            new_photos.append({
+                "id":          uuid.uuid4().hex[:8],
+                "filename":    fname,
+                "path":        f"{url_prefix}/worklog_{wid}/{today}/{fname}",
+                "gps":         gps_str,
+                "watermark":   wm_str,
+                "uploaded_by": user['display_name'],
+                "uploaded_at": datetime.now().isoformat(),
+            })
+        # 慢動作（解碼、寫檔）都做完了，現在才拿寫鎖、重讀目前的 photos、只加上這一批：
+        # 兩個請求同時往同一筆日誌上傳時，各自讀到上傳前的 photos 再整包寫回，後寫的會蓋掉先寫的 ⇒ 先寫那一批的檔就成了孤兒（沒有紀錄指向）；
+        # 日誌在上傳途中被刪掉（UPDATE 影響 0 列）、或這裡任何資料庫錯誤，也走下面同一個回收。
+        with write_txn(conn):
+            cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+            if not cur_row:
+                raise HTTPException(404, "找不到日誌")
+            all_photos = json.loads(cur_row["photos"] or "[]") + new_photos
+            conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                         (json.dumps(all_photos, ensure_ascii=False), wid))
+            conn.commit()
+    except BaseException:
+        # 整批要嘛全收要嘛全不收：任何一張失敗（400／503／斷線）⇒ 這次已寫到磁碟的檔案刪掉，免得留下孤兒、客戶端重試又重複一份
+        for _p in written:
+            try:
+                os.remove(_p)
+            except OSError:
+                pass
+        conn.close()
+        raise
 
-    all_photos = existing + new_photos
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(all_photos, ensure_ascii=False), wid))
-    conn.commit()
     conn.close()
     notify_module_activity("工作日誌", "上傳照片", user['display_name'],
                             f"日誌 #{wid}（{len(new_photos)} 張）", "work-log.html")
@@ -849,10 +872,21 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
         conn.close(); raise HTTPException(404, "找不到日誌")
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能刪除自己工作日誌的照片")
-    photos = json.loads(row["photos"] or "[]")
-    photo  = next((p for p in photos if p.get('id') == photo_id), None)
-    if not photo:
-        conn.close(); raise HTTPException(404, "照片不存在")
+    # lost update：拿寫鎖之後才重讀、只濾掉這一張（讀到寫之間別人剛上傳的照片不會被整份寫回蓋掉）；
+    # 實體檔在 commit 之後才刪（資料庫寫失敗時不會留下「紀錄還在、檔案已不見」）
+    with write_txn(conn):
+        cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+        if not cur_row:
+            raise HTTPException(404, "找不到日誌")
+        photos = json.loads(cur_row["photos"] or "[]")
+        photo  = next((p for p in photos if p.get('id') == photo_id), None)
+        if not photo:
+            raise HTTPException(404, "照片不存在")
+        photos = [p for p in photos if p.get('id') != photo_id]
+        conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                     (json.dumps(photos, ensure_ascii=False), wid))
+        conn.commit()
+    conn.close()
     try:
         base_dir, _url_prefix = _photo_root()
         fp = os.path.join(base_dir, '..', photo['path'])
@@ -860,11 +894,6 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
             os.remove(fp)
     except Exception:
         pass
-    photos = [p for p in photos if p.get('id') != photo_id]
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(photos, ensure_ascii=False), wid))
-    conn.commit()
-    conn.close()
     notify_module_activity("工作日誌", "刪除照片", user.get("display_name") or user["username"],
                             f"日誌 #{wid}", "work-log.html")
     _audit(_tok(authorization), 'work_log.photo_delete', 'work_log', str(wid), str(wid), {'photoId': photo_id})
@@ -1258,6 +1287,8 @@ class CompanyProfile(BaseModel):
     company_name_en: str = ''
     phone: str = ''
     email: str = ''
+    # 2026-11-13「報價用公司信箱」：公司對外信箱。使用者沒有自己的報價用信箱時，報價單／PDF／信件 Reply-To 用它（helpers/quote_email.py）。空白＝不設。
+    external_email: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -1275,6 +1306,7 @@ _COMPANY_PROFILE_DEFAULT = {
     "privacy_notice_contact": "",   # 聯絡人用（客戶／供應商／承攬商），空白＝範本
     "privacy_notice_user": "",      # 使用者帳號用，空白＝範本
     "company_name_en": "", "phone": "", "email": "",   # 2026-09-27 H10（品牌區塊一起編輯）
+    "external_email": "",       # 2026-11-13 公司對外信箱（報價用；helpers/quote_email.py）
 }
 
 #: 設定頁編輯的鍵 ⇒ 同一欄在 company_profile 裡、解析順序排在它前面的別名（helpers.company_identity._PROFILE_ALIASES）。
@@ -1773,6 +1805,14 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     cur = {**_COMPANY_PROFILE_DEFAULT,
            **(_get_setting("company_profile", {}) or {})}
     sent = body.model_dump(include=body.model_fields_set)
+    # 2026-11-13 公司對外信箱：格式不對 ⇒ 422（先驗再寫）；網域只做提醒（回 emailHint），不擋存檔
+    _email_hint = ""
+    if "external_email" in sent:
+        from helpers import quote_email as _qe
+        sent["external_email"] = str(sent["external_email"] or "").strip()
+        if sent["external_email"] and not _qe.valid(sent["external_email"]):
+            raise HTTPException(422, "公司對外信箱的格式不正確（例：service@your-company.com）")
+        _email_hint = _qe.domain_hint(sent["external_email"], (cur.get("email") or ""))
     # 🔴 **收到遮蔽字 ⇒ 視為沒送。**
     #
     # ☠️ 遮蔽帶出來的缺陷，而它**完全安靜**：設定頁最自然的寫法是
@@ -1846,7 +1886,7 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
                value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
         return {"ok": True, "confirmed": True}
-    return {"ok": True}
+    return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
 
 RECONFIRM_CODE = "company_setup_reconfirm"
@@ -2717,12 +2757,62 @@ def get_line_notify(authorization: str = Header(None)):
     from helpers import mail_types as _mt
     sw = _ln.events_view()
     roles = _ln.event_roles_view()
-    from helpers import line_recipients as _lr, line_quota as _lq
+    from helpers import line_recipients as _lr, line_quota as _lq, line_catalog as _cat
     safe["quota_thresholds"] = _lq.thresholds()
     safe["role_choices"] = _lr.role_choices()
     # roles＝該類型允許哪些角色收 LINE；null＝所有角色（缺省，沿用現行行為）
-    safe["events"] = [{"key": k, "name": (_mt.get(k).name if _mt.get(k) else k), "enabled": sw[k], "roles": roles[k]} for k in _ln.WIRED_EVENTS]
+    # group／kind／priority＝設定頁分組與標籤；audience＝管理員指定的「誰要發」（mode／roles／users；users 附顯示名、是否已綁定 LINE、是否自行退訂）
+    aud = _ln.audience_view()
+    names = _line_user_names({u for a in aud.values() for u in a["users"]})
+    safe["event_groups"] = list(_cat.GROUP_ORDER)
+    safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
+                       "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
+                       "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
+
+
+def _line_user_names(usernames) -> dict:
+    """{username: (顯示名, 是否在職)}（給設定頁指定清單顯示用；查不到的帳號不在結果裡）。"""
+    names = [u for u in usernames if isinstance(u, str)]
+    out = {}
+    if not names:
+        return out
+    conn = get_db()
+    try:
+        for i in range(0, len(names), 400):
+            chunk = names[i:i + 400]
+            for r in conn.execute("SELECT username, display_name, active FROM users WHERE username IN (%s)" % ",".join("?" * len(chunk)), chunk).fetchall():
+                out[r["username"]] = (r["display_name"] or r["username"], bool(r["active"]))
+    finally:
+        conn.close()
+    return out
+
+
+def _line_user_row(username: str, names: dict, event_key: str) -> dict:
+    from helpers import line_notify as _ln, line_recipients as _lr
+    disp, active = names.get(username, (username, False))
+    return {"username": username, "display": disp, "active": active, "linked": _ln.is_linked(username),
+            "muted": _lr.is_muted(username, event_key)}
+
+
+@router.put("/api/settings/line-notify/events/{key}/audience")
+def set_line_notify_event_audience(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """設定某種 LINE 通知「誰要發」：`mode`＝`business`（照原本的收件人，預設）／`business_plus`（另外加上指定的角色與人員）／`only`（只發給指定的角色與人員）；
+    `roles`＝角色清單、`users`＝帳號清單。只接受已接線的事件。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    if not _ln.is_wired(key):
+        raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
+    b = body or {}
+    if "mode" not in b:
+        raise HTTPException(400, "缺少 mode（business／business_plus／only）")
+    try:
+        _ln.set_audience(key, b["mode"], b.get("roles"), b.get("users"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.audience", "settings", key,
+           "LINE 通知誰要發：%s → %s（角色 %s；人員 %s）" % (key, b["mode"], "、".join(b.get("roles") or []) or "無", "、".join(b.get("users") or []) or "無"))
+    return {"ok": True, "key": key, "audience": _ln.audience_view()[key]}
 
 
 @router.put("/api/settings/line-notify/events/{key}/roles")
@@ -2952,6 +3042,30 @@ def unlink_line_of(username: str, authorization: str = Header(None)):
     if done:
         _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理者解除 LINE 綁定")
     return {"ok": True, "unlinked": done}
+
+
+@router.get("/api/settings/line-notify/bindings")
+def get_line_bindings(authorization: str = Header(None)):
+    """LINE「綁定狀況」：在職人員誰已綁定、誰還沒（只有最高管理者；不含 LINE userId）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    return _lb.status()
+
+
+@router.post("/api/settings/line-notify/bindings/remind")
+def remind_line_bindings(body: dict = Body(default={}), authorization: str = Header(None)):
+    """「提醒未綁定的人」：用站內通知＋Email 寄綁定說明（附「修改密碼」頁連結）。`usernames` 省略＝所有未綁定的在職人員；
+    同一個人 24 小時內只提醒一次。LINE 登入還沒設好 ⇒ 400。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    names = (body or {}).get("usernames")
+    try:
+        res = _lb.remind(names)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "line.binding.remind", "line_binding", "", "提醒未綁定 LINE 的同仁：站內通知 %d 人、Email %d 人、略過（24 小時內已提醒）%d 人"
+           % (res["notified"], res["emailed"], len(res["skippedRecent"])), {"notified": res["notified"], "emailed": res["emailed"]})
+    return {"ok": True, **res}
 
 
 @router.post("/api/settings/email-notify/test")

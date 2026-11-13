@@ -50,7 +50,7 @@ def test_dispatch_rows_map_to_items_without_double_counting_and_finalize_passes(
     r2 = page.locator(f'[data-testid="stl-un-dispatch-{d2}"]')
     assert r1.count() == 1 and r2.count() == 1 and page.locator('[data-testid^="stl-un-dispatch-"]').count() == 2
     assert "承攬商派發" in r1.inner_text() and "12,500" in r1.inner_text() and "稅額 500" in r1.inner_text()
-    assert "待審核" in r2.inner_text()
+    assert "待簽核" in r2.inner_text()
     assert r1.locator("b").first.evaluate("e => getComputedStyle(e).fontWeight") in ("700", "bold")
     bar = page.locator('[data-testid="stl-sumbar"]').inner_text()
     assert "未對應 4 件" in bar, bar                                   # 派發 2＋材料申請 X＋額外支出 1

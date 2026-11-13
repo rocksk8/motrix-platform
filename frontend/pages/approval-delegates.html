@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>簽核代理人 — MOTRIX 專案管理系統</title>
+  <title>簽核代理人 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -31,6 +31,38 @@
       font-size:12px; font-family:var(--font-zh); outline:none; min-width:160px;
     }
     .dg-field input[type="date"] { min-width:140px; }
+    /* 手機／平板直式（2026-11-12 UI 檢查）：表單欄位寬度參差、「新增」鈕與原因欄擠同一行；七欄表格在 375px 難讀。
+       ⇒ 手機表單欄位一欄撐滿（16px 字、≥44px 高）；清單每筆改成卡片（委託人→代理人＋狀態、期間、原因、建立者＋停用）。 */
+    @media (max-width:767px){
+      .dg-main{padding:16px 12px 28px}
+      .dg-card{padding:14px}
+      .dg-form-row{flex-direction:column;align-items:stretch}
+      .dg-field,.dg-field[style]{flex:none !important;width:100%}
+      .dg-field select,.dg-field input,.dg-field input[type="date"]{width:100%;min-width:0;box-sizing:border-box;font-size:16px;min-height:44px}
+      .dg-form-row > .btn{min-height:44px;width:100%;justify-content:center;text-align:center}
+      .dg-card .data-table{min-width:0;display:block}
+      .dg-card .data-table thead{display:none}
+      .dg-card .data-table tbody{display:block}
+      .dg-card .data-table tr{display:grid;grid-template-columns:1fr auto;grid-template-areas:"to st" "from from" "dates dates" "reason reason" "by act";
+        gap:6px 10px;padding:12px;margin-bottom:10px;border:1px solid var(--border-light);border-radius:var(--radius)}
+      .dg-card .data-table td{display:block;padding:0;border:0;text-align:left !important;min-width:0;overflow-wrap:anywhere}
+      .dg-card .data-table td:nth-child(1){grid-area:from;font-size:12px;color:var(--text-secondary)}
+      .dg-card .data-table td:nth-child(1)::before{content:"委託人　";color:var(--text-dim)}
+      .dg-card .data-table td:nth-child(2){grid-area:to;font-weight:600}
+      .dg-card .data-table td:nth-child(2)::before{content:"代理人　";font-weight:400;color:var(--text-dim);font-size:12px}
+      .dg-card .data-table td:nth-child(3){grid-area:dates;font-size:12px;color:var(--text-secondary)}
+      .dg-card .data-table td:nth-child(4){grid-area:reason;font-size:12px;color:var(--text-secondary)}
+      .dg-card .data-table td:nth-child(5){grid-area:st;text-align:right !important}
+      .dg-card .data-table td:nth-child(6){grid-area:by;font-size:12px;color:var(--text-dim)}
+      .dg-card .data-table td:nth-child(6)::before{content:"建立者　"}
+      .dg-card .data-table td:nth-child(7){grid-area:act;text-align:right !important}
+      .dg-card .data-table td .btn-export{min-height:40px;padding:6px 14px !important}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .dg-main{padding:22px 20px}
+      .dg-field select,.dg-field input{min-height:40px}
+      .dg-card .data-table td .btn-export{min-height:36px}
+    }
   </style>
 </head>
 <body x-data="approvalDelegatesPage()" x-init="init()" x-cloak>

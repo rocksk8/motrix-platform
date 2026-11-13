@@ -34,6 +34,9 @@ from helpers import (
 from helpers.audit import _audit_login_failed
 from helpers.client_ip import client_ip as _trusted_client_ip
 from helpers.client_ip import rate_limit_key as _rl_key
+from helpers import account_lock as _acct
+from helpers import external_access as _ext
+import contextvars
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,8 @@ _LOGIN_MAX_FAILS = 5       # consecutive failures before lockout
 _LOGIN_LOCKOUT_S = 900     # 15 minutes
 _RL_MAX_ENTRIES = 10_000   # T80 稽核 IP-M1：位址輪換會讓這個表無上限成長，超過就清
 _RL_STALE_S = 3600         # 沒鎖定、1 小時沒再失敗的列，清表時當成可丟
+_RL_PRUNE_BATCH = 1000       # LG-S6：一次清到「上限 - 這個數」，讓清表的成本攤在這麼多次失敗上
+_rl_prune_next_at = _RL_MAX_ENTRIES + 1   # 表長到這個數才掃（見 _rl_prune_locked）
 
 _rl_lock = threading.Lock()
 # key(＝_rl_key(ip)，IPv4 原樣／IPv6 取/64) -> {"fails": int, "locked_until": float (monotonic epoch), "last_fail": float}
@@ -52,16 +57,32 @@ _rl_state: dict = {}
 
 
 def _rl_prune_locked(now: float) -> None:
-    """超過上限才清，清掉沒鎖定且久未失敗的列。呼叫端要先持有 `_rl_lock`。"""
-    if len(_rl_state) <= _RL_MAX_ENTRIES:
-        return
-    stale = [
-        k for k, st in _rl_state.items()
-        if st["locked_until"] <= now and now - st.get("last_fail", 0) > _RL_STALE_S
-    ]
-    for k in stale:
-        del _rl_state[k]
+    """鎖定表的**硬**上限。呼叫端要先持有 `_rl_lock`。
 
+    T80稽核 LG-S6：以前只丟「沒鎖定且 1 小時沒再失敗」的列——一小時內灌大量不同前綴，這些列全都不算 stale，
+    表照長、超過上限後**每次失敗登入都掃整張表**（又丟不掉東西）。現在：
+      · 表長 ≤ 上限 ⇒ 什麼都不做（也重設下面的掃描門檻）。
+      · 超過上限 ⇒ 先丟 stale；還是超過就**丟最久沒失敗的未鎖定列**，一路丟到 `上限 - _RL_PRUNE_BATCH`，
+        這樣下一次掃描要等再長 `_RL_PRUNE_BATCH` 列之後（攤提：每 _RL_PRUNE_BATCH 次失敗才掃一次，不是每次）。
+      · **鎖定中的列不丟**（丟了＝解除那個位址的鎖）。若只剩鎖定列還超過上限，表長會暫時超出上限
+        （每一列都要先花 5 次失敗才能鎖定），掃描門檻順延 `_RL_PRUNE_BATCH`，不會變回每次都掃。
+    丟掉未鎖定列只是讓那個前綴的「連續失敗次數」歸零；攻擊者本來就能換前綴重來，不會因此多得到什麼。"""
+    global _rl_prune_next_at
+    n = len(_rl_state)
+    if n <= _RL_MAX_ENTRIES:
+        _rl_prune_next_at = _RL_MAX_ENTRIES + 1
+        return
+    if n < _rl_prune_next_at:
+        return
+    for k in [k for k, st in _rl_state.items()
+              if st["locked_until"] <= now and now - st.get("last_fail", 0) > _RL_STALE_S]:
+        del _rl_state[k]
+    excess = len(_rl_state) - (_RL_MAX_ENTRIES - _RL_PRUNE_BATCH)
+    if excess > 0:
+        unlocked = sorted((st.get("last_fail", 0), k) for k, st in _rl_state.items() if st["locked_until"] <= now)
+        for _t, k in unlocked[:excess]:
+            del _rl_state[k]
+    _rl_prune_next_at = max(_RL_MAX_ENTRIES + 1, len(_rl_state) + _RL_PRUNE_BATCH)
 
 
 def _min_pw() -> int:
@@ -78,8 +99,53 @@ def _client_ip(request: Request) -> str:
 
     🔴 2026-11-11：以前無條件信 `X-Forwarded-For` 第一個值——用戶端自己填的——登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）
     只要每次攻擊換一個 XFF 就繞過（無限次猜密碼）。現在走 `helpers.client_ip.client_ip`：永遠不讀 XFF；只有 TCP 對端本身是
-    loopback（cloudflared 與本程式同機）才採信 `CF-Connecting-IP`。"""
-    return _trusted_client_ip(request)
+    loopback（cloudflared 與本程式同機）才採信 `CF-Connecting-IP`。
+
+    2026-11-12（外網登入強化）：順便把「這個請求是不是外網來源」記進 `_REQ_CTX`（同一個請求的執行緒內讀得到），
+    `_is_external()`／`_rl_fail` 末端的帳號鎖定／外網強制 TOTP 用。每個登入入口一定先呼叫這支，所以不必改各處呼叫端。"""
+    ip = _trusted_client_ip(request)
+    _REQ_CTX.set((ip,) + _ext.classify(request, ip))
+    return ip
+
+
+#: (來源 IP, 是否外網, 判定原因)；沒設定過（沒走 `_client_ip` 的路徑）⇒ 視為外網（保守）
+_REQ_CTX: "contextvars.ContextVar" = contextvars.ContextVar("auth_req_ctx", default=("", True, "unset"))
+
+
+def _is_external() -> bool:
+    return bool(_REQ_CTX.get()[1])
+
+
+def _acct_begin(username, source: str = "password") -> None:
+    """登入入口（預占計數，見 `helpers/account_lock` 不變式①）：帳號鎖定中 ⇒ 429（所有帳號名一視同仁，不洩漏帳號是否存在）；
+    否則把這次嘗試先算進去（併發的猜測最多放行門檻次）。成功登入由 `_acct_success` 清掉；密碼對但走 TOTP 第二步／被拒絕由 `_acct.release` 退回。
+    內網來源在「只鎖外網」模式下不受影響。"""
+    ctx = _REQ_CTX.get()
+    wait = _acct.begin_attempt(username, ctx[0], _is_external(), source)
+    if wait:
+        mins = max(1, (wait + 59) // 60)
+        hint = "；若是本人，也可以在公司內網登入以解除" if _acct.config()["scope"] == 1 else ""
+        raise HTTPException(429, f"此帳號登入失敗次數過多，已暫時鎖定，請約 {mins} 分鐘後再試{hint}")
+
+
+def _external_totp_guard(row, ip: str) -> None:
+    """外網登入、該角色被要求兩步驟驗證、而帳號還沒啟用 ⇒ 拒絕（403，白話訊息；寫稽核，不算密碼失敗、不計入鎖定）。
+    `row` 需要 username／role／totp_enabled。內網、已啟用 TOTP（走原本的挑戰流程）、示範帳號 ⇒ 不動作。"""
+    if not _is_external() or row["totp_enabled"]:
+        return
+    if not _ext.totp_required_for(row["role"], row["username"]):
+        return
+    _acct.release(row["username"])                      # 密碼是對的：不算猜錯，退回這次預占的計數
+    _acct.audit_event("auth.login_refused_external_totp", row["username"], ip,
+                      {"ip": ip, "role": row["role"], "reason": _REQ_CTX.get()[2]}, "ext_totp_required", 403)
+    raise HTTPException(403, _ext.totp_refusal_message())
+
+
+def _acct_success(username: str) -> None:
+    """登入成功：清掉該帳號的失敗計數；從內網成功登入 ⇒ 同時解除該帳號的鎖（本人回到公司就能解）。"""
+    _acct.clear_failures(username)
+    if not _is_external():
+        _acct.clear(username, ip=_REQ_CTX.get()[0], by="internal_login", reason="internal_login_success")
 
 
 def _rl_db_write(ip: str, locked_until_mono: float) -> None:
@@ -118,6 +184,8 @@ def init_rate_limiting() -> None:
         now_mono = time.monotonic()
         with _rl_lock:
             for row in rows:
+                if str(row["ip"]).startswith(_acct.KEY_PREFIX):     # 帳號鎖由 account_lock.load_from_db 載入
+                    continue
                 try:
                     wall_until = datetime.fromisoformat(row["locked_until"])
                     if wall_until > now_wall:
@@ -127,6 +195,7 @@ def init_rate_limiting() -> None:
                     pass
     except Exception:
         logger.warning("init_rate_limiting: could not load from DB")
+    _acct.load_from_db()
 
 
 def _rl_check(ip: str) -> None:
@@ -149,22 +218,48 @@ def _rl_check(ip: str) -> None:
             del _rl_state[key]
 
 
-def _rl_fail(ip: str, username: str) -> None:
+def _rl_fail(ip: str, username: str, source: str = "password") -> None:
+    """一次登入失敗：記進鎖定計數、寫稽核列、達到鎖定的那一刻發告警。
+
+    `source`：password／totp／qr／passkey——決定稽核列的 reason_code（`helpers.audit.LOGIN_FAIL_REASONS`）。
+    2026-11-12：以前只有密碼錯誤會寫稽核（呼叫端自己另外呼叫），TOTP／QR／Passkey 失敗只計數不留紀錄；現在四種來源都由這支統一寫（沿用 60 秒合併 repeat）。
+    告警（`helpers.auth_alert.on_lockout`）只在「達到鎖定」那一刻發一次、背景執行、任何例外只記 log，不影響登入回應。"""
     key = _rl_key(ip)
     now = time.monotonic()
     lockout_until = 0.0
+    log_lockout = False
+    alert_names = []
+    alert_fails = 0
     with _rl_lock:
         state = _rl_state.setdefault(key, {"fails": 0, "locked_until": 0.0, "last_fail": now})
         state["fails"] += 1
         state["last_fail"] = now
+        names = state.setdefault("names", [])               # 這一輪失敗嘗試過的帳號（告警內容用；最多 5 個，鎖定後清空）
+        if username and username not in names and len(names) < 5:
+            names.append(str(username)[:64])
         if state["fails"] >= _LOGIN_MAX_FAILS:
             state["locked_until"] = now + _LOGIN_LOCKOUT_S
             lockout_until = state["locked_until"]
+            alert_fails = state["fails"]
+            alert_names = list(names)
             state["fails"] = 0
-            logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, username, _LOGIN_LOCKOUT_S)
+            state["names"] = []
+            log_lockout = True
         _rl_prune_locked(now)
+    _audit_login_failed(username, ip, source=source)
+    if log_lockout:
+        try:
+            from helpers.auth_alert import mask_for_log as _mask_for_log      # 嘗試的帳號可能是誤填的密碼：log 只留遮蔽後的（存在的帳號原樣）
+            logger.warning("Login lockout: key=%s IP=%s username=%s locked for %ds", key, ip, _mask_for_log(username), _LOGIN_LOCKOUT_S)
+        except Exception:  # noqa: BLE001
+            logger.warning("Login lockout: key=%s IP=%s locked for %ds", key, ip, _LOGIN_LOCKOUT_S)
     if lockout_until:
         _rl_db_write(key, lockout_until)
+        try:
+            from helpers import auth_alert as _auth_alert
+            _auth_alert.on_lockout(key, ip, alert_names, alert_fails, _LOGIN_LOCKOUT_S)
+        except Exception as exc:  # noqa: BLE001  告警永遠不能讓登入失敗回應變成 500
+            logger.warning("登入鎖定告警呼叫失敗（不影響登入）：%s", type(exc).__name__)
 
 
 def _rl_clear(ip: str) -> None:
@@ -269,6 +364,7 @@ class UserIn(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    quote_email: Optional[str] = None      # 2026-11-13 報價用公司信箱（建立／修改使用者都只有最高管理者能呼叫）
     role: Optional[str] = None
     modules: Optional[List[str]] = None
     notification_muted: Optional[List[str]] = None
@@ -372,6 +468,11 @@ def system_branding(authorization: str = Header(None)):
            "shortName": short_name(ident["company_name"]),
            # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
            "assets": asset_urls()}
+    try:
+        from helpers.settings_groups_brand import brand_tagline
+        out["tagline"] = brand_tagline()        # UX P1.5：系統標語（公司可自訂，預設 MOTRIX PLATFORM；登入頁也用得到，所以放 public）
+    except Exception:  # noqa: BLE001
+        out["tagline"] = "MOTRIX PLATFORM"
     if authorization:
         try:
             _require_user(authorization)
@@ -439,6 +540,7 @@ def build_info_endpoint(authorization: str = Header(None)):
 def auth_login(body: LoginIn, request: Request):
     ip = _client_ip(request)
     _rl_check(ip)
+    _acct_begin(body.username.strip(), "password")      # 同一帳號、不分 IP 的鎖：鎖定中 ⇒ 429；否則預占這次嘗試的計數
     conn = get_db()
     row = conn.execute(
         "SELECT id, username, display_name, role, modules, password_hash, "
@@ -449,9 +551,14 @@ def auth_login(body: LoginIn, request: Request):
     ).fetchone()
     if not row or not _verify_pw(body.password, row["password_hash"]):
         conn.close()
-        _rl_fail(ip, body.username.strip())
-        _audit_login_failed(body.username.strip(), ip)
+        _rl_fail(ip, body.username.strip())             # 計數＋稽核（reason_code=login_failed）＋達鎖定時告警
         raise HTTPException(401, "帳號或密碼錯誤")
+    try:
+        _external_totp_guard(row, ip)                  # 外網＋該角色要求 TOTP＋帳號沒啟用 ⇒ 403（密碼是對的，不算失敗）
+    except HTTPException:
+        conn.close()
+        raise
+    _acct.release(row["username"])                     # 密碼正確：退回預占（直接發 session 的路徑由 _acct_success 清計數；TOTP 第二步會自己再預占）
     must_change = bool(row["must_change_password"])
     # Legacy weak password still works once, but forces rotation
     if is_weak_password(body.password):
@@ -581,8 +688,11 @@ def _issue_session(conn, row, must_change: bool) -> dict:
         (token, row["id"], row["username"], now, expires_at, now)
     )
     conn.commit()
+    from helpers.login_greeting import record_login      # 登入問候語要的「上一次登入」；永不讓登入失敗；要在寫稽核之前（舊帳號回填看稽核）
+    record_login(row["id"])
     _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
            {'mustChangePassword': must_change})
+    _acct_success(row["username"])
     return {
         "token":              token,
         "userId":             row["id"],
@@ -617,8 +727,14 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
         conn.close()
         with _totp_lock:
             _totp_pending.pop(body.challenge_token, None)
+        _audit_login_failed(row["username"] if row else "", ip, source="totp")     # 只留稽核（不計鎖定：不是猜測型失敗）
         raise HTTPException(401, "帳號不存在或已停用")
 
+    try:
+        _acct_begin(row["username"], "totp")
+    except HTTPException:
+        conn.close()
+        raise
     code = (body.code or "").strip()
     ok = False
     used_recovery = False
@@ -640,7 +756,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
 
     if not ok:
         conn.close()
-        _rl_fail(ip, row["username"])
+        _rl_fail(ip, row["username"], "totp")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)
             if still:
@@ -732,9 +848,8 @@ def login_qr_info(request: Request, x_login_challenge: str = Header(None)):
 
 @router.post("/api/auth/login/qr-approve")
 def login_qr_approve(body: QrApproveIn, request: Request):
-    """Public — phone approves the pending login here, either by password or
-    (2026-09-08 新增) by an existing session token already held by that
-    phone's browser. Does NOT issue a session for the phone itself (it
+    """Public — phone approves the pending login here by the existing session token
+    already held by that phone's browser (2026-11-12：密碼核准已移除，見下方 F1 說明). Does NOT issue a session for the phone itself (it
     shouldn't hold the desktop's token) — it just flips pending["approved"],
     which login_qr_status() below (polled by the desktop) picks up."""
     ip = _client_ip(request)
@@ -763,7 +878,8 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         ).fetchone()
         conn.close()
         if not sess or not row or sess["user_id"] != row["id"]:
-            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請改用密碼核准")
+            _audit_login_failed(row["username"] if row else "", ip, source="qr")     # 只留稽核（不計鎖定：session token 不可猜）
+            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請在手機上先登入同一個帳號再掃碼")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)
             if still:
@@ -773,31 +889,12 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         return {"ok": True}
 
     conn.close()
-    if not body.password:
-        raise HTTPException(400, "請輸入密碼")
-
-    if not row or not _verify_pw(body.password, row["password_hash"]):
-        _rl_fail(ip, row["username"] if row else "")
-        # 共用同一個 pending["fails"] 計數器（跟手動輸入驗證碼那條路徑同一組上限），
-        # 不是另開一組獨立的失敗次數——避免同一張 challenge 變相有兩倍可猜次數。
-        with _totp_lock:
-            still = _totp_pending.get(body.challenge_token)
-            if still:
-                still["fails"] += 1
-                if still["fails"] >= _TOTP_MAX_FAILS:
-                    del _totp_pending[body.challenge_token]
-                    raise HTTPException(401, "密碼錯誤次數過多，請回到電腦重新登入")
-        raise HTTPException(401, "密碼不正確")
-
-    with _totp_lock:
-        still = _totp_pending.get(body.challenge_token)
-        if still:
-            still["approved"] = True
-    _rl_clear(ip)
-    # 密碼核准：呼叫端沒有 session ⇒ 以被核准的帳號記在 target（username 欄留空）。
-    _audit(None, "auth.login_qr_approve", "user", row["username"], row["username"],
-           {"method": "password", "ip": ip})
-    return {"ok": True}
+    # 🔴 2026-11-12（F1 hotfix，hichan-1 對抗式審查）：**不再接受「輸入密碼核准」**。
+    # 以前這裡只驗密碼就把 challenge 標成 approved，而 qr-status 接著直接發 session ⇒ 只知道密碼的人
+    # 自己呼叫 qr-approve（任何來源、不需要手機）就繞過 TOTP。手機核准的前提必須是「這支手機已經登入同一個帳號」
+    # （上面的 session_token 分支，session 本身就是通過密碼＋TOTP 取得的）。`body.password` 欄位保留只為了讓舊版前端送出時
+    # 收到白話訊息而不是 422；值一律不看、不驗證。
+    raise HTTPException(400, "請在手機上先登入同一個帳號再掃碼")
 
 
 @router.get("/api/auth/login/qr-status")
@@ -811,6 +908,7 @@ def login_qr_status(request: Request, x_login_challenge: str = Header(None)):
     🔑 而這一支是**每 2 秒一次**的那一支。
     """
     challenge = _login_challenge(request, x_login_challenge)
+    ip = _client_ip(request)                           # 記下這個請求是否外網（發 session 的這一步也要套外網規則）
     _totp_sweep_expired()
     with _totp_lock:
         pending = _totp_pending.get(challenge)
@@ -822,12 +920,22 @@ def login_qr_status(request: Request, x_login_challenge: str = Header(None)):
 
     conn = get_db()
     row = conn.execute(
-        "SELECT id, username, display_name, role, modules FROM users WHERE id=?",
+        "SELECT id, username, display_name, role, modules, COALESCE(totp_enabled, 0) AS totp_enabled FROM users WHERE id=? AND active=1",
         (pending["user_id"],),
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(400, "帳號不存在或已停用")
+    try:
+        # 發 session 的最後一關（F1 審查）：帳號鎖定中不發；外網＋該角色要求 TOTP 而帳號沒有啟用 ⇒ 不發
+        # （正常情況下這裡的 challenge 一定來自已啟用 TOTP 的帳號；中途被停用 TOTP 時才會走到）。
+        wait = _acct.check(row["username"], _is_external())
+        if wait:
+            raise HTTPException(429, "此帳號登入失敗次數過多，已暫時鎖定，請稍後再試")
+        _external_totp_guard(row, ip)
+    except HTTPException:
+        conn.close()
+        raise
     result = _issue_session(conn, row, pending["must_change"])
     conn.close()
     return result
@@ -1251,15 +1359,17 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
 @router.post("/api/auth/webauthn/login/complete", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
     """完成 Passkey 登入：驗證認證器簽名、檢查 sign_count 防重放、發行 session。"""
+    _client_ip(request)                                # 記下這個請求是否外網（帳號鎖定／外網強制 TOTP 用）
+    _acct_begin(body.username, "passkey")
     # Get and consume challenge
     challenge_token = body.dict().get("challengeToken")
     if not challenge_token:
-        _rl_fail(_client_ip(request), body.username)
+        _rl_fail(_client_ip(request), body.username, "passkey")
         raise HTTPException(400, "缺少 challengeToken")
 
     challenge = _retrieve_webauthn_challenge(challenge_token)
     if not challenge:
-        _rl_fail(_client_ip(request), body.username)
+        _rl_fail(_client_ip(request), body.username, "passkey")
         raise HTTPException(401, "Challenge 已過期或無效")
 
     conn = get_db()
@@ -1270,7 +1380,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         ).fetchone()
         if not user_row:
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "帳號不存在或已停用")
 
         cred_raw_id = _b64url_decode(body.rawId)
@@ -1281,7 +1391,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         ).fetchone()
         if not cred_row:
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "認證失敗")
 
         # 2026-09-11（DB v74）：這張憑證是在別的 RP ID 下註冊的 → 一定驗不過。
@@ -1291,7 +1401,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         # 全都是被這種籠統錯誤蓋掉才拖了那麼久才找到的。
         if cred_row["rp_id"] and cred_row["rp_id"] != _webauthn_rp_id():
             conn.close()
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             logger.warning(
                 "WebAuthn login rejected: credential id=%s registered under rp_id=%s, "
                 "current rp_id=%s", cred_row["id"], cred_row["rp_id"], _webauthn_rp_id(),
@@ -1336,9 +1446,10 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
             )
 
             user_full = conn.execute(
-                "SELECT id, username, display_name, role, modules FROM users WHERE id=?",
+                "SELECT id, username, display_name, role, modules, COALESCE(totp_enabled, 0) AS totp_enabled FROM users WHERE id=?",
                 (user_row["id"],)
             ).fetchone()
+            _external_totp_guard(user_full, _client_ip(request))   # Passkey 也一樣：外網要求 TOTP 的角色，沒啟用 TOTP 就不能從外網登入
             result = _issue_session(conn, user_full, False)
             return result
 
@@ -1348,7 +1459,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
         except Exception as e:
             conn.close()
             logger.error("WebAuthn authentication failed: %s", str(e))
-            _rl_fail(_client_ip(request), body.username)
+            _rl_fail(_client_ip(request), body.username, "passkey")
             raise HTTPException(401, "認證失敗")
     finally:
         if conn:
@@ -1472,6 +1583,65 @@ def auth_me(authorization: str = Header(None)):
     }
 
 
+# ── 登入問候語（2026-11-13 UX P1.5；邏輯見 helpers/login_greeting.py）──────────────────
+@router.get("/api/auth/greeting")
+def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query(None, ge=0, le=100000)):
+    """首頁大標題下的問候語：單一端點回「標題＋問候句＋離開期間摘要＋待辦句」，前端只顯示。
+    `todo`＝首頁目前顯示的待辦件數（只用來決定要不要帶「0 件／超過 10 件」那句）。
+    「待簽核幾張」走 `approval_queue.my_pending_items`（與角標同一份）；只有真的要顯示離開期間摘要時才會去查。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization)
+
+    def _pending():
+        from routers.approval_queue import my_pending_items
+        return len(my_pending_items(u))
+
+    def _new_quotes():
+        if u.get("role") != "superadmin":              # 新報價單的可見範圍因人而異；只有看得到全部的最高管理者才附這個數字
+            return None
+        st = LG.get_state(u["id"])
+        prev = LG._parse(st.get("prev"))
+        if not prev:
+            return None
+        from core import registry
+        fn = registry.single_provider("greeting.new_quotes")      # 案件模組提供（L1 不直接讀 quotations 表）；模組不在 ⇒ 不附這個數字
+        if fn is None:
+            return None
+        # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較，精確到時分秒
+        return fn(prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"))
+
+    return LG.greeting_for_user(u, todo=todo, pending=_pending, new_quotes=_new_quotes)
+
+
+class GreetingPhrasesIn(BaseModel):
+    category: str
+    style: str
+    lines: List[str] = []
+
+
+@router.get("/api/login-greeting/phrases")
+def login_greeting_phrases(authorization: str = Header(None)):
+    """最高管理者：每個情境的內建句與目前的自訂句（設定畫面用）。"""
+    from helpers import login_greeting as LG
+    _require_user(authorization, require_superadmin=True)
+    return {"categories": LG.phrases_table(), "maxLen": LG.GP.MAX_LEN, "maxLines": LG.GP.MAX_LINES,
+            "placeholders": list(LG.GP.PLACEHOLDERS)}
+
+
+@router.put("/api/login-greeting/phrases")
+def login_greeting_phrases_save(body: GreetingPhrasesIn, authorization: str = Header(None)):
+    """最高管理者：改寫或新增某情境＋風格的句子（整組取代該情境該風格的內建句；`lines` 空＝回內建）。內容守則同內建句。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization, require_superadmin=True)
+    try:
+        saved = LG.set_custom(body.category, body.style, body.lines)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(authorization[7:], 'login_greeting.phrases', 'login_greeting', body.category,
+           LG.GP.CATEGORY_LABELS.get(body.category, body.category), {"style": body.style, "count": len(saved)})
+    return {"ok": True, "saved": saved}
+
+
 @router.patch("/api/auth/change-password")
 def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -1519,7 +1689,7 @@ def list_users(authorization: str = Header(None)):
     full_view = caller["role"] in ("superadmin", "admin")             # 第 47 班（使用者裁示）：只有管理員以上看得到全部人的聯絡方式／權限勾選／信件退訂
     conn = get_db()
     rows = conn.execute("""
-        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
+        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.quote_email, u.modules,
                u.notification_muted, u.active, u.created_at,
                u.department_id, dep.name AS department_name,
                dep.division_id, dv.name AS division_name
@@ -1530,6 +1700,8 @@ def list_users(authorization: str = Header(None)):
     """).fetchall()
     conn.close()
     from helpers.startup import builtin_admin_username
+    from helpers import quote_email as _quote_email
+    _company_ext = _quote_email.company_external_email()
     builtin = builtin_admin_username()
     result = []
     for r in rows:
@@ -1543,11 +1715,25 @@ def list_users(authorization: str = Header(None)):
         d["departmentName"]      = d.pop("department_name")
         d["divisionId"]          = d.pop("division_id")
         d["divisionName"]        = d.pop("division_name")
+        # 2026-11-13 報價用公司信箱：三層解析結果（使用者設定 → 公司對外信箱 → 個人信箱）；報價單／估價單填入業務員資料時用 quoteEmailEffective
+        _qe = _quote_email.resolve(d.get("quote_email"), _company_ext, d.get("email"))
+        d["quoteEmail"]          = d.pop("quote_email") or ""
+        d["quoteEmailEffective"] = _qe["email"]
+        d["quoteEmailSource"]    = _qe["source"]
         if not full_view and d["username"] != caller["username"]:        # 一般人員：別人的 Email／電話／權限勾選／信件退訂不給（自己的那一列照舊，個人設定頁與報價單帶入業務員資料要用）
-            for _k in ("email", "phone", "modules", "notificationMuted"):
+            for _k in ("email", "phone", "modules", "notificationMuted", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"):
                 d.pop(_k, None)
         result.append(d)
     return result
+
+
+def _checked_quote_email(v):
+    """報價用公司信箱：空字串＝清除；有值就要是正確的 Email 格式（否則 400，先驗再寫）。網域提醒只在畫面上顯示，不阻擋。"""
+    from helpers import quote_email as _qe
+    s = str(v or "").strip()
+    if s and not _qe.valid(s):
+        raise HTTPException(400, "報價用公司信箱的格式不正確（例：name@your-company.com）")
+    return s
 
 
 @router.post("/api/users", status_code=201)
@@ -1560,6 +1746,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     if is_weak_password(body.password):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
+    _qe_new = _checked_quote_email(body.quote_email)
     refuse_unknown_new_keys(body.modules)
     if body.role is not None and body.role not in VALID_ROLES:          # 第42班：角色只能是已知值（含 finance）
         raise HTTPException(400, "不認得的角色：%s" % body.role)
@@ -1572,8 +1759,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     try:
         conn.execute("""
             INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password, department_id)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
+                               notification_muted, active, created_at, must_change_password, department_id, quote_email)
+            VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?)
         """, (
             body.username.strip(),
             _hash_pw(body.password),
@@ -1585,6 +1772,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
             body.department_id or None,
+            _qe_new or '',
         ))
         conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -1644,6 +1832,13 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
     if body.email        is not None: sets.append("email=?");        params.append(body.email)
     if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
+    if body.quote_email  is not None:
+        try:
+            _qe_val = _checked_quote_email(body.quote_email)
+        except HTTPException:
+            conn.close()
+            raise
+        sets.append("quote_email=?"); params.append(_qe_val)
     if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
     if body.notification_muted is not None:
         # 個人退訂只接受登記過的信件類型（CORE-SPEC 信件收件人④）：打錯字或不存在的 key 存進去不會有任何效果，
@@ -1738,6 +1933,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     uname  = row["username"]
     ulabel = row["display_name"] or uname
     try:
+        conn.execute("DELETE FROM user_prefs WHERE user_id=?", (user_id,))      # 個人偏好跟著帳號走：帳號刪了就清（避免新帳號沿用舊 id 的偏好）；刪不成功（有關聯資料）時下面整筆 rollback
         conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         conn.commit()
@@ -1796,12 +1992,16 @@ def users_sales_contact(username: str = Query(..., min_length=1, max_length=64),
     require_any_module(user, ["quotation"], "報價單")
     conn = get_db()
     try:
-        row = conn.execute("SELECT id, display_name, username, phone, email FROM users WHERE username=? AND active=1", (username,)).fetchone()
+        row = conn.execute("SELECT id, display_name, username, phone, email, quote_email FROM users WHERE username=? AND active=1", (username,)).fetchone()
     finally:
         conn.close()
     if not row:
         raise HTTPException(404, "找不到這位報價人")
-    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or ""}
+    from helpers import quote_email as _qe
+    eff = _qe.resolve_for_row(row)               # 報價用信箱：使用者設定 → 公司對外信箱 → 個人信箱
+    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or "",
+            "quoteEmailEffective": eff["email"], "quoteEmailSource": eff["source"],
+            "quoteEmail": eff["email"]}        # 舊欄位名（值＝解析後的信箱）保留一版以相容；新程式一律讀 quoteEmailEffective，下一版移除
 
 
 @router.get("/api/users/selectable")
@@ -1912,3 +2112,30 @@ def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
                             str(user_id), "users.html")
     return {"ok": True}
 
+
+
+# ── 帳號鎖定：清單／手動解鎖（超級管理員；2026-11-12 外網登入強化）──────────────────────────────
+class AccountUnlockIn(BaseModel):
+    username: str
+
+
+@router.get("/api/auth/account-locks")
+def account_locks_list(authorization: str = Header(None)):
+    """目前被鎖住的帳號（只有超級管理員）。鎖定規則與取捨見 `helpers/account_lock.py`。"""
+    _require_user(authorization, require_superadmin=True)
+    cfg = _acct.config()
+    return {"locks": _acct.list_locks(),
+            "config": {"threshold": cfg["threshold"], "windowMinutes": cfg["window_s"] // 60,
+                       "lockMinutes": cfg["lock_s"] // 60, "scope": cfg["scope"]}}
+
+
+@router.post("/api/auth/account-locks/unlock")
+def account_locks_unlock(body: AccountUnlockIn, authorization: str = Header(None)):
+    """超級管理員手動解除某帳號的登入鎖定（寫稽核 `auth.account_unlocked`）。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    had = _acct.unlock(body.username, by=actor["username"])
+    if not had:
+        raise HTTPException(404, "這個帳號目前沒有被鎖定")
+    _audit(_tok(authorization), "auth.account_unlocked", "user", body.username.strip().lower()[:64], body.username.strip()[:64],
+           {"by": actor["username"], "reason": "manual"})
+    return {"ok": True}

@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>出納 - MOTRIX 專案管理系統</title>
+  <title>出納 - MOTRIX PLATFORM</title>
   <script src="../js/cashier.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -75,7 +75,7 @@
     .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600}
     .rb-active{background:#DCFCE7;color:#15803D}
     .rb-closed{background:#F3F4F6;color:#374151}
-    .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-fin{background:var(--tone-slate-bg,#EEF2F6);color:var(--tone-slate-fg,#334E68)}      /* 結束狀態：深灰藍（2026-11-13） */
     .rb-received{background:var(--success-light);color:var(--success)}
     .rb-pending{background:#FEF3C7;color:#92400E}
     .rb-invoiced{background:#ECFDF5;color:#065F46}
@@ -258,6 +258,72 @@
     .stl-table th{padding:7px 10px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);background:#FAFAF8;border-bottom:1px solid var(--border-light)}
     .stl-table td{padding:7px 10px;border-bottom:1px solid #F0EEE9;vertical-align:middle;font-family:var(--font-zh)}
     .stl-table tr:last-child td{border-bottom:none}
+
+    /* ── 手機／平板直式（2026-11-12 UI 檢查）──────────────────────────────────
+       原本：KPI 方塊被 max-width:200px 卡成窄條、九個子頁籤被擠成一字一行、客戶歷史左右兩欄在 375px 下互相擠壓。
+       ⇒ KPI 兩欄；子頁籤改單列橫向滑動（不換行）；客戶歷史上下堆疊；輸入框 16px 免 iOS 自動放大；按鈕 ≥40px。 */
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 24px}
+      .page-main > .panel[style*="padding:20px"]{padding:12px !important}
+      .stat-strip{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .stat-pill{max-width:none;min-width:0;padding:10px 12px}
+      .stat-pill:last-child:nth-child(odd){grid-column:1 / -1}
+      .stat-pill__val{font-size:17px;overflow-wrap:anywhere}
+      /* 明細表格：原本 min-width:520px 配 9～10 欄，欄位被壓到一字一行（客戶名稱直排）。改成「依內容撐開、不換行」，
+         表格本身在 .panel 內橫向滑動（各表有自己的 .panel 捲動容器，不會連同上方 KPI 一起捲）。 */
+      .data-table:not(.cash-cards){min-width:max-content}
+      .data-table:not(.cash-cards) th,.data-table:not(.cash-cards) td{white-space:nowrap}
+      /* 六張主清單（待付款／勞報／獎金／付款申請／待收款／匯款審核）：手機改成「一列一張卡片」。
+         原本橫向滑動只看得到 案件號＋客戶，金額／日期／狀態／動作都在畫面外且沒有任何提示（K 審 A）。
+         欄位標籤來自每個 td 的 data-label（＝表頭文字）；金額放大加粗；含輸入框／按鈕／長文字的格子跨滿兩欄。 */
+      .data-table.cash-cards,.data-table.cash-cards tbody{display:block;width:100%;min-width:0}
+      .data-table.cash-cards thead{display:none}
+      .data-table.cash-cards tr{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;padding:12px 14px;border-bottom:8px solid var(--bg, #F4F3EF)}
+      .data-table.cash-cards tr:last-child{border-bottom:0}
+      .data-table.cash-cards td{display:block;padding:0;border:0;min-width:0;text-align:left;white-space:normal;overflow-wrap:anywhere;background:none !important}
+      .data-table.cash-cards td::before{content:attr(data-label);display:block;font-size:11px;line-height:1.4;color:var(--text-dim);font-weight:500;margin-bottom:2px}
+      .data-table.cash-cards td[data-label=""]::before{display:none}
+      .data-table.cash-cards td:first-child,.data-table.cash-cards td:last-child,
+      .data-table.cash-cards td:has(input,select,button,a.action-btn,.field-input){grid-column:1 / -1}
+      .data-table.cash-cards td:first-child{font-weight:700;font-size:14px}
+      .data-table.cash-cards td.r{font-weight:700;font-size:15px}
+      .data-table.cash-cards td:empty{display:none}   /* 值為空（例如沒有業務員）就連標籤一起不顯示 */
+      .data-table.cash-cards td input[type="date"],.data-table.cash-cards td input[type="text"],.data-table.cash-cards td input[type="number"],.data-table.cash-cards td select{width:100% !important;max-width:none;box-sizing:border-box;font-size:16px;min-height:44px;margin-top:2px}
+      .data-table.cash-cards td .action-btn{width:100%;min-height:44px;justify-content:center;text-align:center}
+      .data-table.cash-cards tr.uninvoiced-row{background:#FFFBEB}
+      .ctabs{overflow-x:auto;flex-wrap:nowrap;gap:0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+      .ctabs::-webkit-scrollbar{display:none}
+      .ctab{flex:none;white-space:nowrap;min-height:44px;padding:10px 10px;margin-right:8px}
+      .period-nav button{width:40px;height:40px}
+      .period-type-btn,.btn-export,.btn-load,.btn-set-target{min-height:40px;padding-left:14px;padding-right:14px}
+      .export-wrap{margin-left:0;flex-wrap:wrap}
+      .action-btn{min-height:40px;padding:6px 12px}
+      .search-wrap{flex:1 1 100%}
+      .search-input,.field-input,.tgt-field input,.cust-search,.cust-sort{font-size:16px;min-height:42px}
+      .cust-layout{flex-direction:column;min-height:0}
+      .cust-list-col{width:auto;min-width:0;max-height:260px;border-right:0;border-bottom:1px solid var(--border-light)}
+      .cust-detail-col{padding:14px 12px}
+      .tgt-2col,.stl-meta{grid-template-columns:1fr}
+      .modal-overlay{align-items:flex-end;padding:0}
+      .modal-box{max-width:100%;border-radius:16px 16px 0 0}
+      .modal-hd{padding:14px 16px}
+      .modal-body{padding:14px 16px}
+      .summary-bar{flex-wrap:wrap;gap:6px 16px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:22px 20px}
+      .stat-pill{max-width:none}
+      .ctabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+      .ctabs::-webkit-scrollbar{display:none}
+      .ctab{flex:none;white-space:nowrap;min-height:44px;padding:10px 6px}
+      .period-nav button{width:36px;height:36px}
+      .panel{overflow-x:auto}
+      .data-table{min-width:max-content}
+      .data-table th,.data-table td{white-space:nowrap}
+      .period-type-btn,.btn-export,.btn-load{min-height:38px}
+      .action-btn{min-height:36px;padding:4px 12px}
+      .cust-list-col{width:240px}
+    }
   </style>
 </head>
 <body x-data="cashierApp()" x-init="init()" x-cloak>
@@ -352,7 +418,7 @@
               </template>
               <template x-if="payable.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>申請單號</th><th>關聯案件</th><th>廠商</th>
                       <th class="r">應付金額</th><th class="c">應付款日（合約）</th><th class="c">預定付款日</th><th class="c">動作</th>
@@ -360,20 +426,20 @@
                     <tbody>
                       <template x-for="v in payable" :key="v.voucherNo">
                         <tr>
-                          <td class="mono" x-text="v.voucherNo"></td>
-                          <td class="mono" x-text="v.quoteNo"></td>
-                          <td><span x-text="v.vendorName || '（外包人員點工）'"></span><span x-show="v.kind" data-testid="cashier-kind-label" style="margin-left:6px;font-size:12px;font-weight:600;color:var(--text-secondary)" x-text="(v.kindName || v.kind) + ' 第 ' + v.seq + ' 期'"></span></td>
-                          <td class="r mono" x-text="fmt(v.grandTotal)"></td>
-                          <td class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
+                          <td data-label="申請單號" class="mono" x-text="v.voucherNo"></td>
+                          <td data-label="關聯案件" class="mono" x-text="v.quoteNo"></td>
+                          <td data-label="廠商"><span x-text="v.vendorName || '（外包人員點工）'"></span><span x-show="v.kind" data-testid="cashier-kind-label" style="margin-left:6px;font-size:12px;font-weight:600;color:var(--text-secondary)" x-text="(v.kindName || v.kind) + ' 第 ' + v.seq + ' 期'"></span></td>
+                          <td data-label="應付金額" class="r mono" x-text="fmt(v.grandTotal)"></td>
+                          <td data-label="應付款日（合約）" class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
                               x-text="v.payableDate || '未指定'"></td>
-                          <td class="c" :data-testid="'cashier-payable-planned-' + v.voucherNo">
+                          <td data-label="預定付款日" class="c" :data-testid="'cashier-payable-planned-' + v.voucherNo">
                             <input type="date" class="field-input" style="width:130px" :value="v.plannedPayDate || ''" x-show="canExecuteCashier()"
                                    @change="saveVoucherPlannedPayDate(v, $event.target.value)" :data-testid="'cashier-payable-planned-input-' + v.voucherNo">
                             <span x-show="!canExecuteCashier()" class="mono" x-text="v.plannedPayDate || '—'"></span>
                             <div style="font-size:12px;color:var(--tone-danger-fg)" x-show="plannedState(v) === 'overdue'">已逾預定日</div>
                             <div style="font-size:12px;color:var(--tone-warning-fg)" x-show="plannedState(v) === 'soon'" x-text="plannedSoonDays + ' 天內到期'">3 天內到期</div>
                           </td>
-                          <td class="c">
+                          <td data-label="" class="c">
                             <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
                             <span x-show="!canExecuteCashier()" style="font-size:12px;color:var(--text-dim)">僅檢視</span>
                           </td>
@@ -395,7 +461,7 @@
               </template>
               <template x-if="payslipQueue.items.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>勞報單號</th><th>承攬人</th><th class="r">應付總額</th><th class="r">實發金額</th>
                       <th>簽回檔</th><th class="c">付款日期</th><th class="c">傳票單號</th><th class="c">動作</th>
@@ -403,18 +469,18 @@
                     <tbody>
                       <template x-for="p in payslipQueue.items" :key="p.slipNo">
                         <tr :data-testid="'cashier-payslip-row-' + p.slipNo">
-                          <td class="mono" x-text="p.slipNo"></td>
-                          <td x-text="p.contractor"></td>
-                          <td class="r mono" x-text="fmt(p.gross)"></td>
-                          <td class="r mono" x-text="fmt(p.net)"></td>
-                          <td>
+                          <td data-label="勞報單號" class="mono" x-text="p.slipNo"></td>
+                          <td data-label="承攬人" x-text="p.contractor"></td>
+                          <td data-label="應付總額" class="r mono" x-text="fmt(p.gross)"></td>
+                          <td data-label="實發金額" class="r mono" x-text="fmt(p.net)"></td>
+                          <td data-label="簽回檔">
                             <template x-for="f in p.files" :key="f.id">
                               <a href="#" @click.prevent="openPayslipSigned(p, f)" x-text="f.filename" style="display:block;font-size:12px"></a>
                             </template>
                           </td>
-                          <td class="c"><input type="date" x-model="payslipForm[p.slipNo].date" style="width:140px"></td>
-                          <td class="c"><input type="text" x-model="payslipForm[p.slipNo].voucherNo" placeholder="例 20260929-001" style="width:150px"></td>
-                          <td class="c">
+                          <td data-label="付款日期" class="c"><input type="date" x-model="payslipForm[p.slipNo].date" style="width:140px"></td>
+                          <td data-label="傳票單號" class="c"><input type="text" x-model="payslipForm[p.slipNo].voucherNo" placeholder="例 20260929-001" style="width:150px"></td>
+                          <td data-label="" class="c">
                             <button x-show="payslipQueue.canMarkPaid" class="action-btn pay" :disabled="payslipForm[p.slipNo].saving" @click="markPayslipPaid(p)"
                                     :data-testid="'cashier-payslip-pay-' + p.slipNo">標記已付款</button>
                             <div x-show="payslipForm[p.slipNo].err" x-text="payslipForm[p.slipNo].err" style="color:var(--danger);font-size:12px"></div>
@@ -438,7 +504,7 @@
               </template>
               <template x-if="bonusQueue.items.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>案件號</th><th>客戶</th><th class="c">人數</th>
                       <th class="r">發放總額</th><th class="c">核准日</th><th class="c">動作</th>
@@ -446,12 +512,12 @@
                     <tbody>
                       <template x-for="b in bonusQueue.items" :key="b.quoteNo">
                         <tr :data-testid="'cashier-bonus-row-' + b.quoteNo">
-                          <td class="mono"><a :href="(b.kind === 'correction' ? 'bonus-corrections.html?no=' : 'bonus.html?q=') + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
-                          <td x-text="b.kind === 'correction' ? b.project : b.customer"></td>
-                          <td class="c mono" x-text="b.people"></td>
-                          <td class="r mono" x-text="fmt(b.total)"></td>
-                          <td class="c mono" x-text="b.approvedAt"></td>
-                          <td class="c">
+                          <td data-label="案件號" class="mono"><a :href="(b.kind === 'correction' ? 'bonus-corrections.html?no=' : 'bonus.html?q=') + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
+                          <td data-label="客戶" x-text="b.kind === 'correction' ? b.project : b.customer"></td>
+                          <td data-label="人數" class="c mono" x-text="b.people"></td>
+                          <td data-label="發放總額" class="r mono" x-text="fmt(b.total)"></td>
+                          <td data-label="核准日" class="c mono" x-text="b.approvedAt"></td>
+                          <td data-label="" class="c">
                             <!-- 獎金更正單的補發（kind='correction'）：扣繳試算與銀行選擇在更正單頁，這裡給連結 -->
                             <a x-show="b.kind === 'correction'" class="action-btn pay" :href="'bonus-corrections.html?no=' + encodeURIComponent(b.quoteNo)"
                                :data-testid="'cashier-bonus-corr-' + b.quoteNo">前往補發</a>
@@ -476,7 +542,7 @@
               </template>
               <template x-if="payreqQueue.items.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>案件號</th><th>客戶</th><th>申請內容</th><th>受款人</th>
                       <th class="r">金額</th><th class="c">核准日</th><th class="c">預定付款日</th><th class="c">發票</th><th class="c">付款日</th><th class="c">動作</th>
@@ -484,10 +550,10 @@
                     <tbody>
                       <template x-for="it in payreqQueue.items" :key="it.source + ':' + it.key">
                         <tr :data-testid="'cashier-payreq-row-' + it.source + '-' + it.key">
-                          <td class="mono" x-text="it.quoteNo || it.docCode || '（無案件）'"></td>
-                          <td x-text="it.customerName"></td>
-                          <td><span x-show="it.kind" style="font-size:12px;color:var(--accent);margin-right:4px" :data-testid="'cashier-payreq-kind-' + it.source + '-' + it.key" x-text="kindLabel(it.kind)"></span><span x-text="it.title"></span></td>
-                          <td>
+                          <td data-label="案件號" class="mono" x-text="it.quoteNo || it.docCode || '（無案件）'"></td>
+                          <td data-label="客戶" x-text="it.customerName"></td>
+                          <td data-label="申請內容"><span x-show="it.kind" style="font-size:12px;color:var(--accent);margin-right:4px" :data-testid="'cashier-payreq-kind-' + it.source + '-' + it.key" x-text="kindLabel(it.kind)"></span><span x-text="it.title"></span></td>
+                          <td data-label="受款人">
                             <span x-text="it.payee"></span>
                             <div class="mono" style="font-size:12px;color:var(--text-dim)" x-show="it.payeeBank" :data-testid="'cashier-payreq-bank-masked-' + it.source + '-' + it.key" x-text="it.payeeBank"></div>
                             <div x-show="payreqQueue.canPay && it.kind" style="font-size:12px;margin-top:2px">
@@ -497,16 +563,16 @@
                               <div style="color:#b45309" x-show="payreqExtra(it).bankErr" :data-testid="'cashier-payreq-bank-err-' + it.source + '-' + it.key" x-text="payreqExtra(it).bankErr"></div>
                             </div>
                           </td>
-                          <td class="r mono" x-text="fmt(it.amount)"></td>
-                          <td class="c mono" x-text="(it.approvedAt || '').slice(0, 10)"></td>
-                          <td class="c" :data-testid="'cashier-payreq-planned-' + it.source + '-' + it.key">
+                          <td data-label="金額" class="r mono" x-text="fmt(it.amount)"></td>
+                          <td data-label="核准日" class="c mono" x-text="(it.approvedAt || '').slice(0, 10)"></td>
+                          <td data-label="預定付款日" class="c" :data-testid="'cashier-payreq-planned-' + it.source + '-' + it.key">
                             <input type="date" class="field-input" style="width:130px" :value="it.plannedPayDate || ''" x-show="payreqQueue.canPay"
                                    @change="savePlannedPayDate(it, $event.target.value)" :data-testid="'cashier-payreq-planned-input-' + it.source + '-' + it.key">
                             <span x-show="!payreqQueue.canPay" class="mono" x-text="it.plannedPayDate || '—'"></span>
                             <div style="font-size:12px;color:#b91c1c" x-show="plannedState(it) === 'overdue'">已逾預定日</div>
                             <div style="font-size:12px;color:#b45309" x-show="plannedState(it) === 'soon'" x-text="plannedSoonDays + ' 天內到期'">3 天內到期</div>
                           </td>
-                          <td class="c">
+                          <td data-label="發票" class="c">
                             <div x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></div>
                             <div style="text-align:left;font-size:12px;margin-top:4px" x-show="(it.fileList || []).length"
                                  :data-testid="'cashier-payreq-files-' + it.source + '-' + it.key">
@@ -523,7 +589,7 @@
                                    :data-testid="'cashier-payreq-file-error-' + it.source + '-' + it.key"></div>
                             </div>
                           </td>
-                          <td class="c">
+                          <td data-label="付款日" class="c">
                             <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay" required
                                    :data-testid="'cashier-payreq-date-' + it.source + '-' + it.key" x-model="payreqDates[it.source + ':' + it.key]">
                             <div x-show="payreqQueue.canPay && it.kind !== 'payslip'" style="margin-top:4px;text-align:left;font-size:12px">
@@ -555,7 +621,7 @@
                               <div style="color:#b91c1c" x-show="payreqExtraError(it)" :data-testid="'cashier-payreq-extra-err-' + it.source + '-' + it.key" x-text="payreqExtraError(it)"></div>
                             </div>
                           </td>
-                          <td class="c">
+                          <td data-label="" class="c">
                             <div x-show="it.blockReason" :data-testid="'cashier-payreq-blocked-' + it.source + '-' + it.key" x-text="it.blockReason"
                                  style="font-size:12px;color:#b91c1c;font-weight:600;text-align:left;margin-bottom:4px;max-width:220px"></div>
                             <div x-show="it.payeeNote" :data-testid="'cashier-payreq-payeenote-' + it.source + '-' + it.key" x-text="it.payeeNote"
@@ -598,7 +664,7 @@
               </template>
               <template x-if="filteredReceivable.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
                       <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">收款狀態</th>
@@ -607,15 +673,15 @@
                     <tbody>
                       <template x-for="it in filteredReceivable" :key="it.quoteNo + '-' + it.idx">
                         <tr :class="!it.invoiceNo && 'uninvoiced-row'">
-                          <td class="mono" x-text="it.quoteNo"></td>
-                          <td x-text="it.customer"></td>
-                          <td x-text="it.salesPerson"></td>
-                          <td x-text="it.type"></td>
-                          <td class="r mono" x-text="fmt(it.amount)"></td>
-                          <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
+                          <td data-label="案件號" class="mono" x-text="it.quoteNo"></td>
+                          <td data-label="客戶" x-text="it.customer"></td>
+                          <td data-label="業務員" x-text="it.salesPerson"></td>
+                          <td data-label="款項類型" x-text="it.type"></td>
+                          <td data-label="應收金額" class="r mono" x-text="fmt(it.amount)"></td>
+                          <td data-label="預計收款日" class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
                               x-text="it.expectedReceiptDate || '未指定'"></td>
-                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="stLabel(it.received ? '已收款' : '待收款', 'cashier')"></span></td>
-                          <td>
+                          <td data-label="收款狀態" class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="stLabel(it.received ? '已收款' : '待收款', 'cashier')"></span></td>
+                          <td data-label="發票號碼">
                             <template x-if="it.invoiceNo">
                               <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>
                             </template>
@@ -624,7 +690,7 @@
                             </template>
                             <span x-show="!it.invoiceNo && !canExecuteCashier()" style="color:var(--text-dim);font-size:12px">未登錄</span>
                           </td>
-                          <td class="c">
+                          <td data-label="" class="c">
                             <template x-if="canExecuteCashier() && !it.received">
                               <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
                             </template>
@@ -652,11 +718,11 @@
               <div class="alert-bar" x-show="remitReviewNotice" x-text="remitReviewNotice" data-testid="cashier-remit-result"></div>
               <div class="alert-bar" x-show="remitReviews.notice" x-text="remitReviews.notice"></div>
               <template x-if="remitReviews.available && remitReviews.items.length===0">
-                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待審核的匯款差額</div>
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待簽核的匯款差額</div>
               </template>
               <template x-if="remitReviews.items.length>0">
                 <div class="panel">
-                  <table class="data-table">
+                  <table class="data-table cash-cards">
                     <thead><tr>
                       <th>來源</th><th>案件號</th><th>客戶</th><th>受款人</th><th class="r">應付</th><th class="r">實付</th><th class="r">差額</th>
                       <th class="r">手續費</th><th class="c">匯款日</th><th>經辦</th><th class="c">審核</th>
@@ -664,17 +730,17 @@
                     <tbody>
                       <template x-for="it in remitReviews.items" :key="it.source + ':' + it.key">
                         <tr :data-testid="'cashier-remit-row-' + it.source + '-' + it.key">
-                          <td x-text="it.sourceLabel"></td>
-                          <td class="mono" x-text="it.quoteNo"></td>
-                          <td x-text="it.customerName"></td>
-                          <td x-text="it.payee"></td>
-                          <td class="r mono" x-text="fmt(it.payable)"></td>
-                          <td class="r mono" x-text="fmt(it.actual)"></td>
-                          <td class="r mono" style="color:#b45309;font-weight:600" ><span x-text="(it.diff > 0 ? '+' : '') + it.diff"></span><div x-show="it.reason" style="font-size:12px;font-weight:400" x-text="it.reason" :data-testid="'cashier-remit-reason-' + it.source + '-' + it.key"></div></td>
-                          <td class="r mono" x-text="fmt(it.fee)"></td>
-                          <td class="c mono" x-text="it.paidAt"></td>
-                          <td x-text="it.paidBy"></td>
-                          <td class="c">
+                          <td data-label="來源" x-text="it.sourceLabel"></td>
+                          <td data-label="案件號" class="mono" x-text="it.quoteNo"></td>
+                          <td data-label="客戶" x-text="it.customerName"></td>
+                          <td data-label="受款人" x-text="it.payee"></td>
+                          <td data-label="應付" class="r mono" x-text="fmt(it.payable)"></td>
+                          <td data-label="實付" class="r mono" x-text="fmt(it.actual)"></td>
+                          <td data-label="差額" class="r mono" style="color:#b45309;font-weight:600" ><span x-text="(it.diff > 0 ? '+' : '') + it.diff"></span><div x-show="it.reason" style="font-size:12px;font-weight:400" x-text="it.reason" :data-testid="'cashier-remit-reason-' + it.source + '-' + it.key"></div></td>
+                          <td data-label="手續費" class="r mono" x-text="fmt(it.fee)"></td>
+                          <td data-label="匯款日" class="c mono" x-text="it.paidAt"></td>
+                          <td data-label="經辦" x-text="it.paidBy"></td>
+                          <td data-label="審核" class="c">
                             <template x-if="remitReviews.canDecide">
                               <div>
                                 <input type="text" class="field-input" style="width:120px;display:inline-block" placeholder="原因（退回必填）"
@@ -1139,7 +1205,7 @@
           <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.actual" data-testid="pay-remit-actual"></div>
         </div>
         <div class="alert-bar" x-show="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0)) !== 0" data-testid="pay-remit-diff-warn">
-          ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+          ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></b> 元：標記後單據會標「差額待簽核」並通知管理員，核可前請確認金額。
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="payRemit.hasFee" data-testid="pay-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
         <div x-show="payRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.fee" data-testid="pay-remit-fee"></div>
@@ -1280,7 +1346,7 @@
           <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.actual" data-testid="bank-remit-actual"></div>
         </div>
         <div class="alert-bar" x-show="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0)) !== 0" data-testid="bank-remit-diff-warn">
-          ⚠ 實付與應付差 <b x-text="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+          ⚠ 實付與應付差 <b x-text="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></b> 元：標記後單據會標「差額待簽核」並通知管理員，核可前請確認金額。
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="bankRemit.hasFee" data-testid="bank-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
         <div x-show="bankRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.fee" data-testid="bank-remit-fee"></div>

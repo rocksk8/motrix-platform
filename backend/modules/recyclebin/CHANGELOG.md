@@ -1,5 +1,11 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.10 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.0.9 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（前端）：`recycle-bin.html` 手機（≤767px）與直立平板（≤1023px）版面——8 欄表格改一筆一張卡，「還原」「永久刪除」並排且加大間距避免誤觸，輸入框 16px／44px 高。桌機版不變。（由 fix/mobile-cases-layout-v2 合入；條目於 T81 整合補記。）無 API／資料／權限判斷變更。
+
 ## 1.0.8 — 2026-11-11（fix/t80-conn-leak-net；每日清除失敗分支先放寫鎖；L1 介面不變）
 - 修正（後端）：`jobs.py run_daily` 的 purge 失敗 `except` 先 `conn.rollback()` 再呼叫 `_audit`。`purge()` 在 `begin_write` 之後遇到非預期例外不會自己 rollback，這條連線仍握著寫鎖，而 `_audit` 另開連線寫入會卡滿 30 秒並吞掉例外（稽核紀錄靜默丟失）。每日背景工作，不影響使用者請求。
 - 測試：`tests/test_run_daily_releases_lock_t80.py`（`_audit` 被呼叫那一刻別條連線寫得進去；舊碼紅、新碼綠）。

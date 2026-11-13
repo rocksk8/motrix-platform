@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>採購管理 — MOTRIX 專案管理系統</title>
+  <title>採購管理 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -45,6 +45,41 @@
     .rb-closed{background:#F3F4F6;color:#374151}
     .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       10 欄材料表在手機只看得到前 2～3 欄（其餘要橫捲）→ 一筆材料一張卡：品名／型號、數量＋單位＋到料狀態、案件號＋客戶＋案件狀態、備註、「材料申請」鈕。
+       兩種表格（自訂排版／預設）共用同一套卡片樣式（自訂排版的欄位以 data-layout-cell 辨識）。 */
+    @media (max-width: 1023px) {
+      .search-input { font-size: 16px !important; min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .page-main { padding: 14px 12px 28px; }
+      .stat-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .stat-pill { max-width: none; min-width: 0; }
+      .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .toolbar .search-wrap { grid-column: 1 / -1; flex: none; }
+      .toolbar .btn { min-height: 44px; justify-content: center; }
+      .pc-seg { min-height: 48px; }
+      .data-table, .data-table tbody { display: block; width: 100%; min-width: 0 !important; }
+      .data-table thead { display: none; }
+      .data-table tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 14px; border-bottom: 1px solid #F0EEE9; }
+      .data-table tbody td { display: block; padding: 0; border: 0; flex: 0 0 auto; text-align: left !important; min-width: 0; }
+      .data-table tbody td > span, .data-table tbody td > a { max-width: none !important; white-space: normal !important; }
+      td[data-f="name"], td[data-layout-cell="name"] { order: 1; flex: 1 1 100% !important; font-size: 15px; }
+      td[data-f="name"] span, td[data-layout-cell="name"] span { font-size: 15px !important; font-weight: 600 !important; }
+      td[data-f="model"], td[data-layout-cell="model"] { order: 2; flex: 1 1 100% !important; }
+      td[data-f="qty"], td[data-layout-cell="qty"] { order: 3; }
+      td[data-f="qty"]::before, td[data-layout-cell="qty"]::before { content: "數量 "; color: var(--text-dim); font-size: 12px; }
+      td[data-f="unit"], td[data-layout-cell="unit"] { order: 4; }
+      td[data-f="status"], td[data-layout-cell="status"] { order: 5; }
+      td[data-f="quoteNo"], td[data-layout-cell="quoteNo"] { order: 6; }
+      td[data-f="customer"], td[data-layout-cell="customer"] { order: 7; }
+      td[data-f="dealTag"], td[data-layout-cell="dealTag"] { order: 8; }
+      td[data-f="note"], td[data-layout-cell="note"] { order: 9; flex: 1 1 100% !important; }
+      td[data-f="note"] { max-width: none !important; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+      .data-table tbody td:last-child { order: 10; flex: 1 1 100% !important; margin-top: 6px; }
+      .data-table tbody td:last-child a { display: flex !important; justify-content: center; min-height: 44px; align-items: center; font-size: 14px !important; width: 100%; box-sizing: border-box; }
+    }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -172,24 +207,24 @@
             <tbody>
               <template x-for="(m, idx) in filtered" :key="m.quoteNo + '_' + m.matId">
                 <tr>
-                  <td style="font-size:12px;font-weight:500" x-text="m.name || '—'"></td>
-                  <td style="font-size:12px;color:var(--text-secondary)" x-text="m.model || '—'"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></td>
-                  <td style="font-size:12px;color:var(--text-dim)" x-text="m.unit"></td>
-                  <td>
+                  <td data-f="name" style="font-size:12px;font-weight:500" x-text="m.name || '—'"></td>
+                  <td data-f="model" style="font-size:12px;color:var(--text-secondary)" x-text="m.model || '—'"></td>
+                  <td data-f="qty" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></td>
+                  <td data-f="unit" style="font-size:12px;color:var(--text-dim)" x-text="m.unit"></td>
+                  <td data-f="status">
                     <span class="rb" :class="m.status==='arrived' ? 'rb-arrived' : m.status==='ordered' ? 'rb-ordered' : 'rb-pending'"
                           x-text="m.status==='arrived' ? '已到料' : m.status==='ordered' ? '已下單' : '待採購'"></span>
                   </td>
-                  <td>
+                  <td data-f="quoteNo">
                     <a :href="'case-management.html?q=' + m.quoteNo"
                        style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
                        x-text="m.quoteNo"></a>
                   </td>
-                  <td style="font-size:12px" x-text="m.customer || '—'"></td>
-                  <td>
+                  <td data-f="customer" style="font-size:12px" x-text="m.customer || '—'"></td>
+                  <td data-f="dealTag">
                     <span class="rb" :class="m.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="m.dealTag || '—'"></span>
                   </td>
-                  <td style="font-size:12px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></td>
+                  <td data-f="note" style="font-size:12px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></td>
                   <td>
                     <a :href="'case-management.html?q=' + m.quoteNo"
                        style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">

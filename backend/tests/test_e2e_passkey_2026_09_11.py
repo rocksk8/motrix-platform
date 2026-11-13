@@ -320,7 +320,7 @@ def test_passkey_register_duplicate_rejected_then_login(live_server, make_user, 
     _add_virtual_authenticator(context, page)
     try:
         _login_with_password(page, live_server, username, password)
-        page.goto(f"{live_server}/pages/change-password.html")
+        page.goto(f"{live_server}/pages/my-account.html?tab=security")
         page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
 
         # 第一張：踩得到 base64url padding 與 credential 缺 type 兩個坑
@@ -360,7 +360,7 @@ def test_passkey_login_updates_sign_count(live_server, make_user, e2e_browser):
     _add_virtual_authenticator(context, page)
     try:
         _login_with_password(page, live_server, username, password)
-        page.goto(f"{live_server}/pages/change-password.html")
+        page.goto(f"{live_server}/pages/my-account.html?tab=security")
         page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
         _register_one(page, 1)
 
