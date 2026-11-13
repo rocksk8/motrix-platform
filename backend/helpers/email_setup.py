@@ -123,14 +123,14 @@ def classify_error(exc: BaseException, host: str = "", provider_key: str = "") -
         if _is_m365(host) or provider_key == "microsoft365" or "5.7.139" in raw or "5.7.30" in raw or "smtpclientauthentication" in raw:
             return {"category": "auth", "ticketKind": "m365_auth",
                     "title": "帳號或密碼不對，或公司的 Microsoft 365 沒有開放這種寄信方式",
-                    "hint": "請先確認信箱與密碼。如果確定沒錯，多半是公司把「已驗證的 SMTP 寄信」關閉了，這不是貼密碼能解決的。請按「產生設定單」，交給資訊廠商處理。"}
+                    "hint": "請先確認信箱與密碼。如果確定沒錯，多半是公司已關閉「已驗證的 SMTP 寄信」，此問題無法以重新輸入密碼解決。請按「產生設定單」，交給資訊廠商處理。"}
         if provider_key == "gmail" and ("534" in raw or "5.7.9" in raw or "5.7.8" in raw or "application-specific" in raw):
             return {"category": "auth", "ticketKind": "",
                     "title": "帳號或密碼不對：Gmail 需要「應用程式密碼」",
                     "hint": "請勿貼 Google 登入密碼。先開啟兩步驟驗證，再到「應用程式密碼」頁面建立 16 碼貼上。"}
         return {"category": "auth", "ticketKind": "",
                 "title": "帳號或密碼不對",
-                "hint": "請確認信箱帳號沒有打錯，密碼是否為該信箱要求的「應用程式密碼」（很多信箱不接受登入密碼）。"}
+                "hint": "請確認信箱帳號沒有輸入錯誤，密碼是否為該信箱要求的「應用程式密碼」（很多信箱不接受登入密碼）。"}
     if isinstance(exc, (smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError)):
         return {"category": "rejected", "ticketKind": "m365_auth" if _is_m365(host) else "",
                 "title": "信箱服務拒絕了這封信",
@@ -138,7 +138,7 @@ def classify_error(exc: BaseException, host: str = "", provider_key: str = "") -
     if isinstance(exc, socket.gaierror) or (isinstance(exc, OSError) and getattr(exc, "errno", None) in (errno.ENETUNREACH, errno.ENETDOWN, errno.EHOSTUNREACH)):
         return {"category": "network", "ticketKind": "network",
                 "title": "網路不通：找不到這台寄信主機",
-                "hint": "請確認這台系統主機能上網，以及寄信主機的名稱沒有打錯。公司網路若限制對外連線，需請資訊廠商放行。"}
+                "hint": "請確認這台系統主機能上網，以及寄信主機的名稱沒有輸入錯誤。公司網路若限制對外連線，需請資訊廠商放行。"}
     if isinstance(exc, (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, ConnectionError, TimeoutError, socket.timeout, ssl.SSLError)):
         return {"category": "connect", "ticketKind": "network",
                 "title": "連不上信箱服務",
@@ -165,7 +165,7 @@ def build_ticket(kind: str, *, user: str, host: str, port, company: str = "", re
         ]
     else:
         body = [
-            "狀況：系統要連到下列寄信主機，但連線失敗（連不上或找不到主機）。",
+            "狀況：系統要連到下列寄信主機，但連線失敗（無法連線或找不到主機）。",
             "",
             "請協助：",
             f"  1. 確認系統所在主機可以對外連到 {hp}（TCP）；若被防火牆擋住，請放行。",

@@ -117,7 +117,7 @@ def _require_reports_access(u: dict) -> None:
     if has_finance_access(u) or (user_has_module(u, "reports") and money_visible(u)):
         return
     if user_has_module(u, "reports"):
-        raise HTTPException(403, "營運報表的金額僅財務角色可看；您的帳號有『營運報表』模組，但沒有財務檢視權限")
+        raise HTTPException(403, "營運報表的金額僅財務角色可檢視；您的帳號具有『營運報表』模組，但沒有財務檢視權限")
     raise HTTPException(403, "僅財務角色、或具『營運報表』模組的使用者可存取報表")
 
 
@@ -3423,18 +3423,18 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                     continue   # 沒勾已收或沒日期的未成案款項：維持原範圍，不點名（避免雜訊）
                 kind, hint = ("case_not_won",
                               "款項已收，但案件不是「已成案／已結案」——收入報表只算成案案件，"
-                              "這筆不會出現在任何月份的收入（請先把案件標成案）")
+                              "這筆不會出現在任何月份的收入（請先將案件設為「已成案」）")
             elif rcvd and rat and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", rat):
                 kind, hint = ("received_bad_date",
                               "已收款但收款日期格式無法辨識（請改成 YYYY-MM-DD）——"
-                              "這筆不屬於任何月份，當月收入撈不到它")
+                              "這筆不屬於任何月份，當月收入無法擷取到它")
             elif rcvd and not rat:
                 kind, hint = ("received_no_date",
-                              "已勾「已收款」但沒填收款日期——這筆不屬於任何月份，"
-                              "當月收入與未收款項都撈不到它")
+                              "已勾「已收款」但未填寫收款日期——這筆不屬於任何月份，"
+                              "當月收入與未收款項都無法擷取到它")
             elif rat and not rcvd:
                 kind, hint = ("date_not_received",
-                              "填了收款日期但沒勾「已收款」——收入報表不算（未收），"
+                              "已填寫收款日期但未勾選「已收款」——收入報表不算（未收），"
                               "未收報表也不算（那邊看的是預計收款日）")
             else:
                 continue

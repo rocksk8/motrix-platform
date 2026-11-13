@@ -52,7 +52,7 @@ BUILTIN = {
     "part_category": {
         "label": "料件分類", "relabel": False, "prefix": True,
         "used_by": ["料號管理頁：分類下拉與自動產生料號的前綴", "進貨／庫存的分類篩選",
-                    "會計匯出的「存貨費用科目」對照（新分類要到會計設定補科目）", "營運報表的設備／材料分桶（新分類預設算材料）"],
+                    "會計匯出的「存貨費用科目」對照（新分類須至會計設定補登科目）", "營運報表的設備／材料分桶（新分類預設算材料）"],
         "defaults": [_b("網通設備", prefix="NET"), _b("監控設備", prefix="CCTV"), _b("交換器", prefix="SW"),
                      _b("伺服器/工控", prefix="SVR"), _b("線材配件", prefix="CAB"), _b("其他", prefix="OTH")]},
     "payment_stage": {
@@ -173,7 +173,7 @@ def definition_problems(key, body, live=None) -> list:
         else:
             labels.add(_fold(it["label"]))
         if not spec["relabel"] and isinstance(it.get("value"), str) and it.get("label") != it.get("value"):
-            out.append({"path": p + ".label", "message": "這份清單不能改顯示名稱（這個欄位的值同時被報表或科目對照拿來比對）"})
+            out.append({"path": p + ".label", "message": "這份清單不可變更顯示名稱（此欄位的值同時供報表或科目對照比對使用）"})
         if "disabled" in it and not isinstance(it["disabled"], bool):
             out.append({"path": p + ".disabled", "message": "disabled 必須是 true／false"})
         if spec["prefix"]:

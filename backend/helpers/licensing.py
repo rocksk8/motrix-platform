@@ -1047,8 +1047,8 @@ def _probe_fingerprint():
             is_stable = True  # 只有這一個來源可用是這台機器本來的樣子，不是暫時讀一半
     if not parts:
         raise RuntimeError(
-            "無法取得任何硬體識別（主機板 UUID／實體網卡 MAC／機器 ID 都讀不到），"
-            "算不出機器指紋"
+            "無法取得任何硬體識別（主機板 UUID／實體網卡 MAC／機器 ID 皆無法讀取），"
+            "無法產生機器指紋"
         )
 
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]

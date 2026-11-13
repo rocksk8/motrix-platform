@@ -69,7 +69,7 @@ def patch_fs_line(code: str, body: dict = Body(...), authorization: str = Header
             raise HTTPException(404, "找不到報表列 %s。" % code)
         if fields.get("is_active") in (0, False) and conn.execute(
                 "SELECT 1 FROM gl_account_meta WHERE fs_line=? AND postable=1 AND is_active=1", (code,)).fetchone():
-            raise HTTPException(409, "報表列 %s 底下還有可過帳的科目，停用會讓報表漏算它們；請先把那些科目改歸其他列。" % code)
+            raise HTTPException(409, "報表列 %s 底下還有可過帳的科目，停用會使報表遺漏這些科目；請先將那些科目改歸屬至其他列。" % code)
         sets, args = [], []
         for k, v in fields.items():
             sets.append("%s=?" % k)

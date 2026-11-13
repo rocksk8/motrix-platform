@@ -207,7 +207,7 @@ def create(kind: str, target: str) -> str:
         raise ValueError("%s已經存在：%s" % (LABELS[kind], t))
     parent = os.path.dirname(os.path.normpath(t))
     if not os.path.isdir(parent):
-        raise ValueError("上一層資料夾不存在：%s（只建最後一層，避免在錯的地方建出一整串）" % parent)
+        raise ValueError("上一層資料夾不存在：%s（僅建立最後一層，避免在錯誤位置建立多層資料夾）" % parent)
     os.mkdir(t)
     return t
 

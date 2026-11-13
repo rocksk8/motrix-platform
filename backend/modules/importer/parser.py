@@ -45,7 +45,7 @@ def _col_letters(n: int) -> str:
 
 def _check_deadline(deadline):
     if deadline is not None and time.monotonic() > deadline:
-        raise ParseError("檔案處理太久了（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % DEADLINE_SECONDS)
+        raise ParseError("檔案處理時間過長（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % DEADLINE_SECONDS)
 
 
 # 舊檔表頭「備註」曾寫成另一個字（站內用語守門不准該寫法出現在原始碼）：這裡拆開寫，仍接受舊檔

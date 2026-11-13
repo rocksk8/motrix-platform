@@ -632,7 +632,7 @@ def _validate_workflow(wf, field_keys):
                     out.append(_p(tp + ".when", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
     # 稽核 D C-S3：起始狀態掛簽核不會生效（單據以起始狀態建立，不會展開簽核）⇒ 發布時擋下
     if initial in by_key and by_key[initial][1].get("approval"):
-        out.append(_p("workflow.states[%d].approval" % by_key[initial][0], "起始狀態不可以掛簽核（建立單據時不會展開）；請另設一個送審後的狀態"))
+        out.append(_p("workflow.states[%d].approval" % by_key[initial][0], "起始狀態不可設定簽核（建立單據時不會展開）；請另設一個送審後的狀態"))
     # 稽核 D C-M3：簽核狀態的 on_approved 互相指向 ⇒ 條件都不成立時會一直自動通過（原本 RecursionError 500）
     nxt = {k: (s.get("approval") or {}).get("on_approved") for k, (_i, s) in by_key.items() if s.get("approval")}
     for start in sorted(nxt):

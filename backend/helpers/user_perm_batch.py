@@ -156,9 +156,9 @@ def _refusal_for_grant(key) -> str:
     if key in dr.FINANCE_KEYS:
         return "財務三鍵由角色決定，批次不動"
     if key in dr.HIGH_SENSITIVITY_KEYS:
-        return "高敏感權限：授予要逐人填原因，不能批次"
+        return "高敏感權限：授予要逐人填原因，無法批次處理"
     if key in BATCH_GRANT_REFUSED:
-        return "影響較大的權限：授予要逐人確認，不能批次"
+        return "影響較大的權限：授予要逐人確認，無法批次處理"
     return ""
 
 
@@ -235,7 +235,7 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
         elif rid in bound:
             continue
         elif set(r["permissions"]) & _gated_keys():
-            skip("bind", rid, "這個角色含高敏感或影響較大的權限：綁定要逐人填原因，不能批次")
+            skip("bind", rid, "這個角色含高敏感或影響較大的權限：綁定要逐人填原因，無法批次處理")
         else:
             p["bind"].append(rid)
     for rid in req["unbindRoleIds"]:

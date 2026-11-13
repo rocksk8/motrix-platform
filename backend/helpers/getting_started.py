@@ -42,9 +42,9 @@ STEPS = (
      "confirm": "必填欄位都填好，並按下「儲存並確認本公司資料」。",
      "href": "company-setup-wizard.html", "link": "開啟公司設定精靈"},
     {"id": "quote_style", "title": "報價單樣式",
-     "why": "報價單是客戶第一眼看到的東西：抬頭、條款與收款帳戶要先備妥，並實際預覽一張。",
+     "why": "報價單是客戶第一眼看到的內容：抬頭、條款與收款帳戶要先備妥，並實際預覽一張。",
      "minutes": "約 10 分鐘", "prepare": ["報價條款文字", "收款銀行帳戶（銀行、戶名、帳號）"],
-     "confirm": "到「報價單」頁新增（或打開）任一張報價單，按表單上方的「預覽報價單」，確認抬頭、條款與收款帳戶都正確，再回到這裡按「我已預覽確認」。",
+     "confirm": "到「報價單」頁新增（或開啟）任一張報價單，按表單上方的「預覽報價單」，確認抬頭、條款與收款帳戶都正確，再回到這裡按「我已預覽確認」。",
      "href": "company-setup-wizard.html#s3", "link": "到公司設定精靈（收款帳戶）"},
     {"id": "people", "title": "人員與簽核",
      "why": "單據要送給誰簽、誰負責財務，都取決於部門、主管與職務；缺了任何一項，送審就會被擋下。",
@@ -52,15 +52,15 @@ STEPS = (
      "confirm": "「組織設定檢查」全部通過（每位同仁有部門、每個部門有主管、有人擔任財務）。",
      "href": "users.html", "link": "到使用者管理"},
     {"id": "email", "title": "寄信",
-     "why": "簽核通知、逾期提醒與報表都靠信件送達；先寄一封測試信，確認同仁真的收得到。",
+     "why": "簽核通知、逾期提醒與報表都靠信件送達；先寄一封測試信，確認同仁確實收得到。",
      "minutes": "約 10 分鐘", "prepare": ["公司用的 Gmail 寄件信箱（要先開啟 Google 的「兩步驟驗證」，才能建立應用程式密碼）", "該信箱的應用程式密碼（不是登入密碼）",
                  "測試信收件人：到「信件與通知收件設定」頁指定，並確認該帳號有填 Email"],
-     "confirm": "在通知設定頁填好 Gmail 帳號與應用程式密碼，按「寄測試信」並且成功寄出；若出現「找不到可發送對象」，請先到「信件與通知收件設定」指定測試信收件人、並為該帳號填 Email。",
+     "confirm": "在通知設定頁填寫 Gmail 帳號與應用程式密碼，按「寄測試信」並且成功寄出；若出現「找不到可發送對象」，請先到「信件與通知收件設定」指定測試信收件人、並為該帳號填 Email。",
      "href": "notification-settings.html", "link": "到通知設定"},
     {"id": "backup", "title": "備份",
-     "why": "資料都在這台電腦上，硬碟故障就沒了；要先確認備份放在別的地方，而且真的做成功過一次。",
+     "why": "資料都在這台電腦上，硬碟故障時資料即無法復原；請先確認備份存放於其他位置，且確實成功執行過一次。",
      "minutes": "約 5 分鐘", "prepare": ["備份用的雲端硬碟或另一個資料夾"],
-     "confirm": "系統記錄到第一次「備份到別的地方」成功（只有這台電腦上的備份不算）。",
+     "confirm": "系統記錄到第一次「備份至其他位置」成功（只有這台電腦上的備份不算）。",
      "href": BACKUP_HREF, "link": "到儲存位置與備份"},
     {"id": "line", "title": "LINE（可略過）",
      "why": "有了 LINE，簽核通知會直接傳到同仁手機。可暫不使用，日後需要時再回來設定。",
@@ -68,7 +68,7 @@ STEPS = (
      "confirm": "官方帳號連線成功，並且至少一位同仁完成綁定；請同仁各自到「我的帳號 → 通知」按「綁定 LINE」。",
      "href": "notification-settings.html", "link": "到通知設定", "optional": True},
     {"id": "import", "title": "匯入資料",
-     "why": "把既有的客戶、料號、員工與歷史報價放進來，日後無需重新輸入。",
+     "why": "把既有的客戶、料號、員工與歷史報價匯入，日後無需重新輸入。",
      "minutes": "依資料量而定", "prepare": ["整理好的 Excel 檔（客戶、料號、員工、歷史報價）"],
      "confirm": "系統裡已經有客戶資料；全部匯入完畢後也可以按「資料已備妥」。",
      "href": "customers.html", "link": "到客戶資料"},
@@ -109,7 +109,7 @@ def _d_quote_style(conn):
     from helpers import _get_setting
     miss = cs.payment_bank_missing(_get_setting("company_profile", {}) or {})
     hint = ("收款帳戶還缺：" + "、".join(miss) + "。") if miss else "收款帳戶已填。"
-    return {"done": False, "auto": False, "detail": hint + "預覽報價單這件事系統看不出來，請您確認後按「我已預覽確認」。"}
+    return {"done": False, "auto": False, "detail": hint + "預覽報價單系統無法自動判斷此項，請您確認後按「我已預覽確認」。"}
 
 
 def _d_people(conn):
@@ -134,11 +134,11 @@ def _d_email(conn):
 def _d_backup(conn):
     at = _latest_audit_at(conn, BACKUP_OK_ACTIONS)
     if at:
-        return {"done": True, "auto": True, "detail": "最近一次備份到別的地方成功：%s。" % _fmt_at(at)}
+        return {"done": True, "auto": True, "detail": "最近一次備份至其他位置成功：%s。" % _fmt_at(at)}
     local = _latest_audit_at(conn, _BACKUP_LOCAL_ONLY_ACTIONS)
     if local:
         return {"done": False, "auto": True,
-                "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟故障時會一起消失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一顆硬碟），並等它成功備份一次。" % _fmt_at(local)}
+                "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟故障時將一併遺失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一個硬碟），並等它成功備份一次。" % _fmt_at(local)}
     return {"done": False, "auto": True, "detail": "系統尚未記錄到備份成功。"}
 
 

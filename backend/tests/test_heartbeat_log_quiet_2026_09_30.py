@@ -92,7 +92,7 @@ def test_failure_and_recovery_are_logged_and_a_long_outage_is_hourly(hb, monkeyp
     up["v"] = True
     _set_time(monkeypatch, hb, datetime(2026, 9, 30, 11, 5))
     hb.main()
-    assert hb._lines[-1][0] == "log" and "外部心跳打卡成功" in hb._lines[-1][1]          # 壞→好要記
+    assert hb._lines[-1][0] == "log" and "外部心跳回報成功" in hb._lines[-1][1]          # 壞→好要記
 
 
 def test_logs_have_a_size_cap(hb):

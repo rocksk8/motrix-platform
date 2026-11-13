@@ -54,7 +54,7 @@ LINE_NAMES = {
 
 #: 仍未能核實／未涵蓋的項目（畫面與 Excel 只顯示這幾項；其餘欄位代號已對照官方）
 UNVERIFIED = (
-    "發票種類：來源資料沒有發票種類欄位，一律依『預設發票媒介』（電子發票）落列。發票種類不同只影響欄位分列（銷項 三聯式 1／2、電子 5／6、二聯式 9／10；進項 28／29 與 32／33），不影響銷售額合計、稅額合計、應納稅額。進項若是營業人之間的電子發票，官方應列 32／33（本版進項一律列 28／29），申報前請對照。",
+    "發票種類：來源資料沒有發票種類欄位，一律依『預設發票媒介』（電子發票）列入。發票種類不同只影響欄位分列（銷項 三聯式 1／2、電子 5／6、二聯式 9／10；進項 28／29 與 32／33），不影響銷售額合計、稅額合計、應納稅額。進項若是營業人之間的電子發票，官方應列 32／33（本版進項一律列 28／29），申報前請對照。",
     "本期(月)累積留抵稅額（代號 115）與得退稅限額（113／114）：官方欄位存在，但計算公式尚未取得官方說明，本版不自動計算（申報時請人工填寫）。",
     "媒體申報檔（TXT）：官方檔案格式（附件六 112 欄）已取得，但申報檔另需稅籍編號、檔案編號、申報代號等公司登記資料與進銷項明細檔（附件七），本版只輸出 Excel 工作底稿。",
 )
@@ -229,7 +229,7 @@ def summarize(conn, year, n, invoices=None):
             "AND substr(v.voucher_date,1,10) < ? LIMIT 1", (_CARRY_ORIGIN, lo)).fetchone() and not conn.execute(
             "SELECT 1 FROM gl_tax_settlements WHERE period_end < ? LIMIT 1", (lo,)).fetchone():
         warnings.append({"key": "no_prev_settlement", "level": "amber",
-                         "text": "本期以前已有稅碼分錄，卻沒有任何期別的稅額結轉紀錄：上期累積留抵稅額（108）沒有被承接。若前期已在他處申報，請確認 108 是否應有金額再申報。"})
+                         "text": "本期以前已有稅碼分錄，卻沒有任何期別的稅額結轉紀錄：上期累積留抵稅額（108）未被承接。若前期已在他處申報，請確認 108 是否應有金額再申報。"})
     if unmapped:
         warnings.append({"key": "unmapped", "level": "red", "text": "稅碼 %s 沒有 401 欄位對照（gl_tax401_map）：未列入彙總。" % "、".join(unmapped)})
     return {"year": year, "period": n, "start": lo, "end": hi, "rows": rows, "calc": calc, "checks": checks, "warnings": warnings,
@@ -258,7 +258,7 @@ def generate_settlement(conn, year, n, user, invoices=None):
         raise TaxError(lock)
     S, I, C = s["calc"]["101"], s["calc"]["107"], s["calc"]["108"]
     if S < 0 or I < 0:
-        raise TaxError("本期銷項稅額（101）%d 或進項稅額（107）%d 的淨額是負的（多半是只有退回折讓的期間）：稅額結轉不處理負的淨額，請先確認折讓證明單與進項憑證。" % (S, I))
+        raise TaxError("本期銷項稅額（101）%d 或進項稅額（107）%d 的淨額為負數（大多是僅有退回折讓的期間）：稅額結轉不處理負的淨額，請先確認折讓證明單與進項憑證。" % (S, I))
     if S == 0 and I == 0:
         raise TaxError("本期沒有銷項與進項稅額，不需要結轉。")
     prev = conn.execute(

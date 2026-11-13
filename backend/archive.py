@@ -303,7 +303,7 @@ def _archive_owner_ok() -> bool:
                     f"（機器：{owner.get('machine') or '不明'}，"
                     f"認領於 {owner.get('claimed_at') or '不明'}）。"
                     f"為避免覆蓋對方的備份、或因為對方已寫下當日 .done 而讓本機"
-                    f"靜默略過備份，**本機的雲端備份已全部停止**（本機 SQLite "
+                    f"靜默略過備份，本機的雲端備份已全部停止（本機 SQLite "
                     f"快照不受影響，仍會寫入 {_LOCAL_DB_BACKUP}）。"
                     f"若這台才是正式機、要接手這個存檔目錄，"
                     f"請刪除 {marker_path} 後重啟服務即可重新認領。"
@@ -588,7 +588,7 @@ def _send_backup_error_email(reason: str, ts: str):
             except Exception:
                 logger.exception("寫告警信節流檔失敗")
         elif outcome == SEND_SKIPPED:
-            _alert_email_failed(reason, "這台機器設定成不寄信（開發機標記或寄信未設定），不是寄了失敗")
+            _alert_email_failed(reason, "這台機器設定成不寄信（開發機標記或寄信未設定），並非寄送失敗")
         else:
             _alert_email_failed(reason, "寄送結果：%s" % outcome)
 
@@ -1090,7 +1090,7 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
         ratio = snapshot_size_ratio(os.path.getsize(path), history)
         return False, [
             "快照大小是前 %d 份的 %.2f 倍（合格區間 %s~%s）——"
-            "不是「這一份特別大／特別小」，是**有東西失控了**"
+            "並非單一份快照異常偏大或偏小，而是系統內有項目失控"
             % (len(history), ratio, SNAPSHOT_SIZE_RATIO_LO,
                SNAPSHOT_SIZE_RATIO_HI)], counts
 
@@ -1795,7 +1795,7 @@ def _rotate_server_log_if_large(
                 os.remove(tmp)
             except OSError:
                 pass
-            _warn_rotate_throttled(path, "server.log 輪替沒成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示" % (type(e).__name__, e))
+            _warn_rotate_throttled(path, "server.log 輪替未成功（清空這一步被擋：%s: %s）——檔案維持原樣、世代未動；24 小時內不再重複提示" % (type(e).__name__, e))
             return False
         # 清空成功：現在才推世代。**從這裡起舊內容只存在 .rotating**——推世代任何一步失敗都不可以讓它消失、log 也不可以說「rotated」。
         try:
@@ -1967,11 +1967,11 @@ def _prune_select(names, parse, cutoff_ord: int, label: str, hold_local: str, ho
                   % (len(future), max(future).isoformat(), today.isoformat()))
     elif gap_days is not None and others and today.toordinal() - max(others).toordinal() > gap_days:
         # N-1：往前跳、但小於保留天數時，上一條不會成立，真實快照會被靜默刪掉（稽核實測跳 29 天 ⇒ 30 份剩 7 份）
-        reason = ("最新一份（%s）距今天 %s 已經 %d 天，中間沒有快照（超過 %d 天）—— 系統時鐘可能往前跳了，或機器停機過"
+        reason = ("最新一份（%s）距今天 %s 已經 %d 天，中間沒有快照（超過 %d 天）—— 系統時鐘可能向前跳轉，或機器曾經停機"
                   % (max(others).isoformat(), today.isoformat(), today.toordinal() - max(others).toordinal(), gap_days))
     elif expired and max(others).toordinal() < cutoff_ord:
         reason = ("除了今天以外，所有份數都超過保留天數（最新一份是 %s，今天 %s）—— "
-                  "系統時鐘可能往前跳了，或機器停機很久" % (max(others).isoformat(), today.isoformat()))
+                  "系統時鐘可能向前跳轉，或機器長時間停機" % (max(others).isoformat(), today.isoformat()))
     try:
         held = (os.path.exists(hold_local) if hold_s3 is None
                 else _cloud_marker_exists(hold_local, hold_s3))
@@ -1989,7 +1989,7 @@ def _prune_select(names, parse, cutoff_ord: int, label: str, hold_local: str, ho
             logger.exception("_prune_select: 寫清理暫停標記失敗")
     if reason or held:
         _write_backup_alert(
-            "%s：已暫停清理，這一輪一份都沒刪（原本會刪 %d 份）。原因：%s。"
+            "%s：已暫停清理，這一輪未刪除任何一份（原本會刪 %d 份）。原因：%s。"
             "確認系統時鐘正確後，刪除 %s 才會恢復清理"
             % (label, len(doomed), reason or "先前偵測到時鐘異常，尚未有人確認", hold_local),
             level="ERROR")
@@ -3032,7 +3032,7 @@ def _monthly_backup():
             summary["db_snapshot"] = False
             _write_backup_alert(
                 f"月備份（{month_label}）的整庫檔需要個資資料夾「{_PII_ARCHIVE_DIRNAME}」，"
-                "目前不可用 —— **尚未標記完成**，資料夾建好後的下一次每日備份會補上", level="ERROR")
+                "目前不可用 —— 尚未標記完成，資料夾建好後的下一次每日備份會補上", level="ERROR")
         else:
             try:
                 _pii_copy_file(today_snapshot, pii_db,
@@ -3068,7 +3068,7 @@ def _monthly_backup():
         # 讓明天的每日備份再試一次，直到這個月真的拿到一份完整的為止。
         _system_audit("backup.monthly_partial", month_label, summary)
         _write_backup_alert(
-            "月備份（%s）有 %d 張表匯出失敗：%s。**尚未標記完成**，明日每日備份會再試一次。"
+            "月備份（%s）有 %d 張表匯出失敗：%s。尚未標記完成，明日每日備份會再試一次。"
             % (month_label, len(failed), "、".join(failed)), level="ERROR")
         return
 
@@ -3197,8 +3197,8 @@ def _daily_backup():
                           {"reasons": _snap_reasons, "counts": _snap_counts})
             _write_backup_alert(
                 "每日備份（%s）的整庫快照與當日彙總對不上，**未標記完成**：%s。"
-                "☠️ 檔案在、大小合理、結構也對，而裡面的資料不是正式庫的 ——"
-                "2026-08-30／08-31／09-03 三天就是這個樣子。"
+                "檔案在、大小合理、結構也對，而裡面的資料不是正式庫的 ——"
+                "2026-08-30／08-31／09-03 三天即為此情形。"
                 % (today_label, "；".join(_snap_reasons)), level="ERROR")
             return
 

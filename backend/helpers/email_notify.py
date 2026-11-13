@@ -1991,7 +1991,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
         "案件結案報表", "已產生", "#7C3AED",
         [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
         "", case_page,
-        intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入/成本/損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
+        intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入、成本、損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
         button_text="前往查看案件",
     )
     attachments = [(f"{quote_no}_結案報表.pdf", pdf_bytes, "application/pdf")]
@@ -2350,9 +2350,9 @@ def notify_cert_expiry(
     # 影響範圍講清楚，避免收信的人以為「憑證過期＝系統掛了」而驚動所有人
     impact = (
         "<b>影響範圍</b>：<br>"
-        "• Passkey／指紋登入 → <b>完全不能用</b>（瀏覽器不再視為安全內容）<br>"
-        "• 密碼登入、TOTP、手機掃 QR → <b>仍可使用</b>，但瀏覽器會跳憑證警告，"
-        "需要點「進階 → 繼續前往」<br>"
+        "• Passkey／指紋登入 → <b>完全無法使用</b>（瀏覽器不再視為安全內容）<br>"
+        "• 密碼登入、TOTP、手機掃 QR → <b>仍可使用</b>，但瀏覽器會顯示憑證警告，"
+        "需要按「進階 → 繼續前往」<br>"
         "• 系統本身與資料 → 不受影響"
     )
 
@@ -2360,7 +2360,7 @@ def notify_cert_expiry(
         howto = (
             "<b>此憑證為自動續期憑證（Let's Encrypt）</b>，正常情況下會於到期前自動更新；"
             "收到本通知表示<b>自動續期未成功</b>。請於正式機檢查："
-            "<br>1. 排程工作「MOTRIX ERP Cert Renew」是否還在、最近一次執行結果為何"
+            "<br>1. 排程工作「MOTRIX ERP Cert Renew」是否仍存在、最近一次執行結果為何"
             "<br>2. <code>backend\\logs\\letsencrypt_renew.log</code> 的錯誤訊息"
             "<br>3. Cloudflare API Token 是否已失效或被撤銷"
             "<br>手動補救：以系統管理員執行 "
@@ -2368,11 +2368,11 @@ def notify_cert_expiry(
         )
     else:
         howto = (
-            "<b>這張是自簽憑證（mkcert）</b>，不會自己更新，必須手動重產。"
+            "<b>這張是自簽憑證（mkcert）</b>，不會自動更新，須手動重新產生。"
             "在正式機以系統管理員執行："
             "<br><code>backend\\tools\\https_setup.ps1 -ExtraNames motrix.internal -Force</code>"
             "<br>然後執行 <code>backend\\restart.bat</code> 重啟服務。"
-            "<br>根 CA 本身有效期到 2036-09-07，<b>同事電腦上裝的 CA 不用動</b>；"
+            "<br>根 CA 本身有效期到 2036-09-07，<b>同仁電腦上已安裝的 CA 無須變動</b>；"
             "重產後 Passkey 也不會失效（RP ID 沒有改變）。"
         )
 
@@ -2425,9 +2425,9 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
         "<b>現在的風險</b>：從最後一次成功備份到現在的所有異動，"
         "目前<b>沒有副本</b>；此期間若資料庫損毀或誤刪，這些資料將無法還原。"
         "<br><br><b>請依序檢查（正式機）</b>："
-        "<br>1. 排程工作「MOTRIX ERP Daily Backup」是否還在、最近一次執行結果為何"
+        "<br>1. 排程工作「MOTRIX ERP Daily Backup」是否仍存在、最近一次執行結果為何"
         "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 是否有內容"
-        "<br>3. 雲端碟是否掛得起來（任一磁碟機代號下要找得到 "
+        "<br>3. 雲端碟是否已掛載（任一磁碟機代號下須能找到 "
         "<code>我的雲端硬碟\\系統存檔</code>）"
         "<br>4. <code>backend\\logs\\app.log</code> 搜尋 <code>_daily_backup</code>（錯誤也會寫在 <code>server.log</code>）"
         "<br>5. <b>是否有第二台機器掛載同一個雲端資料夾</b>："
@@ -2467,11 +2467,11 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
             ("狀態檔最後更新", st.get("seen_at") or "—")]
     intro = _safe("監控本身可能沒有在正常運作：" + "；".join(_esc(str(p)) for p in (problems or [summary])))
     note = _safe(
-        "<b>這代表什麼</b>：心跳是「獨立於本機」的服務中斷告警（本機停止回報 ⇒ healthchecks.io 寄信）。"
+        "<b>說明</b>：心跳是「獨立於本機」的服務中斷告警（本機停止回報 ⇒ healthchecks.io 寄信）。"
         "它故障時，<b>真正發生伺服器停止運作或斷電時，可能不會有人被通知</b>。"
         "<br><br><b>請依序檢查（正式機）</b>："
         "<br>1. 登入 healthchecks.io 看這個 check 的狀態與歷史，確認<b>收件人設定仍有效</b>"
-        "<br>2. 排程工作「MOTRIX ERP Heartbeat」是否還在、最近一次執行結果"
+        "<br>2. 排程工作「MOTRIX ERP Heartbeat」是否仍存在、最近一次執行結果"
         "<br>3. <code>backend/logs/heartbeat_job.log</code> 最後幾行（判定哪一種協定、哪一步失敗）"
         "<br>4. 伺服器是否改過協定／埠（<code>autostart.bat</code> 依 <code>certs/cert.pem</code> 是否存在決定 https 或 http）"
         "<br><br>修好並看到下一次回報成功後，請到 healthchecks.io <b>人工確認狀態回到綠燈</b>。"
@@ -2503,9 +2503,9 @@ def notify_line_quota_warning(used: int, limit: int, threshold: int, thresholds:
             ("設定的門檻", "、".join("%d%%" % t for t in (thresholds or [])) or "—")]
     intro = _safe("LINE 本月訊息用量已達 %.0f%%（上限 %d 則）。" % (pct, limit))
     note = _safe(
-        "<b>這代表什麼</b>：LINE 官方帳號的免費方案每月有訊息上限，推播給每位收件人各算一則。"
+        "<b>說明</b>：LINE 官方帳號的免費方案每月有訊息上限，推播給每位收件人各算一則。"
         "用完之後 LINE 會拒絕發送，<b>勾選了「同時發 LINE」的通知就不會送到手機</b>（Email 照常寄出）。額度每月 1 日重置。"
-        "<br><br><b>可以怎麼做</b>："
+        "<br><br><b>建議處理方式</b>："
         "<br>1. 到「通知設定」頁看用量條，確認哪些通知類型在耗用額度，必要時取消勾選或縮小「可收的角色」"
         "<br>2. 評估升級 LINE 官方帳號方案"
         "<br>3. 門檻可由最高管理者在同一頁自訂"
@@ -2553,12 +2553,12 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
             rows, "", _base_url(),
             intro=("測試與打包留下的暫存目錄已累積至需要清理的程度；"
                    "磁碟剩餘空間目前仍在安全範圍，本通知為預先提醒。"),
-            note=_safe("<b>這些目錄清掉一律安全</b>：它們是 pytest 每次執行的暫存"
+            note=_safe("<b>這些目錄清除皆安全無虞</b>：它們是 pytest 每次執行的暫存"
                   "（`--basetemp`），名字帶時間戳或標籤，所以每跑一次就多一份、"
-                  "不會被覆蓋也沒有任何機制會清。"
+                  "不會被覆蓋也無任何機制會自動清除。"
                   "<br><br>清除方式：<code>rd /s /q \"%TEMP%\\motrix-pytest-*\"</code>"
                   "（或直接刪上面列出的資料夾）。"
-                  "<br><br><b>為什麼會這麼大</b>：測試期間「PDF 存檔鏡像」是真的在產生"
+                  "<br><br><b>容量偏大的原因</b>：測試期間「PDF 存檔鏡像」是真的在產生"
                   "PDF，一次完整測試會寫出上萬個單據 PDF（約 3.5 GB）。"),
             button_text="前往系統",
         )
@@ -2580,7 +2580,7 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
             "症狀出現時，可能已缺漏數日的備份。"
             "<br><br><b>可以安全清掉的東西</b>："
             "<br>• <code>%TEMP%\\motrix-pytest-*</code> — 測試暫存，每跑一次 3～4 GB，"
-            "名字每次都不同所以不會被覆蓋、也沒有任何機制會清（2026-09-15 實測一次清出 136 GB）"
+            "名字每次都不同所以不會被覆蓋、也無任何機制會自動清除（2026-09-15 實測一次清出 136 GB）"
             "<br>• <code>backend\\db_backups\\pre_update_*</code> — 部署前快照，"
             "系統每天會自動只留最新 5 份（2026-09-14 起），手動刪更舊的也安全"
             "<br>• <code>backend\\rollback_snapshots\\</code> — 只保留最新 5 份，更舊的可刪"

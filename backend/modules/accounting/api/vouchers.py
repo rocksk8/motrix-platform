@@ -106,7 +106,7 @@ def _system_generated_reason(v):
     kind, origin = (v.get("kind") or ""), str(v.get("origin") or "")
     if kind == "auto" or kind == "reversal" or origin.startswith("bonus"):
         label = {"auto": "總帳引擎產生的自動傳票", "reversal": "總帳引擎產生的反向傳票"}.get(kind, "獎金入帳產生的傳票")
-        return ("這張是%s，不能從傳票頁直接作廢（作廢後會和來源單據脫鉤）。"
+        return ("這張是%s，不能從傳票頁直接作廢（作廢後將與來源單據脫離關聯）。"
                 "要更正請回到來源單據修改，系統會自動產生反向傳票與新草稿；或到「總帳作業」處理對應的事件。" % label)
     return ""
 

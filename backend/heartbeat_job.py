@@ -211,11 +211,11 @@ def main() -> None:
         return
 
     if not ping_url:
-        status, msg, level = "ext_unset", "本機 /api/ping 正常（%s）；heartbeat_config.json ping_url 尚未設定，僅檢查本機服務，不對外打卡" % scheme, logging.WARNING
+        status, msg, level = "ext_unset", "本機 /api/ping 正常（%s）；heartbeat_config.json ping_url 尚未設定，僅檢查本機服務，不對外回報" % scheme, logging.WARNING
     elif _http_get(ping_url):
-        status, msg, level = "ok", "本機 /api/ping 正常（%s）；外部心跳打卡成功" % scheme, logging.INFO
+        status, msg, level = "ok", "本機 /api/ping 正常（%s）；外部心跳回報成功" % scheme, logging.INFO
     else:
-        status, msg, level = "ext_fail", "本機 /api/ping 正常（%s）；外部心跳打卡失敗（本機服務正常，可能是本機對外網路異常）" % scheme, logging.WARNING
+        status, msg, level = "ext_fail", "本機 /api/ping 正常（%s）；外部心跳回報失敗（本機服務正常，可能是本機對外網路異常）" % scheme, logging.WARNING
     if _should_log(prev, status, now, scheme):
         logger.log(level, msg)
         _save_state(status, now, prev, scheme)

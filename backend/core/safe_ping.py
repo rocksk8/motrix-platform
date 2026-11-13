@@ -55,7 +55,7 @@ class RedirectBlocked(PingFailed):
         self.status = int(status)
 
 
-_INTERNAL_MSG = "這是本機或公司內網的位址，外部的監控服務連不到它。請貼監控服務給您的網址。"
+_INTERNAL_MSG = "這是本機或公司內網的位址，外部監控服務無法連線至該位址。請貼上監控服務所提供的網址。"
 
 
 def _embedded_v4(ip):
@@ -104,7 +104,7 @@ def check_url(url: str) -> tuple:
     if sp.scheme not in ("http", "https") or not sp.hostname:
         raise UnsafeTarget("網址要以 https:// 開頭，例如 https://hc-ping.com/…（從 healthchecks.io 的 Ping URL 複製）。")
     if sp.username is not None or sp.password is not None or "@" in sp.netloc:
-        raise UnsafeTarget("網址裡不能含帳號密碼（「@」前面的部分）。請貼監控服務給您的完整 Ping URL。")
+        raise UnsafeTarget("網址裡不能含帳號密碼（「@」前面的部分）。請貼上監控服務所提供的完整 Ping URL。")
     host = sp.hostname.strip().lower()
     while host.endswith("."):
         host = host[:-1]
@@ -117,7 +117,7 @@ def check_url(url: str) -> tuple:
     if port is None:
         port = 443 if sp.scheme == "https" else 80
     if port not in ALLOWED_PORTS:
-        raise UnsafeTarget("網址的連接埠不能自訂，只能使用一般網站的 80 或 443。請貼監控服務給您的原始網址。")
+        raise UnsafeTarget("網址的連接埠不能自訂，只能使用一般網站的 80 或 443。請貼上監控服務所提供的原始網址。")
     if host == "localhost" or host.endswith(_BAD_SUFFIXES):
         raise UnsafeTarget(_INTERNAL_MSG)
     literal = None

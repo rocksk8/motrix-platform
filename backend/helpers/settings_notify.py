@@ -303,7 +303,7 @@ def preview_recipients(items, conn=None):
                 on = _ln.event_enabled(EVENT_KEY)
             except Exception:                                   # noqa: BLE001
                 on = False
-            out["line"] = {"willSend": bool(on and sa), "reason": ("會發 LINE 給最高管理者" if on else "有高風險項目，但 LINE 通知未啟用或「設定變更」事件未勾選，不會發 LINE")}
+            out["line"] = {"willSend": bool(on and sa), "reason": ("會發 LINE 給最高管理者" if on else "有高風險項目，但 LINE 通知未啟用或「設定變更」事件未勾選，不會發送 LINE")}
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("settings_notify.preview_recipients 失敗：%s", exc)
     return out

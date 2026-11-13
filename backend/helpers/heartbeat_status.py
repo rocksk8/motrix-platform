@@ -97,7 +97,7 @@ def assess(now: datetime = None, state=_READ) -> dict:
             if not cfg:
                 out["summary"] = "這台機器沒有心跳監控（沒有設定檔也沒有狀態檔）"
                 return out
-            out.update(level=LEVEL_WARN, alert=True, summary="有心跳設定檔，但沒有狀態檔：心跳排程可能從來沒有執行過")
+            out.update(level=LEVEL_WARN, alert=True, summary="有心跳設定檔，但沒有狀態檔：心跳排程可能從未執行過")
             out["problems"].append(out["summary"])
             return out
         for k in ("status", "since", "seen_at", "scheme", "local_ok_at", "ext_ok_at"):

@@ -711,7 +711,7 @@ def test_initial_state_cannot_have_an_approval():
     """C-S3：起始狀態掛簽核永遠不會展開 ⇒ 發布時擋下。"""
     b = loan_definition()
     b["workflow"]["states"][0]["approval"] = copy.deepcopy(b["workflow"]["states"][1]["approval"])
-    assert "起始狀態不可以掛簽核" in _paths(b)["workflow.states[0].approval"]
+    assert "起始狀態不可設定簽核" in _paths(b)["workflow.states[0].approval"]
 
 
 def test_permission_cannot_be_a_builtin_key_or_shared(client, make_user):

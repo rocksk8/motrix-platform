@@ -48,7 +48,7 @@ def domain_hint(email, company_email="") -> str:
     if d in _PERSONAL_DOMAINS:
         return "這看起來是私人信箱的網域（%s），報價單上通常要用公司信箱，請確認。" % d
     if cd and d != cd:
-        return "這個信箱的網域（%s）和公司對外信箱的網域（%s）不同，請確認沒有填錯。" % (d, cd)
+        return "這個信箱的網域（%s）和公司對外信箱的網域（%s）不同，請確認填寫無誤。" % (d, cd)
     return ""
 
 

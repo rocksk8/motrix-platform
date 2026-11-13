@@ -62,7 +62,7 @@ def _no_manager(conn):
     return {
         "key": GAP_NO_MANAGER, "severity": "warn", "count": len(bad),
         "title": "有 %d 個部門沒有主管" % len(bad),
-        "detail": "「部門主管簽核」會找不到人。請為這些部門指定一位在職的主管（主管離職停用後也要重新指定）。",
+        "detail": "「部門主管簽核」將找不到簽核人。請為這些部門指定一位在職的主管（主管離職停用後也要重新指定）。",
         "items": [{"id": r["id"], "name": r["name"], "note": ("主管已停用" if r["manager_user_id"] else "尚未指定")} for r in bad[:MAX_ITEMS]],
         "fix": {"label": "到組織架構指定主管", "href": "org-structure.html"},
     }

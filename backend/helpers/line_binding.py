@@ -29,7 +29,7 @@ REMIND_KEY = "line_bind_remind"
 _NOTICE_KEY = "user_notice"          # Email 借用的信件類型（「使用者額外通知」）
 _PAGE = "my-account.html?tab=notify"   # 2026-11-13 使用者裁示：綁定卡片搬到「我的帳號」的「通知」分頁（hichan-1 的頁面）
 _TITLE = "請綁定您的 LINE 通知"
-_TEXT = ("公司已啟用 LINE 通知。請登入系統，點下方連結，在頁面中找到「LINE 通知」卡片，按「綁定 LINE」，"
+_TEXT = ("公司已啟用 LINE 通知。請登入系統，按下方連結，在頁面中找到「LINE 通知」卡片，按「綁定 LINE」，"
          "用手機掃描畫面上的 QR 並按「同意」（約 1 分鐘）。綁定後，簽核、指派等通知也會推播到您的 LINE。")
 
 

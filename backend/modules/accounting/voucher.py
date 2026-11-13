@@ -618,7 +618,7 @@ def approval_done(voucher):
     try:
         tiers = _chain_tiers(voucher)
     except VoucherChainUnreadable:
-        return False, "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核，暫不能匯出。"
+        return False, "這張傳票的簽核資料無法讀取，無法判斷是否已完成簽核，暫時無法匯出。"
     if tiers:
         try:
             appr = json.loads(voucher.get("approval_json") or "{}") or {}

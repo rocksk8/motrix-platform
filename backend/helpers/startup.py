@@ -871,8 +871,8 @@ def enable_onepipe_defaults_once() -> None:
                         zero[k] = 1
         if zero:
             _sr.publish(group, zero, user="system", actor={"username": "system", "display_name": "系統升級"},
-                        note="T84 升級：一條龍功能預設開啟",
-                        reason="系統升級（T84）：一條龍功能（%s）預設改為開啟，既有環境一併開啟（0→1）；不需要的項目可到設定中心逐項關閉。" % "、".join(sorted(zero)))
+                        note="T84 升級：整合流程功能預設開啟",
+                        reason="系統升級（T84）：整合流程功能（%s）預設改為開啟，既有環境一併開啟（0→1）；不需要的項目可到設定中心逐項關閉。" % "、".join(sorted(zero)))
             result = "enabled"
         conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
                      "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",

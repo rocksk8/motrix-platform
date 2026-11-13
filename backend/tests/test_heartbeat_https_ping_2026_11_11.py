@@ -198,4 +198,4 @@ def test_stuck_local_down_state_self_heals_without_clearing_state_file(hb, https
     _external_ok(hb, monkeypatch)
     hb.main()
     assert json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))["status"] == "ok"
-    assert hb._lines and hb._lines[-1][0] == "log" and "外部心跳打卡成功" in hb._lines[-1][1]
+    assert hb._lines and hb._lines[-1][0] == "log" and "外部心跳回報成功" in hb._lines[-1][1]

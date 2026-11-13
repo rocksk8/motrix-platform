@@ -229,13 +229,13 @@ def test_one_million_cell_file_is_rejected_fast_and_with_small_memory():
     data = _raw_xlsx(_grid_xml(20000, 50), declared="A1:AX20000")        # 100 萬格，壓縮後只有幾 MB
     assert len(data) < (5 << 20)
     t = time.monotonic()                                                  # ① 時間（不開 tracemalloc：它會讓純 Python 迴圈慢十倍以上）
-    with pytest.raises(P.ParseError, match="儲存格太多|內容太大"):
+    with pytest.raises(P.ParseError, match="儲存格數量過多|內容過大"):
         P.parse_file(data, "bomb.xlsx", "customers")
     took = time.monotonic() - t
     assert took < 2, "1M 格的檔案花了 %.2f 秒才拒絕" % took
     tracemalloc.start()                                                   # ② 尖峰記憶體
     try:
-        with pytest.raises(P.ParseError, match="儲存格太多|內容太大"):
+        with pytest.raises(P.ParseError, match="儲存格數量過多|內容過大"):
             P.parse_file(data, "bomb.xlsx", "customers")
         peak = tracemalloc.get_traced_memory()[1]
     finally:
@@ -255,7 +255,7 @@ def test_lying_dimension_does_not_pad_rows_or_slow_the_parse():
 
 def test_row_numbers_far_below_the_data_are_rejected_not_scanned():
     row = '<row r="1"><c r="A1" t="inlineStr"><is><t>公司名稱</t></is></c></row><row r="%d"><c r="A%d" t="inlineStr"><is><t>x</t></is></c></row>' % (P.MAX_SHEET_ROWNUM + 5, P.MAX_SHEET_ROWNUM + 5)
-    with pytest.raises(P.ParseError, match="太多或資料放得太下面"):
+    with pytest.raises(P.ParseError, match="列數過多或資料位置過於靠下"):
         P.parse_file(_raw_xlsx(row), "far.xlsx", "customers")
 
 
@@ -268,9 +268,9 @@ def test_oversized_sheet_xml_is_rejected_before_reading_it():
 
 def test_deadline_is_enforced(monkeypatch):
     monkeypatch.setattr(P, "DEADLINE_SECONDS", -1.0)
-    with pytest.raises(P.ParseError, match="處理太久"):
+    with pytest.raises(P.ParseError, match="處理時間過長"):
         _parse([CUST_HEAD, ["甲", ""]])
-    with pytest.raises(P.ParseError, match="處理太久"):
+    with pytest.raises(P.ParseError, match="處理時間過長"):
         P.parse_file("公司名稱\n甲\n".encode("utf-8"), "d.csv", "customers")
 
 

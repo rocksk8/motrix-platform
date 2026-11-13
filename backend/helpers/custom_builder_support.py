@@ -205,7 +205,7 @@ def access_problems(body) -> list:
         if bad:
             continue
         if f.get("required") and (_spec(acc.get("visibleTo")) is not None or _spec(acc.get("editableTo")) is not None):
-            out.append({"path": "fields[%d].required" % i, "message": "必填欄位不可以設成只有部分人看得到或改得到（其他人填不了就存不了）"})
+            out.append({"path": "fields[%d].required" % i, "message": "必填欄位不得設為僅部分人員可檢視或編輯（其他人員無法填寫即無法儲存）"})
     menu = body.get("menu")
     v = menu.get("visibleTo") if isinstance(menu, dict) else None
     if v is not None:
@@ -231,7 +231,7 @@ def leaking_formulas(body) -> list:
             if theirs is None:
                 continue
             if mine is None or not (mine[0] <= theirs[0] and mine[1] <= theirs[1]):
-                out.append({"path": "fields[%d].formula" % index[f["key"]], "message": "公式引用了受限欄位「%s」，但這個公式欄的可見範圍比它大——會洩漏" % (src.get("label") or ref)})
+                out.append({"path": "fields[%d].formula" % index[f["key"]], "message": "公式引用了受限欄位「%s」，但這個公式欄的可見範圍比它大——將造成資料洩漏" % (src.get("label") or ref)})
     return out
 
 

@@ -193,7 +193,7 @@ def _extra_expense_entry(row):
 
 
 #: IP-15 成本檢視拒絕這個人（403）時的說明（主持裁示：任何來源因權限沒列出都要明說）
-DISPATCH_COST_FORBIDDEN = "您沒有權限查看承攬商派工的成本：派工支出沒有列出（不是沒有）"
+DISPATCH_COST_FORBIDDEN = "您沒有權限查看承攬商派工的成本：派工支出未列出（並非無此支出）"
 #: IP-15 成本檢視不在（M04 未安裝）時的說明
 DISPATCH_COST_UNAVAILABLE = "外包工班模組未安裝：承攬商派工無法作為支出來源"
 

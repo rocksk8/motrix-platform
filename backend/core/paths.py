@@ -158,5 +158,5 @@ def require_db(path: str = None, env=None) -> None:
         return
     raise DatabaseMissing(
         "找不到資料庫：%s\n"
-        "若這是既有安裝：檢查安裝目錄、磁碟、還原備份（backend/db_backups/），不要重新建庫。\n"
+        "若這是既有安裝：檢查安裝目錄、磁碟、還原備份（backend/db_backups/），請勿重新建立資料庫。\n"
         "若確定是全新安裝：設定環境變數 %s=1 後啟動一次，建好後移除。" % (path, NEW_DB_FLAG))

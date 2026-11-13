@@ -89,7 +89,7 @@ def create_batch(conn, year, opening_date, rows, items, filename, user):
     if err:
         raise OpeningError(err + "請先重開該期間才能匯入期初。")
     if conn.execute("SELECT 1 FROM gl_opening_batches WHERE year=? AND undone_at=''", (int(year),)).fetchone():
-        raise OpeningError("%s 年度已經有一批期初餘額；要重匯請先撤銷（尚未過帳）或開沖轉傳票。" % year)
+        raise OpeningError("%s 年度已經有一批期初餘額；如需重新匯入，請先撤銷（尚未過帳）或開沖轉傳票。" % year)
     res = preview(conn, rows, items)
     if not res["balanced"]:
         raise OpeningError("期初餘額借貸不平衡：借 %d、貸 %d，差 %d。" % (res["debit"], res["credit"], res["diff"]))

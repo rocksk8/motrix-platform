@@ -764,7 +764,7 @@ def approve_disable(change_id: int, actor, ip: str = "") -> dict:
             else:
                 new_url = _read_pending_url()
                 if not new_url:
-                    raise DisableError("申請的新網址暫存檔不見了（可能伺服器資料夾被清理過）。請申請人重新送出申請。")
+                    raise DisableError("申請的新網址暫存檔已遺失（可能伺服器資料夾被清理過）。請申請人重新送出申請。")
                 _validate_ping_url(new_url, resolve=False)
                 _write_config(new_url)
             L.promote_due(conn, domain=_MON_DOMAIN)
@@ -878,17 +878,17 @@ def _ping(url: str) -> tuple:
         if exc.kind == "dns":
             return False, "找不到這個網站的位址。請確認網址是否有貼對，以及這台電腦的網路與 DNS 是否正常。"
         if exc.kind == "tls":
-            return False, "監控服務的安全憑證驗證沒通過。請確認網址沒有貼錯；如果網址正確，請聯絡維運檢查這台電腦的日期時間與憑證。"
+            return False, "監控服務的安全憑證驗證未通過。請確認網址沒有貼錯；如果網址正確，請聯絡維運檢查這台電腦的日期時間與憑證。"
         if exc.kind == "timeout":
-            return False, "等了很久監控服務都沒有回應。請稍後再試，或確認這台電腦的網路可以連到外部。"
-        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
+            return False, "等候逾時，監控服務未回應。請稍後再試，或確認這台電腦的網路可以連到外部。"
+        return False, "這台電腦無法連線至監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
     except Exception as exc:  # noqa: BLE001
         logger.warning("測試心跳失敗：%s", type(exc).__name__)
-        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
+        return False, "這台電腦無法連線至監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
     if 200 <= status < 300:
         return True, "監控服務有收到這次回報。"
     if status in (404, 410):
-        return False, "監控服務說找不到這個網址，請確認是否有貼完整、或在監控服務裡是否被刪除了。"
+        return False, "監控服務回報找不到這個網址，請確認是否有貼完整、或在監控服務裡是否被刪除了。"
     if status in (401, 403):
         return False, "監控服務拒絕了這次回報，請確認網址是否為正確的 Ping URL。"
     if status == 429:

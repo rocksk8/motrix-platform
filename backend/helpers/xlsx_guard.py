@@ -105,7 +105,7 @@ def new_deadline(limits=DEFAULT):
 
 def check_deadline(deadline, limits=DEFAULT):
     if deadline is not None and time.monotonic() > deadline:
-        raise XlsxRejected("檔案處理太久了（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % limits.deadline_seconds)
+        raise XlsxRejected("檔案處理時間過長（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % limits.deadline_seconds)
 
 
 async def read_upload(upload, limits=DEFAULT):
@@ -265,7 +265,7 @@ def prescan_sheet(z, part, limits=DEFAULT, deadline=None, cells_so_far=0):
     except KeyError:
         raise XlsxRejected(_BAD_STRUCT)
     if info.file_size > limits.max_sheet_xml:
-        raise XlsxRejected("這個工作表的內容太大了，請刪掉多餘的空白列、欄與格式再上傳（或拆成多個檔案）")
+        raise XlsxRejected("這個工作表的內容過大，請刪除多餘的空白列、欄與格式再上傳（或拆成多個檔案）")
     cells = rows = 0
     prev_row = prev_col = 0
     root = sheetdata = None
@@ -291,7 +291,7 @@ def prescan_sheet(z, part, limits=DEFAULT, deadline=None, cells_so_far=0):
                     rn = prev_row + 1
                 prev_row, prev_col = rn, 0
                 if rows > limits.max_row_tags or rn > limits.max_rownum:
-                    raise XlsxRejected("這個工作表的列太多或資料放得太下面了（上限約 %d 列）。請刪掉多餘的空白列再上傳，或拆成多個檔案"
+                    raise XlsxRejected("這個工作表的列數過多或資料位置過於靠下（上限約 %d 列）。請刪掉多餘的空白列再上傳，或拆成多個檔案"
                                        % limits.max_rownum)
             elif tag == "c":
                 cells += 1
@@ -308,7 +308,7 @@ def prescan_sheet(z, part, limits=DEFAULT, deadline=None, cells_so_far=0):
                     raise XlsxRejected("第 %d 列的「%s 欄」有內容或格式，超過欄位上限 %d 欄（到 %s 欄）。請刪掉多餘的欄再上傳，或確認檔案是依範本填的"
                                        % (prev_row, (letters or col_letters(col)).upper(), limits.max_cols, col_letters(limits.max_cols)))
                 if cells_so_far + cells > limits.max_cells:
-                    raise XlsxRejected("這個檔案的儲存格太多了（超過 %d 格）。請刪掉多餘的空白列、欄與格式，或拆成多個檔案" % limits.max_cells)
+                    raise XlsxRejected("這個檔案的儲存格數量過多（超過 %d 格）。請刪掉多餘的空白列、欄與格式，或拆成多個檔案" % limits.max_cells)
         else:                                        # end：釋放記憶體
             depth -= 1
             if tag == "row" and sheetdata is not None:
@@ -542,7 +542,7 @@ def _worker_main():
     except XlsxRejected as e:
         payload = {"ok": False, "kind": "rejected", "message": str(e)}
     except MemoryError:
-        payload = {"ok": False, "kind": "rejected", "message": "這個檔案處理時用掉太多記憶體，請減少內容或拆成多個檔案"}
+        payload = {"ok": False, "kind": "rejected", "message": "這個檔案處理時占用過多記憶體，請減少內容或拆成多個檔案"}
     except Exception as e:                                     # noqa: BLE001
         payload = {"ok": False, "kind": "error", "message": type(e).__name__}
     out.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
@@ -679,7 +679,7 @@ def _run_child(data, limits, req):
         except subprocess.TimeoutExpired:
             _kill_tree(proc)
             proc.communicate()
-            raise XlsxRejected("檔案處理太久了（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % limits.deadline_seconds)
+            raise XlsxRejected("檔案處理時間過長（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % limits.deadline_seconds)
         except OSError:
             _kill_tree(proc)
             proc.communicate()

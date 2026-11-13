@@ -187,7 +187,7 @@ def definition_problems(key, body) -> list:
         out.append({"path": "sheets", "message": "這個匯出沒有工作表可選"})
     if spec["sheets"]:                                                   # 工作表型：只能選要哪幾張
         if cols:
-            out.append({"path": "columns", "message": "這個匯出由多張工作表組成，只能選要哪幾張，沒有欄位可選"})
+            out.append({"path": "columns", "message": "這個匯出由多張工作表組成，僅能選擇要匯出的工作表，無欄位可選"})
         sh = body.get("sheets")
         cat = [x["id"] for x in spec["sheets"]]
         if not isinstance(sh, list) or not sh or not all(isinstance(x, str) for x in sh):
@@ -229,7 +229,7 @@ def definition_problems(key, body) -> list:
             seen.add(c.get("id"))
             msg = _text_problem(c.get("label"), LABEL_MAX, "欄位標題")
             if not msg and spec["lock_labels"] and c.get("id") in ids and c["label"] != next(x["label"] for x in spec["columns"] if x["id"] == c["id"]):
-                msg = "這個匯出的檔案會被匯入回來（靠表頭文字對應），欄位標題不能改名"
+                msg = "這個匯出的檔案會被匯入回來（依表頭文字對應），欄位標題不可更名"
             if msg:
                 out.append({"path": p + ".label", "message": msg})
             elif c["label"].strip() in labels:
@@ -489,7 +489,7 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
         base = spec["sample_html"] or "<!doctype html><html><body><h2>預覽樣本頁</h2><p>實際文件的內容與版面不受這些文字影響。</p></body></html>"
         return {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"], "decorOnly": True,
                 "html": apply_pdf_text(base, body), "columns": [], "rows": [], "omitted": [], "sample": "sample",
-                "warnings": ["PDF 只提供樣本頁預覽（證明文字放在哪裡）；實際文件請在發布後下載確認。程式產生的橫幅與法定欄位不受影響。"],
+                "warnings": ["PDF 只提供樣本頁預覽（文字擺放位置）；實際文件請在發布後下載確認。程式產生的橫幅與法定欄位不受影響。"],
                 "header": (body.get("header") or {}).get("text"), "footer": (body.get("footer") or {}).get("text"),
                 "watermark": (body.get("watermark") or {}).get("text")}
     if sample == "visible":

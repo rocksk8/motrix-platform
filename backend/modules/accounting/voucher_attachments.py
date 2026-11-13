@@ -236,7 +236,7 @@ def resolve_picks(conn, picks, user):
         if not os.path.isfile(src):
             raise HTTPException(
                 400, "來源檔案已經不存在：%s（%s／%s）。"
-                     "請確認該筆附件還在，或改用直接上傳。"
+                     "請確認該筆附件仍存在，或改用直接上傳。"
                      % (meta.get("filename") or meta.get("name") or file_id,
                         st, doc_no))
         resolved.append({

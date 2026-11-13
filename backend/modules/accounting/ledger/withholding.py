@@ -164,7 +164,7 @@ def report(conn, ym=None, kind=None, today=None):
         if code:
             out["checks"].append({"key": "vs_account", "label": "清單合計 ＝ 代扣科目 %s 當月貸方發生額" % code, "left": int(listed), "right": int(credit),
                                   "ok": int(listed) == int(credit),
-                                  "note": "不符多半是尚未進清單的來源（例：獎金代扣）或該月傳票尚未過帳。"})
+                                  "note": "不符大多是尚未進清單的來源（例：獎金代扣）或該月傳票尚未過帳。"})
         else:                                                              # 沒有代扣科目可對：明說怎麼辦（不是拿 0 去比一個看不懂的不符）
             out["checks"].append({"key": "vs_account", "label": "清單合計 ＝ 代扣科目當月貸方發生額（代扣科目尚未設定）", "left": int(listed), "right": 0, "ok": False,
                                   "note": "請先到「總帳設定」把角色「代扣所得稅」對應到代扣科目（通常是 2252），再回到這裡核對。"})

@@ -96,7 +96,7 @@ def test_publish_blocks_formula_leak_and_required_restricted_field(client, make_
     req = _body()
     req["fields"][1]["required"] = True
     probs = _publish(client, hb, req, key="b3acc2")
-    assert probs and any("必填欄位不可以設成只有部分人" in p["message"] for p in probs)
+    assert probs and any("必填欄位不得設為僅部分人員" in p["message"] for p in probs)
 
 
 def test_compute_preview_hides_restricted_formula_values(client, make_user):
