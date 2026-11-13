@@ -2815,6 +2815,7 @@
       rejectFinalNote: '',
       rejectingFinal: false,
       _prevDealTag: '',
+      _termsLoadFailed: false,    // 目前這種單據的條款組讀取失敗（true ⇒ 不給開管理視窗，免得拿空清單覆寫設定）
       _termsDocType: 'quote',      // 條款設定現在載的是哪一種單據的（estimate＝估價單自己的條款；見 _termsUrl／_ensureTermsDocType）
       _defaultPaymentTerms: DEFAULT_TERMS.paymentTerms,  // 送審前比對用；new-record 模式下會被 init() 換成後端目前設定的預設值
 
@@ -3513,10 +3514,12 @@
 
       async loadDefaultPaymentTerms() {
         this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms || this._defaultPaymentTerms
+        const t = this._termsDocType           // 回應慢到、期間已切到另一種單據 ⇒ 丟掉（否則另一種的設定蓋上來）
         try {
           const rp = await fetch(this._termsUrl('payment'), { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (rp.ok) {
             const d = await rp.json()
+            if (this._termsDocType !== t) return
             if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
           }
         } catch(e) {}
@@ -3527,20 +3530,31 @@
         t = t === 'estimate' ? 'estimate' : 'quote'
         if (this._termsDocType === t) return
         this._termsDocType = t
+        this._termsLoadFailed = false
+        this.termsPresets = []                 // 載入失敗時顯示內建基準，不留著另一種單據的條款組（否則管理視窗存檔會把它寫到這一種）
+        this.termsDefaultKey = ''
         await this.loadDefaultPaymentTerms()
         await this.loadTermsPresets()
       },
 
       async loadTermsPresets() {
+        const t = this._termsDocType           // 同上：過期的回應不採用
         try {
           const r = await fetch(this._termsUrl('presets'), {
             headers: { Authorization: 'Bearer ' + this.session.token },
           })
-          if (!r.ok) return
+          if (!r.ok) throw new Error('HTTP ' + r.status)
           const d = await r.json()
+          if (this._termsDocType !== t) return
           this.termsPresets = Array.isArray(d.presets) ? d.presets : []
           this.termsDefaultKey = d.defaultKey || ''
-        } catch {}
+          this._termsLoadFailed = false
+        } catch {
+          if (this._termsDocType !== t) return
+          // 讀取失敗：不可以拿另一種單據的條款組頂替，也不可以讓管理視窗拿空清單去覆寫設定 ⇒ 明講、鎖住管理視窗
+          this._termsLoadFailed = true
+          this.toast((t === 'estimate' ? '估價單' : '報價單') + '的條款組載入失敗，請重新整理頁面再試（目前顯示內建條款）')
+        }
       },
 
       _presetByKey(key) {
@@ -3595,6 +3609,7 @@
       },
 
       openTermsManager() {
+        if (this._termsLoadFailed) { this.toast('條款組沒有載入成功，請重新整理頁面後再管理（避免用空清單蓋掉設定）'); return }
         // 深拷貝——在 modal 裡改到一半按叉叉不該影響外面已載入的清單
         this.termsDraft = JSON.parse(JSON.stringify(this.termsPresets))
         this.termsDraftDefault = this.termsDefaultKey

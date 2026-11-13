@@ -2651,8 +2651,8 @@ def _estimate_terms_presets() -> dict:
     return {"presets": presets, "defaultKey": raw.get("defaultKey") or ""}
 
 
-def _clean_terms_presets(body: "QuoteTermsPresetsBody", label: str):
-    """整組覆寫的驗證與清洗（與報價單那支同規則）⇒ (cleaned, default_key)。`label`＝錯誤訊息裡的單據名。"""
+def _clean_terms_presets(body: "QuoteTermsPresetsBody"):
+    """整組覆寫的驗證與清洗（與報價單那支同規則）⇒ (cleaned, default_key)。"""
     if len(body.presets) > 30:
         raise HTTPException(400, "條款組最多 30 組")
     seen, cleaned = set(), []
@@ -2692,7 +2692,7 @@ def get_estimate_terms_presets(authorization: str = Header(None)):
 def set_estimate_terms_presets(body: QuoteTermsPresetsBody, authorization: str = Header(None)):
     """估價單條款組整組覆寫（最高管理者）。只動 `estimate_terms_presets`，報價單的條款組不受影響。"""
     actor = _require_user(authorization, require_superadmin=True)
-    cleaned, default_key = _clean_terms_presets(body, "估價單")
+    cleaned, default_key = _clean_terms_presets(body)
     value = {"presets": cleaned, "defaultKey": default_key}
     _set_setting("estimate_terms_presets", value)
     default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
