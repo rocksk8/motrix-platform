@@ -232,7 +232,7 @@ def test_registry_entry_and_notes_are_in_the_single_registry():
     e = [x for x in reg if x["flag"] == "quotation_form"][0]
     assert (e["module"], e["page"]) == ("case", PAGE_NAME)
     text = " ".join(e["notes"]) + e["impact"]
-    assert "PDF" in text and "照樣" in text and "金額" in text                                  # 編輯器會明講：改名／隱藏不改 PDF、金額不在範圍
+    assert "PDF" in text and "照常" in text and "金額" in text                                  # 編輯器會明講：改名／隱藏不改 PDF、金額不在範圍
 
 
 def test_toolbar_anchor_really_exists_in_the_page_and_style_binding_is_object_form():
