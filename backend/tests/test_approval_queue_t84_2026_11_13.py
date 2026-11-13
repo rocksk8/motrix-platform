@@ -127,6 +127,7 @@ def test_summary_tile_scrolls_to_its_column(live_server, make_user, new_page, lo
     page.evaluate("window.__sc = []; Element.prototype.scrollIntoView = function () { window.__sc.push(this.id) }")
     for tid, col in (("aq-kpi-flow", "aq-col-flow"), ("aq-kpi-mine", "aq-col-mine")):
         tile = page.locator(f"[data-testid={tid}]")
+        tile.wait_for(state="visible")
         assert tile.get_attribute("role") == "button" and tile.get_attribute("tabindex") == "0"
         tile.click()
         assert page.evaluate("window.__sc")[-1] == col
