@@ -30,6 +30,10 @@ EXPECTED_ALLOWED = {
     ("GET", "/api/auth/totp/status"),
     ("POST", "/api/auth/totp/setup"),
     ("POST", "/api/auth/totp/enable"),
+    # 以下三條是 menu-ux 5a／「我的帳號」（t82 凍結 head 已併入）加進來的「帳號本身必要」端點，只讀寫自己的列；不是精靈新增的
+    ("GET", "/api/auth/profile"),
+    ("GET", "/api/auth/preferences"),
+    ("PUT", "/api/auth/preferences"),
 }
 
 
