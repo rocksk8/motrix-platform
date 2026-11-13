@@ -76,6 +76,8 @@ def test_revoke_high_sensitive_key_needs_a_reason(live_server, make_user, e2e_br
     _open_panel(page, live_server)
     page.locator(f'[data-testid="batch-user-{a}"]').check()
     page.locator('input[name="batch-action"][value="revoke"]').check()
+    page.locator('[data-testid="batch-key-settings"]').wait_for(state="visible", timeout=5000)
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"batch-key-settings\"]').disabled", timeout=5000)   # 切到「取消」後才可勾（等 Alpine 重繪）
     assert page.locator('[data-testid="batch-key-settings"]').is_enabled(), "取消高敏感鍵可以批次"
     page.locator('[data-testid="batch-key-settings"]').check()
     page.locator('[data-testid="batch-preview"]').click()
@@ -134,6 +136,7 @@ def test_panel_layout_survives_dynamic_style_and_selection_rules(live_server, ma
 
     page.locator(f'[data-testid="batch-user-{a}"]').check()
     page.fill('input[placeholder="搜尋帳號／顯示名稱"]', "查無此人zzzz")
+    page.wait_for_function(f"() => /被搜尋隱藏/.test({DATA}.batchSelectedText())", timeout=5000)      # 等 Alpine 重算再讀畫面
     assert "被搜尋隱藏" in page.locator('[data-testid="batch-selected-count"]').inner_text()
     page.get_by_role("button", name="全部取消").click()
     assert page.evaluate(f"() => {DATA}.batchSelectedIds().length") == 0, "全部取消要清掉所有已選（含被隱藏的）"
