@@ -129,7 +129,7 @@ def update_material_orders(quote_no: str,
             try:                                            # 一條龍 P5a（旗標 onepipe.buyer_access，預設關＝訊息與今天完全相同）：採購同仁被擋時說清楚為什麼、改走哪裡
                 from helpers.onepipe_flags import flag_on
                 if flag_on("buyer_access") and user_has_module(user, "procurement"):
-                    _msg += "。材料申請有單價與金額，需要財務檢視權限；採購同仁請改用「請購單」提出需求，要叫料請洽管理員或財務角色。"
+                    _msg += "。材料申請有單價與金額，需要財務檢視權限；採購同仁請改用「請購單」提出需求，要提出材料申請請洽管理員或財務角色。"
             except Exception:                               # noqa: BLE001
                 pass
             raise HTTPException(403, _msg)

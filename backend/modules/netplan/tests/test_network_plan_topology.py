@@ -52,7 +52,7 @@ def test_builds_svg_with_faceplates_and_cables():
     # 交換器對交換器的連線只畫一條（不因兩端各自宣告而重複）
     assert html.count("B1F_1 P24") == 1
     # 未列出的上行目標畫成外部方塊
-    assert "ISP 路由器" in html
+    assert "ISP路由器" in html
     # 相同 portProfile 的圖例只出現一次
     assert html.count(">Trunk<") == 1
     # PoE 未勾選則不應出現徽章

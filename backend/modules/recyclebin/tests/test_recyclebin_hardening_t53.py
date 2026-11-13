@@ -131,7 +131,7 @@ def test_rbn15_failed_delete_with_stuck_files_keeps_the_quarantine_folder(monkey
 
     monkeypatch.setattr(Q, "_move", flaky)
     cn = db.get_db()
-    with pytest.raises(RB.BinError, match="搬不回"):
+    with pytest.raises(RB.BinError, match="無法移回"):
         S.delete(cn, ET, "D1", su_user)
     cn.rollback()
     cn.close()
