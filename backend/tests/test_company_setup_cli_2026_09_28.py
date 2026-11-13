@@ -105,13 +105,40 @@ def test_prod_script_has_no_parameter_to_skip_the_preflight():
     assert skip_preflight_params(planted) == ["SkipCompanySetupPreflight"]         # 正對照
 
 
+_STOP_CALL_RE = r"^\s*(?:\$\w+ = )?(?:\$null = )?Stop-InstallService\s*$"
+
+
+def _without_function_bodies(code: str) -> str:
+    """把 `function X {` … 第 0 欄 `}` 的函式本體換成空白行（保留行數與字元位置不變，位置比較才有意義）。"""
+    out, inside = [], False
+    for line in code.split("\n"):
+        if not inside and line.startswith("function "):
+            inside = not line.rstrip().endswith("}")      # 單行函式不跨行
+            out.append(" " * len(line))
+        elif inside:
+            out.append(" " * len(line))
+            if line == "}":
+                inside = False
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def _first_main_flow_stop(code: str) -> int:
-    """主流程（第 0 欄、不在任何函式裡）第一次呼叫 Stop-InstallService 的位置。
-    T84 起 Stop-RespawnedService／Restart-InstallServiceAndWait 等「函式」裡也會呼叫它（縮排的、定義在預檢之前）——
-    那些只是函式定義，不是這次套用的停服時點；真正的停服是主流程第 0 欄的 `$stoppedCount = Stop-InstallService`。"""
-    ms = list(re.finditer(r"^(?:\$\w+ = )?(?:\$null = )?Stop-InstallService\s*$", code, re.M))
+    """主流程（不在任何函式本體裡、任何縮排）第一次呼叫 Stop-InstallService 的位置。
+    T84 起 Stop-RespawnedService／Restart-InstallServiceAndWait 等「函式」裡也會呼叫它（定義在預檢之前）——
+    那些只是函式定義，不是這次套用的停服時點；主流程裡的停服（含縮在 if／try 裡的）一律算，預檢必須在它之前。"""
+    ms = list(re.finditer(_STOP_CALL_RE, _without_function_bodies(code), re.M))
     assert ms, "找不到主流程的 Stop-InstallService 呼叫（寫法變了 ⇒ 守門失效，改抽取方式）"
     return min(m.start() for m in ms)
+
+
+def test_first_main_flow_stop_sees_indented_main_flow_stops_but_not_function_bodies():
+    """正對照：縮在 if 裡、在預檢之前的主流程停服要被看見；函式本體裡的不算。"""
+    base = 'function F {\n    $null = Stop-InstallService\n}\n'
+    assert _first_main_flow_stop(base + 'X\n$stoppedCount = Stop-InstallService\n') == len(base) + 2 + 0
+    planted = base + 'if ($x) {\n    $null = Stop-InstallService\n}\n@("preflight"\n$stoppedCount = Stop-InstallService\n'
+    assert _first_main_flow_stop(planted) < planted.index('@("preflight"')
 
 
 def test_preflight_runs_before_the_service_stops_and_post_check_rolls_back():
