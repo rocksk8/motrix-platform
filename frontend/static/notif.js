@@ -102,10 +102,10 @@
             localStorage.setItem('motrix_session', JSON.stringify(sess))
           } catch (e) {}
           var currentFile = window.location.pathname.split('/').pop()
-          if (currentFile !== 'change-password.html') {
+          if (currentFile !== 'my-account.html' && currentFile !== 'change-password.html') {
             _redirecting = true
             var isPages = window.location.pathname.includes('/pages/')
-            window.location.replace(isPages ? 'change-password.html?forced=1' : 'pages/change-password.html?forced=1')
+            window.location.replace(isPages ? 'my-account.html?forced=1' : 'pages/my-account.html?forced=1')
           }
         }
       } catch (e) {}
@@ -324,12 +324,12 @@ function notifStore() {
       // 架構地圖 §6.2：superadmin/admin 自助啟用 TOTP，非強制——見
       // routers/auth.py totp_* 端點與 db.py::_m072_totp() docstring。這裡只是
       // 提醒，每個分頁（sessionStorage）最多彈一次，不會每換頁就再跳出來，
-      // 且刻意不在 change-password.html 本身顯示（那裡就是設定入口，重複無意義）。
+      // 且刻意不在 my-account.html 本身顯示（那裡就是設定入口，重複無意義）。
       try {
         const role = this._sess?.role || ''
         if (role !== 'superadmin' && role !== 'admin') return
         const currentFile = window.location.pathname.split('/').pop()
-        if (currentFile === 'change-password.html') {
+        if (currentFile === 'my-account.html' || currentFile === 'change-password.html') {
           // 狀態會在這一頁改變 ⇒ 離開後重新查一次（不沿用舊快取）
           try { sessionStorage.removeItem('motrix_totp_status') } catch (_e) { /* 無痕／禁用儲存：下次多查一次而已 */ }
           return
@@ -356,7 +356,7 @@ function notifStore() {
         this._setReminder({
           id: 'totp', tone: 'warning', title: '尚未啟用兩步驟驗證',
           msg: '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。',
-          href: isPages ? 'change-password.html' : 'pages/change-password.html', linkText: '前往設定 →'
+          href: isPages ? 'my-account.html?tab=security' : 'pages/my-account.html?tab=security', linkText: '前往設定 →'
         })
       } catch (e) {}
     },
@@ -585,7 +585,7 @@ function notifStore() {
         'auth.login':              '使用者登入',
         'auth.change_password':    '修改密碼',
         'quotation.create':        '新增報價單',
-        'quotation.submit':        '送出審核',
+        'quotation.submit':        '送出簽核',
         'quotation.approve':       '簽核通過',
         'quotation.reject':        '退回草稿',
         'quotation.update':        '更新報價單',

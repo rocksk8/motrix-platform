@@ -75,8 +75,8 @@ def test_binding_card_is_hidden_until_the_admin_has_configured_login(live_server
     u = make_user(username="e2e_lb2", role="sales")
     page = new_page(viewport={"width": 1280, "height": 1400})
     login_as(page, u)
-    page.goto(f"{live_server}/pages/change-password.html")
-    page.locator("text=兩步驟驗證").first.wait_for(state="visible", timeout=20000)
+    page.goto(f"{live_server}/pages/my-account.html?tab=notify")
+    page.locator("[data-testid=notify-empty-hint]").wait_for(state="visible", timeout=20000)      # 通知分頁：沒有可自己設定的通知時的說明
     page.wait_for_timeout(1200)                      # 讓卡片的 GET /api/line/binding 回來
     assert page.locator("#line-bind-card").is_visible() is False
 
@@ -88,7 +88,7 @@ def test_user_binds_from_the_account_page_and_the_card_updates_by_itself(live_se
     u = make_user(username="e2e_lb3", role="sales")
     page = new_page(viewport={"width": 1280, "height": 1600})
     login_as(page, u)
-    page.goto(f"{live_server}/pages/change-password.html")
+    page.goto(f"{live_server}/pages/my-account.html?tab=notify")
     card = page.locator("#line-bind-card")
     card.wait_for(state="visible", timeout=20000)
     assert "未綁定" in card.inner_text()

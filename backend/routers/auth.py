@@ -364,6 +364,7 @@ class UserIn(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    quote_email: Optional[str] = None      # 2026-11-13 報價用公司信箱（建立／修改使用者都只有最高管理者能呼叫）
     role: Optional[str] = None
     modules: Optional[List[str]] = None
     notification_muted: Optional[List[str]] = None
@@ -467,6 +468,11 @@ def system_branding(authorization: str = Header(None)):
            "shortName": short_name(ident["company_name"]),
            # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
            "assets": asset_urls()}
+    try:
+        from helpers.settings_groups_brand import brand_tagline
+        out["tagline"] = brand_tagline()        # UX P1.5：系統標語（公司可自訂，預設 MOTRIX PLATFORM；登入頁也用得到，所以放 public）
+    except Exception:  # noqa: BLE001
+        out["tagline"] = "MOTRIX PLATFORM"
     if authorization:
         try:
             _require_user(authorization)
@@ -682,6 +688,8 @@ def _issue_session(conn, row, must_change: bool) -> dict:
         (token, row["id"], row["username"], now, expires_at, now)
     )
     conn.commit()
+    from helpers.login_greeting import record_login      # 登入問候語要的「上一次登入」；永不讓登入失敗；要在寫稽核之前（舊帳號回填看稽核）
+    record_login(row["id"])
     _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
            {'mustChangePassword': must_change})
     _acct_success(row["username"])
@@ -1575,6 +1583,65 @@ def auth_me(authorization: str = Header(None)):
     }
 
 
+# ── 登入問候語（2026-11-13 UX P1.5；邏輯見 helpers/login_greeting.py）──────────────────
+@router.get("/api/auth/greeting")
+def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query(None, ge=0, le=100000)):
+    """首頁大標題下的問候語：單一端點回「標題＋問候句＋離開期間摘要＋待辦句」，前端只顯示。
+    `todo`＝首頁目前顯示的待辦件數（只用來決定要不要帶「0 件／超過 10 件」那句）。
+    「待簽核幾張」走 `approval_queue.my_pending_items`（與角標同一份）；只有真的要顯示離開期間摘要時才會去查。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization)
+
+    def _pending():
+        from routers.approval_queue import my_pending_items
+        return len(my_pending_items(u))
+
+    def _new_quotes():
+        if u.get("role") != "superadmin":              # 新報價單的可見範圍因人而異；只有看得到全部的最高管理者才附這個數字
+            return None
+        st = LG.get_state(u["id"])
+        prev = LG._parse(st.get("prev"))
+        if not prev:
+            return None
+        from core import registry
+        fn = registry.single_provider("greeting.new_quotes")      # 案件模組提供（L1 不直接讀 quotations 表）；模組不在 ⇒ 不附這個數字
+        if fn is None:
+            return None
+        # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較，精確到時分秒
+        return fn(prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"))
+
+    return LG.greeting_for_user(u, todo=todo, pending=_pending, new_quotes=_new_quotes)
+
+
+class GreetingPhrasesIn(BaseModel):
+    category: str
+    style: str
+    lines: List[str] = []
+
+
+@router.get("/api/login-greeting/phrases")
+def login_greeting_phrases(authorization: str = Header(None)):
+    """最高管理者：每個情境的內建句與目前的自訂句（設定畫面用）。"""
+    from helpers import login_greeting as LG
+    _require_user(authorization, require_superadmin=True)
+    return {"categories": LG.phrases_table(), "maxLen": LG.GP.MAX_LEN, "maxLines": LG.GP.MAX_LINES,
+            "placeholders": list(LG.GP.PLACEHOLDERS)}
+
+
+@router.put("/api/login-greeting/phrases")
+def login_greeting_phrases_save(body: GreetingPhrasesIn, authorization: str = Header(None)):
+    """最高管理者：改寫或新增某情境＋風格的句子（整組取代該情境該風格的內建句；`lines` 空＝回內建）。內容守則同內建句。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization, require_superadmin=True)
+    try:
+        saved = LG.set_custom(body.category, body.style, body.lines)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(authorization[7:], 'login_greeting.phrases', 'login_greeting', body.category,
+           LG.GP.CATEGORY_LABELS.get(body.category, body.category), {"style": body.style, "count": len(saved)})
+    return {"ok": True, "saved": saved}
+
+
 @router.patch("/api/auth/change-password")
 def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -1622,7 +1689,7 @@ def list_users(authorization: str = Header(None)):
     full_view = caller["role"] in ("superadmin", "admin")             # 第 47 班（使用者裁示）：只有管理員以上看得到全部人的聯絡方式／權限勾選／信件退訂
     conn = get_db()
     rows = conn.execute("""
-        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
+        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.quote_email, u.modules,
                u.notification_muted, u.active, u.created_at,
                u.department_id, dep.name AS department_name,
                dep.division_id, dv.name AS division_name
@@ -1633,6 +1700,8 @@ def list_users(authorization: str = Header(None)):
     """).fetchall()
     conn.close()
     from helpers.startup import builtin_admin_username
+    from helpers import quote_email as _quote_email
+    _company_ext = _quote_email.company_external_email()
     builtin = builtin_admin_username()
     result = []
     for r in rows:
@@ -1646,11 +1715,25 @@ def list_users(authorization: str = Header(None)):
         d["departmentName"]      = d.pop("department_name")
         d["divisionId"]          = d.pop("division_id")
         d["divisionName"]        = d.pop("division_name")
+        # 2026-11-13 報價用公司信箱：三層解析結果（使用者設定 → 公司對外信箱 → 個人信箱）；報價單／估價單填入業務員資料時用 quoteEmailEffective
+        _qe = _quote_email.resolve(d.get("quote_email"), _company_ext, d.get("email"))
+        d["quoteEmail"]          = d.pop("quote_email") or ""
+        d["quoteEmailEffective"] = _qe["email"]
+        d["quoteEmailSource"]    = _qe["source"]
         if not full_view and d["username"] != caller["username"]:        # 一般人員：別人的 Email／電話／權限勾選／信件退訂不給（自己的那一列照舊，個人設定頁與報價單帶入業務員資料要用）
-            for _k in ("email", "phone", "modules", "notificationMuted"):
+            for _k in ("email", "phone", "modules", "notificationMuted", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"):
                 d.pop(_k, None)
         result.append(d)
     return result
+
+
+def _checked_quote_email(v):
+    """報價用公司信箱：空字串＝清除；有值就要是正確的 Email 格式（否則 400，先驗再寫）。網域提醒只在畫面上顯示，不阻擋。"""
+    from helpers import quote_email as _qe
+    s = str(v or "").strip()
+    if s and not _qe.valid(s):
+        raise HTTPException(400, "報價用公司信箱的格式不正確（例：name@your-company.com）")
+    return s
 
 
 @router.post("/api/users", status_code=201)
@@ -1663,6 +1746,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     if is_weak_password(body.password):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
+    _qe_new = _checked_quote_email(body.quote_email)
     refuse_unknown_new_keys(body.modules)
     if body.role is not None and body.role not in VALID_ROLES:          # 第42班：角色只能是已知值（含 finance）
         raise HTTPException(400, "不認得的角色：%s" % body.role)
@@ -1675,8 +1759,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     try:
         conn.execute("""
             INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password, department_id)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
+                               notification_muted, active, created_at, must_change_password, department_id, quote_email)
+            VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?)
         """, (
             body.username.strip(),
             _hash_pw(body.password),
@@ -1688,6 +1772,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
             body.department_id or None,
+            _qe_new or '',
         ))
         conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -1747,6 +1832,13 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
     if body.email        is not None: sets.append("email=?");        params.append(body.email)
     if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
+    if body.quote_email  is not None:
+        try:
+            _qe_val = _checked_quote_email(body.quote_email)
+        except HTTPException:
+            conn.close()
+            raise
+        sets.append("quote_email=?"); params.append(_qe_val)
     if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
     if body.notification_muted is not None:
         # 個人退訂只接受登記過的信件類型（CORE-SPEC 信件收件人④）：打錯字或不存在的 key 存進去不會有任何效果，
@@ -1841,6 +1933,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     uname  = row["username"]
     ulabel = row["display_name"] or uname
     try:
+        conn.execute("DELETE FROM user_prefs WHERE user_id=?", (user_id,))      # 個人偏好跟著帳號走：帳號刪了就清（避免新帳號沿用舊 id 的偏好）；刪不成功（有關聯資料）時下面整筆 rollback
         conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         conn.commit()
@@ -1899,12 +1992,16 @@ def users_sales_contact(username: str = Query(..., min_length=1, max_length=64),
     require_any_module(user, ["quotation"], "報價單")
     conn = get_db()
     try:
-        row = conn.execute("SELECT id, display_name, username, phone, email FROM users WHERE username=? AND active=1", (username,)).fetchone()
+        row = conn.execute("SELECT id, display_name, username, phone, email, quote_email FROM users WHERE username=? AND active=1", (username,)).fetchone()
     finally:
         conn.close()
     if not row:
         raise HTTPException(404, "找不到這位報價人")
-    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or ""}
+    from helpers import quote_email as _qe
+    eff = _qe.resolve_for_row(row)               # 報價用信箱：使用者設定 → 公司對外信箱 → 個人信箱
+    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or "",
+            "quoteEmailEffective": eff["email"], "quoteEmailSource": eff["source"],
+            "quoteEmail": eff["email"]}        # 舊欄位名（值＝解析後的信箱）保留一版以相容；新程式一律讀 quoteEmailEffective，下一版移除
 
 
 @router.get("/api/users/selectable")

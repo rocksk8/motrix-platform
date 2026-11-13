@@ -35,7 +35,21 @@ logger = logging.getLogger(__name__)
 # 寫入端一律用 `_derive_fields()` 補 module／case_no／ref_no——所有既有 `_audit()` 呼叫端不用改。
 # ⚠️ core/migrations.py 的 v3 回填有**凍結的一份**同樣的規則（migration 不准 import 會演進的程式）；
 #    tests/test_audit_search_2026_09_30.py 逐列驗證兩份對同一批資料算出一樣的結果。
-_CASE_NO_RE = re.compile(r"MQ-\d{6}-\d{3}")
+def _fallback_case_no_re():
+    from helpers import doc_type as _DT
+    return re.compile(_DT.rule_for(_DT.QUOTE).search_pattern())       # 報價單規則（字首／日期／位數由單號規則決定，不寫死）
+
+
+_CASE_NO_RE = _fallback_case_no_re()     # 只含報價單規則（讀不到估價單設定時的後備）；實際推導一律用 _case_no_re()（全部規則）
+
+
+def _case_no_re():
+    """案件單號格式＝全部單號規則（報價單＋目前估價單字首）推導出來的 regex（helpers/doc_type.case_no_re）。"""
+    try:
+        from helpers.doc_type import case_no_re
+        return case_no_re()
+    except Exception:                                                                    # noqa: BLE001 — 稽核寫入絕不可因這個失敗
+        return _CASE_NO_RE
 #: 動作第一段 ⇒ 畫面上的模組名（對不到 ⇒ 顯示原字串，不猜）
 _MODULE_LABELS = {
     "quotation": "報價單", "case": "案件管理", "deal_tag": "成案標記", "case_stage": "案件階段", "case_update": "案件動態",
@@ -102,7 +116,7 @@ def _derive_fields(action: str, target_type: str = "", target_id: str = "", targ
         hay.append(detail)
     case_no = ""
     for h in hay:
-        m = _CASE_NO_RE.search(h)
+        m = _case_no_re().search(h)          # 報價單 MQ＋估價單字首（見 helpers/doc_type.py）
         if m:
             case_no = m.group(0)
             break

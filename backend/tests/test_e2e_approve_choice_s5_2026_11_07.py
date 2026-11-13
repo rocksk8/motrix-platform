@@ -184,7 +184,8 @@ def test_queue_edit_choice_goes_to_form_review_edit_and_resigns_the_editor(live_
     assert _wait(lambda: _state()[0]["items"][0]["qty"] == 7, page=page)
     d, entry, status, _audits = _state()
     sent = reviews[-1]["data"]
-    assert set(sent) <= set(d) | {"tot"}, "只送伺服器本文原有的鍵（加上真的改過的）：多出 %s" % (set(sent) - set(d))
+    # docType：讀取端點注入（資料庫欄位為準，舊單本文裡沒有這個鍵）；複查編輯端點會把它改回資料庫現值，所以頁面送回不算「多送」
+    assert set(sent) <= set(d) | {"tot", "docType"}, "只送伺服器本文原有的鍵（加上真的改過的）：多出 %s" % (set(sent) - set(d))
     assert "isSigned" not in sent and "signedFiles" not in sent
     from modules.case import content_fp as C
     assert entry["status"] == "approved" and entry["signedFp"] == C.content_fingerprint(d), "H2：原已簽、正在複查的編輯者，簽視為已簽新版"

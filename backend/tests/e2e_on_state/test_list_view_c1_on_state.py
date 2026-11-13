@@ -47,7 +47,7 @@ def test_c1_personal_view_prefs_apply_persist_and_reset(live_server, make_user, 
     assert "案件名稱" in page.evaluate(HEADS)
     page.get_by_test_id("lv-toggle").click()
     page.get_by_test_id("lv-panel").wait_for(state="visible", timeout=5000)
-    page.evaluate("() => { const d = %s; d.lvToggle('project'); d.lvMove('date', -1); d.lvMove('date', -1); d.pv = { ...d.pv, size: 25 } }" % DATA_JS)
+    page.evaluate("() => { const d = %s; d.lvToggle('project'); d.lvMove('date', -1); d.lvMove('date', -1); d.lvMove('date', -1); d.pv = { ...d.pv, size: 25 } }" % DATA_JS)
     # 必要欄位不可隱藏
     page.evaluate("() => %s.lvToggle('quoteNo')" % DATA_JS)
     assert page.evaluate("() => %s.pv.hidden" % DATA_JS) == ["project"]

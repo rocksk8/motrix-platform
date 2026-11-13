@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>登入 — MOTRIX 專案管理系統</title>
+  <title>登入 — MOTRIX PLATFORM</title>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -320,7 +320,7 @@
       <hr class="divider">
       <div class="footer-note">
         如需開立帳號或重設密碼，請聯繫系統管理員<br>
-        <span style="color:#333" x-text="'MOTRIX 專案管理系統 ' + (systemVersion || 'v1.0') + (branding.shortName ? ' · ' + branding.shortName : '')"></span>
+        <span style="color:#333" x-text="'MOTRIX PLATFORM ' + (systemVersion || 'v1.0') + (branding.shortName ? ' · ' + branding.shortName : '')"></span>
       </div>
     </div>
   </div>
@@ -695,6 +695,7 @@
 
       _storeSessionAndRedirect(data) {
         if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
+        try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 換人登入：前一位的個人偏好快取不留（登入後第一個頁面會向伺服器重新同步）
         localStorage.setItem('motrix_session', JSON.stringify({
           token:       data.token,
           userId:      data.userId,

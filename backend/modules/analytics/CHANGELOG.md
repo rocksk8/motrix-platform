@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.0.49（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `reports.html`、`reports-hub.html`、`report-templates.html`、`devices.html`、`warranty.html`、`procurement.html`：手機／平板版面——報表期間列、匯出鈕、分頁籤的點擊區與間距；客戶清單改上下排；採購清單在手機改為卡片列；設備清單表格加橫向捲動＋表頭固定、搜尋框 16px／44px 高。桌機版不變。
 

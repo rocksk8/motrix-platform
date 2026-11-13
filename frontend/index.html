@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>MOTRIX 專案管理系統 — 營運儀表板</title>
+  <title>MOTRIX PLATFORM — 營運儀表板</title>
 
   <script src="static/auth-guard.js"></script>
   <!-- 同步權限檢查：最早執行，無法繞過 -->
@@ -380,6 +380,9 @@
     .h-kicker { font-family: var(--font-en); font-size: 12px; font-weight: 600; letter-spacing: var(--v4-kicker-ls); text-transform: uppercase; color: #FF6B7A; }
     .h-hero__t { font-size: clamp(23px, 2.7vw, 34px); font-weight: 700; line-height: 1.24; letter-spacing: var(--v4-head-ls); margin: 12px 0 10px; }
     .h-hero__t em { font-style: normal; color: #FF6B7A; }
+    .h-hero__greet { font-size: 15px; line-height: 1.6; margin: 0 0 4px; color: rgba(245,244,240,.92); max-width: 56ch; }
+    .h-hero__start { text-decoration: none; margin: 6px 0 4px; }
+    .h-hero__greet--aux { font-size: 13px; color: rgba(245,244,240,.72); margin-bottom: 2px; }
     .h-hero__sub { font-size: 14px; line-height: 1.75; color: rgba(245,244,240,.72); max-width: 52ch; }
     .h-hero__acts { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 18px; }
     .h-ghost { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: var(--radius); border: 1px solid rgba(245,244,240,.32); color: #F5F4F0; font-size: 13px; font-weight: 600; text-decoration: none; transition: .22s var(--v4-ease); }
@@ -389,6 +392,25 @@
     .h-state div:first-child { border-top: 1px solid rgba(245,244,240,.14); }
     .h-state b { font-family: var(--font-en); font-weight: 600; font-size: 13px; color: #F5F4F0; }
 
+    /* 我的工作（UX P1.5）：依角色／權限出現的分組卡；顏色只用既有語意色，不寫 inline style */
+    .h-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .h-mine__c { background: #fff; border: 1px solid var(--border-light); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .h-mine__h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .h-mine__t { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .h-mine__n { font-family: var(--font-en); font-size: 28px; font-weight: 600; line-height: 1; color: var(--text-primary); }
+    .h-mine__n.is-zero { color: var(--text-secondary); }
+    .h-mine__l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .h-mine__i { display: block; text-decoration: none; color: inherit; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--border-light); background: var(--white); min-width: 0; }
+    .h-mine__i:hover { background: var(--danger-hover-bg); }
+    .h-mine__i b { display: block; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .h-mine__i span { display: block; font-size: 12.5px; color: var(--text-secondary); }
+    .h-mine__i--warn { border-left-color: var(--warning); }
+    .h-mine__i--crit { border-left-color: var(--danger); }
+    .h-mine__e { font-size: 13px; color: var(--text-secondary); margin: 0; }
+    .h-mine__go { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; margin-top: auto; }
+    .h-mine__empty { background: #fff; border: 1px dashed var(--border-light); border-radius: 10px; padding: 18px 20px; }
+    .h-mine__empty p { margin: 0 0 10px; font-size: 14px; }
+    .h-mine__acts { display: flex; gap: 10px; flex-wrap: wrap; }
     .h-band { background: #2A2A2A; color: #F5F4F0; }
     .h-band__g { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
     .h-band__c { display: block; padding: clamp(20px, 2.6vw, 30px) clamp(18px, 2.2vw, 28px); border-left: 1px solid rgba(245,244,240,.14); text-decoration: none; color: inherit; transition: background .22s var(--v4-ease); }
@@ -469,14 +491,19 @@
       <div class="h-wrap">
         <div class="h-hero__in">
           <div>
-            <span class="h-kicker">MOTRIX 專案管理系統</span>
+            <span class="h-kicker" x-text="branding.tagline || 'MOTRIX PLATFORM'">MOTRIX PLATFORM</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
             <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
+            <!-- 登入問候語（UX P1.5；單一端點 /api/auth/greeting，伺服器判斷情境與風格，前端只顯示；關閉或讀不到 ⇒ 整塊不出現） -->
+            <p class="h-hero__greet" data-testid="login-greeting" x-show="greet.line" x-text="greet.line"></p>
+            <p class="h-hero__greet h-hero__greet--aux" data-testid="login-greeting-away" x-show="greet.awayLine" x-text="greet.awayLine"></p>
+            <p class="h-hero__greet h-hero__greet--aux" data-testid="login-greeting-todo" x-show="greet.todoLine" x-text="greet.todoLine"></p>
+            <a class="h-ghost h-hero__start" data-testid="login-greeting-action" x-show="greet.action && greet.action.href" :href="greet.action && greet.action.href" x-text="greet.action && greet.action.label"></a>
             <p class="h-hero__sub" x-text="heroSummary"></p>
             <div class="h-hero__acts">
               <a href="pages/approval-queue.html" class="btn btn-primary" style="text-decoration:none" x-show="canQuotation">
-                前往簽核佇列
+                前往待我簽核
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </a>
               <a href="pages/daily-tasks.html" class="h-ghost">今日工作事項</a>
@@ -492,28 +519,65 @@
       </div>
     </section>
 
+    <!-- ─── 我的工作（UX P1.5）：依「使用者實際有的權限」由伺服器決定出現哪幾組（GET /api/dashboard/mine）。
+         讀不到 ⇒ 整區不出現（不顯示成 0）；每一組都 0 ⇒ 只顯示一句話＋兩個去處。 -->
+    <section class="h-sec" data-testid="home-mine-work" x-show="mineWork.loaded && (mineWork.groups.length > 0 || mineWork.partial)" x-cloak>
+      <div class="h-wrap">
+        <div class="h-head">
+          <div>
+            <h2 class="h-title">我的工作</h2>
+            <p class="h-sub">依您的權限，列出現在輪到您處理的事</p>
+          </div>
+        </div>
+        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；稍後重新整理看看。</p>
+        <template x-if="mineWork.empty">
+          <div class="h-mine__empty" data-testid="home-mine-empty">
+            <p>目前沒有需要您處理的事。</p>
+            <div class="h-mine__acts">
+              <a href="pages/daily-tasks.html" class="h-ghost">看今日工作事項</a>
+              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">去報價單</a>
+            </div>
+          </div>
+        </template>
+        <div class="h-mine" x-show="!mineWork.empty">
+          <template x-for="g in mineWork.groups" :key="g.key">
+            <div class="h-mine__c" :data-testid="'home-mine-' + g.key">
+              <div class="h-mine__h"><span class="h-mine__t" x-text="g.title"></span><span class="h-mine__n" :class="g.count === 0 ? 'is-zero' : ''" x-text="g.count"></span></div>
+              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '目前沒有需要處理的項目'"></p>
+              <ul class="h-mine__l" x-show="g.items.length > 0">
+                <template x-for="(it, ix) in g.items" :key="ix">
+                  <li><a class="h-mine__i" :class="'h-mine__i--' + it.tone" :href="it.href || g.href"><b x-text="it.title"></b><span x-text="it.sub"></span></a></li>
+                </template>
+              </ul>
+              <a class="h-mine__go" :href="g.href" x-show="g.href" x-text="g.hrefLabel + ' →'"></a>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── 需要處理的三件事（用時效分級做眩頭，不用 01/02/03）─── -->
     <section class="h-band">
       <div class="h-wrap">
         <div class="h-band__g">
-          <a href="pages/approval-queue.html" class="h-band__c">
-            <div class="h-band__k">等我簽核</div>
+          <a href="pages/approval-queue.html" class="h-band__c" data-testid="band-approvals">
+            <div class="h-band__k">待我簽核</div>
             <div class="h-band__n" x-text="mineLoaded ? stats.waitingForMe : '—'"></div>
-            <div class="h-band__t">簽核佇列</div>
+            <div class="h-band__t">前往簽核</div>
             <p class="h-band__p" x-text="!mineLoaded ? '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '目前沒有待您簽核的單據。')"></p>
           </a>
           <!-- 這兩格的資料來自營運分析模組（/api/dashboard/funnel、/stats）；模組不在 ⇒ 顯示「—」＋明說，
                不可以顯示 0＋「沒有…」（那跟真的 0 筆長得一樣，稽核 ⑰ M-4、MODULE-GUIDE §1） -->
           <a href="pages/quotations.html" class="h-band__c" data-testid="band-expiring">
-            <div class="h-band__k">有效期將屆</div>
+            <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : expiringQuotes.length"></div>
-            <div class="h-band__t">報價單</div>
+            <div class="h-band__t">報價單有效期將屆</div>
             <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '沒有需要追蹤的報價單。')"></p>
           </a>
           <a href="pages/warranty.html" class="h-band__c" data-testid="band-warranty">
-            <div class="h-band__k">90 天內到期</div>
+            <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : (stats.warrantyWarnings || []).length"></div>
-            <div class="h-band__t">設備保固</div>
+            <div class="h-band__t">設備保固 90 天內到期</div>
             <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '沒有已過保的設備。')"></p>
           </a>
         </div>
@@ -745,9 +809,9 @@
       <div class="panel" data-testid="home-mine-panel">
         <div class="panel__head">
           <div class="panel__title">
-            等我簽核
+            待我簽核
           </div>
-          <a href="pages/approval-queue.html" class="panel__action">前往審核 →</a>
+          <a href="pages/approval-queue.html" class="panel__action">前往簽核 →</a>
         </div>
         <div class="table-scroll">
         <table class="data-table">
@@ -764,7 +828,7 @@
               </tr>
             </template>
             <tr x-show="mineLoaded && stats.waitingForMe > mineItems.length">
-              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往簽核佇列'"></td>
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往待我簽核'"></td>
             </tr>
             <tr x-show="!loading && mineLoaded && !mineItems.length">
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">清單是空的：沒有輪到您的簽核單</td>
@@ -896,6 +960,8 @@ feedCount(key) {
 
       /* ── 階段 2 主視覺用的三個計算值 ── */
       get greeting() {
+        // 伺服器的標題（台北時間；與下面同一套早安／午安／晚安規則）；關閉或讀不到 ⇒ 用下面原本的算法
+        if (this.greet && this.greet.title) return this.greet.title
         const h = new Date().getHours()
         // 只用早安／午安／晚安三種，不用「平安」「夜深了」這類寒暄，
         // 也不放激勵語（2026-09-14 使用者指示）。凌晨 0–5 點歸晚安。
@@ -1017,13 +1083,14 @@ feedCount(key) {
         this.now   = this.today + ' ' + MotrixFormat.dt(d, {hour:'2-digit',minute:'2-digit'})
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
+        // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）。
+        // ⚠ 監聽要在任何 await **之前**掛：stats 慢的時候使用者先回到分頁，focus 事件不能被丟掉（2026-11-13 PM）。
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
+        window.addEventListener('focus', () => this.loadApprovalMine(true))
+        window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
         await Promise.all([this.loadStats(), this.loadApprovalMine()])
         // A3：上手清單（等 stats 讀完才判定「報價單有沒有」）；從 ux-help.js 的「？」抽屜可重新打開
         this.loadChecklist()
-        window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
-        // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
-        window.addEventListener('focus', () => this.loadApprovalMine(true))
         this.monthly  = await this.loadMonthly()
         this.expenses = this.canFinance ? await this.loadExpenses() : []
         this.loadFunnel()
@@ -1038,15 +1105,45 @@ feedCount(key) {
       //  含代理人與所有單據類型）。數字與清單都來自這一個回應，不再用 `dashboard/stats` 只算報價單的版本。
       //  讀不到 ⇒ `mineLoaded=false`，畫面說「讀不到」，不可以顯示成 0。
       mineLoaded: false,
+      //: 登入問候語（/api/auth/greeting）：{title, line, awayLine, todoLine, action}；整包由伺服器決定，關閉時 line／title 皆空
+      greet: {}, _greetDone: false,
+      async loadGreeting(todo) {
+        if (this._greetDone) return
+        this._greetDone = true
+        try {
+          const r = await fetch(`${API}/auth/greeting` + (Number.isInteger(todo) && todo >= 0 ? `?todo=${todo}` : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) { const d = await r.json(); if (d && d.kind !== 'off') this.greet = d }
+        } catch (e) { /* 問候語是加值：讀不到就維持原本的標題 */ }
+      },
+      //: 首頁「我的工作」（/api/dashboard/mine）：分組由伺服器依權限決定；讀不到 ⇒ loaded=false、整區不出現
+      mineWork: { loaded: false, groups: [], empty: false, partial: false }, _mineWorkN: 0,
+      async loadMineWork() {
+        const fresh = this._mineWorkN++ > 0          // 第一次吃 30 秒快取；之後（回到分頁、簽完回來）一律重算
+        try {
+          const r = await fetch(`${API}/dashboard/mine` + (fresh ? '?fresh=1' : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) { this.mineWork = { loaded: false, groups: [], empty: false, partial: false }; return }
+          const d = await r.json()
+          this.mineWork = { loaded: true, groups: Array.isArray(d.groups) ? d.groups : [], empty: !!d.empty, partial: !!d.partial }
+        } catch { this.mineWork = { loaded: false, groups: [], empty: false, partial: false } }
+      },
       mineItems: [],
       mineCount: 0,
       //: S1（W2 稽核）：focus 與 visibilitychange 會在同一次回到分頁時連發 ⇒ 同時只飛一趟（共用同一個 Promise）、
       //  事件觸發的重讀 300 ms 內不再送；回應帶序號，只採用最後一次送出的（舊回應晚到不覆蓋新的）。
       //  ⚠️ Promise 放 window：Alpine 的 Proxy 包住 Promise 會 Illegal invocation。
       loadApprovalMine(fromEvent) {
-        if (window.__mineInflight) return window.__mineInflight
+        if (window.__mineInflight) {
+          // 那一趟若是事件之前很久就送出的（例如開頁面時那一趟），回應可能是舊的 ⇒ 它回來後補讀一次；
+          // focus＋visibilitychange 同時連發（300 ms 內）仍共用同一趟、不補讀。
+          if (fromEvent && Date.now() - (window.__mineStart || 0) >= 300) window.__mineDirty = true
+          return window.__mineInflight
+        }
         if (fromEvent && Date.now() - (window.__mineAt || 0) < 300) return Promise.resolve()
-        const p = this._loadApprovalMineOnce().finally(() => { window.__mineInflight = null; window.__mineAt = Date.now() })
+        window.__mineStart = Date.now()
+        const p = this._loadApprovalMineOnce().finally(() => {
+          window.__mineInflight = null; window.__mineAt = Date.now()
+          if (window.__mineDirty) { window.__mineDirty = false; this.loadApprovalMine() }
+        })
         window.__mineInflight = p
         return p
       },
@@ -1062,6 +1159,8 @@ feedCount(key) {
           this.stats.waitingForMe = this.mineCount
           this.mineItems = d.items || []
           this.mineLoaded = true
+          this.loadMineWork()
+          this.loadGreeting(this.mineCount)      // 只做一次；待辦件數用來決定要不要帶「0 件／超過 10 件」那句
         } catch { if (seq === this._mineSeq) this.mineLoaded = false }
       },
 
