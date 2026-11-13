@@ -83,7 +83,7 @@ def _is_wait_name(name, node=None):
         return True
     if name.startswith("expect"):
         if name == "expect":
-            return True
+            return node is None or isinstance(node.func, ast.Name)      # 裸的 expect(...)；`child.expect("x")`（pexpect 之類）不是 Playwright 的等待
         return name in WAITS and (node is None or isinstance(node.func, ast.Attribute))
     return name in WAITS or name.startswith(_WAIT_PREFIXES)
 
