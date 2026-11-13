@@ -630,6 +630,43 @@ def list_work_logs(
     return result
 
 
+def _worklog_case_on() -> bool:
+    """onepipe P0b 旗標：工作日誌可選案件。預設關；任何讀取錯誤 ⇒ 當作關（關＝與今天逐位元相同）。"""
+    try:
+        from helpers import settings_groups  # noqa: F401  確保群組已登錄（沒登錄會 KeyError ⇒ 被當成關）
+        from helpers import settings_registry as _SR
+        return int(_SR.get("onepipe", "worklog_case") or 0) == 1
+    except Exception:                                  # noqa: BLE001
+        return False
+
+
+def _worklog_case_guard(case_no: str, user: dict) -> None:
+    """旗標開時，日誌要掛的案件必須是「這個人看得到該案動態」的案件（`guard_case_access`，與 `GET /api/quotations/{no}/updates` 同一條規則）。
+    看不到＝不存在：一律 404、稽核另記真正原因（M01-O1）。"""
+    from helpers.case_access import guard_case_access
+    conn = get_db()
+    try:
+        guard_case_access(conn, case_no, user, allow_module="case_manage")
+    finally:
+        conn.close()                                   # 拒絕時 guard 已關過一次，再關一次無害
+
+
+@router.get("/api/work-logs/case-options")
+def work_log_case_options(q: str = "", authorization: str = Header(None)):
+    """P0b：工作日誌「關聯案件」選單的資料（只有案號／客戶／案名；進行中的案件、這個人看得到動態的才列；最多 30 筆，`q` 搜尋）。
+    旗標 `onepipe.worklog_case` 關（預設）⇒ 404，與這支路由不存在時逐字相同。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
+    if not _worklog_case_on():
+        raise HTTPException(404, "Not Found")
+    from helpers.case_access import attachable_cases
+    conn = get_db()
+    try:
+        return {"items": attachable_cases(conn, user, (q or "")[:60])}
+    finally:
+        conn.close()
+
+
 def _work_log_fields(conn, body: dict, keys) -> dict:
     """工作日誌欄位的型別與範圍檢查（W1c 稽核）：原本 `float("abc")`、`.strip()` 打在非字串、不存在的 user_id 都是 500 或寫進壞資料；
     現在一律 422。只檢查 `keys` 裡且有帶的欄位；回傳正規化後的值（日期 YYYY-MM-DD、時數 float、user_id int、文字去頭尾空白）。"""
@@ -696,6 +733,8 @@ def _create_work_log_impl(body, authorization, u):
     hours    = _f.get("hours", 8.0)
     case_no  = _f.get("case_no", "")
     contact_type = _f.get("contact_type", "")
+    if case_no and _worklog_case_on():                  # P0b：旗標開 ⇒ 只能掛自己看得到動態的案件（關＝今天的行為，不檢查）
+        _worklog_case_guard(case_no, u)
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
@@ -730,6 +769,10 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
     except HTTPException:
         conn.close()
         raise
+    if _f.get("case_no") and _f["case_no"] != (row["case_no"] or "") and _worklog_case_on():
+        conn.close()                                                    # P0b：改掛到別的案件才檢查（清空、原樣不動都不擋）；旗標關＝今天的行為
+        _worklog_case_guard(_f["case_no"], u)
+        conn = get_db()
     if "user_id" in _f and _f["user_id"] != row["user_id"] and u["role"] != "superadmin":
         conn.close()                                                    # 第49班 W1c-P5：記錄對象只有最高管理者能改（本人／管理員不能把日誌轉給別人）
         raise HTTPException(403, "只有最高管理者可以更改工作日誌的人員")
