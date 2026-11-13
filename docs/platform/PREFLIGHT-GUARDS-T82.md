@@ -20,6 +20,7 @@ python tools/platform/preflight_guards.py --window <你的視窗> --base <列車
 python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --only <紅的組id>       # 照報告的「修法」改完，只重跑出紅的組
 ```
 - `--base <列車>`：靜態旗標比對與「可能肇因的合併」都從這條之後算；指到不存在的 rev ⇒ 結束碼 2（不是空結果）。預設值 `origin/platform` 只適合基底就是 platform 的情況。
+- **分支模式**：在你的**具名分支**上跑時，樹裡的 `(next)` 版號佔位不算紅（列車 `train_number assign` 取號）；格式錯／快照與 CHANGELOG 不一致仍紅。**整合者要在 `train/<n>-int` 具名分支上跑 preflight，不要在 detached 或 wip 暫存分支上跑**——detached 且 HEAD 已包含在 `--base` 裡（凍結列車 tip 的 worktree）會自動維持嚴格（佔位照紅）；但名叫 wip/* 的暫存分支會被當成分支模式。
 - `--skip generated`：feature 分支不 commit 產生檔（dep_graph／UNIT-INDEX／test_map），列車模式下那組必紅，由整合者重產；其餘紅都是你的。
 - 紅的報告會點名最近哪幾次合併可能是肇因；「未能檢查」（exit 1）＝沒證明題有跑，不是綠。整合者持有閘門鎖時你會最多等 120 秒（75）——等鎖放掉再跑。
 - 題組綠 ≠ 閘門綠；交件仍要附你自己的測試結果。
