@@ -3138,6 +3138,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
     # ① 材料卡 caseRecord.materials[]：實際只有 name／model／qty／unit／ordered／arrived／note，認列採購單後 poLink.arrivedOn 是到貨日
     # ② 材料申請單 caseRecord.materialOrders[]＋疊加簽核列 case_material_approvals（簽核狀態、到貨確認日）
     # 只取名稱／規格／數量／狀態／日期，不碰任何金額欄位（單價、小計、已付）
+    # 舊鍵 status／eta 有意放棄：沒有任何程式寫過，狀態改由 ordered／arrived 旗標、日期改由 poLink.arrivedOn 決定
     def _qty_text(q, unit):
         if q in (None, ""):
             return ""
@@ -3152,7 +3153,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
         link = m.get("poLink") if isinstance(m.get("poLink"), dict) else {}
         materials.append({
             "name":      m.get("name") or m.get("description") or "（未命名料件）",
-            "spec":      m.get("model") or "",
+            "spec":      m.get("model") or m.get("spec") or "",      # 舊鍵 spec 只當匯入／手改資料的後備
             "qty":       _qty_text(m.get("qty"), m.get("unit")),
             "status":    "已到料" if m.get("arrived") else "已申購" if m.get("ordered") else "待申購",
             "arrivedOn": link.get("arrivedOn") or "",

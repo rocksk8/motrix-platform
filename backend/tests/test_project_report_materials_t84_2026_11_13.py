@@ -34,12 +34,14 @@ def test_material_cards_show_spec_qty_unit_status_and_arrival_date(client):
          "poLink": {"key": "k", "arrivedOn": "2026-11-12"}},
         {"id": "m2", "name": "網路線", "model": "Cat6 305m", "qty": 2.0, "unit": "箱", "ordered": True, "arrived": False},
         {"id": "m3", "name": "機櫃", "qty": "1", "unit": "", "ordered": False, "arrived": False, "poLink": None},
+        {"id": "m4", "name": "匯入料件", "spec": "舊鍵規格", "qty": 1, "unit": "個"},
     ]}})
     from pdf_gen import _project_execution_report_data, _build_project_execution_report_html
     data = _project_execution_report_data(QNO)
     by = {m["name"]: m for m in data["materials"]}
     assert by["交換器"] == {"name": "交換器", "spec": "SG-2410", "qty": "3 台", "status": "已到料", "arrivedOn": "2026-11-12"}
     assert by["網路線"]["spec"] == "Cat6 305m" and by["網路線"]["qty"] == "2 箱" and by["網路線"]["status"] == "已申購"
+    assert by["匯入料件"]["spec"] == "舊鍵規格", "model 沒有時退回舊鍵 spec（匯入／手改資料）"
     assert by["機櫃"]["status"] == "待申購" and by["機櫃"]["arrivedOn"] == "" and by["機櫃"]["qty"] == "1"
     html = _build_project_execution_report_html(data)
     for needle in ("SG-2410", "Cat6 305m", "已到料", "已申購", "待申購", "2026-11-12", "到貨日"):
