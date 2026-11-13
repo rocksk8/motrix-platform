@@ -28,6 +28,22 @@ WAIVE_CAP = 470          # 整合者在凍結時設成實際數字;之後只准�
 CASES_FLOOR = 2              # T62 整合者（2026-10-15）：目前實際案例數＝2（階段樣板 preview／apply-template）；同上：整合者設成實際案例數，防止案例檔整批消失
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _restore_definition_registries(_app):
+    """本檔的案例 setup 會把建構器旗標打開，再打寫入路由；後端對 /api/definitions／階段樣板等路徑會惰性登記 kind
+    （`ensure_kind()`：notify_action、case_stage_template、…）。登記表（`core.definitions` 的 `_EXTRA_KINDS`／`_VALIDATORS`／`_DEFAULTS`）
+    是行程內全域狀態：不還原，同一個 worker 後面假設『kind 未登記』的題會紅（例如
+    test_notify_actions_t63::test_flag_off_means_no_kind_and_dispatch_is_a_noop，xdist 分到同一個 worker 才發生 ⇒ 偶發紅）。
+    收尾還原成進場時的樣子；同 test_gov_contract_2026_11_08 的做法：用 module 範圍（kind 靠 import 副作用登記，每題清會讓下一題找不到），
+    依賴 `_app`：user_buttons／expense_types／remit_kinds 在 import 時就登記，要等 main 載完再拍快照，否則還原會把它們一併抹掉。"""
+    from core import definitions as D
+    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS)]      # noqa: SLF001
+    yield
+    for t, saved in snap:
+        t.clear()
+        t.update(saved)
+
+
 def _load(skip_rest=False):
     skip_rest = skip_rest or os.environ.get("U0B_SKIP_REST") == "1"      # 作者自測:略過整合者產生的 cases_zz_rest
     pkg = importlib.import_module("tests.platform.write_golden_cases")
