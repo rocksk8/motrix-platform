@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/upload-files-txn-3；T85；版號由列車取）
+- 修正（內部，API 路徑與回應形狀不變）：報價單 JSON 內嵌的附件刪除——款項發票（`DELETE …/payment/{idx}/invoice-files/{id}`）、叫料附件、叫料發票附件，以及案件留言附件（`DELETE …/updates/{uid}/files/{id}`）——原本「先刪實體檔、再寫庫」：寫庫失敗（鎖逾時、觸發器擋下、磁碟錯誤）會留下「有紀錄、沒檔案」的壞連結，且刪檔在寫鎖內做。改為「鎖內重讀 → 只改清單 → commit → **commit 之後**才刪實體檔」：寫庫失敗＝紀錄與檔都還在，刪檔（慢動作）不再占著寫鎖。案件留言附件改走 `remove_json_item`（鎖內重讀 `files_json`，並發的附件變動不會被整包覆寫）。②已結案半解鎖案件的三種「刪除類變更」被最高管理者核准時（`_apply_case_change_request`）同樣改為：實體檔排進 `deferred_files`，`approve_case_change` commit 之後才刪（核准途中任何失敗 ⇒ 整筆 rollback，檔案不動）。 測試：`tests/test_upload_files_txn3_2026_11_13.py`。
+
 ## (next) — 2026-11-13（feat/upload-files-txn-2；T84＋審查補強；版號由列車取）
 - 修正（審查 M1）：資源回收筒判斷「案件底下還有其他單據」時，`case_change_requests` 不再把 `staging`（上傳途中預留編號）與 `cancelled`（上傳失敗）算進去（`recycle_adapter._DEPENDENT_WHERE`）；否則一次失敗的上傳會讓案件刪不掉。pending／approved／rejected 照舊算。
 - 新增（審查 Q2）：每日維護（`daily.check`，`case_deadlines.run_daily_checks` 最前面）呼叫 `quotations.sweep_stale_staging()`：超過 24 小時還停在 `staging` 的預留列（上傳途中當機／重啟的殘骸）標成 `cancelled` 並清掉 `_pending_case_changes/{id}/` 底下的暫存檔；pending／approved／rejected 與新的 staging 不動。測試：`tests/test_upload_files_txn2_2026_11_13.py`。
