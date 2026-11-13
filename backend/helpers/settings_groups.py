@@ -1232,3 +1232,8 @@ _tender_closing._register(S, _register_core)
 from helpers import settings_groups_onepipe as _onepipe  # noqa: E402
 
 _onepipe._register(S, _register_core)
+
+# T85：匯入精靈開關與上傳大小上限（拆檔，同屬 core）
+from helpers import settings_groups_import_wizard as _import_wizard  # noqa: E402
+
+_import_wizard._register(S, _register_core)

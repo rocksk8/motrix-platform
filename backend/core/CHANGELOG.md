@@ -35,6 +35,12 @@
 - 不變：PUT company-profile／branding 仍限最高管理者；L1 公開介面無變動。
 - 測試（遷移）：`tests/test_company_profile_full_read_tighten_2026_11_13.py`（舊存值 0 → 升級後 1 且有稽核／重跑不變／跑過後手動改 0 仍是 0／全新安裝 1 不寫稽核／存 1 只記標記／失敗不記標記且不丟例外、下次重試／只動這一欄／非最高管理者升級後讀完整版得 403／main.py 有呼叫）。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（新增「全新安裝非最高管理者讀完整版得 403／最高管理者讀得到且金鑰遮罩／開關明確關閉後恢復登入即可讀／預設值為 1 且登錄為『收緊』類」）；`test_company_profile_superadmin_only_2026_09_22.py`、`test_api_integration.py` 對齊新預設。
+- **（併入）(next) — 2026-11-13（feat/import-wizard；T85 匯入精靈）**
+- L1（新增，只增）：新單位 `helpers.user_import`（員工匯入的規劃與臨時密碼產生）、設定群組 `import_wizard`（`enabled` 預設 0、`max_file_mb` 預設 5；`helpers/settings_groups_import_wizard.py`）；新端點 `POST /api/users/import-rows`（只有最高管理者；`dryRun` 只有明確 false 才寫入、`planHash` 預覽綁定、整批一個交易；只新增、既有帳號略過；角色只收業務／工程師／檢視者，管理員、財務、最高管理者列為「此角色需手動建立」；臨時密碼只出現在確認那一次的回應，不進雜湊、日誌、稽核、資料表）。
+- 重構（行為不變）：`routers/auth.py` 的 `create_user` 的 INSERT 抽成 `_insert_new_user`，與員工匯入共用（`create_user` 的驗證、回應、稽核不變）；密碼規則檢查抽成 `_password_problem`（最短長度＋弱密碼清單，訊息逐字不變），`create_user` 與員工匯入的臨時密碼共用。
+- **（追加 2026-11-13，hichan-9 審查 H1／M1～M3／L3～L5 的修正）**：M1 員工帳號正規化（NFKC＋小寫）後必須符合 `^[a-z0-9._-]{3,32}$`，含零寬／方向控制／控制字元一律拒絕，和既有帳號用同一套正規化比對（長得像的寫法不能繞過「既有帳號略過」），建立時存正規化後的值、預覽寫「將建立為 xxx」（L5）；M3 `POST /api/users/import-rows` 寫入可帶 `Idempotency-Key`（用 L1 `helpers.idempotency`）：回應掉了重送同一把 key ⇒ 回第一次的結果（`createdAccounts`，`replayed: true`、`passwordsShown: false`），**不再建立、不含任何密碼**；失敗（含 409 重新預覽）釋放 key；成功回應多 `createdAccounts`、`replayed`、`passwordsShown`，`credentials` 各筆多 `id`（供頁面「重設臨時密碼」走既有的 `PUT /api/users/{id}`）；L3 臨時密碼產生後一律過 `_password_problem`（含 `is_weak_password`）；L4 300 人的密碼雜湊改多執行緒（hashlib 放 GIL），300 人實測 < 10 秒；頁面 M2 下載 CSV 對 `= + - @ Tab CR` 開頭的儲存格加前導單引號（保留 UTF-8 BOM）、M3 頁面分辨「伺服器明確失敗」與「結果不確定」（後者提供「查詢這次匯入結果」）。
+- **（追加 2026-11-13，rebase 到 T82 凍結 head f66dfd9ef）**：`modules/importer/parser.py` 的 xlsx 解析改用 `helpers.xlsx_guard.read_rows(slot_name="importer")`，刪掉自己的串流預掃（L1 無變更）；`routers/auth.py` 的 `_insert_new_user` 補 `quote_email` 參數（T82 新欄位，預設空字串；`create_user` 照舊帶入）。
+- 測試：`tests/test_user_import_t85_2026_11_13.py`、`tests/test_e2e_import_wizard_t85_2026_11_13.py`；基準：`route_inventory`、`response_keys_baseline`、`write_golden`（`cases_importer.py`）、`settings_deploy_baseline`。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

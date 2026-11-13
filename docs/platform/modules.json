@@ -102,6 +102,8 @@
    "helper:list_catalog",
    "helper:list_pref_policy",
    "helper:idempotency",
+   "helper:user_import",
+   "helper:settings_groups_import_wizard",
    "helper:list_view_prefs",
    "helper:alert_settings",
    "helper:clause_titles",
@@ -1089,6 +1091,20 @@
    ],
    "api_prefixes": [
     "/api/permmatrix"
+   ]
+  },
+  "M17": {
+   "key": "importer",
+   "name": "匯入精靈",
+   "units": [
+    "mod:importer/__init__",
+    "mod:importer/api",
+    "mod:importer/parser",
+    "page:pages/import-wizard.html"
+   ],
+   "tables": [],
+   "api_prefixes": [
+    "/api/importer"
    ]
   }
  },

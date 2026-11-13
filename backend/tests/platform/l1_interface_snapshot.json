@@ -2090,6 +2090,7 @@
    "DEFAULT_TAGLINE": "const",
    "brand_tagline": "def()"
   },
+  "helper:settings_groups_import_wizard": {},
   "helper:settings_groups_legal_reminder": {},
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
@@ -2401,6 +2402,19 @@
    "enabled": "def(conn=…)",
    "preview": "def(conn, caller, definition, module, page, username=…)",
    "visible_buttons": "def(conn, user, module, page)"
+  },
+  "helper:user_import": {
+   "ALLOWED_ROLES": "const",
+   "IMPORT_MAX_ROWS": "const",
+   "MANUAL_ROLES": "const",
+   "MAX_TEXT": "const",
+   "USERNAME_RULE": "const",
+   "canon_username": "def(u)",
+   "new_password": "def(min_len, problem=…)",
+   "norm_role": "def(text)",
+   "plan_hash": "def(plan)",
+   "plan_summary": "def(plan)",
+   "plan_users_import": "def(conn, rows)"
   },
   "helper:user_prefs": {
    "PrefError": "class",
