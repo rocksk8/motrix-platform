@@ -806,7 +806,7 @@
       </div>
       <div style="padding:20px">
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.6">
-          此報價單已簽核完成。輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定。
+          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定<span x-show="isPendingStatus()">；<strong>存檔後整條簽核會重跑（重新送審）</strong></span>。
         </div>
         <div style="margin-bottom:4px">
           <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
@@ -1124,15 +1124,17 @@
         </a>
       </template>
       <!-- 解鎖按鈕（工具列） -->
-      <template x-if="q.status === '已送出' && session.role === 'superadmin' && !unlocked">
-        <button class="btn btn-ghost btn-sm" @click="showUnlockModal=true; unlockPwd=''; unlockError=''"
+      <!-- 最高管理者的編輯入口：已送出 ⇒ 解鎖編輯；待審核／簽核中 ⇒ 同一顆（V3.45：原本最高管理者＋當層簽核人在待審核完全沒有入口；後端 unlock-edit 本來就允許） -->
+      <template x-if="canUnlockEdit()">
+        <button class="btn btn-ghost btn-sm" @click="showUnlockModal=true; unlockPwd=''; unlockError=''" data-testid="qf-unlock-edit"
+                :title="isPendingStatus() ? '解鎖後可直接修改內容；存檔後整條簽核會重跑（重新送審）' : '解鎖後可修改內容；存檔後需重新簽核'"
                 style="border-color:#FDE68A;color:#92400E;background:#FFFBEB">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           解鎖編輯
         </button>
       </template>
-      <template x-if="q.status === '已送出' && unlocked">
-        <button class="btn btn-ghost btn-sm" @click="cancelUnlock()"
+      <template x-if="(q.status === '已送出' || isPendingStatus()) && unlocked">
+        <button class="btn btn-ghost btn-sm" @click="cancelUnlock()" data-testid="qf-relock"
                 style="border-color:#FCA5A5;color:#DC2626;background:#FFF1F2">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           重新鎖定
@@ -1230,6 +1232,9 @@
         <div data-testid="qf-pending-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
           <strong>此單目前<span x-text="MotrixStatus.label(q.status)"></span>，僅簽核人可編輯。</strong>
           您目前是唯讀；要修改內容，申請人請先按上方「收回草稿」，或請簽核人（<span x-text="pendingApproverLabel()"></span>）退回修改。
+          <template x-if="q.approval?.requestedBy === session.username">
+            <div data-testid="qf-pending-requester-hint" style="margin-top:4px"><strong>您是送審人：</strong>要修改請先按上方「收回草稿」，改完再重新送審。</div>
+          </template>
         </div>
       </template>
 
@@ -1323,7 +1328,7 @@
         </template>
       </div>
       <!-- 已解鎖警示橫幅 -->
-      <div x-show="q.status === '已送出' && unlocked"
+      <div x-show="(q.status === '已送出' || isPendingStatus()) && unlocked" data-testid="qf-unlocked-banner"
            style="display:flex;align-items:center;gap:12px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;margin-bottom:18px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
         <div style="flex:1">
@@ -2690,7 +2695,9 @@
   // V3.43（2026-11-13，T81 整合）：手機／直立平板版面（工具列可換行、品項明細卡片化）；使用者可見稱呼統一為「最高管理者」。
   // V3.44（2026-11-13，T82 整合：估價單＋整合期的表單調整）：開單時可選「報價單／估價單」（存檔前可改、存檔後鎖定）；單號字首、標題與通知用語隨類型，版型與流程不變。
   //   併入 fix/quote-items-align：品項明細對齊（≥768px 同一列輸入框貼同一條上緣；區段標題列補齊成本／毛利率／單項毛利三格）。
-  const FORM_VERSION = 'V3.44'
+  // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
+  //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
+  const FORM_VERSION = 'V3.45'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -4206,7 +4213,15 @@
       // 2026-11-11（ops）：不只簽核人——非簽核人（最高管理者、申請人、其他人）開著待審核／簽核中的單也一律鎖唯讀（只有解鎖編輯 unlocked 例外）。
       // 原本只鎖簽核人，其餘人欄位可編輯但 PUT 必 403、自動存檔靜默失敗＝以為存了（正式機 14 次，全是最高管理者）。上方橫幅說明原因與出路。
       isApproverLocked() {
-        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing && (this.isCurrentTierApprover() || !this.unlocked)
+        // 解鎖編輯（只有最高管理者能解鎖）例外：最高管理者同時是當層簽核人時，解鎖後也要真的可編輯（V3.45）
+        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing
+          && (!this.unlocked || (this.isCurrentTierApprover() && this.session.role !== 'superadmin'))
+      },
+      isPendingStatus() { return this.q.status === '待審核' || this.q.status === '簽核中' },
+      // 「解鎖編輯」入口：最高管理者、尚未解鎖；已送出，或待審核／簽核中且不在複查編輯中。伺服器為準（unlock-edit 需最高管理者密碼＋最高管理者角色）。
+      canUnlockEdit() {
+        return this.session?.role === 'superadmin' && !this.unlocked && !this.reviewEditing
+          && (this.q.status === '已送出' || this.isPendingStatus())
       },
       // 非簽核人看待審核／簽核中單的橫幅（簽核人本人不顯示：他有自己的工具列與「編輯」鈕）
       pendingReadOnlyBanner() {
@@ -4882,6 +4897,7 @@
       },
 
       cancelUnlock() {
+        this.unlocked = false          // 「重新鎖定」／「取消解鎖」要真的鎖回去（原本只關彈窗，unlocked 沒有還原）
         this.showUnlockModal = false
         this.unlockPwd = ''
         this.unlockError = ''

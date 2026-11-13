@@ -47,7 +47,8 @@ def test_quotation_form_locks_every_non_approver_while_approval_pending():
     橫幅只給非簽核人。行為由 test_e2e_pending_readonly_for_non_approvers 驗，這裡只釘住判斷式沒被改回「只鎖簽核人」。"""
     html = _read("quotation-form.html")
     body = _slice(html, "isApproverLocked() {", 400)
-    assert "this.isCurrentTierApprover() || !this.unlocked" in body, "非簽核人也要鎖（unlocked 才例外）"
+    # V3.45：判斷式改成「!unlocked（任何人沒解鎖都鎖）||（當層簽核人且不是最高管理者）」——最高管理者解鎖後即使同時是當層簽核人也要能編輯
+    assert "!this.unlocked" in body and "this.isCurrentTierApprover() && this.session.role !== 'superadmin'" in body, "非簽核人也要鎖（unlocked 才例外）；簽核人（非最高管理者）解鎖不了"
     ban = _slice(html, "pendingReadOnlyBanner() {", 300)
     assert "!this.isCurrentTierApprover()" in ban and "!this.unlocked" in ban
     auto = _slice(html, "autoSave() {", 1500)
