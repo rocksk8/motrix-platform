@@ -77,7 +77,9 @@ def test_flag_on_staff_creates_a_case_task_and_sees_it(live_server, make_user, e
     page.fill('[data-testid="dt-self-date"]', datetime.date.today().isoformat())
     page.click('[data-testid="dt-self-save"]')
     page.locator('[data-testid="dt-self-modal"]').wait_for(state="hidden", timeout=10000)
-    page.get_by_text("到場確認設備位置E2E").first.wait_for(state="visible", timeout=10000)
+    # 事項進了本人的清單（頁面的 tasks 狀態；畫面有多種檢視、同名標題也出現在隱藏的完成明細，不靠找文字）
+    page.wait_for_function("(t) => { const d = Alpine.$data(document.querySelector('[x-data]')); return d.tasks.some(x => x.title === t) }",
+                           arg="到場確認設備位置E2E", timeout=10000)
 
 
 @pytest.mark.e2e
