@@ -401,7 +401,7 @@
 
 **4. 發布（主持）**
 1. 執行 `publish_tNN.sh`，規則（使用者 2026-10-09 授權主持自己推送、不用等指令）：**先讀腳本全文 → 先 `--check`（只檢查不發）→ 才正式執行**；fail-closed 前置條件：`HEAD` ＝ 過閘門的 commit ＝ origin 上的整合分支、manifest commit 存在、包內沒有 `*.db`／`.pyc`、`verify_package --expect-db-version <目前 schema 版本，現為 118>` 通過；簽章金鑰只以**路徑**傳入、**不讀內容**；不強推；任何一項檢查紅燈就不發布。被分類器擋下就停下請使用者處理，不繞過、不叫別的視窗代做。
-2. 發布產物：部署包 `YYYYMMDD_HHMMSS_<sha8>_full`（含 `package.sha256`、行數／檔案數）、雲端步驟檔 `給正式機Claude_第N班更新步驟.md`；repo 內的 `docs/platform/prod-tasks/YYYYMMDD-trainNN-apply.md` 與它逐字一致。步驟檔寫法見 `prod-tasks/TEMPLATE-apply.md`；套用規則見 `PROD-DEV-CHANNEL.md` §6。
+2. 發布產物：部署包 `YYYYMMDD_HHMMSS_<sha8>_full`（含 `package.sha256`、行數／檔案數）、雲端步驟檔 `給正式機Claude_第N班更新步驟.md`；repo 內的 `docs/platform/prod-tasks/YYYYMMDD-trainNN-apply.md` 與它逐字一致。步驟檔寫法見 `prod-tasks/TEMPLATE-apply.md`；套用規則見 `PROD-DEV-CHANNEL.md` §6。 **步驟 2 必須含「apply_update 自升級前置」**（包內 `backend/tools/apply_update.version.json` 的版本≠上一班已部署版本時，先備份舊檔、只換包內 `apply_update.ps1`＋`.version.json` 並核對雜湊，再 apply；第 81 班因步驟檔寫「套用流程自己會處理」而第一次 apply 被 `script_not_from_package` 擋下，見 `TEMPLATE-apply.md` 步驟 2、`UPGRADE-RUNBOOK.md` §8）。
 3. 正式機 Claude 依步驟檔自動套用（§6）；寫入資料類的作業另走 §7（使用者本人確認）。
 
 **5. 基準（套用成功之後，主持）**
