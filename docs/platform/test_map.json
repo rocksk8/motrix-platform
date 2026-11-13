@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1674,
+  "tests": 1675,
   "unmapped": 9,
   "kinds": {
    "api": 929,
-   "e2e": 379,
+   "e2e": 380,
    "audit": 216,
    "unit": 150
   },
@@ -33951,6 +33951,28 @@
     "page": [
      "frontend/pages/notification-settings.html",
      "frontend/static/email-setup.js"
+    ],
+    "path": [
+     "frontend/pages/notification-settings.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_email_setup_load_lock_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "helper:settings",
+    "page:pages/notification-settings.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/notification-settings.html"
     ],
     "path": [
      "frontend/pages/notification-settings.html"
