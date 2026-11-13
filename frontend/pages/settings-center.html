@@ -439,7 +439,7 @@ function settingsCenterPage() {
       const plain = pend.filter(p => !p.approvalsRequired)
       const first = list => list.map(p => p.effectiveAt).sort()[0]
       if (needApproval.length) parts.push('已送出，待第二位最高管理者核准，預計 ' + this.dayText(first(needApproval)) + '生效')
-      if (plain.length) parts.push('已送出，確認期間後生效，預計 ' + this.dayText(first(plain)) + '生效')
+      if (plain.length) parts.push('已送出，等待期滿後生效，預計 ' + this.dayText(first(plain)) + '生效')
       if (!parts.length) return { kind: 'ok', text: '沒有任何變更' }
       return { kind: pend.length ? 'wait' : 'ok', text: parts.join('；') }
     },

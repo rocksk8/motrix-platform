@@ -796,7 +796,7 @@ def test_save_result_wording_instant_vs_waiting_for_second_superadmin(tmp_path):
     ])
     assert got[0] == {"kind": "ok", "text": "已生效"}
     assert got[1] == {"kind": "wait", "text": "已送出，待第二位最高管理者核准，預計 11 月 20 日生效"}
-    assert got[2] == {"kind": "wait", "text": "已送出，確認期間後生效，預計 11 月 18 日生效"}
+    assert got[2] == {"kind": "wait", "text": "已送出，等待期滿後生效，預計 11 月 18 日生效"}
     assert got[3]["text"] == "已生效；已送出，待第二位最高管理者核准，預計 11 月 20 日生效"
     assert got[4]["text"] == "沒有任何變更"
 
