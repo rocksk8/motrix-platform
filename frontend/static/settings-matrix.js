@@ -55,8 +55,11 @@
  *   //   欄位 colSelect={draft(row,on,itemValue), run(keys,on,itemValue,ctx), confirm(keys,on,itemValue)}（switch／chips 欄；只在桌面表格的欄頭，手機卡片沒有欄頭）：整欄一次開／關，略過不能批次或鎖住的列；
  *   //     草稿頁只吃 draft（沒給＝不動，草稿頁絕不直接寫入；略過幾列會在「已加入草稿」提示裡說），非草稿頁吃 run（走確認視窗→寫入→復原這一批）。
  *   //   cfg.notifyPreview({kind,keys,changes,action,skipped})→raw html：確認視窗最後加「通知預覽」。
+ *   //   select 欄的 options 可以是函式 r => [{value,label}]（每列的選項不同）。
+ *   //   cfg.onRender()：每次畫完呼叫（外框用來更新導覽上的「未儲存 N」；host 端不可在裡面再呼叫 mx.render）。
+ *   //   cfg.rowVisible(row)→false：這一列不顯示（不影響草稿）；條件改變後呼叫 mx.render()。
  *   // 群組快捷鈕總開關：batch.groupActionsEnabled: false（設定中心不開放「全部開啟」）
- *   mx.setRows(rows)  mx.refresh()  mx.selection()  mx.clearSelection()  mx.toast(msg, { undo })  mx.stage(key, patch)  mx.draftCount()  mx.discard()  mx.save()  mx.destroy()
+ *   mx.setRows(rows)  mx.refresh()  mx.selection()  mx.clearSelection()  mx.toast(msg, { undo })  mx.stage(key, patch)  mx.draftCount()  mx.discard()  mx.save()  mx.render()  mx.destroy()
  *   SettingsMatrix.openDialog({ title, html, buttons: [{ label, value, kind: 'primary'|'danger'|'' }], onOpen(el) }) → Promise<value|null>
  *
  * ── 行為（所有套用這個元件的設定頁一致）──
@@ -260,12 +263,15 @@
     function VR() { return S.rows.map(vr) }
     function groupOrder() {
       var seen = {}
-      var all = VR()
+      var all = VR().filter(inScope)
       var out = groups.filter(function (g) { seen[g] = 1; return all.some(function (r) { return rg(r) === g }) })
       all.forEach(function (r) { var g = rg(r) || '其他'; if (!seen[g]) { seen[g] = 1; out.push(g) } })
       return out
     }
+    // cfg.rowVisible(row)→false ＝這一列不屬於目前畫面（設定中心外框：同一張表放全部已載入頁的列，只顯示目前這一頁；草稿與儲存列跨頁共用）
+    function inScope(r) { return !cfg.rowVisible || cfg.rowVisible(r) !== false }
     function visible(r) {
+      if (!inScope(r)) return false
       if (S.g && (rg(r) || '其他') !== S.g) return false
       if (S.f !== 'all') {
         var f = filters.filter(function (x) { return x.id === S.f })[0]
@@ -358,7 +364,7 @@
       }
       if (c.type === 'select') {
         var v = c.get(r)
-        return '<select class="mx-select' + lockCls + '" data-mx="select"' + attrs + ' aria-label="' + aria + '"' + lockAttrs + '>' + c.options.map(function (o) {
+        return '<select class="mx-select' + lockCls + '" data-mx="select"' + attrs + ' aria-label="' + aria + '"' + lockAttrs + '>' + (typeof c.options === 'function' ? c.options(r) : c.options).map(function (o) {
           return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(v) ? ' selected' : '') + '>' + esc(o.label) + '</option>'
         }).join('') + '</select>'
       }
@@ -488,6 +494,10 @@
       if (f.s != null) { try { pick.setSelectionRange(f.s, f.e) } catch (x) { /* ignore */ } }
     }
     function render() {
+      renderInner()
+      if (!dead && cfg.onRender) { try { cfg.onRender() } catch (e) { /* host 的重畫不影響表 */ } }
+    }
+    function renderInner() {
       if (dead) return
       var v = view()
       var chipF = '<button type="button" class="mx-fchip" data-mx="filter" data-f="all" aria-pressed="' + (S.f === 'all') + '">' + esc(T('all')) + '</button>' + filters.map(function (f) {
@@ -865,6 +875,7 @@
       discard: discardDraft,
       save: saveDraft,
       destroy: destroy,
+      render: render,                                              // 外框換頁（rowVisible 的條件變了）後重畫
     }
     return api
   }

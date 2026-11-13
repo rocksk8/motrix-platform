@@ -7,631 +7,701 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>設定中心 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
-  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
-  <link rel="stylesheet" href="../css/hint-popover.css?v=20261113a">
-  <script defer src="../static/hint-popover.js"></script>
+  <link rel="stylesheet" href="../css/settings-matrix.css?v=20261113a">
   <style>
-    .sc-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 32px 120px;
-      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
-    .sc-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 22px; margin-top: 16px; max-width: 1280px; }
-    .sc-side { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px; align-self: start; position: sticky; top: calc(var(--topbar-h) + 12px); background: var(--white); }
-    .sc-side input { width: 100%; padding: 7px 9px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 12px; margin-bottom: 8px; background: #fff; }
-    .sc-gbtn { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 6px; text-align: left; padding: 8px 9px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-size: 13px; color: inherit; }
-    .sc-cat { display: flex; align-items: center; margin: 12px 4px 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); letter-spacing: .02em; }
-    .sc-sec { margin: 8px 9px 2px; font-size: 11px; color: var(--text-secondary); }
-    .sc-gbtn:hover { background: var(--border-light); }
-    .sc-gbtn.is-on { background: var(--accent-light); color: var(--accent); font-weight: 600; }
-    .sc-dot { font-size: 12px; padding: 1px 6px; border-radius: 9px; background: var(--border-light); color: var(--text-secondary); white-space: nowrap; }
-    .sc-dot--warn { background: var(--warning-light); color: var(--warning); }
-    .sc-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-light); margin-bottom: 14px; flex-wrap: wrap; }
-    .sc-tab { border: 0; background: transparent; padding: 9px 14px; cursor: pointer; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid transparent; }
-    .sc-tab.is-on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-    .sc-card { border: 1px solid var(--border-light); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
-    .sc-card.is-dirty { border-color: var(--accent); }
-    .sc-q { font-size: 14px; font-weight: 600; }
-    .sc-help { color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
-    .sc-cur { font-size: 12px; margin-top: 8px; color: var(--text-secondary); }
-    .sc-chip { font-size: 12px; padding: 1px 7px; border-radius: 9px; background: var(--warning-light); color: var(--warning); margin-left: 6px; }
-    .sc-rec { font-size: 12px; padding: 1px 7px; border-radius: 9px; background: var(--success-light); color: var(--success); margin-left: 6px; }
-    .sc-input { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-    .sc-input input[type=number], .sc-input input[type=text] { padding: 7px 9px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 14px; width: 150px; background: #fff; }
-    .sc-choices { display: grid; gap: 8px; margin-top: 10px; }
-    .sc-choice { display: block; border: 1px solid var(--border-light); border-radius: 8px; padding: 9px 11px; cursor: pointer; }
-    .sc-choice.is-on { border-color: var(--accent); background: var(--accent-light); }
-    .sc-choice input { margin-right: 6px; }
-    .sc-choice small { display: block; color: var(--text-secondary); margin: 3px 0 0 22px; font-size: 12px; }
-    .sc-impact { font-size: 12px; color: var(--text-secondary); margin-top: 10px; border-left: 3px solid var(--border-light); padding-left: 8px; }
-    .sc-live { font-size: 12px; margin-top: 6px; color: var(--text-primary); font-weight: 600; }
-    .sc-banner { margin-top: 10px; border-radius: 8px; padding: 9px 12px; font-size: 12px; line-height: 1.6; }
-    .sc-banner--amber { background: var(--warning-light); color: var(--warning); border: 1px solid #FDE68A; }
-    .sc-banner--red { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
-    .sc-kind { font-size: 12px; margin-top: 8px; font-weight: 600; }
-    .sc-err { color: var(--danger); font-size: 12px; margin-top: 6px; }
-    .sc-ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); border-radius: 8px; padding: 9px 12px; font-size: 13px; margin-bottom: 12px; }
-    .sc-bad { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); border-radius: 8px; padding: 9px 12px; font-size: 13px; margin-bottom: 12px; }
-    .sc-bar { position: fixed; left: var(--sidebar-w); right: 0; bottom: 0; background: #fff; border-top: 2px solid var(--accent); padding: 12px 32px; z-index: 30; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
-    .sc-bar-in { max-width: 1280px; display: grid; gap: 8px; }
-    .sc-bar textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--border-light); border-radius: 6px; font-size: 13px; font-family: inherit; background: #fff; }
-    .sc-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .sc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .sc-table th, .sc-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
-    .sc-table th { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
-    .sc-note { font-size: 12px; color: var(--text-secondary); }
+    /* 設定中心外框（S2；SPEC §14）：上方列（搜尋／待生效／最近變更）＋左側兩層導覽＋右側內容。設定表本身是 SettingsMatrix（同一張表放所有已載入頁的列，只顯示目前這一頁）。 */
+    .sc-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 18px 28px 120px; min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .sc-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+    .sc-title { font-size: 20px; font-weight: 700; margin-right: 6px; }
+    .sc-searchbox { position: relative; flex: 1 1 280px; max-width: 520px; }
+    .sc-searchbox input { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; font-size: 14px; background: var(--white); color: inherit; }
+    .sc-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; background: var(--white); border: 1px solid var(--border-light); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); max-height: 420px; overflow: auto; }
+    .sc-res { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border-light); background: transparent; color: inherit; cursor: pointer; font-size: 14px; }
+    .sc-res:hover, .sc-res:focus { background: var(--info-light, rgba(0,0,0,.05)); outline: none; }
+    .sc-res small { display: block; color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+    .sc-res-empty { padding: 10px 12px; color: var(--text-secondary); font-size: 13px; }
+    .sc-toplinks { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+    .sc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border-light); border-radius: 999px; background: var(--white); color: inherit; font-size: 13px; cursor: pointer; }
+    .sc-chip.on { border-color: var(--info); color: var(--info); font-weight: 700; }
+    .sc-chip b { font-weight: 700; }
+    .sc-seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+    .sc-body { display: flex; gap: 22px; margin-top: 14px; align-items: flex-start; }
+    .sc-nav { width: 248px; flex: 0 0 248px; position: sticky; top: calc(var(--topbar-h) + 10px); max-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 24px); overflow: auto; }
+    .sc-cat { font-size: 12px; color: var(--text-secondary); margin: 14px 0 4px; letter-spacing: .06em; }
+    .sc-cat:first-child { margin-top: 0; }
+    .sc-navitem { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; box-sizing: border-box; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 14px; cursor: pointer; text-decoration: none; }
+    .sc-navitem:hover { background: var(--info-light, rgba(0,0,0,.05)); }
+    .sc-navitem.active { background: var(--info-light, rgba(0,0,0,.07)); font-weight: 700; }
+    .sc-navitem.planned { color: var(--text-secondary); }
+    .sc-nbadge { font-size: 11px; font-weight: 400; color: var(--warning); white-space: nowrap; }
+    .sc-nbadge.draft { color: var(--danger); font-weight: 700; }
     .sc-navtoggle { display: none; }
-    /* ≤899px：二十幾個設定群組原本排成一條要左右滑的長條、搜尋框還被藏起來 → 改成「目前群組」一顆大按鈕，點開才展開成兩欄清單（搜尋框一起出現），選了就收起來 */
-    @media (max-width: 899px) {
-      .sc-layout { grid-template-columns: 1fr; }
-      .sc-side { position: static; padding: 8px; }
-      .sc-navtoggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); font-size: 15px; font-weight: 700; color: inherit; cursor: pointer; text-align: left; }
-      .sc-navtoggle small { font-weight: 400; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
-      .sc-navpanel { display: none; margin-top: 8px; }
-      .sc-side.is-open .sc-navpanel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: calc(60vh / var(--fz, 1)); overflow-y: auto; }
-      .sc-side.is-open .sc-navpanel input { grid-column: 1 / -1; margin: 0; font-size: 16px; min-height: 44px; }
-      .sc-gbtn { width: 100%; min-height: 44px; flex-wrap: wrap; text-align: left; }
-      .sc-navpanel > .sc-help, .sc-navpanel > div.sc-gbtn { grid-column: 1 / -1; }
+    .sc-pane { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    .sc-navitem span { min-width: 0; overflow-wrap: anywhere; }
+    .sc-h { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+    .sc-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 2px 0; }
+    .sc-tag { display: inline-block; padding: 1px 8px; margin-left: 8px; border-radius: 999px; font-size: 12px; font-weight: 400; border: 1px solid var(--border-light); color: var(--text-secondary); vertical-align: middle; }
+    .sc-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 10px 0 18px; }
+    .sc-card { border: 1px solid var(--border-light); border-radius: 12px; padding: 14px 16px; background: var(--white); text-align: left; color: inherit; cursor: pointer; font-size: 13px; }
+    .sc-card:hover { border-color: var(--info); }
+    .sc-card .n { font-size: 28px; font-weight: 700; display: block; line-height: 1.2; }
+    .sc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .sc-table th, .sc-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    .sc-table th { color: var(--text-secondary); font-weight: 400; font-size: 12px; }
+    .sc-btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+    .sc-in { padding: 7px 9px; border: 1px solid var(--border-light); border-radius: 6px; background: var(--white); color: inherit; font-size: 14px; }
+    .sc-link { background: none; border: 0; padding: 0; color: var(--info); cursor: pointer; font-size: inherit; text-align: left; }
+    .sc-empty { color: var(--text-secondary); font-size: 13px; padding: 10px 0; }
+    .sc-err { color: var(--danger); font-size: 13px; margin: 8px 0; }
+    .sc-box { border: 1px solid var(--border-light); border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+    .sc-banner { margin: 4px 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; line-height: 1.55; }
+    .sc-banner.red { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
+    .sc-banner.amber { background: var(--warning-light, #fff7e0); color: var(--warning); border: 1px solid var(--warning-border, #f1d58a); }
+    .sc-notify { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--info-light, rgba(0,0,0,.05)); font-size: 13px; line-height: 1.6; }
+    .sc-flash { animation: scflash 1.8s ease-out 1; }
+    @keyframes scflash { 0%, 30% { background: rgba(255, 200, 0, .45); } 100% { background: transparent; } }
+    .sc-mx .mx-dash { visibility: hidden; }
+    textarea.sc-in { width: 100%; box-sizing: border-box; }
+    @media (max-width: 900px) {
+      .sc-main { padding: 12px 12px 140px; }
+      .sc-cards { grid-template-columns: 1fr; }
+      .sc-body { flex-direction: column; gap: 10px; align-items: stretch; }
+      .sc-pane { width: 100%; }
+      .sc-nav { position: static; width: 100%; flex: none; max-height: none; display: none; }
+      .sc-nav.open { display: block; max-height: 60vh; overflow: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 8px; }
+      .sc-navtoggle { display: flex; width: 100%; align-items: center; justify-content: space-between; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); font-size: 15px; font-weight: 700; color: inherit; cursor: pointer; }
+      .sc-searchbox { flex-basis: 100%; max-width: none; }
+      .sc-searchbox input { font-size: 16px; min-height: 44px; }
+      .sc-toplinks { margin-left: 0; }
+      .sc-table { display: block; overflow-x: auto; }
     }
-    @media (min-width: 901px) { body.sys-rail-on .sc-bar { left: calc(var(--sidebar-w) + 208px); } } /* 系統中心分類欄（sidebar.js RAIL_W）佔掉左側 208px */
-    @media (max-width: 767px) { .sc-main { margin-left: 0; padding: 20px 16px 140px; } .sc-bar { left: 0; padding: 10px 16px; } }
-      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
-    @media (max-width: 1023px) {
-      .sc-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
-      .sc-main select,
-      .sc-main textarea { font-size: 16px; min-height: 44px; }
-      .sc-main .btn { min-height: 44px; }
-      .sc-main input[type=checkbox],
-      .sc-main input[type=radio] { width: 22px; height: 22px; }
-    }
-</style>
+  </style>
 </head>
-<body x-data="settingsCenterPage()" x-init="init()" x-cloak>
+<body>
   <header id="app-topbar" class="topbar"></header>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="sc-main">
-    <div class="pg">
-      <div class="pg__l">
-        <div class="pg__eyebrow">系統設定</div>
-        <h1 class="pg__t">設定中心</h1>
-        <p class="pg__s">系統內可調整的數字與選項集中在這裡。每一項都有預設值、可設定範圍與影響說明；比較重要的變更會先等一段緩衝期才生效，必要時還需要另一位最高管理者同意，並留下變更紀錄。名稱旁的「?」可以看白話說明。</p>
+    <div class="sc-top">
+      <div class="sc-title">設定中心</div>
+      <div class="sc-searchbox">
+        <input type="search" id="sc-search" placeholder="搜尋任何設定（例如：逾期、提醒、上限）" autocomplete="off" data-testid="sc-search" aria-label="搜尋設定">
+        <div class="sc-results" id="sc-results" data-testid="sc-results" hidden></div>
+      </div>
+      <div class="sc-toplinks">
+        <button type="button" class="sc-chip" id="sc-go-pending" data-testid="sc-go-pending">待生效 <b id="sc-pending-n">0</b></button>
+        <button type="button" class="sc-chip" id="sc-go-recent" data-testid="sc-go-recent">最近變更</button>
+        <button type="button" class="sc-chip" id="sc-go-versions" data-testid="sc-go-versions">版本紀錄</button>
+        <button type="button" class="sc-chip" id="sc-go-profiles" data-testid="sc-go-profiles" hidden>預設組</button>
       </div>
     </div>
-
-    <div x-show="msg" class="sc-ok" data-testid="sc-msg" x-text="msg"></div>
-    <div x-show="err" class="sc-bad" data-testid="sc-err" x-text="err"></div>
-
-    <div class="sc-layout">
-      <nav class="sc-side" :class="{'is-open': navOpen}" aria-label="設定群組">
-        <button type="button" class="sc-navtoggle" data-testid="sc-navtoggle" :aria-expanded="navOpen ? 'true' : 'false'" @click="navOpen = !navOpen">
-          <span x-text="(groups.find(g => g.group === current) || {}).label || '選擇設定群組'"></span>
-          <small x-text="navOpen ? '收起 ▴' : '切換群組 ▾'"></small>
-        </button>
-        <div class="sc-navpanel">
-        <input type="search" x-model="search" placeholder="搜尋設定（名稱、說明、問題）" data-testid="sc-search">
-        <template x-for="c in groupedView()" :key="c.key">
-          <div :data-testid="'sc-cat-' + c.key">
-            <div class="sc-cat">
-              <span x-text="c.name"></span>
-              <span class="hint" x-show="c.blurb" :data-hint="JSON.stringify({what: c.blurb, when: c.when})" :data-hint-label="c.name"></span>
-            </div>
-            <template x-for="row in c.rows" :key="row.id">
-              <div>
-                <div class="sc-sec" x-show="row.sectionHead" x-text="row.sectionHead"></div>
-                <button type="button" class="sc-gbtn" :class="{'is-on': row.g.group === current}" :data-testid="'sc-group-' + row.g.group" @click="pick(row.g.group); navOpen = false">
-                  <span x-text="row.g.label"></span>
-                  <span class="sc-dot" x-show="row.g.status !== 'planned' && row.g.lastChange">已調整過</span>
-                  <span class="sc-dot sc-dot--warn" x-show="row.g.status === 'planned'" :data-testid="'sc-planned-chip-' + row.g.group">開發中</span>
-                </button>
-              </div>
-            </template>
-          </div>
-        </template>
-        <div class="sc-help" style="margin:8px 4px" x-show="search.trim() && !groupedView().length" data-testid="sc-search-empty">找不到符合的設定，換個說法試試。</div>
-        <div class="sc-help" style="margin:12px 4px 4px" x-show="plannedFeatures.length">即將推出</div>
-        <template x-for="p in plannedFeatures" :key="p.code">
-          <div class="sc-gbtn" style="opacity:.65;cursor:default;display:block" :data-testid="'sc-soon-' + p.code">
-            <span x-text="p.label"></span>
-            <div class="sc-help" :data-testid="'sc-soon-text-' + p.code" x-text="'開發中，尚未開放'"></div>
-          </div>
-        </template>
+    <div class="sc-seg" id="sc-seg" data-testid="sc-seg"></div>
+    <div class="sc-body">
+      <button type="button" class="sc-navtoggle" id="sc-navtoggle" data-testid="sc-navtoggle" aria-expanded="false"><span id="sc-navtoggle-text">選擇設定頁</span><span>▾</span></button>
+      <nav class="sc-nav" id="sc-nav" data-testid="sc-nav" aria-label="設定頁"></nav>
+      <section class="sc-pane">
+        <div id="sc-msg" class="sc-err" role="alert" hidden data-testid="sc-msg"></div>
+        <div id="sc-v-overview" data-testid="sc-overview" hidden></div>
+        <div id="sc-v-page" hidden>
+          <div id="sc-pagehead" data-testid="sc-pagehead"></div>
+          <div id="sc-mx" class="sc-mx" data-testid="sc-matrix"></div>
         </div>
-      </nav>
-
-      <section x-show="detail">
-        <h2 style="font-size:17px" x-text="detail ? detail.label : ''"></h2>
-        <div class="sc-help" x-text="detail ? detail.help : ''"></div>
-        <div class="sc-help" x-show="curMeta() && curMeta().when" data-testid="sc-when" x-text="curMeta() ? '什麼時候需要：' + curMeta().when : ''"></div>
-        <div class="sc-help" x-show="curMeta() && curMeta().catNote" data-testid="sc-catnote" x-text="curMeta() ? '補充：' + curMeta().catNote : ''"></div>
-
-        <div class="sc-card" x-show="isPlanned()" style="opacity:.8;margin-top:12px" data-testid="sc-planned">
-          <div class="sc-q" data-testid="sc-planned-text" x-text="plannedSentence()"></div>
-          <div class="sc-help">這項功能的設定還不能調整；功能完成後會自動開放，現在不會有任何變動。</div>
-        </div>
-
-        <div class="sc-tabs" role="tablist" style="margin-top:12px" x-show="!isPlanned()">
-          <button type="button" class="sc-tab" :class="{'is-on': tab==='values'}" data-testid="sc-tab-values" @click="openTab('values')">目前設定</button>
-          <button type="button" class="sc-tab" :class="{'is-on': tab==='pending'}" data-testid="sc-tab-pending" @click="openTab('pending')">待生效</button>
-          <button type="button" class="sc-tab" :class="{'is-on': tab==='versions'}" data-testid="sc-tab-versions" @click="openTab('versions')">版本與變更紀錄</button>
-          <button type="button" class="sc-tab" :class="{'is-on': tab==='profiles'}" data-testid="sc-tab-profiles" x-show="profiles.length || tab==='profiles'" @click="openTab('profiles')">預設組</button>
-        </div>
-
-        <!-- 目前設定 -->
-        <div x-show="!isPlanned() && tab==='values'">
-          <template x-for="f in fields()" :key="f.key">
-            <div class="sc-card" :class="{'is-dirty': isDirty(f)}" :data-testid="'sc-field-' + f.key">
-              <div class="sc-q"><span x-text="f.question"></span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span><template x-if="f.helpInfo && f.helpInfo.what"><span class="hint" :data-testid="'sc-hint-' + f.key" :data-hint="JSON.stringify(f.helpInfo)" :data-hint-label="f.label"></span></template></div>
-              <div class="sc-help" x-text="f.help"></div>
-
-              <!-- 選項型 -->
-              <div class="sc-choices" x-show="f.choices.length">
-                <template x-for="c in f.choices" :key="String(c.value)">
-                  <label class="sc-choice" :class="{'is-on': choiceOn(f, c)}">
-                    <input type="radio" :name="'sc-' + f.key" :checked="choiceOn(f, c)" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
-                    <span x-text="c.label"></span>
-                    <span class="sc-rec" x-show="f.recommended === c.value">建議</span>
-                    <small x-text="c.impact"></small>
-                  </label>
-                </template>
-              </div>
-              <!-- 數字型 -->
-              <div class="sc-input" x-show="!f.choices.length && (f.type==='int' || f.type==='float')">
-                <input type="number" :min="f.min" :max="f.max" :step="f.type==='int' ? 1 : 'any'" :value="curVal(f)" :data-testid="'sc-input-' + f.key" @input="setDraft(f, $event.target.value)">
-                <span x-text="f.unit"></span>
-                <span class="sc-note" x-text="rangeText(f)"></span>
-              </div>
-              <!-- 開關型 -->
-              <div class="sc-input" x-show="!f.choices.length && f.type==='bool'">
-                <label><input type="checkbox" :checked="curVal(f) === true" :data-testid="'sc-bool-' + f.key" @change="setDraft(f, $event.target.checked)"> 開啟</label>
-              </div>
-              <!-- 文字型 -->
-              <div class="sc-input" x-show="!f.choices.length && f.type==='str'">
-                <input type="text" :value="curVal(f)" :data-testid="'sc-text-' + f.key" @input="setDraft(f, $event.target.value)">
-              </div>
-
-              <div class="sc-err" x-show="problem(f)" x-text="problem(f)"></div>
-
-              <div class="sc-cur">
-                目前：<strong x-text="f.valueText"></strong>
-                <span class="sc-chip" x-show="!f.isDefault" :data-testid="'sc-nondefault-' + f.key">目前不是系統預設（預設：<span x-text="f.defaultText"></span>）</span>
-                <button type="button" class="btn btn-ghost btn-sm" style="margin-left:8px" x-show="!isDefaultNow(f)" :data-testid="'sc-reset-' + f.key" @click="resetField(f)">還原預設</button>
-              </div>
-
-              <div class="sc-impact"><span x-text="f.impact"></span></div>
-              <div class="sc-live" x-show="impacts[f.key]" x-text="impacts[f.key]"></div>
-
-              <template x-if="isDirty(f) && row(f)">
-                <div class="sc-kind" :data-testid="'sc-kind-' + f.key" x-text="kindText(row(f).kind) + (row(f).effectiveAt ? '（' + row(f).effectiveAt.slice(0,10) + ' 起）' : '')"></div>
-              </template>
-
-              <template x-if="bannerFor(f)">
-                <div class="sc-banner" :class="'sc-banner--' + bannerFor(f).level" :data-testid="'sc-banner-' + f.key">
-                  <template x-for="l in bannerFor(f).lines" :key="l"><div x-text="l"></div></template>
-                </div>
-              </template>
-            </div>
-          </template>
-
-          <div class="sc-note" x-show="advancedCount()">
-            <a href="#" @click.prevent="showAdv = !showAdv" data-testid="sc-adv" x-text="showAdv ? '收起進階項目' : '顯示進階項目（' + advancedCount() + ' 項）'"></a>
-          </div>
-
-          <h3 style="font-size:14px;margin:22px 0 8px">最近的變更</h3>
-          <table class="sc-table" data-testid="sc-history">
-            <thead><tr><th>時間</th><th>誰改的</th><th>改了什麼</th><th>原因</th></tr></thead>
-            <tbody>
-              <template x-for="h in ((detail && detail.history) || []).slice(0, 12)" :key="h.id">
-                <tr><td x-text="stamp(h.at)"></td><td x-text="h.actor_display || h.actor"></td><td x-text="historyText(h)"></td><td x-text="h.reason"></td></tr>
-              </template>
-            </tbody>
-          </table>
-          <div class="sc-note" x-show="!((detail && detail.history) || []).length">這個群組還沒有被調整過，全部使用系統預設。</div>
-        </div>
-
-        <!-- 待生效 -->
-        <div x-show="!isPlanned() && tab==='pending'">
-          <div class="sc-note" style="margin-bottom:8px">放寬類或重要的變更不會馬上生效：要等「變更確認期間」，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>
-          <div class="sc-row" style="margin-bottom:10px"><input type="text" x-model="pendingNote" placeholder="核准／撤銷的備註（選填）" style="padding:7px 9px;border:1px solid var(--border-light);border-radius:6px;min-width:260px"></div>
-          <table class="sc-table" data-testid="sc-pending">
-            <thead><tr><th>設定</th><th>改成</th><th>申請人／原因</th><th>生效時間</th><th>核准</th><th></th></tr></thead>
-            <tbody>
-              <template x-for="p in pending" :key="p.id">
-                <tr :data-testid="'sc-pending-' + p.id">
-                  <td><span x-text="p.groupLabel"></span>／<span x-text="p.label"></span></td>
-                  <td><span x-text="p.oldText"></span> → <strong x-text="p.newText"></strong></td>
-                  <td><span x-text="p.actor"></span><div class="sc-note" x-text="p.reason"></div></td>
-                  <td x-text="stamp(p.effectiveAt)"></td>
-                  <td x-text="p.required ? (p.approvals.length + '／' + p.required) : '不需要'"></td>
-                  <td>
-                    <button type="button" class="btn btn-ghost btn-sm" x-show="p.required" :disabled="busy" :data-testid="'sc-approve-' + p.id" @click="decide(p, 'approve')">核准</button>
-                    <button type="button" class="btn btn-danger btn-sm" :disabled="busy" :data-testid="'sc-cancel-' + p.id" @click="decide(p, 'cancel')">撤銷</button>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-          <div class="sc-note" x-show="!pending.length">目前沒有等待生效的變更。</div>
-        </div>
-
-        <!-- 版本與變更紀錄 -->
-        <div x-show="!isPlanned() && tab==='versions'">
-          <table class="sc-table" data-testid="sc-versions">
-            <thead><tr><th>版本</th><th>時間</th><th>誰發布</th><th>備註</th><th></th></tr></thead>
-            <tbody>
-              <template x-for="v in versions" :key="v.version">
-                <tr>
-                  <td x-text="'第 ' + v.version + ' 版'"></td><td x-text="stamp(v.at)"></td><td x-text="v.by"></td><td x-text="v.note"></td>
-                  <td><button type="button" class="btn btn-ghost btn-sm" :data-testid="'sc-restore-' + v.version" @click="startRestore(v)">還原到這一版</button></td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-          <div class="sc-note" x-show="!versions.length">還沒有發布過任何版本，目前使用系統預設。</div>
-
-          <div class="sc-row" style="margin-top:14px">
-            <span class="sc-note">比較</span>
-            <select x-model="diffA" style="padding:6px"><option value="default">系統預設</option><template x-for="v in versions" :key="v.version"><option :value="String(v.version)" x-text="'第 ' + v.version + ' 版'"></option></template></select>
-            <span class="sc-note">與</span>
-            <select x-model="diffB" style="padding:6px"><option value="current">目前</option><option value="default">系統預設</option><template x-for="v in versions" :key="v.version"><option :value="String(v.version)" x-text="'第 ' + v.version + ' 版'"></option></template></select>
-            <button type="button" class="btn btn-ghost btn-sm" data-testid="sc-diff" @click="runDiff()">看差異</button>
-          </div>
-          <template x-if="diff">
-            <table class="sc-table" style="margin-top:8px" data-testid="sc-diff-table">
-              <thead><tr><th>設定</th><th>之前</th><th>之後</th></tr></thead>
-              <tbody><template x-for="c in diff.changes" :key="c.field"><tr><td x-text="c.label"></td><td x-text="c.oldText"></td><td x-text="c.newText"></td></tr></template></tbody>
-            </table>
-          </template>
-          <div class="sc-note" x-show="diff && !diff.changes.length">這兩個版本沒有差異。</div>
-
-          <template x-if="restoreFor && restorePv">
-            <div class="sc-card" style="margin-top:14px" data-testid="sc-restore-panel">
-              <div class="sc-q" x-text="'還原到第 ' + restoreFor.version + ' 版會發生什麼'"></div>
-              <template x-for="r in restorePv.fields.filter(x => x.kind !== 'unchanged')" :key="r.field">
-                <div class="sc-impact"><strong x-text="r.label"></strong>：<span x-text="r.oldText"></span> → <span x-text="r.newText"></span>（<span x-text="kindText(r.kind)"></span>）
-                  <template x-if="r.banner"><div class="sc-banner" :class="'sc-banner--' + r.banner.level"><template x-for="l in r.banner.lines" :key="l"><div x-text="l"></div></template></div></template>
-                </div>
-              </template>
-              <div class="sc-note" x-show="!restorePv.fields.some(x => x.kind !== 'unchanged')">這一版的內容和目前相同，不會有任何變動。</div>
-              <textarea x-model="restoreReason" rows="2" placeholder="還原原因（必填）" style="width:100%;margin-top:8px;padding:7px 9px;border:1px solid var(--border-light);border-radius:6px" data-testid="sc-restore-reason"></textarea>
-              <div class="sc-row" style="margin-top:8px">
-                <button type="button" class="btn btn-primary" :disabled="busy || !restoreReason.trim()" data-testid="sc-restore-confirm" @click="doRestore()">確認還原</button>
-                <button type="button" class="btn btn-ghost" @click="restoreFor = null; restorePv = null">取消</button>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <!-- 預設組 -->
-        <div x-show="!isPlanned() && tab==='profiles'">
-          <div class="sc-note" style="margin-bottom:8px">預設組是一組事先配好的建議值（例如「嚴格」）。套用前會先列出會改哪些設定；放寬的項目一樣要經過確認期間與核准。</div>
-          <div class="sc-row">
-            <template x-for="p in profiles" :key="p.name"><button type="button" class="btn btn-ghost" :data-testid="'sc-profile-' + p.name" @click="previewProfile(p.name)"><span x-text="p.name"></span>（<span x-text="p.fieldCount"></span> 項）</button></template>
-          </div>
-          <div class="sc-note" x-show="!profiles.length">目前沒有可用的預設組。</div>
-          <template x-if="profilePv">
-            <div class="sc-card" style="margin-top:12px" data-testid="sc-profile-panel">
-              <div class="sc-q" x-text="'套用「' + profileName + '」會改這些設定'"></div>
-              <table class="sc-table"><thead><tr><th>群組</th><th>設定</th><th>目前</th><th>改成</th></tr></thead>
-                <tbody><template x-for="c in profilePv" :key="c.group + c.field"><tr><td x-text="c.groupLabel"></td><td x-text="c.label"></td><td><span x-text="c.old"></span> <span x-text="c.unit"></span></td><td><strong x-text="c.new"></strong> <span x-text="c.unit"></span></td></tr></template></tbody></table>
-              <div class="sc-note" x-show="!profilePv.length && !skippedCount()">目前的設定已經和這個預設組一致。</div>
-              <div class="sc-note" x-show="skippedCount()" data-testid="sc-profile-skipped" x-text="'略過 ' + skippedCount() + ' 項（開發中，尚未開放調整）'"></div>
-              <textarea x-model="profileReason" rows="2" placeholder="套用原因（必填）" style="width:100%;margin-top:8px;padding:7px 9px;border:1px solid var(--border-light);border-radius:6px"></textarea>
-              <div class="sc-row" style="margin-top:8px">
-                <button type="button" class="btn btn-primary" :disabled="busy || !profileReason.trim() || !profilePv.length" data-testid="sc-profile-apply" @click="applyProfile()">確認套用</button>
-                <button type="button" class="btn btn-ghost" @click="profilePv = null">取消</button>
-              </div>
-            </div>
-          </template>
-        </div>
+        <div id="sc-v-pending" data-testid="sc-pending" hidden></div>
+        <div id="sc-v-recent" data-testid="sc-recent" hidden></div>
+        <div id="sc-v-versions" data-testid="sc-versions" hidden></div>
+        <div id="sc-v-profiles" data-testid="sc-profiles" hidden></div>
       </section>
     </div>
-
-    <!-- 儲存列：有修改才出現 -->
-    <div class="sc-bar" x-show="dirtyCount() && tab==='values'" data-testid="sc-bar">
-      <div class="sc-bar-in">
-        <div class="sc-row">
-          <strong x-text="'已修改 ' + dirtyCount() + ' 項，尚未儲存'"></strong>
-          <button type="button" class="btn btn-ghost btn-sm" data-testid="sc-discard" @click="discard()">放棄修改</button>
-        </div>
-        <template x-if="preview && preview.ok">
-          <div data-testid="sc-review">
-            <template x-for="r in preview.fields.filter(x => x.kind !== 'unchanged')" :key="r.field">
-              <div class="sc-note" style="color:inherit" x-text="'• ' + r.effect"></div>
-            </template>
-            <template x-for="w in preview.warnings" :key="w"><div class="sc-note" style="color:var(--warning)" x-text="'⚠ ' + w"></div></template>
-          </div>
-        </template>
-        <template x-for="m in previewProblems()" :key="m"><div class="sc-err" x-text="m"></div></template>
-        <textarea x-model="reason" rows="2" placeholder="為什麼要改？（必填，會記在變更紀錄裡）" data-testid="sc-reason"></textarea>
-        <label x-show="hasRed()" style="color:var(--danger);font-size:13px"><input type="checkbox" x-model="ack" data-testid="sc-ack"> 我已了解上述影響</label>
-        <div class="sc-row">
-          <button type="button" class="btn btn-primary" :disabled="!canConfirm()" data-testid="sc-save" @click="save()">確認儲存</button>
-        </div>
-      </div>
-    </div>
   </main>
-
-  <script>
-/* 設定中心（S1，2026-10-13）：可編輯的設定畫面邏輯。
- * 規則：白話、不顯示鍵名與代碼；所有句子（效果句、橫幅、差異）由伺服器產生，這裡只負責呈現與呼叫。
- * 端點見 backend/routers/settings_center.py。 */
-function settingsCenterPage() {
-  return {
-    // 清單與目前群組
-    groups: [], plannedFeatures: [], categories: [], current: '', detail: null, search: '', showAdv: false, navOpen: false,
-    // 編輯狀態
-    drafts: {}, preview: null, impacts: {}, reason: '', ack: false, busy: false, msg: '', err: '',
-    tab: 'values',
-    // 其他頁籤
-    pending: [], pendingNote: '', versions: [], diffA: '', diffB: 'current', diff: null,
-    restoreFor: null, restorePv: null, restoreReason: '',
-    profiles: [], profilePv: null, profileName: '', profileReason: '', profileSkipped: [],
-    _initDone: false, _timer: null, _seq: 0,
-
-    _hdr() {
-      let s = {}
-      try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
-      return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
-    },
-    _get(url) { return this._go(url, { method: 'GET' }) },
-    _post(url, body) { return this._go(url, { method: 'POST', body: JSON.stringify(body) }) },
-    async _go(url, init) {
-      const r = await fetch(url, Object.assign({ headers: this._hdr() }, init))
-      let j = null
-      try { j = await r.json() } catch (e) { j = null }
-      if (!r.ok) { const e = new Error(this._msg(j, r)); e.status = r.status; throw e }
-      return j
-    },
-    _msg(j, r) {
-      const d = j && j.detail
-      if (typeof d === 'string') return d
-      if (d && d.message) {
-        const ps = (d.problems || []).map(p => p.message).join('；')
-        return d.message + (ps ? '：' + ps : '')
-      }
-      return '操作失敗（' + r.status + '）'
-    },
-    _say(m) { this.msg = m; this.err = '' },
-    _fail(e) { this.err = (e && e.message) || '操作失敗'; this.msg = '' },
-
-    async init() {
-      if (this._initDone) return
-      this._initDone = true
-      await this.loadGroups()
-      // 網址帶 #群組代碼（系統中心的卡片這樣連過來，例如 #retention）⇒ 直接開那一組；不認得就開第一組
-      let want = ''
-      try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (e) { want = '' }
-      const hit = this.groups.find(g => g.group === want)
-      if (hit) await this.pick(hit.group)
-      else if (this.groups.length) await this.pick(this.groups[0].group)
-      this.loadProfiles()                      // 預設組頁籤只在有預設組時才顯示
-    },
-    async loadGroups() {
-      try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || []; this.categories = r.categories || [] } catch (e) { this._fail(e) }
-    },
-    filteredGroups() {
-      const q = this.search.trim()
-      return this.groups.filter(g => !q || [g.label, g.help, g.blurb, g.when].some(x => (x || '').includes(q)) || (g.fieldTexts || []).some(x => x.includes(q)))
-    },
-    // 左欄：依共用分類資料檔分類（分類 → 區段 → 群組）；沒有登記到分類的群組（新加的、尚未歸類）放最後的「其他」，不會消失
-    groupedView() {
-      const list = this.filteredGroups()
-      const out = []
-      const byCat = {}
-      list.forEach(g => { (byCat[g.category || '_other'] = byCat[g.category || '_other'] || []).push(g) })
-      const cats = this.categories.concat(byCat._other ? [{ key: '_other', name: '其他', blurb: '', when: '' }] : [])
-      cats.forEach(c => {
-        const gs = byCat[c.key] || []
-        if (!gs.length) return
-        let last = null
-        const rows = gs.map(g => {
-          const head = g.section && g.section !== last ? g.section : ''
-          last = g.section || last
-          return { id: g.group, g, sectionHead: head }
-        })
-        out.push({ key: c.key, name: c.name, blurb: c.blurb, when: c.when, rows })
-      })
-      return out
-    },
-    curMeta() { return this.groups.find(g => g.group === this.current) || null },
-    async pick(group) {
-      if (this.dirtyCount() && group !== this.current) { this._fail(new Error('這個群組有尚未儲存的修改，請先儲存，或按「放棄修改」。')); return }
-      this.current = group
-      this.drafts = {}; this.preview = null; this.impacts = {}; this.reason = ''; this.ack = false; this.msg = ''; this.err = ''
-      this.diff = null; this.restoreFor = null; this.restorePv = null
-      await this.loadDetail()
-      if (this.isPlanned()) { this.tab = 'values'; return }
-      if (this.tab === 'versions') await this.loadVersions()
-    },
-    async loadDetail() {
-      try { this.detail = await this._get('/api/settings-center/groups/' + encodeURIComponent(this.current)) } catch (e) { this._fail(e) }
-    },
-    fields() {
-      const all = (this.detail && this.detail.fields) || []
-      return all.filter(f => !f.advanced || this.showAdv || this.isDirty(f))
-    },
-    isPlanned() { return !!(this.detail && this.detail.status === 'planned') },
-    // 2026-11-13（選單去工程師化 批 0）：畫面不再露出內部班次代號（MSn）；只說「開發中，尚未開放」（不取名稱、說明、備註；不寫日期）。plannedTrain 仍在資料裡，只是不顯示
-    plannedSentence() { return '開發中，尚未開放' },
-    advancedCount() { return ((this.detail && this.detail.fields) || []).filter(f => f.advanced).length },
-
-    // ── 值的呈現 ─────────────────────────────────────────────
-    showVal(f, v) {
-      for (const c of (f.choices || [])) if (c.value === v) return c.label
-      if (typeof v === 'boolean') return v ? '開' : '關'
-      return String(v) + (f.unit ? ' ' + f.unit : '')
-    },
-    rangeText(f) {
-      if (f.choices && f.choices.length) return ''
-      if (f.type === 'bool' || f.type === 'str') return ''
-      if (f.min != null && f.max != null) return '可設定 ' + f.min + '～' + f.max + (f.unit ? ' ' + f.unit : '')
-      if (f.min != null) return '至少 ' + f.min + (f.unit ? ' ' + f.unit : '') + '（無上限）'
-      if (f.max != null) return '至多 ' + f.max + (f.unit ? ' ' + f.unit : '')
-      return ''
-    },
-    // 注意：用 in 而不是 hasOwnProperty.call——Alpine（Proxy）只追蹤 has／get／ownKeys，後者不會觸發重畫
-    // ⚠ 方法名不能叫 valueOf／toString 這類 Object.prototype 的成員：Alpine 的範圍代理用 Reflect.has（含原型鏈）找名稱，
-    //   x-for 迴圈範圍裡的 `valueOf(f)` 會解析到繼承來的原生 valueOf ⇒ 回傳範圍物件、所有輸入元件都顯示空白／不選取（2026-11-13 使用者回報兩次）
-    curVal(f) { return (f.key in this.drafts) ? this.drafts[f.key] : f.value },
-    // 選項是否為目前選取：代碼可能是數字或字串，一律以字串比對
-    choiceOn(f, c) { const v = this.curVal(f); return v !== null && v !== undefined && String(v) === String(c.value) },
-    isDirty(f) { return f.key in this.drafts },
-    dirtyCount() { return Object.keys(this.drafts).length },
-    isDefaultNow(f) { return this.curVal(f) === f.default },
-
-    // ── 編輯 ────────────────────────────────────────────────
-    setDraft(f, raw) {
-      let v = raw
-      if (f.type === 'int' || f.type === 'float') {
-        if (raw === '' || raw === null || raw === undefined) { delete this.drafts[f.key]; this._after(); return }
-        v = f.type === 'int' ? parseInt(raw, 10) : parseFloat(raw)
-        if (Number.isNaN(v)) { return }
-      }
-      if (v === f.value) delete this.drafts[f.key]
-      else this.drafts[f.key] = v
-      this._after()
-    },
-    resetField(f) { this.setDraft(f, f.default) },
-    discard() { this.drafts = {}; this.preview = null; this.impacts = {}; this.reason = ''; this.ack = false },
-    _after() {
-      // 舊預覽立刻作廢：新的預覽回來之前不能按儲存（否則會用過期的分類／橫幅確認）
-      this.preview = null
-      this.msg = ''; this.err = ''; this.ack = false
-      clearTimeout(this._timer)
-      this._timer = setTimeout(() => this.refreshPreview(), 350)
-    },
-    async refreshPreview() {
-      const my = ++this._seq
-      if (!this.dirtyCount()) { this.preview = null; this.impacts = {}; return }
-      try {
-        const p = await this._post('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/preview', { values: this.drafts })
-        if (my !== this._seq) return
-        this.preview = p
-      } catch (e) { if (my === this._seq) this._fail(e); return }
-      for (const f of ((this.detail && this.detail.fields) || [])) {
-        if (!f.hasLiveImpact || !this.isDirty(f)) { delete this.impacts[f.key]; continue }
-        try {
-          const r = await this._post('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/impact', { field: f.key, value: this.drafts[f.key] })
-          if (my === this._seq && r.live) this.impacts[f.key] = r.live.sentence
-        } catch (e) { /* 即時影響失敗只是不顯示，靜態說明仍在 */ }
-      }
-    },
-    row(f) { return this.preview && this.preview.fields ? this.preview.fields.find(x => x.field === f.key) : null },
-    problem(f) { return this.preview && !this.preview.ok ? (this.preview.problems || []).filter(p => p.path === f.key).map(p => p.message).join('；') : '' },
-    previewProblems() { return this.preview && !this.preview.ok ? (this.preview.problems || []).filter(p => !p.path || !((this.detail && this.detail.fields) || []).some(f => f.key === p.path)).map(p => p.message) : [] },
-    // 目前要顯示在欄位下方的橫幅：有草稿 ⇒ 預覽橫幅；沒有 ⇒ 目前值若不是預設，顯示資訊性橫幅
-    bannerFor(f) {
-      if (this.isDirty(f)) { const r = this.row(f); return r ? r.banner : null }
-      if (f.isDefault) return null
-      return f.banner
-    },
-    choiceBanner(f, c) { return f.choiceBanners ? f.choiceBanners[String(c.value)] : null },
-    hasRed() { return !!(this.preview && (this.preview.fields || []).some(x => x.banner && x.banner.level === 'red')) },
-    canConfirm() {
-      return !this.busy && this.preview && this.preview.ok && this.dirtyCount() > 0 && this.reason.trim().length > 0 && (!this.hasRed() || this.ack)
-    },
-    kindText(k) {
-      return { immediate: '立即生效', pending: '等確認期間後生效', pending_approval: '需另一位最高管理者核准', unchanged: '沒有變更' }[k] || ''
-    },
-    async save() {
-      if (!this.canConfirm()) return
-      this.busy = true
-      try {
-        const r = await this._post('/api/settings-center/groups/' + encodeURIComponent(this.current), { values: this.drafts, reason: this.reason.trim() })
-        const n = (r.pending || []).length
-        const parts = []
-        if (r.changed) parts.push('已儲存並立即生效（第 ' + r.version + ' 版）')
-        if (n) parts.push(n + ' 項變更已列入「待生效」，要等確認期間（需要時還要另一位最高管理者核准）後才會生效')
-        if (!parts.length) parts.push('沒有任何變更')
-        this._say(parts.join('；') + '。' + ((r.warnings || []).join('')))
-        this.discard()
-        await this.loadDetail(); await this.loadGroups()
-      } catch (e) { this._fail(e) } finally { this.busy = false }
-    },
-
-    // ── 頁籤 ────────────────────────────────────────────────
-    async openTab(t) {
-      this.tab = t
-      this.msg = ''; this.err = ''
-      if (t === 'pending') await this.loadPending()
-      if (t === 'versions') await this.loadVersions()
-      if (t === 'profiles') await this.loadProfiles()
-    },
-    async loadPending() {
-      try { this.pending = (await this._get('/api/settings-center/pending')).pending || [] } catch (e) { this._fail(e) }
-    },
-    async decide(p, what) {
-      this.busy = true
-      try {
-        await this._post('/api/settings-center/pending/' + p.id + '/' + what, { reason: this.pendingNote.trim() })
-        this._say(what === 'approve' ? '已核准' : '已撤銷')
-        await this.loadPending(); await this.loadGroups()
-        if (this.current) await this.loadDetail()
-      } catch (e) { this._fail(e) } finally { this.busy = false }
-    },
-    async loadVersions() {
-      if (!this.current) return
-      try {
-        const r = await this._get('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/versions')
-        this.versions = r.versions || []
-        this.diffA = this.versions.length ? String(this.versions[0].version) : 'default'
-      } catch (e) { this._fail(e) }
-    },
-    async runDiff() {
-      try {
-        this.diff = await this._get('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/diff?a=' + encodeURIComponent(this.diffA) + '&b=' + encodeURIComponent(this.diffB))
-      } catch (e) { this._fail(e) }
-    },
-    async startRestore(v) {
-      this.restoreFor = v; this.restoreReason = ''
-      try {
-        this.restorePv = await this._post('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/restore/' + v.version, { preview: true })
-      } catch (e) { this._fail(e); this.restoreFor = null }
-    },
-    async doRestore() {
-      if (!this.restoreFor || !this.restoreReason.trim()) return
-      this.busy = true
-      try {
-        const r = await this._post('/api/settings-center/groups/' + encodeURIComponent(this.current) + '/restore/' + this.restoreFor.version, { reason: this.restoreReason.trim() })
-        this._say('已還原到第 ' + this.restoreFor.version + ' 版' + ((r.pending || []).length ? '；其中放寬的項目已列入「待生效」' : ''))
-        this.restoreFor = null; this.restorePv = null
-        await this.loadDetail(); await this.loadVersions(); await this.loadGroups()
-      } catch (e) { this._fail(e) } finally { this.busy = false }
-    },
-    async loadProfiles() {
-      try { this.profiles = (await this._get('/api/settings-center/profiles')).profiles || [] } catch (e) { this._fail(e) }
-    },
-    skippedCount() { return (this.profileSkipped || []).reduce((a, s) => a + (s.fields || 0), 0) },
-    async previewProfile(name) {
-      this.profileName = name; this.profileReason = ''
-      try {
-        const r = await this._get('/api/settings-center/profiles/' + encodeURIComponent(name) + '/preview')
-        this.profilePv = r.changes || []; this.profileSkipped = r.skipped || []
-      } catch (e) { this._fail(e) }
-    },
-    async applyProfile() {
-      if (!this.profileName || !this.profileReason.trim()) return
-      this.busy = true
-      try {
-        const r = await this._post('/api/settings-center/profiles/' + encodeURIComponent(this.profileName) + '/apply', { reason: this.profileReason.trim() })
-        const sk = (r.skipped || []).reduce((a, s) => a + (s.fields || 0), 0)
-        // 只說實際做了什麼：已套用 X 項、略過 N 項（開發中）——不說成全部套用
-        this._say('已套用「' + this.profileName + '」的 ' + (this.profilePv ? this.profilePv.length : 0) + ' 項' + (sk ? '，略過 ' + sk + ' 項（開發中）' : '') + '；放寬的項目會列入「待生效」')
-        this.profilePv = null; this.profileSkipped = []; this.profileName = ''
-        await this.loadGroups(); if (this.current) await this.loadDetail()
-      } catch (e) { this._fail(e) } finally { this.busy = false }
-    },
-    historyText(h) {
-      const f = ((this.detail && this.detail.fields) || []).find(x => x.key === h.field)
-      const lab = f ? f.label : '設定'
-      const o = f ? this.showVal(f, h.old) : h.old
-      const n = f ? this.showVal(f, h.new) : h.new
-      return lab + '：' + o + ' → ' + n
-    },
-    stamp(s) { return (s || '').replace('T', ' ').slice(0, 16) },
-  }
-}
-  </script>
+  <script src="../static/settings-matrix.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script>
+  /* 設定中心外框（S2，2026-11-14；SPEC §14）。所有句子（效果句、橫幅、差異）由伺服器產生，這裡只負責呈現與呼叫；端點見 backend/routers/settings_center.py。
+   * 規則：白話、不顯示鍵名與代碼；點格子只算草稿，儲存才確認（原因必填）才生效；所有動態文字一律 esc()。 */
+  (function () {
+    'use strict'
+    var esc = SettingsMatrix.esc
+    var P = '/api/settings-center'
+    var session = {}
+    try { session = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { session = {} }
+    var ST = { ov: null, idx: [], view: '', page: '', seg: '全部', details: {}, rows: [], reason: '', pending: [], profiles: [], recentHigh: false, vgroup: '', versions: [], diff: null, restoreFor: null, restorePv: null, profilePv: null, profileName: '', profileSkipped: [] }
+    var mx = null
+    var $ = function (id) { return document.getElementById(id) }
+    var enc = encodeURIComponent
+
+    // ── 呼叫 ─────────────────────────────────────────────────────
+    function hdr(json) {
+      var h = { Authorization: 'Bearer ' + (session.token || '') }
+      if (json) h['Content-Type'] = 'application/json'
+      return h
+    }
+    function detailText(d, fallback) {
+      var x = d && d.detail
+      if (typeof x === 'string') return x
+      if (x && x.message) {
+        var ps = (x.problems || []).map(function (p) { return p.message }).join('；')
+        return x.message + (ps ? '：' + ps : '')
+      }
+      return fallback
+    }
+    function call(path, init) {
+      return fetch(path, init || { headers: hdr(false) }).then(function (r) {
+        return r.json().catch(function () { return {} }).then(function (d) {
+          if (!r.ok) { var e = new Error(detailText(d, '操作失敗（' + r.status + '）')); e.status = r.status; e.data = d; throw e }
+          return d
+        })
+      })
+    }
+    function post(path, body) { return call(path, { method: 'POST', headers: hdr(true), body: JSON.stringify(body || {}) }) }
+    function say(m, err) { var el = $('sc-msg'); el.hidden = !m; el.textContent = m || ''; el.className = err === false ? 'sc-sub' : 'sc-err' }
+    function stamp(s) { return String(s || '').replace('T', ' ').slice(0, 16) }
+    function jeq(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
+
+    // ── 頁面資料 ─────────────────────────────────────────────────
+    function pageById(id) { return (ST.ov ? ST.ov.pages : []).filter(function (p) { return p.id === id })[0] || null }
+    function pageOfGroup(g) { return (ST.ov ? ST.ov.pages : []).filter(function (p) { return p.groups.indexOf(g) >= 0 })[0] || null }
+    function groupPlain(g) { var it = ST.idx.filter(function (i) { return i.kind === 'group' && i.group === g })[0]; return it ? it.groupPlain : g }
+    function rowOf(d, f, page) {
+      return { key: d.group + '.' + f.key, group: d.group, groupPlain: groupPlain(d.group), field: f.key, page: page ? page.id : '', name: f.label || f.question || '設定', f: f, value: f.value, selectable: false }
+    }
+    function rowsAll() {
+      var out = []
+      Object.keys(ST.details).forEach(function (g) {
+        var d = ST.details[g]
+        ;(d.fields || []).forEach(function (f) { out.push(rowOf(d, f, pageOfGroup(g))) })
+      })
+      return out
+    }
+    function loadGroups(groups) {
+      var need = groups.filter(function (g) { return !ST.details[g] })
+      return Promise.all(need.map(function (g) { return call(P + '/groups/' + enc(g)).then(function (d) { ST.details[g] = d }) })).then(function () { ST.rows = rowsAll() })
+    }
+    function refreshOverview() {
+      return call(P + '/overview').then(function (o) { ST.ov = o; $('sc-pending-n').textContent = o.stats.pending; renderNav() })
+    }
+    // 寫入後重讀：已載入的群組、總覽（導覽的徽章與待生效數）；回傳整張表的列
+    function reloadAll() {
+      var gs = Object.keys(ST.details)
+      return Promise.all(gs.map(function (g) { return call(P + '/groups/' + enc(g)).then(function (d) { ST.details[g] = d }) })).then(function () {
+        ST.rows = rowsAll()
+        return refreshOverview()
+      }).then(function () { return ST.rows })
+    }
+
+    // ── 導覽 ─────────────────────────────────────────────────────
+    function dirtyByPage() {
+      var out = {}
+      if (!mx) return out
+      var d = mx.state().draft
+      Object.keys(d).forEach(function (k) {
+        var r = ST.rows.filter(function (x) { return x.key === k })[0]
+        if (r) out[r.page] = (out[r.page] || 0) + 1
+      })
+      return out
+    }
+    function renderNav() {
+      if (!ST.ov) return
+      var cats = ST.ov.categories
+      $('sc-seg').innerHTML = ['全部'].concat(cats).map(function (c) {
+        return '<button type="button" class="sc-chip' + (ST.seg === c ? ' on' : '') + '" data-seg="' + esc(c) + '" data-testid="sc-seg-' + esc(c) + '">' + esc(c) + '</button>'
+      }).join('')
+      var dirty = dirtyByPage()
+      var html = ''
+      cats.forEach(function (c) {
+        if (ST.seg !== '全部' && ST.seg !== c) return
+        var ps = ST.ov.pages.filter(function (p) { return p.category === c })
+        if (!ps.length) return
+        html += '<div class="sc-cat">' + esc(c) + '</div>'
+        ps.forEach(function (p) {
+          var badges = ''
+          if (dirty[p.id]) badges += '<span class="sc-nbadge draft" data-testid="sc-navdraft-' + esc(p.id) + '">未儲存 ' + dirty[p.id] + '</span>'
+          if (p.differs) badges += '<span class="sc-nbadge" data-testid="sc-navdiff-' + esc(p.id) + '">與預設不同 ' + p.differs + '</span>'
+          if (p.highRisk) badges += '<span title="內含影響金額、法規或資安的設定" data-testid="sc-navrisk-' + esc(p.id) + '">🔴</span>'
+          if (p.status === 'planned') badges += '<span class="sc-nbadge">開發中</span>'
+          if (p.standalone) html += '<a class="sc-navitem" href="' + esc(p.href) + '" data-testid="sc-page-' + esc(p.id) + '"><span>' + esc(p.plain) + '</span><span class="sc-nbadge">↗</span></a>'
+          else html += '<button type="button" class="sc-navitem' + (ST.view === 'page' && ST.page === p.id ? ' active' : '') + (p.status === 'planned' ? ' planned' : '') + '" data-page="' + esc(p.id) + '" data-testid="sc-page-' + esc(p.id) + '"><span>' + esc(p.plain) + '</span><span>' + badges + '</span></button>'
+        })
+      })
+      $('sc-nav').innerHTML = html || '<div class="sc-empty">沒有符合的設定頁。</div>'
+      var cur = ST.view === 'page' ? pageById(ST.page) : null
+      $('sc-navtoggle-text').textContent = cur ? cur.plain : '選擇設定頁'
+    }
+
+    var VIEWS = ['overview', 'page', 'pending', 'recent', 'versions', 'profiles']
+    function showView(v) {
+      ST.view = v
+      VIEWS.forEach(function (n) { $('sc-v-' + n).hidden = n !== v })
+      var chips = { pending: 'sc-go-pending', recent: 'sc-go-recent', versions: 'sc-go-versions', profiles: 'sc-go-profiles' }
+      Object.keys(chips).forEach(function (k) { $(chips[k]).classList.toggle('on', v === k) })
+      $('sc-nav').classList.remove('open')
+      $('sc-navtoggle').setAttribute('aria-expanded', 'false')
+      say('')
+      renderNav()
+    }
+
+    // ── 設定頁（一張 SettingsMatrix）─────────────────────────────
+    function openPage(id, flashKey) {
+      var p = pageById(id)
+      if (!p) return Promise.resolve()
+      if (p.standalone) { location.href = p.href; return Promise.resolve() }
+      ST.page = id
+      showView('page')
+      try { history.replaceState(null, '', '#p=' + enc(id)) } catch (e) { /* ignore */ }
+      return loadGroups(p.groups).then(function () {
+        renderPageHead(p)
+        mx.setRows(ST.rows)
+        mx.render()
+        renderNav()
+        if (flashKey) flash(flashKey)
+      }).catch(function (e) { say('讀取失敗：' + e.message) })
+    }
+    function renderPageHead(p) {
+      var h = '<h2 class="sc-h">' + esc(p.plain) + (p.privacy ? '<span class="sc-tag" data-testid="sc-privacy">影響隱私</span>' : '') + (p.highRisk ? '<span class="sc-tag" style="color:var(--danger)">🔴 內含高風險設定</span>' : '') + '</h2>'
+      p.groups.forEach(function (g) {
+        var d = ST.details[g]
+        if (!d) return
+        if (d.status === 'planned') h += '<div class="sc-sub" data-testid="sc-planned">「' + esc(groupPlain(g)) + '」開發中，尚未開放。</div>'
+        else if (d.help) h += '<div class="sc-sub">' + esc(groupPlain(g)) + '：' + esc(d.help) + '</div>'
+      })
+      var first = p.groups.filter(function (g) { return ST.details[g] && ST.details[g].status !== 'planned' })[0]
+      if (first) h += '<div class="sc-btnrow"><button type="button" class="sc-link" data-vgroup="' + esc(first) + '" data-testid="sc-page-versions">這一頁的版本紀錄與還原</button></div>'
+      $('sc-pagehead').innerHTML = h
+    }
+    function flash(key) {
+      var box = $('sc-mx')
+      var el = box.querySelector('[data-testid="mx-row-' + key + '"]')
+      if (!el) { var k = box.querySelector('.mx-card-row [data-key="' + key + '"]'); el = k ? k.closest('.mx-card-row') : null }
+      if (!el) return
+      try { el.scrollIntoView({ block: 'center' }) } catch (e) { /* ignore */ }
+      el.classList.add('sc-flash')
+      setTimeout(function () { el.classList.remove('sc-flash') }, 2000)
+    }
+
+    function rangeText(f) {
+      if (f.type === 'bool' || f.type === 'str' || f.type === 'json' || (f.choices && f.choices.length)) return ''
+      var u = f.unit ? ' ' + f.unit : ''
+      if (f.min != null && f.max != null) return '可設定 ' + f.min + '～' + f.max + u
+      if (f.min != null) return '至少 ' + f.min + u
+      if (f.max != null) return '至多 ' + f.max + u
+      return ''
+    }
+    function numeric(f) { return (f.type === 'int' || f.type === 'float') && !(f.choices && f.choices.length) }
+    function coerceChoice(f, v) {
+      var hit = (f.choices || []).filter(function (c) { return String(c.value) === String(v) })[0]
+      return hit ? hit.value : v
+    }
+    var RISK_TAG = { money: '牽涉金額', legal: '法規相關', security: '資安相關' }
+    var columns = [
+      { id: 'sw', type: 'switch', label: '開／關', show: function (r) { return r.f.type === 'bool' },
+        get: function (r) { return !!r.value }, draft: function (r, v) { return { value: !!v } } },
+      { id: 'sel', type: 'select', label: '選擇', show: function (r) { return r.f.type !== 'bool' && r.f.type !== 'json' && !!(r.f.choices && r.f.choices.length) },
+        options: function (r) { return (r.f.choices || []).map(function (c) { return { value: c.value, label: c.label } }) },
+        get: function (r) { return r.value }, draft: function (r, v) { return { value: coerceChoice(r.f, v) } } },
+      { id: 'num', type: 'number', label: '數值', step: 'any', show: function (r) { return numeric(r.f) },
+        get: function (r) { return r.value },
+        validate: function (v, r) {
+          if (v == null) return '請輸入數字'
+          if (r.f.type === 'int' && Math.floor(v) !== v) return '要填整數'
+          if (r.f.min != null && v < r.f.min) return '不可小於 ' + r.f.min
+          if (r.f.max != null && v > r.f.max) return '不可大於 ' + r.f.max
+          return null
+        },
+        draft: function (r, v) { return { value: v } } },
+      { id: 'txt', type: 'text', label: '文字', show: function (r) { return r.f.type === 'str' && !(r.f.choices && r.f.choices.length) },
+        get: function (r) { return r.value }, draft: function (r, v) { return { value: String(v == null ? '' : v) } } },
+      { id: 'ro', type: 'text-view', label: '內容', show: function (r) { return r.f.type === 'json' || ['bool', 'int', 'float', 'str'].indexOf(r.f.type) < 0 },
+        get: function (r) { return '整份文件，不在這張表編輯' } },
+    ]
+
+    // ── 草稿：儲存前確認（原因必填）→ 逐群組寫入 ─────────────────
+    function groupBy(changes) {
+      var by = {}, order = []
+      changes.forEach(function (c) {
+        var r = c.row
+        if (!by[r.group]) { by[r.group] = { group: r.group, plain: r.groupPlain, values: {}, expected: {}, rows: [] }; order.push(r.group) }
+        by[r.group].values[r.field] = c.patch.value
+        by[r.group].expected[r.field] = r.value
+        by[r.group].rows.push(r)
+      })
+      return order.map(function (g) { return by[g] })
+    }
+    function bannerHtml(b) {
+      if (!b) return ''
+      return '<div class="sc-banner ' + esc(b.level) + '">' + (b.lines || []).map(esc).join('<br>') + '</div>'
+    }
+    function confirmSave(changes) {
+      var by = groupBy(changes)
+      return Promise.all(by.map(function (b) {
+        return post(P + '/groups/' + enc(b.group) + '/preview', { values: b.values }).then(function (pl) { b.plan = pl })
+      })).then(function () {
+        var problems = []
+        by.forEach(function (b) { if (!b.plan.ok) (b.plan.problems || []).forEach(function (p) { problems.push(b.plain + '：' + p.message) }) })
+        if (problems.length) throw new Error(problems.join('；'))
+        var n = { immediate: 0, pending: 0, pending_approval: 0, unchanged: 0 }, others = 0, red = false, html = '', warns = []
+        by.forEach(function (b) {
+          others = Math.max(others, b.plan.otherSuperadmins || 0)
+          var items = ''
+          b.plan.fields.forEach(function (f) {
+            n[f.kind] = (n[f.kind] || 0) + 1
+            if (f.kind === 'unchanged') return
+            if (f.banner && f.banner.level === 'red') red = true
+            items += '<li>' + esc(f.effect) + bannerHtml(f.banner) + '</li>'
+          })
+          ;(b.plan.warnings || []).forEach(function (w) { warns.push(w) })
+          if (items) html += '<div style="margin-top:8px"><b>' + esc(b.plain) + '</b></div><ul style="margin:4px 0 0 18px;padding:0">' + items + '</ul>'
+        })
+        if (!n.immediate && !n.pending && !n.pending_approval) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        var days = by[0].plan.confirmDays
+        var lines = []
+        if (n.immediate) lines.push('<b>' + n.immediate + '</b> 項儲存後立即生效')
+        if (n.pending) lines.push('<b>' + n.pending + '</b> 項會列入「待生效」，' + days + ' 天後自動生效，期間內任何最高管理者都能撤銷')
+        if (n.pending_approval) lines.push('<b>' + n.pending_approval + '</b> 項要等另一位最高管理者核准，再過 ' + days + ' 天才會生效')
+        var notify = n.pending_approval && others ? '儲存後系統會通知其他 <b>' + others + '</b> 位最高管理者前來核准。'
+          : (n.pending_approval ? '' : (n.pending ? '儲存後會留下紀錄，不會另外通知別人。' : '儲存後立即生效，會留下變更紀錄。'))
+        var body = '<div data-testid="sc-confirm-summary">' + lines.map(function (l) { return '<div>' + l + '</div>' }).join('') + '</div>' + html +
+          warns.map(function (w) { return '<div class="sc-banner amber">⚠ ' + esc(w) + '</div>' }).join('') +
+          (notify ? '<div class="sc-notify" data-testid="sc-notify">' + notify + '</div>' : '') +
+          '<div style="margin-top:12px"><textarea class="sc-in" rows="2" id="sc-reason" data-testid="sc-reason" placeholder="為什麼要改？（必填，會記在變更紀錄裡）">' + esc(ST.reason) + '</textarea></div>' +
+          (red ? '<label style="display:block;margin-top:8px;color:var(--danger);font-size:13px"><input type="checkbox" id="sc-ack" data-testid="sc-ack"> 我已了解上述影響</label>' : '')
+        return SettingsMatrix.openDialog({
+          title: '儲存 ' + (n.immediate + n.pending + n.pending_approval) + ' 項設定', html: body,
+          buttons: [{ label: '取消', value: false }, { label: '確認儲存', value: true, kind: 'primary', disabled: true }],
+          onOpen: function (el, wrap) {
+            var ok = wrap.querySelector('[data-mx-dlg="1"]'), ta = el.querySelector('#sc-reason'), ack = el.querySelector('#sc-ack')
+            ok.setAttribute('data-testid', 'sc-confirm-ok')
+            var sync = function () { ST.reason = ta.value; ok.disabled = !ta.value.trim() || (!!ack && !ack.checked) }
+            ta.addEventListener('input', sync); if (ack) ack.addEventListener('change', sync); sync()
+            try { ta.focus() } catch (e) { /* ignore */ }
+          },
+        }).then(function (v) { return v === true ? [] : null })
+      })
+    }
+    function conflictError(e, b) {
+      var d = e.data && e.data.detail
+      if (e.status === 409 && d && typeof d === 'object') {
+        var who = d.by ? '被 ' + d.by + (d.at ? '（' + stamp(d.at) + '）' : '') + ' ' : ''
+        var names = (d.keys || []).map(function (x) { return x.name }).join('、')
+        var err = new Error('「' + b.plain + '」的 ' + names + ' 在你送出前' + (who ? who : '已被別人') + '改過，為了不蓋掉別人的修改，這一組沒有儲存。請按「放棄」重新載入後再改。')
+        err.status = 409
+        return err
+      }
+      return e
+    }
+    function save(changes) {
+      var by = groupBy(changes), done = [], tally = { imm: 0, pend: 0, appr: 0 }, i = 0
+      function send(b, supersede) {
+        var body = { values: b.values, expectedValues: b.expected, reason: ST.reason.trim() }
+        if (supersede) body.supersede = true
+        return post(P + '/groups/' + enc(b.group), body)
+      }
+      function askSupersede(b, e) {
+        var d = (e.data && e.data.detail) || {}
+        var names = (d.keys || []).map(function (x) { return esc(x.name) }).join('、')
+        return SettingsMatrix.openDialog({ title: '已有別人的申請在等待生效', html: '<div>「' + esc(b.plain) + '」的 ' + names + ' 已有' + (d.by ? ' ' + esc(d.by) : '別人') + '送出、還在等待生效的申請。</div><div class="sc-banner amber">繼續儲存會取代它。</div>',
+          buttons: [{ label: '取消', value: false }, { label: '取代它並儲存', value: true, kind: 'danger' }] }).then(function (v) { return v === true })
+      }
+      function next() {
+        if (i >= by.length) return Promise.resolve()
+        var b = by[i]
+        return send(b).catch(function (e) {
+          var d = e.data && e.data.detail
+          if (e.status === 409 && d && d.code === 'pending_exists') {
+            return askSupersede(b, e).then(function (ok) { if (!ok) { var c = new Error('已取消'); c.cancelled = true; throw c } return send(b, true) })
+          }
+          throw conflictError(e, b)
+        }).then(function (r) {
+          ;(r.classification || []).forEach(function (f) { if (f.kind === 'immediate') tally.imm++; else if (f.kind === 'pending') tally.pend++; else if (f.kind === 'pending_approval') tally.appr++ })
+          b.rows.forEach(function (row) { row.value = b.values[row.field] })       // 已存的群組：原值換成新值，重試時不會被當成衝突
+          done.push(b.plain); i++
+          return next()
+        })
+      }
+      return next().then(function () {
+        var parts = []
+        if (tally.imm) parts.push(tally.imm + ' 項已立即生效')
+        if (tally.pend) parts.push(tally.pend + ' 項已列入「待生效」，到期後自動生效')
+        if (tally.appr) parts.push(tally.appr + ' 項已列入「待生效」，要等另一位最高管理者核准')
+        return { message: '已儲存：' + (parts.join('、') || '沒有任何變更') + '。' }
+      }).catch(function (e) {
+        if (done.length && !e.cancelled) e.message = '已儲存「' + done.join('」「') + '」；其餘沒有儲存：' + e.message
+        else if (done.length) { SettingsMatrix.toast('已儲存「' + done.join('」「') + '」；其餘已取消。', { error: true }) }
+        throw e
+      })
+    }
+
+    function mountMatrix() {
+      mx = SettingsMatrix.mount($('sc-mx'), {
+        rows: [],
+        rowVisible: function (r) { return r.page === ST.page },
+        rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.groupPlain },
+        rowSub: function (r) { return rangeText(r.f) || r.f.unit || '' },
+        rowTags: function (r) {
+          var t = []
+          if (RISK_TAG[r.f.risk]) t.push({ text: RISK_TAG[r.f.risk], tone: r.f.banner && r.f.banner.level === 'red' ? 'crit' : 'warn' })
+          if (r.f.source && r.f.source.kind === 'pending') t.push({ text: '待生效', tone: 'info' })
+          return t
+        },
+        searchText: function (r) { return r.name + ' ' + (r.f.question || '') + ' ' + (r.f.help || '') },
+        nameLabel: '設定項目', searchPlaceholder: '在這一頁搜尋設定',
+        groupSummary: function (g, all) { var n = all.filter(function (r) { return !jeq(r.value, r.f.default) }).length; return n ? '與預設不同 ' + n + ' 項' : '全部是預設' },
+        help: function (r) { return r.f.helpParts || null },
+        source: function (r) { return r.f.source || null },
+        diff: {
+          isDefault: function (r) { return jeq(r.value, r.f.default) },
+          defaultText: function (r) { return r.f.defaultText },
+          draft: function (r) { return { value: r.f.default } },
+          canReset: function (r) { return r.f.type !== 'json' },
+        },
+        columns: columns,
+        batch: { actions: [], groupActionsEnabled: false },
+        draft: {
+          apply: function (r, pt) { return Object.assign({}, r, pt) },
+          same: function (raw, merged) { return jeq(raw.value, merged.value) },
+          confirm: confirmSave, save: save, afterSave: function () { renderNav() },
+        },
+        reload: reloadAll,
+        onRender: function () { var sig = JSON.stringify(dirtyByPage()); if (sig !== ST.navSig) { ST.navSig = sig; renderNav() } },
+        onError: function (e) { SettingsMatrix.toast((e && e.message) || '操作失敗', { error: true }) },
+      })
+    }
+
+    // ── 總覽 ─────────────────────────────────────────────────────
+    function changeText(c) {
+      if (c.summary && c.summary.length) return esc(c.summary.join('；'))
+      return esc(c.old == null ? '' : c.old) + ' → <b>' + esc(c.new == null ? '' : c.new) + '</b>'
+    }
+    function recentTable(list, testid) {
+      if (!list.length) return '<div class="sc-empty">還沒有任何變更。</div>'
+      return '<table class="sc-table" data-testid="' + testid + '"><thead><tr><th>時間</th><th>誰改的</th><th>哪一項</th><th>改了什麼</th><th>狀態</th><th>原因</th></tr></thead><tbody>' + list.map(function (c) {
+        return '<tr data-testid="sc-recent-' + esc(c.id) + '"><td>' + esc(stamp(c.at)) + '</td><td>' + esc(c.actor) + '</td><td>' + (c.page ? '<button type="button" class="sc-link" data-open="' + esc(c.page) + '" data-flash="' + esc(c.group + '.' + c.field) + '">' + esc(c.groupPlain + '／' + c.label) + '</button>' : esc(c.groupPlain + '／' + c.label)) + '</td><td>' + changeText(c) + '</td><td>' + esc(c.stateText) + '</td><td>' + esc(c.reason) + '</td></tr>'
+      }).join('') + '</tbody></table>'
+    }
+    function showOverview() {
+      showView('overview')
+      try { history.replaceState(null, '', location.pathname + location.search) } catch (e) { /* ignore */ }
+      var o = ST.ov, s = o.stats
+      var items = o.differsItems.slice(0, 60)
+      var html = '<h2 class="sc-h">總覽</h2><div class="sc-sub">這裡看全部設定的現況。左邊選一頁就能調整；點格子只算草稿，按「儲存」並寫下原因才會生效。</div>' +
+        '<div class="sc-cards">' +
+        '<button type="button" class="sc-card" data-card="differs" data-testid="sc-card-differs"><span class="n">' + s.differs + '</span>與預設不同的設定</button>' +
+        '<button type="button" class="sc-card" data-card="pending" data-testid="sc-card-pending"><span class="n">' + s.pending + '</span>待生效的變更</button>' +
+        '<button type="button" class="sc-card" data-card="high" data-testid="sc-card-high"><span class="n">' + s.highRiskGroups + '</span>內含高風險設定的群組</button></div>' +
+        '<h3 style="font-size:15px;margin:6px 0">最近 5 筆變更 <button type="button" class="sc-link" data-card="recent" style="font-size:13px;margin-left:6px">看全部</button></h3>' + recentTable(o.recent, 'sc-overview-recent') +
+        '<h3 style="font-size:15px;margin:18px 0 6px" id="sc-differs-h">與預設不同的設定</h3>' +
+        (items.length ? '<table class="sc-table" data-testid="sc-differs-list"><thead><tr><th>設定</th><th>目前</th><th>預設</th></tr></thead><tbody>' + items.map(function (d) {
+          return '<tr><td><button type="button" class="sc-link" data-open="' + esc(d.page) + '" data-flash="' + esc(d.group + '.' + d.field) + '">' + esc(d.groupPlain + '／' + d.label) + '</button></td><td>' + esc(d.value) + '</td><td>' + esc(d.default) + '</td></tr>'
+        }).join('') + '</tbody></table>' + (o.differsItems.length > items.length ? '<div class="sc-sub">…另有 ' + (o.differsItems.length - items.length) + ' 項，請從左邊各頁查看。</div>' : '') : '<div class="sc-empty">全部設定都和預設一致。</div>')
+      $('sc-v-overview').innerHTML = html
+    }
+
+    // ── 待生效 ───────────────────────────────────────────────────
+    function showPending() {
+      showView('pending')
+      return call(P + '/pending').then(function (r) { ST.pending = r.pending || []; renderPending() }).catch(function (e) { say(e.message) })
+    }
+    function renderPending() {
+      var h = '<h2 class="sc-h">待生效</h2><div class="sc-sub">放寬類或重要的變更不會馬上生效：要等到期，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>' +
+        '<div class="sc-btnrow"><input type="text" class="sc-in" id="sc-pnote" placeholder="核准／撤銷的備註（選填）" style="min-width:260px" data-testid="sc-pending-note"></div>'
+      if (!ST.pending.length) h += '<div class="sc-empty" data-testid="sc-pending-empty">目前沒有等待生效的變更。</div>'
+      else h += '<table class="sc-table" data-testid="sc-pending-list"><thead><tr><th>設定</th><th>改成</th><th>申請人／原因</th><th>生效時間</th><th>核准</th><th></th></tr></thead><tbody>' + ST.pending.map(function (p) {
+        var chg = p.summary && p.summary.length ? esc(p.summary.join('；')) : esc(p.oldText) + ' → <b>' + esc(p.newText) + '</b>'
+        return '<tr data-testid="sc-pending-' + esc(p.id) + '"><td>' + esc(p.groupLabel + '／' + p.label) + '</td><td>' + chg + '</td><td>' + esc(p.actor) + '<div class="sc-sub">' + esc(p.reason) + '</div></td><td>' + esc(stamp(p.effectiveAt)) + '</td><td>' + (p.required ? esc((p.approvals || []).length + '／' + p.required) : '不需要') + '</td><td style="white-space:nowrap">' +
+          (p.required ? '<button type="button" class="mx-btn mx-btn-sm" data-decide="approve" data-id="' + esc(p.id) + '" data-testid="sc-approve-' + esc(p.id) + '">核准</button> ' : '') +
+          '<button type="button" class="mx-btn mx-btn-sm mx-btn-danger" data-decide="cancel" data-id="' + esc(p.id) + '" data-testid="sc-cancel-' + esc(p.id) + '">撤銷</button></td></tr>'
+      }).join('') + '</tbody></table>'
+      $('sc-v-pending').innerHTML = h
+    }
+    function decide(id, what) {
+      var note = ($('sc-pnote') || {}).value || ''
+      return post(P + '/pending/' + id + '/' + what, { reason: note.trim() }).then(function () {
+        SettingsMatrix.toast(what === 'approve' ? '已核准' : '已撤銷')
+        return Promise.all([call(P + '/pending').then(function (r) { ST.pending = r.pending || [] }), reloadAll()])
+      }).then(function () { renderPending() }).catch(function (e) { say(e.message) })
+    }
+
+    // ── 最近變更 ─────────────────────────────────────────────────
+    function showRecent() {
+      showView('recent')
+      return call(P + '/recent?limit=100' + (ST.recentHigh ? '&high=1' : '')).then(function (r) {
+        $('sc-v-recent').innerHTML = '<h2 class="sc-h">最近變更</h2><div class="sc-btnrow"><label style="font-size:13px"><input type="checkbox" id="sc-recent-high"' + (ST.recentHigh ? ' checked' : '') + ' data-testid="sc-recent-high"> 只看影響金額、法規、資安的設定</label></div>' + recentTable(r.changes || [], 'sc-recent-list')
+      }).catch(function (e) { say(e.message) })
+    }
+
+    // ── 版本紀錄與還原 ───────────────────────────────────────────
+    function openGroups() {
+      var out = []
+      ST.ov.pages.forEach(function (p) { if (!p.standalone && p.status !== 'planned') p.groups.forEach(function (g) { out.push({ group: g, text: p.plain + '／' + groupPlain(g) }) }) })
+      return out
+    }
+    function showVersions(group) {
+      showView('versions')
+      var gs = openGroups()
+      ST.vgroup = group && gs.some(function (x) { return x.group === group }) ? group : (ST.vgroup || (gs[0] && gs[0].group) || '')
+      ST.diff = null; ST.restoreFor = null; ST.restorePv = null
+      return ST.vgroup ? call(P + '/groups/' + enc(ST.vgroup) + '/versions').then(function (r) { ST.versions = r.versions || []; renderVersions() }).catch(function (e) { say(e.message) }) : (renderVersions(), Promise.resolve())
+    }
+    function vopts(list, cur) { return list.map(function (x) { return '<option value="' + esc(x.value) + '"' + (x.value === cur ? ' selected' : '') + '>' + esc(x.label) + '</option>' }).join('') }
+    function renderVersions() {
+      var gs = openGroups(), vs = ST.versions
+      var vl = vs.map(function (v) { return { value: String(v.version), label: '第 ' + v.version + ' 版' } })
+      var h = '<h2 class="sc-h">版本紀錄與還原</h2><div class="sc-btnrow"><select class="sc-in" id="sc-vgroup" data-testid="sc-vgroup">' + gs.map(function (x) { return '<option value="' + esc(x.group) + '"' + (x.group === ST.vgroup ? ' selected' : '') + '>' + esc(x.text) + '</option>' }).join('') + '</select></div>'
+      h += vs.length ? '<table class="sc-table" data-testid="sc-versions-list"><thead><tr><th>版本</th><th>時間</th><th>誰發布</th><th>備註</th><th></th></tr></thead><tbody>' + vs.map(function (v) {
+        return '<tr><td>第 ' + esc(v.version) + ' 版</td><td>' + esc(stamp(v.at)) + '</td><td>' + esc(v.by) + '</td><td>' + esc(v.note) + '</td><td><button type="button" class="mx-btn mx-btn-sm" data-restore="' + esc(v.version) + '" data-testid="sc-restore-' + esc(v.version) + '">還原到這一版</button></td></tr>'
+      }).join('') + '</tbody></table>' : '<div class="sc-empty">還沒有發布過任何版本，目前使用系統預設。</div>'
+      h += '<div class="sc-btnrow" style="margin-top:14px"><span class="sc-sub">比較</span><select class="sc-in" id="sc-diffa">' + vopts([{ value: 'default', label: '系統預設' }].concat(vl), vs.length ? String(vs[0].version) : 'default') + '</select><span class="sc-sub">與</span><select class="sc-in" id="sc-diffb">' + vopts([{ value: 'current', label: '目前' }, { value: 'default', label: '系統預設' }].concat(vl), 'current') + '</select><button type="button" class="mx-btn mx-btn-sm" id="sc-diff-go" data-testid="sc-diff">看差異</button></div>'
+      if (ST.diff) h += ST.diff.changes.length ? '<table class="sc-table" data-testid="sc-diff-table"><thead><tr><th>設定</th><th>之前</th><th>之後</th></tr></thead><tbody>' + ST.diff.changes.map(function (c) { return '<tr><td>' + esc(c.label) + '</td><td>' + esc(c.oldText) + '</td><td>' + esc(c.newText) + '</td></tr>' }).join('') + '</tbody></table>' : '<div class="sc-empty">這兩個版本沒有差異。</div>'
+      if (ST.restoreFor && ST.restorePv) {
+        var kinds = { immediate: '立即生效', pending: '到期後生效', pending_approval: '需另一位最高管理者核准後生效', unchanged: '沒有變更' }
+        var fs = ST.restorePv.fields.filter(function (x) { return x.kind !== 'unchanged' })
+        h += '<div class="sc-box" data-testid="sc-restore-panel"><b>還原到第 ' + esc(ST.restoreFor) + ' 版會發生什麼</b>' + fs.map(function (r) { return '<div style="margin-top:6px"><b>' + esc(r.label) + '</b>：' + esc(r.oldText) + ' → ' + esc(r.newText) + '（' + esc(kinds[r.kind] || '') + '）' + bannerHtml(r.banner) + '</div>' }).join('') + (fs.length ? '' : '<div class="sc-sub">這一版的內容和目前相同，不會有任何變動。</div>') +
+          '<textarea class="sc-in" rows="2" id="sc-restore-reason" data-testid="sc-restore-reason" placeholder="還原原因（必填）" style="margin-top:8px"></textarea><div class="sc-btnrow"><button type="button" class="mx-btn mx-btn-primary" id="sc-restore-ok" data-testid="sc-restore-confirm">確認還原</button><button type="button" class="mx-btn" id="sc-restore-no">取消</button></div></div>'
+      }
+      $('sc-v-versions').innerHTML = h
+    }
+    function startRestore(v) {
+      ST.restoreFor = v
+      return post(P + '/groups/' + enc(ST.vgroup) + '/restore/' + v, { preview: true }).then(function (pv) { ST.restorePv = pv; renderVersions() }).catch(function (e) { ST.restoreFor = null; say(e.message) })
+    }
+    function doRestore() {
+      var reason = ($('sc-restore-reason').value || '').trim()
+      if (!reason) { say('請填寫還原原因'); return Promise.resolve() }
+      return post(P + '/groups/' + enc(ST.vgroup) + '/restore/' + ST.restoreFor, { reason: reason }).then(function (r) {
+        SettingsMatrix.toast('已還原到第 ' + ST.restoreFor + ' 版' + ((r.pending || []).length ? '；其中放寬的項目已列入「待生效」' : ''))
+        return reloadAll().then(function () { return showVersions(ST.vgroup) })
+      }).catch(function (e) { say(e.message) })
+    }
+
+    // ── 預設組 ───────────────────────────────────────────────────
+    function showProfiles() {
+      showView('profiles')
+      return call(P + '/profiles').then(function (r) { ST.profiles = r.profiles || []; renderProfiles() }).catch(function (e) { say(e.message) })
+    }
+    function renderProfiles() {
+      var h = '<h2 class="sc-h">預設組</h2><div class="sc-sub">預設組是一組事先配好的建議值（例如「嚴格」）。套用前會先列出會改哪些設定；放寬的項目一樣要等到期與核准。</div><div class="sc-btnrow">' +
+        ST.profiles.map(function (p) { return '<button type="button" class="mx-btn" data-profile="' + esc(p.name) + '" data-testid="sc-profile-' + esc(p.name) + '">' + esc(p.name) + '</button>' }).join('') + '</div>'
+      if (!ST.profiles.length) h += '<div class="sc-empty">目前沒有可用的預設組。</div>'
+      if (ST.profilePv) {
+        var sk = (ST.profileSkipped || []).reduce(function (a, s) { return a + (s.fields || 0) }, 0)
+        h += '<div class="sc-box" data-testid="sc-profile-panel"><b>套用「' + esc(ST.profileName) + '」會改這些設定</b>' + (ST.profilePv.length ? '<table class="sc-table"><thead><tr><th>群組</th><th>設定</th><th>目前</th><th>改成</th></tr></thead><tbody>' + ST.profilePv.map(function (c) { return '<tr><td>' + esc(c.groupLabel) + '</td><td>' + esc(c.label) + '</td><td>' + esc(c.old) + ' ' + esc(c.unit || '') + '</td><td><b>' + esc(c.new) + '</b> ' + esc(c.unit || '') + '</td></tr>' }).join('') + '</tbody></table>' : '<div class="sc-sub">目前的設定已經和這個預設組一致。</div>') +
+          (sk ? '<div class="sc-sub" data-testid="sc-profile-skipped">略過 ' + sk + ' 項（開發中，尚未開放調整）</div>' : '') +
+          '<textarea class="sc-in" rows="2" id="sc-profile-reason" placeholder="套用原因（必填）" style="margin-top:8px"></textarea><div class="sc-btnrow"><button type="button" class="mx-btn mx-btn-primary" id="sc-profile-ok" data-testid="sc-profile-apply">確認套用</button><button type="button" class="mx-btn" id="sc-profile-no">取消</button></div></div>'
+      }
+      $('sc-v-profiles').innerHTML = h
+    }
+    function previewProfile(name) {
+      return call(P + '/profiles/' + enc(name) + '/preview').then(function (r) { ST.profileName = name; ST.profilePv = r.changes || []; ST.profileSkipped = r.skipped || []; renderProfiles() }).catch(function (e) { say(e.message) })
+    }
+    function applyProfile() {
+      var reason = ($('sc-profile-reason').value || '').trim()
+      if (!reason) { say('請填寫套用原因'); return Promise.resolve() }
+      return post(P + '/profiles/' + enc(ST.profileName) + '/apply', { reason: reason }).then(function (r) {
+        var sk = (r.skipped || []).reduce(function (a, s) { return a + (s.fields || 0) }, 0)
+        SettingsMatrix.toast('已套用「' + ST.profileName + '」的 ' + (ST.profilePv ? ST.profilePv.length : 0) + ' 項' + (sk ? '，略過 ' + sk + ' 項（開發中）' : '') + '；放寬的項目會列入「待生效」')
+        ST.profilePv = null; ST.profileSkipped = []; ST.profileName = ''
+        return reloadAll().then(renderProfiles)
+      }).catch(function (e) { say(e.message) })
+    }
+
+    // ── 全域搜尋 ─────────────────────────────────────────────────
+    var hits = []
+    function runSearch() {
+      var q = $('sc-search').value.trim().toLowerCase(), box = $('sc-results')
+      if (!q) { box.hidden = true; box.innerHTML = ''; hits = []; return }
+      var tokens = q.split(/\s+/)
+      hits = ST.idx.filter(function (it) { var t = it.text.toLowerCase(); return tokens.every(function (x) { return t.indexOf(x) >= 0 }) })
+      var rank = { field: 0, group: 1, page: 2 }
+      hits.sort(function (a, b) { return rank[a.kind] - rank[b.kind] })
+      hits = hits.slice(0, 14)
+      box.hidden = false
+      box.innerHTML = hits.length ? hits.map(function (it, i) {
+        if (it.kind === 'field') return '<button type="button" class="sc-res" data-hit="' + i + '" data-testid="sc-hit">' + esc(it.label) + '<small>' + esc(it.pagePlain + '／' + it.groupPlain) + '</small></button>'
+        if (it.kind === 'group') return '<button type="button" class="sc-res" data-hit="' + i + '" data-testid="sc-hit">' + esc(it.groupPlain) + '<small>' + esc(it.pagePlain) + '（整組設定）</small></button>'
+        return '<button type="button" class="sc-res" data-hit="' + i + '" data-testid="sc-hit">' + esc(it.pagePlain) + ' ↗<small>' + esc(it.category) + '・獨立頁面</small></button>'
+      }).join('') : '<div class="sc-res-empty" data-testid="sc-nohit">找不到「' + esc($('sc-search').value.trim()) + '」</div>'
+    }
+    function jump(it) {
+      $('sc-results').hidden = true
+      if (it.kind === 'page') { location.href = it.href; return }
+      openPage(it.page, it.kind === 'field' ? it.group + '.' + it.field : '')
+    }
+
+    // ── 事件 ─────────────────────────────────────────────────────
+    function bind() {
+      $('sc-search').addEventListener('input', runSearch)
+      $('sc-search').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && hits[0]) { e.preventDefault(); jump(hits[0]) }
+        if (e.key === 'Escape') { $('sc-results').hidden = true }
+      })
+      document.addEventListener('click', function (e) { if (!e.target.closest('.sc-searchbox')) $('sc-results').hidden = true })
+      $('sc-results').addEventListener('click', function (e) { var b = e.target.closest('[data-hit]'); if (b) jump(hits[+b.getAttribute('data-hit')]) })
+      $('sc-go-pending').addEventListener('click', showPending)
+      $('sc-go-recent').addEventListener('click', showRecent)
+      $('sc-go-versions').addEventListener('click', function () { showVersions('') })
+      $('sc-go-profiles').addEventListener('click', showProfiles)
+      $('sc-navtoggle').addEventListener('click', function () { var o = $('sc-nav').classList.toggle('open'); $('sc-navtoggle').setAttribute('aria-expanded', o ? 'true' : 'false') })
+      $('sc-seg').addEventListener('click', function (e) { var b = e.target.closest('[data-seg]'); if (b) { ST.seg = b.getAttribute('data-seg'); renderNav() } })
+      $('sc-nav').addEventListener('click', function (e) { var b = e.target.closest('[data-page]'); if (b) openPage(b.getAttribute('data-page')) })
+      $('sc-pagehead').addEventListener('click', function (e) { var b = e.target.closest('[data-vgroup]'); if (b) showVersions(b.getAttribute('data-vgroup')) })
+      $('sc-v-overview').addEventListener('click', function (e) {
+        var c = e.target.closest('[data-card]'), o = e.target.closest('[data-open]')
+        if (o) return openPage(o.getAttribute('data-open'), o.getAttribute('data-flash'))
+        if (!c) return
+        var k = c.getAttribute('data-card')
+        if (k === 'pending') showPending()
+        else if (k === 'high') { ST.recentHigh = true; showRecent() }
+        else if (k === 'recent') { ST.recentHigh = false; showRecent() }
+        else if (k === 'differs') { var h = $('sc-differs-h'); if (h) h.scrollIntoView({ block: 'start' }) }
+      })
+      $('sc-v-recent').addEventListener('click', function (e) { var o = e.target.closest('[data-open]'); if (o) openPage(o.getAttribute('data-open'), o.getAttribute('data-flash')) })
+      $('sc-v-recent').addEventListener('change', function (e) { if (e.target.id === 'sc-recent-high') { ST.recentHigh = e.target.checked; showRecent() } })
+      $('sc-v-pending').addEventListener('click', function (e) { var b = e.target.closest('[data-decide]'); if (b) decide(b.getAttribute('data-id'), b.getAttribute('data-decide')) })
+      $('sc-v-versions').addEventListener('click', function (e) {
+        var r = e.target.closest('[data-restore]')
+        if (r) return startRestore(+r.getAttribute('data-restore'))
+        if (e.target.id === 'sc-diff-go') call(P + '/groups/' + enc(ST.vgroup) + '/diff?a=' + enc($('sc-diffa').value) + '&b=' + enc($('sc-diffb').value)).then(function (d) { ST.diff = d; renderVersions() }).catch(function (x) { say(x.message) })
+        if (e.target.id === 'sc-restore-ok') doRestore()
+        if (e.target.id === 'sc-restore-no') { ST.restoreFor = null; ST.restorePv = null; renderVersions() }
+      })
+      $('sc-v-versions').addEventListener('change', function (e) { if (e.target.id === 'sc-vgroup') showVersions(e.target.value) })
+      $('sc-v-profiles').addEventListener('click', function (e) {
+        var p = e.target.closest('[data-profile]')
+        if (p) return previewProfile(p.getAttribute('data-profile'))
+        if (e.target.id === 'sc-profile-ok') applyProfile()
+        if (e.target.id === 'sc-profile-no') { ST.profilePv = null; renderProfiles() }
+      })
+    }
+
+    function route() {
+      var qs = new URLSearchParams(location.search), hash = ''
+      try { hash = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (e) { hash = '' }
+      if (qs.get('tab') === 'versions') return showVersions(qs.get('group') || '')
+      var pid = hash.indexOf('p=') === 0 ? hash.slice(2) : ''
+      if (!pid && hash) { var pg = pageOfGroup(hash); if (pg) pid = pg.id }          // 舊網址 #群組代碼（系統中心的卡片這樣連過來）
+      if (pid && pageById(pid) && !pageById(pid).standalone) return openPage(pid)
+      showOverview()
+      return Promise.resolve()
+    }
+
+    function boot() {
+      Promise.all([call(P + '/overview'), call(P + '/index')]).then(function (rs) {
+        ST.ov = rs[0]; ST.idx = rs[1].items || []
+        $('sc-pending-n').textContent = ST.ov.stats.pending
+        mountMatrix()
+        bind()
+        renderNav()
+        call(P + '/profiles').then(function (r) { if ((r.profiles || []).length) $('sc-go-profiles').hidden = false }).catch(function () { /* 沒有預設組 */ })
+        return route()
+      }).catch(function (e) {
+        var msg = e.status === 403 || e.status === 401 ? '只有最高管理者可以使用設定中心。' : '讀取失敗：' + e.message
+        $('sc-v-overview').hidden = false
+        $('sc-v-overview').innerHTML = '<div class="sc-err" data-testid="sc-boot-error">' + esc(msg) + '</div>'
+      })
+    }
+    window.__settingsCenter = { state: function () { return ST }, matrix: function () { return mx } }
+    boot()
+  })()
+  </script>
 </body>
 </html>

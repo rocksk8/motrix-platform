@@ -353,6 +353,6 @@ def test_hint_component_is_shared_accessible_and_text_is_not_in_the_page():
     css = _read("css", "hint-popover.css")
     assert ".hint__btn" in css and "width: 16px" in css and ".is-sheet" in css and ".hint__backdrop" in css and "inset: -12px" in css
     html = _read("pages", "settings-center.html")
-    assert "hint-popover.js" in html and "hint-popover.css" in html and 'class="hint"' in html
+    assert "settings-matrix.js" in html and "helpParts" in html           # S2：「?」說明改由矩陣表核心畫（helpParts 由伺服器給），頁面不再自帶 hint-popover
     for h in SH.system_data()["help"].values():
         assert h["what"] not in html, "說明文字不得寫在 HTML 裡"
