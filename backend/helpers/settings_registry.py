@@ -442,7 +442,15 @@ def _call_cross(fn, merged, conn):
             sum(1 for p in ps if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)) >= 2
     except (TypeError, ValueError):
         takes = False
-    return fn(merged, conn) if takes else fn(merged)
+    if not takes:
+        return fn(merged)
+    if conn is not None:
+        return fn(merged, conn)
+    c = get_db()                                    # 呼叫端沒給連線（預檢、定義種類驗證器）：開一條唯讀的臨時連線，別把 None 交給要查庫的檢查
+    try:
+        return fn(merged, c)
+    finally:
+        c.close()
 
 
 def validate_values(group, values, *, partial=False, conn=None):
@@ -507,11 +515,18 @@ def _legacy_values(conn, group, strict=False):
     return {k: raw[f.legacy] for k, f in g["fields"].items() if f.legacy and f.legacy != SCALAR_LEGACY and f.legacy in raw}
 
 
+def _has_legacy_source(group):
+    g = _g(group)
+    return g.get("adapter") is not None or bool(g.get("legacy_key"))
+
+
 def _stored(conn, group, strict=False):
     """資料庫裡的值（定義最新發布版優先，否則舊鍵）；沒有 ⇒ {}。"""
     try:
         row = D.get(conn, KIND, group, SCOPE)
     except Exception:                               # noqa: BLE001 — 定義表還沒建（極舊庫／獨立執行的備份工作）⇒ 只看舊鍵
+        if strict and not _has_legacy_source(group):
+            raise                                   # 嚴格讀取、又沒有舊儲存可退：讀不到就是讀不到，不能默默當成沒存過（會變預設值）
         row = None
     if row is not None:
         body = row.get("body") or {}
@@ -520,7 +535,7 @@ def _stored(conn, group, strict=False):
             return vals
         logger.warning("settings: 群組 %s 的定義內容格式不對，改用預設", group)
         return {}
-    return _legacy_values(conn, group, strict)
+    return _legacy_values(conn, group, True) if strict else _legacy_values(conn, group)
 
 
 def _due_pending(conn, group, now):
@@ -544,7 +559,7 @@ def _due_pending(conn, group, now):
 def _effective(conn, group, now=None, overlay=True, strict=False):
     g = _g(group)
     out = _defaults(group)
-    for k, v in _stored(conn, group, strict).items():
+    for k, v in (_stored(conn, group, True) if strict else _stored(conn, group)).items():     # 非嚴格時維持舊呼叫形狀（測試會換掉 _stored）
         f = g["fields"].get(k)
         if f is None:
             continue
@@ -600,6 +615,8 @@ def get_group_effective(group, *, conn=None, now=None):
         try:
             return _effective(c, group, now, strict=True)
         except Exception:                           # noqa: BLE001
+            if not _has_legacy_source(group):
+                raise                               # 這個群組的值只存在登錄表的定義裡；讀不到就大聲失敗，不退回預設值
             logger.error("settings: 嚴格讀取群組 %s 失敗，退回舊儲存（不用預設）", group, exc_info=True)
             return _merged(_defaults(group), _legacy_values(c, group, strict=True))      # 轉接器讀不到 ⇒ 這裡丟例外（大聲失敗）
     finally:

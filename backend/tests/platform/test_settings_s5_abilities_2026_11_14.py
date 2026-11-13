@@ -99,10 +99,13 @@ def test_cross_check_receives_the_connection_when_it_accepts_one(conn):
     R.register_group(GA, "跨欄測試", [f], help="測試用群組。", cross_check=cc)
     with pytest.raises(R.SettingError):
         R.publish(GA, {"doc": []}, reason="r", user="s5_a", conn=conn)
-    assert seen and all(c is conn for c in seen)
+    assert seen and all(c is not None for c in seen)                                           # 預檢沒有連線時開臨時連線，不把 None 交給要查庫的檢查
+    seen.clear()
+    R.publish(GA, {"doc": ["k"]}, reason="r", user="s5_a", conn=conn)
+    assert any(c is conn for c in seen)                                                        # 寫入時帶真正的（同交易）連線
     R._GROUPS.pop(GA)
     R.register_group(GA, "跨欄測試", [f], help="測試用群組。", cross_check=lambda v: [])         # 單參數仍可用
-    assert R.publish(GA, {"doc": ["k"]}, reason="r", user="s5_a", conn=conn)["changed"]
+    assert R.publish(GA, {"doc": ["k2"]}, reason="r", user="s5_a", conn=conn)["changed"]
 
 
 def test_pending_exists_blocks_silent_overwrite_of_another_actors_document(conn):
@@ -137,6 +140,10 @@ def test_materialize_due_isolates_a_failing_adapter_to_its_own_group(conn):
     R.publish(GB, {"doc": ["b"]}, reason="r", user="s5_a", conn=conn)
     R.publish(GA, {"doc": ["a"]}, reason="r", user="s5_a", conn=conn)
     conn.commit()
+    for g_ in (GA, GB):
+        for r_ in L.pending(conn, 'setting:' + g_):
+            assert L.approve(conn, r_['id'], 's5_b')['ok']                                  # 第二位最高管理者核准
+    conn.commit()
     R.materialize_due(conn, now=later)
     assert STORE[GA] == ["a"]                                                              # 其他群組照常生效
     assert [r for r in L.pending(conn, "setting:" + GB)] == []                              # 失敗群組的到期項被取消
@@ -162,3 +169,15 @@ def test_pending_page_shows_summary_not_raw_json(client, make_user, conn):
     tok = client.post("/api/auth/login", json={"username": username, "password": password}).json()["token"]
     body = client.get("/api/settings-center/pending", headers={"Authorization": "Bearer " + tok})
     assert "secret-token" not in body.text and "清單由 0 項改為 1 項" in body.text
+
+
+def test_strict_reader_raises_for_groups_with_no_legacy_source_instead_of_defaults(conn, monkeypatch):
+    f = _doc_field(loosen=None, risk="ops", risk_text="", impact_scope=None)
+    R.register_group(GA, "只存在定義裡", [f], help="測試用群組。")                       # 沒有 adapter、沒有 legacy_key
+    R.publish(GA, {"doc": ["real"]}, reason="r", user="s5_a", conn=conn)
+    conn.commit()
+    assert R.get_group_effective(GA, conn=conn)["doc"] == ["real"]
+    monkeypatch.setattr(R.D, "get", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("定義表讀不到")))
+    with pytest.raises(RuntimeError):
+        R.get_group_effective(GA, conn=conn)                                              # 嚴格：丟例外
+    assert R.get_group(GA, conn=conn)["doc"] == []                                        # 一般讀取維持「讀不到就預設」（不拖垮畫面）
