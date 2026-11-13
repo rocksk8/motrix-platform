@@ -257,9 +257,9 @@ def test_apply_script_versions_were_bumped_and_registered():
                           ("apply_module_update.ps1", "apply_module_update.version.json", "$ApplyModuleScriptVersion")):
         raw = (_TOOLS / ps1).read_bytes()
         r = json.loads((_TOOLS / reg).read_text(encoding="utf-8-sig"))
-        assert r["version"] == "2026-11-13c", (reg, r["version"])
+        assert r["version"] == "2026-11-13b", (reg, r["version"])
         assert delivery.ps1_digest(raw) == r["sha256"], "%s 的雜湊與 %s 不符" % (ps1, reg)
-        assert '%s = "2026-11-13c"' % var in raw.decode("utf-8-sig")
+        assert '%s = "2026-11-13b"' % var in raw.decode("utf-8-sig")
 
 
 # ── ③ 遠端唯讀腳本：往前讀 .1 ───────────────────────────────────────────────
