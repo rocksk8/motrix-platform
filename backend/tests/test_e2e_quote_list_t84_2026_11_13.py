@@ -13,12 +13,18 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from playwright.sync_api import expect  # noqa: E402
+
 from tests._requires import requires_module  # noqa: E402
 
 pytestmark = requires_module("case", "本檔打 M01（報價單）的清單頁")
 
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
-TODAY = datetime.now().strftime("%Y-%m-%d")
+
+
+def _today():
+    """收集期不取系統時鐘（跨午夜會偶發失敗）：要用的時候才取。"""
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def _uid(username):
@@ -44,7 +50,7 @@ def _seed(no, owner_id, status, deal_tag="", approval=None, project="案"):
             "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
             " created_at, updated_at, deal_tag, quote_date, sales_person_id, sales_person) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (no, status, "客戶" + no[-3:], project + no[-3:], 1050, 1000, json.dumps(dj, ensure_ascii=False),
-             now, now, deal_tag, TODAY, owner_id, "業務甲"))
+             now, now, deal_tag, _today(), owner_id, "業務甲"))
         c.commit()
     finally:
         c.close()
@@ -118,9 +124,10 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     page.get_by_test_id("ql-sum-todo").click()                                  # 再點一次取消
     # 點數字／清除條件只是暫時的檢視：重新整理後回到記住的選擇（預設「只看我負責的」）
     page.get_by_test_id("ql-clear-conditions").click()
+    page.get_by_test_id("ql-cond-mine").wait_for(state="detached", timeout=5000)
     assert page.evaluate("() => %s._mineLimit" % DATA) is False and page.get_by_test_id("ql-cond-mine").count() == 0
     # 清除條件後，「只看我負責的」不再顯示為按下；按一次就回到我負責的，而且不改寫記住的選擇
-    assert page.get_by_test_id("ql-mine-toggle").get_attribute("aria-pressed") == "false"
+    expect(page.get_by_test_id("ql-mine-toggle")).to_have_attribute("aria-pressed", "false")
     page.get_by_test_id("ql-mine-toggle").click()
     assert page.evaluate("() => %s._mineLimit" % DATA) is True and page.evaluate("() => localStorage.getItem('motrix_quote_mine:t84e_sales')") in (None, "1")
     page.get_by_test_id("ql-clear-conditions").click()
@@ -201,8 +208,9 @@ def test_phone_390_cards_show_actions_with_44px_targets_and_no_horizontal_scroll
     assert page.evaluate("() => getComputedStyle(document.querySelector('thead')).display") == "none"
     row = page.locator("tr.ql-row[data-quote-no='MQ-T84E-002']")
     row.scroll_into_view_if_needed()
-    assert row.get_by_text("等 王經理 簽核").is_visible(), "下一步在卡片上"
+    expect(row.get_by_text("等 王經理 簽核")).to_be_visible()          # 下一步在卡片上
     edit = row.locator(".row-actions a.icon-btn")
+    edit.wait_for(state="visible", timeout=5000)
     box = edit.bounding_box()
     assert edit.is_visible() and box["width"] >= 44 and box["height"] >= 44, box
     assert float(page.evaluate("() => getComputedStyle(document.querySelector('.row-actions')).opacity")) == 1, "手機上操作按鈕不靠 hover"
@@ -214,7 +222,7 @@ def test_phone_390_cards_show_actions_with_44px_targets_and_no_horizontal_scroll
     assert abs((sb["y"] + sb["height"] / 2) - (act["y"] + act["height"] / 2)) < 30, "進度選單與操作按鈕同一列"
     # 三個數字在 390px 都看得到、可點
     for t in ("ql-sum-todo", "ql-sum-waiting", "ql-sum-won"):
-        assert page.get_by_test_id(t).is_visible()
+        expect(page.get_by_test_id(t)).to_be_visible()
     # 每張卡片不超出視窗寬度
     assert page.evaluate("() => [...document.querySelectorAll('tr.ql-row')].every(r => r.getBoundingClientRect().right <= window.innerWidth + 1)")
 
@@ -274,7 +282,8 @@ def test_hidden_columns_hide_their_folded_data_and_compact_keeps_the_customer(li
     row = "tr.ql-row[data-quote-no='MQ-T84E-001']"
     assert "客戶001" in page.locator(row + " td[data-col=quoteNo]").inner_text(), "預設精簡：客戶折進單號格"
     page.get_by_test_id("ql-density").click()
-    assert "客戶001" in page.locator(row + " td[data-col=quoteNo]").inner_text() and "業務甲" in page.locator(row + " td[data-col=date]").inner_text(), "緊湊不丟客戶與填單人"
+    expect(page.locator(row + " td[data-col=quoteNo]")).to_contain_text("客戶001")                       # 緊湊不丟客戶與填單人
+    expect(page.locator(row + " td[data-col=date]")).to_contain_text("業務甲")
     page.get_by_test_id("ql-density").click()
     # 設定中心的個人檢視（或公司版面）隱藏客戶／填單人 ⇒ 資料也不從別的格漏出來
     page.evaluate("() => { const d = %s; d.lvOn = { columns: true, tab: false, size: false }; d.pv = { ...d.pv, hidden: ['customer', 'filler'] } }" % DATA)
