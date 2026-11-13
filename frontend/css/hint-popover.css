@@ -22,7 +22,7 @@
 /* 手機／觸控：底部面板（bottom sheet）；暗色背景可以點；? 的點擊範圍至少 44px（用透明的擴大區，不改版面） */
 .hint__backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, .35); z-index: 2146999000; }
 .hint__pop.is-floating.is-sheet {
-  left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 70vh; overflow-y: auto;
+  left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: calc(70vh / var(--fz, 1)); overflow-y: auto;
   border-radius: 16px 16px 0 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px)); font-size: 14px;
 }
 .hint__close {

@@ -17,10 +17,12 @@ import logging
 import os
 import threading
 
+from core import paths as _paths
+
 logger = logging.getLogger("motrix.menu_categories")
 
 OVERRIDE_KEY = "menu_categories_override"
-_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "menu_categories_l1.json")
+_FILE = _paths.backend("core", "menu_categories_l1.json")
 _NAME_MAX = 30
 _ITEM_KINDS = ("settings_group", "page", "card")
 _STATUSES = ("keep", "related", "legacy")
