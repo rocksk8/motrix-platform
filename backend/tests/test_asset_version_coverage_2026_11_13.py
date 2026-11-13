@@ -23,10 +23,10 @@ from pathlib import Path
 
 from core import source_tree
 from helpers import static_cache as sc
+from tests import _frontend_sources as FS
 
 BACKEND = Path(__file__).resolve().parents[1]
 FRONTEND = BACKEND.parent / "frontend"
-MODULES = BACKEND / "modules"
 
 _VER_IN_NAME = re.compile(r"\d+\.\d+\.\d+")
 
@@ -71,11 +71,13 @@ def _page_files():
 
 
 def _text_sources():
-    """所有會被送出、而且可能含資源引用的文字檔：頁面、frontend 的 js／css（vendor 除外）、模組自有 js。"""
-    out = list(_page_files())
-    for sub in ("static", "js", "css"):
-        out += [f for f in sorted((FRONTEND / sub).rglob("*")) if f.suffix in (".js", ".css") and "vendor" not in f.parts]
-    out += sorted(MODULES.glob("*/js/*.js")) + sorted(MODULES.glob("*/pages/*.js"))
+    """所有會被送出、而且可能含資源引用的文字檔：頁面、前端與模組自有 JS（列舉走 `_frontend_sources.all_js()`）、frontend 的 css（vendor 除外）、模組頁面旁的 js。"""
+    out = list(_page_files()) + list(FS.all_js())
+    out += [f for f in sorted(FRONTEND.rglob("*.css")) if "vendor" not in f.parts]
+    for d in source_tree.module_dirs():                     # 模組頁面旁的 js（例：lodging/pages/lodging-overlay.js；不在 all_js 的範圍）
+        pd = d / "pages"
+        if pd.is_dir():
+            out += [f for f in sorted(pd.iterdir()) if f.suffix == ".js"]
     return sorted(set(out))
 
 
