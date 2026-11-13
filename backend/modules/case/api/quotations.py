@@ -62,6 +62,7 @@ from helpers import (
     push_event_for_case_stage_done, push_event_for_module, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
+    files_txn, append_json_list, remove_json_item,
     delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
     active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items, norm_ymd,
 )
@@ -1752,17 +1753,17 @@ async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] =
     每個檔記錄上傳者（顯示名＋帳號 `uploaderUsername`）與時間；刪除規則見 `delete_quotation_signed_file`。**不是**結案條件。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = _signed_back_gate(conn, quote_no, user, authorization)
-    existing = json.loads(row["signed_files_json"] or "[]")
-    new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
-    for f in new_files:
-        f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
-    all_files = existing + new_files
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
-                 (json.dumps(all_files, ensure_ascii=False), now, quote_no))
-    conn.commit()
-    conn.close()
+    try:
+        _signed_back_gate(conn, quote_no, user, authorization)
+        new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+        for f in new_files:
+            f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "quotations", "signed_files_json", "quote_no", quote_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="報價單不存在")
+    finally:
+        conn.close()
     names = "、".join(str(f.get("filename") or "")[:60] for f in new_files)[:300]
     _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
            f"{quote_no}（{len(new_files)} 個檔案：{names}）")
@@ -1794,11 +1795,9 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     if _uploads_mod.upload_path_key(target, "quotations") != quote_no:
         conn.close()
         raise HTTPException(409, "這個附件的檔案位置不正確，無法刪除；請洽管理員")
-    remaining = delete_document_file("quotations", quote_no, existing, file_id)
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
-                 (json.dumps(remaining, ensure_ascii=False), now, quote_no))
-    conn.commit()
+    # T83：上面的權限／路徑檢查用的是未鎖的讀取（檔案的上傳者與路徑不會變）；清單本身在寫鎖內重讀、commit 之後才刪實體檔
+    remove_json_item(conn, "quotations", "signed_files_json", "quote_no", quote_no, file_id,
+                     extra_set={"updated_at": datetime.now().isoformat()}, not_found="報價單不存在")
     conn.close()
     _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no,
            f"{quote_no}（{str(target.get('filename') or '')[:60]}）")

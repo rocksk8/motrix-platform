@@ -6,6 +6,8 @@
 - **（併入）(next) — 2026-11-13（fix/quote-first-put-history，審查後修訂：整包比對不看階段）**
 - 修正（編輯紀錄）：新報價單第一次 PUT 不再多寫一筆使用者沒改的「其他內容」。原因＝建單時階段（`caseRecord.stages`）被 `_sync_stages_to_json` 重建成資料表的樣子（真實 id、補齊 dependsOn／visits／assignedTo），使用者手上那份還是暫時 id、欄位不齊，整包比對就判成有變更；而 PUT 本來就完全忽略用戶端的 stages（case_stages 表為權威），所以階段差異都是幻影。`_summarize_quote_changes` 的整包比對改用 `_diff_view`（不看 `caseRecord.stages`；款項日期套與存檔相同的 YYYY-MM-DD 正規化，三個日期欄位共用常數 `_PAYMENT_DATE_KEYS`）；會被存下來而且真的改了的值（頂層未追蹤欄位、款項金額…）仍記一筆。內容指紋（content_fp）、存檔內容、API 不變。
 - 測試：`tests/test_quote_first_put_history_2026_11_13.py`（9 題：修前 7 題紅；階段差異不記＋前提確認資料庫階段沒被改、頂層未追蹤欄位／款項金額的正向對照、幻影與真改動同時存在仍記、「檢視不改輸入、content_fp 不變」）。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）**
+- 變更（內部）：完工單回簽附件（`api/completion_notes.py`）、報價單客戶回簽單（`api/quotations.py` signed-files）上傳／刪除。附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
 
 ## 1.0.224 — 2026-11-13（T82 預跑 #1 修正；整合者）
 - 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。
