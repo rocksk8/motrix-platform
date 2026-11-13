@@ -11,7 +11,8 @@
       links／ship_install_ok／timeline  P0a／P0c／P1'（hichan-1 的班次接著加在下面的清單裡）
       entry_unify             P4 現場人員自建案件每日事項（hichan-1，D5＝A）
       receive_ledger          T85 P2a 入庫底層：到貨入庫與案件材料申請對應、序號異動紀錄、入庫對帳表（hichan-1，D1＝A、D9）
-[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py、backend/tests/test_onepipe_warranty_closed_2026_11_13.py
+      receive_wizard          T85 P2b 一站式到貨：材料申請上登載到貨（入庫／直送／耗材）、已到數量分批累計、序號一次貼上（hichan-1，D1＝A、D2＋D8＝A、D7＝A）
+[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py、backend/tests/test_onepipe_warranty_closed_2026_11_13.py、backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py、backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py
 """
 
 
@@ -62,6 +63,13 @@ def _register(S, _register_core):
                    "管理員可在入庫對帳表查看「案件已確認到貨、庫存尚未入庫」的材料申請。案件的物料流程時間軸入庫格也會顯示完整數量。",
               impact="只多記錄與多一張唯讀對帳表，不改既有庫存、序號與金額；誰能入庫仍照目前規則。關閉後新的對應與異動紀錄不再寫入，已寫入的保留。立即生效，可隨時改回。",
               choices=[(0, "關閉", "庫存與序號資料、畫面與目前完全相同。"), (1, "開啟（預設）", "多記錄到貨與案件的對應及序號異動，並提供入庫對帳表。")]),
+            S("receive_wizard", "int", 1, min=0, max=1, risk="ops", recommended=1,
+              question="材料申請核准後，是否讓同仁在材料申請上用「到貨登載」一次完成到貨？", label="一站式到貨登載",
+              help="開啟後，已核准的材料申請多一個「到貨登載」：可填這次到了幾件（分批到貨會累計，畫面顯示「已到 4／12」）、選擇入庫、直送客戶現場或耗材（耗材到貨即視為現場領用、不進庫存），"
+                   "有序號的貨可一次貼上多筆序號（一次最多 50 筆，重複或已存在的逐列回報、其餘照寫），並可附上到貨單照片。"
+                   "原本的「確認到貨」仍保留。沒有入庫權限的人只完成案件這一半，庫存請管理員從入庫對帳表補入庫。",
+              impact="只多一個登載方式；材料申請的簽核內容與金額不受影響，到貨數量欄位不會觸發重新簽核。關閉後畫面回復為只有「確認到貨」，已累計的已到數量保留。立即生效，可隨時改回。",
+              choices=[(0, "關閉", "材料申請只有「確認到貨」，與目前完全相同。"), (1, "開啟（預設）", "材料申請多「到貨登載」：分批累計、入庫或直送、耗材到貨即領用、序號一次貼上。")]),
         ],
         sensitive=False, risk="ops",
         help="物料流程各階段的功能開關；預設全部開啟（本次更新起）；可在這裡逐項關閉，關閉就與目前完全相同。",

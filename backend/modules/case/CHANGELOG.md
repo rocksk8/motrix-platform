@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## 1.0.231 — T85 一條龍 P2b「一站式到貨」（train/t85-p2-h1；旗標 `onepipe.receive_wizard`，預設開；關閉＝與今天逐位元相同；版號由列車取）
+- **自有 migration v12**（`0012_material_received_qty.py`）：`case_material_approvals` 加 `received_qty`（已到數量，可為 NULL；NULL＝舊的確認到貨＝全數）。到貨欄位不屬簽核實質內容，不觸發重新簽核；`material.shippable` 本來就讀這一欄。
+- 新端點 `POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock`（旗標關 ⇒ 404）：登載到貨——已到數量分批累計（超收 409）、到貨方式三選一：入庫／直送客戶現場／耗材（耗材到貨即視為現場領用、不進庫存，D2＋D8＝A）；序號一次貼上（≤50 筆，逐列回報，重複與已存在的不寫、其餘照寫）；`supplement` 補入庫（只寫庫存、不動已到數量，給入庫對帳表用）。案件那一半與庫存那一半（IP-118）同一筆交易；沒有入庫權限或庫存模組不在 ⇒ 只做案件那一半並明示（D9）；庫存整列被擋 ⇒ 整筆回滾。邏輯在 `modules/case/material_receive.py`。
+- `GET …/material-order-approvals`：旗標開才多回每筆的 `receivedQty`；「撤銷到貨確認」一併清空已到數量；物料流程時間軸到貨格：旗標開時「只到部分」的材料申請不算已到貨（文字加「；N 張只到部分」、列內 `receivedQty`／`appliedQty`），旗標關與今天相同。
+- 畫面：材料申請列（旗標開）以「到貨登載」取代日期＋「確認到貨」：已到 N／M、到貨方式、料號、單位成本（只預填、金額看不到的人不預填）、序號貼上、到貨單照片（沿用料件卡附件上傳）、補入庫；旗標關畫面與今天相同。
+- 測試：`tests/test_onepipe_p2b_receive_wizard_2026_11_14.py`。
+
 ## 1.0.230 — T85 一條龍 P2a（train/t85-p2-h1；版號由列車取）
 - 新提供者 `material.received_list`（IP-119，暫定號；`modules/case/material_received.py`）：已確認到貨（已核准且 `received_on` 非空）的材料申請清單，給庫存的入庫對帳表用；唯讀、沒有金額、不寫入。
 - 物料流程時間軸的入庫格：`stock.case_summary` 帶 `receivedInStock` 時（旗標 `onepipe.receive_ledger` 開）顯示完整數字——「已入庫尚未認領 N 台、已安裝 N 台、已出貨 N 台」，有直送批次時加註；旗標關時文字與今天相同。

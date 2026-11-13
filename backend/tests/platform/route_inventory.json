@@ -3958,6 +3958,11 @@
    "pp": 2,
    "body": true
   },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
   "POST /api/quotations/{quote_no}/material-orders/{item_id}/reject": {
    "w": true,
    "pp": 2,

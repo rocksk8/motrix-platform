@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.42 — T85 P2a 審查補強的小尾巴（train/t85-p2-h1；版號由列車取）
+- 人工刪除在庫序號寫的 `delete` 異動，時間格式與其他異動一致（到秒）。
+
 ## 1.0.41 — T85 一條龍 P2a「入庫底層」（train/t85-p2-h1；旗標 `onepipe.receive_ledger`，預設開；關閉＝與今天逐位元相同；版號由列車取）
 - **自有 migration v1**（`modules/supply/migrations/0001_receive_ledger.py`；首支，supply 先前沒有自有 migration）：`stock_batches` 加 `quote_no`／`po_doc_code`／`material_item_id`／`delivery_mode`（`stock` 入庫、`direct` 直送）；`stock_items` 加 `material_item_id`；新表 `stock_item_events`（序號異動紀錄）。只新增、冪等、不動既有值。
 - 新提供者 `stock.receive`（IP-118，暫定號；`modules/supply/receive.py`）：一站式到貨的入庫那一半。吃呼叫端連線、不 commit（與案件存檔同一筆交易）；逐列回報（重複／空白／已存在的序號不寫、不擋其他列）、一列最多 50 筆；`direct`（D1＝A）只留批次表頭；入庫權限＝管理員（`can_receive` 一處，P2-pre 上線後由該處放寬）；沒有權限 ⇒ 不寫庫存、回 `NO_PERMISSION`（案件只做自己那一半）；旗標關 ⇒ `DISABLED`。

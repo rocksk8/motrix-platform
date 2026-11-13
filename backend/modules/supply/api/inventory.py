@@ -747,7 +747,7 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
         raise HTTPException(409, "僅在庫（未出貨／未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整")
     conn.execute("DELETE FROM stock_items WHERE id=?", (item_id,))
     _ev.record(conn, event="delete", part_no=row["part_no"], serial_no=row["serial_no"], stock_item_id=row["id"], from_status="in_stock", to_status="",
-               quote_no=row["quote_no"] or "", actor=user.get("display_name") or user["username"], now=datetime.now().isoformat())
+               quote_no=row["quote_no"] or "", actor=user.get("display_name") or user["username"], now=datetime.now().isoformat(timespec="seconds"))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), "inventory.delete", "stock_item", str(item_id),

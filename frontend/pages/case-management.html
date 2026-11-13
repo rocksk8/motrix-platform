@@ -2589,7 +2589,65 @@
                                 style="font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤回</button>
                         <button type="button" x-show="moShowCancel(m)" @click="moCancel(m)" :disabled="moBusy === m.itemId" data-testid="mo-cancel"
                                 style="font-size:12px;padding:2px 10px;border:1px solid var(--tone-danger-border);border-radius:5px;background:var(--surface);color:var(--tone-danger-fg);cursor:pointer">取消材料申請</button>
-                        <template x-if="moAp(m).status === '已核准'">
+                        <template x-if="moAp(m).status === '已核准' && moWizOn()">
+                          <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px" data-testid="mo-wiz">
+                            <span x-show="moAp(m).receivedOn" style="color:var(--success)" data-testid="mo-wiz-progress" x-text="moRecvProgress(m)"></span>
+                            <button type="button" x-show="!moWizFull(m)" @click="moWizOpen(m, false)" :disabled="moBusy === m.itemId" data-testid="mo-wiz-open"
+                                    style="font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">到貨登載</button>
+                            <button type="button" x-show="moAp(m).receivedOn" @click="moWizOpen(m, true)" :disabled="moBusy === m.itemId" data-testid="mo-wiz-supplement"
+                                    style="font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">補入庫</button>
+                            <button type="button" x-show="moAp(m).receivedOn" @click="moUndoReceive(m)" :disabled="moBusy === m.itemId" data-testid="mo-recv-undo"
+                                    style="font-size:12px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤銷</button>
+                          </span>
+                        </template>
+                        <template x-if="m._wiz && m._wiz.open && moWizOn()">
+                          <div style="flex-basis:100%;margin-top:6px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface-sunken);font-size:12px" :data-testid="'mo-wiz-panel-' + m.itemId">
+                            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                              <strong x-text="m._wiz.supplement ? '補入庫（不改已到數量）' : '到貨登載'"></strong>
+                              <label x-show="!m._wiz.supplement">到貨日期 <input class="fi fi--sm" type="date" style="width:132px" x-model="m._wiz.day" data-testid="mo-wiz-day"></label>
+                              <label x-show="!m._wiz.supplement">這次到貨數量 <input class="fi fi--sm" type="number" min="1" style="width:80px" x-model="m._wiz.qty" data-testid="mo-wiz-qty"></label>
+                              <span x-show="!m._wiz.supplement" style="color:var(--text-dim)" x-text="'（還可登載 ' + moWizRemaining(m) + '）'"></span>
+                              <label>到貨方式
+                                <select class="fi fi--sm" x-model="m._wiz.mode" data-testid="mo-wiz-mode">
+                                  <option value="stock">入庫</option>
+                                  <option value="direct" x-show="!m._wiz.supplement">直送客戶現場</option>
+                                  <option value="consumable" x-show="!m._wiz.supplement">耗材（到貨即領用）</option>
+                                </select>
+                              </label>
+                            </div>
+                            <div x-show="m._wiz.mode === 'stock' || m._wiz.mode === 'direct'" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start">
+                              <label x-show="m._wiz.mode === 'stock'">料號
+                                <select class="fi fi--sm" x-model="m._wiz.partNo" data-testid="mo-wiz-part">
+                                  <option value="">請選擇</option>
+                                  <template x-for="p in (moWizParts || [])" :key="p.part_no"><option :value="p.part_no" x-text="p.part_no + '　' + (p.name || '')"></option></template>
+                                </select>
+                              </label>
+                              <label x-show="m._wiz.mode === 'stock'">單位成本 <input class="fi fi--sm" type="number" min="0" style="width:90px" x-model="m._wiz.unitCost" data-testid="mo-wiz-cost"></label>
+                              <label>進貨發票號碼 <input class="fi fi--sm" type="text" style="width:130px" x-model="m._wiz.invoiceNo"></label>
+                              <span x-show="moWizPartsErr" style="color:var(--tone-warning-fg)" x-text="moWizPartsErr"></span>
+                            </div>
+                            <div x-show="m._wiz.mode === 'stock'" style="margin-top:6px">
+                              <div style="margin-bottom:2px">序號（一行一筆，可直接貼上；一次最多 50 筆）　<span x-text="'已貼上 ' + moWizSerials(m).length + ' 筆'" data-testid="mo-wiz-count"></span></div>
+                              <textarea x-model="m._wiz.serialsText" rows="4" style="width:100%;font-family:var(--font-mono,monospace);font-size:12px" data-testid="mo-wiz-serials"></textarea>
+                            </div>
+                            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                              <label>到貨單照片 <input type="file" accept="image/*,.pdf" multiple capture="environment" @change="moWizPhotos(m, $event)" data-testid="mo-wiz-photo"></label>
+                              <span x-show="m._wiz.photoMsg" style="color:var(--text-dim)" x-text="m._wiz.photoMsg"></span>
+                            </div>
+                            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                              <button type="button" @click="moWizSubmit(m)" :disabled="m._wiz.busy" data-testid="mo-wiz-submit"
+                                      style="font-size:12px;padding:3px 14px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">送出</button>
+                              <button type="button" @click="moWizClose(m)" style="font-size:12px;padding:3px 10px;border:none;background:transparent;cursor:pointer;color:var(--text-dim)">收合</button>
+                              <span x-show="m._wiz.msg" :style="m._wiz.msgError ? 'color:var(--tone-danger-fg)' : 'color:var(--success)'" data-testid="mo-wiz-msg" x-text="m._wiz.msg"></span>
+                            </div>
+                            <template x-if="(m._wiz.rows || []).some(x => x.status === 'rejected')">
+                              <ul style="margin:6px 0 0 16px;color:var(--tone-danger-fg)" data-testid="mo-wiz-rejected">
+                                <template x-for="(x, i) in (m._wiz.rows || []).filter(x => x.status === 'rejected')" :key="i"><li x-text="(x.serialNo || '（空白）') + '：' + x.reason"></li></template>
+                              </ul>
+                            </template>
+                          </div>
+                        </template>
+                        <template x-if="moAp(m).status === '已核准' && !moWizOn()">
                           <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
                             <template x-if="!moAp(m).receivedOn">
                               <span style="display:inline-flex;align-items:center;gap:5px">

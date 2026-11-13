@@ -35,6 +35,7 @@
 - L1（新增，只增；快照已文字插入、版號由列車 `core_bump.py --pending` 定）：`helpers.email_notify.shipping_link(note_no)`——出貨單通知要開的頁面（一條龍 P0a；旗標 `onepipe.links` 關、查不到案號或任何錯誤 ⇒ 空字串，呼叫端維持原本的值）；出貨單的四種信件與站內通知使用。
 - 新增（設定中心，`onepipe` 群組欄位）：`entry_unify`（P4a 現場人員自建案件每日事項；T84 起預設 1）。L1 公開介面不變。
 - 新增（設定中心，`onepipe` 群組欄位）：`receive_ledger`（T85 P2a 到貨入庫與案件對應、序號異動紀錄、入庫對帳表；預設 1）。L1 公開介面不變。
+- 新增（設定中心，`onepipe` 群組欄位）：`receive_wizard`（T85 P2b 一站式到貨登載：分批累計已到數量、入庫／直送／耗材；預設 1）。L1 公開介面不變。
 - **（併入）(next) — 2026-11-13（fix/company-profile-full-read-default；公司資料完整版預設只限最高管理者）**
 - 行為變更（對外介面）：設定中心開關 `account_security.company_profile_full_read_superadmin_only` 預設 `0→1`（使用者裁示 2026-11-13，方案 A）。`GET /api/settings/company-profile`（完整版）對非最高管理者預設回 403；公開子集 `GET /api/settings/company-profile/public`（name／tax_id／contact_info／locations[id,name]）不變、任何登入者可讀。開關保留：關閉（0）＝登入即可讀完整版，屬放寬，需第二位最高管理者核准（既有機制，沒動）。
 - 既有環境也會收緊（使用者裁示 2026-11-13，方案 A 的 (a)）：設定中心存檔會把整個「登入與密碼」群組（含此開關）存成明確值，曾存過的環境光改預設看不到。因此新增**一次性升級遷移** `helpers/startup._tighten_company_profile_full_read_once`（`main.py` 啟動時、init 之後呼叫）：每個資料庫只跑一次，標記 `system_settings.migration_company_profile_full_read_tighten_t84`；生效值是 0 ⇒ 經設定中心引擎發布成 1，並寫變更明細與稽核（`settings.account_security.update`，操作者「系統升級」，0→1，原因註明 T84 與「可在設定中心調回」），並通知其他最高管理者（既有高風險設定通知）；已是 1（含全新安裝）⇒ 只記標記、不寫稽核。標記存在後不再動：之後使用者在設定中心調回 0（放寬，需第二位最高管理者核准）會被保留。失敗不記標記、不擋啟動，下次啟動再試。只動這一個欄位，群組其他設定值不變。

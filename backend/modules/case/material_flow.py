@@ -17,6 +17,7 @@ from urllib.parse import quote as _urlquote
 from fastapi import HTTPException
 
 from core import registry as _registry
+from helpers import onepipe_flags
 
 STATES = ("inprogress", "done", "skipped", "na")
 _KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單"}
@@ -51,10 +52,25 @@ def _add_months(d, m):
     return date(y, mo, min(d.day, calendar.monthrange(y, mo)[1]))
 
 
+def _partial(received_qty, applied):
+    """只到部分（已到數量有值、且小於申請數量）⇒ `{"partial": True, "receivedQty", "appliedQty"}`；沒填（舊的確認到貨）或已到齊 ⇒ `{}`。"""
+    try:
+        got, want = float(received_qty), float(applied)
+    except (TypeError, ValueError):
+        return {}
+    if got < want - 1e-9:
+        return {"partial": True, "receivedQty": int(got) if got.is_integer() else got, "appliedQty": int(want) if want.is_integer() else want}
+    return {}
+
+
 def _call_and_arrive(conn, quote_no, data):
     names = {str(o.get("itemId")): o.get("itemName", "") for o in ((data.get("caseRecord") or {}).get("materialOrders") or []) if isinstance(o, dict)}
-    rows = conn.execute("SELECT item_id, doc_code, status, received_on FROM case_material_approvals WHERE quote_no=? AND status<>'已作廢' ORDER BY doc_code, item_id", (quote_no,)).fetchall()
+    wiz = onepipe_flags.flag_on("receive_wizard", conn)                                    # 一條龍 P2b：已到數量（分批累計）旗標開才讀、才顯示
+    qtys = {str(o.get("itemId")): o.get("quantity") for o in ((data.get("caseRecord") or {}).get("materialOrders") or []) if isinstance(o, dict)}
+    rows = conn.execute("SELECT item_id, doc_code, status, received_on" + (", received_qty" if wiz else "")
+                        + " FROM case_material_approvals WHERE quote_no=? AND status<>'已作廢' ORDER BY doc_code, item_id", (quote_no,)).fetchall()
     items = [{"docCode": r["doc_code"] or "", "name": names.get(str(r["item_id"]), ""), "status": r["status"] or "", "receivedOn": r["received_on"] or ""} for r in rows]
+    partial = {id(i): (_partial(r["received_qty"], qtys.get(str(r["item_id"]))) if wiz else {}) for i, r in zip(items, rows)}
     if not items:
         return _cell("call", "材料申請", "na", "尚無材料申請單"), _cell("arrive", "到貨", "na", "尚無材料申請單")
     approved = [i for i in items if i["status"] == "已核准"]
@@ -62,10 +78,12 @@ def _call_and_arrive(conn, quote_no, data):
                  "%d 張材料申請單，%d 張已核准" % (len(items), len(approved)), items)
     if not approved:
         return call, _cell("arrive", "到貨", "na", "材料申請單核准後才會有到貨")
-    got = [i for i in approved if i["receivedOn"]]
+    got = [i for i in approved if i["receivedOn"] and not partial[id(i)]]
+    part = [i for i in approved if i["receivedOn"] and partial[id(i)]]
     arrive = _cell("arrive", "到貨", "done" if len(got) == len(approved) else "inprogress",
-                   "%d 張已核准的材料申請單，%d 張已到貨" % (len(approved), len(got)),
-                   [{"docCode": i["docCode"], "name": i["name"], "arrived": bool(i["receivedOn"]), "receivedOn": i["receivedOn"]} for i in approved])
+                   "%d 張已核准的材料申請單，%d 張已到貨" % (len(approved), len(got)) + ("；%d 張只到部分" % len(part) if part else ""),
+                   [{"docCode": i["docCode"], "name": i["name"], "arrived": bool(i["receivedOn"]) and not partial[id(i)], "receivedOn": i["receivedOn"],
+                     **({"receivedQty": partial[id(i)]["receivedQty"], "appliedQty": partial[id(i)]["appliedQty"]} if partial[id(i)] else {})} for i in approved])
     return call, arrive
 
 

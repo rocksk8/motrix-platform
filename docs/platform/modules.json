@@ -523,6 +523,7 @@
     "mod:case/material_payment_cashier",
     "mod:case/material_recognize",
     "mod:case/item_shipped",
+    "mod:case/material_receive",
     "mod:case/material_received",
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
