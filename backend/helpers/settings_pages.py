@@ -179,3 +179,9 @@ def coverage(registry_groups=None):
                 dup.add(g)
             seen[g] = p["id"]
     return sorted(reg - set(seen)), sorted(set(seen) - reg), sorted(dup)
+
+
+# ── 獨立頁登記（保留原網址；只在外框放連結＋讓全域搜尋找得到）──────────────────────────────────
+# S6：每個人自己的 Email 通知（我的帳號 → 通知分頁）。這不是管理員設定，但使用者會去「設定」找它。
+register_standalone("my_email_prefs", "我要收的 Email 通知（自己的）", "系統", "my-account.html?tab=notify",
+                    keywords=["通知", "信件", "Email", "退訂", "不要收"])
