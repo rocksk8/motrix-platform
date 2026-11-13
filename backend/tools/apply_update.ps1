@@ -221,6 +221,7 @@ function Enter-InstallLock([string]$scriptName, [string]$pkg) {
 }
 
 function Exit-InstallLock {
+    if (Get-Command Restore-AutostartTask -ErrorAction SilentlyContinue) { Restore-AutostartTask }   # 任何出口都不把排程工作留在停用狀態
     if ($script:LockHeld) {
         Remove-Item (Join-Path $BackendDir ".apply.lock") -Force -ErrorAction SilentlyContinue
         $script:LockHeld = $false
@@ -423,6 +424,7 @@ function Stop-InstallService {
     #   ③迴圈 5 秒的 timeout 在隱藏的非互動 cmd 下實測只等 0.3 秒 ⇒ 殺掉服務後**立刻**重生：所以每一輪都先殺迴圈再殺服務，
     #   殺完重新掃描，直到沒有目標為止（最多 5 輪）——不靠「等幾秒再看」。-ListOnly：只列目標不動手，回 @{ Targets; Loops; ByPid }。
     $totalStopped = 0
+    if (-not $ListOnly) { Suspend-AutostartTask }
     for ($round = 0; $round -lt 5; $round++) {
         $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
         $byPid = @{}
@@ -519,23 +521,59 @@ function Stop-InstallService {
             if ($unattributed.Count -gt 0) { Warn "  有 $($unattributed.Count) 個 cmd.exe 的命令列含 autostart*.bat，但路徑不在 $BackendDir 下、也不在 port $Port 的父行程鏈上（別的安裝？相對路徑啟動？）：不動它。PID：$(($unattributed | ForEach-Object { $_.ProcessId }) -join ',')。若它是這台的迴圈，停服後仍會把服務拉回來——請人工確認。" }
         }
         if ($targets.Count -eq 0) { break }
-        foreach ($t in $targets) {
+        # 先把所有迴圈一次結束（單一 Stop-Process 呼叫；逐個殺會讓還活著的迴圈在 port 一釋放就把服務拉回來），再結束服務行程。
+        $loopT = @($targets | Where-Object { $loops.Contains([int]$_) })
+        $restT = @($targets | Where-Object { -not $loops.Contains([int]$_) })
+        foreach ($t in @($loopT) + @($restT)) {
             $p = $byPid[$t]
             $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
             $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
             if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
             Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
-            Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
         }
+        if ($loopT.Count -gt 0) { Stop-Process -Id $loopT -Force -ErrorAction SilentlyContinue }
+        if ($restT.Count -gt 0) { Stop-Process -Id $restT -Force -ErrorAction SilentlyContinue }
         $totalStopped += $targets.Count
         Start-Sleep -Milliseconds 700   # 比迴圈重生延遲（實測 0.3 秒）長：之後重掃才看得到「又被拉起」的
     }
     return $totalStopped
 }
 
+# ── T84（2026-11-13，T83 正式機實證）：停服要「先停排程、一次殺光所有迴圈、確認沒有才複製」──────────────────────────────
+# 證據（正式機回報\20261113_234700_b4c54215_成功）：手動逐一結束 4 個迴圈時，23:45:01 還活著的其他迴圈在 port 一釋放就用舊程式把 uvicorn 拉起
+#   （PID 24044／22408）⇒ 「一次殺一個」會被其他迴圈搶起來。做法：①先暫時停用排程工作（停服期間不讓它叫起新迴圈）；
+#   ②Stop-InstallService 先把本輪找到的**所有**迴圈一次結束（單一 Stop-Process 呼叫、中間不夾別的動作），再結束服務行程；
+#   ③停服後／複製後／啟動前由 Stop-RespawnedService 核對沒有迴圈與 listener；④只由 Start-InstallService 一個來源重啟，啟動前恢復排程工作
+#   （任何出口都會經 Exit-InstallLock 恢復，不會把排程工作留在停用狀態）。
+$script:AutostartTaskDisabledByApply = $false
+function Suspend-AutostartTask {
+    if ($script:AutostartTaskDisabledByApply) { return }
+    try {
+        $t = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
+        if ($t -and $t.State -ne "Disabled") {
+            Disable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
+            $script:AutostartTaskDisabledByApply = $true
+            Info "  已暫時停用排程工作「$AutostartTaskName」（停服期間不讓它叫起新迴圈；啟動前恢復）。"
+        }
+    } catch {
+        Warn "  無法停用排程工作「$AutostartTaskName」：$($_.Exception.Message)（改靠一次結束所有迴圈）。"
+    }
+}
+function Restore-AutostartTask {
+    if (-not $script:AutostartTaskDisabledByApply) { return }
+    try {
+        Enable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
+        $script:AutostartTaskDisabledByApply = $false
+        Info "  已恢復排程工作「$AutostartTaskName」。"
+    } catch {
+        Warn "  ⚠ 無法恢復排程工作「$AutostartTaskName」：$($_.Exception.Message) —— 請人工執行 Enable-ScheduledTask -TaskName `"$AutostartTaskName`"，否則重開機後服務不會自己起來。"
+    }
+}
+
 # 複製完、健康檢查之前啟動。排程工作優先：從遠端工作階段（部署儀表板走 WinRM）直接 Start-Process 的
 # 迴圈是那個工作階段的子行程，工作階段結束時可能被一起結束。
 function Start-InstallService {
+    Restore-AutostartTask   # 啟動前恢復排程工作（Stop-InstallService 停用的）；下面才判斷排程工作能不能用
     $script:RestartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore：舊行程在此之前已停；server.log.1 比這晚才算「本次行程輪替出來的」
     $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
     if ($task -and $task.State -ne "Disabled") {
@@ -1311,7 +1349,7 @@ if ($healthy) {
     $healthy = $gate.Healthy
     Write-Host "::NOTE:: schema_verify=$schemaVerify respawn_detected=$($script:RespawnDetected)"
     if ($gate.FailMsg) {
-        $script:ServiceState = if ($healthy) { "up" } else { "down" }
+        if ($healthy) { $script:ServiceState = "up" }   # 不健康時維持上面「停服後」寫下的 down（守門要求 down 只在第一次寫入之前寫一次）
         Fail ($gate.FailMsg + " 回滾快照：$rollbackDir；db 套用前快照：$dbBackupDir（手動回滾：powershell -ExecutionPolicy Bypass -File `"$BackendDir\tools\rollback_update.ps1`" -SnapshotTimestamp $timestamp）。") "unhealthy_not_rolled_back"
     }
 }
