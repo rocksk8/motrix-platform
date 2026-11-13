@@ -11,6 +11,7 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/display-labels.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -275,6 +276,7 @@
                   <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
                   <button class="action-btn edit" x-show="it.status!=='in_stock' && it.status!=='void'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
                   <button class="action-btn del" x-show="it.status==='in_stock'" @click="deleteItem(it)" style="margin-left:4px">刪除</button>
+                  <button class="action-btn ghost" x-show="onepipe.shipDeviceWarranty" @click="serialHistory(it)" style="margin-left:4px" data-testid="serial-history">歷史</button>
                 </td>
               </tr>
             </template>
@@ -483,6 +485,7 @@ function app() {
     lowStockOnly: false,
     intake: { show: false, partNo: '', partSearch: '', showPartDrop: false, qty: 1, cost: null, supplierId: null, invoiceNo: '', note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
     detail: { show: false, partNo: '', items: [], loading: false, filterStatus: '' },
+    onepipe: {},                     // 一條龍開關（讀不到＝全關＝畫面與今天相同）
     suppliers: [],
     batches: { show: false, items: [], loading: false },
     purchaseSuggestions: { show: false, items: [], count: 0, totalEstimatedCost: 0, loading: false },
@@ -539,6 +542,7 @@ function app() {
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
       MotrixLabels.load().then(m => { this.lb = m })
+      if (window.MotrixOnepipe) window.MotrixOnepipe.flags().then(f => { this.onepipe = f })
       try {
         const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
@@ -764,6 +768,17 @@ function app() {
         const r = await fetch(`${API}/inventory/stock-items/${it.id}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ action }) })
         if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
         else { const e = await r.json().catch(() => ({})); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
+    },
+
+    // 一條龍 P3：序號歷史（只從入庫紀錄開啟當天起有資料）
+    async serialHistory(it) {
+      try {
+        const r = await fetch(`${API}/inventory/serial-history?part_no=${encodeURIComponent(it.part_no)}&serial_no=${encodeURIComponent(it.serial_no)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) { alert('序號歷史功能目前未開啟或您沒有權限'); return }
+        const d = await r.json()
+        const lines = (d.events || []).map(e => MotrixOnepipe.eventLine(e, true))
+        alert(`序號「${it.serial_no}」的歷史（只從入庫紀錄開啟當天起有資料）：\n\n` + (lines.length ? lines.join('\n') : '沒有紀錄'))
       } catch { alert('網路錯誤') }
     },
 

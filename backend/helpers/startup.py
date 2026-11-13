@@ -823,6 +823,9 @@ _ONEPIPE_DEFAULT_ON_MARK = "migration_onepipe_default_on_t84"
 #: 使用者裁示（2026-11-14）：放寬權限類的一條龍旗標（買方可見、收貨權限…）預設關，**不被這個一次性遷移打開**——
 #: 即使欄位存成 0、也沒有人為關閉的明細。要開由最高管理者在設定中心自己開。新增這類旗標時請加進來。
 _ONEPIPE_PERMISSION_FLAGS = ("buyer_access", "receive_permission", "po_skip_resign")
+#: 群組裡「不是開關」的選項（0／1 是選擇，不是關／開）：一次性遷移不碰，否則存成 0 的庫會被悄悄改成另一個選項。
+#: `warranty_start_basis`：0＝出貨日優先、1＝完工日優先（一條龍 P3）。新增這類選項時請加進來（與上面權限類分開寫，避免合併衝突）。
+_ONEPIPE_NOT_FLAGS = ("warranty_start_basis",)
 
 
 def enable_onepipe_defaults_once() -> None:
@@ -833,7 +836,7 @@ def enable_onepipe_defaults_once() -> None:
     不丟例外：發布失敗（例如該群組有送審中的版本）⇒ 不記標記、下次啟動再試，服務照常起來。
     **人為關閉的保留**：設定變更明細（`config_changes`，domain＝`setting:onepipe`）裡該欄位只要有過任何一筆「新值＝0」的紀錄，
     就視為有人在設定中心明確關掉過 ⇒ 跳過不動（記在標記的 `kept_off`）；沒有紀錄的 0（舊版直接寫入、或從沒存過明細）才當成「舊預設」開啟。
-    **權限類旗標不動**：`_ONEPIPE_PERMISSION_FLAGS`（放寬權限、預設關）一律跳過（記在標記的 `excluded`），不論存值與明細。
+    **權限類旗標不動**：`_ONEPIPE_PERMISSION_FLAGS`（放寬權限、預設關）與 `_ONEPIPE_NOT_FLAGS`（不是開關的選項）一律跳過（記在標記的 `excluded`），不論存值與明細。
     只改群組裡的旗標值，不碰別的鍵（例：保固通知的靜默基準 `onepipe.warranty_closed_baseline` 照舊）。"""
     conn = None
     try:
@@ -863,7 +866,7 @@ def enable_onepipe_defaults_once() -> None:
                     continue
             for k, v in vals.items():
                 if k in fields and isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0:
-                    if k in _ONEPIPE_PERMISSION_FLAGS:
+                    if k in _ONEPIPE_PERMISSION_FLAGS or k in _ONEPIPE_NOT_FLAGS:
                         excluded.append(k)
                     elif k in deliberately_off:
                         kept_off.append(k)

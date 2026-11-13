@@ -1078,6 +1078,16 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/inventory/reconcile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/serial-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/inventory/stock-items": {
    "w": false,
    "pp": 0,
@@ -1729,6 +1739,16 @@
    "body": false
   },
   "GET /api/quotations/{quote_no}/closing-report-pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/device-history": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/device-prefill": {
    "w": false,
    "pp": 1,
    "body": false
@@ -3949,6 +3969,11 @@
    "body": true
   },
   "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
    "w": true,
    "pp": 2,
    "body": true

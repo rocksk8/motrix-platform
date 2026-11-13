@@ -66,6 +66,8 @@ window.CM_PARTS.push(() => ({
     moApprovals: {},
     moShipping: {},        // 34-S3：{itemId: {appliedQty, arrivedQty, reserved, shipped, notes}}（出貨連動；只讀）
     moBusy: '',
+    dwPre: null, dwBusy: false, dwMsg: '', dwHistSn: '', dwHist: null,     // 一條龍 P3：出貨帶入設備（預填）與序號歷史
+    moWizParts: null, moWizPartsErr: '',     // 一站式到貨：料號清單（開面板才讀；null＝還沒讀）
     // 材料申請匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
     moPay: {},
     moSuppliers: [],
@@ -115,7 +117,7 @@ window.CM_PARTS.push(() => ({
             supplierId: o.supplierId ?? null,  // 31-C：整份覆寫的端點——少帶這一鍵，已指定的供應商會在下次存檔被抹掉
             quoteItemId: o.quoteItemId || '', poDocCode: o.poDocCode || '', poLine: o.poLine || null, overPlanReason: o.overPlanReason || '',  // 32-S4：連結鍵同理（case-management-mlink.js）
             _saved: true,                      // 伺服器上已有這一列（才能送審）
-            _recvDate: ''
+            _recvDate: '', _wiz: null           // _wiz：一站式到貨登載面板的暫存（一條龍 P2b；不送出）
           }))
           await this.loadMoApprovals(quoteNo)
           if (this._moReqFor === quoteNo && this.mlLoadGroups) await this.mlLoadGroups(quoteNo)       // 第51班：採購單候選（不開面板也有）
@@ -281,6 +283,99 @@ window.CM_PARTS.push(() => ({
     async moReceive(m) {
       const day = m._recvDate || MotrixDate.today()
       await this._moPost(m, 'receive', { receivedOn: day }, d => `已確認到貨：${d.receivedOn}`)
+    },
+    // ── 一站式到貨登載（一條龍 P2b；旗標 onepipe.receiveWizard）：分批累計、入庫／直送／耗材、序號一次貼上 ──
+    moWizOn() { return !!(this.onepipe && this.onepipe.receiveWizard) },
+    moRecvProgress(m) {
+      const a = this.moAp(m)
+      if (!a.receivedOn) return ''
+      const n = a.receivedQty
+      if (n === null || n === undefined) return `✓ 已到貨 ${a.receivedOn}（${a.receivedBy}）`
+      return `已到 ${n}／${Number(m.quantity) || 0}（${a.receivedOn}，${a.receivedBy}）`
+    },
+    // 已到齊：有到貨日，且沒有已到數量（舊的確認到貨＝全數）或已到數量不少於申請數量
+    moWizFull(m) {
+      const a = this.moAp(m)
+      return !!a.receivedOn && (a.receivedQty === null || a.receivedQty === undefined || Number(a.receivedQty) >= (Number(m.quantity) || 0))
+    },
+    moWizRemaining(m) {
+      const a = this.moAp(m)
+      if (!a.receivedOn) return Number(m.quantity) || 0
+      if (a.receivedQty === null || a.receivedQty === undefined) return 0
+      return Math.max((Number(m.quantity) || 0) - Number(a.receivedQty), 0)
+    },
+    moWizSerials(m) {
+      const t = (m._wiz && m._wiz.serialsText) || ''
+      return t.split(/[\r\n,;，；\t]+/).map(s => s.trim()).filter(Boolean)
+    },
+    async moWizOpen(m, supplement) {
+      const rem = this.moWizRemaining(m)
+      m._wiz = {
+        open: true, supplement: !!supplement, mode: 'stock', qty: supplement ? '' : (rem || ''), day: MotrixDate.today(), partNo: '', serialsText: '', invoiceNo: '',
+        unitCost: Number(m.unitPrice) > 0 ? Number(m.unitPrice) : '',      // 只預填、可改；看不到金額的人這個欄位是 0＝不預填
+        busy: false, msg: '', msgError: false, rows: [], photoMsg: ''
+      }
+      if (!this.moWizParts) await this.moWizLoadParts()
+    },
+    moWizClose(m) { if (m._wiz) m._wiz.open = false },
+    async moWizLoadParts() {
+      this.moWizParts = []
+      this.moWizPartsErr = ''
+      try {
+        const r = await fetch('/api/inventory/parts-summary', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) { this.moWizPartsErr = '您沒有庫存權限，入庫請由管理員處理；這裡可登載直送或耗材。'; return }
+        this.moWizParts = ((await r.json()).items || []).map(p => ({ part_no: p.part_no, name: p.name }))
+      } catch (e) { this.moWizPartsErr = '料號清單讀取失敗：' + e.message }
+    },
+    async moWizSubmit(m) {
+      const w = m._wiz
+      const quoteNo = this.selected?.quote_no
+      if (!w || w.busy || !quoteNo) return
+      const serials = this.moWizSerials(m)
+      if (serials.length > 50) { w.msgError = true; w.msg = `序號一次最多 50 筆，請分次登載（目前 ${serials.length} 筆）`; return }
+      if (!w.supplement && !(Number(w.qty) > 0)) { w.msgError = true; w.msg = '請填這次到貨的數量'; return }
+      if (w.mode === 'stock' && !w.partNo && (w.supplement || !this.moWizPartsErr)) { w.msgError = true; w.msg = '入庫請先選料號'; return }   // 只有案件權限的人（料號清單讀不到）可以只登載案件這一半
+      w.busy = true; w.msg = ''; w.rows = []
+      try {
+        const body = { mode: w.mode, receivedOn: w.day, supplement: !!w.supplement, qty: w.supplement ? undefined : Number(w.qty), partNo: w.partNo, serialsText: w.serialsText,
+                       invoiceNo: w.invoiceNo, unitCost: w.unitCost === '' ? undefined : Number(w.unitCost) }
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/${encodeURIComponent(m.itemId)}/receive-stock`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body)
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { w.msgError = true; w.msg = String((d.detail && (d.detail.message || d.detail)) || r.status); w.busy = false; return }
+        const st = d.stock || {}
+        w.rows = ((st.batches || [])[0] || {}).rows || []
+        w.msgError = false
+        const head = d.supplement ? '已補入庫' : `已登載到貨：已到 ${d.receivedQty}／${d.appliedQty}`
+        if (st.ok === false) {
+          w.msgError = true
+          w.msg = st.reason === 'NO_PART' ? `${head}。尚未選料號，這批序號尚未入庫，請管理員從「入庫對帳表」補入庫（序號請另外交給管理員）。`
+                : st.reason === 'NO_PERMISSION' ? `${head}。您沒有入庫權限，這批序號尚未入庫，請管理員從「入庫對帳表」補入庫（序號請另外交給管理員）。`
+                : st.reason === 'DISABLED' ? `${head}。庫存入庫功能目前關閉，這批尚未入庫。`
+                : `${head}。庫存模組不可用，這批尚未入庫。`
+        } else if (st.skipped) w.msg = `${head}（耗材到貨即視為現場領用，不進庫存）`
+        else if (w.mode === 'direct') w.msg = `${head}（直送客戶現場，庫存只留批次紀錄）`
+        else {
+          const bad = (w.rows || []).filter(x => x.status === 'rejected')
+          w.msg = `${head}；序號寫入 ${st.written || 0} 筆` + (bad.length ? `，${bad.length} 筆未寫入（見下方）` : '')
+          w.msgError = bad.length > 0
+        }
+        this.moMsg = ''
+        await this.loadMoApprovals(quoteNo)
+        if (!w.supplement && (w.msgError === false)) w.serialsText = ''
+        w.qty = d.supplement ? '' : (d.remaining || '')
+      } catch (e) { w.msgError = true; w.msg = '網路錯誤：' + e.message }
+      w.busy = false
+    },
+    // 到貨單照片：沿用料件卡的附件上傳（到貨憑證）；找不到對應的料件卡就說明
+    async moWizPhotos(m, evt) {
+      const w = m._wiz
+      const mats = (this.cr && this.cr.caseRecord && this.cr.caseRecord.materials) || []
+      const idx = mats.findIndex(x => x && x.orderItemId === m.itemId)
+      if (idx < 0) { if (w) w.photoMsg = '這筆材料申請尚未對應料件卡，請到料件卡上傳到貨單照片。'; if (evt && evt.target) evt.target.value = ''; return }
+      await this.uploadMaterialFiles(idx, evt)
+      if (w) w.photoMsg = '已上傳到料件卡的附件。'
     },
     async moUndoReceive(m) { await this._moPost(m, 'receive-undo', null, () => '已撤銷到貨確認') },
     // 物流旗標只能對著「已核准的材料申請」勾；已勾的可以取消勾選（後端閘同規則，這裡先反灰並說明）
@@ -1195,6 +1290,45 @@ window.CM_PARTS.push(() => ({
         if (!dev.name) dev.name = mat.name
       }
       this.setDirty()
+    },
+    // ── 一條龍 P3：出貨帶入設備（只預填，按「加入」才寫進設備清單、隨後自動存檔）與序號歷史 ──
+    dwOn() { return !!(this.onepipe && this.onepipe.shipDeviceWarranty) },
+    dwMissing() {
+      return ((this.cr && this.cr.caseRecord && this.cr.caseRecord.devices) || []).filter(d => (d.sn || d.mac || d.name) && !d.warrantyStart).length
+    },
+    dwSns() {
+      return ((this.cr && this.cr.caseRecord && this.cr.caseRecord.devices) || []).map(d => (d.sn || '').trim()).filter(Boolean)
+    },
+    async dwLoad() {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || this.dwBusy) return
+      this.dwBusy = true; this.dwMsg = ''
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/device-prefill`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) { this.dwMsg = '讀取失敗，請稍後再試'; this.dwBusy = false; return }
+        const d = await r.json()
+        d.serials = (d.serials || []).map(s => ({ ...s, start: s.suggestedStart || '' }))
+        this.dwPre = d
+        if (!d.available) this.dwMsg = '庫存模組目前不可用，無法帶入'
+        else if (!d.serials.length) this.dwMsg = '這個案件沒有「已出貨、尚未登載成設備」的序號'
+      } catch (e) { this.dwMsg = '網路錯誤：' + e.message }
+      this.dwBusy = false
+    },
+    dwAdd(s) {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.devices.push({ id: Date.now() + Math.random(), name: s.name || s.partNo || '', sn: s.serialNo || '', mac: s.mac || '', location: '',
+                                         warrantyStart: s.start || '', warrantyMonths: 12, note: '' })
+      if (this.dwPre) this.dwPre.serials = this.dwPre.serials.filter(x => x !== s)
+      this.setDirty()
+    },
+    dwAddAll() { for (const s of [...((this.dwPre && this.dwPre.serials) || [])]) this.dwAdd(s) },
+    async dwShowHistory() {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || !this.dwHistSn) { this.dwHist = null; return }
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/device-history?sn=${encodeURIComponent(this.dwHistSn)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        this.dwHist = r.ok ? await r.json() : { events: [], since: '', available: false }
+      } catch (e) { this.dwHist = { events: [], since: '', available: false } }
     },
     addDevice() {
       this.ensureCaseRecord()

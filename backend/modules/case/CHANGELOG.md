@@ -1,5 +1,33 @@
 # 案件 更新紀錄
 
+## 1.0.233 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；關閉＝與今天逐位元相同；版號由列車取）
+- 新端點（旗標關 ⇒ 404）：`GET /api/quotations/{quote_no}/device-prefill`＝這個案件已出貨、尚未登載成設備的序號，加上建議的保固起始日（D4＝A：出貨日→到貨日→完工日；設定 `onepipe.warranty_start_basis`＝1 改成完工日→出貨日→到貨日）；只預填、不寫任何資料。`GET …/device-history?sn=`＝設備序號的來去歷史，其他案件的異動只標「其他案件」（單號與原因一併清掉），且只查本案設備或已出貨給本案的序號。邏輯在 `modules/case/device_warranty.py`（庫存只經 IP-120／IP-121）。
+- 畫面（旗標開）：設備登錄頁多「從出貨帶入」（可改保固起始日，按「加入」才寫進設備清單、隨後自動存檔）、尚未填保固起始日的提醒（這類設備不會收到到期通知）、序號歷史查詢。
+- 保固到期通知（email 與 LINE）的去重鍵含到期日（旗標開）：保固日期調整後可再通知一次；舊鍵相容——舊鍵記的寄送日不早於「到期日往前推**該門檻自己的天數**」（緊急門檻用緊急天數、提醒門檻用提醒天數）視為已通知，不重寄；延長不到一個提醒期也不會吃掉還沒寄的緊急通知。旗標關＝舊鍵；⚠️ 旗標由開改關時，開著期間用新鍵寄出的通知會再寄一次（舊鍵沒有那筆記號），屬已知、可接受。
+- 序號歷史（P3 審查補強，h9／h11）：只有序號與本案**有庫存關係**（庫存裡綁本案的已出貨／已安裝序號，或異動紀錄帶有本案編號）才回資料——設備清單自己打的序號不算；不是本案的每一筆異動（含沒有案件編號的）一律遮掉單號、原因、操作人，別案編號只標「其他案件」；畫面的異動與狀態改中文。
+- 未做（決策紀錄沒寫、列後續）：「出貨列材料申請連結與序號並存」（需放寬 33-S1 的 `ship_link_serial_exclusive`，會動既有出貨契約測試）。
+- 測試：`tests/test_onepipe_p3_device_warranty_2026_11_14.py`。
+
+## 1.0.232 — T85 P2b 審查補強（train/t85-p2-h1；h9／h2／PM；版號由列車取）
+- 只有案件權限的人（讀不到料號清單）：入庫方式不給料號 ⇒ 不再 400，只做案件那一半、回 `stock.reason="NO_PART"`（序號不寫，由管理員從入庫對帳表補入庫）；畫面不再擋「請先選料號」，並恢復舊的「確認到貨」按鈕（尚未到貨時）。補入庫仍要料號。
+- 「撤銷到貨確認」（旗標 `onepipe.receive_wizard` 開）經新串接點 IP-122 `stock.receive_undo` 一併收回庫存那一半：直送／耗材／沒有序號列的入庫表頭刪除；已有為這筆材料申請入庫的序號 ⇒ 409「請先在庫存處理」、整筆不動。
+- 耗材到貨經 IP-118 留一筆 `consumable` 批次表頭（庫存側不可用時維持只做案件那一半、`stock={"skipped":"consumable"}`），對帳表視為已處理、不再永遠列出；耗材不需入庫權限。
+- 申請數量為 0 或未填 ⇒ 分批登載一律 409（原本略過超收檢查）。
+- 金標：新增 `POST …/receive-stock` 案例（`tests/platform/write_golden_cases/cases_p2b_receive_stock.py`）。
+
+## 1.0.231 — T85 一條龍 P2b「一站式到貨」（train/t85-p2-h1；旗標 `onepipe.receive_wizard`，預設開；關閉＝與今天逐位元相同；版號由列車取）
+- **自有 migration v12**（`0012_material_received_qty.py`）：`case_material_approvals` 加 `received_qty`（已到數量，可為 NULL；NULL＝舊的確認到貨＝全數）。到貨欄位不屬簽核實質內容，不觸發重新簽核；`material.shippable` 本來就讀這一欄。
+- 新端點 `POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock`（旗標關 ⇒ 404）：登載到貨——已到數量分批累計（超收 409）、到貨方式三選一：入庫／直送客戶現場／耗材（耗材到貨即視為現場領用、不進庫存，D2＋D8＝A）；序號一次貼上（≤50 筆，逐列回報，重複與已存在的不寫、其餘照寫）；`supplement` 補入庫（只寫庫存、不動已到數量，給入庫對帳表用）。案件那一半與庫存那一半（IP-118）同一筆交易；沒有入庫權限或庫存模組不在 ⇒ 只做案件那一半並明示（D9）；庫存整列被擋 ⇒ 整筆回滾。邏輯在 `modules/case/material_receive.py`。
+- `GET …/material-order-approvals`：旗標開才多回每筆的 `receivedQty`；「撤銷到貨確認」一併清空已到數量；物料流程時間軸到貨格：旗標開時「只到部分」的材料申請不算已到貨（文字加「；N 張只到部分」、列內 `receivedQty`／`appliedQty`），旗標關與今天相同。
+- 畫面：材料申請列（旗標開）以「到貨登載」取代日期＋「確認到貨」：已到 N／M、到貨方式、料號、單位成本（只預填、金額看不到的人不預填）、序號貼上、到貨單照片（沿用料件卡附件上傳）、補入庫；旗標關畫面與今天相同。
+- 測試：`tests/test_onepipe_p2b_receive_wizard_2026_11_14.py`。
+
+## 1.0.230 — T85 一條龍 P2a（train/t85-p2-h1；版號由列車取）
+- 新提供者 `material.received_list`（IP-119，暫定號；`modules/case/material_received.py`）：已確認到貨（已核准且 `received_on` 非空）的材料申請清單，給庫存的入庫對帳表用；唯讀、沒有金額、不寫入。
+- 物料流程時間軸的入庫格：`stock.case_summary` 帶 `receivedInStock` 時（旗標 `onepipe.receive_ledger` 開）顯示完整數字——「已入庫尚未認領 N 台、已安裝 N 台、已出貨 N 台」，有直送批次時加註；旗標關時文字與今天相同。
+- `material.received_list` 多 `offset` 參數（對帳表先過濾再分頁取滿）。
+- 測試：`tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`（supply 側）。
+
 ## 1.0.229 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
 - 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
 - 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。

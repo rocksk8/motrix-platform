@@ -62,12 +62,13 @@ def _set_devices(quote_no, devices):
 
 
 def _set_flag(on):
+    # P3（ship_device_warranty）把保固去重鍵加上到期日；本檔驗 P0d 的舊鍵格式，所以固定關掉 P3 的開關（P3 的鍵格式由 test_onepipe_p3_device_warranty 驗）
     import db
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as SR
     c = db.get_db()
     try:
-        SR.publish("onepipe", {"warranty_closed_notify": 1 if on else 0}, reason="測試", user="onepipe_p0d_test", conn=c)
+        SR.publish("onepipe", {"warranty_closed_notify": 1 if on else 0, "ship_device_warranty": 0}, reason="測試", user="onepipe_p0d_test", conn=c)
         c.commit()
     finally:
         c.close()
