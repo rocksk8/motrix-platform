@@ -531,6 +531,8 @@
     "mod:case/item_shipped",
     "mod:case/material_receive",
     "mod:case/material_received",
+    "mod:case/notify_next",
+    "mod:case/po_auto_approve",
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
     "mod:case/purchase_items",

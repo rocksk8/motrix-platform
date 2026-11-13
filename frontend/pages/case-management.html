@@ -2671,7 +2671,7 @@
                               <textarea x-model="m._wiz.serialsText" rows="4" style="width:100%;font-family:var(--font-mono,monospace);font-size:12px" data-testid="mo-wiz-serials"></textarea>
                             </div>
                             <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-                              <label>到貨單照片 <input type="file" accept="image/*,.pdf" multiple capture="environment" @change="moWizPhotos(m, $event)" data-testid="mo-wiz-photo"></label>
+                              <label>到貨單照片 <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,.pdf" multiple capture="environment" @change="moWizPhotos(m, $event)" data-testid="mo-wiz-photo"></label>
                               <span x-show="m._wiz.photoMsg" style="color:var(--text-dim)" x-text="m._wiz.photoMsg"></span>
                             </div>
                             <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
