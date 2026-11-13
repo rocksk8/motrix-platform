@@ -253,9 +253,9 @@ def test_apply_script_versions_were_bumped_and_registered():
     import sys
     sys.path.insert(0, str(_TOOLS))
     import delivery
-    # T84：apply_update 因「停服後被拉起」防護＋啟動後 schema 一致性檢查再升到 13c；apply_module_update 維持 13b
+    # T84：apply_update 因「停服後被拉起」防護＋啟動後 schema 一致性檢查再升到 13c；apply_module_update 也因同一個迴圈防護升到 13c
     for ps1, reg, var, ver in (("apply_update.ps1", "apply_update.version.json", "$ApplyScriptVersion", "2026-11-13c"),
-                               ("apply_module_update.ps1", "apply_module_update.version.json", "$ApplyModuleScriptVersion", "2026-11-13b")):
+                               ("apply_module_update.ps1", "apply_module_update.version.json", "$ApplyModuleScriptVersion", "2026-11-13c")):
         raw = (_TOOLS / ps1).read_bytes()
         r = json.loads((_TOOLS / reg).read_text(encoding="utf-8-sig"))
         assert r["version"] == ver, (reg, r["version"])
