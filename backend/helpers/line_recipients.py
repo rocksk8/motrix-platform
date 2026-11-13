@@ -2,7 +2,7 @@
 """LINE 通知的收件人過濾：角色允許清單＋個人勾選（2026-11-12；PM 裁示 D1／D2）。
 
 [單位] helper:line_recipients    [層] L1    [穩定度] 實作
-[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, ineligible_users, is_muted, muted_events, permitted_users, prefs_view, resolve_audience, role_choices, set_muted, visible_to
+[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, ineligible_users, is_muted, muted_events, permitted_users, potential_counts, prefs_view, resolve_audience, role_choices, set_muted, visible_to
 [契約題] tests/test_line_recipients_2026_11_12.py
 [不變式]
   ① 語意是**交集（只縮不擴）**：LINE 最終收件人 ＝ 呼叫端給的帳號（2026-11-12 起＝`helpers.event_audience` 解析出的「事件業務收件人」，**不看 Email、不看信件退訂**）
@@ -325,6 +325,42 @@ def prefs_view(username: str, role: str) -> list:
             continue
         out.append({"key": k, "name": _cat.name_of(k), "enabled": k not in muted, "group": _cat.group_of(k), "kind": _cat.kind_of(k)})
     return out
+
+
+def potential_counts(keys, roles_map=None, aud_map=None) -> dict:
+    """設定頁／批次預覽用：每個事件**目前可能收到 LINE 的人數** ⇒ `{key: {"n": 人數, "exact": 是否精確}}`。
+    人數＝在職、已綁定 LINE、輪得到這個事件（`_visible`：角色被允許／被管理員指定、且有該事件所屬模組權限）、本人沒退訂的帳號。
+    `exact`＝只在「只發給指定」模式為 True（收件人就是這份名單）；「照原本」與「原本＋指定」的業務收件人要看每一則（例如這張報價單的簽核人），
+    所以人數是**上限**（exact=False）。`roles_map`／`aud_map` 可傳「套用之後」的設定（批次預覽，**不寫入**）；不傳＝現行設定。永不丟例外；出錯 ⇒ n=0。"""
+    keys = list(keys)
+    try:
+        from db import get_db
+        from . import line_notify as _ln
+        roles_map = _roles_map() if roles_map is None else roles_map
+        aud_map = _audiences_map() if aud_map is None else aud_map
+        conn = get_db()
+        try:
+            names = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1").fetchall()]
+        finally:
+            conn.close()
+        rows = _perm_rows(names)
+        links = _ln._links()
+        bound = [u for u in names if u in rows and _ln._USER_ID_RE.match(str((links.get(u) or {}).get("userId") or "") if isinstance(links.get(u), dict) else "")]
+        prefs = _prefs()
+        out = {}
+        for k in keys:
+            n = 0
+            for u in bound:
+                if isinstance(prefs.get(u), list) and k in prefs[u]:
+                    continue
+                role, mods = rows[u]
+                if _visible(k, u, role, mods, roles_map, aud_map):
+                    n += 1
+            out[k] = {"n": n, "exact": _audience_from(aud_map, k, False)["mode"] == "only"}
+        return out
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LINE 可能收件人數計算失敗：%s", type(exc).__name__)
+        return {k: {"n": 0, "exact": False} for k in keys}
 
 
 def set_muted(username: str, event_key: str, muted: bool, role: str = None) -> None:
