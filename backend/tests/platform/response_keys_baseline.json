@@ -8848,9 +8848,29 @@
  },
  "/api/quotations/{quote_no}/material-flow": {
   "k": [
-   "detail"
+   "cells",
+   "cells[].href",
+   "cells[].items",
+   "cells[].items[].docCode",
+   "cells[].items[].name",
+   "cells[].items[].noteNo",
+   "cells[].items[].receivedOn",
+   "cells[].items[].shipDate",
+   "cells[].items[].signed",
+   "cells[].items[].status",
+   "cells[].key",
+   "cells[].label",
+   "cells[].state",
+   "cells[].summary",
+   "next",
+   "next.href",
+   "next.key",
+   "next.label",
+   "quoteNo",
+   "shipPresent",
+   "stockPresent"
   ],
-  "s": 404
+  "s": 200
  },
  "/api/mail-types/mine": {
   "k": [
@@ -8892,5 +8912,17 @@
    "detail"
   ],
   "s": 404
+ },
+ "/api/completion-notes/case-prefill": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "/api/daily-tasks/case-options": {
+  "k": [
+   "items"
+  ],
+  "s": 200
  }
 }
