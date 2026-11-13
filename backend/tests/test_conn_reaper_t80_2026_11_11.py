@@ -279,7 +279,7 @@ def test_real_app_stack_releases_lock_and_logs_request(client, make_user, table,
     """整條真實堆疊（auth／license gate／BaseHTTPMiddleware 鏈）下：registry 對 worker 執行緒可見、
     被回收的鎖放得掉、warning 帶得出是哪個請求（N2：請求資訊在開連線當下記）。"""
     import main
-    from tests.test_stock_batch_payment_2026_09_01 import _auth, _login
+    from tests._login_helpers import _auth, _login
     u, p = make_user(username="t80_reaper_" + kind, role="superadmin")
     token = _login(client, u, p)
     route = _real_leak_route(kind)
@@ -387,7 +387,7 @@ def test_async_middleware_writes_do_not_block_the_event_loop(client, make_user, 
     同一個迴圈裡的心跳（每 50ms 一次）最大間隔必須遠小於那個等待時間。（R6 之前＝整個等待時間，全站一起卡。）"""
     import asyncio
     import main
-    from tests.test_stock_batch_payment_2026_09_01 import _login
+    from tests._login_helpers import _login
     orig = db._connect
 
     def short_timeout(path, *a, **kw):

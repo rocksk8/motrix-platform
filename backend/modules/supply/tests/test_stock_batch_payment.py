@@ -6,7 +6,7 @@ import io
 
 import openpyxl
 
-from tests.test_stock_batch_payment_2026_09_01 import _auth, _login
+from tests._login_helpers import _auth, _login
 from core import source_tree
 import pytest
 
