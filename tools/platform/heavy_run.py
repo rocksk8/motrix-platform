@@ -19,11 +19,11 @@
   official 正式閘門（建包／run-stage 全段）；獨佔、不降權
   watcher  背景增量跑者（步驟 3，之後才有）；最低優先
 閘門鎖（整合者開閘門／合併窗口時持有；期間「不是閘門」的重型排隊一律自動等，不靠口頭約定）：
-  python tools/platform/heavy_run.py --gate-lock acquire --window <整合者視窗> [--note "T82 閘門"] [--ttl-hours 6]   取鎖（印 token）；別人持有 ⇒ 退 1
+  python tools/platform/heavy_run.py --gate-lock acquire --window <整合者視窗> [--note "T82 閘門"] [--ttl-hours 4]   取鎖（印 token）；別人持有 ⇒ 退 1
   python tools/platform/heavy_run.py --gate-lock renew   --window <整合者視窗>                                    續期（再給一個 ttl）
   python tools/platform/heavy_run.py --gate-lock release --window <整合者視窗>                                    放鎖（只有持有者；--force 才能放別人的）
   python tools/platform/heavy_run.py --gate-lock status                                                          唯讀：誰持有、剩多久
-  放行誰：`--class official`（正式閘門）、`--window` 與持有者相同的票、環境變數 MOTRIX_GATE_TOKEN 等於鎖內 token 的行程。其餘 heavy／e2e／watcher 一律等到放鎖或過期（預設 6 小時自動過期，不會卡死）。
+  放行誰：`--class official`（正式閘門）、`--window` 與持有者相同的票、環境變數 MOTRIX_GATE_TOKEN 等於鎖內 token 的行程。其餘 heavy／e2e／watcher 一律等到放鎖或過期（預設 4 小時自動過期，不會卡死）。
   light（單檔、單 worker）不受影響。鎖檔 <MOTRIX_CI_DIR>/gate.lock。
   conftest 的「直接跑重型」檢查（backend/conftest.py `_queue_guard`）用同一份判斷：閘門鎖持有期間，沒走排隊、也不是持有者的重型 pytest 直接拒絕；沒有閘門鎖時只印警告
   （MOTRIX_REQUIRE_QUEUE=1 ⇒ 警告改拒絕；MOTRIX_QUEUE_GUARD=0 ⇒ 關閉檢查）。
@@ -104,15 +104,19 @@ def load_tickets(qdir: Path, now=None, alive=pid_alive, clean=True):
     return out
 
 
-def can_start(me: dict, tickets: list) -> bool:
+def can_start(me: dict, tickets: list, gate=None) -> bool:
     """純函式：這張票現在能不能開跑。
     - light 永遠能。
     - 已經在跑的（started 有值）：重型最多一個；有獨佔的在跑 ⇒ 誰都不能開（除了自己）。
     - 排在前面（優先序更高，或同級先入列）而還在等的票 ⇒ 我讓它先（不插隊）。
-    - 我是獨佔 ⇒ 必須沒有任何其他票在跑。"""
+    - 我是獨佔 ⇒ 必須沒有任何其他票在跑。
+    - gate（有效的閘門鎖）給了：**還在等、而且自己被閘門鎖擋住的票不算「排在我前面」**（它在放鎖前根本不會開跑，
+      讓它擋持有者的票就是死結：持有者等它、它等持有者）⇒ 持有者的票等於插隊。已經在跑的票照算。"""
     if me["class"] == "light":
         return True
     others = [t for t in tickets if t["_file"] != me["_file"] and t["class"] != "light"]
+    if gate:
+        others = [t for t in others if t.get("started") or gate_exempt(t["class"], t.get("window"), gate, {})]
     running = [t for t in others if t.get("started")]
     if running and (me["class"] in EXCLUSIVE or any(t["class"] in EXCLUSIVE for t in running) or any(t["class"] != "watcher" for t in running)):
         return False
@@ -133,9 +137,9 @@ def _age(sec) -> str:
 
 # ── 閘門鎖 ──────────────────────────────────────────────────────────────────────
 #: 鎖是「顯式」的（整合者取、整合者放），不綁行程：閘門跑完到下一輪開跑之間、合併／修紅的空檔也要擋住別人的重型，
-#: 光看「有沒有 official 票在跑」會在空檔漏掉。代價是忘了放 ⇒ 靠 TTL 自動過期兜底（預設 6 小時）。
+#: 光看「有沒有 official 票在跑」會在空檔漏掉。代價是忘了放 ⇒ 靠 TTL 自動過期兜底（預設 4 小時）。
 GATE_FILE = "gate.lock"
-GATE_TTL_SECONDS = 6 * 3600
+GATE_TTL_SECONDS = 4 * 3600
 GATE_TOKEN_ENV = "MOTRIX_GATE_TOKEN"
 CI_TICKET_ENV = "MOTRIX_CI_TICKET"
 
@@ -219,8 +223,10 @@ def gate_line(lock, now=None) -> str:
     now = time.time() if now is None else now
     if not lock:
         return "閘門鎖：無"
-    return "閘門鎖：%s 持有%s（已 %s，剩 %s）" % (lock["window"], "「%s」" % lock["note"] if lock.get("note") else "",
-                                              _age(now - float(lock.get("since", now))), _age(float(lock["expires"]) - now))
+    left = float(lock["expires"]) - now
+    return "閘門鎖：%s 持有%s（已 %s，剩 %s%s）" % (lock["window"], "「%s」" % lock["note"] if lock.get("note") else "",
+                                                _age(now - float(lock.get("since", now))), _age(left),
+                                                "　⚠ 即將過期（保護會自動停止）：整合者用 --gate-lock renew 續期" if left < 1800 else "")
 
 
 def direct_run_verdict(env=None, lock=None, exclusive_env=("MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_EXCLUSIVE_OWNER")):
@@ -228,7 +234,7 @@ def direct_run_verdict(env=None, lock=None, exclusive_env=("MOTRIX_PYTEST_BUILD_
     level：ok（放行、不吭聲）／warn（印警告照跑）／refuse（拒絕）。
     - MOTRIX_QUEUE_GUARD=0 ⇒ ok（整道關閉）。
     - 有 MOTRIX_CI_TICKET（heavy_run 排過隊才會設）或建包的子行程標記 ⇒ ok（那邊各有自己的守門）。
-    - 閘門鎖持有中：token 對 ⇒ ok；否則 refuse。
+    - 閘門鎖持有中：token 對、或 MOTRIX_WINDOW＝持有者視窗 ⇒ ok；否則 refuse。
     - 沒有閘門鎖：warn；MOTRIX_REQUIRE_QUEUE=1 ⇒ refuse。"""
     env = os.environ if env is None else env
     if env.get("MOTRIX_QUEUE_GUARD") == "0":
@@ -236,7 +242,7 @@ def direct_run_verdict(env=None, lock=None, exclusive_env=("MOTRIX_PYTEST_BUILD_
     if env.get(CI_TICKET_ENV) or any(env.get(k) for k in exclusive_env):
         return "ok", ""
     if lock:
-        if env.get(GATE_TOKEN_ENV) and env.get(GATE_TOKEN_ENV) == lock["token"]:
+        if (env.get(GATE_TOKEN_ENV) and env.get(GATE_TOKEN_ENV) == lock["token"]) or (env.get("MOTRIX_WINDOW") and env.get("MOTRIX_WINDOW") == lock["window"]):
             return "ok", ""
         return "refuse", ("%s。這一輪是重型跑法（全量或 -n≥2）而且沒有經排隊、也不是閘門持有者的行程 ⇒ 拒絕。"
                           "要跑：用 `python tools/platform/heavy_run.py --class heavy --window <你的視窗> -- <指令>` 排隊（閘門鎖期間會自動等到放鎖），"
@@ -320,7 +326,7 @@ def run(cmd: list, cls="heavy", window="x", track=False, qdir=None, runner=None,
                 continue
             gate = read_gate(gate_file)
             gated = bool(gate) and cls != "light" and not gate_exempt(cls, window, gate, env)
-            if not gated and can_start(mine, tickets):
+            if not gated and can_start(mine, tickets, gate):
                 break
             if max_wait is not None and time.time() - t0 > max_wait:
                 note("[heavy_run] 等超過 %ds，放棄（75）" % max_wait)
@@ -373,7 +379,9 @@ def _gate_cli(a) -> int:
         print("[gate-lock] 取不到：%s（要接手用 --force）" % gate_line(lock))
         return 1
     print("[gate-lock] %s" % gate_line(lock))
-    print("[gate-lock] token=%s（你自己的直接 pytest 重型跑法：$env:MOTRIX_GATE_TOKEN='%s'；經 heavy_run 的不用設）" % (lock["token"], lock["token"]))
+    print("[gate-lock] token=%s" % lock["token"])
+    print("[gate-lock] 你自己的 shell 建議設：$env:MOTRIX_WINDOW='%s'（持有者視窗；conftest 認它，直接跑的重型 pytest 與 run-stage 才不會被自己的鎖擋）；"
+          "經 heavy_run／run_stage 的會自動帶 token" % window)
     return 0
 
 
@@ -391,7 +399,7 @@ def main(argv=None):
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--gate-lock", choices=("acquire", "renew", "release", "status"), help="閘門鎖：整合者取／續／放（持有期間非閘門的重型自動等）")
     ap.add_argument("--note", default="", help="--gate-lock acquire 的備註（顯示在 --status）")
-    ap.add_argument("--ttl-hours", type=float, default=GATE_TTL_SECONDS / 3600, help="--gate-lock 的自動過期小時數（預設 6）")
+    ap.add_argument("--ttl-hours", type=float, default=GATE_TTL_SECONDS / 3600, help="--gate-lock 的自動過期小時數（預設 4）")
     ap.add_argument("--force", action="store_true", help="--gate-lock acquire／release 對別人持有的鎖也動手（只有 PM／整合者交接時用）")
     ap.add_argument("--class", dest="cls", choices=CLASSES, default="heavy")
     ap.add_argument("--window", default=os.environ.get("MOTRIX_WINDOW", "x"))

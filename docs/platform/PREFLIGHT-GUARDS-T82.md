@@ -6,7 +6,7 @@ T81 官方閘門 14 輪（`D:\Claude-pm\t81-gate-*.log`）紅燈絕大多數是�
 
 兩個工具：
 1. **整合守門題組** `tools/platform/preflight_guards.py`——每合併一支分支就跑，約 5 分鐘內一次列出全部守門紅，依守門種類分組，點名最近哪幾次合併可能是肇因，附標準修法。
-2. **閘門鎖** `tools/platform/heavy_run.py --gate-lock …`＋conftest 的直接跑檢查——整合者持有鎖期間，不是閘門的重型自動等（排隊）或被拒（直接跑）。
+2. **閘門鎖** `tools/platform/heavy_run.py --gate-lock …`＋conftest 的直接跑檢查——整合者持有鎖期間，不是閘門的重型自動等（排隊）或被拒（直接跑）。**定位：防意外的護欄，不是強制機制**——有人刻意設 `MOTRIX_QUEUE_GUARD=0`、帶 `MOTRIX_CI_TICKET` 或自稱 `--class official` 都繞得過（與 conftest 鎖檔同一個哲學：防「順手跑一下」，不防蓄意）。
 
 與既有工具分工：`train_preflight.py`（T47）＝A 靜態旗標＋窄版便宜集合＋受影響模組；`pre_train_check.py`＝分支推上月台前在拋棄式樹預演合併。本題組＝**T76／T81 實際紅過的守門類別的固定清單**＋分組＋肇因合併；A 靜態旗標也順手跑一次（`--no-static` 關）。
 
@@ -21,12 +21,14 @@ python tools/platform/preflight_guards.py --dry-run                   # 印指�
 python tools/platform/preflight_guards.py --with-e2e-goldens          # 另加 e2e golden（獨佔排隊）
 ```
 - `MOTRIX_TRAIN=1`、`-m "not e2e"`、不載 failfast ⇒ **一次看到全部的紅**；3 worker、經 `heavy_run` 排隊（`--window` 要和閘門鎖的視窗一致才不會被自己的閘門鎖擋住）。
-- 預算 12 分（`--budget-min`），超過就停、結束碼 3（**不是綠**）。
-- 結束碼：0 全綠｜1 有紅｜2 工具出錯或 required 組找不到檔（守門被改名）｜3 超過預算｜75 排隊逾時。
+- 預算 12 分（`--budget-min`，不含排隊時間），由**牆鐘 watchdog** 強制：卡住沒輸出也會被停、結束碼 3（**不是綠**）。
+- **證明有跑**：每組用 junit 結果算 過／略過／紅；收集 0、全部略過、收集數低於該組 `min_tests`（json 內，實收集數的 80%）、拿不到結果檔 ⇒ 「未能檢查」，結束碼 1，不會印全綠。有略過但有過 ⇒ 只列出。pytest 結束碼不是 0／1（例如 4＝nodeid 改名）⇒ 印輸出尾段。
+- `--window` **必填**（沒有預設）。閘門鎖被別人持有、而你的視窗不是持有者 ⇒ 最多排 120 秒就放棄（75），訊息點名持有者。`--base`（預設 origin/platform）不存在 ⇒ 結束碼 2。
+- 結束碼：0 全綠｜1 有紅或未能檢查｜2 工具出錯／--base 不存在／required 組找不到檔（守門被改名）｜3 超過預算｜75 排隊逾時。
 - 不寫追蹤檔、不 commit、不 push。`--json-out F` 存機器可讀結果。
 
 ### 題組清單
-單一來源 `tools/platform/preflight_guards.json`：每組＝一類守門（`paths`）＋出紅標準修法（`fix`）＋肇因搜尋的 `watch` glob。20 組、約 70 個檔（`--list`）。
+單一來源 `tools/platform/preflight_guards.json`：每組＝一類守門（`paths`）＋出紅標準修法（`fix`）＋肇因搜尋的 `watch` glob。22 組、約 75 個檔、收集約 1180 題（`--list` 看每組檔數與題數下限）。
 守門類別對照 T82 單：CHANGELOG 跟著程式、version_slots／version_manifest、spec_coverage、page_paths、no_direct_js_enumeration、modules.json 歸屬、L1 快照、route_inventory、response_keys、write_golden、unscoped_reads、u0a_sinks、view_filter 標記、mail_registry、recyclebin_guards、generated_maps（train mode）、golden（route table）；另加 T81 實紅過的：AH-O7 套用腳本版本、表單版號、用語守門、no_admin_bypass、寫入路徑登記、靜態掃描（raw-vh 等）；最後一組 `recent_interplay` 是近兩班互踩過的功能題（選用，找不到不擋）。
 `tests/platform/test_preflight_guards_tool.py` 會驗：每個 pattern 都找得到檔（改名＝測試紅）、T82 單列的類別與 T76/T81 日誌裡紅過的守門檔都在清單內。
 
@@ -50,12 +52,12 @@ python tools/platform/preflight_guards.py --with-e2e-goldens          # 另加 e
 
 ### 用法
 ```
-python tools/platform/heavy_run.py --gate-lock acquire --window <整合者視窗> --note "T82 閘門" [--ttl-hours 6]
+python tools/platform/heavy_run.py --gate-lock acquire --window <整合者視窗> --note "T82 閘門" [--ttl-hours 4]
 python tools/platform/heavy_run.py --gate-lock renew   --window <整合者視窗>
 python tools/platform/heavy_run.py --gate-lock release --window <整合者視窗>
 python tools/platform/heavy_run.py --gate-lock status          # 或 --status（一行含閘門鎖）
 ```
-- 鎖檔 `<MOTRIX_CI_DIR>/gate.lock`（預設 `D:\開發測試檔\_ci`）；**顯式取放、不綁行程**（所以閘門跑完到下一輪開跑之間、合併／修紅的空檔也擋得住別人）。忘了放 ⇒ TTL（預設 6 小時）自動過期；別人持有時 `acquire` 退 1（`--force` 才接手）。
+- 鎖檔 `<MOTRIX_CI_DIR>/gate.lock`（預設 `D:\開發測試檔\_ci`）；**顯式取放、不綁行程**（所以閘門跑完到下一輪開跑之間、合併／修紅的空檔也擋得住別人）。忘了放 ⇒ TTL（預設 4 小時；剩不到 30 分鐘 `--status` 會警告，整合者用 `--gate-lock renew` 續期）自動過期；別人持有時 `acquire` 退 1（`--force` 才接手）。
 - 持有期間：`heavy_run` 的 heavy／e2e／watcher 票**自動等**到放鎖或過期（`--max-wait` 逾時回 75）；放行的是 `--class official`、`--window` 等於持有者視窗、環境變數 `MOTRIX_GATE_TOKEN` 等於鎖內 token。light（單檔單 worker）不受影響。放行的票會把 token 帶進子行程。
 - conftest（`backend/conftest.py` `_queue_guard`）對**重型 pytest（全量／-n≥2）沒走 heavy_run** 的處置：
   - 閘門鎖持有中：不是持有者（沒 token、沒票根、不是建包子行程）⇒ **直接拒絕**（UsageError，訊息指到 heavy_run 用法）。
@@ -67,8 +69,12 @@ python tools/platform/heavy_run.py --gate-lock status          # 或 --status（
 ### 每次整合的建議流程（給整合者）
 1. 開窗口：`--gate-lock acquire --window <我> --note "T82 整合"`。
 2. 每合併一支：`preflight_guards.py --window <我>` → 看分組紅 → 修 → `--only` 重跑。
-3. 全部綠才開完整閘門（`heavy_run --class official --window <我> -- …` 或建包腳本）。
+3. 全部綠才開完整閘門（`heavy_run --class official --window <我> -- …` 或建包腳本；`run_stage` 在持有者起它時會**自動**帶 token，不用手動 export）。
 4. 閘門結束或交班：`--gate-lock release --window <我>`。
+5. 你自己的 shell 建議設 `$env:MOTRIX_WINDOW='<我>'`（acquire 會印這一行）：conftest 認持有者視窗，直接跑的重型 pytest 才不會被自己的鎖擋。
+
+### 死結防護
+別人在鎖期間先排的 heavy／e2e（被鎖擋住、放鎖前不會開跑）**不算排在持有者前面**（`can_start(me, tickets, gate)`）：持有者的票插隊，不會與它互等到過期。已經在跑的票照算（鎖只擋新開跑，不殺舊的）。
 
 ## 附錄：T76／T81 閘門日誌的紅（題組來源）
 T81（`t81-gate-*.log`，節錄；failfast 只含已出現的）：test_menu_ux_batch0（空 base_url）、test_module_no_admin_bypass（超管登入）、test_review_edit_chain_reset／test_warranty_mail_owner（通知層更名）、

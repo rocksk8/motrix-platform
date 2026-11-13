@@ -3,34 +3,39 @@
 「只在合併後才紅」的守門一次全列出來，並指出最近哪幾次合併最可能是肇因——不必等 80 分鐘的完整閘門才一個一個發現。
 
 [單位] tools:preflight_guards   [層] 工具   [穩定度] 內部
-[不變式] 題組清單只有 tools/platform/preflight_guards.json 一份（每組＝一類守門＋出紅標準修法＋肇因搜尋的 watch glob）；
+[不變式] 題組清單只有 tools/platform/preflight_guards.json 一份（每組＝一類守門＋出紅標準修法＋肇因搜尋的 watch glob＋題數下限 min_tests）；
     MOTRIX_TRAIN=1、不 fail-fast（不載 failfast 外掛）、-m "not e2e"；找不到 required 組的檔 ⇒ 結束碼 2（改名不會悄悄少跑）；
-    不寫追蹤檔、不 commit、不 push；重型（-n≥2）一律經 heavy_run 排隊（閘門鎖期間要用持有者視窗，否則自動等）。
+    **「跑夠了」要證明**：每組用 junit 結果算 收集／過／略過／紅，收集 0、全略過、題數低於 min_tests 的組一律算「未能檢查」（結束碼 1），
+    不會因為整檔被 skip／deselect 而印「全綠」；沒有結果檔也算未能檢查；
+    預算用牆鐘 watchdog 強制（卡住沒輸出也會被停，結束碼 3）；--base 不存在 ⇒ 錯誤（結束碼 2），不是空結果；--window 必填（沒有預設）；
+    不寫追蹤檔、不 commit、不 push；重型（-n≥2）一律經 heavy_run 排隊（閘門鎖期間要用持有者視窗，否則最多等 120 秒就放棄）。
     與 train_preflight.py 的分工：那支是 A 靜態旗標（秒級）＋窄版便宜集合＋受影響模組；這支是「T76/T81 實際紅過的守門類別」
     的固定題組＋依守門種類分組＋肇因合併。A 靜態旗標這裡也順手跑一次（`--no-static` 可關）。
 
 用法（在整合樹，Python 用 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe；一律在 repo 根目錄下執行）：
-  python tools/platform/preflight_guards.py                      跑題組（3 worker、排隊、預算 12 分）
-  python tools/platform/preflight_guards.py --window <視窗>      閘門鎖持有者用自己的視窗名（才不會被自己的閘門鎖擋住）
-  python tools/platform/preflight_guards.py --list               只列題組（每組幾個檔、找不到的）
-  python tools/platform/preflight_guards.py --dry-run            印 pytest 指令與預估耗時，不跑
-  python tools/platform/preflight_guards.py --only changelog,version_manifest    只跑指定組（修完紅後只重跑那幾組）
-  python tools/platform/preflight_guards.py --with-e2e-goldens   另加 e2e golden（瀏覽器、獨佔排隊；約數分鐘）
-  --since <rev>   肇因搜尋從這個 rev 之後的合併找（預設 origin/platform；沒有就最近 --merges 25 個）
-結束碼：0 全綠；1 有紅（報告依守門種類分組、附肇因合併與標準修法）；2 工具本身出錯／required 組找不到檔；3 超過預算被停掉（不是綠）；75 排隊逾時。
+  python tools/platform/preflight_guards.py --window <視窗>      跑題組（3 worker、排隊、預算 12 分）；閘門鎖持有者用取鎖時的視窗名
+  python tools/platform/preflight_guards.py --window <視窗> --list      只列題組（每組幾個檔、找不到的）
+  python tools/platform/preflight_guards.py --window <視窗> --dry-run   印 pytest 指令與預估耗時，不跑
+  python tools/platform/preflight_guards.py --window <視窗> --only changelog,version_manifest    只跑指定組（修完紅後只重跑那幾組）
+  python tools/platform/preflight_guards.py --window <視窗> --with-e2e-goldens   另加 e2e golden／登入類 e2e（瀏覽器、獨佔排隊）
+  --since <rev>   肇因搜尋從這個 rev 之後的合併找（預設同 --base＝origin/platform）
+結束碼：0 全綠；1 有紅或未能檢查（報告依守門種類分組、附肇因合併與標準修法）；2 工具本身出錯／--base 不存在／required 組找不到檔；3 超過預算被停掉（不是綠）；75 排隊逾時。
 """
 import argparse
 import fnmatch
 import glob
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -39,6 +44,7 @@ CONFIG = HERE / "preflight_guards.json"
 DEFAULT_WORKERS = 3
 DEFAULT_BUDGET_MIN = 12.0
 DEFAULT_MERGES = 25
+GATED_MAX_WAIT = 120                     # 閘門鎖被別人持有、我又不是持有者：最多排 120 秒就放棄（不要靜默等到鎖過期）
 INCOMPLETE_RC = -999
 _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -79,7 +85,7 @@ def expand_groups(backend, cfg, only=None, with_e2e=False):
     targets, file_group, missing = [], {}, []
     groups = [dict(g) for g in cfg["groups"]]
     if with_e2e:
-        groups.append({"id": "e2e_goldens", "label": "e2e golden 比對", "paths": cfg["e2e_goldens"]["paths"], "required": False})
+        groups.append({"id": "e2e_goldens", "label": "e2e golden／登入類 e2e", "paths": cfg["e2e_goldens"]["paths"], "required": False})
     for g in groups:
         if only and g["id"] not in only:
             continue
@@ -111,6 +117,64 @@ def group_failures(failures, file_group):
     return out
 
 
+def parse_junit(xml_text, file_group):
+    """junit 結果 ⇒ {組 id: {"passed", "skipped", "failed"}}；classname 逐段退回到對得上的檔（tests.platform.test_x.TestCls ⇒ tests/platform/test_x.py）。
+    xml 壞掉／空 ⇒ None（呼叫端當未能檢查）。"""
+    try:
+        root = ET.fromstring(xml_text)
+    except (ET.ParseError, TypeError, ValueError):
+        return None
+    out = {}
+    for tc in root.iter("testcase"):
+        parts = (tc.get("classname") or "").split(".")
+        gid = None
+        for k in range(len(parts), 0, -1):
+            f = "/".join(parts[:k]) + ".py"
+            if f in file_group:
+                gid = file_group[f]
+                break
+        if gid is None:
+            continue
+        c = out.setdefault(gid, {"passed": 0, "skipped": 0, "failed": 0})
+        if tc.find("skipped") is not None:
+            c["skipped"] += 1
+        elif tc.find("failure") is not None or tc.find("error") is not None:
+            c["failed"] += 1
+        else:
+            c["passed"] += 1
+    return out
+
+
+def merge_counts(*parts):
+    out = {}
+    for p in parts:
+        for gid, c in (p or {}).items():
+            t = out.setdefault(gid, {"passed": 0, "skipped": 0, "failed": 0})
+            for k in t:
+                t[k] += c[k]
+    return out
+
+
+def judge_counts(groups_run, counts, floors):
+    """⇒ ([未能檢查的描述], [略過的描述])。groups_run＝這次選到的組 id；counts＝parse_junit 的結果（None＝沒有結果檔）；floors＝{組 id: min_tests}。
+    收集 0、全略過（過 0 而且沒有紅）、收集數低於下限 ⇒ 未能檢查；有略過但有過 ⇒ 只列在略過清單。"""
+    if counts is None:
+        return ["沒有拿到 junit 結果檔：無法證明題有跑（%s）" % "、".join(sorted(groups_run))], []
+    bad, skipped = [], []
+    for gid in sorted(groups_run):
+        c = counts.get(gid, {"passed": 0, "skipped": 0, "failed": 0})
+        n = c["passed"] + c["skipped"] + c["failed"]
+        if n == 0:
+            bad.append("[%s] 收集 0 題（檔被整個 deselect／匯入失敗／nodeid 改名？）" % gid)
+        elif c["passed"] == 0 and c["failed"] == 0:
+            bad.append("[%s] %d 題全部略過（沒有任何一題真的驗到東西）" % (gid, c["skipped"]))
+        elif n < int(floors.get(gid, 0)):
+            bad.append("[%s] 只收集到 %d 題，低於下限 %d（glob 縮水？守門被刪？）" % (gid, n, floors[gid]))
+        if c["skipped"] and c["passed"]:
+            skipped.append("[%s] 略過 %d 題（過 %d）" % (gid, c["skipped"], c["passed"]))
+    return bad, skipped
+
+
 def _owner_key(nodeid):
     m = re.match(r"(?:backend/)?modules/([^/]+)/", nodeid.split("::", 1)[0].replace("\\", "/"))
     return m.group(1) if m else None
@@ -138,9 +202,10 @@ def attribute(nodeids, watch, merges, top=3):
     return out
 
 
-def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, nodeid_merges=None):
+def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, nodeid_merges=None,
+                  count_bad=(), count_skipped=(), counts=None, tail=""):
     L = ["═══ 整合守門題組 ═══"]
-    L.append("題組：%d 組、%d 個測試檔%s" % (plan["groups"], len(plan["targets"]), "（含 e2e golden）" if plan.get("e2e") else ""))
+    L.append("題組：%d 組、%d 個測試檔%s" % (plan["groups"], len(plan["targets"]), "（含 e2e）" if plan.get("e2e") else ""))
     for gid, pat, required in missing:
         L.append("%s 找不到守門檔（改名或刪除了？）：[%s] %s" % ("✘" if required else "⚠", gid, pat))
     un = [f for f in static_findings if f.get("unchecked")]
@@ -157,6 +222,14 @@ def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, 
         L.append("⚠ 未完成：超過時間預算被停掉（%.0f 秒）；以下只含停掉前已出現的紅，**不能當作綠**" % secs)
     elif rc is not None:
         L.append("pytest：%s（%.0f 秒，exit %s）" % (passed_line or "-", secs, rc))
+        if rc not in (0, 1) and tail:
+            L.append("pytest 非預期的結束碼 %s（4＝用法／nodeid 找不到、5＝沒收集到題、3＝內部錯誤）；輸出尾段：\n%s" % (rc, tail))
+    if counts:
+        L.append("跑了多少（過／略過／紅）：" + "；".join("%s %d/%d/%d" % (g, c["passed"], c["skipped"], c["failed"]) for g, c in sorted(counts.items())))
+    for s in count_skipped:
+        L.append("⚠ 略過：" + s)
+    for b in count_bad:
+        L.append("✘ 未能檢查：" + b)
     total = sum(len(v) for v in grouped.values())
     if grouped:
         L.append("紅 %d 題，依守門種類（%d 類）：" % (total, len(grouped)))
@@ -177,8 +250,8 @@ def format_report(plan, static_findings, grouped, labels, fixes, watch, merges, 
                 L.append("    修法：" + fixes[gid])
         first = next(iter(next(iter(grouped.values()))))["nodeid"]
         L.append("單獨重跑（在 backend/ 底下，MOTRIX_TRAIN=1）：python -m pytest \"%s\" -v" % first)
-        L.append("修完只重跑出紅的組：python tools/platform/preflight_guards.py --only %s" % ",".join(g for g in grouped if g != "other"))
-    ok = rc in (None, 0) and not real and not un and not any(r for _g, _p, r in missing)
+        L.append("修完只重跑出紅的組：python tools/platform/preflight_guards.py --window <視窗> --only %s" % ",".join(g for g in grouped if g != "other"))
+    ok = rc in (None, 0) and not real and not un and not count_bad and not any(r for _g, _p, r in missing)
     if rc == INCOMPLETE_RC:
         L.append("結果：未完成（incomplete，超過時間預算）")
     elif ok and not grouped:
@@ -195,9 +268,13 @@ def _git(repo, *args):
     return r.stdout if r.returncode == 0 else ""
 
 
+def rev_exists(repo, rev):
+    return bool(rev) and bool(_git(repo, "rev-parse", "--verify", "-q", rev + "^{commit}").strip())
+
+
 def recent_merges(repo, since=None, n=DEFAULT_MERGES):
     """⇒ [{sha, subject, files}]：first-parent 的合併提交（新的在前），每個的檔＝相對第一親的變動檔。since 給了就用 since..HEAD，沒有 rev 就退回最近 n 個。"""
-    rng = ["%s..HEAD" % since] if since and _git(repo, "rev-parse", "--verify", "-q", since).strip() else []
+    rng = ["%s..HEAD" % since] if since and rev_exists(repo, since) else []
     out = _git(repo, "log", "--first-parent", "--merges", "-n", str(n), "--format=%H%x1f%s", *rng)
     merges = []
     for line in out.splitlines():
@@ -216,39 +293,51 @@ def python_exe():
     return str(cand) if cand.exists() else sys.executable
 
 
-def build_cmd(python, targets, workers, basetemp, marker="not e2e"):
+def build_cmd(python, targets, workers, basetemp, marker="not e2e", junit=None):
     return [python, "-m", "pytest", *targets, "-q", "-rfE", "--tb=short", "-m", marker,
-            *(["-n", str(workers)] if workers and workers >= 2 else ["-p", "no:xdist"]), "-p", "no:cacheprovider", "--basetemp=%s" % basetemp]
+            *(["-n", str(workers)] if workers and workers >= 2 else ["-p", "no:xdist"]), "-p", "no:cacheprovider", "--basetemp=%s" % basetemp,
+            *(["--junitxml=%s" % junit, "-o", "junit_family=xunit2"] if junit else [])]
 
 
 def _make_runner(backend, holder, budget_s, tee=True):
+    """真的跑 pytest 的 runner(cmd, env, flags) ⇒ rc。預算由 watchdog 計時器強制（牆鐘；卡住沒輸出也會被停）⇒ INCOMPLETE_RC。"""
     def runner(cmd, env, flags):
         e = dict(env, MOTRIX_TRAIN="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
         t0 = time.time()
         proc = subprocess.Popen(cmd, cwd=str(backend), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags | _NOWIN)
+        fired = threading.Event()
+
+        def kill():
+            fired.set()
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, creationflags=_NOWIN)    # 只結束自己起的這一棵
+        timer = threading.Timer(budget_s, kill) if budget_s else None
+        if timer:
+            timer.daemon = True
+            timer.start()
         lines = []
-        for raw in proc.stdout:
-            line = raw.decode("utf-8", errors="replace")
-            lines.append(line)
-            if tee:
-                sys.stdout.write(line)
-                sys.stdout.flush()
-            if budget_s and time.time() - t0 > budget_s:
-                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, creationflags=_NOWIN)   # 只結束自己起的這一棵
-                holder.update(out="".join(lines), secs=time.time() - t0)
-                proc.wait()
-                return INCOMPLETE_RC
-        rc = proc.wait()
+        try:
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", errors="replace")
+                lines.append(line)
+                if tee:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+            rc = proc.wait()
+        finally:
+            if timer:
+                timer.cancel()
         holder.update(out="".join(lines), secs=time.time() - t0)
-        return rc
+        return INCOMPLETE_RC if fired.is_set() else rc
     return runner
 
 
 def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True):
-    """⇒ (rc, 輸出全文, 秒數)。重型（-n≥2）經 heavy_run 排隊；排不到（75）⇒ rc 75、輸出空。"""
+    """⇒ (rc, 輸出全文, 秒數, junit xml 文字或 None)。重型（-n≥2）經 heavy_run 排隊；排不到（75）⇒ rc 75。"""
     backend = Path(repo) / "backend"
-    basetemp = os.path.join(tempfile.gettempdir(), "pfg_%d_%d" % (os.getpid(), int(time.time())))
-    cmd = build_cmd(python_exe(), targets, workers, basetemp, marker)
+    stamp = "%d_%d" % (os.getpid(), int(time.time() * 1000))
+    basetemp = os.path.join(tempfile.gettempdir(), "pfg_%s" % stamp)
+    junit = os.path.join(tempfile.gettempdir(), "pfg_%s.xml" % stamp)
+    cmd = build_cmd(python_exe(), targets, workers, basetemp, marker, junit)
     holder = {"out": "", "secs": 0.0}
     runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee)
     cls = queue_cls or ("heavy" if workers and workers >= 2 else "light")
@@ -258,9 +347,18 @@ def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None,
             rc = runner(cmd, dict(os.environ), 0)
         else:
             rc = hr.run(cmd, cls, window, runner=runner, max_wait=max_wait, note=lambda m: print(m, flush=True))
-        return rc, holder["out"], holder["secs"]
+        xml = None
+        try:
+            xml = Path(junit).read_text(encoding="utf-8") if os.path.isfile(junit) else None
+        except OSError:
+            pass
+        return rc, holder["out"], holder["secs"], xml
     finally:
         shutil.rmtree(basetemp, ignore_errors=True)
+        try:
+            os.unlink(junit)
+        except OSError:
+            pass
 
 
 def static_findings(repo, base):
@@ -292,25 +390,32 @@ def estimate(repo, targets):
     return total, unknown
 
 
-def preflight(repo=REPO, only=None, workers=DEFAULT_WORKERS, window="x", with_e2e=False, run_static=True, base="origin/platform", since=None,
-              n_merges=DEFAULT_MERGES, dry_run=False, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, runner=None, merges_fn=None, config=None, hr=None):
-    """⇒ (exit_code, report_text, data)。runner(repo, targets, marker) ⇒ (rc, out, secs) 供測試注入。"""
+def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e2e=False, run_static=True, base="origin/platform", since=None,
+              n_merges=DEFAULT_MERGES, dry_run=False, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, runner=None, merges_fn=None, config=None, hr=None,
+              base_exists=None):
+    """⇒ (exit_code, report_text, data)。runner(repo, targets, marker) ⇒ (rc, out, secs, junit_xml) 供測試注入。window 必填。"""
     repo = Path(repo)
+    if not window:
+        return 2, "--window 必填（沒有預設）：閘門鎖持有者用取鎖時的視窗名，其他人用自己的視窗名", {}
     cfg = config or load_config()
     only = set(only) if only else None
     if only:
         unknown = only - {g["id"] for g in cfg["groups"]} - ({"e2e_goldens"} if with_e2e else set())
         if unknown:
             return 2, "未知的題組 id：%s（--list 看全部）" % "、".join(sorted(unknown)), {}
+    if not (base_exists or (lambda r: rev_exists(repo, r)))(base):
+        return 2, "--base 找不到 rev「%s」：靜態旗標與肇因搜尋都靠它，不能當空結果（先 git fetch，或用 --base 指定存在的 rev）" % base, {}
     targets, file_group, missing = expand_groups(repo / "backend", cfg, only, with_e2e)
     labels = {g["id"]: g["label"] for g in cfg["groups"]}
-    labels["e2e_goldens"] = "e2e golden 比對"
+    labels["e2e_goldens"] = "e2e golden／登入類 e2e"
     labels["other"] = "其他"
     fixes = {g["id"]: g.get("fix", "") for g in cfg["groups"]}
     watch = {g["id"]: g.get("watch", []) for g in cfg["groups"]}
+    floors = {g["id"]: g.get("min_tests", 0) for g in cfg["groups"]}
+    run_groups = sorted({file_group[t.split("::")[0]] for t in targets})
     non_e2e = [t for t in targets if group_of(t, file_group) != "e2e_goldens"]
     e2e_t = [t for t in targets if group_of(t, file_group) == "e2e_goldens"]
-    plan = {"groups": len({file_group[t.split('::')[0]] for t in targets}), "targets": targets, "e2e": bool(e2e_t)}
+    plan = {"groups": len(run_groups), "targets": targets, "e2e": bool(e2e_t)}
     if any(req for _g, _p, req in missing) and not targets:
         return 2, format_report(plan, [], {}, labels, fixes, watch, None, None, 0, "", missing), {}
     findings = static_findings(repo, base) if (run_static and not dry_run) else []
@@ -320,38 +425,55 @@ def preflight(repo=REPO, only=None, workers=DEFAULT_WORKERS, window="x", with_e2
         lines += ["  找不到：[%s] %s%s" % (g, p, "" if r else "（選用）") for g, p, r in missing]
         lines.append(" ".join(build_cmd("python", non_e2e, workers, "<basetemp>")))
         return (2 if any(r for _g, _p, r in missing) else 0), "\n".join(lines), {"plan": plan}
-    rc, out, secs = (None, "", 0.0)
-    fails = []
     pt = _load("pre_train_check")
     if pt is None:
         return 2, "預檢工具出錯：pre_train_check 載入失敗（parse_failures 用它）", {}
+    if max_wait is None and runner is None:                                  # 閘門鎖被別人持有而我不是持有者：不要靜默等到鎖過期
+        _hr = hr or _load("heavy_run")
+        try:
+            lock = _hr.read_gate() if _hr else None
+            if lock and not _hr.gate_exempt("heavy", window, lock, {}):
+                print("[preflight] 閘門鎖由 %s 持有（視窗 %s 不是持有者）：最多排 %d 秒，逾時放棄（75）。持有者請用取鎖時的視窗名。" % (lock["window"], window, GATED_MAX_WAIT), flush=True)
+                max_wait = GATED_MAX_WAIT
+        except Exception:                                                    # noqa: BLE001
+            pass
 
     def go(ts, marker, w, cls=None):
         if runner is not None:
             return runner(repo, ts, marker)
         return run_pytest(repo, ts, w, window, marker, cls, budget_min, max_wait, hr)
+    rc, out, secs, xmls = None, "", 0.0, []
     if non_e2e:
-        rc, out, secs = go(non_e2e, "not e2e", workers)
+        rc, out, secs, x = go(non_e2e, "not e2e", workers)
+        xmls.append(x)
     if e2e_t and rc not in (INCOMPLETE_RC, 75):
-        rc2, out2, secs2 = go(e2e_t, "e2e", 1, "e2e")
+        rc2, out2, secs2, x2 = go(e2e_t, "e2e", 1, "e2e")
         out += "\n" + out2
         secs += secs2
+        xmls.append(x2)
         rc = rc if rc not in (None, 0) else rc2
     if rc == 75:
         return 75, "[preflight_guards] 排隊等超過上限，沒有跑（75）", {"rc": 75}
     fails = pt.parse_failures(out)
     grouped = group_failures(fails, file_group)
     passed_line = (re.findall(r"^.*\d+ (?:passed|failed).*$", out, re.M) or [""])[-1].strip()
+    counts = None
+    if rc != INCOMPLETE_RC:
+        parts = [parse_junit(x, file_group) if x else None for x in xmls]
+        counts = None if any(p is None for p in parts) else merge_counts(*parts)
+    count_bad, count_skipped = ([], []) if rc == INCOMPLETE_RC else judge_counts(run_groups, counts, floors)
     merges, cands = None, {}
     if grouped:
         merges = (merges_fn or recent_merges)(repo, since or base, n_merges)
         for gid, fs in grouped.items():
             cands[gid] = attribute([f["nodeid"] for f in fs], watch.get(gid, []), merges)
-    text = format_report(plan, findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, cands)
-    bad = bool(grouped) or any(not f.get("unchecked") for f in findings) or (rc not in (None, 0, INCOMPLETE_RC))
+    tail = "".join(out.splitlines(True)[-25:]) if rc not in (None, 0, 1, INCOMPLETE_RC) else ""
+    text = format_report(plan, findings, grouped, labels, fixes, watch, merges, rc, secs, passed_line, missing, cands, count_bad, count_skipped, counts, tail)
+    bad = bool(grouped) or any(not f.get("unchecked") for f in findings) or (rc not in (None, 0, INCOMPLETE_RC)) or bool(count_bad)
     miss_req = any(r for _g, _p, r in missing)
     code = 3 if rc == INCOMPLETE_RC else 1 if (bad or any(f.get("unchecked") for f in findings)) else 2 if miss_req else 0
-    return code, text, {"rc": rc, "failures": fails, "grouped": {k: [f["nodeid"] for f in v] for k, v in grouped.items()}, "candidates": cands, "findings": findings}
+    return code, text, {"rc": rc, "failures": fails, "grouped": {k: [f["nodeid"] for f in v] for k, v in grouped.items()}, "candidates": cands,
+                        "findings": findings, "counts": counts, "count_bad": count_bad}
 
 
 def _utf8_console():
@@ -365,12 +487,12 @@ def _utf8_console():
 def main(argv=None):
     _utf8_console()
     ap = argparse.ArgumentParser(description="整合守門題組")
-    ap.add_argument("--window", default=os.environ.get("MOTRIX_WINDOW", "x"), help="排隊用的視窗名；閘門鎖持有者要與取鎖的視窗相同")
+    ap.add_argument("--window", required=True, help="排隊用的視窗名（必填，沒有預設）；閘門鎖持有者要與取鎖的視窗相同")
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     ap.add_argument("--only", help="只跑這些組 id（逗號分隔；--list 看全部）")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--with-e2e-goldens", action="store_true")
+    ap.add_argument("--with-e2e-goldens", action="store_true", help="另加 e2e golden／登入類 e2e（瀏覽器、獨佔排隊）")
     ap.add_argument("--no-static", action="store_true", help="不跑 train_preflight 的 A 靜態旗標")
     ap.add_argument("--base", default="origin/platform")
     ap.add_argument("--since", default=None, help="肇因搜尋起點 rev（預設同 --base）")
@@ -383,13 +505,13 @@ def main(argv=None):
         cfg = load_config()
         if a.list:
             targets, fg, missing = expand_groups(REPO / "backend", cfg, None, a.with_e2e_goldens)
-            for g in cfg["groups"] + ([{"id": "e2e_goldens", "label": "e2e golden 比對"}] if a.with_e2e_goldens else []):
+            for g in cfg["groups"] + ([{"id": "e2e_goldens", "label": "e2e golden／登入類 e2e"}] if a.with_e2e_goldens else []):
                 n = sum(1 for v in fg.values() if v == g["id"])
-                print("%-18s %2d 檔  %s" % (g["id"], n, g["label"]))
+                print("%-18s %2d 檔  下限 %3d 題  %s" % (g["id"], n, g.get("min_tests", 0), g["label"]))
             for g, p, r in missing:
                 print("  找不到：[%s] %s%s" % (g, p, "" if r else "（選用）"))
             return 2 if any(r for _g, _p, r in missing) else 0
-        code, text, data = preflight(REPO, a.only.split(",") if a.only else None, a.workers, a.window, a.with_e2e_goldens, not a.no_static, a.base,
+        code, text, data = preflight(REPO, a.window, a.only.split(",") if a.only else None, a.workers, a.with_e2e_goldens, not a.no_static, a.base,
                                      a.since, a.merges, a.dry_run, a.budget_min, a.max_wait, config=cfg)
     except Exception as e:                                                   # noqa: BLE001
         print("預檢工具出錯：%s" % e, file=sys.stderr)

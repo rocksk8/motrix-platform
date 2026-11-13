@@ -260,7 +260,7 @@ def test_gate_lock_cli_roundtrip_and_status_line_shows_it(tmp_path, monkeypatch,
 
 
 def _guard_env(monkeypatch, tmp_path):
-    for k in (H.CI_TICKET_ENV, H.GATE_TOKEN_ENV, "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_EXCLUSIVE_OWNER", "MOTRIX_QUEUE_GUARD", "MOTRIX_REQUIRE_QUEUE"):
+    for k in (H.CI_TICKET_ENV, H.GATE_TOKEN_ENV, "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_EXCLUSIVE_OWNER", "MOTRIX_QUEUE_GUARD", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_WINDOW"):
         monkeypatch.delenv(k, raising=False)                  # 這輪測試自己可能就是被 heavy_run 包著跑的
     monkeypatch.setenv("MOTRIX_CI_DIR", str(tmp_path / "ci"))
     if str(REPO / "backend") not in sys.path:
@@ -304,3 +304,52 @@ def test_conftest_calls_the_queue_guard_only_for_heavy_runs():
     guard = src.index("    _queue_guard(config)", heavy)
     assert src.index("return                       # 單檔臨時跑", heavy) < guard < src.index("slots = _lock_slots()", heavy), "單檔臨時跑先 return；重型才走佇列檢查，且在搶鎖之前"
 
+
+def test_gated_waiter_queued_ahead_does_not_deadlock_the_lock_holder(tmp_path):
+    """H1：別視窗在鎖期間先排了 heavy／e2e（它在放鎖前不會開跑），持有者之後排的票不能被它擋住（否則兩邊互等到 TTL）。"""
+    q = tmp_path / "q"
+    lock = {"window": "h7", "token": "tk", "expires": NOW + 7200}
+    _t(q, "a-other-heavy.json", "heavy", window="h9", enq=NOW - 100)
+    _t(q, "b-other-e2e.json", "e2e", window="h9", enq=NOW - 90)
+    _t(q, "c-holder.json", "heavy", window="h7", enq=NOW)
+    ts = _tickets(q)
+    holder = _by(ts, "c-holder.json")
+    assert H.can_start(holder, ts) is False, "（對照）沒給 gate 時，排前面的等待者仍擋著 ⇒ 這就是死結的來源"
+    assert H.can_start(holder, ts, lock) is True, "給了 gate：被鎖擋住的等待者不算排在前面，持有者插隊"
+    _t(q, "d-running.json", "heavy", window="h9", started=NOW - 5, enq=NOW - 300)      # 已經在跑的別人仍然算（鎖擋新開跑，不殺舊的）
+    ts = _tickets(q)
+    assert H.can_start(_by(ts, "c-holder.json"), ts, lock) is False
+
+
+def test_run_by_the_holder_goes_even_with_a_gated_waiter_ahead_of_it_in_the_queue(tmp_path):
+    q = tmp_path / "ci" / "queue"
+    H.gate_acquire("h7", "T82", 3600, path=tmp_path / "ci" / H.GATE_FILE)
+    _t(q, "0000-other.json", "heavy", window="h9", enq=time.time() - 100, pid=os.getpid())     # 活的行程、還在等（被鎖擋住）
+    ran = []
+    rc = H.run(["x"], "heavy", "h7", qdir=q, runner=lambda c, e, f: ran.append(1) or 0, sleep=lambda s: (_ for _ in ()).throw(AssertionError("持有者不該等")), note=lambda *_: None)
+    assert rc == 0 and ran
+
+
+def test_holder_window_via_motrix_window_passes_the_direct_run_check_and_expiry_warns():
+    lock = {"window": "h7", "token": "abc", "note": "T82", "since": NOW, "expires": NOW + 7200}
+    assert H.direct_run_verdict({"MOTRIX_WINDOW": "h7"}, lock)[0] == "ok", "持有者的 shell（MOTRIX_WINDOW）直接跑重型不被擋"
+    assert H.direct_run_verdict({"MOTRIX_WINDOW": "h9"}, lock)[0] == "refuse"
+    assert "即將過期" not in H.gate_line(lock, NOW)
+    assert "即將過期" in H.gate_line(dict(lock, expires=NOW + 600), NOW), "剩不到 30 分鐘要警告"
+
+
+def test_run_stage_the_gate_itself_exports_the_gate_token_when_a_lock_is_held(tmp_path, monkeypatch):
+    """M-A：run_stage 就是閘門，持有者起它時自動帶 token（不靠人記得 export）。"""
+    sys.path.insert(0, str(REPO / "backend" / "tools"))
+    import build_test_reuse as BT
+    monkeypatch.setenv("MOTRIX_CI_DIR", str(tmp_path / "ci"))
+    monkeypatch.delenv(H.GATE_TOKEN_ENV, raising=False)
+    seen = []
+    ok, lock = H.gate_acquire("h7", "T82", 3600)
+    assert ok
+    BT.run_stage(REPO, "not_e2e", [], python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
+    assert seen == [lock["token"]]
+    H.gate_release("h7")
+    seen.clear()
+    BT.run_stage(REPO, "not_e2e", [], python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
+    assert seen == [None], "沒有鎖就不帶"
