@@ -450,7 +450,7 @@ def _send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> str:
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
+    from_name = cfg.get("from_name", "MOTRIX 專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
         # ⚠️ **機器層級**（見 docstring）⇒ `skipped` 不是 `permanent`：
@@ -573,7 +573,7 @@ def _send_raising(to_addrs: list, subject: str, html: str, ignore_enabled: bool 
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
+    from_name = cfg.get("from_name", "MOTRIX 專案管理系統")
     if not user or not pw:
         raise RuntimeError("SMTP 帳號或應用程式密碼未設定")
     msg = MIMEMultipart("alternative")
@@ -2139,7 +2139,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
+    from_name = cfg.get("from_name", "MOTRIX 專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
         return SEND_SKIPPED

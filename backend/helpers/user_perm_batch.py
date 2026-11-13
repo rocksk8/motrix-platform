@@ -335,7 +335,7 @@ def _notify(actor, plan, applied, reason, undo=False) -> None:
                     continue
                 bits = []
                 if p["effectiveAdded"] or p["effectiveRemoved"]:
-                    bits.append("實際生效多%d項、少%d項" % (len(p["effectiveAdded"]), len(p["effectiveRemoved"])))
+                    bits.append("實際生效多 %d 項、少 %d 項" % (len(p["effectiveAdded"]), len(p["effectiveRemoved"])))
                 if p["bind"] or p["unbind"]:
                     bits.append("角色綁定+%d／-%d" % (len(p["bind"]), len(p["unbind"])))
                 gated = bool(p["gated"])
