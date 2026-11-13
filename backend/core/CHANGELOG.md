@@ -55,6 +55,9 @@
 - 行為變更：寄信連線改走共用的 `_smtp_open`——埠 465 用 SMTP_SSL、其餘用 STARTTLS（原本一律 STARTTLS，465 的信箱寄不出去）。
 - 新端點：`GET /api/settings/email-notify/providers`、`POST /api/settings/email-notify/wizard/test-me`、`POST /api/settings/email-notify/wizard/activate`；`PUT /api/settings/email-notify` 加格式驗證（422）。
 - 行為變更（hichan-3 審查 C／D／E／F）：測試信用候選設定寄、**測試失敗不動正在用的設定**，按「我收到了」才寫入；`PUT` 由未啟用改啟用必須有同一份設定 24 小時內的測試證明（否則 422）；`PUT` 缺欄位改為併入現有設定（不再重設成預設）；`test-me` 每帳號 10 分鐘最多 5 次、埠限 25／465／587／2525（內網主機仍可，回應不回原始錯誤）。
+- **（併入）(next) — 2026-11-13（fix/settings-center-valueof；設定中心輸入元件顯示目前值）**
+- 前端修正（無介面變動）：`settings-center.html` 單選沒有選取、數字框空白（正式機使用者回報兩次，旁邊卻寫「目前：…」）。根因：元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名，Alpine 的範圍代理用 `Reflect.has`（含原型鏈）解析名稱，x-for 內的 `valueOf(f)` 解析到原生函式，所有輸入元件（選項／數字／開關／文字）都拿不到目前值。改名 `curVal`，選項比對改 `choiceOn`（代碼數字或字串皆可）。
+- 測試：`tests/test_settings_center_valueof_2026_11_13.py`（3 題：node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一種；舊 bug 對照；全站元件方法名不得蓋住 Object.prototype 成員）。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

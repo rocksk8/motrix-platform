@@ -165,8 +165,8 @@
               <!-- 選項型 -->
               <div class="sc-choices" x-show="f.choices.length">
                 <template x-for="c in f.choices" :key="String(c.value)">
-                  <label class="sc-choice" :class="{'is-on': valueOf(f) === c.value}">
-                    <input type="radio" :name="'sc-' + f.key" :checked="valueOf(f) === c.value" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
+                  <label class="sc-choice" :class="{'is-on': choiceOn(f, c)}">
+                    <input type="radio" :name="'sc-' + f.key" :checked="choiceOn(f, c)" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
                     <span x-text="c.label"></span>
                     <span class="sc-rec" x-show="f.recommended === c.value">建議</span>
                     <small x-text="c.impact"></small>
@@ -175,17 +175,17 @@
               </div>
               <!-- 數字型 -->
               <div class="sc-input" x-show="!f.choices.length && (f.type==='int' || f.type==='float')">
-                <input type="number" :min="f.min" :max="f.max" :step="f.type==='int' ? 1 : 'any'" :value="valueOf(f)" :data-testid="'sc-input-' + f.key" @input="setDraft(f, $event.target.value)">
+                <input type="number" :min="f.min" :max="f.max" :step="f.type==='int' ? 1 : 'any'" :value="curVal(f)" :data-testid="'sc-input-' + f.key" @input="setDraft(f, $event.target.value)">
                 <span x-text="f.unit"></span>
                 <span class="sc-note" x-text="rangeText(f)"></span>
               </div>
               <!-- 開關型 -->
               <div class="sc-input" x-show="!f.choices.length && f.type==='bool'">
-                <label><input type="checkbox" :checked="valueOf(f) === true" :data-testid="'sc-bool-' + f.key" @change="setDraft(f, $event.target.checked)"> 開啟</label>
+                <label><input type="checkbox" :checked="curVal(f) === true" :data-testid="'sc-bool-' + f.key" @change="setDraft(f, $event.target.checked)"> 開啟</label>
               </div>
               <!-- 文字型 -->
               <div class="sc-input" x-show="!f.choices.length && f.type==='str'">
-                <input type="text" :value="valueOf(f)" :data-testid="'sc-text-' + f.key" @input="setDraft(f, $event.target.value)">
+                <input type="text" :value="curVal(f)" :data-testid="'sc-text-' + f.key" @input="setDraft(f, $event.target.value)">
               </div>
 
               <div class="sc-err" x-show="problem(f)" x-text="problem(f)"></div>
@@ -469,10 +469,14 @@ function settingsCenterPage() {
       return ''
     },
     // 注意：用 in 而不是 hasOwnProperty.call——Alpine（Proxy）只追蹤 has／get／ownKeys，後者不會觸發重畫
-    valueOf(f) { return (f.key in this.drafts) ? this.drafts[f.key] : f.value },
+    // ⚠ 方法名不能叫 valueOf／toString 這類 Object.prototype 的成員：Alpine 的範圍代理用 Reflect.has（含原型鏈）找名稱，
+    //   x-for 迴圈範圍裡的 `valueOf(f)` 會解析到繼承來的原生 valueOf ⇒ 回傳範圍物件、所有輸入元件都顯示空白／不選取（2026-11-13 使用者回報兩次）
+    curVal(f) { return (f.key in this.drafts) ? this.drafts[f.key] : f.value },
+    // 選項是否為目前選取：代碼可能是數字或字串，一律以字串比對
+    choiceOn(f, c) { const v = this.curVal(f); return v !== null && v !== undefined && String(v) === String(c.value) },
     isDirty(f) { return f.key in this.drafts },
     dirtyCount() { return Object.keys(this.drafts).length },
-    isDefaultNow(f) { return this.valueOf(f) === f.default },
+    isDefaultNow(f) { return this.curVal(f) === f.default },
 
     // ── 編輯 ────────────────────────────────────────────────
     setDraft(f, raw) {
