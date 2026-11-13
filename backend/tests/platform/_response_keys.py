@@ -5,6 +5,7 @@
 - `seed_every_table(conn)`：每張表塞一列（NOT NULL 無預設的欄位按型別填），讓清單類路由回傳『有列』——空清單沒有鍵可比，基準會變成假綠燈。
 - `key_paths(obj)`：遞迴鍵路徑（list 取聯集、元素型別抹去）。
 - `record(client, headers, paths)`：逐路由 GET，記狀態與鍵路徑；csv／xlsx 記表頭列。
+- `norm_keys(keys)`：動態月份鍵（`…otherBreakdown.2026-11`）正規化成 `<月>`；`record` 與 `diff` 都走它，所以滾動視窗不會讓基準無故轉紅。
 """
 import csv
 import io
@@ -46,6 +47,20 @@ def seed_every_table(conn) -> int:
             continue
     conn.commit()
     return ok
+
+
+#: 動態月份鍵：回應用「年-月」當物件鍵（例：`/api/dashboard/bundle` 的 `expenses.otherBreakdown.<YYYY-MM>`、`/api/dashboard/expenses-monthly` 的
+#: `otherBreakdown.<YYYY-MM>`；視窗＝最近 12 個月，隨『今天』滾動）。不正規化的話基準錄在 11 月，12/1 起鍵集就變（2025-12 掉出、2026-12 進來）而無故轉紅。
+#: 只認「整段」是 YYYY-MM（前後是 `.`、`[`、頭尾）；`2026-01-05`（日）、`x2026-01`、`2026-13` 都不算。
+_MONTH_SEG = re.compile(r"(?<![\w-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])(?![\w-])")
+MONTH_TOKEN = "<月>"
+
+
+def norm_keys(keys):
+    """鍵路徑清單 ⇒ 月份段換成 `<月>`、去重、排序。None 原樣回（沒有 `k` 的匯出／非 JSON 項目）。冪等。"""
+    if keys is None:
+        return None
+    return sorted({_MONTH_SEG.sub(MONTH_TOKEN, k) for k in keys})
 
 
 def key_paths(obj, prefix="", out=None) -> list:
@@ -166,7 +181,7 @@ def record(client, headers, paths) -> dict:
         ct = r.headers.get("content-type", "")
         if "json" in ct:
             try:
-                out[p] = {"s": r.status_code, "k": key_paths(r.json())}
+                out[p] = {"s": r.status_code, "k": norm_keys(key_paths(r.json()))}
             except ValueError:
                 out[p] = {"s": r.status_code, "k": []}
         elif EXPORT.search(p) or "csv" in ct or "spreadsheetml" in ct:
@@ -211,6 +226,6 @@ def diff(base: dict, now: dict) -> dict:
         b, n = base[p], now[p]
         if p in RATE_LIMITED and {b.get("s"), n.get("s")} == {429, 200}:      # 限流器的命中順序隨請求順序挪動（新增路由會挪動）；只放行清單內路由的 429↔200，其餘（403／404／500、鍵集變動）照報
             continue
-        if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or b.get("k") != n.get("k") or _mask_dates(b.get("hdr")) != _mask_dates(n.get("hdr")):
+        if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or norm_keys(b.get("k")) != norm_keys(n.get("k")) or _mask_dates(b.get("hdr")) != _mask_dates(n.get("hdr")):
             changed[p] = (b, n)
     return {"missing": sorted(set(base) - set(now)), "added": sorted(set(now) - set(base)), "changed": changed}
