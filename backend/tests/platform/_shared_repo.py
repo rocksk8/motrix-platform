@@ -44,3 +44,54 @@ _SHARED_FILES = {}                                      # rel ⇒ _File；Repo.f
 
 def new_real_repo():
     return ST.Repo(real_sources(), files=_SHARED_FILES)
+
+
+# ── 真實 repo 的 dep_scan 圖（D6／D7）：每個行程只掃一次 ──────────────────────────────────────────
+# dep_scan.build() 約 12～15 秒；test_module_boundaries／test_generated_maps／test_route_ownership／_boundaries.scan_units
+# 各自掃（有的一個檔掃三次）。同一個行程內原始碼不變 ⇒ 只算一次，之後給深拷貝（呼叫端會改 dict）。
+# ⚠️ 只快取「真實 repo」（ROOT＝REPO）；合成樹（use_root／build_synthetic）與沙盒複本的掃描一律照舊直接 build，不經這裡。
+_GRAPH = {}
+
+
+def real_dep_graph(dep_scan=None):
+    """真實 repo 的 dep_scan.build() 結果（深拷貝）。dep_scan 的 ROOT 不是真實 repo（合成樹／沙盒）⇒ 不快取，直接 build。"""
+    import copy
+    ds = dep_scan
+    if ds is not None and Path(getattr(ds, "ROOT", REPO)).resolve() != REPO.resolve():
+        return ds.build()
+    if "g" not in _GRAPH:
+        if ds is None:
+            spec = importlib.util.spec_from_file_location("_platform_dep_scan_shared", REPO / "tools" / "platform" / "dep_scan.py")
+            ds = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(ds)
+        _GRAPH["g"] = ds.build()
+    return copy.deepcopy(_GRAPH["g"])
+
+
+# ── modtest 的現算 test_map／dep_graph（D4）：每個行程只算一次 ───────────────────────────────────
+# modtest.load_map()（約 25 秒）＋load_graph()（約 15 秒）是現場掃整棵樹；測 modtest 本身的題（select／main）每一題都各算一次。
+# 這些題驗的是「選題邏輯」，不是「掃描器」（掃描器由 test_generated_maps／test_dep_scan_* 守）⇒ 吃同一份真實 repo 的現算結果即可。
+_MAPS = {}
+
+
+def patch_real_maps(monkeypatch, mt):
+    """把 mt（modtest 模組）的 load_map／load_graph 換成「真實 repo 的現算結果、每個行程只算一次、每次給深拷貝」的版本。
+    use_files=True（讀產生檔）照舊；其餘行為與原函式一致（失敗退讀檔的邏輯也在原函式裡，第一次呼叫時照走）。"""
+    import copy
+    real_map, real_graph = mt.load_map, mt.load_graph
+
+    def load_map(use_files=False):
+        if use_files:
+            return real_map(use_files)
+        if "map" not in _MAPS:
+            _MAPS["map"] = real_map(False)
+        return copy.deepcopy(_MAPS["map"])
+
+    def load_graph(use_files=False):
+        if use_files:
+            return real_graph(use_files)
+        if "graph" not in _MAPS:
+            _MAPS["graph"] = real_graph(False)
+        return copy.deepcopy(_MAPS["graph"])
+    monkeypatch.setattr(mt, "load_map", load_map)
+    monkeypatch.setattr(mt, "load_graph", load_graph)
