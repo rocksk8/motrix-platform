@@ -480,3 +480,51 @@ def test_undo_of_binding_and_bad_requests(client, world):
     assert client.post(BATCH + "/undo", json={"changes": [{"userId": world["boss2"], "adds": ["customer"]}]}, headers=h).json()["conflicts"][0]["reason"]
     hb = _login(client, "bob")
     assert client.post(BATCH + "/undo", json={"changes": [{"userId": world["cat"]}]}, headers=hb).status_code in (401, 403)
+
+
+def _subtract_rows(uid):
+    import db
+    conn = db.get_db()
+    try:
+        return [r[0] for r in conn.execute("SELECT perm_key FROM user_perm_subtracts WHERE user_id=?", (uid,))]
+    finally:
+        conn.close()
+
+
+def _effective_of(uid):
+    from helpers.auth import effective_modules
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT role, modules FROM users WHERE id=?", (uid,)).fetchone()
+        st = upb._load_state(conn, [uid])
+    finally:
+        conn.close()
+    return upb._effective(row["role"], json.loads(row["modules"] or "[]"), st["bound"].get(uid, set()), st["roles"], st["subs"].get(uid, set()))
+
+
+def test_undo_of_a_grant_the_role_already_gave_creates_no_subtract(client, world):
+    """審查 h11 M2：授予一個『角色本來就給』的鍵（只寫進個人勾選）→ 復原只還原個人勾選，不能多造個人扣項把角色給的權限扣掉。"""
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "undo_cust", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
+    before = _effective_of(bob)
+    ap = _post(client, h, {"userIds": [bob], "grant": ["customer"]})
+    assert ap.status_code == 200 and _person(ap, bob)["adds"] == ["customer"]
+    r = client.post(BATCH + "/undo", json={"changes": [p for p in ap.json()["people"] if p["status"] == "change"]}, headers=h)
+    assert r.status_code == 200 and r.json()["applied"] == [bob], r.text
+    assert _subtract_rows(bob) == [], "復原不造個人扣項"
+    assert _mods(bob) == ["dashboard", "work_log"] and _effective_of(bob) == before, "復原後的實際權限＝批次之前"
+
+
+def test_undo_of_a_revoke_of_a_role_given_key_restores_it(client, world):
+    """審查 h11 L5（反向）：取消角色給的鍵（寫個人扣項）→ 復原還回扣項，實際權限回到批次之前。"""
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "undo_cust2", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
+    before = _effective_of(bob)
+    ap = _post(client, h, {"userIds": [bob], "revoke": ["customer"]})
+    assert ap.status_code == 200 and _subtract_rows(bob) == ["customer"]
+    r = client.post(BATCH + "/undo", json={"changes": [p for p in ap.json()["people"] if p["status"] == "change"]}, headers=h)
+    assert r.status_code == 200 and r.json()["applied"] == [bob], r.text
+    assert _subtract_rows(bob) == [] and _effective_of(bob) == before

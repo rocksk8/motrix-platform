@@ -13,8 +13,8 @@
 3. **財務三鍵**（`FINANCE_KEYS`）由角色決定：批次永遠不動（授予、取消都略過並說明）。
 4. **最高管理者不納入**：維持全功能，批次與範本都略過。
 5. **範本**：伺服器在預覽時就把範本展開成「每人明確的授予／取消清單」；套用時**重算同一份**，與預覽的 `planHash` 不同就 409（不照過期預覽寫入）。
-   範本只動「個人勾選」：個人扣項與職責角色綁定不動（**範本模式絕不新增個人扣項**；角色本來就給的鍵留著，預覽顯示
-   「仍由角色給予」）；被個人扣項扣掉的鍵不授予（回報略過）。範本套用**必須帶 planHash**（沒帶 ⇒ 400）：不盲目重新展開。
+   範本只動「個人勾選」：個人扣項與職責角色綁定不動（**範本模式絕不新增個人扣項**；角色本來就給的鍵留著，確認視窗的
+   「實際生效」差異裡不會出現「少了」該鍵）；**復原也絕不新增個人扣項**（只還原這一批寫過的格）；被個人扣項扣掉的鍵不授予（回報略過）。範本套用**必須帶 planHash**（沒帶 ⇒ 400）：不盲目重新展開。
 6. **取消職責角色給的權限**：該權限不在個人勾選裡 ⇒ 改設「個人扣項」（與 `duty_roles.set_subtract` 同表同規則），不是假裝取消了。
 7. **整批同一個寫入交易**（`core.txn.begin_write`）：任何例外 ⇒ 全部不寫；被略過的項目不是錯誤，照實回報。
 """
@@ -193,7 +193,7 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
             skip("revoke", k, "財務三鍵由角色決定，批次不動")
             continue
         in_raw = k in rawset
-        from_role = template_keys is None and k in role_keys and k not in subs
+        from_role = template_keys is None and k in role_keys and k not in subs and not req.get("undoing")   # 復原只還原這一批寫過的東西，不另外造個人扣項（否則角色給的權限會被悄悄扣掉）
         if in_raw:
             p["removes"].append(k)
         elif k not in held_role_keys and template_keys is None:
@@ -346,7 +346,7 @@ def _undo_request(change, st, uid):
     if drift:
         return None, "；".join(drift)
     return {"userIds": [uid], "grant": removes, "revoke": adds, "bindRoleIds": unbind, "unbindRoleIds": bind, "template": "",
-            "unsubtract": sub_adds, "reason": ""}, ""
+            "unsubtract": sub_adds, "reason": "", "undoing": True}, ""
 
 
 def undo(conn, actor, body, ip="") -> dict:
