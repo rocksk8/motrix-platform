@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE 通知矩陣 mockup</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb;--on:#06c755;--sel:#eef4ff}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d;--sel:#1b2740}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:16px 16px 120px}
+h1{font-size:20px;margin:4px 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.banner{background:var(--warnbg);color:var(--warn);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px}
+.tabs{display:flex;gap:6px;margin:8px 0 12px}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 14px;border-radius:8px;cursor:pointer;font:inherit}
+.tab[aria-selected=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+/* 用量 */
+.quota{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;padding:12px 14px;margin-bottom:10px;align-items:center}
+.bar{height:10px;border-radius:6px;background:var(--soft);border:1px solid var(--line);position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--on)}
+.bar b{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--red)}
+.big{font-size:20px;font-weight:700}
+.mute{color:var(--mute);font-size:12px}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);white-space:nowrap}
+.pill.only{background:#e0e7ff;color:#3730a3;border-color:transparent}.pill.sub{background:#e0f2fe;color:#075985;border-color:transparent}
+.pill.crit{background:#fee2e2;color:#991b1b;border-color:transparent}.pill.heavy{background:var(--warnbg);color:var(--warn);border-color:transparent}
+.pill.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}.pill.bad{background:var(--redbg);color:var(--red);border-color:transparent}.pill.good{background:var(--okbg);color:var(--ok);border-color:transparent}
+/* 工具列 */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin-bottom:8px;position:sticky;top:0;z-index:20}
+.toolbar input[type=search]{flex:1 1 220px;min-width:160px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:5px 11px;border-radius:16px;cursor:pointer;font:inherit;font-size:13px}
+.chip[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
+select,.btn{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);padding:5px 9px;cursor:pointer}
+.btn:hover{border-color:var(--mute)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}.btn.danger{color:var(--red)}.btn.sm{padding:2px 8px;font-size:12px}
+.defrow{display:flex;gap:8px;align-items:center;margin:0 0 8px;font-size:13px;flex-wrap:wrap}
+/* 矩陣 */
+.mx{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.mx th{position:sticky;top:var(--thtop,56px);background:var(--soft);z-index:5;text-align:center;font-weight:600;padding:7px 4px;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
+.mx td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.mx td.name,.mx th.name{text-align:left;padding-left:8px}
+.mx tr.grp td{background:var(--soft);text-align:left;font-weight:700;padding:7px 8px;cursor:pointer}
+.mx tr.ev:hover td{background:var(--soft)}.mx tr.ev.sel td{background:var(--sel)}
+.mx .k{font:11px/1.2 ui-monospace,Consolas,monospace;color:var(--mute)}
+.sw{width:38px;height:22px;border-radius:12px;border:1px solid var(--line);background:#c9c9cf;position:relative;cursor:pointer;padding:0;vertical-align:middle}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .12s}
+.sw[aria-checked=true]{background:var(--on);border-color:var(--on)}.sw[aria-checked=true]::after{left:18px}
+.rc{width:30px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--card);cursor:pointer;color:transparent;font-size:14px;line-height:1;padding:0}
+.rc.on{color:#fff}.rc.on.f{background:#7c8aa5;border-color:#7c8aa5}.rc.on.a{background:var(--on);border-color:var(--on)}
+.rc.dis{opacity:.35;cursor:not-allowed}
+.who{display:inline-flex;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:150px}
+.av{font-size:11px;padding:0 6px;border-radius:9px;background:var(--bluebg);color:var(--blue);border:1px solid var(--line)}
+.av.un{background:var(--soft);color:var(--mute);text-decoration:line-through}
+.spark{display:inline-block;height:6px;border-radius:3px;background:var(--on);vertical-align:middle}
+.off td.name{opacity:.78}
+td.name .nm{font-weight:600}
+.mode{max-width:118px}
+.hide{display:none!important}
+/* 批次列 */
+.batch{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;background:var(--ink);color:var(--card);border-radius:12px;padding:9px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:calc(100vw - 16px)}
+.batch .btn{background:transparent;color:inherit;border-color:rgba(255,255,255,.35)}.batch .btn:hover{background:rgba(255,255,255,.12)}
+.batch .sep{width:1px;align-self:stretch;background:rgba(255,255,255,.3)}
+/* 彈窗 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.dlg{background:var(--card);color:var(--ink);border-radius:12px;padding:16px;max-width:520px;width:100%;max-height:88vh;overflow:auto}
+.dlg h3{margin:0 0 8px;font-size:16px}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.ulist{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.ulist label{display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:14px;background:var(--ink);color:var(--card);padding:8px 14px;border-radius:10px;z-index:80;display:flex;gap:10px;align-items:center;font-size:13px}
+.toast button{background:none;border:0;color:#7db3ff;cursor:pointer;font:inherit;text-decoration:underline}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:14px;flex-wrap:wrap;margin:6px 2px 10px;align-items:center}
+.legend .rc{width:18px;height:18px;vertical-align:middle;cursor:default}
+/* 手機卡片 */
+.cards{display:none}
+.gcard{margin-bottom:10px;overflow:hidden}
+.ghead{display:flex;gap:8px;align-items:center;padding:10px 12px;background:var(--soft);font-weight:700;cursor:pointer}
+.ecard{padding:10px 12px;border-top:1px solid var(--line)}
+.ecard.sel{background:var(--sel)}
+.ecard .top{display:flex;gap:8px;align-items:flex-start}
+.ecard .top .t{flex:1}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.chips .rcc{border:1px solid var(--line);background:var(--card);color:var(--mute);border-radius:14px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;min-height:32px}
+.chips .rcc.on{background:var(--on);border-color:var(--on);color:#fff}.chips .rcc.on.f{background:#7c8aa5;border-color:#7c8aa5}
+/* 現況對照 */
+.old .ev{padding:6px 12px;border-top:1px dashed var(--line)}
+.old .roles{font-size:12px;color:var(--mute);margin:2px 0 2px 24px}
+.old .roles label{margin-right:8px;white-space:nowrap}
+@media (max-width:900px){
+  .quota{grid-template-columns:1fr}
+  .mxwrap{display:none}.cards{display:block}
+  .batch{left:8px;right:8px;transform:none;bottom:8px;justify-content:center}
+  .batch .btn{padding:8px 10px}
+  .toolbar{position:static}
+  .defrow .mute{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LINE 通知：要發哪些、發給誰</h1>
+  <p class="sub">設計 mockup（<b>示意資料</b>）：事件名稱與群組取自真實的事件目錄（70 項，10 個群組，不含獎金／薪資／勞報單）；開關、收件對象、發送則數、人員都是假的，所有操作只在這個頁面裡生效、重新整理就還原。</p>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-new" aria-selected="true" onclick="showTab('new')">新設計：矩陣</button>
+    <button class="tab" role="tab" id="tab-old" aria-selected="false" onclick="showTab('old')">現況（對照）</button>
+  </div>
+
+  <div id="view-new">
+    <div class="card quota" id="quota" aria-live="polite"></div>
+    <div class="defrow card" style="padding:8px 12px">
+      <b>新開啟的事件，預設發給：</b>
+      <select id="newdef" aria-label="新開啟事件的預設對象">
+        <option value="me">只發給我（建議）</option>
+        <option value="boss">最高管理者</option>
+        <option value="biz">照 Email 收件人（不建議：會發給整個收件名單）</option>
+      </select>
+      <span class="mute">LINE 只給特定人：從「關」切到「開」時，若事件目前是「照原本收件人」，會依這裡自動改成指定對象；之後仍可逐項調整。</span>
+    </div>
+    <div class="card toolbar" id="toolbar">
+      <input type="search" id="q" placeholder="搜尋事件名稱或代碼（例：簽核、backup、拜訪）" aria-label="搜尋事件">
+      <button class="chip" data-f="all" aria-pressed="true">全部</button>
+      <button class="chip" data-f="on" aria-pressed="false">已開啟</button>
+      <button class="chip" data-f="off" aria-pressed="false">未開啟</button>
+      <button class="chip" data-f="wide" aria-pressed="false" title="已開啟、但還是發給原本全部收件人的事件">⚠ 發給整份名單</button>
+      <button class="chip" data-f="crit" aria-pressed="false">重要（系統告警）</button>
+      <select id="gsel" aria-label="只看某個群組"></select>
+      <button class="btn" id="expall">展開全部</button><button class="btn" id="colall">收合全部</button>
+    </div>
+    <div class="legend">
+      <span>圖例：</span>
+      <span><button class="rc on a" tabindex="-1">✓</button> 指定收件（這個角色會收）</span>
+      <span><button class="rc on f" tabindex="-1">✓</button> 篩選原本收件人（這個角色的人才收）</span>
+      <span><button class="rc" tabindex="-1"></button> 不收</span>
+      <span>點格子即可切換；勾左邊方塊選多個事件，再用下方的批次列一次套用。</span>
+    </div>
+    <div class="card mxwrap"><table class="mx" id="mx"></table></div>
+    <div class="cards" id="cards"></div>
+    <p class="mute" style="margin-top:10px">每一則 LINE 訊息「每位收件人算一則」，免費方案每月 200 則；用量到 90% 時，非「重要」事件會自動暫停。「近 30 天」是已開啟事件實際推出的則數。</p>
+  </div>
+
+  <div id="view-old" class="hide">
+    <div class="banner">這是現行畫面的重現（只列前面幾項）。實際有 70 項，每一項都長這樣：各自一個勾選、6 個角色勾選、再各自展開「設定誰要發」；沒有搜尋、篩選、批次，也看不到用量。</div>
+    <div class="card old" id="oldlist"></div>
+  </div>
+</div>
+
+<div class="batch hide" id="batch" role="toolbar" aria-label="批次操作">
+  <b id="bn"></b>
+  <span class="sep"></span>
+  <button class="btn" data-b="on">開啟</button><button class="btn" data-b="off">關閉</button>
+  <span class="sep"></span>
+  <span style="font-size:12px;opacity:.8">預設組合</span>
+  <button class="btn" data-b="me">只發給我</button><button class="btn" data-b="boss">最高管理者</button><button class="btn" data-b="biz">照 Email 收件人</button>
+  <button class="btn" data-b="custom">指定人員／角色…</button>
+  <span class="sep"></span>
+  <button class="btn" data-b="clear">取消選取</button>
+</div>
+<div id="layer"></div>
+
+<script>
+var EVENTS = [{"key": "approval_request", "name": "報價單待簽核", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "next_tier", "name": "報價單進入下一層簽核", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "approved", "name": "報價單簽核完成", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "returned", "name": "報價單退回修改", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "resubmit_requester", "name": "修改版報價單重新送審確認", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "approval_reminder", "name": "簽核逾期催辦", "group": "報價單與簽核", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "shipping_submitted", "name": "出貨單待簽核", "group": "出貨單", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "shipping_next_tier", "name": "出貨單進入下一層簽核", "group": "出貨單", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "shipping_approved", "name": "出貨單簽核完成", "group": "出貨單", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "shipping_returned", "name": "出貨單退回修改", "group": "出貨單", "kind": "mail", "priority": "normal", "need": ["quotation", "case_manage"]}, {"key": "invoice_voucher_submitted", "name": "開票申請憑據待簽核", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "payment_request_submitted", "name": "請款單待簽核", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "invoice_voucher_next_tier", "name": "開票申請憑據進入下一層簽核", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "payment_request_next_tier", "name": "請款單進入下一層簽核", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "invoice_voucher_approved", "name": "開票申請憑據簽核完成", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "payment_request_approved", "name": "請款單簽核完成", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "invoice_voucher_returned", "name": "開票申請憑據退回修改", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "payment_request_returned", "name": "請款單退回修改", "group": "請款與開票", "kind": "mail", "priority": "normal", "need": ["case_manage", "finance", "cashier", "quotation"]}, {"key": "contractor_voucher_submitted", "name": "承攬商匯款申請待簽核", "group": "承攬商", "kind": "mail", "priority": "normal", "need": ["procurement", "case_manage", "contractor_list"]}, {"key": "contractor_voucher_next_tier", "name": "承攬商匯款申請進入下一層簽核", "group": "承攬商", "kind": "mail", "priority": "normal", "need": ["procurement", "case_manage", "contractor_list"]}, {"key": "contractor_voucher_approved", "name": "承攬商匯款申請簽核完成", "group": "承攬商", "kind": "mail", "priority": "normal", "need": ["procurement", "case_manage", "contractor_list"]}, {"key": "contractor_voucher_returned", "name": "承攬商匯款申請退回修改", "group": "承攬商", "kind": "mail", "priority": "normal", "need": ["procurement", "case_manage", "contractor_list"]}, {"key": "dispatch_file_delete_request", "name": "承攬商報價單附件刪除申請待簽核（當層簽核人）", "group": "承攬商", "kind": "line_only", "priority": "normal", "need": ["procurement", "case_manage", "contractor_list"]}, {"key": "custom_record_submitted", "name": "自訂模組單據待簽核", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_record_next_tier", "name": "自訂模組單據進入下一層簽核", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_def_submitted", "name": "自訂模組定義待審核", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_record_approved", "name": "自訂模組單據簽核完成", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_def_approved", "name": "自訂模組定義審核完成", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_record_returned", "name": "自訂模組單據退回修改", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "custom_def_returned", "name": "自訂模組定義退回修改", "group": "自訂模組", "kind": "mail", "priority": "normal", "need": []}, {"key": "dev_case_delete_request", "name": "業務開發案件刪除申請", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_relink_request", "name": "業務開發案件連結異動申請", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_stale", "name": "業務開發案件逾期未跟進", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_assigned", "name": "業務開發案件指派", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_reply_overdue", "name": "業務開發案件回覆期限已過未回報", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_log_directive", "name": "業務開發記錄批示", "group": "業務開發", "kind": "mail", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_unassigned", "name": "業務開發案件被取消指派（前任負責人）", "group": "業務開發", "kind": "line_only", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_case_deadline_changed", "name": "業務開發案件回覆期限被調整（被指派人）", "group": "業務開發", "kind": "line_only", "priority": "normal", "need": ["dev_crm"]}, {"key": "dev_log_directive_reply", "name": "業務開發記錄批示被回覆", "group": "業務開發", "kind": "line_only", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_case_created", "name": "業務開發：新增案件", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_case_status", "name": "業務開發：案件狀態（階段）變更", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_case_progress", "name": "業務開發：案件進度回報（量大）", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_visit_logged", "name": "業務開發：新增拜訪記錄（量大）", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_log_approved", "name": "業務開發：開發記錄審核通過", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "crm_case_converted", "name": "業務開發：案件轉建報價單", "group": "業務開發", "kind": "sub", "priority": "normal", "need": ["dev_crm"]}, {"key": "daily_task_assigned", "name": "工作事項指派", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "daily_task_completed", "name": "工作事項完成回報", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "daily_task_overdue", "name": "工作事項逾期未完成", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "daily_task_overdue_manager", "name": "部門成員工作事項逾期", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "daily_task_edited", "name": "工作事項內容已編輯", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "range_task_deadline", "name": "區間工作事項即將到期", "group": "工作事項", "kind": "mail", "priority": "normal", "need": ["daily_task", "case_manage"]}, {"key": "case_close_blocked", "name": "結案被防呆機制擋下", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "case_change_requested", "name": "已結案案件變更待簽核", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "case_stage_deadline", "name": "案件執行進度即將到期", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "case_stage_deadline_manager", "name": "部門成員案件進度即將到期", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "case_project_overdue", "name": "案件專案期間已超期", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "warranty_expiry", "name": "設備保固即將到期", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "settlement_finalized", "name": "成本精算完結", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "case_closing_report", "name": "案件結案報表", "group": "案件管理", "kind": "mail", "priority": "normal", "need": ["case_manage", "quotation"]}, {"key": "auth_lockout", "name": "登入失敗鎖定告警", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "cert_expiry", "name": "HTTPS 憑證即將到期", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "backup_stale", "name": "備份已停止運作", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "heartbeat_stale", "name": "心跳監控本身異常", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "disk_space_low", "name": "磁碟空間不足", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "backup_error", "name": "備份嚴重錯誤", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "geo_quota_warning", "name": "地圖定位額度達警戒線", "group": "系統告警", "kind": "mail", "priority": "normal", "need": ["settings"]}, {"key": "company_setup_alert", "name": "本公司資料設定狀態告警", "group": "系統告警", "kind": "mail", "priority": "critical", "need": ["settings"]}, {"key": "monthly_report", "name": "每月營運報表", "group": "通知與報表", "kind": "mail", "priority": "normal", "need": ["reports"]}, {"key": "module_activity", "name": "模組新增與異動", "group": "通知與報表", "kind": "mail", "priority": "normal", "need": ["@admin"]}, {"key": "user_notice", "name": "管理者自訂的額外通知", "group": "通知與報表", "kind": "mail", "priority": "normal", "need": []}];
+var GROUPS = ["報價單與簽核", "出貨單", "請款與開票", "承攬商", "自訂模組", "業務開發", "工作事項", "案件管理", "系統告警", "通知與報表"];
+var ROLES = ['superadmin','admin','sales','engineer','viewer','finance'];
+var RN = {superadmin:'最高管理者',admin:'管理員',sales:'業務',engineer:'工程師',viewer:'檢視者',finance:'財務'};
+var RS = {superadmin:'最高',admin:'管理',sales:'業務',engineer:'工程',viewer:'檢視',finance:'財務'};
+var ME = 'zhang';
+var USERS = [
+  {u:'zhang',n:'張總（我）',r:'superadmin',bound:true,mods:['*']},
+  {u:'wang',n:'王經理',r:'admin',bound:true,mods:['quotation','case_manage','finance','dev_crm','daily_task','settings','reports','procurement','contractor_list','cashier']},
+  {u:'li',n:'李業務',r:'sales',bound:true,mods:['quotation','dev_crm','daily_task']},
+  {u:'chen',n:'陳會計',r:'finance',bound:true,mods:['finance','cashier','case_manage','quotation','reports']},
+  {u:'lin',n:'林工程師',r:'engineer',bound:true,mods:['daily_task','case_manage','dev_crm']},
+  {u:'zhou',n:'周助理',r:'viewer',bound:false,mods:['reports']},
+  {u:'zhao',n:'趙業務',r:'sales',bound:false,mods:['quotation','dev_crm']}
+];
+var ROLEN = {superadmin:1,admin:2,sales:6,engineer:5,viewer:3,finance:2};   // 各角色大約人數（示意）
+var QUOTA = 200, RESERVE = 90;
+function user(u){return USERS.filter(function(x){return x.u===u})[0]}
+function eligible(e,u){var x=user(u);if(!x)return false;if(x.mods.indexOf('*')>=0)return true;
+  if(!e.need.length)return true;
+  return e.need.some(function(m){return m==='@admin'?(x.r==='admin'||x.r==='superadmin'):x.mods.indexOf(m)>=0})}
+
+/* ── 假資料：誰開了、發給誰、近 30 天發了幾則 ── */
+var S = {};
+EVENTS.forEach(function(e){S[e.key]={on:false,mode:'business',roles:ROLES.slice(),users:[],sent:0}});
+function seed(k,o){var s=S[k];if(!s)return;for(var i in o)s[i]=o[i]}
+['approval_request','shipping_submitted'].forEach(function(k){seed(k,{on:true,sent:14})});
+seed('next_tier',{on:true,roles:['superadmin','admin'],sent:6});
+seed('approved',{on:true,mode:'only',roles:[],users:['wang'],sent:9});
+seed('returned',{on:true,mode:'only',roles:[],users:['wang'],sent:4});
+seed('approval_reminder',{on:true,mode:'business_plus',roles:['superadmin'],users:['li'],sent:7});
+seed('payment_request_submitted',{on:true,mode:'only',roles:['finance'],users:[],sent:5});
+seed('invoice_voucher_submitted',{on:true,mode:'only',roles:['finance'],users:[],sent:3});
+['auth_lockout','cert_expiry','backup_stale','backup_error','heartbeat_stale','disk_space_low'].forEach(function(k,i){seed(k,{on:true,mode:'only',roles:['superadmin'],users:[],sent:[2,0,0,1,0,0][i]})});
+seed('dev_case_assigned',{on:true,mode:'only',roles:[],users:['lin','li'],sent:8});
+seed('crm_case_status',{on:true,mode:'only',roles:[],users:['li'],sent:5});
+seed('crm_visit_logged',{on:true,sent:41});        // 量大、而且還發給整份名單 ⇒ 示範用量警示
+seed('daily_task_overdue',{on:true,sent:6});
+var HEAVY = {crm_visit_logged:1,crm_case_progress:1};
+var BIZN = function(e){return {'報價單與簽核':3,'出貨單':3,'請款與開票':3,'承攬商':2,'自訂模組':2,'業務開發':8,'工作事項':6,'案件管理':4,'系統告警':2,'通知與報表':3}[e.group]||3};
+
+/* ── UI 狀態 ── */
+var ST = {q:'',f:'all',g:'',collapsed:{},sel:{},last:null,newdef:'me'};
+var UNDO = null, mobile = false;
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ev(k){return EVENTS.filter(function(e){return e.key===k})[0]}
+function est(e){return estS(e,S[e.key])}
+function estS(e,s){if(!s.on)return 0;
+  var n=s.users.length;
+  if(s.mode==='business'){var r=s.roles.length===6?1:(s.roles.length/6);return Math.max(s.roles.length?1:0,Math.round(BIZN(e)*r))}
+  s.roles.forEach(function(r){n+=ROLEN[r]});
+  return n+(s.mode==='business_plus'?BIZN(e):0)}
+function wide(e){var s=S[e.key];return s.on&&s.mode==='business'&&s.roles.length===6}
+function nobody(e){var s=S[e.key];return s.on&&s.mode==='only'&&!s.roles.length&&!s.users.length}
+function visible(e){
+  var s=S[e.key];
+  if(ST.g&&e.group!==ST.g)return false;
+  if(ST.f==='on'&&!s.on)return false;if(ST.f==='off'&&s.on)return false;
+  if(ST.f==='wide'&&!wide(e))return false;if(ST.f==='crit'&&e.priority!=='critical')return false;
+  if(ST.q){var q=ST.q.toLowerCase();if((e.name+' '+e.key+' '+e.group).toLowerCase().indexOf(q)<0)return false}
+  return true}
+function groupsView(){var out=[];GROUPS.forEach(function(g){var es=EVENTS.filter(function(e){return e.group===g&&visible(e)});if(es.length)out.push({g:g,es:es,all:EVENTS.filter(function(e){return e.group===g})})});return out}
+function visKeys(){var o=[];groupsView().forEach(function(x){if(!ST.collapsed[x.g]||ST.q)x.es.forEach(function(e){o.push(e.key)})});return o}
+
+/* ── 用量 ── */
+function totals(){var s30=0,on=0;EVENTS.forEach(function(e){if(S[e.key].on){on++;s30+=S[e.key].sent}});return {s30:s30,on:on}}
+function renderQuota(){
+  var t=totals(),used=Math.min(QUOTA,Math.round(t.s30*0.9)+4),pct=Math.round(used/QUOTA*100),proj=t.s30,ppct=Math.round(proj/QUOTA*100);
+  var tone=ppct>=RESERVE?'bad':ppct>=70?'warn':'good';
+  var msg=ppct>=RESERVE?'照目前的開法，每月會超過 90% 保留線，一般事件會被暫停；建議把「量大」或「發給整份名單」的事件改成指定對象。':ppct>=70?'接近保留線（90%），再開事件前先確認收件人。':'額度充足。';
+  document.getElementById('quota').innerHTML=
+   '<div><div class="mute">本月 LINE 訊息用量（免費方案 '+QUOTA+' 則／月）</div><div class="big">'+used+' <span class="mute">／ '+QUOTA+'，剩 '+(QUOTA-used)+' 則</span></div>'+
+   '<div class="bar" style="margin-top:6px" title="紅線＝90% 保留線"><i style="width:'+pct+'%"></i><b style="left:'+RESERVE+'%"></b></div></div>'+
+   '<div><div class="mute">已開啟事件</div><div class="big">'+t.on+' <span class="mute">／ '+EVENTS.length+' 項</span></div><div class="mute">近 30 天共推出 '+t.s30+' 則</div></div>'+
+   '<div><span class="pill '+tone+'">依近 30 天推估：每月約 '+proj+' 則（'+ppct+'%）</span><div class="mute" style="margin-top:4px">'+msg+'</div></div>'}
+
+/* ── 渲染（桌面矩陣 ＋ 手機卡片，同一份狀態） ── */
+function modeSel(e){var s=S[e.key];return '<select class="mode" data-act="mode" data-k="'+e.key+'" aria-label="'+esc(e.name)+' 的收件對象">'+
+  [['business','照原本收件人'],['business_plus','原本＋指定'],['only','只發給指定']].map(function(m){return '<option value="'+m[0]+'"'+(s.mode===m[0]?' selected':'')+'>'+m[1]+'</option>'}).join('')+'</select>'}
+function roleCell(e,r){var s=S[e.key],on=s.roles.indexOf(r)>=0,dis=!s.on;
+  return '<button class="rc'+(on?' on '+(s.mode==='business'?'f':'a'):'')+(dis?' dis':'')+'" data-act="role" data-k="'+e.key+'" data-r="'+r+'" aria-pressed="'+on+'" aria-label="'+esc(e.name)+'：'+RN[r]+(on?'（收）':'（不收）')+'" '+(dis?'disabled':'')+'>✓</button>'}
+function whoCell(e){var s=S[e.key];
+  if(s.mode==='business')return '<span class="mute">—</span>';
+  var h=s.users.map(function(u){var x=user(u);return '<span class="av'+(x&&x.bound?'':' un')+'" title="'+(x&&!x.bound?'尚未綁定 LINE，收不到':'')+'">'+esc(x?x.n.replace('（我）',''):u)+'</span>'}).join('');
+  return '<span class="who">'+h+'<button class="btn sm" data-act="people" data-k="'+e.key+'" '+(s.on?'':'disabled')+'>＋</button></span>'}
+function flags(e){var s=S[e.key],h='';
+  if(e.kind==='line_only')h+=' <span class="pill only">僅 LINE</span>';
+  if(e.kind==='sub')h+=' <span class="pill sub">LINE 細項</span>';
+  if(e.priority==='critical')h+=' <span class="pill crit">重要</span>';
+  if(HEAVY[e.key])h+=' <span class="pill heavy">量大</span>';
+  if(nobody(e))h+=' <span class="pill bad">沒有人會收到</span>';
+  else if(wide(e))h+=' <span class="pill warn">發給整份名單（約 '+est(e)+' 人）</span>';
+  return h}
+function sentCell(e){var s=S[e.key];if(!s.on)return '<span class="mute">—</span>';return '<span class="spark" style="width:'+Math.min(60,s.sent*1.6)+'px"></span> '+s.sent}
+function renderTable(){
+  var gv=groupsView(),h='<thead><tr><th style="width:34px"><input type="checkbox" id="selall" aria-label="全選目前列出的事件"></th><th class="name">事件</th><th style="width:60px">開／關</th><th style="width:128px">收件對象</th>'+
+   ROLES.map(function(r){return '<th style="width:44px" title="'+RN[r]+'">'+RS[r]+'</th>'}).join('')+'<th style="width:170px">指定人員</th><th style="width:96px">近 30 天</th></tr></thead><tbody>';
+  if(!gv.length)h+='<tr><td colspan="12" style="padding:30px;color:var(--mute)">沒有符合條件的事件</td></tr>';
+  gv.forEach(function(x){
+    var closed=ST.collapsed[x.g]&&!ST.q,on=x.all.filter(function(e){return S[e.key].on}).length,allsel=x.es.every(function(e){return ST.sel[e.key]}),s30=x.all.reduce(function(a,e){return a+(S[e.key].on?S[e.key].sent:0)},0);
+    h+='<tr class="grp" data-act="gtoggle" data-g="'+esc(x.g)+'"><td><input type="checkbox" data-act="gsel" data-g="'+esc(x.g)+'" '+(allsel?'checked':'')+' aria-label="選取「'+esc(x.g)+'」全部事件"></td>'+
+     '<td colspan="3">'+(closed?'▸ ':'▾ ')+esc(x.g)+' <span class="mute">已開 '+on+' ／ 共 '+x.all.length+'</span></td>'+
+     '<td colspan="6" style="text-align:right"><button class="btn sm" data-act="gon" data-g="'+esc(x.g)+'">全開</button> <button class="btn sm" data-act="goff" data-g="'+esc(x.g)+'">全關</button></td>'+
+     '<td></td><td class="mute">'+s30+' 則</td></tr>';
+    if(closed)return;
+    x.es.forEach(function(e){var s=S[e.key];
+      h+='<tr class="ev'+(ST.sel[e.key]?' sel':'')+(s.on?'':' off')+'"><td><input type="checkbox" data-act="sel" data-k="'+e.key+'" '+(ST.sel[e.key]?'checked':'')+' aria-label="選取 '+esc(e.name)+'"></td>'+
+       '<td class="name"><span class="nm">'+esc(e.name)+'</span>'+flags(e)+'<div class="k">'+e.key+'</div></td>'+
+       '<td><button class="sw" role="switch" data-act="sw" data-k="'+e.key+'" aria-checked="'+s.on+'" aria-label="'+esc(e.name)+' LINE 通知開關"></button></td>'+
+       '<td>'+(s.on?modeSel(e):'<span class="mute">—</span>')+'</td>'+
+       ROLES.map(function(r){return '<td>'+(s.on?roleCell(e,r):'')+'</td>'}).join('')+
+       '<td>'+(s.on?whoCell(e):'')+'</td><td>'+sentCell(e)+'</td></tr>'})});
+  document.getElementById('mx').innerHTML=h+'</tbody>';
+  var sa=document.getElementById('selall');if(sa){var ks=visKeys();sa.checked=ks.length>0&&ks.every(function(k){return ST.sel[k]})}}
+function renderCards(){
+  var h='';groupsView().forEach(function(x){
+    var closed=ST.collapsed[x.g]&&!ST.q,on=x.all.filter(function(e){return S[e.key].on}).length;
+    h+='<div class="card gcard"><div class="ghead" data-act="gtoggle" data-g="'+esc(x.g)+'"><span>'+(closed?'▸':'▾')+'</span><span style="flex:1">'+esc(x.g)+' <span class="mute">已開 '+on+'／'+x.all.length+'</span></span>'+
+     '<button class="btn sm" data-act="gon" data-g="'+esc(x.g)+'">全開</button><button class="btn sm" data-act="goff" data-g="'+esc(x.g)+'">全關</button></div>';
+    if(!closed)x.es.forEach(function(e){var s=S[e.key];
+      h+='<div class="ecard'+(ST.sel[e.key]?' sel':'')+'"><div class="top"><input type="checkbox" data-act="sel" data-k="'+e.key+'" '+(ST.sel[e.key]?'checked':'')+' aria-label="選取 '+esc(e.name)+'" style="width:20px;height:20px;margin-top:2px">'+
+       '<div class="t"><b>'+esc(e.name)+'</b>'+flags(e)+'</div><button class="sw" role="switch" data-act="sw" data-k="'+e.key+'" aria-checked="'+s.on+'" aria-label="'+esc(e.name)+' LINE 通知開關" style="width:46px;height:26px"></button></div>';
+      if(s.on){h+='<div class="row">'+modeSel(e)+(s.mode!=='business'?' <button class="btn sm" data-act="people" data-k="'+e.key+'">指定人員</button> '+whoCell(e).replace(/<button.*?<\/button>/,''):'')+'<span class="mute" style="margin-left:auto">近 30 天 '+s.sent+' 則</span></div>'+
+        '<div class="chips">'+ROLES.map(function(r){var on=s.roles.indexOf(r)>=0;return '<button class="rcc'+(on?' on '+(s.mode==='business'?'f':'a'):'')+'" data-act="role" data-k="'+e.key+'" data-r="'+r+'" aria-pressed="'+on+'">'+RN[r]+'</button>'}).join('')+'</div>'}
+      h+='</div>'});
+    h+='</div>'});
+  document.getElementById('cards').innerHTML=h||'<div class="card" style="padding:20px;color:var(--mute)">沒有符合條件的事件</div>'}
+function render(){renderQuota();renderTable();renderCards();
+  var n=Object.keys(ST.sel).filter(function(k){return ST.sel[k]}).length;var b=document.getElementById('batch');
+  b.classList.toggle('hide',!n);document.getElementById('bn').textContent='已選 '+n+' 項';
+  var tb=document.getElementById('toolbar');document.documentElement.style.setProperty('--thtop',(tb.offsetHeight)+'px')}
+
+/* ── 變更：一律走這裡（可復原） ── */
+function snap(){return JSON.parse(JSON.stringify(S))}
+function toast(msg,undo){var t=document.createElement('div');t.className='toast';t.innerHTML='<span>'+esc(msg)+'</span>'+(undo?'<button>復原</button>':'');
+  if(undo)t.querySelector('button').onclick=function(){S=undo;t.remove();render()};
+  document.body.appendChild(t);setTimeout(function(){t.remove()},6500)}
+function patch(keys,fn,msg){var before=snap();keys.forEach(function(k){fn(S[k],ev(k))});render();toast(typeof msg==='function'?msg():msg,before)}
+function presetFn(p){return function(s){
+  if(p==='me'){s.mode='only';s.roles=[];s.users=[ME]}
+  if(p==='boss'){s.mode='only';s.roles=['superadmin'];s.users=[]}
+  if(p==='biz'){s.mode='business';s.roles=ROLES.slice();s.users=[]}}}
+var PNAME={me:'只發給我',boss:'最高管理者',biz:'照 Email 收件人'};
+function turnOn(s){s.on=true;if(s.mode==='business'&&s.roles.length===6&&!s.users.length&&ST.newdef!=='biz'){presetFn(ST.newdef)(s)}if(!s.sent)s.sent=0}
+function projection(keys,fn){   // 依各事件近 30 天則數 × 收件人數變化，推估批次後每月會推幾則
+  var sel={};keys.forEach(function(k){sel[k]=1});var p0=0,p1=0,fresh=0;
+  EVENTS.forEach(function(e){var s=S[e.key];if(s.on)p0+=s.sent;
+    if(!sel[e.key]){if(s.on)p1+=s.sent;return}
+    var n=JSON.parse(JSON.stringify(s));fn(n,e);
+    if(n.on&&s.on)p1+=s.sent*(estS(e,n)/Math.max(1,estS(e,s)));
+    else if(n.on&&!s.on)fresh++})
+  return {p0:Math.round(p0),p1:Math.round(p1),fresh:fresh}}
+function confirmBatch(keys,title,line,fn,msg){
+  var on=keys.filter(function(k){return S[k].on}).length,pj=projection(keys,fn),pc=Math.round(pj.p1/QUOTA*100);
+  openDlg('<h3>'+esc(title)+'</h3><p>將套用到 <b>'+keys.length+'</b> 個事件（其中目前已開啟 '+on+' 個）：</p><p style="background:var(--soft);padding:8px 10px;border-radius:8px">'+line+'</p>'+
+   '<p>預估每月推出：<b>'+pj.p0+' → '+pj.p1+' 則</b>（額度 '+QUOTA+'，'+pc+'%）'+(pc>=RESERVE?' <span class="pill bad">超過 90% 保留線</span>':'')+(pj.fresh?'<br><span class="mute">另有 '+pj.fresh+' 個新開啟的事件沒有歷史則數，無法推估。</span>':'')+'</p>'+
+   '<p class="mute">套用後會跳出「復原」，6 秒內可以還原。實際系統：這是一次「批次」請求，全部成功或全部不改，並只記一筆稽核紀錄。</p>'+
+   '<div class="row" style="justify-content:flex-end"><button class="btn" data-d="cancel">取消</button><button class="btn primary" data-d="ok">套用</button></div>',
+   function(a){if(a==='ok'){closeDlg();patch(keys,fn,msg)}else closeDlg()})}
+function selKeys(){return Object.keys(ST.sel).filter(function(k){return ST.sel[k]})}
+
+/* ── 彈窗 ── */
+var DLGCB=null;
+function openDlg(html,cb){DLGCB=cb;document.getElementById('layer').innerHTML='<div class="modal" data-d="cancel"><div class="dlg" role="dialog" aria-modal="true">'+html+'</div></div>'}
+function closeDlg(){document.getElementById('layer').innerHTML='';DLGCB=null}
+document.getElementById('layer').addEventListener('click',function(ev2){var d=ev2.target.closest('[data-d]');if(!d||!DLGCB)return;if(d.classList.contains('modal')&&ev2.target.closest('.dlg'))return;DLGCB(d.getAttribute('data-d'))});
+function peopleDlg(keys){   // keys: 一個或多個事件
+  var first=S[keys[0]],mode=keys.length>1?'only':(first.mode==='business'?'only':first.mode),roles=keys.length>1?[]:first.roles.slice(),users=keys.length>1?[]:first.users.slice();
+  if(first.mode==='business'&&keys.length===1){roles=[];users=[]}
+  function body(){
+    var es=keys.map(ev);
+    return '<h3>指定誰要收（'+keys.length+' 個事件）</h3>'+
+    '<div class="row"><label><input type="radio" name="pm" value="only" '+(mode==='only'?'checked':'')+'> 只發給指定的角色／人員</label><label><input type="radio" name="pm" value="business_plus" '+(mode==='business_plus'?'checked':'')+'> 原本的收件人，再加上指定的</label></div>'+
+    '<div class="row"><b>角色</b>'+ROLES.map(function(r){return '<label class="chip" style="'+(roles.indexOf(r)>=0?'background:var(--on);color:#fff;border-color:var(--on)':'')+'"><input type="checkbox" class="hide" data-pr="'+r+'" '+(roles.indexOf(r)>=0?'checked':'')+'>'+RN[r]+'</label>'}).join('')+'</div>'+
+    '<div class="row"><b>人員</b><span class="mute">灰色＝沒有該事件所屬模組的權限，不能指定；刪除線＝尚未綁定 LINE，收不到</span></div>'+
+    '<div class="ulist">'+USERS.map(function(x){var bad=es.filter(function(e){return !eligible(e,x.u)});
+      return '<label style="'+(bad.length?'opacity:.45':'')+'"><input type="checkbox" data-pu="'+x.u+'" '+(users.indexOf(x.u)>=0?'checked':'')+(bad.length?' disabled':'')+'> <span'+(x.bound?'':' style="text-decoration:line-through"')+'>'+esc(x.n)+'</span> <span class="mute">'+RN[x.r]+(x.bound?'':'・尚未綁定')+(bad.length?'・'+(keys.length>1?bad.length+' 個事件沒權限':'沒有權限'):'')+'</span></label>'}).join('')+'</div>'+
+    ((!roles.length&&!users.length)?'<p class="pill bad" style="margin-top:8px">至少要選一個角色或一位人員</p>':'')+
+    '<div class="row" style="justify-content:flex-end"><button class="btn" data-d="cancel">取消</button><button class="btn primary" data-d="ok" '+((!roles.length&&!users.length)?'disabled':'')+'>套用</button></div>'}
+  function redraw(){document.querySelector('#layer .dlg').innerHTML=body();bind()}
+  function bind(){var d=document.querySelector('#layer .dlg');
+    d.querySelectorAll('input[name=pm]').forEach(function(i){i.onchange=function(){mode=i.value;redraw()}});
+    d.querySelectorAll('[data-pr]').forEach(function(i){i.onchange=function(){var r=i.getAttribute('data-pr');roles=i.checked?roles.concat([r]):roles.filter(function(x){return x!==r});redraw()}});
+    d.querySelectorAll('[data-pu]').forEach(function(i){i.onchange=function(){var u=i.getAttribute('data-pu');users=i.checked?users.concat([u]):users.filter(function(x){return x!==u});redraw()}})}
+  openDlg(body(),function(a){if(a!=='ok'){closeDlg();return}
+    closeDlg();var fn=function(s,e){s.mode=mode;s.roles=roles.slice();s.users=users.filter(function(u){return eligible(e,u)})};
+    if(keys.length>1)confirmBatch(keys,'批次指定收件人','對象：'+(mode==='only'?'只發給':'原本收件人＋')+[].concat(roles.map(function(r){return RN[r]}),users.map(function(u){return user(u).n})).join('、'),fn,'已更新 '+keys.length+' 個事件的收件人');
+    else patch(keys,fn,'已更新收件人')});
+  bind()}
+
+/* ── 事件處理（委派） ── */
+document.addEventListener('click',function(e2){
+  var t=e2.target.closest('[data-act]');var bt=e2.target.closest('[data-b]');
+  if(bt){var b=bt.getAttribute('data-b'),ks=selKeys();if(!ks.length)return;
+    if(b==='clear'){ST.sel={};render();return}
+    if(b==='on')return confirmBatch(ks,'批次開啟','開啟 LINE 通知；原本是「照原本收件人」的，對象改成「'+PNAME[ST.newdef]+'」（可在上方「新開啟的事件預設」調整）',function(s){turnOn(s)},'已開啟 '+ks.length+' 個事件');
+    if(b==='off')return confirmBatch(ks,'批次關閉','關閉 LINE 通知（Email 不受影響；收件對象設定保留）'+(ks.some(function(k){return ev(k).priority==='critical'})?'<br><b style="color:var(--red)">包含「重要」系統告警事件，關閉後這些告警不會再推 LINE。</b>':''),function(s){s.on=false},'已關閉 '+ks.length+' 個事件');
+    if(b==='custom')return peopleDlg(ks);
+    return confirmBatch(ks,'批次套用預設組合','收件對象 → <b>'+PNAME[b]+'</b>（已關閉的事件只改對象、不會被開啟）',presetFn(b),'已套用「'+PNAME[b]+'」到 '+ks.length+' 個事件')}
+  if(!t)return;var a=t.getAttribute('data-act'),k=t.getAttribute('data-k'),g=t.getAttribute('data-g');
+  if(a==='sel'){ST.shift=e2.shiftKey;return}   // 實際選取在 change 事件；這裡只記下有沒有按著 Shift
+  if(a==='gsel'){return}
+  if(a==='gtoggle'){if(e2.target.closest('button,input,select'))return;ST.collapsed[g]=!ST.collapsed[g];render();return}
+  if(a==='gon'||a==='goff'){e2.stopPropagation();var keys=EVENTS.filter(function(e){return e.group===g&&visible(e)}).map(function(e){return e.key});
+    if(a==='gon')patch(keys,function(s){turnOn(s)},'「'+g+'」已全開（'+keys.length+' 項）');else patch(keys,function(s){s.on=false},'「'+g+'」已全關（'+keys.length+' 項）');return}
+  if(a==='sw'){var on=!S[k].on;patch([k],function(s2){if(on)turnOn(s2);else s2.on=false},function(){var s=S[k];return ev(k).name+'：'+(on?'已開啟，'+(s.mode==='only'?'只發給指定的人':s.mode==='business_plus'?'原本收件人＋指定':'發給整份收件名單'):'已關閉')});return}
+  if(a==='role'){patch([k],function(s){var r=t.getAttribute('data-r'),i=s.roles.indexOf(r);if(i>=0)s.roles.splice(i,1);else s.roles.push(r)},'已更新收件角色');return}
+  if(a==='people'){peopleDlg([k]);return}
+});
+document.addEventListener('change',function(e2){
+  var t=e2.target.closest('[data-act]');if(!t){return}
+  var a=t.getAttribute('data-act'),k=t.getAttribute('data-k'),g=t.getAttribute('data-g');
+  if(a==='sel'){if(ST.shift&&ST.last){var ks=visKeys(),i=ks.indexOf(ST.last),j=ks.indexOf(k);if(i>=0&&j>=0){var lo=Math.min(i,j),hi=Math.max(i,j);for(var x=lo;x<=hi;x++)ST.sel[ks[x]]=t.checked}}else ST.sel[k]=t.checked;ST.last=k;render();return}
+  if(a==='gsel'){EVENTS.filter(function(e){return e.group===g&&visible(e)}).forEach(function(e){ST.sel[e.key]=t.checked});render();return}
+  if(a==='mode'){var v=t.value;patch([k],function(s){s.mode=v;if(v==='business'){s.roles=ROLES.slice();s.users=[]}else{s.roles=[];s.users=[ME]}},'對象已改成「'+({business:'照原本收件人',business_plus:'原本＋指定',only:'只發給指定'})[v]+'」'+(v==='business'?'（角色篩選重設為全部）':'（先放你自己，請再補上要收的人）'))}
+});
+document.addEventListener('change',function(e2){if(e2.target.id==='selall'){var ks=visKeys();ks.forEach(function(k){ST.sel[k]=e2.target.checked});render()}});
+document.getElementById('q').addEventListener('input',function(e2){ST.q=e2.target.value.trim();render()});
+document.querySelectorAll('.chip[data-f]').forEach(function(c){c.onclick=function(){ST.f=c.getAttribute('data-f');document.querySelectorAll('.chip[data-f]').forEach(function(x){x.setAttribute('aria-pressed',x===c)});render()}});
+document.getElementById('gsel').innerHTML='<option value="">全部群組</option>'+GROUPS.map(function(g){return '<option>'+esc(g)+'</option>'}).join('');
+document.getElementById('gsel').onchange=function(e2){ST.g=e2.target.value;render()};
+document.getElementById('expall').onclick=function(){ST.collapsed={};render()};
+document.getElementById('colall').onclick=function(){GROUPS.forEach(function(g){ST.collapsed[g]=true});render()};
+document.getElementById('newdef').onchange=function(e2){ST.newdef=e2.target.value};
+document.addEventListener('keydown',function(e2){if(e2.key==='Escape')closeDlg()});
+window.addEventListener('resize',function(){render()});
+
+/* ── 現況對照 ── */
+function showTab(n){document.getElementById('view-new').classList.toggle('hide',n!=='new');document.getElementById('view-old').classList.toggle('hide',n!=='old');
+  document.getElementById('tab-new').setAttribute('aria-selected',n==='new');document.getElementById('tab-old').setAttribute('aria-selected',n==='old');
+  document.getElementById('batch').classList.toggle('hide',n!=='new'||!selKeys().length)}
+(function(){var h='<div style="padding:8px 12px;font-weight:700">要發 LINE 的通知（依模組分組）</div>';
+  ['報價單與簽核','出貨單'].forEach(function(g){var es=EVENTS.filter(function(e){return e.group===g});
+    h+='<div style="padding:6px 12px;border-top:1px solid var(--line);background:var(--soft);font-weight:700">▾ '+g+' <span class="mute">已開 '+es.filter(function(e){return S[e.key].on}).length+'／共 '+es.length+'</span></div>';
+    es.forEach(function(e,i){var s=S[e.key];
+      h+='<div class="ev"><label><input type="checkbox" '+(s.on?'checked':'')+' disabled> '+esc(e.name)+'</label> <span class="mute">　收件人：照原本的設定　<button class="btn sm">設定誰要發</button></span>'+
+       '<div class="roles">原本的收件人中，可收的角色：'+ROLES.map(function(r){return '<label><input type="checkbox" checked disabled> '+RN[r]+'</label>'}).join('')+'</div></div>'})});
+  h+='<div style="padding:10px 12px;border-top:1px solid var(--line)" class="mute">⋮ 另外 8 個群組、共 56 項……每項都要各自點開、各自勾。要把 8 個系統告警改成「只發給我」＝約 8 次展開＋8 次選模式＋8 次選人＋8 次儲存。</div>';
+  document.getElementById('oldlist').innerHTML=h})();
+render();
+</script>
+</body>
+</html>

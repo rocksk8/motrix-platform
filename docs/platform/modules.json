@@ -239,6 +239,7 @@
    "page:pages/legal-params.html",
    "page:pages/license-required.html",
    "page:pages/license-settings.html",
+   "page:pages/line-events.html",
    "page:pages/login-qr-approve.html",
    "page:pages/login.html",
    "page:pages/mail-settings.html",

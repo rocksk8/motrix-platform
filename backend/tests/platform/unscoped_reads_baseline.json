@@ -859,6 +859,8 @@
   "routers/system.py::_WorkLogCatalog._collect::<arg:sql>": "dynamic",
   "routers/system.py::_WorkLogCatalog._collect::work_logs": "unscoped",
   "routers/system.py::_WorkLogCatalog.open::work_logs": "unscoped",
+  "routers/system.py::_audit_mark::audit_log": "unscoped",
+  "routers/system.py::_line_conflict_who::audit_log": "unscoped",
   "routers/system.py::_location_reference_counts::quotations": "unscoped",
   "routers/system.py::_upload_work_log_photos_impl::work_logs": "unscoped",
   "routers/system.py::audit_log_failure_summary.top::audit_log": "unscoped",
