@@ -2928,7 +2928,8 @@ def preview_line_notify_events_batch(body: dict = Body(...), authorization: str 
         else:
             keys, kw = _parse_line_batch_body(body)
             kw.pop("confirm_critical", None)
-            res = _ln.preview_events_batch(keys, default_user=actor["username"], **kw)
+            res = (_ln.preview_events_batch(keys, enabled=kw["enabled"], audience=kw["audience"], roles=kw["roles"], default_user=actor["username"]) if "roles" in kw
+                   else _ln.preview_events_batch(keys, enabled=kw["enabled"], audience=kw["audience"], default_user=actor["username"]))        # roles 沒帶 ≠ 帶 null；不用 ** 傳參
     except ValueError as e:
         raise HTTPException(400, str(e))
     for r in res["events"]:
@@ -2950,9 +2951,9 @@ def set_line_notify_events_batch(body: dict = Body(...), authorization: str = He
     if "changes" in b:                                                        # 草稿儲存：每個事件各自的改動，一次寫入、一筆稽核；`expect` 防蓋掉別人的修改
         return _save_line_changes(b, actor, authorization)
     keys, kw = _parse_line_batch_body(body)
-    kw["default_user"] = actor["username"]
     try:
-        res = _ln.set_events_batch(keys, **kw)
+        res = (_ln.set_events_batch(keys, enabled=kw["enabled"], audience=kw["audience"], roles=kw["roles"], confirm_critical=kw["confirm_critical"], default_user=actor["username"]) if "roles" in kw
+               else _ln.set_events_batch(keys, enabled=kw["enabled"], audience=kw["audience"], confirm_critical=kw["confirm_critical"], default_user=actor["username"]))
     except _ln.CriticalConfirmRequired as e:
         raise HTTPException(400, {"code": "confirm_critical_required", "message": str(e), "critical": [{"key": k, "name": _cat.name_of(k)} for k in e.keys]})
     except ValueError as e:
