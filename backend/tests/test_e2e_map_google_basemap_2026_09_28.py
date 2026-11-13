@@ -239,6 +239,9 @@ def test_settings_page_saves_browser_key_and_map_id_without_touching_the_server_
     inject_login(page, live_server, u[0], u[1])
     page.goto(live_server + "/pages/company-profile-settings.html")
     page.wait_for_selector("#google_maps_browser_key")
+    # 等伺服器資料回來再填：表單一開始就畫出來，init() 的 GET 回應晚於 fill 時會把 cfg 整個換掉（地圖 ID 被蓋回空）。
+    # 公司名稱是種子寫進去的「測試公司」，它出現在輸入框＝GET 已套用（比照 company_setup_gate e2e 的等法）。
+    page.wait_for_function("document.querySelector(\"input[x-model='cfg.name']\").value === '測試公司'", timeout=20000)
     page.fill("#google_maps_browser_key", BROWSER_KEY)
     page.fill("#google_maps_map_id", MAP_ID)
     with page.expect_response(lambda r: r.request.method == "PUT" and r.url.endswith("/api/settings/company-profile")) as resp:
