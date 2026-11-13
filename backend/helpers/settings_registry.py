@@ -806,23 +806,18 @@ def live_impact(group, field, value, *, timeout=None):
 def _notice_watermark(c):
     """notifications 的水位線（寫鎖內呼叫）：之後新增的列 id 一定 > 回傳值；取不到 ⇒ `None`（呼叫端跳過去重，最壞多發一則通知）。
 
-    取自 `sqlite_sequence`（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），
-    不直接 SELECT notifications：那會是一筆新的未範圍讀取（unscoped_reads 基準只減不增；這裡只要一個數字、沒有列資料）。
+    平常取自 `sqlite_sequence`（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），不讀 notifications 的列。
     ⚠️ 查不到 seq 列有兩種情況：新庫還沒寫過任何通知，或（不該發生）有人清掉了 sqlite_sequence 而舊通知還在。
-    ☠️ 兩者不分、一律當 0 的話，第二種會讓去重的 DELETE 把舊的 `setting:*` 通知一起刪掉。
-    ⇒ 查不到時在同一個交易內插一列暫存列再刪掉：SQLite 對沒有 seq 列的 AUTOINCREMENT 表取 MAX(rowid)+1，
-       所以那一列的 id 就是「現有最大 id＋1」，又不用讀 notifications；兩種情況都得到正確水位線。
+    ☠️ 兩者不分、一律當 0 的話，第二種會讓去重的 DELETE 把舊的 `setting:*` 通知一起刪掉；改成「跳過去重」則新庫的第一次存檔會多發一則。
+    ⇒ 只在這個罕見分支回退 `SELECT MAX(id) FROM notifications`（通知水位線、只讀 id、無業務資料）；
+       這一筆未範圍讀取已登記進 unscoped_reads 基準（PM 核准 +1，原因見 test_unscoped_reads_ratchet 的 MAX_ENTRIES 註解）。
+       ⛔ 不在 notifications 寫暫存列來取 id（PM 否決：NOT NULL 欄位、日後 trigger／監聽、會推進 sqlite_sequence、稽核看不懂）。
     任何一步出錯 ⇒ `None`（跳過去重，不讓設定存檔失敗）。"""
-    from datetime import datetime
     try:
         row = c.execute("SELECT seq FROM sqlite_sequence WHERE name='notifications'").fetchone()
         if row and row[0] is not None:
             return int(row[0])
-        cur = c.execute("INSERT INTO notifications (username, type, message, created_at) VALUES ('', 'info', '', ?)",
-                        (datetime.now().isoformat(timespec="seconds"),))
-        mark = int(cur.lastrowid)
-        c.execute("DELETE FROM notifications WHERE id=?", (mark,))
-        return mark
+        return int(c.execute("SELECT COALESCE(MAX(id),0) FROM notifications").fetchone()[0])
     except Exception:   # noqa: BLE001
         logger.exception("settings_registry: 取不到通知水位線，這次略過通知去重")
         return None

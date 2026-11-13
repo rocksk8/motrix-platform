@@ -137,12 +137,13 @@ def test_dedupe_watermark_missing_sequence_row_never_deletes_old_notices(client,
     _db_exec("DELETE FROM sqlite_sequence WHERE name='notifications'")
     conn = get_db()
     try:
-        mark = R._notice_watermark(conn)                             # 沒有 seq 列：用暫存列取得「現有最大 id＋1」
-        conn.commit()
+        mark = R._notice_watermark(conn)                             # 沒有 seq 列：回退讀 MAX(id)（唯一一筆登記在基準的 notifications 讀取）
+        count = conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
     finally:
         conn.close()
-    assert mark is not None and mark > max(ids)
-    assert _cfg_notice_ids() == ids                                  # 暫存列已刪、舊通知都在
+    assert mark == max(ids)
+    assert count == len(ids), "水位線不可以在 notifications 寫任何暫存列"
+    assert _cfg_notice_ids() == ids
     _db_exec("DELETE FROM sqlite_sequence WHERE name='notifications'")
     _tighten_uploads(client, h, 14)
     assert _cfg_notice_ids() == ids                                  # 沒有 seq 列時存檔：舊通知不被去重的 DELETE 帶走
