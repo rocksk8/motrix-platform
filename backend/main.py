@@ -82,7 +82,8 @@ _startup_step("import_core")
 from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
-from routers import bootstrap as _bootstrap_router     # 登入後啟動資料合併（2026-11-13，外網載入效能第二階段）
+# 登入後啟動資料合併（2026-11-13，外網載入效能第二階段）；註解不可放在 import 行尾：test_router_registration 以行尾整段當別名
+from routers import bootstrap as _bootstrap_router
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
 from routers import rules as rules_router
