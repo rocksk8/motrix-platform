@@ -78,6 +78,8 @@ NO_COMPANY_DATA = {
     ("modules/payroll/api/payslips.py", "get_archive_pdf"): "已存檔的勞報單 PDF 原樣下載（§1.4：產生當時已凍結）",
     ("modules/subcontract/api/contractors.py", "export_contractors"): "承攬人員 XLSX：人員清單，不印本公司抬頭（§1.3）",
     ("routers/definitions.py", "preview_output_template"): "自訂模組版型預覽：用假資料（無本公司資料）排版給設計者看",
+    ("modules/importer/api.py", "importer_template"): "匯入範本 XLSX 下載：只有欄位標題、填寫說明與空白範例列，不印本公司抬頭或統編（§1.3）",
+    ("modules/importer/parser.py", "build_template"): "匯入範本 XLSX 的產生端（同上）：只有欄位標題與填寫說明，不含本公司資料（§1.3）",
 }
 
 #: 正對照：§1 的已知輸出點，一定要被掃到而且判定為經第二道
