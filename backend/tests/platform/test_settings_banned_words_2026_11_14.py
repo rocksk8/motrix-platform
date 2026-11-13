@@ -4,6 +4,7 @@
 掃 helpers/settings_groups*.py 與 settings_registry.py 的字串常數（AST；docstring 與註解豁免）。
 禁用詞：確認期間、影子、閘門、true／false（開發者看的 ValueError 也一併改成白話）。
 正對照：故意含禁用詞的原始碼必須被抓到；docstring／註解裡的詞不算。
+注意：禁用詞清單在 h12 的盤點腳本（scan_banned_words）與這裡各有一份；改其中一份要同步另一份，否則兩邊會漂移。
 """
 import ast
 import re
