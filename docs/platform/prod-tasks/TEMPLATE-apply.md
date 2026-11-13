@@ -2,6 +2,8 @@
 
 > 範本（2026-09-30，稽核 W4 M4）：每一份 `YYYYMMDD-trainNN-apply.md` 從這裡複製。步驟 0 的第 1、2 項是**必備**，不可以刪。
 
+> **名詞（本範本的「基準」有三種，別混）**：①**正式機基準**＝正式機目前跑的 commit（`.deployed_commit.json`；步驟 0 第 1、2 項、步驟 2 的 `git diff <基準> <head>` 用的就是這個）；②**出貨腳本基準檔**＝`docs/platform/prod-baseline/apply_scripts.json`（已出貨 apply 腳本的版號＋sha256；見「發布者收尾」）；③守門測試的 `*_baseline.json` 基準檔（棘輪；與正式機無關，本範本不提）。單獨說「基準」一律指①。
+
 ## 這一班有什麼
 
 - （條列；使用者看得懂的話）
