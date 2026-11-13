@@ -1894,7 +1894,7 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
         "成本精算完結通知", "精算完結", "#7C3AED",
         [(_dl("報價單號", _lab), quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)],
         quote_no, _base_url(),
-        intro=_dl(f"以下報價單之成本精算已由 {finalized_by} 完結確認，請登入系統查閱最終結算資料。", _lab),
+        intro=_dl("以下報價單之成本精算已由 {who} 完結確認，請登入系統查閱最終結算資料。", _lab).replace("{who}", finalized_by, 1),
         button_text="前往查看精算結果",
     )
     _async_send(to, _mt.subject("settlement_finalized", f"成本精算完結：{quote_no}（{customer}）"), html)

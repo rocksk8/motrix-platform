@@ -62,6 +62,13 @@ def test_settlement_mail_follows_type(mails):
     _quo(quo)
 
 
+def test_user_typed_text_containing_the_old_word_is_not_rewritten(mails):
+    from helpers import email_notify as E
+    E.notify_settlement_finalized(EST_NO, "客", "報價單小組")
+    html = mails[-1][2]
+    assert "報價單小組" in html and html.replace("報價單小組", "").count("報價單") == 0 and "估價單" in html
+
+
 def test_case_close_blocked_and_change_requested_mails_follow_type(mails):
     from helpers import email_notify as E
     for no, row, other in ((EST_NO, "估價單號", "報價單號"), (QUO_NO, "報價單號", "估價單號")):
@@ -154,7 +161,7 @@ def test_calendar_event_wording_follows_type(client, make_user, monkeypatch):
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
     nos = {}
     for dt in ("estimate", None):
-        data = {"customerName": "行事曆客", "projectName": "案", "quoteDate": "2026-11-13",
+        data = {"customerName": "行事曆客", "projectName": "報價單專案" if dt else "案", "quoteDate": "2026-11-13",
                 "items": [{"description": "品項"}], "tot": {"total": 100, "pretax": 95}}
         if dt:
             data["docType"] = dt
@@ -171,7 +178,9 @@ def test_calendar_event_wording_follows_type(client, make_user, monkeypatch):
             pass
     if len(events) < 2:
         pytest.skip("行事曆推送在此環境被旗標／憑證略過；用語已由 relabel 單元題覆蓋")
-    _est(events[0][0] + events[0][1])
+    est_text = events[0][0] + events[0][1]
+    assert "報價單專案" in est_text, "使用者自己寫在案件名稱裡的字不可被改寫"
+    _est(est_text.replace("報價單專案", ""))
     _quo(events[1][0] + events[1][1])
 
 
@@ -204,3 +213,22 @@ def test_shipping_note_pdf_label_follows_the_linked_doc():
     quo = pdf_gen._build_shipping_html(dict(base, quoteNo=QUO_NO))
     assert "關聯估價單：" in est and "關聯報價單：" not in est
     assert "關聯報價單：" in quo and "關聯估價單：" not in quo
+
+
+# ── 6. 催辦查詢不依賴 case 的 migration 欄位 ──────────────────────────────────
+
+def test_reminder_query_does_not_need_the_doc_type_column():
+    """沒裝 case 的機器 quotations 沒有 doc_type 欄位：催辦的 SELECT 不可碰它，否則整輪催辦（含出貨／匯款／開票）中止。"""
+    import sqlite3
+    import helpers.system_checks as SC
+    src = next(x for x in SC._APPROVAL_REMINDER_SOURCES if x["table"] == "quotations")
+    assert "doc_type" not in src["select_extra"]
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE quotations (quote_no TEXT, status TEXT, data_json TEXT, customer_name TEXT, project_name TEXT)")
+    c.execute("INSERT INTO quotations VALUES ('ME-202611-001','待審核','{}','客','案')")
+    rows = c.execute(
+        f"SELECT {src['no_col']} AS doc_no, {src['select_extra']}, json_extract(data_json,'$.approval') AS approval_json "
+        f"FROM {src['table']} WHERE status IN ('待審核','簽核中')").fetchall()
+    assert len(rows) == 1
+

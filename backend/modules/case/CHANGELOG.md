@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.223（next，未取號）— 2026-11-13（fix/estimate-mail-doc-name；估價單的信件／行事曆／PDF 用語）
+- 用語補齊：估價單走到的信件／行事曆／PDF 不再寫死「報價單」——簽核逾期催辦、精算完結、結案報表、結案被擋、變更申請、審核中被編輯、成案行事曆事件、站內活動通知信的模組名稱（`quotations.py` 11 處 `notify_module_activity`）、出貨單「關聯○○單」、請款單／開票憑據「其他資訊（○○單）」，全依 `helpers.doc_type`（單號字首或 `doc_type` 欄位）取名；報價單文字逐字不變。獎金信用的是「案件單號」，不含「報價單」字樣，不需改。盤點後刻意不動：API 錯誤訊息／稽核紀錄文字、功能目錄標籤、開發案件重新關聯的措辭。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
+
 ## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
@@ -22,7 +25,6 @@
 - 回滾須知：migration 0010 只加欄位（預設 `quote`），回滾程式碼不需動資料；但回滾後舊程式的 `_next_revision_no` 只認 `MQ-`，退回修改的估價單會變成 `ME-…-R1-R1`；舊指紋程式把 `docType` 算進內容，部署後被碰過的待簽估價單與舊單的已存指紋會對不上（需重新對帳）。已開出的估價單回滾前先結案或另行處理。
 - 內容指紋：`docType` 加進 `content_fp.EXCLUDED_KEYS`（讀取時由資料庫欄位注入、開立後不可改，同 `status`；舊單沒有這個鍵，既有指紋不失效、`FP_VERSION` 不變）。否則 GET 回的 `contentFp` 含 docType、伺服器用已存內容重算不含 ⇒ 複查編輯／核准一律 409「內容已更新」。複查編輯端點同 PUT：頁面送回的 `docType` 一律改回資料庫現值。**排除清單變動，請 K 審。**
 - 測試：`tests/test_estimate_doc_type_2026_11_13.py`。
-- 用語補齊（fix/estimate-mail-doc-name）：估價單走到的信件／行事曆／PDF 不再寫死「報價單」——簽核逾期催辦、精算完結、結案報表、結案被擋、變更申請、審核中被編輯、成案行事曆事件、站內活動通知信的模組名稱（`quotations.py` 11 處 `notify_module_activity`）、出貨單「關聯○○單」、請款單／開票憑據「其他資訊（○○單）」，全依 `helpers.doc_type`（單號字首或 `doc_type` 欄位）取名；報價單文字逐字不變。獎金信用的是「案件單號」，不含「報價單」字樣，不需改。盤點後刻意不動：API 錯誤訊息／稽核紀錄文字、功能目錄標籤、開發案件重新關聯的措辭。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
 - 串接點（新增）：提供 `case.estimate_prefixes`（IP-ESTQ1，編號暫定）——曾開過估價單的單號字首，供 L1 `helpers/doc_type` 在字首改過後仍認得舊估價單號（L1 不讀 `quotations`）；`modules/case/quotations.py::_estimate_prefixes`。
 
 ## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）

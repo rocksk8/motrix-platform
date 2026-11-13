@@ -569,8 +569,9 @@ def push_event_for_quotation_won(quote_no: str) -> None:
         from helpers import doc_type as _DT          # 估價單：行事曆事件的用語隨單據類型（報價單 ⇒ 字串逐位元不變）
         _dt_no = _DT.doc_type_of_no(quote_no)
         event_id = _create_event_with_retry(
-            _DT.relabel(f"報價單成案 — {pname or quote_no}（{cname}｜{quote_no}）", _dt_no),
-            _DT.relabel(f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}", _dt_no),
+            # 先換範本字樣、再填值：客戶／案件名稱裡自己寫的「報價單」不可被改寫
+            _DT.relabel("報價單成案 — {p}（{c}｜{n}）", _dt_no).format(p=pname or quote_no, c=cname, n=quote_no),
+            _DT.relabel("報價單 {n} 已標記為「已成案」。\n客戶：{c}\n案件名稱：{p}\n金額（含稅）：NT$ {t:,.0f}", _dt_no).format(n=quote_no, c=cname, p=pname, t=total),
             date.today(),
         )
         # 2026-09-25 lost update（C 組）：建事件是網路請求（最慢的一段），期間別人可能已存了這張單
