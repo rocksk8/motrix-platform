@@ -810,7 +810,7 @@ if (Test-Path $prodDbForGate) {
     Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
     $null = Write-CompanyBankNote $gatePre.Text
 } else {
-    Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢（視為全新安裝：首次登入由最高管理者設定）。"
+    Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢（視為全新安裝：首次登入由最高管理員設定）。"
 }
 
 $rollbackRoot = Join-Path $BackendDir "rollback_snapshots"
