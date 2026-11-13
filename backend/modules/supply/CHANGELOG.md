@@ -1,5 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 一條龍 P0c（feat/onepipe-p0-p1；旗標 `onepipe.ship_install_ok`，預設關＝與今天逐位元相同；L1 介面不變）
+- `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。
+- `release`：旗標開時，從出貨狀態登載來的序號（還帶著出貨單號）釋放後回到 `shipped`（保留案號與出貨單號），不是在庫；在庫來的照舊回 `in_stock`。
+- 測試：`tests/test_onepipe_p0c_ship_install_2026_11_13.py`（旗標關仍衝突；開：同案登載／釋放、他案與已認領仍衝突、在庫路徑不變）。無 migration、無新表。
+
 ## 1.0.36 — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）
 - 修正（後端）：`POST /api/inventory/batches`（`create_batch`）整段改在 `write_txn` 內：重複序號檢查與逐筆 INSERT 之間原本沒有寫鎖（先查再寫的 TOCTOU），併發進貨同序號時 INSERT 丟 `IntegrityError`，連線沒 rollback／close ⇒ 寫鎖留到被 GC，下一個寫入者卡 30 秒。寫鎖現在在檢查之前拿，`next_entity_code` 取批號也在鎖內。正常路徑回應不變。
 - 測試：`tests/test_create_batch_write_lock_t80.py`（重複檢查那一刻已在寫交易內，舊碼紅、新碼綠；序號撞 UNIQUE 後鎖已放）。

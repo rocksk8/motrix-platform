@@ -687,7 +687,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 使用方 | M01 `modules/case/api/quotations.py::_sync_device_stock`（案件設備登載 `devices[]` 的序號比對；即時存檔與半解鎖審核套用兩條路徑） |
 | 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("stock.serial", "supply"): inventory._StockSerials})`<br>取用：`s = registry.single_provider("stock.serial")`；`None` ⇒ 退化。`s.claim(conn, sn, quote_no=…, device_id=…, actor=…, now=…) -> None｜狀態`；`s.release(conn, sn, device_id=…, now=…)` |
-| 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
+| 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）；例外（一條龍 P0c，旗標 `onepipe.ship_install_ok` 開）：同一案件出貨（`shipped` 且 `quote_no` 相同）的序號也標成 installed 並回 `"in_stock"`，`release` 時回到 `shipped`。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
 | 對方不在時 | 案件存檔照常；序號不同步庫存；有序號變動時回應帶 `stockNotice`＝「設備序號未同步庫存：採購・庫存・出貨模組未安裝」，案件頁存檔狀態列顯示「已儲存；…」；沒有序號變動就不帶 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側隨模組 |
