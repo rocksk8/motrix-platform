@@ -3,6 +3,11 @@
 ## 1.2.31（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
 - 變更（內部，不影響對外介面）：`api/bonus.py`、`api/payslip_approval.py`（送審與越權通知）、`bonus_payouts.approver_recipients`（獎金簽核收件人）改用真人最高管理者名單，不含展示帳號 `demo`。
 
+## (next) — 2026-11-13（feat/settings-s5-notify；獎金預設存檔後通知）
+- 行為變更：`PUT /api/bonus/cases/settings`（獎金預設：基本發放比例與業務／專案／後勤分配）存檔後發「設定變更通知」（最高管理者；一次存檔多欄合併成一則、只列有變的欄位，舊→新）；仍是立即生效。寫入前讀不到舊值時這次不發通知、不影響儲存。
+- 不變：API 回應、欄位、權限、計算一律沒動。
+- 測試：`tests/test_s5_notify_only_2026_11_13.py`（核心測試目錄，涵蓋三個頁）。
+
 ## 1.2.30 — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
 - 變更（內部，不影響對外介面）：勞報單表單（`payslip-form.html`）預填公司名稱／統編／聯絡方式改打 `GET /api/settings/company-profile/public`；預填內容不變。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。

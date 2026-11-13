@@ -58,6 +58,7 @@
 - 新增 LINE-only 事件 `settings_changed`（分組「系統告警」，只發最高管理者，內容不含原因與數值；預設與所有 LINE 事件一樣全關，由管理者勾選）。
 - 前端修正：`settings-center.html` 單選不選取、數字框空白（使用者兩張截圖）的根因是元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名（Alpine 範圍代理在 x-for 內解析到原生函式）⇒ 改名 `curVal`；新增「未儲存」標記、底部「有 N 項未儲存」列（儲存／放棄）、離開頁面警告、儲存結果提示（已生效／已送出待核准預計 X 日生效）、「建議值」徽章。
 - 測試：`tests/test_settings_change_notify_2026_11_13.py`（46 題：收件人／內容／commit 之後且不在鎖內／待生效流程／合併／LINE；前端以 node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一題，含舊 bug 的對照題與全站「方法名不得蓋住 Object.prototype 成員」守門）。
+- 行為變更（S5 只通知三項，使用者裁示 2026-11-13）：存檔後依 SPEC §15 發「設定變更通知」的三個舊設定頁——獎金預設（`PUT /api/bonus/cases/settings`，見薪資獎金模組紀錄）、營運目標（`PUT /api/settings/operating-targets`，通知財務角色）、報價條款組＋預設付款條件（通知業務角色）；每次存檔合併成一則、只列有變的欄位（舊→新）。**報價條款組存檔不再另發「系統設定：變更報價條款組」的 module_activity（email＋群組 LINE）**，只留設定變更通知一則；寫入前讀不到舊值（例外）時這次不發通知、不影響儲存（未設定過時回空清單，不算讀不到）。測試 `tests/test_s5_notify_only_2026_11_13.py`。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
