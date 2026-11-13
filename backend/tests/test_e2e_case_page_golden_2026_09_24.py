@@ -8,6 +8,7 @@ GOLDEN 檔在重構前的 master（58836e3）上錄：GOLDEN_WRITE=1 pytest …
 """
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import collections
+import contextlib
 import json
 import os
 import pathlib
@@ -23,6 +24,7 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 pytest.importorskip("playwright.sync_api")
 
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_2026_09_24.json")
+GOLDEN_OFF = pathlib.Path(__file__).with_name("golden_case_page_onepipe_off_2026_11_14.json")
 NO = "MQ-GOLD-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 T0 = "2026-03-01T09:00:00"
@@ -277,8 +279,34 @@ def _record(live_server, make_user, e2e_browser):
     return steps
 
 
-@pytest.mark.e2e
-def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser):
+@contextlib.contextmanager
+def _onepipe_flags_off():
+    """「旗標關」對照用：把一條龍群組（onepipe）整個釘成關再錄，離開時還原成進來時的值（不影響之後的題）。"""
+    import db
+    from helpers import settings_groups, settings_registry as SR       # noqa: F401
+
+    def _publish(vals, reason):
+        c = db.get_db()
+        try:
+            SR.publish("onepipe", vals, reason=reason, user="golden_pin", conn=c)
+            c.commit()
+        finally:
+            c.close()
+        SR.invalidate()
+
+    c = db.get_db()
+    try:
+        prev = {f: int(SR.get("onepipe", f, conn=c)) for f in SR._g("onepipe")["fields"]}
+    finally:
+        c.close()
+    _publish({f: 0 for f in prev}, "golden：釘成關")
+    try:
+        yield
+    finally:
+        _publish(prev, "golden：還原")
+
+
+def _skip_unless_modules():
     from core import source_tree
     if not source_tree.module_installed("modules/subcontract/"):
         pytest.skip("黃金錄製含外包工班（M04）的派工分頁；模組不在這個安裝包時分頁列本來就不同（PLAYBOOK §B-11）")
@@ -288,11 +316,30 @@ def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser)
         pytest.skip("golden 錄於 M03 在的狀態；M03 不在時的案件頁由 test_e2e_case_without_supply 驗")
     if not source_tree.module_installed("modules/arap/"):
         pytest.skip("黃金錄製含應收應付（M05）的開票／請款段；模組不在時財務分頁顯示「未安裝」提示、本來就不同（PLAYBOOK §B-11）")
-    got = _record(live_server, make_user, e2e_browser=e2e_browser)
+
+
+def _check_golden(got, golden):
     if os.environ.get("GOLDEN_WRITE") == "1":
-        GOLDEN.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
-        pytest.skip(f"已寫入 {GOLDEN.name}（{len(got)} 步）")
-    exp = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        golden.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
+        pytest.skip(f"已寫入 {golden.name}（{len(got)} 步）")
+    exp = json.loads(golden.read_text(encoding="utf-8"))
     assert sorted(got) == sorted(exp), (sorted(set(got) ^ set(exp)))
     for k in sorted(exp):
-        assert got[k] == exp[k], f"「{k}」與重構前不同"
+        assert got[k] == exp[k], f"「{k}」與基準不同（{golden.name}）"
+
+
+@pytest.mark.e2e
+def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser):
+    """使用者實際看到的案件頁（一條龍旗標用預設值＝開）。2026-11-14 有意識重錄：onepipe 預設開 ⇒ 案件頁多「登載」列、
+    頁面載入時多讀一次旗標（GET /api/settings-center/public?groups=onepipe）；其餘與重構前相同。"""
+    _skip_unless_modules()
+    _check_golden(_record(live_server, make_user, e2e_browser=e2e_browser), GOLDEN)
+
+
+@pytest.mark.e2e
+def test_case_page_behaviour_matches_golden_with_onepipe_off(live_server, make_user, e2e_browser):
+    """旗標關的對照（不取代上一題）：一條龍整個群組關掉時，案件頁的行為。基準檔 `golden_case_page_onepipe_off_2026_11_14.json`。"""
+    _skip_unless_modules()
+    with _onepipe_flags_off():
+        got = _record(live_server, make_user, e2e_browser=e2e_browser)
+    _check_golden(got, GOLDEN_OFF)

@@ -3,7 +3,7 @@
 
 [單位] helper:user_perm_batch    [層] L1    [穩定度] 實作（S3a）
 [公開介面] BATCH_GRANT_REFUSED, MAX_USERS, UNDO_DEFAULT_REASON, list_catalog, parse_request, preview, apply, undo
-[契約題] tests/test_user_perm_batch_2026_11_14.py
+[契約題] tests/test_user_perm_batch_2026_11_13.py
 
 ## 規則（SPEC §12；守門題逐條驗）
 1. **共用檢查點**：原因規則一律走 `helpers.duty_roles.gate_reason`（與 `PUT／POST /api/users`、職責角色各動作同一支）；寫入走
@@ -360,10 +360,10 @@ def apply(conn, actor, body, ip="") -> dict:
             raise dr.DutyError("名單或權限在預覽之後有變動，請重新預覽再套用", 409)
         _sens, reason = dr.gate_reason(plan["gatedKeys"], req["reason"], extra_keys=BATCH_GRANT_REFUSED)
         applied = _write_people(conn, actor, plan, reason, ip)
-        conn.commit()
     except Exception:
         conn.rollback()
         raise
+    conn.commit()          # 頂層 commit：寫鎖在這裡放掉；通知（另開連線寫入）一律在它之後（commit 失敗＝例外往外丟，連線由呼叫端關閉、未 commit 的寫入隨之作廢）
     _notify(actor, plan, applied, reason)
     out = _public(plan)
     out["ok"] = True
@@ -438,10 +438,10 @@ def undo(conn, actor, body, ip="") -> dict:
         _sens, reason = dr.gate_reason(plan["gatedKeys"], reason_in, extra_keys=BATCH_GRANT_REFUSED)
         reason = reason or UNDO_DEFAULT_REASON
         applied = _write_people(conn, actor, plan, reason, ip)
-        conn.commit()
     except Exception:
         conn.rollback()
         raise
+    conn.commit()          # 頂層 commit：寫鎖在這裡放掉；通知（另開連線寫入）一律在它之後（commit 失敗＝例外往外丟，連線由呼叫端關閉、未 commit 的寫入隨之作廢）
     _notify(actor, plan, applied, reason, undo=True)
     out = _public(plan)
     out.update({"ok": True, "applied": applied, "conflicts": conflicts})

@@ -316,7 +316,7 @@
         <template x-if="caseLinkOn">
           <div class="wl-field" data-testid="wl-case-field">
             <label>關聯案件（選填）</label>
-            <input type="text" x-model="caseQuery" @input.debounce.300ms="searchCases()" placeholder="輸入案號、客戶或案名來找案件" data-testid="wl-case-search">
+            <input type="text" class="filter" x-model="caseQuery" @input.debounce.300ms="searchCases()" placeholder="輸入案號、客戶或案名來找案件" data-testid="wl-case-search">
             <select x-model="caseNo" data-testid="wl-case-select" style="margin-top:6px">
               <option value="">— 不關聯案件 —</option>
               <template x-if="caseNo && !caseOptions.some(c => c.quoteNo === caseNo)"><option :value="caseNo" x-text="caseNo"></option></template>

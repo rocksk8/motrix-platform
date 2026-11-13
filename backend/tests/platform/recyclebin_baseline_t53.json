@@ -65,6 +65,10 @@
    "count": 2,
    "reason": "exempt: 請求冪等鍵狀態（T80c；7 天後自動清、處理失敗時釋放，非單據）"
   },
+  "helpers/line_notify.py::line_event_usage_daily": {
+   "count": 1,
+   "reason": "exempt: LINE 按日用量計數的保留期輪替（只留 31 天，系統計數器，非使用者刪除、無還原價值）"
+  },
   "helpers/list_view_prefs.py::user_list_view_prefs": {
    "count": 1,
    "reason": "exempt: 個人清單檢視偏好（T66；重設即回公司預設，非單據）"
@@ -72,6 +76,10 @@
   "helpers/payable_due_core.py::system_settings": {
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
+  },
+  "helpers/settings_registry.py::notifications": {
+   "count": 1,
+   "reason": "exempt: publish 在同一個交易內，刪掉帳本（config_ledger.record）剛為這次變更寫的簡短站內通知（type='config_change'、ref_label LIKE 'setting:%'、id 大於寫入前水位，只動這次交易自己寫的、別人看不到的列），因為 commit 之後由 settings_notify.emit 發完整的一則（同一件事不發兩則）；不是使用者刪除任何資料，也不碰既有通知"
   },
   "helpers/startup.py::login_rate_limit": {
    "count": 1,
@@ -88,6 +96,14 @@
   "helpers/system_checks.py::user_request_log": {
    "count": 1,
    "reason": "exempt: 請求紀錄（保留期輪替）"
+  },
+  "helpers/user_perm_batch.py::user_duty_roles": {
+   "count": 1,
+   "reason": "exempt: 職務角色設定（批次綁定／解除，與 duty_roles.py 同一張設定表、同一規則；復原與原因檢查點走共用路徑）"
+  },
+  "helpers/user_perm_batch.py::user_perm_subtracts": {
+   "count": 1,
+   "reason": "exempt: 權限扣減設定（批次復原還回個人扣項，與 duty_roles.py 同一張設定表）"
   },
   "issue_claude_session.py::sessions": {
    "count": 1,

@@ -290,7 +290,7 @@
           <div>
             <div style="font-size:12px;font-weight:600;margin-bottom:6px">① 選同仁（最高管理者不在批次範圍）</div>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-              <input class="form-input" type="text" x-model="batch.q" placeholder="搜尋帳號／顯示名稱" style="max-width:240px;font-size:12px;padding:6px 9px">
+              <input class="form-input filter" type="text" x-model="batch.q" placeholder="搜尋帳號／顯示名稱" style="max-width:240px;font-size:12px;padding:6px 9px">
               <button class="btn btn-ghost btn-sm" @click="batchToggleAll(true)">全選目前列出的</button>
               <button class="btn btn-ghost btn-sm" @click="batchToggleAll(false)">全部取消</button>
             </div>
@@ -889,7 +889,7 @@
         <span class="modal-head__title">確認批次變更</span>
         <button class="modal-close" @click="batchClosePlan()">×</button>
       </div>
-      <div class="modal-body" style="max-height:60vh;overflow:auto">
+      <div class="modal-body" style="max-height:calc(60vh / var(--fz,1));overflow:auto">
         <div style="font-size:13px;margin-bottom:8px" x-text="batchSummaryText()"></div>
         <div x-show="batchPlanNote()" style="font-size:12px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:8px 10px;margin-bottom:8px" x-text="batchPlanNote()"></div>
         <template x-for="p in ((batch.plan||{}).people||[])" :key="p.userId">

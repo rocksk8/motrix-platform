@@ -20,7 +20,8 @@ BACKEND = Path(__file__).resolve().parents[2]
 EXPECTED_STEPS = (
     "import_core", "import_routers", "load_modules", "build_info", "app_cors", "middleware_setup",
     "require_db", "init_db_main", "init_db_demo", "fail_incomplete_modules", "integrity_check", "company_setup",
-    "license_check", "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords", "cleanup_sessions",
+    "license_check", "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords",
+    "tighten_company_profile_full_read", "enable_onepipe_defaults", "cleanup_sessions",
     "schedulers", "geo_notice", "prune_login_locks", "init_rate_limiting", "sync_module_versions",
     "include_routers", "page_map", "mount_modules", "module_schedulers", "module_states_file", "startup_notices",
     "page_and_static_routes",

@@ -34,6 +34,11 @@ EXPECTED_ALLOWED = {
     ("GET", "/api/auth/profile"),
     ("GET", "/api/auth/preferences"),
     ("PUT", "/api/auth/preferences"),
+    # 以下三條是 T83 已上線的授權匯入（license-import-ui；licensing.LICENSE_EXEMPT_PATHS）與啟動資料合併（perf bootstrap）：
+    # 本來就在 main._COMPANY_SETUP_ALLOWED，不是精靈新增的；這份清單原本沒同步（T84 診斷紅燈），在此補上。
+    ("POST", "/api/license/import"),
+    ("GET", "/api/bootstrap"),
+    ("GET", "/api/license/overview"),
 }
 
 

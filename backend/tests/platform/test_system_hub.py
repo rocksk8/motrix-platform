@@ -319,7 +319,7 @@ def test_page_never_renders_ids_hrefs_or_module_keys_as_text():
     binds = re.findall(r'x-(?:text|html)="([^"]*)"', html)
     assert binds, "掃不到任何 x-text／x-html ⇒ 掃描器壞了"
     for b in binds:
-        assert not re.search(r"\.(href|module|id|keywords)", b), "畫面不可顯示程式碼欄位：%s" % b
+        assert not re.search(r"\.(href|module|id|keywords)\b", b), "畫面不可顯示程式碼欄位：%s" % b
     assert "title=\"" not in re.sub(r"<title>.*?</title>", "", html, flags=re.S) or ":title" not in html, "不要用 title 屬性洩漏網址"
     assert not re.search(r':title="[^"]*(href|module)', html)
 
@@ -406,7 +406,7 @@ def test_page_wires_recent_and_the_denied_setting_without_showing_codes():
     html = source_tree.page_file("system-hub.html").read_text(encoding="utf-8")
     assert "system_hub_recent" in html and "/api/system-hub/settings" not in html and "hub-recent" in html and "hub-settings-link" in html
     for b in re.findall(r'x-(?:text|html)="([^"]*)"', html):
-        assert not re.search(r"\.(href|module|id|keywords)", b), b
+        assert not re.search(r"\.(href|module|id|keywords)\b", b), b
 
 
 def _q(sql, args=()):

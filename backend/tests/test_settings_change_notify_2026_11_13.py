@@ -16,10 +16,11 @@ from db import get_db
 from helpers import settings_groups  # noqa: F401
 from helpers import settings_notify as SN
 from helpers import settings_registry as R
+from core import source_tree
+from tests import _frontend_sources as FS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PAGE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "frontend", "pages", "settings-center.html")
-FRONTEND = os.path.dirname(PAGE)
+PAGE = str(source_tree.page_file("settings-center.html"))          # 頁面位置一律經 source_tree（模組搬頁面不會失效）
 
 
 # ═══════════════════════════ 後端 ═══════════════════════════
@@ -746,11 +747,108 @@ def test_no_alpine_component_method_shadows_an_object_prototype_member():
     """全站守門：x-data 元件的方法名不能是 Object.prototype 的成員（valueOf／toString…）：Alpine 的範圍代理會解析到繼承來的原生函式。"""
     bad = re.compile(r"^\s*(?:async\s+)?(valueOf|toString|toLocaleString|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|constructor)\s*\([^)]*\)\s*\{", re.M)
     hits = []
-    for root, dirs, files in os.walk(FRONTEND):
-        dirs[:] = [d for d in dirs if d not in ("vendor", "node_modules")]
-        for f in files:
-            if f.endswith((".html", ".js")):
-                p = os.path.join(root, f)
-                src = open(p, encoding="utf-8", errors="ignore").read()
-                hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(1)) for m in bad.finditer(src)]
+    for p, label in [(x, x.name) for x in source_tree.page_files()] + [(x, FS.js_rel(x)) for x in FS.all_js()]:      # 頁面＋全部 JS（含模組自有）走共用入口
+        src = p.read_text(encoding="utf-8", errors="ignore")
+        hits += ["%s:%s" % (label, m.group(1)) for m in bad.finditer(src)]
     assert hits == []
+
+
+def _json_group(name, label):
+    R.register_group(name, label, [
+        R.SettingDef("doc", "json", [], question="這份清單要放什麼？", label="清單", help="測試用的整份清單。", impact="影響之後使用這份清單的畫面。",
+                     risk="money", risk_text="清單改錯會影響金額。", loosen="both",
+                     impact_scope={"documents": ["測試單據"], "roles": ["測試角色"], "amounts": "不影響已開出的金額", "reversible": True, "effective": "pending"})],
+        help="測試用的整份清單群組。", risk="money")
+
+
+@pytest.fixture()
+def zz_json_groups(zz_groups):
+    _json_group("zz_nt_j1", "清單甲")
+    _json_group("zz_nt_j2", "清單乙")
+    yield
+    R._GROUPS.pop("zz_nt_j1", None)
+    R._GROUPS.pop("zz_nt_j2", None)
+    R.invalidate()
+
+
+def _writes():
+    return _db_rows("SELECT COUNT(*) FROM config_changes")[0][0], _db_rows("SELECT COUNT(*) FROM audit_log WHERE action LIKE 'settings.%'")[0][0]
+
+
+def test_batch_precheck_refuses_whole_batch_when_a_later_group_has_someone_elses_pending_json(client, make_user, zz_json_groups):
+    """S1d 審查 S1：兩個群組、第二個（json）有別人還在等待的申請、未帶 supersede ⇒ 預檢整批 409 pending_exists，**0 筆寫入**
+    （以前只比 CAS，前面的群組已寫、後面的才被 publish 擋＝部分套用）。帶 supersede 才放行。"""
+    h = _hdr(client, make_user, "nt_pe1")
+    make_user(username="nt_pe1_other", role="superadmin")
+    R.publish("zz_nt_j1", {"doc": ["別人的申請"]}, user="nt_pe1_other", reason="別人先送")        # 進待生效（loosen both）
+    n0, w0 = _writes()
+    r = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_j1": {"values": {"doc": ["我的"]}}}, reason="想一起存")
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "pending_exists", r.text
+    assert [(x["group"], x["code"]) for x in d["groups"]] == [("zz_nt_j1", "pending_exists")] and d["groups"][0]["by"]
+    assert d["applied"] == [] and d["failed"] is None and d["notApplied"] == ["zz_nt_b", "zz_nt_j1"]
+    assert R.get("zz_nt_b", "cap") == 5 and _writes() == (n0, w0)                                # 前面的 zz_nt_b 也沒寫、帳本與設定稽核都沒多（409 的 fail.POST 失敗紀錄是中介層的，不算）
+    ok = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_j1": {"values": {"doc": ["我的"], }, "supersede": True}}, reason="確認取代")
+    assert ok.status_code == 200 and R.get("zz_nt_b", "cap") == 21, ok.text
+
+
+def test_batch_precheck_pending_exists_in_several_groups_uses_the_generic_sentence(client, make_user, zz_json_groups):
+    """L1：多群組都是「別人還在等待」⇒ code 仍是 pending_exists，但訊息不能套「已被改動、請重新整理」那句。"""
+    h = _hdr(client, make_user, "nt_pe2")
+    make_user(username="nt_pe2_other", role="superadmin")
+    for g in ("zz_nt_j1", "zz_nt_j2"):
+        R.publish(g, {"doc": ["別人"]}, user="nt_pe2_other", reason="別人先送")
+    r = _batch(client, h, {"zz_nt_j1": {"values": {"doc": ["我1"]}}, "zz_nt_j2": {"values": {"doc": ["我2"]}}}, reason="一起存")
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "pending_exists" and {x["group"] for x in d["groups"]} == {"zz_nt_j1", "zz_nt_j2"}, r.text
+    assert "等待生效" in d["message"] and "重新整理" not in d["message"] and "已被別人改動" not in d["message"], d["message"]
+    mine = R.publish("zz_nt_j1", {"doc": ["我1"]}, user="nt_pe2_other", reason="自己覆寫自己的不擋")      # 同一人的申請不算「別人」
+    assert mine["superseded"] == 1
+    assert _batch(client, h, {"zz_nt_j1": {"values": {"doc": ["x"]}}}, reason="預檢只看別人的").status_code == 409
+
+
+# ───────── NOT_SCANNED 豁免的證明（wording 守門把 settings_notify 當送信檔是名稱誤報）─────────
+def test_settings_notify_never_imports_or_references_an_email_sender():
+    """靜態：settings_notify 沒有任何 email_notify／smtplib 的 import（含函式內的）、也沒有字串常數指到送信原語——它只寫站內通知＋LINE。"""
+    import ast
+    from helpers import email_notify as EN
+    prims = {n for n in dir(EN) if n.startswith(("_send", "_async_send")) or n == "_build_html"}
+    tree = ast.parse(open(SN.__file__, encoding="utf-8").read())
+    bad = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            bad += [a.name for a in n.names if a.name.split(".")[0] in ("smtplib", "email_notify") or a.name.endswith("email_notify")]
+        elif isinstance(n, ast.ImportFrom):
+            mod = n.module or ""
+            if mod.split(".")[0] == "smtplib" or mod.endswith("email_notify") or (mod == "helpers" and any(a.name == "email_notify" for a in n.names)):
+                bad.append(mod + ":" + ",".join(a.name for a in n.names))
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and (n.value in prims or n.value in ("email_notify", "helpers.email_notify", "smtplib")):
+            bad.append("常數 %r" % n.value)
+    assert bad == [], bad
+
+
+def test_settings_notify_sends_in_app_and_line_but_calls_no_email_sender(client, make_user, zz_groups, monkeypatch):
+    """動態（正對照）：把 email_notify 全部送信原語與 smtplib 連線換成記錄器，走一次真的批次儲存（含高風險群組 ⇒ LINE 路徑）：
+    站內通知真的寫了、LINE 事件真的被呼叫、而信件發送一次都沒被呼叫。"""
+    import smtplib
+    from helpers import email_notify as EN
+    from helpers import line_notify as LN
+    calls = []
+    patched = []
+    for name in [n for n in dir(EN) if n.startswith(("_send", "_async_send")) or n == "_build_html"]:
+        if callable(getattr(EN, name)):
+            monkeypatch.setattr(EN, name, lambda *a, _n=name, **k: calls.append(("email_notify." + _n, a[:1])) or "ok")
+            patched.append(name)
+    assert {"_send", "_async_send", "_build_html"} <= set(patched), patched                      # 尺量得到東西：記錄器真的換上去了
+    for cls in ("SMTP", "SMTP_SSL"):
+        monkeypatch.setattr(smtplib, cls, lambda *a, _c=cls, **k: calls.append(("smtplib." + _c, a)) or (_ for _ in ()).throw(AssertionError("不該連 SMTP")))
+    lines = []
+    monkeypatch.setattr(LN, "notify_event", lambda ev, **kw: lines.append((ev, kw.get("usernames"))))
+    h = _hdr(client, make_user, "nt_nm1")
+    make_user(username="nt_nm1b", role="superadmin")
+    n0 = len(_notes("nt_nm1b"))
+    r = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_a": {"values": {"limit": 150}}}, reason="證明不寄信")     # limit：money 風險、待生效 ⇒ 高風險 ⇒ LINE
+    assert r.status_code == 200, r.text
+    assert len(_notes("nt_nm1b")) == n0 + 1                                                     # 站內通知：寫了（一則合併）
+    assert lines and lines[0][0] == "settings_changed", lines                                    # LINE：高風險那組有發
+    assert calls == [], calls                                                                    # 信件：一次都沒有

@@ -1,5 +1,9 @@
 # 匯入精靈 更新紀錄
 
+## 1.0.4 — 2026-11-14（T84 診斷修正輪；整合者補登）
+- 範本下載（`importer_template`）的 `Content-Disposition` 改走 `helpers.download_name.content_disposition`（下載檔名守門：不再手寫 attachment 標頭；檔名與內容不變）。
+- 精靈頁標題改為「MOTRIX PLATFORM」（畫面不再寫「專案管理系統」；品牌用語守門）。
+
 ## 1.0.3 — 2026-11-13（rebase 到 T82 凍結 head f66dfd9ef；改用共用守門）
 - 內部（行為與回應形狀不變）：xlsx 解析改走 `helpers.xlsx_guard.read_rows(slot_name="importer")`（T82 已有；預掃＋子行程隔離讀取＋硬逾時／記憶體上限＋同時解析數），刪掉自己的串流預掃（`_check_zip`／`_prescan_sheet`／`_sheet_part`）與 `MAX_UNZIPPED`／`MAX_CELLS`／`MAX_ROW_TAGS`／`MAX_SHEET_XML`。守門拒絕的白話訊息原樣轉成 ParseError（400）；同時解析太多 ⇒ XlsxBusy ⇒ 429。守門上限改採 helper 預設（單張工作表 XML 12MB、解壓總量 40MB；其餘同前）。
 - 仍由本模組負責：選資料工作表（「資料」優先、否則第一張非「說明」的可見表）、公式儲存格不匯入、數字格警告、列數上限只算有內容的列。

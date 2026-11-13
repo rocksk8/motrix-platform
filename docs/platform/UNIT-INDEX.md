@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 175 個；有單位卡 120 個。
+單位 177 個；有單位卡 120 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -74,7 +74,7 @@
 | `helper:doc_render` | L1 | L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。 | 1 | 2 | `tests/platform/test_doc_render_2026_10_01.py` |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 21 | 9 | — |
 | `helper:doc_type` | L1 | 單據類型（報價單 quote／估價單 estimate）與「單號規則」的唯一來源（2026-11-13，估價單）。 | 23 | 15 | `backend/tests/test_estimate_doc_type_2026_11_13.py` |
-| `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 21 | `tests/test_download_name_p1_2026_10_13.py` |
+| `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 22 | `tests/test_download_name_p1_2026_10_13.py` |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 23 | 5 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py`、`tests/test_user_perm_sensitive_gate_2026_11_13.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 4 | — |
 | `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 77 | 55 | — |
@@ -166,7 +166,9 @@
 | `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
 | `helper:settings_help` | L1 | 設定中心「?」說明（選單去工程師化 批次 9，2026-11-13）：每個設定欄位要嘛「標籤已夠清楚」（白名單），要嘛有四段說明。 | 16 | 3 | `tests/test_settings_center_b9_2026_11_13.py` |
 | `helper:settings_notify` | L1 | 變更通知元件（2026-11-13，feat/settings-change-notify；使用者：「變更後要有通知，或是儲存選項；點選後沒人知道變動了」）。 | 13 | 6 | `backend/tests/test_settings_change_notify_2026_11_13.py` |
+| `helper:settings_pages` | L1 | 設定中心「外框」的頁面登錄（SPEC §14.5；S2）。**分類只有這一套**；由 `data/shell_groups.json` 轉成執行期可讀的程式資料，（無單位卡） | 9 | 1 | — |
 | `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 44 | 63 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_shell` | L1 | 設定中心外框的唯讀資料（S2；SPEC §14）：總覽首頁、最近變更、全域搜尋索引。**只讀**——寫入仍走 `settings_registry.publish()`。（無單位卡） | 3 | 1 | — |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 6 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 5 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 24 | 10 | — |
@@ -180,8 +182,8 @@
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 26 | 33 | — |
 | `helper:user_buttons` | L1 | 使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。 | 12 | 1 | `backend/tests/test_user_buttons_2026_10_14.py` |
 | `helper:user_import` | L1 | 員工（使用者帳號）批次匯入的規劃邏輯（T85 匯入精靈；端點 `POST /api/users/import-rows` 在 routers/auth.py）。（無單位卡） | 11 | 1 | — |
-| `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_14.py` |
+| `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_13.py` |
 | `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | `tests/test_my_account_prefs_2026_11_13.py` |
-| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 24 | `tests/test_strict_bool_helper_t49.py` |
+| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 25 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_guard` | L1 | 使用者上傳的 .xlsx 的「小檔案展開」守門：預掃（真的 XML 解析，不靠 regex）＋ 子行程隔離解析（硬逾時、記憶體上限）。 | 18 | 5 | `tests/test_xlsx_guard_2026_11_13.py` |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 20 | 16 | — |

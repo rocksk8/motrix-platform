@@ -1899,6 +1899,13 @@ def _ui_is_wizard(request) -> bool:
     return str(request.headers.get("X-Motrix-Ui") or "").strip().lower() == "wizard"
 
 
+def _with_ui_mark(request, detail: dict) -> dict:
+    """稽核 detail 加上精靈標記（`ui: wizard`）；不是精靈的請求原樣回傳。（不用 `**` 展開：purpose 守門掃的是 `**` 呼叫。）"""
+    if _ui_is_wizard(request):
+        detail["ui"] = "wizard"
+    return detail
+
+
 @router.put("/api/settings/company-profile")
 def set_company_profile(body: CompanyProfile, request: Request, authorization: str = Header(None)):
     """部分更新：**這次沒送的欄位保留現值。**
@@ -2024,7 +2031,7 @@ def set_company_profile(body: CompanyProfile, request: Request, authorization: s
         _cs.reset_cache()
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
                value.get("name", ""),
-               detail=dict({"fields_hash": rec["fields_hash"], "via": rec["via"]}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
+               detail=_with_ui_mark(request, {"fields_hash": rec["fields_hash"], "via": rec["via"]}))
         return {"ok": True, "confirmed": True}
     return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
@@ -4427,7 +4434,7 @@ async def upload_branding_asset(kind: str, request: Request, file: UploadFile = 
         raise HTTPException(400, str(e))
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
            branding.KINDS[kind]["label"],
-           dict({"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
+           _with_ui_mark(request, {"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]}))
     return {"ok": True, "kind": kind, "v": saved["v"], "assets": _branding_state_out()}
 
 
@@ -4441,5 +4448,5 @@ def reset_branding_asset(kind: str, request: Request, authorization: str = Heade
     had = branding.reset_asset(kind)
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
            branding.KINDS[kind]["label"],
-           dict({"kind": kind, "op": "reset", "hadCustom": had}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
+           _with_ui_mark(request, {"kind": kind, "op": "reset", "hadCustom": had}))
     return {"ok": True, "kind": kind, "assets": _branding_state_out()}

@@ -326,8 +326,8 @@ def test_tablet_searchbar_pairs_columns_and_density_buttons_in_one_row_static():
     html = _page_html()
     start = html.index('<div class="ql-pair">')
     depth, pos, end = 0, start, None
-    for m in re.finditer(r"<div|</div>", html[start:]):
-        depth += 1 if m.group(0) == "<div" else -1
+    for m in re.finditer(r"<div\b|</div>", html[start:]):
+        depth += 1 if m.group(0).startswith("<div") else -1
         if depth == 0:
             end = start + m.end()
             break
@@ -336,7 +336,7 @@ def test_tablet_searchbar_pairs_columns_and_density_buttons_in_one_row_static():
     assert 'data-testid="ql-cols-btn"' in block and 'data-testid="ql-density"' in block
     # 緊湊是 .ql-pair 的直接子元素（深度 1），欄位在第一個子 div 裡
     d, direct = 0, []
-    for m in re.finditer(r"<div|</div>|<button", block):
+    for m in re.finditer(r"<div\b|</div>|<button\b", block):
         t = m.group(0)
         if t == "</div>":
             d -= 1

@@ -288,6 +288,12 @@
     try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).token || '' } catch (e) { return '' }
   }
 
+  var LOCK_OPEN =
+    '<div class="ns-desc" data-es-loading x-show="cfgState === &quot;loading&quot;">載入寄信設定中…</div>' +
+    '<div class="ns-desc" data-es-load-error x-show="cfgState === &quot;error&quot;" style="color:var(--danger);font-weight:600">寄信設定讀取失敗，為了不蓋掉原本的設定，這張卡先鎖定；請重新整理頁面再試。</div>' +
+    '<div class="ns-desc" data-es-denied x-show="cfgState === &quot;denied&quot;" style="color:var(--danger);font-weight:600">需要登入（且有權限）才能編輯寄信設定。</div>' +
+    '<fieldset :disabled="cfgLocked" data-es-fieldset :data-es-state="cfgState" style="border:0;margin:0;padding:0;min-width:0">'
+
   window.emailSetupCard = function emailSetupCard() {
     return {
       cfg: {
@@ -335,6 +341,7 @@
         }
       },
       async wzSendTest() {
+        if (this.cfgState !== 'ready') return
         const w = this.wz
         w.sending = true; w.err = ''; w.fail = null; w.copied = false
         let r, d = {}
@@ -355,6 +362,7 @@
         w.err = d.detail || '寄送失敗，請確認設定'; w.step = 2
       },
       async wzActivate() {
+        if (this.cfgState !== 'ready') return
         const w = this.wz
         w.activating = true
         let r, d = {}
@@ -451,17 +459,26 @@
       // 使用者與測試都可能讀到還沒載入的舊畫面（2026-11-13 閘門 e2e 紅燈）。無論成功失敗都在 finally 設成 true，不會卡在空白。
       loaded: false,
 
+      // cfgState：卡片的可編輯狀態（'loading'／'ready'／'error'／'denied'）。**只有讀回伺服器設定並預填完成（ready）才可編輯、可送出**：
+      //   以前欄位在 GET 回來之前就能打字，晚到的回應用 `cfg = {...cfg, ...data}` 把使用者剛輸入的系統網址蓋回空字串，按儲存就把 base_url 存成空——
+      //   信件裡的連結會壞（T84，與公司資料表單同型）。現在 mount 外層是 `<fieldset :disabled="cfgState !== 'ready'">`，讀取失敗／沒登入就一直鎖著，
+      //   也不會有人拿預設空值去 PUT／寄測試信／啟用。離開 'loading' 的路徑：ready／denied／error。
+      cfgState: 'loading',
+      get cfgLocked() { return this.cfgState !== 'ready' },
+
       async init() {
         if (this._initDone) return
         this._initDone = true
-        try { await this._loadInit() } finally { this.loaded = true }
+        try { await this._loadInit() } catch (e) { this.cfgState = 'error' } finally { this.loaded = true }
       },
 
       async _loadInit() {
         const tk = token()
-        if (!tk) return                      // 沒登入：頁面的 auth-guard 會處理導向
+        if (!tk) { this.cfgState = 'denied'; return }          // 沒登入：頁面的 auth-guard 會處理導向；這張卡維持鎖定
         const r = await fetch('/api/settings/email-notify', { headers: { Authorization: 'Bearer ' + tk } })
-        if (r.ok) {
+        if (r.status === 401 || r.status === 403) { this.cfgState = 'denied'; return }
+        if (!r.ok) { this.cfgState = 'error'; return }          // 讀不到就不讓人編輯：用預設空值去儲存會蓋掉伺服器上的設定
+        {
           const data = await r.json()
           this.cfg = { ...this.cfg, ...data }
           if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
@@ -481,9 +498,11 @@
         w.provider = hit ? hit.key : (this.cfg.smtp_user && this.cfg.smtp_host ? 'other' : 'gmail')
         if (w.provider === 'other') { w.host = this.cfg.smtp_host || ''; w.port = this.cfg.smtp_port || 587 }
         w.open = !(this.cfg.enabled && this.cfg.smtp_user)            // 還沒設定好 ⇒ 預設展開精靈；設定好了只顯示摘要
+        this.cfgState = 'ready'          // 最後一步才解鎖：上面的預填（w.user／w.baseUrl…）完成後使用者輸入的東西不會再被覆蓋
       },
 
       async save() {
+        if (this.cfgState !== 'ready') return          // 設定還沒讀回來（或讀取失敗）：不送（送出去就是用預設空值蓋掉伺服器上的設定）
         this.saving = true; this.msg = ''
         const { admin_email_preview: _preview, ...payload } = this.cfg
         const r = await fetch('/api/settings/email-notify', {
@@ -503,6 +522,7 @@
       },
 
       async testEmail() {
+        if (this.cfgState !== 'ready') return
         this.testing = true; this.msg = ''
         const r = await fetch('/api/settings/email-notify/test', {
           method: 'POST',
@@ -525,7 +545,8 @@
     if (!host || host.getAttribute('data-mounted')) return
     host.setAttribute('data-mounted', '1')
     host.setAttribute('x-data', 'emailSetupCard()')
-    host.innerHTML = WIZARD + TEMPLATE
+    // 整張卡包在一個 fieldset：cfgState 不是 ready 時所有輸入框與按鈕一起 disabled（見 cfgState 的說明）
+    host.innerHTML = LOCK_OPEN + WIZARD + TEMPLATE + '</fieldset>'
   }
   // 同步載入時 mount 通常已在 DOM（腳本放在 mount 之後）；否則等 DOMContentLoaded（早於 deferred 的 Alpine 啟動）
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount)

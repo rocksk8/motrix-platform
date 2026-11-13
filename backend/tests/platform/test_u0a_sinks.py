@@ -211,6 +211,8 @@ SIDE_EFFECT_GET_CLASSIFIED = {
     "/api/company/tax/{tax_id}": "deny",
     "/api/mail-types": "read",
     "/api/mail-types/receivable": "read",
+    # S6：本人入口，只讀自己的 users.notification_muted 與信件類型目錄；不寄信、不對外連線、不寫資料 ⇒ read
+    "/api/mail-types/mine": "read",
     "/api/settings/email-notify": "read",
     # 寄信精靈：只讀供應商清單（Gmail／Microsoft 365／Yahoo／Zoho／其他的主機、埠與白話說明，寫死在 helpers/email_setup.py）；不連線、不寄信 ⇒ read
     "/api/settings/email-notify/providers": "read",
