@@ -18,10 +18,11 @@ from db import get_db
 from helpers import settings_groups  # noqa: F401
 from helpers import settings_notify as SN
 from helpers import settings_registry as R
+from core import source_tree
+from tests import _frontend_sources as FS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PAGE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "frontend", "pages", "settings-center.html")
-FRONTEND = os.path.dirname(PAGE)
+PAGE = str(source_tree.page_file("settings-center.html"))          # 頁面位置一律經 source_tree（模組搬頁面不會失效）
 
 
 # ═══════════════════════════ 後端 ═══════════════════════════
@@ -922,13 +923,9 @@ def test_no_alpine_component_method_shadows_an_object_prototype_member():
     """全站守門：x-data 元件的方法名不能是 Object.prototype 的成員（valueOf／toString…）：Alpine 的範圍代理會解析到繼承來的原生函式。"""
     bad = re.compile(r"^\s*(?:async\s+)?(valueOf|toString|toLocaleString|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|constructor)\s*\([^)]*\)\s*\{", re.M)
     hits = []
-    for root, dirs, files in os.walk(FRONTEND):
-        dirs[:] = [d for d in dirs if d not in ("vendor", "node_modules")]
-        for f in files:
-            if f.endswith((".html", ".js")):
-                p = os.path.join(root, f)
-                src = open(p, encoding="utf-8", errors="ignore").read()
-                hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(1)) for m in bad.finditer(src)]
+    for p, label in [(x, x.name) for x in source_tree.page_files()] + [(x, FS.js_rel(x)) for x in FS.all_js()]:      # 頁面＋全部 JS（含模組自有）走共用入口
+        src = p.read_text(encoding="utf-8", errors="ignore")
+        hits += ["%s:%s" % (label, m.group(1)) for m in bad.finditer(src)]
     assert hits == []
 
 
