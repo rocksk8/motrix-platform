@@ -196,7 +196,8 @@ def test_no_f_class_guard_uses_a_raw_cashier_or_finance_module_check_without_the
 def test_role_validation_and_audit(client, make_user):
     make_user("root", role="superadmin", modules=[])
     h = _login(client, "root", "Test-Pass-123")
-    body = {"username": "newfin", "password": "Zx9-strong-Pass!", "display_name": "財務甲", "role": "finance", "modules": []}
+    body = {"username": "newfin", "password": "Zx9-strong-Pass!", "display_name": "財務甲", "role": "finance", "modules": [],
+            "reason": "新進財務人員"}      # 2026-11-13 安全票：角色設成財務＝授予財務三鍵（高敏感）⇒ 原因必填
     r = client.post("/api/users", json=body, headers=h)
     assert r.status_code in (200, 201), r.text
     uid = r.json()["id"]

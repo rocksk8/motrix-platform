@@ -2,7 +2,7 @@
 """職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。
 
 [單位] helper:duty_roles    [層] L1    [穩定度] 實作（R1；R2＝盤點／離職回收／職務分離／通知，尚未做）
-[公開介面] DutyError, FINANCE_KEYS, gate_reason, user_modules_gate, record_user_modules_change, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
+[公開介面] DutyError, FINANCE_KEYS, gate_reason, user_perm_change, user_perm_gate, record_user_modules_change, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
 [契約題] tests/test_duty_roles_r1_2026_10_06.py、tests/test_duty_roles_equivalence_2026_10_06.py、tests/test_user_perm_sensitive_gate_2026_11_13.py
 
 ## 權限算法（單一縫＝`helpers.auth.effective_modules`；本檔只提供「角色／扣項怎麼套到原始勾選上」）
@@ -16,7 +16,7 @@
 - 扣項只影響「以模組鍵判斷」的功能；admin 直通的一般管理判斷（B 階段才收斂）不受影響 ⇒ 畫面寫明「部分生效」。
 
 ## 共用檢查點（2026-11-13 安全票 fix/user-perm-sensitive-gate）
-高敏感規則只有一份：`gate_reason(touched, reason)`。職責角色各動作與 `PUT /api/users/{id}` 的個人勾選（`user_modules_gate`＋`record_user_modules_change`）都走它；
+高敏感規則只有一份：`gate_reason(touched, reason)`。職責角色各動作與 `PUT /api/users/{id}` 的個人勾選（`user_perm_gate`＋`record_user_modules_change`；最高管理者降級、角色改成財務也算授予，見 `user_perm_change`）都走它；
 新增授予／取消權限的入口（批次端點、範本套用…）一律呼叫它，不要自己再寫一份判斷。
 
 ## 變更原因（Q4 b）
@@ -27,6 +27,7 @@
 """
 import json
 import sqlite3
+import unicodedata
 from datetime import datetime
 
 #: 高敏感權限鍵（DUTY-ROLES-DESIGN §2.4；N2 a：不含 `reports`）。改清單＝改使用者裁示，要先問。
@@ -167,16 +168,27 @@ def preview_whatif(conn, user_id, raw_modules, role_ids, subtracts, role=None) -
 
 # ── 寫：服務層（每個動作＝一筆 permission_changes）──────────────────────────────
 
+#: 零寬／雙向控制／軟連字號等看不見的字元：塞進原因裡湊「不同字元數」用（`a<零寬>a<零寬>a…`）；驗證前一律拿掉
+_INVISIBLE = dict.fromkeys(map(ord, "​‌‍‎‏⁠⁡⁢⁣⁤﻿­᠎"
+                                    "‪‫‬‭‮⁦⁧⁨⁩"))
+
+
+def _normalize_for_check(text: str) -> str:
+    """驗證用的正規化：NFKC（全形英數 → 半形、相容字元合一）＋拿掉看不見的字元＋大小寫摺疊。只用來「算」，不改使用者寫的內容。"""
+    return unicodedata.normalize("NFKC", text.translate(_INVISIBLE)).casefold()
+
+
 def _clean_reason(reason) -> str:
-    r = (reason or "").strip() if isinstance(reason, str) else ""
+    r = (reason or "").translate(_INVISIBLE).strip() if isinstance(reason, str) else ""
     if len(r) > REASON_MAX:
         raise DutyError("原因最多 %d 字" % REASON_MAX)
     return r
 
 
 def _is_trivial_reason(reason: str) -> bool:
-    """原因太敷衍：少於 REASON_MIN 個「不同的」字母數字（含中文）字元——例如純標點、重複同一字（aaaa、好好好好、1111）。"""
-    return len({c for c in reason if c.isalnum()}) < REASON_MIN
+    """原因太敷衍：**正規化之後**（NFKC、拿掉零寬字元、大小寫摺疊）少於 REASON_MIN 個「不同的」字母數字（含中文）字元——
+    例如純標點、重複同一字（aaaa、好好好好、1111、全形的ａａａａ、`a<零寬>a<零寬>a<零寬>a`）。"""
+    return len({c for c in _normalize_for_check(reason) if c.isalnum()}) < REASON_MIN
 
 
 def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
@@ -186,20 +198,43 @@ def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
 
 def gate_reason(touched, reason):
     """**高敏感權限的共用檢查點**（伺服器端；職責角色各動作、`PUT /api/users/{id}` 的個人勾選、之後的批次／範本套用都走這一支）。
-    `touched`＝這次動到（授予或取消）的權限鍵；其中含 `HIGH_SENSITIVITY_KEYS` 任一個 ⇒ 原因必填（`REASON_MIN` 個不同字元、≤`REASON_MAX`）。
-    ⇒ `(sensitive, reason)`；不合格 raise `DutyError`（400）。沒動到高敏感鍵 ⇒ `(False, reason)`，原因怎麼寫都不擋（行為不變）。"""
+    `touched`＝這次動到（授予或取消）的權限鍵；其中含 `HIGH_SENSITIVITY_KEYS` 任一個 ⇒ 原因必填（正規化後 `REASON_MIN` 個不同字元、≤`REASON_MAX`）。
+    ⇒ `(sensitive, reason)`；不合格 raise `DutyError`（400）。**原因長度（≤`REASON_MAX`）在這一支一律檢查**（職責角色各動作的原因本來就一律限長，行為不變）；
+    沒動到高敏感鍵時只檢查長度、不要求內容。`PUT／POST /api/users` 走 `user_perm_gate`：沒動到高敏感鍵時連長度都不看。"""
     reason = _clean_reason(reason)
     sensitive = bool(set(touched or ()) & set(HIGH_SENSITIVITY_KEYS))
     _require_reason_if_sensitive(sensitive, reason)
     return sensitive, reason
 
 
-def user_modules_gate(before, after, reason, inert=False):
-    """`PUT /api/users/{id}` 的個人勾選（`users.modules`）：新舊清單的差異（授予＋取消）有高敏感鍵 ⇒ 要原因。
-    `inert`＝這個人改完仍是最高管理者（他的 `modules` 不影響生效權限）⇒ 不算授予（呼叫端判斷）。
-    ⇒ `(sensitive, reason)`。只比對清單差異：畫面每次存檔都會整串送回，沒動到的高敏感鍵不要求原因。"""
-    touched = [] if inert else sorted((set(after or ()) ^ set(before or ())) & set(HIGH_SENSITIVITY_KEYS))
-    return gate_reason(touched, reason)
+def user_perm_change(before_role, before_mods, after_role, after_mods):
+    """個人權限（角色＋個人勾選 `users.modules`）一次變更「對高敏感權限算不算授予／取消」。⇒ `(touched, before, after)`。
+    - 最高管理者的 modules 不影響生效權限（全功能）⇒ 兩邊都是最高管理者＝惰性（touched 空）；
+      **降級**（原本最高管理者、之後不是）＝存著的 modules 此刻才開始生效 ⇒ 以「降級後生效的 modules」從無到有算（不論這次有沒有帶 modules、
+      帶的是不是和存著的一樣）；改成最高管理者＝只是收緊，不算。
+    - 角色**改成**財務角色（`helpers.auth.FINANCE_ROLE`）＝財務三鍵由角色補上（`effective_modules`）⇒ 三鍵算被授予（離開財務角色不算）。
+    - 其餘＝新舊個人勾選的差異（授予＋取消）。`before`／`after` 是拿去記錄的集合（含角色補上的財務三鍵）。"""
+    from helpers.auth import FINANCE_ROLE, FINANCE_MODULE_KEYS
+    b, a = set(before_mods or ()), set(after_mods or ())
+    if after_role == "superadmin":                                    # 改成／維持最高管理者：modules 惰性，不算授予
+        return set(), set(), set()
+    if before_role == "superadmin":                                   # 降級：存著的 modules 此刻才生效 ⇒ 從無到有
+        b = set()
+    if after_role == FINANCE_ROLE and before_role != FINANCE_ROLE:    # 角色補上財務三鍵
+        a |= set(FINANCE_MODULE_KEYS)
+    touched = (a ^ b) & set(HIGH_SENSITIVITY_KEYS)
+    return touched, b, a
+
+
+def user_perm_gate(before_role, before_mods, after_role, after_mods, reason):
+    """`PUT／POST /api/users` 的權限變更檢查（走 `gate_reason`）。⇒ `(sensitive, reason, before, after)`。
+    **沒動到高敏感鍵 ⇒ `reason` 完全不看**（不驗長度、不驗內容；`sensitive=False`）；動到了 ⇒ 與職責角色同一條規則（原因必填、≥4 個不同字、≤200）。
+    判定細節（最高管理者降級、改成財務角色）見 `user_perm_change`。"""
+    touched, b, a = user_perm_change(before_role, before_mods, after_role, after_mods)
+    if not touched:
+        return False, "", b, a
+    sensitive, reason = gate_reason(touched, reason)
+    return sensitive, reason, b, a
 
 
 def record_user_modules_change(conn, actor, user_id, label, before, after, reason, ip=""):

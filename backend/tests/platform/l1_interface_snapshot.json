@@ -774,7 +774,8 @@
    "unbind_role": "def(conn, actor, user_id, role_id, reason=…, ip=…)",
    "unset_subtract": "def(conn, actor, user_id, key, reason=…, ip=…)",
    "update_role": "def(conn, actor, role_id, *, name=…, description=…, permissions=…, active=…, reason=…, ip=…)",
-   "user_modules_gate": "def(before, after, reason, inert=…)"
+   "user_perm_change": "def(before_role, before_mods, after_role, after_mods)",
+   "user_perm_gate": "def(before_role, before_mods, after_role, after_mods, reason)"
   },
   "helper:edit_log": {
    "EDIT_LOG_TABLES": "const",
