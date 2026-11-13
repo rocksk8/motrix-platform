@@ -567,7 +567,7 @@
         return t === 'informed' ? '知情核准' : t === 'self_edit_sign' ? '自改自簽' : ''
       },
       moduleLabel(k) { const m = this.moduleOptions.find(x => x.key === k); return m ? m.label : k },
-      failTitle(it) { return (it.module_label || '操作') + ' 寫入被擋下' + (it.target_label ? '（' + it.target_label + '）' : '') },
+      failTitle(it) { return (it.module_label || '操作') + ' 寫入遭拒絕' + (it.target_label ? '（' + it.target_label + '）' : '') },
       applyFilter() { this.page = 1; this.load(); this.loadTree(); this.loadFailSummary() },
       resetFilter() {
         this.fModule = this.fCase = this.fRef = this.fUser = this.fFrom = this.fTo = this.fResult = this.fTag = ''

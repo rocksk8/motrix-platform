@@ -124,7 +124,7 @@
     body.appendChild(document.createTextNode(
       ' 目前也在這份資料裡。兩邊都改的話，先存的人會被後存的人覆蓋——'));
     var strong = document.createElement('b');
-    strong.textContent = '系統會擋下後存的那一次並要求重新載入';
+    strong.textContent = '系統會拒絕後存的那一次並要求重新載入';
     body.appendChild(strong);
     body.appendChild(document.createTextNode(
       '，但您這段時間打的內容會需要重做。建議先確認由誰來改。'));

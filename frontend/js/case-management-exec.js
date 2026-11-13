@@ -422,7 +422,7 @@ window.CM_PARTS.push(() => ({
             const nameOf = id => ((this.materialOrders.find(o => o.itemId === id) || {}).itemName || '').trim()
             const first = d.rejected[0]
             this.moMsg = '部分項目沒有儲存：' + (nameOf(first.itemId) ? '「' + nameOf(first.itemId) + '」：' : '') + first.message +
-              (d.rejected.length > 1 ? '（另有 ' + (d.rejected.length - 1) + ' 項被擋下：' + [...new Set(d.rejected.slice(1).map(x => x.message))].join('；') + '）' : '')
+              (d.rejected.length > 1 ? '（另有 ' + (d.rejected.length - 1) + ' 項遭拒絕：' + [...new Set(d.rejected.slice(1).map(x => x.message))].join('；') + '）' : '')
           } else {
             ok = true
             this.moMsgError = false

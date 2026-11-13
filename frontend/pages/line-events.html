@@ -242,7 +242,7 @@
       var d = e.data && e.data.detail
       if (e.status === 409 && d && d.code === 'conflict') {
         var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
-        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不蓋掉別人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
+        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆蓋他人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
         err.status = 409
         return err
       }

@@ -128,7 +128,7 @@
       <div class="card-sub">
         用手機驗證 App（Google Authenticator／Microsoft Authenticator 等）為登入加上第二道防護。
         <template x-if="!totp.enabled">
-          <span>建議管理員／最高管理者帳號啟用，密碼外洩時仍能擋下未授權登入。</span>
+          <span>建議管理員／最高管理者帳號啟用，密碼外洩時仍能阻擋未授權登入。</span>
         </template>
       </div>
 
@@ -201,7 +201,7 @@
           <template x-if="totp.regenerating">
             <div style="max-width:340px;margin-bottom:14px">
               <div class="alert alert-err" style="font-size:12px">
-                重新產生會讓<b>目前這 10 組全部失效</b>（包含還沒用過的）。如果您手上有印出來或存起來的舊清單，產生後請直接作廢整張。
+                重新產生會讓<b>目前這 10 組全部失效</b>（包含尚未使用過的）。如果您手上有印出來或存起來的舊清單，產生後請直接作廢整張。
               </div>
               <div class="form-group">
                 <label class="form-label">輸入目前密碼以確認</label>

@@ -828,7 +828,7 @@
                 <strong>本週期金額換算</strong>
                 <span x-text="gqCalc && gqCalc.cost_this_period"></span>
                 <span style="opacity:.75">（依您填的單價；
-                  ⚠️ 「一次請求＝一個計費單位」我們沒有向 Google 查證過，
+                  ⚠️ 「一次請求＝一個計費單位」本系統尚未向 Google 查證，
                   這個數字只能當估算）</span></div>
             </div>
 
@@ -863,7 +863,7 @@
                     一個把每日調成 1 天的人，真正需要知道的是「月備份還在」。 -->
             <div class="ns-desc" style="background:#F8FAFC;border-left:3px solid #94A3B8;
                                         padding:10px 12px;border-radius:4px;line-height:1.9">
-              <div><strong>永久保留（不會被任何設定清掉）：</strong>
+              <div><strong>永久保留（不會被任何設定清除）：</strong>
                 月備份（含整份資料庫）・上傳檔案・PDF 存檔・即時備份</div>
               <div style="margin-top:4px"><strong>會自動清除：</strong>
                 本機 DB 快照・雲端每日備份・雲端週備份・稽核紀錄，各依下方天數</div>
@@ -898,7 +898,7 @@
                 <label>雲端月備份（天，0 = 永久保留）</label>
                 <input data-saved-field type="number" min="0" max="3650" x-model.number="retention.cloud_monthly_keep_days">
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                  預設 0。這是長期保存的那一層，<strong>填 0 就永遠不會被清掉</strong>。
+                  預設 0。這是長期保存的那一層，<strong>填 0 就永遠不會被清除</strong>。
                 </div>
               </div>
               <div class="ns-field">
@@ -931,7 +931,7 @@
             <div class="ns-desc">
               報價單／出貨單／請款單等 PDF 的存放根目錄。留空使用預設值。
               <strong>這個路徑也是雲端「PDF 存檔鏡像」的來源</strong>，改了之後舊位置的檔案不會自動搬過去。
-              目錄必須已存在，否則儲存時會被擋下。
+              目錄必須已存在，否則儲存時將遭拒絕。
             </div>
             <div class="ns-row full">
               <div class="ns-field">
@@ -967,7 +967,7 @@
             <div class="ns-desc">
               產生 PDF 需要用到 Edge。<strong>正常情況下不用填</strong>——系統會自動偵測；
               只有在自動偵測失敗（PDF 產生報錯找不到 Edge）時才需要手動指定 <code>msedge.exe</code> 的完整路徑。
-              檔案必須存在，否則儲存時會被擋下。
+              檔案必須存在，否則儲存時將遭拒絕。
             </div>
             <div class="ns-row full">
               <div class="ns-field">

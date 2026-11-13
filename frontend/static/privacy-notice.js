@@ -35,7 +35,7 @@
   // 開新視窗並列印（呼叫端要在使用者點擊的當下呼叫，否則會被擋彈出視窗）
   function print(notice, subjectName) {
     const w = window.open('', '_blank')
-    if (!w) { alert('瀏覽器擋住了彈出視窗，請允許本站開啟新視窗後再列印'); return null }
+    if (!w) { alert('瀏覽器封鎖了彈出視窗，請允許本站開啟新視窗後再列印'); return null }
     w.document.open()
     w.document.write(documentHtml(notice, subjectName))
     w.document.close()

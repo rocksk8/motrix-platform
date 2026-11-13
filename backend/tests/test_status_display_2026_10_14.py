@@ -313,7 +313,7 @@ def test_editor_follows_the_project_rules():
     assert "role !== 'superadmin'" in src and "available()" in src                                  # 其他人連探測都不送
     assert "data-state" in src and "data-busy" in src
     assert src.count("esc(") > 10 and "innerHTML" in src                                            # 所有插入的文字都轉義
-    assert "各畫面有自己的簡稱" in src or "只改顯示名稱不會蓋掉它" in src                                # 簡稱優先於顯示名稱：面板明說
+    assert "各畫面有自己的簡稱" in src or "只改顯示名稱不會覆蓋它" in src                                # 簡稱優先於顯示名稱：面板明說
     assert "type=\"color\"" not in src and "type='color'" not in src                                    # 沒有自由色碼輸入（顏色只能從色盤下拉選）
 
 

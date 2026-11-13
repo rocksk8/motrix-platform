@@ -189,7 +189,7 @@ function ledgerHubPage() {
     },
     statusLabel(st) {
       return ({ drafted: '草稿待確認', posted: '已過帳', drift: '來源已變動', reversed: '已沖轉', superseded: '已被新版取代', orphan: '來源已消失',
-        rejected: '已被作廢', native: '既有傳票（不重複產生）', blocked_closed: '期間已結帳（擋下）', blocked_no_account: '缺科目（擋下）', blocked_inventory: '在庫不足（擋下）' })[st] || st
+        rejected: '已被作廢', native: '既有傳票（不重複產生）', blocked_closed: '期間已結帳（已阻擋）', blocked_no_account: '缺科目（已阻擋）', blocked_inventory: '在庫不足（已阻擋）' })[st] || st
     },
     fmt(n) { return MotrixFormat.num(n || 0, {locale:'zh-TW'}) },
     engBad(e) { return ['drift', 'orphan', 'blocked_closed', 'blocked_no_account', 'blocked_inventory'].indexOf(e.status) >= 0 },
@@ -210,7 +210,7 @@ function ledgerHubPage() {
       g.busy = true
       try {
         g.run = await this._api({ method: 'POST' }, '/api/ledger/engine/run', { start: g.start, end: g.end })
-        g.notice = '掃描 ' + g.run.stats.scanned + ' 筆事件：新增草稿 ' + g.run.stats.created + '、來源變動 ' + g.run.stats.drift + '、擋下 ' + g.run.stats.blocked
+        g.notice = '掃描 ' + g.run.stats.scanned + ' 筆事件：新增草稿 ' + g.run.stats.created + '、來源變動 ' + g.run.stats.drift + '、已阻擋 ' + g.run.stats.blocked
         await this.engLoad()
       } catch (e) { g.error = e.message }
       g.busy = false

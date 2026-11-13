@@ -238,7 +238,7 @@
 
           <div class="et-panel" x-show="!useFD">
             <h2>明細欄（<span class="mono">lines</span>）</h2>
-            <div class="et-sub">金額要嘛有「數量＋單價」（金額由後端算），要嘛只有「金額」。費用類別下拉取自費用類別清單。</div>
+            <div class="et-sub">金額須擇一填寫：「數量＋單價」（金額由後端計算），或僅填「金額」。費用類別下拉取自費用類別清單。</div>
             <div x-show="!linesField" class="et-actions"><button class="btn" data-testid="et-add-lines" @click="addLinesField()">加入明細表</button></div>
             <template x-if="linesField">
               <div>

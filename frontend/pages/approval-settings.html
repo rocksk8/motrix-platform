@@ -383,7 +383,7 @@
           <span x-show="key === 'bonus' || (key === 'unified' && bonusUsesUnified)"
                 data-testid="bonus-superadmin-only"
                 style="font-size:12px;color:var(--danger);font-family:var(--font-zh)">
-            獎金分潤的簽核人只能是最高管理者（其他人或自動主管會讓獎金送審被擋下）</span>
+            獎金分潤的簽核人只能是最高管理者（其他人或自動主管會讓獎金送審遭系統拒絕）</span>
           <span x-show="flows[key] && flows[key].steps.length > 0"
                 style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                 x-text="flows[key] ? flows[key].steps.length + ' 個步驟' : ''"></span>
@@ -484,7 +484,7 @@
                             <span x-text="'🏢 ' + departmentLabel(ap.departmentId) + ' 主管（自動）'"></span>
                             <span :style="currentManagerNameFor(ap.departmentId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
                                   style="font-size:12px;margin-left:6px"
-                                  x-text="currentManagerNameFor(ap.departmentId) ? '目前：' + currentManagerNameFor(ap.departmentId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                                  x-text="currentManagerNameFor(ap.departmentId) ? '目前：' + currentManagerNameFor(ap.departmentId) : '⚠ 尚未設定主管，送審時將遭系統拒絕'"></span>
                           </div>
                         </template>
                         <template x-if="ap.kind === 'division_manager'">
@@ -492,7 +492,7 @@
                             <span x-text="'🏛 ' + divisionLabel(ap.divisionId) + ' 處主管（自動）'"></span>
                             <span :style="currentDivManagerNameFor(ap.divisionId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
                                   style="font-size:12px;margin-left:6px"
-                                  x-text="currentDivManagerNameFor(ap.divisionId) ? '目前：' + currentDivManagerNameFor(ap.divisionId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                                  x-text="currentDivManagerNameFor(ap.divisionId) ? '目前：' + currentDivManagerNameFor(ap.divisionId) : '⚠ 尚未設定主管，送審時將遭系統拒絕'"></span>
                           </div>
                         </template>
                         <button class="as-step-btn danger" title="從這層移除" @click="removeApprover(key, idx, apIdx)" :disabled="session.role!=='superadmin'" style="flex-shrink:0">
@@ -547,7 +547,7 @@
             </button>
           </div>
           <div class="form-hint" x-show="session.role === 'superadmin'" style="margin-top:6px;color:var(--text-dim)">
-            部門／處主管自動簽核：實際簽核人在送審當下即時查詢當時的主管，若屆時沒有指定主管，送審會被擋下並要求先設定主管。
+            部門／處主管自動簽核：實際簽核人在送審當下即時查詢當時的主管，若屆時沒有指定主管，送審將遭系統拒絕，並要求先設定主管。
           </div>
 
           <!-- Reset to default note -->
@@ -1088,7 +1088,7 @@
         async saveScope() {
           if (this.scopeSaving) return
           if (!this._scopeLoaded) {
-            alert('套用範圍尚未成功載入，無法儲存（避免送出殘缺資料覆蓋掉其他人已設定的內容）。請重新整理頁面後再試一次。')
+            alert('套用範圍尚未成功載入，無法儲存（避免送出殘缺資料覆蓋其他人已設定的內容）。請重新整理頁面後再試一次。')
             return
           }
           this.scopeSaving = true

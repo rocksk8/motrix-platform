@@ -284,7 +284,7 @@
   function disableNow(it) {                                              // 一鍵停用＝收緊，立即生效（走同一條發布管線）
     if (it.hasDraft && st.confirmDisable !== it.key) {                   // 停用會把這個設定的草稿換成『停用後的已發布版本』：先警告，再按一次才做
       st.confirmDisable = it.key
-      setMsg('「' + it.label + '」有尚未發布的修改；停用會把這些修改丟掉（草稿會被換成停用後的版本）。要繼續停用，請再按一次這顆按鈕（現在已改成「確認停用」）；想保留修改，請先按「編輯」。', true); render(); return Promise.resolve()
+      setMsg('「' + it.label + '」有尚未發布的修改；停用會捨棄這些修改（草稿會被換成停用後的版本）。要繼續停用，請再按一次這顆按鈕（現在已改成「確認停用」）；想保留修改，請先按「編輯」。', true); render(); return Promise.resolve()
     }
     st.confirmDisable = ''
     var f = fromBody(it.key, it.liveBody || it.draftBody); f.enabled = false

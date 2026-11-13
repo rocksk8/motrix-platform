@@ -399,7 +399,7 @@ function notifStore() {
         const isPages = window.location.pathname.includes('/pages/')
         this._setReminder({
           id: 'totp', tone: 'warning', title: '尚未啟用兩步驟驗證',
-          msg: '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。',
+          msg: '密碼外洩時，兩步驟驗證能多一道防線阻擋未授權登入，建議管理員帳號啟用。',
           href: isPages ? 'my-account.html?tab=security' : 'pages/my-account.html?tab=security', linkText: '前往設定 →'
         })
       } catch (e) {}

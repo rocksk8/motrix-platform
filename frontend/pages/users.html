@@ -1369,7 +1369,7 @@
       quoteEmailHint() {
         const e = (this.form.quoteEmail || '').trim().toLowerCase()
         if (!e) return ''
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return '這個信箱的格式看起來不對，存檔時會被擋下。'
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return '這個信箱的格式看起來不對，存檔時將遭拒絕。'
         const d = e.split('@')[1]
         const personal = ['gmail.com','yahoo.com','yahoo.com.tw','hotmail.com','outlook.com','live.com','icloud.com','msn.com','me.com','qq.com','163.com','proton.me','protonmail.com','pchome.com.tw','seed.net.tw']
         if (personal.includes(d)) return '這看起來是私人信箱的網域（' + d + '），報價單上通常要用公司信箱，請確認。'

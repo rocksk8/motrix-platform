@@ -87,7 +87,7 @@
 '   <ul><template x-for="r in (simResult ? simResult.reasons : [])"><li x-text="r"></li></template></ul>' +
 '   <div class="as-sub" x-show="simResult && simResult.ok" x-text="simResult && (\'會存在：\' + simResult.displayPath)"></div>' +
 '   <div class="as-sub" x-show="simResult && simResult.headerNote" x-text="simResult && simResult.headerNote"></div>' +
-'   <div class="as-sub" x-show="simResult && !simResult.subfolderUsable">這個位置的讀取還不支援子資料夾，發布也用不了。</div>' +
+'   <div class="as-sub" x-show="simResult && !simResult.subfolderUsable">這個位置的讀取還不支援子資料夾，發布亦無法使用。</div>' +
 '   <div class="as-sub" x-show="simResult && simResult.readers" data-testid="as-sim-readers"><span>誰能讀（帳號數）：</span>' +
 '    <template x-for="role in readerRoles()" :key="role"><span x-text="role + \' \' + simResult.readers[role].canRead + \'/\' + simResult.readers[role].accounts + \'　\'"></span></template></div>' +
 '   <div class="as-sub" x-show="simResult && !simResult.readers">填一張真實單號，才能算出各角色有幾個帳號讀得到。</div>' +

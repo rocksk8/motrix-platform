@@ -131,7 +131,7 @@
           <section class="bm-card" data-testid="bm-cloud">
             <div class="bm-card-h"><h2 class="sec-t">雲端備份</h2>
               <button type="button" class="bm-q" :aria-expanded="isHelp('cloud')" aria-label="這是什麼" @click="toggleHelp('cloud')">?</button></div>
-            <div class="bm-q-pop" x-show="isHelp('cloud')">備份除了存在這台電腦，還會複製到雲端（雲端硬碟或 S3），電腦壞掉或被偷時才還原得回來。「鏡像」＝把上傳的檔案、PDF 存檔原樣再存一份到雲端。</div>
+            <div class="bm-q-pop" x-show="isHelp('cloud')">備份除了存在這台電腦，還會複製到雲端（雲端硬碟或 S3），電腦故障或遭竊時才還原得回來。「鏡像」＝把上傳的檔案、PDF 存檔原樣再存一份到雲端。</div>
             <template x-if="s.cloud && !s.cloud.error">
               <div>
                 <div class="bm-note" x-show="!s.cloud.enabled" x-text="s.cloud.note" data-testid="bm-cloud-off"></div>

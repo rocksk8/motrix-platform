@@ -417,7 +417,7 @@
           return '「' + plain + '」的 ' + (x.keys || []).map(function (k) { return k.name }).join('、') + ' 在您送出前' + (who ? who : '已被別人') + '改過'
         })
         var applied = (d.applied || []).map(function (g) { return (by.filter(function (b) { return b.group === g })[0] || {}).plain || g })
-        var msg = gs.length ? gs.join('；') + '，為了不蓋掉別人的修改，' + (applied.length ? '其餘沒有儲存' : '這一批沒有儲存') + '。請按「放棄」重新載入後再改。' : (d.message || e.message)
+        var msg = gs.length ? gs.join('；') + '，為了不覆蓋他人的修改，' + (applied.length ? '其餘沒有儲存' : '這一批沒有儲存') + '。請按「放棄」重新載入後再改。' : (d.message || e.message)
         if (applied.length) msg = '已儲存「' + applied.join('」「') + '」；' + msg
         var err = new Error(msg)
         err.status = 409; err.applied = d.applied || []
@@ -531,7 +531,7 @@
       return call(P + '/pending').then(function (r) { ST.pending = r.pending || []; renderPending() }).catch(function (e) { say(e.message) })
     }
     function renderPending() {
-      var h = '<h2 class="sc-h">待生效</h2><div class="sc-sub">放寬類或重要的變更不會馬上生效：要等到期，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>' +
+      var h = '<h2 class="sc-h">待生效</h2><div class="sc-sub">放寬類或重要的變更不會立即生效：要等到期，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>' +
         '<div class="sc-btnrow"><input type="text" class="sc-in" id="sc-pnote" placeholder="核准／撤銷的備註（選填）" style="min-width:260px" data-testid="sc-pending-note"></div>'
       if (!ST.pending.length) h += '<div class="sc-empty" data-testid="sc-pending-empty">目前沒有等待生效的變更。</div>'
       else h += '<table class="sc-table" data-testid="sc-pending-list"><thead><tr><th>設定</th><th>改成</th><th>申請人／原因</th><th>生效時間</th><th>核准</th><th></th></tr></thead><tbody>' + ST.pending.map(function (p) {

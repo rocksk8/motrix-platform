@@ -245,7 +245,7 @@
       var d = e.data && e.data.detail
       if (e.status === 409 && d && d.code === 'conflict') {
         var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
-        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不蓋掉別人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
+        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆蓋他人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
         err.status = 409
         return err
       }
@@ -293,7 +293,7 @@
         if (lastConfirm) {
           dialogs.push({
             title: '關閉簽核／系統技術類信件？', danger: true, okLabel: '仍要關閉',
-            html: '<div class="mx-danger-box">下列信件關閉後，<b class="ms-red">相關人員不會再收到通知，流程可能卡住、或告警被忽略</b>：</div><ul>' +
+            html: '<div class="mx-danger-box">下列信件關閉後，<b class="ms-red">相關人員不會再收到通知，流程可能停滯、或告警被忽略</b>：</div><ul>' +
               res.confirmRequired.map(function (x) { return '<li class="ms-red">' + esc(x.name) + '</li>' }).join('') + '</ul><div class="mx-mute">請確認有其他管道（系統內通知、LINE）接手。原本的收件人設定會保留，重新開啟即恢復。</div>',
           })
         }

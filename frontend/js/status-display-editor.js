@@ -97,7 +97,7 @@
     var groups = {}
     Object.keys(st.defaults).forEach(function (k) { var g = (st.meta[k] || {}).group || 'approval'; (groups[g] = groups[g] || []).push(k) })
     var html = '<div class="sde-head"><b>狀態顯示名稱與顏色</b><button class="sde-btn" data-sde="close" aria-label="關閉">關閉</button></div><div class="sde-body">'
-    html += '<div class="sde-dim">只改畫面上看到的字與色；狀態的值（資料庫裡存的字）、查詢與權限都不變。核准、付款類狀態改名或改色需要第二位最高管理者核准。狀態欄與徽章會跟著改；按鈕與動作用字（例如「標記已收款」）、區段標題（例如「已收款明細」）和統計卡標題維持系統用語。「顯示名稱」是預設用字；若某個畫面有自己的簡稱（例如報價單列表的「審核中」），要改那個畫面就改它的簡稱欄，只改顯示名稱不會蓋掉它。</div>'
+    html += '<div class="sde-dim">只改畫面上看到的字與色；狀態的值（資料庫裡存的字）、查詢與權限都不變。核准、付款類狀態改名或改色需要第二位最高管理者核准。狀態欄與徽章會跟著改；按鈕與動作用字（例如「標記已收款」）、區段標題（例如「已收款明細」）和統計卡標題維持系統用語。「顯示名稱」是預設用字；若某個畫面有自己的簡稱（例如報價單列表的「審核中」），要改那個畫面就改它的簡稱欄，只改顯示名稱不會覆蓋它。</div>'
     Object.keys(GROUP_NAME).forEach(function (g) {
       if (!groups[g]) return
       html += '<div class="sde-grp">' + esc(GROUP_NAME[g]) + '</div>'

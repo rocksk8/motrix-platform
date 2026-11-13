@@ -85,7 +85,7 @@
     '          <label>系統網址（信件裡的連結會指向這裡）</label>',
     '          <input type="text" x-model="wz.baseUrl" placeholder="例：https://motrix.您的公司.com" data-testid="es-base-url">',
     '          <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="wzBaseWarn()" data-testid="es-base-url-warn">',
-    '            <span x-text="wzBaseWarn()"></span> 外部收件人打不開這個連結，請填公司對外網址。',
+    '            <span x-text="wzBaseWarn()"></span> 外部收件人無法開啟這個連結，請填公司對外網址。',
     '          </div>',
     '        </div>',
     '        <div x-show="wz.needEmail" class="ns-field" data-testid="es-need-email">',
@@ -405,14 +405,14 @@
         if (m4) {
           const o = m4.slice(1).map(Number)
           if (o.some(n => n > 255)) return '這個網址看起來不完整，請填完整網址（例：https://motrix.您的公司.com）。'
-          if (o[0] === 127) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
+          if (o[0] === 127) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才能開啟。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
           if (o[0] === 10 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168) || (o[0] === 169 && o[1] === 254) || (o[0] === 100 && o[1] >= 64 && o[1] <= 127))
-            return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+            return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結將無法開啟。'
           return ''
         }
-        if (h === '::1' || h === 'localhost' || h.endsWith('.localhost')) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
-        if (/^(fc|fd|fe80)/.test(h) && h.includes(':')) return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
-        if (!h.includes('.') || /\.(local|lan|internal|intranet|home|localdomain|home\.arpa)$/.test(h)) return '這看起來是公司內部才認得的名稱：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'
+        if (h === '::1' || h === 'localhost' || h.endsWith('.localhost')) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才能開啟。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
+        if (/^(fc|fd|fe80)/.test(h) && h.includes(':')) return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結將無法開啟。'
+        if (!h.includes('.') || /\.(local|lan|internal|intranet|home|localdomain|home\.arpa)$/.test(h)) return '這看起來是公司內部才認得的名稱：人在公司外（或沒連公司網路）時，點信裡的連結將無法開啟。'
         return ''
       },
 

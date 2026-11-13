@@ -730,7 +730,7 @@ function tenderRadarPage() {
       return {
         ok:           '雷達正常',
         unrecognised: '認不得對方的頁面 —— 對方可能改版了，解析器需要調整',
-        unreachable:  '抓不到對方的網站 —— 連不上／逾時／被擋，解析器沒有問題',
+        unreachable:  '無法擷取對方網站 —— 連不上／逾時／遭封鎖，解析器沒有問題',
         never_run:    '尚未執行過掃描',
       }[this.status.health] || ''
     },

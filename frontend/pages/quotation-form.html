@@ -1242,7 +1242,7 @@
            不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
       <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
            style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
-        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免蓋掉對方的修改，您這次的存檔沒有生效，自動存檔已暫停。請先載入最新版，再把您要改的地方重做一次。</span>
+        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔沒有生效，自動存檔已暫停。請先載入最新版，再把您要改的地方重做一次。</span>
         <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
       </div>
 
@@ -3609,7 +3609,7 @@
       },
 
       openTermsManager() {
-        if (this._termsLoadFailed) { this.toast('條款組沒有載入成功，請重新整理頁面後再管理（避免用空清單蓋掉設定）'); return }
+        if (this._termsLoadFailed) { this.toast('條款組沒有載入成功，請重新整理頁面後再管理（避免用空清單覆蓋設定）'); return }
         // 深拷貝——在 modal 裡改到一半按叉叉不該影響外面已載入的清單
         this.termsDraft = JSON.parse(JSON.stringify(this.termsPresets))
         this.termsDraftDefault = this.termsDefaultKey
