@@ -122,6 +122,11 @@
       tr.ql-lane { display:block; }
       tr.ql-lane > td { display:block; }
     }  /* 收 @media (max-width:1023px)（原本漏關，T84 合併後整段 T84 樣式被包進平板 media query） */
+    /* 平板直立（768–1023）：上面通用卡片版把 .summary-row 排成兩欄格線，三個數字會 2＋1 換行，
+       第三顆（本月已成案）自己一列、還帶著 .ql-sum + .ql-sum 的左邊線 ⇒ 平板改回三個數字一排（和桌機同一做法）；手機（≤767）另有自己的一排規則，桌機不受影響 */
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .summary-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0; }
+    }
     /* ── T84：三個有定義的數字、目前條件列、提示框、下一步、緊湊密度、手機卡片 ── */
     .ql-sum { display:flex; flex-direction:column; gap:2px; flex:1 1 150px; min-width:0; text-align:left; background:none; border:none; border-radius:var(--radius); padding:6px 10px; cursor:pointer; font-family:var(--font-zh); color:inherit; }
     .ql-sum + .ql-sum { border-left:1px solid var(--border-light); border-radius:0 var(--radius) var(--radius) 0; }

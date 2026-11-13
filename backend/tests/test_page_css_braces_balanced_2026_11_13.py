@@ -105,3 +105,11 @@ def test_quotations_t84_rules_are_top_level_and_new_estimate_is_ghost():
         assert 0 in hits, "%s 的基底規則被包進 @media（深度 %s）——桌機會吃不到樣式" % (sel, hits)
     m = re.search(r'<a [^>]*data-testid="ql-new-estimate"[^>]*>', html)
     assert m and "action-btn--ghost" in m.group(0), "「新增估價單」要用 action-btn--ghost（否則沒外框）"
+
+
+def test_quotations_tablet_summary_row_stays_three_across():
+    """平板直立（768–1023）三個數字要一排：通用卡片版的兩欄格線會讓第三顆換行並多一條左邊線（使用者裁示併修）。"""
+    css = _style_blocks(page_file("quotations.html").read_text(encoding="utf-8"))[0]
+    m = re.search(r"@media\s*\(min-width:\s*768px\)\s*and\s*\(max-width:\s*1023px\)\s*\{(.*?)\n    \}", css, re.S)
+    assert m, "找不到 768–1023 的專屬 @media 區塊"
+    assert re.search(r"\.summary-row\s*\{[^}]*repeat\(3,", m.group(1)), "平板的 .summary-row 要三欄（repeat(3,…)）"
