@@ -3,7 +3,7 @@
 
 [單位] helper:user_perm_batch    [層] L1    [穩定度] 實作（S3a）
 [公開介面] BATCH_GRANT_REFUSED, MAX_USERS, UNDO_DEFAULT_REASON, list_catalog, parse_request, preview, apply, undo
-[契約題] tests/test_user_perm_batch_2026_11_14.py
+[契約題] tests/test_user_perm_batch_2026_11_13.py
 
 ## 規則（SPEC §12；守門題逐條驗）
 1. **共用檢查點**：原因規則一律走 `helpers.duty_roles.gate_reason`（與 `PUT／POST /api/users`、職責角色各動作同一支）；寫入走
