@@ -232,3 +232,34 @@ def test_reminder_query_does_not_need_the_doc_type_column():
         f"FROM {src['table']} WHERE status IN ('待審核','簽核中')").fetchall()
     assert len(rows) == 1
 
+
+
+# ── 7. 主旨：先換範本、再填值（客戶名稱裡自己寫的字不被改寫）──────────────────────
+
+def test_approval_mail_subjects_keep_user_text_and_quotes_are_unchanged(mails, monkeypatch):
+    from helpers import email_notify as E
+    monkeypatch.setattr(E, "_lookup_emails", lambda *a, **k: ["a@example.com"])
+    monkeypatch.setattr(E, "_tpl_fields", lambda *a, **k: {})
+    cust = "報價單客戶"
+    calls = (
+        ("approval_request", lambda lab, no: E.notify_approval_request(no, cust, ["u"], lab), "待審核"),
+        ("next_tier", lambda lab, no: E.notify_next_tier(no, cust, 2, 3, ["u"], lab), "審核通知（第 2/3 層）"),
+        ("approved", lambda lab, no: E.notify_approved(no, cust, "某人", "u", lab), "審核完成"),
+        ("returned", lambda lab, no: E.notify_returned(no, "N-R1", cust, "備註", "u", lab), "退回修改"),
+        ("resubmit", lambda lab, no: E.notify_resubmit_requester(no, "N", cust, "u", ["某人"], lab), "已送審"),
+    )
+    for name, fire, key in calls:
+        for lab, no in (("估價單", EST_NO), ("報價單", QUO_NO)):
+            mails.clear()
+            try:
+                fire(lab, no)
+            except TypeError as e:           # 簽名不同 ⇒ 立刻看得出來，不要默默略過
+                raise AssertionError("%s 簽名與測試預期不同：%s" % (name, e))
+            assert mails, name
+            subj = mails[-1][1]
+            assert cust in subj and key in subj, (name, subj)
+            rest = subj.replace(cust, "")
+            if lab == "估價單":
+                assert "估價單" in rest and "報價單" not in rest, (name, subj)
+            else:
+                assert "估價單" not in rest and "報價單" in rest, (name, subj)

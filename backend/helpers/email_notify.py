@@ -576,6 +576,19 @@ def _dl(text, doc_label):
     return text if (not doc_label or doc_label == "報價單") else str(text).replace("報價單", doc_label)
 
 
+def _dl_fill(tpl, doc_label, **vals):
+    """先換範本裡的單據名稱、再填值（單趟取代）：客戶名稱等使用者文字裡自己寫的「報價單」不會被改成「估價單」。"""
+    import re as _re
+    return _re.sub(r"\{(\w+)\}", lambda m: str(vals[m.group(1)]) if m.group(1) in vals else m.group(0), _dl(tpl, doc_label))
+
+
+def _subject_text(_tf, default_tpl, doc_label, **vals):
+    """信件主旨的主文：範本設定檔有給 reason 就用它（管理員自己寫的字，整段換名稱），否則走預設範本。"""
+    if "reason" in _tf:
+        return _dl(_tf["reason"], doc_label)
+    return _dl_fill(default_tpl, doc_label, **vals)
+
+
 def _doc_label_of(quote_no) -> str:
     """只有單號的通知（結算／結案／變更申請…）用：單號字首 ⇒ 報價單／估價單。任何錯誤 ⇒ 報價單（通知不可因取名失敗而寄不出去）。"""
     try:
@@ -603,7 +616,7 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
     )
     from helpers import quote_email as _qe       # 報價人的報價用公司信箱（儲存報價單時伺服器已驗證）；沒有 ⇒ 不加 Reply-To，呼叫形狀與舊版相同
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("approval_request", _dl(_tf.get("reason", f"報價單待簽核：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("approval_request", _subject_text(_tf, "報價單待簽核：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
@@ -625,7 +638,7 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("next_tier", _dl(_tf.get("reason", f"報價單簽核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("next_tier", _subject_text(_tf, "報價單簽核通知（第 {t}/{tt} 層）：{no}（{cust}）", doc_label, t=tier_no, tt=total_tiers, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_approved(quote_no: str, customer: str,
@@ -646,7 +659,7 @@ def notify_approved(quote_no: str, customer: str,
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("approved", _dl(_tf.get("reason", f"報價單簽核完成：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("approved", _subject_text(_tf, "報價單簽核完成：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
@@ -668,7 +681,7 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
     )
     from helpers import quote_email as _qe       # 修改版（新單）也有自己的快照；沒有再用原單的
     _rt = _qe.reply_to_for_quote(new_quote_no) or _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("returned", _dl(_tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("returned", _subject_text(_tf, "報價單退回修改：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
@@ -1382,7 +1395,7 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(new_quote_no)
-    _async_send(to, _mt.subject("resubmit_requester", _dl(f"修改版報價單已送審：{new_quote_no}（{customer}）", doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("resubmit_requester", _dl_fill("修改版報價單已送審：{no}（{cust}）", doc_label, no=new_quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
