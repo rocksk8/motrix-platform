@@ -312,6 +312,18 @@ def collect_reds(fail_stream_dir, limit=500):
     return out
 
 
+def _interpreter_mismatch(python, repo):
+    """用 tools/platform/project_env.py 的同一份判定（formal_python／interpreter_mismatch）；載不到它 ⇒ 不擋（fail-open，只是少一道檢查）。"""
+    try:
+        import importlib.util as _iu
+        sp = _iu.spec_from_file_location("_bt_project_env", str(Path(repo) / "tools" / "platform" / "project_env.py"))
+        pe = _iu.module_from_spec(sp)
+        sp.loader.exec_module(pe)
+        return pe.interpreter_mismatch(python)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
 #: run-stage 一段跑完後，紅的題數 ≤ 這個數就自動在安靜環境單獨重跑一次（0＝關）。**不是 flake 登記**：known_flakes 不動，
 #: 每次重試都留證據（紀錄的 stages.<段>.retry＋retry_log.jsonl），同一題累計次數給雜訊排行榜用。
 RETRY_MAX_DEFAULT = 5
@@ -483,6 +495,11 @@ def _run_stage(repo, stage, records, python=None, runner=None, workers=None, not
     import tempfile
     python = python or sys.executable
     repo = Path(repo)
+    if runner is None:                              # 真的要跑（測試注入 runner 時不查）：run-stage 與預跑（modtest --full）必須同一個直譯器
+        bad = _interpreter_mismatch(python, repo)
+        if bad:
+            note("[run-stage] ✗ 拒跑：" + bad)
+            return 2, False, "直譯器不是正式閘門用的環境"
     fp0 = fingerprint(repo)
     backend = repo / "backend"
     base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S"), os.urandom(3).hex()))   # 末尾隨機：同一秒起兩輪也不共用 fail_stream 目錄（舊明細會被當成這一輪的紅）
