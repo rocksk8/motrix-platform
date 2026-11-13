@@ -7020,6 +7020,7 @@
    "groups[].values.no_access",
    "groups[].values.note_template",
    "groups[].values.notification_keep_days",
+   "groups[].values.notify_next",
    "groups[].values.on_denied",
    "groups[].values.onsite",
    "groups[].values.ordered",

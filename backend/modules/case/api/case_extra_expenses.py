@@ -327,6 +327,16 @@ def _buyer_pr_ok(conn, quote_no: str, user: dict, kind=None, exp_id=None) -> boo
     return _buyer_pr_visible(conn, quote_no, user)
 
 
+def _notify_po_approved(row, quote_no: str, user: dict) -> None:
+    """一條龍 P6：採購單（有案件）最終核准 ⇒ 通知持有庫存模組、看得到案件的人準備收貨。旗標關／其他單據種類／無案件 ⇒ 什麼都不做；永不丟例外。"""
+    try:
+        if quote_no and (_col(row, "kind", "") or "") == "purchase_order":
+            from modules.case.notify_next import notify_next
+            notify_next("po_approved", quote_no, actor=user.get("username") or "", doc=_col(row, "doc_code", "") or "")
+    except Exception:                                                          # noqa: BLE001
+        pass
+
+
 def _po_supplier(conn, kind: str, data: dict, existing: dict = None, body_data=None, typed_name: str = ""):
     """一條龍 P5b（旗標 `onepipe.supplier_master`，預設開）：採購單 `data.supplierId`＝從供應商主檔挑的廠商。
     回傳主檔的廠商名稱（呼叫端據此把收款人類型／名稱以主檔為準）；沒有挑（手動輸入）、不是採購單、旗標關 ⇒ None（行為與目前相同）。
@@ -1050,6 +1060,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
                     f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}；未設定簽核層，送審即核准）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=user["username"], payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 送審即核准 ⇒ 有預定付款日就建「付款待辦」
+            _notify_po_approved(row, quote_no, user)             # 一條龍 P6（旗標 notify_next）：採購單核准 ⇒ 通知下一棒（收貨）
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -1162,6 +1173,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
                         f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=requester or "", payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 最終核准 ⇒ 有預定付款日就建「付款待辦」
+            _notify_po_approved(row, quote_no, user)             # 一條龍 P6
             notify_module_activity("案件管理", "支出申請核准", display, f"{XN.doc_ident(conn, row)}｜{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),
