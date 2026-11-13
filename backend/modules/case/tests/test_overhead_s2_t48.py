@@ -8,6 +8,7 @@ import json
 import pytest
 
 import db
+from tests._settings_activate import activate_now
 
 
 def _login(client, username, password):
@@ -69,6 +70,7 @@ def _mode(client, su, mode):
         _migrated()                                      # 伺服器要求遷移完成標記＋明確確認才准切到新口徑
     r = client.put("/api/overhead/settings", json={"ruleMode": mode, "confirm": True}, headers=su)
     assert r.status_code == 200, r.text
+    activate_now("overhead_basis")                       # S5：口徑切換改成待生效（等待期滿＋核准）；測試模擬已生效
 
 
 # ── 預設（legacy）：數字不變 ───────────────────────────────────────────────────────
@@ -266,7 +268,8 @@ def test_mode_flip_needs_confirmation_and_the_migration_marker(client, who):
     _mode(client, su, "v2")
     assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is True
     assert client.put("/api/overhead/settings", json={"ruleMode": "legacy"}, headers=su).status_code == 200, "退回舊口徑（回滾）不需確認"
-    assert any("口徑" in a["target_label"] for a in _audits("settings.overhead.update"))
+    activate_now("overhead_basis")
+    assert _audits("settings.overhead_basis.pending"), "S5：口徑切換由設定群組 overhead_basis 記稽核（待生效）"
 
 
 def test_v2_recomputes_pretax_tax_and_total_from_items(client, who):
@@ -356,10 +359,11 @@ def test_switching_back_to_legacy_removes_the_migration_marker(client, who):
     _mode(client, su, "v2")
     assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is True
     assert client.put("/api/overhead/settings", json={"ruleMode": "legacy"}, headers=su).status_code == 200
+    activate_now("overhead_basis")
     assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is False
     r = client.put("/api/overhead/settings", json={"ruleMode": "v2", "confirm": True}, headers=su)
     assert r.status_code == 409, "標記不見 ⇒ 不能直接再切回 v2"
-    assert any(json.loads(a["detail"]).get("migrationMarker") == "removed" for a in _audits("settings.overhead.update"))
+    assert len(_audits("settings.overhead_basis.pending")) >= 2, "S5：退回舊口徑／再切 v2 各一筆待生效稽核；標記移除由 migrationDone is False 驗證（上面）"
 
 
 def test_v2_save_of_a_legacy_shaped_quote_keeps_zero_tax(client, who):

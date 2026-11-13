@@ -1620,29 +1620,41 @@ def get_case_bonus_voucher_accounts(authorization: str = Header(None)):
 
 
 @router.put("/cases/voucher-accounts")
-def put_case_bonus_voucher_accounts(body: dict = Body(...), authorization: str = Header(None)):
-    """只改有給的鍵；任何一個不存在或已停用 ⇒ 400，**一個都不寫**。"""
-    _require_user(authorization, require_superadmin=True)
+def put_case_bonus_voucher_accounts(body: dict = Body(...), supersede: bool = False, authorization: str = Header(None)):
+    """只改有給的鍵；任何一個不存在或已停用 ⇒ 400，**一個都不寫**。
+    S5：不再直接寫舊鍵——改走設定群組 `bonus_voucher` 的 `publish()`（確認期間＋第二位最高管理者核准＋稽核）；只送「和目前生效值不同」的欄位。
+    回 `{ok, pending, warnings}`：有實質變更 ⇒ `pending` 不為空（等待期滿且核准後才生效）。"""
+    user = _require_user(authorization, require_superadmin=True)
     body = body or {}
     changes = {k: (body.get(k) if isinstance(body.get(k), str) else "").strip()
                for k in bonus_vouchers.ACCOUNT_SLOTS if k in body}
     if not changes:
         raise HTTPException(400, "沒有要修改的科目。")
+    from helpers import settings_registry as _sr
+    from helpers.settings_groups_external import problems_text
+    from core.definitions import DefinitionConflict
     conn = get_db()
-    try:
+    try:                                                # 有給的每一個科目都先驗（含和目前相同的）：驗證不了（例：會計模組未安裝）就不寫，並說明
         problems = ["%s：%s" % (bonus_vouchers.ACCOUNT_SLOTS[k][2], bonus_vouchers.account_problem(conn, v))
                     for k, v in changes.items() if bonus_vouchers.account_problem(conn, v)]
     finally:
         conn.close()
     if problems:
         raise HTTPException(400, "；".join(problems))
-    from helpers.settings import _set_setting
-    for k, v in changes.items():
-        _set_setting(bonus_vouchers.ACCOUNT_SLOTS[k][0], v)
-    _audit(_tok(authorization), "bonus.case.voucher_accounts", "settings", "bonus_case_voucher_accounts",
-           "獎金分潤傳票科目：%s" % "、".join("%s=%s" % (bonus_vouchers.ACCOUNT_SLOTS[k][2], v)
-                                        for k, v in changes.items()))
-    return {"ok": True}
+    cur = _sr.get_group_effective("bonus_voucher")
+    sent = {k: v for k, v in changes.items() if cur.get(k) != v}
+    if not sent:
+        return {"ok": True, "pending": [], "warnings": []}
+    try:
+        res = _sr.publish("bonus_voucher", sent, user=user["username"], actor=user, reason="獎金分潤傳票科目調整（獎金設定頁）",
+                          expected_values={k: cur[k] for k in sent}, supersede=supersede)
+    except _sr.SettingConflict as e:
+        raise HTTPException(409, {"code": e.code, "keys": e.keys, "by": e.by, "at": e.at})
+    except _sr.SettingError as e:
+        raise HTTPException(400, problems_text(e))
+    except DefinitionConflict as e:
+        raise HTTPException(409, str(e))
+    return {"ok": True, "pending": res.get("pending") or [], "warnings": res.get("warnings") or []}
 
 
 @router.get("/cases")

@@ -13,6 +13,7 @@ import copy
 from datetime import date
 
 import pytest
+from tests._settings_activate import set_tax_versions  # noqa: E402  S5：取代 save_versions（發布＋立刻生效）
 
 pytest.importorskip("playwright.sync_api")
 
@@ -58,7 +59,7 @@ def test_december_without_next_year_warns_on_both_pages(live_server, make_user, 
 
 @pytest.mark.e2e
 def test_payslip_form_new_slip_follows_the_date(live_server, make_user, new_page, login_as, before_new_year):
-    lp.save_versions(lp.load_versions() + [_v2027()])
+    set_tax_versions(lp.load_versions() + [_v2027()])
     u = make_user(username="r1e_d", role="superadmin")
     page = new_page()
     login_as(page, u)
@@ -72,7 +73,7 @@ def test_payslip_form_new_slip_follows_the_date(live_server, make_user, new_page
 @pytest.mark.e2e
 def test_payslip_form_old_slip_keeps_its_version_until_recalc(live_server, make_user, new_page, login_as,
                                                                 client, before_new_year):
-    lp.save_versions(lp.load_versions() + [_v2027()])
+    set_tax_versions(lp.load_versions() + [_v2027()])
     u = make_user(username="r1e_e", role="superadmin")
     tok = client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]
     h = {"Authorization": "Bearer " + tok}

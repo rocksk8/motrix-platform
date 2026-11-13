@@ -394,7 +394,8 @@ def test_accounting_mapping_keys_include_added_and_disabled_categories(monkeypat
     names = PC.all_category_names()
     assert "其他" in names and "工程服務" in names, "停用的分類仍在對照裡（舊料號與進貨批次還用它）"
     assert "其他" not in [c["name"] for c in PC.categories()] and "工程服務" in [c["name"] for c in PC.categories()]
-    monkeypatch.setattr(AE, "_get_setting", lambda k, d=None: {"inventoryExpenseAccounts": {"網通設備": "5101"}})
+    from helpers import settings_registry as _sr                                       # S5：T100 設定改讀設定群組的生效值
+    monkeypatch.setattr(_sr, "get_group_effective", lambda g, conn=None, **kw: {"config": {"inventoryExpenseAccounts": {"網通設備": "5101"}}})
     cfg = AE._t100_config()
     assert set(cfg["inventoryExpenseAccounts"]) >= {"網通設備", "其他", "工程服務"} and cfg["inventoryExpenseAccounts"]["網通設備"] == "5101"
 

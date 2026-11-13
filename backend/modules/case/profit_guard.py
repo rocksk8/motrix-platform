@@ -52,9 +52,30 @@ def parse_pct(v):
     return int(d) if d == d.to_integral_value() else float(d)
 
 
+def basis_raw(conn) -> dict:
+    """舊儲存裡的口徑（`{ruleMode, charityMode}`）。**不經登錄表**：轉接器 `read` 與每日對帳用。"""
+    from helpers.settings_groups_external import overhead_read
+    return overhead_read(conn)
+
+
+def _basis() -> dict:
+    """目前生效的口徑：設定群組 `overhead_basis` 的生效值（含已到時的待生效值；忽略 DEFAULTS_ONLY）；
+    登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。"""
+    from db import get_db
+    conn = get_db()
+    try:
+        try:
+            from helpers import settings_registry as _sr
+            return _sr.get_group_effective("overhead_basis", conn=conn)
+        except Exception:                                         # noqa: BLE001
+            _log.warning("overhead_basis 登錄表讀取失敗，退回舊儲存", exc_info=True)
+            return basis_raw(conn)
+    finally:
+        conn.close()
+
+
 def rule_mode() -> str:
-    from helpers.settings import _get_setting
-    m = _get_setting(MODE_KEY, "legacy")
+    m = _basis().get("ruleMode")
     if m == "v2" and not migration_done():                        # 失效安全：沒有遷移完成標記就算 legacy（防止新舊口徑的單混在一起）
         _log.warning("overhead_rule_mode=v2 但沒有 %s 標記 ⇒ 視為 legacy", MIGRATION_KEY)
         return "legacy"
@@ -92,8 +113,7 @@ def charity_migration_done() -> bool:
 
 def charity_mode() -> str:
     """設定值（不含失效安全判斷）：`direct`｜`total`；缺鍵或不合法＝direct。"""
-    from helpers.settings import _get_setting
-    m = _get_setting(CHARITY_MODE_KEY, PR.CHARITY_DIRECT)
+    m = _basis().get("charityMode")
     return m if m in CHARITY_MODES else PR.CHARITY_DIRECT
 
 

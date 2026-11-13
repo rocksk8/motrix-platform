@@ -43,6 +43,11 @@ def run_once(mode: str) -> list:
     except Exception:                         # noqa: BLE001
         _logger.exception("settings materialize_due failed")
     try:
+        from helpers.settings_groups_external import check_drift   # S5：外部群組的登錄表生效值 vs 舊儲存（有人繞過登錄表直接改舊鍵時警示）
+        check_drift(mode)
+    except Exception:                         # noqa: BLE001
+        _logger.exception("settings external drift check failed")
+    try:
         system_checks.run_all(prune=(mode == "daily"))
     except Exception:                         # noqa: BLE001
         _logger.exception("system_checks.run_all failed")
