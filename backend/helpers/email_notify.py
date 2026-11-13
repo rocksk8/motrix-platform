@@ -586,6 +586,8 @@ def _concrete(text, doc_label):
     """信件類型登記表裡的共用名稱 ⇒ 這封信實際的單據名稱：先把「報價單／估價單」換成 doc_label，再套 `_dl`（其餘「報價單」）。
     報價單（或沒給）⇒ 「報價單／估價單」變回「報價單」，其餘字串不動。只用在登記表的靜態文字（不含任何使用者輸入）。"""
     lab = doc_label or "報價單"
+    if lab == "報價單／估價單":          # 不分單據的信（例如業務開發連結異動）：維持中性寫法
+        return str(text)
     return _dl(str(text).replace("報價單／估價單", lab), lab)
 
 
@@ -626,6 +628,7 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成簽核作業。"), doc_label),
         button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe       # 報價人的報價用公司信箱（儲存報價單時伺服器已驗證）；沒有 ⇒ 不加 Reply-To，呼叫形狀與舊版相同
     _rt = _qe.reply_to_for_quote(quote_no)
@@ -648,6 +651,7 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", f"您好，前層簽核已完成，報價單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。"), doc_label),
         button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
@@ -669,6 +673,7 @@ def notify_approved(quote_no: str, customer: str,
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", "您好，以下報價單已完成全部層級簽核，正式生效。感謝各位簽核人員配合。"), doc_label),
         button_text=_dl(_tf.get("button", "前往查看報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
@@ -691,6 +696,7 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
         intro=_dl(_tf.get("intro", "您好，您提交的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"), doc_label),
         note=note,
         button_text=_dl(_tf.get("button", "前往修改報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe       # 修改版（新單）也有自己的快照；沒有再用原單的
     _rt = _qe.reply_to_for_quote(new_quote_no) or _qe.reply_to_for_quote(quote_no)
@@ -1405,6 +1411,7 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
         new_quote_no, _base_url(),
         intro=_dl("您好，您的修改版報價單已成功送出，目前正等待簽核人員簽核，請耐心等候通知。", doc_label),
         button_text=_dl("前往查看報價單", doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(new_quote_no)
@@ -1473,6 +1480,7 @@ def notify_dev_case_relink_request(case_id: int, case_name: str, requester_displ
         rows, "", crm_page,
         intro=f"{requester_display} 申請異動業務開發案件的報價單／估價單連結，請最高管理者登入系統簽核。",
         button_text="前往簽核",
+        doc_label="報價單／估價單",           # 連結的可能是報價單也可能是估價單：登記表的共用名稱維持中性
     )
     _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
 

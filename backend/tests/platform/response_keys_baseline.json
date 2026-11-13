@@ -6446,6 +6446,8 @@
    "groups[].values.label_close_report",
    "groups[].values.label_completion",
    "groups[].values.label_contractor_voucher",
+   "groups[].values.label_estimate",
+   "groups[].values.label_estimate_version",
    "groups[].values.label_execution_report",
    "groups[].values.label_expense_form",
    "groups[].values.label_invoice_voucher",

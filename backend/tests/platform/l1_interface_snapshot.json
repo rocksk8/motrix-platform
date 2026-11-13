@@ -794,7 +794,7 @@
    "SendHandle.wait": "def(self, timeout=…)",
    "_admin_emails": "def(event_key=…)",
    "_base_url": "def()",
-   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
+   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…, doc_label=…)",
    "_send_raising": "def(to_addrs, subject, html)",
    "email_send_policy": "def(env=…)",
    "finance_recipient_emails": "def(event_key=…)",

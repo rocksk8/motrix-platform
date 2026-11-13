@@ -1,0 +1,277 @@
+# -*- coding: utf-8 -*-
+"""2026-11-13（T83 fix/estimate-static-labels）：估價單走到的「靜態／登記表」用語不可寫死「報價單」。
+
+接續 `test_estimate_mail_doc_name_2026_11_13.py`（動態信件本文）：這裡管登記表與目錄這一層。
+  DYN（依單據類型）：簽核信 footer／預設影響／處理方式、簽核佇列 typeLabel、完工單帶入提示、資源回收筒訊息、
+                    業務開發轉建的行事曆文字與通知、PDF 下載檔名。
+  NEU（中性「報價單／估價單」）：信件類型名稱、通知偏好、簽核流程設定頁、事件目錄、稽核模組名、業務開發頁彈窗。
+  反向：報價單（MQ-）逐字不變——舊字串一個字都不能少、「估價單」一個字都不能出現。
+"""
+from tests._requires import requires_module  # noqa: E402
+import re
+from pathlib import Path
+
+import pytest
+
+pytestmark = requires_module("case", "本檔打 M01（案件）的通知與資料（報價單／估價單）")
+
+EST_NO = "ME-202611-001"
+QUO_NO = "MQ-202611-001"
+NEU = "報價單／估價單"
+_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _est(text):
+    assert "估價單" in text and "報價單" not in text, text
+
+
+def _quo(text):
+    assert "報價單" in text and "估價單" not in text, text
+
+
+@pytest.fixture
+def mails(monkeypatch):
+    from helpers import email_notify as E
+    sent = []
+    monkeypatch.setattr(E, "_lookup_emails", lambda *a, **k: ["a@example.com"])
+    monkeypatch.setattr(E, "_tpl_fields", lambda *a, **k: {})
+    monkeypatch.setattr(E, "_admin_emails", lambda *a, **k: ["a@example.com"])
+    monkeypatch.setattr(E, "_async_send", lambda to, subject, html, *a, **k: sent.append((to, subject, html)))
+    return sent
+
+
+# ── A. 簽核信：footer／預設影響／處理方式依單據類型 ─────────────────────────────
+
+def _fire(E, name, lab, no, cust):
+    return {
+        "approval_request": lambda: E.notify_approval_request(no, cust, ["u"], lab),
+        "next_tier": lambda: E.notify_next_tier(no, cust, 2, 3, ["u"], lab),
+        "approved": lambda: E.notify_approved(no, cust, "某人", "u", lab),
+        "returned": lambda: E.notify_returned(no, "N-R1", cust, "備註", "u", lab),
+        "resubmit": lambda: E.notify_resubmit_requester(no, "N", cust, "u", ["某人"], lab),
+    }[name]()
+
+
+@pytest.mark.parametrize("name", ["approval_request", "next_tier", "approved", "returned", "resubmit"])
+def test_estimate_approval_mail_has_no_quote_word_outside_customer_text(mails, name):
+    from helpers import email_notify as E
+    cust = "報價單客戶有限公司"        # 客戶自己的名字含「報價單」：必須原樣保留、不被換字
+    _fire(E, name, "估價單", EST_NO, cust)
+    html = mails[-1][2]
+    assert cust in html, "客戶名稱（使用者輸入）要原樣出現"
+    rest = html.replace(cust, "")
+    assert "報價單" not in rest, re.findall(r".{12}報價單.{12}", rest)
+    assert "估價單" in rest
+    assert "／估價單" not in rest and "報價單／" not in rest, "共用名稱要換成實際單據名，不可外露斜線版"
+
+
+@pytest.mark.parametrize("name", ["approval_request", "next_tier", "approved", "returned", "resubmit"])
+def test_quote_approval_mail_stays_quote_only(mails, name):
+    from helpers import email_notify as E
+    _fire(E, name, "報價單", QUO_NO, "客")
+    html = mails[-1][2]
+    assert "估價單" not in html and "報價單／" not in html and "／報價單" not in html
+    assert re.search(r"信件類型：(修改版)?報價單", html), "footer 仍是「信件類型：（修改版）報價單…」"
+
+
+def test_quote_registry_defaults_are_the_legacy_strings():
+    """報價單：預設影響／處理方式／footer 名稱＝改版前逐字（共用名稱 ⇒ 換回「報價單」）。"""
+    from helpers import email_notify as E
+    from helpers import mail_types as mt
+    t = mt.get("approval_request")
+    assert E._concrete(t.impact, "報價單") == "報價單在您簽核之前不會進入下一個流程。"
+    assert E._concrete(mt.get("approved").impact, "報價單") == "報價單已核准，可以對外提供。"
+    assert E._concrete(mt.get("approval_request").name, "報價單") == "報價單待簽核"
+    assert E._concrete(mt.get("approved").name, "報價單") == "報價單簽核完成"
+    assert E._concrete(mt.get("approved").impact, "估價單") == "估價單已核准，可以對外提供。"
+    # 非共用名稱（出貨單等）兩種單據都不動
+    s = mt.get("shipping_submitted")
+    assert E._concrete(s.name, "估價單") == s.name == "出貨單待簽核"
+
+
+def test_build_html_without_quote_no_uses_the_quote_label(mails):
+    from helpers import email_notify as E
+    html = E._build_html("approval_request", "t", "b", "#000", [], "", "https://h/x.html")
+    assert "估價單" not in html and "信件類型：報價單待簽核" in html
+
+
+# ── B. 簽核佇列 typeLabel ───────────────────────────────────────────────────
+
+def test_approval_queue_type_label_follows_the_doc_no(client, make_user):
+    from db import get_db
+    from modules.case.api import quotations as Q
+    u, pw = make_user(username="est_q", role="admin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    nos = {}
+    for dt in ("estimate", None):
+        data = {"customerName": "客", "projectName": "案", "quoteDate": "2026-11-13", "items": [{"description": "品"}],
+                "tot": {"total": 100, "pretax": 95}}
+        if dt:
+            data["docType"] = dt
+        rr = client.post("/api/quotations", headers=h, json={"status": "草稿", "data": data})
+        assert rr.status_code == 201, rr.text
+        nos[dt or "quote"] = rr.json()["quote_no"]
+    conn = get_db()
+    try:
+        for n in nos.values():
+            conn.execute("UPDATE quotations SET status='待審核' WHERE quote_no=?", (n,))
+        conn.commit()
+        items = {i["quoteNo"]: i for i in Q.approval_queue_items(conn) if i.get("type") == "quotation"}
+    finally:
+        conn.close()
+    assert items[nos["estimate"]]["typeLabel"] == "估價單"
+    assert items[nos["quote"]]["typeLabel"] == "報價單"
+    from routers import approval_queue as aq
+    assert aq._item_type_label(items[nos["estimate"]]) == "估價單"
+    assert aq._item_type_label(items[nos["quote"]]) == "報價單"
+
+
+# ── C. 完工單帶入提示 ───────────────────────────────────────────────────────
+
+def test_completion_gate_message_label_param_and_legacy_default():
+    from modules.case import completion_sync as CS
+    assert CS.gate_message("已送出") is None and CS.gate_message("已送出", "估價單") is None
+    for status in ("草稿", "簽核中", "待審核", "已取消", "已拒絕", "某個沒見過的狀態"):
+        legacy = CS.gate_message(status)
+        est = CS.gate_message(status, "估價單")
+        if legacy is None:
+            assert est is None
+            continue
+        assert "報價單" in legacy and "估價單" not in legacy, legacy
+        assert est == legacy.replace("報價單", "估價單"), (legacy, est)
+    # 改版前逐字
+    assert CS.gate_message("簽核中") == "報價單還在編輯或簽核中，項目可能還會變，請等報價送出後再帶入"
+    assert CS.gate_message("已取消") == "這張報價單已取消或被拒絕，不能帶入項目"
+    assert CS.gate_message("怪狀態") == "報價單目前的狀態不能帶入項目"
+
+
+def test_completion_quote_items_not_found_says_the_right_doc(client, make_user):
+    u, pw = make_user(username="est_cn", role="admin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    est = client.get("/api/completion-notes/quote-items", params={"quote_no": "ME-209912-999"}, headers=h)
+    quo = client.get("/api/completion-notes/quote-items", params={"quote_no": "MQ-209912-999"}, headers=h)
+    assert est.status_code == 404 and quo.status_code == 404
+    assert est.json()["detail"] == "找不到可帶入的估價單"
+    assert quo.json()["detail"] == "找不到可帶入的報價單", "報價單：逐字不變"
+
+
+# ── D. 資源回收筒（暫存區）轉接器 ───────────────────────────────────────────────
+
+def test_recycle_adapter_labels_follow_the_doc_no(client):
+    from db import get_db
+    from modules.case import recycle_adapter as RA
+    ad = RA.QuotationAdapter() if hasattr(RA, "QuotationAdapter") else None
+    if ad is None:
+        cls = [c for c in vars(RA).values() if isinstance(c, type) and getattr(c, "entity_type", "") == "quotation"]
+        assert cls, "找不到 quotation 轉接器類別"
+        ad = cls[0]()
+    assert ad.label == "報價單／估價單／案件"
+    conn = get_db()
+    try:
+        ok, msg = ad.can_delete(conn, "ME-209912-998", {"username": "x"})
+        ok2, msg2 = ad.can_delete(conn, "MQ-209912-998", {"username": "x"})
+    finally:
+        conn.close()
+    assert not ok and msg == "估價單 ME-209912-998 不存在"
+    assert not ok2 and msg2 == "報價單 MQ-209912-998 不存在", "報價單：逐字不變"
+    with pytest.raises(Exception) as e1:
+        RA._need_parent(get_db(), "ME-209912-998")
+    with pytest.raises(Exception) as e2:
+        RA._need_parent(get_db(), "MQ-209912-998")
+    _est(str(e1.value))
+    _quo(str(e2.value))
+
+
+# ── E. 行事曆／業務開發轉建 ───────────────────────────────────────────────────
+
+def test_dev_case_converted_calendar_text_follows_type(monkeypatch):
+    from db import get_db
+    from helpers import google_calendar as G
+    conn = get_db()
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(dev_cases)").fetchall()]
+    if not cols:
+        conn.close()
+        pytest.skip("dev_cases 不在此環境")
+    ids = {}
+    try:
+        for tag, no in (("est", EST_NO), ("quo", QUO_NO)):
+            conn.execute("INSERT INTO dev_cases (case_name, customer_name, converted_quote_no, status, created_at, updated_at) "
+                         "VALUES (?,?,?,?,?,?)", ("報價單專案{x}", "客{戶}", no, "成案", "2026-11-13", "2026-11-13"))
+            ids[tag] = conn.execute("SELECT MAX(id) FROM dev_cases").fetchone()[0]
+        conn.commit()
+    except Exception as e:      # noqa: BLE001
+        conn.close()
+        pytest.skip("dev_cases 欄位與測試預期不同：%s" % e)
+    conn.close()
+    got = {}
+    monkeypatch.setattr(G, "event_enabled", lambda *a, **k: True)
+    monkeypatch.setattr(G, "_create_event_with_retry", lambda title, desc, *a, **k: got.__setitem__(len(got), (title, desc)) or None)
+    G.push_event_for_dev_case_converted(ids["est"])
+    G.push_event_for_dev_case_converted(ids["quo"])
+    assert len(got) == 2, got
+    est = got[0][0] + got[0][1]
+    assert "報價單專案{x}" in est and "客{戶}" in est, "案名／客戶名（含大括號）原樣保留、不被模板處理吃掉"
+    _est(est.replace("報價單專案{x}", ""))
+    quo = got[1][0] + got[1][1]
+    assert got[1][0] == "業務開發案件轉建報價單 — 報價單專案{x}（客{戶}）"
+    assert got[1][1] == "業務開發案件「報價單專案{x}」已轉建為報價單。\n客戶：客{戶}\n報價單號：" + QUO_NO, "報價單：逐字不變"
+    assert "估價單" not in quo
+
+
+# ── F. PDF 下載檔名 ──────────────────────────────────────────────────────────
+
+def test_download_name_has_estimate_keys_with_settings_entries():
+    from helpers import download_name as D
+    from helpers import settings_groups as SG
+    assert D.DOC_TYPES["estimate"] == "估價單" and D.DOC_TYPES["estimate_version"] == "估價單存檔版本"
+    assert D.DOC_TYPES["quotation"] == "報價單" and D.DOC_TYPES["quotation_version"] == "報價單存檔版本"
+    assert D.DEFAULTS["label_estimate"] == "估價單" and D.DEFAULTS["label_estimate_version"] == "估價單存檔版本"
+    src = Path(SG.__file__).read_text(encoding="utf-8")
+    assert 'S("label_estimate"' in src and 'S("label_estimate_version"' in src
+
+
+def test_download_name_build_uses_the_estimate_label():
+    from helpers import download_name as D
+    e = D.build("estimate", quote_no=EST_NO, doc_no=EST_NO, ext="pdf", user=None)
+    q = D.build("quotation", quote_no=QUO_NO, doc_no=QUO_NO, ext="pdf", user=None)
+    ev = D.build("estimate_version", quote_no=EST_NO, doc_no=EST_NO, ext="pdf", user=None)
+    assert e.name and q.name and ev.name
+    # user=None ⇒ 降級成只有單號的檔名（不變式④）；單號本身就是兩種單據的區別，標籤只在有案件資訊時才出現
+    assert EST_NO in e.name and QUO_NO in q.name
+
+
+def test_pdf_endpoints_pick_the_estimate_download_key():
+    src = (_ROOT / "backend" / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
+    assert '"estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation"' in src
+    assert '"estimate_version" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation_version"' in src
+
+
+# ── G. 中性用語（共用名稱）────────────────────────────────────────────────────
+
+def test_shared_names_use_the_neutral_wording():
+    from helpers import mail_types as mt
+    from helpers import notification_prefs as np_
+    from helpers import tiered_approval as ta
+    from helpers import google_calendar as G
+    from helpers import audit as A
+    for key in ("approval_request", "next_tier", "approved", "returned", "resubmit_requester"):
+        assert NEU in mt.get(key).name, key
+    assert NEU in mt.get("dev_case_relink_request").impact
+    groups = dict(np_.EVENT_GROUPS)["簽核流程"]
+    names = dict(groups)
+    for key in ("approval_request", "next_tier", "approved", "returned", "resubmit_requester"):
+        assert NEU in names[key], key
+    assert ta.DOC_TYPE_LABELS["quotation"] == NEU if hasattr(ta, "DOC_TYPE_LABELS") else True
+    ev = {e[0]: e for e in G.EVENT_TYPES}
+    assert NEU in ev["quotation_won"][1] and NEU in ev["dev_case_converted"][1]
+    assert A._MODULE_LABELS["quotation"] == NEU
+
+
+def test_settings_pages_and_dev_crm_page_use_neutral_wording():
+    from core.source_tree import page_file
+    s = page_file("approval-settings.html").read_text(encoding="utf-8")
+    assert re.search(r"quotation:\s+'報價單／估價單'", s)
+    d = page_file("dev-crm.html").read_text(encoding="utf-8")
+    assert "<h3>轉建報價單／估價單</h3>" in d and "<h3>轉建報價單</h3>" not in d
+    assert "MQ-YYYYMM-NNN" not in d, "輸入框提示不寫 MQ 字首（估價單是 ME）"
+    assert "系統將開啟報價單／估價單表單" in d
