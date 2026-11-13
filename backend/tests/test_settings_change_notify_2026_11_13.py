@@ -981,3 +981,50 @@ def test_batch_precheck_pending_exists_in_several_groups_uses_the_generic_senten
     mine = R.publish("zz_nt_j1", {"doc": ["我1"]}, user="nt_pe2_other", reason="自己覆寫自己的不擋")      # 同一人的申請不算「別人」
     assert mine["superseded"] == 1
     assert _batch(client, h, {"zz_nt_j1": {"values": {"doc": ["x"]}}}, reason="預檢只看別人的").status_code == 409
+
+
+# ───────── NOT_SCANNED 豁免的證明（wording 守門把 settings_notify 當送信檔是名稱誤報）─────────
+def test_settings_notify_never_imports_or_references_an_email_sender():
+    """靜態：settings_notify 沒有任何 email_notify／smtplib 的 import（含函式內的）、也沒有字串常數指到送信原語——它只寫站內通知＋LINE。"""
+    import ast
+    from helpers import email_notify as EN
+    prims = {n for n in dir(EN) if n.startswith(("_send", "_async_send")) or n == "_build_html"}
+    tree = ast.parse(open(SN.__file__, encoding="utf-8").read())
+    bad = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            bad += [a.name for a in n.names if a.name.split(".")[0] in ("smtplib", "email_notify") or a.name.endswith("email_notify")]
+        elif isinstance(n, ast.ImportFrom):
+            mod = n.module or ""
+            if mod.split(".")[0] == "smtplib" or mod.endswith("email_notify") or (mod == "helpers" and any(a.name == "email_notify" for a in n.names)):
+                bad.append(mod + ":" + ",".join(a.name for a in n.names))
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and (n.value in prims or n.value in ("email_notify", "helpers.email_notify", "smtplib")):
+            bad.append("常數 %r" % n.value)
+    assert bad == [], bad
+
+
+def test_settings_notify_sends_in_app_and_line_but_calls_no_email_sender(client, make_user, zz_groups, monkeypatch):
+    """動態（正對照）：把 email_notify 全部送信原語與 smtplib 連線換成記錄器，走一次真的批次儲存（含高風險群組 ⇒ LINE 路徑）：
+    站內通知真的寫了、LINE 事件真的被呼叫、而信件發送一次都沒被呼叫。"""
+    import smtplib
+    from helpers import email_notify as EN
+    from helpers import line_notify as LN
+    calls = []
+    patched = []
+    for name in [n for n in dir(EN) if n.startswith(("_send", "_async_send")) or n == "_build_html"]:
+        if callable(getattr(EN, name)):
+            monkeypatch.setattr(EN, name, lambda *a, _n=name, **k: calls.append(("email_notify." + _n, a[:1])) or "ok")
+            patched.append(name)
+    assert {"_send", "_async_send", "_build_html"} <= set(patched), patched                      # 尺量得到東西：記錄器真的換上去了
+    for cls in ("SMTP", "SMTP_SSL"):
+        monkeypatch.setattr(smtplib, cls, lambda *a, _c=cls, **k: calls.append(("smtplib." + _c, a)) or (_ for _ in ()).throw(AssertionError("不該連 SMTP")))
+    lines = []
+    monkeypatch.setattr(LN, "notify_event", lambda ev, **kw: lines.append((ev, kw.get("usernames"))))
+    h = _hdr(client, make_user, "nt_nm1")
+    make_user(username="nt_nm1b", role="superadmin")
+    n0 = len(_notes("nt_nm1b"))
+    r = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_a": {"values": {"limit": 150}}}, reason="證明不寄信")     # limit：money 風險、待生效 ⇒ 高風險 ⇒ LINE
+    assert r.status_code == 200, r.text
+    assert len(_notes("nt_nm1b")) == n0 + 1                                                     # 站內通知：寫了（一則合併）
+    assert lines and lines[0][0] == "settings_changed", lines                                    # LINE：高風險那組有發
+    assert calls == [], calls                                                                    # 信件：一次都沒有

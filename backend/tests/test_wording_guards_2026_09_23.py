@@ -73,7 +73,7 @@ SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
 NOT_SCANNED = {
     # helpers/email_notify.py 以外的送信原語都在它裡面；刻意不掃的檔只有下面這兩支（email_setup 純函式；settings_notify 是誤報、不寄信）
     "helpers/email_setup.py": "寄信精靈（menu-ux-3）的純函式：只為了 isinstance(exc, smtplib.SMTPAuthenticationError) 等錯誤分類而 import smtplib，自己不寄任何信（真正的測試信走 routers/system.py，已在 SCAN_FILES）；它產出的錯誤說明與「求助單」文字是畫面／給維護者的單據，不是寄給非維護者的信件文案。",
-    "helpers/settings_notify.py": "設定變更通知元件（S1d）：**不寄任何信**——它自己有一支私有函式叫 `_send`（把整理好的變更項目寫成站內通知＋高風險另發 LINE），與 email_notify 的送信原語 `_send` 同名，本守門按名稱比對才把它算成送信檔（誤報，不是真的呼叫 email_notify／smtplib；檔內沒有 email_notify、smtplib 的 import）。站內通知與 LINE 文案由元件自己組（compose，收件人是最高管理者與項目指定的角色，且 security／money／legal 的值與原因只給最高管理者），不走 helpers/wording.py 的信件文案清單；測試 test_settings_change_notify_2026_11_13.py 守內容與隱私。若日後它真的開始寄信，這一條要改成 SCAN_FILES。",
+    "helpers/settings_notify.py": "【誤報】設定變更通知元件（S1d）**只寫站內通知＋LINE，不寄信**。本守門按名稱比對才把它算成送信檔：它自己有一支私有函式叫 `_send`（把整理好的變更項目寫成站內通知、高風險另發 LINE），與 email_notify 的送信原語 `_send` 同名；檔內沒有 email_notify／smtplib 的任何 import 或引用。站內通知與 LINE 文案由元件自己組（compose；security／money／legal 的值與原因只給最高管理者），不走信件文案清單。證明：test_settings_change_notify_2026_11_13.py::test_settings_notify_never_imports_or_references_an_email_sender（靜態）與 ::test_settings_notify_sends_in_app_and_line_but_calls_no_email_sender（動態：送信原語與 smtplib 全換成記錄器，走一次真的批次儲存，站內通知與 LINE 有發、信件一次都沒呼叫）。若日後它真的開始寄信，這一條要改成 SCAN_FILES。",
 }
 
 #: `GW2`：異常／失敗類通知要答的四個問題。
