@@ -79,7 +79,7 @@ _UNTOUCHED = (
      '此版本的 PDF 存檔已不存在（存檔目錄可能已被移動或清理）'),
     # 〔2026-11-11：T79案件階段子系統拆分，純搬移無文字變更，檔案由quotations.py→quotation_stages.py〕
     ('modules/case/api/quotation_stages.py',
-     '這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段'),
+     '此設定將造成階段之間循環依賴，請重新選擇前置階段'),
     ('modules/case/api/quotations.py',
      '系統已設定簽核流程，此報價單缺少簽核層資料。請申請人收回並重新送審，以套用最新簽核設定'),
     ('modules/analytics/api/reports.py',

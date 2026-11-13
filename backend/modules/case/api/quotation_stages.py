@@ -415,7 +415,7 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     else:
         if _would_create_cycle(conn, quote_no, stage_id, candidate_id):
             conn.close()
-            raise HTTPException(400, "這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段")
+            raise HTTPException(400, "此設定將造成階段之間循環依賴，請重新選擇前置階段")
         depends.append(candidate_id)
     conn.execute("UPDATE case_stages SET depends_on=?, updated_at=? WHERE id=?",
                  (json.dumps(depends, ensure_ascii=False), datetime.now().isoformat(), stage_id))
