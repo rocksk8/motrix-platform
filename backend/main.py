@@ -67,7 +67,7 @@ from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode, set_request_ctx
 from helpers import (
     init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks, _license_startup_check,
     _tighten_company_profile_full_read_once,
-    init_unlock_passwords, flag_weak_passwords,
+    init_unlock_passwords, _enable_onepipe_defaults_once, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
 from archive import _schedule_weekly, _schedule_daily
@@ -1050,6 +1050,8 @@ init_unlock_passwords()
 _startup_step("init_unlock_passwords")
 _tighten_company_profile_full_read_once()     # T84：公司資料完整版預設收緊的一次性遷移（每庫一次；經 helpers/startup.py）
 _startup_step("tighten_company_profile_full_read")
+_enable_onepipe_defaults_once()               # T84 一次性遷移：一條龍旗標存成 0 的既有環境改為開（經設定中心引擎、寫稽核、只跑一次）
+_startup_step("enable_onepipe_defaults")
 _cleanup_sessions()
 _startup_step("cleanup_sessions")
 

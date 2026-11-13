@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 966,
-  "endpoints_api": 962,
+  "endpoints_total": 967,
+  "endpoints_api": 963,
   "write_total": 520,
   "write_api": 520,
-  "get_api": 442,
-  "distinct_paths_api": 818,
+  "get_api": 443,
+  "distinct_paths_api": 819,
   "write_with_body_api": 385,
   "write_with_path_param_api": 364
  },
@@ -4847,6 +4847,11 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "GET /api/daily-tasks/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
   }
  }
 }
