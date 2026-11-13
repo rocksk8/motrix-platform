@@ -253,7 +253,7 @@ def test_next_period_settlement_is_refused_while_previous_is_still_draft(conn, f
     _run_and_post(conn, fake, [_ev("bigbuy", "2178-03-10")], "2178-03-01", "2178-04-30")
     r1 = _settle(conn, 2178, 2)                                                       # 期 2：有留抵，草稿
     _run_and_post(conn, fake, [_ev("sale", "2178-05-10")], "2178-05-01", "2178-06-30")
-    with pytest.raises(T.TaxConflict, match="還沒過帳"):
+    with pytest.raises(T.TaxConflict, match="尚未過帳"):
         T.generate_settlement(conn, 2178, 3, "acc")
     conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (r1["voucher_id"],))
     conn.commit()
@@ -308,4 +308,4 @@ def test_api_previous_unposted_is_409(client, conn, fake, make_user):
     assert client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 2}).status_code == 200
     _run_and_post(conn, fake, [_ev("sale", "2178-05-10")], "2178-05-01", "2178-06-30")
     r = client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 3})
-    assert r.status_code == 409 and "還沒過帳" in r.json()["detail"]
+    assert r.status_code == 409 and "尚未過帳" in r.json()["detail"]
