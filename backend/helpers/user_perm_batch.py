@@ -50,15 +50,37 @@ def _json_list(v) -> list:
         return []
 
 
+_MAX_ID = 2 ** 31 - 1                                   # SQLite INTEGER 的安全範圍（再大會 OverflowError ⇒ 500）
+
+
+def _one_id(v, label) -> int:
+    """單一編號：整數（或純數字字串），1..2**31-1；布林、浮點數、超範圍一律 400（不默默截斷成別人）。"""
+    if isinstance(v, bool) or isinstance(v, float) or not isinstance(v, (int, str)):
+        raise dr.DutyError("%s必須是整數" % label)
+    try:
+        n = int(v)
+    except ValueError:
+        raise dr.DutyError("%s必須是整數" % label)
+    if not 1 <= n <= _MAX_ID:
+        raise dr.DutyError("%s超出範圍" % label)
+    return n
+
+
 def _int_list(v, label) -> list:
     if v in (None, ""):
         return []
     if not isinstance(v, (list, tuple)):
         raise dr.DutyError("%s必須是清單" % label)
-    try:
-        return sorted({int(i) for i in v if not isinstance(i, bool)})
-    except (TypeError, ValueError):
-        raise dr.DutyError("%s必須是整數清單" % label)
+    return sorted({_one_id(i, label) for i in v})
+
+
+def _str_list(v, label) -> list:
+    """復原內容裡的權限鍵清單：缺省＝空；有給就必須是「非空字串的清單」，否則 400（不讓整數／字串被逐字當成清單）。"""
+    if v is None:
+        return []
+    if not isinstance(v, (list, tuple)) or not all(isinstance(k, str) and k for k in v):
+        raise dr.DutyError("%s必須是權限鍵的清單" % label)
+    return list(v)
 
 
 def _check_revoke_keys(keys):
@@ -98,6 +120,8 @@ def parse_request(body) -> dict:
     if not isinstance(plan_hash, str):
         raise dr.DutyError("planHash 必須是字串")
     reason = body.get("reason")
+    if reason is not None and not isinstance(reason, str):
+        raise dr.DutyError("reason 必須是字串")
     return {"userIds": ids, "grant": grant, "revoke": revoke, "bindRoleIds": bind_ids, "unbindRoleIds": unbind_ids,
             "template": template, "reason": reason if isinstance(reason, str) else "", "planHash": plan_hash}
 
@@ -196,8 +220,10 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
         from_role = template_keys is None and k in role_keys and k not in subs and not req.get("undoing")   # 復原只還原這一批寫過的東西，不另外造個人扣項（否則角色給的權限會被悄悄扣掉）
         if in_raw:
             p["removes"].append(k)
-        elif k not in held_role_keys and template_keys is None:
+        elif template_keys is None and k not in held_role_keys:
             skip("revoke", k, "對方目前沒有這個權限")
+        elif template_keys is None and k not in role_keys and k not in subs:
+            skip("revoke", k, "這個權限來自同時解除的職責角色，解除後本來就會消失")
         if from_role:
             new_subs.add(k)                               # 角色給的權限：改設個人扣項才算真的取消（範本模式不做）
     p["subtractAdds"] = sorted(new_subs)
@@ -362,9 +388,9 @@ def _undo_request(change, st, uid):
         return None, "最高管理者不納入批次"
     raw = set(_json_list(u["modules"]))
     bound, subs = set(st["bound"].get(uid, ())), set(st["subs"].get(uid, ()))
-    adds, removes = [k for k in change.get("adds") or [] if isinstance(k, str)], [k for k in change.get("removes") or [] if isinstance(k, str)]
+    adds, removes = _str_list(change.get("adds"), "adds"), _str_list(change.get("removes"), "removes")
     bind, unbind = _int_list(change.get("bind"), "bind"), _int_list(change.get("unbind"), "unbind")
-    sub_adds, sub_removes = [k for k in change.get("subtractAdds") or [] if isinstance(k, str)], [k for k in change.get("subtractRemoves") or [] if isinstance(k, str)]
+    sub_adds, sub_removes = _str_list(change.get("subtractAdds"), "subtractAdds"), _str_list(change.get("subtractRemoves"), "subtractRemoves")
     drift = []
     drift += ["個人勾選「%s」已被改過" % k for k in adds if k not in raw] + ["個人勾選「%s」已被改過" % k for k in removes if k in raw]
     drift += ["職責角色綁定 #%s 已被改過" % r for r in bind if r not in bound] + ["職責角色綁定 #%s 已被改過" % r for r in unbind if r in bound]
@@ -385,15 +411,14 @@ def undo(conn, actor, body, ip="") -> dict:
         raise dr.DutyError("沒有可復原的內容")
     if len(changes) > MAX_USERS:
         raise dr.DutyError("一次最多 %d 位" % MAX_USERS)
-    reason_in = body.get("reason") if isinstance(body.get("reason"), str) else ""
+    if body.get("reason") is not None and not isinstance(body.get("reason"), str):
+        raise dr.DutyError("reason 必須是字串")
+    reason_in = body.get("reason") or ""
     by_user = {}
     for c in changes:
         if not isinstance(c, dict):
             raise dr.DutyError("changes 的每一筆必須是物件")
-        try:
-            by_user[int(c.get("userId"))] = c
-        except (TypeError, ValueError):
-            raise dr.DutyError("userId 必須是整數")
+        by_user[_one_id(c.get("userId"), "userId")] = c
     begin_write(conn)
     try:
         ids = sorted(by_user)
