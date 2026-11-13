@@ -37035,6 +37035,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "core:pdf_gen",
     "dir:backend/modules/",
     "dir:backend/modules/case/",
     "dir:backend/modules/case/api/",
@@ -37043,6 +37044,7 @@
     "file:backend/routers/__init__.py",
     "file:backend/tests/_requires.py",
     "helper:audit",
+    "helper:doc_template",
     "helper:doc_type",
     "helper:download_name",
     "helper:email_notify",
@@ -37069,6 +37071,7 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/audit.py",
+     "backend/helpers/doc_template.py",
      "backend/helpers/doc_type.py",
      "backend/helpers/download_name.py",
      "backend/helpers/email_notify.py",
@@ -37082,6 +37085,7 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/completion_sync.py",
      "backend/modules/case/recycle_adapter.py",
+     "backend/pdf_gen.py",
      "backend/routers/__init__.py",
      "backend/routers/approval_queue.py",
      "backend/tests/_requires.py"

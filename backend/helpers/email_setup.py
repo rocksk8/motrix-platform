@@ -2,7 +2,8 @@
 """寄信帳號精靈的後端零件（選單去工程師化 批次 3，2026-11-13）：供應商預設、格式驗證、失敗分類、設定單。
 
 [單位] helper:email_setup    [層] L1    [穩定度] 實驗
-[公開介面] PROVIDERS, provider_list, validate_config, normalize_password, classify_error, build_ticket, config_fingerprint
+[公開介面] PROVIDERS, provider_list, provider_by_key, valid_email, validate_config, normalize_password, classify_error, build_ticket, config_fingerprint
+[契約題] tests/test_email_setup_2026_11_13.py
 [不變式]
   ①純函式、不連網、不讀寫資料庫（寄信與存設定在 routers/system.py）；任何輸出都**不含密碼**。
   ②供應商預設的主機與埠，來源是各家公開說明（2026-11-13 查證，未實際連線測試）：Gmail／Microsoft 365／Yahoo 奇摩都是 587＋STARTTLS；

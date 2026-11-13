@@ -2,21 +2,23 @@
 """設定中心「?」說明（選單去工程師化 批次 9，2026-11-13）：每個設定欄位要嘛「標籤已夠清楚」（白名單），要嘛有四段說明。
 
 [單位] helper:settings_help    [層] L1    [穩定度] 實驗
-[公開介面] BUILTIN_EXTRA_TERMS, BUILTIN_SHARED_TERMS, OVERRIDE_KEY, SECTIONS, forbidden_terms, has_hidden_chars, help_for, help_view, label_clear, problems_in, set_override, system_data, term_problems
-[資料檔] `core/settings_help.json`：`{"version":1, "label_clear":["群組.欄位",…], "help":{"群組.欄位":{"what","when","impact","example"?}}}`。
+[公開介面] BUILTIN_EXTRA_TERMS, BUILTIN_SHARED_TERMS, OVERRIDE_KEY, SECTIONS, SINGLE_ADMIN_NOTE, forbidden_terms, get_override, has_hidden_chars, help_for, help_view, label_clear, problems_in, set_override, shared_terms_file, system_data, term_problems
+[契約題] tests/test_settings_center_b9_2026_11_13.py
+[不變式] ①讀取永不丟例外；②資料檔壞掉 ⇒ 空資料並記 ERROR（守門測試會紅）；③只讀設定欄位的 metadata，不改任何設定值、欄位 key、儲存位置或 API。
+
+資料檔：`core/settings_help.json`：`{"version":1, "label_clear":["群組.欄位",…], "help":{"群組.欄位":{"what","when","impact","example"?}}}`。
     **文字不寫在 HTML 裡**；key 一律是「群組.欄位」（欄位代碼在不同群組會重複，例如 enabled）。
-[四段] ①這是什麼（what）②什麼時候要改（when）③改了會影響什麼（impact）④預設值與建議——**第四段執行時由設定欄位的 metadata 產生**
+四段：①這是什麼（what）②什麼時候要改（when）③改了會影響什麼（impact）④預設值與建議——**第四段執行時由設定欄位的 metadata 產生**
     （預設值、建議值、範例），不手寫，所以不會與程式漂移。
-[公司可自訂（全部可自定）] 覆寫存在 `system_settings.settings_help_override`：`{"群組.欄位":{what,when,impact,example}}`；沒覆寫＝系統預設。
+公司可自訂（全部可自定）：覆寫存在 `system_settings.settings_help_override`：`{"群組.欄位":{what,when,impact,example}}`；沒覆寫＝系統預設。
     覆寫逐筆驗證（四段字數、不含標記、不含工程用語），壞掉的覆寫在讀取時被忽略並回系統預設。
-[工程用語守門] 禁用詞的共用來源是 `backend/tools/ux_audit_config.json`（`forbidden_terms`、`deprecated_terms`；hichan-7 的 UX 守門工具使用同一份）。
+工程用語守門：禁用詞的共用來源是 `backend/tools/ux_audit_config.json`（`forbidden_terms`、`deprecated_terms`；hichan-7 的 UX 守門工具使用同一份）。
     **檔案存在就用它（再加本檔自己多擋的 `BUILTIN_EXTRA_TERMS`）；檔案不存在時改用內建清單 `BUILTIN_SHARED_TERMS`＋`BUILTIN_EXTRA_TERMS`，不略過**
     （PM 2026-11-13：守門不可因為共用檔還沒落地就悄悄關掉，覆寫 API 也不可放行工程用語）。內建的「共用」那份是從共用檔複製的，
     守門測試在共用檔存在時逐項比對，少一項就紅（同步用）。環境變數 `MOTRIX_UX_AUDIT_CONFIG` 可指向別的路徑（測試用）。
-[比對方式] 英文禁用詞**一律不分大小寫**（不看共用檔的 `ci` 旗標；「smtp」「Smtp」都擋）、先做全形轉半形（NFKC：「ＳＭＴＰ」也擋），
+比對方式：英文禁用詞**一律不分大小寫**（不看共用檔的 `ci` 旗標；「smtp」「Smtp」都擋）、先做全形轉半形（NFKC：「ＳＭＴＰ」也擋），
     且詞前面不能緊接英文字母（「capital」不會被「API」誤擋，「tokens」「APIs」仍擋）。中文詞用一般子字串比對。
-[不可見字元] 名稱與說明不得含零寬字元、方向控制字元、控制字元（`has_hidden_chars`），且至少要有一個看得見的字。
-[不變式] ①讀取永不丟例外；②資料檔壞掉 ⇒ 空資料並記 ERROR（守門測試會紅）；③只讀設定欄位的 metadata，不改任何設定值、欄位 key、儲存位置或 API。
+不可見字元：名稱與說明不得含零寬字元、方向控制字元、控制字元（`has_hidden_chars`），且至少要有一個看得見的字。
 """
 import json
 import logging

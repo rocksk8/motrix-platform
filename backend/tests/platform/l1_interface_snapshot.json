@@ -1,5 +1,5 @@
 {
- "core_version": "1.164",
+ "core_version": "1.165",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -1620,6 +1620,18 @@
    "redact_ops": "def(items)",
    "sidebar_ops_of_all": "def(conn, role, mod_items)"
   },
+  "helper:menu_categories": {
+   "CATEGORY_KEYS": "const",
+   "OVERRIDE_KEY": "const",
+   "categories_view": "def(kind=…, labels=…)",
+   "category_of": "def(item_key)",
+   "default_data": "def()",
+   "effective": "def(override=…)",
+   "get_override": "def()",
+   "items_of": "def(category_key, kind=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "validate": "def(data)"
+  },
   "helper:module_assets": {
    "ASSETS_MIN_CORE": "const",
    "JsAssetLookup": "class",
@@ -2073,6 +2085,24 @@
   },
   "helper:settings_groups_recycle_bin": {},
   "helper:settings_groups_tender_closing": {},
+  "helper:settings_help": {
+   "BUILTIN_EXTRA_TERMS": "const",
+   "BUILTIN_SHARED_TERMS": "const",
+   "OVERRIDE_KEY": "const",
+   "SECTIONS": "const",
+   "SINGLE_ADMIN_NOTE": "const",
+   "forbidden_terms": "def()",
+   "get_override": "def()",
+   "has_hidden_chars": "def(s, allow_newline=…)",
+   "help_for": "def(key, override=…)",
+   "help_view": "def(group, field_view, override=…)",
+   "label_clear": "def()",
+   "problems_in": "def(entry, *, terms=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "shared_terms_file": "def()",
+   "system_data": "def()",
+   "term_problems": "def(text)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",

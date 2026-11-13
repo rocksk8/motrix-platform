@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
+- `helpers/email_setup.py` 單位卡補 `[契約題]`，`[公開介面]` 補 `provider_by_key`／`valid_email`（註解，行為不變）。
+
 ## 1.164 — 2026-11-13（feat/license-import-ui；T83 授權匯入：授權頁、匯入端點、到期提醒）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：
   - 新單位 `helpers/license_manager.py`（授權頁與匯入的邏輯；**驗章／機器綁定／到期一律呼叫既有 `licensing.verify_license`，不重寫**）：`run_import`（預覽或匯入）、`describe_current`、`recent_activity`、`normalize_upload`、`rate_allow`、`backup_dir` 與常數。

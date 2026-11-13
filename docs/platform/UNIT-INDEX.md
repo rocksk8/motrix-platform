@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 167 個；有單位卡 113 個。
+單位 169 個；有單位卡 115 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -78,7 +78,7 @@
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 19 | 3 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 4 | — |
 | `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 76 | 54 | — |
-| `helper:email_setup` | L1 | 寄信帳號精靈的後端零件（選單去工程師化 批次 3，2026-11-13）：供應商預設、格式驗證、失敗分類、設定單。 | 9 | 1 | — |
+| `helper:email_setup` | L1 | 寄信帳號精靈的後端零件（選單去工程師化 批次 3，2026-11-13）：供應商預設、格式驗證、失敗分類、設定單。 | 9 | 1 | `tests/test_email_setup_2026_11_13.py` |
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
 | `helper:event_audience` | L1 | 事件 ⇒ 業務收件人（帳號）的共用解析層（2026-11-12；使用者裁示「LINE 全部改獨立通道」）。 | 2 | 3 | `tests/test_auth_lockout_alert_2026_11_12.py` |
 | `helper:expense_types` | L1 | 費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。 | 15 | 6 | `tests/platform/test_expense_types_2026_10_01.py` |
@@ -116,6 +116,7 @@
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 25 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
 | `helper:menu_builder` | L1 | 選單建構器（BP-1）：側欄項改名、換到另一個既有群組、整份選單的發布前預覽。 | 10 | 3 | `tests/platform/test_menu_builder_bp1.py` |
+| `helper:menu_categories` | L1 | 共用分類資料檔（選單去工程師化 批次 9／批次 1「其餘」，2026-11-13）：系統總覽與設定中心都從 `core/menu_categories_l1.json` 讀「項目 → 分類」。 | 10 | 2 | `tests/test_settings_center_b9_2026_11_13.py` |
 | `helper:module_assets` | L1 | L1 模組自有前端 JS（STAGE-C-DESIGN §3；模組資產 POC）。 | 5 | 1 | `tests/platform/test_module_assets_contract_2026_11_08.py` |
 | `helper:module_registry` | L1 | 權限模組的**唯一來源**（B7，2026-09-24 使用者裁示「整併成一份」）。（無單位卡） | 11 | 10 | — |
 | `helper:module_startup` | L1 | 啟動時載入 L2 模組：main.py 與「只做 init_db 的工具」（乾跑 migration、V9→新版轉換）共用同一段。 | 3 | 1 | `tests/platform/test_module_startup.py` |
@@ -160,6 +161,7 @@
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：資源回收筒保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
 | `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
+| `helper:settings_help` | L1 | 設定中心「?」說明（選單去工程師化 批次 9，2026-11-13）：每個設定欄位要嘛「標籤已夠清楚」（白名單），要嘛有四段說明。 | 16 | 3 | `tests/test_settings_center_b9_2026_11_13.py` |
 | `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 39 | 57 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 6 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 5 | `backend/tests/platform/test_stage_templates_t62.py` |

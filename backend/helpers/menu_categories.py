@@ -3,12 +3,14 @@
 
 [單位] helper:menu_categories    [層] L1    [穩定度] 實驗
 [公開介面] CATEGORY_KEYS, OVERRIDE_KEY, category_of, categories_view, default_data, effective, get_override, items_of, set_override, validate
-[資料檔格式] `{"version":1, "categories":[{key,name,tier(1-3),order,blurb,when}], "items":{"<種類>:<代碼>":{category,section,order,tier,blurb,when,status,note}}}`
-    項目鍵 `settings_group:<群組 key>`（設定中心）、`page:<html>`、`card:<代碼>`（系統總覽；之後由總覽那一批登錄）。
-[公司可自訂（全部可自定）] 覆寫存在 `system_settings.menu_categories_override`：`{"categories":{key:{name,order}}, "items":{item:{name,order,category}}}`。
-    沒覆寫＝用系統預設；覆寫只能改「名稱、順序、（項目的）所屬分類」，不能新增或刪除項目。
+[契約題] tests/test_settings_center_b9_2026_11_13.py
 [不變式] ①每個項目恰好屬於一個分類（`validate` 與守門測試）；②讀取永不丟例外：資料檔壞掉或覆寫壞掉 ⇒ 回預設／忽略壞的那一筆並記 log；
     ③覆寫寫入只走 `set_override`（逐筆驗證、未知鍵拒絕、名稱長度與字元限制、寫稽核）；④這份檔案只管「放哪裡、叫什麼」，不碰任何設定值、欄位 key、儲存位置或 API。
+
+資料檔格式：`{"version":1, "categories":[{key,name,tier(1-3),order,blurb,when}], "items":{"<種類>:<代碼>":{category,section,order,tier,blurb,when,status,note}}}`
+    項目鍵 `settings_group:<群組 key>`（設定中心）、`page:<html>`、`card:<代碼>`（系統總覽；之後由總覽那一批登錄）。
+公司可自訂（全部可自定）：覆寫存在 `system_settings.menu_categories_override`：`{"categories":{key:{name,order}}, "items":{item:{name,order,category}}}`。
+    沒覆寫＝用系統預設；覆寫只能改「名稱、順序、（項目的）所屬分類」，不能新增或刪除項目。
 """
 import json
 import logging
