@@ -42,3 +42,10 @@
 ## 步驟 5：回報
 
 - 步驟 0 第 2 項：`verification.mode`、`verification.scoped.base` 與 `.deployed_commit.json` 的 `commit`（兩個值都寫出來）。
+
+## 發布者收尾（開發機／整合者；不是正式機 Claude 做的，寫在這裡是因為每班都要記得）
+
+- `delivery.py publish` 印出 `DELIVERY_PUBLISH_OK` 後，程式會更新 `docs/platform/prod-baseline/apply_scripts.json`（已出貨 apply 腳本的版號＋sha256；見 UPDATE-DELIVERY.md §9.1「已出貨腳本基準」）。
+  - 🔴 **印出 `DELIVERY_BASELINE_UPDATED` 後要把這個檔 commit 進分支／列車**（不 commit，下一班守門就拿舊基準比，等於放鬆）。不手改它。
+  - 印出 `DELIVERY_BASELINE_FAILED`：包已發布、不用重發；補跑 `python backend/tools/delivery.py baseline-record --name <包名>`，再 commit。
+  - 印出 `DELIVERY_REFUSED …腳本版號與已出貨基準衝突`：本班改了 `apply_update.ps1`／`apply_module_update.ps1` 的內容卻沒升版號——升 `$ApplyScriptVersion`（模組那支是 `$ApplyModuleScriptVersion`）並更新 `*.version.json` 的 sha256，重建包再發布。
