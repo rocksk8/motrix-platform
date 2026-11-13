@@ -140,15 +140,28 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
         raise HTTPException(400, "沒有送出任何要變更的欄位")
     if not reason:
         raise HTTPException(400, "請填寫變更原因")
-    return _do_publish(group, values, reason, request, actor)
+    expected = body.get("expectedValues")
+    if expected is not None and not isinstance(expected, dict):
+        raise HTTPException(400, "expectedValues 必須是物件")
+    return _do_publish(group, values, reason, request, actor, expected)
 
 
-def _do_publish(group, values, reason, request, actor):
+def conflict_body(group, e):
+    """409 衝突的 body（與 LINE 事件矩陣同形）：`{code, message, keys:[{key,name}], by, at}`；name＝欄位白話名。"""
+    defs = sr.field_defs(group)
+    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。",
+            "keys": [{"key": k, "name": (defs[k].label or defs[k].question or k) if k in defs else k} for k in e.keys],
+            "by": e.by, "at": e.at}
+
+
+def _do_publish(group, values, reason, request, actor, expected=None):
     """儲存／重置共用：先算分類（與 publish 共用 `_split`，寫入前的狀態才準）、再 publish。"""
     try:
         cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
-                         ip=(client_ip(request) if request else ""), actor=actor)
+                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected)
+    except sr.SettingConflict as e:
+        raise HTTPException(409, conflict_body(group, e))
     except sr.SettingError as e:
         raise HTTPException(400, {"message": str(e), "problems": e.problems})
     except Exception as e:                                   # noqa: BLE001
