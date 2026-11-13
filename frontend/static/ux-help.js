@@ -1,4 +1,4 @@
-/* ux-help.js — 「？」情境說明抽屜（A5）＋「第一次來？」橫幅（A4）＋名詞解釋（E2）
+/* ux-help.js — 「？」情境說明抽屜（A5）＋「初次使用？」橫幅（A4）＋名詞解釋（E2）
  *
  * 2026-11-11 UX 提案 A4／A5／E2。**全站只有這一份內容表**：
  *   - 要加／改某一頁的說明、橫幅文字、名詞定義 ⇒ 只改下面的 PAGES／TERMS，不用動各頁 html。
@@ -38,35 +38,35 @@
     'quotations.html': {
       purpose: '所有報價單與估價單的清單：依狀態分頁、搜尋、複製或開新單。',
       steps: ['按「新增報價單」開一張新單。', '用上方狀態分頁看「草稿／已送出／已成案」。', '點任一筆進入表單檢視或修改。'],
-      hint: '第一次來？這裡列出所有報價單與估價單。要開新單，按右上的「新增報價單」或「新增估價單」；已存在的單子點一下就能打開。',
+      hint: '初次使用？這裡列出所有報價單與估價單。如需建立新單，請按右上方的「新增報價單」或「新增估價單」；已建立的單據按一下即可開啟。',
       anchor: 'main.main',
       terms: ['quote_no', 'approval', 'won'],
     },
     'quotation-form.html': {
       purpose: '填寫單張報價單：客戶、品項、價格與條款都在這一頁。',
       steps: ['先選客戶，再逐列加入品項與數量單價。', '右側「內部成本與利潤」區塊是只給公司內部看的成本與利潤，不是給客戶看的內容。', '存成草稿隨時可以回來改；確認後再「申請送出簽核」。'],
-      hint: '第一次來？由上而下填：客戶 → 品項 → 價格與條款。草稿可隨時儲存，確認無誤再送出簽核。',
+      hint: '初次使用？由上而下填：客戶 → 品項 → 價格與條款。草稿可隨時儲存，確認無誤再送出簽核。',
       anchor: '.form-left',
       terms: ['internal', 'gross', 'overhead', 'approval', 'won', 'discount'],
     },
     'case-management.html': {
       purpose: '案件的工作台：左邊挑案件，右邊看進度、文件、派工與帳務。',
       steps: ['案件通常由報價單「成案」後產生；先到報價單把案子標記為已成案。', '在左側清單點選案件。', '右側依分頁處理進度、文件與費用。'],
-      hint: '第一次來？案件多半從報價單「成案」而來。左邊挑一個案件，右邊就會出現它的進度、文件與費用。',
+      hint: '初次使用？案件多半從報價單「成案」而來。左邊挑一個案件，右邊就會出現它的進度、文件與費用。',
       anchor: '.cm-placeholder',   // 只在「還沒選案件」的空白區顯示：選了案件後詳情區的版面一動就會頂到頁面底部的提醒（test_e2e_notice_banners）
       terms: ['won'],
     },
     'approval-queue.html': {
-      purpose: '輪到你簽核的單據都在這裡。',
+      purpose: '輪到您簽核的單據都在這裡。',
       steps: ['左欄「待我簽核」逐筆點開看內容。', '核准、退回或加上意見。', '處理完的會移到「已處理」。'],
-      hint: '第一次來？「待我簽核」是輪到你處理的單據；點開一筆可以看內容，再選核准或退回。',
+      hint: '初次使用？「待我簽核」為輪到您處理的單據；開啟單據可查看內容，再選擇核准或退回。',
       anchor: '.aq-layout',
       terms: ['approval'],
     },
     'approval-settings.html': {
       purpose: '決定哪些單據、什麼條件需要誰簽核。',
       steps: ['先選要設定的單據類型。', '設定每一關的簽核人與條件。', '儲存前確認「影響」說明；已在簽核中的單據不受新規則影響。'],
-      hint: '第一次來？這頁決定「誰要簽什麼」。可以先用系統預設的流程，之後再依公司需要調整。',
+      hint: '初次使用？這頁決定「誰要簽什麼」。可以先用系統預設的流程，之後再依公司需要調整。',
       anchor: '.pg',
       terms: ['approval'],
     },
@@ -156,7 +156,7 @@
       + '<div class="ux-drawer__head"><div><div class="ux-drawer__eyebrow">本頁說明</div><h2 id="ux-drawer-title">' + esc(pageTitle()) + '</h2></div>'
       + '<button type="button" class="ux-drawer__x" data-ux="close" aria-label="關閉說明">×</button></div>'
       + '<div class="ux-drawer__body">'
-      + '<section><h3>這頁在做什麼</h3><p>' + esc(cfg.purpose || '請從上方選單與搜尋框找到你要用的功能；這一頁的內容依你的權限顯示。') + '</p></section>'
+      + '<section><h3>這頁在做什麼</h3><p>' + esc(cfg.purpose || '請從上方選單與搜尋框找到您要用的功能；這一頁的內容依您的權限顯示。') + '</p></section>'
       + '<section><h3>最常見的做法</h3><ol>' + (cfg.steps || GENERIC_STEPS).map(function (s) { return '<li>' + esc(s) + '</li>' }).join('') + '</ol></section>'
     if (termIds.length) {
       h += '<section><h3>名詞解釋</h3><dl>' + termIds.map(function (id) {

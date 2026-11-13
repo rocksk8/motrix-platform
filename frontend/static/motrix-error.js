@@ -54,7 +54,7 @@
     try { console.warn('[MotrixError] load failed:', x); } catch (e) { /* ignore */ }
     if (typeof x !== 'number') return '連不上系統，請檢查網路後再試。';
     if (x === 401) return '登入已過期，請重新登入。';      // 頁面應改呼叫 sessionExpired()，這句只是保險
-    if (x === 403) return '你沒有權限查看這一頁。';
+    if (x === 403) return '您沒有權限查看這一頁。';
     return '載入失敗，請重新整理，仍然失敗請聯絡系統管理者。';
   }
 

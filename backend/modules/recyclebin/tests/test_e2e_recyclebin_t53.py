@@ -65,6 +65,6 @@ def test_plain_admin_gets_an_error_and_no_data(live_server, make_user, new_conte
     inject_login(page, live_server, adm[0], adm[1])
     page.goto(live_server + "/pages/recycle-bin.html")
     # 一般管理員：平台的權限頁（選單 perm=superadmin）取代頁面內容——**不可以**看到任何暫存區資料
-    page.wait_for_selector("text=你沒有這個頁面的權限", timeout=15000)
+    page.wait_for_selector("text=您沒有這個頁面的權限", timeout=15000)
     assert page.locator('[data-testid^="rb-row-"]').count() == 0
     assert "E3" not in page.locator("body").inner_text()

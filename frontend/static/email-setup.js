@@ -29,13 +29,13 @@
     '',
     '    <div x-show="wz.open" data-testid="es-steps">',
     '      <div class="ns-desc" style="margin-bottom:12px">',
-    '        只要 3 步：選信箱服務 → 填信箱與密碼 → 系統寄一封測試信給你，你收到就完成。',
+    '        只要 3 步：選信箱服務 → 填信箱與密碼 → 系統寄一封測試信給您，您收到就完成。',
     '        <strong x-text="\'第 \' + wz.step + \' 步／共 3 步\'" data-testid="es-step-label"></strong>',
     '      </div>',
     '',
     '      <!-- 第 1 步 -->',
     '      <div x-show="wz.step === 1" data-testid="es-step1">',
-    '        <div style="font-size:13px;font-weight:600;margin-bottom:8px">你的公司用哪一種信箱？</div>',
+    '        <div style="font-size:13px;font-weight:600;margin-bottom:8px">您的公司用哪一種信箱？</div>',
     '        <div style="display:grid;gap:8px">',
     '          <template x-for="p in providers" :key="p.key">',
     '            <label style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px;cursor:pointer"',
@@ -73,7 +73,7 @@
     '        <div class="ns-row" x-show="wz.provider === \'other\'" data-testid="es-other-fields">',
     '          <div class="ns-field">',
     '            <label>寄信主機</label>',
-    '            <input type="text" x-model="wz.host" placeholder="例：mail.你的公司.com" data-testid="es-host">',
+    '            <input type="text" x-model="wz.host" placeholder="例：mail.您的公司.com" data-testid="es-host">',
     '          </div>',
     '          <div class="ns-field">',
     '            <label>連接埠</label>',
@@ -83,13 +83,13 @@
     '        <div class="ns-desc" x-show="wz.provider === \'other\'">這兩個值（寄信主機、連接埠）請向信箱或網域代管廠商詢問，常見的連接埠是 587 或 465。</div>',
     '        <div class="ns-field" style="margin-top:6px">',
     '          <label>系統網址（信件裡的連結會指向這裡）</label>',
-    '          <input type="text" x-model="wz.baseUrl" placeholder="例：https://erp.你的公司.com" data-testid="es-base-url">',
+    '          <input type="text" x-model="wz.baseUrl" placeholder="例：https://motrix.您的公司.com" data-testid="es-base-url">',
     '          <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="wzBaseWarn()" data-testid="es-base-url-warn">',
     '            <span x-text="wzBaseWarn()"></span> 外部收件人打不開這個連結，請填公司對外網址。',
     '          </div>',
     '        </div>',
     '        <div x-show="wz.needEmail" class="ns-field" data-testid="es-need-email">',
-    '          <label>你的帳號還沒有 Email：請填你的 Email（測試信會寄到這裡，也會存回你的帳號）</label>',
+    '          <label>您的帳號還沒有 Email：請填您的 Email（測試信會寄到這裡，也會存回您的帳號）</label>',
     '          <input type="text" x-model="wz.recipient" placeholder="例：you@公司.com" data-testid="es-recipient">',
     '        </div>',
     '        <div x-show="wz.err" style="margin-top:8px;color:var(--danger);font-size:13px;font-weight:600" x-text="wz.err" data-testid="es-err2"></div>',
@@ -106,7 +106,7 @@
     '        <!-- 成功 -->',
     '        <div x-show="wz.sentTo && !wz.done" data-testid="es-sent">',
     '          <div style="font-size:14px;font-weight:600;margin-bottom:6px">測試信已寄到 <span x-text="wz.sentTo" data-testid="es-sent-to"></span></div>',
-    '          <div class="ns-desc">請到這個信箱確認有沒有收到（沒收到請也看一下垃圾信件匣）。收到之後按「我收到了」，系統就會開始寄通知信。</div>',
+    '          <div class="ns-desc">請至此信箱確認是否已收到測試信（若未收到，請一併查看垃圾郵件匣）。收到後請按「我收到了」，系統即會開始寄送通知信。</div>',
     '          <div class="ns-actions" style="margin-top:12px">',
     '            <button class="btn btn-primary" @click="wzActivate()" :disabled="wz.activating" data-testid="es-got-it">我收到了，啟用通知</button>',
     '            <button class="btn btn-ghost" @click="wzSendTest()" :disabled="wz.sending">沒收到，重寄一次</button>',
@@ -239,7 +239,7 @@
     '      </div>',
     '      <div class="ns-field">',
     '        <label>系統網址（信件中的連結前綴）</label>',
-    '        <input type="text" x-model="cfg.base_url" placeholder="例：https://erp.你的公司.com" data-testid="ns-base-url">',
+    '        <input type="text" x-model="cfg.base_url" placeholder="例：https://motrix.您的公司.com" data-testid="ns-base-url">',
     '        <div class="ns-desc" style="margin-top:4px;color:var(--warning)" x-show="baseUrlWarn()" x-text="baseUrlWarn()" data-testid="ns-base-url-warn"></div>',
     '      </div>',
     '    </div>',
@@ -400,11 +400,11 @@
         const u = String(this.cfg.base_url || '').trim()
         if (!u) return '還沒有填系統網址：信件裡的按鈕會沒有連結，收信的人只能自己打開系統。'
         let h = ''
-        try { h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase().replace(/^\[|\]$/g, '') } catch (e) { return '這個網址看起來不完整，請填完整網址（例：https://erp.你的公司.com）。' }
+        try { h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase().replace(/^\[|\]$/g, '') } catch (e) { return '這個網址看起來不完整，請填完整網址（例：https://motrix.您的公司.com）。' }
         const m4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
         if (m4) {
           const o = m4.slice(1).map(Number)
-          if (o.some(n => n > 255)) return '這個網址看起來不完整，請填完整網址（例：https://erp.你的公司.com）。'
+          if (o.some(n => n > 255)) return '這個網址看起來不完整，請填完整網址（例：https://motrix.您的公司.com）。'
           if (o[0] === 127) return '這是這台電腦自己的位址：只有在這台電腦上點信裡的連結才打得開。若同事要從別台電腦或手機點，請改成他們連得到的網址。'
           if (o[0] === 10 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168) || (o[0] === 169 && o[1] === 254) || (o[0] === 100 && o[1] >= 64 && o[1] <= 127))
             return '這是公司內部網路的位址：人在公司外（或沒連公司網路）時，點信裡的連結會打不開。'

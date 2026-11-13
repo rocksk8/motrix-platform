@@ -1059,7 +1059,7 @@ function cashierApp() {
     async unconfirmT100(row) {
       if (!confirm('撤銷這筆的「已匯入 T100」標記？\n\n' + row.date + '　' + row.summary +
                    '\n\n撤銷後它會在下次涵蓋這個日期的匯出／預覽重新出現，' +
-                   '如果 T100 那邊其實已經匯入過，會造成重複匯入。')) return
+                   '如果 T100 已匯入過，會造成重複匯入。')) return
       this.t100Unconfirming = row.sourceType + ':' + row.sourceKey
       try {
         var res = await fetch('/api/reports/t100-export/unconfirm', {

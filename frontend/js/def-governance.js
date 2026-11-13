@@ -82,7 +82,7 @@
   function renderLedger() {
     var L = st.ledger
     if (!L) return '<div class="dg-dim">讀取中…</div>'
-    if (!L.versions.length) return '<div class="dg-dim">還沒有發布過的版本。</div>' + (L.hasDraft ? '<div class="dg-dim">有一份草稿。</div>' : '')
+    if (!L.versions.length) return '<div class="dg-dim">尚未發布過的版本。</div>' + (L.hasDraft ? '<div class="dg-dim">有一份草稿。</div>' : '')
     var h = (L.warnings || []).map(function (w) { return '<div class="dg-warn" role="note">' + esc(w) + '</div>' }).join('')
     h += '<div class="dg-dim">目前生效：第 ' + esc(L.live) + ' 版' + (L.hasDraft ? '；另有一份草稿' : '') + (L.pendingReview ? '；有送審中的版本' : '') + '</div>'
     L.versions.forEach(function (v) {

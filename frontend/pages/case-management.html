@@ -527,7 +527,7 @@
                       <button class="cm-more__item" role="menuitem" title="解鎖後可繼續變更，但每筆變更/上傳都需最高管理者審核" @click="unlockCase()">解鎖</button>
                     </template>
                     <template x-if="cr.dealTag === '已結案' && selected.case_semi_unlocked">
-                      <button class="cm-more__item" role="menuitem" @click="lockCase()">重新上鎖</button>
+                      <button class="cm-more__item" role="menuitem" @click="lockCase()">重新鎖定</button>
                     </template>
                     <!-- Complete case button (已成案 only)
                          2026-09-13（使用者裁示）：**只有最高管理者看得到**。結案是全系統

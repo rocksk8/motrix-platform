@@ -84,7 +84,7 @@
 '  <div class="cf-banner" x-show="loadError" x-text="loadError"></div>' +
 ' </div>' +
 ' <div class="cf-body" x-show="!loading" x-effect="$el.inert = busy">' +
-'  <div class="cf-sub" x-show="!work.length">還沒有欄位。按「新增欄位」開始；畫面上會即時出現預覽，發布之後才會讓大家看到。</div>' +
+'  <div class="cf-sub" x-show="!work.length">尚未建立欄位。請按「新增欄位」開始；畫面上會即時顯示預覽，發布後才會對所有使用者生效。</div>' +
 '  <template x-for="(f, i) in work" :key="f.key">' +
 '   <div class="cf-item" :class="{\'is-off\': f.disabled, \'is-bad\': !!probs[i]}" :data-field-index="i">' +
 '    <div class="cf-row"><input type="text" data-testid="cf-label" x-model="f.label" @input="sync()" placeholder="顯示名稱（例：現場工頭）" maxlength="30">' +
@@ -106,7 +106,7 @@
 '   <span class="cf-sub" x-text="work.length + \' / \' + max"></span></div>' +
 '  <div x-show="diffShown" data-testid="cf-diff"><div class="cf-h">與目前發布版的差異</div><div class="cf-sub" x-show="!diffLines.length">沒有差異。</div>' +
 '   <ul><template x-for="d in diffLines"><li x-text="d"></li></template></ul></div>' +
-'  <div data-testid="cf-versions"><div class="cf-h">版本</div><div class="cf-sub" x-show="!published().length">還沒有發布過。</div>' +
+'  <div data-testid="cf-versions"><div class="cf-h">版本</div><div class="cf-sub" x-show="!published().length">尚未發布過。</div>' +
 '   <template x-for="v in published()" :key="v.version"><div class="cf-ver" :data-version="v.version">' +
 '    <span x-text="\'第 \' + v.version + \' 版 \' + (v.published_at || \'\').slice(0, 16).replace(\'T\', \' \') + (v.note ? \'・\' + v.note : \'\')"></span>' +
 '    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy || loading">還原</button></div></template></div>' +

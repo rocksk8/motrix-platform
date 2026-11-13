@@ -131,7 +131,7 @@
 '  <div class="ml-ed__sec" x-show="diffShown" data-testid="ml-diff"><div class="ml-ed__h">與目前發布版的差異</div>' +
 '   <div class="ml-ed__sub" x-show="!diffLines.length">沒有差異。</div><ul class="ml-ed__diff"><template x-for="d in diffLines"><li x-text="d"></li></template></ul></div>' +
 '  <div class="ml-ed__sec" data-testid="ml-versions"><div class="ml-ed__h">版本（<span x-text="scopeLabel()"></span>）</div>' +
-'   <div class="ml-ed__sub" x-show="!published().length">還沒有發布過（目前是程式預設）。</div>' +
+'   <div class="ml-ed__sub" x-show="!published().length">尚未發布過（目前是程式預設）。</div>' +
 '   <template x-for="v in published()" :key="v.version"><div class="ml-ed__ver" :data-version="v.version">' +
 '    <span x-text="\'第 \' + v.version + \' 版 \' + (v.published_at || \'\').slice(0, 16).replace(\'T\', \' \') + (v.note ? \'・\' + v.note : \'\')"></span>' +
 '    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy || loading">還原</button></div></template></div>' +

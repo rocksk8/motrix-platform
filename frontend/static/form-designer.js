@@ -63,7 +63,7 @@
     user: ['選人員', '從系統裡選一位同事', 'user', 'pick'], users: ['選多位人員', '從系統裡選好幾位同事', 'users', 'pick'],
     dept: ['選部門', '從系統裡選一個部門', 'dept', 'pick'], depts: ['選多個部門', '從系統裡選好幾個部門', 'dept', 'pick'],
     file: ['檔案上傳', '附上檔案，例如發票', 'clip', 'other'], image: ['圖片', '附上照片', 'image', 'other'],
-    formula: ['自動計算', '系統幫你算，例如加總', 'calc', 'other'], table: ['明細表', '很多列的表格，例如費用明細', 'table', 'other']
+    formula: ['自動計算', '由系統自動計算，例如加總', 'calc', 'other'], table: ['明細表', '很多列的表格，例如費用明細', 'table', 'other']
   }
   var PAL_GROUPS = [['common', '常用'], ['pick', '讓人選'], ['other', '其他']]
   // 內建的後備元件（呼叫端沒給 caps.elements 時；與目錄的 fieldElements 同形）
@@ -259,12 +259,12 @@
     this._entries = {}
     entries.forEach(function (x) { self._entries[x.id] = x })
     var hasTable = (this.def.fields || []).some(function (f) { return f.type === 'table' })
-    h += '<h2>加入欄位</h2><p class="fd-hint">點一下加到表單裡，或拖到中間想放的位置。</p>'
+    h += '<h2>加入欄位</h2><p class="fd-hint">按一下即可加入表單，或拖曳至中間想放置的位置。</p>'
     ;(this.caps.extraPalette || []).forEach(function (g, gi) {
       h += '<div class="fd-gt">' + esc(g.title) + '</div><div class="fd-tiles">' + g.items.map(function (it, ii) {
         var have = M.fieldByKey(self.def, it.field.key)
         self._entries['x' + gi + '_' + ii] = { field: it.field, label: it.label }
-        return '<button type="button" class="fd-tile" draggable="true" data-add="x' + gi + '_' + ii + '">' + ic(it.icon || 'text') + '<b>' + esc(it.label) + '</b><small>' + esc(have ? '已加入（點一下找到它）' : it.desc || '') + '</small></button>'
+        return '<button type="button" class="fd-tile" draggable="true" data-add="x' + gi + '_' + ii + '">' + ic(it.icon || 'text') + '<b>' + esc(it.label) + '</b><small>' + esc(have ? '已加入（按一下可定位）' : it.desc || '') + '</small></button>'
       }).join('') + '</div>'
     })
     PAL_GROUPS.forEach(function (g) {
@@ -280,7 +280,7 @@
   function money(f) { return f.type === 'number' && f.min === 0 }
   proto.fillLabel = function (f) {
     var s = M.fillSelection(f); if (!s) return ''
-    if (s.charAt(0) === '*') return s === '*option' ? '指定的選項' : '你填的內容'
+    if (s.charAt(0) === '*') return s === '*option' ? '指定的選項' : '您填的內容'
     var r = this.registry().find(function (x) { return x.token === s }); return r ? r.label : s
   }
   proto.fillExample = function (f) {
@@ -338,7 +338,7 @@
           : '<b class="fd-sectitle">其他</b><span class="fd-dim">還沒放進任何區塊的欄位，使用者會在「其他」看到。拖到上面的區塊就會歸位。</span>') + '</div>'
       }
       h += '<div class="fd-grid">'
-      if (!g.keys.length) h += '<div class="fd-slot fd-empty" data-slot data-g="' + gi + '" data-i="0"><b>這個區塊還是空的</b>把左邊的欄位拖到這裡，或在左邊點一下。</div>'
+      if (!g.keys.length) h += '<div class="fd-slot fd-empty" data-slot data-g="' + gi + '" data-i="0"><b>這個區塊目前是空的</b>請將左側欄位拖曳至此，或在左側按一下欄位。</div>'
       g.keys.forEach(function (k, i) {
         var f = M.fieldByKey(d, k); if (!f) return
         var probs = self.problemsOf(k), cashier = f.editableBy === 'cashier'
@@ -432,7 +432,7 @@
     var reg = this.registry().find(function (x) { return x.token === val })
     if (val === '') info = '欄位一開始是空的。<br>使用者會看到：（空白）'
     else if (reg) info = '<b>' + esc(reg.label) + '</b>：' + esc(reg.why) + '<br>使用者會看到：' + esc(reg.example)
-    else if (val.charAt(0) === '*') info = '使用者會看到你預先填好的內容。'
+    else if (val.charAt(0) === '*') info = '使用者會看到您預先填好的內容。'
     else info = '這個帶入來源目前系統不認得（' + esc(val) + '），原樣保留。'
     return h + extra + '<div class="fd-why fd-exbox">' + info + '</div></div></div>'
   }
@@ -473,7 +473,7 @@
     if (c.p === 'days') h += '<div class="fd-row"><label>開始日期</label>' + S('A', c.a, dates, '請選擇…') + '<div class="fd-why">例：「出發日」。</div></div><div class="fd-row"><label>結束日期</label>' + S('B', c.b, dates, '請選擇…') + '<div class="fd-why">例：「返回日」。</div></div>'
     if (c.p === 'tax') {
       h += '<div class="fd-row"><label>金額是哪一欄？</label>' + S('A', c.a, nums, '請選擇…') + '<div class="fd-why">例：「未稅金額」。</div></div>'
-      h += '<div class="fd-row"><label>你輸入的金額是</label><select class="fd-in" ' + data('Mode') + '><option value="net"' + (c.mode !== 'split' ? ' selected' : '') + '>未稅（算出稅）</option><option value="split"' + (c.mode === 'split' ? ' selected' : '') + '>含稅（拆出稅）</option></select><div class="fd-why">例：發票上寫的是不含稅的價錢 ⇒ 選「未稅」。</div></div>'
+      h += '<div class="fd-row"><label>您輸入的金額是</label><select class="fd-in" ' + data('Mode') + '><option value="net"' + (c.mode !== 'split' ? ' selected' : '') + '>未稅（算出稅）</option><option value="split"' + (c.mode === 'split' ? ' selected' : '') + '>含稅（拆出稅）</option></select><div class="fd-why">例：發票上寫的是不含稅的價錢 ⇒ 選「未稅」。</div></div>'
       if (c.mode !== 'split') h += '<div class="fd-row"><label>要算出</label><select class="fd-in" ' + data('Out') + '><option value="tax"' + (c.out !== 'gross' ? ' selected' : '') + '>稅額</option><option value="gross"' + (c.out === 'gross' ? ' selected' : '') + '>含稅金額</option></select><div class="fd-why">例：要看稅是多少 ⇒ 選「稅額」；要看總共付多少 ⇒ 選「含稅金額」。</div></div>'
       h += '<div class="fd-row"><label>稅率</label><select class="fd-in" ' + data('Rate') + '><option value="5"' + (!c.rate || c.rate === '5' ? ' selected' : '') + '>5%（一般營業稅）</option><option value="free"' + (c.rate === 'free' ? ' selected' : '') + '>免稅</option><option value="custom"' + (c.rate === 'custom' ? ' selected' : '') + '>自己填</option></select>' + (c.rate === 'custom' ? '<input class="fd-in fd-mt6" ' + data('Custom') + ' type="number" min="0" max="100" value="' + esc(c.custom || '') + '" placeholder="稅率 %">' : '') + '<div class="fd-why">例：一般營業稅選 5%；外銷選免稅；其他稅率自己填（填 3 代表 3%）。</div></div>'
     }

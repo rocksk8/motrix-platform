@@ -121,7 +121,7 @@
 '  <div class="ub-banner" x-show="loadError" x-text="loadError"></div>' +
 ' </div>' +
 ' <div class="ub-body" x-show="!loading" x-effect="$el.inert = busy">' +
-'  <div class="ub-sub" x-show="!work.length">還沒有按鈕。按「新增按鈕」開始；畫面上會即時出現預覽（預覽中的按鈕不能點），發布之後才會讓大家看到。</div>' +
+'  <div class="ub-sub" x-show="!work.length">尚未建立按鈕。請按「新增按鈕」開始；畫面上會即時顯示預覽（預覽中的按鈕無法點選），發布後才會對所有使用者生效。</div>' +
 '  <template x-for="(b, i) in work" :key="b.key">' +
 '   <div class="ub-item" :class="{\'is-bad\': !!probs[i]}" :data-button-index="i">' +
 '    <div class="ub-row"><input type="text" data-testid="ub-label" x-model="b.label" @input="sync()" placeholder="按鈕文字（最多 20 字）" maxlength="20">' +
@@ -148,7 +148,7 @@
 '    <template x-for="h in (previewResult ? previewResult.hidden : [])" :key="h.key"><li x-text="\'看不到：\' + h.label + \'（\' + h.reason + \'）\'"></li></template></ul></div>' +
 '  <div x-show="diffShown" data-testid="ub-diff"><div class="ub-h">與目前發布版的差異</div><div class="ub-sub" x-show="!diffLines.length">沒有差異。</div>' +
 '   <ul><template x-for="d in diffLines"><li x-text="d"></li></template></ul></div>' +
-'  <div data-testid="ub-versions"><div class="ub-h">版本</div><div class="ub-sub" x-show="!published().length">還沒有發布過。</div>' +
+'  <div data-testid="ub-versions"><div class="ub-h">版本</div><div class="ub-sub" x-show="!published().length">尚未發布過。</div>' +
 '   <template x-for="v in published()" :key="v.version"><div class="ub-ver" :data-version="v.version">' +
 '    <span x-text="\'第 \' + v.version + \' 版 \' + (v.published_at || \'\').slice(0, 16).replace(\'T\', \' \') + (v.note ? \'・\' + v.note : \'\')"></span>' +
 '    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy || loading">還原</button></div></template></div>' +
@@ -354,7 +354,7 @@
           this.busy = false
           return
         }
-        if (!(await this._ask('發布後，大家在這個畫面就會看到這些按鈕（每個人只看得到自己有權限的）。確定要發布嗎？'))) { this.busy = false; return }
+        if (!(await this._ask('發布後，所有使用者在此畫面都會看到這些按鈕（每個人只看得到自己有權限的）。確定要發布嗎？'))) { this.busy = false; return }
         // T62：治理旗標開時，看過的影響預覽雜湊 preview_hash 隨發布送出（管理者開啟強制時沒帶會被擋）；旗標關／未載入 ⇒ 請求本體只有 note，與先前相同
         var pubBody = { note: this.note }
         if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('user_buttons')) {

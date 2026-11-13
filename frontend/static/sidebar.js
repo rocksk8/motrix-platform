@@ -1263,10 +1263,10 @@ if (typeof module !== 'undefined' && module.exports) {
       '<div id="no-module-notice" style="max-width:520px;margin:64px auto;text-align:center;' +
       'font-family:LINE Seed TW_OTF, sans-serif">' +
       '<div style="font-size:40px;margin-bottom:12px">🔒</div>' +
-      '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>' +
+      '<div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>' +
       '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">' +
       '這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。<br>' +
-      '左側選單中的項目才是你目前可以使用的功能。</div></div>'
+      '左側選單中的項目才是您目前可以使用的功能。</div></div>'
     if (main) {
       main.innerHTML = html
     } else {

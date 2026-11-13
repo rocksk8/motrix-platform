@@ -449,7 +449,7 @@
       st.open = !st.open; if (st.open && !st.list.length && !st.f) { loadList() } else { render() } } }))
     if (!st.open || !st.cat) return
     var panel = el('div', { style: 'margin-top:6px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:760px' })
-    panel.appendChild(el('div', { text: '額外通知：當指定的事情發生時，額外通知你選的人。內建的通知與信件不受影響、也不能在這裡關掉。', style: 'font-size:12px;margin-bottom:6px' }))
+    panel.appendChild(el('div', { text: '額外通知：當指定的事情發生時，額外通知您選的人。內建的通知與信件不受影響、也不能在這裡關掉。', style: 'font-size:12px;margin-bottom:6px' }))
     panel.appendChild(st.f ? formView() : listView())
     if (st.msg) panel.appendChild(el('div', { text: st.msg, 'data-role': 'msg', style: 'margin-top:6px;font-size:12px;color:' + (st.msgBad ? '#b91c1c' : 'inherit') }))
     root.appendChild(panel)

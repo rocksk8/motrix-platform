@@ -71,7 +71,7 @@ window.CM_PARTS.push(() => ({
       this.altPlan.loading = true; this.altPlan.error = ''
       try {
         const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/case-plan-view', { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.status === 403) { this.altPlan.data = null; this.altPlan.error = '你沒有查看報價成本與毛利的權限'; return }
+        if (r.status === 403) { this.altPlan.data = null; this.altPlan.error = '您沒有查看報價成本與毛利的權限'; return }
         if (!r.ok) { this.altPlan.error = '方案比較暫時算不出來，請稍後再試'; return }
         this.altPlan.data = await r.json()
       } catch (e) { this.altPlan.error = '方案比較暫時算不出來，請稍後再試' } finally { this.altPlan.loading = false }

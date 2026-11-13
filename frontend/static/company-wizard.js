@@ -389,7 +389,7 @@
   var MINUTES = { 1: 2, 2: 2, 3: 2, 4: 1, 5: 1 }
   var INTRO = {
     1: { title: '先填公司的名稱與統一編號', why: '報價單、請款單與寄給客戶的信件，抬頭都會用這兩項。照公司登記的資料填就好。' },
-    2: { title: '客戶要怎麼聯絡到你們', why: '電話與 Email 至少填一項；它們會印在文件抬頭，讓客戶知道怎麼聯絡。系統自己寄信用的信箱不在這裡設定，做完這一步後再到「開始使用」的寄信步驟處理。' },
+    2: { title: '客戶要怎麼聯絡到您們', why: '電話與 Email 至少填一項；它們會印在文件抬頭，讓客戶知道怎麼聯絡。系統自己寄信用的信箱不在這裡設定，做完這一步後再到「開始使用」的寄信步驟處理。' },
     3: { title: '客戶要把錢匯到哪裡', why: '請款單會印出收款帳戶。現在還不開請款單可以先略過，之後隨時回來補。報價單的編號由系統自動產生，格式固定如下，不需要設定。' },
     4: { title: '放上公司 Logo', why: 'Logo 會印在報價單等文件上，也會顯示在系統頂端。沒有圖檔可以先略過，之後隨時回來換。' },
     5: { title: '最後確認', why: '請核對下面的資料。按下確認後，系統所有功能才會開放給同仁使用。' },
@@ -539,7 +539,7 @@
     if (sub) sub.style.display = 'none'
     var box = el('div', 'cw-card'); box.setAttribute('data-testid', 'cw-denied'); box.style.textAlign = 'center'
     box.appendChild(el('div', '', '🔒')); box.firstChild.style.fontSize = '40px'
-    box.appendChild(el('h2', 'cw-h', '你沒有這個頁面的權限'))
+    box.appendChild(el('h2', 'cw-h', '您沒有這個頁面的權限'))
     box.appendChild(el('p', 'cw-why', '本公司資料只有最高管理者可以設定。請請最高管理者登入後完成設定，或洽系統管理員。'))
     return box
   }

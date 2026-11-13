@@ -293,7 +293,7 @@
         },
         conflictWho() { var c = this.conflict || {}; return (c.created_by || '另一位使用者') + (c.created_at ? '，' + String(c.created_at).replace('T', ' ').slice(0, 16) : '') },
         async conflictCopy() {
-          try { await navigator.clipboard.writeText(JSON.stringify(this.def, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製你的內容（JSON）', { kind: 'ok' }) }
+          try { await navigator.clipboard.writeText(JSON.stringify(this.def, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製您的內容（JSON）', { kind: 'ok' }) }
           catch (e) { this.errMsg = '無法複製到剪貼簿，請先按「用我的覆蓋」或自行備份' }
         },
         async conflictReload() {           // 丟掉我這幾分鐘的修改，載入最新草稿

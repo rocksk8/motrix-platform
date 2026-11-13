@@ -127,7 +127,7 @@
     strong.textContent = '系統會擋下後存的那一次並要求重新載入';
     body.appendChild(strong);
     body.appendChild(document.createTextNode(
-      '，但你這段時間打的內容會需要重做。建議先確認由誰來改。'));
+      '，但您這段時間打的內容會需要重做。建議先確認由誰來改。'));
 
     var foot = document.createElement('div');
     foot.style.cssText = 'padding:12px 20px;border-top:1px solid #E5E7EB;display:flex;justify-content:flex-end;gap:8px';

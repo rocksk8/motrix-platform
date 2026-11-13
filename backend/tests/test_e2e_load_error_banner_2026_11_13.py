@@ -96,4 +96,4 @@ def test_403_says_you_have_no_permission_for_this_page(live_server, make_user, n
     banner = page.locator('[data-testid="load-error"]')
     banner.wait_for(state="visible", timeout=20000)
     text = banner.inner_text()
-    assert "你沒有權限查看這一頁" in text and "403" not in text and "HTTP" not in text, text
+    assert "您沒有權限查看這一頁" in text and "403" not in text and "HTTP" not in text, text

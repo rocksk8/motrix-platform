@@ -61,7 +61,7 @@ def test_quotation_only_user_cannot_open_the_case_page_so_no_roster_request_is_e
     page.on("request", lambda r: seen.append(r.url))
     inject_login(page, live_server, plain[0], plain[1])
     page.goto("%s/pages/case-management.html" % live_server)
-    page.wait_for_selector("text=你沒有這個頁面的權限", timeout=20000)
+    page.wait_for_selector("text=您沒有這個頁面的權限", timeout=20000)
     page.wait_for_timeout(500)
     assert not [u for u in seen if "/api/contractors/selectable" in u], seen
 

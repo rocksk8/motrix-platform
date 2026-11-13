@@ -199,7 +199,7 @@ window.CM_PARTS.push(() => ({
 
     async lockCase() {
       if (!this.selected) return
-      if (!(await MotrixUI.confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待簽核項目不受影響）。', {danger: true}))) return
+      if (!(await MotrixUI.confirm('確認重新鎖定此案件？\n\n鎖定後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待簽核項目不受影響）。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-lock`, {
           method: 'POST',
@@ -208,7 +208,7 @@ window.CM_PARTS.push(() => ({
         if (r.ok) {
           this.selected.case_semi_unlocked = 0
         } else {
-          MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上鎖失敗', {kind: 'error'})
+          MotrixUI.toast((await r.json().catch(() => ({}))).detail || '鎖定失敗', {kind: 'error'})
         }
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },

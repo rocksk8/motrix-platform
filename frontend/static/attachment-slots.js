@@ -50,7 +50,7 @@
 '  <div class="as-banner" x-show="loadError" x-text="loadError"></div>' +
 ' </div>' +
 ' <div class="as-body" x-show="!loading" x-effect="$el.inert = busy">' +
-'  <div class="as-sub" x-show="!work.length">還沒有自訂的附件種類。按「新增附件種類」開始。</div>' +
+'  <div class="as-sub" x-show="!work.length">尚未建立自訂的附件種類。請按「新增附件種類」開始。</div>' +
 '  <template x-for="(s, i) in work" :key="s.key">' +
 '   <div class="as-item" :class="{\'is-bad\': !!probs[i], \'is-off\': s.disabled}" :data-slot-index="i">' +
 '    <div class="as-row"><input type="text" data-testid="as-label" x-model="s.label" placeholder="名稱（最多 20 字）" maxlength="20">' +
@@ -94,7 +94,7 @@
 '   <div class="as-sub" x-text="simResult && simResult.note"></div></div>' +
 '  <div x-show="diffShown" data-testid="as-diff"><div class="as-h">與目前發布版的差異</div><div class="as-sub" x-show="!diffLines.length">沒有差異。</div>' +
 '   <ul><template x-for="d in diffLines"><li x-text="d"></li></template></ul></div>' +
-'  <div data-testid="as-versions"><div class="as-h">版本</div><div class="as-sub" x-show="!published().length">還沒有發布過。</div>' +
+'  <div data-testid="as-versions"><div class="as-h">版本</div><div class="as-sub" x-show="!published().length">尚未發布過。</div>' +
 '   <template x-for="v in published()" :key="v.version"><div class="as-ver" :data-version="v.version">' +
 '    <span x-text="\'第 \' + v.version + \' 版 \' + (v.published_at || \'\').slice(0, 16).replace(\'T\', \' \') + (v.note ? \'・\' + v.note : \'\')"></span>' +
 '    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy || loading">還原</button></div></template></div>' +

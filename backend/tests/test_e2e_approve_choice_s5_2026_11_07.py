@@ -114,7 +114,7 @@ def test_queue_reconfirm_with_new_reason_needs_note_then_keeps(live_server, make
 
     page.click('[data-testid="aq-approve"]')
     page.wait_for_selector('[data-testid="approve-choice-dialog"]', timeout=5000)
-    assert "內容在你簽過之後有變動" in page.inner_text('[data-flag="reconfirm"]')
+    assert "內容在您簽過之後有變動" in page.inner_text('[data-flag="reconfirm"]')
     assert "毛利率" in page.inner_text('[data-testid="approve-choice-reasons"]')
     assert page.is_disabled('[data-testid="approve-choice-keep"]'), "新增了需審核原因：沒填說明不能按「維持核准」"
     assert page.is_visible('[data-testid="approve-choice-edit"]')

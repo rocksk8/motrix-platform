@@ -148,7 +148,7 @@
       (dir ? '<div class="' + (p.direction === 'loosen' ? 'rb-bad' : 'rb-ok') + '">' + esc(dir) + '</div>' : '') +
       ((p.reasons || []).length ? '<div class="rb-dim">' + p.reasons.map(esc).join('；') + '</div>' : '') +
       (p.degraded && p.degraded.length ? '<div class="rb-warn">有 ' + p.degraded.length + ' 條規則在預覽時故障，已略過。</div>' : '') +
-      (rows ? '<div class="rb-dim" style="margin-top:6px">樣本（你看得到的前 10 筆）</div>' + rows : '') +
+      (rows ? '<div class="rb-dim" style="margin-top:6px">樣本（您看得到的前 10 筆）</div>' + rows : '') +
       '<div class="rb-dim" style="margin-top:6px">' + esc(p.note || '') + '</div></div>'
   }
   function render() {

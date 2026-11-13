@@ -88,7 +88,7 @@
     batchAria: '批次操作', selected: '已選 {n} 項', clearSel: '取消選取', selAllAria: '全選目前列出的列',
     selectRow: '選取 {name}', selectGroupAria: '選取「{g}」全部列出的列（不能批次的列會略過）',
     cellAria: '{name}：{col}', switchDefault: '開關', chipOn: '（是）', chipOff: '（否）',
-    draftBar: '你有 {n} 項未儲存的修改', draftDiscard: '放棄', draftSave: '儲存', draftTag: '未儲存', saved: '已儲存',
+    draftBar: '您有 {n} 項未儲存的修改', draftDiscard: '放棄', draftSave: '儲存', draftTag: '未儲存', saved: '已儲存',
     staged: '已加入草稿 {n} 項（尚未儲存）', stagedSkipped: '，略過 {k} 項（不能批次）',
     noBatchTag: '不能批次', noBatchTitle: '不能批次：{reason}', notSelectable: '這一列不能選取',
     skippedBox: '已略過 {n} 項（不能批次，請逐項設定）：', skippedAll: '選取的項目都不能批次，請逐項設定', noneSelected: '沒有選取任何項目',
@@ -100,7 +100,7 @@
     diffTag: '與預設不同', diffFilter: '與預設不同', diffDefault: '預設：{v}', diffReset: '還原預設', diffResetTitle: '還原「{name}」為預設值',
     colSelAria: '整欄選取：{col}', colSelStaged: '已加入草稿 {n} 項（尚未儲存）', colSelSkipped: '，略過 {k} 項（不能批次或欄位已鎖定）', colSelNone: '沒有可套用的列',
     previewTitle: '通知預覽',
-    leaveTitle: '離開這一頁？', leaveBody: '你有 {n} 項未儲存的修改，離開後會遺失。', stay: '留在這一頁', leave: '放棄修改並離開',
+    leaveTitle: '離開這一頁？', leaveBody: '您有 {n} 項未儲存的修改，離開後會遺失。', stay: '留在這一頁', leave: '放棄修改並離開',
   }
   function fmt(tpl, vars) {
     return String(tpl).replace(/\{(\w+)\}/g, function (m, k) { return vars && vars[k] != null ? vars[k] : m })

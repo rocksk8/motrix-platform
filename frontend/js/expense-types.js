@@ -259,7 +259,7 @@ function expenseTypesPage() {
     _onConflict(r) { this.conflict = r.data.current || {}; this.err = ''; this.msg = '' },
     conflictWho() { var c = this.conflict || {}; return (c.created_by || '另一位使用者') + (c.created_at ? '，' + String(c.created_at).replace('T', ' ').slice(0, 16) : '') },
     async conflictCopy() {
-      try { await navigator.clipboard.writeText(JSON.stringify(this.body, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製你的內容（JSON）', { kind: 'ok' }) }
+      try { await navigator.clipboard.writeText(JSON.stringify(this.body, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製您的內容（JSON）', { kind: 'ok' }) }
       catch (e) { this.err = '無法複製到剪貼簿，請先按「用我的覆蓋」或自行備份' }
     },
     async conflictReload() { var k = this._k(); this.conflict = null; await this.open(k) },
@@ -273,10 +273,10 @@ function expenseTypesPage() {
         var k = this._k()
         this.conflict = null
         await this.open(k)
-        this.msg = '已用你的內容覆蓋草稿'
+        this.msg = '已用您的內容覆蓋草稿'
       } catch (e) { this.err = '網路連線失敗，請確認後再按一次' } finally { this.busy = false }
     },
-    conflictHold() { this.conflict = null; this.err = '草稿被別人改過，你的修改還沒存；要存請再按「儲存草稿」並選擇處理方式' },
+    conflictHold() { this.conflict = null; this.err = '草稿被別人改過，您的修改還沒存；要存請再按「儲存草稿」並選擇處理方式' },
     async saveDraft() {
       if (this.busy) return
       this.err = ''; this.msg = ''
