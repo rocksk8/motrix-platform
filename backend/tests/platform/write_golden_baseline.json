@@ -227,6 +227,30 @@
   ],
   "s": 200
  },
+ "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
+  "k": [
+   "appliedQty",
+   "mode",
+   "ok",
+   "receivedOn",
+   "receivedQty",
+   "remaining",
+   "stock",
+   "stock.batches",
+   "stock.batches[].batchNo",
+   "stock.batches[].materialItemId",
+   "stock.batches[].mode",
+   "stock.batches[].partNo",
+   "stock.batches[].poDocCode",
+   "stock.batches[].rows",
+   "stock.batches[].written",
+   "stock.ok",
+   "stock.rejected",
+   "stock.written",
+   "supplement"
+  ],
+  "s": 200
+ },
  "POST /api/quotations/{quote_no}/review-edit": {
   "k": [
    "detail"

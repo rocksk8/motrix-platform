@@ -198,7 +198,7 @@ def test_validation_errors_write_nothing(client, make_user, monkeypatch):
     bad = [({"qty": 4, "mode": "teleport"}, 400),
            ({"mode": "consumable"}, 400),                                                    # 沒填數量
            ({"qty": 0, "mode": "consumable"}, 400),
-           ({"supplement": True, "mode": "stock", "serialsText": "S1"}, 409),                 # 還沒確認到貨就補入庫
+           ({"supplement": True, "mode": "stock", "partNo": "NET-P2B", "serialsText": "S1"}, 409),   # 還沒確認到貨就補入庫（有料號才走到這一關；沒料號先被 400 擋）
            ({"qty": 1, "mode": "stock", "partNo": "NET-P2B", "serialsText": "S1\nS2"}, 400),   # 序號比數量多
            ({"qty": 4, "mode": "consumable", "serialsText": "S1"}, 400),                     # 耗材沒有序號
            ({"qty": 60, "mode": "stock", "partNo": "NET-P2B", "serialsText": "\n".join("S%03d" % i for i in range(51))}, 400),
