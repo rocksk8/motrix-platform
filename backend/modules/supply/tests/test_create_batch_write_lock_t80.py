@@ -11,7 +11,7 @@ import pytest
 
 import db
 from modules.supply.api import inventory
-from tests.test_stock_batch_payment_2026_09_01 import _auth, _login
+from tests._login_helpers import _auth, _login
 
 
 class _Spy:
