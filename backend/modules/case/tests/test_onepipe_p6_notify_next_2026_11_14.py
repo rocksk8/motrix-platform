@@ -34,7 +34,9 @@ def W(client, make_user):
     try:
         conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, sales_person, deal_tag)"
                      " VALUES (?,?,?,?,?,?,?,?,?)", (NO, "已送出", "測試客戶", "案", json.dumps({"dealTag": "已提供"}), "2026-11-14T00:00:00", "2026-11-14T00:00:00", "p6_sa", "已提供"))
-        conn.execute("DELETE FROM system_settings WHERE key='unified_approval_flow'")
+        conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                     ("unified_approval_flow", json.dumps({"tiers": [], "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))        # 沒設簽核層 ⇒ 送審即核准
+        conn.execute("UPDATE users SET active=0 WHERE username='demo'")                  # 展示帳號持有全部模組，會變成收件者
         conn.commit()
     finally:
         conn.close()
@@ -134,8 +136,7 @@ def test_po_approval_notifies_warehouse_people_who_can_see_the_case(W, monkeypat
     _flag(monkeypatch, True)
     c, h = W
     doc, s = _make_and_submit(c, h, "purchase_order")
-    if s.status_code != 200 or s.json().get("status") != "已核准":
-        pytest.skip("測試環境簽核設定使送審未直接核准：%s" % s.text[:80])
+    assert s.status_code == 200 and s.json().get("status") == "已核准", s.text
     got = _notes(type_="po_approved_next")
     assert sorted(n["username"] for n in got) == ["p6_both", "p6_wh"]
     n = _notes("p6_wh", "po_approved_next")[0]

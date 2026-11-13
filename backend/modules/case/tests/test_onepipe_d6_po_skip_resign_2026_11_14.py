@@ -172,7 +172,7 @@ def test_missing_supplier_on_either_side_never_skips(world, monkeypatch):
     _po()
     conn = db.get_db()
     try:
-        ok = {"poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1, "supplierId": 7}
+        ok = {"itemId": ITEM, "poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1, "supplierId": 7}
         assert PO in auto_approve_note(conn, NO, ok)
         assert auto_approve_note(conn, NO, dict(ok, supplierId=None)) == ""
         assert auto_approve_note(conn, NO, dict(ok, supplierId="")) == ""
@@ -258,10 +258,11 @@ def test_flag_off_is_exactly_today(world, monkeypatch):
 def test_no_tier_flow_message_is_unchanged_when_not_po_linked(world, monkeypatch):
     """沒設簽核層的原本自動核准：紀錄文字不變（旗標開也一樣，只要不是連採購單免簽）。"""
     _flag(monkeypatch, True)
-    _x("DELETE FROM system_settings WHERE key='unified_approval_flow'")
+    _x("UPDATE system_settings SET value_json=? WHERE key='unified_approval_flow'", (json.dumps({"tiers": [], "includeSubmitterManagerTier": False}),))   # 明確設為沒有簽核層
     _case(poDocCode="", poLine="")
     r = _submit(world)
-    assert r.status_code == 200 and r.json()["autoApproved"] is True and "poAutoApproved" not in r.json()
+    assert r.status_code == 200, r.text
+    assert r.json()["autoApproved"] is True and "poAutoApproved" not in r.json()
     assert _approval_json()["note"] == "未設定任何簽核層，送審即視為核准"
 
 
@@ -274,9 +275,9 @@ def test_decision_function_never_raises_and_is_empty_when_flag_off(world, monkey
     conn = db.get_db()
     try:
         _flag(monkeypatch, False)
-        assert auto_approve_note(conn, NO, {"poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1}) == ""
+        assert auto_approve_note(conn, NO, {"itemId": ITEM, "poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1, "supplierId": 7}) == ""
         _flag(monkeypatch, True)
-        assert PO in auto_approve_note(conn, NO, {"poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1})
+        assert PO in auto_approve_note(conn, NO, {"itemId": ITEM, "poDocCode": PO, "poLine": 1, "quantity": 1, "totalPrice": 1, "supplierId": 7})
         for bad in (None, {}, {"poDocCode": PO, "poLine": "x"}, {"poDocCode": PO, "poLine": True}, {"poDocCode": "NOPE"}, {"poDocCode": PO, "poLine": 1, "totalPrice": "abc"}):
             assert isinstance(auto_approve_note(conn, NO, bad), str)
         assert auto_approve_note(conn, "MQ-OTHER", {"poDocCode": PO, "poLine": 1}) == "", "別的案件的採購單不算"
@@ -304,7 +305,7 @@ def test_tolerance_edge_half_a_dollar_is_fine_but_more_is_not(world, monkeypatch
     _po()
     conn = db.get_db()
     try:
-        base = {"poDocCode": PO, "poLine": 1, "quantity": 2, "supplierId": 7}
+        base = {"itemId": ITEM, "poDocCode": PO, "poLine": 1, "quantity": 2, "supplierId": 7}
         assert PO in auto_approve_note(conn, NO, dict(base, totalPrice=3000.5))
         assert auto_approve_note(conn, NO, dict(base, totalPrice=3000.51)) == ""
         assert auto_approve_note(conn, NO, dict(base, totalPrice=3000, quantity=2.000001)) == ""

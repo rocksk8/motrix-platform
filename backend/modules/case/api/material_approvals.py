@@ -195,7 +195,8 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
                 conn2.close()
         except Exception:                                                          # noqa: BLE001 — 知會是附帶動作
             pass
-    return {"ok": True, "status": res["status"], "docCode": info["docCode"], "tierCount": res["tierCount"], "autoApproved": res["autoApproved"]}
+    return {"ok": True, "status": res["status"], "docCode": info["docCode"], "tierCount": res["tierCount"], "autoApproved": res["autoApproved"],
+            **({"poAutoApproved": True} if res.get("poAutoApproved") else {})}
 
 
 @router.post(_BASE + "/approve")
