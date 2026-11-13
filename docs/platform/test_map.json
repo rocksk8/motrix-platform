@@ -31951,6 +31951,7 @@
     "router:auth",
     "router:custom_records",
     "router:item_reads",
+    "router:my_account",
     "router:platform_menu",
     "router:system"
    ],
@@ -31966,6 +31967,7 @@
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/item_reads.py",
+     "backend/routers/my_account.py",
      "backend/routers/platform_menu.py",
      "backend/routers/system.py"
     ],

@@ -27,6 +27,16 @@ def _clean_audit_state():
     A._FAIL_LAST.clear()
     A._FAIL_HOUR.clear()
     AA.reset_for_tests()                 # conftest 只在用到 client 的題才換乾淨的節流狀態；純函式題要自己清
+    try:                                 # 同一個 xdist worker 的前一題可能留下 auth.login_failed 列（沒用 client 夾具就沒人清）⇒ 這個檔的斷言是『剛好幾列』，要自己清
+        from db import get_db
+        _c = get_db()
+        try:
+            _c.execute("DELETE FROM audit_log WHERE action='auth.login_failed'")
+            _c.commit()
+        finally:
+            _c.close()
+    except Exception:
+        pass
     yield
     AA.reset_for_tests()
     A._FAIL_LAST.clear()
