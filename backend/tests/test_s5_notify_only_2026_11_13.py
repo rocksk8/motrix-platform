@@ -241,3 +241,75 @@ def test_quote_terms_presets_validation_error_400_sends_nothing(client, sa):
     bad = {"presets": [_preset("")], "defaultKey": ""}
     assert client.put("/api/settings/quote-terms-presets", headers=sa, json=bad).status_code == 400
     assert _notes("s5n_sa1") == []
+
+
+# ═══ h10 審查（M-／L1–L3）：寫入前讀舊值失敗不能害儲存失敗；年度換了／配額內容調整的顯示；非有限數字 ═══════════════
+
+def test_prewrite_read_failure_never_breaks_the_save_bonus_defaults(client, sa, monkeypatch):
+    from modules.payroll.api import bonus as B
+    with monkeypatch.context() as m:
+        m.setattr(B, "_case_defaults", lambda: (_ for _ in ()).throw(RuntimeError("settings read down")))
+        r = _bonus_put(client, sa, 2000, 6000, 2000, 2000)
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert client.get("/api/bonus/cases/settings", headers=sa).json()["rate_bp"] == 2000     # 照存
+    assert _notes("s5n_sa1") == []                                                           # 不知道舊值 ⇒ 不發
+
+
+def test_prewrite_read_failure_never_breaks_the_save_operating_targets(client, sa, monkeypatch):
+    from routers import system as SY
+    real = SY._get_setting
+    with monkeypatch.context() as m:
+        m.setattr(SY, "_get_setting", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("read down")))
+        # _set_setting 走自己的連線，不經 _get_setting；寫入前的 _get_setting 會丟例外
+        r = client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=5000000))
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert client.get("/api/settings/operating-targets", headers=sa).json()["annual"]["revenue"] == 5000000
+    assert _notes("s5n_sa1") == []
+    assert SY._get_setting is real
+
+
+def test_prewrite_read_failure_never_breaks_the_save_payment_terms(client, sa, monkeypatch):
+    from routers import system as SY
+    with monkeypatch.context() as m:
+        m.setattr(SY, "_quote_default_terms", lambda: (_ for _ in ()).throw(RuntimeError("provider down")))
+        r = client.put("/api/settings/payment-terms", headers=sa, json={"text": "月結 30 天"})
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert client.get("/api/settings/payment-terms", headers=sa).json() == {"text": "月結 30 天"}
+    assert _notes("s5n_sa1") == []
+
+
+def test_prewrite_read_failure_never_breaks_the_save_quote_terms_presets(client, sa, monkeypatch):
+    from routers import system as SY
+    body = {"presets": [_preset("純購料", "k1")], "defaultKey": "k1"}
+    with monkeypatch.context() as m:
+        m.setattr(SY, "_quote_terms_presets", lambda: (_ for _ in ()).throw(RuntimeError("read down")))
+        r = client.put("/api/settings/quote-terms-presets", headers=sa, json=body)
+    assert r.status_code == 200 and r.json()["defaultKey"] == "k1"
+    assert client.get("/api/settings/quote-terms-presets", headers=sa).json()["presets"][0]["name"] == "純購料"
+    assert _notes("s5n_sa1") == []
+
+
+def test_operating_targets_year_change_shows_old_year_real_headcount(client, sa):
+    old = _targets(2026, revenue=1)
+    old["salesperson"] = [{"name": "甲", "revenue": 1, "cases": 1}, {"name": "乙", "revenue": 1, "cases": 1}]
+    client.put("/api/settings/operating-targets", headers=sa, json=old)
+    new = _targets(2027, revenue=1)
+    new["salesperson"] = [{"name": "甲", "revenue": 1, "cases": 1}]
+    client.put("/api/settings/operating-targets", headers=sa, json=new)
+    m = _notes("s5n_sa1")[-1]["message"]
+    assert "業務員配額" in m and "2 位" in m and "1 位" in m and "0 位" not in m               # L1：舊年度實際人數，不是 0
+
+
+def test_operating_targets_quota_edited_same_count_is_not_a_meaningless_line(client, sa):
+    body = _targets(2026, revenue=1)
+    body["salesperson"] = [{"name": "甲", "revenue": 100, "cases": 1}]
+    client.put("/api/settings/operating-targets", headers=sa, json=body)
+    body["salesperson"] = [{"name": "甲", "revenue": 200, "cases": 1}]
+    client.put("/api/settings/operating-targets", headers=sa, json=body)
+    m = _notes("s5n_sa1")[-1]["message"]
+    assert "業務員配額" in m and "內容已調整" in m                                            # L2：不是「1 位 → 1 位」
+
+
+def test_target_num_guards_non_finite_numbers():
+    from routers.system import _target_num
+    assert _target_num(float("nan"), "元") == "0 元" and _target_num(float("inf"), "%") == "0%"   # L3：不丟例外，其他列照發

@@ -1528,7 +1528,11 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
         if "不大於 0" not in str(e):
             raise HTTPException(400, str(e))
     from helpers.settings import _set_setting
-    old_rate, old_split = _case_defaults()          # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值
+    try:
+        old_rate, old_split = _case_defaults()      # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值；讀不到不能害儲存失敗
+    except Exception:                               # noqa: BLE001
+        old_rate = old_split = None
+        logger.warning("獎金預設：讀不到舊值，這次儲存不發通知", exc_info=True)
     new_split = {c: split.get(c, 0) for c in CATEGORIES}
     _set_setting(_RATE_KEY, rate)
     _set_setting(_SPLIT_KEY, new_split)
@@ -1546,6 +1550,8 @@ def _notify_case_defaults_changed(old_rate, old_split, new_rate, new_split, acto
     """SPEC §15-3：獎金預設維持立即生效，**存檔後**發通知（最高管理者全部＋無額外角色；一次存檔多欄合併成一則）。
     只列有變的欄位；沒有任何欄位變 ⇒ 不發。永不丟例外（`notify_change` 自己吞）。"""
     try:
+        if old_rate is None or old_split is None:                       # 寫入前讀不到舊值 ⇒ 不知道改了什麼，不發
+            return
         from helpers import settings_notify as SN
         rows = []
         if old_rate != new_rate:
