@@ -119,6 +119,8 @@ def sidebar_js_source(page_map, frontend_dir):
 
 #: 本公司資料未設定時側欄唯一留下的項目（COMPANY-SETUP-GATE §4.2）
 _SETUP_ONLY_HREF = "company-profile-settings.html"
+#: 未設定時側欄那個入口實際開的頁：公司設定精靈（T84）；其餘情況選單項目仍是上面那頁
+_SETUP_ONLY_TARGET = "company-setup-wizard.html?setup=1"
 
 
 def _company_setup_brief(sa: bool) -> dict:
@@ -138,7 +140,7 @@ def _setup_only(groups: list) -> list:
     """未設定 ⇒ 只留設定頁入口（沒權限看到它的人 ⇒ 空選單；說明頁由 notif.js 導過去）。"""
     out = []
     for g in groups or []:
-        items = [it for it in (g.get("items") or []) if str(it.get("href") or "") == _SETUP_ONLY_HREF]
+        items = [dict(it, href=_SETUP_ONLY_TARGET, active=["company-setup-wizard.html"]) for it in (g.get("items") or []) if str(it.get("href") or "") == _SETUP_ONLY_HREF]
         if items:
             out.append(dict(g, items=items))
     return out

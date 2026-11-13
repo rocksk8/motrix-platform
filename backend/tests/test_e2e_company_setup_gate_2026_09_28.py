@@ -38,16 +38,19 @@ def test_superadmin_is_sent_to_settings_confirms_and_gets_in(client, live_server
     page = new_page()
     login_as(page, tuple(boss)[:2])
     page.goto(f"{live_server}/pages/customers.html")
-    page.wait_for_url("**/company-profile-settings.html?setup=1", timeout=20000)
-    card = page.locator("[data-company-setup-card]")
-    card.wait_for(state="visible", timeout=10000)
-    assert "尚未確認" in page.locator("[data-company-setup-reason]").inner_text()
-    btn = page.locator("[data-company-setup-confirm]")
+    page.wait_for_url("**/company-setup-wizard.html?setup=1", timeout=20000)
+    page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=10000)
+    # 欄位都填好了（電話來自聯絡資訊）⇒ 必填兩步已完成，精靈接在「選填」的第 3 步；略過兩個選填步驟到確認
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要把錢匯到哪裡")
+    page.click("[data-testid=cw-skip]")
+    page.click("[data-testid=cw-skip]")
+    page.locator("[data-testid=cw-summary]").wait_for(state="visible", timeout=10000)
+    btn = page.locator("[data-testid=cw-confirm]")
     assert btn.is_disabled()                                             # 沒勾「以上為本公司資料」不可按
-    page.locator("[data-company-setup-ack]").check()
+    page.locator("[data-testid=cw-ack]").check()
     with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT"):
         btn.click()
-    card.wait_for(state="hidden", timeout=10000)
+    page.locator("[data-testid=cw-done]").wait_for(state="visible", timeout=10000)
     import db
     conn = db.get_db()
     try:
