@@ -371,6 +371,8 @@ class UserIn(BaseModel):
     password: Optional[str] = None
     active: Optional[bool] = None
     department_id: Optional[int] = None
+    #: 變更原因：`PUT /api/users/{id}` 授予或取消高敏感權限鍵（`helpers.duty_roles.HIGH_SENSITIVITY_KEYS`）時必填（≥4 個不同字）；其餘欄位的變更用不到
+    reason: Optional[str] = None
 
 
 class WebauthnRegisterBeginIn(BaseModel):
@@ -1737,7 +1739,7 @@ def _checked_quote_email(v):
 
 
 @router.post("/api/users", status_code=201)
-def create_user(body: UserIn, authorization: str = Header(None)):
+def create_user(body: UserIn, request: Request, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
@@ -1755,6 +1757,12 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     unknown = [k for k in (body.notification_muted or []) if _mt.get(k) is None and k not in _EVENT_KEYS]
     if unknown:
         raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
+    # 高敏感權限的共用檢查點（與 PUT /api/users/{id}、職責角色同一條規則）：建帳號時 modules 帶高敏感鍵 ⇒ 原因必填；建成最高管理者 ⇒ modules 不影響生效權限，不算授予
+    from helpers import duty_roles as _dr
+    try:
+        _sens, _reason, _gb, _ga = _dr.user_perm_gate(None, [], body.role or "viewer", body.modules or [], body.reason)
+    except _dr.DutyError as e:
+        raise HTTPException(e.status, str(e))
     conn = get_db()
     try:
         conn.execute("""
@@ -1774,8 +1782,10 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             body.department_id or None,
             _qe_new or '',
         ))
-        conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        if _sens:                                   # 與 INSERT 同一個交易：permission_changes（kind=user_modules）＋audit_log（user.perm_change）
+            _dr.record_user_modules_change(conn, actor, user_id, body.username.strip(), _gb, _ga, _reason, _trusted_client_ip(request))
+        conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(409, "帳號已存在")
@@ -1805,13 +1815,13 @@ def _subtracted_clash(conn, user_id, modules) -> list:
 
 
 @router.put("/api/users/{user_id}")
-def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+def update_user(user_id: int, body: UserIn, request: Request, authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     if body.role is not None and body.role not in VALID_ROLES:          # 第42班
         conn.close()
         raise HTTPException(400, "不認得的角色：%s" % body.role)
-    _before = conn.execute("SELECT role, modules FROM users WHERE id=?", (user_id,)).fetchone()
+    _before = conn.execute("SELECT role, modules, username FROM users WHERE id=?", (user_id,)).fetchone()
     if not conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "使用者不存在")
@@ -1827,6 +1837,21 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
             conn.close()
             _audit(_tok(authorization), "user.put_rejected_subtract", "user", str(user_id), str(user_id), {"keys": _clash})
             raise HTTPException(400, "下列權限目前被「個人扣項」扣掉，勾選不會生效：%s。請先到「職責角色」頁解除扣項再勾選。" % "、".join(_clash))
+    _perm_audit = None        # 高敏感權限變更：(before, after, reason, label) —— 與 UPDATE 同一個交易寫 permission_changes＋audit_log
+    if body.modules is not None or body.role is not None:
+        # 高敏感權限的共用檢查點（`helpers.duty_roles.user_perm_gate`→`gate_reason`；職責角色同一條規則）：授予／取消高敏感鍵 ⇒ 原因必填。
+        # 角色也算：降級最高管理者（存著的 modules 此刻才生效，不論這次有沒有帶 modules）、改成財務角色（財務三鍵由角色補上）。
+        from helpers import duty_roles as _dr
+        _old_m = json.loads((_before["modules"] if _before else None) or "[]")
+        _b_role = _before["role"] if _before else None
+        try:
+            _sens, _reason, _gb, _ga = _dr.user_perm_gate(_b_role, _old_m, body.role if body.role is not None else _b_role,
+                                                         body.modules if body.modules is not None else _old_m, body.reason)
+        except _dr.DutyError as e:
+            conn.close()
+            raise HTTPException(e.status, str(e))
+        if _sens:
+            _perm_audit = (_gb, _ga, _reason, _before["username"] if _before else str(user_id))
     sets, params = [], []
     if body.display_name is not None: sets.append("display_name=?"); params.append(body.display_name)
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
@@ -1876,6 +1901,10 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if sets:
         params.append(user_id)
         conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=?", params)
+        if _perm_audit:
+            from helpers import duty_roles as _dr
+            _dr.record_user_modules_change(conn, actor, user_id, _perm_audit[3], _perm_audit[0], _perm_audit[1], _perm_audit[2],
+                                           _trusted_client_ip(request))
         conn.commit()
     conn.close()
     _audit(_tok(authorization), 'user.update', 'user', str(user_id), body.display_name or str(user_id))
