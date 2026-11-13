@@ -57,10 +57,9 @@ def _one_id(v, label) -> int:
     """單一編號：整數（或純數字字串），1..2**31-1；布林、浮點數、超範圍一律 400（不默默截斷成別人）。"""
     if isinstance(v, bool) or isinstance(v, float) or not isinstance(v, (int, str)):
         raise dr.DutyError("%s必須是整數" % label)
-    try:
-        n = int(v)
-    except ValueError:
+    if isinstance(v, str) and not (v.isascii() and v.isdigit()):          # 擋 "1_0"（Python 會讀成 10）、全形數字、正負號、空白
         raise dr.DutyError("%s必須是整數" % label)
+    n = int(v)
     if not 1 <= n <= _MAX_ID:
         raise dr.DutyError("%s超出範圍" % label)
     return n

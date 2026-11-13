@@ -532,7 +532,7 @@ def test_undo_of_a_revoke_of_a_role_given_key_restores_it(client, world):
 
 # ── 輸入形狀（審查 h10 S1／S2／L1／L2）──────────────────────────────────────
 
-@pytest.mark.parametrize("bad", [10 ** 30, 0, -1, 1.9, True, "x", None, [1]])
+@pytest.mark.parametrize("bad", [10 ** 30, 0, -1, 1.9, True, "x", None, [1], "1_0", "１２", " 5", "+5"])
 def test_user_ids_must_be_real_in_range_integers(client, world, bad):
     r = _post(client, world["h"], {"userIds": [bad], "grant": ["map"]})
     assert r.status_code == 400, (bad, r.status_code, r.text)
