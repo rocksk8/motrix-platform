@@ -46,8 +46,9 @@ def load_dep_scan():
 
 
 def scan_units(dep_scan=None):
-    """現場掃描 ⇒ units dict。"""
-    return (dep_scan or load_dep_scan()).build()["units"]
+    """現場掃描 ⇒ units dict。真實 repo 的掃描每個行程只做一次（_shared_repo.real_dep_graph）；合成樹／沙盒不快取。"""
+    from tests.platform import _shared_repo
+    return _shared_repo.real_dep_graph(dep_scan)["units"]
 
 
 class Groups:
