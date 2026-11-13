@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 992,
-  "endpoints_api": 988,
-  "write_total": 534,
-  "write_api": 534,
-  "get_api": 454,
-  "distinct_paths_api": 841,
-  "write_with_body_api": 399,
-  "write_with_path_param_api": 364
+  "endpoints_total": 997,
+  "endpoints_api": 993,
+  "write_total": 535,
+  "write_api": 535,
+  "get_api": 458,
+  "distinct_paths_api": 846,
+  "write_with_body_api": 400,
+  "write_with_path_param_api": 365
  },
  "select_star": {
   "modules": 288,
@@ -4976,6 +4976,31 @@
   "PUT /api/settings/estimate-terms-presets": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "GET /api/inventory/reconcile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/serial-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/device-history": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/device-prefill": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
+   "w": true,
+   "pp": 2,
    "body": true
   }
  }

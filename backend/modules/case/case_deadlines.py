@@ -274,11 +274,40 @@ def _closed_warranty_rows(conn) -> list:
     return out
 
 
+def _warranty_expiry_key_on() -> bool:
+    """一條龍 P3（旗標 `onepipe.ship_device_warranty`）：保固通知的去重鍵含到期日。讀不到／關 ⇒ False（舊鍵，與今天完全相同）。"""
+    from helpers import onepipe_flags
+    return onepipe_flags.flag_on("ship_device_warranty")
+
+
+def _warranty_guard(quote_no, sn, threshold, expiry, with_expiry):
+    """⇒ `(已通知過?, 要寫的記號鍵)`。
+    關：`warranty_notif.{案}_{序號}_{門檻}`（今天的鍵）。
+    開：鍵尾加上到期日——保固日期被調整（到期日換了）之後可以對新的到期日再通知一次。**舊鍵相容**：舊鍵存在、且它記的寄送日不早於「現在這個到期日往前推**這一個門檻的天數**」
+    （＝當時是對這個到期日寄的；緊急門檻的舊鍵不能用提醒門檻比——到期日延長不到一個提醒期就會把還沒寄的緊急通知吃掉）⇒ 視為已通知，不重寄；寄送日更早（對的是舊到期日）⇒ 不算。舊鍵的值不是日期（壞值）⇒ 保守視為已通知。"""
+    old = f"warranty_notif.{quote_no}_{sn}_{threshold}"
+    if not with_expiry:
+        return bool(_get_setting(old)), old
+    new = f"{old}_{expiry.isoformat()}"
+    if _get_setting(new):
+        return True, new
+    prev = _get_setting(old)
+    if prev:
+        try:
+            if _date.fromisoformat(str(prev)[:10]) < expiry - _timedelta(days=threshold):
+                return False, new
+        except (TypeError, ValueError):
+            pass
+        return True, new
+    return False, new
+
+
 def _baseline_closed_warranty(conn, rows, today, early, urgent) -> None:
     """第一次建基準：目前已經在提醒期間內的已結案設備只寫「已通知」記號（與正常寄信同一把去重鍵），**不寄信**；已過期的不記（也不會通知）。
     全部寫完才寫基準日——中途失敗 ⇒ 基準日沒寫，下次重做（重做安全：記號已存在就跳過）。"""
     today_str = today.isoformat()
     n = 0
+    with_expiry = _warranty_expiry_key_on()
     for row in rows:
         try:
             cr = json.loads(row["cr_json"] or "{}")
@@ -293,8 +322,8 @@ def _baseline_closed_warranty(conn, rows, today, early, urgent) -> None:
                 continue
             threshold = urgent if days_left <= urgent else early
             sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
-            guard_key = f"warranty_notif.{row['quote_no']}_{sn}_{threshold}"
-            if not _get_setting(guard_key):
+            done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, with_expiry)
+            if not done:
                 _set_setting(guard_key, today_str)
                 n += 1
     _set_setting(_CLOSED_BASELINE_KEY, {"date": today_str, "at": datetime.now().isoformat(timespec="seconds"), "silenced": n})
@@ -334,6 +363,7 @@ def _check_warranty_expiry() -> None:
             _logger.warning("_check_warranty_expiry: 已結案案件保固通知略過（%s）", exc)
             closed_rows, cutoff = [], None
 
+        with_expiry = _warranty_expiry_key_on()               # P3：去重鍵含到期日（旗標關 ⇒ 舊鍵，與今天相同）
         owner_cache = {}      # quote_no → 業務帳號（走 sales_person_id 外鍵；沒有／已停用 ⇒ ""，只寄群組收件人）
 
         def _owner(qn):
@@ -369,8 +399,8 @@ def _check_warranty_expiry() -> None:
 
                 threshold = _urgent if days_left <= _urgent else _early
                 sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
-                guard_key = f"warranty_notif.{row['quote_no']}_{sn}_{threshold}"
-                if _get_setting(guard_key):
+                done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, with_expiry)
+                if done:
                     continue  # already sent for this threshold
 
                 # 先寄成功才寫已通知記號：SMTP 暫時失敗（或這台機器沒設 SMTP）⇒ 不寫，明天的每日檢查會補寄。

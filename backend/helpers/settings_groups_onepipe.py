@@ -10,7 +10,11 @@
       warranty_closed_notify  P0d 保固到期通知納入已結案案件（本檔）
       links／ship_install_ok／timeline  P0a／P0c／P1'（hichan-1 的班次接著加在下面的清單裡）
       entry_unify             P4 現場人員自建案件每日事項（hichan-1，D5＝A）
-[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py、backend/tests/test_onepipe_warranty_closed_2026_11_13.py
+      receive_ledger          T85 P2a 入庫底層：到貨入庫與案件材料申請對應、序號異動紀錄、入庫對帳表（hichan-1，D1＝A、D9）
+      receive_wizard          T85 P2b 一站式到貨：材料申請上登載到貨（入庫／直送／耗材）、已到數量分批累計、序號一次貼上（hichan-1，D1＝A、D2＋D8＝A、D7＝A）
+      ship_device_warranty    T85 P3 出貨／設備／保固對齊：出貨序號預填設備、保固起始日預填、序號歷史、保固通知去重含到期日（hichan-1，D4＝A）
+      warranty_start_basis    T85 P3 保固起始日預填的優先順序（0＝出貨日優先、1＝完工日優先；D4＝A「設定可改成完工日」）
+[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py、backend/tests/test_onepipe_warranty_closed_2026_11_13.py、backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py、backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py
 """
 
 
@@ -85,6 +89,31 @@ def _register(S, _register_core):
               impact="開啟後，符合條件的材料申請送審即核准；不符合條件的照舊簽核。關閉後立即回到目前的樣子（一律照簽核流程），已核准的材料申請保留。",
               impact_scope={"documents": ["材料申請（連到已核准採購單者）"], "roles": ["材料申請的簽核人"], "amounts": "只涵蓋採購單已核准的金額；超出採購單的部分仍要簽核。", "reversible": True, "effective": "pending"},
               choices=[(0, "關閉（預設）", "材料申請一律照簽核流程，與目前完全相同。"), (1, "開啟", "連到已核准採購單且沒超出的材料申請免再簽核（放寬簽核，需第二位最高管理者核准）。")]),
+            S("receive_ledger", "int", 1, min=0, max=1, risk="ops", recommended=1,
+              question="材料到貨時，是否讓庫存這一側記錄這批貨是為哪個案件、哪張材料申請入庫？", label="到貨入庫與案件對應",
+              help="開啟後：進貨批次可記錄對應的案件、採購單與材料申請；到貨時可選擇「入庫」或「直送客戶現場」；序號的進貨、出貨、安裝、退回等異動會留下紀錄（只從開啟當天起記錄，不回補）；"
+                   "管理員可在入庫對帳表查看「案件已確認到貨、庫存尚未入庫」的材料申請。案件的物料流程時間軸入庫格也會顯示完整數量。",
+              impact="只多記錄與多一張唯讀對帳表，不改既有庫存、序號與金額；誰能入庫仍照目前規則。關閉後新的對應與異動紀錄不再寫入，已寫入的保留。立即生效，可隨時改回。",
+              choices=[(0, "關閉", "庫存與序號資料、畫面與目前完全相同。"), (1, "開啟（預設）", "多記錄到貨與案件的對應及序號異動，並提供入庫對帳表。")]),
+            S("receive_wizard", "int", 1, min=0, max=1, risk="ops", recommended=1,
+              question="材料申請核准後，是否讓同仁在材料申請上用「到貨登載」一次完成到貨？", label="一站式到貨登載",
+              help="開啟後，已核准的材料申請多一個「到貨登載」：可填這次到了幾件（分批到貨會累計，畫面顯示「已到 4／12」）、選擇入庫、直送客戶現場或耗材（耗材到貨即視為現場領用、不進庫存），"
+                   "有序號的貨可一次貼上多筆序號（一次最多 50 筆，重複或已存在的逐列回報、其餘照寫），並可附上到貨單照片。"
+                   "原本的「確認到貨」仍保留。沒有入庫權限的人只完成案件這一半，庫存請管理員從入庫對帳表補入庫。",
+              impact="只多一個登載方式；材料申請的簽核內容與金額不受影響，到貨數量欄位不會觸發重新簽核。關閉後畫面回復為只有「確認到貨」，已累計的已到數量保留。立即生效，可隨時改回。",
+              choices=[(0, "關閉", "材料申請只有「確認到貨」，與目前完全相同。"), (1, "開啟（預設）", "材料申請多「到貨登載」：分批累計、入庫或直送、耗材到貨即領用、序號一次貼上。")]),
+            S("ship_device_warranty", "int", 1, min=0, max=1, risk="ops", recommended=1,
+              question="案件登載設備時，是否依出貨紀錄預填設備序號與保固起始日，並提供序號的來去歷史？", label="出貨、設備與保固對齊",
+              help="開啟後：案件的設備頁多一個「從出貨帶入」，列出這個案件已出貨、尚未登載成設備的序號，並預填建議的保固起始日（預設取出貨日，沒有出貨單時依序退到到貨日、完工日）；"
+                   "預填只是建議，要您確認並按儲存才會寫入，不會自動改任何設備。設備頁會提醒「尚未填保固起始日」的設備（這類設備不會收到到期通知）。"
+                   "庫存頁的序號可查「歷史」（出貨、安裝、退回等，只從開啟入庫紀錄當天起有資料）；保固到期通知的去重改為含到期日，保固日期調整後可再次通知。",
+              impact="只影響案件設備頁、庫存序號頁與保固通知的去重方式；不改既有設備、庫存與保固日期，也不改誰看得到案件。關閉後畫面與通知方式回復為目前的狀態。立即生效，可隨時改回。",
+              choices=[(0, "關閉", "設備頁沒有出貨預填與提醒、沒有序號歷史、保固通知去重與目前完全相同。"), (1, "開啟（預設）", "設備頁可由出貨預填序號與保固起始日、提醒未填起始日、可查序號歷史；保固通知去重含到期日。")]),
+            S("warranty_start_basis", "int", 0, min=0, max=1, risk="ops", recommended=0,
+              question="預填設備保固起始日時，要優先取出貨日還是完工日？", label="保固起始日預填的優先順序",
+              help="只影響「從出貨帶入」預填的建議日期，不會改已存的設備。選「出貨日優先」：依序取出貨日、到貨日、完工日；選「完工日優先」：依序取完工日、出貨日、到貨日。",
+              impact="只改變預填的建議日期；仍須您確認並儲存才寫入，已存在的設備不受影響。立即生效，可隨時改回。",
+              choices=[(0, "出貨日優先（預設）", "依序取出貨日、到貨日、完工日。"), (1, "完工日優先", "依序取完工日、出貨日、到貨日。")]),
         ],
         sensitive=False, risk="ops",
         help="物料流程各階段的功能開關；預設全部開啟（本次更新起）；可在這裡逐項關閉，關閉就與目前完全相同。",

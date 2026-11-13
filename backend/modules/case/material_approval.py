@@ -416,6 +416,6 @@ def undo_receipt(conn, quote_no: str, item_id: str, user: dict) -> dict:
     if row is None or not row["received_on"]:
         raise MaterialApprovalError(409, "這筆材料申請沒有到貨確認")
     now = _now()
-    conn.execute("UPDATE case_material_approvals SET received_on='', received_by='', received_at='', updated_at=? WHERE quote_no=? AND item_id=?",
-                 (now, quote_no, str(item_id)))
+    conn.execute("UPDATE case_material_approvals SET received_on='', received_by='', received_at='', received_qty=NULL, updated_at=? WHERE quote_no=? AND item_id=?",
+                 (now, quote_no, str(item_id)))                                   # 已到數量（一條龍 P2b）一併清空；舊資料本來就是 NULL ⇒ 與原行為相同
     return {"undone": True, "was": {"receivedOn": row["received_on"], "receivedBy": row["received_by"]}}

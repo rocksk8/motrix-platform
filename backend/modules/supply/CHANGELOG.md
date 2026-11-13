@@ -1,5 +1,28 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
+- 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。
+- 新端點 `GET /api/inventory/serial-history?part_no=&serial_no=`（庫存同一組模組權限；旗標關 ⇒ 404）；庫存頁序號列多「歷史」按鈕（旗標開）。
+- `stock.serial_history`（IP-121）新增選填參數 `quote_no`（案件頁用）：給了才檢查序號與該案件有庫存關係，並把不是本案的異動（含沒有案件編號的）遮掉 `ref`／`reason`／`actor`；不給＝原樣（庫存頁，已有庫存權限）。
+
+## 1.0.43 — T85 P2b 審查補強（train/t85-p2-h1；h9／h2／PM；版號由列車取）
+- `stock.receive`（IP-118）新增 `consumable` 到貨方式：只留一筆 `delivery_mode='consumable'` 批次表頭（前綴 `CN`），讓入庫對帳表視為已處理；全部是耗材時不需入庫權限；直送／耗材的防重複依方式分開算。
+- 新提供者 `stock.receive_undo`（IP-122，暫定號；`receive.py::undo_receipt`）：案件撤銷到貨確認時收回庫存那一半——刪直送／耗材／無序號列的入庫表頭；已有為該材料申請入庫的序號、或批次已登記付款 ⇒ 回 `BLOCKED`、不動任何東西。
+
+## 1.0.42 — T85 P2a 審查補強的小尾巴（train/t85-p2-h1；版號由列車取）
+- 人工刪除在庫序號寫的 `delete` 異動，時間格式與其他異動一致（到秒）。
+
+## 1.0.41 — T85 一條龍 P2a「入庫底層」（train/t85-p2-h1；旗標 `onepipe.receive_ledger`，預設開；關閉＝與今天逐位元相同；版號由列車取）
+- **自有 migration v1**（`modules/supply/migrations/0001_receive_ledger.py`；首支，supply 先前沒有自有 migration）：`stock_batches` 加 `quote_no`／`po_doc_code`／`material_item_id`／`delivery_mode`（`stock` 入庫、`direct` 直送）；`stock_items` 加 `material_item_id`；新表 `stock_item_events`（序號異動紀錄）。只新增、冪等、不動既有值。
+- 新提供者 `stock.receive`（IP-118，暫定號；`modules/supply/receive.py`）：一站式到貨的入庫那一半。吃呼叫端連線、不 commit（與案件存檔同一筆交易）；逐列回報（重複／空白／已存在的序號不寫、不擋其他列）、一列最多 50 筆；`direct`（D1＝A）只留批次表頭；入庫權限＝管理員（`can_receive` 一處，P2-pre 上線後由該處放寬）；沒有權限 ⇒ 不寫庫存、回 `NO_PERMISSION`（案件只做自己那一半）；旗標關 ⇒ `DISABLED`。
+- 序號異動紀錄（`modules/supply/stock_events.py`）：旗標開時，進貨、出貨核准、撤銷出貨、設備安裝（`claim`）、釋放（`release`）、人工報廢／退回在庫都寫一筆；只有從啟用日起才有歷史、不回補；寫入失敗不擋主流程。
+- `stock.case_summary`（IP-117）：旗標開時多回 `receivedInStock`（為該案入庫、還在庫的台數）、`directBatches`、每料號 `inStock`；旗標關時回應與今天相同。物料流程時間軸的入庫格據此顯示完整數字。
+- 新端點 `GET /api/inventory/reconcile`（管理員；旗標關 ⇒ 404）：入庫對帳表——案件已確認到貨、庫存這一側沒有入庫或直送紀錄的材料申請（經 IP-119 `material.received_list`；M01 不在 ⇒ 空清單）。唯讀、沒有金額。
+- 進貨批次／序號的讀取回應：旗標關時不帶新欄位（`quote_no`／`po_doc_code`／`material_item_id`／`delivery_mode`），與今天相同。
+- 審查補強（h9）：`stock.receive` 直送防重複（同一筆材料申請已有直送批次 ⇒ 該列不寫，分批由呼叫端帶 `additional`）、`materialItemId` 必須是該案件已確認到貨的材料申請（經 `material.shippable`）、`caller=None` 只限可信內部呼叫；對帳表先過濾再取滿一頁（不被已處理項擠掉）、`since` 格式檢查（400）；人工刪除在庫序號也留 `delete` 異動。
+- 本批不含新畫面（一站式到貨畫面是 P2b）；`POST /api/inventory/batches` 行為不變。
+- 測試：`tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`。
+
 ## 1.0.40 — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正、守門補登與 case_summary 註記；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同））；已併 T82 凍結 head f66dfd9ef
 - **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
 - 守門補登：`modules.json` 補歸屬（M03：`supply/case_summary`）；未經範圍讀取基準登記 `release`／`case_summary` 兩筆（理由見 `test_unscoped_reads_ratchet.py` 的 MAX_ENTRIES 註解）。

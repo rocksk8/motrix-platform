@@ -8,7 +8,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
+from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_received, material_shippable, payables, quotations
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
@@ -17,7 +17,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_payments as _api_material_payments,
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
                               quotations as _api_quotations, quotation_stages as _api_quotation_stages, settlement_api as _api_settlement_api, overhead as _api_overhead, alt_plan as _api_alt_plan,
-                              project_margin as _api_project_margin, field_cases as _api_field_cases, material_flow as _api_material_flow)
+                              project_margin as _api_project_margin, field_cases as _api_field_cases, material_flow as _api_material_flow, device_warranty as _api_device_warranty)
 from modules.case.api import dashboard_groups as _dashboard_groups   # 首頁「我的工作」案件分組（2026-11-13）
 from modules.case import recycle_adapter as _recycle_adapter   # 資源回收筒 adapter（IP-RB1）
 from modules.case import rule_provider as _rule_provider         # BP-2：標示規則的案件紀錄提供者（唯讀、逐筆讀取權限過濾）
@@ -41,6 +41,7 @@ _m0008 = importlib.import_module("modules.case.migrations.0008_material_payment_
 _m0009 = importlib.import_module("modules.case.migrations.0009_stage_key")
 _m0010 = importlib.import_module("modules.case.migrations.0010_quote_doc_type")
 _m0011 = importlib.import_module("modules.case.migrations.0011_estimate_terms_copy")
+_m0012 = importlib.import_module("modules.case.migrations.0012_material_received_qty")
 
 MODULE = ModuleSpec(
     key="case",
@@ -50,10 +51,10 @@ MODULE = ModuleSpec(
     # v11：估價單獨立條款——把目前報價單的條款設定複製成估價單的初始值（system_settings estimate_*，2026-11-13；冪等）
     # v7：case_extra_expenses.planned_pay_date（預定付款日，2026-10-05；提醒信＋行事曆「付款待辦」）
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up), (10, _m0010.up), (11, _m0011.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up), (10, _m0010.up), (11, _m0011.up), (12, _m0012.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_quotation_stages.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
-             _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router, _api_project_margin.router, _api_field_cases.router, _api_material_flow.router],
+             _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router, _api_project_margin.router, _api_field_cases.router, _api_material_flow.router, _api_device_warranty.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）
         ("case.access", "case"): quotations._CaseAccess,
@@ -115,6 +116,8 @@ MODULE = ModuleSpec(
         ("gl.events", "case"): gl_events.gl_events,
         # 34-S1：出貨單連動材料申請——可出貨的材料（已核准＋已到貨確認）；supply 經 registry 取用，不 import 本模組
         ("material.shippable", "case"): material_shippable.material_shippable,
+        # IP-119（暫定號）：已確認到貨的材料申請清單（M03 入庫對帳表用；唯讀、無金額）
+        ("material.received_list", "case"): material_received.received_items,
         # 第 43 班（IP-SH5）：整案「訂購／已出貨／占用中」數量小計（營運報表匯出用；只有數量）
         ("case.shipped_summary", "case"): item_shipped.case_shipped_summary,
         # IP-RB1（第 53 班 P1）：資源回收筒的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）

@@ -37,6 +37,7 @@ from helpers import (
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 from modules.supply import material_link as _ML
+from modules.supply import stock_events as _stock_events   # 一條龍 P2a：序號異動紀錄（旗標 onepipe.receive_ledger 關＝不寫）
 from helpers.errors import trace_id
 
 router = APIRouter()
@@ -598,6 +599,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
                 SET status='shipped', shipping_note_no=?, quote_no=?, consumed_at=?, consumed_by=?, updated_at=?
                 WHERE id=?
             """, (note_no, row["quote_no"], now, actor, now, sid))
+        _stock_events.record_for_ids(conn, stock_ids, event="ship", from_status="in_stock", to_status="shipped", quote_no=row["quote_no"] or "", ref=note_no, actor=actor, now=now)
         conn.commit()
         approver_name = appr.get("approvedByDisplay") or user["username"]
         spawn_bg_thread(_generate_shipping_pdf, args=(note_no, approver_name, '簽核'))
@@ -664,6 +666,8 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     returned_rows = conn.execute(
         "SELECT id FROM stock_items WHERE shipping_note_no=? AND status='shipped'", (note_no,)
     ).fetchall()
+    _stock_events.record_for_ids(conn, [r["id"] for r in returned_rows], event="revoke_ship", from_status="shipped", to_status="in_stock", ref=note_no, reason=note,
+                                 actor=user.get("display_name") or user["username"], now=now)
     for r in returned_rows:
         conn.execute("""
             UPDATE stock_items

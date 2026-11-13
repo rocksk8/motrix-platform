@@ -8,6 +8,7 @@ shipped/installed -> in_stock（人工 return_to_stock 更正，見 §出貨單�
 """
 import json
 import math
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -19,6 +20,7 @@ from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  �
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from modules.supply import stock_events as _ev   # 一條龍 P2a：序號異動紀錄（旗標 onepipe.receive_ledger 關＝不寫）
 # ⚠️ 兩種匯入方式是刻意的，不是沒整理：
 #   `from helpers.procurement import ...` —— 純函式，測試不需要換掉它們，直接匯入沒問題
 #   `from helpers import procurement`     —— **接縫**，`procurement.today()` 必須在呼叫當下
@@ -41,6 +43,25 @@ router = APIRouter()
 # 被判定成「不缺貨」——兩邊各自都對、合起來錯。
 # （`parts_summary()::_stock_level()` 裡那份是既有的，這一輪不動它，見 B.md。）
 _YELLOW_MULTIPLIER = 1.5
+
+
+# 一條龍 P2a：supply migration v1 新增的欄位。旗標 `onepipe.receive_ledger` 關 ⇒ 回應不帶這幾個鍵（與今天逐位元相同）。
+_LEDGER_BATCH_COLS = ("quote_no", "po_doc_code", "material_item_id", "delivery_mode")
+_LEDGER_ITEM_COLS = ("material_item_id",)
+
+
+def _item_public(d: dict, ledger: bool) -> dict:
+    if not ledger:
+        for k in _LEDGER_ITEM_COLS:
+            d.pop(k, None)
+    return d
+
+
+def _batch_public(d: dict, ledger: bool) -> dict:
+    if not ledger:
+        for k in _LEDGER_BATCH_COLS:
+            d.pop(k, None)
+    return d
 
 
 def _require_admin(user: dict):
@@ -349,6 +370,61 @@ def set_purchase_suggestion_status(
     }
 
 
+# ── 入庫對帳表（一條龍 P2a；旗標 onepipe.receive_ledger）──────────────────────────────
+
+@router.get("/api/inventory/reconcile")
+def reconcile(since: Optional[str] = None, authorization: str = Header(None)):
+    """案件已確認到貨、庫存這一側還沒有入庫（或直送）紀錄的材料申請清單，給管理員補入庫。唯讀、沒有金額。
+
+    案件側清單經 IP-119 `material.received_list`（M01 不在 ⇒ `caseAvailable=False`、空清單）；庫存側以 `stock_batches.material_item_id`（入庫或直送都算已處理）對帳。
+    旗標關 ⇒ 404（與沒有這支端點時相同）。`since`（YYYY-MM-DD）只看該日之後到貨的（啟用前的歷史到貨不必全部補）。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
+    _require_admin(user)
+    if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+        raise HTTPException(400, "since 需為 YYYY-MM-DD")
+    conn = get_db()
+    try:
+        if not _ev.ledger_on(conn):
+            raise HTTPException(404, "Not Found")
+        from core import registry as _registry
+        fn = _registry.single_provider("material.received_list")
+        if fn is None:
+            return {"items": [], "total": 0, "caseAvailable": False}
+        handled = {(r["quote_no"], r["material_item_id"]) for r in conn.execute(
+            "SELECT quote_no, material_item_id FROM stock_batches WHERE material_item_id<>''").fetchall()}
+        items, offset, page = [], 0, 500
+        while len(items) < page and offset < 100 * page:                 # 先過濾、再取滿一頁：已處理的不會把較舊的未處理項擠掉
+            chunk = fn(conn, since or "", page, offset)
+            if not chunk:
+                break
+            items.extend(i for i in chunk if (i["quoteNo"], i["itemId"]) not in handled)
+            offset += page
+        items = items[:page]
+        return {"items": items, "total": len(items), "caseAvailable": True}
+    finally:
+        conn.close()
+
+
+# ── 序號歷史（一條龍 P3；旗標 onepipe.ship_device_warranty＋receive_ledger）────────────────
+
+@router.get("/api/inventory/serial-history")
+def serial_history(part_no: str, serial_no: str, authorization: str = Header(None)):
+    """一個序號從「入庫異動紀錄」啟用日起的來去（入庫、出貨、安裝、退回…）。唯讀、沒有金額；與「檢視庫存」同一組模組權限。
+    旗標關 ⇒ 404（與沒有這支端點時相同）。⚠️ 啟用日之前的歷史查不到（不回補）：`since` 回該序號最早一筆異動的時間，沒有 ⇒ 空字串。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
+    from modules.supply import serial_view as _sv
+    conn = get_db()
+    try:
+        if not _sv.enabled(conn) or not _ev.ledger_on(conn):
+            raise HTTPException(404, "Not Found")
+        events = _sv.serial_history(conn, part_no, serial_no, user)
+        return {"partNo": part_no, "serialNo": serial_no, "events": events, "since": events[0]["at"] if events else ""}
+    finally:
+        conn.close()
+
+
 # ── 序號清單 ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/inventory/stock-items")
@@ -375,8 +451,9 @@ def list_stock_items(
         params.append(batch_no)
     sql += " ORDER BY id DESC"
     rows = conn.execute(sql, params).fetchall()
+    ledger = _ev.ledger_on(conn)
     conn.close()
-    items = [dict(r) for r in rows]
+    items = [_item_public(dict(r), ledger) for r in rows]
     if q:
         sq = q.lower()
         items = [d for d in items if sq in (d.get("serial_no", "") + d.get("mac", "")).lower()]
@@ -464,11 +541,12 @@ def create_batch(body: dict = Body(...), authorization: str = Header(None)):
         invoice_no = (body.get("invoice_no") or body.get("invoiceNo") or "").strip()
 
         for c in clean:
-            conn.execute("""
+            cur = conn.execute("""
                 INSERT INTO stock_items (part_no, serial_no, mac, status, batch_no, cost, note,
                                           created_by, created_at, updated_at)
                 VALUES (?,?,?,'in_stock',?,?,?,?,?,?)
             """, (part_no, c["serial_no"], c["mac"], batch_no, cost, c["note"] or note, actor, now, now))
+            _ev.record(conn, event="receive", part_no=part_no, serial_no=c["serial_no"], stock_item_id=cur.lastrowid, to_status="in_stock", ref=batch_no, actor=actor, now=now)
         conn.execute("""
             INSERT INTO stock_batches (batch_no, part_no, supplier_id, supplier_name, invoice_no,
                                         note, created_by, created_at, updated_at)
@@ -516,11 +594,12 @@ def get_batch(batch_no: str, authorization: str = Header(None)):
     conn = get_db()
     rows = conn.execute("SELECT * FROM stock_items WHERE batch_no=? ORDER BY id", (batch_no,)).fetchall()
     header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
+    ledger = _ev.ledger_on(conn)
     conn.close()
     if not rows:
         raise HTTPException(404, "批次不存在")
-    return {"batchNo": batch_no, "items": [dict(r) for r in rows],
-            "header": dict(header) if header else None}
+    return {"batchNo": batch_no, "items": [_item_public(dict(r), ledger) for r in rows],
+            "header": _batch_public(dict(header), ledger) if header else None}
 
 
 @router.put("/api/inventory/batches/{batch_no}")
@@ -659,6 +738,10 @@ def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str =
             conn.execute("UPDATE stock_items SET note=? WHERE id=?", (note, item_id))
         else:
             conn.execute("UPDATE stock_items SET note=?, updated_at=? WHERE id=?", (note, now, item_id))
+    if action in ("void", "return_to_stock"):
+        _ev.record(conn, event=action, part_no=row["part_no"], serial_no=row["serial_no"], stock_item_id=row["id"], from_status=row["status"],
+                   to_status="void" if action == "void" else "in_stock", quote_no=row["quote_no"] or "", ref=row["shipping_note_no"] or "",
+                   reason=note, actor=user.get("display_name") or user["username"], now=now)
     conn.commit()
     conn.close()
 
@@ -682,6 +765,8 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, "僅在庫（未出貨／未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整")
     conn.execute("DELETE FROM stock_items WHERE id=?", (item_id,))
+    _ev.record(conn, event="delete", part_no=row["part_no"], serial_no=row["serial_no"], stock_item_id=row["id"], from_status="in_stock", to_status="",
+               quote_no=row["quote_no"] or "", actor=user.get("display_name") or user["username"], now=datetime.now().isoformat(timespec="seconds"))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), "inventory.delete", "stock_item", str(item_id),
@@ -724,7 +809,7 @@ class _StockSerials:
         在庫存系統但不是在庫（已出貨、已被別案認領…）⇒ 不動、回它目前的狀態（呼叫端列為衝突）。
         一條龍 P0c（旗標 `onepipe.ship_install_ok`）：**同一案件**出貨的序號（shipped 且 quote_no 相同）可由該案登載成設備 ⇒ 標成 installed、
         保留出貨單號（之後釋放會回到 shipped，不是在庫）、回 "in_stock"；他案出貨或已被認領仍回原狀態（衝突）。"""
-        row = conn.execute("SELECT id, status, quote_no FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)).fetchone()
+        row = conn.execute("SELECT id, status, quote_no, part_no FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)).fetchone()
         if not row:
             return None
         if row["status"] == "in_stock":
@@ -733,8 +818,13 @@ class _StockSerials:
                 SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
                 WHERE id=?
             """, (quote_no, device_id, now, actor, now, row["id"]))
+            _ev.record(conn, event="install", part_no=row["part_no"], serial_no=sn, stock_item_id=row["id"], from_status="in_stock", to_status="installed",
+                       quote_no=quote_no, ref=str(device_id or ""), actor=actor, now=now)
         elif row["status"] == "shipped" and quote_no and (row["quote_no"] or "") == quote_no and _ship_install_ok(conn):
             cur = conn.execute("UPDATE stock_items SET status='installed', case_device_id=?, updated_at=? WHERE id=? AND status='shipped'", (device_id, now, row["id"]))
+            if cur.rowcount:
+                _ev.record(conn, event="install", part_no=row["part_no"], serial_no=sn, stock_item_id=row["id"], from_status="shipped", to_status="installed",
+                           quote_no=quote_no, ref=str(device_id or ""), actor=actor, now=now)
             return "in_stock" if cur.rowcount else "installed"
         return row["status"]
 
@@ -744,6 +834,7 @@ class _StockSerials:
         一條龍 P0c：**看資料、不看旗標**——從出貨狀態登載來的（installed 且還帶著出貨單號；在庫認領的 installed 一定沒有出貨單號，
         所以旗標全程關時永遠不會進這個分支）⇒ 該出貨單**仍是已核准**就回到 shipped（保留案號與出貨單號）；
         出貨單已不是已核准（被撤銷／作廢）⇒ 回在庫並清掉出貨單號。"""
+        _held = conn.execute("SELECT id, part_no, quote_no FROM stock_items WHERE serial_no=? AND status='installed' AND case_device_id=?", (sn, device_id)).fetchone() if _ev.ledger_on(conn) else None
         conn.execute("""
             UPDATE stock_items
             SET status='shipped', case_device_id='', updated_at=?
@@ -755,6 +846,10 @@ class _StockSerials:
             SET status='in_stock', quote_no='', shipping_note_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
             WHERE serial_no=? AND status='installed' AND case_device_id=?
         """, (now, sn, device_id))
+        if _held is not None:
+            _after = conn.execute("SELECT status FROM stock_items WHERE id=?", (_held["id"],)).fetchone()
+            _ev.record(conn, event="release", part_no=_held["part_no"], serial_no=sn, stock_item_id=_held["id"], from_status="installed",
+                       to_status=(_after["status"] if _after else ""), quote_no=_held["quote_no"] or "", ref=str(device_id or ""), now=now)
 
 
 def _ship_install_ok(conn) -> bool:

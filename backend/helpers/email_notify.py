@@ -1930,12 +1930,17 @@ def notify_warranty_expiry(
     _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
 
 
-def _warranty_line_key(quote_no, sn, days_left) -> str:
+def _warranty_line_key(quote_no, sn, days_left, expiry_date="") -> str:
     """保固到期的 LINE「已推播」鑰匙：每張報價單＋每台設備（序號／MAC／名稱，**與 `case_deadlines` 的 `warranty_notif.*` 記號同一個 `sn`**）＋每個提醒階段（緊急／提早）只推一次。
     不能用顯示名：同一張單兩台同名設備會共用鑰匙，第二台被誤判成「已推過」。"""
     from helpers.alert_settings import warranty_mail_days
     urgent, early = warranty_mail_days()
-    return "warranty_expiry|%s|%s|%s" % (quote_no, sn, urgent if days_left <= urgent else early)
+    key = "warranty_expiry|%s|%s|%s" % (quote_no, sn, urgent if days_left <= urgent else early)
+    if expiry_date:                                                   # 一條龍 P3（旗標 onepipe.ship_device_warranty）：鑰匙含到期日，與 case_deadlines 的已通知記號同步；旗標關 ⇒ 舊鑰匙
+        from helpers import onepipe_flags
+        if onepipe_flags.flag_on("ship_device_warranty"):
+            key += "|" + str(expiry_date)[:10]
+    return key
 
 
 def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
@@ -1949,7 +1954,7 @@ def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_l
                                to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
                                link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
                                button_text=m["button_text"], note=m["intro"], wait=True, out=out,
-                               line_key=_warranty_line_key(quote_no, sn or device_name, days_left))
+                               line_key=_warranty_line_key(quote_no, sn or device_name, days_left, expiry_date))
     except Exception:
         logger.exception("_send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
         return False

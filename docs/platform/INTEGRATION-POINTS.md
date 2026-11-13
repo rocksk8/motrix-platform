@@ -711,6 +711,96 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-118　`stock.receive`：一站式到貨的入庫那一半（M01 案件 → M03 庫存；暫定號，列車定號；2026-11-14，T85 一條龍 P2a）
+
+案件側的到貨確認（一站式到貨，P2b）與庫存側入庫在**同一筆交易**：案件開寫入交易、確認到貨，再呼叫本提供者把序號寫進庫存，一起 commit。提案 `PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md` §2.3、決策 D1＝A（入庫或直送）、D9。旗標 `onepipe.receive_ledger`。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/receive.py::receive` |
+| 使用方 | M01 案件：一站式到貨端點（P2b） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.receive", "supply"): receive`；取用：`fn = registry.single_provider("stock.receive")`；`None` ⇒ 只做案件那一半。`fn(conn, quote_no, lines, caller) -> {"ok", "batches": [{"batchNo", "partNo", "materialItemId", "poDocCode", "mode", "written", "rows": [{"serialNo", "status", "reason"}]}], "written", "rejected"}`；`lines`＝`[{"partNo", "materialItemId", "poDocCode", "supplierId", "invoiceNo", "cost", "note", "mode": "stock"｜"direct"｜"consumable", "serials": [{"serialNo", "mac", "note"}]}]` |
+| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct`／`consumable`（耗材，D2＋D8＝A）只留一筆批次表頭（`delivery_mode='direct'`／`'consumable'`），不建序號列，讓對帳表視為已處理；`consumable` **不需入庫權限**（全部是耗材時略過 `NO_PERMISSION`）；同一筆材料申請已有同方式批次 ⇒ 該列不寫（回 `error`，分批到貨由呼叫端帶 `additional=True`）；`materialItemId` 有給且 M01 在時，必須是該案件已確認到貨的材料申請（經 IP-110 `material.shippable`），否則該列不寫（回 `error`）；`caller=None` ＝可信的內部呼叫端，API 處理函式不可傳 None |
+| 交易契約 | **吃呼叫端的連線、不 commit**（比照 IP-19 的 `claim`／`release`）；呼叫端須先 `begin_write` 拿寫鎖，重複序號檢查與寫入才在同一把鎖內 |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，案件只做自己那一半並明示；對帳表（`GET /api/inventory/reconcile`）列出「案件已到貨、庫存還沒有」的材料申請 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py` |
+
+---
+
+## IP-119　`material.received_list`：已確認到貨的材料申請清單（M01 案件 → M03 入庫對帳表；暫定號，列車定號；2026-11-14，T85 一條龍 P2a）
+
+入庫對帳表（`GET /api/inventory/reconcile`，旗標 `onepipe.receive_ledger`，限管理員）用：列出案件側已確認到貨的材料申請，庫存側扣掉已有入庫或直送紀錄的，剩下的就是待補入庫。**唯讀、沒有任何金額欄位**；不做案件可見性檢查（呼叫端限管理員）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/material_received.py::received_items` |
+| 使用方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::reconcile` |
+| 形式 | provider，單一提供者（名稱 `case`） |
+| 語法 | 提供：`("material.received_list", "case"): received_items`；取用：`fn = registry.single_provider("material.received_list")`；`None` ⇒ 對帳表回空清單（`caseAvailable=false`）。`fn(conn, since, limit, offset=0) -> [{"quoteNo", "itemId", "docCode", "name", "unit", "appliedQty", "receivedOn", "receivedBy"}]`（到貨日新到舊；`since` 為 YYYY-MM-DD） |
+| 回傳 | 只含已核准且已確認到貨（`received_on` 非空）的材料申請，條件同 IP-110 `material.shippable` |
+| 對方不在時 | M01 不在 ⇒ 空清單；M03 不在 ⇒ 沒有對帳表 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py` |
+
+---
+
+## IP-122　`stock.receive_undo`：撤銷到貨確認時收回庫存那一半（M01 案件 → M03 庫存；暫定號，列車定號；2026-11-14，T85 一條龍 P2b）
+
+案件側撤銷「確認到貨」（`DELETE /api/quotations/{no}/material-orders/{item}/receive`，旗標 `onepipe.receive_wizard` 開）時，庫存側一起收回：直送、耗材、沒有序號列的入庫批次表頭直接刪除（重新登載不會被「已登載過」擋住、對帳表不留殘影）；**已有為這筆材料申請入庫的序號（不論現在狀態），或批次已登記付款 ⇒ 擋下、整筆不動**，請先在庫存處理。被刪的只有沒有序號、沒有成本的表頭（直送／耗材／空入庫表頭），所以案件側的使用者（不需庫存權限）可觸發。決策 D1、D7；P2b 審查（h9／PM）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/receive.py::undo_receipt` |
+| 使用方 | M01 案件：`modules/case/api/material_approvals.py::receive_undo` |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.receive_undo", "supply"): undo_receipt`；取用：`fn = registry.single_provider("stock.receive_undo")`；`None` ⇒ 只撤銷案件那一半。`fn(conn, quote_no, item_id, caller) -> {"ok": True, "removed": N}`｜`{"ok": False, "reason": "DISABLED"}`｜`{"ok": False, "reason": "BLOCKED", "message": …}` |
+| 回傳 | `BLOCKED` ⇒ 呼叫端回 409 並**不 commit**（同一筆交易回滾）；`DISABLED`（旗標 `onepipe.receive_ledger` 關）⇒ 不動庫存 |
+| 交易契約 | **吃呼叫端的連線、不 commit**；呼叫端須先 `begin_write` |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，只撤銷案件那一半 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py` |
+
+
+---
+
+## IP-120　`stock.shipped_serials`：案件已出貨、尚未登載成設備的序號（M03 庫存 → M01 案件設備頁；暫定號，列車定號；2026-11-14，T85 一條龍 P3）
+
+案件設備頁的「從出貨帶入」用：列出這個案件已出貨（狀態 `shipped`）、還沒被認領成設備的序號，與這個案件最早的出貨日（含已安裝的序號），讓案件側預填設備與保固起始日（決策 D4＝A：預設出貨日、只預填、由人確認）。旗標 `onepipe.ship_device_warranty`。**唯讀、沒有任何金額欄位。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/serial_view.py::shipped_serials` |
+| 使用方 | M01 案件：`modules/case/device_warranty.py::prefill`（`GET /api/quotations/{no}/device-prefill`） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.shipped_serials", "supply"): shipped_serials`；取用：`fn = registry.single_provider("stock.shipped_serials")`；`None` ⇒ 預填清單空、`available=false`。`fn(conn, quote_no, caller=None) -> {"serials": [{"partNo", "name", "serialNo", "mac", "shipDate", "noteNo"}], "firstShipDate": "YYYY-MM-DD"｜""}` |
+| 回傳 | 旗標關 ⇒ 空；`caller` 有給時需有庫存同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），否則 403；`None`＝可信內部呼叫端。**案件可見性由案件側先檢查**（supply 不認識案件成員） |
+| 交易契約 | 唯讀、不 commit |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，設備頁只是沒有「帶入」清單 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p3_device_warranty_2026_11_14.py` |
+
+---
+
+## IP-121　`stock.serial_history`：序號的來去歷史（M03 庫存 → M01 案件設備頁；暫定號，列車定號；2026-11-14，T85 一條龍 P3）
+
+案件設備頁與庫存頁查一個序號從「入庫異動紀錄」（P2a，`onepipe.receive_ledger`）啟用日起的異動（入庫、出貨、安裝、退回…）。**只有啟用日起有資料，無法回補**；旗標 `onepipe.ship_device_warranty` 或 `receive_ledger` 關 ⇒ 空。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/serial_view.py::serial_history` |
+| 使用方 | M01 案件：`modules/case/device_warranty.py::history`（`GET /api/quotations/{no}/device-history`）；M03 自己的 `GET /api/inventory/serial-history` |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.serial_history", "supply"): serial_history`；取用：`fn = registry.single_provider("stock.serial_history")`；`None` ⇒ 沒有歷史。`fn(conn, part_no, serial_no, caller=None, quote_no="") -> [{"event", "fromStatus", "toStatus", "quoteNo", "ref", "reason", "actor", "at"}]`（舊到新；`part_no` 可空＝只用序號查，案件設備只以序號認領庫存） |
+| 回傳 | 沒給 `quote_no`：`quoteNo`、`ref`、`reason`、`actor` 是**原樣**（可能是別的案件），只給有庫存權限的呼叫端。給了 `quote_no`（案件頁）：序號與該案件沒有庫存關係（庫存裡綁該案件的已出貨／已安裝序號，或異動紀錄帶有該案件編號）⇒ 空；不是本案的每一筆異動（**含沒有案件編號的**——入庫批號、撤銷備註是自由文字）一律把 `ref`／`reason`／`actor` 清空，別案編號只標「其他案件」。沒有任何金額欄位 |
+| 交易契約 | 唯讀、不 commit |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，歷史查詢入口顯示「沒有紀錄」 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p3_device_warranty_2026_11_14.py` |
+
+---
+
 ## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）
 
 主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `modules/accounting/api/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。

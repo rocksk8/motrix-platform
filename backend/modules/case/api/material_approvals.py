@@ -24,9 +24,11 @@ from modules.case import purchase_items as _PI
 from modules.case import material_guard as _MG
 _MG.LINK_VALIDATOR = _PI.link_validator                         # 32-S4：儲存時的連結檢查（material_guard 的接縫）
 from helpers.case_access import require_case
+from helpers import onepipe_flags
 from helpers.auth import require_any_module
 from helpers.financial_mask import money_visible, material_money_visible
 from modules.case import material_approval as MA
+from modules.case import material_receive as MR   # 一條龍 P2b：一站式到貨登載
 from modules.case import material_notify as MN
 from modules.case import material_shipping_view as _MSV   # 34-S3：出貨連動（只經 M03 提供者）
 from modules.case import item_shipped as _IS               # 第 43 班：報價品項的已出貨數量（只經 M03 提供者）
@@ -66,7 +68,7 @@ def _info(row, q, order, quote_no):
     return {"docCode": row["doc_code"], "quoteNo": quote_no, "itemName": (order or {}).get("itemName") or ""}
 
 
-def _summary(row) -> dict:
+def _summary(row, with_qty=False) -> dict:
     if not row:
         return {"status": "", "legacy": True}
     try:
@@ -80,7 +82,8 @@ def _summary(row) -> dict:
             "requestedBy": appr.get("requestedByDisplay") or appr.get("requestedBy") or "", "tierCount": len(tiers), "currentTier": ct,
             "currentApprovers": cur, "rejectReason": appr.get("rejectReason") if row["status"] == MA.S_RETURNED else "",
             "receivedOn": row["received_on"], "receivedBy": row["received_by"], "receivedAt": row["received_at"],
-            "cancelReason": row["cancel_reason"] if row["status"] == MA.S_CANCELLED else ""}
+            "cancelReason": row["cancel_reason"] if row["status"] == MA.S_CANCELLED else "",
+            **({"receivedQty": row.get("received_qty")} if with_qty else {})}
 
 
 # ── 讀 ───────────────────────────────────────────────────────────────
@@ -94,7 +97,8 @@ def get_approvals(quote_no: str, authorization: str = Header(None)):
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no, scope="read")   # 2026-11-11：唯讀摘要、不含金額；案件頁讀得到的人（含持 cashier）就看得到
         rows = MA.rows_for_case(conn, quote_no)
-        return {"quoteNo": quote_no, "approvals": {str(o.get("itemId")): _summary(rows.get(str(o.get("itemId")))) for o in _orders(q)},
+        wiz = onepipe_flags.flag_on("receive_wizard", conn)                    # 一條龍 P2b：旗標開才多回已到數量（關＝與今天相同的鍵）
+        return {"quoteNo": quote_no, "approvals": {str(o.get("itemId")): _summary(rows.get(str(o.get("itemId"))), wiz) for o in _orders(q)},
                 "shipping": _MSV.summary_extra(conn, quote_no)}              # 34-S3：已申請／已到料／已出貨（占用中）＋出貨單號；只經提供者
     finally:
         conn.close()
@@ -321,6 +325,40 @@ def receive(quote_no: str, item_id: str, body: dict = Body(default={}), authoriz
     return {"ok": True, **res}
 
 
+@router.post(_BASE + "/receive-stock")
+def receive_stock(quote_no: str, item_id: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """一站式到貨登載（一條龍 P2b；旗標 `onepipe.receive_wizard`，關 ⇒ 404）：案件這一半（已到數量分批累計、到貨日）與庫存那一半（入庫／直送／耗材，經 IP-118）同一筆交易。
+    body：`{receivedOn, qty, mode: stock|direct|consumable, partNo, serials[]｜serialsText, unitCost?, invoiceNo?, note?, supplement?}`。
+    權限＝與「確認到貨」相同（案件擁有者規則）；入庫那一半另依入庫權限，沒有 ⇒ 只做案件這一半、回應 `stock.ok=false`（D9）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        if not onepipe_flags.flag_on("receive_wizard", conn):
+            raise HTTPException(404, "Not Found")
+        begin_write(conn)
+        q = _load_case(conn, quote_no)
+        require_case(user, q, quote_no)
+        order = _order(q, item_id)
+        try:
+            res = MR.receive_stock(conn, quote_no, item_id, order, body, user)
+        except MA.MaterialApprovalError as e:
+            raise _http(e)
+        row = MA.get(conn, quote_no, item_id)
+        conn.commit()
+        info = _info(row, q, order, quote_no)
+    finally:
+        conn.close()
+    st = res["stock"]
+    batches = [b.get("batchNo") for b in (st.get("batches") or []) if b.get("batchNo")]
+    mode_label = {"stock": "入庫", "direct": "直送客戶現場", "consumable": "耗材"}[res["mode"]]
+    what = "補入庫" if res["supplement"] else "到貨登載 %s（已到 %s／%s）" % (res["receivedOn"], res["receivedQty"], res["appliedQty"])
+    _audit(_tok(authorization), "material_orders.receive_stock", "quotation", quote_no,
+           "材料申請 %s（%s）%s，%s" % (info["docCode"], info["itemName"], what, mode_label),
+           {"docCode": info["docCode"], "mode": res["mode"], "supplement": res["supplement"], "receivedQty": res["receivedQty"], "batches": batches,
+            "written": st.get("written", 0), "rejected": st.get("rejected", 0), "stockOk": bool(st.get("ok")) if "ok" in st else None})
+    return {"ok": True, **res}
+
+
 @router.delete(_BASE + "/receive")
 def receive_undo(quote_no: str, item_id: str, authorization: str = Header(None)):
     """撤銷到貨確認（留稽核）。"""
@@ -331,6 +369,12 @@ def receive_undo(quote_no: str, item_id: str, authorization: str = Header(None))
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
         order = _order(q, item_id)
+        if onepipe_flags.flag_on("receive_wizard", conn):                         # 一條龍 P2b：庫存那一半一起收回（IP-122）；已有入庫序號 ⇒ 擋下、整筆不動
+            from core import registry
+            undo_stock = registry.single_provider("stock.receive_undo")
+            out = undo_stock(conn, quote_no, item_id, user) if undo_stock is not None else {"ok": True}
+            if out.get("reason") == "BLOCKED":
+                raise HTTPException(409, out.get("message") or "已有入庫的序號，請先在庫存處理後再撤銷到貨")
         try:
             res = MA.undo_receipt(conn, quote_no, item_id, user)
         except MA.MaterialApprovalError as e:

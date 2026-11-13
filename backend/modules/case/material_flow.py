@@ -17,6 +17,7 @@ from urllib.parse import quote as _urlquote
 from fastapi import HTTPException
 
 from core import registry as _registry
+from helpers import onepipe_flags
 
 STATES = ("inprogress", "done", "skipped", "na")
 _KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單"}
@@ -51,10 +52,25 @@ def _add_months(d, m):
     return date(y, mo, min(d.day, calendar.monthrange(y, mo)[1]))
 
 
+def _partial(received_qty, applied):
+    """只到部分（已到數量有值、且小於申請數量）⇒ `{"partial": True, "receivedQty", "appliedQty"}`；沒填（舊的確認到貨）或已到齊 ⇒ `{}`。"""
+    try:
+        got, want = float(received_qty), float(applied)
+    except (TypeError, ValueError):
+        return {}
+    if got < want - 1e-9:
+        return {"partial": True, "receivedQty": int(got) if got.is_integer() else got, "appliedQty": int(want) if want.is_integer() else want}
+    return {}
+
+
 def _call_and_arrive(conn, quote_no, data):
     names = {str(o.get("itemId")): o.get("itemName", "") for o in ((data.get("caseRecord") or {}).get("materialOrders") or []) if isinstance(o, dict)}
-    rows = conn.execute("SELECT item_id, doc_code, status, received_on FROM case_material_approvals WHERE quote_no=? AND status<>'已作廢' ORDER BY doc_code, item_id", (quote_no,)).fetchall()
+    wiz = onepipe_flags.flag_on("receive_wizard", conn)                                    # 一條龍 P2b：已到數量（分批累計）旗標開才讀、才顯示
+    qtys = {str(o.get("itemId")): o.get("quantity") for o in ((data.get("caseRecord") or {}).get("materialOrders") or []) if isinstance(o, dict)}
+    rows = conn.execute("SELECT item_id, doc_code, status, received_on" + (", received_qty" if wiz else "")
+                        + " FROM case_material_approvals WHERE quote_no=? AND status<>'已作廢' ORDER BY doc_code, item_id", (quote_no,)).fetchall()
     items = [{"docCode": r["doc_code"] or "", "name": names.get(str(r["item_id"]), ""), "status": r["status"] or "", "receivedOn": r["received_on"] or ""} for r in rows]
+    partial = {id(i): (_partial(r["received_qty"], qtys.get(str(r["item_id"]))) if wiz else {}) for i, r in zip(items, rows)}
     if not items:
         return _cell("call", "材料申請", "na", "尚無材料申請單"), _cell("arrive", "到貨", "na", "尚無材料申請單")
     approved = [i for i in items if i["status"] == "已核准"]
@@ -62,10 +78,12 @@ def _call_and_arrive(conn, quote_no, data):
                  "%d 張材料申請單，%d 張已核准" % (len(items), len(approved)), items)
     if not approved:
         return call, _cell("arrive", "到貨", "na", "材料申請單核准後才會有到貨")
-    got = [i for i in approved if i["receivedOn"]]
+    got = [i for i in approved if i["receivedOn"] and not partial[id(i)]]
+    part = [i for i in approved if i["receivedOn"] and partial[id(i)]]
     arrive = _cell("arrive", "到貨", "done" if len(got) == len(approved) else "inprogress",
-                   "%d 張已核准的材料申請單，%d 張已到貨" % (len(approved), len(got)),
-                   [{"docCode": i["docCode"], "name": i["name"], "arrived": bool(i["receivedOn"]), "receivedOn": i["receivedOn"]} for i in approved])
+                   "%d 張已核准的材料申請單，%d 張已到貨" % (len(approved), len(got)) + ("；%d 張只到部分" % len(part) if part else ""),
+                   [{"docCode": i["docCode"], "name": i["name"], "arrived": bool(i["receivedOn"]) and not partial[id(i)], "receivedOn": i["receivedOn"],
+                     **({"receivedQty": partial[id(i)]["receivedQty"], "appliedQty": partial[id(i)]["appliedQty"]} if partial[id(i)] else {})} for i in approved])
     return call, arrive
 
 
@@ -94,6 +112,14 @@ def _stock(conn, quote_no, user):
     except Exception:                                                # noqa: BLE001 — 供應端壞了只影響這一格
         return _cell("stock", "入庫", "na", "庫存暫時讀不到", unavailable=True)
     ins, shp = int(s.get("installed") or 0), int(s.get("shipped") or 0)
+    if "receivedInStock" in s:                                       # 一條龍 P2a（旗標 onepipe.receive_ledger 開）：入庫格完整（提案 §2.2 ④）
+        rec, direct = int(s.get("receivedInStock") or 0), int(s.get("directBatches") or 0)
+        if not (ins or shp or rec or direct):
+            return _cell("stock", "入庫", "na", "目前沒有這個案件的入庫紀錄")
+        text = "已入庫尚未認領 %d 台、已安裝 %d 台、已出貨 %d 台" % (rec, ins, shp) + ("；%d 批直送客戶現場" % direct if direct else "")
+        return _cell("stock", "入庫", "inprogress", text,
+                     [{"partNo": p.get("partNo", ""), "inStock": int(p.get("inStock") or 0), "installed": int(p.get("installed") or 0), "shipped": int(p.get("shipped") or 0)}
+                      for p in (s.get("parts") or [])])
     if not (ins or shp):
         return _cell("stock", "入庫", "na", "目前沒有這個案件的序號；已入庫但尚未認領的，第 2 階段後提供")
     return _cell("stock", "入庫", "inprogress", "已安裝 %d 台、已出貨 %d 台；已入庫但尚未被這個案件認領的，第 2 階段後提供" % (ins, shp),
