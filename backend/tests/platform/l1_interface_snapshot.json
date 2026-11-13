@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.166",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",

@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正、守門補登與 case_summary 註記；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同））；已併 T82 凍結 head f66dfd9ef
+## 1.0.40 — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正、守門補登與 case_summary 註記；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同））；已併 T82 凍結 head f66dfd9ef
 - **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
 - 守門補登：`modules.json` 補歸屬（M03：`supply/case_summary`）；未經範圍讀取基準登記 `release`／`case_summary` 兩筆（理由見 `test_unscoped_reads_ratchet.py` 的 MAX_ENTRIES 註解）。
 - `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。

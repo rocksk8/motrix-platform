@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
+## 1.0.229 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
 - 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
 - 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。
 - 一條龍 P4b-③ 案件頁「登載」統一入口（旗標 `onepipe.entry_unify`）：案件頁連結列多一行「登載：留言／工作日誌、階段出勤、每日工作事項」，只是捷徑、不合併資料表——留言／工作日誌＝切到「動態」並把游標放進發文框（依填的欄位寫留言或日誌，原本行為）；階段出勤＝切到「執行管理 › 執行進度」（各階段「新增記錄」已預填今天與人次，見 P4b-①）；每日工作事項＝`daily-tasks.html?case_no=<案號>`。每個選項只在這個人真的能做時才出現（依動態／執行管理／進度的顯示權限與每日工作事項模組）。旗標關 ⇒ 整行不出現。純前端，無新端點。
@@ -17,7 +17,7 @@
 - 補登的歷史案件（T70 `approval.historical`）即使結案也排除；已結案那一段任何例外都被隔離，不影響進行中案件原本的通知；已結案查詢不用 `json_extract`（Python 判斷，棘輪不增）。行事曆對帳 `_sync_warranty_calendar` 與進行中案件查詢不動。
 - 測試：`tests/test_onepipe_warranty_closed_2026_11_13.py`（旗標關不寄且不寫記號、首次靜默、新跨門檻只寄一次、已過期永不寄、關→開重建基準、歷史案排除、錯誤隔離、暫時寄送失敗隔天補寄；變異驗證：拿掉截止日／靜默記號皆會紅）。
 
-## 1.0.227（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+## 1.0.228（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）〔train_number：1.0.227 → 1.0.228〕
 - 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
 - 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
 

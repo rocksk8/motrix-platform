@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next) — 2026-11-13（feat/upload-files-txn-4；T86；版號由列車取）
+## 1.2.7 — 2026-11-13（feat/upload-files-txn-4；T86；版號由列車取）
 - 修正（內部，API 路徑與回應形狀不變）：業務開發記錄刪附件（`DELETE /dev-logs/{id}/files/{fid}`）改用 `remove_json_item`（鎖內重讀、commit 後才刪實體檔，並發補附件不被整包覆寫）；刪整筆記錄（`DELETE /dev-logs/{id}`）原本在 commit 之前刪檔，改為同一把寫鎖內讀＋DELETE、commit 之後才刪（路徑經 `canonical_upload_path` 驗證）。 測試：`tests/test_upload_files_txn4_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（feat/upload-files-txn-2；T84；版號由列車取）**
 - 變更（內部，API 路徑與回應形狀不變）：業務開發記錄（`POST /api/dev-cases/{id}/logs`）改用 `helpers.uploads.files_txn`：寫庫失敗，或案件在上傳途中被刪（鎖內重查 `is_deleted=0`，回 404），都回收剛存的檔。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
