@@ -154,6 +154,10 @@ def read_gate(path=None, now=None):
     try:
         d = json.loads(Path(path or gate_path()).read_text(encoding="utf-8"))
         if isinstance(d, dict) and d.get("window") and d.get("token") and float(d.get("expires", 0)) > now:
+            # 行程綁定的鎖（run-stage 自己取的，帶 holder_pid）：持有者行程死了 ⇒ 視為沒有鎖（被殺、當機都不會把全機擋到 TTL 才放）。
+            # 整合者顯式取的鎖不帶 holder_pid（取鎖的 CLI 當下就結束了）⇒ 照舊只看 TTL。
+            if d.get("holder_pid") is not None and not pid_alive(d.get("holder_pid")):
+                return None
             return d
     except (OSError, ValueError, TypeError):
         pass
@@ -173,8 +177,9 @@ def _gate_write(path: Path, d: dict, exclusive=False):
     os.replace(tmp, str(path))
 
 
-def gate_acquire(window, note="", ttl=GATE_TTL_SECONDS, path=None, now=None, force=False):
-    """取鎖 ⇒ (ok, lock)。已有別人的有效鎖 ⇒ (False, 對方的鎖)（force ⇒ 蓋掉）；同一視窗再取 ＝ 續期（token 不變）。"""
+def gate_acquire(window, note="", ttl=GATE_TTL_SECONDS, path=None, now=None, force=False, holder_pid=None):
+    """取鎖 ⇒ (ok, lock)。已有別人的有效鎖 ⇒ (False, 對方的鎖)（force ⇒ 蓋掉）；同一視窗再取 ＝ 續期（token 不變）。
+    `holder_pid`：把鎖綁在一個行程上（read_gate 見到該行程已死就當沒有鎖）。run-stage 自己取鎖用它；整合者用 CLI 取的不綁。"""
     path = Path(path or gate_path())
     now = time.time() if now is None else now
     cur = read_gate(path, now)
@@ -183,6 +188,10 @@ def gate_acquire(window, note="", ttl=GATE_TTL_SECONDS, path=None, now=None, for
     token = cur["token"] if cur and cur["window"] == window else "%08x%08x" % (int(now) & 0xFFFFFFFF, os.getpid() * 2654435761 & 0xFFFFFFFF)
     d = {"window": window, "token": token, "note": note or (cur or {}).get("note", ""), "pid": os.getpid(),
          "since": (cur or {}).get("since", now) if cur and cur["window"] == window else now, "expires": now + float(ttl)}
+    if holder_pid is not None:
+        d["holder_pid"] = int(holder_pid)
+    elif cur and cur["window"] == window and cur.get("holder_pid") is not None:
+        d["holder_pid"] = cur["holder_pid"]                     # 續期不掉綁定
     if cur is None:
         try:
             path.unlink()                                       # 過期／壞檔 ⇒ 先清掉再用 O_EXCL 搶（兩人同時取鎖只有一個贏）
@@ -217,6 +226,29 @@ def gate_exempt(cls, window, lock, env=None) -> bool:
         return True
     env = os.environ if env is None else env
     return cls == "official" or window == lock["window"] or (bool(env.get(GATE_TOKEN_ENV)) and env.get(GATE_TOKEN_ENV) == lock["token"])
+
+
+def light_run_verdict(env=None, lock=None, collect_only=False):
+    """純函式（conftest 的 `_refuse_light_run_during_gate` 用）：閘門鎖持有期間，一輪**輕的**臨時 pytest（單檔、單 worker）要不要放行 ⇒ (level, 訊息)。
+    T82 的教訓：e2e 對時序敏感，閘門期間任何額外的 pytest（含單檔）都會分走 CPU，PM 得人工通知全視窗暫停 ⇒ 改成閘門鎖一持有就自動拒絕。
+    level：ok／refuse。放行：
+    - 沒有閘門鎖；`--collect-only`（數秒、不跑題）；MOTRIX_QUEUE_GUARD=0（與 direct_run_verdict 同一個總開關）。
+    - 閘門持有者：token 對、或 MOTRIX_WINDOW＝持有者視窗。
+    - 閘門／建包自己的子行程：有 MOTRIX_CI_TICKET（heavy_run 排過隊）或 BUILD_CHILD／EXCLUSIVE_OWNER。
+    - 題目自己起的巢狀 pytest：環境帶 PYTEST_CURRENT_TEST（父行程是一輪正在跑的 pytest，它自己已經通過這道檢查）。"""
+    env = os.environ if env is None else env
+    if not lock or collect_only or env.get("MOTRIX_QUEUE_GUARD") == "0":
+        return "ok", ""
+    if env.get(CI_TICKET_ENV) or any(env.get(k) for k in ("MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_EXCLUSIVE_OWNER")):
+        return "ok", ""
+    if env.get("PYTEST_CURRENT_TEST"):
+        return "ok", ""
+    if (env.get(GATE_TOKEN_ENV) and env.get(GATE_TOKEN_ENV) == lock["token"]) or (env.get("MOTRIX_WINDOW") and env.get("MOTRIX_WINDOW") == lock["window"]):
+        return "ok", ""
+    return "refuse", ("%s。閘門期間全機安靜：e2e 對時序敏感，額外的 pytest（含單檔）會讓閘門偶發紅、整段重來 ⇒ 這一輪不開始。"
+                      "等閘門放鎖後再跑（`python tools/platform/heavy_run.py --status` 看進度）；"
+                      "你就是閘門持有者：設 MOTRIX_WINDOW=%s；真的非跑不可（知道後果）：設 MOTRIX_QUEUE_GUARD=0。"
+                      % (gate_line(lock), lock["window"]))
 
 
 def gate_line(lock, now=None) -> str:
