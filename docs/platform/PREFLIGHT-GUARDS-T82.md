@@ -123,3 +123,13 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
 `run-stage` 真的跑的時候**自己持有閘門鎖**（沒人持有才取；綁行程 `holder_pid`，被殺就不再擋；TTL 3 小時兜底；跑完放；別人已持有就不動）。整合者顯式取的鎖不綁行程、照舊靠 TTL。
 測試：`tests/platform/test_gate_retry_failed_and_quiet_2026_11_13.py`。
 **已知限制（h10 審查）**：①任何**真跑**的 run-stage（`--no-failfast` 診斷跑除外）都會持有閘門鎖整段（15～30 分鐘）⇒ 這段時間其他視窗的 pytest 被拒絕——這是設計；診斷用 `--no-failfast`（不重試、不取鎖）。②單程序重試會洗掉「順序污染」型的紅（例如同 worker 前一題留下的 audit_log 列）——這類交給污染偵測器（h4）；run-stage 對同一題 24 小時內重試達 3 次以上會在結束訊息警告，累計看 `retry-counts`。③「綠（重試 k 題）」會標在 run-stage 結束訊息、`explain`、建包沿用訊息與 manifest verification（儀表板的建包閘門讀的是 modtest 全量結果，不經 run-stage 紀錄）。
+
+## 升級演練只在正式閘門跑（`gate_only`，2026-11-13 chore/test-prune）
+`tests/test_upgrade_drill_2026_09_25.py`（2 題）與 `tests/platform/test_stepfile_drill_2026_09_30.py`（7 題）合計約 100 秒，標了 `gate_only`（整檔 pytestmark）。
+- **跑不跑看環境變數 `MOTRIX_GATE_OFFICIAL`**：等於 `1` 才跑，否則 conftest（`_skip_gate_only`，掛在既有的 `pytest_collection_modifyitems` 上）把它們 skip。
+- **只有兩條正式閘門路徑會設 1**：`heavy_run --class official -- …`（子行程）與建包／`run-stage`（`build_test_reuse.run_stage`）。
+  守門題組、`--keep-going` 預跑、自己直接跑 pytest／`modtest --full`、`heavy_run` 的其他級別都不設 ⇒ 跳過（顯示 9 skipped）。
+- **跳過演練的綠燈不能當建包證據**：沒設 1 的 `modtest --full` 在結果檔記 `gate_official: false`，**不寫建包沿用紀錄**，建包會自己重跑。
+  ⇒ 要讓建包沿用，請用 `python tools/platform/heavy_run.py --class official --window <我> -- python tools/platform/modtest.py --full`（或直接 run-stage／建包）。
+- 該旗標不進建包指紋（`_ENV_IGNORE`），不然 official 與非 official 的紀錄永遠對不上。
+- 守門：`tests/platform/test_gate_only_wiring_2026_11_13.py`（標記有註冊、兩檔都帶、只有一個同名 hook、兩條路徑都設 1、非 official 票不繼承 1、modtest 非 official 不寫紀錄）。

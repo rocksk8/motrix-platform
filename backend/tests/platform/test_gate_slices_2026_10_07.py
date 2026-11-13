@@ -208,9 +208,19 @@ def test_user_set_env_wins_over_gate_defaults(monkeypatch):
 def test_evidence_windows_cover_both_slices(monkeypatch):
     """沿用紀錄的證據要涵蓋兩片：main 的 windows 是 [slice0, 其餘]。"""
     seen = {}
+    monkeypatch.setenv("MOTRIX_GATE_OFFICIAL", "1")                # 只有正式閘門才寫建包沿用紀錄（2026-11-13 gate_only）
     monkeypatch.setattr(MT, "stream_evidence", lambda run, windows, stream_dir=None: seen.update(windows) or {})
     _run(monkeypatch, {}, [])
     assert seen["main"] == ["ws0", "w"] and seen["e2e"] == "we2e"
+
+
+def test_non_official_run_does_not_write_the_build_reuse_record(monkeypatch):
+    """反向控制：沒設 MOTRIX_GATE_OFFICIAL=1（升級演練被 gate_only 跳過）⇒ 不收集證據、不寫沿用紀錄。"""
+    seen = {}
+    monkeypatch.delenv("MOTRIX_GATE_OFFICIAL", raising=False)
+    monkeypatch.setattr(MT, "stream_evidence", lambda run, windows, stream_dir=None: seen.update(windows) or {})
+    _run(monkeypatch, {}, [])
+    assert not seen, "非正式閘門不該去收建包沿用的證據"
 
 
 def test_stream_evidence_accepts_a_list_of_windows(tmp_path):
