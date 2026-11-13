@@ -71,7 +71,8 @@ SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
 #: 有送信、而**刻意不掃**的檔：`{路徑: 理由}`。理由不可以空白；清單裡的檔必須仍是送信檔（過期要刪）。
 #: 📌 與 SCAN_FILES 合起來＝「送信檔都有人決定過」（`test_every_mail_sender_is_classified`）。
 NOT_SCANNED = {
-    # helpers/email_notify.py 以外的送信原語都在它裡面；目前沒有刻意不掃的檔
+    # helpers/email_notify.py 以外的送信原語都在它裡面；刻意不掃的檔只有下面這一支
+    "helpers/email_setup.py": "寄信精靈（menu-ux-3）的純函式：只為了 isinstance(exc, smtplib.SMTPAuthenticationError) 等錯誤分類而 import smtplib，自己不寄任何信（真正的測試信走 routers/system.py，已在 SCAN_FILES）；它產出的錯誤說明與「求助單」文字是畫面／給維護者的單據，不是寄給非維護者的信件文案。",
 }
 
 #: `GW2`：異常／失敗類通知要答的四個問題。
