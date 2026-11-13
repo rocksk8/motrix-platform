@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>我的帳號 — MOTRIX 專案管理系統</title>
+  <title>我的帳號 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -41,6 +41,29 @@
     .totp-secret{font-family:monospace;font-size:13px;letter-spacing:.05em;background:#F9FAFB;border:1px solid var(--border-light);border-radius:6px;padding:8px 10px;word-break:break-all;margin-bottom:4px}
     .recovery-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0;font-family:monospace;font-size:13px}
     .recovery-code{background:#F9FAFB;border:1px solid var(--border-light);border-radius:6px;padding:6px 10px;text-align:center}
+    /* 手機／平板直式（2026-11-12 UI 檢查，原在 change-password.html，改成轉址頁後搬到這裡——只套「帳號安全」分頁）：
+       卡片內距 32px 在 375px 把輸入框壓到 ~245px 寬；輸入 13px（iOS 自動放大）、
+       次要按鈕（取消／改名／刪除）只有 ~30px 高、並排時間距 8px 易誤觸（刪除通行金鑰就在改名旁）。
+       高度與字級除以 --fz（字級縮放倍率，同頂欄按鈕做法），縮放後實際畫面仍 ≥ 44px／16px。 */
+    @media (max-width:767px){
+      .page-main{padding:16px 12px 28px}
+      [data-testid="tab-security"] .card{padding:18px 16px;max-width:none}
+      [data-testid="tab-security"] .form-input{font-size:calc(16px / var(--fz, 1)) !important;min-height:calc(46px / var(--fz, 1)) !important}   /* !important：style.css 的「表單控制項 40px」通則用 :not() 鏈、特異度比這裡高 */
+      [data-testid="tab-security"] .btn-primary,[data-testid="tab-security"] .btn-secondary{min-height:calc(46px / var(--fz, 1));padding-left:18px;padding-right:18px;width:100%}
+      [data-testid="tab-security"] .btn-secondary[style*="margin-left"]{margin-left:0 !important;margin-top:10px}
+      [data-testid="tab-security"] .btn-secondary[style*="margin-top:8px"]{margin-top:10px !important}
+      [data-testid="tab-security"] .btn-mini{min-height:calc(40px / var(--fz, 1));min-width:56px;padding:8px 14px}
+      [data-testid="tab-security"] .btn-mini + .btn-mini{margin-left:10px}
+      [data-testid="tab-security"] .form-input[style*="max-width:200px"]{max-width:none !important}
+      [data-testid="tab-security"] .totp-qr{margin-left:auto;margin-right:auto}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:22px 20px}
+      [data-testid="tab-security"] .form-input{min-height:calc(42px / var(--fz, 1))}
+      [data-testid="tab-security"] .btn-primary,[data-testid="tab-security"] .btn-secondary{min-height:calc(42px / var(--fz, 1))}
+      [data-testid="tab-security"] .btn-mini{min-height:calc(36px / var(--fz, 1));padding:6px 12px}
+      [data-testid="tab-security"] .btn-mini + .btn-mini{margin-left:10px}
+    }
   </style>
 </head>
 <body x-data="changePwPage()" x-init="init()" x-cloak>
@@ -124,7 +147,7 @@
           <div class="totp-secret" x-text="totp.secret"></div>
           <div class="form-group" style="margin-top:14px;margin-bottom:12px">
             <label class="form-label">驗證 App 顯示的 6 位數驗證碼</label>
-            <input class="form-input" type="text" inputmode="numeric" x-model="totp.code"
+            <input class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code" x-model="totp.code"
                    placeholder="123456" style="max-width:160px">
           </div>
           <button class="btn-primary" @click="totpConfirm()" :disabled="totp.busy">
@@ -296,7 +319,7 @@
         <span class="totp-badge" :class="linked ? 'totp-on' : 'totp-off'" x-text="linked ? '已綁定' : '未綁定'"></span>
       </div>
       <div class="card-sub">
-        綁定後，管理員開啟的通知（例如報價單審核中被編輯）除了 Email，也會推播到您的 LINE。綁定只用來辨識您的 LINE 帳號，不會取得您的暱稱或頭像。
+        綁定後，管理員開啟的通知（簽核、指派給您的事項、業務開發更新、系統告警等）會推播到您的 LINE；沒有 Email 也收得到。綁定只用來辨識您的 LINE 帳號，不會取得您的暱稱或頭像。
         <b>QR 等同您的綁定權限：不要截圖或分享。</b>若發現不是您本人的手機完成綁定，請立刻按「解除綁定」。
       </div>
       <div x-show="err" class="alert alert-err" x-text="err"></div>
@@ -322,11 +345,16 @@
       <!-- 我要收哪些 LINE 通知（個人勾選；預設全收，可自行退訂；只列「公司已開啟、且我的角色被允許」的類型）。資料來源 GET/PUT /api/line/prefs* -->
       <div x-show="linked && prefs.length" style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:12px" data-testid="line-prefs">
         <div style="font-size:13px;font-weight:600;margin-bottom:6px">我要收的 LINE 通知</div>
-        <template x-for="e in prefs" :key="e.key">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;cursor:pointer">
-            <input type="checkbox" :data-testid="'line-pref-' + e.key" :checked="e.enabled" @change="setPref(e, $event.target.checked)" style="width:15px;height:15px">
-            <span x-text="e.name"></span>
-          </label>
+        <template x-for="g in prefGroups" :key="g.name">
+          <div :data-testid="'line-pref-group-' + g.name" style="margin:8px 0 2px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:2px" x-text="g.name"></div>
+            <template x-for="e in g.events" :key="e.key">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;cursor:pointer">
+                <input type="checkbox" :data-testid="'line-pref-' + e.key" :checked="e.enabled" @change="setPref(e, $event.target.checked)" style="width:15px;height:15px;flex:none">
+                <span x-text="e.name"></span>
+              </label>
+            </template>
+          </div>
         </template>
         <div class="hint" style="margin-top:6px">取消勾選後，這類通知不再推播到您的 LINE（Email 不受影響）。</div>
       </div>
@@ -960,6 +988,17 @@
     return {
       available: false, linked: false, linkedAt: '', confirmed: null,
       qr: '', busy: false, err: '', ok: '', _timer: null, _until: 0, _before: '', prefs: [],
+      // 個人勾選依模組分組（後端 prefs_view 已依「簽核 → 業務開發 → 其餘」排好順序，這裡保持順序分段）
+      get prefGroups() {
+        const out = []
+        for (const e of this.prefs) {
+          const name = e.group || '其他'
+          let g = out.find(x => x.name === name)
+          if (!g) { g = { name, events: [] }; out.push(g) }
+          g.events.push(e)
+        }
+        return out
+      },
       async init() { await this.load() },
       async load() {
         const r = await fetch('/api/line/binding', { headers: hdr() })
