@@ -31,3 +31,31 @@ def test_home_count_list_and_badge_agree_and_follow_approval(live_server, make_u
     page.wait_for_function("() => document.querySelectorAll('[data-testid=home-mine-row]').length === 1", timeout=10000)
     assert page.locator('[data-testid=band-approvals] .h-band__n').inner_text().strip() == "1"
     assert client.get("/api/approval-queue/count", headers=h).json()["count"] == 1
+
+
+@pytest.mark.e2e
+def test_focus_before_stats_returns_still_refreshes_the_approval_count(live_server, make_user, e2e_browser, client):
+    """2026-11-13（PM）：init() 原本先 await 完 stats 才掛 focus 監聽，stats 慢的時候回到分頁的 focus 事件被丟掉、
+    「等我簽核」不更新。監聽要先掛、再 await：stats 還沒回來就觸發 focus，數字也要跟上。"""
+    u, p = make_user(username="w2h_early", role="admin")[:2]
+    make_user(username="w2h_early_s", role="sales")
+    _insert_pending_quotation("MQ-W2H-E01", "w2h_early_s", [["w2h_early"]])
+    _insert_pending_quotation("MQ-W2H-E02", "w2h_early_s", [["w2h_early"]])
+    ctx = e2e_browser.new_context(viewport={"width": 1440, "height": 900})
+    page = ctx.new_page()
+    held = []
+    page.route("**/api/dashboard/stats*", lambda route: held.append(route))      # stats 一直不回
+    sess = inject_login(page, live_server, u, p)
+    h = {"Authorization": "Bearer " + sess["token"]}
+    page.goto(f"{live_server}/index.html")
+    page.wait_for_function("() => window.__mineAt > 0", timeout=20000)             # 簽核數字那一趟已回來
+    page.wait_for_timeout(600)                                                      # 過了「事件 300 ms 內不重送」的窗
+    assert held, "stats 請求應該卡住了（測試前提）"
+    r = client.post("/api/quotations/MQ-W2H-E01/approve", headers=h, json={})
+    assert r.status_code == 200, r.text[:300]
+    page.evaluate("() => window.dispatchEvent(new Event('focus'))")               # stats 還沒回來就回到分頁
+    page.wait_for_function("() => window.__mineAt > 0 && !window.__mineInflight", timeout=10000)
+    for route in held:
+        route.continue_()                                                           # 這時才放行 stats
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=home-mine-row]').length === 1", timeout=15000)
+    assert page.locator('[data-testid=band-approvals] .h-band__n').inner_text().strip() == "1"

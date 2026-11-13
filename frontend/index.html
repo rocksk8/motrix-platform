@@ -1083,13 +1083,14 @@ feedCount(key) {
         this.now   = this.today + ' ' + MotrixFormat.dt(d, {hour:'2-digit',minute:'2-digit'})
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
+        // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）。
+        // ⚠ 監聽要在任何 await **之前**掛：stats 慢的時候使用者先回到分頁，focus 事件不能被丟掉（2026-11-13 PM）。
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
+        window.addEventListener('focus', () => this.loadApprovalMine(true))
+        window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
         await Promise.all([this.loadStats(), this.loadApprovalMine()])
         // A3：上手清單（等 stats 讀完才判定「報價單有沒有」）；從 ux-help.js 的「？」抽屜可重新打開
         this.loadChecklist()
-        window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
-        // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
-        window.addEventListener('focus', () => this.loadApprovalMine(true))
         this.monthly  = await this.loadMonthly()
         this.expenses = this.canFinance ? await this.loadExpenses() : []
         this.loadFunnel()
@@ -1131,9 +1132,18 @@ feedCount(key) {
       //  事件觸發的重讀 300 ms 內不再送；回應帶序號，只採用最後一次送出的（舊回應晚到不覆蓋新的）。
       //  ⚠️ Promise 放 window：Alpine 的 Proxy 包住 Promise 會 Illegal invocation。
       loadApprovalMine(fromEvent) {
-        if (window.__mineInflight) return window.__mineInflight
+        if (window.__mineInflight) {
+          // 那一趟若是事件之前很久就送出的（例如開頁面時那一趟），回應可能是舊的 ⇒ 它回來後補讀一次；
+          // focus＋visibilitychange 同時連發（300 ms 內）仍共用同一趟、不補讀。
+          if (fromEvent && Date.now() - (window.__mineStart || 0) >= 300) window.__mineDirty = true
+          return window.__mineInflight
+        }
         if (fromEvent && Date.now() - (window.__mineAt || 0) < 300) return Promise.resolve()
-        const p = this._loadApprovalMineOnce().finally(() => { window.__mineInflight = null; window.__mineAt = Date.now() })
+        window.__mineStart = Date.now()
+        const p = this._loadApprovalMineOnce().finally(() => {
+          window.__mineInflight = null; window.__mineAt = Date.now()
+          if (window.__mineDirty) { window.__mineDirty = false; this.loadApprovalMine() }
+        })
         window.__mineInflight = p
         return p
       },
