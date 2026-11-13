@@ -331,10 +331,6 @@
    "count": 1,
    "reason": "tmp: 報表 PDF 暫存檔"
   },
-  "modules/case/api/quotations.py": {
-   "count": 2,
-   "reason": "p2: 報價單留言／附件刪除"
-  },
   "modules/case/completion_pdf.py": {
    "count": 1,
    "reason": "tmp: PDF 暫存檔"

@@ -838,6 +838,10 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
         begin_write(conn)                          # 讀快照前先拿寫鎖
         row = _load(conn, quote_no, exp_id, user)  # 鎖內重讀：附件清單以這份為準（鎖外那份可能漏掉剛進來的附件 ⇒ 留孤兒）
+        if row["status"] not in EDITABLE_STATUSES:                       # 狀態與權限也在鎖內重驗（鎖外檢查後、拿鎖之前可能剛被送審／核准）
+            raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
         orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
         with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
