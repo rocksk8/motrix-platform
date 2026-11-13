@@ -31,6 +31,34 @@ def _depth_report(css):
     return d, lo, lines
 
 
+def _indent_violations(css):
+    """縮排對帳：整頁深度＝0 擋不到「這裡少一個 }、別處多一個 }」一來一回的錯。
+    頂層 @media 區塊內的每一行縮排必須比 @media 那行深；收尾的 } 必須與 @media 同縮排。
+    （頂層 @media 沒關好時，後面本來在最外層的規則縮排會 ≤ @media，立刻被抓。）"""
+    bad = []
+    media_indent = None
+    depth = 0
+    for n, raw in enumerate(_strip(css).split("\n"), 1):
+        ln = raw.strip()
+        ind = len(raw) - len(raw.lstrip(" "))
+        if not ln:
+            continue
+        if media_indent is None:
+            if depth == 0 and ln.startswith("@media") and ln.count("{") > ln.count("}"):
+                media_indent = ind
+        else:
+            if ln.startswith("}") and depth == 1:
+                if ind != media_indent:
+                    bad.append((n, "收尾 } 縮排 %d ≠ @media 縮排 %d" % (ind, media_indent)))
+            elif ind <= media_indent:
+                bad.append((n, "@media 區塊內的行縮排 %d 不比 @media（%d）深：%s" % (ind, media_indent, ln[:50])))
+        depth += ln.count("{") - ln.count("}")
+        if depth <= 0:
+            media_indent = None
+            depth = max(depth, 0)
+    return bad
+
+
 def _style_blocks(html):
     return re.findall(r"<style[^>]*>(.*?)</style>", html, re.S)
 
@@ -40,6 +68,23 @@ def test_every_style_block_is_balanced(p):
     for n, css in enumerate(_style_blocks(p.read_text(encoding="utf-8"))):
         final, lo, _ = _depth_report(css)
         assert final == 0 and lo >= 0, "%s 第 %d 個 <style> 括號不平衡（最後深度 %d、最低 %d）" % (p.name, n + 1, final, lo)
+
+
+@pytest.mark.parametrize("p", page_files(), ids=lambda p: p.name)
+def test_media_blocks_close_where_they_are_indented(p):
+    for n, css in enumerate(_style_blocks(p.read_text(encoding="utf-8"))):
+        assert not _indent_violations(css), "%s 第 %d 個 <style>：%s" % (p.name, n + 1, _indent_violations(css)[:3])
+
+
+def test_indent_check_catches_offsetting_errors():
+    """正對照：少一個 }（1023）又多一個 }（別處）⇒ 整頁深度仍 0，但縮排對帳要抓到。"""
+    css = ("    @media (max-width:1023px) {\n      a { x:y }\n"
+           "    .top { x:y }\n"
+           "    @media (max-width:767px) {\n      b { x:y }\n    }\n    }\n")
+    assert _depth_report(css)[0] == 0 and _depth_report(css)[1] >= 0
+    assert _indent_violations(css)
+    ok = "    @media (a) {\n      a { x:y }\n    }\n    .top { x:y }\n"
+    assert not _indent_violations(ok)
 
 
 def test_detector_catches_unclosed_media():
