@@ -156,7 +156,7 @@ function Release-TestExclusive {
         $info = Get-Content -Raw -Encoding UTF8 $script:TestExclusivePath | ConvertFrom-Json
         if ([int]$info.pid -eq $PID) { Remove-Item -LiteralPath $script:TestExclusivePath -Force }
     } catch {}
-    Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER, Env:\MOTRIX_PYTEST_BUILD_CHILD -ErrorAction SilentlyContinue
+    Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER, Env:\MOTRIX_PYTEST_BUILD_CHILD, Env:\MOTRIX_GATE_OFFICIAL -ErrorAction SilentlyContinue
 }
 
 function Invoke-PyTool([string[]]$ToolArgs) {
@@ -826,6 +826,8 @@ $env:MOTRIX_PYTEST_EXCLUSIVE = "1"
 $env:MOTRIX_PYTEST_EXCLUSIVE_OWNER = "$PID"
 # 建包自己的子行程（xdist worker、題目起的子 pytest、偶發重跑）認得這份登記；其他臨時 pytest 會被 conftest 拒絕
 $env:MOTRIX_PYTEST_BUILD_CHILD = "$PID"
+# 正式閘門（gate_only：升級演練只在這裡跑，2026-11-13）：建包自己跑的 pytest 必須帶這個旗標，否則演練靜靜被 skip 、卻記成綠
+$env:MOTRIX_GATE_OFFICIAL = "1"
 # 失敗先行出 log（tools/platform/fail_stream.py）：偶發重跑用它認出紅的是哪幾題；-NoFlakeRetry 時不載（舊行為）
 $buildRunId = "build_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$PID"
 $prevPyPath = $env:PYTHONPATH
@@ -949,6 +951,7 @@ if ($e2eExit -ne 0 -and -not $ffStopped["e2e"]) {
 }
 Pop-Location
 $env:PYTHONPATH = $prevPyPath
+Remove-Item Env:\MOTRIX_GATE_OFFICIAL -ErrorAction SilentlyContinue
 Remove-Item Env:\MOTRIX_FAIL_STREAM_RUN, Env:\MOTRIX_FAIL_STREAM_STAGE, Env:\MOTRIX_FAILFAST, Env:\MOTRIX_FAILFAST_N, Env:\MOTRIX_FAILFAST_QUIET_MIN, Env:\MOTRIX_FAILFIRST, Env:\MOTRIX_FAILFIRST_BASE -ErrorAction SilentlyContinue
 
 # 🔴 **逾時與斷言失敗要分開判**（2026-09-22）。

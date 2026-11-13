@@ -1572,7 +1572,7 @@ def pytest_collection_modifyitems(config, items):
 #: `run_stage`（同）。預跑、守門題組（preflight_guards）、各視窗自己跑 pytest／modtest 都不設 ⇒ 這些題 skip。
 #: ⚠️ 掛在上面既有的 `pytest_collection_modifyitems` 上：同名 hook 會互相覆蓋，不能另開一個。
 #: ⚠️ 漏跑的風險由 tests/platform/test_gate_only_wiring_2026_11_13.py 守：標記有註冊、兩個檔都帶、
-#: 兩條閘門路徑都設環境變數、modtest 在沒設時不寫建包沿用紀錄。
+#: 三條閘門路徑（heavy_run official、run-stage、建包 ps1）都設環境變數、modtest 在沒設時不寫建包沿用紀錄。
 GATE_ONLY = "gate_only"
 GATE_OFFICIAL_ENV = "MOTRIX_GATE_OFFICIAL"
 
