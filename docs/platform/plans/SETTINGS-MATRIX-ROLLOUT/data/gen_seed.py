@@ -52,6 +52,8 @@ def batchable(f, group_sensitive=False):
     """PM 2026-11-13 M1：risk none／ops 可批次（ops 要確認視窗）；security／money／legal、受 change_control 管（待生效／放寬）、`sensitive` 群組者永不進批次。"""
     if group_sensitive or f["risk"] in ("security", "money", "legal") or f["requiresPending"] or f["loosen"]:
         return "否（永不進批次）"
+    if f["type"] == "str" and not f["choices"]:
+        return "否（逐列編輯＋預覽）"  # 自由文字：每家公司內容不同，不能「一鍵套同一段字」；逐列編輯、儲存前預覽
     return "是（需確認視窗）" if f["risk"] == "ops" else "是"
 
 
