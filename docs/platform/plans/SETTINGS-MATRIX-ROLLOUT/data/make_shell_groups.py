@@ -1,10 +1,12 @@
 """產生 data/shell_groups.json（r3.2）：設定中心外框的「頁面」對應。
 - 每個 registry 群組屬於一個「實際呈現的頁面」；預設一群組一頁，少數合併（builder_* 總開關面板、清單與下載檔名、首頁外觀、狀態名稱、小設定）。
 - 分類只有這一套（業務／財務／系統／安全）；安全＝存取、登入、保存與隱私。
-- style：checkbox＝頁面提供勾選格；form＝單項表單卡片＋預覽（不畫勾選格）；preset-only＝只透過預設組合。
+- style：checkbox＝頁面提供勾選格；form／preset-only＝保留給「卡片＋預覽」「只透過預設組合」的頁面（目前沒有頁面使用，gen_seed 與 --check 已支援）。
 - privacy：影響隱私的群組（外框顯示「影響隱私」標籤）。
 改此檔後務必跑 `gen_seed.py` 與 `gen_seed.py --check`。"""
 import json, sys
+from pathlib import Path
+HERE = Path(__file__).resolve().parent  # data/ 資料夾；產出 shell_groups.json 放同一處
 sys.stdout.reconfigure(encoding="utf-8")
 Y, C, S, A = "業務", "財務", "系統", "安全"
 G = {  # group: (category, plain name)
@@ -37,7 +39,7 @@ MERGED = {  # 頁面代碼 -> (白話頁名, 分類, 成員群組, style, 原因
  "small_misc": ("旅宿與標案地圖的小設定", Y, ["lodging_freshness", "tender_closing"], "checkbox", ""),
 }
 STYLE = {}  # 非預設樣式的單群組頁：form＝卡片＋預覽不畫勾選格；preset-only＝只透過預設組合（目前沒有）
-src = json.load(open("D:/Claude-pm/hichan4-matrix/wt/docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/settings_groups.json", encoding="utf-8"))
+src = json.load(open(HERE / "settings_groups.json", encoding="utf-8"))
 assert set(src) == set(G), (set(src) ^ set(G))
 in_merged = {g for m in MERGED.values() for g in m[2]}
 pages = {}

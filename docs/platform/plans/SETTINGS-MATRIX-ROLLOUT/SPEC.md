@@ -52,7 +52,7 @@ LINE 事件矩陣（hichan-6，`feat/line-events-matrix` @ c9ca919b4）是第一
 
 ### 2.3 「目前生效值」與來源（PM N3）
 來源徽章只有：**預設**（值＝預設、從沒改過）／**公司**（有最後修改人、時間、原因）／**等待生效**（顯示何時生效、誰要核准）／**舊位置**（來自 legacy 儲存位置，唯讀提示）。
-**「個人」徽章只出現在真的有個人設定層的欄位**（目前已知：`login_greeting.style`（登入問候語風格，個人可選「跟隨公司／正式／幽默／關閉」；`login_greeting.py:112` `personal_pref`，經 `user_prefs`）、`list_view`／`list_prefs` 清單偏好；個人通知偏好）。`login_greeting.style` 有個人層（h11 收回 r2 的 N3：`login_greeting.py:112` `personal_pref`）；`login_greeting` 的公司設定仍是預設／公司兩種來源，個人選擇另以「個人」徽章顯示。其他欄位一律只顯示「公司」或「預設」，不得為了版面一致而假裝有個人層。
+**「個人」徽章只出現在真的有個人設定層的欄位**（目前已知：`login_greeting.style`（登入問候語風格，個人可選「跟隨公司／正式／幽默／關閉」；`login_greeting.py:116` `personal_pref`，經 `user_prefs`）、`list_view`／`list_prefs` 清單偏好；個人通知偏好）。`login_greeting.style` 有個人層（h11 收回 r2 的 N3：`login_greeting.py:116` `personal_pref`）；`login_greeting` 的公司設定仍是預設／公司兩種來源，個人選擇另以「個人」徽章顯示。其他欄位一律只顯示「公司」或「預設」，不得為了版面一致而假裝有個人層。
 `field_views` 已回 `value／valueText／isDefault／defaultText／recommendedText／banner`；新增 `source:{kind,by,at,reason}`（由 `config_ledger` 最後一筆＋是否預設＋有無 pending 推得）。
 
 ## 3. 欄型別（`SmCell`）與宣告式用法
