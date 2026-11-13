@@ -77,7 +77,7 @@ def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user, e2e_browser
     #    那一組守，這裡只負責**新位置仍然能走完整條路**。
     page.goto(f"{live_server}/pages/cashier.html")
     page.wait_for_selector(".ctab", timeout=20000)
-    page.click('.ctab:has-text("T100匯出")')
+    page.click('.ctab:has-text("T100 匯出")')
 
     # 日期區間涵蓋這筆收款
     page.fill('input[x-model="t100Start"]', "2026-06-01")

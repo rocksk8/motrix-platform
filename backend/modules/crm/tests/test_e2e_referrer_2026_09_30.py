@@ -45,7 +45,7 @@ def test_referrer_add_list_search_detail_edit(live_server, new_context, make_use
     ref = modal.locator('[data-testid="case-referrer"]')
     assert ref.get_attribute("placeholder") == "例：客戶或同業介紹" and ref.get_attribute("maxlength") == "60"
     assert "介紹人" in modal.inner_text()
-    modal.locator('input[placeholder="例：XX公司辦公室弱電整合"]').fill("弱電整合案")
+    modal.locator('input[placeholder="例：XX 公司辦公室弱電整合"]').fill("弱電整合案")
     ref.fill("  王大哥（同業介紹）  ")
     _shot(page, "referrer-new-modal.png")
     page.get_by_role("button", name="建立案件").click()
@@ -105,7 +105,7 @@ def test_referrer_server_rejection_is_shown_in_the_modal(live_server, new_contex
     page.get_by_role("button", name="新增案件").first.click()
     modal = page.locator(".dc-modal", has=page.locator('[data-testid="case-referrer"]'))
     modal.wait_for(state="visible", timeout=15000)
-    modal.locator('input[placeholder="例：XX公司辦公室弱電整合"]').fill("過長介紹人案")
+    modal.locator('input[placeholder="例：XX 公司辦公室弱電整合"]').fill("過長介紹人案")
     ref = modal.locator('[data-testid="case-referrer"]')
     ref.evaluate("e => e.removeAttribute('maxlength')")
     ref.fill("字" * 61)
