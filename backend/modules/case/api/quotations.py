@@ -408,9 +408,42 @@ def _staged_entries_of(change_id) -> list:
     return out
 
 
+def _sweep_decided_staging_dirs(conn, hours: int) -> int:
+    """`_pending_case_changes/{id}/` 目錄：該申請已經不是 staging／pending（approved／rejected／cancelled，或列根本不存在）、
+    目錄還在、最新的檔也超過 `hours` 小時 ⇒ 清掉（核准／駁回在 commit 與清暫存之間程序崩潰會留下它們）。回清掉幾個目錄。
+    staging／pending 的目錄與新的目錄一律不動。"""
+    root = os.path.join(_uploads_mod.UPLOADS_ROOT, *_uploads_mod._effective_subfolder("_pending_case_changes").split("/"))
+    if not os.path.isdir(root):
+        return 0
+    cutoff_ts = datetime.now().timestamp() - hours * 3600
+    n = 0
+    for name in os.listdir(root):
+        d = os.path.join(root, name)
+        if not (name.isdigit() and os.path.isdir(d)):
+            continue
+        row = conn.execute("SELECT status FROM case_change_requests WHERE id=?", (int(name),)).fetchone()
+        if row and row["status"] in ("staging", "pending"):
+            continue
+        entries = _staged_entries_of(int(name))
+        try:
+            newest = max([os.path.getmtime(os.path.join(_uploads_mod.UPLOADS_ROOT, *e["path"].split("/"))) for e in entries] or [os.path.getmtime(d)])
+        except OSError:
+            continue
+        if newest > cutoff_ts:
+            continue
+        _uploads_mod.purge_document_files(entries)
+        try:
+            os.rmdir(d)                       # 空了就收掉（purge 只會收檔案所在的資料夾；這裡是申請目錄本身）
+        except OSError:
+            pass
+        n += 1
+    return n
+
+
 def sweep_stale_staging(hours: int = STAGING_STALE_HOURS) -> int:
     """每日維護（`daily.check`，case_deadlines.run_daily_checks 呼叫）：超過 `hours` 小時還停在 staging 的預留列
-    ⇒ 標 cancelled（先 commit）再清掉它的暫存檔；回清掉幾列。pending／approved／rejected 與新的 staging 列一律不動。"""
+    ⇒ 標 cancelled（先 commit）再清掉它的暫存檔；回清掉幾列。pending／approved／rejected 與新的 staging 列一律不動。
+    順手清「已決定（approved／rejected／cancelled）或沒有對應列、目錄還在、且超過 `hours` 小時」的 `_pending_case_changes/{id}/` 殘留目錄。"""
     cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
     conn = get_db()
     n = 0
@@ -423,6 +456,10 @@ def sweep_stale_staging(hours: int = STAGING_STALE_HOURS) -> int:
             if cur.rowcount:
                 _uploads_mod.purge_document_files(entries)
                 n += 1
+        try:
+            _sweep_decided_staging_dirs(conn, hours)
+        except Exception:                      # noqa: BLE001（附帶清掃：出錯不可讓每日維護失敗）
+            logger.exception("清掃已決定申請的暫存目錄失敗")
     finally:
         conn.close()
     return n
