@@ -43,6 +43,11 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
                "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # 2026-11-13（T83／T84：T82 打包沒沿用 run-stage 的結果、多花約 45 分鐘）：heavy_run／整合者的排隊與鎖插件會在子行程環境塞
+               # **每輪都不同**的值——MOTRIX_CI_TICKET（票根檔路徑，每次排隊一個新的）、MOTRIX_GATE_TOKEN（每把閘門鎖一個）、
+               # MOTRIX_WINDOW（誰在跑）、MOTRIX_CI_DIR／MOTRIX_REQUIRE_QUEUE／MOTRIX_QUEUE_GUARD（排隊機制）。
+               # 它們只決定「排不排隊、拿不拿得到鎖」，不決定哪些題存在或過不過；進指紋 ⇒ 經 heavy_run 跑的 run-stage 與直接跑的建包永遠對不上。
+               "MOTRIX_CI_TICKET", "MOTRIX_GATE_TOKEN", "MOTRIX_WINDOW", "MOTRIX_CI_DIR", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_QUEUE_GUARD",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
@@ -87,6 +92,22 @@ def current_env():
     if addopts is not None:
         env["pytest_addopts"] = addopts
     return env
+
+
+def reuse_blockers(python=None, env=None):
+    """這個行程算出的指紋裡，有哪些「換個環境建包就對不上」的成分（只列名字，不列值）。run-stage 結束時印出來。
+    ① 進指紋的 MOTRIX_* 環境變數（_ENV_IGNORE 以外；例如 MOTRIX_TRAIN、MOTRIX_PROJECT_VENV）② PYTEST_ADDOPTS
+    ③ 算指紋的直譯器（sys.executable）不是跑測試的那支（pip freeze 會是別的環境的）。"""
+    env = dict(os.environ) if env is None else env
+    out = []
+    names = sorted(k for k in env if k.startswith("MOTRIX_") and k not in _ENV_IGNORE)
+    if names:
+        out.append("進指紋的環境變數：%s（建包 shell 沒設成一樣的值就不會沿用）" % "、".join(names))
+    if env.get("PYTEST_ADDOPTS") is not None:
+        out.append("PYTEST_ADDOPTS 有設（進指紋）")
+    if python and os.path.normcase(os.path.abspath(str(python))) != os.path.normcase(os.path.abspath(sys.executable)):
+        out.append("算指紋的直譯器（%s）不是跑測試的（%s）⇒ pip freeze 來自不同環境" % (sys.executable, python))
+    return out
 
 
 def fingerprint(repo, env=None):
@@ -334,6 +355,10 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     if not fp0 or fp0 != fp1:
         return rc, False, "不寫紀錄：%s" % ("開跑時工作樹不乾淨（含未追蹤檔）" if not fp0 else "跑到一半指紋變了（HEAD／工作樹／環境）")
     commit = _git(repo, "rev-parse", "--short", "HEAD").strip()
+    try:                                                                # 診斷旁表：事後 explain 才指得出「環境哪一項不同」（run-stage 原本不寫，T82 查不出原因）
+        remember_parts(records, fp1, components(repo))
+    except Exception:                                                   # noqa: BLE001 — 診斷用，寫不進去不影響結果
+        pass
     found = collect_reds(fs_dir) if rc != 0 else None
     reds = found if no_failfast else None                              # 沿用紀錄的欄位維持原樣：只有 --no-failfast 才多記 reds
     record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0, reds=reds, failfast=False if no_failfast else None)}, source="standalone")
@@ -341,7 +366,9 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     if found:
         extra = "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
             len(found), "無 failfast，全部列出" if no_failfast else "failfast 提早停，只含已出現的", "、".join(found[:20]) + ("…" if len(found) > 20 else ""), fs_dir)
-    return rc, True, "已記錄：%s=%s（建包同指紋、%d 小時內會沿用，可跨午夜）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
+    blockers = reuse_blockers(python)
+    warn = ("；⚠ 建包不一定沿用這份結果——" + "；".join(blockers)) if blockers else ""
+    return rc, True, "已記錄：%s=%s（建包同指紋、%d 小時內會沿用，可跨午夜）%s%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra, warn)
 
 
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
