@@ -174,7 +174,7 @@ window.CM_PARTS.push(() => ({
     dispatchPendingNote() {
       const p = this.dispatches.filter(d => this._dispatchCounts(d) && ['待審核', '簽核中'].includes(d.approvalStatus || ''))
       if (!p.length) return ''
-      return `含待審核 ${p.length} 筆 NT$ ${MotrixFormat.num(p.reduce((s, d) => s + this._dispatchCost(d), 0))}`
+      return `含待簽核 ${p.length} 筆 NT$ ${MotrixFormat.num(p.reduce((s, d) => s + this._dispatchCost(d), 0))}`
     },
 
     // 可往下推進作業狀態：已核准或舊單（後端同一道閘）
@@ -838,7 +838,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _cvStatusLabel(s) {
-      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准', '已作廢': '已作廢' }[s] || s
+      return { '草稿': '草稿', '待審核': '待簽核', '簽核中': '簽核中', '已核准': '已核准', '已作廢': '已作廢' }[s] || s
     },
 
     _cvStatusClass(s) {

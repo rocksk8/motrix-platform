@@ -1,5 +1,12 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.0.61（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- `cashier.html`：手機卡片化——KPI 方塊不再被 `max-width:200px` 卡成窄條、九個子頁籤不再一字一行、明細表在手機改為卡片列（值為空的欄位連標籤一起隱藏）、客戶歷史兩欄改上下排。
+- `payment-request-form.html`：`.page-wrap` 上方留白不再把頂欄高度加兩次（**全寬度都生效，桌機上方空白會比以前少一個頂欄高**）；≤900px 單欄、輸入框 16px／44px 高、預覽彈窗手機全螢幕。
+
 ## 1.0.60 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 選單宣告：`cashier.html` 加 `section: 日常`（財務會計下拉的小標題），入口與權限不變。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。

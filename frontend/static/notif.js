@@ -585,7 +585,7 @@ function notifStore() {
         'auth.login':              '使用者登入',
         'auth.change_password':    '修改密碼',
         'quotation.create':        '新增報價單',
-        'quotation.submit':        '送出審核',
+        'quotation.submit':        '送出簽核',
         'quotation.approve':       '簽核通過',
         'quotation.reject':        '退回草稿',
         'quotation.update':        '更新報價單',

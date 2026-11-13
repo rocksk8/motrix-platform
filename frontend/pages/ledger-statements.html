@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>財務報表 - MOTRIX 專案管理系統</title>
+  <title>財務報表 - MOTRIX PLATFORM</title>
   <script src="../js/ledger-statements.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -37,6 +37,19 @@
     .st-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
     .st-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
     .st-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
+
+    /* ── 手機版（2026-11-12）── */
+    @media (max-width: 767px) {
+      .page-main { margin-left: 0; padding: 16px 12px 32px }
+      .st-title { font-size: 18px }
+      .st-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch }
+      .st-tab { white-space: nowrap; flex-shrink: 0; min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .st-bar { gap: 8px }
+      .st-input, .st-bar input, .st-bar select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .st-btn { min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .st-table td, .st-table th { padding-top: 10px; padding-bottom: 10px }
+      label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px }
+    }
   </style>
 </head>
 <body x-data="ledgerStatementsPage()" x-init="init()" x-cloak>
@@ -86,7 +99,7 @@
             <span x-show="bs.unmapped.length" x-text="'以下科目有餘額卻沒有報表列：' + bs.unmapped.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」歸屬）'"></span>
           </div>
           <div class="st-ok" x-show="bs.checks.balanced" data-testid="st-bs-ok">資產 ＝ 負債 ＋ 權益（對帳通過）。</div>
-          <table class="st-table" data-testid="st-bs-table">
+          <table class="st-table m-scroll m-sticky" data-testid="st-bs-table">
             <tbody>
               <template x-for="(r, idx) in bsRows()" :key="idx">
                 <tr :class="rowClass(r)" @click="r.type === 'item' && toggle(r.key)" :data-testid="r.testid">
@@ -111,7 +124,7 @@
             <span x-show="cf.unclassified.length" x-text="'以下科目有變動卻沒有現金流量分類：' + cf.unclassified.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」分類）'"></span>
           </div>
           <div class="st-ok" x-show="cf.checks.balanced" data-testid="st-cf-ok">三大活動合計＝現金淨變動，期末現金＝資產負債表現金（對帳通過）。</div>
-          <table class="st-table" data-testid="st-cf-table">
+          <table class="st-table m-scroll m-sticky" data-testid="st-cf-table">
             <tbody>
               <template x-for="sec in cf.sections" :key="sec.key">
                 <template x-for="(row, ri) in [{h: true}].concat(sec.lines).concat([{t: true}])" :key="sec.key + ri">
@@ -139,7 +152,7 @@
             <span x-show="!eq.checks.income_statement_balanced || !eq.checks.balance_sheet_balanced">損益表或資產負債表本身不平衡。</span>
           </div>
           <div class="st-ok" x-show="eq.checks.balanced" data-testid="st-eq-ok">期初＋本期變動＝期末，且期末權益＝資產負債表權益（對帳通過）。</div>
-          <table class="st-table" style="max-width:1100px" data-testid="st-eq-table">
+          <table class="st-table m-scroll m-sticky" style="max-width:1100px" data-testid="st-eq-table">
             <tbody>
               <tr class="st-sec"><td>項目</td><template x-for="c in eq.columns" :key="c.key"><td class="num" x-text="c.label"></td></template></tr>
               <template x-for="r in eq.rows" :key="r.key">
@@ -169,7 +182,7 @@
             <span x-show="is.unmapped.length" x-text="'以下損益科目沒有報表列：' + is.unmapped.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」歸屬）'"></span>
           </div>
           <div class="st-ok" x-show="is.checks.balanced" data-testid="st-is-ok">淨利與試算表損益類淨額一致（對帳通過）。</div>
-          <table class="st-table" data-testid="st-is-table">
+          <table class="st-table m-scroll m-sticky" data-testid="st-is-table">
             <tbody>
               <tr class="st-sec"><td>項目</td><td class="num">本期</td><td class="num">年初至今</td><td class="num" x-show="is.compare">比較期</td></tr>
               <template x-for="l in is.lines" :key="l.code">

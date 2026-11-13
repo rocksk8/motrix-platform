@@ -13,6 +13,10 @@
    "count": 2,
    "reason": "exempt: 展示庫（demo）重置時清空表，不是使用者刪除"
   },
+  "helpers/account_lock.py::login_rate_limit": {
+   "count": 1,
+   "reason": "exempt: 登入限流（暫態）"
+  },
   "helpers/audit.py::notifications": {
    "count": 2,
    "reason": "exempt: 站內通知（保留期輪替）"
@@ -272,7 +276,7 @@
  },
  "file_removals": {
   "archive.py": {
-   "count": 7,
+   "count": 8,
    "reason": "tmp: 備份輪替／鏡像清理（非用戶單據）"
   },
   "core/upgrade.py": {
@@ -295,6 +299,10 @@
    "count": 1,
    "reason": "p2: 自訂記錄附件刪除"
   },
+  "helpers/log_setup.py": {
+   "count": 3,
+   "reason": "tmp: 日誌輪替／保留期清理——只刪自己寫的 app.log／access.log 舊檔與壓縮暫存檔（非用戶資料）"
+  },
   "helpers/startup.py": {
    "count": 1,
    "reason": "tmp: 啟動時暫存目錄清理"
@@ -304,8 +312,8 @@
    "reason": "tmp: 儲存位置寫入探測檔"
   },
   "helpers/uploads.py": {
-   "count": 3,
-   "reason": "p2: 上傳檔刪除共用函式（delete_document_file／purge_document_files）：單據進暫存區時改由 adapter 搬走附件"
+   "count": 4,
+   "reason": "p2: 上傳檔刪除共用函式（delete_document_file／purge_document_files）：單據進暫存區時改由 adapter 搬走附件；另有 1 處是 save_document_files 整批失敗時回收「這次呼叫剛寫入」的檔（沒有任何使用者資料被刪，不需進暫存區）。基線上調（uploads 3→4、system 1→2）：2026-11-13 PM（MOTRIX-Platform）核准，理由＝只回滾同一次呼叫剛寫入的檔"
   },
   "modules/accounting/voucher_pdf.py": {
    "count": 1,
@@ -336,8 +344,8 @@
    "reason": "tmp: PDF 產生暫存檔"
   },
   "routers/system.py": {
-   "count": 1,
-   "reason": "p2: 工作日誌照片刪除"
+   "count": 2,
+   "reason": "p2: 工作日誌照片刪除；另有 1 處是工作日誌照片整批上傳失敗時回收「這次呼叫剛寫入」的檔（沒有任何使用者資料被刪，不需進暫存區）。基線上調（uploads 3→4、system 1→2）：2026-11-13 PM（MOTRIX-Platform）核准，理由＝只回滾同一次呼叫剛寫入的檔"
   }
  },
  "routes": {

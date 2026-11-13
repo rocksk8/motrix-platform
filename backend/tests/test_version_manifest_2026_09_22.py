@@ -268,8 +268,7 @@ def test_vr4_entries_created_from_the_ui_are_distinguishable(client, make_user):
 
     username, password = make_user(username="vr4_admin", role="superadmin")
     r = client.post("/api/auth/login",
-                    json={"username": username, "password": password},
-                    headers={"X-Forwarded-For": "203.0.113.241"})
+                    json={"username": username, "password": password})  # 2026-11-13 外網登入強化：帶 X-Forwarded-For 一律當外網（超管外網未開兩步驟會被拒）⇒ 改內網直連
     assert r.status_code == 200, r.text
     auth = {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -306,8 +305,7 @@ def test_vr5_the_api_exposes_when_the_newest_entry_was(client, make_user):
     """
     username, password = make_user(username="vr5_admin", role="superadmin")
     r = client.post("/api/auth/login",
-                    json={"username": username, "password": password},
-                    headers={"X-Forwarded-For": "203.0.113.242"})
+                    json={"username": username, "password": password})  # 2026-11-13 外網登入強化：帶 X-Forwarded-For 一律當外網（超管外網未開兩步驟會被拒）⇒ 改內網直連
     assert r.status_code == 200, r.text
     auth = {"Authorization": f"Bearer {r.json()['token']}"}
 

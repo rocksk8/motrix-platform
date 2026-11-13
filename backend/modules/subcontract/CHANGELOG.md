@@ -1,5 +1,22 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-11-13（fix/image-bomb-guard＋fix/xlsx-guard＋feat/ux-p0-p1-text；使用者上傳圖片／xlsx 的守門、頁面標題後綴；T82 整合；版號由列車取）
+- 變更（內部，API 路徑與回應形狀不變）：外包名冊的證件／存摺浮水印（`api/contractors.py::_stamp_id_card／_stamp_passbook`、`api/vendor_contractors.py` 存摺）改用共用 helper `helpers/image_guard`——開圖前先看宣告的長寬（超過上限回 400 白話訊息）、JPEG／MPO 超過 4000 萬像素改縮小解碼、同時解碼最多 2 件（滿了回 503）。一般尺寸照片行為不變。
+- 測試：`tests/test_image_guard_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（fix/xlsx-guard；使用者上傳 xlsx 的小檔案展開守門；版號由列車取）**
+- 變更（內部，API 路徑與回應形狀不變）：外包名冊匯入（`api/contractors.py`）改走共用 helper `helpers/xlsx_guard.read_rows`——先預掃（儲存格／欄／列號／巢狀深度等上限、禁 DTD）、再在子行程解析（硬逾時、記憶體上限）；最多 5000 列。炸彈檔回 400（白話訊息，例如『第 N 列的「XFD 欄」有內容…』）、同時匯入的人太多回 429；正常檔案結果與先前相同。
+- 測試：`tests/test_xlsx_guard_2026_11_13.py`（含外包名冊 5001 列＋XFD 儲存格的 400 與正常檔正對照）。
+- **（併入）(next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）**
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.1.45 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`api/vendor_contractors.py` 承攬商報價單附件刪除申請接上 LINE 獨立通道（僅 LINE 事件 `dispatch_file_delete_request`；申請送出與輪到下一層時各整批發一則，沒有簽核層時由最高管理者收；不放檔名與原因），泛用的 module_activity 對這件事加 `line_skip` 不重複推；`dispatch_notify.py` 信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`。
+
+## 1.1.44（next，未取號）— 2026-11-13（fix/mobile-cases-layout-v2；手機／平板 UI：頂欄頭像個人選單、手機主選單抽屜）
+- 前端：`pages/contractor-voucher-approval-settings.html` （「此設定已搬移」頁）載入 Alpine，頂欄通知鈴才會正確顯示／隱藏（少了它手機頂欄被撐寬）；其餘為全站頂欄／主選單樣式（核心）。不動 API／資料／權限判斷。
+- 測試：`tests/test_e2e_mobile_nav_cases_2026_11_13.py`（真瀏覽器：頂欄矩陣 375／390／430 × 三種字級 × 深淺色、頭像個人選單 a11y、手機主選單抽屜、徽章形狀）。
+
 ## 1.1.43 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。

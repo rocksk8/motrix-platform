@@ -280,7 +280,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // 而不是心跳或 WebSocket：
   //   ①「在線」的資料來源是 sessions.last_active，那個欄位本來就在更新，不需要
   //     為了這個功能讓每個閒置分頁定時打伺服器
-  //   ② 這是內網 ERP，60 秒的延遲對「誰在線上」完全夠用，不值得為它常駐連線
+  //   ② 這是內網 ERP，（2026-11-13 起 120 秒、分頁看不見時暫停）延遲對「誰在線上」完全夠用，不值得為它常駐連線
   // 精度上限就是 last_active 的節流（5 分鐘），所以剛登入的人最慢 5 分鐘後才出現，
   // 這一點寫在下拉選單的說明文字裡，免得有人以為是壞掉。
   function buildOnlineWidget() {
@@ -302,6 +302,23 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function _roleLabel(r) {
     return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', finance: '財務', user: '一般使用者', viewer: '檢視者' }[r] || r
+  }
+
+  // 輪詢頻率（2026-11-13「外網載入效能」）：外網一趟約 1 秒、閒置分頁也每分鐘打一次很不划算 ⇒ 120 秒，且**分頁看不見時不打**
+  // （切到別的分頁／縮到工作列），回到前景時若距上次已超過 30 秒就立刻補一次。精度上限本來就是 last_active 的 5 分鐘節流，120 秒夠用。
+  var ONLINE_POLL_MS = 120000
+  window.motrixVisiblePoll = window.motrixVisiblePoll || function (fn, ms) {
+    var last = Date.now()
+    function tick() {
+      if (document.hidden) return
+      last = Date.now()
+      fn()
+    }
+    setInterval(tick, ms)
+    // 回到前景：距上次已超過 30 秒就立刻補一次（hichan-2 審查 P5：等滿整個間隔會讓名單最多舊到 2 倍間隔）
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && Date.now() - last >= Math.min(ms, 30000)) tick()
+    })
   }
 
   function refreshOnlineWidget() {
@@ -388,13 +405,13 @@ if (typeof module !== 'undefined' && module.exports) {
       notifOpen('style="position:relative"')
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
-      + '通知'
+      + '<span class="tb-lbl">通知</span>'
       + '<i x-show="reminders.length>0" data-testid="bell-reminder-dot" aria-label="有提醒"'
       + ' style="position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;background:var(--warning);box-shadow:0 0 0 2px #fff;display:none"></i>'
       + '<span x-show="unread>0" x-text="unread>9?\'9+\':unread"'
-      + ' style="background:var(--danger);color:#fff;font-size:12px;padding:1px 5px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
+      + ' class="mbadge" style="background:var(--danger);color:#fff;font-family:LINE Seed TW_OTF, sans-serif"></span>'
       + '</button>'
-      + '<div x-show="open" @click.outside="open=false"'
+      + '<div x-show="open" @click.outside="open=false" class="tb-notif-dd"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
       // UR1：下拉列的是**通知本身**（原本是近期操作紀錄，而紅色數字數的是通知 ⇒ 兩者對不起來）。
       //      點一則 ⇒ 當下只把那一則標成已讀（`markOne`），打開下拉不再全部清掉。
@@ -434,6 +451,23 @@ if (typeof module !== 'undefined' && module.exports) {
       + '</div>'
     }
 
+    // 頭像個人選單（2026-11-13）：頭像（姓氏圓圈）是按鈕，展開「我的帳號／修改密碼／登出」；頂端顯示姓名＋職務中文名。
+    // 「我的帳號」頁（my-account.html）由另一條線交付：MY_ACCOUNT_READY 為 false 時不顯示該項（避免點到 404）；頁面上線後改 true，
+    // 屆時「修改密碼」改指向 my-account.html#security。
+    var MY_ACCOUNT_READY = false
+    function buildAcctMenu(cpHref) {
+      var items = []
+      if (MY_ACCOUNT_READY) items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + (inPg ? 'my-account.html' : 'pages/my-account.html') + '">我的帳號</a>')
+      items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + cpHref + '">修改密碼</a>')
+      items.push('<button type="button" role="menuitem" tabindex="-1" class="acct__item acct__item--out" onclick="motrixLogout()">登出</button>')
+      return '<div class="topbar__acct" id="tb-acct">'
+        + '<button type="button" class="topbar__avatar" id="tb-avatar" aria-haspopup="menu" aria-expanded="false" aria-controls="tb-acct-menu" aria-label="個人選單（' + esc(dn) + '）" title="個人選單">' + esc(av) + '</button>'
+        + '<div class="acct__menu" id="tb-acct-menu" role="menu" aria-label="個人選單" hidden>'
+        + '<div class="acct__head" role="presentation"><b>' + esc(dn) + '</b><span>' + esc(_roleLabel(role)) + '</span></div>'
+        + items.join('')
+        + '</div></div>'
+    }
+
     el.innerHTML =
       '<button class="sidebar-toggle" id="sidebar-toggle" aria-label="選單" title="選單">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
@@ -447,22 +481,89 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<span class="topbar__title">' + esc(_pageName()) + '</span>'
       + buildGlobalSearch()
       + '<div class="topbar__right">'
+      // 手機版（≤767px）：次要項目（姓名／字級／深淺色／在線／？／修改密碼）收進「⋯」面板，頂欄只留 搜尋／通知／⋯／登出。
+      // 桌機與平板 .topbar__sec 是 display:contents（版面等同沒有這層）；通知鈴移到 ？／修改密碼 之後、緊貼登出。
+      + bell
+      + '<button type="button" class="topbar__btn topbar__more" id="tb-more" aria-label="更多" aria-haspopup="true" aria-expanded="false" title="更多">⋯</button>'
+      + '<div class="topbar__sec" id="tb-sec">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
       + buildThemeToggle()
       + buildOnlineWidget()
-      + bell
       + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
-      + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:12px">修改密碼</a>'
-      + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:12px">登出</button>'
-      + '<div class="topbar__avatar">' + esc(av) + '</div>'
+      + '</div>'
+      + buildAcctMenu(cpHref)
       + '</div>'
 
     // Process Alpine directives in the injected topbar (notifStore x-data)
     if (window.Alpine && window.Alpine.initTree) window.Alpine.initTree(el)
+    bindMoreMenu(el)
+    bindAcctMenu(el)
     bindOnlineWidget()
     refreshOnlineWidget()
-    if (sa) setInterval(refreshOnlineWidget, 60000)
+    if (sa) window.motrixVisiblePoll(refreshOnlineWidget, ONLINE_POLL_MS)
+  }
+
+  // ── 手機版頂欄「⋯」面板開關（≤767px 才看得到按鈕；面板內容是 .topbar__sec）──────────
+  function bindMoreMenu(bar) {
+    var btn = bar.querySelector('#tb-more'), sec = bar.querySelector('#tb-sec')
+    if (!btn || !sec) return
+    function isOpen() { return bar.classList.contains('tb-more-open') }
+    function setOpen(v, restoreFocus) {
+      bar.classList.toggle('tb-more-open', v)
+      btn.setAttribute('aria-expanded', v ? 'true' : 'false')
+      if (!v && restoreFocus) { try { btn.focus() } catch (_e) {} }
+      if (v) { var f = sec.querySelector('button, a[href]'); if (f && window.matchMedia && window.matchMedia('(pointer: fine)').matches) { try { f.focus() } catch (_e) {} } }
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!isOpen()) })
+    // 外點收合用 pointerdown（不用 click）：iOS Safari 對「非互動元素」不一定送 click；而且 pointerdown 當下目標還在 DOM 裡——
+    // 面板內按「深淺色」會換掉按鈕內容，用 click 判斷時目標已脫離 DOM、被誤判成外點而收起面板（L1）。
+    document.addEventListener('pointerdown', function (e) {
+      if (isOpen() && !sec.contains(e.target) && !btn.contains(e.target)) setOpen(false)
+    }, true)
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen()) setOpen(false, true) })
+    // 通知下拉（Alpine 的 @click.outside 靠 click 事件，WebKit 觸控點「非互動區」不送 click ⇒ 下拉收不起來，手機全寬後還蓋住 ☰，N5）：
+    // 另加 pointerdown 外點收合——點在鈴鐺那一塊（按鈕＋下拉）以外就把 Alpine 的 open 設回 false
+    document.addEventListener('pointerdown', function (e) {
+      var dd = bar.querySelector('.tb-notif-dd')
+      if (!dd) return
+      var wrap = dd.parentNode
+      if (!wrap || wrap.contains(e.target) || getComputedStyle(dd).display === 'none') return
+      try { if (window.Alpine && window.Alpine.$data) { var d = window.Alpine.$data(wrap); if (d && d.open) d.open = false } } catch (_e) { /* 還沒初始化就略過 */ }
+    }, true)
+  }
+
+  // ── 頭像個人選單開關：Esc 收合並把焦點還給頭像、pointerdown 外點收合、↑↓／Home／End 在項目間移動 ──
+  function bindAcctMenu(bar) {
+    var btn = bar.querySelector('#tb-avatar'), menu = bar.querySelector('#tb-acct-menu')
+    if (!btn || !menu) return
+    function items() { return [].slice.call(menu.querySelectorAll('[role="menuitem"]')) }
+    function isOpen() { return !menu.hidden }
+    function setOpen(v, restoreFocus, focusFirst) {
+      menu.hidden = !v
+      btn.setAttribute('aria-expanded', v ? 'true' : 'false')
+      if (v) { var m = bar.querySelector('#tb-more'); bar.classList.remove('tb-more-open'); if (m) m.setAttribute('aria-expanded', 'false') }   // 與「⋯」面板互斥
+      if (v && focusFirst) { var f = items()[0]; if (f) { try { f.focus() } catch (_e) {} } }
+      if (!v && restoreFocus) { try { btn.focus() } catch (_e) {} }
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!isOpen(), false, e.detail === 0) })   // detail===0＝鍵盤觸發 ⇒ 焦點進第一項；滑鼠／觸控不搶焦點
+    document.addEventListener('pointerdown', function (e) {
+      if (isOpen() && !menu.contains(e.target) && !btn.contains(e.target)) setOpen(false)
+    }, true)
+    document.addEventListener('keydown', function (e) {
+      if (!isOpen()) return
+      if (e.key === 'Escape') { setOpen(false, true); return }
+      if (e.key === 'Tab') { setOpen(false); return }
+      var list = items(); if (!list.length) return
+      var i = list.indexOf(document.activeElement)
+      if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus() }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus() }
+      else if (e.key === 'Home') { e.preventDefault(); list[0].focus() }
+      else if (e.key === 'End') { e.preventDefault(); list[list.length - 1].focus() }
+    })
+    // 開「⋯」面板時收起個人選單
+    var more = bar.querySelector('#tb-more')
+    if (more) more.addEventListener('click', function () { if (isOpen()) setOpen(false) })
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
@@ -600,7 +701,7 @@ if (typeof module !== 'undefined' && module.exports) {
     'daily-tasks.html':        'daily_task',
   }
 
-  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
+  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto'
 
   // 2026-09-13（模組權限稽核）：頁面層守門的資料來源。
   //
@@ -646,6 +747,12 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // 分組下拉選單。每個 sec() 是一個頂層項目，底下的 ni() 排成多欄面板。
   // 只有一個子項的分組（例如「主選單／儀表板」）直接當成連結，不開面板。
+  function _mnavBurgerDot(bar) {
+    var b = bar.querySelector('.mnav__burger')
+    if (!b) return
+    var any = [].some.call(bar.querySelectorAll('.mnav__dot'), function (d) { return d.style.display !== 'none' })
+    b.classList.toggle('has-dot', any)
+  }
   function renderMainNav() {
     var groups = _navGroups.filter(function (g) { return g.items.length > 0 })
     if (!groups.length) {
@@ -655,6 +762,7 @@ if (typeof module !== 'undefined' && module.exports) {
       return
     }
 
+    // 注意：抽屜容器不要加 id——_rebuildNav 會把選單內「有 id 的元素」整個以 textContent 還原（為了保留徽章狀態），容器加 id 會被攤平成純文字。aria-controls 因此指向 #app-mainnav。
     var html = '<div class="mnav__in">' + groups.map(function (g, gi) {
       var anyActive = g.items.some(function (it) { return it.active })
       if (g.items.length === 1) {
@@ -684,7 +792,7 @@ if (typeof module !== 'undefined' && module.exports) {
           return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '"'
             + (it.customKey ? ' data-custom-nav="' + esc(it.customKey) + '"' : '') + ' href="' + it.href + '">'
             + '<span>' + esc(it.label) + '</span>'
-            + (it.badgeId ? '<span id="' + it.badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : '')
+            + (it.badgeId ? '<span id="' + it.badgeId + '" class="mbadge" style="' + _SB_BADGE_STYLE + '"></span>' : '')
             + it.extraBadge
             + '</a>'
         }).join('') + '</div>'
@@ -700,6 +808,14 @@ if (typeof module !== 'undefined' && module.exports) {
         + '</span>' + panel + '</div>'
     }).join('') + '</div>'
 
+    // 手機（≤767px）：主選單收成「☰ 主選單」鈕＋抽屜（CSS 把 .mnav__in 變成左側抽屜、群組變成可展開的清單；桌機這顆鈕不顯示）。
+    // 鈕上顯示目前所在的群組名稱；任何群組有待處理紅點時，鈕上也要有一顆（抽屜收起來看不到群組標題的紅點）。
+    var _curGrp = groups.filter(function (g) { return g.items.some(function (it) { return it.active }) })[0]
+    html = '<button type="button" class="mnav__burger" aria-expanded="false" aria-controls="app-mainnav" aria-label="\u958b\u555f\u4e3b\u9078\u55ae" data-testid="mnav-burger">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
+      + '<span>\u4e3b\u9078\u55ae</span><span class="mnav__cur">' + (_curGrp ? esc(_curGrp.label) : '') + '</span></button>'
+      + html + '<div class="mnav__backdrop" data-testid="mnav-backdrop"></div>'
+
     var bar = document.getElementById('app-mainnav')
     if (!bar) {
       bar = document.createElement('nav')
@@ -711,6 +827,68 @@ if (typeof module !== 'undefined' && module.exports) {
       else document.body.insertBefore(bar, document.body.firstChild)
     }
     bar.innerHTML = html
+    if (!bar._drawerBound) {
+      bar._drawerBound = true
+      var _mq = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null
+      var _setOpen = function (open) {
+        bar.classList.toggle('mnav--open', open)
+        document.documentElement.classList.toggle('mnav-lock', open)
+        var b = bar.querySelector('.mnav__burger')
+        if (b) { b.setAttribute('aria-expanded', open ? 'true' : 'false'); b.setAttribute('aria-label', open ? '\u95dc\u9589\u4e3b\u9078\u55ae' : '\u958b\u555f\u4e3b\u9078\u55ae') }
+        // 抽屜開著時是「對話框」（modal）：讀屏知道範圍、焦點限制在裡面；收起或桌機時拿掉，不改桌機導覽語意
+        var dr = bar.querySelector('.mnav__in')
+        if (dr) {
+          if (open) { dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-modal', 'true'); dr.setAttribute('aria-label', '主選單') }
+          else { dr.removeAttribute('role'); dr.removeAttribute('aria-modal'); dr.removeAttribute('aria-label') }
+        }
+      }
+      var _drawerFocusables = function () {
+        return [].filter.call(bar.querySelectorAll('.mnav__in a[href], .mnav__in .mnav__grp[tabindex], .mnav__in button'), function (x) { return x.offsetParent !== null })
+      }
+      bar.addEventListener('click', function (e) {
+        if (!_mq || !_mq.matches) return
+        var t = e.target
+        if (t.closest('.mnav__burger')) {
+          var willOpen = !bar.classList.contains('mnav--open')
+          _setOpen(willOpen)
+          if (willOpen && !bar.querySelector('.mnav__grp.is-open')) {            // 打開時預設展開目前所在的群組
+            var on = bar.querySelector('.mnav__grp.is-on')
+            if (on) on.classList.add('is-open')
+          }
+          if (willOpen && e.detail === 0) { var f0 = _drawerFocusables()[0]; if (f0) try { f0.focus() } catch (_e) {} }   // 鍵盤開啟 ⇒ 焦點進抽屜第一項
+          return
+        }
+        if (t.closest('.mnav__backdrop')) { _setOpen(false); return }
+        var top = t.closest('span.mnav__top')                                  // 有下拉的群組標題：點一下展開／收合（手風琴，一次一個）
+        if (top && top.parentNode.classList.contains('mnav__grp')) {
+          var grp = top.parentNode, was = grp.classList.contains('is-open')
+          bar.querySelectorAll('.mnav__grp.is-open').forEach(function (x) { x.classList.remove('is-open') })
+          if (!was) { grp.classList.add('is-open'); try { grp.scrollIntoView({ block: 'nearest' }) } catch (_e) {} }
+          return
+        }
+        if (t.closest('a[href]')) _setOpen(false)                              // 點了連結（導向其他頁）⇒ 收起抽屜
+      })
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab' && bar.classList.contains('mnav--open') && _mq && _mq.matches) {   // focus trap：Tab 在抽屜內循環
+          var fl = _drawerFocusables(); if (!fl.length) return
+          var first = fl[0], last = fl[fl.length - 1], act = document.activeElement
+          var inside = bar.querySelector('.mnav__in').contains(act)
+          if (!inside) { e.preventDefault(); first.focus() }
+          else if (e.shiftKey && act === first) { e.preventDefault(); last.focus() }
+          else if (!e.shiftKey && act === last) { e.preventDefault(); first.focus() }
+          return
+        }
+        if (e.key === 'Escape' && bar.classList.contains('mnav--open')) {
+          _setOpen(false)
+          var bb = bar.querySelector('.mnav__burger'); if (bb) try { bb.focus() } catch (_e) {}     // 焦點還給觸發鈕
+        }
+      })
+      window.addEventListener('resize', function () { if (_mq && !_mq.matches && bar.classList.contains('mnav--open')) _setOpen(false) })
+      // 群組標題的紅點由 notif.js 事後改 style.display ⇒ 觀察它，把「有紅點」同步到 ☰ 鈕
+      if (window.MutationObserver) new MutationObserver(function () { _mnavBurgerDot(bar) })
+        .observe(bar, { subtree: true, attributes: true, attributeFilter: ['style'] })
+    }
+    _mnavBurgerDot(bar)
   }
 
 
@@ -749,8 +927,8 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function _extraBadge(x) {
     if (!x || !x.id) return ''
-    return '<span id="' + esc(x.id) + '" style="display:none;background:' + esc(x.color || 'var(--accent)')
-      + ';color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'
+    return '<span id="' + esc(x.id) + '" class="mbadge" style="display:none;background:' + esc(x.color || 'var(--accent)')
+      + ';color:#fff;font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto"></span>'
   }
 
   function _setMenuState(st) { document.documentElement.setAttribute('data-menu-state', st) }

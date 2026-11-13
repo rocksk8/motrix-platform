@@ -321,7 +321,7 @@ def test_submit_modal_explains_the_consequence(live_server, make_user, new_page,
     page.goto(f"{live_server}/pages/quotation-form.html")
     page.locator(".form-toolbar").wait_for(state="visible", timeout=20000)
     # 送出鈕有「這會…」提示（title）；確認視窗第一段說明後果
-    btn = page.locator("button.btn:has-text('申請送出審核')")
+    btn = page.locator("button.btn:has-text('申請送出簽核')")
     btn.wait_for(state="visible", timeout=15000)
     assert "簽核" in (btn.get_attribute("title") or "")
     page.evaluate("Alpine.$data(document.querySelector('[x-data]')).showSubmitModal = true")

@@ -155,8 +155,8 @@ def test_edit_preview_toggle_swaps_the_same_canvas_in_place(live_server, make_us
     page.wait_for_selector("#mb-canvas.is-preview")
     assert page.evaluate("() => window.__cv === document.getElementById('mb-canvas')") is True     # 同一個畫布元素
     assert page.url == url and len(page.context.pages) == pages
-    assert not page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
-    assert page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first.is_visible()          # 區塊標題以填單樣式列出
+    page.locator("#mb-canvas .mb-fc__bar").first.wait_for(state="hidden")          # 點完立刻 is_visible() 會輸給 Alpine x-show 一個影格（閘門偶發紅）⇒ 改等狀態
+    page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first.wait_for(state="visible")          # 區塊標題以填單樣式列出
     assert page.locator("#mb-preview-actions button").count() >= 1
     assert page.locator('.mb-fc[data-field-key="cust"] input').first.is_enabled()                 # 可操作（不存檔）
     n0 = page.locator('[data-mock-table="lines"] tbody tr').count()
@@ -167,7 +167,7 @@ def test_edit_preview_toggle_swaps_the_same_canvas_in_place(live_server, make_us
     page.wait_for_selector("#mb-canvas:not(.is-preview)")
     assert page.locator('.mb-fc[data-field-key="cust"].is-sel').count() == 1                        # 選中狀態保留
     assert page.locator('#mb-props-pane [data-props-for]').count() == 1
-    assert page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
+    page.locator("#mb-canvas .mb-fc__bar").first.wait_for(state="visible")
     assert not errors, errors
 
 
@@ -274,7 +274,8 @@ def test_mobile_layout_uses_palette_and_property_drawers(live_server, make_user,
     page.click('#mb-palette [data-palette-element="text"]')
     page.wait_for_selector("#mb-palette", state="hidden")
     page.wait_for_selector('.mb-fc[data-field-key="field_1"]')
-    page.click('.mb-fc[data-field-key="field_1"]')
+    # 點卡片左上角空白處：手機版面（h4／hichan-17）讓複製／上移／下移／刪除鈕變成 40px 觸控大小並靠右排列，卡片正中央剛好是「複製」鈕（點中心會複製欄位而不是選取）
+    page.click('.mb-fc[data-field-key="field_1"]', position={"x": 6, "y": 6})
     page.wait_for_selector("#mb-props-pane", state="visible")
     page.fill("#mb-f-label", "手機上填的")
     _saved(page)

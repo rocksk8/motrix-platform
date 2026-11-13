@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>組織架構設定 — MOTRIX 專案管理系統</title>
+  <title>組織架構設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -164,6 +164,29 @@
     .chart-dept-card__count { margin-top: 3px; font-size: 12px; color: var(--text-secondary); }
     .chart-dept-card__count b { color: var(--text-primary); font-weight: 700; }
     .chart-dept-card .chart-chip { margin-top: 9px; }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       ① 「清單檢視／組織圖」切換被擠成直排字 → 切換列整列、按鈕放大
+       ② 處／部門那一列：名稱、人數、主管標籤、操作鈕全擠在同一行（名稱被折成三行）→ 資訊一行、操作鈕獨立一行靠右並加大間距
+       ③ 欄位 16px、編輯視窗改成底部蓋板 */
+    @media (max-width: 1023px) {
+      .form-input, .form-select { font-size: 16px; min-height: 44px; box-sizing: border-box; }
+    }
+    @media (max-width: 767px) {
+      .org-main { padding: 14px 12px 28px; }
+      .pg > div[style*="display:flex"] { flex-wrap: wrap; width: 100%; }
+      .view-toggle { width: 100%; }
+      .view-toggle button { flex: 1; min-height: 44px; white-space: nowrap; font-size: 14px; }
+      .pg .btn { min-height: 44px; flex: 1 1 auto; white-space: nowrap; justify-content: center; }
+      .div-head { flex-wrap: wrap; gap: 6px 8px; padding: 12px; }
+      .dept-row { flex-wrap: wrap; gap: 6px 8px; padding: 10px 12px 10px 18px; }
+      .div-head > div[style*="margin-left:auto"], .dept-row > div[style*="margin-left:auto"] { width: 100%; margin-left: 0 !important; justify-content: flex-end; gap: 10px !important; }
+      .div-head .btn-sm, .dept-row .btn-sm { min-height: 44px; min-width: 44px; font-size: 13px; }
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal-box { max-width: 100%; border-radius: 16px 16px 0 0; max-height: calc(92dvh / var(--fz,1)); overflow-y: auto; }
+      .chart-view { padding: 14px 4px 24px; }
+      .chart-band__manager { margin-left: 0; }
+    }
   </style>
 </head>
 

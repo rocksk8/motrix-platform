@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>通知設定 — MOTRIX 專案管理系統</title>
+  <title>通知設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -163,6 +163,30 @@
       border-radius: 10px;
       flex-shrink: 0;
       white-space: nowrap;
+    }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       ① 左右內距 32/36px 讓卡片只剩 ~250px 寬；兩欄並排的欄位（Email、App 密碼、主機）內容被截斷看不全 → 手機內距縮小、單欄
+       ② 欄位 13px（iOS 聚焦放大）→ 16px、高度 ≥44px
+       ③ 勾選框 16px（開關「啟用 Email／LINE 通知」是這頁最重要的動作）→ 24px，整條開關列都能點 */
+    @media (max-width: 1023px) {
+      .ns-field input[type="text"], .ns-field input[type="number"], .ns-field input[type="password"], .ns-field input[type="email"],
+      .ns-email-input-row input, .ns-card select { font-size: 16px !important; min-height: 44px; box-sizing: border-box; }
+      .ns-card input[type="checkbox"] { width: 24px !important; height: 24px !important; flex-shrink: 0; }
+      .ns-card .btn { min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .ns-main { padding: 16px 12px 28px; }
+      .ns-card { margin-top: 16px; }
+      .ns-card-head { padding: 14px; }
+      .ns-card-body { padding: 16px 14px; }
+      .ns-row { grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+      .ns-field label { font-size: 13px; }
+      .ns-toggle { padding: 12px 14px; min-height: 52px; }
+      .ns-toggle label { flex: 1; padding: 6px 0; }
+      .ns-email-input-row { flex-wrap: wrap; }
+      .ns-email-tag { padding: 6px 12px; font-size: 13px; }
+      .ns-email-tag button { font-size: 20px; min-width: 32px; min-height: 32px; }
     }
   </style>
 </head>
@@ -349,8 +373,8 @@
         <div x-show="denied" style="font-size:13px;color:var(--text-dim)">LINE 通知設定只有最高管理者可以查看與修改。</div>
         <div x-show="!denied">
           <div class="ns-desc">
-            在下方勾選的通知，寄 Email 時會<strong>同時</strong>用 LINE 官方帳號推播給「已綁定 LINE」的收件人（收件人與個人退訂規則和 Email 完全相同）。
-            預設全部不發；訊息內容與 Email 相同，<strong>不含金額</strong>。
+            寄信的通知，都可以另外用 LINE 官方帳號推播給「已綁定 LINE」的同仁；<strong>LINE 與 Email 各自獨立</strong>，由你決定每一種通知要不要發、<strong>誰要收</strong>（預設照原本的收件人，也可以另外指定角色或個人）。到「信件與通知收件設定」頁關閉某種信件<strong>不會</strong>停止 LINE，要停請取消下方該通知的勾選。
+            預設全部不發；訊息只放單號、名稱等識別資訊，<strong>不含金額與自由文字</strong>。
           </div>
 
           <!-- 本月訊息用量（常駐；資料來源 GET /api/settings/line-notify/quota，LINE 官方帳號免費方案每月有上限） -->
@@ -404,7 +428,7 @@
             <input data-saved-field type="password" x-model="cfg.login_channel_secret" autocomplete="off" placeholder="Channel secret（32 位英數字）">
             <div style="font-size:12px;color:var(--text-dim);margin-top:4px">
               LINE Login channel 必須與上面的 Messaging API channel 在<strong>同一個 Provider</strong>，且狀態是 Published。已儲存的 secret 會顯示成圓點，不修改請保持不動。
-              填好 Channel ID／secret 與對外網址後，同仁可在「帳號安全」頁自己綁定。
+              填好 Channel ID／secret 與對外網址後，同仁可在「修改密碼」頁自己綁定 LINE。
             </div>
           </div>
 
@@ -414,26 +438,132 @@
             <span style="font-size:12px;color:var(--warning)">開啟會讓外部網路連到系統頁面，需先與網路管理確認；預設關閉。需要先填對外網址。</span>
           </div>
 
+          <!-- LINE 綁定狀況（只有最高管理者看得到；資料來源 GET .../bindings、POST .../bindings/remind、DELETE /api/line/binding/{帳號}） -->
+          <div class="ns-field" style="margin:16px 0" data-testid="line-bindings">
+            <label>LINE 綁定狀況</label>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定，並可一鍵用 Email 和系統內通知提醒還沒綁定的人（信裡附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span data-testid="line-bind-summary" style="font-size:13px;font-weight:600" x-text="bindSummary"></span>
+              <button type="button" class="btn btn-ghost" data-testid="line-bind-toggle" style="padding:2px 10px;font-size:12px" @click="bind.open = !bind.open" x-text="bind.open ? '收合名單' : '看名單'"></button>
+              <button type="button" class="btn btn-primary" data-testid="line-bind-remind" style="padding:4px 12px;font-size:13px" @click="remindUnbound()" :disabled="reminding || !bind.available || !bind.unlinked">
+                <span x-show="!reminding" x-text="'提醒未綁定的人（' + bind.unlinked + ' 人）'"></span>
+                <span x-show="reminding">寄送中…</span>
+              </button>
+            </div>
+            <div x-show="bind.loaded && !bind.available" data-testid="line-bind-unavailable" style="font-size:12px;color:var(--warning);margin-top:6px">還沒設定好「LINE Login channel」與對外網址，同仁目前無法自行綁定，所以先不能提醒；請先完成上方設定。</div>
+            <div x-show="bind.open" style="margin-top:8px;overflow-x:auto">
+              <table data-testid="line-bind-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead><tr style="text-align:left;color:var(--text-dim);font-size:12px"><th style="padding:4px 8px">姓名</th><th style="padding:4px 8px">角色</th><th style="padding:4px 8px">LINE</th><th style="padding:4px 8px">上次提醒</th><th style="padding:4px 8px"></th></tr></thead>
+                <tbody>
+                  <template x-for="u in bind.users" :key="u.username">
+                    <tr :data-testid="'line-bind-row-' + u.username" style="border-top:1px solid var(--border)">
+                      <td style="padding:4px 8px" x-text="u.display"></td>
+                      <td style="padding:4px 8px" x-text="roleName(u.role)"></td>
+                      <td style="padding:4px 8px">
+                        <span x-show="u.linked" style="color:var(--success);font-weight:600" x-text="'已綁定' + (u.linkedAt ? '（' + u.linkedAt.slice(0, 10) + '）' : '') + (u.confirmed === false ? '・測試訊息沒送達' : '')"></span>
+                        <span x-show="!u.linked" style="color:var(--text-dim)">尚未綁定</span>
+                      </td>
+                      <td style="padding:4px 8px;color:var(--text-dim)" x-text="u.lastReminded ? u.lastReminded.replace('T', ' ').slice(0, 16) : '—'"></td>
+                      <td style="padding:4px 8px;white-space:nowrap">
+                        <button type="button" class="btn btn-ghost" x-show="u.linked && !u.confirming" style="padding:2px 8px;font-size:12px" @click="u.confirming = true">解除綁定</button>
+                        <span x-show="u.confirming" style="font-size:12px">確定解除？
+                          <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px;color:var(--danger)" @click="unlinkUser(u)">確定</button>
+                          <button type="button" class="btn btn-ghost" style="padding:2px 8px;font-size:12px" @click="u.confirming = false">取消</button>
+                        </span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 同時發 LINE 的通知：依模組分組（簽核 → 業務開發／指定人員 → 其餘），每項可勾選、可設定「誰要發」 -->
           <div class="ns-field" style="margin:12px 0">
-            <label>同時發 LINE 的通知</label>
-            <template x-for="e in cfg.events" :key="e.key">
-              <div>
-              <div class="ns-toggle" style="margin:2px 0">
-                <input type="checkbox" :id="'chk-line-ev-' + e.key" :checked="e.enabled" @change="toggleEvent(e, $event.target.checked)" style="width:16px;height:16px;cursor:pointer">
-                <label :for="'chk-line-ev-' + e.key" x-text="e.name"></label>
-              </div>
-              <div style="margin:0 0 8px 24px;font-size:12px;color:var(--text-dim)" :data-testid="'line-roles-' + e.key">
-                可收的角色：
-                <template x-for="r in cfg.role_choices" :key="r">
-                  <label style="margin-right:10px;cursor:pointer;white-space:nowrap">
-                    <input type="checkbox" :data-testid="'line-role-' + e.key + '-' + r" :checked="roleOn(e, r)" :disabled="!!rolesBusy[e.key]" @change="toggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
-                    <span x-text="roleName(r)"></span>
-                  </label>
+            <label>要發 LINE 的通知（依模組分組）</label>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">
+              LINE 與 Email 各自獨立；「僅 LINE」＝這件事原本只有系統內通知、沒有 Email，勾選後才會推 LINE（不會新增 Email）。「重要」＝系統告警，LINE 用量到 90% 暫停一般通知時仍會照發。
+            </div>
+            <template x-for="g in groups" :key="g.name">
+              <div :data-testid="'line-group-' + g.name" style="border:1px solid var(--border);border-radius:8px;margin:6px 0">
+                <button type="button" :data-testid="'line-group-head-' + g.name" @click="toggleGroup(g.name)" :aria-expanded="isOpen(g.name) ? 'true' : 'false'"
+                        style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;background:none;border:0;padding:10px 12px;cursor:pointer;font:inherit;color:inherit;text-align:left">
+                  <strong x-text="(isOpen(g.name) ? '▾ ' : '▸ ') + g.name"></strong>
+                  <span style="font-size:12px;color:var(--text-dim)" :data-testid="'line-group-count-' + g.name" x-text="'已開 ' + g.on + '／共 ' + g.events.length"></span>
+                </button>
+                <template x-if="isOpen(g.name)">
+                  <div style="padding:0 12px 8px">
+                    <template x-for="e in g.events" :key="e.key">
+                      <div :data-testid="'line-event-' + e.key" style="padding:4px 0;border-top:1px dashed var(--border)">
+                        <div class="ns-toggle" style="margin:2px 0;flex-wrap:wrap">
+                          <input type="checkbox" :id="'chk-line-ev-' + e.key" :checked="e.enabled" @change="toggleEvent(e, $event.target.checked)" style="width:16px;height:16px;cursor:pointer">
+                          <label :for="'chk-line-ev-' + e.key" x-text="e.name"></label>
+                          <span x-show="e.kind === 'line_only'" :data-testid="'line-tag-only-' + e.key" style="font-size:11px;padding:1px 6px;border-radius:8px;background:#E0E7FF;color:#3730A3">僅 LINE</span>
+                          <span x-show="e.kind === 'sub'" style="font-size:11px;padding:1px 6px;border-radius:8px;background:#E0F2FE;color:#075985">LINE 細項</span>
+                          <span x-show="e.priority === 'critical'" :data-testid="'line-tag-critical-' + e.key" style="font-size:11px;padding:1px 6px;border-radius:8px;background:#FEE2E2;color:#991B1B">重要</span>
+                        </div>
+                        <div style="margin:0 0 4px 24px;font-size:12px;color:var(--text-dim)">
+                          <span :data-testid="'line-aud-summary-' + e.key" x-text="audSummary(e)"></span>
+                          <button type="button" class="btn btn-ghost" :data-testid="'line-aud-open-' + e.key" style="padding:1px 8px;font-size:12px;margin-left:6px" @click="toggleAudEditor(e)" x-text="audOpen[e.key] ? '收合' : '設定誰要發'"></button>
+                        </div>
+                        <div style="margin:0 0 4px 24px;font-size:12px;color:var(--text-dim)" :data-testid="'line-roles-' + e.key">
+                          原本的收件人中，可收的角色：
+                          <template x-for="r in cfg.role_choices" :key="r">
+                            <label style="margin-right:10px;cursor:pointer;white-space:nowrap">
+                              <input type="checkbox" :data-testid="'line-role-' + e.key + '-' + r" :checked="roleOn(e, r)" :disabled="!!rolesBusy[e.key]" @change="toggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
+                              <span x-text="roleName(r)"></span>
+                            </label>
+                          </template>
+                        </div>
+                        <template x-if="audOpen[e.key]">
+                          <div :data-testid="'line-aud-editor-' + e.key" style="margin:4px 0 6px 24px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+                            <div style="font-weight:600;margin-bottom:4px">這則通知誰要收？</div>
+                            <template x-for="m in audModes" :key="m.v">
+                              <label style="display:block;margin:2px 0;cursor:pointer">
+                                <input data-saved-field type="radio" :name="'aud-mode-' + e.key" :data-testid="'line-aud-mode-' + e.key + '-' + m.v" :value="m.v" x-model="aud[e.key].mode" style="vertical-align:-2px">
+                                <span x-text="m.t"></span>
+                              </label>
+                            </template>
+                            <div x-show="aud[e.key].mode !== 'business'" style="margin-top:6px">
+                              <div style="font-size:12px;color:var(--text-dim)">指定角色（該角色的所有在職同仁）：</div>
+                              <template x-for="r in cfg.role_choices" :key="r">
+                                <label style="margin-right:10px;cursor:pointer;white-space:nowrap">
+                                  <input type="checkbox" :data-testid="'line-aud-role-' + e.key + '-' + r" :checked="aud[e.key].roles.includes(r)" @change="audToggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
+                                  <span x-text="roleName(r)"></span>
+                                </label>
+                              </template>
+                              <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定人員：</div>
+                              <div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0">
+                                <template x-for="u in aud[e.key].users" :key="u">
+                                  <span :data-testid="'line-aud-chip-' + e.key + '-' + u" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--border);border-radius:12px;font-size:12px">
+                                    <span x-text="userLabel(u)"></span>
+                                    <span x-show="userFlag(u, e)" style="color:var(--warning)" x-text="userFlag(u, e)"></span>
+                                    <button type="button" :data-testid="'line-aud-del-' + e.key + '-' + u" @click="audRemoveUser(e, u)" style="background:none;border:0;cursor:pointer;color:var(--text-dim)" aria-label="移除">✕</button>
+                                  </span>
+                                </template>
+                                <span x-show="!aud[e.key].users.length" style="font-size:12px;color:var(--text-dim)">（尚未指定）</span>
+                              </div>
+                              <select :data-testid="'line-aud-pick-' + e.key" @change="audAddUser(e, $event.target.value); $event.target.value = ''" style="max-width:260px">
+                                <option value="">＋ 加入人員…</option>
+                                <template x-for="u in bind.users.filter(x => !aud[e.key].users.includes(x.username) && audCanPick(e, x))" :key="u.username">
+                                  <option :value="u.username" x-text="u.display + '（' + roleName(u.role) + '）' + (u.linked ? '' : '・尚未綁定')"></option>
+                                </template>
+                              </select>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定的人不受上面「可收的角色」限制；本人在自己頁面關閉的仍不會收到；離職或還沒綁定 LINE 的人收不到。只有對「這個事件所屬模組」有權限的人才能被指定、也才收得到（沒有權限的人這裡不會列出）。<span x-text="e.follows"></span></div>
+                            <div class="ns-actions" style="margin-top:8px">
+                              <button type="button" class="btn btn-primary" :data-testid="'line-aud-save-' + e.key" style="padding:4px 12px;font-size:13px" @click="saveAudience(e)" :disabled="!!audBusy[e.key]">儲存</button>
+                              <button type="button" class="btn btn-ghost" style="padding:4px 12px;font-size:13px" @click="toggleAudEditor(e)">取消</button>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
                 </template>
               </div>
-              </div>
             </template>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。收件人仍以該通知本來的收件人為準（只會縮小，不會多寄給別人）；每位同仁也可以在「帳號安全」頁自行退訂。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效。獎金、薪資、勞報單類通知不提供 LINE。收件人預設照該通知原本的收件設定；沒有 Email 的同仁只要綁定 LINE 也會收到；Email 退訂不影響 LINE；每位同仁也可以在「修改密碼」頁自行關閉不想收的 LINE 通知。</div>
           </div>
 
           <div class="ns-actions">
@@ -580,12 +710,19 @@
         return json ? { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' } : { Authorization: 'Bearer ' + s.token }
       }
       return {
-        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], role_choices: [], quota_thresholds: [80, 100] },
+        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], event_groups: [], role_choices: [], quota_thresholds: [80, 100] },
         quota: null, quotaLoading: false, thText: '80,100', rolesBusy: {},
+        bind: { loaded: false, available: false, open: false, total: 0, linked: 0, unlinked: 0, users: [] }, reminding: false,
+        groupOpen: {}, audOpen: {}, aud: {}, audBusy: {},
+        audModes: [
+          { v: 'business', t: '照原本的收件人（預設）' },
+          { v: 'business_plus', t: '原本的收件人，再加上指定的角色／人員' },
+          { v: 'only', t: '只發給指定的角色／人員' },
+        ],
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
         // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
-        async init() { await this.load(); if (!this.denied) this.loadQuota(false) },
+        async init() { await this.load(); if (!this.denied) { this.loadQuota(false); this.loadBindings() } },
         async load() {
           const r = await fetch('/api/settings/line-notify', { headers: hdr(false) })
           if (r.status === 403) { this.denied = true; return }
@@ -606,6 +743,98 @@
             if (r.ok) this.quota = await r.json()
           } finally { this.quotaLoading = false }
         },
+        // ── 分組（依後端給的模組順序；預設只展開第一組，其餘收合）──
+        get groups() {
+          const order = this.cfg.event_groups || []
+          const by = {}
+          for (const e of this.cfg.events || []) (by[e.group] = by[e.group] || []).push(e)
+          const names = order.filter(n => by[n]).concat(Object.keys(by).filter(n => !order.includes(n)))
+          return names.map(n => ({ name: n, events: by[n], on: by[n].filter(e => e.enabled).length }))
+        },
+        isOpen(name) { return this.groupOpen[name] !== undefined ? this.groupOpen[name] : (this.groups.length > 0 && this.groups[0].name === name) },
+        toggleGroup(name) { this.groupOpen = { ...this.groupOpen, [name]: !this.isOpen(name) } },
+        // ── 綁定狀況 ──
+        get bindSummary() {
+          if (!this.bind.loaded) return '讀取中…'
+          return '已綁定 ' + this.bind.linked + '／在職 ' + this.bind.total + ' 人（還沒綁定 ' + this.bind.unlinked + ' 人）'
+        },
+        async loadBindings() {
+          const r = await fetch('/api/settings/line-notify/bindings', { headers: hdr(false) })
+          if (r.ok) { const d = await r.json(); this.bind = { ...this.bind, ...d, users: (d.users || []).map(u => ({ ...u, confirming: false })), loaded: true } }
+        },
+        async remindUnbound() {
+          if (this.reminding) return
+          this.reminding = true
+          try {
+            const r = await fetch('/api/settings/line-notify/bindings/remind', { method: 'POST', headers: hdr(true), body: JSON.stringify({}) })
+            const d = await r.json().catch(() => ({}))
+            if (r.ok) {
+              const parts = ['已提醒 ' + d.notified + ' 人（系統內通知）', 'Email ' + d.emailed + ' 人']
+              if (d.noEmail) parts.push((d.emailOff ? '公司已關閉此類 Email；' : '') + '沒有寄 Email：' + d.noEmail + ' 人')
+              if (d.skippedRecent && d.skippedRecent.length) parts.push('24 小時內已提醒過、略過 ' + d.skippedRecent.length + ' 人')
+              this._say(parts.join('；'), false, 9000)
+              await this.loadBindings()
+            } else { this._say(d.detail || '提醒失敗', true, 9000) }
+          } finally { this.reminding = false }
+        },
+        async unlinkUser(u) {
+          const r = await fetch('/api/line/binding/' + encodeURIComponent(u.username), { method: 'DELETE', headers: hdr(false) })
+          if (r.ok) { this._say('已解除 ' + u.display + ' 的 LINE 綁定', false, 4000); await this.loadBindings() }
+          else { const d = await r.json().catch(() => ({})); this._say(d.detail || '解除失敗', true) }
+        },
+        // ── 誰要發（audience）──
+        userLabel(username, e) {
+          const b = this.bind.users.find(x => x.username === username)
+          if (b) return b.display
+          const a = e && e.audience && e.audience.users.find(x => x.username === username)
+          return a ? a.display : username
+        },
+        userFlag(username, e) {
+          const a = e && e.audience && e.audience.users.find(x => x.username === username)
+          if (a && a.active === false) return '已離職'
+          if (a && a.muted) return '已自行關閉'
+          const b = this.bind.users.find(x => x.username === username)
+          if (!b) return a ? '' : '已離職'
+          return b.linked ? '' : '尚未綁定'
+        },
+        audSummary(e) {
+          const a = e.audience || { mode: 'business', roles: [], users: [] }
+          const who = (a.roles || []).map(r => this.roleName(r)).concat((a.users || []).map(u => u.display || u.username))
+          if (a.mode === 'only') return '只發給：' + (who.join('、') || '（沒有指定任何人，不會發）')
+          if (a.mode === 'business_plus') return '原本的收件人，另加：' + (who.join('、') || '（尚未指定）')
+          return '收件人：照原本的設定'
+        },
+        toggleAudEditor(e) {
+          if (this.audOpen[e.key]) { this.audOpen = { ...this.audOpen, [e.key]: false }; return }
+          const a = e.audience || { mode: 'business', roles: [], users: [] }
+          this.aud = { ...this.aud, [e.key]: { mode: a.mode || 'business', roles: (a.roles || []).slice(), users: (a.users || []).map(u => u.username) } }
+          this.audOpen = { ...this.audOpen, [e.key]: true }
+        },
+        audToggleRole(e, r, on) {
+          const cur = this.aud[e.key].roles
+          this.aud[e.key].roles = on ? (cur.includes(r) ? cur : cur.concat([r])) : cur.filter(x => x !== r)
+        },
+        // 「誰要發」的人員選單只列有該通知所屬模組權限的人（最高管理者永遠可以；伺服器端 set_audience 仍會再檢查一次）
+        audCanPick(e, u) {
+          const need = e.need || []
+          if (u.role === 'superadmin' || !need.length) return true
+          if (need.includes('@admin')) return u.role === 'admin'
+          const mods = u.modules || []
+          return need.some(m => mods.includes(m))
+        },
+        audAddUser(e, username) { if (username && !this.aud[e.key].users.includes(username)) this.aud[e.key].users = this.aud[e.key].users.concat([username]) },
+        audRemoveUser(e, username) { this.aud[e.key].users = this.aud[e.key].users.filter(x => x !== username) },
+        async saveAudience(e) {
+          const a = this.aud[e.key]
+          const body = a.mode === 'business' ? { mode: 'business', roles: [], users: [] } : { mode: a.mode, roles: a.roles, users: a.users }
+          this.audBusy = { ...this.audBusy, [e.key]: true }
+          try {
+            const r = await fetch('/api/settings/line-notify/events/' + encodeURIComponent(e.key) + '/audience', { method: 'PUT', headers: hdr(true), body: JSON.stringify(body) })
+            const d = await r.json().catch(() => ({}))
+            if (r.ok) { this.audOpen = { ...this.audOpen, [e.key]: false }; this._say('已更新「' + e.name + '」的收件人', false, 3000); await this.load() }
+            else { this._say(d.detail || '更新失敗', true, 8000) }
+          } finally { this.audBusy = { ...this.audBusy, [e.key]: false } }
+        },
         roleName(r) { return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者', finance: '財務' }[r] || r },
         roleOn(e, r) { return e.roles == null || e.roles.includes(r) },
         async toggleRole(e, r, on) {
@@ -625,7 +854,7 @@
         },
         async save() {
           this.saving = true
-          const { callback_url: _cb, events: _ev, role_choices: _rc, ...payload } = this.cfg
+          const { callback_url: _cb, events: _ev, event_groups: _eg, role_choices: _rc, ...payload } = this.cfg
           const parts = String(this.thText || '').split(/[,，\s]+/).filter(Boolean)
           if (parts.some(p => !/^[0-9]+$/.test(p))) { this.saving = false; this._say('告警門檻只能填整數百分比，例如 80,100', true); return }
           payload.quota_thresholds = parts.map(Number)

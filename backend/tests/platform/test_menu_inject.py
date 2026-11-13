@@ -44,8 +44,13 @@ def test_sidebar_js_is_prefixed_with_the_declaration(client):
     from core import paths as _paths
     from pathlib import Path
     r, menu, body = _served(client)
-    assert body == (Path(_paths.FRONTEND_DIR) / "static" / "sidebar.js").read_text(encoding="utf-8"), "檔案本體要原樣接在後面"
-    assert "no-store" in r.headers.get("cache-control", ""), "模組狀態會變 ⇒ 不可以被快取"
+    from helpers import static_cache as _sc
+    import main as _main
+    raw = (Path(_paths.FRONTEND_DIR) / "static" / "sidebar.js").read_text(encoding="utf-8")
+    # 2026-11-13：送出的本體裡的資源引用會補 ?v=<版本>（static_cache.rewrite_refs）；除此之外原樣
+    assert body == _sc.rewrite_refs(raw, _main.ASSET_VERSION.current()), "檔案本體要原樣接在後面（只差資源引用的 ?v=）"
+    # 模組狀態會變 ⇒ 不可以被快取成永久：沒帶版本 ⇒ no-cache（每次問）；選單宣告進版本雜湊 ⇒ 狀態變了 ⇒ 版本變 ⇒ 網址變
+    assert r.headers.get("cache-control") == "no-cache"
     assert r.headers["content-type"].startswith("application/javascript")
     assert set(menu) == {"v", "groups", "pageModules"}, "只放與使用者無關的宣告（狀態、自訂模組要登入才拿得到）"
     assert all(set(v) == {"key", "name"} for v in menu["pageModules"].values())

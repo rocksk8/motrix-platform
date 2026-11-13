@@ -73,6 +73,50 @@
     .vlog-row{display:grid;grid-template-columns:120px 1fr auto;gap:6px;align-items:start;margin-bottom:6px}
     .vlog-input{padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;width:100%;box-sizing:border-box}
     .vlog-input:focus{border-color:var(--accent)}
+    .m-only{display:none}
+    .m-sub{font-size:12px;color:var(--text-secondary);margin-top:3px}
+    @media (hover:none){.row-actions{opacity:1}}
+    /* 平板：詳情欄（380px）開著時表格只剩半個螢幕 → 次要欄收掉，列尾操作鈕改由詳情欄提供 */
+    @media (max-width:1100px){
+      .data-table th:nth-child(3), .data-table td:nth-child(3),
+      .data-table th:nth-child(6), .data-table td:nth-child(6){display:none}
+    }
+    @media (max-width:767px){
+      /* 關著的詳情欄只靠 translateX 推到畫面外 → 手機瀏覽器把它算進版面寬度，整頁被撐寬縮小 */
+      .detail-pane{width:100%!important;left:0}
+      .detail-pane:not(.open){visibility:hidden;pointer-events:none;transition:transform .22s ease,visibility 0s .22s}
+      .detail-close{width:40px;height:40px}
+      .detail-head{padding:12px 16px}.detail-body{padding:16px}
+      .page-main{padding:20px 16px}
+      .pg{flex-wrap:wrap;gap:12px}
+      .pg>.btn-primary{width:100%;justify-content:center;min-height:44px}
+      /* 搜尋列：搜尋框滿寬；「顯示停用」與匯出入各自一列，點擊區放大 */
+      .search-bar{flex-wrap:wrap;gap:8px}
+      .search-wrap{flex:1 1 100%}
+      .search-input{max-width:none;min-height:44px;font-size:16px}
+      .search-bar>label{min-height:44px;font-size:14px!important;gap:8px!important}
+      .search-bar>label input{width:20px;height:20px}
+      .search-bar>div[style*="margin-left:auto"]{margin-left:0!important;width:100%}
+      .search-bar>div[style*="margin-left:auto"] .btn{flex:1;min-height:44px;justify-content:center}
+      /* 列表只留「名稱（含聯絡人／電話）＋狀態」，其餘點進詳情看 */
+      .data-table{table-layout:fixed;min-width:0!important}
+      .data-table th,.data-table td{padding-left:8px;padding-right:8px}
+      .data-table th:first-child,.data-table td:first-child,
+      .data-table th:last-child,.data-table td:last-child:not(.empty-state),
+      .data-table th:nth-child(5),.data-table td:nth-child(5),
+      .data-table th:nth-child(4),.data-table td:nth-child(4){display:none}
+      .data-table th:nth-child(7){width:76px}
+      .data-table td:nth-child(2){overflow-wrap:anywhere}
+      .data-table .tag{white-space:nowrap}
+      .m-only{display:block}
+      /* 排版器（layoutOn）版：欄位是動態的 → 以 data-layout-col 保留名稱與狀態 */
+      .data-table th[data-layout-col]:not([data-layout-col="name"]):not([data-layout-col="active"]),
+      .data-table td[data-layout-cell]:not([data-layout-cell="name"]):not([data-layout-cell="active"]){display:none}
+      .data-table th[data-layout-col="active"]{width:76px}
+      .form-grid-2{grid-template-columns:1fr}
+      .form-input,.form-select,.form-textarea,.vlog-input{font-size:16px;min-height:44px}
+      .vlog-row{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body x-data="vendorContractorsPage()" x-init="init()">
@@ -132,7 +176,7 @@
               <td><div style="width:30px;height:30px;border-radius:50%;background:#7C3AED;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(v.name||'?')[0]"></div></td>
               <template x-for="c in $store.layout.cols('vendors')" :key="c.field">
                 <td :data-layout-cell="c.field">
-                  <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="v.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="v.code" x-text="v.code" style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="v.category" style="font-size:12px;color:var(--text-dim)" x-text="v.category"></span></div></div></template>
+                  <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="v.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="v.code" x-text="v.code" style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="v.category" style="font-size:12px;color:var(--text-dim)" x-text="v.category"></span></div><div class="m-only m-sub" x-show="v.contactName || v.phone" x-text="[v.contactName, v.phone].filter(Boolean).join(' · ')"></div></div></template>
                   <template x-if="c.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="v.taxId || '—'"></span></template>
                   <template x-if="c.field === 'contact'"><span x-text="v.contactName || '—'"></span></template>
                   <template x-if="c.field === 'phone'"><span style="font-size:12px" x-text="v.phone || '—'"></span></template>
@@ -178,6 +222,7 @@
                         style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
                   <span x-show="v.category" style="font-size:12px;color:var(--text-dim)" x-text="v.category"></span>
                 </div>
+                <div class="m-only m-sub" x-show="v.contactName || v.phone" x-text="[v.contactName, v.phone].filter(Boolean).join(' · ')"></div>
               </td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="v.taxId || '—'"></td>
               <td x-text="v.contactName || '—'"></td>

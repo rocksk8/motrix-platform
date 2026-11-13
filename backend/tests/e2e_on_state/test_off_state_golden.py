@@ -28,8 +28,12 @@ def _norm_text(s):
     return [ln.strip() for ln in s.splitlines() if ln.strip()]
 
 
+# 載入速度（perf）：靜態資源網址帶內容雜湊版號 ?v=<hash>（每次改檔都變）⇒ 不比對版號本身，只比對「載了哪些檔」
+_ASSET_V = re.compile(r"\?v=[^&]*&|[?&]v=[^&]*")
+
+
 def _norm_reqs(items):
-    return [re.sub(r"(token|_)=[^&]*", r"\1=<x>", i) for i in items]
+    return [_ASSET_V.sub(lambda m: "?" if m.group(0).endswith("&") else "", re.sub(r"(token|_)=[^&]*", r"\1=<x>", s)) for s in items]
 
 
 # T62 在旗標【關閉】時多出來的請求，逐條列出（PM 裁示 2026-10-15：允許清單，不做延後載入重構）。
@@ -42,7 +46,9 @@ ALLOWED_EXTRA = {
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates",
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",     # T64 B：既有的公開讀取多帶 ui_format 群組
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",                                                   # T64 A／B：靜態腳本載入
-        "GET /static/custom-fields.js"]),
+        "GET /static/custom-fields.js",
+        "GET /static/status-chip.js",                                                                                         # UX P1（2026-11-13）：報價單表單改用 MotrixStatus.label 顯示「待簽核」，要載入這支靜態腳本
+        "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format,builder_status_display"]),      # M1：沿用既有的那一次設定讀取多帶一個群組（旗標關＝什麼都不改）
     "quotations_list_off": set(_JS + [
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",

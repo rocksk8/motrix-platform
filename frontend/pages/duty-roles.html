@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>職責角色 — MOTRIX 專案管理系統</title>
+  <title>職責角色 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -34,7 +34,28 @@
     .dr-bad { color: var(--danger); font-size: 12px; margin-top: 6px }
     .dr-ok { color: var(--success); font-size: 12px; margin-top: 6px }
     .dr-edit { max-width: 1200px; margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px }
-    @media (max-width: 767px) { .dr-main { margin-left: 0; padding: 20px 16px } }
+    @media (max-width: 767px) {
+      .dr-main { margin-left: 0; padding: 20px 16px }
+      .dr-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch }
+      .dr-tab { flex-shrink: 0; white-space: nowrap; min-height: 44px; padding: 8px 16px }
+      .dr-card { overflow: visible; border: none; background: none; margin-top: 12px }
+      .dr-card:has(table.m-scroll) { overflow-x: auto; border: 1px solid var(--border); background: transparent }
+      .dr-chip { padding: 7px 12px; font-size: 13px; min-height: 34px; box-sizing: border-box; display: inline-flex; align-items: center }
+      .dr-sel, .dr-in { min-height: 44px; padding: 8px 10px; font-size: 16px }
+      .dr-card .btn--sm { min-height: 44px; padding: 8px 18px }
+      /* 角色表：名稱＋權限整列、成員／狀態並排、編輯鈕靠右 */
+      .dr-t-roles td:nth-child(1), .dr-t-roles td:nth-child(2) { flex: 1 0 100% }
+      .dr-t-roles td:nth-child(1) b { font-size: 16px }
+      .dr-t-roles td:nth-child(3)::before { content: '成員 '; color: var(--text-dim); font-size: 12px }
+      .dr-t-roles td:nth-child(5) { margin-left: auto }
+      /* 使用者表：每欄各一列、前綴小標 */
+      .dr-t-users td { flex: 1 0 100% }
+      .dr-t-users td:nth-child(1) b { font-size: 16px }
+      .dr-t-users td:nth-child(2)::before { content: '基礎類別　'; color: var(--text-dim); font-size: 12px }
+      .dr-t-users td:nth-child(3)::before { content: '職責角色'; display: block; color: var(--text-dim); font-size: 12px }
+      .dr-t-users td:nth-child(4)::before { content: '個人扣項'; display: block; color: var(--text-dim); font-size: 12px }
+      .dr-t-users td:nth-child(5)::before { content: '生效權限（預覽）'; display: block; color: var(--text-dim); font-size: 12px }
+    }
   </style>
 </head>
 <body x-data="dutyRolesPage()" x-init="init()" x-cloak>
@@ -67,7 +88,7 @@
     <!-- 角色 -->
     <section x-show="tab === 'roles'">
       <div class="dr-card">
-        <table class="dr-table">
+        <table class="dr-table m-cards dr-t-roles">
           <thead><tr><th>角色</th><th>權限</th><th>成員</th><th>狀態</th><th></th></tr></thead>
           <tbody>
             <template x-for="r in roles" :key="r.id">
@@ -115,7 +136,7 @@
     <!-- 使用者綁定 -->
     <section x-show="tab === 'users'">
       <div class="dr-card">
-        <table class="dr-table">
+        <table class="dr-table m-cards dr-t-users">
           <thead><tr><th>使用者</th><th>基礎類別</th><th>職責角色</th><th>個人扣項</th><th>生效權限（預覽）</th><th></th></tr></thead>
           <tbody>
             <template x-for="u in users" :key="u.id">
@@ -162,7 +183,7 @@
     <!-- 變更紀錄 -->
     <section x-show="tab === 'changes'">
       <div class="dr-card">
-        <table class="dr-table">
+        <table class="dr-table m-scroll">
           <thead><tr><th>時間</th><th>操作者</th><th>種類</th><th>對象</th><th>新增</th><th>移除</th><th>原因</th></tr></thead>
           <tbody>
             <template x-for="c in changes" :key="c.id">

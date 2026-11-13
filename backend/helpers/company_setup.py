@@ -533,6 +533,9 @@ def alert(conn, code: str, text: str) -> bool:
     try:
         from helpers import email_notify
         from helpers import mail_types as _mt
+        # LINE 獨立通道（2026-11-13）：同一天同一狀態碼只會走到這裡一次（上面的 marks 節流），不看 Email。
+        email_notify._line_event("company_setup_alert", to_group=True, title="本公司資料設定狀態", rows=[("狀況", text)],
+                                 reason="請登入系統，於「本公司資料」補齊或修正設定")
         to = email_notify._group_emails("company_setup_alert")
         if to:
             body = email_notify._build_html("company_setup_alert", "本公司資料設定狀態", code, "#B91C1C",

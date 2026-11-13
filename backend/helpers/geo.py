@@ -874,6 +874,10 @@ def notify_quota_warning(used=None, quota=None) -> bool:
         return False
 
     from helpers import mail_types as _mt
+    # LINE 獨立通道（2026-11-13）：不看 Email；鑰匙＝計費週期（每週期只推一次——這段在 Email 寄成功之前每次呼叫都會走到，不能每次都推）
+    email_notify._line_event("geo_quota_warning", to_group=True, title="地圖定位額度達警戒線",
+                             rows=[("計費週期", "%s 起" % period), ("已送出請求", "%s 次" % used), ("免費額度", "%s 次" % quota), ("警戒線", "%s%%" % warn_pct)],
+                             reason="本週期 Google 地理編碼的請求次數已達設定的警戒線", line_key="geo_quota_warning|%s" % period)
     to = email_notify._group_emails("geo_quota_warning")
     if not to:
         return False

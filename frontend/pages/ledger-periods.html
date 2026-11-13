@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>會計期間 - MOTRIX 專案管理系統</title>
+  <title>會計期間 - MOTRIX PLATFORM</title>
   <script src="../js/ledger-periods.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -40,6 +40,19 @@
     .lp-back{position:fixed;inset:0;background:var(--overlay-backdrop);display:flex;align-items:center;justify-content:center;z-index:50}
     .lp-dlg{background:var(--surface);border-radius:var(--radius-lg);padding:20px 22px;width:min(520px,92vw);box-shadow:var(--shadow-popover)}
     .lp-stale{font-size:12px;color:var(--warning);margin-left:6px}
+
+    /* ── 手機版（2026-11-12）：表格橫向捲動（第一欄固定）、表單控制項加大 ── */
+    @media (max-width: 767px) {
+      .page-main { margin-left: 0; padding: 16px 12px 32px }
+      label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px }
+      .lp-title { font-size: 18px }
+      .lp-card { padding: 14px 12px }
+      .lp-input, .lp-area, .lp-card select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .lp-input { flex: 1 1 140px; min-width: 0 }
+      .lp-btn { min-height: 44px; padding: 8px 16px; font-size: 14px }
+      .lp-row { gap: 8px }
+      .lp-dlg { padding: 16px 14px; width: 94vw }
+    }
   </style>
 </head>
 <body x-data="ledgerPeriodsPage()" x-init="init()" x-cloak>
@@ -61,7 +74,7 @@
       <div class="lp-card" x-show="requests.length" data-testid="lp-requests">
         <div class="lp-h">總帳申請</div>
         <div class="lp-note">結帳、重開期間、年度決算、期初批次由財務人員送申請，最高管理者（會計主管）到「待我簽核」簽核，核准後自動執行；申請人可在簽核前撤回。被退回的申請可以修改內容後重新申請（回到上面的期間列再按一次）。</div>
-        <table class="lp-table">
+        <table class="lp-table m-scroll m-sticky">
           <thead><tr style="white-space:nowrap"><th>申請號</th><th>內容</th><th>申請人／時間</th><th>狀態</th><th>決定人／時間</th><th>說明</th><th></th></tr></thead>
           <tbody>
             <template x-for="r in requests" :key="r.id">
@@ -98,7 +111,7 @@
             <button class="lp-btn" @click="exportStatements(y, 'pdf')" :data-testid="'lp-export-pdf-' + y.year">匯出四大表 PDF</button>
             <span class="lp-note" style="margin:0 0 0 10px" x-text="y.start_date + ' ～ ' + y.end_date + '　期初：' + (y.opening_mode === 'imported' ? '匯入（' + y.opening_date + '）' : y.opening_mode === 'carry' ? '自上年結轉' : '零')"></span>
           </div>
-          <table class="lp-table">
+          <table class="lp-table m-scroll m-sticky">
             <thead><tr><th>期間</th><th>起訖</th><th>狀態</th><th>結帳</th><th></th></tr></thead>
             <tbody>
               <template x-for="p in y.periods" :key="p.id">
@@ -111,8 +124,8 @@
                   </td>
                   <td x-text="p.closed_by ? (p.closed_by + '　' + (p.closed_at || '').slice(0, 16).replace('T', ' ')) : ''"></td>
                   <td style="text-align:right">
-                    <button class="lp-btn" x-show="p.status === 'open'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openClose(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '結帳'" data-testid="lp-close">結帳</button>
-                    <button class="lp-btn" x-show="p.status === 'closed'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openReopen(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '重開'" data-testid="lp-reopen">重開</button>
+                    <button class="lp-btn" x-show="p.status === 'open'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openClose(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請簽核中' : '結帳'" data-testid="lp-close">結帳</button>
+                    <button class="lp-btn" x-show="p.status === 'closed'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openReopen(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請簽核中' : '重開'" data-testid="lp-reopen">重開</button>
                     <button class="lp-btn" x-show="p.status === 'closed' && isSuper()" @click="lock(p)" data-testid="lp-lock">鎖定</button>
                     <button class="lp-btn" x-show="p.status === 'locked' && isSuper()" @click="openUnlock(p)" data-testid="lp-unlock">解鎖</button>
                   </td>
@@ -146,7 +159,7 @@
         </div>
         <template x-if="op.result">
           <div>
-            <table class="lp-table">
+            <table class="lp-table m-scroll m-sticky">
               <thead><tr><th>科目</th><th>名稱</th><th class="lp-num">借方</th><th class="lp-num">貸方</th></tr></thead>
               <tbody>
                 <template x-for="r in op.result.rows" :key="r.account_code">
@@ -160,7 +173,7 @@
         </template>
 
         <div class="lp-h" style="margin-top:16px" x-show="batches.length">已匯入的批次</div>
-        <table class="lp-table" x-show="batches.length">
+        <table class="lp-table m-scroll m-sticky" x-show="batches.length">
           <thead><tr><th>年度</th><th>開帳日</th><th>傳票</th><th>狀態</th><th class="lp-num">借方合計</th><th></th></tr></thead>
           <tbody>
             <template x-for="b in batches" :key="b.id">
@@ -176,7 +189,7 @@
 
       <div class="lp-card" x-show="log.length">
         <div class="lp-h">稽核軌跡（最近 50 筆，只增不改）</div>
-        <table class="lp-table">
+        <table class="lp-table m-scroll m-sticky">
           <thead><tr><th>時間</th><th>動作</th><th>年度</th><th>人員</th><th>理由</th></tr></thead>
           <tbody>
             <template x-for="l in log" :key="l.id">
@@ -229,7 +242,7 @@
           <template x-for="v in cdlg.pv.vouchers" :key="v.key">
             <div x-show="v.lines.length" style="margin-bottom:8px">
               <div class="lp-note" style="margin:0" x-text="v.summary"></div>
-              <table class="lp-table"><tbody>
+              <table class="lp-table m-scroll m-sticky"><tbody>
                 <template x-for="l in v.lines" :key="l.account_code"><tr><td x-text="l.account_code"></td><td x-text="l.name"></td><td class="lp-num" x-text="fmt(l.debit)"></td><td class="lp-num" x-text="fmt(l.credit)"></td></tr></template>
               </tbody></table>
             </div>

@@ -107,7 +107,7 @@ def test_login_lockout_shares_one_bucket_across_the_same_v64_but_not_across_v4(c
     assert r.status_code == 429, (r.status_code, r.text[:120])
 
     # 不同 /64 的另一位使用者不受連坐
-    other_user, other_pw = make_user(username="ipm1_v64_other")
+    other_user, other_pw = make_user(username="ipm1_v64_other", role="sales")
     r = tunnel.post("/api/auth/login", json={"username": other_user, "password": other_pw},
                      headers={"CF-Connecting-IP": "2001:db8:aa:bb::1"})
     assert r.status_code == 200, r.text[:120]
@@ -155,7 +155,7 @@ def test_behind_a_same_host_tunnel_each_visitor_has_their_own_lockout_bucket(cli
     from fastapi.testclient import TestClient
     tunnel = TestClient(client.app, client=("127.0.0.1", 5000))
     attacker, _ = make_user(username="xff_attacker_target")
-    victim, victim_pw = make_user(username="xff_victim")
+    victim, victim_pw = make_user(username="xff_victim", role="sales")
     for i in range(5):
         r = _fail(tunnel, attacker, **{"CF-Connecting-IP": "198.51.100.7", "X-Forwarded-For": "9.9.9.%d" % i})
         assert r.status_code == 401

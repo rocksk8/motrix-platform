@@ -68,6 +68,53 @@
     .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
     .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit}
     .id-card-remove:hover{background:var(--danger)}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：
+       ① 九欄表格 + 頁面右側預留 400px（開詳情時）⇒ 375px 寬橫向溢出、按鈕列「新增人員」被推出畫面
+       ② 「編輯」按鈕 opacity:0、滑鼠移上去才出現 ⇒ 觸控裝置永遠看不到
+       ⇒ 觸控裝置編輯鈕常駐；手機只留 姓名（下附電話）／狀態（其餘點整列看詳情，編輯在詳情欄）；
+          詳情改全螢幕覆蓋，不再擠壓頁面。 */
+    .m-only{display:none}
+    @media (hover:none){ .row-actions{opacity:1} }
+    @media (max-width:1023px){ .row-actions{opacity:1} .page-main{padding-right:20px !important} }
+    /* 平板：次要欄位先收掉，姓名欄才不會被擠成一字一行 */
+    @media (max-width:1100px){ .t-hide{display:none !important} .data-table th:nth-child(2){min-width:180px} .data-table td .tag,.data-table td:nth-child(4){white-space:nowrap} }
+    /* 觸控平板：列尾的「編輯」欄收掉（點整列開詳情；沒有 hover 就不該有獨立的操作欄） */
+    @media (max-width:1100px) and (hover:none){ .col-act{display:none !important} }
+    @media (max-width:767px){
+      .page-main{padding:16px 12px 28px !important}
+      .pg > div[style*="display:flex"]{flex-wrap:wrap;width:100%}
+      .pg > div[style*="display:flex"] .btn{flex:1 1 auto;justify-content:center}
+      .search-bar{flex-wrap:wrap}
+      .search-wrap{flex:1 1 100%}
+      .search-input,.form-input,.form-select,.form-textarea{font-size:16px;min-height:44px}
+      .search-bar label{min-height:44px}
+      .search-bar label input{width:20px;height:20px}
+      /* 與 suppliers／vendor-contractors 同一套清單＋明細版型（MOTRIX-ERP 裁示 2026-11-12）：
+         手機只留「姓名／狀態」，電話併進姓名下方一行；其餘資訊點整列開詳情；編輯在詳情欄裡。 */
+      .m-hide{display:none !important}
+      .m-only{display:block}
+      .m-sub{font-size:12px;color:var(--text-secondary);margin-top:3px}
+      .data-table{min-width:0;table-layout:fixed}
+      .data-table th:nth-child(8){width:76px}
+      .data-table th,.data-table td{padding-left:8px;padding-right:8px}
+      .data-table td{padding-top:12px;padding-bottom:12px}
+      .data-table td:nth-child(2){overflow-wrap:anywhere}
+      .data-table td .tag{white-space:nowrap}
+      .detail-pane{width:100%;border-left:0}
+      .detail-pane:not(.open){box-shadow:none}
+      .detail-close{width:44px;height:44px;font-size:20px}
+      .form-grid-2{grid-template-columns:1fr}
+      .modal-overlay{padding:0 !important;align-items:flex-end !important}
+      .modal-box{max-width:100% !important;border-radius:16px 16px 0 0}
+      .modal-head,.modal-foot{padding-left:16px;padding-right:16px}
+      .modal-body{padding:16px}
+      .modal-foot .btn{flex:1 1 auto;justify-content:center;min-height:44px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding-left:20px}
+      .search-input,.form-input,.form-select{min-height:40px}
+      .detail-pane{width:340px}
+    }
   </style>
 </head>
 <body x-data="contractorsPage()" x-init="init()">
@@ -120,21 +167,21 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width:32px"></th>
+            <th class="m-hide t-hide" style="width:32px"></th>
             <th>姓名</th>
-            <th>證件號碼</th>
-            <th>電話</th>
-            <th>Email</th>
-            <th>國籍</th>
-            <th>分行</th>
+            <th class="m-hide">證件號碼</th>
+            <th class="m-hide">電話</th>
+            <th class="m-hide">Email</th>
+            <th class="m-hide t-hide">國籍</th>
+            <th class="m-hide t-hide">分行</th>
             <th>狀態</th>
-            <th style="width:80px"></th>
+            <th class="m-hide col-act" style="width:80px"></th>
           </tr>
         </thead>
         <tbody>
           <template x-for="c in contractors" :key="c.id">
             <tr @click="selectContractor(c)" style="cursor:pointer">
-              <td>
+              <td class="m-hide t-hide">
                 <div style="width:30px;height:30px;border-radius:50%;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700"
                      x-text="(c.name||'?')[0]"></div>
               </td>
@@ -145,17 +192,18 @@
                         style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#ECFDF5;color:#059669;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600">ID ✓</span>
                   <span x-show="c.has_union_insurance" style="font-size:12px;color:var(--text-dim)">職業工會</span>
                 </div>
+                <div class="m-only m-sub" x-show="c.phone" x-text="c.phone"></div>
               </td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.id_number || '—'"></td>
-              <td x-text="c.phone || '—'"></td>
-              <td style="font-size:12px" x-text="c.email || '—'"></td>
-              <td x-text="c.nationality || '—'"></td>
-              <td x-text="c.bank_branch || '—'"></td>
+              <td class="m-hide" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.id_number || '—'"></td>
+              <td class="m-hide" x-text="c.phone || '—'"></td>
+              <td class="m-hide" style="font-size:12px" x-text="c.email || '—'"></td>
+              <td class="m-hide t-hide" x-text="c.nationality || '—'"></td>
+              <td class="m-hide t-hide" x-text="c.bank_branch || '—'"></td>
               <td>
                 <span class="tag" :class="c.active ? 'tag-active' : 'tag-inactive'"
                       x-text="c.active ? '往來中' : '停用'"></span>
               </td>
-              <td>
+              <td class="m-hide col-act">
                 <div class="row-actions">
                   <button class="btn btn-ghost btn-sm" @click.stop="openEdit(c)">編輯</button>
                 </div>
@@ -347,7 +395,7 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">電話</label>
-            <input class="form-input" type="text" x-model="form.phone" placeholder="04-XXXX-XXXX">
+            <input class="form-input" type="tel" inputmode="tel" x-model="form.phone" placeholder="04-XXXX-XXXX">
           </div>
           <div class="form-group">
             <label class="form-label">Email</label>
@@ -365,7 +413,7 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">銀行代碼</label>
-            <input class="form-input" type="text" x-model="form.bank_code" placeholder="如 812">
+            <input class="form-input" type="text" inputmode="numeric" x-model="form.bank_code" placeholder="如 812">
           </div>
           <div class="form-group">
             <label class="form-label">銀行名稱</label>

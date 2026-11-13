@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>儲存位置 — MOTRIX 專案管理系統</title>
+  <title>儲存位置 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -34,7 +34,16 @@
       background: var(--surface-muted, var(--white)); font-size: 13px; line-height: 1.7 }
     .st-actions { max-width: 980px; margin-top: 14px; display: flex; gap: 10px; align-items: center }
     @media (max-width: 767px) { .st-main { margin-left: 0; padding: 20px 16px } }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .st-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .st-main select,
+      .st-main textarea { font-size: 16px; min-height: 44px; }
+      .st-main .btn { min-height: 44px; }
+      .st-main input[type=checkbox],
+      .st-main input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="storageSettingsPage()" x-init="init()" x-cloak>
   <header id="app-topbar" class="topbar"></header>

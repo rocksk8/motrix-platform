@@ -47,6 +47,26 @@
   ],
   "s": 400
  },
+ "POST /api/auth/account-locks/unlock": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "POST /api/customers/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "confirms",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
+  ],
+  "s": 200
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -105,6 +125,19 @@
    "user",
    "usesSample",
    "warnings"
+  ],
+  "s": 200
+ },
+ "POST /api/parts/import-rows": {
+  "k": [
+   "changes",
+   "changesTruncated",
+   "created",
+   "duplicates",
+   "errors",
+   "failed",
+   "planHash",
+   "updated"
   ],
   "s": 200
  },
@@ -235,6 +268,12 @@
   ],
   "s": 201
  },
+ "POST /api/settings/line-notify/bindings/remind": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/settings/line-notify/verify": {
   "k": [
    "detail"
@@ -332,6 +371,12 @@
   ],
   "s": 200
  },
+ "PUT /api/login-greeting/phrases": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"
@@ -339,6 +384,12 @@
   "s": 400
  },
  "PUT /api/settings/line-notify/events/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/settings/line-notify/events/{key}/audience": {
   "k": [
    "detail"
   ],

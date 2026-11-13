@@ -1,5 +1,15 @@
 # 標案雷達 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
+## 1.5.13 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`notify.py` 的標案通知多了 LINE 獨立通道（`tender_found`／`tender_fetch_failed`／`tender_source_changed`／`tender_detail_blocked`，送到群組；每天同一事件最多推一次）；信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`。
+
+## 1.5.12（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- `tender-radar.html`：手機／平板（≤1023px）版面與觸控目標調整（新增一段 `@media (max-width:1023px)` 樣式）。桌機版不變。
+
 ## 1.5.11 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。

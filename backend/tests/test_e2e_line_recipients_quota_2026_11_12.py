@@ -122,6 +122,7 @@ def test_role_checkboxes_write_through_and_all_checked_means_default(live_server
     page.locator("[data-testid=line-roles-%s]" % EV).wait_for(state="visible", timeout=20000)
     page.wait_for_function("() => !document.querySelector('[data-testid=line-role-%s-viewer]').checked" % EV, timeout=10000)
     assert box("sales").is_checked() and not box("viewer").is_checked()
+    page.locator("[data-testid=line-group-head-案件管理]").click()                     # 2026-11-13：事件依模組分組、預設只展開第一組（EV2＝保固到期在「案件管理」）
     assert page.locator("[data-testid=line-role-%s-viewer]" % EV2).is_checked(), "別的類型不受影響"
     box("viewer").check()
     from helpers.settings import _get_setting

@@ -34,7 +34,7 @@
 .cm-card.selected { background:var(--tone-info-bg); border-left-color:var(--accent) !important; }
 .cm-card:has(.cm-card__tag--active) { border-left-color:var(--tone-success-solid); }
 .cm-card:has(.cm-card__tag--stage)  { border-left-color:var(--tone-warning-border); }
-.cm-card:has(.cm-card__tag--closed) { border-left-color:var(--tone-violet-border); }
+.cm-card:has(.cm-card__tag--closed) { border-left-color:var(--tone-slate-border); }
 .cm-card__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .cm-card__no { font-size:12px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-primary); letter-spacing:.02em; }
 .cm-card__tag { font-size:12px; padding:2px 6px; border-radius:4px; font-weight:600; font-family:var(--font-zh); }
@@ -222,13 +222,13 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 /* deal-tag badge inline */
 .deal-tag-badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); white-space:nowrap; }
 .deal-tag-badge--active { background:var(--tone-success-bg-strong); color:var(--tone-success-fg); border:1px solid var(--tone-success-border); }
-.deal-tag-badge--closed { background:var(--tone-violet-bg); color:var(--tone-violet-fg); border:1px solid var(--tone-violet-border); }
+.deal-tag-badge--closed { background:var(--tone-slate-bg); color:var(--tone-slate-fg); border:1px solid var(--tone-slate-border); }
 .deal-tag-badge--stage  { background:var(--tone-warning-bg); color:var(--tone-warning-fg); border:1px solid var(--tone-warning-border); }
 .cm-project-btn { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; border:1px solid var(--tone-violet-border); background:var(--tone-violet-bg); color:var(--tone-violet-fg); font-size:12px; font-family:var(--font-zh); font-weight:500; cursor:pointer; transition:background .12s; flex-shrink:0; }
 .cm-project-btn:hover { background:var(--tone-violet-bg); }
 
 .tag-active { display:inline-flex; align-items:center; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-success-bg-strong); color:var(--tone-success-fg); border:1px solid var(--tone-success-border); }
-.tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-violet-bg); color:var(--tone-violet-fg); border:1px solid var(--tone-violet-border); }
+.tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:12px; font-weight:600; font-family:var(--font-zh); background:var(--tone-slate-bg); color:var(--tone-slate-fg); border:1px solid var(--tone-slate-border); }
 
 /* KPI pills */
 /* 2026-09-14：原本是 4 張有框小卡單獨一列，加上下方的 meta 列，
@@ -640,7 +640,11 @@ transition:background .1s;
   .mob-back-cm { display:none; }
   @media (max-width:767px) {
 .cm-layout { flex-direction:column; height:auto; min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); overflow:visible; }
-.cm-list { width:100%; min-width:0; max-height:calc(44vh / var(--fz,1)); border-right:none; border-bottom:1px solid var(--border-light); }
+/* 手機清單（2026-11-12）：舊寫法 .cm-list 用視窗高度比例當上限＋overflow:hidden，清單標頭（標題列／搜尋／排序／分頁／篩選晶片）
+   就佔掉 ~320px，內層 .cm-list__body 只剩 70–150px ⇒ 只看到半張卡片，下方整片空白。
+   手機整頁本來就可捲（.cm-layout height:auto），清單改成跟著內容長高、由頁面捲動，不再自成一個小捲動區。 */
+.cm-list { width:100%; min-width:0; max-height:none; overflow:visible; border-right:none; border-bottom:1px solid var(--border-light); }
+.cm-list__body { flex:none; overflow:visible; }
 .cm-detail { min-height:calc(54vh / var(--fz,1)); }
 .cm-list.mob-hidden  { display:none !important; }
 .cm-detail.mob-hidden { display:none !important; }
@@ -732,7 +736,7 @@ transition:background .1s;
 :root[data-theme="dark"] body.cm-page .badge--pending  { background: var(--tone-warning-bg);  color: var(--tone-warning-fg); }
 :root[data-theme="dark"] body.cm-page .badge--signing  { background: var(--tone-info-bg);     color: var(--tone-info-fg); }
 :root[data-theme="dark"] body.cm-page .badge--running  { background: var(--tone-success-bg);  color: var(--tone-success-fg); }
-:root[data-theme="dark"] body.cm-page .badge--settled  { background: var(--tone-violet-bg);   color: var(--tone-violet-fg); }
+:root[data-theme="dark"] body.cm-page .badge--settled  { background: var(--tone-slate-bg);    color: var(--tone-slate-fg); }
 :root[data-theme="dark"] body.cm-page .badge--rejected { background: var(--tone-danger-bg);   color: var(--tone-danger-fg);  border-color: var(--tone-danger-border); }
 :root[data-theme="dark"] body.cm-page .badge--lost     { background: var(--surface-neutral); color: var(--ink-secondary); }
 :root[data-theme="dark"] body.cm-page .btn-ghost       { background: var(--surface); }
@@ -752,3 +756,29 @@ transition:background .1s;
 :where(:root[data-theme="dark"] body.cm-page) a { color: var(--tone-info-fg); }
 /* 切換鈕選中狀態：深色模式不用近白的亮底（會成為全頁最亮的一塊），改中灰底＋深字（對比約 8.8） */
 :root[data-theme="dark"] body.cm-page .aq-sort.on { background: var(--ink-secondary); border-color: var(--ink-secondary); }
+
+/* ══ 手機／平板直式觸控補強（2026-11-12 UI 檢查）══════════════════════════════
+   既有手機版已把清單／明細改成上下堆疊、分頁籤可左右滑；這裡只補「手指好不好點」：
+   ① 輸入框 12px ⇒ iOS 聚焦會自動放大整頁 ⇒ 手機一律 16px、≥44px 高
+   ② 返回「列表」鈕 45×21、「更多」「儲存」~30px、操作紀錄連結 19px、分頁籤 39px ⇒ 補到 ≥40～44px
+   ③ 篩選籤（.aq-sort）彼此間距 0，容易點到隔壁 ⇒ 加 6px 間距、高度 40px
+   （放在檔尾、只用 min-height／padding／間距，不改既有版面規則，也不碰詳情頭／橫幅元件。） */
+@media (max-width:767px) {
+  .cm-list__search-input, .fi { font-size:16px; min-height:44px; }
+  textarea.fi { min-height:88px; }
+  .cm-list__tab { min-height:44px; }
+  .aq-sort { min-height:40px; padding:8px 12px; margin:0 6px 6px 0; }
+  .mob-back-cm { min-height:44px; padding:8px 14px; }
+  .cm-more__btn, .btn-save { min-height:44px; }
+  .cm-tab { padding:13px 14px; }
+  .cm-header__back { min-height:40px; display:inline-flex; align-items:center; }
+  button[x-text*="操作紀錄"] { min-height:40px; padding:10px 6px; }
+}
+@media (min-width:768px) and (max-width:1023px) {
+  .cm-list__search-input, .fi { min-height:40px; }
+  .cm-list__tab { min-height:40px; }
+  .aq-sort { min-height:36px; padding:6px 12px; margin:0 4px 4px 0; }
+  .cm-more__btn, .btn-save { min-height:40px; }
+  .cm-tab { padding:12px 14px; }
+  button[x-text*="操作紀錄"] { min-height:36px; padding:8px 6px; }
+}

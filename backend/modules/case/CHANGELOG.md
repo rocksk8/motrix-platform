@@ -4,6 +4,21 @@
 - 變更：新增／更新／補登歷史案件時，伺服器端驗證 `salesEmail`——必須是該業務可用的三個信箱之一（報價用信箱、公司對外信箱、本人 Email），否則改寫成系統解析出的值；舊報價單沒動它（也沒換業務員）就維持原樣；換了業務員但信箱還是舊的，會重新驗證。（用戶端寫進去的值不再被信任，信件 Reply-To 靠它。）
 - 前端：`quotation-form.html` 讀業務聯絡資料時優先用 `quoteEmailEffective`（舊名 `quoteEmail` 還在、值相同，保留一版）。
 - 測試：`tests/test_quote_email_2026_11_13.py`（偽造信箱被覆蓋、舊值保留、其他通知信同帶 Reply-To）。
+- **（併入）(next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）**
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+- 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
+- 文字：『拒絕結案』全改『駁回結案』（報價單頁訊息、稽核動作名稱、擇一方案設定說明）；案件頁新增 `?quick=` 深連結（mine／stage_overdue／recv_overdue／missing_docs）。
+
+## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
+- 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
+- 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。
+
+## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
+- 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
+
+## 1.0.219 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
+- 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
 
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。

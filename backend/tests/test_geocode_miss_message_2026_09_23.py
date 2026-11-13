@@ -378,8 +378,7 @@ def test_gc8_the_response_carries_both_numbers_separately(client, make_user,
 
     username, password = make_user(username="gc8_map", role="superadmin")
     r = client.post("/api/auth/login",
-                    json={"username": username, "password": password},
-                    headers={"X-Forwarded-For": "203.0.113.252"})
+                    json={"username": username, "password": password})  # 2026-11-13 外網登入強化：帶 X-Forwarded-For 一律當外網（超管外網未開兩步驟會被拒）⇒ 改內網直連
     assert r.status_code == 200, r.text
     r = client.get("/api/map/points",
                    headers={"Authorization": f"Bearer {r.json()['token']}"})

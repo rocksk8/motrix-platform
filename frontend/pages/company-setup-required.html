@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>尚未完成本公司資料設定 - MOTRIX 專案管理系統</title>
+  <title>尚未完成本公司資料設定 - MOTRIX PLATFORM</title>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     .cs-wrap { max-width:640px; margin:64px auto; padding:24px 28px; background:var(--white);
@@ -13,6 +13,17 @@
     .cs-title { font-size:20px; margin:0 0 8px; }
     .cs-dim { color:var(--text-secondary); font-size:13px; }
     .cs-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+    /* 手機（2026-11-12 UI 檢查）：卡片左右貼邊（margin:64px auto 在窄螢幕沒有側邊距）、兩顆按鈕並排偏小。 */
+    @media (max-width:767px){
+      .cs-wrap{margin:24px 14px;padding:20px 18px}
+      .cs-title{font-size:18px}
+      .cs-row{flex-direction:column}
+      .cs-row .btn{width:100%;min-height:46px;justify-content:center}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .cs-wrap{margin:48px auto}
+      .cs-row .btn{min-height:42px}
+    }
   </style>
 </head>
 <body>

@@ -627,6 +627,7 @@
  },
  "/api/approval-queue": {
   "k": [
+   "myCount",
    "myDelegatedFor",
    "queue",
    "queue[].count",
@@ -641,6 +642,7 @@
    "queue[].items[].customer",
    "queue[].items[].isEditApproval",
    "queue[].items[].linkedQuoteNo",
+   "queue[].items[].mine",
    "queue[].items[].projectName",
    "queue[].items[].quoteDate",
    "queue[].items[].quoteNo",
@@ -757,6 +759,34 @@
    "window.from",
    "window.maxDays",
    "window.to"
+  ],
+  "s": 200
+ },
+ "/api/auth/account-locks": {
+  "k": [
+   "config",
+   "config.lockMinutes",
+   "config.scope",
+   "config.threshold",
+   "config.windowMinutes",
+   "locks"
+  ],
+  "s": 200
+ },
+ "/api/auth/greeting": {
+  "k": [
+   "action",
+   "action.href",
+   "action.label",
+   "awayLine",
+   "category",
+   "companyStyle",
+   "kind",
+   "line",
+   "pref",
+   "style",
+   "title",
+   "todoLine"
   ],
   "s": 200
  },
@@ -1278,9 +1308,9 @@
  "/api/cashier/export": {
   "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "hdr": [
-   "已匯款明細|出納執行紀錄 — 已匯款（2026-11-01 ~ 2026-11-04）",
-   "已收款明細|出納執行紀錄 — 已收款（2026-11-01 ~ 2026-11-04）",
-   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-11-01 ~ 2026-11-04）"
+   "已匯款明細|出納執行紀錄 — 已匯款（2026-11-01 ~ 2026-11-13）",
+   "已收款明細|出納執行紀錄 — 已收款（2026-11-01 ~ 2026-11-13）",
+   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-11-01 ~ 2026-11-13）"
   ],
   "s": 200
  },
@@ -2534,6 +2564,28 @@
   ],
   "s": 200
  },
+ "/api/dashboard/mine": {
+  "k": [
+   "empty",
+   "generatedAt",
+   "groups",
+   "groups[].count",
+   "groups[].empty",
+   "groups[].href",
+   "groups[].hrefLabel",
+   "groups[].items",
+   "groups[].items[].href",
+   "groups[].items[].sub",
+   "groups[].items[].title",
+   "groups[].items[].tone",
+   "groups[].key",
+   "groups[].kind",
+   "groups[].order",
+   "groups[].title",
+   "partial"
+  ],
+  "s": 200
+ },
  "/api/dashboard/monthly": {
   "k": [
    "items",
@@ -3662,6 +3714,23 @@
    "nextAllowedAt",
    "stale",
    "staleDays"
+  ],
+  "s": 200
+ },
+ "/api/login-greeting/phrases": {
+  "k": [
+   "categories",
+   "categories[].category",
+   "categories[].formal",
+   "categories[].formal.builtin",
+   "categories[].formal.custom",
+   "categories[].humor",
+   "categories[].humor.builtin",
+   "categories[].humor.custom",
+   "categories[].label",
+   "maxLen",
+   "maxLines",
+   "placeholders"
   ],
   "s": 200
  },
@@ -6103,7 +6172,7 @@
    "執行摘要|營運報表",
    "目標達成率|2026 年度目標達成率",
    "本期收款明細|本期收款明細 — 2026 年 11 月",
-   "未收款清單|未收款清單 — 截至 2026-11-04",
+   "未收款清單|未收款清單 — 截至 2026-11-13",
    "當月收支|2026-11 當月收支明細",
    "今年度收支|2026年度收支總表",
    "案件清單|全部案件清單（本期新成案：0 件）",
@@ -6111,15 +6180,12 @@
    "毛利分析|利潤分析 — 精算利潤對照（已結案案件）",
    "保固到期預警|保固到期預警（90 天內，共 0 筆）",
    "已結案未精算|已結案未完成精算（共 0 件）",
-   "帳齡分析|應收帳款帳齡分析（截至 2026-11-04，合計未收 NT$ 0）"
+   "帳齡分析|應收帳款帳齡分析（截至 2026-11-13，合計未收 NT$ 0）"
   ],
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "k": [
-   "detail"
-  ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6240,10 +6306,11 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "k": [
-   "detail"
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "銷項發票清單|銷項發票清單（全部區間）"
   ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6356,8 +6423,17 @@
    "groups[].values.enforce_output_template",
    "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
+   "groups[].values.ext_totp_enabled",
+   "groups[].values.ext_totp_role_admin",
+   "groups[].values.ext_totp_role_engineer",
+   "groups[].values.ext_totp_role_finance",
+   "groups[].values.ext_totp_role_sales",
+   "groups[].values.ext_totp_role_superadmin",
+   "groups[].values.ext_totp_role_viewer",
+   "groups[].values.external_hosts",
    "groups[].values.hidden_terms_pdf_mode",
    "groups[].values.include_headers",
+   "groups[].values.internal_networks",
    "groups[].values.k01_seed",
    "groups[].values.label_bonus_award",
    "groups[].values.label_close_report",
@@ -6374,8 +6450,13 @@
    "groups[].values.label_voucher",
    "groups[].values.local_db_keep_days",
    "groups[].values.local_pre_update_keep",
+   "groups[].values.lock_minutes",
    "groups[].values.lock_scope",
+   "groups[].values.lock_threshold",
+   "groups[].values.lock_window_min",
+   "groups[].values.log_keep_days",
    "groups[].values.login_days",
+   "groups[].values.loopback_is_internal",
    "groups[].values.mail_cap",
    "groups[].values.mail_window_minutes",
    "groups[].values.max_file_mb",
@@ -6430,9 +6511,11 @@
    "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
+   "groups[].values.style",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
+   "groups[].values.tagline",
    "groups[].values.thousands",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
@@ -6709,10 +6792,20 @@
    "callback_url",
    "channel_access_token",
    "enabled",
+   "event_groups",
    "events",
+   "events[].audience",
+   "events[].audience.mode",
+   "events[].audience.roles",
+   "events[].audience.users",
    "events[].enabled",
+   "events[].follows",
+   "events[].group",
    "events[].key",
+   "events[].kind",
    "events[].name",
+   "events[].need",
+   "events[].priority",
    "events[].roles",
    "include_links",
    "login_channel_id",
@@ -6720,6 +6813,25 @@
    "public_base_url",
    "quota_thresholds",
    "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  },
@@ -7023,6 +7135,7 @@
    "companyName",
    "companyNameEn",
    "shortName",
+   "tagline",
    "taxId"
   ],
   "s": 200

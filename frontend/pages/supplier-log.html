@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>供應商日誌 — MOTRIX 專案管理系統</title>
+  <title>供應商日誌 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -258,7 +258,41 @@
     .btn-p:disabled { opacity: .6; cursor: not-allowed; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      /* 版型：左側摘要欄（288px）＋右側時間軸並排 → 手機右側只剩 70px、文字一字一行。改成上下排，整頁一起捲 */
+      .log-wrap { display: block; height: auto; overflow: visible; }
+      .log-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border-light); overflow: visible; }
+      .log-sidebar .stats-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 0 !important; }   /* style.css 手機版把 .stats-grid 壓成 1 欄（!important）→ 四個數字各占一列 */
+      .stat-cell { padding: 12px 8px; text-align: center; }
+      .stat-cell:nth-child(n+3) { border-top: none; }
+      .stat-cell:nth-child(2n) { border-right: 1px solid var(--border-light); }
+      .stat-cell:last-child { border-right: none; }
+      .stat-cell__val { font-size: 20px; }
+      .filter-area { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; }
+      .filter-area > .filter-sec-title { flex: 1 1 100%; margin-bottom: 0; }
+      .ftab { width: auto; min-height: 44px; padding: 0 12px; gap: 8px; border: 1px solid var(--border-light); background: #fff; }
+      .ftab.active { border-color: var(--black); }
+      .log-topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+      .log-search-wrap { max-width: none; flex: 1 1 100%; }
+      .log-sort { flex: 1; }
+      .timeline-scroll { overflow: visible; padding: 16px 16px 40px; }
+      .tl-left { width: 52px; }
+      .tl-act { min-height: 40px; padding: 0 14px; }
+      .log-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .modal-overlay input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .log-main select,
+      .modal-overlay select,
+      .log-main textarea,
+      .modal-overlay textarea { font-size: 16px; min-height: 44px; }
+      .log-main .btn,
+      .modal-overlay .btn { min-height: 44px; }
+      .log-main input[type=checkbox],
+      .modal-overlay input[type=checkbox],
+      .log-main input[type=radio],
+      .modal-overlay input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="supplierLogPage()" x-init="init()" x-cloak>
 
@@ -604,7 +638,7 @@
           const list = await r.json()
           this.supplier = list.find(s => String(s.id) === String(sid)) || null
           if (!this.supplier) { location.href = 'suppliers.html'; return }
-          document.title = this.supplier.name + ' 日誌 — MOTRIX 專案管理系統'
+          document.title = this.supplier.name + ' 日誌 — MOTRIX PLATFORM'
           this.visits = this.supplier.visits || []
         } catch {}
       },

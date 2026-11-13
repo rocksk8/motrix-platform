@@ -171,7 +171,7 @@ def test_login_create_submit_approve_smoke(live_server, make_user, e2e_browser):
     page1.fill('input[x-model="q.projectName"]', project_name)
     page1.locator('textarea[x-model="item.description"]').first.fill("測試品項 A")
 
-    page1.click('button:has-text("申請送出審核")')
+    page1.click('button:has-text("申請送出簽核")')
     page1.click('button:has-text("確認送出")')
     # 2026-09-10：原本只等「有內容」，但畫面在還沒拿到號碼時會顯示
     # 「（儲存後自動編號）」佔位字（見 quotation-form.html，取代舊版
@@ -416,7 +416,7 @@ def test_login_qr_approve_smoke(live_server, make_user, e2e_browser, client):
     """手機掃 QR 核准登入 smoke test（2026-09-08，見 routers/auth.py 的
     login_qr_info/login_qr_approve/login_qr_status 與 login-qr-approve.html）。
     桌面登入頁顯示 QR 後，模擬手機另開一個獨立瀏覽器 context 開啟確認頁面、
-    輸入密碼核准，桌面應該在輪詢週期內自動偵測到核准並完成登入，全程不需要
+    以同帳號的已登入狀態核准（2026-11-12 起不再接受密碼核准），桌面應該在輪詢週期內自動偵測到核准並完成登入，全程不需要
     在桌面上做任何其他操作（不輸入驗證碼、不用按任何按鈕）。"""
     username, password = make_user(role="superadmin")
 
@@ -452,7 +452,18 @@ def test_login_qr_approve_smoke(live_server, make_user, e2e_browser, client):
         assert challenge, "桌面頁面沒有拿到 challengeToken，QR 流程沒有正確啟動"
 
         # ── 手機：另開一個完全獨立的 context（模擬另一台裝置），開確認頁面 ──
+        # 2026-11-12（F1 修補）：手機核准**不再接受輸入密碼**——只有「這支手機已經登入同一個帳號」才能核准。
+        # (a) 手機沒登入：看到白話提示、沒有密碼欄位，也不會被核准。
+        ctx_nologin = browser.new_context()
+        page_nologin = ctx_nologin.new_page()
+        page_nologin.goto(f"{live_server}/pages/login-qr-approve.html#challenge={challenge}")
+        page_nologin.wait_for_selector('text=請在手機上先登入同一個帳號，再掃碼', timeout=10000)
+        assert page_nologin.locator('input[type="password"]').count() == 0
+        ctx_nologin.close()
+        # (b) 手機已登入同一個帳號（localStorage 有同帳號的 session）：自動核准。
         ctx_phone = browser.new_context()
+        ctx_phone.add_init_script(
+            "window.localStorage.setItem('motrix_session', JSON.stringify({token: %s}))" % json.dumps(login_resp.json()["token"]))
         page_phone = ctx_phone.new_page()
         # ⚠️ 2026-09-22 §8 FX22：challenge 改走 **URL fragment**。
         # ☠️ 原本是 `?challenge=` ⇒ 手機一掃就是
@@ -463,9 +474,6 @@ def test_login_qr_approve_smoke(live_server, make_user, e2e_browser, client):
         # 📌 `#` 後面的東西**瀏覽器不會送給伺服器**。
         page_phone.goto(
             f"{live_server}/pages/login-qr-approve.html#challenge={challenge}")
-        page_phone.wait_for_selector('input[type="password"]', timeout=10000)
-        page_phone.fill('input[type="password"]', password)
-        page_phone.click('button:has-text("核准登入")')
         page_phone.wait_for_selector('text=已核准登入', timeout=10000)
         ctx_phone.close()
 
