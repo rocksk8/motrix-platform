@@ -3,6 +3,9 @@
 ## (next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
 - 變更（內部，不影響對外介面）：案件頁（`case-management-core.js`）、核准佇列（`approval-queue.html`）、報價單（`quotation-form.html`）讀據點清單／公司名稱改打 `GET /api/settings/company-profile/public`（只含名稱、統編、聯絡方式、據點 id＋名稱）；顯示與行為不變。完整端點只剩公司資料設定頁在用（後端新增「完整內容只給最高管理者」開關，預設關）。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
+- **（併入）(next) — 2026-11-13（fix/quote-first-put-history，審查後修訂：整包比對不看階段）**
+- 修正（編輯紀錄）：新報價單第一次 PUT 不再多寫一筆使用者沒改的「其他內容」。原因＝建單時階段（`caseRecord.stages`）被 `_sync_stages_to_json` 重建成資料表的樣子（真實 id、補齊 dependsOn／visits／assignedTo），使用者手上那份還是暫時 id、欄位不齊，整包比對就判成有變更；而 PUT 本來就完全忽略用戶端的 stages（case_stages 表為權威），所以階段差異都是幻影。`_summarize_quote_changes` 的整包比對改用 `_diff_view`（不看 `caseRecord.stages`；款項日期套與存檔相同的 YYYY-MM-DD 正規化，三個日期欄位共用常數 `_PAYMENT_DATE_KEYS`）；會被存下來而且真的改了的值（頂層未追蹤欄位、款項金額…）仍記一筆。內容指紋（content_fp）、存檔內容、API 不變。
+- 測試：`tests/test_quote_first_put_history_2026_11_13.py`（9 題：修前 7 題紅；階段差異不記＋前提確認資料庫階段沒被改、頂層未追蹤欄位／款項金額的正向對照、幻影與真改動同時存在仍記、「檢視不改輸入、content_fp 不變」）。
 
 ## 1.0.224 — 2026-11-13（T82 預跑 #1 修正；整合者）
 - 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。
