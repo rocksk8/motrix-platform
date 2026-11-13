@@ -316,6 +316,8 @@ function Matrix(host,cfg){
 /* ───────── 分頁一：使用者個人權限 ───────── */
 /* 高敏感清單一律讀 API（GET /api/duty-roles 的 highSensitiveKeys），不寫死；此處以資料帶入模擬 */
 var PERM_HEAVY={};DATA.high_sensitive.forEach(function(k){PERM_HEAVY[k]=1});
+/* C4（使用者裁示）：另列一份「批次拒絕清單」——這些鍵禁止批次授予（批次取消可以）；不併入高敏感清單，由 API 的 batchGrantRefused 回傳 */
+var NOGRANT={};['project_approve_eng','project_approve_biz','quotation','expense_forms','file_center','contractor_list'].forEach(function(k){NOGRANT[k]=1});
 var ROLE_DECIDED={};DATA.finance_keys.forEach(function(k){ROLE_DECIDED[k]=1});
 var PEOPLE=[['wang','王經理','admin'],['li','李業務','sales'],['chen','陳工程師','engineer'],['lin','林會計','finance'],['zhang','張助理','viewer'],['huang','黃採購','sales'],['wu','吳專案','engineer'],['zhou','周工讀','viewer']];
 var ROLE_ZH={superadmin:'最高管理者',admin:'管理者',sales:'業務',engineer:'工程',finance:'財務',viewer:'檢視者'};
@@ -326,7 +328,7 @@ function permCfg(){
     var heavy=!!PERM_HEAVY[k[0]],v={},d={};
     PEOPLE.forEach(function(p){var t=DATA.role_templates[p[2]].indexOf(k[0])>=0;d[p[0]]=t;v[p[0]]=t});
     return {id:k[0],group:k[2],label:k[1].replace(/（.*$/,''),code:k[0],one:'能不能使用「'+k[1].replace(/（.*$/,'')+'」這項功能。預設依各人的角色範本。',
-      tags:[['oth','影響別人']].concat(heavy?[['heavy','影響大']]:[]).concat(ROLE_DECIDED[k[0]]?[['ext','由角色決定']]:[]),eligible:!ROLE_DECIDED[k[0]],whyNot:'財務三鍵由角色決定，這裡唯讀；批次永遠不改角色',roleDecided:!!ROLE_DECIDED[k[0]],heavy:heavy,
+      tags:[['oth','影響別人']].concat(heavy?[['heavy','影響大']]:[]).concat(ROLE_DECIDED[k[0]]?[['ext','由角色決定']]:[]).concat(NOGRANT[k[0]]?[['heavy','不可批次授予']]:[]),eligible:!ROLE_DECIDED[k[0]],nogrant:!!NOGRANT[k[0]],whyNot:'財務三鍵由角色決定，這裡唯讀；批次永遠不改角色',roleDecided:!!ROLE_DECIDED[k[0]],heavy:heavy,
       heavyText:'高敏感權限：授予不能批次，要逐人填原因（至少 4 個字）；取消可以批次（例如離職）但同樣要填原因。原因與權限變更紀錄由伺服器端同一個共用檢查點強制，單筆修改、批次、範本套用三條路都要經過，不是只擋新的批次端點。',
       help:{what:'控制是否能進入或操作「'+k[1]+'」。',when:'新進、調職、離職，或某人臨時要代理這項工作時。',impact:'只影響這個人的選單與操作權限；已送出的單據不受影響。'+(heavy?'屬高敏感權限，變更會記進權限變更紀錄。':''),recommend:'照角色範本；只有例外才個別加減。'},
       v:v,d:d}});
@@ -352,6 +354,7 @@ function permPlan(rs,cs,on){
   rs.forEach(function(r){
     if(r.roleDecided){pl.skip.push({label:r.label,why:'財務三鍵由角色決定，批次不改角色'});return}
     if(on&&r.heavy){pl.skip.push({label:r.label,why:'授予高敏感權限不能批次，要逐人填原因'});return}
+    if(on&&r.nogrant){pl.skip.push({label:r.label,why:'這項權限在「批次拒絕清單」，不能批次授予（取消可以）'});return}
     cs.forEach(function(c){if(r.v[c.id]===on)had++;else{newN++;if(r.heavy)hv++;pl.changes.push({r:r,c:c.id,to:on})}})});
   pl.estimate=(on?'新增 ':'移除 ')+newN+' 個授權（'+cs.length+' 人 × '+rs.length+' 項；其中 '+had+' 個本來就是這樣，不動）。';
   if(hv)pl.warn.push('其中 '+hv+' 個是「取消高敏感權限」：儲存時必須填原因（至少 4 個字），並寫進權限變更紀錄。');
@@ -366,6 +369,7 @@ function tplPlan(cs,role){
       if(r.roleDecided){return}
       var to=tpl.indexOf(r.id)>=0,cur=r.v[c.id];if(to===cur)return;
       if(to&&r.heavy){pl.skip.push({label:c.title+'：'+r.label,why:'授予高敏感權限不能批次'});return}
+      if(to&&r.nogrant){pl.skip.push({label:c.title+'：'+r.label,why:'在批次拒絕清單，不能批次授予'});return}
       pl.changes.push({r:r,c:c.id,to:to});(to?gr:rev).push(r.label)});
     lines.push('<b>'+esc(c.title)+'</b>：取消 '+rev.length+' 項'+(rev.length?'（'+esc(rev.slice(0,6).join('、'))+(rev.length>6?'…':'')+'）':'')+'；新增 '+gr.length+' 項'+(gr.length?'（'+esc(gr.slice(0,6).join('、'))+(gr.length>6?'…':'')+'）':''));
   });
@@ -517,7 +521,7 @@ document.addEventListener('change',function(e){if(e.target.id==='mockc')MOCK.con
     var b=document.getElementById('batch'),pick={perm:'grant',mail:'off',pref:'off'}[q];
     function doBatch(){
       if(q==='flow'){var sel=b.querySelector('select[data-b=tpl]');sel.value='t2';sel.dispatchEvent(new Event('change',{bubbles:true}))}
-      else if(demo==='tpl'){var s2=b.querySelector('select[data-b=tpl]');s2.value='sales';s2.dispatchEvent(new Event('change',{bubbles:true}))}
+      else if(demo==='tpl'||demo==='tplsave'){var s2=b.querySelector('select[data-b=tpl]');s2.value='sales';s2.dispatchEvent(new Event('change',{bubbles:true}))}
       else b.querySelector('button[data-b='+pick+']').click()}
     if(demo==='draft'||demo==='save'||demo==='done'||demo==='tpl'||demo==='tplsave'){
       if(demo==='tpl'||demo==='tplsave'){st.sel={}}
