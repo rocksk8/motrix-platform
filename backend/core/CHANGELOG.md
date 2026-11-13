@@ -17,6 +17,9 @@
 - 行為變更（hichan-9 M1／PM 裁示）：「重要」告警**實際收件人變成 0 或變少**（角色篩選清成 `[]`、只發給指定但指定的人都離職／未綁定、改成只發給一人…）與「關閉」同樣必須 `confirm_critical`（否則 400 `confirm_critical_required`；批次、草稿儲存、進鎖後複查三處一致）；預覽列多 `critical_narrow`。復原（`restore_events_batch`）仍不需確認（寫回使用者自己先前的狀態），但先前指定的人已離職／被刪除／失去模組權限時整批 400「無法復原…」。沒有任何實質變動的批次不再寫入設定（L4）；每日用量清理日期在 commit 成功後才記錄（L5）。
 - 共用前端元件 `settings-matrix.js` 補強（不是 L1）：草稿模式（儲存列、未儲存標示、離開警告）、`registerEligibleOverride` 資格登記表、`batch.groupActionsEnabled`、`number`／`text` 輸入欄、每格 `disabled`（可帶原因）／`readonly`、列 `selectable:false`、`cfg.labels` 換文案、`destroy()`、重繪還原焦點、寫入中的格子修改排隊不丟、`html` 欄位預設跳脫（要放標籤須 `raw:true` 或 `SettingsMatrix.raw()`）、`snapshot` 必須回物件。**行為變更**：`type:'html'` 欄位原本直接當 HTML，現在需明確 `raw:true`（目前只有 LINE 事件頁用到，已加）。
 - 測試：`tests/test_line_events_batch_2026_11_13.py`（約 90 題）、`tests/test_e2e_line_events_matrix_2026_11_13.py`（15 題）。
+- **（併入）(next) — 2026-11-13（fix/google-quota-conn-t84；Google 額度頁一次請求開約 200 條連線）**
+- 效能修正（`helpers/geo.py`，行為與公開介面不變）：`GET /api/settings/google-quota` 在正式機一次 8.6～9.8 秒，原因是 `quota_calculator()` 對待暖清單每個地址呼叫 `cached_only()`，每次各開一條讀連線（約 200 條）。計算器的「待查地址數」迴圈改包進 `cache_read_session()`（範圍內共用一條讀連線，finally 關閉）；`_warm_backlog()` 是同一個寫法，改成先收齊再在同一範圍內過濾（順序與去重結果不變）。
+- 測試：`tests/test_google_quota_conn_2026_11_13.py`（5 → 200 個地址連線數相同、絕對上限、端點層、結果與舊語意相同、計數器正對照）。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
