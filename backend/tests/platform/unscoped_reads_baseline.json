@@ -131,6 +131,7 @@
   "helpers/notify_actions.py::_throttled::notifications": "unscoped",
   "helpers/notify_actions.py::preview::notifications": "unscoped",
   "helpers/prefill_sources.py::_custom_last_value::custom_records": "unscoped",
+  "helpers/settings_registry.py::_notice_watermark::notifications": "unscoped",
   "helpers/settings_registry.py::audit_spine_failures::audit_log": "unscoped",
   "helpers/system_checks.py::_check_approval_reminders::<from>": "dynamic",
   "helpers/system_checks.py::_latest_audit_at::audit_log": "unscoped",

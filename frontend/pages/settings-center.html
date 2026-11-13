@@ -28,7 +28,11 @@
     .sc-tab { border: 0; background: transparent; padding: 9px 14px; cursor: pointer; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid transparent; }
     .sc-tab.is-on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
     .sc-card { border: 1px solid var(--border-light); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: #fff; }
-    .sc-card.is-dirty { border-color: var(--accent); }
+    .sc-card.is-dirty { border-color: var(--warning); box-shadow: 0 0 0 2px var(--warning-light); }
+    .sc-unsaved { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 9px; background: var(--warning); color: #fff; margin-left: 8px; vertical-align: middle; }
+    .sc-toast { position: fixed; top: 18px; right: 18px; z-index: 60; max-width: 420px; padding: 12px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+    .sc-toast.is-ok { background: var(--success); color: #fff; }
+    .sc-toast.is-wait { background: var(--warning); color: #fff; }
     .sc-q { font-size: 14px; font-weight: 600; }
     .sc-help { color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
     .sc-cur { font-size: 12px; margin-top: 8px; color: var(--text-secondary); }
@@ -97,6 +101,7 @@
       </div>
     </div>
 
+    <div x-show="toast" class="sc-toast" :class="toast && toast.kind === 'wait' ? 'is-wait' : 'is-ok'" role="status" data-testid="sc-toast" x-text="toast ? toast.text : ''"></div>
     <div x-show="msg" class="sc-ok" data-testid="sc-msg" x-text="msg"></div>
     <div x-show="err" class="sc-bad" data-testid="sc-err" x-text="err"></div>
 
@@ -159,7 +164,7 @@
         <div x-show="!isPlanned() && tab==='values'">
           <template x-for="f in fields()" :key="f.key">
             <div class="sc-card" :class="{'is-dirty': isDirty(f)}" :data-testid="'sc-field-' + f.key">
-              <div class="sc-q"><span x-text="f.question"></span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span><template x-if="f.helpInfo && f.helpInfo.what"><span class="hint" :data-testid="'sc-hint-' + f.key" :data-hint="JSON.stringify(f.helpInfo)" :data-hint-label="f.label"></span></template></div>
+              <div class="sc-q"><span x-text="f.question"></span><span class="sc-unsaved" x-show="isDirty(f)" :data-testid="'sc-unsaved-' + f.key">未儲存</span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span><template x-if="f.helpInfo && f.helpInfo.what"><span class="hint" :data-testid="'sc-hint-' + f.key" :data-hint="JSON.stringify(f.helpInfo)" :data-hint-label="f.label"></span></template></div>
               <div class="sc-help" x-text="f.help"></div>
 
               <!-- 選項型 -->
@@ -168,7 +173,7 @@
                   <label class="sc-choice" :class="{'is-on': choiceOn(f, c)}">
                     <input type="radio" :name="'sc-' + f.key" :checked="choiceOn(f, c)" :data-testid="'sc-choice-' + f.key + '-' + c.value" @change="setDraft(f, c.value)">
                     <span x-text="c.label"></span>
-                    <span class="sc-rec" x-show="f.recommended === c.value">建議</span>
+                    <span class="sc-rec" x-show="f.recommended !== null && f.recommended !== undefined && f.recommended === c.value" :data-testid="'sc-rec-' + f.key + '-' + c.value">建議值</span>
                     <small x-text="c.impact"></small>
                   </label>
                 </template>
@@ -326,11 +331,12 @@
     </div>
 
     <!-- 儲存列：有修改才出現 -->
-    <div class="sc-bar" x-show="dirtyCount() && tab==='values'" data-testid="sc-bar">
+    <div class="sc-bar" x-show="dirtyCount()" data-testid="sc-bar">
       <div class="sc-bar-in">
         <div class="sc-row">
-          <strong x-text="'已修改 ' + dirtyCount() + ' 項，尚未儲存'"></strong>
-          <button type="button" class="btn btn-ghost btn-sm" data-testid="sc-discard" @click="discard()">放棄修改</button>
+          <strong data-testid="sc-bar-title" x-text="'有 ' + dirtyCount() + ' 項未儲存'"></strong>
+          <span class="sc-note" x-show="tab !== 'values'">（到「目前設定」填寫原因後按「儲存」）</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="sc-discard" @click="discard()">放棄</button>
         </div>
         <template x-if="preview && preview.ok">
           <div data-testid="sc-review">
@@ -338,13 +344,14 @@
               <div class="sc-note" style="color:inherit" x-text="'• ' + r.effect"></div>
             </template>
             <template x-for="w in preview.warnings" :key="w"><div class="sc-note" style="color:var(--warning)" x-text="'⚠ ' + w"></div></template>
+            <div class="sc-note" style="color:inherit" x-show="recipientsText()" data-testid="sc-recipients" x-text="recipientsText()"></div>
           </div>
         </template>
         <template x-for="m in previewProblems()" :key="m"><div class="sc-err" x-text="m"></div></template>
         <textarea x-model="reason" rows="2" placeholder="為什麼要改？（必填，會記在變更紀錄裡）" data-testid="sc-reason"></textarea>
         <label x-show="hasRed()" style="color:var(--danger);font-size:13px"><input type="checkbox" x-model="ack" data-testid="sc-ack"> 我已了解上述影響</label>
         <div class="sc-row">
-          <button type="button" class="btn btn-primary" :disabled="!canConfirm()" data-testid="sc-save" @click="save()">確認儲存</button>
+          <button type="button" class="btn btn-primary" :disabled="!canConfirm()" data-testid="sc-save" @click="save()">儲存</button>
         </div>
       </div>
     </div>
@@ -365,6 +372,7 @@ function settingsCenterPage() {
     pending: [], pendingNote: '', versions: [], diffA: '', diffB: 'current', diff: null,
     restoreFor: null, restorePv: null, restoreReason: '',
     profiles: [], profilePv: null, profileName: '', profileReason: '', profileSkipped: [],
+    toast: null, _toastTimer: null,
     _initDone: false, _timer: null, _seq: 0,
 
     _hdr() {
@@ -393,9 +401,58 @@ function settingsCenterPage() {
     _say(m) { this.msg = m; this.err = '' },
     _fail(e) { this.err = (e && e.message) || '操作失敗'; this.msg = '' },
 
+    // 有未儲存的草稿時離開（關分頁、重新整理、點到別的頁面）⇒ 瀏覽器的離開確認；沒有草稿 ⇒ 不干擾
+    leaveGuard(e) {
+      if (!this.dirtyCount()) return undefined
+      if (e) { e.preventDefault(); e.returnValue = '' }
+      return '有尚未儲存的設定變更，離開後會遺失。'
+    },
+    showToast(kind, text) {
+      this.toast = { kind, text }
+      clearTimeout(this._toastTimer)
+      this._toastTimer = setTimeout(() => { this.toast = null }, 9000)
+    },
+    // 儲存前的「誰會收到通知」（伺服器 plan().recipients 的白話）；角色片語以外的對象（簽核人、主管…）目前不會自動通知，誠實寫出來
+    recipientsText() {
+      const r = this.preview && this.preview.recipients
+      if (!r || !r.superadmins) return ''
+      const o = r.others || []
+      const who = []
+      if (r.superadmins.length) who.push(r.superadmins.join('、') + '（最高管理者）')
+      if (o.length) who.push(o.slice(0, 5).map(x => x.display).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : ''))
+      let t = who.length ? '儲存後會通知：' + who.join('，以及 ') : '儲存後不會另外通知其他人（你自己不會收到自己操作的通知）'
+      if (o.length && r.redactedForOthers) t += '。一般同仁只會看到「設定已變更、由誰操作」，看不到數值與原因'
+      if (r.line && r.line.willSend) t += '；並發 LINE 給最高管理者'
+      if ((r.ignoredRoles || []).length) t += '。另有「' + r.ignoredRoles.join('、') + '」不在自動通知對象內，請自行告知'
+      return t
+    },
+    dayText(iso) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '')
+      return m ? (parseInt(m[2], 10) + ' 月 ' + parseInt(m[3], 10) + ' 日') : ''
+    },
+    // 儲存結果的白話（提示框用）：立即生效 ⇒「已生效」；要核准 ⇒「已送出，待第二位最高管理者核准，預計 X 日生效」；只等確認期間 ⇒「已送出，預計 X 日生效」
+    saveSummary(r) {
+      const parts = []
+      const pend = (r && r.pending) || []
+      if (r && r.changed) parts.push('已生效')
+      const needApproval = pend.filter(p => p.approvalsRequired > 0)
+      const plain = pend.filter(p => !p.approvalsRequired)
+      const first = list => list.map(p => p.effectiveAt).sort()[0]
+      if (needApproval.length) parts.push('已送出，待第二位最高管理者核准，預計 ' + this.dayText(first(needApproval)) + '生效')
+      if (plain.length) parts.push('已送出，等待期滿後生效，預計 ' + this.dayText(first(plain)) + '生效')
+      if (!parts.length) return { kind: 'ok', text: '沒有任何變更' }
+      return { kind: pend.length ? 'wait' : 'ok', text: parts.join('；') }
+    },
     async init() {
       if (this._initDone) return
       this._initDone = true
+      window.addEventListener('beforeunload', e => this.leaveGuard(e))
+      // 通知裡的「完整明細：變更紀錄」連結帶 ?tab=versions（可再帶 &group=群組）⇒ 直接開「版本與變更紀錄」頁籤
+      try {
+        const q = new URLSearchParams(location.search)
+        if (['values', 'versions'].includes(q.get('tab'))) this.tab = q.get('tab')
+        if (q.get('group') && !location.hash) location.hash = '#' + encodeURIComponent(q.get('group'))
+      } catch (e) { /* 網址解析失敗就用預設頁籤 */ }
       await this.loadGroups()
       // 網址帶 #群組代碼（系統中心的卡片這樣連過來，例如 #retention）⇒ 直接開那一組；不認得就開第一組
       let want = ''
@@ -434,7 +491,7 @@ function settingsCenterPage() {
     },
     curMeta() { return this.groups.find(g => g.group === this.current) || null },
     async pick(group) {
-      if (this.dirtyCount() && group !== this.current) { this._fail(new Error('這個群組有尚未儲存的修改，請先儲存，或按「放棄修改」。')); return }
+      if (this.dirtyCount() && group !== this.current) { this._fail(new Error('這個群組有尚未儲存的修改，請先按「儲存」，或按「放棄」。')); return }
       this.current = group
       this.drafts = {}; this.preview = null; this.impacts = {}; this.reason = ''; this.ack = false; this.msg = ''; this.err = ''
       this.diff = null; this.restoreFor = null; this.restorePv = null
@@ -543,6 +600,8 @@ function settingsCenterPage() {
         if (n) parts.push(n + ' 項變更已列入「待生效」，要等確認期間（需要時還要另一位最高管理者核准）後才會生效')
         if (!parts.length) parts.push('沒有任何變更')
         this._say(parts.join('；') + '。' + ((r.warnings || []).join('')))
+        const sm = this.saveSummary(r)
+        this.showToast(sm.kind, sm.text)
         this.discard()
         await this.loadDetail(); await this.loadGroups()
       } catch (e) { this._fail(e) } finally { this.busy = false }

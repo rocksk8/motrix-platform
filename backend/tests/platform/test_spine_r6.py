@@ -185,8 +185,9 @@ def _f(**kw):
 def test_loosen_both_is_accepted_only_on_numbers_and_flags_any_direction_in_banners():
     f = _f(risk="money", risk_text="金額可能不一致。", loosen="both", impact_scope=SCOPE)
     assert f.loosen == "both"
+    assert _f(type="str", default="a", loosen="both").loosen == "both"                       # S5：非數值欄位可用 both（任何變更都走放寬流程）
     with pytest.raises(ValueError):
-        _f(type="str", default="a", loosen="both")
+        _f(type="str", default="a", loosen="up")                                             # up／down 仍只限數值
     with pytest.raises(ValueError):
         _f(loosen="sideways")
     up, down = R.banner_of(f, 8, days=7), R.banner_of(f, 2, days=7)
