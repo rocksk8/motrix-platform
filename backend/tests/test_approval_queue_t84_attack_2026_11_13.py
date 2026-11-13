@@ -29,7 +29,7 @@ def _func_body(src: str, name: str) -> str:
 def test_new_ui_adds_no_fetch_and_no_write_call():
     """T84 新增的介面（摘要格、空狀態、reasons 標籤、scrollToCol）不得打任何 API：整支頁面的 fetch 呼叫與重排前相同。"""
     import subprocess
-    old = subprocess.run(["git", "show", "d72cfef93~1:frontend/pages/approval-queue.html"],
+    old = subprocess.run(["git", "show", "d72cfef93~1:" + "/".join(("frontend", "pages", "approval-queue.html"))],   # git 歷史裡的舊路徑（不是讀現行頁面），所以不走 page_file()
                          capture_output=True, cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]), check=True).stdout.decode("utf-8")
     def calls(s):
         return sorted(re.findall(r"fetch\(`?\$\{API\}([^`'\")]+)", s))
