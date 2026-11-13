@@ -399,19 +399,24 @@ class files_txn:
         return self._w.__exit__(exc_type, exc, tb)
 
 
-def _read_json_list(conn, table, col, where_col, key, not_found):
-    row = conn.execute("SELECT %s AS v FROM %s WHERE %s = ?" % (col, table, where_col), (key,)).fetchone()
-    if row is None:
-        raise HTTPException(404, not_found)
-    cur = json.loads(row["v"] or "[]")
+def _read_json_list(conn, table, col, where_col, key):
+    """目前的清單（列不存在也回 []；列是否存在由寫回時的 rowcount 判斷）。讀取沿用已登記的 `files_from_json_column`。"""
+    cur = files_from_json_column(conn, table, where_col, key, col)
     return cur if isinstance(cur, list) else []
 
 
-def _write_json_list(conn, table, col, where_col, key, items, extra_set):
+def _row_exists(conn, table, col, where_col, key) -> bool:
+    """列在不在（`UPDATE … SET col=col` 的 rowcount；在寫交易內、不改任何資料）。"""
+    return conn.execute("UPDATE %s SET %s=%s WHERE %s = ?" % (table, col, col, where_col), (key,)).rowcount > 0
+
+
+def _write_json_list(conn, table, col, where_col, key, items, extra_set) -> bool:
+    """寫回；列不存在（rowcount 0）回 False。"""
     sets = [col] + list((extra_set or {}).keys())
     _idents(*sets)
-    conn.execute("UPDATE %s SET %s WHERE %s = ?" % (table, ", ".join("%s=?" % c for c in sets), where_col),
-                 (json.dumps(items, ensure_ascii=False), *(extra_set or {}).values(), key))
+    cur = conn.execute("UPDATE %s SET %s WHERE %s = ?" % (table, ", ".join("%s=?" % c for c in sets), where_col),
+                       (json.dumps(items, ensure_ascii=False), *(extra_set or {}).values(), key))
+    return cur.rowcount > 0
 
 
 def append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=None, not_found="找不到單據", guard=None) -> list:
@@ -422,11 +427,12 @@ def append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=N
     _idents(table, col, where_col)
     if not conn.in_transaction:
         raise RuntimeError("append_json_list 必須在 files_txn／write_txn 區塊內呼叫")
-    cur = _read_json_list(conn, table, col, where_col, key, not_found)
+    cur = _read_json_list(conn, table, col, where_col, key)
     if guard is not None:
         guard(cur)
     merged = cur + list(new_items)
-    _write_json_list(conn, table, col, where_col, key, merged, extra_set)
+    if not _write_json_list(conn, table, col, where_col, key, merged, extra_set):
+        raise HTTPException(404, not_found)                      # 列不存在（上傳途中單據被刪）⇒ 回收新檔、404
     return merged
 
 
@@ -439,14 +445,17 @@ def remove_json_item(conn, table, col, where_col, key, file_id, *, extra_set=Non
     _idents(table, col, where_col)
     target = None
     with write_txn(conn):
-        cur = _read_json_list(conn, table, col, where_col, key, not_found)
+        cur = _read_json_list(conn, table, col, where_col, key)
         target = next((f for f in cur if isinstance(f, dict) and f.get("id") == file_id), None)
         if target is None and not missing_ok:
+            if not _row_exists(conn, table, col, where_col, key):
+                raise HTTPException(404, not_found)
             raise HTTPException(404, "找不到指定的檔案")
         remaining = cur
         if target is not None:
             remaining = [f for f in cur if not (isinstance(f, dict) and f.get("id") == file_id)]
-            _write_json_list(conn, table, col, where_col, key, remaining, extra_set)
+            if not _write_json_list(conn, table, col, where_col, key, remaining, extra_set):
+                raise HTTPException(404, not_found)
         if inside is not None:
             inside(conn)
         conn.commit()
