@@ -75,12 +75,14 @@
       if (d.detail && d.detail.message) return d.detail.message
       return fallback
     }
-    async function call(path, method, body) {
-      var r = await fetch(path, { method: method || 'GET', headers: hdr(!!body), body: body ? JSON.stringify(body) : undefined })
+    async function call(path, init) {
+      var r = await fetch(path, init || { headers: hdr(false) })
       var d = await r.json().catch(function () { return {} })
       if (!r.ok) { var err = new Error(detailText(d, '操作失敗（' + r.status + '）')); err.status = r.status; err.data = d; throw err }
       return d
     }
+
+    function post(path, body) { return call(path, { method: 'POST', headers: hdr(true), body: JSON.stringify(body) }) }
 
     // ── 資料 ──
     // 預設規則把「重要」告警視為影響大（risk=security，不能批次）；LINE 頁登記了覆寫（見下），其餘事件 risk=none
@@ -249,7 +251,7 @@
     function restore(snap, res) {
       var r = res && res.res
       if (!r || !r.after) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原'))
-      return call('/api/settings/line-notify/events/batch-undo', 'POST', { states: snap, expect: r.after, since_audit: r.audit_mark || 0 }).catch(function (e) { throw conflictError(e, '無法復原這一批：') })
+      return post('/api/settings/line-notify/events/batch-undo', { states: snap, expect: r.after, since_audit: r.audit_mark || 0 }).catch(function (e) { throw conflictError(e, '無法復原這一批：') })
     }
     function applied(res, label) { return { res: res, message: label + '（' + res.changed.length + ' 項有變動' + (res.unchanged && res.unchanged.length ? '、' + res.unchanged.length + ' 項本來就是這樣' : '') + '）' } }
     function changesOf(list) { var o = {}; list.forEach(function (c) { o[c.key] = c.patch }); return o }
@@ -266,7 +268,7 @@
     }
     var lastCritical = []
     function confirmSave(list) {
-      return call('/api/settings/line-notify/events/batch-preview', 'POST', { changes: changesOf(list) }).then(function (res) {
+      return post('/api/settings/line-notify/events/batch-preview', { changes: changesOf(list) }).then(function (res) {
         var changed = res.events.filter(function (r) { return r.changed }).length
         if (!changed) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
         var t = res.total, q = window.__leQuota
@@ -285,7 +287,7 @@
     function save(list, ctx) {
       var expect = {}
       list.forEach(function (c) { if (c.row && c.row.version) expect[c.key] = c.row.version })
-      return call('/api/settings/line-notify/events/batch', 'POST', { changes: changesOf(list), expect: expect, since_audit: cfg.audit_mark || 0, confirm_critical: lastCritical.length > 0 && !!ctx.confirmed })
+      return post('/api/settings/line-notify/events/batch', { changes: changesOf(list), expect: expect, since_audit: cfg.audit_mark || 0, confirm_critical: lastCritical.length > 0 && !!ctx.confirmed })
         .then(function (r) { return applied(r, '已儲存') })
         .catch(function (e) { throw conflictError(e, '無法儲存：') })
     }
