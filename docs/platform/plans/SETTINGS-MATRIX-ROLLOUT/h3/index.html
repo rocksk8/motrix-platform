@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設定矩陣 mockup：業務與財務規則</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb;--on:#157347;--sel:#eef4ff;--purple:#5b3fa0;--purplebg:#efe9fb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d;--sel:#1b2740;--purplebg:#2a2040;--red:#ff6b81;--ok:#5fd18c;--warn:#f0b457;--blue:#7fb0ff;--purple:#b9a2ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:16px 16px 140px}
+h1{font-size:20px;margin:4px 0 2px}h2{font-size:16px;margin:22px 0 8px}h3{font-size:14px;margin:0}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.banner{background:var(--warnbg);color:var(--warn);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px}
+.tabs{display:flex;gap:6px;margin:8px 0 12px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 14px;border-radius:8px;cursor:pointer;font:inherit}
+.tab[aria-selected=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.mute{color:var(--mute);font-size:12px}
+.k{font:11px/1.3 ui-monospace,Consolas,monospace;color:var(--mute)}
+.pill{display:inline-block;font-size:11px;padding:0 7px;border-radius:9px;border:1px solid var(--line);white-space:nowrap;line-height:1.7}
+.pill.heavy{background:var(--redbg);color:var(--red);border-color:transparent}
+.pill.ext{background:var(--warnbg);color:var(--warn);border-color:transparent}
+.pill.oth{background:var(--bluebg);color:var(--blue);border-color:transparent}
+.pill.adv{background:var(--soft);color:var(--mute)}
+.pill.cust{background:var(--purplebg);color:var(--purple);border-color:transparent}
+.pill.ok{background:var(--okbg);color:var(--ok);border-color:transparent}
+.pill.bad{background:var(--redbg);color:var(--red);border-color:transparent}
+.pill.pnd{background:var(--warnbg);color:var(--warn);border-color:transparent}
+/* summary */
+.sum{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.sum .card{padding:8px 14px;min-width:120px}.sum b{font-size:20px;display:block;line-height:1.2}
+/* toolbar */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin-bottom:8px;position:sticky;top:0;z-index:20}
+.toolbar input[type=search]{flex:1 1 220px;min-width:160px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:5px 11px;border-radius:16px;cursor:pointer;font:inherit;font-size:13px;min-height:32px}
+.chip[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
+select,.btn,input[type=number],input[type=text],textarea,input[type=date]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);padding:5px 9px}
+.btn{cursor:pointer}.btn:hover{border-color:var(--mute)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}.btn.sm{padding:2px 8px;font-size:12px}.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.danger{color:var(--red)}
+/* nav */
+.secnav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+/* subsection */
+.subsec{margin:0 0 12px;overflow:hidden}
+.subh{display:flex;gap:10px;align-items:center;padding:9px 12px;background:var(--soft);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.subh .cnt{margin-left:auto;font-size:12px;color:var(--mute)}
+.topsec{font-size:15px;font-weight:700;margin:16px 0 6px;padding-left:8px;border-left:4px solid var(--blue)}
+.row{display:grid;grid-template-columns:30px minmax(0,1.25fr) minmax(0,1fr) 190px 84px;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:start;position:relative}
+.row:last-child{border-bottom:0}
+.row.chg{box-shadow:inset 4px 0 0 var(--blue)}
+.row.pnd{box-shadow:inset 4px 0 0 var(--warn)}
+.row.off{opacity:.55}
+.row.sel{background:var(--sel)}
+.row .nm{font-weight:600}
+.row .ds{font-size:12.5px;color:var(--mute);margin-top:2px}
+.q{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--blue);cursor:pointer;font-size:12px;line-height:1;padding:0;vertical-align:middle}
+.dot{color:var(--blue);font-size:12px;white-space:nowrap}
+.src{font-size:12px}
+.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:5px 8px;margin:0 0 4px;cursor:pointer;background:var(--card)}
+.opt input{margin-right:6px}.opt b{font-weight:600;font-size:13px}.opt small{display:block;color:var(--mute);margin-left:22px;font-size:12px}
+.opt.on{border-color:var(--blue);background:var(--bluebg)}
+.opt.dis{opacity:.5;cursor:not-allowed}
+.unit{color:var(--mute);margin-left:4px}
+.err{color:var(--red);font-size:12px}
+.sw{width:42px;height:24px;border-radius:12px;border:1px solid var(--line);background:#c9c9cf;position:relative;cursor:pointer;padding:0;vertical-align:middle}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .12s}
+.sw[aria-checked=true]{background:var(--on);border-color:var(--on)}.sw[aria-checked=true]::after{left:20px}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px}.chips span{background:var(--bluebg);color:var(--blue);border-radius:10px;padding:0 8px;font-size:12px}
+.note{font-size:12px;color:var(--warn);margin-top:3px}
+.pendline{font-size:12px;background:var(--warnbg);color:var(--warn);border-radius:6px;padding:4px 8px;margin-top:4px}
+/* matrix tables */
+.mx{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.mx th{background:var(--soft);text-align:center;font-weight:600;padding:7px 6px;border-bottom:1px solid var(--line);font-size:12px}
+.mx td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.mx td.l,.mx th.l{text-align:left;padding-left:12px}
+.mx tr.sel td{background:var(--sel)}
+.mx tr:last-child td{border-bottom:0}
+.mx input[type=number]{width:84px}
+.cell{display:block;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);padding:5px 7px;cursor:pointer;font:inherit;font-size:12.5px;text-align:left}
+.cell small{display:block;color:var(--mute);font-size:11.5px}
+.cell.on{border-color:var(--blue);background:var(--bluebg)}
+.cell[disabled]{opacity:.45;cursor:not-allowed;background:var(--soft)}
+.band{height:12px;border-radius:6px;border:1px solid var(--line);position:relative;overflow:hidden;min-width:150px}
+.band i{position:absolute;top:0;bottom:0}
+.presets{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--soft);border-bottom:1px solid var(--line);font-size:13px}
+.banner2{padding:7px 12px;font-size:12.5px;background:var(--warnbg);color:var(--warn);border-bottom:1px solid var(--line)}
+.panelnote{padding:8px 12px;font-size:12.5px;color:var(--mute)}
+/* batch bar */
+.batch{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;background:var(--ink);color:var(--card);border-radius:12px;padding:9px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:calc(100vw - 16px)}
+.batch .btn{background:transparent;color:inherit;border-color:rgba(255,255,255,.35);min-height:36px}.batch .btn:hover{background:rgba(255,255,255,.12)}
+.hide{display:none!important}
+/* dialog */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:center;justify-content:center;padding:12px}
+.dlg{background:var(--card);color:var(--ink);border-radius:12px;max-width:640px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.dlg h3{font-size:16px;margin:0 0 8px}
+.dlg table{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0}.dlg td,.dlg th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+.dlg .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.dlg textarea{width:100%;min-height:48px}
+.hl{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:6px 9px;font-size:12.5px;margin:6px 0}
+.hl.red{background:var(--redbg);color:var(--red)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:70;background:var(--ink);color:var(--card);padding:9px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:calc(100vw - 16px)}
+.toast .btn{background:transparent;color:inherit;border-color:rgba(255,255,255,.4)}
+.toast .tm{position:absolute;left:0;bottom:0;height:3px;background:#7fb0ff;animation:tm 8s linear forwards}
+@keyframes tm{from{width:100%}to{width:0}}
+.help h4{margin:8px 0 2px;font-size:12px;color:var(--mute)}.help p{margin:0;font-size:13.5px}
+/* page panels (tab 2) */
+.pg{margin:0 0 16px;overflow:hidden}
+.pgh{padding:10px 14px;background:var(--soft);border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pgb{display:grid;grid-template-columns:260px minmax(0,1fr);gap:0}
+.pgb .was{padding:12px 14px;border-right:1px solid var(--line);font-size:12.5px;color:var(--mute);background:var(--soft)}
+.pgb .was ul{margin:4px 0 0 16px;padding:0}
+.pgb .new{padding:12px 14px;min-width:0;overflow:auto}
+.savebar{display:flex;gap:8px;align-items:center;margin-top:8px;padding:6px 10px;background:var(--bluebg);border-radius:8px;font-size:12.5px}
+.step{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px}.step span{padding:2px 10px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:12px}.step span.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.flow{display:inline-flex;gap:3px;align-items:center;flex-wrap:wrap}.flow span{background:var(--bluebg);color:var(--blue);border-radius:10px;padding:0 8px;font-size:12px}.flow span.fix{background:var(--purplebg);color:var(--purple)}
+.lock{opacity:.6;background:var(--soft)}
+.chg-cell{background:var(--warnbg)!important}
+.tree div{padding:2px 0}.tree .l2{margin-left:18px}.tree .l3{margin-left:36px}
+.warnrow td{background:var(--redbg)}
+@media (max-width:900px){
+ .row{grid-template-columns:28px 1fr;grid-template-areas:"c0 c1" ". c2" ". c3" ". c4";padding:12px 10px}
+ .row>:nth-child(1){grid-area:c0}.row>:nth-child(2){grid-area:c1}.row>:nth-child(3){grid-area:c2}.row>:nth-child(4){grid-area:c3}.row>:nth-child(5){grid-area:c4}
+ .row input[type=number],.row input[type=text],.row select,.row .btn{min-height:40px}
+ .opt{padding:9px 10px}
+ .pgb{grid-template-columns:1fr}.pgb .was{border-right:0;border-bottom:1px solid var(--line)}
+ .mx.stack thead{display:none}.mx.stack tr{display:block;border-bottom:1px solid var(--line);padding:6px 4px}.mx.stack td{display:block;text-align:left;border:0;padding:3px 8px}
+ .mx.stack td[data-l]::before{content:attr(data-l)"：";color:var(--mute);font-size:12px}
+ .wrap{padding-bottom:180px}
+ .toolbar{position:static}
+ .batch .btn{min-height:40px}
+}
+/* ===== r3 外框（SPEC §14）／草稿（§13） ===== */
+.topbar{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--line)}
+.trow{display:flex;gap:8px;align-items:center;padding:8px 14px;flex-wrap:wrap;max-width:1240px;margin:0 auto}
+.ttl{white-space:nowrap}.menu{display:none}
+.searchw{position:relative;flex:1;min-width:200px;max-width:520px}.searchw input{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--ink);font:inherit}
+.gres{position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-height:340px;overflow:auto;z-index:60}
+.gres button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);padding:8px 10px;font:inherit;cursor:pointer}.gres button:hover{background:var(--soft)}
+.gbtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 11px;font:inherit;cursor:pointer}.gbtn.on{background:var(--ink);color:var(--card)}.gbtn .n{background:var(--warn);color:#fff;border-radius:9px;padding:0 7px;font-size:12px;margin-left:4px}
+.gsave{display:flex;align-items:center;gap:10px;background:#fff8d6;color:#4a3d00;border-top:1px solid var(--line);padding:7px 14px;flex-wrap:wrap}.gsave b{font-size:16px}.gsave .un{margin-left:6px;color:#9a5b00}.gsave .sp{flex:1}
+@media (prefers-color-scheme:dark){.gsave{background:#3a3410;color:#f5e9a8}.gsave .un{color:#f0b457}}
+.layout{display:flex;align-items:flex-start;gap:0}
+.snav{width:290px;flex:none;position:sticky;top:96px;max-height:calc(100vh - 110px);overflow:auto;padding:4px 10px 40px 0}
+.smain{flex:1;min-width:0;padding:0 0 40px 14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:10px}.seg button{flex:1;border:0;border-right:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 0;font:inherit;cursor:pointer}.seg button:last-child{border:0}.seg button.on{background:var(--ink);color:var(--card)}
+.cat{margin:6px 0}.cat .ch{display:flex;justify-content:space-between;font-weight:700;color:var(--mute);font-size:13px;padding:6px}
+.gi{display:flex;justify-content:space-between;align-items:center;gap:6px;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:6px 10px;border-radius:7px;line-height:1.35;font:inherit;cursor:pointer}.gi:hover{background:var(--soft)}.gi.on{background:var(--bluebg);color:var(--blue);font-weight:600}
+.gi .bd{display:flex;gap:4px;flex:none}.dot2{font-size:11.5px;border-radius:9px;padding:0 6px;color:var(--warn);background:var(--warnbg)}.hi{font-size:11px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:10px 0}.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:left;color:var(--ink);font:inherit;cursor:pointer}.stat .big{font-size:30px;font-weight:700;line-height:1.1}.stat .lb{color:var(--mute)}
+.smain h2{font-size:18px;margin:0 0 2px}.smain>.sub{margin-bottom:10px}.smain .card{padding:12px 14px;margin-bottom:10px}
+.toolbar2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px!important}.muted2{font-size:12.5px;color:var(--mute);margin:0 0 6px}
+.pill.draft{background:#fff3b0;color:#7a5b00;border-color:transparent}@media (prefers-color-scheme:dark){.pill.draft{background:#4a4010;color:#f5e08a}}
+.row.drf{background:#fffbe3}@media (prefers-color-scheme:dark){.row.drf{background:#2f2b10}}
+.row.flash{animation:fl 1.8s}@keyframes fl{0%,60%{background:var(--warnbg)}100%{background:transparent}}
+.mx tr.flash td{animation:fl 1.8s}
+.dlg table{border-collapse:collapse;width:100%;font-size:13px}.dlg td,.dlg th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
+@media (max-width:900px){.menu{display:inline-block}.snav{position:fixed;left:0;top:0;bottom:0;z-index:80;background:var(--card);width:86vw;max-width:340px;max-height:none;transform:translateX(-102%);transition:.2s;box-shadow:4px 0 20px rgba(0,0,0,.4);padding:14px 10px}.snav.open{transform:none}.layout{display:block}.smain{padding:0}.ttl{display:none}}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+<div class="trow"><button class="btn sm menu" data-act="menu" aria-label="選單">☰</button><b class="ttl">設定中心（甲份 mockup）</b>
+<div class="searchw"><input type="search" id="gq" placeholder="搜尋所有設定：名稱、代碼、選項…" aria-label="全域搜尋設定"><div id="gres" class="gres hide"></div></div>
+<button class="gbtn" id="gPend" data-act="view" data-v="pending">待生效 <span class="n" id="nPend">0</span></button>
+<button class="gbtn" id="gRecent" data-act="view" data-v="recent">最近變更</button>
+<button class="gbtn on" id="gHome" data-act="view" data-v="home">總覽</button></div>
+<div id="savebar" class="gsave hide" role="status"><span>有 <b id="nDraft">0</b> 項<span id="draftNote"></span>修改<b class="un">尚未儲存</b>（你現在看到的是草稿，其他人還看不到）</span><span class="sp"></span><button class="btn" data-act="discard">放棄全部</button><button class="btn primary" data-act="openSave">儲存…</button></div>
+</header>
+<div class="wrap">
+<p class="sub">分支 feat/settings-matrix-rollout ・ 設計階段（r3）。設定中心 20 群組／76 欄、7 個獨立頁、7 個「設定中心以外」的項目。名稱、選項、範圍、預設取自設定登錄表；<b>目前值、來源、人名、日期都是假資料</b>。</p>
+<div class="banner">示範路線：①左側分類 → 群組（或上方搜尋）→ 改值＝只放進草稿，上方出現固定儲存列　②勾選「可批次」的項目 → 套用建議值／預設組合／重設為預設（一樣只進草稿）→「儲存…」看確認視窗與通知預覽　③存完 8 秒內可「復原這一批」（逐欄位比對；任何一欄被別人改過就整批拒絕）　④改「影響大」的項目：只等待（等 7 天）或等待加核准（放寬方向）。　<button class="btn sm" data-act="demo-conflict">示範：套用後，別人改了其中一欄</button> <button class="btn sm" data-act="solo" aria-pressed="false">示範：只有一位最高管理者</button></div>
+<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-t="t1" aria-selected="true">設定中心（20 群組／76 項）</button><button class="tab" role="tab" data-act="tab" data-t="t2" aria-selected="false">獨立頁面改版（7 頁）</button><button class="tab" role="tab" data-act="tab" data-t="t3" aria-selected="false">設定中心以外（7 項）</button></div>
+<div id="t1" class="layout"><nav id="nav" class="snav"></nav><main id="main" class="smain"></main></div>
+<div id="t2" class="hide">
+<p class="sub">設定中心以外、單獨成頁的 7 個設定頁（承攬商匯款簽核設定已是跳轉頁，併入①的「承攬商匯款申請」那一列，不另做）。每頁左邊是「現況的問題」，右邊是「新版畫面」（假資料；欄位、名稱取自現有頁面）。同一套規則：中文名稱＋小字代碼、「?」說明、與預設不同標記、危險項不批次、修改後出現「已改 N 處，尚未儲存」列。</p>
+
+<!-- 1 approval-settings -->
+<section class="card pg" id="pg-approval"><div class="pgh"><h3>① 簽核設定　approval-settings</h3><span class="k">frontend/pages/approval-settings.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>「統一流程」與「獨立設定」兩大區塊上下各一份，要在兩處對照才知道某單據現在誰簽。</li><li>切換要先按「調整」才看得到切換後誰會核准。</li><li>特殊規則（會計傳票最後一層固定最高管理者、獎金分潤簽核人限最高管理者）散在說明文字裡。</li></ul><br><b>新設計</b><br>一張「單據 × 簽核層」矩陣，一眼看每種單據現在由誰簽；特殊規則直接標在那一列。簽核流程影響別人、影響大，<b>不批次</b>。</div>
+<div class="new"><table class="mx" data-scope="ap"><thead><tr><th class="l">單據</th><th>流程</th><th>第 1 層</th><th>第 2 層</th><th>第 3 層</th><th>最終</th><th>狀態</th></tr></thead><tbody>
+<tr><td class="l"><b>報價單</b> <span class="pill heavy">影響大</span><div class="k">quotation</div></td><td><label><input type="radio" name="f1" checked data-d> 統一</label> <label><input type="radio" name="f1" data-d> 獨立</label></td><td colspan="2"><span class="flow"><span>部門主管</span>→<span>處主管</span></span></td><td></td><td><span class="flow"><span>核准</span></span></td><td><span class="pill ok">使用中</span></td></tr>
+<tr><td class="l"><b>出貨單</b> <span class="pill heavy">影響大</span><div class="k">shipment</div></td><td><label><input type="radio" name="f2" checked data-d> 統一</label> <label><input type="radio" name="f2" data-d> 獨立</label></td><td colspan="2"><span class="flow"><span>部門主管</span></span></td><td></td><td><span class="flow"><span>核准</span></span></td><td><span class="pill ok">使用中</span></td></tr>
+<tr><td class="l"><b>完工單</b> <span class="pill heavy">影響大</span><div class="k">completion</div></td><td><label><input type="radio" name="f3" data-d> 統一</label> <label><input type="radio" name="f3" checked data-d> 獨立</label></td><td colspan="2"><span class="flow"><span>指定人員（李主任）</span>→<span>最高管理者</span></span></td><td></td><td></td><td><span class="pill ok">使用中</span></td></tr>
+<tr><td class="l"><b>承攬商匯款申請</b> <span class="pill heavy">影響大</span><div class="k">contractor_voucher</div><div class="mute">（原「承攬商匯款簽核設定」頁已併入這一列）</div></td><td><label><input type="radio" name="f4" data-d> 統一</label> <label><input type="radio" name="f4" checked data-d> 獨立</label></td><td colspan="2"><span class="flow"><span>部門主管</span>→<span>會計</span></span></td><td></td><td></td><td><span class="pill ok">使用中</span></td></tr>
+<tr class="lock"><td class="l"><b>會計傳票</b> 🔒<div class="k">voucher</div></td><td colspan="2" class="mute">這裡只決定最後一層之前的層</td><td></td><td></td><td><span class="flow"><span class="fix">最高管理者（系統規定，不可移除）</span></span></td><td><span class="pill ok">使用中</span></td></tr>
+<tr><td class="l"><b>獎金分潤</b> <span class="pill heavy">影響大</span><div class="k">bonus</div></td><td><label><input type="radio" name="f6" checked data-d> 統一</label> <label><input type="radio" name="f6" data-d> 獨立</label></td><td colspan="2"><span class="flow"><span class="fix">最高管理者（限定）</span></span></td><td></td><td></td><td><span class="pill ok">使用中</span></td></tr>
+</tbody></table>
+<div class="hl" style="margin-top:8px">改任何一格都會先顯示「切換後誰會核准」的對照（現行→之後），已在審核中的單據不受影響（簽核流程在送審時就快照）。沒有批次：簽核人變動屬於「影響別人」。</div>
+<div class="savebar hide" data-bar="ap"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm">預覽誰會核准</button><button class="btn sm primary">儲存</button><button class="btn sm">還原</button></div></div></div></section>
+
+<!-- 2 approval-delegates -->
+<section class="card pg" id="pg-delegates"><div class="pgh"><h3>② 簽核代理人　approval-delegates</h3><span class="k">frontend/pages/approval-delegates.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>表單與表格各佔一塊，起訖日要手選兩次。</li><li>看不出「現在誰正在代理」「哪些快到期」。</li></ul><br><b>新設計</b><br>上方一排快速範圍（今天／本週／下週／自訂），下方依狀態分組；「代理中」置頂。代理 ＝ 暫時把簽核權限交給別人（影響別人）。</div>
+<div class="new"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:8px"><label>委託人<br><select><option>— 我自己 —</option></select></label><label>代理人<br><select><option>請選擇</option><option>李主任</option><option>陳經理</option></select></label><label>期間<br><span class="chips" style="display:inline-flex"><button class="btn sm">今天</button><button class="btn sm">本週</button><button class="btn sm">下週</button><button class="btn sm">自訂…</button></span></label><label>原因（選填）<br><input type="text" placeholder="例：特休"></label><button class="btn primary">新增代理</button></div>
+<div class="mute" style="margin-bottom:6px">只能設定自己的簽核代理人；代替他人設定請聯絡最高管理者。</div>
+<div style="display:flex;gap:6px;margin-bottom:6px"><button class="chip" aria-pressed="true" data-dfilter="all">全部</button><button class="chip" aria-pressed="false" data-dfilter="now">代理中</button><button class="chip" aria-pressed="false" data-dfilter="soon">未開始</button><button class="chip" aria-pressed="false" data-dfilter="past">已過期</button></div>
+<table class="mx stack" id="dtab"><thead><tr><th class="l">委託人</th><th>代理人</th><th>起訖</th><th>原因</th><th>狀態</th><th>建立者</th><th></th></tr></thead><tbody>
+<tr data-s="now"><td class="l" data-l="委託人">王經理</td><td data-l="代理人">李主任</td><td data-l="起訖">11/12 – 11/15</td><td data-l="原因">特休</td><td data-l="狀態"><span class="pill ok">代理中・剩 2 天</span></td><td data-l="建立者">王經理</td><td><button class="btn sm danger">停用</button></td></tr>
+<tr data-s="soon"><td class="l" data-l="委託人">陳經理</td><td data-l="代理人">張組長</td><td data-l="起訖">11/20 – 11/22</td><td data-l="原因">出差</td><td data-l="狀態"><span class="pill oth">未開始</span></td><td data-l="建立者">陳經理</td><td><button class="btn sm danger">停用</button></td></tr>
+<tr data-s="past"><td class="l" data-l="委託人">王經理</td><td data-l="代理人">陳經理</td><td data-l="起訖">10/02 – 10/04</td><td data-l="原因">—</td><td data-l="狀態"><span class="pill adv">已過期</span></td><td data-l="建立者">王經理</td><td></td></tr></tbody></table></div></div></section>
+
+<!-- 4 expense-types -->
+<section class="card pg" id="pg-expense"><div class="pgh"><h3>③ 支出申請類型　expense-types</h3><span class="k">frontend/pages/expense-types.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>清單頁與表單設計頁來回切；草稿、驗證、預覽、發布是一排按鈕，看不出現在在哪一步。</li><li>別人同時改草稿、出貨範本差異等提示塞在頁頂。</li></ul><br><b>新設計</b><br>清單加搜尋與狀態篩選；進入某類型後用「精靈」步驟列：基本設定 → 表單欄位 → 版面 → 驗證與預覽 → 發布。發布屬影響別人，不批次。</div>
+<div class="new"><div style="display:flex;gap:8px;margin-bottom:6px"><input type="search" placeholder="搜尋代碼、名稱、前綴" style="flex:1"><button class="chip" aria-pressed="true">全部</button><button class="chip" aria-pressed="false">啟用中</button><button class="chip" aria-pressed="false">草稿未發布</button><button class="btn primary">新增類型</button></div>
+<table class="mx stack"><thead><tr><th class="l">名稱／代碼</th><th>單號前綴</th><th>核准後進出納</th><th>版本</th><th>狀態</th><th></th></tr></thead><tbody>
+<tr><td class="l" data-l="名稱"><b>請購單</b><div class="k">purchase_request</div></td><td data-l="前綴">PR</td><td data-l="進出納"><button class="sw" role="switch" aria-checked="false" data-sw></button></td><td data-l="版本">v3</td><td data-l="狀態"><span class="pill ok">使用中</span></td><td><button class="btn sm">編輯</button></td></tr>
+<tr><td class="l" data-l="名稱"><b>採購單</b><div class="k">purchase_order</div></td><td data-l="前綴">PO</td><td data-l="進出納"><button class="sw" role="switch" aria-checked="true" data-sw></button></td><td data-l="版本">v5</td><td data-l="狀態"><span class="pill pnd">有未發布草稿</span></td><td><button class="btn sm">編輯</button></td></tr>
+<tr><td class="l" data-l="名稱"><b>差旅費用</b><div class="k">travel</div></td><td data-l="前綴">TR</td><td data-l="進出納"><button class="sw" role="switch" aria-checked="true" data-sw></button></td><td data-l="版本">v2</td><td data-l="狀態"><span class="pill ok">使用中</span></td><td><button class="btn sm">編輯</button></td></tr>
+<tr><td class="l" data-l="名稱"><b>零用金</b><div class="k">petty_cash</div></td><td data-l="前綴">PC</td><td data-l="進出納"><button class="sw" role="switch" aria-checked="true" data-sw></button></td><td data-l="版本">v1</td><td data-l="狀態"><span class="pill adv">已停用</span></td><td><button class="btn sm">編輯</button></td></tr></tbody></table>
+<div style="margin-top:10px"><b>編輯「採購單」</b><div class="step" style="margin-top:4px"><span>1 基本設定</span><span>2 表單欄位</span><span>3 版面</span><span class="on">4 驗證與預覽</span><span>5 發布</span></div><div class="hl">驗證通過。與已發布版有 3 處差異（新增欄位「交貨地點」、「備註」改必填、明細欄少一個）。<button class="btn sm">看差異</button> <button class="btn sm primary">下一步：發布</button></div><div class="mute">已開出的單據固定使用開單當時的版本；發布前伺服器會再驗證一次。</div></div></div></div></section>
+
+<!-- 5 remit-kinds -->
+<section class="card pg" id="pg-remit"><div class="pgh"><h3>④ 匯款款別設定　remit-kinds-settings</h3><span class="k">frontend/pages/remit-kinds-settings.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>每個款別一張卡片，裡面一排勾選「可以開立的派發狀態」；款別一多，要一張張對照才知道「哪個狀態能開哪個款別」。</li></ul><br><b>新設計</b><br>這天生就是矩陣：<b>款別 × 派發狀態</b>，格子勾選就是「這個狀態可以開這個款別」。代碼建立後不能改、款別不能刪，只能停用。<b>發布後只影響之後新開的申請。</b></div>
+<div class="new"><table class="mx stack" data-scope="remit"><thead><tr><th class="l">款別（名稱／代碼）</th><th>啟用</th><th>已送出</th><th>已驗收</th><th>完工</th><th>排序</th></tr></thead><tbody>
+<tr><td class="l" data-l="款別"><b>訂金款</b><div class="k">deposit</div></td><td data-l="啟用"><button class="sw" role="switch" aria-checked="true" data-sw></button></td><td data-l="已送出"><input type="checkbox" checked data-d></td><td data-l="已驗收"><input type="checkbox" data-d></td><td data-l="完工"><input type="checkbox" data-d></td><td data-l="排序"><input type="number" value="10" style="width:64px"></td></tr>
+<tr><td class="l" data-l="款別"><b>進度款</b><div class="k">progress</div></td><td data-l="啟用"><button class="sw" role="switch" aria-checked="false" data-sw></button></td><td data-l="已送出"><input type="checkbox" data-d></td><td data-l="已驗收"><input type="checkbox" checked data-d></td><td data-l="完工"><input type="checkbox" data-d></td><td data-l="排序"><input type="number" value="20" style="width:64px"></td></tr>
+<tr><td class="l" data-l="款別"><b>完工款</b><div class="k">completion</div></td><td data-l="啟用"><button class="sw" role="switch" aria-checked="true" data-sw></button></td><td data-l="已送出"><input type="checkbox" data-d></td><td data-l="已驗收"><input type="checkbox" checked data-d></td><td data-l="完工"><input type="checkbox" checked data-d></td><td data-l="排序"><input type="number" value="30" style="width:64px"></td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">例：「完工款」勾「已驗收」「完工」，派發還在「已送出」就開不了。進度款已停用：舊申請照常顯示，不能再開新的。</div>
+<div class="savebar hide" data-bar="remit"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm">驗證</button><button class="btn sm">與目前使用的版本比較</button><button class="btn sm primary">發布</button><button class="btn sm">丟棄草稿</button></div></div></div></section>
+
+<!-- 6 ledger-settings -->
+<section class="card pg" id="pg-ledger"><div class="pgh"><h3>⑤ 報表設定（科目歸屬）　ledger-settings</h3><span class="k">frontend/pages/ledger-settings.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>一個畫面三大塊：科目歸屬、費用類別對應、科目角色對應，混在同一頁。</li><li>最重要的「哪些科目還沒歸屬」要自己勾「只看有問題的」才看得到。</li></ul><br><b>新設計</b><br>頁首固定顯示健檢結果；科目歸屬用表格＋勾選批次（一次指定報表列／現金流量分類）；「科目角色對應」影響金流，獨立一塊並標「須另一位最高管理者核准」，<b>不批次</b>。</div>
+<div class="new"><div class="hl red" style="margin:0 0 8px">⚠ 2 個可過帳科目還沒有報表歸屬、1 個資產負債科目沒有現金流量分類：報表會漏算。<button class="btn sm" data-ledfilter>只看有問題的</button></div>
+<div class="presets" style="border:1px solid var(--line);border-radius:8px 8px 0 0"><span id="ledcnt">已選 0 個科目</span><select id="ledrow"><option>指定報表列…</option><option>流動資產</option><option>流動負債</option><option>營業費用</option></select><select id="ledcf"><option>指定現金流量分類…</option><option>營業活動</option><option>投資活動</option><option>籌資活動</option></select><button class="btn sm primary" id="ledapply">套用到已選科目</button></div>
+<table class="mx stack" id="ledtab"><thead><tr><th></th><th class="l">科目</th><th>類別</th><th>報表列</th><th>現金流量分類</th></tr></thead><tbody>
+<tr><td><input type="checkbox" class="ledchk"></td><td class="l" data-l="科目"><b>銀行存款</b><div class="k">1102（示意）</div></td><td data-l="類別">資產</td><td data-l="報表列"><select><option>流動資產</option></select></td><td data-l="現金流量"><select><option>不分類</option></select></td></tr>
+<tr class="warnrow" data-bad="1"><td><input type="checkbox" class="ledchk"></td><td class="l" data-l="科目"><b>預付設備款</b><div class="k">1xxx（示意）</div></td><td data-l="類別">資產</td><td data-l="報表列"><select><option>（未歸屬）</option><option>非流動資產</option></select></td><td data-l="現金流量"><select><option>（未分類）</option><option>投資活動</option></select></td></tr>
+<tr class="warnrow" data-bad="1"><td><input type="checkbox" class="ledchk"></td><td class="l" data-l="科目"><b>其他應付款</b><div class="k">2xxx（示意）</div></td><td data-l="類別">負債</td><td data-l="報表列"><select><option>（未歸屬）</option><option>流動負債</option></select></td><td data-l="現金流量"><select><option>營業活動</option></select></td></tr>
+<tr><td><input type="checkbox" class="ledchk"></td><td class="l" data-l="科目"><b>租金支出</b><div class="k">6xxx（示意）</div></td><td data-l="類別">費用</td><td data-l="報表列"><select><option>營業費用</option></select></td><td data-l="現金流量"><select><option>不分類（淨利整體歸營業活動）</option></select></td></tr></tbody></table>
+<div class="banner2" style="margin-top:10px">科目角色對應 ・ 影響金流：變更要由<b>另一位最高管理者核准</b>後才生效，申請人不能核准自己的申請。<b>不批次。</b></div>
+<table class="mx stack"><thead><tr><th class="l">角色</th><th>目前科目</th><th>申請改為</th><th>狀態</th></tr></thead><tbody><tr><td class="l" data-l="角色"><b>銀行存款</b><div class="k">bank</div></td><td data-l="目前">1102 銀行存款</td><td data-l="申請改為"><select><option>（不改）</option><option>1103 活期存款</option></select></td><td data-l="狀態"><span class="pill adv">無待核准申請</span></td></tr></tbody></table></div></div></section>
+
+<!-- 7 legal-params -->
+<section class="card pg" id="pg-legal"><div class="pgh"><h3>⑥ 法規參數設定　legal-params</h3><span class="k">frontend/pages/legal-params.html</span></div><div class="pgb">
+<div class="was"><b>現況的問題</b><ul><li>每個版本一列、9 個參數橫向排開，要比較年度間差異得左右捲動、自己心算。</li><li>已生效的版本不能改，但外觀與可改的草稿版沒有明顯區別。</li></ul><br><b>新設計</b><br>轉置：<b>參數 × 版本年度</b>，一眼對照。已生效的欄鎖定（灰、🔒）；草稿欄可編輯、與前一版不同的格自動標色；「新增下一年度」＝複製最新一版成草稿欄。法規來源列在欄底。</div>
+<div class="new"><table class="mx stack" data-scope="legal"><thead><tr><th class="l">參數</th><th>114 年（2025）🔒</th><th>115 年（2026）🔒</th><th>116 年（2027）草稿</th></tr></thead><tbody>
+<tr><td class="l" data-l="參數"><b>最低工資（月）</b> <button class="q">?</button><div class="k">min_wage_monthly</div></td><td class="lock" data-l="114">28,590</td><td class="lock" data-l="115">29,500</td><td data-l="116"><input type="number" value="30900" data-d data-base="29500" style="width:100px"> <div class="mute">尚待行政院核定</div></td></tr>
+<tr><td class="l" data-l="參數"><b>兼職薪資補充保費門檻</b><div class="k">（50）</div></td><td class="lock" data-l="114">28,590</td><td class="lock" data-l="115">29,500</td><td data-l="116"><input type="number" value="30900" data-d data-base="29500" style="width:100px"><div class="mute">須等於最低工資</div></td></tr>
+<tr><td class="l" data-l="參數"><b>薪資起扣（50）</b></td><td class="lock" data-l="114">88,501</td><td class="lock" data-l="115">88,501</td><td data-l="116"><input type="number" value="88501" data-d data-base="88501" style="width:100px"></td></tr>
+<tr><td class="l" data-l="參數"><b>執行業務起扣（9A／9B）</b></td><td class="lock" data-l="114">20,010</td><td class="lock" data-l="115">20,010</td><td data-l="116"><input type="number" value="20010" data-d data-base="20010" style="width:100px"></td></tr>
+<tr><td class="l" data-l="參數"><b>補充保費費率</b></td><td class="lock" data-l="114">2.11%</td><td class="lock" data-l="115">2.11%</td><td data-l="116"><input type="number" step="0.01" value="2.11" data-d data-base="2.11" style="width:100px">%</td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">已生效版本不能修改，要更正請新增一版。每張勞報單依開單日期套用當時版本。<b>這一頁有自己的保護機制</b>：已生效版本鎖定；最低工資與「兼職薪資補充保費門檻（50）」必須相等；整組先驗證才寫入。金額為示意假資料，畫面欄位取自現有頁面。與前一版不同的格會變色。</div>
+<div class="savebar hide" data-bar="legal"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存草稿</button><button class="btn sm">新增下一年度（複製最新一版）</button></div></div></div></section>
+
+<!-- 8 account-items -->
+<section class="card pg" id="pg-acct"><div class="pgh"><h3>⑦ 會計科目　account-items</h3><span class="k">frontend/pages/account-items.html</span></div><div class="pgb">
+<div class="was"><b>現況</b><br>樹狀清單＋「只看一級／展開到二級／全部展開」，法定項目唯讀，可「＋延伸」自建子科目。這頁是<b>資料維護</b>而不是設定開關，不需要矩陣與批次。<br><br><b>新設計（小改）</b><br>加上搜尋、「只看自建」「已停用」篩選晶片；法定項目 🔒 加一句為什麼不能改；新代號預覽。其餘維持。</div>
+<div class="new"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><input type="search" placeholder="搜尋科目代號或名稱" style="flex:1"><button class="chip" aria-pressed="true" data-tree="1">只看一級</button><button class="chip" aria-pressed="false" data-tree="2">展開到二級</button><button class="chip" aria-pressed="false" data-tree="3">全部展開</button><button class="chip" aria-pressed="false">只看自建</button><button class="chip" aria-pressed="false">已停用</button></div>
+<div class="mute">共 20 筆・自建 1 筆（含停用 0 筆）。依經濟部公告《商業會計項目表》建立，法定項目不可修改或刪除。（以下為示意資料）</div>
+<div class="tree" id="tree"><div><b>1</b> 資產 🔒</div><div class="l2 hide"><b>11</b> 流動資產 🔒</div><div class="l3 hide"><b>1101</b> 現金及約當現金 🔒 <button class="btn sm">＋延伸</button></div><div class="l3 hide"><b>1101-01</b> 零用金（自建）<span class="pill cust">自建</span></div><div><b>2</b> 負債 🔒</div><div class="l2 hide"><b>21</b> 流動負債 🔒</div><div><b>6</b> 費用 🔒</div></div>
+<div class="hl" style="margin-top:8px">按「＋延伸」→ 新代號預覽「1101-02」（流水號由系統決定，不由你填）→ 只填名稱。</div></div></div></section>
+
+</div>
+<div id="t3" class="hide">
+<p class="sub">這 7 項不在「設定中心」裡，散在各業務頁面。使用者裁示（SPEC §15）：<b>先不搬進設定中心</b>，在原頁面改白話並加標示，設定中心左側導覽放「其他位置的設定」連結過來；其中<b>影響金額的 4 項加變更管制</b>（傳票科目、扣繳參數、T100 科目、管銷／公益口徑：要等確認期，或由第二位最高管理者核准才生效，接既有的變更管制與變更紀錄），<b>另 3 項維持立即生效但存檔後發通知</b>（獎金預設、營運目標、報價條款）。每項標出：在哪裡改、現在的問題、新畫面、風險標示。每一頁同樣套用「草稿＋固定儲存列＋離開警告」，改了不會立刻寫入。</p>
+<div class="hl">兩種生效方式一眼分清：<span class="pill pnd">變更管制</span>＝儲存後進「待生效」，滿確認期（預設 7 天）或第二位最高管理者核准才生效（放寬方向才需要第二人，其餘只等待）；<span class="pill ok">立即生效＋通知</span>＝儲存就生效，並通知最高管理者與受影響的人。<b>後端要新增的工作</b>：4 個影響金額的項目接上變更管制與變更紀錄；通知元件另一張票。</div>
+
+<section class="card pg" id="ot-bonus"><div class="pgh"><h3>① 獎金分潤預設比例</h3><span class="pill oth">影響別人</span><span class="pill ok">立即生效＋通知</span><span class="k">bonus.html「預設比例設定」・GET/PUT /api/bonus/cases/settings</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在獎金頁的一顆按鈕裡，只有最高管理者看得到。<br><br><b>新設計</b>搬進同一套設定頁排版；三類比例旁邊即時顯示合計，不是 100% 時存檔鈕灰掉並說原因。只影響之後新建的草稿。</div>
+<div class="new"><table class="mx stack" data-scope="bonus"><thead><tr><th class="l">項目</th><th>目前值</th><th>預設</th><th>來源</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>獎金比率（營業利益的 %）</b><div class="k">rate_bp</div></td><td data-l="目前值"><input type="number" step="0.01" value="10" data-d style="width:90px">%</td><td data-l="預設">10%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>業務比例</b><div class="k">split_bp.sales</div></td><td data-l="目前值"><input type="number" value="50" data-d data-split style="width:90px">%</td><td data-l="預設">50%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>專案比例</b><div class="k">split_bp.project</div></td><td data-l="目前值"><input type="number" value="30" data-d data-split style="width:90px">%</td><td data-l="預設">30%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>後勤比例</b><div class="k">split_bp.admin</div></td><td data-l="目前值"><input type="number" value="20" data-d data-split style="width:90px">%</td><td data-l="預設">20%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr></tbody></table>
+<div class="hl" id="splitmsg" style="margin-top:8px">三類比例合計：<b>100%</b> ✔</div>
+<div class="mute" style="margin-top:6px">權限：讀寫都只有最高管理者。整包寫入、沒有並行控制（後存的蓋掉先存的）；獎金比率與三類比例是<b>兩次分開寫入，不在同一個交易裡</b>。所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="bonus"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary" id="bonusSave">儲存</button><button class="btn sm">還原</button></div></div></div></section>
+
+<section class="card pg" id="ot-voucher"><div class="pgh"><h3>② 憑證（傳票）科目對應</h3><span class="pill heavy">影響大</span><span class="pill pnd">變更管制</span><span class="k">bonus.html「傳票科目」・/api/bonus/cases/voucher-accounts</span></div><div class="pgb">
+<div class="was"><b>現況</b>獎金進入待發放、標記已發放時自動開傳票草稿用的 5 個科目；現在改了就直接生效，沒有等待。<br><br><b>變更管制（使用者裁示）</b>改科目要填原因，儲存後進「待生效」，等確認期或第二位最高管理者核准才生效；等待中仍用舊科目。<br><br><b>新設計</b>科目欄「輸入代號 → 即時顯示科目名稱」，後來被停用的科目標紅字；5 個欄位其中 2 個預設同為 2252，提醒「代扣稅款與代收補充保費目前是同一科目」。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">用途</th><th>科目代號</th><th>科目名稱</th><th>預設</th></tr></thead><tbody>
+<tr><td class="l" data-l="用途"><b>費用（薪資支出）</b><div class="k">expense</div></td><td data-l="代號"><input type="text" value="6111" data-d style="width:90px"></td><td data-l="名稱">薪資支出（示意）</td><td data-l="預設">6111</td></tr>
+<tr><td class="l" data-l="用途"><b>應付（應付薪資）</b><div class="k">payable</div></td><td data-l="代號"><input type="text" value="2191" data-d style="width:90px"></td><td data-l="名稱">應付薪資（示意）</td><td data-l="預設">2191</td></tr>
+<tr><td class="l" data-l="用途"><b>代扣稅款</b><div class="k">withholding</div></td><td data-l="代號"><input type="text" value="2252" data-d style="width:90px"></td><td data-l="名稱">代收款（示意）</td><td data-l="預設">2252</td></tr>
+<tr><td class="l" data-l="用途"><b>代收補充保費</b><div class="k">nhi</div></td><td data-l="代號"><input type="text" value="2252" data-d style="width:90px"></td><td data-l="名稱">代收款（示意）</td><td data-l="預設">2252</td></tr>
+<tr class="warnrow"><td class="l" data-l="用途"><b>銀行存款</b><div class="k">bank</div></td><td data-l="代號"><input type="text" value="1113" data-d style="width:90px"></td><td data-l="名稱">⚠ 這個科目目前已停用，請重新選擇</td><td data-l="預設">1113</td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">不存在或已停用的代號會被擋下，整批都不寫（現況行為）。</div>
+<div class="mute" style="margin-top:6px">權限：讀寫都只有最高管理者。5 個科目整包寫入、沒有並行控制，所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="voucher"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存傳票科目</button></div></div></div></section>
+
+<section class="card pg" id="ot-deduct"><div class="pgh"><h3>③ 獎金扣繳與補充保費</h3><span class="pill heavy">影響大</span><span class="pill oth">影響別人</span><span class="pill pnd">變更管制</span><span class="k">legal-params（費率）＋bonus.html「投保金額與全年累計」</span></div><div class="pgb">
+<div class="was"><b>現況</b>沒有獨立的「扣款設定」。費率與門檻在「法規參數」頁（依生效日分版本，見「獨立頁面改版」的⑥），每人的投保金額另在獎金頁。沒有投保金額的人，獎金不能標記已發放。<br><br><b>新設計</b>兩塊並列、互相連結：左＝「目前適用版本」唯讀摘要（點進法規參數矩陣），右＝「人 × 年度」投保金額小矩陣（個資敏感，只有最高管理者看得到）。</div>
+<div class="new"><div class="hl">目前適用：2026 版（生效 2026-01-01）　補充保費費率 2.11%　獎金補充保費門檻＝投保金額 × 4　<button class="btn sm">到「法規參數」編輯</button></div>
+<table class="mx stack"><thead><tr><th class="l">人員</th><th>投保金額</th><th>MOTRIX 以外全年累計（2026）</th><th>MOTRIX 已發放</th><th>全年累計</th></tr></thead><tbody>
+<tr><td class="l" data-l="人員"><b>王經理</b></td><td data-l="投保金額"><input type="number" value="72800" data-d style="width:100px"></td><td data-l="外部累計"><input type="number" value="0" data-d style="width:100px"></td><td data-l="已發放">120,000</td><td data-l="全年累計">120,000</td></tr>
+<tr class="warnrow"><td class="l" data-l="人員"><b>李業務</b></td><td data-l="投保金額"><input type="number" placeholder="未設定" data-d style="width:100px"></td><td data-l="外部累計"><input type="number" value="0" data-d style="width:100px"></td><td data-l="已發放">0</td><td data-l="全年累計">0 <span class="err">未設定投保金額：獎金不能標記已發放</span></td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">扣繳規則本身（起扣、扣多少）不能在這裡改，來自法規參數。</div>
+<div class="mute" style="margin-top:6px">權限：法規參數與投保金額的讀寫都只有最高管理者。法規參數有自己的保護機制（已生效版本鎖定、最低工資與補充保費門檻須一致、整組先驗證）。投保金額屬個資：稽核紀錄的內容含投保金額；要修正稽核內容另開票。兩位管理員同時改不同人的投保金額時，可能互相覆蓋。<b>不提供批次與復原。</b></div><div class="savebar hide" data-bar="deduct"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存</button></div></div></div></section>
+
+<section class="card pg" id="ot-oh"><div class="pgh"><h3>④ 管銷與公益金的計算方式</h3><span class="pill heavy">影響大</span><span class="pill oth">影響別人</span><span class="pill pnd">變更管制</span><span class="k">GET/PUT /api/overhead/settings</span></div><div class="pgb">
+<div class="was"><b>現況</b>畫面上沒有切換入口，只能用工具或 API 改；切換有前置條件（遷移標記）。<br><br><b>新設計</b>只做<b>唯讀顯示＋「切換精靈」</b>：前置檢查 → 影響預覽 → 確認 → 套用。不放成一般開關，避免誤按。兩個比率（管銷分攤、公益捐款）已在設定中心的甲份 76 欄裡，不重複。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">項目</th><th>目前</th><th>預設</th><th>狀態</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>管銷口徑</b><div class="k">ruleMode</div></td><td data-l="目前">舊制：管銷＝稅前金額 × 10%</td><td data-l="預設">舊制</td><td data-l="狀態"><span class="pill adv">預設</span> <button class="btn sm" data-wizard="oh">切換到新制…</button></td></tr>
+<tr><td class="l" data-l="項目"><b>公益金基數</b><div class="k">charityMode</div></td><td data-l="目前">直接毛利 × 公益率</td><td data-l="預設">直接毛利</td><td data-l="狀態"><span class="pill adv">預設</span> <button class="btn sm" disabled title="須先轉新制並完成遷移">切換到報價含稅金額…</button></td></tr></tbody></table>
+<div class="hide" id="ohwiz"><div class="step" style="margin-top:8px"><span class="on">1 前置檢查</span><span>2 影響預覽</span><span>3 確認</span><span>4 套用</span></div><div class="hl">前置檢查：管銷遷移已完成 ✔　新制＝直接毛利（不低於 0）× 管銷比率（目前 25%）。轉回舊制時，公益基數會一併強制改回「直接毛利」。<button class="btn sm primary">下一步：看影響預覽</button></div><div class="hl red">最後一步（畫面不能自己跑遷移）：請工程師執行 tools/overhead_migrate.py（公益基數另需 tools/charity_migrate.py），完成後回來按「重新檢查」。<br>退回舊制會刪除遷移標記，之後再切回新制要重跑遷移。這個切換只寫一般稽核，不寫「變更紀錄」。</div><div class="mute">權限：讀＝任何登入者；寫（含逐張報價的管銷比率）＝最高管理者。不提供批次與復原。</div></div></div></div></section>
+
+<section class="card pg" id="ot-target"><div class="pgh"><h3>⑤ 年度營運目標</h3><span class="pill oth">影響別人</span><span class="pill ok">立即生效＋通知</span><span class="k">reports.html「設定目標」・/api/settings/operating-targets</span></div><div class="pgb">
+<div class="was"><b>現況</b>報表頁的彈窗；一次只存一年，儲存會整份覆蓋；後端沒有上下限，只有畫面擋。<br><br><b>新設計</b>目標年度放最上面並顯示「已設定／未設定」；業務員配額做成可增減的列＋合計；0＝未設定目標（報表不算達成率）。</div>
+<div class="new"><label>目標年度 <select><option>2026</option><option>2027</option></select></label> <span class="pill adv">預設：全部 0＝未設定</span>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">目標</th><th>目前值</th></tr></thead><tbody>
+<tr><td class="l" data-l="目標"><b>年度合約總額目標</b><span class="unit">元，含稅</span><div class="k">annual.revenue</div></td><td data-l="值"><input type="number" value="30000000" min="0" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>年度新成案數目標</b><span class="unit">件</span><div class="k">annual.newCases</div></td><td data-l="值"><input type="number" value="60" min="0" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>收款率目標</b><span class="unit">%</span><div class="k">annual.collectionRate</div></td><td data-l="值"><input type="number" step="0.1" value="92" min="0" max="100" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>平均營業利益率目標</b><span class="unit">%</span><div class="k">annual.avgNetMarginPct</div></td><td data-l="值"><input type="number" step="0.1" value="18" min="0" max="100" data-d style="width:140px"></td></tr></tbody></table>
+<div class="mute">另有：年度收款金額目標、年度實際營業利益目標（精算後），同上排版。</div>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">業務員配額</th><th>配額目標（元）</th><th>案件數配額（件）</th><th></th></tr></thead><tbody><tr><td class="l" data-l="業務員"><input type="text" value="張業務" data-d></td><td data-l="配額"><input type="number" value="8000000" data-d></td><td data-l="案件數"><input type="number" value="15" data-d></td><td><button class="btn sm danger">移除</button></td></tr></tbody></table><button class="btn sm" style="margin-top:4px">＋新增業務員</button>
+<div class="mute" style="margin-top:6px">權限：讀＝有財務權限者（否則 403）；寫＝最高管理者。整份覆蓋、沒有並行控制，所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="target"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存 2026 年目標</button></div></div></div></section>
+
+<section class="card pg" id="ot-t100"><div class="pgh"><h3>⑥ T100 匯出的科目代號</h3><span class="pill heavy">影響大</span><span class="pill pnd">變更管制</span><span class="k">cashier.html「展開科目代號設定」・/api/settings/t100-export-config</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在出納頁的展開區；科目代號沒有名稱對照；儲存時不擋不存在的科目，只在畫面警示。<br><br><b>新設計</b>「逐列編輯＋預覽」：每個代號即時顯示科目名稱，不可用的標紅；銀行帳戶清單可設一個★預設帳戶；匯出程式本身沒有可調參數。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">項目</th><th>科目代號</th><th>對應科目</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>銷貨收入</b><div class="k">salesRevenueAccount</div></td><td data-l="代號"><input type="text" value="4101" data-d style="width:100px"></td><td data-l="科目">銷貨收入（示意）</td></tr>
+<tr><td class="l" data-l="項目"><b>銷項稅額</b><div class="k">outputTaxAccount</div></td><td data-l="代號"><input type="text" value="2171" data-d style="width:100px"></td><td data-l="科目">銷項稅額（示意）</td></tr>
+<tr><td class="l" data-l="項目"><b>承攬商費用</b><div class="k">contractorExpenseAccount</div></td><td data-l="代號"><input type="text" value="" placeholder="未設定" data-d style="width:100px"></td><td data-l="科目" class="mute">留空也能匯出，但該欄會是空的</td></tr>
+<tr><td class="l" data-l="項目"><b>傳票別</b><div class="k">voucherCategory</div></td><td data-l="代號"><select data-d><option>現</option><option selected>轉</option><option>記</option></select></td><td data-l="科目" class="mute">預設「轉」</td></tr></tbody></table>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">銀行帳戶</th><th>科目代號</th><th>系統預設</th><th></th></tr></thead><tbody><tr><td class="l" data-l="帳戶"><input type="text" value="第一銀行 123-456" data-d></td><td data-l="代號"><input type="text" value="1102" data-d style="width:90px"></td><td data-l="預設">★</td><td><button class="btn sm danger">刪除</button></td></tr></tbody></table><button class="btn sm" style="margin-top:4px">＋新增銀行帳戶</button>
+<div class="mute" style="margin-top:6px">另有：匯款／收款手續費、部門別、各料件分類的成本科目（分類 × 代號逐列編輯）。</div>
+<div class="mute" style="margin-top:6px">權限：讀＝有財務權限者（否則 403）；寫＝最高管理者。整包寫入、沒有並行控制，所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="t100"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存</button></div></div></div></section>
+
+<section class="card pg" id="ot-terms"><div class="pgh"><h3>⑦ 報價單條款組與預設付款條件</h3><span class="pill cust">客戶看得到</span><span class="pill oth">影響別人</span><span class="pill ok">立即生效＋通知</span><span class="k">quotation-form.html「管理條款組」・/api/settings/quote-terms-presets、/payment-terms</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在報價單表單裡的彈窗，要先開一張報價單才找得到。<br><br><b>新設計</b>獨立在設定頁：左邊組名清單（★預設、最多 30 組），右邊五段條款文字＋「客戶看到的樣子」預覽。報價單是複製文字而不是連結，改範本不會動到已開的單。</div>
+<div class="new" style="display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px"><div><div class="opt on"><b>★ 純購料</b></div><div class="opt"><b>含安裝工程</b></div><div class="opt"><b>年度維護</b></div><button class="btn sm">＋新增條款組</button><div class="mute" style="margin-top:6px">3／30 組</div></div>
+<div><label>組名（必填，最多 30 字）<br><input type="text" value="純購料" style="width:100%" data-d></label><label style="display:block;margin-top:6px">付款條件<br><textarea rows="3" style="width:100%" data-d>三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</textarea></label>
+<div class="mute">交貨條件、驗收標準、保固條件、售後服務及備註說明：同上排版（各最多 5000 字）。</div><div class="hl" style="margin-top:6px"><b>客戶看到的樣子</b>　付款條件：三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</div><label style="display:block;margin-top:8px">預設付款條件（沒選條款組時帶入）<br><textarea rows="2" style="width:100%" data-d>三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</textarea></label><span class="mute">不可空白。</span></div>
+<div class="mute" style="margin-top:6px;grid-column:1/-1">權限：條款組 讀＝任何登入者、寫＝最高管理者；預設付款條件 讀＝任何登入者、寫＝最高管理者。整份清單覆蓋、沒有並行控制，所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="terms" style="grid-column:1/-1"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存條款組</button></div></div></div></section>
+
+</div>
+</div>
+<div id="batch" class="batch hide" aria-live="polite"></div>
+<div id="toast" class="toast hide" role="status" aria-live="polite"></div>
+<div id="ov" class="ov hide"></div>
+<script>
+const D = {"shell": {"quote_approval": {"plain": "報價單什麼時候要送審", "category": "業務", "currentName": "報價送審門檻", "privacy": false}, "quote_defaults": {"plain": "報價單預設值", "category": "業務", "currentName": "報價單預設值", "privacy": false}, "quote_alt": {"plain": "報價單的「擇一方案」", "category": "業務", "currentName": "擇一方案", "privacy": false}, "quote_output": {"plain": "隱藏的報價條件要不要印在 PDF", "category": "業務", "currentName": "報價單輸出", "privacy": false}, "quote_privacy": {"plain": "報價單的個人資料欄位（能不能隱藏）", "category": "安全", "currentName": "報價單個人資料欄位", "privacy": true}, "quote_backfill": {"plain": "補登歷史案件", "category": "業務", "currentName": "補登歷史案件", "privacy": false}, "profit_warning": {"plain": "利潤提醒色帶", "category": "財務", "currentName": "利潤提醒色帶", "privacy": false}, "project_margin": {"plain": "專案毛利率低於多少要提醒", "category": "財務", "currentName": "專案毛利%", "privacy": false}, "overhead": {"plain": "管銷怎麼分攤", "category": "財務", "currentName": "管銷分攤比率", "privacy": false}, "profit_rules": {"plain": "公益捐款比率", "category": "財務", "currentName": "利潤口徑", "privacy": false}, "material_order": {"plain": "材料申請規則", "category": "業務", "currentName": "材料申請", "privacy": false}, "material_recognition": {"plain": "誰能把採購單認列到材料卡片", "category": "業務", "currentName": "材料卡片認列採購單", "privacy": false}, "finance_cashier": {"plain": "出納頁與銀行對帳單", "category": "財務", "currentName": "出納", "privacy": false}, "finance_reports": {"plain": "帳齡與未精算提醒", "category": "財務", "currentName": "財務報表", "privacy": false}, "case_close_gates": {"plain": "案件結案前要先完成什麼", "category": "業務", "currentName": "結案條件加嚴", "privacy": false}, "completion_note": {"plain": "完工單怎麼從報價單帶入", "category": "業務", "currentName": "完工單", "privacy": false}, "alerts": {"plain": "保固與確認檔到期提醒", "category": "業務", "currentName": "到期預警", "privacy": false}, "legal_params_reminder": {"plain": "法規參數跨年提醒", "category": "財務", "currentName": "法規參數跨年提醒", "privacy": false}, "change_control": {"plain": "重大設定要等幾天才生效", "category": "安全", "currentName": "變更管制", "privacy": false}, "payslip_dispatch_picker": {"plain": "勞報單「選派發」下拉一次載入幾筆", "category": "財務", "currentName": "勞報單選派發下拉", "privacy": false}}, "groupOrder": ["quote_approval", "quote_defaults", "quote_alt", "quote_output", "quote_privacy", "quote_backfill", "profit_warning", "project_margin", "overhead", "profit_rules", "material_order", "material_recognition", "finance_cashier", "finance_reports", "case_close_gates", "completion_note", "alerts", "legal_params_reminder", "change_control", "payslip_dispatch_picker"], "groupHelp": {"quote_approval": "報價單送審時，『單項毛利率偏低』『有效期限過長』『含折讓』這幾條審核原因的門檻。", "quote_defaults": "新增報價單時預先帶入的值（業務可逐張修改），以及估價單的單號字首。", "quote_alt": "報價單「擇一方案」的文字範本、數量上限，以及客戶回簽後的處理規則。", "quote_output": "報價單 PDF 與預覽如何處理被管理者隱藏的報價條件；金額與稅務不在這裡調整。", "quote_privacy": "報價單上客戶個人資料欄位（電子郵件、傳真）能不能被管理者隱藏。", "quote_backfill": "最高管理者補登過去月份已成案報價單的開關與可補登的最早月份；預設關閉。", "profit_warning": "各畫面的利潤顏色門檻。只改顏色與提示字；每個畫面各自一組，預設都是該畫面原本的數字。", "project_margin": "報價單「專案毛利%」的提醒門檻；算式本身固定，不在此調整。", "overhead": "新建報價單的管銷分攤預設比率；管銷口徑切換（舊／新口徑、公益基數）仍在精算相關的管銷設定入口，不在這裡。", "profit_rules": "報價單與精算的公益捐款比率；管銷比率另在精算頁／管銷設定調整，營業利益率目標沿用「利潤提醒色帶」的報價單紅線。", "material_order": "材料申請的新增規則。目前只有「新增時要不要選供應商」。", "material_recognition": "材料卡片「帶入並連結」（認列已核准的採購單）的權限，以及被拒時的通知方式。", "finance_cashier": "出納頁的顯示天數與銀行對帳單欄位名稱；金額、權限與單據狀態不在這裡調整。", "finance_reports": "財務報表的顯示參數。金額、稅額與捨入不在這裡調整。", "case_close_gates": "結案檢查的加嚴選項。只能讓結案更嚴，不能拿掉收款、單據、精算、額外支出任何一關。", "completion_note": "完工單從報價單帶入項目時的預設行為。誰能建立或編輯完工單屬權限設定，不在這裡（目前仍限管理員）。", "alerts": "各種「快到期了」提醒的提前天數。", "legal_params_reminder": "法規參數「下一年度還沒設定」提醒的起算日；提醒的內容與法規檢查不在這裡調整。", "change_control": "高風險設定變更要等多久才生效、是否需要第二位最高管理者核准。", "payslip_dispatch_picker": "勞報單選派發下拉清單的載入筆數；搜尋範圍與權限不在這裡調整。"}, "sections": [{"code": "quote", "label": "報價單", "subs": [{"code": "q-approval", "label": "送審門檻", "desc": "什麼樣的報價單要送主管看"}, {"code": "q-defaults", "label": "新報價單預設", "desc": "新開報價單時預先帶入的值"}, {"code": "q-alt-show", "label": "擇一方案：顯示與列印", "desc": "客戶看到什麼、內部怎麼比較"}, {"code": "q-alt-lock", "label": "擇一方案：回簽後的鎖定規則", "desc": "客戶回簽之後，哪些動作還能做"}, {"code": "q-output", "label": "輸出與個人資料", "desc": "PDF 要不要印、哪些欄位可隱藏"}, {"code": "q-backfill", "label": "補登歷史案件", "desc": "臨時開放補登過去月份的成案單"}]}, {"code": "profit", "label": "利潤與管銷", "subs": [{"code": "p-warning", "label": "利潤提醒色帶", "desc": "各畫面的利潤率紅／黃／綠"}, {"code": "p-rules", "label": "管銷與公益口徑", "desc": "新報價單怎麼抽管銷、公益金"}]}, {"code": "material", "label": "材料與採購", "subs": [{"code": "m-order", "label": "材料申請", "desc": "新增材料申請的規則"}, {"code": "m-recog", "label": "認列採購單", "desc": "誰能把採購單認列到材料卡片"}]}, {"code": "finance", "label": "財務與出納", "subs": [{"code": "f-cashier", "label": "出納頁與對帳單", "desc": "即將到期標示、逾期寬限、銀行對帳單欄名"}, {"code": "f-reports", "label": "財務報表", "desc": "帳齡區間與未精算提醒"}]}, {"code": "close", "label": "結案與完工", "subs": [{"code": "c-gates", "label": "結案條件加嚴", "desc": "哪些情況不讓案件結案"}, {"code": "c-note", "label": "完工單帶入", "desc": "新建完工單時從報價單帶入什麼"}]}, {"code": "remind", "label": "提醒與到期", "subs": [{"code": "r-alerts", "label": "到期預警", "desc": "保固、確認檔到期前幾天提醒"}, {"code": "r-legal", "label": "法規參數跨年提醒", "desc": "每年何時提醒設定下一年度參數"}]}, {"code": "other", "label": "其他", "subs": [{"code": "o-change", "label": "變更管制", "desc": "高風險設定改了要等幾天才生效"}, {"code": "o-picker", "label": "勞報單選派發", "desc": "下拉一次載入幾筆"}]}], "rows": [{"id": "quote_approval.min_item_margin_pct", "gk": "quote_approval", "key": "min_item_margin_pct", "name": "單項毛利率低於多少，送審時要特別標示", "desc": "任一有成本的品項毛利率低於這個百分比，就多一條「毛利率偏低」的審核原因。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 30, "rec": 30, "choices": [], "risk": "money", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（報價送審門檻）：一律逐項設定", "sec": "q-approval", "top": "quote", "secLabel": "送審門檻", "groupLabel": "報價送審門檻", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】調低門檻後，毛利偏低的報價單不再被列出『單項毛利率偏低』這條審核原因，可能讓需要主管看的單子少了一個提醒。；往小調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調低門檻後，毛利偏低的報價單不再被列出『單項毛利率偏低』這條審核原因，可能讓需要主管看的單子少了一個提醒。", "helpWhat": "報價單某一項的毛利率低於多少，送審時要列為『需審核』原因？ 報價單任一品項（有成本者）的毛利率低於這個百分比，送審時會多一條「第幾項毛利率偏低（低於門檻）」的審核原因。預設 30。", "helpWhen": "主管覺得太多或太少低毛利單被標出來時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "調低＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經等待期）；調高＝更多（立即生效）。不改簽核層與簽核規則，也不改任何金額。 【高影響】調低門檻後，毛利偏低的報價單不再被列出『單項毛利率偏低』這條審核原因，可能讓需要主管看的單子少了一個提醒。", "helpRec": "建議值：30 %。", "lockRule": false, "roles": ["業務", "簽核人"]}, {"id": "quote_approval.max_valid_days", "gk": "quote_approval", "key": "max_valid_days", "name": "報價單有效天數最多幾天", "desc": "超過就在送審時多一條「有效期限過長」的原因。", "type": "int", "unit": "天", "min": 1, "max": 365, "def": 30, "rec": 30, "choices": [], "risk": "money", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（報價送審門檻）：一律逐項設定", "sec": "q-approval", "top": "quote", "secLabel": "送審門檻", "groupLabel": "報價送審門檻", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】調大上限後，有效期限較長的報價單不再被列出『有效期限過長』這條審核原因，可能讓需要主管看的條件沒被注意到。；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調大上限後，有效期限較長的報價單不再被列出『有效期限過長』這條審核原因，可能讓需要主管看的條件沒被注意到。", "helpWhat": "報價單的有效期限最多可以幾天，超過就要列為『需審核』原因？ 報價單的有效天數超過這個數字，送審時會多一條「有效期限過長（超過上限天數）」的審核原因。", "helpWhen": "公司的報價有效期政策改變時。調低上限前，先確認「新報價單預設有效天數」沒有超過新上限，否則預設值會存不進去。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "調大＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經等待期）；調小＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。注意：上限調到低於「新報價單預設有效天數」（報價單預設值）時，每張新報價單一開始就會被列為『有效期限過長』。 【高影響】調大上限後，有效期限較長的報價單不再被列出『有效期限過長』這條審核原因，可能讓需要主管看的條件沒被注意到。", "helpRec": "建議值：30 天。", "lockRule": false, "roles": ["業務", "簽核人"]}, {"id": "quote_approval.discount_review_above", "gk": "quote_approval", "key": "discount_review_above", "name": "折讓超過多少元要列為審核原因", "desc": "填 0＝只要有折讓就列出。", "type": "int", "unit": "元", "min": 0, "max": 100000000, "def": 0, "rec": 0, "choices": [], "risk": "money", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（報價送審門檻）：一律逐項設定", "sec": "q-approval", "top": "quote", "secLabel": "送審門檻", "groupLabel": "報價送審門檻", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】調高後，金額不大的折讓不再被列出『含折讓』這條審核原因，可能讓需要主管看的折讓沒被注意到。；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調高後，金額不大的折讓不再被列出『含折讓』這條審核原因，可能讓需要主管看的折讓沒被注意到。", "helpWhat": "報價單的折讓金額超過多少元，送審時要列為『需審核』原因？（填 0 代表只要有折讓就列出） 報價單有折讓、而且折讓金額大於這個數字，送審時會多一條「含折讓（列出折讓金額）」的審核原因。0 代表任何折讓都列出（目前的做法）。", "helpWhen": "想讓小額折讓免審、或所有折讓都要看時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "調高＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經等待期）；調低＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。 【高影響】調高後，金額不大的折讓不再被列出『含折讓』這條審核原因，可能讓需要主管看的折讓沒被注意到。", "helpRec": "建議值：0 元。", "lockRule": false, "roles": ["業務", "簽核人"]}, {"id": "quote_approval.reconfirm_mode", "gk": "quote_approval", "key": "reconfirm_mode", "name": "簽完後內容又被改，要不要請簽核人重看", "desc": "預設關。建議「先試跑」一週看看會影響誰，再開。", "type": "int", "unit": "", "min": 0, "max": 2, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "維持今天：簽完後內容被改，簽核不受影響。"}, {"value": 1, "label": "先試跑（只記錄）", "impact": "只記錄本來會作廢誰，不改任何簽核。"}, {"value": 2, "label": "開啟", "impact": "內容被改後，已簽的層回到待複查。"}], "risk": "money", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（報價送審門檻）：一律逐項設定", "sec": "q-approval", "top": "quote", "secLabel": "送審門檻", "groupLabel": "報價送審門檻", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】調小後（開→先試跑、開→關、先試跑→關），簽核人簽完之後內容被改的單子不再被要求重新複查，已簽的層會沿用舊簽核。；往小調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調小後（開→先試跑、開→關、先試跑→關），簽核人簽完之後內容被改的單子不再被要求重新複查，已簽的層會沿用舊簽核。", "helpWhat": "簽核人簽完之後，報價單內容又被改了，要不要請簽核人重新複查？ 預設關閉（簽核人簽完後內容怎麼被改都不受影響）。「先試跑」只記錄「如果開了會作廢誰」供評估，不改任何簽核；建議先先試跑跑一週再開。「開」＝已簽的層，內容被改後回到待複查，並通知該簽核人、後續層與送審人。", "helpWhen": "簽完後內容被未經同意修改、而簽核人不知情時；「先試跑」看一週會影響誰，再決定開。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "往大調（關→先試跑→開）立即生效；往小調（開→先試跑、開→關、先試跑→關）＝放寬，需第二位最高管理者核准並經等待期。不改任何金額，也不改簽核流向；只影響『已簽核之後內容被修改』的處理。 【高影響】調小後（開→先試跑、開→關、先試跑→關），簽核人簽完之後內容被改的單子不再被要求重新複查，已簽的層會沿用舊簽核。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝維持今天：簽完後內容被改，簽核不受影響。；先試跑（只記錄）＝只記錄本來會作廢誰，不改任何簽核。；開啟＝內容被改後，已簽的層回到待複查。", "lockRule": false, "roles": ["業務", "簽核人", "最高管理者"]}, {"id": "quote_defaults.valid_days", "gk": "quote_defaults", "key": "valid_days", "name": "新報價單預設有效天數", "desc": "新增報價單時預先帶入的天數，業務仍可逐張改。", "type": "int", "unit": "天", "min": 1, "max": 365, "def": 30, "rec": 30, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「重設為預設」多的功能", "sec": "q-defaults", "top": "quote", "secLabel": "新報價單預設", "groupLabel": "報價單預設值", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "新報價單預設的有效天數要幾天？ 新增報價單時，「有效天數」欄位預先帶入的數字，業務仍可逐張修改。不可超過「報價單有效天數上限」，否則每張新單一開始就會被列為『有效期限過長』。預設 30。", "helpWhen": "公司慣用的報價有效天數變了；業務仍可逐張改。", "helpImpact": "只影響之後新增的報價單的預設值；已存的報價單不變。這個預設值本身不放寬也不收緊審核（超過上限仍由伺服器列為審核原因）。立即生效。注意：之後若把「報價單有效天數上限」調到低於這個預設，每張新報價單一開始就會被列為『有效期限過長』而需要審核，請一併調整。", "helpRec": "建議值：30 天。", "lockRule": false, "roles": []}, {"id": "quote_defaults.estimate_no_prefix", "gk": "quote_defaults", "key": "estimate_no_prefix", "name": "估價單單號的字首", "desc": "2 個大寫英文字母；只影響之後新開的估價單。", "type": "str", "unit": "", "min": null, "max": null, "def": "ME", "rec": "ME", "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "q-defaults", "top": "quote", "secLabel": "新報價單預設", "groupLabel": "報價單預設值", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "估價單的單號要用哪兩個英文字母開頭？ 開立「估價單」時，單號最前面的兩個大寫英文字母就是這裡設定的字首，後面的年月與流水號跟報價單各自獨立計算、互不搶號。必須是 2 個大寫英文字母，且不能跟報價單或其他單據已使用的字首相同。", "helpWhen": "想讓估價單單號一眼和報價單分開，或字首與其他單據撞了時。", "helpImpact": "只影響之後新開立的估價單的單號；已經開出去的估價單單號不變、仍可正常開啟與搜尋。不影響報價單的單號。立即生效。", "helpRec": "建議值：「ME」。", "lockRule": false, "roles": []}, {"id": "quote_alt.alt_enabled", "gk": "quote_alt", "key": "alt_enabled", "name": "報價單可以標「擇一方案」", "desc": "開了，報價單品項才能標成「三選一」這類方案；關掉只是不顯示欄位，舊單不變。", "type": "bool", "unit": "", "min": null, "max": null, "def": true, "rec": true, "choices": [], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人", "riskText": "", "helpWhat": "報價單要不要提供「擇一方案」功能？ 開啟後，報價單的品項可以標成『擇一』（例如三種方案只能選一種）。關閉只是不顯示相關欄位，已經含擇一的舊單仍照原樣計算與列印。", "helpWhen": "公司不再使用擇一方案、想把相關欄位從報價單拿掉時，才關閉；關掉只是不顯示欄位，舊單不變。", "helpImpact": "只影響報價單編輯畫面是否顯示擇一欄位；既有含擇一的報價單金額與列印不變。立即生效。", "helpRec": "建議值：開啟。", "lockRule": false, "roles": []}, {"id": "quote_alt.total_text", "gk": "quote_alt", "key": "total_text", "name": "還沒選定方案時，合計欄顯示的字", "desc": "客戶尚未選方案前，稅前合計與總計兩格會印這段字。", "type": "str", "unit": "", "min": null, "max": null, "def": "依方案選擇", "rec": "依方案選擇", "choices": [], "risk": "legal", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": true, "dangerText": "影響大、客戶看得到、影響別人｜這段文字會印在給客戶的報價單上，請確認措辭不會讓客戶誤解金額。", "riskText": "這段文字會印在給客戶的報價單上，請確認措辭不會讓客戶誤解金額。", "helpWhat": "報價單尚未選定方案時，稅前合計與總計那兩格要顯示什麼字？ 客戶看到的報價單，在還沒選定方案之前，稅前合計與總計兩格會改顯示這段文字。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。客戶反映合計欄的字眼看不懂，或公司想換一句更貼切的說法時。", "helpImpact": "只影響之後存檔的報價單；已存檔的報價單沿用當時的文字（存檔時會記下）。客戶看得到這段文字。 這段文字會印在給客戶的報價單上，請確認措辭不會讓客戶誤解金額。", "helpRec": "建議值：「依方案選擇」。", "lockRule": false, "roles": []}, {"id": "quote_alt.note_template", "gk": "quote_alt", "key": "note_template", "name": "擇一方案的備註句", "desc": "每組擇一方案會自動在備註末尾加一句；用按鈕插入「項次」「組別名稱」。", "type": "str", "unit": "", "min": null, "max": null, "def": "項次{items}為{group}擇一方案選擇", "rec": "項次{items}為{group}擇一方案選擇", "choices": [], "risk": "legal", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": true, "dangerText": "影響大、客戶看得到、影響別人｜這句話會印在給客戶的報價單上，請確認措辭正確。", "riskText": "這句話會印在給客戶的報價單上，請確認措辭正確。", "helpWhat": "報價單備註要自動帶哪一句擇一說明？ 每一組擇一方案會自動產生一句說明，接在備註最後。編輯時可從按鈕插入「項次」與「組別名稱」兩個代入位置，存檔時系統會自動換成該組的實際內容。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。想調整客戶看到的擇一備註措辭時；平常不必動。", "helpImpact": "只影響之後存檔的報價單；已存檔的報價單沿用當時的句子。客戶看得到這句話。 這句話會印在給客戶的報價單上，請確認措辭正確。", "helpRec": "建議值：「項次{items}為{group}擇一方案選擇」。", "lockRule": false, "roles": []}, {"id": "quote_alt.show_unpicked_in_pdf", "gk": "quote_alt", "key": "show_unpicked_in_pdf", "name": "客戶選定後，列印時保留沒被選到的項目", "desc": "預設不印；開了會用灰字標「未選」。", "type": "bool", "unit": "", "min": null, "max": null, "def": false, "rec": false, "choices": [], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": false, "others": true, "ext": "", "cust": true, "dangerText": "客戶看得到、影響別人", "riskText": "", "helpWhat": "客戶選定方案後，列印的報價單要不要保留沒被選到的項目（灰字標示『未選』）？ 預設不印沒被選到的項目。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。客戶要求所有 PDF／Excel 輸出都保留「沒被選到的方案」做留底時。", "helpImpact": "只影響之後列印／匯出的報價單 PDF 與 Excel，不改變任何金額。", "helpRec": "建議值：關閉。", "lockRule": false, "roles": []}, {"id": "quote_alt.alt_groups_max", "gk": "quote_alt", "key": "alt_groups_max", "name": "一張報價單最多幾組擇一方案", "desc": "組數越多，內部比較的組合數越爆炸；超過就不能存檔。", "type": "int", "unit": "組", "min": 1, "max": 20, "def": 10, "rec": 10, "choices": [], "risk": "ops", "rp": false, "loosen": "up", "adv": true, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人、進階｜往大調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "一張報價單最多可以有幾組擇一方案？ 組數越多，內部比較的組合數會暴增。超過上限的報價單無法存檔。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。同一張單真的需要超過目前組數的擇一方案時；調大前先確認內部比較畫面還看得懂。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響之後存檔的報價單；已超過新上限的舊單不會被刪除，但改動時需先減少組數。", "helpRec": "建議值：10 組。", "lockRule": false, "roles": []}, {"id": "quote_alt.combo_view_max", "gk": "quote_alt", "key": "combo_view_max", "name": "內部「方案組合比較」最多列幾種", "desc": "只影響內部畫面，超過的只顯示總數；客戶看不到。", "type": "int", "unit": "種", "min": 1, "max": 200, "def": 24, "rec": 24, "choices": [], "risk": "ops", "rp": false, "loosen": null, "adv": true, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人、進階", "riskText": "", "helpWhat": "內部「方案組合比較」最多列出幾種組合？ 只影響內部成本比較畫面（客戶看不到）。超過的組合只顯示總數。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。內部比較畫面出現「只顯示前 N 種」而你想看更多時。", "helpImpact": "只影響內部畫面，不影響任何金額、列印或客戶看到的內容。", "helpRec": "建議值：24 種。", "lockRule": false, "roles": []}, {"id": "quote_alt.combo_view_default_open", "gk": "quote_alt", "key": "combo_view_default_open", "name": "開報價單時，組合比較預設展開", "desc": "預設收合，要看再展開，開單比較快。", "type": "bool", "unit": "", "min": null, "max": null, "def": false, "rec": false, "choices": [], "risk": "ops", "rp": false, "loosen": null, "adv": true, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-show", "top": "quote", "secLabel": "擇一方案：顯示與列印", "groupLabel": "擇一方案", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人、進階", "riskText": "", "helpWhat": "開啟報價單時，內部「方案組合比較」要不要預設展開？ 預設收合，要看時再展開，開單比較快。", "helpWhen": "要先開啟「啟用擇一方案」才有作用。業務習慣一開單就比較各組合成本時。", "helpImpact": "只影響內部畫面的預設狀態。", "helpRec": "建議值：關閉。", "lockRule": false, "roles": []}, {"id": "quote_alt.lock_scope", "gk": "quote_alt", "key": "lock_scope", "name": "客戶回簽後，哪些內容鎖住不能改", "desc": "要改就得先「取消回簽」。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "鎖定整份報價本文（建議）", "impact": "品項、金額、備註與報價附件全部不能改；要改請先取消回簽。"}, {"value": 2, "label": "只鎖品項與金額", "impact": "備註與報價附件仍可編輯，品項、單價、數量、擇一設定不能改。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "客戶回簽之後，報價單的哪些內容不能再改？ 決定已回簽的擇一報價單，哪些欄位會被鎖住。要改就先「取消回簽」。", "helpWhen": "現場常需要在客戶回簽後補改備註或附件、又不想每次都先取消回簽時，才考慮放寬成「只鎖品項與金額」。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：鎖定整份報價本文（建議）。 各選項後果：鎖定整份報價本文（建議）＝品項、金額、備註與報價附件全部不能改；要改請先取消回簽。；只鎖品項與金額＝備註與報價附件仍可編輯，品項、單價、數量、擇一設定不能改。", "lockRule": true, "roles": []}, {"id": "quote_alt.cancel_after_deal", "gk": "quote_alt", "key": "cancel_after_deal", "name": "案件成案後，還能取消客戶回簽嗎", "desc": "取消回簽會清掉客戶選的方案，金額回到暫估。", "type": "int", "unit": "", "min": 1, "max": 3, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行，需先處理下游（建議）", "impact": "已成案的案件不能取消回簽；請先把案件改回未成案。"}, {"value": 2, "label": "可以，並連動清除下游衍生資料（尚未提供）", "impact": "取消回簽時，同步重算或標記下游依報價金額衍生的資料。"}, {"value": 3, "label": "可以，只提醒", "impact": "照常取消回簽，並提醒『下游金額可能與報價不一致』，不連動修改。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "案件已成案之後，還可以取消回簽嗎？ 取消回簽會清除客戶選定的方案，金額回到未選定的暫估。", "helpWhen": "成案後客戶改變主意、需要重選方案時，才評估放寬。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行，需先處理下游（建議）。 各選項後果：不行，需先處理下游（建議）＝已成案的案件不能取消回簽；請先把案件改回未成案。；可以，並連動清除下游衍生資料（尚未提供）＝取消回簽時，同步重算或標記下游依報價金額衍生的資料。；可以，只提醒＝照常取消回簽，並提醒『下游金額可能與報價不一致』，不連動修改。", "lockRule": true, "roles": []}, {"id": "quote_alt.move_out_of_sent", "gk": "quote_alt", "key": "move_out_of_sent", "name": "已回簽的單，能改成草稿／已取消／已拒絕嗎", "desc": "指「改狀態、收回、退回」這類讓單離開「已送出」的動作。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行（建議）", "impact": "一律擋下並提示『請管理員取消回簽』。"}, {"value": 2, "label": "可以，並自動清除選定（尚未提供）", "impact": "比照取消回簽：通過下游檢查後同步清除選定，再進入新狀態。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "已回簽的擇一單，可以被改成草稿、已取消或已拒絕嗎？ 指「改狀態」「收回」「退回」等會讓單據離開『已送出』的操作。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行（建議）。 各選項後果：不行（建議）＝一律擋下並提示『請管理員取消回簽』。；可以，並自動清除選定（尚未提供）＝比照取消回簽：通過下游檢查後同步清除選定，再進入新狀態。", "lockRule": true, "roles": []}, {"id": "quote_alt.reject_final_keep", "gk": "quote_alt", "key": "reject_final_keep", "name": "「駁回結案」時，客戶選的方案要保留嗎", "desc": "駁回結案是終局動作。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "保留（建議）", "impact": "駁回結案之後選定與金額原樣保留。"}, {"value": 2, "label": "清除（尚未提供）", "impact": "比照取消回簽：通過下游檢查後清除選定。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "已回簽的擇一單被「駁回結案」時，客戶選定的方案要保留還是清除？ 駁回結案是終局動作。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：保留（建議）。 各選項後果：保留（建議）＝駁回結案之後選定與金額原樣保留。；清除（尚未提供）＝比照取消回簽：通過下游檢查後清除選定。", "lockRule": true, "roles": []}, {"id": "quote_alt.unlock_edit_signed", "gk": "quote_alt", "key": "unlock_edit_signed", "name": "最高管理者可以「解鎖修改」已回簽單嗎", "desc": "解鎖修改會讓單回到待審核。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行（建議）", "impact": "一律擋下並提示『請管理員取消回簽』。"}, {"value": 2, "label": "可以", "impact": "允許進入解鎖修改；期間仍受『回簽後鎖定範圍』限制。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "最高管理者可以對已回簽的擇一單做「解鎖修改」嗎？ 解鎖修改會讓單據回到待審核狀態。", "helpWhen": "有已回簽單必須由最高管理者修正時，才評估放寬。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行（建議）。 各選項後果：不行（建議）＝一律擋下並提示『請管理員取消回簽』。；可以＝允許進入解鎖修改；期間仍受『回簽後鎖定範圍』限制。", "lockRule": true, "roles": []}, {"id": "quote_alt.approval_basis", "gk": "quote_alt", "key": "approval_basis", "name": "擇一單送審時，用哪些品項判斷要不要審核", "desc": "目前會逐項檢查所有品項，包含沒被選到的。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "逐項檢查所有品項（最嚴，建議；目前的做法）", "impact": "包含還沒被選到的品項都逐一檢查，較不會漏掉需要審核的單。"}, {"value": 2, "label": "只看計入金額的品項（尚未提供）", "impact": "只檢查實際計入金額的品項（已選定的方案加上一般品項），沒被選到的方案不再列入審核原因。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選『只看計入金額的品項』時，沒被選到的低毛利方案不再列入審核原因，可能讓需要主管看的單子直接通過。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選『只看計入金額的品項』時，沒被選到的低毛利方案不再列入審核原因，可能讓需要主管看的單子直接通過。", "helpWhat": "擇一方案的報價單送審時，審核原因用哪個金額來判斷？ 目前審核原因會逐項檢查所有品項（包含還沒被選到的）。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "只影響之後送審的擇一方案報價單的審核原因清單。放寬須另一位最高管理者核准並等等待期。 【高影響】選『只看計入金額的品項』時，沒被選到的低毛利方案不再列入審核原因，可能讓需要主管看的單子直接通過。", "helpRec": "建議值：逐項檢查所有品項（最嚴，建議；目前的做法）。 各選項後果：逐項檢查所有品項（最嚴，建議；目前的做法）＝包含還沒被選到的品項都逐一檢查，較不會漏掉需要審核的單。；只看計入金額的品項（尚未提供）＝只檢查實際計入金額的品項（已選定的方案加上一般品項），沒被選到的方案不再列入審核原因。", "lockRule": true, "roles": []}, {"id": "quote_alt.cancel_after_export", "gk": "quote_alt", "key": "cancel_after_export", "name": "已匯出給財務的單據，還能取消回簽嗎", "desc": "匯出後財務已據以開立文件。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行，永久凍結選定方案（建議）", "impact": "請財務先作廢該憑據後才能取消回簽。"}, {"value": 2, "label": "可以，並通知財務（尚未提供）", "impact": "取消回簽並通知財務；已匯出文件本身不會被修改。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "已經匯出給財務的開票憑據／請款單，還可以取消回簽嗎？ 匯出後財務已據以開立文件。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行，永久凍結選定方案（建議）。 各選項後果：不行，永久凍結選定方案（建議）＝請財務先作廢該憑據後才能取消回簽。；可以，並通知財務（尚未提供）＝取消回簽並通知財務；已匯出文件本身不會被修改。", "lockRule": true, "roles": []}, {"id": "quote_alt.cancel_after_invoice", "gk": "quote_alt", "key": "cancel_after_invoice", "name": "已開票／請款但還沒匯出時，能取消回簽嗎", "desc": "單據已建立未匯出時，取消回簽會讓報價與單據金額不一致。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行，須先撤回該單據（建議）", "impact": "請先撤回開票單或請款單再取消回簽。"}, {"value": 2, "label": "可以，並提醒財務（尚未提供）", "impact": "取消回簽後單據留著，並通知財務其金額與方案不一致。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "已開票或已請款、但還沒匯出時，可以取消回簽嗎？ 單據已建立但還沒匯出給財務時，取消回簽會讓報價金額與該單據不一致。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行，須先撤回該單據（建議）。 各選項後果：不行，須先撤回該單據（建議）＝請先撤回開票單或請款單再取消回簽。；可以，並提醒財務（尚未提供）＝取消回簽後單據留著，並通知財務其金額與方案不一致。", "lockRule": true, "roles": []}, {"id": "quote_alt.cancel_after_settle", "gk": "quote_alt", "key": "cancel_after_settle", "name": "案件已精算後，還能取消回簽嗎", "desc": "精算完結後成本與利潤已凍結。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "不行，須先重開精算（建議）", "impact": "請最高管理者先重新開啟精算再取消回簽。"}, {"value": 2, "label": "可以，並重算精算基準（尚未提供）", "impact": "取消回簽並重算精算基準。"}], "risk": "money", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（擇一方案）：一律逐項設定", "sec": "q-alt-lock", "top": "quote", "secLabel": "擇一方案：回簽後的鎖定規則", "groupLabel": "擇一方案", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpWhat": "案件已精算之後，可以取消回簽嗎？ 精算完結後，成本與利潤已凍結，取消回簽會讓報價金額與精算不一致。", "helpWhen": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。", "helpImpact": "影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。放寬（往後面的選項）須原因、另一位最高管理者核准並等等待期；收緊立即生效。 【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。", "helpRec": "建議值：不行，須先重開精算（建議）。 各選項後果：不行，須先重開精算（建議）＝請最高管理者先重新開啟精算再取消回簽。；可以，並重算精算基準（尚未提供）＝取消回簽並重算精算基準。", "lockRule": true, "roles": []}, {"id": "quote_output.hidden_terms_pdf_mode", "gk": "quote_output", "key": "hidden_terms_pdf_mode", "name": "被隱藏的報價條件，PDF 還要印嗎", "desc": "預設照印；改成不印，客戶就看不到那些條件。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "照印（建議）", "impact": "隱藏欄位只是不顯示輸入框，已存的條件仍印在 PDF。"}, {"value": 1, "label": "不印被隱藏的條件", "impact": "被隱藏的條件欄位不會出現在 PDF 與預覽。"}], "risk": "legal", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：法規）：永遠逐項設定", "sec": "q-output", "top": "quote", "secLabel": "輸出與個人資料", "groupLabel": "報價單輸出", "heavy": true, "others": false, "ext": "", "cust": true, "dangerText": "影響大、客戶看得到｜【高影響】選「不印」後，被管理者隱藏的報價條件（付款、交貨、驗收、保固、售後）不會印在報價單 PDF 上，客戶看不到這些條件，之後可能因為條件沒寫而起爭議。；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】選「不印」後，被管理者隱藏的報價條件（付款、交貨、驗收、保固、售後）不會印在報價單 PDF 上，客戶看不到這些條件，之後可能因為條件沒寫而起爭議。", "helpWhat": "報價單上被隱藏的報價條件欄位，PDF 還要照印嗎？ 管理者可以在表單上隱藏某個報價條件欄位。預設照印：隱藏只是不顯示輸入框，已存的條件（含範本預設文字）仍印在 PDF。改成不印後，被隱藏的欄位不會印出。", "helpWhen": "公司決定客戶端不顯示某些報價條件，卻發現 PDF 仍然印出時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響之後產生或重新開啟的報價單 PDF 與預覽；已寄出的文件不會改，也不會刪掉任何已存的內容。改成不印屬於放寬，需要第二位最高管理者核准並經等待期；改回照印立即生效。 【高影響】選「不印」後，被管理者隱藏的報價條件（付款、交貨、驗收、保固、售後）不會印在報價單 PDF 上，客戶看不到這些條件，之後可能因為條件沒寫而起爭議。", "helpRec": "建議值：照印（建議）。 各選項後果：照印（建議）＝隱藏欄位只是不顯示輸入框，已存的條件仍印在 PDF。；不印被隱藏的條件＝被隱藏的條件欄位不會出現在 PDF 與預覽。", "lockRule": false, "roles": ["業務", "客戶"]}, {"id": "quote_privacy.contact_email_hideable", "gk": "quote_privacy", "key": "contact_email_hideable", "name": "客戶電子郵件欄位可以被隱藏", "desc": "隱藏只是不顯示輸入框，不刪資料。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "可隱藏（目前做法）", "impact": "管理者可以在排版器隱藏這個欄位。"}, {"value": 0, "label": "不可隱藏", "impact": "這個欄位固定顯示。"}], "risk": "legal", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：法規）：永遠逐項設定", "sec": "q-output", "top": "quote", "secLabel": "輸出與個人資料", "groupLabel": "報價單個人資料欄位", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜改成不可隱藏後，管理者不能再把客戶電子郵件欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "riskText": "改成不可隱藏後，管理者不能再把客戶電子郵件欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "helpWhat": "客戶電子郵件欄位可以讓管理者從報價單表單隱藏嗎？ 電子郵件屬於個人資料。預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。", "helpWhen": "對個人資料有內規，要求某些欄位固定顯示或可被隱藏時。", "helpImpact": "只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）：先前被隱藏的欄位會立刻對所有人重新顯示，資料不變；改回可隱藏後，原本的隱藏設定會恢復。 改成不可隱藏後，管理者不能再把客戶電子郵件欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "helpRec": "建議值：可隱藏（目前做法）。 各選項後果：可隱藏（目前做法）＝管理者可以在排版器隱藏這個欄位。；不可隱藏＝這個欄位固定顯示。", "lockRule": false, "roles": ["業務", "最高管理者"]}, {"id": "quote_privacy.contact_fax_hideable", "gk": "quote_privacy", "key": "contact_fax_hideable", "name": "客戶傳真欄位可以被隱藏", "desc": "同上。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "可隱藏（目前做法）", "impact": "管理者可以在排版器隱藏這個欄位。"}, {"value": 0, "label": "不可隱藏", "impact": "這個欄位固定顯示。"}], "risk": "legal", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：法規）：永遠逐項設定", "sec": "q-output", "top": "quote", "secLabel": "輸出與個人資料", "groupLabel": "報價單個人資料欄位", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜改成不可隱藏後，管理者不能再把客戶傳真欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "riskText": "改成不可隱藏後，管理者不能再把客戶傳真欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "helpWhat": "客戶傳真欄位可以讓管理者從報價單表單隱藏嗎？ 預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。", "helpWhen": "公司對個人資料欄位有內規時；傳真已很少用，通常可以讓它隱藏。", "helpImpact": "只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）：先前被隱藏的欄位會立刻對所有人重新顯示，資料不變；改回可隱藏後，原本的隱藏設定會恢復。 改成不可隱藏後，管理者不能再把客戶傳真欄位從報價單表單隱藏；已經隱藏的會恢復顯示。", "helpRec": "建議值：可隱藏（目前做法）。 各選項後果：可隱藏（目前做法）＝管理者可以在排版器隱藏這個欄位。；不可隱藏＝這個欄位固定顯示。", "lockRule": false, "roles": ["業務", "最高管理者"]}, {"id": "quote_backfill.enabled", "gk": "quote_backfill", "key": "enabled", "name": "開放補登歷史案件（限最高管理者）", "desc": "開啟後可補登過去月份的已成案報價單，補完請關閉；一定要填原因並留稽核。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "沒有補登入口。"}, {"value": 1, "label": "開啟", "impact": "最高管理者可補登過去月份的已成案報價單。"}], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "q-backfill", "top": "quote", "secLabel": "補登歷史案件", "groupLabel": "補登歷史案件", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "要開放最高管理者補登過去月份的已成案報價單嗎？ 開啟後，只有最高管理者可以補登過去月份（不含本月）的已成案報價單，單號依該單所屬月份編列（例如補登 7 月的案件，單號就是 7 月的號碼）。補登一定要填原因，並留下稽核紀錄。補登完請記得關閉。", "helpWhen": "只在需要補登過去月份的成案單時打開，補完就關。", "helpImpact": "只開放最高管理者的補登入口；一般新增報價單的編號與流程完全不變。開啟與關閉立即生效，並留下稽核紀錄。補登的案件不發成案通知、不觸發提醒，利潤與公益金以現行口徑計算並註明。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝沒有補登入口。；開啟＝最高管理者可補登過去月份的已成案報價單。", "lockRule": false, "roles": []}, {"id": "quote_backfill.earliest_month", "gk": "quote_backfill", "key": "earliest_month", "name": "最早可以補登到哪一個月", "desc": "補登的報價日期不得早於此月，也不得是本月或未來。", "type": "int", "unit": "", "min": 200001, "max": 209912, "def": 202001, "rec": 202001, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "q-backfill", "top": "quote", "secLabel": "補登歷史案件", "groupLabel": "補登歷史案件", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "最早可以補登到哪一個月？（填年月，例如 202001） 補登的報價日期不得早於這個月份；也不得是本月或未來。", "helpWhen": "要補登更早的月份，或想縮小可補登範圍時。", "helpImpact": "只限制補登時可選的月份範圍，不影響已存在的報價單。", "helpRec": "建議值：202,001。", "lockRule": false, "roles": []}, {"id": "quote_backfill.auto_off_hours", "gk": "quote_backfill", "key": "auto_off_hours", "name": "開啟後幾小時自動關閉", "desc": "0＝不自動關閉。縮短暴露時間用。", "type": "int", "unit": "小時", "min": 0, "max": 720, "def": 24, "rec": 24, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "q-backfill", "top": "quote", "secLabel": "補登歷史案件", "groupLabel": "補登歷史案件", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "開啟補登後，要在幾小時後自動關閉？（0＝不自動關閉） 為了減少暴露時間，開啟「補登歷史案件」後超過這個小時數，系統就自動視為關閉（要再補登請重新開啟）。填 0 表示不自動關閉。", "helpWhen": "想縮短補登入口開著的時間，避免忘記關。", "helpImpact": "只影響補登入口的開放時間；已補登的報價單不受影響。調整立即生效並留下稽核紀錄。", "helpRec": "建議值：24 小時。", "lockRule": false, "roles": []}, {"id": "profit_warning.quote_form_low", "gk": "profit_warning", "key": "quote_form_low", "name": "報價單表單：營業利益率低於這個數變紅", "desc": "報價單表單右側的營業利益率，低於此值顯示紅色與「低於目標」。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 12, "rec": 12, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "報價單表單上，營業利益率低於多少要顯示紅色警示？ 報價單表單右側的營業利益率低於這個數字會變紅、並顯示「低於目標」。目前的預設是 12%（＝這個畫面原本的做法）。", "helpWhen": "業務反映報價單上紅色太常出現或太少出現時。", "helpImpact": "影響範圍：報價單表單右側的營業利益率低於這個數字會變紅、並顯示「低於目標」。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：12 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.quote_form_good", "gk": "profit_warning", "key": "quote_form_good", "name": "報價單表單：達到這個數才變綠", "desc": "介於紅線與此值之間顯示黃色；不可低於紅線。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 20, "rec": 20, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "報價單表單上，營業利益率達到多少才顯示綠色？ 報價單表單的營業利益率介於紅線與這個數字之間顯示黃色，達到這個數字顯示綠色。目前的預設是 20%（＝這個畫面原本的做法）。不可低於紅線。", "helpWhen": "公司提高或降低利潤目標時。", "helpImpact": "影響範圍：報價單表單的營業利益率介於紅線與這個數字之間顯示黃色，達到這個數字顯示綠色。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：20 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.report_low", "gk": "profit_warning", "key": "report_low", "name": "報表頁：分項利潤率低於這個數變紅", "desc": "報表頁分項表格的營業利益率低於此值顯示紅色。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 10, "rec": 10, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "報表頁的分項利潤率低於多少要顯示紅色？ 報表頁分項表格的營業利益率低於這個數字顯示紅色。目前的預設是 10%（＝這個畫面原本的做法）。", "helpWhen": "報表頁的紅色與公司的利潤警戒線不一致時。", "helpImpact": "影響範圍：報表頁分項表格的營業利益率低於這個數字顯示紅色。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：10 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.report_good", "gk": "profit_warning", "key": "report_good", "name": "報表頁：達到這個數才變綠", "desc": "介於紅線與此值之間顯示橘色。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 20, "rec": 20, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "報表頁的分項利潤率達到多少才顯示綠色？ 報表頁分項表格的營業利益率達到這個數字顯示綠色，介於紅線與此之間顯示橘色。目前的預設是 20%（＝這個畫面原本的做法）。不可低於紅線。", "helpWhen": "公司的「達標」定義改變時。", "helpImpact": "影響範圍：報表頁分項表格的營業利益率達到這個數字顯示綠色，介於紅線與此之間顯示橘色。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：20 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.case_floor", "gk": "profit_warning", "key": "case_floor", "name": "案件頁與結算摘要：低於這個數變紅", "desc": "案件頁、報表結算摘要與結算 PDF；預設 0＝虧損才紅，可設負數。", "type": "float", "unit": "%", "min": -100, "max": 100, "def": 0, "rec": 0, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "案件頁、報表結算摘要與結算 PDF，營業利益率低於多少要顯示紅色？ 案件頁、報表結算摘要與結算 PDF 的營業利益率低於這個數字顯示紅色（預設 0＝虧損才紅）。可設負數。目前的預設是 0%（＝這個畫面原本的做法）。", "helpWhen": "想把「虧損」的定義改成低於某個正數、或容許小額虧損時。", "helpImpact": "影響範圍：案件頁、報表結算摘要與結算 PDF 的營業利益率低於這個數字顯示紅色（預設 0＝虧損才紅）。可設負數。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：0 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.case_good", "gk": "profit_warning", "key": "case_good", "name": "案件頁與結算摘要：達到這個數才變綠", "desc": "介於紅線與此值之間顯示黃色。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 20, "rec": 20, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "案件頁、報表結算摘要與結算 PDF，營業利益率達到多少才顯示綠色？ 案件頁、報表結算摘要與結算 PDF 的營業利益率達到這個數字顯示綠色，介於紅線與此之間顯示黃色。目前的預設是 20%（＝這個畫面原本的做法）。不可低於紅線。", "helpWhen": "案件頁的綠色與公司的達標定義不一致時。", "helpImpact": "影響範圍：案件頁、報表結算摘要與結算 PDF 的營業利益率達到這個數字顯示綠色，介於紅線與此之間顯示黃色。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：20 %。", "lockRule": false, "roles": []}, {"id": "profit_warning.settlement_good", "gk": "profit_warning", "key": "settlement_good", "name": "結算頁：達到這個數才變綠", "desc": "結算頁摘要達標顯示綠色，其餘顯示紅色（沒有紅線）。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 20, "rec": 20, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "利潤提醒色帶", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "結算頁的營業利益率達到多少才顯示綠色？ 結算頁摘要的營業利益率達到這個數字顯示綠色，其餘顯示紅色。目前的預設是 20%（＝這個畫面原本的做法）。", "helpWhen": "結算頁的達標標準與公司目標不同時。", "helpImpact": "影響範圍：結算頁摘要的營業利益率達到這個數字顯示綠色，其餘顯示紅色。只改顏色與提示字，不影響存檔、送審、審核與任何金額；沒有放寬或收緊之分，立即生效。", "helpRec": "建議值：20 %。", "lockRule": false, "roles": []}, {"id": "project_margin.warn_pct", "gk": "project_margin", "key": "warn_pct", "name": "專案毛利低於多少，在報價單上提醒業務", "desc": "0＝不提醒；只有看得到成本與毛利的人會看到。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 0, "rec": 0, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「重設為預設」多的功能", "sec": "p-warning", "top": "profit", "secLabel": "利潤提醒色帶", "groupLabel": "專案毛利%", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "專案毛利% 低於多少時，在報價單上提醒業務？（0 代表不提醒） 專案毛利% ＝（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入。設成 0 就不提醒；設成例如 20，專案毛利低於 20% 時，報價單的內部損益區會用警示色標出來。", "helpWhen": "想在業務開單當下就提醒毛利偏低；0 代表不提醒。", "helpImpact": "只改畫面提示，不影響存檔、送審與審核；只有看得到成本與毛利的人會看到。立即生效。", "helpRec": "建議值：0 %。", "lockRule": false, "roles": []}, {"id": "overhead.default_pct", "gk": "overhead", "key": "default_pct", "name": "新報價單的管銷分攤比率", "desc": "新報價單管銷＝直接毛利 × 這個比率；每張仍可由最高管理者在精算頁個別調。", "type": "float", "unit": "%", "min": 0, "max": 100, "def": 25, "rec": 25, "choices": [], "risk": "money", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（管銷分攤比率）：一律逐項設定", "sec": "p-rules", "top": "profit", "secLabel": "管銷與公益口徑", "groupLabel": "管銷分攤比率", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜【高影響】調低管銷預設比率後，之後新建的報價單營業利益會變高、獎金基數變大；已建立的報價單與已完結的精算不會被改寫。；往小調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調低管銷預設比率後，之後新建的報價單營業利益會變高、獎金基數變大；已建立的報價單與已完結的精算不會被改寫。", "helpWhat": "新建報價單的管銷分攤，預設要抽直接毛利的百分之幾？ 新建報價單時，管銷分攤預設＝直接毛利 × 這個比率（最多 1 位小數）。每張報價單仍可由最高管理者在精算頁個別調整。預設 25％（＝目前的做法）。", "helpWhen": "公司管銷政策或抽成比例改變時（通常年度檢討才改）。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "調高＝多抽管銷、營業利益變低（立即生效）；調低＝少抽管銷、營業利益與獎金基數變高（放寬，需第二位最高管理者核准並經等待期）。只影響設定生效之後新建的報價單；已建立的報價單與已完結精算不回頭改寫。 【高影響】調低管銷預設比率後，之後新建的報價單營業利益會變高、獎金基數變大；已建立的報價單與已完結的精算不會被改寫。", "helpRec": "建議值：25 %。", "lockRule": false, "roles": ["業務", "最高管理者", "財務"]}, {"id": "profit_rules.charity_rate_pct", "gk": "profit_rules", "key": "charity_rate_pct", "name": "公益捐款比率", "desc": "公益金＝基數 × 這個比率；預設 1%。", "type": "float", "unit": "%", "min": 0, "max": 10, "def": 1, "rec": 1, "choices": [], "risk": "money", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（利潤口徑）：一律逐項設定", "sec": "p-rules", "top": "profit", "secLabel": "管銷與公益口徑", "groupLabel": "利潤口徑", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜【高影響】調低公益捐款比率後，新算的報價單與精算會少扣公益金、營業利益變高，並影響獎金基數與營運報表；已完結精算的存檔公益金不會被改寫。；往小調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調低公益捐款比率後，新算的報價單與精算會少扣公益金、營業利益變高，並影響獎金基數與營運報表；已完結精算的存檔公益金不會被改寫。", "helpWhat": "公益捐款要扣報價（或直接毛利）的百分之幾？ 報價單與精算的「公益捐款」＝基數 × 這個比率（基數是直接毛利或報價含稅金額，由既有的公益基數開關決定）。預設 1％（＝目前的做法）。", "helpWhen": "公司公益政策調整比率時（通常年度檢討才改）。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "調高＝多扣公益金（立即生效）；調低＝少扣公益金、營業利益變高（放寬，需第二位最高管理者核准並經等待期）。只影響之後新算的數字；已完結精算的存檔公益金不回頭改寫。 【高影響】調低公益捐款比率後，新算的報價單與精算會少扣公益金、營業利益變高，並影響獎金基數與營運報表；已完結精算的存檔公益金不會被改寫。", "helpRec": "建議值：1 %。", "lockRule": false, "roles": ["業務", "最高管理者", "財務"]}, {"id": "material_order.supplier_required", "gk": "material_order", "key": "supplier_required", "name": "新增材料申請一定要先選供應商", "desc": "匯款申請要靠供應商帶出收款對象。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "一定要選（建議）", "impact": "沒選供應商的新申請不能儲存，會顯示原因。"}, {"value": 0, "label": "帶入採購單的免選", "impact": "從已核准採購單帶入的新申請可以先不選供應商；手動新增的仍要選。"}], "risk": "money", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：金額）：永遠逐項設定", "sec": "m-order", "top": "material", "secLabel": "材料申請", "groupLabel": "材料申請", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜免選供應商後，申請可能在沒有供應商資料的情況下送審，到開匯款申請才發現缺資料而卡住；也比較容易漏選到錯的供應商。；往小調＝放寬，須第二位最高管理者核准", "riskText": "免選供應商後，申請可能在沒有供應商資料的情況下送審，到開匯款申請才發現缺資料而卡住；也比較容易漏選到錯的供應商。", "helpWhat": "新增材料申請時，一定要先選供應商嗎？ 匯款申請要憑供應商帶出收款對象。從已核准採購單帶入的材料申請，採購單上已有廠商收款資料，可以先不選。", "helpWhen": "從採購單帶入的材料申請常沒有供應商、被「一定要選」擋住時。放寬後只有帶入的免選，手動新增仍要選；開匯款申請前還是要補選好。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響之後新增的材料申請，已存在的不受影響。選「帶入採購單的免選」時，從採購單帶入的新申請可以不選供應商就儲存、送審；之後開匯款申請時仍必須選好供應商。 免選供應商後，申請可能在沒有供應商資料的情況下送審，到開匯款申請才發現缺資料而卡住；也比較容易漏選到錯的供應商。", "helpRec": "建議值：一定要選（建議）。 各選項後果：一定要選（建議）＝沒選供應商的新申請不能儲存，會顯示原因。；帶入採購單的免選＝從已核准採購單帶入的新申請可以先不選供應商；手動新增的仍要選。", "lockRule": false, "roles": []}, {"id": "material_recognition.who_may", "gk": "material_recognition", "key": "who_may", "name": "誰可以把採購單「認列」到材料卡片", "desc": "認列不走材料申請的審核，所以預設只有最高管理者。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "只有最高管理者（建議）", "impact": "其他人嘗試時取消，並依下一題通知管理員。"}, {"value": 2, "label": "管理員與專案經理也可以", "impact": "能編輯材料申請的人（管理員以上，或有財務檢視權的專案經理）可以認列，不需要最高管理者核准；仍會留下稽核記錄。其他角色仍不行。"}], "risk": "security", "rp": true, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（材料卡片認列採購單）：一律逐項設定", "sec": "m-recog", "top": "material", "secLabel": "認列採購單", "groupLabel": "材料卡片認列採購單", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜【高影響】放寬後，沒有走審核的人也能讓材料卡片標示為已申購、已到料，並認領庫存序號。；改了要等 N 天才生效（天數見「變更管制」）；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】放寬後，沒有走審核的人也能讓材料卡片標示為已申購、已到料，並認領庫存序號。", "helpWhat": "誰可以把已核准的採購單「認列」到材料卡片（讓卡片能勾已申購／已到料）？ 認列不經過材料申請的審核流程，所以預設只有最高管理者可以。其他人按下「帶入並連結」時，系統會取消這次動作。", "helpWhen": "專案經理常需要自己認列採購單，且公司同意由他們負責時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響範圍：案件管理的材料卡片。放寬後，管理員與專案經理也能認列，認列後即可勾已申購與已到料（已到料會影響庫存序號）。已認列的卡片不受影響。 【高影響】放寬後，沒有走審核的人也能讓材料卡片標示為已申購、已到料，並認領庫存序號。", "helpRec": "建議值：只有最高管理者（建議）。 各選項後果：只有最高管理者（建議）＝其他人嘗試時取消，並依下一題通知管理員。；管理員與專案經理也可以＝能編輯材料申請的人（管理員以上，或有財務檢視權的專案經理）可以認列，不需要最高管理者核准；仍會留下稽核記錄。其他角色仍不行。", "lockRule": false, "roles": ["管理員", "有財務檢視權的專案經理"]}, {"id": "material_recognition.on_denied", "gk": "material_recognition", "key": "on_denied", "name": "沒權限卻嘗試認列時要不要通知管理員", "desc": "不論怎麼選，這次認列都會取消，且一定留稽核。", "type": "int", "unit": "", "min": 1, "max": 2, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "取消並寄信通知管理員（建議）", "impact": "寄給管理員：案件、材料卡片、嘗試的帳號與時間。同一人同一案件同一張採購單在時間窗內只寄一次。"}, {"value": 2, "label": "只取消，不寄信", "impact": "只留稽核記錄。"}], "risk": "security", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（材料卡片認列採購單）：一律逐項設定", "sec": "m-recog", "top": "material", "secLabel": "認列採購單", "groupLabel": "材料卡片認列採購單", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜選「只取消」後，管理員不會收到信，只能事後翻稽核記錄才知道有人嘗試。；往大調＝放寬，須第二位最高管理者核准", "riskText": "選「只取消」後，管理員不會收到信，只能事後翻稽核記錄才知道有人嘗試。", "helpWhat": "有人沒有權限卻嘗試認列時，要怎麼處理？ 不論選哪個，這次認列都會被取消，而且一定留下稽核記錄。", "helpWhen": "管理員覺得越權嘗試的通知信太吵，或相反希望第一時間得知時，才改。不論怎麼選，稽核都會留下紀錄。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響範圍：被拒時是否寄信給管理員（收件人在「信件與通知收件設定」）。信內不含金額與採購單明細。 選「只取消」後，管理員不會收到信，只能事後翻稽核記錄才知道有人嘗試。", "helpRec": "建議值：取消並寄信通知管理員（建議）。 各選項後果：取消並寄信通知管理員（建議）＝寄給管理員：案件、材料卡片、嘗試的帳號與時間。同一人同一案件同一張採購單在時間窗內只寄一次。；只取消，不寄信＝只留稽核記錄。", "lockRule": false, "roles": ["管理員"]}, {"id": "material_recognition.mail_window_minutes", "gk": "material_recognition", "key": "mail_window_minutes", "name": "同一人重複嘗試時，隔多久才再通知", "desc": "避免有人反覆按而洗版。", "type": "int", "unit": "分鐘", "min": 1, "max": 1440, "def": 60, "rec": 60, "choices": [], "risk": "ops", "rp": false, "loosen": "down", "adv": true, "elig": false, "confirm": false, "why": "敏感群組（材料卡片認列採購單）：一律逐項設定", "sec": "m-recog", "top": "material", "secLabel": "認列採購單", "groupLabel": "材料卡片認列採購單", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人、進階｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "同一個人對同一案件、同一張採購單重複嘗試時，隔多久才再寄一次通知？ 避免有人反覆按而洗版。", "helpWhen": "管理員抱怨重複通知太多或太少時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響範圍：只影響通知信的頻率，不影響取消與稽核記錄。調短會讓管理員收到更多信。", "helpRec": "建議值：60 分鐘。", "lockRule": false, "roles": []}, {"id": "material_recognition.mail_cap", "gk": "material_recognition", "key": "mail_cap", "name": "這段時間內通知信最多幾封", "desc": "達上限後不再寄信，但每次嘗試仍留稽核。", "type": "int", "unit": "封", "min": 1, "max": 200, "def": 10, "rec": 10, "choices": [], "risk": "ops", "rp": false, "loosen": "up", "adv": true, "elig": false, "confirm": false, "why": "敏感群組（材料卡片認列採購單）：一律逐項設定", "sec": "m-recog", "top": "material", "secLabel": "認列採購單", "groupLabel": "材料卡片認列採購單", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人、進階｜往大調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "上面那段時間內，這類通知信最多寄幾封？ 達到上限後不再寄信，但每次嘗試仍會留稽核記錄。", "helpWhen": "同一段時間內通知信量明顯過多或過少時才調整；平常不用動。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響範圍：只影響通知信的數量，不影響取消與稽核記錄。", "helpRec": "建議值：10 封。", "lockRule": false, "roles": []}, {"id": "finance_cashier.custom_due_soon", "gk": "finance_cashier", "key": "custom_due_soon", "name": "「即將到期」改用自訂天數", "desc": "關閉時：應付日 7 天內、預定付款日 3 天內標「即將到期」。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "維持 7 天與 3 天。"}, {"value": 1, "label": "開啟", "impact": "採用下面兩個天數。"}], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "出納頁的「即將到期」要不要改用自訂天數？ 關閉時，待付款的應付日 7 天內、預定付款日 3 天內會標成「即將到期」。開啟後改用下面兩個天數。", "helpWhen": "想讓「即將到期」比 7 天／3 天更早或更晚提醒時。", "helpImpact": "只改出納頁的標色與提示文字，不改任何金額或單據狀態。立即生效。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝維持 7 天與 3 天。；開啟＝採用下面兩個天數。", "lockRule": false, "roles": []}, {"id": "finance_cashier.due_soon_payable_days", "gk": "finance_cashier", "key": "due_soon_payable_days", "name": "應付日幾天內標成「即將到期」", "desc": "待付款與應收清單的日期在這個天數內，用橘字標示。", "type": "int", "unit": "天", "min": 1, "max": 60, "def": 7, "rec": 7, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "應付日幾天內要標成「即將到期」？ 待付款與應收清單的日期在今天起這個天數內，會用橘字標示。", "helpWhen": "要先開啟「自訂即將到期天數」才有作用。出納想更早（或更晚）在待付款與應收清單看到橘字「即將到期」時調整。", "helpImpact": "只影響顏色。", "helpRec": "建議值：7 天。", "lockRule": false, "roles": []}, {"id": "finance_cashier.due_soon_planned_days", "gk": "finance_cashier", "key": "due_soon_planned_days", "name": "預定付款日幾天內提示「即將到期」", "desc": "提醒信與站內通知也是預定日的前這幾天寄出。", "type": "int", "unit": "天", "min": 1, "max": 60, "def": 3, "rec": 3, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "預定付款日幾天內要提示「即將到期」？ 預定付款日在今天起這個天數內，會顯示「幾天內到期」的提示；預定付款日提醒信與站內通知也是預定日的前幾天寄出（預設 3 天）。", "helpWhen": "要先開啟「自訂即將到期天數」才有作用。想更早（或更晚）收到預定付款日的提醒信時。", "helpImpact": "影響出納頁提示文字，以及提醒信／站內通知提前幾天寄出。縮短天數後，個別預定日可能多收到一封提醒。", "helpRec": "建議值：3 天。", "lockRule": false, "roles": []}, {"id": "finance_cashier.receivable_grace_days", "gk": "finance_cashier", "key": "receivable_grace_days", "name": "預計收款日過幾天才標「逾期」", "desc": "0＝過了就逾期；設 3＝寬限滿 3 天、第 4 天才標逾期。", "type": "int", "unit": "天", "min": 0, "max": 90, "def": 0, "rec": 0, "choices": [], "risk": "money", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：金額）：永遠逐項設定", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜【高影響】調大寬限天數後，逾期的應收款會晚幾天才被標成「逾期」，可能讓該追的款項晚被注意到。；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調大寬限天數後，逾期的應收款會晚幾天才被標成「逾期」，可能讓該追的款項晚被注意到。", "helpWhat": "預計收款日過了幾天之後，才把應收款標成「逾期」？（0 代表過了就逾期） 0 ＝ 今天的做法：預計收款日已過、還沒收就標逾期。設成例如 3，預計收款日之後的第 4 天才開始標逾期（也就是寬限滿 3 天之後）。只影響出納應收清單的逾期標示。", "helpWhen": "客戶習慣晚幾天付款、不想太早標逾期時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響出納頁應收款的「逾期」旗標與紅字；不改任何金額或收款資料。調大＝逾期標示更晚出現（放寬，需第二位最高管理者核准並經等待期）；調小＝更早（立即生效）。 【高影響】調大寬限天數後，逾期的應收款會晚幾天才被標成「逾期」，可能讓該追的款項晚被注意到。", "helpRec": "建議值：0 天。", "lockRule": false, "roles": ["出納", "財務"]}, {"id": "finance_cashier.custom_bank_aliases", "gk": "finance_cashier", "key": "custom_bank_aliases", "name": "匯入銀行對帳單時，使用自訂欄位名稱", "desc": "各銀行匯出的欄名不同；關閉時用內建清單。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "使用內建清單。"}, {"value": 1, "label": "開啟", "impact": "使用下面的清單；寫得不合理的欄位會退回內建清單。"}], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "匯入銀行對帳單時，要不要改用自訂的欄位名稱清單？ 各家銀行匯出的欄位名稱不同。關閉時使用內建清單；開啟後使用下面三欄的清單（用逗號分隔，越前面越優先）。", "helpWhen": "匯入銀行對帳單時，欄位對不上時才打開。", "helpImpact": "只影響對帳單檔案怎麼找出日期、金額、摘要欄；找不到金額欄時一樣會擋下，不會猜。立即生效。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝使用內建清單。；開啟＝使用下面的清單；寫得不合理的欄位會退回內建清單。", "lockRule": false, "roles": []}, {"id": "finance_cashier.bank_alias_date", "gk": "finance_cashier", "key": "bank_alias_date", "name": "哪些欄名代表「交易日期」", "desc": "用逗號分隔，最多 20 個、每個 2～30 字，越前面越優先。", "type": "str", "unit": "", "min": null, "max": null, "def": "交易日期,日期,過帳日,轉帳日期,交易日,date,Date", "rec": "交易日期,日期,過帳日,轉帳日期,交易日,date,Date", "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "哪些欄位名稱代表交易日期？ 用逗號分隔，最多 20 個、每個 2 到 30 字。", "helpWhen": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的日期欄叫別的名字時，加進來。", "helpImpact": "只影響對帳單匯入。", "helpRec": "建議值：「交易日期,日期,過帳日,轉帳日期,交易日,date,Date」。", "lockRule": false, "roles": []}, {"id": "finance_cashier.bank_alias_amount", "gk": "finance_cashier", "key": "bank_alias_amount", "name": "哪些欄名代表「金額」", "desc": "同上；找不到金額欄時匯入會擋下，不會用猜的。", "type": "str", "unit": "", "min": null, "max": null, "def": "金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal", "rec": "金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal", "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "哪些欄位名稱代表金額？ 用逗號分隔，最多 20 個、每個 2 到 30 字。", "helpWhen": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的金額欄叫別的名字時，加進來。", "helpImpact": "只影響對帳單匯入。", "helpRec": "建議值：「金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal」。", "lockRule": false, "roles": []}, {"id": "finance_cashier.bank_alias_desc", "gk": "finance_cashier", "key": "bank_alias_desc", "name": "哪些欄名代表「摘要」", "desc": "同上。", "type": "str", "unit": "", "min": null, "max": null, "def": "摘要,備註,說明,對方戶名,附言,memo,Description,Memo", "rec": "摘要,備註,說明,對方戶名,附言,memo,Description,Memo", "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次", "sec": "f-cashier", "top": "finance", "secLabel": "出納頁與對帳單", "groupLabel": "出納", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "哪些欄位名稱代表摘要？ 用逗號分隔，最多 20 個、每個 2 到 30 字。", "helpWhen": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的摘要欄叫別的名字時，加進來。", "helpImpact": "只影響對帳單匯入。", "helpRec": "建議值：「摘要,備註,說明,對方戶名,附言,memo,Description,Memo」。", "lockRule": false, "roles": []}, {"id": "finance_reports.custom_aging", "gk": "finance_reports", "key": "custom_aging", "name": "應收帳齡改用自訂區間", "desc": "關閉時固定分 0–30、31–60、61–90、90 天以上四組。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "維持 30／60／90 天。"}, {"value": 1, "label": "開啟", "impact": "採用下面三個天數。"}], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-reports", "top": "finance", "secLabel": "財務報表", "groupLabel": "財務報表", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "應收帳齡要不要改用自訂的天數區間？ 關閉時，應收帳齡固定分成 0–30、31–60、61–90、90 天以上四組。開啟後，下面三個天數決定各組的分界。", "helpWhen": "公司的帳期習慣不是 30／60／90 天時才打開。", "helpImpact": "只改帳齡報表（畫面、Excel、PDF）怎麼分組與標色；不改任何金額，也不改誰看得到這份報表。立即生效。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝維持 30／60／90 天。；開啟＝採用下面三個天數。", "lockRule": false, "roles": []}, {"id": "finance_reports.aging_day1", "gk": "finance_reports", "key": "aging_day1", "name": "第一組帳齡到第幾天為止", "desc": "必須小於第二個分界。", "type": "int", "unit": "天", "min": 1, "max": 3650, "def": 30, "rec": 30, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-reports", "top": "finance", "secLabel": "財務報表", "groupLabel": "財務報表", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "第一組帳齡到第幾天為止？ 經過天數不超過這個值的款項歸第一組。必須小於第二個分界。只有「自訂帳齡區間」開啟時才採用。", "helpWhen": "要先開啟「自訂帳齡區間」才有作用。想把最短的帳齡區間改短或改長時。", "helpImpact": "三個分界必須由小到大；填得不合理時報表自動退回 30／60／90 天。", "helpRec": "建議值：30 天。", "lockRule": false, "roles": []}, {"id": "finance_reports.aging_day2", "gk": "finance_reports", "key": "aging_day2", "name": "第二組帳齡到第幾天為止", "desc": "超過的款項在 Excel 與 PDF 以橘字標出。", "type": "int", "unit": "天", "min": 1, "max": 3650, "def": 60, "rec": 60, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-reports", "top": "finance", "secLabel": "財務報表", "groupLabel": "財務報表", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "第二組帳齡到第幾天為止？ 超過第一個分界、不超過這個值的款項歸第二組；超過這個值的款項在 Excel 與 PDF 以橘字標出。", "helpWhen": "要先開啟「自訂帳齡區間」才有作用。想調整「注意」的分界時。", "helpImpact": "必須大於第一個分界、小於第三個分界。", "helpRec": "建議值：60 天。", "lockRule": false, "roles": []}, {"id": "finance_reports.aging_day3", "gk": "finance_reports", "key": "aging_day3", "name": "超過第幾天列為「逾期很久」", "desc": "超過的款項歸最後一組，Excel 與 PDF 以紅字標出。", "type": "int", "unit": "天", "min": 1, "max": 3650, "def": 90, "rec": 90, "choices": [], "risk": "none", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": false, "why": "", "sec": "f-reports", "top": "finance", "secLabel": "財務報表", "groupLabel": "財務報表", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "超過第幾天的款項要列為「逾期很久」？ 超過這個值的款項歸最後一組，並在 Excel 與 PDF 以紅字標出。", "helpWhen": "要先開啟「自訂帳齡區間」才有作用。想調整「逾期很久」的分界時。", "helpImpact": "必須大於第二個分界。", "helpRec": "建議值：90 天。", "lockRule": false, "roles": []}, {"id": "finance_reports.settle_overdue_days", "gk": "finance_reports", "key": "settle_overdue_days", "name": "結案後等幾天，才把「未精算」案件列入清單", "desc": "0＝一結案就列；從案件最後更新日起算。", "type": "int", "unit": "天", "min": 0, "max": 365, "def": 0, "rec": 0, "choices": [], "risk": "money", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "影響大（風險：金額）：永遠逐項設定", "sec": "f-reports", "top": "finance", "secLabel": "財務報表", "groupLabel": "財務報表", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜【高影響】調大等待天數後，已結案但還沒精算的案件會晚幾天才出現在清單與總覽件數，可能讓該精算的案件晚被注意到。；往大調＝放寬，須第二位最高管理者核准", "riskText": "【高影響】調大等待天數後，已結案但還沒精算的案件會晚幾天才出現在清單與總覽件數，可能讓該精算的案件晚被注意到。", "helpWhat": "「已結案但還沒精算」的清單，要等結案幾天之後才列出？（0 代表一結案就列） 0 ＝ 今天的做法：案件一結案、精算還沒完結就列入清單與總覽件數。設成例如 14，結案超過 14 天仍未精算才列入。等待天數從案件的「最後更新日」算起，結案後只要又被編輯過，就會重新計算。", "helpWhen": "結案後需要多一點時間才完成精算，不想太早被列入「未精算」時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響報表裡「已結案未精算」清單與總覽件數（畫面、Excel、PDF 一致）；不改任何案件或金額。調大＝案件更晚才列入（放寬，需第二位最高管理者核准並經等待期）；調小＝更早（立即生效）。 【高影響】調大等待天數後，已結案但還沒精算的案件會晚幾天才出現在清單與總覽件數，可能讓該精算的案件晚被注意到。", "helpRec": "建議值：0 天。", "lockRule": false, "roles": ["財務", "最高管理者"]}, {"id": "case_close_gates.enabled", "gk": "case_close_gates", "key": "enabled", "name": "啟用「結案條件加嚴」", "desc": "開了，下面勾的項目才變成結案的必要條件；關閉時與今天完全相同。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "關閉（預設）", "impact": "結案條件與今天相同。"}, {"value": 1, "label": "啟用", "impact": "下面勾選的加嚴項目生效。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-gates", "top": "close", "secLabel": "結案條件加嚴", "groupLabel": "結案條件加嚴", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "要不要啟用結案條件加嚴？ 開啟後，下面勾選的項目會變成結案的必要條件。關閉時結案條件與今天完全相同。", "helpWhen": "公司想把結案把關從「寬鬆」改成「必須齊全」時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只會讓更多案件暫時不能結案，不會改任何資料。關閉屬於放寬，需要另一位最高管理者核准並經等待期。", "helpRec": "建議值：關閉（預設）。 各選項後果：關閉（預設）＝結案條件與今天相同。；啟用＝下面勾選的加嚴項目生效。", "lockRule": false, "roles": ["所有按下「結案」的人"]}, {"id": "case_close_gates.require_stages", "gk": "case_close_gates", "key": "require_stages", "name": "沒有建立執行階段的案件不能結案", "desc": "今天沒有階段的案件，進度這關視為「不用檢查」。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "不要（預設）", "impact": "沒有階段的案件照舊可結案。"}, {"value": 1, "label": "要加嚴", "impact": "沒有階段的案件不能結案。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-gates", "top": "close", "secLabel": "結案條件加嚴", "groupLabel": "結案條件加嚴", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "沒有建立執行管理階段的案件，要不要也不能結案？ 今天沒有任何階段的案件，進度這一關視為「無需檢查」。啟用後，沒有階段就不能結案。", "helpWhen": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒建階段就結案、事後難追蹤時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響結案檢查。關閉屬於放寬。", "helpRec": "建議值：不要（預設）。 各選項後果：不要（預設）＝沒有階段的案件照舊可結案。；要加嚴＝沒有階段的案件不能結案。", "lockRule": false, "roles": ["所有按下「結案」的人"]}, {"id": "case_close_gates.require_payment_items", "gk": "case_close_gates", "key": "require_payment_items", "name": "沒有建立款項明細的案件不能結案", "desc": "今天沒有款項期別的案件，收款這關視為「不用檢查」。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "不要（預設）", "impact": "沒有款項明細的案件照舊可結案。"}, {"value": 1, "label": "要加嚴", "impact": "沒有款項明細的案件不能結案。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-gates", "top": "close", "secLabel": "結案條件加嚴", "groupLabel": "結案條件加嚴", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "沒有建立款項明細的案件，要不要也不能結案？ 今天沒有任何款項期別的案件，收款這一關視為「無需檢查」。啟用後，沒有款項明細就不能結案。", "helpWhen": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒建款項明細就結案、收款對不起來時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響結案檢查。關閉屬於放寬。", "helpRec": "建議值：不要（預設）。 各選項後果：不要（預設）＝沒有款項明細的案件照舊可結案。；要加嚴＝沒有款項明細的案件不能結案。", "lockRule": false, "roles": ["所有按下「結案」的人"]}, {"id": "case_close_gates.require_settlement", "gk": "case_close_gates", "key": "require_settlement", "name": "還沒建立成本精算的案件不能結案", "desc": "今天完全沒有精算資料的案件，精算這關視為「不用檢查」。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "不要（預設）", "impact": "沒有精算資料的案件照舊可結案。"}, {"value": 1, "label": "要加嚴", "impact": "沒有精算資料的案件不能結案。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-gates", "top": "close", "secLabel": "結案條件加嚴", "groupLabel": "結案條件加嚴", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "還沒建立成本精算的案件，要不要也不能結案？ 今天完全沒有精算資料的案件，精算這一關視為「無需檢查」。啟用後，沒有精算就不能結案。", "helpWhen": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒精算就結案、利潤看不到時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響結案檢查。關閉屬於放寬。", "helpRec": "建議值：不要（預設）。 各選項後果：不要（預設）＝沒有精算資料的案件照舊可結案。；要加嚴＝沒有精算資料的案件不能結案。", "lockRule": false, "roles": ["所有按下「結案」的人"]}, {"id": "case_close_gates.count_unfinished_extra_expenses", "gk": "case_close_gates", "key": "count_unfinished_extra_expenses", "name": "額外支出還沒簽完（草稿、簽到一半）也擋結案", "desc": "今天只有「待審核」的額外支出會擋結案。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "不要（預設）", "impact": "維持今天的做法，只擋待審核的額外支出。"}, {"value": 1, "label": "要加嚴", "impact": "草稿與簽核中的額外支出也擋結案。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-gates", "top": "close", "secLabel": "結案條件加嚴", "groupLabel": "結案條件加嚴", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "額外支出還沒走完簽核（草稿或簽核到一半）時，要不要也不能結案？ 今天只有剛送出、還在「待審核」的額外支出會擋結案；草稿，以及多層簽核簽到一半（簽核中）的額外支出不會擋。啟用後，這兩種也會擋。", "helpWhen": "要先開啟「啟用結案條件加嚴」才有作用。常有額外支出草稿卡著，結案後成本不完整時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響結案檢查。關閉屬於放寬。", "helpRec": "建議值：不要（預設）。 各選項後果：不要（預設）＝維持今天的做法，只擋待審核的額外支出。；要加嚴＝草稿與簽核中的額外支出也擋結案。", "lockRule": false, "roles": ["所有按下「結案」的人"]}, {"id": "completion_note.auto_prefill", "gk": "completion_note", "key": "auto_prefill", "name": "新建完工單時自動帶入報價單項目", "desc": "帶入後每列都能改、能刪；按「儲存」才寫入。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "自動帶入（建議）", "impact": "新建時畫面直接出現報價單的項目，不用重打。"}, {"value": 0, "label": "不自動帶入", "impact": "新建時項目是空白的，需要時再按「從報價單帶入」。"}], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人", "riskText": "", "helpWhat": "新建完工單時，要不要自動把報價單的項目帶進來？ 帶入後每一列都可以修改、刪除；按「儲存」才會寫入。", "helpWhen": "現場希望完工單一開始是空白、由人逐項填寫（例如實際完工內容和報價單差很多）時，才關閉自動帶入。", "helpImpact": "只影響之後新開的完工單畫面；已存的完工單不會改。選「不自動帶入」仍可在草稿上按「從報價單帶入」。", "helpRec": "建議值：自動帶入（建議）。 各選項後果：自動帶入（建議）＝新建時畫面直接出現報價單的項目，不用重打。；不自動帶入＝新建時項目是空白的，需要時再按「從報價單帶入」。", "lockRule": false, "roles": []}, {"id": "completion_note.prefill_unsigned", "gk": "completion_note", "key": "prefill_unsigned", "name": "報價單客戶還沒回簽，也能帶入嗎", "desc": "還沒回簽時項目可能再變，帶入內容只是暫時依據。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "可以，並提示尚未回簽（建議）", "impact": "畫面會提醒「報價單尚未回簽，項目可能再變」。"}, {"value": 0, "label": "要等客戶回簽後才能帶入", "impact": "報價單未回簽時不能帶入，避免依據還會變動的項目開單。"}], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人", "riskText": "", "helpWhat": "報價單已送出、但客戶還沒回簽時，可以帶入項目嗎？ 報價還沒回簽時，項目之後還可能被修改；帶入的內容只是暫時依據。", "helpWhen": "要先開啟「新建時自動帶入項目」才有作用。現場想在客戶回簽前先開完工單，或相反要嚴格等回簽時。", "helpImpact": "影響所有新建與重新帶入完工單的人（目前限管理員）；已存的完工單不變。選「要回簽後才能帶入」時，現場想先開完工單會被擋下，需先請業務取得客戶回簽。變更立即生效。", "helpRec": "建議值：可以，並提示尚未回簽（建議）。 各選項後果：可以，並提示尚未回簽（建議）＝畫面會提醒「報價單尚未回簽，項目可能再變」。；要等客戶回簽後才能帶入＝報價單未回簽時不能帶入，避免依據還會變動的項目開單。", "lockRule": false, "roles": []}, {"id": "completion_note.qty_mode", "gk": "completion_note", "key": "qty_mode", "name": "帶入時，數量預設填多少", "desc": "分批完工時，預設只填剩下還沒完工的部分。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "只填剩餘未完工的數量（建議）", "impact": "已完工的數量（待審核、簽核中、已核准的完工單）會先扣掉；已全數完工的項目預設不帶入。"}, {"value": 1, "label": "填報價的全部數量", "impact": "不扣已完工的數量。"}], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人", "riskText": "", "helpWhat": "帶入時，每個項目的數量預設填多少？ 分批完工時，若前面的完工單已經完成一部分，預設只填剩下的部分。", "helpWhen": "要先開啟「新建時自動帶入項目」才有作用。不分批完工、想讓每張完工單一律填報價的全部數量時，才改成「填報價的全部數量」；分批完工的案件維持預設較省事。", "helpImpact": "只影響帶入當下的預設數字，每列都能再改。選「報價全數」時，分批完工的第二張單會重複計入前一張已完成的數量，需要自己減掉。", "helpRec": "建議值：只填剩餘未完工的數量（建議）。 各選項後果：只填剩餘未完工的數量（建議）＝已完工的數量（待審核、簽核中、已核准的完工單）會先扣掉；已全數完工的項目預設不帶入。；填報價的全部數量＝不扣已完工的數量。", "lockRule": false, "roles": []}, {"id": "completion_note.default_status", "gk": "completion_note", "key": "default_status", "name": "帶入項目的完成狀態預設是什麼", "desc": "只做完一部分時，把該列改成「部分完成」即可。", "type": "int", "unit": "", "min": 0, "max": 2, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "完成（建議）", "impact": "預設視為已做完，只需修改例外的幾列。"}, {"value": 1, "label": "部分完成", "impact": "預設都標為部分完成，現場逐列確認。"}, {"value": 2, "label": "未施作", "impact": "預設都標為未施作，做完一項再改一項。"}], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人", "riskText": "", "helpWhat": "帶入的項目，完成狀態預設是什麼？ 現場只做完一部分時，把該列改成「部分完成」即可。", "helpWhen": "要先開啟「新建時自動帶入項目」才有作用。大多數項目完工狀態一致時，選最常見的，省去逐列改。", "helpImpact": "只影響帶入當下的預設，每列都能再改；「部分完成」與「未施作」會出現在完工單的遺留事項提醒。", "helpRec": "建議值：完成（建議）。 各選項後果：完成（建議）＝預設視為已做完，只需修改例外的幾列。；部分完成＝預設都標為部分完成，現場逐列確認。；未施作＝預設都標為未施作，做完一項再改一項。", "lockRule": false, "roles": []}, {"id": "completion_note.include_headers", "gk": "completion_note", "key": "include_headers", "name": "一併帶入報價單的分段標題", "desc": "分段標題只是分組用的標題列，沒有數量。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "一併帶入（建議）", "impact": "完工單的項目分組與報價單一致。"}, {"value": 0, "label": "不帶入標題", "impact": "只帶有數量的項目。"}], "risk": "ops", "rp": false, "loosen": null, "adv": true, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人、進階", "riskText": "", "helpWhat": "帶入時，要不要一併帶入報價單的分段標題？ 分段標題只是分組用的標題列，沒有數量。", "helpWhen": "要先開啟「新建時自動帶入項目」才有作用。報價單分段標題對完工單沒意義，或相反要保留分組時。", "helpImpact": "只影響帶入當下的畫面。", "helpRec": "建議值：一併帶入（建議）。 各選項後果：一併帶入（建議）＝完工單的項目分組與報價單一致。；不帶入標題＝只帶有數量的項目。", "lockRule": false, "roles": []}, {"id": "completion_note.brand_prefix", "gk": "completion_note", "key": "brand_prefix", "name": "品名前面加上品牌", "desc": "例：品牌「某牌」、品名「攝影機」→「某牌 攝影機」。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 1, "rec": 1, "choices": [{"value": 1, "label": "加上品牌（建議）", "impact": "品名會是「品牌 品名」。"}, {"value": 0, "label": "只帶品名", "impact": "品牌不帶入。"}], "risk": "ops", "rp": false, "loosen": null, "adv": true, "elig": true, "confirm": true, "why": "", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": false, "others": true, "ext": "", "cust": false, "dangerText": "影響別人、進階", "riskText": "", "helpWhat": "帶入時，品名前面要不要加上品牌？ 例如報價單的品牌「某牌」、品名「攝影機」，帶入後顯示為「某牌 攝影機」。", "helpWhen": "要先開啟「新建時自動帶入項目」才有作用。完工單的品名欄太長，或客戶不需要看到品牌時，才改成只帶品名。", "helpImpact": "只影響帶入當下的品名文字，之後仍可修改。", "helpRec": "建議值：加上品牌（建議）。 各選項後果：加上品牌（建議）＝品名會是「品牌 品名」。；只帶品名＝品牌不帶入。", "lockRule": false, "roles": []}, {"id": "completion_note.over_qty", "gk": "completion_note", "key": "over_qty", "name": "完工數量超過報價數量時怎麼處理", "desc": "現場多做、報價單後來增補，都是真實會發生的。", "type": "int", "unit": "", "min": 0, "max": 1, "def": 0, "rec": 0, "choices": [{"value": 0, "label": "警示但仍可儲存（建議）", "impact": "該列會標黃色並顯示超過多少，仍然可以儲存。"}, {"value": 1, "label": "擋下，不能儲存", "impact": "超過的部分需要先改報價單的數量，或調整完工單的數量。"}], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "c-note", "top": "close", "secLabel": "完工單帶入", "groupLabel": "完工單", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "某個項目的完工數量加總超過報價數量時，要怎麼處理？ 現場多做、或報價單後來有增補，都是真實會發生的情況。", "helpWhen": "現場多做的數量需要被管制，或相反要寬鬆時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響之後儲存完工單的人。選「擋下」時，多做的部分要先修改報價單才能儲存；已存的完工單不受影響。", "helpRec": "建議值：警示但仍可儲存（建議）。 各選項後果：警示但仍可儲存（建議）＝該列會標黃色並顯示超過多少，仍然可以儲存。；擋下，不能儲存＝超過的部分需要先改報價單的數量，或調整完工單的數量。", "lockRule": false, "roles": []}, {"id": "alerts.warranty_report_days", "gk": "alerts", "key": "warranty_report_days", "name": "營運報表：保固幾天內到期要列入預警", "desc": "報表的保固到期預警會列出這個天數以內要到期的設備。", "type": "int", "unit": "天", "min": 30, "max": 365, "def": 90, "rec": 90, "choices": [], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-alerts", "top": "remind", "secLabel": "到期預警", "groupLabel": "到期預警", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "營運報表的「保固到期預警」要列出幾天內到期的設備？ 營運報表裡的保固到期預警，會列出這個天數以內就要到期的設備。", "helpWhen": "想讓營運報表提早（或延後）列出快到期的保固。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響報表的呈現與統計：天數調短，報表看到的預警會變少（設備與保固資料本身不變）；調短須另一位最高管理者核准並等等待期後才生效，調長立即生效。", "helpRec": "建議值：90 天。", "lockRule": false, "roles": []}, {"id": "alerts.warranty_mail_early_days", "gk": "alerts", "key": "warranty_mail_early_days", "name": "保固到期前幾天先寄第一封提醒", "desc": "每台設備、每個階段只寄一次。", "type": "int", "unit": "天", "min": 8, "max": 180, "def": 30, "rec": 30, "choices": [], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-alerts", "top": "remind", "secLabel": "到期預警", "groupLabel": "到期預警", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "保固到期前幾天，要先寄第一封提醒信？ 設備保固到期前這麼多天，系統會寄第一封提醒信給負責人。", "helpWhen": "業務需要更早排程更換設備時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響之後的提醒：每台設備、每個階段只寄一次。調短會晚一點才提醒，須另一位最高管理者核准並等等待期；調長立即生效（可能讓已寄過的設備再收到一次新階段的信）。", "helpRec": "建議值：30 天。", "lockRule": false, "roles": []}, {"id": "alerts.warranty_mail_urgent_days", "gk": "alerts", "key": "warranty_mail_urgent_days", "name": "保固到期前幾天再寄一封「緊急」提醒", "desc": "一定比「提前」天數小。", "type": "int", "unit": "天", "min": 1, "max": 30, "def": 7, "rec": 7, "choices": [], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-alerts", "top": "remind", "secLabel": "到期預警", "groupLabel": "到期預警", "heavy": true, "others": true, "ext": "", "cust": false, "dangerText": "影響大、影響別人｜往小調＝放寬，須第二位最高管理者核准", "riskText": "", "helpWhat": "保固到期前幾天，要再寄一封「緊急」提醒信？ 設備保固快到期時，系統會再寄一封標示緊急的提醒信；這個天數一定比「提前」天數小。", "helpWhen": "想在更接近到期日時再催一次。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響之後的提醒，每台設備只寄一次。調短會更晚才緊急提醒，須另一位最高管理者核准並等等待期；調長立即生效。", "helpRec": "建議值：7 天。", "lockRule": false, "roles": []}, {"id": "alerts.cert_warn_days", "gk": "alerts", "key": "cert_warn_days", "name": "簽章確認檔到期前幾天開始提醒", "desc": "確認檔過期後輸出會暫停；到期前這段時間系統中心會出現換發提醒。", "type": "int", "unit": "天", "min": 7, "max": 90, "def": 30, "rec": 30, "choices": [], "risk": "ops", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-alerts", "top": "remind", "secLabel": "到期預警", "groupLabel": "到期預警", "heavy": true, "others": true, "ext": "到期前要到開發者端換發簽章確認檔", "cust": false, "dangerText": "影響大、需外部設定、影響別人｜往小調＝放寬，須第二位最高管理者核准；需外部動作：到期前要到開發者端換發簽章確認檔", "riskText": "", "helpWhat": "開發者簽章確認檔到期前幾天，要開始在系統中心提醒？ 確認檔過期後輸出會暫停；到期前這麼多天起，系統中心會出現換發提醒。", "helpWhen": "換發簽章確認檔需要較長前置作業時，提早提醒。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響提醒出現的時間，不影響確認檔本身是否有效。調短會晚一點才提醒，須另一位最高管理者核准並等等待期；調長立即生效。", "helpRec": "建議值：30 天。", "lockRule": false, "roles": []}, {"id": "legal_params_reminder.start_month", "gk": "legal_params_reminder", "key": "start_month", "name": "每年從幾月起提醒設定下一年度法規參數", "desc": "到了這天，下一年度還沒新增參數版本，法規參數頁與勞報單頁就顯示提醒。", "type": "int", "unit": "月", "min": 1, "max": 12, "def": 10, "rec": 10, "choices": [], "risk": "ops", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-legal", "top": "remind", "secLabel": "法規參數跨年提醒", "groupLabel": "法規參數跨年提醒", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。；往大調＝放寬，須第二位最高管理者核准", "riskText": "往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。", "helpWhat": "每年從幾月起，開始提醒「下一年度的法規參數還沒設定」？ 到了這一天，如果下一年度還沒有新增法規參數版本，「法規參數設定」頁與勞報單頁就會顯示提醒；提醒會一直顯示到新增為止。", "helpWhen": "每年法規公告時間較晚、或公司想更早準備時。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響提醒什麼時候開始出現，不改任何稅額、扣繳或勞報單內容。往後延會更晚才提醒，須另一位最高管理者核准並等等待期；提前則立即生效。 往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。", "helpRec": "建議值：10 月。", "lockRule": false, "roles": ["最高管理者", "開立勞報單的人"]}, {"id": "legal_params_reminder.start_day", "gk": "legal_params_reminder", "key": "start_day", "name": "提醒從那個月的幾號開始", "desc": "日數最多選到 28，避免沒有 29～31 日的月份。", "type": "int", "unit": "日", "min": 1, "max": 28, "def": 1, "rec": 1, "choices": [], "risk": "ops", "rp": false, "loosen": "up", "adv": false, "elig": false, "confirm": false, "why": "放寬方向須第二位最高管理者核准：須逐項設定", "sec": "r-legal", "top": "remind", "secLabel": "法規參數跨年提醒", "groupLabel": "法規參數跨年提醒", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。；往大調＝放寬，須第二位最高管理者核准", "riskText": "往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。", "helpWhat": "提醒從那個月的幾號開始？ 與上面的月份合起來就是提醒的起算日；日數最多選到 28，避免遇到沒有 29～31 日的月份。", "helpWhen": "與「月」一起決定每年從哪一天起提醒；想讓提醒更早或更晚時調整。若要往放寬方向調整（往大調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "只影響提醒什麼時候開始出現，不改任何稅額、扣繳或勞報單內容。往後延會更晚才提醒，須另一位最高管理者核准並等等待期；提前則立即生效。 往後延會讓提醒更晚出現，可能來不及在年底前設定下一年度的最低工資、扣繳起扣標準與補充保費門檻，進而影響明年初開立的勞報單。", "helpRec": "建議值：1 日。", "lockRule": false, "roles": ["最高管理者", "開立勞報單的人"]}, {"id": "change_control.confirm_period_days", "gk": "change_control", "key": "confirm_period_days", "name": "高風險設定改了，要等幾天才生效", "desc": "期間內任何最高管理者都能撤銷；最短 1 天。", "type": "int", "unit": "天", "min": 1, "max": 90, "def": 7, "rec": 7, "choices": [], "risk": "legal", "rp": false, "loosen": "down", "adv": false, "elig": false, "confirm": false, "why": "敏感群組（變更管制）：一律逐項設定", "sec": "o-change", "top": "other", "secLabel": "變更管制", "groupLabel": "變更管制", "heavy": true, "others": false, "ext": "", "cust": false, "dangerText": "影響大｜縮短後，有人誤改或被盜用帳號時，留給大家發現並撤銷的時間會變少。；往小調＝放寬，須第二位最高管理者核准", "riskText": "縮短後，有人誤改或被盜用帳號時，留給大家發現並撤銷的時間會變少。", "helpWhat": "高風險設定的變更，要等幾天才生效？（期間內可以撤銷） 金額、法遵、安全這類設定改了以後，先等這段時間才真的生效，期間內任何最高管理者都能撤銷。最短 1 天。", "helpWhen": "想讓高風險設定多一點反悔時間，或縮短等待時。若要往放寬方向調整（往小調），需第二位最高管理者核准並等待 N 天才生效。", "helpImpact": "影響之後送出的高風險變更；已經在等待中的變更仍照原本的生效時間。縮短等待期等於放寬管制，須另一位最高管理者核准，並等目前的等待期後才生效。 縮短後，有人誤改或被盜用帳號時，留給大家發現並撤銷的時間會變少。", "helpRec": "建議值：7 天。", "lockRule": false, "roles": []}, {"id": "payslip_dispatch_picker.page_size", "gk": "payslip_dispatch_picker", "key": "page_size", "name": "勞報單「選派發」下拉一次載入幾筆", "desc": "往下按「載入更多」再接著看；調大可能載入較慢。", "type": "int", "unit": "筆", "min": 10, "max": 100, "def": 30, "rec": 30, "choices": [], "risk": "ops", "rp": false, "loosen": null, "adv": false, "elig": false, "confirm": false, "why": "本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「重設為預設」多的功能", "sec": "o-picker", "top": "other", "secLabel": "勞報單選派發", "groupLabel": "勞報單選派發下拉", "heavy": false, "others": false, "ext": "", "cust": false, "dangerText": "無", "riskText": "", "helpWhat": "勞報單的「選派發」下拉，一次要載入幾筆？ 在勞報單選派發時，清單一次顯示這麼多筆，往下按「載入更多」再接著看。", "helpWhen": "派發筆數很多而下拉載入太慢，或相反想一次看更多時。", "helpImpact": "只影響清單一次載入幾筆，不改誰看得到哪些派發，也不改任何勞報單或派發資料；調大可能讓清單載入稍慢。", "helpRec": "建議值：30 筆。", "lockRule": false, "roles": []}], "groups": {"change_control": "變更管制", "retention": "保存期限", "uploads": "上傳容量", "system_hub": "系統中心", "material_order": "材料申請", "quote_alt": "擇一方案", "material_recognition": "材料卡片認列採購單", "download_name": "下載檔名", "project_margin": "專案毛利%", "quote_approval": "報價送審門檻", "finance_reports": "財務報表", "finance_cashier": "出納", "case_close_gates": "結案條件加嚴", "builder_status_display": "狀態顯示名稱與顏色", "ui_format": "數字與日期顯示格式", "completion_note": "完工單", "builder_layout": "自訂畫面版面", "builder_governance": "建構器治理（版本帳本與發布前影響預覽）", "builder_rules": "規則（標示型）", "builder_menu": "選單建構器", "builder_custom_fields": "自訂欄位（內建畫面）", "builder_actions": "自訂按鈕", "builder_slots": "附件種類與儲存位置", "builder_exports": "自訂匯出", "builder_option_lists": "自訂選項清單", "list_prefs": "清單個人偏好", "alerts": "到期預警", "account_security": "登入與密碼", "external_login": "外網登入防護", "builder_notify": "自訂通知用語", "builder_stage_templates": "自訂案件階段樣板", "builder_custom_modules": "自訂模組引擎（建立新模組）", "quote_output": "報價單輸出", "quote_privacy": "報價單個人資料欄位", "profit_warning": "利潤提醒色帶", "quote_defaults": "報價單預設值", "profit_rules": "利潤口徑", "list_view": "清單檢視（個人偏好）", "netplan_labels": "網路規劃：狀態名稱", "procurement_labels": "採購建議：狀態名稱", "lodging_labels": "住宿紀錄：計價單位與詢價管道", "payslip_dispatch_picker": "勞報單選派發下拉", "legal_params_reminder": "法規參數跨年提醒", "recycle_bin": "資源回收筒", "brand": "系統標語", "login_greeting": "登入問候語", "quote_backfill": "補登歷史案件", "overhead": "管銷分攤比率", "lodging_freshness": "附近旅宿：資料新舊提示", "tender_closing": "地圖：標案即將截止標記"}, "fake": {"quote_alt.show_unpicked_in_pdf": true, "quote_alt.lock_scope": 2, "quote_defaults.valid_days": 14, "profit_warning.quote_form_low": 15, "profit_warning.report_low": 12, "finance_cashier.receivable_grace_days": 3, "finance_reports.custom_aging": 1, "finance_reports.aging_day1": 15, "finance_reports.aging_day2": 30, "finance_reports.aging_day3": 60, "completion_note.over_qty": 1, "quote_backfill.auto_off_hours": 12, "overhead.default_pct": 30, "finance_cashier.custom_bank_aliases": 1, "finance_cashier.bank_alias_date": "交易日期,日期,過帳日,轉帳日期,交易日,date,Date,帳務日", "alerts.warranty_report_days": 120}, "fakeSrc": {"quote_alt.show_unpicked_in_pdf": {"by": "王經理", "at": "11/05"}, "quote_alt.lock_scope": {"by": "李會計", "at": "10/28"}, "quote_defaults.valid_days": {"by": "王經理", "at": "10/28"}, "profit_warning.quote_form_low": {"by": "李會計", "at": "11/05"}, "profit_warning.report_low": {"by": "王經理", "at": "10/28"}, "finance_cashier.receivable_grace_days": {"by": "李會計", "at": "10/28"}, "finance_reports.custom_aging": {"by": "王經理", "at": "11/05"}, "finance_reports.aging_day1": {"by": "李會計", "at": "10/28"}, "finance_reports.aging_day2": {"by": "王經理", "at": "10/28"}, "finance_reports.aging_day3": {"by": "李會計", "at": "11/05"}, "completion_note.over_qty": {"by": "王經理", "at": "10/28"}, "quote_backfill.auto_off_hours": {"by": "李會計", "at": "10/28"}, "overhead.default_pct": {"by": "王經理", "at": "11/05"}, "finance_cashier.custom_bank_aliases": {"by": "李會計", "at": "10/28"}, "finance_cashier.bank_alias_date": {"by": "王經理", "at": "10/28"}, "alerts.warranty_report_days": {"by": "李會計", "at": "11/05"}}, "fakePend": {"quote_approval.max_valid_days": {"val": 45, "eff": "11/20", "need2": true, "by": "王經理"}}, "ccDays": 7, "deps": {"quote_alt.total_text": "quote_alt.alt_enabled", "quote_alt.note_template": "quote_alt.alt_enabled", "quote_alt.show_unpicked_in_pdf": "quote_alt.alt_enabled", "quote_alt.alt_groups_max": "quote_alt.alt_enabled", "quote_alt.combo_view_max": "quote_alt.alt_enabled", "quote_alt.combo_view_default_open": "quote_alt.alt_enabled", "finance_cashier.due_soon_payable_days": "finance_cashier.custom_due_soon", "finance_cashier.due_soon_planned_days": "finance_cashier.custom_due_soon", "finance_cashier.bank_alias_date": "finance_cashier.custom_bank_aliases", "finance_cashier.bank_alias_amount": "finance_cashier.custom_bank_aliases", "finance_cashier.bank_alias_desc": "finance_cashier.custom_bank_aliases", "finance_reports.aging_day1": "finance_reports.custom_aging", "finance_reports.aging_day2": "finance_reports.custom_aging", "finance_reports.aging_day3": "finance_reports.custom_aging", "case_close_gates.require_stages": "case_close_gates.enabled", "case_close_gates.require_payment_items": "case_close_gates.enabled", "case_close_gates.require_settlement": "case_close_gates.enabled", "case_close_gates.count_unfinished_extra_expenses": "case_close_gates.enabled", "completion_note.prefill_unsigned": "completion_note.auto_prefill", "completion_note.qty_mode": "completion_note.auto_prefill", "completion_note.default_status": "completion_note.auto_prefill", "completion_note.include_headers": "completion_note.auto_prefill", "completion_note.brand_prefix": "completion_note.auto_prefill"}, "pairs": [["profit_warning.quote_form_low", "profit_warning.quote_form_good"], ["profit_warning.report_low", "profit_warning.report_good"], ["profit_warning.case_floor", "profit_warning.case_good"]], "chipKeys": ["finance_cashier.bank_alias_date", "finance_cashier.bank_alias_amount", "finance_cashier.bank_alias_desc"], "profitPresets": [{"name": "標準（登錄表預設）", "v": {"profit_warning.quote_form_low": 12, "profit_warning.quote_form_good": 20, "profit_warning.report_low": 10, "profit_warning.report_good": 20, "profit_warning.case_floor": 0, "profit_warning.case_good": 20, "profit_warning.settlement_good": 20}}, {"name": "較嚴（利潤要求高）", "v": {"profit_warning.quote_form_low": 15, "profit_warning.quote_form_good": 25, "profit_warning.report_low": 15, "profit_warning.report_good": 25, "profit_warning.case_floor": 3, "profit_warning.case_good": 25, "profit_warning.settlement_good": 25}}, {"name": "較寬（利潤要求低）", "v": {"profit_warning.quote_form_low": 8, "profit_warning.quote_form_good": 15, "profit_warning.report_low": 8, "profit_warning.report_good": 15, "profit_warning.case_floor": -5, "profit_warning.case_good": 15, "profit_warning.settlement_good": 15}}], "agingPresets": [{"name": "30／60／90（預設）", "v": {"finance_reports.aging_day1": 30, "finance_reports.aging_day2": 60, "finance_reports.aging_day3": 90}}, {"name": "15／30／60", "v": {"finance_reports.aging_day1": 15, "finance_reports.aging_day2": 30, "finance_reports.aging_day3": 60}}, {"name": "45／90／180", "v": {"finance_reports.aging_day1": 45, "finance_reports.aging_day2": 90, "finance_reports.aging_day3": 180}}]};
+</script>
+<script>
+/* 甲份 mockup：業務與財務規則。DATA 由 gen_index.py 從 settings_groups.json（registry 匯出）＋盤點表產生。值（目前生效值、來源、人名）是假資料。 */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const R = {};
+D.rows.forEach(r => R[r.id] = r);
+/* r3：sv＝已儲存（生效中）的值；val＝畫面上的草稿值（點選只改 val，按「儲存」才寫入 sv） */
+const S = {sv: {}, val: {}, chg: {}, pend: {}, src: {}, sel: new Set(), skip: {}, batchIds: new Set(), pdraft: {}, log: [], seg: '全部', view: {k: 'home'}, flash: null, tab: 't1', solo: false, f: 'all', q: '', sec: 'all', advOpen: {}, hv: {}, last: null, toastT: null};
+D.rows.forEach(r => {
+  S.sv[r.id] = (r.id in D.fake) ? D.fake[r.id] : r.def;
+  S.val[r.id] = JSON.parse(JSON.stringify(S.sv[r.id]));
+  S.src[r.id] = D.fakeSrc[r.id] || null;
+  if (D.fakeSrc[r.id]) S.chg[r.id] = {by: D.fakeSrc[r.id].by, at: D.fakeSrc[r.id].at};
+});
+Object.keys(D.fakePend).forEach(id => S.pend[id] = D.fakePend[id]);
+S.log = [
+  {id: 'finance_reports.aging_day3', by: '王經理', at: '11/05 10:12', reason: '客戶付款習慣變慢', old: '90 天', neu: '60 天'},
+  {id: 'quote_defaults.valid_days', by: '李會計', at: '10/28 16:40', reason: '報價單有效期統一', old: '30 天', neu: '14 天'},
+  {id: 'profit_warning.quote_form_low', by: '王經理', at: '10/28 09:03', reason: '利潤要求提高', old: '12 %', neu: '15 %'},
+  {id: 'alerts.warranty_report_days', by: '李會計', at: '10/20 14:22', reason: '保固單提早提醒', old: '60 天', neu: '90 天'},
+  {id: 'quote_backfill.auto_off_hours', by: '王經理', at: '10/12 11:05', reason: '補開作業限時', old: '24 小時', neu: '12 小時'}
+].filter(e => e.id in R);
+const CC = D.ccDays;
+const TODAY = '11/13';
+function nowHM() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+/* ---------- 判定 ---------- */
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const isDiff = r => !same(S.val[r.id], r.def);
+function vt(r, v) {
+  if (r.choices && r.choices.length) { const c = r.choices.find(c => c.value === v); return c ? c.label : String(v); }
+  if (r.type === 'bool') return v ? '開啟' : '關閉';
+  if (r.type === 'str') return v === '' ? '（空白）' : '「' + v + '」';
+  return (typeof v === 'number' ? v.toLocaleString('zh-TW') : v) + (r.unit ? ' ' + r.unit : '');
+}
+function isLoosen(r, oldv, newv) {
+  if (!r.loosen || typeof oldv !== 'number' || typeof newv !== 'number') return false;
+  return r.loosen === 'up' ? newv > oldv : newv < oldv;
+}
+const heavyRisk = r => ['money', 'legal', 'security'].includes(r.risk);
+function depOff(r) {
+  const d = D.deps[r.id];
+  if (!d) return null;
+  const on = S.val[d];
+  return on ? null : '要先開啟：' + R[d].name.replace(/[「」]/g, '');
+}
+function validate(r, v) {
+  if (typeof v === 'number' && (r.type === 'int' || r.type === 'float')) {
+    if (isNaN(v)) return '請輸入數字';
+    if (r.min != null && v < r.min) return '不能小於 ' + r.min;
+    if (r.max != null && v > r.max) return '不能大於 ' + r.max;
+    if (r.type === 'int' && !Number.isInteger(v)) return '請輸入整數';
+  }
+  const pair = (lowId, goodId, val, id) => {
+    const lo = id === lowId ? val : S.val[lowId], go = id === goodId ? val : S.val[goodId];
+    return lo < go ? null : '紅線必須低於達標線';
+  };
+  for (const [lo, go] of D.pairs) if (r.id === lo || r.id === go) { const m = pair(lo, go, v, r.id); if (m) return m; }
+  const ag = ['finance_reports.aging_day1', 'finance_reports.aging_day2', 'finance_reports.aging_day3'];
+  if (ag.includes(r.id)) {
+    const a = ag.map(i => i === r.id ? v : S.val[i]);
+    if (!(a[0] < a[1] && a[1] < a[2])) return '三個分界天數必須由小到大';
+  }
+  if (r.id === 'quote_defaults.valid_days' && v > S.val['quote_approval.max_valid_days']) return '預設有效天數不能超過「有效天數上限」（' + S.val['quote_approval.max_valid_days'] + ' 天）';
+  return null;
+}
+function matchRow(r) {
+  const f = S.f;
+  if (f === 'diff' && !isDiff(r)) return false;
+  if (f === 'heavy' && !r.heavy) return false;
+  if (f === 'oth' && !r.others) return false;
+  if (f === 'ext' && !r.ext) return false;
+  if (f === 'adv' && !r.adv) return false;
+  if (f === 'batch' && !r.elig) return false;
+  if (f === 'pend' && !S.pend[r.id]) return false;
+  if (S.sec !== 'all' && r.top !== S.sec) return false;
+  const q = S.q.trim().toLowerCase();
+  if (q) {
+    const hay = (r.name + ' ' + r.id + ' ' + r.desc + ' ' + r.groupLabel + ' ' + r.secLabel + ' ' + (r.choices || []).map(c => c.label).join(' ')).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+/* ---------- 版面 ---------- */
+function tags(r) {
+  let h = '';
+  if (r.heavy) h += ' <span class="pill heavy" title="' + esc(r.dangerText) + '">影響大</span>';
+  if (r.others) h += ' <span class="pill oth">影響別人</span>';
+  if (r.ext) h += ' <span class="pill ext" title="' + esc(r.ext) + '">需外部設定</span>';
+  if (r.cust) h += ' <span class="pill cust">客戶看得到</span>';
+  if (r.adv) h += ' <span class="pill adv">進階</span>';
+  return h;
+}
+function srcBadge(r) {
+  const p = S.pend[r.id], s = S.src[r.id];
+  let h = '';
+  if (p) h = '<span class="pill pnd">' + (p.need2 ? '等待加核准' : '只等待') + '</span>';
+  else if (s) h = '<span class="pill oth">公司</span> <span class="mute">' + esc(s.by) + '・' + esc(s.at) + '</span>';
+  else h = '<span class="pill adv">預設</span>';
+  if (!same(S.val[r.id], S.sv[r.id])) h += ' <span class="pill draft">未儲存</span>';
+  if (isDiff(r)) h += '<div class="dot">● 與預設不同（預設：' + esc(vt(r, r.def)) + '）</div>';
+  return '<div class="src">' + h + '</div>';
+}
+function ctl(r) {
+  const off = depOff(r), dis = off ? ' disabled' : '';
+  const v = S.val[r.id];
+  let h = '';
+  if (r.choices && r.choices.length) {
+    h = r.choices.map(c => {
+      const na = /尚未提供/.test(c.label);
+      const on = c.value === v;
+      return '<label class="opt' + (on ? ' on' : '') + (na ? ' dis' : '') + '"><input type="radio" name="' + r.id + '" data-chg="' + r.id + '" value="' + c.value + '"' + (on ? ' checked' : '') + (na || off ? ' disabled' : '') + '><b>' + esc(c.label) + '</b><small>' + esc(c.impact) + '</small></label>';
+    }).join('');
+  } else if (r.type === 'bool') {
+    h = '<button class="sw" role="switch" aria-checked="' + (v ? 'true' : 'false') + '" data-act="toggle" data-id="' + r.id + '"' + dis + ' aria-label="' + esc(r.name) + '"></button> <span class="mute">' + (v ? '開啟' : '關閉') + '</span>';
+  } else if (r.type === 'str' && D.chipKeys.includes(r.id)) {
+    h = '<div class="chips">' + String(v).split(',').filter(Boolean).map(x => '<span>' + esc(x) + '</span>').join('') + '</div><input type="text" style="width:100%" data-chg="' + r.id + '" value="' + esc(v) + '"' + dis + ' aria-label="' + esc(r.name) + '"><div class="mute">逗號分隔，越前面越優先，最多 20 個</div>';
+  } else if (r.type === 'str' && (r.id === 'quote_defaults.estimate_no_prefix' || r.id === 'quote_alt.total_text')) {
+    h = '<input type="text" style="width:100%" data-chg="' + r.id + '" value="' + esc(v) + '"' + dis + ' aria-label="' + esc(r.name) + '"><div class="mute">' + (r.id === 'quote_alt.total_text' ? '客戶看到的樣子：稅前合計　' + esc(v) + '　／　總計　' + esc(v) : '估價單單號會長這樣：' + esc(v) + '-0001（字首 + 流水號，示意）') + '</div>';
+  } else if (r.type === 'str') {
+    h = '<textarea style="width:100%" rows="2" data-chg="' + r.id + '"' + dis + ' aria-label="' + esc(r.name) + '">' + esc(v) + '</textarea>';
+    if (r.id === 'quote_alt.note_template') h += '<div style="margin-top:4px"><button class="btn sm" data-act="ins" data-id="' + r.id + '" data-tok="{items}">＋插入「項次」</button> <button class="btn sm" data-act="ins" data-id="' + r.id + '" data-tok="{group}">＋插入「組別名稱」</button></div>';
+    h += '<div class="mute">客戶看到的樣子：' + esc(String(v).replace('{items}', '1、2').replace('{group}', '電源方案')) + '</div>';
+  } else {
+    const step = r.type === 'float' ? '0.5' : '1';
+    h = '<input type="number" step="' + step + '" data-chg="' + r.id + '" value="' + v + '"' + (r.min != null ? ' min="' + r.min + '"' : '') + (r.max != null ? ' max="' + r.max + '"' : '') + dis + ' aria-label="' + esc(r.name) + '" style="width:110px">' + (r.unit ? '<span class="unit">' + esc(r.unit) + '</span>' : '') + '<div class="mute">範圍 ' + (r.min != null ? r.min : '—') + '～' + (r.max != null ? r.max : '—') + (r.rec !== undefined && r.rec !== null ? '　建議 ' + esc(vt(r, r.rec)) : '') + '</div>';
+  }
+  if (off) h += '<div class="note">' + off + '，目前不會生效</div>';
+  const p = S.pend[r.id];
+  if (p) h += '<div class="pendline">' + (p.need2 ? '<b>等待加核准</b>：' : '<b>只等待</b>：') + '之後改成 ' + esc(vt(r, p.val)) + '；' + esc(p.eff) + ' 期滿' + (p.need2 ? '，且第二位最高管理者核准後才生效' : '自動生效，不需要別人核准') + '。<button class="btn sm" data-act="cancelpend" data-id="' + r.id + '">撤銷申請</button></div>';
+  else if (!same(S.val[r.id], S.sv[r.id])) { const k = pendKind(r, S.sv[r.id], S.val[r.id]); if (k !== 'now') h += '<div class="pendline">儲存後：' + KIND_TXT[k] + '</div>'; }
+  return h;
+}
+function checkbox(r) {
+  if (r.type === 'str') return '<span class="mute" title="' + esc(r.why) + '">✎</span>';
+  const dis = !r.elig;
+  return '<input type="checkbox" data-act="sel" data-id="' + r.id + '"' + (S.sel.has(r.id) ? ' checked' : '') + (dis ? ' disabled title="' + esc(r.why) + '"' : '') + ' aria-label="選取 ' + esc(r.name) + '">';
+}
+function rowHtml(r) {
+  const off = depOff(r);
+  return '<div class="row' + (same(S.val[r.id], S.sv[r.id]) ? '' : ' drf') + (isDiff(r) ? ' chg' : '') + (S.pend[r.id] ? ' pnd' : '') + (off ? ' off' : '') + (S.sel.has(r.id) ? ' sel' : '') + '" data-row="' + r.id + '">'
+    + '<div>' + checkbox(r) + '</div>'
+    + '<div><div class="nm">' + esc(r.name) + ' <button class="q" data-act="help" data-id="' + r.id + '" aria-label="說明">?</button>' + tags(r) + '</div><div class="k">' + r.id + '</div><div class="ds">' + esc(r.desc) + '</div></div>'
+    + '<div>' + ctl(r) + '</div>'
+    + '<div>' + srcBadge(r) + '</div>'
+    + '<div>' + (isDiff(r) ? '<button class="btn sm" data-act="reset" data-id="' + r.id + '">還原預設</button>' : '') + '</div></div>';
+}
+/* 特殊區塊 */
+const PW = [['報價單表單', 'profit_warning.quote_form_low', 'profit_warning.quote_form_good'], ['報表頁分項', 'profit_warning.report_low', 'profit_warning.report_good'], ['案件頁與結算摘要', 'profit_warning.case_floor', 'profit_warning.case_good'], ['結算頁', null, 'profit_warning.settlement_good']];
+function band(lo, go) {
+  const mn = -10, mx = 40, pc = x => Math.max(0, Math.min(100, (x - mn) / (mx - mn) * 100));
+  const a = lo == null ? 0 : pc(lo), b = pc(go);
+  return '<div class="band" title="紅：低於紅線　黃：介於　綠：達標"><i style="left:0;width:' + a + '%;background:#e5484d"></i><i style="left:' + a + '%;width:' + (b - a) + '%;background:#f5b041"></i><i style="left:' + b + '%;right:0;background:#30a46c"></i></div>';
+}
+function profitBlock(rows) {
+  const vis = id => id && rows.find(r => r.id === id);
+  let h = '<div class="presets"><b>預設組合</b><span class="mute">一鍵填入整張表（套用前會先確認）：</span>';
+  D.profitPresets.forEach((p, i) => h += '<button class="btn sm" data-act="preset" data-i="' + i + '">' + esc(p.name) + '</button>');
+  h += '</div><table class="mx stack"><thead><tr><th></th><th class="l">畫面</th><th>紅線（低於變紅）</th><th>達標線（達到變綠）</th><th>色帶預覽</th><th>來源</th></tr></thead><tbody>';
+  PW.forEach(([nm, lo, go]) => {
+    if (!(vis(lo) || vis(go))) return;
+    const ids = [lo, go].filter(Boolean), sel = ids.every(i => S.sel.has(i));
+    const cellOf = id => {
+      if (!id) return '<span class="mute">— 不適用</span>';
+      const r = R[id], p = S.pend[id];
+      return '<input type="number" step="0.5" data-chg="' + id + '" value="' + S.val[id] + '" min="' + r.min + '" max="' + r.max + '" aria-label="' + esc(r.name) + '"><span class="unit">%</span>' + (isDiff(r) ? '<div class="dot">●預設 ' + r.def + '</div>' : '');
+    };
+    const anyDiff = ids.some(i => isDiff(R[i]));
+    h += '<tr class="' + (sel ? 'sel' : '') + '"><td><input type="checkbox" data-act="selpair" data-ids="' + ids.join(',') + '"' + (sel ? ' checked' : '') + ' aria-label="選取 ' + nm + '"></td><td class="l" data-l="畫面"><b>' + nm + '</b> <button class="q" data-act="help" data-id="' + (go) + '">?</button><div class="k">' + ids.join('、').replace(/profit_warning\./g, '') + '</div></td><td data-l="紅線">' + cellOf(lo) + '</td><td data-l="達標線">' + cellOf(go) + '</td><td data-l="色帶">' + band(lo ? S.val[lo] : null, S.val[go]) + '</td><td data-l="來源">' + (anyDiff ? '<span class="pill oth">公司</span>' : '<span class="pill adv">預設</span>') + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+function lockBlock(rows) {
+  let h = '<div class="banner2">這 ' + rows.length + ' 條是「客戶回簽後」的高風險鎖定規則：每一格的變更都要填原因、要等 ' + CC + ' 天才生效；放寬（選到較寬的那一格）還要第二位最高管理者核准。<b>不能批次。</b>灰色格＝系統尚未提供。</div>';
+  h += '<table class="mx stack"><thead><tr><th class="l" style="width:26%">規則</th><th>最嚴（建議）</th><th>放寬一</th><th>放寬二</th><th style="width:130px">目前</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    const p = S.pend[r.id];
+    h += '<tr><td class="l" data-l="規則"><b>' + esc(r.name) + '</b> <button class="q" data-act="help" data-id="' + r.id + '">?</button> <span class="pill heavy">影響大</span><div class="k">' + r.id + '</div></td>';
+    for (let i = 0; i < 3; i++) {
+      const c = r.choices[i];
+      if (!c) { h += '<td></td>'; continue; }
+      const na = /尚未提供/.test(c.label), on = c.value === S.val[r.id];
+      h += '<td data-l="' + (i === 0 ? '最嚴' : '放寬' + (i === 1 ? '一' : '二')) + '"><button class="cell' + (on ? ' on' : '') + '" data-act="lockpick" data-id="' + r.id + '" data-v="' + c.value + '"' + (na ? ' disabled' : '') + '>' + (on ? '● ' : '') + esc(c.label) + '<small>' + esc(c.impact) + '</small></button></td>';
+    }
+    h += '<td data-l="目前">' + (p ? '<span class="pill pnd">等待生效</span><div class="mute">→ ' + esc(vt(r, p.val)) + '</div>' : isDiff(r) ? '<span class="pill oth">公司</span><div class="dot">●與預設不同</div>' : '<span class="pill adv">預設</span>') + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+function agingBlock() {
+  const ids = ['finance_reports.aging_day1', 'finance_reports.aging_day2', 'finance_reports.aging_day3'];
+  const d = ids.map(i => S.val[i]), off = !S.val['finance_reports.custom_aging'];
+  const mx = Math.max(d[2] * 1.4, 120), pc = x => x / mx * 100;
+  let h = '<div class="presets"><b>帳齡分界</b><span class="mute">預設組合：</span>';
+  D.agingPresets.forEach((p, i) => h += '<button class="btn sm" data-act="agingpreset" data-i="' + i + '">' + esc(p.name) + '</button>');
+  h += '</div><div style="padding:10px 12px' + (off ? ';opacity:.5' : '') + '"><div class="band" style="height:18px"><i style="left:0;width:' + pc(d[0]) + '%;background:#30a46c"></i><i style="left:' + pc(d[0]) + '%;width:' + (pc(d[1]) - pc(d[0])) + '%;background:#f5b041"></i><i style="left:' + pc(d[1]) + '%;width:' + (pc(d[2]) - pc(d[1])) + '%;background:#ef7a3c"></i><i style="left:' + pc(d[2]) + '%;right:0;background:#e5484d"></i></div>'
+    + '<div class="mute" style="margin:4px 0 8px">0 ～ ' + d[0] + ' 天（正常）｜' + (d[0] + 1) + ' ～ ' + d[1] + ' 天（注意，橘字）｜' + (d[1] + 1) + ' ～ ' + d[2] + ' 天（紅字）｜超過 ' + d[2] + ' 天（逾期很久）</div>';
+  ids.forEach((id, i) => { const r = R[id]; h += '<label style="margin-right:14px">' + esc(r.name) + ' <input type="number" data-chg="' + id + '" value="' + S.val[id] + '" min="' + r.min + '" max="' + r.max + '" style="width:80px"' + (off ? ' disabled' : '') + '><span class="unit">天</span></label>'; });
+  h += (off ? '<div class="note">目前未啟用自訂區間，維持 30／60／90 天；套用預設組合不會自動打開開關。</div>' : '') + '<div class="mute">三個天數要由小到大；填不合理時報表會退回 30／60／90，所以畫面先擋下。</div></div>';
+  return h;
+}
+function legalBlock(rows) {
+  const m = R['legal_params_reminder.start_month'], dd = R['legal_params_reminder.start_day'];
+  const sel = ['legal_params_reminder.start_month', 'legal_params_reminder.start_day'].every(i => S.sel.has(i));
+  let o = ''; for (let i = 1; i <= 12; i++) o += '<option value="' + i + '"' + (i === S.val[m.id] ? ' selected' : '') + '>' + i + ' 月</option>';
+  let o2 = ''; for (let i = 1; i <= 28; i++) o2 += '<option value="' + i + '"' + (i === S.val[dd.id] ? ' selected' : '') + '>' + i + ' 日</option>';
+  return '<div class="row' + (sel ? ' sel' : '') + '"><div><input type="checkbox" data-act="selpair" data-ids="' + m.id + ',' + dd.id + '"' + (sel ? ' checked' : '') + ' aria-label="選取"></div><div><div class="nm">每年從哪一天起，提醒設定下一年度法規參數 <button class="q" data-act="help" data-id="' + m.id + '">?</button> <span class="pill heavy">放寬須核准</span></div><div class="k">' + m.id + '、' + dd.id + '</div><div class="ds">' + esc(m.desc) + ' 日數只能選到 28，避免沒有 29～31 日的月份。往後延＝放寬提醒，須第二位最高管理者核准。</div></div><div>每年 <select data-chg="' + m.id + '" aria-label="月">' + o + '</select> <select data-chg="' + dd.id + '" aria-label="日">' + o2 + '</select> 起提醒</div><div>' + srcBadge(m) + '</div><div></div></div>';
+}
+function notePreview() {
+  const g = k => S.val['completion_note.' + k];
+  const items = [['分段標題：入口網路', 0], ['攝影機 IPC-2K', 10], ['電源供應器', 5]];
+  const done = [0, 6, 0];
+  let h = '<div class="panelnote"><b>帶入後的樣子</b>（用報價單 3 列示範，依上面目前的設定即時變化）<table class="mx" style="margin-top:6px"><thead><tr><th class="l">品名</th><th>報價數量</th><th>預設完工數量</th><th>預設狀態</th></tr></thead><tbody>';
+  const st = ['完成', '部分完成', '未施作'][g('default_status')];
+  items.forEach((it, i) => {
+    if (it[1] === 0) { if (g('include_headers')) h += '<tr><td class="l" colspan="4"><b>' + it[0] + '</b></td></tr>'; return; }
+    const remain = it[1] - done[i], q = g('qty_mode') === 0 ? remain : it[1];
+    h += '<tr><td class="l">' + (g('brand_prefix') ? '某牌 ' : '') + it[0] + '</td><td>' + it[1] + '</td><td>' + q + '</td><td>' + st + '</td></tr>';
+  });
+  return h + '</tbody></table><span class="mute">範例：第二列已完工 6 個。</span></div>';
+}
+/* 區段 */
+function sectionBody(code, rows) {
+  const used = new Set();
+  let h = '';
+  if (code === 'p-warning') {
+    const pr = rows.filter(r => r.gk === 'profit_warning');
+    if (pr.length) { h += profitBlock(pr); pr.forEach(r => used.add(r.id)); }
+  } else if (code === 'q-alt-lock') {
+    const lr = rows.filter(r => r.lockRule);
+    if (lr.length) { h += lockBlock(lr); lr.forEach(r => used.add(r.id)); }
+  } else if (code === 'f-reports') {
+    const g = rows.find(r => r.id === 'finance_reports.custom_aging');
+    if (g) { h += rowHtml(g); used.add(g.id); }
+    if (rows.some(r => /aging_day/.test(r.id))) { h += agingBlock(); rows.filter(r => /aging_day/.test(r.id)).forEach(r => used.add(r.id)); }
+  } else if (code === 'r-legal') {
+    if (rows.length) { h += legalBlock(rows); rows.forEach(r => used.add(r.id)); }
+  }
+  const rest = rows.filter(r => !used.has(r.id));
+  const adv = rest.filter(r => r.adv), norm = rest.filter(r => !r.adv);
+  h += norm.map(rowHtml).join('');
+  if (adv.length) {
+    const open = S.advOpen[code] || S.f === 'adv' || S.q.trim();
+    h += '<div class="panelnote"><button class="btn sm" data-act="advtoggle" data-sec="' + code + '">' + (open ? '▼' : '▶') + ' 進階（' + adv.length + ' 項，平常不用動）</button></div>';
+    if (open) h += adv.map(rowHtml).join('');
+  }
+  if (code === 'c-note') h += notePreview();
+  return h;
+}
+
+/* ================= r3：外框（SPEC §14）＋草稿與儲存列（§13）＋逐欄 CAS 復原（§5）＋兩種等待（§4） ================= */
+const CATS = ['業務', '財務', '系統', '安全'];
+const SUBS = D.sections.reduce((a, s) => a.concat(s.subs), []);
+const who = '你（王經理）';
+const draftIds = () => D.rows.filter(r => !same(S.val[r.id], S.sv[r.id])).map(r => r.id);
+const pageDraftCount = () => Object.values(S.pdraft).reduce((a, x) => a + x.n, 0);
+const totalDrafts = () => draftIds().length + pageDraftCount();
+function pendKind(r, oldv, newv) { // 'now' | 'wait'（只等待）| 'wait2'（等待加第二人核准）
+  if (isLoosen(r, oldv, newv)) return S.solo ? 'wait' : 'wait2'; // r3.2：只有一位最高管理者時，放寬沒有第二人可核准，只剩等待（伺服器 plan().kind／otherSuperadmins 決定；這裡是假資料切換）
+  if (r.rp) return 'wait';
+  return 'now';
+}
+const KIND_TXT = {
+  wait: '要等 ' + CC + ' 天確認期，不需要別人核准，滿 ' + CC + ' 天後自動生效。',
+  wait2: '放寬：要等 ' + CC + ' 天確認期，並要第二位最高管理者核准。'
+};
+function groupRows(gk) { return D.rows.filter(r => r.gk === gk); }
+const isDiffSv = r => !same(S.sv[r.id], r.def);
+const gDiff = gk => groupRows(gk).filter(isDiffSv).length;
+const gHeavy = gk => groupRows(gk).some(r => r.heavy);
+function notifyPreview(items) {
+  const roles = new Set(), heavy = items.some(x => x.r.heavy || x.r.risk === 'money' || x.r.risk === 'legal' || x.r.risk === 'security');
+  items.forEach(x => (x.r.roles || []).forEach(t => roles.add(t)));
+  let h = '最高管理者（所有人）';
+  h += '；受影響的人：' + (roles.size ? Array.from(roles).join('、') : '使用該功能的同仁');
+  if (heavy) h += '；<b>另外發 LINE 給最高管理者</b>（含影響大項目）';
+  return h + '。多項合併成一則：「' + who.replace('你（', '').replace('）', '') + '調整了 ' + items.length + ' 項設定」，點開看明細。';
+}
+
+/* ---------- 版面 ---------- */
+function navHtml() {
+  let h = '<div class="seg">' + ['全部'].concat(CATS).map(c => '<button class="' + (S.seg === c ? 'on' : '') + '" data-act="seg" data-c="' + c + '">' + c + '</button>').join('') + '</div>';
+  CATS.forEach(c => {
+    if (S.seg !== '全部' && S.seg !== c) return;
+    const gs = D.groupOrder.filter(g => D.shell[g].category === c);
+    if (!gs.length) { h += '<div class="cat"><div class="ch"><span>' + c + '</span></div><div class="mute" style="padding:2px 10px">（本稿只含甲份；系統類群組見乙份）</div></div>'; return; }
+    h += '<div class="cat"><div class="ch"><span>' + c + '</span><span>' + gs.length + '</span></div>' + gs.map(g => {
+      const n = gDiff(g), on = S.view.k === 'group' && S.view.g === g;
+      return '<button class="gi' + (on ? ' on' : '') + '" data-act="grp" data-g="' + g + '"><span>' + esc(D.shell[g].plain) + '<br><span class="k">' + esc(D.shell[g].currentName) + '</span></span><span class="bd">' + (n ? '<span class="dot2" title="與預設不同 ' + n + ' 項">' + n + '</span>' : '') + (D.shell[g].privacy ? '<span class="pill ext" title="影響隱私">隱私</span>' : '') + (gHeavy(g) ? '<span class="hi" title="內含高風險項目">🔴</span>' : '') + '</span></button>';
+    }).join('') + '</div>';
+  });
+  h += '<div class="cat"><div class="ch"><span>其他位置的設定</span></div><button class="gi" data-act="tab" data-t="t3"><span>獎金、傳票科目、T100、營運目標、報價條款…<br><span class="k">不在設定中心，原頁面改版</span></span><span class="bd">7 ›</span></button></div>';
+  return h;
+}
+function filterBar() {
+  let h = '<div class="card toolbar2">';
+  [['all', '全部'], ['diff', '與預設不同'], ['heavy', '影響大'], ['oth', '影響別人'], ['ext', '需外部設定'], ['adv', '進階']].forEach(([k, l]) => h += '<button class="chip" aria-pressed="' + (S.f === k) + '" data-act="filter" data-k="' + k + '">' + l + '</button>');
+  return h + '</div>';
+}
+function groupView(gk) {
+  const meta = D.shell[gk], rows = groupRows(gk), vis = rows.filter(matchRow);
+  const elig = vis.filter(r => r.elig), allSel = elig.length && elig.every(r => S.sel.has(r.id));
+  let h = '<h2>' + esc(meta.plain) + '</h2><div class="sub">' + esc(D.groupHelp[gk]) + '　<span class="k">原名：' + esc(meta.currentName) + '（' + gk + '）</span>' + (gHeavy(gk) ? ' <button class="pill heavy" data-act="hvtoggle" data-sec="' + gk + '">內含高風險項目 ' + (S.hv[gk] ? '▴' : '▾') + '</button>' : '') + '</div>';
+  if (S.hv[gk]) h += '<div class="banner2" style="border-radius:8px;margin-bottom:8px">高風險項目：' + rows.filter(r => r.heavy).map(r => esc(r.name)).join('、') + '。這些永遠逐項設定，不進批次。</div>';
+  h += filterBar() + '<div class="muted2"><label><input type="checkbox" data-act="selgrp" data-g="' + gk + '"' + (allSel ? ' checked' : '') + (elig.length ? '' : ' disabled') + '> 選取本群組可批次的項目（' + elig.length + ' 項）</label>　符合 ' + vis.length + ' 項</div>';
+  let any = false;
+  SUBS.forEach(sub => {
+    const rs = vis.filter(r => r.sec === sub.code);
+    if (!rs.length) return;
+    any = true;
+    const showHead = SUBS.filter(s => rows.some(r => r.sec === s.code)).length > 1;
+    h += '<section class="card subsec" id="s-' + sub.code + '">' + (showHead ? '<div class="subh"><h3>' + esc(sub.label) + '</h3><span class="mute">' + esc(sub.desc) + '</span></div>' : '') + sectionBody(sub.code, rs) + '</section>';
+  });
+  if (!any) h += '<div class="card panelnote">沒有符合的項目。改選「全部」。</div>';
+  return h;
+}
+function recentRows(n) {
+  return S.log.slice(0, n).map(e => '<tr><td data-l="時間">' + esc(e.at) + '</td><td data-l="誰">' + esc(e.by) + '</td><td class="l" data-l="項目"><b>' + esc(R[e.id].name) + '</b><div class="k">' + e.id + '</div></td><td data-l="舊→新">' + esc(e.old) + ' → ' + esc(e.neu) + (e.note ? ' <span class="pill pnd">' + esc(e.note) + '</span>' : '') + '</td><td data-l="原因">' + esc(e.reason) + '</td><td><button class="btn sm" data-act="goto" data-id="' + e.id + '">查看該項</button></td></tr>').join('');
+}
+const RECENT_HEAD = '<table class="mx stack"><thead><tr><th>時間</th><th>誰</th><th class="l">項目</th><th>舊 → 新</th><th>原因</th><th></th></tr></thead><tbody>';
+function homeView() {
+  const diffN = D.rows.filter(isDiffSv).length, pendN = Object.keys(S.pend).length, hv = D.groupOrder.filter(gHeavy).length;
+  return '<h2>設定中心　總覽（甲份：業務與財務規則）</h2><div class="sub">這份稿只有甲份 20 個群組；乙、丙份的群組在各自的稿裡。</div>'
+    + '<div class="stats"><button class="stat" data-act="view" data-v="diff"><div class="big">' + diffN + '</div><div class="lb">與預設不同的項目 ›</div></button>'
+    + '<button class="stat" data-act="view" data-v="pending"><div class="big">' + pendN + '</div><div class="lb">等待生效的項目 ›</div></button>'
+    + '<button class="stat" data-act="view" data-v="risk"><div class="big">' + hv + '</div><div class="lb">內含高風險項目的群組 ›</div></button></div>'
+    + '<div class="card"><h3>最近變更</h3>' + RECENT_HEAD + recentRows(5) + '</tbody></table><button class="btn sm" data-act="view" data-v="recent" style="margin-top:6px">前往全部 ›</button></div>';
+}
+function pendingView() {
+  const ids = Object.keys(S.pend);
+  let h = '<h2>等待生效</h2><div class="sub">這些變更已送出，還沒生效。</div><div class="card">';
+  if (!ids.length) return h + '<div class="panelnote">目前沒有等待生效的項目。</div></div>';
+  h += '<table class="mx stack"><thead><tr><th class="l">項目</th><th>現在 → 之後</th><th>誰申請</th><th>預計生效</th><th>誰要核准</th><th></th></tr></thead><tbody>' + ids.map(id => { const r = R[id], p = S.pend[id]; return '<tr><td class="l" data-l="項目"><b>' + esc(r.name) + '</b><div class="k">' + id + '</div></td><td data-l="變更">' + esc(vt(r, S.sv[id])) + ' → ' + esc(vt(r, p.val)) + '</td><td data-l="誰申請">' + esc(p.by || '王經理') + '</td><td data-l="預計生效">' + esc(p.eff) + '</td><td data-l="誰要核准">' + (p.need2 ? '第二位最高管理者' : '不需核准（期滿自動生效）') + '</td><td><button class="btn sm" data-act="cancelpend" data-id="' + id + '">撤銷申請</button></td></tr>'; }).join('') + '</tbody></table></div>';
+  return h;
+}
+function diffView(riskOnly) {
+  let h = '<h2>' + (riskOnly ? '內含高風險項目的群組' : '與預設不同的項目') + '</h2><div class="sub">跨群組列出；可直接在這裡改（一樣是草稿）。</div>';
+  D.groupOrder.forEach(g => {
+    if (riskOnly ? !gHeavy(g) : !gDiff(g)) return;
+    const rs = groupRows(g).filter(r => riskOnly ? r.heavy : isDiffSv(r));
+    h += '<div class="topsec">' + esc(D.shell[g].plain) + '</div><section class="card subsec">' + rs.map(rowHtml).join('') + '</section>';
+  });
+  return h;
+}
+function render() {
+  const keepY = window.scrollY, v = S.view;
+  $('#nav').innerHTML = navHtml();
+  $('#main').innerHTML = v.k === 'group' ? groupView(v.g) : v.k === 'pending' ? pendingView() : v.k === 'recent' ? '<h2>最近變更</h2><div class="sub">資料來源：變更紀錄。</div><div class="card">' + RECENT_HEAD + recentRows(50) + '</tbody></table></div>' : v.k === 'diff' ? diffView(false) : v.k === 'risk' ? diffView(true) : homeView();
+  $('#nPend').textContent = Object.keys(S.pend).length;
+  ['gPend', 'gRecent', 'gHome'].forEach(i => { const e = $('#' + i); if (e) e.classList.toggle('on', (i === 'gPend' && v.k === 'pending') || (i === 'gRecent' && v.k === 'recent') || (i === 'gHome' && v.k === 'home')); });
+  renderSavebar(); renderBatch();
+  window.scrollTo(0, keepY);
+  if (S.flash) { const el = $('[data-row="' + S.flash + '"]'); if (el) { el.scrollIntoView({block: 'center'}); el.classList.add('flash'); } S.flash = null; }
+}
+function renderSavebar() {
+  const n = draftIds().length, p = pageDraftCount(), b = $('#savebar');
+  if (!n && !p) { b.classList.add('hide'); return; }
+  b.classList.remove('hide');
+  $('#nDraft').textContent = n + p;
+  $('#draftNote').textContent = (n && p ? '（設定中心 ' + n + ' 項、其他頁面 ' + p + ' 處）' : '');
+}
+function renderBatch() {
+  const n = S.sel.size, b = $('#batch');
+  if (!n) { b.classList.add('hide'); return; }
+  b.classList.remove('hide');
+  b.innerHTML = '<b>已選 ' + n + ' 項</b><span style="opacity:.7;font-size:12px">（批次只改草稿；儲存後才寫入，不繞過等待期與核准）</span>'
+    + '<button class="btn" data-act="batch" data-m="rec">套用建議值</button><button class="btn" data-act="presetpick">套用預設組合</button><button class="btn" data-act="batch" data-m="def">重設為預設</button><button class="btn" data-act="selclear">取消選取</button>';
+}
+
+/* ---------- 對話框／吐司／說明 ---------- */
+function closeDlg() { const o = $('#ov'); o.classList.add('hide'); o.innerHTML = ''; }
+function openDlg(html) { const o = $('#ov'); o.innerHTML = '<div class="dlg" role="dialog" aria-modal="true">' + html + '</div>'; o.classList.remove('hide'); const f = $('#ov button.primary:not([disabled])') || $('#ov textarea') || $('#ov button'); if (f) f.focus(); }
+function toast(msg, undoFn, undoLabel) {
+  const t = $('#toast'); clearTimeout(S.toastT);
+  t.innerHTML = msg + (undoFn ? ' <button class="btn sm" id="undoBtn">' + (undoLabel || '復原') + '</button><i class="tm"></i>' : '');
+  t.classList.remove('hide');
+  if (undoFn) $('#undoBtn').onclick = () => { clearTimeout(S.toastT); t.classList.add('hide'); undoFn(); };
+  S.toastT = setTimeout(() => t.classList.add('hide'), undoFn ? 8000 : 4500);
+}
+function showHelp(id) {
+  const r = R[id];
+  openDlg('<div class="help"><h3>' + esc(r.name) + '</h3><div class="k">' + id + '</div><h4>這是什麼</h4><p>' + esc(r.helpWhat) + '</p>' + (r.helpWhen ? '<h4>什麼時候要改</h4><p>' + esc(r.helpWhen) + '</p>' : '') + '<h4>改了會影響什麼</h4><p>' + esc(r.helpImpact) + '</p><h4>建議值</h4><p>' + esc(r.helpRec) + '</p><div class="mute" style="margin-top:8px">說明由設定登錄表的 question／help／impact／riskText／recommended 產生；「什麼時候要改」＝新增的 SettingDef.when（沒填就不顯示這一段）。</div></div><div class="acts"><button class="btn primary" data-act="closedlg">關閉</button></div>');
+}
+
+/* ---------- 草稿 ---------- */
+function setDraft(id, v) {
+  const r = R[id], bad = validate(r, v);
+  if (bad) { toast('<span>「' + esc(r.name) + '」：' + esc(bad) + '，沒有放進草稿</span>'); render(); return false; }
+  S.val[id] = v; return true;
+}
+function requestChange(id, v) { if (!same(v, S.val[id])) setDraft(id, v); render(); }
+function discardAll() {
+  D.rows.forEach(r => S.val[r.id] = JSON.parse(JSON.stringify(S.sv[r.id])));
+  S.sel.clear(); S.skip = {}; S.batchIds.clear();
+  if (window.pageClear) window.pageClear();
+  S.pdraft = {}; render(); toast('<span>已放棄所有未儲存的修改</span>');
+}
+function startBatch(mode) {
+  let n = 0; const skip = Object.assign({}, S.skip);
+  S.sel.forEach(id => {
+    const r = R[id], to = mode === 'rec' ? r.rec : r.def;
+    if (mode === 'rec' && (to === undefined || to === null)) { skip[id] = '沒有建議值'; return; }
+    if (same(to, S.val[id])) return;
+    const bad = validate(r, to);
+    if (bad) { skip[id] = '不合格：' + bad; return; }
+    S.val[id] = to; S.batchIds.add(id); n++;
+  });
+  S.skip = skip; S.sel.clear(); render();
+  toast('<span>已把 ' + n + ' 項放進草稿（尚未儲存）' + (Object.keys(skip).length ? '；略過 ' + Object.keys(skip).length + ' 項' : '') + '。確認後按上方「儲存」。</span>');
+}
+function applyPreset(map, label) {
+  for (const k of Object.keys(map)) { const bad = (() => { const r = R[k]; const old = S.val[k]; S.val[k] = map[k]; const m = validate(r, map[k]); S.val[k] = old; return m; })(); }
+  const old = Object.assign({}, S.val); let n = 0;
+  Object.keys(map).forEach(k => { if (!same(S.val[k], map[k])) { S.val[k] = map[k]; S.batchIds.add(k); n++; } });
+  for (const k of Object.keys(map)) { const m = validate(R[k], S.val[k]); if (m) { Object.keys(old).forEach(i => S.val[i] = old[i]); toast('<span>「' + esc(label) + '」套不進去：' + esc(R[k].name) + ' ' + esc(m) + '</span>'); render(); return; } }
+  render(); toast('<span>已把「' + esc(label) + '」放進草稿（' + n + ' 項，尚未儲存）。</span>');
+}
+
+/* ---------- 儲存（確認視窗＋通知預覽） ---------- */
+function buildItems() {
+  return draftIds().map(id => { const r = R[id], old = S.sv[id], to = S.val[id]; return {r, id, old, to, kind: pendKind(r, old, to), batch: S.batchIds.has(id)}; });
+}
+function openSave() {
+  const items = buildItems(), pages = Object.values(S.pdraft);
+  if (!items.length && !pages.length) return;
+  const heavy = items.some(x => x.r.heavy || x.kind !== 'now' || heavyRisk(x.r)) || pages.some(p => p.heavy);
+  const nOps = items.filter(x => x.batch && x.r.confirm && x.kind === 'now').length;
+  const sk = Object.keys(S.skip);
+  let h = '<h3>儲存修改</h3><p>將變更 <b>' + (items.length + pages.reduce((a, p) => a + p.n, 0)) + '</b> 項，略過 ' + sk.length + ' 項。</p>';
+  if (sk.length) { const g = {}; sk.forEach(i => (g[S.skip[i]] = g[S.skip[i]] || []).push(R[i].name)); h += '<div class="hl">已略過（不能批次，請逐項設定）：' + Object.keys(g).map(k => esc(k) + '（' + g[k].length + ' 項）').join('；') + '</div>'; }
+  if (items.length) {
+    h += '<table><thead><tr><th>項目</th><th>現在</th><th>之後</th><th>怎麼生效</th></tr></thead><tbody>' + items.map(x => '<tr><td>' + esc(x.r.name) + (x.r.heavy ? ' <span class="pill heavy">影響大</span>' : '') + '</td><td>' + esc(vt(x.r, x.old)) + '</td><td>' + esc(vt(x.r, x.to)) + '</td><td>' + (x.kind === 'now' ? '立即生效' : x.kind === 'wait' ? '<span class="pill pnd">只等待</span>' : '<span class="pill pnd">等待加核准</span>') + '</td></tr>').join('') + '</tbody></table>';
+    if (items.some(x => x.kind === 'wait')) h += '<div class="hl">只等待：' + KIND_TXT.wait + '</div>';
+    if (S.solo && items.some(x => isLoosen(x.r, x.old, x.to))) h += '<div class="hl">其中有放寬方向的項目：目前系統裡<b>只有一位最高管理者</b>，沒有第二人可核准，所以改成「填原因、等 ' + CC + ' 天後生效，並留下紀錄」。</div>';
+    if (items.some(x => x.kind === 'wait2')) h += '<div class="hl">' + KIND_TXT.wait2 + '</div>';
+  }
+  if (pages.length) h += '<p><b>其他頁面的修改：</b></p><ul>' + pages.map(p => '<li>' + esc(p.title) + '（' + p.n + ' 處）：' + (p.cc ? '<span class="pill pnd">要等 ' + CC + ' 天確認期或第二位最高管理者核准</span>' : '立即生效') + '</li>').join('') + '</ul>';
+  const notifyItems = items.concat(pages.map(p => ({r: {heavy: p.heavy, risk: p.heavy ? 'money' : 'ops', roles: [p.notify]}})));
+  h += '<div class="hl" style="background:var(--bluebg);color:var(--blue)"><b>通知預覽（儲存後送出）</b><br>' + notifyPreview(notifyItems) + '</div>';
+  if (nOps) h += '<label class="hl" style="display:block"><input type="checkbox" id="opsOk"> 我確認要改這 ' + nOps + ' 項營運設定（會影響日常作業的畫面或提醒）</label>';
+  h += '<label>變更原因' + (heavy ? '（含影響大項目，必填，至少 4 個字）' : '（選填）') + '<textarea id="reason" placeholder="例：客戶要求…">' + (S.batchIds.size ? '批次調整（' + S.batchIds.size + ' 項）' : '') + '</textarea></label><div class="acts"><button class="btn" data-act="closedlg">取消</button><button class="btn primary" id="okBtn" data-act="dosave" data-heavy="' + (heavy ? 1 : 0) + '" data-ops="' + nOps + '">儲存</button></div>';
+  openDlg(h); checkSaveBtn();
+}
+function checkSaveBtn() {
+  const b = $('#okBtn'); if (!b) return;
+  const heavy = b.dataset.heavy === '1', ops = Number(b.dataset.ops), reason = ($('#reason') || {}).value || '';
+  b.disabled = (heavy && reason.trim().length < 4) || (ops > 0 && !($('#opsOk') || {}).checked);
+}
+function doSave() {
+  const items = buildItems(), reason = ($('#reason') || {}).value || '', at = TODAY + ' ' + nowHM();
+  const rec = [], now = [], wait = [], wait2 = [];
+  items.forEach(x => {
+    const logBase = {id: x.id, by: who, at, reason: reason.trim() || '（未填）', old: vt(x.r, x.old), neu: vt(x.r, x.to)};
+    if (x.kind === 'now') {
+      S.sv[x.id] = JSON.parse(JSON.stringify(x.to)); S.chg[x.id] = {by: who, at}; S.src[x.id] = same(x.to, x.r.def) ? null : {by: '王經理', at: TODAY};
+      now.push(x); if (x.batch) rec.push({id: x.id, before: x.old, wrote: x.to}); S.log.unshift(logBase);
+    } else {
+      S.pend[x.id] = {val: x.to, eff: '11/20', need2: x.kind === 'wait2', by: '王經理'};
+      S.val[x.id] = JSON.parse(JSON.stringify(x.old)); (x.kind === 'wait' ? wait : wait2).push(x);
+      S.log.unshift(Object.assign(logBase, {note: x.kind === 'wait' ? '只等待' : '等待加核准'}));
+    }
+  });
+  const np = pageDraftCount(); const pages = Object.values(S.pdraft);
+  const ccPages = pages.filter(p => p.cc).reduce((a, p) => a + p.n, 0);
+  if (window.pageClear) window.pageClear();
+  S.pdraft = {}; S.batchIds.clear(); S.skip = {}; S.sel.clear();
+  S.last = rec.length ? {rec} : null;
+  closeDlg(); render();
+  const parts = [];
+  if (now.length + (np - ccPages)) parts.push('已生效 ' + (now.length + np - ccPages) + ' 項');
+  if (wait.length) parts.push('等待生效 ' + wait.length + ' 項（只等待，預計 11/20 自動生效）');
+  if (wait2.length + ccPages) parts.push('等待核准 ' + (wait2.length + ccPages) + ' 項（預計 11/20 生效，要第二位最高管理者核准）');
+  toast('<span>' + parts.join('；') + '。已通知最高管理者與受影響的人。</span>', rec.length ? undoBatch : null, '復原這一批');
+}
+function undoBatch() {
+  const L = S.last; if (!L) return;
+  const bad = L.rec.filter(x => !same(S.sv[x.id], x.wrote));
+  if (bad.length) {
+    const c = S.chg[bad[0].id] || {by: '另一位管理者', at: TODAY};
+    toast('<span>無法復原這一批：' + bad.map(x => '「' + esc(R[x.id].name) + '」').join('、') + '在你套用之後被 ' + esc(c.by) + ' 於 ' + esc(c.at) + ' 改過，為了不蓋掉別人的修改，系統拒絕整批復原。</span>');
+    return;
+  }
+  L.rec.forEach(x => { S.sv[x.id] = JSON.parse(JSON.stringify(x.before)); if (same(S.val[x.id], x.wrote)) S.val[x.id] = JSON.parse(JSON.stringify(x.before)); S.chg[x.id] = {by: who, at: TODAY + ' ' + nowHM()}; S.src[x.id] = same(x.before, R[x.id].def) ? null : S.src[x.id]; });
+  const n = L.rec.length; S.last = null; render(); toast('<span>已復原這一批（' + n + ' 項）</span>');
+}
+function simulateConflict() {
+  if (!S.last) { toast('<span>先做一次批次：選幾項 → 套用建議值 → 儲存，再按這個示範</span>'); return; }
+  const x = S.last.rec[0], r = R[x.id];
+  const alt = (r.choices && r.choices.length) ? (r.choices.find(c => c.value !== x.wrote && !/尚未提供/.test(c.label)) || {value: x.before}).value : (typeof x.wrote === 'number' ? x.wrote + 1 : x.wrote);
+  S.sv[x.id] = alt; if (same(S.val[x.id], x.wrote)) S.val[x.id] = alt;
+  S.chg[x.id] = {by: '李會計', at: TODAY + ' 15:42'};
+  render(); toast('<span>已模擬：李會計在 15:42 改了「' + esc(r.name) + '」。現在按「復原這一批」會被拒絕。</span>', undoBatch, '復原這一批');
+}
+
+/* ---------- 全域搜尋 ---------- */
+function doSearch(q) {
+  const box = $('#gres'); q = q.trim().toLowerCase();
+  if (!q) { box.classList.add('hide'); return; }
+  const m = D.rows.filter(r => (r.name + ' ' + r.id + ' ' + r.desc + ' ' + D.shell[r.gk].plain + ' ' + D.shell[r.gk].currentName + ' ' + (r.choices || []).map(c => c.label).join(' ')).toLowerCase().includes(q)).slice(0, 12);
+  box.innerHTML = m.length ? m.map(r => '<button data-act="gosearch" data-id="' + r.id + '"><span class="mute">' + esc(D.shell[r.gk].plain) + ' ›</span> <b>' + esc(r.name) + '</b> <span class="k">' + r.id + '</span></button>').join('') : '<div class="mute" style="padding:8px">沒有符合的設定</div>';
+  box.classList.remove('hide');
+}
+function gotoRow(id) { const r = R[id]; S.view = {k: 'group', g: r.gk}; S.f = 'all'; S.flash = id; $('#gres').classList.add('hide'); $('#gq').value = ''; render(); }
+
+/* ---------- 事件 ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) { if (!e.target.closest('.searchw')) $('#gres').classList.add('hide'); return; }
+  const a = t.dataset.act, id = t.dataset.id;
+  if (a === 'filter') { S.f = t.dataset.k; render(); }
+  else if (a === 'help') showHelp(id);
+  else if (a === 'closedlg') closeDlg();
+  else if (a === 'toggle') requestChange(id, !S.val[id]);
+  else if (a === 'reset') requestChange(id, R[id].def);
+  else if (a === 'lockpick') requestChange(id, Number(t.dataset.v));
+  else if (a === 'advtoggle') { S.advOpen[t.dataset.sec] = !S.advOpen[t.dataset.sec]; render(); }
+  else if (a === 'hvtoggle') { S.hv[t.dataset.sec] = !S.hv[t.dataset.sec]; render(); }
+  else if (a === 'cancelpend') { delete S.pend[id]; S.log.unshift({id, by: who, at: TODAY + ' ' + nowHM(), reason: '撤銷申請', old: '（等待中）', neu: '維持現值'}); render(); toast('<span>已撤銷申請：' + esc(R[id].name) + '</span>'); }
+  else if (a === 'ins') { const ta = $('textarea[data-chg="' + id + '"]'); ta.value += t.dataset.tok; requestChange(id, ta.value); }
+  else if (a === 'selclear') { S.sel.clear(); S.skip = {}; render(); }
+  else if (a === 'batch') startBatch(t.dataset.m);
+  else if (a === 'presetpick') {
+    const all = D.profitPresets.map((p, i) => ({lbl: '利潤提醒色帶：' + p.name, act: 'preset', i})).concat(D.agingPresets.map((p, i) => ({lbl: '帳齡分界：' + p.name, act: 'agingpreset', i})));
+    openDlg('<h3>套用預設組合</h3><p class="mute">預設組合是登錄表 presets 的內容（目前 0 個，下列為本份提案，使用者看過才上線）。選了只會放進草稿。</p>' + all.map(x => '<div style="margin:4px 0"><button class="btn" data-act="' + x.act + '" data-i="' + x.i + '">' + esc(x.lbl) + '</button></div>').join('') + '<div class="acts"><button class="btn" data-act="closedlg">取消</button></div>');
+  }
+  else if (a === 'preset') { closeDlg(); const p = D.profitPresets[Number(t.dataset.i)]; applyPreset(p.v, '利潤提醒色帶：' + p.name); }
+  else if (a === 'agingpreset') { closeDlg(); const p = D.agingPresets[Number(t.dataset.i)]; applyPreset(p.v, '帳齡分界：' + p.name); }
+  else if (a === 'dosave') doSave();
+  else if (a === 'openSave') openSave();
+  else if (a === 'discard') discardAll();
+  else if (a === 'sel') { t.checked ? S.sel.add(id) : S.sel.delete(id); render(); }
+  else if (a === 'selpair') { t.dataset.ids.split(',').forEach(i => t.checked ? S.sel.add(i) : S.sel.delete(i)); render(); }
+  else if (a === 'selgrp') {
+    groupRows(t.dataset.g).filter(matchRow).forEach(r => { if (r.elig) { t.checked ? S.sel.add(r.id) : S.sel.delete(r.id); } else if (t.checked) S.skip[r.id] = r.why; else delete S.skip[r.id]; });
+    render();
+  }
+  else if (a === 'grp') { S.view = {k: 'group', g: t.dataset.g}; S.f = 'all'; $('#nav').classList.remove('open'); render(); window.scrollTo(0, 0); }
+  else if (a === 'seg') { S.seg = t.dataset.c; render(); }
+  else if (a === 'view') { S.view = {k: t.dataset.v}; render(); window.scrollTo(0, 0); }
+  else if (a === 'goto' || a === 'gosearch') gotoRow(id);
+  else if (a === 'tab') tryTab(t.dataset.t);
+  else if (a === 'leave') { discardAll(); closeDlg(); showTab(t.dataset.t); }
+  else if (a === 'menu') $('#nav').classList.toggle('open');
+  else if (a === 'demo-conflict') simulateConflict();
+  else if (a === 'solo') { S.solo = !S.solo; t.setAttribute('aria-pressed', S.solo); t.textContent = S.solo ? '目前：只有一位最高管理者（再按切回）' : '示範：只有一位最高管理者'; render(); toast('<span>' + (S.solo ? '已切換：系統只有一位最高管理者，放寬方向改為「填原因＋等待＋留紀錄」，沒有第二人核准。' : '已切回：有其他最高管理者，放寬方向要第二位核准。') + '</span>'); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'opsOk') { checkSaveBtn(); return; }
+  const id = t.dataset && t.dataset.chg; if (!id) return;
+  let v;
+  if (t.type === 'radio') v = Number(t.value);
+  else if (t.type === 'number') v = t.value === '' ? NaN : Number(t.value);
+  else if (t.tagName === 'SELECT') v = Number(t.value);
+  else v = t.value;
+  requestChange(id, v);
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'gq') doSearch(t.value);
+  if (t.id === 'reason') checkSaveBtn();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#ov').classList.contains('hide')) closeDlg(); });
+window.addEventListener('beforeunload', e => { if (totalDrafts() > 0) { e.preventDefault(); e.returnValue = ''; } });
+window.pageDirty = (pg, n, title, notify, heavy, cc) => { if (n > 0) S.pdraft[pg] = {n, title, notify, heavy: !!heavy, cc: !!cc}; else delete S.pdraft[pg]; renderSavebar(); };
+function showTab(t) {
+  $$('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.t === t));
+  ['t1', 't2', 't3'].forEach(x => $('#' + x).classList.toggle('hide', x !== t));
+  S.tab = t; try { sessionStorage.setItem('mx-tab', t); } catch (e) {}
+}
+function tryTab(t) {
+  if (t === S.tab) return;
+  if (totalDrafts() > 0) { openDlg('<h3>你有未儲存的修改</h3><p>切換到別的頁面會放掉這些草稿（共 ' + totalDrafts() + ' 項）。</p><div class="acts"><button class="btn" data-act="closedlg">留在這裡</button><button class="btn primary" data-act="leave" data-t="' + t + '">放棄並離開</button></div>'); return; }
+  showTab(t);
+}
+S.tab = 't1';
+render();
+let _t = 't1'; try { _t = sessionStorage.getItem('mx-tab') || 't1'; } catch (e) {}
+showTab(_t);
+
+</script>
+<script>
+/* 第 2、3 頁籤的小互動（假資料；只示範畫面行為，不呼叫任何 API） */
+(function () {
+  const dirty = new WeakMap();
+  const META = {
+    'pg-approval': ['簽核設定', '簽核人、業務', true], 'pg-delegates': ['簽核代理人', '被代理人與代理人', false], 'pg-expense': ['支出申請類型', '申請支出的同仁', false],
+    'pg-remit': ['匯款款別', '出納', true], 'pg-ledger': ['報表設定（科目歸屬）', '財務', true], 'pg-legal': ['法規參數', '最高管理者、開立勞報單的人', true], 'pg-acct': ['會計科目', '財務', true],
+    'ot-bonus': ['獎金分潤預設比例', '最高管理者、之後新建獎金草稿的人', false, false], 'ot-voucher': ['傳票科目對應', '財務', true, true], 'ot-deduct': ['獎金扣繳與補充保費', '領獎金的人、財務', true, true],
+    'ot-oh': ['管銷與公益金計算方式', '業務、財務', true, true], 'ot-target': ['年度營運目標', '看報表的人', false, false], 'ot-t100': ['T100 科目代號', '財務', true, true], 'ot-terms': ['報價條款與付款條件', '業務', false, false]
+  };
+  const origs = new Map();
+  function remember(el) {
+    if (origs.has(el)) return;
+    origs.set(el, el.hasAttribute('data-sw') ? el.getAttribute('aria-checked') : el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.selectedIndex : el.value);
+  }
+  function mark(el) {
+    const pg = el.closest('.pg'); if (!pg) return;
+    remember(el);
+    const set = dirty.get(pg) || new Set(); set.add(el); dirty.set(pg, set);
+    const td = el.closest('td'); if (td) td.classList.add('chg-cell');
+    const bar = pg.querySelector('[data-bar]');
+    if (bar) { bar.classList.remove('hide'); bar.querySelector('.cnt').textContent = '已改 ' + set.size + ' 處，尚未儲存（也算進上方的儲存列）'; const pb = bar.querySelector('.btn.primary'); if (pb) pb.setAttribute('data-act', 'openSave'); }
+    const m = META[pg.id] || [pg.id, '相關同仁', false];
+    if (window.pageDirty) window.pageDirty(pg.id, set.size, m[0], m[1], m[2], !!m[3]);
+  }
+  window.pageClear = function () {
+    origs.forEach((v, el) => { if (el.hasAttribute('data-sw')) el.setAttribute('aria-checked', v); else if (el.type === 'checkbox') el.checked = v; else if (el.tagName === 'SELECT') el.selectedIndex = v; else el.value = v; });
+    origs.clear();
+    document.querySelectorAll('.chg-cell').forEach(c => { const i = c.querySelector('[data-base]'); if (!i || String(i.value) === i.dataset.base) c.classList.remove('chg-cell'); });
+    document.querySelectorAll('[data-bar]').forEach(b => b.classList.add('hide'));
+    document.querySelectorAll('.pg').forEach(pg => dirty.delete(pg));
+  };
+  document.addEventListener('change', e => { const t = e.target; if (t.matches && t.matches('[data-d]')) mark(t); });
+  document.addEventListener('input', e => { const t = e.target; if (t.matches && t.matches('[data-d][type=number],[data-d][type=text],textarea[data-d]')) mark(t); if (t.matches && t.matches('[data-split]')) split(); });
+  function split() {
+    const sum = Array.from(document.querySelectorAll('[data-split]')).reduce((a, x) => a + (Number(x.value) || 0), 0);
+    const m = document.getElementById('splitmsg'), ok = Math.abs(sum - 100) < 0.001;
+    m.innerHTML = '三類比例合計：<b>' + sum + '%</b> ' + (ok ? '✔' : '<span class="err">必須是 100%，存檔鈕暫時不能按</span>');
+    const b = document.getElementById('bonusSave'); if (b) b.disabled = !ok;
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button,[data-sw]'); if (!t) return;
+    if (t.hasAttribute('data-sw')) { t.setAttribute('aria-checked', t.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); mark(t); return; }
+    if (t.dataset.dfilter) {
+      document.querySelectorAll('[data-dfilter]').forEach(b => b.setAttribute('aria-pressed', b === t));
+      document.querySelectorAll('#dtab tbody tr').forEach(r => r.classList.toggle('hide', t.dataset.dfilter !== 'all' && r.dataset.s !== t.dataset.dfilter));
+    }
+    if (t.dataset.tree) {
+      document.querySelectorAll('[data-tree]').forEach(b => b.setAttribute('aria-pressed', b === t));
+      const lv = Number(t.dataset.tree);
+      document.querySelectorAll('#tree .l2').forEach(x => x.classList.toggle('hide', lv < 2));
+      document.querySelectorAll('#tree .l3').forEach(x => x.classList.toggle('hide', lv < 3));
+    }
+    if (t.hasAttribute('data-ledfilter')) {
+      const on = t.getAttribute('aria-pressed') !== 'true'; t.setAttribute('aria-pressed', on); t.textContent = on ? '顯示全部' : '只看有問題的';
+      document.querySelectorAll('#ledtab tbody tr').forEach(r => r.classList.toggle('hide', on && !r.dataset.bad));
+    }
+    if (t.id === 'ledapply') {
+      const rows = Array.from(document.querySelectorAll('.ledchk:checked')).map(c => c.closest('tr'));
+      const a = document.getElementById('ledrow').selectedIndex, b = document.getElementById('ledcf').selectedIndex;
+      rows.forEach(r => { const s = r.querySelectorAll('select'); if (a > 0) { s[0].selectedIndex = 0; s[0].innerHTML = '<option>' + document.getElementById('ledrow').value + '</option>'; mark(s[0]); } if (b > 0) { s[1].innerHTML = '<option>' + document.getElementById('ledcf').value + '</option>'; mark(s[1]); } r.classList.remove('warnrow'); delete r.dataset.bad; });
+    }
+    if (t.dataset.wizard === 'oh') document.getElementById('ohwiz').classList.toggle('hide');
+  });
+  document.addEventListener('change', e => {
+    if (e.target.classList && e.target.classList.contains('ledchk')) {
+      const n = document.querySelectorAll('.ledchk:checked').length; document.getElementById('ledcnt').textContent = '已選 ' + n + ' 個科目';
+    }
+  });
+  // 法規參數：與前一版不同的格自動變色
+  document.querySelectorAll('[data-base]').forEach(i => { if (String(i.value) !== i.dataset.base) i.closest('td').classList.add('chg-cell'); });
+  split();
+})();
+
+</script>
+</body>
+</html>

@@ -196,7 +196,25 @@ def case_profile_apply(c, kind):
     assert [s["group"] for s in r.json()["skipped"]] == [PLAN] and "路由測試隱藏" not in str(r.json())
 
 
+def case_overview(c, kind):
+    d = _g(c, "/overview").json()
+    assert "路由測試隱藏" not in str(d) and HIDE not in str(d)                          # hidden 連名稱都不出現（頁面登錄沒登記這些測試群組，這裡鎖的是任何形式的外洩）
+
+
+def case_recent(c, kind):
+    body = _g(c, "/recent", params={"limit": 200}).json()["changes"]
+    assert not [x for x in body if x["group"] in (PLAN, HIDE)]                         # 非 open 群組的變更不列
+
+
+def case_index(c, kind):
+    body = str(_g(c, "/index").json())
+    assert HIDE not in body and "路由測試隱藏" not in body
+
+
 CASES = {
+    ("GET", P + "/overview"): case_overview,
+    ("GET", P + "/recent"): case_recent,
+    ("GET", P + "/index"): case_index,
     ("GET", P + "/groups"): case_list_groups,
     ("GET", P + "/groups/{group}"): case_get_group,
     ("POST", P + "/groups/{group}"): case_save,

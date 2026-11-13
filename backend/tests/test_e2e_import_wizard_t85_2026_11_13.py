@@ -72,7 +72,7 @@ def test_customers_flow_preview_commit_and_result(live_server, make_user, new_pa
     assert page.get_by_test_id("iw-ubn-ack").is_visible()
     assert page.get_by_test_id("iw-commit").is_disabled()
     page.get_by_test_id("iw-ubn-ack-box").check()
-    assert page.get_by_test_id("iw-commit").is_enabled()
+    page.wait_for_function("() => { const b = document.querySelector('[data-testid=\"iw-commit\"]'); return b && !b.disabled }", timeout=10000)
     page.get_by_test_id("iw-commit").click()
     page.get_by_test_id("iw-result").wait_for(state="visible", timeout=15000)
     assert "新增 2 筆" in page.get_by_test_id("iw-result-summary").inner_text()
