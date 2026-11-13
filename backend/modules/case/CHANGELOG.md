@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — fix/superadmin-approver-edit-entry（報價單表單 V3.45）；併入 fix/unlock-edit-keep-requester（解鎖編輯保留送審人）
+## (next) — fix/superadmin-approver-edit-entry（報價單表單 V3.45）；併入 fix/unlock-edit-keep-requester（解鎖編輯保留送審人；簽核卡顯示修改人）
 - 修正：最高管理者開著待審核／簽核中的報價單（尤其同時是當層簽核人）原本完全沒有編輯入口；工具列補上「解鎖編輯」（tooltip 說明存檔後整條簽核會重跑），解鎖後欄位真的可編輯，「重新鎖定」「取消解鎖」真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。只改 `quotation-form.html`＋測試，不改後端權限（unlock-edit 本來就允許最高管理者）。
 - 修正（解鎖編輯保留送審人；使用者裁示）：最高管理者解鎖編輯存檔時，`approval.requestedBy` 維持**原送審人**，改內容的人另記 `approval.editedBy`（`quotations.py` 解鎖段）；重建簽核鏈時原送審人與改內容的人都不在簽核層裡（`_exclude_requester`；無簽核層時 `check_no_tier_self_approval` 也擋 `editedBy`），所以原送審人不會變成能簽自己的單、改內容的人不簽自己改的內容；沒有原送審紀錄的舊單退回舊行為（送審人記為改內容的人）。原送審人因此可以「收回草稿」（以前被換成最高管理者而 403）。
 - 新增：被清掉的已簽簽核人收到通知「內容已被修改，請重新簽核」——站內通知＋信件（新信件類型 `approval_content_edited`，登記在 `quote_edit_notify.py`，自動併入個人通知偏好；LINE 在「報價單與簽核」群組、預設關），**預設只發給本人**，信內不放金額。`editHistory` 與稽核（`quotation.unlock_edit`）記：誰改的、原送審人、清掉哪幾層（層號＋帳號）。解鎖確認彈窗改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」。
