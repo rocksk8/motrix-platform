@@ -14,6 +14,7 @@ import io
 import json
 
 import openpyxl
+from tests._settings_activate import activate_now  # noqa: E402
 
 
 def _login(client, username, password):
@@ -110,6 +111,15 @@ def test_t100_export_config_defaults_blank_and_superadmin_only_write(client, mak
     )
     assert r2.status_code == 403, r2.text
 
+    import db                                           # S5：T100 設定存檔時科目代號必須存在於科目表（新規則）⇒ 先備好這幾個科目
+    conn = db.get_db()
+    try:
+        for code in ("1101", "4101", "2191", "6101", "5109"):
+            conn.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
+                         " VALUES (?, 4, ?, '', 'custom', 1)", (code, "測試科目" + code))
+        conn.commit()
+    finally:
+        conn.close()
     r3 = client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
         json={"bankAccounts": [{"name": "第一銀行", "acctCode": "1101"}],
@@ -118,6 +128,7 @@ def test_t100_export_config_defaults_blank_and_superadmin_only_write(client, mak
               "inventoryExpenseAccounts": {"其他": "5109"}},
     )
     assert r3.status_code == 200, r3.text
+    activate_now("t100_export")                         # S5：科目設定改成待生效（等待期滿＋核准）；測試模擬已生效
 
     r4 = client.get("/api/settings/t100-export-config", headers=_auth(token))
     assert r4.json()["bankAccounts"] == [{"name": "第一銀行", "acctCode": "1101"}]

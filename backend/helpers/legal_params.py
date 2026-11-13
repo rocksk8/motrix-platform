@@ -418,22 +418,22 @@ def _backfill(v: dict) -> dict:
     return v
 
 
+def load_versions_raw(conn) -> list:
+    """舊儲存裡的版本表（含舊鍵 `tax_rules` 的相容與程式預設）。**不經登錄表**：轉接器 `read` 與每日對帳用。"""
+    from helpers.settings_groups_external import tax_read
+    return tax_read(conn)["versions"]
+
+
 def load_versions() -> list:
-    from helpers.settings import _get_setting
-    stored = _get_setting(VERSIONS_KEY, None)
-    if isinstance(stored, list) and stored:
-        return [_backfill(v) for v in sort_versions(stored)]
-    legacy = _get_setting(LEGACY_KEY, None)
-    if isinstance(legacy, dict) and legacy:
-        v = copy.deepcopy(legacy)
-        v.setdefault("version", "2026")
-        v.setdefault("effectiveFrom", LEGACY_EFFECTIVE_FROM)
-        if "sources" not in v:
-            v["sources"] = copy.deepcopy(DEFAULT_TAX_RULE_VERSIONS[0]["sources"])
-        return [_backfill(v)]
-    return sort_versions(DEFAULT_TAX_RULE_VERSIONS)
-
-
-def save_versions(versions) -> None:
-    from helpers.settings import _set_setting
-    _set_setting(VERSIONS_KEY, sort_versions(versions))
+    """目前生效的版本表（設定群組 `tax_rules` 的生效值，含已到時的待生效版本；忽略 DEFAULTS_ONLY）。
+    登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。寫入只走 `settings_registry.publish("tax_rules", …)`（舊端點也是）。"""
+    from db import get_db
+    conn = get_db()
+    try:
+        try:
+            from helpers import settings_registry as sr
+            return [_backfill(v) for v in sort_versions(sr.get_group_effective("tax_rules", conn=conn)["versions"])]
+        except Exception:                           # noqa: BLE001
+            return load_versions_raw(conn)
+    finally:
+        conn.close()

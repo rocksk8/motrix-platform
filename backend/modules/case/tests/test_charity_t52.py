@@ -9,6 +9,7 @@ import json
 import pytest
 
 import db
+from tests._settings_activate import activate_now
 from modules.case import settlement_actuals as SA
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W  # noqa: F401
 from modules.case.tests.test_settlement_actuals_2026_10_03 import _get  # noqa: F401
@@ -209,15 +210,24 @@ def test_charity_mode_switch_conditions_and_forced_revert(client, who):
     assert put(su, charityMode="total", confirm=True).status_code == 409, "沒有公益遷移完成標記"
     _set("charity_migration_done", {"doneAt": "y"})
     assert put(su, charityMode="total", confirm=True).status_code == 200
+    activate_now("overhead_basis")                       # S5：口徑改成待生效（等待期滿＋核准）；測試模擬已生效
     assert client.get("/api/overhead/settings", headers=su).json()["charityBasis"] == "total"
-    assert any("公益基數" in json.dumps(a, ensure_ascii=False) for a in _audits("settings.overhead.update"))
+    assert _audits("settings.overhead_basis.pending"), "S5：公益基數切換由設定群組 overhead_basis 記稽核（待生效）"
     # 管銷退回 legacy ⇒ 公益基數強制退回 direct 並移除標記
     assert put(su, ruleMode="legacy").status_code == 200
+    activate_now("overhead_basis")
     j = client.get("/api/overhead/settings", headers=su).json()
     assert j["charityBasis"] == "direct" and j["charityMode"] == "direct" and j["charityMigrationDone"] is False
     # 單獨切回 direct 也會移除標記
-    _all_on()
+    # S5：生效值在設定群組裡——要正規走一遍（遷移標記是離線工具寫的原始鍵，這裡照樣直接寫）
+    _set("overhead_migration_done", {"doneAt": "2026-10-09T00:00:00"})
+    assert put(su, ruleMode="v2", confirm=True).status_code == 200
+    activate_now("overhead_basis")
+    _set("charity_migration_done", {"doneAt": "2026-10-10T00:00:00"})
+    assert put(su, charityMode="total", confirm=True).status_code == 200
+    activate_now("overhead_basis")
     assert put(su, charityMode="direct").status_code == 200
+    activate_now("overhead_basis")
     assert client.get("/api/overhead/settings", headers=su).json()["charityMigrationDone"] is False
 
 

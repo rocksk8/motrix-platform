@@ -17,6 +17,7 @@ from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
 from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 from core import source_tree
+from tests._settings_activate import activate_now  # noqa: E402  S5：舊端點改走待生效，測試模擬「核准＋等待期滿」
 
 ACCOUNTS = "/api/bonus/cases/voucher-accounts"
 
@@ -254,6 +255,7 @@ def test_the_configured_account_is_used(client, people):
     finally:
         conn.close()
     assert client.put(ACCOUNTS, headers=_auth(people["bc_sa"]), json={"payable": "21918"}).status_code == 200
+    activate_now("bonus_voucher")                                       # S5：科目改成待生效（等待期滿＋核准）；測試模擬已生效
     _to_payout(client, people, "MQ-AC3-030")
     v = _voucher(_award("MQ-AC3-030")["accrual_voucher_id"])
     assert v["lines"][1]["account_code"] == "21918"
@@ -270,6 +272,7 @@ def test_a_saved_account_later_disabled_means_no_voucher_and_a_notice(client, pe
     finally:
         conn.close()
     assert client.put(ACCOUNTS, headers=_auth(people["bc_sa"]), json={"payable": "21917"}).status_code == 200
+    activate_now("bonus_voucher")                                       # S5：科目改成待生效；測試模擬已生效
     conn = _db()
     try:
         conn.execute("UPDATE account_items SET is_active=0 WHERE code='21917'")

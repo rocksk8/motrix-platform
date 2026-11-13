@@ -18,6 +18,7 @@ from datetime import date
 from fractions import Fraction
 
 import pytest
+from tests._settings_activate import activate_now  # noqa: E402  S5：舊端點改走待生效，測試模擬「核准＋等待期滿」
 
 from helpers import legal_params as lp
 from helpers import privacy_notice as pn
@@ -196,6 +197,7 @@ def test_editing_uses_the_snapshot_even_if_its_future_version_was_changed(client
     h = _hdr(client, make_user)
     r = client.put("/api/legal-params/tax-rules", json={"versions": lp.load_versions() + [_v2027()]}, headers=h)
     assert r.status_code == 200, r.text
+    activate_now("tax_rules")                                                             # S5：待生效 ⇒ 測試模擬已生效
     r = client.post("/api/payslips", json={"data": _data(31000, "50", "2027-01-05")}, headers=h)
     assert r.status_code == 201 and r.json()["calc"]["nhiSupplement"] == 654, r.text     # 31,000 ≥ 30,900
     no = r.json()["slip_no"]
@@ -205,6 +207,7 @@ def test_editing_uses_the_snapshot_even_if_its_future_version_was_changed(client
     v27["nhi"]["thresholds"]["50"] = 32000
     r = client.put("/api/legal-params/tax-rules", json={"versions": vs}, headers=h)
     assert r.status_code == 200, r.text                                                   # 未生效 ⇒ 可以改
+    activate_now("tax_rules")
     r = client.put("/api/payslips/" + no, json={"data": _data(31000, "50", "2027-01-05")}, headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["calc"]["nhiSupplement"] == 654, "沒勾重算 ⇒ 沿用快照（門檻 30,900），不是改過的 2027 版"

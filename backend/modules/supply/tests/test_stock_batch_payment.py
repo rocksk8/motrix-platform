@@ -140,12 +140,24 @@ def test_stock_batch_flows_into_t100_export_and_can_be_confirmed(client, make_us
     username, password = make_user(username="stk_admin5", role="superadmin")
     token = _login(client, username, password)
 
-    client.put(
+    import db                                           # S5：T100 設定存檔時科目代號必須存在於科目表 ⇒ 先備好；存檔後模擬已生效
+    from tests._settings_activate import activate_now
+    _c = db.get_db()
+    try:
+        for _code in ("4101", "2191", "6101", "5101"):
+            _c.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
+                       " VALUES (?, 4, ?, '', 'custom', 1)", (_code, "測試科目" + _code))
+        _c.commit()
+    finally:
+        _c.close()
+    _r = client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
         json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
               "contractorExpenseAccount": "6101",
               "inventoryExpenseAccounts": {"其他": "5101"}},
     )
+    assert _r.status_code == 200, _r.text
+    activate_now("t100_export")
 
     _make_part(client, token, "STK-P5")
     supplier_id = _make_supplier(client, token, "測試供應商C")

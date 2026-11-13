@@ -15,6 +15,7 @@ import copy
 from datetime import date
 
 import pytest
+from tests._settings_activate import activate_now  # noqa: E402  S5：舊端點改走待生效，測試模擬「核准＋等待期滿」
 
 from helpers import legal_params as lp
 
@@ -42,7 +43,10 @@ def frozen_today(monkeypatch):
 
 
 def _put_versions(client, h, versions):
-    return client.put("/api/legal-params/tax-rules", json={"versions": versions}, headers=h)
+    r = client.put("/api/legal-params/tax-rules", json={"versions": versions}, headers=h)
+    if r.status_code == 200:
+        activate_now("tax_rules")                       # S5：法規參數改成待生效（等待期滿＋核准）；測試模擬已生效
+    return r
 
 
 def _add_2027(client, h):

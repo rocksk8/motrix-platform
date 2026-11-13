@@ -24,12 +24,23 @@ def test_default_bank_account_config_field(client, make_user):
     r0 = client.get("/api/settings/t100-export-config", headers=_auth(token))
     assert r0.json()["defaultBankAccountCode"] == ""
 
+    import db                                           # S5：T100 設定存檔時科目代號必須存在於科目表 ⇒ 先備好；存檔後模擬已生效
+    from tests._settings_activate import activate_now
+    _c = db.get_db()
+    try:
+        for _code in ("1101",):
+            _c.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
+                       " VALUES (?, 4, ?, '', 'custom', 1)", (_code, "測試科目" + _code))
+        _c.commit()
+    finally:
+        _c.close()
     r1 = client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
         json={"bankAccounts": [{"name": "主要帳戶", "acctCode": "1101"}],
               "defaultBankAccountCode": "1101"},
     )
     assert r1.status_code == 200, r1.text
+    activate_now("t100_export")
 
     r2 = client.get("/api/settings/t100-export-config", headers=_auth(token))
     assert r2.json()["defaultBankAccountCode"] == "1101"
