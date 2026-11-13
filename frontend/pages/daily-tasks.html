@@ -8,6 +8,7 @@
   <title>每日工作事項 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -814,6 +815,14 @@
           新增工作事項
         </button>
       </div>
+    </template>
+
+    <!-- 一條龍 P4a（旗標 onepipe.entry_unify，預設關）：現場人員新增「掛在案件上、指派給自己」的事項；改／刪仍限最高管理者 -->
+    <template x-if="session?.role !== 'superadmin' && selfCreate">
+      <button class="dt-bar-act dt-bar-act-add" data-testid="dt-self-add" @click="openSelfCreate()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        新增我的案件事項
+      </button>
     </template>
 
     <!-- 更多：回報彙整／月曆總覽／看板／解鎖管理視角（原本各是一顆彩色按鈕，動作與行為不變） -->
@@ -2340,6 +2349,46 @@
   </div>
 </div>
 
+<!-- ══ 現場人員自建案件事項（一條龍 P4a）══ -->
+<div x-show="showSelfModal" x-cloak class="dt-modal-wrap" data-testid="dt-self-modal"
+     @click.self="showSelfModal=false" @keydown.escape.window="showSelfModal=false">
+  <div class="dt-modal">
+    <div class="dt-modal-head">
+      <div class="dt-modal-title">新增我的案件事項</div>
+      <button class="dt-modal-close" @click="showSelfModal=false">&#215;</button>
+    </div>
+    <div class="dt-modal-body">
+      <p class="dt-field-note">這筆事項會掛在你選的案件上、指派給你自己；只有你看得到。建立後如要修改或刪除，請找最高管理者。</p>
+      <div class="dt-field">
+        <label class="dt-field-label">日期 <span class="req">*</span></label>
+        <input type="date" x-model="selfForm.task_date" class="dt-input" data-testid="dt-self-date">
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">關聯案件 <span class="req">*</span></label>
+        <select x-model="selfForm.case_no" class="dt-input" data-testid="dt-self-case" :disabled="!!casesNotice">
+          <option value="">— 請選擇案件 —</option>
+          <template x-for="c in activeCases" :key="c.quoteNo">
+            <option :value="c.quoteNo" x-text="c.quoteNo + '　' + c.customer + (c.projectName ? '　' + c.projectName : '')"></option>
+          </template>
+        </select>
+        <p class="dt-field-note" x-show="casesNotice" x-text="casesNotice"></p>
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">事項標題 <span class="req">*</span></label>
+        <input type="text" x-model="selfForm.title" class="dt-input" data-testid="dt-self-title" placeholder="例：到場確認設備位置">
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">說明</label>
+        <textarea x-model="selfForm.description" rows="3" class="dt-input" style="resize:vertical;min-height:64px"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+        <button type="button" class="dt-bar-act" @click="showSelfModal=false">取消</button>
+        <button type="button" class="dt-bar-act dt-bar-act-add" data-testid="dt-self-save" :disabled="savingSelf" @click="saveSelfForm()">建立</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ Create / Edit Modal ══ -->
 <div x-show="showModal" x-cloak class="dt-modal-wrap"
      @click.self="showModal=false" @keydown.escape.window="showModal=false">
@@ -2600,6 +2649,8 @@ function app() {
     reportFilterPerson: '',
 
     activeCases: [],
+    selfCreate: false, showSelfModal: false, savingSelf: false,   // 一條龍 P4a
+    selfForm: { task_date: '', title: '', description: '', case_no: '' },
     casesNotice: '',   // M01 不在（/api/sales-orders 404）⇒ 說出原因，不是「沒有已成案的案件」（M01-PLAN §5 ④ SO）
 
     showModal:  false,
@@ -2659,6 +2710,7 @@ function app() {
           }
         }
       }
+      if (window.MotrixOnepipe) window.MotrixOnepipe.flags().then(f => { this.selfCreate = !!f.entryUnify })
       await this.loadTasks()
       this.loadActiveCases()
       // 桌機版預設開啟日曆視圖
@@ -3026,6 +3078,34 @@ function app() {
       }
       if (this.users.length === 0) this.loadUsers()
       this.showModal = true
+    },
+
+    // 一條龍 P4a：現場人員新增掛案件、指派給自己的單次事項（伺服器再驗一次；旗標關時按鈕不出現）
+    openSelfCreate() {
+      this.selfForm = { task_date: MotrixDate.today(), title: '', description: '', case_no: '' }
+      this.showSelfModal = true
+    },
+    async saveSelfForm() {
+      const f = this.selfForm
+      if (!f.case_no)        { alert('請選擇關聯案件'); return }
+      if (!f.title.trim())   { alert('請填寫事項標題'); return }
+      if (!f.task_date)      { alert('請選擇日期'); return }
+      this.savingSelf = true
+      try {
+        const r = await fetch(`${API}/daily-tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', Authorization:'Bearer '+this.session.token },
+          body: JSON.stringify({ task_date: f.task_date, title: f.title.trim(), description: f.description || '', case_no: f.case_no,
+                                 assigned_to: [this.session.username], supervisors: [], recurrence_type: 'once' })
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(()=>({}))
+          alert('建立失敗：' + (e.detail || '未知錯誤')); return
+        }
+        this.showSelfModal = false
+        this.toast('事項已建立')
+        await this.loadTasks()
+      } finally { this.savingSelf = false }
     },
 
     openEdit() {

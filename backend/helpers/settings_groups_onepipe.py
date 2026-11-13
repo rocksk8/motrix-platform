@@ -8,7 +8,8 @@
       worklog_case            P0b 工作日誌可選案件（本檔）
       warranty_closed_notify  P0d 保固到期通知納入已結案案件（本檔）
       links／ship_install_ok／timeline  P0a／P0c／P1'（hichan-1 的班次接著加在下面的清單裡）
-[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py
+      entry_unify             P4 現場人員自建案件每日事項（hichan-1，D5＝A）
+[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py
 """
 
 
@@ -47,6 +48,12 @@ def _register(S, _register_core):
               help="開啟後，案件頁多一個「物料流程」入口，打開後用一條時間軸顯示這個案件的材料申請、採購、到貨、出貨、設備與保固目前走到哪。畫面只讀，只顯示現在算得出來的部分；看得到哪些案件、金額看不看得到，都跟現在的權限一樣。",
               impact="只多一個唯讀畫面，不改任何資料或權限；沒有金額檢視權的人看不到金額。關閉後入口消失，畫面與今天相同。立即生效，可隨時改回。",
               choices=[(0, "關閉（預設）", "案件頁沒有物料流程入口，與今天完全相同。"), (1, "開啟", "案件頁多一個唯讀的物料流程畫面。")]),
+            S("entry_unify", "int", 0, min=0, max=1, risk="ops", recommended=0,
+              question="要讓現場人員自己新增「掛在案件上、指派給自己」的每日工作事項嗎？", label="現場人員自建案件工作事項",
+              help="現在只有最高管理者能新增每日工作事項。開啟後，有「每日工作事項」權限的同仁可以新增事項，但限定：一定要掛在自己看得到的案件上、只能指派給自己、只能是單次事項。"
+                   "事項只有本人看得到（與今天被指派的事項一樣）；修改與刪除仍然只有最高管理者。",
+              impact="只放寬「新增」這一個動作，範圍限縮在自己的案件與自己身上；不改既有事項、不改誰看得到事項。關閉後同仁又不能新增，已建立的事項保留。立即生效，可隨時改回。",
+              choices=[(0, "關閉（預設）", "只有最高管理者能新增每日工作事項，與今天完全相同。"), (1, "開啟", "現場人員可新增掛案件、指派給自己的單次事項。")]),
         ],
         sensitive=False, risk="ops",
         help="物料流程一條龍各批次的開關；預設全部關閉，關閉就和今天完全相同。",

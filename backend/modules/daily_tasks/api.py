@@ -413,12 +413,45 @@ def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authoriz
     return t
 
 
+_STAFF_SELF_DENIED = "僅最高管理者可建立工作事項"
+
+
+def _check_staff_self_create(user: dict, body: "DailyTaskIn") -> None:
+    """一條龍 P4a（D5＝A）：旗標 `onepipe.entry_unify` 開時，非最高管理者可建立「掛在自己看得到的案件上、指派給自己」的單次事項。
+
+    旗標關、或任何一項不符 ⇒ 403（旗標關時訊息與今天逐字相同）；案件看不到 ⇒ 同案件端點的 404（不洩漏案件存在）。
+    只擋「新增」：修改、刪除維持最高管理者（裁示 D5）。誰看得到這筆事項不變（`_user_filter_sql`：被指派者本人＋主管）。
+    """
+    from helpers import onepipe_flags
+    if not onepipe_flags.flag_on("entry_unify"):
+        raise HTTPException(403, _STAFF_SELF_DENIED)
+    case_no = (body.case_no or "").strip()
+    if not case_no:
+        raise HTTPException(403, "現場人員新增工作事項時，須掛在一個案件上")
+    others = [u for u in (body.assigned_to or []) if u != user["username"]]
+    if others or (body.supervisors or []):
+        raise HTTPException(403, "現場人員只能把工作事項指派給自己，不能指派他人或指定主管")
+    if (body.recurrence_type or "once") != "once":
+        raise HTTPException(403, "現場人員新增的工作事項只能是單次事項")
+    from helpers import case_access
+    if not case_access.case_module_present():
+        raise HTTPException(403, "案件模組未安裝：現場人員無法新增掛案件的工作事項")
+    conn = get_db()
+    try:
+        q = conn.execute("SELECT data_json, sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?", (case_no,)).fetchone()
+        case_access.require_case(user, q, case_no)
+    finally:
+        conn.close()
+
+
 @router.post("/api/daily-tasks", status_code=201)
 def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
-    if user["role"] != "superadmin":
-        raise HTTPException(403, "僅最高管理者可建立工作事項")
+    staff_self = user["role"] != "superadmin"
+    if staff_self:
+        _check_staff_self_create(user, body)        # 一條龍 P4a（D5＝A）：旗標關 ⇒ 與以前相同的 403
+        body.assigned_to = [user["username"]]
     if not body.title.strip():
         raise HTTPException(400, "工作事項標題不可為空")
     if not body.task_date:
@@ -453,8 +486,8 @@ def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), "daily_task.create", "daily_task", str(task_id),
-           f"{body.task_date} {body.title}")
-    if body.assigned_to:
+           f"{body.task_date} {body.title}" + (f"（現場自建，案件 {body.case_no}）" if staff_self else ""))
+    if body.assigned_to and not staff_self:             # 現場人員自建（指派給自己）不需通知自己
         for u in body.assigned_to:
             _notify(u, "daily_task", str(task_id), body.title,
                     f"已指派工作事項給您：{body.title}（{body.task_date}）")

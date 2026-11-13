@@ -3,6 +3,7 @@
 ## (next) — 2026-11-13（onepipe；物料流程一條龍）
 - 新增（設定中心）：群組 `onepipe`（`helpers/settings_groups_onepipe.py`，拆檔同 lodging_freshness）——各批次共用的開關，欄位皆 0／1、預設 0（關＝與今天逐位元相同）：`worklog_case`（P0b 工作日誌可選案件）、`warranty_closed_notify`（P0d 保固到期通知納入已結案案件）。P0a／P0c／P1' 的欄位 `links`（案件與採購的快速入口、出貨單通知連結）、`ship_install_ok`（同案先出貨後登載設備不再序號衝突）、`timeline`（案件物料流程時間軸）亦在同一份清單，預設 0。
 - L1（新增，只增；快照已文字插入、版號由列車 `core_bump.py --pending` 定）：`helpers.email_notify.shipping_link(note_no)`——出貨單通知要開的頁面（一條龍 P0a；旗標 `onepipe.links` 關、查不到案號或任何錯誤 ⇒ 空字串，呼叫端維持原本的值）；出貨單的四種信件與站內通知使用。
+- 新增（設定中心，`onepipe` 群組欄位）：`entry_unify`（P4a 現場人員自建案件每日事項；預設 0＝與今天逐位元相同）。L1 公開介面不變。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
