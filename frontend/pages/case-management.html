@@ -2177,7 +2177,7 @@
                       <div x-show="canFinanceRole()" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
                         <template x-if="v.status==='草稿'">
                           <span style="display:flex;gap:6px">
-                            <button @click="submitInvoiceVoucher(v)" style="padding:3px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
+                            <button @click="submitInvoiceVoucher(v)" style="padding:3px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出簽核</button>
                             <button @click="deleteInvoiceVoucher(v)" style="padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                           </span>
                         </template>
@@ -3367,7 +3367,7 @@
                       <!-- 草稿操作 -->
                       <div x-show="n.status==='草稿' && ['superadmin','admin'].includes(session.role)" style="display:flex;gap:6px">
                         <button @click="openEditShippingNote(n)" style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer">編輯</button>
-                        <button @click="submitShippingNote(n)" style="padding:4px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
+                        <button @click="submitShippingNote(n)" style="padding:4px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出簽核</button>
                         <button @click="deleteShippingNote(n)" style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                       </div>
 
