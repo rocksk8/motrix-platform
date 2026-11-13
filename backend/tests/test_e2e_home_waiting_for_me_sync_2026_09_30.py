@@ -27,7 +27,8 @@ def test_home_count_list_and_badge_agree_and_follow_approval(live_server, make_u
     assert client.get("/api/approval-queue/count", headers=h).json()["count"] == 2
     r = client.post("/api/quotations/MQ-W2H-001/approve", headers=h, json={})
     assert r.status_code == 200, r.text[:300]
-    page.evaluate("() => window.dispatchEvent(new Event('focus'))")
-    page.wait_for_function("() => document.querySelectorAll('[data-testid=home-mine-row]').length === 1", timeout=10000)
+    # 首頁的 focus 監聽在 init() 讀完統計之後才掛（清單列出現時可能還沒掛）⇒ 只丟一次 focus 偶爾落空（單獨重跑約 1/4 紅）。
+    # 改成每 500 ms 丟一次再檢查（首頁自己 300 ms 內去重、同時只飛一趟）；要驗的是「簽核之後回到首頁會跟著變」，不是監聽掛上的先後。
+    page.wait_for_function("() => { window.dispatchEvent(new Event('focus')); return document.querySelectorAll('[data-testid=home-mine-row]').length === 1 }", polling=500, timeout=15000)
     assert page.locator('.h-band__c .h-band__n').first.inner_text().strip() == "1"
     assert client.get("/api/approval-queue/count", headers=h).json()["count"] == 1
