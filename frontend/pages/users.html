@@ -283,7 +283,7 @@
           <div x-show="batch.result" style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;gap:10px" data-testid="batch-result">
             <span x-text="'已套用：變更 ' + (batch.result ? batch.result.applied.length : 0) + ' 位。'"></span>
             <button class="btn btn-ghost btn-sm" :disabled="batch.undoBusy" @click="batchUndo()" data-testid="batch-undo">復原這一批</button>
-            <span style="color:var(--text-dim)">被別人改過的人不會被復原。</span>
+            <span style="color:var(--text-dim)">被其他使用者改過的人不會被復原。</span>
           </div>
           <div x-show="batch.undoMsg" style="font-size:12px;color:var(--text-dim)" x-text="batch.undoMsg" data-testid="batch-undo-msg"></div>
 
@@ -1528,7 +1528,7 @@
         await this.loadUsers()
         this.closeModal()
         if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
-        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁還沒有歸屬部門（請看上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
+        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁尚無歸屬部門（請看上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
       },
 
       async toggleActive(user) {

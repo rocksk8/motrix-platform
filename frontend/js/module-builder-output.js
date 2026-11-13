@@ -210,7 +210,7 @@
             var r = await this.api('POST', this.defUrl() + '/publish', pub)
             if (r.status === 409 && r.data && r.data.code === 'draft_conflict') {
               this.conflict = r.data.current || {}; this.conflictHeld = false; this.saveState = 'conflict'
-              this.errMsg = '未發布：草稿在您載入之後被別人改過，請先處理上方的提示'
+              this.errMsg = '未發布：草稿在您載入之後被其他使用者改過，請先處理上方的提示'
               return
             }
             if (r.status === 422) {

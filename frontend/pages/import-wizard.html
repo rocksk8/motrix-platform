@@ -60,7 +60,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">匯入精靈</h1>
-          <p class="pg__s">把原本的客戶、料號、員工資料搬進來：下載範本、填好、上傳，先看預覽，確認沒問題才真的寫入。</p>
+          <p class="pg__s">將既有的客戶、料號、員工資料匯入：下載範本、填好、上傳，先看預覽，確認無誤後才實際寫入。</p>
         </div>
       </div>
 
@@ -220,7 +220,7 @@
           </div>
           <div class="iw-card" data-testid="iw-credentials" x-show="credentials.length">
             <b>臨時密碼（只顯示這一次）</b>
-            <div class="iw-warn">請現在就複製或下載，交給同仁本人。離開或重新整理後就看不到了；如果這個畫面沒顯示完整就離開，請不要重新匯入，到「帳號」頁替同仁重設密碼。同仁第一次登入必須改密碼。</div>
+            <div class="iw-warn">請立即複製或下載，交給同仁本人。離開或重新整理後就看不到了；如果這個畫面沒顯示完整就離開，請不要重新匯入，到「帳號」頁替同仁重設密碼。同仁第一次登入必須改密碼。</div>
             <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th>臨時密碼</th></tr></thead>
               <tbody><template x-for="c in credentials" :key="c.username + ':' + c.password"><tr><td x-text="c.username"></td><td x-text="c.displayName"></td><td class="iw-pw" x-text="c.password"></td></tr></template></tbody></table>
             <div class="iw-row">

@@ -80,7 +80,7 @@
       itemLine(key, it) {
         const e = (v) => this._esc(v)
         if (key === 'call') return '<b>' + e(it.docCode) + '</b> ' + e(it.name) + '（' + e(it.status) + '）'
-        if (key === 'arrive') return '<b>' + e(it.docCode) + '</b> ' + e(it.name) + '：' + (it.arrived ? '已到貨 ' + e(it.receivedOn) : '還沒到')
+        if (key === 'arrive') return '<b>' + e(it.docCode) + '</b> ' + e(it.name) + '：' + (it.arrived ? '已到貨 ' + e(it.receivedOn) : '尚未到')
         if (key === 'purchase') return '<b>' + e(it.kindLabel) + ' ' + e(it.docCode) + '</b>（' + e(it.status) + (it.date ? '，' + e(it.date) : '') + '）'
         if (key === 'ship') return '<b>' + e(it.noteNo) + '</b>（' + e(it.status) + (it.shipDate ? '，' + e(it.shipDate) : '') + (it.signed ? '，已回簽' : '') + '）'
         if (key === 'stock') return '<b>' + e(it.partNo || '（未填料號）') + '</b>：已安裝 ' + e(it.installed) + '、已出貨 ' + e(it.shipped)

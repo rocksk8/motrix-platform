@@ -92,7 +92,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t" id="fc-title">檔案中心</h1>
-          <p class="pg__s">全系統的上傳檔案（報價單回簽、出貨單、發票、傳票附件、勞報單簽回…）。只列出您在原單據頁打得開的檔案。</p>
+          <p class="pg__s">全系統的上傳檔案（報價單回簽、出貨單、發票、傳票附件、勞報單簽回…）。只列出您在原單據頁有權限開啟的檔案。</p>
         </div>
       </div>
 
@@ -162,7 +162,7 @@
             <button class="btn btn-ghost btn-sm" id="fc-prev" :disabled="page <= 1 || loading" @click="go(page - 1)">上一頁</button>
             <span>第 <b x-text="page"></b> 頁</span>
             <button class="btn btn-ghost btn-sm" id="fc-next" :disabled="!hasMore || loading || page >= 20" @click="go(page + 1)">下一頁</button>
-            <span class="fc-note" style="margin:0" x-show="page >= 20 && hasMore">最多翻到第 20 頁；請加條件（關鍵字、日期、類別）縮小範圍。</span>
+            <span class="fc-note" style="margin:0" x-show="page >= 20 && hasMore">最多可瀏覽至第 20 頁；請加條件（關鍵字、日期、類別）縮小範圍。</span>
           </div>
         </section>
       </div>

@@ -193,7 +193,7 @@
             <span style="font-size:12px;color:#B45309;font-weight:500"
                   x-show="totp.recoveryRemaining > 2 && totp.recoveryRemaining <= 4">快用完了，建議現在重新產生。</span>
             <span style="font-size:12px;color:#B91C1C;font-weight:600"
-                  x-show="totp.recoveryRemaining <= 2">⚠️ 用完之後，驗證 App 不在手邊就會登不進來。請立即重新產生。</span>
+                  x-show="totp.recoveryRemaining <= 2">⚠️ 用完之後，驗證 App 不在手邊將無法登入。請立即重新產生。</span>
             <button class="btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px"
                     x-show="!totp.regenerating" @click="totp.regenerating = true">重新產生救援碼</button>
           </div>
@@ -589,7 +589,7 @@
         help: {
           font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
           theme: '只是您自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
-          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選別的就以您的選擇為準。',
+          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選擇其他項目則以您的選擇為準。',
           home_page: '每次登入後第一個看到的頁面（只有您的權限看得到的頁面才會生效）。',
         },
         // 公司設為「關閉」是總開關：個人選什麼都不會讓問候語出現，所以選單停用並說明原因（個人值照舊保留，公司重新開啟後依個人選擇）

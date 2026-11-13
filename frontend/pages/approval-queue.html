@@ -591,7 +591,7 @@
       <aside class="aq-col" id="aq-col-flow">
         <div class="aq-col__head">
           <span class="vm-lamp vm-lamp--idle"></span>
-          <span class="aq-col__title">流程中（等別人）</span>
+          <span class="aq-col__title">流程中（等待他人）</span>
           <span class="aq-col__count" x-text="flowItems.length + ' 件'"></span>
         </div>
 
@@ -2115,7 +2115,7 @@
         <div style="font-size:12px;color:var(--text-dim);line-height:1.9;margin-bottom:14px">
           目前卡在
           <b x-text="(selected?.currentApprovers || []).map(a => a.displayName || a.username).join('、') || '（未指定）'"></b>
-          身上。轉簽只會換掉<b>當層還沒簽的那個人</b>，已經簽過的與後面幾層不動。
+          身上。轉簽只會換掉<b>當層尚未簽的那個人</b>，已經簽過的與後面幾層不動。
         </div>
         <div style="margin-bottom:12px">
           <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">轉給誰 *</label>

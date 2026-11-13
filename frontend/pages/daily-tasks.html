@@ -1051,7 +1051,7 @@
                     <div class="dt-report-text"
                          :class="!reportGetComp(reportSelectedTask(), a.username)?.completed ? 'pending-text' : ''"
                          x-text="reportGetComp(reportSelectedTask(), a.username)?.report
-                           || (reportGetComp(reportSelectedTask(), a.username)?.completed ? '（未填寫回報內容）' : '尚未提交回報')">
+                           || (reportGetComp(reportSelectedTask(), a.username)?.completed ? '（未填寫回報內容）' : '尚未送出回報')">
                     </div>
                   </div>
                 </div>
@@ -1453,7 +1453,7 @@
                             <div class="dt-report-text"
                                  :class="!reportGetComp(reportSelectedTask(),a.username)?.completed?'pending-text':''"
                                  x-text="reportGetComp(reportSelectedTask(),a.username)?.report
-                                   ||(reportGetComp(reportSelectedTask(),a.username)?.completed?'（未填寫回報內容）':'尚未提交回報')">
+                                   ||(reportGetComp(reportSelectedTask(),a.username)?.completed?'（未填寫回報內容）':'尚未送出回報')">
                             </div>
                             <!-- Edit button: own row, already submitted -->
                             <button x-show="a.username===session?.username && reportGetComp(reportSelectedTask(),a.username)?.completed"
@@ -1467,7 +1467,7 @@
                                     class="btn btn-sm btn-ghost" style="margin-top:5px;font-size:12px;color:#15803D;border-color:#BBF7D0;background:#F0FDF4"
                                     @click="calEditTaskId=reportSelected; calEditReport=''">
                               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                              提交回報
+                              送出回報
                             </button>
                           </div>
                           <!-- Inline edit/submit form: own row while editing -->
@@ -2030,7 +2030,7 @@
                     <div class="ag-report"
                          :class="!getCompletion(a.username)?.completed ? 'ag-report-pending' : ''"
                          x-text="getCompletion(a.username)?.report
-                           || (getCompletion(a.username)?.completed ? '（未填寫回報內容）' : '尚未提交回報')">
+                           || (getCompletion(a.username)?.completed ? '（未填寫回報內容）' : '尚未送出回報')">
                     </div>
                   </template>
                 </div>
@@ -2229,7 +2229,7 @@
                                     </div>
                                     <div x-show="c.report" class="dt-hist-report" x-text="c.report"></div>
                                     <div x-show="!c.report && c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">（未填寫回報）</div>
-                                    <div x-show="!c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">尚未提交回報</div>
+                                    <div x-show="!c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">尚未送出回報</div>
                                   </div>
                                 </div>
                               </template>
@@ -2282,7 +2282,7 @@
                             </div>
                             <div x-show="c.report" class="dt-hist-report" x-text="c.report"></div>
                             <div x-show="!c.report && c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">（未填寫回報）</div>
-                            <div x-show="!c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">尚未提交回報</div>
+                            <div x-show="!c.completed" style="font-size:12px;color:var(--text-dim);font-style:italic">尚未送出回報</div>
                           </div>
                         </div>
                       </template>
@@ -2358,7 +2358,7 @@
       <button class="dt-modal-close" @click="showSelfModal=false">&#215;</button>
     </div>
     <div class="dt-modal-body">
-      <p class="dt-field-note">這筆事項會掛在您選的案件上、指派給您自己；只有您看得到。建立後如要修改或刪除，請找最高管理者。</p>
+      <p class="dt-field-note">這筆事項會掛在您選的案件上、指派給您自己；只有您看得到。建立後如要修改或刪除，請洽最高管理者。</p>
       <div class="dt-field">
         <label class="dt-field-label">日期 <span class="req">*</span></label>
         <input type="date" x-model="selfForm.task_date" class="dt-input" data-testid="dt-self-date">
@@ -3111,9 +3111,9 @@ function app() {
         if (r.ok) {
           const d = await r.json()
           this.selfCases = d.items || []
-          this.selfCasesNotice = this.selfCases.length ? '' : '您目前沒有可關聯的進行中案件（只列出您負責或被指派協作的已成案案件）；請找最高管理者建立事項。'
+          this.selfCasesNotice = this.selfCases.length ? '' : '您目前沒有可關聯的進行中案件（只列出您負責或被指派協作的已成案案件）；請洽最高管理者建立事項。'
         } else if (r.status === 404) {
-          this.selfCasesNotice = '這項功能目前沒有開放，或案件模組未安裝；請找最高管理者建立事項。'
+          this.selfCasesNotice = '這項功能目前沒有開放，或案件模組未安裝；請洽最高管理者建立事項。'
         } else if (r.status === 403) {
           this.selfCasesNotice = '您沒有「每日工作事項」的權限，無法新增事項。'
         } else {

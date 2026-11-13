@@ -45,7 +45,7 @@ def test_default_shows_three_kpis_and_empty_hint(live_server, make_user, e2e_bro
     assert not page.locator("[data-testid=kpi-more]").is_visible()
     assert "更多指標" in page.locator("[data-testid=kpi-more-toggle]").inner_text()
     hint = page.locator("[data-testid=reports-empty-hint]")
-    assert hint.is_visible() and "還沒有資料，建立第一張報價單後這裡會出現統計" in hint.inner_text()
+    assert hint.is_visible() and "尚無資料，建立第一張報價單後這裡會出現統計" in hint.inner_text()
     # 展開後，原本的其餘指標都在（含「收支」那組）
     page.click("[data-testid=kpi-more-toggle]")
     page.wait_for_selector("[data-testid=kpi-more]", state="visible")

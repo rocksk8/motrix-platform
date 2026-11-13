@@ -212,7 +212,7 @@
         </div>
 
         <div class="adv" x-show="loaded && session.role === 'superadmin' && settingsLink" data-testid="hub-settings">
-          系統中心要不要列出『您沒有權限使用』的項目？ <a :href="settingsLink && settingsLink.href" data-testid="hub-settings-link">到「<span x-text="settingsLink && settingsLink.title"></span>」調整</a>（預設隱藏；改成顯示需要等確認期間並由另一位最高管理者核准）
+          系統中心是否列出『您沒有權限使用』的項目？ <a :href="settingsLink && settingsLink.href" data-testid="hub-settings-link">到「<span x-text="settingsLink && settingsLink.title"></span>」調整</a>（預設隱藏；改成顯示需要等確認期間並由另一位最高管理者核准）
         </div>
 
         <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">您目前沒有可用的系統功能。</div>

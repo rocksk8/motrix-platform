@@ -130,7 +130,7 @@
     if (f.when.length > 3) out.push('條件最多 3 條')
     var seen = {}
     f.when.forEach(function (c) {
-      if (!c.field) { out.push('有一條條件還沒選欄位'); return }
+      if (!c.field) { out.push('有一條條件尚未選欄位'); return }
       if (seen[c.field]) out.push('同一個欄位只能設一條條件（' + c.field + '）')
       seen[c.field] = 1
       var vals = c.picked ? c.picked : splitValues(c.values)
@@ -180,7 +180,7 @@
     return '有一項變更待第二位最高管理者核准（目前 ' + a + '/' + need + ' 位核准）；核准前不會生效。'
   }
   function statusText(it) {
-    if (!it.published) return '還沒發布（只有草稿）'
+    if (!it.published) return '尚未發布（只有草稿）'
     if (!it.enabled) return '已停用'
     return it.hasDraft ? '使用中（另有未發布的修改）' : '使用中'
   }
@@ -311,7 +311,7 @@
   function listView() {
     var box = el('div', { 'data-role': 'list' })
     if (st.pendingError) box.appendChild(el('div', { 'data-role': 'pending-error', text: '無法讀取待核准狀態：清單上沒有顯示的「待核准」不代表真的沒有，請到「版本與還原」的待核准變更分頁確認。', style: 'font-size:12px;color:#b91c1c;margin:4px 0' }))
-    if (!st.list.length) box.appendChild(el('div', { text: '還沒有額外通知。按「新增通知」建立第一個。', style: 'font-size:12px;color:var(--text-dim,#888);margin:6px 0' }))
+    if (!st.list.length) box.appendChild(el('div', { text: '尚無額外通知。按「新增通知」建立第一個。', style: 'font-size:12px;color:var(--text-dim,#888);margin:6px 0' }))
     st.list.forEach(function (it) {
       var ev = eventOf(it.event)
       box.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-light,#eee)', 'data-role': 'item' }, [
@@ -449,7 +449,7 @@
       st.open = !st.open; if (st.open && !st.list.length && !st.f) { loadList() } else { render() } } }))
     if (!st.open || !st.cat) return
     var panel = el('div', { style: 'margin-top:6px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:760px' })
-    panel.appendChild(el('div', { text: '額外通知：當指定的事情發生時，額外通知您選的人。內建的通知與信件不受影響、也不能在這裡關掉。', style: 'font-size:12px;margin-bottom:6px' }))
+    panel.appendChild(el('div', { text: '額外通知：當指定的事情發生時，額外通知您選的人。內建的通知與信件不受影響、也無法在此處關閉。', style: 'font-size:12px;margin-bottom:6px' }))
     panel.appendChild(st.f ? formView() : listView())
     if (st.msg) panel.appendChild(el('div', { text: st.msg, 'data-role': 'msg', style: 'margin-top:6px;font-size:12px;color:' + (st.msgBad ? '#b91c1c' : 'inherit') }))
     root.appendChild(panel)

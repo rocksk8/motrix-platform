@@ -43,7 +43,7 @@
 
       <div class="mb-err" id="mb-error" x-show="errMsg" x-text="errMsg"></div>
       <div class="mb-err" id="mb-conflict" x-show="conflict" x-cloak role="alert" data-testid="mb-conflict">
-        <b>別人剛改過這份草稿</b>（<span data-testid="mb-conflict-who" x-text="conflictWho()"></span>）。自動存檔已停止，您這邊未存的修改還在畫面上。
+        <b>其他使用者剛改過這份草稿</b>（<span data-testid="mb-conflict-who" x-text="conflictWho()"></span>）。自動存檔已停止，您這邊未存的修改還在畫面上。
         <span x-show="!conflictHeld">
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
@@ -87,7 +87,7 @@
           <div class="mb-bad" x-show="keyErr" x-text="keyErr"></div>
           <!-- 缺口 #5：全部模組（含只有草稿、從未發布的），GET /api/definitions/custom_module -->
           <div style="margin-top:14px" id="mb-module-list" :data-loaded="defsLoaded ? '1' : '0'">
-            <div class="mb-hint" x-show="defsLoaded && !defs.length">還沒有任何自訂模組</div>
+            <div class="mb-hint" x-show="defsLoaded && !defs.length">尚無任何自訂模組</div>
             <table class="mb-table" x-show="defs.length">
               <thead><tr><th>代號</th><th>名稱</th><th>最新發布</th><th>草稿</th><th>更新時間</th><th></th></tr></thead>
               <tbody>

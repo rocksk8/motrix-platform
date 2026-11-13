@@ -199,7 +199,7 @@
         <div x-show="isNew" data-testid="ps-person-dispatch-box" style="margin-bottom:10px">
           <div x-show="q.contractorId && personDispatches.length" style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--bg-sub,#F9FAFB)">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-              <span style="font-size:12px;font-weight:600">這位人員的派工（已預設勾選還沒連過勞報單的；建立勞報單時一併關聯）</span>
+              <span style="font-size:12px;font-weight:600">這位人員的派工（已預設勾選尚未連過勞報單的；建立勞報單時一併關聯）</span>
               <button type="button" class="btn btn-ghost btn-sm" data-testid="ps-fill-from-dispatch" @click="fillFromPicked()" style="padding:2px 8px;font-size:12px">帶入勾選的派工</button>
               <span x-show="personDispatchFillMsg" data-testid="ps-fill-msg" style="font-size:12px;color:var(--text-dim)" x-text="personDispatchFillMsg"></span>
             </div>

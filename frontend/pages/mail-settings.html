@@ -32,8 +32,8 @@
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="ms-main">
     <div class="ms-title">信件與通知收件設定</div>
-    <div class="ms-sub">每一種系統寄出的信件都在這張表指定：<b>信件</b>要不要寄、<b>行事曆</b>要不要同步到公司 Google 行事曆、<b>收件人</b>是誰。
-      您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些列沒被別人改過）。
+    <div class="ms-sub">每一種系統寄出的信件都在這張表指定：<b>信件</b>是否寄送、<b>行事曆</b>是否同步到公司 Google 行事曆、<b>收件人</b>是誰。
+      您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些列沒被其他使用者改過）。
       「信件」關閉＝這種信不寄給任何人（原本的收件人設定保留，重新開啟即恢復）；只進行事曆、不寄信也可以；沒有日期的信件，行事曆欄不能勾。
       系統技術類預設只寄最高管理者。個人仍可在使用者管理中退訂自己收得到的類型。</div>
     <div class="ms-note" id="ms-cal-banner" data-testid="ms-cal-banner" hidden></div>
@@ -245,7 +245,7 @@
       var d = e.data && e.data.detail
       if (e.status === 409 && d && d.code === 'conflict') {
         var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
-        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆蓋他人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
+        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆寫其他使用者的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
         err.status = 409
         return err
       }

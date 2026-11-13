@@ -214,7 +214,7 @@
     var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:640px' })
     panel.appendChild(el('div', { text: (st.cat && st.cat.label || '匯出') + '：選擇要匯出的欄位、標題與順序（資料與權限不變；沒有權限看的欄位不會出現）', style: 'font-size:12px;margin-bottom:6px' }))
     if (hasSheets()) {
-      panel.appendChild(el('div', { text: '選擇報表要包含哪些明細工作表（Excel、PDF 與月報郵件都一樣；順序、名稱與內容固定，不能修改）。注意：摘要永遠包含公司層級金額合計；這個設定只控制明細工作表，不會讓報表變成沒有金額。拿掉工作表屬收緊；重新加回含金額的工作表需要第二位最高管理者核准。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
+      panel.appendChild(el('div', { text: '選擇報表要包含哪些明細工作表（Excel、PDF 與月報郵件都一樣；順序、名稱與內容固定，不能修改）。注意：摘要永遠包含公司層級金額合計；這個設定只控制明細工作表，不會讓報表變成沒有金額。移除工作表屬收緊；重新加回含金額的工作表需要第二位最高管理者核准。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
       st.cat.sheets.forEach(function (s) {
         panel.appendChild(el('label', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0;font-size:12px', 'data-sheet': s.id }, [
           el('input', { type: 'checkbox', checked: (s.required || st.sheets[s.id] !== false) ? 'checked' : null, disabled: s.required ? 'disabled' : null,

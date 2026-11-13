@@ -118,7 +118,7 @@
         document.getElementById('lr-title').textContent = '授權已恢復，但有模組要重啟服務才會出現'
         document.getElementById('lr-msg').textContent = '業務功能已經可以使用。不過服務是在授權失效的狀態下啟動的，下列模組當時沒有載入，需要重新啟動服務才會載入。'
         var box = document.getElementById('lr-restart'); box.hidden = false
-        box.textContent = (isSuper ? '尚未載入的模組：' + keys.join('、') + '。' : '部分功能尚未載入。') + '請聯絡系統管理員重新啟動服務；在那之前，這些功能的頁面會找不到。'
+        box.textContent = (isSuper ? '尚未載入的模組：' + keys.join('、') + '。' : '部分功能尚未載入。') + '請聯絡系統管理員重新啟動服務；在那之前，這些功能的頁面將無法開啟。'
         var go = document.getElementById('lr-retry'); go.textContent = '先進入系統'; go.dataset.mode = 'enter'
       }
       document.getElementById('lr-retry').addEventListener('click', function () {

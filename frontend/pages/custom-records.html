@@ -1066,7 +1066,7 @@
           if (!r.ok && r.status === 'network') {
             var no = this.record && this.record.record_no
             this.fail(failLabel + '失敗', r, no ? { label: '重新載入單據', run: () => this.openRecord(no) } : null,
-                      '網路連線失敗，無法確認是否已完成——請先按「重新載入單據」看目前狀態，需要時再做一次')
+                      '網路連線失敗，無法確認是否已完成——請先按「重新載入單據」看目前狀態，需要時再執行一次')
             return
           }
           if (!r.ok) {

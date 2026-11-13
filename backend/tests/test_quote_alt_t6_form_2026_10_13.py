@@ -28,7 +28,7 @@ def test_totals_cells_use_template_text_only_when_flagged_and_unpicked():
 
 def test_unpicked_state_is_neutral_not_green():
     assert "(altUnpicked() || !hasAmounts()) ? '' : MotrixMargin.tone(tot.directMarginPct)" in FORM
-    assert "還沒選定，下面的毛利是不含擇一品項的暫估" in FORM
+    assert "尚未選定，下面的毛利是不含擇一品項的暫估" in FORM
 
 
 def test_plan_panel_is_cost_gated_and_front_end_does_not_compute():

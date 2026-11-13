@@ -110,7 +110,7 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     assert "等 王經理 簽核" in nxt("MQ-T84E-002")
     assert "簽完了，請寄給客戶" in nxt("MQ-T84E-003")
     assert "被退回" in nxt("MQ-T84E-004")
-    assert "還沒送簽" in nxt("MQ-T84E-001")
+    assert "尚未送簽" in nxt("MQ-T84E-001")
     # 案件進度小選單仍在（E3：一次選擇完成），未標記有說明
     sel = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] td[data-col=dealTag] select")
     assert sel.count() == 1 and "未標記" in (sel.get_attribute("title") or "")

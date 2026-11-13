@@ -89,7 +89,7 @@
     '          </div>',
     '        </div>',
     '        <div x-show="wz.needEmail" class="ns-field" data-testid="es-need-email">',
-    '          <label>您的帳號還沒有 Email：請填您的 Email（測試信會寄到這裡，也會存回您的帳號）</label>',
+    '          <label>您的帳號尚未設定 Email：請填您的 Email（測試信會寄到這裡，也會存回您的帳號）</label>',
     '          <input type="text" x-model="wz.recipient" placeholder="例：you@公司.com" data-testid="es-recipient">',
     '        </div>',
     '        <div x-show="wz.err" style="margin-top:8px;color:var(--danger);font-size:13px;font-weight:600" x-text="wz.err" data-testid="es-err2"></div>',
@@ -398,7 +398,7 @@
       // 系統網址的白話提醒：沒填、是這台電腦自己（localhost）、或是公司內部才連得到的位址（私有 IP、.local／.lan 之類的內部名稱、單一名稱的主機）
       baseUrlWarn() {
         const u = String(this.cfg.base_url || '').trim()
-        if (!u) return '還沒有填系統網址：信件裡的按鈕會沒有連結，收信的人只能自己打開系統。'
+        if (!u) return '尚未填寫系統網址：信件裡的按鈕會沒有連結，收信的人只能自己打開系統。'
         let h = ''
         try { h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase().replace(/^\[|\]$/g, '') } catch (e) { return '這個網址看起來不完整，請填完整網址（例：https://motrix.您的公司.com）。' }
         const m4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)

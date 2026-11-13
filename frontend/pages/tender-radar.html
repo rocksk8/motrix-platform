@@ -258,7 +258,7 @@
         <!-- 📌 「留空＝不寄」要寫出來：它是一個合法設定，而它看起來像「還沒設」。
              不寫的話使用者不會知道自己可以關掉它。 -->
         <div style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.7">
-          抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天抓四次、只在傍晚寄一封，
+          抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天擷取四次、只在傍晚寄一封，
           也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會抓一次。<br>
           超過 <span x-text="schedule ? schedule.highFrequencyThreshold : 12"></span>
           個時段會先跟您確認一次——那不是上限，確認之後就會存進去。
@@ -448,7 +448,7 @@
         <button class="btn btn-ghost btn-sm" @click="search = ''; loadTenders()">清除搜尋</button>
       </div>
       <div class="empty-state" x-show="tenders.length === 0 && !search">
-        資料庫裡還沒有任何標案——雷達還沒抓過，或抓取失敗。
+        資料庫裡尚無任何標案——雷達尚未擷取過，或擷取失敗。
         上面的「狀態」會說是哪一種。
       </div>
       <div class="empty-state"

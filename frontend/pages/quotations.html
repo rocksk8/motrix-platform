@@ -256,14 +256,14 @@
     <!-- 頁頂三個數字（可點擊篩選；定義固定，見 UX-BUSINESS-PAGES-PROPOSAL §3.3） -->
     <div class="summary-row" data-testid="ql-summary">
       <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" :disabled="!mineOk" data-testid="ql-sum-todo" @click="setFocus('todo')"
-              title="您負責的報價單裡：草稿、被退回待修改的、已核准還沒送給客戶的">
+              title="您負責的報價單裡：草稿、被退回待修改的、已核准尚未送給客戶的">
         <span class="ql-sum__lbl">要我處理</span>
         <span class="ql-sum__val" :style="mineOk && summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="mineOk ? summaryData.todo + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? '草稿、被退回、已核准待寄客戶' : '暫時無法計算'"></span>
       </button>
       <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" :disabled="!mineOk" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
               title="您負責的報價單裡，正在簽核的（待簽核與簽核中）">
-        <span class="ql-sum__lbl">等別人</span>
+        <span class="ql-sum__lbl">等待他人</span>
         <span class="ql-sum__val" x-text="mineOk ? summaryData.waiting + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
       </button>
@@ -434,7 +434,7 @@
             <th data-col="validDays" x-show="cShown('validDays')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
             <th data-col="filler" x-show="cShown('filler')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
             <th data-col="status" x-show="cShown('status')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
-            <th data-col="dealTag" x-show="cShown('dealTag')" title="案件進度：未標記＝還沒標示這張報價單談得如何"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
+            <th data-col="dealTag" x-show="cShown('dealTag')" title="案件進度：未標記＝尚未標示這張報價單談得如何"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
             <th data-col="next" x-show="cShown('next')" title="這張單現在卡在誰身上、還要等多久"><span x-text="cLabel('next', '下一步')">下一步</span></th>
             <th data-col="date" x-show="cShown('date')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
             <th>操作</th>
@@ -509,7 +509,7 @@
                   </span>
                 </template>
                 <template x-if="q.deal_tag !== '已成案' && q.deal_tag !== '已結案'">
-                  <select @change="trySetLost(q.quote_no, $event.target.value, q)" aria-label="案件進度（未標記＝還沒標示談得如何）" title="案件進度：未標記＝還沒標示談得如何"
+                  <select @change="trySetLost(q.quote_no, $event.target.value, q)" aria-label="案件進度（未標記＝尚未標示談得如何）" title="案件進度：未標記＝尚未標示談得如何"
                           :value="q.deal_tag || ''"
                           style="padding:3px 6px;font-size:12px;border:1px solid var(--border-light);border-radius:4px;background:#fff;font-family:var(--font-zh);cursor:pointer;outline:none;max-width:86px;transition:border-color .12s"
                           :style="q.deal_tag==='未成案' ? 'color:var(--danger);border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:var(--text-secondary)' : 'color:var(--text-dim)'">
@@ -558,7 +558,7 @@
             <td :colspan="colSpan()" style="text-align:center;padding:0px">
               <div class="ux-empty ux-empty--none" x-show="emptyKind === 'none'" data-testid="empty-none">
                 <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
-                <div class="ux-empty__title">還沒有報價單</div>
+                <div class="ux-empty__title">尚無報價單</div>
                 <div class="ux-empty__desc">報價單用來向客戶報價。送出並完成簽核、客戶確定採用後，標記「已成案」，就會成為案件。</div>
                 <div class="ux-empty__actions">
                   <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none;display:inline-flex">新增第一張報價單</a>
@@ -836,7 +836,7 @@
       get conditions() {
         const c = []
         if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '您是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
-        const f = { todo: '要我處理', waiting: '等別人', won: '本月已成案' }[this.focus]
+        const f = { todo: '要我處理', waiting: '等待他人', won: '本月已成案' }[this.focus]
         if (f) c.push({ key: 'focus', label: f })
         const ph = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
         if (ph) c.push({ key: 'phase', label: ph.label })
@@ -856,7 +856,7 @@
         if (s === '已拒絕') return { text: '被退回，請修改後重新送簽', tone: 'act' }
         if (this.lifecycleOf(q) === 'closed') return { text: '—', tone: 'dim' }
         const ag = this.agingOf(q)
-        if (s === '草稿') return { text: '還沒送簽', tone: ag && ag.cls ? 'warn' : '', sub: ag ? ag.text : '', subCls: ag ? ag.cls : '' }
+        if (s === '草稿') return { text: '尚未送簽', tone: ag && ag.cls ? 'warn' : '', sub: ag ? ag.text : '', subCls: ag ? ag.cls : '' }
         if (s === '待審核' || s === '簽核中') {
           const w = Array.isArray(q.waiting_on) ? q.waiting_on : []
           const who = w.length ? '等 ' + w.slice(0, 2).join('、') + (w.length > 2 ? ' 等 ' + w.length + ' 人' : '') + ' 簽核' : '簽核進行中'

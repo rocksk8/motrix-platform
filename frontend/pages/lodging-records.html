@@ -89,7 +89,7 @@
           <button class="btn btn-ghost btn-sm" data-lodging-compare-btn :disabled="selected.length !== 2"
                   @click="compareSelected()">比較勾選的兩筆</button>
         </div>
-        <p class="lg-dim" x-show="!records.length && loaded" data-lodging-empty>還沒有紀錄。</p>
+        <p class="lg-dim" x-show="!records.length && loaded" data-lodging-empty>尚無紀錄。</p>
         <table class="data-table m-scroll m-sticky" x-show="records.length" style="margin-top:8px">
           <thead><tr><th></th><th>時間</th><th>建立者</th><th>中心點</th><th>半徑</th><th>筆數</th><th>備註</th><th></th></tr></thead>
           <tbody>

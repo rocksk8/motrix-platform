@@ -295,7 +295,7 @@ window.CM_PARTS.push(() => ({
       if (this.matCanTick(mat, flag)) return ''
       const a = this.moApprovals[mat.orderItemId || '']
       if (!a) return '需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。'
-      if (a.status !== '已核准') return '這筆材料申請還沒核准。'
+      if (a.status !== '已核准') return '這筆材料申請尚未核准。'
       return '需先在材料申請上確認到貨（日期與確認人）'
     },
 
@@ -383,8 +383,8 @@ window.CM_PARTS.push(() => ({
       const payload = []
       for (const m of this.materialOrders) {
         const name = (m.itemName || '').trim()
-        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return false }
-        if (m._saved === false && !m.supplierId && (this.moSupplierAlways || !m.poDocCode)) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return false }
+        if (!name) { this.moMsgError = true; this.moMsg = '有項目尚未填名稱'; return false }
+        if (m._saved === false && !m.supplierId && (this.moSupplierAlways || !m.poDocCode)) { this.moMsgError = true; this.moMsg = `「${name}」尚未選供應商（新增材料申請必填）`; return false }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
@@ -588,7 +588,7 @@ window.CM_PARTS.push(() => ({
     },
     async stOpen() {
       await this.stInit()
-      if (!this.stTpl.length) { MotrixUI.toast('還沒有已發布的階段樣板，請最高管理者先到「管理階段樣板」建立並發布', {kind: 'info'}); return }
+      if (!this.stTpl.length) { MotrixUI.toast('尚無已發布的階段樣板，請最高管理者先到「管理階段樣板」建立並發布', {kind: 'info'}); return }
       const has = (this.cr.caseRecord?.stages || []).length > 0
       const t = new Date()
       this.stDlg = { open: true, key: (this.stTpl[0] || {}).key || '', base: t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'),

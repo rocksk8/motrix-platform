@@ -606,7 +606,7 @@ def set_ping_url(url: str, actor=None, reason: str = "", ip: str = "") -> dict:
     from . import config_ledger as L
     clean = _validate_ping_url(url)
     if not clean:
-        raise InvalidPingUrl("要停用對外打卡，請按「停用對外打卡」，並寫下原因；有多位最高管理者時需要另一位核准。")
+        raise InvalidPingUrl("要停用對外回報，請按「停用對外回報」，並寫下原因；有多位最高管理者時需要另一位核准。")
     old = _read_ping_url()
     old_host, new_host = _host_of(old), _host_of(clean)
     base = {"pingUrlSet": bool(old), "pingHost": old_host, "oldHost": old_host, "newHost": new_host}
@@ -701,7 +701,7 @@ def request_disable(actor, reason: str, ip: str = "") -> dict:
     from . import config_ledger as L
     reason = _clean_reason(reason)
     if not _read_ping_url():
-        raise DisableError("目前沒有設定對外打卡，不需要停用。")
+        raise DisableError("目前沒有設定對外回報，不需要停用。")
     user = _username(actor)
     conn = get_db()
     try:
@@ -846,7 +846,7 @@ def reject_disable(change_id: int, actor, reason: str = "") -> dict:
         conn.close()
     _clear_pending_file()
     _notify_superadmins("對外心跳監控的變更申請被駁回",
-                        [("申請人", requested_by), ("駁回人", _display(actor)), ("申請內容", "換到另一個監控主機" if kind == "change" else "停用對外打卡"),
+                        [("申請人", requested_by), ("駁回人", _display(actor)), ("申請內容", "換到另一個監控主機" if kind == "change" else "停用對外回報"),
                          ("時間", _mail_now()), ("駁回原因", why)],
                         "%s 提出的申請被 %s 駁回" % (requested_by, _display(actor)))
     return {"rejected": True, "kind": kind}
@@ -886,11 +886,11 @@ def _ping(url: str) -> tuple:
         logger.warning("測試心跳失敗：%s", type(exc).__name__)
         return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
     if 200 <= status < 300:
-        return True, "監控服務有收到這次打卡。"
+        return True, "監控服務有收到這次回報。"
     if status in (404, 410):
         return False, "監控服務說找不到這個網址，請確認是否有貼完整、或在監控服務裡是否被刪除了。"
     if status in (401, 403):
-        return False, "監控服務拒絕了這次打卡，請確認網址是否為正確的 Ping URL。"
+        return False, "監控服務拒絕了這次回報，請確認網址是否為正確的 Ping URL。"
     if status == 429:
         return False, "打得太頻繁，監控服務暫時拒絕了。請稍後再試。"
     if status >= 500:

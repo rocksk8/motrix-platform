@@ -153,7 +153,7 @@
         try {
           const d = await this._batchPost('/undo', { changes: this.batchResultChanges() })
           const bad = (d.conflicts || []).map(c => c.name + '（' + c.reason + '）')
-          b.undoMsg = '已復原 ' + d.applied.length + ' 位' + (bad.length ? '；未復原 ' + bad.length + ' 位（別人在這之後改過，不覆蓋；請到使用者頁手動調整）：' + bad.join('；') : '')
+          b.undoMsg = '已復原 ' + d.applied.length + ' 位' + (bad.length ? '；未復原 ' + bad.length + ' 位（其他使用者在這之後改過，不覆蓋；請到使用者頁手動調整）：' + bad.join('；') : '')
           const skipped = (d.people || []).reduce((n, p) => n + (p.skipped || []).length, 0)
           if (skipped) b.undoMsg += '；有 ' + skipped + ' 個項目因屬高敏感或影響較大而未還原，請逐人處理'
           b.result = null

@@ -108,7 +108,7 @@ def put_heartbeat_url(request: Request, body: dict = Body(default=None), authori
 @router.post("/api/system/backup-monitor/heartbeat-disable")
 def post_heartbeat_disable(request: Request, body: dict = Body(default=None), authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    _need_confirm(body, "停用對外打卡")
+    _need_confirm(body, "停用對外回報")
     reason = body.get("reason", "") if isinstance(body, dict) else ""
     if not isinstance(reason, str):
         raise HTTPException(400, "請寫下停用的原因。")
@@ -119,21 +119,21 @@ def post_heartbeat_disable(request: Request, body: dict = Body(default=None), au
     except OSError:
         raise HTTPException(500, "沒有存成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間。")
     if res["disabled"]:
-        return {"ok": True, **res, "message": "已停用對外打卡：系統只會檢查本機服務，不會通知外部監控。已寄信通知所有最高管理者。"}
+        return {"ok": True, **res, "message": "已停用對外回報：系統只會檢查本機服務，不會通知外部監控。已寄信通知所有最高管理者。"}
     return {"ok": True, **res, "message": "已送出停用申請，要另一位最高管理者核准後才會停用。已寄信通知所有最高管理者。"}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-disable/{change_id}/approve")
 def post_heartbeat_disable_approve(change_id: int, request: Request, body: dict = Body(default=None), authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    _need_confirm(body, "核准停用對外打卡")
+    _need_confirm(body, "核准停用對外回報")
     try:
         res = bm.approve_disable(change_id, user, _ip(request))
     except bm.DisableError as exc:
         raise HTTPException(422, str(exc))
     except OSError:
         raise HTTPException(500, "沒有核准成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間，再按一次。")
-    return {"ok": True, **res, "message": "已核准，對外打卡已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄您的核准。")}
+    return {"ok": True, **res, "message": "已核准，對外回報已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄您的核准。")}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-disable/{change_id}/cancel")

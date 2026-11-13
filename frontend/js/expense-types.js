@@ -276,7 +276,7 @@ function expenseTypesPage() {
         this.msg = '已用您的內容覆蓋草稿'
       } catch (e) { this.err = '網路連線失敗，請確認後再按一次' } finally { this.busy = false }
     },
-    conflictHold() { this.conflict = null; this.err = '草稿被別人改過，您的修改還沒存；要存請再按「儲存草稿」並選擇處理方式' },
+    conflictHold() { this.conflict = null; this.err = '草稿被其他使用者改過，您的修改尚未存；要存請再按「儲存草稿」並選擇處理方式' },
     async saveDraft() {
       if (this.busy) return
       this.err = ''; this.msg = ''

@@ -193,7 +193,7 @@
                     <input id="gate-email" type="text" inputmode="email" :value="gateGet('email')" @input="gateSet('email', $event.target.value)" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
                   </div>
                 </div>
-                <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料當抬頭；Logo、據點、收款帳戶等其餘設定，確認後再慢慢補。</div>
+                <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料作為抬頭；Logo、據點、收款帳戶等其餘設定，確認後再慢慢補。</div>
               </div>
             </template>
             <div class="ns-desc" x-show="!gateMode">輸出的報價單、請款單等文件會使用下方「品牌與公司名稱」及主要據點的公司名稱、統一編號、電話／email。請確認是貴公司的資料後再按確認。</div>
@@ -696,7 +696,7 @@
           </div>
           <div style="font-size:12px;color:var(--text-dim);margin-top:4px;line-height:1.6">
             以下設定會影響備份、PDF 產生與檔案存放位置。<strong>改動前請確認路徑或參數正確</strong>——
-            填錯不會立刻報錯，而是在下一次備份或產生 PDF 時才失敗。留空一律代表「使用系統預設」。
+            填錯不會立即顯示錯誤，而是在下一次備份或產生 PDF 時才失敗。留空一律代表「使用系統預設」。
           </div>
         </div>
 
@@ -736,7 +736,7 @@
             <div class="ns-desc">
               到達上限時系統會<strong>自動退回免費的定位來源</strong>（精度較低），
               <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
-              <br>⚠️ <strong>額度留空 ＝ 不設上限</strong>（不是 0，也不是關掉功能）：
+              <br>⚠️ <strong>額度留空 ＝ 不設上限</strong>（不是 0，也不是停用功能）：
               警戒線不會寄信、硬上限不會降回免費，<strong>用多少算多少</strong>。
               請填入您自己在 Google Cloud 主控台上看到的數字 ——
               每個服務（SKU）各自一組免費額度，<strong>不共用</strong>。
@@ -905,7 +905,7 @@
                 <label>更新前快照（份數，不是天數）</label>
                 <input type="number" min="0" max="100" x-model.number="retention.local_pre_update_keep">
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                  每次套用更新前會先做一份本機快照，這裡是保留幾份。0 = 不清理。
+                  每次套用更新前會先做一份本機快照，此處為保留份數。0 = 不清理。
                 </div>
               </div>
             </div>
@@ -930,7 +930,7 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               報價單／出貨單／請款單等 PDF 的存放根目錄。留空使用預設值。
-              <strong>這個路徑也是雲端「PDF 存檔鏡像」的來源</strong>，改了之後舊位置的檔案不會自動搬過去。
+              <strong>這個路徑也是雲端「PDF 存檔鏡像」的來源</strong>，改了之後舊位置的檔案不會自動移轉。
               目錄必須已存在，否則儲存時將遭拒絕。
             </div>
             <div class="ns-row full">
@@ -966,7 +966,7 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               產生 PDF 需要用到 Edge。<strong>正常情況下不用填</strong>——系統會自動偵測；
-              只有在自動偵測失敗（PDF 產生報錯找不到 Edge）時才需要手動指定 <code>msedge.exe</code> 的完整路徑。
+              只有在自動偵測失敗（PDF 產生時發生錯誤、找不到 Edge）時才需要手動指定 <code>msedge.exe</code> 的完整路徑。
               檔案必須存在，否則儲存時將遭拒絕。
             </div>
             <div class="ns-row full">
@@ -1002,7 +1002,7 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               預設是「本機磁碟機」（Google 雲端硬碟掛載的資料夾）。
-              切到 S3 相容物件儲存需要先在伺服器設好 access key 環境變數，<strong>沒設好的話備份會靜默失敗</strong>，
+              切換至 S3 相容物件儲存需要先在伺服器設好 access key 環境變數，<strong>沒設好的話備份會靜默失敗</strong>，
               切換後請確認隔天的備份告警沒有跳出來。
             </div>
             <div class="ns-row full">

@@ -161,12 +161,12 @@
         '<button class="rb-btn" data-rb="edit:' + i + '">編輯</button>' +
         (st.delConfirm === i ? '<span class="rb-bad">刪除？</span><button class="rb-btn" data-rb="del-yes:' + i + '">確定</button><button class="rb-btn" data-rb="del-no">取消</button>'
           : '<button class="rb-btn" data-rb="del:' + i + '">刪除</button>') + '</div>'
-    }).join('') || '<div class="rb-dim">還沒有規則。按「新增規則」開始。</div>'
+    }).join('') || '<div class="rb-dim">尚無規則。按「新增規則」開始。</div>'
     p.innerHTML = '<div class="rb-head"><b>標示規則：' + esc(st.ent.label) + '</b><span class="rb-dim">已發布第 ' + esc(st.pubVersion || 0) + ' 版' + (dirty() ? '・有未儲存的修改' : '') + '</span>' +
       '<button class="rb-btn" data-rb="close" aria-label="關閉">✕</button></div>' +
       '<div class="rb-body">' +
       (st.msg ? '<div class="' + (st.msgBad ? 'rb-warn rb-bad' : 'rb-warn') + '" data-rb-msg="1">' + esc(st.msg) + '</div>' : '') +
-      '<div class="rb-dim">規則只做標示：不會改資料、不會擋存檔。看不到來源欄位的人（例如沒有成本權限者）不會看到由該欄位產生的標示。</div>' +
+      '<div class="rb-dim">規則只做標示：不會改資料、不會阻擋儲存。看不到來源欄位的人（例如沒有成本權限者）不會看到由該欄位產生的標示。</div>' +
       listing + '<div style="margin-top:8px"><button class="rb-btn" data-rb="add">新增規則</button></div>' + editor() + previewBox() + '</div>' +
       '<div class="rb-foot">' + (st.k01 && st.ent.key === 'case' && !st.rules.some(function (r) { return r.id === 'k01_project_margin' }) ? '<button class="rb-btn" data-rb="k01">匯入現有利潤警示</button>' : '') + '<button class="rb-btn" data-rb="save"' + (st.busy || !dirty() ? ' disabled' : '') + '>儲存草稿</button>' +
       '<button class="rb-btn" data-rb="publish"' + (st.busy ? ' disabled' : '') + '>預覽並發布…</button></div>'

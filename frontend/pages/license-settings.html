@@ -80,7 +80,7 @@
         <div class="ls-row">
           <input type="file" id="ls-file" class="ls-file" aria-label="選擇授權檔">
           <label class="btn btn-ghost" for="ls-file">選擇授權檔</label>
-          <span class="ls-dim" id="ls-filename">還沒有選擇檔案</span>
+          <span class="ls-dim" id="ls-filename">尚未選擇檔案</span>
         </div>
         <details style="margin-top:8px">
           <summary class="ls-dim">改用貼上授權內容</summary>
@@ -141,7 +141,7 @@
         }
       }
       function clearResult() { $('ls-result').hidden = true; $('ls-confirm-row').hidden = true; pending = null }
-      function resetFile() { $('ls-file').value = ''; $('ls-filename').textContent = '還沒有選擇檔案' }
+      function resetFile() { $('ls-file').value = ''; $('ls-filename').textContent = '尚未選擇檔案' }
 
       function render(d) {
         $('ls-main').hidden = false
@@ -173,7 +173,7 @@
         ;(d.recent || []).forEach(function (r) {
           var li = document.createElement('li'); li.textContent = r.at + '　' + r.who + '：' + r.what; ul.appendChild(li)
         })
-        if (!(d.recent || []).length) { var e = document.createElement('li'); e.className = 'ls-dim'; e.textContent = '還沒有匯入紀錄。'; ul.appendChild(e) }
+        if (!(d.recent || []).length) { var e = document.createElement('li'); e.className = 'ls-dim'; e.textContent = '尚無匯入紀錄。'; ul.appendChild(e) }
         $('ls-backup-note').textContent = d.backup_count
           ? '舊授權已自動備份 ' + d.backup_count + ' 份（最近一份：' + (d.backup_latest || '—') + '），存放在伺服器上。需要還原請聯絡系統管理員。'
           : '尚未備份過授權（第一次匯入新授權時會自動備份目前的）。'
@@ -234,7 +234,7 @@
 
       $('ls-file').addEventListener('change', function () {
         var f = this.files && this.files[0]
-        $('ls-filename').textContent = f ? f.name : '還沒有選擇檔案'
+        $('ls-filename').textContent = f ? f.name : '尚未選擇檔案'
         if (!f) return
         if (f.size > maxBytes) { clearResult(); showMsg('bad', '這個檔案太大，不像是授權檔（授權檔只有幾百個字）。請確認選到的是供應商提供的那一個。'); return }
         var fr = new FileReader()

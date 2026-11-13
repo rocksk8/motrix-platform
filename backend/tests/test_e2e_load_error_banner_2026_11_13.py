@@ -16,7 +16,7 @@ _MAKE_USER_DEFAULT_ROLE = "superadmin"
 # (頁面, 會被打的 API 路徑片段, 失敗時「不可以出現」的空狀態文字)
 PAGES = [
     ("audit-log.html", "**/api/audit-log**", "暫無紀錄"),
-    ("online-stats.html", "**/api/user-activity**", "還沒有任何活躍紀錄"),
+    ("online-stats.html", "**/api/user-activity**", "尚無任何活躍紀錄"),
     ("schema-status.html", "**/api/system/schema-status", None),
     ("module-versions.html", "**/api/module-versions", None),
     ("shipping-export-history.html", "**/api/shipping-notes/export-history", "尚無符合條件的匯出紀錄"),

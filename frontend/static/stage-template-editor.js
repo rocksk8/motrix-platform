@@ -206,7 +206,7 @@
       el('span', { text: '案件階段樣板', style: 'font-size:14px;font-weight:700;flex:1' }),
       el('button', { type: 'button', text: '×', 'aria-label': '關閉', onclick: function () { st.open = false; render() }, style: 'width:28px;height:28px;border:none;border-radius:5px;cursor:pointer' })
     ]))
-    panel.appendChild(el('div', { text: '樣板只是新增階段時幫忙預先填好：套用後就是那個案件自己的階段，之後樣板再改，已套用的案件不會跟著變。階段代號建立後不能改。發布前要先按「預覽」看過。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:8px' }))
+    panel.appendChild(el('div', { text: '樣板僅在新增階段時預先帶入內容：套用後就是那個案件自己的階段，之後樣板再改，已套用的案件不會跟著變。階段代號建立後不能改。發布前要先按「預覽」看過。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:8px' }))
     var sel = el('select', { 'data-testid': 'st-ed-select', style: 'font-size:12px', onchange: function (ev) { if (ev.target.value === '__new') newTemplate(); else loadOne(ev.target.value) } },
       st.keys.map(function (k) { return el('option', { value: k, text: k, selected: (!st.isNew && k === st.key) ? 'selected' : null }) }).concat([el('option', { value: '__new', text: '＋ 新增樣板', selected: st.isNew ? 'selected' : null })]))
     panel.appendChild(sel)

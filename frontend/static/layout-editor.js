@@ -192,7 +192,7 @@
 
       async start() {
         if (window.innerWidth < 1024) { this._notice('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
-        if (!this.$store.layout.ready) { this._notice('版面設定還沒載入完成，稍後再試。'); return }
+        if (!this.$store.layout.ready) { this._notice('版面設定尚未載入完成，稍後再試。'); return }
         // O7 第三次：start 在 loadScope 之前還有兩趟 await（角色標籤、側欄）；這段期間面板已打開、舊的 work 還在、loading 卻是 false
         // ⇒ 使用者（或 e2e）此時的編輯／範圍切換，會被稍後 start 自己的 loadScope 用伺服器版蓋掉（編輯無聲消失）。先鎖住，載入完才放開。
         this.loading = true
@@ -284,7 +284,7 @@
             if (seq !== this._scopeSeq) return
             if (!c.ok) throw new Error('公司預設 HTTP ' + c.status)
             ops = c.d.latest ? (c.d.latest.body.ops || []) : []
-            note = '這個角色還沒有覆寫：以公司預設為起點'
+            note = '這個角色尚無覆寫：以公司預設為起點'
           } else note = '以程式預設為起點'
           this.defs = defs
           this.startNote = note

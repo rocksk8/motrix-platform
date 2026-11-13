@@ -290,7 +290,7 @@
             沒有符合篩選條件的傳票。
           </div>
           <div class="vc-side__empty" x-show="listLoaded && !list.length">
-            還沒有任何傳票。<br>按上面的「新增傳票」開第一張。
+            尚無任何傳票。<br>按上面的「新增傳票」開第一張。
           </div>
         </aside>
 
@@ -576,7 +576,7 @@
                   <div>原因：<span x-text="backField(g.back, '退回原因').to || '（未填原因）'"></span></div>
                   <div>單號：<span x-text="backField(g.back, 'voucher_no').from + ' → ' + backField(g.back, 'voucher_no').to"></span></div>
                   <div style="margin-top:4px;font-weight:600">這次編修</div>
-                  <template x-if="!g.edits.length"><div class="vc-att__hint">退回之後還沒有修改。</div></template>
+                  <template x-if="!g.edits.length"><div class="vc-att__hint">退回之後尚無修改。</div></template>
                   <template x-for="(ed, ei) in g.edits" :key="ei">
                     <div>
                       <span x-text="editFieldLabel(ed.c.field)"></span>：
@@ -622,7 +622,7 @@
             </template>
 
             <div class="vc-att__empty" x-show="!attachments.length">
-              這張傳票還沒有附件。
+              這張傳票尚無附件。
             </div>
 
             <div class="vc-att__acts" x-show="canEdit">
@@ -792,7 +792,7 @@
                 <span class="vc-att__tag" x-text="mergeKindLabel(a.mergeKind)"></span>
               </div>
             </template>
-            <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+            <div class="vc-att__empty" x-show="!attachments.length">這張傳票尚無附件。</div>
           </div>
           <!-- 預覽窗裡也要能夾帶檔案（使用者 2026-09-30：預覽後想帶入附件卻無處可按）；草稿才有，與主頁面同一條上傳路徑 -->
           <div class="vc-att__acts" x-show="canEdit && isSaved" style="margin-top:8px">
@@ -827,7 +827,7 @@
         <button class="btn btn-sm" :disabled="exporting" @click="exportPdf(false)"
                 x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
         <button class="btn btn-sm" :disabled="exporting || !attachments.length"
-                :title="attachments.length ? '' : '這張傳票還沒有附件，沒有東西可以併進去'"
+                :title="attachments.length ? '' : '這張傳票尚無附件，沒有東西可以併進去'"
                 @click="exportPdf(true)">匯出 PDF（含附件）</button>
       </div>
       <!-- `JV17`：這句原本貼在主頁面兩顆匯出鈕旁邊，鈕搬進 modal 之後

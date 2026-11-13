@@ -386,7 +386,7 @@
     <b x-text="loadError"></b> <button type="button" class="btn btn-ghost btn-sm" @click="location.reload()">重新載入</button>
   </div>
   <div x-show="conflict" x-cloak role="alert" data-testid="stl-conflict" class="stl-banner stl-banner--warn">
-    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；您這次的修改尚未存檔，目前仍保留在畫面上。
+    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋其他使用者的修改或用過期數字完結，已停止儲存／完結；您這次的修改尚未存檔，目前仍保留在畫面上。
     <div x-show="dirtyList.length" data-testid="stl-conflict-dirty" style="flex-basis:100%">
       <b x-text="'您的未存變更（' + dirtyList.length + ' 項）：'"></b>
       <ul style="margin:4px 0 0;padding-left:18px"><template x-for="d in dirtyList" :key="d"><li x-text="d"></li></template></ul>
@@ -654,7 +654,7 @@
         <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">
           額外支出已移到 <b>案件管理 → 額外支出</b> 分頁，並加上填寫人、支出人與送審流程。
           <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
-            原本填在這裡的資料都已經搬過去，不會遺失。下方「成本彙總」仍會把額外支出算進去。
+            原本填在這裡的資料皆已移轉，不會遺失。下方「成本彙總」仍會把額外支出算進去。
           </div>
           <a class="btn btn-ghost btn-sm" style="margin-top:12px;text-decoration:none"
              :href="'case-management.html?q=' + (quoteNo || '')">
@@ -965,7 +965,7 @@
       <!-- ── 四之一、每個品項的賺賠（毛利；未對應項目與折扣／調整各自一列，讓加總對得上）── -->
       <div class="stl-card" data-testid="stl-profit-card">
         <div class="stl-card__head">
-          <div class="stl-card__title">四之一、每個品項的賺賠（毛利）</div>
+          <div class="stl-card__title">四之一、每個品項的損益（毛利）</div>
           <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管銷分攤、公益捐贈、營業利益只在下方「利潤分析」</div>
         </div>
         <div class="stl-pf noprint" data-testid="stl-pf">
@@ -1592,7 +1592,7 @@ function settlementPage() {
     // 圖表的文字替代（螢幕閱讀器；數字與上方表格同源）
     get chartDescBridge() {
       const sm = this.summary, f = n => this.fmt(n)
-      return '從報價到最終營業利益：報價 ' + f(sm.quotedPretax) + '，總實際成本 ' + f(sm.totalActualCost) + '，毛利 ' + f(sm.grossProfit) + '，管銷分攤 ' + f(sm.adminCost) + '，公益捐款 ' + f(sm.charityDonation) + '，最終營業利益 ' + f(sm.netProfit) + '。同樣的數字見下方「每個品項的賺賠」表與扣費前後兩個區塊。'
+      return '從報價到最終營業利益：報價 ' + f(sm.quotedPretax) + '，總實際成本 ' + f(sm.totalActualCost) + '，毛利 ' + f(sm.grossProfit) + '，管銷分攤 ' + f(sm.adminCost) + '，公益捐款 ' + f(sm.charityDonation) + '，最終營業利益 ' + f(sm.netProfit) + '。同樣的數字見下方「每個品項的損益」表與扣費前後兩個區塊。'
     },
     get chartDescPair() {
       const sm = this.summary, f = n => this.fmt(n)

@@ -237,7 +237,7 @@
         <div x-show="denied" style="font-size:13px;color:var(--text-dim)">LINE 通知設定只有最高管理者可以查看與修改。</div>
         <div x-show="!denied">
           <div class="ns-desc">
-            寄信的通知，都可以另外用 LINE 官方帳號推播給「已綁定 LINE」的同仁；<strong>LINE 與 Email 各自獨立</strong>，由您決定每一種通知要不要發、<strong>誰要收</strong>（預設照原本的收件人，也可以另外指定角色或個人）。到「信件與通知收件設定」頁關閉某種信件<strong>不會</strong>停止 LINE，要停請取消下方該通知的勾選。
+            寄信的通知，都可以另外用 LINE 官方帳號推播給「已綁定 LINE」的同仁；<strong>LINE 與 Email 各自獨立</strong>，由您決定每一種通知是否發送、<strong>誰要收</strong>（預設照原本的收件人，也可以另外指定角色或個人）。到「信件與通知收件設定」頁關閉某種信件<strong>不會</strong>停止 LINE，要停請取消下方該通知的勾選。
             預設全部不發；訊息只放單號、名稱等識別資訊，<strong>不含金額與自由文字</strong>。
           </div>
 
@@ -305,7 +305,7 @@
           <!-- LINE 綁定狀況（只有最高管理者看得到；資料來源 GET .../bindings、POST .../bindings/remind、DELETE /api/line/binding/{帳號}） -->
           <div class="ns-field" style="margin:16px 0" data-testid="line-bindings">
             <label>LINE 綁定狀況</label>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定，並可一鍵用 Email 和系統內通知提醒還沒綁定的人（信裡附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰尚未綁定，並可一鍵以 Email 與系統內通知提醒尚未綁定者（信裡附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span data-testid="line-bind-summary" style="font-size:13px;font-weight:600" x-text="bindSummary"></span>
               <button type="button" class="btn btn-ghost" data-testid="line-bind-toggle" style="padding:2px 10px;font-size:12px" @click="bind.open = !bind.open" x-text="bind.open ? '收合名單' : '看名單'"></button>
@@ -314,7 +314,7 @@
                 <span x-show="reminding">寄送中…</span>
               </button>
             </div>
-            <div x-show="bind.loaded && !bind.available" data-testid="line-bind-unavailable" style="font-size:12px;color:var(--warning);margin-top:6px">還沒設定好「LINE Login channel」與對外網址，同仁目前無法自行綁定，所以先不能提醒；請先完成上方設定。</div>
+            <div x-show="bind.loaded && !bind.available" data-testid="line-bind-unavailable" style="font-size:12px;color:var(--warning);margin-top:6px">尚未設定好「LINE Login channel」與對外網址，同仁目前無法自行綁定，所以先不能提醒；請先完成上方設定。</div>
             <div x-show="bind.open" style="margin-top:8px;overflow-x:auto">
               <table data-testid="line-bind-table" style="width:100%;border-collapse:collapse;font-size:13px">
                 <thead><tr style="text-align:left;color:var(--text-dim);font-size:12px"><th style="padding:4px 8px">姓名</th><th style="padding:4px 8px">角色</th><th style="padding:4px 8px">LINE</th><th style="padding:4px 8px">上次提醒</th><th style="padding:4px 8px"></th></tr></thead>
@@ -348,7 +348,7 @@
             <div style="margin:2px 0 8px"><a href="line-events.html" class="btn btn-primary" data-testid="line-open-matrix" style="display:inline-block;padding:6px 14px;font-size:13px;text-decoration:none">開啟矩陣管理頁（可批次、可篩選）</a>
               <span style="font-size:12px;color:var(--text-dim);margin-left:6px">一張表看完所有事件，勾選多個一次設定，套用後可復原這一批。</span></div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">
-              LINE 與 Email 各自獨立；「僅 LINE」＝這件事原本只有系統內通知、沒有 Email，勾選後才會推 LINE（不會新增 Email）。「重要」＝系統告警，LINE 用量到 90% 暫停一般通知時仍會照發。
+              LINE 與 Email 各自獨立；「僅 LINE」＝這件事原本只有系統內通知、沒有 Email，勾選後才會推 LINE（不會新增 Email）。「重要」＝系統告警，LINE 用量到 90% 暫停一般通知時仍會發送。
             </div>
             <template x-for="g in groups" :key="g.name">
               <div :data-testid="'line-group-' + g.name" style="border:1px solid var(--border);border-radius:8px;margin:6px 0">
@@ -416,7 +416,7 @@
                                 </template>
                               </select>
                             </div>
-                            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定的人不受上面「可收的角色」限制；本人在自己頁面關閉的仍不會收到；離職或還沒綁定 LINE 的人收不到。只有對「這個事件所屬模組」有權限的人才能被指定、也才收得到（沒有權限的人這裡不會列出）。<span x-text="e.follows"></span></div>
+                            <div style="font-size:12px;color:var(--text-dim);margin-top:6px">指定的人不受上面「可收的角色」限制；本人在自己頁面關閉的仍不會收到；離職或尚未綁定 LINE 的人收不到。只有對「這個事件所屬模組」有權限的人才能被指定、也才收得到（沒有權限的人這裡不會列出）。<span x-text="e.follows"></span></div>
                             <div class="ns-actions" style="margin-top:8px">
                               <button type="button" class="btn btn-primary" :data-testid="'line-aud-save-' + e.key" style="padding:4px 12px;font-size:13px" @click="saveAudience(e)" :disabled="!!audBusy[e.key]">儲存</button>
                               <button type="button" class="btn btn-ghost" style="padding:4px 12px;font-size:13px" @click="toggleAudEditor(e)">取消</button>
@@ -549,7 +549,7 @@
         <span data-testid="hb-level" :style="'font-size:12px;font-weight:700;color:' + levelColor" x-text="levelText"></span>
       </div>
       <div class="ns-card-body">
-        <div class="ns-desc">心跳是獨立於本機的服務中斷告警：本機每 5 分鐘向外部服務（healthchecks.io）打卡，打卡中斷就會寄信。這裡顯示它<strong>自己</strong>是否正常。</div>
+        <div class="ns-desc">心跳是獨立於本機的服務中斷告警：本機每 5 分鐘向外部服務（healthchecks.io）回報，回報中斷就會寄信。這裡顯示它<strong>自己</strong>是否正常。</div>
         <div data-testid="hb-summary" x-text="d.summary" style="font-size:13px;margin:8px 0;font-weight:600"></div>
         <template x-for="p in d.problems" :key="p">
           <div style="font-size:12px;color:var(--danger);margin:2px 0" x-text="'• ' + p"></div>
@@ -558,8 +558,8 @@
           <tr><td style="padding-right:12px">目前狀態</td><td x-text="d.status || '—'"></td></tr>
           <tr><td style="padding-right:12px">此狀態開始於</td><td x-text="d.since || '—'"></td></tr>
           <tr><td style="padding-right:12px">本機服務協定</td><td x-text="d.scheme || '—'"></td></tr>
-          <tr><td style="padding-right:12px">上次對外打卡成功</td><td x-text="d.ext_ok_at || '—'"></td></tr>
-          <tr><td style="padding-right:12px">對外打卡網址</td><td x-text="d.ping_url_set ? '已設定' : '未設定'"></td></tr>
+          <tr><td style="padding-right:12px">上次對外回報成功</td><td x-text="d.ext_ok_at || '—'"></td></tr>
+          <tr><td style="padding-right:12px">對外回報網址</td><td x-text="d.ping_url_set ? '已設定' : '未設定'"></td></tr>
         </table>
         <div class="ns-actions" style="margin-top:10px"><button class="btn btn-ghost" @click="load()">重新整理</button></div>
       </div>
@@ -623,7 +623,7 @@
         // ── 綁定狀況 ──
         get bindSummary() {
           if (!this.bind.loaded) return '讀取中…'
-          return '已綁定 ' + this.bind.linked + '／在職 ' + this.bind.total + ' 人（還沒綁定 ' + this.bind.unlinked + ' 人）'
+          return '已綁定 ' + this.bind.linked + '／在職 ' + this.bind.total + ' 人（尚未綁定 ' + this.bind.unlinked + ' 人）'
         },
         async loadBindings() {
           const r = await fetch('/api/settings/line-notify/bindings', { headers: hdr(false) })

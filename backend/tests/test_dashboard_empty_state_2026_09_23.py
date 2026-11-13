@@ -96,7 +96,7 @@ PAGE = (Path(__file__).resolve().parent.parent.parent
 #: A 點名的那一組新手引導文案。📌 **這是判準，不是實作細節** ——
 #: 它們是使用者真的會讀到的字，而這一題問的就是「他會不會讀到」。
 ONBOARDING_CARD_COPY = "尚無資料"
-ONBOARDING_HERO_COPY = "系統目前還沒有資料"
+ONBOARDING_HERO_COPY = "系統目前尚無資料"
 ONBOARDING_HERO_CTA = "建立第一筆"
 
 #: 🔴 2026-09-23 A 把範圍擴到這兩句 —— `:473` 標題與 `:502` 副標。

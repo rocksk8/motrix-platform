@@ -335,7 +335,7 @@ window.CM_PARTS.push(() => ({
       try {
         const w = await fetch(`/api/shipping-notes/${n.noteNo}/material-link-check`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         const un = w.ok ? ((await w.json()).unlinked || []) : []
-        if (un.length) warn = '\n\n提醒：以下已到料的材料申請還有剩餘可出貨量，但沒有連結到這張出貨單（不擋，仍可送出）：\n' + un.map(x => `・${x.docCode} ${x.name}（剩餘 ${x.remaining}）`).join('\n')
+        if (un.length) warn = '\n\n提醒：以下已到料的材料申請還有剩餘可出貨量，但沒有連結到這張出貨單（不阻擋，仍可送出）：\n' + un.map(x => `・${x.docCode} ${x.name}（剩餘 ${x.remaining}）`).join('\n')
       } catch {}
       if (!(await MotrixUI.confirm(`確定送出出貨單「${n.noteNo}」進行簽核？` + warn))) return
       try {

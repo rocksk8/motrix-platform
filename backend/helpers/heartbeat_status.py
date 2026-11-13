@@ -122,12 +122,12 @@ def assess(now: datetime = None, state=_READ) -> dict:
             if status == "local_down":
                 probs.append("心跳檢查本機服務已 %s 判定「沒有回應」，但 app 正在執行：監控本身可能壞了（協定／埠不符？）" % _ago(now - (since or seen)))
             else:
-                probs.append("心跳對外打卡（healthchecks.io）已 %s 失敗：外部告警目前不可靠（本機對外網路？ping 網址？）" % _ago(now - (since or seen)))
+                probs.append("心跳對外回報（healthchecks.io）已 %s 失敗：外部告警目前不可靠（本機對外網路？ping 網址？）" % _ago(now - (since or seen)))
         elif status == "ext_unset":
             level = LEVEL_WARN
             if (now - (since or seen)).total_seconds() > EXT_UNSET_ALERT_HOURS * 3600:
                 alert = True
-            probs.append("沒有設定對外打卡網址（ping_url）：只有本機自查，沒有獨立於本機的告警")
+            probs.append("沒有設定對外回報網址（ping_url）：只有本機自查，沒有獨立於本機的告警")
         else:
             level, alert = LEVEL_WARN, True
             probs.append("心跳狀態值不認得：%r" % status)
@@ -136,7 +136,7 @@ def assess(now: datetime = None, state=_READ) -> dict:
             level, alert = LEVEL_ERROR, True
             probs.append("心跳狀態檔已 %s 沒有更新：心跳排程可能已停止執行" % _ago(now - seen))
         out.update(level=level, alert=bool(alert), problems=probs)
-        out["summary"] = "；".join(probs) if probs else "心跳正常（本機 %s，上次對外打卡成功 %s）" % (
+        out["summary"] = "；".join(probs) if probs else "心跳正常（本機 %s，上次對外回報成功 %s）" % (
             out["scheme"] or "?", out["ext_ok_at"] or "未知")
         return out
     except Exception as exc:  # noqa: BLE001

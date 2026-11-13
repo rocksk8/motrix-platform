@@ -93,7 +93,7 @@
 '     <select data-testid="cf-type" x-model="f.type" @change="sync()" :disabled="!isNew(f)">' + typeOpts + '</select>' +
 '     <span class="cf-sub" x-show="!isNew(f)">已發布，型別不能改</span>' +
 '     <label style="margin-left:auto"><input type="checkbox" x-model="f.disabled" @change="onDisable(f)"> 停用</label>' +
-'     <button type="button" class="cf-b" x-show="isNew(f)" title="移除（還沒發布過）" @click="remove(i)">移除</button></div>' +
+'     <button type="button" class="cf-b" x-show="isNew(f)" title="移除（尚未發布過）" @click="remove(i)">移除</button></div>' +
 '    <div class="cf-row" style="margin-top:4px" x-show="f.type === \'select\'"><label>選項（一行一個）</label>' +
 '     <textarea rows="3" style="width:100%" data-testid="cf-options" x-model="f.optionsText" @input="sync()"></textarea></div>' +
 '    <div class="cf-row" style="margin-top:4px" x-show="f.type === \'text\'"><label>最多字數</label>' +
@@ -236,7 +236,7 @@
           this.defs = r.d
           var src = r.d.draft ? r.d.draft.body : (r.d.latest ? r.d.latest.body : { fields: [] })
           this.work = this._fromBody(src)
-          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '還沒有欄位')
+          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '尚無欄位')
           this.loading = false
           this.sync()
           this.loadUsage()

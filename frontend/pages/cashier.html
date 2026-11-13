@@ -999,7 +999,7 @@
             </template>
             </tbody>
             </table>
-            <div class="empty-hint" style="font-size:12px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)" x-show="t100Preview && !t100Preview.count">目前這個區間沒有待確認的事件（可能是還沒有金流事件，或已經全部確認過了）。</div>
+            <div class="empty-hint" style="font-size:12px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)" x-show="t100Preview && !t100Preview.count">目前這個區間沒有待確認的事件（可能是尚無金流事件，或已經全部確認過了）。</div>
             </div>
 
             <!-- 已確認清單＋反確認（2026-09-10 補上）：後端 /t100-export/confirmed
@@ -1323,7 +1323,7 @@
         <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">留空並儲存可清除發票號碼</div>
         <label class="field-label">發票開立日期</label>
         <input type="date" class="field-input" x-model="invoiceModal.date">
-        <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">供稅務匯出判斷申報期別，跟收款日期是兩回事；留空則沿用收款日期</div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">供稅務匯出判斷申報期別，與收款日期不同；留空則沿用收款日期</div>
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button @click="invoiceModal.show=false" style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
           <button @click="confirmInvoice()" style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer">儲存</button>

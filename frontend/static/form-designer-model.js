@@ -350,12 +350,12 @@
     var out = []
     ;(d.fields || []).forEach(function (f, i) {
       var p = 'fields[' + i + ']'
-      if (!f.label || !String(f.label).trim()) out.push({ path: p + '.label', message: '欄位還沒有名稱。', key: f.key })
+      if (!f.label || !String(f.label).trim()) out.push({ path: p + '.label', message: '欄位尚無名稱。', key: f.key })
       if (caps.bannedWords && (caps.bannedWords.test(f.key) || caps.bannedWords.test(f.label || ''))) out.push({ path: p + '.label', message: '這個名稱含有不能使用的字眼（銀行、帳號等）。', key: f.key })
-      if (OPTION_TYPES[f.type] && !(f.options || []).some(function (o) { return String(o).trim() })) out.push({ path: p + '.options', message: '還沒有任何選項。', key: f.key })
+      if (OPTION_TYPES[f.type] && !(f.options || []).some(function (o) { return String(o).trim() })) out.push({ path: p + '.options', message: '尚無任何選項。', key: f.key })
       var fo = caps.fixedOptions && caps.fixedOptions[f.key]
       if (fo && OPTION_TYPES[f.type] && JSON.stringify(f.options || []) !== JSON.stringify(fo)) out.push({ path: p + '.options', message: '這個欄位的選項必須固定為：' + fo.join('、') + '。', key: f.key })
-      if (f.type === 'formula' && !String(f.formula || '').trim()) out.push({ path: p + '.formula', message: '還沒選要算什麼。', key: f.key })
+      if (f.type === 'formula' && !String(f.formula || '').trim()) out.push({ path: p + '.formula', message: '尚未選要算什麼。', key: f.key })
       if (f.locked && fillSelection(f) === '') out.push({ path: p + '.locked', message: '要先選好「自動帶入」才能設「不能改」。', key: f.key })
       if (f.type === 'table') {
         var cols = f.columns || [], ks = cols.map(function (c) { return c.key })
@@ -363,7 +363,7 @@
         var pr = caps.pairColumns || []
         if (pr.length === 2 && (ks.indexOf(pr[0]) >= 0) !== (ks.indexOf(pr[1]) >= 0)) out.push({ path: p + '.columns', message: '「數量」和「單價」要一起有，或一起沒有。', key: f.key })
         cols.forEach(function (c, j) {
-          if (OPTION_TYPES[c.type] && !(c.options || []).length && !c.optionsFrom) out.push({ path: p + '.columns[' + j + '].options', message: '這一欄還沒有選項。', key: f.key })
+          if (OPTION_TYPES[c.type] && !(c.options || []).length && !c.optionsFrom) out.push({ path: p + '.columns[' + j + '].options', message: '這一欄尚無選項。', key: f.key })
           if (caps.bannedWords && caps.bannedWords.test(c.label || '')) out.push({ path: p + '.columns[' + j + '].label', message: '這個欄名含有不能使用的字眼。', key: f.key })
         })
       }

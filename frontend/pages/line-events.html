@@ -33,7 +33,7 @@
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="le-main">
     <div class="le-title">LINE 通知事件</div>
-    <div class="le-sub">一張表管理所有 LINE 通知：每個事件要不要發、發給誰。點格子立即生效；您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些事件沒被別人改過）。
+    <div class="le-sub">一張表管理所有 LINE 通知：每個事件是否發送、發給誰。點格子立即生效；您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些事件沒被其他使用者改過）。
       連線設定、綁定、總開關在 <a href="notification-settings.html" data-testid="le-back-link">通知設定</a>。</div>
     <div class="le-bar" id="le-bar" aria-live="polite"></div>
     <div class="le-legend" aria-label="圖例">
@@ -135,7 +135,7 @@
         (cfg.role_choices || []).map(function (r) { return '<label><input type="checkbox" data-role="' + esc(r) + '"' + (st.roles.indexOf(r) >= 0 ? ' checked' : '') + '> ' + esc(roleName(r)) + '</label>' }).join('') + '</div>' +
         '<div style="margin-top:8px"><b>指定人員</b>' + (evs.length > 1 ? '<span class="mx-mute">（只列出對所有選取事件都有權限的人）</span>' : '') + '</div><div class="le-people-list">' +
         (cand.length ? cand.map(function (u) { return '<label><input type="checkbox" data-user="' + esc(u.username) + '"' + (st.users.indexOf(u.username) >= 0 ? ' checked' : '') + ' data-testid="le-pick-user-' + esc(u.username) + '"> ' + esc(u.display || u.username) + '（' + esc(roleName(u.role)) + '）' + (u.linked ? '' : '<span class="le-flag">尚未綁定 LINE</span>') + '</label>' }).join('') : '<span class="mx-mute">沒有可指定的人</span>') + '</div>' +
-        '<div class="mx-mute">指定的人不受「可收角色」限制；本人自行關閉、離職、或還沒綁定 LINE 的人收不到。</div>'
+        '<div class="mx-mute">指定的人不受「可收角色」限制；本人自行關閉、離職、或尚未綁定 LINE 的人收不到。</div>'
       return SettingsMatrix.openDialog({
         title: evs.length > 1 ? '指定 ' + evs.length + ' 個事件的收件對象' : '「' + evs[0].name + '」誰要收',
         html: html,
@@ -242,7 +242,7 @@
       var d = e.data && e.data.detail
       if (e.status === 409 && d && d.code === 'conflict') {
         var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
-        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆蓋他人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
+        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不覆寫其他使用者的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
         err.status = 409
         return err
       }
@@ -276,7 +276,7 @@
         html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 儲存後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項沒有推播紀錄、無法估算）</span>' : '') + '</div>'
         html += '<div class="mx-mute">估算方式：以近 30 天實際推播量，按「可能收件人數」的比例推算；「上限」＝照原本收件人時每一則的實際收件人可能更少。</div>'
         if (q && q.limit != null && !q.unlimited) html += '<div style="margin-top:6px">本月額度 <b>' + esc(q.limit) + '</b> 則，已用 <b>' + esc(q.used) + '</b> 則。</div>'
-        if (q && q.limit != null && !q.unlimited && t.est_after > q.limit) html += '<div class="mx-danger-box">預估每月 ' + t.est_after + ' 則，超過 LINE 免費額度 ' + esc(q.limit) + ' 則：用量到 90% 時一般通知會暫停（重要告警照發）。</div>'
+        if (q && q.limit != null && !q.unlimited && t.est_after > q.limit) html += '<div class="mx-danger-box">預估每月 ' + t.est_after + ' 則，超過 LINE 免費額度 ' + esc(q.limit) + ' 則：用量到 90% 時一般通知會暫停（重要告警仍會發送）。</div>'
         html += '<div class="mx-mute" style="margin-top:6px">儲存後會留下操作紀錄，並可按「復原這一批」。</div>'
         var off = res.events.filter(function (r) { return r.critical_off }).map(function (r) { return r.key })
         var nar = res.events.filter(function (r) { return r.critical_narrow }).map(function (r) { return r.key })

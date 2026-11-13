@@ -257,7 +257,7 @@
           this.defs = r.d
           var src = r.d.draft ? r.d.draft.body : (r.d.latest ? r.d.latest.body : { buttons: [] })
           this.work = this._fromBody(src)
-          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '還沒有按鈕')
+          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '尚無按鈕')
           this.loading = false
           this.sync()
         } catch (e) {

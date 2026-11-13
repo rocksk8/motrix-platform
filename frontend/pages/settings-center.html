@@ -414,10 +414,10 @@
         var gs = (d.groups || []).map(function (x) {
           var who = x.by ? '被 ' + x.by + (x.at ? '（' + stamp(x.at) + '）' : '') + ' ' : ''
           var plain = (by.filter(function (b) { return b.group === x.group })[0] || {}).plain || x.label
-          return '「' + plain + '」的 ' + (x.keys || []).map(function (k) { return k.name }).join('、') + ' 在您送出前' + (who ? who : '已被別人') + '改過'
+          return '「' + plain + '」的 ' + (x.keys || []).map(function (k) { return k.name }).join('、') + ' 在您送出前' + (who ? who : '已被其他使用者') + '改過'
         })
         var applied = (d.applied || []).map(function (g) { return (by.filter(function (b) { return b.group === g })[0] || {}).plain || g })
-        var msg = gs.length ? gs.join('；') + '，為了不覆蓋他人的修改，' + (applied.length ? '其餘沒有儲存' : '這一批沒有儲存') + '。請按「放棄」重新載入後再改。' : (d.message || e.message)
+        var msg = gs.length ? gs.join('；') + '，為了不覆寫其他使用者的修改，' + (applied.length ? '其餘沒有儲存' : '這一批沒有儲存') + '。請按「放棄」重新載入後再改。' : (d.message || e.message)
         if (applied.length) msg = '已儲存「' + applied.join('」「') + '」；' + msg
         var err = new Error(msg)
         err.status = 409; err.applied = d.applied || []
@@ -437,8 +437,8 @@
       function askSupersede(e) {
         var d = (e.data && e.data.detail) || {}, gs = d.groups || []
         var names = gs.map(function (x) { return '「' + esc((by.filter(function (b) { return b.group === x.group })[0] || {}).plain || x.label) + '」的 ' + (x.keys || []).map(function (k) { return esc(k.name) }).join('、') }).join('；')
-        var who = gs[0] && gs[0].by ? ' ' + esc(gs[0].by) + (gs[0].at ? '（' + esc(stamp(gs[0].at)) + '）' : '') : '別人'
-        return SettingsMatrix.openDialog({ title: '已有別人的申請在等待生效', html: '<div>' + names + ' 已有' + who + '送出、還在等待生效的申請。</div><div class="sc-banner amber">繼續儲存會取代它，對方的申請就失效了；如果那是需要核准的放寬，對方得重新申請。</div>',
+        var who = gs[0] && gs[0].by ? ' ' + esc(gs[0].by) + (gs[0].at ? '（' + esc(stamp(gs[0].at)) + '）' : '') : '其他使用者'
+        return SettingsMatrix.openDialog({ title: '已有其他使用者的申請在等待生效', html: '<div>' + names + ' 已有' + who + '送出、還在等待生效的申請。</div><div class="sc-banner amber">繼續儲存會取代它，對方的申請就失效了；如果那是需要核准的放寬，對方得重新申請。</div>',
           buttons: [{ label: '取消', value: false }, { label: '取代它並儲存', value: true, kind: 'danger' }] }).then(function (v) { return v === true })
       }
       return send().catch(function (e) {
@@ -502,7 +502,7 @@
       return esc(c.old == null ? '' : c.old) + ' → <b>' + esc(c.new == null ? '' : c.new) + '</b>'
     }
     function recentTable(list, testid) {
-      if (!list.length) return '<div class="sc-empty">還沒有任何變更。</div>'
+      if (!list.length) return '<div class="sc-empty">尚無任何變更。</div>'
       return '<table class="sc-table" data-testid="' + testid + '"><thead><tr><th>時間</th><th>誰改的</th><th>哪一項</th><th>改了什麼</th><th>狀態</th><th>原因</th></tr></thead><tbody>' + list.map(function (c) {
         return '<tr data-testid="sc-recent-' + esc(c.id) + '"><td>' + esc(stamp(c.at)) + '</td><td>' + esc(c.actor) + '</td><td>' + (c.page ? '<button type="button" class="sc-link" data-open="' + esc(c.page) + '" data-flash="' + esc(c.group + '.' + c.field) + '">' + esc(c.groupPlain + '／' + c.label) + '</button>' : esc(c.groupPlain + '／' + c.label)) + '</td><td>' + changeText(c) + '</td><td>' + esc(c.stateText) + '</td><td>' + esc(c.reason) + '</td></tr>'
       }).join('') + '</tbody></table>'
@@ -512,7 +512,7 @@
       try { history.replaceState(null, '', location.pathname + location.search) } catch (e) { /* ignore */ }
       var o = ST.ov, s = o.stats
       var items = o.differsItems.slice(0, 60)
-      var html = '<h2 class="sc-h">總覽</h2><div class="sc-sub">這裡看全部設定的現況。左邊選一頁就能調整；點格子只算草稿，按「儲存」並寫下原因才會生效。</div>' +
+      var html = '<h2 class="sc-h">總覽</h2><div class="sc-sub">此處顯示全部設定的現況。選取左側頁面即可調整；點選欄位僅記為草稿，按「儲存」並寫下原因才會生效。</div>' +
         '<div class="sc-cards">' +
         '<button type="button" class="sc-card" data-card="differs" data-testid="sc-card-differs"><span class="n">' + s.differs + '</span>與預設不同的設定</button>' +
         '<button type="button" class="sc-card" data-card="pending" data-testid="sc-card-pending"><span class="n">' + s.pending + '</span>待生效的變更</button>' +
@@ -578,7 +578,7 @@
       var h = '<h2 class="sc-h">版本紀錄與還原</h2><div class="sc-btnrow"><select class="sc-in" id="sc-vgroup" data-testid="sc-vgroup">' + gs.map(function (x) { return '<option value="' + esc(x.group) + '"' + (x.group === ST.vgroup ? ' selected' : '') + '>' + esc(x.text) + '</option>' }).join('') + '</select></div>'
       h += vs.length ? '<table class="sc-table" data-testid="sc-versions-list"><thead><tr><th>版本</th><th>時間</th><th>誰發布</th><th>備註</th><th></th></tr></thead><tbody>' + vs.map(function (v) {
         return '<tr><td>第 ' + esc(v.version) + ' 版</td><td>' + esc(stamp(v.at)) + '</td><td>' + esc(v.by) + '</td><td>' + esc(v.note) + '</td><td><button type="button" class="mx-btn mx-btn-sm" data-restore="' + esc(v.version) + '" data-testid="sc-restore-' + esc(v.version) + '">還原到這一版</button></td></tr>'
-      }).join('') + '</tbody></table>' : '<div class="sc-empty">還沒有發布過任何版本，目前使用系統預設。</div>'
+      }).join('') + '</tbody></table>' : '<div class="sc-empty">尚無發布過任何版本，目前使用系統預設。</div>'
       h += '<div class="sc-btnrow" style="margin-top:14px"><span class="sc-sub">比較</span><select class="sc-in" id="sc-diffa">' + vopts([{ value: 'default', label: '系統預設' }].concat(vl), vs.length ? String(vs[0].version) : 'default') + '</select><span class="sc-sub">與</span><select class="sc-in" id="sc-diffb">' + vopts([{ value: 'current', label: '目前' }, { value: 'default', label: '系統預設' }].concat(vl), 'current') + '</select><button type="button" class="mx-btn mx-btn-sm" id="sc-diff-go" data-testid="sc-diff">看差異</button></div>'
       if (ST.diff) h += ST.diff.changes.length ? '<table class="sc-table" data-testid="sc-diff-table"><thead><tr><th>設定</th><th>之前</th><th>之後</th></tr></thead><tbody>' + ST.diff.changes.map(function (c) { return '<tr><td>' + esc(c.label) + '</td><td>' + esc(c.oldText) + '</td><td>' + esc(c.newText) + '</td></tr>' }).join('') + '</tbody></table>' : '<div class="sc-empty">這兩個版本沒有差異。</div>'
       if (ST.restoreFor && ST.restorePv) {

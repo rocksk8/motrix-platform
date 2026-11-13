@@ -113,7 +113,7 @@
           <!-- 備份 -->
           <section class="bm-card" data-testid="bm-backups">
             <div class="bm-card-h"><h2 class="sec-t">最近一次備份</h2></div>
-            <div class="bm-card-sub">每種備份最近一次成功的時間。備份壞了或停擺，系統會寄信給最高管理者。</div>
+            <div class="bm-card-sub">每種備份最近一次成功的時間。備份故障或停止運作，系統會寄信給最高管理者。</div>
             <template x-if="s.backups && s.backups.error"><div class="bm-bad" x-text="s.backups.error"></div></template>
             <template x-for="b in (Array.isArray(s.backups) ? s.backups : [])" :key="b.key">
               <div class="bm-row" :data-testid="'bm-backup-' + b.key" :data-level="b.level">
@@ -176,10 +176,10 @@
                   <dt>目前狀態</dt>
                   <dd><span class="st-chip" :class="chipClass(s.heartbeat.level)" x-text="hbChip" data-testid="bm-hb-chip"></span>
                       <span class="bm-note">　<span x-text="hbText" data-testid="bm-hb-text"></span></span></dd>
-                  <dt>最近一次成功打卡</dt><dd x-text="fmt(s.heartbeat.extOkAt)"></dd>
+                  <dt>最近一次成功回報</dt><dd x-text="fmt(s.heartbeat.extOkAt)"></dd>
                   <dt>最近一次確認本機正常</dt><dd x-text="fmt(s.heartbeat.localOkAt)"></dd>
                   <dt>外部監控</dt>
-                  <dd data-testid="bm-hb-host" x-text="s.heartbeat.pingUrlSet ? ('已設定（' + (s.heartbeat.pingHost || '—') + '）') : '還沒有設定：目前只檢查本機，沒有通知外部'"></dd>
+                  <dd data-testid="bm-hb-host" x-text="s.heartbeat.pingUrlSet ? ('已設定（' + (s.heartbeat.pingHost || '—') + '）') : '尚未設定：目前只檢查本機，沒有通知外部'"></dd>
                 </dl>
                 <label class="bm-label" for="bm-ping" style="display:block;margin-top:6px">監控網址
                   <button type="button" class="bm-q" :aria-expanded="isHelp('url')" aria-label="這是什麼" @click="toggleHelp('url')">?</button></label>
@@ -191,7 +191,7 @@
                 </div>
                 <div class="bm-line">
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-save" :disabled="busy || !pingUrl.trim()" @click="ask('url')">儲存監控網址</button>
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-clear" x-show="s.heartbeat.pingUrlSet && !s.heartbeat.disableRequest" :disabled="busy" @click="ask('clear')">停用對外打卡</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-clear" x-show="s.heartbeat.pingUrlSet && !s.heartbeat.disableRequest" :disabled="busy" @click="ask('clear')">停用對外回報</button>
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-test" :disabled="busy || !s.heartbeat.pingUrlSet || !!testWait" @click="ask('test')">測試心跳</button>
                   <span class="bm-note" x-show="!pingUrl.trim()">貼上網址後才能儲存。</span>
                   <span class="bm-note" x-show="!s.heartbeat.pingUrlSet">先儲存網址才能測試。</span>
@@ -199,7 +199,7 @@
                 </div>
                 <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
                   <strong data-testid="bm-disable-waiting" x-text="waitingTitle()"></strong>
-                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'您的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外打卡。')"></div>
+                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'您的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外回報。')"></div>
                   <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
                   <div class="bm-line">
                     <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
@@ -245,7 +245,7 @@
           <section class="bm-card" data-testid="bm-settings">
             <div class="bm-card-h"><h2 class="sec-t">保留多久、什麼時候通知</h2>
               <button type="button" class="bm-q" :aria-expanded="isHelp('th')" aria-label="這是什麼" @click="toggleHelp('th')">?</button></div>
-            <div class="bm-q-pop" x-show="isHelp('th')">這些數字在「設定中心」調整。調得比較寬鬆（保留更短、更晚才通知）需要另一位最高管理者核准，並等確認期間後才生效，避免被誤改或盜用。</div>
+            <div class="bm-q-pop" x-show="isHelp('th')">這些數字在「設定中心」調整。調整得較寬鬆（保留更短、更晚才通知）需要另一位最高管理者核准，並等確認期間後才生效，避免被誤改或盜用。</div>
             <dl class="bm-kv" x-show="s.retention && !s.retention.error">
               <dt>系統日誌保留</dt><dd data-testid="bm-ret-log" x-text="(s.retention && s.retention.log_keep_days) + ' 天'"></dd>
               <dt>本機備份保留</dt><dd x-text="(s.retention && s.retention.local_db_keep_days) + ' 天'"></dd>
@@ -306,7 +306,7 @@
             const r = await fetch('/api/system/backup-monitor', { headers: this._hdr() })
             const d = await r.json().catch(() => ({}))
             if (!r.ok) {
-              this.errMsg = r.status === 403 ? '這一頁只有最高管理者可以看。需要請找最高管理者。' : '讀取失敗：' + (typeof d.detail === 'string' ? d.detail : '請稍後再試')
+              this.errMsg = r.status === 403 ? '這一頁只有最高管理者可以看。需要請洽最高管理者。' : '讀取失敗：' + (typeof d.detail === 'string' ? d.detail : '請稍後再試')
               return
             }
             this.s = d
@@ -322,7 +322,7 @@
         waitingTitle() {
           const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
           if (!rq) return ''
-          const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外打卡'
+          const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外回報'
           if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待您或另一位最高管理者核准。'
           const hrs = rq.hoursWaiting > 0 ? rq.hoursWaiting + ' 小時' : '不到 1 小時'
           const who = (rq.waitingFor && rq.waitingFor.length) ? rq.waitingFor.join('、') : '另一位最高管理者'
@@ -351,8 +351,8 @@
           if (!h) return ''
           if (h.level === 'na') return '這台電腦沒有心跳監控（例如開發用的電腦）。'
           if (h.status === 'ok' && h.level === 'error') return '心跳排程可能已經停止執行：狀態紀錄很久沒有更新了。'
-          return { ok: '系統在線，外部監控有收到打卡。', ext_unset: '只檢查本機，沒有通知外部監控（還沒有設定監控網址）。',
-                   ext_fail: '本機正常，但對外部監控打卡失敗；可能是這台電腦連不到外部網路。', local_down: '本機服務沒有回應。' }[h.status]
+          return { ok: '系統在線，外部監控有收到回報。', ext_unset: '只檢查本機，沒有通知外部監控（尚未設定監控網址）。',
+                   ext_fail: '本機正常，但對外部監控回報失敗；可能是這台電腦連不到外部網路。', local_down: '本機服務沒有回應。' }[h.status]
             || '心跳排程可能從來沒有執行過，或狀態紀錄讀不懂。'
         },
         get overall() {
@@ -384,12 +384,12 @@
           const host = this.s && this.s.heartbeat && this.s.heartbeat.pingHost
           const T = {
             backup: ['立即做一次備份？', '將複製一份資料庫並更新雲端備份；於背景執行，不影響其他使用者作業，通常數分鐘內完成。為避免重複，30 分鐘內僅能執行一次。', '開始備份'],
-            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
-            clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
-            approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或系統異常，就沒有人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
+            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務回報，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
+            clear: ['停用對外回報？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
+            approve: ['核准停用對外回報？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或系統異常，就沒有人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
             reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請寫下駁回的原因（會留在紀錄裡）。', '駁回'],
             cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
-            test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
+            test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '發送一次心跳回報，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
           }[kind]
           this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]
           this.urlNeedsReason = false

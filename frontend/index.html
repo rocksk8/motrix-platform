@@ -984,7 +984,7 @@ feedCount(key) {
           return '有 ' + this.followUpQuotes.length + ' 張報價單送出後超過 14 天未收到客戶回應，建議先追蹤。'
         }
         if (overdue > 0) {
-          return '有 ' + overdue + ' 台設備已過保，先確認要不要續約或更換。'
+          return '有 ' + overdue + ' 台設備已過保，先確認是否續約或更換。'
         }
         // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
         // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
@@ -994,7 +994,7 @@ feedCount(key) {
                + '畫面上的數字暫時不準。重新整理可以再試一次。'
         }
         if (this.stats.totalQuotes === 0) {
-          return '系統目前還沒有資料，從建立第一筆客戶與報價單開始。'
+          return '系統目前尚無資料，從建立第一筆客戶與報價單開始。'
         }
         return '沒有需要您立刻處理的事項。'
       },

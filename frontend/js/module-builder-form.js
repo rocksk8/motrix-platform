@@ -19,7 +19,7 @@
           if (!f || f.type !== 'formula') return ''
           var probs = this.fxProblems[i] || []
           if (probs.length) return '公式有誤：第 ' + (probs[0].pos + 1) + ' 個字附近——' + probs[0].message
-          if (!String(f.formula || '').trim()) return '（還沒寫公式）'
+          if (!String(f.formula || '').trim()) return '（尚未寫公式）'
           return this.L.formulaReadable(this.def, f)
         },
         moveFieldKb(i, dir) {

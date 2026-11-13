@@ -72,7 +72,7 @@
 
   // ── 右欄：目錄屬性的白話用語（R3；目錄有而這裡沒有的屬性，只在「進階」出現）──
   var ATTR_COPY = {
-    placeholder: ['提示文字', '欄位還沒填時，框裡顯示的淡淡灰字。', '「請輸入地點」'],
+    placeholder: ['提示文字', '欄位尚未填時，框裡顯示的淡淡灰字。', '「請輸入地點」'],
     maxLength: ['最多幾個字', '超過就不能再輸入。', '備註最多 200 字'],
     unique: ['不可重複', '同一個欄位的內容，不能和以前的單子一樣。', '「發票號碼」不能填兩次'],
     min: ['最小值', '小於這個數字就不能送出。', '金額最小 0'], max: ['最大值', '大於這個數字就不能送出。', '折扣最大 100'],
@@ -292,7 +292,7 @@
   proto.formulaText = function (f) {
     var c = this.calcOf(f)
     if (c === null) return '進階公式'
-    if (!c.p) return '還沒選要算什麼'
+    if (!c.p) return '尚未選要算什麼'
     var meta = M.CALCS.find(function (x) { return x.id === c.p }).name
     return meta
   }
@@ -308,7 +308,7 @@
       case 'daterange': return '<div class="fd-ctl">' + ic('range') + '<span>開始</span><span>→</span><span>結束</span></div>'
       case 'select': case 'multiselect': return '<div class="fd-ctl">' + val(dv, '請選擇') + '<span class="fd-end">▾</span></div>'
       case 'radio': case 'checkboxes':
-        return '<div class="fd-choices">' + (opts.length ? opts.slice(0, 5).map(function (o) { return '<span><i class="' + (f.type === 'radio' ? 'round' : '') + (o === f.default ? ' on' : '') + '"></i>' + esc(o) + '</span>' }).join('') + (opts.length > 5 ? '<span class="fd-dim">…還有 ' + (opts.length - 5) + ' 個</span>' : '') : '<span class="fd-dim">（還沒有選項）</span>') + '</div>'
+        return '<div class="fd-choices">' + (opts.length ? opts.slice(0, 5).map(function (o) { return '<span><i class="' + (f.type === 'radio' ? 'round' : '') + (o === f.default ? ' on' : '') + '"></i>' + esc(o) + '</span>' }).join('') + (opts.length > 5 ? '<span class="fd-dim">…還有 ' + (opts.length - 5) + ' 個</span>' : '') : '<span class="fd-dim">（尚無選項）</span>') + '</div>'
       case 'checkbox': return '<div class="fd-choices"><span><i></i>是</span></div>'
       case 'file': return '<div class="fd-drop">' + ic('clip') + '選擇檔案，或把檔案拖到這裡</div>'
       case 'image': return '<div class="fd-drop">' + ic('image') + '選擇圖片，或把圖片拖到這裡</div>'
@@ -326,7 +326,7 @@
     var self = this, d = this.def, view = M.groupsOf(d), explicit = M.hasExplicitGroups(d), final = this.mode === 'final'
     var h = '<div class="fd-paper' + (final ? ' is-final' : '') + '"><div class="fd-head"><div class="fd-title">' + esc(d.name || this.caps.titleFallback || '（未命名的表單）') + '</div><p>' +
       (final ? '這就是使用者會看到的樣子。' : '中間就是使用者會看到的表單。點任何一個欄位，右邊會出現它的設定。') + '</p></div>'
-    if (!(d.fields || []).length) h += '<div class="fd-bigempty">' + ic('lines') + '<h3>還沒有任何欄位</h3><p>從左邊點一個欄位（例如「文字」），它就會出現在這張表單上。</p></div>'
+    if (!(d.fields || []).length) h += '<div class="fd-bigempty">' + ic('lines') + '<h3>尚無任何欄位</h3><p>從左邊點一個欄位（例如「文字」），它就會出現在這張表單上。</p></div>'
     view.forEach(function (g, gi) {
       var real = !g.virtual && !g.other
       h += '<section class="fd-sec' + (g.other ? ' is-other' : '') + '" data-sec="' + gi + '">'
@@ -335,7 +335,7 @@
           '<span class="fd-sectools"><button type="button" class="fd-mini" data-sec-up="' + gi + '" title="區塊往上移" aria-label="區塊往上移"' + (gi === 0 ? ' disabled' : '') + '>' + ic('up') + '</button>' +
           '<button type="button" class="fd-mini" data-sec-down="' + gi + '" title="區塊往下移" aria-label="區塊往下移"' + (gi >= self._realCount(view) - 1 ? ' disabled' : '') + '>' + ic('down') + '</button>' +
           '<button type="button" class="fd-mini fd-del" data-sec-del="' + gi + '" title="刪除這個區塊" aria-label="刪除這個區塊">' + ic('trash') + '</button></span>'
-          : '<b class="fd-sectitle">其他</b><span class="fd-dim">還沒放進任何區塊的欄位，使用者會在「其他」看到。拖到上面的區塊就會歸位。</span>') + '</div>'
+          : '<b class="fd-sectitle">其他</b><span class="fd-dim">尚未放進任何區塊的欄位，使用者會在「其他」看到。拖到上面的區塊就會歸位。</span>') + '</div>'
       }
       h += '<div class="fd-grid">'
       if (!g.keys.length) h += '<div class="fd-slot fd-empty" data-slot data-g="' + gi + '" data-i="0"><b>這個區塊目前是空的</b>請將左側欄位拖曳至此，或在左側按一下欄位。</div>'
@@ -401,7 +401,7 @@
     var cashierOk = !this.caps.cashierKeys || this.caps.cashierKeys.indexOf(f.key) >= 0
     if (f.type !== 'formula') h += sw('cashier', f.editableBy === 'cashier', '只有出納能修改', cashierOk ? '其他人看得到，但不能填；只有出納可以改。' : '這個設定只有付款相關的欄位（付款條件、匯款日、付款日）能用。', '「付款日」：業務只看得到，出納才能填。', !cashierOk && f.editableBy !== 'cashier')
     var hasFill = M.fillSelection(f) !== '', lk = M.canLock(f, this.registry())
-    if (f.type !== 'formula' && f.type !== 'table') h += sw('locked', !!f.locked, hasFill ? '「' + esc(this.fillLabel(f)) + '」不能改' : '帶入的內容不能改', !hasFill ? '要先在上面選好「自動帶入」才能開。' : (lk.ok ? '使用者看得到這一格，但不能自己改掉。' : '這個帶入來源每次可能不一樣，所以不能鎖住。'), hasFill ? '「申請人」自動帶入王小明，別人不能改成別人。' : '先選「申請人本人」，這裡才會能開。', !lk.ok && !f.locked)
+    if (f.type !== 'formula' && f.type !== 'table') h += sw('locked', !!f.locked, hasFill ? '「' + esc(this.fillLabel(f)) + '」不能改' : '帶入的內容不能改', !hasFill ? '要先在上面選好「自動帶入」才能開。' : (lk.ok ? '使用者看得到這一格，但不能自己改掉。' : '這個帶入來源每次可能不一樣，所以不能鎖住。'), hasFill ? '「申請人」自動帶入王小明，其他使用者不能改成其他使用者。' : '先選「申請人本人」，這裡才會能開。', !lk.ok && !f.locked)
     h += sw('listed', M.isListed(this.def, f.key), '在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '開起來 ⇒ 清單多一欄「' + esc(f.label) + '」。')
     h += '</div>'
     h += this.moreUI(f)
@@ -467,7 +467,7 @@
     h += '<div class="fd-box fd-box--in"><h3>' + M.CALCS.find(function (x) { return x.id === c.p }).name + '：設定</h3>'
     var S = function (k, v, o, ph) { return '<select class="fd-in" ' + data(k) + '><option value="">' + ph + '</option>' + o.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (x[0] === v ? ' selected' : '') + '>' + esc(x[1]) + '</option>' }).join('') + '</select>' }
     if (c.p === 'sumtable') h += '<div class="fd-row"><label>加哪一欄？</label>' + S('T', c.tbl && c.col ? c.tbl + '|' + c.col : '', tbls, '請選擇…') + '<div class="fd-why">例：費用明細每一列的「小計」。</div></div>'
-    if (c.p === 'sum') h += '<div class="fd-row"><span class="fd-lbl">勾選要加起來的欄位</span><div class="fd-pick">' + (nums.length ? nums.map(function (n) { return '<label class="fd-opt"><input type="checkbox" ' + data('Key') + ' value="' + esc(n[0]) + '"' + ((c.keys || []).indexOf(n[0]) >= 0 ? ' checked' : '') + '>' + esc(n[1]) + '</label>' }).join('') : '<div class="fd-why">表單裡還沒有數字欄位，先在左邊加一個「數字」或「金額」。</div>') + '</div><div class="fd-why">例：勾「機票」和「住宿」，這格就是兩個加起來。</div></div>'
+    if (c.p === 'sum') h += '<div class="fd-row"><span class="fd-lbl">勾選要加起來的欄位</span><div class="fd-pick">' + (nums.length ? nums.map(function (n) { return '<label class="fd-opt"><input type="checkbox" ' + data('Key') + ' value="' + esc(n[0]) + '"' + ((c.keys || []).indexOf(n[0]) >= 0 ? ' checked' : '') + '>' + esc(n[1]) + '</label>' }).join('') : '<div class="fd-why">表單裡尚無數字欄位，先在左邊加一個「數字」或「金額」。</div>') + '</div><div class="fd-why">例：勾「機票」和「住宿」，這格就是兩個加起來。</div></div>'
     if (c.p === 'mul' || c.p === 'sub') h += '<div class="fd-row"><label>' + (c.p === 'mul' ? '第一個數字' : 'A（被減的數字）') + '</label>' + S('A', c.a, nums, '請選擇…') + '<div class="fd-why">' + (c.p === 'mul' ? '例：「數量」。' : '例：「預算」。') + '</div></div><div class="fd-row"><label>' + (c.p === 'mul' ? '第二個數字' : 'B（要減掉的數字）') + '</label>' + S('B', c.b, nums, '請選擇…') + '<div class="fd-why">' + (c.p === 'mul' ? '例：「單價」。' : '例：「已用」。') + '</div></div>'
     if (c.p === 'pct') h += '<div class="fd-row"><label>拿哪個金額來算？</label>' + S('A', c.a, nums, '請選擇…') + '<div class="fd-why">例：「總額」。</div></div><div class="fd-row"><label>要幾 %？</label><input class="fd-in" ' + data('Pct') + ' type="number" min="0" max="100" value="' + esc(c.pct == null ? '' : c.pct) + '" placeholder="例如 30"><div class="fd-why">例：填 30 就是 30%（訂金常用）。</div></div>'
     if (c.p === 'days') h += '<div class="fd-row"><label>開始日期</label>' + S('A', c.a, dates, '請選擇…') + '<div class="fd-why">例：「出發日」。</div></div><div class="fd-row"><label>結束日期</label>' + S('B', c.b, dates, '請選擇…') + '<div class="fd-why">例：「返回日」。</div></div>'

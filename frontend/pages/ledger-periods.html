@@ -65,7 +65,7 @@
       <div class="lp-title">會計期間與結帳</div>
       <div class="lp-note">
         已結帳或鎖定的期間不能再過帳、也不能作廢已過帳傳票；要更正請開沖轉傳票，或由財務人員「重開期間」（須填理由，全程留稽核軌跡）。
-        鎖定（決算、申報後）只有最高管理者可以解除。還沒建立任何期間時，所有日期都視為開放。
+        鎖定（決算、申報後）只有最高管理者可以解除。尚未建立任何期間時，所有日期都視為開放。
       </div>
 
       <div class="lp-err" x-show="error" x-text="error" data-testid="lp-error"></div>
@@ -135,7 +135,7 @@
           </table>
         </div>
       </template>
-      <div class="lp-note" x-show="loaded && !years.length">還沒有任何會計年度。</div>
+      <div class="lp-note" x-show="loaded && !years.length">尚無任何會計年度。</div>
 
       <div class="lp-card">
         <div class="lp-h">期初餘額（開帳）</div>

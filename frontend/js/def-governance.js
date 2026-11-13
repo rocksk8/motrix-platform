@@ -113,7 +113,7 @@
           return '<span class="dg-bad">確定' + VERBS[v] + '？</span><button class="dg-btn" data-dg="pact-yes:' + v + ':' + key + '">確定</button><button class="dg-btn" data-dg="pact-no">取消</button>'
         }
         var dis = v === 'activate' && !c.ready
-        return '<button class="dg-btn" data-dg="pact:' + v + ':' + key + '"' + (dis ? ' disabled title="還沒核准或確認期間未過"' : '') + '>' + VERBS[v] + '</button>'
+        return '<button class="dg-btn" data-dg="pact:' + v + ':' + key + '"' + (dis ? ' disabled title="尚未核准或確認期間未過"' : '') + '>' + VERBS[v] + '</button>'
       }).join('')
       return '<div class="dg-row" data-change="' + esc(c.id) + '"><div class="dg-grow"><b>' + esc(c.kind) + ' / ' + esc(c.key) + '</b>（' + esc(c.scope) + '，第 ' + esc(c.version) + ' 版）' +
         '<div class="dg-dim">' + esc(c.by) + '　' + esc(c.at) + '　核准 ' + esc((c.approvals || []).length) + '／' + esc(c.approvalsRequired) + '　可套用時間 ' + esc(c.effectiveAt) +

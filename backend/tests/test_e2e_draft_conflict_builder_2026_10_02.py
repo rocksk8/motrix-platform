@@ -72,7 +72,7 @@ def two(live_server, make_user, new_context):
 
 def test_b_is_told_autosave_stops_and_the_database_keeps_a(two):
     a, b, _ = two
-    assert b.locator("#mb-save-state").inner_text() == "未存：草稿被別人改過"
+    assert b.locator("#mb-save-state").inner_text() == "未存：草稿被其他使用者改過"
     assert "k2_a" in b.locator('[data-testid="mb-conflict-who"]').inner_text()
     assert b.locator("#mb-prefix").input_value() == "BB"        # B 的修改還在畫面上
     b.fill("#mb-prefix", "BC")
@@ -120,7 +120,7 @@ def test_hold_collapses_the_banner_and_keeps_autosave_off(two):
     a, b, _ = two
     b.click('[data-testid="mb-conflict-hold"]')
     b.wait_for_selector('[data-testid="mb-conflict-reload"]', state="hidden")
-    assert b.locator('[data-testid="mb-conflict-reopen"]').is_visible() and b.locator("#mb-save-state").inner_text() == "未存：草稿被別人改過"
+    assert b.locator('[data-testid="mb-conflict-reopen"]').is_visible() and b.locator("#mb-save-state").inner_text() == "未存：草稿被其他使用者改過"
     b.fill("#mb-prefix", "ZZ")
     b.wait_for_timeout(5000)
     assert _draft()[1] == "k2_a"

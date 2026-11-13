@@ -343,7 +343,7 @@
       <!-- 我的申請 -->
       <section x-show="tab === 'mine'" id="pr-mine" :data-loaded="mineLoaded ? '1' : '0'" :data-busy="busy ? '1' : '0'">
         <div class="pr-card">
-          <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
+          <div class="pr-hint" x-show="mineLoaded && !mine.length">尚無申請</div>
           <table class="pr-table" x-show="mine.length">
             <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>預定付款日</th><th>付款日</th><th>單據</th><th>附件</th><th></th></tr></thead>
             <tbody>

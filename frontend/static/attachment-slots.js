@@ -67,7 +67,7 @@
 '    <div class="as-sub">一個都不勾＝維持原本的上傳權限；勾選只會「縮小」成這些角色（最高管理者一律可以）。</div>' +
 '    <div class="as-row" style="margin-top:4px"><label>子資料夾 <input type="text" data-testid="as-sub" x-model="s.subfolder" maxlength="40" placeholder="（選填）" :disabled="!subfolderOk()"></label>' +
 '     <span class="as-sub" x-show="!subfolderOk()">這個位置的讀取還不支援子資料夾</span></div>' +
-'    <div class="as-row" style="margin-top:4px"><label class="as-chk"><input type="checkbox" x-model="s.required"> 提示必須有（只標紅，不擋）</label>' +
+'    <div class="as-row" style="margin-top:4px"><label class="as-chk"><input type="checkbox" x-model="s.required"> 提示必須有（只標紅，不阻擋）</label>' +
 '     <label class="as-chk"><input type="checkbox" x-model="s.disabled" data-testid="as-disabled"> 停用</label></div>' +
 '    <div class="as-prob" x-show="probs[i]" x-text="probs[i]"></div>' +
 '   </div></template>' +
@@ -217,7 +217,7 @@
           this.defs = r.d
           var src = r.d.draft ? r.d.draft.body : (r.d.latest ? r.d.latest.body : { slots: [] })
           this.work = this._fromBody(src)
-          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '還沒有自訂附件種類')
+          this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '尚無自訂附件種類')
           this.loading = false
         } catch (e) {
           this.loadError = '讀取附件種類失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後再打開重試'

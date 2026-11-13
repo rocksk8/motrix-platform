@@ -178,7 +178,7 @@
    "section": "notify",
    "title": "Google 行事曆設定",
    "desc": "哪些事件同步到行事曆、日曆帳號",
-   "impact": "影響：關掉某類事件後，新的事件不再放到行事曆；已存在的事件不會自動刪除。",
+   "impact": "影響：關閉某類事件後，新的事件不再放到行事曆；已存在的事件不會自動刪除。",
    "href": "google-calendar-settings.html",
    "perm": "superadmin",
    "order": 30,

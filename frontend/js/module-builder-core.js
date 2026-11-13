@@ -312,7 +312,7 @@
           if (r.ok) this.draftProblems = r.data.problems || []
         },
         saveLabel() {
-          if (this.conflict) return '未存：草稿被別人改過'
+          if (this.conflict) return '未存：草稿被其他使用者改過'
           if (this.saveState === 'error') return '草稿存檔失敗'
           if (this.saving) return '存檔中…'
           if (this.dirty) return '有未存的修改'

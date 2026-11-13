@@ -558,9 +558,9 @@
         this.form.items = out
         this._quoteFp = res.fingerprint || ''
         this._quoteOpts = o
-        const parts = ['已從報價單帶入 ' + added + ' 項，可直接修改；只做完一部分請把狀態改成「部分完成」。']
+        const parts = ['已從報價單帶入 ' + added + ' 項，可直接修改；僅完成一部分時，請將狀態改為「部分完成」。']
         if (skipped) parts.push(skipped + ' 項已全數完工，沒有帶入。')
-        if (removed) parts.push('報價單已移除 ' + removed + ' 項，已從清單拿掉。')
+        if (removed) parts.push('報價單已移除 ' + removed + ' 項，已從清單移除。')
         if (nonTrack) parts.push(nonTrack + ' 項因報價單舊資料無法追蹤已完工數。')
         ;(res.warnings || []).forEach(w => parts.push(w + '。'))
         this.quoteNote = parts.join(' ')

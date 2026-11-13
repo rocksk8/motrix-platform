@@ -1489,7 +1489,7 @@
           <div class="form-group" x-show="fShown('qbasic', 'salesEmail')" :style="fo('qbasic', 'salesEmail')">
             <label class="form-label"><span x-text="fLabel('qbasic', 'salesEmail', 'E-MAIL')">E-MAIL</span></label>
             <input class="form-input readonly" x-model="q.salesEmail" readonly data-testid="sales-email">
-            <div class="hint" data-testid="sales-email-hint" x-show="salesEmailSource && salesEmailSource !== 'user' && salesEmailSource !== 'company'" style="color:#B45309">尚未設定公司信箱：目前帶入的是個人信箱。請管理者在「使用者管理」幫這位同仁設定「報價用公司信箱」，或在「公司資料設定」填寫公司對外信箱。</div>
+            <div class="hint" data-testid="sales-email-hint" x-show="salesEmailSource && salesEmailSource !== 'user' && salesEmailSource !== 'company'" style="color:#B45309">尚未設定公司信箱：目前帶入的是個人信箱。請管理者在「使用者管理」為這位同仁設定「報價用公司信箱」，或在「公司資料設定」填寫公司對外信箱。</div>
           </div>
         </div>
       </div>
@@ -1502,7 +1502,7 @@
         </div>
         <div class="pdf-legend" data-testid="qf-pdf-legend">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          欄位旁的眼睛＝這一欄要不要印在報價單上（綠色＝印出，灰色斜線＝不印）
+          欄位旁的眼睛＝這一欄是否印在報價單上（綠色＝印出，灰色斜線＝不印）
         </div>
         <div class="form-grid form-grid-2" style="margin-bottom:12px">
           <div class="form-group" x-show="fShown('qcustomer', 'customerName')" :style="fo('qcustomer', 'customerName')">
@@ -1729,7 +1729,7 @@
               <span x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--warning);font-size:11px"></span>
               <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
             </div>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" x-show="!$store.cf.list().length">還沒有自訂欄位。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" x-show="!$store.cf.list().length">尚無自訂欄位。</div>
             <div class="form-grid form-grid-2">
               <template x-for="f in $store.cf.list()" :key="f.key">
                 <div class="form-group" :data-cf-field="f.key">
@@ -2027,7 +2027,7 @@
               <input type="checkbox" :checked="q.totalsByAlt === true" @change="q.totalsByAlt = $event.target.checked; calcTotals(); setDirty()"> 合計依方案選擇
             </label>
             <div class="form-hint" x-show="q.totalsByAlt !== true">勾選「合計依方案選擇」後，擇一品項才會依客戶選定的方案計入合計；沒勾選時，所有品項都照一般報價單計入。</div>
-            <div class="form-hint" x-show="q.totalsByAlt === true" x-text="'客戶還沒選定方案時，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」（合計不含擇一品項），選定後恢復金額。'"></div>
+            <div class="form-hint" x-show="q.totalsByAlt === true" x-text="'客戶尚未選定方案時，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」（合計不含擇一品項），選定後恢復金額。'"></div>
           </div>
           <div class="totals-grid">
             <div class="total-row">
@@ -2212,7 +2212,7 @@
         </div>
 
         <div x-show="altUnpicked()" style="font-size:11px;color:#9CA3AF;margin-bottom:8px" data-testid="qf-alt-estimate"
-             x-text="'尚有 ' + altUnpicked() + ' 組擇一方案還沒選定，下面的毛利是不含擇一品項的暫估'"></div>
+             x-text="'尚有 ' + altUnpicked() + ' 組擇一方案尚未選定，下面的毛利是不含擇一品項的暫估'"></div>
         <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">直接利潤</div>
 
         <div class="cost-row">

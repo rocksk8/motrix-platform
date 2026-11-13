@@ -2,7 +2,7 @@
 // 用法（Alpine）：<span :class="MotrixStatus.chipClass(e.status)" x-text="MotrixStatus.label(e.status)"></span>
 // 未知狀態 ⇒ 只回基底 `st-chip`（中性），不會誤上色；要新增狀態只改這張表（並補 backend/tests/test_status_chip_t51.py 的詞彙）。
 //
-// S-X2：旗標 builder_status_display.enabled 關（預設）或表還沒載入 ⇒ chipClass 用 MAP、label 照頁面的 fallback／原值——唯一例外是 DEFAULTS 內建改名（待審核→待簽核，UX P1）。
+// S-X2：旗標 builder_status_display.enabled 關（預設）或表尚未載入 ⇒ chipClass 用 MAP、label 照頁面的 fallback／原值——唯一例外是 DEFAULTS 內建改名（待審核→待簽核，UX P1）。
 // 旗標開且管理者改過某個狀態的字或色 ⇒ 只有『被改過的欄位』覆寫畫面原本的做法（server 回的 changed 清單），沒改的欄位維持畫面自己的字與色。
 // 邏輯（x-show／篩選／權限）永遠用原始狀態值，不要用 label() 的結果判斷。
 (function () {
