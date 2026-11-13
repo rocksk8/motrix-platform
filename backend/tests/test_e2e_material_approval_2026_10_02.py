@@ -158,7 +158,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     other = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[data-testid=mat-order-link]'));
         d.moApprovals = Object.assign({}, d.moApprovals, { 'X-PENDING': { status: '待審核' } });
         return d.matTickHint({ orderItemId: 'X-PENDING' }, 'ordered'); }""")
-    assert other == "這筆材料申請還沒核准。", other
+    assert other == "這筆材料申請尚未核准。", other
     page.click('.cm-tab:has-text("財務")')
     page.wait_for_selector(f'{PANEL} [data-testid="mo-ap-status"]', timeout=15000)
 

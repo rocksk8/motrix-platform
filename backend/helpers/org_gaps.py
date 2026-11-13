@@ -39,7 +39,7 @@ def _no_department(conn):
         return None
     return {
         "key": GAP_NO_DEPARTMENT, "severity": "warn", "count": len(rows),
-        "title": "有 %d 位同仁還沒有歸屬部門" % len(rows),
+        "title": "有 %d 位同仁尚未歸屬部門" % len(rows),
         "detail": "沒有部門的人，送審時會被擋下（系統找不到他的部門主管），要先補上部門才能送審。最高管理者若要送審，仍然需要歸屬部門。",
         "items": [{"id": r["id"], "name": _label(r)} for r in rows[:MAX_ITEMS]],
         "fix": {"label": "到使用者管理補上部門", "href": "users.html"},

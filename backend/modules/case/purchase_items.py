@@ -280,7 +280,7 @@ def check_pr_claims(conn, quote_no, kind, lines, *, exclude_id=None):
         if pr is None:
             raise _bad("第 %d 列連到的請購單 %s 不存在或不屬於這個案件" % (i + 1, code[:30]))
         if (pr["status"] or "") != "已核准":
-            raise _bad("第 %d 列連到的請購單 %s 還沒有核准（目前：%s）" % (i + 1, code[:30], pr["status"]))
+            raise _bad("第 %d 列連到的請購單 %s 尚未核准（目前：%s）" % (i + 1, code[:30], pr["status"]))
         try:
             n = int(l.get("prLine"))
         except (TypeError, ValueError):
@@ -407,7 +407,7 @@ def check_from_pr(conn, quote_no, kind, data):
         if not row or row["kind"] != REQ:
             raise _bad("來源請購單 %s 不存在、不是請購單，或不屬於這個案件" % str(pr)[:30])
         if row["status"] != "已核准":
-            raise _bad("來源請購單 %s 還沒有核准（目前：%s）" % (str(pr)[:30], row["status"]))
+            raise _bad("來源請購單 %s 尚未核准（目前：%s）" % (str(pr)[:30], row["status"]))
 
 
 # ── 叫料連結（S4a；規格 docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md §2／§3）────────────────────────

@@ -189,8 +189,8 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
 def conflict_body(group, e):
     """409 衝突的 body（與 LINE 事件矩陣同形）：`{code, message, keys:[{key,name}], by, at}`；name＝欄位白話名。"""
     defs = sr.field_defs(group)
-    msg = ("這一項已有別人送出、還在等待生效的申請；繼續送出會取代它。" if getattr(e, "code", "") == "pending_exists"
-           else "這些設定在你送出前已被別人改動，請重新整理後再改。")
+    msg = ("這一項已有其他人送出、還在等待生效的申請；繼續送出會取代它。" if getattr(e, "code", "") == "pending_exists"
+           else "這些設定在您送出前已被其他人改動，請重新整理後再改。")
     return {"code": getattr(e, "code", "conflict"), "message": msg,
             "keys": [{"key": k, "name": (defs[k].label or defs[k].question or k) if k in defs else k} for k in e.keys],
             "by": e.by, "at": e.at}
@@ -245,7 +245,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         if exp is not None and (not isinstance(exp, dict) or not exp):
             raise HTTPException(400, "「%s」送出的比對資料格式不對，請重新整理畫面後再試。" % sr.groups()[g]["label"])
         if undo and not exp:                                   # 復原一定要逐欄比對：沒帶就會把別人後來改的蓋回去
-            raise HTTPException(400, "復原需要帶上每個群組「套用後的值」，才不會蓋掉別人後來的修改；請重新整理畫面後再試。")
+            raise HTTPException(400, "復原需要帶上每個群組「套用後的值」，才不會覆蓋其他人後來的修改；請重新整理畫面後再試。")
         if exp and [k for k in vals if k not in exp]:          # 與 publish 同規則（S1c）：帶了就要涵蓋每個要改的欄位；先在這裡擋，免得寫到一半才失敗
             raise HTTPException(400, "「%s」送出的比對資料沒有涵蓋所有要改的項目（缺：%s），請重新整理畫面後再試。" % (sr.groups()[g]["label"], "、".join((sr.field_defs(g)[k].label or k) if k in sr.field_defs(g) else k for k in vals if k not in exp)))
         if exp:
@@ -305,7 +305,7 @@ def _batch_conflict_body(found, applied, failed, not_applied):
         out.append({"group": g, "label": sr.groups()[g]["label"], "code": b["code"], "message": b["message"], "keys": b["keys"], "by": b["by"], "at": b["at"]})
     codes = {x["code"] for x in out}
     return {"code": codes.pop() if len(codes) == 1 else "conflict",       # 都是 pending_exists 才回 pending_exists（畫面可帶 supersede 重送）；混合或一般衝突 ⇒ conflict
-            "message": out[0]["message"] if len(out) == 1 else "這些設定在你送出前已被別人改動，請重新整理後再改。", "groups": out,
+            "message": out[0]["message"] if len(out) == 1 else "這些設定在您送出前已被其他人改動，請重新整理後再改。", "groups": out,
             "applied": applied, "failed": failed, "notApplied": not_applied}
 
 

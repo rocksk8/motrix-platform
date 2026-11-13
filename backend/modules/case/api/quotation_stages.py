@@ -167,7 +167,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
     except _D.DefinitionError:
         d = None
     if not d:
-        conn.close(); raise HTTPException(404, "找不到這個階段樣板，或它還沒有發布")
+        conn.close(); raise HTTPException(404, "找不到這個階段樣板，或它尚未發布")
     _rows = conn.execute("SELECT id, stage_key, label, sort_order FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
     existing = [{"id": r["id"], "stage_key": r["stage_key"], "label": r["label"]} for r in _rows]
     max_order = max([r["sort_order"] for r in _rows if r["sort_order"] is not None] or [-1])      # 寫入端用；同一次（已持寫鎖）讀取，不再另讀
@@ -180,7 +180,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
     _soon = {datetime.now().date().isoformat(), (datetime.now().date() + timedelta(days=3)).isoformat()}
     _n_soon = sum(1 for x in pl["stages"] if x["dueDate"] in _soon)
     if _n_soon:
-        pl["notes"] = list(pl["notes"]) + ["其中 %d 個階段的結束日是今天或 3 天後。這些階段還沒有負責人，案件已成案時，系統會照原本的到期提醒規則通知業務與部門主管" % _n_soon]
+        pl["notes"] = list(pl["notes"]) + ["其中 %d 個階段的結束日是今天或 3 天後。這些階段尚無負責人，案件已成案時，系統會照原本的到期提醒規則通知業務與部門主管" % _n_soon]
     out = {"template": key, "templateVersion": d.get("version"), "baseDate": base, "mode": mode, **pl}
     if dry:
         conn.close()

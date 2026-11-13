@@ -89,7 +89,7 @@ def remind(usernames=None, now: datetime = None) -> dict:
     from . import line_notify as _ln, mail_types as MT, notification_prefs as NP
     from .audit import _notify
     if not _login_ready():
-        raise ValueError("還沒設定好 LINE 登入與對外網址，同仁目前無法自行綁定；請先完成上方設定")
+        raise ValueError("尚未設定好 LINE 登入與對外網址，同仁目前無法自行綁定；請先完成上方設定")
     if usernames is not None and (not isinstance(usernames, (list, tuple)) or not all(isinstance(u, str) for u in usernames)):
         raise ValueError("usernames 必須是帳號清單")
     with _remind_lock:

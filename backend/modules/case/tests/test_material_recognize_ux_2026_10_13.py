@@ -117,9 +117,9 @@ def test_success_text_only_when_the_save_really_succeeded():
 
 @needs_node
 def test_other_rejections_keep_the_review_prefix_and_do_not_reload_groups():
-    r = _run(scenario="rejected", list=[{"itemId": "c1", "field": "ordered", "code": "order_not_approved", "message": "這筆材料申請還沒核准。"}],
+    r = _run(scenario="rejected", list=[{"itemId": "c1", "field": "ordered", "code": "order_not_approved", "message": "這筆材料申請尚未核准。"}],
              local=[{"id": "c1"}], server=[{"id": "c1"}])
-    assert r["toasts"] == [["材料申請審核規則：這筆材料申請還沒核准。", "info"]] and r["loads"] == 0
+    assert r["toasts"] == [["材料申請審核規則：這筆材料申請尚未核准。", "info"]] and r["loads"] == 0
 
 
 @needs_node

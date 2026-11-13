@@ -209,7 +209,7 @@ def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) 
     item_id = str(order.get("itemId") or "")
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "這筆材料申請還沒有審核單（請先儲存材料申請清單）")
+        raise MaterialApprovalError(404, "這筆材料申請尚無審核單（請先儲存材料申請清單）")
     if row["status"] not in EDITABLE:
         raise MaterialApprovalError(409, "「%s」狀態不可送審" % row["status"])
     flow = resolve_active_flow_setting(DOC_TYPE)

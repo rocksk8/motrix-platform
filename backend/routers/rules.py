@@ -156,7 +156,7 @@ def rules_summary(entity: str = Query(...), authorization: str = Header(None)):
                                                              "level": (r.get("mark") or {}).get("level")} for r in rules if isinstance(r, dict)]}
         if rows is None:
             return dict(base, available=False, sampled=0, hits={},
-                        message="資料來源暫時讀取失敗，無法計算命中數" if failed else "這個主題還沒有接上資料來源，無法計算命中數")
+                        message="資料來源暫時讀取失敗，無法計算命中數" if failed else "這個主題尚未接上資料來源，無法計算命中數")
         out = E.evaluate(rules, rows, C.visible_ids(entity, u, conn), budget_ms=PREVIEW_BUDGET_MS)
         _note_degraded(authorization, entity, ver, out["degraded"])
         return dict(base, available=True, sampled=len(rows), hits=out["hits"], degraded=out["degraded"], notApplicable=out["notApplicable"])
@@ -191,7 +191,7 @@ def rules_preview(payload: dict = Body(default={}), authorization: str = Header(
         direction, reasons = P.classify(RS.KIND, live_body, body)
         if rows is None:
             return {"entity": entity, "available": False, "direction": direction, "reasons": reasons,
-                    "message": "資料來源暫時讀取失敗，無法預覽命中的紀錄" if failed else "這個主題還沒有接上資料來源，無法預覽命中的紀錄"}
+                    "message": "資料來源暫時讀取失敗，無法預覽命中的紀錄" if failed else "這個主題尚未接上資料來源，無法預覽命中的紀錄"}
         vis = C.visible_ids(entity, u, conn)
         cur = E.evaluate(live_body.get("rules") or [], rows, vis, budget_ms=PREVIEW_BUDGET_MS)
         new = E.evaluate(body.get("rules") or [], rows, vis, budget_ms=PREVIEW_BUDGET_MS)
@@ -207,7 +207,7 @@ def rules_preview(payload: dict = Body(default={}), authorization: str = Header(
                 "added": len(after - before), "removed": len(before - after), "samples": samples,
                 "direction": direction, "reasons": reasons,
                 "degraded": new["degraded"], "notApplicable": new["notApplicable"],
-                "note": "依最近 %d 筆估算（不是全部紀錄）；只列你本來就看得到的紀錄與欄位。" % len(rows)}
+                "note": "依最近 %d 筆估算（不是全部紀錄）；只列您本來就看得到的紀錄與欄位。" % len(rows)}
     finally:
         conn.close()
 

@@ -139,7 +139,7 @@ def _check_account_codes(conn, lines):
         if not code:
             # 🔑 空與「打錯」是兩件事，訊息也要分得出來：
             #    空 ＝ 還沒選；打錯 ＝ 選了一個不存在的。
-            problems.append("第 %d 行還沒有選會計科目" % i)
+            problems.append("第 %d 行尚未選擇會計科目" % i)
             continue
         ok, err = validate_account_code(conn, code)
         if not ok:
@@ -199,7 +199,7 @@ def require_final_superadmin(conn, user):
     if (user or {}).get("role") == "superadmin":
         return
     if conn.execute("SELECT 1 FROM users WHERE role='superadmin' AND active=1 LIMIT 1").fetchone():
-        raise HTTPException(403, "最後一層由最高管理者（會計主管，系統規定）核准，你不是這一層的簽核人。")
+        raise HTTPException(403, "最後一層由最高管理者（會計主管，系統規定）核准，您不是這一層的簽核人。")
 
 
 def _require_voucher_actor(conn, appr, user, action):
@@ -263,7 +263,7 @@ def insert_draft_voucher(conn, voucher_date, summary, lines, created_by, now, ca
     except Exception as exc:                            # noqa: BLE001
         if "UNIQUE" in str(exc).upper():
             raise HTTPException(
-                409, "傳票號碼「%s」剛剛被別人用掉了，請再存一次。" % no)
+                409, "傳票號碼「%s」已被其他人使用，請重新儲存。" % no)
         raise
     vid = cur.lastrowid
     for i, ln in enumerate(lines, start=1):

@@ -561,7 +561,7 @@ class BatchConflict(ValueError):
     """「復原這一批」時，有事件在套用之後被別人（或別的視窗）改過 ⇒ 整批拒絕復原（不蓋掉別人的修改）。`.keys`＝被改過的事件。"""
 
     def __init__(self, keys):
-        super().__init__("這些事件在你套用之後又被改過：%s" % "、".join(keys[:5]))
+        super().__init__("這些事件在您套用之後又被改過：%s" % "、".join(keys[:5]))
         self.keys = list(keys)
 
 

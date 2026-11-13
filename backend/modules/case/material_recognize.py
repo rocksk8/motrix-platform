@@ -117,7 +117,7 @@ def _order_conflict(ctx, g) -> bool:
 def _build(ctx, key, mid):
     g = ctx.group_map().get(key)
     if g is None:
-        return None, "找不到這張已核准的採購單（可能還沒核准、已被取消，或不屬於這個案件）"
+        return None, "找不到這張已核准的採購單（可能尚未核准、已被取消，或不屬於這個案件）"
     owner = ctx.taken.get(key)
     if owner and owner != mid:
         return None, "這張採購單已經認列到另一張材料卡片"

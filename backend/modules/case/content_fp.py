@@ -139,7 +139,7 @@ def approve_flags(entry: dict, username: str) -> list:
     return out
 
 
-FLAG_LABELS = {"reconfirm": "內容在你簽過之後有變動", "reassigned": "此單由他人轉簽給你", "delegated": "你是代理簽核"}
+FLAG_LABELS = {"reconfirm": "內容在您簽過之後有變動", "reassigned": "此單由他人轉簽給您", "delegated": "您是代理簽核"}
 REVIEW_NOTE_MAX = 200                                 # confirmNote 進稽核的字數上限（approve 端點截斷用）
 
 
@@ -559,8 +559,8 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
         blk = "、".join(blocks) if blocks else "（區塊未知）"
         if inv_names:
             notices.append({"type": "approval_reconfirm", "to": inv_names, "blocks": blocks, "by": by, "source": source, "rev": rev,
-                            "text": (f"你已簽核的報價單內容被 {who} 修改（{blk}），整條簽核已回到第 1 層重新進行；輪到你時會再通知" if chain_reset
-                                     else f"你已簽核的報價單內容被 {who} 修改（{blk}），請重新複查確認")})
+                            "text": (f"您已簽核的報價單內容被 {who} 修改（{blk}），整條簽核已回到第 1 層重新進行；輪到您時會再通知" if chain_reset
+                                     else f"您已簽核的報價單內容被 {who} 修改（{blk}），請重新複查確認")})
         others = [a.get("username") for _t, a in _entries(appr)
                   if a.get("status") != "approved" and not a.get("reconfirm") and a.get("username") not in (me, None)]
         if others:
@@ -569,7 +569,7 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
         req = appr.get("requestedBy")
         if req and req != me and req not in inv_names:
             notices.append({"type": "approval_reconfirm_info", "to": [req], "blocks": blocks, "by": by, "source": source, "rev": rev,
-                            "text": f"你送審的報價單內容被 {who} 修改（{blk}），已簽核的層需重新複查"})
+                            "text": f"您送審的報價單內容被 {who} 修改（{blk}），已簽核的層需重新複查"})
     return True, notices
 
 

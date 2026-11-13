@@ -1815,7 +1815,7 @@ def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str 
         conn.execute("BEGIN IMMEDIATE")
         award, lines = _load_case_award(conn, quote_no)
         if award is None:
-            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+            raise HTTPException(404, "這個案件尚無獎金分潤單。")
         if award["status"] not in ("草稿", "待審核"):
             raise HTTPException(409, "「%s」的獎金分潤單不能再修改（核准後不可改）。" % award["status"])
         in_review = award["status"] == "待審核"
@@ -1985,7 +1985,7 @@ def submit_case_bonus(quote_no: str, authorization: str = Header(None)):
         conn.execute("BEGIN IMMEDIATE")
         award, lines = _load_case_award(conn, quote_no)
         if award is None:
-            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+            raise HTTPException(404, "這個案件尚無獎金分潤單。")
         if award["status"] != "草稿":
             raise HTTPException(409, "只有草稿可以送審，這一張現在是「%s」。" % award["status"])
         if not lines:
@@ -2015,7 +2015,7 @@ def _sole_approver_bypass(appr, tiers, user, reason, code, msg):
         raise HTTPException(code, msg)
     reason = (reason or "").strip() if isinstance(reason, str) else ""
     if not reason:
-        raise HTTPException(403, "你不在這張獎金分潤的簽核層內；這條鏈只有一位簽核人（%s）。若要以最高管理者身分代為核准，請填寫原因"
+        raise HTTPException(403, "您不在這張獎金分潤的簽核層內；這條鏈只有一位簽核人（%s）。若要以最高管理者身分代為核准，請填寫原因"
                                  "（會寫入稽核紀錄，並通知其他最高管理者）。" % sole)
     return {"approver": sole, "reason": reason[:500]}
 
@@ -2168,7 +2168,7 @@ def return_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
         conn.execute("BEGIN IMMEDIATE")
         award, _lines = _load_case_award(conn, quote_no)
         if award is None:
-            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+            raise HTTPException(404, "這個案件尚無獎金分潤單。")
         if award["status"] == "已發放":
             raise HTTPException(409, "已發放的獎金分潤不可以退回。")
         if award["status"] == "草稿":

@@ -105,7 +105,7 @@ def test_weekly_and_monthly_off_machine_backups_count_too(client, su, action):
 
 def test_people_step_needs_staff_and_a_clean_org_check(client, make_user, su):
     s = _st(_get(client, su))["people"]
-    assert s["status"] == "todo" and "還沒有建立同仁帳號" in s["detail"]           # 全新安裝：沒有缺口也不算完成
+    assert s["status"] == "todo" and "尚未建立同仁帳號" in s["detail"]           # 全新安裝：沒有缺口也不算完成
     u, _ = make_user(username="gs_staff", role="sales")
     s = _st(_get(client, su))["people"]
     assert s["status"] == "todo" and "還有" in s["detail"] and s["href"] in ("users.html", "org-structure.html")

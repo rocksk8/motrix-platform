@@ -51,7 +51,7 @@ def _plan(body, base_date, mode, existing):
     base = _d(base_date)
     have = {e["stage_key"]: e["id"] for e in existing if e.get("stage_key")}
     if mode == "new" and existing:
-        raise PlanError("這個案件已經有階段了。要把樣板裡還沒有的階段補進來，請選「補上缺少的階段」；已有的階段不會被改動")
+        raise PlanError("這個案件已經有階段了。要把樣板裡尚無的階段補進來，請選「補上缺少的階段」；已有的階段不會被改動")
     ratios = [s.get("ratioBp") for s in stages]
     has_ratio = any(r is not None for r in ratios)
     use_ratio = has_ratio and not existing

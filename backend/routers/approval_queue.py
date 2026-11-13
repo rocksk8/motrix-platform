@@ -548,7 +548,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         if not requester:                                                                      # 讀不到送審人 ⇒ 規則無從驗證 ⇒ 擋下（fail-closed），不放行
             raise HTTPException(409, "無法確認這張單的送審人，不能轉簽（請改由修改簽核流程或退回重送）。")
         if user["username"] == requester:
-            raise HTTPException(403, "你是這張單的送審人，不能轉簽自己送審的單據。")
+            raise HTTPException(403, "您是這張單的送審人，不能轉簽自己送審的單據。")
         if to_username == requester:
             raise HTTPException(400, "不能把簽核轉給送審人本人（送審人不得自行核准自己送審的單據）。")
         # 雙人控管不能被轉簽收掉：對象已經在這張單的其他層（簽過或還沒簽）⇒ 同一個人會簽出兩層
@@ -607,7 +607,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
     # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
     if not self_assigned:                                        # 自己接手 ⇒ 不必通知自己（其他人都會收到『自行接手』）
         _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
-                actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
+                actor + " 將「" + body.id + "」的簽核轉給您（原因：" + reason + "）")
     # 第 54 班：原簽核人與其他在職最高管理者也要知道（否則簽核被拿走了，當事人和其他監督者都不知道）
     seen = {user["username"], to_username}
     note = "%s 將「%s」第 %d 層的簽核由 %s 轉給 %s%s（原因：%s）" % (

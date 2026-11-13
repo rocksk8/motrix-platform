@@ -524,7 +524,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
         if isinstance(_pv, str) and _pv and _preview_enforced(conn, kind):
             # T62 B：強制範圍內，寫鎖內比對的**永遠是看過預覽的那個戳**；呼叫端另外帶了不同的 base_etag ⇒ 兩邊對不上 ⇒ 409 draft_conflict（不發布）
             if base_etag is not None and base_etag != _pv:
-                return _err(D.DraftConflict("你載入的草稿與看過預覽的草稿不是同一份，未發布", {"etag": _pv}))
+                return _err(D.DraftConflict("您載入的草稿與看過預覽的草稿不是同一份，未發布", {"etag": _pv}))
             base_etag = _pv
         from routers import def_pipeline as _pl                          # T60 S2：旗標開、名單內的 kind ⇒ 放寬先待核准、收緊立即（其餘 ⇒ None，照舊）
         _piped = _pl.handle_publish(conn, kind, key, scope, u, (payload or {}).get("note", ""), base_etag, authorization)
@@ -535,7 +535,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
             from helpers import custom_modules as _cm
             _dr = D.get(conn, kind, key, scope, 0)
             if base_etag is not None and _dr is not None and _dr.get("etag") != base_etag:       # K-2：送審／發布的是「我看到的那份草稿」（先擋＝快速失敗；真正的比對在 D.publish／D.submit_draft 的寫鎖內）
-                return _err(D.DraftConflict("這份草稿在你載入之後被別人改過，未發布",
+                return _err(D.DraftConflict("這份草稿在您載入之後被其他人改過，未發布",
                                             {"etag": _dr.get("etag", ""), "created_by": _dr.get("created_by", ""), "created_at": _dr.get("created_at", "")}))
             _cap = _cm.mount_cap_problems(conn, key, (_dr or {}).get("body") or {}) if _dr else []
             if _cap:
@@ -706,7 +706,7 @@ def preview_output_template(key: str, payload: dict = Body(...), format: str = Q
     from helpers import doc_template as dt
     sample = _SAMPLE_VIEWS.get(key)
     if sample is None:
-        raise HTTPException(404, "這個輸出還沒有提供樣本資料預覽")
+        raise HTTPException(404, "這個輸出尚未提供樣本資料預覽")
     body = payload.get("body")
     if not isinstance(body, dict):
         return JSONResponse(status_code=422, content={"detail": "版型必須是 JSON 物件", "problems": [{"path": "", "message": "版型必須是 JSON 物件"}]})

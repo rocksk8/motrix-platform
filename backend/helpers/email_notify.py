@@ -713,7 +713,7 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
         _dl(_tf.get("title", "報價單退回修改通知"), doc_label), _tf.get("badge", "請修改後重新送審"), "#DC2626",
         [("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)],
         new_quote_no, _base_url(),
-        intro=_dl(_tf.get("intro", "您好，您提交的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"), doc_label),
+        intro=_dl(_tf.get("intro", "您好，您送審的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"), doc_label),
         note=note,
         button_text=_dl(_tf.get("button", "前往修改報價單"), doc_label),
         doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
@@ -2426,7 +2426,7 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
         "目前<b>沒有副本</b>；此期間若資料庫損毀或誤刪，這些資料將無法還原。"
         "<br><br><b>請依序檢查（正式機）</b>："
         "<br>1. 排程工作「MOTRIX ERP Daily Backup」是否還在、最近一次執行結果為何"
-        "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 有沒有內容"
+        "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 是否有內容"
         "<br>3. 雲端碟是否掛得起來（任一磁碟機代號下要找得到 "
         "<code>我的雲端硬碟\\系統存檔</code>）"
         "<br>4. <code>backend\\logs\\app.log</code> 搜尋 <code>_daily_backup</code>（錯誤也會寫在 <code>server.log</code>）"

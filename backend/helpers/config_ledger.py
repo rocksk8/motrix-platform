@@ -272,7 +272,7 @@ def approve(conn, change_id, actor, reason=""):
     if username == r["actor"]:
         return {"ok": False, "why": "申請人不能核准自己的變更", "approvals": len(have), "required": required}
     if username in have:
-        return {"ok": False, "why": "你已經核准過了", "approvals": len(have), "required": required}
+        return {"ok": False, "why": "您已經核准過了", "approvals": len(have), "required": required}
     _append(conn, change_id, "approved", actor, reason)
     return {"ok": True, "why": "", "approvals": len(have) + 1, "required": required}
 

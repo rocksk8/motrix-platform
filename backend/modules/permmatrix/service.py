@@ -269,7 +269,7 @@ def cancel_pending(conn, actor, pid, reason):
         if not L.cancel(conn, int(pid), actor, reason):
             raise PermError("這筆已不是待生效狀態（%s）" % st, 409)
         L.audit_event(conn, actor, "permmatrix.pending.cancel", pid, {"reason": reason, "id": int(pid)}, target_label="撤銷待生效 #%s" % pid)
-        notices = [(req, "perm_grant_cancelled", pid, "待生效授權已撤銷", "%s 撤銷了你申請的授權變更 #%s：%s" % (_name(actor), pid, reason))] if req != _name(actor) else []
+        notices = [(req, "perm_grant_cancelled", pid, "待生效授權已撤銷", "%s 撤銷了您申請的授權變更 #%s：%s" % (_name(actor), pid, reason))] if req != _name(actor) else []
         conn.commit()
     except Exception:
         conn.rollback()
@@ -627,7 +627,7 @@ def create_delegation(conn, actor, delegator, delegate, scope_kind, caps=(), doc
     try:
         if risky:
             res, notices = _request_pending(conn, actor, "delegation", "%s>%s" % (delegator, delegate), None, dict(p, riskCaps=risky), reason, "代理 %s → %s（%s）" % (delegator, delegate, "、".join(risky[:3])))
-            notices += [(delegator, "perm_delegation_pending", res["id"], "代理待生效", "你被設定為 %s 的委派人（%s 後生效）" % (delegate, res["effectiveAt"][:16].replace("T", " ")))]
+            notices += [(delegator, "perm_delegation_pending", res["id"], "代理待生效", "您被設定為 %s 的委派人（%s 後生效）" % (delegate, res["effectiveAt"][:16].replace("T", " ")))]
             conn.commit()
             _send(notices)
             return res

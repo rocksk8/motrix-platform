@@ -783,7 +783,7 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
             if not is_admin:
                 raise HTTPException(403, "付款日只有財務角色可以登錄（申請人登錄會繞過出納待付款）")
             if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
-                raise HTTPException(409, "這筆申請還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
+                raise HTTPException(409, "這筆申請尚未核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
             if changes["paid_date"] and not old_paid:                     # 第 48 班：設付款日＝標成已付款 ⇒ 與出納登錄付款同一道『缺廠商收款帳戶』擋（不能繞過 mark_paid）
                 from modules.case import payables as _PB
                 if _PB._po_bank_missing(row, _PB.po_bank_block_since()):

@@ -58,7 +58,7 @@ REJECT_MESSAGES = {
     "malformed":        "這不是有效的授權檔：內容無法辨識，可能被截斷、被改動，或選錯了檔案。請向供應商重新取得。",
     "bad_signature":    "這份授權沒有通過驗證，可能不是供應商簽發的，或內容被改動過。系統沒有更換任何東西。",
     "machine_mismatch": "這份授權是給另一台電腦的，不能用在這一台。如果這台電腦換過主機板或網卡，請聯絡供應商重新簽發。",
-    "machine_unreadable": "目前讀不到這台電腦的識別資訊，沒辦法確認這份授權是不是給這一台的。請稍後再試，仍不行請聯絡供應商。",
+    "machine_unreadable": "目前讀不到這台電腦的識別資訊，無法確認這份授權是否給這一台的。請稍後再試，仍不行請聯絡供應商。",
     "expired":          "這份授權已經過期（到期日 {expires}），不能使用。請向供應商取得新的授權。",
     "same_as_current":  "這份授權和目前使用中的是同一份，不需要更換。",
     "rate_limited":     "短時間內嘗試太多次，請稍後再試。",
@@ -259,7 +259,7 @@ def describe_current(machine_fn):
         level, headline = "bad", "目前的授權不是給這台電腦的"
         detail = "常見原因是伺服器換過主機板或網卡。請把下方的「機器代碼」提供給供應商重新簽發，拿到新授權檔後在下方匯入。"
     elif reason == "missing":
-        level, headline = "bad", "這台電腦還沒有安裝授權"
+        level, headline = "bad", "這台電腦尚未安裝授權"
         detail = "請向供應商取得授權檔（申請時需要下方的「機器代碼」），再到下方匯入。"
     else:                                                   # malformed／bad_signature
         level, headline = "bad", "目前的授權檔無法使用"
@@ -551,7 +551,7 @@ def _run_import(raw, *, apply, confirm, machine_fn):
             return _with(info, ok=True, applied=True, reason="applied", http=200,
                          backup=os.path.basename(backup) if backup else None,
                          restart_needed=restart,
-                         message="已更換成新的授權。" + ("要讓功能的增減生效，需要重新啟動服務。" if restart else "馬上生效，不需要重新啟動。"))
+                         message="已更換成新的授權。" + ("要讓功能的增減生效，需要重新啟動服務。" if restart else "立即生效，不需要重新啟動。"))
         except Exception:  # noqa: BLE001
             logger.exception("license_manager: 換檔後的步驟發生未預期的錯誤，還原成原本的授權")
             return _after_swap_failed(path, backup)

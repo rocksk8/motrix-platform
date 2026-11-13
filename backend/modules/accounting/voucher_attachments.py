@@ -142,7 +142,7 @@ def source_files(conn, source_type, doc_no, user):
     try:
         return prov.files(conn, source_type, doc_no, user)
     except _uploads.AttachmentNotVisible:
-        raise HTTPException(403, "你沒有權限查看這筆附件的原單據。")
+        raise HTTPException(403, "您沒有權限查看這筆附件的原單據。")
     except _uploads.AttachmentSourceError as e:
         raise HTTPException(400, str(e))
 

@@ -374,7 +374,7 @@ def test_heartbeat_test_without_url_says_so_and_does_not_call_out(client, make_u
     monkeypatch.setattr(bm, "_ping", lambda u: pytest.fail("沒設網址不該對外"))
     h = _login(client, make_user)
     r = client.post("/api/system/backup-monitor/heartbeat-test", headers=h, json={"confirm": True})
-    assert r.status_code == 200 and r.json()["ok"] is False and "還沒有設定" in r.json()["message"]
+    assert r.status_code == 200 and r.json()["ok"] is False and "尚未設定" in r.json()["message"]
 
 
 def test_heartbeat_test_ok_then_rate_limited(client, make_user, hb_cfg, fresh_limits, monkeypatch):

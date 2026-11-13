@@ -117,7 +117,7 @@ def create(conn, user, action, params):
     dup = conn.execute("SELECT request_no FROM gl_action_requests WHERE status='待審核' AND action=? AND requested_by=? AND params_json=?",
                        (action, uname, blob)).fetchone()
     if dup:
-        raise RequestConflict("你已經送出同一個申請（%s），請等待最高管理者簽核。" % dup["request_no"])
+        raise RequestConflict("您已經送出同一個申請（%s），請等待最高管理者簽核。" % dup["request_no"])
     now = _dt.datetime.now().isoformat(timespec="seconds")
     no = _next_no(conn, now)
     display = (user or {}).get("display_name") or uname

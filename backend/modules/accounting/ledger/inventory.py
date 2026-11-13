@@ -34,7 +34,7 @@ def issue_amount(conn, part_no, qty):
     if qty <= 0:
         raise ValueError("出庫數量要大於 0")
     if qty > qb:
-        raise InsufficientStock("料號 %s 在庫 %d 不足出庫 %d（進貨事件還沒入帳，或尚未建立開帳存貨）" % (part_no, qb, qty))
+        raise InsufficientStock("料號 %s 在庫 %d 不足出庫 %d（進貨事件尚未入帳，或尚未建立開帳存貨）" % (part_no, qb, qty))
     return vb if qty == qb else int(round_half_up(vb * qty / qb))
 
 

@@ -60,7 +60,7 @@ def _cap_label(key: str) -> str:
 def question(key: str, who: str) -> str:
     """白話提問，例：「財務可以送出勞報單嗎？」。"""
     c = _cap.get(key)
-    return (c.question if c is not None else "{who}可以做這件事嗎？").replace("{who}", who)
+    return (c.question if c is not None else "{who}是否可以做這件事？").replace("{who}", who)
 
 
 def sentence_role_cap(role: str, key: str, granted: bool) -> str:
@@ -80,7 +80,7 @@ def sentence_delegation(delegator_name: str, delegate_name: str, keys: Iterable[
         dd = valid_to[8:10].lstrip("0") or "?"
         until = "，到 %s/%s" % (mm, dd)
     when = "，%d 小時後生效" % pending_hours if pending_hours else "，儲存後立即生效"
-    return "你即將讓%s代理%s：%s%s%s" % (delegate_name, delegator_name, what, until, when)
+    return "您即將讓%s代理%s：%s%s%s" % (delegate_name, delegator_name, what, until, when)
 
 
 def risk_hint(key: str) -> str:

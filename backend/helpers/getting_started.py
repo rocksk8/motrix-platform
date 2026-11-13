@@ -63,12 +63,12 @@ STEPS = (
      "confirm": "系統記錄到第一次「備份到別的地方」成功（只有這台電腦上的備份不算）。",
      "href": BACKUP_HREF, "link": "到儲存位置與備份"},
     {"id": "line", "title": "LINE（可略過）",
-     "why": "有了 LINE，簽核通知會直接傳到同仁手機。不用也沒關係，之後想用再回來設定。",
+     "why": "有了 LINE，簽核通知會直接傳到同仁手機。可暫不使用，日後需要時再回來設定。",
      "minutes": "約 20 分鐘，另外每位同仁各 1 分鐘", "prepare": ["LINE 官方帳號", "對外網址（讓 LINE 連得回來）"],
      "confirm": "官方帳號連線成功，並且至少一位同仁完成綁定；請同仁各自到「我的帳號 → 通知」按「綁定 LINE」。",
      "href": "notification-settings.html", "link": "到通知設定", "optional": True},
     {"id": "import", "title": "匯入資料",
-     "why": "把既有的客戶、料號、員工與歷史報價放進來，之後就不用重打。",
+     "why": "把既有的客戶、料號、員工與歷史報價放進來，日後無需重新輸入。",
      "minutes": "依資料量而定", "prepare": ["整理好的 Excel 檔（客戶、料號、員工、歷史報價）"],
      "confirm": "系統裡已經有客戶資料；全部匯入完畢後也可以按「資料已備妥」。",
      "href": "customers.html", "link": "到客戶資料"},
@@ -101,7 +101,7 @@ def _d_company(conn):
         return {"done": True, "auto": True, "detail": "公司資料已確認。"}
     missing = st.get("missing") or []
     return {"done": False, "auto": True,
-            "detail": ("還有 %d 個必填欄位沒填好。" % len(missing)) if missing else "公司資料還沒有按「確認」。"}
+            "detail": ("還有 %d 個必填欄位沒填好。" % len(missing)) if missing else "公司資料尚未按「確認」。"}
 
 
 def _d_quote_style(conn):
@@ -109,13 +109,13 @@ def _d_quote_style(conn):
     from helpers import _get_setting
     miss = cs.payment_bank_missing(_get_setting("company_profile", {}) or {})
     hint = ("收款帳戶還缺：" + "、".join(miss) + "。") if miss else "收款帳戶已填。"
-    return {"done": False, "auto": False, "detail": hint + "預覽報價單這件事系統看不出來，請你確認後按「我已預覽確認」。"}
+    return {"done": False, "auto": False, "detail": hint + "預覽報價單這件事系統看不出來，請您確認後按「我已預覽確認」。"}
 
 
 def _d_people(conn):
     from helpers import org_gaps as og
     if not og._has_regular_staff(conn):
-        return {"done": False, "auto": True, "detail": "還沒有建立同仁帳號。", "fix": {"label": "到使用者管理", "href": "users.html"}}
+        return {"done": False, "auto": True, "detail": "尚未建立同仁帳號。", "fix": {"label": "到使用者管理", "href": "users.html"}}
     res = og.check(conn)
     if res["ok"]:
         return {"done": True, "auto": True, "detail": "組織設定檢查全部通過。"}
@@ -128,7 +128,7 @@ def _d_email(conn):
     at = _latest_audit_at(conn, (EMAIL_TEST_ACTION,))
     if at:
         return {"done": True, "auto": True, "detail": "最近一次測試信寄出成功：%s。" % _fmt_at(at)}
-    return {"done": False, "auto": True, "detail": "還沒有寄過測試信（或寄出失敗）。"}
+    return {"done": False, "auto": True, "detail": "尚未寄過測試信（或寄出失敗）。"}
 
 
 def _d_backup(conn):
@@ -139,21 +139,21 @@ def _d_backup(conn):
     if local:
         return {"done": False, "auto": True,
                 "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟壞掉時會一起消失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一顆硬碟），並等它成功備份一次。" % _fmt_at(local)}
-    return {"done": False, "auto": True, "detail": "系統還沒有記錄到備份成功。"}
+    return {"done": False, "auto": True, "detail": "系統尚未記錄到備份成功。"}
 
 
 def _d_line(conn):
     from helpers import line_notify as ln
     from helpers import _get_setting
     if not ln.enabled():
-        return {"done": False, "auto": True, "detail": "LINE 還沒有串接。（這一步可以略過。）"}
+        return {"done": False, "auto": True, "detail": "LINE 尚未串接。（這一步可以略過。）"}
     links = _get_setting(ln.LINKS_KEY, {}) or {}
     names = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1").fetchall()]
     # 一次讀整份綁定表再逐人對照（`is_linked` 逐人各查一次資料庫；綁定時 `link_user` 已驗過 userId 格式，這裡只認「有 userId」）
     bound = sum(1 for n in names if isinstance(links.get(n), dict) and links[n].get("userId"))
     if bound >= 1:
         return {"done": True, "auto": True, "detail": "已有 %d／%d 位同仁綁定 LINE。" % (bound, len(names))}
-    return {"done": False, "auto": True, "detail": "官方帳號已連線，但還沒有同仁綁定（請同仁到「我的帳號 → 通知」綁定）。"}
+    return {"done": False, "auto": True, "detail": "官方帳號已連線，但尚無同仁綁定（請同仁到「我的帳號 → 通知」綁定）。"}
 
 
 def _d_import(conn):
@@ -165,7 +165,7 @@ def _d_import(conn):
         c = 0
     if c > 0:
         return {"done": True, "auto": True, "detail": "已經有 %d 位客戶資料。" % c}
-    return {"done": False, "auto": False, "detail": "還沒有客戶資料。匯入完畢後也可以按「資料已備妥」。"}
+    return {"done": False, "auto": False, "detail": "尚無客戶資料。匯入完畢後也可以按「資料已備妥」。"}
 
 
 _DETECT = {"company": _d_company, "quote_style": _d_quote_style, "people": _d_people, "email": _d_email,
