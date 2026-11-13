@@ -162,3 +162,72 @@ def test_diff_tolerates_rate_limit_flip_only_on_listed_routes():
     assert RK.diff({r: rl}, {r: {"s": 500, "k": ["detail"]}})["changed"], "429→500 必須報"
     other = "/api/not-rate-limited"
     assert RK.diff({other: rl}, {other: ok})["changed"], "清單外的 429↔200 必須報"
+
+
+# ── 動態月份鍵正規化（T84，h11）────────────────────────────────────────────────────────
+# /api/dashboard/bundle（expenses.otherBreakdown.<YYYY-MM>）與 /api/dashboard/expenses-monthly（otherBreakdown.<YYYY-MM>）用『最近 12 個月』當物件鍵，
+# 視窗隨今天滾動；基準錄在 11 月，不正規化的話 12/1 起必紅（與程式無關）。
+
+def _months(first_year, first_month, n=12):
+    out, y, m = [], first_year, first_month
+    for _ in range(n):
+        out.append("%04d-%02d" % (y, m))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def test_month_keys_rolling_window_is_not_a_diff():
+    """滾動視窗：2025-12…2026-11 → 2026-01…2026-12，鍵集『相同』（12 個月）；key_paths 的原始輸出確實不同（正對照：沒正規化就會紅）。"""
+    route = "/api/dashboard/bundle"
+    mk = lambda months: {"expenses": {"otherBreakdown": {m: 0 for m in months}, "items": [{"total": 1}]}}   # noqa: E731
+    old, new = mk(_months(2025, 12)), mk(_months(2026, 1))
+    assert RK.key_paths(old) != RK.key_paths(new), "正對照失效：原始鍵路徑本來就該不同"
+    b = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths(old))}}
+    n = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths(new))}}
+    assert RK.diff(b, n) == {"missing": [], "added": [], "changed": {}}
+    # 舊格式基準（含 12 個具體月份、尚未正規化）對新記錄也不報：diff 兩側都走 norm_keys
+    raw = {route: {"s": 200, "k": RK.key_paths(old)}}
+    assert RK.diff(raw, n)["changed"] == {}
+    assert RK.norm_keys(RK.key_paths(old)) == ["expenses", "expenses.items", "expenses.items[].total",
+                                               "expenses.otherBreakdown", "expenses.otherBreakdown.<月>"]
+
+
+def test_month_keys_real_key_changes_are_still_reported():
+    """正規化不可吞掉真的變動：新增／消失的真鍵、月份底下的子鍵、狀態類別都照報。"""
+    route = "/api/dashboard/expenses-monthly"
+    base = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths({"otherBreakdown": {"2026-10": 1}, "total": 1}))}}
+    extra = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths({"otherBreakdown": {"2026-11": 1}, "total": 1, "owner_unit_id": 1}))}}
+    assert list(RK.diff(base, extra)["changed"]) == [route], "多了真鍵必須報"
+    gone = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths({"otherBreakdown": {"2026-11": 1}}))}}
+    assert list(RK.diff(base, gone)["changed"]) == [route], "少了真鍵必須報"
+    sub = {route: {"s": 200, "k": RK.norm_keys(RK.key_paths({"otherBreakdown": {"2026-11": {"x": 1}}, "total": 1}))}}
+    assert list(RK.diff(base, sub)["changed"]) == [route], "月份底下新增子鍵必須報"
+    assert list(RK.diff(base, {route: {"s": 500, "k": base[route]["k"]}})["changed"]) == [route], "200→500 必須報"
+    assert RK.leaks({route: extra[route]}), "owner_unit_id 洩漏檢查不受正規化影響"
+
+
+def test_norm_keys_only_collapses_whole_year_month_segments():
+    """只換『整段』YYYY-MM；日期、前後黏字、不存在的月份、冪等、None。"""
+    N = RK.norm_keys
+    assert N(["a.2026-11"]) == ["a.<月>"] and N(["a.2025-12.b", "a.2026-01.b"]) == ["a.<月>.b"]
+    assert N(["2026-11"]) == ["<月>"] and N(["a[].2026-11"]) == ["a[].<月>"]
+    keep = ["a.2026-11-05", "a.2026-13", "a.2026-00", "a.x2026-11", "a.2026-11x", "a.12026-11", "a.1899-11", "a.2026-1"]
+    assert N(keep) == sorted(keep), "日／13 月／黏字／非 19xx-20xx 不可被換掉"
+    assert N(N(["a.2026-11", "a.2026-12"])) == ["a.<月>"], "冪等"
+    assert N(None) is None and N([]) == []
+    assert N(["b", "a.2026-11", "a.2026-12", "a"]) == ["a", "a.<月>", "b"], "去重＋排序"
+
+def test_export_header_month_year_tokens_are_masked_but_structure_is_compared():
+    """匯出表頭裡的『YYYY-MM』『YYYY 年 M 月』『YYYY年度』隨執行月／年變動：遮掉才不會 12/1、1/1 無故轉紅；欄位名／工作表名變了照報。"""
+    M = RK._mask_dates
+    a = ["當月收支|2026-11 當月收支明細", "本期收款明細|本期收款明細 — 2026 年 11 月", "今年度收支|2026年度收支總表", "未收款清單|未收款清單 — 截至 2026-11-13"]
+    b = [h.replace("2026-11-13", "2026-12-01").replace("2026-11", "2026-12").replace("2026 年 11 月", "2027 年 1 月").replace("2026年度", "2027年度") for h in a]
+    assert b != a and M(a) == M(b), "換月／換年不該有差異"
+    assert M(M(a)) == M(a) and M(None) is None, "冪等＋None"
+    assert M(["x|2026-13 y", "x|a2026-11b"]) == ["x|2026-13 y", "x|a2026-11b"], "13 月／黏字不遮"
+    route = "/api/reports/export"
+    base = {route: {"s": 200, "ct": "x", "hdr": M(a)}}
+    same = {route: {"s": 200, "ct": "x", "hdr": M(b)}}
+    assert RK.diff(base, same)["changed"] == {}
+    renamed = {route: {"s": 200, "ct": "x", "hdr": M([h.replace("當月收支", "本月收支") for h in b])}}
+    assert list(RK.diff(base, renamed)["changed"]) == [route], "工作表名／表頭文字變了必須報"
