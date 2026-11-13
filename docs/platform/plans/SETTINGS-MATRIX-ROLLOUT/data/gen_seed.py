@@ -61,30 +61,46 @@ def batchable(f, group_sensitive=False):
     return "是（需確認視窗）" if f["risk"] == "ops" else "是"
 
 
-def checkbox(f, group_sensitive, n_rule_in_group):
-    """② 畫面提供勾選格（PM r3 M4）：① 規則上可批次、不是文字欄位、而且「有可重複套用的對象」才給。
-    可重複套用的對象＝本群組還有其他規則上可批次的欄位（可一起勾選重設）或該欄的建議值≠預設值（「套用建議值」是和「重設為預設」不同的動作；單欄的重設已有逐列「還原預設」）。批次勾選在群組頁內進行。
-    不給的要寫原因。往後對使用者報的數字一律以 ② 為準。"""
+def load_pages():
+    """data/shell_groups.json：group -> 頁面（實際呈現的頁面，SPEC §14.5）。可勾選數一律以「實際呈現的頁面」為準，不以 registry 群組為準（PM r3.2 ⑥）。"""
+    sg = json.load(open(HERE / "shell_groups.json", encoding="utf-8"))
+    g2p = {g: pid for pid, p in sg["pages"].items() for g in p["groups"]}
+    assert len(g2p) == sum(len(p["groups"]) for p in sg["pages"].values()), "shell_groups.json：同一群組出現在兩個頁面"
+    return sg, g2p
+
+
+def page_rule_count(reg, sg):
+    """每頁「規則上可批次」的欄位數。"""
+    return {pid: sum(1 for g in p["groups"] for f in reg[g]["fields"] if batchable(f, reg[g]["sensitive"]).startswith("是")) for pid, p in sg["pages"].items()}
+
+
+def checkbox(f, group_sensitive, page, n_rule_in_page):
+    """② 畫面提供勾選格（PM M4＋r3.2 ⑥）：① 規則上可批次、不是文字欄位、該「頁面」的呈現方式是勾選格，而且「有可重複套用的對象」才給。
+    可重複套用的對象＝本頁面還有其他 ① 為是的欄位（可一起勾選），或該欄的建議值≠預設值。不給的要寫原因。往後對使用者報的數字一律以 ② 為準。"""
     rule = batchable(f, group_sensitive)
     if rule.startswith("否"):
         return rule  # 永不進批次／文字欄位，原因即 ① 的字樣
-    if n_rule_in_group >= 2 or (f["recommended"] is not None and f["recommended"] != f["default"]):
+    if page["style"] == "preset-only":
+        return "否（只透過預設組合：" + page["reason"] + "）"
+    if page["style"] == "form":
+        return "否（單項表單：" + page["reason"] + "）"
+    if n_rule_in_page >= 2 or (f["recommended"] is not None and f["recommended"] != f["default"]):
         return rule
-    return "否（單項表單：本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「還原預設」多的功能）"
+    return "否（單項表單：本頁只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「還原預設」多的功能）"
 
 
 def settings_center_csv(reg):
     cols = ["段", "分工", "群組代碼", "現群組名", "群組風險標示(內含高風險項目?)", "欄位代碼", "現名稱(label)", "現問句", "現說明", "現影響說明", "型別",
             "預設值", "建議值", "單位", "現選項(標籤：後果)", "風險類別", "風險提示", "收進進階", "確認期間才生效", "放寬須雙人核准", "規則上可批次?", "畫面提供勾選格?"] + FILL
     rows = []
+    sg, g2p = load_pages(); nrp = page_rule_count(reg, sg)
     for g, v in sorted(reg.items(), key=lambda kv: (slice_of(kv[0]), kv[0])):
-        n_rule = sum(1 for f in v["fields"] if batchable(f, v["sensitive"]).startswith("是"))
         hi = any(f["risk"] in ("security", "money", "legal") or f["requiresPending"] for f in v["fields"])
         for f in v["fields"]:
             ch = "；".join("%s：%s" % (c["label"], c["impact"]) for c in f["choices"])
             rows.append(["一～三 設定中心欄位", slice_of(g), g, v["label"], "內含高風險項目" if hi else "", f["key"], f["label"], f["question"], f["help"], f["impact"],
                          f["type"], json.dumps(f["default"], ensure_ascii=False), "" if f["recommended"] is None else json.dumps(f["recommended"], ensure_ascii=False),
-                         f["unit"], ch, f["risk"], f["riskText"], "是" if f["advanced"] else "", "是" if f["requiresPending"] else "", f["loosen"] or "", batchable(f, v["sensitive"]), checkbox(f, v["sensitive"], n_rule)] + [""] * len(FILL))
+                         f["unit"], ch, f["risk"], f["riskText"], "是" if f["advanced"] else "", "是" if f["requiresPending"] else "", f["loosen"] or "", batchable(f, v["sensitive"]), checkbox(f, v["sensitive"], sg["pages"][g2p[g]], nrp[g2p[g]])] + [""] * len(FILL))
     # 第四段：設定中心以外（PM 2026-11-13 M2）。位置請負責人補到「備註」；不在本次範圍的只有 API 的兩項，不替它們發明畫面。
     outside = [
         (SLICE_JIA, "bonus 預設", "獎金", ""), (SLICE_JIA, "憑證帳戶", "", ""), (SLICE_JIA, "扣款設定", "", ""),
@@ -195,13 +211,29 @@ def check_batchable():
             else:
                 w = "是（需確認視窗）" if f["risk"] == "ops" else "是"
             want[(g, f["key"])] = w
-    # ② 畫面提供勾選格：獨立重算（見 checkbox() 的定義）
-    n_rule = {g: sum(1 for f in v["fields"] if want[(g, f["key"])].startswith("是")) for g, v in groups.items()}
+    # ② 畫面提供勾選格：依 shell_groups.json 的「頁面」獨立重算（PM r3.2 ⑥）
+    sg = json.load(open(HERE / "shell_groups.json", encoding="utf-8"))
+    pages = sg["pages"]
+    assert set(sg["groups"]) == set(groups), "shell_groups.json 的群組集合與 settings_groups.json 不同：%s" % (set(sg["groups"]) ^ set(groups))
+    g2p = {}
+    for pid, p in pages.items():
+        assert p["style"] in ("checkbox", "form", "preset-only"), pid
+        assert p["category"] in sg["categoryOrder"], pid
+        for g in p["groups"]:
+            assert g not in g2p, "群組 %s 出現在兩個頁面" % g
+            g2p[g] = pid
+    assert set(g2p) == set(groups), "有群組沒有對應頁面"
+    n_rule = {pid: sum(1 for g in p["groups"] for f in groups[g]["fields"] if want[(g, f["key"])].startswith("是")) for pid, p in pages.items()}
     want2 = {}
     for g, v in groups.items():
+        pg = pages[g2p[g]]
         for f in v["fields"]:
             w = want[(g, f["key"])]
-            want2[(g, f["key"])] = w if (w.startswith("否") or n_rule[g] >= 2 or (f.get("recommended") is not None and f.get("recommended") != f["default"])) else "否（單項表單：本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「還原預設」多的功能）"
+            if w.startswith("否"): w2 = w
+            elif pg["style"] != "checkbox": w2 = "否（"+("只透過預設組合：" if pg["style"] == "preset-only" else "單項表單：")+pg["reason"]+"）"
+            elif n_rule[g2p[g]] >= 2 or (f.get("recommended") is not None and f.get("recommended") != f["default"]): w2 = w
+            else: w2 = "否（單項表單：本頁只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「還原預設」多的功能）"
+            want2[(g, f["key"])] = w2
     for name in ("settings-center-items.seed.csv", "settings-center-items.csv"):
         with open(HERE / name, encoding="utf-8-sig", newline="") as fh:
             rows = [r for r in csv.DictReader(fh) if r["段"].startswith("一")]
@@ -210,9 +242,26 @@ def check_batchable():
             assert set(got) == set(exp), "%s：欄位集合與 settings_groups.json 不同" % name
             bad = [k for k in exp if got[k] != exp[k]]
             assert not bad, "%s：「%s」與重算不符 %d 列，例：%s" % (name, col, len(bad), bad[:5])
+        # 與盤點表自己宣告的「套用樣式」交叉比對（有填才比）：② 不給勾選格卻寫「勾選批次」、或給了卻沒寫勾選批次／預設組合，都算不一致（mockup 與盤點表要一致）
+        clash = []
+        for r in rows:
+            st = r.get("【填】套用樣式", "")
+            if not st: continue
+            yes = r["畫面提供勾選格?"].startswith("是")
+            if (not yes and "勾選批次" in st) or (yes and "勾選批次" not in st and "預設組合" not in st):
+                clash.append((r["群組代碼"], r["欄位代碼"], r["畫面提供勾選格?"][:10], st))
+        assert not clash, "%s：② 與【填】套用樣式不一致 %d 列，例：%s" % (name, len(clash), clash[:5])
         a1 = sum(1 for k in want if want[k].startswith("是")); a2 = sum(1 for k in want2 if want2[k].startswith("是"))
+        by = {}
+        for (g, _), w in want2.items():
+            if w.startswith("是"):
+                by.setdefault(slice_of_json(g), 0); by[slice_of_json(g)] += 1
         assert a2 <= a1
-        print("check ok  %s  rows=%d  ①規則上可批次=%d  ②畫面提供勾選格=%d（對使用者報 ②）" % (name, len(rows), a1, a2))
+        print("check ok  %s  rows=%d  ①規則上可批次=%d  ②畫面提供勾選格=%d %s（對使用者報 ②）" % (name, len(rows), a1, a2, dict(by)))
+
+
+def slice_of_json(g):
+    return "甲" if g in JIA else "乙"
 
 
 if __name__ == "__main__":
