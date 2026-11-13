@@ -141,6 +141,12 @@
   },
   {
    "file": "modules/case/api/completion_notes.py",
+   "path": "/api/completion-notes/case-prefill",
+   "handler": "completion_case_prefill",
+   "scope": "own_rule"
+  },
+  {
+   "file": "modules/case/api/completion_notes.py",
    "path": "/api/completion-notes/quote-items",
    "handler": "completion_quote_items",
    "scope": "own_rule"
