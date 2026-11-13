@@ -13,6 +13,7 @@
 ⇒「登記表有、程式碼沒有提供」不算（主持裁定 2026-09-26）。資料夾在就照樣比對；提供方沒寫出模組路徑（例如仍寫 `routers/…`）不豁免。
 """
 import ast
+import functools
 import re
 from pathlib import Path
 
@@ -96,8 +97,41 @@ def _str0(call):
     return None
 
 
+@functools.lru_cache(maxsize=None)
+def _file_capabilities(src):
+    """一個檔的 (provided, consumed)（frozenset）。以原始碼文字為鍵快取：「逐一拿掉每個模組」要對 15 個模組各算一次全 repo，
+    原本每次重新 parse 全部檔（O(模組×檔)）；每個檔的能力掃描結果與「拿掉誰」無關 ⇒ 只算一次（D2，2026-11-13）。"""
+    provided, consumed = set(), set()
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else (fn.id if isinstance(fn, ast.Name) else "")
+        if name == "provide" and _str0(node):
+            provided.add(_str0(node))
+        elif name in ("single_provider", "providers") and _str0(node):
+            consumed.add(_str0(node))
+        elif name == "ModuleSpec":
+            for kw in node.keywords:
+                if kw.arg == "providers" and isinstance(kw.value, ast.Dict):
+                    for k in kw.value.keys:
+                        if isinstance(k, ast.Tuple) and k.elts and isinstance(k.elts[0], ast.Constant):
+                            provided.add(k.elts[0].value)
+    return frozenset(provided), frozenset(consumed)
+
+
 def code_capabilities(sources):
-    """sources：{名稱: 原始碼}。回 (provided, consumed)。"""
+    """sources：{名稱: 原始碼}。回 (provided, consumed)。＝各檔結果的聯集（見 _file_capabilities）。"""
+    provided, consumed = set(), set()
+    for src in sources.values():
+        p, c = _file_capabilities(src)
+        provided |= p
+        consumed |= c
+    return provided, consumed
+
+
+def _code_capabilities_uncached(sources):
+    """D2 之前的原寫法（逐檔 parse、不快取），只給等價對照題用。"""
     provided, consumed = set(), set()
     for src in sources.values():
         for node in ast.walk(ast.parse(src)):
@@ -296,3 +330,17 @@ def test_missing_registry_files_checks_consumer_guard_and_freeze_rows(tmp_path):
 def test_every_provider_file_in_the_registry_exists():
     bad = missing_provider_files(DOC.read_text(encoding="utf-8"))
     assert not bad, "INTEGRATION-POINTS 的提供方／使用方／守門／單據凍結檔案不存在（路徑寫錯或已搬走？）：\n  " + "\n  ".join(bad)
+
+
+def test_cached_capability_scan_equals_the_original_algorithm():
+    """D2 等價對照：快取版（逐檔結果的聯集）與原寫法（逐檔 parse）在真實樹上逐模組「拿掉」後結果完全相同。
+    取：全部檔、以及拿掉其中兩個模組（有提供者的 case 與一個取用端），再加合成來源（含 ModuleSpec／provide／取用）。"""
+    srcs = {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.product_files()}
+    keys = [d.name for d in source_tree.module_dirs()]
+    pick = [k for k in ("case", "arap") if k in keys] or keys[:2]
+    assert code_capabilities(srcs) == _code_capabilities_uncached(srcs)
+    for key in pick:
+        rest = {r: s for r, s in srcs.items() if _module_key(r) != key}
+        assert len(rest) < len(srcs)
+        assert code_capabilities(rest) == _code_capabilities_uncached(rest), key
+    assert code_capabilities(_SRC) == _code_capabilities_uncached(_SRC) and code_capabilities(_SRC)[0], "合成來源：非空才有意義"

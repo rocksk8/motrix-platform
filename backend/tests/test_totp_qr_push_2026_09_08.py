@@ -1,3 +1,4 @@
+# 2026-11-13 chore/test-prune：刪 test_qr_approve_via_session_token_same_account_succeeds——它的步驟與斷言（核准 200＋{"ok": True}、qr-status 200、username 相同）全部包含在 test_qr_approve_with_phone_session_then_status_issues_session_once（另外還驗 token、單次有效）裡
 """手機掃 QR 核准登入測試（2026-09-08 新增，與既有 6 位數驗證碼並行）。
 見 routers/auth.py 的 login_qr_info() / login_qr_approve() / login_qr_status()。
 以下三個 helper 複製自 test_totp_2026_09_07.py（此專案測試慣例是各檔各自複製
@@ -110,30 +111,6 @@ def test_manual_code_path_unaffected_by_qr_password_removal(client, make_user):
         assert client.post("/api/auth/login/qr-approve", json={"challenge_token": challenge, "password": password}).status_code == 400
     ok = client.post("/api/auth/login/totp", json={"challenge_token": challenge, "code": pyotp.TOTP(secret).now()})
     assert ok.status_code == 200 and ok.json()["token"]
-
-
-def test_qr_approve_via_session_token_same_account_succeeds(client, make_user):
-    # 2026-09-08（再新增）：手機瀏覽器已經是登入狀態時免再輸入密碼——用手機
-    # 現有 session token 核准，只要 session 的帳號跟這次核准請求的目標帳號
-    # 相同即可，不需要密碼。
-    username, password = make_user(role="superadmin")
-    phone_session_token = _login(client, username, password)["token"]
-    _enable_totp(client, phone_session_token)
-    challenge = client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    ).json()["challengeToken"]
-
-    approve = client.post(
-        "/api/auth/login/qr-approve",
-        json={"challenge_token": challenge, "session_token": phone_session_token},
-    )
-    assert approve.status_code == 200, approve.text
-    assert approve.json() == {"ok": True}
-
-    status = client.get("/api/auth/login/qr-status",
-                      headers={"X-Login-Challenge": challenge})
-    assert status.status_code == 200, status.text
-    assert status.json()["username"] == username
 
 
 def test_qr_approve_via_session_token_different_account_rejected(client, make_user):

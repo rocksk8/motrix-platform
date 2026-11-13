@@ -18,7 +18,7 @@ MODTEST = REPO / "tools" / "platform" / "modtest.py"
 def _run(env_extra):
     # --no-count：這題驗 stdout 只有 JSON，與題數無關；呼叫端 module_update.ship_tests 也是這樣呼叫（第 45 班 O5，省掉 collect 全庫）
     env = dict(os.environ, PYTHONIOENCODING="utf-8", **env_extra)
-    return subprocess.run([sys.executable, str(MODTEST), "--files", "backend/tools/module_apply_steps.py", "--dry-run", "--json", "--no-count"],
+    return subprocess.run([sys.executable, str(MODTEST), "--files", "backend/tools/module_apply_steps.py", "--dry-run", "--json", "--no-count", "--use-files"],
                           cwd=str(REPO), capture_output=True, env=env, timeout=600)
 
 

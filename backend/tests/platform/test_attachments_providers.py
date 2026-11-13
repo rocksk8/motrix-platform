@@ -1,3 +1,4 @@
+# 依第42班使用者裁示（傳票／出納／財務金額能力只屬財務角色與 superadmin；財務與出納合併），刪除 7 題原本 skip 的測試：test_voucher_users_only_see_attachments_of_cases_they_can_read、test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages、test_invoice_voucher_attachments_keep_the_amount_layer、test_quotation_attachments_are_not_wider_than_the_case_page、test_hidden_notice_carries_no_identifier_of_the_unseen_document、test_partially_visible_invoice_vouchers_list_the_visible_one、test_a_wholly_unseen_case_answers_like_a_missing_one（2026-11-13 chore/test-prune）
 """`attachments.for_document`（主持裁示 M06-b，2026-09-26；docs/platform/plans/ATTACHMENTS-PLAN.md）。
 
 傳票帶入附件的九類來源由各擁有模組提供（M01 案件 6 類、M04 外包工班 2 類、M05 應收應付 1 類），
@@ -205,36 +206,6 @@ def _hdr(client, make_user, name, role, modules):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
 
 
-@needs_case('驗 M01 案件附件依案件可見性')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_user):
-    """同樣有傳票權限（finance）：看得到案件的人（案件業務）列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。
-    （AT-M1c 前「看得到」用 case_manage 充當；回簽檔改用案件頁的規則後 case_manage 不再放行，改用擁有者。）"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    inside = _hdr(client, make_user, "att_in", "engineer", ["finance"])
-    _seed_case_with_file("ATT-PERM-1", owner_id=_user("att_in")["id"])
-    outside = _hdr(client, make_user, "att_out", "engineer", ["finance"])
-    url = "/api/vouchers/line-source-files?source_type=case&ref=ATT-PERM-1"
-    got_in = client.get(url, headers=inside)
-    assert got_in.status_code == 200 and [f["fileId"] for f in got_in.json()["files"]] == ["f1"], got_in.text
-    got_out = client.get(url, headers=outside)
-    none = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-PERM-NONE", headers=outside)
-    assert got_out.status_code == 404 and none.status_code == 404, (got_out.status_code, none.status_code)
-    assert got_out.json()["detail"].replace("ATT-PERM-1", "X") == none.json()["detail"].replace("ATT-PERM-NONE", "X"), \
-        "整個看不到與不存在要逐字相同（主持裁示：不可以讓人探知案件編號）"
-    prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-PERM-1&file_id=f1", headers=outside)
-    assert prev.status_code in (403, 404), prev.status_code
-    lines = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
-             {"account_code": "1113", "debit": 0, "credit": 100, "summary": "b"}]
-    for h, want in ((outside, 403), (inside, 200)):
-        v = client.post("/api/vouchers", headers=h, json={"summary": "AT-M1", "lines": lines})
-        assert v.status_code == 200, v.text[:200]
-        r = client.post("/api/vouchers/%s/attachments" % v.json()["id"], headers=h,
-                        json={"picks": [{"type": "quotation_signed", "docNo": "ATT-PERM-1", "fileId": "f1"}]})
-        assert r.status_code == want, (want, r.status_code, r.text[:200])
-
-
 @needs_case('逐一驗含 M01 的每個提供者')
 def test_each_provider_refuses_a_reader_who_cannot_see_the_case(client):
     """每個在場的提供者：看不到案件的人 ⇒ AttachmentNotVisible（不是回空清單冒充「沒有附件」）；
@@ -283,92 +254,6 @@ def _seed_extra_expense_file(quote_no):
         conn.close()
 
 
-@needs_case('驗 M01 額外支出附件的可見範圍＝M01 額外支出頁')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(client, make_user):
-    """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
-    經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    eid = _seed_extra_expense_file("ATT-EE-1")
-    _add_case_update_file("ATT-EE-1")          # 案件動態 case_manage 看得到 ⇒ 案件「部分看得到」
-    probe = _hdr(client, make_user, "att_ee_probe", "sales", ["case_manage", "finance"])
-    own = client.get("/api/quotations/ATT-EE-1/extra-expenses", headers=probe)
-    assert own.status_code == 404, ("前提：額外支出自己的端點擋這個人", own.status_code)
-    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-EE-1", headers=probe)
-    assert got.status_code == 200, got.text[:200]
-    assert [f for f in got.json()["files"] if f.get("type") == "extra_expense"] == [], got.json()["files"]
-    assert _hidden(got).get("hidden:extra_expense") == 1, got.json()["hidden"]
-    prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-EE-1&file_id=e1", headers=probe)
-    assert prev.status_code in (403, 404), prev.status_code
-    lines = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
-             {"account_code": "1113", "debit": 0, "credit": 100, "summary": "b"}]
-    v = client.post("/api/vouchers", headers=probe, json={"summary": "AT-M1b", "lines": lines})
-    assert v.status_code == 200, v.text[:200]
-    r = client.post("/api/vouchers/%s/attachments" % v.json()["id"], headers=probe,
-                    json={"picks": [{"type": "extra_expense", "docNo": eid, "fileId": "e1"}]})
-    assert r.status_code == 403, (r.status_code, r.text[:200])
-    # 正對照：額外支出自己的端點放行的人（admin），經傳票也列得出
-    import db
-    _hdr(client, make_user, "att_ee_admin", "admin", None)
-    admin = _user("att_ee_admin")
-    conn = db.get_db()
-    try:
-        prov = registry.providers(CAP)["case"]
-        assert prov.doc_nos_for_case(conn, "extra_expense", "ATT-EE-1", admin) == [eid]
-        assert [m["id"] for m in prov.files(conn, "extra_expense", eid, admin)] == ["e1"]
-    finally:
-        conn.close()
-
-
-@needs_case('前提是 M05 的 /api/invoice-vouchers 與 L1 案件層守門放行；M01 不在時兩者依 CA-M1 條件 3 一律 404（fail-closed，由 test_case_access_l1 驗）')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
-    """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
-    自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
-    持有 financial_view 的人兩邊都放行（正對照）。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
-        pytest.skip("應收應付不在這個安裝包 ⇒ /api/invoice-vouchers 端點不存在")
-    import db
-    from helpers.uploads import AttachmentNotVisible
-    conn = db.get_db()
-    try:
-        conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
-                     " VALUES ('ATT-IV-P','已送出','{}','2026-01-01','2026-01-01')")
-        conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, issued_files_json, created_at, updated_at)"
-                     " VALUES ('IV-ATT-P','ATT-IV-P',?,'2026-01-01','2026-01-01')",
-                     (json.dumps([{"id": "i1", "filename": "iv.pdf", "path": "invoice_vouchers/IV-ATT-P/iv.pdf"}]),))
-        conn.commit()
-    finally:
-        conn.close()
-    _add_case_update_file("ATT-IV-P")
-    no_amt = _hdr(client, make_user, "att_iv_noamt", "engineer", ["case_manage", "finance"])
-    amt = _hdr(client, make_user, "att_iv_amt", "engineer", ["case_manage", "finance", "financial_view"])
-    assert client.get("/api/invoice-vouchers/IV-ATT-P", headers=no_amt).status_code == 403, "前提：自己的端點擋金額層"
-    assert client.get("/api/invoice-vouchers/IV-ATT-P", headers=amt).status_code == 200
-    u_no, u_amt = _user("att_iv_noamt"), _user("att_iv_amt")   # 與登入後 _require_user 同一份欄位（modules 是 JSON 字串）
-    prov = registry.providers(CAP)["arap"]
-    conn = db.get_db()
-    try:
-        with pytest.raises(AttachmentNotVisible) as ei:
-            prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_no)
-        assert ei.value.visible == [] and ei.value.hidden == 1, "讀不到的那張不列，但要說出沒列出幾個附件"
-        with pytest.raises(AttachmentNotVisible):
-            prov.files(conn, "invoice_voucher", "IV-ATT-P", u_no)
-        assert prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_amt) == ["IV-ATT-P"]
-        assert [m["id"] for m in prov.files(conn, "invoice_voucher", "IV-ATT-P", u_amt)] == ["i1"]
-    finally:
-        conn.close()
-    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=no_amt)
-    assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "invoice_voucher"] == []
-    assert _hidden(got).get("hidden:invoice_voucher") == 1, "因權限沒列出要明說（主持裁示），不可以跟「沒有」長得一樣"
-    _no_identifiers(got, "IV-ATT-P", "iv.pdf", "invoice_vouchers/IV-ATT-P/iv.pdf", "ATT-IV-P")
-    ok = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=amt)
-    assert "hidden:invoice_voucher" not in _hidden(ok), "看得到的人不該被告知有沒列出的"
-
-
 def _user(username):
     import db
     conn = db.get_db()
@@ -389,27 +274,6 @@ def _pick(client, h, quote_no):
     assert v.status_code == 200, v.text[:200]
     return client.post("/api/vouchers/%s/attachments" % v.json()["id"], headers=h,
                        json={"picks": [{"type": "quotation_signed", "docNo": quote_no, "fileId": "f1"}]})
-
-
-@needs_case('驗 M01 報價單附件的可見範圍＝M01 案件頁')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
-    """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    _seed_case_with_file("ATT-QP-1")
-    _add_case_update_file("ATT-QP-1")
-    h = _hdr(client, make_user, "att_qp_cm", "engineer", ["case_manage", "finance"])
-    assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 404, "前提：案件頁擋 case_manage 非擁有者"
-    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-1", headers=h)
-    assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "quotation_signed"] == [], got.text
-    assert _hidden(got).get("hidden:quotation_signed") == 1, got.json().get("hidden")
-    ss = client.get("/api/vouchers/summary-sources?quote_no=ATT-QP-1", headers=h)
-    assert ss.status_code == 200 and _hidden(ss).get("hidden:quotation_signed") == 1, ss.json().get("hidden")
-    _no_identifiers(got, "sign.png", "quotations/ATT-QP-1/sign.png", "f1")
-    prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-QP-1&file_id=f1", headers=h)
-    assert prev.status_code in (403, 404), prev.status_code
-    assert _pick(client, h, "ATT-QP-1").status_code == 403
 
 
 @needs_case('驗 M01 報價單附件的可見範圍＝M01 案件頁')
@@ -473,43 +337,6 @@ def test_nothing_hidden_means_hidden_is_empty(client, make_user):
     assert _hidden(got) == {}
 
 
-@needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make_user):
-    """反向控制：看不到的單據帶著一眼認得出來的單號、檔名、路徑、金額 ⇒ hidden 只剩類別與個數，這些字串一個都不出現；
-    正對照：同一個回應的 files（看得到的那些）照常帶檔名，證明掃描的字串確實存在於資料裡。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    import db
-    import os
-    import helpers.uploads as up
-    owner = _hdr(client, make_user, "att_leak_own", "engineer", ["finance"])
-    other = _hdr(client, make_user, "att_leak_other", "engineer", ["finance", "case_manage"])
-    rel = "quotations/MQ-LEAK-001/LEAK-SECRET-9f3.png"                    # 真實配置（open-bind）
-    os.makedirs(os.path.join(up.UPLOADS_ROOT, "quotations", "MQ-LEAK-001"), exist_ok=True)
-    open(os.path.join(up.UPLOADS_ROOT, rel), "wb").write(b"x")
-    meta = [{"id": "fid-LEAK-77", "filename": "機密合約-LEAK.png", "path": rel},
-            {"id": "fid-LEAK-78", "filename": "第二張-LEAK.png", "path": rel}]
-    conn = db.get_db()
-    try:
-        conn.execute("INSERT INTO quotations (quote_no, status, data_json, signed_files_json, created_at, updated_at,"
-                     " sales_person_id, customer_name) VALUES (?,?,?,?,?,?,?,?)",
-                     ("MQ-LEAK-001", "已送出", json.dumps({"total": 8765432}), json.dumps(meta), "2026-01-01",
-                      "2026-01-01", _user("att_leak_own")["id"], "機密客戶LEAK"))
-        conn.commit()
-    finally:
-        conn.close()
-    _add_case_update_file("MQ-LEAK-001")
-    url = "/api/vouchers/line-source-files?source_type=case&ref=MQ-LEAK-001"
-    seen = client.get(url, headers=owner)
-    assert "機密合約-LEAK.png" in json.dumps(seen.json()["files"], ensure_ascii=False), "正對照：看得到的人拿得到檔名"
-    got = client.get(url, headers=other)
-    assert got.status_code == 200 and [f["type"] for f in got.json()["files"]] == ["case_update"]
-    assert _hidden(got) == {"hidden:quotation_signed": 2}, got.json()["hidden"]
-    _no_identifiers(got, "MQ-LEAK-001", "機密合約-LEAK.png", "第二張-LEAK.png", "LEAK-SECRET-9f3", "fid-LEAK-77",
-                    "fid-LEAK-78", "8765432", "機密客戶LEAK", "LEAK")
-
-
 def _add_case_update_file(quote_no):
     """案件動態一筆附件：case_manage 看得到（案件動態端點的規則）⇒ 讓案件「部分看得到」。"""
     import db
@@ -522,64 +349,3 @@ def _add_case_update_file(quote_no):
     finally:
         conn.close()
 
-
-@needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
-    """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
-    那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
-        pytest.skip("應收應付（M05）不在：沒有開票申請")
-    import db
-    h = _hdr(client, make_user, "att_ap_one", "engineer", ["case_manage", "finance"])
-    appr = json.dumps({"approval": {"tiers": [{"approvers": [{"username": "att_ap_one"}]}]}})
-    conn = db.get_db()
-    try:
-        conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
-                     " VALUES ('ATT-AP-2','已送出','{}','2026-01-01','2026-01-01')")
-        for no, data, fid in (("IV-AP-MINE", appr, "mine"), ("IV-AP-OTHER", "{}", "other")):
-            conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, data_json, issued_files_json, created_at,"
-                         " updated_at) VALUES (?,?,?,?,'2026-01-01','2026-01-01')",
-                         (no, "ATT-AP-2", data, json.dumps([{"id": fid, "filename": fid + ".pdf", "path": "invoice_vouchers/%s/x.pdf" % no}])))
-        conn.commit()
-    finally:
-        conn.close()
-    assert client.get("/api/invoice-vouchers/IV-AP-MINE", headers=h).status_code == 200, "前提：簽核人讀得到自己要簽的那張"
-    assert client.get("/api/invoice-vouchers/IV-AP-OTHER", headers=h).status_code == 403, "前提：另一張看不到金額"
-    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-AP-2", headers=h)
-    assert got.status_code == 200, got.text[:200]
-    assert [(f["type"], f["docNo"], f["fileId"]) for f in got.json()["files"]
-            if f["type"] == "invoice_voucher"] == [("invoice_voucher", "IV-AP-MINE", "mine")], got.json()["files"]
-    assert _hidden(got).get("hidden:invoice_voucher") == 1, got.json()["hidden"]
-    _no_identifiers(got, "IV-AP-OTHER", "other.pdf")
-
-
-@needs_case('打 /api/quotations/{q}（M01 端點）＋ source_type=case 的 attachments.for_document 提供者')
-@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
-def test_a_wholly_unseen_case_answers_like_a_missing_one(client, make_user):
-    """主持裁示（D 的觀察）：整個案件都看不到 ⇒ 照「不存在」回（404，逐字相同），不回「N 個附件看不到」
-    （否則可以探知案件編號是否存在）；summary-sources 的說明也逐字相同。反向控制：同一個人對看得到一部分的案件照常 200＋hidden。"""
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    _seed_case_with_file("ATT-WHOLE-1")
-    h = _hdr(client, make_user, "att_whole", "engineer", ["finance"])
-    base = "/api/vouchers/line-source-files?source_type=case&ref="
-    hid, none = client.get(base + "ATT-WHOLE-1", headers=h), client.get(base + "ATT-WHOLE-NONE", headers=h)
-    assert hid.status_code == none.status_code == 404, (hid.status_code, none.status_code)
-    assert "hidden" not in hid.json() and "count" not in hid.text, hid.text
-    assert hid.json()["detail"].replace("ATT-WHOLE-1", "X") == none.json()["detail"].replace("ATT-WHOLE-NONE", "X")
-    page = client.get("/api/quotations/ATT-WHOLE-NONE", headers=h)       # 原單據（案件頁）對不存在的回法
-    assert page.status_code == 404 and none.json()["detail"] == page.json()["detail"], (none.json(), page.json())
-    s1 = client.get("/api/vouchers/summary-sources?quote_no=ATT-WHOLE-1", headers=h).json()
-    s2 = client.get("/api/vouchers/summary-sources?quote_no=ATT-WHOLE-NONE", headers=h).json()
-    assert s1["hidden"] == s2["hidden"] == [], (s1["hidden"], s2["hidden"])
-    n1 = [v for v in s1["notes"].values() if "ATT-WHOLE-1" in v]
-    n2 = [v for v in s2["notes"].values() if "ATT-WHOLE-NONE" in v]
-    assert [x.replace("ATT-WHOLE-1", "X") for x in n1] == [x.replace("ATT-WHOLE-NONE", "X") for x in n2] != [], (n1, n2)
-    # 反向控制：案件動態看得到（case_manage）⇒ 部分看得到 ⇒ 200＋hidden
-    _add_case_update_file("ATT-WHOLE-1")
-    h2 = _hdr(client, make_user, "att_whole_cm", "engineer", ["finance", "case_manage"])
-    part = client.get(base + "ATT-WHOLE-1", headers=h2)
-    assert part.status_code == 200 and _hidden(part).get("hidden:quotation_signed") == 1, part.text[:300]

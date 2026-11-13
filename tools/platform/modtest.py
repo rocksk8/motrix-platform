@@ -1230,6 +1230,15 @@ def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, to
     return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
 
 
+GATE_OFFICIAL_ENV = "MOTRIX_GATE_OFFICIAL"
+
+
+def gate_official(env=None):
+    """這一輪是不是正式閘門（heavy_run --class official／建包 run-stage 會設 MOTRIX_GATE_OFFICIAL=1）。
+    只有它為 1 時 backend/conftest 才放行 `gate_only` 題（升級演練）；modtest 也據此決定寫不寫建包沿用紀錄。"""
+    return (env if env is not None else os.environ).get(GATE_OFFICIAL_ENV, "").strip() == "1"
+
+
 OVERLAP_ENV = "MOTRIX_FULL_OVERLAP"
 OVERLAP_MIN_GB_ENV = "MOTRIX_FULL_OVERLAP_MIN_GB"
 
@@ -1460,6 +1469,10 @@ def run_full(extra, a):
     if keep_going(a):
         result["keep_going"] = True
         print("[全閘門] --keep-going：不中斷預跑（failfast 關、slice0 紅也照跑其餘片與 e2e）；紅的結果照記，不可當放行證據")
+    result["gate_official"] = gate_official()
+    if not result["gate_official"]:
+        print("[全閘門] ⚠ 非正式閘門（%s≠1）：標了 gate_only 的題（升級演練 2 組，約 100 秒）本輪跳過；"
+              "這輪不寫建包沿用紀錄，建包會自己重跑。正式閘門用 `heavy_run --class official -- … modtest --full` 或建包 run-stage" % GATE_OFFICIAL_ENV)
     result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
     if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
         print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
@@ -1553,8 +1566,11 @@ def run_full(extra, a):
         except Exception as e:                      # noqa: BLE001 — 寫不出結果檔要說出來，不可靜默
             print("[全量結果] ⚠ 寫不出全量結果檔：%r" % e)
         try:
-            done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
-                                         stream_evidence(_FAIL_STREAM_RUN, dict(main_windows, e2e=a.window + "e2e")))
+            if not result["gate_official"]:                  # 升級演練沒跑 ⇒ 不能當建包的「已跑過」證據
+                done, why = False, "非正式閘門：gate_only 題（升級演練）被跳過"
+            else:
+                done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
+                                             stream_evidence(_FAIL_STREAM_RUN, dict(main_windows, e2e=a.window + "e2e")))
             print("[建包沿用] %s：%s" % ("已寫入" if done else "未寫入", why))
         except Exception as e:                      # noqa: BLE001
             print("[建包沿用] ⚠ 寫不進沿用紀錄：%r（建包會自己重跑，不影響正確性）" % e)
@@ -1594,6 +1610,8 @@ def main(argv=None):
                     help="--full 不記最慢 %d 題（預設會記，寫進 full_results/<commit>.json 的 slowest）" % DURATIONS)
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
+    ap.add_argument("--allow-other-python", dest="allow_other_python", action="store_true",
+                    help="--full 時允許用正式閘門（.venv312）以外的直譯器（預設拒跑；也可設環境變數 MOTRIX_ALLOW_OTHER_PYTHON=1）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
     ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
     ap.add_argument("--transitive", action="store_true", help="舊規則：改動單位一律沿反向 import 遞移擴散（預設：介面沒變只到直接依賴，§C-11a）")
@@ -1614,6 +1632,12 @@ def main(argv=None):
         return 2 if not r["rebased"] else (3 if r["high_impact"] else 0)   # 3＝影響大（差異題擴大＋月台註明），不是「跑全量」
     global PYEXE
     PYEXE = resolve_python(a.python)
+
+    if a.full and not a.dry_run and "PYTEST_CURRENT_TEST" not in os.environ:
+        bad = project_env.interpreter_mismatch(PYEXE, dict(os.environ, **({project_env.ALLOW_OTHER_PYTHON_ENV: "1"} if a.allow_other_python else {})))
+        if bad:                                         # 全量（預跑／閘門證據）一定要與建包同一個直譯器；不一致就拒跑，不是警告
+            print("[全閘門] ✗ 拒跑：" + bad)
+            return 2
 
     if a.full:
         if a.dry_run:
