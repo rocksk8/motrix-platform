@@ -127,7 +127,7 @@
     @media (min-width: 768px) and (max-width: 1023px) {
       .summary-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0; }
       /* 搜尋列兩欄格線（≤1023）裡「緊湊」會自己佔一整列：「欄位」「緊湊」併成一個整列、兩顆並排各半（桌機 >1023、手機 ≤767 不套用） */
-      .search-bar .ql-pair { display:grid; grid-template-columns: 1fr 1fr; gap:8px; grid-column: 1 / -1; }
+      .search-bar .ql-pair { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:8px; grid-column: 1 / -1; }   /* x-show 藏起來的不算格子：只剩一顆就滿列，兩顆各半 */
       .search-bar .ql-pair .action-btn { width:100%; }
     }
     /* ── T84：三個有定義的數字、目前條件列、提示框、下一步、緊湊密度、手機卡片 ── */
