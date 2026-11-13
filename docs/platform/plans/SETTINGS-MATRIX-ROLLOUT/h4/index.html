@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設定矩陣 mockup（丙：權限／信件／個人通知／簽核流程）</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb;--on:#1b7f4b;--sel:#eef4ff;--diff:#e08a00;--purple:#5b3fa0;--purplebg:#efeafb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d;--sel:#1b2740;--purplebg:#2a2147;--on:#2fae6d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:16px 16px 130px}
+h1{font-size:20px;margin:4px 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.tabs{display:flex;gap:6px;margin:8px 0 12px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 14px;border-radius:8px;cursor:pointer;font:inherit}
+.tab[aria-selected=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.note{background:var(--bluebg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;margin:0 0 10px}
+.note.warn{background:var(--warnbg);color:var(--warn)}
+.cmp{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;padding:8px 12px;margin-bottom:10px;font-size:13px}
+.cmp b{font-size:18px}.cmp .bad{color:var(--red)}.cmp .good{color:var(--ok)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin-bottom:8px;position:sticky;top:0;z-index:20}
+.toolbar input[type=search]{flex:1 1 220px;min-width:160px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:5px 11px;border-radius:16px;cursor:pointer;font:inherit;font-size:13px}
+.chip[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
+select,.btn{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);padding:5px 9px;cursor:pointer}
+.btn:hover{border-color:var(--mute)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}.btn.sm{padding:2px 8px;font-size:12px}
+.mute{color:var(--mute);font-size:12px}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:14px;flex-wrap:wrap;margin:6px 2px 10px;align-items:center}
+/* 表格 */
+.mx{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.mx th{position:sticky;top:var(--thtop,56px);background:var(--soft);z-index:5;text-align:center;font-weight:600;padding:7px 6px;border-bottom:1px solid var(--line);font-size:12px}
+.mx td{padding:6px 6px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.mx td.name,.mx th.name{text-align:left;padding-left:8px;min-width:300px}
+.mx tr.grp td{background:var(--soft);text-align:left;font-weight:700;padding:7px 8px}
+.mx tr.grp .gt{cursor:pointer}
+.mx tr.row:hover td{background:var(--soft)}.mx tr.row.sel td{background:var(--sel)}
+.mx tr.row.chg td.name{box-shadow:inset 3px 0 0 var(--diff)}
+.nm{font-weight:600}.cd{font:11px/1.2 ui-monospace,Consolas,monospace;color:var(--mute);margin-left:6px}
+.one{font-size:12px;color:var(--mute);margin-top:1px}
+.src{font-size:11px;color:var(--mute)}
+.dotd{color:var(--diff);font-size:11px;margin-left:6px;white-space:nowrap}
+.tg{display:inline-block;font-size:11px;padding:0 7px;border-radius:9px;margin-left:5px;white-space:nowrap}
+.tg.heavy{background:var(--redbg);color:var(--red)}.tg.ext{background:var(--warnbg);color:var(--warn)}.tg.oth{background:var(--bluebg);color:var(--blue)}.tg.me{background:var(--purplebg);color:var(--purple)}.tg.adv{background:var(--soft);color:var(--mute);border:1px solid var(--line)}
+.q{display:inline-block;width:18px;height:18px;line-height:16px;text-align:center;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--blue);cursor:pointer;font-size:11px;padding:0;margin-left:6px}
+.sw{width:38px;height:22px;border-radius:12px;border:1px solid var(--line);background:#c9c9cf;position:relative;cursor:pointer;padding:0;vertical-align:middle}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .12s}
+.sw[aria-checked=true]{background:var(--on);border-color:var(--on)}.sw[aria-checked=true]::after{left:18px}
+.sw[disabled]{opacity:.4;cursor:not-allowed}
+.ck{width:28px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--card);cursor:pointer;color:transparent;font-size:14px;line-height:1;padding:0}
+.ck.on{background:var(--on);border-color:var(--on);color:#fff}.ck.dd{outline:2px dashed var(--diff);outline-offset:1px}.ck.hv{border-color:var(--red)}
+.mx select{max-width:150px}
+.pcol{font-weight:600;white-space:nowrap}
+.pcol .rl{display:block;font-weight:400;color:var(--mute);font-size:11px}
+.pcol input{vertical-align:middle;margin-right:4px}
+.hide{display:none!important}
+/* 批次列 */
+.batch{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;background:var(--ink);color:var(--card);border-radius:12px;padding:9px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:calc(100vw - 16px)}
+.batch .btn{background:transparent;color:inherit;border-color:rgba(255,255,255,.35)}.batch .btn:hover{background:rgba(255,255,255,.12)}
+.batch select{background:transparent;color:inherit;border-color:rgba(255,255,255,.35)}.batch select option{color:#000}
+.batch .sep{width:1px;align-self:stretch;background:rgba(255,255,255,.3)}
+/* 彈窗／吐司／說明 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.dlg{background:var(--card);color:var(--ink);border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:88vh;overflow:auto}
+.dlg h3{margin:0 0 8px;font-size:16px}.dlg ul{margin:4px 0 4px 18px;padding:0;font-size:13px}.dlg .red{color:var(--red)}
+.dlg textarea,.dlg input[type=text]{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;padding:6px 8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:14px;background:var(--ink);color:var(--card);padding:8px 14px;border-radius:10px;z-index:80;display:flex;gap:10px;align-items:center;font-size:13px}
+.toast button{background:none;border:0;color:#7db3ff;cursor:pointer;font:inherit;text-decoration:underline}
+.pop{position:absolute;z-index:70;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:10px 12px;width:340px;max-width:calc(100vw - 24px);font-size:13px;text-align:left}
+.pop h4{margin:0 0 4px;font-size:13px}.pop p{margin:3px 0}.pop b{color:var(--blue)}
+/* 手機卡片：同一份表格轉成卡片 */
+@media (max-width:900px){
+  .mx,.mx tbody,.mx tr,.mx td{display:block;width:100%}.mx thead{display:none}
+  .mx tr.row{padding:10px 12px;border-bottom:1px solid var(--line)}
+  .mx td{border:0;padding:3px 0;text-align:left}.mx td.name{min-width:0}
+  .mx td[data-l]::before{content:attr(data-l) "：";color:var(--mute);font-size:12px}
+  .mx td.nm0{padding-bottom:6px}
+  .batch{left:8px;right:8px;transform:none;bottom:8px;justify-content:center}.batch .btn,.batch select{padding:9px 10px}
+  .toolbar{position:static}
+  .ck,.sw{min-height:34px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>設定矩陣：一眼看完、點格子切換、勾選一次套用</h1>
+  <p class="sub">設計 mockup（<b>示意資料</b>）：項目名稱、群組、說明、影響、權限鍵、信件類型、通知事件、單據類型取自真實程式（30 個權限鍵／67 種信件／78 個個人通知事件／9 種簽核單據）；人員、開關狀態、進行中單據數都是假的，操作只在這個頁面生效、重新整理就還原。四個分頁共用同一套元件（規格見 SPEC.md）。</p>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <label class="mute" style="display:block;margin:-4px 0 8px"><input type="checkbox" id="mockc"> 模擬「套用之後，別人也改了其中某項」（用來看復原被拒絕時的畫面；復原＝復原<b>這一批</b>，靠版本檢查，不是逐格 6 秒）</label>
+  <div id="views"></div>
+</div>
+<div class="batch hide" id="batch" role="toolbar" aria-label="批次操作"></div>
+<div id="layer"></div>
+<script>
+var DATA = {"perm_keys": [["dashboard", "儀表板", "基本"], ["dev_crm", "業務開發 CRM", "業務"], ["tender_radar", "標案雷達", "業務"], ["map", "地圖", "業務"], ["lodging", "附近旅宿", "業務"], ["quotation", "報價單／簽核佇列", "業務"], ["case_manage", "案件管理", "業務"], ["project_manage", "案件材料申請－修改", "業務"], ["customer", "客戶管理", "業務"], ["financial_view", "財務金額可視", "財務"], ["finance", "應收帳款／銷售訂單", "財務"], ["reports", "營運報表", "財務"], ["cashier", "出納（標記已匯款/已收款、銀行對帳）", "財務"], ["expense_forms", "費用單據（不掛案件的請款／請購／採購／差旅／零用金；新增與編輯）", "財務"], ["procurement", "供應商／料號／採購", "採購"], ["inventory", "庫存管理", "採購"], ["equipment", "設備登載／保固", "設備"], ["netplan", "網路架構規劃書－檢視", "網路架構規劃書"], ["netplan_edit", "網路架構規劃書－新增修改刪除", "網路架構規劃書"], ["project_approve_eng", "案件待辦－工程主管確認", "專案"], ["project_approve_biz", "案件待辦－業務確認", "專案"], ["work_log", "工作日誌", "工作"], ["daily_task", "每日工作事項", "工作"], ["contractor_list", "外包名冊", "勞務"], ["payslip", "勞報單", "勞務"], ["settings", "系統設定", "系統"], ["audit_log", "操作紀錄（全系統操作軌跡）", "系統"], ["shipping_export_log", "出貨單歷史紀錄", "系統"], ["module_versions", "版本紀錄", "系統"], ["file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"]], "role_templates": {"superadmin": ["audit_log", "case_manage", "cashier", "customer", "daily_task", "dashboard", "equipment", "finance", "financial_view", "inventory", "module_versions", "netplan", "procurement", "project_approve_biz", "project_approve_eng", "quotation", "reports", "settings", "shipping_export_log", "work_log"], "admin": ["case_manage", "customer", "daily_task", "dashboard", "equipment", "inventory", "procurement", "project_approve_biz", "project_approve_eng", "quotation", "reports", "work_log"], "sales": ["case_manage", "customer", "daily_task", "dashboard", "map", "project_approve_biz", "quotation", "work_log"], "engineer": ["case_manage", "daily_task", "dashboard", "equipment", "project_approve_eng", "work_log"], "finance": ["case_manage", "cashier", "customer", "daily_task", "dashboard", "finance", "financial_view", "quotation", "reports", "work_log"], "viewer": ["dashboard"]}, "mail_types": [{"key": "approval_request", "name": "報價單待簽核", "category": "approval", "event": "當層簽核人", "impact": "報價單在您簽核之前不會進入下一個流程。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "shipping_submitted", "name": "出貨單待簽核", "category": "approval", "event": "當層簽核人", "impact": "出貨單在您簽核之前不會進入下一個流程。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "contractor_voucher_submitted", "name": "承攬商匯款申請待簽核", "category": "approval", "event": "當層簽核人", "impact": "承攬商匯款申請在您簽核之前不會進入下一個流程。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "invoice_voucher_submitted", "name": "開票申請憑據待簽核", "category": "approval", "event": "當層簽核人", "impact": "開票申請憑據在您簽核之前不會進入下一個流程。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "payment_request_submitted", "name": "請款單待簽核", "category": "approval", "event": "當層簽核人", "impact": "請款單在您簽核之前不會進入下一個流程。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "next_tier", "name": "報價單進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，報價單在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "shipping_next_tier", "name": "出貨單進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，出貨單在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "contractor_voucher_next_tier", "name": "承攬商匯款申請進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，承攬商匯款申請在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "invoice_voucher_next_tier", "name": "開票申請憑據進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，開票申請憑據在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "payment_request_next_tier", "name": "請款單進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，請款單在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "approved", "name": "報價單簽核完成", "category": "approval", "event": "申請人", "impact": "報價單已核准，可以對外提供。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "shipping_approved", "name": "出貨單簽核完成", "category": "approval", "event": "申請人", "impact": "單據已核准，進入後續作業。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "contractor_voucher_approved", "name": "承攬商匯款申請簽核完成", "category": "approval", "event": "申請人", "impact": "單據已核准，進入後續作業。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "invoice_voucher_approved", "name": "開票申請憑據簽核完成", "category": "approval", "event": "申請人", "impact": "單據已核准，進入後續作業。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "payment_request_approved", "name": "請款單簽核完成", "category": "approval", "event": "申請人", "impact": "單據已核准，進入後續作業。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "returned", "name": "報價單退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "shipping_returned", "name": "出貨單退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "contractor_voucher_returned", "name": "承攬商匯款申請退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "invoice_voucher_returned", "name": "開票申請憑據退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "payment_request_returned", "name": "請款單退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "custom_record_submitted", "name": "自訂模組單據待簽核", "category": "approval", "event": "當層簽核人", "impact": "單據在您簽核之前不會進入下一個狀態。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "custom_record_next_tier", "name": "自訂模組單據進入下一層簽核", "category": "approval", "event": "該層簽核人", "impact": "前一層已完成，單據在本層簽核之前不會繼續。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "custom_def_submitted", "name": "自訂模組定義待審核", "category": "approval", "event": "模組審核人", "impact": "這一版模組定義在審核之前不會發布，新單據仍用現行版。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "custom_record_approved", "name": "自訂模組單據簽核完成", "category": "approval", "event": "申請人", "impact": "單據已核准，進入後續狀態。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "custom_def_approved", "name": "自訂模組定義審核完成", "category": "approval", "event": "送審人", "impact": "這一版模組定義已核可並發布。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "custom_record_returned", "name": "自訂模組單據退回修改", "category": "approval", "event": "申請人", "impact": "單據已退回，修改並重新送審之前流程暫停。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "custom_def_returned", "name": "自訂模組定義退回修改", "category": "approval", "event": "送審人", "impact": "這一版模組定義已退回，現行版不變。", "action": "請登入系統，於模組建構器依退回原因修改草稿後重新送審。"}, {"key": "resubmit_requester", "name": "修改版報價單重新送審確認", "category": "approval", "event": "申請人", "impact": "修改版已重新進入簽核流程，原版本不再流轉。", "action": "請登入系統查看單據目前狀態；如有疑問請洽簽核人。"}, {"key": "bonus_submitted", "name": "獎金分潤待簽核", "category": "approval", "event": "輪到的簽核人（含代理人）", "impact": "獎金分潤在您簽核之前不會進入待發放。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。（信中不含金額，請登入查看）"}, {"key": "bonus_payout_ready", "name": "獎金分潤核准待發放", "category": "approval", "event": "出納", "impact": "獎金分潤已核准，等待出納發放。", "action": "請登入系統，於出納頁「獎金待發放」確認後標記已發放。（信中不含金額）"}, {"key": "bonus_correction_submitted", "name": "獎金更正單待簽核", "category": "approval", "event": "輪到的簽核人（含代理人）", "impact": "已發放獎金的更正在您簽核之前不會生效（不會沖轉傳票、不會補發）。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。（信中不含金額，請登入查看）"}, {"key": "bonus_correction_approved", "name": "獎金更正單核准", "category": "approval", "event": "申請人；有補發時含出納", "impact": "更正已生效：沖轉與重開應付的傳票草稿已產生；有補發時等待出納發放。", "action": "請登入系統查看更正單；出納請於出納頁「獎金待發放」處理補發。（信中不含金額）"}, {"key": "bonus_correction_returned", "name": "獎金更正單駁回", "category": "approval", "event": "申請人", "impact": "更正單已駁回，修改並重新送審之前不會生效。", "action": "請登入系統依退回說明修改內容後重新送審。"}, {"key": "approval_reminder", "name": "簽核逾期催辦", "category": "approval", "event": "當層簽核人", "impact": "單據停留在同一層超過規定工作日，後續作業延遲。", "action": "請登入系統，於「待我簽核」開啟該單據確認內容後核准或駁回。"}, {"key": "dev_case_delete_request", "name": "業務開發案件刪除申請", "category": "approval", "event": "", "impact": "案件在核准或駁回之前維持待刪除狀態。", "action": "請登入系統，於業務開發頁確認申請理由後核准或駁回。"}, {"key": "dev_case_relink_request", "name": "業務開發案件連結異動申請", "category": "approval", "event": "", "impact": "案件與報價單的連結在核准之前維持原狀。", "action": "請登入系統，於業務開發頁確認後核准或駁回。"}, {"key": "case_close_blocked", "name": "結案被防呆機制擋下", "category": "approval", "event": "待處理的承辦人", "impact": "案件在前置條件完成之前無法結案。", "action": "請依信中列出的未完成項目逐項處理後再結案。"}, {"key": "case_change_requested", "name": "已結案案件變更待簽核", "category": "approval", "event": "", "impact": "變更在簽核通過之前不會套用到已結案案件。", "action": "請登入系統，於案件頁簽核變更內容後套用或退回。"}, {"key": "daily_task_assigned", "name": "工作事項指派", "category": "business", "event": "負責人", "impact": "您有新的工作事項需要處理。", "action": "請登入系統查看工作事項內容與期限。"}, {"key": "daily_task_completed", "name": "工作事項完成回報", "category": "business", "event": "主管", "impact": "指派的工作事項已完成。", "action": "請登入系統確認完成內容。"}, {"key": "daily_task_overdue", "name": "工作事項逾期未完成", "category": "business", "event": "負責人與主管", "impact": "工作事項已超過期限，相關作業延遲。", "action": "請負責人完成或更新進度；主管請確認是否需要協助。"}, {"key": "daily_task_overdue_manager", "name": "部門成員工作事項逾期", "category": "business", "event": "部門主管", "impact": "部門成員的工作事項已超過期限。", "action": "請確認進度並視需要調整分工。"}, {"key": "daily_task_edited", "name": "工作事項內容已編輯", "category": "business", "event": "主管", "impact": "工作事項內容有異動。", "action": "請登入系統確認異動內容。"}, {"key": "range_task_deadline", "name": "區間工作事項即將到期", "category": "business", "event": "負責人與主管", "impact": "區間工作事項即將到期。", "action": "請在期限前完成或更新進度。"}, {"key": "case_stage_deadline", "name": "案件執行進度即將到期", "category": "business", "event": "負責人與主管", "impact": "案件階段即將到期，逾期會影響整體時程。", "action": "請在期限前完成該階段或更新預計日期。"}, {"key": "case_stage_deadline_manager", "name": "部門成員案件進度即將到期", "category": "business", "event": "部門主管", "impact": "部門成員負責的案件階段即將到期。", "action": "請確認進度並視需要調整人力。"}, {"key": "case_project_overdue", "name": "案件專案期間已超期", "category": "business", "event": "", "impact": "案件已超過預定的專案期間。", "action": "請確認案件狀態，完成結案或更新專案期間。"}, {"key": "warranty_expiry", "name": "設備保固即將到期", "category": "business", "event": "業務負責人", "impact": "設備保固即將到期，到期後維修需另行報價。", "action": "請聯繫客戶確認是否續約或延長保固。"}, {"key": "dev_case_stale", "name": "業務開發案件逾期未跟進", "category": "business", "event": "業務與規劃人員", "impact": "業務開發案件已超過規定天數沒有新的開發紀錄。", "action": "請聯繫客戶並登錄開發紀錄。"}, {"key": "dev_case_assigned", "name": "業務開發案件指派", "category": "business", "event": "被指派人", "impact": "被指派人尚未留意前，案件可能逾期沒有人跟進。", "action": "請登入系統查看案件內容，於回覆期限前更新進度並回報。"}, {"key": "dev_case_reply_overdue", "name": "業務開發案件回覆期限已過未回報", "category": "business", "event": "被指派人與指派人", "impact": "被指派人在回覆期限前沒有回報進度，案件可能沒有人在跟進。", "action": "請被指派人登入系統回報進度；指派人請確認是否需要改期或重新指派。"}, {"key": "dev_log_directive", "name": "業務開發記錄批示", "category": "business", "event": "被要求回覆的成員", "impact": "管理員對開發記錄下了批示並指定你回覆，沒看到可能耽誤回覆。", "action": "請登入系統查看批示內容並回覆。"}, {"key": "settlement_finalized", "name": "成本精算完結", "category": "business", "event": "", "impact": "案件成本已精算完結，可進行獎金分潤與結案。", "action": "請登入系統查看精算結果。"}, {"key": "case_closing_report", "name": "案件結案報表", "category": "business", "event": "", "impact": "案件已結案，結案報表如附件。", "action": "請檢閱附件；如需修正請於案件頁處理。"}, {"key": "auth_lockout", "name": "登入失敗鎖定告警", "category": "system", "event": "", "impact": "有來源 IP 連續登入失敗而被鎖定（可能是有人在猜密碼）。LINE 為獨立通道：不需要 Email 也能收到。", "action": "請確認該 IP 與帳號是否為本人操作；非本人請檢查該帳號並考慮更換密碼。"}, {"key": "monthly_report", "name": "每月營運報表", "category": "business", "event": "報表收件人設定", "impact": "上月營運報表已產生。", "action": "請檢閱附件或登入系統查看報表。"}, {"key": "module_activity", "name": "模組新增與異動", "category": "business", "event": "", "impact": "系統有新增或異動的資料。", "action": "如非預期的異動，請登入系統查看稽核紀錄。"}, {"key": "user_notice", "name": "管理者自訂的額外通知", "category": "business", "event": "管理者在通知動作裡指定的人", "impact": "這是管理者額外設定的通知，不影響原本的流程與內建通知。", "action": "請登入系統查看相關單據；不想再收到可在「使用者管理 → 通知偏好」關閉。"}, {"key": "cert_expiry", "name": "HTTPS 憑證即將到期", "category": "system", "event": "", "impact": "憑證到期後，使用者開啟系統時瀏覽器會出現安全性警告。", "action": "請依系統說明更新憑證，並於更新後重新啟動服務。"}, {"key": "backup_stale", "name": "備份已停止運作", "category": "system", "event": "", "impact": "超過規定時間沒有成功的備份，發生故障時可能遺失資料。", "action": "請檢查備份排程、雲端硬碟掛載與磁碟空間，處理後確認下一次備份成功。"}, {"key": "heartbeat_stale", "name": "心跳監控本身異常", "category": "system", "event": "", "impact": "心跳監控壞掉時，伺服器當機或斷電可能沒有人被通知。", "action": "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。"}, {"key": "disk_space_low", "name": "磁碟空間不足", "category": "system", "event": "", "impact": "磁碟空間不足時，備份與上傳可能失敗。", "action": "請清理暫存檔案或擴充磁碟空間。"}, {"key": "line_quota_warning", "name": "LINE 本月訊息額度告警", "category": "system", "event": "", "impact": "LINE 官方帳號免費方案每月有訊息上限，用完後 LINE 通知會停止送達（Email 不受影響）。", "action": "請確認本月用量，必要時減少勾選「同時發 LINE」的通知類型，或調整 LINE 方案。"}, {"key": "backup_error", "name": "備份嚴重錯誤", "category": "system", "event": "", "impact": "本次備份沒有完成，發生故障時可能遺失資料。", "action": "請確認雲端硬碟是否已掛載、本機快照（backend/db_backups/）是否存在，以及伺服器磁碟空間。"}, {"key": "geo_quota_warning", "name": "地圖定位額度達警戒線", "category": "system", "event": "", "impact": "達到額度上限後，系統改用精度較低的免費定位來源；功能不會關閉。", "action": "如需維持定位精度，請調整額度設定；下一個計費週期開始時自動恢復。"}, {"key": "company_setup_alert", "name": "本公司資料設定狀態告警", "category": "system", "event": "", "impact": "本公司資料未確認、判定失敗或暫時放行中時，對外文件可能暫停輸出或使用未經確認的公司資料。", "action": "請最高管理者至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。"}, {"key": "system_test_mail", "name": "測試信", "category": "system", "event": "", "impact": "本信僅用於確認寄信設定。", "action": "收到本信表示寄信設定正確，無需處理。"}], "event_groups": [["簽核流程", [["approval_request", "報價單待簽核通知（當層簽核人）"], ["next_tier", "報價單進入下一層簽核"], ["approved", "報價單簽核完成"], ["returned", "報價單退回修改"], ["resubmit_requester", "修改版報價單重新送審確認"], ["shipping_submitted", "出貨單待簽核通知（當層簽核人）"], ["shipping_next_tier", "出貨單進入下一層簽核"], ["shipping_approved", "出貨單簽核完成"], ["shipping_returned", "出貨單退回修改"], ["contractor_voucher_submitted", "承攬商匯款申請待簽核通知（當層簽核人）"], ["contractor_voucher_next_tier", "承攬商匯款申請進入下一層簽核"], ["contractor_voucher_approved", "承攬商匯款申請簽核完成"], ["contractor_voucher_returned", "承攬商匯款申請退回修改"], ["invoice_voucher_submitted", "開票申請憑據待簽核通知（當層簽核人）"], ["invoice_voucher_next_tier", "開票申請憑據進入下一層簽核"], ["invoice_voucher_approved", "開票申請憑據簽核完成"], ["invoice_voucher_returned", "開票申請憑據退回修改"], ["payment_request_submitted", "請款單待簽核通知（當層簽核人）"], ["payment_request_next_tier", "請款單進入下一層簽核"], ["payment_request_approved", "請款單簽核完成"], ["payment_request_returned", "請款單退回修改"], ["custom_record_submitted", "自訂模組單據待簽核通知（當層簽核人）"], ["custom_record_next_tier", "自訂模組單據進入下一層簽核"], ["custom_record_approved", "自訂模組單據簽核完成"], ["custom_record_returned", "自訂模組單據退回修改"], ["custom_def_submitted", "自訂模組定義待審核通知（模組審核人）"], ["custom_def_approved", "自訂模組定義審核完成（送審人）"], ["custom_def_returned", "自訂模組定義退回修改（送審人）"], ["bonus_submitted", "獎金分潤待簽核通知（輪到我簽，含代理；信中不含金額）"], ["bonus_payout_ready", "獎金分潤核准待發放（出納；信中不含金額）"], ["bonus_correction_submitted", "獎金更正單待簽核通知（輪到我簽，含代理；信中不含金額）"], ["bonus_correction_approved", "獎金更正單核准通知（申請人；有補發時含出納；信中不含金額）"], ["bonus_correction_returned", "獎金更正單駁回通知（申請人）"], ["approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"]]], ["會計傳票與總帳申請", [["voucher_submitted", "會計傳票待審核通知（當層簽核人）"], ["voucher_next_tier", "會計傳票進入下一層審核"], ["voucher_approved", "會計傳票審核完成"], ["voucher_returned", "會計傳票退回修改"], ["ledger_action_submitted", "總帳申請待審核通知（最高管理者）"], ["ledger_action_approved", "總帳申請已核准並執行"], ["ledger_action_returned", "總帳申請被退回"]]], ["工作事項", [["daily_task_assigned", "工作事項指派通知"], ["daily_task_completed", "工作事項完成回報"], ["daily_task_overdue", "工作事項逾期未完成"], ["daily_task_overdue_manager", "工作事項逾期未完成（我是部門主管，通知我部門成員的逾期事項）"], ["daily_task_edited", "工作事項內容已編輯"], ["range_task_deadline", "區間工作事項即將到期"]]], ["案件與到期提醒", [["case_stage_deadline", "案件執行進度即將到期"], ["case_stage_deadline_manager", "案件執行進度即將到期（我是部門主管，通知我部門成員的案件進度）"], ["case_project_overdue", "案件專案期間已超期（每日檢查，超期當天寄一次、之後每 7 天一次）"], ["warranty_expiry", "設備保固即將到期"], ["dev_case_stale", "業務開發案件逾期未跟進"], ["dev_case_assigned", "業務開發案件指派通知"], ["dev_case_reply_overdue", "業務開發案件回覆期限已過未回報（每個案件、每個期限只寄一次）"], ["dev_log_directive", "業務開發記錄批示（只寄給被要求回覆的成員）"]]], ["業務開發審核", [["dev_case_delete_request", "業務開發案件刪除申請"], ["dev_case_relink_request", "業務開發案件連結異動申請"]]], ["系統與報表", [["settlement_finalized", "成本精算完結通知"], ["case_closing_report", "案件結案報表 PDF（僅最高管理者）"], ["monthly_report", "每月營運報表"], ["module_activity", "各模組新增／異動通知（建立帳號、案件等一般活動）"], ["user_notice", "管理者自訂的額外通知（站內通知另有各動作的個別退訂）"], ["cert_expiry", "HTTPS 憑證即將到期（每日檢查，依憑證種類自動調整提前天數）"], ["backup_stale", "備份已停止運作（每日檢查，超過 36 小時沒有成功備份）"], ["heartbeat_stale", "心跳監控本身異常（每日檢查：狀態壞超過 90 分鐘、排程停止更新）"], ["disk_space_low", "磁碟空間不足（每日檢查，低於 10% 且低於 20 GB）"], ["auth_lockout", "登入失敗鎖定告警（同一來源鎖定期間只通知一次；全系統每小時有上限）"], ["line_quota_warning", "LINE 本月訊息額度告警（用量跨過設定的門檻；同一門檻每月只寄一次）"], ["backup_error", "備份嚴重錯誤（每日每類最多一次）"], ["geo_quota_warning", "地圖定位額度達警戒線"], ["company_setup_alert", "本公司資料設定狀態告警（每日每類最多一次）"], ["system_test_mail", "寄信設定測試信"]]], ["標案雷達", [["tender_found", "標案雷達命中新標案（每日一封彙總，不是每筆一封）"], ["tender_fetch_failed", "標案雷達抓不到對方網站（連不上／逾時／被擋；只在「進入異常」時寄一次）"], ["tender_source_changed", "標案雷達疑似對方改版（解析大量失敗；只在「進入異常」時寄一次）"], ["tender_detail_blocked", "標案雷達詳細頁被要求驗證碼（地點暫時無法取得；只在「進入異常」時寄一次）"]]], ["已結案案件解鎖", [["case_close_blocked", "結案被防呆機制擋下（未達成前置條件）"], ["case_change_requested", "已結案案件半解鎖期間的變更/上傳待簽核（僅最高管理者）"]]]], "approval": {"labels": {"quotation": "報價單", "shipping": "出貨單", "invoice_voucher": "發票開立簽核單", "payment_request": "請款單", "contractor_voucher": "承攬商匯款申請", "extra_expense": "案件支出申請", "completion": "完工單", "voucher": "傳票（會計）", "bonus": "獎金分潤單"}, "unified": ["payment_request", "invoice_voucher", "completion", "extra_expense", "shipping", "quotation"]}};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+
+/* ───────── 共用核心（對應 SPEC：SmTable／SmToolbar／SmBatchBar／SmConfirm／SmUndoToast／SmHelp） ───────── */
+var UI={toastT:null,pop:null};
+var MOCK={ver:1,conflict:false,when:'16:02'};
+function toast(msg,undo){
+  var o=document.getElementById('toast');if(o)o.remove();clearTimeout(UI.toastT);
+  var t=document.createElement('div');t.id='toast';t.className='toast';t.setAttribute('aria-live','polite');
+  t.innerHTML='<span>'+esc(msg)+'</span>'+(undo?'<button>復原這一批（6）</button>':'');
+  document.body.appendChild(t);
+  if(undo){var n=6,b=t.querySelector('button');
+    var iv=setInterval(function(){n--;if(b)b.textContent='復原這一批（'+n+'）';if(n<=0)clearInterval(iv)},1000);
+    b.onclick=function(){clearInterval(iv);t.remove();clearTimeout(UI.toastT);undo()};
+    UI.toastT=setTimeout(function(){t.remove();clearInterval(iv)},6000)}
+  else UI.toastT=setTimeout(function(){t.remove()},2200);
+}
+function dlg(html,onOk,okLabel,okCheck){
+  var L=document.getElementById('layer');
+  L.innerHTML='<div class="modal"><div class="dlg" role="dialog" aria-modal="true">'+html+'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" id="dc">取消</button>'+(onOk?'<button class="btn primary" id="dk">'+(okLabel||'套用')+'</button>':'')+'</div></div></div>';
+  document.getElementById('dc').onclick=function(){L.innerHTML=''};
+  if(onOk)document.getElementById('dk').onclick=function(){if(okCheck&&!okCheck())return;L.innerHTML='';onOk()};
+}
+function help(btn,r){
+  closePop();var h=r.help||{};var p=document.createElement('div');p.className='pop';
+  p.innerHTML='<h4>'+esc(r.label)+' <span class="cd">'+esc(r.code)+'</span></h4>'+
+    '<p><b>這是什麼</b>：'+esc(h.what||r.one||'')+'</p><p><b>什麼時候要改</b>：'+esc(h.when||'（待補：settings_help.json）')+'</p>'+
+    '<p><b>改了會影響什麼</b>：'+esc(h.impact||'')+'</p><p><b>建議值</b>：'+esc(h.recommend||'照預設')+'</p>';
+  var b=btn.getBoundingClientRect();document.body.appendChild(p);
+  p.style.top=(window.scrollY+b.bottom+6)+'px';p.style.left=Math.max(8,Math.min(window.scrollX+b.left-20,document.documentElement.clientWidth-360))+'px';UI.pop=p;
+}
+function closePop(){if(UI.pop){UI.pop.remove();UI.pop=null}}
+document.addEventListener('click',function(e){if(UI.pop&&!e.target.closest('.pop')&&!e.target.closest('.q'))closePop()});
+
+/* cfg: id, title, intro, cmp, groups[{id,label}], rows[{id,group,label,code,one,tags[],help,v{},d{},src,heavy,eligible,whyNot,hint}],
+        cols[{id,title,type:'switch'|'select'|'check'|'text',options,sub,tag,name}], colSelect, filters[{id,label,fn}], search(row)->text,
+        groupToggle:{col,onLabel,offLabel}, batch(ctx)->[{id,label,kind:'btn'|'select',options,run(rowsSel,colsSel,val)->plan}], need:{rows,cols} */
+function Matrix(host,cfg){
+  var S={q:'',f:'all',sel:{},csel:{},collapsed:{}};
+  var root=document.createElement('div');host.appendChild(root);
+  function rowsById(id){return cfg.rows.filter(function(r){return r.id===id})[0]}
+  function changed(r){return cfg.cols.some(function(c){return r.v[c.id]!==r.d[c.id]})}
+  function vis(r){
+    if(S.q){var t=(r.label+' '+r.code+' '+(r.one||'')+' '+(cfg.search?cfg.search(r):'')).toLowerCase();if(t.indexOf(S.q.toLowerCase())<0)return false}
+    if(S.f==='chg')return changed(r);
+    var fl=cfg.filters.filter(function(x){return x.id===S.f})[0];return fl?fl.fn(r):true;
+  }
+  function tags(r){return (r.tags||[]).map(function(t){return '<span class="tg '+t[0]+'">'+t[1]+'</span>'}).join('')}
+  function cell(r,c){
+    var v=r.v[c.id],dis=r.locked&&r.locked[c.id]?' disabled':'',dd=v!==r.d[c.id];
+    if(c.type==='switch')return '<button class="sw" role="switch" aria-checked="'+!!v+'" aria-label="'+esc(r.label+' '+c.title)+'" data-act="cell" data-r="'+r.id+'" data-c="'+c.id+'"'+dis+'></button>'+(dd?'<div class="dotd">●</div>':'');
+    if(c.type==='check')return '<button class="ck'+(v?' on':'')+(dd?' dd':'')+(r.heavy?' hv':'')+'" aria-pressed="'+!!v+'" aria-label="'+esc(r.label+'／'+c.name)+'" data-act="cell" data-r="'+r.id+'" data-c="'+c.id+'">✓</button>';
+    if(c.type==='select')return '<select data-act="sel" data-r="'+r.id+'" data-c="'+c.id+'" aria-label="'+esc(r.label+' '+c.title)+'">'+c.options.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(v)?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'+(dd?'<span class="dotd">●</span>':'');
+    return esc(v==null?'':(c.fmt?c.fmt(v,r):v))+(dd?'<span class="dotd">●</span>':'');
+  }
+  function draw(){
+    var h='';
+    if(cfg.intro)h+='<div class="note'+(cfg.introWarn?' warn':'')+'">'+cfg.intro+'</div>';
+    if(cfg.cmp)h+='<div class="card cmp">'+cfg.cmp+'</div>';
+    h+='<div class="card toolbar"><input type="search" id="q'+cfg.id+'" placeholder="搜尋中文名稱、代碼、說明" value="'+esc(S.q)+'" aria-label="搜尋">';
+    [{id:'all',label:'全部'},{id:'chg',label:'● 與預設不同'}].concat(cfg.filters).forEach(function(f){h+='<button class="chip" data-act="flt" data-f="'+f.id+'" aria-pressed="'+(S.f===f.id)+'">'+f.label+'</button>'});
+    h+='<button class="btn" data-act="exp">展開全部</button><button class="btn" data-act="col">收合全部</button></div>';
+    h+='<div class="legend"><span><b>●</b> 與預設不同（列左側橘條）</span><span>？ 點開看四段說明</span><span>灰掉的核取方塊＝影響大，不能批次，要逐項設定</span><span>批次套用後可「復原這一批」（別人沒動過才行）</span><span>勾左邊方塊選多列'+(cfg.colSelect?'，勾欄頭選多人':'')+'，再用下方批次列一次套用。</span></div>';
+    h+='<div class="card"><table class="mx"><thead><tr><th class="name">項目（中文名稱／代碼）</th>';
+    cfg.cols.forEach(function(c){
+      if(cfg.colSelect)h+='<th class="pcol"><label><input type="checkbox" data-act="csel" data-c="'+c.id+'"'+(S.csel[c.id]?' checked':'')+'>'+esc(c.title)+'</label><span class="rl">'+esc(c.sub||'')+'</span></th>';
+      else h+='<th>'+esc(c.title)+(c.tag?'<span class="tg ext">'+c.tag+'</span>':'')+'</th>';
+    });
+    h+='</tr></thead><tbody>';
+    var n=0;
+    cfg.groups.forEach(function(g){
+      var rs=cfg.rows.filter(function(r){return r.group===g.id&&vis(r)});if(!rs.length)return;
+      var open=!S.collapsed[g.id]||S.q,elig=rs.filter(function(r){return r.eligible!==false}),allsel=elig.length&&elig.every(function(r){return S.sel[r.id]});
+      h+='<tr class="grp"><td colspan="'+(cfg.cols.length+1)+'"><label style="margin-right:8px"><input type="checkbox" data-act="gsel" data-g="'+g.id+'"'+(allsel?' checked':'')+' aria-label="選取整組"></label><span class="gt" data-act="gtog" data-g="'+g.id+'">'+(open?'▾ ':'▸ ')+esc(g.label)+'</span> <span class="mute">（'+rs.length+' 項'+(elig.length<rs.length?'，其中 '+(rs.length-elig.length)+' 項不能批次':'')+'）</span>';
+      if(cfg.groupToggle)h+=' <button class="btn sm" data-act="gon" data-g="'+g.id+'">'+cfg.groupToggle.onLabel+'</button> <button class="btn sm" data-act="goff" data-g="'+g.id+'">'+cfg.groupToggle.offLabel+'</button>';
+      h+='</td></tr>';
+      if(!open)return;
+      rs.forEach(function(r){
+        n++;var ck=r.eligible===false?' disabled title="'+esc(r.whyNot||'影響大，要逐項設定')+'"':'';
+        h+='<tr class="row'+(S.sel[r.id]?' sel':'')+(changed(r)?' chg':'')+'"><td class="name nm0"><label style="float:left;margin:2px 8px 0 0"><input type="checkbox" data-act="rsel" data-r="'+r.id+'"'+(S.sel[r.id]?' checked':'')+ck+' aria-label="選取 '+esc(r.label)+'"></label>'+
+          '<div><span class="nm">'+esc(r.label)+'</span><span class="cd">'+esc(r.code)+'</span>'+tags(r)+'<button class="q" data-act="help" data-r="'+r.id+'" aria-label="說明">?</button>'+(changed(r)?'<span class="dotd">● 與預設不同</span>':'')+'</div>'+
+          '<div class="one">'+esc(r.one||'')+'</div>'+(r.src?'<div class="src">'+esc(typeof r.src==='function'?r.src(r):r.src)+'</div>':'')+'</td>';
+        cfg.cols.forEach(function(c){h+='<td data-l="'+esc(c.title)+'">'+cell(r,c)+'</td>'});
+        h+='</tr>';
+      });
+    });
+    if(!n)h+='<tr><td colspan="'+(cfg.cols.length+1)+'" class="mute" style="text-align:center;padding:18px">沒有符合的項目。</td></tr>';
+    h+='</tbody></table></div>';
+    root.innerHTML=h;
+    var qi=document.getElementById('q'+cfg.id);if(qi&&S.focusQ){qi.focus();qi.setSelectionRange(qi.value.length,qi.value.length)}
+    batchBar();
+  }
+  function selRows(){return cfg.rows.filter(function(r){return S.sel[r.id]})}
+  function selCols(){return cfg.cols.filter(function(c){return S.csel[c.id]})}
+  function batchBar(){
+    var B=document.getElementById('batch'),rs=selRows(),cs=selCols();
+    if(!cfg.active()||(!rs.length&&!cs.length)){B.classList.add('hide');return}
+    var acts=cfg.batch({rows:rs,cols:cs}),h='<b>'+(cfg.need&&cfg.need.cols?'已選 '+rs.length+' 項 × '+cs.length+' 人':'已選 '+rs.length+' 項')+'</b><span class="sep"></span>';
+    acts.forEach(function(a){
+      if(a.kind==='select')h+='<select data-b="'+a.id+'" aria-label="'+esc(a.label)+'"><option value="">'+esc(a.label)+'…</option>'+a.options.map(function(o){return '<option value="'+esc(o[0])+'">'+esc(o[1])+'</option>'}).join('')+'</select>';
+      else if(a.kind==='sep')h+='<span class="sep"></span>';
+      else h+='<button class="btn" data-b="'+a.id+'">'+esc(a.label)+'</button>';
+    });
+    h+='<span class="sep"></span><button class="btn" data-b="__clear">取消選取</button>';
+    B.innerHTML=h;B.classList.remove('hide');B._acts=acts;B._owner=cfg.id;
+  }
+  /* 套用：plan＝{changes:[{r,c,to}],skip:[{label,why}],warn:[],estimate:''} */
+  function plan2dlg(title,plan,after){
+    var real=plan.changes.filter(function(x){return x.r.v[x.c]!==x.to});
+    if(!real.length&&!plan.skip.length){toast('沒有需要變更的項目（本來就是這樣）');return}
+    var by={};real.forEach(function(x){var k=x.r.id;by[k]=by[k]||{r:x.r,n:0};by[k].n++});
+    var nShown=real.filter(function(x){return !x.hide}).length;
+    var h='<h3>'+esc(title)+'</h3><p>將變更 <b>'+nShown+'</b> 個設定'+(plan.skip.length?'，略過 <b>'+plan.skip.length+'</b> 項':'')+'。</p>';
+    if(plan.estimate)h+='<p>'+plan.estimate+'</p>';
+    (plan.warn||[]).forEach(function(w){h+='<p class="red">⚠ '+w+'</p>'});
+    var shown=real.filter(function(x){return !x.hide});var items=shown.slice(0,8).map(function(x){return '<li>'+esc(x.r.label)+(cfg.need&&cfg.need.cols?'（'+esc(cfg.cols.filter(function(c){return c.id===x.c})[0].title)+'）':'')+'：'+esc(x.fromText||fmt(x.r.v[x.c]))+' → '+esc(x.toText||fmt(x.to))+'</li>'}).join('');
+    h+='<ul>'+items+(shown.length>8?'<li class="mute">…另 '+(shown.length-8)+' 項</li>':'')+'</ul>';
+    if(plan.skip.length)h+='<p class="mute">已略過（不能批次，請逐項設定）：</p><ul>'+plan.skip.slice(0,6).map(function(s){return '<li>'+esc(s.label)+'：'+esc(s.why)+'</li>'}).join('')+(plan.skip.length>6?'<li class="mute">…另 '+(plan.skip.length-6)+' 項</li>':'')+'</ul>';
+    h+='<p class="mute">變更原因（會記進稽核紀錄）</p><input type="text" id="rsn" value="批次調整（'+real.length+' 項）">';
+    dlg(h,function(){
+      var before=cfg.rows.map(function(r){return [r,clone(r.v)]});
+      real.forEach(function(x){x.r.v[x.c]=x.to});
+      var verAt=++MOCK.ver;draw();
+      toast('已套用 '+real.length+' 項（可復原這一批）',function(){
+        if(MOCK.conflict){dlg('<h3>無法復原這一批</h3><p class="red">這幾項在你套用之後被別人改過了：<b>王經理</b> 於 '+MOCK.when+' 修改了「'+esc(real[0].r.label)+'」。</p><p>為了不蓋掉別人的修改，系統拒絕整批復原。請到「變更紀錄」查看，或手動調整。</p>');return}
+        before.forEach(function(p){p[0].v=p[1]});draw();toast('已復原這一批（'+real.length+' 項）')});
+    },'套用 '+real.length+' 項');
+  }
+  function fmt(v){return v===true?'開':v===false?'關':String(v)}
+  host.addEventListener('input',function(e){if(e.target.type==='search'){S.q=e.target.value;S.focusQ=true;draw();S.focusQ=false}});
+  host.addEventListener('change',function(e){
+    var t=e.target,a=t.dataset.act;if(!a)return;
+    if(a==='sel'){var r=rowsById(t.dataset.r),c=t.dataset.c,old=r.v[c];singleSet(r,c,t.value,old)}
+    if(a==='rsel'){S.sel[t.dataset.r]=t.checked;draw()}
+    if(a==='csel'){S.csel[t.dataset.c]=t.checked;draw()}
+    if(a==='gsel'){cfg.rows.filter(function(r){return r.group===t.dataset.g&&r.eligible!==false&&vis(r)}).forEach(function(r){S.sel[r.id]=t.checked});draw()}
+  });
+  function singleSet(r,c,val,old){
+    var col=cfg.cols.filter(function(x){return x.id===c})[0];
+    if(col.type==='switch'||col.type==='check')val=!old;
+    var key=r.id+'|'+c;
+    function apply(){var o=r.v[c];r.v[c]=(col.type==='select'&&typeof o==='number')?Number(val):val;MOCK.ver++;draw();toast('已更新「'+r.label+'」（要還原請到「變更紀錄」）')}
+    if(r.heavy){
+      dlg('<h3>「'+esc(r.label)+'」影響大</h3><p class="red">'+esc(r.heavyText||'這項設定影響別人或牽涉金額、資安，要填原因並走既有的確認流程（確認期間／雙人核准），所以不能批次、也沒有 6 秒復原。')+'</p><p class="mute">變更原因（必填，至少 4 個字）</p><input type="text" id="rsn" placeholder="例：新任出納到職">',apply,'確認變更',function(){var v=document.getElementById('rsn').value.trim();if(v.length<4){document.getElementById('rsn').style.borderColor='var(--red)';return false}return true});
+    }else apply();
+    if(col.type==='select')draw();
+  }
+  host.addEventListener('click',function(e){
+    var t=e.target.closest('[data-act],[data-b]');if(!t)return;
+    if(t.dataset.b){return}
+    var a=t.dataset.act;
+    if(a==='flt'){S.f=t.dataset.f;draw()}
+    if(a==='exp'){S.collapsed={};draw()}
+    if(a==='col'){cfg.groups.forEach(function(g){S.collapsed[g.id]=true});draw()}
+    if(a==='gtog'){S.collapsed[t.dataset.g]=!S.collapsed[t.dataset.g];draw()}
+    if(a==='help'){var r=rowsById(t.dataset.r);help(t,r)}
+    if(a==='cell'){var r2=rowsById(t.dataset.r),c2=t.dataset.c;singleSet(r2,c2,null,r2.v[c2])}
+    if(a==='gon'||a==='goff'){
+      var on=a==='gon',col=cfg.groupToggle.col,pl={changes:[],skip:[],warn:cfg.groupToggle.warn?cfg.groupToggle.warn(on,t.dataset.g):[]};
+      cfg.rows.filter(function(r){return r.group===t.dataset.g}).forEach(function(r){
+        if(r.eligible===false){pl.skip.push({label:r.label,why:r.whyNot||'影響大，要逐項設定'});return}
+        pl.changes.push({r:r,c:col,to:on})});
+      plan2dlg((on?'全開：':'全關：')+cfg.groups.filter(function(g){return g.id===t.dataset.g})[0].label,pl)}
+  });
+  document.getElementById('batch').addEventListener('click',function(e){
+    var B=document.getElementById('batch');if(B._owner!==cfg.id)return;
+    var t=e.target.closest('button[data-b]');if(!t)return;
+    if(t.dataset.b==='__clear'){S.sel={};S.csel={};draw();return}
+    var a=B._acts.filter(function(x){return x.id===t.dataset.b})[0];if(!a)return;
+    runAct(a,'')
+  });
+  document.getElementById('batch').addEventListener('change',function(e){
+    var B=document.getElementById('batch');if(B._owner!==cfg.id)return;
+    var t=e.target;if(t.tagName!=='SELECT'||!t.value)return;
+    var a=B._acts.filter(function(x){return x.id===t.dataset.b})[0];var v=t.value;t.value='';if(a)runAct(a,v)
+  });
+  function runAct(a,val){var rs=selRows(),cs=selCols(),pl=a.run(rs,cs,val);plan2dlg(a.title||a.label,pl)}
+  cfg._redraw=draw;draw();
+  return {redraw:draw,state:S};
+}
+
+/* ───────── 分頁一：使用者個人權限 ───────── */
+var PERM_HEAVY={financial_view:1,finance:1,cashier:1,settings:1,audit_log:1,module_versions:1,payslip:1};
+var PEOPLE=[['wang','王經理','admin'],['li','李業務','sales'],['chen','陳工程師','engineer'],['lin','林會計','finance'],['zhang','張助理','viewer'],['huang','黃採購','sales'],['wu','吳專案','engineer'],['zhou','周工讀','viewer']];
+var ROLE_ZH={superadmin:'最高管理者',admin:'管理者',sales:'業務',engineer:'工程',finance:'財務',viewer:'檢視者'};
+function permCfg(){
+  var groups=[],gi={};DATA.perm_keys.forEach(function(k){if(!gi[k[2]]){gi[k[2]]=1;groups.push({id:k[2],label:k[2]})}});
+  var cols=PEOPLE.map(function(p){return {id:p[0],title:p[1],name:p[1],type:'check',sub:ROLE_ZH[p[2]]}});
+  var rows=DATA.perm_keys.map(function(k){
+    var heavy=!!PERM_HEAVY[k[0]],v={},d={};
+    PEOPLE.forEach(function(p){var t=DATA.role_templates[p[2]].indexOf(k[0])>=0;d[p[0]]=t;v[p[0]]=t});
+    return {id:k[0],group:k[2],label:k[1].replace(/（.*$/,''),code:k[0],one:'能不能使用「'+k[1].replace(/（.*$/,'')+'」這項功能。預設依各人的角色範本。',
+      tags:[['oth','影響別人']].concat(heavy?[['heavy','影響大']]:[]),eligible:!heavy,whyNot:'高敏感權限（財務／系統／勞務），要逐人逐項填原因，不能批次',heavy:heavy,
+      heavyText:'這是高敏感權限：要填原因（至少 4 個字）、寫進稽核紀錄；不能批次，也沒有 6 秒復原。',
+      help:{what:'控制是否能進入或操作「'+k[1]+'」。',when:'新進、調職、離職，或某人臨時要代理這項工作時。',impact:'只影響這個人的選單與操作權限；已送出的單據不受影響。'+(heavy?'屬高敏感權限，變更會記進權限變更紀錄。':''),recommend:'照角色範本；只有例外才個別加減。'},
+      v:v,d:d}});
+  /* 兩個個人例外，示範「與預設不同」 */
+  function setv(rk,pk,val){rows.filter(function(r){return r.id===rk})[0].v[pk]=val}
+  setv('reports','li',true);setv('customer','chen',true);setv('inventory','lin',true);
+  return {id:'perm',title:'使用者權限',groups:groups,rows:rows,cols:cols,colSelect:true,need:{cols:1},
+    intro:'<b>給多位同仁一次開同樣的權限</b>：勾上方「欄頭」選人、勾左邊選權限（或勾整組），再按下方「授予」。方格的<b>橘色虛線</b>＝和他的角色範本不同（個別加減）。高敏感權限（紅色「影響大」）不能批次。',
+    cmp:'<span>5 人給同 8 項權限：</span><span>現況（逐人編輯）<b class="bad">約 70 次點擊</b></span><span>→ 這裡：勾 5 人＋勾 8 項（或勾整組）＋按「授予」＋確認＝<b class="good">約 15 次</b></span>',
+    filters:[{id:'heavy',label:'影響大',fn:function(r){return r.heavy}}],
+    search:function(r){return r.group},
+    active:function(){return TAB==='perm'},
+    batch:function(ctx){
+      var A=[];
+      if(ctx.rows.length&&ctx.cols.length){A.push({id:'grant',label:'授予',run:function(rs,cs){return permPlan(rs,cs,true)},title:'授予權限'});A.push({id:'revoke',label:'取消',run:function(rs,cs){return permPlan(rs,cs,false)},title:'取消權限'})}
+      if(ctx.cols.length){A.push({kind:'sep'});A.push({id:'tpl',kind:'select',label:'套用角色範本',options:Object.keys(ROLE_ZH).filter(function(k){return k!=='superadmin'}).map(function(k){return [k,ROLE_ZH[k]+'範本']}),title:'套用角色範本',run:function(rs,cs,val){return tplPlan(cs,val)}})}
+      return A;
+    }};
+}
+var PERMCFG;
+function permPlan(rs,cs,on){
+  var pl={changes:[],skip:[],warn:[]},newN=0,had=0;
+  rs.forEach(function(r){cs.forEach(function(c){if(r.v[c.id]===on)had++;else{newN++;pl.changes.push({r:r,c:c.id,to:on,fromText:r.v[c.id]?'有':'無',toText:on?'有':'無'})}})});
+  pl.estimate=(on?'新增 ':'移除 ')+newN+' 個授權（'+cs.length+' 人 × '+rs.length+' 項；其中 '+had+' 個本來就是這樣，不動）。';
+  return pl;
+}
+function tplPlan(cs,role){
+  var pl={changes:[],skip:[],warn:[]},tpl=DATA.role_templates[role];
+  PERMCFG.rows.forEach(function(r){
+    if(r.heavy){pl.skip.push({label:r.label,why:'高敏感權限，不隨範本批次變動，維持各人現狀'});return}
+    cs.forEach(function(c){var to=tpl.indexOf(r.id)>=0;pl.changes.push({r:r,c:c.id,to:to,fromText:r.v[c.id]?'有':'無',toText:to?'有':'無'})});
+  });
+  pl.estimate='把 '+cs.map(function(c){return c.title}).join('、')+' 的一般權限改成「'+ROLE_ZH[role]+'範本」；他們目前的個別加減會被範本取代。';
+  pl.warn=['高敏感權限不會被動到，請到各項逐一設定。'];
+  return pl;
+}
+
+/* ───────── 分頁二：信件與通知收件設定 ───────── */
+function mailCfg(){
+  var CAT={approval:'簽核類信件',business:'業務類信件',system:'系統技術類信件（預設只寄最高管理者）'};
+  var groups=['approval','business','system'].map(function(k){return {id:k,label:CAT[k]}});
+  var rows=DATA.mail_types.map(function(t,i){
+    var sys=t.category==='system';
+    return {id:t.key,group:t.category,label:t.name,code:t.key,one:'何時寄：'+t.event+'。預設：信件開、照預設收件人。',
+      tags:sys?[['heavy','影響大']]:[],eligible:true,
+      help:{what:'「'+t.name+'」這封信，在「'+t.event+'」時寄出。',when:'想讓更多人（或更少人）收到這種通知時。收到信後該做的事：'+t.action,impact:t.impact,recommend:'信件開、收件人照預設；行事曆依需要。'},
+      src:function(r){return changedRow(r)?'公司設定 · 王經理 10/28':'系統預設'},
+      v:{mail:true,cal:false,mode:'default'},d:{mail:true,cal:false,mode:'default'},sys:sys}});
+  function changedRow(r){return r.v.mail!==r.d.mail||r.v.cal!==r.d.cal||r.v.mode!==r.d.mode}
+  [3,9,15,22].forEach(function(i){if(rows[i])rows[i].v.cal=true});[30,41,50].forEach(function(i){if(rows[i])rows[i].v.mode='superadmin_only'});[27,28].forEach(function(i){if(rows[i])rows[i].v.mail=false});
+  return {id:'mail',title:'信件收件',groups:groups,rows:rows,
+    cols:[{id:'mail',title:'信件',type:'switch'},{id:'cal',title:'行事曆',type:'switch',tag:'需外部設定'},{id:'mode',title:'收件人',type:'select',options:[['default','照預設'],['superadmin_only','僅最高管理者'],['custom','指定帳號／角色…']]}],
+    intro:'67 種信件，一張表看完。<b>行事曆欄</b>要先連上 Google 才會真的推送（標「需外部設定」）。系統技術類信件關閉後告警可能沒人看到，所以標「影響大」，批次關閉時確認視窗會用紅字提醒。',
+    cmp:'<span>關 8 種信件：</span><span>現況 <b class="bad">約 16 次點擊</b>（逐列）</span><span>8 列改「僅最高管理者」：<b class="bad">約 24 次</b>（每列還要各按一次儲存）</span><span>→ 這裡：勾 8 列＋批次＋確認＝<b class="good">約 12 次</b></span>',
+    filters:[{id:'heavy',label:'影響大',fn:function(r){return r.sys}},{id:'off',label:'信件已關閉',fn:function(r){return !r.v.mail}},{id:'cal',label:'行事曆已開',fn:function(r){return r.v.cal}},{id:'nd',label:'收件人非預設',fn:function(r){return r.v.mode!=='default'}}],
+    search:function(r){return CAT[r.group]},
+    groupToggle:{col:'mail',onLabel:'全開',offLabel:'全關',warn:function(on,g){return (!on&&g==='system')?['系統技術類信件是告警（備份失敗、憑證到期…），全關後可能沒人知道系統出問題。']:(!on&&g==='approval'?['簽核類信件關閉後，簽核人不會收到通知，流程可能卡住。']:[])}},
+    active:function(){return TAB==='mail'},
+    batch:function(ctx){return [
+      {id:'on',label:'信件 開',run:function(rs){return mailPlan(rs,'mail',true)},title:'開啟信件'},
+      {id:'off',label:'信件 關',run:function(rs){return mailPlan(rs,'mail',false)},title:'關閉信件'},{kind:'sep'},
+      {id:'con',label:'行事曆 開',run:function(rs){return mailPlan(rs,'cal',true)},title:'開啟行事曆'},
+      {id:'coff',label:'行事曆 關',run:function(rs){return mailPlan(rs,'cal',false)},title:'關閉行事曆'},{kind:'sep'},
+      {id:'mode',kind:'select',label:'收件人',options:[['default','照預設'],['superadmin_only','僅最高管理者']],title:'變更收件人',run:function(rs,cs,val){return mailPlan(rs,'mode',val)}}]}};
+}
+function mailPlan(rs,col,to){
+  var pl={changes:[],skip:[],warn:[]},sysN=0,apN=0;
+  rs.forEach(function(r){pl.changes.push({r:r,c:col,to:to,fromText:colText(col,r.v[col]),toText:colText(col,to)});if(col==='mail'&&to===false){if(r.sys)sysN++;if(r.group==='approval')apN++}});
+  if(sysN)pl.warn.push('其中 '+sysN+' 封是系統技術告警，關閉後可能沒人知道系統出問題。');
+  if(apN)pl.warn.push('其中 '+apN+' 封是簽核通知，關閉後簽核人不會收到信，流程可能卡住。');
+  if(col==='cal'&&to===true)pl.warn.push('Google 行事曆目前尚未連線：先勾選也可以，連線後才會真的推送。');
+  return pl;
+}
+function colText(col,v){return col==='mode'?({default:'照預設',superadmin_only:'僅最高管理者',custom:'指定…'}[v]||v):(v?'開':'關')}
+
+/* ───────── 分頁三：個人通知偏好（Email） ───────── */
+function prefCfg(){
+  var groups=DATA.event_groups.map(function(g,i){return {id:'g'+i,label:g[0]}});
+  var rows=[];
+  DATA.event_groups.forEach(function(g,i){g[1].forEach(function(e){
+    rows.push({id:e[0],group:'g'+i,label:e[1],code:e[0],one:'預設會收到這封通知；取消後就不會再寄給這位同仁。',tags:[['me','個人']],eligible:true,
+      help:{what:'「'+e[1]+'」的 Email 通知。',when:'覺得這類信太多、或你不負責這類事情時可以取消。',impact:'只影響這位同仁收不收信；站內通知與單據流程不受影響。',recommend:'負責簽核的人建議保留「簽核流程」整組。'},
+      src:function(r){return r.v.recv?'預設（全部都收）':'已取消 · 管理者代設 11/05'},v:{recv:true},d:{recv:true}})})});
+  [5,6,40,41,42,60,61].forEach(function(i){if(rows[i])rows[i].v.recv=false});
+  return {id:'pref',title:'個人通知偏好',groups:groups,rows:rows,cols:[{id:'recv',title:'收這封信',type:'switch'}],
+    intro:'78 個 Email 通知事件、8 組。現況只有管理員能在「使用者管理」代改，而且要逐項取消；<b>這個版面同時給本人（我的帳號）和管理員（代設）用</b>——是否開放本人修改，是要使用者決定的事。',
+    cmp:'<span>整組取消「工作事項」或只留「我要簽的」：</span><span>現況 <b class="bad">逐項點，78 個要點 60 多次</b></span><span>→ 這裡：按一個「預設組合」＝<b class="good">2 次</b></span>',
+    filters:[{id:'off',label:'已取消的',fn:function(r){return !r.v.recv}}],
+    search:function(r){return ''},
+    groupToggle:{col:'recv',onLabel:'整組全收',offLabel:'整組全不收'},
+    active:function(){return TAB==='pref'},
+    batch:function(ctx){return [
+      {id:'on',label:'開（收）',run:function(rs){return prefPlan(rs,true)},title:'改為收信'},
+      {id:'off',label:'關（不收）',run:function(rs){return prefPlan(rs,false)},title:'改為不收'},{kind:'sep'},
+      {id:'pre',kind:'select',label:'預設組合（套用到全部事件）',options:[['all','全收（預設）'],['sign','只收我要簽的（簽核流程）'],['alert','只收系統告警（系統與報表）'],['none','全不收']],title:'套用預設組合',run:function(rs,cs,v){return prefPreset(v)}}]}};
+}
+var PREFCFG;
+function prefPlan(rs,to){var pl={changes:[],skip:[],warn:[]};rs.forEach(function(r){pl.changes.push({r:r,c:'recv',to:to})});return pl}
+function prefPreset(v){
+  var pl={changes:[],skip:[],warn:[]};
+  PREFCFG.rows.forEach(function(r){
+    var g=DATA.event_groups[Number(r.group.slice(1))][0],to=v==='all'?true:v==='none'?false:v==='sign'?g==='簽核流程':g==='系統與報表';
+    pl.changes.push({r:r,c:'recv',to:to})});
+  pl.estimate='預設組合會依「事件所屬的群組」一次設定全部 78 個事件，不用逐項點。';
+  if(v==='none')pl.warn.push('全部不收：簽核通知也不會寄給這位同仁，可能漏看待簽單據。');
+  return pl;
+}
+
+/* ───────── 分頁四：簽核流程 ───────── */
+function flowCfg(){
+  var LAB=DATA.approval.labels,uni=DATA.approval.unified,order=Object.keys(LAB);
+  var INFL={quotation:7,shipping:2,invoice_voucher:1,payment_request:4,contractor_voucher:3,extra_expense:0,completion:2,voucher:5,bonus:0};
+  var AP={quotation:['直屬主管','業務部經理'],shipping:['直屬主管'],invoice_voucher:['財務主管'],payment_request:['直屬主管','財務主管'],contractor_voucher:['工程主管','財務主管','最高管理者'],extra_expense:['直屬主管'],completion:['工程主管'],voucher:['會計主管','財務主管'],bonus:['最高管理者']};
+  var rows=order.map(function(k){var isU=uni.indexOf(k)>=0;
+    return {id:k,group:isU?'u':'i',label:LAB[k],code:k,one:'進行中 '+INFL[k]+' 張。目前 '+AP[k].length+' 層：'+AP[k].join(' → ')+'。',inflight:INFL[k],
+      tags:[['oth','影響別人']],eligible:true,
+      help:{what:'「'+LAB[k]+'」送出後要經過哪幾層、由誰簽核。',when:'組織調整、主管異動、或想讓某類單據多一道把關時。',impact:'之後新送出的單據照新流程；進行中的單據會依既有規則處理（見確認視窗的件數）。',recommend:'小型公司：一般單據 1～2 層，金額大的（匯款、傳票）加財務主管。'},
+      src:'公司設定 · 王經理 09/30',v:{flow:isU?'u':'i',layers:AP[k].length,ap:AP[k].join(' → ')},d:{flow:isU?'u':'i',layers:AP[k].length,ap:AP[k].join(' → ')}}});
+  return {id:'flow',title:'簽核流程',groups:[{id:'u',label:'統一流程（共用同一條）'},{id:'i',label:'獨立流程（各自一條）'}],rows:rows,
+    cols:[{id:'flow',title:'套用範圍',type:'select',options:[['u','統一流程'],['i','獨立流程']]},{id:'layers',title:'層數',type:'text'},{id:'ap',title:'各層簽核人',type:'text'}],
+    intro:'9 種單據各自要走哪條流程、幾層、誰簽。現況要逐類展開、逐層逐人用下拉加入，各區塊各自存檔；這裡可勾多類、一次套用「流程範本」或「複製某類的流程」，確認視窗會先告訴你<b>進行中的單據有幾張會受影響</b>。',
+    cmp:'<span>改一條 3 層 × 每層 2 人的流程：</span><span>現況 <b class="bad">約 22 次點擊</b>，9 類各存一次</span><span>→ 這裡：勾要改的類型＋選範本＋確認＝<b class="good">約 5 次</b></span>',
+    filters:[{id:'busy',label:'有進行中單據',fn:function(r){return r.inflight>0}}],
+    search:function(r){return r.v.ap},
+    active:function(){return TAB==='flow'},
+    batch:function(ctx){return [
+      {id:'tpl',kind:'select',label:'套用流程範本',options:[['t1','一層：直屬主管'],['t2','兩層：直屬主管 → 財務主管'],['t3','三層：直屬主管 → 財務主管 → 最高管理者']],title:'套用流程範本',run:function(rs,cs,v){return flowPlan(rs,v)}},
+      {id:'cp',kind:'select',label:'複製某類的流程',options:order.map(function(k){return [k,LAB[k]]}),title:'複製流程',run:function(rs,cs,v){return flowCopy(rs,v)}},{kind:'sep'},
+      {id:'u',label:'改為統一流程',run:function(rs){return flowScope(rs,'u')},title:'改為統一流程'},
+      {id:'i',label:'改為獨立流程',run:function(rs){return flowScope(rs,'i')},title:'改為獨立流程'}]}};
+}
+var FLOWCFG,TPL={t1:['直屬主管'],t2:['直屬主管','財務主管'],t3:['直屬主管','財務主管','最高管理者']};
+function flowPlan(rs,t){var ap=TPL[t],pl={changes:[],skip:[],warn:[]},inf=0;
+  rs.forEach(function(r){var s=ap.join(' → ');if(r.v.ap!==s){pl.changes.push({r:r,c:'ap',to:s});pl.changes.push({r:r,c:'layers',to:ap.length,hide:1});inf+=r.inflight}});
+  pl.estimate='受影響的進行中單據：<b>'+inf+'</b> 張（已簽的層維持原樣，尚未簽的層改走新流程）。';if(inf)pl.warn.push('有進行中單據：確認前請先通知相關簽核人。');return pl}
+function flowCopy(rs,src){var s=FLOWCFG.rows.filter(function(r){return r.id===src})[0],pl={changes:[],skip:[],warn:[]},inf=0;
+  rs.forEach(function(r){if(r.id===src){pl.skip.push({label:r.label,why:'就是來源本身'});return}if(r.v.ap!==s.v.ap){pl.changes.push({r:r,c:'ap',to:s.v.ap});pl.changes.push({r:r,c:'layers',to:s.v.layers,hide:1});inf+=r.inflight}});
+  pl.estimate='把「'+s.label+'」的流程（'+s.v.ap+'）複製到所選類型；受影響的進行中單據 <b>'+inf+'</b> 張。';return pl}
+function flowScope(rs,to){var pl={changes:[],skip:[],warn:[]};rs.forEach(function(r){if(r.v.flow!==to)pl.changes.push({r:r,c:'flow',to:to,fromText:r.v.flow==='u'?'統一':'獨立',toText:to==='u'?'統一':'獨立'})});
+  pl.warn.push('改為統一流程後，這些類型會改走同一條流程，原本各自設定的簽核人會被取代。');return pl}
+
+/* ───────── 啟動 ───────── */
+var TAB='perm',MX={};
+var TABS=[['perm','① 使用者權限（30 項 × 人）'],['mail','② 信件收件（67 種）'],['pref','③ 個人通知偏好（78 項）'],['flow','④ 簽核流程（9 類）']];
+function showTab(k){
+  TAB=k;closePop();
+  TABS.forEach(function(t){document.getElementById('tab-'+t[0]).setAttribute('aria-selected',t[0]===k);document.getElementById('view-'+t[0]).classList.toggle('hide',t[0]!==k)});
+  document.getElementById('batch').classList.add('hide');
+  if(MX[k])MX[k].redraw();
+}
+document.addEventListener('change',function(e){if(e.target.id==='mockc')MOCK.conflict=e.target.checked});
+(function(){
+  var tb=document.getElementById('tabs'),vw=document.getElementById('views');
+  TABS.forEach(function(t){
+    var b=document.createElement('button');b.className='tab';b.id='tab-'+t[0];b.setAttribute('role','tab');b.textContent=t[1];b.onclick=function(){showTab(t[0])};tb.appendChild(b);
+    var d=document.createElement('div');d.id='view-'+t[0];vw.appendChild(d);
+  });
+  PERMCFG=permCfg();MX.perm=Matrix(document.getElementById('view-perm'),PERMCFG);
+  var mc=mailCfg();MX.mail=Matrix(document.getElementById('view-mail'),mc);
+  PREFCFG=prefCfg();MX.pref=Matrix(document.getElementById('view-pref'),PREFCFG);
+  FLOWCFG=flowCfg();MX.flow=Matrix(document.getElementById('view-flow'),FLOWCFG);
+  var hq=(location.hash||'').replace('#','').split('-'),q=hq[0],demo=hq[1];showTab(['perm','mail','pref','flow'].indexOf(q)>=0?q:'perm');
+  /* 擷圖用：#perm-demo（預先勾好）、#perm-confirm（再自動按下批次鈕）。一般使用不會用到 */
+  if(demo){
+    var st=MX[q].state;
+    if(q==='perm'){['wang','li','chen','lin','zhang'].forEach(function(c){st.csel[c]=true});['quotation','case_manage','customer','reports','map','dev_crm','lodging','inventory'].forEach(function(r){st.sel[r]=true})}
+    if(q==='mail'){DATA.mail_types.slice(60,67).forEach(function(t){st.sel[t.key]=true});st.sel[DATA.mail_types[0].key]=true}
+    if(q==='pref'){DATA.event_groups[2][1].forEach(function(e){st.sel[e[0]]=true})}
+    if(q==='flow'){['shipping','invoice_voucher','extra_expense','completion'].forEach(function(r){st.sel[r]=true})}
+    MX[q].redraw();
+    if(demo==='confirm'){var b=document.getElementById('batch'),pick={perm:'grant',mail:'off',pref:'off',flow:'tpl'}[q];
+      if(q==='flow'){var sel=b.querySelector('select[data-b=tpl]');sel.value='t2';sel.dispatchEvent(new Event('change',{bubbles:true}))}else b.querySelector('button[data-b='+pick+']').click()}
+  }
+})();
+</script>
+</body>
+</html>

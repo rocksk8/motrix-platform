@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>丙份設計說明：權限／信件／個人通知／簽核流程</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--warnbg:#3a2c10;--bluebg:#16253d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px}h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px;padding-top:8px;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--soft)}
+code{font:12.5px ui-monospace,Consolas,monospace;background:var(--soft);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+.q{background:var(--warnbg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0}.mute{color:var(--mute)}a{color:var(--blue)}
+img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}ul,ol{margin:4px 0 4px 20px;padding:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>丙份設計說明：權限／信件／個人通知／簽核流程</h1>
+<p class="mute">分支 <code>feat/settings-matrix-rollout</code>（設計階段，使用者看過才實作）。畫面見同資料夾 <a href="index.html">index.html</a>（四個分頁；假資料、真實項目名稱）。規格見上層 <code>SPEC.md</code>、盤點見 <code>INVENTORY.md</code>。</p>
+
+<h2>1. 這份 mockup 在示範什麼</h2>
+<p>四個分頁用<b>同一套共用核心</b>（工具列／群組列／批次列／確認視窗／復原這一批／「?」說明／與預設不同／手機卡片）；各頁只宣告「列資料＋欄＋批次動作」。目的是證明：LINE 稿、設定中心與各設定頁可以共用一套元件，不用每頁各寫一套。</p>
+<table>
+<tr><th>分頁</th><th>真實資料</th><th>主要示範</th><th>現況 → 這裡（點擊數為推算）</th></tr>
+<tr><td>① 使用者權限</td><td>30 個權限鍵／10 群（<code>module_registry.MODULES</code>）、6 個角色範本（<code>ROLE_TEMPLATES</code>）、7 個高敏感鍵（<code>HIGH_SENSITIVITY_KEYS</code>）</td><td>「權限鍵 × 人」矩陣；欄頭勾人、左邊勾權限；批次授予／取消／套用角色範本；方格橘色虛線＝與角色範本不同；高敏感鍵不能批次，單點要填原因</td><td>5 人給同 8 項：約 70 次 → 約 15 次</td></tr>
+<tr><td>② 信件收件</td><td>67 種信件（簽核 38／業務 19／系統技術 10；<code>mail_types.all_types()</code>），名稱、事件、影響、建議處理皆為真實文字</td><td>信件／行事曆／收件人三欄；系統技術類標「影響大」，批次關閉時紅字警告；「行事曆」欄標「需外部設定」；與預設不同篩選</td><td>關 8 種：約 16 次 → 約 12 次；8 列改收件人：約 24 次 → 約 12 次</td></tr>
+<tr><td>③ 個人通知偏好</td><td>78 個 Email 通知事件／8 組（<code>notification_prefs.EVENT_GROUPS</code>）</td><td>整組全收／全不收；預設組合（全收／只收我要簽的／只收系統告警／全不收）一次套用；來源「預設」或「已取消」</td><td>逐項取消 60 多次 → 2 次（選預設組合＋確認）</td></tr>
+<tr><td>④ 簽核流程</td><td>9 種單據類型與中文名稱（<code>tiered_approval</code>），統一／獨立分組為預設值</td><td>勾多類 → 套用流程範本、複製某類的流程、改統一／獨立；確認視窗先講「進行中單據 N 張受影響」</td><td>改一條 3 層 × 2 人：約 22 次、9 類各存一次 → 約 5 次</td></tr>
+</table>
+<p class="mute">所有人員（王經理、李業務…）、開關狀態、進行中單據數、誰何時改過都是假的；點擊數是依現有介面結構推算的判斷，不是實測。</p>
+
+<h2>2. 畫面</h2>
+<img src="shots/01-perm-select.png" alt="權限：選人選權限"><br>
+<img src="shots/02-perm-confirm.png" alt="權限：確認視窗"><br>
+<img src="shots/03-mail-matrix.png" alt="信件矩陣"><br>
+<img src="shots/04-mail-confirm-warn.png" alt="信件：批次關閉的紅字警告"><br>
+<img src="shots/05-pref-groups.png" alt="個人通知偏好"><br>
+<img src="shots/06-flow-confirm.png" alt="簽核流程：套用範本的確認視窗"><br>
+<img src="shots/07-phone-mail.png" alt="手機版卡片">
+
+<h2>3. 照裁示畫的行為（與舊稿不同處）</h2>
+<ul>
+<li><b>復原＝「復原這一批」＋版本檢查</b>（PM N2）：套用後吐司「已套用 N 項（可復原這一批）」；頁面上方有一個「模擬別人也改了」勾選，勾了再按復原，會看到被拒絕的畫面（誰、何時改了哪一項、為什麼拒絕）。<b>單項修改沒有逐格 6 秒復原</b>，只說「要還原請到變更紀錄」。</li>
+<li><b>高敏感／影響大不進批次</b>（M1 精神）：權限頁 7 個高敏感鍵的核取方塊灰掉；確認視窗列出「已略過 N 項：原因」；單點時要填原因（至少 4 字）且沒有復原。</li>
+<li><b>每一列</b>（規則 5）：中文名稱、小字代碼、標籤（影響大／影響別人／個人／需外部設定）、「?」四段說明、與預設不同（橘條＋●＋篩選）、來源（公司設定 · 誰 · 何時／系統預設）。</li>
+<li><b>「?」四段</b>（N4）：這是什麼／什麼時候要改／改了會影響什麼／建議值。信件頁的「改了會影響什麼」與「收到信後該做的事」直接取自 <code>mail_types</code> 既有的 <code>impact</code>／<code>action</code>；其餘由各頁既有登錄處產生，不另建說明檔。mockup 裡「什麼時候要改」是示意文字，實作時對應新增的 <code>SettingDef.when</code>（或各登錄處的同義欄位）。</li>
+<li><b>來源「個人」</b>（N3）：只有分頁③（個人通知偏好）真的有個人層，所以只有它出現「個人」標籤。</li>
+<li><b>群組不另標風險</b>（N5）：群組列只顯示「幾項、其中幾項不能批次」。</li>
+</ul>
+
+<h2>4. 需要的 API／後端（丙份）</h2>
+<table>
+<tr><th>項目</th><th>內容</th></tr>
+<tr><td>使用者權限批次</td><td><code>POST /api/users/permissions/batch</code>：<code>{users:[…], grant:[…], revoke:[…]}</code>；整批驗證（高敏感鍵一律拒絕並回原因）、寫權限變更紀錄與稽核；回傳每人新舊差異供「復原這一批」</td></tr>
+<tr><td>信件批次</td><td><code>POST /api/settings/mail/batch</code>：<code>{keys, mail?, calendar?, mode?}</code>；原子驗證（沿用 LINE 批次端點的作法）；一筆稽核；「不可關閉」的信件整批拒絕並指名</td></tr>
+<tr><td>個人通知偏好</td><td>沿用 opt-out 清單；新增本人 GET／PUT（<code>my-account</code>），管理員代設端點不變；預設組合純前端展開</td></tr>
+<tr><td>簽核流程複製／範本</td><td><code>POST /api/approval/flows/copy</code>：<code>{from, to:[…]}</code>；回傳進行中單據受影響件數（確認視窗用）；範本是前端展開成既有 flow 結構</td></tr>
+<tr><td>復原這一批</td><td>各端點接受 <code>expectedVersion</code>（各頁既有的更新時間／版本欄位）；衝突回 409 帶 <code>{by, at, keys}</code>（規格見 SPEC §5）</td></tr>
+</table>
+
+<h2>5. 要使用者決定的事（丙份）</h2>
+<div class="q"><ol>
+<li><b>角色三套並存</b>（固定 6 碼／自訂角色快速套用／職責角色連動）：「套用角色範本」要建立在哪一套上？建議以職責角色（連動）為主、自訂角色併入，否則批次改完仍會脫鉤。</li>
+<li><b>個人 Email 偏好要給本人入口嗎？</b>（現在只有管理員能代改；本人只能改 LINE 偏好。）</li>
+<li><b>系統技術類信件</b>預設只寄最高管理者：批次允許關閉嗎？（mockup 允許，但紅字提醒。）</li>
+<li><b>行事曆事件開關兩處</b>（google-calendar-settings 與 mail-settings 的「行事曆」欄是同一份資料）：只留 mail-settings 這一處、另一處改成連結？</li>
+<li><b>簽核流程「複製」「套範本」</b>會改到進行中單據的後續層，要不要先限制成「只能在沒有進行中單據時批次」？（mockup 目前是警告＋確認。）</li>
+<li>權限矩陣（permission-matrix）規模小（60 格）、頻率低：本次只做白話標示與批次暫存，還是等能力接入變多再做？</li>
+</ol></div>
+
+<h2>6. mockup 的限制</h2>
+<ul>
+<li>確認視窗、復原、衝突拒絕只是示意；實作時批次由後端整批驗證、整批寫入、寫稽核。</li>
+<li>權限頁只放 8 位示意人員；實際人數是執行期資料（未驗證）。實作時人多於一屏要改成「依部門分段＋欄頭全選」或「人在列、權限在欄」的轉置檢視。</li>
+<li>簽核流程頁只示範「流程範本／複製／統一獨立」；每層簽核人的細部編輯（下拉選人）仍沿用現有展開面板，不在本稿。</li>
+<li>LINE 70 事件矩陣沿用 hichan-6 稿（<code>feat/line-events-matrix</code>），本資料夾不重畫。</li>
+</ul>
+</div>
+</body>
+</html>
