@@ -358,3 +358,65 @@ def test_step_labels_match_their_content_and_sidebar_points_to_wizard():
     assert "收款帳戶" in titles and "報價單與單據" not in titles and "列印抬頭" not in titles
     import routers.platform_menu as pm
     assert pm._SETUP_ONLY_TARGET == "company-setup-wizard.html?setup=1"
+
+
+# ── 審查後修正（h11 B1／N1／N3／N4／N6）──────────────────────────────────────
+
+def _boss_headers(client, make_user, name):
+    boss = make_user(username=name, role="superadmin")
+    tok = client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]
+    return {"Authorization": "Bearer " + tok}
+
+
+def test_every_wizard_payload_key_is_a_field_the_backend_model_keeps():
+    """B1：精靈送出的鍵若不在 CompanyProfile 裡，pydantic 會靜默丟掉（PUT 200、什麼都沒存）。每一個 STEP_FIELDS 的鍵都必須是模型欄位。"""
+    from routers.system import CompanyProfile
+    m = re.search(r"var STEP_FIELDS = \{(.*?)\}\n", _js(), re.S)
+    assert m, "找不到 STEP_FIELDS"
+    keys = re.findall(r"'([a-z_]+)'", m.group(1))
+    assert "company_name_en" in keys and "name_en" not in keys
+    missing = [k for k in keys if k not in CompanyProfile.model_fields]
+    assert not missing, "精靈送出、但後端模型沒有的欄位（會被靜默丟掉）：%s" % missing
+
+
+def test_company_name_en_saved_by_the_wizard_payload_survives_a_reload(client, make_user):
+    """B1：PUT 之後重新 GET，英文名稱還在（精靈的鍵 company_name_en）。"""
+    from helpers import company_setup as cs
+    cs.reset_cache()
+    h = _boss_headers(client, make_user, "cw_en_boss")
+    assert client.put("/api/settings/company-profile", headers=h, json={"company_name_en": "Example Technology Co., Ltd."}).status_code == 200
+    got = client.get("/api/settings/company-profile", headers=h).json()
+    assert got["company_name_en"] == "Example Technology Co., Ltd."
+
+
+def test_wizard_requests_are_tagged_in_the_audit_detail(client, make_user):
+    """N4：精靈的存檔帶 X-Motrix-Ui: wizard，稽核 detail 有 ui=wizard；設定頁（沒帶）沒有。"""
+    import json as _json
+    from db import get_db
+    from helpers import company_setup as cs
+    cs.reset_cache()
+    h = _boss_headers(client, make_user, "cw_ui_boss")
+
+    def last_detail():
+        conn = get_db()
+        try:
+            r = conn.execute("SELECT detail FROM audit_log WHERE action='settings.company_profile.update' ORDER BY id DESC LIMIT 1").fetchone()
+        finally:
+            conn.close()
+        return _json.loads(r[0] or "{}")
+
+    assert client.put("/api/settings/company-profile", headers=dict(h, **{"X-Motrix-Ui": "wizard"}), json={"phone": "02-1234-5678"}).status_code == 200
+    assert last_detail().get("ui") == "wizard"
+    assert client.put("/api/settings/company-profile", headers=h, json={"phone": "02-1234-5679"}).status_code == 200
+    assert "ui" not in last_detail()
+    assert "'X-Motrix-Ui': 'wizard'" in _js()
+
+
+def test_wizard_reads_status_before_company_data_and_handles_401_and_finish_errors():
+    """N1／N3／N6：先讀 status、確定 canFix 才讀公司資料；401 回登入頁；finish() 例外不當成連線異常。"""
+    js = _js()
+    body = js[js.index("function loadAll()"):js.index("// 這一步要送出的內容")]
+    assert body.index("company-setup/status") < body.index("company-profile") < body.index("/api/settings/branding")
+    assert "canFix === false" in body
+    assert "toLogin()" in js and "r.status === 401" in js
+    assert re.search(r"try \{ if \(window\.MotrixWizard[^\n]*finish\(\) \} catch", js)
