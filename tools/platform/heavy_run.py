@@ -141,6 +141,8 @@ def _age(sec) -> str:
 GATE_FILE = "gate.lock"
 GATE_TTL_SECONDS = 4 * 3600
 GATE_TOKEN_ENV = "MOTRIX_GATE_TOKEN"
+#: 只有正式閘門設 1（`--class official` 的子行程、建包 run_stage 的子行程）：backend/conftest 的 `gate_only` 題（升級演練）看它決定跑不跑。
+GATE_OFFICIAL_ENV = "MOTRIX_GATE_OFFICIAL"
 CI_TICKET_ENV = "MOTRIX_CI_TICKET"
 
 
@@ -313,7 +315,7 @@ def run(cmd: list, cls="heavy", window="x", track=False, qdir=None, runner=None,
     qdir = Path(qdir) if qdir else queue_dir()
     gate_file = Path(gate_file) if gate_file else qdir.parent / GATE_FILE      # 閘門鎖跟著佇列目錄走（測試用暫存佇列就不會讀到真的鎖）
     if cls == "light" and not track:
-        return _spawn(cmd, cls, runner, {})
+        return _spawn(cmd, cls, runner, {GATE_OFFICIAL_ENV: ""})
     me = _enqueue(qdir, cls, window, cmd)
     t0 = time.time()
     try:
@@ -340,6 +342,10 @@ def run(cmd: list, cls="heavy", window="x", track=False, qdir=None, runner=None,
         _write(me)
         note("[heavy_run] 開跑（%s，%s）" % (cls, "一般優先權" if cls == "official" else "低優先權"))
         extra = {CI_TICKET_ENV: me["_file"]}
+        if cls == "official":
+            extra[GATE_OFFICIAL_ENV] = "1"                       # 正式閘門＝升級演練（gate_only）要跑的唯一入口之一
+        else:
+            extra[GATE_OFFICIAL_ENV] = ""                        # 非正式票不得從外層環境繼承 1
         gate = read_gate(gate_file)
         if gate and gate_exempt(cls, window, gate, env):
             extra[GATE_TOKEN_ENV] = gate["token"]
