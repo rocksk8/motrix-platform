@@ -1,6 +1,6 @@
 # 權限矩陣 更新紀錄
 
-## (next) — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
+## 1.1.4 — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
 - 變更（內部，不影響對外介面）：`service._superadmins()` 改用 `config_ledger.real_superadmins()`（不含展示帳號 demo）：放寬類授權變更「要不要第二位核准」與生效通知名單只看真人最高管理者；只有一位真人時改走「原因＋確認期間＋警告」。
 - 測試：`tests/test_loosening_demo_not_second_approver_2026_11_13.py`（守門）。
 

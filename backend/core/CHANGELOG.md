@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-13（feat/license-import-ui；T83 授權匯入：授權頁、匯入端點、到期提醒）
+## 1.164 — 2026-11-13（feat/license-import-ui；T83 授權匯入：授權頁、匯入端點、到期提醒）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：
   - 新單位 `helpers/license_manager.py`（授權頁與匯入的邏輯；**驗章／機器綁定／到期一律呼叫既有 `licensing.verify_license`，不重寫**）：`run_import`（預覽或匯入）、`describe_current`、`recent_activity`、`normalize_upload`、`rate_allow`、`backup_dir` 與常數。
   - `helpers.licensing`：`EXPIRY_HEADER`／`EXPIRY_THRESHOLDS`／`expiry_reminder`／`expiry_banner`（剩 30／14／7 天提醒的判定；只在授權仍可用時提醒）；`LICENSE_EXEMPT_PATHS` 新增 `/api/license/overview`、`/api/license/import`（授權失效時唯一能救回系統的動作就是匯入新授權；豁免只跳過閘門，端點自己驗最高管理者＋非示範帳號）。

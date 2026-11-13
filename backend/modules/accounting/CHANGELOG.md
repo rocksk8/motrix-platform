@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
+## 1.1.69 — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
 - 變更（內部，不影響對外介面）：`api/ledger_reports.py` 角色對應申請判斷「有沒有另一位在職最高管理者」改用 `config_ledger.real_superadmins()`（不含展示帳號 demo）；只有一位真人最高管理者時，訊息與行為與原本「沒有第二位」相同。
 - 測試：`tests/test_loosening_demo_not_second_approver_2026_11_13.py`（守門）。
 

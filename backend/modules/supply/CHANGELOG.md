@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）
+## 1.0.39 — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）
 - 變更（內部）：出貨單回簽附件（`api/shipping_notes.py` signed-files 上傳／刪除）。附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
 
 ## 1.0.38 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）

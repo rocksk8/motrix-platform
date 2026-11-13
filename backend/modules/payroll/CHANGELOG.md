@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
+## 1.2.30 — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
 - 變更（內部，不影響對外介面）：勞報單表單（`payslip-form.html`）預填公司名稱／統編／聯絡方式改打 `GET /api/settings/company-profile/public`；預填內容不變。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
 

@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-11-13（perf/bootstrap-bundle-20261113；外網載入效能第二階段）
+## 1.0.51 — 2026-11-13（perf/bootstrap-bundle-20261113；外網載入效能第二階段）
 - 新增 `GET /api/dashboard/bundle`（`?department_id=&activity_limit=`）：把首頁儀表板的六支（stats／monthly／expenses-monthly／funnel／ops-alerts／activity-feed）合成一支，每個區段**直接呼叫原端點的處理函式**（權限檢查與遮蔽同一份、不比原端點多給任何資料）；某段被拒／出錯 ⇒ 該段 null＋`errors`。回 `Cache-Control: no-store`。守門：`tests/test_bootstrap_bundle_2026_11_13.py`（逐區段、逐角色比對）。無 migration、無設定變動。
 
 ## 1.0.50 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
