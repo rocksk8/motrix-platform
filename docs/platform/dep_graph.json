@@ -24490,6 +24490,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/hint-popover.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -26375,6 +26376,7 @@
     "helper:backup_monitor",
     "helper:builtin_fields",
     "helper:case_access",
+    "helper:client_ip",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
@@ -26437,7 +26439,8 @@
    "imports": [
     "helper:audit",
     "helper:auth",
-    "helper:backup_monitor"
+    "helper:backup_monitor",
+    "helper:client_ip"
    ],
    "kind": "router",
    "path": "backend/routers/backup_monitor.py",
@@ -26445,49 +26448,49 @@
    "routes": [
     {
      "func": "get_backup_monitor",
-     "line": 47,
+     "line": 50,
      "method": "GET",
      "path": "/api/system/backup-monitor"
     },
     {
      "func": "post_backup_now",
-     "line": 64,
+     "line": 67,
      "method": "POST",
      "path": "/api/system/backup-monitor/backup-now"
     },
     {
      "func": "put_heartbeat_url",
-     "line": 80,
+     "line": 83,
      "method": "PUT",
      "path": "/api/system/backup-monitor/heartbeat-url"
     },
     {
      "func": "post_heartbeat_disable",
-     "line": 106,
+     "line": 109,
      "method": "POST",
      "path": "/api/system/backup-monitor/heartbeat-disable"
     },
     {
      "func": "post_heartbeat_disable_approve",
-     "line": 124,
+     "line": 127,
      "method": "POST",
      "path": "/api/system/backup-monitor/heartbeat-disable/{change_id}/approve"
     },
     {
      "func": "post_heartbeat_disable_cancel",
-     "line": 137,
+     "line": 140,
      "method": "POST",
      "path": "/api/system/backup-monitor/heartbeat-disable/{change_id}/cancel"
     },
     {
      "func": "post_heartbeat_disable_reject",
-     "line": 147,
+     "line": 150,
      "method": "POST",
      "path": "/api/system/backup-monitor/heartbeat-disable/{change_id}/reject"
     },
     {
      "func": "post_heartbeat_test",
-     "line": 161,
+     "line": 164,
      "method": "POST",
      "path": "/api/system/backup-monitor/heartbeat-test"
     }

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from tests._e2e_login import bootstrap_unavailable
 from tests._requires import requires_module
 from tests.e2e_on_state._common import DATA_JS, Requests, inject_login, seed_draft_quote
 
@@ -39,10 +40,15 @@ def _norm_reqs(items):
 # T62 在旗標【關閉】時多出來的請求，逐條列出（PM 裁示 2026-10-15：允許清單，不做延後載入重構）。
 # 理由：全是「讀旗標」的 GET 與靜態資源（頁面載入版面／自訂欄位／狀態顯示的腳本），旗標關閉時不呈現任何東西、使用者看到的畫面與 platform 相同。
 # 任何不在這份清單裡的新請求都會讓測試失敗；寫入（非 GET）一律不准。
+# 2026-11-13（perf：bootstrap）：開頁的啟動資料（auth/me、platform/menu、branding、build-info、approval-queue/count、notifications/mine、…）原本各打一支，
+# 現在第一次由一支 `GET /api/bootstrap` 供應。golden 錄的是「基底樹」的原端點清單，這裡比對的是「旗標關閉＝與過去逐項相同」，不是 bootstrap 本身：
+# 所以題目先 `bootstrap_unavailable(page)`（/api/bootstrap 回 404 ⇒ 頁面退回原端點，請求清單與基底樹一致），那一支被擋掉的 GET /api/bootstrap 是唯一多出來的請求（唯讀 GET）。
+# bootstrap 與原端點內容逐欄相同由 tests/test_bootstrap_bundle_2026_11_13.py 守；golden 檔本身不改。
+_BOOT = ["GET /api/bootstrap"]
 _JS = ["GET /js/def-governance.js", "GET /static/custom-layout.js", "GET /static/layout-editor.js", "GET /static/layout-runtime.js", "GET /static/public-flags.js",
         "GET /static/ux-help.js"]      # 2026-11-11 UX A4／A5：頂欄「？」說明抽屜＋「第一次來？」橫幅（旗標無關，每頁都載入）
 ALLOWED_EXTRA = {
-    "quotation_form_off": set(_JS + [
+    "quotation_form_off": set(_BOOT + _JS + [
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates",
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",     # T64 B：既有的公開讀取多帶 ui_format 群組
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",                                                   # T64 A／B：靜態腳本載入
@@ -50,7 +56,7 @@ ALLOWED_EXTRA = {
         "GET /static/status-chip.js",                                                                                         # UX P1（2026-11-13）：報價單表單改用 MotrixStatus.label 顯示「待簽核」，要載入這支靜態腳本
         "GET /api/auth/preferences",                                                                                      # T82：我的帳號（側欄使用者選單讀個人偏好；唯讀 GET，不寫入）
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format,builder_status_display"]),      # M1：沿用既有的那一次設定讀取多帶一個群組（旗標關＝什麼都不改）
-    "quotations_list_off": set(_JS + [
+    "quotations_list_off": set(_BOOT + _JS + [
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",
         "GET /api/settings-center/public?groups=builder_layout",
@@ -115,6 +121,7 @@ def test_quotation_form_off_golden(live_server, make_user, new_context):
     ctx = new_context()
     page = ctx.new_page()
     inject_login(page, live_server, u[0], u[1])
+    bootstrap_unavailable(page)                      # 比對的是原端點清單（見 _BOOT 的說明）
     reqs = Requests(page, live_server)
     page.goto("%s/pages/quotation-form.html?id=%s" % (live_server, qn))
     snap = _snapshot(page, reqs, "() => %s.q && %s.q.quoteNo === '%s'" % (DATA_JS, DATA_JS, qn))
@@ -130,6 +137,7 @@ def test_quotations_list_off_golden(live_server, make_user, new_context):
     ctx = new_context()
     page = ctx.new_page()
     inject_login(page, live_server, u[0], u[1])
+    bootstrap_unavailable(page)                      # 比對的是原端點清單（見 _BOOT 的說明）
     reqs = Requests(page, live_server)
     page.goto(live_server + "/pages/quotations.html")
     snap = _snapshot(page, reqs, "() => %s.loading === false" % DATA_JS)

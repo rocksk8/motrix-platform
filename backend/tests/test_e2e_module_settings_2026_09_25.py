@@ -14,7 +14,7 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from tests._e2e_login import inject_login  # noqa: E402
+from tests._e2e_login import bootstrap_unavailable, inject_login  # noqa: E402
 
 KEY = "zz_e2e"
 
@@ -117,20 +117,27 @@ def test_sidebar_hides_entries_of_unloaded_modules(live_server, make_user, e2e_b
 
 
 @pytest.mark.e2e
-def test_core_only_page_and_sidebar_still_work(live_server, make_user, e2e_browser):
-    """A-2 反向控制：狀態表是空的（core-only 產品）⇒ 管理頁說「沒有可選配的模組」、側欄照常、沒有 JS 錯誤。"""
+@pytest.mark.parametrize("via_bootstrap", [True, False], ids=["bootstrap", "direct"])
+def test_core_only_page_and_sidebar_still_work(live_server, make_user, e2e_browser, via_bootstrap):
+    """A-2 反向控制：狀態表是空的（core-only 產品）⇒ 管理頁說「沒有可選配的模組」、側欄照常、沒有 JS 錯誤。
+    2026-11-13（bootstrap）：側欄的 availability 第一次由 /api/bootstrap 的 moduleAvailability 供應；bootstrap 不可用時退回原端點。兩條路都驗。"""
     from core import registry
     snap = registry.snapshot()
     try:
         registry._STATES.clear()
-        u = make_user(username="mse_sa3", role="superadmin")
+        u = make_user(username="mse_sa3%s" % ("b" if via_bootstrap else "d"), role="superadmin")
         page = e2e_browser.new_context().new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         inject_login(page, live_server, u[0], u[1])
-        with page.expect_response(lambda r: "/api/system/modules/availability" in r.url) as resp:
+        if not via_bootstrap:
+            bootstrap_unavailable(page)
+        want = (lambda r: r.url.endswith("/api/bootstrap")) if via_bootstrap else (lambda r: "/api/system/modules/availability" in r.url)
+        with page.expect_response(want) as resp:
             page.goto(f"{live_server}/pages/module-settings.html")
-        assert resp.value.status == 200 and resp.value.json() == {}                   # 側欄改用 availability
+        body = resp.value.json()
+        avail = body["moduleAvailability"] if via_bootstrap else body
+        assert resp.value.status == 200 and avail == {}                   # 側欄改用 availability（bootstrap 時是它的區段）
         page.locator("text=這個安裝包裡沒有可選配的模組").wait_for(state="visible", timeout=15000)
         page.wait_for_load_state("networkidle")
         # 第 54 班（系統中心）：『系統』群組在導覽列收成單一連結（指向系統中心），模組管理不再是獨立導覽項；
