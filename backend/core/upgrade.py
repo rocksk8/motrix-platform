@@ -49,6 +49,10 @@ NEW_SETTINGS = {
     "payslip_archive_path": "",      # 空字串＝用預設 backend/export_archive（routers/payslips._archive_dir）
 }
 
+#: 由 migration 在升級跑 migrate 時順手寫入的設定鍵（值是 migration 當下的資料，不是固定預設 ⇒ 不放 NEW_SETTINGS）。
+#: 驗證時視為「新版新增」而非「未宣告」。`line_event_usage_since`＝LINE 事件按日用量開始累積的日期（core/migrations.py）。
+_MIGRATION_WRITTEN_SETTINGS = frozenset({"line_event_usage_since"})
+
 
 def _rel(abs_path: str) -> str:
     return os.path.relpath(abs_path, _p.INSTALL_ROOT).replace("\\", "/")
@@ -838,7 +842,7 @@ def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
     for k in settings_changes(manifest["pre"]["settings"], s_after):
         problems.append("既有設定被改寫或刪除：%s" % k)
     extra = set(s_after) - set(manifest["pre"]["settings"])
-    unexpected = extra - set(NEW_SETTINGS)
+    unexpected = extra - set(NEW_SETTINGS) - _MIGRATION_WRITTEN_SETTINGS
     if unexpected:
         problems.append("出現未宣告的新設定鍵：%s" % sorted(unexpected))
     # 設定檔（含 autostart.bat）：轉換不可以改寫或刪除（稽核 X-9b M-4）

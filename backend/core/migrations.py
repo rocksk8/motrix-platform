@@ -789,6 +789,7 @@ def _core_next_line_event_usage_daily(conn):
             day           TEXT    NOT NULL,
             event_key     TEXT    NOT NULL,
             n             INTEGER NOT NULL DEFAULT 0,
+            owner_unit_id INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (day, event_key)
         )
     """)
