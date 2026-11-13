@@ -777,3 +777,27 @@ def _core_next_users_quote_email(conn):
 
 
 register("core", 14, _core_next_users_quote_email)
+
+
+# ── LINE 事件按日用量（2026-11-13，LINE 事件矩陣票；未取號 core 遷移，PLAYBOOK §G6）──────────────────
+# `line_event_usage_daily(day, event_key, n)`：每天（台灣日期）每個 LINE 事件推出幾則；只存近 31 天（寫入時清）。
+# 另在 system_settings 記 `line_event_usage_since`（開始累積的日期；已有就不動）⇒ 畫面據此標「已累積 N 天」。
+# 純新增、冪等（每次 run_all 都會重跑）；不 import 會演進的程式碼（凍住的歷史），日期自己算（UTC+8）。
+def _core_next_line_event_usage_daily(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS line_event_usage_daily (
+            day           TEXT    NOT NULL,
+            event_key     TEXT    NOT NULL,
+            n             INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (day, event_key)
+        )
+    """)
+    from datetime import timedelta, timezone
+    today_tw = (datetime.now(timezone.utc) + timedelta(hours=8)).strftime("%Y-%m-%d")
+    conn.execute("INSERT OR IGNORE INTO system_settings (key, value_json, updated_at) VALUES ('line_event_usage_since', ?, ?)",
+                 (json.dumps(today_tw), datetime.now().isoformat()))
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_line_event_usage_daily)
