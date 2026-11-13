@@ -48,6 +48,12 @@
  *   // 寫入中（S.busy）的格子修改**不會被丟掉**：排進佇列，前一筆寫完後依序套用（草稿模式＝依序併入草稿；儲存中改的格子不會被儲存後的清空吃掉）。
  *   // 重新繪製會還原焦點（依 data-mx／data-key／data-col／data-val／data-g 找回同一個控制項，文字框連游標位置）。
  *   // 草稿：draft: { apply, same, confirm, save, afterSave }（見 mount 內的說明）；欄位用 draft(row, value) 取代 set／toggle，批次動作用 draft(keys) 取代 run
+ *   // S1b 新增（全部選填；沒給＝畫面與行為完全不變）：
+ *   //   cfg.help(row)→{what,when,impact,recommend}：名稱旁的「?」，點開四段說明（空段略過、全空不畫；文字跳脫）。
+ *   //   cfg.source(row)→{kind:'default'|'company'|'pending'|'legacy'|'personal', by, at, reason, until}：來源徽章＋「來源：…」一行（'personal' 只給真的有個人層的欄位）。
+ *   //   cfg.diff={isDefault(row), defaultText(row), reset(row,ctx), draft(row), canReset(row), confirm(row)}：「與預設不同」標記＋篩選晶片＋「預設：X［還原預設］」（只在不同時顯示）。
+ *   //   欄位 colSelect={draft(row,on,itemValue), run(keys,on,itemValue,ctx), confirm(keys,on,itemValue)}（switch／chips 欄）：欄頭核取方塊，整欄一次開／關（略過不能批次或鎖住的列）。
+ *   //   cfg.notifyPreview({kind,keys,changes,action,skipped})→raw html：確認視窗最後加「通知預覽」。
  *   // 群組快捷鈕總開關：batch.groupActionsEnabled: false（設定中心不開放「全部開啟」）
  *   mx.setRows(rows)  mx.refresh()  mx.selection()  mx.clearSelection()  mx.toast(msg, { undo })  mx.stage(key, patch)  mx.draftCount()  mx.discard()  mx.save()  mx.destroy()
  *   SettingsMatrix.openDialog({ title, html, buttons: [{ label, value, kind: 'primary'|'danger'|'' }], onOpen(el) }) → Promise<value|null>
@@ -84,6 +90,12 @@
     skippedBox: '已略過 {n} 項（不能批次，請逐項設定）：', skippedAll: '選取的項目都不能批次，請逐項設定', noneSelected: '沒有選取任何項目',
     partialTitle: '部分項目不能批次', partialBody: '將套用 {n} 項。', apply: '套用', cancel: '取消',
     undo: '復原這一批', undone: '已復原這一批（{n} 項）', updated: '已更新', turnedOn: '已開啟', turnedOff: '已關閉', failed: '失敗', invalidNumber: '請輸入數字',
+    help: '說明', helpTitle: '{name}：說明', helpWhat: '這是什麼', helpWhen: '什麼時候要改', helpImpact: '改了會影響什麼', helpRecommend: '建議值', close: '關閉',
+    srcLine: '來源：', srcDefault: '預設', srcCompany: '公司', srcPending: '等待生效', srcLegacy: '舊位置', srcPersonal: '個人',
+    srcDefaultText: '系統預設', srcCompanyText: '公司設定', srcPendingText: '等待生效', srcLegacyText: '舊位置（唯讀提示）', srcPersonalText: '個人設定',
+    diffTag: '與預設不同', diffFilter: '與預設不同', diffDefault: '預設：{v}', diffReset: '還原預設', diffResetTitle: '還原「{name}」為預設值',
+    colSelAria: '整欄選取：{col}', colSelStaged: '已加入草稿 {n} 項（尚未儲存）', colSelSkipped: '，略過 {k} 項（不能批次或欄位已鎖定）', colSelNone: '沒有可套用的列',
+    previewTitle: '通知預覽',
     leaveTitle: '離開這一頁？', leaveBody: '你有 {n} 項未儲存的修改，離開後會遺失。', stay: '留在這一頁', leave: '放棄修改並離開',
   }
   function fmt(tpl, vars) {
@@ -108,6 +120,43 @@
     if (r.pending) return { ok: false, reason: '已有待生效的變更' }
     if (r.sensitive) return { ok: false, reason: '高敏感項目，請逐項設定' }
     return { ok: true, reason: '' }
+  }
+
+  // ── C6「?」說明／C7 來源／C8 與預設不同（純函式，可單獨測試；內容由 host 從登錄表的 field_views 傳入，核心不自己編文案）──────
+  // 說明四段：{ what, when, impact, recommend }（來自 SettingDef 的 question／help、when、impact／risk_text、recommended；SPEC §6）。空段不顯示；全空＝不畫「?」。
+  // 文字一律跳脫（純文字）；要換行請用 \n（轉成 <br>）。
+  var HELP_PARTS = [['what', 'helpWhat'], ['when', 'helpWhen'], ['impact', 'helpImpact'], ['recommend', 'helpRecommend']]
+  function textHtml(t) { return esc(t).replace(/\n/g, '<br>') }
+  function helpParts(h, labels) {
+    if (!h || typeof h !== 'object') return []
+    var out = []
+    HELP_PARTS.forEach(function (p) {
+      var v = h[p[0]]
+      if (v == null || String(v).trim() === '') return
+      out.push({ id: p[0], title: (labels || DEFAULT_LABELS)[p[1]] || DEFAULT_LABELS[p[1]], text: String(v) })
+    })
+    return out
+  }
+  function helpHtml(h, labels) {
+    return helpParts(h, labels).map(function (p) {
+      return '<section class="mx-help-sec" data-part="' + p.id + '"><h4>' + esc(p.title) + '</h4><p>' + textHtml(p.text) + '</p></section>'
+    }).join('')
+  }
+  // 來源徽章只有五種（SPEC §2.3）：預設／公司／等待生效／舊位置／個人。「個人」只該出現在真的有個人層的欄位——核心不判斷，host 只在有個人層時才回 kind:'personal'。
+  var SRC_KINDS = { 'default': { b: 'srcDefault', t: 'srcDefaultText', tone: 'mute' }, company: { b: 'srcCompany', t: 'srcCompanyText', tone: 'info' },
+    pending: { b: 'srcPending', t: 'srcPendingText', tone: 'warn' }, legacy: { b: 'srcLegacy', t: 'srcLegacyText', tone: 'mute' }, personal: { b: 'srcPersonal', t: 'srcPersonalText', tone: 'good' } }
+  // s：{kind, by, at, reason, until}；回 {badge, tone, text}（text＝「來源」那一行的純文字），kind 不認得 ⇒ null
+  function sourceInfo(s, labels) {
+    if (!s || typeof s !== 'object') return null
+    var k = SRC_KINDS[s.kind]
+    if (!k) return null
+    var LBL = labels || DEFAULT_LABELS
+    var bits = [LBL[k.t] || DEFAULT_LABELS[k.t]]
+    var who = [s.by, s.at].filter(function (x) { return x != null && String(x) !== '' }).join(' ')
+    if (who) bits.push(who)
+    if (s.kind === 'pending' && s.until) bits.push(String(s.until))
+    if (s.reason) bits.push(String(s.reason))
+    return { badge: LBL[k.b] || DEFAULT_LABELS[k.b], tone: k.tone, text: bits.join(' · ') }
   }
 
   // ── 彈窗（供 host 自己的對話框與元件內建的確認視窗共用）──────────────────────────────────────────
@@ -194,7 +243,11 @@
     var rn = cfg.rowName || function (r) { return r.name }
     var rg = cfg.rowGroup || function (r) { return r.group }
     var cols = cfg.columns || []
-    var filters = cfg.filters || []
+    // C8 與預設不同：cfg.diff = { isDefault(row)→bool, defaultText(row)→「預設：X」的 X, reset(row, ctx)→Promise（立即模式）, draft(row)→patch（草稿模式）, canReset(row)→bool（選填，false＝不給還原鈕）, confirm(row)→確認視窗（選填） }
+    var DF = cfg.diff || null
+    function differs(r) { return !!DF && DF.isDefault(r) === false }
+    var filters = (cfg.filters || []).slice()
+    if (DF && !filters.some(function (f) { return f.id === '__diff' })) filters.push({ id: '__diff', label: LB.diffFilter, test: differs })
     var batch = cfg.batch || { actions: [] }
     var groups = (cfg.groups || []).slice()
 
@@ -256,14 +309,33 @@
       if (S.draft[rk(r)]) extra.push({ text: T('draftTag'), tone: 'warn' })
       var el = eligibleOf(r)
       if (!el.ok) extra.push({ text: T('noBatchTag'), tone: 'mute', title: el.reason })
+      if (differs(r)) extra.push({ text: '● ' + T('diffTag'), tone: 'warn' })
+      var si = srcOf(r)
+      if (si) extra.push({ text: si.badge, tone: si.tone, title: si.text })
       return (cfg.rowTags ? cfg.rowTags(r) : []).concat(extra).map(function (t) { return ' <span class="mx-pill ' + (TONES[t.tone] || '') + '"' + (t.title ? ' title="' + esc(t.title) + '"' : '') + '>' + esc(t.text) + '</span>' }).join('')
     }
     function ckAttrs(r) {
       var el = eligibleOf(r)
       return el.ok ? '' : ' disabled title="' + esc(T('noBatchTitle', { reason: el.reason })) + '"'
     }
+    function srcOf(r) { return cfg.source ? sourceInfo(cfg.source(r), LB) : null }
+    function helpOf(r) { return cfg.help ? cfg.help(r) : null }
+    function helpBtn(r) {
+      return helpParts(helpOf(r), LB).length ? ' <button type="button" class="mx-help" data-mx="help" data-key="' + esc(rk(r)) + '" aria-label="' + esc(T('help') + '：' + rn(r)) + '" title="' + esc(T('help')) + '">?</button>' : ''
+    }
+    // 「預設：X［還原預設］」只在與預設不同時才顯示（SPEC §2.1-4）；來源那一行只在 host 有提供 source 時顯示
+    function metaLines(r) {
+      var h = ''
+      var si = srcOf(r)
+      if (si) h += '<div class="mx-src" data-testid="mx-src">' + esc(T('srcLine')) + esc(si.text) + '</div>'
+      if (differs(r) && DF.defaultText) {
+        h += '<div class="mx-dflt" data-testid="mx-dflt">' + esc(T('diffDefault', { v: DF.defaultText(r) })) +
+          ((DF.reset || DF.draft) && !(DF.canReset && DF.canReset(r) === false) ? ' <button type="button" class="mx-btn mx-btn-sm" data-mx="dreset" data-key="' + esc(rk(r)) + '" title="' + esc(T('diffResetTitle', { name: rn(r) })) + '">' + esc(T('diffReset')) + '</button>' : '') + '</div>'
+      }
+      return h
+    }
     function nameCell(r) {
-      return '<span class="mx-nm">' + esc(rn(r)) + '</span>' + tags(r) + (cfg.rowSub ? '<div class="mx-sub">' + esc(cfg.rowSub(r)) + '</div>' : '')
+      return '<span class="mx-nm">' + esc(rn(r)) + '</span>' + helpBtn(r) + tags(r) + (cfg.rowSub ? '<div class="mx-sub">' + esc(cfg.rowSub(r)) + '</div>' : '') + metaLines(r)
     }
     // 每格的狀態：disabled（反灰，可帶原因字串）／readonly（看得到值、不能改）。伺服器端永遠是最後防線；這裡的判斷在事件處理時會再查一次。
     function stateOf(c, r) {
@@ -321,13 +393,40 @@
       return '<button type="button" class="' + cls + '" data-mx="chip" data-col="' + esc(c.id) + '" data-key="' + esc(k) + '" data-val="' + esc(it.value) + '" aria-pressed="' + on + '" aria-label="' +
         esc(rn(r) + '：' + it.label + (on ? T('chipOn') : T('chipOff'))) + '"' + (dis ? ' disabled' : '') + (st.ro ? ' aria-readonly="true"' : '') + (st.why ? ' title="' + esc(st.why) + '"' : '') + '>' + (asChip ? esc(it.label) : '✓') + '</button>'
     }
+    // C11 欄頭選取：欄定義帶 colSelect:{ draft(row, on, itemValue)→patch（草稿模式，逐列算）, run(keys, on, itemValue, ctx)→Promise（立即模式）, confirm(keys, on, itemValue)→確認視窗（選填） }
+    //   的 switch／chips 欄，欄頭多一個核取方塊：勾＝把「目前列出、可批次、該格沒鎖」的列全設成開；取消勾＝全設成關；有開有關＝半選。
+    function csHead(c, it) {
+      if (!c.colSelect || (c.type !== 'switch' && c.type !== 'chips')) return ''
+      var val = it ? it.value : ''
+      return '<input type="checkbox" class="mx-csel" data-mx="csel" data-col="' + esc(c.id) + '"' + (it ? ' data-val="' + esc(val) + '"' : '') + ' aria-label="' + esc(T('colSelAria', { col: it ? it.label : (c.label || '') })) + '">'
+    }
     function headCells() {
       var h = ''
       cols.forEach(function (c) {
-        if (c.type === 'chips') c.items.forEach(function (it) { h += '<th class="mx-th-chip" title="' + esc(it.label) + '">' + esc(it.short || it.label) + '</th>' })
-        else h += '<th' + (c.width ? ' style="width:' + c.width + 'px"' : '') + '>' + esc(c.label || '') + '</th>'
+        if (c.type === 'chips') c.items.forEach(function (it) { h += '<th class="mx-th-chip" title="' + esc(it.label) + '">' + esc(it.short || it.label) + csHead(c, it) + '</th>' })
+        else h += '<th' + (c.width ? ' style="width:' + c.width + 'px"' : '') + '>' + esc(c.label || '') + csHead(c, null) + '</th>'
       })
       return h
+    }
+    function cellOn(c, r, val) {
+      if (c.type === 'chips') { var cur = c.get(r); return cur == null ? true : cur.indexOf(val) >= 0 }
+      return !!c.get(r)
+    }
+    // 欄頭選取的對象：目前列出（群組沒收合）、可批次、該格顯示且沒鎖的列
+    function colTargets(c) {
+      return visKeys().filter(function (k) { var r = rowByKey(k); return r && eligibleOf(r).ok && colShown(c, r) && !locked(c, r) })
+    }
+    function syncColSelect() {
+      Array.prototype.slice.call(el.querySelectorAll('input[data-mx=csel]')).forEach(function (b) {
+        var c = cols.filter(function (x) { return x.id === b.getAttribute('data-col') })[0]
+        if (!c) return
+        var val = b.getAttribute('data-val')
+        var ks = colTargets(c)
+        var n = ks.filter(function (k) { return cellOn(c, rowByKey(k), val) }).length
+        b.disabled = !ks.length
+        b.checked = ks.length > 0 && n === ks.length
+        b.indeterminate = n > 0 && n < ks.length
+      })
     }
     function rowTable(r) {
       var k = rk(r), tds = ''
@@ -335,7 +434,7 @@
         if (c.type === 'chips') c.items.forEach(function (it) { tds += '<td>' + chipCell(c, r, k, it, false) + '</td>' })
         else tds += '<td>' + cell(c, r, k) + '</td>'
       })
-      return '<tr class="mx-row' + (S.sel[k] ? ' sel' : '') + (S.draft[k] ? ' mx-draft' : '') + '" data-testid="mx-row-' + esc(k) + '"><td class="mx-ck"><input type="checkbox" data-mx="sel" data-key="' + esc(k) + '"' + (S.sel[k] ? ' checked' : '') + ckAttrs(r) +
+      return '<tr class="mx-row' + (S.sel[k] ? ' sel' : '') + (S.draft[k] ? ' mx-draft' : '') + (differs(r) ? ' mx-changed' : '') + '" data-testid="mx-row-' + esc(k) + '"><td class="mx-ck"><input type="checkbox" data-mx="sel" data-key="' + esc(k) + '"' + (S.sel[k] ? ' checked' : '') + ckAttrs(r) +
         ' aria-label="' + esc(T('selectRow', { name: rn(r) })) + '"></td><td class="mx-name">' + nameCell(r) + '</td>' + tds + '</tr>'
     }
     function rowCard(r) {
@@ -347,7 +446,7 @@
         if (c.type === 'chips') body += '<div class="mx-chips">' + c.items.map(function (it) { return chipCell(c, r, k, it, true) }).join('') + '</div>'
         else body += '<div class="mx-crow">' + cell(c, r, k) + '</div>'
       })
-      return '<div class="mx-card-row' + (S.sel[k] ? ' sel' : '') + (S.draft[k] ? ' mx-draft' : '') + '"><div class="mx-card-top"><input type="checkbox" data-mx="sel" data-key="' + esc(k) + '"' + (S.sel[k] ? ' checked' : '') + ckAttrs(r) +
+      return '<div class="mx-card-row' + (S.sel[k] ? ' sel' : '') + (S.draft[k] ? ' mx-draft' : '') + (differs(r) ? ' mx-changed' : '') + '"><div class="mx-card-top"><input type="checkbox" data-mx="sel" data-key="' + esc(k) + '"' + (S.sel[k] ? ' checked' : '') + ckAttrs(r) +
         ' aria-label="' + esc(T('selectRow', { name: rn(r) })) + '"><div class="mx-card-name">' + nameCell(r) + '</div>' + sw + '</div>' + body + '</div>'
     }
     function groupHead(x, asCard) {
@@ -425,6 +524,7 @@
       restoreFocus(fo)
       var sa = el.querySelector('[data-mx=selall]')
       if (sa) { var ks = visKeys().filter(canBatch); sa.checked = ks.length > 0 && ks.every(function (k) { return S.sel[k] }) }
+      syncColSelect()
     }
 
     // ── 寫入（單格／批次共用）：鎖住 → 寫 → 重讀 → 提示＋復原；失敗 ⇒ 顯示原因並回到伺服器的狀態 ──
@@ -480,6 +580,19 @@
       })
       return chain
     }
+    // 確認視窗的「通知預覽」：cfg.notifyPreview({ kind:'batch'|'draft'|'colselect'|'reset', keys, changes, action, skipped })→raw html（或 Promise；回空＝不顯示）；
+    //   接在最後一個確認視窗後面（沒有確認視窗就補一個）。html 是 raw——動態值（人名、信件主旨…）host 要先 esc()。預覽失敗不擋儲存。
+    function withPreview(dialogs, info) {
+      if (!cfg.notifyPreview) return Promise.resolve(dialogs)
+      return Promise.resolve().then(function () { return cfg.notifyPreview(info) }).catch(function () { return '' }).then(function (html) {
+        if (!html) return dialogs
+        var box = '<div class="mx-preview" data-testid="mx-preview"><b>' + esc(T('previewTitle')) + '</b><div>' + html + '</div></div>'
+        var out = dialogs.slice()
+        if (out.length) out[out.length - 1] = Object.assign({}, out[out.length - 1], { html: (out[out.length - 1].html || '') + box })
+        else out.push({ title: T('previewTitle'), html: box, okLabel: T('apply') })
+        return out
+      })
+    }
     // a.confirm(keys)：回確認視窗陣列，或回 Promise（例如先向伺服器要預覽）；回 null／false ⇒ 使用者在前置步驟取消、靜默放棄；丟錯 ⇒ 顯示錯誤、不執行
     function runAction(a, requested) {
       if (S.busy) return Promise.resolve()
@@ -502,7 +615,7 @@
           if (dialogs.length) dialogs[0] = Object.assign({}, dialogs[0], { html: skippedHtml(sk) + (dialogs[0].html || '') })
           else dialogs.push({ title: T('partialTitle'), html: esc(T('partialBody', { n: keys.length })) + skippedHtml(sk), okLabel: T('apply') })
         }
-        return askAll(dialogs).then(function (ok) {
+        return withPreview(dialogs, { kind: a.previewKind || 'batch', keys: keys, action: a, skipped: sk }).then(function (ds) { dialogs = ds; return askAll(dialogs) }).then(function (ok) {
           if (!ok) return
           return perform(a.doneLabel || a.label, keys, function () { return a.run(keys, { confirmed: dialogs.length > 0, skipped: sk }) }, { undo: true })
         })
@@ -526,8 +639,7 @@
       var keys = changes.map(function (c) { return c.key })
       return Promise.resolve().then(function () { return D.confirm ? D.confirm(changes) : [] }).then(function (dialogs) {
         if (dialogs === null || dialogs === false) return
-        dialogs = dialogs || []
-        return askAll(dialogs).then(function (ok) {
+        return withPreview(dialogs || [], { kind: 'draft', keys: keys, changes: changes }).then(function (ds) { dialogs = ds; return askAll(dialogs) }).then(function (ok) {
           if (!ok) return
           return perform(T('saved'), keys, function () { return D.save(changes, { confirmed: dialogs.length > 0 }) }, { undo: true, draft: true, after: function (res) { if (D.afterSave) D.afterSave(res, changes) } })
         })
@@ -537,6 +649,38 @@
       if (!dirtyCount()) return
       S.draft = {}
       reloadAfter().then(render)                                    // 重新讀取：順便換成最新的版本
+    }
+    // C8 還原預設（單列）：草稿模式＝把 diff.draft(row) 併進草稿；立即模式＝diff.confirm（選填）→ diff.reset(row, ctx)（走 perform，失敗回到伺服器狀態）
+    function resetRow(key) {
+      var r = rowByKey(key)
+      if (!DF || !r || !differs(r) || (DF.canReset && DF.canReset(r) === false)) return Promise.resolve()
+      if (D && DF.draft) return stageCell(key, function () { return DF.draft(r) })
+      if (!DF.reset) return Promise.resolve()
+      var dialogs = DF.confirm ? (DF.confirm(r) || []) : []
+      return askAll(dialogs).then(function (ok) {
+        if (!ok) return
+        return perform(rn(r) + '：' + T('diffReset'), [key], function () { return DF.reset(r, { confirmed: dialogs.length > 0 }) })
+      })
+    }
+    // C11 欄頭選取（on＝true 全開／false 全關）；val＝chips 欄的項目值。略過的列（不能批次／該格鎖住／不顯示）一律不動並在提示裡計數。
+    function colSelect(c, val, on) {
+      var targets = colTargets(c)
+      var all = visKeys().length
+      var skipped = all - targets.length
+      if (!targets.length) { toast(T('colSelNone'), { error: true }); return render() }
+      var cs = c.colSelect
+      if (D && cs.draft) {
+        return Promise.resolve().then(function () {
+          var n = 0
+          return targets.reduce(function (p, k) {
+            return p.then(function () { return cs.draft(rowByKey(k), on, val) }).then(function (patch) { if (patch) { stage(k, patch); n++ } })
+          }, Promise.resolve()).then(function () { render(); toast(T('colSelStaged', { n: n }) + (skipped ? T('colSelSkipped', { k: skipped }) : '')) })
+        }).catch(function (e) { if (!(e && e.cancelled)) fail(e); render() })
+      }
+      if (!cs.run) { render(); return Promise.resolve() }
+      return runAction({ id: 'colsel:' + c.id, label: (c.label || '') + (on ? '：全部勾選' : '：全部取消'), previewKind: 'colselect',
+        confirm: function (keys) { return cs.confirm ? cs.confirm(keys, on, val) : [] },
+        run: function (keys, ctx) { return cs.run(keys, on, val, ctx) } }, targets)
     }
     // 單格操作：column.confirm(row, value) 可回確認視窗（例如關閉「重要」告警）；set／toggle 丟出 {cancelled:true} ⇒ 靜默放棄、畫面回原狀
     function runCell(label, key, col, r, value, fn) {
@@ -589,7 +733,13 @@
       if (!t || !el.contains(t)) return
       var m = t.getAttribute('data-mx')
       if (m === 'sel') { S.shift = e.shiftKey; return }
-      if (m === 'gsel' || m === 'select' || m === 'search' || m === 'selall' || m === 'gsel-filter' || m === 'input') return
+      if (m === 'gsel' || m === 'select' || m === 'search' || m === 'selall' || m === 'gsel-filter' || m === 'input' || m === 'csel') return
+      if (m === 'help') {                                                    // C6：只讀的說明視窗，寫入中也能開
+        var hr = rowByKey(t.getAttribute('data-key'))
+        var hh = hr ? helpHtml(helpOf(hr), LB) : ''
+        if (hh) openDialog({ title: T('helpTitle', { name: rn(hr) }), html: hh, buttons: [{ label: T('close'), value: null, kind: 'primary' }] })
+        return
+      }
       var cellKinds = { 'switch': 1, chip: 1 }
       if (S.busy && m !== 'gtoggle' && !cellKinds[m]) return
       var key = t.getAttribute('data-key'), col = cols.filter(function (c) { return c.id === t.getAttribute('data-col') })[0]
@@ -597,6 +747,7 @@
         if (e.target.closest('button,input,select')) return
         var g = t.getAttribute('data-g'); S.collapsed[g] = !S.collapsed[g]; render(); return
       }
+      if (m === 'dreset') { resetRow(key); return }
       if (m === 'ddiscard') { discardDraft(); return }
       if (m === 'dsave') { saveDraft(); return }
       if (m === 'switch') {
@@ -640,6 +791,13 @@
       if (m === 'gsel') { var g = t.getAttribute('data-g'); view().filter(function (x) { return x.g === g })[0].rows.forEach(function (r) { if (eligibleOf(r).ok) S.sel[rk(r)] = t.checked }); render(); return }
       if (m === 'selall') { visKeys().forEach(function (k) { if (canBatch(k)) S.sel[k] = t.checked }); render(); return }
       if (m === 'gsel-filter') { S.g = t.value; render(); return }
+      if (m === 'csel') {
+        var cc = cols.filter(function (c) { return c.id === t.getAttribute('data-col') })[0]
+        if (!cc || !cc.colSelect) { render(); return }
+        if (S.busy) { render(); return }
+        colSelect(cc, t.getAttribute('data-val'), t.checked)
+        return
+      }
       if (m === 'select' || m === 'input') {
         var col = cols.filter(function (c) { return c.id === t.getAttribute('data-col') })[0], r = rowByKey(key)
         if (!col || !r || locked(col, r)) { render(); return }
@@ -711,5 +869,6 @@
   }
 
   global.SettingsMatrix = global.MxTable = { mount: mount, openDialog: openDialog, closeDialog: closeDialog, toast: toast, esc: esc,
-    registerEligibleOverride: registerEligibleOverride, raw: raw, defaultLabels: DEFAULT_LABELS, eligibleOverrides: eligibleOverrides, defaultEligible: defaultEligible }
+    registerEligibleOverride: registerEligibleOverride, raw: raw, defaultLabels: DEFAULT_LABELS, eligibleOverrides: eligibleOverrides, defaultEligible: defaultEligible,
+    helpParts: helpParts, helpHtml: helpHtml, sourceInfo: sourceInfo }
 })(window)
