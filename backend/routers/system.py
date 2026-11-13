@@ -785,7 +785,7 @@ def _create_work_log_impl(body, authorization, u):
         _c.close()
     log_date, user_id, content = _f["log_date"], _f["user_id"], _f["content"]
     if user_id != u["id"] and u["role"] != "superadmin":              # 第 52 班（使用者裁示）：建立時也只有最高管理者能指定別人為記錄對象（同值＝自己 OK；與 PUT 的『不得改記錄對象』對稱）
-        raise HTTPException(403, "只有最高管理者可以替別人建立工作日誌")
+        raise HTTPException(403, "只有最高管理者可以替其他人建立工作日誌")
     hours    = _f.get("hours", 8.0)
     case_no  = _f.get("case_no", "")
     contact_type = _f.get("contact_type", "")
@@ -2271,12 +2271,12 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
             400,
             f"RP ID 不能是 IP 位址（收到：{rp_id}）。WebAuthn 規格要求 RP ID 是可註冊的網域"
             f"後綴，瀏覽器會直接拒絕 IP。請先在內部 DNS 建一個指向這台主機的名稱"
-            f"（例如 erp.example.local），再用那個名稱設定。"
+            f"（例如 motrix.example.local），再用該名稱設定。"
         )
 
     parsed = _urlparse(origin)
     if parsed.scheme not in ("https", "http") or not parsed.hostname:
-        raise HTTPException(400, f"Origin 必須是完整來源，例如 https://erp.example.local:666（收到：{origin}）")
+        raise HTTPException(400, f"Origin 必須是完整來源，例如 https://motrix.example.local:666（收到：{origin}）")
     if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
         raise HTTPException(400, f"Origin 不可包含路徑或查詢字串（收到：{origin}）")
 
@@ -2936,7 +2936,7 @@ def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
     # 由「未啟用」改成「啟用」＝一定要有這份設定剛剛測試成功的證明（24 小時內、帳密與主機埠完全相同）；精靈與舊頁面都一樣，伺服器端把關
     if data.get("enabled") and not current.get("enabled") and not _wizard_proof_matches(
             data.get("smtp_host"), data.get("smtp_port"), data.get("smtp_user"), data.get("smtp_password")):
-        raise HTTPException(422, "要啟用 Email 通知，請先用上方的「設定公司寄信帳號」寄一封測試信並確認收到；這份設定還沒有測試成功。")
+        raise HTTPException(422, "要啟用 Email 通知，請先用上方的「設定公司寄信帳號」寄一封測試信並確認收到；這份設定尚無測試成功。")
     _set_setting("email_notify", data)
     _audit(_tok(authorization), "settings.email_notify.update", "settings",
            "email_notify", "Email 通知設定")
@@ -3187,7 +3187,7 @@ def _parse_line_changes_body(b: dict, need_expect: bool = False) -> dict:
         raise HTTPException(400, "expect 必須是 {事件代碼: 字串}")
     if need_expect:                                                          # 儲存草稿一定要帶載入時的 version，否則會悄悄蓋掉別人的修改
         if ex is None:
-            raise HTTPException(400, "草稿儲存必須帶 expect（{事件代碼: 載入時的 version}），否則會蓋掉別人的修改")
+            raise HTTPException(400, "草稿儲存必須帶 expect（{事件代碼: 載入時的 version}），否則會覆蓋其他人的修改")
         missing = [k for k in b["changes"] if k not in ex]
         if missing:
             raise HTTPException(400, "expect 缺少這些事件的 version：%s" % "、".join(str(x) for x in missing[:5]))
@@ -3273,7 +3273,7 @@ def _save_line_changes(b: dict, actor: dict, authorization) -> dict:
         raise HTTPException(400, {"code": "confirm_critical_required", "message": str(e), "critical": [{"key": k, "name": _cat.name_of(k)} for k in e.keys]})
     except _ln.BatchConflict as e:
         who = _line_conflict_who(e.keys, p["since_audit"])
-        raise HTTPException(409, {"code": "conflict", "message": "這些事件在你載入頁面之後又被改過，為了不蓋掉別人的修改，系統拒絕儲存。",
+        raise HTTPException(409, {"code": "conflict", "message": "這些事件在您載入頁面之後又被改過，為了不覆蓋其他人的修改，系統拒絕儲存。",
                                   "keys": [{"key": k, "name": _cat.name_of(k)} for k in e.keys], **who})
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -3343,7 +3343,7 @@ def undo_line_notify_events_batch(body: dict = Body(...), authorization: str = H
         res = _ln.restore_events_batch(b.get("states"), b.get("expect"))
     except _ln.BatchConflict as e:
         who = _line_conflict_who(e.keys, since)
-        raise HTTPException(409, {"code": "conflict", "message": "這些事件在你套用之後又被改過，為了不蓋掉別人的修改，系統拒絕整批復原。",
+        raise HTTPException(409, {"code": "conflict", "message": "這些事件在您套用之後又被改過，為了不覆蓋其他人的修改，系統拒絕整批復原。",
                                   "keys": [{"key": k, "name": _cat.name_of(k)} for k in e.keys], **who})
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -3747,7 +3747,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
         if not to_addr.strip():
             rec = (body.recipient or "").strip()
             if not rec:
-                return _wizard_error(400, "您的帳號還沒有 Email，請在下方填上 Email，測試信才寄得到。", needEmail=True)
+                return _wizard_error(400, "您的帳號尚無 Email，請在下方填上 Email，測試信才寄得到。", needEmail=True)
             if not _es.valid_email(rec):
                 raise HTTPException(422, "Email 格式不對，請檢查後再填一次。")
             conn.execute("UPDATE users SET email=? WHERE id=?", (rec, user["id"]))
@@ -3794,10 +3794,10 @@ def email_notify_wizard_activate(body: EmailWizardIn = None, authorization: str 
     cfg = _get_setting("email_notify", {}) or {}
     proof = _get_setting(_EMAIL_WIZARD_PROOF, {}) or {}
     if body is None or not proof or not _wizard_fresh(proof):
-        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定尚無測試成功。")
     _prov, cand = _wizard_candidate(body, cfg)
     if proof.get("fp_full") != _wiz_full_fp(cand):
-        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定還沒有測試成功。")
+        raise HTTPException(400, "請先寄測試信並確認收到：目前的寄信設定尚無測試成功。")
     if proof.get("base_fp") != _live_fp(cfg):
         raise HTTPException(400, "寄信設定在測試之後被改過，請重新寄一次測試信。")
     _set_setting("email_notify", {**_EMAIL_DEFAULTS, **cfg, **cand, "enabled": True})      # 測試成功的候選設定，到這一步才寫進正式設定
@@ -4202,7 +4202,7 @@ def user_activity_trail(user: Optional[str] = None, start: Optional[str] = None,
         "items": items,
         "nextBeforeId": next_before_id,
         "note": "只記人的操作：輪詢、心跳、下拉選單與欄位偏好這類頁面自動發出的請求不記；"
-                "一次點擊連帶打出的多支請求算一次。",
+                "一次操作連帶送出的多個請求計為一次。",
     }
 
 

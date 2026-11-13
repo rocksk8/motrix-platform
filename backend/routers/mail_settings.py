@@ -349,7 +349,7 @@ def _parse_batch(b, need_expect):
         raise HTTPException(400, "expect 必須是 {列代碼: 版本字串}")
     if need_expect:                                      # 儲存草稿一定要帶載入時的 version，否則會悄悄蓋掉別人的修改
         if ex is None:
-            raise HTTPException(400, "草稿儲存必須帶 expect（{列代碼: 載入時的 version}），否則會蓋掉別人的修改")
+            raise HTTPException(400, "草稿儲存必須帶 expect（{列代碼: 載入時的 version}），否則會覆蓋其他人的修改")
         missing = [k for k in ch if k not in ex]
         if missing:
             raise HTTPException(400, "expect 缺少這些列的 version：%s" % "、".join(str(x) for x in missing[:5]))
@@ -465,7 +465,7 @@ def _conflict_who(keys, since_id):
 
 def _conflict_response(keys, since_id, names):
     who = _conflict_who(keys, since_id)
-    return HTTPException(409, {"code": "conflict", "message": "這些信件設定在你載入頁面之後又被改過，為了不蓋掉別人的修改，系統拒絕儲存。",
+    return HTTPException(409, {"code": "conflict", "message": "這些信件設定在您載入頁面之後又被改過，為了不覆蓋其他人的修改，系統拒絕儲存。",
                                "keys": [{"key": k, "name": names.get(k) or _row_name(k)} for k in keys], **who})
 
 
@@ -811,14 +811,14 @@ def set_my_mail_prefs(body: dict = Body(...), authorization: str = Header(None))
             raise HTTPException(404, "使用者不存在")
         muted = _mine_muted(me["notification_muted"])
         if body.get("expect") is not None and body.get("expect") != _mine_version(muted):
-            raise HTTPException(409, "你的通知設定在你開啟這頁之後被改過（可能是管理員代為設定），請重新整理再改。")
+            raise HTTPException(409, "您的通知設定在您開啟這頁之後被改過（可能是管理員代為設定），請重新整理再改。")
         unknown = [k for k in changes if k not in known]
         if unknown:
             raise HTTPException(400, "不認得的通知類型：%s" % "、".join(unknown))
         o = _overrides()
         not_mine = [known[k].name for k in changes if not receivable(known[k], o, me["username"], me["role"])]
         if not_mine:
-            raise HTTPException(400, "下列通知不會寄給你，不需要設定：%s" % "、".join(not_mine))
+            raise HTTPException(400, "下列通知不會寄給您，不需要設定：%s" % "、".join(not_mine))
         new_muted = [k for k in muted if not (k in changes and changes[k] is True)]
         for k, v in changes.items():
             if v is False and k not in new_muted:
@@ -833,7 +833,7 @@ def set_my_mail_prefs(body: dict = Body(...), authorization: str = Header(None))
                 raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何最高管理者收得到"
                                          "（至少要有一位；最後一位不能退訂）：%s" % "、".join(blocked))
             if view["risky"] and not preview and body.get("confirm") is not True:
-                raise HTTPException(409, "不收「%s」（簽核／系統技術類）後，相關提醒或告警你會收不到、可能因此漏掉；確認請帶 confirm=true 再送一次"
+                raise HTTPException(409, "不收「%s」（簽核／系統技術類）後，相關提醒或告警您會收不到、可能因此漏掉；確認請帶 confirm=true 再送一次"
                                     % "、".join(view["risky"]))
         if preview or not changed:
             conn.rollback()

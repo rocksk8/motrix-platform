@@ -76,14 +76,14 @@ def post_backup_now(body: dict = Body(default=None), authorization: str = Header
     except bm.BackupRateLimited as exc:
         raise HTTPException(429, "剛做過一次備份，請 %d 分鐘後再試。" % max(1, -(-exc.wait_seconds // 60)))
     _safe_audit(authorization, "system.backup_now", "system", "backup", "手動立即備份")
-    return {"ok": True, "started": res["started"], "message": "已開始備份，完成後這頁會更新。備份在背景進行，不影響大家使用。"}
+    return {"ok": True, "started": res["started"], "message": "已開始備份，完成後這頁會更新。備份在背景進行，不影響其他使用者作業。"}
 
 
 @router.put("/api/system/backup-monitor/heartbeat-url")
 def put_heartbeat_url(request: Request, body: dict = Body(default=None), authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
     if not isinstance(body, dict) or not isinstance(body.get("pingUrl", ""), str):
-        raise HTTPException(400, "請貼上監控服務給你的網址。")
+        raise HTTPException(400, "請貼上監控服務給您的網址。")
     try:
         res = bm.set_ping_url(body.get("pingUrl", ""), user, body.get("reason", ""), _ip(request))
     except (bm.InvalidPingUrl, bm.DisableError) as exc:
@@ -133,7 +133,7 @@ def post_heartbeat_disable_approve(change_id: int, request: Request, body: dict 
         raise HTTPException(422, str(exc))
     except OSError:
         raise HTTPException(500, "沒有核准成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間，再按一次。")
-    return {"ok": True, **res, "message": "已核准，對外打卡已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄你的核准。")}
+    return {"ok": True, **res, "message": "已核准，對外打卡已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄您的核准。")}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-disable/{change_id}/cancel")

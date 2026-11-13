@@ -1848,7 +1848,7 @@ def import_user_rows(body: dict, response: Response, authorization: str = Header
                 rp = _idem.replay_response(call)
                 rp.headers["Cache-Control"] = "no-store"
                 return rp
-        stale = {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"}
+        stale = {"code": "plan_changed", "message": "資料在您預覽之後有變動，請重新預覽再確認"}
         plan = UI.plan_users_import(conn, rows)
         if UI.plan_hash(plan) != body["planHash"]:
             raise HTTPException(409, stale)

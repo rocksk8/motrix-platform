@@ -112,7 +112,7 @@ def _approval_groups(user: dict, now) -> list:
         [{"title": _item_title(i), "sub": "%s 送來，已 %d 天" % (i.get("requestedByDisplay") or i.get("requestedBy") or "", age_days(i.get("requestedAt"), now)),
           "href": _item_href(i), "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in mine],
         count=len(mine), href="pages/approval-queue.html", href_label="去簽核", order=10,
-        empty="目前沒有等你簽的單"))
+        empty="目前沒有等您簽的單"))
 
     sent = [i for i in items if i.get("requestedBy") == me and not i.get("mine")]
     sent.sort(key=lambda i: str(i.get("requestedAt") or ""))

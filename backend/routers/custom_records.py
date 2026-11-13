@@ -136,7 +136,7 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
         d = _can_use(conn, u, key)
         vals, forbidden = SUP.guard_writes(d["body"], payload.get("values"), None, u)
         if forbidden:
-            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+            raise HTTPException(403, "有欄位您沒有修改權限：" + "；".join(x["message"] for x in forbidden))
         rec = CM.create_record(conn, key, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)
@@ -230,7 +230,7 @@ def update_custom_record(key: str, record_no: str, payload: dict = Body(...), au
         cur = CM.get_record(conn, key, record_no)
         vals, forbidden = SUP.guard_writes(cur["definition"], payload.get("values"), cur["data"], u)
         if forbidden:
-            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+            raise HTTPException(403, "有欄位您沒有修改權限：" + "；".join(x["message"] for x in forbidden))
         rec = CM.update_record(conn, key, record_no, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)

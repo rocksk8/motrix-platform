@@ -186,7 +186,7 @@ def _cmp_export_template(old, new):
     for part in ("header", "footer", "watermark"):
         name = {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part]
         if part in old and part not in new:
-            tighten.append("拿掉%s" % name)
+            tighten.append("移除%s" % name)
         elif part in new and part not in old:
             loosen.append("新增%s文字（輸出檔多了可見文字）" % name)
         elif part in new and part in old and (old[part] or {}).get("text") != (new[part] or {}).get("text"):
@@ -374,7 +374,7 @@ def _cmp_notify_template(old, new):
             loosen.append("用語 %s 改變（收件人看到的字，需核准）" % k)
     for k in o:
         if k not in n:
-            tighten.append("拿掉自訂用語 %s（回到系統預設字）" % k)
+            tighten.append("移除自訂用語 %s（回到系統預設字）" % k)
     for k in set(old or {}) | set(new or {}):
         if k not in ("inapp", "mail", "version") and (old or {}).get(k) != (new or {}).get(k):
             loosen.append("未知設定 %s 變了（視為放寬）" % k)
@@ -475,7 +475,7 @@ def handle_publish(conn, kind, key, scope, user, note, base_etag, authorization)
     cls, reasons, old_v = _classify_vs_base(conn, kind, key, scope, draft["body"])
     if cls == "loosen":
         if base_etag is not None and draft.get("etag") != base_etag:
-            raise D.DraftConflict("這份草稿在你載入之後被別人改過，未送出", {"etag": draft.get("etag", "")})
+            raise D.DraftConflict("這份草稿在您載入之後被其他人改過，未送出", {"etag": draft.get("etag", "")})
         out = _submit_pending(conn, kind, key, scope, user, note, reasons, old_v)
         _audit(_tok(authorization), "definitions.submit", "ui_definition", "%s/%s/%s" % (kind, key, scope),
                "放寬變更待核准 %s 第 %d 版" % (key, out["version"]), {"reasons": reasons})
@@ -582,9 +582,9 @@ def activate_change(change_id: int, payload: dict = Body(default={}), authorizat
     try:
         r = _pending_row(conn, change_id)
         if len(r["approvals"]) < int(r["approvals_required"] or 0):
-            raise HTTPException(409, "還沒有另一位最高管理者核准")
+            raise HTTPException(409, "尚無另一位最高管理者核准")
         if not L.in_effect(r):
-            raise HTTPException(409, "確認期間還沒過（%s 之後才能套用）" % r["effective_at"])
+            raise HTTPException(409, "確認期間尚未過（%s 之後才能套用）" % r["effective_at"])
         kind, key, scope, ver = _target(r)
         try:
             d = D.decide_submitted(conn, kind, key, scope, ver, True, u["username"], (payload or {}).get("note", "") or "管線套用")

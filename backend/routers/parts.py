@@ -291,7 +291,7 @@ def import_part_rows(body: dict = Body(...), authorization: str = Header(None)):
         with write_txn(conn):                    # 整批一個交易；拿鎖之後重算計畫
             plan = _plan_part_import(conn, rows)
             if _part_plan_hash(plan) != body["planHash"]:
-                raise HTTPException(409, {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"})
+                raise HTTPException(409, {"code": "plan_changed", "message": "資料在您預覽之後有變動，請重新預覽再確認"})
             for p in plan:
                 f = p["fields"]
                 if p["action"] == "create":
