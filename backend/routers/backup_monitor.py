@@ -18,6 +18,7 @@ from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from helpers import _require_user, _audit, _tok
 from helpers import backup_monitor as bm
+from helpers.client_ip import client_ip
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,10 +38,12 @@ def _safe_audit(authorization, action, target_type="", target_id="", target_labe
 
 
 def _ip(request: Request) -> str:
+    """稽核用來源 IP：一律走 helpers.client_ip（不自己讀 client.host／XFF）；沒有對端時維持原本的空字串（helper 回 "unknown"）。"""
     try:
-        return (request.client.host if request and request.client else "") or ""
+        ip = client_ip(request) if request is not None else ""
     except Exception:  # noqa: BLE001
         return ""
+    return "" if ip == "unknown" else ip
 
 
 @router.get("/api/system/backup-monitor")

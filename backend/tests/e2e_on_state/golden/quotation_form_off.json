@@ -175,7 +175,7 @@
   "GET /api/quotations/x/privacy-notice?role=contact",
   "GET /api/quotations/x/versions",
   "GET /api/reads/module-counts",
-  "GET /api/settings/company-profile",
+  "GET /api/settings/company-profile/public",
   "GET /api/settings/payment-terms",
   "GET /api/settings/quote-terms-defaults",
   "GET /api/settings/quote-terms-presets",

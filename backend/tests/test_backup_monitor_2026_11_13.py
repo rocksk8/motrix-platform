@@ -21,6 +21,14 @@ _MAKE_USER_DEFAULT_ROLE = "superadmin"
 SECRET = "https://hc-ping.example.com/SECRET-UUID-1234"
 
 
+@pytest.fixture(autouse=True)
+def _logs_dir_in_tmp(monkeypatch, tmp_path):
+    """立即備份會在 LOGS_DIR 建 backup_run.lock；沒用到 hb_cfg 的題目不能寫進真的 backend/logs（BK19：測試不准寫 repo）。
+    autouse 先於明確要求的夾具建立，hb_cfg 之後再換成自己的 logs 時以它為準。"""
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs_auto"))
+
+
 @pytest.fixture()
 def hb_cfg(monkeypatch, tmp_path):
     """心跳設定檔／狀態檔換成暫存路徑，不碰真的。"""

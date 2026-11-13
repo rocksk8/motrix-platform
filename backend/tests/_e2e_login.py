@@ -27,6 +27,17 @@ def session_init_script(sess):
     return "try { localStorage.setItem('motrix_session', %s); %s %s } catch (e) {}" % (json.dumps(json.dumps(sess)), flags, pins)
 
 
+def bootstrap_unavailable(page_or_context):
+    """讓 `GET /api/bootstrap` 回 404 ⇒ auth-guard.js 的 `window.MotrixBoot` 變 null ⇒ 各處退回打**原端點**（與 bootstrap 上線前相同）。
+
+    2026-11-13（perf：bootstrap）：第一次要啟動區段（auth/me、platform/menu、system/branding、build-info、bonus-module-status、modules/availability、
+    approval-queue/count、notifications/mine、reads/module-counts、online-users、auth/totp/status）時，頁面不再打原端點、改由 `/api/bootstrap` 供應。
+    所以**用 page.route／window.fetch 包裝去攔這些原端點**的題目（回 500、扣住第一趟、數請求次數）看不到那一趟——要驗的是「原端點被攔／被扣住時頁面的行為」，
+    先呼叫這個把 bootstrap 關掉，題目驗的東西就跟以前一樣。bootstrap 路徑自己的降級（區段在 200 的 bootstrap 裡失敗 ⇒ 退回原端點 ⇒ 同樣的結果）
+    另有題目守（test_e2e_menu_layout.py::test_menu_failure_inside_a_200_bootstrap_*）。要在 goto 之前呼叫（context／page 皆可）。"""
+    page_or_context.route("**/api/bootstrap", lambda route: route.fulfill(status=404, content_type="application/json", body='{"detail": "disabled by test"}'))
+
+
 def wait_logged_in(page, timeout=10000):
     """登入成功後等「應用就緒」：網址到 /index.html（只等 DOMContentLoaded）＋ sidebar.js 已畫出頂欄（#app-topbar）。
     〔O5-S1：原本 `wait_for_url(...)` 預設等 `load`，而 load 被兩支約 5 MB 的字型綁住——這幾題要驗的是「有沒有登入成功」，

@@ -16,6 +16,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from tests._e2e_login import bootstrap_unavailable  # noqa: E402
+
 from helpers import company_setup as cs  # noqa: E402
 from tests.test_company_setup_core_2026_09_28 import make_ubn  # noqa: E402
 
@@ -411,6 +413,7 @@ def test_build_footer_is_admin_only(live_server, make_user, new_page, login_as):
 
     pa = new_page(viewport={"width": 1440, "height": 900})
     login_as(pa, admin)
+    bootstrap_unavailable(pa)            # 攔的是原端點 /api/build-info；bootstrap 開著時第一趟由它供應（真值，不是替身）
     pa.route("**/api/build-info", route)
     pa.goto(f"{live_server}/pages/customers.html")
     pa.locator("#build-footer").wait_for(state="visible", timeout=15000)
@@ -418,6 +421,7 @@ def test_build_footer_is_admin_only(live_server, make_user, new_page, login_as):
 
     ps = new_page(viewport={"width": 1440, "height": 900})
     login_as(ps, sales)
+    bootstrap_unavailable(ps)
     ps.route("**/api/build-info", route)
     ps.goto(f"{live_server}/pages/customers.html")
     ps.locator("#app-topbar").wait_for(state="visible", timeout=15000)

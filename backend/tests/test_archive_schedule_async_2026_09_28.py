@@ -29,6 +29,14 @@ class _RecordingTimer:
         self.started = True
 
 
+@pytest.fixture(autouse=True)
+def _logs_dir_in_tmp(monkeypatch, tmp_path):
+    """第一輪／每輪會在 `backup_run_lock()` 之內備份，鎖檔寫在 LOGS_DIR/backup_run.lock（備份互斥，2026-11-13）；
+    這支檔的題目會真的呼叫 Timer 的 function，不導到暫存目錄就會在真的 backend/logs 建鎖檔（BK19：測試不准寫 repo）。"""
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs_auto"))
+
+
 @pytest.fixture
 def timers(monkeypatch):
     _RecordingTimer.made = []
