@@ -73,6 +73,10 @@
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
   },
+  "helpers/settings_registry.py::notifications": {
+   "count": 1,
+   "reason": "exempt: publish 在同一個交易內，刪掉帳本（config_ledger.record）剛為這次變更寫的簡短站內通知（type='config_change'、ref_label LIKE 'setting:%'、id 大於寫入前水位，只動這次交易自己寫的、別人看不到的列），因為 commit 之後由 settings_notify.emit 發完整的一則（同一件事不發兩則）；不是使用者刪除任何資料，也不碰既有通知"
+  },
   "helpers/startup.py::login_rate_limit": {
    "count": 1,
    "reason": "exempt: 登入限流（暫態）"
