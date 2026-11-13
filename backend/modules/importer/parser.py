@@ -500,6 +500,7 @@ def build_template(kind: str) -> bytes:
     """範本 .xlsx：「資料」工作表（表頭、灰底範例列、全欄文字格式避免電話／料號被 Excel 吃掉開頭的 0）＋「說明」工作表。"""
     if kind not in KINDS:
         raise ParseError("不認得的匯入對象")
+    from helpers.xlsx_out import xl_safe_xlsx
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -512,11 +513,11 @@ def build_template(kind: str) -> bytes:
     req_fill = PatternFill("solid", fgColor="B91C1C")
     ex_fill = PatternFill("solid", fgColor="E5E7EB")
     for i, c in enumerate(cols, start=1):
-        cell = ws.cell(row=1, column=i, value=c["label"] + ("＊" if c["required"] else ""))
+        cell = ws.cell(row=1, column=i, value=xl_safe_xlsx(c["label"] + ("＊" if c["required"] else "")))
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = req_fill if c["required"] else head_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
-        ex = ws.cell(row=2, column=i, value=c["example"] or None)
+        ex = ws.cell(row=2, column=i, value=xl_safe_xlsx(c["example"] or None))
         ex.fill = ex_fill
         ex.font = Font(color="6B7280", italic=True)
         L = get_column_letter(i)
@@ -533,7 +534,7 @@ def build_template(kind: str) -> bytes:
     hs = wb.create_sheet(HELP_SHEET)
     hs.column_dimensions["A"].width = 22
     hs.column_dimensions["B"].width = 90
-    hs.append(["怎麼填（%s）" % KIND_NAMES[kind], ""])
+    hs.append([xl_safe_xlsx("怎麼填（%s）" % KIND_NAMES[kind]), ""])
     hs["A1"].font = Font(bold=True, size=13)
     notes = ["第 2 列灰底是範例（開頭有「%s」），上傳時會自動略過，可以保留也可以刪掉。" % EXAMPLE_MARK,
              "紅底、有 ＊ 的欄位一定要填；其他欄位可以留空。",
@@ -547,13 +548,13 @@ def build_template(kind: str) -> bytes:
         notes.append("這裡只能新增帳號：已存在的帳號會略過，不會更新。管理員、財務、最高管理者請到帳號頁一個一個建立。")
         notes.append("不要在檔案裡放密碼。匯入完成後，系統會顯示每位同仁的臨時密碼（只顯示一次），第一次登入必須改密碼。")
     for n in notes:
-        hs.append(["", n])
+        hs.append(["", xl_safe_xlsx(n)])
     hs.append([])
     hs.append(["欄位", "說明"])
     hs["A%d" % hs.max_row].font = Font(bold=True)
     hs["B%d" % hs.max_row].font = Font(bold=True)
     for c in cols:
-        hs.append([c["label"] + ("（必填）" if c["required"] else ""), c["hint"] or "—"])
+        hs.append([xl_safe_xlsx(c["label"] + ("（必填）" if c["required"] else "")), xl_safe_xlsx(c["hint"] or "—")])
     for row in hs.iter_rows():
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
