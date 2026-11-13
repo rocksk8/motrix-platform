@@ -193,9 +193,46 @@ def test_provider_stock_case_summary_counts_by_case_and_has_no_money(client):
     _rows("INSERT INTO stock_items (part_no, serial_no, status, quote_no, created_at, updated_at) VALUES (?,?,?,?,?,?)", ("P-B", "S-B1", "void", "MQ-CS", "x", "x"))
     conn = db.get_db()
     try:
-        s = case_summary(conn, "MQ-CS", {"username": "u"})
+        s = case_summary(conn, "MQ-CS", {"username": "u", "role": "superadmin"})
         assert (s["installed"], s["shipped"], s["void"]) == (1, 1, 1) and s["parts"] == [{"partNo": "P-A", "installed": 1, "shipped": 1}]
         assert "123456" not in json.dumps(s)
         assert case_summary(conn, "", None) == {"installed": 0, "shipped": 0, "void": 0, "parts": []}
+    finally:
+        conn.close()
+
+
+def test_stock_cell_without_stock_view_permission_says_no_access_and_shows_no_numbers(client, make_user, monkeypatch):
+    """入庫格要有「檢視庫存」同一組權限；沒有 ⇒ 只顯示「無權限檢視」，沒有任何台數／料號。"""
+    _flag(monkeypatch, True)
+    h = _member(make_user, client)
+    _seed()
+    _rows("INSERT INTO stock_items (part_no, serial_no, status, quote_no, created_at, updated_at) VALUES (?,?,?,?,?,?)", ("P-SECRET", "S-NP1", "installed", NO, "x", "x"))
+    from fastapi import HTTPException
+    real = _registry.single_provider
+
+    def deny(*a, **k):
+        raise HTTPException(403, "no")
+    monkeypatch.setattr(_registry, "single_provider", lambda cap: deny if cap == "stock.case_summary" else real(cap))
+    b = client.get("/api/quotations/%s/material-flow" % NO, headers=h).json()
+    c = _cells(b)["stock"]
+    assert c["summary"] == "無權限檢視" and c["state"] == "na" and not c.get("items")
+    assert "P-SECRET" not in json.dumps(b) and b["stockPresent"] is True
+
+
+def test_provider_checks_the_same_module_keys_as_inventory_view():
+    import db
+    from fastapi import HTTPException
+    from modules.supply.case_summary import case_summary
+    conn = db.get_db()
+    try:
+        for mods in ("[]", '["hr"]'):
+            try:
+                case_summary(conn, "MQ-CS", {"role": "engineer", "modules": mods})
+                raise AssertionError("沒有庫存相關模組的人不該讀得到")
+            except HTTPException as e:
+                assert e.status_code == 403
+        for key in ("inventory", "procurement", "case_manage", "netplan_edit"):
+            assert case_summary(conn, "MQ-CS", {"role": "engineer", "modules": json.dumps([key])})["parts"] is not None
+        assert case_summary(conn, "MQ-CS", None)["installed"] >= 0                       # 內部呼叫（沒給 caller）不檢查
     finally:
         conn.close()

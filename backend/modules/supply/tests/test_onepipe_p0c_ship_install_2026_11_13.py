@@ -33,6 +33,17 @@ def _row(serial):
         conn.close()
 
 
+def _note(note_no, status, quote_no=""):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT OR REPLACE INTO shipping_notes (note_no, quote_no, status, customer_name, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                     (note_no, quote_no, status, "客戶", "{}", "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _save(client, token, quote_no, devices):
     r = client.patch("/api/quotations/%s/case-record" % quote_no, headers=_auth(token), json={"case_record": {"devices": devices}})
     assert r.status_code == 200, r.text
@@ -57,6 +68,7 @@ def test_flag_on_same_case_shipped_then_install_then_release_goes_back_to_shippe
     u, p = make_user(role="admin")
     token = _login(client, u, p)
     _make_quotation("MQ-P0C-002")
+    _note("SH-2", "已核准", "MQ-P0C-002")
     _item("SN-P0C-ON", "shipped", quote_no="MQ-P0C-002", note_no="SH-2")
     out = _save(client, token, "MQ-P0C-002", [{"id": 7, "sn": "SN-P0C-ON"}])
     assert out["stockConflicts"] == []
@@ -93,3 +105,57 @@ def test_flag_on_in_stock_path_is_unchanged(client, make_user, monkeypatch):
     _save(client, token, "MQ-P0C-004", [{"id": 1, "sn": ""}])
     r = _row("SN-P0C-STOCK")
     assert (r["status"], r["quote_no"], r["shipping_note_no"]) == ("in_stock", "", "")
+
+
+@needs_m01
+def test_release_follows_the_data_not_the_flag_flag_on_claim_then_flag_off_release(client, make_user, monkeypatch):
+    """M1（hichan-9 審查）：旗標開時認領、之後旗標關掉再釋放 ⇒ 仍回 shipped（出貨單還是已核准），不可被算成在庫。"""
+    _note("SH-M1", "已核准", "MQ-P0C-M1")
+    _flag(monkeypatch, True)
+    u, p = make_user(role="admin")
+    token = _login(client, u, p)
+    _make_quotation("MQ-P0C-M1")
+    _item("SN-P0C-M1", "shipped", quote_no="MQ-P0C-M1", note_no="SH-M1")
+    assert _save(client, token, "MQ-P0C-M1", [{"id": 5, "sn": "SN-P0C-M1"}])["stockConflicts"] == []
+    assert _row("SN-P0C-M1")["status"] == "installed"
+    _flag(monkeypatch, False)
+    _save(client, token, "MQ-P0C-M1", [{"id": 5, "sn": ""}])
+    r = _row("SN-P0C-M1")
+    assert (r["status"], r["quote_no"], r["shipping_note_no"], r["case_device_id"]) == ("shipped", "MQ-P0C-M1", "SH-M1", "")
+
+
+@needs_m01
+def test_release_when_the_note_is_no_longer_approved_goes_back_in_stock_and_clears_the_note(client, make_user, monkeypatch):
+    """M2（PM 裁示）：出貨單已不是已核准 ⇒ 釋放回在庫並清掉出貨單號（否則永遠卡在 shipped 掛著草稿單）。"""
+    _flag(monkeypatch, True)
+    u, p = make_user(role="admin")
+    token = _login(client, u, p)
+    _make_quotation("MQ-P0C-M2")
+    _note("SH-M2", "已核准", "MQ-P0C-M2")
+    _item("SN-P0C-M2", "shipped", quote_no="MQ-P0C-M2", note_no="SH-M2")
+    _save(client, token, "MQ-P0C-M2", [{"id": 6, "sn": "SN-P0C-M2"}])
+    assert _row("SN-P0C-M2")["status"] == "installed"
+    _note("SH-M2", "草稿", "MQ-P0C-M2")                                         # 單被退回草稿（例如舊資料／別條路徑）
+    _save(client, token, "MQ-P0C-M2", [{"id": 6, "sn": ""}])
+    r = _row("SN-P0C-M2")
+    assert (r["status"], r["quote_no"], r["shipping_note_no"], r["case_device_id"]) == ("in_stock", "", "", "")
+
+
+@needs_m01
+def test_revoke_approval_is_blocked_while_a_serial_of_the_note_is_installed(client, make_user, monkeypatch):
+    """M2（PM 裁示）：這張單的序號已登載成設備 ⇒ 撤回核准 409，講人話；移除設備後才可撤回，序號回在庫。"""
+    _flag(monkeypatch, True)
+    u, p = make_user(role="admin")
+    token = _login(client, u, p)
+    _make_quotation("MQ-P0C-RV")
+    _note("SH-RV", "已核准", "MQ-P0C-RV")
+    _item("SN-P0C-RV", "shipped", quote_no="MQ-P0C-RV", note_no="SH-RV")
+    _save(client, token, "MQ-P0C-RV", [{"id": 8, "sn": "SN-P0C-RV"}])
+    r = client.post("/api/shipping-notes/SH-RV/revoke-approval", headers=_auth(token), json={"note": "測試撤回"})
+    assert r.status_code == 409 and "請先從案件移除設備再撤回" in r.json()["detail"], r.text
+    assert _row("SN-P0C-RV")["status"] == "installed"
+    _save(client, token, "MQ-P0C-RV", [{"id": 8, "sn": ""}])                       # 移除設備序號 ⇒ 回 shipped（單仍已核准）
+    assert _row("SN-P0C-RV")["status"] == "shipped"
+    r = client.post("/api/shipping-notes/SH-RV/revoke-approval", headers=_auth(token), json={"note": "測試撤回"})
+    assert r.status_code == 200, r.text
+    assert r.json()["stockReturned"] == 1 and _row("SN-P0C-RV")["status"] == "in_stock"

@@ -703,7 +703,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M03 採購・庫存・出貨：`modules/supply/case_summary.py::case_summary` |
 | 使用方 | M01 案件：`modules/case/material_flow.py`（入庫格；唯讀） |
 | 形式 | provider，單一提供者（名稱 `supply`） |
-| 語法 | 提供：`("stock.case_summary", "supply"): case_summary`；取用：`fn = registry.single_provider("stock.case_summary")`；`None` ⇒ 入庫格整格隱藏。`fn(conn, quote_no, caller) -> {"installed", "shipped", "void", "parts": [{"partNo", "installed", "shipped"}]}`（讀呼叫端連線、不寫、不 commit；`caller` 目前不影響內容，保留給之後加成本欄位時依呼叫者遮罩） |
+| 語法 | 提供：`("stock.case_summary", "supply"): case_summary`；取用：`fn = registry.single_provider("stock.case_summary")`；`None` ⇒ 入庫格整格隱藏。`fn(conn, quote_no, caller) -> {"installed", "shipped", "void", "parts": [{"partNo", "installed", "shipped"}]}`（讀呼叫端連線、不寫、不 commit；`caller` 有給時須有「檢視庫存」同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），沒有 ⇒ 丟 HTTPException 403、呼叫端該格顯示「無權限檢視」；沒給不檢查；也保留給之後加成本欄位時依呼叫者遮罩） |
 | 回傳 | 只算 `stock_items.quote_no` 等於該案件者；沒有 ⇒ 全 0 |
 | 對方不在時 | M03 不在 ⇒ 入庫格與出貨格整格隱藏（回應 `stockPresent`＝false）；M03 在但提供者丟例外 ⇒ 該格顯示「庫存暫時讀不到」（不隱藏，免得被誤認沒有倉儲），其餘格照常 |
 | 契約版本 | 1（2026-11-13） |

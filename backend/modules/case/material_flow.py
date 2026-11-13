@@ -87,6 +87,10 @@ def _stock(conn, quote_no, user):
         return None
     try:
         s = fn(conn, quote_no, user)
+    except HTTPException as e:
+        if e.status_code in (401, 403):                              # 沒有檢視庫存的權限 ⇒ 這一格只說「無權限檢視」，不回任何數量
+            return _cell("stock", "入庫", "na", "無權限檢視", forbidden=True)
+        return _cell("stock", "入庫", "na", "庫存暫時讀不到", unavailable=True)
     except Exception:                                                # noqa: BLE001 — 供應端壞了只影響這一格
         return _cell("stock", "入庫", "na", "庫存暫時讀不到", unavailable=True)
     ins, shp = int(s.get("installed") or 0), int(s.get("shipped") or 0)

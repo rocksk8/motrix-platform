@@ -1,8 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設關＝與今天逐位元相同）
+## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設關＝與今天逐位元相同）
 - `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。
-- `release`：旗標開時，從出貨狀態登載來的序號（還帶著出貨單號）釋放後回到 `shipped`（保留案號與出貨單號），不是在庫；在庫來的照舊回 `in_stock`。
+- `release`：**看資料、不看旗標**——從出貨狀態登載來的序號（`installed` 且還帶著出貨單號；在庫認領的一定沒有單號，旗標全程關時不會進這個分支）釋放後，若該出貨單仍是已核准 ⇒ 回到 `shipped`（保留案號與出貨單號）；出貨單已不是已核准 ⇒ 回 `in_stock` 並清掉出貨單號。在庫來的照舊回 `in_stock`。`claim` 的更新加 `AND status='shipped'` 並檢查 rowcount。
+- 撤銷出貨單核准（`POST /api/shipping-notes/{no}/revoke-approval`）：這張單的序號有 `installed`（先出貨後登載）⇒ 409「這張出貨單有設備已登載安裝，請先從案件移除設備再撤回」；旗標從沒開過就不會有這種列，行為與今天相同。
+- `stock.case_summary` 有給 `caller` 時，要有「檢視庫存」同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），沒有 ⇒ 403；沒給（內部呼叫）不檢查。
 - 一條龍 P0a（旗標 `onepipe.links`）：出貨單的四種信件與站內通知（送審、輪到簽核、核准、退回）、模組活動信的連結改為該案件頁的出貨單分頁 `case-management.html?q=<案號>&tab=shipping`（原連結 `shipping-notes.html` 不存在）；旗標關或查不到案號 ⇒ 連結與站內通知的 link 欄與今天相同。新增 L1 公開函式 `helpers.email_notify.shipping_link(note_no)`。
 - 一條龍 P1'：新提供者 `stock.case_summary`（IP-117，暫定號；`modules/supply/case_summary.py`）——該案件已安裝／已出貨／作廢的序號台數與料號（唯讀、只有數量沒有金額），給案件的物料流程時間軸入庫格用。
 - 測試：`tests/test_onepipe_p0c_ship_install_2026_11_13.py`（旗標關仍衝突；開：同案登載／釋放、他案與已認領仍衝突、在庫路徑不變）。無 migration、無新表。

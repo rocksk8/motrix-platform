@@ -734,23 +734,25 @@ class _StockSerials:
                 WHERE id=?
             """, (quote_no, device_id, now, actor, now, row["id"]))
         elif row["status"] == "shipped" and quote_no and (row["quote_no"] or "") == quote_no and _ship_install_ok(conn):
-            conn.execute("UPDATE stock_items SET status='installed', case_device_id=?, updated_at=? WHERE id=?", (device_id, now, row["id"]))
-            return "in_stock"
+            cur = conn.execute("UPDATE stock_items SET status='installed', case_device_id=?, updated_at=? WHERE id=? AND status='shipped'", (device_id, now, row["id"]))
+            return "in_stock" if cur.rowcount else "installed"
         return row["status"]
 
     @staticmethod
     def release(conn, sn, *, device_id, now):
         """這個設備先前認領的序號放回在庫（只放本設備認領的那一筆）。
-        一條龍 P0c（旗標開）：從出貨狀態登載來的（還帶著出貨單號）⇒ 回到 shipped、保留案號與出貨單號，不是在庫。"""
-        if _ship_install_ok(conn):
-            conn.execute("""
-                UPDATE stock_items
-                SET status='shipped', case_device_id='', updated_at=?
-                WHERE serial_no=? AND status='installed' AND case_device_id=? AND shipping_note_no<>''
-            """, (now, sn, device_id))
+        一條龍 P0c：**看資料、不看旗標**——從出貨狀態登載來的（installed 且還帶著出貨單號；在庫認領的 installed 一定沒有出貨單號，
+        所以旗標全程關時永遠不會進這個分支）⇒ 該出貨單**仍是已核准**就回到 shipped（保留案號與出貨單號）；
+        出貨單已不是已核准（被撤銷／作廢）⇒ 回在庫並清掉出貨單號。"""
         conn.execute("""
             UPDATE stock_items
-            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
+            SET status='shipped', case_device_id='', updated_at=?
+            WHERE serial_no=? AND status='installed' AND case_device_id=? AND shipping_note_no<>''
+              AND shipping_note_no IN (SELECT note_no FROM shipping_notes WHERE status='已核准')
+        """, (now, sn, device_id))
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', quote_no='', shipping_note_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
             WHERE serial_no=? AND status='installed' AND case_device_id=?
         """, (now, sn, device_id))
 

@@ -169,9 +169,9 @@
             <template x-for="c in group.cases" :key="c.quoteNo">
               <div class="case-block">
                 <div class="case-header">
-                  <span class="case-qno" x-show="!(op.links && c.quoteNo && c.quoteNo !== '—')" x-text="c.quoteNo"></span>
+                  <template x-if="!(op.links && c.quoteNo && c.quoteNo !== '—')"><span class="case-qno" x-text="c.quoteNo"></span></template>
                   <!-- 一條龍 P0a（旗標 onepipe.links）：案號可點進案件頁 -->
-                  <a class="case-qno" data-testid="op-warranty-case-link" x-show="op.links && c.quoteNo && c.quoteNo !== '—'" x-cloak :href="'case-management.html?q=' + encodeURIComponent(c.quoteNo)" style="text-decoration:underline" x-text="c.quoteNo"></a>
+                  <template x-if="op.links && c.quoteNo && c.quoteNo !== '—'"><a class="case-qno" data-testid="op-warranty-case-link" :href="'case-management.html?q=' + encodeURIComponent(c.quoteNo)" style="text-decoration:underline" x-text="c.quoteNo"></a></template>
                   <span class="case-name" x-text="c.projectName || '（無案件名稱）'"></span>
                   <span :class="'dt ' + (c.dealTag==='已成案' ? 'dt-active' : c.dealTag==='已結案' ? 'dt-closed' : 'dt-none')" x-text="c.dealTag || '—'"></span>
                   <span class="case-count" x-text="c.devices.length + ' 台'"></span>

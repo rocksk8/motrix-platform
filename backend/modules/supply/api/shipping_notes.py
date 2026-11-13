@@ -650,6 +650,9 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     if row["is_signed"]:
         conn.close()
         raise HTTPException(409, "已回簽（客戶確認收貨）的出貨單不可撤銷核准，請先取消回簽")
+    if conn.execute("SELECT 1 FROM stock_items WHERE shipping_note_no=? AND status='installed' LIMIT 1", (note_no,)).fetchone():
+        conn.close()                                      # 一條龍 P0c：先出貨後登載的序號仍掛這張單 ⇒ 不能撤（旗標沒開過就不會有這種列）
+        raise HTTPException(409, "這張出貨單有設備已登載安裝，請先從案件移除設備再撤回")
     note = require_reject_reason(note, conn=conn)
     cname = row["customer_name"] or ""
     d = json.loads(row["data_json"] or "{}")

@@ -81,7 +81,7 @@ def test_front_end_entries_are_gated_by_the_flag():
     core = (FRONTEND / "js" / "case-management-core.js").read_text(encoding="utf-8")
     assert "onepipe: { links: false, timeline: false }" in core
     wy = source_tree.page_file("warranty.html").read_text(encoding="utf-8")
-    assert "op: { links: false }" in wy and 'x-show="!(op.links' in wy
+    assert "op: { links: false }" in wy and 'x-if="!(op.links' in wy
     pr = source_tree.page_file("payment-request.html").read_text(encoding="utf-8")
     assert "(await window.MotrixOnepipe.flags()).links" in pr
     js = (FRONTEND / "static" / "onepipe.js").read_text(encoding="utf-8")
