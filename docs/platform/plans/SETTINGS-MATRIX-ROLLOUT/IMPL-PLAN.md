@@ -50,6 +50,7 @@
 ## 3. 各切片詳細
 
 ### S1a 共用核心補齊（h6；審查 h9；T85）
+- **現況（h6 回報 2026-11-13）：已實作並推送** `feat/line-events-matrix` @ `9b96f1042`（C-a eligible／lock、C-b opt-in 草稿模式、C-c groupActions 開關；另加數字／文字欄、逐格 disabled／readonly、列 `selectable:false`、`cfg.labels`、`destroy()`、焦點還原、忙碌佇列、html 欄預設跳脫（`raw:true` 才不跳）；既有 testid 不變）。草稿 API：`mount({draft:{apply,same,confirm,save,afterSave}})`，欄位用 `draft(row,value)` 取代 `set`／`toggle`；詳見檔頭註解。h9 重審中。**S1b 一律以 `9b96f1042` 為底**，不要用更早的核心。S1a 的班次視同隨 T84 的 LINE 矩陣進列車（h6 的票），本切片剩餘工作＝h9 重審通過與 e2e 補強。
 - 檔案：`frontend/static/settings-matrix.js`、`frontend/css/settings-matrix.css`（h6 的核心；**不得改既有 `data-testid`**：`mx-row-*`、`mx-batch-*`、`mx-undo`、`mx-toast-text`）。
 - 內容：
   - **C-a eligible／lock**：頁面宣告列是否可批次與鎖定原因（灰色核取方塊＋tooltip；SPEC §4 的「否」字樣）；LINE 頁維持自己的覆寫（只有「重要」可放寬，守門要登記覆寫處）。
