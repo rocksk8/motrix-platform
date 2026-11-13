@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path, run_edge_pdf
 from helpers.xlsx_out import xl_safe_xlsx, xlsx_unescape
+from helpers import xlsx_guard as _xg
 from helpers.company_identity import company_name, contact_line, footer_line, location_identity, name_pair
 from modules.netplan.topology import build_topology_svg, build_topology_text_summary_html
 
@@ -142,20 +143,29 @@ def parse_plan_excel(content: bytes) -> dict:
     程式碼會完全比對不到、被略過，若靜默跳過使用者會完全看不出「為什麼
     匯入完成訊息裡少了這兩個分頁」，只能回頭翻程式碼或猜——曾實際發生過
     使用者拿舊範本測試匯入、成功訊息卻少兩個分頁又沒有任何提示的情況。"""
-    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    # 檔案炸彈守門＝helpers.xlsx_guard.read_rows：預掃＋讀取都在子行程裡（硬逾時、記憶體上限），丟 XlsxRejected／XlsxBusy
+    wanted = [title[:31] for _key, title, _cols in SECTIONS]
+    res = _xg.read_rows(content, sheets=wanted, max_rows=_PLAN_IMPORT_MAX_ROWS + 1, header_rows=1, slot_name="netplan_import")
+    return _parse_plan_rows(res["titles"], {s["name"]: s["rows"] for s in res["sheets"]})
+
+
+_PLAN_IMPORT_MAX_ROWS = 5000        # 每個分頁的資料列數上限（不含表頭）
+
+
+def _parse_plan_rows(titles, rows_by_sheet):
     title_to_section = {title[:31]: (key, columns) for key, title, columns in SECTIONS}
 
     sections = {}
     warnings = []
-    for sheet_name in wb.sheetnames:
+    for sheet_name in titles:
         if sheet_name not in title_to_section:
             warnings.append(f"分頁「{sheet_name}」無法辨識，已略過（若這是舊版範本的分頁，"
                              f"請改用最新匯出的範本重新填寫）")
             continue
         section_key, columns = title_to_section[sheet_name]
-        ws = wb[sheet_name]
+        sheet_rows = rows_by_sheet.get(sheet_name, [])
 
-        header_cells = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])
+        header_cells = sheet_rows[0] if sheet_rows else []
         col_idx_by_key = {}
         for idx, header in enumerate(header_cells):
             for k, label in columns:
@@ -167,7 +177,7 @@ def parse_plan_excel(content: bytes) -> dict:
             continue
 
         rows_out = []
-        for row_cells in ws.iter_rows(min_row=2, values_only=True):
+        for row_cells in sheet_rows[1:]:
             record = {}
             for k, idx in col_idx_by_key.items():
                 if idx >= len(row_cells):
