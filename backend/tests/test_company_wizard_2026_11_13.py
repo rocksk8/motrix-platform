@@ -420,3 +420,12 @@ def test_wizard_reads_status_before_company_data_and_handles_401_and_finish_erro
     assert "canFix === false" in body
     assert "toLogin()" in js and "r.status === 401" in js
     assert re.search(r"try \{ if \(window\.MotrixWizard[^\n]*finish\(\) \} catch", js)
+
+
+def test_wizard_ui_header_is_not_part_of_the_openapi_contract(client):
+    """N4：X-Motrix-Ui 只是稽核標記，用 Request 讀；不可宣告成 Header 參數（會進 OpenAPI，路由表 golden 要跟著重錄）。"""
+    spec = client.get("/openapi.json").json()
+    for path, methods in (("/api/settings/company-profile", ("put",)), ("/api/settings/branding/{kind}", ("put", "delete"))):
+        for m in methods:
+            params = [p["name"].lower() for p in spec["paths"][path][m].get("parameters", [])]
+            assert "x-motrix-ui" not in params, (m, path, params)
