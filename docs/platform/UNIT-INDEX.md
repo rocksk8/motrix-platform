@@ -180,7 +180,7 @@
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 26 | 33 | — |
 | `helper:user_buttons` | L1 | 使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。 | 12 | 1 | `backend/tests/test_user_buttons_2026_10_14.py` |
 | `helper:user_import` | L1 | 員工（使用者帳號）批次匯入的規劃邏輯（T85 匯入精靈；端點 `POST /api/users/import-rows` 在 routers/auth.py）。（無單位卡） | 11 | 1 | — |
-| `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_14.py` |
+| `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_13.py` |
 | `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | `tests/test_my_account_prefs_2026_11_13.py` |
 | `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 24 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_guard` | L1 | 使用者上傳的 .xlsx 的「小檔案展開」守門：預掃（真的 XML 解析，不靠 regex）＋ 子行程隔離解析（硬逾時、記憶體上限）。 | 18 | 5 | `tests/test_xlsx_guard_2026_11_13.py` |

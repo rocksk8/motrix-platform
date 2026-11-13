@@ -97,6 +97,14 @@
    "count": 1,
    "reason": "exempt: 請求紀錄（保留期輪替）"
   },
+  "helpers/user_perm_batch.py::user_duty_roles": {
+   "count": 1,
+   "reason": "exempt: 職務角色設定（批次綁定／解除，與 duty_roles.py 同一張設定表、同一規則；復原與原因檢查點走共用路徑）"
+  },
+  "helpers/user_perm_batch.py::user_perm_subtracts": {
+   "count": 1,
+   "reason": "exempt: 權限扣減設定（批次復原還回個人扣項，與 duty_roles.py 同一張設定表）"
+  },
   "issue_claude_session.py::sessions": {
    "count": 1,
    "reason": "exempt: 登入 session（暫態）"
