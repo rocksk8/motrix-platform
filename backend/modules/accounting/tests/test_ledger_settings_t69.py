@@ -131,16 +131,81 @@ def test_roles_read_needs_ledger_module_and_login(client, make_user, conn):
     assert client.get("/api/ledger/roles", headers=nobody).status_code == 403
 
 
-def test_sole_superadmin_cannot_change_roles_alone(client, sup_a, conn):
+def _only(sole):
     c = db.get_db()
-    try:                                                        # 沒有第二位在職最高管理者
-        c.execute("UPDATE users SET active=0 WHERE role='superadmin' AND username<>'t69_sup_a'")
+    try:                                                        # 沒有其他在職真人最高管理者（展示帳號不算）
+        c.execute("UPDATE users SET active=0 WHERE role='superadmin' AND username<>?", (sole,))
         c.commit()
     finally:
         c.close()
+
+
+def test_sole_superadmin_changes_roles_directly_with_a_reason_and_an_audit(client, sup_a, conn):
+    """使用者裁示 2026-11-13：單人公司（沒有其他真人最高管理者）填原因後直接生效；200、warning、稽核註明單人公司。"""
+    _only("t69_sup_a")
+    before = _role_code()
+    r = _put(client, sup_a, reason="單人公司調整銀行科目")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["ok"] is True and j["pending"] is False and j["applied"] is True and "再設一位最高管理者" in j["warning"], j
+    assert _role_code() == "1112" != before                    # 立即寫進 gl_account_roles
+    assert client.get("/api/ledger/roles", headers=sup_a).json()["pending"] == []
+    a = _audits("ledger.role.put")
+    assert a and a[-1]["username"] == "t69_sup_a"
+    d = a[-1]["detail"]
+    assert "單人公司：無第二位核准" in d["reason"] and "單人公司調整銀行科目" in d["reason"], d
+    assert d["changes"][0]["old"] == before
+
+
+def test_sole_superadmin_still_needs_a_reason_and_a_valid_account(client, sup_a, conn):
+    _only("t69_sup_a")
+    before = _role_code()
+    for bad in ("", " ", "x"):
+        assert _put(client, sup_a, reason=bad).status_code == 400, bad
+    assert _put(client, sup_a, code="111").status_code == 400            # 非葉節點
+    assert _put(client, sup_a, code="0000").status_code == 400
+    assert _role_code() == before and not [x for x in _audits("ledger.role.put") if x["username"] == "t69_sup_a"]
+
+
+def test_invisible_characters_do_not_count_as_a_reason(client, sup_a, conn):
+    """零寬字元、全形空白、韓文填充字元組成的「原因」＝沒填：單人直接生效與一般申請都擋。"""
+    _only("t69_sup_a")
+    before = _role_code()
+    for bad in ("\u200b\u200b\u200b", "\u3164\u3164", "\u3000\u3000", " \u200b ", "\ufeff\u2060", "x\u200b"):
+        assert _put(client, sup_a, reason=bad).status_code == 400, repr(bad)
+    assert _role_code() == before
+    assert _put(client, sup_a, reason="調整\u200b").status_code == 200        # 可見字數夠就過
+
+
+def test_sole_superadmin_direct_change_supersedes_an_older_pending_request(client, sup_a, sup_b, conn):
+    """兩位真人時甲送出待核准；乙離職後甲再改同一個角色 ⇒ 直接生效，舊的待核准被取代，不留下無人能核准的待辦。"""
+    r = _put(client, sup_a)
+    assert r.status_code == 202
+    assert len(client.get("/api/ledger/roles", headers=sup_a).json()["pending"]) == 1
+    _only("t69_sup_a")
+    r2 = _put(client, sup_a, code="1111", reason="乙離職後單人調整")
+    assert r2.status_code == 200, r2.text
+    assert _role_code() == "1111"
+    assert client.get("/api/ledger/roles", headers=sup_a).json()["pending"] == []
+
+
+def test_sole_superadmin_requesting_the_current_account_is_a_409(client, sup_a, conn):
+    _only("t69_sup_a")
+    assert _put(client, sup_a).status_code == 200
+    r = _put(client, sup_a)
+    assert r.status_code == 409 and "已經是" in r.json()["detail"], r.text
+
+
+def test_demo_account_does_not_count_as_a_second_approver(client, sup_a, conn):
+    """測試庫預設的最高管理者 demo 仍在職，但不算第二位 ⇒ 仍是單人直接生效（不是 202）。"""
+    _only("t69_sup_a")
+    assert _put(client, sup_a).status_code == 200
+
+
+def test_two_real_superadmins_still_means_202_pending(client, sup_a, sup_b, conn):
     before = _role_code()
     r = _put(client, sup_a)
-    assert r.status_code == 409 and r.json()["detail"] == "目前只有一位最高管理者，科目角色變更需要第二位核准。請先到『使用者管理』新增第二位最高管理者。", r.text
+    assert r.status_code == 202 and r.json()["pending"] is True, r.text
     assert _role_code() == before
 
 
