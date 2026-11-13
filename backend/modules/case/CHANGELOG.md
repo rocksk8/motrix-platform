@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## 1.0.222（next，未取號）— 2026-11-13（fix/append-items-price；承攬派工匯入報價單的品項寫入時就算好售價與金額）
+- 修正（`modules/case/api/quotations.py::_append_items_to_quotation`，IP-17 `quotation.append_items`）：承攬派工「匯入報價單品項」原本寫入 `unitPrice=None`／`amount=0`，而報價單頁載入時只重算合計、不重算品項金額 ⇒ 畫面單價與金額空白、合計與 PDF 少算（PDF 印 0），要使用者逐列編輯才補得出來。現在寫入時用與前端 `calcUnitPrice`／`calcItem` 同式的算法（新增私有 `_calc_unit_price`，毛利 30%；金額＝`round_half_up(數量, 單價)`，與 `profit_guard.item_amount` 逐位相同）算好。成本 ≤0、NaN／inf（例如派工品項單價寫成 1e999）或 >1e12 元一律當沒填：維持 `unitPrice=None`、`amount=0`，不讓一筆壞資料擋掉整批匯入（審查 L1：原先 inf 會 OverflowError、端點 500）。寫入的 `cost`／`qty` 也先清洗：inf／NaN 或超過上限（cost >1e12、qty >1e9）一律存 0（原樣存會變成 `Infinity`，不是合法 JSON，該報價單 GET 直接 500 讀不出來；審查 hichan-9 複查）。只動新匯入的品項；已存在的單不改（存量由另案依正式機筆數決定）。匯入端點仍只收草稿，故不影響內容指紋（簽核中／已簽核單不會被改到）。
+- 測試：`modules/case/tests/test_append_items_price_2026_11_13.py`（用 node 跑前端 `calcUnitPrice` 與後端同一組成本向量逐位比對；匯入端點寫進資料庫的單價／金額、贈品列、原有品項不動、與 `item_amount` 一致）。
+- 已知未處理（另案，審查 L2）：匯入後 `data.tot`（小計／稅額／含稅）與 `quotations.total`／`pretax`／毛利欄位仍是舊值，要等表單下次載入並存檔才由 PUT 重算寫入。品項金額現在有值，所以匯入後到下次存檔之間，草稿的品項合計與這些欄位會不一致（舊版是「金額 0 與欄位 0 一致」）。沒有現成函式能共用：`profit_guard.server_totals` 只算純數字，欄位與 `tot` 的寫入邏輯內嵌在 PUT 端點（`api/quotations.py` 的 UPDATE total／pretax／margin），在這裡另寫一份會與之分歧。UI 一律先載入再存檔；尚未確認有沒有只讀 `total` 欄位的草稿流程（例如依金額分流的簽核送出）會在存檔前讀到舊值。
+
 ## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
 - 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
 - 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。

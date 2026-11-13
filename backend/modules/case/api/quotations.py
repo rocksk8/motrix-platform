@@ -7369,6 +7369,37 @@ def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -
         conn.close()
 
 
+_MAX_APPEND_COST = 1e12
+_MAX_APPEND_QTY = 1e9
+
+
+def _sane_num(v, default, cap):
+    """可轉成數字且有限、絕對值不超過 cap ⇒ 原值；轉得成數字但 inf／NaN／超過 cap ⇒ `default`；轉不成數字 ⇒ 原值（舊行為不動）。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return v
+    return v if (math.isfinite(f) and abs(f) <= cap) else default
+
+
+def _calc_unit_price(cost, margin: float = 0.30) -> int:
+    """售價＝與 quotation-form 前端 `calcUnitPrice` 逐步同式（含浮點運算順序）：成本×1.05÷(1−毛利率) 無條件進位到 5 元，
+    再依百分位餘數收成 …00／…50（餘數 >50 進百位；1–50 取 …50）。成本 ≤0 或毛利率 ≥1 ⇒ 0（前端同樣回 0）。"""
+    try:
+        c, m = float(cost), float(margin)
+    except (TypeError, ValueError):
+        return 0
+    if not (math.isfinite(c) and math.isfinite(m)) or not (c > 0) or m >= 1 or c > _MAX_APPEND_COST:
+        return 0      # NaN／inf／超出合理範圍（>1e12 元）一律當沒填：維持 None／0，不讓一筆壞資料擋掉整批匯入或寫出幾百位數的售價
+    base = math.ceil(c * 1.05 / (1 - m) / 5) * 5
+    rem = base % 100
+    if rem > 50:
+        return math.ceil(base / 100) * 100
+    if rem > 0:
+        return math.ceil(base / 100) * 100 - 50
+    return base
+
+
 def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, now: str) -> str:
     """IP-17 `quotation.append_items`（M01 → M04）：把外部品項附加到**草稿**報價單。
 
@@ -7391,18 +7422,28 @@ def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, no
     if not isinstance(qdata.get("items"), list):
         qdata["items"] = []
     qdata["items"].append({"id": str(uuid.uuid4()), "type": "header", "description": header})
+    from helpers.legal_params import round_half_up as _rhu
     for it in items:
+        qty = _sane_num(it.get("qty", 1), 0, _MAX_APPEND_QTY)       # inf／NaN／離譜大 ⇒ 存了會讓該報價單 GET 500（Infinity 不是合法 JSON）
+        cost = _sane_num(it.get("cost", 0), 0, _MAX_APPEND_COST)
+        # 售價與金額在寫入時就算好（與前端 calcItem 同式）：舊版留 unitPrice=None／amount=0，載入頁面不會重算，
+        # 畫面空白、合計與 PDF 少算，要使用者逐列編輯才補得出來。成本 ≤0（贈品／沒填）維持 None／0。
+        price = _calc_unit_price(cost, 0.30)
+        try:
+            amount = _rhu(float(qty or 0), price) if price > 0 else 0
+        except Exception:        # noqa: BLE001 — 數量不是數字（inf／NaN／字串）⇒ 金額 0，不擋整批匯入
+            amount = 0
         qdata["items"].append({
             "id": str(uuid.uuid4()),
             "description": it.get("description", ""),
             "brand": "",
-            "qty": it.get("qty", 1),
+            "qty": qty,
             "unit": it.get("unit", "式"),
-            "cost": it.get("cost", 0),
+            "cost": cost,
             "margin": 0.30,
-            "unitPrice": None,
+            "unitPrice": price if price > 0 else None,
             "unitPriceOverride": False,
-            "amount": 0,
+            "amount": amount,
             "notes": it.get("note", ""),
         })
     # T9（2026-09-23）：第 4 個位置參數是 status ⇒ 一律用關鍵字傳 updated_at
