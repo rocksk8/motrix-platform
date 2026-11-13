@@ -173,6 +173,8 @@ def test_real_helper_private_change_selects_its_tests(monkeypatch):
     assert old != cur, "legal_params._as_date 的寫法變了，更新這一題的突變"
     real_source = MT._source
     monkeypatch.setattr(MT, "_source", lambda r, ref: old if (r == rel and ref == "OLD") else real_source(r, ref))
+    from tests.platform import _shared_repo
+    _shared_repo.patch_real_maps(monkeypatch, MT)         # D4：現算 test_map／dep_graph 每個行程只算一次（本題驗選題邏輯，不是掃描器）
     chk = lambda r: False     # noqa: E731
     chk.refs = ("OLD", None)
     picked, rep = MT.select([rel], MT.load_map(False), MT.load_graph(), chk)
