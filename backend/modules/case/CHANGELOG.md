@@ -6,6 +6,10 @@
 - 出貨單「關聯○○單」標籤用 `esc()` 包起來（固定字串，輸出不變；讓未逸出內插棘輪不必加基線）。
 - 測試：`tests/test_estimate_static_labels_2026_11_13.py`、`tests/test_estimate_doc_type_2026_11_13.py`。
 
+## 1.0.226（next，未取號）— 2026-11-13（fix/quotations-tablet-searchbar-t84；報價單頁平板搜尋列）
+- 修正（版面）：報價單頁在平板 768–1023 寬度，搜尋列（≤1023 兩欄格線）裡「緊湊」按鈕自己佔一整列。「欄位」「緊湊」包進同一個 `.ql-pair`：桌機（>1023）與手機（≤767）`display:contents`（版面不變），平板併成跨整列的兩欄格線、兩顆並排各半。
+- 測試：`tests/test_e2e_quote_list_t84_2026_11_13.py`（靜態規則＋平板 900／768 並排＋桌機 1440／手機 390 版面不變）。
+
 ## 1.0.225 — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
 - 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
 - 中性用語（使用者裁示：共用名稱一律「報價單／估價單」）：信件類型名稱、通知偏好、簽核流程設定頁、行事曆事件目錄、稽核模組名、業務開發頁轉建／連結彈窗與輸入框提示（不再寫 MQ- 字首）。

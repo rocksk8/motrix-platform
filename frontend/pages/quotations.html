@@ -126,6 +126,9 @@
        第三顆（本月已成案）自己一列、還帶著 .ql-sum + .ql-sum 的左邊線 ⇒ 平板改回三個數字一排（和桌機同一做法）；手機（≤767）另有自己的一排規則，桌機不受影響 */
     @media (min-width: 768px) and (max-width: 1023px) {
       .summary-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0; }
+      /* 搜尋列兩欄格線（≤1023）裡「緊湊」會自己佔一整列：「欄位」「緊湊」併成一個整列、兩顆並排各半（桌機 >1023、手機 ≤767 不套用） */
+      .search-bar .ql-pair { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:8px; grid-column: 1 / -1; }   /* x-show 藏起來的不算格子：只剩一顆就滿列，兩顆各半 */
+      .search-bar .ql-pair .action-btn { width:100%; }
     }
     /* ── T84：三個有定義的數字、目前條件列、提示框、下一步、緊湊密度、手機卡片 ── */
     .ql-sum { display:flex; flex-direction:column; gap:2px; flex:1 1 150px; min-width:0; text-align:left; background:none; border:none; border-radius:var(--radius); padding:6px 10px; cursor:pointer; font-family:var(--font-zh); color:inherit; }
@@ -147,6 +150,7 @@
     table.ql-compact td { padding-top:4px; padding-bottom:4px; }
     .ql-table td[data-col=dealTag] select { max-width:86px; }
     .ql-filters { display:contents; }
+    .ql-pair { display:contents; }
     .ql-only-m { display:none; }
     .ql-cond__toggle { margin-left:auto; display:inline-flex; align-items:center; gap:4px; padding:3px 10px; min-height:28px; border-radius:999px; background:#fff; border:1px solid var(--border-light); color:var(--text-secondary); font-family:var(--font-zh); font-size:12px; cursor:pointer; }
     .ql-cond__toggle[aria-pressed=true] { border-color:var(--accent); color:var(--accent); font-weight:600; }
@@ -317,6 +321,7 @@
         <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
       </button>
       <button class="action-btn action-btn--ghost" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響你自己）">檢視設定</button>
+      <div class="ql-pair">   <!-- 「欄位」「緊湊」成對：桌機／手機 display:contents（版面不變）；平板 768–1023 併成一列 -->
       <div style="position:relative" x-show="!lvOn.columns" x-cloak @click.outside="colPickOpen = false">
         <button type="button" class="action-btn action-btn--ghost" data-testid="ql-cols-btn" @click="colPickOpen = !colPickOpen" title="選要看的欄位（只影響你自己）">欄位</button>
         <div class="ql-colpick" x-show="colPickOpen" x-cloak data-testid="ql-cols-panel">
@@ -327,6 +332,7 @@
         </div>
       </div>
       <button type="button" class="action-btn action-btn--ghost" data-testid="ql-density" @click="toggleCompact()" :title="colPrefs.compact ? '切回標準列高' : '列高縮小、一頁看更多張'" x-text="colPrefs.compact ? '標準密度' : '緊湊'"></button>
+      </div>
       </div>
     </div>
 
