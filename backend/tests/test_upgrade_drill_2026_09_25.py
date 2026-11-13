@@ -23,7 +23,8 @@ def _has_v9_base():
     return r.returncode == 0
 
 
-pytestmark = pytest.mark.skipif(not _has_v9_base(), reason="沒有 V9 基準 commit c83dae6e（非本 repo 的 clone）")
+# gate_only：只在正式閘門跑（MOTRIX_GATE_OFFICIAL=1；conftest._skip_gate_only）。預跑、守門題組、各視窗自己跑全量都跳過（2026-11-13 chore/test-prune，PM 轉達使用者裁示）
+pytestmark = [pytest.mark.gate_only, pytest.mark.skipif(not _has_v9_base(), reason="沒有 V9 基準 commit c83dae6e（非本 repo 的 clone）")]
 
 
 #: 連線只打 127.0.0.1 上**本題自己起的** uvicorn 子行程（/api/ping），不連任何外部位址。
