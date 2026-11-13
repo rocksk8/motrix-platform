@@ -12,7 +12,7 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-# 869 = 867 + 2（LINE 事件矩陣 2026-11-13：`routers/system.py::_audit_mark`／`_line_conflict_who` 只對最高管理者的 LINE 設定頁讀 `audit_log`：前者回最新一筆的編號（只有 id）、後者只在儲存衝突時找「誰在何時改了這些事件」（只回顯示名與時間，不回稽核列；僅 `settings.line_notify%` 動作）；audit_log 沒有逐列範圍可套）
+# 869 = 867 + 2（LINE 事件矩陣 2026-11-13：`routers/system.py::_audit_mark`／`_line_conflict_who` 只對最高管理者的 LINE 設定頁讀 `audit_log`：前者回最新一筆的編號（只有 id）、後者只在儲存衝突時找「誰在何時改了這些事件」（只回顯示名與時間，不回稽核列；僅 `settings.line_notify%` 動作）；audit_log 沒有逐列範圍可套）。PM 2026-11-13 核准：新功能必要（「復原這一批」要顯示衝突是誰造成的）、限最高管理者頁；整合時照規矩把各分支的增減相加
 # 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
 MAX_ENTRIES = 869      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
