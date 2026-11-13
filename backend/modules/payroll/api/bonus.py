@@ -2288,6 +2288,9 @@ def put_insurance_profile(username: str, body: dict = Body(...), authorization: 
     prof[username] = cur
     from helpers.settings import _set_setting
     _set_setting(bonus_deductions.PROFILE_KEY, prof)
+    # 稽核只記「誰的哪些欄位改了」，**不記金額**：投保金額／外部已發獎金是薪資等級資料，稽核紀錄（audit_log 權限者都看得到）不可含明文（h11 發現；
+    # 金額的變更前後只存在 system_settings 的設定檔，由最高管理者專用的 GET /insurance 讀）。
+    _fields = [("insuredAmount" if k == "insuredAmount" else "ytdExternal[%s]" % "、".join(sorted(v))) for k, v in changes.items()]
     _audit(_tok(authorization), "bonus.insurance", "settings", username,
-           "投保金額／全年累計：%s" % json.dumps(changes, ensure_ascii=False))
+           "投保金額／全年累計：變更欄位 %s" % "、".join(_fields))
     return {"ok": True, "profile": cur}
