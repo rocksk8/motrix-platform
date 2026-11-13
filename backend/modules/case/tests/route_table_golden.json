@@ -451,6 +451,8 @@
 ["GET", "/api/login-greeting/phrases", "login_greeting_phrases_api_login_greeting_phrases_get", [["header", "authorization", false]], [], []]
 ["PUT", "/api/login-greeting/phrases", "login_greeting_phrases_save_api_login_greeting_phrases_put", [["header", "authorization", false]], [["application/json", "#/components/schemas/GreetingPhrasesIn"]], []]
 ["GET", "/api/mail-types", "list_mail_types_api_mail_types_get", [["header", "authorization", false]], [], []]
+["GET", "/api/mail-types/mine", "my_mail_prefs_api_mail_types_mine_get", [["header", "authorization", false]], [], []]
+["PUT", "/api/mail-types/mine", "set_my_mail_prefs_api_mail_types_mine_put", [["header", "authorization", false]], [["application/json", ""]], []]
 ["GET", "/api/mail-types/receivable", "list_receivable_api_mail_types_receivable_get", [["header", "authorization", false], ["query", "user_id", true]], [], []]
 ["PUT", "/api/mail-types/{key}/recipients", "set_mail_recipients_api_mail_types__key__recipients_put", [["header", "authorization", false], ["path", "key", true]], [["application/json", ""]], []]
 ["GET", "/api/map/config", "map_config_api_map_config_get", [["header", "authorization", false]], [], []]

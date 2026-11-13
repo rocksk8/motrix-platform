@@ -8848,5 +8848,27 @@
    "detail"
   ],
   "s": 404
+ },
+ "/api/mail-types/mine": {
+  "k": [
+   "categories",
+   "categories.approval",
+   "categories.business",
+   "categories.system",
+   "hasEmail",
+   "items",
+   "items[].action",
+   "items[].category",
+   "items[].categoryLabel",
+   "items[].event",
+   "items[].impact",
+   "items[].key",
+   "items[].lowRisk",
+   "items[].managedElsewhere",
+   "items[].name",
+   "items[].receive",
+   "version"
+  ],
+  "s": 200
  }
 }

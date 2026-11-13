@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 967,
-  "endpoints_api": 963,
-  "write_total": 520,
-  "write_api": 520,
-  "get_api": 443,
-  "distinct_paths_api": 819,
-  "write_with_body_api": 385,
+  "endpoints_total": 969,
+  "endpoints_api": 965,
+  "write_total": 521,
+  "write_api": 521,
+  "get_api": 444,
+  "distinct_paths_api": 820,
+  "write_with_body_api": 386,
   "write_with_path_param_api": 364
  },
  "select_star": {
@@ -4852,6 +4852,16 @@
    "w": false,
    "pp": 0,
    "body": false
+  },
+  "GET /api/mail-types/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/mail-types/mine": {
+   "w": true,
+   "pp": 0,
+   "body": true
   }
  }
 }

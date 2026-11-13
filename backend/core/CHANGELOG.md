@@ -64,6 +64,14 @@
 - 前端修正：`settings-center.html` 單選不選取、數字框空白（使用者兩張截圖）的根因是元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名（Alpine 範圍代理在 x-for 內解析到原生函式）⇒ 改名 `curVal`；新增「未儲存」標記、底部「有 N 項未儲存」列（儲存／放棄）、離開頁面警告、儲存結果提示（已生效／已送出待核准預計 X 日生效）、「建議值」徽章。
 - 測試：`tests/test_settings_change_notify_2026_11_13.py`（46 題：收件人／內容／commit 之後且不在鎖內／待生效流程／合併／LINE；前端以 node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一題，含舊 bug 的對照題與全站「方法名不得蓋住 Object.prototype 成員」守門）。
 - 行為變更（S5 只通知三項，使用者裁示 2026-11-13）：存檔後依 SPEC §15 發「設定變更通知」的三個舊設定頁——獎金預設（`PUT /api/bonus/cases/settings`，見薪資獎金模組紀錄）、營運目標（`PUT /api/settings/operating-targets`，通知財務角色）、報價條款組＋預設付款條件（通知業務角色）；每次存檔合併成一則、只列有變的欄位（舊→新）。**報價條款組存檔不再另發「系統設定：變更報價條款組」的 module_activity（email＋群組 LINE）**，只留設定變更通知一則；寫入前讀不到舊值（例外）時這次不發通知、不影響儲存（未設定過時回空清單，不算讀不到）。測試 `tests/test_s5_notify_only_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/settings-matrix-s6；設定改版 S6：我的帳號 → 通知分頁「我要收的 Email 通知」）**
+- 行為變更（對外介面）：新端點 `GET /api/mail-types/mine`、`PUT /api/mail-types/mine`（本人；登入即可）——本人自己看／改自己的 Email 通知偏好。只列「寄得到我」的信件類型（沿用 `receivable`）；寫的是 `users.notification_muted`（opt-out 清單：空＝全收；清單裡本人看不到的舊項目原樣保留）。
+  - `PUT` 的 body：`{changes: {類型代碼: true|false}, expect?: 版本, confirm?: bool, preview?: bool}`。`expect` 是 `GET` 回的 `version`（別人／管理員在這之間改過 ⇒ 409，請重新整理）；`preview:true` 只回「實際會變哪些、哪些是高影響」，不寫入。
+  - **簽核／系統技術類（非業務類）取消勾選一律要 `confirm:true`**（伺服器端強制，不靠前端）；業務類不用。沒有實質變動 ⇒ 不寫入、不留稽核。
+  - 仍遵守 U15「系統技術類信件至少一位最高管理者收得到」：最後一位收件人不能退訂（400）。
+  - 每次實際變更寫一筆稽核 `user.notification_prefs.self`（`by:"self"`、改成不收／改成要收的類型、前後清單長度）。只改本人，不通知別人（不走 `notify_change`）。
+- 前端：`pages/my-account.html` 通知分頁最上方新增「Email 通知」卡，用共用矩陣元件（`settings-matrix.js` 草稿模式：點選只算草稿，按「儲存」才寫入；業務類可批次、簽核／系統技術類不能批次且儲存前跳確認視窗）。LINE 卡原樣不動；「沒有可自己設定的通知」的空狀態提示改成只談 LINE（Email 卡永遠在）。
+- 不變：管理員代設定（`PUT /api/users/{id}` 的 `notification_muted`、使用者管理頁）完全沒動；L1 公開介面沒有變動（新函式都是底線私有，`core_version` 只因 (next) 佔位而是 `"next"`）。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
