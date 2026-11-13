@@ -13,11 +13,11 @@ from modules.case import material_approval as MA
 from modules.case import purchase_items as PI
 
 
-def received_items(conn, since="", limit=200) -> list:
-    """⇒ `[{quoteNo, itemId, docCode, name, unit, appliedQty, receivedOn, receivedBy}]`（到貨日新到舊）。`since`（YYYY-MM-DD）只回該日（含）之後到貨的。"""
+def received_items(conn, since="", limit=200, offset=0) -> list:
+    """⇒ `[{quoteNo, itemId, docCode, name, unit, appliedQty, receivedOn, receivedBy}]`（到貨日新到舊）。`since`（YYYY-MM-DD）只回該日（含）之後到貨的。`offset`＝跳過前幾筆（呼叫端分頁、先過濾再取滿）。"""
     sql = ("SELECT quote_no, item_id, doc_code, received_on, received_by FROM case_material_approvals"
-           " WHERE status=? AND received_on<>''" + (" AND received_on>=?" if since else "") + " ORDER BY received_on DESC, rowid DESC LIMIT ?")
-    args = [MA.S_APPROVED] + ([str(since)] if since else []) + [int(limit)]
+           " WHERE status=? AND received_on<>''" + (" AND received_on>=?" if since else "") + " ORDER BY received_on DESC, rowid DESC LIMIT ? OFFSET ?")
+    args = [MA.S_APPROVED] + ([str(since)] if since else []) + [int(limit), int(offset)]
     rows = conn.execute(sql, args).fetchall()
     by_case = {}
     for r in rows:

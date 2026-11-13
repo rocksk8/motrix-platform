@@ -3,6 +3,7 @@
 ## 1.0.230 — T85 一條龍 P2a（train/t85-p2-h1；版號由列車取）
 - 新提供者 `material.received_list`（IP-119，暫定號；`modules/case/material_received.py`）：已確認到貨（已核准且 `received_on` 非空）的材料申請清單，給庫存的入庫對帳表用；唯讀、沒有金額、不寫入。
 - 物料流程時間軸的入庫格：`stock.case_summary` 帶 `receivedInStock` 時（旗標 `onepipe.receive_ledger` 開）顯示完整數字——「已入庫尚未認領 N 台、已安裝 N 台、已出貨 N 台」，有直送批次時加註；旗標關時文字與今天相同。
+- `material.received_list` 多 `offset` 參數（對帳表先過濾再分頁取滿）。
 - 測試：`tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`（supply 側）。
 
 ## 1.0.229 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛

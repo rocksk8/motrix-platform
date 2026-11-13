@@ -721,7 +721,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 使用方 | M01 案件：一站式到貨端點（P2b） |
 | 形式 | provider，單一提供者（名稱 `supply`） |
 | 語法 | 提供：`("stock.receive", "supply"): receive`；取用：`fn = registry.single_provider("stock.receive")`；`None` ⇒ 只做案件那一半。`fn(conn, quote_no, lines, caller) -> {"ok", "batches": [{"batchNo", "partNo", "materialItemId", "poDocCode", "mode", "written", "rows": [{"serialNo", "status", "reason"}]}], "written", "rejected"}`；`lines`＝`[{"partNo", "materialItemId", "poDocCode", "supplierId", "invoiceNo", "cost", "note", "mode": "stock"｜"direct", "serials": [{"serialNo", "mac", "note"}]}]` |
-| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct` 只留一筆批次表頭（`delivery_mode='direct'`），不建序號列 |
+| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct` 只留一筆批次表頭（`delivery_mode='direct'`），不建序號列；同一筆材料申請已有直送批次 ⇒ 該列不寫（回 `error`，分批到貨由呼叫端帶 `additional=True`）；`materialItemId` 有給且 M01 在時，必須是該案件已確認到貨的材料申請（經 IP-110 `material.shippable`），否則該列不寫（回 `error`）；`caller=None` ＝可信的內部呼叫端，API 處理函式不可傳 None |
 | 交易契約 | **吃呼叫端的連線、不 commit**（比照 IP-19 的 `claim`／`release`）；呼叫端須先 `begin_write` 拿寫鎖，重複序號檢查與寫入才在同一把鎖內 |
 | 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，案件只做自己那一半並明示；對帳表（`GET /api/inventory/reconcile`）列出「案件已到貨、庫存還沒有」的材料申請 |
 | 契約版本 | 1（2026-11-14） |
@@ -738,7 +738,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M01 案件：`modules/case/material_received.py::received_items` |
 | 使用方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::reconcile` |
 | 形式 | provider，單一提供者（名稱 `case`） |
-| 語法 | 提供：`("material.received_list", "case"): received_items`；取用：`fn = registry.single_provider("material.received_list")`；`None` ⇒ 對帳表回空清單（`caseAvailable=false`）。`fn(conn, since, limit) -> [{"quoteNo", "itemId", "docCode", "name", "unit", "appliedQty", "receivedOn", "receivedBy"}]`（到貨日新到舊；`since` 為 YYYY-MM-DD） |
+| 語法 | 提供：`("material.received_list", "case"): received_items`；取用：`fn = registry.single_provider("material.received_list")`；`None` ⇒ 對帳表回空清單（`caseAvailable=false`）。`fn(conn, since, limit, offset=0) -> [{"quoteNo", "itemId", "docCode", "name", "unit", "appliedQty", "receivedOn", "receivedBy"}]`（到貨日新到舊；`since` 為 YYYY-MM-DD） |
 | 回傳 | 只含已核准且已確認到貨（`received_on` 非空）的材料申請，條件同 IP-110 `material.shippable` |
 | 對方不在時 | M01 不在 ⇒ 空清單；M03 不在 ⇒ 沒有對帳表 |
 | 契約版本 | 1（2026-11-14） |

@@ -17,6 +17,21 @@ ADMIN = {"role": "admin", "username": "adm", "display_name": "管理員甲"}
 STAFF = {"role": "sales", "username": "stf", "display_name": "一般同仁"}
 
 
+@pytest.fixture(autouse=True)
+def _shippable_provider(request, monkeypatch):
+    """多數題的 materialItemId 只是標籤（沒有真的材料申請）：預設讓 `material.shippable` 提供者缺席（略過「材料申請屬於這個案件」檢查）；
+    要測那項檢查的題目要求 `real_shippable` 夾具。"""
+    from core import registry
+    real = registry.single_provider
+    use_real = "real_shippable" in request.fixturenames
+    monkeypatch.setattr(registry, "single_provider", lambda cap: None if (cap == "material.shippable" and not use_real) else real(cap))
+
+
+@pytest.fixture
+def real_shippable():
+    return True
+
+
 def _flag(monkeypatch, on):
     from helpers import onepipe_flags
     monkeypatch.setattr(onepipe_flags, "flag_on", lambda field, conn=None: bool(on) and field == "receive_ledger")
@@ -352,7 +367,7 @@ def test_reconcile_flag_off_is_404_and_non_admin_is_403(client, make_user, monke
 
 
 @needs_m01
-def test_reconcile_lists_received_items_without_stock_and_drops_them_after_receive(client, make_user, monkeypatch):
+def test_reconcile_lists_received_items_without_stock_and_drops_them_after_receive(client, make_user, monkeypatch, real_shippable):
     admin = _login(client, *make_user(role="admin"))
     _flag(monkeypatch, True)
     _part()
@@ -401,3 +416,67 @@ def test_timeline_stock_cell_shows_received_counts_when_flag_on(client, make_use
     finally:
         conn.close()
     assert off["summary"].startswith("目前沒有這個案件的序號")                                    # 關＝與今天相同的文字
+
+
+# ── 審查補強（h9）：直送防重複、材料申請歸屬、對帳表分頁與 since、刪除事件 ────────────────
+
+@needs_m01
+def test_direct_receive_rejects_duplicate_unless_additional(client, monkeypatch, real_shippable):
+    _flag(monkeypatch, True)
+    _part()
+    _received_case("MQ-P2A-030", "d1")
+    ln = lambda **kw: _line([], mode="direct", materialItemId="d1", **kw)           # noqa: E731
+    first = _receive([ln()], quote_no="MQ-P2A-030")
+    assert first["batches"][0]["batchNo"].startswith("DR-") and "error" not in first["batches"][0]
+    again = _receive([ln()], quote_no="MQ-P2A-030")
+    assert again["batches"][0]["batchNo"] == "" and "重複" in again["batches"][0]["error"]
+    assert len(_q("SELECT 1 FROM stock_batches WHERE material_item_id='d1'")) == 1
+    more = _receive([ln(additional=True)], quote_no="MQ-P2A-030")                  # 分批到貨：呼叫端明確帶 additional
+    assert more["batches"][0]["batchNo"].startswith("DR-")
+    assert len(_q("SELECT 1 FROM stock_batches WHERE material_item_id='d1'")) == 2
+
+
+@needs_m01
+def test_receive_rejects_material_item_of_another_case_or_not_received(client, monkeypatch, real_shippable):
+    _flag(monkeypatch, True)
+    _part()
+    _received_case("MQ-P2A-031", "x1")
+    _received_case("MQ-P2A-032", "x2")
+    out = _receive([_line(["SN-X1"], materialItemId="x2")], quote_no="MQ-P2A-031")           # x2 是別案的材料申請
+    b = out["batches"][0]
+    assert out["written"] == 0 and b["rows"][0]["status"] == "rejected" and "不屬於這個案件" in b["error"]
+    assert _q("SELECT 1 FROM stock_items") == []
+    ok = _receive([_line(["SN-X1"], materialItemId="x1")], quote_no="MQ-P2A-031")
+    assert ok["written"] == 1
+
+
+@needs_m01
+def test_reconcile_pages_past_handled_items_and_validates_since(client, make_user, monkeypatch):
+    admin = _login(client, *make_user(role="admin"))
+    _flag(monkeypatch, True)
+    _part()
+    import db
+    conn = db.get_db()
+    try:
+        rows = [("MQ-BIG", "n%03d" % i, "MR-BIG-%03d" % i, "已核准", "2026-11-01" if i < 520 else "2026-10-01", "pm") for i in range(600)]
+        conn.executemany("INSERT INTO case_material_approvals (quote_no, item_id, doc_code, status, received_on, received_by) VALUES (?,?,?,?,?,?)", rows)
+        conn.commit()
+    finally:
+        conn.close()
+    _receive([_line([], mode="direct", materialItemId="n%03d" % i) for i in range(520)], quote_no="MQ-BIG")     # 最新的 520 筆都已處理
+    r = client.get("/api/inventory/reconcile", headers=_auth(admin)).json()
+    assert r["total"] == 80 and {i["itemId"] for i in r["items"]} == {"n%03d" % i for i in range(520, 600)}       # 較舊、未處理的沒被擠掉
+    assert client.get("/api/inventory/reconcile?since=2026-10-15", headers=_auth(admin)).json()["total"] == 0
+    assert client.get("/api/inventory/reconcile?since=yesterday", headers=_auth(admin)).status_code == 400
+
+
+def test_delete_in_stock_item_leaves_a_delete_event(client, make_user, monkeypatch):
+    admin = _login(client, *make_user(role="admin"))
+    _flag(monkeypatch, True)
+    _part()
+    _receive([_line(["SN-DEL"])])
+    sid = _q("SELECT id FROM stock_items WHERE serial_no='SN-DEL'")[0]["id"]
+    assert client.delete("/api/inventory/stock-items/%d" % sid, headers=_auth(admin)).status_code == 200
+    ev = _q("SELECT event, from_status, to_status FROM stock_item_events WHERE serial_no='SN-DEL' ORDER BY id")
+    assert [e["event"] for e in ev] == ["receive", "delete"] and ev[1]["from_status"] == "in_stock"
+

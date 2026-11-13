@@ -7,6 +7,7 @@
 - `stock.case_summary`（IP-117）：旗標開時多回 `receivedInStock`（為該案入庫、還在庫的台數）、`directBatches`、每料號 `inStock`；旗標關時回應與今天相同。物料流程時間軸的入庫格據此顯示完整數字。
 - 新端點 `GET /api/inventory/reconcile`（管理員；旗標關 ⇒ 404）：入庫對帳表——案件已確認到貨、庫存這一側沒有入庫或直送紀錄的材料申請（經 IP-119 `material.received_list`；M01 不在 ⇒ 空清單）。唯讀、沒有金額。
 - 進貨批次／序號的讀取回應：旗標關時不帶新欄位（`quote_no`／`po_doc_code`／`material_item_id`／`delivery_mode`），與今天相同。
+- 審查補強（h9）：`stock.receive` 直送防重複（同一筆材料申請已有直送批次 ⇒ 該列不寫，分批由呼叫端帶 `additional`）、`materialItemId` 必須是該案件已確認到貨的材料申請（經 `material.shippable`）、`caller=None` 只限可信內部呼叫；對帳表先過濾再取滿一頁（不被已處理項擠掉）、`since` 格式檢查（400）；人工刪除在庫序號也留 `delete` 異動。
 - 本批不含新畫面（一站式到貨畫面是 P2b）；`POST /api/inventory/batches` 行為不變。
 - 測試：`tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`。
 

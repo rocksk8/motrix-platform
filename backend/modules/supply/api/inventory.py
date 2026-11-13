@@ -8,6 +8,7 @@ shipped/installed -> in_stock（人工 return_to_stock 更正，見 §出貨單�
 """
 import json
 import math
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -380,6 +381,8 @@ def reconcile(since: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
+    if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+        raise HTTPException(400, "since 需為 YYYY-MM-DD")
     conn = get_db()
     try:
         if not _ev.ledger_on(conn):
@@ -390,7 +393,14 @@ def reconcile(since: Optional[str] = None, authorization: str = Header(None)):
             return {"items": [], "total": 0, "caseAvailable": False}
         handled = {(r["quote_no"], r["material_item_id"]) for r in conn.execute(
             "SELECT quote_no, material_item_id FROM stock_batches WHERE material_item_id<>''").fetchall()}
-        items = [i for i in fn(conn, since or "", 500) if (i["quoteNo"], i["itemId"]) not in handled]
+        items, offset, page = [], 0, 500
+        while len(items) < page and offset < 100 * page:                 # 先過濾、再取滿一頁：已處理的不會把較舊的未處理項擠掉
+            chunk = fn(conn, since or "", page, offset)
+            if not chunk:
+                break
+            items.extend(i for i in chunk if (i["quoteNo"], i["itemId"]) not in handled)
+            offset += page
+        items = items[:page]
         return {"items": items, "total": len(items), "caseAvailable": True}
     finally:
         conn.close()
@@ -736,6 +746,8 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, "僅在庫（未出貨／未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整")
     conn.execute("DELETE FROM stock_items WHERE id=?", (item_id,))
+    _ev.record(conn, event="delete", part_no=row["part_no"], serial_no=row["serial_no"], stock_item_id=row["id"], from_status="in_stock", to_status="",
+               quote_no=row["quote_no"] or "", actor=user.get("display_name") or user["username"], now=datetime.now().isoformat())
     conn.commit()
     conn.close()
     _audit(_tok(authorization), "inventory.delete", "stock_item", str(item_id),

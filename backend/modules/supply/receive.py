@@ -8,6 +8,7 @@
          旗標 `onepipe.receive_ledger` 關 ⇒ 一律不動（回 `{"ok": False, "reason": "DISABLED"}`）。
          沒有入庫權限 ⇒ 不寫任何庫存（回 `{"ok": False, "reason": "NO_PERMISSION"}`），呼叫端只做案件那一半並明示（D9）。
          逐列回報：重複序號、空白序號、已存在於庫存的序號**不寫、不擋其他列**；一列最多 `MAX_SERIALS_PER_LINE` 筆（超過 ⇒ 該列整列不寫）。
+         `caller=None` ＝**可信的內部呼叫端**（不檢查入庫權限）：API 處理函式一律要傳入目前使用者，不可傳 None。
          入庫權限：目前＝管理員（與 `POST /api/inventory/batches` 相同）；P2-pre（`onepipe.receive_permission`）上線後由 `can_receive` 一處放寬，其他地方不必改。
 """
 from datetime import datetime
@@ -52,8 +53,12 @@ def receive(conn, quote_no, lines, caller=None) -> dict:
         serials = [s for s in (ln.get("serials") or []) if isinstance(s, dict)]
         res = {"batchNo": "", "partNo": part_no, "materialItemId": mid, "poDocCode": po, "mode": mode if mode in _MODES else "stock", "written": 0, "rows": []}
         out["batches"].append(res)
+        problem = _line_problem(conn, qn, mid, mode, ln)
         if mode not in _MODES:
             res["rows"] = _reject_all(None, serials, "不支援的到貨方式")
+        elif problem:
+            res["error"] = problem
+            res["rows"] = _reject_all(None, serials, problem)
         elif mode == "direct":
             _direct(conn, qn, ln, res, actor, now)
         elif not part_no:
@@ -67,6 +72,26 @@ def receive(conn, quote_no, lines, caller=None) -> dict:
         out["written"] += res["written"]
         out["rejected"] += sum(1 for r in res["rows"] if r["status"] == "rejected")
     return out
+
+
+def _line_problem(conn, qn, mid, mode, ln):
+    """這一列不能寫的原因（空字串＝可以）。
+    1. 有給 `materialItemId` 時，那筆材料申請必須屬於這個案件且已確認到貨（經 `material.shippable` 提供者；M01 不在就略過這項檢查）。
+    2. 直送：同一筆材料申請已經有直送批次 ⇒ 擋下（避免重複送出；分批到貨由呼叫端明確帶 `additional=True`，數量上限由案件側管）。"""
+    if mid:
+        from core import registry
+        fn = registry.single_provider("material.shippable")
+        if fn is not None:
+            try:
+                known = {str(r.get("materialItemId")) for r in (fn(conn, qn) or [])}
+            except Exception:                                                            # noqa: BLE001 — 提供者出錯不擋入庫（對帳表仍會列出）
+                known = None
+            if known is not None and mid not in known:
+                return "這筆材料申請不屬於這個案件，或尚未確認到貨"
+    if mode == "direct" and mid and not ln.get("additional"):
+        if conn.execute("SELECT 1 FROM stock_batches WHERE quote_no=? AND material_item_id=? AND delivery_mode='direct'", (qn, mid)).fetchone():
+            return "這筆材料申請已經登載過直送，請勿重複送出"
+    return ""
 
 
 def _direct(conn, qn, ln, res, actor, now):
