@@ -2675,10 +2675,8 @@ def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = He
     _audit(_tok(authorization), "settings.quote_terms_presets.update", "settings",
            "quote_terms_presets",
            f"報價條款組共 {len(cleaned)} 組，預設為「{default_name}」")
-    notify_module_activity("系統設定", "變更報價條款組",
-                            actor.get("display_name") or actor["username"],
-                            f"{len(cleaned)} 組，預設「{default_name}」",
-                            "quotation-form.html")
+    # 使用者裁示（2026-11-13）：條款組變更只發「設定變更通知」一則（誰改了什麼、舊→新）；原本的 notify_module_activity
+    # （「系統設定：變更報價條款組」email＋群組 LINE module_activity）拿掉，不再並存發兩則。
     if old_value is not None:
         _notify_quote_terms_changed(_quote_terms_change_rows(old_value, value), actor["username"])
     return value

@@ -227,8 +227,25 @@ def test_quote_terms_presets_save_sends_one_merged_message(client, make_user, sa
     m = notes[-1]["message"]
     assert "報價條款變更" in m and "含施工" in m and "純購料" in m
     assert len(_notes("s5n_sales4")) == n0 + 1
-    # 既有的 notify_module_activity（群組 LINE「module_activity」）原樣保留；新通知（ops）不發 settings_changed 的 LINE
+    # 新通知（ops）不發 settings_changed 的 LINE；舊的 module_activity 已拿掉（見下一題）
     assert all(c[0][0] != SN.EVENT_KEY for c in line_calls)
+
+
+def test_quote_terms_presets_save_no_longer_sends_the_old_module_activity_notice(client, sa, line_calls, monkeypatch):
+    """使用者裁示 2026-11-13：報價條款兩則通知合併成一則——只留設定變更通知，拿掉「系統設定：變更報價條款組」的 module_activity
+    （email＋群組 LINE）。條款組與預設付款條件兩支 PUT 都不得再呼叫 notify_module_activity；LINE 也不得出現 module_activity 事件。"""
+    import routers.system as SY
+    activity = []
+    monkeypatch.setattr(SY, "notify_module_activity", lambda *a, **kw: activity.append((a, kw)))
+    body = {"presets": [_preset("純購料", "m1"), _preset("含施工", "m2")], "defaultKey": "m2"}
+    assert client.put("/api/settings/quote-terms-presets", headers=sa, json=body).status_code == 200
+    n0 = len(_notes("s5n_obs"))
+    body2 = {"presets": [_preset("純購料", "m1", paymentTerms="貨到付款"), _preset("含施工", "m2")], "defaultKey": "m1"}
+    assert client.put("/api/settings/quote-terms-presets", headers=sa, json=body2).status_code == 200
+    assert client.put("/api/settings/payment-terms", headers=sa, json={"text": "月結 30 天（測試）"}).status_code == 200
+    assert activity == [], activity                                 # 舊的模組動態通知（email）不再發
+    assert all(c[0][0] != "module_activity" for c in line_calls)    # 群組 LINE 的 module_activity 也不再發
+    assert len(_notes("s5n_obs")) >= n0 + 2                         # 新的設定變更通知仍在（條款組一則＋付款條件一則）
 
 
 def test_quote_terms_presets_no_change_sends_nothing(client, sa):
