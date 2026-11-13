@@ -226,11 +226,11 @@ def _register_both():
 
 
 def test_registry_supports_titles_sheets_or_both():
+    from helpers import clause_titles as CT       # import 時才註冊 case:quotation-clause-titles ⇒ 必須在取 registered() 快照之前
     _register_both()
     reg = ET.registered()
     assert reg[BOTH]["titles"] == {"a": ["甲標題", "甲另一個"]} and [x["id"] for x in reg[BOTH]["sheets"]] == ["main", "extra"]
     assert reg[BOTH]["decorOnly"] is False
-    from helpers import clause_titles as CT
     assert reg[CT.EXPORT_ID]["titles"] and reg[CT.EXPORT_ID]["sheets"] == [] and reg[CT.EXPORT_ID]["decorOnly"] is True, "標題型維持原樣"
     assert reg[EID]["titles"] == {} and reg[EID]["sheets"], "工作表型維持原樣"
 
