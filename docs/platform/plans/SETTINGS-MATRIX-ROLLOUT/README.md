@@ -37,7 +37,7 @@ base：T82 凍結頭 `435e761de`。**只做文件與 mockup，不跑重型測試
 
 | 檔 | 內容 |
 |---|---|
-| `data/gen_seed.py` | **產生器**（唯讀：只 import 程式，不連 DB）。在 `backend/` 下執行：`MOTRIX_DISABLE_SCHEDULERS=1 PYTHONUTF8=1 python -I ../docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/gen_seed.py`。T83 凍結後重產一次。**r3 起重跑只重寫 `*.seed.csv`，不覆蓋工作檔（含【填】欄）**；工作檔不存在才複製一份種子。`--check`（`python -I gen_seed.py --check`）不連後端，獨立重算「可批次?」並與種子／工作檔逐列比對 |
+| `data/gen_seed.py` | **產生器**（唯讀：只 import 程式，不連 DB）。在 `backend/` 下執行：`MOTRIX_DISABLE_SCHEDULERS=1 PYTHONUTF8=1 python -I ../docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/gen_seed.py`。T83 凍結後重產一次。**r3 起重跑只重寫 `*.seed.csv`，不覆蓋工作檔（含【填】欄）**；工作檔不存在才複製一份種子。`--check`（`python -I gen_seed.py --check`）不連後端，獨立重算 ①規則上可批次／②畫面提供勾選格 並與種子／工作檔逐列比對（工作檔 r3.1 起這兩欄取代原「可批次?」；欄位順序在其後的【填】欄不變）。對使用者報數字以 ② 為準 |
 | `data/settings_groups.json` | 設定中心全部群組／欄位的完整 meta（`SettingDef.meta()`） |
 | `data/settings-center-items.csv` | 一～三段：183 欄逐欄一列（分工甲／乙、可批次？、現名稱／問句／說明／影響／選項後果／風險已預填）；第四段「設定中心以外」14 列（含僅 API 兩項） |
 | `data/bing-items.csv` | 丙份 263 列：信件類型 67、LINE 事件 70、個人 Email 通知事件 78、個人權限鍵 30、僅行事曆事件 9、簽核單據類型 9 |
