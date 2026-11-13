@@ -2,7 +2,7 @@
 """設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCALAR_LEGACY, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
+[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCALAR_LEGACY, SCOPE, SettingConflict, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
     audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, generation, get, get_group, group_info, group_stamp, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
@@ -171,11 +171,12 @@ class SettingDef:
     `loosen`＝放寬方向：往該方向調整的變更視同風險變更——確認期間後才生效，且需要另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；
     收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
-                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max", "impact_scope")
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max", "impact_scope",
+                 "when", "external")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None):
+                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None, when="", external=""):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -187,6 +188,11 @@ class SettingDef:
         self.choices = [tuple(c) for c in (choices or [])]
         self.presets = dict(presets or {})
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
+        # when＝「？」第二段「什麼時候要改」（選填，沒填就不顯示；不得與 help 一字不差＝防複製貼上）。
+        # external＝一句話：這個設定要先在別處做什麼才有用（例「要先到 Google 後台開通」；空字串＝不需要，畫面顯示「要先在外部設定」標籤）。
+        self.when, self.external = (when or "").strip(), (external or "").strip()
+        if self.when and self.when == (help or "").strip():
+            raise ValueError("設定欄位 %r 的 when 不得與 help 完全相同" % (key,))
         if loosen not in (None, "up", "down", "both"):
             raise ValueError("loosen 只能是 up／down／both／None：%r" % (loosen,))
         if loosen and type not in ("int", "float"):
@@ -235,7 +241,7 @@ class SettingDef:
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
                 "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
                 "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
-                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope, "when": self.when, "needsExternal": self.external,
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
@@ -663,17 +669,67 @@ def field_defs(group):
     return dict(_g(group)["fields"])
 
 
-def field_views(group, values=None, *, days=None):
+def _help_parts(f):
+    """「？」四段（SPEC §6）：這是什麼／什麼時候要改／改了會影響什麼／建議。空段不出現。"""
+    p = {"what": "\n".join(x for x in (f.question, f.help) if x),
+         "when": f.when,
+         "impact": "\n".join(x for x in (f.impact, f.risk_text) if x),
+         "recommend": ""}
+    if f.recommended is not None:
+        p["recommend"] = show_value(f, f.recommended)
+    return {k: v for k, v in p.items() if v}
+
+
+def _sources(group, vals, conn):
+    """每欄的來源（C7）：`{欄位鍵: {kind, by, at, reason}}`。kind＝pending（有等待生效的申請）／company（帳本有已生效的變更）／
+    default（等於程式預設、沒有紀錄）／legacy（不等於預設、帳本沒有紀錄＝舊位置寫的）。個人層（personal）只給個人偏好頁，設定中心不會有。"""
+    from helpers import config_ledger as L
+    g = _g(group)
+    pend, eff = {}, {}
+    for r in L.history(conn, "setting:%s" % group, group, limit=1000):          # 新→舊
+        f = r["field"]
+        if f not in g["fields"]:
+            continue
+        if r["state"] == "pending" and not L.in_effect(r):
+            pend.setdefault(f, r)
+        elif L.in_effect(r):
+            eff.setdefault(f, r)
+    out = {}
+    for k, f in g["fields"].items():
+        r, kind = pend.get(k), "pending"
+        if r is None:
+            r, kind = eff.get(k), "company"
+        if r is not None:
+            out[k] = {"kind": kind, "by": r.get("actor_display") or r.get("actor") or "", "at": r.get("effective_at") or r.get("at") or "",
+                      "reason": r.get("reason") or ""}
+        else:
+            out[k] = {"kind": "default" if _same_value(vals[k], f.default) else "legacy", "by": "", "at": "", "reason": ""}
+    return out
+
+
+def field_views(group, values=None, *, days=None, conn=None):
     """設定中心畫面用的欄位清單：欄位定義（含版本邊界後的有效範圍）＋目前值、白話值、是否預設、預設的白話值、目前值的橫幅、
     選項型欄位每個選項的橫幅（`choiceBanners`，鍵為代碼字串）。句子與等級一律由這裡（`banner_of`）產生。"""
     g = _g(group)
     vals = values if values is not None else get_group(group)
     n = days if days is not None else confirm_period_days()
+    own = conn is None
+    src = {}
+    try:
+        c = conn if conn is not None else get_db()
+        try:
+            src = _sources(group, vals, c)
+        finally:
+            if own:
+                c.close()
+    except Exception:                               # noqa: BLE001 — 來源只是顯示；讀不到就不顯示徽章，不拖垮整頁
+        logger.warning("settings: 讀取群組 %s 的來源失敗", group, exc_info=True)
     out = []
     for k, f in g["fields"].items():
         lo, hi = _bounds(group, f)
         cur = vals[k]
         m = dict(f.meta(), min=lo, max=hi)
+        m.update(helpParts=_help_parts(f), source=src.get(k))
         m.update(value=cur, valueText=show_value(f, cur), isDefault=(cur == f.default), defaultText=show_value(f, f.default),
                  recommendedText=(show_value(f, f.recommended) if f.recommended is not None else None),
                  banner=banner_of(f, cur, days=n),
@@ -911,6 +967,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             unknown = [k for k in expected_values if k not in g["fields"]]
             if unknown:
                 raise SettingError("expected_values 含不存在的欄位：%s" % "、".join(map(str, unknown)))
+            missing = [k for k in values if k not in expected_values]
+            if missing:                                 # 有帶 expected 就要每個要改的欄位都帶（否則那欄是無條件覆寫）
+                raise SettingError("每個要改的欄位都要帶 expected_values，缺：%s" % "、".join(map(str, missing)))
             bad = [k for k, v in expected_values.items() if not _same_value(eff[k], v)]
             if bad:
                 by, at = _conflict_origin(c, group, g, eff, bad)
@@ -927,6 +986,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         for r in L.pending(c, domain):                # 本次送出的欄位：舊的待生效項一律被取代（即使這次是立即生效的收緊）
             if r["domain"] == domain and r["key"] == group and r["field"] in values and L.supersede(c, r["id"], actor_, "被較新的申請取代"):
                 result["superseded"] += 1
+                result.setdefault("supersededRequests", []).append(      # 誰的哪一筆被取代：畫面要說「已取代某某的待生效申請」
+                    {"id": r["id"], "field": r["field"], "new": r["new"], "by": r.get("actor_display") or r.get("actor") or "",
+                     "at": r.get("at") or ""})
         if changes:
             risk = _risk_of(group, [x["field"] for x in changes])
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
