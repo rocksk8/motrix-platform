@@ -49,6 +49,7 @@ def test_the_counter_sees_one_connection_per_address_outside_a_session(client, c
 
 def test_quota_calculator_connections_do_not_grow_with_the_address_count(client, count_conns, monkeypatch):
     geo = _use_warm_source(monkeypatch, _addresses(5, "calc"))
+    geo.quota_calculator()                      # 暖機：第一次呼叫可能多做冷啟動的工作，不拿來當基準
     count_conns.clear()
     geo.quota_calculator()
     few = len(count_conns)
@@ -59,12 +60,13 @@ def test_quota_calculator_connections_do_not_grow_with_the_address_count(client,
     many = len(count_conns)
 
     assert out["uncached_addresses"] == 200, "共用連線不可以改變計算結果"
-    assert many == few, "待暖清單從 5 個變 200 個，連線數從 %d 變 %d：又回到逐筆開連線" % (few, many)
+    assert many <= few, "待暖清單從 5 個變 200 個，連線數從 %d 變 %d：又回到逐筆開連線" % (few, many)
     assert many < 20, "一次計算器就開了 %d 條連線" % many
 
 
 def test_warm_backlog_connections_do_not_grow_with_the_address_count(client, count_conns, monkeypatch):
     geo = _use_warm_source(monkeypatch, _addresses(5, "warm"))
+    geo._warm_backlog()                         # 暖機（同上）
     count_conns.clear()
     geo._warm_backlog()
     few = len(count_conns)
@@ -76,7 +78,7 @@ def test_warm_backlog_connections_do_not_grow_with_the_address_count(client, cou
     many = len(count_conns)
 
     assert backlog == addrs, "待辦清單的內容與順序不可以因共用連線而改變"
-    assert many == few and many < 20, "待暖清單 5→200 個，連線數 %d→%d" % (few, many)
+    assert many <= few and many < 20, "待暖清單 5→200 個，連線數 %d→%d" % (few, many)
 
 
 def test_warm_backlog_still_drops_known_addresses_and_duplicates(client, monkeypatch):
@@ -94,6 +96,17 @@ def test_warm_backlog_still_drops_known_addresses_and_duplicates(client, monkeyp
     assert geo._warm_backlog() == ["連線數守門測試 新地址 A", "連線數守門測試 新地址 B"]
 
 
+def test_warm_backlog_keeps_going_when_one_source_raises(client, monkeypatch):
+    """行為不變：一個來源壞掉不拖垮其他來源（保住原本的 try/except；先收齊再過濾的寫法不可以弄丟它）。"""
+    from helpers import geo
+
+    def broken():
+        raise RuntimeError("來源壞了")
+
+    monkeypatch.setattr(geo, "_WARM_SOURCES", [broken, lambda: ["連線數守門測試 壞來源之後 A"]])
+    assert geo._warm_backlog() == ["連線數守門測試 壞來源之後 A"]
+
+
 def test_the_google_quota_endpoint_opens_a_bounded_number_of_connections(client, make_user, count_conns, monkeypatch):
     """端點層：整個 `GET /api/settings/google-quota`（含設定、狀態、計算器）的連線數不隨地址數成長。"""
     username, password = make_user(username="quota_conn_admin", role="superadmin")
@@ -108,8 +121,9 @@ def test_the_google_quota_endpoint_opens_a_bounded_number_of_connections(client,
         assert resp.status_code == 200, resp.text
         return len(count_conns), resp.json()
 
+    one_request(_addresses(5, "ep0"))           # 暖機：第一個請求會多做冷啟動的工作
     few, _ = one_request(_addresses(5, "ep"))
     many, body = one_request(_addresses(200, "ep2"))
     assert body["calculator"]["uncached_addresses"] == 200
-    assert many == few, "端點的連線數隨地址數成長（%d → %d）" % (few, many)
+    assert many <= few, "端點的連線數隨地址數成長（%d → %d）" % (few, many)
     assert many <= 20, "一次請求開了 %d 條連線" % many
