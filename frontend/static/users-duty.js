@@ -5,6 +5,9 @@
  *  2. 預覽由伺服器算（POST /api/duty-roles/preview，與真實生效路徑同一個函式）；這裡不自己算權限。
  *  3. 存檔順序：先「解除扣項」（要勾回的鍵不能還被扣著，否則舊 PUT 會 400）→ PUT /api/users（基本資料／原始勾選）→ 解除／新增角色綁定 → 新增扣項。
  *     沒有跨 API 交易：任何一步失敗就停下，並明講「已完成／未完成」。
+ *  5. 個人勾選（form.modules）本身動到高敏感鍵（取得清單＝GET /api/duty-roles 的 highSensitiveKeys）時也要原因：伺服器端
+ *     PUT /api/users/{id} 強制（安全票 fix/user-perm-sensitive-gate）；這裡只是先擋、並把原因放進 PUT 的 reason。原因輸入框沿用職責角色那一格
+ *     （同一次存檔共用一個原因）；那一格沒顯示（沒有職責角色差異、或最高管理者）時才另顯示 permGate 這一格。
  *  4. 一次存檔的多個動作共用同一個原因（伺服器逐筆寫入各自的 permission_changes）。高敏感差異必填原因（伺服器端仍強制）。
  * 用法：usersPage() 回傳物件時 spread `...window.usersDutyMixin()`；openEdit 呼叫 dutyOpen(user)，saveUser 在 PUT 前後呼叫 dutyBefore／dutyAfter。 */
 (function () {
@@ -14,6 +17,39 @@
     return {
       duty: { visible: false, loaded: false, loading: false, roles: [], keys: [], hi: [], origRoleIds: [], origSubs: [],
               roleIds: [], subs: [], reason: '', preview: null, previewBusy: false, error: '', progress: '', _t: null, _userId: null },
+
+      // ── 個人勾選的高敏感鍵（PUT /api/users/{id} 要原因）──────────────────────────────────────────────
+      permGate: { hi: [], keys: [], origModules: [], origRole: '', reason: '' },
+      async permGateOpen(user) {
+        const g = this.permGate
+        Object.assign(g, { hi: [], keys: [], origModules: [...((user && user.modules) || [])], origRole: (user && user.role) || '', reason: '' })
+        try {
+          const r = await fetch('/api/duty-roles', { headers: this._headers() })
+          if (!r.ok) return
+          const d = await r.json()
+          if (this.editingId === user.id) { g.hi = d.highSensitiveKeys || []; g.keys = d.keys || [] }
+        } catch (e) { /* 取不到清單 ⇒ 不先擋；伺服器仍會擋並回原因 */ }
+      },
+      // 這次存檔動到（授予或取消）的高敏感個人勾選；改完仍是最高管理者 ⇒ 不算（伺服器同一條規則）
+      permGateTouched() {
+        const g = this.permGate
+        if (!this.editingId || !g.hi.length) return []
+        if (g.origRole === 'superadmin' && this.form.role === 'superadmin') return []
+        const a = new Set(g.origModules), b = new Set(this.form.modules || [])
+        return g.hi.filter(k => a.has(k) !== b.has(k))
+      },
+      // 另顯示輸入框：有高敏感差異、而職責角色那一格沒顯示時
+      permGateShowOwnReason() { return this.permGateTouched().length > 0 && !(this.duty.visible && this.dutyHasDiff()) },
+      permGateLabel(k) { const x = this.permGate.keys.find(i => i.key === k); return x ? x.label : k },
+      permGateReason() { return ((this.duty.visible && this.dutyHasDiff() ? this.duty.reason : this.permGate.reason) || '').trim() },
+      permGatePrecheck() {
+        const t = this.permGateTouched()
+        if (t.length && this.permGateReason().length < 4) {
+          this.formError = '這次變更涉及高敏感權限（' + t.map(k => this.permGateLabel(k)).join('、') + '），請填寫變更原因（至少 4 個字）'
+          return false
+        }
+        return true
+      },
 
       // ── 開啟（編輯既有、非 superadmin 的使用者才顯示；新增使用者沒有 id，不顯示）──────────────────────
       async dutyOpen(user) {
