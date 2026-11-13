@@ -1181,6 +1181,31 @@ def _read_lock(path):
         return None
 
 
+def _queue_guard(config):
+    """重型 pytest（全量或 -n≥2）沒有經 `tools/platform/heavy_run.py` 排隊時的處置（T82：整合期間別人的全量把閘門拖紅）。
+
+    判斷是 heavy_run.direct_run_verdict 的純函式：閘門鎖持有中 ⇒ 不是持有者的直接重型跑法拒絕；沒有閘門鎖 ⇒ 只印警告。
+    `--collect-only` 不算（數秒、不跑題）。**找不到 heavy_run、讀檔出任何錯 ⇒ 放行**（出貨包沒有 tools/、這道只防「順手跑一下」，不能反過來擋住測試）。
+    """
+    if getattr(config.option, "collectonly", False):
+        return
+    try:
+        import importlib.util as _iu
+        hr_path = Path(__file__).resolve().parents[1] / "tools" / "platform" / "heavy_run.py"
+        if not hr_path.is_file():
+            return
+        spec = _iu.spec_from_file_location("_motrix_heavy_run_guard", str(hr_path))
+        hr = _iu.module_from_spec(spec)
+        spec.loader.exec_module(hr)
+        level, msg = hr.direct_run_verdict(os.environ, hr.read_gate())
+    except Exception:                    # noqa: BLE001 — fail open
+        return
+    if level == "refuse":
+        raise pytest.UsageError("【測試佇列】" + msg)
+    if level == "warn":
+        _lock_say("\n[測試佇列] " + msg, flush=True)
+
+
 def pytest_configure(config):
     """在**任何一支測試跑起來之前**擋下來。
 
@@ -1212,6 +1237,7 @@ def pytest_configure(config):
     if not _is_heavy_run(config):
         _refuse_light_run_during_build(config)
         return                       # 單檔臨時跑，不搶鎖（建包獨佔期間例外：直接拒絕，見上一行）
+    _queue_guard(config)             # 重型但沒經 heavy_run 排隊：閘門鎖期間拒絕、平時警告（判斷在 tools/platform/heavy_run.py）
 
     slots = _lock_slots()
     wait = _env_seconds("MOTRIX_PYTEST_LOCK_WAIT", LOCK_WAIT_SECONDS_DEFAULT)
