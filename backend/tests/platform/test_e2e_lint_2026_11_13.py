@@ -237,6 +237,14 @@ def test_expect_prefix_is_a_wait_only_for_playwright_calls():
     assert _hits(_wrap('page.click("#go")\nexpected_total()\nassert page.is_visible("#ok")'))            # 自己寫的函式，名字剛好 expect 開頭
     assert _hits(_wrap('page.click("#go")\nexpect_rows(page, 3)\nassert page.is_visible("#ok")'))           # 同上（不是屬性呼叫）
     assert _hits(_wrap('page.click("#go")\nhelper.expect_rows(3)\nassert page.is_visible("#ok")'))          # 屬性呼叫但不是 Playwright 的 expect_* 名單
+    # 名字剛好叫 expect 的屬性呼叫（pexpect 的 child.expect("x")、自己寫的 helper.expect(3)）不是 Playwright 的等待（h3 複驗 L，T84）
+    assert _hits(_wrap('page.click("#go")\nchild.expect("x")\nassert page.is_visible("#ok")'))
+    assert _hits(_wrap('page.click("#go")\nhelper.expect(3)\nassert page.is_visible("#ok")'))
+    # 正對照：裸的 expect(...) 仍是等待（上面第二行），且名字單獨判斷（沒給節點）時 expect 仍算等待——給 file_waiters 之類只看名字的呼叫者用
+    import ast
+    assert E._is_wait_name("expect") is True
+    assert E._is_wait_name("expect", ast.parse("expect(x)").body[0].value) is True
+    assert E._is_wait_name("expect", ast.parse("child.expect(x)").body[0].value) is False
 
 
 def test_two_same_name_reads_on_one_line_get_two_ids():
