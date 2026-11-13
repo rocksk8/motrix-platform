@@ -4,7 +4,7 @@
 釘住的事：
   ① 立即生效沒變（值照存、回傳不變）；有變才發、沒變不發；一次存檔多欄＝一則（`SN.batch()`）。
   ② 通知內容＝誰（操作者）、哪一項（白話標籤）、舊→新（白話值）；種類前綴對（獎金預設變更／營運目標變更／報價條款變更）。
-  ③ 風險＝ops ⇒ **不發 LINE**（只有 security／money／legal 才發）；收件人＝全部在職最高管理者（含操作者本人）＋指定角色。
+  ③ 風險＝ops ⇒ **不發 LINE**（只有 security／money／legal 才發）；收件人＝其他在職最高管理者（h9 的 S1d：操作者本人不收自己的站內通知）＋指定角色。
   ④ 通知失敗**不影響**設定已存好（呼叫端都在 commit 之後）；非最高管理者 403 ⇒ 不發。
 依賴：`helpers.settings_notify.notify_change`（S1d；feat/settings-change-notify）。
 """
@@ -42,7 +42,9 @@ def line_calls(monkeypatch):
 
 @pytest.fixture()
 def sa(client, make_user):
-    return _hdr(client, make_user, "s5n_sa1")
+    h = _hdr(client, make_user, "s5n_sa1")
+    make_user(username="s5n_obs", role="superadmin")               # 被檢查的收件人：另一位最高管理者（h9：操作者本人不再收到自己的站內通知）
+    return h
 
 
 def _bonus_put(client, h, rate, sales, project, admin):
@@ -59,7 +61,7 @@ def test_bonus_defaults_change_notifies_superadmins_once_with_old_new_and_no_lin
     assert r.status_code == 200 and r.json() == {"ok": True}      # ① 立即生效、回傳形狀不變
     got = client.get("/api/bonus/cases/settings", headers=sa).json()
     assert got == {"rate_bp": 2000, "split_bp": {"sales": 6000, "project": 2000, "admin": 2000}}
-    for u in ("s5n_sa1", "s5n_sa2"):                              # 全部在職最高管理者（含操作者本人）各一則（多欄合併）
+    for u in ("s5n_obs", "s5n_sa2"):                              # 其他在職最高管理者各一則（多欄合併；操作者本人不收自己的站內通知）
         n = _notes(u)
         assert len(n) == 1, (u, n)
         m = n[0]["message"]
@@ -74,7 +76,7 @@ def test_bonus_defaults_change_notifies_superadmins_once_with_old_new_and_no_lin
 
 def test_bonus_defaults_no_change_sends_nothing(client, sa, line_calls):
     assert _bonus_put(client, sa, 1000, 5000, 3000, 2000).status_code == 200      # 與預設相同
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
 
 
 def test_bonus_defaults_non_superadmin_forbidden_and_silent(client, make_user, line_calls):
@@ -86,7 +88,7 @@ def test_bonus_defaults_non_superadmin_forbidden_and_silent(client, make_user, l
 
 def test_bonus_defaults_invalid_body_400_no_notify(client, sa):
     assert _bonus_put(client, sa, 2000, 1, 1, 1).status_code == 400
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
 
 
 def test_bonus_defaults_notify_failure_does_not_break_the_save(client, sa, monkeypatch):
@@ -119,7 +121,7 @@ def test_operating_targets_first_save_notifies_with_year_and_changed_fields(clie
     r = client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=5000000, newCases=12))
     assert r.status_code == 200 and r.json() == {"ok": True}
     assert client.get("/api/settings/operating-targets", headers=sa).json()["annual"]["revenue"] == 5000000
-    m = _notes("s5n_sa1")[0]["message"]
+    m = _notes("s5n_obs")[0]["message"]
     assert "營運目標變更" in m and "2026 年度" in m and "營收目標" in m and "5,000,000" in m and "新成案數" in m
     assert "收款率" not in m                                       # 0→0 沒變
     assert len(_notes("s5n_fin")) == 1                             # 財務是指定角色（目標頁財務看得到）
@@ -129,7 +131,7 @@ def test_operating_targets_first_save_notifies_with_year_and_changed_fields(clie
 def test_operating_targets_same_year_only_changed_fields_listed(client, sa):
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=5000000, newCases=12))
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=6000000, newCases=12))
-    msgs = [n["message"] for n in _notes("s5n_sa1")]
+    msgs = [n["message"] for n in _notes("s5n_obs")]
     assert len(msgs) == 2
     assert "營收目標" in msgs[1] and "6,000,000" in msgs[1] and "新成案數" not in msgs[1]
 
@@ -139,21 +141,21 @@ def test_operating_targets_salesperson_quota_change_is_one_line(client, sa):
     body = _targets(2026, revenue=1)
     body["salesperson"] = [{"name": "小王", "revenue": 100, "cases": 2}]
     client.put("/api/settings/operating-targets", headers=sa, json=body)
-    m = _notes("s5n_sa1")[-1]["message"]
+    m = _notes("s5n_obs")[-1]["message"]
     assert "業務員配額" in m and "0 位" in m and "1 位" in m
 
 
 def test_operating_targets_no_change_sends_nothing(client, sa):
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=1))
-    n0 = len(_notes("s5n_sa1"))
+    n0 = len(_notes("s5n_obs"))
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=1))
-    assert len(_notes("s5n_sa1")) == n0
+    assert len(_notes("s5n_obs")) == n0
 
 
 def test_operating_targets_other_year_is_reported_as_year_change(client, sa):
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=5000000))
     client.put("/api/settings/operating-targets", headers=sa, json=_targets(2027, revenue=5000000))
-    m = _notes("s5n_sa1")[-1]["message"]
+    m = _notes("s5n_obs")[-1]["message"]
     assert "目標年度" in m and "2026 年度" in m and "2027 年度" in m
 
 
@@ -179,7 +181,7 @@ def test_payment_terms_change_notifies_old_and_new_text(client, make_user, sa, l
     r = client.put("/api/settings/payment-terms", headers=sa, json={"text": "三期 50/30/20"})
     assert r.status_code == 200 and r.json() == {"ok": True}
     assert client.get("/api/settings/payment-terms", headers=sa).json() == {"text": "三期 50/30/20"}
-    m = _notes("s5n_sa1")[-1]["message"]
+    m = _notes("s5n_obs")[-1]["message"]
     assert "報價條款變更" in m and "預設付款條件" in m and "月結 30 天" in m and "三期 50/30/20" in m
     assert len(_notes("s5n_sales2")) == 2                          # 業務是指定角色
     assert line_calls == []
@@ -187,9 +189,9 @@ def test_payment_terms_change_notifies_old_and_new_text(client, make_user, sa, l
 
 def test_payment_terms_same_text_sends_nothing(client, sa):
     client.put("/api/settings/payment-terms", headers=sa, json={"text": "月結 30 天"})
-    n0 = len(_notes("s5n_sa1"))
+    n0 = len(_notes("s5n_obs"))
     client.put("/api/settings/payment-terms", headers=sa, json={"text": "月結 30 天"})
-    assert len(_notes("s5n_sa1")) == n0
+    assert len(_notes("s5n_obs")) == n0
 
 
 def test_payment_terms_non_superadmin_forbidden(client, make_user):
@@ -216,11 +218,11 @@ def test_quote_terms_presets_save_sends_one_merged_message(client, make_user, sa
     make_user(username="s5n_sales4", role="sales")
     first = {"presets": [_preset("純購料", "k1")], "defaultKey": "k1"}
     assert client.put("/api/settings/quote-terms-presets", headers=sa, json=first).status_code == 200
-    n0 = len(_notes("s5n_sa1"))
+    n0 = len(_notes("s5n_obs"))
     second = {"presets": [_preset("純購料", "k1", paymentTerms="貨到付款"), _preset("含施工", "k2")], "defaultKey": "k2"}
     r = client.put("/api/settings/quote-terms-presets", headers=sa, json=second)
     assert r.status_code == 200 and r.json()["defaultKey"] == "k2"      # 回傳形狀不變
-    notes = _notes("s5n_sa1")
+    notes = _notes("s5n_obs")
     assert len(notes) == n0 + 1                                    # 新增＋內容修改＋預設改變 ⇒ 一則
     m = notes[-1]["message"]
     assert "報價條款變更" in m and "含施工" in m and "純購料" in m
@@ -232,15 +234,15 @@ def test_quote_terms_presets_save_sends_one_merged_message(client, make_user, sa
 def test_quote_terms_presets_no_change_sends_nothing(client, sa):
     body = {"presets": [_preset("純購料", "k1")], "defaultKey": "k1"}
     client.put("/api/settings/quote-terms-presets", headers=sa, json=body)
-    n0 = len(_notes("s5n_sa1"))
+    n0 = len(_notes("s5n_obs"))
     client.put("/api/settings/quote-terms-presets", headers=sa, json=body)
-    assert len(_notes("s5n_sa1")) == n0
+    assert len(_notes("s5n_obs")) == n0
 
 
 def test_quote_terms_presets_validation_error_400_sends_nothing(client, sa):
     bad = {"presets": [_preset("")], "defaultKey": ""}
     assert client.put("/api/settings/quote-terms-presets", headers=sa, json=bad).status_code == 400
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
 
 
 # ═══ h10 審查（M-／L1–L3）：寫入前讀舊值失敗不能害儲存失敗；年度換了／配額內容調整的顯示；非有限數字 ═══════════════
@@ -252,7 +254,7 @@ def test_prewrite_read_failure_never_breaks_the_save_bonus_defaults(client, sa, 
         r = _bonus_put(client, sa, 2000, 6000, 2000, 2000)
     assert r.status_code == 200 and r.json() == {"ok": True}
     assert client.get("/api/bonus/cases/settings", headers=sa).json()["rate_bp"] == 2000     # 照存
-    assert _notes("s5n_sa1") == []                                                           # 不知道舊值 ⇒ 不發
+    assert _notes("s5n_obs") == []                                                           # 不知道舊值 ⇒ 不發
 
 
 def test_prewrite_read_failure_never_breaks_the_save_operating_targets(client, sa, monkeypatch):
@@ -264,7 +266,7 @@ def test_prewrite_read_failure_never_breaks_the_save_operating_targets(client, s
         r = client.put("/api/settings/operating-targets", headers=sa, json=_targets(2026, revenue=5000000))
     assert r.status_code == 200 and r.json() == {"ok": True}
     assert client.get("/api/settings/operating-targets", headers=sa).json()["annual"]["revenue"] == 5000000
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
     assert SY._get_setting is real
 
 
@@ -275,7 +277,7 @@ def test_prewrite_read_failure_never_breaks_the_save_payment_terms(client, sa, m
         r = client.put("/api/settings/payment-terms", headers=sa, json={"text": "月結 30 天"})
     assert r.status_code == 200 and r.json() == {"ok": True}
     assert client.get("/api/settings/payment-terms", headers=sa).json() == {"text": "月結 30 天"}
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
 
 
 def test_prewrite_read_failure_never_breaks_the_save_quote_terms_presets(client, sa, monkeypatch):
@@ -286,7 +288,7 @@ def test_prewrite_read_failure_never_breaks_the_save_quote_terms_presets(client,
         r = client.put("/api/settings/quote-terms-presets", headers=sa, json=body)
     assert r.status_code == 200 and r.json()["defaultKey"] == "k1"
     assert client.get("/api/settings/quote-terms-presets", headers=sa).json()["presets"][0]["name"] == "純購料"
-    assert _notes("s5n_sa1") == []
+    assert _notes("s5n_obs") == []
 
 
 def test_operating_targets_year_change_shows_old_year_real_headcount(client, sa):
@@ -296,7 +298,7 @@ def test_operating_targets_year_change_shows_old_year_real_headcount(client, sa)
     new = _targets(2027, revenue=1)
     new["salesperson"] = [{"name": "甲", "revenue": 1, "cases": 1}]
     client.put("/api/settings/operating-targets", headers=sa, json=new)
-    m = _notes("s5n_sa1")[-1]["message"]
+    m = _notes("s5n_obs")[-1]["message"]
     assert "業務員配額" in m and "2 位" in m and "1 位" in m and "0 位" not in m               # L1：舊年度實際人數，不是 0
 
 
@@ -306,7 +308,7 @@ def test_operating_targets_quota_edited_same_count_is_not_a_meaningless_line(cli
     client.put("/api/settings/operating-targets", headers=sa, json=body)
     body["salesperson"] = [{"name": "甲", "revenue": 200, "cases": 1}]
     client.put("/api/settings/operating-targets", headers=sa, json=body)
-    m = _notes("s5n_sa1")[-1]["message"]
+    m = _notes("s5n_obs")[-1]["message"]
     assert "業務員配額" in m and "內容已調整" in m                                            # L2：不是「1 位 → 1 位」
 
 
