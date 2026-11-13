@@ -31,7 +31,7 @@
  },
  "material_recognition": {
   "category": "財務",
-  "plain": "材料成本怎麼認列",
+  "plain": "誰能把採購單認列到材料卡片",
   "currentName": "材料卡片認列採購單"
  },
  "download_name": {
@@ -41,7 +41,7 @@
  },
  "project_margin": {
   "category": "財務",
-  "plain": "專案毛利率口徑",
+  "plain": "專案毛利偏低時提醒業務",
   "currentName": "專案毛利%"
  },
  "quote_approval": {
@@ -51,12 +51,12 @@
  },
  "finance_reports": {
   "category": "財務",
-  "plain": "財務報表選項",
+  "plain": "帳齡與未精算提醒",
   "currentName": "財務報表"
  },
  "finance_cashier": {
   "category": "財務",
-  "plain": "出納作業",
+  "plain": "出納頁與銀行對帳單",
   "currentName": "出納"
  },
  "case_close_gates": {
@@ -76,7 +76,7 @@
  },
  "completion_note": {
   "category": "業務",
-  "plain": "完工單",
+  "plain": "完工單怎麼從報價單帶入",
   "currentName": "完工單"
  },
  "builder_layout": {
@@ -131,7 +131,7 @@
  },
  "alerts": {
   "category": "業務",
-  "plain": "到期提醒",
+  "plain": "保固與確認檔到期提醒",
   "currentName": "到期預警"
  },
  "account_security": {
@@ -166,7 +166,7 @@
  },
  "quote_privacy": {
   "category": "業務",
-  "plain": "報價單的個資欄位",
+  "plain": "報價單的個人資料欄位（能不能隱藏）",
   "currentName": "報價單個人資料欄位"
  },
  "profit_warning": {
@@ -181,7 +181,7 @@
  },
  "profit_rules": {
   "category": "財務",
-  "plain": "利潤怎麼算",
+  "plain": "公益金怎麼抽",
   "currentName": "利潤口徑"
  },
  "list_view": {
@@ -206,7 +206,7 @@
  },
  "payslip_dispatch_picker": {
   "category": "財務",
-  "plain": "勞報單派發選單",
+  "plain": "勞報單「選派發」下拉一次載入幾筆",
   "currentName": "勞報單選派發下拉"
  },
  "legal_params_reminder": {
@@ -236,7 +236,7 @@
  },
  "overhead": {
   "category": "財務",
-  "plain": "管銷分攤比率",
+  "plain": "管銷怎麼分攤",
   "currentName": "管銷分攤比率"
  },
  "lodging_freshness": {

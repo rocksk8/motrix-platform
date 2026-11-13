@@ -41,12 +41,13 @@ for r in rows:
         heavy=heavy, others=gk in C.AFFECT_OTHERS, ext=C.NEEDS_EXTERNAL.get((gk, f["key"]), ""), cust=bool(it.get("cust")),
         dangerText=r["danger"], riskText=C.scrub(f.get("riskText") or ""),
         helpWhat=help_what, helpWhen=r["when"], helpImpact=impact, helpRec=rec_txt,
-        lockRule=(gk == "quote_alt" and f["key"] in ALT_LOCK)))
+        lockRule=(gk == "quote_alt" and f["key"] in ALT_LOCK),
+        roles=[x for x in ((f.get("impactScope") or {}).get("roles") or [])]))
 
 ids = {r["id"] for r in D_rows}
 dflt = {r["id"]: r["def"] for r in D_rows}
 FAKE = {
-    "quote_alt.show_unpicked_in_pdf": True, "quote_defaults.valid_days": 14, "profit_warning.quote_form_low": 15,
+    "quote_alt.show_unpicked_in_pdf": True, "quote_alt.lock_scope": 2, "quote_defaults.valid_days": 14, "profit_warning.quote_form_low": 15,
     "profit_warning.report_low": 12, "finance_cashier.receivable_grace_days": 3, "finance_reports.custom_aging": 1,
     "finance_reports.aging_day1": 15, "finance_reports.aging_day2": 30, "finance_reports.aging_day3": 60,
     "completion_note.over_qty": 1, "quote_backfill.auto_off_hours": 12, "overhead.default_pct": 30,
@@ -75,7 +76,19 @@ for p in PRESETS:
         assert f["min"] is None or v >= f["min"], (k, v)
         assert f["max"] is None or v <= f["max"], (k, v)
 
-DATA = dict(sections=secs, rows=D_rows, groups={k: v["label"] for k, v in g.items()}, fake=FAKE, fakeSrc=FAKE_SRC, fakePend=FAKE_PEND,
+SHELL_P = "D:/Claude-pm/h3-matrix/docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/shell_groups.json"
+shell_all = json.load(open(SHELL_P, encoding="utf-8"))
+order = []
+for r in D_rows:
+    if r["gk"] not in order:
+        order.append(r["gk"])
+shell = {k: shell_all[k] for k in order}
+for k, v in shell.items():
+    for t in (v["plain"], v["currentName"]):
+        for w in ("確認期間", "影子", "閘門", "true", "false"):
+            assert w not in t, (k, t)
+group_help = {k: C.scrub(g[k]["help"]) for k in order}
+DATA = dict(shell=shell, groupOrder=order, groupHelp=group_help, sections=secs, rows=D_rows, groups={k: v["label"] for k, v in g.items()}, fake=FAKE, fakeSrc=FAKE_SRC, fakePend=FAKE_PEND,
             ccDays=g["change_control"]["fields"][0]["default"], deps=DEPS,
             pairs=[[P + "quote_form_low", P + "quote_form_good"], [P + "report_low", P + "report_good"], [P + "case_floor", P + "case_good"]],
             chipKeys=["finance_cashier.bank_alias_date", "finance_cashier.bank_alias_amount", "finance_cashier.bank_alias_desc"],
@@ -84,6 +97,6 @@ DATA = dict(sections=secs, rows=D_rows, groups={k: v["label"] for k, v in g.item
 rd = lambda n: open(os.path.join(M, n), encoding="utf-8").read()
 html = rd("shell.html")
 html = html.replace("/*STYLE*/", rd("style.css")).replace("<!--PAGES-->", rd("pages.html")).replace("<!--OUTSIDE-->", rd("outside.html"))
-html = html.replace("/*DATA*/", json.dumps(DATA, ensure_ascii=False)).replace("/*APP*/", rd("app.js")).replace("/*PAGESJS*/", rd("pages.js"))
+html = html.replace("/*DATA*/", json.dumps(DATA, ensure_ascii=False)).replace("/*APP*/", rd("app_head.js") + chr(10) + rd("app_tail.js")).replace("/*PAGESJS*/", rd("pages.js"))
 open(OUT + "/index.html", "w", encoding="utf-8", newline="\n").write(html)
 print("index.html", len(html), "rows", len(D_rows), "elig", sum(1 for r in D_rows if r["elig"]))

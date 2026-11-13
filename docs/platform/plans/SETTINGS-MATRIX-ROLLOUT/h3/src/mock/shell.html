@@ -9,12 +9,19 @@
 </style>
 </head>
 <body>
+<header class="topbar">
+<div class="trow"><button class="btn sm menu" data-act="menu" aria-label="選單">☰</button><b class="ttl">設定中心（甲份 mockup）</b>
+<div class="searchw"><input type="search" id="gq" placeholder="搜尋所有設定：名稱、代碼、選項…" aria-label="全域搜尋設定"><div id="gres" class="gres hide"></div></div>
+<button class="gbtn" id="gPend" data-act="view" data-v="pending">待生效 <span class="n" id="nPend">0</span></button>
+<button class="gbtn" id="gRecent" data-act="view" data-v="recent">最近變更</button>
+<button class="gbtn on" id="gHome" data-act="view" data-v="home">總覽</button></div>
+<div id="savebar" class="gsave hide" role="status"><span>有 <b id="nDraft">0</b> 項<span id="draftNote"></span>修改<b class="un">尚未儲存</b>（你現在看到的是草稿，其他人還看不到）</span><span class="sp"></span><button class="btn" data-act="discard">放棄全部</button><button class="btn primary" data-act="openSave">儲存…</button></div>
+</header>
 <div class="wrap">
-<h1>設定改版 mockup：業務與財務規則（甲份）</h1>
-<p class="sub">分支 feat/settings-matrix-rollout ・ 設計階段，使用者看過才實作。設定中心 20 群組／76 欄、7 個獨立頁、7 個「設定中心以外」的項目。欄位名稱、選項、範圍、預設取自設定登錄表（settings_groups.json）；<b>目前值、來源、人名、日期都是假資料</b>。</p>
-<div class="banner">示範重點：①搜尋與篩選（「與預設不同」「影響大」…）　②勾選「可批次」的項目 → 套用建議值／套用預設組合／重設為預設 → 確認視窗 → 套用 → 「復原這一批」（版本檢查）　③改單一項目：一般項目直接生效；影響大的項目要填原因、要等 7 天才生效，放寬還要第二位最高管理者核准。　<button class="btn sm" data-act="demo-conflict">示範：套用後，別人改了同一群組</button></div>
+<p class="sub">分支 feat/settings-matrix-rollout ・ 設計階段（r3）。設定中心 20 群組／76 欄、7 個獨立頁、7 個「設定中心以外」的項目。名稱、選項、範圍、預設取自設定登錄表；<b>目前值、來源、人名、日期都是假資料</b>。</p>
+<div class="banner">示範路線：①左側分類 → 群組（或上方搜尋）→ 改值＝只放進草稿，上方出現固定儲存列　②勾選「可批次」的項目 → 套用建議值／預設組合／重設為預設（一樣只進草稿）→「儲存…」看確認視窗與通知預覽　③存完 8 秒內可「復原這一批」（逐欄位比對；任何一欄被別人改過就整批拒絕）　④改「影響大」的項目：只等待（等 7 天）或等待加核准（放寬方向）。　<button class="btn sm" data-act="demo-conflict">示範：套用後，別人改了其中一欄</button></div>
 <div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-t="t1" aria-selected="true">設定中心（20 群組／76 項）</button><button class="tab" role="tab" data-act="tab" data-t="t2" aria-selected="false">獨立頁面改版（7 頁）</button><button class="tab" role="tab" data-act="tab" data-t="t3" aria-selected="false">設定中心以外（7 項）</button></div>
-<div id="t1"></div>
+<div id="t1" class="layout"><nav id="nav" class="snav"></nav><main id="main" class="smain"></main></div>
 <div id="t2" class="hide">
 <!--PAGES-->
 </div>

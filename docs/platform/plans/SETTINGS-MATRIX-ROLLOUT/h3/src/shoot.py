@@ -1,86 +1,112 @@
 # -*- coding: utf-8 -*-
-import sys, os
+import sys, os, glob
 from playwright.sync_api import sync_playwright
 OUT = "D:/Claude-pm/h3-matrix/docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/h3"
 URL = "file:///" + OUT + "/index.html"
+for f in glob.glob(OUT + "/shots/*.png"):
+    os.remove(f)
 errs = []
+n = [0]
+def shot(pg, name, **kw):
+    n[0] += 1
+    pg.screenshot(path=OUT + "/shots/%02d-%s.png" % (n[0], name), **kw)
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(viewport={"width": 1280, "height": 900})
     pg.on("console", lambda m: errs.append(("console", m.type, m.text)) if m.type in ("error", "warning") else None)
     pg.on("pageerror", lambda e: errs.append(("pageerror", str(e))))
     pg.goto(URL)
-    pg.wait_for_selector(".subsec")
-    pg.screenshot(path=OUT + "/shots/01-settings-center.png", full_page=False)
-    # 與預設不同
+    pg.wait_for_selector(".stats")
+    shot(pg, "overview-home")
+    # 全域搜尋
+    pg.fill("#gq", "有效")
+    pg.wait_for_selector("#gres:not(.hide) button")
+    shot(pg, "global-search")
+    pg.fill("#gq", "")
+    # 群組頁＋與預設不同
+    pg.click("button.gi[data-g=finance_reports]")
+    pg.wait_for_selector("#s-f-reports")
     pg.click("button.chip[data-k=diff]")
     pg.wait_for_selector(".row.chg")
-    pg.screenshot(path=OUT + "/shots/02-filter-changed.png")
+    shot(pg, "group-filter-diff")
     pg.click("button.chip[data-k=all]")
-    # 利潤區：選兩列 → 批次列 → 套用建議值（確認視窗）
-    pg.select_option("#secsel", "profit")
+    # 利潤矩陣
+    pg.click("button.gi[data-g=profit_warning]")
     pg.wait_for_selector("#s-p-warning")
-    pg.screenshot(path=OUT + "/shots/03-profit-matrix.png")
-    pg.check("#s-p-warning input[data-act=selsub]")
+    shot(pg, "profit-matrix")
+    # 勾選整群 → 批次 → 草稿
+    pg.check("input[data-act=selgrp][data-g=profit_warning]")
     pg.wait_for_selector("#batch:not(.hide)")
     pg.click("#batch button[data-m=rec]")
+    pg.wait_for_selector("#savebar:not(.hide)")
+    shot(pg, "draft-savebar")
+    pg.click("#savebar button[data-act=openSave]")
     pg.wait_for_selector(".dlg")
-    pg.screenshot(path=OUT + "/shots/04-batch-confirm.png")
-    # 套用
-    ok = pg.locator("#okBtn")
-    if ok.is_disabled():
+    shot(pg, "save-confirm-notify")
+    pg.fill("#reason", "利潤要求統一調整")
+    if pg.locator("#opsOk").count():
         pg.check("#opsOk")
     pg.click("#okBtn")
-    pg.wait_for_selector("#toast:not(.hide)")
-    pg.screenshot(path=OUT + "/shots/05-batch-applied-undo.png")
-    # 衝突示範
+    pg.wait_for_selector("#undoBtn")
+    shot(pg, "saved-undo")
     pg.click("button[data-act=demo-conflict]")
     pg.wait_for_selector("#undoBtn")
     pg.click("#undoBtn")
     pg.wait_for_timeout(200)
-    pg.screenshot(path=OUT + "/shots/06-undo-refused.png")
-    # 鎖定矩陣 → 單項高風險確認
-    pg.select_option("#secsel", "quote")
+    shot(pg, "undo-refused-per-field")
+    # 鎖定矩陣：點選只進草稿；等待加核准
+    pg.click("button.gi[data-g=quote_alt]")
     pg.wait_for_selector("#s-q-alt-lock")
     pg.locator("#s-q-alt-lock").scroll_into_view_if_needed()
-    pg.screenshot(path=OUT + "/shots/07-lock-matrix.png")
+    shot(pg, "lock-matrix")
     pg.locator("#s-q-alt-lock button.cell:not([disabled]):not(.on)").first.click()
+    pg.wait_for_selector("#savebar:not(.hide)")
+    pg.click("#savebar button[data-act=openSave]")
     pg.wait_for_selector(".dlg")
-    pg.screenshot(path=OUT + "/shots/08-heavy-confirm.png")
+    shot(pg, "heavy-save-confirm")
     pg.fill("#reason", "客戶要求")
     pg.click("#okBtn")
     pg.wait_for_timeout(200)
-    # 財務：帳齡
-    pg.select_option("#secsel", "finance")
+    pg.click("button#gPend")
+    pg.wait_for_selector(".mx")
+    shot(pg, "pending-two-kinds")
+    # 帳齡
+    pg.click("button#gHome")
+    pg.click("button.gi[data-g=finance_reports]")
     pg.wait_for_selector("#s-f-reports")
     pg.locator("#s-f-reports").scroll_into_view_if_needed()
-    pg.screenshot(path=OUT + "/shots/09-finance-aging.png")
-    # "?" 說明
+    shot(pg, "finance-aging")
     pg.locator("#s-f-reports .q").first.click()
     pg.wait_for_selector(".help")
-    pg.screenshot(path=OUT + "/shots/10-help.png")
+    shot(pg, "help")
     pg.keyboard.press("Escape")
-    # 頁籤 2 / 3
+    # 頁籤 2：頁面草稿進同一條儲存列
     pg.click("button.tab[data-t=t2]"); pg.wait_for_selector("#pg-approval")
-    pg.screenshot(path=OUT + "/shots/11-pages-approval-remit.png", full_page=False)
     pg.locator("#pg-remit").scroll_into_view_if_needed()
     pg.locator("#pg-remit input[type=checkbox]").first.click()
-    pg.screenshot(path=OUT + "/shots/12-pages-remit.png")
+    shot(pg, "pages-remit-draft")
     pg.locator("#pg-legal").scroll_into_view_if_needed()
-    pg.screenshot(path=OUT + "/shots/13-pages-legal.png")
-    pg.click("button.tab[data-t=t3]"); pg.wait_for_selector("#ot-bonus")
-    pg.screenshot(path=OUT + "/shots/14-outside-center.png")
+    shot(pg, "pages-legal")
+    # 離開有草稿的頁籤要確認
+    pg.click("button.tab[data-t=t3]")
+    pg.wait_for_selector(".dlg")
+    shot(pg, "leave-confirm")
+    pg.click(".dlg button[data-act=leave]")
+    pg.wait_for_selector("#ot-bonus")
+    shot(pg, "outside-center")
     # 手機
     pg.set_viewport_size({"width": 390, "height": 800})
     pg.click("button.tab[data-t=t1]")
-    pg.select_option("#secsel", "finance")
+    pg.click("button.menu")
+    pg.wait_for_selector("#nav.open")
+    shot(pg, "phone-nav")
+    pg.click("button.gi[data-g=finance_cashier]")
     pg.wait_for_selector("#s-f-cashier")
     pg.locator("#s-f-cashier").scroll_into_view_if_needed()
-    pg.screenshot(path=OUT + "/shots/15-phone-cards.png")
+    shot(pg, "phone-cards")
     ov = pg.evaluate("document.documentElement.scrollWidth - window.innerWidth")
     print("horizontal overflow px (t1 phone):", ov)
     pg.click("button.tab[data-t=t2]")
-    ov2 = pg.evaluate("document.documentElement.scrollWidth - window.innerWidth")
-    print("horizontal overflow px (t2 phone):", ov2)
+    print("horizontal overflow px (t2 phone):", pg.evaluate("document.documentElement.scrollWidth - window.innerWidth"))
     b.close()
-print("errors:", errs)
+print("shots", n[0], "errors:", errs)

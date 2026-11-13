@@ -4,13 +4,22 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const R = {};
 D.rows.forEach(r => R[r.id] = r);
-const S = {gver: {}, gchg: {}, val: {}, ver: {}, pend: {}, src: {}, sel: new Set(), skip: {}, f: 'all', q: '', sec: 'all', advOpen: {}, hv: {}, last: null, toastT: null};
-D.rows.forEach(r => { S.gver[r.gk] = 1;
-  S.val[r.id] = (r.id in D.fake) ? D.fake[r.id] : r.def;
-  S.ver[r.id] = 1;
+/* r3：sv＝已儲存（生效中）的值；val＝畫面上的草稿值（點選只改 val，按「儲存」才寫入 sv） */
+const S = {sv: {}, val: {}, chg: {}, pend: {}, src: {}, sel: new Set(), skip: {}, batchIds: new Set(), pdraft: {}, log: [], seg: '全部', view: {k: 'home'}, flash: null, tab: 't1', f: 'all', q: '', sec: 'all', advOpen: {}, hv: {}, last: null, toastT: null};
+D.rows.forEach(r => {
+  S.sv[r.id] = (r.id in D.fake) ? D.fake[r.id] : r.def;
+  S.val[r.id] = JSON.parse(JSON.stringify(S.sv[r.id]));
   S.src[r.id] = D.fakeSrc[r.id] || null;
+  if (D.fakeSrc[r.id]) S.chg[r.id] = {by: D.fakeSrc[r.id].by, at: D.fakeSrc[r.id].at};
 });
 Object.keys(D.fakePend).forEach(id => S.pend[id] = D.fakePend[id]);
+S.log = [
+  {id: 'finance_reports.aging_day3', by: '王經理', at: '11/05 10:12', reason: '客戶付款習慣變慢', old: '90 天', neu: '60 天'},
+  {id: 'quote_defaults.valid_days', by: '李會計', at: '10/28 16:40', reason: '報價單有效期統一', old: '30 天', neu: '14 天'},
+  {id: 'profit_warning.quote_form_low', by: '王經理', at: '10/28 09:03', reason: '利潤要求提高', old: '12 %', neu: '15 %'},
+  {id: 'alerts.warranty_report_days', by: '李會計', at: '10/20 14:22', reason: '保固單提早提醒', old: '60 天', neu: '90 天'},
+  {id: 'quote_backfill.auto_off_hours', by: '王經理', at: '10/12 11:05', reason: '補開作業限時', old: '24 小時', neu: '12 小時'}
+].filter(e => e.id in R);
 const CC = D.ccDays;
 const TODAY = '11/13';
 function nowHM() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
@@ -86,9 +95,10 @@ function tags(r) {
 function srcBadge(r) {
   const p = S.pend[r.id], s = S.src[r.id];
   let h = '';
-  if (p) h = '<span class="pill pnd">等待生效</span>';
+  if (p) h = '<span class="pill pnd">' + (p.need2 ? '等待加核准' : '只等待') + '</span>';
   else if (s) h = '<span class="pill oth">公司</span> <span class="mute">' + esc(s.by) + '・' + esc(s.at) + '</span>';
   else h = '<span class="pill adv">預設</span>';
+  if (!same(S.val[r.id], S.sv[r.id])) h += ' <span class="pill draft">未儲存</span>';
   if (isDiff(r)) h += '<div class="dot">● 與預設不同（預設：' + esc(vt(r, r.def)) + '）</div>';
   return '<div class="src">' + h + '</div>';
 }
@@ -118,7 +128,8 @@ function ctl(r) {
   }
   if (off) h += '<div class="note">' + off + '，目前不會生效</div>';
   const p = S.pend[r.id];
-  if (p) h += '<div class="pendline">待生效：' + esc(vt(r, p.val)) + '（' + esc(p.eff) + ' 生效' + (p.need2 ? '；等第二位最高管理者核准' : '') + '）<button class="btn sm" data-act="cancelpend" data-id="' + r.id + '">取消待生效</button></div>';
+  if (p) h += '<div class="pendline">' + (p.need2 ? '<b>等待加核准</b>：' : '<b>只等待</b>：') + '之後改成 ' + esc(vt(r, p.val)) + '；' + esc(p.eff) + ' 期滿' + (p.need2 ? '，且第二位最高管理者核准後才生效' : '自動生效，不需要別人核准') + '。<button class="btn sm" data-act="cancelpend" data-id="' + r.id + '">撤銷申請</button></div>';
+  else if (!same(S.val[r.id], S.sv[r.id])) { const k = pendKind(r, S.sv[r.id], S.val[r.id]); if (k !== 'now') h += '<div class="pendline">儲存後：' + KIND_TXT[k] + '</div>'; }
   return h;
 }
 function checkbox(r) {
@@ -128,7 +139,7 @@ function checkbox(r) {
 }
 function rowHtml(r) {
   const off = depOff(r);
-  return '<div class="row' + (isDiff(r) ? ' chg' : '') + (S.pend[r.id] ? ' pnd' : '') + (off ? ' off' : '') + (S.sel.has(r.id) ? ' sel' : '') + '" data-row="' + r.id + '">'
+  return '<div class="row' + (same(S.val[r.id], S.sv[r.id]) ? '' : ' drf') + (isDiff(r) ? ' chg' : '') + (S.pend[r.id] ? ' pnd' : '') + (off ? ' off' : '') + (S.sel.has(r.id) ? ' sel' : '') + '" data-row="' + r.id + '">'
     + '<div>' + checkbox(r) + '</div>'
     + '<div><div class="nm">' + esc(r.name) + ' <button class="q" data-act="help" data-id="' + r.id + '" aria-label="說明">?</button>' + tags(r) + '</div><div class="k">' + r.id + '</div><div class="ds">' + esc(r.desc) + '</div></div>'
     + '<div>' + ctl(r) + '</div>'
@@ -236,200 +247,3 @@ function sectionBody(code, rows) {
   if (code === 'c-note') h += notePreview();
   return h;
 }
-function render() {
-  const keepY = window.scrollY;
-  let h = '';
-  const all = D.rows;
-  const visCount = all.filter(matchRow).length;
-  h += '<div class="sum"><div class="card"><b>' + all.length + '</b><span class="mute">本頁設定項目</span></div><div class="card"><b>' + all.filter(isDiff).length + '</b><span class="mute">與預設不同</span></div><div class="card"><b>' + Object.keys(S.pend).length + '</b><span class="mute">等待生效</span></div><div class="card"><b>' + all.filter(r => r.elig).length + '</b><span class="mute">可批次（其餘永遠逐項）</span></div></div>';
-  h += '<div class="card toolbar"><input type="search" id="q" placeholder="搜尋：名稱、代碼、說明、選項…" value="' + esc(S.q) + '" aria-label="搜尋">';
-  [['all', '全部'], ['diff', '與預設不同'], ['heavy', '影響大'], ['oth', '影響別人'], ['ext', '需外部設定'], ['adv', '進階'], ['batch', '可批次'], ['pend', '等待生效']].forEach(([k, l]) => h += '<button class="chip" aria-pressed="' + (S.f === k) + '" data-act="filter" data-k="' + k + '">' + l + '</button>');
-  h += '<select id="secsel" aria-label="分區"><option value="all">全部分區</option>' + D.sections.map(s => '<option value="' + s.code + '"' + (S.sec === s.code ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select><span class="mute">符合 ' + visCount + ' 項</span></div>';
-  D.sections.forEach(sec => {
-    let sh = '';
-    sec.subs.forEach(sub => {
-      const rows = all.filter(r => r.sec === sub.code && matchRow(r));
-      if (!rows.length) return;
-      const elig = rows.filter(r => r.elig), allSel = elig.length && elig.every(r => S.sel.has(r.id));
-      sh += '<section class="card subsec" id="s-' + sub.code + '"><div class="subh"><input type="checkbox" data-act="selsub" data-sec="' + sub.code + '"' + (allSel ? ' checked' : '') + (elig.length ? '' : ' disabled title="這一區沒有可批次的項目"') + ' aria-label="選取本區可批次項目"><h3>' + esc(sub.label) + '</h3><span class="mute">' + esc(sub.desc) + '</span>'+ (rows.some(r => r.heavy) ? '<button class="pill heavy" data-act="hvtoggle" data-sec="' + sub.code + '" aria-expanded="' + !!S.hv[sub.code] + '">內含高風險項目 ' + (S.hv[sub.code] ? '▴' : '▾') + '</button>' : '') + '<span class="cnt">' + rows.length + ' 項・' + elig.length + ' 項可批次</span></div>' + (S.hv[sub.code] ? '<div class="banner2">高風險項目：' + rows.filter(r => r.heavy).map(r => esc(r.name)).join('、') + '。這些永遠逐項設定，不進批次。</div>' : '') + sectionBody(sub.code, rows) + '</section>';
-    });
-    if (sh) h += '<div class="topsec">' + esc(sec.label) + '</div>' + sh;
-  });
-  if (!visCount) h += '<div class="card panelnote">沒有符合的項目。清除搜尋或改選「全部」。</div>';
-  $('#t1').innerHTML = h;
-  renderBatch();
-  window.scrollTo(0, keepY);
-  const q = $('#q'); if (q && document.activeElement === document.body && S._focusQ) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
-}
-function renderBatch() {
-  const n = S.sel.size, b = $('#batch');
-  if (!n) { b.classList.add('hide'); return; }
-  b.classList.remove('hide');
-  b.innerHTML = '<b>已選 ' + n + ' 項</b><span style="opacity:.7;font-size:12px">（批次只做三件事，不繞過等待期與核准）</span>'
-    + '<button class="btn" data-act="batch" data-m="rec">套用建議值</button><button class="btn" data-act="presetpick">套用預設組合</button><button class="btn" data-act="batch" data-m="def">重設為預設</button><button class="btn" data-act="selclear">取消選取</button>';
-    + '<button class="btn" data-act="batch" data-m="rec">套用建議值</button><button class="btn" data-act="batch" data-m="def">重設為預設值</button><button class="btn" data-act="selclear">取消選取</button>';
-}
-
-/* ---------- 對話框／吐司 ---------- */
-function closeDlg() { const o = $('#ov'); o.classList.add('hide'); o.innerHTML = ''; }
-function openDlg(html) { const o = $('#ov'); o.innerHTML = '<div class="dlg" role="dialog" aria-modal="true">' + html + '</div>'; o.classList.remove('hide'); const f = $('#ov button.primary') || $('#ov textarea'); if (f) f.focus(); }
-function toast(msg, undoFn, undoLabel, kind) {
-  const t = $('#toast'); clearTimeout(S.toastT);
-  t.innerHTML = msg + (undoFn ? ' <button class="btn sm" id="undoBtn">' + (undoLabel || '復原') + '</button><i class="tm"></i>' : '');
-  t.classList.remove('hide');
-  if (undoFn) $('#undoBtn').onclick = () => { clearTimeout(S.toastT); t.classList.add('hide'); undoFn(); };
-  S.toastT = setTimeout(() => t.classList.add('hide'), undoFn ? 6000 : 3500);
-}
-function showHelp(id) {
-  const r = R[id];
-  openDlg('<div class="help"><h3>' + esc(r.name) + '</h3><div class="k">' + id + '</div><h4>這是什麼</h4><p>' + esc(r.helpWhat) + '</p>' + (r.helpWhen ? '<h4>什麼時候要改</h4><p>' + esc(r.helpWhen) + '</p>' : '') + '<h4>改了會影響什麼</h4><p>' + esc(r.helpImpact) + '</p><h4>建議值</h4><p>' + esc(r.helpRec) + '</p><div class="mute" style="margin-top:8px">說明由設定登錄表的 question／help／impact／riskText／recommended 產生；「什麼時候要改」＝新增的 SettingDef.when（沒填就不顯示這一段）。</div></div><div class="acts"><button class="btn primary" data-act="closedlg">關閉</button></div>');
-}
-
-/* ---------- 變更 ---------- */
-function applyVal(id, v, by) {
-  S.val[id] = v; S.ver[id]++; S.gver[R[id].gk]++; S.gchg[R[id].gk] = {by: by || '你（王經理）', at: TODAY + ' ' + nowHM(), key: R[id].name}; S.src[id] = isDiff(R[id]) ? {by: by || '你（王經理）', at: TODAY} : null;
-}
-function requestChange(id, v) {
-  const r = R[id], old = S.val[id];
-  if (same(v, old)) return render();
-  const bad = validate(r, v);
-  if (bad) { toast('<span>「' + esc(r.name) + '」：' + esc(bad) + '，沒有儲存</span>'); return render(); }
-  const toPend = r.rp || isLoosen(r, old, v);
-  if (toPend || heavyRisk(r)) {
-    const sentence = '你即將把「' + esc(r.name) + '」從「' + esc(vt(r, old)) + '」改成「' + esc(vt(r, v)) + '」，' + (toPend ? '<b>要等 ' + CC + ' 天才生效</b>' + (isLoosen(r, old, v) ? '，且這是放寬方向，<b>須第二位最高管理者核准</b>' : '') : '<b>立即生效</b>') + '。';
-    openDlg('<h3>確認變更</h3><p>' + sentence + '</p>' + (r.riskText ? '<div class="hl red">' + esc(r.riskText) + '</div>' : '') + '<p class="mute">高風險設定沒有「復原」：要等的變更，等待期間可隨時「取消待生效」。</p><label>變更原因（必填）<textarea id="reason" placeholder="例：客戶要求…"></textarea></label><div class="acts"><button class="btn" data-act="closedlg">取消</button><button class="btn primary" id="okBtn" disabled data-act="okone" data-id="' + id + '" data-v="' + encodeURIComponent(JSON.stringify(v)) + '" data-pend="' + (toPend ? 1 : 0) + '" data-need2="' + (isLoosen(r, old, v) ? 1 : 0) + '">送出</button></div>');
-    return;
-  }
-  applyVal(id, v);
-  render();
-  toast('<span>已更新「' + esc(r.name) + '」→ ' + esc(vt(r, v)) + '（要還原請到「變更紀錄」）</span>');
-}
-function openBatchDialog(title, changes, skipped, label) {
-  // changes: [{id, to}]
-  const rows = changes.map(c => {
-    const r = R[c.id], old = S.val[c.id];
-    const pend = r.rp || isLoosen(r, old, c.to);
-    return {r, old, to: c.to, same: same(old, c.to), pend, bad: validate(r, c.to)};
-  });
-  const todo = rows.filter(x => !x.same && !x.bad), unchanged = rows.filter(x => x.same), bads = rows.filter(x => x.bad);
-  const nOps = todo.filter(x => x.r.confirm && !x.pend).length, nPend = todo.filter(x => x.pend).length;
-  const sk = Object.keys(skipped || {});
-  let h = '<h3>' + esc(title) + '</h3><p>將變更 <b>' + todo.length + '</b> 項；已經是目標值 ' + unchanged.length + ' 項（不動）' + (bads.length ? '；<b>' + bads.length + ' 項不合格，整批不會送出</b>' : '') + '。</p>';
-  if (sk.length) { const g = {}; sk.forEach(i => (g[skipped[i]] = g[skipped[i]] || []).push(R[i].name)); h += '<div class="hl">已略過 ' + sk.length + ' 項：' + Object.keys(g).map(k => esc(k) + '（' + g[k].length + ' 項）').join('；') + '。這些要逐項設定。</div>'; }
-  if (nPend) h += '<div class="hl">其中 ' + nPend + ' 項是放寬方向或需要等待：<b>不會立即生效</b>，會依原規則進入等待（' + CC + ' 天，放寬須第二位最高管理者核准）。批次不會繞過變更管制。</div>';
-  h += '<table><thead><tr><th>項目</th><th>現在</th><th>之後</th><th></th></tr></thead><tbody>' + todo.map(x => '<tr><td>' + esc(x.r.name) + '</td><td>' + esc(vt(x.r, x.old)) + '</td><td>' + esc(vt(x.r, x.to)) + '</td><td>' + (x.pend ? '<span class="pill pnd">等待生效</span>' : x.r.confirm ? '<span class="pill ext">營運</span>' : '') + '</td></tr>').join('') + '</tbody></table>';
-  bads.forEach(x => h += '<div class="err">' + esc(x.r.name) + '：' + esc(x.bad) + '</div>');
-  if (nOps) h += '<label class="hl" style="display:block"><input type="checkbox" id="opsOk"> 我確認要改這 ' + nOps + ' 項營運設定（會影響日常作業的畫面或提醒）</label>';
-  h += '<label>變更原因<input type="text" id="reason" style="width:100%" value="批次調整（' + todo.length + ' 項）"></label><div class="acts"><button class="btn" data-act="closedlg">取消</button><button class="btn primary" id="okBtn" data-act="okbatch"' + (todo.length && !bads.length && !nOps ? '' : ' disabled') + '>套用 ' + todo.length + ' 項</button></div>';
-  S._pendingBatch = todo.map(x => ({id: x.r.id, to: x.to, pend: x.pend}));
-  S._needOps = nOps;
-  openDlg(h);
-}
-function startBatch(mode) {
-  const changes = [];
-  S.sel.forEach(id => { const r = R[id]; if (mode === 'rec') { if (r.rec !== undefined && r.rec !== null) changes.push({id, to: r.rec}); } else changes.push({id, to: r.def}); });
-  if (mode === 'rec') { const none = Array.from(S.sel).filter(id => R[id].rec === undefined || R[id].rec === null); none.forEach(id => S.skip[id] = '沒有建議值'); }
-  openBatchDialog(mode === 'rec' ? '批次：套用建議值' : '批次：重設為預設值', changes, S.skip);
-}
-function doBatch() {
-  const items = S._pendingBatch, reason = ($('#reason') || {}).value || '批次調整';
-  const rec = [], gs = {};
-  items.forEach(it => {
-    const r = R[it.id];
-    if (it.pend) { S.pend[it.id] = {val: it.to, eff: '11/20', need2: isLoosen(r, S.val[it.id], it.to), by: '你'}; rec.push({id: it.id, pend: true}); }
-    else { const before = S.val[it.id], bsrc = S.src[it.id]; applyVal(it.id, it.to); rec.push({id: it.id, before, bsrc}); gs[r.gk] = 1; }
-  });
-  // 記下「套用後」各群組的版本號：復原時若版本變了＝別人改過
-  const gv = {}; Object.keys(gs).forEach(g => gv[g] = S.gver[g]);
-  closeDlg(); S.sel.clear(); S.skip = {};
-  S.last = {rec, gv};
-  render();
-  const nApplied = rec.filter(x => !x.pend).length, nP = rec.length - nApplied;
-  toast('<span>已套用 ' + nApplied + ' 項' + (nP ? '，另 ' + nP + ' 項進入等待生效' : '') + '（原因：' + esc(reason) + '）</span>', undoBatch, '復原這一批');
-}
-function undoBatch() {
-  const L = S.last; if (!L) return;
-  const bad = Object.keys(L.gv).filter(g => S.gver[g] !== L.gv[g]);
-  if (bad.length) {
-    const c = S.gchg[bad[0]] || {by: '另一位管理者', at: TODAY, key: ''};
-    toast('<span>無法復原這一批：' + bad.map(g => esc(D.groups[g])).join('、') + '的設定在你套用之後被 ' + esc(c.by) + ' 於 ' + esc(c.at) + ' 改過' + (c.key ? '（' + esc(c.key) + '）' : '') + '，為了不蓋掉別人的修改，系統拒絕整批復原。</span>');
-    return;
-  }
-  L.rec.forEach(x => { if (x.pend) delete S.pend[x.id]; else { S.val[x.id] = x.before; S.ver[x.id]++; S.src[x.id] = x.bsrc; S.gver[R[x.id].gk]++; } });
-  const n = L.rec.length; S.last = null; render(); toast('<span>已復原這一批（' + n + ' 項）</span>');
-}
-function simulateConflict() {
-  if (!S.last) { toast('<span>先做一次批次（選幾項 → 套用建議值），再按這個示範</span>'); return; }
-  const g = Object.keys(S.last.gv)[0]; if (!g) return;
-  S.gver[g]++; S.gchg[g] = {by: '李會計', at: TODAY + ' 15:42', key: ''};
-  toast('<span>已模擬：李會計在 15:42 改了「' + esc(D.groups[g]) + '」。現在按「復原這一批」會被拒絕。</span>', undoBatch, '復原這一批');
-}
-
-/* ---------- 事件 ---------- */
-document.addEventListener('click', e => {
-  const t = e.target.closest('[data-act]'); if (!t) return;
-  const a = t.dataset.act, id = t.dataset.id;
-  if (a === 'filter') { S.f = t.dataset.k; render(); }
-  else if (a === 'help') showHelp(id);
-  else if (a === 'closedlg') closeDlg();
-  else if (a === 'toggle') requestChange(id, !S.val[id]);
-  else if (a === 'reset') requestChange(id, R[id].def);
-  else if (a === 'lockpick') requestChange(id, Number(t.dataset.v));
-  else if (a === 'hvtoggle') { S.hv[t.dataset.sec] = !S.hv[t.dataset.sec]; render(); }
-  else if (a === 'advtoggle') { S.advOpen[t.dataset.sec] = !S.advOpen[t.dataset.sec]; render(); }
-  else if (a === 'cancelpend') { delete S.pend[id]; render(); toast('<span>已取消待生效：' + esc(R[id].name) + '</span>'); }
-  else if (a === 'ins') { const ta = $('textarea[data-chg="' + id + '"]'); ta.value += t.dataset.tok; requestChange(id, ta.value); }
-  else if (a === 'selclear') { S.sel.clear(); S.skip = {}; render(); }
-  else if (a === 'batch') startBatch(t.dataset.m);
-  else if (a === 'okbatch') doBatch();
-  else if (a === 'presetpick') {
-    const all = D.profitPresets.map((p, i) => ({lbl: '利潤提醒色帶：' + p.name, act: 'preset', i})).concat(D.agingPresets.map((p, i) => ({lbl: '帳齡分界：' + p.name, act: 'agingpreset', i})));
-    openDlg('<h3>套用預設組合</h3><p class="mute">預設組合是登錄表 presets 的內容（目前 0 個，下列為本份提案）。套用前會先確認。</p>' + all.map(x => '<div style="margin:4px 0"><button class="btn" data-act="' + x.act + '" data-i="' + x.i + '">' + esc(x.lbl) + '</button></div>').join('') + '<div class="acts"><button class="btn" data-act="closedlg">取消</button></div>');
-  }
-  else if (a === 'preset') { const p = D.profitPresets[Number(t.dataset.i)]; openBatchDialog('預設組合：' + p.name, Object.keys(p.v).map(k => ({id: k, to: p.v[k]})), {}); }
-  else if (a === 'agingpreset') { const p = D.agingPresets[Number(t.dataset.i)]; openBatchDialog('預設組合：帳齡 ' + p.name, Object.keys(p.v).map(k => ({id: k, to: p.v[k]})), {}); }
-  else if (a === 'okone') {
-    const v = JSON.parse(decodeURIComponent(t.dataset.v)), r = R[id], reason = $('#reason').value.trim();
-    if (!reason) return;
-    closeDlg();
-    if (t.dataset.pend === '1') { S.pend[id] = {val: v, eff: '11/20', need2: t.dataset.need2 === '1', by: '你'}; render(); toast('<span>已送出：「' + esc(r.name) + '」要等 ' + CC + ' 天才生效</span>'); }
-    else { applyVal(id, v); render(); toast('<span>已變更「' + esc(r.name) + '」</span>'); }
-  }
-  else if (a === 'sel') { t.checked ? S.sel.add(id) : S.sel.delete(id); render(); }
-  else if (a === 'selpair') { t.dataset.ids.split(',').forEach(i => t.checked ? S.sel.add(i) : S.sel.delete(i)); render(); }
-  else if (a === 'selsub') {
-    const rows = D.rows.filter(r => r.sec === t.dataset.sec && matchRow(r));
-    rows.forEach(r => { if (r.elig) { t.checked ? S.sel.add(r.id) : S.sel.delete(r.id); } else if (t.checked) S.skip[r.id] = r.why; else delete S.skip[r.id]; });
-    render();
-  }
-  else if (a === 'tab') showTab(t.dataset.t);
-  else if (a === 'demo-conflict') simulateConflict();
-});
-document.addEventListener('change', e => {
-  const t = e.target;
-  if (t.id === 'secsel') { S.sec = t.value; render(); return; }
-  const id = t.dataset && t.dataset.chg; if (!id) return;
-  const r = R[id];
-  let v;
-  if (t.type === 'radio') v = Number(t.value);
-  else if (t.type === 'number') v = t.value === '' ? NaN : Number(t.value);
-  else if (t.tagName === 'SELECT') v = Number(t.value);
-  else v = t.value;
-  requestChange(id, v);
-});
-document.addEventListener('input', e => {
-  const t = e.target;
-  if (t.id === 'q') { S.q = t.value; S._focusQ = true; render(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
-  if (t.id === 'reason') { const b = $('#okBtn'); if (b && b.dataset.act === 'okone') b.disabled = !t.value.trim(); }
-  if (t.id === 'opsOk') { const b = $('#okBtn'); b.disabled = !t.checked || !S._pendingBatch.length; }
-});
-document.addEventListener('change', e => { if (e.target.id === 'opsOk') { $('#okBtn').disabled = !e.target.checked; } });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#ov').classList.contains('hide')) closeDlg(); });
-function showTab(t) {
-  $$('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.t === t));
-  ['t1', 't2', 't3'].forEach(x => $('#' + x).classList.toggle('hide', x !== t));
-  try { sessionStorage.setItem('mx-tab', t); } catch (e) {}
-}
-render();
-let _t = 't1'; try { _t = sessionStorage.getItem('mx-tab') || 't1'; } catch (e) {}
-showTab(_t);
