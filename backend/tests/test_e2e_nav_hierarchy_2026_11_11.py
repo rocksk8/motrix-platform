@@ -202,6 +202,7 @@ def test_b6_page_header_crumb_is_filled_from_the_menu_declaration(live_server, m
     crumb = page.locator(".pg__crumb")
     crumb.wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => document.querySelector('.pg__crumb [data-crumb-grp]')", timeout=10000)
+    crumb.wait_for(state="visible", timeout=15000)                           # 同上：等放行（visible）再讀文字
     assert crumb.inner_text().replace("\n", "").replace(" ", "") == "客戶與業務›客戶管理", crumb.inner_text()
     assert page.locator("h1").count() == 1 and page.locator("h1").inner_text().strip() == "客戶管理"
     # 有麵包屑的頁面：頂部黑列不再重複印頁名
@@ -209,4 +210,5 @@ def test_b6_page_header_crumb_is_filled_from_the_menu_declaration(live_server, m
     # 設備三頁已併入採購與庫存：麵包屑跟著宣告走，頁面檔裡沒有寫死舊群組名
     page.goto(live_server + "/pages/warranty.html")
     page.wait_for_function("() => document.querySelector('.pg__crumb [data-crumb-grp]')", timeout=15000)
+    page.locator(".pg__crumb").wait_for(state="visible", timeout=15000)       # 頁面在 auth/me 放行前是 html{visibility:hidden}：群組節點在 DOM 裡不代表看得到，inner_text 在隱藏時是空字串
     assert page.locator(".pg__crumb").inner_text().replace("\n", "").replace(" ", "") == "採購與庫存›保固追蹤"
