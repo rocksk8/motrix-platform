@@ -15,7 +15,9 @@ def _set(item_id, status="已核准", received_on="2026-10-03", doc=None, receiv
     try:
         cn.execute("UPDATE case_material_approvals SET status=?, doc_code=?, received_on=? WHERE quote_no=? AND item_id=?", (status, doc or "MO-" + item_id, received_on, NO, item_id))
         if received_qty is not None:
-            cn.execute("ALTER TABLE case_material_approvals ADD COLUMN received_qty REAL")
+            # 欄位現在由 case 自己的 migration 0012 建（一條龍 P2b）；舊環境／舊版 schema 沒有才補，避免 duplicate column name
+            if "received_qty" not in {r[1] for r in cn.execute("PRAGMA table_info(case_material_approvals)")}:
+                cn.execute("ALTER TABLE case_material_approvals ADD COLUMN received_qty REAL")
             cn.execute("UPDATE case_material_approvals SET received_qty=? WHERE quote_no=? AND item_id=?", (received_qty, NO, item_id))
         cn.commit()
     finally:

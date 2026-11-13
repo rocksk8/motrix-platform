@@ -34,11 +34,16 @@ def test_group_registered_with_every_field_default_on(client):
     import helpers.settings_groups  # noqa: F401
     fields = list(SR._g("onepipe")["fields"])
     assert {"links", "ship_install_ok", "timeline", "worklog_case", "warranty_closed_notify", "entry_unify"} <= set(fields)
+    from helpers import startup
+    not_default_on = set(startup._ONEPIPE_PERMISSION_FLAGS) | set(startup._ONEPIPE_NOT_FLAGS)     # 放寬權限類旗標（預設關）與不是開關的選項（0／1 是選擇）
     for f in fields:
+        if f in not_default_on:
+            assert SR.get("onepipe", f) == 0, f                          # 這類欄位預設就是 0，不隨「一條龍上線就開啟」
+            continue
         assert SR.get("onepipe", f) == 1, f
         assert SR._g("onepipe")["fields"][f].recommended == 1, f
     from helpers.onepipe_flags import flag_on
-    assert all(flag_on(f) for f in fields)
+    assert all(flag_on(f) for f in fields if f not in not_default_on)
     assert not flag_on("nope"), "沒登錄的欄位＝讀不到＝當關（fail-closed）"
 
 
@@ -106,10 +111,10 @@ def test_front_end_entries_are_gated_by_the_flag():
     cm = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     assert re.search(r'data-testid="op-open-bar"[^>]*', cm) and 'x-show="onepipe.links && selected"' in cm
     core = (FRONTEND / "js" / "case-management-core.js").read_text(encoding="utf-8")
-    assert "onepipe: { links: false, timeline: false, entryUnify: false }" in core
+    assert "onepipe: { links: false, timeline: false, entryUnify: false, receiveWizard: false, shipDeviceWarranty: false }" in core
     wy = source_tree.page_file("warranty.html").read_text(encoding="utf-8")
     assert "op: { links: false }" in wy and 'x-if="!(op.links' in wy
     pr = source_tree.page_file("payment-request.html").read_text(encoding="utf-8")
     assert "(await window.MotrixOnepipe.flags()).links" in pr
     js = (FRONTEND / "static" / "onepipe.js").read_text(encoding="utf-8")
-    assert "{ links: false, timeline: false, entryUnify: false }" in js and "groups=onepipe" in js
+    assert "{ links: false, timeline: false, entryUnify: false, receiveWizard: false, shipDeviceWarranty: false }" in js and "groups=onepipe" in js

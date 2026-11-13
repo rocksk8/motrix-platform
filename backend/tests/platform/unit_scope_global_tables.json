@@ -117,6 +117,7 @@
   "schema_version": "系統層：版本、設定、介面定義與設定異動紀錄，全站共用",
   "seq_by_entity": "U0a 單位功能自己的表：以 unit_id／entity_id 為鍵，不是業務資料，不加 owner_unit_id",
   "sessions": "帳號／登入／使用者偏好與活動紀錄，以使用者為鍵；使用者的單位歸屬在 user_units",
+  "stock_item_events": "子表：序號異動紀錄，隨母列 stock_items 的單位（stock_item_id／序號對得到母列；只追加、不單獨查詢）",
   "switch_categories": "產品目錄／情境參照資料，全公司共用，不分單位",
   "switch_fit": "產品目錄／情境參照資料，全公司共用，不分單位",
   "switch_products": "產品目錄／情境參照資料，全公司共用，不分單位",

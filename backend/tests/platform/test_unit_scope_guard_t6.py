@@ -15,7 +15,8 @@ from core import migrations as M
 
 DECL = Path(__file__).with_name("unit_scope_global_tables.json")
 #: 宣告筆數上限——只准往下改（U0b／U1／U3 補欄位後刪掉宣告、同步調低）。調高＝新增例外，審查必須逐筆看理由。
-SHRINK_CEILING = 139
+# 140 = 139 + 1（一條龍 P2a 2026-11-14：`stock_item_events` 序號異動紀錄是 `stock_items`（已有 owner_unit_id）的子表，宣告「隨母列的單位」；與 bonus_*_lines 等子表同型，org_units U0a 守門也歸 CHILD_TABLES）
+SHRINK_CEILING = 140
 MIN_REASON_LEN = 8
 OWNER_COL = "owner_unit_id"
 U0A_NEW_TABLES = ("org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity")
