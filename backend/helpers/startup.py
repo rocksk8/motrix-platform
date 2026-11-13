@@ -777,6 +777,9 @@ def _cleanup_sessions() -> None:
 
 #: T84 一次性遷移的標記（`system_settings` 的 key）：有這一列＝這個庫處理過了，之後使用者自己關掉的旗標要保留，不再改。
 _ONEPIPE_DEFAULT_ON_MARK = "migration_onepipe_default_on_t84"
+#: 使用者裁示（2026-11-14）：放寬權限類的一條龍旗標（買方可見、收貨權限…）預設關，**不被這個一次性遷移打開**——
+#: 即使欄位存成 0、也沒有人為關閉的明細。要開由最高管理者在設定中心自己開。新增這類旗標時請加進來。
+_ONEPIPE_PERMISSION_FLAGS = ("buyer_access", "receive_permission")
 
 
 def enable_onepipe_defaults_once() -> None:
@@ -787,6 +790,7 @@ def enable_onepipe_defaults_once() -> None:
     不丟例外：發布失敗（例如該群組有送審中的版本）⇒ 不記標記、下次啟動再試，服務照常起來。
     **人為關閉的保留**：設定變更明細（`config_changes`，domain＝`setting:onepipe`）裡該欄位只要有過任何一筆「新值＝0」的紀錄，
     就視為有人在設定中心明確關掉過 ⇒ 跳過不動（記在標記的 `kept_off`）；沒有紀錄的 0（舊版直接寫入、或從沒存過明細）才當成「舊預設」開啟。
+    **權限類旗標不動**：`_ONEPIPE_PERMISSION_FLAGS`（放寬權限、預設關）一律跳過（記在標記的 `excluded`），不論存值與明細。
     只改群組裡的旗標值，不碰別的鍵（例：保固通知的靜默基準 `onepipe.warranty_closed_baseline` 照舊）。"""
     conn = None
     try:
@@ -803,7 +807,7 @@ def enable_onepipe_defaults_once() -> None:
         row = _D.get(conn, _sr.KIND, group, _sr.SCOPE)
         vals = ((row or {}).get("body") or {}).get("values") if row else None
         fields = set(_sr._g(group)["fields"])
-        zero, kept_off = {}, []
+        zero, kept_off, excluded = {}, [], []
         if isinstance(vals, dict):
             # 曾被人明確關掉（變更明細有 new＝0）的欄位不動。讀不到明細 ⇒ 例外 ⇒ 不記標記、下次再試（寧可不遷移也不誤開人為關閉的項目）。
             deliberately_off = set()
@@ -816,7 +820,9 @@ def enable_onepipe_defaults_once() -> None:
                     continue
             for k, v in vals.items():
                 if k in fields and isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0:
-                    if k in deliberately_off:
+                    if k in _ONEPIPE_PERMISSION_FLAGS:
+                        excluded.append(k)
+                    elif k in deliberately_off:
                         kept_off.append(k)
                     else:
                         zero[k] = 1
@@ -828,7 +834,7 @@ def enable_onepipe_defaults_once() -> None:
         conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
                      "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
                      (_ONEPIPE_DEFAULT_ON_MARK,
-                      json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "result": result, "fields": sorted(zero), "kept_off": sorted(kept_off)}, ensure_ascii=False),
+                      json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "result": result, "fields": sorted(zero), "kept_off": sorted(kept_off), "excluded": sorted(excluded)}, ensure_ascii=False),
                       datetime.now().isoformat()))
         conn.commit()
     except Exception:  # noqa: BLE001
