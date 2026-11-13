@@ -5,12 +5,18 @@
 - `PUT  /api/mail-types/{key}/recipients`：{mode: default|superadmin_only|custom, users: [...], roles: [...],
   mailOff?: bool（信件關閉，MAIL-CAL 階段 1）, confirm?: bool（關閉簽核／系統類要帶 true）}
 - `GET  /api/mail-types/receivable?user_id=`：某位使用者**收得到**哪些類型（使用者管理頁的個人退訂清單用）
+- `GET／PUT /api/mail-types/mine`：**本人入口**（設定改版 S6；「我的帳號 → 通知」分頁）：本人看／改自己的 Email 通知退訂清單；
+  管理員代設仍走 `PUT /api/users/{id}` 的 `notification_muted`（不變）。
 
 個人退訂（`users.notification_muted`）只能移除自己收得到的類型；受限的類型不會出現在可勾選的清單裡，
 也沒有任何設定能把自己加進去（加人只能由最高管理者在本頁設定）。
 """
+import hashlib
+import json
+
 from fastapi import APIRouter, Body, Header, HTTPException
 
+from core.txn import begin_write
 from db import get_db
 from helpers import _require_user, _audit, _tok
 from helpers import mail_types as mt
@@ -235,3 +241,123 @@ def list_receivable(user_id: int, authorization: str = Header(None)):
               "receivable": receivable(t, o, u["username"], u["role"])}
              for t in sorted(mt.all_types(), key=lambda t: (order.index(t.category), t.name))]
     return {"items": items}
+
+
+# ── 本人入口：「我的帳號 → 通知」分頁（設定改版 S6；使用者裁示：本人可自己改，管理員仍可代設）──────────────────────────
+# 資料還是同一欄 `users.notification_muted`（退訂清單：空＝全收，新增的信件類型不會悄悄被關掉）；本人與管理員代設共用同一套檢查：
+#   · 只能動「自己收得到」的類型（`receivable`）；清單裡別的退訂（例如管理員代設、目前收不到）原樣保留。
+#   · 退訂簽核類／系統技術類 ⇒ 要 `confirm=true`（畫面會先跳確認視窗；非業務類不能用批次，逐項確認）。
+#   · 最後一位收得到系統技術類信件的最高管理者不能退訂（`last_superadmin_blockers`，與管理員代設同一個檢查）。
+#   · `expect`（目前版本）不符 ⇒ 409：管理員剛好代設過，不蓋掉別人的修改。
+#   · `preview=true` ⇒ 驗證但不寫入（確認視窗用）。
+def _mine_muted(raw):
+    try:
+        v = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:                                                  # noqa: BLE001 — 壞值當空清單
+        return []
+    return [k for k in (v or []) if isinstance(k, str)]
+
+
+def _mine_version(muted):
+    return hashlib.sha1(json.dumps(sorted(set(muted)), ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+
+
+def _mine_row(conn, user_id):
+    return conn.execute("SELECT id, username, role, email, notification_muted FROM users WHERE id=?", (user_id,)).fetchone()
+
+
+def _mine_items(me, muted):
+    o = _overrides()
+    order = list(mt.CATEGORIES)
+    mset = set(muted)
+    items = []
+    for t in sorted(mt.all_types(), key=lambda t: (order.index(t.category), t.name)):
+        if not receivable(t, o, me["username"], me["role"]):
+            continue                                                   # 寄不到我的類型不列（也沒辦法把自己加進去）
+        items.append({"key": t.key, "name": t.name, "category": t.category, "categoryLabel": mt.CATEGORIES[t.category],
+                      "receive": t.key not in mset, "lowRisk": t.category == "business",
+                      "event": t.event, "impact": t.impact, "action": t.action,
+                      "managedElsewhere": mt.MANAGED_ELSEWHERE.get(t.key, "")})
+    return items
+
+
+@router.get("/api/mail-types/mine")
+def my_mail_prefs(authorization: str = Header(None)):
+    """本人的 Email 通知清單：只列「寄得到我」的類型，`receive`＝目前有收；`version` 給 PUT 的 `expect` 用。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        me = _mine_row(conn, user["id"])
+    finally:
+        conn.close()
+    if me is None:
+        raise HTTPException(404, "使用者不存在")
+    muted = _mine_muted(me["notification_muted"])
+    return {"items": _mine_items(me, muted), "hasEmail": _has_email(me["email"]), "version": _mine_version(muted),
+            "categories": mt.CATEGORIES}
+
+
+@router.put("/api/mail-types/mine")
+def set_my_mail_prefs(body: dict = Body(...), authorization: str = Header(None)):
+    """本人改自己的通知。body：`{changes: {類型代碼: true(要收)|false(不收)}, expect?: 版本, confirm?: bool, preview?: bool}`。
+    回 `{ok, preview, changed:[{key,name,receive,lowRisk}], unchanged:[key], risky:[名稱], version}`；沒有實質變動 ⇒ 不寫入、不留稽核。"""
+    user = _require_user(authorization)
+    body = body or {}
+    changes = body.get("changes")
+    if not isinstance(changes, dict) or not changes:
+        raise HTTPException(400, "沒有要儲存的修改。")
+    if any(not isinstance(k, str) or not isinstance(v, bool) for k, v in changes.items()):
+        raise HTTPException(400, "changes 的格式是 {類型代碼: true|false}。")
+    preview = body.get("preview") is True
+    known = {t.key: t for t in mt.all_types()}
+    conn = get_db()
+    done = None
+    try:
+        begin_write(conn)
+        me = _mine_row(conn, user["id"])
+        if me is None:
+            raise HTTPException(404, "使用者不存在")
+        muted = _mine_muted(me["notification_muted"])
+        if body.get("expect") is not None and body.get("expect") != _mine_version(muted):
+            raise HTTPException(409, "你的通知設定在你開啟這頁之後被改過（可能是管理員代為設定），請重新整理再改。")
+        unknown = [k for k in changes if k not in known]
+        if unknown:
+            raise HTTPException(400, "不認得的通知類型：%s" % "、".join(unknown))
+        o = _overrides()
+        not_mine = [known[k].name for k in changes if not receivable(known[k], o, me["username"], me["role"])]
+        if not_mine:
+            raise HTTPException(400, "下列通知不會寄給你，不需要設定：%s" % "、".join(not_mine))
+        new_muted = [k for k in muted if not (k in changes and changes[k] is True)]
+        for k, v in changes.items():
+            if v is False and k not in new_muted:
+                new_muted.append(k)
+        changed = [k for k in changes if (k in muted) != (k in new_muted)]
+        view = {"ok": True, "preview": preview, "unchanged": [k for k in changes if k not in changed], "version": _mine_version(muted),
+                "changed": [{"key": k, "name": known[k].name, "receive": changes[k], "lowRisk": known[k].category == "business"} for k in changed],
+                "risky": [known[k].name for k in changed if changes[k] is False and known[k].category != "business"]}
+        if changed:
+            blocked = last_superadmin_blockers(conn, me["id"], new_muted)
+            if blocked:
+                raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何最高管理者收得到"
+                                         "（至少要有一位；最後一位不能退訂）：%s" % "、".join(blocked))
+            if view["risky"] and not preview and body.get("confirm") is not True:
+                raise HTTPException(409, "不收「%s」（簽核／系統技術類）後，相關提醒或告警你會收不到、可能因此漏掉；確認請帶 confirm=true 再送一次"
+                                    % "、".join(view["risky"]))
+        if preview or not changed:
+            conn.rollback()
+            return view
+        conn.execute("UPDATE users SET notification_muted=? WHERE id=?", (json.dumps(new_muted, ensure_ascii=False), me["id"]))
+        conn.commit()
+        view["version"] = _mine_version(new_muted)
+        done = {"by": "self", "turned_off": [known[k].name for k in changed if changes[k] is False],
+                "turned_on": [known[k].name for k in changed if changes[k] is True],
+                "keys_off": [k for k in changed if changes[k] is False], "keys_on": [k for k in changed if changes[k] is True],
+                "muted_before": len(muted), "muted_after": len(new_muted)}
+    except BaseException:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "user.notification_prefs.self", "user", user["username"], "我的 Email 通知偏好（本人修改）", done)
+    return view

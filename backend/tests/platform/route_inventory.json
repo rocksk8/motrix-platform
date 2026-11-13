@@ -1368,6 +1368,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/mail-types/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/mail-types/receivable": {
    "w": false,
    "pp": 0,
@@ -4461,6 +4466,11 @@
   "PUT /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/mail-types/mine": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/mail-types/{key}/recipients": {
