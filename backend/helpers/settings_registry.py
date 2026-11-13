@@ -874,6 +874,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             if began:
                 c.rollback()
             return result
+        _items = [i for i in _items if i]           # setting_item 失敗會回 None：先濾掉；沒有任何有效項目 ⇒ 不刪帳本的簡短通知（否則誰都沒被通知）
         if _items:                                  # 設定中心的通知（commit 後發）取代帳本對高風險變更的簡短通知（同一件事不發兩則）：同交易內刪掉剛寫的那幾列
             c.execute("DELETE FROM notifications WHERE id>? AND type='config_change' AND ref_label LIKE 'setting:%'", (_notice_mark,))
         c.commit()
@@ -890,7 +891,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
 
 
 def materialize_due(conn=None, now=None):
-    """把已到時的待生效值寫進定義版本並標 activated（每日工作呼叫；漏跑也不影響效力——讀取時本來就套用到時的待生效值）。回處理的明細列數。"""
+    """把已到時的待生效值寫進定義版本並標 activated（每日工作呼叫；漏跑也不影響效力——讀取時本來就套用到時的待生效值）。回處理的明細列數。
+    通知只在**本函式自己 commit 之後**發（自己開連線，或 `begin_write` 由本函式開了交易）；呼叫端傳入的連線已在自己的交易裡（`began` 為 False、由呼叫端稍後 commit）⇒ **不發通知**
+    （commit 之前發會通知到還沒落盤的變更；呼叫端要通知請在自己 commit 之後 `settings_notify.emit()`）。每日工作走自己的連線，不受影響。"""
     from datetime import datetime
     from core.txn import begin_write
     from helpers import config_ledger as L

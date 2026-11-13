@@ -12,6 +12,8 @@ commit **之後**呼叫 `emit()`；收件人解析、合併成一則、LINE（�
   ③ 一則合併：同一次伺服器呼叫內的多個項目（多欄、多群組）＝一則；跨呼叫（預設組／批次端點／每日到期生效）用 `with batch():` 收攏，離開時才發（含例外：已 commit 的變更照樣通知）。
   ④ 收件人（`_recipients`）：全部在職最高管理者（含操作者本人）＋項目 `roles` 片語對得上的角色（`_ROLE_USERS`）＋項目 `recipients` 明列的帳號。
      **支援的只有這三種**；角色片語以外的收件人（簽核人、受影響同仁的主管、單據的申請人…）**目前不支援**：片語不在 `_ROLE_USERS` ⇒ 忽略，並在 `preview_recipients()` 的 `ignoredRoles` 列出（畫面據此誠實顯示「另有 X 不在通知對象內」）。
+  ⑧ **隱私（h11 M1，PM 裁示）**：security／money／legal 風險或 sensitive 群組的項目，**只有最高管理者收件人**看得到舊值、新值與原因；其他收件人只收到
+     「某某設定已變更（狀態），由誰於何時操作」。原因（自由文字）一律只給最高管理者。操作者本人不收站內通知（他自己知道；LINE 不變）。
   ⑤ LINE：任一項目 risk 屬 security／money／legal（含呼叫端指定 `risk`）⇒ 另發 LINE `settings_changed` 給最高管理者（LINE-only 事件、預設全關由管理者勾選）；LINE 內容不放原因（自由文字）與數值，只放名稱與選項（`email_notify._line_event` 的內容守則）。
   ⑥ 站內通知超過 8 行 ⇒ 最後一行寫「完整明細：變更紀錄」，通知連結指到設定中心的「版本與變更紀錄」頁籤（單一群組時帶群組）。
   ⑦ 復原：`batch(verb="復原", header="已復原到第 N 版")` 把一次復原（單群組或多群組）發成**一則**「復原了…」，不是每群組一則。
@@ -28,7 +30,8 @@ LINK = "settings-center.html"
 LINE_RISKS = ("security", "money", "legal")
 _RISK_ORDER = ("none", "ops", "money", "legal", "security")
 _MAX_LINES = 8
-_MAX_MSG = 900
+_MAX_MSG = 1500
+_MAX_LINE = 130          # 每行條列的長度上限（8 行 ≈ 1060 字，留空間給摘要行與原因；原因先被截，不會切掉「完整明細」那一行）
 
 #: 項目種類（kind）⇒ 通知標題的前綴。不在表內的種類一律用「設定變更」。新頁接上時在這裡加一行即可。
 KIND_LABELS = {"setting": "設定變更", "permission": "權限變更", "mail": "信件設定變更", "line": "LINE 通知設定變更", "approval_flow": "簽核流程變更",
@@ -48,15 +51,17 @@ def _clip(s, n=40):
 # ── 項目 ────────────────────────────────────────────────────────────────
 
 def make_item(kind, label, old, new, phase="updated", *, actor="", reason="", effective_at="", approvals=0, required=0,
-              risk="none", roles=(), recipients=(), plain=False, ref="", link=""):
+              risk="none", roles=(), recipients=(), plain=False, ref="", link="", sensitive=False):
     """通用項目（所有頁共用）。`label`＝這一項是什麼（例：「報價送審門檻／單項毛利率送審門檻」「王經理的權限：案件管理」）；`old`／`new`＝**已是白話**的值文字。
     `phase`：updated｜pending｜pending_approval｜approved｜activated｜cancelled。`roles`＝受影響的角色片語（見 `_ROLE_USERS`）；`recipients`＝額外明列的帳號。
-    `plain`＝值本身是白話選項（LINE 才可以帶；數字、文字、金額不帶）。`ref`＝分組鍵（通知的 ref_id，同一則裡全部相同才寫入，否則 `batch`）。`link`＝點通知要開的頁面（同站檔名＋選填查詢字串）。"""
+    `plain`＝值本身是白話選項（LINE 才可以帶；數字、文字、金額不帶）。`ref`＝分組鍵（通知的 ref_id，同一則裡全部相同才寫入，否則 `batch`）。`link`＝點通知要開的頁面（同站檔名＋選填查詢字串）。
+    `sensitive`＝這項屬於敏感設定（例如 sensitive 設定群組）；與 risk 屬 security／money／legal 一樣，**非最高管理者收件人不會看到值與原因**（見不變式 ⑧）。"""
     return {"kind": kind if kind in KIND_LABELS else "setting", "label": _clip(label, 80), "oldText": _clip(old), "newText": _clip(new), "plain": bool(plain),
             "phase": phase, "actor": actor or "", "reason": (reason or "").strip(), "effectiveAt": effective_at or "",
             "approvals": int(approvals or 0), "required": int(required or 0),
             "risk": risk if risk in _RISK_ORDER else "none", "roles": [str(r) for r in (roles or ())],
-            "recipients": [str(u) for u in (recipients or ()) if u], "ref": ref or "", "link": link or "", "verb": ""}
+            "recipients": [str(u) for u in (recipients or ()) if u], "ref": ref or "", "link": link or "", "verb": "", "sensitive": sensitive is True,
+            "at": datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
 def setting_item(group, field, old, new, phase, *, actor="", reason="", effective_at="", approvals=0, required=0):
@@ -69,7 +74,7 @@ def setting_item(group, field, old, new, phase, *, actor="", reason="", effectiv
             return None
         return make_item("setting", "%s／%s" % (g["label"], f.label or field), sr.show_value(f, old), sr.show_value(f, new), phase,
                          actor=actor, reason=reason, effective_at=effective_at, approvals=approvals, required=required, risk=f.risk,
-                         roles=(f.impact_scope or {}).get("roles") or (), plain=bool(f.choices) or f.type == "bool", ref=group)
+                         roles=(f.impact_scope or {}).get("roles") or (), plain=bool(f.choices) or f.type == "bool", ref=group, sensitive=g.get("sensitive") is True)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("settings_notify.setting_item 失敗：%s", exc)
         return None
@@ -89,13 +94,13 @@ def setting_item_from_ledger(row, phase, *, actor="", reason="", approvals=0, re
 
 
 def notify_change(kind, label, old, new, *, actor="", reason="", risk="none", roles=(), recipients=(), plain=False, ref="", link="",
-                  phase="updated", effective_at="", approvals=0, required=0):
+                  phase="updated", effective_at="", approvals=0, required=0, sensitive=False):
     """給設定中心以外的頁面（權限、信件、LINE、簽核流程、獎金預設、營運目標、報價條款…）：commit 之後一行呼叫。永不丟例外。
     高敏感權限變更（`kind="permission"`、`risk="security"`）⇒ 站內通知最高管理者＋受影響角色／帳號，並發 LINE 給最高管理者。
     一次操作有很多項目 ⇒ 外面包一層 `with batch():`，只發一則。"""
     try:
         emit([make_item(kind, label, old, new, phase, actor=actor, reason=reason, effective_at=effective_at, approvals=approvals, required=required,
-                        risk=risk, roles=roles, recipients=recipients, plain=plain, ref=ref, link=link)])
+                        risk=risk, roles=roles, recipients=recipients, plain=plain, ref=ref, link=link, sensitive=sensitive)])
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("settings_notify.notify_change 失敗：%s", exc)
 
@@ -174,7 +179,14 @@ def _who(names, it):
     return names.get(it["actor"]) or it["actor"] or "系統"
 
 
-def _sentence(it, names):
+def _hidden(it):
+    """非最高管理者看不到值與原因的項目（不變式 ⑧）。"""
+    return it["risk"] in LINE_RISKS or it["sensitive"]
+
+
+def _sentence(it, names, full=True):
+    if not full and _hidden(it):
+        return "「%s」設定已變更（%s），由%s於 %s 操作" % (it["label"], _status(it), _who(names, it), it["at"])
     base = "「%s」" % it["label"]
     chg = "%s → %s" % (it["oldText"], it["newText"])
     a = _who(names, it)
@@ -202,31 +214,34 @@ def _link_for(items):
     return next(iter(links)) if len(links) == 1 else LINK
 
 
-def compose(items, names=None, header=""):
-    """⇒ (ref_label, message)。單一項目一句話；多項目＝一行摘要＋逐項條列（最多 8 行；超過 ⇒ 最後一行「完整明細：變更紀錄」）；原因（去重後最多兩個）接在最後。"""
+def compose(items, names=None, header="", full=True):
+    """⇒ (ref_label, message)。單一項目一句話；多項目＝一行摘要＋逐項條列（最多 8 行；超過 ⇒ 最後一行「完整明細：變更紀錄」）；原因（去重後最多兩個）接在最後。
+    `full=False`（非最高管理者收件人）：security／money／legal／sensitive 的項目不含值，**所有原因都不附**（不變式 ⑧）。"""
     names = names or {}
     prefix = _title_prefix(items)
     if len(items) == 1:
         label = "%s：%s" % (prefix, items[0]["label"])
-        body = _sentence(items[0], names)
+        body = _sentence(items[0], names, full)[:300]
         if header:
             body = header + "。" + body
     else:
         label = "%s（%d 項）" % (prefix, len(items))
-        lines = ["• " + _sentence(i, names) for i in items[:_MAX_LINES]]
+        lines = ["• " + _sentence(i, names, full)[:_MAX_LINE] for i in items[:_MAX_LINES]]
         if len(items) > _MAX_LINES:
             lines.append("…另 %d 項。完整明細：變更紀錄（點此開啟）" % (len(items) - _MAX_LINES))
         body = (header + "，" if header else "") + "共 %d 項變更：\n%s" % (len(items), "\n".join(lines))
-    reasons = list(dict.fromkeys(i["reason"] for i in items if i["reason"]))[:2]
+    reasons = list(dict.fromkeys(i["reason"] for i in items if i["reason"]))[:2] if full else []
     if reasons:
-        body += "\n原因：" + "；".join(_clip(r, 80) for r in reasons)
+        tail = "\n原因：" + "；".join(_clip(r, 80) for r in reasons)
+        body += tail[:max(0, _MAX_MSG - len(body))]             # 原因先被截；摘要與「完整明細」行不會被它擠掉
     return label, body[:_MAX_MSG]
 
 
 # ── 收件人（發送與預覽共用）──────────────────────────────────────────────
 
 def _recipients(conn, items):
-    """⇒ (最高管理者帳號清單, {帳號: [項目…]}, 被忽略的角色片語清單)。最高管理者拿全部；其他人只拿對得上的項目（角色片語或明列帳號）。"""
+    """⇒ (全部在職最高管理者帳號清單〔LINE 用〕, {帳號: [項目…]}〔站內通知；已排除「操作者本人看自己的操作」，空的不列〕, 被忽略的角色片語清單)。
+    最高管理者拿全部；其他人只拿對得上的項目（角色片語或明列帳號）。"""
     sa = [r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id").fetchall()]
     active = None
     per = {u: list(items) for u in sa}
@@ -253,15 +268,19 @@ def _recipients(conn, items):
         for u in dict.fromkeys(users):
             if u not in sa:
                 per.setdefault(u, []).append(it)
+    for u in list(per):                                         # 操作者本人不收自己操作的站內通知（他自己知道；PM 裁示 2026-11-13）
+        per[u] = [i for i in per[u] if i["actor"] != u]
+        if not per[u]:
+            del per[u]
     return sa, per, ignored
 
 
 def preview_recipients(items, conn=None):
     """收件人預覽（dry-run，**不寫入、不發送**）：確認視窗顯示「誰會收到」。`items`＝`make_item`／`setting_item` 組出的假想項目（`phase` 用變更之後會是的狀態）。
-    ⇒ `{"superadmins": [顯示名稱], "others": [{"username", "display", "count"}], "ignoredRoles": [不支援的片語], "line": {"willSend": bool, "reason": 說明}}`。
+    ⇒ `{"superadmins": [顯示名稱], "others": [{"username", "display", "count"}], "ignoredRoles": [不支援的片語], "redactedForOthers": bool, "line": {"willSend": bool, "reason": 說明}}`。
     `line.willSend`＝有高風險項目、而且 LINE 啟用且 `settings_changed` 事件已勾選。永不丟例外（出錯 ⇒ 空名單）。"""
     items = [i for i in (items or []) if i]
-    out = {"superadmins": [], "others": [], "ignoredRoles": [], "line": {"willSend": False, "reason": "沒有高風險項目，不發 LINE"}}
+    out = {"superadmins": [], "others": [], "ignoredRoles": [], "redactedForOthers": False, "line": {"willSend": False, "reason": "沒有高風險項目，不發 LINE"}}
     if not items:
         return out
     own = conn is None
@@ -274,8 +293,9 @@ def preview_recipients(items, conn=None):
         finally:
             if own:
                 c.close()
-        out["superadmins"] = [names.get(u, u) for u in sa]
+        out["superadmins"] = [names.get(u, u) for u in sa if u in per]         # 操作者本人不收站內通知 ⇒ 不列
         out["others"] = [{"username": u, "display": names.get(u, u), "count": len(v)} for u, v in per.items() if u not in sa]
+        out["redactedForOthers"] = any(_hidden(i) for u, v in per.items() if u not in sa for i in v)   # 一般收件人只看到「已變更」，不含值與原因
         out["ignoredRoles"] = ignored
         if any(i["risk"] in LINE_RISKS for i in items):
             try:
@@ -303,9 +323,12 @@ def _send(items, verb="", header=""):
         sa, per, _ignored = _recipients(conn, items)
         names = {r[0]: (r[1] or r[0]) for r in conn.execute("SELECT username, display_name FROM users").fetchall()}
         for user, its in per.items():
-            label, msg = compose(its, names, header)
-            refs = {i["ref"] for i in its}
-            audit._notify_in_txn(conn, user, NOTIF_TYPE, next(iter(refs)) if len(refs) == 1 and next(iter(refs)) else "batch", label, msg, _link_for(its))
+            try:                                                # 每個收件人各自隔離失敗：一人寫入失敗不影響其他人（SQLite 語句失敗不會讓交易作廢）
+                label, msg = compose(its, names, header, full=user in sa)
+                refs = {i["ref"] for i in its}
+                audit._notify_in_txn(conn, user, NOTIF_TYPE, next(iter(refs)) if len(refs) == 1 and next(iter(refs)) else "batch", label, msg, _link_for(its))
+            except Exception as exc:                            # noqa: BLE001
+                logger.warning("settings_notify：寫入 %s 的站內通知失敗（其他人照發）：%s", user, exc)
         conn.commit()
     finally:
         conn.close()

@@ -169,7 +169,7 @@ _BATCH_MAX_GROUPS = 40
 def save_batch(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     """**跨群組一次儲存**（畫面「儲存」一次改了好幾個群組時用）：body `{"groups": {群組: {"values": {欄位: 值}}}, "reason": "...", "preview": false}`。
     ① 全部群組先驗證（`plan()`；任何一組不合法 ⇒ 整批 400、一組都不寫）② 之後逐群組 publish（每組各自一個交易；**不是跨群組原子**——極少見的中途失敗會回 409，
-    `applied` 列出已寫入的群組、`failed` 是失敗的那組，已寫入的仍照常通知）③ **整批只發一則通知**（伺服器端單一 `batch()`，呼叫端不必自己合併）。
+    `applied` 列出已寫入的群組、`failed` 是失敗的那組、`notApplied` 是失敗之後沒試過的群組，已寫入的仍照常通知）③ **整批只發一則通知**（伺服器端單一 `batch()`，呼叫端不必自己合併）。
     `preview:true` ⇒ 只回各群組的 `plan()`（含 `recipients` 收件人預覽）與合併後的 `recipients`，不寫入。"""
     actor = _require_user(authorization, require_superadmin=True)
     groups = body.get("groups")
@@ -207,8 +207,10 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
             try:
                 results[g] = sr.publish(g, v, note=reason, user=actor["username"], reason=reason, ip=client_ip(request), actor=actor)
             except Exception as e:                             # noqa: BLE001
-                raise HTTPException(409, {"message": "有群組沒有存成功：%s（%s）。已寫入的群組仍然有效，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
-                                          "applied": applied, "failed": g})
+                rest = list(values_by)
+                rest = rest[rest.index(g) + 1:]                # 失敗那組之後根本沒試過：回 notApplied，畫面才能分「失敗」與「未處理」
+                raise HTTPException(409, {"message": "有群組沒有存成功：%s（%s）。已寫入的群組仍然有效，其餘群組未處理，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
+                                          "applied": applied, "failed": g, "notApplied": rest})
             applied.append(g)
     return {"ok": True, "groups": {g: {**results[g], "classification": plans[g]["fields"]} for g in applied}}
 
