@@ -26838,7 +26838,10 @@
      "frontend/index.html",
      "frontend/pages/approval-queue.html"
     ]
-   }
+   },
+   "unresolved_api": [
+    "/api/new-endpoint"
+   ]
   },
   "backend/tests/test_approval_reassign_history_2026_09_14.py": {
    "kind": "api",

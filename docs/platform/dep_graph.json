@@ -24490,6 +24490,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/hint-popover.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
