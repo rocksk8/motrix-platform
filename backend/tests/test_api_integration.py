@@ -501,12 +501,18 @@ def test_company_profile_put_refuses_non_superadmin_with_settings_module(client,
         f"{r.text[:200]}"
     )
 
-    # 📌 讀取**仍然**要通（SA4：匯款帳號印在寄給客戶的請款單上，它不是秘密）。
-    # ⚠️ 少了這一行，一個「把整個端點關掉」的實作會讓上面那個斷言綠，
-    #    而一般使用者的請款單頁面會整個壞掉。
+    # 📌 公司資料的讀取**仍然**要通（SA4 的原意：不可以把寫入關緊時順手把整個讀取也關掉，
+    #    否則一般使用者的請款單頁面整個壞掉）。
+    # 🔑 2026-11-13 使用者裁示：**完整版**（匯款帳號、電話、地址…）預設只給最高管理者 ⇒ 非最高管理者讀完整版是 403，
+    #    頁面要用的名稱／統編／聯絡方式／據點名稱走 `/api/settings/company-profile/public`（任何登入者）。
+    #    ⇒ 這裡的斷言從「完整版 200」改成「完整版 403＋公開子集 200」，防的還是同一件事：讀取不能被整個關掉。
     r = client.get("/api/settings/company-profile", headers=_auth(token))
+    assert r.status_code == 403, (
+        f"完整公司資料沒有預設只限最高管理者（{r.status_code}）：{r.text[:200]}"
+    )
+    r = client.get("/api/settings/company-profile/public", headers=_auth(token))
     assert r.status_code == 200, (
-        f"把寫入關緊的同時把讀取也關掉了（{r.status_code}）：{r.text[:200]}"
+        f"把寫入關緊的同時把讀取也關掉了（公開子集 {r.status_code}）：{r.text[:200]}"
     )
 
 

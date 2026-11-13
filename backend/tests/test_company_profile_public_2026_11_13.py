@@ -6,8 +6,9 @@
 單據列印在伺服器端組（pdf_gen／company_identity），不經這個端點。
 
 第一步（不改權限、不洩漏新東西）：新增 `/api/settings/company-profile/public`（白名單），五個呼叫者改打它。
-第二步（預設關＝行為不變）：設定中心「登入與密碼」的 `company_profile_full_read_superadmin_only`＝1 時，
-完整端點對非最高管理者回 403。A 裁（讀取登入即可）仍是預設；要不要打開由使用者決定。
+第二步：設定中心「登入與密碼」的 `company_profile_full_read_superadmin_only`＝1 時，完整端點對非最高管理者回 403。
+原本預設 0（A 裁：讀取登入即可）；**2026-11-13 使用者裁示改預設 1**（全新安裝、沒存過值也只有最高管理者讀得到完整版；
+開關保留，1→0 屬放寬，須第二位最高管理者核准）。
 """
 import json
 import re
@@ -52,17 +53,6 @@ def seeded(client, roles):
     r = client.put("/api/settings/company-profile", headers=roles["superadmin"], json=body)
     assert r.status_code == 200, r.text
     return body
-
-
-def _set_switch(value):
-    import db
-    from helpers import settings_registry as SR
-    c = db.get_db()
-    try:
-        SR.publish(GROUP, {FIELD: value}, user="cp_sa", reason="test", conn=c)
-        SR.invalidate()
-    finally:
-        c.close()
 
 
 def _all_text(obj):
@@ -120,41 +110,51 @@ def test_public_legacy_install_without_locations_gets_the_migrated_head_office(c
     assert d["locations"] == [{"id": "loc_1", "name": "總公司"}] and d["name"] == "舊公司" and "某地址" not in _all_text(d)
 
 
-# ── 完整端點：預設（開關關）行為不變 ───────────────────────────────────────
-
-@pytest.mark.parametrize("role", ["superadmin", "admin", "viewer", "engineer", "finance", "sales"])
-def test_full_endpoint_default_is_unchanged_every_logged_in_role_still_reads_it(client, roles, seeded, role):
-    """預設關 ⇒ 與今天逐位元相同（A 裁：讀取登入即可）；SA4 的回歸守門仍成立。"""
-    r = client.get("/api/settings/company-profile", headers=roles[role])
-    assert r.status_code == 200, r.text
-    d = r.json()
-    assert d["bank_account_number"] == SECRET_ACCOUNT and d["tax_id"] == "04595257" and d["address"]
-    assert d["google_maps_api_key"].startswith("•") and "AIza" not in _all_text(d)     # 金鑰照舊遮蔽
-
-
-def test_switch_default_is_off_and_registered_as_a_tightening_setting():
-    from helpers import settings_groups  # noqa: F401
-    from helpers import settings_registry as SR
-    f = SR.field_defs(GROUP)[FIELD]
-    assert f.default == 0 and (f.min, f.max) == (0, 1) and f.loosen == "down" and f.risk == "security"
-    assert SR.get(GROUP, FIELD) == 0
-
-
-# ── 完整端點：開關開了以後 ─────────────────────────────────────────────────
+# ── 完整端點：預設（全新安裝、沒存過開關值）＝只有最高管理者 ─────────────────────
 
 @pytest.mark.parametrize("role", ["admin", "viewer", "engineer", "finance", "sales"])
-def test_switch_on_non_superadmin_is_refused_on_the_full_endpoint(client, roles, seeded, role):
-    _set_switch(1)
+def test_fresh_install_non_superadmin_is_refused_on_the_full_endpoint(client, roles, seeded, role):
+    """2026-11-13 使用者裁示：預設只限最高管理者。**沒有任何人動過開關**（全新安裝）就必須是 403——
+    少了這題，「預設值又被改回 0」或「讀不到值時當成關」都會讓既有題全綠、而正式機重新洩漏匯款帳號。"""
     r = client.get("/api/settings/company-profile", headers=roles[role])
-    assert r.status_code == 403
+    assert r.status_code == 403, r.text
     assert SECRET_ACCOUNT not in r.text and "04595257" not in r.text
-    # 公開子集照常（頁面不壞）
     assert client.get("/api/settings/company-profile/public", headers=roles[role]).status_code == 200
 
 
-def test_switch_on_superadmin_still_reads_everything_and_can_save(client, roles, seeded):
+def test_fresh_install_superadmin_reads_the_full_endpoint_with_masked_key(client, roles, seeded):
+    """正對照：預設只擋非最高管理者；最高管理者照讀，Google 金鑰照舊遮蔽。"""
+    r = client.get("/api/settings/company-profile", headers=roles["superadmin"])
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["bank_account_number"] == SECRET_ACCOUNT and d["tax_id"] == "04595257" and d["address"]
+    assert d["google_maps_api_key"].startswith("•") and "AIza" not in _all_text(d)
+
+
+@pytest.mark.parametrize("role", ["admin", "viewer", "engineer", "finance", "sales"])
+def test_switch_explicitly_off_restores_login_only_read(client, roles, seeded, monkeypatch, role):
+    """開關仍可調回（放寬）：判定為「關」時，登入即可讀完整版（舊行為）。
+    1→0 要走待生效（見下一題），所以這裡直接換掉判定函式，不經登錄表。"""
+    monkeypatch.setattr("routers.system._full_read_superadmin_only", lambda: False)
+    r = client.get("/api/settings/company-profile", headers=roles[role])
+    assert r.status_code == 200, r.text
+    assert r.json()["bank_account_number"] == SECRET_ACCOUNT
+
+
+def test_switch_default_is_on_and_registered_as_a_tightening_setting():
+    from helpers import settings_groups  # noqa: F401
+    from helpers import settings_registry as SR
+    f = SR.field_defs(GROUP)[FIELD]
+    assert f.default == 1 and (f.min, f.max) == (0, 1) and f.loosen == "down" and f.risk == "security"
+    assert SR.get(GROUP, FIELD) == 1
+    labels = " ".join(str(c) for c in (getattr(f, "choices", None) or []))
+    assert "目前的做法" not in labels, labels
+
+
+# ── 完整端點：開關的其他情境 ───────────────────────────────────────────────
+
+def test_superadmin_still_reads_everything_and_can_save(client, roles, seeded):
     """正對照：只擋非最高管理者；少了這題，「一律 403」會讓上面全綠而設定頁壞掉。"""
-    _set_switch(1)
     r = client.get("/api/settings/company-profile", headers=roles["superadmin"])
     assert r.status_code == 200 and r.json()["bank_account_number"] == SECRET_ACCOUNT
     assert client.put("/api/settings/company-profile", headers=roles["superadmin"], json={"phone": "02-0000-1111"}).status_code == 200
@@ -162,7 +162,6 @@ def test_switch_on_superadmin_still_reads_everything_and_can_save(client, roles,
 
 def test_switch_off_again_is_a_loosening_and_not_immediate(client, roles, seeded):
     """1→0 讓所有登入者讀得到完整資料 ＝ 放寬：走待生效（確認期間＋第二位最高管理者核准），當下仍維持限制。"""
-    _set_switch(1)
     import db
     from helpers import settings_registry as SR
     c = db.get_db()
