@@ -22,5 +22,13 @@
     })()
     return cache
   }
-  window.MotrixOnepipe = { flags: flags }
+  // 序號歷史的一行文字（案件頁、庫存頁共用）：異動與狀態用中文，不顯示英文代碼；不認得的代碼原樣顯示（不丟例外）
+  var EV = { receive: '入庫', ship: '出貨', revoke_ship: '撤銷出貨', install: '安裝', release: '釋放', 'delete': '刪除', 'void': '作廢', return_to_stock: '退回庫存' }
+  var ST = { in_stock: '庫存中', shipped: '已出貨', installed: '已安裝', 'void': '已作廢' }
+  function eventLine(e, withActor) {
+    e = e || {}
+    var st = (e.fromStatus || e.toStatus) ? '（' + (ST[e.fromStatus] || e.fromStatus || '') + ' → ' + (ST[e.toStatus] || e.toStatus || '') + '）' : ''
+    return (e.at || '').slice(0, 10) + '　' + (EV[e.event] || e.event || '') + st + (e.quoteNo ? '　' + e.quoteNo : '') + (withActor && e.actor ? '　' + e.actor : '')
+  }
+  window.MotrixOnepipe = { flags: flags, eventLine: eventLine }
 })()

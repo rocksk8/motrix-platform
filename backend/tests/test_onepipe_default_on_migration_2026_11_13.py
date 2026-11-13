@@ -34,7 +34,8 @@ def _sql(sql, args=()):
 def _fields():
     from helpers import settings_registry as SR
     import helpers.settings_groups  # noqa: F401
-    return list(SR._g(GROUP)["fields"])
+    from helpers import startup
+    return [f for f in SR._g(GROUP)["fields"] if f not in startup._ONEPIPE_NOT_FLAGS]     # 「不是開關」的選項另有專測（一次性遷移不碰它）
 
 
 def _effective():
@@ -236,3 +237,24 @@ def test_permission_loosening_flags_are_never_opened_by_the_migration(fresh, mon
     assert victim in m["excluded"] and victim not in m["fields"] and m["result"] == "enabled"
     d = json.loads(_audits()[0][2])
     assert victim not in {x["field"] for x in d["changes"]}, "稽核也不列被排除的欄位"
+
+
+def test_non_flag_options_are_never_flipped_by_the_migration(fresh):
+    """h9（P3 複審）：`warranty_start_basis` 是選項（0＝出貨日優先、1＝完工日優先），不是開關。存成 0 的庫跑一次性遷移後必須仍是 0，
+    不可悄悄變成「完工日優先」；記在標記的 `excluded`，稽核不列。"""
+    from helpers import startup
+    from helpers import settings_registry as SR
+    import db
+    assert "warranty_start_basis" in startup._ONEPIPE_NOT_FLAGS
+    _store(warranty_start_basis=0)                           # 舊庫：選項也存成 0（_store 預設只存開關，這裡補上）
+    _run()
+    c = db.get_db()
+    try:
+        assert int(SR.get(GROUP, "warranty_start_basis", conn=c)) == 0
+    finally:
+        c.close()
+    assert set(_effective().values()) == {1}, "其他旗標照開"
+    m = _mark()
+    assert "warranty_start_basis" in m["excluded"] and "warranty_start_basis" not in m["fields"]
+    d = json.loads(_audits()[0][2])
+    assert "warranty_start_basis" not in {x["field"] for x in d["changes"]}

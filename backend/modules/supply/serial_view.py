@@ -44,17 +44,29 @@ def shipped_serials(conn, quote_no, caller=None) -> dict:
     return out
 
 
-def serial_history(conn, part_no, serial_no, caller=None) -> list:   # part_no 可空（只用序號查）
+def serial_history(conn, part_no, serial_no, caller=None, quote_no="") -> list:   # part_no 可空（只用序號查）
     """⇒ `[{"event", "fromStatus", "toStatus", "quoteNo", "ref", "reason", "actor", "at"}]`（舊到新）。
-    ⚠️ `quoteNo` 是**原樣的案件編號**（可能是別的案件）：呼叫端要依自己的可見性規則遮罩（案件頁只顯示本案編號，其他一律標「其他案件」）。"""
+    ⚠️ 沒給 `quote_no` 時，`quoteNo` 是**原樣的案件編號**（可能是別的案件）：呼叫端要依自己的可見性規則遮罩。
+    給了 `quote_no`（案件頁的呼叫）＝**只有這個序號與該案件真的有庫存關係才回資料**（庫存裡有綁這個案件的此序號：已出貨／已安裝，或這個序號的異動紀錄帶有該案件編號；
+    案件設備清單裡自己打的序號不算），否則回空；且**不是本案的每一筆異動一律遮掉 `ref`／`reason`／`actor`**（含沒有案件編號的異動——入庫批號、撤銷備註是自由文字，可能屬於別的案件），
+    別案的 `quoteNo` 只標「其他案件」。"""
     _check(caller)
     from modules.supply import stock_events
     if not enabled(conn) or not stock_events.ledger_on(conn):
         return []
+    qn = str(quote_no or "").strip()
+    if qn:
+        bound = conn.execute("SELECT 1 FROM stock_items WHERE quote_no=? AND serial_no=? AND status IN ('shipped','installed') LIMIT 1", (qn, serial_no or "")).fetchone() \
+            or conn.execute("SELECT 1 FROM stock_item_events WHERE quote_no=? AND serial_no=? LIMIT 1", (qn, serial_no or "")).fetchone()
+        if not bound:
+            return []
     if str(part_no or "").strip():
         rows = stock_events.history(conn, part_no, serial_no)
     else:                                                                       # 案件設備只以序號認領庫存（不帶料號）⇒ 只用序號查
         rows = [dict(r) for r in conn.execute("SELECT event, from_status, to_status, quote_no, ref, reason, actor, created_at FROM stock_item_events"
                                               " WHERE serial_no=? ORDER BY id", (serial_no or "",)).fetchall()]
-    return [{"event": e["event"], "fromStatus": e["from_status"], "toStatus": e["to_status"], "quoteNo": e["quote_no"], "ref": e["ref"],
-             "reason": e["reason"], "actor": e["actor"], "at": e["created_at"]} for e in rows]
+    out = [{"event": e["event"], "fromStatus": e["from_status"], "toStatus": e["to_status"], "quoteNo": e["quote_no"], "ref": e["ref"],
+            "reason": e["reason"], "actor": e["actor"], "at": e["created_at"]} for e in rows]
+    if qn:
+        out = [e if (e["quoteNo"] or "") == qn else {**e, "quoteNo": "其他案件" if e["quoteNo"] else "", "ref": "", "reason": "", "actor": ""} for e in out]
+    return out

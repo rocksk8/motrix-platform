@@ -777,7 +777,7 @@ function app() {
         const r = await fetch(`${API}/inventory/serial-history?part_no=${encodeURIComponent(it.part_no)}&serial_no=${encodeURIComponent(it.serial_no)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) { alert('序號歷史功能目前未開啟或您沒有權限'); return }
         const d = await r.json()
-        const lines = (d.events || []).map(e => `${(e.at || '').slice(0, 10)}　${e.event}${e.fromStatus || e.toStatus ? '（' + (e.fromStatus || '') + ' → ' + (e.toStatus || '') + '）' : ''}${e.quoteNo ? '　' + e.quoteNo : ''}${e.actor ? '　' + e.actor : ''}`)
+        const lines = (d.events || []).map(e => MotrixOnepipe.eventLine(e, true))
         alert(`序號「${it.serial_no}」的歷史（只從入庫紀錄開啟當天起有資料）：\n\n` + (lines.length ? lines.join('\n') : '沒有紀錄'))
       } catch { alert('網路錯誤') }
     },

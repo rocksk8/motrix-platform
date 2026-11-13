@@ -103,7 +103,7 @@ def test_flag_off_guard_key_and_line_key_are_the_old_ones(monkeypatch):
     from helpers import email_notify as EN
     _flags(monkeypatch)
     monkeypatch.setattr(CD, "_get_setting", lambda k: None)
-    done, key = CD._warranty_guard("Q1", "SN1", 7, date(2027, 1, 31), 30, with_expiry=False)
+    done, key = CD._warranty_guard("Q1", "SN1", 7, date(2027, 1, 31), with_expiry=False)
     assert (done, key) == (False, "warranty_notif.Q1_SN1_7")
     assert EN._warranty_line_key("Q1", "SN1", 5, "2027-01-31") == EN._warranty_line_key("Q1", "SN1", 5)          # 旗標關：鑰匙不含到期日
 
@@ -191,6 +191,27 @@ def test_history_masks_other_cases_and_only_covers_this_cases_serials(client, ma
 
 
 @needs_m01
+def test_history_masks_events_without_quote_and_ignores_typed_serials(client, make_user, monkeypatch):
+    """h11／h9：沒有案件編號的異動（撤銷出貨備註、入庫批號）是自由文字，案件成員不得看到；設備清單自己打的序號不當成與本案有庫存關係。"""
+    _flags(monkeypatch, **ON)
+    admin = _admin(client, make_user)
+    _case(devices=[{"id": 1, "sn": "S-H2", "name": "設備", "warrantyStart": "2026-11-01", "warrantyMonths": 12},
+                   {"id": 2, "sn": "S-TYPED", "name": "手打", "warrantyStart": "2026-11-01", "warrantyMonths": 12}])
+    _shipped("S-H2", "2026-11-05")
+    _event("S-H2", "receive", quote="", to="in_stock", ref="PO-SECRET", reason="入庫備註")
+    _event("S-H2", "revoke_ship", quote="", frm="shipped", to="in_stock", ref="SN-OTHER-9", reason="別案撤銷備註")
+    _event("S-H2", "ship", quote=NO, frm="in_stock", to="shipped", ref="SN-P3-1")
+    b = client.get(HIS, params={"sn": "S-H2"}, headers=admin).json()
+    assert [e["event"] for e in b["events"]] == ["receive", "revoke_ship", "ship"]
+    assert all(e["ref"] == "" and e["reason"] == "" and e["actor"] == "" for e in b["events"][:2])
+    assert b["events"][0]["quoteNo"] == "" and b["events"][2]["quoteNo"] == NO and b["events"][2]["ref"] == "SN-P3-1"
+    blob = json.dumps(b, ensure_ascii=False)
+    assert "PO-SECRET" not in blob and "別案撤銷備註" not in blob and "SN-OTHER-9" not in blob
+    _event("S-TYPED", "receive", quote=OTHER, to="in_stock", ref="PO-X", reason="別案")           # 只在案件設備清單打了序號、庫存與本案無關
+    assert client.get(HIS, params={"sn": "S-TYPED"}, headers=admin).json()["events"] == []
+
+
+@needs_m01
 def test_inventory_serial_history_needs_inventory_module_and_returns_events(client, make_user, monkeypatch):
     _flags(monkeypatch, **ON)
     admin = _admin(client, make_user)
@@ -215,23 +236,33 @@ def _store(monkeypatch):
 def test_guard_key_includes_expiry_and_new_expiry_can_notify_again(monkeypatch):
     CD, kv = _store(monkeypatch)
     e1, e2 = date(2027, 1, 31), date(2027, 6, 30)
-    done, key = CD._warranty_guard("Q1", "SN1", 30, e1, 30, True)
+    done, key = CD._warranty_guard("Q1", "SN1", 30, e1, True)
     assert not done and key == "warranty_notif.Q1_SN1_30_2027-01-31"
     kv[key] = "2027-01-05"
-    assert CD._warranty_guard("Q1", "SN1", 30, e1, 30, True)[0] is True                 # 同到期日 ⇒ 已通知
-    assert CD._warranty_guard("Q1", "SN1", 30, e2, 30, True) == (False, "warranty_notif.Q1_SN1_30_2027-06-30")   # 到期日換了 ⇒ 可再通知
+    assert CD._warranty_guard("Q1", "SN1", 30, e1, True)[0] is True                 # 同到期日 ⇒ 已通知
+    assert CD._warranty_guard("Q1", "SN1", 30, e2, True) == (False, "warranty_notif.Q1_SN1_30_2027-06-30")   # 到期日換了 ⇒ 可再通知
 
 
 def test_guard_old_key_compat_suppresses_only_for_the_same_expiry(monkeypatch):
     CD, kv = _store(monkeypatch)
     e = date(2027, 1, 31)
     kv["warranty_notif.Q1_SN1_30"] = (e - timedelta(days=12)).isoformat()                # 對這個到期日寄的（在提醒期間內）
-    assert CD._warranty_guard("Q1", "SN1", 30, e, 30, True)[0] is True                   # 舊鍵相容：不重寄
+    assert CD._warranty_guard("Q1", "SN1", 30, e, True)[0] is True                   # 舊鍵相容：不重寄
     kv["warranty_notif.Q1_SN2_30"] = (e - timedelta(days=200)).isoformat()               # 對更早的到期日寄的
-    assert CD._warranty_guard("Q1", "SN2", 30, e, 30, True)[0] is False
+    assert CD._warranty_guard("Q1", "SN2", 30, e, True)[0] is False
     kv["warranty_notif.Q1_SN3_30"] = "壞值"
-    assert CD._warranty_guard("Q1", "SN3", 30, e, 30, True)[0] is True                    # 壞值保守視為已通知
-    assert CD._warranty_guard("Q1", "SN1", 30, e, 30, False) == (True, "warranty_notif.Q1_SN1_30")   # 旗標關＝只看舊鍵
+    assert CD._warranty_guard("Q1", "SN3", 30, e, True)[0] is True                    # 壞值保守視為已通知
+    assert CD._warranty_guard("Q1", "SN1", 30, e, False) == (True, "warranty_notif.Q1_SN1_30")   # 旗標關＝只看舊鍵
+
+
+def test_guard_old_urgent_key_is_compared_with_the_urgent_threshold_not_the_early_one(monkeypatch):
+    """h11：舊的緊急鍵（到期前 7 天寄的）＋保固延長 ≤23 天，不能被當成「新到期日的緊急通知已寄」。"""
+    CD, kv = _store(monkeypatch)
+    e0 = date(2027, 1, 31)
+    kv["warranty_notif.Q1_SN1_7"] = (e0 - timedelta(days=7)).isoformat()                 # 對舊到期日寄的緊急通知
+    assert CD._warranty_guard("Q1", "SN1", 7, e0, True)[0] is True                       # 到期日沒變 ⇒ 已通知
+    for ext in (1, 10, 23):                                                                # 延長不到一個提醒期：新到期日的緊急通知還沒寄
+        assert CD._warranty_guard("Q1", "SN1", 7, e0 + timedelta(days=ext), True)[0] is False, ext
 
 
 def test_line_key_carries_expiry_only_when_flag_on(monkeypatch):

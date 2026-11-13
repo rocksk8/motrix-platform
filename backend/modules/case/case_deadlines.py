@@ -280,11 +280,11 @@ def _warranty_expiry_key_on() -> bool:
     return onepipe_flags.flag_on("ship_device_warranty")
 
 
-def _warranty_guard(quote_no, sn, threshold, expiry, early, with_expiry):
+def _warranty_guard(quote_no, sn, threshold, expiry, with_expiry):
     """⇒ `(已通知過?, 要寫的記號鍵)`。
     關：`warranty_notif.{案}_{序號}_{門檻}`（今天的鍵）。
-    開：鍵尾加上到期日——保固日期被調整（到期日換了）之後可以對新的到期日再通知一次。**舊鍵相容**：舊鍵存在、且它記的寄送日不早於「現在這個到期日往前推提醒天數」
-    （＝當時是對這個到期日寄的）⇒ 視為已通知，不重寄；寄送日更早（對的是舊到期日）⇒ 不算。舊鍵的值不是日期（壞值）⇒ 保守視為已通知。"""
+    開：鍵尾加上到期日——保固日期被調整（到期日換了）之後可以對新的到期日再通知一次。**舊鍵相容**：舊鍵存在、且它記的寄送日不早於「現在這個到期日往前推**這一個門檻的天數**」
+    （＝當時是對這個到期日寄的；緊急門檻的舊鍵不能用提醒門檻比——到期日延長不到一個提醒期就會把還沒寄的緊急通知吃掉）⇒ 視為已通知，不重寄；寄送日更早（對的是舊到期日）⇒ 不算。舊鍵的值不是日期（壞值）⇒ 保守視為已通知。"""
     old = f"warranty_notif.{quote_no}_{sn}_{threshold}"
     if not with_expiry:
         return bool(_get_setting(old)), old
@@ -294,7 +294,7 @@ def _warranty_guard(quote_no, sn, threshold, expiry, early, with_expiry):
     prev = _get_setting(old)
     if prev:
         try:
-            if _date.fromisoformat(str(prev)[:10]) < expiry - _timedelta(days=early):
+            if _date.fromisoformat(str(prev)[:10]) < expiry - _timedelta(days=threshold):
                 return False, new
         except (TypeError, ValueError):
             pass
@@ -322,7 +322,7 @@ def _baseline_closed_warranty(conn, rows, today, early, urgent) -> None:
                 continue
             threshold = urgent if days_left <= urgent else early
             sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
-            done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, early, with_expiry)
+            done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, with_expiry)
             if not done:
                 _set_setting(guard_key, today_str)
                 n += 1
@@ -399,7 +399,7 @@ def _check_warranty_expiry() -> None:
 
                 threshold = _urgent if days_left <= _urgent else _early
                 sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
-                done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, _early, with_expiry)
+                done, guard_key = _warranty_guard(row["quote_no"], sn, threshold, expiry, with_expiry)
                 if done:
                     continue  # already sent for this threshold
 

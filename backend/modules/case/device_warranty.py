@@ -78,22 +78,17 @@ def prefill(conn, quote_no, q) -> dict:
 
 def history(conn, quote_no, q, serial_no) -> dict:
     """⇒ `{"serialNo", "available", "since", "events": [{"event", "fromStatus", "toStatus", "quoteNo"（本案編號或「其他案件」）, "ref", "reason", "actor", "at"}]}`。
-    序號必須是這個案件的設備（或已出貨給這個案件的序號），否則 `events` 為空——不讓人拿案件頁當全庫序號的查詢入口。"""
+    序號必須和這個案件有**庫存關係**（庫存裡綁這個案件的已出貨／已安裝序號，或它的異動紀錄帶有本案編號）——案件設備清單裡自己打的序號不算，
+    不讓人拿案件頁當全庫序號的查詢入口。不是本案的異動（含沒有案件編號的）一律遮掉 `ref`／`reason`／`actor`；別案編號只標「其他案件」（由 `stock.serial_history` 提供者依 `quote_no` 處理）。"""
     sn = str(serial_no or "").strip()
     out = {"serialNo": sn, "available": False, "since": "", "events": []}
     fn = registry.single_provider("stock.serial_history")
     if fn is None or not sn:
         return out
     out["available"] = True
-    mine = {str(d.get("sn") or "").strip().lower() for d in _devices(q)}
-    shipped = registry.single_provider("stock.shipped_serials")
-    if sn.lower() not in mine and shipped is not None:
-        mine |= {str(s.get("serialNo") or "").strip().lower() for s in ((shipped(conn, quote_no) or {}).get("serials") or [])}
-    if sn.lower() not in mine:
-        return out
-    for e in fn(conn, "", sn) or []:
-        if e.get("quoteNo") and e["quoteNo"] != quote_no:
-            e = {**e, "quoteNo": "其他案件", "ref": "", "reason": ""}
+    for e in fn(conn, "", sn, quote_no=quote_no) or []:
+        if (e.get("quoteNo") or "") != quote_no:                                  # 再遮一次（提供者已遮；這裡不信任對方，空編號的自由文字也不外流）
+            e = {**e, "quoteNo": "其他案件" if e.get("quoteNo") else "", "ref": "", "reason": "", "actor": ""}
         out["events"].append(e)
     out["since"] = out["events"][0]["at"] if out["events"] else ""
     return out

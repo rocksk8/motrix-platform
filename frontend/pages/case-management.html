@@ -1312,7 +1312,7 @@
                     </div>
                     <template x-if="dwHist">
                       <ul style="margin:6px 0 0 16px" data-testid="dw-hist">
-                        <template x-for="(e, i) in (dwHist.events || [])" :key="i"><li x-text="(e.at || '').slice(0, 10) + '　' + e.event + (e.fromStatus || e.toStatus ? '（' + (e.fromStatus || '') + ' → ' + (e.toStatus || '') + '）' : '') + (e.quoteNo ? '　' + e.quoteNo : '')"></li></template>
+                        <template x-for="(e, i) in (dwHist.events || [])" :key="i"><li x-text="MotrixOnepipe.eventLine(e, false)"></li></template>
                         <li x-show="!(dwHist.events || []).length" style="color:var(--text-dim)">沒有紀錄（開啟入庫紀錄之前的異動查不到）</li>
                       </ul>
                     </template>

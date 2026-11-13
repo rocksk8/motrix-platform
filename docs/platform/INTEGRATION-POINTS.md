@@ -792,8 +792,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M03 採購・庫存・出貨：`modules/supply/serial_view.py::serial_history` |
 | 使用方 | M01 案件：`modules/case/device_warranty.py::history`（`GET /api/quotations/{no}/device-history`）；M03 自己的 `GET /api/inventory/serial-history` |
 | 形式 | provider，單一提供者（名稱 `supply`） |
-| 語法 | 提供：`("stock.serial_history", "supply"): serial_history`；取用：`fn = registry.single_provider("stock.serial_history")`；`None` ⇒ 沒有歷史。`fn(conn, part_no, serial_no, caller=None) -> [{"event", "fromStatus", "toStatus", "quoteNo", "ref", "reason", "actor", "at"}]`（舊到新；`part_no` 可空＝只用序號查，案件設備只以序號認領庫存） |
-| 回傳 | ⚠️ `quoteNo`、`ref`、`reason` 是**原樣**（可能是別的案件）：呼叫端要依自己的可見性規則遮罩——案件頁只顯示本案編號，其他案件的異動只標「其他案件」並清掉單號與原因；案件頁只查本案設備（或已出貨給本案）的序號。沒有任何金額欄位 |
+| 語法 | 提供：`("stock.serial_history", "supply"): serial_history`；取用：`fn = registry.single_provider("stock.serial_history")`；`None` ⇒ 沒有歷史。`fn(conn, part_no, serial_no, caller=None, quote_no="") -> [{"event", "fromStatus", "toStatus", "quoteNo", "ref", "reason", "actor", "at"}]`（舊到新；`part_no` 可空＝只用序號查，案件設備只以序號認領庫存） |
+| 回傳 | 沒給 `quote_no`：`quoteNo`、`ref`、`reason`、`actor` 是**原樣**（可能是別的案件），只給有庫存權限的呼叫端。給了 `quote_no`（案件頁）：序號與該案件沒有庫存關係（庫存裡綁該案件的已出貨／已安裝序號，或異動紀錄帶有該案件編號）⇒ 空；不是本案的每一筆異動（**含沒有案件編號的**——入庫批號、撤銷備註是自由文字）一律把 `ref`／`reason`／`actor` 清空，別案編號只標「其他案件」。沒有任何金額欄位 |
 | 交易契約 | 唯讀、不 commit |
 | 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，歷史查詢入口顯示「沒有紀錄」 |
 | 契約版本 | 1（2026-11-14） |
