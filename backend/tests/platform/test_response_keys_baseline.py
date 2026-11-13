@@ -134,6 +134,12 @@ def test_key_paths_records_keys_of_every_list_element_not_only_the_first_50():
     old = RK.key_paths({"groups": rows[:50]})                         # 舊行為的樣子
     assert "groups[].late_key" not in old and "groups[].nested" not in old, "正對照失效：前 50 筆本來就不含這些鍵"
     assert RK.key_paths({"groups": []}) == ["groups"] and RK.key_paths([]) == [] and RK.key_paths({"a": [1, 2, 3]}) == ["a"]
+    # 巢狀截斷單獨成立（h5 note 1）：外層只有一筆、巢狀陣列放在第 1 筆裡，外層截斷不可能遮住它
+    inner = [{"a": i} for i in range(55)]
+    inner[54]["deep_key"] = 1
+    only_nested = {"groups": [{"nested": inner}]}
+    assert "groups[].nested[].deep_key" in RK.key_paths(only_nested), "巢狀陣列第 55 筆的鍵沒被記到（只截斷巢狀的情況）"
+    assert "groups[].nested[].deep_key" not in RK.key_paths({"groups": [{"nested": inner[:50]}]}), "正對照失效：前 50 筆本來就不含 deep_key"
 
 
 def test_seed_every_table_creates_rows_so_lists_have_keys(client):
