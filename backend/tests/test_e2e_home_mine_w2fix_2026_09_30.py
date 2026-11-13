@@ -48,7 +48,7 @@ def test_w2f5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e
     assert page.locator(".h-state div:has-text('我的待簽核')").count() == 0
     hero = page.locator(".h-hero__t").inner_text()
     assert "今天有" not in hero and "目前沒有待您簽核" not in hero, hero
-    assert "讀不到待簽核清單" in page.locator("[data-testid=band-approvals] .h-band__p").inner_text()
+    assert "無法讀取待簽核清單" in page.locator("[data-testid=band-approvals] .h-band__p").inner_text()
     assert page.locator('[data-testid="home-mine-unknown"]').count() == 1
 
 

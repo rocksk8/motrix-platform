@@ -95,7 +95,7 @@ def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, 
     page.wait_for_selector("[data-testid=hb-tax-rows] td:has-text('OUT-5')")                      # 終點：彙總表出現銷項列
     calc = page.locator("[data-testid=hb-tax-calc]").inner_text()
     assert "101" in calc and "500" in calc and "111" in calc and "400" in calc, calc               # 銷項 500、進項 100 ⇒ 應實繳 400
-    assert "自己補" in page.locator("[data-testid=hb-tax-summary]").inner_text()                     # 兩行白話摘要（預設可見）
+    assert "自行補齊" in page.locator("[data-testid=hb-tax-summary]").inner_text()                     # 兩行白話摘要（預設可見）
     assert page.locator("[data-testid=hb-tax-legal]").is_hidden()                                    # 詳細說明預設收合
     page.locator("[data-testid=hb-tax-details] summary").click()
     page.locator("[data-testid=hb-tax-legal]").wait_for(state="visible", timeout=5000)

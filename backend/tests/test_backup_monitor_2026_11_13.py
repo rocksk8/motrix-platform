@@ -411,7 +411,7 @@ def test_ping_redirect_is_a_failure_with_explanation(monkeypatch):
     assert ok is False and "轉" in msg and "SECRET" not in msg and "302" not in msg
 
 
-@pytest.mark.parametrize("kind,needle", [("dns", "找不到這個網站"), ("tls", "憑證"), ("timeout", "沒有回應"), ("connect", "連不到"), ("response", "連不到")])
+@pytest.mark.parametrize("kind,needle", [("dns", "找不到這個網站"), ("tls", "憑證"), ("timeout", "未回應"), ("connect", "無法連線"), ("response", "無法連線")])
 def test_ping_failure_kinds_have_plain_messages_and_hide_exception(monkeypatch, kind, needle):
     from core import safe_ping
     from helpers import backup_monitor as bm
@@ -431,7 +431,7 @@ def test_ping_unexpected_error_hides_exception(monkeypatch):
         raise OSError("getaddrinfo failed for hc-ping.example.com SECRET-UUID")
     monkeypatch.setattr(safe_ping, "get", fake)
     ok, msg = bm._ping(SECRET)
-    assert ok is False and "連不到" in msg and "SECRET" not in msg and "getaddrinfo" not in msg
+    assert ok is False and "無法連線" in msg and "SECRET" not in msg and "getaddrinfo" not in msg
 
 
 def test_ping_success_uses_the_ten_second_timeout(monkeypatch):

@@ -73,7 +73,7 @@ def test_flag_on_entry_opens_timeline_with_cells_and_next_step_and_no_money(live
     assert keys == ["mf-cell-call", "mf-cell-purchase", "mf-cell-arrive", "mf-cell-stock", "mf-cell-ship", "mf-cell-device", "mf-cell-warranty"]
     assert page.get_attribute('[data-testid="mf-cell-call"]', 'data-state') == 'done'
     assert page.get_attribute('[data-testid="mf-cell-arrive"]', 'data-state') == 'inprogress'
-    assert "MO-E2E-1" in page.inner_text('[data-testid="mf-cell-arrive"]') and "還沒到" in page.inner_text('[data-testid="mf-cell-arrive"]')
+    assert "MO-E2E-1" in page.inner_text('[data-testid="mf-cell-arrive"]') and "尚未到" in page.inner_text('[data-testid="mf-cell-arrive"]')
     assert page.is_visible('[data-testid="mf-next"]')
     text = page.inner_text('[data-testid="mf-page"]')
     for n in ("98765", "424242", "400000"):
