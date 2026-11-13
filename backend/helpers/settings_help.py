@@ -27,13 +27,15 @@ import re
 import threading
 import unicodedata
 
+from core import paths as _paths
+
 logger = logging.getLogger("motrix.settings_help")
 
 OVERRIDE_KEY = "settings_help_override"
 SECTIONS = ("what", "when", "impact")           # 手寫的三段；第四段（預設值與建議）由 metadata 產生
 _TEXT_MAX = 400
-_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "settings_help.json")
-_UX_CONFIG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "ux_audit_config.json")
+_FILE = _paths.backend("core", "settings_help.json")
+_UX_CONFIG = _paths.backend("tools", "ux_audit_config.json")
 _cache = {"mtime": None, "data": None}
 _lock = threading.Lock()
 
