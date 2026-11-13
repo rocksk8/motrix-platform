@@ -1115,6 +1115,17 @@
    "warm_status": "def()",
    "without_google_content": "def()"
   },
+  "helper:getting_started": {
+   "BACKUP_HREF": "const",
+   "BACKUP_OK_ACTIONS": "const",
+   "EMAIL_TEST_ACTION": "const",
+   "MANUAL_DONE_IDS": "const",
+   "STATE_KEY": "const",
+   "STEPS": "const",
+   "STEP_IDS": "const",
+   "overview": "def(conn=…)",
+   "set_step": "def(step_id, action, username)"
+  },
   "helper:gl_status": {
    "MESSAGE": "const",
    "gl_posted_warning": "def(conn, source_type, source_key, prefix=…)"
@@ -1729,6 +1740,15 @@
    "request_stage_defaults": "def()",
    "request_stage_label": "def(code, fallback=…)",
    "request_stage_names": "def()"
+  },
+  "helper:org_gaps": {
+   "GAP_KEYS": "const",
+   "GAP_NO_DEPARTMENT": "const",
+   "GAP_NO_FINANCE": "const",
+   "GAP_NO_MANAGER": "const",
+   "MAX_ITEMS": "const",
+   "check": "def(conn=…)",
+   "finance_holder_exists": "def(conn)"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",

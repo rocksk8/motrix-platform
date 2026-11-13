@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 953,
-  "endpoints_api": 949,
-  "write_total": 514,
-  "write_api": 514,
-  "get_api": 435,
-  "distinct_paths_api": 805,
-  "write_with_body_api": 379,
-  "write_with_path_param_api": 363
+  "endpoints_total": 956,
+  "endpoints_api": 952,
+  "write_total": 515,
+  "write_api": 515,
+  "get_api": 437,
+  "distinct_paths_api": 808,
+  "write_with_body_api": 380,
+  "write_with_path_param_api": 364
  },
  "select_star": {
   "modules": 288,
@@ -4781,6 +4781,21 @@
   "PUT /api/system/backup-monitor/heartbeat-url": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "GET /api/org/gaps": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/getting-started": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/getting-started/steps/{step_id}": {
+   "w": true,
+   "pp": 1,
    "body": true
   }
  }

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>簽核設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/org-gaps.js"></script>
   <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -241,6 +242,8 @@
   <!-- MAIN -->
   <main class="as-main">
 
+    <!-- 組織設定缺口（批次 5a）：缺主管／缺部門／沒人擔任財務時，簽核會卡住，所以放在最上面 -->
+    <div id="org-gaps" data-org-gaps style="display:none"></div>
     <div class="pg">
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>

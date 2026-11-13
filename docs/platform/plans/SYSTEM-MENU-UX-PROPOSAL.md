@@ -429,6 +429,10 @@
 
 檢查「沒有部門的人／沒有主管的部門／沒人持有財務職務」，顯示在簽核設定頁頂、使用者新增後、總覽首頁。檔案：新唯讀端點、`approval-settings.html`、`users.html`、`system-hub.html`。
 
+**批次 5a 實作紀錄（2026-11-13，分支 `feat/menu-ux-5a`，基底 batch0 `84c5b4010`）：** 新 `helpers/org_gaps.py`（只讀三項檢查；單項失敗不影響其他項、不丟 500）、`GET /api/org/gaps`（只有管理者以上；其他角色 403）、共用橫幅 `static/org-gaps.js`（文字由後端提供、人名用 textContent）。橫幅掛在簽核設定頁頂、使用者管理頁頂（新增／停用後自動重查，新增沒選部門時 toast 直接點出）、系統總覽首頁；沒缺口整塊隱藏。判準：①在職且沒有部門；②有在職成員、但沒有主管或主管已停用的部門（空部門不算）；③沒有任何非最高管理者持有財務職務（走 `finance_duty_person`，與實際權限同一條規則；全新安裝無人員時不提醒）。每項附「到哪裡補」的連結（使用者管理／組織架構），不新增頁面。
+
+**批次 5a 審查修正（hichan-10 審、2026-11-13，分支 `feat/menu-ux-5a-fix-h10`）：** ①財務判定改一次查詢 `org_gaps.finance_holder_exists`（與 `finance_duty_person` 同規則、各旗標模式都不寫入；300 人 2 秒 → 數毫秒；測試逐模式比對）；②全新安裝（沒有在職的非最高管理者）不顯示任何缺口，最高管理者不算「沒有部門」（說明文字寫明「最高管理者若要送審，仍然需要歸屬部門」）；③說明改「送審會被擋下」（2026-09-15 起不再往最高管理者遞補）；④橫幅：非管理者不發請求、連續重查只認最後一次回應、刪除使用者後也重查；⑤`/api/org/gaps` 的回應鍵基準只錄「沒有缺口」形狀，缺口項目形狀由 `test_gap_item_shape_is_stable` 釘住。
+
 ### 後續批次：角色中文名收斂為單一來源（hichan-6 審查 L4）
 
 全站目前有至少 6 份「角色代碼→中文名」對照（`sidebar.js`、`role-label.js`、`users.html`、`mail-settings.html`、`daily-tasks.html`、`routers/system.py::_DEFAULT_ROLE_LABELS` 等），其中只有使用者管理頁與 `perm_text` 讀公司自訂的 `role_labels`。批 0 新增的 `static/role-label.js` 已先讀 `GET /api/settings/role-labels`（每個登入期間抓一次、存 sessionStorage），但其他幾份仍是寫死預設。後續要：全站改走 `MotrixRole.label`、補一個首次載入就帶角色名稱的方式（例如隨 `/api/auth/me` 回傳），再加守門測試禁止新增第七份對照表。

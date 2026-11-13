@@ -7,6 +7,8 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>系統 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/org-gaps.js"></script>
+  <script src="../static/getting-started-card.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
@@ -118,6 +120,10 @@
   <div class="app-shell">
     <main class="page-main">
       <div class="hub-inner">
+        <!-- 組織設定缺口（批次 5a）：總覽首頁也提醒（管理者以上；沒缺口時隱藏） -->
+        <div id="org-gaps" data-org-gaps style="display:none"></div>
+        <!-- 新手設定清單進度卡（只有最高管理者；全部處理完或讀不到時隱藏） -->
+        <div id="getting-started-card" data-getting-started-card style="display:none"></div>
         <div class="hub-head">
           <h1>系統</h1>
           <div class="search-wrap">

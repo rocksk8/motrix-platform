@@ -102,6 +102,8 @@ from routers import option_lists as option_lists_router
 from routers import system_hub
 # 備份與監控專頁（批次 4a；註解不寫在 import 行尾，test_router_registration 以行解析）
 from routers import backup_monitor
+from routers import org_gaps as org_gaps_router
+from routers import getting_started as getting_started_router
 from routers import platform_catalog
 _startup_step("import_routers")
 
@@ -1175,6 +1177,8 @@ app.include_router(export_templates_router.router)
 app.include_router(option_lists_router.router)
 app.include_router(system_hub.router)
 app.include_router(backup_monitor.router)         # 備份與監控專頁（最高管理者；批次 4a）
+app.include_router(org_gaps_router.router)
+app.include_router(getting_started_router.router)
 app.include_router(platform_catalog.router)
 _startup_step("include_routers")
 

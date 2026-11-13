@@ -198,6 +198,18 @@
    "icon": "gear"
   },
   {
+   "id": "getting-started",
+   "section": "settings",
+   "title": "開始使用",
+   "desc": "新公司 7 步設定清單：公司資料、報價單、人員與簽核、寄信、備份、LINE、匯入資料",
+   "impact": "影響：只是進度與連結，不會改動任何設定；每一步的設定仍在各自的頁面。",
+   "href": "getting-started.html",
+   "perm": "superadmin",
+   "order": 5,
+   "keywords": "開始使用 新手 設定精靈 第一次 導覽 清單 上線",
+   "icon": "gear"
+  },
+  {
    "id": "company-profile-settings",
    "section": "settings",
    "title": "公司資料設定",

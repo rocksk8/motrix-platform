@@ -41,6 +41,14 @@
     - N5／T1（第三輪）：`heartbeat_config.json.pending`（含完整新網址）加進 `.gitignore`，以及 `apply_update.ps1`（回滾快照複製、各還原／覆蓋 robocopy）與 `rollback_update.ps1` 所有 `/XF` 清單（與 `heartbeat_config.json` 並列）；`apply_update.version.json` 只更新 sha256（比照 9de4cc8e4 加 `/XF` 檔名的先例，`$ApplyScriptVersion` 不動）。測試：兩個守門題；`test_scrub_paths_is_linear_and_bounded` 改用短 `ids`（4 萬字的 id 會讓 Windows 的 `PYTEST_CURRENT_TEST` 超過 32767 字上限而 setup 出錯）。
 - **（併入）(next) — 2026-11-13（feat/upload-files-txn；T83 附件清單寫回交易化）**
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產；T83 feat/upload-files-txn）：`helpers.uploads` 新增 `files_txn(conn, new_files)`（拿寫鎖、離開時 commit；區塊內任何例外或 commit 失敗 ⇒ rollback、關連線、回收 `new_files` 剛存的檔）、`append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=None, not_found, guard=None)`（寫鎖內重讀 JSON 清單、只加自己這批；列不存在 ⇒ 404）、`remove_json_item(conn, table, col, where_col, key, file_id, *, extra_set=None, not_found, missing_ok=False, inside=None)`（寫鎖內重讀、濾掉一筆、commit 之後才刪實體檔；`inside(conn)` 讓簽核流程把自己的申請列與刪附件放同一個交易）。`helpers.uploads.delete_document_file` 行為不變（內部拆出 `_remove_physical`）；`helpers/__init__` 一併匯出三個新名。資源回收筒基準：helpers/uploads.py 的 `os.remove` 數量不變（搬位置、不新增）。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-5a；選單去工程師化 批 5a：組織設定缺口檢查）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.org_gaps`（`check`、`GAP_KEYS`、`finance_holder_exists`）——只讀的組織設定缺口檢查（沒部門的人／沒主管的部門／沒人擔任財務）。
+- 登記：`helper:org_gaps`、`router:org_gaps`、`js:static/org-gaps.js`、`js:static/role-label.js` 歸 L1（`docs/platform/modules.json`）。
+- 不改任何既有介面、不加資料表、不加 migration。
+- **（併入）(next) — 2026-11-13（feat/getting-started-h10；「開始使用」7 步清單）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.getting_started`（`STEPS`、`STEP_IDS`、`STATE_KEY`、`MANUAL_DONE_IDS`、`BACKUP_HREF`、`BACKUP_OK_ACTIONS`、`EMAIL_TEST_ACTION`、`overview`、`set_step`）——每步的自動偵測（只讀）＋存在 `system_settings.getting_started_v1` 的人工旗標（略過／手動確認）。
+- 新端點（只限最高管理者）：`GET /api/getting-started`、`PUT /api/getting-started/steps/{step_id}`；新頁 `getting-started.html`、系統中心卡片 `getting-started`、系統中心進度卡 `static/getting-started-card.js`。不改既有設定值、欄位、API。
+- 測試：`tests/test_getting_started_2026_11_13.py`。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。
