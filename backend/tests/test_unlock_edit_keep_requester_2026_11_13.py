@@ -216,3 +216,74 @@ def test_new_mail_type_is_registered_in_the_quote_approval_line_group():
     from helpers import line_catalog, mail_types
     assert mail_types.get("approval_content_edited") is not None
     assert line_catalog.group_of("approval_content_edited") == "報價單與簽核"
+
+
+def test_departed_original_requester_falls_back_to_the_editor(client, world):
+    """h9 S1：原送審人已停用 ⇒ 他不能收回、也收不到退件通知，所以退回「沒有原送審紀錄」的行為（送審人記為改內容的人）。"""
+    from db import get_db
+    conn = get_db()
+    try:
+        conn.execute("UPDATE users SET active=0 WHERE username='ke_req'")
+        conn.commit()
+    finally:
+        conn.close()
+    _flow([["ke_a1"], ["ke_a2"]])
+    _seed()
+    assert _unlock_put(client, world["headers"]).status_code == 200
+    appr = _state()[0]["approval"]
+    assert appr["requestedBy"] == "ke_sa" and appr["editedBy"] == "ke_sa"
+    assert _state()[0]["editHistory"][-1]["originalRequester"] == "ke_sa"
+
+
+def test_cleared_signers_come_from_the_value_read_inside_the_write_transaction(client, world, monkeypatch):
+    """h9 S2：寫鎖之前讀的那份只用來建簽核層；被清掉的已簽層（通知、editHistory、稽核）以交易內讀到的現值為準。
+    這裡讓第一次（鎖前）的計算回空、第二次（交易內）用真的 ⇒ 結果必須是第二次的。"""
+    from modules.case import quote_edit_notify as QEN
+    real = QEN.signed_layers
+    calls = []
+
+    def fake(appr):
+        calls.append(1)
+        return [] if len(calls) == 1 else real(appr)
+    monkeypatch.setattr(QEN, "signed_layers", fake)
+    _flow([["ke_a1"], ["ke_a2"]])
+    _seed()
+    assert _unlock_put(client, world["headers"]).status_code == 200
+    assert len(calls) == 2, "鎖前一次、交易內一次"
+    assert _state()[0]["editHistory"][-1]["clearedSigners"] == [{"tier": 1, "username": "ke_a1"}]
+    assert [kw["usernames"] for k, kw in world["sent"] if k == "approval_content_edited"] == [["ke_a1"]]
+
+
+def test_reject_final_also_notifies_the_editor_not_only_the_original_requester(client, world):
+    """h9 S1（一行加碼）：改這份內容的最高管理者（editedBy）也收到駁回結案通知。"""
+    _flow([["ke_a1"], ["ke_a2"]])
+    _seed()
+    assert _unlock_put(client, world["headers"]).status_code == 200
+    r = client.post(f"/api/quotations/{NO}/reject-final", headers=_login(client, *world["users"]["ke_a1"]), json={"note": "不行"})
+    assert r.status_code == 200, r.text
+    from db import get_db
+    conn = get_db()
+    try:
+        who = sorted(x["username"] for x in conn.execute("SELECT username FROM notifications WHERE type='approval_rejected' AND ref_id=?", (NO,)).fetchall())
+    finally:
+        conn.close()
+    assert who == ["ke_req", "ke_sa"], who
+
+
+def test_when_the_requester_is_the_only_other_superadmin_recall_is_the_way_out(client, world, make_user):
+    """h9 N1：原送審人本身是最高管理者、且另一位最高管理者就是改內容的人、沒有簽核層 ⇒ 兩個人都不能自簽；原送審人收回草稿是唯一出路。"""
+    from db import get_db
+    from helpers.tiered_approval import check_no_tier_self_approval
+    _flow([])
+    _seed(requester="ke_sa2", signed=(), pending=())
+    assert _unlock_put(client, world["headers"]).status_code == 200
+    appr = _state()[0]["approval"]
+    assert appr["requestedBy"] == "ke_sa2" and appr["editedBy"] == "ke_sa"
+    conn = get_db()
+    try:
+        assert check_no_tier_self_approval(conn, appr, {"username": "ke_sa"}), "改內容的人不可自簽"
+        assert check_no_tier_self_approval(conn, appr, {"username": "ke_sa2"}), "原送審人不可自簽"
+    finally:
+        conn.close()
+    r = client.post(f"/api/quotations/{NO}/recall", headers=_login(client, *world["users"]["ke_sa2"]))
+    assert r.status_code == 200, r.text

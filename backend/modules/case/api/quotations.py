@@ -528,6 +528,19 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
         )
 
 
+def _user_is_active(username: str) -> bool:
+    """帳號存在且在職（active=1）。查不到／出錯 ⇒ False（呼叫端把它當「不能代表這個人」，退回保守行為）。"""
+    try:
+        _c = get_db()
+        try:
+            r = _c.execute("SELECT active FROM users WHERE username=?", (username,)).fetchone()
+        finally:
+            _c.close()
+        return bool(r and r["active"])
+    except Exception:                                                            # noqa: BLE001
+        return False
+
+
 def _exclude_requester(tiers: list, requester: str) -> list:
     """Drop the requester from tier approver lists — a submitter must never end up
     required to approve their own quotation. Tiers left with no approvers after
@@ -2386,6 +2399,9 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         _old_appr = _old_dj.get("approval") if isinstance(_old_dj.get("approval"), dict) else {}
         _orig_req = str(_old_appr.get("requestedBy") or "") or editor["username"]
         _prev_req = str(_old_appr.get("requestedBy") or "")
+        if _prev_req and not _user_is_active(_prev_req):                         # 原送審人已離職／停用：沒有人能代表他收回或收退件通知 ⇒ 同「沒有原送審紀錄」
+            _prev_req = ""
+            _orig_req = editor["username"]
         if _prev_req:
             _orig_req_disp = str(_old_appr.get("requestedByDisplay") or "") or _prev_req
         else:                                                                    # 退回舊行為：送審人記為改內容的人
@@ -2492,6 +2508,14 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         if isinstance(_db_hist, list):
             q["editHistory"] = _db_hist
         if is_unlock_edit:
+            # 被清掉的已簽層以**交易內讀到的現值**為準（前面那份是寫鎖之前讀的：兩次讀之間若有人剛簽完，他也要被通知與記進稽核）。
+            # 送審人／簽核層已在上面依較早的讀取建好，這裡不改（兩次之間換了送審人是極罕見的情況）。
+            try:
+                _txn_appr = (json.loads(existing["data_json"] or "{}") or {}).get("approval")
+            except (TypeError, ValueError):
+                _txn_appr = None
+            _unlock_cleared = _QEN.signed_layers(_txn_appr)
+            _unlock_info["cleared"] = [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]
             _hist = q.get("editHistory") if isinstance(q.get("editHistory"), list) else []
             edit_rev = len(_hist) + 1
             _hist.append({"rev": edit_rev, "at": now, "by": user["username"],
@@ -5854,6 +5878,9 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         if requester:
             _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
             notify_returned(quote_no, new_no, cname, note, requester, doc_label=_DT.label(d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：送審人維持原送審人，改這份內容的最高管理者也要知道被退回
+        if _editor_u and _editor_u != requester:
+            _notify(_editor_u, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
@@ -5917,6 +5944,11 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         if requester:
             suffix = f"：{note}" if note else ""
             _notify(requester, "approval_rejected", quote_no, quote_no,
+                    _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：改內容的最高管理者也要知道被駁回
+        if _editor_u and _editor_u != requester:
+            suffix = f"：{note}" if note else ""
+            _notify(_editor_u, "approval_rejected", quote_no, quote_no,
                     _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
