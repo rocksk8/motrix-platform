@@ -2,8 +2,8 @@
 """職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。
 
 [單位] helper:duty_roles    [層] L1    [穩定度] 實作（R1；R2＝盤點／離職回收／職務分離／通知，尚未做）
-[公開介面] DutyError, FINANCE_KEYS, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
-[契約題] tests/test_duty_roles_r1_2026_10_06.py、tests/test_duty_roles_equivalence_2026_10_06.py
+[公開介面] DutyError, FINANCE_KEYS, gate_reason, user_modules_gate, record_user_modules_change, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
+[契約題] tests/test_duty_roles_r1_2026_10_06.py、tests/test_duty_roles_equivalence_2026_10_06.py、tests/test_user_perm_sensitive_gate_2026_11_13.py
 
 ## 權限算法（單一縫＝`helpers.auth.effective_modules`；本檔只提供「角色／扣項怎麼套到原始勾選上」）
   生效（原始勾選層）＝（`users.modules`〔個人加項〕 ∪ 啟用中的綁定角色的權限）− 個人扣項
@@ -14,6 +14,10 @@
   角色／扣項資料不可能降低它；服務層也拒絕對 superadmin 設扣項／綁角色。
 - `has_finance_access`／`has_cashier_access`／`user_has_module(財務三鍵)` **不動**（第42班原樣）；R1 不開放對財務三鍵設扣項（扣了不會生效，會造成假安全感）。
 - 扣項只影響「以模組鍵判斷」的功能；admin 直通的一般管理判斷（B 階段才收斂）不受影響 ⇒ 畫面寫明「部分生效」。
+
+## 共用檢查點（2026-11-13 安全票 fix/user-perm-sensitive-gate）
+高敏感規則只有一份：`gate_reason(touched, reason)`。職責角色各動作與 `PUT /api/users/{id}` 的個人勾選（`user_modules_gate`＋`record_user_modules_change`）都走它；
+新增授予／取消權限的入口（批次端點、範本套用…）一律呼叫它，不要自己再寫一份判斷。
 
 ## 變更原因（Q4 b）
 只有高敏感變更必填（≥4 個不同的字母數字／中文字元、≤200 字，伺服器端強制；純標點或重複同一字視為無效）；是否高敏感由伺服器依差異計算，不信前端旗標。
@@ -180,6 +184,32 @@ def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
         raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 個不同的字，不可只有標點或重複同一個字）" % ("、".join(HIGH_SENSITIVITY_KEYS), REASON_MIN))
 
 
+def gate_reason(touched, reason):
+    """**高敏感權限的共用檢查點**（伺服器端；職責角色各動作、`PUT /api/users/{id}` 的個人勾選、之後的批次／範本套用都走這一支）。
+    `touched`＝這次動到（授予或取消）的權限鍵；其中含 `HIGH_SENSITIVITY_KEYS` 任一個 ⇒ 原因必填（`REASON_MIN` 個不同字元、≤`REASON_MAX`）。
+    ⇒ `(sensitive, reason)`；不合格 raise `DutyError`（400）。沒動到高敏感鍵 ⇒ `(False, reason)`，原因怎麼寫都不擋（行為不變）。"""
+    reason = _clean_reason(reason)
+    sensitive = bool(set(touched or ()) & set(HIGH_SENSITIVITY_KEYS))
+    _require_reason_if_sensitive(sensitive, reason)
+    return sensitive, reason
+
+
+def user_modules_gate(before, after, reason, inert=False):
+    """`PUT /api/users/{id}` 的個人勾選（`users.modules`）：新舊清單的差異（授予＋取消）有高敏感鍵 ⇒ 要原因。
+    `inert`＝這個人改完仍是最高管理者（他的 `modules` 不影響生效權限）⇒ 不算授予（呼叫端判斷）。
+    ⇒ `(sensitive, reason)`。只比對清單差異：畫面每次存檔都會整串送回，沒動到的高敏感鍵不要求原因。"""
+    touched = [] if inert else sorted((set(after or ()) ^ set(before or ())) & set(HIGH_SENSITIVITY_KEYS))
+    return gate_reason(touched, reason)
+
+
+def record_user_modules_change(conn, actor, user_id, label, before, after, reason, ip=""):
+    """個人勾選含高敏感鍵的變更：`permission_changes` 一列（kind=`user_modules`）＋同一交易一筆 `audit_log`（`user.perm_change`）。
+    不 commit（呼叫端與 `UPDATE users` 同一個交易一起 commit）。"""
+    b, a = set(before or ()), set(after or ())
+    _record(conn, actor, "user_modules", "user", user_id, label, a - b, b - a, {"modules": sorted(b)}, {"modules": sorted(a)}, True, reason, ip,
+            audit=("user.perm_change", "user", user_id, label))
+
+
 def _write_audit(conn, actor, audit):
     """R2 第 2 步 8a：在**同一個交易**寫一筆 `audit_log`（動作名稱沿用原本路由寫的 `duty_roles.*`），回它的 id。
     `audit`＝(action, target_type, target_id, target_label)；沒給 ⇒ None（不寫、audit_id 留空，舊呼叫端行為不變）。
@@ -261,9 +291,7 @@ def create_role(conn, actor, key, name, description, permissions, reason, ip="")
         raise DutyError("角色代碼已存在", 409)
     perms = _check_perm_keys(permissions or [])
     _check_grantable(actor, perms)
-    reason = _clean_reason(reason)
-    sensitive = bool(set(perms) & set(HIGH_SENSITIVITY_KEYS))
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason(perms, reason)
     now = _now()
     cur = conn.execute("INSERT INTO duty_roles (key, name, description, permissions, is_system, active, version, created_at, updated_at)"
                        " VALUES (?,?,?,?,0,1,1,?,?)", (key, name, (description or "").strip(), json.dumps(perms), now, now))
@@ -280,13 +308,11 @@ def update_role(conn, actor, role_id, *, name=None, description=None, permission
     _check_grantable(actor, [k for k in new if k not in old])
     added, removed = set(new) - set(old), set(old) - set(new)
     new_active = r["active"] if active is None else (1 if active else 0)
-    reason = _clean_reason(reason)
     touched = added | removed
     # 角色停用／啟用也會同時增減所有成員的權限 ⇒ 以「角色目前權限」判斷是否高敏感
     if new_active != r["active"]:
         touched |= set(new)
-    sensitive = bool(touched & set(HIGH_SENSITIVITY_KEYS))
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason(touched, reason)
     new_name = (name if name is not None else r["name"]).strip()
     if not new_name:
         raise DutyError("名稱不可空白")
@@ -324,9 +350,7 @@ def bind_role(conn, actor, user_id, role_id, reason="", ip=""):
         raise DutyError("已綁定這個角色", 409)
     perms = _loads(r["permissions"], [])
     _check_grantable(actor, perms)
-    reason = _clean_reason(reason)
-    sensitive = bool(set(perms) & set(HIGH_SENSITIVITY_KEYS))
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason(perms, reason)
     before = set(_effective_of(conn, user_id, u["role"]))
     conn.execute("INSERT INTO user_duty_roles (user_id, role_id, granted_by, granted_at, reason) VALUES (?,?,?,?,?)",
                  (user_id, role_id, (actor or {}).get("id"), _now(), reason))
@@ -342,9 +366,7 @@ def unbind_role(conn, actor, user_id, role_id, reason="", ip=""):
     if not conn.execute("SELECT 1 FROM user_duty_roles WHERE user_id=? AND role_id=?", (user_id, role_id)).fetchone():
         raise DutyError("沒有綁定這個角色", 404)
     perms = _loads(r["permissions"], [])
-    reason = _clean_reason(reason)
-    sensitive = bool(set(perms) & set(HIGH_SENSITIVITY_KEYS))
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason(perms, reason)
     before = set(_effective_of(conn, user_id, u["role"]))
     conn.execute("DELETE FROM user_duty_roles WHERE user_id=? AND role_id=?", (user_id, role_id))
     after = set(_effective_of(conn, user_id, u["role"]))
@@ -363,9 +385,7 @@ def set_subtract(conn, actor, user_id, key, reason="", ip=""):
         raise DutyError("這個權限目前是個人勾選（加項），請先在使用者管理取消勾選再設扣項（同一個鍵只能有一種個人狀態）", 400)
     if conn.execute("SELECT 1 FROM user_perm_subtracts WHERE user_id=? AND perm_key=?", (user_id, key)).fetchone():
         raise DutyError("已經是扣項", 409)
-    reason = _clean_reason(reason)
-    sensitive = key in HIGH_SENSITIVITY_KEYS
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason([key], reason)
     before = set(_effective_of(conn, user_id, u["role"]))
     conn.execute("INSERT INTO user_perm_subtracts (user_id, perm_key, set_by, set_at, reason) VALUES (?,?,?,?,?)",
                  (user_id, key, (actor or {}).get("id"), _now(), reason))
@@ -379,9 +399,7 @@ def unset_subtract(conn, actor, user_id, key, reason="", ip=""):
     u = _guard_target_user(conn, actor, user_id)
     if not conn.execute("SELECT 1 FROM user_perm_subtracts WHERE user_id=? AND perm_key=?", (user_id, key)).fetchone():
         raise DutyError("沒有這個扣項", 404)
-    reason = _clean_reason(reason)
-    sensitive = key in HIGH_SENSITIVITY_KEYS
-    _require_reason_if_sensitive(sensitive, reason)
+    sensitive, reason = gate_reason([key], reason)
     _check_grantable(actor, [key])                       # 解除扣項＝把權限還給對方
     before = set(_effective_of(conn, user_id, u["role"]))
     conn.execute("DELETE FROM user_perm_subtracts WHERE user_id=? AND perm_key=?", (user_id, key))
