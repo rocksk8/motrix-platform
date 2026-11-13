@@ -794,7 +794,7 @@ def test_audit_failure_after_the_action_is_not_a_500(client, make_user, hb_cfg, 
     def boom(*a, **k):
         raise RuntimeError("audit db locked")
     monkeypatch.setattr(rt, "_audit", boom)
-    monkeypatch.setattr(fresh, "_ping", lambda u: (True, "監控服務有收到這次打卡。"))
+    monkeypatch.setattr(fresh, "_ping", lambda u: (True, "監控服務有收到這次回報。"))
     h = _login(client, make_user, "l3_sa")
     r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
     assert r.status_code == 200 and r.json()["ok"] is True                      # 備份已經開始，不能回 500 讓人重按
