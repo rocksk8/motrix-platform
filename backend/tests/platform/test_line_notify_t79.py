@@ -148,6 +148,7 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     assert not any(k.startswith(("bonus_", "payslip_")) for k in evs) and "line_quota_warning" not in evs
     assert g.pop("event_groups")[0] == "報價單與簽核"                    # 設定頁依模組分組（簽核優先）
     assert g.pop("role_choices") == ["superadmin", "admin", "sales", "engineer", "viewer", "finance"]         # 收件人角色（2026-11-12）
+    assert g.pop("usage30")["days"] == 30                                                                      # 2026-11-13（LINE 事件矩陣票）：近 30 天用量（按日計數）
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
     assert TOKEN not in client.get("/api/settings/line-notify", headers=sa).text

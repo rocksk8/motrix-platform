@@ -575,6 +575,7 @@ PAGE_LABELS = {
     "network-plan-form.html": "網路架構規劃書",
     "network-plans.html": "網路架構規劃書",
     "notification-settings.html": "通知設定",
+    "line-events.html": "LINE 通知事件",
     "online-stats.html": "使用狀況",
     "org-structure.html": "組織架構設定",
     "parts.html": "料號主檔",
