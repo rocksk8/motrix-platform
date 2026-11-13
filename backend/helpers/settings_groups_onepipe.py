@@ -8,7 +8,7 @@
       worklog_case            P0b 工作日誌可選案件（本檔）
       warranty_closed_notify  P0d 保固到期通知納入已結案案件（本檔）
       links／ship_install_ok／timeline  P0a／P0c／P1'（hichan-1 的班次接著加在下面的清單裡）
-[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py
+[契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py
 """
 
 
