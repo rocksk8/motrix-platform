@@ -65,6 +65,11 @@
 - 新增 LINE-only 事件 `settings_changed`（分組「系統告警」，只發最高管理者，內容不含原因與數值；預設與所有 LINE 事件一樣全關，由管理者勾選）。
 - 前端修正：`settings-center.html` 單選不選取、數字框空白（使用者兩張截圖）的根因是元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名（Alpine 範圍代理在 x-for 內解析到原生函式）⇒ 改名 `curVal`；新增「未儲存」標記、底部「有 N 項未儲存」列（儲存／放棄）、離開頁面警告、儲存結果提示（已生效／已送出待核准預計 X 日生效）、「建議值」徽章。
 - 測試：`tests/test_settings_change_notify_2026_11_13.py`（46 題：收件人／內容／commit 之後且不在鎖內／待生效流程／合併／LINE；前端以 node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一題，含舊 bug 的對照題與全站「方法名不得蓋住 Object.prototype 成員」守門）。
+- **（併入）(next) — 2026-11-13（feat/settings-matrix-s3b；信件收件人矩陣：草稿儲存、批次端點、行事曆欄與 Google 行事曆設定頁同一份資料）**
+- 新增端點（皆最高管理者；L1 只增）：`POST /api/settings/mail/batch-preview`（儲存前預覽：每列套用前後、系統技術類標紅、哪些要二次確認、通知會發給誰；不寫入）、`POST /api/settings/mail/batch`（草稿一次儲存：`changes`＋`expect`（載入時的列版本）＋`since_audit`；**全部驗證過才寫、任一列不合法 400 一個都不寫**；信件覆寫與行事曆開關同一個交易；整批一筆稽核 `settings.mail.batch`＋一則設定變更通知；本批有簽核／系統技術類信件被關閉時必須帶 `confirm_system: true`，否則 400 `confirm_system_required`；版本對不上 409 `conflict`）、`POST /api/settings/mail/batch-undo`（復原這一批，同樣整批比對版本）。`GET /api/mail-types` 只增 `auditMark`、每列 `version`、`calendarOnly[].key／version`。
+- 行為變更：單列舊入口 `PUT /api/mail-types/{key}/recipients` 與批次共用同一套規則（`_plan_row`／`_write_states`），原有的 400／404／409 訊息不變；多了一件事——成功寫入後發設定變更通知（kind `mail`）。
+- 前端：`mail-settings.html` 改成共用矩陣元件（草稿制：頂端儲存列、整欄開關、批次「收件人」動作、選人視窗、儲存前確認視窗、復原這一批），不再用 Alpine；`google-calendar-settings.html` 的「自動建立的事件」改成唯讀狀態＋連到信件矩陣的連結（開關只剩一個入口，同一份 `google_calendar.events`）。
+- 測試：`tests/test_s3b_mail_matrix_2026_11_13.py`（22 題：原子性、系統類確認、預覽不寫入、行事曆欄共用、版本衝突、復原、通知一則、僅最高管理者）；e2e 三支改寫成草稿制操作；未範圍讀取基準 +1（`_conflict_who`，上限 875）。
 - 行為變更（S5 只通知三項，使用者裁示 2026-11-13）：存檔後依 SPEC §15 發「設定變更通知」的三個舊設定頁——獎金預設（`PUT /api/bonus/cases/settings`，見薪資獎金模組紀錄）、營運目標（`PUT /api/settings/operating-targets`，通知財務角色）、報價條款組＋預設付款條件（通知業務角色）；每次存檔合併成一則、只列有變的欄位（舊→新）。**報價條款組存檔不再另發「系統設定：變更報價條款組」的 module_activity（email＋群組 LINE）**，只留設定變更通知一則；寫入前讀不到舊值（例外）時這次不發通知、不影響儲存（未設定過時回空清單，不算讀不到）。測試 `tests/test_s5_notify_only_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（feat/settings-matrix-s6；設定改版 S6：我的帳號 → 通知分頁「我要收的 Email 通知」）**
 - 行為變更（對外介面）：新端點 `GET /api/mail-types/mine`、`PUT /api/mail-types/mine`（本人；登入即可）——本人自己看／改自己的 Email 通知偏好。只列「寄得到我」的信件類型（沿用 `receivable`）；寫的是 `users.notification_muted`（opt-out 清單：空＝全收；清單裡本人看不到的舊項目原樣保留）。

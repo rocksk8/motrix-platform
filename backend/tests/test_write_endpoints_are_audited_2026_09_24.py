@@ -48,6 +48,8 @@ AUDIT_WRAPPERS = {
     "_create_work_log_impl": ("routers/system.py", "建立成功寫 work_log.create"),
     "_upload_work_log_photos_impl": ("routers/system.py", "上傳成功寫 work_log.photo_upload"),
     # 備份與監控頁：動作完成後才寫稽核，寫失敗只記 log（不讓使用者看到 500 而重按）；內部直接呼叫 `_audit`
+    # S3b 信件矩陣草稿儲存／復原：寫入成功後一次 `_audit_batch`（內部直接呼叫 `_audit`：settings.mail.batch／settings.mail.batch_undo；行事曆格另寫 settings.google_calendar.event_toggle）；驗證／衝突／未確認都在前面 raise、不寫
+    "_audit_batch": ("routers/mail_settings.py", "批次儲存／復原成功才寫 settings.mail.batch／batch_undo"),
     "_safe_audit": ("routers/backup_monitor.py", "立即備份／設定網址／測試心跳完成後寫 system.backup_now／heartbeat_url_set／heartbeat_test"),
 }
 
@@ -58,6 +60,9 @@ EXEMPT = {
         "稽核 menu_categories.override 由 helpers/menu_categories.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
     ("menu_categories.py", "PUT", "/api/menu/settings-help/override"):
         "稽核 settings_help.override 由 helpers/settings_help.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
+    # ── 信件矩陣批次預覽（S3b 2026-11-13）：POST 只為帶「想套用的改動」，不寫設定、不寫稽核 ──
+    ("mail_settings.py", "POST", "/api/settings/mail/batch-preview"):
+        "preview：只在記憶體內算套用前後的收件人與每月則數（純計算、不 commit、不寫任何資料、不發通知）；僅最高管理者。真正寫入的 /api/settings/mail/batch 與 batch-undo 寫 settings.mail.batch／batch_undo 稽核。",
     # ── LINE 事件矩陣批次預覽（2026-11-13）：POST 只為帶「想套用的改動」，不寫設定、不寫稽核 ──
     ("system.py", "POST", "/api/settings/line-notify/events/batch-preview"):
         "preview：只在記憶體內算套用前後的收件人數與每月則數（line_notify.preview_events_* 純計算、不 commit、不寫任何資料）；僅最高管理者。真正寫入的 /events/batch 與 /events/batch-undo 各記一筆稽核。",
