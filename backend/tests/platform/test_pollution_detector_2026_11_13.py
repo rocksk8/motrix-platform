@@ -146,6 +146,6 @@ def test_xdist_single_writer_one_line_per_record_and_one_list(tmp_path):
     assert len(files) == len(set(files)), files                                                   # 每個檔只一行（worker 不寫）
     assert len(list(out.glob("*.pollution-list.json"))) == 1
     lst = _polluters(out)
-    assert lst["attribution"] == "reliable" and lst["files_checked"] == len(SUITE)
+    assert lst["attribution"] == "reliable" and lst["files_checked"] == sum(k.startswith("test_") for k in SUITE)
     p2, out2 = _run(tmp_path, sub="xl", extra_args=("-n", "2", "--dist", "load"))
     assert _polluters(out2)["attribution"].startswith("approximate")                              # 分配模式 load：照出，但標歸屬不可靠
