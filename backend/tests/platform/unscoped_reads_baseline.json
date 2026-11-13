@@ -335,6 +335,7 @@
   "modules/case/api/quotations.py::_post_case_update_impl::quotations": "unscoped",
   "modules/case/api/quotations.py::_serialize_stage::case_stage_visits": "unscoped",
   "modules/case/api/quotations.py::_signed_back_gate::quotations": "unscoped",
+  "modules/case/api/quotations.py::_sweep_decided_staging_dirs::case_change_requests": "unscoped",
   "modules/case/api/quotations.py::_sync_json_stages_to_table::case_stages": "unscoped",
   "modules/case/api/quotations.py::_sync_stages_to_json::case_stage_visits": "unscoped",
   "modules/case/api/quotations.py::_sync_stages_to_json::case_stages": "unscoped",
