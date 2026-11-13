@@ -1708,6 +1708,7 @@
    "register": "def(S, _register_core)"
   },
   "helper:settings_groups_lodging_freshness": {},
+  "helper:settings_groups_onepipe": {},
   "helper:settings_groups_overhead": {
    "register": "def(S, _register_core)"
   },

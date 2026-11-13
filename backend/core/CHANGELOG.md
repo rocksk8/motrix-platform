@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（onepipe；物料流程一條龍）
+- 新增（設定中心）：群組 `onepipe`（`helpers/settings_groups_onepipe.py`，拆檔同 lodging_freshness）——各批次共用的開關，欄位皆 0／1、預設 0（關＝與今天逐位元相同）：`worklog_case`（P0b 工作日誌可選案件）、`warranty_closed_notify`（P0d 保固到期通知納入已結案案件）。P0a／P0c／P1' 的欄位由各自班次接著加進同一份清單。
+
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
 - L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
 - 行為變更（安全／效能，不影響對外介面）：
