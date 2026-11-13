@@ -206,7 +206,7 @@ def _run_ps(body, tmp_path, funcs=("Stop-InstallService",), src="apply_update.ps
     parts = []
     funcs = tuple(funcs)
     if "Stop-InstallService" in funcs:   # Stop-InstallService 會呼叫排程工作的停用／恢復（T84 一次殺光所有迴圈）
-        funcs += tuple(x for x in ("Suspend-AutostartTask", "Restore-AutostartTask") if x not in funcs)
+        funcs += tuple(x for x in ("Suspend-AutostartTask", "Restore-AutostartTask", "Get-AutostartTaskMarker") if x not in funcs)
     for n in funcs:
         f = _fn(t, n)
         assert f, "找不到函式 %s" % n
@@ -344,7 +344,7 @@ $n = Stop-InstallService
 Restore-AutostartTask
 Restore-AutostartTask
 "after_restore=$($script:taskOps -join ',')|state=$($script:taskState)"
-''', tmp_path, funcs=("Stop-InstallService", "Suspend-AutostartTask", "Restore-AutostartTask"))
+''', tmp_path, funcs=("Stop-InstallService", "Suspend-AutostartTask", "Restore-AutostartTask", "Get-AutostartTaskMarker"))
     assert re.search(r"^after_list=$", out, re.M), "-ListOnly 不動排程工作：" + out
     assert "after_stop=disable|state=Disabled" in out, out
     assert re.search(r"^after_second_stop=disable$", out, re.M), "再停一次不重複停用：" + out
@@ -358,19 +358,48 @@ $script:taskState = "Disabled"
 Suspend-AutostartTask
 Restore-AutostartTask
 "ops=$($script:taskOps -join ',')|state=$($script:taskState)"
-''', tmp_path, funcs=("Suspend-AutostartTask", "Restore-AutostartTask"))
+''', tmp_path, funcs=("Suspend-AutostartTask", "Restore-AutostartTask", "Get-AutostartTaskMarker"))
     assert "ops=|state=Disabled" in out, "管理者本來就停用的不要替他啟用：" + out
+
+
+@needs_ps
+def test_interrupted_apply_leaves_a_marker_and_the_next_run_restores_the_task(tmp_path):
+    """套用行程在 Suspend 與 Restore 之間死掉（WinRM 斷線／被殺／斷電）⇒ 排程工作停在停用、重開機後服務不會起來。
+    標記檔讓下一次 apply／rollback 認得那個停用是我們留下的並恢復；管理者自己停用的（沒有標記）仍不動。"""
+    bd = str(tmp_path).replace("\\", "/")
+    out = _run_ps(_TASK_PS + "\n$BackendDir = '%s'\n" % bd + r'''
+$marker = Get-AutostartTaskMarker
+Suspend-AutostartTask
+"marker_after_suspend=$(Test-Path $marker)"
+# ── 行程在這裡死掉：旗標與記憶體狀態消失，只剩 Windows 工作（Disabled）與標記檔 ──
+$script:AutostartTaskDisabledByApply = $false
+"state_after_crash=$($script:taskState)"
+Suspend-AutostartTask
+"adopted=$($script:AutostartTaskDisabledByApply)|ops=$($script:taskOps -join ',')"
+Restore-AutostartTask
+"state_after_next_run=$($script:taskState)|marker_after_restore=$(Test-Path $marker)|ops=$($script:taskOps -join ',')"
+# 管理者自己停用、沒有標記 ⇒ 不動
+$script:taskState = "Disabled"; $script:taskOps.Clear()
+Suspend-AutostartTask
+Restore-AutostartTask
+"admin_disabled_ops=$($script:taskOps -join ',')|state=$($script:taskState)"
+''', tmp_path, funcs=("Suspend-AutostartTask", "Restore-AutostartTask", "Get-AutostartTaskMarker"))
+    assert "marker_after_suspend=True" in out, out
+    assert "state_after_crash=Disabled" in out, out
+    assert "adopted=True|ops=disable" in out, "下一次要認得標記並接手（不再重複停用）：" + out
+    assert "state_after_next_run=Ready|marker_after_restore=False|ops=disable,enable" in out, out
+    assert re.search(r"^admin_disabled_ops=\|state=Disabled$", out, re.M), "管理者自己停用的不動：" + out
 
 
 def test_restore_happens_before_start_and_on_every_exit_in_all_three_scripts():
     for n in ("apply_update.ps1", "apply_module_update.ps1", "rollback_update.ps1"):
         s = _src(n)
-        for fn in ("Suspend-AutostartTask", "Restore-AutostartTask", "Start-InstallService", "Exit-InstallLock"):
+        for fn in ("Suspend-AutostartTask", "Restore-AutostartTask", "Get-AutostartTaskMarker", "Start-InstallService", "Exit-InstallLock"):
             assert _fn(s, fn), (n, fn)
         assert _fn(s, "Start-InstallService").split(chr(10))[1].strip().startswith("Restore-AutostartTask"), n
         assert "Restore-AutostartTask" in _fn(s, "Exit-InstallLock"), n
         assert "Suspend-AutostartTask" in _fn(s, "Stop-InstallService"), n
-    parts = [(_fn(_src(n), "Suspend-AutostartTask"), _fn(_src(n), "Restore-AutostartTask"), _fn(_src(n), "Exit-InstallLock"), _fn(_src(n), "Start-InstallService"))
+    parts = [(_fn(_src(n), "Suspend-AutostartTask"), _fn(_src(n), "Restore-AutostartTask"), _fn(_src(n), "Get-AutostartTaskMarker"), _fn(_src(n), "Exit-InstallLock"), _fn(_src(n), "Start-InstallService"))
              for n in ("apply_update.ps1", "apply_module_update.ps1", "rollback_update.ps1")]
     assert parts[0] == parts[1] == parts[2], "四個函式在三支腳本逐字相同"
 
