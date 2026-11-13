@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.231 — 2026-11-14（T84 診斷修正輪；整合者補登）
+- 規格宣告（行為不變）：`module.json` 的 `features` 補登 `case_content_edited_notify`（`mail: approval_content_edited`）——簽核內容被修改的通知信早已存在，這次是讓脊柱字面值登記掃描（`test_spine_literal_scan`）認得它；無新端點、無資料表變動。
+
 ## 1.0.230 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
 - 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
 - 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。

@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1673,
+  "tests": 1674,
   "unmapped": 9,
   "kinds": {
-   "api": 928,
+   "api": 929,
    "e2e": 379,
    "audit": 216,
    "unit": 150
@@ -24880,6 +24880,7 @@
     "core:main",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_response_keys.py",
+    "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:tender_radar/__init__",
     "mod:tender_radar/source",
@@ -24901,12 +24902,14 @@
      "backend/tests/platform/_response_keys.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py",
      "backend/routers/parts.py"
     ]
    },
    "unresolved_api": [
-    "/api/not-rate-limited"
+    "/api/not-rate-limited",
+    "/api/reports/export"
    ],
    "login_fixture": true
   },
@@ -25061,6 +25064,30 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_s6_standalone_registration_2026_11_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:frontend/pages/",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_pages",
+    "helper:settings_shell",
+    "page:pages/my-account.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_pages.py",
+     "backend/helpers/settings_shell.py"
+    ],
+    "page": [
+     "frontend/pages/my-account.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/my-account.html"
+    ]
+   }
   },
   "backend/tests/platform/test_scope_gate_2026_09_30.py": {
    "kind": "audit",
