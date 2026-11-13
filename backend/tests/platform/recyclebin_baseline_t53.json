@@ -155,7 +155,7 @@
   },
   "modules/case/case_deadlines.py::system_settings": {
    "count": 2,
-   "reason": "exempt: 系統設定鍵值（非單據）；T84 階段到期去重鍵修剪多一處"
+   "reason": "exempt: 系統設定鍵值（非單據）；2026-11-13 T84 階段到期去重鍵 casestage_notif.* 修剪多一處 DELETE（清理用，不是使用者刪除）"
   },
   "modules/case/material_payment.py::case_material_payment_lines": {
    "count": 1,
