@@ -184,7 +184,7 @@ def test_recycle_adapter_labels_follow_the_doc_no(client):
 
 # ── E. 行事曆／業務開發轉建 ───────────────────────────────────────────────────
 
-def test_dev_case_converted_calendar_text_follows_type(monkeypatch):
+def test_dev_case_converted_calendar_text_follows_type(client, monkeypatch):
     from db import get_db
     from helpers import google_calendar as G
     conn = get_db()
