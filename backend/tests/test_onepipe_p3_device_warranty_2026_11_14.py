@@ -54,7 +54,8 @@ def _case(devices=(), assigned=(), no=NO):
        (no, "已送出", "客", "專案", 1000, 952, json.dumps(data), "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "", json.dumps(list(assigned))))
 
 
-def _shipped(serial, ship_date, quote=NO, part="NET-P3", note="SN-P3-1", status="shipped"):
+def _shipped(serial, ship_date, quote=NO, part="NET-P3", note=None, status="shipped"):
+    note = note or "SN-" + serial                       # 每個序號各一張出貨單（INSERT OR IGNORE 共用單號會讓後面的序號沿用第一張的出貨日）
     _x("INSERT OR IGNORE INTO parts (part_no, name, active, cost, created_at, updated_at) VALUES (?,?,1,0,?,?)", (part, "測試交換器", "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
     _x("INSERT OR IGNORE INTO shipping_notes (note_no, quote_no, status, ship_date, created_at, updated_at) VALUES (?,?,?,?,?,?)",
        (note, quote, "已核准", ship_date, "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
@@ -200,11 +201,11 @@ def test_history_masks_events_without_quote_and_ignores_typed_serials(client, ma
     _shipped("S-H2", "2026-11-05")
     _event("S-H2", "receive", quote="", to="in_stock", ref="PO-SECRET", reason="入庫備註")
     _event("S-H2", "revoke_ship", quote="", frm="shipped", to="in_stock", ref="SN-OTHER-9", reason="別案撤銷備註")
-    _event("S-H2", "ship", quote=NO, frm="in_stock", to="shipped", ref="SN-P3-1")
+    _event("S-H2", "ship", quote=NO, frm="in_stock", to="shipped", ref="SN-S-H2")
     b = client.get(HIS, params={"sn": "S-H2"}, headers=admin).json()
     assert [e["event"] for e in b["events"]] == ["receive", "revoke_ship", "ship"]
     assert all(e["ref"] == "" and e["reason"] == "" and e["actor"] == "" for e in b["events"][:2])
-    assert b["events"][0]["quoteNo"] == "" and b["events"][2]["quoteNo"] == NO and b["events"][2]["ref"] == "SN-P3-1"
+    assert b["events"][0]["quoteNo"] == "" and b["events"][2]["quoteNo"] == NO and b["events"][2]["ref"] == "SN-S-H2"
     blob = json.dumps(b, ensure_ascii=False)
     assert "PO-SECRET" not in blob and "別案撤銷備註" not in blob and "SN-OTHER-9" not in blob
     _event("S-TYPED", "receive", quote=OTHER, to="in_stock", ref="PO-X", reason="別案")           # 只在案件設備清單打了序號、庫存與本案無關
