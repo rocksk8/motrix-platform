@@ -340,7 +340,7 @@ def test_preview_delegation_gives_the_plain_confirmation_sentence(conn, make_use
     _mk(make_user, "pv_boss", "admin")
     _mk(make_user, "pv_dlg", "viewer")
     p = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.edit"], "2031-11-30")
-    assert p["sentence"].startswith("你即將讓") and "代理" in p["sentence"] and "修改測試單" in p["sentence"] and "11/30" in p["sentence"] and "立即生效" in p["sentence"]
+    assert p["sentence"].startswith("您即將讓") and "代理" in p["sentence"] and "修改測試單" in p["sentence"] and "11/30" in p["sentence"] and "立即生效" in p["sentence"]
     risky = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.pay"], "2031-11-30")
     assert risky["pending"] and "7 天確認期間後生效" in risky["sentence"] and "24 小時" not in risky["sentence"] and "高風險" in risky["risk"] and "24 小時" not in risky["risk"]
     with pytest.raises(S.PermError):
