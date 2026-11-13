@@ -223,7 +223,8 @@ def explain(records, repo, env=None, now=None, last=12):
             out["stages"][st] = {"reuse": ok, "reason": why}
     for r in recs[-last:]:
         row = {"tested_at": r.get("tested_at"), "source": r.get("source") or "build", "commit": r.get("commit"),
-               "stages": {k: ("綠" if (v or {}).get("green") else "紅") for k, v in (r.get("stages") or {}).items()}
+               "stages": {k: (("綠（重試 %s 題）" % (v["retry"].get("count")) if isinstance((v or {}).get("retry"), dict) else "綠") if (v or {}).get("green") else "紅")
+                          for k, v in (r.get("stages") or {}).items()}
                or {"(舊格式)": "綠" if r.get("green") else "紅"},
                "fp_match": bool(fp) and r.get("fingerprint") == fp}
         if fp and not row["fp_match"]:
@@ -313,6 +314,9 @@ def collect_reds(fail_stream_dir, limit=500):
 #: 每次重試都留證據（紀錄的 stages.<段>.retry＋retry_log.jsonl），同一題累計次數給雜訊排行榜用。
 RETRY_MAX_DEFAULT = 5
 RETRY_LOG_NAME = "retry_log.jsonl"
+#: 同一題 24 小時內被重試達這個次數 ⇒ run-stage 結束時警告「這不像雜訊」（只警告，不拒絕；累計看 retry-counts）
+RETRY_WARN_COUNT = 3
+RETRY_WARN_HOURS = 24
 
 
 def retry_log_path(records):
@@ -388,8 +392,9 @@ def append_retry_log(records, stage, commit, fp, rows):
         pass
 
 
-def retry_counts(records):
-    """retry_log.jsonl ⇒ {nodeid: {"retries": 次數, "passed": 重試過的次數, "failed": 重試仍紅的次數, "last": 最後一次時間}}（雜訊排行榜的來源）。"""
+def retry_counts(records, now=None):
+    """retry_log.jsonl ⇒ {nodeid: {"retries": 次數, "passed": 重試過的次數, "failed": 重試仍紅的次數, "last": 最後一次時間, "recent": 最近 24 小時的次數}}（雜訊排行榜的來源）。"""
+    now = now or datetime.now()
     out = {}
     p = retry_log_path(records)
     if not p.exists():
@@ -402,8 +407,13 @@ def retry_counts(records):
         n = r.get("nodeid")
         if not n:
             continue
-        e = out.setdefault(n, {"retries": 0, "passed": 0, "failed": 0, "last": ""})
+        e = out.setdefault(n, {"retries": 0, "passed": 0, "failed": 0, "last": "", "recent": 0})
         e["retries"] += 1
+        try:
+            if (now - datetime.strptime(r.get("t") or "", TS_FMT)).total_seconds() <= RETRY_WARN_HOURS * 3600:
+                e["recent"] += 1
+        except ValueError:
+            pass
         e["passed" if r.get("result") == "pass" else "failed"] += 1
         e["last"] = r.get("t") or e["last"]
     return out
@@ -446,7 +456,10 @@ def gate_hold(repo, stage, note=print, hr=None, window=None):
 def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False, retry_failed=RETRY_MAX_DEFAULT):
     """run-stage 本體（`_run_stage`）外包一層閘門鎖：真的要跑（沒注入 runner）時自己持有閘門鎖，跑完放（見 gate_hold）。
     回 (exit code, 是否寫了紀錄, 說明)。其餘說明見 `_run_stage`。"""
-    release = gate_hold(repo, stage, note) if runner is None else (lambda: None)
+    # 診斷跑（--no-failfast＝找出全部紅）：不重試（重試綠會把原本的紅洗掉）、也不自己取閘門鎖（不要為了一次診斷讓全機的 pytest 被拒絕 15～30 分鐘）
+    if no_failfast:
+        retry_failed = 0
+    release = gate_hold(repo, stage, note) if (runner is None and not no_failfast) else (lambda: None)
     try:
         return _run_stage(repo, stage, records, python, runner, workers, note, no_failfast, retry_failed)
     finally:
@@ -556,6 +569,9 @@ def _run_stage(repo, stage, records, python=None, runner=None, workers=None, not
         extra += "；重試 %d 題：%s（原始紅明細：%s；重試明細：%s）；累計重試次數：%s" % (
             retry["count"], "全部通過 ⇒ 記綠" if retry["retried_green"] else "仍紅 %d 題（%s）⇒ 記紅" % (len(retry["still_red"]), "、".join(retry["still_red"])),
             fs_dir, retry["dir"], "、".join("%s×%d" % (n, counts.get(n, {}).get("retries", 0)) for n in retry["original_reds"]))
+        often = [n for n in retry["original_reds"] if counts.get(n, {}).get("recent", 0) >= RETRY_WARN_COUNT]
+        if often:
+            extra += "；⚠ %d 小時內重試達 %d 次以上（不像雜訊，像真的不穩或測試間污染）：%s" % (RETRY_WARN_HOURS, RETRY_WARN_COUNT, "、".join(often))
     elif found:
         extra += "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
             len(found), "無 failfast，全部列出" if no_failfast else "failfast 提早停，只含已出現的", "、".join(found[:20]) + ("…" if len(found) > 20 else ""), fs_dir)
@@ -612,9 +628,12 @@ def find_reusable_stage(records, fp, stage, now, max_hours=MAX_HOURS):
         if not _stage_ok(entry, now, max_hours):
             return None
         flaky = entry.get("flaky_retried") or []
-        return {"green": True, "tested_at": entry["tested_at"],
-                "flaky_retried": list(flaky) if isinstance(flaky, list) else [],
-                "commit": r.get("commit"), "source": r.get("source") or "build"}
+        got = {"green": True, "tested_at": entry["tested_at"],
+               "flaky_retried": list(flaky) if isinstance(flaky, list) else [],
+               "commit": r.get("commit"), "source": r.get("source") or "build"}
+        if isinstance(entry.get("retry"), dict):
+            got["retry"] = entry["retry"]                    # 這一段是「綠（重試 k 題）」：顯示端（建包摘要／儀表板）要看得到，不要和乾淨的綠混在一起
+        return got
     return None
 
 

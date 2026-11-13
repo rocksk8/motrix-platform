@@ -305,3 +305,46 @@ def test_run_stage_holds_the_gate_only_for_a_real_run_and_children_carry_the_tok
     rc, wrote, why = btr.run_stage(tiny_repo, "not_e2e", tmp_path / "rec.jsonl", note=lambda *_: None)
     assert rc == 0 and seen["gate"] and seen["gate"]["note"].startswith("run-stage") and seen["token"] == seen["gate"]["token"], seen
     assert H.read_gate() is None, "run-stage 跑完沒放閘門鎖"
+
+
+# ── h10 審查後補（M-／L2／L3）──────────────────────────────────────────────────────────────────
+
+
+def test_no_failfast_diagnostic_run_is_never_retried_and_keeps_the_original_reds(tiny_repo, tmp_path):
+    rn = Runner([R1, R2])
+    rc, wrote, why, rec, recs = _run(tiny_repo, tmp_path, rn, no_failfast=True)
+    assert rc == 1 and len(rn.calls) == 1, "診斷跑（找出全部紅）被自動重試，原始紅被洗掉"
+    ent = rec["stages"]["not_e2e"]
+    assert ent["green"] is False and ent["reds"] == [R1, R2] and "retry" not in ent
+
+
+def test_no_failfast_does_not_take_the_machine_wide_gate_lock(tiny_repo, tmp_path, monkeypatch):
+    monkeypatch.setenv("MOTRIX_CI_DIR", str(tmp_path / "ci"))
+    taken = []
+    monkeypatch.setattr(btr, "gate_hold", lambda *a, **k: taken.append(1) or (lambda: None))
+    # 注入 runner 時本來就不取；這題看的是 wrapper 的條件：診斷跑不取
+    src = (BACKEND / "tools" / "build_test_reuse.py").read_text(encoding="utf-8")
+    assert "(runner is None and not no_failfast)" in src, "診斷跑（--no-failfast）也取閘門鎖：為了一次診斷讓全機 pytest 被拒絕 15～30 分鐘"
+
+
+def test_a_retry_green_stage_is_visible_to_the_build_and_to_explain(tiny_repo, tmp_path):
+    rn = Runner([R1, R2])
+    rc, wrote, why, rec, recs = _run(tiny_repo, tmp_path, rn)
+    from datetime import datetime
+    got = btr.find_reusable_stage(btr._read(recs), rec["fingerprint"], "not_e2e", datetime.now())
+    assert got and got["retry"]["count"] == 2 and got["retry"]["original_reds"] == [R1, R2], "沿用結果沒帶出「綠（重試 k 題）」"
+    clean = btr.find_reusable_stage([{"fingerprint": "f", "stages": {"not_e2e": btr.stage_entry(True)}}], "f", "not_e2e", datetime.now())
+    assert "retry" not in clean, "乾淨的綠不該有 retry 欄位"
+    res = btr.explain(recs, tiny_repo)
+    assert any(r["stages"].get("not_e2e") == "綠（重試 2 題）" for r in res["rows"]), res["rows"]
+    ps1 = (BACKEND / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
+    assert ps1.count("綠（重試 $(") == 3, "建包沿用一段時要寫明是重試綠（manifest verification＋非 e2e／e2e 兩行訊息）"
+
+
+def test_a_test_retried_often_is_flagged_as_not_noise(tiny_repo, tmp_path):
+    recs = tmp_path / "rec.jsonl"
+    why = ""
+    for _ in range(3):
+        _, _, why = btr.run_stage(tiny_repo, "not_e2e", recs, runner=Runner([R1]), note=lambda *_: None)
+    assert "⚠" in why and R1 in why.split("⚠", 1)[1] and "不像雜訊" in why, why
+    assert btr.retry_counts(recs)[R1]["recent"] == 3
