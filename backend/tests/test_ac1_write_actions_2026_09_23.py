@@ -67,8 +67,12 @@ from tests import _frontend_sources as FS
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGES_DIR = ROOT / "frontend" / "pages"
 
-#: 「會送出的那一個動作」。
-WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]", re.I)
+#: 「會送出的那一個動作」。兩種寫法都算：
+#:  ① `fetch(…, { method: 'POST' … })`；
+#:  ② 頁內的送出小幫手把 method 當參數傳（`this._post('/api/…', 'POST', body, …)`，幫手裡的 fetch 只寫 `{ method, … }`
+#:     ⇒ ① 看不到；T83 整合：backup-monitor.html 就是這樣，被誤判成沒有任何動作的頁）。
+WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]"
+                      r"|\b_?post\w*\(\s*['\"]/api/[^\n]*?,\s*['\"](POST|PUT|PATCH|DELETE)['\"]\s*,", re.I)
 
 #: 頁面自己 `<script src>` 進來的專案 js。
 #: 單雙引號皆可、容許 `?v=` 版本戳（原本只吃 `src="….js"` ⇒ 將來有人加版本戳就會安靜少掃）。
