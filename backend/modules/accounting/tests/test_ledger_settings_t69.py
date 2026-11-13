@@ -147,7 +147,7 @@ def test_sole_superadmin_changes_roles_directly_with_a_reason_and_an_audit(clien
     r = _put(client, sup_a, reason="單人公司調整銀行科目")
     assert r.status_code == 200, r.text
     j = r.json()
-    assert j["ok"] is True and j["pending"] is False and j["applied"] is True and "單人公司" in j["warning"], j
+    assert j["ok"] is True and j["pending"] is False and j["applied"] is True and "再設一位最高管理者" in j["warning"], j
     assert _role_code() == "1112" != before                    # 立即寫進 gl_account_roles
     assert client.get("/api/ledger/roles", headers=sup_a).json()["pending"] == []
     a = _audits("ledger.role.put")
