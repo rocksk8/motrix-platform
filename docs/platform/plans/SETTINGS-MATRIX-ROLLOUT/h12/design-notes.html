@@ -3,14 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>乙份設計說明</title>
+<title>乙份設計說明 r2</title>
 <style>
 :root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--redbg:#fdecef;--blue:#1b4f9c;--bluebg:#e9f0fb;--warnbg:#fff4de;--warn:#9a5b00}
 @media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--redbg:#3a1a20;--red:#ff6b7f;--blue:#7fb0ff;--bluebg:#16253d;--warnbg:#3a2c10;--warn:#f0b04a}}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
 .w{max-width:960px;margin:0 auto;padding:20px 16px 60px}
 h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:26px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}h3{font-size:15.5px;margin:16px 0 4px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;margin:10px 0}
 .b{border-radius:10px;padding:8px 14px;margin:10px 0}.red{background:var(--redbg);color:var(--red)}.blue{background:var(--bluebg);color:var(--blue)}.yel{background:var(--warnbg);color:var(--warn)}
 table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow-x:auto}th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--soft);white-space:nowrap}
 code{font:12.5px ui-monospace,Consolas,monospace;color:var(--mute)}
@@ -19,100 +18,98 @@ code{font:12.5px ui-monospace,Consolas,monospace;color:var(--mute)}
 </style>
 </head>
 <body><div class="w">
-<h1>設定矩陣化：乙份「系統、安全、畫面與自訂」設計說明</h1>
-<div class="mute">作者 hichan-12｜分支 feat/settings-matrix-rollout｜審查 hichan-11｜互動樣品 <a href="index.html">index.html</a>｜盤點表 <code>data/settings-center-items.csv</code>（乙份 111 列【填】欄已填）</div>
+<h1>設定矩陣化：乙份「系統、安全、畫面與自訂」設計說明（r2）</h1>
+<div class="mute">作者 hichan-12｜分支 feat/settings-matrix-rollout｜審查 hichan-11｜互動樣品 <a href="index.html">index.html</a>｜盤點表 <code>data/settings-center-items.csv</code>（分工＝乙）｜對齊 SPEC r3.1（§4 批次、§5 逐欄 CAS、§13 草稿＋儲存列、§14 外框、§15 設定中心以外）</div>
 
-<div class="b blue">一句話：<b>只有「同一件事要重複很多次、而且沒有風險」的地方才給勾選批次</b>（開放客製功能、清單個人調整）；文字欄位（檔名、狀態名稱）逐列改＋看預覽；安全類（外網登入防護、備份保留、回收筒位置、監控、自訂表單審核）每一項都是單項表單，放寬一律先寫清後果、再走第二人核准＋等待。</div>
+<div class="b blue"><b>r2 改了什麼（相對 63d71e463）：</b>採納 h11 審查（PM 裁示）M1～M5＋L 全部；對齊 r3：點選只算草稿＋固定儲存列＋儲存確認視窗＋存檔通知＋離開警告、復原這一批改逐欄 compare-and-set、套用設定中心外框（分類只用 <code>shell_groups.json</code> 一套）、設定中心以外的 4 項改放「其他位置的設定」連結區。</div>
 
-<h2>1. 範圍與數量</h2>
+<h2>1. 範圍與數量（以「實際呈現的頁面」計）</h2>
 <table><tr><th>項目</th><th>數量</th><th>說明</th></tr>
-<tr><td>設定中心欄位</td><td>107 欄／30 群組</td><td>全部取自 <code>settings_groups.json</code> 真實登錄（型別、預設、建議、範圍、放寬方向、選項後果），樣品不是手打的</td></tr>
-<tr><td>設定中心以外</td><td>4 項</td><td>資源回收筒隔離目錄、標案雷達排程、備份與監控頁（T83）、自訂表單審核</td></tr>
-<tr><td>獨立頁</td><td>6 張</td><td>公司資料設定、儲存位置、模組管理、模組建構器（自訂表單）、自選條件報表、備份與監控；系統總覽僅當導覽入口，不算本份</td></tr>
-<tr><td>可批次（盤點表）</td><td>67 欄</td><td>無風險 39＋營運 28（要確認視窗）；<b>永不批次 40 欄</b>＝安全 20＋法遵 3＋金額 1＋含高風險群組（保留 8）＋放寬類（enforce_* 5、uploads 3）</td></tr>
-<tr><td>其中真的畫勾選格</td><td>28 欄</td><td>開放客製功能 22（扣掉印在客戶文件、涉及金額、放寬類共 7 欄）＋清單個人調整 6</td></tr>
-<tr><td>逐列直接改＋預覽</td><td>25 欄</td><td>下載檔名用語 13＋網路規劃 3＋採購建議 3＋住宿 6；雖然盤點表標「可批次＝是」，依 PM 規則不畫勾選格</td></tr>
-<tr><td>預設組合</td><td>2 組</td><td>清單個人調整（3 種）、數字與日期（維持目前／台灣常見／金額兩位小數）</td></tr></table>
+<tr><td>設定中心欄位</td><td>107 欄／30 群組</td><td>取自 <code>settings_groups.json</code> 真實登錄；呈現為 10 頁（<code>shell_groups.json</code> 分類：安全 2、系統 7、業務 2 頁；其中「自訂功能的開關」合併 13 個 builder 群組）</td></tr>
+<tr><td>規則上可批次（①）</td><td>41 欄</td><td>風險為 none／ops、非放寬、非 requires_pending、非敏感群組、非文字欄位</td></tr>
+<tr><td><b>畫面提供勾選格（②）</b></td><td><b>41 欄</b></td><td>依 PM 裁示改以「實際呈現的頁面」計：builder_* 22 欄在同一頁（單欄總開關可重複套用）、清單 7 欄（list_view 6＋list_prefs 1）、下載檔名 5 欄（name_layout／separator／case_name_max_chars／total_max_chars／add_date）、首頁外觀 5 欄（ui_format 4＋login_greeting 1）、小設定 2 欄（lodging_freshness／tender_closing）。每頁都有 ≥2 個可批次欄，所以①＝②。<b>請 h4 的 gen_seed 乙份 ② 以 41 計</b>（之前依群組算是 27）</td></tr>
+<tr><td>文字欄位（永不批次）</td><td>26 欄</td><td>下載檔名用語 13＋網路規劃 3＋採購建議 3＋住宿 6＋首頁小標語 1：逐列編輯＋預覽</td></tr>
+<tr><td>永不批次</td><td>40 欄</td><td>安全 20、法遵 3、金額 1、放寬類（enforce_* 5、uploads 3、保留期限 loosen）、含高風險群組（retention）</td></tr>
+<tr><td>設定中心以外</td><td>4 項</td><td>回收桶隔離目錄（既有卡片改白話）、標案雷達排程、備份與監控頁（T83）、自訂表單審核</td></tr>
+<tr><td>獨立頁</td><td>6 張</td><td>公司資料設定、儲存位置、模組管理、自訂表單（module-builder）、自選條件報表、備份與監控；system-hub 只是導覽入口</td></tr></table>
 
-<h2>2. 版面與共同元件（取自 LINE 事件矩陣樣式，沿用 SPEC §11 用語）</h2>
+<h2>2. 外框與共同元件（SPEC §14）</h2>
 <ul>
-<li><b>側欄分四類</b>：人員與權限／資料安全與備份／單據與編號／畫面與客製；每頁可搜尋名稱、代碼、說明；篩選晶片固定 6 個：全部｜與預設不同｜需外部設定｜影響大｜影響別人｜進階。</li>
-<li><b>每列</b>：白話名稱＋小字代碼＋標籤（影響大／需外部設定／影響別人／個人／進階）＋來源徽章（預設／公司‧誰‧何時／等待生效；「個人」只出現在真的有個人層的 login_greeting、list_view、list_prefs）；與預設不同的列左邊有橘色細條。</li>
-<li><b>群組表頭</b>只標一種東西：🔴「內含高風險項目」；沒有其他群組風險色塊。</li>
-<li><b>「?」說明由登錄表產生</b>，不另做 settings_help.json：<br>這是什麼＝<code>question</code>＋<code>help</code>｜什麼時候要改＝新欄位 <code>SettingDef.when</code>（本份每組已提案，寫在盤點表備註「建議 when」）｜改了會影響什麼＝<code>impact</code>＋<code>riskText</code>｜建議值＝<code>recommended</code>。</li>
-<li><b>禁用詞</b>：不出現「確認期間」（改「要等 N 天才生效」）、影子、閘門、true／false、把代碼當名稱。</li></ul>
+<li><b>頂列</b>：欄位級全域搜尋（點結果跳到該頁並框出該欄）、「待生效 N」、「最近變更」；<b>分段</b>全部｜業務｜財務｜系統｜安全；<b>左側兩層導覽</b>：分類 → 白話群組名（取自 <code>shell_groups.json</code>），旁邊顯示「與預設不同 N」橘點數與 🔴「內含高風險項目」。<b>分類只有這一套</b>，我原本自己的四分類已拿掉。</li>
+<li><b>偏離外框的一處</b>：builder_* 13 個群組合成一頁「自訂功能的開關（13 組）」，因為它們有「總開關＋子開關」的階層，分開 13 頁反而看不出誰沒開；請 PM 認可。「清單與畫面用語」依分類拆成「清單與下載檔名用語」（系統）與「網路規劃、採購、住宿的狀態名稱」（業務）兩頁。</li>
+<li><b>每列</b>：白話名稱＋小字代碼＋標籤（影響大／需外部設定／影響別人／個人／進階；另有「調小＝放寬」「只需等待」）＋來源徽章（預設／公司‧誰‧何時／等待生效／未儲存）；與預設不同的列左邊橘條。</li>
+<li><b>「?」由登錄表產生</b>：這是什麼＝question＋help｜什麼時候要改＝<code>SettingDef.when</code>，<b>逐欄</b>（external_login 14、retention 11、download_name 21 都已逐欄寫在盤點表備註）｜改了會影響什麼＝impact＋riskText｜建議值＝<code>recommended</code>，<b>沒有 recommended 的欄位整段不顯示</b>（external_login 5 欄：三個預設不強制角色、算外網的網址、內網網段）。</li>
+<li><b>重設為預設＝刪除公司設定值</b>（不是寫入預設值）：按鈕有 tooltip，草稿與確認視窗都寫「重設為預設（刪除公司設定）」，儲存後來源徽章回到「預設」。</li></ul>
 
-<h2>3. 批次規則落地（對照 PM／SPEC）</h2>
-<table><tr><th>規則</th><th>樣品怎麼做</th></tr>
-<tr><td>只有 none／ops 可批次；security／money／legal／change_control 永不</td><td>不能批次的列顯示 🔒，滑過看原因（放寬類、涉及金額、涉及法遵、含高風險群組）；勾選格不存在，連「全選」也只選可批次的列</td></tr>
-<tr><td>批次動作只有三種</td><td>套用建議值｜套用預設組合｜重設為預設（＋取消選取）。<b>沒有「全部開啟」</b>；開放客製功能頁沒有預設組合（按鈕反灰並說明）</td></tr>
-<tr><td>ops 要跳確認</td><td>確認視窗：「將變更 N 項，略過 M 項」＋逐項「舊值 → 新值」＋略過原因（本來就是這個值／放寬類不能批次／不在組合內）；營運設定要勾「我了解會影響全公司」才能按；原因預設「批次調整（N 項）」</td></tr>
-<tr><td>文字欄位不做勾選格</td><td>下載檔名、網路規劃、採購建議、住宿用語：逐列輸入框＋預設值＋預覽（實際檔名、狀態標籤、按鈕外觀）＋每列「重設為預設」</td></tr>
-<tr><td>復原＝「復原這一批」＋版本檢查</td><td>套用後出現 toast；每個群組有版本號，按復原時若別人改過同一組，<b>整批拒絕</b>並顯示「誰、何時改過」（可用 toast 上的「（示範）別人剛改了其中一項」按鈕模擬）</td></tr>
-<tr><td>單項修改沒有復原</td><td>toast 只寫「已更新（要還原請到變更紀錄）」</td></tr></table>
+<h2>3. 草稿、儲存與復原（SPEC §13、§5）</h2>
+<table><tr><th>步驟</th><th>樣品怎麼做</th></tr>
+<tr><td>點選＝草稿</td><td>改值、勾格、批次動作都只改畫面；草稿列左黃條＋「未儲存」；頁面頂端固定儲存列「你有 N 項未儲存的修改　[放棄][儲存]」；草稿跨頁保留（外框切換頁面不丟）；有草稿時關閉或重新整理頁面有 beforeunload 警告</td></tr>
+<tr><td>儲存 → 確認視窗</td><td>分區列出：立即生效／<b>要等 N 天才生效（只需等待）</b>／<b>放寬（第二位最高管理者核准＋等 N 天）</b>＋放寬後果／連帶失效／「還不會生效：需先開啟…」／批次略過項目與原因／營運設定「我了解會影響全公司」／<b>通知預覽</b>（最高管理者、受影響角色；高風險另發 LINE；批次合併一則）／變更原因（影響大、安全、等待中的項目必填且 ≥4 字）。天數讀 <code>confirmDays</code>（樣品示意 7，預計生效日現算）</td></tr>
+<tr><td>放寬後果文字缺失</td><td>確認視窗會標紅「登錄表缺少放寬後果文字，不能送出」並鎖住按鈕；樣品建置時另有檢查：任何 loosen 欄位的盤點表文字都必須有「放寬…後果：」句</td></tr>
+<tr><td>結果</td><td>吐司分開寫「已生效 N 項；M 項等待核准／等待生效（預計 ○/○ 生效）；已通知最高管理者」</td></tr>
+<tr><td>復原這一批</td><td><b>逐欄 compare-and-set</b>：記下這批自己寫入的欄位與值；復原時只有「那些欄位目前值仍等於我套用的值」才回寫（原本沒有公司設定的，回寫＝刪除）；任一欄被別人改過→整批拒絕，顯示「誰、何時、哪一項、值怎麼變」；同群組別的欄位被改不會誤拒。含影響大／安全／等待項目的批次<b>不提供</b>復原（確認視窗先說明）。可用吐司的「（示範）別人剛改了其中一項」模擬</td></tr></table>
 
-<h2>4. 各頁設計要點</h2>
-<h3>開放客製功能（13 群組、29 欄＋自訂表單審核）</h3>
-<p>13 個群組合成一頁 5 區，先看「已開放 N／29」。真正的階層（先開「改版前先預覽」，其他功能才會生效）直接用「需先開：○○」標籤＋缺先決條件時列內黃條「一併開啟」。<code>enforce_*</code>（放寬類）與會印在客戶文件、涉及金額的兩欄一律 🔒。</p>
-<h3>外網登入防護（14 欄）</h3>
-<p>總開關卡＋角色矩陣（人數、已啟用兩步驟人數、「N 人會被擋在外網門外」提示）＋一句話鎖定規則預覽＋「進階」收納網域／網段（標需外部設定）。<b>不批次</b>。選項旁的「放寬」標籤＋放寬確認視窗：寫出<b>後果</b>（取自登錄表 riskText）、<b>流程</b>（第二位最高管理者核准＋要等 7 天，等待期任何最高管理者可撤銷，之前仍是目前設定）、必填原因、勾「我已了解上述後果」才能送；送出後出現在「待生效的變更」。收緊（變嚴）立即生效。</p>
-<h3>備份與保留、資源回收筒</h3>
-<p>先看「現在能回到多久以前」摘要表（本機、雲端日／週／月、更新前備份、回收筒），再調整；<code>0＝永久</code>顯示為「永久」。縮短＝放寬走同一個放寬流程。回收筒附件位置見 §5。</p>
-<h3>下載檔名</h3><p>上方即時預覽實際檔名，並同時預覽「沒有案件權限的人」下載同一份的檔名（這是這組設定最容易出事的地方：檔名外洩客戶或個人姓名）。13 種文件用語在「清單與畫面用語」逐列改。</p>
-<h3>首頁外觀、數字與日期</h3><p>右側即時預覽；數字與日期 4 欄提供三個預設組合，套用走 §3 的批次確認。預覽強調「只改畫面顯示；儲存的金額與法定四捨五入不變，PDF 與匯出檔也不變」。</p>
-<h3>各模組的小設定</h3><p>只有一個數字的欄位用「數字＋上下按鈕＋單位」；標案雷達時段用 0～23 點的小格子（不用打逗號）。</p>
+<h2>4. 批次規則落地（SPEC §4）</h2>
+<ul>
+<li>勾選格只給 ① 欄；🔒＝永不批次（滑過看原因）；批次動作只有<b>套用建議值／套用預設組合／重設為預設</b>，<b>沒有「全部開啟」</b>。沒有 <code>recommended</code> 的欄位在套用建議值時略過並寫「這欄沒有建議值」。</li>
+<li>批次動作的結果只進草稿，視窗說「已加入草稿 N 項，略過 M 項，還沒有寫入」；要到儲存確認才寫入。</li>
+<li><b>預設組合都是提案</b>：<code>profiles()</code> 目前為 0，所以按鈕與預覽都標「提案」；實作前要先登錄進 registry（list_view 3 組、ui_format 3 組），使用者看過才上線。<code>cases_merge_won_tab</code> 已移出「全部開放」組合（影響所有人看到的案件分頁，單獨設定）。</li>
+<li>前置相依補進：list_view 報價單 3 欄 → 報價單管理版面；list_view 案件 3 欄 → 案件管理版面；list_prefs → 改版前先預覽。儲存視窗會列「連帶失效」。</li></ul>
 
-<h2>5. 設定中心以外的 4 項</h2>
-<table><tr><th>項目</th><th>樣品</th><th>發現／待裁示</th></tr>
-<tr><td>資源回收筒隔離目錄 <code>recyclebin_dir</code></td><td>在「備份與保留」頁加一張卡：目前位置（預設／公司）、回收筒內項目數、「變更位置…（搬移並核對）」精靈說明；標影響大＋需外部設定</td><td>目前連畫面都沒有，只有系統設定值。讀碼推論：回收筒已有東西時直接換位置會讓舊項目還原不回來（<b>推論，實作前須驗證</b>），所以不是改字串而是搬移＋核對</td></tr>
-<tr><td>標案雷達排程</td><td>「各模組的小設定」兩張小時格卡；抓取超過 12 個時段先跳確認「每個工作日發出 N 次請求」；寄信同樣式</td><td>直接寫入並有稽核，不經設定中心等待期；屬營運類，只做高頻率確認＋稽核</td></tr>
-<tr><td>備份與監控頁（T83）</td><td>獨立頁線框；監控網址只顯示主機名（網址等同密碼）；停用對外打卡走第二人核准、後果句與其他放寬一致</td><td>已實作的流程不重做；T83 凍結後多一個 monitoring 設定群組（備份停擺通知時數、硬碟空間通知門檻），屬乙，欄位出現後補列（h4：重跑 <code>gen_seed.py</code> 預期 51 群組／186 欄，會覆寫【填】欄，要以 diff／備份合併）</td></tr>
-<tr><td>自訂表單審核（<code>custom_module_def_review</code>）</td><td>放在「開放客製功能」頁最下方一張卡：自動（建議）／一律送審／關閉審核＋審核人名單；「關閉審核」標放寬並走放寬視窗</td><td><b>builder_governance 不涵蓋此項</b>（它只管「發布前強制先看預覽」，是另一件事）。目前此設定直接寫入，不走等待期與第二人核准。<b>請 PM 裁示是否比照放寬流程</b></td></tr></table>
+<h2>5. 審查意見（h11）逐項處理</h2>
+<table><tr><th>項</th><th>處理</th></tr>
+<tr><td>M1 external_hosts／internal_networks</td><td>屬 requires_pending（<b>只等待，不需第二人核准</b>，增刪都等 N 天）：改用「清單編輯器」（逐筆新增／移除；內網網段旁顯示「你目前的連線位址」），拿掉「放寬」字樣；確認視窗與待生效頁顯示兩種提示文字（「只需等待」／「等待核准」）。maxlength 只留在 label_*（10）與 brand.tagline（24）</td></tr>
+<tr><td>M2 recyclebin_dir</td><td>更正：<b>已有 UI</b>（<code>recycle-bin.html</code> rb-dir-panel，T69）與 API（<code>PUT /api/recycle-bin/settings</code>，有項目時 409、<code>location_problem</code> 擋不安全路徑）。本輪只把既有卡片改白話：顯示「目前位置」「回收筒裡有 N 個項目」、「要先還原或清除全部項目才能更換位置」，有項目時輸入框與按鈕灰掉；<b>不做精靈</b>；「放寬後果」整句刪除</td></tr>
+<tr><td>M3 retention 三欄＋更新前備份</td><td>notification／request_log／log keep_days 補寫放寬後果（盤點表已補；實作時 registry 同步補），標「調小＝放寬」；local_pre_update_keep 補「調多立即生效」</td></tr>
+<tr><td>M4 勾選格數字</td><td>見 §1：乙 ①＝②＝41（以頁面計）；文字欄位 26；永不批次 40。原本沒有勾選格的 14 欄（builder 單欄總開關、download_name 5、ui_format 4、list_prefs、lodging_freshness、tender_closing、login_greeting 等）在樣品裡<b>全部給勾選格</b>（單欄在同一頁可重複套用；盤點表「套用樣式」欄已同步改為含「勾選批次」）。「②畫面提供勾選格」欄的 41 要等 h4 的 gen_seed 改以頁面計後才會一致</td></tr>
+<tr><td>M5 逐欄 when／建議值</td><td>完成（見 §2）</td></tr>
+<tr><td>L</td><td>前置相依與連帶失效（§4）；cases_merge_won_tab 移出全部開放；等待天數讀 confirmDays；標案雷達<b>每次</b>超過 12 個時段都要確認、確認文字依類型（抓取＝「每個工作日對政府採購網發出 N 次請求（目前 M 次）」；寄信＝「每個工作日會寄出 N 次通知信」）、寫明誰能改（有「標案雷達」模組權限的人，不限最高管理者）；審核人挑選器只列真實在職使用者並排除示範帳號；重設＝刪除；預設組合標「提案」</td></tr></table>
 
-<h2>6. 獨立頁 6 張（只列新版重點，完整問題見 SYSTEM-MENU-UX-inventory）</h2>
-<ul><li><b>公司資料設定</b>：一頁 1700 行拆三頁籤（公司資料／報價單樣式／技術設定〔進階、需外部設定〕）；每張卡一顆儲存鈕；技術設定的 PDF／Edge／雲端目標儲存目前直接生效、繞過等待期與第二人核准，新版走放寬流程。</li>
-<li><b>儲存位置</b>：自動偵測雲端硬碟＋一鍵建立資料夾；「測試寫入」顯示綠燈；更新交付資料夾僅開發商顯示。</li>
-<li><b>模組管理</b>：客戶端改成唯讀「我買了哪些功能」；啟停僅開發商，且停用前先顯示影響預覽。</li>
-<li><b>模組建構器→自訂表單</b>：從範本開始；代號、權限名稱自動產生並隱藏；公式與條件改積木；錯誤改白話「第 2 個欄位：缺少名稱」；發布顯示審核人與影響人數。</li>
-<li><b>自選條件報表</b>：沿用頁籤與「本月／本季／今年／去年」快選，加「常用條件」與一句話結果摘要。</li>
-<li><b>備份與監控</b>：見 §5。</li></ul>
+<h2>6. 設定中心以外的 4 項（SPEC §15：原頁面改白話＋標示，設定中心只放連結）</h2>
+<table><tr><th>項目</th><th>樣品</th><th>決定</th></tr>
+<tr><td>回收桶隔離目錄</td><td>資源回收筒頁既有卡片（唯讀示意）</td><td>PM 11-13：只改白話與提示，不做精靈</td></tr>
+<tr><td>標案雷達排程</td><td>標案雷達頁內兩張小時格卡，用草稿＋儲存列</td><td>PM 11-13：直接寫入＋&gt;12 時段確認＋稽核，另加存檔後通知；每次超過 12 都要確認</td></tr>
+<tr><td>備份與監控頁（T83）</td><td>線框（監控網址只顯示主機名；停用對外打卡走第二人核准，放寬後果句與其他一致）</td><td>已實作，不重做；monitoring 設定群組（停擺通知時數、硬碟空間門檻）等 T83 凍結後補列</td></tr>
+<tr><td>自訂表單審核</td><td>自訂表單頁的「審核模式」＋「審核人名單」兩個欄位</td><td>PM 11-13：「關閉審核」與「清空審核人」比照放寬類（第二位最高管理者核准並等待）；後端改動列入 API 彙總（與甲份設定中心以外影響金額項目同批）。注意：builder_governance 不涵蓋此項</td></tr></table>
 
-<h2>7. 要請 PM／審查者確認的事</h2>
-<ol>
-<li><b>M：</b>自訂表單「關閉審核」是否比照放寬類（第二位最高管理者核准＋等待期）。現況是直接寫入，且 builder_governance 沒涵蓋它。</li>
-<li><b>M：</b>回收筒位置若要開放修改，需做「搬移＋核對」精靈；範圍是否列入本輪，或維持唯讀顯示？（推論尚未驗證。）</li>
-<li>標案雷達排程維持「直接寫入＋>12 時段確認＋稽核」是否足夠。</li>
-<li>「建議 when（SettingDef.when）」每組 1 句已寫在盤點表備註，需要 h4 在 SettingDef 加欄位後才能由登錄表產生。</li>
-<li>登錄表現有的說明／風險文字（約 35 處）還寫「確認期間」；樣品「?」顯示時已替換成「要等 N 天才生效」，實作時要回頭改登錄表原文，否則「?」會洩漏舊用語。</li>
-<li>monitoring 群組等 T83 凍結、重跑 <code>gen_seed.py</code> 後補列。</li></ol>
+<h2>7. 待辦與限制</h2>
+<ul>
+<li>monitoring 群組：等 T83 凍結後重跑 <code>gen_seed.py</code>（現在只重寫 seed，不覆蓋工作檔），再補乙份新列。</li>
+<li>登錄表現有說明約 35 處仍寫「確認期間」：樣品顯示時替換成「要等 N 天才生效」，實作時要改原文。</li>
+<li>JS 為單檔自帶，並沒有直接沿用 <code>h4/shell.html</code> 的核心；三份合併時以本文 §3、§4 為準。</li>
+<li>目前值、人數、申請單、回收筒項目數都是假資料；逐欄 CAS 用前端比對示意，實作走 <code>publish(expected_values)</code>＋409。</li></ul>
 
-<h2>8. 樣品限制</h2>
-<ul><li>目前值、人數、申請單、回收筒項目數都是假的；重新整理就還原；版本檢查用前端計數器示意，實作要用 <code>SettingConflict(by, at, keys)</code>（SPEC 已定，尚未實作）。</li>
-<li>JS 為單檔自帶，未直接沿用 h4/index.html 的核心（我的頁面型態不同：階層開關、文字預覽、時段格）；實作時三份可合併為同一套元件。</li>
-<li>深色模式、手機寬度（390px）已看過；無主控台錯誤。</li></ul>
-
-<h2>9. 截圖</h2>
+<h2>8. 截圖</h2>
 <div class="g">
-<figure><a href="shots/01-builders.png"><img src="shots/01-builders.png" alt=""></a><figcaption>01 開放客製功能（總開關＋子開關、🔒、自訂表單審核）</figcaption></figure>
-<figure><a href="shots/02-builders-help.png"><img src="shots/02-builders-help.png" alt=""></a><figcaption>02「?」四段說明（由登錄表產生）</figcaption></figure>
-<figure><a href="shots/03-builders-batch-confirm.png"><img src="shots/03-builders-batch-confirm.png" alt=""></a><figcaption>03 批次確認：變更／略過、營運設定勾選</figcaption></figure>
-<figure><a href="shots/04-builders-applied-undo.png"><img src="shots/04-builders-applied-undo.png" alt=""></a><figcaption>04 已套用，出現「復原這一批」</figcaption></figure>
-<figure><a href="shots/05-undo-conflict.png"><img src="shots/05-undo-conflict.png" alt=""></a><figcaption>05 別人改過：整批拒絕復原並說誰、何時</figcaption></figure>
-<figure><a href="shots/06-builders-top.png"><img src="shots/06-builders-top.png" alt=""></a><figcaption>06 頁首與批次列</figcaption></figure>
-<figure><a href="shots/07-views.png"><img src="shots/07-views.png" alt=""></a><figcaption>07 清單個人調整（可批次）＋用語逐列改＋預覽</figcaption></figure>
-<figure><a href="shots/08-views-preset-menu.png"><img src="shots/08-views-preset-menu.png" alt=""></a><figcaption>08 套用預設組合</figcaption></figure>
-<figure><a href="shots/09-external-login.png"><img src="shots/09-external-login.png" alt=""></a><figcaption>09 外網登入防護</figcaption></figure>
-<figure><a href="shots/10-loosen-modal.png"><img src="shots/10-loosen-modal.png" alt=""></a><figcaption>10 放寬確認：後果、流程、原因、我已了解</figcaption></figure>
-<figure><a href="shots/11-retention.png"><img src="shots/11-retention.png" alt=""></a><figcaption>11 備份與保留、回收筒位置</figcaption></figure>
-<figure><a href="shots/12-download-name.png"><img src="shots/12-download-name.png" alt=""></a><figcaption>12 下載檔名即時預覽</figcaption></figure>
-<figure><a href="shots/13-home-format.png"><img src="shots/13-home-format.png" alt=""></a><figcaption>13 首頁外觀、數字與日期（預設組合）</figcaption></figure>
-<figure><a href="shots/14-small-tender.png"><img src="shots/14-small-tender.png" alt=""></a><figcaption>14 小設定＋標案雷達時段</figcaption></figure>
-<figure><a href="shots/15-pending.png"><img src="shots/15-pending.png" alt=""></a><figcaption>15 待生效的變更</figcaption></figure>
-<figure><a href="shots/16-pages.png"><img src="shots/16-pages.png" alt=""></a><figcaption>16 獨立頁 6 張</figcaption></figure>
-<figure><a href="shots/17-compare.png"><img src="shots/17-compare.png" alt=""></a><figcaption>17 現況對照</figcaption></figure>
-<figure><a href="shots/18-phone-builders.png"><img src="shots/18-phone-builders.png" alt=""></a><figcaption>18 手機：開放客製功能</figcaption></figure>
-<figure><a href="shots/19-phone-views.png"><img src="shots/19-phone-views.png" alt=""></a><figcaption>19 手機：清單與畫面用語</figcaption></figure>
-<figure><a href="shots/20-phone-external.png"><img src="shots/20-phone-external.png" alt=""></a><figcaption>20 手機：外網登入防護</figcaption></figure>
-<figure><a href="shots/21-dark-builders.png"><img src="shots/21-dark-builders.png" alt=""></a><figcaption>21 深色</figcaption></figure>
+<figure><a href="shots/01-builders.png"><img src="shots/01-builders.png" alt=""></a><figcaption>01 自訂功能的開關（勾選格、🔒、外框導覽）</figcaption></figure>
+<figure><a href="shots/02-help-four-parts.png"><img src="shots/02-help-four-parts.png" alt=""></a><figcaption>02「?」四段（逐欄 when）</figcaption></figure>
+<figure><a href="shots/03-batch-to-draft.png"><img src="shots/03-batch-to-draft.png" alt=""></a><figcaption>03 批次動作只進草稿</figcaption></figure>
+<figure><a href="shots/04-draft-savebar.png"><img src="shots/04-draft-savebar.png" alt=""></a><figcaption>04 草稿列＋固定儲存列</figcaption></figure>
+<figure><a href="shots/05-save-confirm-ops.png"><img src="shots/05-save-confirm-ops.png" alt=""></a><figcaption>05 儲存確認：連帶失效、營運設定、通知預覽</figcaption></figure>
+<figure><a href="shots/06-saved-undo-toast.png"><img src="shots/06-saved-undo-toast.png" alt=""></a><figcaption>06 已生效＋復原這一批</figcaption></figure>
+<figure><a href="shots/07-undo-conflict-cas.png"><img src="shots/07-undo-conflict-cas.png" alt=""></a><figcaption>07 逐欄 CAS：被別人改過→整批拒絕</figcaption></figure>
+<figure><a href="shots/08-external-login.png"><img src="shots/08-external-login.png" alt=""></a><figcaption>08 從外網登入的防護</figcaption></figure>
+<figure><a href="shots/09-ext-draft-loosen.png"><img src="shots/09-ext-draft-loosen.png" alt=""></a><figcaption>09 放寬項目的草稿</figcaption></figure>
+<figure><a href="shots/10-save-loosen-modal.png"><img src="shots/10-save-loosen-modal.png" alt=""></a><figcaption>10 儲存：放寬後果、第二人核准＋等待、我已了解</figcaption></figure>
+<figure><a href="shots/11-pending-two-kinds.png"><img src="shots/11-pending-two-kinds.png" alt=""></a><figcaption>11 待生效：兩種類型</figcaption></figure>
+<figure><a href="shots/12-hosts-list-editor.png"><img src="shots/12-hosts-list-editor.png" alt=""></a><figcaption>12 算外網的網址：清單編輯器</figcaption></figure>
+<figure><a href="shots/13-save-wait-only.png"><img src="shots/13-save-wait-only.png" alt=""></a><figcaption>13 只需等待（不需第二位核准）</figcaption></figure>
+<figure><a href="shots/14-retention.png"><img src="shots/14-retention.png" alt=""></a><figcaption>14 資料保存多久</figcaption></figure>
+<figure><a href="shots/15-download-name.png"><img src="shots/15-download-name.png" alt=""></a><figcaption>15 下載檔案怎麼命名（勾選格＋即時預覽）</figcaption></figure>
+<figure><a href="shots/16-home-format.png"><img src="shots/16-home-format.png" alt=""></a><figcaption>16 首頁外觀、數字與日期（預設組合＝提案）</figcaption></figure>
+<figure><a href="shots/17-small.png"><img src="shots/17-small.png" alt=""></a><figcaption>17 小設定</figcaption></figure>
+<figure><a href="shots/18-views.png"><img src="shots/18-views.png" alt=""></a><figcaption>18 清單與下載檔名用語</figcaption></figure>
+<figure><a href="shots/19-labels.png"><img src="shots/19-labels.png" alt=""></a><figcaption>19 狀態名稱（文字欄位逐列編輯＋預覽）</figcaption></figure>
+<figure><a href="shots/20-radar-over-12.png"><img src="shots/20-radar-over-12.png" alt=""></a><figcaption>20 標案雷達：超過 12 個時段</figcaption></figure>
+<figure><a href="shots/21-radar-save-confirm.png"><img src="shots/21-radar-save-confirm.png" alt=""></a><figcaption>21 標案雷達存檔確認（每次都要確認）</figcaption></figure>
+<figure><a href="shots/22-cmr-reviewer-picker.png"><img src="shots/22-cmr-reviewer-picker.png" alt=""></a><figcaption>22 審核人挑選器（只列真實在職）</figcaption></figure>
+<figure><a href="shots/23-cmr-close-review-loosen.png"><img src="shots/23-cmr-close-review-loosen.png" alt=""></a><figcaption>23 關閉審核＝放寬</figcaption></figure>
+<figure><a href="shots/24-recycle-bin-card.png"><img src="shots/24-recycle-bin-card.png" alt=""></a><figcaption>24 資源回收筒既有卡片改白話</figcaption></figure>
+<figure><a href="shots/25-backup-monitor.png"><img src="shots/25-backup-monitor.png" alt=""></a><figcaption>25 備份與監控</figcaption></figure>
+<figure><a href="shots/26-pages.png"><img src="shots/26-pages.png" alt=""></a><figcaption>26 獨立頁 6 張</figcaption></figure>
+<figure><a href="shots/27-compare.png"><img src="shots/27-compare.png" alt=""></a><figcaption>27 現況對照</figcaption></figure>
+<figure><a href="shots/28-phone-builders.png"><img src="shots/28-phone-builders.png" alt=""></a><figcaption>28 手機：自訂功能</figcaption></figure>
+<figure><a href="shots/29-phone-external.png"><img src="shots/29-phone-external.png" alt=""></a><figcaption>29 手機：外網防護</figcaption></figure>
+<figure><a href="shots/30-dark.png"><img src="shots/30-dark.png" alt=""></a><figcaption>30 深色</figcaption></figure>
 </div>
 </div></body></html>
