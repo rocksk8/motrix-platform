@@ -1,5 +1,14 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核名單、不能決定審核）
+- 行為變更（對外介面）：展示帳號（`demo`，role＝superadmin）不再出現在各處「簽核／審核／知會／提醒」名單，也不能核准或駁回：
+  - `helpers.backup_monitor`：心跳監控停用的雙人核准只算真人最高管理者；展示帳號呼叫核准／駁回得拒絕（A2）。
+  - `helpers.custom_def_review`：審核佇列名單不含展示帳號；展示帳號不能決定審核（A1）。
+  - B 類名單改用 `config_ledger.real_superadmins`（`tiered_approval.org_chain_notice_usernames`、`google_calendar`、`system_checks._check_approval_reminders`、`routers/approval_queue.reassign_approval`；模組端見 case／accounting／payroll／recyclebin）。
+- L1：`config_ledger.real_superadmins` 的 docstring／行為不變（只增加呼叫端）；無新公開介面。C 類（登入／持有者語意等非簽核名單）刻意不動。
+- 前端（文字）：公司設定頁「聯絡方式」欄註明「會顯示給所有使用者，請勿填銀行資料」。
+- 守門：DEMO_ token 到不了真實資料庫；測試 `tests/test_demo_approver_lists_2026_11_13.py`（11 項）、`test_backup_monitor_review_fixes_2026_11_13.py` 加 3 項；兩支既有測試（approval_reminder_ladder、remarks_only_on_success）補一位真人最高管理者夾具。
+
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
 - `helpers/email_setup.py` 單位卡補 `[契約題]`，`[公開介面]` 補 `provider_by_key`／`valid_email`（註解，行為不變）。

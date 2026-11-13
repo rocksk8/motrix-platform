@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## 1.0.227（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+- 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
+- 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
+
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
 - 預覽路由（`POST /api/quotations/preview-html`）與存檔版 PDF 改以 `quotations.doc_type` 欄位為準（同 `generate_pdf_bytes`），前端帶舊／缺的 docType 不再印回報價字樣。
