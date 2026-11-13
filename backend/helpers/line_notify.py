@@ -330,7 +330,7 @@ LINE_EVENTS = {
     "heartbeat_stale": {"priority": "critical", "digest": False, "line_group": "inherit"},
     "disk_space_low": {"priority": "critical", "digest": False, "line_group": "inherit"},
     "cert_expiry": {"priority": "critical", "digest": False, "line_group": "inherit"},
-    # license_expiry（授權即將到期，critical／最高管理者群組）的 LINE_EVENTS 條目隨 hichan-12 的授權匯入票一起進（該票提供 license_expiry 信件類型；本列車沒有它，留著會讓「LINE_EVENTS ⊆ WIRED_EVENTS」守門紅）。分組（line_catalog 系統告警）已先登記。
+    "license_expiry": {"priority": "critical", "digest": False, "line_group": "inherit"},       # 授權即將到期（30／14／7 天；最高管理者群組；T83 授權匯入票提供信件類型與每日檢查）
     "company_setup_alert": {"priority": "critical", "digest": False, "line_group": "inherit"},
     # 「核准完成」LINE 預設只給申請人（信件另寄管理員群組；PM 2026-11-13）
     "approved": {"priority": "normal", "digest": False, "line_group": None},

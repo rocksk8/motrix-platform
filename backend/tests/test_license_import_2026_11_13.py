@@ -836,6 +836,19 @@ def test_expiry_mail_type_is_registered_for_superadmins_and_locked():
     assert "license_expiry" in notify_matrix.MAIL_OFF_LOCKED
 
 
+def test_expiry_line_event_is_wired_critical_and_default_off(client):
+    """信件類型、LINE 事件、接線三處要一起在：少了 LINE_EVENTS 條目，管理者在 LINE 設定頁永遠勾不到這一類。
+    LINE 預設全關慣例：沒勾選之前不發。"""
+    from helpers import line_catalog, line_notify as L, mail_types
+    assert mail_types.get("license_expiry") is not None
+    assert "license_expiry" in L.LINE_EVENTS and "license_expiry" in L.WIRED_EVENTS
+    spec = L.LINE_EVENTS["license_expiry"]
+    assert spec["priority"] == "critical" and spec["digest"] is False and spec["line_group"] == "inherit"
+    assert L.events_view().get("license_expiry") is False
+    assert L.event_enabled("license_expiry") is False
+    assert line_catalog.group_of("license_expiry") == "系統告警"
+
+
 # ── 前端：402 說明頁連結、授權頁、橫幅 ───────────────────────────────────────────
 
 def _page(name):
