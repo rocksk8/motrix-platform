@@ -204,11 +204,21 @@ def history(conn, domain=None, key=None, limit=100, offset=0):
 
 def last_effective_change(conn, domain, key, field, now=None):
     """某欄位最近一次**已生效**的變更（立即、已套用、或已到時且票數夠的待生效）的 `(誰, 何時)`；沒有任何紀錄 ⇒ None。
-    給逐欄 CAS 的衝突訊息用（「這個欄位剛被某某在某時改了」）。唯讀。"""
-    for r in history(conn, domain, key, limit=300):
-        if r["field"] == field and in_effect(r, now):
-            return (r.get("actor_display") or r.get("actor") or "", r.get("effective_at") or r.get("at") or "")
-    return None
+    給逐欄 CAS 的衝突訊息用（「這個欄位剛被某某在某時改了」）。唯讀。依欄位查、每頁 100 筆往回找（不受同網域其他欄位的筆數影響）。"""
+    off = 0
+    while True:
+        rows = conn.execute("SELECT * FROM config_changes WHERE domain=? AND key=? AND field=? ORDER BY id DESC LIMIT 100 OFFSET ?",
+                            (domain, str(key), str(field), off)).fetchall()
+        if not rows:
+            return None
+        ids = [r["id"] for r in rows]
+        ev, ap = _last_events(conn, ids), _approvals(conn, ids)
+        for r in rows:
+            d = _row(r, ev.get(r["id"]))
+            d["approvals"] = ap.get(r["id"], [])
+            if in_effect(d, now):
+                return (d.get("actor_display") or d.get("actor") or "", d.get("effective_at") or d.get("at") or "")
+        off += 100
 
 
 def state_of(conn, change_id):

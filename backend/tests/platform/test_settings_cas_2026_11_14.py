@@ -108,3 +108,28 @@ def test_route_returns_409_with_the_shared_conflict_shape(client, make_user):
     bad = client.post("/api/settings-center/groups/change_control",
                       json={"values": {"confirm_period_days": 14}, "reason": "測試", "expectedValues": [1]}, headers=h)
     assert bad.status_code == 400
+
+
+def test_expected_values_must_cover_every_changed_field_when_present(grp):
+    with pytest.raises(R.SettingError) as ei:
+        R.publish(G, {"note_days": 6, "cap": 5}, reason="r", user="cas_a", conn=grp, expected_values={"note_days": 5})
+    assert "cap" in str(ei.value)
+    assert R.get(G, "note_days", conn=grp) == 5                                              # 沒寫任何東西
+
+
+def test_superseding_someone_elses_pending_request_says_who_and_what(grp):
+    out1 = R.publish(G, {"cap": 50}, reason="放寬", user="cas_x", conn=grp)                  # 調大＝放寬 ⇒ 待生效（等在那）
+    assert out1["pending"]
+    out2 = R.publish(G, {"cap": 30}, reason="另一個人也要改", user="cas_a", conn=grp, expected_values={"cap": 10})
+    sup = out2["supersededRequests"]
+    assert out2["superseded"] == 1 and len(sup) == 1 and sup[0]["by"] == "cas_x" and sup[0]["field"] == "cap" and sup[0]["new"] == 50
+
+
+def test_conflict_origin_is_found_even_when_the_domain_has_over_300_other_rows(grp):
+    domain = "setting:" + G
+    L.record(grp, domain, G, [{"field": "cap", "old": 10, "new": 12}], "很久以前", "cas_old")
+    for i in range(310):
+        L.record(grp, domain, G, [{"field": "note_days", "old": i, "new": i + 1}], "雜訊", "cas_noise")
+    grp.commit()
+    assert L.last_effective_change(grp, domain, G, "cap")[0] == "cas_old"                    # 舊實作只看最近 300 筆會找不到
+    assert L.last_effective_change(grp, domain, G, "nope") is None
