@@ -37,7 +37,10 @@ def _restore_definition_registries(_app):
     收尾還原成進場時的樣子；同 test_gov_contract_2026_11_08 的做法：用 module 範圍（kind 靠 import 副作用登記，每題清會讓下一題找不到），
     依賴 `_app`：user_buttons／expense_types／remit_kinds 在 import 時就登記，要等 main 載完再拍快照，否則還原會把它們一併抹掉。"""
     from core import definitions as D
-    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS)]      # noqa: SLF001
+    from core import spine as SP
+    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS, SP._KIND_GATES)]      # noqa: SLF001
+    # SP._KIND_GATES（核心 spine 的 kind 開關登記）也是行程內全域狀態：案例走到 ensure_kind() 會登記，沒還原就留給同 worker 的後續檔
+    # （T84 汙染偵測器 tools/platform/pollution_detector.py 抓到的洩漏）。
     yield
     for t, saved in snap:
         t.clear()
