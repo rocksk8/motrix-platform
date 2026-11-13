@@ -1325,3 +1325,52 @@ def test_a_request_from_someone_who_left_can_still_be_cleared_by_rejecting(clien
     assert client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": "申請人已離職"}).status_code == 200
     assert client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"] is None
     assert _cfg_url(hb_cfg) == SECRET
+
+
+# ══ 展示帳號 demo 不算「另一位最高管理者」、不能核准／駁回（2026-11-13，PM 裁示；與 helpers/config_ledger.real_superadmins 同一個規則）══════
+
+def _add_demo_superadmin():
+    import db
+    c = db.get_db()
+    try:
+        if not c.execute("SELECT 1 FROM users WHERE username='demo'").fetchone():
+            c.execute("INSERT INTO users (username, password_hash, display_name, role, modules, active, created_at, must_change_password) "
+                      "VALUES ('demo', 'x', '展示帳號', 'superadmin', '[]', 1, '2026-01-01T00:00:00', 1)")
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_one_real_superadmin_plus_demo_disables_immediately(client, make_user, hb_cfg, mails):
+    """只有一位真人最高管理者 ⇒ 立即停用＋寄信，不是等一個永遠不會來的 demo 核准。"""
+    ha = _login(client, make_user, "dm_solo")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    r = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"})
+    assert r.status_code == 200 and r.json()["pending"] is False and r.json()["disabled"] is True, r.text
+
+
+def test_waiting_for_list_never_names_the_demo_account(client, make_user, hb_cfg, mails):
+    ha = _login(client, make_user, "dm_pa")
+    _login(client, make_user, "dm_pb")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    assert client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["pending"] is True
+    rq = client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]
+    assert rq["waitingFor"] == ["dm_pb"], rq["waitingFor"]
+
+
+def test_demo_account_can_neither_approve_nor_reject(client, make_user, hb_cfg, mails):
+    from helpers import backup_monitor as bm
+    ha = _login(client, make_user, "dm_qa")
+    _login(client, make_user, "dm_qb")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
+    demo = {"username": "demo", "role": "superadmin", "display_name": "展示帳號"}
+    with pytest.raises(bm.DisableError, match="展示帳號"):
+        bm.approve_disable(cid, demo)
+    with pytest.raises(bm.DisableError, match="展示帳號"):
+        bm.reject_disable(cid, demo, "不認得這筆申請")
+    assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]["id"] == cid      # 申請還在、什麼都沒變
+    assert _cfg_url(hb_cfg) == SECRET
