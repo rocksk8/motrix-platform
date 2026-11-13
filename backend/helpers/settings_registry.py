@@ -585,7 +585,8 @@ def get_group(group, *, conn=None, now=None):
 
 def get_group_effective(group, *, conn=None, now=None):
     """**金額／法遵讀取端用的嚴格版**（SPEC §15.A.6 N2）：永遠讀即時的生效值（含到時的待生效），**忽略 `MOTRIX_SETTINGS_DEFAULTS_ONLY`**、不用行程內快取；
-    登錄表讀取失敗 ⇒ 退回轉接器 RAW 舊儲存（＝最後一次生效的值），**絕不退回程式預設**；連 RAW 也讀不到 ⇒ 丟例外（寧可大聲失敗，也不用錯的金額）。"""
+    登錄表讀取失敗 ⇒ 退回轉接器 RAW 舊儲存（＝最後一次生效的值），**絕不退回程式預設**；連 RAW 也讀不到 ⇒ 丟例外（寧可大聲失敗，也不用錯的金額）。
+    **呼叫者契約**：呼叫者（排程／通知／匯出）必須自行 try/except；失敗關閉＝跳過該筆並記錄，不可讓整個迴圈中止。"""
     g = _g(group)
     own = conn is None
     c = conn if conn is not None else get_db()
