@@ -5,7 +5,7 @@
   ... setup_merge_drivers.py --check     檢查已登記而且複本是最新（exit 0／1；列車長開車前跑）
   ... setup_merge_drivers.py --remove    移除登記（之後回到一般衝突）
 
-直譯器：只接受路徑在 `.venv312` 底下的 python（登記進共用 .git/config，所有 worktree 都會用它跑驅動）；--check 也會比對已登記的直譯器。
+直譯器：只接受完整路徑在 `D:\\MOTRIX-PLATFORM\\.venv312` 底下的 python（登記進共用 .git/config，所有 worktree 都會用它跑驅動）；--check 也會比對已登記的直譯器。
 做法：把 tools/platform/merge_drivers.py 複製到 `<git 共用目錄>/motrix/merge_drivers.py`（不隨 checkout 變動：
 舊分支上沒有這支檔也照樣能跑），再寫 repo 本地 git config：
   merge.motrix-changelog.driver = "<python>" "<複本>" changelog %O %A %B %P
@@ -15,6 +15,7 @@
 對應的 .gitattributes 已在 repo 裡。沒登記的機器：git 找不到驅動 ⇒ 一般三方合併（照常出衝突，不會靜默少東西）。
 """
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -25,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 SOURCE = HERE / "merge_drivers.py"
 #: 驅動會被 git 以「登記時的直譯器」執行（寫進共用的 .git/config、所有 worktree 都吃）⇒ 只准專案固定的 venv，
 #: 不收「剛好是誰在跑這支腳本」的 sys.executable（使用者自己的 python、release runner 的暫時環境…）
-REQUIRED_VENV = ".venv312"
+REQUIRED_VENV = r"D:\MOTRIX-PLATFORM\.venv312"
 DRIVERS = {"motrix-changelog": "changelog", "motrix-manifest": "manifest", "motrix-json": "json", "motrix-maxentries": "maxentries"}
 
 
@@ -46,11 +47,13 @@ def _posix(p):
 
 
 def python_ok(python):
-    """⇒ 錯誤說明或 None：路徑裡要有 .venv312 這一層（大小寫不拘）。"""
-    parts = [x.lower() for x in Path(str(python)).parts]
-    if REQUIRED_VENV in parts:
+    """⇒ 錯誤說明或 None：直譯器的完整路徑要在 REQUIRED_VENV（D:\\MOTRIX-PLATFORM\\.venv312）底下（大小寫、斜線方向不拘；`..` 先正規化）。
+    只比路徑中間有沒有 `.venv312` 這個字，任何人的 `C:\\x\\.venv312\\python.exe` 都會過——所以改比完整路徑。"""
+    got = os.path.normcase(os.path.abspath(str(python)))
+    root = os.path.normcase(os.path.abspath(REQUIRED_VENV))
+    if got == root or got.startswith(root + os.sep):
         return None
-    return "直譯器不在 %s 之下：%s（請用 D:/MOTRIX-PLATFORM/%s/Scripts/python.exe 執行本腳本）" % (REQUIRED_VENV, python, REQUIRED_VENV)
+    return "直譯器不在 %s 之下：%s（請用 %s\\Scripts\\python.exe 執行本腳本）" % (REQUIRED_VENV, python, REQUIRED_VENV)
 
 
 def expected(repo, python=None):
@@ -71,7 +74,7 @@ def registered_python(got):
 
 
 def problems(repo, strict=True):
-    """⇒ [問題]；空＝已登記而且複本是最新（strict：登記的直譯器也必須在 .venv312 之下）。"""
+    """⇒ [問題]；空＝已登記而且複本是最新（strict：登記的直譯器也必須在 REQUIRED_VENV 之下）。"""
     copy, cfg = expected(repo)
     out = []
     for k in cfg:
