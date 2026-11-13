@@ -53,6 +53,11 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 選單分類／設定說明覆寫（批次 9）：稽核在 helper 的 set_override 內直接呼叫 _audit（寫入成功後才寫；驗證失敗丟 ValueError、不寫），端點本身只轉呼叫 ──
+    ("menu_categories.py", "PUT", "/api/menu/categories/override"):
+        "稽核 menu_categories.override 由 helpers/menu_categories.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
+    ("menu_categories.py", "PUT", "/api/menu/settings-help/override"):
+        "稽核 settings_help.override 由 helpers/settings_help.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
     # ── 通知用語預覽（t62 S-X3）：POST 只為帶草稿範本，不寫任何資料 ──
     ("notify_templates.py", "POST", "/api/notify-templates/{event}/preview"):
         "preview：只在記憶體內驗證草稿範本並以樣本值渲染（NT.preview 不 commit、不寫任何資料）；僅最高管理者、builder_notify 旗標關閉時 404。",
