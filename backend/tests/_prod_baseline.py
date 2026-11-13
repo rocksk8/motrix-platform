@@ -59,6 +59,7 @@
 📌 2026-11-12 12:21：正式機已更新到 78109f878（第七十九班 T79：LINE 通知管道三階段（封裝＋設定、事件通道〔審核意見編輯、保固到期〕、LINE Login 綁定；對外 callback 走 Tunnel `https://line.miactw.com/api/line/callback`，訊息帶連結與各事件開關預設全關）、option_list 重新啟用已停用選項改需第二位最高管理者核准（旗標關時與 T78 逐位元相同）、模組自有前端 JS 掛載機制（module.json assets）、WebAuthn 設定頁 404 診斷鍵改查狀態端點；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261112-t79-apply.md；套件 20261112_051302_78109f87_full；core 1.153→1.157、case 1.0.208→1.0.216、crm 1.2.0→1.2.1、subcontract 1.1.41→1.1.43（其餘模組版本不變），schema 維持 118（module_schema_versions 全表與 sqlite_master 485 項套用前後逐項相同、無 migration）；manifest 610→618 筆；設定群組維持 47；能力維持 12（複核者已在 T78／T79 凍結樹各現場跑 `all_caps()` 交叉確認一致；正式機 Claude 本次 client fixture 量法有誤未重測，依此結論為準，非資料缺口）；正式機 Claude 依常設授權執行 apply_update，applied_at 12:21:24 成功、無回滾，package.sha256 與 1236 檔核對一致、verify_package --expect-db-version 118 為 0 FAIL；步驟 3 各項全過（#15 四頁與 JS 回 200；#16 LINE callback 固定 400「連結無效」頁、帶 no-store／no-referrer、四個需登入端點未登入皆 401；#17 reconfirm_mode 套用前後同為 2〔開啟〕；#18／#19 LINE 兩鍵不存在、governance=0、送審中定義 0 筆）；回報資料夾 20261112_122200_78109f87_成功；LINE 通知預設全關，待使用者驗收結轉 T59～T78、選單改版、報價單簽核、自選條件報表）⇒ 基準改 78109f87。
 📌 2026-11-13 10:13：正式機已更新到 0147b3d53（第八十一班 T81：外網登入強化〔外網強制兩步驟驗證＋單一帳號鎖定、登入失敗告警〕、LINE 全信件接線〔預設全關〕、日誌分流輪替＋日誌不寫查詢參數、選單用字整理與讀取失敗提示、手機／平板介面、外網載入效能〔靜態檔版本化＋長效快取、HTML 304〕、Excel 匯入防資料遺失〔客戶／零件先預覽再確認〕；無 migration、schema 118 不變；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261113-t81-apply.md；套件 20261113_095433_0147b3d5_full；正式機 motrix-37 回報 applied_at 2026-11-13 10:13:13、status=success、未回滾、步驟 3 #1～#26 全過〔三項偏差見步驟檔文首〕）⇒ 基準改 0147b3d53。（⚠ 第八十班 T80 adc6bd58 上線當時未記帳，基準由 78109f87 直接移到本班；0147b3d53 是 adc6bd58 的後代，單調性不受影響。）
 📌 2026-11-13 18:42：正式機已更新到 f66dfd9ef（第八十二班 T82：首頁「我的工作」儀表板與登入問候、「我的帳號」頁（個人偏好、報價用公司信箱）、估價單（開單可選報價單／估價單）、簽核頁重排與簽核用語統一、報價清單重排、上傳防護（圖片解壓縮炸彈、xlsx 展開）與日誌遮罩補強；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261113-t82-apply.md；套件 20261113_181056_f66dfd9e_full；core 1.162→1.163、15 個模組版號全部上升；3 個新 migration（core v13 `user_prefs`、core v14 `users.quote_email`、case v10 `quotations.doc_type`，皆只新增、冪等），schema 維持 118；正式機 motrix-37 回報 applied_at 2026-11-13 18:38:34、status=success、未回滾；🔴 第一次啟動 core migration 沒跑（case 10 有跑、log 印 accounting 1.1.67），套用後檢查 #12 未過、依步驟 4 停下；使用者指示只重啟服務，18:42:20 重啟後 core 12→14 補上、accounting 1.1.68，步驟 3 全過）⇒ 基準改 f66dfd9ef。
+📌 2026-11-13 23:46：正式機已更新到 b4c542153（第八十三班 T83：授權頁可匯入授權（剩 30／14／7 天提醒）、「備份與監控」專頁（立即備份、心跳網址、停用／換主機需第二位最高管理者核准）、設定中心依 10 個分類分組＋欄位「?」說明、「開始使用」清單與組織設定缺口檢查、寄信帳號精靈（465 埠可寄）、頁面載入合併請求（/api/bootstrap、/api/dashboard/bundle）、公司資料改讀公開子集（完整內容可選只給最高管理者）、展示帳號不再算「另一位最高管理者」、簽核者本人可從待簽報價單「解鎖修改」、估價單 PDF 用語整理；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261113-t83-apply.md；套件 20261113_232746_b4c54215_full；core 1.163→1.165、9 個模組版號上升（accounting 1.1.68→1.1.70）、新增 22 條 API 路由、設定群組 50→51；無 migration、schema 維持 118；正式機 motrix-37 回報 applied_at 2026-11-13 23:45:58、status=success、未回滾、步驟 3 #1～#27 全過、載入版本＝磁碟版本；兩個如實揭露的偏差：①先 stage／verify／自升級再做 0-A（停機由約 13 分鐘縮為約 52 秒）；②步驟 0-A 逐一 taskkill 迴圈時，尚未被殺的多餘迴圈在 port 釋放時立刻拉起一個舊程式的服務（由 apply [2/6] 結束）⇒ 基準改 b4c542153。
 """
 import json
 import subprocess
@@ -67,7 +68,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "f66dfd9e"
+BASELINE = "b4c54215"
 
 
 def baseline_manifest():
