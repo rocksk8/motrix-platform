@@ -44,6 +44,13 @@ class _FakeLine:
         time.sleep(0.15)                      # 多等一下，確認沒有「多出來」的呼叫
         return self.calls
 
+    @property
+    def mails(self):
+        """只含「報價單審核中被編輯」這類信的收件人（主旨含「在審核中被」）。同一個行程裡別的測試／背景執行緒可能在這個測試期間寄出別類的信
+        （2026-11-14 T84 閘門整批並行時多了一封只寄 sa1／sa2 的信；單跑與整個 case 模組並行都重現不出來）；本檔驗「這個事件的收件人」，
+        不是「全機只有這一封信」。全部的信在 `all_mails`（收件人, 主旨），比對失敗時印在訊息裡，雜信的來源一眼看得出。"""
+        return [to for to, subj in self.all_mails if "在審核中被" in subj]
+
     def targets(self):
         out = []
         for c in self.calls:
@@ -64,8 +71,8 @@ def line(client, monkeypatch):
     monkeypatch.setattr(L, "_http", fake)
     monkeypatch.setattr(EN, "email_send_policy", lambda env=None: (True, "測試允許"))
     sent = []
-    monkeypatch.setattr(EN, "_async_send", lambda to, subject, html: sent.append(sorted(to)))
-    fake.mails = sent
+    monkeypatch.setattr(EN, "_async_send", lambda to, subject, html: sent.append((sorted(to), subject)))
+    fake.all_mails = sent
     _set_setting("line_notify", {"enabled": True, "channel_access_token": TOKEN, "events": {"approval_review_edit": True}})
     return fake
 
@@ -86,7 +93,7 @@ def test_review_edit_also_pushes_line_to_linked_recipients_only(client, make_use
     r = _edit(client, hs[0], qty=9)
     assert r.status_code == 200, r.text
     line.wait(1)
-    assert line.mails == [sorted(["req@example.test", "sa1@example.test", "sa2@example.test"])], "信件收件人不變"
+    assert line.mails == [sorted(["req@example.test", "sa1@example.test", "sa2@example.test"])], "信件收件人不變：%r" % (line.all_mails,)
     # LINE：業務收件人 ∩ 已綁定＝送審人、sa1、**沒有 Email 的 sa_noemail**。sa2 沒綁；bystander（一般管理員）不是收件人、停用的 sa_off 兩個通道都不發，即使綁了也不收
     assert len(line.calls) == 1 and line.calls[0]["path"] == "/v2/bot/message/multicast"
     assert line.targets() == sorted([_uid(1), _uid(2), _uid(5)])

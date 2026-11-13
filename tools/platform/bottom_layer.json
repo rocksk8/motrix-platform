@@ -61,7 +61,8 @@
   "backend/tests/test_voucher_referenced_code_2026_09_23.py",
   "backend/tests/test_voucher_view_acceptance_2026_09_23.py",
   "backend/tests/test_walk_batch_small_2026_09_24.py",
-  "backend/modules/crm/tests/test_dev_log_directive_2026_11_04.py"
+  "backend/modules/crm/tests/test_dev_log_directive_2026_11_04.py",
+  "backend/tests/test_settings_change_notify_2026_11_13.py"
  ],
  "rules": [
   {"pattern": "**/conftest.py", "layer": "bottom", "why": "fixture 層：所有測試的執行環境（MODULE-GUIDE §7；modtest.FIXTURE_LAYER）"},
