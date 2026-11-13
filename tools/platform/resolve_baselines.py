@@ -71,6 +71,7 @@ CORE_CHANGELOG = "backend/core/CHANGELOG.md"
 #: 其他『只准縮小』的棘輪基準（id→說明的字典；兩邊各新增不同的 id ⇒ 聯集）。新增這類基準檔時加在這裡＋.gitattributes
 EXTRA_JSON = (
     "backend/tests/platform/recyclebin_baseline_t53.json",
+    "backend/tests/platform/e2e_lint_baseline.json",
     "backend/tests/platform/write_golden_baseline.json",
     "backend/tests/platform/page_path_baseline.json",
     "backend/tests/platform/json_extract_baseline.json",

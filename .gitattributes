@@ -198,6 +198,7 @@ backend/tests/platform/unscoped_reads_baseline.json   merge=motrix-json
 docs/platform/modules.json                            merge=motrix-json
 backend/tests/platform/test_unscoped_reads_ratchet.py merge=motrix-maxentries
 backend/tests/platform/recyclebin_baseline_t53.json   merge=motrix-json
+backend/tests/platform/e2e_lint_baseline.json   merge=motrix-json
 backend/tests/platform/write_golden_baseline.json     merge=motrix-json
 backend/tests/platform/page_path_baseline.json        merge=motrix-json
 backend/tests/platform/json_extract_baseline.json     merge=motrix-json
