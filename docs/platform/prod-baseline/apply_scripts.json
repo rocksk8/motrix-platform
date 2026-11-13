@@ -4,13 +4,13 @@
   "apply_update": {
    "version": "2026-11-13c",
    "sha256": "8c4d37b3c84cb265ba59c960a2bc63827f0d74fc7aff1af3c136cd1e77025e0b",
-   "shipped_in": "20261114_050923_5f1a4a5d_full",
+   "shipped_in": "20261114_052951_5f1a4a5d_full",
    "commit": "5f1a4a5d85253199c6f04986776aff16eb9f2b8a"
   },
   "apply_module_update": {
    "version": "2026-11-13c",
    "sha256": "52237d98774cf2a17edd3727c9c6739a98e03e8ed61d13b6b8db92fcc4495319",
-   "shipped_in": "20261114_050923_5f1a4a5d_full",
+   "shipped_in": "20261114_052951_5f1a4a5d_full",
    "commit": "5f1a4a5d85253199c6f04986776aff16eb9f2b8a"
   }
  }
