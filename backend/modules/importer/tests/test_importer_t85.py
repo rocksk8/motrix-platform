@@ -223,18 +223,19 @@ def _grid_xml(rows, cols):
 
 
 def test_one_million_cell_file_is_rejected_fast_and_with_small_memory():
+    # 共用守門（helpers.xlsx_guard）先擋哪一個上限：這份檔的工作表 XML 超過 12MB 就先報「內容太大」，否則報「儲存格太多」——都是白話拒絕、重點是快且不吃記憶體
     import time
     import tracemalloc
     data = _raw_xlsx(_grid_xml(20000, 50), declared="A1:AX20000")        # 100 萬格，壓縮後只有幾 MB
     assert len(data) < (5 << 20)
     t = time.monotonic()                                                  # ① 時間（不開 tracemalloc：它會讓純 Python 迴圈慢十倍以上）
-    with pytest.raises(P.ParseError, match="儲存格太多"):
+    with pytest.raises(P.ParseError, match="儲存格太多|內容太大"):
         P.parse_file(data, "bomb.xlsx", "customers")
     took = time.monotonic() - t
     assert took < 2, "1M 格的檔案花了 %.2f 秒才拒絕" % took
     tracemalloc.start()                                                   # ② 尖峰記憶體
     try:
-        with pytest.raises(P.ParseError, match="儲存格太多"):
+        with pytest.raises(P.ParseError, match="儲存格太多|內容太大"):
             P.parse_file(data, "bomb.xlsx", "customers")
         peak = tracemalloc.get_traced_memory()[1]
     finally:
