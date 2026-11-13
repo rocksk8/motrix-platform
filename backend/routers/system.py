@@ -1669,7 +1669,7 @@ def _migrated_locations(profile):
 _PUBLIC_PROFILE_FIELDS = ("name", "tax_id", "contact_info")
 _PUBLIC_LOCATION_FIELDS = ("id", "name")
 
-#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 0 ＝ 維持原本（登入即可讀）。
+#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 1（2026-11-13 使用者裁示：公司資料完整版預設只限最高管理者）；0 ＝ 登入即可讀（放寬，須第二位最高管理者核准）。
 _FULL_READ_GROUP, _FULL_READ_FIELD = "account_security", "company_profile_full_read_superadmin_only"
 
 
