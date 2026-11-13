@@ -12,7 +12,7 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-# 873 = 871 + 2（LINE 事件矩陣 2026-11-13：`routers/system.py::_audit_mark`／`_line_conflict_who` 只對最高管理者的 LINE 設定頁讀 `audit_log`：前者回最新一筆的編號（只有 id）、後者只在儲存衝突時找「誰在何時改了這些事件」（只回顯示名與時間，不回稽核列；僅 `settings.line_notify%` 動作）；audit_log 沒有逐列範圍可套）
+# 873 = 871 + 2（LINE 事件矩陣 2026-11-13：`routers/system.py::_audit_mark`／`_line_conflict_who` 只對最高管理者的 LINE 設定頁讀 `audit_log`：前者回最新一筆的編號（只有 id）、後者只在儲存衝突時找「誰在何時改了這些事件」（只回顯示名與時間，不回稽核列；僅 `settings.line_notify%` 動作）；audit_log 沒有逐列範圍可套）。PM 2026-11-13 核准：新功能必要（「復原這一批」要顯示衝突是誰造成的）、限最高管理者頁；整合時照規矩把各分支的增減相加
 # 865 = 864 + 1（授權匯入 T83 2026-11-13：`license_manager.recent_activity` 讀 `audit_log` 最近幾筆 `license.import`／`license.import_rejected`——只回時間、操作者顯示名稱與白話結果（不含授權內容），端點只限最高管理者（GET /api/license/overview）；不得接其他使用者端點）
 # 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
 # 870 = 868 + 2（T83 整合 2026-11-13：備份與監控頁 `helpers/backup_monitor._audit_latest_map`／`_alerts_block` 讀 `audit_log` 的備份事件（`backup.*` 動作的最後時間、最近 N 筆警示）——只回時間與（過濾過路徑的）事件文字、不回個人資料，端點限最高管理者；audit_log 不是案件範圍資料，沒有 row_access 可套。feat/backup-monitor-page 分支當初漏登記）
