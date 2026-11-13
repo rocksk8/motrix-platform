@@ -638,7 +638,7 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
                      total_tiers: int, approver_usernames: list, doc_label: str = "報價單") -> None:
     """前層通過，下一層簽核通知"""
-    _line_event("next_tier", usernames=approver_usernames, title="報價單輪到您簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
+    _line_event("next_tier", usernames=approver_usernames, title=_dl("報價單輪到您簽核", doc_label), rows=[(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "next_tier")
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
@@ -661,7 +661,7 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
 def notify_approved(quote_no: str, customer: str,
                     approved_by: str, requester_username: str, doc_label: str = "報價單") -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
-    _line_event("approved", usernames=[requester_username], to_group=True, title="報價單簽核完成", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
+    _line_event("approved", usernames=[requester_username], to_group=True, title=_dl("報價單簽核完成", doc_label), rows=[(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
     to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
@@ -683,7 +683,7 @@ def notify_approved(quote_no: str, customer: str,
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
                     note: str, requester_username: str, doc_label: str = "報價單") -> None:
     """退回修改 → 通知申請人"""
-    _line_event("returned", usernames=[requester_username], title="報價單退回修改", rows=[("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
+    _line_event("returned", usernames=[requester_username], title=_dl("報價單退回修改", doc_label), rows=[("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "returned")
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
@@ -1397,7 +1397,7 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
                               approver_names: list, doc_label: str = "報價單") -> None:
     """退回改版重新送審 → 確認信給申請人"""
-    _line_event("resubmit_requester", usernames=[requester_username], title="修改版報價單已重新送審", rows=[("修改版單號", new_quote_no), ("原始單號", original_quote_no), ("客戶名稱", customer)], reason="修改版已重新進入簽核流程")
+    _line_event("resubmit_requester", usernames=[requester_username], title=_dl("修改版報價單已重新送審", doc_label), rows=[("修改版單號", new_quote_no), ("原始單號", original_quote_no), ("客戶名稱", customer)], reason="修改版已重新進入簽核流程")
     to = _lookup_emails([requester_username], "resubmit_requester")
     if not to:
         logger.warning("notify_resubmit_requester: 申請人 %r 無設定 email（quote_no=%r）",
@@ -1918,7 +1918,7 @@ def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_l
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
     """精算完結 → 通知 admin_emails"""
-    _line_event("settlement_finalized", to_group=True, title="成本精算完結", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)])
+    _line_event("settlement_finalized", to_group=True, title="成本精算完結", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)])
     to = _admin_emails("settlement_finalized")
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
@@ -1938,7 +1938,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理者（2026-08-25）。
     報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
     發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
-    _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
+    _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
     to = _superadmin_emails("case_closing_report")
     if not to:
         logger.warning("notify_case_closing_report: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1970,7 +1970,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
     概念）＋最高管理者（不論如何都通知，即使 pending_usernames 已涵蓋所有
     superadmin，重複的 email 由呼叫端 set() 去重）。"""
-    _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
+    _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
     to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
                   + _superadmin_emails("case_close_blocked")))
     if not to:
@@ -1996,7 +1996,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""
-    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
+    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
     to = _superadmin_emails("case_change_requested")
     if not to:
         logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)

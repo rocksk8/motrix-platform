@@ -275,3 +275,55 @@ def test_settings_pages_and_dev_crm_page_use_neutral_wording():
     assert "<h3>轉建報價單／估價單</h3>" in d and "<h3>轉建報價單</h3>" not in d
     assert "MQ-YYYYMM-NNN" not in d, "輸入框提示不寫 MQ 字首（估價單是 ME）"
     assert "系統將開啟報價單／估價單表單" in d
+
+
+# ── H. 跟進（PM 追加）：LINE 標題／列標籤、業務開發連結的「單號不存在」句 ───────────────────
+
+def _line_capture(monkeypatch):
+    from helpers import email_notify as E
+    got = []
+    monkeypatch.setattr(E, "_line_event", lambda key, **kw: got.append((key, kw)))
+    monkeypatch.setattr(E, "_lookup_emails", lambda *a, **k: [])        # 不寄信；只看 LINE 呼叫
+    monkeypatch.setattr(E, "_tpl_fields", lambda *a, **k: {})
+    return E, got
+
+
+def _line_text(kw):
+    return kw["title"] + "|" + "|".join(k + "=" + str(v) for k, v in kw.get("rows") or [])
+
+
+@pytest.mark.parametrize("name", ["next_tier", "approved", "returned", "resubmit"])
+def test_line_titles_and_row_labels_follow_the_doc_label(monkeypatch, name):
+    E, got = _line_capture(monkeypatch)
+    cust = "報價單客"
+    for lab, no in (("估價單", EST_NO), ("報價單", QUO_NO)):
+        got.clear()
+        _fire(E, name, lab, no, cust)
+        assert got, name
+        txt = _line_text(got[-1][1]).replace(cust, "")
+        (_est if lab == "估價單" else _quo)(txt)
+
+
+@pytest.mark.parametrize("name,fn", [
+    ("settlement", lambda E, no: E.notify_settlement_finalized(no, "客", "某人")),
+    ("change", lambda E, no: E.notify_case_change_requested(no, "客", "案", "摘要", "某人")),
+])
+def test_line_row_labels_of_number_only_mails_follow_the_prefix(monkeypatch, name, fn):
+    E, got = _line_capture(monkeypatch)
+    monkeypatch.setattr(E, "_admin_emails", lambda *a, **k: [])
+    monkeypatch.setattr(E, "_superadmin_emails", lambda *a, **k: [])
+    for no, chk in ((EST_NO, _est), (QUO_NO, _quo)):
+        got.clear()
+        fn(E, no)
+        assert got, name
+        chk(_line_text(got[-1][1]).replace(no, ""))
+
+
+def test_dev_case_link_not_found_sentences_follow_the_number():
+    src = (_ROOT / "backend" / "modules" / "crm" / "api.py").read_text(encoding="utf-8")
+    assert 'f"{_DT.label_of_no(quote_no)} {quote_no} 不存在，無法連結"' in src
+    assert 'f"{_DT.label_of_no(target)} {target} 不存在，無法連結"' in src
+    assert 'f"{_DT.label_of_no(target)} {target} 已不存在，無法核准，請申請人取消或重新申請"' in src
+    from helpers import doc_type as D
+    assert f"{D.label_of_no('ME-209912-1')} ME-209912-1 不存在，無法連結" == "估價單 ME-209912-1 不存在，無法連結"
+    assert f"{D.label_of_no('MQ-209912-1')} MQ-209912-1 不存在，無法連結" == "報價單 MQ-209912-1 不存在，無法連結"

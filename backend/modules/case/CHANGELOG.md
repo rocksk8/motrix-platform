@@ -1,7 +1,7 @@
 ## (next) — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
 - 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
 - 中性用語（使用者裁示：共用名稱一律「報價單／估價單」）：信件類型名稱、通知偏好、簽核流程設定頁、行事曆事件目錄、稽核模組名、業務開發頁轉建／連結彈窗與輸入框提示（不再寫 MQ- 字首）。
-- 刻意不動：API 錯誤訊息（HTTPException）維持「報價單」；「轉建時選估價單」是新功能，不在本票。已知未涵蓋：LINE 推播標題（next_tier／approved／returned 等 `_line_event` 的 title）、簽核佇列「報價單附件刪除」類型名仍寫「報價單」。
+- 刻意不動：API 錯誤訊息（HTTPException）維持「報價單」；「轉建時選估價單」是新功能，不在本票。LINE 推播標題與列標籤（next_tier／approved／returned／resubmit、精算完結、結案報表、結案被擋、已結案變更）也依單據類型換字。已知未涵蓋：簽核佇列「報價單附件刪除」類型名（承攬商報價單附件，待 PM 確認是否屬於案件的報價單／估價單）。
 - 測試：`tests/test_estimate_static_labels_2026_11_13.py`。
 
 # 案件 更新紀錄
