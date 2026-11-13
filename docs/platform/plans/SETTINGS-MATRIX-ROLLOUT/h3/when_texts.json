@@ -1,0 +1,309 @@
+{
+ "_doc": "甲份 76 欄的 SettingDef.when 草稿（來源：盤點表備註『什麼時候要改』；hichan-3，2026-11-13）。有前置開關的欄位開頭已含『要先開啟…』。放寬方向（loosen 非空）的那句『若要往放寬方向調整…需第二位最高管理者核准並等待 N 天』已拿掉：實作時由 plan().kind／otherSuperadmins 在執行期產生（SPEC §4.13，只有一位最高管理者時不能寫死第二位核准）。",
+ "fields": {
+  "quote_approval.min_item_margin_pct": {
+   "when": "主管覺得太多或太少低毛利單被標出來時。",
+   "loosen": "down"
+  },
+  "quote_approval.max_valid_days": {
+   "when": "公司的報價有效期政策改變時。調低上限前，先確認「新報價單預設有效天數」沒有超過新上限，否則預設值會存不進去。",
+   "loosen": "up"
+  },
+  "quote_approval.discount_review_above": {
+   "when": "想讓小額折讓免審、或所有折讓都要看時。",
+   "loosen": "up"
+  },
+  "quote_approval.reconfirm_mode": {
+   "when": "簽完後內容被未經同意修改、而簽核人不知情時；「先試跑」看一週會影響誰，再決定開。",
+   "loosen": "down"
+  },
+  "quote_defaults.valid_days": {
+   "when": "公司慣用的報價有效天數變了；業務仍可逐張改。",
+   "loosen": null
+  },
+  "quote_defaults.estimate_no_prefix": {
+   "when": "想讓估價單單號一眼和報價單分開，或字首與其他單據撞了時。",
+   "loosen": null
+  },
+  "quote_alt.alt_enabled": {
+   "when": "公司不再使用擇一方案、想把相關欄位從報價單拿掉時，才關閉；關掉只是不顯示欄位，舊單不變。",
+   "loosen": null
+  },
+  "quote_alt.total_text": {
+   "when": "要先開啟「啟用擇一方案」才有作用。客戶反映合計欄的字眼看不懂，或公司想換一句更貼切的說法時。",
+   "loosen": null
+  },
+  "quote_alt.note_template": {
+   "when": "要先開啟「啟用擇一方案」才有作用。想調整客戶看到的擇一備註措辭時；平常不必動。",
+   "loosen": null
+  },
+  "quote_alt.show_unpicked_in_pdf": {
+   "when": "要先開啟「啟用擇一方案」才有作用。客戶要求所有 PDF／Excel 輸出都保留「沒被選到的方案」做留底時。",
+   "loosen": null
+  },
+  "quote_alt.alt_groups_max": {
+   "when": "要先開啟「啟用擇一方案」才有作用。同一張單真的需要超過目前組數的擇一方案時；調大前先確認內部比較畫面還看得懂。",
+   "loosen": "up"
+  },
+  "quote_alt.combo_view_max": {
+   "when": "要先開啟「啟用擇一方案」才有作用。內部比較畫面出現「只顯示前 N 種」而你想看更多時。",
+   "loosen": null
+  },
+  "quote_alt.combo_view_default_open": {
+   "when": "要先開啟「啟用擇一方案」才有作用。業務習慣一開單就比較各組合成本時。",
+   "loosen": null
+  },
+  "quote_alt.lock_scope": {
+   "when": "現場常需要在客戶回簽後補改備註或附件、又不想每次都先取消回簽時，才考慮放寬成「只鎖品項與金額」。",
+   "loosen": "up"
+  },
+  "quote_alt.cancel_after_deal": {
+   "when": "成案後客戶改變主意、需要重選方案時，才評估放寬。",
+   "loosen": "up"
+  },
+  "quote_alt.move_out_of_sent": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_alt.reject_final_keep": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_alt.unlock_edit_signed": {
+   "when": "有已回簽單必須由最高管理者修正時，才評估放寬。",
+   "loosen": "up"
+  },
+  "quote_alt.approval_basis": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_alt.cancel_after_export": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_alt.cancel_after_invoice": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_alt.cancel_after_settle": {
+   "when": "目前只有一個可選項（其他選項尚未提供），所以現在沒有可以改的地方；等系統提供放寬選項後，才需要評估。",
+   "loosen": "up"
+  },
+  "quote_output.hidden_terms_pdf_mode": {
+   "when": "公司決定客戶端不顯示某些報價條件，卻發現 PDF 仍然印出時。",
+   "loosen": "up"
+  },
+  "quote_privacy.contact_email_hideable": {
+   "when": "對個人資料有內規，要求某些欄位固定顯示或可被隱藏時。",
+   "loosen": null
+  },
+  "quote_privacy.contact_fax_hideable": {
+   "when": "公司對個人資料欄位有內規時；傳真已很少用，通常可以讓它隱藏。",
+   "loosen": null
+  },
+  "quote_backfill.enabled": {
+   "when": "只在需要補登過去月份的成案單時打開，補完就關。",
+   "loosen": null
+  },
+  "quote_backfill.earliest_month": {
+   "when": "要補登更早的月份，或想縮小可補登範圍時。",
+   "loosen": null
+  },
+  "quote_backfill.auto_off_hours": {
+   "when": "想縮短補登入口開著的時間，避免忘記關。",
+   "loosen": null
+  },
+  "profit_warning.quote_form_low": {
+   "when": "業務反映報價單上紅色太常出現或太少出現時。",
+   "loosen": null
+  },
+  "profit_warning.quote_form_good": {
+   "when": "公司提高或降低利潤目標時。",
+   "loosen": null
+  },
+  "profit_warning.report_low": {
+   "when": "報表頁的紅色與公司的利潤警戒線不一致時。",
+   "loosen": null
+  },
+  "profit_warning.report_good": {
+   "when": "公司的「達標」定義改變時。",
+   "loosen": null
+  },
+  "profit_warning.case_floor": {
+   "when": "想把「虧損」的定義改成低於某個正數、或容許小額虧損時。",
+   "loosen": null
+  },
+  "profit_warning.case_good": {
+   "when": "案件頁的綠色與公司的達標定義不一致時。",
+   "loosen": null
+  },
+  "profit_warning.settlement_good": {
+   "when": "結算頁的達標標準與公司目標不同時。",
+   "loosen": null
+  },
+  "project_margin.warn_pct": {
+   "when": "想在業務開單當下就提醒毛利偏低；0 代表不提醒。",
+   "loosen": null
+  },
+  "overhead.default_pct": {
+   "when": "公司管銷政策或抽成比例改變時（通常年度檢討才改）。",
+   "loosen": "down"
+  },
+  "profit_rules.charity_rate_pct": {
+   "when": "公司公益政策調整比率時（通常年度檢討才改）。",
+   "loosen": "down"
+  },
+  "material_order.supplier_required": {
+   "when": "從採購單帶入的材料申請常沒有供應商、被「一定要選」擋住時。放寬後只有帶入的免選，手動新增仍要選；開匯款申請前還是要補選好。",
+   "loosen": "down"
+  },
+  "material_recognition.who_may": {
+   "when": "專案經理常需要自己認列採購單，且公司同意由他們負責時。",
+   "loosen": "up"
+  },
+  "material_recognition.on_denied": {
+   "when": "管理員覺得越權嘗試的通知信太吵，或相反希望第一時間得知時，才改。不論怎麼選，稽核都會留下紀錄。",
+   "loosen": "up"
+  },
+  "material_recognition.mail_window_minutes": {
+   "when": "管理員抱怨重複通知太多或太少時。",
+   "loosen": "down"
+  },
+  "material_recognition.mail_cap": {
+   "when": "同一段時間內通知信量明顯過多或過少時才調整；平常不用動。",
+   "loosen": "up"
+  },
+  "finance_cashier.custom_due_soon": {
+   "when": "想讓「即將到期」比 7 天／3 天更早或更晚提醒時。",
+   "loosen": null
+  },
+  "finance_cashier.due_soon_payable_days": {
+   "when": "要先開啟「自訂即將到期天數」才有作用。出納想更早（或更晚）在待付款與應收清單看到橘字「即將到期」時調整。",
+   "loosen": null
+  },
+  "finance_cashier.due_soon_planned_days": {
+   "when": "要先開啟「自訂即將到期天數」才有作用。想更早（或更晚）收到預定付款日的提醒信時。",
+   "loosen": null
+  },
+  "finance_cashier.receivable_grace_days": {
+   "when": "客戶習慣晚幾天付款、不想太早標逾期時。",
+   "loosen": "up"
+  },
+  "finance_cashier.custom_bank_aliases": {
+   "when": "匯入銀行對帳單時，欄位對不上時才打開。",
+   "loosen": null
+  },
+  "finance_cashier.bank_alias_date": {
+   "when": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的日期欄叫別的名字時，加進來。",
+   "loosen": null
+  },
+  "finance_cashier.bank_alias_amount": {
+   "when": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的金額欄叫別的名字時，加進來。",
+   "loosen": null
+  },
+  "finance_cashier.bank_alias_desc": {
+   "when": "要先開啟「自訂對帳單欄位名稱」才有作用。對帳單的摘要欄叫別的名字時，加進來。",
+   "loosen": null
+  },
+  "finance_reports.custom_aging": {
+   "when": "公司的帳期習慣不是 30／60／90 天時才打開。",
+   "loosen": null
+  },
+  "finance_reports.aging_day1": {
+   "when": "要先開啟「自訂帳齡區間」才有作用。想把最短的帳齡區間改短或改長時。",
+   "loosen": null
+  },
+  "finance_reports.aging_day2": {
+   "when": "要先開啟「自訂帳齡區間」才有作用。想調整「注意」的分界時。",
+   "loosen": null
+  },
+  "finance_reports.aging_day3": {
+   "when": "要先開啟「自訂帳齡區間」才有作用。想調整「逾期很久」的分界時。",
+   "loosen": null
+  },
+  "finance_reports.settle_overdue_days": {
+   "when": "結案後需要多一點時間才完成精算，不想太早被列入「未精算」時。",
+   "loosen": "up"
+  },
+  "case_close_gates.enabled": {
+   "when": "公司想把結案把關從「寬鬆」改成「必須齊全」時。",
+   "loosen": "down"
+  },
+  "case_close_gates.require_stages": {
+   "when": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒建階段就結案、事後難追蹤時。",
+   "loosen": "down"
+  },
+  "case_close_gates.require_payment_items": {
+   "when": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒建款項明細就結案、收款對不起來時。",
+   "loosen": "down"
+  },
+  "case_close_gates.require_settlement": {
+   "when": "要先開啟「啟用結案條件加嚴」才有作用。常有案件沒精算就結案、利潤看不到時。",
+   "loosen": "down"
+  },
+  "case_close_gates.count_unfinished_extra_expenses": {
+   "when": "要先開啟「啟用結案條件加嚴」才有作用。常有額外支出草稿卡著，結案後成本不完整時。",
+   "loosen": "down"
+  },
+  "completion_note.auto_prefill": {
+   "when": "現場希望完工單一開始是空白、由人逐項填寫（例如實際完工內容和報價單差很多）時，才關閉自動帶入。",
+   "loosen": null
+  },
+  "completion_note.prefill_unsigned": {
+   "when": "要先開啟「新建時自動帶入項目」才有作用。現場想在客戶回簽前先開完工單，或相反要嚴格等回簽時。",
+   "loosen": null
+  },
+  "completion_note.qty_mode": {
+   "when": "要先開啟「新建時自動帶入項目」才有作用。不分批完工、想讓每張完工單一律填報價的全部數量時，才改成「填報價的全部數量」；分批完工的案件維持預設較省事。",
+   "loosen": null
+  },
+  "completion_note.default_status": {
+   "when": "要先開啟「新建時自動帶入項目」才有作用。大多數項目完工狀態一致時，選最常見的，省去逐列改。",
+   "loosen": null
+  },
+  "completion_note.include_headers": {
+   "when": "要先開啟「新建時自動帶入項目」才有作用。報價單分段標題對完工單沒意義，或相反要保留分組時。",
+   "loosen": null
+  },
+  "completion_note.brand_prefix": {
+   "when": "要先開啟「新建時自動帶入項目」才有作用。完工單的品名欄太長，或客戶不需要看到品牌時，才改成只帶品名。",
+   "loosen": null
+  },
+  "completion_note.over_qty": {
+   "when": "現場多做的數量需要被管制，或相反要寬鬆時。",
+   "loosen": "down"
+  },
+  "alerts.warranty_report_days": {
+   "when": "想讓營運報表提早（或延後）列出快到期的保固。",
+   "loosen": "down"
+  },
+  "alerts.warranty_mail_early_days": {
+   "when": "業務需要更早排程更換設備時。",
+   "loosen": "down"
+  },
+  "alerts.warranty_mail_urgent_days": {
+   "when": "想在更接近到期日時再催一次。",
+   "loosen": "down"
+  },
+  "alerts.cert_warn_days": {
+   "when": "換發簽章確認檔需要較長前置作業時，提早提醒。",
+   "loosen": "down"
+  },
+  "legal_params_reminder.start_month": {
+   "when": "每年法規公告時間較晚、或公司想更早準備時。",
+   "loosen": "up"
+  },
+  "legal_params_reminder.start_day": {
+   "when": "與「月」一起決定每年從哪一天起提醒；想讓提醒更早或更晚時調整。",
+   "loosen": "up"
+  },
+  "change_control.confirm_period_days": {
+   "when": "想讓高風險設定多一點反悔時間，或縮短等待時。",
+   "loosen": "down"
+  },
+  "payslip_dispatch_picker.page_size": {
+   "when": "派發筆數很多而下拉載入太慢，或相反想一次看更多時。",
+   "loosen": null
+  }
+ }
+}
