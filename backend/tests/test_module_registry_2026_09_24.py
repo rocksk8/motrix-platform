@@ -103,7 +103,11 @@ def test_catalog_endpoint_serves_the_registry_to_superadmin(client, make_user):
     h = _hdr(client, make_user, "root", "superadmin")
     r = client.get("/api/modules/catalog", headers=h)
     assert r.status_code == 200, r.text
-    assert r.json() == catalog()
+    from helpers import user_perm_batch as upb
+    expected = dict(catalog())
+    expected.update(upb.list_catalog())      # S3a：highSensitiveKeys／batchGrantRefused／financeKeys 由伺服器給（SPEC §12-3），前端不寫死
+    assert r.json() == expected
+    assert {"highSensitiveKeys", "batchGrantRefused", "financeKeys"} <= set(r.json()), "批次面板要用的三份清單不見了"
     assert len(r.json()["modules"]) == len(GOLDEN_MODULES)
 
 

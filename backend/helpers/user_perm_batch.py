@@ -360,10 +360,10 @@ def apply(conn, actor, body, ip="") -> dict:
             raise dr.DutyError("名單或權限在預覽之後有變動，請重新預覽再套用", 409)
         _sens, reason = dr.gate_reason(plan["gatedKeys"], req["reason"], extra_keys=BATCH_GRANT_REFUSED)
         applied = _write_people(conn, actor, plan, reason, ip)
-        conn.commit()
     except Exception:
         conn.rollback()
         raise
+    conn.commit()          # 頂層 commit：寫鎖在這裡放掉；通知（另開連線寫入）一律在它之後（commit 失敗＝例外往外丟，連線由呼叫端關閉、未 commit 的寫入隨之作廢）
     _notify(actor, plan, applied, reason)
     out = _public(plan)
     out["ok"] = True
@@ -438,10 +438,10 @@ def undo(conn, actor, body, ip="") -> dict:
         _sens, reason = dr.gate_reason(plan["gatedKeys"], reason_in, extra_keys=BATCH_GRANT_REFUSED)
         reason = reason or UNDO_DEFAULT_REASON
         applied = _write_people(conn, actor, plan, reason, ip)
-        conn.commit()
     except Exception:
         conn.rollback()
         raise
+    conn.commit()          # 頂層 commit：寫鎖在這裡放掉；通知（另開連線寫入）一律在它之後（commit 失敗＝例外往外丟，連線由呼叫端關閉、未 commit 的寫入隨之作廢）
     _notify(actor, plan, applied, reason, undo=True)
     out = _public(plan)
     out.update({"ok": True, "applied": applied, "conflicts": conflicts})
