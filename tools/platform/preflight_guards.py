@@ -404,6 +404,8 @@ def preflight(repo=REPO, window=None, only=None, workers=DEFAULT_WORKERS, with_e
         if unknown_skip:
             return 2, "未知的題組 id（--skip）：%s（--list 看全部）" % "、".join(sorted(unknown_skip)), {}
         only = (only or {g["id"] for g in cfg["groups"]}) - set(skip)
+        if not only:
+            return 2, "--skip 把全部題組都排除了：沒有東西可跑（要跑什麼請用 --only）", {}
     if only:
         unknown = only - {g["id"] for g in cfg["groups"]} - ({"e2e_goldens"} if with_e2e else set())
         if unknown:

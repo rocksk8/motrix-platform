@@ -360,3 +360,12 @@ def test_skip_removes_groups_and_unknown_skip_id_is_an_error(tmp_path):
     code, text, _d = P.preflight(tmp_path, skip=["nope"], config=cfg, **KW)
     assert code == 2 and "--skip" in text
 
+
+def test_skipping_every_group_is_an_error_not_a_run_of_everything(tmp_path):
+    cfg = _cfg_two(tmp_path)
+    ran = []
+    code, text, _d = P.preflight(tmp_path, skip=["ga", "gb"], config=cfg, runner=lambda *a: ran.append(1) or (0, "", 0.0, None), **KW)
+    assert code == 2 and "全部題組都排除" in text and not ran
+    code, _t, _d = P.preflight(tmp_path, only=["ga"], skip=["ga"], config=cfg, runner=lambda *a: ran.append(1) or (0, "", 0.0, None), **KW)
+    assert code == 2 and not ran, "--only 與 --skip 相消也算空"
+

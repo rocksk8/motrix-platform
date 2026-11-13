@@ -347,9 +347,9 @@ def test_run_stage_the_gate_itself_exports_the_gate_token_when_a_lock_is_held(tm
     seen = []
     ok, lock = H.gate_acquire("h7", "T82", 3600)
     assert ok
-    BT.run_stage(REPO, "not_e2e", [], python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
+    BT.run_stage(REPO, "not_e2e", str(tmp_path / "rec.jsonl"), python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
     assert seen == [lock["token"]]
     H.gate_release("h7")
     seen.clear()
-    BT.run_stage(REPO, "not_e2e", [], python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
+    BT.run_stage(REPO, "not_e2e", str(tmp_path / "rec.jsonl"), python=sys.executable, runner=lambda cmd, cwd, env: seen.append(env.get(H.GATE_TOKEN_ENV)) or 0, note=lambda *_: None)
     assert seen == [None], "沒有鎖就不帶"
