@@ -122,3 +122,67 @@ def test_normal_upload_still_works_and_appends(client, make_user):
     r = _upload(client, h, wid, n=1)
     assert r.status_code == 201 and r.json()["added"] == 1
     assert len(_photos(wid)) == 3 and len(_files_under(_dir(wid))) == 3
+
+
+# ── 刪除單張照片（hichan-12 M1）：同樣的 lost update ＋「先刪檔、後寫庫」的順序 ──
+
+def _one_photo(client, h, wid):
+    assert _upload(client, h, wid, n=1).status_code == 201
+    return _photos(wid)[0]
+
+
+def test_delete_photo_keeps_a_photo_committed_by_another_request(client, make_user, monkeypatch):
+    """刪除途中（檔案被移除的那一刻）另一個請求剛好把一張新照片寫進同一筆日誌：刪除不能整份寫回蓋掉它。"""
+    h, wid = _new_log(client, make_user, "wo_dlc")
+    target = _one_photo(client, h, wid)
+    injected = {"id": "late001", "filename": "late.png", "path": "x/late.png", "uploaded_by": "B", "uploaded_at": "2026-11-13T00:00:00"}
+    real_remove = os.remove
+    state = {"done": False}
+
+    def remove_and_interleave(p, *a, **kw):
+        if not state["done"]:
+            state["done"] = True
+            import db
+            conn = db.get_db()
+            cur = json.loads(conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()["photos"] or "[]")
+            conn.execute("UPDATE work_logs SET photos=? WHERE id=?", (json.dumps(cur + [injected]), wid))
+            conn.commit()
+            conn.close()
+        return real_remove(p, *a, **kw)
+    monkeypatch.setattr(os, "remove", remove_and_interleave)
+    r = client.delete(f"/api/work-logs/{wid}/photos/{target['id']}", headers=h)
+    assert r.status_code == 200, r.text
+    ids = [p["id"] for p in _photos(wid)]
+    assert ids == ["late001"], ids                                       # 目標被刪、別人剛寫的還在
+    assert state["done"]
+
+
+def test_delete_photo_db_error_keeps_record_and_file(client, make_user):
+    """寫庫失敗：紀錄與實體檔都要留著（不能出現「紀錄還在、檔案已不見」）。"""
+    h, wid = _new_log(client, make_user, "wo_dle")
+    target = _one_photo(client, h, wid)
+    import db
+    conn = db.get_db()
+    conn.execute("CREATE TRIGGER wo_block_photos2 BEFORE UPDATE OF photos ON work_logs BEGIN SELECT RAISE(ABORT, 'blocked-by-test'); END")
+    conn.commit()
+    conn.close()
+    try:
+        with pytest.raises(Exception):
+            client.delete(f"/api/work-logs/{wid}/photos/{target['id']}", headers=h)
+    finally:
+        conn = db.get_db()
+        conn.execute("DROP TRIGGER IF EXISTS wo_block_photos2")
+        conn.commit()
+        conn.close()
+    assert [p["id"] for p in _photos(wid)] == [target["id"]]
+    assert len(_files_under(_dir(wid))) == 1
+
+
+def test_delete_photo_normal_removes_record_and_file_and_404s(client, make_user):
+    """正對照：一般刪除照舊（紀錄與檔都沒了）；不存在的照片／日誌回 404。"""
+    h, wid = _new_log(client, make_user, "wo_dlok")
+    target = _one_photo(client, h, wid)
+    assert client.delete(f"/api/work-logs/{wid}/photos/{target['id']}", headers=h).status_code == 200
+    assert _photos(wid) == [] and _files_under(_dir(wid)) == []
+    assert client.delete(f"/api/work-logs/{wid}/photos/{target['id']}", headers=h).status_code == 404
+    assert client.delete("/api/work-logs/99999/photos/zzz", headers=h).status_code == 404

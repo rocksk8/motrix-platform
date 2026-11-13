@@ -872,10 +872,21 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
         conn.close(); raise HTTPException(404, "找不到日誌")
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能刪除自己工作日誌的照片")
-    photos = json.loads(row["photos"] or "[]")
-    photo  = next((p for p in photos if p.get('id') == photo_id), None)
-    if not photo:
-        conn.close(); raise HTTPException(404, "照片不存在")
+    # lost update：拿寫鎖之後才重讀、只濾掉這一張（讀到寫之間別人剛上傳的照片不會被整份寫回蓋掉）；
+    # 實體檔在 commit 之後才刪（資料庫寫失敗時不會留下「紀錄還在、檔案已不見」）
+    with write_txn(conn):
+        cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+        if not cur_row:
+            raise HTTPException(404, "找不到日誌")
+        photos = json.loads(cur_row["photos"] or "[]")
+        photo  = next((p for p in photos if p.get('id') == photo_id), None)
+        if not photo:
+            raise HTTPException(404, "照片不存在")
+        photos = [p for p in photos if p.get('id') != photo_id]
+        conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                     (json.dumps(photos, ensure_ascii=False), wid))
+        conn.commit()
+    conn.close()
     try:
         base_dir, _url_prefix = _photo_root()
         fp = os.path.join(base_dir, '..', photo['path'])
@@ -883,11 +894,6 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
             os.remove(fp)
     except Exception:
         pass
-    photos = [p for p in photos if p.get('id') != photo_id]
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(photos, ensure_ascii=False), wid))
-    conn.commit()
-    conn.close()
     notify_module_activity("工作日誌", "刪除照片", user.get("display_name") or user["username"],
                             f"日誌 #{wid}", "work-log.html")
     _audit(_tok(authorization), 'work_log.photo_delete', 'work_log', str(wid), str(wid), {'photoId': photo_id})
