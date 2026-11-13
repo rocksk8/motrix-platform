@@ -49,7 +49,7 @@ from modules.case.quotations import is_historical_json as _is_hist, sql_hist_hin
 # 洞 1（只寫不修）：每次掃描結尾修剪——只留「還沒完成、到期日 ≥ 今天－1 天」的階段的鍵（與 `caseproj_notif` 同一個「只留還活著的」慣例）。
 # 洞 2（逐階段發）：同一個人同一天的階段彙整成一則站內通知＋一封信（主管同理一人一封）；只有一個階段時內容與舊版相同。
 # 洞 3（先寫鍵再發送、發送在 daemon thread）：站內通知與鍵同交易；信件改成同步等結果，寄出（或結果不明／永久失敗／沒有收件人）才把鍵寫成最終；
-#   暫時失敗 ⇒ 鍵停在 p: ⇒ 到期日之前每次每日檢查只重試外部通道，**不會重發站內通知**；最多重發一次，不會永遠漏發（重試窗口＝到期前 3 天～到期當天）。
+#   暫時失敗（連續 3 封才停止本輪；單一收件人壞掉不擋後面的人）或這台機器略過信件（不停——LINE 與信件結果無關）⇒ 鍵停在 p: ⇒ 到期日之前每次每日檢查只重試外部通道，**不會重發站內通知**；最多重發一次，不會永遠漏發（重試窗口＝到期前 3 天～到期當天）。
 # 不補發：只看「今天～今天＋3 天」到期的階段，過去已逾期的永遠不會被選到；首次嘗試仍只在到期前 3 天與當天兩個日子（與舊版相同），
 #   「到期前 1～2 天」只用來重試已經有 p: 鍵的項目，沒有鍵的不會憑空新發。
 def _send_stage_digest(items, **kw):
@@ -58,6 +58,7 @@ def _send_stage_digest(items, **kw):
 
 
 _STAGE_GUARD_PREFIX = "casestage_notif."
+_STAGE_MAIL_MAX_TRANSIENT = 3     # 連續幾封暫時失敗就停止本輪外部通道（每封最多等 SEND_WAIT_TIMEOUT_SECONDS）
 _STAGE_GUARD_KEEP_DAYS = 1       # 到期日之後再留幾天才修剪（同一天重跑、時鐘誤差的緩衝）
 
 
@@ -92,14 +93,10 @@ def _prune_case_stage_guard_keys(live: set) -> None:
     try:
         existing = [r["key"] for r in conn.execute(
             "SELECT key FROM system_settings WHERE key LIKE ?", (_STAGE_GUARD_PREFIX + "%",)).fetchall()]
-        stale = []
-        for k in existing:
-            rest = k[len(_STAGE_GUARD_PREFIX):].rsplit(".", 1)[0]          # 去掉尾端的 3d／deadline
-            parts = rest.split(".", 2)                                      # 案號、階段 id、帳號（案號與帳號都可能含 "."，所以由左邊切兩刀）
-            if len(parts) < 3:
-                continue
-            if (parts[0], parts[1]) not in live:
-                stale.append(k)
+        # 案號與帳號都可能含 "."，不能靠切字串還原；改成「還活著的階段的前綴 `案號.階段id.`」去比（寧可多留，不誤刪：前綴撞到別的階段只會讓鍵多留一天）
+        prefixes = tuple(f"{_STAGE_GUARD_PREFIX}{q}.{i}." for q, i in live)
+        stale = [k for k in existing
+                 if (k.endswith(".3d") or k.endswith(".deadline")) and not k.startswith(prefixes)]    # 看不懂格式（不是 3d／deadline 結尾）的鍵不動
         if stale:
             conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
             conn.commit()
@@ -180,7 +177,7 @@ def _check_case_stage_deadline() -> None:
                         continue
                     dept_id = dept_map.get(username)
                     mgr = dept_mgr_username.get(dept_id) if dept_id else None
-                    items.append({"key": key, "kind": kind, "flags": flags, "username": username, "display": dn_map.get(username, username),
+                    items.append({"key": key, "stage_id": row["stage_id"], "kind": kind, "flags": flags, "username": username, "display": dn_map.get(username, username),
                                   "quote_no": row["quote_no"], "label": row["label"] or "", "due": row["due_date"], "days_left": days_left,
                                   "customer": row["customer_name"] or "", "project": row["project_name"] or "",
                                   "mgr": mgr if (mgr and mgr != username) else None})
@@ -233,6 +230,7 @@ def _check_case_stage_deadline() -> None:
 
         # ── 階段 2：外部通道（信件／LINE），一人一封、同步等結果；寄出才寫進度旗標 ──────────────────────────────────
         halted = False
+        transient_run = [0]        # 連續暫時失敗次數（成功歸零）
 
         def _is_final(it):
             return "a" in it["flags"] and (not it["mgr"] or "m" in it["flags"])
@@ -252,21 +250,35 @@ def _check_case_stage_deadline() -> None:
             nonlocal halted
             out = {}
             who = kw.get("assignee_username") or ("m:" + kw.get("manager_username", ""))
-            lk = "casestage-%s:%s:%s" % (who, today_str, hashlib.md5("|".join(sorted(i["key"] for i in its)).encode("utf-8")).hexdigest()[:10])
+            # LINE 已推播記號：不含日期——同一組階段隔天重試信件時 LINE 不重推（組成變了才是新的一則）
+            lk = "casestage-%s:%s" % (who, hashlib.md5("|".join(sorted(i["key"] for i in its)).encode("utf-8"), usedforsecurity=False).hexdigest()[:10])
+            seen, digest = set(), []                          # 同一階段只列一次：3d 那封暫時失敗、到期日又有新的 deadline 項目時，同一階段會有兩筆（鍵兩把都要寫回，內容只列一次）
+            for i in sorted(its, key=lambda x: x["days_left"]):
+                if (i["quote_no"], i["stage_id"]) not in seen:
+                    seen.add((i["quote_no"], i["stage_id"]))
+                    digest.append(i)
             try:
-                ok = _send_stage_digest([{k: i[k] for k in ("quote_no", "label", "due", "days_left", "customer", "project", "display")} for i in its],
+                ok = _send_stage_digest([{k: i[k] for k in ("quote_no", "label", "due", "days_left", "customer", "project", "display")} for i in digest],
                                         out=out, line_key=lk, **kw)
             except Exception as exc:                                         # noqa: BLE001
                 _logger.warning("_check_case_stage_deadline: 寄送例外（%s）：%s", who, exc)
                 ok, out = False, {"outcome": _en.SEND_TRANSIENT_FAIL}
             if ok:
+                transient_run[0] = 0
                 for i in its:
                     if flag not in i["flags"]:
                         i["flags"] += flag
                 _persist(its)
-            elif out.get("outcome") in (_en.SEND_TRANSIENT_FAIL, _en.SEND_SKIPPED):
-                _logger.warning("_check_case_stage_deadline: 寄送%s，本輪停止後續階段信（鍵停在 p:，下次每日檢查只重試外部通道）", out.get("outcome"))
-                halted = True
+            elif out.get("outcome") == _en.SEND_TRANSIENT_FAIL:
+                # 單一收件人的暫時失敗（信箱滿、灰名單 4xx）不該擋住後面每個人：連續 N 次才判定是整台 SMTP 的問題而停止本輪
+                transient_run[0] += 1
+                _logger.warning("_check_case_stage_deadline: 寄送暫時失敗（%s；連續第 %d 次；鍵停在 p:，下次只重試外部通道）", who, transient_run[0])
+                if transient_run[0] >= _STAGE_MAIL_MAX_TRANSIENT:
+                    halted = True
+            else:
+                # SKIPPED＝這台機器沒開信件／沒設 SMTP／開發機封鎖：`send_registered` 在動網路之前就回來（重試零成本），而且 LINE 與信件結果無關——
+                # 不能停（停了後面的人收不到 LINE）。鍵留在 p:，不寫最終；之後有設好 SMTP 才會補寄。
+                _logger.info("_check_case_stage_deadline: 這台機器略過信件（%s；%s）", who, out.get("outcome"))
 
         by_user_ext = {}
         for it in items:

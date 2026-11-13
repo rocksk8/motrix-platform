@@ -114,6 +114,8 @@ def test_prune_keeps_only_live_keys(cd, make_user):
     make_user(username="t84_u", role="admin")
     make_user(username="t84.dot", role="admin")
     _make_case("MQ-T84-A")
+    _make_case("MQ.T84.DOT")                                                 # 案號含 "."
+    dotq = _stage("MQ.T84.DOT", "點號案號", D2, ["t84_u"])
     live = _stage("MQ-T84-A", "活的", D2, ["t84_u"])
     done = _stage("MQ-T84-A", "已完成", D2, ["t84_u"], done=1)
     old = _stage("MQ-T84-A", "早過期", LONG_AGO, ["t84_u"])
@@ -121,6 +123,7 @@ def test_prune_keeps_only_live_keys(cd, make_user):
     seeded = {
         f"casestage_notif.MQ-T84-A.{live}.t84_u.3d": D3,
         f"casestage_notif.MQ-T84-A.{live}.t84.dot.3d": D3,                  # 帳號含 "."
+        f"casestage_notif.MQ.T84.DOT.{dotq}.t84_u.3d": D3,                  # 案號含 "."：不能被當成過期鍵刪掉（否則到期日當天重發）
         f"casestage_notif.MQ-T84-A.{done}.t84_u.3d": D3,
         f"casestage_notif.MQ-T84-A.{old}.t84_u.deadline": LONG_AGO,
         f"casestage_notif.MQ-T84-A.{edge}.t84_u.deadline": YESTERDAY,
@@ -132,6 +135,7 @@ def test_prune_keeps_only_live_keys(cd, make_user):
     cd._check_case_stage_deadline()
     left = set(_states())
     assert left == {f"casestage_notif.MQ-T84-A.{live}.t84_u.3d", f"casestage_notif.MQ-T84-A.{live}.t84.dot.3d",
+                    f"casestage_notif.MQ.T84.DOT.{dotq}.t84_u.3d",
                     f"casestage_notif.MQ-T84-A.{edge}.t84_u.deadline", "casestage_notif.weird"}
 
 
@@ -227,28 +231,72 @@ def test_every_final_outcome_writes_the_final_key(cd, make_user, outcome):
     assert _states()[f"casestage_notif.MQ-T84-F.{sid}.t84_f.3d"] == D0
 
 
-def test_skipped_also_stays_pending(cd, make_user):
-    make_user(username="t84_sk", role="admin")
+def test_skipped_stays_pending_but_never_halts_the_round(cd, make_user):
+    """機器略過信件（沒設 SMTP／沒開信件）：鍵留 p:；不能停——後面的人（LINE 與信件結果無關）仍要被呼叫。"""
+    for u in ("t84_sk1", "t84_sk2", "t84_sk3"):
+        make_user(username=u, role="admin")
     _make_case("MQ-T84-SK")
-    sid = _stage("MQ-T84-SK", "施工", D3, ["t84_sk"])
-    cd.sender.script = ["skipped"]
+    ids = {u: _stage("MQ-T84-SK", "施工" + u, D3, [u]) for u in ("t84_sk1", "t84_sk2", "t84_sk3")}
+    cd.sender.script = ["skipped", "skipped", "skipped"]
     cd._check_case_stage_deadline()
-    assert _states()[f"casestage_notif.MQ-T84-SK.{sid}.t84_sk.3d"] == f"p::{D0}"
+    assert [c["assignee"] for c in cd.sender.calls] == ["t84_sk1", "t84_sk2", "t84_sk3"]
+    for u, sid in ids.items():
+        assert _states()[f"casestage_notif.MQ-T84-SK.{sid}.{u}.3d"] == f"p::{D0}"
 
 
-def test_transient_failure_halts_the_rest_of_the_round(cd, make_user):
+def test_one_bad_recipient_does_not_block_the_others(cd, make_user):
     for u in ("t84_h1", "t84_h2"):
         make_user(username=u, role="admin")
     _make_case("MQ-T84-H")
     _stage("MQ-T84-H", "一", D3, ["t84_h1"])
     _stage("MQ-T84-H", "二", D3, ["t84_h2"])
-    cd.sender.script = ["transient_fail"]
+    cd.sender.script = ["transient_fail", "sent"]                            # 第一個人信箱滿（4xx）；第二個人照常送
     cd._check_case_stage_deadline()
-    assert len(cd.sender.calls) == 1                                         # 第一封暫時失敗 ⇒ 不再逐封各等一次
-    assert len(_notifs("t84_h1")) == 1 and len(_notifs("t84_h2")) == 1       # 站內通知兩人都有
+    assert [c["assignee"] for c in cd.sender.calls] == ["t84_h1", "t84_h2"]
+    assert len(_notifs("t84_h1")) == 1 and len(_notifs("t84_h2")) == 1
     cd._check_case_stage_deadline()
-    assert len(cd.sender.calls) == 3                                         # 下次補：兩封都送
+    assert [c["assignee"] for c in cd.sender.calls][2:] == ["t84_h1"]       # 隔天只補第一個人
     assert set(_states().values()) == {D0}
+
+
+def test_three_consecutive_transient_failures_halt_the_round(cd, make_user):
+    users = ["t84_c%d" % i for i in range(5)]
+    for u in users:
+        make_user(username=u, role="admin")
+    _make_case("MQ-T84-C")
+    for u in users:
+        _stage("MQ-T84-C", "x" + u, D3, [u])
+    cd.sender.script = ["transient_fail"] * 3
+    cd._check_case_stage_deadline()
+    assert len(cd.sender.calls) == 3                                         # 連續 3 次 ⇒ 判定整台 SMTP 有問題，不再逐封各等一次
+    assert all(len(_notifs(u)) == 1 for u in users)                          # 站內通知五個人都有
+    cd._check_case_stage_deadline()
+    assert len(cd.sender.calls) == 3 + 5 and set(_states().values()) == {D0}
+
+
+def test_success_resets_the_consecutive_transient_counter(cd, make_user):
+    users = ["t84_s%d" % i for i in range(5)]
+    for u in users:
+        make_user(username=u, role="admin")
+    _make_case("MQ-T84-S")
+    for u in users:
+        _stage("MQ-T84-S", "x" + u, D3, [u])
+    cd.sender.script = ["transient_fail", "transient_fail", "sent", "transient_fail", "transient_fail"]
+    cd._check_case_stage_deadline()
+    assert len(cd.sender.calls) == 5                                         # 中間一次成功把計數歸零 ⇒ 五個人都被嘗試
+
+
+def test_digest_lists_a_stage_once_when_3d_retry_meets_the_deadline_item(cd, make_user):
+    """3d 那封暫時失敗留著 p:，到期日當天同一階段又有新的 deadline 項目 ⇒ 同一封信同一階段只列一次，兩把鍵都要寫回。"""
+    make_user(username="t84_dd", role="admin")
+    _make_case("MQ-T84-DD")
+    sid = _stage("MQ-T84-DD", "施工", D0, ["t84_dd"])
+    k3, k0 = (f"casestage_notif.MQ-T84-DD.{sid}.t84_dd.{t}" for t in ("3d", "deadline"))
+    _put(k3, f"p::{D3}")
+    cd._check_case_stage_deadline()
+    assert len(cd.sender.calls) == 1 and cd.sender.calls[0]["n"] == 1        # 一個階段，不是兩個
+    assert _states()[k3] == D0 and _states()[k0] == D0
+    assert len(_notifs("t84_dd")) == 1                                       # deadline 那把是新的 ⇒ 站內通知一則（今日到期）
 
 
 def test_sender_exception_counts_as_transient(cd, make_user, monkeypatch):
