@@ -128,3 +128,23 @@
   .mx-toast { bottom: 96px; }
 }
 @media (prefers-reduced-motion: reduce) { .mx-sw, .mx-sw::after { transition: none; } }
+
+/* S1b：C6「?」說明、C7 來源、C8 與預設不同、C11 欄頭選取、通知預覽 */
+.mx-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: 4px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--ink-secondary); font: inherit; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: 1px; }
+.mx-help:hover { background: var(--info-light); color: var(--info); border-color: var(--info-border); }
+.mx-help-sec { margin: 0 0 12px; }
+.mx-help-sec:last-child { margin-bottom: 0; }
+.mx-help-sec h4 { margin: 0 0 2px; font-size: 13px; color: var(--ink-secondary); }
+.mx-help-sec p { margin: 0; }
+.mx-src { font-size: 11px; color: var(--ink-secondary); margin-top: 2px; }
+.mx-dflt { font-size: 12px; color: var(--ink-secondary); margin-top: 3px; }
+.mx-row.mx-changed td:first-child, .mx-card-row.mx-changed { box-shadow: inset 4px 0 0 var(--warning); }            /* 與預設不同：左側橘條（草稿列的黃條同位置，草稿優先） */
+.mx-row.mx-draft.mx-changed td:first-child, .mx-card-row.mx-draft.mx-changed { box-shadow: inset 4px 0 0 var(--warning), inset 8px 0 0 var(--warning-light); }
+.mx-csel { display: block; margin: 4px auto 0; }
+.mx-csel:disabled { cursor: not-allowed; opacity: .4; }
+.mx-dlg-body .mx-preview { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--info-border); border-radius: var(--radius); background: var(--info-light); }
+.mx-dlg-body .mx-preview > b { display: block; margin-bottom: 4px; color: var(--info); font-size: 13px; }
+@media (max-width: 900px) {
+  .mx-help { width: 28px; height: 28px; font-size: 14px; }
+  .mx-dflt .mx-btn { min-height: 32px; }
+}
