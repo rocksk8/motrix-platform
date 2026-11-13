@@ -319,6 +319,10 @@
    "count": 1,
    "reason": "tmp: 報表 PDF 暫存檔"
   },
+  "modules/case/api/quotations.py": {
+   "count": 1,
+   "reason": "tmp: 已決定申請殘留的 _pending_case_changes/{id} 空暫存目錄（每日清掃；檔案本身走 purge_document_files）"
+  },
   "modules/case/completion_pdf.py": {
    "count": 1,
    "reason": "tmp: PDF 暫存檔"
