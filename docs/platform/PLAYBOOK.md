@@ -164,7 +164,7 @@
 
 - **開關（預設全開；關掉＝舊行為）**：`build_deploy_package.ps1 -NoStageReuse`（只沿用兩段都綠的完整紀錄）、`-NoFlakeRetry`（紅就擋、不查登記簿、不載 fail_stream）、`-NoPreflight`；conftest `MOTRIX_PYTEST_BUILD_GUARD=0`。`-ForceTests` 照舊（一律重跑）。
 - **登記偶發題**（人看過紅的現場、開了追根因的單才登記）：`.venv312\Scripts\python.exe tools\platform\known_flakes.py add --nodeid "<nodeid>" --owner "<負責人>" --ticket "<RUN-PLAN 編號>" --days 14`；根因修好 ⇒ `remove`；`check` 列出並驗過期。
-- **偶發排行榜**（T84，只記錄、不影響建包結果）：重跑中紅了又變綠的題會記進 `tools/platform/flaky_leaderboard.jsonl`（git 忽略）；看排行用 `.venv312\Scripts\python.exe tools\platformlaky_leaderboard.py --days 7`（或 `--days 30`、`--json`、`--top N`）。排行靠前的先查根因；登記仍只由人做（`known_flakes.py add`），排行榜不參與放行判定。
+- **偶發排行榜**（T84，只記錄、不影響建包結果）：重跑中紅了又變綠的題會記進 `tools/platform/flaky_leaderboard.jsonl`（git 忽略）；看排行用 `.venv312\Scripts\python.exe tools\platform\flaky_leaderboard.py --days 7`（或 `--days 30`、`--json`、`--top N`）。排行靠前的先查根因；登記仍只由人做（`known_flakes.py add`），排行榜不參與放行判定。
 - **發行時的順序**：先 `modtest --full`（綠會被建包沿用）→ 儀表板打包；建包紅在 e2e 時，直接再建一次＝只跑 e2e。
 - **守門**：`backend/tests/platform/test_build_opt_2026_09_30.py`（每條規則含反向控制）；既有 `test_build_test_reuse_2026_09_25`、`test_pytest_exclusive_lock_2026_09_25`。
 
