@@ -170,7 +170,7 @@
       panel.appendChild(el('select', { style: 'margin-bottom:6px', onchange: function (ev) { st.id = ev.target.value; load() } }, IDS.map(function (id) { return el('option', { value: id, text: id, selected: id === st.id ? 'selected' : null }) })))
     }
     if (st.meta) {
-      panel.appendChild(el('div', { text: (st.meta.label || st.id) + '：已發布的選項不能刪除，只能停用；停用後新增／編輯時不能再選，舊資料照常顯示。', style: 'font-size:12px;margin-bottom:4px' }))
+      panel.appendChild(el('div', { text: (st.meta.label || st.id) + '：已發布的選項不可刪除，僅能停用；停用後新增／編輯時不可再選取，舊資料仍照常顯示。', style: 'font-size:12px;margin-bottom:4px' }))
       ;(st.meta.usedBy || []).forEach(function (u) { panel.appendChild(el('div', { text: '・用在：' + u, style: 'font-size:12px;color:var(--text-dim,#888)' })) })
       if (st.meta.relabel === false) panel.appendChild(el('div', { text: '這份清單的顯示名稱固定（同一個字也被報表或科目對照使用），只能新增、重排或停用。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
     }

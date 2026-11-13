@@ -141,7 +141,7 @@ def test_dev_mode_toggle_always_lives_in_the_collapsed_dev_section():
 
 def test_empty_base_url_has_a_plain_hint_and_the_private_check_parses_ips():
     html = _notif_page_src()
-    assert "信件裡的按鈕會沒有連結" in html
+    assert "信件中的按鈕將沒有連結" in html
     assert "10\." not in html or "o[0] === 10" in html            # 不再用 /^(10\.…)/ 前綴比對（會誤報 10.example.com）
     assert "o[0] === 100 && o[1] >= 64 && o[1] <= 127" in html       # 100.64.0.0/10
     assert "local|lan|internal" in html                              # .local／.lan 之類內部名稱

@@ -19,7 +19,7 @@ from helpers import mail_types as _mt
 logger = logging.getLogger(__name__)
 
 _mt.register("approval_review_edit", "報價單審核中被簽核人編輯", "approval", "superadmins", "送審人",
-             "報價單內容在審核中被修改；已簽核的層需要重新簽核（第 3 層以後的編輯會從第 1 層重跑）。",
+             "報價單內容在審核中被修改；已簽核的層需要重新簽核（第 3 層以後的編輯，將從第 1 層重新簽核）。",
              "請登入系統開啟該報價單，確認修改內容與目前的簽核進度。", owner="case")
 
 

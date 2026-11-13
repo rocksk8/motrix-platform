@@ -80,7 +80,7 @@
     var overlay = el('div', { 'data-testid': 'return-dialog', style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px' });
     var box = el('div', { role: 'dialog', 'aria-modal': 'true', style: 'background:#fff;border-radius:12px;width:100%;max-width:440px;padding:18px 20px;box-shadow:0 16px 48px rgba(0,0,0,.25);font-family:var(--font-zh,sans-serif)' });
     box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;margin-bottom:4px' }, opts.title || '退回修改'));
-    box.appendChild(el('div', { style: 'font-size:12px;color:#6B6B6B;margin-bottom:10px' }, opts.hint || '單據會退回草稿，申請人修改後可重新送審。退回原因必填，會寫進稽核。'));
+    box.appendChild(el('div', { style: 'font-size:12px;color:#6B6B6B;margin-bottom:10px' }, opts.hint || '單據會退回草稿，申請人修改後可重新送審。退回原因必填，將記入稽核紀錄。'));
     var ta = el('textarea', { 'data-testid': 'return-reason', rows: '4', placeholder: '退回原因（必填）', style: 'width:100%;box-sizing:border-box;border:1px solid #D4D4D4;border-radius:6px;padding:8px;font-size:13px;font-family:inherit' });
     box.appendChild(ta);
     var err = el('div', { 'data-testid': 'return-error', style: 'color:#B91C1C;font-size:12px;min-height:16px;margin-top:6px' });

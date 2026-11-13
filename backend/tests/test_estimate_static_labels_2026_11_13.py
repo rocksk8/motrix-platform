@@ -140,7 +140,7 @@ def test_completion_gate_message_label_param_and_legacy_default():
         assert "報價單" in legacy and "估價單" not in legacy, legacy
         assert est == legacy.replace("報價單", "估價單"), (legacy, est)
     # 改版前逐字
-    assert CS.gate_message("簽核中") == "報價單還在編輯或簽核中，項目可能還會變，請等報價送出後再帶入"
+    assert CS.gate_message("簽核中") == "報價單尚在編輯或簽核中，項目可能異動，請待報價送出後再帶入"
     assert CS.gate_message("已取消") == "這張報價單已取消或被拒絕，不能帶入項目"
     assert CS.gate_message("怪狀態") == "報價單目前的狀態不能帶入項目"
 

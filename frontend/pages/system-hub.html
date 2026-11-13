@@ -140,12 +140,12 @@
             </div>
           </div>
         </div>
-        <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；您看得到的項目依權限顯示</div>
+        <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核皆由此進入；您看得到的項目依權限顯示</div>
 
         <div x-show="error" class="error-bar" x-text="error" role="alert"></div>
 
         <div class="first-hint" x-show="hint && loaded && sections.length" data-testid="hub-first-hint">
-          <span>第一次使用？左邊選一個分類，右邊就會列出這個分類裡可以設定的項目；找不到時，直接在上面的搜尋框打幾個字。</span>
+          <span>初次使用？請於左側選擇分類，右側將列出該分類下可設定的項目；找不到時，請於上方搜尋框輸入關鍵字。</span>
           <button type="button" class="hint-x" @click="dismissHint()" aria-label="我知道了，不用再顯示">我知道了</button>
         </div>
 
@@ -212,7 +212,7 @@
         </div>
 
         <div class="adv" x-show="loaded && session.role === 'superadmin' && settingsLink" data-testid="hub-settings">
-          系統中心是否列出『您沒有權限使用』的項目？ <a :href="settingsLink && settingsLink.href" data-testid="hub-settings-link">到「<span x-text="settingsLink && settingsLink.title"></span>」調整</a>（預設隱藏；改成顯示需要等確認期間並由另一位最高管理者核准）
+          系統中心是否列出『您沒有權限使用』的項目？ <a :href="settingsLink && settingsLink.href" data-testid="hub-settings-link">到「<span x-text="settingsLink && settingsLink.title"></span>」調整</a>（預設隱藏；改為顯示須經確認期間並由另一位最高管理者核准）
         </div>
 
         <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">您目前沒有可用的系統功能。</div>

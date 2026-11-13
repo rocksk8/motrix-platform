@@ -112,7 +112,7 @@
          x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
     <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-      依搜尋條件自動比對政府電子採購網的招標公告，每日一次，命中的會寄一封彙總信。
+      依搜尋條件自動比對政府電子採購網的招標公告，每日一次，符合條件者會寄一封彙總信。
       <!-- ⚠️ 原本這裡寫「**不發送通知**」：一是 HTML 裡的 Markdown 粗體會顯示成
            字面的星號，二是第 5 輪之後它已經不正確了。過時的說明比沒有說明更糟。 -->
     </p>
@@ -261,7 +261,7 @@
           抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天擷取四次、只在傍晚寄一封，
           也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會抓一次。<br>
           超過 <span x-text="schedule ? schedule.highFrequencyThreshold : 12"></span>
-          個時段會先跟您確認一次——那不是上限，確認之後就會存進去。
+          個時段會先向您確認一次——此並非上限，確認後即儲存。
         </div>
       </div>
     </div>
@@ -369,7 +369,7 @@
       </div>
     </template>
     <div class="empty-state" x-show="!loading && watches.length === 0">
-      尚未設定任何搜尋條件。至少要有一個關鍵字，否則雷達不知道要找什麼。
+      尚未設定任何搜尋條件。至少要有一個關鍵字，否則雷達無從得知要搜尋什麼。
     </div>
 
     <!-- ── 標案清單：**全部都列**，命中的帶標籤 ──────────────────────
@@ -403,8 +403,8 @@
            通知與顯示現在是**兩條不相交的路**：畫面上看得到全部，
            而信裡只有「這次掃到的新東西」。 -->
       <span style="font-size:12px;color:var(--text-dim)">
-        關鍵字是<strong>分類標籤</strong>，不是篩選門檻——沒分到類的也會留在清單裡。
-        信件只寄新掃到的命中，<strong>新增條件不會補寄舊標案</strong>。
+        關鍵字是<strong>分類標籤</strong>，並非篩選門檻——未分類者仍會保留於清單。
+        信件僅寄送新掃描到的符合項目，<strong>新增條件不會補寄舊標案</strong>。
       </span>
     </div>
 
@@ -922,7 +922,7 @@ function tenderRadarPage() {
                               { method: 'POST', headers: this._h() })
         const d = await r.json().catch(() => ({}))
         if (d.skipped === 'daily_limit') {
-          alert('今天已經抓過了。抓取頻率硬上限是每日一次 —— 這是對政府網站的節制，不是設定值。')
+          alert('今天已經抓過了。抓取頻率硬上限是每日一次 —— 此為對政府網站的使用節制，並非設定值。')
         } else if (d.skipped === 'disabled') {
           alert('總開關關閉中，不會對外連線。')
         }

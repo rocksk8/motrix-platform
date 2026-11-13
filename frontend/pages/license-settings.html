@@ -51,7 +51,7 @@
   <div class="ls-wrap" data-license-settings>
     <div class="ls-card">
       <h1 class="ls-title">授權</h1>
-      <p class="ls-dim" style="margin:0">系統目前的使用授權，以及匯入供應商提供的新授權檔。只有最高管理者看得到這一頁。</p>
+      <p class="ls-dim" style="margin:0">系統目前的使用授權，以及匯入供應商提供的新授權檔。僅最高管理者可查看此頁。</p>
       <div class="ls-row">
         <a class="btn btn-ghost" href="../index.html" id="ls-back">返回系統</a>
         <button type="button" class="btn btn-ghost" id="ls-logout">登出</button>
@@ -214,7 +214,7 @@
       function check(content) {
         clearResult()
         if (!content || !content.trim()) { showMsg('bad', '沒有收到授權內容。請選擇供應商提供的授權檔。'); return }
-        if (content.length > maxBytes) { showMsg('bad', '這個檔案太大，不像是授權檔（授權檔只有幾百個字）。請確認選到的是供應商提供的那一個。'); return }
+        if (content.length > maxBytes) { showMsg('bad', '此檔案過大，應非授權檔（授權檔僅數百字元）。請確認選到的是供應商提供的那一個。'); return }
         send(content, false, false).then(function (j) {
           if (!j) return
           if (j.reason === 'preview') {
@@ -236,7 +236,7 @@
         var f = this.files && this.files[0]
         $('ls-filename').textContent = f ? f.name : '尚未選擇檔案'
         if (!f) return
-        if (f.size > maxBytes) { clearResult(); showMsg('bad', '這個檔案太大，不像是授權檔（授權檔只有幾百個字）。請確認選到的是供應商提供的那一個。'); return }
+        if (f.size > maxBytes) { clearResult(); showMsg('bad', '此檔案過大，應非授權檔（授權檔僅數百字元）。請確認選到的是供應商提供的那一個。'); return }
         var fr = new FileReader()
         fr.onload = function () { check(String(fr.result || '')) }
         fr.onerror = function () { clearResult(); showMsg('bad', '讀不到這個檔案，請重新選擇。') }

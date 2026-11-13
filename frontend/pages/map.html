@@ -288,7 +288,7 @@
       <div class="mp-note info" x-show="info && info.googleOnlyHidden > 0">
         <span>🗺️</span>
         <div>有 <strong x-text="(info || {}).googleOnlyHidden"></strong> 筆只有 Google 定位的座標，<strong>未顯示</strong>：
-          依 Google 條款，Google 定位結果只能配 Google 地圖使用，目前底圖為 OpenStreetMap。
+          依 Google 條款，Google 定位結果只能搭配 Google 地圖使用，目前底圖為 OpenStreetMap。
           改用 Google 底圖後即會顯示；免費定位來源補上座標的，也會自動顯示。
         </div>
       </div>
@@ -910,7 +910,7 @@ function mapPage() {
       // 後者才是對方可能拒絕。合成一句的話，使用者會去查一個沒有壞的東西。
       const misses = w.misses || 0
       const missNote = misses > 0
-        ? '另有 ' + misses + ' 個地址外部地圖服務查不到（多為機關或場所名稱，不是地址），'
+        ? '另有 ' + misses + ' 個地址外部地圖服務查無結果（多為機關或場所名稱，而非地址），'
           + '請到原單據改成可查的地址，或在地圖上手動定位。'
         : ''
       // 第十五班（主持裁示）：Google 階本輪連續連線失敗／被拒 ⇒ 已改用免費來源（迴圈沒停），要說出來並指向網路或金鑰限制

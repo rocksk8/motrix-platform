@@ -11,7 +11,7 @@
     linkedHere: '已連到這張勞報單',
     offRoster: '受領人不在此派發名單',
     empty: '沒有符合的派發',
-    emptyRoster: '這位受領人目前沒有被排進派發，可改按「顯示全部派發」搜尋',
+    emptyRoster: '這位受領人目前未被排入派發，可改按「顯示全部派發」搜尋',
     loadMore: '載入更多',
     loading: '搜尋中…',
     failed: '無法讀取派發清單，請稍後再試',

@@ -146,7 +146,7 @@ def withdraw_accrual(conn, award, who, now, reason):
         return None, ""
     void = registry.single_provider("voucher.void_draft")
     if void is None:
-        return None, ("未作廢傳票（#%d）：會計模組未安裝；退回照常，請會計另行處理那一張傳票。" % vid)
+        return None, ("未作廢傳票（#%d）：會計模組未安裝；退回流程照常進行，請會計另行處理該張傳票。" % vid)
     r = void(conn, vid, voided_by=who, now=now, reason="獎金分潤退回：%s" % reason)
     if r["result"] == "not_draft":
         return None, ("傳票 %s 已送審（%s），系統不會自動作廢；請會計另行處理。"

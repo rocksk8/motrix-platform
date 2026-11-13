@@ -738,7 +738,7 @@
                   <button type="button" class="aq-sort" x-show="quoteContractAvailable && aShown('fillContract')"
                           :style="aOrder('fillContract')" @click="pullContractFromQuote()"
                           style="margin-left:auto;font-weight:400"
-                          title="從這張報價單帶入交貨地址、交貨條件與聯絡人——只填空白欄位，不覆蓋已經有的值">
+                          title="從這張報價單帶入交貨地址、交貨條件與聯絡人——僅填入空白欄位，不覆蓋既有的值">
                     <span x-text="aLabel('fillContract', '從報價單帶入')">從報價單帶入</span>
                   </button>
                 </div>
@@ -932,7 +932,7 @@
                     </template>
                   </div>
                 </template>
-                <div style="display:flex;justify-content:flex-end;margin:-4px 0 8px"><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存；勾選完成、日期、比例、負責人、拜訪紀錄都是改了就存">即時儲存<span class="save-mode__ok" data-testid="flash-stages" x-show="savedFlash['stages']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div style="display:flex;justify-content:flex-end;margin:-4px 0 8px"><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，無須按儲存；勾選完成、日期、比例、負責人、拜訪紀錄修改後即自動儲存">即時儲存<span class="save-mode__ok" data-testid="flash-stages" x-show="savedFlash['stages']" x-transition.opacity> ✓ 已存</span></span></div>
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
                   <div style="flex:1">
                     <div class="stage-segbar">
@@ -1881,7 +1881,7 @@
                    ⇒ 這一段**不**套 canSeeFinancial()，下面的應收應付總覽／材料申請／精算才套。 -->
               <div x-show="activeTab==='fin'" data-testid="fin-payment">
                 <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:var(--tone-warning-fg)">您不是這個案件的成員，以出納身分開啟：只能在這裡登錄收款，其他內容唯讀。</div>
-                <div class="cm-section-title">收款管理<span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存；勾已收款、實收金額等由有權限的人登錄">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div class="cm-section-title">收款管理<span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，無須按儲存；已收款勾選與實收金額等由有權限者登錄">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
                 <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
                      跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
                      未稅金額與收款進度條。 -->
@@ -2030,7 +2030,7 @@
                     <template x-if="!moneyMasked()">
                       <div class="pay-grid" style="display:grid;grid-template-columns:136px 136px 1fr;gap:8px;margin-top:8px;align-items:end">
                         <div>
-                          <label class="fi-label" :for="'pay-' + item.id + '-invpre'" title="發票上記載的銷售額（未稅）；與稅額一起填寫，稅務匯出以它為準">發票未稅</label>
+                          <label class="fi-label" :for="'pay-' + item.id + '-invpre'" title="發票上記載的銷售額（未稅）；與稅額一起填寫，稅務匯出以此為準">發票未稅</label>
                           <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填" :id="'pay-' + item.id + '-invpre'"
                                  data-testid="invoice-pretax"
                                  x-model.number="item.invoicePretax" @input="setDirty()">
@@ -2477,7 +2477,7 @@
                       <div x-show="mlLoadingList" style="color:var(--text-dim)">載入中…</div>
                       <template x-if="mlPanel === 'po' && !mlLoadingList">
                         <div>
-                          <div style="color:var(--text-dim);font-size:12px;margin-bottom:6px">一個報價品項一筆材料申請，內容涵蓋該品項<b>全部已核准</b>的採購單行（數量、金額由系統算；數量可往下調）；額外採購以採購單為單位各一筆。已有申請的品項要追加請用變更申請；簽核中的採購單行通過後才會併入。</div>
+                          <div style="color:var(--text-dim);font-size:12px;margin-bottom:6px">一個報價品項一筆材料申請，內容涵蓋該品項<b>全部已核准</b>的採購單行（數量、金額由系統計算；數量可調低）；額外採購以採購單為單位各一筆。已有申請的品項如需追加，請使用變更申請；簽核中的採購單行通過後才會併入。</div>
                           <template x-for="g in mlGroupChoices()" :key="g.key">
                             <label style="display:flex;gap:8px;align-items:center;padding:3px 0" :style="mlGroupBlock(g) ? 'cursor:not-allowed;opacity:.55' : 'cursor:pointer'" :data-testid="'ml-p-' + g.poDocCode + '-' + g.poLine">
                               <input type="checkbox" style="width:auto" x-model="mlPick[mlGroupKey(g)]" :disabled="!!mlGroupBlock(g)">
@@ -2711,7 +2711,7 @@
                 <div id="fin-material-changes" data-testid="mc-panel" style="margin-bottom:24px;font-family:var(--font-zh)">
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                     <span class="cm-section-title" style="margin-bottom:0">材料申請變更</span>
-                    <span style="font-size:12px;color:var(--text-dim)">已核准的材料申請不能直接修改；在這裡提變更申請，核准後才切換，核准前原內容照常有效。</span>
+                    <span style="font-size:12px;color:var(--text-dim)">已核准的材料申請不可直接修改；請在此提出變更申請，核准後才切換，核准前原內容仍然有效。</span>
                   </div>
                   <div x-show="mcCandidates().length > 0 || mcReviseId" data-testid="mc-form" style="border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--surface);margin-bottom:10px;font-size:12px">
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
@@ -3500,7 +3500,7 @@
                     <span class="cm-section-title" style="margin-bottom:0">完工單管理</span><span class="save-mode save-mode--manual" data-save-mode="manual" title="在完工單視窗裡按儲存">按儲存</span>
                   </div>
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="as-edit-open" x-show="asOn" @click="MotrixAttachmentSlots.openEditor()"
-                          title="為完工單設定附件種類（可收的檔案類型、大小、可上傳的人）；只有最高管理者看得到">附件種類</button>
+                          title="為完工單設定附件種類（可收的檔案類型、大小、可上傳的人）；僅最高管理者可查看">附件種類</button>
                   <!-- 比照報價單：清單在這裡，填寫在獨立頁面（completion-note-form.html）。
                        2026-09-12 使用者指定「用報價單的方式去建立，一個頁面做填寫」。 -->
                   <a x-show="['superadmin','admin'].includes(session.role)"
@@ -3938,7 +3938,7 @@
         <label style="font-size:12px" x-show="(cr.caseRecord?.stages || []).length">這個案件已有階段，要
           <select class="form-input filter" x-model="stDlg.mode" @change="stPreview()"><option value="append">補上缺少的階段</option></select></label>
       </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">選好樣板和基準日後，下面會先列出「會建立哪些階段」，確認沒問題再按「建立階段」。已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段。</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">選好樣板和基準日後，下面會先列出「會建立哪些階段」，確認無誤後再按「建立階段」。已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段。</div>
       <div x-show="stDlg.err" data-testid="st-err" style="color:var(--danger);font-size:12px;margin-bottom:8px" x-text="stDlg.err"></div>
       <template x-if="stDlg.plan">
         <div data-testid="st-preview">
@@ -4671,7 +4671,7 @@
       <input type="date" x-model="createVoucherPayableDate"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
       <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);margin-top:6px">
-        會一併寫回派發紀錄，之後在派發清單也看得到；不填就沿用派發原本設定的應付款日期（若有）。
+        會一併寫回派發紀錄，之後在派發清單也看得到；未填則沿用派發原本設定的應付款日期（若有）。
       </div>
       <label style="font-size:12px;font-weight:500;color:var(--text-secondary);display:block;margin:12px 0 4px">預定付款日（選填）</label>
       <input type="date" x-model="createVoucherPlannedDate" data-testid="cv-planned-pay-date"

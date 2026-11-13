@@ -51,13 +51,13 @@ def _plan(body, base_date, mode, existing):
     base = _d(base_date)
     have = {e["stage_key"]: e["id"] for e in existing if e.get("stage_key")}
     if mode == "new" and existing:
-        raise PlanError("這個案件已經有階段了。要把樣板裡尚無的階段補進來，請選「補上缺少的階段」；已有的階段不會被改動")
+        raise PlanError("此案件已有階段。若要補入樣板中尚未建立的階段，請選取「補上缺少的階段」；既有階段不會被修改。")
     ratios = [s.get("ratioBp") for s in stages]
     has_ratio = any(r is not None for r in ratios)
     use_ratio = has_ratio and not existing
     notes, skipped, out = [], [], []
     if has_ratio and existing:
-        notes.append("這個案件已經有階段，所以樣板的建議收入認列比例不會帶入（否則合計會不是 100%）。需要的話，請在各階段上自己設定比例")
+        notes.append("這個案件已經有階段，所以樣板的建議收入認列比例不會帶入（否則合計將不等於 100%）。如有需要，請於各階段自行設定比例")
     for s in stages:
         k = s["key"]
         if k in have:
@@ -83,7 +83,7 @@ def _plan(body, base_date, mode, existing):
         have_labels = {(e.get("label") or "").strip().casefold(): e.get("label") for e in existing if not e.get("stage_key")}
         dup = [o["label"] for o in out if o["label"].casefold() in have_labels]
         if dup:
-            notes.append("這個案件已經有手動建立的同名階段：" + "、".join(dup) + "。補上之後會有兩個同名的階段（系統只用樣板的階段代號判斷「已經有了」，不比對名稱），需要的話請自己刪掉其中一個")
+            notes.append("這個案件已經有手動建立的同名階段：" + "、".join(dup) + "。補上之後會有兩個同名的階段（系統只用樣板的階段代號判斷「已經有了」，不比對名稱），如有需要，請自行刪除其中一個")
     if not out:
         notes.append("樣板裡的階段這個案件都已經有了，沒有需要補上的")
     return {"stages": out, "notes": notes, "skipped": skipped}

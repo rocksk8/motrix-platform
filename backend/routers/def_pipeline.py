@@ -500,7 +500,7 @@ def handle_restore(conn, kind, key, scope, version, user, note, authorization):
         return None
     cur = D.get(conn, kind, key, scope, 0)
     if cur is not None and cur["body"] != old["body"]:
-        raise D.DefinitionConflict("目前有未發布的草稿，還原到較寬鬆的版本會覆蓋它；請先發布或丟棄草稿")
+        raise D.DefinitionConflict("目前有未發布的草稿，還原到較寬鬆的版本會覆蓋它；請先發布或捨棄草稿")
     if cur is None:
         D.save_draft(conn, kind, key, scope, old["body"], user=user["username"])
     out = _submit_pending(conn, kind, key, scope, user, note or ("還原自第 %s 版" % version), reasons, live_v)

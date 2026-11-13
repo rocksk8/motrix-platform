@@ -58,7 +58,7 @@
       <template x-if="ready && !key && tplChoice">
         <div class="mb-card" id="mb-tpl-pick">
           <h3>建立「<span x-text="tplKey"></span>」：從範本開始</h3>
-          <div class="mb-hint">範本是一份預填好的草稿（欄位、區塊、明細表、簽核、輸出版型）；選了之後可以自由修改，不會再跟範本連動。</div>
+          <div class="mb-hint">範本是一份預填好的草稿（欄位、區塊、明細表、簽核、輸出版型）；選了之後可以自由修改，不再與範本連動。</div>
           <div class="mb-tpl">
             <button class="mb-tpl__c" id="mb-tpl-blank" :disabled="tplBusy" @click="chooseTemplate(null)">
               <strong>空白</strong><span>從沒有欄位的空白表單開始</span>
@@ -81,7 +81,7 @@
             <input class="mb-in mb-in-s" id="mb-key" x-model.trim="keyInput" placeholder="模組代號（例：equipment_loan）" style="min-width:260px" @keydown.enter="openKey(keyInput)">
             <button class="btn btn-primary" id="mb-open" @click="openKey(keyInput)">開啟／建立</button>
           </div>
-          <div class="mb-hint" x-show="createOn">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
+          <div class="mb-hint" x-show="createOn">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不可修改（它是網址與權限的一部分）。</div>
           <!-- P8 總開關（builder_custom_modules.enabled，預設關）：關著時不提供「建立新模組」，既有模組仍可從下面的清單開啟與修改 -->
           <div class="mb-hint" x-show="!createOn" data-testid="mb-create-off">目前未開放建立新的自訂模組（請最高管理者到設定中心開啟「自訂模組引擎」）。已有的模組仍可從下方清單開啟與修改。</div>
           <div class="mb-bad" x-show="keyErr" x-text="keyErr"></div>
@@ -174,7 +174,7 @@
                   <option value="">（不掛載：只用獨立選單項目）</option>
                   <template x-for="p in mountOptions()" :key="p.id"><option :value="p.id" x-text="p.label + '（' + p.id + '）'" :selected="p.id === mountPointId()"></option></template>
                 </select>
-                <div class="mb-hint">掛載＝這個模組同時成為該頁面裡的一個頁籤（資料仍是同一份、原本的選單項目照樣保留）。看得到頁籤的人＝有這個模組權限、且看得到那一頁的人；<b>隱藏頁籤不是存取控制</b>，各端點仍各自驗權限。每個掛載點最多 <span x-text="mountMax"></span> 個頁籤。</div>
+                <div class="mb-hint">掛載＝這個模組同時成為該頁面裡的一個頁籤（資料仍是同一份、原本的選單項目仍然保留）。看得到頁籤的人＝有這個模組權限、且看得到那一頁的人；<b>隱藏頁籤不是存取控制</b>，各端點仍各自驗權限。每個掛載點最多 <span x-text="mountMax"></span> 個頁籤。</div>
                 <div class="mb-bad" id="mb-mount-missing" data-testid="mb-mount-missing" x-show="mountMissing()">這個掛載目標目前不存在，或其所屬模組未載入：頁籤不會顯示（模組與單據資料不受影響，也不會被自動刪除）。</div>
                 <template x-if="mountPointId()">
                   <div style="margin-top:8px">
@@ -1098,7 +1098,7 @@
                 <div class="mb-hint" id="mb-review-state" x-text="reviewBadge()"></div>
                 <div class="mb-hint" x-show="!defReview.active" x-text="defReview.reason"></div>
                 <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">模組審核人與模式</summary>
-                  <div class="mb-hint">名單裡有您以外至少一人 ⇒ 送審自動啟用；審核人任一位核可即發布，退回要填原因、版號不回收。</div>
+                  <div class="mb-hint">名單中除您以外至少有一人時，送審自動啟用；審核人任一位核可即發布，退回要填原因、版號不回收。</div>
                   <div class="cr-opts" style="max-height:150px;overflow:auto">
                     <template x-for="u in users" :key="u.username">
                       <label><input type="checkbox" style="width:auto" :data-reviewer="u.username" :checked="reviewerHas(u.username)" @change="toggleReviewer(u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>

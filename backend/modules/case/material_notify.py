@@ -31,7 +31,7 @@ _mt.register("material_payment_submitted", "材料申請匯款申請待審核", 
 _mt.register("material_payment_next_tier", "材料申請匯款申請輪到您審核", "approval", "none", "當層簽核人",
              "前一層已完成，匯款申請在本層簽核之前不會繼續。", _APPROVE, owner="case")
 _mt.register("material_payment_approved", "材料申請匯款申請已核准", "approval", "none", "申請人",
-             "匯款申請已核准，已交給出納付款。", _RESULT, owner="case")
+             "匯款申請已核准，已轉交出納辦理付款。", _RESULT, owner="case")
 _mt.register("material_payment_returned", "材料申請匯款申請被退回", "approval", "none", "申請人",
              "匯款申請已退回，修改並重新送審之前流程暫停。", "請登入系統依退回原因修改匯款申請後重新送審。", owner="case")
 
@@ -146,7 +146,7 @@ def _pay_mail(event, info, *, usernames, extra=None, page="approval-queue.html")
     if event == "approved":
         return _en.send_registered("material_payment_approved", title="材料申請匯款申請已核准", rows=rows, usernames=users,
                                    badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident + " 已核准",
-                                   note="您好，您送審的匯款申請已完成審核並核准，已交給出納付款。")
+                                   note="您好，您送審的匯款申請已完成審核並核准，已轉交出納辦理付款。")
     if event == "returned":
         return _en.send_registered("material_payment_returned", title="材料申請匯款申請被退回", rows=rows, usernames=users,
                                    badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident + " 已退回",

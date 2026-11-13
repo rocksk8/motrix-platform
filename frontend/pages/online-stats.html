@@ -216,8 +216,8 @@
       <div class="os-note" style="background:#F1F5F9;border-color:#CBD5E1;color:#334155">
         <span>🕒</span>
         <span>
-          逐條紀錄每個人做了什麼（含遭拒絕的操作）。只記人的操作——輪詢、同時編輯
-          心跳、下拉選單與欄位偏好這類頁面自動發出的請求不記；<strong>一次點擊連帶打出的
+          逐條紀錄每個人做了什麼（含遭拒絕的操作）。僅記錄人為操作——輪詢、同時編輯
+          心跳、下拉選單與欄位偏好這類頁面自動發出的請求不計入；<strong>一次點擊連帶打出的
           多支請求算一次</strong>，重複的會併成一列並在後面標 × 次數。保留 90 天後自動清除。
         </span>
       </div>
@@ -264,7 +264,7 @@
       </div>
       <div x-show="trail.length === 0 && trailNextId"
            style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">
-        這一批都是系統自動發出的請求（已隱藏），按下面的按鈕看更早的紀錄
+        這一批都是系統自動發出的請求（已隱藏），請按下方按鈕查看較早的紀錄
       </div>
       <div style="text-align:center;margin-top:14px" x-show="trailNextId">
         <button class="btn btn-secondary btn-sm" @click="loadTrail(true)">載入更早的紀錄</button>

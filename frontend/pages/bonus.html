@@ -149,7 +149,7 @@
         <div class="bn-card" data-testid="bn-insurance">
           <div class="bn-sec">投保金額與全年累計（<input class="bn-in filter" style="width:64px" x-model.number="insuranceYear" @change="loadInsurance()"> 年）</div>
           <div class="bn-note">補充保費：全年累計獎金超過「投保金額 × 倍數」的部分計收；倍數與費率依法規參數版本。
-            「MOTRIX 以外」填同一年由其他管道（例如薪資系統）已發的獎金。沒有設定投保金額的人，獎金無法標記已發放。</div>
+            「MOTRIX 以外」填同一年由其他管道（例如薪資系統）已發的獎金。未設定投保金額者，獎金無法標記已發放。</div>
           <table class="bn-table" style="width:100%;font-size:13px;margin-top:8px">
             <thead><tr><th style="text-align:left">人員</th><th>投保金額</th><th>MOTRIX 以外</th><th>MOTRIX 已發放</th><th>全年累計</th><th></th></tr></thead>
             <tbody>
@@ -404,7 +404,7 @@
                 <div class="bn-card" x-show="isSuper && detail.status === '已發放'" data-testid="bn-correction-card">
                   <div class="bn-sec">發放後更正</div>
                   <a class="bn-btn bn-btn--ghost" style="text-decoration:none;display:inline-block" :href="'bonus-corrections.html?q=' + encodeURIComponent(selectedNo)" data-testid="bn-open-correction">開獎金更正單</a>
-                  <span class="bn-note">已發放的不可退回；金額有誤請開更正單，核准後自動沖轉並補發。</span>
+                  <span class="bn-note">已發放者不可退回；金額有誤請開更正單，核准後自動沖轉並補發。</span>
                 </div>
 
                 <div class="bn-card" x-show="msg"><span :class="/失敗|錯誤|請|不|只有/.test(msg) ? 'bn-err' : 'bn-ok'" x-text="msg" data-testid="bn-msg"></span></div>

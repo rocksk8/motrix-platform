@@ -602,7 +602,7 @@
             <template x-if="importNotice"><div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:var(--radius);padding:6px 10px;margin-top:8px" x-text="importNotice"></div></template>
             <template x-if="importPlan.confirms.length > 0">
               <div style="margin-top:10px" data-testid="import-confirm-list">
-                <div style="font-size:12px;font-weight:600;color:#92400E;margin-bottom:4px">統編相同但公司名稱不同——請確認是同一家再勾選（可能是統編打錯）</div>
+                <div style="font-size:12px;font-weight:600;color:#92400E;margin-bottom:4px">統一編號相同但公司名稱不同——請確認是同一家再勾選（可能是統一編號輸入錯誤）</div>
                 <div style="max-height:130px;overflow-y:auto;background:#FFFBEB;border-radius:var(--radius);padding:8px 12px">
                   <template x-for="(c, ci) in importPlan.confirms" :key="ci">
                     <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#92400E;margin-bottom:5px;cursor:pointer">
@@ -1225,7 +1225,7 @@
           this._importRows = null
         } catch(e) {
           if (e.code === 'plan_changed' && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
-            try { this.importPlan = this._withTicks(await this._importPost(true)); this.importNotice = '資料在您預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）'; this.importing = false; return } catch(e2) { e = e2 }
+            try { this.importPlan = this._withTicks(await this._importPost(true)); this.importNotice = '資料在您預覽之後有變動，已重新預覽，請再確認一次（勾選項目須重新勾選）'; this.importing = false; return } catch(e2) { e = e2 }
           }
           this.importPlan = null
           this.importResults = { created: 0, updated: 0, failed: 1, errors: [(e.code === 'import_failed' ? '' : '匯入失敗：') + e.message], duplicates: [] }

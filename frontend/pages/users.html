@@ -276,7 +276,7 @@
              :style="{ borderBottom: batch.open ? '1px solid var(--border-light)' : '' }" @click="batchToggleOpen()" @keydown.enter="batchToggleOpen()"
              role="button" tabindex="0" :aria-expanded="batch.open ? 'true' : 'false'" data-testid="batch-open">
           <span style="font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0">批次調整權限</span>
-          <span style="font-size:12px;color:var(--text-dim)">一次給多位同仁開或收同樣的權限、套用角色範本、綁定職責角色</span>
+          <span style="font-size:12px;color:var(--text-dim)">一次對多位同仁授予或收回相同權限、套用角色範本、綁定職責角色</span>
           <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="batchSelectedText()" data-testid="batch-selected-count"></span>
         </div>
         <div x-show="batch.open" style="padding:14px 16px;display:grid;gap:14px">
@@ -317,7 +317,7 @@
           </div>
 
           <div x-show="batch.action==='grant' || batch.action==='revoke'">
-            <div style="font-size:12px;font-weight:600;margin-bottom:6px" x-text="batch.action==='grant' ? '③ 要授予哪些權限（高敏感與影響較大的權限不能批次授予，要到個別使用者逐人填原因）' : '③ 要取消哪些權限（取消高敏感或影響較大的權限要填原因，並留下權限變更紀錄）'"></div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px" x-text="batch.action==='grant' ? '③ 要授予哪些權限（高敏感與影響較大的權限不可批次授予，須至個別使用者逐人填寫原因）' : '③ 要取消哪些權限（取消高敏感或影響較大的權限要填原因，並留下權限變更紀錄）'"></div>
             <template x-for="g in moduleGroups" :key="g.group">
               <div style="margin-bottom:8px">
                 <div style="font-size:12px;color:var(--text-dim);margin-bottom:3px" x-text="g.group"></div>
@@ -343,7 +343,7 @@
             </select>
           </div>
           <div x-show="batch.action==='bind' || batch.action==='unbind'">
-            <div style="font-size:12px;font-weight:600;margin-bottom:6px">③ 哪個職責角色（含高敏感或影響較大權限的角色不能批次綁定）</div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">③ 哪個職責角色（含高敏感或影響較大權限的角色不可批次綁定）</div>
             <select class="form-input" x-model="batch.roleId" style="max-width:280px;font-size:12px" data-testid="batch-role">
               <option value="">請選擇</option>
               <template x-for="r in batch.roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
@@ -400,7 +400,7 @@
               <input data-saved-field class="form-input" type="text" x-model="rlForm.viewer" placeholder="檢視者" style="font-size:12px;padding:7px 9px">
             </div>
           </div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">變更後，使用者列表、角色選單及快速套用 chips 均會即時反映新名稱。</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">變更後，使用者列表、角色選單及快速套用標籤均會即時反映新名稱。</div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="btn btn-ghost btn-sm" @click="rlForm={...roleLabels};roleLabelsMgrOpen=false">取消</button>
             <button class="btn btn-primary btn-sm" @click="saveRoleLabels()">儲存名稱</button>
@@ -731,7 +731,7 @@
         <!-- 職責角色／個人扣項／生效權限預覽（R2 第 2 步）：只有編輯既有、非最高管理者；勾選仍只存「原始勾選」，預覽由伺服器算 -->
         <div class="form-group" x-show="editingId && duty.visible" x-cloak data-testid="duty-section">
           <label class="form-label">職責角色與個人扣項
-            <span style="color:var(--text-dim);font-size:12px">（角色給的權限加在上面的勾選之外；扣項只能扣角色給的權限；預覽由伺服器計算）</span></label>
+            <span style="color:var(--text-dim);font-size:12px">（角色給的權限加在上面的勾選之外；扣項僅能扣除角色所給的權限；預覽由伺服器計算）</span></label>
           <div x-show="duty.loading" style="font-size:12px;color:var(--text-dim)">讀取中…</div>
           <div x-show="duty.error" style="font-size:12px;color:var(--danger)" data-testid="duty-error" x-text="duty.error"></div>
           <div x-show="duty.loaded">
@@ -749,7 +749,7 @@
               </template>
               <span x-show="!duty.roles.length" style="font-size:12px;color:var(--text-dim)">尚未建立任何職責角色（到「職責角色」頁建立）</span>
             </div>
-            <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">個人扣項（扣掉角色給的權限；財務三鍵由「財務」角色決定，不開放扣項）：</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">個人扣項（扣除角色所給的權限；財務三鍵由「財務」角色決定，不開放扣項）：</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
               <template x-for="k in dutySubCandidates()" :key="k">
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:6px"
@@ -1528,7 +1528,7 @@
         await this.loadUsers()
         this.closeModal()
         if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
-        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁尚無歸屬部門（請看上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
+        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁尚無歸屬部門（請參閱上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
       },
 
       async toggleActive(user) {
@@ -1629,7 +1629,7 @@
           ROLE_MODULES = d.roleTemplates || {}
           if (!this.allModules.length) throw new Error('empty')
         } catch (e) {
-          this.catalogError = '讀不到權限模組清單，請重新整理頁面；若持續發生請聯絡系統管理員。'
+          this.catalogError = '無法讀取權限模組清單，請重新整理頁面；若持續發生請聯絡系統管理員。'
           this.toast(this.catalogError)
         }
       }

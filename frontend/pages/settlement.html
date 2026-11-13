@@ -426,7 +426,7 @@
           <div>
             <div style="font-size:12px;font-weight:600;color:#92400E">承攬商成本自精算完結後已異動，其他頁面顯示的快照可能已過期</div>
             <div style="font-size:11px;color:#92400E;margin-top:1px"
-                 x-text="'完結當下承攬商派發成本：NT$ ' + fmt(dispatchStale().frozen) + '　目前即時計算：NT$ ' + fmt(dispatchStale().live) + '（' + (dispatchStale().diff>=0?'+':'') + fmt(dispatchStale().diff) + '）　此頁上方數字已是最新即時計算，但案件管理財務Tab／營運報表仍顯示完結當下的舊快照，如需同步請按右上角「重新開啟」後重新完結'"></div>
+                 x-text="'完結當下承攬商派發成本：NT$ ' + fmt(dispatchStale().frozen) + '　目前即時計算：NT$ ' + fmt(dispatchStale().live) + '（' + (dispatchStale().diff>=0?'+':'') + fmt(dispatchStale().diff) + '）　此頁上方數字已是最新即時計算，但案件管理財務頁籤／營運報表仍顯示完結當下的舊快照，如需同步請按右上角「重新開啟」後重新完結'"></div>
           </div>
         </div>
       </template>
@@ -616,7 +616,7 @@
                            placeholder="說明…"
                            @input="calcSummary()">
                     <div x-show="itemSource(item).key === 'est' && !hasPurchase(item)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:var(--warning);line-height:1.4">
-                      ⚠ 無採購／對應紀錄：實際成本暫以估計計。已採購但沒進系統（歷史）或人力成本，請在左側填實際數量／單位成本。
+                      ⚠ 無採購／對應紀錄：實際成本暫以估計值計。已採購但未登錄於系統（歷史）或人力成本，請在左側填實際數量／單位成本。
                     </div>
                   </td>
                 </tr>
@@ -669,7 +669,7 @@
       <div class="stl-card" x-show="_actualsOk && (offsets.length || allMapRows().length)" data-testid="stl-unassigned">
         <div class="stl-card__head">
           <div class="stl-card__title">二之一、未對應品項的材料申請、額外支出與承攬商派發</div>
-          <div style="font-size:11px;color:var(--text-dim)">沒對應到報價品項的錢一律照算（計入額外支出）；選一個品項＝改算在那個品項的實際成本，原單據不動</div>
+          <div style="font-size:11px;color:var(--text-dim)">未對應到報價品項的金額一律照常計算（計入額外支出）；選一個品項＝改算在那個品項的實際成本，原單據不變動</div>
         </div>
         <div class="stl-sumbar" data-testid="stl-sumbar" :class="mapSummary.unCount === 0 ? 'stl-sumbar--ok' : (mapSummary.unPending ? 'stl-sumbar--bad' : 'stl-sumbar--warn')">
           <b x-text="mapSummary.unCount === 0 ? '✔ 全部已對應' : '⚠ 未對應 ' + mapSummary.unCount + ' 件'"></b>
@@ -692,7 +692,7 @@
                   </td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="dispatchIsPretax() ? '稅額 ' + fmt(u.tax) + '（不計成本）' : '其中稅額 ' + fmt(u.tax) + '（含在金額內）'"></div></td>
                   <td>
-                    <div x-show="u.partial" data-testid="stl-partial-note" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">已逐行對應，這是剩餘；要整張對應請先到「二之二」清除逐行對應</div>
+                    <div x-show="u.partial" data-testid="stl-partial-note" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">已逐行對應，這是剩餘；如需整張對應，請先到「二之二」清除逐行對應</div>
                     <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized' || !!u.partial"
                             @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
                       <option value="" :selected="!u.itemId">（不對應，計入額外支出）</option>
@@ -712,7 +712,7 @@
         </div>
         <div x-show="!unmappedRows().length" data-testid="stl-unmapped-none" style="padding:8px 2px;font-size:12px;color:var(--text-secondary)">目前沒有未對應的項目。</div>
         <div x-show="mappedRows().length" data-testid="stl-mapped" style="margin-top:14px">
-          <div style="font-size:12px;font-weight:600;margin-bottom:4px">已對應到品項（已帶入，不會再出現在上面的未對應清單；同一筆只能有一個去處）</div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">已對應到品項（已帶入，不會再出現在上面的未對應清單；同一筆僅能對應一個去向）</div>
           <div class="stl-legend" data-testid="stl-legend"><span><i class="is-mapped"></i>淺綠底＋「已對應」＝已帶入某個品項的實際成本</span><span><i></i>白底＝尚未對應（計入額外支出）</span></div>
           <div style="overflow-x:auto">
             <table class="stl-table">
@@ -765,7 +765,7 @@
       <div class="stl-card" x-show="_actualsOk && (dispatchLinesList().length || dlWarnings().length)" data-testid="stl-dl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">二之二、承攬商派發逐行對應（選填）</div>
-          <div style="font-size:11px;color:var(--text-dim)">把派發單的每一行歸到報價品項，一行可依金額拆給多個品項；整張對應與逐行對應二擇一。沒歸的行、外包人員、拆分餘額仍計入額外支出</div>
+          <div style="font-size:11px;color:var(--text-dim)">把派發單的每一行歸到報價品項，一行可依金額拆給多個品項；整張對應與逐行對應二擇一。未歸屬的行、外包人員、拆分餘額仍計入額外支出</div>
         </div>
         <div x-show="dlWarnings().length" role="alert" data-testid="stl-dl-warnings" style="margin:6px 0;padding:8px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px">
           <b x-text="'已存的逐行對應有 ' + dlWarnings().length + ' 處未生效：金額已回到未對應（仍計入總成本），對應到的品項成本會因此少算。'"></b>
@@ -813,7 +813,7 @@
                         </tr>
                         <tr x-show="l.mappable && dlSplitting(v.dispatchId, l.lineKey)" :data-testid="'stl-dl-editor-' + v.dispatchId + '-' + n">
                           <td colspan="5" style="background:#FAFAF7">
-                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">每份填「未稅金額」，含稅金額由系統依累計比例進位算出（唯讀）；沒分配完的餘額（含稅額）留在未對應。</div>
+                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">每份填「未稅金額」，含稅金額由系統依累計比例進位算出（唯讀）；尚未分配完的餘額（含稅額）留在未對應。</div>
                             <template x-for="(r, i) in dlRows(v.dispatchId, l.lineKey)" :key="r.no">
                               <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
                                 <span style="width:46px;font-size:12px" x-text="'第 ' + r.no + ' 份'"></span>
@@ -937,7 +937,7 @@
 
       <!-- ── 存檔有、報價單已無的品項（唯讀；不計入任何金額）── -->
       <div class="stl-card" x-show="orphanItems.length" x-cloak data-testid="stl-orphans">
-        <div class="stl-card__head"><div class="stl-card__title">存檔有、報價單已無的品項（唯讀）</div><div style="font-size:11px;color:var(--text-dim)">這些品項已從報價單刪除，目前不計入任何金額；僅提醒您存檔裡還留著資料</div></div>
+        <div class="stl-card__head"><div class="stl-card__title">存檔有、報價單已無的品項（唯讀）</div><div style="font-size:11px;color:var(--text-dim)">這些品項已從報價單刪除，目前不計入任何金額；僅提醒您：已儲存的資料仍保留</div></div>
         <div style="overflow-x:auto"><table class="stl-table">
           <thead><tr><th>品項編號</th><th>當時品名</th><th style="text-align:right">存檔的實際成本</th></tr></thead>
           <tbody><template x-for="o in orphanItems" :key="o.id"><tr :data-testid="'stl-orphan-' + o.id"><td x-text="o.id"></td><td x-text="o.description || '（無品名）'"></td><td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(o.actualTotalCost)"></td></tr></template></tbody>
@@ -966,7 +966,7 @@
       <div class="stl-card" data-testid="stl-profit-card">
         <div class="stl-card__head">
           <div class="stl-card__title">四之一、每個品項的損益（毛利）</div>
-          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管銷分攤、公益捐贈、營業利益只在下方「利潤分析」</div>
+          <div style="font-size:11px;color:var(--text-dim)">品項僅計算至毛利；管銷分攤、公益捐贈、營業利益僅於下方「利潤分析」</div>
         </div>
         <div class="stl-pf noprint" data-testid="stl-pf">
           <b>篩選</b>
@@ -1701,7 +1701,7 @@ function settlementPage() {
         else if (dpp != null && dpp < -C.GP_DROP_PP) L.push({ key: 'drop-' + i.id, lv: 'a', ic: '▼', t: name + '：毛利比比原始低 ' + Math.abs(dpp).toFixed(1) + ' pp', s: this.pctTxt(this.itemOrigPct(i)) + ' → ' + this.pctTxt(this.itemPct(i)) + '（門檻 ' + C.GP_DROP_PP + ' pp）', go: '#stl-row-' + i.id, item: i.id })
       })
       const nr = this.settlement.items.filter(i => this._noRecord(i))
-      if (nr.length) L.push({ key: 'norecord', lv: C.BLOCK_ON_NO_RECORD ? 'r' : 'a', ic: '📝', t: nr.length + ' 個品項無採購／對應紀錄且未手填：' + nr.map(i => '#' + this.itemNo(i.id)).join('、'), s: '實際成本暫以估計計；已採購未建系統（歷史）或人力成本請手填', go: '#stl-row-' + nr[0].id, item: nr[0].id })
+      if (nr.length) L.push({ key: 'norecord', lv: C.BLOCK_ON_NO_RECORD ? 'r' : 'a', ic: '📝', t: nr.length + ' 個品項無採購／對應紀錄且未手填：' + nr.map(i => '#' + this.itemNo(i.id)).join('、'), s: '實際成本暫以估計值計；已採購但未登錄於系統（歷史）或人力成本請手動填寫', go: '#stl-row-' + nr[0].id, item: nr[0].id })
       if (this.quoteAdjust !== 0) L.push({ key: 'adjust', lv: 'a', ic: '±', t: '折扣／調整 NT$ ' + (this.quoteAdjust < 0 ? '−' : '') + f(Math.abs(this.quoteAdjust)), s: '報價收入與品項報價加總不同；已單列於對帳', go: '[data-testid="stl-profit-card"]' })
       if (Math.abs(this.reconQuoteGap) > C.RECON_TOLERANCE || Math.abs(this.reconCostGap) > C.RECON_TOLERANCE) L.push({ key: 'recon', lv: 'r', ic: '✖', t: '對帳差額不為 0（報價 ' + f(this.reconQuoteGap) + '／成本 ' + f(this.reconCostGap) + '）', s: '加總對不上，需查明', go: '[data-testid="stl-recon"]' })
       return L
@@ -1950,7 +1950,7 @@ function settlementPage() {
         if (!rows) continue
         const label = (v.docCode || '派發#' + v.dispatchId) + '「' + (l.description || '第 ' + (v.lines.indexOf(l) + 1) + ' 行') + '」'
         if (this.dlOver(l, v.dispatchId)) return label + ' 的拆分金額加總超過行金額，請調整後再存檔'
-        if (rows.some(r => (r.itemId && !this._cents(r.amount)) || (!r.itemId && String(r.amount || '').trim()))) return label + ' 有拆分列沒填完整或金額格式不對（品項與未稅金額都要有；金額只能是數字，不要逗號、文字或空格，最多 2 位小數、要大於 0）'
+        if (rows.some(r => (r.itemId && !this._cents(r.amount)) || (!r.itemId && String(r.amount || '').trim()))) return label + ' 有拆分列沒填完整或金額格式不對（品項與未稅金額都要有；金額須為數字，不可含逗號、文字或空格，最多 2 位小數，且須大於 0）'
       }
       return ''
     },

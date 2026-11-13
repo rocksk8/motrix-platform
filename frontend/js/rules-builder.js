@@ -118,7 +118,7 @@
     var r = st.rules[st.sel]
     if (!r) return ''
     if (!simple(r)) {
-      return '<div class="rb-box"><div class="rb-warn">這條規則是進階條件，這裡只能啟用／停用或刪除，不能編輯條件。</div>' + ruleMeta(r) + '</div>'
+      return '<div class="rb-box"><div class="rb-warn">這條規則是進階條件，此處僅能啟用／停用或刪除，不可編輯條件。</div>' + ruleMeta(r) + '</div>'
     }
     var w = r.when, f = fieldOf(w.field) || { ops: [] }
     return '<div class="rb-box"><b>編輯規則</b>' +

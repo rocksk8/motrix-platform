@@ -1148,7 +1148,7 @@
       </template>
       <template x-if="reviewEditing">
         <span style="display:inline-flex;gap:6px;align-items:center;padding:3px 8px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius);font-size:11px;color:#3730A3" data-testid="review-edit-bar">
-          <span x-text="reviewEditResetsChain() ? '複查編輯中（第 3 層以後的編輯，存檔後整條簽核會回第 1 層重跑）：改完請按「儲存複查編輯」' : '複查編輯中：改完請按「儲存複查編輯」'"></span>
+          <span x-text="reviewEditResetsChain() ? '複查編輯中（第 3 層以後的編輯，存檔後整個簽核流程將回到第 1 層重新進行）：改完請按「儲存複查編輯」' : '複查編輯中：改完請按「儲存複查編輯」'"></span>
           <button class="btn btn-sm" style="background:#4338CA;color:#fff;border:1px solid #4338CA" :disabled="reviewEditBusy" @click="saveReviewEdit()" data-testid="review-edit-save">儲存複查編輯</button>
           <button class="btn btn-ghost btn-sm" :disabled="reviewEditBusy" @click="cancelReviewEdit()" data-testid="review-edit-cancel">放棄修改</button>
         </span>
@@ -1242,7 +1242,7 @@
            不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
       <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
            style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
-        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔沒有生效，自動存檔已暫停。請先載入最新版，再把您要改的地方重做一次。</span>
+        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請先載入最新版，再重新進行您要修改的部分。</span>
         <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
       </div>
 
@@ -2064,7 +2064,7 @@
             </div>
           </div>
           <div x-show="altNotePreview().length" style="margin-top:8px;font-size:11px;color:var(--text-dim)" data-testid="qf-alt-note-preview">
-            <div>列印時會自動加在「售後服務及備註說明」最後（尚未選定時的樣子）：</div>
+            <div>列印時會自動加在「售後服務及備註說明」最後（尚未選定時的顯示樣式）：</div>
             <template x-for="n in altNotePreview()" :key="n"><div x-text="n" style="color:var(--text-secondary)"></div></template>
           </div>
           </div>
@@ -2322,7 +2322,7 @@
            style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px">
         <div style="background:#fff;border-radius:8px;max-width:560px;width:100%;max-height:calc(90vh / var(--fz,1));overflow:auto;padding:18px 20px">
           <div style="font-size:15px;font-weight:700;margin-bottom:4px">客戶回簽：請選擇客戶採用的方案</div>
-          <div class="form-hint" style="margin-bottom:10px">每一組都要選一個；選定後合計會改成所選方案的金額。要換方案請先取消回簽，再重新回簽。</div>
+          <div class="form-hint" style="margin-bottom:10px">每一組都要選一個；選定後合計會改成所選方案的金額。如需更換方案，請先取消回簽，再重新回簽。</div>
           <template x-for="g in altPickGroups()" :key="g.group">
             <div style="margin-bottom:10px">
               <div style="font-weight:600;margin-bottom:4px" x-text="g.group"></div>
@@ -2347,7 +2347,7 @@
       <div class="cost-panel alt-plan" x-show="showCostCols && altGroupNames().length && q.quoteNo" x-cloak data-testid="qf-alt-plan"
            x-init="$watch('q.quoteNo', v => { if (v && altGroupNames().length) loadPlan() })">
         <div class="cost-panel__title"><span></span>內部・擇一方案比較</div>
-        <div style="font-size:11px;color:#9CA3AF;margin-bottom:6px">依「已儲存」的內容計算；改了品項或單價請先儲存，再按「重新計算」。每個方案欄是「其他組都取下方選的基準」時的結果。</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-bottom:6px">依「已儲存」的內容計算；變更品項或單價後請先儲存，再按「重新計算」。每個方案欄是「其他組都取下方選的基準」時的結果。</div>
         <button class="btn btn-ghost btn-sm" @click="loadPlan()" :disabled="plan.loading" x-text="plan.loading ? '計算中…' : '重新計算'"></button>
         <div class="alt-warn" x-show="plan.error" x-text="plan.error"></div>
         <template x-if="plan.data">
@@ -3609,7 +3609,7 @@
       },
 
       openTermsManager() {
-        if (this._termsLoadFailed) { this.toast('條款組沒有載入成功，請重新整理頁面後再管理（避免用空清單覆蓋設定）'); return }
+        if (this._termsLoadFailed) { this.toast('條款組載入失敗，請重新整理頁面後再管理（避免用空清單覆蓋設定）'); return }
         // 深拷貝——在 modal 裡改到一半按叉叉不該影響外面已載入的清單
         this.termsDraft = JSON.parse(JSON.stringify(this.termsPresets))
         this.termsDraftDefault = this.termsDefaultKey

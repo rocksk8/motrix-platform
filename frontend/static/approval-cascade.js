@@ -58,7 +58,7 @@
   /** 接在既有確認訊息後面的說明，沒有可合併的層時回空字串。 */
   function cascadeNote(nos) {
     if (!nos || !nos.length) return '';
-    return `\n\n⚠ 您同時是第 ${nos.join('、')} 層的簽核人，確認後將一併完成這 ${nos.length + 1} 層簽核（不需要再簽一次）。`;
+    return `\n\n⚠ 您同時是第 ${nos.join('、')} 層的簽核人，確認後將一併完成這 ${nos.length + 1} 層簽核（無須再簽署一次）。`;
   }
 
   /** 後端回來的 signedTiers 轉成提示文字。 */
@@ -70,7 +70,7 @@
   // ── S5：維持／編輯彈窗 ──────────────────────────────────────────────────────────────
   const FLAG_TEXT = {
     reconfirm: '這張單的內容在您簽過之後有變動，需要您重新確認。',
-    reassigned: '這張單是由最高管理者轉簽給您的，您沒有經手過前面的內容。',
+    reassigned: '這張單是由最高管理者轉簽給您的，您未經手前面的內容。',
     delegated: '您是以代理人身分簽核，不是原本指定的簽核人。'
   };
   const BLOCK_TEXT = {
@@ -152,7 +152,7 @@
       const keep = btn('維持核准', 'background:#15803D;border-color:#15803D;color:#fff', 'approve-choice-keep');
       bar.appendChild(cancel); if (edit) bar.appendChild(edit); bar.appendChild(keep);
       box.appendChild(bar);
-      if (!opts.canEdit) box.appendChild(el('div', 'margin-top:8px;color:#78716C;font-size:12px', opts.noEditHint || '您的身分不能在這裡直接改內容；若要修改請退回，或請有編輯權限的簽核人處理。', { 'data-testid': 'approve-choice-noedit' }));
+      if (!opts.canEdit) box.appendChild(el('div', 'margin-top:8px;color:#78716C;font-size:12px', opts.noEditHint || '您的身分不可在此直接修改內容；如需修改，請退回，或請有編輯權限的簽核人處理。', { 'data-testid': 'approve-choice-noedit' }));
       shade.appendChild(box);
       document.body.appendChild(shade);
 

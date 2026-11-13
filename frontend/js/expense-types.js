@@ -152,7 +152,7 @@ function expenseTypesPage() {
     rfKeep: function (it) { var sk = Object.assign({}, this.skipped); sk[it.id] = true; this.skipped = sk },
     async copyDefault() {
       if (this.busy || this.isNew || !this.defBody) return
-      var ok = window.MotrixUI ? await window.MotrixUI.confirm('用出貨範本取代目前畫面上的內容，並存成草稿（目前的草稿內容會被取代）。不會自動發布，發布前還可以再修改。確定？', { okText: '複製到草稿' }) : true
+      var ok = window.MotrixUI ? await window.MotrixUI.confirm('用出貨範本取代目前畫面上的內容，並存成草稿（目前的草稿內容會被取代）。不會自動發布，發布前仍可再修改。確定？', { okText: '複製到草稿' }) : true
       if (!ok) return
       this.body = clone(this.defBody); this.adopted = ['（整份出貨範本）']; this.skipped = {}
       this.rfRemount()
@@ -276,7 +276,7 @@ function expenseTypesPage() {
         this.msg = '已用您的內容覆蓋草稿'
       } catch (e) { this.err = '網路連線失敗，請確認後再按一次' } finally { this.busy = false }
     },
-    conflictHold() { this.conflict = null; this.err = '草稿被其他使用者改過，您的修改尚未存；要存請再按「儲存草稿」並選擇處理方式' },
+    conflictHold() { this.conflict = null; this.err = '草稿被其他使用者改過，您的修改尚未儲存；如需儲存，請再按「儲存草稿」並選擇處理方式' },
     async saveDraft() {
       if (this.busy) return
       this.err = ''; this.msg = ''

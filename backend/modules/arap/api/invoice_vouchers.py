@@ -52,7 +52,7 @@ from helpers import export_templates as _ET     # BP-3：開票申請憑據 PDF 
 _ET.register_export(
     "arap:invoice-voucher-pdf", label="開票申請憑據（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"),
     sample_html=("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>開票申請憑據（樣本頁）</h2>"
-                 "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；憑據的內容、金額與程式產生的橫幅不受影響。</p></body></html>"))
+                 "<p>本頁僅供預覽頁尾與浮水印文字的位置；憑據的內容、金額與程式產生的橫幅不受影響。</p></body></html>"))
 from helpers.errors import trace_id
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE   # T：L1
 from helpers.legal_params import tax_basis_error, tax_basis_label   # R2（L1）

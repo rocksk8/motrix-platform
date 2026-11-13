@@ -110,7 +110,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">權限設定</h1>
-          <p class="pg__s">看每個角色、每個人能做哪些事，以及為什麼。只有最高管理者看得到。勾選前會先說明會發生什麼事，確認後才會儲存，隨時可以一鍵復原。</p>
+          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選前會先說明會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
         </div>
       </div>
 
@@ -125,7 +125,7 @@
 
       <section x-show="tab === 'matrix'" data-testid="pm-matrix">
         <div class="pm-note" x-show="m && !m.caps.length" data-testid="pm-empty">目前尚無任何功能宣告可調整的權限項目；各功能接入後會出現在這裡。</div>
-        <div class="pm-sub" x-show="m && m.caps.length">最高管理者永遠可以做所有事，不列在表中。標「已調整」的格子與預設不同。標「未接入」的項目尚未實際生效，暫時不能勾選。</div>
+        <div class="pm-sub" x-show="m && m.caps.length">最高管理者具備所有權限，不列在表中。標「已調整」的格子與預設不同。標「未接入」的項目尚未實際生效，暫時無法勾選。</div>
         <template x-for="g in groups()" :key="g.name">
           <div class="pm-scroll">
             <table class="pm-t pm-mt" style="margin-top:12px">
@@ -333,7 +333,7 @@
           } catch (e) { this.err = String(e.message || e) }
         },
         askClear(u, o) {
-          this._open('取消個別調整', { sentence: u.name + '：' + o.label + ' 的' + (o.effect === 'allow' ? '個別允許' : '個別禁止') + '會取消，回到依角色的結果。', reversibleText: '隨時可以一鍵復原' },
+          this._open('取消個別調整', { sentence: u.name + '：' + o.label + ' 的' + (o.effect === 'allow' ? '個別允許' : '個別禁止') + '會取消，回到依角色的結果。', reversibleText: '可隨時一鍵復原' },
             (reason) => this._del('/api/permmatrix/user-override?user_id=' + u.id + '&cap=' + encodeURIComponent(o.key) + '&reason=' + encodeURIComponent(reason)),
             { needReason: o.effect === 'deny' })
         },
@@ -347,7 +347,7 @@
             () => this._post('/api/permmatrix/undo'))
         },
         askRestore(v) {
-          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走確認期間與核准。', reversibleText: '隨時可以一鍵復原' },
+          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走確認期間與核准。', reversibleText: '可隨時一鍵復原' },
             (reason) => this._post('/api/permmatrix/versions/' + v.id + '/restore', { reason }), { needReason: true })
         },
         hasOverrides() { return this.users.some(u => u.overrides.length) },

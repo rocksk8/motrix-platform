@@ -524,7 +524,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>精算快照可能已過期：</strong>
-              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方營業利益/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方營業利益／業務員／部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
             </span>
           </div>
 
@@ -541,7 +541,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>案件缺收款期別：</strong>
-              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/營業利益等統計
+              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案／已結案案件沒有填寫收款期別，合約金額不會計入收款率／營業利益等統計
               —
               <template x-for="cw in casesWithoutPaymentItems.slice(0,4)" :key="cw.quoteNo">
                 <span style="margin-right:4px;font-family:monospace" x-text="cw.quoteNo"></span>
@@ -2117,7 +2117,7 @@
                 <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
                   <div class="cm-section-title" style="margin-bottom:8px">稅務匯出（銷項發票清單）</div>
                   <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
-                    匯出已填發票號碼的收款品項，含統一編號/金額/稅額欄位，供記帳士申報使用。
+                    匯出已填發票號碼的收款品項，含統一編號／金額／稅額欄位，供記帳士申報使用。
                   </div>
                   <div style="display:flex;align-items:center;gap:8px">
                     <select class="filter" x-model.number="taxExportYear" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">

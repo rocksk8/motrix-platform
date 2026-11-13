@@ -173,7 +173,7 @@ def test_every_event_field_validation_matches_the_server_including_default_exemp
 
 def test_help_text_says_dollar_and_slash_are_not_allowed():
     js = EDITOR.read_text(encoding="utf-8")
-    assert "不能使用 $ 與 /" in js and "「1,200 元」" in js
+    assert "不可使用 $ 與 /" in js and "「1,200 元」" in js
 
 
 def test_tabs_switch_keep_each_events_edits_and_publish_uses_the_selected_event():

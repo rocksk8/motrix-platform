@@ -217,25 +217,25 @@ def _plan_customer_import(conn, rows: list) -> list:
         if not r["name"]:
             item.update(action="error", reason="公司名稱不可空白")
         elif r["tax"] and r["tax"] in seen_tax:
-            item.update(action="error", reason="同一個檔案裡統編 %s 出現多次，這一列未匯入" % r["tax"])
+            item.update(action="error", reason="同一個檔案裡統一編號 %s 出現多次，這一列未匯入" % r["tax"])
         elif r["tax"]:
             hits = by_tax.get(r["tax"], [])
             if len(hits) > 1:
-                item.update(action="duplicate", reason="統編 %s 在系統裡對到 %d 家客戶，無法判斷是哪一家，未匯入" % (r["tax"], len(hits)))
+                item.update(action="duplicate", reason="統一編號 %s 在系統裡對到 %d 家客戶，無法判斷是哪一家，未匯入" % (r["tax"], len(hits)))
             elif hits:
                 if _name_key(hits[0]["name"]) == _name_key(r["name"]):
                     item.update(action="update", target=hits[0])
                 else:
                     item.update(action="confirm", target=hits[0],
-                                reason="統編 %s 在系統裡是「%s」，檔案寫的是「%s」，名稱不同——可能是統編打錯" % (r["tax"], hits[0]["name"], r["name"]))
+                                reason="統一編號 %s 在系統裡是「%s」，檔案寫的是「%s」，名稱不同——可能是統一編號打錯" % (r["tax"], hits[0]["name"], r["name"]))
             elif by_name.get(r["name"]) or r["name"] in seen_name:
-                item.update(action="duplicate", reason="系統裡已有同名客戶「%s」但統編不同或沒有統編，可能是同一家，未匯入（請人工確認）" % r["name"])
+                item.update(action="duplicate", reason="系統裡已有同名客戶「%s」但統一編號不同或沒有統一編號，可能是同一家，未匯入（請人工確認）" % r["name"])
             else:
                 item.update(action="create")
             seen_tax.add(r["tax"])
         else:
             if by_name.get(r["name"]) or r["name"] in seen_name:
-                item.update(action="duplicate", reason="只有名稱相同（檔案沒有統編），可能與既有客戶重複，未匯入（請補統編或人工確認）")
+                item.update(action="duplicate", reason="只有名稱相同（檔案沒有統一編號），可能與既有客戶重複，未匯入（請補統一編號或人工確認）")
             else:
                 item.update(action="create")
         if item.get("action") in ("update", "confirm"):

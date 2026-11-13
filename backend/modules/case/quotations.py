@@ -70,7 +70,7 @@ def validate_quote_tax(q: dict) -> None:
         raise HTTPException(400, "稅別不正確（只能是應稅 5%、零稅率或免稅）")
     kind = quote_tax_type(q)
     if kind == "legacy":
-        raise HTTPException(400, "此報價使用已停用的稅率 %s%%，請改選法定稅別（應稅 5%%、零稅率或免稅）後再存檔"
+        raise HTTPException(400, "此報價使用已停用的稅率 %s%%，請改選法定稅別（應稅 5%%、零稅率或免稅）後再儲存"
                             % q.get("taxRate"))
     if t in TAX_TYPES:
         try:

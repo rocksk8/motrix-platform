@@ -45,7 +45,7 @@ CATEGORY = "案件進度"
 NOTICE_NO_DAILY_TASKS = "未建立每日任務：每日任務模組未安裝"
 # 取消勾選／刪除階段時，原本建立過的每日任務收不回來（M12 不在時 M01 不碰 M12 的表）。
 # 任務 id 留在 case_stages.daily_task_id：M12 裝回來之後再勾選／取消勾選，會收斂到同一筆任務，不會多出一筆。
-NOTICE_NOT_WITHDRAWN = "未收回每日任務：每日任務模組未安裝，原本建立的任務仍在"
+NOTICE_NOT_WITHDRAWN = "未收回每日任務：每日任務模組未安裝，原本建立的任務仍保留"
 
 
 def _tasks():

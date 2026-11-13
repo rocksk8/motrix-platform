@@ -743,7 +743,7 @@ function paymentRequestForm() {
     revokeReq() {
       window.MotrixApprovalReturn.ask({
         title: `撤銷核准：請款單 ${this.q.requestNo}`,
-        hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
+        hint: '撤銷後單據退回草稿。撤銷原因必填，將記入稽核紀錄並通知申請人。',
         post: (reason) => fetch(`${API}/payment-requests/${this.q.requestNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },

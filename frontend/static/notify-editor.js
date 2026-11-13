@@ -220,7 +220,7 @@
       st.cat.noteSample ? el('div', { text: st.cat.noteSample, style: 'margin-top:8px;padding:6px 8px;background:#FFF8E1;border-radius:6px;color:#7A5A00' }) : null,
       el('div', { text: expand(eff('mail.button'), ctxShow), style: 'display:inline-block;margin-top:10px;padding:6px 14px;background:#1D4ED8;color:#fff;border-radius:6px', 'data-role': 'pv-button' })
     ]))
-    box.appendChild(el('div', { text: '主旨前綴與分類、信件版型、收件人與寄送時機都不能改；信件沒有金額欄位。', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
+    box.appendChild(el('div', { text: '主旨前綴與分類、信件版型、收件人與寄送時機皆不可修改；信件不含金額欄位。', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     return box
   }
 
@@ -238,7 +238,7 @@
       })))
     }
     panel.appendChild(el('div', { text: st.cat.label + '：調整收到的訊息與通知信文字（留空＝用系統預設字）', style: 'font-size:13px;font-weight:600;margin-bottom:6px' }))
-    panel.appendChild(el('div', { text: '文字只能用中文、英數字與常用標點；不能使用 $ 與 /（金額請寫成「1,200 元」這類說法），也不能放網址或標記。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:6px', 'data-role': 'help' }))
+    panel.appendChild(el('div', { text: '文字只能用中文、英數字與常用標點；不可使用 $ 與 /（金額請寫成「1,200 元」這類說法），也不能放網址或標記。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:6px', 'data-role': 'help' }))
     fields().forEach(function (f) {
       var prob = problemOf(f.field, st.vals[f.field])
       var input = el('input', { type: 'text', 'data-path': f.field, value: st.vals[f.field] || '', placeholder: f.default, maxlength: String(f.limit + 20), style: 'flex:1;font-size:12px', oninput: function (ev) { st.vals[f.field] = ev.target.value; st.state = 'idle'; refreshLive() } })

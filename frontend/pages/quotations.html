@@ -268,7 +268,7 @@
         <span class="ql-sum__sub" x-text="mineOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
       </button>
       <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" :disabled="!mineOk" data-testid="ql-sum-won" @click="setFocus('won')"
-              title="您負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統沒有另外記成案日）。全公司的數字在儀表板。">
+              title="您負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統未另行記錄成案日）。全公司的數字在儀表板。">
         <span class="ql-sum__lbl">本月已成案</span>
         <span class="ql-sum__val" x-text="mineOk ? summaryData.wonCount + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? 'NT$ ' + MotrixFormat.num(summaryData.wonTotal) + '・以報價日期計' : '暫時無法計算'"></span>
@@ -567,8 +567,8 @@
               <div class="ux-empty ux-empty--filtered" x-show="emptyKind === 'filtered'" data-testid="empty-filtered">
                 <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
                 <div class="ux-empty__title">沒有符合條件的報價單</div>
-                <div class="ux-empty__desc" x-show="hasActiveFilter">目前的條件下找不到資料（預設只列您負責的、進行中的報價單）。可以按「清除條件」看全部。</div>
-                <div class="ux-empty__desc" x-show="!hasActiveFilter">「全部」分頁不含已結案、未成案的報價單；要看它們請切換上方的分頁。</div>
+                <div class="ux-empty__desc" x-show="hasActiveFilter">目前的條件下找不到資料（預設只列您負責的、進行中的報價單）。可按「清除條件」查看全部。</div>
+                <div class="ux-empty__desc" x-show="!hasActiveFilter">「全部」分頁不含已結案、未成案的報價單；如需查看，請切換上方分頁。</div>
                 <div class="ux-empty__actions" x-show="hasActiveFilter">
                   <button class="action-btn" @click="clearFilters()" style="cursor:pointer" data-testid="empty-clear-filters">清除條件</button>
                 </div>
@@ -576,7 +576,7 @@
               <div class="ux-empty ux-empty--error" x-show="emptyKind === 'error'" data-testid="empty-error" role="alert">
                 <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
                 <div class="ux-empty__title">資料載入失敗</div>
-                <div class="ux-empty__desc">暫時取不到報價單資料，可能是網路或伺服器連線問題。請稍後再試一次。</div>
+                <div class="ux-empty__desc">暫時無法取得報價單資料，可能是網路或伺服器連線問題。請稍後再試一次。</div>
                 <div class="ux-empty__actions">
                   <button class="action-btn" @click="reload()" style="cursor:pointer">
                     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M20 9A9 9 0 1 0 4 15"/></svg>

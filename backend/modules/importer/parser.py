@@ -59,7 +59,7 @@ def _col(key, label, aliases=(), required=False, hint="", example="", ignored=Fa
 COLUMNS = {
     "customers": [
         _col("name", "公司名稱", ["名稱", "客戶名稱", "客戶"], True, "必填。去掉前後空白；同一家公司請用同一個寫法。", EXAMPLE_MARK + "大安電腦股份有限公司"),
-        _col("taxId", "統一編號", ["統編"], False, "8 碼數字。系統用統編判斷是否同一家客戶；沒有統編（海外、個人）請留空。", "12345675"),
+        _col("taxId", "統一編號", ["統編"], False, "8 碼數字。系統以統一編號判斷是否為同一客戶；無統一編號者（海外、個人）請留空。", "12345675"),
         _col("nameEn", "英文名稱", [], False, "", "Da-An Computer Co., Ltd."),
         _col("phone", "電話", [], False, "", "02-12345678"),
         _col("fax", "傳真", [], False, "", ""),
@@ -79,7 +79,7 @@ COLUMNS = {
         _col("notes", "備註", [_OLD_NOTE], False, "已有備註時，這裡的內容會接在後面，不會覆寫。", ""),
     ],
     "parts": [
-        _col("partNo", "料號", ["part_no", "品號"], False, "系統用料號判斷是否同一個品項（不分大小寫、全半形）。留空＝新增時由系統編號（類別要有編號前綴）。", "AP-001"),
+        _col("partNo", "料號", ["part_no", "品號"], False, "系統以料號判斷是否為同一品項（不分大小寫、全形半形）。留空者於新增時由系統編號（類別要有編號前綴）。", "AP-001"),
         _col("name", "品名", ["名稱", "name", "品項名稱"], True, "必填。", EXAMPLE_MARK + "無線基地台"),
         _col("brand", "廠牌", ["brand"], False, "", "Ubiquiti"),
         _col("model", "型號", ["model"], False, "", "U6-Pro"),
@@ -94,11 +94,11 @@ COLUMNS = {
     "users": [
         _col("username", "帳號", ["使用者帳號", "登入帳號", "username"], True, "必填。登入用，不可有空白。已存在的帳號會略過，不會更新。", EXAMPLE_MARK + "wang.xiaoming"),
         _col("displayName", "姓名", ["顯示名稱", "名稱", "display_name"], True, "必填。", "王小明"),
-        _col("role", "角色", ["role"], False, "可填：業務、工程師、檢視者；留空＝檢視者。管理員、財務、最高管理者需由最高管理者到帳號頁一個一個建立。", "業務"),
+        _col("role", "角色", ["role"], False, "可填：業務、工程師、檢視者；留空＝檢視者。管理員、財務、最高管理者須由最高管理者至帳號頁逐一建立。", "業務"),
         _col("email", "Email", ["電子郵件", "email"], False, "", "wang@example.com"),
         _col("phone", "電話", ["手機", "phone"], False, "", ""),
         _col("department", "部門", ["department"], False, "要和系統裡的部門名稱一樣；對不上就先不分部門。", ""),
-        _col("password", "密碼", ["password"], False, "請勿在檔案裡放密碼：這一欄會被忽略。系統會自己產生臨時密碼，匯入完成後只顯示一次。", "", ignored=True),
+        _col("password", "密碼", ["password"], False, "請勿於檔案中填寫密碼：此欄位將被忽略。系統將自行產生臨時密碼，匯入完成後只顯示一次。", "", ignored=True),
     ],
 }
 
@@ -167,7 +167,7 @@ def _csv_rows(text, max_scan, deadline):
         if len(rec) > MAX_COLS:
             extra = [ci for ci in range(MAX_COLS, len(rec)) if _cell_text(rec[ci])]
             if extra:
-                raise ParseError("第 %d 列的「%s 欄」（第 %d 欄）有內容，超過欄位上限 %d 欄；請確認檔案是依範本填的" % (i + 1, _col_letters(extra[0] + 1), extra[0] + 1, MAX_COLS))
+                raise ParseError("第 %d 列的「%s 欄」（第 %d 欄）有內容，超過欄位上限 %d 欄；請確認檔案是依範本填寫" % (i + 1, _col_letters(extra[0] + 1), extra[0] + 1, MAX_COLS))
             rec = rec[:MAX_COLS]
         cells = [_cell_text(c) for c in rec]
         if not any(cells):
@@ -225,7 +225,7 @@ def _find_header(rows, kind):
         hits = [c for c in cells if _hkey(c) in idx]
         if hits:
             return r_no, cells, idx
-    raise ParseError("第一列要放欄位名稱（和範本一樣）。請下載範本，把資料貼進去再上傳")
+    raise ParseError("第一列須為欄位名稱（與範本相同）。請下載範本，貼上資料後再上傳")
 
 
 def _split_tags(s):
@@ -411,7 +411,7 @@ def build_template(kind: str) -> bytes:
     hs.column_dimensions["B"].width = 90
     hs.append([xl_safe_xlsx("怎麼填（%s）" % KIND_NAMES[kind]), ""])
     hs["A1"].font = Font(bold=True, size=13)
-    notes = ["第 2 列灰底是範例（開頭有「%s」），上傳時會自動略過，可以保留也可以刪掉。" % EXAMPLE_MARK,
+    notes = ["第 2 列灰底是範例（開頭有「%s」），上傳時會自動略過，可保留或刪除。" % EXAMPLE_MARK,
              "紅底、有 ＊ 的欄位一定要填；其他欄位可以留空。",
              "留空的格子代表「不更新」：已經存在的資料不會被清掉。",
              "請勿更改欄位名稱或合併儲存格；公式不會匯入，請貼成值。"]
@@ -420,8 +420,8 @@ def build_template(kind: str) -> bytes:
     if kind == "parts":
         notes.append("品項以「料號」判斷是否同一個；成本、定價、安全庫存、前置天數留空＝不更新。")
     if kind == "users":
-        notes.append("這裡只能新增帳號：已存在的帳號會略過，不會更新。管理員、財務、最高管理者請到帳號頁一個一個建立。")
-        notes.append("不要在檔案裡放密碼。匯入完成後，系統會顯示每位同仁的臨時密碼（只顯示一次），第一次登入必須改密碼。")
+        notes.append("這裡只能新增帳號：已存在的帳號會略過，不會更新。管理員、財務、最高管理者請至帳號頁逐一建立。")
+        notes.append("請勿於檔案中填寫密碼。匯入完成後，系統會顯示每位同仁的臨時密碼（只顯示一次），首次登入須變更密碼。")
     for n in notes:
         hs.append(["", xl_safe_xlsx(n)])
     hs.append([])

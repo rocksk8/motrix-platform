@@ -181,7 +181,7 @@
       + '<button type="button" class="btn btn-ghost btn-sm" data-testid="ml-personal-open" @click="toggle()"'
       + ' x-show="$store.layout.ready && $store.layout.mode === \'live\'">欄位</button>'
       + '<div class="ml-pop" x-show="open" @click.outside="open = false" x-cloak>'
-      + '<div class="ml-pop__t">我的欄位</div><div class="ml-pop__hint">只影響自己的畫面；核心欄位不能隱藏。管理者隱藏的欄位不會出現在這裡。</div>'
+      + '<div class="ml-pop__t">我的欄位</div><div class="ml-pop__hint">只影響自己的畫面；核心欄位不可隱藏。管理者隱藏的欄位不會出現在這裡。</div>'
       + '<template x-for="(c, i) in cols" :key="c.field"><div class="ml-pop__row" :data-field="c.field">'
       + '<label><input type="checkbox" :checked="c.visible" :disabled="c.core" @change="c.visible = $event.target.checked"> <span x-text="c.label"></span></label>'
       + '<span class="ml-core" x-show="c.core">核心</span>'

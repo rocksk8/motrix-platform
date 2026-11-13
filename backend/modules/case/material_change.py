@@ -214,7 +214,7 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
     ship = _shipped_fn()
     if ship is None:
         if _supply_loaded():                                                            # 出貨連動（supply）已啟用卻取不到出貨量 ⇒ fail closed：寧可擋也不讓人把已出貨的數量改小
-            problems.append({"code": "shipped_unavailable", "message": "出貨連動已啟用但目前取不到已出貨量，暫時不能變更（避免把已出貨的數量改小）；請聯絡管理員"})
+            problems.append({"code": "shipped_unavailable", "message": "出貨連動已啟用但目前無法取得已出貨量，暫時不能變更（避免把已出貨的數量改小）；請聯絡管理員"})
         else:                                                                           # 沒有出貨模組：沒有「已出貨」這件事，警告即可
             warnings.append("沒有出貨連動（出貨模組不存在），未檢查「不得低於已出貨＋占用量」")
     else:

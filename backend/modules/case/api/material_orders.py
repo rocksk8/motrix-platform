@@ -119,7 +119,7 @@ def update_material_orders(quote_no: str,
         require_case_money(user, q, quote_no)               # 財務角色可「看」任何案件（GET／匯款／發票日維持）；編輯清單另在下面收窄
         if finance_duty_person(user) and not row_access.visible("case", user, q):
             # （使用者裁示 a）：財務角色對非自己負責（非業務／協作者）案件的一般叫料清單只能看、不能改；付款相關欄位走匯款申請／出納端點，不受影響。superadmin 不受限。
-            raise HTTPException(403, "財務角色只能檢視非自己負責案件的材料申請清單，不能編輯；付款請走匯款申請與出納")
+            raise HTTPException(403, "財務角色只能檢視非自己負責案件的材料申請清單，不能編輯；付款請透過匯款申請與出納辦理")
 
         data = json.loads(q["data_json"] or "{}")
 
@@ -236,7 +236,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
         if not hit:
             raise HTTPException(404, "找不到這筆材料申請（請先儲存材料申請清單）")
         if MA.status_of(conn, quote_no, item_id) in MA.IN_FLIGHT:
-            raise HTTPException(409, "審核中的材料申請不可改發票日期（請先撤回或等審核完成）")
+            raise HTTPException(409, "審核中的材料申請不可修改發票日期（請先撤回或等審核完成）")
         before = hit[0].get("invoiceDate") or ""
         hit[0]["invoiceDate"] = inv
         save_quotation_json(conn, quote_no, data)

@@ -224,7 +224,7 @@ def location_problem(d: str) -> str:
         return "隔離目錄不可以是磁碟機根目錄"
     install = os.path.normcase(os.path.realpath(_install_root()))
     if real == install or real.startswith(install + os.sep):
-        return "隔離目錄不可以在安裝目錄裡面（要放樹內請留空＝預設位置）"
+        return "隔離目錄不可位於安裝目錄內（留空＝使用預設位置）"
     if install.startswith(real + os.sep):
         return "隔離目錄不可以包含安裝目錄"
     cloud = _cloud_problem(real)
@@ -265,7 +265,7 @@ def _cloud_problem(real: str) -> str:
     for seg in os.path.normcase(real).replace("/", os.sep).split(os.sep):
         seg = seg.strip()
         if seg in _CLOUD_SEGMENTS or seg.startswith("onedrive") or seg.startswith("google drive"):
-            return "隔離目錄不可以放在雲端同步資料夾底下（%s）——隔離檔含個資，永不上雲" % seg
+            return "隔離目錄不可位於雲端同步資料夾內（%s）——隔離檔含個資，不得上傳雲端" % seg
     return ""
 
 

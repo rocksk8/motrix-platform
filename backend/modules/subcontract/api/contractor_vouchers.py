@@ -576,7 +576,7 @@ def set_voucher_invoice(voucher_no: str, body: dict = Body(...), authorization: 
         if not row:
             raise HTTPException(404, "申請不存在")
         if not row["kind"]:
-            raise HTTPException(409, "舊式整筆申請的發票登在派發上（派發的「發票日期」），不在這裡登")
+            raise HTTPException(409, "舊式整筆申請的發票登錄於派發（派發的「發票日期」），不在此處登錄")
         if row["voided_at"]:
             raise HTTPException(409, "這張申請已作廢，不能登錄發票")
         now = datetime.now().isoformat()

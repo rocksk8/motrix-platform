@@ -71,13 +71,13 @@
   function intIn(v, lo, hi) { v = Number(v); return Math.floor(v) === v && v >= lo && v <= hi }
   function problems() {
     var out = [], keys = {}, names = {}
-    if (!KEY_RE.test(st.key || '')) out.push('樣板代號要用小寫英文字母開頭，只能有小寫英文、數字和底線（最多 30 字）')
+    if (!KEY_RE.test(st.key || '')) out.push('樣板代號須以小寫英文字母開頭，僅可含小寫英文、數字與底線（最多 30 字）')
     var p = nameProblem(st.label, 30, '樣板名稱'); if (p) out.push(p)
     if (!st.stages.length) out.push('至少要有一個階段')
     if (st.stages.length > 30) out.push('最多 30 個階段')
     st.stages.forEach(function (s, i) {
       var w = '第 ' + (i + 1) + ' 個階段'
-      if (!KEY_RE.test(s.key || '')) out.push(w + '：階段代號要用小寫英文字母開頭，只能有小寫英文、數字和底線')
+      if (!KEY_RE.test(s.key || '')) out.push(w + '：階段代號須以小寫英文字母開頭，僅可含小寫英文、數字與底線')
       else if (keys[s.key]) out.push(w + '：階段代號重複 ' + s.key)
       keys[s.key] = true
       p = nameProblem(s.label, 20, w + '名稱'); if (p) out.push(p)
@@ -206,13 +206,13 @@
       el('span', { text: '案件階段樣板', style: 'font-size:14px;font-weight:700;flex:1' }),
       el('button', { type: 'button', text: '×', 'aria-label': '關閉', onclick: function () { st.open = false; render() }, style: 'width:28px;height:28px;border:none;border-radius:5px;cursor:pointer' })
     ]))
-    panel.appendChild(el('div', { text: '樣板僅在新增階段時預先帶入內容：套用後就是那個案件自己的階段，之後樣板再改，已套用的案件不會跟著變。階段代號建立後不能改。發布前要先按「預覽」看過。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:8px' }))
+    panel.appendChild(el('div', { text: '樣板僅在新增階段時預先帶入內容：套用後就是那個案件自己的階段，之後樣板即使修改，已套用的案件也不會隨之變動。階段代號建立後不可修改。發布前請先按「預覽」確認。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:8px' }))
     var sel = el('select', { 'data-testid': 'st-ed-select', style: 'font-size:12px', onchange: function (ev) { if (ev.target.value === '__new') newTemplate(); else loadOne(ev.target.value) } },
       st.keys.map(function (k) { return el('option', { value: k, text: k, selected: (!st.isNew && k === st.key) ? 'selected' : null }) }).concat([el('option', { value: '__new', text: '＋ 新增樣板', selected: st.isNew ? 'selected' : null })]))
     panel.appendChild(sel)
     if (st.isNew || st.key) {
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;margin:8px 0;flex-wrap:wrap' }, [
-        st.isNew ? el('input', { type: 'text', value: st.key, placeholder: '樣板代號（英文小寫，建立後不能改）', maxlength: '30', 'data-testid': 'st-ed-key', style: 'font-size:12px;width:150px', oninput: function (ev) { st.key = ev.target.value; st.preview = null; st.previewKey = '' } })
+        st.isNew ? el('input', { type: 'text', value: st.key, placeholder: '樣板代號（英文小寫，建立後不可修改）', maxlength: '30', 'data-testid': 'st-ed-key', style: 'font-size:12px;width:150px', oninput: function (ev) { st.key = ev.target.value; st.preview = null; st.previewKey = '' } })
                     : el('span', { text: st.key, style: 'font-size:12px;align-self:center' }),
         el('input', { type: 'text', value: st.label, placeholder: '樣板名稱', maxlength: '30', 'data-testid': 'st-ed-label', style: 'font-size:12px;flex:1;min-width:160px', oninput: function (ev) { st.label = ev.target.value; st.preview = null; st.previewKey = '' } }),
         el('label', { style: 'font-size:12px;align-self:center' }, [el('input', { type: 'checkbox', 'data-testid': 'st-ed-ratio', checked: st.useRatio ? 'checked' : null, onchange: function (ev) { st.useRatio = ev.target.checked; st.stages.forEach(function (s) { s.ratioPct = st.useRatio ? (s.ratioPct === '' ? 0 : s.ratioPct) : '' }); changed() } }), el('span', { text: ' 預設收入認列比例（所有階段加起來要剛好 100%）' })])
@@ -220,7 +220,7 @@
       st.stages.forEach(function (s, i) {
         var others = st.stages.filter(function (o) { return o.key !== s.key })
         panel.appendChild(el('div', { 'data-stage-row': s.key, style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0;padding:4px 0;border-bottom:1px solid var(--border-light,#eee)' }, [
-          el('input', { type: 'text', value: s.key, maxlength: '30', disabled: st.locked[s.key] ? 'disabled' : null, title: st.locked[s.key] ? '這個階段代號已經發布，不能改' : '階段代號（英文小寫；建立後不能改，用來辨識這是哪一種階段）', style: 'width:96px;font-size:12px', oninput: function (ev) { var old = s.key; s.key = ev.target.value; st.stages.forEach(function (o) { o.dependsOn = o.dependsOn.map(function (d) { return d === old ? s.key : d }) }); st.preview = null; st.previewKey = '' } }),
+          el('input', { type: 'text', value: s.key, maxlength: '30', disabled: st.locked[s.key] ? 'disabled' : null, title: st.locked[s.key] ? '這個階段代號已經發布，不能改' : '階段代號（英文小寫；建立後不可修改，用來辨識這是哪一種階段）', style: 'width:96px;font-size:12px', oninput: function (ev) { var old = s.key; s.key = ev.target.value; st.stages.forEach(function (o) { o.dependsOn = o.dependsOn.map(function (d) { return d === old ? s.key : d }) }); st.preview = null; st.previewKey = '' } }),
           el('input', { type: 'text', value: s.label, placeholder: '階段名稱', maxlength: '20', style: 'flex:1;min-width:110px;font-size:12px', oninput: function (ev) { s.label = ev.target.value; st.preview = null; st.previewKey = '' } }),
           num('第幾天開始（基準日起算）', s, 'offsetDays', 56), num('持續幾天', s, 'durationDays', 56),
           st.useRatio ? num('收入認列比例 %', s, 'ratioPct', 64) : null,

@@ -216,7 +216,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     d_rows = dispatch_rows(conn, quote_no, d_basis, with_lines=True)
     for did in sorted(set(off_lines) - {d["itemId"] for d in d_rows}):
         for key in off_lines[did]:
-            warnings.append({"code": "dispatch_line_removed", "ref": DL.format_ref(did, key), "message": "逐行對應的派發單已不在精算內（取消／退回草稿？），對應暫時失效，金額列入未對應"})
+            warnings.append({"code": "dispatch_line_removed", "ref": DL.format_ref(did, key), "message": "逐行對應的派發單已不在精算內（是否已取消或退回草稿？），對應暫時失效，金額列入未對應"})
     disp_view = []                                          # 每張派發單的逐行檢視（含已被整張／全部分完而不在未對應清單者），給畫面「逐行對應」編輯用
     for d in d_rows:
         tgt, specs = off_dispatch.get(d["itemId"]), off_lines.get(d["itemId"])
@@ -234,7 +234,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
                 res = DL.allocate(d, specs, d_basis == BASIS_TAXED)
         if res is None:
             if specs and d.get("linesOk"):                                    # allocate 回 None（分配後餘額為負；理論上走不到）：整張暫列未對應，要讓人看得到
-                warnings.append({"code": "dispatch_line_unmappable", "ref": d["itemId"], "message": "派發單 %s：逐行對應分配後金額對不上，逐行對應暫時失效，整張列入未對應" % (d.get("docCode") or d["itemId"])})
+                warnings.append({"code": "dispatch_line_unmappable", "ref": d["itemId"], "message": "派發單 %s：逐行對應分配後金額不一致，逐行對應暫時失效，整張列入未對應" % (d.get("docCode") or d["itemId"])})
             unassigned_disp.append(d)
             disp_view.append(_line_view(d, "none", "", d.get("lines") or []))
             continue
@@ -470,7 +470,7 @@ def _check_line_groups(whole_rows, dl_rows, dispatch_by_id):
         by_line.setdefault((p["dispatch"], p["key"]), []).append((n, p, amt, is_keep))
     for did, keeps in by_disp.items():
         if did in whole_rows and not (whole_rows[did] and all(keeps)):
-            return "offsets：承攬商派發 %s 同時有整張與逐行對應，同一張只能二選一（切換時請清掉另一種）" % did
+            return "offsets：承攬商派發 %s 同時有整張與逐行對應，同一張只能二選一（切換時請清除另一種）" % did
     for (did, key), rows in by_line.items():
         if all(k for _, _, _, k in rows):
             continue

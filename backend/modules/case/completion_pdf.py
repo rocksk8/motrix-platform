@@ -32,7 +32,7 @@ COMPLETION_PDF_EXPORT = "case:completion-note-pdf"
 _ET.register_export(
     COMPLETION_PDF_EXPORT, label="完工單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"),
     sample_html=("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>完工單（樣本頁）</h2>"
-                 "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；文件的內容與程式產生的橫幅不受影響。</p></body></html>"))
+                 "<p>本頁僅供預覽頁尾與浮水印文字的位置；文件的內容與程式產生的橫幅不受影響。</p></body></html>"))
 
 
 def _build_completion_html(n: dict) -> str:

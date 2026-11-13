@@ -77,7 +77,7 @@
 '  <div class="cf-row" style="justify-content:space-between"><strong>自訂欄位</strong>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-close" @click="close()">關閉</button></div>' +
 '  <div class="cf-sub" x-text="\'單據類型：\' + typeLabel()"></div>' +
-'  <div class="cf-sub">看得到的人：能開啟這筆單據的內部人員。欄位不會出現在報價單、客戶版文件或回簽頁。第一版只有文字、日期、單選、勾選，沒有金額。</div>' +
+'  <div class="cf-sub">可查看者：能開啟這筆單據的內部人員。欄位不會出現在報價單、客戶版文件或回簽頁。第一版只有文字、日期、單選、勾選，不含金額。</div>' +
 '  <div class="cf-banner" data-testid="cf-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span> ' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="cf-ask-yes" @click="answer(true)">確定</button> ' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-ask-no" @click="answer(false)">取消</button></div>' +
@@ -190,7 +190,7 @@
       onDisable: function (f) {
         this.sync()
         var n = this.usage[f.key] || 0
-        if (f.disabled && n) this.msg = '「' + (f.label || f.key) + '」已有 ' + n + ' 筆單據填了；停用後畫面不再顯示、也不能再改，資料仍會保留，重新啟用就會再出現。'
+        if (f.disabled && n) this.msg = '「' + (f.label || f.key) + '」已有 ' + n + ' 筆單據填了；停用後畫面不再顯示、亦不可再修改，資料仍會保留，重新啟用就會再出現。'
       },
       async loadUsage() {
         try {

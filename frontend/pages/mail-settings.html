@@ -34,14 +34,14 @@
     <div class="ms-title">信件與通知收件設定</div>
     <div class="ms-sub">每一種系統寄出的信件都在這張表指定：<b>信件</b>是否寄送、<b>行事曆</b>是否同步到公司 Google 行事曆、<b>收件人</b>是誰。
       您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些列沒被其他使用者改過）。
-      「信件」關閉＝這種信不寄給任何人（原本的收件人設定保留，重新開啟即恢復）；只進行事曆、不寄信也可以；沒有日期的信件，行事曆欄不能勾。
+      「信件」關閉＝這種信不寄給任何人（原本的收件人設定保留，重新開啟即恢復）；只進行事曆、不寄信亦可；無日期的信件，行事曆欄不可勾選。
       系統技術類預設只寄最高管理者。個人仍可在使用者管理中退訂自己收得到的類型。</div>
     <div class="ms-note" id="ms-cal-banner" data-testid="ms-cal-banner" hidden></div>
-    <div class="ms-note">主旨格式固定為「【MOTRIX 系統通知】分類－事由」，內文依「事由、影響、建議處理、發送時間與來源」呈現；每一列名稱旁的「?」是該類信件內文的預設說明。
+    <div class="ms-note">主旨格式固定為「【MOTRIX 系統通知】分類－事由」，內文依「事由、影響、建議處理、發送時間與來源」呈現；每一列名稱旁的「？」是該類信件內文的預設說明。
       行事曆的事件開關與 <a href="google-calendar-settings.html" data-testid="ms-gcal-link">Google 行事曆設定</a> 是同一份資料；連線與總開關在那一頁。</div>
     <div class="ms-legend" aria-label="圖例">
       <span><button type="button" class="mx-rc on a" tabindex="-1" aria-hidden="true">✓</button>綠＝指定收件的角色／同步行事曆</span>
-      <span>整欄開關：點欄頭的方塊，一次設定目前列出的所有列（鎖住的列會略過）</span>
+      <span>整欄開關：點欄頭的方塊，一次設定目前列出的所有列（已鎖定的列會略過）</span>
     </div>
     <div id="ms-err" class="ms-warn" hidden data-testid="ms-err"></div>
     <div id="ms-box" data-testid="ms-matrix"></div>
@@ -285,7 +285,7 @@
           '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tbody>' + shown + '</tbody></table>' + (rows.length > 12 ? '<div class="mx-mute">…另有 ' + (rows.length - 12) + ' 項</div>' : '')
         if (res.systemRows && res.systemRows.length) {
           html += '<div class="mx-danger-box" data-testid="ms-system-warn"><span class="ms-red">這批含 ' + res.systemRows.length + ' 項系統技術類信件</span>（告警、排程、安全通知）：<ul>' +
-            res.systemRows.map(function (x) { return '<li class="ms-red">' + esc(x.name) + '</li>' }).join('') + '</ul>改了之後，這些告警會寄給不同的人；請確認接手的人收得到。</div>'
+            res.systemRows.map(function (x) { return '<li class="ms-red">' + esc(x.name) + '</li>' }).join('') + '</ul>變更後，這些告警將寄給不同的人；請確認接手者能收到。</div>'
         }
         html += recipientsHtml(res.recipients) + '<div class="mx-mute" style="margin-top:6px">儲存後會留下操作紀錄，並可按「復原這一批」。</div>'
         lastConfirm = (res.confirmRequired || []).length

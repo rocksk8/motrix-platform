@@ -193,7 +193,7 @@
                     <input id="gate-email" type="text" inputmode="email" :value="gateGet('email')" @input="gateSet('email', $event.target.value)" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
                   </div>
                 </div>
-                <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料作為抬頭；Logo、據點、收款帳戶等其餘設定，確認後再慢慢補。</div>
+                <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料作為抬頭；Logo、據點、收款帳戶等其餘設定，確認後再逐步補齊。</div>
               </div>
             </template>
             <div class="ns-desc" x-show="!gateMode">輸出的報價單、請款單等文件會使用下方「品牌與公司名稱」及主要據點的公司名稱、統一編號、電話／email。請確認是貴公司的資料後再按確認。</div>
@@ -241,7 +241,7 @@
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
-              登入頁、上方列、瀏覽器分頁圖示、單據抬頭與匯出報表都讀這裡的設定。
+              登入頁、上方列、瀏覽器分頁圖示、單據抬頭與匯出報表皆採用此處設定。
               據點另外填了抬頭時，該據點的單據以據點的值為準。
             </div>
             <div class="ns-row">
@@ -353,7 +353,7 @@
                      ⚠️ 不講的話，使用者調整順序時不會知道自己改動了別的東西
                      （報價單的抬頭與地圖的辦公室標記都跟著它走）。 -->
                 <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
-                  <strong>第一筆是「主要據點」</strong>：單據與地圖上的「辦公室」都跟著它走。
+                  <strong>第一筆是「主要據點」</strong>：單據與地圖上的「辦公室」皆以此為準。
                   地圖上每一筆案子會顯示<strong>離最近的據點</strong>多遠，並寫出是哪一個。
                 </div>
 
@@ -787,7 +787,7 @@
             </div>
             <div x-show="quotaUnmanaged()"
                  style="font-size:12px;color:#B45309;margin-top:-4px;margin-bottom:8px">
-              ⚠️ 上面兩個百分比<strong>目前不會生效</strong>：沒有額度就沒有「幾成」可言。
+              ⚠️ 上面兩個百分比<strong>目前不會生效</strong>：未設定額度，便無法計算百分比。
               填了上方的免費額度之後它們才會開始作用。
             </div>
             <div class="ns-row">
@@ -795,7 +795,7 @@
                 <label>帳單週期起算日（1～28）</label>
                 <input type="number" min="1" max="28" x-model.number="gq.cycle_start_day">
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                  Google 的帳單週期不一定是自然月。29 以後的日子二月沒有，所以上限是 28。
+                  Google 的帳單週期不一定是自然月。二月無 29 日以後的日期，故上限為 28。
                 </div>
               </div>
             </div>
@@ -829,7 +829,7 @@
                 <span x-text="gqCalc && gqCalc.cost_this_period"></span>
                 <span style="opacity:.75">（依您填的單價；
                   ⚠️ 「一次請求＝一個計費單位」本系統尚未向 Google 查證，
-                  這個數字只能當估算）</span></div>
+                  此數字僅供估算）</span></div>
             </div>
 
             <div class="ns-actions">
@@ -855,7 +855,7 @@
               如需查看備份是否成功、剩餘硬碟空間及系統是否在線，請至 <a href="backup-monitor.html">備份與監控</a>。
             </div>
             <div class="ns-desc">
-              超過保留天數的備份會在每日排程時自動清除。<strong>調小等於刪掉更多歷史備份，調整前先確認磁碟空間與可回溯範圍的取捨。</strong>
+              超過保留天數的備份會在每日排程時自動清除。<strong>調小等同刪除更多歷史備份，調整前先確認磁碟空間與可回溯範圍的取捨。</strong>
             </div>
             <!-- 🔑 BK8（使用者 2026-09-22：「長期哪些會刪哪些不會刪」）。
                  📌 判準：**使用者不應該需要問這個問題。**
@@ -905,7 +905,7 @@
                 <label>更新前快照（份數，不是天數）</label>
                 <input type="number" min="0" max="100" x-model.number="retention.local_pre_update_keep">
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                  每次套用更新前會先做一份本機快照，此處為保留份數。0 = 不清理。
+                  每次套用更新前會先做一份本機快照，此處為保留份數。0＝不清理。
                 </div>
               </div>
             </div>

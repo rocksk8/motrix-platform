@@ -368,13 +368,13 @@
       var follow = Object.keys(st.mods).length - own
       note = '套用順序：角色層 ＞ 公司層。某個模組只要發布了「' + roleLabel(k) + '」的角色層，這個角色在該模組就整份改用角色層——公司層在該模組的改名、換群組、隱藏都不再套用給他（不是逐項合併）。'
         + '尚無角色層的模組會先以現行公司層為起頭複製一份再改；只改項目名稱、隱藏或換群組時，只有被改到的模組會建立角色層；'
-        + '但調整群組內的順序時，同一個群組裡的所有模組都會一併建立角色層（順序是位置式的）——建立後那些模組就不再跟公司層。'
+        + '但調整群組內的順序時，同一個群組裡的所有模組都會一併建立角色層（順序是位置式的）——建立後那些模組就不再沿用公司層。'
         + '載入時：' + own + ' 個模組已有角色層、' + follow + ' 個跟隨公司層。'
         + '預覽要用一位「' + roleLabel(k) + '」角色的在職帳號。'
     } else {
       var layered = st.roles.filter(function (r) { return st.roleLayers[r.key] }).map(function (r) { return r.label })
       note = '公司預設會套用給所有沒有自己角色層的角色。'
-        + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會看到這裡的調整；到該角色的範圍去改。' : '')
+        + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會看到這裡的調整；請至該角色的範圍修改。' : '')
     }
     box.appendChild(el('div', { class: 'me-scope-note', text: note }))
     var wp = willPublish()                                                  // 隨編輯即時更新：按發布會寫入哪些模組
@@ -402,7 +402,7 @@
     if (!st.open) return
     var dirty = !!st.previewKey && st.previewKey === dirtyKey()
     var body = el('div', { class: 'me-b', inert: st.busy ? '' : null })     // 讀取／發布中不可編輯（否則改到的是即將被換掉的舊工作副本）
-    body.appendChild(el('div', { style: 'color:#666;margin-bottom:6px', text: '只改側欄怎麼顯示，不改任何人的權限；沒有權限的項目不會出現在預覽。' }))
+    body.appendChild(el('div', { style: 'color:#666;margin-bottom:6px', text: '僅變更側欄的顯示方式，不改任何人的權限；沒有權限的項目不會出現在預覽。' }))
     body.appendChild(scopeBar())
     st.decl.forEach(function (g) {
       body.appendChild(el('div', { class: 'me-g', text: g.label }))

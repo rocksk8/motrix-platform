@@ -89,7 +89,7 @@ def put_heartbeat_url(request: Request, body: dict = Body(default=None), authori
     except (bm.InvalidPingUrl, bm.DisableError) as exc:
         raise HTTPException(422, str(exc))
     except OSError:
-        raise HTTPException(500, "沒有存成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間。")
+        raise HTTPException(500, "儲存失敗：本機無法寫入監控設定檔，請檢查資料夾權限與硬碟空間。")
     # 稽核只記主機名，不記完整網址（網址等同密碼）；換網址時一併記舊主機名（申請待核准的那一筆，ledger 自己已記稽核）
     if res["pending"]:
         return {"ok": True, "pingUrlSet": res["pingUrlSet"], "pingHost": res["pingHost"], "changed": False, "pending": True, "id": res["id"],
@@ -97,9 +97,9 @@ def put_heartbeat_url(request: Request, body: dict = Body(default=None), authori
     if res["changed"]:
         _safe_audit(authorization, "system.heartbeat_url_set", "system", "heartbeat", res["pingHost"],
                     {"pingUrlSet": True, "host": res["pingHost"], "oldHost": res["oldHost"], "mailed": res["mailed"]})
-        msg = "已儲存，並寄信通知所有最高管理者。心跳排程下一次執行（最多 5 分鐘內）就會用新的網址，不用重新啟動。"
+        msg = "已儲存，並寄信通知所有最高管理者。心跳排程下一次執行（最多 5 分鐘內）就會用新的網址，無須重新啟動。"
         if not res["mailed"]:
-            msg += "但通知信沒有寄出去（可能沒有設定收件人或郵件服務），請自己告知其他最高管理者。"
+            msg += "但通知信沒有寄出去（可能沒有設定收件人或郵件服務），請自行告知其他最高管理者。"
     else:
         msg = "這個網址和目前的一樣，沒有變更。"
     return {"ok": True, "pingUrlSet": res["pingUrlSet"], "pingHost": res["pingHost"], "changed": res["changed"], "pending": False, "message": msg}
@@ -117,7 +117,7 @@ def post_heartbeat_disable(request: Request, body: dict = Body(default=None), au
     except bm.DisableError as exc:
         raise HTTPException(422, str(exc))
     except OSError:
-        raise HTTPException(500, "沒有存成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間。")
+        raise HTTPException(500, "儲存失敗：本機無法寫入監控設定檔，請檢查資料夾權限與硬碟空間。")
     if res["disabled"]:
         return {"ok": True, **res, "message": "已停用對外回報：系統只會檢查本機服務，不會通知外部監控。已寄信通知所有最高管理者。"}
     return {"ok": True, **res, "message": "已送出停用申請，要另一位最高管理者核准後才會停用。已寄信通知所有最高管理者。"}
@@ -132,7 +132,7 @@ def post_heartbeat_disable_approve(change_id: int, request: Request, body: dict 
     except bm.DisableError as exc:
         raise HTTPException(422, str(exc))
     except OSError:
-        raise HTTPException(500, "沒有核准成功：這台電腦寫不進監控設定檔，請檢查資料夾權限與硬碟空間，再按一次。")
+        raise HTTPException(500, "核准失敗：本機無法寫入監控設定檔，請檢查資料夾權限與硬碟空間後再試一次。")
     return {"ok": True, **res, "message": "已核准，對外回報已停用。" if res["disabled"] else ("已核准，已換成新的監控網址。" if res["changed"] else "已記錄您的核准。")}
 
 

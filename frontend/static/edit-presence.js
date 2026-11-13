@@ -122,7 +122,7 @@
     who.textContent = names.join('、');          // 使用者可控字串 → 一律 textContent
     body.appendChild(who);
     body.appendChild(document.createTextNode(
-      ' 目前也在這份資料裡。兩邊都改的話，先存的人會被後存的人覆蓋——'));
+      ' 目前也在這份資料裡。若兩邊都修改，先儲存者的內容將被後儲存者覆蓋——'));
     var strong = document.createElement('b');
     strong.textContent = '系統會拒絕後存的那一次並要求重新載入';
     body.appendChild(strong);

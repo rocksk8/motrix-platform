@@ -131,7 +131,7 @@ def set_status(conn, row, target, user, *, reason="", via_completion=False, now=
     if target == "accepted":
         if username and username == (_g(row, "created_by") or ""):
             if user.get("role") != "superadmin":
-                raise FlowError("驗收人不能是建立派發的人（職責分離）；請由其他管理員確認驗收")
+                raise FlowError("驗收人不得為建立派發者（職責分離）；請由其他管理員確認驗收")
             note = "同人驗收（最高管理者）"
         conn.execute("UPDATE contractor_dispatches SET status='accepted', accepted_by=?, accepted_at=?, updated_at=? WHERE id=?",
                      (display, now, now, row["id"]))

@@ -932,7 +932,7 @@
             <div style="max-width:640px">
             <div class="cm-section-title" style="margin-bottom:6px">T100（鼎新）傳票批次匯出</div>
             <div style="font-size:12px;color:var(--text-dim)">
-            現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）、已匯款承攬商費用（借承攬商費用／貸銀行存款）、已付款料件/設備進貨（借料件設備成本／貸銀行存款），每張傳票借貸自動平衡。
+            現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）、已匯款承攬商費用（借承攬商費用／貸銀行存款）、已付款料件／設備進貨（借料件設備成本／貸銀行存款），每張傳票借貸自動平衡。
             請款單不含在內（尚未實際收款，非金流事件）；進貨批次要先到「庫存管理」頁的「進貨批次」標記已付款才會出現。匯出後請財務用 T100 既有匯入功能核對後手動匯入。
             </div>
             </div>
@@ -1071,7 +1071,7 @@
             <template x-if="t100Config">
             <div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
-            科目代號留白時，匯出的 Excel 仍會產出正確的金額/日期/摘要/來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
+            科目代號留白時，匯出的 Excel 仍會產出正確的金額／日期／摘要／來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
             <span x-show="_role()!=='superadmin'">（僅最高管理者可修改，您目前只能檢視）</span>
             </div>
 
@@ -1080,7 +1080,7 @@
             <!-- 卡片①：銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
             <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">銀行帳戶清單</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款/已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——這裡改了，其他頁面下次開啟標記視窗就會看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款／已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——此處修改後，其他頁面下次開啟標記視窗即可看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
             <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
             <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
             <button type="button" x-show="_role()==='superadmin'"
@@ -1095,8 +1095,8 @@
             <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="if (t100Config.defaultBankAccountCode === b.acctCode) t100Config.defaultBankAccountCode = ''; t100Config.bankAccounts.splice(bi,1)">刪除</button>
             </div>
             </template>
-            <div style="font-size:12px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">點 ☆ 可把該帳戶設為系統預設（標記已付款/已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
-            <div x-show="_role()==='superadmin' && (!t100Config.bankAccounts || !t100Config.bankAccounts.length)" style="font-size:12px;color:var(--warning);margin-bottom:6px">⚠ 尚未設定任何銀行帳戶，標記已付款/已收款時將無法選擇帳戶</div>
+            <div style="font-size:12px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">點 ☆ 可把該帳戶設為系統預設（標記已付款／已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
+            <div x-show="_role()==='superadmin' && (!t100Config.bankAccounts || !t100Config.bankAccounts.length)" style="font-size:12px;color:var(--warning);margin-bottom:6px">⚠ 尚未設定任何銀行帳戶，標記已付款／已收款時將無法選擇帳戶</div>
             <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.push({name:'',acctCode:''})">+ 新增銀行帳戶</button>
             </div>
 

@@ -3924,7 +3924,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 _b = {k: v for k, v in body.case_record.items() if k not in _skip}
                 if _a != _b:
                     conn.close()
-                    raise HTTPException(403, "您不是這個案件的成員，只能修改款項（收款）；這份整包資料有款項以外的欄位與目前資料不同，請重新載入頁面後只改款項再存")
+                    raise HTTPException(403, "您不是這個案件的成員，只能修改款項（收款）；這份整包資料有款項以外的欄位與目前資料不同，請重新載入頁面後，僅修改款項再儲存")
             elif not cashier_payment_only:
                 conn.close()
                 raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
@@ -4807,7 +4807,7 @@ def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:
         for i, it in enumerate(arr):
             if it.get("id") is not None and str(it.get("id")) == str(item_id):
                 return i
-        raise HTTPException(409, "找不到這一項：可能尚未存檔或已被他人刪除，請先存檔或重新整理後再操作")
+        raise HTTPException(409, "找不到此項目：可能尚未儲存或已被他人刪除，請先儲存或重新整理後再操作")
     if idx < 0 or idx >= len(arr):
         raise HTTPException(400, range_msg)
     return idx
@@ -5685,7 +5685,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             _review = _CFP.approve_review(d, my_entry) if ("reconfirm" in _flags and _CFP._mode_cached(conn) == "on") else None
             if _review and _review["needNote"] and not (body.confirmNote or "").strip():
                 conn.close()
-                raise HTTPException(409, "內容變動後新增了需審核的原因，選擇「維持核准」請填一句確認說明",
+                raise HTTPException(409, "內容變動後新增了需審核的原因，選擇「維持核准」請填寫確認說明",
                                     headers={"X-Approve-Flags": ",".join(_flags), "X-Approve-Need-Note": "1"})
             _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
 
@@ -5746,7 +5746,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 raise HTTPException(
                     403,
                     "系統已設定簽核流程，此報價單缺少簽核層資料。"
-                    "請請申請人收回並重新送審，以套用最新簽核設定"
+                    "請申請人收回並重新送審，以套用最新簽核設定"
                 )
             self_block_msg = check_no_tier_self_approval(conn, appr, user)
             if self_block_msg:
@@ -6707,7 +6707,7 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
     full = _resolve_archived_pdf(_get_pdf_base(), str(target.get("file") or ""))
     if not full or not os.path.isfile(full):
         raise HTTPException(
-            404, "這個版本的存檔檔案已不存在（PDF 存檔目錄可能被搬移或清理過）")
+            404, "此版本的 PDF 存檔已不存在（存檔目錄可能已被移動或清理）")
 
     with open(full, "rb") as f:
         content = f.read()

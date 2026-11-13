@@ -83,12 +83,12 @@ window.CM_PARTS.push(() => ({
       let n = 0
       for (const g of this.mlGroupChoices()) {
         if (!this.mlPick[this.mlGroupKey(g)] || this.mlGroupBlock(g)) continue
-        if (g.totalPrice == null) { this.mlMsg = '看不到金額的帳號不能從採購單帶入材料申請（需要財務檢視權限）'; return }
+        if (g.totalPrice == null) { this.mlMsg = '無法查看金額的帳號，不可從採購單帶入材料申請（需要財務檢視權限）'; return }
         this._mlPush({ itemName: g.name, quantity: g.quantity, unit: g.unit, unitPrice: g.unitPrice, totalPrice: g.totalPrice,
                        quoteItemId: g.quoteItemId || '', poDocCode: g.poDocCode, poLine: g.poLine })
         n++
       }
-      if (!n) { this.mlMsg = '請先勾選要帶入的項目（只能帶入已核准採購單的涵蓋內容；已有申請的品項請用變更申請）'; return }
+      if (!n) { this.mlMsg = '請先勾選要帶入的項目（僅可帶入已核准採購單的涵蓋內容；已有申請的品項請使用變更申請）'; return }
       this.mlPick = {}
       this.mlPanel = ''
       this.mlTab = 'approved'
@@ -153,7 +153,7 @@ window.CM_PARTS.push(() => ({
           if (!(cur.poLink && cur.poLink.key)) { this.mlMsg = ''; return }                  // 被拒：poLink 已被伺服器現值取代，由提示框說明
           if (res === true) this.mlMsg = okMsg                                              // 真的存成功才宣告
           else if (res === 'pending') this.mlMsg = '認列已送出，待最高管理者審核後才會生效'
-          else this.mlMsg = '認列尚未儲存：請看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出'
+          else this.mlMsg = '認列尚未儲存：請查看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出'
         })
       } else this.mlMsg = okMsg
       return true
@@ -267,7 +267,7 @@ window.CM_PARTS.push(() => ({
     // 已全額付款的材料申請：數量／單價不能改（金額已付清，要調整請另開一筆）
     // 34（E7）：涵蓋採購單的材料申請，金額＝涵蓋行金額合計（唯讀）；數量只能往下調（單價隨數量換算，小計不變）
     moCovered(m) { return !!(m && String(m.poDocCode || '').trim() && m.poLine) },
-    moCoveredHint: '金額＝涵蓋的採購單行金額合計，不能修改；數量只能往下調（單價隨數量換算）',
+    moCoveredHint: '金額＝涵蓋的採購單行金額合計，不可修改；數量僅能調低（單價隨數量換算）',
     moPaidFullHint: '已全額付款，金額不能修改；要調整請另開一筆材料申請',
     moPaidFull(m) { return !!m && m._saved !== false && m.paidStatus === 'paid' },
     // 34-S3：已申請／已到料／已出貨（占用中）＋出貨單號；沒有到料也沒有出貨連動 ⇒ 空字串（不顯示）

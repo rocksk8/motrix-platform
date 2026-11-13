@@ -52,7 +52,7 @@ def gate_message(status: str, label: str = "報價單"):
     if status == "已送出":
         return None
     if status in GATE_EDITING:
-        return f"{label}還在編輯或簽核中，項目可能還會變，請等報價送出後再帶入"
+        return f"{label}尚在編輯或簽核中，項目可能異動，請待報價送出後再帶入"
     if status in GATE_DEAD:
         return f"這張{label}已取消或被拒絕，不能帶入項目"
     return f"{label}目前的狀態不能帶入項目"

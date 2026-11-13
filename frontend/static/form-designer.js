@@ -392,21 +392,21 @@
     if (f.type !== 'formula' && f.type !== 'table') h += sw('required', !!f.required, '一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。')
     h += '</div>'
     var fixedOpts = this.caps.fixedOptions && this.caps.fixedOptions[f.key]
-    if (M.OPTION_TYPES[f.type] && fixedOpts) h += '<div class="fd-box" data-fd-fixedopts="1"><h3>選項（固定）</h3><ul class="fd-fixedlist">' + fixedOpts.map(function (o) { return '<li>' + esc(o) + '</li>' }).join('') + '</ul><div class="fd-why">這個欄位的選項是固定的，系統其他地方會用到，所以不能改。例：' + esc(fixedOpts.join('、')) + '。</div></div>'
-    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">打字後按 Enter 就會多一格；也可以一次貼上很多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
+    if (M.OPTION_TYPES[f.type] && fixedOpts) h += '<div class="fd-box" data-fd-fixedopts="1"><h3>選項（固定）</h3><ul class="fd-fixedlist">' + fixedOpts.map(function (o) { return '<li>' + esc(o) + '</li>' }).join('') + '</ul><div class="fd-why">這個欄位的選項是固定的，系統其他地方會用到，故不可修改。例：' + esc(fixedOpts.join('、')) + '。</div></div>'
+    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">輸入後按 Enter 即新增一格；亦可一次貼上多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
     if (f.type === 'formula') h += '<div class="fd-box"><h3>自動計算</h3>' + this.calcUI(f, f) + '</div>'
     if (f.type === 'table') h += this.tableUI(f)
     h += this.fillUI(f)
     h += '<div class="fd-box"><h3>誰能填、怎麼顯示</h3>'
     var cashierOk = !this.caps.cashierKeys || this.caps.cashierKeys.indexOf(f.key) >= 0
-    if (f.type !== 'formula') h += sw('cashier', f.editableBy === 'cashier', '只有出納能修改', cashierOk ? '其他人看得到，但不能填；只有出納可以改。' : '這個設定只有付款相關的欄位（付款條件、匯款日、付款日）能用。', '「付款日」：業務只看得到，出納才能填。', !cashierOk && f.editableBy !== 'cashier')
+    if (f.type !== 'formula') h += sw('cashier', f.editableBy === 'cashier', '只有出納能修改', cashierOk ? '其他人看得到，但不能填；只有出納可以改。' : '這個設定僅付款相關的欄位（付款條件、匯款日、付款日）可使用。', '「付款日」：業務只看得到，出納才能填。', !cashierOk && f.editableBy !== 'cashier')
     var hasFill = M.fillSelection(f) !== '', lk = M.canLock(f, this.registry())
     if (f.type !== 'formula' && f.type !== 'table') h += sw('locked', !!f.locked, hasFill ? '「' + esc(this.fillLabel(f)) + '」不能改' : '帶入的內容不能改', !hasFill ? '要先在上面選好「自動帶入」才能開。' : (lk.ok ? '使用者看得到這一格，但不能自己改掉。' : '這個帶入來源每次可能不一樣，所以不能鎖住。'), hasFill ? '「申請人」自動帶入王小明，其他使用者不能改成其他使用者。' : '先選「申請人本人」，這裡才會能開。', !lk.ok && !f.locked)
     h += sw('listed', M.isListed(this.def, f.key), '在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '開起來 ⇒ 清單多一欄「' + esc(f.label) + '」。')
     h += '</div>'
     h += this.moreUI(f)
-    if (this.caps.isSuper) h += '<details class="fd-adv"><summary>進階設定（只有最高管理者看得到）</summary><div class="fd-row"><label>系統內部代碼</label><input class="fd-in" value="' + esc(f.key) + '" readonly aria-readonly="true"><div class="fd-why">自動產生，發布後不能改（舊單據靠它找資料）。改「欄位名稱」不會動它。例：place。</div></div>' +
-      (f.type === 'formula' && this.calcOf(f) === null ? '<div class="fd-row"><label>舊的文字公式</label><input class="fd-in" value="' + esc(f.formula) + '" readonly><div class="fd-why">這是用文字寫的公式，只有在這裡看得到；選上面的計算器就會取代它。例：round_half_up(qty * unitCost)。</div></div>' : '') + '</details>'
+    if (this.caps.isSuper) h += '<details class="fd-adv"><summary>進階設定（只有最高管理者看得到）</summary><div class="fd-row"><label>系統內部代碼</label><input class="fd-in" value="' + esc(f.key) + '" readonly aria-readonly="true"><div class="fd-why">自動產生，發布後不可修改（舊單據依此尋找資料）；修改「欄位名稱」不會影響它。例：place。</div></div>' +
+      (f.type === 'formula' && this.calcOf(f) === null ? '<div class="fd-row"><label>舊的文字公式</label><input class="fd-in" value="' + esc(f.formula) + '" readonly><div class="fd-why">這是用文字寫的公式，僅在此處可見；選擇上方的計算器即會取代它。例：round_half_up(qty * unitCost)。</div></div>' : '') + '</details>'
     h += '<button type="button" class="fd-dangerbtn" data-fd-act="delsel">' + ic('trash') + ' 刪除這個欄位</button>'
     el.innerHTML = h
   }
@@ -455,7 +455,7 @@
     var scope = colScope || this.calcScope(owner)
     var allowed = colScope ? ['mul', 'sub', 'pct', 'sum'] : M.CALCS.map(function (x) { return x.id })
     var h = ''
-    if (c === null) h += '<div class="fd-row"><span class="fd-tag">進階公式</span><div class="fd-why">這是用文字寫的舊公式，系統原樣保留。想換成現成的計算器，選下面任何一個就會取代它。例：round_half_up(qty * unitCost) ＝「數量 × 單價」四捨五入。</div></div>'
+    if (c === null) h += '<div class="fd-row"><span class="fd-tag">進階公式</span><div class="fd-why">這是用文字寫的舊公式，系統原樣保留。如要改用現成的計算器，選擇下方任一個即會取代它。例：round_half_up(qty * unitCost) ＝「數量 × 單價」四捨五入。</div></div>'
     c = c || { p: '' }
     var scopeAttr = colScope ? ' data-col="' + colScope.colIndex + '"' : ''
     h += '<div class="fd-row"><span class="fd-lbl">選一個計算器</span><div class="fd-pick" role="radiogroup" aria-label="計算器">' + M.CALCS.filter(function (x) { return allowed.indexOf(x.id) >= 0 }).map(function (x) {
@@ -474,7 +474,7 @@
     if (c.p === 'tax') {
       h += '<div class="fd-row"><label>金額是哪一欄？</label>' + S('A', c.a, nums, '請選擇…') + '<div class="fd-why">例：「未稅金額」。</div></div>'
       h += '<div class="fd-row"><label>您輸入的金額是</label><select class="fd-in" ' + data('Mode') + '><option value="net"' + (c.mode !== 'split' ? ' selected' : '') + '>未稅（算出稅）</option><option value="split"' + (c.mode === 'split' ? ' selected' : '') + '>含稅（拆出稅）</option></select><div class="fd-why">例：發票上寫的是不含稅的價錢 ⇒ 選「未稅」。</div></div>'
-      if (c.mode !== 'split') h += '<div class="fd-row"><label>要算出</label><select class="fd-in" ' + data('Out') + '><option value="tax"' + (c.out !== 'gross' ? ' selected' : '') + '>稅額</option><option value="gross"' + (c.out === 'gross' ? ' selected' : '') + '>含稅金額</option></select><div class="fd-why">例：要看稅是多少 ⇒ 選「稅額」；要看總共付多少 ⇒ 選「含稅金額」。</div></div>'
+      if (c.mode !== 'split') h += '<div class="fd-row"><label>要算出</label><select class="fd-in" ' + data('Out') + '><option value="tax"' + (c.out !== 'gross' ? ' selected' : '') + '>稅額</option><option value="gross"' + (c.out === 'gross' ? ' selected' : '') + '>含稅金額</option></select><div class="fd-why">例：如要查看稅額，請選「稅額」；如要查看總付款金額，請選「含稅金額」。</div></div>'
       h += '<div class="fd-row"><label>稅率</label><select class="fd-in" ' + data('Rate') + '><option value="5"' + (!c.rate || c.rate === '5' ? ' selected' : '') + '>5%（一般營業稅）</option><option value="free"' + (c.rate === 'free' ? ' selected' : '') + '>免稅</option><option value="custom"' + (c.rate === 'custom' ? ' selected' : '') + '>自己填</option></select>' + (c.rate === 'custom' ? '<input class="fd-in fd-mt6" ' + data('Custom') + ' type="number" min="0" max="100" value="' + esc(c.custom || '') + '" placeholder="稅率 %">' : '') + '<div class="fd-why">例：一般營業稅選 5%；外銷選免稅；其他稅率自己填（填 3 代表 3%）。</div></div>'
     }
     var r = M.calcResult(this.def, c)
@@ -517,7 +517,7 @@
       return '<li class="' + (open ? 'is-open' : '') + '"><div class="fd-colhead"><button type="button" class="fd-colname" data-col-open="' + i + '" aria-expanded="' + open + '">' + esc(c.label) + (must ? '<span class="fd-chip">必要</span>' : '') + '<span class="fd-dim">' + esc((COL_TYPES.find(function (t) { return t[0] === c.type }) || [0, c.type])[1]) + '</span></button>' +
         '<button type="button" class="fd-mini" data-col-up="' + i + '" aria-label="往上移"' + (i === 0 ? ' disabled' : '') + '>' + ic('up') + '</button><button type="button" class="fd-mini" data-col-down="' + i + '" aria-label="往下移"' + (i === cols.length - 1 ? ' disabled' : '') + '>' + ic('down') + '</button>' +
         '<button type="button" class="fd-mini fd-del" data-col-del="' + i + '" aria-label="刪除這一欄"' + (must ? ' disabled title="這一欄是必要的"' : '') + '>✕</button></div>' + body + '</li>'
-    }).join('') + '</ul><button type="button" class="fd-additem" data-col-add="1">＋ 新增一欄</button>' + this.colPresetUI(f) + '<div class="fd-why">點欄名展開它的設定。標「必要」的欄不能刪。例：「數量」「單價」「發票號碼」。</div></div>'
+    }).join('') + '</ul><button type="button" class="fd-additem" data-col-add="1">＋ 新增一欄</button>' + this.colPresetUI(f) + '<div class="fd-why">點欄名展開它的設定。標示「必要」的欄不可刪除。例：「數量」「單價」「發票號碼」。</div></div>'
     return h
   }
   // 常用欄（呼叫端用 caps.columnPresets 提供：[{label, desc, cols:[完整的欄物件…]}]；欄代碼固定，所以從這裡加）

@@ -336,7 +336,7 @@ def build_topology_svg(data: dict) -> dict:
             if near and near != link_to and link_to not in typo_warned:
                 typo_warned.add(link_to)
                 warnings.append(
-                    f'「{src_dev}」的連線對象「{link_to}」與交換器「{near}」僅大小寫/空白不同，'
+                    f'「{src_dev}」的連線對象「{link_to}」與交換器「{near}」僅大小寫／空白不同，'
                     f'未自動配對到該交換器（已畫成外部設備方塊）——若寫錯了請修正拼寫'
                 )
             if link_to not in external_targets:

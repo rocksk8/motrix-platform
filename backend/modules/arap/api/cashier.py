@@ -934,7 +934,7 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
         "matchedCount":       len(matched_voucher_nos),
         "unmatchedBankCount": sum(1 for r in bank_results if not r["match"]),
         "unmatchedVouchers":  unmatched_vouchers,
-        "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
+        "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號／"
                 "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
     }
 

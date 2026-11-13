@@ -21,7 +21,7 @@ def _page():
 def test_page_calls_the_existing_settings_endpoint_and_explains_the_lock():
     s = _page()
     assert "/api/recycle-bin/settings" in s and "method: 'PUT'" in s
-    assert "資源回收筒還有項目時不能換目錄" in s              # 停用時的白話說明
+    assert "資源回收筒還有項目時不可更換目錄" in s              # 停用時的白話說明
     assert "不可放在網站上傳資料夾（uploads）底下" in s    # 提示和伺服器規則一致
     assert "rb-dir-default" in s and "改回預設位置" in s
     assert "dirLocked" in s

@@ -438,7 +438,7 @@
         var d = (e.data && e.data.detail) || {}, gs = d.groups || []
         var names = gs.map(function (x) { return '「' + esc((by.filter(function (b) { return b.group === x.group })[0] || {}).plain || x.label) + '」的 ' + (x.keys || []).map(function (k) { return esc(k.name) }).join('、') }).join('；')
         var who = gs[0] && gs[0].by ? ' ' + esc(gs[0].by) + (gs[0].at ? '（' + esc(stamp(gs[0].at)) + '）' : '') : '其他使用者'
-        return SettingsMatrix.openDialog({ title: '已有其他使用者的申請在等待生效', html: '<div>' + names + ' 已有' + who + '送出、還在等待生效的申請。</div><div class="sc-banner amber">繼續儲存會取代它，對方的申請就失效了；如果那是需要核准的放寬，對方得重新申請。</div>',
+        return SettingsMatrix.openDialog({ title: '已有其他使用者的申請在等待生效', html: '<div>' + names + ' 已有' + who + '送出、還在等待生效的申請。</div><div class="sc-banner amber">繼續儲存會取代它，對方的申請就失效了；如果那是需要核准的放寬，對方須重新申請。</div>',
           buttons: [{ label: '取消', value: false }, { label: '取代它並儲存', value: true, kind: 'danger' }] }).then(function (v) { return v === true })
       }
       return send().catch(function (e) {

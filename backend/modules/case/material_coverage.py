@@ -91,7 +91,7 @@ def adjust_check(conn, quote_no, quote_item_id, adjust_of):
     if str(order.get("quoteItemId") or "").strip() != str(quote_item_id or "").strip():
         problems.append({"code": "adjust_item_mismatch", "message": "調整單必須與原材料申請同一個品項"})
     if not paid_in_full(order):
-        problems.append({"code": "adjust_not_paid_in_full", "message": "原材料申請尚未全額付款，請走變更申請（調整單只用於已全額付款、金額不能修改的申請）"})
+        problems.append({"code": "adjust_not_paid_in_full", "message": "原材料申請尚未全額付款，請依變更申請辦理（調整單只用於已全額付款、金額不能修改的申請）"})
     if not coverage_snapshot(conn, quote_no, quote_item_id, only_untaken=True, exclude_item_id=None)["poSnapshot"]:
         problems.append({"code": "adjust_no_new_lines", "message": "這個品項沒有尚未被材料申請涵蓋的已核准採購單行"})
     return problems
@@ -179,7 +179,7 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
         return {"itemId": str(item_id), "before": {}, "after": {}, "diff": [], "uncoveredLines": [], "problems": [{"code": "not_found", "message": "找不到這筆材料申請（舊單沒有變更申請，直接修改即可）"}]}
     from modules.case import material_approval as MA
     if not MA.po_required_for(row):                                       # grandfather／規則上線前的單：維持 31-C「核准後改＝回草稿」，不走變更申請（d7 設計 §5）
-        problems.append({"code": "use_direct_edit", "message": "這筆材料申請是規則上線前建立（沒有採購單涵蓋快照），請直接修改後重新送審，不走變更申請"})
+        problems.append({"code": "use_direct_edit", "message": "這筆材料申請是規則上線前建立（沒有採購單涵蓋快照），請直接修改後重新送審，不適用變更申請"})
     if row["status"] != "已核准":
         problems.append({"code": "not_approved", "message": "只有已核准的材料申請可以提變更申請（草稿或已退回的直接修改後送審）"})
     qid = str(order.get("quoteItemId") or "").strip()
@@ -211,7 +211,7 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
         problems.append({"code": "below_paid", "message": "變更後小計低於已付金額 %g" % paid})
     limit = _quantity_limit(fresh)                    # 數量只能往下調（規格 §A.1）：不得超過涵蓋行數量合計（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大（da）
     if limit is not None and after.get("quantity") is not None and isinstance(after["quantity"], float) and after["quantity"] > limit + 1e-9:
-        problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %g 超過已核准採購單行涵蓋的數量 %g（數量只能往下調；要增加請先申請採購單）" % (after["quantity"], limit)})
+        problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %g 超過已核准採購單行涵蓋的數量 %g（數量僅能調低；要增加請先申請採購單）" % (after["quantity"], limit)})
     dropped = [l for l in snap if _line_key(l) not in {_line_key(x) for x in fresh["poSnapshot"]}]
     if dropped:
         problems.append({"code": "coverage_shrinks", "message": "原本涵蓋的採購單行不再是已核准（%s），請先處理採購單" % "、".join("%s 第 %s 列" % _line_key(l) for l in dropped)})

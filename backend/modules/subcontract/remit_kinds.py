@@ -104,7 +104,7 @@ def validate_body(body, key="", *, conn=None):
         if not isinstance(st, list) or any(s not in STAGES for s in st):
             out.append(_p(p + ".stages", "可開立的派發狀態必須是：%s" % "、".join("%s(%s)" % (STAGE_LABELS[s], s) for s in STAGES)))
         elif k.get("active") is True and not st:
-            out.append(_p(p + ".stages", "啟用中的款別至少要有一個可開立的派發狀態（不想讓人用就改成停用）"))
+            out.append(_p(p + ".stages", "啟用中的款別至少要有一個可開立的派發狀態（如不再使用，請改為停用）"))
         elif len(set(st)) != len(st):
             out.append(_p(p + ".stages", "派發狀態重複"))
         note = k.get("note", "")

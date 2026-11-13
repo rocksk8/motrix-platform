@@ -53,7 +53,7 @@
       <div class="ls-title">報表設定</div>
       <div class="ls-note">
         決定每個會計科目出現在財務報表的哪一列，以及在現金流量表（間接法）屬於營業、投資或籌資活動。預設值依經濟部商業會計項目表與一般行業做法建立；
-        會計師可在這裡調整，不需要改程式。任何科目缺少歸屬或分類，對應的報表就會漏算，下面的檢查會標出來。
+        會計師可在這裡調整，無須修改程式。任何科目缺少歸屬或分類，對應的報表將會漏算，下面的檢查會標出來。
       </div>
 
       <div class="ls-err" x-show="error" x-text="error" data-testid="ls-error"></div>
@@ -180,7 +180,7 @@
 
       <template x-if="tab==='roles'">
         <div x-data="glRoleMap()" x-init="load()" data-testid="ls-roles">
-          <div class="ls-note">「角色」決定系統自動產生傳票時各筆金額記到哪個會計科目（例如銀行存款、銷項稅額）。這影響金流，所以<b>變更要由另一位最高管理者核准後才生效</b>（申請人不能核准自己的申請）；核准時會立即套用，全程留有稽核紀錄。</div>
+          <div class="ls-note">「角色」決定系統自動產生傳票時各筆金額記到哪個會計科目（例如銀行存款、銷項稅額）。此設定影響金流，故<b>變更要由另一位最高管理者核准後才生效</b>（申請人不得核准自己的申請）；核准時會立即套用，全程留有稽核紀錄。</div>
           <div class="ls-err" x-show="error" x-text="error" data-testid="ls-roles-error"></div>
           <div class="ls-ok" x-show="notice" x-text="notice" data-testid="ls-roles-notice"></div>
           <div class="ls-warn" x-show="pending.length" x-text="'待核准的變更：' + pending.length + ' 筆'" data-testid="ls-roles-pending-count"></div>
@@ -197,7 +197,7 @@
                   <td x-text="p.requested_by"></td>
                   <td x-text="p.reason"></td>
                   <td>
-                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!isSuper || p.requested_by === me" :title="p.requested_by === me ? '申請人不能核准自己的申請' : ''" @click="approve(p)" data-testid="ls-roles-approve">核准並套用</button>
+                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!isSuper || p.requested_by === me" :title="p.requested_by === me ? '申請人不得核准自己的申請' : ''" @click="approve(p)" data-testid="ls-roles-approve">核准並套用</button>
                     <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!isSuper" @click="cancel(p)" data-testid="ls-roles-cancel">撤銷</button>
                   </td>
                 </tr>

@@ -114,7 +114,7 @@
 ' <div class="ub-head">' +
 '  <div class="ub-row" style="justify-content:space-between"><strong>自訂按鈕</strong>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-close" @click="close()">關閉</button></div>' +
-'  <div class="ub-sub">按鈕只是入口，不會讓任何人看到或匯出他本來不能的東西：每個人只看得到自己有權限的按鈕；目標頁面與匯出自己會再檢查。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
+'  <div class="ub-sub">按鈕僅作為入口，不會讓任何人看到或匯出其原本無權存取的內容：每個人只看得到自己有權限的按鈕；目標頁面與匯出功能會另行檢查權限。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
 '  <div class="ub-banner" data-testid="ub-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span> ' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="ub-ask-yes" @click="answer(true)">確定</button> ' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-ask-no" @click="answer(false)">取消</button></div>' +
@@ -134,7 +134,7 @@
 '      <template x-if="b.type === \'navigate\'"><template x-for="p in catalog.pages" :key="p.page"><option :value="p.page" x-text="p.label" :selected="b.target === p.page"></option></template></template>' +
 '      <template x-if="b.type === \'export\'"><template x-for="e in catalog.exports" :key="e.id"><option :value="e.id" x-text="e.label + \'（\' + e.format + \'）\'" :selected="b.target === e.id"></option></template></template>' +
 '     </select></div>' +
-'    <div class="ub-sub" x-show="b.type === \'export\'">匯出會用「點擊的人自己」的身分執行，沒有權限的人看不到這顆按鈕、也匯不出。</div>' +
+'    <div class="ub-sub" x-show="b.type === \'export\'">匯出會用「點擊的人自己」的身分執行，無權限者看不到此按鈕，也無法匯出。</div>' +
 '    <div class="ub-prob" x-show="probs[i]" x-text="probs[i]"></div>' +
 '   </div></template>' +
 '  <div class="ub-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" data-testid="ub-add" @click="add()" :disabled="work.length >= max">＋ 新增按鈕</button>' +

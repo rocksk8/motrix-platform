@@ -404,7 +404,7 @@
     <h3>貼上 Excel 資料 — <span x-text="pasteModalTabLabel"></span></h3>
     <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px">
       在 Excel（或本系統匯出的範本）選取要貼上的範圍複製，貼到下方文字框（Ctrl+V）。
-      第一列若跟欄位標題相符會自動當標題列比對，順序、缺欄位都沒關係；沒有標題列則依本分頁欄位由左到右對應。
+      第一列若與欄位標題相符，會自動視為標題列比對；欄位順序不同或缺少欄位皆可；沒有標題列則依本分頁欄位由左到右對應。
       這是<b>新增</b>，會加在現有資料最後面，不會覆蓋或刪除既有列。
     </p>
     <textarea x-model="pasteModalText" rows="12"

@@ -131,7 +131,7 @@
           <section class="bm-card" data-testid="bm-cloud">
             <div class="bm-card-h"><h2 class="sec-t">雲端備份</h2>
               <button type="button" class="bm-q" :aria-expanded="isHelp('cloud')" aria-label="這是什麼" @click="toggleHelp('cloud')">?</button></div>
-            <div class="bm-q-pop" x-show="isHelp('cloud')">備份除了存在這台電腦，還會複製到雲端（雲端硬碟或 S3），電腦故障或遭竊時才還原得回來。「鏡像」＝把上傳的檔案、PDF 存檔原樣再存一份到雲端。</div>
+            <div class="bm-q-pop" x-show="isHelp('cloud')">備份除保存於本機外，另會複製至雲端（雲端硬碟或 S3），電腦故障或遭竊時方能還原。「鏡像」＝將上傳的檔案、PDF 存檔原樣另存一份至雲端。</div>
             <template x-if="s.cloud && !s.cloud.error">
               <div>
                 <div class="bm-note" x-show="!s.cloud.enabled" x-text="s.cloud.note" data-testid="bm-cloud-off"></div>
@@ -152,7 +152,7 @@
           <section class="bm-card" data-testid="bm-disks">
             <div class="bm-card-h"><h2 class="sec-t">硬碟剩餘空間</h2>
               <button type="button" class="bm-q" :aria-expanded="isHelp('disk')" aria-label="這是什麼" @click="toggleHelp('disk')">?</button></div>
-            <div class="bm-q-pop" x-show="isHelp('disk')">硬碟滿了，備份和上傳都會先失敗。少於下方「通知門檻」會寄信給最高管理者；門檻在設定中心可以調整。</div>
+            <div class="bm-q-pop" x-show="isHelp('disk')">硬碟空間用盡時，備份與上傳將會失敗。少於下方「通知門檻」會寄信給最高管理者；門檻在設定中心可以調整。</div>
             <template x-if="s.disks && s.disks.error"><div class="bm-bad" x-text="s.disks.error"></div></template>
             <template x-for="d in (Array.isArray(s.disks) ? s.disks : [])" :key="d.label">
               <div class="bm-row" :data-testid="'bm-disk-' + d.label" :data-level="d.level">
@@ -183,7 +183,7 @@
                 </dl>
                 <label class="bm-label" for="bm-ping" style="display:block;margin-top:6px">監控網址
                   <button type="button" class="bm-q" :aria-expanded="isHelp('url')" aria-label="這是什麼" @click="toggleHelp('url')">?</button></label>
-                <div class="bm-q-pop" x-show="isHelp('url')">到 healthchecks.io 之類的監控服務建立一個檢查項目，會得到一串「Ping URL」，整串複製貼在這裡。這串網址等同密碼，所以儲存後畫面只會顯示主機名，不會再顯示整串。</div>
+                <div class="bm-q-pop" x-show="isHelp('url')">到 healthchecks.io 之類的監控服務建立一個檢查項目，會得到一串「Ping URL」，請整串複製後貼上。這串網址等同密碼，所以儲存後畫面只會顯示主機名，不會再顯示整串。</div>
                 <div class="bm-note">手動儲存：貼好後按「儲存監控網址」才會生效。</div>
                 <div class="bm-line">
                   <input id="bm-ping" class="bm-in" :class="{ 'is-bad': urlErr }" data-testid="bm-ping-input" x-model="pingUrl" autocomplete="off" spellcheck="false"
@@ -352,7 +352,7 @@
           if (h.level === 'na') return '這台電腦沒有心跳監控（例如開發用的電腦）。'
           if (h.status === 'ok' && h.level === 'error') return '心跳排程可能已經停止執行：狀態紀錄很久沒有更新了。'
           return { ok: '系統在線，外部監控有收到回報。', ext_unset: '只檢查本機，沒有通知外部監控（尚未設定監控網址）。',
-                   ext_fail: '本機正常，但對外部監控回報失敗；可能是這台電腦連不到外部網路。', local_down: '本機服務沒有回應。' }[h.status]
+                   ext_fail: '本機正常，但對外部監控回報失敗；可能是本機無法連線至外部網路。', local_down: '本機服務沒有回應。' }[h.status]
             || '心跳排程可能從來沒有執行過，或狀態紀錄讀不懂。'
         },
         get overall() {
@@ -384,12 +384,12 @@
           const host = this.s && this.s.heartbeat && this.s.heartbeat.pingHost
           const T = {
             backup: ['立即做一次備份？', '將複製一份資料庫並更新雲端備份；於背景執行，不影響其他使用者作業，通常數分鐘內完成。為避免重複，30 分鐘內僅能執行一次。', '開始備份'],
-            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務回報，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
-            clear: ['停用對外回報？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
+            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務回報，無須重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
+            clear: ['停用對外回報？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就沒有人會收到通知。有多位最高管理者時，須另一位核准後才會停用；只有一位時立即停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
             approve: ['核准停用對外回報？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或系統異常，就沒有人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
-            reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請寫下駁回的原因（會留在紀錄裡）。', '駁回'],
+            reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請填寫駁回原因（將留存於紀錄）。', '駁回'],
             cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
-            test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '發送一次心跳回報，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
+            test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '發送一次心跳回報，確認本機可連線至該服務。每分鐘限測試一次。', '開始測試'],
           }[kind]
           this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]
           this.urlNeedsReason = false
@@ -398,7 +398,7 @@
             try { nh = new URL(this.pingUrl.trim()).hostname.toLowerCase().replace(/\.$/, '') } catch (e) { nh = '' }
             if (nh && nh !== (this.s.heartbeat.pingHost || '').toLowerCase()) {
               this.urlNeedsReason = true
-              this.dlgBody = '這會把外部監控換到另一個主機（' + nh + '）。這等於換掉「誰來接收我還活著的訊號」，所以要寫下原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
+              this.dlgBody = '這會把外部監控換到另一個主機（' + nh + '）。此變更等同更換「接收系統存活訊號的對象」，故須填寫原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
               this.dlgOk = '送出'
             }
           }

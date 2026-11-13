@@ -176,7 +176,7 @@ def test_tier3_edit_warns_resets_chain_and_the_first_tier_reruns_it_to_the_end(l
     page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     page.click('[data-testid="qf-review-edit-start"]')
     page.wait_for_selector('[data-testid="review-edit-bar"]', timeout=5000)
-    assert "整條簽核會回第 1 層重跑" in page.inner_text('[data-testid="review-edit-bar"]')
+    assert "整個簽核流程將回到第 1 層重新進行" in page.inner_text('[data-testid="review-edit-bar"]')
     page.fill(QTY, "9")
     page.click('[data-testid="review-edit-save"]')
     assert _wait(lambda: bool(reviews), page)

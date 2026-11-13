@@ -28,7 +28,7 @@ _mt.register("payslip_paid", "勞報單已付款（送審人）", "approval", "n
              "勞報單已由出納登錄付款。", "請登入系統，於勞報單頁查看。（信中不含金額與受領人資料）", owner="payroll")
 
 _mt.register("payslip_approver_bypass", "勞報單層外代核（通知其他最高管理者）", "approval", "none", "其他最高管理者",
-             "當層簽核人就是送審人、不能自核，由另一位最高管理者代為核准了一張勞報單。", "請登入系統，於勞報單頁與稽核紀錄查看核准人、原簽核人與原因。（信中不含金額與受領人資料）", owner="payroll")
+             "當層簽核人就是送審人、不得自行核准，由另一位最高管理者代為核准了一張勞報單。", "請登入系統，於勞報單頁與稽核紀錄查看核准人、原簽核人與原因。（信中不含金額與受領人資料）", owner="payroll")
 
 
 def ident(slip_no) -> str:
@@ -159,7 +159,7 @@ def fire_bypass(slip_no, slip_date, actor, sole_approver, reason, recipients) ->
         return _en.send_registered("payslip_approver_bypass", title="勞報單層外代核", reason="%s 層外代核" % ident(slip_no), usernames=who,
                                    rows=[("單號", e(slip_no) or "—"), ("開單日期", e(slip_date) or "—"), ("核准人", e(actor) or "—"), ("原簽核人", e(sole_approver) or "—"), ("原因", e(reason) or "—")],
                                    badge_text="層外代核", badge_color="#B45309", link=_mail_link(slip_no), button_text="前往查看",
-                                   note="您好，%s 目前輪到的簽核人是送審人本人、不能自核，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (e(ident(slip_no)), e(actor)))
+                                   note="您好，%s 目前輪到的簽核人是送審人本人、不得自行核准，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (e(ident(slip_no)), e(actor)))
     except Exception:                                            # noqa: BLE001
         logger.exception("勞報單層外代核通知失敗（%s）", slip_no)
         return False

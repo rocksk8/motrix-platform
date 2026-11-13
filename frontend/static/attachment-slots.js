@@ -43,7 +43,7 @@
 '  <div class="as-row" style="justify-content:space-between"><strong>附件種類</strong>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="as-close" @click="close()">關閉</button></div>' +
 '  <div class="as-sub" x-text="\'單據：\' + label() + \'。內建的「簽回單」永遠存在、不能改。\'"></div>' +
-'  <div class="as-sub">檔案類型、大小與誰能上傳都只能比系統底線更嚴；誰能「看」檔案仍由原本的單據權限決定，這裡改不了。只影響之後新上傳的檔案，已存的檔案不搬移。</div>' +
+'  <div class="as-sub">檔案類型、大小與誰能上傳皆只能比系統底線更嚴格；誰能「看」檔案仍由原本的單據權限決定，無法在此變更。只影響之後新上傳的檔案，已存的檔案不搬移。</div>' +
 '  <div class="as-banner" data-testid="as-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span> ' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="as-ask-yes" @click="answer(true)">確定</button> ' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="as-ask-no" @click="answer(false)">取消</button></div>' +
@@ -64,7 +64,7 @@
 '     <label>一次合計 MB <input type="number" min="1" :max="catalog.platform.maxRequestMb" data-testid="as-req-mb" x-model="s.maxRequestMb" placeholder="50"></label></div>' +
 '    <div class="as-row" style="margin-top:4px"><span>誰可以上傳</span>' +
 '     <template x-for="r in catalog.roles" :key="r"><label class="as-chk"><input type="checkbox" :data-role="r" :checked="s.roles.indexOf(r) >= 0" @change="toggleRole(s, r, $event.target.checked)"> <span x-text="r"></span></label></template></div>' +
-'    <div class="as-sub">一個都不勾＝維持原本的上傳權限；勾選只會「縮小」成這些角色（最高管理者一律可以）。</div>' +
+'    <div class="as-sub">全部不勾選＝維持原本的上傳權限；勾選只會「縮小」成這些角色（最高管理者一律可以）。</div>' +
 '    <div class="as-row" style="margin-top:4px"><label>子資料夾 <input type="text" data-testid="as-sub" x-model="s.subfolder" maxlength="40" placeholder="（選填）" :disabled="!subfolderOk()"></label>' +
 '     <span class="as-sub" x-show="!subfolderOk()">這個位置的讀取還不支援子資料夾</span></div>' +
 '    <div class="as-row" style="margin-top:4px"><label class="as-chk"><input type="checkbox" x-model="s.required"> 提示必須有（只標紅，不阻擋）</label>' +
@@ -230,8 +230,8 @@
         finally { this.busy = false }
       },
       saveDraft: function () { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次') },
-      publish: function () { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經處理，請關閉再打開、看版本清單確認') },
-      restore: function (v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉再打開、看版本清單確認') },
+      publish: function () { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經處理，請關閉後重新開啟，並查看版本清單確認') },
+      restore: function (v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉後重新開啟，並查看版本清單確認') },
       discard: function () { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉再打開確認') },
       simulate: function () { var self = this; return this._guard(function () { return self._simulate() }, '模擬失敗') },
       _mark: function (problems) {

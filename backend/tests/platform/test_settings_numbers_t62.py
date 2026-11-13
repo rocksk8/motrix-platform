@@ -112,7 +112,7 @@ def test_setters_use_the_policy_and_answer_503_when_it_cannot_be_read(monkeypatc
     _strict(monkeypatch, {("account_security", "password_min_len"): RuntimeError("database is locked")})
     with pytest.raises(HTTPException) as ei:
         RA._min_pw()
-    assert ei.value.status_code == 503 and "密碼規則暫時讀不到" in ei.value.detail
+    assert ei.value.status_code == 503 and "密碼規則暫時無法讀取" in ei.value.detail
 
 
 def test_login_session_length_follows_the_setting_and_never_exceeds_thirty_days(client, make_user, monkeypatch):

@@ -1523,8 +1523,8 @@ def _guard_removed_locations(new_list, previous):
     raise HTTPException(
         422,
         "這些據點還被單據引用，不能刪除：%s。"
-        "請先把那些單據改綁到別的據點，或保留這個據點。"
-        "（刪掉的話，那批單據會在沒有人發現的情況下換掉發票抬頭與匯款帳號。）"
+        "請先將那些單據改綁至其他據點，或保留此據點。"
+        "（若刪除，這些單據的發票抬頭與匯款帳號將在無人察覺的情況下被更換。）"
         % detail)
 
 
@@ -1573,8 +1573,8 @@ def _clean_locations(raw, previous):
         name = str(item.get("name") or "").strip()
         address = str(item.get("address") or "").strip()
         if not name:
-            raise HTTPException(422, f"第 {idx + 1} 個據點沒有名稱 —— "
-                                     "距離欄位要寫「離○○ 3.2 km」，沒有名稱那句話就沒有主詞")
+            raise HTTPException(422, f"第 {idx + 1} 個據點未填名稱——"
+                                     "距離欄位會顯示為「離○○ 3.2 km」，缺少名稱則無法組成該句")
         if not address:
             raise HTTPException(422, f"據點「{name}」沒有地址")
         if name in seen_names:
@@ -1598,8 +1598,8 @@ def _clean_locations(raw, previous):
             raise HTTPException(
                 422,
                 f"據點 id「{ident}」的格式不合：只允許英數字、底線與連字號，"
-                "長度 1~32（例如 `loc_1`、`taipei-branch`）。"
-                "這個值會被寫進單據與稽核紀錄，要能用眼睛比對。")
+                "長度 1～32（例如 `loc_1`、`taipei-branch`）。"
+                "這個值會被寫進單據與稽核紀錄，須能以肉眼比對。")
         if not ident:
             keep = prev_by_name.get(name)
             ident = str(keep.get("id")) if keep and keep.get("id") else ""
@@ -2053,7 +2053,7 @@ def _guard_reconfirm(cur: dict, value: dict) -> None:
     if blocks:
         raise HTTPException(409, {"code": RECONFIRM_CODE,
                                   "message": "這次修改了本公司必要欄位（公司名稱／統一編號／電話或 email）。"
-                                             "儲存後其他人會暫停使用系統直到重新確認 ⇒ 請勾選確認後按「儲存並確認本公司資料」"})
+                                             "儲存後，其他人將暫停使用系統，直至重新確認；請勾選確認後按「儲存並確認本公司資料」"})
 
 
 @router.get("/api/settings/company-setup/status")
@@ -2270,7 +2270,7 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
         raise HTTPException(
             400,
             f"RP ID 不能是 IP 位址（收到：{rp_id}）。WebAuthn 規格要求 RP ID 是可註冊的網域"
-            f"後綴，瀏覽器會直接拒絕 IP。請先在內部 DNS 建一個指向這台主機的名稱"
+            f"後綴，瀏覽器會直接拒絕 IP。請先在內部 DNS 建立一個指向本主機的名稱"
             f"（例如 motrix.example.local），再用該名稱設定。"
         )
 
@@ -3568,7 +3568,7 @@ def remind_line_bindings(body: dict = Body(default={}), authorization: str = Hea
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
     if not _wizard_rate_ok(user["id"]):               # 舊的「寄測試信」也走同一個頻率限制（不然可繞過精靈的限制反覆探測）
-        raise HTTPException(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。")
+        raise HTTPException(429, "測試信寄送過於頻繁（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。")
     from helpers.email_notify import _send_raising, _admin_emails, _build_html, _base_url
     from helpers import mail_types as _mt
     to = _admin_emails("system_test_mail")
@@ -3584,7 +3584,7 @@ def test_email_notify(authorization: str = Header(None)):
     except Exception as e:
         tid = trace_id()
         logger.exception("email_notify test failed trace=%s", tid)
-        raise HTTPException(502, f"寄信失敗：連不上寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
+        raise HTTPException(502, f"寄信失敗：無法連線至寄信伺服器。請檢查寄信主機、埠號、帳號與應用程式密碼是否正確（錯誤代碼 {tid}，聯絡系統管理者時請提供）")
     _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
 
@@ -3758,7 +3758,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
     # 候選設定只放在記憶體裡測試，**不存進系統設定**：測試失敗時，正在使用的設定一個字都不會變；測試成功＋按「我收到了」才寫入
     full = {**_EMAIL_DEFAULTS, **current, **cand}
     if not _wizard_rate_ok(user["id"]):
-        return _wizard_error(429, "測試信寄得太頻繁了（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。", category="rate_limited")
+        return _wizard_error(429, "測試信寄送過於頻繁（每個帳號 10 分鐘內最多 5 次）。請稍等幾分鐘再試。", category="rate_limited")
     html = _build_html("system_test_mail", "測試信", "測試", "#2563EB",
                        [("觸發者", user.get("display_name") or user["username"])], "", _base_url(),
                        intro="本信為寄信設定測試。收到這封信，代表寄信帳號設定成功。")
@@ -4201,7 +4201,7 @@ def user_activity_trail(user: Optional[str] = None, start: Optional[str] = None,
     return {
         "items": items,
         "nextBeforeId": next_before_id,
-        "note": "只記人的操作：輪詢、心跳、下拉選單與欄位偏好這類頁面自動發出的請求不記；"
+        "note": "僅記錄人為操作：輪詢、心跳、下拉選單與欄位偏好這類頁面自動發出的請求不計入；"
                 "一次操作連帶送出的多個請求計為一次。",
     }
 

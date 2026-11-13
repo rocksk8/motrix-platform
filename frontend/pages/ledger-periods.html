@@ -64,7 +64,7 @@
     <main class="page-main">
       <div class="lp-title">會計期間與結帳</div>
       <div class="lp-note">
-        已結帳或鎖定的期間不能再過帳、也不能作廢已過帳傳票；要更正請開沖轉傳票，或由財務人員「重開期間」（須填理由，全程留稽核軌跡）。
+        已結帳或鎖定的期間不可再過帳或作廢已過帳傳票；如需更正，請開立沖轉傳票，或由財務人員「重開期間」（須填理由，全程留稽核軌跡）。
         鎖定（決算、申報後）只有最高管理者可以解除。尚未建立任何期間時，所有日期都視為開放。
       </div>
 
@@ -247,7 +247,7 @@
               </tbody></table>
             </div>
           </template>
-          <div class="lp-note" style="margin-top:6px">流程：1～11 期逐期結帳 → 產生結轉傳票（草稿）→ 送審、核准、過帳 → 決算（四大表對帳全部通過才成立，並凍結）。要更正請「重開年度」。</div>
+          <div class="lp-note" style="margin-top:6px">流程：1～11 期逐期結帳 → 產生結轉傳票（草稿）→ 送審、核准、過帳 → 決算（四大表對帳全部通過才成立，並凍結）。如需更正，請「重開年度」。</div>
           <label class="lp-note" style="display:block"><input type="checkbox" x-model="cdlg.accept" data-testid="lp-closing-accept"> 決算時第 12 期若有未過帳傳票等提醒，我已確認</label>
           <input class="lp-input" style="width:100%;margin:6px 0" type="text" x-show="isSuper() && cdlg.status === 'closed'" x-model="cdlg.reason" placeholder="重開年度的理由（必填）" data-testid="lp-closing-reason">
         </div>

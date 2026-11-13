@@ -232,7 +232,7 @@
               </div>
               <!-- 比照報價單「條件留空就不印」的既有慣例：取消勾選＝月數歸 0＝PDF 不印那一列 -->
               <div class="cnf-hint" x-show="!(form.warranty_months > 0)">
-                不勾選＝完工單上<b>不會出現</b>保固那一列（零組件販售、系統設定這類單子常常沒有保固可言）。
+                不勾選＝完工單上<b>不會出現</b>保固那一列（零組件販售、系統設定等類型的單據常無保固項目）。
               </div>
             </div>
           </div>
@@ -292,7 +292,7 @@
                  style="margin-top:14px;padding:10px 14px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
               ⚠️ 有 <b x-text="unfinishedCount()"></b> 項未完成。請在下方
               「<span x-text="labels.sectionPending"></span>」寫清楚待處理內容與預計完成時間
-              ——這張單簽下去等於承認全部完成，沒寫清楚的缺失日後沒有依據。
+              ——本單簽署即視同確認全部完成，未載明的缺失日後將無憑據。
             </div>
           </div>
         </div>
@@ -318,7 +318,7 @@
             <div class="cnf-card-title" style="color:#B91C1C" x-text="labels.sectionPending"></div>
             <textarea class="cnf-in" rows="3" x-model="form.pending_items" :disabled="!editable()" @input="dirty=true"
                       placeholder="尚未完成或待改善的項目、預計完成時間"></textarea>
-            <div class="cnf-hint">留空的話不會出現在完工單上；但**有未完成項目時請務必填寫**。</div>
+            <div class="cnf-hint">留空則不會出現在完工單上；有未完成項目時請務必填寫。</div>
           </div>
           <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
           <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.noteNo ? '/api/completion-notes/' + encodeURIComponent(s.noteNo) : null, s => s.form && s.form.recipient)"

@@ -830,7 +830,7 @@ def set_my_mail_prefs(body: dict = Body(...), authorization: str = Header(None))
         if changed:
             blocked = last_superadmin_blockers(conn, me["id"], new_muted)
             if blocked:
-                raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何最高管理者收得到"
+                raise HTTPException(400, "此項變更後，下列系統技術類信件將沒有任何最高管理者可收到"
                                          "（至少要有一位；最後一位不能退訂）：%s" % "、".join(blocked))
             if view["risky"] and not preview and body.get("confirm") is not True:
                 raise HTTPException(409, "不收「%s」（簽核／系統技術類）後，相關提醒或告警您會收不到、可能因此漏掉；確認請帶 confirm=true 再送一次"

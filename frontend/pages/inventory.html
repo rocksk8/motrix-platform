@@ -294,7 +294,7 @@
   <div class="modal-box" style="width:900px" @click.stop>
     <div class="modal-title">進貨批次（供應商 / 發票 / 付款狀態）</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
-      標記「已付款」的批次會納入 T100 傳票匯出（財務報表 → 資金水位）的現金基礎付款事件；供應商/發票號可事後補登。
+      標記「已付款」的批次會納入 T100 傳票匯出（財務報表 → 資金水位）的現金基礎付款事件；供應商／發票號可事後補登。
     </div>
     <div class="loading-text" x-show="batches.loading">載入中…</div>
     <template x-if="!batches.loading">
@@ -339,7 +339,7 @@
   <div class="modal-box" style="width:920px" @click.stop>
     <div class="modal-title">採購建議</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
-      依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。前置時間優先取料號設定，未設定則取上次供應商的設定；<strong>兩邊都沒設定時預計到貨日會顯示「未知」——那不是今天，是系統沒有資料</strong>，請自行向供應商確認交期。
+      依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。前置時間優先取料號設定，未設定則取上次供應商的設定；<strong>兩邊都沒設定時預計到貨日會顯示「未知」——並非今天，而是系統尚無資料</strong>，請自行向供應商確認交期。
     </div>
     <div class="loading-text" x-show="purchaseSuggestions.loading">載入中…</div>
     <template x-if="!purchaseSuggestions.loading">
@@ -356,7 +356,7 @@
                     padding:6px 9px;border-radius:4px;margin-bottom:12px">
           還有 <strong x-text="purchaseSuggestions.legacyLeadTimeSuppliers"></strong>
           家供應商只填了舊的「標準交期」文字、沒有可計算的天數 ——
-          它們的料號算不出預計到貨日。
+          它們的料號無法計算預計到貨日。
           <a href="suppliers.html" style="color:var(--warning);text-decoration:underline">前往供應商管理填寫</a>
         </div>
         <div class="table-scroll" style="max-height:calc(60vh / var(--fz,1));overflow-y:auto">

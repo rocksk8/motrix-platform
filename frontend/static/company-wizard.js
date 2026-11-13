@@ -388,9 +388,9 @@
 
   var MINUTES = { 1: 2, 2: 2, 3: 2, 4: 1, 5: 1 }
   var INTRO = {
-    1: { title: '先填公司的名稱與統一編號', why: '報價單、請款單與寄給客戶的信件，抬頭都會用這兩項。請依公司登記的資料填寫。' },
-    2: { title: '客戶如何聯絡貴公司', why: '電話與 Email 至少填一項；它們會印在文件抬頭，讓客戶知道怎麼聯絡。系統自己寄信用的信箱不在這裡設定，完成這一步後再到「開始使用」的寄信步驟處理。' },
-    3: { title: '客戶要把錢匯到哪裡', why: '請款單會印出收款帳戶。尚未使用請款單者可先略過，之後隨時可回來補填。報價單的編號由系統自動產生，格式固定如下，不需要設定。' },
+    1: { title: '先填公司的名稱與統一編號', why: '報價單、請款單與寄給客戶的信件，抬頭皆採用這兩項。請依公司登記的資料填寫。' },
+    2: { title: '客戶如何聯絡貴公司', why: '電話與 Email 至少填一項；它們會印在文件抬頭，供客戶聯絡。系統寄信所用的信箱不在這裡設定，完成這一步後再到「開始使用」的寄信步驟處理。' },
+    3: { title: '客戶要把錢匯到哪裡', why: '請款單會印出收款帳戶。尚未使用請款單者可先略過，之後隨時可回來補填。報價單的編號由系統自動產生，格式固定如下，無須設定。' },
     4: { title: '放上公司 Logo', why: 'Logo 會印在報價單等文件上，也會顯示在系統頂端。沒有圖檔可先略過，之後隨時可回來更換。' },
     5: { title: '最後確認', why: '請核對下面的資料。按下確認後，系統所有功能才會開放給同仁使用。' },
   }
@@ -410,7 +410,7 @@
       skip.addEventListener('click', function () {
         var pend = (STEP_FIELDS[n] || []).filter(function (k) { return Object.prototype.hasOwnProperty.call(st.draft, k) })
         // 重新確認（409）後留在畫面上、還沒生效的修改：略過會丟掉它，先講清楚、要再按一次才丟
-        if (pend.length && st.needReconfirm && st.skipAsk !== n) { st.skipAsk = n; say('這一步有尚未生效的修改（等著在最後一步確認）。再按一次「先略過」會捨棄這些修改。', true); return }
+        if (pend.length && st.needReconfirm && st.skipAsk !== n) { st.skipAsk = n; say('這一步有尚未生效的修改（待於最後一步確認）。再按一次「先略過」會捨棄這些修改。', true); return }
         st.skipAsk = 0
         markSeen(n)
         pend.forEach(function (k) { delete st.draft[k] })      // 只丟這一步的未存內容，別步的修改不動
@@ -540,7 +540,7 @@
     var box = el('div', 'cw-card'); box.setAttribute('data-testid', 'cw-denied'); box.style.textAlign = 'center'
     box.appendChild(el('div', '', '🔒')); box.firstChild.style.fontSize = '40px'
     box.appendChild(el('h2', 'cw-h', '您沒有這個頁面的權限'))
-    box.appendChild(el('p', 'cw-why', '本公司資料只有最高管理者可以設定。請請最高管理者登入後完成設定，或洽系統管理員。'))
+    box.appendChild(el('p', 'cw-why', '本公司資料只有最高管理者可以設定。請最高管理者登入後完成設定，或洽系統管理員。'))
     return box
   }
 

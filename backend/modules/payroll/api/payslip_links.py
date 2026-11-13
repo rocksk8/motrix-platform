@@ -10,7 +10,7 @@ from helpers import perm
 from modules.payroll import payslip_links as PL
 
 router = APIRouter()
-DISPATCH_MISSING = "外包工班模組未安裝：看不到派發資料，也不能新增派發關聯"
+DISPATCH_MISSING = "外包工班模組未安裝：無法查看派發資料，亦無法新增派發關聯"
 MSG_NO_SEARCH = "外包工班模組未安裝或版本過舊：不能搜尋派發"
 MSG_BAD_PAGE = "分頁參數格式不正確"
 

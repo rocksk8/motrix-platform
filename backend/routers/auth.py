@@ -94,7 +94,7 @@ def _min_pw() -> int:
     try:
         return min_password_len()
     except PolicyUnreadable:
-        raise HTTPException(503, "密碼規則暫時讀不到，為了安全暫時無法設定密碼，請稍後再試")
+        raise HTTPException(503, "密碼規則暫時無法讀取，為了安全暫時無法設定密碼，請稍後再試")
 
 def _client_ip(request: Request) -> str:
     """來源 IP（登入鎖定、TOTP／Passkey 失敗計數、登入稽核都用這支）。
@@ -883,7 +883,7 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         conn.close()
         if not sess or not row or sess["user_id"] != row["id"]:
             _audit_login_failed(row["username"] if row else "", ip, source="qr")     # 只留稽核（不計鎖定：session token 不可猜）
-            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請在手機上先登入同一個帳號再掃碼")
+            raise HTTPException(401, "手機目前登入的帳號與本次核准請求不符，請先在手機上登入同一個帳號，再掃描 QR 碼")
         with _totp_lock:
             still = _totp_pending.get(body.challenge_token)
             if still:
@@ -1946,7 +1946,7 @@ def update_user(user_id: int, body: UserIn, request: Request, authorization: str
         if _clash:                                                       # R2 第 2 步 2c（使用者裁示 Q1＝拒絕）：勾到「個人扣項」扣掉的鍵＝勾了卻沒權限的假象，直接擋下並留稽核
             conn.close()
             _audit(_tok(authorization), "user.put_rejected_subtract", "user", str(user_id), str(user_id), {"keys": _clash})
-            raise HTTPException(400, "下列權限目前被「個人扣項」扣掉，勾選不會生效：%s。請先到「職責角色」頁解除扣項再勾選。" % "、".join(_clash))
+            raise HTTPException(400, "下列權限目前遭「個人扣項」扣除，勾選不會生效：%s。請先到「職責角色」頁解除扣項再勾選。" % "、".join(_clash))
     _perm_audit = None        # 高敏感權限變更：(before, after, reason, label) —— 與 UPDATE 同一個交易寫 permission_changes＋audit_log
     if body.modules is not None or body.role is not None:
         # 高敏感權限的共用檢查點（`helpers.duty_roles.user_perm_gate`→`gate_reason`；職責角色同一條規則）：授予／取消高敏感鍵 ⇒ 原因必填。
@@ -1992,7 +1992,7 @@ def update_user(user_id: int, body: UserIn, request: Request, authorization: str
         blocked = last_superadmin_blockers(conn, user_id, body.notification_muted, body.email, body.role)
         if blocked:
             conn.close()
-            raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何最高管理者收得到"
+            raise HTTPException(400, "此項變更後，下列系統技術類信件將沒有任何最高管理者可收到"
                                      "（至少要有一位；最後一位不能退訂、清空 Email 或改成非超管）：%s" % "、".join(blocked))
     if body.department_id is not None:
         sets.append("department_id=?")
@@ -2090,7 +2090,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
         # 正式離職應改用 toggle_user_active() 停用。
         conn.rollback()
         conn.close()
-        raise HTTPException(409, f"「{ulabel}」仍有關聯資料（如業務開發案件、報價單業務歸屬、部門/處主管等），無法刪除，請改用「停用」")
+        raise HTTPException(409, f"「{ulabel}」仍有關聯資料（如業務開發案件、報價單業務歸屬、部門／處主管等），無法刪除，請改用「停用」")
     conn.close()
     _audit(_tok(authorization), 'user.delete', 'user', str(user_id), ulabel)
     notify_module_activity("使用者管理", "刪除帳號", actor.get("display_name") or actor["username"],

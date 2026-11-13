@@ -2358,7 +2358,7 @@
       <button class="dt-modal-close" @click="showSelfModal=false">&#215;</button>
     </div>
     <div class="dt-modal-body">
-      <p class="dt-field-note">這筆事項會掛在您選的案件上、指派給您自己；只有您看得到。建立後如要修改或刪除，請洽最高管理者。</p>
+      <p class="dt-field-note">此事項將關聯至您選擇的案件、指派給您自己；只有您看得到。建立後如要修改或刪除，請洽最高管理者。</p>
       <div class="dt-field">
         <label class="dt-field-label">日期 <span class="req">*</span></label>
         <input type="date" x-model="selfForm.task_date" class="dt-input" data-testid="dt-self-date">
@@ -2519,7 +2519,7 @@
       <div>
         <div class="dt-section-hd" style="margin-bottom:4px">
           負責主管
-          <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);font-size:12px">— 完成回報 &amp; 逾期未完成通知的收件人；留空則通知所有管理員</span>
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);font-size:12px">— 完成回報與逾期未完成通知的收件人；留空則通知所有管理員</span>
         </div>
         <div class="usr-grid">
           <template x-for="u in users" :key="u.username">

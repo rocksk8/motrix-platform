@@ -284,7 +284,7 @@
   function disableNow(it) {                                              // 一鍵停用＝收緊，立即生效（走同一條發布管線）
     if (it.hasDraft && st.confirmDisable !== it.key) {                   // 停用會把這個設定的草稿換成『停用後的已發布版本』：先警告，再按一次才做
       st.confirmDisable = it.key
-      setMsg('「' + it.label + '」有尚未發布的修改；停用會捨棄這些修改（草稿會被換成停用後的版本）。要繼續停用，請再按一次這顆按鈕（現在已改成「確認停用」）；想保留修改，請先按「編輯」。', true); render(); return Promise.resolve()
+      setMsg('「' + it.label + '」有尚未發布的修改；停用會捨棄這些修改（草稿會被換成停用後的版本）。要繼續停用，請再按一次此按鈕（現在已改成「確認停用」）；如要保留修改，請先按「編輯」。', true); render(); return Promise.resolve()
     }
     st.confirmDisable = ''
     var f = fromBody(it.key, it.liveBody || it.draftBody); f.enabled = false
@@ -310,7 +310,7 @@
   }
   function listView() {
     var box = el('div', { 'data-role': 'list' })
-    if (st.pendingError) box.appendChild(el('div', { 'data-role': 'pending-error', text: '無法讀取待核准狀態：清單上沒有顯示的「待核准」不代表真的沒有，請到「版本與還原」的待核准變更分頁確認。', style: 'font-size:12px;color:#b91c1c;margin:4px 0' }))
+    if (st.pendingError) box.appendChild(el('div', { 'data-role': 'pending-error', text: '無法讀取待核准狀態：清單未顯示「待核准」，不代表實際上沒有，請到「版本與還原」的待核准變更分頁確認。', style: 'font-size:12px;color:#b91c1c;margin:4px 0' }))
     if (!st.list.length) box.appendChild(el('div', { text: '尚無額外通知。按「新增通知」建立第一個。', style: 'font-size:12px;color:var(--text-dim,#888);margin:6px 0' }))
     st.list.forEach(function (it) {
       var ev = eventOf(it.event)
@@ -400,14 +400,14 @@
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '移除', onclick: function () { f.when.splice(i, 1); touch(); render() } })]))
     })
     if (ev.filterable.length && f.when.length < 3) condHost.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'add-cond', text: '＋ 加一條條件', onclick: function () { f.when.push({ field: '', values: '', picked: null }); touch(); render() } }))
-    panel.appendChild(field('只在符合這些情況時才通知（可以不設，最多 3 條）', condHost, ev.filterable.length ? '可以不設；每一條裡勾選（或填寫）的值，只要符合其中一個就算符合；有設多條時要全部符合。' : '這個事件沒有可設的條件。'))
+    panel.appendChild(field('只在符合這些情況時才通知（可以不設，最多 3 條）', condHost, ev.filterable.length ? '可不設定；每一條裡勾選（或填寫）的值，符合其中一個即視為符合；設定多條時須全部符合。' : '這個事件沒有可設的條件。'))
     // 收件人
     var chips = el('div', { 'data-role': 'chips', style: 'display:flex;gap:4px;flex-wrap:wrap;margin:3px 0' }, f.recipients.map(function (r, i) {
       return el('span', { 'data-role': 'chip', style: 'display:inline-flex;gap:4px;align-items:center;padding:2px 8px;border:1px solid var(--border,#bbb);border-radius:10px;font-size:12px' }, [
         el('span', { text: whoText(r) }), el('button', { type: 'button', text: '✕', 'aria-label': '移除', style: 'border:none;background:none;cursor:pointer', onclick: function () { f.recipients.splice(i, 1); touch(); render() } })])
     }))
     var addSel = select(recipientOptions(ev), '', function (v) { addRecipient(v) }, { 'data-role': 'add-recipient' })
-    panel.appendChild(field('要通知誰？（最多 8 項）', el('div', {}, [chips, addSel]), '只能從清單挑選；不接受電子郵件位址。收件人必須有權限看到那張單據才會收到。'))
+    panel.appendChild(field('要通知誰？（最多 8 項）', el('div', {}, [chips, addSel]), '僅能從清單選擇；不接受電子郵件位址。收件人必須有權限看到那張單據才會收到。'))
     // 通道
     panel.appendChild(field('用什麼方式通知？', el('div', {}, [
       el('label', { style: 'font-size:12px;margin-right:12px' }, [el('input', { type: 'checkbox', checked: 'checked', disabled: 'disabled' }), el('span', { text: ' 站內通知（一定會有）' })]),
@@ -424,7 +424,7 @@
           return el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-ph': p, text: '插入「' + p + '」', onclick: function () { insertAt(input, key, '{' + p + '}') } })
         })),
         el('div', { 'data-problem': key, text: f[key] ? prob : '', style: 'color:#b91c1c;font-size:12px' })]),
-        '文字只能用中文、英數字與常用標點；不能放網址、$、/ 或標記；不能寫「已核准」這類官方狀態字樣。「插入」的詞會換成實際內容。'))
+        '文字只能用中文、英數字與常用標點；不可含網址、$、/ 或標記；不能寫「已核准」這類官方狀態字樣。「插入」的詞會換成實際內容。'))
     })
     // 節流
     panel.appendChild(field('避免打擾', el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px' }, [

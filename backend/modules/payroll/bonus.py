@@ -420,7 +420,7 @@ def _bonus_chain_tiers(award):
         return (json.loads(raw) or {}).get("tiers") or []
     except (TypeError, ValueError) as exc:
         raise BonusChainUnreadable(
-            "這張獎金分潤單的簽核資料讀不出來，無法判斷是否已完成簽核。"
+            "這張獎金分潤單的簽核資料無法讀取，無法判斷是否已完成簽核。"
         ) from exc
 
 

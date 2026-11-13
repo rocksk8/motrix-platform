@@ -84,7 +84,7 @@
           <div class="iw-kinds">
             <button type="button" class="iw-kind" data-testid="iw-kind-users" :disabled="!isSuper" @click="pick('users')">
               <b>員工（可登入的帳號）</b>
-              <small x-show="isSuper">只新增帳號，已存在的不動；系統產生臨時密碼，匯入完成後只顯示一次。</small>
+              <small x-show="isSuper">只新增帳號，已存在者不變動；系統產生臨時密碼，匯入完成後只顯示一次。</small>
               <small x-show="!isSuper">只有最高管理者可以匯入員工。</small>
             </button>
             <button type="button" class="iw-kind" data-testid="iw-kind-customers" @click="pick('customers')">
@@ -156,7 +156,7 @@
             </div>
 
             <div class="iw-warn" data-testid="iw-manual" x-show="plan && plan.manual && plan.manual.length">
-              <b>此角色需手動建立</b>（管理員、財務、最高管理者權限高，請最高管理者到「帳號」頁一個一個建立）：
+              <b>此角色需手動建立</b>（管理員、財務、最高管理者權限高，請最高管理者至「帳號」頁逐一建立）：
               <ul class="iw-list"><template x-for="m in (plan ? plan.manual : [])" :key="m.row"><li>第 <span x-text="m.row"></span> 列：<span x-text="m.username"></span>（<span x-text="m.displayName"></span>）</li></template></ul>
             </div>
             <div class="iw-card" data-testid="iw-skipped" x-show="plan && plan.skipped && plan.skipped.length">
@@ -182,17 +182,17 @@
 
             <div class="iw-warn" data-testid="iw-ubn-ack" x-show="ubnWarnCount > 0">
               <b>有 <span x-text="ubnWarnCount"></span> 列的統一編號檢查碼不對。</b>統編是判斷「同一家客戶」的依據：打錯了，系統會把它當成<b>新客戶</b>，不會併進原本那一家。
-              <label style="display:block;margin-top:4px"><input type="checkbox" data-testid="iw-ubn-ack-box" x-model="ubnAck"> 我已確認這些統編沒有打錯（例如海外或特殊客戶），照樣匯入</label>
+              <label style="display:block;margin-top:4px"><input type="checkbox" data-testid="iw-ubn-ack-box" x-model="ubnAck"> 我已確認這些統一編號無誤（例如海外或特殊客戶），仍照常匯入</label>
             </div>
 
             <div class="iw-card" x-show="kind === 'users' && plan && plan.created > 0" data-testid="iw-users-note">
               確認後會建立 <b x-text="plan && plan.created"></b> 個可登入的帳號：角色只會是業務／工程師／檢視者，<b>沒有任何模組權限</b>（匯入後到權限頁設定）。
-              系統會產生臨時密碼，<b>只在下一個畫面顯示一次</b>，請立即交給同仁；第一次登入必須改密碼。
+              系統會產生臨時密碼，<b>只在下一個畫面顯示一次</b>，請立即交給同仁；首次登入須變更密碼。
             </div>
 
             <div class="iw-err" data-testid="iw-uncertain" x-show="uncertain">
-              <b>結果不確定。</b>網路中斷或等太久，這次匯入<b>可能已經完成，也可能沒有</b>。請不要重新上傳或再按一次「確認匯入」，先按下面的按鈕查詢這次的結果：
-              如果已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；如果沒有，會直接補做這一次。
+              <b>結果不確定。</b>網路中斷或等太久，這次匯入<b>可能已經完成，也可能沒有</b>。請勿重新上傳或再按一次「確認匯入」，先按下面的按鈕查詢這次的結果：
+              若已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；若沒有，會直接補做這一次。
               <div class="iw-row" style="margin-top:6px"><button type="button" class="iw-btn primary" data-testid="iw-query" :disabled="busy" @click="queryResult()">查詢這次匯入結果</button></div>
             </div>
             <div class="iw-row">
@@ -209,7 +209,7 @@
           <h2 style="font-size:16px;margin:0 0 6px" x-text="kindName + '匯入完成'"></h2>
           <div class="iw-ok" data-testid="iw-result-summary" x-text="resultText"></div>
           <div class="iw-warn" data-testid="iw-replayed" x-show="replayed">
-            這是<b>先前那次匯入</b>的結果：下面的帳號已經建立，但臨時密碼<b>無法再顯示</b>（系統不留存）。請替每位同仁按「重設臨時密碼」，會產生新的臨時密碼並只顯示一次；同仁第一次登入必須改密碼。
+            這是<b>先前那次匯入</b>的結果：下面的帳號已經建立，但臨時密碼<b>無法再顯示</b>（系統不留存）。請替每位同仁按「重設臨時密碼」，會產生新的臨時密碼並只顯示一次；同仁首次登入須變更密碼。
           </div>
           <div class="iw-card" data-testid="iw-lost" x-show="lostAccounts.length">
             <b>需要重設臨時密碼的帳號</b>
@@ -220,7 +220,7 @@
           </div>
           <div class="iw-card" data-testid="iw-credentials" x-show="credentials.length">
             <b>臨時密碼（只顯示這一次）</b>
-            <div class="iw-warn">請立即複製或下載，交給同仁本人。離開或重新整理後就看不到了；如果這個畫面沒顯示完整就離開，請不要重新匯入，到「帳號」頁替同仁重設密碼。同仁第一次登入必須改密碼。</div>
+            <div class="iw-warn">請立即複製或下載，交給同仁本人。離開或重新整理後將無法再查看；若此畫面未完整顯示即離開，請勿重新匯入，到「帳號」頁替同仁重設密碼。同仁首次登入須變更密碼。</div>
             <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th>臨時密碼</th></tr></thead>
               <tbody><template x-for="c in credentials" :key="c.username + ':' + c.password"><tr><td x-text="c.username"></td><td x-text="c.displayName"></td><td class="iw-pw" x-text="c.password"></td></tr></template></tbody></table>
             <div class="iw-row">
@@ -386,7 +386,7 @@
               this.uncertain = false; this._idemKey = ''; this._commitBody = null
               try {
                 await this._preview()
-                let n = '資料在您預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。'
+                let n = '資料在您預覽之後有變動，已重新預覽，請再確認一次（勾選項目須重新勾選）。'
                 if (this.kind === 'users' && this.plan.skipped && this.plan.skipped.length) {
                   n += '另外，有 ' + this.plan.skipped.length + ' 個帳號目前狀態為「已存在」而被略過（可能剛由他人建立，或上一次匯入實際上已完成），請至帳號頁確認。'
                 }

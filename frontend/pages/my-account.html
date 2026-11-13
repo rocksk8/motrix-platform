@@ -165,7 +165,7 @@
           <!-- 這個畫面被「初次啟用」與「重新產生」兩種情境共用，文案要分開：
                重產時說「已啟用！」會讓人以為剛剛發生了別的事 -->
           <div class="alert alert-ok" x-show="!totp.recoveryFromRegen">已啟用。請將下方 10 組救援碼另行存放於安全處——手機遺失或驗證 App 移除時可用來登入，畫面關閉後就無法再次查看。</div>
-          <div class="alert alert-ok" x-show="totp.recoveryFromRegen">已重新產生 10 組救援碼，<b>舊的那一批現在全部失效</b>。請把下方新碼另外存放安全處並作廃舊清單——畫面關閉後就無法再次查看。</div>
+          <div class="alert alert-ok" x-show="totp.recoveryFromRegen">已重新產生 10 組救援碼，<b>舊的那一批現在全部失效</b>。請將下方新碼另行存放於安全處，並作廢舊清單——畫面關閉後就無法再次查看。</div>
           <div class="recovery-grid">
             <template x-for="c in totp.recoveryCodes" :key="c">
               <div class="recovery-code" x-text="c"></div>
@@ -201,7 +201,7 @@
           <template x-if="totp.regenerating">
             <div style="max-width:340px;margin-bottom:14px">
               <div class="alert alert-err" style="font-size:12px">
-                重新產生會讓<b>目前這 10 組全部失效</b>（包含尚未使用過的）。如果您手上有印出來或存起來的舊清單，產生後請直接作廢整張。
+                重新產生會讓<b>目前這 10 組全部失效</b>（包含尚未使用過的）。若您持有已列印或已儲存的舊清單，產生後請直接作廢整張。
               </div>
               <div class="form-group">
                 <label class="form-label">輸入目前密碼以確認</label>
@@ -319,7 +319,7 @@
     <div class="card" id="email-prefs-card" data-testid="email-prefs" style="margin-top:20px;max-width:none"
          x-data="accountEmailPrefs()" x-effect="tab === 'notify' && !wiz && boot()" x-cloak>
       <div class="card-title">Email 通知</div>
-      <div class="card-sub">預設會收到寄給您的所有 Email 通知。不想收的可以在下面取消勾選，按「儲存」才會生效。簽核與系統技術類通知漏收可能耽誤處理，要逐項勾選並再確認一次。</div>
+      <div class="card-sub">預設會收到寄給您的所有 Email 通知。不需要的請於下方取消勾選，按「儲存」才會生效。簽核與系統技術類通知漏收可能耽誤處理，須逐項勾選並再次確認。</div>
       <div id="ep-note" data-testid="ep-note"></div>
       <div id="ep-box" data-testid="ep-matrix"></div>
     </div>
@@ -384,7 +384,7 @@
     <div x-show="tab === 'profile' && !wiz" x-cloak x-data="accountProfile()" data-testid="tab-profile">
       <div class="card">
         <div class="card-title">個人資料</div>
-        <div class="card-sub">這些資料由管理者維護，所以這裡只能看、不能改，需要更正請聯絡管理者。報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」，不是這裡的個人 Email。</div>
+        <div class="card-sub">這些資料由管理者維護，故此處僅供檢視、不可修改；如需更正，請聯絡管理者。報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」，不是這裡的個人 Email。</div>
         <div x-show="err" class="alert alert-err" x-text="err"></div>
         <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
           <div :style="'width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;background:' + avatarBg()" x-text="initial()" data-testid="profile-avatar"></div>
@@ -426,7 +426,7 @@
     <div x-show="tab === 'prefs' && !wiz" x-cloak x-data="accountPrefs()" data-testid="tab-prefs">
       <div class="card">
         <div class="card-title">偏好設定</div>
-        <div class="card-sub">只影響您自己看到的畫面，存在伺服器上，換電腦或手機登入也會保留，不會改變報價單或其他單據的內容。</div>
+        <div class="card-sub">只影響您自己看到的畫面，儲存於伺服器，更換電腦或手機登入仍會保留，不會改變報價單或其他單據的內容。</div>
         <div x-show="err" class="alert alert-err" x-text="err"></div>
         <template x-for="k in keys" :key="k">
           <div class="form-group" style="margin-top:14px">
@@ -588,7 +588,7 @@
         keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, company: {}, err: '', ok: '', _t: null,
         help: {
           font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
-          theme: '只是您自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
+          theme: '僅影響您自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
           login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選擇其他項目則以您的選擇為準。',
           home_page: '每次登入後第一個看到的頁面（只有您的權限看得到的頁面才會生效）。',
         },

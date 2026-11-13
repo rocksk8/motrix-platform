@@ -312,7 +312,7 @@ def allocate(d: dict, specs: dict, taxed: bool):
         if not parts:
             continue
         if sum(c for _, _, c in parts) > A:
-            warns.append(("dispatch_line_split_exceeds", ref0, "拆分金額加總超過目前的行金額（派發單被改過？），這一行的拆分暫時忽略，金額列入未對應"))
+            warns.append(("dispatch_line_split_exceeds", ref0, "拆分金額加總超過目前的行金額（派發單是否已被修改？），這一行的拆分暫時忽略，金額列入未對應"))
             continue
         taxes, rem_tax = split_tax(tL, A, [c for _, _, c in parts])
         ps = [piece(key, ln, no, c, t, iid, "split") for (no, iid, c), t in zip(parts, taxes)]

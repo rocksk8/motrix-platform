@@ -680,7 +680,7 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
         raise HTTPException(404, "庫存項目不存在")
     if row["status"] != "in_stock":
         conn.close()
-        raise HTTPException(409, "僅在庫（未出貨/未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整")
+        raise HTTPException(409, "僅在庫（未出貨／未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整")
     conn.execute("DELETE FROM stock_items WHERE id=?", (item_id,))
     conn.commit()
     conn.close()

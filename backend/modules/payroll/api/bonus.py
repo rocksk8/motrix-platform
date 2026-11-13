@@ -1576,7 +1576,7 @@ def _deduction_view(conn, award, lines):
         if ded is None:
             out["deductionNotice"] = why + "；無法標記已發放。"
         elif ded["missing"]:
-            out["deductionNotice"] = "有人沒有設定投保金額，無法標記已發放（請先設定投保金額）。"
+            out["deductionNotice"] = "尚有人員未設定投保金額，無法標記已發放（請先設定投保金額）。"
         return out
     if award["status"] == "已發放":
         snap = bonus_payouts.paid_snapshot(conn, award["id"])
@@ -2015,7 +2015,7 @@ def _sole_approver_bypass(appr, tiers, user, reason, code, msg):
         raise HTTPException(code, msg)
     reason = (reason or "").strip() if isinstance(reason, str) else ""
     if not reason:
-        raise HTTPException(403, "您不在這張獎金分潤的簽核層內；這條鏈只有一位簽核人（%s）。若要以最高管理者身分代為核准，請填寫原因"
+        raise HTTPException(403, "您不在這張獎金分潤的簽核層內；此簽核流程僅有一位簽核人（%s）。若要以最高管理者身分代為核准，請填寫原因"
                                  "（會寫入稽核紀錄，並通知其他最高管理者）。" % sole)
     return {"approver": sole, "reason": reason[:500]}
 

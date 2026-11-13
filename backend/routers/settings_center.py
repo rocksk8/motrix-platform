@@ -290,7 +290,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
                 rest = rest[rest.index(g) + 1:]                # 失敗那組之後根本沒試過：回 notApplied，畫面才能分「失敗」與「未處理」
                 if isinstance(e, sr.SettingConflict):          # 預檢之後、寫入之前才被別人改（極少見）：同樣回 conflict 形狀
                     raise HTTPException(409, _batch_conflict_body([(g, e)], applied, g, rest))
-                raise HTTPException(409, {"message": "有群組沒有存成功：%s（%s）。已寫入的群組仍然有效，其餘群組未處理，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
+                raise HTTPException(409, {"message": "部分群組儲存失敗：%s（%s）。已寫入的群組仍然有效，其餘群組未處理，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
                                           "applied": applied, "failed": g, "notApplied": rest})
             applied.append(g)
     return {"ok": True, "groups": {g: {**results[g], "classification": plans[g]["fields"]} for g in applied}}

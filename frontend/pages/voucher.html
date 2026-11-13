@@ -445,7 +445,7 @@
           <div class="vc-srcblk" data-testid="src-block" x-show="canEdit" style="display:none">
             <div class="vc-src__hd">
               <span data-testid="src-target" x-text="'帶入到第 ' + (srcTargetLine() + 1) + ' 行摘要'"></span>
-              <span class="vc-src__hint">點摘要格可換一行；點案件或支出項看它的已上傳檔案，點檔案預覽後確認才帶入附件。</span>
+              <span class="vc-src__hint">點選摘要格可換行；點選案件或支出項可查看其已上傳檔案，預覽檔案後再確認帶入附件。</span>
             </div>
             <div class="vc-srcblk__cols">
               <div class="vc-srcblk__col" data-testid="src-cases">
@@ -591,7 +591,7 @@
           <div class="vc-att" x-show="isSaved">
             <div class="vc-att__hd">
               <span>附件</span>
-              <span class="vc-att__hint">發票、請款單等憑證。帶入的檔案會複製一份留在這張傳票裡。</span>
+              <span class="vc-att__hint">發票、請款單等憑證。帶入的檔案會複製一份，留存於此傳票。</span>
             </div>
 
             <template x-for="a in attachments" :key="a.file_id">
@@ -742,8 +742,8 @@
       <div class="vc-hint">
         單號在儲存時由系統產生；借貸是否平衡由系統在過帳時檢查，此處僅顯示目前差額。<br>
         退回修改會把狀態退回草稿、<b>清除已有的簽核</b>，並把單號升版（例如 <code>-R1</code>）——
-        同一張被退過幾次因此看得出來。作廢後原單仍留在系統裡，勾選「含已作廢」可以查到。<br>
-        草稿可以反覆修改並儲存（含分錄），<b>每一次儲存都會逐行記下改了哪一行的哪一個欄位、由什麼變成什麼</b>；
+        可由此看出同一張被退回幾次。作廢後原單仍保留於系統，勾選「含已作廢」即可查詢。<br>
+        草稿可以反覆修改並儲存（含分錄），<b>每一次儲存都會逐行記錄所修改的行與欄位，以及修改前後的值</b>；
         送出審核之後就不能再改，要改請先退回修改。
       </div>
 
@@ -780,7 +780,7 @@
         <div class="vc-preview-atts">
           <div class="vc-preview-atts__hd">
             附件（<span x-text="attachments.length"></span> 筆）
-            <span class="vc-att__hint">點擊可開啟；「預計併入」依副檔名判斷，實際能不能併入以匯出結果為準。</span>
+            <span class="vc-att__hint">點擊可開啟；「預計併入」依副檔名判斷，實際是否可併入，以匯出結果為準。</span>
           </div>
           <div class="vc-preview-atts__rows">
             <template x-for="a in attachments" :key="a.file_id">
@@ -834,7 +834,7 @@
            一起搬過來——它在解釋「含附件」那顆鈕做什麼，鈕不在原地了，
            這句留在原地會變成一句沒有主詞的說明。 -->
       <div class="vc-att__hint" style="padding:0 16px 12px;text-align:right">
-        「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；併不進去的會列在最後一頁，畫面上也會說。
+        「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；無法併入者會列於最後一頁，畫面上亦會說明。
       </div>
     </div>
   </div>

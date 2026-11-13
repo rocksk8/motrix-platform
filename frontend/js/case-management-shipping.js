@@ -389,7 +389,7 @@ window.CM_PARTS.push(() => ({
     revokeShippingApproval(n) {
       window.MotrixApprovalReturn.ask({
         title: `撤銷出貨單「${n.noteNo}」的核准`,
-        hint: '撤銷後單據退回草稿。已扣的庫存序號會自動歸還可出貨狀態。撤銷原因必填，會寫進稽核並通知申請人。',
+        hint: '撤銷後單據退回草稿。已扣的庫存序號會自動歸還可出貨狀態。撤銷原因必填，將記入稽核紀錄並通知申請人。',
         post: (reason) => fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },

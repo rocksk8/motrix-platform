@@ -197,7 +197,7 @@ def check_lines(conn, quote_no, kind, lines, *, exclude_id=None, require_reason=
     if not linked:
         return lines, []
     if not (quote_no or "") or kind not in (REQ, ORD):
-        raise _bad("只有掛在案件底下的請購單／採購單，明細才能連到案件品項")
+        raise _bad("僅隸屬於案件的請購單／採購單，明細才能連到案件品項")
     data, rows = _case_state(conn, quote_no)
     plan = {p["itemId"]: p for p in plan_items(data)}
     for i, l in enumerate(lines, 1):
@@ -580,7 +580,7 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None, po_req
         if cov["poSnapshot"]:                                                                # N2：申請涵蓋該品項**所有**已核准採購單行——金額＝行金額合計、數量只能往下調；否則申請量小於涵蓋量（可出貨量失真）
             if abs(_num(order.get("totalPrice")) - cov["totalPrice"]) > 0.5 or _num(order.get("quantity")) > cov["quantity"] + 1e-9:
                 problems.append({"code": "content_not_cover_snapshot",
-                                 "message": "材料申請的內容要涵蓋該品項全部已核准的採購單行（%d 行：數量 %g、小計 %g），目前是數量 %g、小計 %g；請以涵蓋全部採購單行的內容送審（數量可往下調，金額不可改）。"
+                                 "message": "材料申請的內容要涵蓋該品項全部已核准的採購單行（%d 行：數量 %g、小計 %g），目前是數量 %g、小計 %g；請以涵蓋全部採購單行的內容送審（數量可調低，金額不可修改）。"
                                             % (len(cov["poSnapshot"]), cov["quantity"], cov["totalPrice"], _num(order.get("quantity")), _num(order.get("totalPrice")))})
         snap["poSnapshot"] = cov["poSnapshot"]
         if adjust_of:

@@ -1179,7 +1179,7 @@ def _guard_files_editable(row, kind=None):
         raise HTTPException(409, "這筆額外支出已作廢，附件不可再更動")
     if row["status"] == "已核准" and kind != "invoice":
         raise HTTPException(
-            409, "這筆額外支出已核准，附件已上鎖。發票可由填寫人、管理員或出納補上傳；要補其他憑證請按「編輯」提出變更申請，"
+            409, "這筆額外支出已核准，附件已鎖定。發票可由填寫人、管理員或出納補上傳；要補其他憑證請按「編輯」提出變更申請，"
                  "新附件會在簽核通過後一併生效")
 
 

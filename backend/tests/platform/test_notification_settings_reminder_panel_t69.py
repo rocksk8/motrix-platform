@@ -24,7 +24,7 @@ def test_page_reads_the_existing_endpoint_and_explains_empty_and_denied():
     assert "/api/settings/reminder-send-failures" in s
     assert "目前沒有寄不出去的提醒" in s            # 空清單要有話說，不是一片空白
     assert "只有最高管理者，或被授予「系統設定」功能的帳號可以查看" in s            # 403 分支（與伺服器真實規則一致）
-    assert "暫時讀不到這份清單" in s and "rfError" in s            # 500／連線失敗不能靜默隱藏
+    assert "暫時無法讀取這份清單" in s and "rfError" in s            # 500／連線失敗不能靜默隱藏
     assert 'href="users.html"' in s                  # 補填 Email 的出口
 
 

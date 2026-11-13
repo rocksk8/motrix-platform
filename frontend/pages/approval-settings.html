@@ -320,7 +320,7 @@
             <rect class="cmp-step" x="182" y="120" width="74" height="26" rx="5"/><text x="219" y="137" text-anchor="middle">最高管理者</text>
           </svg>
         </div>
-        <p class="as-caption" data-testid="as-caption">勾選＝共用統一流程；取消＝該單據自己一條。按「調整」可看到切換後誰會核准（儲存前不會生效）。</p>
+        <p class="as-caption" data-testid="as-caption">勾選＝共用統一流程；取消＝該單據使用獨立流程。按「調整」可看到切換後誰會核准（儲存前不會生效）。</p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
           <template x-for="dt in docTypeOrder" :key="dt">
             <div class="scope-row" :id="'as-scope-' + dt" :data-doc-type="dt">
@@ -427,7 +427,7 @@
               <details class="as-fold-more">
               <summary>詳細規則</summary>
               <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
-                申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他最高管理者簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
+                申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（逐層依組織流程留痕，不再跳過換人）；連處主管也是本人時即已達最高層，不再指派其他最高管理者簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
               </div>
               </details>
             </div>
@@ -540,7 +540,7 @@
           <!-- Add tier row -->
           <div class="as-add-row" x-show="session.role === 'superadmin'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-dim);flex-shrink:0"><path d="M12 4v16m8-8H4"/></svg>
-            <span style="flex:1;font-size:12px;color:var(--text-secondary)">新增一層空白層，再從層卡片內加入簽核人（同一層可放多人，依序輪流，可跨部門/處）</span>
+            <span style="flex:1;font-size:12px;color:var(--text-secondary)">新增一層空白層，再從層卡片內加入簽核人（同一層可放多人，依序輪流，可跨部門／處）</span>
             <button class="btn btn-sm btn-primary" @click="addStep(key)">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
               新增簽核層

@@ -97,7 +97,7 @@
   <main class="pr-main">
     <div class="pr-wrap">
       <div class="page-header"><h1 class="page-title">支出申請</h1></div>
-      <p class="pr-hint">支出申請就是案件的額外支出：先挑案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
+      <p class="pr-hint">支出申請就是案件的額外支出：先選擇案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
 
       <div class="pr-tabs">
         <button class="btn btn-sm" :class="tab === 'new' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-new" @click="tab = 'new'">新增申請</button>
@@ -223,7 +223,7 @@
           </div>
           <!-- 採購單廠商收款帳戶（第 47 班）：出納付款時看得到這裡填的快照；完整帳號只有出納與最高管理者看得到，其他人只看末四碼 -->
           <fieldset class="pr-f" x-show="typeCode === 'purchase_order'" data-testid="pr-po-bank-block" style="margin-top:10px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:8px 12px">
-            <legend style="font-size:13px;font-weight:600;padding:0 4px">廠商收款帳戶（建議填寫；沒填時出納付款前會被提醒向您確認）</legend>
+            <legend style="font-size:13px;font-weight:600;padding:0 4px">廠商收款帳戶（建議填寫；未填寫時，出納付款前將提醒向您確認）</legend>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
               <label>銀行名稱<input type="text" maxlength="60" x-model="form.poBank" data-testid="pr-po-bank" placeholder="例：玉山銀行"></label>
               <label>分行<input type="text" maxlength="40" x-model="form.poBranch" data-testid="pr-po-branch" placeholder="例：台中分行"></label>
@@ -254,7 +254,7 @@
           </div>
           <div id="pr-pr-picker" x-show="typeCode === 'purchase_order' && prReqs.length" data-testid="pr-pr-picker" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
             <div style="font-weight:600;margin-bottom:4px">從請購單帶入</div>
-            <div class="pr-hint" style="margin-bottom:6px">只列同案件<b>已核准</b>的請購單；可混合多張請購單的明細，數量可以只帶一部分（累計不超過請購量）。價格由請購單帶入，帶入後仍可修改；看不到財務金額的帳號不帶價格。</div>
+            <div class="pr-hint" style="margin-bottom:6px">只列同案件<b>已核准</b>的請購單；可混合多張請購單的明細，數量可僅帶入一部分（累計不超過請購量）。價格由請購單帶入，帶入後仍可修改；無法查看財務金額的帳號，不帶入價格。</div>
             <template x-for="rq in prReqs" :key="rq.docCode">
               <div style="margin-bottom:8px" :data-pr-doc="rq.docCode">
                 <div style="font-weight:600;font-size:12px" x-text="rq.docCode + (rq.title ? '　' + rq.title : '')"></div>
@@ -605,7 +605,7 @@
         },
         async save(submit) {
           this.err = ''; this.result = null
-          if (!this.picked) { this.err = '請先挑案件'; return }
+          if (!this.picked) { this.err = '請先選擇案件'; return }
           if (!(this.form.description || '').trim()) { this.err = '請填說明'; return }
           if (!(Number(this.form.amount) > 0)) { this.err = '請填金額'; return }
           this.busy = true

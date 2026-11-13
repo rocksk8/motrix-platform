@@ -471,13 +471,13 @@ class MaterialOrderAdapter(RB.Adapter):
         qn, iid = _split_mid(entity_id)
         out = []
         if self._has_payments(conn, qn, iid):
-            out.append({"kind": "paid", "label": "有匯款申請紀錄（含已付款／作廢）：紀錄要留，請先處理匯款申請，不能刪除", "blocking": True})
+            out.append({"kind": "paid", "label": "有匯款申請紀錄（含已付款／作廢）：須保留紀錄，請先處理匯款申請，不可刪除", "blocking": True})
         r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qn,)).fetchone()
         if r is not None:
             cr = _jload(r["data_json"], {}).get("caseRecord") or {}
             linked = [m for m in (cr.get("materials") or []) if isinstance(m, dict) and str(m.get("orderItemId") or "") == iid]
             if linked:
-                out.append({"kind": "linked_materials", "label": "有 %d 筆材料清單項目對應到這張材料申請（刪除後連結會失效，已申購／已到料的勾選仍留著）" % len(linked), "blocking": False})
+                out.append({"kind": "linked_materials", "label": "有 %d 筆材料清單項目對應到這張材料申請（刪除後連結會失效，已申購／已到料的勾選仍保留）" % len(linked), "blocking": False})
         a = self._approval(conn, qn, iid)
         if a is not None and a["status"] == "已核准":
             out.append({"kind": "approved", "label": "已核准的材料申請（%s）" % (a["doc_code"] or "—"), "blocking": False})

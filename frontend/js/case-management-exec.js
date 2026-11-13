@@ -744,7 +744,7 @@ window.CM_PARTS.push(() => ({
     async toggleStageDependency(st, candidateId) {
       const has = (st.dependsOn || []).includes(candidateId)
       if (!has && this.wouldCreateCycle(st.id, candidateId)) {
-        MotrixUI.toast('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段', {kind: 'info'})
+        MotrixUI.toast('此設定將造成階段之間循環依賴，請重新選擇前置階段', {kind: 'info'})
         return
       }
       try {
