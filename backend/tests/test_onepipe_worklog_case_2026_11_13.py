@@ -278,7 +278,9 @@ def test_e2e_flag_off_has_no_case_field_and_posts_no_case_no(live_server, make_u
     page.goto(f"{live_server}/pages/work-log.html")
     page.get_by_role("button", name="新增日誌").first.click()
     page.locator("textarea").first.fill("旗標關的日誌")
-    assert page.locator("[data-testid=wl-case-field]").count() == 0 and page.locator("[data-testid=wl-case-th]").count() == 0
+    from playwright.sync_api import expect
+    expect(page.locator("[data-testid=wl-case-field]")).to_have_count(0)               # 旗標關 ⇒ DOM 沒有這欄（用 expect 等畫面穩定，不是動作後立刻 count()）
+    expect(page.locator("[data-testid=wl-case-th]")).to_have_count(0)
     page.get_by_role("button", name="新增日誌").last.click()
     page.wait_for_timeout(800)
     assert posted and "case_no" not in json.loads(posted[-1])
