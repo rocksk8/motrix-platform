@@ -84,7 +84,7 @@
         <div class="pg__l">
           <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>備份與監控</span></nav>
           <h1 class="pg__t">備份與監控</h1>
-          <p class="pg__s">看備份有沒有成功、硬碟夠不夠、系統有沒有在線；有問題時會寄信通知你。</p>
+          <p class="pg__s">確認備份是否成功、硬碟空間是否足夠、系統是否在線；發生問題時會寄送電子郵件通知您。</p>
         </div>
         <div class="pg__a">
           <button type="button" class="btn btn-primary" data-testid="bm-backup-now" :disabled="!!backupNowDisabledReason" @click="ask('backup')">立即備份</button>
@@ -140,7 +140,7 @@
                   <dt>現在連不連得到</dt>
                   <dd><span class="st-chip" :class="s.cloud.reachable === false ? 'st-chip--rejected' : (s.cloud.reachable ? 'st-chip--approved' : 'st-chip--draft')"
                             x-text="s.cloud.reachable === false ? '連不到' : (s.cloud.reachable ? '連得到' : '不確定')" data-testid="bm-cloud-reach"></span>
-                      <span class="bm-note" x-show="s.cloud.reachable === false">　請確認雲端硬碟有沒有掛上、網路有沒有通。</span></dd>
+                      <span class="bm-note" x-show="s.cloud.reachable === false">　請確認雲端硬碟是否已掛載、網路連線是否正常。</span></dd>
                   <template x-for="m in s.cloud.mirrors" :key="m.label"><div style="display:contents"><dt x-text="m.label + '最近一次'"></dt><dd x-text="fmt(m.at)"></dd></div></template>
                 </dl>
               </div>
@@ -169,7 +169,7 @@
           <section class="bm-card" data-testid="bm-heartbeat">
             <div class="bm-card-h"><h2 class="sec-t">系統是否在線（心跳監控）</h2>
               <button type="button" class="bm-q" :aria-expanded="isHelp('hb')" aria-label="這是什麼" @click="toggleHelp('hb')">?</button></div>
-            <div class="bm-q-pop" x-show="isHelp('hb')">這台電腦每 5 分鐘會檢查系統是不是還活著，並向外部的監控服務（例如 healthchecks.io）打一次卡。萬一斷電或當機，外部服務等不到打卡，就會寄信通知你——這是系統自己壞掉時唯一還會響的警報。</div>
+            <div class="bm-q-pop" x-show="isHelp('hb')">這台電腦每 5 分鐘會檢查系統是否仍在運作，並向外部監控服務（例如 healthchecks.io）回報一次。若發生斷電或當機，外部服務未收到回報時，會寄送電子郵件通知您——這是系統本身故障時唯一仍會發出的警報。</div>
             <template x-if="s.heartbeat && !s.heartbeat.error">
               <div>
                 <dl class="bm-kv">
@@ -199,14 +199,14 @@
                 </div>
                 <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
                   <strong data-testid="bm-disable-waiting" x-text="waitingTitle()"></strong>
-                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'你的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外打卡。')"></div>
+                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'您的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外打卡。')"></div>
                   <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
                   <div class="bm-line">
                     <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
                     <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('cancelreq')">撤回</button>
                     <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-hint">若對方長期不在，可請對方登入核准，或撤回這次變更。</span>
                     <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-reject" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('reject')">駁回</button>
-                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">你可以核准，或駁回（要寫原因）；只有提出申請的人可以撤回。</span>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">您可以核准，或駁回（要寫原因）；只有提出申請的人可以撤回。</span>
                   </div>
                 </div>
                 <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
@@ -323,7 +323,7 @@
           const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
           if (!rq) return ''
           const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外打卡'
-          if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待你或另一位最高管理者核准。'
+          if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待您或另一位最高管理者核准。'
           const hrs = rq.hoursWaiting > 0 ? rq.hoursWaiting + ' 小時' : '不到 1 小時'
           const who = (rq.waitingFor && rq.waitingFor.length) ? rq.waitingFor.join('、') : '另一位最高管理者'
           return '等待 ' + who + ' 核准（已送出 ' + hrs + '）'
@@ -358,11 +358,11 @@
         get overall() {
           const items = []
           const s = this.s || {}
-          if (Array.isArray(s.backups)) s.backups.forEach(b => { if (b.level === 'error' || b.level === 'warn') items.push(b.label + '：' + (b.note || '需要看一下')) })
+          if (Array.isArray(s.backups)) s.backups.forEach(b => { if (b.level === 'error' || b.level === 'warn') items.push(b.label + '：' + (b.note || '需要查看')) })
           if (s.cloud && s.cloud.enabled && s.cloud.reachable === false) items.push('雲端備份：現在連不到雲端存放位置')
           if (Array.isArray(s.disks)) s.disks.forEach(d => { if (d.level === 'error' || d.level === 'warn') items.push(d.label + '：剩餘空間偏少' + (d.freeGb !== null ? '（剩 ' + d.freeGb + ' GB）' : '')) })
           const h = s.heartbeat
-          if (h && (h.level === 'error' || h.level === 'warn')) items.push('心跳監控：' + (this.hbText || '需要看一下'))
+          if (h && (h.level === 'error' || h.level === 'warn')) items.push('心跳監控：' + (this.hbText || '需要查看'))
           if (s.alerts && s.alerts.current) items.push('有一則未解除的備份告警')
           const bad = (Array.isArray(s.backups) && s.backups.some(b => b.level === 'error')) || (s.disks && Array.isArray(s.disks) && s.disks.some(d => d.level === 'error')) ||
                       (s.cloud && s.cloud.reachable === false && s.cloud.enabled) || (h && h.level === 'error')
@@ -383,10 +383,10 @@
           this.urlErr = ''; this.hbMsg = ''
           const host = this.s && this.s.heartbeat && this.s.heartbeat.pingHost
           const T = {
-            backup: ['立即做一次備份？', '會把資料庫複製一份，並更新雲端備份；在背景進行，不影響大家使用，通常幾分鐘內完成。為避免重複，30 分鐘內只能做一次。', '開始備份'],
+            backup: ['立即做一次備份？', '將複製一份資料庫並更新雲端備份；於背景執行，不影響其他使用者作業，通常數分鐘內完成。為避免重複，30 分鐘內僅能執行一次。', '開始備份'],
             url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
             clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
-            approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，而且是你認得的人提出的。', '核准停用'],
+            approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
             reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請寫下駁回的原因（會留在紀錄裡）。', '駁回'],
             cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],

@@ -256,19 +256,19 @@
     <!-- 頁頂三個數字（可點擊篩選；定義固定，見 UX-BUSINESS-PAGES-PROPOSAL §3.3） -->
     <div class="summary-row" data-testid="ql-summary">
       <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" :disabled="!mineOk" data-testid="ql-sum-todo" @click="setFocus('todo')"
-              title="你負責的報價單裡：草稿、被退回待修改的、已核准還沒送給客戶的">
+              title="您負責的報價單裡：草稿、被退回待修改的、已核准還沒送給客戶的">
         <span class="ql-sum__lbl">要我處理</span>
         <span class="ql-sum__val" :style="mineOk && summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="mineOk ? summaryData.todo + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? '草稿、被退回、已核准待寄客戶' : '暫時無法計算'"></span>
       </button>
       <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" :disabled="!mineOk" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
-              title="你負責的報價單裡，正在簽核的（待簽核與簽核中）">
+              title="您負責的報價單裡，正在簽核的（待簽核與簽核中）">
         <span class="ql-sum__lbl">等別人</span>
         <span class="ql-sum__val" x-text="mineOk ? summaryData.waiting + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
       </button>
       <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" :disabled="!mineOk" data-testid="ql-sum-won" @click="setFocus('won')"
-              title="你負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統沒有另外記成案日）。全公司的數字在儀表板。">
+              title="您負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統沒有另外記成案日）。全公司的數字在儀表板。">
         <span class="ql-sum__lbl">本月已成案</span>
         <span class="ql-sum__val" x-text="mineOk ? summaryData.wonCount + ' 張' : '—'"></span>
         <span class="ql-sum__sub" x-text="mineOk ? 'NT$ ' + MotrixFormat.num(summaryData.wonTotal) + '・以報價日期計' : '暫時無法計算'"></span>
@@ -320,10 +320,10 @@
               @click="toggleSortDir()" title="切換正序/倒序">
         <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
       </button>
-      <button class="action-btn action-btn--ghost" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響你自己）">檢視設定</button>
+      <button class="action-btn action-btn--ghost" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響您自己）">檢視設定</button>
       <div class="ql-pair">   <!-- 「欄位」「緊湊」成對：桌機／手機 display:contents（版面不變）；平板 768–1023 併成一列 -->
       <div style="position:relative" x-show="!lvOn.columns" x-cloak @click.outside="colPickOpen = false">
-        <button type="button" class="action-btn action-btn--ghost" data-testid="ql-cols-btn" @click="colPickOpen = !colPickOpen" title="選要看的欄位（只影響你自己）">欄位</button>
+        <button type="button" class="action-btn action-btn--ghost" data-testid="ql-cols-btn" @click="colPickOpen = !colPickOpen" title="選要看的欄位（只影響您自己）">欄位</button>
         <div class="ql-colpick" x-show="colPickOpen" x-cloak data-testid="ql-cols-panel">
           <template x-for="k in COL_OPTIONAL" :key="k">
             <label><input type="checkbox" :checked="!colPrefs.hidden.includes(k)" @change="toggleCol(k)" :data-testid="'ql-col-' + k"> <span x-text="cLabel(k, LV_LABELS[k])"></span></label>
@@ -345,7 +345,7 @@
       <button type="button" class="action-btn action-btn--ghost" style="min-height:32px" data-testid="ql-clear-conditions"
               x-show="hasActiveFilter" @click="clearFilters()">清除條件</button>
       <button type="button" class="ql-cond__toggle" data-testid="ql-mine-toggle" :aria-pressed="(onlyMine && !showAll) ? 'true' : 'false'" @click="toggleMine()"
-              title="開啟＝預設只列你負責的報價單（會記住你的選擇）；關閉＝預設列出你看得到的全部">
+              title="開啟＝預設只列您負責的報價單（會記住您的選擇）；關閉＝預設列出您看得到的全部">
         <span x-text="(onlyMine && !showAll) ? '✓ 只看我負責的' : '只看我負責的'"></span>
       </button>
       <span class="ql-note" data-testid="ql-mine-note" x-show="mineNote" x-text="mineNote"></span>
@@ -567,7 +567,7 @@
               <div class="ux-empty ux-empty--filtered" x-show="emptyKind === 'filtered'" data-testid="empty-filtered">
                 <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
                 <div class="ux-empty__title">沒有符合條件的報價單</div>
-                <div class="ux-empty__desc" x-show="hasActiveFilter">目前的條件下找不到資料（預設只列你負責的、進行中的報價單）。可以按「清除條件」看全部。</div>
+                <div class="ux-empty__desc" x-show="hasActiveFilter">目前的條件下找不到資料（預設只列您負責的、進行中的報價單）。可以按「清除條件」看全部。</div>
                 <div class="ux-empty__desc" x-show="!hasActiveFilter">「全部」分頁不含已結案、未成案的報價單；要看它們請切換上方的分頁。</div>
                 <div class="ux-empty__actions" x-show="hasActiveFilter">
                   <button class="action-btn" @click="clearFilters()" style="cursor:pointer" data-testid="empty-clear-filters">清除條件</button>
@@ -811,8 +811,8 @@
       _isMineQ(q) { return this.mineSet.has(q.quote_no) },
       get mineNote() {
         if (!this.onlyMine || this.showAll || this.focus || this.search.trim() || this.loading) return ''
-        if (!this.mineOk) return '暫時無法判斷哪些是你負責的，先顯示全部'
-        return this.mineSet.size === 0 ? '你目前沒有負責的報價，先顯示全部' : ''
+        if (!this.mineOk) return '暫時無法判斷哪些是您負責的，先顯示全部'
+        return this.mineSet.size === 0 ? '您目前沒有負責的報價，先顯示全部' : ''
       },
       // 清除條件後（暫時看全部）再按一下＝回到記住的「只看我負責的」，不改寫記住的選擇；其餘情況才是明確切換（會記住）
       toggleMine() {
@@ -835,7 +835,7 @@
       },
       get conditions() {
         const c = []
-        if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '你是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
+        if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '您是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
         const f = { todo: '要我處理', waiting: '等別人', won: '本月已成案' }[this.focus]
         if (f) c.push({ key: 'focus', label: f })
         const ph = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
@@ -844,7 +844,7 @@
           const tab = this.tabs.find(t => t.key === this.activeTab)
           c.push({ key: 'tab', label: this.activeTab === 'all' ? '進行中' : (tab ? tab.label : this.activeTab) })
         }
-        if (this.search.trim()) { c.push({ key: 'search', label: '搜尋「' + this.search.trim() + '」' }); if (!this.focus) c.push({ key: 'scope', label: '搜尋範圍：全部你可看的報價' }) }
+        if (this.search.trim()) { c.push({ key: 'search', label: '搜尋「' + this.search.trim() + '」' }); if (!this.focus) c.push({ key: 'scope', label: '搜尋範圍：全部您可看的報價' }) }
         if (this.filterSales) c.push({ key: 'sales', label: '填單人 ' + this.filterSales })
         if (this.filterMonth) c.push({ key: 'month', label: this.filterMonth })
         if (this.filterDealTag) c.push({ key: 'deal', label: '案件進度：' + this.filterDealTag })

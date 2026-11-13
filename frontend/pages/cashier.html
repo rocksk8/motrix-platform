@@ -407,7 +407,7 @@
               <!-- `FN3`：T100 匯出從報表頁搬進來，成為第 5 個子頁籤。
                    ⚠️ 用 `showT100Sub()` 不是直接指派 `cashierSub` —— 它要**懶載**
                       預覽／設定／已確認清單，而其餘四個子頁籤的資料在 init() 就載好了。 -->
-              <button class="ctab" :class="{on: cashierSub==='t100'}" @click="showT100Sub()">T100匯出<span class="tab__cnt" x-show="t100Preview && t100Preview.count" x-text="t100Preview ? t100Preview.count : ''"></span></button>
+              <button class="ctab" :class="{on: cashierSub==='t100'}" @click="showT100Sub()">T100 匯出<span class="tab__cnt" x-show="t100Preview && t100Preview.count" x-text="t100Preview ? t100Preview.count : ''"></span></button>
             </div>
 
             <!-- 待付款 -->
@@ -1072,20 +1072,20 @@
             <div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
             科目代號留白時，匯出的 Excel 仍會產出正確的金額/日期/摘要/來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
-            <span x-show="_role()!=='superadmin'">（僅最高管理者可修改，你目前只能檢視）</span>
+            <span x-show="_role()!=='superadmin'">（僅最高管理者可修改，您目前只能檢視）</span>
             </div>
 
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
 
             <!-- 卡片①：銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">🏦 銀行帳戶清單</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">銀行帳戶清單</div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款/已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——這裡改了，其他頁面下次開啟標記視窗就會看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
             <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
             <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
             <button type="button" x-show="_role()==='superadmin'"
             @click="t100Config.defaultBankAccountCode = (t100Config.defaultBankAccountCode === b.acctCode ? '' : b.acctCode)"
-            :title="t100Config.defaultBankAccountCode === b.acctCode ? '目前是系統預設帳戶，點一下取消' : '設為系統預設帳戶'"
+            :title="t100Config.defaultBankAccountCode === b.acctCode ? '目前為系統預設帳戶，按一下可取消' : '設為系統預設帳戶'"
             style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px;line-height:1;flex-shrink:0"
             :style="t100Config.defaultBankAccountCode === b.acctCode ? 'color:var(--warning)' : 'color:var(--border-light)'"
             x-text="t100Config.defaultBankAccountCode === b.acctCode ? '★' : '☆'"></button>
@@ -1102,7 +1102,7 @@
 
             <!-- 卡片②：通用科目代號 -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">📊 通用科目代號</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">通用科目代號</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
             <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:2px">銷貨收入</label>
@@ -1137,7 +1137,7 @@
 
             <!-- 卡片③：料件/設備成本科目代號（依料件分類分開設定） -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">📦 料件/設備成本科目代號（依分類）</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">料件／設備成本科目代號（依分類）</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <template x-for="cat in Object.keys(t100Config.inventoryExpenseAccounts)" :key="cat">
             <div>

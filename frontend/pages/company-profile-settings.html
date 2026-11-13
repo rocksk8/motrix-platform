@@ -374,7 +374,7 @@
                       <input type="text" style="flex:1 1 150px" x-model="loc.name"
                              placeholder="名稱，例：總公司／台北分公司">
                       <input type="text" style="flex:2 1 260px" x-model="loc.address"
-                             placeholder="地址，例：台北市信義區市府路1號">
+                             placeholder="地址，例：台北市信義區市府路 1 號">
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
                       <!-- 📌 第一筆的兩個輸入框沿用 `office_lat`／`office_lon` 這兩個
@@ -738,7 +738,7 @@
               <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
               <br>⚠️ <strong>額度留空 ＝ 不設上限</strong>（不是 0，也不是關掉功能）：
               警戒線不會寄信、硬上限不會降回免費，<strong>用多少算多少</strong>。
-              請填入你自己在 Google Cloud 主控台上看到的數字 ——
+              請填入您自己在 Google Cloud 主控台上看到的數字 ——
               每個服務（SKU）各自一組免費額度，<strong>不共用</strong>。
             </div>
             <div class="ns-row">
@@ -757,7 +757,7 @@
                   留空＝<strong>不設上限，超用多少算多少</strong>。
                   Google 目前給 Geocoding <strong>每月 10,000 次免費</strong>
                   （2026-09 查證，印度區另有例外），
-                  <strong>實際額度以你的帳單為準</strong>。
+                  <strong>實際額度以您的帳單為準</strong>。
                 </div>
               </div>
               <div class="ns-field">
@@ -827,7 +827,7 @@
               <div x-show="gqCalc && gqCalc.cost_this_period !== null">
                 <strong>本週期金額換算</strong>
                 <span x-text="gqCalc && gqCalc.cost_this_period"></span>
-                <span style="opacity:.75">（依你填的單價；
+                <span style="opacity:.75">（依您填的單價；
                   ⚠️ 「一次請求＝一個計費單位」我們沒有向 Google 查證過，
                   這個數字只能當估算）</span></div>
             </div>
@@ -852,7 +852,7 @@
           </div>
           <div class="ns-card-body">
             <div class="ns-desc" data-testid="bm-link-card">
-              要看備份有沒有成功、硬碟剩多少、系統在不在線，請到 <a href="backup-monitor.html">備份與監控</a>。
+              如需查看備份是否成功、剩餘硬碟空間及系統是否在線，請至 <a href="backup-monitor.html">備份與監控</a>。
             </div>
             <div class="ns-desc">
               超過保留天數的備份會在每日排程時自動清除。<strong>調小等於刪掉更多歷史備份，調整前先確認磁碟空間與可回溯範圍的取捨。</strong>
@@ -930,7 +930,7 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               報價單／出貨單／請款單等 PDF 的存放根目錄。留空使用預設值。
-              <strong>這個路徑也是雲端「PDF存檔鏡像」的來源</strong>，改了之後舊位置的檔案不會自動搬過去。
+              <strong>這個路徑也是雲端「PDF 存檔鏡像」的來源</strong>，改了之後舊位置的檔案不會自動搬過去。
               目錄必須已存在，否則儲存時會被擋下。
             </div>
             <div class="ns-row full">

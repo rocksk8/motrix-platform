@@ -87,7 +87,7 @@ def test_labels_point_at_real_fields_and_ticking_received_prompts_for_the_date(l
     n = page.evaluate("""() => document.querySelectorAll('[data-testid="fin-payment"] label.fi-label[for]').length""")
     assert n >= 10, "款項明細的欄位標籤要綁到欄位（正對照：至少兩期 × 5 格）"
     page.locator('[data-testid="fin-payment"] label[for$="-note"]').nth(1).click()
-    assert page.evaluate("() => document.activeElement.placeholder") == "收款備註..."
+    assert page.evaluate("() => document.activeElement.placeholder") == "收款備註…"
 
     # 第二期原本未收款：勾下去的當下 ⇒ 游標到收款日期、框紅、出現必填 *
     page.locator('[data-testid="pay-received-1"]').check()

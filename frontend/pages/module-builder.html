@@ -43,7 +43,7 @@
 
       <div class="mb-err" id="mb-error" x-show="errMsg" x-text="errMsg"></div>
       <div class="mb-err" id="mb-conflict" x-show="conflict" x-cloak role="alert" data-testid="mb-conflict">
-        <b>別人剛改過這份草稿</b>（<span data-testid="mb-conflict-who" x-text="conflictWho()"></span>）。自動存檔已停止，你這邊未存的修改還在畫面上。
+        <b>別人剛改過這份草稿</b>（<span data-testid="mb-conflict-who" x-text="conflictWho()"></span>）。自動存檔已停止，您這邊未存的修改還在畫面上。
         <span x-show="!conflictHeld">
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
@@ -247,7 +247,7 @@
             <div class="mb3__bar">
               <div class="mb-seg" role="tablist" aria-label="編輯或預覽" id="mb-mode" x-show="!useFD">
                 <button role="tab" id="mb-mode-edit" :class="{ 'is-on': formMode === 'edit' }" :aria-selected="formMode === 'edit' ? 'true' : 'false'" @click="setFormMode('edit')">✎ 編輯</button>
-                <button role="tab" id="mb-mode-preview" :class="{ 'is-on': formMode === 'preview' }" :aria-selected="formMode === 'preview' ? 'true' : 'false'" @click="setFormMode('preview')">👁 預覽</button>
+                <button role="tab" id="mb-mode-preview" :class="{ 'is-on': formMode === 'preview' }" :aria-selected="formMode === 'preview' ? 'true' : 'false'" @click="setFormMode('preview')">預覽</button>
               </div>
               <span class="mb-hint" x-show="!useFD && formMode === 'preview'" style="margin:0">這是使用者填單的樣子（試填不會存檔）</span>
               <span class="grow"></span>
@@ -261,7 +261,7 @@
               <!-- 左：元件列（目錄 fieldElements／elementGroups；分組可收合、可搜尋） -->
               <aside class="mb-pal mb3__pal" id="mb-palette" aria-label="元件列">
                 <input class="mb-pal__q" id="mb-palette-q" type="search" x-model="paletteQuery" placeholder="搜尋元件…" aria-label="搜尋元件">
-                <div class="mb-pal__t">拖進表單，或按 Enter／點一下加到目前的區塊</div>
+                <div class="mb-pal__t">拖曳至表單，或按 Enter／按一下以加入目前的區塊</div>
                 <template x-for="g in paletteGroups()" :key="g.id">
                   <div :data-palette-group="g.id">
                     <button class="mb-pal__g" :aria-expanded="groupClosed[g.id] ? 'false' : 'true'" @click="toggleGroup(g.id)">
@@ -1098,7 +1098,7 @@
                 <div class="mb-hint" id="mb-review-state" x-text="reviewBadge()"></div>
                 <div class="mb-hint" x-show="!defReview.active" x-text="defReview.reason"></div>
                 <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">模組審核人與模式</summary>
-                  <div class="mb-hint">名單裡有你以外至少一人 ⇒ 送審自動啟用；審核人任一位核可即發布，退回要填原因、版號不回收。</div>
+                  <div class="mb-hint">名單裡有您以外至少一人 ⇒ 送審自動啟用；審核人任一位核可即發布，退回要填原因、版號不回收。</div>
                   <div class="cr-opts" style="max-height:150px;overflow:auto">
                     <template x-for="u in users" :key="u.username">
                       <label><input type="checkbox" style="width:auto" :data-reviewer="u.username" :checked="reviewerHas(u.username)" @change="toggleReviewer(u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>

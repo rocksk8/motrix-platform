@@ -223,7 +223,7 @@
           </div>
           <!-- 採購單廠商收款帳戶（第 47 班）：出納付款時看得到這裡填的快照；完整帳號只有出納與最高管理者看得到，其他人只看末四碼 -->
           <fieldset class="pr-f" x-show="typeCode === 'purchase_order'" data-testid="pr-po-bank-block" style="margin-top:10px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:8px 12px">
-            <legend style="font-size:13px;font-weight:600;padding:0 4px">廠商收款帳戶（建議填寫；沒填時出納付款前會被提醒向你確認）</legend>
+            <legend style="font-size:13px;font-weight:600;padding:0 4px">廠商收款帳戶（建議填寫；沒填時出納付款前會被提醒向您確認）</legend>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
               <label>銀行名稱<input type="text" maxlength="60" x-model="form.poBank" data-testid="pr-po-bank" placeholder="例：玉山銀行"></label>
               <label>分行<input type="text" maxlength="40" x-model="form.poBranch" data-testid="pr-po-branch" placeholder="例：台中分行"></label>

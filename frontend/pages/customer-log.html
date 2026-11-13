@@ -307,7 +307,7 @@
       <!-- Customer card -->
       <div class="cust-card">
         <template x-if="!customer">
-          <div style="color:var(--text-dim);font-size:13px">載入中...</div>
+          <div style="color:var(--text-dim);font-size:13px">載入中…</div>
         </template>
         <template x-if="customer">
           <div>
@@ -385,7 +385,7 @@
       <div class="log-topbar">
         <div class="log-search-wrap">
           <svg class="log-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input class="log-search" type="text" placeholder="搜尋紀錄內容、人員..." x-model="search">
+          <input class="log-search" type="text" placeholder="搜尋紀錄內容、人員…" x-model="search">
         </div>
         <select class="log-sort filter" x-model="sortDir">
           <option value="desc">最新優先</option>
@@ -422,7 +422,7 @@
         <template x-if="loading">
           <div class="tl-empty">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite;color:var(--accent)"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-dasharray="60" stroke-dashoffset="20"/></svg>
-            <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">載入中...</div>
+            <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">載入中…</div>
           </div>
         </template>
 
@@ -527,11 +527,11 @@
           <div class="fg">
             <div class="fl">聯繫類型</div>
             <select class="fs" x-model="form.type">
-              <option value="現場拜訪">🏢 現場拜訪</option>
-              <option value="電話聯繫">📞 電話聯繫</option>
-              <option value="視訊會議">💻 視訊會議</option>
-              <option value="電子郵件">📧 電子郵件</option>
-              <option value="其他">📌 其他</option>
+              <option value="現場拜訪">現場拜訪</option>
+              <option value="電話聯繫">電話聯繫</option>
+              <option value="視訊會議">視訊會議</option>
+              <option value="電子郵件">電子郵件</option>
+              <option value="其他">其他</option>
             </select>
           </div>
         </div>
@@ -544,7 +544,7 @@
           </div>
           <div class="att-grid">
             <template x-if="users.length === 0">
-              <div style="font-size:12px;color:var(--text-dim)">載入使用者中...</div>
+              <div style="font-size:12px;color:var(--text-dim)">載入使用者中…</div>
             </template>
             <template x-for="u in users" :key="u.username">
               <button class="att-chip" :class="{on: form.attendees.includes(u.displayName)}"
@@ -560,19 +560,19 @@
         <!-- Content -->
         <div class="fg">
           <div class="fl">工作內容 / 會議摘要 <span class="req">*</span></div>
-          <textarea class="fta" rows="4" placeholder="說明本次往來的具體內容，如：現場勘查設備狀況、與主管討論需求、確認交期..." x-model="form.content"></textarea>
+          <textarea class="fta" rows="4" placeholder="說明本次往來的具體內容，如：現場勘查設備狀況、與主管討論需求、確認交期…" x-model="form.content"></textarea>
         </div>
 
         <!-- Follow-up -->
         <div class="fg">
           <div class="fl">聯繫事項 / 待辦追蹤</div>
-          <textarea class="fta" rows="3" placeholder="需後續跟進的事項、客戶提出的要求、預計下次聯繫時間..." x-model="form.contactNotes"></textarea>
+          <textarea class="fta" rows="3" placeholder="需後續跟進的事項、客戶提出的要求、預計下次聯繫時間…" x-model="form.contactNotes"></textarea>
         </div>
 
         <!-- Note -->
         <div class="fg" style="margin-bottom:0">
           <div class="fl">內部備註</div>
-          <textarea class="fta" rows="2" placeholder="內部說明，不對外顯示..." x-model="form.note"></textarea>
+          <textarea class="fta" rows="2" placeholder="內部說明，不對外顯示…" x-model="form.note"></textarea>
         </div>
 
       </div>
@@ -583,7 +583,7 @@
         <button class="btn-g" @click="closeModal()">取消</button>
         <button class="btn-p" @click="saveRecord()" :disabled="saving">
           <svg x-show="saving" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .7s linear infinite"><path d="M21 12a9 9 0 11-18 0"/></svg>
-          <span x-text="saving ? '儲存中...' : (editingId ? '更新紀錄' : '新增紀錄')"></span>
+          <span x-text="saving ? '儲存中…' : (editingId ? '更新紀錄' : '新增紀錄')"></span>
         </button>
       </div>
     </div>

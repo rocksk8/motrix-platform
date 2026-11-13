@@ -276,7 +276,7 @@
     <div class="os-note">
       <span>ℹ️</span>
       <span>
-        這裡統計的是「有實際操作的活躍時間」，不是分頁開著的時間——開著畫面去開會不會被算進去。
+        這裡統計的是「有實際操作的活躍時間」，不是分頁開啟的時間——開啟畫面但未操作的時段（例如開會）不會列入計算。
         系統每 5 分鐘累計一次，因此當天的數字最多會少算 5 分鐘。<br>
         這份資料只有最高管理者看得到。
       </span>
@@ -304,7 +304,7 @@
             document.querySelector('.os-main').innerHTML =
               '<div style="max-width:520px;margin:64px auto;text-align:center">'
               + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
-              + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>'
+              + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>'
               + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">使用狀況僅限最高管理者檢視。</div></div>'
             return
           }

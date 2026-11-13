@@ -27,7 +27,7 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 
 NO = "MQ-E2ECC-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
-NOTE_INPUT = 'input[placeholder="收款備註..."]'
+NOTE_INPUT = 'input[placeholder="收款備註…"]'
 
 
 

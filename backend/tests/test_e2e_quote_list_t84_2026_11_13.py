@@ -182,7 +182,7 @@ def test_superadmin_with_no_owned_quotes_is_not_shown_an_empty_page(live_server,
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
     assert page.evaluate("() => %s._mineLimit" % DATA) is False
     assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 5
-    assert "你目前沒有負責的報價，先顯示全部" in page.get_by_test_id("ql-mine-note").inner_text()
+    assert "您目前沒有負責的報價，先顯示全部" in page.get_by_test_id("ql-mine-note").inner_text()
     assert owner  # 夾具已建帳號
 
 
@@ -247,7 +247,7 @@ def test_search_ignores_mine_and_says_so_without_an_extra_click(live_server, mak
     assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") == 1, "預設只列我負責的"
     page.locator("input.search-input[placeholder*='搜尋報價單號']").fill("客戶102")
     page.wait_for_function("() => document.querySelectorAll(\"tr.ql-row[data-quote-no='MQ-T84E-102']\").length === 1", timeout=5000)
-    assert "搜尋範圍：全部你可看的報價" in page.get_by_test_id("ql-cond").inner_text()
+    assert "搜尋範圍：全部您可看的報價" in page.get_by_test_id("ql-cond").inner_text()
     page.locator("input.search-input[placeholder*='搜尋報價單號']").fill("")
     page.wait_for_function("() => document.querySelectorAll('tr.ql-row').length === 1", timeout=5000)
     assert page.get_by_test_id("ql-cond-mine").count() == 1

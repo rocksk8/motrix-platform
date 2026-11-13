@@ -78,7 +78,7 @@ def test_banner_survives_typing_after_an_error(live_server, make_user, e2e_brows
     browser = e2e_browser
     page = _open(browser, live_server, u)
     _break_and_save(page)
-    note = page.locator("[data-testid=fin-payment] input[placeholder='收款備註...']").first
+    note = page.locator("[data-testid=fin-payment] input[placeholder='收款備註…']").first
     note.fill("打字")                          # @input ⇒ setDirty()
     page.wait_for_timeout(300)
     assert page.locator(BANNER).is_visible(), "一打字錯誤橫幅就消失了（問題還在）"

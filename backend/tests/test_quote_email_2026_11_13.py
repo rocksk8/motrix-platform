@@ -333,7 +333,7 @@ def test_profile_copy_distinguishes_personal_email_from_quote_email():
     import pathlib
     html = _page_file("my-account.html").read_text(encoding="utf-8")
     assert "報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」" in html
-    assert "profile-quote-email-none" in html and "尚未設定：目前報價單上不會有你的信箱" in html
+    assert "profile-quote-email-none" in html and "尚未設定：目前報價單上不會有您的信箱" in html
     assert "（尚未設定）" in html
 
 

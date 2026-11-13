@@ -634,7 +634,7 @@
       <!-- 洽談中逾期警示 -->
       <div class="dc-stale-bar" x-show="staleCount > 0" @click="staleOnly = !staleOnly">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
-        <span x-text="staleCount + ' 筆案件洽談中超過30天未更新'"></span>
+        <span x-text="staleCount + ' 筆案件洽談中超過 30 天未更新'"></span>
         <span style="margin-left:auto;text-decoration:underline" x-text="staleOnly ? '顯示全部 →' : '只看逾期 →'"></span>
       </div>
 
@@ -1255,7 +1255,7 @@
           <div class="dc-form-group">
             <label>案件名稱 <span style="color:var(--danger)">*</span></label>
             <input class="dc-input" type="text" x-model="caseForm.case_name"
-              placeholder="例：XX公司辦公室弱電整合">
+              placeholder="例：XX 公司辦公室弱電整合">
           </div>
           <div class="dc-form-group">
             <label>介紹人 <span style="color:var(--text-dim);font-weight:400">（選填）</span></label>
@@ -1991,8 +1991,8 @@ function devCrmPage() {
       box.setAttribute('data-testid', 'dev-crm-no-access')
       box.innerHTML = '<div style="max-width:560px;margin:64px auto;padding:24px 28px;text-align:center;line-height:1.8">'
         + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
-        + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">你目前沒有「業務開發」的使用權限</div>'
-        + '<div style="font-size:13px;color:var(--text-secondary,#4B5563);margin-bottom:18px">這個功能要由最高管理者在「使用者管理」替你的帳號開啟後才能使用。需要的話，請聯絡你的主管或系統管理員。若你剛被開通權限，請登出後重新登入。</div>'
+        + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">您目前沒有「業務開發」的使用權限</div>'
+        + '<div style="font-size:13px;color:var(--text-secondary,#4B5563);margin-bottom:18px">這個功能要由最高管理者在「使用者管理」替您的帳號開啟後才能使用。需要的話，請聯絡您的主管或系統管理員。若您剛被開通權限，請登出後重新登入。</div>'
         + '<a class="btn btn-primary" href="../index.html">回首頁</a></div>'
       main.parentNode.insertBefore(box, main.nextSibling)
     },

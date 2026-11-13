@@ -559,7 +559,7 @@
           <div class="tab-bar tab-bar--grouped" data-testid="tab-bar">
             <div class="tab-group" data-tab-group="perf"><span class="tab-group__lbl">業績</span>
               <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">
-              🎯 目標達成率
+              目標達成率
               <span class="tab__cnt"
                     :style="achievement.hasTargets && achievement.annual && achievement.annual.revenue && achievement.annual.revenue.rate !== null
                       ? (achievement.annual.revenue.rate >= 95 ? 'background:#DCFCE7;color:#15803D'
@@ -569,7 +569,7 @@
                       ? (achievement.annual.revenue.rate||0).toFixed(0)+'%' : '未設定'"></span>
             </button>
               <button class="tab" :class="{on:activeTab==='charts'}" @click="showChartsTab()">
-              📈 圖表分析
+              圖表分析
             </button>
               <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
               業務員績效<span class="tab__cnt" x-text="salesPerf.length"></span>

@@ -164,7 +164,7 @@
         <div>
           <!-- 這個畫面被「初次啟用」與「重新產生」兩種情境共用，文案要分開：
                重產時說「已啟用！」會讓人以為剛剛發生了別的事 -->
-          <div class="alert alert-ok" x-show="!totp.recoveryFromRegen">已啟用！請把下方 10 組救援碼另外存放安全處——手機遺失或驗證 App 移除時可用來登入，畫面關閉後就無法再次查看。</div>
+          <div class="alert alert-ok" x-show="!totp.recoveryFromRegen">已啟用。請將下方 10 組救援碼另行存放於安全處——手機遺失或驗證 App 移除時可用來登入，畫面關閉後就無法再次查看。</div>
           <div class="alert alert-ok" x-show="totp.recoveryFromRegen">已重新產生 10 組救援碼，<b>舊的那一批現在全部失效</b>。請把下方新碼另外存放安全處並作廃舊清單——畫面關閉後就無法再次查看。</div>
           <div class="recovery-grid">
             <template x-for="c in totp.recoveryCodes" :key="c">
@@ -201,7 +201,7 @@
           <template x-if="totp.regenerating">
             <div style="max-width:340px;margin-bottom:14px">
               <div class="alert alert-err" style="font-size:12px">
-                重新產生會讓<b>目前這 10 組全部失效</b>（包含還沒用過的）。如果你手上有印出來或存起來的舊清單，產生後請直接作廢整張。
+                重新產生會讓<b>目前這 10 組全部失效</b>（包含還沒用過的）。如果您手上有印出來或存起來的舊清單，產生後請直接作廢整張。
               </div>
               <div class="form-group">
                 <label class="form-label">輸入目前密碼以確認</label>
@@ -376,7 +376,7 @@
 
       <div class="card" style="margin-top:20px" x-show="lineAvail === false" data-testid="notify-empty-hint" x-cloak>
         <div class="card-title">LINE 通知</div>
-        <div class="card-sub">LINE 通知目前沒有開放。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的 LINE 通知。</div>
+        <div class="card-sub">LINE 通知目前沒有開放。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與您想收的 LINE 通知。</div>
       </div>
     </div>
 
@@ -402,14 +402,14 @@
           <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
         <div class="form-group" data-testid="profile-quote-email-group"><label class="form-label">報價用信箱（開報價單時帶入）</label>
           <input class="form-input" type="text" :value="p.quoteEmailEffective || '（尚未設定）'" disabled data-testid="profile-quote-email">
-          <div class="hint" x-show="p.quoteEmailSource === 'user'">此資料由管理者維護，會顯示在報價單上。這是管理者幫你設定的報價用公司信箱。</div>
-          <div class="hint" x-show="p.quoteEmailSource === 'company'">此資料由管理者維護，會顯示在報價單上。你沒有自己的報價用信箱，所以使用公司對外信箱。</div>
-          <div class="hint" x-show="p.quoteEmailSource === 'personal'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定報價用公司信箱：目前報價單會帶入你的個人信箱。請聯絡管理者設定報價用公司信箱。</div>
-          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company' && p.quoteEmailSource !== 'personal'" data-testid="profile-quote-email-none" style="color:#B45309">尚未設定：目前報價單上不會有你的信箱。請聯絡管理者設定報價用信箱。</div></div>
+          <div class="hint" x-show="p.quoteEmailSource === 'user'">此資料由管理者維護，會顯示在報價單上。這是管理者為您設定的報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource === 'company'">此資料由管理者維護，會顯示在報價單上。您沒有自己的報價用信箱，所以使用公司對外信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource === 'personal'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定報價用公司信箱：目前報價單會帶入您的個人信箱。請聯絡管理者設定報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company' && p.quoteEmailSource !== 'personal'" data-testid="profile-quote-email-none" style="color:#B45309">尚未設定：目前報價單上不會有您的信箱。請聯絡管理者設定報價用信箱。</div></div>
       </div>
       <div class="card" style="margin-top:20px">
         <div class="card-title">頭像顏色</div>
-        <div class="card-sub">只改你自己看到的頭像圓圈顏色，不會出現在任何單據上。</div>
+        <div class="card-sub">只改您自己看到的頭像圓圈顏色，不會出現在任何單據上。</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px" data-testid="avatar-colors">
           <template x-for="c in colors" :key="c.value">
             <button type="button" class="btn-ghost" :data-testid="'avatar-' + c.value" @click="setColor(c.value)"
@@ -426,7 +426,7 @@
     <div x-show="tab === 'prefs' && !wiz" x-cloak x-data="accountPrefs()" data-testid="tab-prefs">
       <div class="card">
         <div class="card-title">偏好設定</div>
-        <div class="card-sub">只影響你自己看到的畫面，存在伺服器上，換電腦或手機登入也會保留，不會改變報價單或其他單據的內容。</div>
+        <div class="card-sub">只影響您自己看到的畫面，存在伺服器上，換電腦或手機登入也會保留，不會改變報價單或其他單據的內容。</div>
         <div x-show="err" class="alert alert-err" x-text="err"></div>
         <template x-for="k in keys" :key="k">
           <div class="form-group" style="margin-top:14px">
@@ -588,9 +588,9 @@
         keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, company: {}, err: '', ok: '', _t: null,
         help: {
           font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
-          theme: '只是你自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
-          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選別的就以你的選擇為準。',
-          home_page: '每次登入後第一個看到的頁面（只有你的權限看得到的頁面才會生效）。',
+          theme: '只是您自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
+          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選別的就以您的選擇為準。',
+          home_page: '每次登入後第一個看到的頁面（只有您的權限看得到的頁面才會生效）。',
         },
         // 公司設為「關閉」是總開關：個人選什麼都不會讓問候語出現，所以選單停用並說明原因（個人值照舊保留，公司重新開啟後依個人選擇）
         lockedMsg: { login_greeting: '公司已關閉登入問候語' },
@@ -877,7 +877,7 @@
             body: JSON.stringify(body)
           })
           if (!r.ok) { const d = await r.json().catch(() => ({})); this.passkeys.err = d.detail || '註冊失敗'; return }
-          this.passkeys.ok = '已新增 Passkey！'
+          this.passkeys.ok = '已新增 Passkey。'
           await this.loadPasskeys()
         } catch (e) {
           this.passkeys.err = e.message || '連線失敗'
@@ -959,8 +959,8 @@
             this.errMsg = data.detail || '更新失敗，請稍後再試'
           } else {
             this.okMsg = this.wiz === 'pw'
-              ? '步驟 1 完成！密碼已更新，2 秒後請用新密碼重新登入，接著進行下一步。'
-              : '密碼已更新！2 秒後將重新登入…'
+              ? '步驟 1 完成。密碼已更新，2 秒後請使用新密碼重新登入，再進行下一步。'
+              : '密碼已更新。2 秒後將重新登入…'
             setTimeout(() => {
               localStorage.removeItem('motrix_session')
               location.href = '../index.html'
@@ -1087,7 +1087,7 @@
     function put(body) { return call('/api/mail-types/mine', { method: 'PUT', headers: hdr(true), body: JSON.stringify(body) }) }
     function noteHtml(d) {
       var h = ''
-      if (!d.hasEmail) h += '<div class="alert alert-err" data-testid="ep-no-email">您的帳號還沒有 Email，目前不會收到任何 Email 通知。請管理者在「使用者管理」幫您補上；這裡的選擇會先存起來，補上之後生效。</div>'
+      if (!d.hasEmail) h += '<div class="alert alert-err" data-testid="ep-no-email">您的帳號尚未設定 Email，目前不會收到任何 Email 通知。請管理者在「使用者管理」為您補上；此處的選擇會先行儲存，補上後即生效。</div>'
       return h
     }
     // 伺服器的列 → 矩陣的列：非業務類（簽核／系統技術）不能批次勾選

@@ -156,7 +156,7 @@
             <!-- 🔴 「不可編輯」必須在**按下去之前**就說出來。
                  ☠️ 少了它，使用者按下編輯才被資料層擋，
                     而他看到的是 RAISE(ABORT) 那句話。 -->
-            <span class="ai-lock" x-show="row.source === 'statutory'" title="法定項目：不可修改、不可刪除">🔒 唯讀</span>
+            <span class="ai-lock" x-show="row.source === 'statutory'" title="法定項目：不可修改、不可刪除">唯讀</span>
 
             <!-- `CA1 §5`：延伸建立與停用／啟用都是 superadmin 專屬端點，
                  前端一致地只給 superadmin 看得到這兩個動作。

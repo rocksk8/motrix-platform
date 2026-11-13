@@ -33,7 +33,7 @@
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="le-main">
     <div class="le-title">LINE 通知事件</div>
-    <div class="le-sub">一張表管理所有 LINE 通知：每個事件要不要發、發給誰。點格子立即生效；你的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些事件沒被別人改過）。
+    <div class="le-sub">一張表管理所有 LINE 通知：每個事件要不要發、發給誰。點格子立即生效；您的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些事件沒被別人改過）。
       連線設定、綁定、總開關在 <a href="notification-settings.html" data-testid="le-back-link">通知設定</a>。</div>
     <div class="le-bar" id="le-bar" aria-live="polite"></div>
     <div class="le-legend" aria-label="圖例">
@@ -261,7 +261,7 @@
       var shown = rows.slice(0, 8).map(function (r) {
         var who = r.n_before + ' → ' + r.n_after + ' 人' + (r.exact_after ? '' : '（上限）')
         var est = !r.enabled_after ? (r.sent30 ? r.sent30 + ' → 0' : '0') : (r.est_after == null ? '—' : r.sent30 + ' → ' + r.est_after)
-        return '<tr><td>' + esc(r.name) + (r.defaulted ? ' <span class="mx-mute">（預設只發給你）</span>' : '') + '</td><td style="text-align:right;white-space:nowrap">' + who + '</td><td style="text-align:right;white-space:nowrap">' + est + '</td></tr>'
+        return '<tr><td>' + esc(r.name) + (r.defaulted ? ' <span class="mx-mute">（預設只發給您）</span>' : '') + '</td><td style="text-align:right;white-space:nowrap">' + who + '</td><td style="text-align:right;white-space:nowrap">' + est + '</td></tr>'
       }).join('')
       return '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--ink-secondary)"><th style="text-align:left">事件</th><th style="text-align:right">可能收件人</th><th style="text-align:right">每月則數</th></tr></thead><tbody>' + shown + '</tbody></table>' +
         (rows.length > 8 ? '<div class="mx-mute">…另有 ' + (rows.length - 8) + ' 項</div>' : '')

@@ -103,7 +103,7 @@
     <div style="background:#fff;border-radius:10px;max-width:640px;width:100%;max-height:calc(80vh / var(--fz,1));display:flex;flex-direction:column;font-family:var(--font-zh)">
       <div style="padding:14px 18px;border-bottom:1px solid #EDEAE4;font-weight:600">報價單的項目有更動</div>
       <div style="padding:12px 18px;overflow:auto;flex:1">
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">勾選要套用的更動；沒勾的項目維持原樣，你改過的內容不會被覆蓋。</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">勾選要套用的更動；沒勾的項目維持原樣，您改過的內容不會被覆蓋。</div>
         <template x-for="(d, i) in diffRows" :key="i">
           <label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #F3F1EC;cursor:pointer;font-size:13px">
             <input type="checkbox" x-model="d.checked" data-testid="cnf-diff-check">
@@ -253,7 +253,7 @@
                  x-text="quoteNote"></div>
             <div x-show="quoteChanged" data-testid="cnf-quote-changed"
                  style="margin-bottom:10px;padding:8px 12px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
-              報價單的項目有更動。草稿可按上方「從報價單帶入」補上新增的項目（你改過的列會保留）。
+              報價單的項目有更動。草稿可按上方「從報價單帶入」補上新增的項目（您改過的列會保留）。
             </div>
             <template x-if="form.items.length === 0">
               <div style="text-align:center;padding:28px;color:var(--text-dim);font-size:12px;font-family:var(--font-zh);border:1px dashed var(--border-light);border-radius:8px">
@@ -723,7 +723,7 @@
         const customised = Object.values(this.form.labels || {})
           .some(v => (v || '').trim() !== '')
         if (customised &&
-            !confirm('套用這組用語會覆蓋你已經逐欄調整過的標題，確定要套用嗎？')) return
+            !confirm('套用這組用語會覆蓋您已經逐欄調整過的標題，確定要套用嗎？')) return
         this.form.labels = Object.assign({}, this._presetData[key] || {})
         this._syncLabels(); this.dirty = true
         this.msgError = false; this.msg = '已套用，記得按儲存'

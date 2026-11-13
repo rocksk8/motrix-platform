@@ -89,11 +89,11 @@
             </button>
             <button type="button" class="iw-kind" data-testid="iw-kind-customers" @click="pick('customers')">
               <b>客戶</b>
-              <small>以統一編號判斷是不是同一家；已有的客戶只補空白欄位，不會蓋掉拜訪紀錄。</small>
+              <small>以統一編號判斷是否為同一家公司；已存在的客戶僅補齊空白欄位，不會覆蓋拜訪紀錄。</small>
             </button>
             <button type="button" class="iw-kind" data-testid="iw-kind-parts" @click="pick('parts')">
               <b>料號</b>
-              <small>以料號判斷是不是同一個品項；留空的欄位不會更新（成本不會被清成 0）。</small>
+              <small>以料號判斷是否為同一品項；留空的欄位不會更新（成本不會被清為 0）。</small>
             </button>
           </div>
         </section>
@@ -120,7 +120,7 @@
             <div>檔案共讀到 <b x-text="parsed && parsed.rowCount"></b> 列資料<span x-show="parsed && parsed.skippedExamples">（已略過 <span x-text="parsed && parsed.skippedExamples"></span> 列範例）</span>。</div>
             <div class="iw-warn" data-testid="iw-unused" x-show="parsed && parsed.unusedColumns.length">這些欄位系統不認得，<b>不會匯入</b>：<span x-text="parsed && parsed.unusedColumns.join('、')"></span></div>
             <div class="iw-warn" x-show="parsed && parsed.warnings.length" data-testid="iw-parse-warnings">
-              <b>檔案裡有 <span x-text="parsed && parsed.warnings.length"></span> 個提醒</b>（不會擋住匯入，但請看一下）：
+              <b>檔案裡有 <span x-text="parsed && parsed.warnings.length"></span> 個提醒</b>（不會阻擋匯入，但請留意）：
               <ul class="iw-list"><template x-for="w in (parsed ? parsed.warnings.slice(0, 30) : [])" :key="w.row + w.field + w.message"><li>第 <span x-text="w.row"></span> 列〔<span x-text="w.field"></span>〕<span x-text="w.message"></span></li></template></ul>
               <div x-show="parsed && parsed.warnings.length > 30">…還有 <span x-text="parsed.warnings.length - 30"></span> 個</div>
             </div>
@@ -386,9 +386,9 @@
               this.uncertain = false; this._idemKey = ''; this._commitBody = null
               try {
                 await this._preview()
-                let n = '資料在你預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。'
+                let n = '資料在您預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。'
                 if (this.kind === 'users' && this.plan.skipped && this.plan.skipped.length) {
-                  n += '另外，有 ' + this.plan.skipped.length + ' 個帳號現在變成「已存在」而被略過（可能剛剛有人建立了，或上一次匯入其實已經完成），請到帳號頁確認。'
+                  n += '另外，有 ' + this.plan.skipped.length + ' 個帳號目前狀態為「已存在」而被略過（可能剛由他人建立，或上一次匯入實際上已完成），請至帳號頁確認。'
                 }
                 this.notice = n
               } catch (e2) { this.err = String(e2.message || e2) }

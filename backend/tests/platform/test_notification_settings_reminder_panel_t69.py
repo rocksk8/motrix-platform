@@ -48,7 +48,7 @@ def test_reason_codes_are_shown_as_plain_words():
     for code in (email_notify.SEND_PERMANENT_FAIL, email_notify.SEND_UNKNOWN):
         assert "'%s'" % code in s                    # 對照表裡有這個後端原因碼
     assert "x-text=\"it.reason\"" not in s           # 不直接把原因碼印給使用者
-    assert "收件人沒有 Email" in s and "不確定信有沒有寄出" in s
+    assert "收件人沒有 Email" in s and "無法確認電子郵件是否已寄出" in s
 
 
 def _get(client, make_user, username, role, modules=None):

@@ -651,7 +651,7 @@
              x-show="!loading && statsLoaded && !onboardingDismissed && checklistVisible"
              aria-labelledby="ux-check-title">
       <div class="ux-check__head">
-        <div class="ux-check__t" id="ux-check-title" x-text="'歡迎，' + (session.display_name || session.username) + '！上手清單'"></div>
+        <div class="ux-check__t" id="ux-check-title" x-text="'歡迎，' + (session.display_name || session.username) + '：上手清單'"></div>
         <div class="ux-check__n" data-testid="checklist-progress" x-text="checklistDone + ' / ' + checklistItems.length + ' 完成'"></div>
         <div class="ux-check__n" x-show="stats.totalQuotes === 0">系統目前尚無資料，從第一項開始。</div>
         <div class="ux-check__bar" aria-hidden="true"><i :style="'width:' + (checklistItems.length ? Math.round(checklistDone * 100 / checklistItems.length) : 0) + '%'"></i></div>

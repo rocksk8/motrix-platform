@@ -92,7 +92,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t" id="fc-title">檔案中心</h1>
-          <p class="pg__s">全系統的上傳檔案（報價單回簽、出貨單、發票、傳票附件、勞報單簽回…）。只列出你在原單據頁打得開的檔案。</p>
+          <p class="pg__s">全系統的上傳檔案（報價單回簽、出貨單、發票、傳票附件、勞報單簽回…）。只列出您在原單據頁打得開的檔案。</p>
         </div>
       </div>
 
@@ -157,7 +157,7 @@
               </template>
             </tbody>
           </table>
-          <div class="fc-empty" id="fc-none" x-show="loaded && !loading && !items.length">沒有符合條件的檔案（只列出你有權限打開的）。</div>
+          <div class="fc-empty" id="fc-none" x-show="loaded && !loading && !items.length">沒有符合條件的檔案（只列出您有權限打開的）。</div>
           <div class="fc-pager" x-show="loaded && (page > 1 || hasMore)">
             <button class="btn btn-ghost btn-sm" id="fc-prev" :disabled="page <= 1 || loading" @click="go(page - 1)">上一頁</button>
             <span>第 <b x-text="page"></b> 頁</span>
@@ -246,7 +246,7 @@
           try { await P.openInNewTab(m, P.byAttachmentRef) }
           catch (e) {
             const msg = String((e && e.message) || '')
-            this.openMsg = /HTTP (403|404)/.test(msg) ? '無法開啟「' + it.filename + '」：檔案已被刪除，或你沒有開啟這個檔案的權限。'
+            this.openMsg = /HTTP (403|404)/.test(msg) ? '無法開啟「' + it.filename + '」：檔案已被刪除，或您沒有開啟這個檔案的權限。'
               : '無法開啟「' + it.filename + '」，請稍後再試（' + msg + '）。'
           }
         },

@@ -258,7 +258,7 @@
       }).catch(function (e) { say('讀取失敗：' + e.message) })
     }
     function renderPageHead(p) {
-      var h = '<h2 class="sc-h">' + esc(p.plain) + (p.privacy ? '<span class="sc-tag" data-testid="sc-privacy">影響隱私</span>' : '') + (p.highRisk ? '<span class="sc-tag" style="color:var(--danger)">🔴 內含高風險設定</span>' : '') + '</h2>'
+      var h = '<h2 class="sc-h">' + esc(p.plain) + (p.privacy ? '<span class="sc-tag" data-testid="sc-privacy">影響隱私</span>' : '') + (p.highRisk ? '<span class="sc-tag" style="color:var(--danger)">內含高風險設定</span>' : '') + '</h2>'
       p.groups.forEach(function (g) {
         var d = ST.details[g]
         if (!d) return
@@ -337,7 +337,7 @@
       var o = r.others || [], who = []
       if (r.superadmins.length) who.push(r.superadmins.join('、') + '（最高管理者）')
       if (o.length) who.push(o.slice(0, 5).map(function (x) { return x.display }).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : ''))
-      var t = who.length ? '儲存後會通知：' + who.join('，以及 ') : '儲存後不會另外通知其他人（你自己不會收到自己操作的通知）'
+      var t = who.length ? '儲存後會通知：' + who.join('，以及 ') : '儲存後不會另外通知其他人（您自己不會收到自己操作的通知）'
       if (o.length && r.redactedForOthers) t += '。一般同仁只會看到「設定已變更、由誰操作」，看不到數值與原因'
       if (r.line && r.line.willSend) t += '；並發 LINE 給最高管理者'
       if ((r.ignoredRoles || []).length) t += '。另有「' + r.ignoredRoles.join('、') + '」不在自動通知對象內，請自行告知'
@@ -414,7 +414,7 @@
         var gs = (d.groups || []).map(function (x) {
           var who = x.by ? '被 ' + x.by + (x.at ? '（' + stamp(x.at) + '）' : '') + ' ' : ''
           var plain = (by.filter(function (b) { return b.group === x.group })[0] || {}).plain || x.label
-          return '「' + plain + '」的 ' + (x.keys || []).map(function (k) { return k.name }).join('、') + ' 在你送出前' + (who ? who : '已被別人') + '改過'
+          return '「' + plain + '」的 ' + (x.keys || []).map(function (k) { return k.name }).join('、') + ' 在您送出前' + (who ? who : '已被別人') + '改過'
         })
         var applied = (d.applied || []).map(function (g) { return (by.filter(function (b) { return b.group === g })[0] || {}).plain || g })
         var msg = gs.length ? gs.join('；') + '，為了不蓋掉別人的修改，' + (applied.length ? '其餘沒有儲存' : '這一批沒有儲存') + '。請按「放棄」重新載入後再改。' : (d.message || e.message)

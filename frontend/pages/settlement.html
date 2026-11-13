@@ -355,7 +355,7 @@
     </template>
   </div>
   <div class="stl-toolbar__right">
-    <span x-show="xeMasked > 0" data-testid="stl-masked-warning" style="font-size:11px;color:#B45309;max-width:320px">⚠️ 有 <b x-text="xeMasked"></b> 筆費用單據的金額對你遮蔽，額外支出總額不完整：不能儲存或完結精算（請由申請人／簽核人／出納／財務／管理員處理）</span>
+    <span x-show="xeMasked > 0" data-testid="stl-masked-warning" style="font-size:11px;color:#B45309;max-width:320px">⚠️ 有 <b x-text="xeMasked"></b> 筆費用單據的金額對您遮蔽，額外支出總額不完整：不能儲存或完結精算（請由申請人／簽核人／出納／財務／管理員處理）</span>
     <span x-show="saving" style="font-size:11px;color:var(--text-dim)">儲存中…</span>
     <template x-if="settlement.status !== 'finalized'">
       <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving || xeMasked > 0 || conflict" data-testid="stl-save-draft">
@@ -386,7 +386,7 @@
     <b x-text="loadError"></b> <button type="button" class="btn btn-ghost btn-sm" @click="location.reload()">重新載入</button>
   </div>
   <div x-show="conflict" x-cloak role="alert" data-testid="stl-conflict" class="stl-banner stl-banner--warn">
-    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；你這次的修改尚未存檔，目前仍保留在畫面上。
+    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；您這次的修改尚未存檔，目前仍保留在畫面上。
     <div x-show="dirtyList.length" data-testid="stl-conflict-dirty" style="flex-basis:100%">
       <b x-text="'您的未存變更（' + dirtyList.length + ' 項）：'"></b>
       <ul style="margin:4px 0 0;padding-left:18px"><template x-for="d in dirtyList" :key="d"><li x-text="d"></li></template></ul>
@@ -937,7 +937,7 @@
 
       <!-- ── 存檔有、報價單已無的品項（唯讀；不計入任何金額）── -->
       <div class="stl-card" x-show="orphanItems.length" x-cloak data-testid="stl-orphans">
-        <div class="stl-card__head"><div class="stl-card__title">存檔有、報價單已無的品項（唯讀）</div><div style="font-size:11px;color:var(--text-dim)">這些品項已從報價單刪除，目前不計入任何金額；僅提醒你存檔裡還留著資料</div></div>
+        <div class="stl-card__head"><div class="stl-card__title">存檔有、報價單已無的品項（唯讀）</div><div style="font-size:11px;color:var(--text-dim)">這些品項已從報價單刪除，目前不計入任何金額；僅提醒您存檔裡還留著資料</div></div>
         <div style="overflow-x:auto"><table class="stl-table">
           <thead><tr><th>品項編號</th><th>當時品名</th><th style="text-align:right">存檔的實際成本</th></tr></thead>
           <tbody><template x-for="o in orphanItems" :key="o.id"><tr :data-testid="'stl-orphan-' + o.id"><td x-text="o.id"></td><td x-text="o.description || '（無品名）'"></td><td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(o.actualTotalCost)"></td></tr></template></tbody>
@@ -1141,7 +1141,7 @@
   <div class="modal-box">
     <div style="font-size:16px;font-weight:700;margin-bottom:8px">確認完結精算？</div>
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;line-height:1.7">
-      完結後本精算將進入唯讀模式，所有數據將被鎖定。<br>
+      完結後本精算將進入唯讀模式，所有資料將被鎖定。<br>
       若需修改，可點「重新開啟」解鎖。<br><br>
       <span style="font-weight:600;color:var(--text-primary)">精算摘要：</span><br>
       報價稅前收入：NT$ <span x-text="fmt(summary.quotedPretax)"></span><br>
@@ -2325,8 +2325,8 @@ function settlementPage() {
     // 失敗訊息：只在安全時才顯示後端 detail（409／422／400 是給使用者看的檢核訊息）；404 與「不存在」同一句（後端不分有沒有權限）
     _httpMsg(status, what, detail) {
       const safe = (status === 409 || status === 422 || status === 400) && typeof detail === 'string' && detail ? '：' + detail : ''
-      if (status === 404) return '找不到這張報價單（不存在，或你沒有權限查看）。'
-      if (status === 403) return '你沒有權限執行「' + what + '」。'
+      if (status === 404) return '找不到這張報價單（不存在，或您沒有權限查看）。'
+      if (status === 403) return '您沒有權限執行「' + what + '」。'
       if (status >= 500) return '伺服器暫時無法處理「' + what + '」，請稍後再試；資料沒有被改動。'
       return what + '失敗' + safe
     },
@@ -2385,7 +2385,7 @@ function settlementPage() {
       const detail = r.data && r.data.detail
       if (r.status === 409) {
         this.conflict = true
-        const m = what + '失敗：' + (typeof detail === 'string' && detail ? detail : '精算已被其他人更新') + '。請按「重新載入」取得最新內容；你這次的修改尚未存檔。'
+        const m = what + '失敗：' + (typeof detail === 'string' && detail ? detail : '精算已被其他人更新') + '。請按「重新載入」取得最新內容；您這次的修改尚未存檔。'
         this.toastErr(m); return m
       }
       const m = this._httpMsg(r.status, what, detail)
@@ -2397,7 +2397,7 @@ function settlementPage() {
     async saveDraft() {
       const dlMsg = this.dlInvalid()
       if (dlMsg) { this.toastErr(dlMsg); return }
-      if (this.xeMasked > 0) { this.toastErr('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
+      if (this.xeMasked > 0) { this.toastErr('有 ' + this.xeMasked + ' 筆費用單據的金額對您遮蔽，額外支出總額不完整，不能儲存精算'); return }
       this.saving = true
       try {
         const r = await this._settlementPut()
@@ -2409,7 +2409,7 @@ function settlementPage() {
     async finalize() {
       const dlMsg = this.dlInvalid()
       if (dlMsg) { this.toastErr(dlMsg); this.showFinalizeModal = false; return }
-      if (this.xeMasked > 0) { this.toastErr('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
+      if (this.xeMasked > 0) { this.toastErr('額外支出總額不完整（有金額對您遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
       this._finalizing = true
       const when = new Date().toISOString(), who = this.session.displayName || this.session.username || ''

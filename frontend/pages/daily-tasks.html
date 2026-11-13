@@ -1217,7 +1217,7 @@
 
                 <!-- 今日已全完成 hint -->
                 <template x-if="calDashData.length > 0 && calDashPendingTasks().length === 0">
-                  <div style="font-size:12px;color:#15803D;padding:6px 2px">🎉 今日所有事項皆已回報完成</div>
+                  <div style="font-size:12px;color:#15803D;padding:6px 2px">今日所有事項皆已回報完成</div>
                 </template>
               </div>
 
@@ -2358,7 +2358,7 @@
       <button class="dt-modal-close" @click="showSelfModal=false">&#215;</button>
     </div>
     <div class="dt-modal-body">
-      <p class="dt-field-note">這筆事項會掛在你選的案件上、指派給你自己；只有你看得到。建立後如要修改或刪除，請找最高管理者。</p>
+      <p class="dt-field-note">這筆事項會掛在您選的案件上、指派給您自己；只有您看得到。建立後如要修改或刪除，請找最高管理者。</p>
       <div class="dt-field">
         <label class="dt-field-label">日期 <span class="req">*</span></label>
         <input type="date" x-model="selfForm.task_date" class="dt-input" data-testid="dt-self-date">
@@ -3111,11 +3111,11 @@ function app() {
         if (r.ok) {
           const d = await r.json()
           this.selfCases = d.items || []
-          this.selfCasesNotice = this.selfCases.length ? '' : '你目前沒有可關聯的進行中案件（只列出你負責或被指派協作的已成案案件）；請找最高管理者建立事項。'
+          this.selfCasesNotice = this.selfCases.length ? '' : '您目前沒有可關聯的進行中案件（只列出您負責或被指派協作的已成案案件）；請找最高管理者建立事項。'
         } else if (r.status === 404) {
           this.selfCasesNotice = '這項功能目前沒有開放，或案件模組未安裝；請找最高管理者建立事項。'
         } else if (r.status === 403) {
-          this.selfCasesNotice = '你沒有「每日工作事項」的權限，無法新增事項。'
+          this.selfCasesNotice = '您沒有「每日工作事項」的權限，無法新增事項。'
         } else {
           this.selfCasesNotice = '案件清單載入失敗（' + r.status + '），請稍後再試。'
         }

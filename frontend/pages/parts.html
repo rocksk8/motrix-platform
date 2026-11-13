@@ -777,7 +777,7 @@ function app() {
         this._importRows = null
       } catch(e) {
         if (e.code === 'plan_changed' && this._importRows) {      // 預覽之後資料有變：重新預覽，請使用者再確認一次
-          try { this.importPlan = await this._importPost(true); this.importNotice = '資料在你預覽之後有變動，已重新預覽，請再確認一次'; this.importing = false; return } catch(e2) { e = e2 }
+          try { this.importPlan = await this._importPost(true); this.importNotice = '資料在您預覽之後有變動，已重新預覽，請再確認一次'; this.importing = false; return } catch(e2) { e = e2 }
         }
         this.importPlan = null
         this.importResults = { created: 0, updated: 0, failed: 1, errors: [(e.code === 'import_failed' ? '' : '匯入失敗：') + e.message] }

@@ -25,7 +25,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._ports import free_safe_port
 
-NOTE_INPUT = 'input[placeholder="收款備註..."]'
+NOTE_INPUT = 'input[placeholder="收款備註…"]'
 
 
 
