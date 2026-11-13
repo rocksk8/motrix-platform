@@ -145,7 +145,7 @@ def test_non_member_gets_the_same_404_as_a_missing_case(client, make_user, monke
     assert client.get("/api/quotations/%s/material-flow" % NO).status_code in (401, 403)
 
 
-def test_m03_absent_hides_stock_and_ship_cells(client, make_user, monkeypatch):
+def test_supply_absent_hides_stock_and_ship_cells(client, make_user, monkeypatch):
     _flag(monkeypatch, True)
     h = _member(make_user, client)
     _seed()

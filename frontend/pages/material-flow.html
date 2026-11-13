@@ -73,6 +73,8 @@
   function materialFlow() {
     return {
       session: {}, quoteNo: '', data: null, err: '',
+      // Alpine 3 會自己叫一次 init()，body 的 x-init 再叫一次 ⇒ 跑兩遍；守衛擋第二次。
+      _initDone: false,
       _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) },
       stateLabel(s) { return ({ inprogress: '進行中', done: '完成', skipped: '略過', na: '尚未開始／尚未提供' })[s] || s },
       itemLine(key, it) {
@@ -85,6 +87,8 @@
         return e(JSON.stringify(it))
       },
       async init() {
+        if (this._initDone) return
+        this._initDone = true
         const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
         if (!s || !s.token) { location.href = '../index.html'; return }
         this.session = s

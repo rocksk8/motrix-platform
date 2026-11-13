@@ -645,6 +645,7 @@
 ["POST", "/api/quotations/{quote_no}/material-changes/{change_id}/submit", "submit_change_api_quotations__quote_no__material_changes__change_id__submit_post", [["header", "authorization", false], ["path", "change_id", true], ["path", "quote_no", true]], [], []]
 ["POST", "/api/quotations/{quote_no}/material-changes/{change_id}/withdraw", "withdraw_change_api_quotations__quote_no__material_changes__change_id__withdraw_post", [["header", "authorization", false], ["path", "change_id", true], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/material-coverage", "material_coverage_api_quotations__quote_no__material_coverage_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
+["GET", "/api/quotations/{quote_no}/material-flow", "get_material_flow_api_quotations__quote_no__material_flow_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/material-link-status", "material_link_statuses_api_quotations__quote_no__material_link_status_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/material-order-approvals", "get_approvals_api_quotations__quote_no__material_order_approvals_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/material-orders", "get_material_orders_api_quotations__quote_no__material_orders_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
