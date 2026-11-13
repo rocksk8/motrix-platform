@@ -3,6 +3,9 @@
 ## (next) — 2026-11-13（onepipe；物料流程一條龍）
 - 新增（設定中心）：群組 `onepipe`（`helpers/settings_groups_onepipe.py`，拆檔同 lodging_freshness）——各批次共用的開關，欄位皆 0／1、預設 0（關＝與今天逐位元相同）：`worklog_case`（P0b 工作日誌可選案件）、`warranty_closed_notify`（P0d 保固到期通知納入已結案案件）。P0a／P0c／P1' 的欄位 `links`（案件與採購的快速入口、出貨單通知連結）、`ship_install_ok`（同案先出貨後登載設備不再序號衝突）、`timeline`（案件物料流程時間軸）亦在同一份清單，預設 0。
 - L1（新增，只增；快照已文字插入、版號由列車 `core_bump.py --pending` 定）：`helpers.email_notify.shipping_link(note_no)`——出貨單通知要開的頁面（一條龍 P0a；旗標 `onepipe.links` 關、查不到案號或任何錯誤 ⇒ 空字串，呼叫端維持原本的值）；出貨單的四種信件與站內通知使用。
+- 新增（P0b，旗標 `onepipe.worklog_case`，預設關）：工作日誌可選案件。`GET /api/work-logs/case-options?q=`（登入＋工作日誌或案件管理模組；只回案號／客戶／案名，進行中案件、這個人看得到該案動態的才列，最多 30 筆；旗標關 ⇒ 404）；旗標開時 `POST／PUT /api/work-logs` 的 `case_no` 必須是看得到該案動態的案件（`guard_case_access`，看不到＝404、稽核另記）；改掛才檢查，清空與原樣不動不擋；旗標關＝今天的行為（不檢查）。畫面 `work-log.html` 旗標開才出現「關聯案件」欄位與列表欄，關時 DOM 與送出內容都不變。日誌可見範圍（`GET /api/work-logs`）不變。
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.case_access.attachable_cases(conn, user, q, limit, max_scan)`——給上面選單用，規則與 `case_documents_readable` 同一條；讀 `quotations` 仍只在 `helpers/case_access.py`。
+- 測試：`tests/test_onepipe_worklog_case_2026_11_13.py`。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

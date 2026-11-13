@@ -336,6 +336,38 @@ def case_documents_readable(conn, quote_no: str, user: dict) -> bool:
     return bool(q) and case_access_allowed(conn, q, user, allow_module="case_manage")
 
 
+def attachable_cases(conn, user: dict, q: str = "", limit: int = 30, max_scan: int = 3000) -> list:
+    """工作日誌「關聯案件」選單用：這個人**可以把日誌掛上去**的進行中（已成案）案件，最新的在前，最多 `limit` 筆。
+
+    可掛＝`case_documents_readable` 的同一條規則（`case_access_allowed(..., allow_module="case_manage")`）：日誌掛上去之後會出現在該案的動態裡，
+    所以只能掛「看得到那個案件動態」的人看得到的案件，不是讓人把文字塞進看不到的案件。`q` 比對案號／客戶／案名。
+    只回案號、客戶、案名（沒有金額、地址、業務欄位）。M01 不在 ⇒ 空清單。"""
+    if not case_module_present():
+        return []
+    sql = ("SELECT quote_no, customer_name, project_name, deal_tag, sales_person_id, sales_person, assigned_user_ids, data_json "
+           "FROM quotations WHERE (deal_tag = '已成案' OR COALESCE(deal_tag, '') = '')")
+    args = []
+    if q and q.strip():
+        like = "%" + q.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"      # 跳脫字元用 !：使用者輸入的 % _ 當一般字元
+        sql += " AND (quote_no LIKE ? ESCAPE '!' OR customer_name LIKE ? ESCAPE '!' OR project_name LIKE ? ESCAPE '!')"
+        args += [like, like, like]
+    sql += " ORDER BY id DESC LIMIT ?"
+    out = []
+    for r in conn.execute(sql, args + [int(max_scan)]).fetchall():
+        if not (r["deal_tag"] or ""):                        # 欄位空 ⇒ 看 data_json.dealTag（與各處的 deal_tag 判斷同義）
+            try:
+                if (json.loads(r["data_json"] or "{}") or {}).get("dealTag") != "已成案":
+                    continue
+            except (TypeError, ValueError, AttributeError):
+                continue
+        if not case_access_allowed(conn, r, user, allow_module="case_manage"):
+            continue
+        out.append({"quoteNo": r["quote_no"], "customer": r["customer_name"] or "", "projectName": r["project_name"] or ""})
+        if len(out) >= int(limit):
+            break
+    return out
+
+
 # ── IP-96 `case.summary` 的用途範圍（2026-09-26 A，主持裁示對齊 AT6-O1／JV7）──────────────────────
 #: 用途 ⇒ 可以看「全部案件摘要」的模組。只有登錄在這裡的用途才可能放寬；其餘一律照案件可見性過濾。
 #: `voucher_link`：傳票摘要從案件帶入（JV7）。有傳票權限（cashier／finance）的人列全部案件——AT6-O1 界線：

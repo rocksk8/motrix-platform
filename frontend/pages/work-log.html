@@ -8,6 +8,7 @@
   <title>工作日誌 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -236,6 +237,7 @@
             <th style="width:160px">出勤人員</th>
             <th style="width:80px">工時</th>
             <th>工作內容</th>
+            <template x-if="caseLinkOn"><th style="width:150px" data-testid="wl-case-th">關聯案件</th></template>
             <th style="width:110px">建立時間</th>
             <th style="width:80px"></th>
           </tr>
@@ -257,6 +259,7 @@
               <td>
                 <div class="wl-content" x-text="row.content"></div>
               </td>
+              <template x-if="caseLinkOn"><td style="font-size:12px" data-testid="wl-case-td" x-text="row.case_no || '—'"></td></template>
               <td style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                   x-text="(row.created_at||'').slice(0,16).replace('T',' ')"></td>
               <td>
@@ -309,6 +312,21 @@
             </template>
           </select>
         </div>
+        <!-- 關聯案件（onepipe.worklog_case 開才有；選填） -->
+        <template x-if="caseLinkOn">
+          <div class="wl-field" data-testid="wl-case-field">
+            <label>關聯案件（選填）</label>
+            <input type="text" x-model="caseQuery" @input.debounce.300ms="searchCases()" placeholder="輸入案號、客戶或案名來找案件" data-testid="wl-case-search">
+            <select x-model="caseNo" data-testid="wl-case-select" style="margin-top:6px">
+              <option value="">— 不關聯案件 —</option>
+              <template x-if="caseNo && !caseOptions.some(c => c.quoteNo === caseNo)"><option :value="caseNo" x-text="caseNo"></option></template>
+              <template x-for="c in caseOptions" :key="c.quoteNo">
+                <option :value="c.quoteNo" x-text="c.quoteNo + '　' + c.customer + (c.projectName ? '　' + c.projectName : '')"></option>
+              </template>
+            </select>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">選了案件，這筆日誌會出現在該案件的動態與專案報告；誰看得到這筆日誌不變。</div>
+          </div>
+        </template>
         <!-- 工作內容 -->
         <div class="wl-field">
           <label>工作內容</label>
@@ -340,6 +358,11 @@
       saving:       false,
       editId:       null,
       form: { log_date: '', user_id: '', hours: 8, content: '' },
+      // P0b：旗標 onepipe.worklog_case 開才顯示「關聯案件」；關（預設）＝畫面與送出的內容都和以前一樣（不帶 case_no）
+      caseLinkOn:   false,
+      caseNo:       '',
+      caseQuery:    '',
+      caseOptions:  [],
 
       get totalHours() {
         return this.logs.reduce((s, r) => s + (r.hours || 0), 0)
@@ -361,7 +384,26 @@
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
         this.viewDate = MotrixDate.today()
-        await Promise.all([this.loadUsers(), this.load()])
+        await Promise.all([this.loadUsers(), this.load(), this.readCaseFlag()])
+      },
+
+      // P0b：讀旗標（讀不到、旗標關 ⇒ 維持今天的畫面，不影響其他功能）
+      async readCaseFlag() {
+        try {
+          const g = window.MotrixPublicFlags ? await window.MotrixPublicFlags.read(['onepipe'], { token: this.session.token }) : {}
+          this.caseLinkOn = !!(g && g.onepipe && Number(g.onepipe.worklog_case) === 1)
+        } catch { this.caseLinkOn = false }
+        if (this.caseLinkOn) this.searchCases()
+      },
+
+      async searchCases() {
+        if (!this.caseLinkOn) return
+        try {
+          const r = await fetch(`${API}/work-logs/case-options?q=${encodeURIComponent(this.caseQuery || '')}`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) this.caseOptions = (await r.json()).items || []
+        } catch {}
       },
 
       async loadUsers() {
@@ -414,6 +456,9 @@
           hours:    8,
           content:  ''
         }
+        this.caseNo = ''
+        this.caseQuery = ''
+        if (this.caseLinkOn) this.searchCases()
         this.showModal = true
       },
 
@@ -425,6 +470,9 @@
           hours:    row.hours,
           content:  row.content
         }
+        this.caseNo = row.case_no || ''
+        this.caseQuery = ''
+        if (this.caseLinkOn) this.searchCases()
         this.showModal = true
       },
 
@@ -444,7 +492,8 @@
               'Content-Type': 'application/json',
               'Authorization': 'Bearer ' + this.session.token
             },
-            body: JSON.stringify({ ...this.form, user_id: uid, hours: parseFloat(this.form.hours) || 8 })
+            body: JSON.stringify({ ...this.form, user_id: uid, hours: parseFloat(this.form.hours) || 8,
+                                   ...(this.caseLinkOn ? { case_no: this.caseNo || '' } : {}) })
           })
           if (r.ok) {
             this.showModal = false
