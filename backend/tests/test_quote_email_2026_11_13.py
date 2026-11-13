@@ -299,7 +299,7 @@ def test_update_forged_email_is_overridden_but_an_untouched_old_value_stays(clie
     assert _snap(qno)["salesEmail"] == "upd@corp.com"              # 改成不合法的值 ⇒ 覆寫成解析值
 
 
-def test_other_quote_mails_also_carry_reply_to(monkeypatch):
+def test_other_quote_mails_also_carry_reply_to(client, monkeypatch):
     """next_tier／approved／returned／resubmit_requester 與 approval_request 一致：有快照才加 Reply-To，沒有就維持舊呼叫形狀。"""
     from db import get_db
     from helpers import email_notify as EN
