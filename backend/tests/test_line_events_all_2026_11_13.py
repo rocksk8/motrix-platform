@@ -336,7 +336,7 @@ def test_legacy_notify_pushes_line_and_leaves_email_byte_identical(env, dept, fu
     env["line_fail"] = False
 
 
-def test_legacy_line_is_independent_of_email_recipients_and_mail_off(env):
+def test_legacy_line_is_independent_of_email_recipients_and_mail_off(env, client):
     """沒有 Email 的人、信件被矩陣關閉：LINE 照發（獨立通道）；個人信件退訂不影響 LINE。"""
     from helpers import email_notify as EN, line_notify as L
     from db import get_db
@@ -433,7 +433,7 @@ def test_personal_mute_is_respected_even_for_picked_people(env):
     assert _targets(env) == ["amy", "carol"]
 
 
-def test_inactive_and_unlinked_picked_people_are_dropped(env):
+def test_inactive_and_unlinked_picked_people_are_dropped(env, client):
     from helpers import email_notify as EN, line_notify as L
     from db import get_db
     L.set_event("shipping_submitted", True)

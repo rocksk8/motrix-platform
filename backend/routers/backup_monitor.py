@@ -28,10 +28,10 @@ def _need_confirm(body: dict, what: str) -> None:
         raise HTTPException(400, "請先確認要%s。" % what)
 
 
-def _safe_audit(authorization, *args, **kwargs) -> None:
+def _safe_audit(authorization, action, target_type="", target_id="", target_label="", detail=None) -> None:
     """動作已經做了，稽核寫失敗不能讓使用者看到 500（以為沒做成功而重按）；只記 log。"""
     try:
-        _audit(_tok(authorization), *args, **kwargs)
+        _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
     except Exception:  # noqa: BLE001
         logger.exception("備份與監控：稽核寫入失敗（動作本身已完成）")
 

@@ -7,16 +7,17 @@ x-for 迴圈範圍裡的 `valueOf(f)` 解析到繼承來的原生函式，回傳
 含舊 bug 的對照題（證明題目抓得到）與全站守門（元件方法名不得蓋住 Object.prototype 的成員）。
 """
 import json
-import os
 import re
 import shutil
 import subprocess
 
 import pytest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PAGE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "frontend", "pages", "settings-center.html")
-FRONTEND = os.path.dirname(PAGE)
+from core import source_tree
+from tests import _frontend_sources as FS
+
+# 頁面位置一律經 core.source_tree（頁面可能住在模組的 pages/ 底下）；JS 列舉一律經 tests/_frontend_sources
+PAGE = str(source_tree.page_file("settings-center.html"))
 
 
 NODE = shutil.which("node")
@@ -156,11 +157,10 @@ def test_no_alpine_component_method_shadows_an_object_prototype_member():
     """全站守門：x-data 元件的方法名不能是 Object.prototype 的成員（valueOf／toString…）：Alpine 的範圍代理會解析到繼承來的原生函式。"""
     bad = re.compile(r"^\s*(?:async\s+)?(valueOf|toString|toLocaleString|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|constructor)\s*\([^)]*\)\s*\{", re.M)
     hits = []
-    for root, dirs, files in os.walk(FRONTEND):
-        dirs[:] = [d for d in dirs if d not in ("vendor", "node_modules")]
-        for f in files:
-            if f.endswith((".html", ".js")):
-                p = os.path.join(root, f)
-                src = open(p, encoding="utf-8", errors="ignore").read()
-                hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(1)) for m in bad.finditer(src)]
+    scanned = 0
+    for p in list(source_tree.page_files()) + list(FS.all_js()):
+        src = open(p, encoding="utf-8", errors="ignore").read()
+        scanned += 1
+        hits += ["%s:%s" % (FS.js_rel(p) if p.suffix == ".js" else p.name, m.group(1)) for m in bad.finditer(src)]
+    assert scanned > 50, "掃到的檔太少，列舉入口可能壞了"
     assert hits == []

@@ -162,7 +162,7 @@ def test_relock_with_unsaved_edit_asks_first_and_discards_to_the_server_version(
 
 def test_autosave_does_not_run_while_unlocked():
     """h9 L1：解鎖編輯一律手動儲存（自動存檔的 PUT 不帶 _isUnlockEdit，待審核／已送出都會被 403）。"""
-    import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     i = html.index("      autoSave() {")
     assert "if (this.unlocked) return" in html[i:i + 400]

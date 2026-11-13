@@ -3253,9 +3253,9 @@ class EmailWizardIn(BaseModel):
     recipient: str = ""          # 登入的人沒有 Email 時，在這一步補填（同時存回他的帳號）
 
 
-def _wizard_error(status: int, detail: str, **extra):
+def _wizard_error(status: int, detail: str, extra=None, **more):
     from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=status, content={"detail": detail, **extra})
+    return JSONResponse(status_code=status, content={"detail": detail, **(extra or {}), **more})
 
 
 def _wizard_candidate(body, current):
@@ -3335,7 +3335,7 @@ def email_notify_wizard_test_me(body: EmailWizardIn, authorization: str = Header
             company = (prof.get("name", "") if isinstance(prof, dict) else "") or ""
             extra["ticket"] = _es.build_ticket(c["ticketKind"], user=cand["smtp_user"], host=host, port=port,
                                                company=company, requester=user.get("display_name") or user["username"])
-        return _wizard_error(502, c["title"] + "。" + c["hint"], **extra)
+        return _wizard_error(502, c["title"] + "。" + c["hint"], extra)
     # 證明不存密碼：只存帶金鑰的 HMAC 指紋＋非機密的主機／埠／帳號與時間（24 小時內有效；沒用到的在讀設定時清掉）
     _set_setting(_EMAIL_WIZARD_PROOF, {"fp": _wiz_creds_fp(host, port, cand["smtp_user"], cand["smtp_password"]), "fp_full": _wiz_full_fp(cand),
                                        "base_fp": _live_fp(current), "at": datetime.now().isoformat(timespec="seconds"), "to": to_addr,
