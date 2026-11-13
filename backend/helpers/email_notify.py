@@ -15,7 +15,9 @@ import logging
 from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError
 import os
 import re
+import contextlib
 import smtplib
+import ssl
 import threading
 from email.encoders import encode_base64 as _encode_b64
 from email.mime.base import MIMEBase as _MIMEBase
@@ -131,17 +133,23 @@ def _url_esc(u) -> str:
 def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
                 rows: list, quote_no: str, base_url: str,
                 note: str = "", intro: str = "",
-                button_text: str = "前往系統查看", impact: str = None, action: str = None) -> str:
+                button_text: str = "前往系統查看", impact: str = None, action: str = None, doc_label: str = None) -> str:
     """通知信內文（用語規範 MODULE-GUIDE §11）：固定依「事由、影響、建議處理、發送時間與來源」。
 
     事由＝`intro`（沒有就用 `title`）＋明細列；影響／建議處理預設取信件類型登記表
     （helpers/mail_types.py），個別信件可以傳入更具體的說明。
+
+    單據名稱（估價單）：登記表裡的預設文字（影響／建議處理）與頁尾的「信件類型」名稱是靜態字串，共用名稱寫成「報價單／估價單」；
+    這裡依 `doc_label`（沒給就由 `quote_no` 的字首判斷；單號是空的呼叫端自己傳）換成這封信實際的單據名稱（報價單 ⇒ 字串與改版前逐位元相同）。
+    只換「登記表的文字」，不碰呼叫端傳進來的 title／rows／note（那些已經先換範本、再填值）。
     """
+    if doc_label is None:
+        doc_label = _doc_label_of(quote_no) if quote_no else "報價單"
     t = _mt.get(mail_key)
     if t is None:
         logger.error("信件類型 %r 未登記（_build_html）", mail_key)
-    impact = impact if impact is not None else (t.impact if t else "")
-    action = action if action is not None else (t.action if t else "")
+    impact = impact if impact is not None else (_concrete(t.impact, doc_label) if t else "")
+    action = action if action is not None else (_concrete(t.action, doc_label) if t else "")
     # 預設逸出（2026-10-14，04 稽核）：除了包成 `_safe()` 的片段（呼叫端刻意傳入的 HTML，其中的使用者資料要自己 `_esc()`），所有文字欄位都當純文字逸出。
     # 純文字且不含 & < > " ' 時，輸出與逸出前逐位元相同（守門：tests/test_mail_escape_2026_10_14.py）。
     title, badge_text, button_text, impact, action = _esc(title), _esc(badge_text), _esc(button_text), _esc(impact), _esc(action)
@@ -160,7 +168,7 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
         link = base_url if str(base_url).lower().startswith(("http://", "https://")) else "#"
     link = _url_esc(link)
     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(t.name if t else mail_key))
+    source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(_concrete(t.name, doc_label) if t else mail_key))
 
     def _sec(label, body):
         return (f'<div class="lbl" style="margin-top:14px;font-weight:700">{label}</div>'
@@ -373,6 +381,28 @@ SEND_PERMANENT_FAIL = "permanent_fail"
 SEND_SKIPPED = "skipped"
 
 
+@contextlib.contextmanager
+def _smtp_open(host: str, port: int, timeout: int):
+    """開一條 SMTP 連線（登入前）：連接埠 465 用隱含 SSL，其餘用 STARTTLS（批次 3：「其他信箱」可能是 465）。"""
+    if int(port) == 465:
+        s = smtplib.SMTP_SSL(host, int(port), timeout=timeout, context=ssl.create_default_context())
+        try:
+            s.ehlo()
+            yield s
+        finally:
+            try:
+                s.quit()
+            except Exception:  # noqa: BLE001
+                pass
+        return
+    with smtplib.SMTP(host, int(port), timeout=timeout) as s:
+        s.ehlo()
+        s.starttls()
+        s.ehlo()
+        yield s
+
+
+
 def _clean_reply_to(v) -> str:
     """Reply-To 只收格式正確的單一 Email；其他一律當沒有（不讓壞值進信件標頭）。"""
     try:
@@ -435,10 +465,7 @@ def _send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> str:
         msg["Reply-To"] = _rt
     msg.attach(MIMEText(html, "html", "utf-8"))
     try:
-        with smtplib.SMTP(host, port, timeout=15) as s:
-            s.ehlo()
-            s.starttls()
-            s.ehlo()
+        with _smtp_open(host, port, 15) as s:
             s.login(user, pw)
             s.sendmail(user, to_addrs, msg.as_string())
         logger.info("email sent to %s — %r", to_addrs, subject)
@@ -530,10 +557,12 @@ def _async_send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> 
     return handle
 
 
-def _send_raising(to_addrs: list, subject: str, html: str) -> None:
-    """同 _send，但 SMTP 失敗時直接拋出例外（供測試端點用）。"""
-    cfg = _cfg()
-    if not cfg.get("enabled"):
+def _send_raising(to_addrs: list, subject: str, html: str, ignore_enabled: bool = False, cfg: dict = None) -> None:
+    """同 _send，但 SMTP 失敗時直接拋出例外（供測試端點用）。
+    `ignore_enabled=True`：寄信精靈在「啟用之前」就要寄測試信，所以略過「未啟用」這一關；開發機硬擋與帳密檢查照舊。
+    `cfg`：寄信精靈拿「候選設定」直接測試，**不先存進系統設定**（測試失敗時，正在使用的設定一個字都不會變）；沒給就讀目前已存的設定。"""
+    cfg = cfg if cfg is not None else _cfg()
+    if not cfg.get("enabled") and not ignore_enabled:
         raise RuntimeError("Email 通知功能未啟用")
     subject = _apply_dev_subject_prefix(cfg, subject)
     if _smtp_send_blocked(subject):
@@ -552,10 +581,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
     msg["From"]    = f"{from_name} <{user}>"
     msg["To"]      = ", ".join(to_addrs)
     msg.attach(MIMEText(html, "html", "utf-8"))
-    with smtplib.SMTP(host, port, timeout=15) as s:
-        s.ehlo()
-        s.starttls()
-        s.ehlo()
+    with _smtp_open(host, port, 15) as s:
         s.login(user, pw)
         s.sendmail(user, to_addrs, msg.as_string())
 
@@ -576,6 +602,37 @@ def _dl(text, doc_label):
     return text if (not doc_label or doc_label == "報價單") else str(text).replace("報價單", doc_label)
 
 
+def _concrete(text, doc_label):
+    """信件類型登記表裡的共用名稱 ⇒ 這封信實際的單據名稱：先把「報價單／估價單」換成 doc_label，再套 `_dl`（其餘「報價單」）。
+    報價單（或沒給）⇒ 「報價單／估價單」變回「報價單」，其餘字串不動。只用在登記表的靜態文字（不含任何使用者輸入）。"""
+    lab = doc_label or "報價單"
+    if lab == "報價單／估價單":          # 不分單據的信（例如業務開發連結異動）：維持中性寫法
+        return str(text)
+    return _dl(str(text).replace("報價單／估價單", lab), lab)
+
+
+def _dl_fill(tpl, doc_label, **vals):
+    """先換範本裡的單據名稱、再填值（單趟取代）：客戶名稱等使用者文字裡自己寫的「報價單」不會被改成「估價單」。"""
+    import re as _re
+    return _re.sub(r"\{(\w+)\}", lambda m: str(vals[m.group(1)]) if m.group(1) in vals else m.group(0), _dl(tpl, doc_label))
+
+
+def _subject_text(_tf, default_tpl, doc_label, *, no, cust, t=None, tt=None):
+    """信件主旨的主文：範本設定檔有給 reason 就用它（管理員自己寫的字，整段換名稱），否則走預設範本。"""
+    if "reason" in _tf:
+        return _dl(_tf["reason"], doc_label)
+    return _dl_fill(default_tpl, doc_label, no=no, cust=cust, t=t, tt=tt)       # 明列關鍵字（case_summary_purpose 守門禁非字面值 **）；t／tt 只有 next_tier 的範本用得到
+
+
+def _doc_label_of(quote_no) -> str:
+    """只有單號的通知（結算／結案／變更申請…）用：單號字首 ⇒ 報價單／估價單。任何錯誤 ⇒ 報價單（通知不可因取名失敗而寄不出去）。"""
+    try:
+        from helpers import doc_type as _DT
+        return _DT.label_of_no(quote_no)
+    except Exception:                                                  # noqa: BLE001
+        return "報價單"
+
+
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list, doc_label: str = "報價單") -> None:
     """新報價/改版送審 → 通知當層簽核人（doc_label＝單據類型名稱，估價單傳「估價單」）"""
     # LINE 獨立通道（2026-11-13）：不看 Email、不看信件退訂；信件與 LINE 各自失敗互不影響。收件人規格見 docs/platform/plans/LINE-EVENTS-EXPANSION-PROPOSAL.md v2-4。
@@ -591,16 +648,17 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成簽核作業。"), doc_label),
         button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe       # 報價人的報價用公司信箱（儲存報價單時伺服器已驗證）；沒有 ⇒ 不加 Reply-To，呼叫形狀與舊版相同
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("approval_request", _dl(_tf.get("reason", f"報價單待簽核：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("approval_request", _subject_text(_tf, "報價單待簽核：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
                      total_tiers: int, approver_usernames: list, doc_label: str = "報價單") -> None:
     """前層通過，下一層簽核通知"""
-    _line_event("next_tier", usernames=approver_usernames, title="報價單輪到您簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
+    _line_event("next_tier", usernames=approver_usernames, title=_dl("報價單輪到您簽核", doc_label), rows=[(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "next_tier")
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
@@ -613,16 +671,17 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", f"您好，前層簽核已完成，報價單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。"), doc_label),
         button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("next_tier", _dl(_tf.get("reason", f"報價單簽核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("next_tier", _subject_text(_tf, "報價單簽核通知（第 {t}/{tt} 層）：{no}（{cust}）", doc_label, t=tier_no, tt=total_tiers, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_approved(quote_no: str, customer: str,
                     approved_by: str, requester_username: str, doc_label: str = "報價單") -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
-    _line_event("approved", usernames=[requester_username], to_group=True, title="報價單簽核完成", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
+    _line_event("approved", usernames=[requester_username], to_group=True, title=_dl("報價單簽核完成", doc_label), rows=[(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
     to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
@@ -634,16 +693,17 @@ def notify_approved(quote_no: str, customer: str,
         quote_no, _base_url(),
         intro=_dl(_tf.get("intro", "您好，以下報價單已完成全部層級簽核，正式生效。感謝各位簽核人員配合。"), doc_label),
         button_text=_dl(_tf.get("button", "前往查看報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("approved", _dl(_tf.get("reason", f"報價單簽核完成：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("approved", _subject_text(_tf, "報價單簽核完成：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
                     note: str, requester_username: str, doc_label: str = "報價單") -> None:
     """退回修改 → 通知申請人"""
-    _line_event("returned", usernames=[requester_username], title="報價單退回修改", rows=[("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
+    _line_event("returned", usernames=[requester_username], title=_dl("報價單退回修改", doc_label), rows=[("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "returned")
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
@@ -656,10 +716,11 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
         intro=_dl(_tf.get("intro", "您好，您提交的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"), doc_label),
         note=note,
         button_text=_dl(_tf.get("button", "前往修改報價單"), doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe       # 修改版（新單）也有自己的快照；沒有再用原單的
     _rt = _qe.reply_to_for_quote(new_quote_no) or _qe.reply_to_for_quote(quote_no)
-    _async_send(to, _mt.subject("returned", _dl(_tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("returned", _subject_text(_tf, "報價單退回修改：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
@@ -1356,7 +1417,7 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
                               approver_names: list, doc_label: str = "報價單") -> None:
     """退回改版重新送審 → 確認信給申請人"""
-    _line_event("resubmit_requester", usernames=[requester_username], title="修改版報價單已重新送審", rows=[("修改版單號", new_quote_no), ("原始單號", original_quote_no), ("客戶名稱", customer)], reason="修改版已重新進入簽核流程")
+    _line_event("resubmit_requester", usernames=[requester_username], title=_dl("修改版報價單已重新送審", doc_label), rows=[("修改版單號", new_quote_no), ("原始單號", original_quote_no), ("客戶名稱", customer)], reason="修改版已重新進入簽核流程")
     to = _lookup_emails([requester_username], "resubmit_requester")
     if not to:
         logger.warning("notify_resubmit_requester: 申請人 %r 無設定 email（quote_no=%r）",
@@ -1370,10 +1431,11 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
         new_quote_no, _base_url(),
         intro=_dl("您好，您的修改版報價單已成功送出，目前正等待簽核人員簽核，請耐心等候通知。", doc_label),
         button_text=_dl("前往查看報價單", doc_label),
+        doc_label=doc_label,                  # 呼叫端明講的單據名優先（footer／預設影響／處理方式用它換字）
     )
     from helpers import quote_email as _qe
     _rt = _qe.reply_to_for_quote(new_quote_no)
-    _async_send(to, _mt.subject("resubmit_requester", _dl(f"修改版報價單已送審：{new_quote_no}（{customer}）", doc_label)), html, *((_rt,) if _rt else ()))
+    _async_send(to, _mt.subject("resubmit_requester", _dl_fill("修改版報價單已送審：{no}（{cust}）", doc_label, no=new_quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
 def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
@@ -1429,15 +1491,16 @@ def notify_dev_case_relink_request(case_id: int, case_name: str, requester_displ
         logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
-    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單號）"
+    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單／估價單號）"
     rows = [("案件名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
     if reason and reason.strip():
         rows.append(("申請原因", reason.strip()))
     html = _build_html("dev_case_relink_request", 
-        "業務開發案件報價單連結異動申請", "請盡速簽核", "#DC2626",
+        "業務開發案件報價單／估價單連結異動申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統簽核。",
+        intro=f"{requester_display} 申請異動業務開發案件的報價單／估價單連結，請最高管理者登入系統簽核。",
         button_text="前往簽核",
+        doc_label="報價單／估價單",           # 連結的可能是報價單也可能是估價單：登記表的共用名稱維持中性
     )
     _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
 
@@ -1875,16 +1938,17 @@ def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_l
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
     """精算完結 → 通知 admin_emails"""
-    _line_event("settlement_finalized", to_group=True, title="成本精算完結", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)])
+    _line_event("settlement_finalized", to_group=True, title="成本精算完結", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)])
     to = _admin_emails("settlement_finalized")
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
         return
+    _lab = _doc_label_of(quote_no)
     html = _build_html("settlement_finalized", 
         "成本精算完結通知", "精算完結", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)],
+        [(_dl("報價單號", _lab), quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)],
         quote_no, _base_url(),
-        intro=f"以下報價單之成本精算已由 {finalized_by} 完結確認，請登入系統查閱最終結算資料。",
+        intro=_dl("以下報價單之成本精算已由 {who} 完結確認，請登入系統查閱最終結算資料。", _lab).replace("{who}", finalized_by, 1),
         button_text="前往查看精算結果",
     )
     _async_send(to, _mt.subject("settlement_finalized", f"成本精算完結：{quote_no}（{customer}）"), html)
@@ -1894,7 +1958,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理者（2026-08-25）。
     報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
     發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
-    _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
+    _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
     to = _superadmin_emails("case_closing_report")
     if not to:
         logger.warning("notify_case_closing_report: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1906,7 +1970,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_closing_report", 
         "案件結案報表", "已產生", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
         "", case_page,
         intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入/成本/損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
         button_text="前往查看案件",
@@ -1926,7 +1990,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
     概念）＋最高管理者（不論如何都通知，即使 pending_usernames 已涵蓋所有
     superadmin，重複的 email 由呼叫端 set() 去重）。"""
-    _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
+    _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
     to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
                   + _superadmin_emails("case_close_blocked")))
     if not to:
@@ -1936,7 +2000,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_close_blocked", 
         "結案被擋下", "尚未達成前置條件", "#DC2626",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
          ("未達成項目", "、".join(reasons))],
         "", case_page,
         intro=f"案件「{label}」嘗試結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試結案。",
@@ -1952,7 +2016,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""
-    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
+    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
     to = _superadmin_emails("case_change_requested")
     if not to:
         logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1961,7 +2025,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_change_requested", 
         "已結案案件變更待簽核", "待簽核", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
         intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於「待我簽核」簽核後才會套用。",
@@ -2085,8 +2149,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
         outer.attach(part)
 
     try:
-        with smtplib.SMTP(host, port, timeout=60) as s:
-            s.ehlo(); s.starttls(); s.ehlo()
+        with _smtp_open(host, port, 60) as s:
             s.login(user, pw)
             s.sendmail(user, to_addrs, outer.as_string())
         logger.info("email+attachments sent to %s — %r", to_addrs, subject)

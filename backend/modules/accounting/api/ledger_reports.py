@@ -272,7 +272,7 @@ def put_role(body: dict = Body(...), authorization: str = Header(None)):
         begin_write(conn)
         _roles.ensure_meta(conn)
         _check_role_target(conn, p["account_code"])
-        others = [r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user["username"],))]
+        others = _L.real_superadmins(conn, user["username"])        # 展示帳號不算第二位
         if not others:
             raise HTTPException(409, "角色對應的變更需要另一位在職的最高管理者核准；目前沒有第二位最高管理者，無法申請。")
         if _current_role_code(conn, p) == p["account_code"]:

@@ -112,6 +112,7 @@ from .google_calendar import (
 from .uploads import (
     save_document_files,
     delete_document_file,
+    files_txn, append_json_list, remove_json_item,
 )
 from .startup import (
     _EDGE_CANDIDATES,
@@ -182,7 +183,7 @@ __all__ = [
     "push_event_delete_for_case_stage", "push_event_for_module",
     "push_event_upsert_for_module", "push_event_delete_for_module",
     # uploads
-    "save_document_files", "delete_document_file",
+    "save_document_files", "delete_document_file", "files_txn", "append_json_list", "remove_json_item",
     # startup
     "_EDGE_CANDIDATES", "_get_edge_path", "EDGE_PDF_SEMAPHORE",
     "EDGE_PDF_TIMEOUT_SECONDS", "run_edge_pdf",

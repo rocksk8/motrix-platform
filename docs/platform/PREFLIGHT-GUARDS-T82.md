@@ -110,3 +110,16 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
 預跑用 **`modtest --full --keep-going --window <視窗>`**：關 fail-fast／紅燈上限、slice0 紅也照跑其餘片與 e2e；結果照寫，`keep_going: true`，**紅就是紅、不可當放行證據**；
 全綠時與正常全量同一份證據。只要某一段的紅清單用 `run-stage <段> --no-failfast`。正式閘門仍用不帶旗標的 `modtest --full`。
 （測試：`tests/platform/test_gate_slices_2026_10_07.py::test_keep_going_*`。）
+
+## run-stage 只重試失敗題＋閘門期間全機安靜（2026-11-13，T82 使用者要求）
+**① 只重試失敗題**（`python backend/tools/build_test_reuse.py run-stage --stage <段>`，預設開；`--retry-failed N` 調上限、`--no-retry` 關）：
+一段跑完、**紅的題數 ≤ N（預設 5）** ⇒ 自動把這幾題在安靜環境（單程序 `-n 0`、無 failfast）單獨重跑一次。
+- 全過 ⇒ 這一段記 **「綠（重試 k 題）」**，建包可沿用；紀錄 `stages.<段>.retry` 帶原始紅、重試結果、明細目錄；`deploy_logs/retry_log.jsonl` 每題一行（原始紅摘要＋pass/fail）。
+- 重試仍紅 ⇒ 這段記紅。
+- **只有「這一輪確定跑完、紅的就是這幾題」才重試**：被中斷／failfast 提早停／collect 階段紅／沒有 fail_stream summary／紅清單比 summary 少／exit code 不是 1 ⇒ 不重試（沒跑到的題不能靠重試補）。紅超過 N 題＝真的問題，不重試。
+- 為了讓「紅 ≤ N」的一輪能跑完，run-stage 的 failfast 改成「紅超過 N 才停」（`MOTRIX_FAILFAST_N`＝N＋1、關掉第一個紅後靜默 3 分鐘那條）；`--no-retry` 回舊值。
+- **這不是 flake 登記**：`known_flakes.json` 不動、建包的偶發重跑規則不變。同一題累計重試次數：`build_test_reuse.py retry-counts [--json]`（雜訊排行榜的來源）。
+**② 閘門期間全機安靜**：閘門鎖（`heavy_run --gate-lock acquire`）被持有時，conftest 會拒絕非持有者的 pytest——**含單檔**（`【閘門期間：不開始臨時 pytest】`，exit 4）。放行：持有者（`MOTRIX_WINDOW`＝持有者視窗或帶對 `MOTRIX_GATE_TOKEN`）、heavy_run 排過隊的行程（`MOTRIX_CI_TICKET`）、建包子行程、`--collect-only`、`MOTRIX_QUEUE_GUARD=0`（知道後果才用）。
+`run-stage` 真的跑的時候**自己持有閘門鎖**（沒人持有才取；綁行程 `holder_pid`，被殺就不再擋；TTL 3 小時兜底；跑完放；別人已持有就不動）。整合者顯式取的鎖不綁行程、照舊靠 TTL。
+測試：`tests/platform/test_gate_retry_failed_and_quiet_2026_11_13.py`。
+**已知限制（h10 審查）**：①任何**真跑**的 run-stage（`--no-failfast` 診斷跑除外）都會持有閘門鎖整段（15～30 分鐘）⇒ 這段時間其他視窗的 pytest 被拒絕——這是設計；診斷用 `--no-failfast`（不重試、不取鎖）。②單程序重試會洗掉「順序污染」型的紅（例如同 worker 前一題留下的 audit_log 列）——這類交給污染偵測器（h4）；run-stage 對同一題 24 小時內重試達 3 次以上會在結束訊息警告，累計看 `retry-counts`。③「綠（重試 k 題）」會標在 run-stage 結束訊息、`explain`、建包沿用訊息與 manifest verification（儀表板的建包閘門讀的是 modtest 全量結果，不經 run-stage 紀錄）。

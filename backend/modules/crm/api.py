@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 from helpers import row_access
+from helpers import doc_type as _DT   # 估價單：轉建通知依單號字首顯示「報價單」或「估價單」
 from helpers import perm as _perm
 from helpers import email_notify as _en            # LINE 專屬事件（僅 LINE／細項）走 `_en._line_event`
 import threading
@@ -901,7 +902,7 @@ def mark_converted(
         # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
         # converted_quote_no 就是一個從一開始就沒有意義的懸空參照。
         if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
-            raise HTTPException(400, f"報價單 {quote_no} 不存在，無法連結")
+            raise HTTPException(400, f"{_DT.label_of_no(quote_no)} {quote_no} 不存在，無法連結")
         conn.execute(
             "UPDATE dev_cases SET converted_quote_no=?, status='成案', updated_at=? WHERE id=?",
             (quote_no, now, case_id),
@@ -910,7 +911,7 @@ def mark_converted(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
                str(case_id), f"{row['case_name']} → {quote_no}")
-        notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
+        notify_module_activity("業務開發", "轉建" + _DT.label_of_no(quote_no), user.get("display_name") or user["username"],
                                 f"{row['case_name']} → {quote_no}", "dev-crm.html",
                                 line_event="crm_case_converted", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))
@@ -945,7 +946,7 @@ def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
         if target and not conn.execute(
             "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
         ).fetchone():
-            raise HTTPException(400, f"報價單 {target} 不存在，無法連結")
+            raise HTTPException(400, f"{_DT.label_of_no(target)} {target} 不存在，無法連結")
         requester_display = user.get("display_name") or user["username"]
         conn.execute(
             "UPDATE dev_cases SET pending_relink=1, relink_requested_by=?,"
@@ -1021,7 +1022,7 @@ def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
             if target and not conn.execute(
                 "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
             ).fetchone():
-                raise HTTPException(400, f"報價單 {target} 已不存在，無法核准，請申請人取消或重新申請")
+                raise HTTPException(400, f"{_DT.label_of_no(target)} {target} 已不存在，無法核准，請申請人取消或重新申請")
             new_status = "洽談中" if not target else row["status"]
             conn.execute(
                 "UPDATE dev_cases SET converted_quote_no=?, status=?, pending_relink=0,"

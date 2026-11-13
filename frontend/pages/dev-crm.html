@@ -550,7 +550,7 @@
     <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
             @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
       <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
-      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單／估價單</small></span>
     </button>
     <span class="dc-funnel__arrow" aria-hidden="true">→</span>
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
@@ -847,7 +847,7 @@
                   </a>
                   <button x-show="selectedCase.convertedQuoteNo && isAdmin && !selectedCase.pendingRelink"
                           class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
-                          @click="openRelinkModal()" title="申請修改／解除報價單連結">
+                          @click="openRelinkModal()" title="申請修改／解除報價單／估價單連結">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
                   <template x-if="selectedCase.pendingRelink">
@@ -872,7 +872,7 @@
               <template x-if="selectedCase.status === '成案' && !selectedCase.convertedQuoteNo">
                 <button class="btn btn-primary btn-sm" @click="openConvertModal()">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
-                  轉建報價單
+                  轉建報價單／估價單
                 </button>
               </template>
               <template x-if="selectedCase.status !== '洽談中'">
@@ -1369,39 +1369,39 @@
       </div>
     </div>
 
-    <!-- ── Modal：轉建報價單 ── -->
+    <!-- ── Modal：轉建報價單／估價單 ── -->
     <div class="dc-modal-bg" x-show="showConvertModal" x-cloak @click.self="showConvertModal=false">
       <div class="dc-modal" style="max-width:420px">
         <div class="dc-modal-head">
-          <h3>轉建報價單</h3>
+          <h3>轉建報價單／估價單</h3>
           <button class="btn btn-ghost btn-icon" @click="showConvertModal=false">✕</button>
         </div>
         <div class="dc-modal-body">
           <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;font-family:var(--font-zh)">
-            系統將開啟報價單表單，並預填以下資訊。
+            系統將開啟報價單／估價單表單，並預填以下資訊。
           </p>
           <div style="background:#F8FAFF;border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:14px;font-family:var(--font-zh)">
             <div style="margin-bottom:5px"><b>客戶名稱：</b><span x-text="selectedCase && selectedCase.customerName || '（未填）'"></span></div>
             <div><b>案件名稱：</b><span x-text="selectedCase && selectedCase.caseName"></span></div>
           </div>
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
-            報價單建立後，可輸入單號完成連結（選填）：
+            報價單／估價單建立後，可輸入單號完成連結（選填）：
           </div>
           <input class="dc-input" type="text" x-model="convertQuoteNo"
-            placeholder="MQ-YYYYMM-NNN（留空可後續補填）">
+            placeholder="輸入單號（留空可後續補填）">
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showConvertModal=false">取消</button>
-          <button class="btn btn-primary" @click="doConvert()">開啟報價單表單</button>
+          <button class="btn btn-primary" @click="doConvert()">開啟報價單／估價單表單</button>
         </div>
       </div>
     </div>
 
-    <!-- ── Modal：申請修改／解除報價單連結 ── -->
+    <!-- ── Modal：申請修改／解除報價單／估價單連結 ── -->
     <div class="dc-modal-bg" x-show="showRelinkModal" x-cloak @click.self="showRelinkModal=false">
       <div class="dc-modal" style="max-width:420px">
         <div class="dc-modal-head">
-          <h3>申請修改／解除報價單連結</h3>
+          <h3>申請修改／解除報價單／估價單連結</h3>
           <button class="btn btn-ghost btn-icon" @click="showRelinkModal=false">✕</button>
         </div>
         <div class="dc-modal-body">
@@ -1411,13 +1411,13 @@
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
             目前連結：<b x-text="selectedCase && selectedCase.convertedQuoteNo"></b>
           </div>
-          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單號（留空＝申請解除連結）</label>
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單／估價單號（留空＝申請解除連結）</label>
           <input class="dc-input" type="text" x-model="relinkQuoteNo"
-            placeholder="MQ-YYYYMM-NNN，留空表示案件變更需取消連結">
+            placeholder="輸入單號，留空表示案件變更需取消連結">
           <label style="display:block;font-size:12px;color:var(--text-secondary);margin:10px 0 4px;font-family:var(--font-zh)">申請原因（選填）</label>
           <textarea class="dc-input" x-model="relinkReason" rows="3"
             style="resize:vertical;min-height:56px"
-            placeholder="例如：報價單已取消，案件需求變更…"></textarea>
+            placeholder="例如：報價單／估價單已取消，案件需求變更…"></textarea>
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showRelinkModal=false">取消</button>
@@ -2568,7 +2568,7 @@ function devCrmPage() {
         this.selectedCase = updated
         const idx = this.cases.findIndex(c => c.id === updated.id)
         if (idx >= 0) this.cases.splice(idx, 1, updated)
-        this._toast('已連結至報價單 ' + quoteNo)
+        this._toast('已連結至報價單／估價單 ' + quoteNo)
       }
     },
 

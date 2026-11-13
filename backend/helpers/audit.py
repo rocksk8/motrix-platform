@@ -52,7 +52,7 @@ def _case_no_re():
         return _CASE_NO_RE
 #: 動作第一段 ⇒ 畫面上的模組名（對不到 ⇒ 顯示原字串，不猜）
 _MODULE_LABELS = {
-    "quotation": "報價單", "case": "案件管理", "deal_tag": "成案標記", "case_stage": "案件階段", "case_update": "案件動態",
+    "quotation": "報價單／估價單", "case": "案件管理", "deal_tag": "成案標記", "case_stage": "案件階段", "case_update": "案件動態",
     "case_action_item": "案件待辦", "extra_expense": "額外支出", "completion": "完工單", "shipping": "出貨單",
     "voucher": "傳票", "invoice_voucher": "開票申請", "payment_request": "請款單", "payment": "收款",
     "contractor_voucher": "承攬商匯款", "contractor": "承攬人員", "vendor": "外包廠商", "payslip": "勞報單", "bonus": "獎金分潤",

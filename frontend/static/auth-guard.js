@@ -11,7 +11,67 @@
  */
 (function () {
   // 模組建構器的即時預覽（BUILDER-UX §3.3，custom-records.html?preview=1）：不驗證、不打 API、不轉登入頁
+  // （預覽時 notif.js／sidebar.js 也讓位，不會用到下面的啟動資料；呼叫端一律寫 `window.motrixBootFetch || fetch`）
   if (window.MOTRIX_PREVIEW) return;
+  // ── 啟動資料（2026-11-13「外網載入效能」第二階段）────────────────────────────────────────────
+  // 原本每一頁載入都各自打 auth/me、platform/menu、modules/availability、build-info、approval-queue/count、notifications/mine、
+  // reads/module-counts、system/branding、online-users、totp/status…（外網每支約 1 s）。現在這支守門腳本在驗證登入（`auth/me`，放行頁面只看它）的**同時**並行打 **一支** `GET /api/bootstrap`
+  // 取其餘啟動資料（不擋首繪），結果放在 `window.MotrixBoot`（Promise → bootstrap JSON；null＝不可用，各處退回打原端點）。
+  //   window.motrixBootFetch(url, opts)：與 fetch 同簽章。**第一次**要某個啟動區段時（且在 20 秒內、同一個 token）回一個由 bootstrap 內容
+  //     組成的 Response（r.ok／r.json() 與原端點完全相同），否則就是真的 fetch ⇒ 呼叫端只要把 fetch 換成它，其餘邏輯不用動；
+  //     之後的重抓（輪詢、focus、reads-changed）一律是真的請求，不會拿到舊資料。
+  //   window.motrixBoot(name)：Promise → 區段內容或 undefined（沒有／過期／已用過 ⇒ 呼叫端自己打原端點）。
+  // 內容與原端點逐欄相同（後端是直接呼叫原端點的處理函式；守門 tests/test_bootstrap_bundle_2026_11_13.py）。
+  var BOOT_TTL_MS = 20000;
+  // 原端點路徑 → [bootstrap 區段, 這一頁最多可由 bootstrap 供應幾次（同一資料有兩個載入點的給 2）]
+  var BOOT_SECTIONS = {
+    '/api/auth/me': ['me', 2], '/api/platform/menu': ['menu', 1], '/api/system/branding': ['branding', 2],
+    '/api/build-info': ['buildInfo', 1], '/api/system/bonus-module-status': ['bonusModuleStatus', 1],
+    '/api/system/modules/availability': ['moduleAvailability', 1], '/api/approval-queue/count': ['approvalCount', 2],
+    '/api/notifications/mine': ['notifications', 1], '/api/reads/module-counts': ['moduleCounts', 1],
+    '/api/online-users': ['onlineUsers', 1], '/api/auth/totp/status': ['totp', 1]
+  };
+  var boot = { data: null, at: 0, token: '', hdr: null, used: {} };
+  var bootResolve;
+  window.MotrixBoot = new Promise(function (res) { bootResolve = res; });
+  function bootValue(name, token) {
+    var d = boot.data;
+    if (!d || token !== boot.token || Date.now() - boot.at > BOOT_TTL_MS) return undefined;
+    var v = d[name];
+    return v === null ? undefined : v;
+  }
+  // 使用者動作造成的重抓（簽核處理完、標已讀…）一律要拿真資料：事件一來，整份啟動資料作廢
+  if (window.addEventListener) {
+    ['motrix:approval-changed', 'motrix:reads-changed', 'motrix:item-read', 'motrix:item-read-failed'].forEach(function (ev) {
+      window.addEventListener(ev, function () { boot.data = null; });
+    });
+  }
+  window.motrixBoot = function (name) {
+    return window.MotrixBoot.then(function () {
+      var tok = boot.token;
+      var limit = 1;
+      Object.keys(BOOT_SECTIONS).forEach(function (k) { if (BOOT_SECTIONS[k][0] === name) limit = BOOT_SECTIONS[k][1]; });
+      if ((boot.used[name] || 0) >= limit) return undefined;
+      var v = bootValue(name, tok);
+      if (v !== undefined) boot.used[name] = (boot.used[name] || 0) + 1;
+      return v;
+    });
+  };
+  window.motrixBootFetch = function (url, opts) {
+    var m = BOOT_SECTIONS[url];
+    var method = String((opts && opts.method) || 'GET').toUpperCase();
+    var auth = opts && opts.headers && (opts.headers.Authorization || opts.headers.authorization);
+    if (!m || method !== 'GET' || !auth || !window.MotrixBoot) return fetch(url, opts);
+    return window.MotrixBoot.then(function () {
+      var v = (auth === 'Bearer ' + boot.token && (boot.used[m[0]] || 0) < m[1]) ? bootValue(m[0], boot.token) : undefined;
+      if (v === undefined) return fetch(url, opts);
+      boot.used[m[0]] = (boot.used[m[0]] || 0) + 1;
+      // 橫幅標頭（授權／本公司資料設定）原本由真的回應帶來；第一次供應時補上同樣的標頭，notif.js 的橫幅邏輯才不會漏掉
+      try { if (window.motrixApplyBanners && boot.hdr) window.motrixApplyBanners(boot.hdr); } catch (e) {}
+      return new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+  };
+
   var raw = null;
   try { raw = localStorage.getItem('motrix_session'); } catch (e) {}
   var session = null;
@@ -41,6 +101,7 @@
 
   if (!session || !session.token) {
     try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 沒登入（含各頁自己登出的路徑）：個人偏好快取一併清掉
+    bootResolve(null);
     rememberReturn();
     location.replace(loginPath);
     return;
@@ -150,27 +211,53 @@
   // 5 秒安全逾時：伺服器無回應時也要放行，不能讓使用者永遠卡在空白頁
   var timeoutId = setTimeout(reveal, 5000);
 
-  fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + session.token } })
-    .then(function (r) {
-      clearTimeout(timeoutId);
-      if (r.ok) {
-        forgetReturn();
-        reveal();
-        syncPrefs();
-      } else if (r.status === 402) {
-        // 授權閘門（helpers/licensing.py，T80）：這不是「未登入」——不清 session、不轉登入頁（否則使用者以為被登出、
-        // 重新登入又被擋，永遠看不到原因），導向「授權無法使用」說明頁。
-        location.replace(licensePath);
-      } else {
-        try { localStorage.removeItem('motrix_session'); } catch (e) {}
-        rememberReturn();
-        location.replace(loginPath);
-      }
-    })
-    .catch(function () {
-      // 網路暫時錯誤（非 401），不是「未登入」——放行，避免整頁永遠白屏，
-      // 後續各頁面自己的 API 呼叫會各自處理失敗情形
-      clearTimeout(timeoutId);
+  var authHeaders = { Authorization: 'Bearer ' + session.token };
+
+  // 與改版前 `/api/auth/me` 的處理逐字相同（ok ⇒ 放行；402 ⇒ 授權說明頁；其他 ⇒ 清 session 轉登入頁）
+  function handleStatus(r) {
+    clearTimeout(timeoutId);
+    if (r.ok) {
+      forgetReturn();
       reveal();
-    });
+      syncPrefs();
+    } else if (r.status === 402) {
+      // 授權閘門（helpers/licensing.py，T80）：這不是「未登入」——不清 session、不轉登入頁（否則使用者以為被登出、
+      // 重新登入又被擋，永遠看不到原因），導向「授權無法使用」說明頁。
+      location.replace(licensePath);
+    } else {
+      try { localStorage.removeItem('motrix_session'); } catch (e) {}
+      rememberReturn();
+      location.replace(loginPath);
+    }
+  }
+  function onNetworkError() {
+    // 網路暫時錯誤（非 401），不是「未登入」——放行，避免整頁永遠白屏，
+    // 後續各頁面自己的 API 呼叫會各自處理失敗情形
+    clearTimeout(timeoutId);
+    reveal();
+  }
+  function legacyMe() {
+    return fetch('/api/auth/me', { headers: authHeaders }).then(handleStatus).catch(onNetworkError);
+  }
+
+  // 啟動資料等不到就不等：BOOT_WAIT_MS（1.5 秒）後讓 MotrixBoot 變 null，各處退回打原端點（與改版前一樣）。
+  // 之前是 6 秒：bootstrap 卡住時，等它的頁面資料會卡 6 秒，比沒有 bootstrap 還糟。逾時後才到的 bootstrap 回應一律丟掉（呼叫端已經改打原端點了）。
+  var BOOT_WAIT_MS = 1500, bootDead = false;
+  var bootTimer = setTimeout(function () { bootDead = true; bootResolve(null); }, BOOT_WAIT_MS);
+
+  // 首繪不可以比改版前慢（B1）：**放行只看快的 `auth/me`**（與改版前逐字相同的路徑），`/api/bootstrap` 同時並行發出、
+  // 只負責供應資料——它慢（11 個區段）不會擋住頁面顯示；它失敗（401／403／428／404／5xx／逾時）只是 MotrixBoot＝null、各處退回打原端點。
+  fetch('/api/bootstrap', { headers: authHeaders })
+    .then(function (r) {
+      if (r.status !== 200) { clearTimeout(bootTimer); bootResolve(null); return; }
+      return r.json().then(function (d) {
+        if (!d || !d.me) throw new Error('bootstrap without me');
+        if (bootDead) return;
+        boot.data = d; boot.at = Date.now(); boot.token = session.token;
+        boot.hdr = { license: r.headers.get('X-Motrix-License'), setup: r.headers.get('X-Motrix-Company-Setup'), expiry: r.headers.get('X-Motrix-License-Expiry') };
+        clearTimeout(bootTimer); bootResolve(d);
+      });
+    })
+    .catch(function () { clearTimeout(bootTimer); bootResolve(null); });
+  legacyMe();
 })();

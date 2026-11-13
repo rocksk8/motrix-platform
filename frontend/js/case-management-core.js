@@ -45,7 +45,7 @@ window.CM_PARTS.push(() => ({
     //: 讀公司資料裡的據點清單。讀不到就留空 => 那一行不顯示，其餘照常。
     async loadLocations() {
       try {
-        const r = await fetch('/api/settings/company-profile', {
+        const r = await fetch('/api/settings/company-profile/public', {
           headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
         const d = await r.json()

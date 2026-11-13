@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 942,
-  "endpoints_api": 938,
-  "write_total": 506,
-  "write_api": 506,
-  "get_api": 432,
-  "distinct_paths_api": 794,
-  "write_with_body_api": 372,
-  "write_with_path_param_api": 360
+  "endpoints_total": 962,
+  "endpoints_api": 958,
+  "write_total": 519,
+  "write_api": 519,
+  "get_api": 439,
+  "distinct_paths_api": 814,
+  "write_with_body_api": 384,
+  "write_with_path_param_api": 364
  },
  "select_star": {
   "modules": 288,
@@ -543,6 +543,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/bootstrap": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/build-info": {
    "w": false,
    "pp": 0,
@@ -854,6 +859,11 @@
    "body": false
   },
   "GET /api/dashboard/activity-feed": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/bundle": {
    "w": false,
    "pp": 0,
    "body": false
@@ -4724,6 +4734,106 @@
    "body": false
   },
   "PUT /api/auth/preferences": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/license/overview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/license/import": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/company-profile/public": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/backup-monitor": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/system/backup-monitor/backup-now": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-test": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/system/backup-monitor/heartbeat-url": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/org/gaps": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/getting-started": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/getting-started/steps/{step_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "GET /api/menu/categories": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/menu/categories/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/settings-help/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/settings/email-notify/providers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/settings/email-notify/wizard/activate": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/email-notify/wizard/test-me": {
    "w": true,
    "pp": 0,
    "body": true

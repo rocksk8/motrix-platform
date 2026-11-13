@@ -429,6 +429,10 @@
 
 檢查「沒有部門的人／沒有主管的部門／沒人持有財務職務」，顯示在簽核設定頁頂、使用者新增後、總覽首頁。檔案：新唯讀端點、`approval-settings.html`、`users.html`、`system-hub.html`。
 
+**批次 5a 實作紀錄（2026-11-13，分支 `feat/menu-ux-5a`，基底 batch0 `84c5b4010`）：** 新 `helpers/org_gaps.py`（只讀三項檢查；單項失敗不影響其他項、不丟 500）、`GET /api/org/gaps`（只有管理者以上；其他角色 403）、共用橫幅 `static/org-gaps.js`（文字由後端提供、人名用 textContent）。橫幅掛在簽核設定頁頂、使用者管理頁頂（新增／停用後自動重查，新增沒選部門時 toast 直接點出）、系統總覽首頁；沒缺口整塊隱藏。判準：①在職且沒有部門；②有在職成員、但沒有主管或主管已停用的部門（空部門不算）；③沒有任何非最高管理者持有財務職務（走 `finance_duty_person`，與實際權限同一條規則；全新安裝無人員時不提醒）。每項附「到哪裡補」的連結（使用者管理／組織架構），不新增頁面。
+
+**批次 5a 審查修正（hichan-10 審、2026-11-13，分支 `feat/menu-ux-5a-fix-h10`）：** ①財務判定改一次查詢 `org_gaps.finance_holder_exists`（與 `finance_duty_person` 同規則、各旗標模式都不寫入；300 人 2 秒 → 數毫秒；測試逐模式比對）；②全新安裝（沒有在職的非最高管理者）不顯示任何缺口，最高管理者不算「沒有部門」（說明文字寫明「最高管理者若要送審，仍然需要歸屬部門」）；③說明改「送審會被擋下」（2026-09-15 起不再往最高管理者遞補）；④橫幅：非管理者不發請求、連續重查只認最後一次回應、刪除使用者後也重查；⑤`/api/org/gaps` 的回應鍵基準只錄「沒有缺口」形狀，缺口項目形狀由 `test_gap_item_shape_is_stable` 釘住。
+
 ### 後續批次：角色中文名收斂為單一來源（hichan-6 審查 L4）
 
 全站目前有至少 6 份「角色代碼→中文名」對照（`sidebar.js`、`role-label.js`、`users.html`、`mail-settings.html`、`daily-tasks.html`、`routers/system.py::_DEFAULT_ROLE_LABELS` 等），其中只有使用者管理頁與 `perm_text` 讀公司自訂的 `role_labels`。批 0 新增的 `static/role-label.js` 已先讀 `GET /api/settings/role-labels`（每個登入期間抓一次、存 sessionStorage），但其他幾份仍是寫死預設。後續要：全站改走 `MotrixRole.label`、補一個首次載入就帶角色名稱的方式（例如隨 `/api/auth/me` 回傳），再加守門測試禁止新增第七份對照表。
@@ -524,6 +528,16 @@
 - 新增設定欄位卻沒有說明也不在白名單 ⇒ 測試失敗（避免日後新欄位又變成難懂的）。
 
 **依賴與順序：** 需要批次 1「其餘」的分類資料檔與守門先落地（或同批一起做）；`?` 元件可以先單獨出，給 5a／3 的新畫面直接用。**實作時間另外排。**
+
+**批次 9 實作紀錄（2026-11-13，分支 `feat/menu-ux-b9`，基底 `feat/menu-ux-5a` 93938b9aa；hichan-6）：**
+- **共用分類資料檔** `backend/core/menu_categories_l1.json`（10 個分類＋47 個設定群組歸位；項目鍵 `settings_group:<群組>`，`page:`／`card:` 前綴保留給總覽批次）；`helpers/menu_categories.py` 驗證、讀取、公司覆蓋（`system_settings.menu_categories_override`）；`GET /api/menu/categories`、`PUT /api/menu/categories/override`。設定中心與總覽讀同一份，沒有登記到分類的群組放「其他」，不會消失。
+- **「?」說明資料檔** `backend/core/settings_help.json`（鍵 `群組.欄位`；「這是什麼／什麼時候要改／改了會影響什麼」三段手寫，「預設值與建議」由欄位登記的預設值與建議值自動組出）；`helpers/settings_help.py`；公司可覆蓋（`settings_help_override`，`PUT /api/menu/settings-help/override`，即「全部可自定」）。**165 個欄位：104 個有說明、61 個標籤本身已清楚（白名單）而不放「?」**；沒有第三種。
+- **守門**（`tests/test_settings_center_b9_2026_11_13.py`）：每個欄位必須在白名單或有說明；說明不得為空；說明文字不得含工程用語（詞表讀 hichan-7 的 `tools/ux_audit_config.json`，沒有該檔就跳過並說明原因，不複製詞表）；每個群組必須歸入分類。
+- **共用「?」元件** `static/hint-popover.js`＋`css/hint-popover.css`（`.hint[data-hint]` 自動升級；桌機滑過／聚焦顯示、點一下釘住、Esc 關；手機點一下開底部面板，有「關閉」鈕；aria 完整；內容一律以文字寫入）。設定中心先用，業務頁之後沿用同一元件。
+- **設定中心頁**：左欄依分類／區段分組、搜尋涵蓋欄位問句與「什麼時候需要」、每個欄位旁有「?」、沒有預設組時不顯示「預設組」頁籤。14 個客製開關歸在「畫面與客製」。
+- **合併／淘汰標記**：逐組檢視後沒有需要淘汰的群組（狀態皆為 `keep`）；以「區段標題」與「補充」說明處理名稱相近的群組，後續要合併時改資料檔即可。
+- **hichan-10 審查修正（同日）**：①手機面板可點暗色背景收起、焦點進面板並鎖住、收起後回到 ?、? 點擊範圍 ≥ 44px、桌機 tooltip 裡不放按鈕、彈出框掛 body（不受祖先 transform 影響）；②兩支覆寫 API 的稽核列寫真實帳號與被改的鍵（不記文字）；③工程用語守門內建後備清單（共用檔不在時不略過；與共用檔逐項同步由測試守住），覆寫 API 一律擋工程用語；④名稱與說明擋零寬／方向控制／控制字元；⑤`GET /api/menu/categories` 對非最高管理者不回設定群組；⑥說明第四段範例與預設值相同時不重複、提到「另一位最高管理者」的影響句補「只有一位最高管理者時怎麼辦」。回應鍵基準的資料長大鍵以註解說明（`routers/menu_categories.py`）。
+- 基準檔：`route_inventory.json`（+3 條路由）、`response_keys_baseline.json`（只收 `/api/menu/categories` 與 `/api/settings-center/groups` 的新增鍵）；測試 `test_settings_center_b9_2026_11_13.py`（16）、`test_e2e_settings_center_b9_2026_11_13.py`（3）。
 
 ---
 

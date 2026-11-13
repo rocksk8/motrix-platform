@@ -79,6 +79,17 @@
   ],
   "s": 404
  },
+ "POST /api/license/import": {
+  "k": [
+   "applied",
+   "detail",
+   "license",
+   "message",
+   "ok",
+   "reason"
+  ],
+  "s": 400
+ },
  "POST /api/line/binding/start": {
   "k": [
    "detail"
@@ -268,6 +279,18 @@
   ],
   "s": 201
  },
+ "POST /api/settings/email-notify/wizard/activate": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/settings/email-notify/wizard/test-me": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "POST /api/settings/line-notify/bindings/remind": {
   "k": [
    "detail"
@@ -275,6 +298,42 @@
   "s": 400
  },
  "POST /api/settings/line-notify/verify": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/backup-now": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-test": {
   "k": [
    "detail"
   ],
@@ -324,6 +383,12 @@
    "prefs.theme"
   ],
   "s": 200
+ },
+ "PUT /api/getting-started/steps/{step_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "PUT /api/ledger/roles": {
   "k": [
@@ -377,6 +442,18 @@
   ],
   "s": 400
  },
+ "PUT /api/menu/categories/override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/menu/settings-help/override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"
@@ -396,6 +473,12 @@
   "s": 400
  },
  "PUT /api/settings/line-notify/events/{key}/roles": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/system/backup-monitor/heartbeat-url": {
   "k": [
    "detail"
   ],

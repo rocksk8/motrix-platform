@@ -38,8 +38,18 @@ def _pending_for(username):
         conn.close()
 
 
+def _count_resp(r):
+    """待簽數的來源：開頁時由 /api/bootstrap（2026-11-13 起合併了 approval-queue/count）供應，之後的重抓是原端點。"""
+    return "/api/approval-queue/count" in r.url or r.url.endswith("/api/bootstrap")
+
+
+def _count_of(resp):
+    j = resp.json()
+    return j["count"] if "count" in j else j["approvalCount"]["count"]
+
+
 def _open(page, live_server, path="quotations.html"):
-    with page.expect_response(lambda r: "/api/approval-queue/count" in r.url, timeout=30000) as resp:
+    with page.expect_response(_count_resp, timeout=30000) as resp:
         page.goto("%s/pages/%s" % (live_server, path))
     page.wait_for_selector(".mnav__grp", state="attached", timeout=30000)
     return resp.value
@@ -60,7 +70,7 @@ def test_dot_shows_for_a_user_with_a_pending_approval_and_goes_away_after_approv
     page = new_context(viewport={"width": 1440, "height": 900}).new_page()
     inject_login(page, live_server, waiting[0], waiting[1])
     r = _open(page, live_server)
-    assert r.json()["count"] == 1
+    assert _count_of(r) == 1
     page.wait_for_selector(DOT, state="visible", timeout=15000)               # 下拉收起（沒有 hover）也看得到
     assert page.inner_text(BADGE) == "1" or page.evaluate("() => document.getElementById('sb-approval-badge').textContent") == "1"
     # 簽掉（API），再由簽核佇列頁重抓清單——頁面自己每次處理完都會這樣做——紅點要消失
@@ -82,7 +92,7 @@ def test_no_dot_for_a_user_with_nothing_waiting(live_server, world, new_context)
     page = new_context(viewport={"width": 1440, "height": 900}).new_page()
     inject_login(page, live_server, idle[0], idle[1])
     r = _open(page, live_server)
-    assert r.json()["count"] == 0
+    assert _count_of(r) == 0
     page.wait_for_timeout(800)                                                  # 不會出現的東西只能等一下再確認
     assert not page.locator(DOT).is_visible()
 
@@ -114,7 +124,7 @@ def test_plain_role_user_approver_gets_the_dot_on_every_page(live_server, client
     page = new_context(viewport={"width": 1440, "height": 900}).new_page()
     inject_login(page, live_server, u[0], u[1])
     url = live_server + ("/index.html" if path == "index.html" else "/pages/" + path)
-    with page.expect_response(lambda r: "/api/approval-queue/count" in r.url, timeout=30000):
+    with page.expect_response(_count_resp, timeout=30000):
         page.goto(url)
     page.wait_for_selector(DOT, state="visible", timeout=15000)
     assert page.locator(BADGE).count() == 1 and page.evaluate("() => document.getElementById('sb-approval-badge').textContent") == "1"

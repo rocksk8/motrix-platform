@@ -1,5 +1,68 @@
 # L0／L1 底層 更新紀錄
 
+## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
+- `helpers/email_setup.py` 單位卡補 `[契約題]`，`[公開介面]` 補 `provider_by_key`／`valid_email`（註解，行為不變）。
+
+## 1.164 — 2026-11-13（feat/license-import-ui；T83 授權匯入：授權頁、匯入端點、到期提醒）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：
+  - 新單位 `helpers/license_manager.py`（授權頁與匯入的邏輯；**驗章／機器綁定／到期一律呼叫既有 `licensing.verify_license`，不重寫**）：`run_import`（預覽或匯入）、`describe_current`、`recent_activity`、`normalize_upload`、`rate_allow`、`backup_dir` 與常數。
+  - `helpers.licensing`：`EXPIRY_HEADER`／`EXPIRY_THRESHOLDS`／`expiry_reminder`／`expiry_banner`（剩 30／14／7 天提醒的判定；只在授權仍可用時提醒）；`LICENSE_EXEMPT_PATHS` 新增 `/api/license/overview`、`/api/license/import`（授權失效時唯一能救回系統的動作就是匯入新授權；豁免只跳過閘門，端點自己驗最高管理者＋非示範帳號）。
+  - `helpers.license_alerts.expiry_notice`：寄 `license_expiry` 信（新信件類型，`superadmins`、信件格鎖住不可關）；`system_checks._check_license_expiry` 每日 08:00 檢查，同一把授權同一檔位（30／14／7／永久已過維護期）只通知一次。
+- 行為變更（對外介面）：新端點 `GET /api/license/overview`、`POST /api/license/import`（最高管理者；匯入有大小上限 32 KB、頻率限制（每帳號 10 點／10 分鐘，預覽半點，另有全域 60 點；本文巢狀深度上限）、稽核 `license.import`／`license.import_rejected`、換檔前自動備份、換後複驗失敗自動還原）；已登入的 `/api` 回應多帶 `X-Motrix-License-Expiry`（`days=…;level=…;kind=…`／`none`）；新頁 `pages/license-settings.html`（獨立頁，不載入側欄／不打業務 API，授權失效時也開得起來）、系統選單「授權」、系統中心「公司與參數設定」卡；`license-required.html` 對最高管理者多一個「前往授權頁匯入」。
+- 不變：`LICENSE_GATE_ENABLED`、驗章流程、公鑰、緊急放行通行證判定、402 行為一律沒動。
+- **L6（複審）：換檔後複驗不過、而還原舊授權也失敗時**，回應不再說「已自動還原」，改回 500 `restore_failed`（「新授權未通過驗證，且無法自動還原舊授權；系統可能已被鎖住，請重新匯入有效授權或聯絡供應商」），伺服器寫 ERROR log、稽核 `license.import_restore_failed`；`license_manager._restore` 改回傳 bool。
+- **契約變更（PM 裁示）：`GET /api/license/status` 對非最高管理者（admin／sales／engineer／viewer、示範帳號）改回精簡欄位**——只有 `valid`、`reason`、`gate`、`blocked`、`emergency`（`{active}` 或 `null`）、`modules_unlicensed_count`；不再帶 `customer`／`expires`／`days_left`／`modules`／`env`／`machine`／`modules_unlicensed`。非示範最高管理者拿到的與以前完全相同。前端（402 說明頁、守門、橫幅）判斷用的欄位都在精簡版內；T80 的測試改用最高管理者讀完整狀態。
+- 審查修正（hichan-3 L1～L5＋PM 追加）：`license_manager` 公開介面新增 `PREVIEW_WEIGHT`／`RATE_GLOBAL_MAX`，`rate_allow(now=…)` → `rate_allow(account=…, weight=…, now=…)`（尚無外部呼叫端；快照以 `core_bump.py --pending` 重產）；正式公鑰已內建時拒收開發金鑰簽的授權（`dev_license_not_allowed`）；到期提醒標頭 `X-Motrix-License-Expiry` 只給最高管理者；`apply_update.ps1`（腳本版本 2026-11-13a）／`rollback_update.ps1` 的排除清單加 `license_backups`、`license.key.import-tmp`、`license.key.restore-tmp`；`verify_package` 擋授權備份資料夾與換檔暫存檔。
+- 測試：`tests/test_license_import_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算「另一位最高管理者」）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：`helpers.config_ledger` 新增 `DEMO_USERNAME`（`"demo"`）與 `real_superadmins(conn, exclude="")`（在職、真人的最高管理者，不含展示帳號與 exclude）。
+- 行為變更：展示帳號（開機建立、role＝superadmin、active＝1）不再被算成第二位最高管理者——設定中心放寬類變更（plan／publish）、帳務「角色對應」與權限矩陣的雙人核准、無簽核層時的自簽逃生條款、公司資料設定頁「只有一位最高管理者」提示的計數都改用 `real_superadmins()`。只有一位真人最高管理者的公司，放寬變更改走「原因＋確認期間＋警告」，不再卡在一個不會來的核准；有第二位真人時行為不變。簽核人／通知名單（誰能簽、誰收通知）不動：展示庫裡 demo 本來就是唯一的簽核人。
+- **（追加 2026-11-13，hichan-12 審查 M1 的修正，新 commit）**：`helpers.custom_def_review.review_state` 在審核模式「開」且沒指定審核人時，預設審核人（申請人以外的最高管理者）改用 `real_superadmins()`：只有一位真人最高管理者時不啟用審核、直接發布（稽核照記「未經第二人審核」），不再等展示帳號。有第二位真人時審核人＝那一位。
+- 測試：`tests/test_loosening_demo_not_second_approver_2026_11_13.py`（一位真人＋demo ⇒ 不要求第二位核准、兩位真人仍要求、plan 的 otherSuperadmins、自簽逃生條款、設定頁計數、變異：demo 名稱換掉全紅、守門：各處不准再各寫一份含 demo 的計數）。
+- **（併入）(next) — 2026-11-13（feat/company-profile-public-h11；公司資料公開子集＋「完整內容只給最高管理者」開關）**
+- 行為變更：①新增 `GET /api/settings/company-profile/public`（任何登入者；白名單 name／tax_id／contact_info／locations[{id,name}]；不含匯款帳號、地址、電話、email、座標、金鑰、告知文字、據點自己的銀行與抬頭欄位）。②案件頁、核准佇列、報價單、傳票、勞報單五個呼叫者改打 /public（完整端點只剩公司資料設定頁在用；守門題鎖住）。③設定中心「登入與密碼」新增欄位 `company_profile_full_read_superadmin_only`（預設 0＝與今天相同，任何登入者仍讀得到完整資料；改 1 ＝ 非最高管理者讀完整端點回 403，改回 0 屬放寬須第二位最高管理者核准）。預設值不變，部署零行為變更；是否打開、是否推翻 SA4（A 裁）待使用者裁示。
+- **（追加 2026-11-13，hichan-12 審查 M1／L1／L2／L3 的修正，新 commit）**：①公司資料設定頁在開關開啟、非最高管理者讀到 403 時顯示「完整的公司資料只有最高管理者可以查看。」，不再是一張靜默的空表單。②開關問句改成說明統編與聯絡方式仍會顯示給所有人。③守門題的完整端點名單加上公司設定精靈（`company-wizard.js`，T84，最高管理者專用），並認得拼接、變數基底與 %2D 編碼寫法。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（逐角色：/public 只有白名單、完整端點預設不變／開關開後非超管 403／超管照讀、白名單變異、舊安裝補總公司、讀不到設定 fail-closed、前端只有設定頁讀完整端點）；route_inventory／response_keys／settings_deploy 基準同步。
+- **（併入）(next) — 2026-11-13（feat/backup-monitor-page；「備份與監控」專頁，系統選單提案 v2 批次 4a）**
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.backup_monitor`（`status`／`run_backup_now`／`set_ping_url`／`test_heartbeat`／`scrub_paths`／`ping_host`…）、`routers.backup_monitor`（`GET /api/system/backup-monitor`、`POST …/backup-now`、`PUT …/heartbeat-url`、`POST …/heartbeat-test`，全部最高管理者）；`helpers.system_checks.alert_thresholds`（新公開介面）；頁面 `pages/backup-monitor.html`（系統選單「資料與備份」、系統中樞卡片）。
+- 行為變更：①設定中心新群組 `monitoring`（備份停擺小時數 `backup_stale_hours`＝36、硬碟剩餘 `disk_free_min_gb`＝50／`disk_free_min_pct`＝10；放寬須第二位最高管理者核准），`system_checks` 的備份停擺與硬碟空間檢查改讀這三個值（預設與原寫死值相同，讀不到回預設）。②新頁一頁看完最近各種備份的時間與結果、雲端鏡像、硬碟、心跳、告警紀錄、保留天數；全部取自既有來源（稽核紀錄 `backup.*`、警示檔、心跳狀態檔），不新增表、不新增寫入。③「立即備份」＝跑與排程相同的每日＋每週備份（背景、同時一個、30 分鐘一次，結果存 `system_settings.backup_now_*`）；心跳網址可在頁面設定（只收 http／https、擋內網與本機、網址不回傳、稽核只記主機名）並可「測試心跳」（1 分鐘一次）。④備份嚴重錯誤信（`backup_error`）不再顯示伺服器路徑；公司資料設定的備份區塊加連結到新頁。
+- 測試：`tests/test_backup_monitor_2026_11_13.py`。
+- **對抗式審查修補（hichan-11：1 High／4 Medium／5 Low；同一批次、同一分支）**：
+  - L0（新增，只增）：`core/safe_ping.py`（`plat:safe_ping`，純標準庫）＝對外打卡的唯一安全 GET：**不跟隨轉址**（3xx＝失敗）、解析後每個位址都必須是公開位址（IPv4 對映／6to4／Teredo／NAT64 先拆內嵌 IPv4）、連線釘在檢查過的 IP（Host／SNI 照原主機名，防 DNS rebinding）、只准 80／443、整體 15 秒時限、網址字串檢查（帳密、`.localhost`、單標籤名、`127.1`／`2130706433`／`0x7f.0.0.1`、尾端的點）。
+  - **外部（正式機現成程式的洞，一併關）**：`backend/heartbeat_job.py` 的對外打卡原本直接 `urlopen(ping_url)`——伺服器會跟著對方的 302 去打內網（SSRF）；改走 `safe_ping.get`。本機 loopback 探測保留（略過自簽憑證驗證），但同樣不跟隨轉址。**log 不再寫完整網址**（healthchecks 的密鑰在路徑裡）：只記主機名＋狀態碼或例外類別。
+  - L1（新增，只增）：`archive.backup_run_lock`／`BackupInProgress`（備份互斥：跨行程檔案鎖 `logs/backup_run.lock`，由作業系統持有，行程死掉自動放掉）；`_daily_tick`、`_weekly_tick`、`backup_job.py`（排程 02:00，獨立行程）與網頁「立即備份」同一時間只准一個，拿不到鎖就略過／回「已有備份在進行中」。`helpers.backup_monitor` 新增 `request_disable`／`approve_disable`／`cancel_disable`／`pending_disable`／`DisableError`／`MSG_*`，`set_ping_url(url, actor=None)`（原 `set_ping_url(url)`，新增選填參數）。路由新增 `POST …/heartbeat-disable`、`POST …/heartbeat-disable/{id}/approve`、`POST …/heartbeat-disable/{id}/cancel`（route_inventory 重錄）。
+  - 行為變更：①換心跳網址一定寄信給所有最高管理者（信裡只有舊／新主機名）並留稽核；**停用對外打卡**改走獨立申請：必填原因，只有一位最高管理者 ⇒ 立刻停用＋寄信，有其他最高管理者 ⇒ 待核准（`config_ledger` domain `monitor:heartbeat`，申請人不能核准自己的），`PUT …/heartbeat-url` 傳空字串不再能停用（422）。②`scrub_paths` 重寫：含空白／中文的磁碟代號與 UNC 路徑、相對路徑、單段 `/data` 整段遮到句尾（寧可多遮）。③「立即備份」的 30 分鐘時間戳改為執行緒真的啟動後才寫；時鐘往回撥（時間戳在未來，1 天內）照樣擋；稽核寫入失敗不再回 500；今天已備份過時結果訊息為「今天的雲端每日備份已經完成，沒有重做」。
+  - 測試：`tests/test_backup_monitor_review_fixes_2026_11_13.py`（161 題；審查者的同款探針：兩台本機伺服器驗證 302 不被跟隨、解析只做一次且釘 IP、慢速滴水的整體時限、跨行程鎖與行程死掉自動放鎖、停用的雙人核准全流程）。
+  - **第二輪複審修補（hichan-11：N1／N2 Medium、N3／N4 Low；PM 裁示）**：
+    - N1：`scrub_paths` 的 lookbehind 補 `-`、輸入先截到 2000 字（原本 4 萬字 `a-a-…` 要 30 秒＝二次方）；測試鎖 `"a-"*40000` < 50 ms。
+    - N2：**換成另一個主機＝等於關掉原本的監控，同樣走第二人核准**：必填原因；有其他最高管理者 ⇒ 待核准（沿用 `config_ledger` `monitor:heartbeat`，ledger／稽核／信只有主機名；新網址存設定檔旁邊的 `heartbeat_config.json.pending`，核准才寫入、撤回／取代／作廢時刪除）；只有一位 ⇒ 立即＋寄信（含原因）；第一次設定與同主機換路徑 ⇒ 立即＋寄信。`PUT …/heartbeat-url` 新增選填 `reason`；`GET` 的 `heartbeat.disableRequest` 新增 `kind`（`disable`／`change`）與 `newHost`；`approve_disable` 回傳新增 `changed`／`kind`；`set_ping_url(url, actor=None, reason="", ip="")`。
+    - N3：解析網域放進整體時限（背景執行緒＋逾時，`safe_ping.public_addresses(host, port, timeout=5.0)` 新增選填 `timeout`，逾時＝`PingFailed("timeout")`）。
+    - N4：備份鎖檔打不開時不再安靜退回只用執行緒鎖：手動備份拒絕（`archive.BackupLockUnavailable` → `helpers.backup_monitor.BackupLockProblem` → 路由 503，白話訊息，不寫「最後啟動」時間）；排程備份照跑，但記 ERROR 並寫系統告警（每行程一次）。`archive.backup_run_lock(strict=False)` 新增選填參數。
+    - 測試：同檔新增 N1～N4 題（慢 DNS、破折號線性、換主機核准全流程、鎖檔不可開）。
+    - PM 追加（待核准提示）：申請待核准時，申請人的畫面顯示「等待 ○○ 核准（已送出 N 小時）」（○○＝其他在職最高管理者的顯示名稱）、「若對方長期不在，可請對方登入核准，或撤回這次變更」與「撤回」鈕；`GET` 的 `heartbeat.disableRequest` 新增 `hoursWaiting`、`waitingFor`。**行為變更：撤回改為只有申請人能做**（原本任何最高管理者都行；別人要擺脫這筆，可核准或另外提出自己的申請取代它）；撤回的稽核多記申請種類。
+    - PM 追加（駁回）：新增 `POST /api/system/backup-monitor/heartbeat-disable/{id}/reject`（`{confirm, reason}`；route_inventory／write_golden 已補）與 `helpers.backup_monitor.reject_disable`（L1 新增，只增）：**不是申請人**的最高管理者可駁回待核准的停用／換主機申請——必填原因、稽核 `system.heartbeat_disable_rejected`（含原因與申請種類）、寄信給所有最高管理者、刪除 `.pending` 暫存網址；申請人自己要放棄仍用撤回。ledger 沒有獨立的「駁回」事件（`EVENTS` 是共用的，加事件要動共用表格），所以在 ledger 記成帶「駁回：」前綴的 `cancelled`。申請人離職或長期不在時，這筆不會永遠掛著。頁面對其他最高管理者多一顆「駁回」鈕（彈窗要填原因）。
+    - N5／T1（第三輪）：`heartbeat_config.json.pending`（含完整新網址）加進 `.gitignore`，以及 `apply_update.ps1`（回滾快照複製、各還原／覆蓋 robocopy）與 `rollback_update.ps1` 所有 `/XF` 清單（與 `heartbeat_config.json` 並列）；`apply_update.version.json` 只更新 sha256（比照 9de4cc8e4 加 `/XF` 檔名的先例，`$ApplyScriptVersion` 不動）。測試：兩個守門題；`test_scrub_paths_is_linear_and_bounded` 改用短 `ids`（4 萬字的 id 會讓 Windows 的 `PYTEST_CURRENT_TEST` 超過 32767 字上限而 setup 出錯）。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn；T83 附件清單寫回交易化）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產；T83 feat/upload-files-txn）：`helpers.uploads` 新增 `files_txn(conn, new_files)`（拿寫鎖、離開時 commit；區塊內任何例外或 commit 失敗 ⇒ rollback、關連線、回收 `new_files` 剛存的檔）、`append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=None, not_found, guard=None)`（寫鎖內重讀 JSON 清單、只加自己這批；列不存在 ⇒ 404）、`remove_json_item(conn, table, col, where_col, key, file_id, *, extra_set=None, not_found, missing_ok=False, inside=None)`（寫鎖內重讀、濾掉一筆、commit 之後才刪實體檔；`inside(conn)` 讓簽核流程把自己的申請列與刪附件放同一個交易）。`helpers.uploads.delete_document_file` 行為不變（內部拆出 `_remove_physical`）；`helpers/__init__` 一併匯出三個新名。資源回收筒基準：helpers/uploads.py 的 `os.remove` 數量不變（搬位置、不新增）。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-5a；選單去工程師化 批 5a：組織設定缺口檢查）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.org_gaps`（`check`、`GAP_KEYS`、`finance_holder_exists`）——只讀的組織設定缺口檢查（沒部門的人／沒主管的部門／沒人擔任財務）。
+- 登記：`helper:org_gaps`、`router:org_gaps`、`js:static/org-gaps.js`、`js:static/role-label.js` 歸 L1（`docs/platform/modules.json`）。
+- 不改任何既有介面、不加資料表、不加 migration。
+- **（併入）(next) — 2026-11-13（feat/getting-started-h10；「開始使用」7 步清單）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.getting_started`（`STEPS`、`STEP_IDS`、`STATE_KEY`、`MANUAL_DONE_IDS`、`BACKUP_HREF`、`BACKUP_OK_ACTIONS`、`EMAIL_TEST_ACTION`、`overview`、`set_step`）——每步的自動偵測（只讀）＋存在 `system_settings.getting_started_v1` 的人工旗標（略過／手動確認）。
+- 新端點（只限最高管理者）：`GET /api/getting-started`、`PUT /api/getting-started/steps/{step_id}`；新頁 `getting-started.html`、系統中心卡片 `getting-started`、系統中心進度卡 `static/getting-started-card.js`。不改既有設定值、欄位、API。
+- 測試：`tests/test_getting_started_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-3；選單去工程師化 批 3：寄信帳號精靈）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.email_setup`（`PROVIDERS`、`provider_list`、`provider_by_key`、`valid_email`、`normalize_password`、`validate_config`、`config_fingerprint`、`classify_error`、`build_ticket`）——寄信帳號精靈的供應商清單、設定檢查、失敗分類與「設定單」。
+- L1（相容擴充）：`helpers.email_notify._send_raising` 新增選填參數 `ignore_enabled=False`（精靈在啟用前寄測試信用）與 `cfg=None`（精靈拿候選設定直接測試、不先存進系統設定）；既有呼叫不受影響。
+- 行為變更：寄信連線改走共用的 `_smtp_open`——埠 465 用 SMTP_SSL、其餘用 STARTTLS（原本一律 STARTTLS，465 的信箱寄不出去）。
+- 新端點：`GET /api/settings/email-notify/providers`、`POST /api/settings/email-notify/wizard/test-me`、`POST /api/settings/email-notify/wizard/activate`；`PUT /api/settings/email-notify` 加格式驗證（422）。
+- 行為變更（hichan-3 審查 C／D／E／F）：測試信用候選設定寄、**測試失敗不動正在用的設定**，按「我收到了」才寫入；`PUT` 由未啟用改啟用必須有同一份設定 24 小時內的測試證明（否則 422）；`PUT` 缺欄位改為併入現有設定（不再重設成預設）；`test-me` 每帳號 10 分鐘最多 5 次、埠限 25／465／587／2525（內網主機仍可，回應不回原始錯誤）。
+- **（併入）(next) — 2026-11-13（fix/settings-center-valueof；設定中心輸入元件顯示目前值）**
+- 前端修正（無介面變動）：`settings-center.html` 單選沒有選取、數字框空白（正式機使用者回報兩次，旁邊卻寫「目前：…」）。根因：元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名，Alpine 的範圍代理用 `Reflect.has`（含原型鏈）解析名稱，x-for 內的 `valueOf(f)` 解析到原生函式，所有輸入元件（選項／數字／開關／文字）都拿不到目前值。改名 `curVal`，選項比對改 `choiceOn`（代碼數字或字串皆可）。
+- 測試：`tests/test_settings_center_valueof_2026_11_13.py`（3 題：node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一種；舊 bug 對照；全站元件方法名不得蓋住 Object.prototype 成員）。
+
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新單位 `helpers.image_guard`（`MAX_PIXELS`＝2000 萬、`MAX_PIXELS_JPEG`＝1.1 億、`JPEG_FULL_DECODE_MAX`＝4000 萬、`DRAFT_LONG_SIDE`＝4000、`ALLOWED_FORMATS`、`MAX_CONCURRENT_DECODES`＝2、`DECODE_WAIT_SECONDS`／`DECODE_THREAD_WAIT_SECONDS`／`MAX_WAITING_THREADS`／`MAX_WAITING_ASYNC`、`ImageRejected`／`ImageTooLarge`／`ImageUnsupported`（HEIC／HEIF，不解碼、非 ImageRejected）／`ImageBusy`（各帶 `.status`／`.user_message`）、`USER_MESSAGE`／`BUSY_MESSAGE`、`check_pixels`、`open_checked(data, formats=ALLOWED_FORMATS, max_pixels=None, draft_long_side=4000)`、`decode_slot`／`with_decode_slot`／`run_decode`）。`photos._process_project_photo` 簽章不變（新增行為：被拒的圖丟 `ImageRejected` 子類、不再回原檔；同時解碼最多 2 件）。
@@ -31,6 +94,11 @@
 - 行為：不改既有報價單單號（`MQ-YYYYMM-NNN`）與 `quote_seq` 鍵；`helpers/audit.py` 的案件單號推導改用規則導出的正則（對舊 `MQ-` 單號結果不變）。凍結的歷史遷移副本 `core/migrations.py` 刻意不動。
 - L1（審查修正，只增）：`helpers.doc_type` 再加 `used_prefixes`（現在實際有效的各單據單號前綴：靜態保底＋表單範本檔＋已發布自訂模組＋費用類型）、`estimate_prefixes_in_use`（目前＋曾用過的估價單字首）；`validate_prefix` 改查 `used_prefixes`。`helpers.expense_types.used_prefixes(conn)`（新公開介面）／`helpers.custom_modules.used_prefixes(conn)` 為兩邊各自提供的前綴清單；`custom_modules._validate_numbering` 與 `expense_types.validate_expense_type` 存前綴時不可等於估價單字首（目前與曾用過的）。
 - 測試：`tests/test_estimate_doc_type_2026_11_13.py`、`tests/test_e2e_estimate_ui_2026_11_13.py`。
+- L1（fix/estimate-mail-doc-name，只增）：`helpers.doc_type` 再加 `label_of_no(no, conn=None)`（只有單號時的單據名稱：報價單／估價單，查不到字首 ⇒ 報價單，不丟例外）。`email_notify`（精算完結／結案報表／結案被擋／變更申請）、`google_calendar`（成案事件）、`system_checks`（簽核逾期催辦）、`pdf_gen`（出貨單／請款單／開票憑據的「報價單」字樣）改依單據類型取名；報價單的字串逐位元不變。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
+
+- **（併入）(next) — 2026-11-13（fix/estimate-static-labels；估價單靜態用語）**
+- L1（行為變更，無公開名稱增減）：`email_notify._build_html` 加選用參數 `doc_label`（預設由單號字首判斷；報價單輸出逐位元不變），footer／預設影響／處理方式把登記表的共用名稱「報價單／估價單」換成這封信的實際單據名；`mail_types`／`notification_prefs`／`tiered_approval`／`audit`／`google_calendar` 的共用名稱改為中性「報價單／估價單」；`download_name.DOC_TYPES` 增加 `estimate`、`estimate_version`（`settings_groups` 同步兩個 `label_*` 設定）。
+- 測試：`tests/test_estimate_static_labels_2026_11_13.py`。
 
 ## 1.162 — 2026-11-13（feat/line-events-all；LINE 全信件接線＋誰要發＋綁定狀況）〔train_number：1.161 → 1.162〕
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.line_catalog`（`LINE_ONLY_EVENTS`／`GROUP_ORDER`／`EXCLUDED_*`／`group_of`／`kind_of`／`mail_key_of`／`name_of`／`exclusion_reason`／`is_known`）、`helpers.line_binding`（`status`／`remind`）；`helpers.line_notify` 加 `DEFAULT_EVENT_SPEC`／`event_spec`／`is_wired`／`wired_events`／`audience_view`／`set_audience`／`AUDIENCE_MODES`／`MAX_AUDIENCE_USERS`，`WIRED_EVENTS` 改為由「信件登記表」推導（惰性物件），`deliver_event`／`notify_event` 多選填關鍵字 `group`；`helpers.line_recipients` 加 `audience_of`／`audience_view`／`resolve_audience`／`visible_to`／`allowed_roles_view`；`helpers.event_audience.group_usernames`／`resolve_usernames` 多選填關鍵字 `mail_key`；`helpers.email_notify.notify_module_activity` 多 `line_event`／`line_usernames`／`line_exclude`／`line_skip`（信件完全不變）。

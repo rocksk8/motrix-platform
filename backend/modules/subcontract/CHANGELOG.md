@@ -1,5 +1,11 @@
 # 外包工班 更新紀錄
 
+## 1.1.47 — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）
+- 變更（內部）：承攬商報價附件、發票附件（`api/vendor_contractors.py` 上傳／刪除，含刪除申請核可：刪附件與申請列改「已核可」同一個寫交易）附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（fix/contractor-voucher-wording-t83；承攬商憑據「送出簽核」用詞統一）**
+- 文字（T83 用詞統一）：承攬商憑據「僅草稿狀態可送出審核」409 訊息 → 「…可送出簽核」；僅訊息文字，狀態判斷與 status 值（待審核）不變
+
+
 ## 1.1.46 — 2026-11-13（fix/image-bomb-guard＋fix/xlsx-guard＋feat/ux-p0-p1-text；使用者上傳圖片／xlsx 的守門、頁面標題後綴；T82 整合；版號由列車取）
 - 變更（內部，API 路徑與回應形狀不變）：外包名冊的證件／存摺浮水印（`api/contractors.py::_stamp_id_card／_stamp_passbook`、`api/vendor_contractors.py` 存摺）改用共用 helper `helpers/image_guard`——開圖前先看宣告的長寬（超過上限回 400 白話訊息）、JPEG／MPO 超過 4000 萬像素改縮小解碼、同時解碼最多 2 件（滿了回 503）。一般尺寸照片行為不變。
 - 測試：`tests/test_image_guard_2026_11_13.py`。

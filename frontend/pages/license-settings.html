@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>授權 - MOTRIX 專案管理系統</title>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [hidden] { display:none !important; }   /* .ls-row／.btn 的 display 會蓋掉 hidden 屬性 */
+    .ls-wrap { max-width:720px; margin:40px auto; padding:0 16px 40px; }
+    .ls-card { background:var(--white); border:1px solid var(--border-light); border-radius:var(--radius-lg);
+               padding:20px 24px; margin-bottom:16px; line-height:1.8; }
+    .ls-title { font-size:20px; margin:0 0 4px; }
+    .ls-h2 { font-size:15px; margin:0 0 8px; }
+    .ls-dim { color:var(--text-secondary); font-size:13px; }
+    .ls-status { padding:12px 16px; border-radius:var(--radius-lg); border:1px solid; margin:0 0 4px; }
+    .ls-status strong { display:block; font-size:16px; }
+    .ls-status[data-level="ok"]       { background:var(--success-light); color:var(--success); border-color:var(--success-border); }
+    .ls-status[data-level="info"]     { background:var(--info-light); color:var(--info); border-color:var(--info-border); }
+    .ls-status[data-level="notice"],
+    .ls-status[data-level="warning"]  { background:var(--warning-light); color:var(--warning); border-color:var(--warning); }
+    .ls-status[data-level="critical"],
+    .ls-status[data-level="bad"]      { background:var(--danger-light); color:var(--danger); border-color:var(--danger-border); }
+    .ls-kv { margin:12px 0 0; font-size:14px; }
+    .ls-kv dt { color:var(--text-secondary); float:left; clear:left; width:7em; }
+    .ls-kv dd { margin:0 0 4px 7em; word-break:break-all; }
+    .ls-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+    .ls-chip { padding:1px 10px; border:1px solid var(--border-light); border-radius:999px; font-size:13px; background:#fff; }
+    .ls-row { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+    .ls-msg { margin-top:12px; padding:10px 14px; border-radius:var(--radius-lg); border:1px solid; font-size:14px; }
+    .ls-msg[data-kind="ok"]   { background:var(--success-light); color:var(--success); border-color:var(--success-border); }
+    .ls-msg[data-kind="bad"]  { background:var(--danger-light); color:var(--danger); border-color:var(--danger-border); }
+    .ls-msg[data-kind="warn"] { background:var(--warning-light); color:var(--warning); border-color:var(--warning); }
+    .ls-msg ul { margin:6px 0 0 18px; padding:0; }
+    .ls-paste textarea { width:100%; min-height:90px; font-family:monospace; font-size:12px; box-sizing:border-box; }
+    .ls-recent { margin:0; padding:0; list-style:none; font-size:13px; }
+    .ls-recent li { padding:3px 0; border-bottom:1px solid var(--border-light); }
+    .ls-recent li:last-child { border-bottom:0; }
+    .ls-file { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }   /* 原生按鈕是英文；用 label 當按鈕，輸入框留給鍵盤與讀屏 */
+    .ls-file:focus + label.btn { outline:2px solid var(--info); outline-offset:2px; }
+    .ls-code { font-family:monospace; user-select:all; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <!-- 授權頁（T83，授權匯入）。**刻意不用 Alpine、也不載入側欄**：授權失效（沒有授權／已到期／換了機器）時，
+       業務 API 全部回 402，載入側欄與一般頁面腳本會被導去「授權無法使用」說明頁；而這一頁正是要在那個時候用來匯入新授權的。
+       只呼叫 /api/license/overview 與 /api/license/import（兩條都在授權豁免清單內，端點自己驗「最高管理者」）。
+       伺服器回的文字一律用 textContent 顯示，不拼 HTML 字串。 -->
+  <div class="ls-wrap" data-license-settings>
+    <div class="ls-card">
+      <h1 class="ls-title">授權</h1>
+      <p class="ls-dim" style="margin:0">系統目前的使用授權，以及匯入供應商提供的新授權檔。只有最高管理者看得到這一頁。</p>
+      <div class="ls-row">
+        <a class="btn btn-ghost" href="../index.html" id="ls-back">返回系統</a>
+        <button type="button" class="btn btn-ghost" id="ls-logout">登出</button>
+      </div>
+    </div>
+
+    <div class="ls-card" id="ls-denied" hidden>
+      <p id="ls-denied-msg" style="margin:0">這一頁只有最高管理者可以使用。</p>
+    </div>
+
+    <div id="ls-main" hidden>
+      <div class="ls-card">
+        <div class="ls-status" id="ls-status" data-level="ok"><strong id="ls-headline"></strong><span id="ls-detail"></span></div>
+        <div class="ls-msg" id="ls-emergency" data-kind="warn" hidden></div>
+        <dl class="ls-kv" id="ls-kv"></dl>
+        <details style="margin-top:12px" id="ls-machine-box" hidden>
+          <summary class="ls-dim">向供應商申請或換發授權時需要的資料</summary>
+          <p class="ls-dim" style="margin:6px 0 0">請把下面的「機器代碼」提供給供應商，對方才能簽發給這台電腦使用的授權。</p>
+          <p class="ls-code" id="ls-machine-code" style="margin:4px 0 0"></p>
+        </details>
+      </div>
+
+      <div class="ls-card">
+        <h2 class="ls-h2">匯入新的授權檔</h2>
+        <p class="ls-dim" style="margin:0 0 8px">先選擇供應商提供的授權檔，系統會檢查內容是否有效、是不是給這台電腦的；確認無誤後才會換上。換上之前，目前的授權會自動備份。</p>
+        <div class="ls-row">
+          <input type="file" id="ls-file" class="ls-file" aria-label="選擇授權檔">
+          <label class="btn btn-ghost" for="ls-file">選擇授權檔</label>
+          <span class="ls-dim" id="ls-filename">還沒有選擇檔案</span>
+        </div>
+        <details style="margin-top:8px">
+          <summary class="ls-dim">改用貼上授權內容</summary>
+          <div class="ls-paste">
+            <textarea id="ls-text" aria-label="貼上授權內容" spellcheck="false"></textarea>
+            <div class="ls-row"><button type="button" class="btn btn-ghost" id="ls-check-text">檢查貼上的內容</button></div>
+          </div>
+        </details>
+        <div class="ls-msg" id="ls-result" hidden></div>
+        <div class="ls-row" id="ls-confirm-row" hidden>
+          <button type="button" class="btn btn-primary" id="ls-apply">確認更換</button>
+          <button type="button" class="btn btn-ghost" id="ls-cancel">取消</button>
+        </div>
+      </div>
+
+      <div class="ls-card">
+        <h2 class="ls-h2">最近的匯入紀錄</h2>
+        <ul class="ls-recent" id="ls-recent"></ul>
+        <p class="ls-dim" id="ls-backup-note" style="margin:8px 0 0"></p>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var sess = {}
+      try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { sess = {} }
+      if (!sess.token) { location.replace('login.html'); return }
+      var H = { Authorization: 'Bearer ' + sess.token }
+      var maxBytes = 32768
+      var pending = null          // { content, needsConfirm }
+      var $ = function (id) { return document.getElementById(id) }
+
+      function kvRow(k, v) {
+        var dt = document.createElement('dt'); dt.textContent = k
+        var dd = document.createElement('dd')
+        if (typeof v === 'string') dd.textContent = v; else dd.appendChild(v)
+        $('ls-kv').appendChild(dt); $('ls-kv').appendChild(dd)
+      }
+      function chips(mods) {
+        var box = document.createElement('div'); box.className = 'ls-chips'
+        function add(t) { var s = document.createElement('span'); s.className = 'ls-chip'; s.textContent = t; box.appendChild(s) }
+        if (mods.invalid) add('授權內的功能清單格式不正確，請向供應商重新取得')
+        else if (mods.all) add('全部功能')
+        else {
+          mods.names.forEach(add)
+          if (mods.unknown) add('另有 ' + mods.unknown + ' 項這個版本沒有安裝的功能')
+          if (!mods.names.length && !mods.unknown) add('沒有任何功能')
+        }
+        return box
+      }
+      function showMsg(kind, text, items) {
+        var el = $('ls-result'); el.hidden = false; el.setAttribute('data-kind', kind)
+        el.textContent = text
+        if (items && items.length) {
+          var ul = document.createElement('ul')
+          items.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li) })
+          el.appendChild(ul)
+        }
+      }
+      function clearResult() { $('ls-result').hidden = true; $('ls-confirm-row').hidden = true; pending = null }
+      function resetFile() { $('ls-file').value = ''; $('ls-filename').textContent = '還沒有選擇檔案' }
+
+      function render(d) {
+        $('ls-main').hidden = false
+        maxBytes = d.max_upload_bytes || maxBytes
+        $('ls-status').setAttribute('data-level', d.level || 'ok')
+        $('ls-headline').textContent = d.headline || ''
+        $('ls-detail').textContent = d.detail || ''
+        var em = $('ls-emergency'); em.hidden = !d.emergency
+        if (d.emergency) em.textContent = d.emergency.text
+        $('ls-kv').textContent = ''
+        var L = d.license
+        if (L) {
+          kvRow('授權客戶', L.customer || '—')
+          kvRow('到期日', (L.expires || '—') + (L.days_text ? '（' + L.days_text + '）' : ''))
+          kvRow('授權種類', L.kind_label || '—')
+          kvRow('可用功能', chips(L.modules))
+          if (L.test_key) kvRow('提醒', '這是測試用授權，不是正式授權。')
+        } else {
+          kvRow('授權客戶', '—')
+        }
+        kvRow('綁定的電腦', d.machine_text || '—')
+        if (d.modules_not_loaded && d.modules_not_loaded.length) {
+          kvRow('尚未載入', d.modules_not_loaded.join('、') + '（需要重新啟動服務才會出現）')
+        }
+        $('ls-machine-box').hidden = !d.machine_code
+        $('ls-machine-box').open = d.level === 'bad'       // 授權不能用時最需要這串代碼，直接展開
+        $('ls-machine-code').textContent = d.machine_code || ''
+        var ul = $('ls-recent'); ul.textContent = ''
+        ;(d.recent || []).forEach(function (r) {
+          var li = document.createElement('li'); li.textContent = r.at + '　' + r.who + '：' + r.what; ul.appendChild(li)
+        })
+        if (!(d.recent || []).length) { var e = document.createElement('li'); e.className = 'ls-dim'; e.textContent = '還沒有匯入紀錄。'; ul.appendChild(e) }
+        $('ls-backup-note').textContent = d.backup_count
+          ? '舊授權已自動備份 ' + d.backup_count + ' 份（最近一份：' + (d.backup_latest || '—') + '），存放在伺服器上。需要還原請聯絡系統管理員。'
+          : '尚未備份過授權（第一次匯入新授權時會自動備份目前的）。'
+      }
+
+      function load() {
+        return fetch('/api/license/overview', { headers: H }).then(function (r) {
+          if (r.status === 401) { try { localStorage.removeItem('motrix_session') } catch (e) {} ; location.replace('login.html'); return null }
+          if (r.status === 403) {
+            return r.json().catch(function () { return {} }).then(function (j) {
+              $('ls-denied').hidden = false
+              $('ls-denied-msg').textContent = j.detail || '這一頁只有最高管理者可以使用。'
+              return null
+            })
+          }
+          return r.ok ? r.json() : null
+        }).then(function (d) { if (d) render(d) }).catch(function () { showMsg('bad', '連不上伺服器，請稍後再試。') })
+      }
+
+      function send(content, apply, confirm) {
+        return fetch('/api/license/import', {
+          method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, H),
+          body: JSON.stringify({ content: content, apply: !!apply, confirm: !!confirm })
+        }).then(function (r) {
+          if (r.status === 401) { try { localStorage.removeItem('motrix_session') } catch (e) {} ; location.replace('login.html'); return null }
+          return r.json().catch(function () { return {} }).then(function (j) { j._status = r.status; return j })
+        })
+      }
+
+      function summary(j) {
+        var L = j.license || {}, out = []
+        if (L.customer) out.push('客戶：' + L.customer)
+        if (L.expires) out.push('到期日：' + L.expires + (L.days_text ? '（' + L.days_text + '）' : ''))
+        if (L.modules) out.push('可用功能：' + (L.modules.all ? '全部功能' : (L.modules.names.join('、') || '—')))
+        return out
+      }
+
+      function check(content) {
+        clearResult()
+        if (!content || !content.trim()) { showMsg('bad', '沒有收到授權內容。請選擇供應商提供的授權檔。'); return }
+        if (content.length > maxBytes) { showMsg('bad', '這個檔案太大，不像是授權檔（授權檔只有幾百個字）。請確認選到的是供應商提供的那一個。'); return }
+        send(content, false, false).then(function (j) {
+          if (!j) return
+          if (j.reason === 'preview') {
+            var items = summary(j)
+            var warns = j.warnings || []
+            var ma = j.modules_after_restart || {}
+            if (ma.gain && ma.gain.length) items.push('重新啟動服務後才會出現的功能：' + ma.gain.join('、'))
+            pending = { content: content, needsConfirm: warns.length > 0 }
+            showMsg(warns.length ? 'warn' : 'ok', j.message, items.concat(warns.map(function (w) { return '請注意：' + w })))
+            $('ls-confirm-row').hidden = false
+            $('ls-apply').textContent = warns.length ? '我已確認，仍要更換' : '確認更換'
+          } else {
+            showMsg('bad', j.message || j.detail || '授權檔無法使用。')
+          }
+        }).catch(function () { showMsg('bad', '連不上伺服器，請稍後再試。') })
+      }
+
+      $('ls-file').addEventListener('change', function () {
+        var f = this.files && this.files[0]
+        $('ls-filename').textContent = f ? f.name : '還沒有選擇檔案'
+        if (!f) return
+        if (f.size > maxBytes) { clearResult(); showMsg('bad', '這個檔案太大，不像是授權檔（授權檔只有幾百個字）。請確認選到的是供應商提供的那一個。'); return }
+        var fr = new FileReader()
+        fr.onload = function () { check(String(fr.result || '')) }
+        fr.onerror = function () { clearResult(); showMsg('bad', '讀不到這個檔案，請重新選擇。') }
+        fr.readAsText(f)
+      })
+      $('ls-check-text').addEventListener('click', function () { check($('ls-text').value) })
+      $('ls-cancel').addEventListener('click', function () { clearResult(); resetFile() })
+      $('ls-apply').addEventListener('click', function () {
+        if (!pending) return
+        var btn = this, p = pending
+        btn.disabled = true
+        send(p.content, true, p.needsConfirm).then(function (j) {
+          btn.disabled = false
+          if (!j) return
+          $('ls-confirm-row').hidden = true
+          pending = null
+          if (j.applied) {
+            showMsg('ok', j.message, summary(j))
+            resetFile(); $('ls-text').value = ''
+            load()
+          } else {
+            showMsg('bad', j.message || j.detail || '授權檔無法使用。')
+          }
+        }).catch(function () { btn.disabled = false; showMsg('bad', '連不上伺服器，請稍後再試。') })
+      })
+      $('ls-logout').addEventListener('click', function () {
+        fetch('/api/auth/logout', { method: 'POST', headers: H }).finally(function () {
+          try { localStorage.removeItem('motrix_session') } catch (e) {}
+          location.replace('login.html')
+        })
+      })
+      load()
+    })()
+  </script>
+</body>
+</html>

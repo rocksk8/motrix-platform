@@ -82,7 +82,7 @@ def _audit_tx(conn, actor, action, target_type, target_id, label, detail):
 
 
 def _superadmins(conn):
-    return [r[0] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()]
+    return L.real_superadmins(conn)          # 展示帳號不算（第二位核准與通知名單都只看真人）
 
 
 def _send(notices):

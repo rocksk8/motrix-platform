@@ -1818,6 +1818,74 @@ def _rotate_server_log_if_large(
         return False
 
 
+#: 行程啟動後這麼久之內不輪替 server.log（秒）。**為什麼**（2026-11-13 T81 正式機實況）：每日備份第一輪在啟動後 30 秒就跑，
+#: 而 `apply_update.ps1`／`apply_module_update.ps1` 的健康檢查正好在這個時間窗內讀 server.log 找「MOTRIX ERP starting／Uvicorn running on」
+#: 並掃錯誤——輪替把檔案清成 0 byte、啟動行搬去 server.log.1 ⇒ 檢查字面不符（最好）或掃到空檔假綠、模組更新路徑還可能假回滾。
+_ROTATE_BOOT_GRACE_SECONDS = 120
+#: 套用／回滾鎖（apply_update.ps1／apply_module_update.ps1 的 `Enter-InstallLock` 建立）超過這麼久視為殘留，不再擋輪替（秒）。
+_APPLY_LOCK_MAX_AGE_SECONDS = 2 * 3600
+#: 本行程的啟動時間（monotonic）。archive 在啟動 import 階段載入，等於行程啟動時間。
+_PROCESS_STARTED_MONO = time.monotonic()
+
+
+def _apply_lock_path() -> str:
+    return os.path.join(_paths.BACKEND_DIR, ".apply.lock")
+
+
+def _server_log_rotation_deferred_reason(now_mono: float = None, lock_path: str = None, now_wall: float = None) -> str:
+    """要不要延後這一輪 server.log 輪替？回理由字串（延後）或 ""（可以輪替）。永不丟例外（拿不準就不延後之外的行為不變：讀鎖檔失敗視為沒有鎖）。
+    延後 ⇒ 不做任何事，下一個 tick（`_DAILY_INTERVAL_SECONDS`）自然再試——檔案多長 2 小時的量，不會爆。
+    ① 行程啟動未滿 `_ROTATE_BOOT_GRACE_SECONDS`；② `backend/.apply.lock` 存在且未過期（套用或回滾正在進行，健康檢查會讀 server.log）。"""
+    now_mono = time.monotonic() if now_mono is None else now_mono
+    up = now_mono - _PROCESS_STARTED_MONO
+    if up < _ROTATE_BOOT_GRACE_SECONDS:
+        return "行程啟動僅 %d 秒（< %d 秒）" % (up, _ROTATE_BOOT_GRACE_SECONDS)
+    lock_path = lock_path or _apply_lock_path()
+    try:
+        if os.path.exists(lock_path):
+            now_wall = time.time() if now_wall is None else now_wall
+            age = now_wall - os.path.getmtime(lock_path)
+            if age < _APPLY_LOCK_MAX_AGE_SECONDS:
+                return "套用／回滾鎖 %s 存在（%d 秒前建立）" % (lock_path, max(age, 0))
+    except OSError:
+        pass
+    return ""
+
+
+#: 延後之後的補輪替：寬限／鎖解除後約這麼久再試一次（秒）。沒有它，行程若每 < 2 小時就重啟一次（崩潰重啟迴圈），
+#: 每次都只跑到寬限內的第一輪 ⇒ 永遠輪替不到。
+_ROTATE_RETRY_AFTER_SECONDS = 5
+_ROTATE_RETRY_LOCK_POLL_SECONDS = 60
+_ROTATE_RETRY_PENDING = False
+
+
+def _schedule_rotation_retry():
+    """被延後時排「一次」補輪替（旗標防止堆疊）：寬限剩多少就等多少再 +5 秒；因鎖延後就 60 秒後再看。永不丟例外。"""
+    global _ROTATE_RETRY_PENDING
+    if _ROTATE_RETRY_PENDING:
+        return
+    try:
+        up = time.monotonic() - _PROCESS_STARTED_MONO
+        delay = (_ROTATE_BOOT_GRACE_SECONDS - up + _ROTATE_RETRY_AFTER_SECONDS) if up < _ROTATE_BOOT_GRACE_SECONDS else _ROTATE_RETRY_LOCK_POLL_SECONDS
+        _ROTATE_RETRY_PENDING = True
+        _start_timer(max(delay, 1), _rotation_retry_tick)
+    except Exception:  # noqa: BLE001
+        _ROTATE_RETRY_PENDING = False
+        logger.exception("_schedule_rotation_retry failed")
+
+
+def _rotation_retry_tick():
+    global _ROTATE_RETRY_PENDING
+    _ROTATE_RETRY_PENDING = False
+    try:
+        if _server_log_rotation_deferred_reason():
+            _schedule_rotation_retry()           # 還在延後（例如套用鎖還在）⇒ 再排一次；鎖 2 小時後視為殘留，不會無限排
+        else:
+            _rotate_server_log_if_large()
+    except Exception:  # noqa: BLE001
+        logger.exception("_rotation_retry_tick failed")
+
+
 def _prune_old_logs(log_dir: str = None, keep_days=None) -> list:
     """輪替出來的舊日誌（access.log.N.gz／app.log.N.gz／server.log.N）超過 `retention.log_keep_days`（設定中心，預設 30）就刪。
     現行檔與 `server.log.rotating` 永遠不刪。整套日誌分流的設計見 `helpers/log_setup.py` 檔頭。永不丟例外（清日誌不可以拖累備份）。回被刪的檔名。"""
@@ -2721,8 +2789,53 @@ def _strip_json_f2(raw, list_key, keys):
     return json.dumps(obj, ensure_ascii=False)
 
 
+_SECRET_KEY_RE = re.compile(r"password|secret|token|app_pw", re.I)
+
+
+def _looks_secret(v) -> bool:
+    """鍵名含祕密字樣時，值「長得像祕密」才遮蔽：非空字串（只有恰好是 true／false 的除外）、或巢狀物件／清單。
+    型別是數字、布林、空值的不可能是祕密（例如 password_min_len=8、password_required=true 這種規則設定），保留——
+    否則有人拿匯出還原設定時，會把「[已遮蔽]」寫進密碼長度規則。
+    純數字**字串**（PIN、數字密碼、數字 token）一律遮蔽：型別已經分得出規則設定，不需要再靠內容猜。"""
+    if v is None or isinstance(v, (bool, int, float)):
+        return False
+    if isinstance(v, str):
+        s = v.strip()
+        return bool(s) and s.lower() not in ("true", "false")
+    return bool(v)
+
+
+def _redact_secret_values(value):
+    """名稱含 password／secret／token／app_pw 的鍵，值若長得像祕密就換成遮蔽字樣（遞迴；不管是哪一個設定、哪一層）。"""
+    if isinstance(value, dict):
+        return {k: ("[已遮蔽]" if _SECRET_KEY_RE.search(str(k)) and _looks_secret(v) else _redact_secret_values(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_secret_values(v) for v in value]
+    return value
+
+
+def _redact_settings_row(row: dict) -> dict:
+    """「系統設定」匯出的總括遮蔽：設定鍵本身含祕密字樣且值長得像祕密 ⇒ 整個值遮蔽；否則往 JSON 值裡一層層遮蔽（SQL 那層的 json_remove 照舊，這是第二層）。"""
+    out = dict(row)
+    raw = out.get("value_json")
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) and raw else None
+    except Exception:  # noqa: BLE001
+        parsed = None
+        if _SECRET_KEY_RE.search(str(out.get("key", ""))) and raw:       # 解不開的值＋祕密鍵名 ⇒ 寧可遮蔽
+            out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
+        return out
+    if _SECRET_KEY_RE.search(str(out.get("key", ""))) and _looks_secret(parsed):
+        out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
+    elif isinstance(parsed, (dict, list)):
+        out["value_json"] = json.dumps(_redact_secret_values(parsed), ensure_ascii=False)
+    return out
+
+
 def _general_row(fname: str, row: dict) -> dict:
     """一般份的一列：拿掉 F2 欄位，再抽掉內嵌影像。沒有 F2 宣告的表只做後者（行為同 V9）。"""
+    if fname == "系統設定":
+        row = _redact_settings_row(row)
     spec = _F2_FIELDS.get(fname)
     if spec:
         row = {k: v for k, v in row.items() if k not in spec.get("columns", ())}
@@ -2969,7 +3082,13 @@ def _daily_backup():
 
     # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
     # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
-    _rotate_server_log_if_large()
+    # 開機 120 秒內或套用鎖在時不輪替（健康檢查正在讀 server.log，見 _ROTATE_BOOT_GRACE_SECONDS）——延到下一個 tick
+    _deferred = _server_log_rotation_deferred_reason()
+    if _deferred:
+        logger.info("server.log 輪替延後：%s", _deferred)
+        _schedule_rotation_retry()
+    else:
+        _rotate_server_log_if_large()
     _prune_old_logs()
 
     if not _archive_ok():
@@ -3165,13 +3284,120 @@ def _daily_first_tick():
     _daily_tick()
 
 
+class BackupInProgress(Exception):
+    """已經有另一個備份在跑（同一行程的另一條執行緒，或另一個行程：排程的 `backup_job.py`）。"""
+
+
+class BackupLockUnavailable(Exception):
+    """備份鎖檔打不開（權限、磁碟）⇒ 無法確認有沒有另一個行程在備份。嚴格模式（手動備份）直接拒絕。"""
+
+
+_BACKUP_RUN_THREAD_LOCK = threading.Lock()
+
+
+def _backup_lock_path() -> str:
+    return os.path.join(_paths.LOGS_DIR, "backup_run.lock")
+
+
+def _os_lock(fh) -> bool:
+    """對鎖檔第 0 個位元組上不等待的互斥鎖；別人持有 ⇒ False。鎖由作業系統持有：行程不論怎麼死（含被強制終止、斷電重開）鎖都會放掉，
+    所以不需要「過期時間」，也不會留下卡死的鎖。"""
+    fh.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fh) -> None:
+    try:
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+_LOCK_ALERTED = {"on": False}
+
+
+def _alert_lock_unavailable() -> None:
+    """排程備份遇到鎖檔打不開：照常備份（不能因此整天沒備份），但**不安靜地降級**——記 ERROR、寫系統告警（同一行程只寫一次，不洗版）。"""
+    logger.error("備份互斥鎖檔打不開：這一輪備份沒有跨行程互斥（可能與另一個備份同時寫入）。請檢查 logs 資料夾權限，以及排程帳號與服務帳號是否相同。")
+    if _LOCK_ALERTED["on"]:
+        return
+    _LOCK_ALERTED["on"] = True
+    try:
+        _write_backup_alert("備份互斥鎖檔打不開（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
+                            "但可能與另一個備份同時寫入。請聯絡維運檢查資料夾權限。", level="ERROR")
+    except Exception:  # noqa: BLE001
+        logger.exception("鎖檔告警寫入失敗")
+
+
+class backup_run_lock:
+    """備份互斥（備份與監控頁 M3，2026-11-13）：「立即備份」、`_daily_tick`、`backup_job.py` 同一時間只准一個在跑
+    （否則兩邊同時寫同一個 `.done`／日資料夾／快照檔，可能互相覆蓋或留下半成品，又各自記一筆稽核）。
+    `with backup_run_lock():`——拿不到 ⇒ 立刻丟 `BackupInProgress`（不等待）。
+    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。
+    **鎖檔打不開（權限、磁碟、排程與服務不同帳號）時不安靜降級（審查 N4）**：`strict=True`（手動備份）⇒ 丟 `BackupLockUnavailable`、拒絕執行；
+    排程備份（預設）⇒ 照常備份（不能因此整天沒備份），但記 ERROR 並寫系統告警。"""
+
+    def __init__(self, strict: bool = False):
+        self._strict = bool(strict)
+        self._fh = None
+
+    def __enter__(self):
+        if not _BACKUP_RUN_THREAD_LOCK.acquire(blocking=False):
+            raise BackupInProgress()
+        self._fh = None
+        try:
+            try:
+                os.makedirs(_paths.LOGS_DIR, exist_ok=True)
+                self._fh = open(_backup_lock_path(), "a+b")
+            except OSError:
+                if self._strict:
+                    raise BackupLockUnavailable() from None
+                _alert_lock_unavailable()
+                self._fh = None
+            if self._fh is not None and not _os_lock(self._fh):
+                self._fh.close()
+                self._fh = None
+                raise BackupInProgress()
+        except BaseException:
+            _BACKUP_RUN_THREAD_LOCK.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._fh is not None:
+                _os_unlock(self._fh)
+                self._fh.close()
+        finally:
+            _BACKUP_RUN_THREAD_LOCK.release()
+        return False
+
+
 def _daily_tick():
     try:
-        _daily_backup()
+        with backup_run_lock():
+            _daily_backup()
         try:
             _cleanup_sessions()
         except Exception:  # noqa: BLE001
             logger.exception("_cleanup_sessions failed in daily schedule")
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪每日備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_daily_backup failed in daily schedule")
     finally:
@@ -3221,7 +3447,10 @@ def _schedule_weekly():
 
 def _weekly_tick():
     try:
-        _weekly_backup()
+        with backup_run_lock():
+            _weekly_backup()
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪週備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_weekly_backup failed in weekly schedule")
     finally:

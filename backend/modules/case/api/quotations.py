@@ -63,6 +63,7 @@ from helpers import (
     push_event_for_case_stage_done, push_event_for_module, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
+    files_txn, append_json_list, remove_json_item,
     delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
     active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items, norm_ymd,
 )
@@ -195,11 +196,39 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
                         "to":   f"{len(n_items)} 項"})
 
     if not changes:
-        stripped_old = {k: v for k, v in old.items() if k not in _DIFF_IGNORE_KEYS}
-        stripped_new = {k: v for k, v in new.items() if k not in _DIFF_IGNORE_KEYS}
-        if stripped_old != stripped_new:
+        if _diff_view(old) != _diff_view(new):
             changes.append({"field": "其他內容", "from": "", "to": ""})
     return changes
+
+
+#: 款項日期欄位：PUT 存檔時一律正規化成 YYYY-MM-DD 的那三個（建單不做）；整包比對用同一份清單，兩處不會各寫一份而漂移。
+_PAYMENT_DATE_KEYS = ("receivedAt", "expectedReceiptDate", "invoiceDate")
+
+
+def _diff_view(d: dict) -> dict:
+    """整包比對用的「正規化檢視」：拿掉紀錄類／每次存檔都變的鍵與 `caseRecord.stages`，款項日期套與存檔相同的 YYYY-MM-DD 正規化。
+    只用在「有沒有『其他內容』變更」的判斷——**只讓伺服器自己會改寫、或根本不會被存檔採用的差異不算變更**：
+    ① 階段（stages）：PUT 完全忽略用戶端的 stages，case_stages 表才是權威（見 update_quotation 寫入後的 `_sync_stages_to_json`）；
+       建單時階段又被重建成表的樣子（真實 id、補齊欄位），所以任何階段差異都是「幻影」（第一次 PUT 多記一筆「其他內容」的根因，2026-11-13 修）。
+    ② 款項日期：只在 PUT 才正規化。
+    使用者真的改了、而且會被存下來的值（頂層未追蹤欄位、款項金額…）仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）、不改輸入。"""
+    out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
+    cr = out.get("caseRecord")
+    if isinstance(cr, dict):
+        cr = {k: v for k, v in cr.items() if k != "stages"}
+        pay = cr.get("payment")
+        if isinstance(pay, dict) and isinstance(pay.get("items"), list):
+            items = []
+            for it in pay["items"]:
+                if isinstance(it, dict):
+                    it = dict(it)
+                    for k in _PAYMENT_DATE_KEYS:
+                        if it.get(k):
+                            it[k] = norm_ymd(it[k])
+                items.append(it)
+            cr["payment"] = {**pay, "items": items}
+        out["caseRecord"] = cr
+    return out
 
 
 def _append_edit_history(q: dict, user: dict, now: str, entry_type: str,
@@ -1662,7 +1691,7 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note})
-    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+    notify_module_activity(_DT.label_of_no(quote_no), "已回簽" if action == "sign" else "取消回簽",
                             user.get("display_name") or user["username"], quote_no, "quotation-form.html",
                             detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
@@ -1705,7 +1734,7 @@ def _toggle_alt_signed(quote_no: str, action: str, note: str, picks, user: dict,
         conn.commit()
     conn.close()
     _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note, "alt": True})
-    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+    notify_module_activity(_DT.label_of_no(quote_no), "已回簽" if action == "sign" else "取消回簽",
                            user.get("display_name") or user["username"], quote_no, "quotation-form.html", detail=note or "")
     out = {"ok": True, "is_signed": action == "sign", "signed_log": log}
     out.update(result)
@@ -1741,17 +1770,17 @@ async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] =
     每個檔記錄上傳者（顯示名＋帳號 `uploaderUsername`）與時間；刪除規則見 `delete_quotation_signed_file`。**不是**結案條件。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = _signed_back_gate(conn, quote_no, user, authorization)
-    existing = json.loads(row["signed_files_json"] or "[]")
-    new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
-    for f in new_files:
-        f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
-    all_files = existing + new_files
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
-                 (json.dumps(all_files, ensure_ascii=False), now, quote_no))
-    conn.commit()
-    conn.close()
+    try:
+        _signed_back_gate(conn, quote_no, user, authorization)
+        new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+        for f in new_files:
+            f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "quotations", "signed_files_json", "quote_no", quote_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="報價單不存在")
+    finally:
+        conn.close()
     names = "、".join(str(f.get("filename") or "")[:60] for f in new_files)[:300]
     _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
            f"{quote_no}（{len(new_files)} 個檔案：{names}）")
@@ -1783,11 +1812,9 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     if _uploads_mod.upload_path_key(target, "quotations") != quote_no:
         conn.close()
         raise HTTPException(409, "這個附件的檔案位置不正確，無法刪除；請洽管理員")
-    remaining = delete_document_file("quotations", quote_no, existing, file_id)
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
-                 (json.dumps(remaining, ensure_ascii=False), now, quote_no))
-    conn.commit()
+    # T83：上面的權限／路徑檢查用的是未鎖的讀取（檔案的上傳者與路徑不會變）；清單本身在寫鎖內重讀、commit 之後才刪實體檔
+    remove_json_item(conn, "quotations", "signed_files_json", "quote_no", quote_no, file_id,
+                     extra_set={"updated_at": datetime.now().isoformat()}, not_found="報價單不存在")
     conn.close()
     _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no,
            f"{quote_no}（{str(target.get('filename') or '')[:60]}）")
@@ -2064,7 +2091,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
     if _oh_change:
         _audit(_tok(authorization), 'quotation.overhead_pct_change', 'quotation', qno, f"{qno} 管銷分攤比率 {_oh_change['old']}% → {_oh_change['new']}%（預設 {_oh_change['default']}%）", _oh_change)
-    notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(qno), "建立", user.get("display_name") or user["username"],
                             f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
 
@@ -2375,7 +2402,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
-            for _k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+            for _k in _PAYMENT_DATE_KEYS:
                 if _pi.get(_k):
                     _pi[_k] = norm_ymd(_pi[_k])
 
@@ -2805,7 +2832,7 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
         action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
         action = action_map.get(body.status, 'quotation.status_change')
         _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
-        notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         if body.status == '已送出':
             try:
@@ -2862,7 +2889,7 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
                f"{quote_no}（{cname}）已由申請人收回草稿")
-        notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), "收回草稿", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         return {"quote_no": quote_no, "status": "草稿"}
 
@@ -3307,7 +3334,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         conn.close()
         _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
                f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
-        notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
+        notify_module_activity(_DT.label_of_no(quote_no), f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
                                 f"{quote_no}（{cname}）", "quotations.html")
         if body.deal_tag == '已成案' and old_tag != '已成案':
             spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
@@ -3426,7 +3453,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
                f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
-    notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(quote_no), "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
     notices = ([QUOTE_DELETED_CRM_ABSENT] if unlink is None else []) + ([_ra.BIN_ABSENT_NOTICE] if res is None else [])
     if unlink is None:
@@ -4626,7 +4653,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     if invoice_changed_from:
         _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', no,
                f"{no} {label} 發票號碼 {invoice_changed_from} → {body.get('invoiceNo')}（總帳 E01 將在下次引擎執行時沖轉並重建）")
-    notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
+    notify_module_activity(_DT.label_of_no(no), action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": now,
             **({"glWarning": _gl_doc(gl_warn, "%s／%s" % (no, pits[idx].get("label") or pits[idx].get("type") or "第%d期" % (idx + 1)))} if gl_warn else {})}
@@ -4908,7 +4935,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId:
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
-    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), "申請沖銷", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -4937,7 +4964,7 @@ def cancel_payment_writeoff(no: str, idx: int, itemId: Optional[str] = None, aut
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
-    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -4976,7 +5003,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, itemId:
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_approve' if body.approve else 'payment.writeoff_reject',
            'quotation', no, f"{no} {label}（{action_detail}）")
-    notify_module_activity("報價單", action_detail, approver_display, f"{no} {label}", "quotations.html", audience="finance")
+    notify_module_activity(_DT.label_of_no(no), action_detail, approver_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "approved": body.approve, "item": item}
 
 
@@ -5239,6 +5266,7 @@ def approval_queue_items(conn) -> list:
         f = _queue_tier_fields(raw)
         items.append({
             "type":                "quotation",
+            "typeLabel":           _DT.label_of_no(r["quote_no"]),   # 估價單：佇列卡片標籤依單號字首（前端 docTypeLabel 直接用 item.typeLabel）
             "locationId":          r["location_id"] or "",          # 簽核頁「據點」列用（QL15；之前佇列沒帶這欄，那一列永遠不出現）
             "quoteNo":             r["quote_no"],
             "customer":            r["customer_name"] or "",
@@ -6378,13 +6406,14 @@ def preview_quotation_html(body: dict = Body(...), authorization: str = Header(N
         row = None
         if quote_no:
             row = conn.execute(
-                "SELECT status, deal_tag, location_id FROM quotations WHERE quote_no=?",
+                "SELECT status, deal_tag, location_id, doc_type FROM quotations WHERE quote_no=?",
                 (quote_no,)).fetchone()
         if row:
             _guard_case(conn, quote_no, user, allow_approver=True)
             status = row["status"] or ""
             deal_tag = row["deal_tag"] or q.get("dealTag") or ""
             q["locationId"] = row["location_id"] or ""
+            q["docType"] = _DT.norm(row["doc_type"])      # 估價單：單據類型以欄位為準（同 generate_pdf_bytes），不信前端帶來的 docType
         else:
             require_any_module(user, ["quotation"], "報價單")
             status = q.get("status") or "草稿"
@@ -6451,7 +6480,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
             "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
-    dn = download_name.build("quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"variant": "internal"} if internal else None)
     return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
@@ -6564,7 +6593,7 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
            {"seq": seq, "file": target.get("file")})
     # 檔名＝案件欄位＋報價單存檔版本＋單號＋事件與日期（沿用今天存檔檔名裡的事件與日期資訊）
     _stamp = "_".join(x for x in (str(target.get("event") or "").strip(), str(target.get("at") or "")[:10].replace("-", "")) if x)
-    dn = download_name.build("quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate_version" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"suffix": _stamp} if _stamp else None)
     return Response(content=content, media_type="application/pdf", headers=dn.headers())
 

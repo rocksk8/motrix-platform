@@ -524,7 +524,7 @@ def _route_exists(app, path):
 
 
 def _login_token(client, make_user, username="tester"):
-    u, pw = make_user(username=username)
+    u, pw = make_user(username=username, role="superadmin")      # 完整授權狀態只給最高管理者（T83 L5 追加，PM 裁示）；其他角色見 test_license_import_2026_11_13.py
     r = client.post("/api/auth/login", json={"username": u, "password": pw})
     assert r.status_code == 200, r.text
     return r.json()["token"]

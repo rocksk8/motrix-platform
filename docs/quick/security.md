@@ -323,3 +323,19 @@ main.py auth_middleware：token.startswith('DEMO_') → set_demo_mode(True)，
 - **路由 handler 內用 `threading.Thread(...)` 起的背景工作，一律要用 `db.spawn_bg_thread()` 取代直接呼叫 `threading.Thread`**（2026-08-01i 修復，見 §12）：`contextvars.ContextVar`（`_demo_mode`）只在建立當下的 context 裡有效，一般 `threading.Thread(...).start()` 起的新執行緒拿到的是全新、空白 context，裡面的 `is_demo_mode()`/`get_db()` 會誤判成正式環境——即使觸發的 request 其實是 demo session。`spawn_bg_thread()` 用 `contextvars.copy_context()` 把呼叫當下的 context 原封不動帶進新執行緒，修正後 demo 帳號核准出貨單/報價單不會再把 PDF 寫進正式共用資料夾、每日工作事項通知也不會再誤連正式庫寄信給真實同仁。**例外**（不需要、也不該用 `spawn_bg_thread()`）：(a) 伺服器啟動/排程觸發、不掛在任何 request 上的背景工作（如 `daily_tasks.py` 的 `_startup_catchup`、`reports.py` 的 `_catchup_monthly_reports`），本來就該永遠連正式庫；(b) 只吃呼叫端已解析好的純值參數、本身不呼叫 `get_db()`/`is_demo_mode()` 的葉節點執行緒（如 `email_notify.py` 的 `_async_send()`/`_send()`）
 - `reset_demo_db()` 用 SQL `DELETE`+`VACUUM`（同一連線內完成），不刪 `.db/-wal/-shm` 檔案本身 — 避免 Windows 掃毒/索引服務短暫鎖住剛建立的 WAL 檔案導致 `os.remove()` 失敗
 - `db.demo_reset_lock`（`threading.Lock`）包住整個「reset + 建立 demo 使用者/session」流程 — 兩個 demo 登入同時到達會搶跑同一個共用 db，造成 `IntegrityError`/database-is-locked；已用併發壓力測試驗證修正
+
+---
+
+### §3.6 · 授權（匯入、到期提醒；T83，2026-11-13）
+
+授權閘門（T80）本身的規則見 `docs/platform/LICENSE-EMERGENCY-PASS.md` 與 `helpers/licensing.py`；**匯入新授權**不需要工程師：最高管理者在「系統 → 授權」頁選擇授權檔、預覽、確認更換。
+
+| 規則 | 說明 |
+|------|------|
+| 誰可以 | 只有最高管理者；**示範帳號一律擋**（授權檔是整台機器共用的） |
+| 驗證 | 一律走 `licensing.verify_license(blob)`（不重寫驗章）；只換 `reason == ok` 的授權；驗的與存的是同一個字串 |
+| 換檔 | 先備份舊檔（`license_backups/`，留 30 份）→ 原子寫入 → 讀檔複驗 → 失敗自動還原 |
+| 限制 | 上傳 ≤ 32 KB；每帳號 10 點／10 分鐘（預覽 0.5 點）＋全域 60 點；本文巢狀深度上限；正式公鑰已內建時拒收開發金鑰簽的授權；稽核 `license.import`／`license.import_rejected`（不記授權內容） |
+| 豁免 | `/api/license/overview`、`/api/license/import` 在授權豁免清單內（授權失效時唯一能救回系統的動作）；豁免只跳過授權閘門，端點自己驗權限 |
+| status | `GET /api/license/status`（授權豁免、任何已登入者可讀）：**只有非示範最高管理者拿完整欄位**；其餘身分（含示範）只拿 `valid／reason／gate／blocked／emergency{active}／modules_unlicensed_count`，不含客戶名、到期日、機器指紋、模組清單 |
+| 到期提醒 | 剩 30／14／7 天頂端橫幅（`X-Motrix-License-Expiry`，**只有最高管理者**的回應帶、看得到）＋每日通知（信件；LINE 待事件登記表併入）；詳見 `docs/platform/LICENSE-IMPORT.md` |

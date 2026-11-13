@@ -67,8 +67,13 @@ from tests import _frontend_sources as FS
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGES_DIR = ROOT / "frontend" / "pages"
 
-#: 「會送出的那一個動作」。
-WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]", re.I)
+#: 「會送出的那一個動作」。兩種寫法都算：
+#:  ① `fetch(…, { method: 'POST' … })`；
+#:  ② 頁內的送出小幫手把 method 當參數傳（`this._post(url, 'POST', body, cb)`／`_post('/api/…', 'PUT')`／`_post(`/api/x/${id}`, 'POST', b)`，
+#:     第一個參數是什麼都行，method 後面接逗號或右括號；幫手裡的 fetch 只寫 `{ method, … }` ⇒ ① 看不到。
+#:     T83 整合：backup-monitor.html 就是這樣，被誤判成沒有任何動作的頁）。幫手名限 `_post*`（不讓 `window.postMessage(…)` 之類誤中）。
+WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]"
+                      r"|\b_post\w*\(\s*[^\n]*?,\s*['\"](POST|PUT|PATCH|DELETE)['\"]\s*[,)]", re.I)
 
 #: 頁面自己 `<script src>` 進來的專案 js。
 #: 單雙引號皆可、容許 `?v=` 版本戳（原本只吃 `src="….js"` ⇒ 將來有人加版本戳就會安靜少掃）。
@@ -243,6 +248,30 @@ def test_ac1_the_write_detector_can_tell_a_read_only_page_apart():
 
     buttons = "<button>重新整理</button><button>匯出 Excel</button>"
     assert not WRITE_RE.search(buttons), "按鈕被算成寫入動作 —— 太寬。"
+
+    # 寫法②：送出小幫手把 method 當參數傳（backup-monitor.html 的形狀）
+    for snippet in ("await this._post('/api/x', 'POST', { confirm: true }, d => {})",
+                    "await this._post('/api/a/' + rq.id + '/' + (k ? 'a' : 'b'), 'PUT', body, cb)",
+                    "this._post(url, 'POST', b)",                         # 網址是變數
+                    "_post(`/api/x/${id}`, 'DELETE', b)",                 # 樣板字串網址
+                    "this._post('/api/x', 'POST')"):                      # method 是最後一個參數
+        assert WRITE_RE.search(snippet), "沒認出送出小幫手的寫入：%r —— 太窄。" % snippet
+    for snippet in ("await this._post('/api/x', 'GET', b)",
+                    "window.postMessage('/api/x', 'POST', 1)",            # 名字不是 _post*
+                    "my_post('/api/x', 'POST', 1)",
+                    "fetch('/api/x', { headers: h })"):
+        assert not WRITE_RE.search(snippet), "不是寫入卻被判成寫入：%r —— 太寬。" % snippet
+
+
+def test_ac1_a_page_whose_writes_go_through_a_post_helper_counts_as_writing():
+    """正對照：備份與監控頁的寫入全走 `this._post(url, 'POST'|'PUT', …)`，幫手裡的 fetch 只寫 `{ method, … }`。
+    守門必須把它算成「有會送出的動作」，**不可以**用登記成唯讀來繞過（它有 7 個寫入端點）。
+    少了這題，將來有人拿掉寫法②，只會看到 backup-monitor 又紅，看不出是量具退化。"""
+    page = next((p for p in _pages() if p.name == "backup-monitor.html"), None)
+    if page is None:
+        pytest.skip("backup-monitor.html 不在")
+    assert _writes(page, _shared_js()), "backup-monitor.html 的 _post(…, 'POST') 沒被算成寫入動作"
+    assert "backup-monitor.html" not in READ_ONLY_PAGES
 
 
 def test_ac1_shared_js_is_excluded_and_it_matters():

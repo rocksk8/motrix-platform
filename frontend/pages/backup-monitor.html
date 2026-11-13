@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>備份與監控 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-format.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    備份與監控（系統選單提案 v2 批次 4a，2026-11-13）：一頁看完「備份有沒有成功、硬碟夠不夠、系統有沒有在線、最近有沒有告警」。
+    - 資料全部來自 GET /api/system/backup-monitor（helpers/backup_monitor.py；唯讀、取自既有來源，不另記狀態）。
+    - 三個動作都只有最高管理者能用，且都先跳確認：立即備份（30 分鐘內只能一次）、儲存監控網址、測試心跳（1 分鐘內只能一次）。
+    - 畫面不出現伺服器路徑與監控網址本身（網址等同密碼，只顯示主機名）。
+    - 儲存方式：只有「監控網址」一個手動儲存欄位（按「儲存監控網址」）；其餘都是唯讀狀態。告警門檻與保留天數在設定中心調整（放寬要第二人核准）。
+    - 「?」說明：點一下展開、再點收起（不靠滑鼠移上去）；元件樣式 .bm-q／.bm-q-pop 暫放本頁，與 hichan-1 約定好後可搬到共用樣式。
+  -->
+  <style>
+    .bm-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .bm-wrap { max-width: 980px; }
+    .bm-banner { margin-top: 4px; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; line-height: 1.7; }
+    .bm-banner--ok { background: var(--success-light); border-color: var(--success-border); color: var(--success); }
+    .bm-banner--warn { background: var(--warning-light); border-color: var(--warning); color: var(--warning); }
+    .bm-banner--danger { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+    .bm-banner ul { margin: 6px 0 0 18px; padding: 0; font-size: 13px }
+    .bm-card { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px 6px; }
+    .bm-card-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px }
+    .bm-card-h .sec-t { margin-bottom: 0 }
+    .bm-card-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 6px }
+    .bm-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(150px, 1fr) minmax(90px, auto) minmax(0, 1.6fr); gap: 10px; align-items: center;
+      padding: 11px 0; border-top: 1px solid var(--border-light); font-size: 13.5px }
+    .bm-row:first-of-type { border-top: none }
+    .bm-label { font-weight: 600 }
+    .bm-time { color: var(--text-main) }
+    .bm-time small { display: block; color: var(--text-secondary); font-size: 12px }
+    .bm-note { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6 }
+    .bm-q { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-width: 20px; margin-left: 6px; padding: 0;
+      border: 1px solid var(--border); border-radius: 50%; background: var(--white); color: var(--text-secondary); font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer }
+    .bm-q:hover, .bm-q[aria-expanded="true"] { color: var(--accent); border-color: var(--accent) }
+    .bm-q-pop { grid-column: 1 / -1; margin: 2px 0 0; padding: 8px 12px; border-radius: 6px; background: var(--surface-muted, var(--white)); border: 1px solid var(--border-light);
+      font-size: 12.5px; line-height: 1.7; color: var(--text-secondary) }
+    .bm-kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 14px; padding: 8px 0 12px; font-size: 13.5px }
+    .bm-kv dt { color: var(--text-secondary) }
+    .bm-kv dd { margin: 0 }
+    .bm-in { width: 100%; max-width: 560px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit;
+      background: var(--white); color: var(--text-main) }
+    .bm-in.is-bad { border-color: var(--danger) }
+    .bm-line { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center }
+    .bm-bad { color: var(--danger); font-size: 12.5px; margin-top: 6px }
+    .bm-ok { color: var(--success); font-size: 12.5px; margin-top: 6px }
+    .bm-bar { height: 8px; border-radius: 4px; background: var(--border-light); overflow: hidden; margin-top: 5px; max-width: 260px }
+    .bm-bar > i { display: block; height: 100%; background: var(--success) }
+    .bm-bar > i.is-warn { background: var(--warning) }
+    .bm-bar > i.is-bad { background: var(--danger) }
+    .bm-alert { padding: 9px 0; border-top: 1px solid var(--border-light); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap }
+    .bm-alert:first-of-type { border-top: none }
+    .bm-alert time { color: var(--text-secondary); min-width: 130px }
+    .bm-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 16px }
+    .bm-modal { background: var(--white); border-radius: 12px; max-width: 460px; width: 100%; padding: 22px 24px; box-shadow: 0 10px 40px rgba(0,0,0,.25) }
+    .bm-modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 10px }
+    .bm-modal p { font-size: 13.5px; line-height: 1.8; color: var(--text-secondary) }
+    .bm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px }
+    .bm-links { margin: 6px 0 12px; font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap }
+    @media (max-width: 767px) {
+      .bm-main { margin-left: 0; padding: 20px 16px }
+      .bm-row { grid-template-columns: 1fr; gap: 4px }
+      .bm-kv { grid-template-columns: 1fr }
+      .bm-alert time { min-width: 0 }
+      .bm-modal-actions .btn { min-height: 44px }
+    }
+  </style>
+</head>
+<body x-data="backupMonitorPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="bm-main">
+    <div class="bm-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>備份與監控</span></nav>
+          <h1 class="pg__t">備份與監控</h1>
+          <p class="pg__s">看備份有沒有成功、硬碟夠不夠、系統有沒有在線；有問題時會寄信通知你。</p>
+        </div>
+        <div class="pg__a">
+          <button type="button" class="btn btn-primary" data-testid="bm-backup-now" :disabled="!!backupNowDisabledReason" @click="ask('backup')">立即備份</button>
+          <span class="bm-note" x-show="backupNowDisabledReason" x-text="backupNowDisabledReason" data-testid="bm-backup-now-why"></span>
+        </div>
+      </div>
+
+      <div class="bm-bad" x-show="errMsg" data-testid="bm-err">
+        <span x-text="errMsg"></span> <button type="button" class="btn btn-ghost btn-sm" @click="load()">重試</button>
+      </div>
+      <div class="bm-note" x-show="loading && !s" data-testid="bm-loading">載入中…</div>
+
+      <template x-if="s">
+        <div>
+          <!-- 總覽 -->
+          <div class="bm-banner" :class="'bm-banner--' + overall.tone" data-testid="bm-overall" :data-tone="overall.tone">
+            <strong x-text="overall.title"></strong>
+            <ul x-show="overall.items.length"><template x-for="it in overall.items" :key="it"><li x-text="it"></li></template></ul>
+          </div>
+
+          <div class="bm-note" style="margin-top:8px" x-show="s.manual && s.manual.lastResult" data-testid="bm-manual-last">
+            最近一次手動備份：<span x-text="s.manual && s.manual.lastResult ? (s.manual.lastResult.ok ? '完成' : '沒有完成') + '（' + fmt(s.manual.lastResult.finishedAt) + '）' : ''"></span>
+            <span x-show="s.manual && s.manual.lastResult && !s.manual.lastResult.ok" x-text="s.manual && s.manual.lastResult && s.manual.lastResult.message"></span>
+          </div>
+
+          <!-- 備份 -->
+          <section class="bm-card" data-testid="bm-backups">
+            <div class="bm-card-h"><h2 class="sec-t">最近一次備份</h2></div>
+            <div class="bm-card-sub">每種備份最近一次成功的時間。備份壞了或停擺，系統會寄信給最高管理者。</div>
+            <template x-if="s.backups && s.backups.error"><div class="bm-bad" x-text="s.backups.error"></div></template>
+            <template x-for="b in (Array.isArray(s.backups) ? s.backups : [])" :key="b.key">
+              <div class="bm-row" :data-testid="'bm-backup-' + b.key" :data-level="b.level">
+                <div class="bm-label"><span x-text="b.label"></span>
+                  <button type="button" class="bm-q" :aria-expanded="isHelp('b-' + b.key)" aria-label="這是什麼" @click="toggleHelp('b-' + b.key)">?</button></div>
+                <div class="bm-time"><span x-text="fmt(b.at)"></span><small x-show="b.at" x-text="ago(b.at)"></small></div>
+                <div><span class="st-chip" :class="chipClass(b.level)" x-text="levelText(b.level, b.result)"></span></div>
+                <div class="bm-note" x-text="b.note"></div>
+                <div class="bm-q-pop" x-show="isHelp('b-' + b.key)" x-text="b.help"></div>
+              </div>
+            </template>
+          </section>
+
+          <!-- 雲端 -->
+          <section class="bm-card" data-testid="bm-cloud">
+            <div class="bm-card-h"><h2 class="sec-t">雲端備份</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('cloud')" aria-label="這是什麼" @click="toggleHelp('cloud')">?</button></div>
+            <div class="bm-q-pop" x-show="isHelp('cloud')">備份除了存在這台電腦，還會複製到雲端（雲端硬碟或 S3），電腦壞掉或被偷時才還原得回來。「鏡像」＝把上傳的檔案、PDF 存檔原樣再存一份到雲端。</div>
+            <template x-if="s.cloud && !s.cloud.error">
+              <div>
+                <div class="bm-note" x-show="!s.cloud.enabled" x-text="s.cloud.note" data-testid="bm-cloud-off"></div>
+                <dl class="bm-kv" x-show="s.cloud.enabled">
+                  <dt>存放位置</dt><dd x-text="s.cloud.backendLabel || '—'"></dd>
+                  <dt>現在連不連得到</dt>
+                  <dd><span class="st-chip" :class="s.cloud.reachable === false ? 'st-chip--rejected' : (s.cloud.reachable ? 'st-chip--approved' : 'st-chip--draft')"
+                            x-text="s.cloud.reachable === false ? '連不到' : (s.cloud.reachable ? '連得到' : '不確定')" data-testid="bm-cloud-reach"></span>
+                      <span class="bm-note" x-show="s.cloud.reachable === false">　請確認雲端硬碟有沒有掛上、網路有沒有通。</span></dd>
+                  <template x-for="m in s.cloud.mirrors" :key="m.label"><div style="display:contents"><dt x-text="m.label + '最近一次'"></dt><dd x-text="fmt(m.at)"></dd></div></template>
+                </dl>
+              </div>
+            </template>
+            <template x-if="s.cloud && s.cloud.error"><div class="bm-bad" x-text="s.cloud.error"></div></template>
+          </section>
+
+          <!-- 硬碟 -->
+          <section class="bm-card" data-testid="bm-disks">
+            <div class="bm-card-h"><h2 class="sec-t">硬碟剩餘空間</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('disk')" aria-label="這是什麼" @click="toggleHelp('disk')">?</button></div>
+            <div class="bm-q-pop" x-show="isHelp('disk')">硬碟滿了，備份和上傳都會先失敗。少於下方「通知門檻」會寄信給最高管理者；門檻在設定中心可以調整。</div>
+            <template x-if="s.disks && s.disks.error"><div class="bm-bad" x-text="s.disks.error"></div></template>
+            <template x-for="d in (Array.isArray(s.disks) ? s.disks : [])" :key="d.label">
+              <div class="bm-row" :data-testid="'bm-disk-' + d.label" :data-level="d.level">
+                <div class="bm-label" x-text="d.label"></div>
+                <div class="bm-time"><span x-text="d.freeGb === null ? '—' : ('剩 ' + d.freeGb + ' GB（共 ' + d.totalGb + ' GB）')"></span>
+                  <div class="bm-bar" x-show="d.freePct !== null"><i :class="d.level === 'error' ? 'is-bad' : (d.level === 'warn' ? 'is-warn' : '')" :style="'width:' + Math.max(2, Math.min(100, d.freePct)) + '%'"></i></div></div>
+                <div><span class="st-chip" :class="chipClass(d.level)" x-text="levelText(d.level)"></span></div>
+                <div class="bm-note" x-text="d.note || (d.freePct === null ? '' : '剩餘 ' + d.freePct + '%')"></div>
+              </div>
+            </template>
+          </section>
+
+          <!-- 心跳 -->
+          <section class="bm-card" data-testid="bm-heartbeat">
+            <div class="bm-card-h"><h2 class="sec-t">系統是否在線（心跳監控）</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('hb')" aria-label="這是什麼" @click="toggleHelp('hb')">?</button></div>
+            <div class="bm-q-pop" x-show="isHelp('hb')">這台電腦每 5 分鐘會檢查系統是不是還活著，並向外部的監控服務（例如 healthchecks.io）打一次卡。萬一斷電或當機，外部服務等不到打卡，就會寄信通知你——這是系統自己壞掉時唯一還會響的警報。</div>
+            <template x-if="s.heartbeat && !s.heartbeat.error">
+              <div>
+                <dl class="bm-kv">
+                  <dt>目前狀態</dt>
+                  <dd><span class="st-chip" :class="chipClass(s.heartbeat.level)" x-text="hbChip" data-testid="bm-hb-chip"></span>
+                      <span class="bm-note">　<span x-text="hbText" data-testid="bm-hb-text"></span></span></dd>
+                  <dt>最近一次成功打卡</dt><dd x-text="fmt(s.heartbeat.extOkAt)"></dd>
+                  <dt>最近一次確認本機正常</dt><dd x-text="fmt(s.heartbeat.localOkAt)"></dd>
+                  <dt>外部監控</dt>
+                  <dd data-testid="bm-hb-host" x-text="s.heartbeat.pingUrlSet ? ('已設定（' + (s.heartbeat.pingHost || '—') + '）') : '還沒有設定：目前只檢查本機，沒有通知外部'"></dd>
+                </dl>
+                <label class="bm-label" for="bm-ping" style="display:block;margin-top:6px">監控網址
+                  <button type="button" class="bm-q" :aria-expanded="isHelp('url')" aria-label="這是什麼" @click="toggleHelp('url')">?</button></label>
+                <div class="bm-q-pop" x-show="isHelp('url')">到 healthchecks.io 之類的監控服務建立一個檢查項目，會得到一串「Ping URL」，整串複製貼在這裡。這串網址等同密碼，所以儲存後畫面只會顯示主機名，不會再顯示整串。</div>
+                <div class="bm-note">手動儲存：貼好後按「儲存監控網址」才會生效。</div>
+                <div class="bm-line">
+                  <input id="bm-ping" class="bm-in" :class="{ 'is-bad': urlErr }" data-testid="bm-ping-input" x-model="pingUrl" autocomplete="off" spellcheck="false"
+                         :placeholder="s.heartbeat.pingUrlSet ? '已設定。要更換請貼上新的網址' : '例如 https://hc-ping.com/…'">
+                </div>
+                <div class="bm-line">
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-save" :disabled="busy || !pingUrl.trim()" @click="ask('url')">儲存監控網址</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-clear" x-show="s.heartbeat.pingUrlSet && !s.heartbeat.disableRequest" :disabled="busy" @click="ask('clear')">停用對外打卡</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-ping-test" :disabled="busy || !s.heartbeat.pingUrlSet || !!testWait" @click="ask('test')">測試心跳</button>
+                  <span class="bm-note" x-show="!pingUrl.trim()">貼上網址後才能儲存。</span>
+                  <span class="bm-note" x-show="!s.heartbeat.pingUrlSet">先儲存網址才能測試。</span>
+                  <span class="bm-note" x-show="testWait" x-text="testWait"></span>
+                </div>
+                <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
+                  <strong data-testid="bm-disable-waiting" x-text="waitingTitle()"></strong>
+                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'你的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外打卡。')"></div>
+                  <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
+                  <div class="bm-line">
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('cancelreq')">撤回</button>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-hint">若對方長期不在，可請對方登入核准，或撤回這次變更。</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-reject" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('reject')">駁回</button>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">你可以核准，或駁回（要寫原因）；只有提出申請的人可以撤回。</span>
+                  </div>
+                </div>
+                <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
+                <div :class="hbMsgBad ? 'bm-bad' : 'bm-ok'" x-show="hbMsg" x-text="hbMsg" data-testid="bm-ping-msg"></div>
+              </div>
+            </template>
+            <template x-if="s.heartbeat && s.heartbeat.error"><div class="bm-bad" x-text="s.heartbeat.error"></div></template>
+            <div style="height:10px"></div>
+          </section>
+
+          <!-- 告警 -->
+          <section class="bm-card" data-testid="bm-alerts">
+            <div class="bm-card-h"><h2 class="sec-t">告警紀錄</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('alerts')" aria-label="這是什麼" @click="toggleHelp('alerts')">?</button></div>
+            <div class="bm-q-pop" x-show="isHelp('alerts')">備份出問題時系統會留下告警（也會寄信）。問題排除後，告警會自動標示為「已解除」。下面只列最近 30 天。</div>
+            <template x-if="s.alerts && !s.alerts.error">
+              <div>
+                <div class="callout callout--warn" x-show="s.alerts.current" data-testid="bm-alert-current">
+                  <strong>目前還有一則未解除的告警：</strong><span x-text="s.alerts.current && s.alerts.current.reason"></span>
+                  <span class="bm-note">（<span x-text="s.alerts.current && fmt(s.alerts.current.at)"></span>）</span>
+                </div>
+                <div class="bm-note" x-show="!s.alerts.recent.length && !s.alerts.current" data-testid="bm-alert-empty">最近 30 天沒有備份告警。</div>
+                <template x-for="a in s.alerts.recent" :key="a.at + a.kind + a.text">
+                  <div class="bm-alert"><time x-text="fmt(a.at)"></time>
+                    <span class="st-chip" :class="a.kind === 'cleared' ? 'st-chip--approved' : (a.kind === 'alert' ? 'st-chip--pending' : 'st-chip--rejected')"
+                          x-text="a.kind === 'cleared' ? '已解除' : (a.kind === 'alert' ? '告警' : '信寄不出去')"></span>
+                    <span x-text="a.text"></span></div>
+                </template>
+              </div>
+            </template>
+            <template x-if="s.alerts && s.alerts.error"><div class="bm-bad" x-text="s.alerts.error"></div></template>
+            <div style="height:8px"></div>
+          </section>
+
+          <!-- 保留與門檻 -->
+          <section class="bm-card" data-testid="bm-settings">
+            <div class="bm-card-h"><h2 class="sec-t">保留多久、什麼時候通知</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('th')" aria-label="這是什麼" @click="toggleHelp('th')">?</button></div>
+            <div class="bm-q-pop" x-show="isHelp('th')">這些數字在「設定中心」調整。調得比較寬鬆（保留更短、更晚才通知）需要另一位最高管理者核准，並等確認期間後才生效，避免被誤改或盜用。</div>
+            <dl class="bm-kv" x-show="s.retention && !s.retention.error">
+              <dt>系統日誌保留</dt><dd data-testid="bm-ret-log" x-text="(s.retention && s.retention.log_keep_days) + ' 天'"></dd>
+              <dt>本機備份保留</dt><dd x-text="(s.retention && s.retention.local_db_keep_days) + ' 天'"></dd>
+              <dt>雲端每日備份保留</dt><dd x-text="(s.retention && s.retention.cloud_daily_keep_days) + ' 天'"></dd>
+              <dt>雲端每週備份保留</dt><dd x-text="(s.retention && s.retention.cloud_weekly_keep_days) + ' 天'"></dd>
+              <dt>雲端每月備份保留</dt><dd x-text="(s.retention && s.retention.cloud_monthly_keep_days) ? (s.retention.cloud_monthly_keep_days + ' 天') : '永久保留'"></dd>
+              <dt>備份停擺通知</dt><dd data-testid="bm-th-stale" x-text="'超過 ' + s.thresholds.backup_stale_hours + ' 小時沒有成功的備份'"></dd>
+              <dt>硬碟空間通知</dt><dd data-testid="bm-th-disk" x-text="'剩餘少於 ' + s.thresholds.disk_free_min_gb + ' GB，而且少於 ' + s.thresholds.disk_free_min_pct + '%'"></dd>
+            </dl>
+            <div class="bm-links">
+              <a href="settings-center.html#retention" data-testid="bm-link-retention">調整保留天數</a>
+              <a href="settings-center.html#monitoring" data-testid="bm-link-monitoring">調整通知門檻</a>
+              <a href="mail-settings.html" data-testid="bm-link-mail">設定誰收到備份告警信</a>
+            </div>
+          </section>
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <!-- 確認對話框（取消在左、主要動作在右；文字重複動作） -->
+  <div class="bm-modal-bg" x-show="dlg" x-cloak @keydown.escape.window="dlg = ''" data-testid="bm-dialog">
+    <div class="bm-modal" role="dialog" aria-modal="true" aria-labelledby="bm-dlg-t">
+      <h2 id="bm-dlg-t" x-text="dlgTitle"></h2>
+      <p x-text="dlgBody"></p>
+      <div x-show="needsReason" style="margin-top:10px">
+        <label class="bm-label" for="bm-reason">原因（必填，會留在紀錄並通知所有最高管理者）</label>
+        <textarea id="bm-reason" class="bm-in" rows="3" maxlength="300" data-testid="bm-dialog-reason" x-model="reason" style="max-width:none"></textarea>
+      </div>
+      <div class="bm-modal-actions">
+        <button type="button" class="btn btn-ghost" data-testid="bm-dialog-cancel" @click="dlg = ''">取消</button>
+        <button type="button" class="btn btn-primary" data-testid="bm-dialog-ok" :disabled="busy || (needsReason && reason.trim().length < 2)" @click="confirmDlg()" x-text="busy ? '處理中…' : dlgOk"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function backupMonitorPage() {
+      return {
+        s: null, loading: false, errMsg: '', busy: false, _initDone: false, _timer: null,
+        pingUrl: '', urlErr: '', hbMsg: '', hbMsgBad: false, testWait: '', _testUntil: 0, _tick: null,
+        dlg: '', help: {}, reason: '', urlNeedsReason: false,
+        _hdr() {
+          let x = {}
+          try { x = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (x.token || '') }
+        },
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          await this.load()
+        },
+        async load() {
+          this.loading = true; this.errMsg = ''
+          try {
+            const r = await fetch('/api/system/backup-monitor', { headers: this._hdr() })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) {
+              this.errMsg = r.status === 403 ? '這一頁只有最高管理者可以看。需要請找最高管理者。' : '讀取失敗：' + (typeof d.detail === 'string' ? d.detail : '請稍後再試')
+              return
+            }
+            this.s = d
+            this._pollIfRunning()
+          } catch (e) { this.errMsg = '目前連不到系統，請稍後再試；問題持續請聯絡管理者。' }
+          finally { this.loading = false }
+        },
+        _pollIfRunning() {
+          if (this._timer) { clearTimeout(this._timer); this._timer = null }
+          if (this.s && this.s.manual && this.s.manual.running) this._timer = setTimeout(() => this.load(), 5000)
+        },
+        // ── 顯示 ──
+        waitingTitle() {
+          const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
+          if (!rq) return ''
+          const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外打卡'
+          if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待你或另一位最高管理者核准。'
+          const hrs = rq.hoursWaiting > 0 ? rq.hoursWaiting + ' 小時' : '不到 1 小時'
+          const who = (rq.waitingFor && rq.waitingFor.length) ? rq.waitingFor.join('、') : '另一位最高管理者'
+          return '等待 ' + who + ' 核准（已送出 ' + hrs + '）'
+        },
+        fmt(iso) { return iso ? (window.MotrixFormat ? MotrixFormat.dt(iso, 'plain') : String(iso).replace('T', ' ').slice(0, 16)) : '—' },
+        ago(iso) {
+          const t = Date.parse(iso)
+          if (isNaN(t)) return ''
+          const m = Math.max(0, Math.round((Date.now() - t) / 60000))
+          if (m < 60) return m + ' 分鐘前'
+          const h = Math.round(m / 60)
+          if (h < 48) return h + ' 小時前'
+          const d = Math.round(h / 24)
+          return d <= 7 ? d + ' 天前' : ''
+        },
+        chipClass(level) { return { ok: 'st-chip--approved', warn: 'st-chip--pending', error: 'st-chip--rejected' }[level] || 'st-chip--draft' },
+        levelText(level, result) {
+          if (result === 'skipped') return '不適用'
+          if (result === 'never') return '尚無紀錄'
+          return { ok: '正常', warn: '注意', error: '有問題', na: '不適用' }[level] || '不確定'
+        },
+        get hbChip() { const h = this.s && this.s.heartbeat; return h ? (h.level === 'na' ? '沒有心跳' : this.levelText(h.level)) : '' },
+        get hbText() {
+          const h = this.s && this.s.heartbeat
+          if (!h) return ''
+          if (h.level === 'na') return '這台電腦沒有心跳監控（例如開發用的電腦）。'
+          if (h.status === 'ok' && h.level === 'error') return '心跳排程可能已經停止執行：狀態紀錄很久沒有更新了。'
+          return { ok: '系統在線，外部監控有收到打卡。', ext_unset: '只檢查本機，沒有通知外部監控（還沒有設定監控網址）。',
+                   ext_fail: '本機正常，但對外部監控打卡失敗；可能是這台電腦連不到外部網路。', local_down: '本機服務沒有回應。' }[h.status]
+            || '心跳排程可能從來沒有執行過，或狀態紀錄讀不懂。'
+        },
+        get overall() {
+          const items = []
+          const s = this.s || {}
+          if (Array.isArray(s.backups)) s.backups.forEach(b => { if (b.level === 'error' || b.level === 'warn') items.push(b.label + '：' + (b.note || '需要看一下')) })
+          if (s.cloud && s.cloud.enabled && s.cloud.reachable === false) items.push('雲端備份：現在連不到雲端存放位置')
+          if (Array.isArray(s.disks)) s.disks.forEach(d => { if (d.level === 'error' || d.level === 'warn') items.push(d.label + '：剩餘空間偏少' + (d.freeGb !== null ? '（剩 ' + d.freeGb + ' GB）' : '')) })
+          const h = s.heartbeat
+          if (h && (h.level === 'error' || h.level === 'warn')) items.push('心跳監控：' + (this.hbText || '需要看一下'))
+          if (s.alerts && s.alerts.current) items.push('有一則未解除的備份告警')
+          const bad = (Array.isArray(s.backups) && s.backups.some(b => b.level === 'error')) || (s.disks && Array.isArray(s.disks) && s.disks.some(d => d.level === 'error')) ||
+                      (s.cloud && s.cloud.reachable === false && s.cloud.enabled) || (h && h.level === 'error')
+          if (!items.length) return { tone: 'ok', title: '一切正常：備份都成功、硬碟空間足夠、系統在線。', items }
+          return { tone: bad ? 'danger' : 'warn', title: '有 ' + items.length + ' 件事需要注意：', items }
+        },
+        get backupNowDisabledReason() {
+          const m = this.s && this.s.manual
+          if (!m) return '資料載入後才能使用'
+          if (m.running) return '備份進行中…'
+          if (m.waitSeconds > 0) return '剛做過，請 ' + Math.ceil(m.waitSeconds / 60) + ' 分鐘後再做'
+          return ''
+        },
+        isHelp(k) { return !!this.help[k] },
+        toggleHelp(k) { this.help = Object.assign({}, this.help, { [k]: !this.help[k] }) },
+        // ── 動作（都先確認） ──
+        ask(kind) {
+          this.urlErr = ''; this.hbMsg = ''
+          const host = this.s && this.s.heartbeat && this.s.heartbeat.pingHost
+          const T = {
+            backup: ['立即做一次備份？', '會把資料庫複製一份，並更新雲端備份；在背景進行，不影響大家使用，通常幾分鐘內完成。為避免重複，30 分鐘內只能做一次。', '開始備份'],
+            url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
+            clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
+            approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，而且是你認得的人提出的。', '核准停用'],
+            reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請寫下駁回的原因（會留在紀錄裡）。', '駁回'],
+            cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
+            test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
+          }[kind]
+          this.dlg = kind; this.dlgTitle = T[0]; this.dlgBody = T[1]; this.dlgOk = T[2]
+          this.urlNeedsReason = false
+          if (kind === 'url' && this.s && this.s.heartbeat && this.s.heartbeat.pingUrlSet) {
+            let nh = ''
+            try { nh = new URL(this.pingUrl.trim()).hostname.toLowerCase().replace(/\.$/, '') } catch (e) { nh = '' }
+            if (nh && nh !== (this.s.heartbeat.pingHost || '').toLowerCase()) {
+              this.urlNeedsReason = true
+              this.dlgBody = '這會把外部監控換到另一個主機（' + nh + '）。這等於換掉「誰來接收我還活著的訊號」，所以要寫下原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
+              this.dlgOk = '送出'
+            }
+          }
+          if (kind === 'clear' || kind === 'reject' || this.urlNeedsReason) this.reason = ''
+        },
+        dlgTitle: '', dlgBody: '', dlgOk: '',
+        get needsReason() { return this.dlg === 'clear' || this.dlg === 'reject' || (this.dlg === 'url' && this.urlNeedsReason) },
+        async confirmDlg() {
+          if (this.busy) return
+          const kind = this.dlg
+          this.busy = true
+          try {
+            if (kind === 'backup') await this._post('/api/system/backup-monitor/backup-now', 'POST', { confirm: true }, d => { this.hbMsg = d.message || '已開始備份'; this.hbMsgBad = false })
+            else if (kind === 'test') await this._post('/api/system/backup-monitor/heartbeat-test', 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = !d.ok; this._startTestWait(60) })
+            else if (kind === 'url') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: this.pingUrl.trim(), reason: this.urlNeedsReason ? this.reason.trim() : '' }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' }, true)
+            else if (kind === 'clear') await this._post('/api/system/backup-monitor/heartbeat-disable', 'POST', { confirm: true, reason: this.reason.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' })
+            else if (kind === 'approve' || kind === 'cancelreq' || kind === 'reject') {
+              const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
+              if (rq) await this._post('/api/system/backup-monitor/heartbeat-disable/' + rq.id + '/' + (kind === 'approve' ? 'approve' : (kind === 'reject' ? 'reject' : 'cancel')), 'POST', kind === 'reject' ? { confirm: true, reason: this.reason.trim() } : { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = false })
+            }
+          } finally { this.busy = false; this.dlg = '' }
+          await this.load()
+        },
+        async _post(url, method, body, onOk, isUrl) {
+          try {
+            const r = await fetch(url, { method, headers: this._hdr(), body: JSON.stringify(body) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) {
+              const msg = typeof d.detail === 'string' ? d.detail : '沒有成功，請稍後再試。'
+              if (isUrl && r.status === 422) this.urlErr = msg
+              else { this.hbMsg = msg; this.hbMsgBad = true }
+              if (r.status === 429 && url.indexOf('heartbeat-test') >= 0) this._startTestWait(60)
+              return
+            }
+            onOk(d)
+          } catch (e) { this.hbMsg = '目前連不到系統，請稍後再試。'; this.hbMsgBad = true }
+        },
+        _startTestWait(sec) {
+          this._testUntil = Date.now() + sec * 1000
+          if (this._tick) clearInterval(this._tick)
+          const upd = () => {
+            const left = Math.ceil((this._testUntil - Date.now()) / 1000)
+            if (left <= 0) { this.testWait = ''; clearInterval(this._tick); this._tick = null } else this.testWait = '請 ' + left + ' 秒後再測'
+          }
+          upd(); this._tick = setInterval(upd, 1000)
+        },
+      }
+    }
+  </script>
+</body>
+</html>

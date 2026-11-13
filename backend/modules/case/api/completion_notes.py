@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code
 from helpers import download_name
+from helpers import doc_type as _DT   # 估價單：完工單帶入提示依來源單號字首顯示「報價單／估價單」
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
@@ -44,7 +45,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files, files_txn, append_json_list, remove_json_item,
     guard_case_access, require_any_module,
 )
 from modules.case.completion_pdf import generate_completion_pdf_bytes
@@ -308,12 +309,12 @@ def _quote_source(conn, quote_no: str, user: dict):
     q = conn.execute("SELECT status, is_signed, customer_name, project_name, data_json FROM quotations WHERE quote_no=?",
                      (quote_no,)).fetchone()
     if not q or not case_page_readable(conn, quote_no, user):
-        raise HTTPException(404, _QI_NOT_FOUND)
-    why = _CS.gate_message(q["status"] or "")
+        raise HTTPException(404, _QI_NOT_FOUND.replace("報價單", _DT.label_of_no(quote_no)))
+    why = _CS.gate_message(q["status"] or "", _DT.label_of_no(quote_no))
     if why:
         raise HTTPException(409, why)
     if not q["is_signed"] and _opt("prefill_unsigned") != 1:
-        raise HTTPException(409, "報價單客戶尚未回簽，目前設定要回簽後才能帶入項目")
+        raise HTTPException(409, _DT.label_of_no(quote_no) + "客戶尚未回簽，目前設定要回簽後才能帶入項目")
     try:
         data = json.loads(q["data_json"] or "{}") or {}
     except ValueError:
@@ -321,7 +322,7 @@ def _quote_source(conn, quote_no: str, user: dict):
     try:
         return q, data, _CS.source_items(data)
     except _CS.SourceUnavailable:
-        raise _SourceBlocked(409, "報價單目前無法判定計入項目，請稍後再試或洽管理員")
+        raise _SourceBlocked(409, _DT.label_of_no(quote_no) + "目前無法判定計入項目，請稍後再試或洽管理員")
 
 
 def _resolve_quote_sync(conn, quote_no: str, user: dict, qs) -> Optional[dict]:
@@ -332,10 +333,10 @@ def _resolve_quote_sync(conn, quote_no: str, user: dict, qs) -> Optional[dict]:
     try:
         _q, _d, src = _quote_source(conn, quote_no, user)
     except HTTPException as e:
-        raise HTTPException(409, "報價單目前無法同步：" + str(e.detail))
+        raise HTTPException(409, _DT.label_of_no(quote_no) + "目前無法同步：" + str(e.detail))
     cur = _CS.fingerprint(src)
     if not fp or fp != cur:
-        raise HTTPException(409, "報價單剛有更動，請重新帶入")
+        raise HTTPException(409, _DT.label_of_no(quote_no) + "剛有更動，請重新帶入")
     return {"syncedAt": datetime.now().isoformat(), "itemsFingerprint": cur}
 
 
@@ -352,7 +353,7 @@ def _enforce_over_qty(conn, quote_no: str, user: dict, items, exclude_note: str 
     over = _CS.over_quota(items, src, _CS.completed_qty_by_item(conn, quote_no, exclude_note))
     if over:
         raise HTTPException(400, "；".join("「%s」超過報價數量 %g" % (n, x) for n, x in over[:5])
-                            + "。請先調整完工數量或修改報價單")
+                            + "。請先調整完工數量或修改" + _DT.label_of_no(quote_no))
 
 
 @router.get("/api/completion-notes/quote-items")
@@ -368,14 +369,14 @@ def completion_quote_items(quote_no: str, exclude_note: str = "", authorization:
         try:
             unselected = _CS.unselected_alt_groups(data)
         except _CS.SourceUnavailable:
-            raise _SourceBlocked(409, "報價單目前無法判定計入項目，請稍後再試或洽管理員")
+            raise _SourceBlocked(409, _DT.label_of_no(quote_no) + "目前無法判定計入項目，請稍後再試或洽管理員")
         done = _CS.completed_qty_by_item(conn, quote_no, exclude_note)
         items = _CS.with_progress(src, done)
         if _opt("include_headers") != 1:
             items = [i for i in items if i.get("type") != "header"]
         warnings = []
         if not q["is_signed"]:
-            warnings.append("報價單尚未回簽，項目可能再變")
+            warnings.append(_DT.label_of_no(quote_no) + "尚未回簽，項目可能再變")
         if unselected:
             warnings.append("尚有 %d 組方案客戶還沒選定，該組品項沒有帶入" % len(unselected))
         return {
@@ -428,7 +429,7 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
             "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (body.quote_no,)
         ).fetchone()
         if not q:
-            raise HTTPException(404, "找不到關聯的報價單")
+            raise HTTPException(404, "找不到關聯的" + _DT.label_of_no(body.quote_no))
         customer_name = (body.customer_name or '').strip() or (q["customer_name"] or "")
         project_name  = (body.project_name or '').strip() or (q["project_name"] or "")
         qsync = _resolve_quote_sync(conn, body.quote_no, user, body.quote_sync)
@@ -936,13 +937,12 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
     try:
         # 2026-09-30 P0：原本任何登入者都能對任何完工單上傳 ⇒ 同單筆讀取規則（看不到＝不存在）
         row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
-        existing = json.loads(row["signed_files_json"] or "[]")
         new_files = await save_document_files("completion_notes", note_no, files,
                                               user.get("display_name") or user["username"])
-        conn.execute("UPDATE completion_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                     (json.dumps(existing + new_files, ensure_ascii=False),
-                      datetime.now().isoformat(), note_no))
-        conn.commit()
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "completion_notes", "signed_files_json", "note_no", note_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="完工單不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "completion.upload_signed_files", "completion_note", note_no,
@@ -968,16 +968,9 @@ def delete_completion_signed_file(note_no: str, file_id: str, authorization: str
         raise HTTPException(403, "僅管理員以上可刪除回簽附件")
     conn = get_db()
     try:
-        row = conn.execute("SELECT signed_files_json FROM completion_notes WHERE note_no=?",
-                           (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
-        remaining = delete_document_file("completion_notes", note_no,
-                                         json.loads(row["signed_files_json"] or "[]"), file_id)
-        conn.execute("UPDATE completion_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                     (json.dumps(remaining, ensure_ascii=False),
-                      datetime.now().isoformat(), note_no))
-        conn.commit()
+        # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔（單據不存在 ⇒ 404 完工單不存在）
+        remove_json_item(conn, "completion_notes", "signed_files_json", "note_no", note_no, file_id,
+                         extra_set={"updated_at": datetime.now().isoformat()}, not_found="完工單不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "completion.delete_signed_file", "completion_note", note_no, note_no)

@@ -3384,7 +3384,7 @@
       //  這一頁不是設定頁，它**不應該因為讀不到一個選填清單而壞掉**。
       async loadLocations() {
         try {
-          const r = await fetch(`${this.API}/settings/company-profile`, {
+          const r = await fetch(`${this.API}/settings/company-profile/public`, {
             headers: { Authorization: 'Bearer ' + this.session.token } })
           if (!r.ok) return
           const d = await r.json()

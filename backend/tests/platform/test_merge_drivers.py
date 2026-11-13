@@ -241,7 +241,11 @@ def test_cli_usage_error_is_not_a_silent_success(tmp_path):
 
 @pytest.mark.parametrize("py,ok", [
     ("D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe", True), (r"d:\motrix-platform\.VENV312\Scripts\python.exe", True),
-    ("C:/Python312/python.exe", False), ("D:/Claude-pm/runner/venv/Scripts/python.exe", False), ("D:/x/.venv312-old/python.exe", False)])
+    ("C:/Python312/python.exe", False), ("D:/Claude-pm/runner/venv/Scripts/python.exe", False),
+    ("D:/MOTRIX-PLATFORM/.venv312-old/Scripts/python.exe", False),
+    ("C:/Users/x/.venv312/Scripts/python.exe", False), ("D:/other/.venv312/Scripts/python.exe", False),          # 別人的 .venv312 不算
+    ("D:/MOTRIX-PLATFORM/.venv312/../evil/python.exe", False),                                                  # 用 .. 溜出去
+    ("D:/MOTRIX-PLATFORM-x/.venv312/Scripts/python.exe", False)])
 def test_python_ok_accepts_only_the_project_venv(py, ok):
     assert (SETUP.python_ok(py) is None) == ok
 

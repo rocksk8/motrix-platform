@@ -846,6 +846,9 @@
             <span x-show="retSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
+            <div class="ns-desc" data-testid="bm-link-card">
+              要看備份有沒有成功、硬碟剩多少、系統在不在線，請到 <a href="backup-monitor.html">備份與監控</a>。
+            </div>
             <div class="ns-desc">
               超過保留天數的備份會在每日排程時自動清除。<strong>調小等於刪掉更多歷史備份，調整前先確認磁碟空間與可回溯範圍的取捨。</strong>
             </div>
@@ -1235,6 +1238,9 @@
             this.bkSet = !!this.bkMasked
             this.bkText = ''
             this.bkCleared = false
+          } else if (r.status === 403) {
+            // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
+            this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true
           }
           await this.loadSetup()
           if (this.isSuperadmin) {

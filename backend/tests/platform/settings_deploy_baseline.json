@@ -156,6 +156,18 @@
      null,
      false
     ],
+    "label_estimate": [
+     "估價單",
+     null,
+     null,
+     false
+    ],
+    "label_estimate_version": [
+     "估價單存檔版本",
+     null,
+     null,
+     false
+    ],
     "label_shipping": [
      "出貨單",
      null,
@@ -203,6 +215,7 @@
   "recycle_bin": {"retention_days": [30, 7, 365, false]},
   "brand": {"tagline": ["MOTRIX PLATFORM", null, null, false]},
   "login_greeting": {"style": [1, 0, 2, false]},
+  "monitoring": {"backup_stale_hours": [36, 12, 720, false], "disk_free_min_gb": [50, 1, 10000, false], "disk_free_min_pct": [10, 1, 90, false]},
   "lodging_freshness": {"stale_days": [30, 7, 365, false]},
   "tender_closing": {"closing_soon_days": [7, 1, 60, false]},
   "completion_note": {"auto_prefill": [1, 0, 1, false], "prefill_unsigned": [1, 0, 1, false], "qty_mode": [0, 0, 1, false], "default_status": [0, 0, 2, false], "include_headers": [1, 0, 1, false], "brand_prefix": [1, 0, 1, false], "over_qty": [0, 0, 1, false]},
@@ -349,7 +362,7 @@
   "legal_params_reminder": {"start_month": [10, 1, 12, false], "start_day": [1, 1, 28, false]},
   "alerts": {"warranty_report_days": [90, 30, 365, false], "warranty_mail_early_days": [30, 8, 180, false], "warranty_mail_urgent_days": [7, 1, 30, false], "cert_warn_days": [30, 7, 90, false]},
   "payslip_dispatch_picker": {"page_size": [30, 10, 100, false]},
-  "account_security": {"password_min_len": [8, 8, 64, false], "login_days": [30, 1, 30, false]},
+  "account_security": {"password_min_len": [8, 8, 64, false], "login_days": [30, 1, 30, false], "company_profile_full_read_superadmin_only": [0, 0, 1, false]},
   "external_login": {"ext_totp_enabled": [1, 0, 1, false], "ext_totp_role_superadmin": [1, 0, 1, false], "ext_totp_role_admin": [1, 0, 1, false], "ext_totp_role_finance": [1, 0, 1, false], "ext_totp_role_sales": [0, 0, 1, false], "ext_totp_role_engineer": [0, 0, 1, false], "ext_totp_role_viewer": [0, 0, 1, false], "lock_threshold": [10, 3, 100, false], "lock_window_min": [30, 5, 1440, false], "lock_minutes": [30, 5, 1440, false], "lock_scope": [1, 1, 2, false], "external_hosts": ["", null, null, false], "loopback_is_internal": [0, 0, 1, false], "internal_networks": ["10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10", null, null, false]},
   "builder_rules": {
    "enabled": [

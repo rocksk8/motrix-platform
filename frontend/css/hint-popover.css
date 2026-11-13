@@ -1,0 +1,35 @@
+/* 「?」說明元件樣式（選單去工程師化 批次 9；全站共用）。行為見 static/hint-popover.js。
+ * 開啟時彈出框（.hint__pop.is-floating）與背景（.hint__backdrop）掛在 <body> 下、用 fixed 定位。 */
+.hint { position: relative; display: inline-block; vertical-align: middle; margin-left: 6px; }
+.hint__btn {
+  position: relative; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1px solid var(--border, #cbd5e1);
+  background: var(--white, #fff); color: var(--text-secondary, #64748b); font-size: 11px; line-height: 14px; font-weight: 700;
+  cursor: help; display: inline-flex; align-items: center; justify-content: center;
+}
+.hint__btn:hover, .hint.is-open .hint__btn { background: var(--accent-light, #e0e7ff); color: var(--accent, #4f46e5); border-color: var(--accent, #4f46e5); }
+.hint__btn:focus-visible { outline: 2px solid var(--accent, #4f46e5); outline-offset: 2px; }
+.hint__pop {
+  position: absolute; z-index: 60; top: calc(100% + 6px); left: 0; width: min(340px, 86vw);
+  background: var(--white, #fff); color: var(--text-primary, #0f172a); border: 1px solid var(--border-light, #e2e8f0);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(15, 23, 42, .18); padding: 12px 14px; font-size: 12.5px; line-height: 1.6; text-align: left; font-weight: 400;
+}
+.hint__pop.is-floating { position: fixed; top: 0; left: 0; z-index: 2147483000; }
+.hint__pop[hidden], .hint__backdrop[hidden] { display: none; }
+.hint__title { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.hint__sec + .hint__sec { margin-top: 8px; }
+.hint__h { font-size: 11.5px; font-weight: 700; color: var(--accent, #4f46e5); }
+.hint__p { color: var(--text-primary, #0f172a); white-space: pre-wrap; }
+/* 手機／觸控：底部面板（bottom sheet）；暗色背景可以點；? 的點擊範圍至少 44px（用透明的擴大區，不改版面） */
+.hint__backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, .35); z-index: 2146999000; }
+.hint__pop.is-floating.is-sheet {
+  left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: calc(70vh / var(--fz, 1)); overflow-y: auto;
+  border-radius: 16px 16px 0 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px)); font-size: 14px;
+}
+.hint__close {
+  display: block; width: 100%; min-height: 44px; margin-top: 14px; padding: 10px; border: 1px solid var(--border, #cbd5e1); border-radius: 8px;
+  background: var(--white, #fff); color: var(--text-primary, #0f172a); font-size: 14px; cursor: pointer;
+}
+@media (max-width: 767px), (pointer: coarse) {
+  .hint__btn { width: 22px; height: 22px; font-size: 13px; line-height: 20px; }
+  .hint__btn::after { content: ""; position: absolute; inset: -12px; }      /* 22 + 24 ＝ 46px 的可點範圍 */
+}
