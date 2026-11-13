@@ -39,6 +39,10 @@
 
 ## 步驟 3：套用後檢查（逐項、可機械判定）
 
+> 🔴 **凡是「`server.log` 最近 N 行含 `MOTRIX ERP starting`／`Uvicorn running on`／`已載入`」這類檢查，一律寫成「`server.log`、`server.log.1`（輪替後啟動行會搬到這裡）或 `app.log` 任一份有即可」**（第 81 班 #22②：套用後 `server.log` 是 0 byte、啟動行在 `server.log.1`，字面不符）。
+> 範例：`Get-Content "$b\server.log.1","$b\server.log" -Tail 400 -Encoding UTF8 -ErrorAction SilentlyContinue | Select-String -Pattern "MOTRIX ERP starting","Uvicorn running on","已載入" | Select-Object -Last 6`（檔不存在就略過該檔）。
+> 自 `2026-11-13c` 起 archive 在開機 120 秒內與套用鎖存在時不輪替、`apply_update`／`apply_module_update` 的健檢也會往前讀 `server.log.1`；但**人工檢查仍照上面寫法**（回滾到舊版時舊腳本不會這樣做）。
+
 > 🔴 **「新功能靜態存在」這一列（慣例編號 #9）只准檢查『實際會被部署的程式檔』**：`<ROOT>\backend\**`（含 `backend\tools\*.py`、`backend\modules\*\migrations\*.py`）、`<ROOT>\frontend\**`，用「檔案存在」或 `Select-String <檔> -Pattern '<該班新增的字面值>'`（≥1）。
 > **不可以**檢查 `<ROOT>\docs\platform\*.md` 的存在或內容：`apply_update.ps1` 不部署 `docs\platform`（只還原／備份根目錄的說明檔），正式機上那些檔不是舊的就是不存在，檢查會永遠紅、或對到過期內容而誤綠（第 46 班踩到）。
 > 文件類的交付是否到位，改看包內 `deploy_manifest.json`／套用輸出的 `plan.txt`，不要看正式機的 `docs\`。
