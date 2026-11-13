@@ -320,18 +320,37 @@ def _page_html():
 
 
 def test_tablet_searchbar_pairs_columns_and_density_buttons_in_one_row_static():
-    """靜態規則：兩顆在同一個 .ql-pair 裡；.ql-pair 預設 display:contents（桌機／手機不變）；
-    只有 768–1023 的 media 規則把它變成跨整列的兩欄格線、兩顆各半。"""
+    """靜態規則：兩顆在同一個 .ql-pair 裡（依 div 深度配對收尾，不靠縮排）；.ql-pair 預設 display:contents（桌機／手機不變）；
+    只有 768–1023 的 media 規則把它變成跨整列的格線（欄流向、等寬；x-show 藏起來的不算格子）。"""
     import re
     html = _page_html()
-    m = re.search(r'<div class="ql-pair">(.*?)\n      </div>\n    </div>', html, re.S)
-    assert m, "找不到 .ql-pair 區塊"
-    assert 'data-testid="ql-cols-btn"' in m.group(1) and 'data-testid="ql-density"' in m.group(1)
+    start = html.index('<div class="ql-pair">')
+    depth, pos, end = 0, start, None
+    for m in re.finditer(r"<div|</div>", html[start:]):
+        depth += 1 if m.group(0) == "<div" else -1
+        if depth == 0:
+            end = start + m.end()
+            break
+    assert end, "找不到 .ql-pair 的收尾 </div>"
+    block = html[start:end]
+    assert 'data-testid="ql-cols-btn"' in block and 'data-testid="ql-density"' in block
+    # 緊湊是 .ql-pair 的直接子元素（深度 1），欄位在第一個子 div 裡
+    d, direct = 0, []
+    for m in re.finditer(r"<div|</div>|<button", block):
+        t = m.group(0)
+        if t == "</div>":
+            d -= 1
+        else:
+            if d == 1:
+                direct.append(t)
+            if t == "<div":
+                d += 1
+    assert direct == ["<div", "<button"], "pair 直接子元素應是『欄位』外框 div 與『緊湊』按鈕：%s" % direct
     assert re.search(r"\n\s*\.ql-pair \{ display:contents; \}", html), "預設必須是 display:contents（桌機、手機版面不變）"
     tab = re.search(r"@media \(min-width: 768px\) and \(max-width: 1023px\) \{(.*?)\n    \}", html, re.S)
     assert tab, "找不到平板 768–1023 的 media 規則"
     body = tab.group(1)
-    assert re.search(r"\.search-bar \.ql-pair \{[^}]*display:grid[^}]*grid-template-columns: 1fr 1fr[^}]*grid-column: 1 / -1", body)
+    assert re.search(r"\.search-bar \.ql-pair \{[^}]*display:grid[^}]*grid-auto-flow:column[^}]*grid-auto-columns:minmax\(0, 1fr\)[^}]*grid-column: 1 / -1", body)
     # 平板以外的 media（桌機 >1023、手機 ≤767）不得改 .ql-pair
     outside = html.replace(body, "")
     assert not re.search(r"\.search-bar \.ql-pair|@media[^{]*\{[^}]*\.ql-pair", outside)
@@ -361,3 +380,14 @@ def test_desktop_and_phone_searchbar_layout_is_unchanged_pair_has_no_box(live_se
         ba = page.get_by_test_id("ql-cols-btn").bounding_box()
         bb = page.get_by_test_id("ql-density").bounding_box()
         assert abs(ba["y"] - bb["y"]) < 2, "桌機一列排開"
+
+
+@pytest.mark.e2e
+def test_tablet_density_button_takes_the_full_row_when_columns_button_is_hidden(live_server, make_user, new_page, login_as):
+    """「欄位」被藏起來（檢視設定關掉欄位選擇）⇒ 「緊湊」滿列，不獨占左半邊。"""
+    page = _open(live_server, make_user, new_page, login_as, "t84e_tabbar_solo", width=900, height=900)
+    page.get_by_test_id("ql-density").wait_for(state="visible", timeout=5000)
+    page.evaluate("document.querySelector('.ql-pair > div').style.display = 'none'")
+    pair = page.evaluate("(() => { const r = document.querySelector('.ql-pair').getBoundingClientRect(); return {x: r.x, w: r.width} })()")
+    b = page.get_by_test_id("ql-density").bounding_box()
+    assert abs(b["width"] - pair["w"]) < 2 and abs(b["x"] - pair["x"]) < 2, "只剩一顆時滿列：%s %s" % (b, pair)
