@@ -66,7 +66,7 @@ def can_export(award):
     if award.get("status") == "已核准":
         return True, ""
     return False, (
-        "這張獎金分潤單還沒有簽核完成（現在是「%s」），不能匯出。"
+        "這張獎金分潤單尚未簽核完成（現在是「%s」），不能匯出。"
         % (award.get("status") or ""))
 
 

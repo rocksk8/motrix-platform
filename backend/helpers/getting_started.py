@@ -58,7 +58,7 @@ STEPS = (
      "confirm": "在通知設定頁填好 Gmail 帳號與應用程式密碼，按「寄測試信」並且成功寄出；若出現「找不到可發送對象」，請先到「信件與通知收件設定」指定測試信收件人、並為該帳號填 Email。",
      "href": "notification-settings.html", "link": "到通知設定"},
     {"id": "backup", "title": "備份",
-     "why": "資料都在這台電腦上，硬碟壞了就沒了；要先確認備份放在別的地方，而且真的做成功過一次。",
+     "why": "資料都在這台電腦上，硬碟故障就沒了；要先確認備份放在別的地方，而且真的做成功過一次。",
      "minutes": "約 5 分鐘", "prepare": ["備份用的雲端硬碟或另一個資料夾"],
      "confirm": "系統記錄到第一次「備份到別的地方」成功（只有這台電腦上的備份不算）。",
      "href": BACKUP_HREF, "link": "到儲存位置與備份"},
@@ -138,7 +138,7 @@ def _d_backup(conn):
     local = _latest_audit_at(conn, _BACKUP_LOCAL_ONLY_ACTIONS)
     if local:
         return {"done": False, "auto": True,
-                "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟壞掉時會一起消失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一顆硬碟），並等它成功備份一次。" % _fmt_at(local)}
+                "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟故障時會一起消失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一顆硬碟），並等它成功備份一次。" % _fmt_at(local)}
     return {"done": False, "auto": True, "detail": "系統尚未記錄到備份成功。"}
 
 

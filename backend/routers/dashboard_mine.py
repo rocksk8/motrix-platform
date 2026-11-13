@@ -128,7 +128,7 @@ def _approval_groups(user: dict, now) -> list:
         stuck.sort(key=lambda i: str(i.get("requestedAt") or ""))
         if stuck:
             out.append(_group(
-                "stuck", "卡住的單（2 天以上）",
+                "stuck", "停滯的單（2 天以上）",
                 [{"title": _item_title(i), "sub": _stuck_text(i, now), "href": _item_href(i),
                   "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in stuck],
                 href="pages/approval-queue.html", href_label="去催件", order=30))

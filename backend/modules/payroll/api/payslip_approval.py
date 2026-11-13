@@ -205,7 +205,7 @@ def _deadlock_bypass(conn, appr, tiers, ct, user, reason, code, msg):
         raise HTTPException(code, msg)
     reason = normalize_reason(reason)
     if len(reason) < BYPASS_REASON_MIN_LEN:
-        raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准，或該帳號已停用），單據會卡住。若要以最高管理者身分代為核准，請填寫原因"
+        raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准，或該帳號已停用），單據會停滯。若要以最高管理者身分代為核准，請填寫原因"
                                  "（至少 %d 個字；會寫入稽核紀錄，並通知其他最高管理者）。" % (blocker, BYPASS_REASON_MIN_LEN))
     return {"approver": blocker, "reason": reason[:500]}
 

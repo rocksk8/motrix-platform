@@ -201,7 +201,7 @@ def definition_problems(key, body) -> list:
             else:
                 miss = [x["label"] for x in spec["sheets"] if x["required"] and x["id"] not in sh]
                 if miss:
-                    out.append({"path": "sheets", "message": "必選的工作表不能拿掉：%s" % "、".join(miss)})
+                    out.append({"path": "sheets", "message": "必選的工作表不能移除：%s" % "、".join(miss)})
                 if sh != [c for c in cat if c in sh]:
                     out.append({"path": "sheets", "message": "工作表順序固定（依目錄順序），不能調換"})
     elif not spec["columns"]:                                            # decorOnly：版面固定，沒有欄位可選

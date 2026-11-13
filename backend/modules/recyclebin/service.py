@@ -80,7 +80,7 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
     try:
         manifest = Q.move_in(token, _files_of(snap))
     except OSError as e:
-        raise RB.BinError("附件搬進資源回收筒失敗，單據未刪除：%s" % e)
+        raise RB.BinError("附件移入資源回收筒失敗，單據未刪除：%s" % e)
     now = _now()
     try:
         cur = conn.execute(

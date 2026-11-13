@@ -3339,7 +3339,7 @@ def _alert_lock_unavailable() -> None:
         return
     _LOCK_ALERTED["on"] = True
     try:
-        _write_backup_alert("備份互斥鎖檔打不開（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
+        _write_backup_alert("備份互斥鎖檔無法開啟（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
                             "但可能與另一個備份同時寫入。請聯絡維運檢查資料夾權限。", level="ERROR")
     except Exception:  # noqa: BLE001
         logger.exception("鎖檔告警寫入失敗")

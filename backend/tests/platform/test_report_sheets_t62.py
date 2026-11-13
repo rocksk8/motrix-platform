@@ -265,7 +265,7 @@ def test_comparator_combines_titles_and_sheets_semantics():
     a = {"version": 1, "format": "pdf", "sheets": ["main", "extra"], "titles": {}}
     b = {"version": 1, "format": "pdf", "sheets": ["main"], "titles": {"a": "甲另一個"}}
     cls, why = classify("export_template", a, b)
-    assert cls == "loosen" and any("條款標題" in w for w in why) and any("關掉工作表" in w for w in why), "換標題＝放寬，同時關工作表＝收緊；合併後以放寬為準"
+    assert cls == "loosen" and any("條款標題" in w for w in why) and any("關閉工作表" in w for w in why), "換標題＝放寬，同時關工作表＝收緊；合併後以放寬為準"
     assert classify("export_template", b, a)[0] == "loosen", "加回含金額的工作表＝放寬"
     assert classify("export_template", {"version": 1, "format": "pdf", "sheets": ["main", "extra"], "titles": {"a": "甲標題"}},
                     {"version": 1, "format": "pdf", "sheets": ["main"], "titles": {}})[0] == "tighten"

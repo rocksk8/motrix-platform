@@ -656,7 +656,7 @@ def _validate_workflow(wf, field_keys):
             if k not in seen:
                 out.append(_p("workflow.states[%d]" % i, "狀態 %s 從起始狀態走不到（孤立狀態）" % k))
             elif k not in finals and not edges[k]:
-                out.append(_p("workflow.states[%d]" % i, "狀態 %s 不是終點卻沒有出路（單據會卡住）" % k))
+                out.append(_p("workflow.states[%d]" % i, "狀態 %s 不是終點卻沒有出路（單據會停滯）" % k))
     return out
 
 

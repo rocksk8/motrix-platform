@@ -69,7 +69,7 @@ class BackupBusy(Exception):
 class BackupLockProblem(Exception):
     """備份鎖檔打不開（資料夾權限？），無法確認有沒有另一個備份在跑 ⇒ 手動備份不執行（審查 N4）。"""
 
-    MESSAGE = ("現在無法確認是否已經有備份在進行（備份的鎖檔打不開，可能是資料夾權限問題，也可能有另一個備份正在進行）。"
+    MESSAGE = ("現在無法確認是否已經有備份在進行（備份的鎖檔無法開啟，可能是資料夾權限問題，也可能有另一個備份正在進行）。"
                "為了避免兩份備份同時寫入，這次不執行。請稍後再試；問題持續請聯絡維運檢查資料夾權限。")
 
 
@@ -332,7 +332,7 @@ def status(now: datetime = None) -> dict:
 
 #: 「今天已經備份過」時給使用者的白話（`_daily_backup` 見到今天的完成記號會早退；本機快照與鏡像仍照常檢查，只是不重做 JSON 匯出）
 MSG_ALREADY_DONE = "今天的雲端每日備份已經完成，沒有重做（本機快照與鏡像已照常檢查一次）。"
-MSG_BUSY = "已有備份在進行中，請等它做完。"
+MSG_BUSY = "已有備份在進行中，請等它完成。"
 
 
 def _wait_after(last: str, now: datetime) -> int:

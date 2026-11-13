@@ -211,7 +211,7 @@ def _filter(buttons, user, modules, superadmin, module, page):
             if a.get("page") in nav:
                 out.append(dict(base, type="navigate", page=a["page"]))
             else:
-                hidden.append({"key": b.get("key"), "reason": "這位使用者打不開「%s」" % (a.get("page"),)})
+                hidden.append({"key": b.get("key"), "reason": "這位使用者無法開啟「%s」" % (a.get("page"),)})
         elif a.get("type") == "export":
             ex = exports.get(a.get("export"))
             if ex and (not ex.get("perm") or superadmin or ex["perm"] in modules):

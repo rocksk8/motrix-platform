@@ -265,7 +265,7 @@ def generate_settlement(conn, year, n, user, invoices=None):
         "SELECT s.period_start, s.period_end, s.voucher_id, v.status AS vstatus, v.voided_at AS vvoid FROM gl_tax_settlements s LEFT JOIN vouchers_all v ON v.id=s.voucher_id"
         " WHERE s.period_end < ? ORDER BY s.period_end DESC LIMIT 1", (lo,)).fetchone()
     if prev and (prev["voucher_id"] is None or prev["vvoid"] or prev["vstatus"] != "已過帳"):
-        raise TaxConflict("前一期（%s～%s）的稅額結轉傳票還沒過帳（或已作廢）：請先過帳再產生本期，否則上期留抵不會被承接、本期應實繳稅額會被高估。"
+        raise TaxConflict("前一期（%s～%s）的稅額結轉傳票尚未過帳（或已作廢）：請先過帳再產生本期，否則上期留抵不會被承接、本期應實繳稅額會被高估。"
                           % (prev["period_start"], prev["period_end"]))
     X = S - I - C
     lines = []

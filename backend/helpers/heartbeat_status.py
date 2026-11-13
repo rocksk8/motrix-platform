@@ -120,7 +120,7 @@ def assess(now: datetime = None, state=_READ) -> dict:
             if dur > BAD_GRACE_MINUTES * 60:
                 level, alert = LEVEL_ERROR, True
             if status == "local_down":
-                probs.append("心跳檢查本機服務已 %s 判定「沒有回應」，但 app 正在執行：監控本身可能壞了（協定／埠不符？）" % _ago(now - (since or seen)))
+                probs.append("心跳檢查本機服務已 %s 判定「沒有回應」，但 app 正在執行：監控本身可能故障（協定／埠不符？）" % _ago(now - (since or seen)))
             else:
                 probs.append("心跳對外回報（healthchecks.io）已 %s 失敗：外部告警目前不可靠（本機對外網路？ping 網址？）" % _ago(now - (since or seen)))
         elif status == "ext_unset":

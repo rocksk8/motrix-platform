@@ -156,7 +156,7 @@ def save_draft(conn, kind, key, scope, body, user="", base_etag=None, force=Fals
             cur_etag = cur["etag"] if cur else ""
             if cur_etag != base_etag:
                 if not force:
-                    raise DraftConflict("這份草稿在您載入之後被別人改過", cur or {"etag": "", "created_by": "", "created_at": ""})
+                    raise DraftConflict("這份草稿在您載入之後被其他使用者改過", cur or {"etag": "", "created_by": "", "created_at": ""})
                 overridden = cur
             return _save_draft_locked(conn, kind, key, scope, body, user, overridden)
         except Exception:
@@ -261,7 +261,7 @@ def submit_draft(conn, kind, key, scope, note="", user="", decision=None, base_e
         if draft is None:
             raise DefinitionError("沒有草稿可以送審")
         if base_etag is not None and draft["etag"] != base_etag:
-            raise DraftConflict("這份草稿在您載入之後被別人改過，未送審", {"etag": draft["etag"], "created_by": draft.get("created_by", ""), "created_at": draft.get("created_at", "")})
+            raise DraftConflict("這份草稿在您載入之後被其他使用者改過，未送審", {"etag": draft["etag"], "created_by": draft.get("created_by", ""), "created_at": draft.get("created_at", "")})
         if open_submission(conn, kind, key, scope) is not None:
             raise DefinitionError("已有送審中的版本，請等審核結果（或請審核人退回）再送")
         problems = validate(kind, key, draft["body"])
@@ -350,7 +350,7 @@ def publish(conn, kind, key, scope, note="", user="", base_etag=None) -> dict:
         if base_etag is not None:
             cur = _draft_meta(conn, kind, key, scope)
             if cur is not None and cur["etag"] != base_etag:
-                raise DraftConflict("這份草稿在您載入之後被別人改過，未發布", cur)
+                raise DraftConflict("這份草稿在您載入之後被其他使用者改過，未發布", cur)
         return _publish_locked(conn, kind, key, scope, note, user)
     except Exception:
         if began:

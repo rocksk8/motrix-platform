@@ -76,7 +76,7 @@ COLUMNS = {
         _col("contactTitle", "聯絡人職稱", [], False, "", ""),
         _col("contactPhone", "聯絡人電話", [], False, "", ""),
         _col("contactEmail", "聯絡人Email", [], False, "", ""),
-        _col("notes", "備註", [_OLD_NOTE], False, "已有備註時，這裡的內容會接在後面，不會蓋掉。", ""),
+        _col("notes", "備註", [_OLD_NOTE], False, "已有備註時，這裡的內容會接在後面，不會覆寫。", ""),
     ],
     "parts": [
         _col("partNo", "料號", ["part_no", "品號"], False, "系統用料號判斷是否同一個品項（不分大小寫、全半形）。留空＝新增時由系統編號（類別要有編號前綴）。", "AP-001"),
