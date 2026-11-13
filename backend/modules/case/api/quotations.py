@@ -827,15 +827,14 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
         elif not tiers:
             msg = _submitted_msg(quote_no, label, cname, _dt)
             _conn = get_db()
-            admins = _conn.execute(
-                "SELECT username FROM users WHERE role='superadmin' AND active=1"
-            ).fetchall()
+            from helpers import config_ledger as _cl
+            admins = _cl.real_superadmins(_conn, requester)         # 真人最高管理者（不含申請人與展示帳號：展示帳號不是簽核人，不該收到簽核通知）
             _conn.close()
             for adm in admins:
-                if adm["username"] not in (requester, appr.get("editedBy")):
-                    _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
-                    _appr_names.append(adm["username"])
-                    _appr_labels.append(adm["username"])
+                if adm not in (requester, appr.get("editedBy")):    # real_superadmins 回帳號字串（已排除申請人與展示帳號）；解鎖改版的編輯者另外排除
+                    _notify(adm, "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(adm)
+                    _appr_labels.append(adm)
             notify_approval_request(quote_no, cname, _appr_names, doc_label=_dlabel)
 
         # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已是組織職權頂端，

@@ -124,7 +124,8 @@ def _tier_users(tier):
 
 
 def _superadmin_usernames(conn):
-    return [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1")]
+    from helpers import config_ledger as _cl
+    return _cl.real_superadmins(conn)               # 下一層簽核人名單只列真人（展示帳號不是簽核人）
 
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])

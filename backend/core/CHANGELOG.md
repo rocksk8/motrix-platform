@@ -41,6 +41,14 @@
 - **（追加 2026-11-13，hichan-9 審查 H1／M1～M3／L3～L5 的修正）**：M1 員工帳號正規化（NFKC＋小寫）後必須符合 `^[a-z0-9._-]{3,32}$`，含零寬／方向控制／控制字元一律拒絕，和既有帳號用同一套正規化比對（長得像的寫法不能繞過「既有帳號略過」），建立時存正規化後的值、預覽寫「將建立為 xxx」（L5）；M3 `POST /api/users/import-rows` 寫入可帶 `Idempotency-Key`（用 L1 `helpers.idempotency`）：回應掉了重送同一把 key ⇒ 回第一次的結果（`createdAccounts`，`replayed: true`、`passwordsShown: false`），**不再建立、不含任何密碼**；失敗（含 409 重新預覽）釋放 key；成功回應多 `createdAccounts`、`replayed`、`passwordsShown`，`credentials` 各筆多 `id`（供頁面「重設臨時密碼」走既有的 `PUT /api/users/{id}`）；L3 臨時密碼產生後一律過 `_password_problem`（含 `is_weak_password`）；L4 300 人的密碼雜湊改多執行緒（hashlib 放 GIL），300 人實測 < 10 秒；頁面 M2 下載 CSV 對 `= + - @ Tab CR` 開頭的儲存格加前導單引號（保留 UTF-8 BOM）、M3 頁面分辨「伺服器明確失敗」與「結果不確定」（後者提供「查詢這次匯入結果」）。
 - **（追加 2026-11-13，rebase 到 T82 凍結 head f66dfd9ef）**：`modules/importer/parser.py` 的 xlsx 解析改用 `helpers.xlsx_guard.read_rows(slot_name="importer")`，刪掉自己的串流預掃（L1 無變更）；`routers/auth.py` 的 `_insert_new_user` 補 `quote_email` 參數（T82 新欄位，預設空字串；`create_user` 照舊帶入）。
 - 測試：`tests/test_user_import_t85_2026_11_13.py`、`tests/test_e2e_import_wizard_t85_2026_11_13.py`；基準：`route_inventory`、`response_keys_baseline`、`write_golden`（`cases_importer.py`）、`settings_deploy_baseline`。
+- **（併入）(next) — 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核名單、不能決定審核）**
+- 行為變更（對外介面）：展示帳號（`demo`，role＝superadmin）不再出現在各處「簽核／審核／知會／提醒」名單，也不能核准或駁回：
+  - `helpers.backup_monitor`：心跳監控停用的雙人核准只算真人最高管理者；展示帳號呼叫核准／駁回得拒絕（A2）。
+  - `helpers.custom_def_review`：審核佇列名單不含展示帳號；展示帳號不能決定審核（A1）。
+  - B 類名單改用 `config_ledger.real_superadmins`（`tiered_approval.org_chain_notice_usernames`、`google_calendar`、`system_checks._check_approval_reminders`、`routers/approval_queue.reassign_approval`；模組端見 case／accounting／payroll／recyclebin）。
+- L1：`config_ledger.real_superadmins` 的 docstring／行為不變（只增加呼叫端）；無新公開介面。C 類（登入／持有者語意等非簽核名單）刻意不動。
+- 前端（文字）：公司設定頁「聯絡方式」欄註明「會顯示給所有使用者，請勿填銀行資料」。
+- 守門：DEMO_ token 到不了真實資料庫；測試 `tests/test_demo_approver_lists_2026_11_13.py`（11 項）、`test_backup_monitor_review_fixes_2026_11_13.py` 加 3 項；兩支既有測試（approval_reminder_ladder、remarks_only_on_success）補一位真人最高管理者夾具。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

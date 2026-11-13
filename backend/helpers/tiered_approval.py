@@ -271,11 +271,8 @@ def org_chain_notice_usernames(conn, tiers: list, requester_username: str) -> li
         for a in (t.get("approvers") or []):
             if (a.get("username") or "") != requester_username:
                 return []
-    rows = conn.execute(
-        "SELECT username FROM users WHERE role='superadmin' AND active=1 AND username!=?",
-        (requester_username,)
-    ).fetchall()
-    return [r["username"] for r in rows]
+    from helpers import config_ledger as _cl
+    return _cl.real_superadmins(conn, requester_username)          # 知會名單只列真人（展示帳號不是簽核人）
 
 
 def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = None) -> list:

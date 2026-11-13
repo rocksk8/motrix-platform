@@ -1,5 +1,8 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.11（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+- 變更（內部，不影響對外介面）：`service.superadmins` 通知名單改用真人最高管理者，不含展示帳號 `demo`。
+
 ## 1.0.10 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
