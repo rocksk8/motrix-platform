@@ -416,6 +416,8 @@
 ["GET", "/api/legal-params/tax-basis-options", "get_tax_basis_options_api_legal_params_tax_basis_options_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/legal-params/tax-rules", "get_tax_rule_versions_api_legal_params_tax_rules_get", [["header", "authorization", false]], [], []]
 ["PUT", "/api/legal-params/tax-rules", "put_tax_rule_versions_api_legal_params_tax_rules_put", [["header", "authorization", false]], [["application/json", ""]], []]
+["POST", "/api/license/import", "license_import_api_license_import_post", [["header", "authorization", false]], [], []]
+["GET", "/api/license/overview", "license_overview_api_license_overview_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/license/status", "license_status_api_license_status_get", [["header", "authorization", false]], [], []]
 ["DELETE", "/api/line/binding", "unlink_own_line_api_line_binding_delete", [["header", "authorization", false]], [], []]
 ["GET", "/api/line/binding", "get_line_binding_api_line_binding_get", [["header", "authorization", false]], [], []]
