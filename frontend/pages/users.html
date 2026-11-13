@@ -273,10 +273,11 @@
     <div x-show="isSuperAdmin" style="margin-bottom:16px" id="batch-perm-panel">
       <div class="panel" style="padding:0;overflow:hidden">
         <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer"
-             :style="batch.open ? 'border-bottom:1px solid var(--border-light)' : ''" @click="batchToggleOpen()" data-testid="batch-open">
-          <span style="font-size:13px;font-weight:600">批次調整權限</span>
+             :style="{ borderBottom: batch.open ? '1px solid var(--border-light)' : '' }" @click="batchToggleOpen()" @keydown.enter="batchToggleOpen()"
+             role="button" tabindex="0" :aria-expanded="batch.open ? 'true' : 'false'" data-testid="batch-open">
+          <span style="font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0">批次調整權限</span>
           <span style="font-size:12px;color:var(--text-dim)">一次給多位同仁開或收同樣的權限、套用角色範本、綁定職責角色</span>
-          <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="batchSelectedIds().length ? '已選 ' + batchSelectedIds().length + ' 位' : ''"></span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="batchSelectedText()" data-testid="batch-selected-count"></span>
         </div>
         <div x-show="batch.open" style="padding:14px 16px;display:grid;gap:14px">
           <div x-show="batch.result" style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;gap:10px" data-testid="batch-result">
@@ -323,7 +324,7 @@
                 <div style="display:flex;flex-wrap:wrap;gap:6px">
                   <template x-for="m in g.mods" :key="m.key">
                     <label style="display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;padding:4px 8px"
-                           :style="batchKeyState(m.key).disabled ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'"
+                           :style="{ opacity: batchKeyState(m.key).disabled ? '.55' : '', cursor: batchKeyState(m.key).disabled ? 'not-allowed' : 'pointer' }"
                            :title="batchKeyState(m.key).note">
                       <input type="checkbox" :checked="batch.keys.includes(m.key)" :disabled="batchKeyState(m.key).disabled" @change="batchToggleKey(m.key)" :data-testid="'batch-key-' + m.key">
                       <span x-text="m.label"></span>
@@ -881,7 +882,6 @@
     </div>
   </div>
 
-  <!-- ══ 自訂角色 Modal ══ -->
   <!-- 批次調整權限：預覽與確認視窗（逐人列出；需要原因時必填） -->
   <div class="modal-overlay" x-show="batch.showPlan" x-transition style="display:none" data-testid="batch-plan">
     <div class="modal-box" style="max-width:640px">
@@ -899,8 +899,10 @@
             <div x-show="p.status==='nochange'" style="color:var(--text-dim)">沒有需要變更的項目</div>
             <div x-show="batchCancelKeys(p).length" x-text="'取消 ' + batchCancelKeys(p).length + ' 項（' + batchKeysText(batchCancelKeys(p)) + '）'"></div>
             <div x-show="p.adds.length" x-text="'新增 ' + p.adds.length + ' 項（' + batchKeysText(p.adds) + '）'"></div>
-            <div x-show="p.bind.length" x-text="'綁定職責角色 ' + p.bind.length + ' 個'"></div>
-            <div x-show="p.unbind.length" x-text="'解除職責角色 ' + p.unbind.length + ' 個'"></div>
+            <div x-show="p.bind.length" x-text="'綁定職責角色：' + batchRoleNames(p.bind)" data-testid="batch-plan-bind"></div>
+            <div x-show="p.unbind.length" x-text="'解除職責角色：' + batchRoleNames(p.unbind)" data-testid="batch-plan-unbind"></div>
+            <div x-show="(p.effectiveAdded||[]).length" style="color:#047857" x-text="'實際生效　多了：' + batchKeysText(p.effectiveAdded)" data-testid="batch-plan-eff-add"></div>
+            <div x-show="(p.effectiveRemoved||[]).length" style="color:#B91C1C" x-text="'實際生效　少了：' + batchKeysText(p.effectiveRemoved)" data-testid="batch-plan-eff-del"></div>
             <template x-for="s in p.skipped" :key="s.kind + s.key"><div style="color:var(--text-dim)" x-text="'略過 ' + batchSkipText(s)"></div></template>
           </div>
         </template>
@@ -911,12 +913,13 @@
         <div x-show="batch.error" style="margin-top:8px;font-size:12px;color:#B91C1C" x-text="batch.error" data-testid="batch-plan-error"></div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-ghost" @click="batchClosePlan()">取消</button>
+        <button class="btn btn-ghost" @click="batchClosePlan()" data-testid="batch-plan-cancel">取消</button>
         <button class="btn btn-primary" :disabled="batch.busy || !(((batch.plan||{}).summary||{}).changed)" @click="batchApply()" data-testid="batch-apply">套用</button>
       </div>
     </div>
   </div>
 
+  <!-- ══ 自訂角色 Modal ══ -->
   <div class="modal-overlay" x-show="showCrModal" x-transition style="display:none">
     <div class="modal-box" style="max-width:460px">
       <div class="modal-head">

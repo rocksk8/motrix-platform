@@ -13,7 +13,8 @@
 3. **財務三鍵**（`FINANCE_KEYS`）由角色決定：批次永遠不動（授予、取消都略過並說明）。
 4. **最高管理者不納入**：維持全功能，批次與範本都略過。
 5. **範本**：伺服器在預覽時就把範本展開成「每人明確的授予／取消清單」；套用時**重算同一份**，與預覽的 `planHash` 不同就 409（不照過期預覽寫入）。
-   範本只動「個人勾選」：個人扣項與職責角色綁定不動；被個人扣項扣掉的鍵不授予（回報略過）。
+   範本只動「個人勾選」：個人扣項與職責角色綁定不動（**範本模式絕不新增個人扣項**；角色本來就給的鍵留著，預覽顯示
+   「仍由角色給予」）；被個人扣項扣掉的鍵不授予（回報略過）。範本套用**必須帶 planHash**（沒帶 ⇒ 400）：不盲目重新展開。
 6. **取消職責角色給的權限**：該權限不在個人勾選裡 ⇒ 改設「個人扣項」（與 `duty_roles.set_subtract` 同表同規則），不是假裝取消了。
 7. **整批同一個寫入交易**（`core.txn.begin_write`）：任何例外 ⇒ 全部不寫；被略過的項目不是錯誤，照實回報。
 """
@@ -60,6 +61,13 @@ def _int_list(v, label) -> list:
         raise dr.DutyError("%s必須是整數清單" % label)
 
 
+def _check_revoke_keys(keys):
+    """取消可以點名任何「目前持有」的鍵（含已下架的舊鍵，與 PUT 一樣只擋新增未知鍵）；形狀仍要檢查，持有與否在計畫階段判斷。"""
+    if not isinstance(keys, (list, tuple)) or not all(isinstance(k, str) and k for k in keys):
+        raise dr.DutyError("權限必須是鍵的清單")
+    return list(dict.fromkeys(keys))
+
+
 def parse_request(body) -> dict:
     """驗證請求。{userIds, grant[], revoke[], bindRoleIds[], unbindRoleIds[], template, reason, planHash} ⇒ 正規化後的 dict。"""
     if not isinstance(body, dict):
@@ -70,7 +78,7 @@ def parse_request(body) -> dict:
     if len(ids) > MAX_USERS:
         raise dr.DutyError("一次最多 %d 位" % MAX_USERS)
     grant = dr._check_perm_keys(body.get("grant") or [])
-    revoke = dr._check_perm_keys(body.get("revoke") or [])
+    revoke = _check_revoke_keys(body.get("revoke") or [])
     both = sorted(set(grant) & set(revoke))
     if both:
         raise dr.DutyError("同一個權限不能同時授予與取消：%s" % "、".join(both))
@@ -145,10 +153,12 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
     raw = _json_list(u["modules"])
     rawset = set(raw)
     roles, bound, subs = st["roles"], set(st["bound"].get(uid, ())), set(st["subs"].get(uid, ()))
-    role_keys = set()
+    role_keys, held_role_keys = set(), set()              # role_keys＝套用後仍綁著的啟用角色所給的鍵（同一請求解除的角色不算）
     for rid in bound:
         if rid in roles and roles[rid]["active"]:
-            role_keys |= set(roles[rid]["permissions"])
+            held_role_keys |= set(roles[rid]["permissions"])
+            if rid not in req["unbindRoleIds"]:
+                role_keys |= set(roles[rid]["permissions"])
     if template_keys is not None:
         tset = set(template_keys)
         want_grant = [k for k in template_keys if k not in rawset]
@@ -183,11 +193,13 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
             skip("revoke", k, "財務三鍵由角色決定，批次不動")
             continue
         in_raw = k in rawset
-        from_role = k in role_keys and k not in subs
+        from_role = template_keys is None and k in role_keys and k not in subs
         if in_raw:
             p["removes"].append(k)
+        elif k not in held_role_keys and template_keys is None:
+            skip("revoke", k, "對方目前沒有這個權限")
         if from_role:
-            new_subs.add(k)                               # 角色給的權限：改設個人扣項才算真的取消
+            new_subs.add(k)                               # 角色給的權限：改設個人扣項才算真的取消（範本模式不做）
     p["subtractAdds"] = sorted(new_subs)
     for rid in req["bindRoleIds"]:
         r = roles.get(rid)
@@ -289,6 +301,8 @@ def apply(conn, actor, body, ip="") -> dict:
     `planHash` 有帶且與重算結果不同 ⇒ 409。任何例外 ⇒ rollback（全部不寫）。回應的 `people[*]` 就是「復原這一批」要送回的內容。"""
     from core.txn import begin_write
     req = parse_request(body)
+    if req["template"] and not req["planHash"]:
+        raise dr.DutyError("套用範本要帶預覽的 planHash（請先預覽再套用）")
     begin_write(conn)
     try:
         plan = _plan(conn, req)

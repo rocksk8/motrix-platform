@@ -6,6 +6,9 @@
  *  3. 先預覽、再確認、才寫入：預覽視窗逐人列出「取消 N 項／新增 N 項」、被略過的項目與原因；需要原因時（取消高敏感或影響大的權限）原因必填。
  *  4. 套用成功後留一條「復原這一批」：逐人比對，被別人改過的人不復原並說明（不覆蓋別人的修改）。
  *  5. 所有動態文字一律用 x-text 顯示（人名、角色名稱、權限名稱都是使用者可編輯的內容，不使用 x-html）。
+ * 6. **§13 豁免（h4 確認；條件）**：本頁是「人×權限」多人操作，不套 SettingsMatrix 的草稿＋儲存列，改走「預覽→確認→套用」。條件：
+ *    (1) 任何一次點擊都不寫入，只有確認視窗的「套用」才寫；(2) 確認視窗逐人點名角色／使用者，並列出「實際生效多了／少了」哪些權限；
+ *    (3) 離開頁面時沒有東西會悄悄遺失：選人與勾選只在畫面上、**預覽之前完全沒有寫入任何東西**（所以不加離開警告），套用後可「復原這一批」。
  * 用法：usersPage() 回傳物件時 spread `...window.usersBatchMixin()`；`loadModuleCatalog` 把目錄的三份清單放進 `batchLists`。 */
 (function () {
   window.usersBatchMixin = function () {
@@ -32,7 +35,23 @@
           (!q || (u.username || '').toLowerCase().includes(q) || (u.displayName || '').toLowerCase().includes(q)))
       },
       batchSelectedIds() { return Object.keys(this.batch.sel).filter(k => this.batch.sel[k]).map(Number) },
-      batchToggleAll(on) { for (const u of this.batchPeople()) this.batch.sel[u.id] = !!on },
+      // 「全選」只選目前列出的；「全部取消」清掉**所有**已選（包含被搜尋隱藏的），避免看不見的人仍留在送出的名單裡
+      batchToggleAll(on) {
+        if (!on) { this.batch.sel = {}; return }
+        for (const u of this.batchPeople()) this.batch.sel[u.id] = true
+      },
+      batchHiddenSelectedCount() {
+        const shown = new Set(this.batchPeople().map(u => u.id))
+        return this.batchSelectedIds().filter(id => !shown.has(id)).length
+      },
+      batchSelectedText() {
+        const n = this.batchSelectedIds().length, hid = this.batchHiddenSelectedCount()
+        if (!n) return ''
+        return '已選 ' + n + ' 位' + (hid ? '，其中 ' + hid + ' 位被搜尋隱藏' : '')
+      },
+      batchRoleNames(ids) {
+        return (ids || []).map(id => { const r = (this.batch.roles || []).find(x => x.id === id); return r ? r.name : '職責角色 #' + id }).join('、')
+      },
 
       // ── 選權限 ────────────────────────────────────────────────────────────
       batchSetAction(a) {
@@ -91,21 +110,21 @@
           b.showPlan = true
         } catch (e) { b.error = e.message } finally { b.busy = false }
       },
-      batchClosePlan() { this.batch.showPlan = false },
+      batchClosePlan() { this.batch.showPlan = false; this.batch.error = '' },
       batchCancelKeys(p) { return Array.from(new Set((p.removes || []).concat(p.subtractAdds || []))) },
       batchKeysText(keys) {
         const t = (keys || []).map(k => this.batchKeyLabel(k))
         return t.length > 6 ? t.slice(0, 6).join('、') + ' 等 ' + t.length + ' 項' : t.join('、')
       },
       batchSkipText(s) {
-        const what = s.kind === 'bind' ? '職責角色 #' + s.key : this.batchKeyLabel(s.key)
+        const what = s.kind === 'bind' ? '職責角色「' + this.batchRoleNames([s.key]) + '」' : this.batchKeyLabel(s.key)
         return what + '：' + s.reason
       },
       batchPlanNote() {
         const p = this.batch.plan
         if (!p) return ''
         return this.batch.action === 'template'
-          ? '他們目前的個別勾選會被範本取代；個人扣項與職責角色綁定不動。財務三鍵由角色決定，不會被動到；最高管理者不在批次範圍。「管理者範本」只含權限鍵，不含管理者角色本身的通行權。'
+          ? '他們目前的個別勾選會被範本取代；個人扣項與職責角色綁定不動（角色本來就給的權限仍然有效）。財務三鍵由角色決定，不會被動到；最高管理者不在批次範圍。「管理者範本」只含權限鍵，不含管理者角色本身的通行權。'
           : ''
       },
       batchSummaryText() {
@@ -121,6 +140,7 @@
           const body = Object.assign(this.batchBody(), { reason: b.reason, planHash: b.plan.planHash })
           b.result = await this._batchPost('', body)
           b.showPlan = false
+          b.sel = {}                                         // 已套用：清掉選取，避免下一次預覽不小心又帶上同一批人
           this.toast('已套用：變更 ' + b.result.applied.length + ' 位')
           await this.loadUsers()
         } catch (e) { b.error = e.message } finally { b.busy = false }

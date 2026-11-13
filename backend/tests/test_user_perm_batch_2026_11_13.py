@@ -77,6 +77,14 @@ def _post(client, h, body, preview=False):
     return client.post(BATCH + ("/preview" if preview else ""), json=body, headers=h)
 
 
+def _apply_template(client, h, ids, template, reason=""):
+    """範本套用一律先預覽再帶 planHash 套用（沒帶 ⇒ 400；見 test_template_apply_requires_the_plan_hash）。"""
+    body = {"userIds": ids, "template": template, "reason": reason}
+    pv = _post(client, h, body, preview=True)
+    assert pv.status_code == 200, pv.text
+    return _post(client, h, {**body, "planHash": pv.json()["planHash"]})
+
+
 def _person(resp, uid):
     return next(p for p in resp.json()["people"] if p["userId"] == uid)
 
@@ -268,7 +276,7 @@ def test_template_keeps_personal_subtracts_and_leaves_finance_keys_alone(client,
     rid = _role(client, h, "viewer_plus", ["map"])
     client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
     client.post("/api/duty-roles/subtracts", json={"userId": bob, "key": "map", "reason": ""}, headers=h)
-    r = _post(client, h, {"userIds": [bob], "template": "sales", "reason": "調整為業務範本"})
+    r = _apply_template(client, h, [bob], "sales", reason="調整為業務範本")
     assert r.status_code == 200, r.text
     p = _person(r, bob)
     assert "map" in [s["key"] for s in p["skipped"] if "扣項" in s["reason"]], "被個人扣項扣掉的鍵不授予，照實回報"
@@ -280,6 +288,71 @@ def test_template_keeps_personal_subtracts_and_leaves_finance_keys_alone(client,
         assert conn.execute("SELECT COUNT(*) FROM user_duty_roles WHERE user_id=?", (bob,)).fetchone()[0] == 1
     finally:
         conn.close()
+
+
+def test_template_apply_requires_the_plan_hash(client, world):
+    """審查 h11 S1：範本不盲目重新展開——沒帶預覽的 planHash ⇒ 400，且什麼都不寫。"""
+    h, bob = world["h"], world["bob"]
+    n = _count("permission_changes")
+    r = _post(client, h, {"userIds": [bob], "template": "engineer"})
+    assert r.status_code == 400 and "planHash" in r.json()["detail"]
+    assert _mods(bob) == ["dashboard", "work_log"] and _count("permission_changes") == n
+
+
+def test_template_never_adds_a_personal_subtract_for_role_given_keys(client, world):
+    """審查 h11 M1：範本只換「個人勾選」。角色本來就給的鍵留著（不新增永久個人扣項，之後也不會害授予被略過）。"""
+    h, amy = world["h"], world["amy"]
+    rid = _role(client, h, "cust_role", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": amy, "roleId": rid, "reason": ""}, headers=h)
+    pv = _post(client, h, {"userIds": [amy], "template": "engineer"}, preview=True)
+    assert _person(pv, amy)["subtractAdds"] == [] and pv.status_code == 200
+    r = _apply_template(client, h, [amy], "engineer", reason="調整為工程範本")
+    assert r.status_code == 200, r.text
+    import db
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM user_perm_subtracts WHERE user_id=?", (amy,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert "customer" not in _mods(amy)
+    from helpers.auth import effective_modules
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT role, modules FROM users WHERE id=?", (amy,)).fetchone()
+        assert "customer" in effective_modules(row["role"], dr.apply_duty(json.loads(row["modules"]), [["customer"]], set(), True)), "角色仍給 customer"
+    finally:
+        conn.close()
+    again = _post(client, h, {"userIds": [amy], "grant": ["customer"]})
+    assert again.status_code == 200 and not any("扣項" in s["reason"] for s in _person(again, amy)["skipped"])
+
+
+def test_unbind_and_revoke_the_same_key_leaves_no_redundant_subtract(client, world):
+    """審查 h11 L1：同一請求解除角色又取消它給的鍵 ⇒ 不再寫多餘的個人扣項。"""
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "viewer_plus2", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
+    r = _post(client, h, {"userIds": [bob], "unbindRoleIds": [rid], "revoke": ["customer"]})
+    assert r.status_code == 200, r.text
+    p = _person(r, bob)
+    assert p["subtractAdds"] == [] and p["unbind"] == [rid]
+    assert not any(s["key"] == "customer" for s in p["skipped"]), "沒有「對方沒有這個權限」的誤報：它本來就來自被解除的角色"
+
+
+def test_revoke_may_name_a_legacy_key_the_person_still_holds(client, world):
+    """審查 h11 L2：取消只要求對方持有，不要求鍵還在目錄裡（已下架的舊鍵可以被清掉）。"""
+    import db
+    h, bob = world["h"], world["bob"]
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(["dashboard", "old_removed_key"]), bob))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _post(client, h, {"userIds": [bob], "revoke": ["old_removed_key"]})
+    assert r.status_code == 200, r.text
+    assert _mods(bob) == ["dashboard"]
+    bad = _post(client, h, {"userIds": [bob], "grant": ["never_existed"]})
+    assert bad.status_code == 400, "授予仍只認得目錄裡的鍵"
 
 
 # ── 6. 整批同一個交易 ───────────────────────────────────────────────────────
@@ -324,7 +397,7 @@ def test_path_3_batch_revoke_needs_a_reason(client, world):
 
 
 def test_path_4_template_apply_that_removes_a_high_key_needs_a_reason(client, world):
-    r = _post(client, world["h"], {"userIds": [world["amy"]], "template": "viewer"})
+    r = _apply_template(client, world["h"], [world["amy"]], "viewer")
     assert r.status_code == 400 and "原因" in r.json()["detail"]
     assert "settings" in _mods(world["amy"])
 
