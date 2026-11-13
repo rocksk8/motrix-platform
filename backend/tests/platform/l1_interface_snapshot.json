@@ -731,6 +731,7 @@
    "estimate_prefix": "def(conn=…)",
    "estimate_prefixes_in_use": "def(conn=…)",
    "label": "def(doc_type)",
+   "label_of_no": "def(no, conn=…)",
    "no_re": "def(prefix_or_rule, *, revision=…)",
    "norm": "def(v)",
    "prefix_for": "def(doc_type, conn=…)",

@@ -576,6 +576,15 @@ def _dl(text, doc_label):
     return text if (not doc_label or doc_label == "報價單") else str(text).replace("報價單", doc_label)
 
 
+def _doc_label_of(quote_no) -> str:
+    """只有單號的通知（結算／結案／變更申請…）用：單號字首 ⇒ 報價單／估價單。任何錯誤 ⇒ 報價單（通知不可因取名失敗而寄不出去）。"""
+    try:
+        from helpers import doc_type as _DT
+        return _DT.label_of_no(quote_no)
+    except Exception:                                                  # noqa: BLE001
+        return "報價單"
+
+
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list, doc_label: str = "報價單") -> None:
     """新報價/改版送審 → 通知當層簽核人（doc_label＝單據類型名稱，估價單傳「估價單」）"""
     # LINE 獨立通道（2026-11-13）：不看 Email、不看信件退訂；信件與 LINE 各自失敗互不影響。收件人規格見 docs/platform/plans/LINE-EVENTS-EXPANSION-PROPOSAL.md v2-4。
@@ -1880,11 +1889,12 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
         return
+    _lab = _doc_label_of(quote_no)
     html = _build_html("settlement_finalized", 
         "成本精算完結通知", "精算完結", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)],
+        [(_dl("報價單號", _lab), quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)],
         quote_no, _base_url(),
-        intro=f"以下報價單之成本精算已由 {finalized_by} 完結確認，請登入系統查閱最終結算資料。",
+        intro=_dl(f"以下報價單之成本精算已由 {finalized_by} 完結確認，請登入系統查閱最終結算資料。", _lab),
         button_text="前往查看精算結果",
     )
     _async_send(to, _mt.subject("settlement_finalized", f"成本精算完結：{quote_no}（{customer}）"), html)
@@ -1906,7 +1916,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_closing_report", 
         "案件結案報表", "已產生", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
         "", case_page,
         intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入/成本/損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
         button_text="前往查看案件",
@@ -1936,7 +1946,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_close_blocked", 
         "結案被擋下", "尚未達成前置條件", "#DC2626",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
          ("未達成項目", "、".join(reasons))],
         "", case_page,
         intro=f"案件「{label}」嘗試結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試結案。",
@@ -1961,7 +1971,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_change_requested", 
         "已結案案件變更待簽核", "待簽核", "#7C3AED",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
+        [(_dl("報價單號", _doc_label_of(quote_no)), quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
         intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於「待我簽核」簽核後才會套用。",

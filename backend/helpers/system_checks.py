@@ -521,7 +521,7 @@ def _current_tier_idx(appr: dict) -> int:
 _APPROVAL_REMINDER_SOURCES = [
     {
         "table": "quotations", "no_col": "quote_no", "label": "報價單",
-        "select_extra": "customer_name, project_name",
+        "select_extra": "customer_name, project_name, doc_type",     # doc_type：估價單的催辦信用「估價單」（label 只是舊資料／沒欄位時的預設）
         "desc": lambda row, snap: (row["customer_name"] or "")
                                    + (("｜" + row["project_name"]) if row["project_name"] else ""),
     },
@@ -698,6 +698,9 @@ def _check_approval_reminders() -> None:
                 desc      = src["desc"](row, snap)
                 doc_no    = row["doc_no"]
                 doc_type  = src["label"]
+                if src["table"] == "quotations":
+                    from helpers import doc_type as _DT
+                    doc_type = _DT.label(row["doc_type"])               # 報價單 ⇒ 仍是「報價單」（字串逐位元不變）
                 guard_base = f"approval_notif.{src['table']}.{doc_no}.{requested_at}"
 
                 def _mark(stage: str) -> None:

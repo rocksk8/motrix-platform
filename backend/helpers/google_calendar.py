@@ -566,9 +566,11 @@ def push_event_for_quotation_won(quote_no: str) -> None:
         total = row["total"] or 0
         # 2026-09-11：標題補上**案件名稱**。使用者要的是在行事曆上一眼看出「哪個案子
         # 怎麼了」，原本只有單號＋客戶，案件名稱藏在 description 裡，月檢視根本看不到。
+        from helpers import doc_type as _DT          # 估價單：行事曆事件的用語隨單據類型（報價單 ⇒ 字串逐位元不變）
+        _dt_no = _DT.doc_type_of_no(quote_no)
         event_id = _create_event_with_retry(
-            f"報價單成案 — {pname or quote_no}（{cname}｜{quote_no}）",
-            f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}",
+            _DT.relabel(f"報價單成案 — {pname or quote_no}（{cname}｜{quote_no}）", _dt_no),
+            _DT.relabel(f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}", _dt_no),
             date.today(),
         )
         # 2026-09-25 lost update（C 組）：建事件是網路請求（最慢的一段），期間別人可能已存了這張單
