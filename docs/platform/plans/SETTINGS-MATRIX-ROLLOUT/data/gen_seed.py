@@ -7,10 +7,11 @@
     python -I ../docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/gen_seed.py
 
 輸出（寫在本檔所在資料夾）：
-  settings_groups.json        設定中心所有群組／欄位完整 meta（`SettingDef.meta()`）
-  settings-center-items.csv   第一～三段：設定中心每個欄位一列（分工 甲／乙）；第四段：「設定中心以外」的設定（分工 甲／乙／丙／僅 API）
-  bing-items.csv              丙份：個人權限鍵、信件類型、LINE 事件、個人 Email 通知事件、簽核單據類型、職責角色
-「【填】」開頭的欄位留給各分工填寫，重跑時**不會**保留手填內容——所以只在凍結後第一次產生；之後請直接改 CSV，或改成合併式更新。
+  settings_groups.json              設定中心所有群組／欄位完整 meta（`SettingDef.meta()`；機器產生，可覆蓋）
+  settings-center-items.seed.csv    骨架：第一～三段＝設定中心每個欄位一列（分工 甲／乙）；第四段＝「設定中心以外」的設定
+  bing-items.seed.csv               丙份骨架：個人權限鍵、信件類型、僅行事曆事件、LINE 事件、個人 Email 通知事件、簽核單據類型
+  settings-center-items.csv／bing-items.csv   **工作檔**（各分工在這裡填「【填】」欄）。本腳本**絕不覆蓋**工作檔：只有工作檔不存在時才由 .seed.csv 複製一份
+重產後要合併：用 `python -I diff_seed.py`（見檔尾說明）或自行 diff 工作檔與 .seed.csv 的「非【填】」欄。
 """
 import csv
 import json
@@ -47,9 +48,9 @@ def dump_registry():
     return out
 
 
-def batchable(f):
-    """PM 2026-11-13 M1：risk none／ops 可批次（ops 要確認視窗）；security／money／legal 與受 change_control 管（待生效／放寬）者永不進批次。"""
-    if f["risk"] in ("security", "money", "legal") or f["requiresPending"] or f["loosen"]:
+def batchable(f, group_sensitive=False):
+    """PM 2026-11-13 M1：risk none／ops 可批次（ops 要確認視窗）；security／money／legal、受 change_control 管（待生效／放寬）、`sensitive` 群組者永不進批次。"""
+    if group_sensitive or f["risk"] in ("security", "money", "legal") or f["requiresPending"] or f["loosen"]:
         return "否（永不進批次）"
     return "是（需確認視窗）" if f["risk"] == "ops" else "是"
 
@@ -64,7 +65,7 @@ def settings_center_csv(reg):
             ch = "；".join("%s：%s" % (c["label"], c["impact"]) for c in f["choices"])
             rows.append(["一～三 設定中心欄位", slice_of(g), g, v["label"], "內含高風險項目" if hi else "", f["key"], f["label"], f["question"], f["help"], f["impact"],
                          f["type"], json.dumps(f["default"], ensure_ascii=False), "" if f["recommended"] is None else json.dumps(f["recommended"], ensure_ascii=False),
-                         f["unit"], ch, f["risk"], f["riskText"], "是" if f["advanced"] else "", "是" if f["requiresPending"] else "", f["loosen"] or "", batchable(f)] + [""] * len(FILL))
+                         f["unit"], ch, f["risk"], f["riskText"], "是" if f["advanced"] else "", "是" if f["requiresPending"] else "", f["loosen"] or "", batchable(f, v["sensitive"])] + [""] * len(FILL))
     # 第四段：設定中心以外（PM 2026-11-13 M2）。位置請負責人補到「備註」；不在本次範圍的只有 API 的兩項，不替它們發明畫面。
     outside = [
         (SLICE_JIA, "bonus 預設", "獎金", ""), (SLICE_JIA, "憑證帳戶", "", ""), (SLICE_JIA, "扣款設定", "", ""),
@@ -79,8 +80,16 @@ def settings_center_csv(reg):
     ]
     for sl, name, where, note in outside:
         rows.append(["四 設定中心以外", sl, "", "", "", "", name, "", "", "", "", "", "", "", "", "", "", "", "", "", ""] + [""] * (len(FILL) - 1) + [("位置：" + where + "　" + note).strip()])
-    with open(HERE / "settings-center-items.csv", "w", encoding="utf-8-sig", newline="") as fh:
+    return _write_seed("settings-center-items", cols, rows)
+
+
+def _write_seed(stem, cols, rows):
+    """只寫 .seed.csv；工作檔不存在才複製一份。工作檔存在就不動（可能有人手填）。"""
+    seed, work = HERE / (stem + ".seed.csv"), HERE / (stem + ".csv")
+    with open(seed, "w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh); w.writerow(cols); w.writerows(rows)
+    if not work.exists():
+        work.write_bytes(seed.read_bytes())
     return len(rows)
 
 
@@ -91,6 +100,9 @@ def _fill(cat, name, ev="", sens=False, extra=""):
                 "照預設＝依這種信的預設收件人；僅最高管理者＝只寄給最高管理者；指定＝除事件相關人外，另寄給指定帳號或角色",
                 "公司（改過才算）／預設", "系統技術類：關閉後告警可能沒人看到（影響大）" if sens else "簽核類：關閉後簽核人收不到通知，流程可能卡住" if extra == "approval" else "",
                 "矩陣｜勾選批次｜搜尋篩選｜套用前確認＋復原這一批｜手機卡片", "行事曆欄標「需外部設定」"]
+    if cat == "僅行事曆事件":
+        return [name, "%s。預設：依事件預設。" % (ev or name), "開／關（只有公司層，沒有個人層）", "公司／預設", "需外部設定：要先連上 Google 行事曆才會真的推送",
+                "矩陣｜勾選批次｜搜尋篩選｜套用前確認＋復原這一批｜手機卡片", "與 google-calendar-settings 是同一份資料（INVENTORY §五-7）"]
     if cat == "LINE 事件":
         return [name, "有「%s」時用 LINE 推播給指定對象。預設：關。" % name, "收件對象：照 Email 收件人／只發給指定人員（建議）／原本＋指定",
                 "公司／預設", "影響別人（收件人會收到 LINE）", "矩陣｜勾選批次｜群組全開全關｜搜尋篩選｜預設組合｜套用前確認＋復原這一批｜手機卡片",
@@ -136,11 +148,15 @@ def bing_csv():
     for key, label, grp in MR.MODULES:
         rows.append(["個人權限鍵", "users.html（存取模組）", grp, key, label, "", "高敏感權限：要原因、寫權限變更紀錄" if key in sens else "", "依角色範本", "module_registry.MODULES",
                      "否（高敏感）" if key in sens else "是"] + _fill("個人權限鍵", label.split("（")[0], sens=key in sens))
+    from helpers import google_calendar as GC, notify_matrix as NM
+    cal = {x["code"]: x for x in GC.event_types()}
+    for code in NM.calendar_only_codes(GC.EVENT_CODES):
+        x = cal[code]
+        rows.append(["僅行事曆事件", "mail-settings／google-calendar-settings", x["group"], code, x["label"], x["description"], "", "預設：" + ("開" if x["default"] else "關"),
+                     "google_calendar.event_types()（沒有對應信件的行事曆事件）", "是（需連上 Google 才會推送）"] + _fill("僅行事曆事件", x["label"], x["description"]))
     for key, label in TA.APPROVAL_DOC_TYPE_LABELS.items():
         rows.append(["簽核單據類型", "approval-settings", "統一流程" if key in TA.DEFAULT_UNIFIED_DOC_TYPES else "獨立流程", key, label, "", "", "", "tiered_approval", "是"] + _fill("簽核單據類型", label))
-    with open(HERE / "bing-items.csv", "w", encoding="utf-8-sig", newline="") as fh:
-        w = csv.writer(fh); w.writerow(cols); w.writerows(rows)
-    return len(rows)
+    return _write_seed("bing-items", cols, rows)
 
 
 if __name__ == "__main__":
