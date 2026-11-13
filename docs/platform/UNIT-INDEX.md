@@ -22,7 +22,7 @@
 | `plat:mounts` | L0 | 內建頁面開放給自訂模組的「掛載點」（建構器方案 B；設計 docs/platform/plans/BUILDER-B-DESIGN.md）。 | 6 | 3 | `tests/test_builder_b_mounts_2026_10_01.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 32 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 101 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 106 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:safe_ping` | L0 | 對外打卡的安全 GET（2026-11-13；備份與監控頁的對抗式審查 H1／M1／L5）。 | 10 | 2 | `tests/test_backup_monitor_2026_11_13.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 10 | `backend/tests/platform/test_spine_e_b.py` |
@@ -32,7 +32,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 27 | 10 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 179 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 182 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 13 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 17 | — |
@@ -43,8 +43,8 @@
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 19 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 15 | 103 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 144 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 15 | 104 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 146 | — |
 | `helper:auth_alert` | L1 | 登入鎖定告警（2026-11-12「登入失敗告警」票；外網 go-live 補上的門檻）。 | 12 | 2 | `tests/test_auth_lockout_alert_2026_11_12.py` |
 | `helper:backup_monitor` | L1 | 「備份與監控」專頁的資料與動作（2026-11-13；系統選單提案 v2 批次 4a）。 | 21 | 1 | `tests/test_backup_monitor_2026_11_13.py` |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
@@ -52,7 +52,7 @@
 | `helper:builtin_fields` | L1 | 內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。 | 12 | 6 | `backend/tests/test_builtin_custom_fields_2026_10_14.py` |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 5 | — |
 | `helper:calendar_sync` | L1 | 日期型行事曆事件的每日對帳（L1；MAIL-CAL 階段 2：保固到期／區間事項結束／專案預計完成）。 | 4 | 2 | `tests/test_notify_matrix_phase2_2026_10_06.py` |
-| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 26 | 36 | — |
+| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 26 | 38 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 4 | — |
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
 | `helper:client_ip` | L1 | 可信的來源 IP（2026-11-11，外網存取 go-live 前必修的安全項）。 | 5 | 5 | `backend/tests/test_trusted_client_ip_2026_11_11.py` |
@@ -125,7 +125,7 @@
 | `helper:notify_actions` | L1 | 額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。 | 27 | 7 | `tests/platform/test_notify_actions_t63.py` |
 | `helper:notify_matrix` | L1 | 通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。 | 10 | 2 | `tests/test_notify_matrix_2026_10_05.py` |
 | `helper:notify_templates` | L1 | 簽核事件通知用語範本（S-X3 第一刀：報價單送審 `approval:submitted`；設計 docs/platform/plans/S-X3-NOTIFY-WORDING-DESIGN-T62.md）。 | 17 | 6 | `tests/platform/test_notify_templates_t62.py` |
-| `helper:onepipe_flags` | L1 | 一條龍（onepipe）各批次的開關讀取。 | 2 | 7 | `tests/test_onepipe_p0a_links_2026_11_13.py` |
+| `helper:onepipe_flags` | L1 | 一條龍（onepipe）各批次的開關讀取。 | 2 | 18 | `tests/test_onepipe_p0a_links_2026_11_13.py` |
 | `helper:option_lists` | L1 | 選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。 | 22 | 12 | `tests/platform/test_option_lists_t62.py` |
 | `helper:org_gaps` | L1 | 組織設定缺口檢查（選單去工程師化 批次 5a，2026-11-13）：只讀，不改任何資料。 | 7 | 2 | `tests/test_org_gaps_5a_2026_11_13.py` |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 5 | 2 | — |
@@ -157,7 +157,7 @@
 | `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
 | `helper:settings_groups_lodging_freshness` | L1 | T70 設定群組：附近旅宿資料「多久算過舊」（lodging_freshness.stale_days）。 | 0 | 1 | `backend/modules/lodging/tests/test_lodging_stale_days_t70.py` |
-| `helper:settings_groups_onepipe` | L1 | 物料流程「一條龍」各批次的開關（群組 `onepipe`；提案 docs/platform/plans/PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md §2.4）。 | 0 | 1 | `backend/tests/test_onepipe_p0a_links_2026_11_13.py`、`backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py`、`backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py`、`backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py`、`backend/tests/test_onepipe_worklog_case_2026_11_13.py`、`backend/tests/test_onepipe_warranty_closed_2026_11_13.py` |
+| `helper:settings_groups_onepipe` | L1 | 物料流程「一條龍」各批次的開關（群組 `onepipe`；提案 docs/platform/plans/PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md §2.4）。 | 0 | 1 | `backend/tests/test_onepipe_p0a_links_2026_11_13.py`、`backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py`、`backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py`、`backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py`、`backend/tests/test_onepipe_worklog_case_2026_11_13.py`、`backend/tests/test_onepipe_warranty_closed_2026_11_13.py`、`backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`、`backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py` |
 | `helper:settings_groups_overhead` | L1 | T69 設定群組：管銷分攤比率的全域預設值（overhead.default_pct）。**預設值＝上線前的 25（`profit_rules.DEFAULT_OVERHEAD_PCT`）**，部署零行為變更。 | 1 | 1 | `backend/modules/case/tests/test_overhead_default_pct_t69.py` |
 | `helper:settings_groups_payslip_picker` | L1 | T68 設定群組：勞報單「選派發」下拉（payslip_dispatch_picker）。**預設＝上線前的程式常數（一次 30 筆）。** | 0 | 1 | `backend/modules/payroll/tests/test_payslip_dispatch_dropdown_t55.py` |
 | `helper:settings_groups_profit` | L1 | T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 | 1 | 1 | `backend/tests/platform/test_profit_warning_t64.py` |
@@ -167,7 +167,7 @@
 | `helper:settings_help` | L1 | 設定中心「?」說明（選單去工程師化 批次 9，2026-11-13）：每個設定欄位要嘛「標籤已夠清楚」（白名單），要嘛有四段說明。 | 16 | 3 | `tests/test_settings_center_b9_2026_11_13.py` |
 | `helper:settings_notify` | L1 | 變更通知元件（2026-11-13，feat/settings-change-notify；使用者：「變更後要有通知，或是儲存選項；點選後沒人知道變動了」）。 | 13 | 6 | `backend/tests/test_settings_change_notify_2026_11_13.py` |
 | `helper:settings_pages` | L1 | 設定中心「外框」的頁面登錄（SPEC §14.5；S2）。**分類只有這一套**；由 `data/shell_groups.json` 轉成執行期可讀的程式資料，（無單位卡） | 9 | 1 | — |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 44 | 63 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 44 | 64 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_shell` | L1 | 設定中心外框的唯讀資料（S2；SPEC §14）：總覽首頁、最近變更、全域搜尋索引。**只讀**——寫入仍走 `settings_registry.publish()`。（無單位卡） | 3 | 1 | — |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 6 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 5 | `backend/tests/platform/test_stage_templates_t62.py` |
@@ -184,6 +184,6 @@
 | `helper:user_import` | L1 | 員工（使用者帳號）批次匯入的規劃邏輯（T85 匯入精靈；端點 `POST /api/users/import-rows` 在 routers/auth.py）。（無單位卡） | 11 | 1 | — |
 | `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_13.py` |
 | `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | `tests/test_my_account_prefs_2026_11_13.py` |
-| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 25 | `tests/test_strict_bool_helper_t49.py` |
+| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 26 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_guard` | L1 | 使用者上傳的 .xlsx 的「小檔案展開」守門：預掃（真的 XML 解析，不靠 regex）＋ 子行程隔離解析（硬逾時、記憶體上限）。 | 18 | 5 | `tests/test_xlsx_guard_2026_11_13.py` |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 20 | 16 | — |

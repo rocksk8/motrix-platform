@@ -1,5 +1,8 @@
 # 業務開發 更新紀錄
 
+## 1.2.8 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。
+
 ## 1.2.7 — 2026-11-13（feat/upload-files-txn-4；T86；版號由列車取）
 - 修正（內部，API 路徑與回應形狀不變）：業務開發記錄刪附件（`DELETE /dev-logs/{id}/files/{fid}`）改用 `remove_json_item`（鎖內重讀、commit 後才刪實體檔，並發補附件不被整包覆寫）；刪整筆記錄（`DELETE /dev-logs/{id}`）原本在 commit 之前刪檔，改為同一把寫鎖內讀＋DELETE、commit 之後才刪（路徑經 `canonical_upload_path` 驗證）。 測試：`tests/test_upload_files_txn4_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（feat/upload-files-txn-2；T84；版號由列車取）**

@@ -1,5 +1,8 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.12 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。
+
 ## 1.0.11（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
 - 變更（內部，不影響對外介面）：`service.superadmins` 通知名單改用真人最高管理者，不含展示帳號 `demo`。
 
