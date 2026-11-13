@@ -1812,10 +1812,12 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     from helpers.settings import _get_setting
     from helpers import clause_titles as _CT
     _CT.freeze(q)                                                  # S-Q2：送審當下把條款標題凍結進單據（範本生效時）；沒生效 ⇒ 清掉舊的凍結值。要在算原因之前。
-    raw = _get_setting("quote_terms_presets", {}) or {}
+    from modules.case.quote_terms import terms_setting_keys
+    k_presets, k_pay = terms_setting_keys(q.get("docType"))         # 估價單讀自己的條款組／預設付款條件；報價單鍵不變
+    raw = _get_setting(k_presets, {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
     presets = presets if isinstance(presets, list) else []
-    default_pt = _get_setting("default_payment_terms", DEFAULT_TERMS["paymentTerms"]) or ""
+    default_pt = _get_setting(k_pay, DEFAULT_TERMS["paymentTerms"]) or ""
     appr = q.get("approval") if isinstance(q.get("approval"), dict) else {}
     q["approval"] = appr
     appr["reasons"] = submit_reasons(q, user.get("display_name") or user["username"],
@@ -2443,10 +2445,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             # Instead, compare against the status currently stored in the DB.
             _chk = get_db()
             _old = _chk.execute(
-                "SELECT status FROM quotations WHERE quote_no=?", (quote_no,)
+                "SELECT status, doc_type FROM quotations WHERE quote_no=?", (quote_no,)
             ).fetchone()
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
+            if _old:
+                q["docType"] = _DT.norm(_old["doc_type"])     # 條款比對基準依單據類型：以資料庫現值為準（用戶端送什麼都不採用；之後 2487 行同一規則）
             is_new_submission = _old_status not in ("待審核", "簽核中")
             # N13：只在「轉為待審核」的那一次重算（前端也只在送審時算）；
             # 解鎖編輯的「解鎖後修改，需重新簽核」維持原樣，不在移植範圍

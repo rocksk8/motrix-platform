@@ -2138,6 +2138,16 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/settings/estimate-payment-terms": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-terms-presets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings/google-calendar": {
    "w": false,
    "pp": 0,
@@ -4584,6 +4594,16 @@
    "body": true
   },
   "PUT /api/settings/email-notify": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-terms-presets": {
    "w": true,
    "pp": 0,
    "body": true
