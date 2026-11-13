@@ -123,7 +123,7 @@ def test_hold_hides_the_banner_and_writes_nothing(two):
     a, b, _ = two
     b.click("[data-testid=et-conflict-hold]")
     b.wait_for_selector(CONFLICT, state="hidden")
-    assert "還沒存" in b.locator("[data-testid=et-error]").inner_text()
+    assert "尚未儲存" in b.locator("[data-testid=et-error]").inner_text()
     assert _draft()[0]["name"] == "A改名"
 
 

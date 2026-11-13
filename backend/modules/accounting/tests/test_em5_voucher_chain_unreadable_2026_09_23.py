@@ -135,7 +135,7 @@ def test_em5_export_is_blocked_when_the_chain_is_unreadable_not_just_unsigned(
     assert r.status_code == 400, (
         "簽核鏈解析失敗的傳票，匯出回 %s，不是 400：%s"
         % (r.status_code, r.text[:200]))
-    assert "讀不出來" in r.text, (
+    assert "無法讀取" in r.text, (
         "訊息是 %r——沒有說出『讀不出來』，可能落到了『還沒簽到第幾關』"
         "那個分支，而那是兩種不同的成因。" % r.text[:200])
 

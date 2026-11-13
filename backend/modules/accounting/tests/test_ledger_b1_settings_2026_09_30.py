@@ -165,5 +165,5 @@ def test_api_fs_lines_edit_rules_and_permissions(client, make_user, conn):
     assert client.patch("/api/ledger/fs-lines/BS_CA_INV", headers=hdr, json={}).status_code == 400
     # 停用仍有科目歸屬的列 ⇒ 409 並說明；停用沒有科目的列（例如計算列）可以
     r = client.patch("/api/ledger/fs-lines/BS_CA_INV", headers=hdr, json={"is_active": False})
-    assert r.status_code == 409 and "漏算" in r.json()["detail"]
+    assert r.status_code == 409 and "遺漏" in r.json()["detail"]
     assert client.patch("/api/ledger/fs-lines/IS_TCI", headers=hdr, json={"is_active": False}).status_code == 200

@@ -20,7 +20,8 @@ NEW_HELP = "這一欄會自動帶入申請人；管理者可在設計器解除�
 #: 改動前（help 欄除外）的 canonical JSON sha256（第 31 班出貨狀態，origin/platform 09d13fdf 實算）
 FROZEN = {
     "petty_cash": "e730414edeffcd8422e631479204138c769c6bbf7e46bb4b917fef9d2cd0d8b2",
-    "purchase_order": "9aa1f66a6fb20124c949649bb14afb6c5237cd3142aa7e342e150bf2739fa46d",
+    # T85 文字專業化：purchase_order 的 note 一句文字改寫（「之後再開」→「日後再開放」），只動 note 這一個字串；其餘欄位逐一比對無變動。
+    "purchase_order": "de6763dbf2f154590020ef11c6c84dc7f3b53d172613adef5a0c48bffec2aa5c",
     "purchase_req": "38c30b7a0c02f89453cbf73ff3264413a91ce28240fcd6375b4202c68e8a5073",
     "travel": "1e774ca4074634e1c5c6d3c8a63982580eafa2f5b945135b3b970a9b48ce5202",
 }

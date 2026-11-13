@@ -89,7 +89,7 @@ def test_unknown_item_id_is_409_and_nothing_written(client, make_user):
                 f"/api/quotations/{NO}/materials/0/invoice-files?itemId=999"):
         r = client.post(url, headers=h, files={"files": PDF})
         assert r.status_code == 409, (url, r.text)
-        assert "存檔" in r.json()["detail"]
+        assert "儲存" in r.json()["detail"]
     assert _cr() == before
 
 

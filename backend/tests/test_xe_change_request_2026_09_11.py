@@ -75,7 +75,7 @@ def test_approved_expense_rejects_file_upload(client, make_user):
     r = client.post(f"{_base()}/{exp_id}/files", headers=_auth(token),
                     files={"files": ("invoice.png", io.BytesIO(b"\x89PNG\r\n\x1a\n fake"), "image/png")})
     assert r.status_code == 409, r.text
-    assert "上鎖" in r.json()["detail"], "錯誤訊息要指向變更申請這條路，不能只說不可修改"
+    assert "已鎖定" in r.json()["detail"], "錯誤訊息要指向變更申請這條路，不能只說不可修改"
 
 
 def test_draft_expense_still_accepts_file_upload(client, make_user):

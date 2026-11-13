@@ -96,7 +96,7 @@ PAGE = (Path(__file__).resolve().parent.parent.parent
 #: A 點名的那一組新手引導文案。📌 **這是判準，不是實作細節** ——
 #: 它們是使用者真的會讀到的字，而這一題問的就是「他會不會讀到」。
 ONBOARDING_CARD_COPY = "尚無資料"
-ONBOARDING_HERO_COPY = "系統目前尚無資料"
+ONBOARDING_HERO_COPY = "系統中尚無任何資料"
 ONBOARDING_HERO_CTA = "建立第一筆"
 
 #: 🔴 2026-09-23 A 把範圍擴到這兩句 —— `:473` 標題與 `:502` 副標。
@@ -554,7 +554,7 @@ def test_fx33_the_probe_goes_red_on_the_version_before_the_fix():
     lied = []
     if got["card"]:
         lied.append("引導卡片")
-    if ONBOARDING_HERO_COPY in got["hero"]:
+    if ONBOARDING_HERO_COPY in got["hero"] or "系統目前還沒有資料" in got["hero"]:   # 修正前那一版（c89e9d9）仍是舊句子
         lied.append("heroSummary")
     if got["title"]:
         lied.append(":473 標題")
