@@ -3423,6 +3423,15 @@
   ],
   "s": 200
  },
+ "/api/extra-expenses/suppliers": {
+  "k": [
+   "suppliers",
+   "suppliers[].code",
+   "suppliers[].id",
+   "suppliers[].name"
+  ],
+  "s": 200
+ },
  "/api/field/cases": {
   "k": [
    "has_more",

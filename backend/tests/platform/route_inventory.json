@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 991,
-  "endpoints_api": 987,
-  "write_total": 534,
-  "write_api": 534,
-  "get_api": 453,
-  "distinct_paths_api": 840,
-  "write_with_body_api": 399,
-  "write_with_path_param_api": 364
+  "endpoints_total": 997,
+  "endpoints_api": 993,
+  "write_total": 535,
+  "write_api": 535,
+  "get_api": 458,
+  "distinct_paths_api": 846,
+  "write_with_body_api": 400,
+  "write_with_path_param_api": 365
  },
  "select_star": {
-  "modules": 287,
+  "modules": 288,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -4997,6 +4997,11 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "GET /api/extra-expenses/suppliers": {
+   "w": false,
+   "pp": 0,
+   "body": false
   }
  }
 }
