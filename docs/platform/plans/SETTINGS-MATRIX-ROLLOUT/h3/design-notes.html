@@ -79,7 +79,7 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}f
 <p>我的 76 欄中，<b>26 欄</b>的 label／question／help／impact／riskText／選項含「確認期間」（27 處）或「影子」（4 處，quote_approval.reconfirm_mode 的選項「影子（只記錄）」→ 建議「先試跑（只記錄）」）。「確認期間」建議統一改成「要等 N 天才生效」。欄位清單：alerts 4 欄、case_close_gates.enabled、change_control.confirm_period_days、finance_cashier.receivable_grace_days、finance_reports.settle_overdue_days、legal_params_reminder 2 欄、overhead.default_pct、profit_rules.charity_rate_pct、quote_alt 9 條鎖定規則、quote_approval 4 欄、quote_output.hidden_terms_pdf_mode。</p>
 
 <h2>7. 已裁示與待決定的事</h2>
-<p><b>已裁示：</b>「憑證帳戶」＝獎金傳票科目（PUT /api/bonus/cases/voucher-accounts，5 個會計科目，歸入 §15 的「傳票科目」變更管制）；管銷與公益口徑做成唯讀加切換精靈（步驟：前置檢查→影響預覽→送出申請走變更管制→生效後最後一步「請工程師執行遷移工具」）；登錄表禁用詞（確認期間、影子）實作時從原始來源改寫（清單見 §6）；設定中心以外的處理見 §5（使用者裁示，SPEC §15）；文字欄位永遠不可批次；承攬商匯款簽核設定的跳轉頁併入簽核設定。</p>
+<p><b>已裁示（憑證帳戶：PM 裁示 2026-11-13）：</b>「憑證帳戶」＝獎金傳票科目（PUT /api/bonus/cases/voucher-accounts，5 個會計科目，歸入 §15 的「傳票科目」變更管制）；管銷與公益口徑做成唯讀加切換精靈（步驟：前置檢查→影響預覽→送出申請走變更管制→生效後最後一步「請工程師執行遷移工具」）；登錄表禁用詞（確認期間、影子）實作時從原始來源改寫（清單見 §6）；設定中心以外的處理見 §5（使用者裁示，SPEC §15）；文字欄位永遠不可批次；承攬商匯款簽核設定的跳轉頁併入簽核設定。</p>
 <p><b>仍待決定：</b>預設組合的內容——利潤色帶（標準／較嚴／較寬）與帳齡（30／60／90、15／30／60、45／90／180）是我的提案，登錄表 presets 目前是 0 個，使用者看過才上線。</p>
 <p><b>數字（回報使用者用）：</b>甲份 76 欄中，<b>規則上可批次 27 項、畫面提供勾選格 24 項</b>（CSV「規則上可批次?」「畫面提供勾選格?」兩欄，已與 gen_seed 重產的結果比對一致）。</p>
 
