@@ -313,7 +313,8 @@
   "features": [
     {"code": "material_recognize_notify", "label": "材料卡片認列採購單被拒的通知信", "mail": ["material_recognize_denied"]},
     {"code": "case_invoice_upload_notify", "label": "案件發票上傳通知信（財務＋最高管理者）", "mail": ["case_invoice_uploaded"]},
-    {"code": "case_review_edit_notify", "label": "報價單審核中被簽核人編輯的通知信（送審人＋全部最高管理者）", "mail": ["approval_review_edit"]}
+    {"code": "case_review_edit_notify", "label": "報價單審核中被簽核人編輯的通知信（送審人＋全部最高管理者）", "mail": ["approval_review_edit"]},
+    {"code": "case_content_edited_notify", "label": "報價單內容被最高管理者修改、清除簽核的通知信（被清除的簽核人）", "mail": ["approval_content_edited"]}
   ],
   "pages": [
     {

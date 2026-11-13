@@ -8,6 +8,7 @@ GOLDEN 檔在重構前的 master（58836e3）上錄：GOLDEN_WRITE=1 pytest …
 """
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import collections
+import contextlib
 import json
 import os
 import pathlib
@@ -278,6 +279,34 @@ def _record(live_server, make_user, e2e_browser):
 
 
 @pytest.mark.e2e
+@contextlib.contextmanager
+def _onepipe_flags_off():
+    """golden 是「CM12 重構前」錄的純重構守門：案件頁要和一條龍之前逐字相同。一條龍（群組 onepipe）T84 起預設開，案件頁會多出「登載」等入口——
+    那些由各批次自己的題驗（test_e2e_onepipe_*）。這裡把整個群組釘成關再錄，離開時還原成進來時的值（不影響之後的題）。"""
+    import db
+    from helpers import settings_groups, settings_registry as SR       # noqa: F401
+
+    def _publish(vals, reason):
+        c = db.get_db()
+        try:
+            SR.publish("onepipe", vals, reason=reason, user="golden_pin", conn=c)
+            c.commit()
+        finally:
+            c.close()
+        SR.invalidate()
+
+    c = db.get_db()
+    try:
+        prev = {f: int(SR.get("onepipe", f, conn=c)) for f in SR._g("onepipe")["fields"]}
+    finally:
+        c.close()
+    _publish({f: 0 for f in prev}, "golden：釘成關")
+    try:
+        yield
+    finally:
+        _publish(prev, "golden：還原")
+
+
 def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser):
     from core import source_tree
     if not source_tree.module_installed("modules/subcontract/"):
@@ -288,7 +317,8 @@ def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser)
         pytest.skip("golden 錄於 M03 在的狀態；M03 不在時的案件頁由 test_e2e_case_without_supply 驗")
     if not source_tree.module_installed("modules/arap/"):
         pytest.skip("黃金錄製含應收應付（M05）的開票／請款段；模組不在時財務分頁顯示「未安裝」提示、本來就不同（PLAYBOOK §B-11）")
-    got = _record(live_server, make_user, e2e_browser=e2e_browser)
+    with _onepipe_flags_off():
+        got = _record(live_server, make_user, e2e_browser=e2e_browser)
     if os.environ.get("GOLDEN_WRITE") == "1":
         GOLDEN.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
         pytest.skip(f"已寫入 {GOLDEN.name}（{len(got)} 步）")

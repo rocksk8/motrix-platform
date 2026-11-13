@@ -61,7 +61,8 @@ def test_the_detail_shows_the_editor_only_for_a_quote_that_was_unlock_edited(liv
     assert "修改人" in text and "最高管理者甲" in text, text
     assert "sa_editor" not in text, "有顯示名稱時用顯示名稱：" + text
     # 申請人那一列仍是原送審人（送審人維持）
-    assert "原送審人" in page.locator(".aq-info-grid").inner_text()
+    # 詳情頁有好幾個 .aq-info-grid（基本資訊／承攬商匯款／案件／欄位，各是一節）：只看含「修改人」列的那一格（基本資訊），不靠全頁唯一
+    assert "原送審人" in page.locator(".aq-info-grid", has=page.locator(ROW)).inner_text()
 
     _select(page, "MQ-PLAIN-1")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"aq-edited-by\"]') || "
