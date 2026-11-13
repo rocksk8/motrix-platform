@@ -16,5 +16,8 @@ CASES = [
     # 2026-11-13 LINE 全信件：「誰要發」缺 mode ⇒ 400；提醒綁定（沒設 LINE Login／沒有未綁定的人 ⇒ 錯誤或空結果；形狀見 test_line_events_all_2026_11_13.py）
     {"key": "PUT /api/settings/line-notify/events/{key}/audience", "url": "/api/settings/line-notify/events/approval_review_edit/audience", "body": {}, "expect": _E},
     {"key": "POST /api/settings/line-notify/bindings/remind", "url": "/api/settings/line-notify/bindings/remind", "body": {}, "expect": _E},
+    # 2026-11-13 LINE 事件矩陣：批次設定缺 keys ⇒ 400；復原這一批缺 states／expect ⇒ 400（成功形狀、409 衝突形狀見 test_line_events_batch_2026_11_13.py）
+    {"key": "POST /api/settings/line-notify/events/batch", "url": "/api/settings/line-notify/events/batch", "body": {}, "expect": _E},
+    {"key": "POST /api/settings/line-notify/events/batch-undo", "url": "/api/settings/line-notify/events/batch-undo", "body": {}, "expect": _E},
 ]
 WAIVE = {}

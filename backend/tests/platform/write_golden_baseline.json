@@ -274,6 +274,18 @@
   ],
   "s": 400
  },
+ "POST /api/settings/line-notify/events/batch": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/settings/line-notify/events/batch-undo": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/settings/line-notify/verify": {
   "k": [
    "detail"
