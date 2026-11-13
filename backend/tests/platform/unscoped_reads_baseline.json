@@ -403,6 +403,7 @@
   "modules/case/case_deadlines.py::_check_case_stage_deadline::case_stages": "unscoped",
   "modules/case/case_deadlines.py::_check_case_stage_deadline::quotations": "unscoped",
   "modules/case/case_deadlines.py::_check_warranty_expiry::quotations": "unscoped",
+  "modules/case/case_deadlines.py::_closed_warranty_rows::quotations": "unscoped",
   "modules/case/case_deadlines.py::_sync_project_end_calendar::quotations": "unscoped",
   "modules/case/case_deadlines.py::_sync_warranty_calendar::quotations": "unscoped",
   "modules/case/case_stage_tasks.py::sync_daily_task_for_case_stage::case_stages": "unscoped",
