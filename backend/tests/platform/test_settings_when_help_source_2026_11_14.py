@@ -62,3 +62,14 @@ def test_source_failure_never_breaks_the_page(grp, monkeypatch):
     monkeypatch.setattr(R, "_sources", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     v = _by_key(R.field_views(G, conn=grp))
     assert v["cap"]["source"] is None and v["cap"]["helpParts"]
+
+
+def test_source_is_found_even_when_a_sibling_field_has_over_1000_rows(grp):
+    from helpers import config_ledger as L
+    domain = "setting:" + G
+    L.record(grp, domain, G, [{"field": "days", "old": 5, "new": 6}], "很久以前改的", "hs_old")
+    for i in range(1100):
+        L.record(grp, domain, G, [{"field": "cap", "old": i, "new": i + 1}], "雜訊", "hs_noise")
+    grp.commit()
+    v = _by_key(R.field_views(G, conn=grp))
+    assert v["days"]["source"]["kind"] == "company" and v["days"]["source"]["by"] == "hs_old"
