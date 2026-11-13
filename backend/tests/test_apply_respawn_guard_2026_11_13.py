@@ -103,6 +103,11 @@ def test_schema_gate_sits_between_health_loop_and_log_scan_and_never_auto_rolls_
         assert bad not in gate, "Invoke-SchemaGate 只回結果，不決定要不要回滾：%s" % bad
 
 
+def test_schema_gate_documents_the_tradeoff_against_the_log_errors_rollback():
+    t = _src()
+    assert "與既有 $logErrors 自動回滾的取捨" in t and "留在原地、不回滾" in t
+
+
 def test_stop_install_service_is_identical_in_all_three_scripts_and_knows_guard_loops():
     a, m, r = (_fn(_src(n), "Stop-InstallService") for n in ("apply_update.ps1", "apply_module_update.ps1", "rollback_update.ps1"))
     assert a and a == m == r
@@ -161,31 +166,32 @@ function Stop-Process {
 }
 '''
 
-# 正式機證據的行程鏈（命令列照證據；PID 以證據為準：guard cmd 11916、殭屍 23148／24764／19892）
+# 正式機證據的行程鏈（證據.txt (b)／行程表，命令列與 PID 逐字取自證據；父行程 21188／14044／19336 在證據取樣時不在行程表內）
 _PROD_CHAIN = r'''
 $B = "C:\Users\Motrix\Desktop\V9.0\backend"
-$guardCmd = 'C:\Windows\system32\cmd.exe /c ""' + $B + '\autostart_guard.bat""'
+$guardCmd = '"C:\Windows\System32\cmd.exe" /c "C:\Users\Motrix\Desktop\V9.0\backend\autostart_guard.bat"'
+$uv = '"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe"  main:app --port 666 --host 0.0.0.0 --log-level info --ssl-keyfile=certs\key.pem --ssl-certfile=certs\cert.pem'
 Add-P 4 0 "System" $null
-Add-P 700 4 "services.exe" 'C:\Windows\system32\services.exe'
-Add-P 2000 700 "cloudflared.exe" 'C:\Program Files\cloudflared\cloudflared.exe tunnel run'
-Add-P 11916 2000 "cmd.exe" $guardCmd
-Add-P 12000 11916 "uvicorn.exe" ($B + '\..\.venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 666')
-Add-P 12100 12000 "python.exe" 'C:\Python312\python.exe -m uvicorn main:app --host 0.0.0.0 --port 666'
-$script:listen = @(12100)
+Add-P 1620 4 "services.exe" $null
+Add-P 16944 1620 "cloudflared.exe" $null
+Add-P 11916 16944 "cmd.exe" $guardCmd
+Add-P 19544 11916 "uvicorn.exe" $uv
+Add-P 23376 19544 "python.exe" ('"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\python.exe"  ' + $uv.Replace('"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe"  ', '"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe" '))
+$script:listen = @(23376)
 '''
 _ZOMBIES = r'''
-foreach ($z in 23148, 24764, 19892) {
-    Add-P $z (90000 + $z) "cmd.exe" $guardCmd
-    Add-P ($z + 1) $z "conhost.exe" '\??\C:\Windows\system32\conhost.exe 0x4'
-    Add-P ($z + 2) $z "timeout.exe" 'timeout  /t 5'
+foreach ($z in @(@(23148, 21188), @(24764, 14044), @(19892, 19336))) {
+    Add-P $z[0] $z[1] "cmd.exe" $guardCmd
+    Add-P ($z[0] + 1) $z[0] "conhost.exe" '\??\C:\Windows\system32\conhost.exe 0x4'
+    Add-P ($z[0] + 2) $z[0] "timeout.exe" 'timeout  /t 5 /nobreak'
 }
 '''
 _OTHER_INSTALL = r'''
-Add-P 5000 90000 "cmd.exe" 'C:\Windows\system32\cmd.exe /c ""D:\OtherInstall\backend\autostart_guard.bat""'
+Add-P 5000 90000 "cmd.exe" '"C:\Windows\System32\cmd.exe" /c "D:\OtherInstall\backend\autostart_guard.bat"'
 Add-P 5001 5000 "python.exe" 'D:\Other\python.exe -m uvicorn main:app --port 8000'
 '''
 _ZOMBIE_IDS = "23148,23149,23150,24764,24765,24766,19892,19893,19894"
-_PROD_TARGETS = "11916,12000,12100," + _ZOMBIE_IDS
+_PROD_TARGETS = "11916,19544,23376," + _ZOMBIE_IDS
 _PROD_LOOPS = "11916,23148,24764,19892"
 
 
@@ -223,22 +229,22 @@ def test_prod_chain_all_four_guard_loops_and_their_trees_are_targets_unrelated_i
     out = _run_ps(_PROD_CHAIN + _ZOMBIES + _OTHER_INSTALL + _LIST, tmp_path, src=script)
     assert _ids(out, "targets") == {int(x) for x in _PROD_TARGETS.split(",")}, out
     assert _ids(out, "loops") == {int(x) for x in _PROD_LOOPS.split(",")}, "含沒有 uvicorn 子行程的 3 個殭屍迴圈：" + out
-    for must_not in (2000, 700, 4, 5000, 5001):
+    for must_not in (16944, 1620, 4, 5000, 5001):
         assert must_not not in _ids(out, "targets"), "不可動 cloudflared／services／別的安裝（路徑不同）的迴圈：%d" % must_not
 
 
 @needs_ps
 def test_loop_found_by_walking_up_from_the_listener_when_cmdline_has_no_backend_path(tmp_path):
     """排程工作若用相對路徑啟動（cmd /c autostart_guard.bat），命令列沒有 $BackendDir ⇒ 只能靠 listener 往上的父行程鏈找到它。"""
-    chain = _PROD_CHAIN.replace(r"""$guardCmd = 'C:\Windows\system32\cmd.exe /c ""' + $B + '\autostart_guard.bat""'""",
-                                r"""$guardCmd = 'C:\Windows\system32\cmd.exe /c autostart_guard.bat'""")
-    assert "cmd.exe /c autostart_guard.bat'" in chain
+    old_guard = r"""$guardCmd = '"C:\Windows\System32\cmd.exe" /c "C:\Users\Motrix\Desktop\V9.0\backend\autostart_guard.bat"'"""
+    assert old_guard in _PROD_CHAIN
+    chain = _PROD_CHAIN.replace(old_guard, r"""$guardCmd = '"C:\Windows\System32\cmd.exe" /c autostart_guard.bat'""")
     other = r'''
-Add-P 5000 90000 "cmd.exe" 'C:\Windows\system32\cmd.exe /c autostart_guard.bat'
+Add-P 5000 90000 "cmd.exe" '"C:\Windows\System32\cmd.exe" /c autostart_guard.bat'
 '''
     out = _run_ps(chain + other + _LIST, tmp_path)
     assert _ids(out, "loops") == {11916}, "只有 listener 鏈上的那個；別的安裝的相對路徑迴圈不能被當成我們的：" + out
-    assert _ids(out, "targets") == {11916, 12000, 12100}
+    assert _ids(out, "targets") == {11916, 19544, 23376}
 
 
 @needs_ps
@@ -252,7 +258,7 @@ def test_list_only_kills_nothing_and_old_autostart_bat_loop_is_still_recognised(
 def test_kill_order_loop_first_then_service_and_nothing_respawns(tmp_path):
     out = _run_ps(_PROD_CHAIN + _ZOMBIES + r'''
 function Stop-Process-Hook($id) {
-    if ($id -eq 12100 -and ($script:procs.ToArray() | Where-Object { [int]$_.ProcessId -eq 11916 })) {
+    if ($id -eq 23376 -and ($script:procs.ToArray() | Where-Object { [int]$_.ProcessId -eq 11916 })) {
         Add-P 13000 11916 "python.exe" 'C:\Python312\python.exe -m uvicorn main:app --port 666'
         $script:listen = @(13000)
         $script:calls.Add("respawned")
@@ -265,11 +271,11 @@ $n = Stop-InstallService
 "calls=$($script:calls -join ',')"
 ''', tmp_path)
     order = [int(x) for x in re.search(r"order=([0-9,]+)", out).group(1).split(",")]
-    assert order.index(11916) < order.index(12000) < order.index(12100), "先殺迴圈再殺服務：" + out
+    assert order.index(11916) < order.index(19544) < order.index(23376), "先殺迴圈再殺服務：" + out
     assert "respawned" not in out, "迴圈先死 ⇒ 殺服務時不會再長出新的：" + out
     assert "n=12" in out
     left = _ids(out, "left")
-    assert left == {4, 700, 2000}, "只剩 System／services／cloudflared：" + out
+    assert left == {4, 1620, 16944}, "只剩 System／services／cloudflared：" + out
 
 
 @needs_ps
@@ -280,7 +286,7 @@ $script:once = $false
 function Stop-Process-Hook($id) {
     if ($id -eq 11916 -and -not $script:once) {
         $script:once = $true
-        Add-P 14000 2000 "cmd.exe" $guardCmd
+        Add-P 14000 16944 "cmd.exe" $guardCmd
         Add-P 14100 14000 "python.exe" 'C:\Python312\python.exe -m uvicorn main:app --port 666'
         $script:listen = @(14100)
     }
@@ -289,8 +295,65 @@ $n = Stop-InstallService
 "left=$(($script:procs.ToArray() | ForEach-Object { $_.ProcessId } | Sort-Object) -join ',')"
 "killed=$($script:killed -join ',')"
 ''', tmp_path)
-    assert _ids(out, "left") == {4, 700, 2000}, out
+    assert _ids(out, "left") == {4, 1620, 16944}, out
     assert 14000 in _ids(out, "killed") and 14100 in _ids(out, "killed"), out
+
+
+@needs_ps
+def test_unattributable_autostart_cmd_is_warned_not_killed(tmp_path):
+    """命令列含 autostart*.bat 但不在本安裝路徑、也不在 listener 鏈上（別的安裝／相對路徑啟動的殭屍）⇒ 不動它，但要大聲說有它。"""
+    out = _run_ps(_OTHER_INSTALL + r'''
+Add-P 5100 90000 "cmd.exe" '"C:\Windows\System32\cmd.exe" /c autostart_guard.bat'
+$n = Stop-InstallService
+"n=$n killed=$($script:killed.Count) calls=$($script:calls -join ',')"
+''', tmp_path)
+    assert "n=0 killed=0 calls=warn" in out, out
+
+
+@needs_ps
+def test_never_kills_itself_or_its_ancestors_even_when_run_under_a_loop(tmp_path):
+    """apply 若是從迴圈底下開的主控台執行：自己（$PID）與祖先（迴圈 cmd）不殺，其餘照殺，並警告。"""
+    out = _run_ps(_PROD_CHAIN + r'''
+Add-P $PID 11916 "powershell.exe" 'powershell -File apply_update.ps1'
+$n = Stop-InstallService
+"killed=$($script:killed -join ',')"
+"self=$PID"
+"calls=$($script:calls -join ',')"
+''', tmp_path)
+    killed = _ids(out, "killed")
+    me = int(re.search(r"self=(\d+)", out).group(1))
+    assert me not in killed and 11916 not in killed, "不殺自己與祖先：" + out
+    assert {19544, 23376} <= killed, "服務行程照殺：" + out
+    assert "warn" in out.split("calls=")[1]
+
+
+@needs_ps
+@pytest.mark.parametrize("backend_spelling", [
+    r"C:\Users\Motrix\Desktop\V9.0\backend\\",                    # 結尾反斜線
+    r"c:\USERS\motrix\desktop\v9.0\backend",                       # 大小寫不同
+    r"C:\Users\Motrix\Desktop\V9.0\tools\..\backend",             # 含 .. 的寫法
+])
+def test_backend_dir_spelling_does_not_change_which_loops_are_found(tmp_path, backend_spelling):
+    out = _run_ps(_PROD_CHAIN + _ZOMBIES + _OTHER_INSTALL + "\n$BackendDir = '%s'\n" % backend_spelling + _LIST, tmp_path)
+    assert _ids(out, "loops") == {int(x) for x in _PROD_LOOPS.split(",")}, out
+
+
+@needs_ps
+def test_short_8dot3_path_in_the_command_line_is_matched(tmp_path):
+    """命令列用短檔名（C:\\PROGRA~1\\…），$BackendDir 是長路徑：靠 FileSystemObject 取出短路徑變體；磁碟沒開 8.3 時跳過。"""
+    long_dir = tmp_path / "A Long Install Directory" / "backend"
+    long_dir.mkdir(parents=True)
+    import ctypes
+    buf = ctypes.create_unicode_buffer(1024)
+    ctypes.windll.kernel32.GetShortPathNameW(str(long_dir), buf, 1024)
+    short = buf.value
+    if not short or short.lower() == str(long_dir).lower():
+        pytest.skip("這個磁碟沒有 8.3 短檔名")
+    out = _run_ps(r'''
+Add-P 11916 16944 "cmd.exe" '"C:\Windows\System32\cmd.exe" /c "@@SHORT@@\autostart_guard.bat"'
+$BackendDir = '@@LONG@@'
+'''.replace("@@SHORT@@", short).replace("@@LONG@@", str(long_dir)) + _LIST, tmp_path)
+    assert _ids(out, "loops") == {11916}, out
 
 
 @needs_ps
@@ -343,7 +406,7 @@ $r = Stop-RespawnedService "停服後"
 ''', tmp_path, _RESPAWN_FUNCS)
     assert "result=True detected=True" in out and "::NOTE:: respawn_detected stage=停服後" in out
     assert "respawn_unresolved" not in out
-    assert _ids(out, "left") == {4, 700, 2000}
+    assert _ids(out, "left") == {4, 1620, 16944}
     assert "PID 23148 | cmd.exe" in out and "父行程已不在" in out, "要印出 PID／父行程／建立時間（事後找啟動器的證據）"
 
 

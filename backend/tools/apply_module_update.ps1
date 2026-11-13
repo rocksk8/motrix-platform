@@ -299,13 +299,34 @@ function Stop-InstallService {
         $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
         $byPid = @{}
         foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
-        $backendLow = ([string]$BackendDir).TrimEnd('\').ToLowerInvariant()
+        # 本安裝路徑的各種拼法（命令列可能是長路徑／短檔名 8.3／映射磁碟的 UNC／含 .. 的寫法；一律小寫、結尾補 \ 再比對子字串）
+        $roots = New-Object System.Collections.Generic.List[string]
+        $rawRoot = ([string]$BackendDir).TrimEnd('\')
+        $cands = New-Object System.Collections.Generic.List[string]
+        $cands.Add($rawRoot)
+        try { $cands.Add([System.IO.Path]::GetFullPath($rawRoot).TrimEnd('\')) } catch { }
+        try {
+            $fso = New-Object -ComObject Scripting.FileSystemObject
+            if ($fso.FolderExists($rawRoot)) { $fd = $fso.GetFolder($rawRoot); $cands.Add([string]$fd.Path); $cands.Add([string]$fd.ShortPath) }
+        } catch { }
+        try {
+            if ($rawRoot -match '^([A-Za-z]:)(\\.*)?$') {
+                $drv = $Matches[1]; $rest = $Matches[2]
+                $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$drv'" -ErrorAction SilentlyContinue
+                if ($ld -and $ld.ProviderName) { $cands.Add(([string]$ld.ProviderName).TrimEnd('\') + $rest) }
+            }
+        } catch { }
+        foreach ($c in $cands) {
+            if ($c) { $lc = $c.TrimEnd('\').ToLowerInvariant() + '\'; if (-not $roots.Contains($lc)) { $roots.Add($lc) } }
+        }
         $loopRe = 'autostart[a-z0-9_-]*\.bat'
         $loops = New-Object System.Collections.Generic.List[int]
         foreach ($p in $all) {
             if ($p.Name -eq "cmd.exe" -and $p.CommandLine) {
                 $cl = $p.CommandLine.ToLowerInvariant()
-                if ($cl.Contains($backendLow) -and $cl -match $loopRe) { $loops.Add([int]$p.ProcessId) }
+                $inRoot = $false
+                foreach ($r in $roots) { if ($cl.Contains($r)) { $inRoot = $true; break } }
+                if ($inRoot -and $cl -match $loopRe) { $loops.Add([int]$p.ProcessId) }
             }
         }
         $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
@@ -351,8 +372,24 @@ function Stop-InstallService {
                 Add-Tree ([int]$p.ProcessId)
             }
         }
+        # 不殺自己（本腳本行程）與祖先：apply 若是從某個迴圈／服務底下開的主控台執行，Add-Tree 會把整棵子樹（含自己）列為目標。
+        $selfIds = New-Object System.Collections.Generic.List[int]
+        $sp = [int]$PID
+        for ($k = 0; $k -lt 12 -and $sp -gt 0 -and -not $selfIds.Contains($sp); $k++) {
+            $selfIds.Add($sp)
+            $sp = if ($byPid.ContainsKey($sp)) { [int]$byPid[$sp].ParentProcessId } else { 0 }
+        }
+        $hitSelf = @($targets | Where-Object { $selfIds.Contains([int]$_) })
+        if ($hitSelf.Count -gt 0) {
+            if (-not $ListOnly) { Warn "  本腳本（PID $PID）在要結束的行程樹裡（$(($hitSelf | Sort-Object) -join ',')）：不結束自己與祖先；若其中有迴圈，它仍會在停服後把服務拉回來——請從迴圈之外的主控台執行。" }
+            foreach ($h in $hitSelf) { [void]$targets.Remove([int]$h) }
+        }
         if ($ListOnly) { return @{ Targets = @($targets); Loops = @($loops); ByPid = $byPid } }
         if ($round -eq 0 -and $loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart*.bat，含 autostart_guard.bat）。" }
+        if ($round -eq 0) {
+            $unattributed = @($all | Where-Object { $_.Name -eq "cmd.exe" -and $_.CommandLine -and $_.CommandLine -match $loopRe -and -not $loops.Contains([int]$_.ProcessId) })
+            if ($unattributed.Count -gt 0) { Warn "  有 $($unattributed.Count) 個 cmd.exe 的命令列含 autostart*.bat，但路徑不在 $BackendDir 下、也不在 port $Port 的父行程鏈上（別的安裝？相對路徑啟動？）：不動它。PID：$(($unattributed | ForEach-Object { $_.ProcessId }) -join ',')。若它是這台的迴圈，停服後仍會把服務拉回來——請人工確認。" }
+        }
         if ($targets.Count -eq 0) { break }
         foreach ($t in $targets) {
             $p = $byPid[$t]
