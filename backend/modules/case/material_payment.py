@@ -536,7 +536,7 @@ def add_line(conn, pid, paid_date, user, body) -> dict:
     if row is None:
         raise LookupError("找不到這張匯款申請")
     if row["status"] != S_APPROVED:
-        raise ValueError("這張匯款申請還沒核准（%s），不能登錄付款" % row["status"])
+        raise ValueError("這張匯款申請尚未核准（%s），不能登錄付款" % row["status"])
     remaining = remaining_of(conn, row)
     if remaining <= 0:
         raise ValueError("這張匯款申請已結清，沒有待付金額")

@@ -335,7 +335,7 @@ class _Payables:
             if _again is not None and not (r["paid_date"] or "") and _po_bank_missing(_again, po_bank_block_since()):     # 讀→寫之間被清空收款資料
                 raise PoBankMissing(PO_BANK_BLOCK_MSG)
             if r["status"] != "已核准":
-                raise ValueError("這筆申請還沒核准，不能登錄付款")
+                raise ValueError("這筆申請尚未核准，不能登錄付款")
             raise ValueError("這筆申請已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
         _full = conn.execute("SELECT kind, doc_code, created_by, approval_json FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if _full is not None and (_full["kind"] or ""):                      # 費用單據（A2-7）：通知申請人已付款；kind='' 不寄

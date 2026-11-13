@@ -78,7 +78,7 @@ def preview(conn, year):
     prereq = []
     open_early = conn.execute("SELECT period_no FROM gl_periods WHERE year=? AND period_no<12 AND status='open' ORDER BY period_no", (y["year"],)).fetchall()
     if open_early:
-        prereq.append("第 %s 期還沒結帳。" % "、".join(str(r[0]) for r in open_early))
+        prereq.append("第 %s 期尚未結帳。" % "、".join(str(r[0]) for r in open_early))
     p12 = conn.execute("SELECT status FROM gl_periods WHERE year=? AND period_no=12", (y["year"],)).fetchone()
     if p12 is None:
         prereq.append("這個年度沒有第 12 期。")
@@ -155,13 +155,13 @@ def close_year(conn, year, user, accept_warnings=False):
         raise ClosingError("年度目前是「%s」，只有開放的年度可以決算。" % y["status"])
     open_early = conn.execute("SELECT period_no FROM gl_periods WHERE year=? AND period_no<12 AND status='open'", (y["year"],)).fetchall()
     if open_early:
-        raise ClosingError("第 %s 期還沒結帳，不能決算。" % "、".join(str(r[0]) for r in open_early))
+        raise ClosingError("第 %s 期尚未結帳，不能決算。" % "、".join(str(r[0]) for r in open_early))
     remaining = _pl_nets(conn, y["start_date"], y["end_date"], include_closing=True)
     if remaining:
         raise ClosingError("損益科目還有餘額（%s 等 %d 個科目）：請先產生結轉傳票並過帳。" % (sorted(remaining)[0], len(remaining)))
     unposted = closing_vouchers(conn, year, statuses=("草稿", "待審核", "簽核中", "已核准"))
     if unposted:
-        raise ClosingError("結轉傳票 %s 還沒過帳。" % unposted[0]["voucher_no"])
+        raise ClosingError("結轉傳票 %s 尚未過帳。" % unposted[0]["voucher_no"])
     stm = _statements(conn, y)
     ok, bad = statements_ok(stm)
     if not ok:

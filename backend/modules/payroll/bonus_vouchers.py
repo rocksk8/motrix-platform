@@ -57,7 +57,7 @@ def accounting_available():
 def account_problem(conn, code):
     """空 ⇒ 「還沒設定」；不存在／已停用 ⇒ M06 的訊息；M06 不在 ⇒ 無法驗證（不當作有效）；沒問題 ⇒ ""。"""
     if not (code or "").strip():
-        return "還沒有設定科目"
+        return "尚未設定科目"
     check = registry.single_provider("voucher.account_check")
     if check is None:
         return "會計模組未安裝，無法驗證科目"

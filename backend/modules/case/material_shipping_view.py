@@ -43,7 +43,7 @@ def cancel_blocker(conn, quote_no, item_id):
         e = shipped_map(conn, quote_no).get(str(item_id))
     except Exception:                                                              # noqa: BLE001
         log.exception("material_shipping_view: 取消前檢查出貨連動失敗")
-        return "暫時無法確認這筆材料申請有沒有出貨單連動，請稍後再試"
+        return "暫時無法確認這筆材料申請是否有出貨單連動，請稍後再試"
     if e and (float(e.get("reserved") or 0) + float(e.get("shipped") or 0)) > 1e-9:
         return "這筆材料申請已有出貨單連動（%s；已出貨 %g、占用中 %g），請先處理那些出貨單再取消" % (
             "、".join(e.get("notes") or []) or "—", float(e.get("shipped") or 0), float(e.get("reserved") or 0))

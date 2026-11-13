@@ -7012,7 +7012,7 @@ def _summarize_case_change(action_type: str, payload: dict, cr: dict,
     return {"label": "核准後會套用的內容",
             "before": None,
             "after": {"變更類型": action_type,
-                      "說明": "這個變更類型還沒有可讀摘要，請開啟案件頁確認後再核准"}}
+                      "說明": "這個變更類型尚無可讀摘要，請開啟案件頁確認後再核准"}}
 
 
 # ── 佇列詳情：M01 的四種單據（IP-93 `approval.detail` 提供者；2026-09-27 端點搬 L1 routers/approval_queue.py）──

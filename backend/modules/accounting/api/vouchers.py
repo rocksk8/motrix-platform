@@ -421,7 +421,7 @@ def summary_sources(q: str = "", quote_no: str = "",
         if not_found:
             note2 = CASE_NOT_FOUND % picked + "。"
         elif not files and hidden:
-            note2 = "案件「%s」底下沒有你有權限查看的憑證。" % picked
+            note2 = "案件「%s」底下沒有您有權限查看的憑證。" % picked
         elif not files:
             note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
         else:

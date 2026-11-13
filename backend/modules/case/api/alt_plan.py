@@ -28,7 +28,7 @@ def _plan_row(conn, quote_no, user):
 def _plan_response(row, picks, combos, user, gate):
     """兩個介面共用的回應；差別只在『成本權限』的判定函式（兩者語意不同，不得互換）。逐案可見性已由各路由先過 `deny_case`（被拒＝查無）。"""
     if not gate(user):
-        raise HTTPException(403, "你沒有查看報價成本與毛利的權限")
+        raise HTTPException(403, "您沒有查看報價成本與毛利的權限")
     try:
         q = json.loads(row["data_json"] or "{}") or {}
     except (TypeError, ValueError):

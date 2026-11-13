@@ -399,7 +399,7 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected, actor=
                 continue
             row = rows.get(link) if link else None
             if not link or row is None or row["status"] != MA.S_APPROVED:
-                _rej(rejected, mid, flag, "order_not_approved", "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" if not link or row is None else "這筆材料申請還沒核准。")
+                _rej(rejected, mid, flag, "order_not_approved", "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" if not link or row is None else "這筆材料申請尚未核准。")
             elif flag == "arrived" and not row["received_on"]:
                 _rej(rejected, mid, flag, "receipt_missing", "請先在材料申請上確認到貨（日期與確認人），才能標記已到料")
             else:

@@ -14,7 +14,7 @@ router = APIRouter()
 def get_project_margin_config(authorization: str = Header(None)):
     user = _require_user(authorization)
     if not quote_money_visible(user):                  # 最小揭露：只有看得到報價成本與毛利的人會用到這個門檻
-        raise HTTPException(403, "你沒有查看報價成本與毛利的權限")
+        raise HTTPException(403, "您沒有查看報價成本與毛利的權限")
     try:
         warn = float(sr.get("project_margin", "warn_pct") or 0)
     except (TypeError, ValueError):

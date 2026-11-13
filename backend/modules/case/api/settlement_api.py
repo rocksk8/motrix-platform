@@ -76,7 +76,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             raise
         if body.settlement.get("status") == "finalized" and (row["deal_tag"] or "") not in ("已成案", "已結案"):      # 40：沒成案的報價單不能完結精算（已結案＝管理員重新開啟後再完結）
             conn.close()
-            raise HTTPException(409, "這張報價單還沒成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"))
+            raise HTTPException(409, "這張報價單尚未成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"))
         if body.expectedUpdatedAt is not None and (row["updated_at"] or "") != body.expectedUpdatedAt:      # 38：樂觀鎖——兩人（或兩個分頁）同時編輯，後存的不再悄悄蓋掉前存的
             conn.close()
             raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存")
@@ -120,7 +120,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:
                 conn.close()
-                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
+                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在您編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
         if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）

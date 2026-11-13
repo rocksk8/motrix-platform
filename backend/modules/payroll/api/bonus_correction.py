@@ -39,7 +39,7 @@ def _row(conn, corr_no):
 def _paid_award(conn, quote_no):
     award, _lines = bonus_api._load_case_award(conn, quote_no)
     if award is None:
-        raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+        raise HTTPException(404, "這個案件尚無獎金分潤單。")
     if award["status"] != "已發放":
         raise HTTPException(409, "只有「已發放」的獎金分潤可以開更正單（這一張現在是「%s」；發放前請用退回）。" % award["status"])
     return award
@@ -118,7 +118,7 @@ def current_amounts(quote_no: str, authorization: str = Header(None)):
     try:
         award, _lines = bonus_api._load_case_award(conn, quote_no)
         if award is None:
-            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+            raise HTTPException(404, "這個案件尚無獎金分潤單。")
         open_row = conn.execute("SELECT corr_no, status FROM bonus_corrections WHERE award_id = ? AND status IN"
                                 " ('草稿','待審核','待補發')", (award["id"],)).fetchone()
         cur = bc.effective_amounts(conn, award["id"])

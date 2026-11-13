@@ -378,7 +378,7 @@ def completion_quote_items(quote_no: str, exclude_note: str = "", authorization:
         if not q["is_signed"]:
             warnings.append(_DT.label_of_no(quote_no) + "尚未回簽，項目可能再變")
         if unselected:
-            warnings.append("尚有 %d 組方案客戶還沒選定，該組品項沒有帶入" % len(unselected))
+            warnings.append("尚有 %d 組方案客戶尚未選定，該組品項沒有帶入" % len(unselected))
         return {
             "header": {
                 "customerName": q["customer_name"] or data.get("customerName") or "",
