@@ -153,10 +153,11 @@ def test_failure_does_not_mark_and_never_raises_then_retries(fresh, monkeypatch)
     def boom(*a, **k):
         raise RuntimeError("publish failed")
 
+    real_publish = SR.publish
     monkeypatch.setattr(SR, "publish", boom)
     _run()                                             # 不丟例外
     assert _mark() is None and _effective() == 0
-    monkeypatch.undo()
+    monkeypatch.setattr(SR, "publish", real_publish)   # 只還原這一個；不用 monkeypatch.undo()——client 夾具用同一個 monkeypatch 換了 db.DB_PATH 等，undo 會把它們一起還原
     _run()                                             # 下次啟動再試成功
     assert _effective() == 1 and _mark()["result"] == "tightened"
 
