@@ -30,7 +30,7 @@ PROVIDERS = [
     {
         "key": "microsoft365", "label": "Microsoft 365／Outlook（公司信箱）", "host": "smtp.office365.com", "port": 587,
         "passwordLabel": "信箱密碼或應用程式密碼",
-        "passwordHelp": "多數公司的 Microsoft 365 已關閉這種寄信方式。如果下一步失敗，系統會產生一張「設定單」，請交給您們的資訊廠商處理。",
+        "passwordHelp": "多數公司的 Microsoft 365 已關閉這種寄信方式。如果下一步失敗，系統會產生一張「設定單」，請交給貴公司的資訊廠商處理。",
         "helpUrl": "", "helpLabel": "",
         "userHint": "例：name@公司網域.com", "note": "Microsoft 365 預設常關閉「已驗證的 SMTP 寄信」，不是貼密碼就能解決。",
     },

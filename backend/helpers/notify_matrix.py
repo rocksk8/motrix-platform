@@ -37,7 +37,7 @@ EVENT_LINKS = {
 MAIL_OFF_LOCKED = {
     "backup_error": "備份失敗沒有通知時，發生故障可能遺失資料",
     "backup_stale": "備份停擺沒有通知時，發生故障可能遺失資料",
-    "heartbeat_stale": "心跳監控故障、沒有通知時，伺服器異常或斷電可能沒有人被通知",
+    "heartbeat_stale": "心跳監控故障、沒有通知時，伺服器停止運作或斷電可能沒有人被通知",
     "disk_space_low": "磁碟空間不足沒有通知時，備份與上傳會失敗",
     "line_quota_warning": "額度告警被關掉時，LINE 額度用完後通知會靜默停止送達",
     "cert_expiry": "憑證到期沒有通知時，使用者開啟系統會出現瀏覽器安全性警告",
