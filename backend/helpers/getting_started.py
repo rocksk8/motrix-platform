@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """「開始使用」7 步清單（選單去工程師化 批次「開始使用清單面板」，2026-11-13）：只讀偵測＋伺服器端進度。
 
+（依據：docs/platform/plans/SYSTEM-MENU-UX-PROPOSAL.md 第六節——7 步：公司資料／報價單樣式／人員與簽核／寄信／備份／LINE／匯入資料；
+    每步固定三件事：約幾分鐘、要準備什麼、做完怎麼確認；可中途離開，進度存伺服器端（公司層），換電腦、換人都能接著做；每步可略過、可回來。）
+
 [單位] helper:getting_started    [層] L1    [穩定度] 實驗
-[公開介面] STEPS, STEP_IDS, STATE_KEY, MANUAL_DONE_IDS, overview, set_step
-[規格] docs/platform/plans/SYSTEM-MENU-UX-PROPOSAL.md 第六節：7 步（公司資料／報價單樣式／人員與簽核／寄信／備份／LINE／匯入資料）；
-    每步固定三件事：約幾分鐘、要準備什麼、做完怎麼確認；可中途離開，進度存伺服器端（公司層），換電腦、換人都能接著做；每步可略過、可回來。
+[公開介面] STEPS, STEP_IDS, STATE_KEY, MANUAL_DONE_IDS, BACKUP_HREF, BACKUP_OK_ACTIONS, EMAIL_TEST_ACTION, overview, set_step
+[契約題] tests/test_getting_started_2026_11_13.py
 [不變式]
     ①**完成狀態盡量自動偵測**，偵測只讀（不寫庫、不寫檔、不寄信、不連外）：公司資料＝`company_setup.status`；人員與簽核＝`org_gaps.check` 全綠（且已有一般同仁）；
       寄信＝稽核紀錄有「寄測試信成功」（`settings.email_notify.test` 只在寄成功後才寫）；備份＝稽核紀錄有「備份到別的地方」成功（雲端／備份資料夾的每日、每週、每月；只有本機快照不算）；
