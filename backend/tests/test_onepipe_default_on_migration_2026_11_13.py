@@ -123,7 +123,7 @@ def test_running_again_changes_nothing(fresh):
 def test_a_flag_the_user_turned_off_after_the_migration_is_kept(fresh):
     _store()
     _run()
-    _store(**{f: 1 for f in _fields()}, links=0)       # 使用者之後在設定中心把「快速入口」關掉
+    _store(**dict({f: 1 for f in _fields()}, links=0))       # 使用者之後在設定中心把「快速入口」關掉
     assert _effective()["links"] == 0
     audits = len(_audits())
     _run()                                             # 再升級／再啟動
@@ -157,10 +157,10 @@ def test_failure_does_not_mark_and_never_raises_then_retries(fresh, monkeypatch)
     def boom(*a, **k):
         raise RuntimeError("publish failed")
 
-    monkeypatch.setattr(SR, "publish", boom)
-    _run()                                             # 不丟例外
+    with monkeypatch.context() as m:                   # 不用 monkeypatch.undo()：它會連 client 夾具的環境設定一起還原（資料庫路徑跟著跑掉）
+        m.setattr(SR, "publish", boom)
+        _run()                                         # 不丟例外
     assert _mark() is None and set(_effective().values()) == {0}
-    monkeypatch.undo()
     _run()                                             # 下次啟動再試成功
     assert set(_effective().values()) == {1} and _mark()["result"] == "enabled"
 

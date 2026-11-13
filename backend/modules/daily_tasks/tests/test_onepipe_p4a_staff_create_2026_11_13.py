@@ -96,8 +96,8 @@ def test_flag_on_staff_creates_a_case_task_assigned_to_self_only(client, world, 
     assert row["created_by"] == "p4a_eng" and row["case_no"] == NO and row["recurrence_type"] == "once"
     assert json.loads(row["assigned_to"]) == ["p4a_eng"] and json.loads(row["supervisors"]) == []
     # 稽核記得出是現場自建
-    audit = _rows("SELECT detail FROM audit_log WHERE action='daily_task.create'")
-    assert audit and "現場自建" in audit[-1]["detail"] and NO in audit[-1]["detail"], audit
+    audit = _rows("SELECT target_label FROM audit_log WHERE action='daily_task.create'")
+    assert audit and "現場自建" in audit[-1]["target_label"] and NO in audit[-1]["target_label"], audit
     # 本人看得到
     mine = client.get("/api/daily-tasks?year_month=2026-11", headers=world["eng"]).json()["items"]
     assert [i["id"] for i in mine] == [r.json()["id"]]
