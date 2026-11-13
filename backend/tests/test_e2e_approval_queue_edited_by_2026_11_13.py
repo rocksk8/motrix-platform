@@ -38,14 +38,18 @@ def _open(page, live_server, items):
 
 
 def _select(page, no):
-    # 詳情是蓋在列表上的抽屜（有遮罩）：已經開著一張時，先照使用者的做法按 Esc 關掉，才點得到列表上的下一張
-    if page.locator(".aq-drawer-mask").is_visible():
+    # 詳情是蓋在列表上的抽屜（有遮罩）：已經開著一張時，先照使用者的做法按 Esc 關掉，才點得到列表上的下一張。
+    # 判斷「開著沒」看 Alpine 的狀態、不看遮罩在畫面上的樣子：Alpine 先改狀態、下一個微任務才改 DOM，
+    # 剛點完一張就馬上用 is_visible() 看遮罩，會在那一個影格裡看到「還沒顯示」而漏按 Esc，接著遮罩出現、攔下下一次點擊（背景負載高時更常發生，單跑也會）。
+    if page.evaluate("() => Alpine.$data(document.body).drawerOpen"):
         page.keyboard.press("Escape")
+        page.wait_for_function("() => !Alpine.$data(document.body).drawerOpen", timeout=5000)
         page.locator(".aq-drawer-mask").wait_for(state="hidden", timeout=5000)
     page.locator(f'[data-testid="aq-item-{no}"]').first.click()
-    # 點完不要馬上讀 UI：先等 Alpine 把 selected 換成這一張
+    # 點完不要馬上讀 UI：先等 Alpine 把 selected 換成這一張，再等抽屜與遮罩真的顯示出來（下一次 _select 的前提）
     page.wait_for_function("(no) => { const d = Alpine.$data(document.body); return d.selected && d.selected.quoteNo === no }",
                            arg=no, timeout=10000)
+    page.locator(".aq-drawer-mask").wait_for(state="visible", timeout=5000)
 
 
 @pytest.mark.e2e
