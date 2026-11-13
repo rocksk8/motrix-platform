@@ -327,3 +327,38 @@ def test_dev_case_link_not_found_sentences_follow_the_number():
     from helpers import doc_type as D
     assert f"{D.label_of_no('ME-209912-1')} ME-209912-1 不存在，無法連結" == "估價單 ME-209912-1 不存在，無法連結"
     assert f"{D.label_of_no('MQ-209912-1')} MQ-209912-1 不存在，無法連結" == "報價單 MQ-209912-1 不存在，無法連結"
+
+
+# ── PDF 本文四處固有用語（T83 fix/estimate-pdf-labels-t83）─────────────────────
+
+_PDF_BASE = {"quoteNo": "XX-202611-001", "customerName": "客", "projectName": "案", "items": [], "quoteDate": "2026-11-13",
+             "tot": {"total": 0, "pretax": 0}, "paymentTerms": "月結30天"}
+#: 報價單 → 估價單 的四處固有用語（單號／日期／合計／條件）
+_PDF_FOUR = (("報價編號：", "估價單號："), ("報價日期：", "估價日期："), ("四、報價合計", "四、估價合計"), ("五、報價條件", "五、估價條件"))
+
+
+def _pdf_html(**kw):
+    import pdf_gen
+    return pdf_gen._build_quote_html(dict(_PDF_BASE, **kw), _PDF_BASE["tot"])
+
+
+def test_estimate_pdf_has_the_four_estimate_labels():
+    est = _pdf_html(docType="estimate")
+    for old, new in _PDF_FOUR:
+        assert new in est and old not in est, (old, new)
+
+
+def test_quote_pdf_keeps_the_four_quote_labels():
+    quo = _pdf_html()
+    for old, new in _PDF_FOUR:
+        assert old in quo and new not in quo, (old, new)
+    assert _pdf_html(docType="quote") == quo                  # 明寫 quote 與沒帶 docType 逐位元相同
+
+
+def test_estimate_pdf_differs_from_quote_pdf_only_in_those_places():
+    """估價單 HTML 把四處新用語與標題換回報價單 ⇒ 必須與報價單 HTML 逐位元相同（沒有多動別的地方）。"""
+    est = _pdf_html(docType="estimate")
+    for old, new in _PDF_FOUR:
+        est = est.replace(new, old)
+    est = est.replace("估　價　單", "報　價　單").replace("估價單", "報價單")
+    assert est == _pdf_html()

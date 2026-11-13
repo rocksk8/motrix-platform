@@ -300,6 +300,9 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     if _dlabel != '報價單':
         watermark_text = (watermark_text or '').replace('報價單', _dlabel)
         notice_text = (notice_text or '').replace('報價單', _dlabel)
+    # 估價單：單號／日期／合計／條件四處的固有用語跟著類型走（報價單 ⇒ 「報價編號」「報價日期」「四、報價合計」「五、報價條件」，輸出逐位元不變）
+    _dpre = _dlabel[:-1]                                              # 報價／估價
+    _dno = '報價編號' if _dlabel == '報價單' else _dlabel + '號'          # 報價編號／估價單號
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -407,7 +410,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True, key='acceptanceTerms')
 
     terms_section = (
-        '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'
+        f'<div class="terms"><div class="section-label" style="margin-bottom:8px">五、{_dpre}條件</div>'
         f'<div class="terms-grid">{terms_html}</div></div>'
     ) if terms_html.strip() else ''
 
@@ -524,8 +527,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  </div>\n'
         '</div>\n'
         '<div class="meta">\n'
-        f'  <div><span>報價編號：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
-        f'  <div><span>報價日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
+        f'  <div><span>{_dno}：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
+        f'  <div><span>{_dpre}日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
         f'  <div><span>有效期限：</span>{esc(str(q.get("validDays",30)))} 日內</div>\n'
         f'  <div><span>報　價　人：</span>{esc(q.get("salesPerson",""))}</div>\n'
         f'  <div><span>電　　　話：</span>{esc(q.get("salesPhone",""))}</div>\n'
@@ -568,7 +571,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + f'  <tbody>{item_rows}</tbody>\n'
         '</table>\n'
         '<div class="totals-group">\n'
-        '<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、報價合計</div>\n'
+        f'<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、{_dpre}合計</div>\n'
         '<div class="totals">\n'
         f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
         f'  {freight_row}\n'
