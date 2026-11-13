@@ -3,6 +3,9 @@
 ## (next) — 一條龍 P0a（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`，預設關＝與今天逐位元相同）；已併 T82 凍結 head f66dfd9ef
 - `warranty.html`：旗標開時案號可點進該案件頁（`case-management.html?q=<案號>`）；旗標關時照舊為純文字。不改 API、資料、權限。
 
+## 1.0.51 — 2026-11-13（perf/bootstrap-bundle-20261113；外網載入效能第二階段）
+- 新增 `GET /api/dashboard/bundle`（`?department_id=&activity_limit=`）：把首頁儀表板的六支（stats／monthly／expenses-monthly／funnel／ops-alerts／activity-feed）合成一支，每個區段**直接呼叫原端點的處理函式**（權限檢查與遮蔽同一份、不比原端點多給任何資料）；某段被拒／出錯 ⇒ 該段 null＋`errors`。回 `Cache-Control: no-store`。守門：`tests/test_bootstrap_bundle_2026_11_13.py`（逐區段、逐角色比對）。無 migration、無設定變動。
+
 ## 1.0.50 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 

@@ -1455,7 +1455,7 @@
       //  ⚠️ 這一頁不是設定頁，**不應該因為讀不到一個選填清單而壞掉**。
       async loadLocations() {
         try {
-          const r = await fetch(`${API}/api/settings/company-profile`, {      // 原本少了 /api ⇒ 404，據點永遠讀不到（UX 提案 D2）
+          const r = await fetch(`${API}/api/settings/company-profile/public`, {
             headers: { Authorization: 'Bearer ' + this.session.token } })
           if (!r.ok) return
           const d = await r.json()

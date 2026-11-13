@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## 1.2.30 — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
+- 變更（內部，不影響對外介面）：勞報單表單（`payslip-form.html`）預填公司名稱／統編／聯絡方式改打 `GET /api/settings/company-profile/public`；預填內容不變。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
+
 ## 1.2.29 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 

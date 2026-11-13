@@ -233,12 +233,12 @@ EVENT_TYPES = (
     ("invoice_voucher",    "開票申請憑據已核准",     "金額單據", "開票申請憑據簽核核准當天建立整天事件", True),
     ("payment_request",    "請款單已核准",           "金額單據", "請款單簽核核准當天建立整天事件", True),
     ("shipping_note",      "出貨單已核准",           "金額單據", "出貨單簽核核准後，以出貨日期建立整天事件", True),
-    ("quotation_won",      "報價單成案",             "案件",     "報價單標記為「已成案」當天建立整天事件", True),
+    ("quotation_won",      "報價單／估價單成案",     "案件",     "報價單／估價單標記為「已成案」當天建立整天事件", True),
     ("stage_due",          "案件階段到期日",         "案件",     "執行進度階段設定到期日時建立（改日期同步更新、清空到期日刪除）", True),
     ("stage_done",         "案件階段完成日",         "案件",     "執行進度階段勾選完成時以完成日建立（取消勾選刪除）", True),
     ("important_comment",  "案件重要留言",           "案件",     "案件留言板標記為重要的留言", True),
     ("case_update",        "案件更新",               "案件",     "案件留言板新增留言（重要留言除外）；同一案件同一天合併為一個「○○案件更新」事件", False),
-    ("dev_case_converted", "業務開發案件轉建報價單", "業務開發", "業務開發案件轉建為報價單當天建立", True),
+    ("dev_case_converted", "業務開發案件轉建報價單／估價單", "業務開發", "業務開發案件轉建為報價單／估價單當天建立", True),
     ("dev_case_stale",     "業務開發案件停滯提醒",   "業務開發", "洽談中超過 30 天未更新（每個停滯週期只建一次）", True),
     ("dev_case_update",    "業務開發案件更新",       "業務開發", "新增開發（拜訪）紀錄；同一案件同一天合併為一個「○○案件更新」事件", False),
     ("contractor_payout",  "包商撥款",               "付款",     "承攬商匯款申請標記已匯款時，以匯款日期建立", False),
@@ -566,9 +566,12 @@ def push_event_for_quotation_won(quote_no: str) -> None:
         total = row["total"] or 0
         # 2026-09-11：標題補上**案件名稱**。使用者要的是在行事曆上一眼看出「哪個案子
         # 怎麼了」，原本只有單號＋客戶，案件名稱藏在 description 裡，月檢視根本看不到。
+        from helpers import doc_type as _DT          # 估價單：行事曆事件的用語隨單據類型（報價單 ⇒ 字串逐位元不變）
+        _dt_no = _DT.doc_type_of_no(quote_no)
         event_id = _create_event_with_retry(
-            f"報價單成案 — {pname or quote_no}（{cname}｜{quote_no}）",
-            f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}",
+            # 先換範本字樣、再填值：客戶／案件名稱裡自己寫的「報價單」不可被改寫
+            _DT.relabel("報價單成案 — {p}（{c}｜{n}）", _dt_no).format(p=pname or quote_no, c=cname, n=quote_no),
+            _DT.relabel("報價單 {n} 已標記為「已成案」。\n客戶：{c}\n案件名稱：{p}\n金額（含稅）：NT$ {t:,.0f}", _dt_no).format(n=quote_no, c=cname, p=pname, t=total),
             date.today(),
         )
         # 2026-09-25 lost update（C 組）：建事件是網路請求（最慢的一段），期間別人可能已存了這張單
@@ -597,9 +600,12 @@ def push_event_for_dev_case_converted(case_id: int) -> None:
             conn.close()
             return
         cname = row["customer_name"] or ""
+        from helpers import doc_type as _DT   # 估價單：模板先換字、再填值（案名／客戶名是使用者輸入，不能被換字）
+        _dt = _DT.doc_type_of_no(row["converted_quote_no"])
         event_id = _create_event_with_retry(
-            f"業務開發案件轉建報價單 — {row['case_name']}（{cname}）",
-            f"業務開發案件「{row['case_name']}」已轉建為報價單。\n客戶：{cname}\n報價單號：{row['converted_quote_no']}",
+            _DT.relabel("業務開發案件轉建報價單 — {case}（{cname}）", _dt).format(case=row["case_name"], cname=cname),
+            _DT.relabel("業務開發案件「{case}」已轉建為報價單。\n客戶：{cname}\n報價單號：{no}", _dt).format(
+                case=row["case_name"], cname=cname, no=row["converted_quote_no"]),
             date.today(),
         )
         conn.close()

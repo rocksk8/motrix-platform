@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from helpers import recycle_bin as RB
+from helpers import doc_type as _DT          # 估價單：訊息／標籤依單號字首顯示「報價單」或「估價單」
 from helpers.uploads import canonical_upload_path
 
 #: 資源回收筒模組不在時，刪除端點的明說（IP-RB2「對方不在時」）：照舊硬刪、附件不留
@@ -126,7 +127,7 @@ def _quote_exists(conn, quote_no) -> bool:
 
 def _need_parent(conn, quote_no) -> None:
     if quote_no and not _quote_exists(conn, quote_no):
-        raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在資源回收筒）：請先還原報價單" % quote_no)
+        raise RB.BinError("parent_missing: %s %s 不在了（可能也在資源回收筒）：請先還原%s" % (_DT.label_of_no(quote_no), quote_no, _DT.label_of_no(quote_no)))
 
 
 # ── 額外支出（請購單／採購單／費用單據同一張表）─────────────────────────────────────
@@ -294,7 +295,7 @@ _DEPENDENT_WHERE = {"stock_items": " AND status='shipped'"}
 
 class QuotationAdapter(RB.Adapter):
     entity_type = "quotation"
-    label = "報價單／案件"
+    label = "報價單／估價單／案件"
 
     def _row(self, conn, entity_id):
         return conn.execute("SELECT * FROM quotations WHERE quote_no=?", (str(entity_id),)).fetchone()
@@ -302,8 +303,8 @@ class QuotationAdapter(RB.Adapter):
     def can_delete(self, conn, entity_id, user) -> Tuple[bool, str]:
         r = self._row(conn, entity_id)
         if r is None:
-            return False, "報價單 %s 不存在" % entity_id
-        return (True, "") if r["status"] == "草稿" else (False, "只有草稿狀態的報價單可以刪除（目前狀態：%s）" % r["status"])
+            return False, "%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id)
+        return (True, "") if r["status"] == "草稿" else (False, "只有草稿狀態的%s可以刪除（目前狀態：%s）" % (_DT.label_of_no(entity_id), r["status"]))
 
     def _dependents(self, conn, quote_no) -> List[Tuple[str, int]]:
         out = []
@@ -319,7 +320,7 @@ class QuotationAdapter(RB.Adapter):
     def can_delete_approved(self, conn, entity_id, user) -> Tuple[bool, str]:
         r = self._row(conn, entity_id)
         if r is None:
-            return False, "報價單 %s 不存在" % entity_id
+            return False, "%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id)
         dep = self._dependents(conn, str(entity_id))
         if dep:
             return False, "這個案件底下還有其他單據，不連帶刪除（請先逐張處理）：" + "、".join("%s %d 張" % d for d in dep)
@@ -345,7 +346,7 @@ class QuotationAdapter(RB.Adapter):
     def snapshot(self, conn, entity_id) -> dict:
         r = self._row(conn, entity_id)
         if r is None:
-            raise RB.BinError("報價單 %s 不存在" % entity_id)
+            raise RB.BinError("%s %s 不存在" % (_DT.label_of_no(entity_id), entity_id))
         qn = str(entity_id)
         row = dict(r)
         rows = {"quotations": [row]}
@@ -366,7 +367,7 @@ class QuotationAdapter(RB.Adapter):
             if p not in seen:
                 seen.add(p)
                 files.append(p)
-        return {"rows": rows, "files": _files(files), "label": "報價單 %s（%s）" % (qn, row.get("customer_name") or ""), "parent": None,
+        return {"rows": rows, "files": _files(files), "label": "%s %s（%s）" % (_DT.label_of_no(qn), qn, row.get("customer_name") or ""), "parent": None,
                 "meta": {"status": row.get("status") or "", "crm_unlink": "業務開發案件的轉建連結不會自動恢復"}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
@@ -388,7 +389,7 @@ class QuotationAdapter(RB.Adapter):
         q = rows["quotations"][0]
         qn = q["quote_no"]
         if self._row(conn, qn) is not None:
-            raise RB.BinError("conflict: 報價單號 %s 已被占用（請先處理現有那張）" % qn)
+            raise RB.BinError("conflict: %s號 %s 已被占用（請先處理現有那張）" % (_DT.label_of_no(qn), qn))
         _insert(conn, "quotations", _remap_json_cols(q, ctx, "signed_files_json", "data_json"), drop_id=_id_taken(conn, "quotations", q))
         idmap = {}
         for s in rows.get("case_stages", []):
@@ -514,14 +515,14 @@ class MaterialOrderAdapter(RB.Adapter):
         qn, iid = meta.get("quote_no", ""), str(meta.get("item_id", ""))
         r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qn,)).fetchone()
         if r is None:
-            raise RB.BinError("parent_missing: 報價單 %s 不在了（可能也在資源回收筒）：請先還原報價單" % qn)
+            raise RB.BinError("parent_missing: %s %s 不在了（可能也在資源回收筒）：請先還原%s" % (_DT.label_of_no(qn), qn, _DT.label_of_no(qn)))
         data = _jload(r["data_json"], {})
         cr = data.setdefault("caseRecord", {}) if isinstance(data.get("caseRecord", {}), dict) else None
         if cr is None:
-            raise RB.BinError("conflict: 這張報價單的案件資料格式不對，無法放回材料申請")
+            raise RB.BinError("conflict: 這張%s的案件資料格式不對，無法放回材料申請" % _DT.label_of_no(qn))
         orders = cr.setdefault("materialOrders", [])
         if any(isinstance(o, dict) and str(o.get("itemId")) == iid for o in orders):
-            raise RB.BinError("conflict: 材料申請編號 %s 已存在於這張報價單" % iid)
+            raise RB.BinError("conflict: 材料申請編號 %s 已存在於這張%s" % (iid, _DT.label_of_no(qn)))
         a_rows = (snap.get("rows") or {}).get("case_material_approvals") or []
         for a in a_rows:
             if self._approval(conn, qn, iid) is not None:

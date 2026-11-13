@@ -1,0 +1,598 @@
+{
+ "version": 1,
+ "note": "共用分類資料檔（系統總覽與設定中心都從這裡讀；公司可覆寫名稱與順序，覆寫存在 system_settings.menu_categories_override）。item key 格式：settings_group:<群組 key>、page:<html 檔名>、card:<卡片代碼>。守門：每個項目恰好屬於一個分類。",
+ "categories": [
+  {
+   "key": "start",
+   "name": "開始使用",
+   "tier": 1,
+   "order": 10,
+   "blurb": "第一次用系統，照順序把必要的設定做完。",
+   "when": "剛安裝或剛交給你的第一週。"
+  },
+  {
+   "key": "company",
+   "name": "公司與基本規則",
+   "tier": 1,
+   "order": 20,
+   "blurb": "公司資料、稅率、利潤與管銷這類全公司共用的基本數字。",
+   "when": "新公司上線、年度更換法規參數、調整利潤口徑時。"
+  },
+  {
+   "key": "people",
+   "name": "人員與權限",
+   "tier": 1,
+   "order": 30,
+   "blurb": "誰能登入、誰能看什麼、改設定要不要等幾天。",
+   "when": "有人到職離職、想調整誰能看哪些功能、想把登入規則調嚴時。"
+  },
+  {
+   "key": "flow",
+   "name": "單據與流程",
+   "tier": 1,
+   "order": 40,
+   "blurb": "報價、簽核、完工、材料、請款與結案的規則。",
+   "when": "想改單據怎麼送審、怎麼結案、財務報表怎麼分組時。"
+  },
+  {
+   "key": "numbering",
+   "name": "單據與編號",
+   "tier": 1,
+   "order": 50,
+   "blurb": "下載檔名與單號怎麼顯示。",
+   "when": "想讓下載的文件檔名更好找、或換成公司慣用說法時。"
+  },
+  {
+   "key": "notify",
+   "name": "通知與提醒",
+   "tier": 1,
+   "order": 60,
+   "blurb": "誰會收到什麼通知，以及各種到期提醒的提前天數。",
+   "when": "覺得通知太多、太少，或提醒來得太早太晚時。"
+  },
+  {
+   "key": "data",
+   "name": "資料安全與備份",
+   "tier": 1,
+   "order": 70,
+   "blurb": "備份保留多久、資源回收筒放多久、上傳檔案的大小上限。",
+   "when": "硬碟快滿了、想延長備份保存、或想調整上傳限制時。"
+  },
+  {
+   "key": "records",
+   "name": "紀錄與查詢",
+   "tier": 1,
+   "order": 80,
+   "blurb": "操作紀錄、使用狀況與檔案中心。",
+   "when": "要查『誰改了什麼』或看使用狀況時。"
+  },
+  {
+   "key": "custom",
+   "name": "畫面與客製",
+   "tier": 1,
+   "order": 90,
+   "blurb": "畫面用語、清單偏好，以及要不要開放各種自訂功能給管理者。",
+   "when": "想改畫面上的名稱、或讓管理者自己加欄位、按鈕、新模組時。"
+  },
+  {
+   "key": "advanced",
+   "name": "進階（開發商）",
+   "tier": 3,
+   "order": 100,
+   "blurb": "資料庫版本、版本紀錄、模組啟停與修復工具；一般使用者不需要碰。",
+   "when": "只有開發商或系統維運人員在處理問題時才會用到。"
+  }
+ ],
+ "items": {
+  "settings_group:quote_defaults": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "新增報價單時預先帶入的預設值。",
+   "when": "想讓新報價單一開始就用公司慣用的有效天數時。",
+   "status": "keep",
+   "note": "",
+   "order": 10
+  },
+  "settings_group:project_margin": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "報價單專案毛利太低時，要不要提醒業務。",
+   "when": "想設定毛利低於幾 % 就在報價單上亮警示時。",
+   "status": "keep",
+   "note": "與「規則（標示型）」的毛利提醒是同一件事：規則發布後以規則為準。",
+   "order": 20
+  },
+  "settings_group:overhead": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "新報價單的管銷分攤預設比率。",
+   "when": "公司的管銷成本比例改變時。",
+   "status": "keep",
+   "note": "",
+   "order": 30
+  },
+  "settings_group:profit_rules": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "公益捐款要扣報價的幾 %。",
+   "when": "公司的公益捐款政策改變時。",
+   "status": "keep",
+   "note": "",
+   "order": 40
+  },
+  "settings_group:profit_warning": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "各畫面的利潤顏色門檻（紅、黃、綠）。",
+   "when": "覺得畫面上的利潤顏色不符合公司的目標時。",
+   "status": "keep",
+   "note": "",
+   "order": 50
+  },
+  "settings_group:legal_params_reminder": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "每年幾月幾日起，提醒你設定下一年度的法規參數。",
+   "when": "想提早或延後年度法規參數的提醒時。",
+   "status": "keep",
+   "note": "",
+   "order": 60
+  },
+  "settings_group:account_security": {
+   "category": "people",
+   "section": "登入安全",
+   "tier": 1,
+   "blurb": "密碼最短長度與登入有效天數。",
+   "when": "想把密碼規則或登入期限調得更嚴時。",
+   "status": "keep",
+   "note": "",
+   "order": 70
+  },
+  "settings_group:system_hub": {
+   "category": "people",
+   "section": "誰看得到什麼",
+   "tier": 1,
+   "blurb": "系統中心要不要列出『你沒有權限』的項目。",
+   "when": "想讓同事看得到（灰色）或看不到沒有權限的功能時。",
+   "status": "keep",
+   "note": "",
+   "order": 80
+  },
+  "settings_group:change_control": {
+   "category": "people",
+   "section": "改設定的管制",
+   "tier": 2,
+   "blurb": "高風險設定變更要等幾天才生效。",
+   "when": "想調整重要設定的緩衝期時。",
+   "status": "keep",
+   "note": "",
+   "order": 90
+  },
+  "settings_group:quote_alt": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 2,
+   "blurb": "報價單「擇一方案」的文字、上限與客戶回簽後的規則。",
+   "when": "公司報價常有多個方案讓客戶選一個時。",
+   "status": "keep",
+   "note": "",
+   "order": 100
+  },
+  "settings_group:quote_approval": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 1,
+   "blurb": "報價單在什麼情況下需要送審（毛利、有效天數、折讓）。",
+   "when": "想調整報價單的送審門檻時。",
+   "status": "keep",
+   "note": "",
+   "order": 110
+  },
+  "settings_group:quote_output": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 1,
+   "blurb": "被隱藏的報價條件，PDF 還要不要印出來。",
+   "when": "想控制客戶看到的報價單內容時。",
+   "status": "keep",
+   "note": "",
+   "order": 120
+  },
+  "settings_group:quote_privacy": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 1,
+   "blurb": "客戶電子郵件與傳真能不能被隱藏。",
+   "when": "個資規範要求某些欄位不顯示時。",
+   "status": "keep",
+   "note": "",
+   "order": 130
+  },
+  "settings_group:quote_backfill": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 2,
+   "blurb": "補登過去月份已成案報價單的開關。",
+   "when": "要把系統上線前的舊案件補進來時（補完請關閉）。",
+   "status": "keep",
+   "note": "一次性維運：平常保持關閉。",
+   "order": 140
+  },
+  "settings_group:completion_note": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 1,
+   "blurb": "完工單從報價單帶入項目時的預設行為。",
+   "when": "覺得開完工單時要改很多東西時。",
+   "status": "keep",
+   "note": "",
+   "order": 150
+  },
+  "settings_group:material_order": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 1,
+   "blurb": "新增材料申請時要不要一定選供應商。",
+   "when": "想讓材料申請更嚴格或更彈性時。",
+   "status": "keep",
+   "note": "",
+   "order": 160
+  },
+  "settings_group:material_recognition": {
+   "category": "flow",
+   "section": "報價單",
+   "tier": 2,
+   "blurb": "誰能把核准的採購單認列到材料卡片，以及被拒時的通知。",
+   "when": "想放寬或收緊認列採購單的權限時。",
+   "status": "keep",
+   "note": "",
+   "order": 170
+  },
+  "settings_group:finance_reports": {
+   "category": "flow",
+   "section": "財務與結案",
+   "tier": 1,
+   "blurb": "應收帳齡怎麼分組、已結案未精算多久後提醒。",
+   "when": "覺得帳齡報表的分組不符合收款習慣時。",
+   "status": "keep",
+   "note": "",
+   "order": 180
+  },
+  "settings_group:finance_cashier": {
+   "category": "flow",
+   "section": "財務與結案",
+   "tier": 1,
+   "blurb": "出納頁的到期提示天數與銀行對帳單欄位名稱。",
+   "when": "出納頁提示太早太晚，或匯入銀行對帳單找不到欄位時。",
+   "status": "keep",
+   "note": "",
+   "order": 190
+  },
+  "settings_group:case_close_gates": {
+   "category": "flow",
+   "section": "財務與結案",
+   "tier": 1,
+   "blurb": "案件結案前要多檢查哪些條件。",
+   "when": "想讓案件結案前更嚴格把關時。",
+   "status": "keep",
+   "note": "",
+   "order": 200
+  },
+  "settings_group:download_name": {
+   "category": "numbering",
+   "section": "",
+   "tier": 1,
+   "blurb": "下載文件的檔名怎麼組成、文件類型叫什麼。",
+   "when": "想讓下載的檔案更好找，或不想在檔名露出案件名稱時。",
+   "status": "keep",
+   "note": "",
+   "order": 210
+  },
+  "settings_group:alerts": {
+   "category": "notify",
+   "section": "",
+   "tier": 1,
+   "blurb": "保固、確認檔等「快到期了」提醒的提前天數。",
+   "when": "覺得到期提醒太早或太晚時。",
+   "status": "keep",
+   "note": "",
+   "order": 220
+  },
+  "settings_group:retention": {
+   "category": "data",
+   "section": "備份與紀錄保存",
+   "tier": 2,
+   "blurb": "備份、稽核紀錄、通知與操作軌跡要保存多久。",
+   "when": "硬碟快滿了，或想延長法遵需要的保存期限時。",
+   "status": "keep",
+   "note": "內含備份與紀錄保存兩類欄位；之後可拆成兩組。",
+   "order": 230
+  },
+  "settings_group:recycle_bin": {
+   "category": "data",
+   "section": "備份與紀錄保存",
+   "tier": 1,
+   "blurb": "被刪除的單據在資源回收筒放幾天。",
+   "when": "想讓誤刪的單據有更長的後悔時間時。",
+   "status": "keep",
+   "note": "",
+   "order": 240
+  },
+  "settings_group:uploads": {
+   "category": "data",
+   "section": "上傳限制",
+   "tier": 1,
+   "blurb": "上傳檔案的大小與數量上限。",
+   "when": "常有檔案因為太大傳不上去，或想節省硬碟時。",
+   "status": "keep",
+   "note": "",
+   "order": 250
+  },
+  "settings_group:ui_format": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "畫面上數字與日期的顯示方式。",
+   "when": "想要千分位、小數位或不同日期寫法時。",
+   "status": "keep",
+   "note": "",
+   "order": 260
+  },
+  "settings_group:list_view": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "報價單與案件清單的個人偏好（欄位、預設頁籤、每頁筆數）。",
+   "when": "想讓每個人自己調整清單怎麼看時。",
+   "status": "keep",
+   "note": "需先開啟「清單個人偏好」總開關。",
+   "order": 270
+  },
+  "settings_group:netplan_labels": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "網路規劃書三個狀態的顯示名稱。",
+   "when": "想把狀態改成公司慣用的說法時。",
+   "status": "keep",
+   "note": "",
+   "order": 280
+  },
+  "settings_group:procurement_labels": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "採購建議三個狀態的顯示名稱。",
+   "when": "想把狀態改成公司慣用的說法時。",
+   "status": "keep",
+   "note": "",
+   "order": 290
+  },
+  "settings_group:lodging_labels": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "住宿紀錄的計價單位與詢價管道名稱。",
+   "when": "想把名稱改成公司慣用的說法時。",
+   "status": "keep",
+   "note": "",
+   "order": 300
+  },
+  "settings_group:payslip_dispatch_picker": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "勞報單「選派發」下拉一次載入幾筆。",
+   "when": "選派發的清單載入太慢或太短時。",
+   "status": "keep",
+   "note": "",
+   "order": 310
+  },
+  "settings_group:lodging_freshness": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "附近旅宿資料多久沒更新就提示過舊。",
+   "when": "想更早或更晚被提醒旅宿資料過舊時。",
+   "status": "keep",
+   "note": "",
+   "order": 320
+  },
+  "settings_group:tender_closing": {
+   "category": "custom",
+   "section": "畫面與用語",
+   "tier": 1,
+   "blurb": "地圖上標案幾天內截止要標成「即將截止」。",
+   "when": "想調整標案截止的提醒範圍時。",
+   "status": "keep",
+   "note": "",
+   "order": 330
+  },
+  "settings_group:builder_status_display": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者自訂狀態在畫面上的名稱與顏色。",
+   "when": "想把「待審核」之類的狀態改成公司慣用說法時。",
+   "status": "keep",
+   "note": "",
+   "order": 340
+  },
+  "settings_group:builder_layout": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者自訂各個頁面的欄位顯示、順序與名稱。",
+   "when": "不同部門想看不同欄位、或想隱藏用不到的欄位時。",
+   "status": "keep",
+   "note": "",
+   "order": 350
+  },
+  "settings_group:builder_governance": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 2,
+   "blurb": "自訂功能的版本紀錄與發布前影響預覽（安全控管）。",
+   "when": "開放自訂功能之後，想讓每次修改都能預覽、能還原時。",
+   "status": "keep",
+   "note": "",
+   "order": 360
+  },
+  "settings_group:builder_rules": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者設定「條件成立就標紅或提醒」的規則。",
+   "when": "想用規則自動標出毛利過低、逾期等情況時。",
+   "status": "keep",
+   "note": "",
+   "order": 370
+  },
+  "settings_group:builder_menu": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者調整側欄選單的名稱與分組。",
+   "when": "公司想用自己的說法稱呼功能、或重新分組選單時。",
+   "status": "keep",
+   "note": "",
+   "order": 380
+  },
+  "settings_group:builder_custom_fields": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者在案件、供應商與報價單加自己的欄位。",
+   "when": "內建欄位不夠用，想多記錄一些資料時。",
+   "status": "keep",
+   "note": "",
+   "order": 390
+  },
+  "settings_group:builder_actions": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者在畫面上放自己的「開頁」「匯出」按鈕。",
+   "when": "想把常用的頁面或匯出做成一鍵按鈕時。",
+   "status": "keep",
+   "note": "",
+   "order": 400
+  },
+  "settings_group:builder_slots": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者自訂單據的附件種類與存放位置。",
+   "when": "公司有特殊的附件種類（例如驗收照片）需要分類時。",
+   "status": "keep",
+   "note": "",
+   "order": 410
+  },
+  "settings_group:builder_exports": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者自訂匯出檔的欄位與標題。",
+   "when": "匯出的 Excel 或 PDF 欄位不符合公司需求時。",
+   "status": "keep",
+   "note": "",
+   "order": 420
+  },
+  "settings_group:builder_option_lists": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者自訂下拉選單的選項。",
+   "when": "客戶類型、料件分類等選項要換成公司的分類時。",
+   "status": "keep",
+   "note": "",
+   "order": 430
+  },
+  "settings_group:builder_notify": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者調整簽核通知的文字。",
+   "when": "想用公司慣用的語氣寫簽核通知時。",
+   "status": "keep",
+   "note": "",
+   "order": 440
+  },
+  "settings_group:builder_stage_templates": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者定義常用的案件執行階段樣板。",
+   "when": "每個案件的施工階段大同小異，想一鍵套用時。",
+   "status": "keep",
+   "note": "",
+   "order": 450
+  },
+  "settings_group:builder_custom_modules": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓管理者建立全新的自訂模組。",
+   "when": "公司有系統沒有的流程（例如設備借用），想自己做一個表單流程時。",
+   "status": "keep",
+   "note": "",
+   "order": 460
+  },
+  "settings_group:list_prefs": {
+   "category": "custom",
+   "section": "開放哪些客製功能",
+   "tier": 1,
+   "blurb": "要不要讓每個人自己調整清單的欄位、排序與每頁筆數。",
+   "when": "同事想自己決定清單怎麼看時。",
+   "status": "keep",
+   "note": "這是總開關；個別偏好在「清單檢視（個人偏好）」。",
+   "order": 470
+  },
+  "settings_group:brand": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "首頁大標題上方那一行系統標語。",
+   "when": "想把畫面上的系統名稱／口號換成公司自己的時候。",
+   "status": "keep",
+   "note": "",
+   "order": 65
+  },
+  "settings_group:external_login": {
+   "category": "people",
+   "section": "登入安全",
+   "tier": 1,
+   "blurb": "從外網登入時的額外防護：指定角色要先啟用兩步驟驗證、輸錯太多次暫時鎖帳號。",
+   "when": "公司開放外網登入、或想把外網登入規則調嚴時。",
+   "status": "keep",
+   "note": "內網登入行為不變。",
+   "order": 95
+  },
+  "settings_group:monitoring": {
+   "category": "data",
+   "section": "備份與紀錄保存",
+   "tier": 1,
+   "blurb": "備份多久沒成功、硬碟剩多少空間，要通知最高管理者。",
+   "when": "備份頻率或硬碟大小改變、想讓通知更早或更晚響起時。",
+   "status": "keep",
+   "note": "看實際狀態請到「備份與監控」頁。",
+   "order": 235
+  },
+  "settings_group:login_greeting": {
+   "category": "advanced",
+   "section": "",
+   "tier": 3,
+   "blurb": "登入後首頁那一句問候語的口氣。",
+   "when": "想讓問候語更正式、更輕鬆，或完全關閉時。",
+   "status": "keep",
+   "note": "每個情境的句子可另外改寫；每個人也能在自己的帳號裡改口氣。",
+   "order": 900
+  }
+ }
+}

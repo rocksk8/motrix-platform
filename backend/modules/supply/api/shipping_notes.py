@@ -31,7 +31,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files, files_txn, append_json_list, remove_json_item,
     guard_case_access, require_any_module, is_document_approver,
 )
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
@@ -857,15 +857,15 @@ async def upload_shipping_signed_files(note_no: str, files: List[UploadFile] = F
     參考資料，不強制一定要 already 已核准才能傳。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
-    existing = json.loads(row["signed_files_json"] or "[]")
-    new_files = await save_document_files("shipping_notes", note_no, files, user.get("display_name") or user["username"])
-    all_files = existing + new_files
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE shipping_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                 (json.dumps(all_files, ensure_ascii=False), now, note_no))
-    conn.commit()
-    conn.close()
+    try:
+        _readable_note(conn, note_no, user, "quote_no, signed_files_json")
+        new_files = await save_document_files("shipping_notes", note_no, files, user.get("display_name") or user["username"])
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "shipping_notes", "signed_files_json", "note_no", note_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="出貨單不存在")
+    finally:
+        conn.close()
     _audit(_tok(authorization), "shipping.upload_signed_files", "shipping_note", note_no,
            f"{note_no}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files}
@@ -887,16 +887,9 @@ def delete_shipping_signed_file(note_no: str, file_id: str, authorization: str =
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可刪除回簽附件")
     conn = get_db()
-    row = conn.execute("SELECT signed_files_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "出貨單不存在")
-    existing = json.loads(row["signed_files_json"] or "[]")
-    remaining = delete_document_file("shipping_notes", note_no, existing, file_id)
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE shipping_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                 (json.dumps(remaining, ensure_ascii=False), now, note_no))
-    conn.commit()
+    # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔（單據不存在 ⇒ 404 出貨單不存在）
+    remove_json_item(conn, "shipping_notes", "signed_files_json", "note_no", note_no, file_id,
+                     extra_set={"updated_at": datetime.now().isoformat()}, not_found="出貨單不存在")
     conn.close()
     _audit(_tok(authorization), "shipping.delete_signed_file", "shipping_note", note_no, note_no)
     return {"ok": True}

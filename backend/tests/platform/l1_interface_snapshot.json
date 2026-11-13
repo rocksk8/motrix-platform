@@ -2,6 +2,8 @@
  "core_version": "next",
  "interface": {
   "core:archive": {
+   "BackupInProgress": "class",
+   "BackupLockUnavailable": "class",
    "MODULE_BACKUP_PREFIX": "const",
    "PRUNE_KEEP_NEWEST": "const",
    "PiiFolderMissing": "class",
@@ -16,6 +18,8 @@
    "_backup_retention": "def()",
    "_backup_suppliers": "def()",
    "backed_up_table_names": "def()",
+   "backup_run_lock": "class",
+   "backup_run_lock.__init__": "def(self, strict=…)",
    "bytes_per_audit_row": "def(db_bytes, audit_rows)",
    "cloud_archive_enabled": "def()",
    "merge_general_and_pii": "def(fname, general_rows, pii_rows)",
@@ -284,6 +288,31 @@
    "on_lockout": "def(key, ip, usernames, fails, lock_seconds, now=…, scope=…)",
    "reset_for_tests": "def()"
   },
+  "helper:backup_monitor": {
+   "BackupBusy": "class",
+   "BackupLockProblem": "class",
+   "BackupRateLimited": "class",
+   "BackupRateLimited.__init__": "def(self, wait_seconds)",
+   "DisableError": "class",
+   "HEARTBEAT_TEST_MIN_INTERVAL_SECONDS": "const",
+   "HeartbeatRateLimited": "class",
+   "HeartbeatRateLimited.__init__": "def(self, wait_seconds)",
+   "InvalidPingUrl": "class",
+   "MSG_ALREADY_DONE": "const",
+   "MSG_BUSY": "const",
+   "RUN_MIN_INTERVAL_SECONDS": "const",
+   "approve_disable": "def(change_id, actor, ip=…)",
+   "cancel_disable": "def(change_id, actor)",
+   "pending_disable": "def()",
+   "ping_host": "def()",
+   "reject_disable": "def(change_id, actor, reason=…)",
+   "request_disable": "def(actor, reason, ip=…)",
+   "run_backup_now": "def(now=…)",
+   "scrub_paths": "def(text)",
+   "set_ping_url": "def(url, actor=…, reason=…, ip=…)",
+   "status": "def(now=…)",
+   "test_heartbeat": "def()"
+  },
   "helper:branding": {
    "ALLOWED_FORMATS": "const",
    "AUDIT_ACTION": "const",
@@ -479,6 +508,7 @@
    "verified_doc": "def(raw)"
   },
   "helper:config_ledger": {
+   "DEMO_USERNAME": "const",
    "EVENTS": "const",
    "HIGH_RISK": "const",
    "RISKS": "const",
@@ -491,6 +521,7 @@
    "in_effect": "def(row, now=…)",
    "pending": "def(conn, domain=…)",
    "promote_due": "def(conn, now=…, domain=…)",
+   "real_superadmins": "def(conn, exclude=…)",
    "record": "def(conn, domain, key, changes, reason, actor, *, ip=…, risk=…, ref_version=…, effective_at=…, audit_action=…, target_label=…, link=…, approvals_required=…)",
    "register_domain": "def(prefix, snapshot_fn=…, restore_fn=…, diff_fn=…, label=…)",
    "restore_version": "def(conn, domain, key, version, actor, reason=…)",
@@ -731,6 +762,7 @@
    "estimate_prefix": "def(conn=…)",
    "estimate_prefixes_in_use": "def(conn=…)",
    "label": "def(doc_type)",
+   "label_of_no": "def(no, conn=…)",
    "no_re": "def(prefix_or_rule, *, revision=…)",
    "norm": "def(v)",
    "prefix_for": "def(doc_type, conn=…)",
@@ -793,8 +825,8 @@
    "SendHandle.wait": "def(self, timeout=…)",
    "_admin_emails": "def(event_key=…)",
    "_base_url": "def()",
-   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
-   "_send_raising": "def(to_addrs, subject, html)",
+   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…, doc_label=…)",
+   "_send_raising": "def(to_addrs, subject, html, ignore_enabled=…, cfg=…)",
    "email_send_policy": "def(env=…)",
    "finance_recipient_emails": "def(event_key=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
@@ -860,6 +892,17 @@
    "notify_warranty_expiry": "def(device_name, customer, quote_no, days_left, expiry_date, sales_person)",
    "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…, line_key=…, line_exclude=…)",
    "shipping_link": "def(note_no)"
+  },
+  "helper:email_setup": {
+   "PROVIDERS": "const",
+   "build_ticket": "def(kind, *, user, host, port, company=…, requester=…)",
+   "classify_error": "def(exc, host=…, provider_key=…)",
+   "config_fingerprint": "def(host, port, user, password)",
+   "normalize_password": "def(provider_key, pw)",
+   "provider_by_key": "def(key)",
+   "provider_list": "def()",
+   "valid_email": "def(v)",
+   "validate_config": "def(data)"
   },
   "helper:errors": {
    "trace_id": "def()"
@@ -1084,6 +1127,17 @@
    "warm_status": "def()",
    "without_google_content": "def()"
   },
+  "helper:getting_started": {
+   "BACKUP_HREF": "const",
+   "BACKUP_OK_ACTIONS": "const",
+   "EMAIL_TEST_ACTION": "const",
+   "MANUAL_DONE_IDS": "const",
+   "STATE_KEY": "const",
+   "STEPS": "const",
+   "STEP_IDS": "const",
+   "overview": "def(conn=…)",
+   "set_step": "def(step_id, action, username)"
+  },
   "helper:gl_status": {
    "MESSAGE": "const",
    "gl_posted_warning": "def(conn, source_type, source_key, prefix=…)"
@@ -1211,8 +1265,27 @@
   "helper:license_alerts": {
    "dev_key_in_use": "def(status, background=…)",
    "emergency_in_use": "def(info, background=…)",
+   "expiry_notice": "def(rem, status)",
    "flush": "def(timeout=…)",
    "startup_check": "def()"
+  },
+  "helper:license_manager": {
+   "BACKUP_DIR_NAME": "const",
+   "BACKUP_KEEP": "const",
+   "MAX_UPLOAD_BYTES": "const",
+   "PREVIEW_WEIGHT": "const",
+   "RATE_GLOBAL_MAX": "const",
+   "RATE_MAX": "const",
+   "RATE_WINDOW_S": "const",
+   "REJECT_MESSAGES": "const",
+   "backup_dir": "def()",
+   "describe_current": "def(machine_fn)",
+   "modules_view": "def(mods)",
+   "normalize_upload": "def(raw)",
+   "rate_allow": "def(account=…, weight=…, now=…)",
+   "recent_activity": "def(conn, limit=…)",
+   "reset_for_tests": "def()",
+   "run_import": "def(raw, *, apply, confirm, machine_fn)"
   },
   "helper:licensing": {
    "EMERGENCY_COVERS": "const",
@@ -1220,6 +1293,8 @@
    "EMERGENCY_MAX_BYTES": "const",
    "EMERGENCY_MAX_DAYS": "const",
    "EMERGENCY_PURPOSE": "const",
+   "EXPIRY_HEADER": "const",
+   "EXPIRY_THRESHOLDS": "const",
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
    "LICENSE_HEADER": "const",
@@ -1231,6 +1306,8 @@
    "emergency_pass": "def(status)",
    "emergency_path": "def()",
    "emergency_status": "def(status)",
+   "expiry_banner": "def(status)",
+   "expiry_reminder": "def(status)",
    "license_banner": "def(status, emergency)",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",
@@ -1544,6 +1621,18 @@
    "redact_ops": "def(items)",
    "sidebar_ops_of_all": "def(conn, role, mod_items)"
   },
+  "helper:menu_categories": {
+   "CATEGORY_KEYS": "const",
+   "OVERRIDE_KEY": "const",
+   "categories_view": "def(kind=…, labels=…)",
+   "category_of": "def(item_key)",
+   "default_data": "def()",
+   "effective": "def(override=…)",
+   "get_override": "def()",
+   "items_of": "def(category_key, kind=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "validate": "def(data)"
+  },
   "helper:module_assets": {
    "ASSETS_MIN_CORE": "const",
    "JsAssetLookup": "class",
@@ -1679,6 +1768,15 @@
    "request_stage_defaults": "def()",
    "request_stage_label": "def(code, fallback=…)",
    "request_stage_names": "def()"
+  },
+  "helper:org_gaps": {
+   "GAP_KEYS": "const",
+   "GAP_NO_DEPARTMENT": "const",
+   "GAP_NO_FINANCE": "const",
+   "GAP_NO_MANAGER": "const",
+   "MAX_ITEMS": "const",
+   "check": "def(conn=…)",
+   "finance_holder_exists": "def(conn)"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
@@ -1993,6 +2091,24 @@
   },
   "helper:settings_groups_recycle_bin": {},
   "helper:settings_groups_tender_closing": {},
+  "helper:settings_help": {
+   "BUILTIN_EXTRA_TERMS": "const",
+   "BUILTIN_SHARED_TERMS": "const",
+   "OVERRIDE_KEY": "const",
+   "SECTIONS": "const",
+   "SINGLE_ADMIN_NOTE": "const",
+   "forbidden_terms": "def()",
+   "get_override": "def()",
+   "has_hidden_chars": "def(s, allow_newline=…)",
+   "help_for": "def(key, override=…)",
+   "help_view": "def(group, field_view, override=…)",
+   "label_clear": "def()",
+   "problems_in": "def(entry, *, terms=…)",
+   "set_override": "def(patch, user=…, token=…)",
+   "shared_terms_file": "def()",
+   "system_data": "def()",
+   "term_problems": "def(text)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
@@ -2167,6 +2283,7 @@
    "REMINDER_FAILURE_SETTING": "const",
    "REMINDER_FIRST_STAGES": "const",
    "REMINDER_STEP_AFTER": "const",
+   "alert_thresholds": "def()",
    "reminder_dedup_key": "def(stage)",
    "reminder_send_failures": "def()",
    "reminder_stages_at_or_below": "def(days)",
@@ -2234,14 +2351,18 @@
    "UPLOAD_LIMITS_BY_SUBFOLDER": "const",
    "_check_upload_magic": "def(filename, ext, raw, subfolder=…, uploaded_by=…)",
    "_effective_subfolder": "def(subfolder)",
+   "append_json_list": "def(conn, table, col, where_col, key, new_items, *, extra_set=…, not_found=…, guard=…)",
    "canonical_upload_path": "def(raw)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",
    "files_from_json_column": "def(conn, table, key_col, key, col)",
+   "files_txn": "class",
+   "files_txn.__init__": "def(self, conn, new_files)",
    "limits_for": "def(subfolder)",
    "max_file_bytes": "def()",
    "opened_upload_file": "def(entry)",
    "pick_file": "def(files, file_id)",
    "purge_document_files": "def(existing_files)",
+   "remove_json_item": "def(conn, table, col, where_col, key, file_id, *, extra_set=…, not_found=…, missing_ok=…, inside=…)",
    "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…, existing_count=…, policy=…)",
    "upload_owner": "def(rel)",
    "upload_path_key": "def(entry, folder, depth=…, key_index=…)",
@@ -2620,6 +2741,21 @@
    "single_provider": "def(capability)",
    "snapshot": "def()",
    "unload": "def(key, reason)"
+  },
+  "plat:safe_ping": {
+   "ALLOWED_PORTS": "const",
+   "DEADLINE_SECONDS": "const",
+   "PingFailed": "class",
+   "PingFailed.__init__": "def(self, kind=…)",
+   "RedirectBlocked": "class",
+   "RedirectBlocked.__init__": "def(self, status)",
+   "UnsafeTarget": "class",
+   "UnsafeTarget.__init__": "def(self, reason)",
+   "check_url": "def(url)",
+   "get": "def(url, *, timeout=…, deadline=…)",
+   "ip_is_public": "def(ip)",
+   "public_addresses": "def(host, port, timeout=…)",
+   "resolve_host": "def(host, port)"
   },
   "plat:source_tree": {
    "BACKEND": "const",

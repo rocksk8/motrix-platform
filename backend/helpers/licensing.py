@@ -126,11 +126,19 @@ LICENSE_KIND_PERPETUAL    = "perpetual"      # 永久：過期只提示，不擋
 # **寫成一個具名常數讓測試釘得住**，不要散在判斷式裡——散在判斷式裡的豁免清單，
 # 少一條不會有人發現。
 # 實際豁免範圍 ＝ 這個集合 ∪ main.py 的 _PUBLIC_API_PATHS。
+#
+# T83（授權匯入）加的兩條：`/api/license/overview`（授權頁讀目前狀態）與 `/api/license/import`（匯入新授權檔）。
+# 理由：授權失效時（沒有檔／過期／機器不符）**唯一能把系統救回來的動作就是匯入新授權**；這兩條若被閘門擋住，
+# 買家拿到新授權檔也只能請工程師去放檔案——授權匯入畫面就沒有意義。**豁免只是跳過授權閘門，不跳過任何其他檢查**：
+# 兩條端點自己都要求「已登入＋最高管理者＋非示範帳號」，匯入另有大小上限、頻率限制、稽核紀錄，
+# 驗章／機器綁定／到期一律走本檔的 `_open_blob`／`verify_license`（不重寫驗章）。
 LICENSE_EXEMPT_PATHS = frozenset({
     "/api/ping",
     "/api/auth/login",
     "/api/auth/logout",
     "/api/license/status",
+    "/api/license/overview",
+    "/api/license/import",
 })
 
 # 缺任何一個就不是一把金鑰（`sig` 另外檢查）。`{}` 與 `{"sig": "..."}` 都靠這關擋下來。
@@ -703,6 +711,60 @@ def emergency_pass(status):
     result = info if info and info.get("active") else None
     _EMERGENCY_CACHE = (key, _copy_status(result) if result is not None else None)
     return result
+
+
+# ── 到期提醒（T83）──────────────────────────────────────────────────────────
+#
+# 剩 30／14／7 天（含）以內顯示頂端橫幅，嚴重程度依序是 notice／warning／critical；每日排程在跨過這三個門檻時各通知一次
+# （system_checks._check_license_expiry）。**只在授權目前仍可用時提醒**：
+#   · 年費授權：reason=ok 且剩 ≤30 天（過期後閘門直接 402，說明頁會講；那時不需要橫幅）
+#   · 永久授權：reason=ok 且剩 ≤30 天，或已過維護期（reason=expired 但不擋；`days` 為負、level=ended）
+# 其餘狀態（沒金鑰／損毀／簽章不符／機器不符）一律不提醒——那些不是「快到期」，是已經不能用。
+EXPIRY_HEADER = "X-Motrix-License-Expiry"
+EXPIRY_THRESHOLDS = (30, 14, 7)          # 由遠到近；最近那一檔以內＝critical
+
+
+def expiry_reminder(status):
+    """授權狀態 → 到期提醒 dict（`days`／`level`／`kind`／`expires`），不需要提醒 ⇒ None。不丟例外。
+
+    level：`notice`（≤30）／`warning`（≤14）／`critical`（≤7，含今天到期）／`ended`（永久授權已過維護期）。
+    `bucket` 是通知用的「門檻檔位」（30／14／7／`ended`），同一把授權同一檔位只通知一次（見 system_checks）。
+    """
+    try:
+        if not isinstance(status, dict):
+            return None
+        days, kind, reason = status.get("days_left"), status.get("kind"), status.get("reason")
+        if not isinstance(days, int) or isinstance(days, bool):
+            return None
+        if reason == "ok":
+            pass
+        elif reason == "expired" and kind == LICENSE_KIND_PERPETUAL:
+            pass
+        else:
+            return None
+        hi, mid, lo = EXPIRY_THRESHOLDS
+        if days < 0:
+            level, bucket = "ended", "ended"
+        elif days > hi:
+            return None
+        elif days <= lo:
+            level, bucket = "critical", lo
+        elif days <= mid:
+            level, bucket = "warning", mid
+        else:
+            level, bucket = "notice", hi
+        return {"days": days, "level": level, "bucket": bucket, "kind": kind or LICENSE_KIND_SUBSCRIPTION,
+                "expires": status.get("expires")}
+    except Exception:  # noqa: BLE001 — 提醒壞掉不可以讓請求壞掉
+        return None
+
+
+def expiry_banner(status):
+    """前端橫幅的標頭值：`days=12;level=warning;kind=subscription`；不需要提醒 ⇒ None。"""
+    r = expiry_reminder(status)
+    if r is None:
+        return None
+    return "days=%d;level=%s;kind=%s" % (r["days"], r["level"], r["kind"])
 
 
 def license_banner(status, emergency):

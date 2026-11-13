@@ -43,6 +43,11 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
                "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # 2026-11-13（T83／T84：T82 打包沒沿用 run-stage 的結果、多花約 45 分鐘）：heavy_run／整合者的排隊與鎖插件會在子行程環境塞
+               # **每輪都不同**的值——MOTRIX_CI_TICKET（票根檔路徑，每次排隊一個新的）、MOTRIX_GATE_TOKEN（每把閘門鎖一個）、
+               # MOTRIX_WINDOW（誰在跑）、MOTRIX_CI_DIR／MOTRIX_REQUIRE_QUEUE／MOTRIX_QUEUE_GUARD（排隊機制）。
+               # 它們只決定「排不排隊、拿不拿得到鎖」，不決定哪些題存在或過不過；進指紋 ⇒ 經 heavy_run 跑的 run-stage 與直接跑的建包永遠對不上。
+               "MOTRIX_CI_TICKET", "MOTRIX_GATE_TOKEN", "MOTRIX_WINDOW", "MOTRIX_CI_DIR", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_QUEUE_GUARD",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
@@ -87,6 +92,22 @@ def current_env():
     if addopts is not None:
         env["pytest_addopts"] = addopts
     return env
+
+
+def reuse_blockers(python=None, env=None):
+    """這個行程算出的指紋裡，有哪些「換個環境建包就對不上」的成分（只列名字，不列值）。run-stage 結束時印出來。
+    ① 進指紋的 MOTRIX_* 環境變數（_ENV_IGNORE 以外；例如 MOTRIX_TRAIN、MOTRIX_PROJECT_VENV）② PYTEST_ADDOPTS
+    ③ 算指紋的直譯器（sys.executable）不是跑測試的那支（pip freeze 會是別的環境的）。"""
+    env = dict(os.environ) if env is None else env
+    out = []
+    names = sorted(k for k in env if k.startswith("MOTRIX_") and k not in _ENV_IGNORE)
+    if names:
+        out.append("進指紋的環境變數：%s（建包 shell 沒設成一樣的值就不會沿用）" % "、".join(names))
+    if env.get("PYTEST_ADDOPTS") is not None:
+        out.append("PYTEST_ADDOPTS 有設（進指紋）")
+    if python and os.path.normcase(os.path.abspath(str(python))) != os.path.normcase(os.path.abspath(sys.executable)):
+        out.append("算指紋的直譯器（%s）不是跑測試的（%s）⇒ pip freeze 來自不同環境" % (sys.executable, python))
+    return out
 
 
 def fingerprint(repo, env=None):
@@ -202,7 +223,8 @@ def explain(records, repo, env=None, now=None, last=12):
             out["stages"][st] = {"reuse": ok, "reason": why}
     for r in recs[-last:]:
         row = {"tested_at": r.get("tested_at"), "source": r.get("source") or "build", "commit": r.get("commit"),
-               "stages": {k: ("綠" if (v or {}).get("green") else "紅") for k, v in (r.get("stages") or {}).items()}
+               "stages": {k: (("綠（重試 %s 題）" % (v["retry"].get("count")) if isinstance((v or {}).get("retry"), dict) else "綠") if (v or {}).get("green") else "紅")
+                          for k, v in (r.get("stages") or {}).items()}
                or {"(舊格式)": "綠" if r.get("green") else "紅"},
                "fp_match": bool(fp) and r.get("fingerprint") == fp}
         if fp and not row["fp_match"]:
@@ -288,12 +310,171 @@ def collect_reds(fail_stream_dir, limit=500):
     return out
 
 
-def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False):
+#: run-stage 一段跑完後，紅的題數 ≤ 這個數就自動在安靜環境單獨重跑一次（0＝關）。**不是 flake 登記**：known_flakes 不動，
+#: 每次重試都留證據（紀錄的 stages.<段>.retry＋retry_log.jsonl），同一題累計次數給雜訊排行榜用。
+RETRY_MAX_DEFAULT = 5
+RETRY_LOG_NAME = "retry_log.jsonl"
+#: 同一題 24 小時內被重試達這個次數 ⇒ run-stage 結束時警告「這不像雜訊」（只警告，不拒絕；累計看 retry-counts）
+RETRY_WARN_COUNT = 3
+RETRY_WARN_HOURS = 24
+
+
+def retry_log_path(records):
+    return Path(records).with_name(RETRY_LOG_NAME)
+
+
+def stream_status(fail_stream_dir):
+    """讀 fail_stream 目錄 ⇒ {"reds": [nodeid…（依出現順序、不重複）], "info": {nodeid: {type, when, summary}}, "summary": 最後一筆 type=summary 或 None}。
+    只讀 type=fail／node_down（aborted 不算紅）。"""
+    reds, info, summary = [], {}, None
+    d = Path(fail_stream_dir)
+    for f in sorted(d.glob("*.jsonl")) if d.is_dir() else []:
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            if r.get("type") == "summary":
+                summary = r
+            elif r.get("type") in ("fail", "node_down") and r.get("nodeid") and r["nodeid"] not in info:
+                info[r["nodeid"]] = {"type": r.get("type"), "when": r.get("when"), "summary": str(r.get("summary") or "")[:300]}
+                reds.append(r["nodeid"])
+    return {"reds": reds, "info": info, "summary": summary}
+
+
+def retry_eligibility(rc, st, limit):
+    """這一段紅了，能不能只重試紅的題？⇒ (可, 原因)。純函式。
+    鐵則：**只有「這一輪確定跑完了、紅的就是這幾題」才准重試**——否則沒跑到的題會被當成過了：
+    - rc 必須是 1（pytest 的 TESTS_FAILED）；2（中斷）、3（內部錯誤）、4（用法）、5（沒題）都不是「跑完但有紅」。
+    - fail_stream 的 summary 必須在，且不是 aborted／failfast 提早停（停了＝後面的題沒跑）。
+    - 紅清單不能比 summary 的 failed＋errors 少（少了＝有紅沒被抓到）、不能有 collect 階段的紅（檔案載入失敗＝那檔的題根本沒跑）。
+    - 紅題數 ≤ limit；nodeid 都得是 路徑::題名。"""
+    if limit <= 0:
+        return False, "重試關閉（--no-retry）"
+    if rc != 1:
+        return False, "exit code=%s 不是「跑完但有紅」(1)" % rc
+    summ = (st or {}).get("summary")
+    if not summ:
+        return False, "沒有 fail_stream summary，無法確認這輪跑完"
+    reds = (st or {}).get("reds") or []
+    if len(reds) > limit:
+        return False, "紅 %d 題 > %d 題上限：不重試（這不是雜訊，是真的問題）" % (len(reds), limit)
+    if summ.get("aborted") or summ.get("aborted_by"):
+        return False, "這輪被中斷／提早停止（%s）：沒跑到的題不能靠重試補" % (summ.get("aborted_by") or "aborted")
+    if not reds:
+        return False, "沒抓到任何紅題（紅清單是空的）"
+    if len(reds) < int(summ.get("failed", 0)) + int(summ.get("errors", 0)):
+        return False, "紅清單（%d）比 summary 的失敗＋錯誤（%d）少，有紅沒被抓到" % (len(reds), int(summ.get("failed", 0)) + int(summ.get("errors", 0)))
+    if any((st["info"].get(n) or {}).get("when") == "collect" for n in reds):
+        return False, "有 collect 階段的紅（檔案載入失敗，那檔的題根本沒跑）"
+    if any("::" not in n for n in reds):
+        return False, "紅清單裡有不是 路徑::題名 的項目"
+    return True, ""
+
+
+def retry_command(stage, python, nodeids, basetemp):
+    """只重跑紅的題：同一個段的標記（-m）、單程序（-n 0）、fail_stream 照載（留明細）、不載 failfast。"""
+    args = [a for a in STAGE_PYTEST[stage] if not a.startswith("--durations")]
+    return [str(python), "-m", "pytest", *args, *nodeids, "-n", "0", "--basetemp=%s" % basetemp, "-p", "fail_stream", "-p", "no:cacheprovider"]
+
+
+def append_retry_log(records, stage, commit, fp, rows):
+    """每次重試都留證據：每題一行（時間、段、commit、指紋、題、原始紅的摘要、重試結果）。累計次數從這裡算（retry_counts）。"""
+    try:
+        t = datetime.now().strftime(TS_FMT)
+        for r in rows:
+            _append(retry_log_path(records), {"t": t, "stage": stage, "commit": commit, "fingerprint": fp, "kind": "retry_failed", **r})
+    except OSError:
+        pass
+
+
+def retry_counts(records, now=None):
+    """retry_log.jsonl ⇒ {nodeid: {"retries": 次數, "passed": 重試過的次數, "failed": 重試仍紅的次數, "last": 最後一次時間, "recent": 最近 24 小時的次數}}（雜訊排行榜的來源）。"""
+    now = now or datetime.now()
+    out = {}
+    p = retry_log_path(records)
+    if not p.exists():
+        return out
+    for ln in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        n = r.get("nodeid")
+        if not n:
+            continue
+        e = out.setdefault(n, {"retries": 0, "passed": 0, "failed": 0, "last": "", "recent": 0})
+        e["retries"] += 1
+        try:
+            if (now - datetime.strptime(r.get("t") or "", TS_FMT)).total_seconds() <= RETRY_WARN_HOURS * 3600:
+                e["recent"] += 1
+        except ValueError:
+            pass
+        e["passed" if r.get("result") == "pass" else "failed"] += 1
+        e["last"] = r.get("t") or e["last"]
+    return out
+
+
+def gate_hold(repo, stage, note=print, hr=None, window=None):
+    """run-stage 跑的這一段**就是閘門**：沒有人持有閘門鎖時自己取（綁行程；TTL 3 小時兜底），跑完放。回 release()。
+    取到之後，conftest 會拒絕其他視窗的 pytest（含單檔），PM 不必再人工通知全視窗暫停（T82）。
+    - 已經有人持有（整合者顯式取的、或別的 run-stage）⇒ 什麼都不動、release 是空的（絕不放別人的鎖）。
+    - 行程被殺／當機：鎖綁著這個 pid，read_gate 見到持有者已死就當沒有鎖。
+    - 任何錯誤 ⇒ 不取（fail-open；只是少一道保護）。"""
+    noop = (lambda: None)
+    try:
+        if hr is None:
+            import importlib.util as _iu
+            sp = _iu.spec_from_file_location("_bt_heavy_run_gate", str(Path(repo) / "tools" / "platform" / "heavy_run.py"))
+            hr = _iu.module_from_spec(sp)
+            sp.loader.exec_module(hr)
+        if hr.read_gate():
+            return noop
+        window = window or os.environ.get("MOTRIX_WINDOW") or "run-stage"
+        ok, lock = hr.gate_acquire(window, note="run-stage %s（自動取、跑完放）" % stage, ttl=3 * 3600, holder_pid=os.getpid())
+        if not ok:
+            return noop
+        note("[run-stage] 取閘門鎖（%s）：跑的期間其他視窗的 pytest（含單檔）會被拒絕；跑完自動放" % window)
+        token = lock["token"]
+
+        def release():
+            try:
+                cur = hr.read_gate()
+                if cur and cur.get("token") == token:
+                    hr.gate_release(window)
+            except Exception:                           # noqa: BLE001 — 放不掉靠 holder_pid／TTL 兜底
+                pass
+        return release
+    except Exception:                                   # noqa: BLE001
+        return noop
+
+
+def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False, retry_failed=RETRY_MAX_DEFAULT):
+    """run-stage 本體（`_run_stage`）外包一層閘門鎖：真的要跑（沒注入 runner）時自己持有閘門鎖，跑完放（見 gate_hold）。
+    回 (exit code, 是否寫了紀錄, 說明)。其餘說明見 `_run_stage`。"""
+    # 診斷跑（--no-failfast＝找出全部紅）：不重試（重試綠會把原本的紅洗掉）、也不自己取閘門鎖（不要為了一次診斷讓全機的 pytest 被拒絕 15～30 分鐘）
+    if no_failfast:
+        retry_failed = 0
+    release = gate_hold(repo, stage, note) if (runner is None and not no_failfast) else (lambda: None)
+    try:
+        return _run_stage(repo, stage, records, python, runner, workers, note, no_failfast, retry_failed)
+    finally:
+        release()
+
+
+def _run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False, retry_failed=RETRY_MAX_DEFAULT):
     """**獨立跑一段也算數**（建包優化 2 項 2）：跑與建包同一組指令；開跑與結束的指紋相同且工作樹乾淨 ⇒ 把這一段（綠或紅）寫進沿用紀錄
     （source=standalone）。之後建包遇到同指紋、12 小時內的綠就直接沿用這一段，不再跑第二次。
     - 紅也照記（同指紋之前的綠不可以再被沿用，與建包同一條規則）；fail-fast 提前停止的一段是紅。
     - 指紋不同（跑到一半 HEAD／工作樹／環境變了）或一開始就不乾淨 ⇒ 照跑、回傳 exit code，但**不寫紀錄**。
-    - 這裡不做偶發重跑：紅就是紅（要走偶發登記請用建包）。
+    - 不做偶發**登記**（known_flakes 不動）。但一段跑完且紅的題數 ≤ `retry_failed`（預設 5）時，**只把紅的題在安靜環境（單程序、無 failfast）重跑一次**：
+      全部通過 ⇒ 這一段記「綠（重試 k 題）」，stages.<段>.retry 帶原始紅、重試結果、明細目錄，retry_log.jsonl 每題一行（累計次數＝雜訊排行榜）；
+      重試仍紅 ⇒ 這一段記紅。只有「跑完、確定紅的就是這幾題」才重試（retry_eligibility）：被中斷／failfast 提早停／collect 紅／紅太多 ⇒ 不重試。
+      為了讓「紅 ≤ 上限」的一輪能跑完，failfast 改成「紅超過上限才停」（MOTRIX_FAILFAST_N＝上限＋1、關掉靜默分鐘那條）；`--no-retry` 回舊值（10／3 分鐘）。
     - `no_failfast=True`（`--no-failfast`）：**找出全部紅**——只把 `MOTRIX_FAILFAST=0`，其餘指令／plugin／指紋完全相同；紅的段多記 `reds` 清單。
       全綠的 run 本來就不可能被 failfast 截斷（執行題數＝收集題數）⇒ 無 failfast 的全綠與有 failfast 的全綠是同一份證據，照舊可被沿用；有紅照舊不沿用。
     回 (exit code, 是否寫了紀錄, 說明)。`runner(cmd, cwd, env)` 供測試注入（回 returncode）。"""
@@ -302,7 +483,7 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     repo = Path(repo)
     fp0 = fingerprint(repo)
     backend = repo / "backend"
-    base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S")))
+    base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S"), os.urandom(3).hex()))   # 末尾隨機：同一秒起兩輪也不共用 fail_stream 目錄（舊明細會被當成這一輪的紅）
     cmd = stage_command(stage, python, workers or default_workers(stage), base)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
@@ -325,23 +506,79 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     env["MOTRIX_FAIL_STREAM_RUN"] = "runstage-%s-%s" % (stage, datetime.now().strftime("%H%M%S"))
     if no_failfast:
         env["MOTRIX_FAILFAST"] = "0"
+    elif retry_failed > 0:
+        # 要讓「紅 ≤ 上限」的一輪**跑完**（否則沒跑到的題沒有證據、不能重試）：紅超過上限才停；靜默分鐘那條關掉（它會在第一個紅之後 3 分鐘就截斷）
+        env["MOTRIX_FAILFAST_N"] = str(retry_failed + 1)
+        env["MOTRIX_FAILFAST_QUIET_MIN"] = "0"
     note("[run-stage] %s：%s" % (stage, " ".join(cmd)))
     if runner is None:
         rc = subprocess.run(cmd, cwd=str(backend), env=env).returncode
     else:
         rc = runner(cmd, str(backend), env)
+    st0 = stream_status(fs_dir) if rc != 0 else None
+    retry, retry_rows, retry_note = None, [], ""
+    if st0 is not None:
+        try:
+            ok_r, why_r = retry_eligibility(rc, st0, retry_failed)
+            if ok_r and (not fp0 or fingerprint(repo) != fp0):
+                ok_r, why_r = False, "指紋已變（HEAD／工作樹／環境），這一輪不會寫紀錄，不重試"
+            if ok_r:
+                ids = list(st0["reds"])
+                rdir = base + "-retry-failstream"
+                renv = dict(env)
+                renv.update({"MOTRIX_FAILFAST": "0", "MOTRIX_FAILFIRST": "0", "MOTRIX_FAIL_STREAM_DIR": rdir,
+                             "MOTRIX_FAIL_STREAM_RUN": env["MOTRIX_FAIL_STREAM_RUN"] + "-retry"})
+                renv.pop("MOTRIX_FAILFIRST_BASE", None)
+                rcmd = retry_command(stage, python, ids, base + "-retry")
+                note("[run-stage] %s 紅 %d 題（≤ %d）⇒ 只在安靜環境重跑這幾題一次：%s" % (stage, len(ids), retry_failed, "、".join(ids)))
+                t_r = datetime.now()
+                rrc = subprocess.run(rcmd, cwd=str(backend), env=renv).returncode if runner is None else runner(rcmd, str(backend), renv)
+                rst = stream_status(rdir)
+                rsum = rst["summary"] or {}
+                still = [n for n in ids if n in rst["reds"]]
+                green_r = (rrc == 0 and not rst["reds"] and int(rsum.get("passed", 0)) >= len(ids) and not int(rsum.get("skipped", 0))
+                           and not rsum.get("aborted") and not rsum.get("aborted_by"))
+                if not green_r and not still:
+                    still = list(ids)                        # 重試沒有「每題都明確過」的證據 ⇒ 全部當仍紅（寧可紅）
+                retry = {"limit": retry_failed, "count": len(ids), "original_reds": ids, "retried_green": bool(green_r),
+                         "still_red": still, "seconds": round((datetime.now() - t_r).total_seconds(), 1), "dir": rdir}
+                retry_rows = [{"nodeid": n, "original": st0["info"].get(n), "result": "fail" if n in still else "pass", "run": env["MOTRIX_FAIL_STREAM_RUN"]}
+                              for n in ids]
+                if green_r:
+                    rc = 0
+            elif retry_failed > 0:
+                retry_note = "；未重試：" + why_r
+        except Exception as e:                               # noqa: BLE001 — 重試出任何錯 ⇒ 照原本的紅，不吞
+            retry, retry_rows = None, []
+            retry_note = "；重試出錯（%r），照原本的紅" % (e,)
     fp1 = fingerprint(repo)
     if not fp0 or fp0 != fp1:
         return rc, False, "不寫紀錄：%s" % ("開跑時工作樹不乾淨（含未追蹤檔）" if not fp0 else "跑到一半指紋變了（HEAD／工作樹／環境）")
     commit = _git(repo, "rev-parse", "--short", "HEAD").strip()
+    try:                                                                # 診斷旁表：事後 explain 才指得出「環境哪一項不同」（run-stage 原本不寫，T82 查不出原因）
+        remember_parts(records, fp1, components(repo))
+    except Exception:                                                   # noqa: BLE001 — 診斷用，寫不進去不影響結果
+        pass
     found = collect_reds(fs_dir) if rc != 0 else None
     reds = found if no_failfast else None                              # 沿用紀錄的欄位維持原樣：只有 --no-failfast 才多記 reds
-    record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0, reds=reds, failfast=False if no_failfast else None)}, source="standalone")
-    extra = ""
-    if found:
-        extra = "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
+    record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0, reds=reds, failfast=False if no_failfast else None, retry=retry)}, source="standalone")
+    extra = retry_note
+    if retry:
+        append_retry_log(records, stage, commit, fp1, retry_rows)
+        counts = retry_counts(records)
+        extra += "；重試 %d 題：%s（原始紅明細：%s；重試明細：%s）；累計重試次數：%s" % (
+            retry["count"], "全部通過 ⇒ 記綠" if retry["retried_green"] else "仍紅 %d 題（%s）⇒ 記紅" % (len(retry["still_red"]), "、".join(retry["still_red"])),
+            fs_dir, retry["dir"], "、".join("%s×%d" % (n, counts.get(n, {}).get("retries", 0)) for n in retry["original_reds"]))
+        often = [n for n in retry["original_reds"] if counts.get(n, {}).get("recent", 0) >= RETRY_WARN_COUNT]
+        if often:
+            extra += "；⚠ %d 小時內重試達 %d 次以上（不像雜訊，像真的不穩或測試間污染）：%s" % (RETRY_WARN_HOURS, RETRY_WARN_COUNT, "、".join(often))
+    elif found:
+        extra += "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
             len(found), "無 failfast，全部列出" if no_failfast else "failfast 提早停，只含已出現的", "、".join(found[:20]) + ("…" if len(found) > 20 else ""), fs_dir)
-    return rc, True, "已記錄：%s=%s（建包同指紋、%d 小時內會沿用，可跨午夜）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
+    blockers = reuse_blockers(python)
+    warn = ("；⚠ 建包不一定沿用這份結果——" + "；".join(blockers)) if blockers else ""
+    label = ("綠（重試 %d 題）" % retry["count"]) if (rc == 0 and retry) else ("綠" if rc == 0 else "紅")
+    return rc, True, "已記錄：%s=%s（建包同指紋、%d 小時內會沿用，可跨午夜）%s%s" % (stage, label, MAX_HOURS, extra, warn)
 
 
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
@@ -391,9 +628,12 @@ def find_reusable_stage(records, fp, stage, now, max_hours=MAX_HOURS):
         if not _stage_ok(entry, now, max_hours):
             return None
         flaky = entry.get("flaky_retried") or []
-        return {"green": True, "tested_at": entry["tested_at"],
-                "flaky_retried": list(flaky) if isinstance(flaky, list) else [],
-                "commit": r.get("commit"), "source": r.get("source") or "build"}
+        got = {"green": True, "tested_at": entry["tested_at"],
+               "flaky_retried": list(flaky) if isinstance(flaky, list) else [],
+               "commit": r.get("commit"), "source": r.get("source") or "build"}
+        if isinstance(entry.get("retry"), dict):
+            got["retry"] = entry["retry"]                    # 這一段是「綠（重試 k 題）」：顯示端（建包摘要／儀表板）要看得到，不要和乾淨的綠混在一起
+        return got
     return None
 
 
@@ -440,8 +680,10 @@ def record(records, fp, green, commit, stages=None, source=None):
     _append(records, line)
 
 
-def stage_entry(green, tested_at=None, flaky=None, reds=None, failfast=None):
+def stage_entry(green, tested_at=None, flaky=None, reds=None, failfast=None, retry=None):
     e = {"green": bool(green), "tested_at": tested_at or datetime.now().strftime(TS_FMT)}
+    if retry:
+        e["retry"] = dict(retry)                     # run-stage 的「只重試失敗題」證據（原始紅、重試結果、明細目錄）；綠（重試 k 題）與紅都會帶
     if flaky:
         e["flaky_retried"] = list(flaky)
     if reds:
@@ -524,7 +766,13 @@ def main(argv=None):
     rn.add_argument("--stage", required=True, choices=STAGES)
     rn.add_argument("--records")
     rn.add_argument("--workers", type=int)
+    rn.add_argument("--retry-failed", type=int, default=RETRY_MAX_DEFAULT, metavar="N",
+                    help="一段跑完、紅的題數 ≤ N 時，只把紅的題在安靜環境重跑一次（預設 %d；全過⇒記綠（重試 k 題）、仍紅⇒記紅；不是 flake 登記）" % RETRY_MAX_DEFAULT)
+    rn.add_argument("--no-retry", action="store_true", help="不重試（等於 --retry-failed 0；failfast 回舊值）")
     rn.add_argument("--no-failfast", action="store_true", help="找出全部紅（只關 failfast，其餘同正式指令）；紅的段記 reds 清單")
+    rcn = sub.add_parser("retry-counts", help="run-stage 重試過的題累計次數（雜訊排行榜的來源；唯讀）")
+    rcn.add_argument("--records")
+    rcn.add_argument("--json", action="store_true")
     ex = sub.add_parser("explain", help="為什麼這一段沒被沿用／同一份東西為何跑兩次（唯讀診斷）")
     ex.add_argument("--records")
     ex.add_argument("--last", type=int, default=12)
@@ -553,9 +801,21 @@ def main(argv=None):
             remember_parts(default_records(repo), fp, comps)      # 診斷旁表（只存元件雜湊）；寫不進去不影響指紋
         print(json.dumps({"fingerprint": fp, "components": comps}))
     elif a.cmd == "run-stage":
-        rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers, no_failfast=a.no_failfast)
+        rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers, no_failfast=a.no_failfast,
+                                   retry_failed=0 if a.no_retry else max(0, a.retry_failed))
         print("[run-stage] " + why)
         return rc
+    elif a.cmd == "retry-counts":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        cnt = retry_counts(a.records or default_records(repo))
+        rows = sorted(cnt.items(), key=lambda kv: (-kv[1]["retries"], kv[0]))
+        if a.json:
+            print(json.dumps(dict(rows), ensure_ascii=False, indent=1))
+        else:
+            for n, v in rows:
+                print("%3d 次（過 %d／仍紅 %d，最近 %s）  %s" % (v["retries"], v["passed"], v["failed"], v["last"], n))
+            if not rows:
+                print("（還沒有重試紀錄）")
     elif a.cmd == "explain":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         res = explain(a.records or default_records(repo), repo, last=a.last)

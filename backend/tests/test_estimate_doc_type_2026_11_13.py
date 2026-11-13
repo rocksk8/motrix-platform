@@ -8,6 +8,7 @@
 5. 簽核流程與報價單一致（同樣的鏈、同樣的核准結果）。
 """
 from tests._requires import requires_module  # noqa: E402
+import inspect
 import json
 import re
 
@@ -497,3 +498,21 @@ def test_runtime_prefix_ignores_a_reserved_or_malformed_setting_value(client):
     with pytest.raises(SettingError):
         sr.publish("quote_defaults", {"estimate_no_prefix": "PO"}, user=u, reason="test")
     assert DT.estimate_prefix() == "ME"
+
+
+def test_preview_and_archive_paths_take_doc_type_from_the_column(client, make_user):
+    """T83：預覽路由與存檔版 PDF 都以 `doc_type` 欄位為準（同 generate_pdf_bytes），前端帶舊／缺的 docType 不會印回報價字樣。"""
+    import pdf_gen
+    u, pw = make_user(username="est_prev", role="admin")
+    h = _login(client, u, pw)
+    e = _create(client, h, "estimate")
+    q = _create(client, h)
+    stale = dict(_payload()["data"])            # 沒有 docType（等同舊／缺值）
+    r = client.post("/api/quotations/preview-html", headers=h, json={"quoteNo": e, "data": stale, "internal": False})
+    assert r.status_code == 200, r.text
+    assert "估價單號：" in r.json()["html"] and "報價編號：" not in r.json()["html"]
+    r = client.post("/api/quotations/preview-html", headers=h, json={"quoteNo": q, "data": dict(stale, docType="estimate"), "internal": False})
+    assert r.status_code == 200, r.text
+    assert "報價編號：" in r.json()["html"] and "估價單號：" not in r.json()["html"]
+    src = inspect.getsource(pdf_gen._generate_quotation_pdf)
+    assert "location_id, doc_type FROM quotations" in src and 'q["docType"] = _DT.norm(row["doc_type"])' in src

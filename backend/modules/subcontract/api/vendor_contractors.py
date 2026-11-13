@@ -17,7 +17,7 @@ from helpers import (_require_user, _tok, _audit, _notify, notify_module_activit
 from core.txn import begin_write, write_txn
 from core import registry as _registry
 from helpers import email_notify as _en           # LINE 專屬事件（`dispatch_file_delete_request`）走 `_en._line_event`
-from helpers.uploads import save_document_files, delete_document_file
+from helpers.uploads import save_document_files, files_txn, append_json_list, remove_json_item
 from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -819,19 +819,13 @@ async def upload_dispatch_files(did: int, files: List[UploadFile] = File(...),
         ).fetchone()
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
-        try:
-            existing = json.loads(row["files_json"] or "[]")
-        except Exception:
-            existing = []
         new_files = await save_document_files("contractor_dispatches", str(did), files,
                                               user.get("display_name") or user["username"])
-        existing.extend(new_files)
         now = datetime.now().isoformat()
-        conn.execute(
-            "UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
-            (json.dumps(existing, ensure_ascii=False), now, did)
-        )
-        conn.commit()
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "contractor_dispatches", "files_json", "id", did, new_files,
+                             extra_set={"updated_at": now}, not_found="派發紀錄不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.upload_files", "contractor_dispatch", str(did),
@@ -848,13 +842,6 @@ def _load_quote_files(conn, did):
     except Exception:
         files = []
     return row, files
-
-
-def _save_quote_files(conn, did, files):
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
-                 (json.dumps(files, ensure_ascii=False), now, did))
-    return now
 
 
 def _quote_file(files, file_id):
@@ -921,9 +908,8 @@ def delete_dispatch_file(did: int, file_id: str, body: dict = Body(default={}), 
             tiers = []          # 申請人沒有歸屬部門／主管解析不出來 ⇒ 不卡死，由最高管理者核可
         now = datetime.now().isoformat()
         if not tiers and user["role"] == "superadmin":
-            updated = delete_document_file("contractor_dispatches", str(did), files, file_id)
-            now = _save_quote_files(conn, did, updated)
-            conn.commit()
+            remove_json_item(conn, "contractor_dispatches", "files_json", "id", did, file_id,
+                             extra_set={"updated_at": now}, not_found="派發紀錄不存在")      # T83：寫鎖內重讀、commit 後才刪實體檔
             deleted = True
         else:
             appr = {"requestedBy": user["username"], "requestedByDisplay": user.get("display_name") or user["username"],
@@ -1009,12 +995,12 @@ def approve_dispatch_file_delete(did: int, file_id: str, authorization: str = He
                 done = req["currentTier"] >= len(tiers)
         now = datetime.now().isoformat()
         if done:
-            row, files = _load_quote_files(conn, did)
-            if any(x.get("id") == file_id for x in files):
-                files = delete_document_file("contractor_dispatches", str(did), files, file_id)
-                now = _save_quote_files(conn, did, files)
-            conn.execute("UPDATE dispatch_file_delete_requests SET status='已核可', decided_by=?, decided_at=? WHERE id=?",
-                         (user["username"], now, r["id"]))
+            # T83：刪附件與「申請列改已核可」同一個寫交易（寫鎖內重讀清單；commit 之後才刪實體檔；附件已不在就略過）
+            remove_json_item(
+                conn, "contractor_dispatches", "files_json", "id", did, file_id,
+                extra_set={"updated_at": now}, not_found="派發紀錄不存在", missing_ok=True,
+                inside=lambda c: c.execute("UPDATE dispatch_file_delete_requests SET status='已核可', decided_by=?, decided_at=? WHERE id=?",
+                                           (user["username"], now, r["id"])))
         else:
             appr = json.loads(r["approval_json"] or "{}")
             appr["tiers"], appr["currentTier"] = tiers, req["currentTier"]
@@ -1131,19 +1117,13 @@ async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File
         ).fetchone()
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
-        try:
-            existing = json.loads(row["invoice_files_json"] or "[]")
-        except Exception:
-            existing = []
         new_files = await save_document_files("contractor_dispatch_invoices", str(did), files,
                                               user.get("display_name") or user["username"])
-        existing.extend(new_files)
         now = datetime.now().isoformat()
-        conn.execute(
-            "UPDATE contractor_dispatches SET invoice_files_json=?, updated_at=? WHERE id=?",
-            (json.dumps(existing, ensure_ascii=False), now, did)
-        )
-        conn.commit()
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "contractor_dispatches", "invoice_files_json", "id", did, new_files,
+                             extra_set={"updated_at": now}, not_found="派發紀錄不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.upload_invoice_files", "contractor_dispatch", str(did),
@@ -1163,17 +1143,10 @@ def delete_dispatch_invoice_file(did: int, file_id: str, authorization: str = He
         ).fetchone()
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
-        try:
-            existing = json.loads(row["invoice_files_json"] or "[]")
-        except Exception:
-            existing = []
-        updated = delete_document_file("contractor_dispatch_invoices", str(did), existing, file_id)
         now = datetime.now().isoformat()
-        conn.execute(
-            "UPDATE contractor_dispatches SET invoice_files_json=?, updated_at=? WHERE id=?",
-            (json.dumps(updated, ensure_ascii=False), now, did)
-        )
-        conn.commit()
+        # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔
+        remove_json_item(conn, "contractor_dispatches", "invoice_files_json", "id", did, file_id,
+                         extra_set={"updated_at": now}, not_found="派發紀錄不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.delete_invoice_file", "contractor_dispatch", str(did), row["quote_no"])

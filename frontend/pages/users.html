@@ -9,6 +9,7 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/users-duty.js"></script>
+  <script src="../static/org-gaps.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -176,6 +177,8 @@
 
   <!-- MAIN -->
   <div class="users-main">
+    <!-- 組織設定缺口（批次 5a）：沒有部門的人／沒有主管的部門／沒人擔任財務；管理者以上才會顯示，沒缺口時整塊隱藏 -->
+    <div id="org-gaps" data-org-gaps style="display:none"></div>
     <!-- 頁頭 -->
     <div class="pg">
       <div class="pg__l">
@@ -1382,9 +1385,11 @@
           this.privacyAck = (await pr.json()).ack
           this.privacyAckRequested = false
         }
+        const _noDept = !this.editingId && !this.form.departmentId        // 5a：新增後立刻提醒缺口
         await this.loadUsers()
         this.closeModal()
-        this.toast(this.editingId ? '已儲存變更' : '帳號已建立')
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
+        this.toast(this.editingId ? '已儲存變更' : (_noDept ? '帳號已建立，但這位同仁還沒有歸屬部門（請看上方的補齊提醒）' : '帳號已建立'), _noDept ? 6000 : undefined)
       },
 
       async toggleActive(user) {
@@ -1393,6 +1398,7 @@
           method: 'PATCH', headers: this._headers()
         })
         await this.loadUsers()
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()
       },
 
       async deleteUser(user) {
@@ -1404,6 +1410,7 @@
         })
         if (!res.ok) { alert((await res.json().catch(()=>({}))).detail || '刪除失敗'); return }
         await this.loadUsers()
+        if (window.MotrixOrgGaps) window.MotrixOrgGaps.refresh()        // 刪掉的可能是主管或唯一的財務
         this.toast('帳號已刪除')
       },
 
@@ -1418,12 +1425,12 @@
         window.location.href = 'login.html'
       },
 
-      toast(msg) {
+      toast(msg, ms) {
         const el = document.createElement('div')
         el.textContent = msg
         el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
         document.body.appendChild(el)
-        setTimeout(() => el.remove(), 2500)
+        setTimeout(() => el.remove(), ms || 2500)
       },
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，

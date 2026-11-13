@@ -227,3 +227,25 @@ def test_documented_limitations_are_written_in_the_module_docstring():
     doc = E.__doc__
     for phrase in ("輔助函式「裡面」才讀 UI", "page.evaluate", "基準 id", "WAIT_HELPER_WHITELIST"):
         assert phrase in doc, phrase
+
+
+# ── hichan-3 複驗留下的 L ─────────────────────────────────────────────────────────
+
+def test_expect_prefix_is_a_wait_only_for_playwright_calls():
+    assert _hits(_wrap('with page.expect_response("**/x"):\n    page.click("#go")\nassert page.is_visible("#ok")')) == []
+    assert _hits(_wrap('page.click("#go")\nexpect(page.locator("#ok")).to_be_visible()\nassert page.is_visible("#ok")')) == []
+    assert _hits(_wrap('page.click("#go")\nexpected_total()\nassert page.is_visible("#ok")'))            # 自己寫的函式，名字剛好 expect 開頭
+    assert _hits(_wrap('page.click("#go")\nexpect_rows(page, 3)\nassert page.is_visible("#ok")'))           # 同上（不是屬性呼叫）
+    assert _hits(_wrap('page.click("#go")\nhelper.expect_rows(3)\nassert page.is_visible("#ok")'))          # 屬性呼叫但不是 Playwright 的 expect_* 名單
+
+
+def test_two_same_name_reads_on_one_line_get_two_ids():
+    ids = _hits(_wrap('page.click("#go")\nassert page.locator("#a").is_visible() and page.locator("#b").is_visible()'))
+    assert len(ids) == 2 and ids[0].endswith("is_visible#1") and ids[1].endswith("is_visible#2")
+    assert ids == _hits("\n\n" + _wrap('page.click("#go")\nassert page.locator("#a").is_visible() and page.locator("#b").is_visible()')), "id 不含行號"
+
+
+def test_polling_helper_with_a_lambda_that_merely_builds_a_locator_is_not_a_wait():
+    src = ("def _wait(pred):\n    import time\n    time.sleep(0.1)\n    return pred()\n\n"
+           "def test_a(page):\n    page.click('#go')\n    _wait(lambda: page.locator('#a'))\n    assert page.locator('#ok').is_visible()\n")
+    assert _hits(src)                                       # lambda 回傳 Locator（永遠為真）⇒ 立刻返回，不是等待

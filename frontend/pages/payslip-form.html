@@ -901,7 +901,7 @@ function payslipForm() {
 
       // Load company profile
       try {
-        const r = await fetch(`${API}/settings/company-profile`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const r = await fetch(`${API}/settings/company-profile/public`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) {
           const cp = await r.json()
           if (!this.q.companyName) this.q.companyName = cp.name || ''

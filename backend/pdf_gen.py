@@ -297,9 +297,12 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                            unapproved_status: str = None) -> str:
     # 估價單：版型完全沿用報價單，只有標題與浮水印／橫幅用語的「報價單」換成「估價單」（報價單 ⇒ 字串逐位元不變）
     _dlabel = _DT.label(q.get('docType'))
+    _dpre = _dlabel[:-1]                                              # 報價／估價
     if _dlabel != '報價單':
-        watermark_text = (watermark_text or '').replace('報價單', _dlabel)
-        notice_text = (notice_text or '').replace('報價單', _dlabel)
+        watermark_text = (watermark_text or '').replace('報價單', _dlabel).replace('本案報價未成立', '本案' + _dpre + '未成立')
+        notice_text = (notice_text or '').replace('報價單', _dlabel).replace('本案報價未成立', '本案' + _dpre + '未成立')
+    # 估價單：單號／日期／合計／條件／承辦人五處的固有用語跟著類型走（報價單 ⇒ 「報價編號」「報價日期」「四、報價合計」「五、報價條件」「報　價　人」，輸出逐位元不變）
+    _dno = '報價編號' if _dlabel == '報價單' else _dlabel + '號'          # 報價編號／估價單號
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -407,7 +410,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True, key='acceptanceTerms')
 
     terms_section = (
-        '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'
+        f'<div class="terms"><div class="section-label" style="margin-bottom:8px">五、{_dpre}條件</div>'
         f'<div class="terms-grid">{terms_html}</div></div>'
     ) if terms_html.strip() else ''
 
@@ -524,10 +527,10 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  </div>\n'
         '</div>\n'
         '<div class="meta">\n'
-        f'  <div><span>報價編號：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
-        f'  <div><span>報價日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
+        f'  <div><span>{_dno}：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
+        f'  <div><span>{_dpre}日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
         f'  <div><span>有效期限：</span>{esc(str(q.get("validDays",30)))} 日內</div>\n'
-        f'  <div><span>報　價　人：</span>{esc(q.get("salesPerson",""))}</div>\n'
+        f'  <div><span>{"　".join(_dpre + "人")}：</span>{esc(q.get("salesPerson",""))}</div>\n'
         f'  <div><span>電　　　話：</span>{esc(q.get("salesPhone",""))}</div>\n'
         f'  <div><span>E-mail：</span>{esc(q.get("salesEmail",""))}</div>\n'
         '</div>\n'
@@ -568,7 +571,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + f'  <tbody>{item_rows}</tbody>\n'
         '</table>\n'
         '<div class="totals-group">\n'
-        '<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、報價合計</div>\n'
+        f'<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、{_dpre}合計</div>\n'
         '<div class="totals">\n'
         f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
         f'  {freight_row}\n'
@@ -1159,13 +1162,14 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         row = conn.execute(
             # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
         # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
-        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "SELECT data_json, status, deal_tag, location_id, doc_type FROM quotations "
         "WHERE quote_no=?", (quote_no,)
         ).fetchone()
         conn.close()
         if not row:
             return
         q        = json.loads(row["data_json"] or "{}")
+        q["docType"] = _DT.norm(row["doc_type"])      # 估價單：單據類型以欄位為準（存檔版 PDF 的用語；同 generate_pdf_bytes）
         q["locationId"] = row["location_id"] or ""      # QL7：欄位才是權威
         deal_tag = row["deal_tag"] or q.get("dealTag") or ""
         status   = row["status"] or ""
@@ -1362,7 +1366,7 @@ def _build_shipping_html(n: dict) -> str:
         '<div class="meta">\n'
         f'  <div><span>出貨單號：</span><strong style="font-family:Arial,sans-serif">{esc(n.get("noteNo",""))}</strong></div>\n'
         f'  <div><span>出貨日期：</span>{esc(n.get("shipDate",""))}</div>\n'
-        f'  <div><span>關聯報價單：</span>{esc(n.get("quoteNo",""))}</div>\n'
+        f'  <div><span>關聯{esc(_DT.label_of_no(n.get("quoteNo")))}：</span>{esc(n.get("quoteNo",""))}</div>\n'
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'
@@ -2007,7 +2011,7 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     from helpers.builtin_fields import finance_rows as _fin_rows
     _fr = _fin_rows(v.get("quoteNo"))
     if _fr and "</body>" in out:
-        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（報價單）</div>'
+        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（' + _DT.label_of_no(v.get("quoteNo")) + '）</div>'
                 + ''.join(f'<div><span style="color:#666">{_html_text(lb, falsy_empty=True)}：</span>{_html_text(val, falsy_empty=True)}</div>' for lb, val in _fr)
                 + '</div>')
         out = out.replace("</body>", _blk + "</body>", 1)
@@ -2293,7 +2297,7 @@ def _build_payment_request_html_core(v: dict) -> str:
     _fr = _fin_rows(v.get('quoteNo'))
     if _fr:
         terms_section += (
-            '<div class="section-label">其他資訊（報價單）</div>'
+            '<div class="section-label">其他資訊（' + _DT.label_of_no(v.get('quoteNo')) + '）</div>'
             + ''.join(term_block(lb, val) for lb, val in _fr)
         )
 
@@ -3134,14 +3138,45 @@ def _project_execution_report_data(quote_no: str) -> dict:
             "assignedNames": [dn_map.get(u, u) for u in assigned],
         })
 
-    # 叫料管控
-    materials = [{
-        "name":     m.get("name") or m.get("description") or "（未命名料件）",
-        "spec":     m.get("spec") or "",
-        "qty":      m.get("qty") or "",
-        "status":   m.get("status") or "",
-        "eta":      m.get("eta") or "",
-    } for m in (cr.get("materials") or [])]
+    # 材料申請（T84：舊版讀 spec／status／eta，材料卡根本沒有這三個鍵 ⇒ 規格永遠空白、狀態與預計到貨永遠「—」，也沒讀 materialOrders）
+    # ① 材料卡 caseRecord.materials[]：實際只有 name／model／qty／unit／ordered／arrived／note，認列採購單後 poLink.arrivedOn 是到貨日
+    # ② 材料申請單 caseRecord.materialOrders[]＋疊加簽核列 case_material_approvals（簽核狀態、到貨確認日）
+    # 只取名稱／規格／數量／狀態／日期，不碰任何金額欄位（單價、小計、已付）
+    # 舊鍵 status／eta 有意放棄：沒有任何程式寫過，狀態改由 ordered／arrived 旗標、日期改由 poLink.arrivedOn 決定
+    def _qty_text(q, unit):
+        if q in (None, ""):
+            return ""
+        if isinstance(q, float) and q == int(q):
+            q = int(q)
+        return ("%s %s" % (q, unit or "")).strip()
+
+    materials = []
+    for m in (cr.get("materials") or []):
+        if not isinstance(m, dict):
+            continue
+        link = m.get("poLink") if isinstance(m.get("poLink"), dict) else {}
+        materials.append({
+            "name":      m.get("name") or m.get("description") or "（未命名料件）",
+            "spec":      m.get("model") or m.get("spec") or "",      # 舊鍵 spec 只當匯入／手改資料的後備
+            "qty":       _qty_text(m.get("qty"), m.get("unit")),
+            "status":    "已到料" if m.get("arrived") else "已申購" if m.get("ordered") else "待申購",
+            "arrivedOn": link.get("arrivedOn") or "",
+        })
+    _appr = {
+        str(a["item_id"]): a for a in conn.execute(
+            "SELECT item_id, status, received_on FROM case_material_approvals WHERE quote_no=?", (quote_no,)).fetchall()
+    }
+    material_orders = []
+    for o in (cr.get("materialOrders") or []):
+        if not isinstance(o, dict):
+            continue
+        a = _appr.get(str(o.get("itemId")))
+        material_orders.append({
+            "name":       o.get("itemName") or "（未命名項目）",
+            "qty":        _qty_text(o.get("quantity"), o.get("unit")),
+            "status":     (a["status"] if a else "") or "（未走簽核）",
+            "receivedOn": (a["received_on"] if a else "") or "",
+        })
 
     # 代辦事項（兩階段簽核）
     action_items = [{
@@ -3196,6 +3231,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
         "assignedNames": assigned_names,
         "stages":       stages,
         "materials":    materials,
+        "materialOrders": material_orders,
         "actionItems":  action_items,
         "workLogs":     work_logs,
         "feed":         feed,
@@ -3239,16 +3275,25 @@ def _build_project_execution_report_html(data: dict) -> str:
     )
 
     mat_rows_html = "".join(
-        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"])}</td><td class="c">{esc(m["qty"])}</td>'
-        f'<td class="c">{esc(m["status"]) or "—"}</td><td class="c">{esc(m["eta"]) or "—"}</td></tr>'
+        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"]) or "—"}</td><td class="c">{esc(m["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(m["status"])}</td><td class="c">{esc(m["arrivedOn"]) or "—"}</td></tr>'
         for m in data["materials"]
     )
     _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無材料申請資料</td></tr>'
+    mo_rows_html = "".join(
+        f'<tr><td>{esc(o["name"])}</td><td class="c">{esc(o["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(o["status"])}</td><td class="c">{esc(o["receivedOn"]) or "—"}</td></tr>'
+        for o in data.get("materialOrders") or []
+    )
     materials_section = (
         '<div class="section-label">二、材料申請</div>'
-        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:70px">數量</th>'
-        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">預計到貨</th></tr></thead>'
+        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:90px">數量</th>'
+        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">到貨日</th></tr></thead>'
         f'<tbody>{mat_rows_html or _no_mat_row}</tbody></table>'
+        + ('<div style="margin:8px 0 3px;font-size:12px;color:#6B7280">材料申請單（簽核）</div>'
+           '<table><thead><tr><th>申請項目</th><th class="c" style="width:90px">數量</th>'
+           '<th class="c" style="width:90px">簽核狀態</th><th class="c" style="width:100px">到貨確認日</th></tr></thead>'
+           f'<tbody>{mo_rows_html}</tbody></table>' if mo_rows_html else '')
     )
 
     def _item_status(it):

@@ -28,6 +28,18 @@
    "icon": "user"
   },
   {
+   "id": "backup-monitor",
+   "section": "data",
+   "title": "備份與監控",
+   "desc": "最近一次備份有沒有成功、硬碟還剩多少、系統是否在線，一頁看完",
+   "impact": "影響：只是查看；頁面上的「立即備份」「測試心跳」要確認後才會執行。",
+   "href": "backup-monitor.html",
+   "perm": "superadmin",
+   "order": 5,
+   "keywords": "備份 監控 心跳 硬碟 空間 告警 還原",
+   "icon": "disk"
+  },
+  {
    "id": "storage-settings",
    "section": "data",
    "title": "儲存位置",
@@ -186,6 +198,18 @@
    "icon": "gear"
   },
   {
+   "id": "getting-started",
+   "section": "settings",
+   "title": "開始使用",
+   "desc": "新公司 7 步設定清單：公司資料、報價單、人員與簽核、寄信、備份、LINE、匯入資料",
+   "impact": "影響：只是進度與連結，不會改動任何設定；每一步的設定仍在各自的頁面。",
+   "href": "getting-started.html",
+   "perm": "superadmin",
+   "order": 5,
+   "keywords": "開始使用 新手 設定精靈 第一次 導覽 清單 上線",
+   "icon": "gear"
+  },
+  {
    "id": "company-profile-settings",
    "section": "settings",
    "title": "公司資料設定",
@@ -196,6 +220,18 @@
    "order": 20,
    "keywords": "公司 抬頭 統編 據點 Logo 品牌",
    "icon": "gear"
+  },
+  {
+   "id": "license-settings",
+   "section": "settings",
+   "title": "授權",
+   "desc": "查看目前的授權（客戶、到期日、可用功能），並匯入供應商提供的新授權檔",
+   "impact": "影響：換上新授權後，可用的功能與到期日以新授權為準；換上之前會自動備份目前的授權。",
+   "href": "license-settings.html",
+   "perm": "superadmin",
+   "order": 25,
+   "keywords": "授權 到期 續約 匯入 授權檔 啟用 購買",
+   "icon": "shield"
   },
   {
    "id": "legal-params",

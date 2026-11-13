@@ -22,7 +22,7 @@ import pytest
 _TOOLS = Path(__file__).resolve().parents[2] / "tools"
 NEW = "apply_module_update.ps1"
 SHARED = ("Test-Ping", "Fail", "Info", "Warn", "Ok", "Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile",
-          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange",
+          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange", "Get-ServerLogTail",
           "Write-CompanyBankNote")      # 第二十一班（E4S3-S1）
 NEW_STATUSES = {"module_preflight_failed", "module_load_dryrun_failed", "module_copy_failed",
                 "module_unhealthy_rolled_back", "module_restore_failed"}
@@ -369,6 +369,7 @@ def _log_check(tmp_path, lines, key="tender_radar", version="1.3.4"):
         "$ErrorActionPreference = 'Stop'",
         "function Info($msg) { }",
         _fn(text, "Get-StartupRange"),
+        _fn(text, "Get-ServerLogTail"),
         _fn(text, "Get-LogCheck"),
         "$BackendDir = '%s'" % str(tmp_path).replace("'", "''"),
         "$lc = Get-LogCheck '%s' '%s'" % (key, version),

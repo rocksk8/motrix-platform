@@ -15,6 +15,9 @@ backend/.initial_demo_credentials.txt
 backend/license.key
 # 緊急放行通行證（LICENSE-EMERGENCY-PASS.md；per-installation、有期限，同 license.key）
 backend/license_emergency.key
+# 授權匯入（T83；LICENSE-IMPORT.md）：換檔前的舊授權備份與寫入中的暫存檔，per-installation，同 license.key
+backend/license_backups/
+backend/license.key.*-tmp
 # 本公司資料設定閘門的安裝設定檔（COMPANY-SETUP-GATE §3.4；per-installation，同 license.key）
 backend/.install_identity
 backend/.install_identity.tmp
@@ -39,6 +42,7 @@ motrix_erp.db
 
 # Deployment-specific config (per-machine, not app code)
 backend/heartbeat_config.json
+backend/heartbeat_config.json.pending
 backend/tools/.guide_sync_config.json
 backend/certs/
 
