@@ -343,7 +343,7 @@ def _line(items, superadmins, names):
         from helpers import line_notify as _ln
         rows = []
         for i, it in enumerate(items[:5], 1):
-            rows.append(("項目" if len(items) == 1 else "項目%d" % i, it["label"]))
+            rows.append(("項目" if len(items) == 1 else "項目 %d" % i, it["label"]))
             if it["plain"]:
                 rows.append(("變更", "%s → %s" % (it["oldText"], it["newText"])))
             rows.append(("狀態", _status(it)))
