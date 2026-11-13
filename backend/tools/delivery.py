@@ -22,8 +22,9 @@
 
 子命令（exit：0 通過／1 不通過或拒絕）：
   keygen   --private-out <路徑>                 產生 Ed25519 金鑰：私鑰寫到檔（已存在就拒絕），公鑰印出（貼進 DELIVERY_PUBKEY_PEM）
-  publish  --pkg <完整包> --root <交付資料夾> --private-key <私鑰檔> [--keep 3] [--baseline <基準檔>]
-           發布前對照「已出貨腳本基準」（版號必須比基準大、除非內容相同）；DELIVERY_PUBLISH_OK 之後才更新基準（T83）
+  publish  --pkg <完整包> --root <交付資料夾> --private-key <私鑰檔> [--keep 3] [--baseline <基準檔>] [--no-baseline]
+           發布前對照「已出貨腳本基準」（版號必須比基準大、除非內容相同；基準檔不存在 ⇒ 拒絕，除非 --no-baseline）；
+           DELIVERY_PUBLISH_OK 之後才更新基準（T83）；單模組包不適用（DELIVERY_BASELINE_NOT_APPLICABLE）
   baseline-record --root <交付資料夾> --name <包名>   手動補寫基準（發布成功但寫基準失敗時）
   scan     --root <交付資料夾>
   stage    --root <交付資料夾> --name <包名> --staging <staging 根>
@@ -259,20 +260,45 @@ def baseline_problems(facts, baseline):
     return problems
 
 
-def record_baseline(root, name, path=None):
-    """發布成功之後把這個包裡的腳本版號＋sha256 寫成新的基準（原子寫）⇒ 路徑。只收完整包；寫之前再驗一次不退版
-    （手動補寫也不能把基準往回倒）。"""
+def _verified_published_package(root, name, pubkey_pem):
+    """⇒ (meta, payload 路徑)。基準只能從「真的由開發機發布、簽章驗得過」的包取值：名稱合格（不含路徑分隔）、
+    在 <root>/packages/ 底下、delivery.json 的 name 同名、簽章（用內建公鑰）驗得過、腳本檔的雜湊與清單一致。"""
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        raise DeliveryError("包名不合格：%r" % (name,))
+    pkgs = os.path.realpath(os.path.join(root, "packages"))
+    pkg = os.path.realpath(os.path.join(pkgs, name))
+    if os.path.dirname(pkg) != pkgs or not os.path.isdir(pkg):
+        raise DeliveryError("%s 不在 %s 底下（或不存在）" % (name, pkgs))
+    meta_bytes, meta = _read_meta(os.path.join(pkg, META_JSON))
+    if meta is None or meta.get("name") != name:
+        raise DeliveryError("delivery.json 讀不到，或裡面的 name 與資料夾名不同：%s" % name)
+    pub = DELIVERY_PUBKEY_PEM if pubkey_pem is None else pubkey_pem
+    try:
+        sha_bytes = open(os.path.join(pkg, SHA_LIST), "rb").read()
+        sig = open(os.path.join(pkg, SIG), encoding="ascii").read().strip()
+    except OSError as e:
+        raise DeliveryError("交付檔不完整，不寫基準：%s" % e)
+    if not pub or not verify_signature(signed_bytes(meta_bytes, sha_bytes), sig, pub):
+        raise DeliveryError("簽章驗不過（或沒有公鑰），不寫基準：%s" % name)
+    return meta, os.path.join(pkg, PAYLOAD), parse_sha_list(sha_bytes.decode("utf-8"))
+
+
+def record_baseline(root, name, path=None, pubkey_pem=None):
+    """發布成功之後把這個包裡的腳本版號＋sha256 寫成新的基準（原子寫；失敗不留 .tmp）⇒ 路徑。只收完整包（單模組包 ⇒ DeliveryError）；
+    包必須是真的發布出來、簽章驗得過的（見 `_verified_published_package`）；寫之前再驗一次不退版（手動補寫也不能把基準往回倒）。"""
     path = path or default_baseline_path()
-    pkg = os.path.join(root, "packages", name)
-    meta = json.load(open(os.path.join(pkg, META_JSON), encoding="utf-8-sig"))
-    if meta.get("kind", KIND_FULL) != KIND_FULL:
+    meta, payload, listed = _verified_published_package(root, name, pubkey_pem)
+    if package_kind(meta) != KIND_FULL:
         raise DeliveryError("單模組包不寫腳本基準：%s" % name)
-    facts = script_facts(os.path.join(pkg, PAYLOAD))
+    facts = script_facts(payload)
     if not facts:
         raise DeliveryError("包裡沒有任何登記的腳本，不寫基準：%s" % name)
     for n, (v, _s) in facts.items():
         if v is None:
             raise DeliveryError("[%s] 包裡的腳本讀不到版號，不寫基準" % n)
+        rel = BASELINE_SCRIPTS[n][0]
+        if listed.get(rel) != _sha256_file(os.path.join(payload, *rel.split("/"))):
+            raise DeliveryError("[%s] 腳本檔的雜湊與已簽章的清單不符，不寫基準" % n)
     old = read_baseline(path) or {}
     problems = baseline_problems({n: f for n, f in facts.items() if n in old}, old)
     if problems:
@@ -286,9 +312,16 @@ def record_baseline(root, name, path=None):
            "scripts": new}
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        f.write(json.dumps(doc, ensure_ascii=False, indent=1) + "\n")
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(doc, ensure_ascii=False, indent=1) + "\n")
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
     return path
 
 
@@ -902,7 +935,8 @@ def main(argv=None, resolver=None):
     #: --root 省略 ⇒ 讀「系統設定→儲存位置」的更新交付資料夾（configured_root）
     p = sub.add_parser("publish"); p.add_argument("--pkg", required=True); p.add_argument("--root")
     p.add_argument("--private-key", required=True); p.add_argument("--keep", type=int, default=KEEP_DEFAULT)
-    p.add_argument("--baseline", help="已出貨腳本基準檔（預設＝這份原始碼樹的 %s；發布前驗版號、發布成功後更新）" % BASELINE_REL)
+    p.add_argument("--baseline", help="已出貨腳本基準檔（預設＝這份原始碼樹的 %s；發布前驗版號、發布成功後更新；檔案不存在 ⇒ 拒絕發布）" % BASELINE_REL)
+    p.add_argument("--no-baseline", action="store_true", help="明確略過基準（不驗版號、不更新）；只有基準檔真的不可用時才用，會大聲印出")
     br = sub.add_parser("baseline-record"); br.add_argument("--root"); br.add_argument("--name", required=True)
     br.add_argument("--baseline", help="預設同 publish")
     s = sub.add_parser("scan"); s.add_argument("--root")
@@ -924,14 +958,22 @@ def main(argv=None, resolver=None):
             print(keygen(a.private_out).decode("ascii"))
             print("DELIVERY_KEYGEN_OK（私鑰：%s；公鑰貼進 backend/tools/delivery.py 的 DELIVERY_PUBKEY_PEM）" % a.private_out)
         elif a.cmd == "publish":
+            is_module = os.path.isfile(os.path.join(a.pkg, MODULE_LOCK))
             bpath = a.baseline or default_baseline_path()
-            name = publish(a.pkg, a.root, open(a.private_key, "rb").read(), a.keep,
-                           baseline_path=bpath if os.path.isfile(bpath) or a.baseline else None)
+            if is_module or a.no_baseline:
+                bpath = None
+            elif not os.path.isfile(bpath):                          # L2：預設（或指定）的基準檔不存在 ⇒ 拒絕，不默默放行
+                raise DeliveryError("已出貨腳本基準檔不存在：%s（被刪了？不要在沒基準的情況下發布；確定要略過才明確帶 --no-baseline）" % bpath)
+            name = publish(a.pkg, a.root, open(a.private_key, "rb").read(), a.keep, baseline_path=bpath)
             print("DELIVERY_PUBLISH_OK %s" % name)
-            if not os.path.isfile(bpath) and not a.baseline:        # 不在原始碼樹裡跑（沒有基準檔）：發布照常，只提醒
-                print("DELIVERY_BASELINE_SKIPPED 找不到 %s（不是在原始碼樹裡跑的？）：沒有驗版號也沒有更新基準" % bpath)
+            if is_module:
+                print("DELIVERY_BASELINE_NOT_APPLICABLE 單模組包不涉及 apply_update 腳本版號，沒有驗也不更新基準")
+            elif a.no_baseline:
+                print("DELIVERY_BASELINE_SKIPPED --no-baseline：這次發布沒有驗腳本版號、也沒有更新基準（下一班的守門會拿舊基準比）")
             else:
-                try:                                                # 只在發布成功之後才寫；寫不成不推翻已發布的包，但要大聲講
+                if a.baseline and os.path.abspath(bpath) != os.path.abspath(default_baseline_path()):
+                    print("DELIVERY_BASELINE_FILE 使用非預設基準檔：%s" % os.path.abspath(bpath))
+                try:                                                # 只在發布成功之後寫；寫不成不推翻已發布的包，但要大聲講
                     print("DELIVERY_BASELINE_UPDATED %s（要 commit）" % record_baseline(a.root, name, bpath))
                 except (DeliveryError, OSError, ValueError) as e:
                     print("DELIVERY_BASELINE_FAILED %s ⇒ 包已發布；請用 `delivery.py baseline-record --name %s` 補寫，否則基準會停在舊版" % (e, name))

@@ -134,9 +134,10 @@ def _keys(tmp_path):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     k = Ed25519PrivateKey.generate()
     priv = k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    pub = k.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
     f = tmp_path / "priv.pem"
     f.write_bytes(priv)
-    return priv, str(f)
+    return priv, str(f), pub
 
 
 def _pkg(tmp_path, version, body="x", commit="0123abcd" + "e" * 32, built_at="2026-11-13 10:00:00", tag="a"):
@@ -167,7 +168,7 @@ def _write_baseline(tmp_path, v="2026-11-13a", sha=None):
 
 
 def test_publish_refuses_changed_content_with_the_shipped_version_and_leaves_nothing_behind(tmp_path, delivery_root):
-    priv, _f = _keys(tmp_path)
+    priv, _f, pub = _keys(tmp_path)
     pkg, _sha = _pkg(tmp_path, "2026-11-13a", body="behavior changed")
     bp = _write_baseline(tmp_path)
     before = bp.read_bytes()
@@ -181,13 +182,13 @@ def test_publish_refuses_changed_content_with_the_shipped_version_and_leaves_not
 
 def test_publish_without_a_baseline_argument_does_not_check(tmp_path, delivery_root):
     """單元層不帶基準＝不查（既有 publish 測試與非原始碼樹的用法不受影響）；CLI 預設會帶。"""
-    priv, _f = _keys(tmp_path)
+    priv, _f, pub = _keys(tmp_path)
     pkg, _ = _pkg(tmp_path, "2026-11-13a", body="whatever")
     assert D.publish(str(pkg), str(delivery_root), priv)
 
 
 def test_cli_failed_publish_does_not_touch_the_baseline(tmp_path, delivery_root, capsys):
-    _p, keyfile = _keys(tmp_path)
+    _p, keyfile, pub = _keys(tmp_path)
     pkg, _ = _pkg(tmp_path, "2026-11-13a", body="behavior changed")
     bp = _write_baseline(tmp_path)
     before = bp.read_bytes()
@@ -197,8 +198,9 @@ def test_cli_failed_publish_does_not_touch_the_baseline(tmp_path, delivery_root,
     assert bp.read_bytes() == before, "失敗的發布不得寫基準"
 
 
-def test_cli_successful_publish_writes_the_baseline_after_the_ok_line(tmp_path, delivery_root, capsys):
-    _p, keyfile = _keys(tmp_path)
+def test_cli_successful_publish_writes_the_baseline_after_the_ok_line(tmp_path, delivery_root, capsys, monkeypatch):
+    _p, keyfile, pub = _keys(tmp_path)
+    monkeypatch.setattr(D, "DELIVERY_PUBKEY_PEM", pub)
     pkg, sha = _pkg(tmp_path, "2026-11-13b", body="behavior changed", tag="b")
     bp = _write_baseline(tmp_path)
     rc = D.main(["publish", "--pkg", str(pkg), "--root", str(delivery_root), "--private-key", keyfile, "--baseline", str(bp)])
@@ -213,7 +215,7 @@ def test_cli_successful_publish_writes_the_baseline_after_the_ok_line(tmp_path, 
 
 
 def test_cli_baseline_write_failure_is_loud_but_does_not_undo_the_published_package(tmp_path, delivery_root, capsys, monkeypatch):
-    _p, keyfile = _keys(tmp_path)
+    _p, keyfile, pub = _keys(tmp_path)
     pkg, _ = _pkg(tmp_path, "2026-11-13b", body="x", tag="d")
     bp = _write_baseline(tmp_path)
 
@@ -226,23 +228,141 @@ def test_cli_baseline_write_failure_is_loud_but_does_not_undo_the_published_pack
 
 
 def test_record_baseline_never_rewinds_the_version(tmp_path, delivery_root):
-    priv, _f = _keys(tmp_path)
+    priv, _f, pub = _keys(tmp_path)
     pkg, _ = _pkg(tmp_path, "2026-11-13a", body="old shape", tag="e")
     name = D.publish(str(pkg), str(delivery_root), priv)           # 不帶基準：先讓它發布出去
     bp = _write_baseline(tmp_path, v="2026-11-14a", sha="f" * 64)   # 基準已經比這個包新
     with pytest.raises(D.DeliveryError):
-        D.record_baseline(str(delivery_root), name, str(bp))
+        D.record_baseline(str(delivery_root), name, str(bp), pubkey_pem=pub)
     assert json.loads(bp.read_text(encoding="utf-8"))["scripts"]["apply_update"]["version"] == "2026-11-14a"
 
 
 def test_record_baseline_first_time_writes_every_script_present_in_the_package(tmp_path, delivery_root):
-    priv, _f = _keys(tmp_path)
+    priv, _f, pub = _keys(tmp_path)
     pkg, sha = _pkg(tmp_path, "2026-11-13a", body="first", tag="f")
     mod = pkg / "backend" / "tools" / "apply_module_update.ps1"
     mod.write_bytes(b'# m\r\n$ApplyModuleScriptVersion = "2026-09-29a"\r\n')
     name = D.publish(str(pkg), str(delivery_root), priv)
     bp = tmp_path / "fresh" / "apply_scripts.json"
-    D.record_baseline(str(delivery_root), name, str(bp))
+    D.record_baseline(str(delivery_root), name, str(bp), pubkey_pem=pub)
     s = json.loads(bp.read_text(encoding="utf-8"))["scripts"]
     assert s["apply_update"]["sha256"] == sha and s["apply_module_update"]["version"] == "2026-09-29a"
     assert bp.read_bytes().endswith(b"\n") and b"\r\n" not in bp.read_bytes()
+
+
+# ── 審查補強（hichan-10：M1／L1～L4）──────────────────────────────────────────────
+
+def _published(tmp_path, delivery_root, version="2026-11-13b", tag="p"):
+    priv, keyfile, pub = _keys(tmp_path)
+    pkg, sha = _pkg(tmp_path, version, body="shipped", tag=tag)
+    return D.publish(str(pkg), str(delivery_root), priv), priv, keyfile, pub, sha
+
+
+def test_m1_cli_module_package_skips_the_baseline_step_with_a_neutral_line(tmp_path, delivery_root, capsys, monkeypatch):
+    """M1：單模組包 ⇒ 不驗、不寫基準，印中性的 NOT_APPLICABLE，不是假的 FAILED（那個補救指令也會再失敗）。"""
+    from tests.platform.test_delivery_module_2026_09_28 import _mod_pkg
+    _p, keyfile, pub = _keys(tmp_path)
+    monkeypatch.setattr(D, "DELIVERY_PUBKEY_PEM", pub)
+    bp = _write_baseline(tmp_path)
+    before = bp.read_bytes()
+    rc = D.main(["publish", "--pkg", str(_mod_pkg(tmp_path)), "--root", str(delivery_root), "--private-key", keyfile, "--baseline", str(bp)])
+    out = capsys.readouterr().out
+    assert rc == 0 and "DELIVERY_PUBLISH_OK" in out and "DELIVERY_BASELINE_NOT_APPLICABLE" in out, out
+    assert "BASELINE_FAILED" not in out and "BASELINE_UPDATED" not in out
+    assert bp.read_bytes() == before
+
+
+def test_m1_module_package_publish_works_even_when_the_baseline_file_is_missing(tmp_path, delivery_root, capsys, monkeypatch):
+    from tests.platform.test_delivery_module_2026_09_28 import _mod_pkg
+    _p, keyfile, pub = _keys(tmp_path)
+    rc = D.main(["publish", "--pkg", str(_mod_pkg(tmp_path)), "--root", str(delivery_root), "--private-key", keyfile,
+                 "--baseline", str(tmp_path / "nope.json")])
+    out = capsys.readouterr().out
+    assert rc == 0 and "DELIVERY_BASELINE_NOT_APPLICABLE" in out, out
+
+
+def test_l1_record_baseline_rejects_bad_names_and_path_traversal(tmp_path, delivery_root):
+    name, _priv, _kf, pub, _sha = _published(tmp_path, delivery_root)
+    bp = tmp_path / "b.json"
+    for bad in ("..", "../" + name, "..\\" + name, name + "/..", "x", "", None, os.path.join(str(delivery_root), "packages", name)):
+        with pytest.raises(D.DeliveryError):
+            D.record_baseline(str(delivery_root), bad, str(bp), pubkey_pem=pub)
+    assert not bp.exists()
+
+
+def test_l1_record_baseline_rejects_a_fake_unsigned_directory(tmp_path, delivery_root):
+    """假目錄：名稱合格、有 payload 和 delivery.json，但沒有簽章 ⇒ 拒絕。"""
+    name, _priv, _kf, pub, _sha = _published(tmp_path, delivery_root)
+    fake = "20261113_235959_deadbeef_full"
+    src = delivery_root / "packages" / name
+    import shutil
+    shutil.copytree(src, delivery_root / "packages" / fake)
+    (delivery_root / "packages" / fake / "package.sha256.sig").unlink()
+    bp = tmp_path / "b.json"
+    with pytest.raises(D.DeliveryError):
+        D.record_baseline(str(delivery_root), fake, str(bp), pubkey_pem=pub)
+    assert not bp.exists()
+
+
+def test_l1_record_baseline_rejects_meta_name_mismatch_wrong_key_and_tampered_script(tmp_path, delivery_root):
+    import shutil
+    name, _priv, _kf, pub, _sha = _published(tmp_path, delivery_root)
+    bp = tmp_path / "b.json"
+    # 資料夾名與 delivery.json 的 name 不同（改名複製）：簽章本身是對的，但 name 對不上
+    other = "20261113_235958_0123abcd_full"
+    shutil.copytree(delivery_root / "packages" / name, delivery_root / "packages" / other)
+    with pytest.raises(D.DeliveryError):
+        D.record_baseline(str(delivery_root), other, str(bp), pubkey_pem=pub)
+    # 公鑰不是發布者的
+    _p2, _f2, pub2 = _keys(tmp_path)
+    with pytest.raises(D.DeliveryError):
+        D.record_baseline(str(delivery_root), name, str(bp), pubkey_pem=pub2)
+    # 發布後腳本被換掉（簽章驗得過、但腳本雜湊對不上清單）
+    ps1 = delivery_root / "packages" / name / "payload" / "backend" / "tools" / "apply_update.ps1"
+    ps1.write_bytes(ps1.read_bytes() + b"# tampered\r\n")
+    with pytest.raises(D.DeliveryError):
+        D.record_baseline(str(delivery_root), name, str(bp), pubkey_pem=pub)
+    assert not bp.exists()
+
+
+def test_l2_cli_refuses_to_publish_when_the_baseline_file_is_missing_unless_no_baseline(tmp_path, delivery_root, capsys):
+    _p, keyfile, pub = _keys(tmp_path)
+    pkg, _ = _pkg(tmp_path, "2026-11-13b", body="x", tag="m")
+    missing = str(tmp_path / "gone" / "apply_scripts.json")
+    rc = D.main(["publish", "--pkg", str(pkg), "--root", str(delivery_root), "--private-key", keyfile, "--baseline", missing])
+    out = capsys.readouterr().out
+    assert rc == 1 and "DELIVERY_REFUSED" in out and "--no-baseline" in out and "DELIVERY_PUBLISH_OK" not in out, out
+    assert not (delivery_root / "packages").exists() or not list((delivery_root / "packages").iterdir())
+    rc = D.main(["publish", "--pkg", str(pkg), "--root", str(delivery_root), "--private-key", keyfile, "--no-baseline"])
+    out = capsys.readouterr().out
+    assert rc == 0 and "DELIVERY_PUBLISH_OK" in out and "DELIVERY_BASELINE_SKIPPED" in out and "BASELINE_UPDATED" not in out, out
+
+
+def test_l2_default_baseline_path_missing_also_refuses(tmp_path, delivery_root, capsys, monkeypatch):
+    _p, keyfile, pub = _keys(tmp_path)
+    pkg, _ = _pkg(tmp_path, "2026-11-13b", body="x", tag="n")
+    monkeypatch.setattr(D, "default_baseline_path", lambda: str(tmp_path / "no-default.json"))
+    rc = D.main(["publish", "--pkg", str(pkg), "--root", str(delivery_root), "--private-key", keyfile])
+    assert rc == 1 and "DELIVERY_REFUSED" in capsys.readouterr().out
+
+
+def test_l3_non_default_baseline_path_is_printed(tmp_path, delivery_root, capsys, monkeypatch):
+    _p, keyfile, pub = _keys(tmp_path)
+    monkeypatch.setattr(D, "DELIVERY_PUBKEY_PEM", pub)
+    pkg, _ = _pkg(tmp_path, "2026-11-13b", body="x", tag="o")
+    bp = _write_baseline(tmp_path)
+    rc = D.main(["publish", "--pkg", str(pkg), "--root", str(delivery_root), "--private-key", keyfile, "--baseline", str(bp)])
+    out = capsys.readouterr().out
+    assert rc == 0 and "DELIVERY_BASELINE_FILE" in out and str(bp) in out, out
+
+
+def test_l4_no_stray_tmp_file_is_left_when_the_atomic_replace_fails(tmp_path, delivery_root, monkeypatch):
+    name, _priv, _kf, pub, _sha = _published(tmp_path, delivery_root, tag="q")
+    bp = tmp_path / "out" / "apply_scripts.json"
+
+    def boom(*a, **k):
+        raise OSError("replace failed")
+    monkeypatch.setattr(D.os, "replace", boom)
+    with pytest.raises(OSError):
+        D.record_baseline(str(delivery_root), name, str(bp), pubkey_pem=pub)
+    assert not bp.exists() and not (tmp_path / "out" / "apply_scripts.json.tmp").exists()
