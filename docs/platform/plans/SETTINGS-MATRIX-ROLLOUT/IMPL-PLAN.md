@@ -1,6 +1,6 @@
 # 實作計畫：系統設定全面改版（SETTINGS-MATRIX-ROLLOUT）
 
-狀態：**計畫稿 v1**（hichan-4 寫，2026-11-13；使用者已看過設計稿 `04fc33c0c` 並同意「照這個方向開始實作」；h11 對 r3.2 複驗 0 阻擋）。
+狀態：**計畫稿 v1.1**（hichan-4 寫，2026-11-13；PM 同日裁示與 h11 意見已併入：審查分流、簽核頁通知降級、S5 使用者裁示與轉接器設計、批次端點 undo；使用者已看過設計稿 `04fc33c0c` 並同意「照這個方向開始實作」；h11 對 r3.2 複驗 0 阻擋）。
 寫給「T82 上線、使用者清除視窗之後的新視窗」：不靠對話紀錄也要看得懂。本檔**只是計畫**；🔴 **禁重測令仍有效**期間不動程式碼、不跑重測（單檔、序列的測試可以）。班次號碼是「最早可進」的提案，PM／整合者可前後調整，依賴關係不可違反。
 
 ## 0. 接手第一步（新視窗照做）
@@ -15,7 +15,7 @@
 
 1. **規格是 SPEC.md**；與 mockup 衝突時以 SPEC 為準，發現規格有洞先回報 h4（不要自己決定後默默實作）。
 2. **寫入一律走既有路徑**：設定中心＝`settings_registry.publish()`／`apply_profile()`；不另開寫入點（SPEC §4-4）。
-3. **審查者**：每切片至少一位**非作者**審查者；設定相關預設找 **h11**（對抗式審查者，熟 registry／change_control）；共用核心前端找 **h9**；安全／金額後端找 **h10／h12**。審查意見處理完才進列車。
+3. **審查者**：每切片至少一位**非作者**審查者；設定相關找 **h11**（對抗式審查者，熟 registry／change_control），但 PM 2026-11-13 裁示 h11 只留 S1d、S2、S3a、S6；共用核心前端與信件矩陣找 **h9**；registry、安全、金額後端找 **h12／h10**。審查意見處理完才進列車。
 4. **測試（禁重測令解除前後都一樣的最低要求）**：每切片自帶測試檔，單檔、序列可跑；解除禁令後，整合者跑其列車的 preflight。`data/gen_seed.py --check` 在每個動到頁面對應或盤點表的切片都要綠。測試清單見各切片。
 5. **「與預設不同」「來源」「?」說明**由登錄表產生（SPEC §6）；不另建說明檔；新增文字**不得含禁用詞**（確認期間、影子、閘門、true/false、整數選項代碼；SPEC §11、UX-PRINCIPLES §6.5）。
 6. **截圖關卡（使用者明講：每一班上線前都要截圖給使用者確認）**：
@@ -33,15 +33,15 @@
 |---|---|---|---|---|---|
 | **S1a** | 共用核心補齊：eligible／lock、草稿模式（opt-in）、groupActions 防呆（SPEC §10 C-a～C-c） | h6 | h9 | h6 的 LINE 審查完成（核心不被動） | T85 |
 | **S1b** | 核心元件補丁：C6「?」說明、C7 來源徽章、C8 與預設不同、C11 欄頭選取＋確認視窗的「略過原因／通知預覽」欄 | h4（對 `settings-matrix.js` 提 patch／PR，h6 合） | h6、h9 | S1a | T86 |
-| **S1c** | 設定登錄表後端：`publish(..., expected_values)` 逐欄 CAS＋409；`SettingDef.when`＋`field_views` 加 `source`／`help`；禁用詞原文修正；`needs_external` | h4 | h11 | T83 已凍結的 `settings_registry.py` 基底 | T85 |
+| **S1c** | 設定登錄表後端：`publish(..., expected_values)` 逐欄 CAS＋409；`SettingDef.when`＋`field_views` 加 `source`／`help`；禁用詞原文修正；`needs_external` | h4 | h12 | T83 已凍結的 `settings_registry.py` 基底 | T85 |
 | **S1d** | 通知元件通用化（h9 的 8 項）與設定中心儲存列前端 | h9 | h11 | T83 valueOf 先進、T84 notify v1 | T84～T85（h9 目標 T84，跟不上就 T85） |
 | **S2** | 設定中心外框：兩層導覽、總覽、待生效、最近變更、全域搜尋、草稿＋儲存列；後端 `overview`／`recent` | h4 | h11（後端）、h9（前端）；人機介面由 h12 覆看 | S1a、S1b、S1c、S1d | T86 |
 | **S3a** | 使用者權限矩陣（`users.html` 的權限段＋批次端點＋範本逐人展開） | h4 | h12（對安全）、h11 | S1a、S1b、S1d、**h10 的 sensitive-gate 先合（T84）** | T87 |
-| **S3b** | 信件收件矩陣（`mail-settings.html`＋批次端點；行事曆開關只留這頁、`google-calendar-settings.html` 改連結） | h4 | h11 | S1a、S1b、S1d | T87 |
-| **S5**（後端，與 S3 平行） | §15：傳票科目、扣繳參數、T100 科目、管銷／公益口徑加變更管制；獎金預設、營運目標、報價條款存檔後發通知 | h3 | h10（金額／安全）、h11 | S1c、S1d | T87 |
+| **S3b** | 信件收件矩陣（`mail-settings.html`＋批次端點；行事曆開關只留這頁、`google-calendar-settings.html` 改連結） | h4 | h9 | S1a、S1b、S1d | T87 |
+| **S5**（後端，與 S3 平行） | §15：傳票科目、扣繳參數、T100 科目、管銷／公益口徑加變更管制；獎金預設、營運目標、報價條款存檔後發通知 | h3 | h10（金額／安全）；**SPEC §15 補強稿先給 h11 做規格審，過了 h3 才動程式** | S1c、S1d、SPEC §15 補強（見 S5） | T87 |
 | **S4a** | 乙份各設定頁（11 頁；`builder_*` 13 組合一頁等） | h12 | h3 | S2（外框）、S1a～c | T88 |
 | **S4b** | 甲份各設定頁（設定中心內 20 群組、7 個獨立頁、設定中心以外 7 項的白話化與連結） | h3 | h12 | S2、S1a～c、S5（設定中心以外的變更管制） | T88 |
-| **S4c** | 丙份其餘頁：職責角色、組織架構、permission-matrix 暫存批次、簽核流程複製／範本（`approval-settings` 屬甲，見 S4b；流程範本批次由 h4 做） | h4 | h11 | S3a、S3b | T89 |
+| **S4c** | 丙份其餘頁：職責角色、組織架構、permission-matrix 暫存批次、簽核流程複製／範本（`approval-settings` 屬甲，見 S4b；流程範本批次由 h4 做） | h4 | h12（h11 建議；PM 未指定，開工前確認） | S3a、S3b | T89 |
 | **S6** | 個人 Email 通知偏好的**本人入口**（my-account 通知分頁）＋管理員代設；LINE 個人偏好白話化 | h4 | h11 | S1a～b、S1d | T89 |
 | **S7**（後續，不排班） | 預設組合內容（團隊提案→使用者看過→上線）；INVENTORY §七「整包寫入沒有並行控制」後續票；T83 凍結後重跑 `gen_seed.py`（monitoring 群組歸乙，預期 51 群組／186 欄） | h3＋h12＋h4 | — | S2 之後 | 待排 |
 
@@ -62,23 +62,24 @@
 - 對 `settings-matrix.js` 提 patch／PR（h6 合，避免衝突）：C6 `SmHelp`（四段，內容來自 `field_views.help`）、C7 `SmSource`（預設／公司／等待生效／舊位置／個人）、C8 `SmDiff`（與預設不同＋「預設：X［還原預設］」只在不同時顯示）、C11 `SmColSelect`（欄頭勾人；權限矩陣用）、確認視窗的「略過原因」與「通知預覽」欄。
 - 測試：每個元件一組純前端 node 測試（餵 rows JSON，驗輸出 DOM）＋用語守門（四段不得出現禁用詞；`when` 不得與 `help` 完全相同）。
 
-### S1c 設定登錄表後端（h4；審查 h11；T85）
+### S1c 設定登錄表後端（h4；審查 h12；T85）
+- 輸入：h3 已把甲份 76 欄的 `when` 與放寬方向推在 `h3/when_texts.json`（`329712f32`，格式 `{"fields":{"group.key":{"when":文字,"loosen":"up"|"down"|null}}}`）。**放寬那句（「需第二位最高管理者核准並等待 N 天」）刻意不放進 when**，執行期由 `plan().kind`／`otherSuperadmins` 產生（只有一位最高管理者時不得出現「第二位」）。乙份 `when` 由 h12 照同格式提供。
 - 檔案：`backend/helpers/settings_registry.py`、`backend/routers/settings_center.py`、`backend/helpers/config_ledger.py`（by／at 退路）、`backend/helpers/settings_groups.py`（`when` 與禁用詞原文）。
 - 內容：
   1. **逐欄 CAS**（SPEC §5-5）：`publish(group, values, ..., expected_values=None)` 在 `begin_write` 之後、寫入前逐欄比對目前**生效值**（含到期的 pending 覆蓋層）；不符丟 `SettingConflict(keys, by, at)`；路由接受 `expectedValues`，衝突回 409 `{code:'conflict', keys, by, at}`；沒有 `config_changes` 紀錄時 `by`＝「系統預設」或「舊路徑寫入，時間不明」。復原＝以 `expected_values=套用後的值` 回寫套用前的值，原因固定「復原批次」。
   2. `SettingDef.when`（選填）；`field_views` 加 `source:{kind,by,at,reason}` 與 `help:{what,when,impact,recommend}`；`needs_external`（SPEC §7）。
-  3. **禁用詞原文修正**：登錄表現有文字約 35 處含「確認期間」等（h12 統計），機械式改寫成「要等 N 天才生效」；影子、閘門同理；加守門測試（掃登錄表所有 `question／help／impact／riskText／choices.impact／when`）。
+  3. **禁用詞原文修正**：h12 的掃描（`h12/scan_banned_words.py`，AST＋tokenize；清單 `h12/banned-word-sites.csv`；從 repo 根目錄 `python -I -X utf8 …/h12/scan_banned_words.py [--csv out]`）：使用者可見處 **51 處「確認期間」**（`settings_groups.py` 43、`settings_registry.py` 8，含 plan()／警告句約 588／590／730／732／742／854 行）＋**4 處「影子」**（`settings_groups.py` 433／436／437／439；選項標籤「影子（只記錄）」改成「只記錄、不生效」）；兩處 true/false 是開發者 ValueError 訊息（registry 103／163 行），不算使用者介面，守門豁免或改字；「閘門」只出現在註解。（先前說的「約 35 處」是以不同句子計，實際是 51 處。）機械式改寫成「要等 N 天才生效」（N 由參數帶入，注意 plan()／警告句用 `%d` 天）；docstring 與註解豁免。守門測試掃 `question／help／impact／risk_text／choices／when` 的字串常數＋registry `plan()`／`effect()` 句子。`when` 輸入：甲 `h3/when_texts.json`（76 欄）、乙 `h12/when-texts.csv`（107 欄／30 群組；同群組同類欄位共用一句，「when 不得等於 help」守門要逐欄比對）。
   4. 兩種等待的文字分開（SPEC §4-13）：確認視窗與待生效頁的提示文字由 `plan().kind`／`otherSuperadmins` 決定，API 回傳，前端不寫死（B 類 1）。
 - 測試（單檔）：`test_settings_cas_*.py`——同群組別欄被改不誤拒、同欄被改拒、含到期 pending 的生效值、跨群組部分復原、409 body 形狀、by/at 退路；`test_settings_help_wording_*.py`（禁用詞守門，正對照用故意含禁用詞的字串）；既有 `test_settings_registry_t54.py` 要仍綠。
-- 注意：動到寫入路徑，**規格要先給 h11 審**（SPEC §5 已有，實作前再讀一次 h11 的 G 系列意見）。
+- 注意：動到寫入路徑；SPEC §5 已過 h11 審，實作前再讀一次 h11 的 G 系列意見（實作審查由 h12 做，規格疑義再請 h11 看）。
 
 ### S1d 通知元件通用化（h9；審查 h11；T84～T85）
 h9 的 8 項（來源：h9 2026-11-13 訊息）：
 1. 通用項目 `make_item(kind,label,old,new,phase,roles,recipients,risk,plain,ref,link)`＋`setting_item()` 轉接 registry 欄位。
-2. **跨群組一次存檔＝單一端點** `POST /api/settings-center/batch`（body `{groups:{group:{values}}, reason, preview?:true}`；伺服器先逐群組 `plan()` 預驗，任一不合法 400 全不寫；通過後一次 server-side `batch()` 只發**一則**通知；**不是跨群組原子**，中途失敗回 409 `{applied, failed}`）。設定頁在多於一個群組有草稿時呼叫它。
+2. **跨群組一次存檔＝單一端點** `POST /api/settings-center/batch`（body `{groups:{group:{values, expectedValues?}}, reason, preview?:true, undo?:true}`；伺服器先逐群組 `plan()` 預驗，任一不合法 400 全不寫；通過後一次 server-side `batch()` 只發**一則**通知；**不是跨群組原子**，中途失敗回 409 `{applied, failed}`）。設定頁在多於一個群組有草稿時呼叫它。**復原（item 4）也走這支**：`undo:true`＋每群組 `expectedValues`（S1c 的逐欄 CAS），否則復原會退化成 N 次單群組呼叫＝N 則通知；undo 模式的 409 body＝`{applied:[group…], failed:[{group, keys, by, at}]}`（跨群組＝逐群組、可部分復原；同群組整批拒絕）。（h11 意見，已採納；h9 實作時請確認。）
 3. `plan()` 回 `recipients {superadmins, others, ignoredRoles, line}`；`preview_recipients()` 給確認視窗做 dry-run。**目前只支援最高管理者、角色片語、明列使用者；簽核人與受影響者的主管尚不支援**（列在 `ignoredRoles`，SPEC 已註明）——所以簽核流程頁的通知對象 SPEC §13-7 要降級（見 §6 開放問題）。
 4. 復原（單／多群組）只發**一則**「已復原到第 N 版」。
-5. 超過 8 行時最後一行放「完整明細：變更紀錄」連結，連到 `settings-center.html?tab=versions`（**頁面初始化要讀 `?tab=versions`**，S2 要接）。
+5. 超過 8 行時最後一行放「完整明細：變更紀錄」連結，連到 `settings-center.html?tab=versions`（**頁面初始化要讀 `?tab=versions`**，S2 要接）。**依賴 S2**：S2（T86）之前頁面不讀這個參數，所以這一行連結在 S1d 先 ship 時要嘛指向現有「版本」分頁的實際 id（開工時查現有頁面），要嘛 S1d 先不放連結、等 S2 補上（h11 意見）。
 6. `notify_change(kind,label,old,new,risk,roles,recipients…)` 一行式，給其他頁用；高敏感權限變更（h10 gate）呼叫它，`kind="permission", risk="security"` → 最高管理者站內＋LINE；介面先預留，h10 合併後接。
 7. （PM 追加，T84 小項）valueOf 測試 1–2 在 `MOTRIX_TRAIN=1` 且缺 node 時要**紅**不是 skip；放寬方法名守門 regex（`name: function/arrow`、`get name()`、`__define*__`／`__lookup*__`）（B 類 5）。
 8. 合併順序：`fix/settings-center-valueof`（`2ad78c914`，h11 已核可）先進 T83；通知分支再 rebase（`settings-center.html` 同行衝突取 valueOf 版本）。前端剩：確認視窗顯示收件人、呼叫 batch 端點、`?tab=versions`。
@@ -98,12 +99,15 @@ h9 的 8 項（來源：h9 2026-11-13 訊息）：
 - 測試：四路徑各一測（含 create_user）；批次端點拒絕授予 C4／高敏感鍵；範本預覽展開與套用一致；superadmin 降級邊界（承 h10 的 M 級發現）。
 - 截圖：`h4/index.html` 權限頁六張同款（選取、草稿、儲存確認含通知預覽、結果、範本逐人、手機）。
 
-### S3b 信件收件矩陣（h4；審查 h11；T87）
+### S3b 信件收件矩陣（h4；審查 h9；T87）
 - 檔案：`frontend/pages/mail-settings.html`、`backend/routers/settings*.py`＋`POST /api/settings/mail/batch`、`helpers/mail_types.py`；`google-calendar-settings.html` 的事件開關改成連結到 mail-settings 的行事曆欄（使用者裁示 #7）。
 - 內容：67 種信件＋9 列「僅行事曆」；系統技術類可批次但確認視窗紅字；整批原子驗證；一筆稽核；通知經 S1d。
 - 測試：批次端點原子性（任一不合法整批不寫）、系統技術類確認字樣、行事曆欄與 google-calendar 同一份資料。
 
-### S5 §15 設定中心以外的變更管制（h3；審查 h10、h11；T87，後端為主）
+### S5 §15 設定中心以外的變更管制（h3；審查 h10；T87，後端為主）
+- **使用者 2026-11-13 選單裁示**：選「影響金額的加（建議）」——傳票科目（含憑證帳戶＝獎金傳票科目）、扣繳參數、T100 科目、管銷／公益口徑改成要等待或核准；獎金預設、營運目標、報價條款維持立即生效，但存檔後要通知。PM 在 S5 上線前截圖時會再提醒使用者這是行為改變。
+- **開工前必須先決定的設計（h11 意見，採納）**：變更管制（`change_control`／pending／`plan()`）全在 `settings_registry.publish` 裡，而這四項的資料存在**登錄表之外**（例如傳票科目 `PUT /api/bonus/cases/voucher-accounts`）。「接既有機制不另造」的做法＝**把它們登記成登錄表群組＋舊儲存轉接器（legacy-store adapter）**，讓 `plan()`、待生效、放寬／第二位核准、`otherSuperadmins`、帳本全部沿用；**不做第二條 pending 路徑**。h4 先把這段寫進 SPEC §15（含每一項的「放寬方向」定義：哪種變更算放寬、哪些一律只等待），交 h11 做規格審，**過了 h3 才動程式**。h3 目前也在查這四處的寫入位置與能否不動核心，結果先回報再動。
+- 順序：SPEC §15 補強（h4）→ h11 規格審 → h3 實作 → h10 審查。
 - 範圍（SPEC §15）：傳票科目（含**憑證帳戶＝獎金傳票科目**，PM 已裁示）、扣繳參數、T100 科目、管銷／公益口徑 → 確認期或第二位最高管理者核准才生效（接既有 `change_control`／`config_ledger`，不另造機制；是否需第二人看 `otherSuperadmins`，SPEC §4-13）；獎金預設、營運目標、報價條款維持立即生效、存檔後發通知（S1d）。
 - 原頁面改白話並加標示（名稱＋代碼＋標籤＋「?」），設定中心導覽「其他位置的設定」放連結。
 - 同票**不處理**「整包寫入沒有並行控制」（INVENTORY §七，後續票），但實作時不得讓問題更糟（例如 operating-targets 只存一年）。
@@ -117,7 +121,7 @@ h9 的 8 項（來源：h9 2026-11-13 訊息）：
 - 每頁一個 commit，可獨立 revert；每頁 e2e 一題＋盤點表「可批次」與頁面實際勾選格一致（`gen_seed.py --check`）。
 - 建議把 S4a／S4b 各再拆成兩班（先放使用者最常用的頁：報價、簽核、出納；再放其餘），由負責人與 PM 決定。
 
-### S4c 丙份其餘頁（h4；審查 h11；T89）
+### S4c 丙份其餘頁（h4；審查 h12（暫定）；T89）
 - 職責角色（批次綁定）、組織架構、permission-matrix 暫存區批次、簽核流程複製／範本（`POST /api/approval/flows/copy`；確認視窗先講進行中單據受影響件數）、LINE 個人偏好白話化。
 
 ### S6 個人 Email 偏好本人入口（h4；審查 h11；T89）
@@ -151,11 +155,12 @@ h9 的 8 項（來源：h9 2026-11-13 訊息）：
 ## 6. 風險與開放問題（請 PM／使用者決定）
 
 1. **班次號碼是推估**：T83／T84 的實際內容與凍結日由整合者決定；若 T84 吃不下 S1d，S1d 與 S1a、S1c 同進 T85。
-2. **簽核流程頁的通知對象**：h9 的元件目前**不支援**「簽核人、受影響者的主管」；SPEC §13-7 對簽核流程與權限頁寫的對象要降級成「最高管理者＋角色片語＋明列使用者」，或另開票擴充元件。建議先降級（不擋 S3、S4c），擴充放 S7。
+2. **簽核流程頁的通知對象（PM 已裁示：降級）**：h9 的元件目前不支援「簽核人、受影響者的主管」；先做「最高管理者＋角色片語＋明列使用者」三種，不擋 S3、S4c；「簽核人／主管」排到後續（S7）。
 3. **每班只一個大改**：T86（外框）與 T87（權限＋信件＋§15）是使用者可見變化最大的兩班；若使用者想慢一點確認，可把 S3a／S3b／S5 拆到兩班。
 4. **預設組合內容**（S7）要團隊提案、使用者看過才上線；在那之前「套用預設組合」按鈕顯示「之後提供」。
-5. **審查者負荷**：h11 同時是 S1c／S1d／S2 後端／S3b／S4c／S5／S6 的審查者；建議 PM 視情況把部分改派 h9、h12。
-6. **S5 是行為改變**（原本立即生效的金額設定改成要等待或核准）：上線前必須讓使用者明確確認，並在 CHANGELOG 與給正式機的步驟檔寫明。
+5. **審查者分流（PM 已裁示）**：S1c 改 h12、S3b 改 h9、S5 實作審 h10（規格審仍由 h11 先看）；h11 留 S1d、S2、S3a、S6。h11 另建議 S6、S4c 交 h12，PM 未回，S4c 暫定 h12、S6 維持 h11，開工前由 PM 確認。
+6. **S5 是行為改變**（原本立即生效的金額設定改成要等待或核准）：使用者已於 2026-11-13 選單明確同意（見 S5）；上線前仍由 PM 在截圖時再提醒，並在 CHANGELOG 與給正式機的步驟檔寫明。
+7. **S1b 是 S2 的班內關卡**：兩者同在 T86，S1b 必須先合進該班，S2 才能收；S1b 沒趕上就 S2 一起延到 T87。
 7. **`style` 欄**（`form`／`preset-only`）目前無頁面使用，S2 時決定保留或刪除。
 8. **h6 的核心審查**（h9 審）若出現結構性意見，S1a 的內容可能改變；S1b 等 S1a 合併後才開始。
 
