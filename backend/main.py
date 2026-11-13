@@ -82,6 +82,7 @@ _startup_step("import_core")
 from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
+from routers import bootstrap as _bootstrap_router     # 登入後啟動資料合併（2026-11-13，外網載入效能第二階段）
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
 from routers import rules as rules_router
@@ -320,6 +321,7 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
     ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
+    ("GET", "/api/bootstrap"): "登入後啟動資料合併端點：只放原本在白名單內的區段（me／menu／branding／totp），其餘區段在未設定時自己回 428 標記，不給資料",
     ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
     ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
     ("GET", "/api/auth/profile"): "帳號本身必要：「我的帳號」讀自己的顯示名稱、部門與報價用信箱（只回自己這一列，無他人資料）；未設定公司資料時使用者仍要看得到自己的帳號頁",
@@ -1173,6 +1175,7 @@ app.include_router(settings_center.router)
 app.include_router(mail_settings.router)
 app.include_router(duty_roles.router)
 app.include_router(platform_menu.router)
+app.include_router(_bootstrap_router.router)        # GET /api/bootstrap：每頁都要打的啟動請求合成一支（只放原端點會回的、且只會變少）
 app.include_router(platform_menu_preview.router)
 app.include_router(export_templates_router.router)
 app.include_router(option_lists_router.router)
