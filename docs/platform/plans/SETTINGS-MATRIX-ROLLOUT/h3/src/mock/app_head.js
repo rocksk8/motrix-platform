@@ -5,7 +5,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp
 const R = {};
 D.rows.forEach(r => R[r.id] = r);
 /* r3：sv＝已儲存（生效中）的值；val＝畫面上的草稿值（點選只改 val，按「儲存」才寫入 sv） */
-const S = {sv: {}, val: {}, chg: {}, pend: {}, src: {}, sel: new Set(), skip: {}, batchIds: new Set(), pdraft: {}, log: [], seg: '全部', view: {k: 'home'}, flash: null, tab: 't1', f: 'all', q: '', sec: 'all', advOpen: {}, hv: {}, last: null, toastT: null};
+const S = {sv: {}, val: {}, chg: {}, pend: {}, src: {}, sel: new Set(), skip: {}, batchIds: new Set(), pdraft: {}, log: [], seg: '全部', view: {k: 'home'}, flash: null, tab: 't1', solo: false, f: 'all', q: '', sec: 'all', advOpen: {}, hv: {}, last: null, toastT: null};
 D.rows.forEach(r => {
   S.sv[r.id] = (r.id in D.fake) ? D.fake[r.id] : r.def;
   S.val[r.id] = JSON.parse(JSON.stringify(S.sv[r.id]));

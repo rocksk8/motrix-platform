@@ -78,6 +78,7 @@ for p in PRESETS:
 
 SHELL_P = "D:/Claude-pm/h3-matrix/docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/shell_groups.json"
 shell_all = json.load(open(SHELL_P, encoding="utf-8"))
+shell_all = shell_all.get("groups", shell_all)
 order = []
 for r in D_rows:
     if r["gk"] not in order:

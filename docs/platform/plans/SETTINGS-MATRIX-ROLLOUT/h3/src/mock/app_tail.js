@@ -6,7 +6,7 @@ const draftIds = () => D.rows.filter(r => !same(S.val[r.id], S.sv[r.id])).map(r 
 const pageDraftCount = () => Object.values(S.pdraft).reduce((a, x) => a + x.n, 0);
 const totalDrafts = () => draftIds().length + pageDraftCount();
 function pendKind(r, oldv, newv) { // 'now' | 'wait'（只等待）| 'wait2'（等待加第二人核准）
-  if (isLoosen(r, oldv, newv)) return 'wait2';
+  if (isLoosen(r, oldv, newv)) return S.solo ? 'wait' : 'wait2'; // r3.2：只有一位最高管理者時，放寬沒有第二人可核准，只剩等待（伺服器 plan().kind／otherSuperadmins 決定；這裡是假資料切換）
   if (r.rp) return 'wait';
   return 'now';
 }
@@ -36,7 +36,7 @@ function navHtml() {
     if (!gs.length) { h += '<div class="cat"><div class="ch"><span>' + c + '</span></div><div class="mute" style="padding:2px 10px">（本稿只含甲份；系統類群組見乙份）</div></div>'; return; }
     h += '<div class="cat"><div class="ch"><span>' + c + '</span><span>' + gs.length + '</span></div>' + gs.map(g => {
       const n = gDiff(g), on = S.view.k === 'group' && S.view.g === g;
-      return '<button class="gi' + (on ? ' on' : '') + '" data-act="grp" data-g="' + g + '"><span>' + esc(D.shell[g].plain) + '<br><span class="k">' + esc(D.shell[g].currentName) + '</span></span><span class="bd">' + (n ? '<span class="dot2" title="與預設不同 ' + n + ' 項">' + n + '</span>' : '') + (gHeavy(g) ? '<span class="hi" title="內含高風險項目">🔴</span>' : '') + '</span></button>';
+      return '<button class="gi' + (on ? ' on' : '') + '" data-act="grp" data-g="' + g + '"><span>' + esc(D.shell[g].plain) + '<br><span class="k">' + esc(D.shell[g].currentName) + '</span></span><span class="bd">' + (n ? '<span class="dot2" title="與預設不同 ' + n + ' 項">' + n + '</span>' : '') + (D.shell[g].privacy ? '<span class="pill ext" title="影響隱私">隱私</span>' : '') + (gHeavy(g) ? '<span class="hi" title="內含高風險項目">🔴</span>' : '') + '</span></button>';
     }).join('') + '</div>';
   });
   h += '<div class="cat"><div class="ch"><span>其他位置的設定</span></div><button class="gi" data-act="tab" data-t="t3"><span>獎金、傳票科目、T100、營運目標、報價條款…<br><span class="k">不在設定中心，原頁面改版</span></span><span class="bd">7 ›</span></button></div>';
@@ -181,6 +181,7 @@ function openSave() {
   if (items.length) {
     h += '<table><thead><tr><th>項目</th><th>現在</th><th>之後</th><th>怎麼生效</th></tr></thead><tbody>' + items.map(x => '<tr><td>' + esc(x.r.name) + (x.r.heavy ? ' <span class="pill heavy">影響大</span>' : '') + '</td><td>' + esc(vt(x.r, x.old)) + '</td><td>' + esc(vt(x.r, x.to)) + '</td><td>' + (x.kind === 'now' ? '立即生效' : x.kind === 'wait' ? '<span class="pill pnd">只等待</span>' : '<span class="pill pnd">等待加核准</span>') + '</td></tr>').join('') + '</tbody></table>';
     if (items.some(x => x.kind === 'wait')) h += '<div class="hl">只等待：' + KIND_TXT.wait + '</div>';
+    if (S.solo && items.some(x => isLoosen(x.r, x.old, x.to))) h += '<div class="hl">其中有放寬方向的項目：目前系統裡<b>只有一位最高管理者</b>，沒有第二人可核准，所以改成「填原因、等 ' + CC + ' 天後生效，並留下紀錄」。</div>';
     if (items.some(x => x.kind === 'wait2')) h += '<div class="hl">' + KIND_TXT.wait2 + '</div>';
   }
   if (pages.length) h += '<p><b>其他頁面的修改：</b></p><ul>' + pages.map(p => '<li>' + esc(p.title) + '（' + p.n + ' 處）：' + (p.cc ? '<span class="pill pnd">要等 ' + CC + ' 天確認期或第二位最高管理者核准</span>' : '立即生效') + '</li>').join('') + '</ul>';
@@ -290,6 +291,7 @@ document.addEventListener('click', e => {
   else if (a === 'leave') { discardAll(); closeDlg(); showTab(t.dataset.t); }
   else if (a === 'menu') $('#nav').classList.toggle('open');
   else if (a === 'demo-conflict') simulateConflict();
+  else if (a === 'solo') { S.solo = !S.solo; t.setAttribute('aria-pressed', S.solo); t.textContent = S.solo ? '目前：只有一位最高管理者（再按切回）' : '示範：只有一位最高管理者'; render(); toast('<span>' + (S.solo ? '已切換：系統只有一位最高管理者，放寬方向改為「填原因＋等待＋留紀錄」，沒有第二人核准。' : '已切回：有其他最高管理者，放寬方向要第二位核准。') + '</span>'); }
 });
 document.addEventListener('change', e => {
   const t = e.target;
