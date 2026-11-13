@@ -94,3 +94,6 @@ def test_failed_estimate_terms_load_does_not_leave_the_quote_groups(live_server,
     page.evaluate(f"async () => await {_data(page)}.setDocType('estimate')")
     names = page.evaluate(f"() => {_data(page)}.termsPresets.map(x => x.name)")
     assert names == [], names
+    assert page.evaluate(f"() => {_data(page)}._termsLoadFailed") is True
+    page.evaluate(f"() => {_data(page)}.openTermsManager()")
+    assert page.evaluate(f"() => {_data(page)}.termsManageOpen") is False, "載入失敗不給開管理視窗（會拿空清單覆寫估價單條款組）"
