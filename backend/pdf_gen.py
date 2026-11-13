@@ -3134,14 +3134,44 @@ def _project_execution_report_data(quote_no: str) -> dict:
             "assignedNames": [dn_map.get(u, u) for u in assigned],
         })
 
-    # 叫料管控
-    materials = [{
-        "name":     m.get("name") or m.get("description") or "（未命名料件）",
-        "spec":     m.get("spec") or "",
-        "qty":      m.get("qty") or "",
-        "status":   m.get("status") or "",
-        "eta":      m.get("eta") or "",
-    } for m in (cr.get("materials") or [])]
+    # 材料申請（T84：舊版讀 spec／status／eta，材料卡根本沒有這三個鍵 ⇒ 規格永遠空白、狀態與預計到貨永遠「—」，也沒讀 materialOrders）
+    # ① 材料卡 caseRecord.materials[]：實際只有 name／model／qty／unit／ordered／arrived／note，認列採購單後 poLink.arrivedOn 是到貨日
+    # ② 材料申請單 caseRecord.materialOrders[]＋疊加簽核列 case_material_approvals（簽核狀態、到貨確認日）
+    # 只取名稱／規格／數量／狀態／日期，不碰任何金額欄位（單價、小計、已付）
+    def _qty_text(q, unit):
+        if q in (None, ""):
+            return ""
+        if isinstance(q, float) and q == int(q):
+            q = int(q)
+        return ("%s %s" % (q, unit or "")).strip()
+
+    materials = []
+    for m in (cr.get("materials") or []):
+        if not isinstance(m, dict):
+            continue
+        link = m.get("poLink") if isinstance(m.get("poLink"), dict) else {}
+        materials.append({
+            "name":      m.get("name") or m.get("description") or "（未命名料件）",
+            "spec":      m.get("model") or "",
+            "qty":       _qty_text(m.get("qty"), m.get("unit")),
+            "status":    "已到料" if m.get("arrived") else "已申購" if m.get("ordered") else "待申購",
+            "arrivedOn": link.get("arrivedOn") or "",
+        })
+    _appr = {
+        str(a["item_id"]): a for a in conn.execute(
+            "SELECT item_id, status, received_on FROM case_material_approvals WHERE quote_no=?", (quote_no,)).fetchall()
+    }
+    material_orders = []
+    for o in (cr.get("materialOrders") or []):
+        if not isinstance(o, dict):
+            continue
+        a = _appr.get(str(o.get("itemId")))
+        material_orders.append({
+            "name":       o.get("itemName") or "（未命名項目）",
+            "qty":        _qty_text(o.get("quantity"), o.get("unit")),
+            "status":     (a["status"] if a else "") or "（未走簽核）",
+            "receivedOn": (a["received_on"] if a else "") or "",
+        })
 
     # 代辦事項（兩階段簽核）
     action_items = [{
@@ -3196,6 +3226,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
         "assignedNames": assigned_names,
         "stages":       stages,
         "materials":    materials,
+        "materialOrders": material_orders,
         "actionItems":  action_items,
         "workLogs":     work_logs,
         "feed":         feed,
@@ -3239,16 +3270,25 @@ def _build_project_execution_report_html(data: dict) -> str:
     )
 
     mat_rows_html = "".join(
-        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"])}</td><td class="c">{esc(m["qty"])}</td>'
-        f'<td class="c">{esc(m["status"]) or "—"}</td><td class="c">{esc(m["eta"]) or "—"}</td></tr>'
+        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"]) or "—"}</td><td class="c">{esc(m["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(m["status"])}</td><td class="c">{esc(m["arrivedOn"]) or "—"}</td></tr>'
         for m in data["materials"]
     )
     _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無材料申請資料</td></tr>'
+    mo_rows_html = "".join(
+        f'<tr><td>{esc(o["name"])}</td><td class="c">{esc(o["qty"]) or "—"}</td>'
+        f'<td class="c">{esc(o["status"])}</td><td class="c">{esc(o["receivedOn"]) or "—"}</td></tr>'
+        for o in data.get("materialOrders") or []
+    )
     materials_section = (
         '<div class="section-label">二、材料申請</div>'
-        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:70px">數量</th>'
-        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">預計到貨</th></tr></thead>'
+        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:90px">數量</th>'
+        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">到貨日</th></tr></thead>'
         f'<tbody>{mat_rows_html or _no_mat_row}</tbody></table>'
+        + ('<div style="margin:8px 0 3px;font-size:12px;color:#6B7280">材料申請單（簽核）</div>'
+           '<table><thead><tr><th>申請項目</th><th class="c" style="width:90px">數量</th>'
+           '<th class="c" style="width:90px">簽核狀態</th><th class="c" style="width:100px">到貨確認日</th></tr></thead>'
+           f'<tbody>{mo_rows_html}</tbody></table>' if mo_rows_html else '')
     )
 
     def _item_status(it):
