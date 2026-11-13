@@ -553,6 +553,46 @@
    "status": "keep",
    "note": "這是總開關；個別偏好在「清單檢視（個人偏好）」。",
    "order": 470
+  },
+  "settings_group:brand": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "首頁大標題上方那一行系統標語。",
+   "when": "想把畫面上的系統名稱／口號換成公司自己的時候。",
+   "status": "keep",
+   "note": "",
+   "order": 65
+  },
+  "settings_group:external_login": {
+   "category": "people",
+   "section": "登入安全",
+   "tier": 1,
+   "blurb": "從外網登入時的額外防護：指定角色要先啟用兩步驟驗證、輸錯太多次暫時鎖帳號。",
+   "when": "公司開放外網登入、或想把外網登入規則調嚴時。",
+   "status": "keep",
+   "note": "內網登入行為不變。",
+   "order": 95
+  },
+  "settings_group:monitoring": {
+   "category": "data",
+   "section": "備份與紀錄保存",
+   "tier": 1,
+   "blurb": "備份多久沒成功、硬碟剩多少空間，要通知最高管理者。",
+   "when": "備份頻率或硬碟大小改變、想讓通知更早或更晚響起時。",
+   "status": "keep",
+   "note": "看實際狀態請到「備份與監控」頁。",
+   "order": 235
+  },
+  "settings_group:login_greeting": {
+   "category": "advanced",
+   "section": "",
+   "tier": 3,
+   "blurb": "登入後首頁那一句問候語的口氣。",
+   "when": "想讓問候語更正式、更輕鬆，或完全關閉時。",
+   "status": "keep",
+   "note": "每個情境的句子可另外改寫；每個人也能在自己的帳號裡改口氣。",
+   "order": 900
   }
  }
 }

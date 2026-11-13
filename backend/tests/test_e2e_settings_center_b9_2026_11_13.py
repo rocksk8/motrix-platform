@@ -15,8 +15,12 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 def _open(page, live_server, group):
     page.goto(f"{live_server}/pages/settings-center.html")
-    page.locator(f'[data-testid="sc-group-{group}"]').wait_for(timeout=20000)
-    page.locator(f'[data-testid="sc-group-{group}"]').click()
+    btn = page.locator(f'[data-testid="sc-group-{group}"]')
+    btn.wait_for(state="attached", timeout=20000)
+    if not btn.is_visible():                                          # T82：手機寬度的群組清單預設收起，要先按「切換群組」
+        page.locator('[data-testid="sc-navtoggle"]').click()
+        btn.wait_for(state="visible", timeout=10000)
+    btn.click()
 
 
 def _pop_of(page, hint):
