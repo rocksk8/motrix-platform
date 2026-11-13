@@ -2189,6 +2189,7 @@
    "builtin_admin_username": "def()",
    "demo_account_on": "def()",
    "drift_between": "def(entries, db_keys)",
+   "enable_onepipe_defaults_once": "def()",
    "flag_weak_passwords": "def()",
    "init_default_admin": "def()",
    "init_demo_account": "def()",

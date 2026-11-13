@@ -2,7 +2,7 @@
 """一條龍旗標預設開——既有環境的一次性遷移（T84，使用者裁示 2026-11-13：「一條龍上線就開啟，這班車結束就給使用者」）。
 
 背景：群組 `onepipe` 每個旗標預設 0→1，但設定中心存檔會把整個群組存成明確值，所以曾存過這個群組的既有環境仍是 0。
-`helpers/startup._enable_onepipe_defaults_once` 在啟動時**每庫只跑一次**：資料庫裡存成 0 的欄位（群組裡登錄的每一個欄位）⇒ 一次經設定中心引擎發布成 1
+`helpers/startup.enable_onepipe_defaults_once` 在啟動時**每庫只跑一次**：資料庫裡存成 0 的欄位（群組裡登錄的每一個欄位）⇒ 一次經設定中心引擎發布成 1
 （寫設定變更明細與稽核：系統升級、0→1、原因含 T84）；之後使用者自己關掉要保留。
 
 釘住：舊存值 0 → 1（含稽核與明細）；只跑一次；跑過之後使用者關掉的保留；已是 1／沒存過 ⇒ 只記標記、不寫稽核；
@@ -75,7 +75,7 @@ def _audits():
 def _run():
     from helpers import startup
     from helpers import settings_registry as SR
-    startup._enable_onepipe_defaults_once()
+    startup.enable_onepipe_defaults_once()
     SR.invalidate()
 
 
@@ -188,9 +188,9 @@ def test_migration_turns_entry_unify_on_for_a_legacy_database(fresh):
 
 def test_main_calls_the_migration_at_startup_after_init():
     src = MAIN_PY.read_text(encoding="utf-8")
-    assert re.search(r"^_enable_onepipe_defaults_once\(\)", src, re.M), "main.py 沒有呼叫一次性遷移"
-    assert src.index("init_unlock_passwords()\n_startup_step") < src.index("\n_enable_onepipe_defaults_once()"), "要在 init 之後"
-    assert "_enable_onepipe_defaults_once," in src.split("from archive import")[0], "main.py 沒有 import"
+    assert re.search(r"^enable_onepipe_defaults_once\(\)", src, re.M), "main.py 沒有呼叫一次性遷移"
+    assert src.index("init_unlock_passwords()\n_startup_step") < src.index("\nenable_onepipe_defaults_once()"), "要在 init 之後"
+    assert "enable_onepipe_defaults_once," in src.split("from archive import")[0], "main.py 沒有 import"
 
 
 def test_a_flag_deliberately_turned_off_in_the_ledger_is_kept_off_by_the_migration(fresh):

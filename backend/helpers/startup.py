@@ -779,7 +779,7 @@ def _cleanup_sessions() -> None:
 _ONEPIPE_DEFAULT_ON_MARK = "migration_onepipe_default_on_t84"
 
 
-def _enable_onepipe_defaults_once() -> None:
+def enable_onepipe_defaults_once() -> None:
     """T84 升級（使用者裁示 2026-11-13：「一條龍上線就開啟」）：群組 `onepipe` 的每個旗標預設 0→1。預設值只對沒存過該群組的庫生效；
     設定中心存檔會把整個群組存成明確值，所以曾存過這個群組的既有環境仍是舊值 0。這裡**每庫只跑一次**：資料庫裡存成 0 的欄位
     （**群組裡登錄的每一個欄位**，之後新增的旗標自動涵蓋）⇒ 一次經設定中心引擎發布成 1（寫設定變更明細與稽核：誰＝系統升級、0→1、原因含 T84），
@@ -832,7 +832,7 @@ def _enable_onepipe_defaults_once() -> None:
                       datetime.now().isoformat()))
         conn.commit()
     except Exception:  # noqa: BLE001
-        logger.exception("_enable_onepipe_defaults_once failed（不記標記，下次啟動再試）")
+        logger.exception("enable_onepipe_defaults_once failed（不記標記，下次啟動再試）")
     finally:
         if conn is not None:
             conn.close()
