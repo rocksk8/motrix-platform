@@ -118,10 +118,10 @@ def _run():
 
 
 # ── ① 旗標關＝今天 ───────────────────────────────────────────────
-def test_flag_default_is_off_and_registered(client):
+def test_flag_is_registered_as_a_0_1_switch(client):
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as SR
-    assert int(SR.get("onepipe", "warranty_closed_notify")) == 0
+    assert int(SR.get("onepipe", "warranty_closed_notify")) in (0, 1)   # 不釘預設值（預設開關由一條龍統一遷移決定）
 
 
 def test_flag_off_closed_cases_never_mail_and_open_cases_do(client, mails):

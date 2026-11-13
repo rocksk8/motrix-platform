@@ -54,6 +54,14 @@ def _set_flag(on):
     SR.invalidate("onepipe")
 
 
+@pytest.fixture(autouse=True)
+def _flag_off_unless_asked():
+    """預設值之後會改成「開」（一條龍上線＝預設開，由 h1 統一遷移）：本檔的『關』路徑測試一律先明確關掉，不靠預設值；要開的用 flag_on。"""
+    _set_flag(False)
+    yield
+    _set_flag(False)
+
+
 @pytest.fixture()
 def flag_on():
     _set_flag(True)
@@ -79,10 +87,10 @@ def _rows(case_no=None):
 
 
 # ── ① 旗標關＝今天 ───────────────────────────────────────────────────────────
-def test_flag_defaults_to_off_and_group_is_registered():
+def test_flag_is_registered_as_a_0_1_switch():
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as SR
-    assert int(SR.get("onepipe", "worklog_case")) == 0
+    assert int(SR.get("onepipe", "worklog_case")) in (0, 1)           # 不釘預設值（預設開關由一條龍統一遷移決定）
     assert "onepipe" in SR.groups()
 
 
