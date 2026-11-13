@@ -381,6 +381,7 @@
   "modules/case/api/quotations.py::reject_case_change::case_change_requests": "unscoped",
   "modules/case/api/quotations.py::reject_final_quotation::quotations": "unscoped",
   "modules/case/api/quotations.py::reject_quotation::quotations": "unscoped",
+  "modules/case/api/quotations.py::sweep_stale_staging::case_change_requests": "unscoped",
   "modules/case/api/quotations.py::toggle_quotation_signed::quotations": "unscoped",
   "modules/case/api/quotations.py::unlock_case::quotations": "unscoped",
   "modules/case/api/quotations.py::update_case_assigned_users::quotations": "unscoped",

@@ -396,6 +396,11 @@ def run_daily_checks(mode: str = "daily") -> None:
         expire_backfill_if_due()
     except Exception as exc:                             # noqa: BLE001
         _logger.warning("expire_backfill_if_due failed: %s", exc)
+    try:                                                 # 已結案變更上傳途中當機留下的預留列／暫存檔（T84）
+        from modules.case.api.quotations import sweep_stale_staging
+        sweep_stale_staging()
+    except Exception as exc:                             # noqa: BLE001
+        _logger.warning("sweep_stale_staging failed: %s", exc)
     _check_warranty_expiry()
     _check_case_stage_deadline()
     _check_case_project_timeline_deadline()

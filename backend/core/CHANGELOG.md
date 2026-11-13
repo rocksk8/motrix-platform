@@ -20,6 +20,9 @@
 - **（併入）(next) — 2026-11-13（fix/google-quota-conn-t84；Google 額度頁一次請求開約 200 條連線）**
 - 效能修正（`helpers/geo.py`，行為與公開介面不變）：`GET /api/settings/google-quota` 在正式機一次 8.6～9.8 秒，原因是 `quota_calculator()` 對待暖清單每個地址呼叫 `cached_only()`，每次各開一條讀連線（約 200 條）。計算器的「待查地址數」迴圈改包進 `cache_read_session()`（範圍內共用一條讀連線，finally 關閉）；`_warm_backlog()` 是同一個寫法，改成先收齊再在同一範圍內過濾（順序與去重結果不變）。
 - 測試：`tests/test_google_quota_conn_2026_11_13.py`（5 → 200 個地址連線數相同、絕對上限、端點層、結果與舊語意相同、計數器正對照）。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn-3；T84 txn-2＋T85；版號由列車取）**
+- L1（新增，只增；T85 feat/upload-files-txn-3）：`helpers.uploads` 新增 `pop_document_file(existing_files, file_id)`（只改清單、不碰實體檔，回 `(被刪那筆, 剩下的清單)`，找不到 404）與 `remove_physical_file(target)`（commit 之後刪實體檔，失敗不丟例外）：給「附件清單內嵌在別的 JSON 裡」的刪除用（先 commit、後刪檔）。`delete_document_file` 行為不變（其餘單據仍用它）。 測試：`tests/test_upload_files_txn3_2026_11_13.py`。
+- L1（行為修正，介面不變；T84 feat/upload-files-txn-2）：`routers/custom_records.py` 自訂模組暫存附件上傳——暫存列寫入失敗（`register_staged`）時回收剛存的檔（原本留下沒有紀錄的孤兒檔）。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

@@ -121,7 +121,7 @@ class DevLogIn(BaseModel):
 import os
 
 import helpers.uploads as _uploads_mod
-from helpers.uploads import save_document_files, delete_document_file
+from helpers.uploads import save_document_files, delete_document_file, files_txn
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -1213,20 +1213,22 @@ async def create_dev_log(case_id: int,
                 user.get("display_name") or user["username"],
                 watermark_by=user.get("display_name") or user["username"],
             )
-        cur = conn.execute("""
-            INSERT INTO dev_logs
-              (case_id, log_date, log_by, channel, content, next_action,
-               status_snapshot, needs_approval, created_by, created_at, files_json)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            case_id, body.log_date, body.log_by,
-            body.channel or "", body.content or "",
-            body.next_action or "", body.status_snapshot or "",
-            needs_approval, user["id"], now,
-            json.dumps(saved_files, ensure_ascii=False),
-        ))
-        conn.execute("UPDATE dev_cases SET updated_at=? WHERE id=?", (now, case_id))
-        conn.commit()
+        with files_txn(conn, saved_files):      # T84：寫庫失敗／案件在上傳途中被刪 ⇒ 回收剛存的檔
+            if not conn.execute("SELECT 1 FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone():
+                raise HTTPException(404, "案件不存在")
+            cur = conn.execute("""
+                INSERT INTO dev_logs
+                  (case_id, log_date, log_by, channel, content, next_action,
+                   status_snapshot, needs_approval, created_by, created_at, files_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                case_id, body.log_date, body.log_by,
+                body.channel or "", body.content or "",
+                body.next_action or "", body.status_snapshot or "",
+                needs_approval, user["id"], now,
+                json.dumps(saved_files, ensure_ascii=False),
+            ))
+            conn.execute("UPDATE dev_cases SET updated_at=? WHERE id=?", (now, case_id))
         row = conn.execute("SELECT * FROM dev_logs WHERE id=?", (cur.lastrowid,)).fetchone()
         case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         case_name_str = case_row["case_name"] if case_row else str(case_id)

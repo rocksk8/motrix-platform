@@ -313,6 +313,21 @@ def delete_document_file(subfolder: str, doc_no: str, existing_files: list, file
     return [f for f in existing_files if f.get("id") != file_id]
 
 
+def pop_document_file(existing_files: list, file_id: str):
+    """只動清單、**不碰實體檔**：回 `(被刪的那筆 metadata, 刪除後的清單)`；找不到該 file_id ⇒ 404。
+    給「附件清單內嵌在別的 JSON 裡」的刪除用（報價單 data_json 等）：呼叫端在寫鎖內改清單、commit，**commit 之後**再
+    `remove_physical_file(target)`——寫庫失敗＝紀錄與檔都還在（`delete_document_file` 是先刪檔、後寫庫，寫庫失敗就留下「有紀錄、沒檔案」）。"""
+    target = next((f for f in existing_files if isinstance(f, dict) and f.get("id") == file_id), None)
+    if not target:
+        raise HTTPException(404, "找不到指定的檔案")
+    return target, [f for f in existing_files if not (isinstance(f, dict) and f.get("id") == file_id)]
+
+
+def remove_physical_file(target: dict) -> None:
+    """commit 之後刪一筆附件的實體檔（失敗不丟例外）；`pop_document_file` 的搭檔。"""
+    _remove_physical(target)
+
+
 def _remove_physical(target: dict) -> None:
     """刪一筆附件 metadata 指的實體檔（失敗不丟例外）。"""
     try:
