@@ -483,6 +483,12 @@
   ],
   "s": 400
  },
+ "PUT /api/mail-types/mine": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/menu/categories/override": {
   "k": [
    "detail"
