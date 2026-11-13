@@ -74,6 +74,9 @@
   - 每次實際變更寫一筆稽核 `user.notification_prefs.self`（`by:"self"`、改成不收／改成要收的類型、前後清單長度）。只改本人，不通知別人（不走 `notify_change`）。
 - 前端：`pages/my-account.html` 通知分頁最上方新增「Email 通知」卡，用共用矩陣元件（`settings-matrix.js` 草稿模式：點選只算草稿，按「儲存」才寫入；業務類可批次、簽核／系統技術類不能批次且儲存前跳確認視窗）。LINE 卡原樣不動；「沒有可自己設定的通知」的空狀態提示改成只談 LINE（Email 卡永遠在）。
 - 不變：管理員代設定（`PUT /api/users/{id}` 的 `notification_muted`、使用者管理頁）完全沒動；L1 公開介面沒有變動（新函式都是底線私有，`core_version` 只因 (next) 佔位而是 `"next"`）。
+- 新增（P0b，旗標 `onepipe.worklog_case`，預設關）：工作日誌可選案件。`GET /api/work-logs/case-options?q=`（登入＋工作日誌或案件管理模組；只回案號／客戶／案名，進行中案件、這個人看得到該案動態的才列，最多 30 筆；旗標關 ⇒ 404）；旗標開時 `POST／PUT /api/work-logs` 的 `case_no` 必須是看得到該案動態的案件（`guard_case_access`，看不到＝404、稽核另記）；改掛才檢查，清空與原樣不動不擋；旗標關＝今天的行為（不檢查）。畫面 `work-log.html` 旗標開才出現「關聯案件」欄位與列表欄，關時 DOM 與送出內容都不變。日誌可見範圍（`GET /api/work-logs`）不變。
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.case_access.attachable_cases(conn, user, q, limit, max_scan)`——給上面選單用，規則與 `case_documents_readable` 同一條；讀 `quotations` 仍只在 `helpers/case_access.py`。
+- 測試：`tests/test_onepipe_worklog_case_2026_11_13.py`。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

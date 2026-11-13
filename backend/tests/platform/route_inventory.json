@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 974,
-  "endpoints_api": 970,
+  "endpoints_total": 975,
+  "endpoints_api": 971,
   "write_total": 523,
   "write_api": 523,
-  "get_api": 447,
-  "distinct_paths_api": 823,
+  "get_api": 448,
+  "distinct_paths_api": 824,
   "write_with_body_api": 388,
   "write_with_path_param_api": 364
  },
@@ -4884,6 +4884,11 @@
    "body": true
   },
   "GET /api/completion-notes/case-prefill": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/work-logs/case-options": {
    "w": false,
    "pp": 0,
    "body": false

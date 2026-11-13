@@ -8886,5 +8886,11 @@
    "presets"
   ],
   "s": 200
+ },
+ "/api/work-logs/case-options": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  }
 }
