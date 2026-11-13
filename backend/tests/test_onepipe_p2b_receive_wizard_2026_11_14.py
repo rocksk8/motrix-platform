@@ -358,6 +358,18 @@ def test_undo_is_blocked_when_serials_were_stocked_and_changes_nothing(client, m
 
 
 @needs_m01
+def test_undo_is_blocked_when_a_header_is_marked_paid(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True, receive_ledger=True)
+    admin = _admin(client, make_user)
+    _case(qty=10)
+    assert client.post(BASE + "/receive-stock", json={"qty": 10, "mode": "direct", "invoiceNo": "INV-1"}, headers=admin).status_code == 200
+    _x("UPDATE stock_batches SET is_paid=1, paid_by='x', paid_at='2026-11-12T00:00:00' WHERE quote_no=?", (NO,))
+    d = client.delete(BASE + "/receive", headers=admin)
+    assert d.status_code == 409 and "付款" in d.text
+    assert len(_q("SELECT 1 FROM stock_batches")) == 1 and _row()["received_qty"] == 10.0                 # 付款紀錄與案件那一半都沒動
+
+
+@needs_m01
 def test_undo_with_wizard_off_never_touches_stock(client, make_user, monkeypatch):
     _flags(monkeypatch, receive_ledger=True)
     admin = _admin(client, make_user)

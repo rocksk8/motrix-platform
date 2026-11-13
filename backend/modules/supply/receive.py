@@ -165,7 +165,7 @@ def _stock(conn, qn, ln, part_no, mid, po, serials, res, actor, now):
 def undo_receipt(conn, quote_no, item_id, caller=None) -> dict:
     """IP-122（暫定號）`stock.receive_undo`：案件側撤銷「確認到貨」時，把庫存那一半一起收回（吃呼叫端連線、不 commit）。
     ⇒ `{"ok": True, "removed": N}`（N＝刪掉的批次表頭數：直送／耗材／沒有序號列的入庫表頭）｜`{"ok": False, "reason": "DISABLED"}`｜
-    `{"ok": False, "reason": "BLOCKED", "message": …}`＝已有為這筆材料申請入庫的序號（不論現在狀態）⇒ **不動任何東西**，請先在庫存處理（出貨單／刪除序號）。
+    `{"ok": False, "reason": "BLOCKED", "message": …}`＝已有為這筆材料申請入庫的序號（不論現在狀態），或批次已登記付款 ⇒ **不動任何東西**，請先在庫存處理（出貨單／刪除序號／取消付款）。
     直送、耗材沒有序號，撤銷時直接刪表頭，讓「重新登載」不會被「已登載過直送」擋住、對帳表也不留殘影。"""
     if not stock_events.ledger_on(conn):
         return {"ok": False, "reason": "DISABLED"}
@@ -174,6 +174,8 @@ def undo_receipt(conn, quote_no, item_id, caller=None) -> dict:
         return {"ok": True, "removed": 0}
     if conn.execute("SELECT 1 FROM stock_items si JOIN stock_batches sb ON sb.batch_no = si.batch_no WHERE sb.quote_no=? AND si.material_item_id=? LIMIT 1", (qn, mid)).fetchone():
         return {"ok": False, "reason": "BLOCKED", "message": "這筆材料申請已有入庫的序號，請先在庫存處理（出貨或刪除序號）後再撤銷到貨"}
+    if conn.execute("SELECT 1 FROM stock_batches WHERE quote_no=? AND material_item_id=? AND (is_paid=1 OR COALESCE(paid_at,'')<>'') LIMIT 1", (qn, mid)).fetchone():
+        return {"ok": False, "reason": "BLOCKED", "message": "此到貨批次已登記付款，請先在庫存取消付款後再撤銷到貨"}
     cur = conn.execute("DELETE FROM stock_batches WHERE quote_no=? AND material_item_id=?", (qn, mid))
     return {"ok": True, "removed": cur.rowcount}
 
