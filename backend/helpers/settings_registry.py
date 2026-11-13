@@ -803,6 +803,31 @@ def live_impact(group, field, value, *, timeout=None):
     return res
 
 
+def _notice_watermark(c):
+    """notifications 的水位線（寫鎖內呼叫）：之後新增的列 id 一定 > 回傳值；取不到 ⇒ `None`（呼叫端跳過去重，最壞多發一則通知）。
+
+    取自 `sqlite_sequence`（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），
+    不直接 SELECT notifications：那會是一筆新的未範圍讀取（unscoped_reads 基準只減不增；這裡只要一個數字、沒有列資料）。
+    ⚠️ 查不到 seq 列有兩種情況：新庫還沒寫過任何通知，或（不該發生）有人清掉了 sqlite_sequence 而舊通知還在。
+    ☠️ 兩者不分、一律當 0 的話，第二種會讓去重的 DELETE 把舊的 `setting:*` 通知一起刪掉。
+    ⇒ 查不到時在同一個交易內插一列暫存列再刪掉：SQLite 對沒有 seq 列的 AUTOINCREMENT 表取 MAX(rowid)+1，
+       所以那一列的 id 就是「現有最大 id＋1」，又不用讀 notifications；兩種情況都得到正確水位線。
+    任何一步出錯 ⇒ `None`（跳過去重，不讓設定存檔失敗）。"""
+    from datetime import datetime
+    try:
+        row = c.execute("SELECT seq FROM sqlite_sequence WHERE name='notifications'").fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+        cur = c.execute("INSERT INTO notifications (username, type, message, created_at) VALUES ('', 'info', '', ?)",
+                        (datetime.now().isoformat(timespec="seconds"),))
+        mark = int(cur.lastrowid)
+        c.execute("DELETE FROM notifications WHERE id=?", (mark,))
+        return mark
+    except Exception:   # noqa: BLE001
+        logger.exception("settings_registry: 取不到通知水位線，這次略過通知去重")
+        return None
+
+
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
@@ -826,11 +851,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     began = False
     try:
         began = begin_write(c)
-        # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的。
-        # 水位線取自 sqlite_sequence（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），
-        # 不直接 SELECT notifications：那會是一筆新的未範圍讀取（unscoped_reads 基準只減不增；這裡只要一個數字、沒有列資料）。
-        _row = c.execute("SELECT seq FROM sqlite_sequence WHERE name='notifications'").fetchone()
-        _notice_mark = int(_row[0]) if _row and _row[0] is not None else 0
+        _notice_mark = _notice_watermark(c)         # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的
         _who = user or ((actor.get("username") or "") if isinstance(actor, dict) else str(actor or ""))
         _items = []                                 # 變更通知項目（commit 之後才發；見 helpers/settings_notify）
         base = _effective(c, group, overlay=False)
@@ -879,7 +900,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                 c.rollback()
             return result
         _items = [i for i in _items if i]           # setting_item 失敗會回 None：先濾掉；沒有任何有效項目 ⇒ 不刪帳本的簡短通知（否則誰都沒被通知）
-        if _items:                                  # 設定中心的通知（commit 後發）取代帳本對高風險變更的簡短通知（同一件事不發兩則）：同交易內刪掉剛寫的那幾列
+        if _items and _notice_mark is not None:     # 設定中心的通知（commit 後發）取代帳本對高風險變更的簡短通知（同一件事不發兩則）：同交易內刪掉剛寫的那幾列
             c.execute("DELETE FROM notifications WHERE id>? AND type='config_change' AND ref_label LIKE 'setting:%'", (_notice_mark,))
         c.commit()
         invalidate(group)

@@ -76,6 +76,85 @@ def test_immediate_change_notifies_every_active_superadmin_with_who_what_old_new
     assert line_calls == []                                          # ops 風險不發 LINE
 
 
+# ── 通知去重的水位線（publish 的 `_notice_watermark`；h11 審查：sqlite_sequence 取不到時不可以誤刪舊通知）──────────
+
+def _cfg_notice_ids():
+    conn = get_db()
+    try:
+        return [r[0] for r in conn.execute("SELECT id FROM notifications WHERE type='config_change' AND ref_label LIKE 'setting:%' ORDER BY id").fetchall()]
+    finally:
+        conn.close()
+
+
+def _seed_old_cfg_notices(n):
+    conn = get_db()
+    try:
+        ids = [conn.execute("INSERT INTO notifications (username, type, ref_label, message, created_at) VALUES ('nt_old', 'config_change', 'setting:old_zz', ?, '2026-01-01T00:00:00')",
+                            ("舊通知 %d" % i,)).lastrowid for i in range(n)]
+        conn.commit()
+        return ids
+    finally:
+        conn.close()
+
+
+def _db_exec(sql, args=()):
+    conn = get_db()
+    try:
+        conn.execute(sql, args)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _tighten_uploads(client, h, mb):
+    r = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": mb}, "reason": "測"}, headers=h)
+    assert r.status_code == 200 and r.json()["changed"] is True, r.text
+
+
+def test_dedupe_watermark_empty_notifications_table_still_dedupes_and_still_notifies(client, make_user):
+    h = _hdr(client, make_user, "nt_e1")
+    make_user(username="nt_e2", role="superadmin")
+    _seed_old_cfg_notices(2)
+    _db_exec("DELETE FROM notifications")                            # 表清空；sqlite_sequence 的列還在
+    _tighten_uploads(client, h, 12)
+    assert _cfg_notice_ids() == []                                   # 帳本的簡短通知被取代
+    assert len(_notes("nt_e2")) == 1                                 # 設定中心的通知仍然發出
+
+
+def test_dedupe_watermark_pruned_top_ids_keep_old_notices(client, make_user):
+    h = _hdr(client, make_user, "nt_p1")
+    make_user(username="nt_p2", role="superadmin")
+    ids = _seed_old_cfg_notices(5)
+    _db_exec("DELETE FROM notifications WHERE id>?", (ids[2],))      # 最大的幾個 id 被清掉：seq > MAX(id)
+    _tighten_uploads(client, h, 13)
+    assert _cfg_notice_ids() == ids[:3]                              # 舊的留著、這次的簡短通知被去重
+
+
+def test_dedupe_watermark_missing_sequence_row_never_deletes_old_notices(client, make_user):
+    h = _hdr(client, make_user, "nt_m1")
+    make_user(username="nt_m2", role="superadmin")
+    ids = _seed_old_cfg_notices(3)
+    _db_exec("DELETE FROM sqlite_sequence WHERE name='notifications'")
+    conn = get_db()
+    try:
+        mark = R._notice_watermark(conn)                             # 沒有 seq 列：用暫存列取得「現有最大 id＋1」
+        conn.commit()
+    finally:
+        conn.close()
+    assert mark is not None and mark > max(ids)
+    assert _cfg_notice_ids() == ids                                  # 暫存列已刪、舊通知都在
+    _db_exec("DELETE FROM sqlite_sequence WHERE name='notifications'")
+    _tighten_uploads(client, h, 14)
+    assert _cfg_notice_ids() == ids                                  # 沒有 seq 列時存檔：舊通知不被去重的 DELETE 帶走
+
+
+def test_dedupe_watermark_failure_returns_none_instead_of_breaking_the_save():
+    class _Boom:
+        def execute(self, *a, **k):
+            raise RuntimeError("sqlite_sequence 不存在")
+    assert R._notice_watermark(_Boom()) is None
+
+
 def test_inactive_superadmin_is_not_notified(client, make_user):
     h = _hdr(client, make_user, "nt_sa3")
     make_user(username="nt_sa4", role="superadmin")
