@@ -125,6 +125,7 @@ from .startup import (
     flag_weak_passwords,
     init_unlock_passwords,
     _cleanup_sessions,
+    _tighten_company_profile_full_read_once,
     _prune_login_locks,
     _license_startup_check,
     _sync_module_versions,

@@ -2,10 +2,11 @@
 
 ## (next) — 2026-11-13（fix/company-profile-full-read-default；公司資料完整版預設只限最高管理者）
 - 行為變更（對外介面）：設定中心開關 `account_security.company_profile_full_read_superadmin_only` 預設 `0→1`（使用者裁示 2026-11-13，方案 A）。`GET /api/settings/company-profile`（完整版）對非最高管理者預設回 403；公開子集 `GET /api/settings/company-profile/public`（name／tax_id／contact_info／locations[id,name]）不變、任何登入者可讀。開關保留：關閉（0）＝登入即可讀完整版，屬放寬，需第二位最高管理者核准（既有機制，沒動）。
-- 適用範圍（重要）：新預設只對全新安裝、以及從沒存過「登入與密碼」（account_security）群組的環境生效——設定中心存檔會把整個群組（含此開關）存成明確值，曾存過的環境仍是舊值 0，需手動改為開啟（或另案遷移）。
+- 既有環境也會收緊（使用者裁示 2026-11-13，方案 A 的 (a)）：設定中心存檔會把整個「登入與密碼」群組（含此開關）存成明確值，曾存過的環境光改預設看不到。因此新增**一次性升級遷移** `helpers/startup._tighten_company_profile_full_read_once`（`main.py` 啟動時、init 之後呼叫）：每個資料庫只跑一次，標記 `system_settings.migration_company_profile_full_read_tighten_t84`；生效值是 0 ⇒ 經設定中心引擎發布成 1，並寫變更明細與稽核（`settings.account_security.update`，操作者「系統升級」，0→1，原因註明 T84 與「可在設定中心調回」），並通知其他最高管理者（既有高風險設定通知）；已是 1（含全新安裝）⇒ 只記標記、不寫稽核。標記存在後不再動：之後使用者在設定中心調回 0（放寬，需第二位最高管理者核准）會被保留。失敗不記標記、不擋啟動，下次啟動再試。只動這一個欄位，群組其他設定值不變。
 - 設定登錄（`helpers/settings_groups.py`、`core/settings_help.json`）：預設值、選項文字（拿掉「(目前的做法)」，改標「預設、建議」）、說明同步；`tests/platform/settings_deploy_baseline.json` 同步為 `[1, 0, 1, false]`。
 - `main.py` 公司設定 428 閘門放行理由改正：設定頁與公司設定精靈讀取本公司資料，預設只有最高管理者讀得到完整內容。
 - 不變：PUT company-profile／branding 仍限最高管理者；L1 公開介面無變動。
+- 測試（遷移）：`tests/test_company_profile_full_read_tighten_2026_11_13.py`（舊存值 0 → 升級後 1 且有稽核／重跑不變／跑過後手動改 0 仍是 0／全新安裝 1 不寫稽核／存 1 只記標記／失敗不記標記且不丟例外、下次重試／只動這一欄／非最高管理者升級後讀完整版得 403／main.py 有呼叫）。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（新增「全新安裝非最高管理者讀完整版得 403／最高管理者讀得到且金鑰遮罩／開關明確關閉後恢復登入即可讀／預設值為 1 且登錄為『收緊』類」）；`test_company_profile_superadmin_only_2026_09_22.py`、`test_api_integration.py` 對齊新預設。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）

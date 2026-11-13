@@ -66,6 +66,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode, set_request_ctx
 from helpers import (
     init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks, _license_startup_check,
+    _tighten_company_profile_full_read_once,
     init_unlock_passwords, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
@@ -1047,6 +1048,8 @@ flag_weak_passwords()
 _startup_step("flag_weak_passwords")
 init_unlock_passwords()
 _startup_step("init_unlock_passwords")
+_tighten_company_profile_full_read_once()     # T84：公司資料完整版預設收緊的一次性遷移（每庫一次；經 helpers/startup.py）
+_startup_step("tighten_company_profile_full_read")
 _cleanup_sessions()
 _startup_step("cleanup_sessions")
 
