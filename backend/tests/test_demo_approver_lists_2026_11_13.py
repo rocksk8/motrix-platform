@@ -164,8 +164,8 @@ def test_demo_cannot_decide_a_custom_def_review(make_user):
 
 def test_contact_info_field_warns_that_everyone_can_see_it():
     """公司資料「聯絡方式」欄會顯示給所有使用者（/api/settings/company-profile/public）：欄位旁寫明別填銀行資料（hichan-12 L）。"""
-    from pathlib import Path
-    html = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "company-profile-settings.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("company-profile-settings.html").read_text(encoding="utf-8")
     i = html.index('x-model="cfg.contact_info"')
     assert "此欄會顯示給所有使用者，請勿填銀行資料" in html[i:i + 600]
 
