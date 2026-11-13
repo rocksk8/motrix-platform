@@ -4,6 +4,10 @@
 - 變更（內部，不影響對外介面）：勞報單表單（`payslip-form.html`）預填公司名稱／統編／聯絡方式改打 `GET /api/settings/company-profile/public`；預填內容不變。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
 
+## 1.2.30（next，未取號）— 2026-11-13（fix/user-perm-sensitive-gate；安全：投保／扣繳設定的稽核紀錄不再含金額明文）
+- 修正（安全）：`PUT /api/bonus/insurance/{username}` 以前把 `{"insuredAmount": 45800, "ytdExternal": {...}}` 整段寫進稽核 `bonus.insurance` 的 `target_label`——投保金額與 MOTRIX 以外已發的獎金是薪資等級資料，任何有稽核權限的人都讀得到。現在只記「變更欄位 insuredAmount、ytdExternal[年]」，不記金額；金額本身照常存在 `system_settings`、只由最高管理者專用的 `GET /api/bonus/insurance` 讀取。API 回應不變。
+- 測試：`tests/test_insurance_audit_no_amount_2026_11_13.py`（稽核列無金額明文〔含千分位寫法〕、只改單一欄位／清除、金額仍可由 GET 讀回、被拒的請求不留稽核列）。
+
 ## 1.2.29 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
