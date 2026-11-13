@@ -2807,6 +2807,12 @@
   ],
   "s": 200
  },
+ "/api/daily-tasks/case-options": {
+  "k": [
+   "items"
+  ],
+  "s": 200
+ },
  "/api/daily-tasks/{task_id}": {
   "k": [
    "assigned_to",
@@ -5985,9 +5991,29 @@
  },
  "/api/quotations/{quote_no}/material-flow": {
   "k": [
-   "detail"
+   "cells",
+   "cells[].href",
+   "cells[].items",
+   "cells[].items[].docCode",
+   "cells[].items[].name",
+   "cells[].items[].noteNo",
+   "cells[].items[].receivedOn",
+   "cells[].items[].shipDate",
+   "cells[].items[].signed",
+   "cells[].items[].status",
+   "cells[].key",
+   "cells[].label",
+   "cells[].state",
+   "cells[].summary",
+   "next",
+   "next.href",
+   "next.key",
+   "next.label",
+   "quoteNo",
+   "shipPresent",
+   "stockPresent"
   ],
-  "s": 404
+  "s": 200
  },
  "/api/quotations/{quote_no}/material-link-status": {
   "k": [
