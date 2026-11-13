@@ -187,3 +187,13 @@ backend/tools/parse_account_items.py export-ignore
 backend/core/CHANGELOG.md           merge=motrix-changelog
 backend/modules/*/CHANGELOG.md      merge=motrix-changelog
 backend/version_manifest.json       merge=motrix-manifest
+
+# 基準檔的合併驅動（2026-11-13，測試流程改革：基準檔每次整合都衝突）——結構合併（兩邊新增都留）；
+# 重算那一半（快照／路由合計／MAX_ENTRIES／sha256）由 tools/platform/resolve_baselines.py 做。
+# 驅動要先登記（setup_merge_drivers.py）；沒登記 ⇒ 一般三方合併，照常衝突，resolve_baselines.py 再收。
+backend/tests/platform/l1_interface_snapshot.json     merge=motrix-json
+backend/tests/platform/route_inventory.json           merge=motrix-json
+backend/tests/platform/response_keys_baseline.json    merge=motrix-json
+backend/tests/platform/unscoped_reads_baseline.json   merge=motrix-json
+docs/platform/modules.json                            merge=motrix-json
+backend/tests/platform/test_unscoped_reads_ratchet.py merge=motrix-maxentries

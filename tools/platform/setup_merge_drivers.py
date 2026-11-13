@@ -1,4 +1,4 @@
-"""登記 CHANGELOG／version_manifest 的 git 合併驅動（PLAYBOOK §G6；每個 clone 做一次，worktree 共用）。
+"""登記 CHANGELOG／version_manifest／基準 JSON／MAX_ENTRIES 的 git 合併驅動（PLAYBOOK §G6；每個 clone 做一次，worktree 共用）。
 
 用法（repo 或任何 worktree 內）：
   D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe tools/platform/setup_merge_drivers.py            登記／更新
@@ -9,6 +9,8 @@
 舊分支上沒有這支檔也照樣能跑），再寫 repo 本地 git config：
   merge.motrix-changelog.driver = "<python>" "<複本>" changelog %O %A %B %P
   merge.motrix-manifest.driver  = "<python>" "<複本>" manifest  %O %A %B %P
+  merge.motrix-json.driver      = "<python>" "<複本>" json      %O %A %B %P      （基準 JSON：結構合併）
+  merge.motrix-maxentries.driver = "<python>" "<複本>" maxentries %O %A %B %P    （test_unscoped_reads_ratchet.py 的 MAX_ENTRIES）
 對應的 .gitattributes 已在 repo 裡。沒登記的機器：git 找不到驅動 ⇒ 一般三方合併（照常出衝突，不會靜默少東西）。
 """
 import argparse
@@ -19,7 +21,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE / "merge_drivers.py"
-DRIVERS = {"motrix-changelog": "changelog", "motrix-manifest": "manifest"}
+DRIVERS = {"motrix-changelog": "changelog", "motrix-manifest": "manifest", "motrix-json": "json", "motrix-maxentries": "maxentries"}
 
 
 def _git(repo, *args, check=True):
@@ -97,7 +99,7 @@ def main(argv=None):
         print("合併驅動：%s" % ("OK" if not bad else "；".join(bad)))
         return 1 if bad else 0
     copy = install(a.repo)
-    print("已登記 motrix-changelog／motrix-manifest（複本 %s）" % copy)
+    print("已登記 %s（複本 %s）" % ("／".join(DRIVERS), copy))
     return 0
 
 
