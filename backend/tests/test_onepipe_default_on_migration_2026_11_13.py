@@ -31,7 +31,7 @@ def _sql(sql, args=()):
         c.close()
 
 
-PERM_FLAGS = ("buyer_access", "receive_permission")      # 放寬權限類旗標：預設關，不被遷移打開（P5a 起 buyer_access 已登錄）
+PERM_FLAGS = ("buyer_access", "receive_permission", "po_skip_resign")      # 放寬權限類旗標：預設關，不被遷移打開（P5a 起 buyer_access 已登錄）
 
 
 def _all_fields():

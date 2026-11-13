@@ -7033,6 +7033,7 @@
    "groups[].values.per_person",
    "groups[].values.phone",
    "groups[].values.planning",
+   "groups[].values.po_skip_resign",
    "groups[].values.prefill_unsigned",
    "groups[].values.procurement",
    "groups[].values.qty_mode",
