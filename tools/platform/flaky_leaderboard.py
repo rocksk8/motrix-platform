@@ -35,7 +35,8 @@ def default_path():
     env = os.environ.get(PATH_ENV)
     if env:
         return Path(env)
-    sys.path.insert(0, str(HERE))
+    if str(HERE) not in sys.path:
+        sys.path.insert(0, str(HERE))
     try:
         import fail_stream
         return fail_stream.stream_dir().parent / FILE_NAME
@@ -60,7 +61,11 @@ def _trim(path, now):
         kept = [ln for ln in path.read_text(encoding="utf-8", errors="replace").splitlines()
                 if ln.strip() and _line_time(ln) >= cutoff]
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text("\n".join(kept[-MAX_LINES:]) + "\n", encoding="utf-8")
+        kept = kept[-MAX_LINES:]
+        total = sum(len(ln.encode("utf-8")) + 1 for ln in kept)
+        while kept and total > MAX_BYTES * 3 // 4:            # 行數沒超過、但每行很長（參數化題名）⇒ 再按位元組丟最舊的；留點空間，不必每次都重寫整檔
+            total -= len(kept.pop(0).encode("utf-8")) + 1
+        tmp.write_text("".join(ln + "\n" for ln in kept), encoding="utf-8")
         os.replace(str(tmp), str(path))
     except OSError:
         pass
@@ -69,7 +74,7 @@ def _trim(path, now):
 def _line_time(line):
     try:
         return str(json.loads(line).get("t") or "")
-    except ValueError:
+    except (ValueError, AttributeError):          # 不是 JSON、或是 JSON 但不是物件（例如 123）
         return ""                    # 讀不懂的行：時間空字串 ⇒ 修剪時被丟掉
 
 
@@ -115,14 +120,15 @@ def aggregate(events, days, now=None):
     cutoff = (now - timedelta(days=days)).strftime(TS_FMT)
     rows = {}
     for e in events:
-        if str(e["t"]) < cutoff:
+        t = str(e["t"])                                   # 時間欄位不是字串的列（手改過的檔）也不讓排行崩
+        if t < cutoff:
             continue
         r = rows.setdefault(e["nodeid"], {"nodeid": e["nodeid"], "flaky": 0, "hard_fail": 0, "runs": set(), "stages": set(),
-                                          "first": e["t"], "last": e["t"]})
+                                          "first": t, "last": t})
         r["flaky" if e.get("passed") else "hard_fail"] += 1
-        r["runs"].add(e.get("run", ""))
-        r["stages"].add(e.get("stage", ""))
-        r["first"], r["last"] = min(r["first"], e["t"]), max(r["last"], e["t"])
+        r["runs"].add(str(e.get("run", "")))
+        r["stages"].add(str(e.get("stage", "")))
+        r["first"], r["last"] = min(r["first"], t), max(r["last"], t)
     out = []
     for r in rows.values():
         out.append({"nodeid": r["nodeid"], "flaky": r["flaky"], "hard_fail": r["hard_fail"], "runs": len(r["runs"]),

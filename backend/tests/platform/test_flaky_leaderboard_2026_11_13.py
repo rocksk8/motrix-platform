@@ -5,7 +5,7 @@
  (a) 沒有任何其他建包／偶發工具引用排行榜（known_flakes／failfast／fail_stream／build_test_reuse／modtest／build_deploy_package.ps1），
      flaky_retry.py 裡只有一處、在 main() 的 `try … except Exception` 裡；
  (b) 同一組重跑結果：排行榜寫得成、寫失敗（丟例外）、寫到寫不進去的路徑 ⇒ `flaky_retry.main` 的結束碼與 --result-out 逐字相同；
- (c) known_flakes.json 的 flakes 保持空（排行榜不會自動登記），且跑完 main 後登記簿檔案沒被動。
+ (c) 跑完 main 後真正的 known_flakes.json 位元組不變（排行榜不會自動登記；登記只由人做）。
 另鎖：事件格式、排序與天數窗、檔案大小上限、.gitignore。
 """
 import ast
@@ -100,6 +100,38 @@ def test_file_size_is_bounded_old_lines_dropped_then_only_the_last_lines_kept(tm
     assert "tests/n39.py::t" in lines[-1], "最新的一筆被修剪掉了"
 
 
+def test_garbled_rows_do_not_break_trim_or_aggregate(tmp_path, monkeypatch):
+    p = tmp_path / "lb.jsonl"
+    monkeypatch.setattr(LB, "MAX_BYTES", 1500)
+    monkeypatch.setattr(LB, "MAX_LINES", 5)
+    bad = ["123", "[1,2]", json.dumps("字串", ensure_ascii=False), json.dumps({"t": 20261113, "run": 1, "stage": 2, "nodeid": NID_A, "passed": True})]
+    p.write_text(chr(10).join(bad) + chr(10), encoding="utf-8")                                           # 非物件的 JSON 行、時間欄位是數字的列
+    for i in range(30):
+        LB.record([_res("tests/n%02d.py::t" % i, [1, 0], True)], "r%d" % i, "s", path=p, now=NOW)       # 不丟例外；修剪照常發生
+    lines = p.read_text(encoding="utf-8").splitlines()
+    assert len(lines) <= 12 and "tests/n29.py::t" in lines[-1]
+    rows = LB.aggregate(LB.load_events(p), 7, NOW)                                                       # 時間欄位是數字的列也不崩
+    assert all(isinstance(r["nodeid"], str) for r in rows)
+
+
+def test_a_few_very_long_rows_are_also_bounded_by_bytes(tmp_path, monkeypatch):
+    p = tmp_path / "lb.jsonl"
+    monkeypatch.setattr(LB, "MAX_BYTES", 4000)
+    long_id = "tests/test_x.py::test_case[" + "p" * 600 + "]"
+    for i in range(30):
+        LB.record([_res(long_id + str(i), [1, 0], True)], "r%d" % i, "s", path=p, now=NOW)
+    assert p.stat().st_size <= 4000 + 1000, "行數沒超過上限、但每行很長時，檔案不能無限長大"
+
+
+def test_default_path_does_not_grow_sys_path(monkeypatch, tmp_path):
+    monkeypatch.delenv(LB.PATH_ENV, raising=False)
+    LB.default_path()
+    n = sys.path.count(str(LB.HERE))
+    LB.default_path()
+    LB.default_path()
+    assert sys.path.count(str(LB.HERE)) == n, "default_path 每呼叫一次就往 sys.path 塞一份"
+
+
 def test_default_path_is_gitignored_and_env_overrides_it(monkeypatch, tmp_path):
     ignore = (REPO / ".gitignore").read_text(encoding="utf-8")
     assert "tools/platform/" + LB.FILE_NAME in ignore.replace("\r", "").splitlines()
@@ -153,7 +185,7 @@ def test_a_the_only_reference_in_flaky_retry_is_inside_a_swallow_all_try_in_main
         t = tries[0]
         assert any(isinstance(h.type, ast.Name) and h.type.id == "Exception" for h in t.handlers), "hook 的 except 沒吞掉所有例外"
         assert any(isinstance(c, ast.FunctionDef) and c.name == "main" for c in chain), "hook 不在 main() 裡"
-        # hook 在 main 中位於結果檔寫出與 fail_stream 追加之後（結果已定案）
+        # hook 在 main 中位於 --result-out 寫出之後（結果已定案；下面比對）
     main = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main")
     stmts = main.body
     idx_hook = next(i for i, s in enumerate(stmts) if isinstance(s, ast.Try) and any(u in ast.walk(s) for u in uses))
@@ -179,24 +211,28 @@ def _run_main(tmp_path, monkeypatch, tag, lb_mode):
         blocker.write_text("x", encoding="utf-8")
         lb_file = blocker / "sub" / "lb.jsonl"                         # 父層是檔案 ⇒ mkdir／open 都會 OSError
     monkeypatch.setenv(LB.PATH_ENV, str(lb_file))
+    monkeypatch.setitem(sys.modules, "flaky_leaderboard", LB)          # hook 呼叫當下 import 到的一定是這個模組（別的測試動過 sys.modules 也一樣）
+    calls = []
     if lb_mode == "raise":
         def _boom(*a, **k):
+            calls.append(1)
             raise RuntimeError("排行榜壞了")
         monkeypatch.setattr(LB, "record", _boom)
     monkeypatch.setattr(FR, "make_runner", lambda *a, **k: (lambda nid, attempt: 0 if attempt == 2 else 1))
     rc = FR.main(["--run-id", "run-" + tag, "--stage", "stg", "--exit-code", "1", "--output-file", str(out), "--basetemp-prefix",
                   str(tmp_path / "bt"), "--result-out", str(res), "--registry", str(reg)])
     stream = (tmp_path / ("fs-" + tag) / ("run-" + tag + ".jsonl")).read_text(encoding="utf-8")
-    return rc, res.read_text(encoding="utf-8"), lb_file, stream
+    return rc, res.read_text(encoding="utf-8"), lb_file, calls
 
 
 def test_b_leaderboard_ok_failing_or_unwritable_does_not_change_exit_code_or_result(tmp_path, monkeypatch):
-    rc_ok, res_ok, lb_file, _ = _run_main(tmp_path, monkeypatch, "ok", "ok")
+    rc_ok, res_ok, lb_file, _calls = _run_main(tmp_path, monkeypatch, "ok", "ok")
     assert rc_ok == 0, "基準情境本身要放行（一題紅、重跑綠、已登記）"
     rows = [json.loads(x) for x in lb_file.read_text(encoding="utf-8").splitlines()]          # 正對照：寫得成時真的有記到
     assert len(rows) == 1 and rows[0]["nodeid"] == NID_A and rows[0]["passed"] is True and rows[0]["attempts"] == [1, 0]
     monkeypatch.undo()
-    rc_raise, res_raise, _, _ = _run_main(tmp_path, monkeypatch, "raise", "raise")
+    rc_raise, res_raise, _, boom_calls = _run_main(tmp_path, monkeypatch, "raise", "raise")
+    assert boom_calls == [1], "正對照：hook 真的呼叫了（而且丟了例外）；沒呼叫＝這題空轉"
     monkeypatch.undo()
     rc_bad, res_bad, bad_file, _ = _run_main(tmp_path, monkeypatch, "bad", "unwritable")
     assert not bad_file.exists()
@@ -225,6 +261,6 @@ def test_b_a_blocked_retry_leaves_the_same_exit_code_with_and_without_the_leader
 def test_c_known_flakes_registry_stays_empty_and_untouched_by_a_run(tmp_path, monkeypatch):
     real = PLAT / "known_flakes.json"
     before = real.read_bytes()
-    assert json.loads(before.decode("utf-8-sig"))["flakes"] == [], "known_flakes.json 的 flakes 要保持空：登記只由人做（known_flakes.py add）"
     _run_main(tmp_path, monkeypatch, "c", "ok")
-    assert real.read_bytes() == before
+    assert real.read_bytes() == before, "跑一次偶發重跑（含排行榜）不該動登記簿；登記只由人做（known_flakes.py add）"
+    # 不斷言「flakes 永遠是空的」：人合法登記偶發題（known_flakes.py add）時這題不能變紅
