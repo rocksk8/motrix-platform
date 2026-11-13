@@ -27,7 +27,8 @@ TOKENS = ("case_no", "case_name", "customer", "doc_type", "doc_no", "date")
 
 #: 文件類型穩定鍵 → 預設用語（顯示用語可在設定改，鍵不變）
 DOC_TYPES = {
-    "quotation": "報價單", "quotation_version": "報價單存檔版本", "close_report": "結案報表", "execution_report": "專案執行報告",
+    "quotation": "報價單", "quotation_version": "報價單存檔版本", "estimate": "估價單", "estimate_version": "估價單存檔版本",
+    "close_report": "結案報表", "execution_report": "專案執行報告",
     "completion": "完工單", "expense_form": "費用單", "shipping": "出貨單", "payment_request": "請款單",
     "invoice_voucher": "開票申請", "contractor_voucher": "承攬商傳票", "payslip": "勞報單", "bonus_award": "獎金分配單",
     "voucher": "傳票",

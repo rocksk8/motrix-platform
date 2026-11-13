@@ -5151,6 +5151,7 @@ def approval_queue_items(conn) -> list:
         f = _queue_tier_fields(raw)
         items.append({
             "type":                "quotation",
+            "typeLabel":           _DT.label_of_no(r["quote_no"]),   # 估價單：佇列卡片標籤依單號字首（前端 docTypeLabel 直接用 item.typeLabel）
             "locationId":          r["location_id"] or "",          # 簽核頁「據點」列用（QL15；之前佇列沒帶這欄，那一列永遠不出現）
             "quoteNo":             r["quote_no"],
             "customer":            r["customer_name"] or "",
@@ -6352,7 +6353,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
             "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
-    dn = download_name.build("quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"variant": "internal"} if internal else None)
     return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
@@ -6465,7 +6466,7 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
            {"seq": seq, "file": target.get("file")})
     # 檔名＝案件欄位＋報價單存檔版本＋單號＋事件與日期（沿用今天存檔檔名裡的事件與日期資訊）
     _stamp = "_".join(x for x in (str(target.get("event") or "").strip(), str(target.get("at") or "")[:10].replace("-", "")) if x)
-    dn = download_name.build("quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+    dn = download_name.build("estimate_version" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"suffix": _stamp} if _stamp else None)
     return Response(content=content, media_type="application/pdf", headers=dn.headers())
 

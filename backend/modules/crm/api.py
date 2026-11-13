@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 from helpers import row_access
+from helpers import doc_type as _DT   # 估價單：轉建通知依單號字首顯示「報價單」或「估價單」
 from helpers import perm as _perm
 from helpers import email_notify as _en            # LINE 專屬事件（僅 LINE／細項）走 `_en._line_event`
 import threading
@@ -910,7 +911,7 @@ def mark_converted(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
                str(case_id), f"{row['case_name']} → {quote_no}")
-        notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
+        notify_module_activity("業務開發", "轉建" + _DT.label_of_no(quote_no), user.get("display_name") or user["username"],
                                 f"{row['case_name']} → {quote_no}", "dev-crm.html",
                                 line_event="crm_case_converted", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))

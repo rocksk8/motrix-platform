@@ -66,7 +66,7 @@ APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_reque
 DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request",
                              "extra_expense", "completion"}
 APPROVAL_DOC_TYPE_LABELS = {
-    "quotation":         "報價單",
+    "quotation":         "報價單／估價單",       # 簽核流程設定的名稱：兩種單據共用同一組流程（單張單據的名稱看單據類型）
     "shipping":          "出貨單",
     "invoice_voucher":   "發票開立簽核單",
     "payment_request":   "請款單",

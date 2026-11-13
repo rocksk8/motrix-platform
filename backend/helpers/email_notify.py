@@ -131,17 +131,23 @@ def _url_esc(u) -> str:
 def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
                 rows: list, quote_no: str, base_url: str,
                 note: str = "", intro: str = "",
-                button_text: str = "前往系統查看", impact: str = None, action: str = None) -> str:
+                button_text: str = "前往系統查看", impact: str = None, action: str = None, doc_label: str = None) -> str:
     """通知信內文（用語規範 MODULE-GUIDE §11）：固定依「事由、影響、建議處理、發送時間與來源」。
 
     事由＝`intro`（沒有就用 `title`）＋明細列；影響／建議處理預設取信件類型登記表
     （helpers/mail_types.py），個別信件可以傳入更具體的說明。
+
+    單據名稱（估價單）：登記表裡的預設文字（影響／建議處理）與頁尾的「信件類型」名稱是靜態字串，共用名稱寫成「報價單／估價單」；
+    這裡依 `doc_label`（沒給就由 `quote_no` 的字首判斷；單號是空的呼叫端自己傳）換成這封信實際的單據名稱（報價單 ⇒ 字串與改版前逐位元相同）。
+    只換「登記表的文字」，不碰呼叫端傳進來的 title／rows／note（那些已經先換範本、再填值）。
     """
+    if doc_label is None:
+        doc_label = _doc_label_of(quote_no) if quote_no else "報價單"
     t = _mt.get(mail_key)
     if t is None:
         logger.error("信件類型 %r 未登記（_build_html）", mail_key)
-    impact = impact if impact is not None else (t.impact if t else "")
-    action = action if action is not None else (t.action if t else "")
+    impact = impact if impact is not None else (_concrete(t.impact, doc_label) if t else "")
+    action = action if action is not None else (_concrete(t.action, doc_label) if t else "")
     # 預設逸出（2026-10-14，04 稽核）：除了包成 `_safe()` 的片段（呼叫端刻意傳入的 HTML，其中的使用者資料要自己 `_esc()`），所有文字欄位都當純文字逸出。
     # 純文字且不含 & < > " ' 時，輸出與逸出前逐位元相同（守門：tests/test_mail_escape_2026_10_14.py）。
     title, badge_text, button_text, impact, action = _esc(title), _esc(badge_text), _esc(button_text), _esc(impact), _esc(action)
@@ -160,7 +166,7 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
         link = base_url if str(base_url).lower().startswith(("http://", "https://")) else "#"
     link = _url_esc(link)
     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(t.name if t else mail_key))
+    source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(_concrete(t.name, doc_label) if t else mail_key))
 
     def _sec(label, body):
         return (f'<div class="lbl" style="margin-top:14px;font-weight:700">{label}</div>'
@@ -574,6 +580,13 @@ def _tpl_fields(event: str, ctx: dict) -> dict:
 def _dl(text, doc_label):
     """單據類型用語：doc_label 預設「報價單」⇒ 原字串；估價單 ⇒ 把版面文字裡的「報價單」換成「估價單」。"""
     return text if (not doc_label or doc_label == "報價單") else str(text).replace("報價單", doc_label)
+
+
+def _concrete(text, doc_label):
+    """信件類型登記表裡的共用名稱 ⇒ 這封信實際的單據名稱：先把「報價單／估價單」換成 doc_label，再套 `_dl`（其餘「報價單」）。
+    報價單（或沒給）⇒ 「報價單／估價單」變回「報價單」，其餘字串不動。只用在登記表的靜態文字（不含任何使用者輸入）。"""
+    lab = doc_label or "報價單"
+    return _dl(str(text).replace("報價單／估價單", lab), lab)
 
 
 def _dl_fill(tpl, doc_label, **vals):
@@ -1451,14 +1464,14 @@ def notify_dev_case_relink_request(case_id: int, case_name: str, requester_displ
         logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
-    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單號）"
+    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單／估價單號）"
     rows = [("案件名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
     if reason and reason.strip():
         rows.append(("申請原因", reason.strip()))
     html = _build_html("dev_case_relink_request", 
-        "業務開發案件報價單連結異動申請", "請盡速簽核", "#DC2626",
+        "業務開發案件報價單／估價單連結異動申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統簽核。",
+        intro=f"{requester_display} 申請異動業務開發案件的報價單／估價單連結，請最高管理者登入系統簽核。",
         button_text="前往簽核",
     )
     _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
