@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
-[公開介面] AUDIENCE_MODES, BATCH_MAX_KEYS, BatchConflict, CALLBACK_PATH, CriticalConfirmRequired, DEFAULT_EVENT_SPEC, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_AUDIENCE_USERS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_DAILY_KEEP_DAYS, USAGE_KEY, WIRED_EVENTS, audience_view, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, event_spec, events_view, ids_for, is_linked, is_wired, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, public_base, push, push_async, quota, restore_events_batch, retry_pending, safe_link, set_audience, set_confirmed, set_event, set_event_roles, set_events_batch, settings_lock, unlink_user, usage_daily_view, valid_login_id, valid_login_secret, valid_token, verify_token, wired_events
+[公開介面] AUDIENCE_MODES, BATCH_MAX_KEYS, BatchConflict, CALLBACK_PATH, CriticalConfirmRequired, DEFAULT_EVENT_SPEC, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_AUDIENCE_USERS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_DAILY_KEEP_DAYS, USAGE_KEY, WIRED_EVENTS, audience_view, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, event_spec, events_view, ids_for, is_linked, is_wired, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, preview_events_batch, public_base, push, push_async, quota, restore_events_batch, retry_pending, safe_link, set_audience, set_confirmed, set_event, set_event_roles, set_events_batch, settings_lock, unlink_user, usage_daily_view, valid_login_id, valid_login_secret, valid_token, verify_token, wired_events
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -626,14 +626,8 @@ def _plan_batch(cfg: dict, keys, enabled, audience, roles_given: bool, event_rol
     return c, changed, defaulted, critical_off
 
 
-def set_events_batch(keys, enabled=None, audience=None, roles=_UNSET, confirm_critical: bool = False, default_user: str = None) -> dict:
-    """一次改多個事件的 開關／誰要發／角色篩選；**全部成功或全部不改**（整批只寫一次 `_set_setting`）。
-
-    keys：1～`BATCH_MAX_KEYS` 個事件 key（去重、保持順序），必須全是已接線事件。
-    enabled：None（不動）／True／False（嚴格布林）。audience：None（不動）／`{"mode", "roles"?, "users"?}`（規則同 `set_audience`，含「指定的人要有該事件所屬模組的權限」）。
-    roles：沒帶＝不動；None＝移除角色篩選（所有角色）；list＝只收這些角色。confirm_critical：要關閉「重要」告警時必須為 True。
-    default_user：事件從關切到開、且沒有指定對象時套用「只發給我」（不變式 ⑭）。
-    ⇒ `{"changed", "unchanged", "defaulted", "critical_off"}`（事件 key 清單）。不合法 ⇒ `ValueError`；缺確認 ⇒ `CriticalConfirmRequired`（是 ValueError 的子類）。"""
+def _batch_inputs(keys, enabled, audience, roles, confirm_critical):
+    """批次輸入的整理與驗證（進鎖前；含資料庫查詢）⇒ `(keys, roles_given, ev_roles, norm_aud)`。`set_events_batch` 與 `preview_events_batch` 共用，規則只有一份。"""
     if not isinstance(keys, (list, tuple)) or not all(isinstance(k, str) for k in keys):
         raise ValueError("keys 必須是事件代碼的清單")
     keys = list(dict.fromkeys(keys))
@@ -664,6 +658,18 @@ def set_events_batch(keys, enabled=None, audience=None, roles=_UNSET, confirm_cr
         norm_aud = {"mode": audience["mode"], "roles": r0, "users": u0}
     if enabled is None and norm_aud is None and not roles_given:
         raise ValueError("沒有要改的項目（enabled／audience／roles 至少要有一個）")
+    return keys, roles_given, ev_roles, norm_aud
+
+
+def set_events_batch(keys, enabled=None, audience=None, roles=_UNSET, confirm_critical: bool = False, default_user: str = None) -> dict:
+    """一次改多個事件的 開關／誰要發／角色篩選；**全部成功或全部不改**（整批只寫一次 `_set_setting`）。
+
+    keys：1～`BATCH_MAX_KEYS` 個事件 key（去重、保持順序），必須全是已接線事件。
+    enabled：None（不動）／True／False（嚴格布林）。audience：None（不動）／`{"mode", "roles"?, "users"?}`（規則同 `set_audience`，含「指定的人要有該事件所屬模組的權限」）。
+    roles：沒帶＝不動；None＝移除角色篩選（所有角色）；list＝只收這些角色。confirm_critical：要關閉「重要」告警時必須為 True。
+    default_user：事件從關切到開、且沒有指定對象時套用「只發給我」（不變式 ⑭）。
+    ⇒ `{"changed", "unchanged", "defaulted", "critical_off"}`（事件 key 清單）。不合法 ⇒ `ValueError`；缺確認 ⇒ `CriticalConfirmRequired`（是 ValueError 的子類）。"""
+    keys, roles_given, ev_roles, norm_aud = _batch_inputs(keys, enabled, audience, roles, confirm_critical)
     crit0 = _plan_batch(_cfg(), keys, enabled, norm_aud, roles_given, ev_roles, default_user)[3]
     if crit0 and not confirm_critical:
         raise CriticalConfirmRequired(crit0)
@@ -677,6 +683,43 @@ def set_events_batch(keys, enabled=None, audience=None, roles=_UNSET, confirm_cr
             _set_setting(SETTING_KEY, c)
         after = {k: _state_token(c, k) for k in keys}
     return {"changed": changed, "unchanged": [k for k in keys if k not in changed], "defaulted": defaulted, "critical_off": crit, "after": after}
+
+
+def preview_events_batch(keys, enabled=None, audience=None, roles=_UNSET, default_user: str = None) -> dict:
+    """批次預覽（**不寫入、不記稽核**）：同 `set_events_batch` 的輸入與驗證，回每個事件套用前後的開關、可能收件人數與每月則數估算。
+    ⇒ `{"events": [{key, enabled_before, enabled_after, n_before, n_after, exact_after, sent30, est_after, changed, defaulted, critical_off}], "total": {...}}`。
+    估算：以該事件近 30 天實際推播數（`sent30`）按「可能收件人數」的比例推算套用後的每月則數（`est_after`）；沒有歷史（sent30＝0）或套用前人數為 0 ⇒ `None`（無法估算）。
+    關閉事件 ⇒ 0。人數是上限（見 `line_recipients.potential_counts`）。`total` 把能估算的相加，`unknown`＝無法估算的事件數。"""
+    from . import line_recipients as _lr
+    keys, roles_given, ev_roles, norm_aud = _batch_inputs(keys, enabled, audience, roles, False)
+    cfg = _cfg()
+    new_cfg, changed, defaulted, crit = _plan_batch(cfg, keys, enabled, norm_aud, roles_given, ev_roles, default_user)
+    before = _lr.potential_counts(keys, roles_map=cfg.get("event_roles") if isinstance(cfg.get("event_roles"), dict) else {},
+                                  aud_map=cfg.get("audiences") if isinstance(cfg.get("audiences"), dict) else {})
+    after = _lr.potential_counts(keys, roles_map=new_cfg.get("event_roles") if isinstance(new_cfg.get("event_roles"), dict) else {},
+                                 aud_map=new_cfg.get("audiences") if isinstance(new_cfg.get("audiences"), dict) else {})
+    sent = usage_daily_view(30)["by_event"]
+    ev0 = cfg.get("events") if isinstance(cfg.get("events"), dict) else {}
+    ev1 = new_cfg.get("events") if isinstance(new_cfg.get("events"), dict) else {}
+    rows, tot_now, tot_after, unknown = [], 0, 0, 0
+    for k in keys:
+        on0, on1 = ev0.get(k) is True, ev1.get(k) is True
+        s30 = int(sent.get(k, 0) or 0)
+        n0, n1 = before[k]["n"], after[k]["n"]
+        if not on1:
+            est = 0
+        elif s30 > 0 and n0 > 0:
+            est = int(round(s30 * n1 / n0))
+        else:
+            est = None
+        tot_now += s30
+        if est is None:
+            unknown += 1
+        else:
+            tot_after += est
+        rows.append({"key": k, "enabled_before": on0, "enabled_after": on1, "n_before": n0, "n_after": n1, "exact_after": after[k]["exact"],
+                     "sent30": s30, "est_after": est, "changed": k in changed, "defaulted": k in defaulted, "critical_off": k in crit})
+    return {"events": rows, "total": {"sent30": tot_now, "est_after": tot_after, "unknown": unknown}}
 
 
 def restore_events_batch(states, expect) -> dict:
