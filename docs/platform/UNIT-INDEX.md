@@ -130,7 +130,7 @@
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:profit_rules` | L1 | 報價單／精算的利潤規則（第 48 班 S1；設計稿 docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md）。（無單位卡） | 17 | 5 | — |
 | `helper:profit_warning` | L1 | T64 A：利潤提醒色帶與報價單預設有效天數的讀取（只讀設定；預設＝各畫面今天寫死的數字）。 | 10 | 9 | `backend/tests/platform/test_profit_warning_t64.py` |
-| `helper:quote_email` | L1 | 報價用公司信箱（2026-11-13，使用者需求）：有些人用私人信箱註冊帳號，但報價單要用公司信箱。 | 9 | 5 | — |
+| `helper:quote_email` | L1 | 報價用公司信箱（2026-11-13，使用者需求）：有些人用私人信箱註冊帳號，但報價單要用公司信箱。 | 9 | 5 | `tests/test_quote_email_2026_11_13.py` |
 | `helper:quote_output` | L1 | 報價單輸出的設定使用端（T63 Q0）：被管理者隱藏的報價條件欄位，PDF／預覽要不要照印。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:quote_privacy` | L1 | 報價單個人資料欄位的設定使用端（T63 Q0）：客戶電子郵件／傳真能不能被管理者隱藏。 | 1 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
@@ -167,7 +167,7 @@
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 33 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 21 | 33 | — |
 | `helper:user_buttons` | L1 | 使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。 | 12 | 1 | `backend/tests/test_user_buttons_2026_10_14.py` |
-| `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | — |
+| `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | `tests/test_my_account_prefs_2026_11_13.py` |
 | `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 24 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_guard` | L1 | 使用者上傳的 .xlsx 的「小檔案展開」守門：預掃（真的 XML 解析，不靠 regex）＋ 子行程隔離解析（硬逾時、記憶體上限）。 | 18 | 3 | `tests/test_xlsx_guard_2026_11_13.py` |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 20 | 15 | — |

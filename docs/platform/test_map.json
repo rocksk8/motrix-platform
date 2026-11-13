@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1593,
+  "tests": 1594,
   "unmapped": 13,
   "kinds": {
    "api": 876,
    "e2e": 361,
-   "audit": 204,
+   "audit": 205,
    "unit": 152
   },
   "routes": 922
@@ -20951,7 +20951,7 @@
    }
   },
   "backend/tests/platform/test_gate_slices_2026_10_07.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
     "dir:backend/modules/",
     "dir:backend/tests/platform/",
@@ -20963,7 +20963,8 @@
     "file:backend/tests/test_page_shell_scripts_2026_09_30.py",
     "file:backend/tests/test_spec_coverage_2026_09_21.py",
     "file:backend/tests/test_system_audit_2026_09_14.py",
-    "file:backend/tests/test_wording_guards_2026_09_23.py"
+    "file:backend/tests/test_wording_guards_2026_09_23.py",
+    "file:tools/platform/modtest.py"
    ],
    "evidence": {
     "path": [
@@ -20977,7 +20978,8 @@
      "backend/tests/test_spec_coverage_2026_09_21.py",
      "backend/tests/test_system_audit_2026_09_14.py",
      "backend/tests/test_wording_guards_2026_09_23.py",
-     "tools/platform/"
+     "tools/platform/",
+     "tools/platform/modtest.py"
     ]
    }
   },
@@ -37661,6 +37663,21 @@
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
      "backend/helpers/settings.py"
+    ]
+   }
+  },
+  "backend/tests/test_guard_no_star_kwargs_2026_11_13.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:image_guard",
+    "helper:xlsx_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/image_guard.py",
+     "backend/helpers/xlsx_guard.py"
     ]
    }
   },
