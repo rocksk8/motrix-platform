@@ -4933,7 +4933,7 @@
       _applyDocSkin() {
         const est = this.q.docType === 'estimate'
         window.__motrixDocEstimate = est
-        document.title = (est ? '估價單' : '報價單') + ' - MOTRIX 專案管理系統'
+        document.title = (est ? '估價單' : '報價單') + ' - MOTRIX PLATFORM'
         if (!est) return
         // 使用者自己輸入的內容（客戶名、專案名、條款…）本身若含「報價單」要原樣保留：只換系統寫死的用語。
         // 做法：把表單資料裡含「報價單」的字串先換成佔位符、換完再還原（只有節點含「報價單」時才掃一次，很少發生）。
