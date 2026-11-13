@@ -2302,6 +2302,7 @@ def _daily_backup_tables() -> dict:
         "組織單位":         "SELECT * FROM org_units ORDER BY id",
         "組織單位層級":     "SELECT * FROM org_unit_closure ORDER BY ancestor_id, descendant_id",
         "使用者單位歸屬":   "SELECT * FROM user_units ORDER BY user_id, unit_id",
+        "個人偏好":         "SELECT user_id, key, value_json, updated_at, owner_unit_id FROM user_prefs ORDER BY user_id, key",          # 「我的帳號」票（字級、外觀、問候語、首頁、頭像色）：每人每鍵一列，純文字小資料
         "單位設定覆寫":     "SELECT * FROM system_settings_unit ORDER BY unit_id, key",
         "單位序列":         "SELECT * FROM seq_by_entity ORDER BY entity_id, kind, period",
         # ── 帳號與組織（2026-09-14 補）──
@@ -2314,7 +2315,7 @@ def _daily_backup_tables() -> dict:
         # 走到最後手段本來就該這樣做（來路不明的舊憑證不該直接沿用）。
         "使用者":           ("SELECT id, username, display_name, role, email, phone, "
                              "modules, active, created_at, must_change_password, "
-                             "notification_muted, department_id, totp_enabled "
+                             "notification_muted, department_id, totp_enabled, quote_email "
                              "FROM users ORDER BY id"),
         "部門":             "SELECT * FROM departments ORDER BY id",
         "事業處":           "SELECT * FROM divisions ORDER BY id",

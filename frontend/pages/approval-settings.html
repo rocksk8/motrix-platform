@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>簽核設定 — MOTRIX 專案管理系統</title>
+  <title>簽核設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/org-gaps.js"></script>
   <script src="../static/motrix-error.js"></script>
@@ -579,9 +579,9 @@
         </summary>
         <div class="as-card-body" style="padding:14px 20px">
           <ul style="font-size:12px;color:var(--text-secondary);line-height:2;margin:0;padding-left:18px">
-            <li>每種文件類型依「套用範圍」設定走統一流程或自己的獨立設定，送出審核後系統依當下設定生成簽核步驟，並快照當時的設定（之後修改設定不影響已在審核中的單據）</li>
+            <li>每種文件類型依「套用範圍」設定走統一流程或自己的獨立設定，送出簽核後系統依當下設定生成簽核步驟，並快照當時的設定（之後修改設定不影響已在審核中的單據）</li>
             <li>勾選套用範圍＝走統一流程；取消勾選＝改用該類型自己的獨立設定（會在下方各自一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層；每一類的「調整」裡，左邊一列是現在生效的設定、另一列是切過去之後會變成的設定</li>
-            <li>每位簽核人員在自己的步驟輪到時，才能在「簽核佇列」頁面執行簽核</li>
+            <li>每位簽核人員在自己的步驟輪到時，才能在「待我簽核」頁面執行簽核</li>
             <li>任何步驟皆可由最高管理者退回草稿</li>
             <li>所有步驟完成後，該單據狀態自動更新為完成狀態（報價單為「已送出」，其餘為「已核准」）</li>
             <li>未設定任何步驟時，回歸預設行為：任一最高管理者皆可簽核</li>

@@ -230,8 +230,8 @@ def test_avatar_menu_content_and_a11y(live_server, make_user, e2e_browser, w, h,
               right: Math.round(m.getBoundingClientRect().right), vw: innerWidth} }""")
     assert info["role"] == "menu" and info["right"] <= info["vw"], info
     names = [i[0] for i in info["items"]]
-    assert names == ["修改密碼", "登出"], info
-    assert "change-password.html" in info["items"][0][2], info
+    assert names == ["我的帳號", "修改密碼", "登出"], info      # T82：我的帳號頁上線（sidebar.js MY_ACCOUNT_READY）⇒ 選單多一項；修改密碼改到帳號安全分頁
+    assert info["items"][0][2] == "my-account.html" and "my-account.html?tab=security" in info["items"][1][2], info
     if mobile:
         assert all(i[1] >= 43.5 for i in info["items"]), "手機選單項目觸控目標 <44px：%r" % info
     # Esc：收合、aria-expanded=false、焦點回頭像
@@ -242,6 +242,8 @@ def test_avatar_menu_content_and_a11y(live_server, make_user, e2e_browser, w, h,
     page.focus("#tb-avatar")
     page.keyboard.press("Enter")
     assert ex() == [True, "true"]
+    assert page.evaluate("() => document.activeElement.textContent.trim()") == "我的帳號"
+    page.keyboard.press("ArrowDown")
     assert page.evaluate("() => document.activeElement.textContent.trim()") == "修改密碼"
     page.keyboard.press("ArrowDown")
     assert page.evaluate("() => document.activeElement.textContent.trim()") == "登出"

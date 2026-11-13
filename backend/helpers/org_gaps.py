@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """組織設定缺口檢查（選單去工程師化 批次 5a，2026-11-13）：只讀，不改任何資料。
 
-檢查項目（說明，不是單位卡欄位）：①在職但沒有部門的人 ②有在職成員、卻沒有主管（或主管已停用）的部門 ③沒有任何人持有「財務」職務
-
 [單位] helper:org_gaps    [層] L1    [穩定度] 實驗
-[公開介面] check, GAP_KEYS, GAP_NO_DEPARTMENT, GAP_NO_FINANCE, GAP_NO_MANAGER, MAX_ITEMS, finance_holder_exists
+[公開介面] check, finance_holder_exists, GAP_NO_DEPARTMENT, GAP_NO_MANAGER, GAP_NO_FINANCE, GAP_KEYS, MAX_ITEMS
 [契約題] tests/test_org_gaps_5a_2026_11_13.py
 [不變式] ①只讀（不寫、不 DELETE）；任何一項查不到資料表／欄位 ⇒ 該項視為「沒有缺口」並記 log，不丟 500（缺口檢查壞了不該擋住頁面）。
     ②「持有財務職務」與 `helpers.auth.finance_duty_person` 同一條規則（旗標 off／shadow／on 都對；測試逐一比對），但**一次查詢、不逐人呼叫**
@@ -12,6 +10,8 @@
     ③沒有在職成員的空部門不算缺口（沒有人需要它的主管）。最高管理者不算「沒有部門」（主要是簽核、不是送審）；全新安裝（沒有任何在職的非最高管理者）整個檢查不出任何缺口。
     ④回傳的人名／部門名只給呼叫端（路由限管理者以上），單項最多列 `MAX_ITEMS` 筆，`count` 一律是完整數量。
     ⑤文字用白話、不含程式字眼；`fix.href` 指向實際能修的頁面（不新增頁面）。
+
+檢查項目：①在職但沒有部門的人 ②有在職成員、卻沒有主管（或主管已停用）的部門 ③沒有任何人持有「財務」職務
 """
 import json
 import logging

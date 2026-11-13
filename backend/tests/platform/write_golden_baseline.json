@@ -280,6 +280,51 @@
   ],
   "s": 400
  },
+ "PUT /api/auth/preferences": {
+  "k": [
+   "company",
+   "company.login_greeting_off",
+   "defaults",
+   "defaults.avatar_color",
+   "defaults.font_size",
+   "defaults.home_page",
+   "defaults.login_greeting",
+   "defaults.theme",
+   "options",
+   "options.avatar_color",
+   "options.avatar_color.choices",
+   "options.avatar_color.choices[].label",
+   "options.avatar_color.choices[].value",
+   "options.avatar_color.label",
+   "options.font_size",
+   "options.font_size.choices",
+   "options.font_size.choices[].label",
+   "options.font_size.choices[].value",
+   "options.font_size.label",
+   "options.home_page",
+   "options.home_page.choices",
+   "options.home_page.choices[].label",
+   "options.home_page.choices[].value",
+   "options.home_page.label",
+   "options.login_greeting",
+   "options.login_greeting.choices",
+   "options.login_greeting.choices[].label",
+   "options.login_greeting.choices[].value",
+   "options.login_greeting.label",
+   "options.theme",
+   "options.theme.choices",
+   "options.theme.choices[].label",
+   "options.theme.choices[].value",
+   "options.theme.label",
+   "prefs",
+   "prefs.avatar_color",
+   "prefs.font_size",
+   "prefs.home_page",
+   "prefs.login_greeting",
+   "prefs.theme"
+  ],
+  "s": 200
+ },
  "PUT /api/getting-started/steps/{step_id}": {
   "k": [
    "detail"
@@ -331,6 +376,12 @@
    "sort.default.dir"
   ],
   "s": 200
+ },
+ "PUT /api/login-greeting/phrases": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "PUT /api/settings/line-notify": {
   "k": [

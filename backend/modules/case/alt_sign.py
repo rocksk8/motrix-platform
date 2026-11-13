@@ -184,7 +184,7 @@ def guard_update(new: dict, old: dict, is_unlock_edit: bool) -> None:
 def guard_move_out_of_sent(is_signed, data: dict, target_status: str) -> None:
     """P3：已回簽的擇一單不可被改成草稿／待審核／已取消／已拒絕（`update_status`、`recall`、`reject`）。
     預設（①）一律 409『請管理員取消回簽』；目標仍是『已送出』不算離開。選項②（自動清除）尚未提供（沒有消費者前不開放）。
-    拒絕結案（P3b）預設『終局保留』＝不動任何東西，所以沒有對應的守門呼叫。無擇一資料的單不受影響（H5）。"""
+    駁回結案（P3b）預設『終局保留』＝不動任何東西，所以沒有對應的守門呼叫。無擇一資料的單不受影響（H5）。"""
     if is_signed and applies(data) and target_status != "已送出":
         if alt_policy.policy("move_out_of_sent") == 1:
             raise HTTPException(409, alt_lock.LOCKED_MSG)

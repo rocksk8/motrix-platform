@@ -452,7 +452,7 @@ window.CM_PARTS.push(() => ({
       return [
         { key: '待精算', label: '待精算', dot: 'var(--tone-warning-border)', items: settling },
         { key: '進行中', label: '進行中', dot: 'var(--tone-success-solid)', items: active },
-        { key: '已結案', label: '已結案', dot: 'var(--tone-violet-border)', items: closed },
+        { key: '已結案', label: '已結案', dot: 'var(--tone-slate-border)', items: closed },
       ]
     },
 

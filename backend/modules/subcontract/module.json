@@ -1,7 +1,7 @@
 {
   "key": "subcontract",
   "name": "外包工班",
-  "version": "1.1.45",
+  "version": "1.1.46",
   "core": ">=1.155,<2.0",
   "license_key": "subcontract",
   "permissions": ["contractor_list"],

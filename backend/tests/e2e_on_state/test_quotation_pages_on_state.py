@@ -138,13 +138,14 @@ def test_q4_quotation_list_columns(live_server, make_user, new_context):
     page.wait_for_function("(js) => eval(js)().includes('含稅總額') && !eval(js)().includes('案件名稱')", arg=heads_js, timeout=15000)                  # layoutOn 之後欄位才非同步套用
     heads = page.evaluate(heads_js)
     assert "案件名稱" not in heads and "金額（含稅）" not in heads and "含稅總額" in heads, heads
-    # 順序固定：隱藏／改名之外，欄位順序和預設相同
-    assert heads.index("報價單號") < heads.index("客戶名稱") < heads.index("含稅總額"), heads
+    # 順序固定：隱藏／改名之外，欄位順序和預設相同（T84 起客戶名稱併進單號格、預設不單獨成欄；毛利率、有效天數、填單人同理）
+    assert heads.index("報價單號") < heads.index("含稅總額") < heads.index("狀態"), heads
+    assert "客戶名稱" not in heads, heads
     # 核心欄不能隱藏
     for core in ("quoteNo", "customer", "status", "dealTag"):
         s, _ = api(ctx, live_server, "PUT", "/api/definitions/layout/module:case/draft", tk, {"body": {"ops": [{"op": "hide", "target": col(core)}]}}, {"scope": "company"})
         if s == 200:
             s, _ = api(ctx, live_server, "POST", "/api/definitions/layout/module:case/publish", tk, {"note": "x"}, {"scope": "company"})
         assert s == 422, (core, s)
-    # 空列（colspan）跟著可見欄數：隱藏 1 欄 ⇒ 12 - 1
-    assert page.evaluate("() => %s.colSpan()" % DATA_JS) == 11
+    # 空列（colspan）跟著可見欄數：13 欄（含操作）－公司版面隱藏 1 欄（案件名稱）－T84 預設精簡 4 欄（客戶名稱、毛利率、有效天數、填單人）
+    assert page.evaluate("() => %s.colSpan()" % DATA_JS) == 13 - 1 - 4

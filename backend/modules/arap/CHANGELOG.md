@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## 1.0.62 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）
+- 文字（T82 用詞整理）：開票憑據、匯款申請「僅草稿狀態可送出審核」409 訊息 → 「…可送出簽核」；僅訊息文字，狀態判斷不變
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.0.61（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
 - `cashier.html`：手機卡片化——KPI 方塊不再被 `max-width:200px` 卡成窄條、九個子頁籤不再一字一行、明細表在手機改為卡片列（值為空的欄位連標籤一起隱藏）、客戶歷史兩欄改上下排。
 - `payment-request-form.html`：`.page-wrap` 上方留白不再把頂欄高度加兩次（**全寬度都生效，桌機上方空白會比以前少一個頂欄高**）；≤900px 單欄、輸入框 16px／44px 高、預覽彈窗手機全螢幕。

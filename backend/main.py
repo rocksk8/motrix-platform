@@ -80,7 +80,7 @@ from core.internal_cols import InternalColsMiddleware
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
+from routers import auth, customers, parts, system, module_versions, search, org_structure, my_account, list_prefs, uploads, attachments, approval_delegates, approval_queue, dashboard_mine, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
@@ -317,6 +317,9 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
     ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
     ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
+    ("GET", "/api/auth/profile"): "帳號本身必要：「我的帳號」讀自己的顯示名稱、部門與報價用信箱（只回自己這一列，無他人資料）；未設定公司資料時使用者仍要看得到自己的帳號頁",
+    ("GET", "/api/auth/preferences"): "帳號本身必要：每個登入期間載入頁面時同步自己的字級、外觀與首頁偏好（只讀寫自己的列）；擋住會讓字級與深色模式在未設定期間失效",
+    ("PUT", "/api/auth/preferences"): "帳號本身必要：頂欄調字級會把偏好存回伺服器、「我的帳號」儲存偏好（只改自己的列，白名單值域，不碰任何公司資料）",
 }
 
 
@@ -498,8 +501,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         route = request.scope.get("route")
         template = getattr(route, "path", "") or request.url.path.split("?")[0]
         pp = request.scope.get("path_params") or {}
-        from helpers.audit import _CASE_NO_RE, _audit_failure
-        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        from helpers.audit import _case_no_re, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_case_no_re().search(str(v))] if m), "")
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,
@@ -1132,6 +1135,7 @@ app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
+app.include_router(my_account.router)
 app.include_router(list_prefs.router)
 app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
@@ -1148,6 +1152,7 @@ app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
+app.include_router(dashboard_mine.router)     # 首頁「我的工作」（L1，2026-11-13 UX P1.5；提供者 dashboard.mine_groups）
 app.include_router(licensing.router)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)

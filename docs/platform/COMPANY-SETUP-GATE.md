@@ -17,8 +17,8 @@
 |---|---|
 | 對外輸出點 | 後端 34 個端點＋1 個排程信、前端 6 類（§1）。**八種單據 PDF＋自訂模組**經同一條路（`company_identity.location_identity` → `pdf_gen._identity_head/_identity_foot`）；**繞過它的 3 處**：傳票 PDF、個資告知列印、薪資單（前端直讀設定並存進單據） |
 | 回退到開發者資料的路徑 | 資料層已封：全新安裝種子是空、`DEFAULT_IDENTITY` 全空、包內沒有 .db。**仍會到客戶手上的 4 類**：預設 LOGO／favicon 圖、掃描器看不到的出貨檔（version_manifest 內文、docs/platform/audit、DR-SOP.md、.gitattributes 註解）、每個客戶庫都會寫入的版本紀錄內文、V9 轉換工具以「名稱片段」認本公司（§2） |
-| 「已設定」判準 | **確認紀錄**（本安裝最高管理員在設定頁按「確認本公司資料」）＋**綁本安裝**（安裝識別檔，不看硬體）＋**欄位雜湊一致**；公司統編／名稱命中**開發者指紋**時另需「開發者簽章的確認檔」（綁安裝識別、有到期日）（§3）〔更正 CG-M1：~~綁本機（機器指紋）；登記的開發者機器~~〕 |
-| 引導與擋 | 比照既有「必須先改密碼」：auth_middleware 之後擋所有 `/api/`（**精確 (方法, 路由樣板) 白名單**）回 **428** `company_setup_required`〔更正 CG-S1／CG-M2：~~409；白名單例外~~〕；`notif.js` 導向設定頁（最高管理員）或說明頁（其他人）；輸出端 `company_identity.require_for_output()` 第二道（§4、§5） |
+| 「已設定」判準 | **確認紀錄**（本安裝最高管理者在設定頁按「確認本公司資料」）＋**綁本安裝**（安裝識別檔，不看硬體）＋**欄位雜湊一致**；公司統編／名稱命中**開發者指紋**時另需「開發者簽章的確認檔」（綁安裝識別、有到期日）（§3）〔更正 CG-M1：~~綁本機（機器指紋）；登記的開發者機器~~〕 |
+| 引導與擋 | 比照既有「必須先改密碼」：auth_middleware 之後擋所有 `/api/`（**精確 (方法, 路由樣板) 白名單**）回 **428** `company_setup_required`〔更正 CG-S1／CG-M2：~~409；白名單例外~~〕；`notif.js` 導向設定頁（最高管理者）或說明頁（其他人）；輸出端 `company_identity.require_for_output()` 第二道（§4、§5） |
 | 既有正式機 | **兩階段**：先建安裝識別檔並回報 ⇒ 開發者簽確認檔 ⇒ 升級（套用前乾跑 status，會「未設定」就拒絕升級；套用後以本機 CLI 驗 status，未設定就自動回滾）⇒ 行為不變；現場另有 72 小時暫時放行（§4.3、§6）〔更正 CG-M1：~~登記正式機機器指紋；健檢靠人工回報~~〕 |
 | 停擺風險 | 這是正式機第一個「擋全部功能」的機制（~~`LICENSE_GATE_ENABLED=False`~~（**2026-11-11 更正**：授權閘門的出貨預設已改 `True`，程式與測試先行、**尚未部署**；正式機沒有 `license.key` 期間，本閘門仍是正式機實際生效的第一個「擋全部功能」機制））⇒ 預檢、套用後自動回滾、暫時放行、`status()` 例外處理（§3.6，Q7 裁示 C：中介層放行＋輸出拒絕，且橫幅＋告警不安靜）四層 |
 | 守門 | ①所有 `/api` 路由預設被擋（白名單要逐條理由＋存在性）②輸出點掃描器（先讓已知 40 點亮起）——新輸出點沒經過 `require_for_output` 或未登記「不含本公司資料」⇒ 紅（§7） |
@@ -92,7 +92,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 4. 必要欄位都合格（3.5）；
 5. 統編或公司名命中**開發者指紋**（3.3）⇒ 另需「有效的開發者簽章確認檔」（3.3，綁本安裝識別、未過期）。
 
-**只有**設定頁的「確認本公司資料」（`PUT /api/settings/company-profile` 帶 `confirmIdentity: true`，**限最高管理員**）會寫紀錄；一般存檔（例如只改 Google 金鑰）**不會**——否則複製來的庫只要管理員存一次任何設定就「確認」了。寫紀錄同時記稽核（誰、何時、欄位雜湊，不記值）。
+**只有**設定頁的「確認本公司資料」（`PUT /api/settings/company-profile` 帶 `confirmIdentity: true`，**限最高管理者**）會寫紀錄；一般存檔（例如只改 Google 金鑰）**不會**——否則複製來的庫只要管理員存一次任何設定就「確認」了。寫紀錄同時記稽核（誰、何時、欄位雜湊，不記值）。
 回傳 `{configured: bool, reason: <代碼>, via, grace: {active, until}|null}`；reason 代碼：`no_record`／`install_mismatch`／`fields_changed`／`fields_invalid`／`developer_identity_unsigned`／`signed_file_expired`／`status_error`。
 
 ### 3.3 開發者指紋與簽章確認檔〔修訂：主持裁示 Q2＋CG-M1、CG-S3、CG-S4〕
@@ -111,9 +111,9 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - `backend/.install_identity`：安裝時產生（`secrets.token_hex(32)`＋建立時間），隨安裝目錄；F3：`.gitignore`、`verify_package` 拒絕帶入、**不進每日／月備份**、不上雲。紀錄與簽章檔只存它的 sha256。
 - 產生時機：`backend/tools/company_setup_cli.py ensure-install-id --root <安裝目錄>`（冪等：已有就不動）由 `apply_update.ps1` 在**停服之前**呼叫；新裝由安裝程序呼叫；啟動時仍不存在 ⇒ 產生，並依庫裡有沒有確認紀錄分兩種：
   - 庫裡**沒有**確認紀錄（新裝、第一次啟動）⇒ 記 WARN；
-  - 庫裡**已有**確認紀錄 ⇒ 重建＝改掉綁定 ⇒ **ERROR＋系統告警**（與備份告警同一套：邊緣觸發、每日一封）「安裝識別檔遺失，已重建；本公司資料確認紀錄失效，請最高管理員重新確認（開發者正式機：需新簽章檔或暫時放行）」〔CG2-M1；~~產生並記 WARN（第一次啟動）~~〕
+  - 庫裡**已有**確認紀錄 ⇒ 重建＝改掉綁定 ⇒ **ERROR＋系統告警**（與備份告警同一套：邊緣觸發、每日一封）「安裝識別檔遺失，已重建；本公司資料確認紀錄失效，請最高管理者重新確認（開發者正式機：需新簽章檔或暫時放行）」〔CG2-M1；~~產生並記 WARN（第一次啟動）~~〕
 - **登記為安裝設定（CG2-M1）**：三個 F3 檔（`.install_identity`、`company_confirmation.sig`、`company_setup_grace.json`）進 `core.paths` 常數＋`core.upgrade.CONFIG_FILES`（:74-83，同 license.key、`.deployed_commit.json`；同 DB-O1 對 `.deployed_modules.json` 的做法）。沒登記的檔在 `classify` 預設是「程式」⇒ 刪除計畫、cleanup-snapshot、完整包套用、V9 轉換、兩種回滾都可能動到它；識別檔一丟，開發者正式機就被擋。
-- 後果（寫進 DR-SOP，CG-S5）：只複製資料庫、或還原到新目錄／新機器 ⇒ 識別不同 ⇒ 未設定 ⇒ 最高管理員重新確認一次；開發者正式機 ⇒ 需新簽確認檔或 §4.3 暫時放行。整包複製安裝目錄（連識別檔）⇒ 視為同一安裝（威脅模型外，3.3）。
+- 後果（寫進 DR-SOP，CG-S5）：只複製資料庫、或還原到新目錄／新機器 ⇒ 識別不同 ⇒ 未設定 ⇒ 最高管理者重新確認一次；開發者正式機 ⇒ 需新簽確認檔或 §4.3 暫時放行。整包複製安裝目錄（連識別檔）⇒ 視為同一安裝（威脅模型外，3.3）。
 - ~~首選 `licensing.machine_fingerprint()`（主機板 UUID＋第一張實體網卡 MAC，已有且已測）…讀不到硬體（RuntimeError）⇒ 退用安裝識別檔…網卡更換會讓紀錄失效~~（CG-O1：與現行程式不符——先退到 MachineGuid、最後才丟 RuntimeError；整段取代）
 
 ### 3.6 `status()` 自己出錯時〔CG-M1 ⑤；**主持裁示 Q7＝C**（2026-09-28）：中介層放行（避免全公司停擺）＋含本公司資料的輸出一律拒絕（保護面不降級）〕
@@ -149,7 +149,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 > ~~3. `fields_hash`＝目前必要欄位（正規化後）的雜湊——必要欄位被改過（任何路徑：API、腳本、還原）⇒ 失效，要重新確認；~~
 > ~~4. 必要欄位都合格（3.5）；~~
 > ~~5. 統編或公司名命中**開發者指紋**（3.3）⇒ 另需「本機是登記的開發者機器」或「有效的開發者簽章確認檔」。~~
-> ~~**只有**設定頁的「確認本公司資料」（`PUT /api/settings/company-profile` 帶 `confirmIdentity: true`，**限最高管理員**）會寫紀錄；一般存檔（例如只改 Google 金鑰）**不會**——否則複製來的庫只要管理員存一次任何設定就「確認」了。寫紀錄同時記稽核（誰、何時、欄位雜湊，不記值）。~~
+> ~~**只有**設定頁的「確認本公司資料」（`PUT /api/settings/company-profile` 帶 `confirmIdentity: true`，**限最高管理者**）會寫紀錄；一般存檔（例如只改 Google 金鑰）**不會**——否則複製來的庫只要管理員存一次任何設定就「確認」了。寫紀錄同時記稽核（誰、何時、欄位雜湊，不記值）。~~
 > ~~### 3.3 開發者指紋怎麼存（不把統編字面值寫到出貨程式碼以外）~~
 > ~~- 出貨程式碼內只放**雜湊**：`DEVELOPER_IDENTITY_FP = {sha256("motrix-devco-v1|" + 正規化值)}`，正規化值＝統編只取數字、公司名去空白與「股份有限公司／有限公司」字尾。建置時由開發者本機的一次性工具算出貼入（工具不存字面值）。~~
 > ~~- ⚠ **誠實說明**：統編只有 8 碼，有鹽的雜湊仍可在數秒內暴力還原（鹽在程式碼裡）。這個設計的目的是**不再多一處字面值**（文件、測試、設定、log 都不出現），不是保密——統編本來就是公開登記資料，且已以字面值存在於凍結的 `db.py`／`core/upgrade.py`（ALLOWED）。~~
@@ -176,7 +176,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 
 ### 4.1 後端（第一道）〔修訂 CG-M2、CG-S1、Q3〕
 - 位置：`main.py` `auth_middleware` 在「必須先改密碼」之後、`call_next` 之前（同一套形狀：精確集合＋`code`）。
-- 未設定 ⇒ **428 Precondition Required** `{"detail": "尚未完成本公司資料設定", "code": "company_setup_required", "reason": <代碼>, "canFix": <是否最高管理員>, "settingsUrl": "/pages/company-profile-settings.html?setup=1"}`。
+- 未設定 ⇒ **428 Precondition Required** `{"detail": "尚未完成本公司資料設定", "code": "company_setup_required", "reason": <代碼>, "canFix": <是否最高管理者>, "settingsUrl": "/pages/company-profile-settings.html?setup=1"}`。
   - 為什麼 428（CG-S1）：產品碼有 19 處 409（版本衝突），頁面自己的 fetch 可能在導頁前把 409 顯示成「資料衝突」；403 已被 `must_change_password` 與一般權限不足共用。428 目前產品碼 0 處，語意＝「先滿足前置條件」。`notif.js` 以 `code` 為準（狀態碼只是第二訊號）。
 - **白名單 `_COMPANY_SETUP_ALLOWED`：精確 `{(方法, 路由樣板): 理由}`**，~~中介層以 FastAPI 比對到的路由樣板（`request.scope["route"].path`）＋方法比對~~〔更正 CG2-S1：D 探針實測 `@app.middleware("http")` 在 `call_next` **之前** `scope["route"]` 是 None——路由在 call_next 裡才解析〕中介層**自己比對**：啟動時把白名單每條 (方法, 樣板) 對應到 app 路由表裡的那一個 route 物件（找不到 ⇒ 啟動記 ERROR、守門 §7-⑥ 紅），請求進來時對這些 route 呼叫 `route.matches(scope)`（Starlette 的比對，含路徑參數與方法），`Match.FULL` 才放行；不自己拼正規式；**不收萬用字元、不收描述性條目**：
 
@@ -197,32 +197,32 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
   - 白名單的最終內容以實作時的路由表為準；守門 §7-① 驗每一條存在於路由表、方法相符、理由 ≥ 20 字。
   - 〔實作註 段②〕
     - 比對：~~`route.matches(scope)`~~ 改用 Starlette 的 `compile_path(樣板)` 編出與路由同一套的正規式（`company_setup.compile_allowed／is_allowed`；HEAD 視同 GET）。理由：`route.matches` 需要完整 scope，且同樣板多方法時要逐一找 route 物件；`compile_path` 就是路由自己用的編譯器，規則一致。守門：白名單每條都在路由表且方法相符；**路由表裡每一條不在白名單的 `/api` 路由（>300 條，`/api/uploads/` 靜態除外）逐條打一次都回 428**（新 API 自動被擋的證明）。
-    - 表外補兩條（實跑設定頁發現）：`GET /api/settings/branding`（設定頁「品牌與公司名稱」卡讀目前品牌圖狀態）、`DELETE /api/settings/branding/{kind}`（品牌圖「恢復預設」）。兩者限最高管理員、端點自己驗權限，只動品牌圖、不動確認紀錄。上表「DELETE 不在」一句作廢。
+    - 表外補兩條（實跑設定頁發現）：`GET /api/settings/branding`（設定頁「品牌與公司名稱」卡讀目前品牌圖狀態）、`DELETE /api/settings/branding/{kind}`（品牌圖「恢復預設」）。兩者限最高管理者、端點自己驗權限，只動品牌圖、不動確認紀錄。上表「DELETE 不在」一句作廢。
     - 標頭 `X-Motrix-Company-Setup: status_error|grace` 在 `_record_request_trail` 之後設（`call_next` 後緊接記軌跡是既有守門）。
     - demo token 段② 先視同已設定；段③ 種虛構示範公司後拿掉豁免。
     - 測試：`conftest` 預設把 `company_setup.status` 釘成已設定（否則全部既有題都 428）；閘門題以 marker `company_gate` 退出這個預設；每個 xdist worker 的識別檔／簽章檔／放行檔經 `FILES_OVERRIDE` 放各自暫存目錄。
-    - 未做（併段③）：`/api/platform/menu` 回 `companySetup` 讓側欄只留設定入口（現況：側欄照常，點任何業務頁 ⇒ 該頁 API 428 ⇒ 導回設定頁／說明頁，擋的效果相同，只是多一次跳轉）；設定頁「只有一位最高管理員時建議再設一位」提示。
+    - 未做（併段③）：`/api/platform/menu` 回 `companySetup` 讓側欄只留設定入口（現況：側欄照常，點任何業務頁 ⇒ 該頁 API 428 ⇒ 導回設定頁／說明頁，擋的效果相同，只是多一次跳轉）；設定頁「只有一位最高管理者時建議再設一位」提示。
 - 效能：`status()` 結果快取在行程內，以 `company_profile`／`company_identity_confirmation` 的 `updated_at`＋安裝識別檔與簽章檔的 mtime 當版本。
 - 非 HTTP 的輸出（每月排程報表信）：走第二道（§5），未設定 ⇒ 不寄、記一則「本公司資料未設定」系統告警（邊緣觸發、每日一封，比照〈告警必須有速率上限〉）。
 - demo（Q3 裁示）：demo 庫每次登入重建 ⇒ 重建時種虛構示範公司（名稱含「示範」、統編 `00000000`，~~**不過檢查碼**＝不可能是真公司~~〔更正 段③：`00000000` 加權和為 0，**會通過**檢查碼；「不會被當成真公司」改由名稱含「示範資料」、只在 demo 庫有效的確認紀錄、demo 單據浮水印三者保證〕）＋確認紀錄 `via: "demo_seed"`（`install` 綁 demo 專用常數，只在 demo 庫有效）；demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。
 
 > ~~### 4.1 後端（第一道）~~
 > ~~- 位置：`main.py` `auth_middleware` 在「必須先改密碼」之後、`call_next` 之前（同一套形狀：`_MUST_CHANGE_PW_ALLOWED` 那個白名單＋`code`）。~~
-> ~~- 未設定 ⇒ `409 {"detail": "尚未完成本公司資料設定", "code": "company_setup_required", "canFix": <是否最高管理員>, "settingsUrl": "/pages/company-profile-settings.html?setup=1"}`。~~
+> ~~- 未設定 ⇒ `409 {"detail": "尚未完成本公司資料設定", "code": "company_setup_required", "canFix": <是否最高管理者>, "settingsUrl": "/pages/company-profile-settings.html?setup=1"}`。~~
 > ~~- 白名單 `_COMPANY_SETUP_ALLOWED`（每條附理由，§7-①）：登入／登出／`/api/auth/me`／改密碼／TOTP 與 Passkey 設定（帳號本身必要功能）、`/api/ping`、`/api/system/version`、健康檢查、`/api/system/branding*`（登入頁）、`/api/settings/company-profile`（GET／PUT）、`/api/settings/company-setup/status`、上傳品牌圖、`/api/platform/menu`（導頁需要）、使用者管理的「自己」端點。**其他全部擋**（預設拒絕：新 API 自動被擋，不必記得加）。~~
 > ~~- 效能：`status()` 結果快取在行程內，以 `system_settings` 的 `company_profile`／`company_identity_confirmation` 的 `updated_at` 當版本；機器指紋已有行程快取。~~
 > ~~- 非 HTTP 的輸出（每月排程報表信）：走第二道（§5），未設定 ⇒ 不寄、記一則「本公司資料未設定」系統告警（邊緣觸發、每日一封，比照〈告警必須有速率上限〉）。~~
 > ~~- demo：demo 庫每次登入重建、公司資料為空 ⇒ 〔Q3 裁示採建議〕：demo 庫種一份明確虛構的示範公司（名稱含「示範」、統編用不合檢查碼的 `00000000`）＋確認紀錄 `via: "demo_seed"`，且 demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。~~
 
 ### 4.2 前端
-- `static/notif.js` 的 fetch 包裝（已處理 `must_change_password`）加 `company_setup_required`（以 `code` 判斷，428）：最高管理員 ⇒ 導 `company-profile-settings.html?setup=1`；其他人 ⇒ 導新頁 `company-setup-required.html`（「請最高管理員先完成本公司資料設定」＋最高管理員帳號名單不列，只說角色）。
-  〔CG-S5：說明頁另寫「最高管理員不在時：請貴公司系統負責人依 DR-SOP〈本公司資料設定〉使用暫時放行（本機、72 小時）」；設定頁在只有一位最高管理員時提示「建議再設一位最高管理員」〕
+- `static/notif.js` 的 fetch 包裝（已處理 `must_change_password`）加 `company_setup_required`（以 `code` 判斷，428）：最高管理者 ⇒ 導 `company-profile-settings.html?setup=1`；其他人 ⇒ 導新頁 `company-setup-required.html`（「請最高管理者先完成本公司資料設定」＋最高管理者帳號名單不列，只說角色）。
+  〔CG-S5：說明頁另寫「最高管理者不在時：請貴公司系統負責人依 DR-SOP〈本公司資料設定〉使用暫時放行（本機、72 小時）」；設定頁在只有一位最高管理者時提示「建議再設一位最高管理者」〕
 - 登入後第一個請求（`/api/platform/menu` 在白名單內，回應帶 `companySetup: {configured, canFix}`）⇒ 側欄在未設定時只顯示設定頁入口。
 - 設定頁 `?setup=1`：頂端說明「輸出文件會使用以下資料；確認前系統其他功能暫停」＋必要欄位驗證＋「確認本公司資料」鈕（勾選「以上為本公司資料」才可按）；命中開發者指紋 ⇒ 明說「這是 MOTRIX 開發者的公司資料，請改成貴公司資料」，確認鈕停用。
 
 ### 4.3 現場安全閥：暫時放行（CG-M1 ③）
 - 形式：`backend/company_setup_grace.json`（〔實作註：~~安裝根目錄的~~〕F3：`.gitignore`、`verify_package` 拒絕、不進備份、不上雲），由 **本機 CLI** 建立：
-  `python backend/tools/company_setup_cli.py grace --root <安裝目錄> --hours 72 --reason "<原因>"`（只在伺服器本機執行；不開網路端點，免登入＝最高管理員不在也能用）。
+  `python backend/tools/company_setup_cli.py grace --root <安裝目錄> --hours 72 --reason "<原因>"`（只在伺服器本機執行；不開網路端點，免登入＝最高管理者不在也能用）。
 - 內容：`{"created": ISO, "until": ISO, "reason", "install": sha256(安裝識別), "created_by_os_user"}`。
 - **有效期由伺服器保證**（CG2-S4；檔案是本機檔，任何能寫安裝目錄的人都可以不經 CLI 改它）：
   - 伺服器第一次看到某份放行檔（以**內容雜湊**為鍵）⇒ 記 `first_seen` 到 DB（設定鍵 `company_setup_grace_seen`＝{內容雜湊: first_seen}，T1）＋系統稽核；
@@ -232,7 +232,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
   ~~`until − created ≤ 72 小時`，超過或 `install` 不符 ⇒ 無效。**不可延長**：要再放行得重建（每次都記稽核）。~~
 - 效果：`status()` 回 `configured: false, grace: {active: true, until}`；中介層與輸出端**都放行**；**不寫確認紀錄** ⇒ 到期自動恢復擋（複製庫的情境到期後仍擋得住）。
 - 可見性：伺服器偵測到新的放行檔 ⇒ 寫系統稽核（誰、原因、到期）；所有頁面頂端橫幅「本公司資料尚未確認，暫時放行至 …」；每日告警一次；到期前 6 小時再提醒一次。
-- 放行期間輸出的文件照常用 `company_profile` 的值（那正是要最高管理員儘快確認的理由；橫幅與告警說明這一點）。
+- 放行期間輸出的文件照常用 `company_profile` 的值（那正是要最高管理者儘快確認的理由；橫幅與告警說明這一點）。
 
 ## 5. 輸出端第二道
 - L1 `company_identity.require_for_output(kind)`：`status()` 不通過 ⇒ 丟 `CompanySetupRequired`（端點轉 **428** 同一個 code；判定失敗 ⇒ `company_setup_undetermined`）〔更正 CG2-S2：~~409~~〕；`kind="payment_request"` 另驗銀行欄位。
@@ -247,11 +247,11 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
   - 1.2 三處：傳票 `voucher_pdf._company_name` → `company_name()`；個資告知 `legal_params` 回傳公司名與範本代入改走 company_identity（`privacy_notice._company_name_of`，同一套解析；告知文字的雜湊只在「name 與主要據點公司名不同」的安裝會變）；勞報單 Q4：`_payslip_view` 開頭只驗已設定。
   - 月報：`_catchup_monthly_reports` 與 `_send_monthly_report_for` 開頭問第二道；被擋 ⇒ 不寄、`monthly_report_skipped` 告警（每日一次）、`monthly_report_last_sent` 不前進（設定後補寄）。
   - demo：`routers/auth.py` demo 登入重建後 `seed_demo`；`gate(demo=None)` 依 `db.is_demo_mode()` 判 demo 庫、比對 `DEMO_INSTALL`，demo 與正式分開快取；中介層拿掉 demo 豁免；pdf_gen `_identity_head` 在 demo 加「示範資料」浮水印。XLSX／報表 HTML 沒有浮水印版位 ⇒ 靠公司名本身含「示範資料」。
-  - 側欄（§4.2）：`/api/platform/menu` 回 `companySetup`；未設定 ⇒ `groups` 與 `layout.groups` 只留設定頁入口（非最高管理員＝空）；在伺服器端過濾，sidebar.js 不改。
+  - 側欄（§4.2）：`/api/platform/menu` 回 `companySetup`；未設定 ⇒ `groups` 與 `layout.groups` 只留設定頁入口（非最高管理者＝空）；在伺服器端過濾，sidebar.js 不改。
   - CG5-S1：已確認的安裝，一般存檔會改動必要欄位（欄位雜湊變）⇒ 409 `company_setup_reconfirm`、**不存**；設定頁把確認卡換成「儲存並確認本公司資料」（同一請求帶 confirmIdentity）。本來就未確認 ⇒ 照常存。
   - CG5-S2：判定失敗後 `ERROR_CACHE_SECONDS`（60）秒內直接回 undetermined 不重算；告警另有行程內「每代碼每日一次」節流（庫讀不到節流紀錄時仍擋得住）。
   - 到期提醒（§4.3、§6.5 原設計，段①未做，段③補）：`observe_expiry`——放行剩 ≤ 6 小時、開發者簽章檔剩 ≤ 30 天（2026-09-29：~~30~~ ⇒ ~~7~~ ⇒ 30，有效期 365 天） ⇒ 告警（每日一次），在 `gate` 重算時呼叫。
-  - CG-S5：status 端點對最高管理員回 `superadminCount`；設定頁只有一位時提示再設一位。DR-SOP §4a〈本公司資料設定〉。
+  - CG-S5：status 端點對最高管理者回 `superadminCount`；設定頁只有一位時提示再設一位。DR-SOP §4a〈本公司資料設定〉。
   - §2-④：`core.upgrade._is_our_install` 只認統編（去分隔符比對），刪名稱片段；`test_b2_blank_string_fill_passes_verify` 的前提（名稱在、統編空白）隨之改為統編在、名稱空白字串。
   - 測試：`conftest` 預設同時換掉 `status` 與 `gate`（第二道在沒有建庫的單元題也會被呼叫）。
   - 〔D §11 建議，主持視為上車前必做〕E4S3-S1：`company_setup_cli` preflight／status 的 JSON 加 `payment_bank_missing`（主要據點解析後缺哪幾欄；讀不到＝null），`apply_update.ps1`（2026-09-28j）預檢通過後 `Write-CompanyBankNote` 印 `[WARN]`＋`::NOTE:: company_bank_missing=<欄位>`／`company_bank=ok`／`company_bank=unknown`——**只報不擋**；`::RESULT::` 與結果檔不動（欄位與值域固定、結果檔寫入函式與 rollback 逐字相同）、`Invoke-CompanySetupCli` 不動（單模組腳本逐字複製它；A 落地時若複製呼叫點，連這一行一起）。E4S3-S2：`required_problems(profile, demo=False)` 非 demo 庫拒收 `RESERVED_DEMO_UBN`（00000000）⇒ 設定頁確認 422、直接寫庫的判定為 `fields_invalid`；demo 判定照常。
@@ -290,13 +290,13 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
    a. 無簽章檔套用 ⇒ 預檢拒絕、服務未停、0 變動；
    b. 放入簽章檔 ⇒ 套用成功、登入無導頁、報價單 PDF／每月報表乾跑照舊；
    c. 刪簽章檔重啟 ⇒ 428 ⇒ 用 CLI 建 72 小時暫時放行 ⇒ 恢復、橫幅出現、稽核有；手動把 `until` 改成 80 小時 ⇒ 無效；
-   d. **還原到新目錄**（DR 情境：複製庫＋備份還原，無識別檔）⇒ 未設定 ⇒ 最高管理員確認（非開發者資料）或暫時放行（開發者資料）⇒ 恢復；
+   d. **還原到新目錄**（DR 情境：複製庫＋備份還原，無識別檔）⇒ 未設定 ⇒ 最高管理者確認（非開發者資料）或暫時放行（開發者資料）⇒ 恢復；
    e. 套用後故意讓 `status()` 丟例外（演練用壞設定 JSON）⇒ 依 Q7 裁示的行為。
 3. 正式機升級後：`::RESULT::` 已含 status 結果（6.3-2），不再靠人工回報。
 
 ### 6.5 DR-SOP 補一節〈本公司資料設定〉（CG-S5）
-- 還原到新機器／新目錄 ⇒ 必然未設定（識別檔不在備份裡）⇒ 最高管理員登入後按「確認本公司資料」；開發者正式機 ⇒ 用暫時放行撐到新簽章檔到位。
-- 唯一最高管理員不在 ⇒ 伺服器本機建暫時放行（72 小時，記稽核）⇒ 同時處理「第二位最高管理員」。
+- 還原到新機器／新目錄 ⇒ 必然未設定（識別檔不在備份裡）⇒ 最高管理者登入後按「確認本公司資料」；開發者正式機 ⇒ 用暫時放行撐到新簽章檔到位。
+- 唯一最高管理者不在 ⇒ 伺服器本機建暫時放行（72 小時，記稽核）⇒ 同時處理「第二位最高管理者」。
 - 簽章檔到期 ⇒ ~~到期前 7 天起已有告警（有效期 30 天）~~ 到期前 30 天起每日告警（有效期 365 天）〔有效期兩次變更：2026-09-29 先 30 天（主持轉述授權）⇒ 同日使用者表單改 **365 天**，理由：過期＝全公司暫停，每月重簽風險太高〕。
   **到期＝全公司暫停**（D SG-M2）：`signed_file_expired` ⇒ 中介層對全公司 428，直到放入新簽章檔或啟用暫時放行（72 小時）。
   ~~**年度重簽（負責人：主持）**：安裝識別不變 ⇒ (a) 不必重做，只做 §6.7 (b)(c)；在告警期（到期前 30 天）內完成。~~〔第三次變更 2026-09-29 01:15 記錄：使用者原話「正式機為永久授權」（主持轉達）⇒ 開發者本公司的正式機用 **`--permanent`（永久、不到期、不提醒）**；`--days`（上限 365）只留給其他情況〕
@@ -346,10 +346,10 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.p
 
 **(d) 演練（apply-run 演練目錄；兩條都演）**
 - **路徑一：新安裝／一般客戶的確認路徑**（演練庫是新庫）
-  1. 演練目錄全新安裝 ⇒ 啟動 ⇒ 最高管理員登入 ⇒ 自動導到「公司資料設定」（`?setup=1`），其他帳號導到說明頁；業務 API 一律 428。
+  1. 演練目錄全新安裝 ⇒ 啟動 ⇒ 最高管理者登入 ⇒ 自動導到「公司資料設定」（`?setup=1`），其他帳號導到說明頁；業務 API 一律 428。
   2. 填測試公司（名稱、**通過檢查碼的測試統編**——不可用 00000000，E4S3-S2 會拒收——、電話）、匯款三欄 ⇒ 勾選「以上為本公司的資料」⇒「確認本公司資料」。
   3. 驗：`company_setup_cli.py status --db <演練庫> --root <演練目錄>` ⇒ `configured: true`、`via: "settings_page"`；報價單 PDF、請款單 PDF 200；側欄完整；改公司名按一般「儲存」⇒ 出現「儲存並確認」（CG5-S1）。
-  4. 反向：刪 `<演練目錄>\backend\.install_identity` ⇒ 重啟 ⇒ `install_mismatch`、428、log 有 ERROR＋告警 ⇒ 最高管理員重新確認即恢復。
+  4. 反向：刪 `<演練目錄>\backend\.install_identity` ⇒ 重啟 ⇒ `install_mismatch`、428、log 有 ERROR＋告警 ⇒ 最高管理者重新確認即恢復。
 - **路徑二：開發者簽章路徑**（演練庫放「公司資料為開發者身分」的庫：開發機既有的演練庫形狀，**不用正式機資料**）
   1. 對演練目錄做 (a) ⇒ 預檢 ~~`developer_identity_unsigned`~~〔更正 2026-09-29：`no_record`＋`developer: true`，理由同 (a) 第 2 步的更正〕＋`install`。
   2. 做 (b)，`--install` 用演練目錄的值、`--days 7`、`--out` 放演練目錄旁的暫存位置（演練用檔，用完刪）。

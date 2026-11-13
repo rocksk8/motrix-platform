@@ -246,17 +246,20 @@ def test_python_ok_accepts_only_the_project_venv(py, ok):
     assert (SETUP.python_ok(py) is None) == ok
 
 
+_FOREIGN_PY = r"C:\Python312\python.exe"          # 不含 .venv312 這一層的路徑（只用字串判斷，不需要真的存在）
+
+
 def test_install_refuses_a_foreign_interpreter_and_writes_nothing(two_branches):
     r = two_branches
     with pytest.raises(SystemExit) as e:
-        SETUP.install(r)                                    # 預設 strict：測試用的 sys.executable 不在 .venv312 之下
+        SETUP.install(r, python=_FOREIGN_PY)                # 預設 strict：明確給一個不在 .venv312 之下的直譯器（不靠誰在跑測試——建包用 .venv312 跑時 sys.executable 就在其下）
     assert "拒絕登記" in str(e.value)
     assert SETUP.problems(r, strict=False) and not (SETUP.common_dir(r) / "motrix").exists()
 
 
 def test_check_flags_a_registered_driver_with_a_foreign_interpreter(two_branches):
     r = two_branches
-    SETUP.install(r, strict=False)                          # 登記成目前的 python（不在 .venv312）
+    SETUP.install(r, python=_FOREIGN_PY, strict=False)      # 登記成一個不在 .venv312 的 python
     assert SETUP.problems(r, strict=False) == []
     bad = SETUP.problems(r)                                  # --check 預設 strict ⇒ 要抓到
     assert bad and all(".venv312" in b for b in bad)

@@ -653,6 +653,7 @@
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "unique_errors": "def(conn, module_key, body, vals, exclude_id=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
+   "used_prefixes": "def(conn=…)",
    "validate_module": "def(body, key=…)",
    "visible_mounts": "def(conn, user, point, manifests=…)",
    "visible_to": "def(mods, user)"
@@ -703,6 +704,42 @@
    "unapproved_banner": "def(status=…, detail=…, cls=…, doc_no=…, wm_text=…)",
    "unapproved_overlay": "def(doc_no=…, wm_text=…)",
    "validate": "def(template, sample_view=…)"
+  },
+  "helper:doc_type": {
+   "DEFAULT_ESTIMATE_PREFIX": "const",
+   "ESTIMATE": "const",
+   "LABELS": "const",
+   "NumberRule": "class",
+   "NumberRule.__init__": "def(self, doc_type, prefix, date_fmt=…, seq_digits=…)",
+   "NumberRule.format": "def(self, month, seq)",
+   "NumberRule.glob": "def(self, month)",
+   "NumberRule.max_seq": "def(self)",
+   "NumberRule.month_of": "def(self, no)",
+   "NumberRule.owns": "def(self, no)",
+   "NumberRule.regex": "def(self, *, revision=…)",
+   "NumberRule.search_pattern": "def(self)",
+   "NumberRule.seq_key": "def(self, month)",
+   "NumberRule.seq_of": "def(self, no)",
+   "NumberRule.seq_start": "def(self)",
+   "NumberRule.total_len": "def(self)",
+   "QUOTE": "const",
+   "QUOTE_PREFIX": "const",
+   "RESERVED_PREFIXES": "const",
+   "all_rules": "def(conn=…)",
+   "case_no_re": "def(conn=…)",
+   "doc_type_of_no": "def(no, conn=…)",
+   "estimate_prefix": "def(conn=…)",
+   "estimate_prefixes_in_use": "def(conn=…)",
+   "label": "def(doc_type)",
+   "no_re": "def(prefix_or_rule, *, revision=…)",
+   "norm": "def(v)",
+   "prefix_for": "def(doc_type, conn=…)",
+   "relabel": "def(text, doc_type)",
+   "rule_for": "def(doc_type, conn=…)",
+   "rule_of_no": "def(no, conn=…)",
+   "seq_key": "def(no)",
+   "used_prefixes": "def(conn=…)",
+   "validate_prefix": "def(p, conn=…)"
   },
   "helper:download_name": {
    "DEFAULTS": "const",
@@ -761,8 +798,8 @@
    "email_send_policy": "def(env=…)",
    "finance_recipient_emails": "def(event_key=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
-   "notify_approval_request": "def(quote_no, customer, approver_usernames)",
-   "notify_approved": "def(quote_no, customer, approved_by, requester_username)",
+   "notify_approval_request": "def(quote_no, customer, approver_usernames, doc_label=…)",
+   "notify_approved": "def(quote_no, customer, approved_by, requester_username, doc_label=…)",
    "notify_backup_stale": "def(stale, threshold_hours)",
    "notify_bonus_correction_approved": "def(corr_no, quote_no, usernames, needs_payout)",
    "notify_bonus_correction_returned": "def(corr_no, quote_no, usernames, reason)",
@@ -807,14 +844,14 @@
    "notify_line_quota_warning": "def(used, limit, threshold, thresholds=…, month=…)",
    "notify_module_activity": "def(module_label, action_label, actor, item_label, page_path=…, detail=…, audience=…, line_event=…, line_usernames=…, line_exclude=…, line_skip=…)",
    "notify_monthly_report": "def(period_label, period_str, excel_bytes, pdf_bytes)",
-   "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames)",
+   "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames, doc_label=…)",
    "notify_payment_request_approved": "def(request_no, customer, approved_by, requester_username)",
    "notify_payment_request_next_tier": "def(request_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_payment_request_returned": "def(request_no, customer, note, requester_username)",
    "notify_payment_request_submitted": "def(request_no, customer, approver_usernames)",
    "notify_range_task_deadline": "def(task_id, title, end_date, days_left, assignee_username, assignee_display, supervisor_usernames=…)",
-   "notify_resubmit_requester": "def(new_quote_no, original_quote_no, customer, requester_username, approver_names)",
-   "notify_returned": "def(quote_no, new_quote_no, customer, note, requester_username)",
+   "notify_resubmit_requester": "def(new_quote_no, original_quote_no, customer, requester_username, approver_names, doc_label=…)",
+   "notify_returned": "def(quote_no, new_quote_no, customer, note, requester_username, doc_label=…)",
    "notify_settlement_finalized": "def(quote_no, customer, finalized_by)",
    "notify_shipping_approved": "def(note_no, customer, approved_by, requester_username)",
    "notify_shipping_next_tier": "def(note_no, customer, tier_no, total_tiers, approver_usernames)",
@@ -843,6 +880,7 @@
    "last_value_hook": "def(type_code)",
    "list_types": "def(conn)",
    "normalize_lines": "def(lines)",
+   "used_prefixes": "def(conn)",
    "validate_expense_type": "def(body, key=…)",
    "validate_values": "def(conn, defn, data, lines, *, viewer, prior=…, case=…, type_code=…)"
   },
@@ -1080,6 +1118,22 @@
    "push_event_for_quotation_won": "def(quote_no)",
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
+  },
+  "helper:greeting_calendar": {
+   "COVERED_UNTIL_YEAR": "const",
+   "FESTIVAL_LABELS": "const",
+   "coverage_warning": "def(today)",
+   "festival_keys_on": "def(d)",
+   "reopen_day": "def(year)",
+   "spring_festival": "def(year)"
+  },
+  "helper:greeting_phrases": {
+   "BUILTIN": "const",
+   "CATEGORY_LABELS": "const",
+   "MAX_LEN": "const",
+   "MAX_LINES": "const",
+   "PLACEHOLDERS": "const",
+   "check_phrase": "def(text)"
   },
   "helper:heartbeat_status": {
    "BAD_GRACE_MINUTES": "const",
@@ -1433,6 +1487,30 @@
    "redact_target": "def(target)",
    "redact_text": "def(text)"
   },
+  "helper:login_greeting": {
+   "CUSTOM_KEY": "const",
+   "PERSONAL_STYLES": "const",
+   "START_HREF": "const",
+   "START_LABEL": "const",
+   "STATE_PREFIX": "const",
+   "away_category": "def(prev_date, today)",
+   "away_line": "def(pending, new_quotes)",
+   "build_greeting": "def(*, now, user_id, name, style, state, custom=…, todo=…, pending=…, new_quotes=…)",
+   "choose_category": "def(now, *, first, logged_today, prev_date)",
+   "company_style": "def()",
+   "effective_style": "def(company, pref)",
+   "get_custom": "def()",
+   "get_state": "def(user_id)",
+   "greeting_for_user": "def(user, *, todo=…, pending=…, new_quotes=…, now=…)",
+   "personal_pref": "def(user_id)",
+   "phrases_table": "def()",
+   "record_login": "def(user_id, now=…)",
+   "season_category": "def(d)",
+   "set_custom": "def(cat, style, lines)",
+   "taipei_now": "def()",
+   "time_category": "def(hour)",
+   "title_category": "def(hour)"
+  },
   "helper:mail_types": {
    "CATEGORIES": "const",
    "GROUPS": "const",
@@ -1776,6 +1854,17 @@
    "rate_text": "def(pct)",
    "rules_config": "def(conn=…)"
   },
+  "helper:quote_email": {
+   "PROFILE_KEY": "const",
+   "company_external_email": "def()",
+   "domain_hint": "def(email, company_email=…)",
+   "enforce_sales_email": "def(conn, q, old_data=…)",
+   "reply_to_for_quote": "def(quote_no)",
+   "resolve": "def(user_quote_email, company_external_email, personal_email)",
+   "resolve_for_row": "def(row)",
+   "resolve_for_user_id": "def(user_id)",
+   "valid": "def(email)"
+  },
   "helper:quote_output": {
    "TERMS": "const",
    "hidden_terms": "def(conn=…)"
@@ -1895,6 +1984,10 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_brand": {
+   "DEFAULT_TAGLINE": "const",
+   "brand_tagline": "def()"
   },
   "helper:settings_groups_legal_reminder": {},
   "helper:settings_groups_list_view": {
@@ -2028,6 +2121,7 @@
    "changed_fields": "def(table)",
    "compare": "def(old, new)",
    "defaults": "def()",
+   "duplicate_warnings": "def(table=…)",
    "effective_table": "def(body)",
    "enabled": "def(conn=…)",
    "ensure_registered": "def()",
@@ -2180,6 +2274,16 @@
    "enabled": "def(conn=…)",
    "preview": "def(conn, caller, definition, module, page, username=…)",
    "visible_buttons": "def(conn, user, module, page)"
+  },
+  "helper:user_prefs": {
+   "PrefError": "class",
+   "SCHEMA": "const",
+   "TABLE": "const",
+   "defaults": "def()",
+   "get": "def(user_id, key, default=…)",
+   "get_all": "def(user_id)",
+   "set_many": "def(user_id, changes)",
+   "validate": "def(changes)"
   },
   "helper:validation": {
    "body_flag": "def(body, key, default=…)",

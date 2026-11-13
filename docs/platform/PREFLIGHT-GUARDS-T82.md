@@ -16,10 +16,11 @@ T81 官方閘門 14 輪（`D:\Claude-pm\t81-gate-*.log`）紅燈絕大多數是�
 在你自己的 worktree 根目錄，用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`（下面 `<列車>` 一律是上面那條，T82 期間＝`origin/train/t82-int`）：
 ```
 git fetch origin && git merge <列車>        # 先把目前列車合進你的分支（或 rebase），再跑
-python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --skip generated      # 約 5.5 分、3 worker、自動排隊；結束碼 0＝綠
+python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --skip generated      # 約 7 分（加 static_scans2 後）、3 worker、自動排隊；結束碼 0＝綠
 python tools/platform/preflight_guards.py --window <你的視窗> --base <列車> --only <紅的組id>       # 照報告的「修法」改完，只重跑出紅的組
 ```
 - `--base <列車>`：靜態旗標比對與「可能肇因的合併」都從這條之後算；指到不存在的 rev ⇒ 結束碼 2（不是空結果）。預設值 `origin/platform` 只適合基底就是 platform 的情況。
+- **分支模式**：在你的**具名分支**上跑時，樹裡的 `(next)` 版號佔位不算紅（列車 `train_number assign` 取號）；格式錯／快照與 CHANGELOG 不一致仍紅。**整合者要在 `train/<n>-int` 具名分支上跑 preflight，不要在 detached 或 wip 暫存分支上跑**——detached 且 HEAD 已包含在 `--base` 裡（凍結列車 tip 的 worktree）會自動維持嚴格（佔位照紅）；但名叫 wip/* 的暫存分支會被當成分支模式。
 - `--skip generated`：feature 分支不 commit 產生檔（dep_graph／UNIT-INDEX／test_map），列車模式下那組必紅，由整合者重產；其餘紅都是你的。
 - 紅的報告會點名最近哪幾次合併可能是肇因；「未能檢查」（exit 1）＝沒證明題有跑，不是綠。整合者持有閘門鎖時你會最多等 120 秒（75）——等鎖放掉再跑。
 - 題組綠 ≠ 閘門綠；交件仍要附你自己的測試結果。
@@ -42,8 +43,13 @@ python tools/platform/preflight_guards.py --with-e2e-goldens          # 另加 e
 - 不寫追蹤檔、不 commit、不 push。`--json-out F` 存機器可讀結果。
 
 ### 題組清單
-單一來源 `tools/platform/preflight_guards.json`：每組＝一類守門（`paths`）＋出紅標準修法（`fix`）＋肇因搜尋的 `watch` glob。22 組、約 75 個檔、收集約 1180 題（`--list` 看每組檔數與題數下限）。
+單一來源 `tools/platform/preflight_guards.json`：每組＝一類守門（`paths`）＋出紅標準修法（`fix`）＋肇因搜尋的 `watch` glob。23 組、約 165 個檔、收集約 2000 題（`--list` 看每組檔數與題數下限）。
 守門類別對照 T82 單：CHANGELOG 跟著程式、version_slots／version_manifest、spec_coverage、page_paths、no_direct_js_enumeration、modules.json 歸屬、L1 快照、route_inventory、response_keys、write_golden、unscoped_reads、u0a_sinks、view_filter 標記、mail_registry、recyclebin_guards、generated_maps（train mode）、golden（route table）；另加 T81 實紅過的：AH-O7 套用腳本版本、表單版號、用語守門、no_admin_bypass、寫入路徑登記、靜態掃描（raw-vh 等）；最後一組 `recent_interplay` 是近兩班互踩過的功能題（選用，找不到不擋）。
+**`static_scans2`（全倉靜態掃描補收）**：T82 預跑才抓到 `test_no_truthy_request_flags`、`test_case_summary_purpose`（image-bomb／xlsx-guard 合併後才紅）——它們是「掃整個 repo 的寫法」的守門，沒被任何組收進來。
+2026-11-13 把其餘 **88 個**同類檔一次補收（約 810 題；做法：列出沒被任何組收的測試檔，挑「掃原始碼／頁面、不起 client／瀏覽器」的，**逐檔單獨跑**確認各檔 ≤ 25 秒，
+排除測工具本身或依賴所在目錄的檔：prepush_check／module_update／subproc_helper／testcache_shadow／basetemp_cleanup／pdf_concurrency，與單檔 > 25 秒的 scope_gate／pii_forms／modtest_scope／module_update_delivery／stage_select）。
+當天在 t82-int tip 上這組另外抓到 5 個真紅（unit_cards、motrix_format、no_import_time_clock、case_summary_purpose 的 `**` 呼叫、truthy_request_flags），預跑原本看不到。
+之後新增「掃全倉」型守門請加進這組（或對應的組）；`test_preflight_guards_tool.py` 的 min_tests 下限會在檔被刪或改名時報「未能檢查」。
 `tests/platform/test_preflight_guards_tool.py` 會驗：每個 pattern 都找得到檔（改名＝測試紅）、T82 單列的類別與 T76/T81 日誌裡紅過的守門檔都在清單內。
 
 ### 報告
@@ -98,3 +104,9 @@ e2e：off_state_golden ×2、builder3_singlepage ×2、test_browser_netguard、l
 T81 整合者 fix 提交：u0a_sinks、modules.json 登記（role-label.js／log_setup／motrix-error.js）、bottom_layer 全域釘子、page_paths／no_direct_js_enumeration（static_cache 測試）、
 L1 快照 `--pending`、manifest 順序／未來日期、六模組 `(next)` 佔位、題名規格編號撞名、AH-O7（apply_update.version.json）。
 T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_alt_write_paths、spec_coverage ×2。
+
+## 全閘門前的「不中斷」預跑（T82）
+`modtest --full` 預設 fail-fast（紅達 N 筆就停）且 slice0 紅就不開第二片與 e2e——適合正式放行，但預跑要「一次收齊」做不到。
+預跑用 **`modtest --full --keep-going --window <視窗>`**：關 fail-fast／紅燈上限、slice0 紅也照跑其餘片與 e2e；結果照寫，`keep_going: true`，**紅就是紅、不可當放行證據**；
+全綠時與正常全量同一份證據。只要某一段的紅清單用 `run-stage <段> --no-failfast`。正式閘門仍用不帶旗標的 `modtest --full`。
+（測試：`tests/platform/test_gate_slices_2026_10_07.py::test_keep_going_*`。）

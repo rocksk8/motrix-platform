@@ -171,7 +171,7 @@ def test_login_create_submit_approve_smoke(live_server, make_user, e2e_browser):
     page1.fill('input[x-model="q.projectName"]', project_name)
     page1.locator('textarea[x-model="item.description"]').first.fill("測試品項 A")
 
-    page1.click('button:has-text("申請送出審核")')
+    page1.click('button:has-text("申請送出簽核")')
     page1.click('button:has-text("確認送出")')
     # 2026-09-10：原本只等「有內容」，但畫面在還沒拿到號碼時會顯示
     # 「（儲存後自動編號）」佔位字（見 quotation-form.html，取代舊版

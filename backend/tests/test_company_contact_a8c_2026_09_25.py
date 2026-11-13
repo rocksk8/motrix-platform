@@ -159,7 +159,7 @@ def test_a8d_branding_is_public_but_tax_id_needs_a_login(client, make_user):
     # H10（2026-09-27）：回應多了 `assets`（品牌圖檔網址，另有 test_branding 驗）；這裡只驗名稱三欄
     assert {k: body[k] for k in ("companyName", "companyNameEn", "shortName")} == {
         "companyName": "範例科技股份有限公司", "companyNameEn": "", "shortName": "範例科技"}
-    assert set(body) == {"companyName", "companyNameEn", "shortName", "assets"}      # 未登入不多給（尤其不給統編）
+    assert set(body) == {"companyName", "companyNameEn", "shortName", "assets", "tagline"}      # 未登入不多給（尤其不給統編）；tagline＝系統標語（UX P1.5，公開、非機敏）
     assert "taxId" not in client.get("/api/system/branding", headers={"Authorization": "Bearer nope"}).json()
     u, p = make_user("a8d_user", "A8d-Pass-123", role="user")[:2]
     tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]

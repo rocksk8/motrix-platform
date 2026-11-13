@@ -1,15 +1,15 @@
 /* ux-wizard.js — 首次設定精靈外殼（A1，2026-11-11 UX 提案）
  *
  * 把「強制改密碼 → 確認公司資料 → 兩步驟驗證（可略過）→ 開始使用」串成一條有步驟條的路。
- * 不新增頁面：在既有的 change-password.html／company-profile-settings.html 上
+ * 不新增頁面：在既有的 my-account.html（舊名 change-password.html）／company-profile-settings.html 上
  *   ① 隱藏頂欄與選單（新手不該在這時候被 35 個目的地分心）；
  *   ② 在頁首放「步驟 n／N」＋步驟條＋「為什麼要做這步」一句話。
  *
  * 載入方式：這兩頁的 <head> 以同步 <script> 載入（要在畫面出現之前就把 <html> 標成 ux-wizard，否則會先閃一下頂欄）。
  *
  * 判定（只看網址與 session，不打任何 API——強制改密碼期間大部分 API 本來就會被擋）：
- *   change-password.html?forced=1        ⇒ 步驟「設新密碼」
- *   change-password.html?wizard=totp     ⇒ 步驟「兩步驟驗證」
+ *   my-account.html?forced=1              ⇒ 步驟「設新密碼」
+ *   my-account.html?wizard=totp           ⇒ 步驟「兩步驟驗證」
  *   company-setup-wizard.html?setup=1（公司設定精靈；舊的 company-profile-settings.html?setup=1 也算）⇒ 步驟「確認公司資料」
  * 步驟數依角色：最高管理者 4 步（要確認公司資料）；其他人 2 步（改完密碼就能用）。
  *
@@ -23,8 +23,9 @@
   var file = window.location.pathname.split('/').pop() || ''
   var q = new URLSearchParams(window.location.search)
   var mode = ''
-  if (file === 'change-password.html' && q.get('forced') === '1') mode = 'pw'
-  else if (file === 'change-password.html' && q.get('wizard') === 'totp') mode = 'totp'
+  var onAccount = file === 'my-account.html' || file === 'change-password.html'   // 舊網址保留（會轉到 my-account.html，帶同樣的 query）
+  if (onAccount && q.get('forced') === '1') mode = 'pw'
+  else if (onAccount && q.get('wizard') === 'totp') mode = 'totp'
   else if ((file === 'company-profile-settings.html' || file === 'company-setup-wizard.html') && q.get('setup') === '1') mode = 'company'
   if (!mode) { window.MotrixWizard = { mode: '' }; return }
 

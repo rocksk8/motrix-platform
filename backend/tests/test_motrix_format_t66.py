@@ -5,7 +5,8 @@ import re
 
 from core import source_tree
 
-NAMES = ["audit-log", "schema-status", "change-password", "vendor-contractors", "customers"]
+# change-password 已併入 my-account.html（帳號安全），該檔只剩轉址頁、沒有任何日期／數字格式化，故不在此列（2026-11-13，hichan-1）。
+NAMES = ["audit-log", "schema-status", "vendor-contractors", "customers"]
 _RAW = re.compile(r"\.toLocale(?:Date|Time)?String\(")
 _FALLBACK = re.compile(r"<script>/\* 後備：格式器沒載入時.*?</script>", re.S)
 

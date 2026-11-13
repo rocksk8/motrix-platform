@@ -82,6 +82,7 @@ _DYN_SRC_RE = re.compile(r"""\.src\s*=\s*["']([^"']+?\.js)(?:\?[^"']*)?["']""")
 #: ☠️ 這張表是 `AC1` 唯一的逃生門 ⇒ 它變長就是這道守門在失效。
 READ_ONLY_PAGES = {
     "approval-history.html": "簽核歷程：純查詢，動作在簽核佇列那一頁。",
+    "change-password.html": "T82 整合（hichan-1 feat/menu-ux-myaccount）：舊網址轉址頁——內容整個搬到「我的帳號 → 帳號安全」（my-account.html，改密碼／通行金鑰等寫入動作在那一頁），這裡只剩 location.replace 與說明連結；刻意沒有寫入動作。",
     # 🔴 2026-09-23：`AS4` 刻意留下的**導向頁**，不是壞掉的孤兒
     #    （commit `e2b774d`）。頁面本身是「此設定已整合進『簽核設定』」
     #    的說明＋轉址，`save()`／寫入動作都在新頁 `approval-settings.html`。
@@ -344,7 +345,9 @@ def test_ac1_every_exemption_gives_a_real_reason():
             "`%s` 的登記理由太短（%r）——\n" % (name, why)
             + "⚠️ 下一個人要靠它判斷這筆登記有沒有過期。")
 
-    assert len(READ_ONLY_PAGES) <= 12, (
+    # 12 → 13（T82 整合 2026-11-13，明著的決定）：hichan-1 的「我的帳號」把 change-password.html 改成轉址頁（舊書籤／舊信件連結要仍可用），
+    # 與 approval-settings 的導向頁同一類：刻意沒有寫入動作。登記理由寫在 READ_ONLY_PAGES。
+    assert len(READ_ONLY_PAGES) <= 13, (
         "登記表已經有 %d 筆（2026-09-23 實算是 8）——\n" % len(READ_ONLY_PAGES)
         + "☠️ 它變長就是這道守門在失效。\n"
         + "⚠️ 若真的有那麼多唯讀頁，**退回給我**：那時要改的是這個上限，\n"

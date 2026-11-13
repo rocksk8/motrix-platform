@@ -1,5 +1,8 @@
 # 標案雷達 更新紀錄
 
+## 1.5.14 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.5.13 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`notify.py` 的標案通知多了 LINE 獨立通道（`tender_found`／`tender_fetch_failed`／`tender_source_changed`／`tender_detail_blocked`，送到群組；每天同一事件最多推一次）；信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`。
