@@ -794,4 +794,4 @@ def test_semi_unlock_change_emails_superadmin(client, make_user, monkeypatch):
 
     recipients = [addr for to, _ in sent for addr in to]
     assert "boss@example.com" in recipients, f"沒有寄給最高管理者：{sent}"
-    assert any("變更待審核" in subj for _, subj in sent), f"信件主旨不對：{sent}"
+    assert any("變更待簽核" in subj for _, subj in sent), f"信件主旨不對：{sent}"

@@ -45,7 +45,7 @@ window.CM_PARTS.push(() => ({
     //: 讀公司資料裡的據點清單。讀不到就留空 => 那一行不顯示，其餘照常。
     async loadLocations() {
       try {
-        const r = await fetch(`${this.API}/settings/company-profile`, {
+        const r = await fetch('/api/settings/company-profile', {
           headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
         const d = await r.json()
@@ -115,11 +115,7 @@ window.CM_PARTS.push(() => ({
       this.$watch('moDirty', v => { window.motrixIsDirty = !!v || !!this.dirty })   // 材料申請有未儲存的新增／修改：離頁（beforeunload）與站內切換都提示
       this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
-      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
-      // 而這一頁的主體（案件矩陣）不應該等它。
-      this.loadLocations()
       MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
-      this.detectFileCenter()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
@@ -140,6 +136,13 @@ window.CM_PARTS.push(() => ({
         this.session.displayName = me.displayName
         this.session.id = me.userId
       } catch {}
+      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，而這一頁的主體（案件矩陣）不應該等它。
+      // D3：這兩支要帶 session.token，所以**必須在 session 就緒之後**（以前放在 init() 最前面、`_initDone` 擋之前：
+      // Alpine 自動呼叫的那一輪 session 還是空的 ⇒ `Bearer undefined` ⇒ 401，而且 init 跑兩遍所以還各送兩次）。
+      // 審查 L3：更進一步放在 /api/auth/me 確認 token 有效**之後**——token 已過期時 me 先 401 就導回登入頁，
+      // 不會先打出這兩支 401（它們不 await，me 之前發出去就收不回來）。
+      this.loadLocations()
+      this.detectFileCenter()
       try {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
@@ -167,6 +170,11 @@ window.CM_PARTS.push(() => ({
         this.caseActivity = { ...this.caseActivity, [k]: true }
       })
       this.caseSortPref = await loadListPref(s.token, 'case_list')
+      // 首頁「我的工作」的深連結：?quick=mine,stage_overdue,recv_overdue,missing_docs（逗號可疊加；不認得的字略過）。
+      // 套在第一次載入之前，清單與數字一次到位（不先閃一次未篩選的清單）。
+      new URLSearchParams(location.search).get('quick') && String(new URLSearchParams(location.search).get('quick')).split(',').forEach(k => {
+        if (Object.prototype.hasOwnProperty.call(this.caseQuick, k)) this.caseQuick = { ...this.caseQuick, [k]: true }
+      })
       await this.loadCases()
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')

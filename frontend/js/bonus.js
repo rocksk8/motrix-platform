@@ -79,6 +79,7 @@ function bonusPage() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      if (window.MotrixStatus) window.MotrixStatus.init()      // 管理者自訂的狀態名稱；旗標關 ⇒ 什麼都不改
       try {
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}
         this.isSuper = s.role === 'superadmin'
@@ -174,7 +175,7 @@ function bonusPage() {
     pct(bp) { return bnPct(bp) },
     badgeClass(st) {
       return { '未精算': 'st-gray', '已精算': 'st-blue', '草稿': 'st-amber', '待審核': 'st-orange',
-               '待發放': 'st-green', '已發放': 'st-purple' }[st] || 'st-gray'
+               '待發放': 'st-green', '已發放': 'st-slate' }[st] || 'st-gray'
     },
 
     async select(no) {

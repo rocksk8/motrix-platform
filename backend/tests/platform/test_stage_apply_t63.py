@@ -419,7 +419,7 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
     html = _page("case-management.html")
     assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段" in html
     form = _page("quotation-form.html")
-    assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format']" in form
+    assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format', 'builder_status_display']" in form
     f = form[form.index("async _seedDefaultStagesIfEmpty"):]
     f = f[:f.index("async doUnlock")]
     assert f.index("if (this._stFlag)") < f.index("const labels = ['訂單確認'")

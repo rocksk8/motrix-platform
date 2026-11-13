@@ -232,22 +232,6 @@ def _mail_off(event_key) -> bool:
         return False
 
 
-#: LINE 通道要知道「信件收件人是哪些帳號」，但收件人解析（覆寫／退訂／關閉）只有 `_users_emails` 這一個漏斗，不可複製第二份。
-#: 做法：`send_registered` 在解析期間打開這個執行緒區域的收集器（`_resolved.pairs`＝[(信箱, 帳號)]），漏斗把「實際回傳的人」記進去；
-#: 覆寫模式把事件收件人丟掉（`superadmin_only`）時，連同那一段 pair 一起丟（`event_span`），所以共用信箱的人也不會因此多收 LINE
-#: （K 審 L2）。最後只取**最終寄出信箱**對應的帳號。沒開收集器＝行為與原本完全相同。
-_resolved = threading.local()
-
-
-def _drop_event_pairs() -> None:
-    """覆寫把事件收件人換掉時，把 `_lookup_emails` 剛記下的那一段 (信箱, 帳號) 一起丟掉。沒開收集器＝什麼都不做。"""
-    sink = getattr(_resolved, "pairs", None)
-    span = getattr(_resolved, "event_span", None)
-    if sink is not None and span:
-        del sink[span[0]:span[1]]
-        _resolved.event_span = (span[0], span[0])
-
-
 def _users_emails(where: str, params, event_key) -> list:
     if _mail_off(event_key):                   # 所有收件人查詢的唯一漏斗：關了就沒有收件人（呼叫端照「沒有收件人」處理）
         return []
@@ -259,9 +243,6 @@ def _users_emails(where: str, params, event_key) -> list:
             "AND email IS NOT NULL AND email != '' AND (%s)" % where, list(params)).fetchall()
         conn.close()
         kept = [r for r in rows if _pref_enabled(r["notification_muted"], event_key)]
-        sink = getattr(_resolved, "pairs", None)
-        if sink is not None:
-            sink.extend((r["email"], r["username"]) for r in kept)
         return [r["email"] for r in kept]
     except Exception as exc:
         logger.warning("收件人查詢失敗（%s）：%s", event_key, exc)
@@ -349,11 +330,9 @@ def _with_event_recipients(event_emails: list, event_key) -> list:
         return []
     t = _registered(event_key)
     if t is None:
-        _drop_event_pairs()
         return _only_superadmins(event_key)
     o = _override_of(event_key)
     if o["mode"] == "superadmin_only":
-        _drop_event_pairs()
         return _only_superadmins(event_key)
     if o["mode"] == "custom":
         return list(dict.fromkeys(event_emails + _custom_emails(o, event_key)))
@@ -368,16 +347,9 @@ def _admin_emails(event_key: str = None) -> list:
 def _lookup_emails(usernames: list, event_key: str = None) -> list:
     """事件收件人（依帳號）＋覆寫。"""
     found = []
-    sink = getattr(_resolved, "pairs", None)
-    start = len(sink) if sink is not None else 0
     if usernames:
         found = _users_emails("username IN (%s)" % ",".join("?" * len(usernames)), usernames, event_key)
-    if sink is not None:
-        _resolved.event_span = (start, len(sink))        # 這一段是「事件收件人」；覆寫若把它丟掉，pair 也一起丟（見 `_drop_event_pairs`）
-    try:
-        return _with_event_recipients(found, event_key)
-    finally:
-        _resolved.event_span = None
+    return _with_event_recipients(found, event_key)
 
 
 
@@ -424,7 +396,18 @@ def _smtp_open(host: str, port: int, timeout: int):
         yield s
 
 
-def _send(to_addrs: list, subject: str, html: str) -> str:
+
+def _clean_reply_to(v) -> str:
+    """Reply-To 只收格式正確的單一 Email；其他一律當沒有（不讓壞值進信件標頭）。"""
+    try:
+        from helpers import quote_email as _qe
+        v = str(v or "").strip()
+        return v if _qe.valid(v) else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> str:
     """寄一封信，**回傳四種結果之一**（見 `SEND_*`）。
 
     ## 🔴 `permanent` 與 `skipped` 的分界，是我（B）當場做的決定
@@ -471,6 +454,9 @@ def _send(to_addrs: list, subject: str, html: str) -> str:
     msg["Subject"] = subject
     msg["From"]    = f"{from_name} <{user}>"
     msg["To"]      = ", ".join(to_addrs)
+    _rt = _clean_reply_to(reply_to)            # 報價用公司信箱：只加 Reply-To，寄件者（From）不變
+    if _rt:
+        msg["Reply-To"] = _rt
     msg.attach(MIMEText(html, "html", "utf-8"))
     try:
         with _smtp_open(host, port, 15) as s:
@@ -542,7 +528,7 @@ class SendHandle:
         return self.outcome if self.outcome is not None else SEND_UNKNOWN
 
 
-def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
+def _async_send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> SendHandle:
     """背景寄信。**回一個把手，不要再把結果丟掉。**
 
     📌 既有呼叫端可以繼續忽略回傳值（行為完全不變）——
@@ -555,7 +541,7 @@ def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
         # ⚠️ 例外也要留下結果，否則 `wait()` 會回 `SEND_UNKNOWN`，
         # 而呼叫端分不出「執行緒炸了」與「還沒跑完」。
         try:
-            handle.outcome = _send(to_addrs, subject, html)
+            handle.outcome = _send(to_addrs, subject, html, reply_to) if reply_to else _send(to_addrs, subject, html)
         except Exception as exc:                      # noqa: BLE001
             logger.exception("非同步寄信的執行緒自己炸了：%s", exc)
             handle.outcome = SEND_TRANSIENT_FAIL
@@ -605,99 +591,119 @@ def _tpl_fields(event: str, ctx: dict) -> dict:
         return {}
 
 
-def notify_approval_request(quote_no: str, customer: str, approver_usernames: list) -> None:
-    """新報價/改版送審 → 通知當層簽核人"""
+def _dl(text, doc_label):
+    """單據類型用語：doc_label 預設「報價單」⇒ 原字串；估價單 ⇒ 把版面文字裡的「報價單」換成「估價單」。"""
+    return text if (not doc_label or doc_label == "報價單") else str(text).replace("報價單", doc_label)
+
+
+def notify_approval_request(quote_no: str, customer: str, approver_usernames: list, doc_label: str = "報價單") -> None:
+    """新報價/改版送審 → 通知當層簽核人（doc_label＝單據類型名稱，估價單傳「估價單」）"""
+    # LINE 獨立通道（2026-11-13）：不看 Email、不看信件退訂；信件與 LINE 各自失敗互不影響。收件人規格見 docs/platform/plans/LINE-EVENTS-EXPANSION-PROPOSAL.md v2-4。
+    _line_event("approval_request", usernames=approver_usernames, title=_dl("報價單待簽核", doc_label), rows=[(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "approval_request")
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
     _tf = _tpl_fields("approval:submitted", {"單號": quote_no, "對象": customer})          # S-X3：旗標關／沒有範本 ⇒ {} ⇒ 下面全部走今天的字
     html = _build_html("approval_request", 
-        _tf.get("title", "報價單簽核申請"), _tf.get("badge", "待您審核"), "#2F6FD6",
-        [("報價單號", quote_no), ("客戶名稱", customer)],
+        _dl(_tf.get("title", "報價單簽核申請"), doc_label), _tf.get("badge", "待您簽核"), "#2F6FD6",
+        [(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer)],
         quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。"),
-        button_text=_tf.get("button", "前往審核報價單"),
+        intro=_dl(_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成簽核作業。"), doc_label),
+        button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
     )
-    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe       # 報價人的報價用公司信箱（儲存報價單時伺服器已驗證）；沒有 ⇒ 不加 Reply-To，呼叫形狀與舊版相同
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("approval_request", _dl(_tf.get("reason", f"報價單待簽核：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
-                     total_tiers: int, approver_usernames: list) -> None:
+                     total_tiers: int, approver_usernames: list, doc_label: str = "報價單") -> None:
     """前層通過，下一層簽核通知"""
+    _line_event("next_tier", usernames=approver_usernames, title="報價單輪到您簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "next_tier")
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
         return
     _tf = _tpl_fields("approval:next_tier", {"單號": quote_no, "對象": customer, "層": tier_no, "總層": total_tiers})
     html = _build_html("next_tier", 
-        _tf.get("title", "報價單簽核流程通知"), _tf.get("badge", "輪到您審核"), "#2F6FD6",
-        [("報價單號", quote_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        _dl(_tf.get("title", "報價單簽核流程通知"), doc_label), _tf.get("badge", "輪到您簽核"), "#2F6FD6",
+        [(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         quote_no, _base_url(),
-        intro=_tf.get("intro", f"您好，前層審核已完成，報價單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。"),
-        button_text=_tf.get("button", "前往審核報價單"),
+        intro=_dl(_tf.get("intro", f"您好，前層簽核已完成，報價單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。"), doc_label),
+        button_text=_dl(_tf.get("button", "前往簽核報價單"), doc_label),
     )
-    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("next_tier", _dl(_tf.get("reason", f"報價單簽核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
 
 
 def notify_approved(quote_no: str, customer: str,
-                    approved_by: str, requester_username: str) -> None:
+                    approved_by: str, requester_username: str, doc_label: str = "報價單") -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
+    _line_event("approved", usernames=[requester_username], to_group=True, title="報價單簽核完成", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)], reason="已核准")
     to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
         return
     _tf = _tpl_fields("approval:approved", {"單號": quote_no, "對象": customer, "最終審核人": approved_by})
     html = _build_html("approved", 
-        _tf.get("title", "報價單審核完成"), _tf.get("badge", "全數通過"), "#16A34A",
-        [("報價單號", quote_no), ("客戶名稱", customer), ("最終審核人", approved_by)],
+        _dl(_tf.get("title", "報價單簽核完成"), doc_label), _tf.get("badge", "全數通過"), "#16A34A",
+        [(_dl("報價單號", doc_label), quote_no), ("客戶名稱", customer), ("最終簽核人", approved_by)],
         quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。"),
-        button_text=_tf.get("button", "前往查看報價單"),
+        intro=_dl(_tf.get("intro", "您好，以下報價單已完成全部層級簽核，正式生效。感謝各位簽核人員配合。"), doc_label),
+        button_text=_dl(_tf.get("button", "前往查看報價單"), doc_label),
     )
-    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單審核完成：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("approved", _dl(_tf.get("reason", f"報價單簽核完成：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
-                    note: str, requester_username: str) -> None:
+                    note: str, requester_username: str, doc_label: str = "報價單") -> None:
     """退回修改 → 通知申請人"""
+    _line_event("returned", usernames=[requester_username], title="報價單退回修改", rows=[("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "returned")
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
         return
     _tf = _tpl_fields("approval:returned", {"原單號": quote_no, "新單號": new_quote_no, "對象": customer})
     html = _build_html("returned", 
-        _tf.get("title", "報價單退回修改通知"), _tf.get("badge", "請修改後重新送審"), "#DC2626",
+        _dl(_tf.get("title", "報價單退回修改通知"), doc_label), _tf.get("badge", "請修改後重新送審"), "#DC2626",
         [("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)],
         new_quote_no, _base_url(),
-        intro=_tf.get("intro", "您好，您提交的報價單經審核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"),
+        intro=_dl(_tf.get("intro", "您好，您提交的報價單經簽核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"), doc_label),
         note=note,
-        button_text=_tf.get("button", "前往修改報價單"),
+        button_text=_dl(_tf.get("button", "前往修改報價單"), doc_label),
     )
-    _async_send(to, _mt.subject("returned", _tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe       # 修改版（新單）也有自己的快照；沒有再用原單的
+    _rt = _qe.reply_to_for_quote(new_quote_no) or _qe.reply_to_for_quote(quote_no)
+    _async_send(to, _mt.subject("returned", _dl(_tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）"), doc_label)), html, *((_rt,) if _rt else ()))
 
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
     """出貨單送審 → 通知當層簽核人"""
+    _line_event("shipping_submitted", usernames=approver_usernames, title="出貨單待簽核", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "shipping_submitted")
     if not to:
         logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_submitted", 
-        "出貨單簽核申請", "待您審核", "#2F6FD6",
+        "出貨單簽核申請", "待您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核出貨單",
+        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核出貨單",
     )
-    _async_send(to, _mt.subject("shipping_submitted", f"出貨單待審核：{note_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("shipping_submitted", f"出貨單待簽核：{note_no}（{customer}）"), html)
 
 
 def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
                               total_tiers: int, approver_usernames: list) -> None:
     """前層通過，出貨單下一層簽核通知"""
+    _line_event("shipping_next_tier", usernames=approver_usernames, title="出貨單輪到您簽核", rows=[("出貨單號", note_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "shipping_next_tier")
     if not to:
         logger.warning("notify_shipping_next_tier: 第 %d 層簽核人 %s 皆無設定 email（note_no=%r）",
@@ -705,28 +711,29 @@ def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_next_tier", 
-        "出貨單簽核流程通知", "輪到您審核", "#2F6FD6",
+        "出貨單簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，出貨單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核出貨單",
+        intro=f"您好，前層簽核已完成，出貨單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核出貨單",
     )
-    _async_send(to, _mt.subject("shipping_next_tier", f"出貨單審核通知（第 {tier_no}/{total_tiers} 層）：{note_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("shipping_next_tier", f"出貨單簽核通知（第 {tier_no}/{total_tiers} 層）：{note_no}（{customer}）"), html)
 
 
 def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requester_username: str) -> None:
     """出貨單全員簽核完成 → 通知申請人"""
+    _line_event("shipping_approved", usernames=[requester_username], title="出貨單簽核完成", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "shipping_approved")
     if not to:
         logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
     page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
     html = _build_html("shipping_approved", 
-        "出貨單審核完成", "已核准", "#16A34A",
+        "出貨單簽核完成", "已核准", "#16A34A",
         [("出貨單號", note_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下出貨單已完成審核並核准。",
+        intro="您好，以下出貨單已完成簽核並核准。",
         button_text="前往查看出貨單",
     )
     _async_send(to, _mt.subject("shipping_approved", f"出貨單已核准：{note_no}（{customer}）"), html)
@@ -734,6 +741,7 @@ def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requ
 
 def notify_shipping_returned(note_no: str, customer: str, note: str, requester_username: str) -> None:
     """出貨單退回 → 通知申請人"""
+    _line_event("shipping_returned", usernames=[requester_username], title="出貨單退回修改", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "shipping_returned")
     if not to:
         logger.warning("notify_shipping_returned: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
@@ -743,7 +751,7 @@ def notify_shipping_returned(note_no: str, customer: str, note: str, requester_u
         "出貨單退回通知", "請修改後重新送審", "#DC2626",
         [("出貨單號", note_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的出貨單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的出貨單經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改出貨單",
     )
@@ -752,6 +760,7 @@ def notify_shipping_returned(note_no: str, customer: str, note: str, requester_u
 
 def notify_contractor_voucher_submitted(voucher_no: str, vendor_name: str, approver_usernames: list) -> None:
     """承攬商匯款申請送審 → 通知當層簽核人"""
+    _line_event("contractor_voucher_submitted", usernames=approver_usernames, title="承攬商匯款申請待簽核", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "contractor_voucher_submitted")
     if not to:
         logger.warning("notify_contractor_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -759,18 +768,19 @@ def notify_contractor_voucher_submitted(voucher_no: str, vendor_name: str, appro
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_submitted", 
-        "承攬商匯款申請簽核申請", "待您審核", "#2F6FD6",
+        "承攬商匯款申請簽核申請", "待您簽核", "#2F6FD6",
         [("申請單號", voucher_no), ("承攬商", vendor_name)],
         "", page,
-        intro="您好，以下承攬商匯款申請已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下承攬商匯款申請已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("contractor_voucher_submitted", f"承攬商匯款申請待審核：{voucher_no}（{vendor_name}）"), html)
+    _async_send(to, _mt.subject("contractor_voucher_submitted", f"承攬商匯款申請待簽核：{voucher_no}（{vendor_name}）"), html)
 
 
 def notify_contractor_voucher_next_tier(voucher_no: str, vendor_name: str, tier_no: int,
                                         total_tiers: int, approver_usernames: list) -> None:
     """前層通過，承攬商匯款申請下一層簽核通知"""
+    _line_event("contractor_voucher_next_tier", usernames=approver_usernames, title="承攬商匯款申請輪到您簽核", rows=[("申請單號", voucher_no), ("承攬商", vendor_name), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "contractor_voucher_next_tier")
     if not to:
         logger.warning("notify_contractor_voucher_next_tier: 第 %d 層簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -778,19 +788,20 @@ def notify_contractor_voucher_next_tier(voucher_no: str, vendor_name: str, tier_
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_next_tier", 
-        "承攬商匯款申請簽核流程通知", "輪到您審核", "#2F6FD6",
+        "承攬商匯款申請簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("申請單號", voucher_no), ("承攬商", vendor_name),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，承攬商匯款申請現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，承攬商匯款申請現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("contractor_voucher_next_tier", f"承攬商匯款申請審核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{vendor_name}）"), html)
+    _async_send(to, _mt.subject("contractor_voucher_next_tier", f"承攬商匯款申請簽核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{vendor_name}）"), html)
 
 
 def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approved_by: str,
                                        requester_username: str) -> None:
     """承攬商匯款申請全員簽核完成 → 通知申請人"""
+    _line_event("contractor_voucher_approved", usernames=[requester_username], title="承攬商匯款申請簽核完成", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="已核准")
     to = _lookup_emails([requester_username], "contractor_voucher_approved")
     if not to:
         logger.warning("notify_contractor_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -798,10 +809,10 @@ def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approv
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("contractor_voucher_approved", 
-        "承攬商匯款申請審核完成", "已核准", "#16A34A",
+        "承攬商匯款申請簽核完成", "已核准", "#16A34A",
         [("申請單號", voucher_no), ("承攬商", vendor_name), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下承攬商匯款申請已完成審核並核准，可提供財務單位辦理匯款。",
+        intro="您好，以下承攬商匯款申請已完成簽核並核准，可提供財務單位辦理匯款。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("contractor_voucher_approved", f"承攬商匯款申請已核准：{voucher_no}（{vendor_name}）"), html)
@@ -810,6 +821,7 @@ def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approv
 def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: str,
                                        requester_username: str) -> None:
     """承攬商匯款申請退回 → 通知申請人"""
+    _line_event("contractor_voucher_returned", usernames=[requester_username], title="承攬商匯款申請退回修改", rows=[("申請單號", voucher_no), ("承攬商", vendor_name)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "contractor_voucher_returned")
     if not to:
         logger.warning("notify_contractor_voucher_returned: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -820,7 +832,7 @@ def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: 
         "承攬商匯款申請退回通知", "請修改後重新送審", "#DC2626",
         [("申請單號", voucher_no), ("承攬商", vendor_name)],
         "", page,
-        intro="您好，您送出的承攬商匯款申請經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的承攬商匯款申請經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -829,6 +841,7 @@ def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: 
 
 def notify_invoice_voucher_submitted(voucher_no: str, customer: str, approver_usernames: list) -> None:
     """開票申請憑據送審 → 通知當層簽核人"""
+    _line_event("invoice_voucher_submitted", usernames=approver_usernames, title="開票申請憑據待簽核", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "invoice_voucher_submitted")
     if not to:
         logger.warning("notify_invoice_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -836,18 +849,19 @@ def notify_invoice_voucher_submitted(voucher_no: str, customer: str, approver_us
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_submitted", 
-        "開票申請憑據簽核申請", "待您審核", "#2F6FD6",
+        "開票申請憑據簽核申請", "待您簽核", "#2F6FD6",
         [("憑據單號", voucher_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下開票申請憑據已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下開票申請憑據已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("invoice_voucher_submitted", f"開票申請憑據待審核：{voucher_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("invoice_voucher_submitted", f"開票申請憑據待簽核：{voucher_no}（{customer}）"), html)
 
 
 def notify_invoice_voucher_next_tier(voucher_no: str, customer: str, tier_no: int,
                                      total_tiers: int, approver_usernames: list) -> None:
     """前層通過，開票申請憑據下一層簽核通知"""
+    _line_event("invoice_voucher_next_tier", usernames=approver_usernames, title="開票申請憑據輪到您簽核", rows=[("憑據單號", voucher_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "invoice_voucher_next_tier")
     if not to:
         logger.warning("notify_invoice_voucher_next_tier: 第 %d 層簽核人 %s 皆無設定 email（voucher_no=%r）",
@@ -855,19 +869,20 @@ def notify_invoice_voucher_next_tier(voucher_no: str, customer: str, tier_no: in
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_next_tier", 
-        "開票申請憑據簽核流程通知", "輪到您審核", "#2F6FD6",
+        "開票申請憑據簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("憑據單號", voucher_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，開票申請憑據現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，開票申請憑據現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("invoice_voucher_next_tier", f"開票申請憑據審核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("invoice_voucher_next_tier", f"開票申請憑據簽核通知（第 {tier_no}/{total_tiers} 層）：{voucher_no}（{customer}）"), html)
 
 
 def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by: str,
                                     requester_username: str) -> None:
     """開票申請憑據全員簽核完成 → 通知申請人"""
+    _line_event("invoice_voucher_approved", usernames=[requester_username], title="開票申請憑據簽核完成", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "invoice_voucher_approved")
     if not to:
         logger.warning("notify_invoice_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -875,10 +890,10 @@ def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by:
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("invoice_voucher_approved", 
-        "開票申請憑據審核完成", "已核准", "#16A34A",
+        "開票申請憑據簽核完成", "已核准", "#16A34A",
         [("憑據單號", voucher_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下開票申請憑據已完成審核並核准，可提供財務單位辦理開立發票。",
+        intro="您好，以下開票申請憑據已完成簽核並核准，可提供財務單位辦理開立發票。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("invoice_voucher_approved", f"開票申請憑據已核准：{voucher_no}（{customer}）"), html)
@@ -887,6 +902,7 @@ def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by:
 def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
                                     requester_username: str) -> None:
     """開票申請憑據退回 → 通知申請人"""
+    _line_event("invoice_voucher_returned", usernames=[requester_username], title="開票申請憑據退回修改", rows=[("憑據單號", voucher_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "invoice_voucher_returned")
     if not to:
         logger.warning("notify_invoice_voucher_returned: 申請人 %r 無設定 email（voucher_no=%r）",
@@ -897,7 +913,7 @@ def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
         "開票申請憑據退回通知", "請修改後重新送審", "#DC2626",
         [("憑據單號", voucher_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的開票申請憑據經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的開票申請憑據經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -906,6 +922,7 @@ def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
 
 def notify_payment_request_submitted(request_no: str, customer: str, approver_usernames: list) -> None:
     """請款單送審 → 通知當層簽核人"""
+    _line_event("payment_request_submitted", usernames=approver_usernames, title="請款單待簽核", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "payment_request_submitted")
     if not to:
         logger.warning("notify_payment_request_submitted: 簽核人 %s 皆無設定 email（request_no=%r）",
@@ -913,18 +930,19 @@ def notify_payment_request_submitted(request_no: str, customer: str, approver_us
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_submitted", 
-        "請款單簽核申請", "待您審核", "#2F6FD6",
+        "請款單簽核申請", "待您簽核", "#2F6FD6",
         [("請款單號", request_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核",
+        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成簽核作業。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("payment_request_submitted", f"請款單待審核：{request_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("payment_request_submitted", f"請款單待簽核：{request_no}（{customer}）"), html)
 
 
 def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: int,
                                      total_tiers: int, approver_usernames: list) -> None:
     """前層通過，請款單下一層簽核通知"""
+    _line_event("payment_request_next_tier", usernames=approver_usernames, title="請款單輪到您簽核", rows=[("請款單號", request_no), ("客戶名稱", customer), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "payment_request_next_tier")
     if not to:
         logger.warning("notify_payment_request_next_tier: 第 %d 層簽核人 %s 皆無設定 email（request_no=%r）",
@@ -932,19 +950,20 @@ def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: in
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_next_tier", 
-        "請款單簽核流程通知", "輪到您審核", "#2F6FD6",
+        "請款單簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("請款單號", request_no), ("客戶名稱", customer),
-         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+         ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
         "", page,
-        intro=f"您好，前層審核已完成，請款單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核",
+        intro=f"您好，前層簽核已完成，請款單現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("payment_request_next_tier", f"請款單審核通知（第 {tier_no}/{total_tiers} 層）：{request_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("payment_request_next_tier", f"請款單簽核通知（第 {tier_no}/{total_tiers} 層）：{request_no}（{customer}）"), html)
 
 
 def notify_payment_request_approved(request_no: str, customer: str, approved_by: str,
                                     requester_username: str) -> None:
     """請款單全員簽核完成 → 通知申請人"""
+    _line_event("payment_request_approved", usernames=[requester_username], title="請款單簽核完成", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="已核准")
     to = _lookup_emails([requester_username], "payment_request_approved")
     if not to:
         logger.warning("notify_payment_request_approved: 申請人 %r 無設定 email（request_no=%r）",
@@ -952,10 +971,10 @@ def notify_payment_request_approved(request_no: str, customer: str, approved_by:
         return
     page = f"{_base_url()}/pages/case-management.html"
     html = _build_html("payment_request_approved", 
-        "請款單審核完成", "已核准", "#16A34A",
+        "請款單簽核完成", "已核准", "#16A34A",
         [("請款單號", request_no), ("客戶名稱", customer), ("核准人", approved_by)],
         "", page,
-        intro="您好，以下請款單已完成審核並核准。",
+        intro="您好，以下請款單已完成簽核並核准。",
         button_text="前往查看",
     )
     _async_send(to, _mt.subject("payment_request_approved", f"請款單已核准：{request_no}（{customer}）"), html)
@@ -964,6 +983,7 @@ def notify_payment_request_approved(request_no: str, customer: str, approved_by:
 def notify_payment_request_returned(request_no: str, customer: str, note: str,
                                     requester_username: str) -> None:
     """請款單退回 → 通知申請人"""
+    _line_event("payment_request_returned", usernames=[requester_username], title="請款單退回修改", rows=[("請款單號", request_no), ("客戶名稱", customer)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "payment_request_returned")
     if not to:
         logger.warning("notify_payment_request_returned: 申請人 %r 無設定 email（request_no=%r）",
@@ -974,7 +994,7 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
         "請款單退回通知", "請修改後重新送審", "#DC2626",
         [("請款單號", request_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，您送出的請款單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        intro="您好，您送出的請款單經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
         note=note,
         button_text="前往修改",
     )
@@ -1005,9 +1025,77 @@ def _rows_plain(rows) -> list:
     return out
 
 
+def _line_event(event_key: str, *, title: str, rows=None, usernames=None, to_group: bool = False, reason: str = "", link: str = "",
+                exclude=None, group: str = None, line_key: str = "") -> None:
+    """舊寫法 `notify_*` 的 LINE 通道（2026-11-13：寄信有的 LINE 都要）。與 `send_registered` 內的 LINE 呼叫同一個入口（`line_notify.notify_event`，背景執行緒），
+    收件人由呼叫端傳（事件收件人 `usernames`、登記群組 `to_group`），不看 Email、不看信件退訂；**永不丟例外**，信件那一段不受影響。
+    🔴 內容守則：不放金額、不放自由文字（退回說明、報告內文、備註）——只放單號／名稱／日期這類識別資訊，細節請登入系統看。
+    `event_key` 必須是呼叫端寫死的字面字串（守門 tests/test_line_events_all_2026_11_13.py 逐一核對已接線）。"""
+    try:
+        _ln.notify_event(event_key, usernames=list(usernames) if usernames else None, to_group=to_group, title=title,
+                         rows=_rows_plain(rows), reason=reason, link=link, exclude=exclude, dedupe_key=line_key, group=group)
+    except Exception as exc:                       # LINE 的問題不能讓信件那一段跟著壞
+        logger.warning("_line_event %r 失敗（不影響信件）：%s", event_key, exc)
+
+
+def _line_day_key(*parts) -> str:
+    """**沒有特定對象**的掃描型告警（憑證、備份、心跳、磁碟、標案）的 LINE「已推播」鑰匙：事件＋識別資訊＋今天日期——同一天內 Email 重試不會重推 LINE，
+    隔天（仍有狀況）才會再推一次。⚠️ 帶日期的鑰匙**不進補發佇列**（`line_notify` 見尾碼日期就不 park）：隔天的檢查本來就會重新評估並重新推，
+    補發昨天的只會讓同一件事在隔天推兩則（審查 h8 L4）。"""
+    return "|".join([str(p) for p in parts] + [datetime.now().strftime("%Y-%m-%d")])
+
+
+def _line_entity_key(*parts) -> str:
+    """**綁定在某個對象**（某張單、某個工作事項、某個案件）的掃描型事件的 LINE「已推播」鑰匙：事件＋對象，**不含日期**（PM 裁示，審查 h8 L4）。
+    同一個對象的同一件事在記號保存期（`line_notify.MARK_KEEP_DAYS` 天）內只推一次——不會「每逾期一天推一則」，補發佇列（額度保留／暫時失敗）重送時
+    鑰匙與當天檢查完全相同，不會隔天雙推；兩條路徑共用 `line_notify` 的 per-key 鎖。"""
+    return "|".join(str(p) for p in parts)
+
+
+def _department_manager_usernames(department_id) -> list:
+    """部門主管的帳號（沒設主管／主管已停用＝空清單）；LINE 用，不看 Email。"""
+    if not department_id:
+        return []
+    try:
+        from db import get_db
+        conn = get_db()
+        try:
+            row = conn.execute("""SELECT u.username FROM departments d JOIN users u ON u.id = d.manager_user_id
+                                  WHERE d.id=? AND u.active=1""", (department_id,)).fetchone()
+        finally:
+            conn.close()
+        return [row["username"]] if row and row["username"] else []
+    except Exception as exc:
+        logger.warning("_department_manager_usernames failed: %s", exc)
+        return []
+
+
+def _monthly_report_line_targets() -> tuple:
+    """每月營運報表的 LINE 收件人 ⇒ (帳號清單, 是否發給登記群組)。與信件同一個來源（`monthly_report_recipients` 設定）：
+    從沒存過設定＝沿用舊行為發給最高管理者群組；存過＝照 `userIds`（只取啟用中的帳號）。"""
+    try:
+        raw = _get_setting("monthly_report_recipients")
+        if raw is None:
+            return [], True
+        user_ids = raw.get("userIds") or []
+        if not user_ids:
+            return [], False
+        from db import get_db
+        conn = get_db()
+        try:
+            rows = conn.execute(f"SELECT username FROM users WHERE active=1 AND id IN ({','.join('?' * len(user_ids))})", user_ids).fetchall()
+        finally:
+            conn.close()
+        return [r["username"] for r in rows], False
+    except Exception as exc:
+        logger.warning("_monthly_report_line_targets failed: %s", exc)
+        return [], False
+
+
 def send_registered(event_key: str, *, title: str, rows: list, usernames: list = None, to_group: bool = False,
                     reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
-                    link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None) -> bool:
+                    link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None,
+                    line_key: str = "", line_exclude: list = None) -> bool:
     """模組用的通用寄信入口（A2-0 #6）：信件類型由模組自己 `mail_types.register()` 登記，這裡只負責收件人＋內文＋主旨。
     收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套最高管理者的覆寫與個人退訂。
     `event_key` 必須是呼叫端寫死的字面字串（守門 test_mail_registry 逐一核對已登記）；其餘參數一律用關鍵字。
@@ -1015,29 +1103,36 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     `wait=True`（要寫「已通知」記號的呼叫端用）：等寄送結果（最多 `SEND_WAIT_TIMEOUT_SECONDS`），回 True＝**可以寫記號**，照 `system_checks` 的「先寄成功才記」前例：
     `SEND_SENT`（寄出了）、`SEND_UNKNOWN`（等不到結果——不知道有沒有出去，重寄可能雙寄）、`SEND_PERMANENT_FAIL`（這一封永遠寄不出去——重試只是天天失敗）都回 True（保留記號）；
     只有明確的暫時失敗（`SEND_TRANSIENT_FAIL`）、機器層級略過（`SEND_SKIPPED`）或沒有收件人才回 False（不寫記號，下次重試）。
+    **LINE 是獨立通道**（2026-11-12）：已接線的事件（`line_notify.LINE_EVENTS`）同時由 `line_notify.deliver_event` 發 LINE，收件人用同樣的 `usernames`／`to_group`
+    經 `helpers.event_audience` 直接解析（不看 Email、不看信件退訂／關閉、不因信件失敗而跳過）。`line_exclude`：LINE 要排除的帳號（例如操作者本人；不影響信件）。
+    `line_key`：LINE 自己的「已推播」記號鑰匙（`wait=True` 的每日檢查型呼叫端請傳；同一把鑰匙只推一次，Email 暫時失敗隔天重試時 LINE 不重推）。
+    LINE 預設背景發送（不擋信件與呼叫端）；只有 `wait=True` 且**沒有任何 Email 收件人**時才同步等 LINE，結果寫進 `out["line"]`，回 True 的條件改看 LINE：LINE 推成功／永久失敗／同鑰匙已推過 ⇒ True（寫記號、不再每天重試）。
     `out`（選填 dict）：寄送結果寫進 `out["outcome"]`（`SEND_*`；沒有收件人＝`"no_recipient"`），讓呼叫端分得出「真的寄出」與「保留記號但不確定」。"""
-    _resolved.pairs = []                    # 收集 (信箱, 帳號) 給 LINE 通道用（見 `_resolved` 說明）
-    try:
-        to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
-                                + (_group_emails(event_key) if to_group else [])))
-        pairs = list(_resolved.pairs)
-    finally:
-        _resolved.pairs = None
-        _resolved.event_span = None
-    final = set(to)
-    line_users = sorted({u for e, u in pairs if e in final})
+    def _line(fn):      # 明列關鍵字（守門禁止 ** 傳參數）；fn＝`line_notify.deliver_event`（同步）或 `notify_event`（背景）
+        return fn(event_key, usernames=usernames, to_group=to_group, title=title, rows=_rows_plain(rows), reason=reason, link=link,
+                  exclude=line_exclude, dedupe_key=line_key)
+    # LINE 先於信件處理：信件這一段的任何例外都不會讓 LINE 漏發；沒啟用／沒勾選／沒人綁定＝什麼都不做；連結經 safe_link（預設不帶）
+    lo = None
+    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
+                            + (_group_emails(event_key) if to_group else [])))
+    if wait and not to:
+        lo = _line(_ln.deliver_event)                         # 同步：只有「沒有 Email 收件人」時才要等——回傳值決定能不能寫記號
+        if out is not None:
+            out["line"] = lo
+    else:
+        _line(_ln.notify_event)                               # 背景執行緒：有 Email 收件人時，LINE 慢（逾時最久 10 秒）不拖住信件與每日檢查；補發靠 `line_pending`
     if not to:
-        logger.warning("send_registered: %r 沒有收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
+        logger.warning("send_registered: %r 沒有 Email 收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
         if out is not None:
             out["outcome"] = "no_recipient"
+        if wait:
+            # 沒有任何 Email 收件人＝信件永遠寄不出去，隔天重試也不會有結果；此時 LINE 是唯一通道：推成功／永久失敗／已推過 ⇒ True（寫記號、不再重試）；
+            # 沒開 LINE／沒人可推／暫時失敗／額度保留暫停 ⇒ False（照舊：不寫記號、下次重試）。
+            return lo in (_ln.SEND_SENT, _ln.SEND_PERMANENT_FAIL, "already_pushed")
         return False
     html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
                        intro=reason, button_text=button_text, note=note)
     handle = _async_send(to, _mt.subject(event_key, reason or title), html)
-    def _line():
-        # LINE 通道（附帶、背景、失敗只記 log；沒勾選／沒啟用／沒人綁定＝什麼都不做）。收件人＝信件最終寄出的那些帳號；連結經 safe_link（預設不帶）
-        _ln.notify_users(event_key, line_users, title, _rows_plain(rows), reason=reason, link=link)
-
     if wait:
         outcome = handle.wait()
         if out is not None:
@@ -1046,69 +1141,69 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
             logger.error("send_registered: %r 寄送結果 %s——保留記號（不重寄），請人工確認收件人是否收到／補齊收件人 Email", event_key, outcome)
         elif outcome != SEND_SENT:
             logger.warning("send_registered: %r 寄送結果 %s（呼叫端不寫記號，下次重試）", event_key, outcome)
-        may_mark = outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
-        # 要寫「已通知」記號的呼叫端（wait=True）會在 False 時隔天重試：LINE 只在「可以寫記號」時才發，
-        # 否則同一件事每次重試都會再推一次 LINE（K 審 S1）；LINE 因此跟著信件的成敗走，信件機器層級沒設好時 LINE 也等它一起補發。
-        if may_mark:
-            _line()
-        return may_mark
-    _line()
+        # 呼叫端（wait=True）在 False 時隔天重試；LINE 已在上面先發，重試時由 `line_key` 的「已推播」記號擋住，不會重推（取代舊的「LINE 跟著信件成敗走」）。
+        return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
     return True
 
 
 def notify_custom_record_submitted(module_name: str, record_no: str, approver_usernames: list, module_key: str = "") -> None:
     """自訂模組單據送審 → 通知當層簽核人"""
+    _line_event("custom_record_submitted", usernames=approver_usernames, title=f"{module_name}待簽核", rows=[("單據", module_name), ("單號", record_no)], reason="輪到您簽核，請登入系統處理")
     to = _lookup_emails(approver_usernames, "custom_record_submitted")
     if not to:
         logger.warning("notify_custom_record_submitted: 簽核人 %s 皆無設定 email（record_no=%r）", approver_usernames, record_no)
         return
-    html = _build_html("custom_record_submitted", f"{module_name}簽核申請", "待您審核", "#2F6FD6",
+    html = _build_html("custom_record_submitted", f"{module_name}簽核申請", "待您簽核", "#2F6FD6",
                        [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，以下{module_name}已進入簽核流程，敬請於系統中完成審核作業。", button_text="前往審核")
-    _async_send(to, _mt.subject("custom_record_submitted", f"{module_name}待審核：{record_no}"), html)
+                       intro=f"您好，以下{module_name}已進入簽核流程，敬請於系統中完成簽核作業。", button_text="前往簽核")
+    _async_send(to, _mt.subject("custom_record_submitted", f"{module_name}待簽核：{record_no}"), html)
 
 
 def notify_custom_record_next_tier(module_name: str, record_no: str, tier_no: int, total_tiers: int,
                                    approver_usernames: list, module_key: str = "") -> None:
     """自訂模組單據前層通過 → 通知下一層簽核人"""
+    _line_event("custom_record_next_tier", usernames=approver_usernames, title=f"{module_name}輪到您簽核", rows=[("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層（共 {total_tiers} 層）")], reason="前一層已完成，請登入系統處理")
     to = _lookup_emails(approver_usernames, "custom_record_next_tier")
     if not to:
         logger.warning("notify_custom_record_next_tier: 第 %d 層簽核人 %s 皆無設定 email（record_no=%r）", tier_no, approver_usernames, record_no)
         return
-    html = _build_html("custom_record_next_tier", f"{module_name}簽核流程通知", "輪到您審核", "#2F6FD6",
-                       [("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+    html = _build_html("custom_record_next_tier", f"{module_name}簽核流程通知", "輪到您簽核", "#2F6FD6",
+                       [("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層簽核（共 {total_tiers} 層）")],
                        "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，前層審核已完成，{module_name}現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。", button_text="前往審核")
-    _async_send(to, _mt.subject("custom_record_next_tier", f"{module_name}審核通知（第 {tier_no}/{total_tiers} 層）：{record_no}"), html)
+                       intro=f"您好，前層簽核已完成，{module_name}現已進入第 {tier_no} 層簽核階段，敬請登入系統完成簽核。", button_text="前往簽核")
+    _async_send(to, _mt.subject("custom_record_next_tier", f"{module_name}簽核通知（第 {tier_no}/{total_tiers} 層）：{record_no}"), html)
 
 
 def notify_custom_record_approved(module_name: str, record_no: str, approved_by: str, requester_username: str, module_key: str = "") -> None:
     """自訂模組單據全員簽核完成 → 通知申請人"""
+    _line_event("custom_record_approved", usernames=[requester_username], title=f"{module_name}簽核完成", rows=[("單據", module_name), ("單號", record_no), ("核准人", approved_by)], reason="已核准")
     to = _lookup_emails([requester_username], "custom_record_approved")
     if not to:
         logger.warning("notify_custom_record_approved: 申請人 %r 無設定 email（record_no=%r）", requester_username, record_no)
         return
-    html = _build_html("custom_record_approved", f"{module_name}審核完成", "已核准", "#16A34A",
+    html = _build_html("custom_record_approved", f"{module_name}簽核完成", "已核准", "#16A34A",
                        [("單據", module_name), ("單號", record_no), ("核准人", approved_by)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，以下{module_name}已完成審核並核准。", button_text="前往查看")
+                       intro=f"您好，以下{module_name}已完成簽核並核准。", button_text="前往查看")
     _async_send(to, _mt.subject("custom_record_approved", f"{module_name}已核准：{record_no}"), html)
 
 
 def notify_custom_record_returned(module_name: str, record_no: str, note: str, requester_username: str, module_key: str = "") -> None:
     """自訂模組單據退回 → 通知申請人"""
+    _line_event("custom_record_returned", usernames=[requester_username], title=f"{module_name}退回修改", rows=[("單據", module_name), ("單號", record_no)], reason="請登入系統依退回說明修改後重新送審")
     to = _lookup_emails([requester_username], "custom_record_returned")
     if not to:
         logger.warning("notify_custom_record_returned: 申請人 %r 無設定 email（record_no=%r）", requester_username, record_no)
         return
     html = _build_html("custom_record_returned", f"{module_name}退回通知", "請修改後重新送審", "#DC2626",
                        [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
-                       intro=f"您好，您送出的{module_name}經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+                       intro=f"您好，您送出的{module_name}經簽核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
                        note=note, button_text="前往修改")
     _async_send(to, _mt.subject("custom_record_returned", f"{module_name}已退回：{record_no}"), html)
 
 
 def notify_custom_def_submitted(module_key: str, version: int, submitter: str, reviewer_usernames: list) -> None:
     """模組定義送審 → 通知模組審核人"""
+    _line_event("custom_def_submitted", usernames=reviewer_usernames, title="自訂模組定義待審核", rows=[("模組", module_key), ("版本", f"第 {version} 版"), ("送審人", submitter)], reason="請登入系統審核")
     to = _lookup_emails(reviewer_usernames, "custom_def_submitted")
     if not to:
         logger.warning("notify_custom_def_submitted: 審核人 %s 皆無設定 email（module=%r v%s）", reviewer_usernames, module_key, version)
@@ -1121,6 +1216,7 @@ def notify_custom_def_submitted(module_key: str, version: int, submitter: str, r
 
 def notify_custom_def_approved(module_key: str, version: int, decided_by: str, submitter_username: str) -> None:
     """模組定義核可並發布 → 通知送審人"""
+    _line_event("custom_def_approved", usernames=[submitter_username], title="自訂模組定義審核完成", rows=[("模組", module_key), ("版本", f"第 {version} 版"), ("核可人", decided_by)], reason="已核可並發布")
     to = _lookup_emails([submitter_username], "custom_def_approved")
     if not to:
         logger.warning("notify_custom_def_approved: 送審人 %r 無設定 email（module=%r v%s）", submitter_username, module_key, version)
@@ -1133,6 +1229,7 @@ def notify_custom_def_approved(module_key: str, version: int, decided_by: str, s
 
 def notify_custom_def_returned(module_key: str, version: int, note: str, submitter_username: str) -> None:
     """模組定義退回 → 通知送審人"""
+    _line_event("custom_def_returned", usernames=[submitter_username], title="自訂模組定義退回修改", rows=[("模組", module_key), ("版本", f"第 {version} 版")], reason="請依退回原因修改草稿後重新送審")
     to = _lookup_emails([submitter_username], "custom_def_returned")
     if not to:
         logger.warning("notify_custom_def_returned: 送審人 %r 無設定 email（module=%r v%s）", submitter_username, module_key, version)
@@ -1153,13 +1250,13 @@ def notify_bonus_submitted(quote_no: str, customer: str, approver_usernames: lis
         return
     page = f"{_base_url()}/pages/bonus.html?q={quote_no}"
     html = _build_html("bonus_submitted", 
-        "獎金分潤簽核申請", "待您審核", "#2F6FD6",
+        "獎金分潤簽核申請", "待您簽核", "#2F6FD6",
         [("案件單號", quote_no), ("客戶名稱", customer)],
         "", page,
-        intro="您好，以下案件的獎金分潤已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
-        button_text="前往審核",
+        intro="您好，以下案件的獎金分潤已送審，敬請於系統中完成簽核作業（金額請登入後查看）。",
+        button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("bonus_submitted", f"獎金分潤待審核：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("bonus_submitted", f"獎金分潤待簽核：{quote_no}（{customer}）"), html)
 
 
 def notify_bonus_payout_ready(quote_no: str, customer: str, cashier_usernames: list) -> None:
@@ -1186,12 +1283,12 @@ def notify_bonus_correction_submitted(corr_no: str, quote_no: str, approver_user
     if not to:
         logger.warning("notify_bonus_correction_submitted: 簽核人 %s 皆無設定 email（corr_no=%r）", approver_usernames, corr_no)
         return
-    html = _build_html("bonus_correction_submitted", "獎金更正單簽核申請", "待您審核", "#2F6FD6",
+    html = _build_html("bonus_correction_submitted", "獎金更正單簽核申請", "待您簽核", "#2F6FD6",
                        [("更正單", corr_no), ("原案件單號", quote_no)], "",
                        f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
-                       intro="您好，以下已發放獎金分潤的更正單已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
-                       button_text="前往審核")
-    _async_send(to, _mt.subject("bonus_correction_submitted", f"獎金更正單待審核：{corr_no}"), html)
+                       intro="您好，以下已發放獎金分潤的更正單已送審，敬請於系統中完成簽核作業（金額請登入後查看）。",
+                       button_text="前往簽核")
+    _async_send(to, _mt.subject("bonus_correction_submitted", f"獎金更正單待簽核：{corr_no}"), html)
 
 
 def notify_bonus_correction_approved(corr_no: str, quote_no: str, usernames: list, needs_payout: bool) -> None:
@@ -1217,7 +1314,7 @@ def notify_bonus_correction_returned(corr_no: str, quote_no: str, usernames: lis
     html = _build_html("bonus_correction_returned", "獎金更正單已駁回", "請修改後重新送審", "#DC2626",
                        [("更正單", corr_no), ("原案件單號", quote_no)], "",
                        f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
-                       intro="您好，您送出的獎金更正單經審核後已駁回，請參閱下方原因修改後重新送審。",
+                       intro="您好，您送出的獎金更正單經簽核後已駁回，請參閱下方原因修改後重新送審。",
                        note=reason, button_text="前往修改")
     _async_send(to, _mt.subject("bonus_correction_returned", f"獎金更正單已駁回：{corr_no}"), html)
 
@@ -1233,6 +1330,7 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
     （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
     統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
     分開連結。"""
+    _line_event("approval_reminder", usernames=approver_usernames, to_group=also_superadmin, title=f"{doc_type_label}簽核逾期提醒", rows=[("單號", doc_no), ("已等待", f"{days_elapsed} 個工作日")], reason="請儘速登入系統完成簽核", line_key=_line_entity_key("approval_reminder", doc_type_label, doc_no))
     to = list(set(_lookup_emails(approver_usernames, "approval_reminder")
                   + (_superadmin_emails("approval_reminder") if also_superadmin else [])))
     if not to:
@@ -1260,8 +1358,8 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
         #   ② 站內通知的收件人（`daily_tasks.py` 的 `notify_targets`）
         # ☠️ 順手把參數刪掉的話，**管理員會安靜地不再收到信**。
         # 🔑 文案與收件人是兩件事，而它們現在共用同一個旗標。
-        intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。",
-        button_text="前往簽核佇列",
+        intro=f"您好，以下{doc_type_label}已送出簽核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成簽核作業。",
+        button_text="前往待我簽核",
     )
     # 🔴 **同步寄，並把結果回給呼叫端。**
     # ⚠️ 原本走 `_async_send` ⇒ 丟進 `Thread` ⇒ **呼叫端拿不到任何結果**，
@@ -1276,8 +1374,9 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
 
 def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
-                              approver_names: list) -> None:
+                              approver_names: list, doc_label: str = "報價單") -> None:
     """退回改版重新送審 → 確認信給申請人"""
+    _line_event("resubmit_requester", usernames=[requester_username], title="修改版報價單已重新送審", rows=[("修改版單號", new_quote_no), ("原始單號", original_quote_no), ("客戶名稱", customer)], reason="修改版已重新進入簽核流程")
     to = _lookup_emails([requester_username], "resubmit_requester")
     if not to:
         logger.warning("notify_resubmit_requester: 申請人 %r 無設定 email（quote_no=%r）",
@@ -1285,20 +1384,23 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
         return
     approver_str = "、".join(approver_names) if approver_names else "相關簽核人員"
     html = _build_html("resubmit_requester", 
-        "修改版報價單已送審", "重新送審確認", "#2F6FD6",
+        _dl("修改版報價單已送審", doc_label), "重新送審確認", "#2F6FD6",
         [("修改版單號", new_quote_no), ("原始單號", original_quote_no),
-         ("客戶名稱", customer), ("待審核人員", approver_str)],
+         ("客戶名稱", customer), ("待簽核人員", approver_str)],
         new_quote_no, _base_url(),
-        intro="您好，您的修改版報價單已成功送出，目前正等待簽核人員審核，請耐心等候通知。",
-        button_text="前往查看報價單",
+        intro=_dl("您好，您的修改版報價單已成功送出，目前正等待簽核人員簽核，請耐心等候通知。", doc_label),
+        button_text=_dl("前往查看報價單", doc_label),
     )
-    _async_send(to, _mt.subject("resubmit_requester", f"修改版報價單已送審：{new_quote_no}（{customer}）"), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(new_quote_no)
+    _async_send(to, _mt.subject("resubmit_requester", _dl(f"修改版報價單已送審：{new_quote_no}（{customer}）", doc_label)), html, *((_rt,) if _rt else ()))
 
 
 def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
                                assignee_usernames: list,
                                description: str = '') -> None:
     """工作事項指派 → 通知被指派人"""
+    _line_event("daily_task_assigned", usernames=assignee_usernames, title="工作事項指派", rows=[("執行日期", task_date)], reason="有一項工作事項指派給您")
     to = _lookup_emails(assignee_usernames, "daily_task_assigned")
     if not to:
         logger.warning("notify_daily_task_assigned: 指派對象 %s 皆無設定 email（task_id=%d）",
@@ -1320,6 +1422,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
 def notify_dev_case_delete_request(case_id: int, case_name: str,
                                    requester_display: str, reason: str = '') -> None:
     """業務開發案件刪除申請 → 通知所有最高管理者審核"""
+    _line_event("dev_case_delete_request", to_group=True, title="業務開發案件刪除申請", rows=[("案件名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
     to = _superadmin_emails("dev_case_delete_request")
     if not to:
         logger.warning("notify_dev_case_delete_request: 無最高管理者 email（case_id=%d）", case_id)
@@ -1329,10 +1432,10 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
     if reason and reason.strip():
         rows.append(("刪除原因", reason.strip()))
     html = _build_html("dev_case_delete_request", 
-        "業務開發案件刪除申請", "請盡速審核", "#DC2626",
+        "業務開發案件刪除申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統審核。",
-        button_text="前往審核",
+        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統簽核。",
+        button_text="前往簽核",
     )
     _async_send(to, _mt.subject("dev_case_delete_request", f"業務開發案件刪除申請：{case_name}"), html)
 
@@ -1340,6 +1443,7 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
 def notify_dev_case_relink_request(case_id: int, case_name: str, requester_display: str,
                                    target_quote_no: str = '', reason: str = '') -> None:
     """業務開發案件報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
+    _line_event("dev_case_relink_request", to_group=True, title="業務開發案件連結異動申請", rows=[("案件名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
     to = _superadmin_emails("dev_case_relink_request")
     if not to:
         logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
@@ -1350,10 +1454,10 @@ def notify_dev_case_relink_request(case_id: int, case_name: str, requester_displ
     if reason and reason.strip():
         rows.append(("申請原因", reason.strip()))
     html = _build_html("dev_case_relink_request", 
-        "業務開發案件報價單連結異動申請", "請盡速審核", "#DC2626",
+        "業務開發案件報價單連結異動申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統審核。",
-        button_text="前往審核",
+        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統簽核。",
+        button_text="前往簽核",
     )
     _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
 
@@ -1366,6 +1470,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
                                 old_report: str = "") -> None:
     """工作事項完成回報 → 通知指定主管；未指定則通知所有 admin/superadmin。
     is_edit=True 時使用「已修改」格式並顯示修改前後對照。"""
+    _line_event("daily_task_completed", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項完成回報", rows=[("執行日期", task_date), ("完成人員", completed_by_display or completed_by_username)], reason="有一項工作事項已完成")
     if supervisor_usernames:
         to = _lookup_emails(supervisor_usernames, "daily_task_completed")
         if not to:
@@ -1413,6 +1518,7 @@ def notify_daily_task_overdue(task_id: int, title: str, task_date: str,
                               assignee_username: str, assignee_display: str,
                               supervisor_usernames: list = None) -> None:
     """逾期未完成工作事項 → 通知被指派人 + 指定主管（若有），否則通知所有 admin/superadmin"""
+    _line_event("daily_task_overdue", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項逾期未完成", rows=[("執行日期", task_date), ("負責人員", assignee_display or assignee_username)], reason="有一項工作事項已超過期限", line_key=_line_entity_key("daily_task_overdue", task_id))
     assignee_to = _lookup_emails([assignee_username], "daily_task_overdue")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "daily_task_overdue")
@@ -1455,6 +1561,7 @@ def notify_daily_task_overdue_manager(task_id: int, title: str, task_date: str,
     這裡走的是組織架構（departments.manager_user_id），department_id
     是空值或部門沒有主管時直接安靜跳過，不當錯誤處理（純通知性質，
     不像簽核路由那樣需要擋下流程）。"""
+    _line_event("daily_task_overdue_manager", usernames=_department_manager_usernames(department_id), title="部門成員工作事項逾期", rows=[("執行日期", task_date), ("負責人員", assignee_display or assignee_username)], reason="部門成員有一項工作事項已超過期限", line_key=_line_entity_key("daily_task_overdue_manager", task_id))
     to = _department_manager_emails(department_id, "daily_task_overdue_manager")
     if not to:
         return
@@ -1484,6 +1591,7 @@ def notify_range_task_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """區間工作事項即將到期 → 指派人 + 主管"""
+    _line_event("range_task_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="區間工作事項即將到期", rows=[("截止日期", end_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期" if days_left == 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("range_task_deadline", task_id))
     assignee_to = _lookup_emails([assignee_username], "range_task_deadline")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "range_task_deadline")
@@ -1526,6 +1634,7 @@ def notify_case_stage_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """案件執行進度階段即將到期／已逾期 → 負責人 + 主管（無則 admin）"""
+    _line_event("case_stage_deadline", usernames=[assignee_username] + list(supervisor_usernames or []), to_group=not supervisor_usernames, title="案件執行進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("case_stage_deadline", quote_no, stage_label))
     assignee_to = _lookup_emails([assignee_username], "case_stage_deadline")
     if supervisor_usernames:
         mgr_to = _lookup_emails(supervisor_usernames, "case_stage_deadline")
@@ -1572,6 +1681,7 @@ def notify_case_stage_deadline_manager(
     比照 notify_daily_task_overdue_manager 的既有原則：獨立事件 key，跟負責人自己收到的
     case_stage_deadline 分開訂閱/取消訂閱；department_id 是空值或部門沒有主管時安靜跳過，
     純通知性質，不擋流程。"""
+    _line_event("case_stage_deadline_manager", usernames=_department_manager_usernames(department_id), title="部門成員案件進度即將到期", rows=[("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", assignee_display or assignee_username)], reason="今天到期或已逾期" if days_left <= 0 else "尚餘 %s 天到期" % days_left, line_key=_line_entity_key("case_stage_deadline_manager", quote_no, stage_label))
     to = _department_manager_emails(department_id, "case_stage_deadline_manager")
     if not to:
         return
@@ -1599,6 +1709,7 @@ def notify_case_stage_deadline_manager(
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
     """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
+    _line_event("dev_case_stale", usernames=usernames, title="業務開發案件逾期未跟進", rows=[("案件名稱", case_name), ("客戶", customer_name or "（未指定）"), ("停滯天數", "%s 天" % days_since_update)], reason="請聯繫客戶並登錄開發紀錄", line_key=_line_entity_key("dev_case_stale", case_id))
     to = _lookup_emails(usernames, "dev_case_stale")
     if not to:
         logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
@@ -1619,6 +1730,7 @@ def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
                              assignee_username: str, assignee_display: str,
                              assigned_by_display: str = '') -> None:
     """業務開發案件指派 → 通知被指派人（含回覆期限）"""
+    _line_event("dev_case_assigned", usernames=[assignee_username], title="業務開發案件指派", rows=[("案件名稱", case_name), ("回覆期限", reply_deadline or "未設定"), ("指派人", assigned_by_display or "管理員")], reason="請於期限內跟進並回報進度")
     to = _lookup_emails([assignee_username], "dev_case_assigned")
     if not to:
         logger.warning("notify_dev_case_assigned: 無有效收件人（case_id=%d, assignee=%s）", case_id, assignee_username)
@@ -1639,6 +1751,7 @@ def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
 def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: str,
                                   days_overdue: int, assignee_display: str, usernames: list) -> None:
     """業務開發案件回覆期限已過、被指派人自指派後沒有任何進度回報 → 通知被指派人與指派人（每案每期限只寄一次，由呼叫端的 guard key 保證）"""
+    _line_event("dev_case_reply_overdue", usernames=usernames, title="業務開發案件回覆期限已過", rows=[("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"), ("回覆期限", reply_deadline), ("逾期天數", "%s 天" % days_overdue)], line_key=_line_entity_key("dev_case_reply_overdue", case_id, reply_deadline))
     to = _lookup_emails(usernames, "dev_case_reply_overdue")
     if not to:
         logger.warning("notify_dev_case_reply_overdue: 無有效收件人（case_id=%d）", case_id)
@@ -1658,6 +1771,7 @@ def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: 
 def notify_dev_log_directive(case_id: int, case_name: str, usernames: list, directive_by_display: str = '') -> None:
     """開發記錄批示 → 通知「要回覆」的對象。本文**不放批示全文**（批示限作者／對象／管理員可見，信件可能被轉寄；
     全文只在系統裡），只放案名、批示人與請登入查看。只寄 must_reply 的人是呼叫端決定的。"""
+    _line_event("dev_log_directive", usernames=usernames, title="業務開發記錄批示", rows=[("案件名稱", case_name), ("批示人", directive_by_display or "管理員")], reason="請登入系統查看並回覆")
     to = _lookup_emails(usernames, "dev_log_directive")
     if not to:
         logger.warning("notify_dev_log_directive: 無有效收件人（case_id=%d）", case_id)
@@ -1683,6 +1797,7 @@ def notify_daily_task_edited(
     supervisor_usernames: list = None,
 ) -> None:
     """工作事項編輯 → 通知指定主管；未指定則通知所有 admin/superadmin"""
+    _line_event("daily_task_edited", usernames=list(supervisor_usernames or []), to_group=not supervisor_usernames, title="工作事項內容已編輯", rows=[("執行日期", task_date), ("編輯人員", editor_display or editor_username)], reason="有一項工作事項內容已被編輯")
     if supervisor_usernames:
         to = _lookup_emails(supervisor_usernames, "daily_task_edited")
         if not to:
@@ -1741,6 +1856,8 @@ def notify_warranty_expiry(
 ) -> None:
     """保固即將到期 → 業務員 + 管理員。⚠️ 舊入口：`sales_person` 是**帳號**（以 username 比對），不是顯示名；
     案件的每日檢查已改走 `_send_warranty_expiry`（用 FK 找業務帳號、先寄成功才記已通知）。"""
+    m_line = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
+    _line_event("warranty_expiry", usernames=[sales_person], to_group=True, title=m_line["title"], rows=m_line["rows"], reason=m_line["subject"], line_key=_warranty_line_key(quote_no, device_name, days_left))
     to = list(dict.fromkeys(_lookup_emails([sales_person], "warranty_expiry") + _admin_emails("warranty_expiry")))
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
@@ -1751,17 +1868,26 @@ def notify_warranty_expiry(
     _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
 
 
+def _warranty_line_key(quote_no, sn, days_left) -> str:
+    """保固到期的 LINE「已推播」鑰匙：每張報價單＋每台設備（序號／MAC／名稱，**與 `case_deadlines` 的 `warranty_notif.*` 記號同一個 `sn`**）＋每個提醒階段（緊急／提早）只推一次。
+    不能用顯示名：同一張單兩台同名設備會共用鑰匙，第二台被誤判成「已推過」。"""
+    from helpers.alert_settings import warranty_mail_days
+    urgent, early = warranty_mail_days()
+    return "warranty_expiry|%s|%s|%s" % (quote_no, sn, urgent if days_left <= urgent else early)
+
+
 def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
-                         owner_username: str = "", out: dict = None) -> bool:
+                         owner_username: str = "", out: dict = None, sn: str = "") -> bool:
     """保固即將到期 → 案件業務（帳號）＋群組收件人，**等寄送結果**。回 True＝呼叫端可以寫「已通知」記號
     （寄出／結果不明／永久失敗）；False＝沒有收件人或暫時失敗（不寫記號，下次每日檢查重試）。
-    `owner_username` 由呼叫端用案件的 `sales_person_id` 外鍵解出（`helpers/case_access.case_owner_username`），**不是**報價單上的顯示名。永不丟例外。"""
+    `sn`＝設備識別（呼叫端與已通知記號同一個值；沒傳退回顯示名），用在 LINE 的已推播鑰匙。`owner_username` 由呼叫端用案件的 `sales_person_id` 外鍵解出（`helpers/case_access.case_owner_username`），**不是**報價單上的顯示名。永不丟例外。"""
     try:
         m = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
         return send_registered("warranty_expiry", title=m["title"], rows=m["rows"], usernames=[owner_username] if owner_username else [],
                                to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
                                link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
-                               button_text=m["button_text"], note=m["intro"], wait=True, out=out)
+                               button_text=m["button_text"], note=m["intro"], wait=True, out=out,
+                               line_key=_warranty_line_key(quote_no, sn or device_name, days_left))
     except Exception:
         logger.exception("_send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
         return False
@@ -1769,6 +1895,7 @@ def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_l
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
     """精算完結 → 通知 admin_emails"""
+    _line_event("settlement_finalized", to_group=True, title="成本精算完結", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("完結人員", finalized_by)])
     to = _admin_emails("settlement_finalized")
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
@@ -1787,6 +1914,7 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理者（2026-08-25）。
     報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
     發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
+    _line_event("case_closing_report", to_group=True, title="案件結案報表已產生", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")], reason="報表為內部機密，請登入系統查看，不在 LINE 傳送")
     to = _superadmin_emails("case_closing_report")
     if not to:
         logger.warning("notify_case_closing_report: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1818,6 +1946,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
     概念）＋最高管理者（不論如何都通知，即使 pending_usernames 已涵蓋所有
     superadmin，重複的 email 由呼叫端 set() 去重）。"""
+    _line_event("case_close_blocked", usernames=pending_usernames, to_group=True, title="結案被擋下", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"), ("未達成項目", "%s 項" % len(reasons or []))], reason="請登入系統處理未完成項目後再結案")
     to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
                   + _superadmin_emails("case_close_blocked")))
     if not to:
@@ -1843,6 +1972,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""
+    _line_event("case_change_requested", to_group=True, title="已結案案件變更待簽核", rows=[("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display)], reason="請登入系統簽核")
     to = _superadmin_emails("case_change_requested")
     if not to:
         logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
@@ -1850,14 +1980,14 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     queue_page = f"{_base_url()}/pages/approval-queue.html"
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html("case_change_requested", 
-        "已結案案件變更待審核", "待審核", "#7C3AED",
+        "已結案案件變更待簽核", "待簽核", "#7C3AED",
         [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
          ("變更內容", summary)],
         "", queue_page,
-        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於簽核佇列審核後才會套用。",
-        button_text="前往簽核佇列",
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理者於「待我簽核」簽核後才會套用。",
+        button_text="前往待我簽核",
     )
-    _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待審核：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("case_change_requested", f"已結案案件變更待簽核：{quote_no}（{customer}）"), html)
 
 
 # ── Monthly report ────────────────────────────────────────────────────────────
@@ -1988,6 +2118,8 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
 def notify_monthly_report(period_label: str, period_str: str,
                           excel_bytes: bytes, pdf_bytes: bytes) -> None:
     """每月營運報表 → 寄送 Excel + PDF 附件給設定的收件人（見 _monthly_report_recipient_emails）"""
+    _mr_users, _mr_group = _monthly_report_line_targets()
+    _line_event("monthly_report", usernames=_mr_users, to_group=_mr_group, title="每月營運報表已產生", rows=[("報表期間", period_label)], reason="完整內容請見 Email 附件或登入系統查看線上報表")
     to = _monthly_report_recipient_emails()
     if not to:
         logger.warning("notify_monthly_report: 無 superadmin email 收件人（period=%r）", period_str)
@@ -2026,15 +2158,56 @@ def notify_monthly_report(period_label: str, period_str: str,
     ).start()
 
 
+#: 🔴 勞報單／獎金／薪資類的「模組動態」永不發 LINE（內容含受款人姓名與單號；使用者裁示 2026-11-13，審查 H1）。
+#: 比對模組名稱字樣（不是白名單）：日後新增的同類模組只要名稱含這些字就自動擋住。呼叫端另外帶 `line_skip=True`（雙重保險；守門測試掃 payroll 模組全部呼叫點）。
+_LINE_NEVER_WORDS = ("勞報", "獎金", "薪資", "薪轉", "payslip", "bonus", "payroll")
+
+
+def _line_never(module_label) -> bool:
+    t = str(module_label or "").lower()
+    return any(w in t for w in _LINE_NEVER_WORDS)
+
+
+#: 🔴 外包名冊／承攬商往來紀錄：LINE 不放姓名與項目（使用者裁示 2026-11-13；Email 維持原樣），只寫一句固定的話。
+def _line_generic_text(module_label, action_label) -> str:
+    m, a = str(module_label or ""), str(action_label or "")
+    if m == "外包名冊":
+        return "外包名冊有一筆新增／異動"
+    if m == "承攬商管理" and "往來紀錄" in a:
+        return "承攬商往來紀錄有一筆新增"
+    return ""
+
+
 def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
-                           page_path: str = "", detail: str = "", audience: str = "admins") -> None:
+                           page_path: str = "", detail: str = "", audience: str = "admins",
+                           line_event: str = "", line_usernames: list = None, line_exclude: list = None, line_skip: bool = False) -> None:
     """Non-blocking email to all admin/superadmin when a new item is created in any module.
 
     detail: optional full free-text body (comment / log content / note ...). Always rendered
     in full, never truncated — the point is recipients can read the whole thing in the email
     itself without having to log into the system. Pass the real content here instead of
-    folding a truncated snippet into item_label."""
+    folding a truncated snippet into item_label.
+
+    LINE（2026-11-13）：**信件一律不變**（收件人／主旨／內文照舊）。LINE 端——
+    ① 呼叫端傳 `line_event`（`line_catalog.LINE_ONLY_EVENTS` 裡 kind="sub" 的細項事件，例如 `crm_case_status`）＋`line_usernames`（事件收件人＝案件相關人）：發該細項事件，
+       `line_exclude`＝要排除的帳號（操作者本人）；預設只發給 `line_usernames`（沒人＝不發），最高管理者想收可在設定頁用「另加指定人員」。
+    ② 沒傳 `line_event`：發泛用的 `module_activity`（群組收件人，財務類走財務群組）；預設關，由最高管理者決定要不要開。
+    ③ `line_skip=True`：這個操作的 LINE 已由專屬事件負責（例如指派案件＝`dev_case_assigned`），這裡不再發泛用的那一則（避免同一件事推兩次）。
+    🔴 LINE 只放「模組／動作／項目名稱」，**不放 `detail`**（自由文字：留言、記錄內容、備註）。"""
+    _line_rows = [("項目", item_label)]
+    _line_reason = f"{actor} 在「{module_label}」執行了「{action_label}」"
+    _line_title = f"{module_label}：{action_label}"
+    _generic = _line_generic_text(module_label, action_label)
+    if _generic:                                                       # 外包名冊／承攬商往來紀錄：LINE 不放姓名與項目（使用者裁示），信件照舊
+        _line_title, _line_rows, _line_reason = _generic, [], "請登入系統查看"
+    if line_skip or _line_never(module_label):                         # 勞報單／獎金／薪資類永不發 LINE（雙重保險：呼叫端 line_skip＋這裡依模組名擋）
+        pass
+    elif line_event:
+        _line_event(line_event, usernames=line_usernames, title=_line_title, rows=_line_rows, reason=_line_reason, exclude=line_exclude)
+    else:
+        _line_event("module_activity", to_group=True, group=("finance" if audience == "finance" else None),
+                    title=_line_title, rows=_line_rows, reason=_line_reason, exclude=line_exclude)
     # audience="finance"（第42班）：付款／匯款／沖銷這類財務事件只寄「財務」角色＋最高管理者，不寄全體 admin
     to = _finance_audience_emails("module_activity") if audience == "finance" else _admin_emails("module_activity")
     if not to:
@@ -2059,6 +2232,7 @@ def notify_case_project_overdue(
     days_overdue: int,
 ) -> None:
     """案件專案期間已超期 → 所有 admin/superadmin"""
+    _line_event("case_project_overdue", to_group=True, title="案件專案期間已超期", rows=[("案件號", quote_no), ("客戶", customer_name), ("專案名稱", project_name or "（未填）"), ("預計結束日期", end_date)], reason="已超過預定的專案期間", line_key=_line_entity_key("case_project_overdue", quote_no))
     to = _admin_emails("case_project_overdue")
     if not to:
         return
@@ -2092,6 +2266,7 @@ def notify_cert_expiry(
     好幾百天後才第一次寄出，那時候沒有人會記得 mkcert 或 Posh-ACME 是什麼、
     更不會記得要去翻哪份文件。信裡查得到做法，才不用等到出事當天現學。
     """
+    _line_event("cert_expiry", to_group=True, title="HTTPS 憑證即將到期", rows=[("到期日", not_after), ("剩餘天數", "%s 天" % days_left)], reason="到期後瀏覽器會出現安全性警告", line_key=_line_day_key("cert_expiry"))
     to = _admin_emails("cert_expiry")
     if not to:
         return
@@ -2165,6 +2340,7 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
     notify_cert_expiry() 的作法。備份斷掉跟憑證到期一樣，都是那種**隔很久才
     第一次寄出、寄出時沒有人記得當初怎麼設計的**的告警。
     """
+    _line_event("backup_stale", to_group=True, title="備份已停止運作", rows=[("超過", "%s 小時沒有成功備份" % threshold_hours)], reason="請檢查備份排程、雲端硬碟掛載與磁碟空間", line_key=_line_day_key("backup_stale"))
     to = _admin_emails("backup_stale")
     if not to:
         return
@@ -2190,7 +2366,7 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
         "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 有沒有內容"
         "<br>3. 雲端碟是否掛得起來（任一磁碟機代號下要找得到 "
         "<code>我的雲端硬碟\\系統存檔</code>）"
-        "<br>4. <code>backend\\logs\\server.log</code> 搜尋 <code>_daily_backup</code>"
+        "<br>4. <code>backend\\logs\\app.log</code> 搜尋 <code>_daily_backup</code>（錯誤也會寫在 <code>server.log</code>）"
         "<br>5. <b>是否有第二台機器掛載同一個雲端資料夾</b>："
         "先執行的機器會寫入當日 <code>.done</code>，正式機將略過備份，且不留下錯誤紀錄"
         "<br><br><b>立即補救</b>：在正式機執行 "
@@ -2218,6 +2394,7 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
     回傳＝「呼叫端可以寫『今天寄過了』旗標」（K 審 L1）：等寄送結果（`handle.wait()`），
     寄出／結果不明（重寄恐雙寄）／永久失敗（天天重試只是天天失敗）＝True；沒有收件人、暫時失敗、機器層級略過＝False（隔天重試）。
     """
+    _line_event("heartbeat_stale", to_group=True, title="心跳監控異常", rows=[("狀況", summary)], reason="請檢查心跳排程與對外連線", line_key=_line_day_key("heartbeat_stale"))
     to = _admin_emails("heartbeat_stale")
     if not to:
         return False
@@ -2293,6 +2470,7 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
     **兩種觸發共用一封信與同一個通知偏好 key**（`disk_space_low`）：對收信的人來說
     這是同一件事（空間被吃掉了，要去清），分成兩個開關只會讓人多關一個。
     """
+    _line_event("disk_space_low", to_group=True, title="磁碟空間不足", rows=[("狀況", "%d 個磁碟空間不足" % len(problems or []))], reason="請清理暫存檔案或擴充磁碟空間", line_key=_line_day_key("disk_space_low"))
     to = _admin_emails("disk_space_low")
     if not to:
         return

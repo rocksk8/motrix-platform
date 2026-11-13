@@ -16,7 +16,8 @@ function voucherPage() {
   return {
     // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；邏輯一律用原始值
     stLabel(raw, ctx, fallback) {
-      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx || 'voucher', fallback)      // 傳票情境：『待審核』維持原字（會計傳票的「審核」是會計用語；PM 裁示 2026-11-13）
+         : (fallback != null ? fallback : (raw == null ? '' : raw))
     },
     // ── 單據 ──
     id: 0,                // 0 ＝ 尚未儲存的新單

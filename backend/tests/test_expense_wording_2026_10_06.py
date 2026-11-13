@@ -26,7 +26,7 @@ GONE = [
 KEPT = [
     (source_tree.page_file("payment-request-form.html"), ["新增請款單", "編輯請款單"]),
     (BACKEND / "modules" / "arap" / "api" / "payment_requests.py", ["請款單 {request_no}", "請款單不存在"]),
-    (BACKEND / "helpers" / "mail_types.py", ["請款單待審核"]),
+    (BACKEND / "helpers" / "mail_types.py", ["請款單待簽核"]),
 ]
 
 

@@ -623,6 +623,72 @@ def test_kfix_s1_the_audit_goes_to_the_main_db_even_when_the_request_is_a_demo_s
     assert [a for a, _ in _audit_rows()] == ["license.emergency_pass"]
 
 
+def _break_audit_db(monkeypatch):
+    """讓稽核寫入的連線開不起來（模擬「資料庫忙到逾時」）；回一個函式把它修好。"""
+    import db
+    import sqlite3
+    real = db._connect
+
+    def _busy(*a, **kw):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(db, "_connect", _busy)
+    return lambda: monkeypatch.setattr(db, "_connect", real)
+
+
+@pytest.mark.parametrize("which", ["emergency", "dev_key", "startup_blocked"])
+def test_lg_s2_a_failed_audit_write_is_retried_not_lost_for_the_day(client, monkeypatch, caplog, which):
+    """T80稽核 LG-S2：「今天已警告」以前在寫稽核**之前**就標記；庫忙到逾時那天的稽核紀錄永遠補不回來。
+    現在：失敗 ⇒ 不標記；retry 視窗內不重寫（不要每個請求都開一條 30 秒的寫入）；視窗過後下一次會補上；補上之後同一天不再寫。"""
+    if which == "emergency":
+        info = {"pass_id": "abc123abc123", "until": "2099-01-01", "note": "n", "env": "prod"}
+        fire, action = (lambda: la.emergency_in_use(info)), "license.emergency_pass"
+    elif which == "dev_key":
+        st = {"valid": True, "env": "dev", "customer": "測試", "expires": "2099-01-01"}
+        fire, action = (lambda: la.dev_key_in_use(st)), "license.dev_key"
+    else:
+        monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", True)
+        monkeypatch.setattr(lic, "verify_license", lambda: {"valid": False, "reason": "missing", "customer": None})
+        monkeypatch.setattr(lic, "emergency_pass", lambda status: None)
+        fire, action = (lambda: la.startup_check() == "blocked"), "license.startup_blocked"
+    repair = _break_audit_db(monkeypatch)
+    with caplog.at_level(logging.ERROR, logger=la.logger.name):
+        fire()
+    assert any("稽核寫入失敗" in r.getMessage() for r in caplog.records), "寫入失敗要有 ERROR log（不是悄悄吞掉）"
+    repair()
+    la.flush()
+    assert _audit_rows() == [], "前提：第一次真的沒寫進去"
+    # retry 視窗內：不重寫（庫還是忙的時候不要每個請求都再打一次）
+    fire()
+    assert _audit_rows() == []
+    # 視窗過後：補上
+    monkeypatch.setattr(la, "_RETRY_AFTER_S", 0.0)
+    fire()
+    assert [a for a, _ in _audit_rows()] == [action], "失敗那天的稽核紀錄要補得回來"
+    # 補上之後同一天不再寫
+    fire()
+    fire()
+    assert [a for a, _ in _audit_rows()] == [action]
+
+
+def test_lg_s2_concurrent_requests_do_not_start_a_second_write_while_one_is_in_flight(client, monkeypatch):
+    """正在寫的時候（名額被領走、還沒結算），別的請求不可以再開一條。"""
+    st = {"valid": True, "env": "dev", "customer": "測試", "expires": "2099-01-01"}
+    assert la._claim("dev_key") is True
+    assert la.dev_key_in_use(st) is False, "名額還被領著（pending）⇒ 不再寫"
+    la._settle("dev_key", False)
+    assert la._claim("dev_key") is False, "剛失敗、還在 retry 視窗內"
+    monkeypatch.setattr(la, "_RETRY_AFTER_S", 0.0)
+    assert la._claim("dev_key") is True
+
+
+def test_lg_s2_a_claim_that_never_settles_goes_stale(monkeypatch):
+    """領了名額卻沒結算（例如執行緒被砍）不可以讓這個告警永遠沒人寫。"""
+    assert la._claim("dev_key") is True
+    assert la._claim("dev_key") is False
+    monkeypatch.setattr(la, "_PENDING_STALE_S", 0.0)
+    assert la._claim("dev_key") is True
+
+
 def test_kfix_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(client, hdr, monkeypatch):
     """S6：指紋讀不到時 machine_fingerprint() 不快取（每次都跑硬體查詢）；狀態端點被前端反覆呼叫，不可以每次都打。"""
     import routers.licensing as rl

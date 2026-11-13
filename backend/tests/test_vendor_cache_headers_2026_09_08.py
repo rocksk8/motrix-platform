@@ -18,15 +18,16 @@ def test_vendor_js_is_long_cached(client):
     assert "max-age=31536000" in cc
 
 
-def test_app_js_still_no_store(client):
+def test_app_js_without_version_is_revalidated_not_immutable(client):
+    """2026-11-13：app 自己的 JS 沒帶 ?v= ⇒ no-cache（每次都問、沒變回 304），不是 immutable；帶目前版本才 immutable。"""
     r = client.get("/static/sidebar.js")
     assert r.status_code == 200
     cc = r.headers.get("cache-control", "")
-    assert "no-store" in cc
+    assert cc == "no-cache" and "immutable" not in cc
 
 
-def test_page_html_still_no_store(client):
+def test_page_html_is_revalidated(client):
     r = client.get("/pages/login.html")
     assert r.status_code == 200
     cc = r.headers.get("cache-control", "")
-    assert "no-store" in cc
+    assert cc == "no-cache" and "immutable" not in cc and r.headers.get("etag")

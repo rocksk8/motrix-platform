@@ -28,7 +28,7 @@ GLOBAL_TABLES = {
     "env_guide_environments", "env_guide_links", "env_guide_recommendations", "geocode_cache", "geocode_usage", "idempotency_keys", "item_reads",
     "login_rate_limit", "module_schema_versions", "module_versions", "payslip_seq", "permission_changes", "purchase_suggestion_status",
     "quote_seq", "schema_version", "sessions", "system_settings", "t100_export_confirmations", "tender_fetch_log", "ui_definitions",
-    "user_activity_daily", "user_duty_roles", "user_list_prefs", "user_list_view_prefs", "user_perm_subtracts", "user_request_log", "users",
+    "user_activity_daily", "user_duty_roles", "user_list_prefs", "user_list_view_prefs", "user_perm_subtracts", "user_prefs", "user_request_log", "users",
     "voucher_template_versions", "voucher_templates", "webauthn_credentials",
 }
 #: 模組自己的 migration 就帶 owner_unit_id 的新表（隨所屬記錄的單位；不屬 core 的 U0A_OWNER_UNIT_TABLES，也不在模組自有「待補欄」清單）

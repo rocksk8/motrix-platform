@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>法規參數設定 — MOTRIX 專案管理系統</title>
+  <title>法規參數設定 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -26,7 +26,30 @@
     .lp-bad { color: var(--danger); font-size: 12px; }
     .lp-actions { display: flex; gap: 10px; margin-top: 16px; max-width: 1100px; align-items: center; }
     .lp-src { max-width: 1100px; margin-top: 18px; font-size: 12px; color: var(--text-dim); line-height: 1.7; word-break: break-all; }
-    @media (max-width: 767px) { .lp-main { margin-left: 0; padding: 20px 16px; } }
+    @media (max-width: 767px) {
+      .lp-main { margin-left: 0; padding: 20px 16px; }
+      .lp-card { overflow: visible; border: none; background: none; margin-top: 14px }
+      /* 每個版本一張卡片；欄位名稱放在輸入框上方（原表頭在手機上要橫滑才看得到） */
+      .lp-table.m-cards tr { gap: 12px 12px; align-items: flex-start }
+      .lp-table.m-cards td { flex: 1 1 100%; white-space: normal !important }
+      .lp-table.m-cards td:nth-child(1), .lp-table.m-cards td:nth-child(2) { flex: 1 1 calc(50% - 6px) }
+      .lp-table.m-cards td:last-child { flex: 1 0 100% }
+      .lp-table.m-cards td:last-child::before { content: none }
+      .lp-table.m-cards td input { width: 100% !important; box-sizing: border-box; font-size: 16px; min-height: 44px; padding: 8px 10px }
+      .lp-table.m-cards td:nth-child(1) .lp-tag { display: inline-block; margin-top: 6px }
+      .lp-table.m-cards td .btn { width: 100%; min-height: 44px; justify-content: center }
+      .lp-actions { flex-wrap: wrap }
+      .lp-actions .btn { min-height: 44px; flex: 1 1 140px; justify-content: center }
+      .lp-table.m-cards td:nth-child(1)::before { content: '版本'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(2)::before { content: '生效日'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(3)::before { content: '最低工資（月）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(4)::before { content: '兼職薪資補充保費門檻（50）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(5)::before { content: '薪資起扣（50）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(6)::before { content: '執行業務起扣（9A／9B）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(7)::before { content: '補充保費費率'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(8)::before { content: '補充保費門檻（9A／9B）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+      .lp-table.m-cards td:nth-child(9)::before { content: '獎金補充保費門檻（投保金額 × N）'; display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px }
+    }
   </style>
 </head>
 <body x-data="legalParamsPage()" x-init="init()" x-cloak>
@@ -47,7 +70,7 @@
     </template>
 
     <div class="lp-card">
-      <table class="lp-table">
+      <table class="lp-table m-cards">
         <thead>
           <tr>
             <th>版本</th><th>生效日</th><th>最低工資（月）</th><th>兼職薪資補充保費門檻（50）</th>

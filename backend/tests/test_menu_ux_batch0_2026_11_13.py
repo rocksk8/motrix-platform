@@ -12,6 +12,9 @@ import re
 
 import pytest
 
+from core import source_tree
+from tests import _frontend_sources as FS
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FRONT = ROOT / "frontend"
 BACK = ROOT / "backend"
@@ -21,9 +24,14 @@ def _read(p):
     return pathlib.Path(p).read_text(encoding="utf-8")
 
 
+def _page(name):
+    """頁面位置一律經 core.source_tree（頁面可能住在模組的 pages/ 底下）。"""
+    return source_tree.page_file(name)
+
+
 def test_visible_files_never_say_old_admin_titles():
     bad = []
-    for p in list(FRONT.rglob("*.html")) + list(FRONT.rglob("*.js")) + [BACK / "core" / "menu_l1.json", BACK / "core" / "system_hub_l1.json"] + list((BACK / "modules").glob("*/module.json")):
+    for p in list(source_tree.page_files()) + list(FS.all_js()) + [BACK / "core" / "menu_l1.json", BACK / "core" / "system_hub_l1.json"] + list((BACK / "modules").glob("*/module.json")):
         t = _read(p)
         for old in ("超級管理員", "最高管理員", "超管"):
             if old in t:
@@ -61,22 +69,22 @@ def test_audit_page_is_called_operation_log():
     menu = json.loads(_read(BACK / "core" / "menu_l1.json"))
     txt = json.dumps(menu, ensure_ascii=False)
     assert "操作紀錄" in txt and '"歷史紀錄"' not in txt
-    assert "<title>操作紀錄" in _read(FRONT / "pages" / "audit-log.html")
+    assert "<title>操作紀錄" in _read(_page("audit-log.html"))
 
 
 
 def test_online_stats_has_no_literal_markdown_stars():
-    assert "**" not in _read(FRONT / "pages" / "online-stats.html")
+    assert "**" not in _read(_page("online-stats.html"))
 
 
 def test_recycle_bin_reason_is_marked_required_and_blocks_the_button():
-    html = _read(FRONT / "pages" / "recycle-bin.html")
+    html = _read(_page("recycle-bin.html"))
     assert "原因（選填）" not in html and "原因（必填" in html
     assert "!ap.reason_text" in html
 
 
 def test_planned_cards_do_not_show_train_codes():
-    html = _read(FRONT / "pages" / "settings-center.html")
+    html = _read(_page("settings-center.html"))
     assert "預計 ' + p.plannedTrain" not in html and "版提供" not in html
 
 
@@ -146,10 +154,10 @@ def test_blocked_send_message_is_plain():
 
 
 def test_role_keys_are_not_shown_as_labels():
-    users = _read(FRONT / "pages" / "users.html")
+    users = _read(_page("users.html"))
     for k in ("superadmin", "admin", "sales", "engineer", "finance", "viewer"):
         assert ('letter-spacing:.05em">%s</div>' % k) not in users, k
-    assert "（僅 superadmin 可修改" not in _read(FRONT / "pages" / "cashier.html")
+    assert "（僅 superadmin 可修改" not in _read(_page("cashier.html"))
     ns = _notif_page_src()
     assert "為 admin 或 superadmin 帳號" not in ns and "<strong>superadmin</strong>" not in ns
 
@@ -159,7 +167,7 @@ def test_role_codes_are_never_printed_on_screen():
     idx = _read(FRONT / "index.html")
     assert "' · ' + (session.role || '')" not in idx and "MotrixRole.label(session.role)" in idx
     assert "static/role-label.js" in idx
-    dr = _read(FRONT / "pages" / "duty-roles.html")
+    dr = _read(_page("duty-roles.html"))
     assert 'x-text="u.role"' not in dr and "MotrixRole.label(u.role)" in dr and "static/role-label.js" in dr
     assert "st.preview.role + '）" not in _read(FRONT / "static" / "menu-editor.js")
     assert "previewResult.role + " not in _read(FRONT / "static" / "user-buttons.js")

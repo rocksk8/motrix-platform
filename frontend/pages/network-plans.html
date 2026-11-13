@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>網路架構規劃書 — MOTRIX 專案管理系統</title>
+  <title>網路架構規劃書 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/display-labels.js"></script>
   <script src="../static/privacy-notice.js"></script>
@@ -52,6 +52,30 @@
     .stock-item-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-size:12px}
     .stock-item-row:hover{border-color:var(--accent);background:var(--accent-light)}
     .btn-xs{padding:4px 8px;font-size:12px}
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       6 欄表格在手機案場名稱被擠成一字一行、狀態欄一字一行 → 一份規劃書一張卡（編號＋狀態、案場名稱、綁定案件、更新時間／人）；整張卡可點開。 */
+    @media (max-width: 1023px) {
+      .search-input, .form-group input { font-size: 16px !important; min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .page-main { padding: 14px 12px 28px; }
+      .search-wrap { flex: 1 1 100%; }
+      .page-main .btn { min-height: 44px; }
+      .vm-andon__seg.np-seg { min-height: 48px; }
+      .modal-box { width: 100%; max-width: 100%; border-radius: 16px 16px 0 0; box-sizing: border-box; max-height: calc(92dvh / var(--fz,1)); overflow-y: auto; }
+      .data-table, .data-table tbody { display: block; width: 100%; min-width: 0 !important; }
+      .data-table thead { display: none; }
+      .data-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 14px; border-bottom: 1px solid #F0EEE9; align-items: center; }
+      .data-table tbody td { display: block; padding: 0; border: 0; min-width: 0; }
+      .data-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .data-table tbody td:nth-child(4) { grid-column: 2; grid-row: 1; }
+      .data-table tbody td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 15px; font-weight: 600; }
+      .data-table tbody td:nth-child(3) { grid-column: 1 / -1; grid-row: 3; }
+      .data-table tbody td:nth-child(3)::before { content: "綁定案件 "; color: var(--text-dim); font-size: 12px; }
+      .data-table tbody td:nth-child(5) { grid-column: 1; grid-row: 4; color: var(--text-dim); }
+      .data-table tbody td:nth-child(6) { grid-column: 2; grid-row: 4; color: var(--text-dim); text-align: right; }
+    }
   </style>
 </head>
 <body x-data="networkPlansPage()" x-init="init()" x-cloak>
