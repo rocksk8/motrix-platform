@@ -127,12 +127,12 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
 ## 升級演練只在正式閘門跑（`gate_only`，2026-11-13 chore/test-prune）
 `tests/test_upgrade_drill_2026_09_25.py`（2 題）與 `tests/platform/test_stepfile_drill_2026_09_30.py`（7 題）合計約 100 秒，標了 `gate_only`（整檔 pytestmark）。
 - **跑不跑看環境變數 `MOTRIX_GATE_OFFICIAL`**：等於 `1` 才跑，否則 conftest（`_skip_gate_only`，掛在既有的 `pytest_collection_modifyitems` 上）把它們 skip。
-- **只有兩條正式閘門路徑會設 1**：`heavy_run --class official -- …`（子行程）與建包／`run-stage`（`build_test_reuse.run_stage`）。
+- **只有三條正式閘門路徑會設 1**：`heavy_run --class official -- …`（子行程）、`run-stage`（`build_test_reuse.run_stage`）與建包腳本 `build_deploy_package.ps1`（自己跑的非 e2e／e2e 兩段 pytest，在 `MOTRIX_PYTEST_BUILD_CHILD` 旁設、結束時清）。
   守門題組、`--keep-going` 預跑、自己直接跑 pytest／`modtest --full`、`heavy_run` 的其他級別都不設 ⇒ 跳過（顯示 9 skipped）。
 - **跳過演練的綠燈不能當建包證據**：沒設 1 的 `modtest --full` 在結果檔記 `gate_official: false`，**不寫建包沿用紀錄**，建包會自己重跑。
   ⇒ 要讓建包沿用，請用 `python tools/platform/heavy_run.py --class official --window <我> -- python tools/platform/modtest.py --full`（或直接 run-stage／建包）。
 - 該旗標不進建包指紋（`_ENV_IGNORE`），不然 official 與非 official 的紀錄永遠對不上。
-- 守門：`tests/platform/test_gate_only_wiring_2026_11_13.py`（標記有註冊、兩檔都帶、只有一個同名 hook、兩條路徑都設 1、非 official 票不繼承 1、modtest 非 official 不寫紀錄）。
+- 守門：`tests/platform/test_gate_only_wiring_2026_11_13.py`（標記有註冊、兩檔都帶、只有一個同名 hook、三條路徑都設 1、非 official 票不繼承 1、modtest 非 official 不寫紀錄）。
 
 ## 預跑與閘門必須同一個直譯器（2026-11-13，T82 閘門抓到）
 預跑用 `.venv`、閘門用 `.venv312` ⇒ `test_merge_drivers` 兩題（假設 `sys.executable` 不在 `.venv312` 之下）預跑綠、閘門紅。現在：
@@ -140,3 +140,4 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
 - 明知要用別的環境（例：測 3.13）才放行：`modtest --full --allow-other-python` 或環境變數 `MOTRIX_ALLOW_OTHER_PYTHON=1`。沒有 `.venv312` 的機器不擋。
 - `preflight_guards` 本來就固定 `.venv312`；`--dry-run` 與 pytest 內呼叫 modtest 的工具測不受影響。
 - 守門：`tests/platform/test_formal_interpreter_2026_11_13.py`。
+- 儀表板建包閘門（`deploy_insights.last_full`）：全量結果記 `gate_official:false`（非正式閘門、升級演練被跳過）⇒ state=`not_official`，不放行；缺欄位＝舊結果，照舊放行。
