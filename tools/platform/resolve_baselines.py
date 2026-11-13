@@ -14,6 +14,7 @@
 
 處理對象（每一項：衝突時怎麼解 ／ 之後怎麼重算）
   core 與各模組 CHANGELOG       兩邊的 `## (next)` 都留（併成一塊）；驅動看不懂的形狀 ⇒ 逐行聯集後再併 (next)（會標「請目視」）
+                                合併後（不論有沒有衝突）(next) 段落不在最上面——上游疊了號碼段落時 git 會把它悄悄放到下面——就搬回最上面
   version_manifest.json         兩邊新增的條目都留（同 git 驅動）
   l1_interface_snapshot.json    結構合併 ／ 之後比對目前介面，有差就 `_l1_interface.py --update --pending`（CHANGELOG 最上面是 (next) 才會重產；否則報「需要升版」）
   route_inventory.json          結構合併，summary 由 endpoints 重算、select_star 兩邊增量相加 ／ 之後用原始碼重算 summary／select_star
@@ -21,6 +22,8 @@
   unscoped_reads_baseline.json  結構合併（聯集）／ 之後掃描：程式碼有、基準沒有的 ⇒ 報告（不自動登記）
   test_unscoped_reads_ratchet.py 的 MAX_ENTRIES   數字＝基底＋兩邊增量、說明註解兩邊都留 ／ 之後若小於聯集後的基準筆數 ⇒ 調成基準筆數
   docs/platform/modules.json    結構合併（手排的檔：逐行聯集且解析後必須等於結構合併的結果）
+  其他棘輪基準（EXTRA_JSON：recyclebin／write_golden／page_path／json_extract／l2_import／settings_deploy／field_policy_exits／pdf_raw_sinks）
+                                結構合併（各新增不同的 id ⇒ 聯集）；之後沒有重算（那些由各自的測試守門）
   apply_update.version.json／apply_module_update.version.json   重算 .ps1 的 sha256（去 BOM、CRLF→LF）與 $…ScriptVersion
 
 用法（任何一棵 MOTRIX-PLATFORM 樹；Python 用 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe）：
@@ -65,7 +68,18 @@ UNSCOPED = "backend/tests/platform/unscoped_reads_baseline.json"
 RATCHET = "backend/tests/platform/test_unscoped_reads_ratchet.py"
 MODULES = "docs/platform/modules.json"
 CORE_CHANGELOG = "backend/core/CHANGELOG.md"
-JSON_FILES = (SNAPSHOT, ROUTE_INV, RESP_KEYS, UNSCOPED, MODULES)
+#: 其他『只准縮小』的棘輪基準（id→說明的字典；兩邊各新增不同的 id ⇒ 聯集）。新增這類基準檔時加在這裡＋.gitattributes
+EXTRA_JSON = (
+    "backend/tests/platform/recyclebin_baseline_t53.json",
+    "backend/tests/platform/write_golden_baseline.json",
+    "backend/tests/platform/page_path_baseline.json",
+    "backend/tests/platform/json_extract_baseline.json",
+    "backend/tests/platform/l2_import_baseline.json",
+    "backend/tests/platform/settings_deploy_baseline.json",
+    "backend/tests/platform/field_policy_exits_baseline.json",
+    "backend/tests/pdf_raw_sinks_baseline.json",
+)
+JSON_FILES = (SNAPSHOT, ROUTE_INV, RESP_KEYS, UNSCOPED, MODULES) + EXTRA_JSON
 #: (版本檔, .ps1, 版本變數)
 PS1_REG = (
     ("backend/tools/apply_update.version.json", "backend/tools/apply_update.ps1", "ApplyScriptVersion"),
@@ -202,6 +216,38 @@ def ps1_digest(raw):
     if raw.startswith(b"\xef\xbb\xbf"):
         raw = raw[3:]
     return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def next_to_top(text):
+    """CHANGELOG 的 `## (next)` 段落必須在最上面（G4／test_version_slots）。上游在最上面又疊了號碼段落時，git 的文字合併會把我方的 (next)
+    放到它們下面（沒有衝突、安靜地放錯位置）⇒ 搬回最上面（只搬 (next) 段落；多塊併成一塊）。⇒ 新文字，或 None（本來就對／不是本 repo 排版）。"""
+    pre, secs = MD.split_sections(text)
+    if not secs:
+        return None
+    is_next = [s.startswith("## (next") for s in secs]
+    if not any(is_next) or (is_next[0] and not any(is_next[1:])):
+        return None
+    nexts = [s if s.endswith("\n\n") else s.rstrip("\n") + "\n\n" for s, n in zip(secs, is_next) if n]
+    rest = [s for s, n in zip(secs, is_next) if not n]
+    out = pre + "".join(MD.coalesce_next(nexts) + rest)
+    return out if out != text else None
+
+
+def post_changelog_order(repo, dry, skip):
+    """所有 core／模組 CHANGELOG：(next) 不在最上面就搬上去 ⇒ (改過的檔, 問題)。"""
+    changed, problems = [], []
+    rels = [CORE_CHANGELOG] + sorted(p.relative_to(repo).as_posix() for p in (Path(repo) / "backend" / "modules").glob("*/CHANGELOG.md"))
+    for rel in rels:
+        if rel in skip:
+            continue
+        text = read_worktree(repo, rel)
+        if text is None or has_markers(text):
+            continue
+        new = next_to_top(text)
+        if new is not None:
+            _write(repo, rel, new, dry)
+            changed.append(rel)
+    return changed, problems
 
 
 def post_ps1(repo, dry, skip):
@@ -428,6 +474,10 @@ def resolve(repo=REPO, dry=False, add=True, verify=False, slow=False, post=True)
     ps_changed, ps_prob = post_ps1(repo, dry, skip | set(rep["unmerged_other"])) if post else ([], [])
     rep["regenerated"] += ps_changed
     rep["problems"] += ps_prob
+    if post:
+        ch, pr = post_changelog_order(repo, dry, skip | set(rep["unmerged_other"]))
+        rep["regenerated"] += ch
+        rep["problems"] += pr
     if not post:
         pass
     elif not rep["unmerged_other"] and not rep["kept_for_human"]:

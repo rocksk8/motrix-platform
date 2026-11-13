@@ -273,7 +273,7 @@ def test_gitattributes_covers_every_baseline_with_a_registered_driver():
     drivers = set(SETUP.DRIVERS)
     for rel in (SNAP, "backend/tests/platform/route_inventory.json", "backend/tests/platform/response_keys_baseline.json",
                 "backend/tests/platform/unscoped_reads_baseline.json", MODS, "backend/tests/platform/test_unscoped_reads_ratchet.py",
-                CLOG, MANIFEST):
+                CLOG, MANIFEST, *RB.EXTRA_JSON):
         line = next((l for l in attrs.splitlines() if l.split()[:1] == [rel]), None)
         assert line, "%s 沒有 merge= 驅動" % rel
         assert line.split("merge=")[1].strip() in drivers, line
@@ -335,7 +335,8 @@ def test_post_unscoped_reports_new_unregistered_reads_but_never_registers_them(t
 
 @pytest.mark.parametrize("rel,hand_laid", [
     (SNAP, False), ("backend/tests/platform/route_inventory.json", False), ("backend/tests/platform/response_keys_baseline.json", False),
-    ("backend/tests/platform/unscoped_reads_baseline.json", False), (MODS, True)])
+    ("backend/tests/platform/unscoped_reads_baseline.json", False), (MODS, True),
+    ("backend/tests/platform/recyclebin_baseline_t53.json", False), ("backend/tests/platform/write_golden_baseline.json", False)])
 def test_real_baseline_files_are_in_a_supported_layout(rel, hand_laid):
     text = (REPO / rel).read_text(encoding="utf-8")
     renderer = MD.detect_renderer(text)
@@ -359,3 +360,54 @@ def test_real_route_inventory_summary_matches_its_endpoints():
         assert MD.summarize_inventory(inv["endpoints"]) == RI.summarize(inv["endpoints"])
     finally:
         sys.path.remove(str(REPO / "backend"))
+
+
+# ── CHANGELOG (next) 位置（next_to_top／post_changelog_order）──────────────────────
+
+_CLOG_OK = "# Changelog\n\n## (next)\n\n- 新\n\n## 5.0 — 2026-11-01\n\n- 舊\n"
+_CLOG_BAD = "# Changelog\n\n## 5.1 — 2026-11-10\n\n- 上游新增\n\n## (next)\n\n- 我的\n\n## 5.0 — 2026-11-01\n\n- 舊\n"
+
+
+def test_next_to_top_moves_a_misplaced_next_section_and_leaves_correct_files_alone():
+    assert RB.next_to_top(_CLOG_OK) is None
+    got = RB.next_to_top(_CLOG_BAD)
+    assert got is not None
+    heads = [l for l in got.splitlines() if l.startswith("## ")]
+    assert heads == ["## (next)", "## 5.1 — 2026-11-10", "## 5.0 — 2026-11-01"]
+    assert "- 我的" in got and "- 上游新增" in got and "- 舊" in got
+    assert RB.next_to_top(got) is None, "冪等"
+
+
+def test_next_to_top_without_any_next_section_or_sections_is_a_noop():
+    assert RB.next_to_top("# Changelog\n\n## 5.0 — x\n\n- a\n") is None
+    assert RB.next_to_top("# 只有標題\n") is None
+
+
+def test_post_changelog_order_fixes_core_and_module_changelogs(tmp_path):
+    for rel, text in ((RB.CORE_CHANGELOG, _CLOG_BAD), ("backend/modules/foo/CHANGELOG.md", _CLOG_OK), ("backend/modules/bar/CHANGELOG.md", _CLOG_BAD)):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8", newline="\n")
+    changed, problems = RB.post_changelog_order(tmp_path, dry=True, skip=set())
+    assert sorted(changed) == sorted([RB.CORE_CHANGELOG, "backend/modules/bar/CHANGELOG.md"]) and problems == []
+    assert (tmp_path / RB.CORE_CHANGELOG).read_text(encoding="utf-8") == _CLOG_BAD, "--check 不寫檔"
+    changed, _ = RB.post_changelog_order(tmp_path, dry=False, skip=set())
+    assert len(changed) == 2
+    assert RB.post_changelog_order(tmp_path, dry=False, skip=set()) == ([], [])
+    assert RB.post_changelog_order(tmp_path, dry=False, skip={RB.CORE_CHANGELOG}) == ([], [])
+
+
+def test_post_changelog_order_skips_files_with_conflict_markers(tmp_path):
+    p = tmp_path / RB.CORE_CHANGELOG
+    p.parent.mkdir(parents=True)
+    p.write_text("<<<<<<< HEAD\n## 5.1\n=======\n## (next)\n>>>>>>> b\n", encoding="utf-8", newline="\n")
+    assert RB.post_changelog_order(tmp_path, dry=False, skip=set()) == ([], [])
+
+
+@pytest.mark.parametrize("rel", RB.EXTRA_JSON)
+def test_extra_json_baselines_exist_and_are_in_a_supported_layout(rel):
+    p = REPO / rel
+    assert p.is_file(), "%s 不存在：EXTRA_JSON 登記的基準檔被搬走或改名了（同步 resolve_baselines.EXTRA_JSON 與 .gitattributes）" % rel
+    hand_laid = {"backend/tests/platform/settings_deploy_baseline.json"}     # 手排：靠逐行聯集備援（與結構合併結果相同才用）
+    got = MD.detect_renderer(p.read_text(encoding="utf-8"))
+    assert (got is None) == (rel in hand_laid), "%s 的排版驅動認不得（或已變成規則排版，可從 hand_laid 拿掉）" % rel

@@ -279,6 +279,9 @@ def _renderers():
     yield lambda o: json.dumps(o, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     yield lambda o: json.dumps(o, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
     yield _unscoped_dump
+    # 沒有結尾換行的（pdf_raw_sinks／field_policy_exits：寫檔時 json.dumps 後沒加換行）
+    yield lambda o: json.dumps(o, ensure_ascii=False, indent=1, sort_keys=True)
+    yield lambda o: json.dumps(o, ensure_ascii=False, indent=1, sort_keys=False)
 
 
 def detect_renderer(base_text):
