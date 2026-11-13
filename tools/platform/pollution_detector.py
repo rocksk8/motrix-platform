@@ -17,6 +17,8 @@
   process   cwd、sys.path、logging root handlers、warnings.filters 長度、threading.active_count、db.DB_PATH。
   db        行程的 session DB 檔（`db.DB_PATH` 指到的檔，含 -wal）在這個檔前後有沒有被寫過；檔案變了才去數各表筆數，點名「哪張表多了／少了幾列」
             （沒用 client 的題目讀到前一個檔留下的列，就是這一類：例 test_auth_lockout_alert 讀到 1001 列 audit_log）。
+            ⚠️ 只數筆數：UPDATE 不改筆數的變動看不到（已知盲點，「沒發現」≠「乾淨」）；背景執行緒（排程／稽核）也會寫 DB，
+            所以這一類只列為「疑似」（pollution-list 的 suspects），不進 polluters，也不當閘門輸入。
 白名單（"不算汙染"的東西）一律寫死成下面的常數、每一項都註解理由；不從外部檔讀、不用環境變數開洞（PM 裁示 2026-11-13）。
 成本：快照＝每個容器 O(筆數) 的雜湊（超過 BIG 筆只比長度）＋ environ／sys.modules 的 id 表；清單只在 sys.modules 變動時重掃。
 """
@@ -40,9 +42,12 @@ BIG = 5000                       # 超過這個筆數的容器只比長度與雜
 COPY_MAX = 600                   # 容器筆數 ≤ 這個才留複本（用來點名鍵）
 _NAME_RE = re.compile(r"^_?[A-Z][A-Z0-9_]{2,}$")
 # 名字像快取／記帳的全域容器：照記但標 class=cache，不進「汙染清單」（它們本來就會隨使用長大；要不要治理另案）
-_CACHE_RE = re.compile(r"CACHE|MEMO|LOGGED|ALERTED|_SEEN|FAIL_LAST|FAIL_HOUR|POOL|WATCHERS|WRITE_TXNS|ERROR_UNTIL|MISS|PENDING|IMPACT|REWRITE|HIST|TRAIL|INCOMPLETE")
+# 以「底線分隔的完整單字」比對（h2 審查：子字串會把 _PERMISSIONS 的 MISS 當快取而永遠不報）；要加字請加進括號並寫理由
+_CACHE_RE = re.compile(r"(?:^|_)(?:CACHE|CACHES|MEMO|LOGGED|ALERTED|SEEN|FAIL_LAST|FAIL_HOUR|POOL|WATCHERS|WRITE_TXNS|ERROR_UNTIL|MISS|PENDING|IMPACT|REWRITE|HIST|HISTORY|TRAIL|INCOMPLETE)(?:$|_)")
 # ── 白名單（寫死；新增一項要在這裡寫理由）──
 _ENV_IGNORE = frozenset({"PYTEST_CURRENT_TEST"})      # pytest 自己每題設／清，不是測試造成的
+# process 類裡「本來就會浮動」的項目：照記、標 class=cache，不進汙染清單（背景執行緒數會因排程／連線池自然增減；h2 審查）
+_PROC_NOISE = frozenset({"threads"})
 _PROC_IGNORE = frozenset({"warnings.filters"})        # pytest 的 catch_warnings 每題進出都會動長度；改用 sys.modules／registry 抓真正的洩漏
 _PKGS = ("core", "helpers", "routers", "modules")
 _CURATED = (                       # 一定要看的（即使名字不合自動盤點的規則）
@@ -145,8 +150,7 @@ class Detector:
         st = snap["db"]
         if st is not None and (self._db_cache is None or self._db_cache[0] != st[0] or self._db_cache[2] != st):      # 檔案在兩個檔之間被動過 ⇒ 基線重數，免得誤報
             c = self._db_counts(st[0])
-            if c is not None:
-                self._db_cache = (st[0], c, st)
+            self._db_cache = (st[0], c, st) if c is not None else None          # 數不出來 ⇒ 基線無效：這個檔不比 DB，免得誤報
         self.cost_ms += (time.perf_counter() - t0) * 1000
         return snap
 
@@ -239,19 +243,19 @@ class Detector:
         # db：只在 session DB 檔被寫過時才數表（先比 stat；基線筆數在 snapshot 時就備好）
         d0, d1 = a.get("db"), self._dbstat()
         if d0 is not None and d1 is not None and d0[0] == d1[0] and d0 != d1:
-            before = self._db_cache[1] if self._db_cache and self._db_cache[0] == d0[0] else {}
+            before = self._db_cache[1] if self._db_cache and self._db_cache[0] == d0[0] else None
             after = self._db_counts(d1[0])
-            if after is not None:
+            if after is not None and before is not None:
                 grew = sorted("%s +%d" % (t, n - before.get(t, 0)) for t, n in after.items() if n > before.get(t, 0))
                 shrank = sorted("%s %d" % (t, n - before.get(t, 0)) for t, n in after.items() if n < before.get(t, 0))
                 if grew or shrank:
-                    out.append({"class": "db", "state": "session DB（%s）" % Path(d1[0]).name, "added": grew[:20], "removed": shrank[:20]})
-                self._db_cache = (d1[0], after, d1)
+                    out.append({"class": "db", "suspect": True, "state": "session DB（%s）" % Path(d1[0]).name, "added": grew[:20], "removed": shrank[:20]})
+            self._db_cache = (d1[0], after, d1) if after is not None else None
         # process
         p1 = self._proc()
         for k, v0 in a["proc"].items():
             if k not in _PROC_IGNORE and p1[k] != v0:
-                out.append({"class": "process", "state": k, "before": _short(v0), "after": _short(p1[k])})
+                out.append({"class": "cache" if k in _PROC_NOISE else "process", "state": k, "before": _short(v0), "after": _short(p1[k])})
         self.cost_ms += (time.perf_counter() - t0) * 1000
         return out
 
@@ -265,6 +269,7 @@ def _short(v):
 _MODE = (os.environ.get("MOTRIX_POLLUTION") or "report").strip().lower()
 _det = None
 _state = {"mod": None, "snap": None, "setting_up": False}
+_cfg = {"worker": False, "dist": "no", "reliable": True, "disabled": False}      # 本行程是不是 xdist worker／分配模式／歸屬是否可靠／是否因內部錯誤自行停用
 PROP = "pollution"
 
 
@@ -278,27 +283,51 @@ def pytest_configure(config):
         return
     root = getattr(config, "rootpath", None) or Path.cwd()
     _det = Detector(root)
+    # xdist：worker 只把發現塞進 report.user_properties；寫檔與清單只在 controller（沒有 xdist 時本行程就是 controller）做一次
+    _cfg["worker"] = hasattr(config, "workerinput")
+    # 每檔前後快照的歸屬，要求「同一檔的題目連續在同一個 worker 上跑」：沒有 xdist／loadfile／loadscope 才可靠；
+    # 其餘（load、worksteal、loadgroup…）兩個檔的題目會交錯，快照會把別檔的改動算到這個檔 ⇒ 清單照出但標「歸屬不可靠」
+    _cfg["dist"] = str(getattr(getattr(config, "option", None), "dist", "no") or "no")
+    _cfg["reliable"] = _cfg["dist"] in ("no", "loadfile", "loadscope")
     config._pollution_findings = []          # controller 端收集（gate 清單用）
     config._pollution_files = 0
+
+
+def _safe_snapshot():
+    """⇒ 快照或 None。偵測器只觀察：快照出任何錯都不能變成測試的 setup／fixture error ⇒ 記一次、整個停用（h2 審查）。"""
+    if _cfg["disabled"] or _det is None:
+        return None
+    try:
+        return _det.snapshot()
+    except Exception as exc:                              # noqa: BLE001
+        _cfg["disabled"] = True
+        _state["mod"], _state["snap"] = None, None
+        sys.stderr.write("pollution_detector: snapshot failed, detector disabled for this run: %r\n" % (exc,))
+        return None
 
 
 if pytest is not None:
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(item):
-        if _det is None:
+        if _det is None or _cfg["disabled"]:
             return
         mod = getattr(item, "module", None)
         if _state["mod"] is mod and _state["snap"] is not None:
             return
-        _state["mod"], _state["snap"], _state["setting_up"] = mod, _det.snapshot(), True
+        snap = _safe_snapshot()
+        if snap is not None:
+            _state["mod"], _state["snap"], _state["setting_up"] = mod, snap, True
 
     @pytest.hookimpl(hookwrapper=True)
     def pytest_fixture_setup(fixturedef, request):
         """session 範圍 fixture（例如 `_app`：載入 main、模組登記 kind）建好之後，若還在本檔第一題的 setup 階段，重拍基線：
         否則第一個檔的基線太早（core.definitions 都還沒 import），洩漏的登記看不到、bootstrap 又會被算成這個檔的改動。"""
         yield
-        if _det is not None and _state["snap"] is not None and fixturedef.scope == "session":
-            _state["snap"] = _det.snapshot()
+        # 只在「本檔第一題的 setup 階段」重拍（_state["setting_up"]）：檔案中途才第一次用到的 session fixture 不重設基線，免得遮掉前面題目的改動
+        if _det is not None and not _cfg["disabled"] and _state["snap"] is not None and _state["setting_up"] and fixturedef.scope == "session":
+            snap = _safe_snapshot()
+            if snap is not None:
+                _state["snap"] = snap
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_call(item):
@@ -307,7 +336,7 @@ if pytest is not None:
     @pytest.hookimpl(trylast=True)
     def pytest_runtest_teardown(item, nextitem):
         """module 的最後一題收尾之後（module 範圍 fixture 已還原）才比對。trylast＝在 pytest 自己的 teardown（含 fixture finalizer）之後。"""
-        if _det is None or _state["snap"] is None:
+        if _det is None or _cfg["disabled"] or _state["snap"] is None:
             return
         if nextitem is not None and getattr(nextitem, "module", None) is _state["mod"]:
             return
@@ -321,8 +350,8 @@ if pytest is not None:
             _state["mod"], _state["snap"] = None, None
 
     def pytest_runtest_logreport(report):
-        """controller 端（xdist 下 worker 的報告也會到這裡）：單一寫入者。"""
-        if report.when != "teardown":
+        """controller 端：單一寫入者。xdist worker 行程也會呼叫這個 hook ⇒ worker 一律略過（否則 jsonl 重複、清單雙寫）。"""
+        if report.when != "teardown" or _cfg["worker"]:
             return
         for k, v in getattr(report, "user_properties", ()):
             if k != PROP:
@@ -334,7 +363,7 @@ if pytest is not None:
             _write(rec)
 
     def pytest_sessionfinish(session, exitstatus):
-        if _det is None or _MODE != "gate":
+        if _det is None or _MODE != "gate" or _cfg["worker"]:
             return
         try:
             _emit_list()
@@ -378,11 +407,21 @@ def pollution_list(recs):
     agg = {}
     for r in recs:
         for f in r.get("findings", ()):
-            if f.get("class") == "cache":
+            if f.get("class") == "cache" or f.get("suspect"):
                 continue
             keys = tuple(f.get("added", ())) + tuple("-" + x for x in f.get("removed", ())) + tuple("~" + x for x in f.get("replaced", ()))
             k = (f["state"], keys or (f.get("change") or ""))
             agg.setdefault(k, []).append(r["file"])
+    return [{"state": s, "keys": list(ks), "files": sorted(set(fs))} for (s, ks), fs in sorted(agg.items())]
+
+
+def suspect_list(recs):
+    """⇒ 疑似清單：class=db（背景寫入也會讓筆數變，只能當線索，不進閘門輸入）。"""
+    agg = {}
+    for r in recs:
+        for f in r.get("findings", ()):
+            if f.get("suspect"):
+                agg.setdefault((f["state"], tuple(f.get("added", ())) + tuple("-" + x for x in f.get("removed", ()))), []).append(r["file"])
     return [{"state": s, "keys": list(ks), "files": sorted(set(fs))} for (s, ks), fs in sorted(agg.items())]
 
 
@@ -391,7 +430,9 @@ def _emit_list():
     rid = _RID or _run_id()
     d = _outdir()
     d.mkdir(parents=True, exist_ok=True)
-    (d / (rid + ".pollution-list.json")).write_text(json.dumps({"run": rid, "files_checked": len(_RECS), "cost_ms_this_process": round(_det.cost_ms, 2), "files_this_process": _det.files, "polluters": lst}, ensure_ascii=False, indent=1), encoding="utf-8")
+    (d / (rid + ".pollution-list.json")).write_text(json.dumps({"run": rid, "files_checked": len(_RECS), "cost_ms_this_process": round(_det.cost_ms, 2), "files_this_process": _det.files,
+                                                          "dist": _cfg["dist"], "attribution": "reliable" if _cfg["reliable"] else "approximate（分配模式不是 loadfile／loadscope：檔與檔的題目可能交錯，歸屬僅供參考）",
+                                                          "disabled": _cfg["disabled"], "polluters": lst, "suspects": suspect_list(_RECS)}, ensure_ascii=False, indent=1), encoding="utf-8")
     sys.stdout.write("\nPOLLUTION-LIST run=%s files=%d polluters=%d → %s\n" % (rid, len(_RECS), len(lst), d / (rid + ".pollution-list.json")))
     for p in lst[:30]:
         sys.stdout.write("  %s %s ← %s\n" % (p["state"], p["keys"][:6], ", ".join(p["files"][:4])))

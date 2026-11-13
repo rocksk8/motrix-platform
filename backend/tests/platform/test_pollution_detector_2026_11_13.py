@@ -39,18 +39,18 @@ SUITE = {
 }
 
 
-def _run(tmp_path, mode="gate", sub="r"):
+def _run(tmp_path, mode="gate", sub="r", extra_files=None, extra_args=()):
     tmp_path = tmp_path / sub
     proj = tmp_path / "proj"
     proj.mkdir(parents=True)
-    for name, body in SUITE.items():
+    for name, body in dict(SUITE, **(extra_files or {})).items():
         (proj / name).write_text(body, encoding="utf-8")
     out = tmp_path / "out"
     env = dict(os.environ, PYTHONPATH=str(PLAT), PYTHONUTF8="1", MOTRIX_POLLUTION=mode, MOTRIX_POLLUTION_DIR=str(out),
                PD_DB=str(tmp_path / "session.db"), MOTRIX_FAIL_STREAM_RUN="pd1")
     for k in ("MOTRIX_TRAIN", "PYTEST_ADDOPTS"):
         env.pop(k, None)
-    p = subprocess.run([sys.executable, "-m", "pytest", "-p", "pollution_detector", "-p", "no:cacheprovider", "-q"],
+    p = subprocess.run([sys.executable, "-m", "pytest", "-p", "pollution_detector", "-p", "no:cacheprovider", "-q", *extra_args],
                        cwd=str(proj), env=env, capture_output=True, text=True, encoding="utf-8", timeout=180)
     return p, out
 
@@ -71,8 +71,10 @@ def test_leaks_are_named_with_the_file_and_the_key_and_clean_files_are_not(tmp_p
     assert by["leaky_reg.LIST_X"]["files"] == ["test_a_leaker.py"]
     assert by["os.environ"]["files"] == ["test_d_env.py"] and "PD_LEAKED_ENV" in by["os.environ"]["keys"]
     assert "PD_TMP_ENV" not in json.dumps(pol)                                                    # monkeypatch.setenv 收尾還原 ⇒ 沒事
-    sess = [x for x in pol if x["state"].startswith("session DB")]
-    assert len(sess) == 1 and sess[0]["files"] == ["test_f_db.py"] and "audit_log +3" in sess[0]["keys"]    # 沒用 client 的題目讀到的前題殘留，就是這一類
+    assert not [x for x in pol if x["state"].startswith("session DB")]                          # DB 類只列「疑似」，不進 polluters（背景寫入也會讓筆數變）
+    sus = _polluters(out)["suspects"]
+    assert len(sus) == 1 and sus[0]["files"] == ["test_f_db.py"] and "audit_log +3" in sus[0]["keys"]      # 沒用 client 的題目讀到的前題殘留，就是這一類
+    assert _polluters(out)["attribution"] == "reliable"
     assert by["sys.modules"]["files"] == ["test_g_stub.py"]
     assert all("test_b_clean.py" not in x["files"] and "test_c_restores.py" not in x["files"] for x in pol)
     assert "leaky_reg.CACHE_X" not in by                                                          # 快取類照記（jsonl）但不進清單
@@ -109,3 +111,39 @@ def test_every_whitelist_constant_is_hardcoded_and_commented():
     head = src.split("class Detector")[0]
     assert "open(" not in head and "json.load" not in head                                       # 白名單區不讀外部檔
     assert "POL_DEBUG" not in src
+
+
+def test_cache_names_are_matched_as_whole_words_not_substrings():
+    """h2 審查：子字串 MISS 會把 _PERMISSIONS 當快取而永遠不報。"""
+    k = lambda n: PD.Watch("m", n, {}).klass                                                      # noqa: E731
+    assert k("_PERMISSIONS") == "registry" and k("SUBMISSION_KINDS") == "registry" and k("_HISTORIANS") == "registry"
+    assert k("_STARTUP_PENDING") == "cache" and k("_EDGE_PROFILE_POOL") == "cache" and k("RESULT_CACHE") == "cache" and k("_CACHE_X") == "cache"
+
+
+def test_threads_count_is_noise_not_a_polluter_and_db_never_enters_polluters():
+    recs = [{"file": "a.py", "findings": [{"class": "cache", "state": "threads", "before": "3", "after": "4"},
+                                          {"class": "db", "suspect": True, "state": "session DB（x.db）", "added": ["audit_log +9"]}]}]
+    assert PD.pollution_list(recs) == []
+    assert PD.suspect_list(recs) == [{"state": "session DB（x.db）", "keys": ["audit_log +9"], "files": ["a.py"]}]
+
+
+def test_a_failing_snapshot_never_becomes_a_test_error(tmp_path):
+    """快照呼叫出錯 ⇒ 偵測器自行停用、只在 stderr 說一次；測試結果與沒有偵測器時完全一樣（只有 test_h_red 紅）。"""
+    conftest = "import pollution_detector as P\n\ndef _boom(self):\n    raise RuntimeError('boom')\n\nP.Detector.snapshot = _boom\n"
+    p, out = _run(tmp_path, extra_files={"conftest.py": conftest}, sub="boom")
+    assert "1 failed" in p.stdout and " error" not in p.stdout.lower().replace("0 errors", "") and p.returncode == 1, p.stdout[-600:]
+    assert "detector disabled" in p.stderr + p.stdout
+
+
+@pytest.mark.skipif(importlib.util.find_spec("xdist") is None, reason="這個 Python 沒有 pytest-xdist")
+def test_xdist_single_writer_one_line_per_record_and_one_list(tmp_path):
+    p, out = _run(tmp_path, sub="x", extra_args=("-n", "2", "--dist", "loadfile"))
+    assert p.returncode == 1 and "1 failed" in p.stdout, p.stdout[-600:]
+    lines = [json.loads(x) for x in (out / "pd1.pollution.jsonl").read_text(encoding="utf-8").splitlines()]
+    files = [x["file"] for x in lines]
+    assert len(files) == len(set(files)), files                                                   # 每個檔只一行（worker 不寫）
+    assert len(list(out.glob("*.pollution-list.json"))) == 1
+    lst = _polluters(out)
+    assert lst["attribution"] == "reliable" and lst["files_checked"] == len(SUITE)
+    p2, out2 = _run(tmp_path, sub="xl", extra_args=("-n", "2", "--dist", "load"))
+    assert _polluters(out2)["attribution"].startswith("approximate")                              # 分配模式 load：照出，但標歸屬不可靠
