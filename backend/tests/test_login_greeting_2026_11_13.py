@@ -391,7 +391,9 @@ def test_record_login_keeps_previous_login(client, make_user):
 def test_personal_pref_reads_user_prefs_with_safe_fallback(monkeypatch):
     import sys, types
     fake = types.SimpleNamespace(get=lambda uid, key, default=None: {"login_greeting": "humor"}.get(key, default))
+    import helpers
     monkeypatch.setitem(sys.modules, "helpers.user_prefs", fake)
+    monkeypatch.setattr(helpers, "user_prefs", fake, raising=False)   # `from helpers import user_prefs` 讀的是套件屬性，不是 sys.modules（先被別的測試匯入過就會拿到真的）
     assert LG.personal_pref(1) == "humor"
     for raw, want in (("follow_company", "follow"), ("formal", "formal"), ("off", "off"), ("亂寫", "follow"), (None, "follow")):
         fake.get = lambda uid, key, default=None, _r=raw: _r
