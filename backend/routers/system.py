@@ -24,6 +24,7 @@ from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 from helpers.image_guard import ImageRejected, run_decode
+from core.txn import write_txn
 import trail
 
 router = APIRouter()
@@ -801,7 +802,6 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
     if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
         conn.close(); raise HTTPException(403, "只能替自己的工作日誌上傳照片")
 
-    existing = json.loads(row["photos"] or "[]")
     today = datetime.now().strftime("%Y-%m-%d")
     base_dir, url_prefix = _photo_root()
     save_dir = os.path.join(base_dir, f"worklog_{wid}", today)
@@ -834,6 +834,17 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
                 "uploaded_by": user['display_name'],
                 "uploaded_at": datetime.now().isoformat(),
             })
+        # 慢動作（解碼、寫檔）都做完了，現在才拿寫鎖、重讀目前的 photos、只加上這一批：
+        # 兩個請求同時往同一筆日誌上傳時，各自讀到上傳前的 photos 再整包寫回，後寫的會蓋掉先寫的 ⇒ 先寫那一批的檔就成了孤兒（沒有紀錄指向）；
+        # 日誌在上傳途中被刪掉（UPDATE 影響 0 列）、或這裡任何資料庫錯誤，也走下面同一個回收。
+        with write_txn(conn):
+            cur_row = conn.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()
+            if not cur_row:
+                raise HTTPException(404, "找不到日誌")
+            all_photos = json.loads(cur_row["photos"] or "[]") + new_photos
+            conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                         (json.dumps(all_photos, ensure_ascii=False), wid))
+            conn.commit()
     except BaseException:
         # 整批要嘛全收要嘛全不收：任何一張失敗（400／503／斷線）⇒ 這次已寫到磁碟的檔案刪掉，免得留下孤兒、客戶端重試又重複一份
         for _p in written:
@@ -844,10 +855,6 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
         conn.close()
         raise
 
-    all_photos = existing + new_photos
-    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
-                 (json.dumps(all_photos, ensure_ascii=False), wid))
-    conn.commit()
     conn.close()
     notify_module_activity("工作日誌", "上傳照片", user['display_name'],
                             f"日誌 #{wid}（{len(new_photos)} 張）", "work-log.html")
