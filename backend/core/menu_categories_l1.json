@@ -334,6 +334,26 @@
    "note": "",
    "order": 250
   },
+  "settings_group:onepipe": {
+   "category": "flow",
+   "section": "物料流程一條龍",
+   "tier": 2,
+   "blurb": "物料流程一條龍各批次的開關（工作日誌關聯案件、保固通知、時間軸等）。",
+   "when": "想逐項開啟或關閉案件、採購、保固串接的新功能時。",
+   "status": "keep",
+   "note": "",
+   "order": 251
+  },
+  "settings_group:import_wizard": {
+   "category": "data",
+   "section": "資料匯入",
+   "tier": 2,
+   "blurb": "匯入精靈的開關與上傳大小上限。",
+   "when": "剛上線要把舊的客戶、料號、員工資料搬進系統時。",
+   "status": "keep",
+   "note": "",
+   "order": 252
+  },
   "settings_group:ui_format": {
    "category": "custom",
    "section": "畫面與用語",

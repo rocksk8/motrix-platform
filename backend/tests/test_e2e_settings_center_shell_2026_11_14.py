@@ -55,10 +55,10 @@ def _save_with_reason(page, reason, ack=False):
     page.locator('[data-testid="mx-draft-save"]').click()
     page.locator('[data-testid="sc-reason"]').wait_for(timeout=15000)
     ok = page.locator('[data-testid="sc-confirm-ok"]')
-    assert ok.is_disabled()                                           # 還沒填原因
+    page.wait_for_function("() => document.querySelector('[data-testid=\"sc-confirm-ok\"]').disabled", timeout=10000)                      # 還沒填原因
     page.fill('[data-testid="sc-reason"]', reason)
     if ack:
-        assert ok.is_disabled()                                       # 紅色橫幅：沒勾「我已了解」不可送出
+        page.wait_for_function("() => document.querySelector('[data-testid=\"sc-confirm-ok\"]').disabled", timeout=10000)                  # 紅色橫幅：沒勾「我已了解」不可送出
         page.check('[data-testid="sc-ack"]')
     page.wait_for_function("() => !document.querySelector('[data-testid=\"sc-confirm-ok\"]').disabled", timeout=10000)
     ok.click()
@@ -81,7 +81,7 @@ def test_overview_nav_segments_and_global_search_jump_and_flash(live_server, mak
     page.locator('[data-testid="sc-page-uploads"]').wait_for(timeout=10000)
     # 分類切換：只看「安全」時，別的分類的頁不在導覽
     page.click('[data-testid="sc-seg-安全"]')
-    assert page.locator('[data-testid="sc-nav"] [data-page="uploads"]').count() == 0
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"sc-nav\"] [data-page=\"uploads\"]')", timeout=10000)
     page.click('[data-testid="sc-seg-全部"]')
     page.locator('[data-testid="sc-page-uploads"]').wait_for(timeout=10000)
     # 全域搜尋（欄位問句，群組名稱裡沒有的字）→ 跳到那一頁、那一列閃一下
@@ -131,7 +131,8 @@ def test_loosening_needs_ack_then_second_superadmin_approves_in_pending_view(liv
     _open(page, live_server, "retention")
     _set_number(page, "retention", "audit_log_keep_days", 400)       # 縮短保存期限＝放寬
     _save_with_reason(page, "測試放寬", ack=True)
-    assert "待生效" in _toast(page)
+    t = _toast(page)
+    assert "待生效" in t and "日生效" in t                                  # 白話結果帶預計生效日（M 月 D 日）
     pend = _q("SELECT id, approvals_required FROM config_changes WHERE domain='setting:retention' AND field='audit_log_keep_days'")
     assert len(pend) == 1 and pend[0]["approvals_required"] == 1
     assert not _q("SELECT 1 FROM ui_definitions WHERE kind='setting_group' AND key='retention'")            # 放寬沒有直接生效
@@ -162,10 +163,28 @@ def test_draft_survives_page_switch_and_discard_clears_it_and_choice_field_works
     page.wait_for_function("() => document.querySelector('[data-testid=\"mx-draft-count\"] b').textContent === '2'", timeout=10000)
     page.locator('[data-testid="sc-navdraft-uploads"]').wait_for(timeout=10000)
     page.click('[data-testid="sc-page-uploads"]')
+    page.locator(ROW % ("uploads", "max_file_mb") + ' input[data-mx="input"]').first.wait_for(timeout=10000)
     assert page.locator(ROW % ("uploads", "max_file_mb") + ' input[data-mx="input"]').first.input_value() == "10"
     page.click('[data-testid="mx-draft-discard"]')
     page.locator('[data-testid="mx-draftbar"]').wait_for(state="detached", timeout=10000)
     assert page.locator(ROW % ("uploads", "max_file_mb") + ' input[data-mx="input"]').first.input_value() == "20"
+
+
+@pytest.mark.e2e
+def test_confirm_dialog_lists_who_gets_notified_and_never_claims_no_one_is(live_server, make_user, e2e_browser):
+    """h5 M1：有第二位最高管理者時，確認視窗要寫出他會收到通知（不得寫「不會另外通知別人」）；通知對象來自伺服器預覽。"""
+    a = make_user(username="s2_e2e_n1", role="superadmin")
+    make_user(username="s2_e2e_n2", role="superadmin")
+    page = e2e_browser.new_page(viewport={"width": 1280, "height": 900})
+    inject_login(page, live_server, *a)
+    _open(page, live_server, "uploads")
+    _set_number(page, "uploads", "max_file_mb", 9)                    # 調小＝收緊 ⇒ 立即生效，但仍會通知其他最高管理者
+    page.locator('[data-testid="mx-draft-save"]').click()
+    box = page.locator('[data-testid="sc-recipients"]')
+    box.wait_for(timeout=15000)
+    txt = box.inner_text()
+    assert txt.startswith("儲存後會通知：") and "最高管理者" in txt and "不會另外通知" not in txt
+    assert "會留下紀錄，不會另外通知別人" not in page.content()
 
 
 @pytest.mark.e2e
@@ -258,7 +277,7 @@ def test_names_with_html_never_execute_and_mobile_has_no_horizontal_scroll(live_
         assert page.evaluate("document.querySelector('main').querySelectorAll('img[src=\"x\"]').length") == 0
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), "手機寬度不橫向捲動"
         page.locator('[data-testid="sc-navtoggle"]').click()
-        assert page.locator('[data-testid="sc-nav"]').is_visible()                                       # 導覽抽屜可開
+        page.locator('[data-testid="sc-nav"]').wait_for(state="visible", timeout=10000)                  # 導覽抽屜可開
         page.fill('[data-testid="sc-search"]', "填多少")
         page.locator('[data-testid="sc-hit"]').first.wait_for(timeout=10000)
         assert page.evaluate("window.__xss") is None
