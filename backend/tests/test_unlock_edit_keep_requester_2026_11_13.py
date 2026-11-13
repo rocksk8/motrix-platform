@@ -317,9 +317,8 @@ def test_queue_item_carries_edited_by_only_for_unlock_edited_quotes(client, worl
 
 def test_pages_show_the_edited_by_row_only_when_edited_by_exists():
     """N2 靜態檢查：兩個畫面都有「修改人」那一行，且以 `editedBy` 為顯示條件（真瀏覽器版放在 e2e 批次）。"""
-    import pathlib
-    root = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages"
-    q = (root / "approval-queue.html").read_text(encoding="utf-8")
-    f = (root / "quotation-form.html").read_text(encoding="utf-8")
+    from core import source_tree
+    q = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
+    f = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     assert 'data-testid="aq-edited-by"' in q and 'x-show="selected?.editedBy"' in q and "修改人" in q
     assert 'data-testid="qf-edited-by"' in f and 'x-show="q.approval?.editedBy"' in f and "<b>修改人：</b>" in f
