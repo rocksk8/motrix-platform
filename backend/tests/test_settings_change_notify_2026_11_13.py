@@ -930,3 +930,57 @@ def test_no_alpine_component_method_shadows_an_object_prototype_member():
                 src = open(p, encoding="utf-8", errors="ignore").read()
                 hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(1)) for m in bad.finditer(src)]
     assert hits == []
+
+
+def _json_group(name, label):
+    R.register_group(name, label, [
+        R.SettingDef("doc", "json", [], question="這份清單要放什麼？", label="清單", help="測試用的整份清單。", impact="影響之後使用這份清單的畫面。",
+                     risk="money", risk_text="清單改錯會影響金額。", loosen="both",
+                     impact_scope={"documents": ["測試單據"], "roles": ["測試角色"], "amounts": "不影響已開出的金額", "reversible": True, "effective": "pending"})],
+        help="測試用的整份清單群組。", risk="money")
+
+
+@pytest.fixture()
+def zz_json_groups(zz_groups):
+    _json_group("zz_nt_j1", "清單甲")
+    _json_group("zz_nt_j2", "清單乙")
+    yield
+    R._GROUPS.pop("zz_nt_j1", None)
+    R._GROUPS.pop("zz_nt_j2", None)
+    R.invalidate()
+
+
+def _writes():
+    return _db_rows("SELECT COUNT(*) FROM config_changes")[0][0], _db_rows("SELECT COUNT(*) FROM audit_log WHERE action LIKE 'settings.%'")[0][0]
+
+
+def test_batch_precheck_refuses_whole_batch_when_a_later_group_has_someone_elses_pending_json(client, make_user, zz_json_groups):
+    """S1d 審查 S1：兩個群組、第二個（json）有別人還在等待的申請、未帶 supersede ⇒ 預檢整批 409 pending_exists，**0 筆寫入**
+    （以前只比 CAS，前面的群組已寫、後面的才被 publish 擋＝部分套用）。帶 supersede 才放行。"""
+    h = _hdr(client, make_user, "nt_pe1")
+    make_user(username="nt_pe1_other", role="superadmin")
+    R.publish("zz_nt_j1", {"doc": ["別人的申請"]}, user="nt_pe1_other", reason="別人先送")        # 進待生效（loosen both）
+    n0, w0 = _writes()
+    r = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_j1": {"values": {"doc": ["我的"]}}}, reason="想一起存")
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "pending_exists", r.text
+    assert [(x["group"], x["code"]) for x in d["groups"]] == [("zz_nt_j1", "pending_exists")] and d["groups"][0]["by"]
+    assert d["applied"] == [] and d["failed"] is None and d["notApplied"] == ["zz_nt_b", "zz_nt_j1"]
+    assert R.get("zz_nt_b", "cap") == 5 and _writes() == (n0, w0)                                # 前面的 zz_nt_b 也沒寫、帳本與設定稽核都沒多（409 的 fail.POST 失敗紀錄是中介層的，不算）
+    ok = _batch(client, h, {"zz_nt_b": {"values": {"cap": 21}}, "zz_nt_j1": {"values": {"doc": ["我的"], }, "supersede": True}}, reason="確認取代")
+    assert ok.status_code == 200 and R.get("zz_nt_b", "cap") == 21, ok.text
+
+
+def test_batch_precheck_pending_exists_in_several_groups_uses_the_generic_sentence(client, make_user, zz_json_groups):
+    """L1：多群組都是「別人還在等待」⇒ code 仍是 pending_exists，但訊息不能套「已被改動、請重新整理」那句。"""
+    h = _hdr(client, make_user, "nt_pe2")
+    make_user(username="nt_pe2_other", role="superadmin")
+    for g in ("zz_nt_j1", "zz_nt_j2"):
+        R.publish(g, {"doc": ["別人"]}, user="nt_pe2_other", reason="別人先送")
+    r = _batch(client, h, {"zz_nt_j1": {"values": {"doc": ["我1"]}}, "zz_nt_j2": {"values": {"doc": ["我2"]}}}, reason="一起存")
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "pending_exists" and {x["group"] for x in d["groups"]} == {"zz_nt_j1", "zz_nt_j2"}, r.text
+    assert "等待生效" in d["message"] and "重新整理" not in d["message"] and "已被別人改動" not in d["message"], d["message"]
+    mine = R.publish("zz_nt_j1", {"doc": ["我1"]}, user="nt_pe2_other", reason="自己覆寫自己的不擋")      # 同一人的申請不算「別人」
+    assert mine["superseded"] == 1
+    assert _batch(client, h, {"zz_nt_j1": {"values": {"doc": ["x"]}}}, reason="預檢只看別人的").status_code == 409
