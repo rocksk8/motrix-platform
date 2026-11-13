@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。
 
-[單位] helper:user_perm_batch    [層] L1    [穩定度] 實作（S3a 第一段；「復原這一批」見後續提交）
-[公開介面] BATCH_GRANT_REFUSED, MAX_USERS, list_catalog, parse_request, preview, apply
+[單位] helper:user_perm_batch    [層] L1    [穩定度] 實作（S3a）
+[公開介面] BATCH_GRANT_REFUSED, MAX_USERS, UNDO_DEFAULT_REASON, list_catalog, parse_request, preview, apply, undo
 [契約題] tests/test_user_perm_batch_2026_11_14.py
 
 ## 規則（SPEC §12；守門題逐條驗）
@@ -134,7 +134,7 @@ def _refusal_for_grant(key) -> str:
 def _plan_person(uid, req, st, known, template_keys) -> dict:
     u = st["users"].get(uid)
     p = {"userId": uid, "username": "", "name": "", "role": "", "status": "nochange", "note": "", "adds": [], "removes": [],
-         "bind": [], "unbind": [], "subtractAdds": [], "skipped": [], "effectiveAdded": [], "effectiveRemoved": [], "gated": []}
+         "bind": [], "unbind": [], "subtractAdds": [], "subtractRemoves": [], "skipped": [], "effectiveAdded": [], "effectiveRemoved": [], "gated": []}
     if u is None:
         p.update(status="skipped", note="找不到這位使用者")
         return p
@@ -159,13 +159,21 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
     def skip(kind, key, why):
         p["skipped"].append({"kind": kind, "key": key, "reason": why})
 
+    for k in req.get("unsubtract") or ():                 # 只給「復原」用：還回個人扣項＝把權限還給對方，與授予同一條不對稱規則
+        if k not in subs:
+            continue
+        why = _refusal_for_grant(k)
+        if why:
+            skip("grant", k, why)
+        else:
+            p["subtractRemoves"].append(k)
     for k in want_grant:
         if k in rawset:
             continue
         why = _refusal_for_grant(k)
         if why:
             skip("grant", k, why)
-        elif k in subs:
+        elif k in subs and k not in p["subtractRemoves"]:
             skip("grant", k, "目前被個人扣項扣掉，請先到「職責角色」頁解除扣項")
         else:
             p["adds"].append(k)
@@ -198,13 +206,13 @@ def _plan_person(uid, req, st, known, template_keys) -> dict:
             p["unbind"].append(rid)
     raw_after = [k for k in raw if k not in set(p["removes"])] + [k for k in p["adds"] if k not in rawset]
     bound_after = (bound | set(p["bind"])) - set(p["unbind"])
-    subs_after = subs | set(p["subtractAdds"])
+    subs_after = (subs | set(p["subtractAdds"])) - set(p["subtractRemoves"])
     before = _effective(u["role"], raw, bound, roles, subs)
     after = _effective(u["role"], raw_after, bound_after, roles, subs_after)
     p["effectiveAdded"], p["effectiveRemoved"] = sorted(after - before), sorted(before - after)
     touched = (before ^ after) | set(p["adds"]) | set(p["removes"])
     p["gated"] = sorted(touched & _gated_keys())
-    changed = bool(p["adds"] or p["removes"] or p["bind"] or p["unbind"] or p["subtractAdds"])
+    changed = bool(p["adds"] or p["removes"] or p["bind"] or p["unbind"] or p["subtractAdds"] or p["subtractRemoves"])
     p["status"] = "change" if changed else "nochange"
     p["_rawAfter"], p["_before"], p["_after"] = raw_after, sorted(before), sorted(after)
     p["_rawChanged"] = bool(p["adds"] or p["removes"])
@@ -218,7 +226,8 @@ def _template_keys(template, known):
     return [k for k in mr.ROLE_TEMPLATES[template] if k in known and k not in dr.FINANCE_KEYS]
 
 
-def _plan(conn, req) -> dict:
+def _plan(conn, req, per_person=None) -> dict:
+    """`per_person`＝{userId: 該人專屬的請求}（只給「復原」用：每人要還原的內容不同）；沒給 ⇒ 全員同一份 `req`。"""
     st = _load_state(conn, req["userIds"])
     known = dr.known_keys()
     tkeys = _template_keys(req["template"], known)
@@ -226,10 +235,10 @@ def _plan(conn, req) -> dict:
     if tkeys is not None:
         from helpers import module_registry as mr
         template_skipped = [k for k in mr.ROLE_TEMPLATES[req["template"]] if k in dr.FINANCE_KEYS]
-    people = [_plan_person(uid, req, st, known, tkeys) for uid in req["userIds"]]
+    people = [_plan_person(uid, (per_person or {}).get(uid, req), st, known, tkeys) for uid in req["userIds"]]
     gated = sorted({k for p in people for k in p["gated"]})
     digest = hashlib.sha256(json.dumps(
-        [[p["userId"], p["adds"], p["removes"], p["bind"], p["unbind"], p["subtractAdds"]] for p in sorted(people, key=lambda x: x["userId"])],
+        [[p["userId"], p["adds"], p["removes"], p["bind"], p["unbind"], p["subtractAdds"], p["subtractRemoves"]] for p in sorted(people, key=lambda x: x["userId"])],
         ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:32]
     return {"people": people, "gatedKeys": gated, "needsReason": bool(gated), "planHash": digest, "templateFinanceKeysLeftAlone": template_skipped}
 
@@ -250,9 +259,34 @@ def preview(conn, actor, body) -> dict:
     return _public(_plan(conn, parse_request(body)))
 
 
+def _write_people(conn, actor, plan, reason, ip) -> list:
+    """把計畫逐人寫進去（呼叫端已在寫入交易內、已過原因檢查點）。⇒ 實際寫入的 userId 清單。"""
+    now = datetime.now().isoformat(timespec="seconds")
+    applied = []
+    for p in plan["people"]:
+        if p["status"] != "change":
+            continue
+        uid = p["userId"]
+        if p["_rawChanged"]:
+            conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(p["_rawAfter"], ensure_ascii=False), uid))
+        for rid in p["bind"]:
+            conn.execute("INSERT INTO user_duty_roles (user_id, role_id, granted_by, granted_at, reason) VALUES (?,?,?,?,?)",
+                         (uid, rid, (actor or {}).get("id"), now, reason))
+        for rid in p["unbind"]:
+            conn.execute("DELETE FROM user_duty_roles WHERE user_id=? AND role_id=?", (uid, rid))
+        for k in p["subtractAdds"]:
+            conn.execute("INSERT INTO user_perm_subtracts (user_id, perm_key, set_by, set_at, reason) VALUES (?,?,?,?,?)",
+                         (uid, k, (actor or {}).get("id"), now, reason))
+        for k in p["subtractRemoves"]:
+            conn.execute("DELETE FROM user_perm_subtracts WHERE user_id=? AND perm_key=?", (uid, k))
+        dr.record_user_modules_change(conn, actor, uid, p["username"], p["_before"], p["_after"], reason, ip, sensitive=bool(p["gated"]))
+        applied.append(uid)
+    return applied
+
+
 def apply(conn, actor, body, ip="") -> dict:
     """套用：同一個寫入交易重算計畫（與預覽同一支函式）、過共用檢查點、逐人寫入並記 `permission_changes`＋`audit_log`。
-    `planHash` 有帶且與重算結果不同 ⇒ 409。任何例外 ⇒ rollback（全部不寫）。"""
+    `planHash` 有帶且與重算結果不同 ⇒ 409。任何例外 ⇒ rollback（全部不寫）。回應的 `people[*]` 就是「復原這一批」要送回的內容。"""
     from core.txn import begin_write
     req = parse_request(body)
     begin_write(conn)
@@ -261,24 +295,7 @@ def apply(conn, actor, body, ip="") -> dict:
         if req["planHash"] and req["planHash"] != plan["planHash"]:
             raise dr.DutyError("名單或權限在預覽之後有變動，請重新預覽再套用", 409)
         _sens, reason = dr.gate_reason(plan["gatedKeys"], req["reason"], extra_keys=BATCH_GRANT_REFUSED)
-        now = datetime.now().isoformat(timespec="seconds")
-        applied = []
-        for p in plan["people"]:
-            if p["status"] != "change":
-                continue
-            uid = p["userId"]
-            if p["_rawChanged"]:
-                conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(p["_rawAfter"], ensure_ascii=False), uid))
-            for rid in p["bind"]:
-                conn.execute("INSERT INTO user_duty_roles (user_id, role_id, granted_by, granted_at, reason) VALUES (?,?,?,?,?)",
-                             (uid, rid, (actor or {}).get("id"), now, reason))
-            for rid in p["unbind"]:
-                conn.execute("DELETE FROM user_duty_roles WHERE user_id=? AND role_id=?", (uid, rid))
-            for k in p["subtractAdds"]:
-                conn.execute("INSERT INTO user_perm_subtracts (user_id, perm_key, set_by, set_at, reason) VALUES (?,?,?,?,?)",
-                             (uid, k, (actor or {}).get("id"), now, reason))
-            dr.record_user_modules_change(conn, actor, uid, p["username"], p["_before"], p["_after"], reason, ip, sensitive=bool(p["gated"]))
-            applied.append(uid)
+        applied = _write_people(conn, actor, plan, reason, ip)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -286,4 +303,82 @@ def apply(conn, actor, body, ip="") -> dict:
     out = _public(plan)
     out["ok"] = True
     out["applied"] = applied
+    return out
+
+
+# ── 復原這一批（SPEC §5-3：逐人 compare-and-set，不覆蓋別人的修改）────────────────────
+
+#: 復原時沒填原因的預設文字（只在沒動到高敏感／批次拒絕鍵時才允許留空；寫進變更紀錄用）
+UNDO_DEFAULT_REASON = "復原批次"
+
+
+def _undo_request(change, st, uid):
+    """某人的「復原內容」＝套用時那一筆的反向；⇒ (請求 or None, 衝突說明 or "")。
+    CAS：套用時這個人**這一批自己改到的格**，目前必須仍是套用後的樣子（加的仍在、拿掉的仍沒有、綁定／扣項同理）；否則整個人拒絕復原。"""
+    u = st["users"].get(uid)
+    if u is None:
+        return None, "找不到這位使用者"
+    if u["role"] == "superadmin":
+        return None, "最高管理者不納入批次"
+    raw = set(_json_list(u["modules"]))
+    bound, subs = set(st["bound"].get(uid, ())), set(st["subs"].get(uid, ()))
+    adds, removes = [k for k in change.get("adds") or [] if isinstance(k, str)], [k for k in change.get("removes") or [] if isinstance(k, str)]
+    bind, unbind = _int_list(change.get("bind"), "bind"), _int_list(change.get("unbind"), "unbind")
+    sub_adds, sub_removes = [k for k in change.get("subtractAdds") or [] if isinstance(k, str)], [k for k in change.get("subtractRemoves") or [] if isinstance(k, str)]
+    drift = []
+    drift += ["個人勾選「%s」已被改過" % k for k in adds if k not in raw] + ["個人勾選「%s」已被改過" % k for k in removes if k in raw]
+    drift += ["職責角色綁定 #%s 已被改過" % r for r in bind if r not in bound] + ["職責角色綁定 #%s 已被改過" % r for r in unbind if r in bound]
+    drift += ["個人扣項「%s」已被改過" % k for k in sub_adds if k not in subs] + ["個人扣項「%s」已被改過" % k for k in sub_removes if k in subs]
+    if drift:
+        return None, "；".join(drift)
+    return {"userIds": [uid], "grant": removes, "revoke": adds, "bindRoleIds": unbind, "unbindRoleIds": bind, "template": "",
+            "unsubtract": sub_adds, "reason": ""}, ""
+
+
+def undo(conn, actor, body, ip="") -> dict:
+    """復原一批：`body.changes`＝套用回應 `people[*]` 中有變更的那幾筆（只讀它們的 userId／adds／removes／bind／unbind／subtractAdds／subtractRemoves）。
+    逐人 CAS，有人被別人改過 ⇒ 只拒絕那個人並說明（`conflicts`），其餘照復原；反向動作走同一支規劃與同一個檢查點
+    （還回高敏感／批次拒絕鍵＝授予 ⇒ 略過，要逐人處理；取消它們要原因）。整批同一個交易。"""
+    from core.txn import begin_write
+    changes = body.get("changes") if isinstance(body, dict) else None
+    if not isinstance(changes, list) or not changes:
+        raise dr.DutyError("沒有可復原的內容")
+    if len(changes) > MAX_USERS:
+        raise dr.DutyError("一次最多 %d 位" % MAX_USERS)
+    reason_in = body.get("reason") if isinstance(body.get("reason"), str) else ""
+    by_user = {}
+    for c in changes:
+        if not isinstance(c, dict):
+            raise dr.DutyError("changes 的每一筆必須是物件")
+        try:
+            by_user[int(c.get("userId"))] = c
+        except (TypeError, ValueError):
+            raise dr.DutyError("userId 必須是整數")
+    begin_write(conn)
+    try:
+        ids = sorted(by_user)
+        st = _load_state(conn, ids)
+        per, conflicts = {}, []
+        for uid in ids:
+            req, why = _undo_request(by_user[uid], st, uid)
+            if req is None:
+                name = st["users"][uid]["display_name"] or st["users"][uid]["username"] if uid in st["users"] else str(uid)
+                conflicts.append({"userId": uid, "name": name, "reason": why})
+            else:
+                per[uid] = req
+        if not per:
+            conn.rollback()
+            return {"ok": True, "applied": [], "conflicts": conflicts, "people": [], "summary": {"restored": 0, "conflicts": len(conflicts)}}
+        req_all = {"userIds": sorted(per), "grant": [], "revoke": [], "bindRoleIds": [], "unbindRoleIds": [], "template": "", "reason": "", "planHash": ""}
+        plan = _plan(conn, req_all, per)
+        _sens, reason = dr.gate_reason(plan["gatedKeys"], reason_in, extra_keys=BATCH_GRANT_REFUSED)
+        reason = reason or UNDO_DEFAULT_REASON
+        applied = _write_people(conn, actor, plan, reason, ip)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    out = _public(plan)
+    out.update({"ok": True, "applied": applied, "conflicts": conflicts})
+    out["summary"].update({"restored": len(applied), "conflicts": len(conflicts)})
     return out

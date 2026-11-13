@@ -333,4 +333,77 @@ def test_the_batch_module_has_no_reason_rule_of_its_own():
     src = (BACKEND / "helpers" / "user_perm_batch.py").read_text(encoding="utf-8")
     for banned in ("REASON_MIN", "_is_trivial_reason", "_require_reason_if_sensitive", "len(reason)"):
         assert banned not in src.split('"""', 2)[2], "批次不自帶第二份原因規則：一律 duty_roles.gate_reason（%s）" % banned
-    assert src.count("dr.gate_reason(") == 1 and src.count("dr.record_user_modules_change(") == 1
+    assert src.count("dr.gate_reason(") == 2, "apply 與 undo 各一處，都走同一支"
+    assert src.count("dr.record_user_modules_change(") == 1, "寫入只有 _write_people 一處（apply 與 undo 共用）"
+
+
+# ── 8. 復原這一批（逐人 compare-and-set）──────────────────────────────────────
+def _undo(client, h, apply_resp, reason=None):
+    changes = [p for p in apply_resp.json()["people"] if p["status"] == "change"]
+    body = {"changes": changes}
+    if reason is not None:
+        body["reason"] = reason
+    return client.post(BATCH + "/undo", json=body, headers=h)
+
+
+def test_undo_restores_the_batch_and_leaves_its_own_records(client, world):
+    h, bob, cat = world["h"], world["bob"], world["cat"]
+    ap = _post(client, h, {"userIds": [bob, cat], "grant": ["customer", "map"]})
+    r = _undo(client, h, ap)
+    assert r.status_code == 200, r.text
+    assert sorted(r.json()["applied"]) == sorted([bob, cat]) and r.json()["conflicts"] == []
+    assert _mods(bob) == ["dashboard", "work_log"] and _mods(cat) == ["dashboard"]
+    for uid in (bob, cat):
+        ch = _changes(uid)
+        assert len(ch) == 2 and json.loads(ch[1]["removed"]) == ["customer", "map"] and ch[1]["reason"] == "復原批次"
+
+
+def test_undo_refuses_only_the_person_who_was_changed_by_someone_else(client, world):
+    h, bob, cat = world["h"], world["bob"], world["cat"]
+    ap = _post(client, h, {"userIds": [bob, cat], "grant": ["customer"]})
+    other = client.put("/api/users/%d" % bob, json={"modules": ["dashboard", "work_log"]}, headers=h)      # 別人（同權限者）把這一批給的鍵拿掉
+    assert other.status_code == 200
+    r = _undo(client, h, ap)
+    assert r.status_code == 200, r.text
+    assert r.json()["applied"] == [cat] and [c["userId"] for c in r.json()["conflicts"]] == [bob]
+    assert "customer" in r.json()["conflicts"][0]["reason"] and _mods(cat) == ["dashboard"]
+
+
+def test_undo_of_a_revoke_of_a_gated_key_is_a_grant_and_is_refused(client, world):
+    h, amy = world["h"], world["amy"]
+    ap = _post(client, h, {"userIds": [amy], "revoke": ["settings", "customer"], "reason": "人員離職收回權限"})
+    assert ap.status_code == 200
+    r = _undo(client, h, ap)
+    assert r.status_code == 200, r.text
+    p = _person(r, amy)
+    assert [s["key"] for s in p["skipped"]] == ["settings"], "還回高敏感鍵＝授予，不能批次"
+    assert "customer" in _mods(amy) and "settings" not in _mods(amy)
+
+
+def test_undo_of_a_role_derived_revoke_removes_the_personal_subtract(client, world):
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "viewer_plus", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
+    ap = _post(client, h, {"userIds": [bob], "revoke": ["customer"]})
+    assert _person(ap, bob)["subtractAdds"] == ["customer"]
+    r = _undo(client, h, ap)
+    assert r.status_code == 200 and r.json()["applied"] == [bob], r.text
+    import db
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM user_perm_subtracts WHERE user_id=?", (bob,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_undo_of_binding_and_bad_requests(client, world):
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "viewer_plus", ["customer"])
+    ap = _post(client, h, {"userIds": [bob], "bindRoleIds": [rid]})
+    r = _undo(client, h, ap)
+    assert r.status_code == 200 and _person(r, bob)["unbind"] == [rid]
+    assert client.post(BATCH + "/undo", json={"changes": []}, headers=h).status_code == 400
+    assert client.post(BATCH + "/undo", json={"changes": [{"userId": "x"}]}, headers=h).status_code == 400
+    assert client.post(BATCH + "/undo", json={"changes": [{"userId": world["boss2"], "adds": ["customer"]}]}, headers=h).json()["conflicts"][0]["reason"]
+    hb = _login(client, "bob")
+    assert client.post(BATCH + "/undo", json={"changes": [{"userId": world["cat"]}]}, headers=hb).status_code in (401, 403)
