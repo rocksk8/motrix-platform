@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """組織設定缺口檢查（選單去工程師化 批次 5a，2026-11-13）：只讀，不改任何資料。
 
+檢查項目（說明，不是單位卡欄位）：①在職但沒有部門的人 ②有在職成員、卻沒有主管（或主管已停用）的部門 ③沒有任何人持有「財務」職務
+
 [單位] helper:org_gaps    [層] L1    [穩定度] 實驗
-[公開介面] check, GAP_KEYS, finance_holder_exists
-[檢查項目] ①在職但沒有部門的人 ②有在職成員、卻沒有主管（或主管已停用）的部門 ③沒有任何人持有「財務」職務
+[公開介面] check, GAP_KEYS, GAP_NO_DEPARTMENT, GAP_NO_FINANCE, GAP_NO_MANAGER, MAX_ITEMS, finance_holder_exists
+[契約題] tests/test_org_gaps_5a_2026_11_13.py
 [不變式] ①只讀（不寫、不 DELETE）；任何一項查不到資料表／欄位 ⇒ 該項視為「沒有缺口」並記 log，不丟 500（缺口檢查壞了不該擋住頁面）。
     ②「持有財務職務」與 `helpers.auth.finance_duty_person` 同一條規則（旗標 off／shadow／on 都對；測試逐一比對），但**一次查詢、不逐人呼叫**
       （逐人呼叫在旗標 `on` 時每人開一條連線，300 人約 2 秒；`shadow` 時還會寫稽核）⇒ 本檔任何旗標模式都不寫入任何東西。最高管理者不算（他本來就全能，缺口是「日常沒人負責財務」）。
