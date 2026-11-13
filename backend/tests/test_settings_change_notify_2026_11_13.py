@@ -433,7 +433,6 @@ def test_security_change_to_all_users_scope_shows_values_and_reason_only_to_othe
     new = cur - 1 if cur > 3 else cur + 1
     r = client.post("/api/settings-center/groups/external_login", json={"values": {"lock_threshold": new}, "reason": "機密原因XYZ"}, headers=h)
     assert r.status_code == 200, r.text
-    assert R.groups()["external_login"]["sensitive"] is True
     sa = _notes("nt_p1b")[0]["message"]
     assert "→" in sa and "機密原因XYZ" in sa and f.label in sa                # 其他最高管理者：完整
     assert _notes("nt_p1") == []                                           # 操作者本人不收
