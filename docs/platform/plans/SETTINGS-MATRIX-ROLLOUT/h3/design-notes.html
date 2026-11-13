@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設定矩陣 mockup（甲份）設計說明</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--warnbg:#fff4de;--warn:#9a5b00;--redbg:#fdecef;--red:#c8102e}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--warnbg:#3a2c10;--warn:#f0b457;--redbg:#3a1a20;--red:#ff6b81}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.65 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px 16px 60px}h1{font-size:20px;margin:6px 0}h2{font-size:16px;margin:26px 0 8px;border-left:4px solid #1b4f9c;padding-left:8px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--line)}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{background:var(--soft)}
+code,.k{font:12px ui-monospace,Consolas,monospace;color:var(--mute)}
+.hl{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:8px 12px;margin:8px 0}.red{background:var(--redbg);color:var(--red)}
+img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}figure{margin:10px 0}figcaption{font-size:12px;color:var(--mute)}
+@media (max-width:700px){table{display:block;overflow-x:auto}}
+</style>
+</head>
+<body><div class="wrap">
+<h1>設定矩陣 mockup（甲份「業務與財務規則」）設計說明</h1>
+<p>作者 hichan-3 ・ 分支 feat/settings-matrix-rollout ・ 畫面見同資料夾 <a href="index.html">index.html</a>（假資料；欄位、選項、範圍、預設取自設定登錄表）。範圍：設定中心 20 群組／76 欄、7 個獨立頁、7 個「設定中心以外」的項目。規則依 README／SPEC r2（PM 裁示 M1、N2～N5）。</p>
+
+<h2>1. 一句話</h2>
+<p>把「76 個設定散在 20 個群組、逐項開關」改成<b>每一列都有：白話名稱、小字代碼、標籤、一句說明、目前值、來源、與預設不同●</b>；可批次的項目只做「套用建議值／套用預設組合／重設為預設」；影響大的項目永遠逐項，要填原因、要等 N 天才生效，放寬還要第二位最高管理者核准。</p>
+
+<h2>2. 規則怎麼落實（對照 README §二）</h2>
+<table><tr><th>規則</th><th>在畫面上怎麼做</th></tr>
+<tr><td>M1 批次只限 none／ops</td><td>勾選格只出現在可批次的列；不可批次的列勾選格灰掉、tooltip 寫原因；群組標題的全選自動略過，確認視窗列「已略過 N 項：原因」。批次列只有三顆：套用建議值、套用預設組合、重設為預設（外加取消選取）。營運類（ops）項目在確認視窗多一個「我確認要改這 N 項營運設定」勾選。</td></tr>
+<tr><td>批次不繞過變更管制</td><td>確認視窗把「放寬方向／要等 N 天」的項目標成「等待生效」並說明：不會立即生效，會依原規則進入等待。</td></tr>
+<tr><td>文字類欄位不畫勾選格</td><td>quote_defaults.estimate_no_prefix、quote_alt.total_text／note_template、finance_cashier.bank_alias_* 共 6 項：不畫勾選格，做成逐列編輯＋即時預覽（客戶看到的樣子、單號樣子、欄名標籤）。</td></tr>
+<tr><td>N2 復原這一批</td><td>套用後吐司「復原這一批」。復原時比對涉及群組的版本；別人改過就整批拒絕，顯示誰、何時、哪一項（可用頁首「示範」按鈕看）。沒有欄位層級的 6 秒復原；單項修改的吐司只說「要還原請到變更紀錄」。</td></tr>
+<tr><td>N3 來源</td><td>只用「預設／公司／等待生效」。本份 76 欄沒有任何一欄有個人設定層，所以沒有「個人」徽章。</td></tr>
+<tr><td>N4 說明由登錄表產生</td><td>「?」四段：這是什麼＝question＋help；什麼時候要改＝<b>新增 SettingDef.when</b>（我先寫了 76 條草稿，附在盤點表備註欄，採用就貼進登錄表）；改了會影響什麼＝impact＋riskText；建議值＝recommended＋各選項後果。</td></tr>
+<tr><td>N5 群組風險</td><td>群組標題不標高低風險，只在內含影響大的項目時顯示「內含高風險項目 ▾」，點開列出是哪幾項。</td></tr>
+<tr><td>用語表</td><td>畫面不出現 true／false、整數選項代碼、「影子」「閘門」「確認期間」。<b>但登錄表原文有</b>（見 §6），mockup 顯示時改寫，來源仍待改。</td></tr></table>
+
+<h2>3. 設定中心 20 群組怎麼分區（7 大區、15 小區）</h2>
+<table><tr><th>大區</th><th>小區（內含群組）</th></tr>
+<tr><td>報價單</td><td>送審門檻（quote_approval）／新報價單預設（quote_defaults）／擇一方案：顯示與列印（quote_alt 7 項）／擇一方案：回簽後的鎖定規則（quote_alt 9 項，矩陣）／輸出與個人資料（quote_output、quote_privacy）／補登歷史案件（quote_backfill）</td></tr>
+<tr><td>利潤與管銷</td><td>利潤提醒色帶（profit_warning＋project_margin；表格＋預設組合）／管銷與公益口徑（overhead、profit_rules）</td></tr>
+<tr><td>材料與採購</td><td>材料申請（material_order）／認列採購單（material_recognition）</td></tr>
+<tr><td>財務與出納</td><td>出納頁與對帳單（finance_cashier）／財務報表（finance_reports，含帳齡色帶）</td></tr>
+<tr><td>結案與完工</td><td>結案條件加嚴（case_close_gates）／完工單帶入（completion_note，含「帶入後的樣子」預覽）</td></tr>
+<tr><td>提醒與到期</td><td>到期預警（alerts）／法規參數跨年提醒（legal_params_reminder，月＋日合成一個控制項）</td></tr>
+<tr><td>其他</td><td>變更管制（change_control）／勞報單選派發（payslip_dispatch_picker，只有一項，併入）</td></tr></table>
+
+<h2>4. 幾個特別的設計</h2>
+<ul>
+<li><b>利潤提醒色帶</b>：7 個欄位在登錄表是 7 列，其實是「4 個畫面 × 紅線／達標線」的矩陣；每列右邊一條紅／黃／綠色帶即時預覽；紅線必須低於達標線（畫面先擋）；預設組合三個（標準＝登錄表預設、較嚴、較寬）一鍵填整張表，走確認視窗。<b>預設組合的內容是我的提案</b>，目前登錄表 presets 是 0 個。</li>
+<li><b>擇一方案鎖定規則</b>：9 條「客戶回簽後」的規則排成「規則 × 嚴格程度」單選矩陣（欄＝最嚴建議／放寬一／放寬二）；「尚未提供」的格灰掉不可選；每格變更都走原因＋要等 N 天才生效＋放寬須核准；<b>不能批次</b>。</li>
+<li><b>帳齡分界</b>：三個天數合成一條色帶（正常／注意／紅字／逾期很久），三個天數要由小到大（畫面先擋，報表否則會退回 30／60／90）；預設組合 30／60／90、15／30／60、45／90／180。</li>
+<li><b>相依灰色</b>：總開關關掉時，它下面的項目灰掉並寫「要先開啟：…」，目前不會生效（擇一方案、即將到期自訂、對帳單欄名、帳齡、結案加嚴、完工單帶入）。</li>
+<li><b>獨立頁</b>：匯款款別＝「款別 × 派發狀態」勾選矩陣；法規參數＝轉置成「參數 × 版本年度」，已生效的欄鎖定、草稿欄與前一版不同的格自動標色；簽核設定＝「單據 × 簽核層」矩陣；報表設定＝健檢橫幅＋科目批次指定報表列／現金流量分類，科目角色對應維持雙人核准、不批次；支出類型＝清單＋「精靈」步驟列；簽核代理人＝快速範圍＋狀態分組；會計科目＝小改（搜尋與篩選）。承攬商匯款簽核設定已是跳轉頁，併入簽核設定那一列，不另做。</li>
+</ul>
+
+<h2>5. 登錄表／後端要配合的地方</h2>
+<table><tr><th>項目</th><th>內容</th></tr>
+<tr><td>SettingDef.when</td><td>新增選填欄位；76 條草稿在盤點表備註欄（「什麼時候要改」）。</td></tr>
+<tr><td>presets 內容</td><td>profit_warning（3 組）與 finance_reports 帳齡（3 組）是我的提案；其餘群組沒有預設組合。</td></tr>
+<tr><td>需外部設定標籤</td><td>76 欄裡只有 alerts.cert_warn_days（要到開發者端換發簽章確認檔）。</td></tr>
+<tr><td>expected-version</td><td>復原這一批要 publish() 帶 expected_version；mockup 以「群組版本」示範。</td></tr>
+<tr><td>設定中心以外的 7 項</td><td>全是舊路徑直接寫入（只有稽核紀錄；沒有要等 N 天、沒有雙人核准）。是否納入變更管制要 PM 裁示（見 §7）。</td></tr></table>
+
+<h2>6. 登錄表原文違反用語表的地方（來源要改；mockup 顯示時已改寫）</h2>
+<p>我的 76 欄中，<b>26 欄</b>的 label／question／help／impact／riskText／選項含「確認期間」（27 處）或「影子」（4 處，quote_approval.reconfirm_mode 的選項「影子（只記錄）」→ 建議「先試跑（只記錄）」）。「確認期間」建議統一改成「要等 N 天才生效」。欄位清單：alerts 4 欄、case_close_gates.enabled、change_control.confirm_period_days、finance_cashier.receivable_grace_days、finance_reports.settle_overdue_days、legal_params_reminder 2 欄、overhead.default_pct、profit_rules.charity_rate_pct、quote_alt 9 條鎖定規則、quote_approval 4 欄、quote_output.hidden_terms_pdf_mode。</p>
+
+<h2>7. 要 PM／使用者決定的事</h2>
+<ol>
+<li><b>「憑證帳戶」指哪一項？</b>程式裡找不到這個字。我暫以「獎金傳票科目」呈現；其他候選：銀行帳戶清單（T100）、個人 Passkey（歸丙）、Google Maps 金鑰（歸乙）。</li>
+<li><b>設定中心以外 7 項要不要納入變更管制？</b>目前都是直接寫入。影響大的是：傳票科目、扣繳參數（法規參數）、T100 科目代號、管銷／公益口徑。本稿照現況畫，並標出來。</li>
+<li><b>管銷口徑／公益口徑</b>現在沒有任何畫面可以切換，只能用工具。本稿建議只做「唯讀＋切換精靈」，不放成一般開關。</li>
+<li><b>盤點表「可批次?」欄對文字欄位</b>寫了「是」（estimate_no_prefix、bank_alias_*×3）；依「文字類不畫勾選格」本稿把它們排除，畫面上可批次 31 項、盤點表是 35 項。請 h4 確認以哪個為準。</li>
+<li><b>預設組合內容</b>（利潤色帶、帳齡）是否採用我的提案。</li></ol>
+
+<h2>8. 畫面</h2>
+<figure><img src="shots/01-settings-center.png" alt=""><figcaption>設定中心：摘要、篩選晶片、分區與每列的白話名稱／標籤／來源／等待生效。</figcaption></figure>
+<figure><img src="shots/03-profit-matrix.png" alt=""><figcaption>利潤提醒色帶：畫面 × 紅線／達標線，色帶預覽與預設組合。</figcaption></figure>
+<figure><img src="shots/04-batch-confirm.png" alt=""><figcaption>批次：套用建議值的確認視窗（將變更 N 項、現在→之後、原因）。</figcaption></figure>
+<figure><img src="shots/06-undo-refused.png" alt=""><figcaption>復原這一批被拒絕：同群組在套用之後被別人改過。</figcaption></figure>
+<figure><img src="shots/07-lock-matrix.png" alt=""><figcaption>擇一方案鎖定規則矩陣（高風險，不能批次）。</figcaption></figure>
+<figure><img src="shots/08-heavy-confirm.png" alt=""><figcaption>影響大項目的單項確認：原因＋要等 N 天才生效。</figcaption></figure>
+<figure><img src="shots/09-finance-aging.png" alt=""><figcaption>帳齡色帶與預設組合。</figcaption></figure>
+<figure><img src="shots/10-help.png" alt=""><figcaption>「?」四段說明。</figcaption></figure>
+<figure><img src="shots/12-pages-remit.png" alt=""><figcaption>獨立頁：匯款款別 × 派發狀態矩陣。</figcaption></figure>
+<figure><img src="shots/13-pages-legal.png" alt=""><figcaption>獨立頁：法規參數（參數 × 版本年度）。</figcaption></figure>
+<figure><img src="shots/14-outside-center.png" alt=""><figcaption>設定中心以外的 7 項。</figcaption></figure>
+<figure><img src="shots/15-phone-cards.png" alt=""><figcaption>手機寬度（390px）：卡片版，無橫向捲動。</figcaption></figure>
+
+<h2>9. 限制</h2>
+<p>所有目前值、來源、人名、日期、獨立頁與「設定中心以外」的數字（例如法規參數年度金額）都是假資料；欄位名稱取自現有程式與登錄表。復原、確認視窗、版本檢查在 mockup 只是示意，實作時由後端整批驗證、整批寫入。沒有跑任何測試（設計階段，只做文件）。</p>
+</div></body></html>
