@@ -50,6 +50,8 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_CI_TICKET", "MOTRIX_GATE_TOKEN", "MOTRIX_WINDOW", "MOTRIX_CI_DIR", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_QUEUE_GUARD",
                # 2026-11-13：正式閘門旗標不進指紋——它決定的是「升級演練跑不跑」，由 modtest.record_for_build 明確只在它為 1 時寫紀錄
                "MOTRIX_GATE_OFFICIAL",
+               # 2026-11-13：只放行直譯器檢查（modtest／run-stage 的 interpreter_mismatch）；直譯器本身已由 python／pip_freeze 進指紋
+               "MOTRIX_ALLOW_OTHER_PYTHON",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
