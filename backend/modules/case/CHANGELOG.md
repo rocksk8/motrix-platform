@@ -1,6 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-13（feat/upload-files-txn-2；T84；版號由列車取）
+## (next) — 2026-11-13（feat/upload-files-txn-2；T84＋審查補強；版號由列車取）
+- 修正（審查 M1）：資源回收筒判斷「案件底下還有其他單據」時，`case_change_requests` 不再把 `staging`（上傳途中預留編號）與 `cancelled`（上傳失敗）算進去（`recycle_adapter._DEPENDENT_WHERE`）；否則一次失敗的上傳會讓案件刪不掉。pending／approved／rejected 照舊算。
+- 新增（審查 Q2）：每日維護（`daily.check`，`case_deadlines.run_daily_checks` 最前面）呼叫 `quotations.sweep_stale_staging()`：超過 24 小時還停在 `staging` 的預留列（上傳途中當機／重啟的殘骸）標成 `cancelled` 並清掉 `_pending_case_changes/{id}/` 底下的暫存檔；pending／approved／rejected 與新的 staging 不動。測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 - 變更（內部，API 路徑與回應形狀不變）：①已結案半解鎖案件的三條上傳類變更（款項發票／叫料附件／叫料發票附件）改為「預留編號（status='staging'，簽核佇列看不到、核准回 409）→ 存檔 → 鎖內一次升為 pending＋寫 staged_files_json → commit 之後才通知」：原本先建 pending 申請（立刻通知最高管理者）再存檔，存檔失敗（格式／大小 400、寫庫出錯）會留下沒有檔案的「鬼申請」；現在失敗＝這筆標 `cancelled`、回收檔、不通知。`_create_case_change_request` 拆成 `_insert_case_change_request`（不 commit）＋`_announce_case_change_request`（commit 後通知＋稽核），其他呼叫端行為不變。②款項發票／叫料附件／叫料發票附件／案件留言補附件改用 `helpers.uploads.files_txn`：項目被刪（404）或寫庫出錯時回收剛存的檔。③案件留言（`POST …/updates`）INSERT 失敗回收剛存的檔，且存檔失敗不再漏關連線。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 
 ## (next) — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）

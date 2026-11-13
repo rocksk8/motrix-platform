@@ -289,7 +289,10 @@ _DEPENDENTS = (("case_extra_expenses", "額外支出／請購單／採購單"), 
                ("case_change_requests", "變更申請"), ("case_material_approvals", "材料申請審核"), ("case_material_payments", "材料匯款申請"),
                ("case_material_changes", "材料申請變更申請"), ("stock_items", "已出貨的庫存序號"))
 #: 上面某些表只算『特定狀態』的列（stock_items 只有 shipped 才是下游紀錄）
-_DEPENDENT_WHERE = {"stock_items": " AND status='shipped'"}
+#: case_change_requests：`staging`（上傳途中預留編號，看不到）與 `cancelled`（上傳失敗、已回收）不是下游單據（T84；否則失敗的上傳讓案件刪不掉）；
+#: pending／approved／rejected 照舊算。
+_DEPENDENT_WHERE = {"stock_items": " AND status='shipped'",
+                    "case_change_requests": " AND status NOT IN ('staging','cancelled')"}
 
 
 class QuotationAdapter(RB.Adapter):

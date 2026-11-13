@@ -363,6 +363,40 @@ async def _stage_upload_change_request(conn, quote_no: str, doc_idx, user: dict,
     return change_id
 
 
+#: 預留（staging）超過幾小時還沒升為 pending ⇒ 視為上傳途中當機／重啟留下的殘骸，每日維護清掉
+STAGING_STALE_HOURS = 24
+
+
+def _staged_entries_of(change_id) -> list:
+    """`_pending_case_changes/{id}/` 底下實際存在的檔（staging 列的 staged_files_json 還是空的，只能看磁碟）⇒ `[{"path": 相對路徑}]`。"""
+    base = os.path.join(_uploads_mod.UPLOADS_ROOT, *_uploads_mod._effective_subfolder("_pending_case_changes/%s" % int(change_id)).split("/"))
+    out = []
+    for d, _dirs, names in os.walk(base):
+        rel_d = os.path.relpath(d, _uploads_mod.UPLOADS_ROOT).replace(os.sep, "/")
+        out += [{"path": "%s/%s" % (rel_d, n)} for n in names]
+    return out
+
+
+def sweep_stale_staging(hours: int = STAGING_STALE_HOURS) -> int:
+    """每日維護（`daily.check`，case_deadlines.run_daily_checks 呼叫）：超過 `hours` 小時還停在 staging 的預留列
+    ⇒ 標 cancelled（先 commit）再清掉它的暫存檔；回清掉幾列。pending／approved／rejected 與新的 staging 列一律不動。"""
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    conn = get_db()
+    n = 0
+    try:
+        for r in conn.execute("SELECT id FROM case_change_requests WHERE status='staging' AND requested_at < ?", (cutoff,)).fetchall():
+            entries = _staged_entries_of(r["id"])
+            cur = conn.execute("UPDATE case_change_requests SET status='cancelled', reject_reason='上傳未完成，逾時自動清理' WHERE id=? AND status='staging'",
+                               (r["id"],))
+            conn.commit()
+            if cur.rowcount:
+                _uploads_mod.purge_document_files(entries)
+                n += 1
+    finally:
+        conn.close()
+    return n
+
+
 def _cancel_staging_request(change_id: int) -> None:
     """上傳失敗：把預留的 staging 申請標成 cancelled（用新連線；盡力而為，失敗只留一筆看不到的 staging／cancelled 列）。"""
     try:

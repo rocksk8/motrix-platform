@@ -424,3 +424,79 @@ def test_d_custom_staged_register_error_leaves_no_files(client, make_user, monke
     with pytest.raises(RuntimeError):
         client.post("/api/custom/%s/files/pics" % KEY, headers=hs, files=[("files", ("a.png", PNG))])
     assert saved and _on_disk(saved) == []
+
+
+# ───────────────────────────── 審查 M1／Q2：staging／cancelled 不是下游單據；逾時的 staging 每日清掉 ─────────────────────────────
+
+def _ccr_insert(q, status, requested_at):
+    import db
+    c = db.get_db()
+    try:
+        cur = c.execute("INSERT INTO case_change_requests (quote_no, action_type, summary, payload_json, staged_files_json, status, requested_by, requested_at) "
+                        "VALUES (?,?,?,?,?,?,?,?)", (q, "material_file_upload", "x", "{}", "[]", status, "u", requested_at))
+        c.commit()
+        return cur.lastrowid
+    finally:
+        c.close()
+
+
+def _stage_file(change_id):
+    """在 `_pending_case_changes/{id}/Q_0/` 放一個實體檔（staging 列的 staged_files_json 是空的，檔只在磁碟上）。"""
+    import helpers.uploads as up
+    rel = "_pending_case_changes/%s/Q_0/x.png" % change_id
+    full = os.path.join(up.UPLOADS_ROOT, *rel.split("/"))
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    open(full, "wb").write(PNG)
+    return {"path": rel}
+
+
+def _ago(hours):
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(hours=hours)).isoformat()
+
+
+def test_recycle_dependents_ignore_staging_and_cancelled_but_count_real_requests(client):
+    from modules.case.recycle_adapter import QuotationAdapter
+    import db
+    _mk_q("MQ-T84-R")
+    _ccr_insert("MQ-T84-R", "staging", _ago(0))
+    _ccr_insert("MQ-T84-R", "cancelled", _ago(0))
+    ad = QuotationAdapter()
+    c = db.get_db()
+    try:
+        assert [d for d in ad._dependents(c, "MQ-T84-R") if d[0] == "變更申請"] == []
+        _ccr_insert("MQ-T84-R", "pending", _ago(0))
+        assert [d for d in ad._dependents(c, "MQ-T84-R") if d[0] == "變更申請"] == [("變更申請", 1)]
+        _ccr_insert("MQ-T84-R", "approved", _ago(0))
+        assert [d for d in ad._dependents(c, "MQ-T84-R") if d[0] == "變更申請"] == [("變更申請", 2)]
+    finally:
+        c.close()
+
+
+def test_sweep_cancels_only_stale_staging_rows_and_removes_their_files(client):
+    from modules.case.api.quotations import sweep_stale_staging
+    _mk_q("MQ-T84-S")
+    old = _ccr_insert("MQ-T84-S", "staging", _ago(30))
+    fresh = _ccr_insert("MQ-T84-S", "staging", _ago(1))
+    pend = _ccr_insert("MQ-T84-S", "pending", _ago(300))
+    f_old, f_fresh, f_pend = _stage_file(old), _stage_file(fresh), _stage_file(pend)
+    assert sweep_stale_staging() == 1
+    st = {r["id"]: r["status"] for r in _rows("SELECT id, status FROM case_change_requests")}
+    assert st == {old: "cancelled", fresh: "staging", pend: "pending"}
+    assert _on_disk([f_old]) == [] and len(_on_disk([f_fresh])) == 1 and len(_on_disk([f_pend])) == 1
+    assert sweep_stale_staging() == 0                      # 冪等
+
+
+def test_daily_check_runs_the_staging_sweep(client, monkeypatch):
+    """掛在既有的每日維護（daily.check）上：run_daily_checks 跑完，逾時的 staging 已被清掉。"""
+    from modules.case import case_deadlines as CD
+    for name in ("_check_warranty_expiry", "_check_case_stage_deadline", "_check_case_project_timeline_deadline",
+                 "_check_project_deadline", "_sync_warranty_calendar", "_sync_project_end_calendar"):
+        monkeypatch.setattr(CD, name, lambda *a, **k: None)
+    monkeypatch.setattr(CD.payable_reminders, "run", lambda *a, **k: None)
+    _mk_q("MQ-T84-D")
+    old = _ccr_insert("MQ-T84-D", "staging", _ago(48))
+    f = _stage_file(old)
+    CD.run_daily_checks("daily")
+    assert _rows("SELECT status FROM case_change_requests WHERE id=?", (old,))[0]["status"] == "cancelled"
+    assert _on_disk([f]) == []
