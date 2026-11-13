@@ -198,7 +198,7 @@ def test_validation_errors_write_nothing(client, make_user, monkeypatch):
     bad = [({"qty": 4, "mode": "teleport"}, 400),
            ({"mode": "consumable"}, 400),                                                    # 沒填數量
            ({"qty": 0, "mode": "consumable"}, 400),
-           ({"qty": 4, "mode": "stock", "serialsText": "S1"}, 400),                          # 入庫沒選料號
+           ({"supplement": True, "mode": "stock", "serialsText": "S1"}, 409),                 # 還沒確認到貨就補入庫
            ({"qty": 1, "mode": "stock", "partNo": "NET-P2B", "serialsText": "S1\nS2"}, 400),   # 序號比數量多
            ({"qty": 4, "mode": "consumable", "serialsText": "S1"}, 400),                     # 耗材沒有序號
            ({"qty": 60, "mode": "stock", "partNo": "NET-P2B", "serialsText": "\n".join("S%03d" % i for i in range(51))}, 400),
@@ -276,3 +276,103 @@ def test_stock_line_error_rolls_back_the_case_half(client, make_user, monkeypatc
     r = client.post(BASE + "/receive-stock", json={"qty": 4, "mode": "direct"}, headers=admin)
     assert r.status_code == 409 and "直送" in r.text
     assert _row() == {"received_on": "", "received_qty": None}
+
+
+# ── P2b 審查補強（h9／PM）：案件權限者、撤銷、耗材、零數量 ─────────────────────────
+
+def _staff(make_user, client, name="p2b_staff"):
+    n, pw = make_user(username=name, role="sales")
+    uid = _q("SELECT id FROM users WHERE username=?", (n,))[0]["id"]
+    return uid, lambda: _auth(_login(client, n, pw))
+
+
+@needs_m01
+def test_case_only_user_can_register_stock_mode_without_part_no(client, make_user, monkeypatch):
+    """只有案件權限的人讀不到料號清單：入庫方式不給料號 ⇒ 只做案件那一半（不是 400），序號不寫、由管理員補。"""
+    _flags(monkeypatch, receive_wizard=True, receive_ledger=True)
+    uid, login = _staff(make_user, client)
+    _case(assigned=[uid], qty=12)
+    r = client.post(BASE + "/receive-stock", json={"qty": 4, "mode": "stock", "serialsText": "SN-X1"}, headers=login())
+    assert r.status_code == 200, r.text
+    assert r.json()["stock"] == {"ok": False, "reason": "NO_PART"} and _row()["received_qty"] == 4.0
+    assert _q("SELECT 1 FROM stock_items") == []
+    admin = _admin(client, make_user)
+    assert [i["itemId"] for i in client.get("/api/inventory/reconcile", headers=admin).json()["items"]] == [ITEM]       # 對帳表仍列出
+    assert client.post(BASE + "/receive-stock", json={"supplement": True, "mode": "stock", "serialsText": "SN-X1"}, headers=admin).status_code == 400   # 補入庫一定要料號
+
+
+@needs_m01
+def test_consumable_writes_header_is_handled_and_needs_no_stock_permission(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True, receive_ledger=True)
+    uid, login = _staff(make_user, client)
+    _case(assigned=[uid], qty=10)
+    r = client.post(BASE + "/receive-stock", json={"qty": 4, "mode": "consumable"}, headers=login())       # 非管理員也行（沒有庫存可動）
+    assert r.status_code == 200, r.text
+    assert r.json()["stock"]["ok"] is True and r.json()["stock"]["batches"][0]["batchNo"].startswith("CN")
+    hdr = _q("SELECT delivery_mode, material_item_id, quote_no FROM stock_batches")
+    assert hdr == [{"delivery_mode": "consumable", "material_item_id": ITEM, "quote_no": NO}] and _q("SELECT 1 FROM stock_items") == []
+    admin = _admin(client, make_user)
+    assert client.get("/api/inventory/reconcile", headers=admin).json()["items"] == []                     # 耗材算已處理，不再永遠列在對帳表
+    assert client.post(BASE + "/receive-stock", json={"qty": 6, "mode": "consumable"}, headers=admin).status_code == 200   # 分批第二筆
+    assert len(_q("SELECT 1 FROM stock_batches WHERE delivery_mode='consumable'")) == 2
+
+
+@needs_m01
+def test_consumable_with_ledger_off_skips_stock_half(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True)
+    admin = _admin(client, make_user)
+    _case(qty=10)
+    r = client.post(BASE + "/receive-stock", json={"qty": 4, "mode": "consumable"}, headers=admin)
+    assert r.status_code == 200 and r.json()["stock"] == {"skipped": "consumable"} and _q("SELECT 1 FROM stock_batches") == []
+
+
+@needs_m01
+def test_undo_removes_direct_and_consumable_headers_and_allows_reregister(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True, receive_ledger=True)
+    admin = _admin(client, make_user)
+    _case(qty=10)
+    assert client.post(BASE + "/receive-stock", json={"qty": 10, "mode": "direct"}, headers=admin).status_code == 200
+    assert len(_q("SELECT 1 FROM stock_batches")) == 1
+    assert client.delete(BASE + "/receive", headers=admin).status_code == 200
+    assert _q("SELECT 1 FROM stock_batches") == [] and _row() == {"received_on": "", "received_qty": None}
+    assert [i["itemId"] for i in client.get("/api/inventory/reconcile", headers=admin).json()["items"]] == []   # 撤銷後沒有殘影
+    r = client.post(BASE + "/receive-stock", json={"qty": 10, "mode": "direct"}, headers=admin)               # 重新登載不再被「已登載過直送」擋住
+    assert r.status_code == 200, r.text
+    assert len(_q("SELECT 1 FROM stock_batches")) == 1
+
+
+@needs_m01
+def test_undo_is_blocked_when_serials_were_stocked_and_changes_nothing(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True, receive_ledger=True)
+    admin = _admin(client, make_user)
+    _part()
+    _case(qty=12)
+    assert client.post(BASE + "/receive-stock", json={"qty": 2, "mode": "stock", "partNo": "NET-P2B", "serialsText": "U1\nU2", "receivedOn": "2026-11-10"}, headers=admin).status_code == 200
+    d = client.delete(BASE + "/receive", headers=admin)
+    assert d.status_code == 409 and "庫存" in d.text
+    assert _row() == {"received_on": "2026-11-10", "received_qty": 2.0}                                   # 案件那一半也沒動
+    assert sorted(i["serial_no"] for i in _q("SELECT serial_no FROM stock_items")) == ["U1", "U2"] and len(_q("SELECT 1 FROM stock_batches")) == 1
+    _x("DELETE FROM stock_items")                                                                            # 序號處理掉（刪除）後，空的入庫表頭可被收回
+    assert client.delete(BASE + "/receive", headers=admin).status_code == 200
+    assert _q("SELECT 1 FROM stock_batches") == [] and _row() == {"received_on": "", "received_qty": None}
+
+
+@needs_m01
+def test_undo_with_wizard_off_never_touches_stock(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_ledger=True)
+    admin = _admin(client, make_user)
+    _case(received_on="2026-11-10")
+    _x("INSERT INTO stock_batches (batch_no, part_no, created_at, updated_at, quote_no, po_doc_code, material_item_id, delivery_mode) VALUES ('DR-9','',?,?,?,?,?,'direct')",
+       ("2026-11-10T00:00:00", "2026-11-10T00:00:00", NO, "PO-77", ITEM))
+    assert client.delete(BASE + "/receive", headers=admin).status_code == 200
+    assert len(_q("SELECT 1 FROM stock_batches")) == 1                                                       # 旗標關＝今天的行為，不碰庫存
+
+
+@needs_m01
+def test_zero_quantity_order_cannot_bypass_over_receipt_cap(client, make_user, monkeypatch):
+    _flags(monkeypatch, receive_wizard=True)
+    admin = _admin(client, make_user)
+    _case(qty=0)
+    r = client.post(BASE + "/receive-stock", json={"qty": 5, "mode": "consumable"}, headers=admin)
+    assert r.status_code == 409 and _row() == {"received_on": "", "received_qty": None}
+

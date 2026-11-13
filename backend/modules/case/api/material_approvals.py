@@ -366,6 +366,12 @@ def receive_undo(quote_no: str, item_id: str, authorization: str = Header(None))
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
         order = _order(q, item_id)
+        if onepipe_flags.flag_on("receive_wizard", conn):                         # 一條龍 P2b：庫存那一半一起收回（IP-122）；已有入庫序號 ⇒ 擋下、整筆不動
+            from core import registry
+            undo_stock = registry.single_provider("stock.receive_undo")
+            out = undo_stock(conn, quote_no, item_id, user) if undo_stock is not None else {"ok": True}
+            if out.get("reason") == "BLOCKED":
+                raise HTTPException(409, out.get("message") or "已有入庫的序號，請先在庫存處理後再撤銷到貨")
         try:
             res = MA.undo_receipt(conn, quote_no, item_id, user)
         except MA.MaterialApprovalError as e:

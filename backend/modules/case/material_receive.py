@@ -63,7 +63,8 @@ def _clean(n):
 
 def receive_stock(conn, quote_no, item_id, order, body, user) -> dict:
     """⇒ `{"receivedOn", "receivedQty", "appliedQty", "remaining", "mode", "supplement", "stock": {...}}`；不合法 ⇒ raise `MA.MaterialApprovalError(status, message)`。
-    `stock`＝`{"ok": True, "batches": [...], "written", "rejected"}`（逐列回報）｜`{"ok": False, "reason": "NO_PERMISSION"|"DISABLED"|"NO_STOCK_MODULE"|"NO_CASE"}`｜`{"skipped": "consumable"}`。
+    `stock`＝`{"ok": True, "batches": [...], "written", "rejected"}`（逐列回報）｜`{"ok": False, "reason": "NO_PERMISSION"|"DISABLED"|"NO_STOCK_MODULE"|"NO_CASE"|"NO_PART"}`｜`{"skipped": "consumable"}`（耗材但庫存側不可用，只做案件這一半）。
+    入庫方式沒給料號（只有案件權限的使用者）⇒ 只做案件這一半、`stock.reason="NO_PART"`（序號不寫，請管理員從對帳表補入庫）。
     案件可見性（`require_case`）與寫鎖（`begin_write`）由呼叫端先做。"""
     body = body or {}
     row = MA.get(conn, quote_no, item_id)
@@ -80,8 +81,8 @@ def receive_stock(conn, quote_no, item_id, order, body, user) -> dict:
         raise MA.MaterialApprovalError(400, "耗材沒有序號；有序號的貨請選入庫或直送客戶現場")
     applied = PI._num(order.get("quantity")) if isinstance(order, dict) else 0
     part_no = str(body.get("partNo") or "").strip()
-    if mode == "stock" and not part_no:
-        raise MA.MaterialApprovalError(400, "入庫需要先選料號")
+    if mode == "stock" and not part_no and supplement:
+        raise MA.MaterialApprovalError(400, "補入庫請先選料號")
     try:
         day = MA.normalize_date(body.get("receivedOn") or datetime.now().strftime("%Y-%m-%d"), "到貨日期")
     except Exception as e:                                                       # noqa: BLE001  HTTPException 或 ValueError：統一成 400
@@ -107,7 +108,9 @@ def receive_stock(conn, quote_no, item_id, order, body, user) -> dict:
         if len(serials) > qty:
             raise MA.MaterialApprovalError(400, "序號筆數（%d）不能多於這次到貨數量（%s）" % (len(serials), _clean(qty)))
         total = prev + qty
-        if applied and total > applied + 1e-9:
+        if applied <= 0:
+            raise MA.MaterialApprovalError(409, "這筆材料申請沒有填申請數量，無法分批累計到貨，請先補上數量")
+        if total > applied + 1e-9:
             raise MA.MaterialApprovalError(409, "已到 %s／申請 %s，這次最多還能登載 %s" % (_clean(prev), _clean(applied), _clean(max(applied - prev, 0))))
 
     now = MA._now()
@@ -120,11 +123,14 @@ def receive_stock(conn, quote_no, item_id, order, body, user) -> dict:
 
 
 def _stock_half(conn, quote_no, order, row, mode, part_no, serials, body, user, additional) -> dict:
-    if mode == "consumable":
-        return {"skipped": "consumable"}                                          # D2＋D8＝A：耗材到貨即視為現場領用，不進庫存
     fn = registry.single_provider("stock.receive")
-    if fn is None:
+    if mode == "consumable":                                                      # D2＋D8＝A：耗材到貨即視為現場領用，不進庫存；只留一筆批次表頭讓對帳表視為已處理
+        if fn is None:
+            return {"skipped": "consumable"}
+    elif fn is None:
         return {"ok": False, "reason": "NO_STOCK_MODULE"}
+    elif mode == "stock" and not part_no:
+        return {"ok": False, "reason": "NO_PART"}
     line = {"partNo": part_no, "materialItemId": str(row["item_id"]), "poDocCode": str((order or {}).get("poDocCode") or ""),
             "supplierId": (order or {}).get("supplierId"), "invoiceNo": str(body.get("invoiceNo") or "").strip(), "note": str(body.get("note") or "").strip(),
             "mode": mode, "additional": additional, "serials": serials}
@@ -132,6 +138,8 @@ def _stock_half(conn, quote_no, order, row, mode, part_no, serials, body, user, 
     if cost is not None and cost >= 0:
         line["cost"] = cost
     out = fn(conn, quote_no, [line], user)
+    if mode == "consumable" and not out.get("ok"):
+        return {"skipped": "consumable"}
     if out.get("ok"):
         b = (out.get("batches") or [{}])[0]
         if b.get("error"):                                                        # 整列被擋（直送重複、材料申請歸屬）⇒ 整筆回滾，讓使用者重填

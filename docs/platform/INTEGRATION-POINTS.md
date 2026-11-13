@@ -720,8 +720,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M03 採購・庫存・出貨：`modules/supply/receive.py::receive` |
 | 使用方 | M01 案件：一站式到貨端點（P2b） |
 | 形式 | provider，單一提供者（名稱 `supply`） |
-| 語法 | 提供：`("stock.receive", "supply"): receive`；取用：`fn = registry.single_provider("stock.receive")`；`None` ⇒ 只做案件那一半。`fn(conn, quote_no, lines, caller) -> {"ok", "batches": [{"batchNo", "partNo", "materialItemId", "poDocCode", "mode", "written", "rows": [{"serialNo", "status", "reason"}]}], "written", "rejected"}`；`lines`＝`[{"partNo", "materialItemId", "poDocCode", "supplierId", "invoiceNo", "cost", "note", "mode": "stock"｜"direct", "serials": [{"serialNo", "mac", "note"}]}]` |
-| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct` 只留一筆批次表頭（`delivery_mode='direct'`），不建序號列；同一筆材料申請已有直送批次 ⇒ 該列不寫（回 `error`，分批到貨由呼叫端帶 `additional=True`）；`materialItemId` 有給且 M01 在時，必須是該案件已確認到貨的材料申請（經 IP-110 `material.shippable`），否則該列不寫（回 `error`）；`caller=None` ＝可信的內部呼叫端，API 處理函式不可傳 None |
+| 語法 | 提供：`("stock.receive", "supply"): receive`；取用：`fn = registry.single_provider("stock.receive")`；`None` ⇒ 只做案件那一半。`fn(conn, quote_no, lines, caller) -> {"ok", "batches": [{"batchNo", "partNo", "materialItemId", "poDocCode", "mode", "written", "rows": [{"serialNo", "status", "reason"}]}], "written", "rejected"}`；`lines`＝`[{"partNo", "materialItemId", "poDocCode", "supplierId", "invoiceNo", "cost", "note", "mode": "stock"｜"direct"｜"consumable", "serials": [{"serialNo", "mac", "note"}]}]` |
+| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct`／`consumable`（耗材，D2＋D8＝A）只留一筆批次表頭（`delivery_mode='direct'`／`'consumable'`），不建序號列，讓對帳表視為已處理；`consumable` **不需入庫權限**（全部是耗材時略過 `NO_PERMISSION`）；同一筆材料申請已有同方式批次 ⇒ 該列不寫（回 `error`，分批到貨由呼叫端帶 `additional=True`）；`materialItemId` 有給且 M01 在時，必須是該案件已確認到貨的材料申請（經 IP-110 `material.shippable`），否則該列不寫（回 `error`）；`caller=None` ＝可信的內部呼叫端，API 處理函式不可傳 None |
 | 交易契約 | **吃呼叫端的連線、不 commit**（比照 IP-19 的 `claim`／`release`）；呼叫端須先 `begin_write` 拿寫鎖，重複序號檢查與寫入才在同一把鎖內 |
 | 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，案件只做自己那一半並明示；對帳表（`GET /api/inventory/reconcile`）列出「案件已到貨、庫存還沒有」的材料申請 |
 | 契約版本 | 1（2026-11-14） |
@@ -743,6 +743,24 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 對方不在時 | M01 不在 ⇒ 空清單；M03 不在 ⇒ 沒有對帳表 |
 | 契約版本 | 1（2026-11-14） |
 | 守門 | `backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py` |
+
+---
+
+## IP-122　`stock.receive_undo`：撤銷到貨確認時收回庫存那一半（M01 案件 → M03 庫存；暫定號，列車定號；2026-11-14，T85 一條龍 P2b）
+
+案件側撤銷「確認到貨」（`DELETE /api/quotations/{no}/material-orders/{item}/receive`，旗標 `onepipe.receive_wizard` 開）時，庫存側一起收回：直送、耗材、沒有序號列的入庫批次表頭直接刪除（重新登載不會被「已登載過」擋住、對帳表不留殘影）；**已有為這筆材料申請入庫的序號（不論現在狀態）⇒ 擋下、整筆不動**，請先在庫存處理。決策 D1、D7；P2b 審查（h9／PM）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/receive.py::undo_receipt` |
+| 使用方 | M01 案件：`modules/case/api/material_approvals.py::receive_undo` |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.receive_undo", "supply"): undo_receipt`；取用：`fn = registry.single_provider("stock.receive_undo")`；`None` ⇒ 只撤銷案件那一半。`fn(conn, quote_no, item_id, caller) -> {"ok": True, "removed": N}`｜`{"ok": False, "reason": "DISABLED"}`｜`{"ok": False, "reason": "BLOCKED", "message": …}` |
+| 回傳 | `BLOCKED` ⇒ 呼叫端回 409 並**不 commit**（同一筆交易回滾）；`DISABLED`（旗標 `onepipe.receive_ledger` 關）⇒ 不動庫存 |
+| 交易契約 | **吃呼叫端的連線、不 commit**；呼叫端須先 `begin_write` |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，只撤銷案件那一半 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2b_receive_wizard_2026_11_14.py` |
 
 ---
 

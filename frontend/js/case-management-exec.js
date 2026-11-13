@@ -333,7 +333,7 @@ window.CM_PARTS.push(() => ({
       const serials = this.moWizSerials(m)
       if (serials.length > 50) { w.msgError = true; w.msg = `序號一次最多 50 筆，請分次登載（目前 ${serials.length} 筆）`; return }
       if (!w.supplement && !(Number(w.qty) > 0)) { w.msgError = true; w.msg = '請填這次到貨的數量'; return }
-      if (w.mode === 'stock' && !w.partNo) { w.msgError = true; w.msg = '入庫請先選料號'; return }
+      if (w.mode === 'stock' && !w.partNo && (w.supplement || !this.moWizPartsErr)) { w.msgError = true; w.msg = '入庫請先選料號'; return }   // 只有案件權限的人（料號清單讀不到）可以只登載案件這一半
       w.busy = true; w.msg = ''; w.rows = []
       try {
         const body = { mode: w.mode, receivedOn: w.day, supplement: !!w.supplement, qty: w.supplement ? undefined : Number(w.qty), partNo: w.partNo, serialsText: w.serialsText,
@@ -349,7 +349,8 @@ window.CM_PARTS.push(() => ({
         const head = d.supplement ? '已補入庫' : `已登載到貨：已到 ${d.receivedQty}／${d.appliedQty}`
         if (st.ok === false) {
           w.msgError = true
-          w.msg = st.reason === 'NO_PERMISSION' ? `${head}。您沒有入庫權限，這批序號尚未入庫，請管理員從「入庫對帳表」補入庫（序號請另外交給管理員）。`
+          w.msg = st.reason === 'NO_PART' ? `${head}。尚未選料號，這批序號尚未入庫，請管理員從「入庫對帳表」補入庫（序號請另外交給管理員）。`
+                : st.reason === 'NO_PERMISSION' ? `${head}。您沒有入庫權限，這批序號尚未入庫，請管理員從「入庫對帳表」補入庫（序號請另外交給管理員）。`
                 : st.reason === 'DISABLED' ? `${head}。庫存入庫功能目前關閉，這批尚未入庫。`
                 : `${head}。庫存模組不可用，這批尚未入庫。`
         } else if (st.skipped) w.msg = `${head}（耗材到貨即視為現場領用，不進庫存）`

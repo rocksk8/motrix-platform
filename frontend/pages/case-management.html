@@ -2647,7 +2647,7 @@
                             </template>
                           </div>
                         </template>
-                        <template x-if="moAp(m).status === '已核准' && !moWizOn()">
+                        <template x-if="moAp(m).status === '已核准' && (!moWizOn() || !moAp(m).receivedOn)">
                           <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
                             <template x-if="!moAp(m).receivedOn">
                               <span style="display:inline-flex;align-items:center;gap:5px">

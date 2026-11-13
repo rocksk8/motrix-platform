@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## 1.0.232 — T85 P2b 審查補強（train/t85-p2-h1；h9／h2／PM；版號由列車取）
+- 只有案件權限的人（讀不到料號清單）：入庫方式不給料號 ⇒ 不再 400，只做案件那一半、回 `stock.reason="NO_PART"`（序號不寫，由管理員從入庫對帳表補入庫）；畫面不再擋「請先選料號」，並恢復舊的「確認到貨」按鈕（尚未到貨時）。補入庫仍要料號。
+- 「撤銷到貨確認」（旗標 `onepipe.receive_wizard` 開）經新串接點 IP-122 `stock.receive_undo` 一併收回庫存那一半：直送／耗材／沒有序號列的入庫表頭刪除；已有為這筆材料申請入庫的序號 ⇒ 409「請先在庫存處理」、整筆不動。
+- 耗材到貨經 IP-118 留一筆 `consumable` 批次表頭（庫存側不可用時維持只做案件那一半、`stock={"skipped":"consumable"}`），對帳表視為已處理、不再永遠列出；耗材不需入庫權限。
+- 申請數量為 0 或未填 ⇒ 分批登載一律 409（原本略過超收檢查）。
+- 金標：新增 `POST …/receive-stock` 案例（`tests/platform/write_golden_cases/cases_p2b_receive_stock.py`）。
+
 ## 1.0.231 — T85 一條龍 P2b「一站式到貨」（train/t85-p2-h1；旗標 `onepipe.receive_wizard`，預設開；關閉＝與今天逐位元相同；版號由列車取）
 - **自有 migration v12**（`0012_material_received_qty.py`）：`case_material_approvals` 加 `received_qty`（已到數量，可為 NULL；NULL＝舊的確認到貨＝全數）。到貨欄位不屬簽核實質內容，不觸發重新簽核；`material.shippable` 本來就讀這一欄。
 - 新端點 `POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock`（旗標關 ⇒ 404）：登載到貨——已到數量分批累計（超收 409）、到貨方式三選一：入庫／直送客戶現場／耗材（耗材到貨即視為現場領用、不進庫存，D2＋D8＝A）；序號一次貼上（≤50 筆，逐列回報，重複與已存在的不寫、其餘照寫）；`supplement` 補入庫（只寫庫存、不動已到數量，給入庫對帳表用）。案件那一半與庫存那一半（IP-118）同一筆交易；沒有入庫權限或庫存模組不在 ⇒ 只做案件那一半並明示（D9）；庫存整列被擋 ⇒ 整筆回滾。邏輯在 `modules/case/material_receive.py`。

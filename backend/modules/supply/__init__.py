@@ -29,6 +29,8 @@ MODULE = ModuleSpec(
         ("stock.case_summary", "supply"): _case_summary.case_summary,
         # IP-118（暫定號）：M01 一站式到貨的入庫那一半（吃呼叫端連線、不 commit；旗標 onepipe.receive_ledger）
         ("stock.receive", "supply"): _receive.receive,
+        # IP-122（暫定號）：案件側撤銷確認到貨時收回庫存那一半（吃呼叫端連線、不 commit；有入庫序號 ⇒ 擋下）
+        ("stock.receive_undo", "supply"): _receive.undo_receipt,
         # IP-20：M06 T100 付款傳票的料件進貨段
         ("inventory.paid_batches", "supply"): inventory.paid_batches,
         # IP-GL1（W4 總帳 C4）：進貨批次入庫 E08、進貨發票進項稅額 E08b、進貨付款 E09；唯讀
