@@ -26,9 +26,11 @@ def _open_after_login(live_server, client, new_context, user):
     ctx = new_context(viewport={"width": 1440, "height": 900})
     _session_only(client, ctx, user)
     page = ctx.new_page()
-    with page.expect_response(lambda r: "/api/approval-queue/count" in r.url) as resp:
+    # 2026-11-13（bootstrap）：開頁的待簽數由 /api/bootstrap 的 approvalCount 區段供應（與原端點同形）；沒有 bootstrap 時才是原端點。兩者擇一先到的回應都算。
+    with page.expect_response(lambda r: "/api/approval-queue/count" in r.url or r.url.endswith("/api/bootstrap")) as resp:
         page.goto(f"{live_server}/pages/quotations.html")
-    return page, resp.value.json()["count"]
+    body = resp.value.json()
+    return page, (body["approvalCount"] if resp.value.url.endswith("/api/bootstrap") else body)["count"]
 
 
 @pytest.mark.e2e

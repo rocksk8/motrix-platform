@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from core import registry  # noqa: E402
+from tests._e2e_login import bootstrap_unavailable  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
@@ -64,6 +65,7 @@ _HOLD_FIRST = """
 
 
 def _hold_first(page, ok, status, body):
+    bootstrap_unavailable(page)          # 第一趟 platform/menu 現在由 /api/bootstrap 供應；關掉它，這一趟才是會被扣住的原端點 fetch
     page.add_init_script(_HOLD_FIRST % {"ok": "true" if ok else "false", "status": status, "body": body})
 
 
@@ -137,11 +139,44 @@ def test_layout_failure_keeps_declared_menu_and_says_so(live_server, make_user, 
     login_as(page, (u, p))
     logs = []
     page.on("console", lambda m: logs.append(m.text))
+    bootstrap_unavailable(page)          # 要攔的是原端點；bootstrap 開著時第一趟選單不經原端點
     page.route("**/api/platform/menu", lambda route: route.fulfill(status=500, body="boom"))
     page.goto(f"{live_server}/index.html")
     _state(page, "layout-failed")
     assert label in _vocab(page), "讀版面失敗 ⇒ 宣告版要留著"
     assert any("[menu]" in t and "保留宣告版" in t and "自訂模組暫不顯示" in t for t in logs), logs   # C4-S4：講清楚少了什麼
+
+
+def test_menu_failure_inside_a_200_bootstrap_degrades_the_same_way(live_server, make_user, new_page, login_as):
+    """bootstrap 路徑自己的降級：整包 200，但 menu 區段是失敗的（menu 不給、errors.menu＝500）⇒ 頁面退回打原端點；
+    原端點同樣失敗 ⇒ 結果與上一題相同：宣告版留著、layout-failed、console 講清楚。（不是空白、也不是卡在 pending）"""
+    import json
+    _key, _href, label = _pick()
+    u, p = make_user(username="c4e_bfail", role="superadmin", modules=[])
+    page = new_page()
+    login_as(page, (u, p))
+    logs = []
+    page.on("console", lambda m: logs.append(m.text))
+    seen = {"bootstrap": 0, "menu": 0}
+
+    def _boot(route):
+        seen["bootstrap"] += 1
+        resp = route.fetch()
+        d = resp.json()
+        d["menu"] = None
+        d.setdefault("errors", {})["menu"] = 500
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(d))
+
+    def _menu(route):
+        seen["menu"] += 1
+        route.fulfill(status=500, body="boom")
+    page.route("**/api/bootstrap", _boot)
+    page.route("**/api/platform/menu", _menu)
+    page.goto(f"{live_server}/index.html")
+    _state(page, "layout-failed")
+    assert seen["bootstrap"] == 1 and seen["menu"] == 1, seen          # 先問 bootstrap（沒給）、再退回原端點一次
+    assert label in _vocab(page), "bootstrap 內的選單失敗 ⇒ 宣告版也要留著"
+    assert any("[menu]" in t and "保留宣告版" in t for t in logs), logs
 
 
 def test_stale_layout_response_is_dropped(live_server, make_user, new_page, login_as):
@@ -226,10 +261,26 @@ def test_menu_api_is_called_once_per_page_load(live_server, make_user, new_page,
     u, p = make_user(username="c4e_o2", role="superadmin", modules=[])
     page = new_page()
     login_as(page, (u, p))
+    calls, boots = [], []
+    page.on("request", lambda r: calls.append(r.url) if "/api/platform/menu" in r.url else None)
+    page.on("request", lambda r: boots.append(r.url) if r.url.endswith("/api/bootstrap") else None)
+    page.goto(f"{live_server}/index.html")
+    _seq(page, 1, "layout")
+    page.wait_for_timeout(1500)                       # 給重複／迴圈呼叫一個出現的機會
+    # 2026-11-13（bootstrap）：第一趟選單由 /api/bootstrap 供應 ⇒ 載入頁面時原端點 0 次、bootstrap 恰 1 次；不論哪條路，「取一次選單」不得重複
+    assert len(boots) == 1 and len(calls) == 0, (boots, calls)
+
+
+def test_menu_api_is_called_once_per_page_load_without_bootstrap(live_server, make_user, new_page, login_as):
+    """同上（C4-O2 原題）：bootstrap 不可用時退回原端點，每次載入仍只打一次 /api/platform/menu。"""
+    u, p = make_user(username="c4e_o2b", role="superadmin", modules=[])
+    page = new_page()
+    login_as(page, (u, p))
+    bootstrap_unavailable(page)
     calls = []
     page.on("request", lambda r: calls.append(r.url) if "/api/platform/menu" in r.url else None)
     page.goto(f"{live_server}/index.html")
     _seq(page, 1, "layout")
-    page.wait_for_timeout(1500)                       # 給重複／迴圈呼叫一個出現的機會
+    page.wait_for_timeout(1500)
     assert len(calls) == 1, calls
 

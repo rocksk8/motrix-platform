@@ -154,19 +154,23 @@ def test_invalid_draft_is_not_submitted(world):
     assert [s for _v, s in _statuses()] == ["draft"]
 
 
-def test_mode_override_off_forces_direct_publish_and_on_forces_review_with_other_superadmins(world, make_user, client):
+def test_mode_override_off_forces_direct_publish_and_on_forces_review_with_other_real_superadmins(world, make_user, client):
     client, boss, appr, _o = world
     _cfg(client, boss, reviewers=["b3d_appr"], mode="off")
     _draft(client, boss, _body())
     r = _publish(client, boss)
     assert r.json()["status"] == "published" and "definitions.publish_unreviewed" in _audit_actions()   # 覆寫關閉：直接發布仍記稽核
-    # on：名單清空 ⇒ 改用「申請人以外的最高管理者」當審核人（測試庫本來就有預設的 admin 最高管理者）
+    # on：名單清空 ⇒ 改用「申請人以外的**真人**最高管理者」當審核人。測試庫唯一預設的最高管理者是展示帳號 demo——它不是真人審核人
+    # （config_ledger.real_superadmins 排除它；6878f050e／fdf625653），所以此時只有申請人自己 ⇒ 未啟用、直接發布
     st = _cfg(client, boss, reviewers=[], mode="on")
-    assert st["mode"] == "on" and st["active"] is True and "b3d_boss" not in [r["username"] for r in st["reviewers"]]
-    # 再多一位最高管理者 ⇒ 也在審核人裡
+    assert st["mode"] == "on" and st["active"] is False and st["reviewers"] == [], "只有展示帳號當另一位最高管理者 ⇒ 不啟用審核"
+    assert "沒有申請人以外的審核人" in st["reason"]
+    # 再多一位真人最高管理者 ⇒ 強制送審，審核人就是他（不含申請人、不含展示帳號）
     _login(client, make_user, "b3d_boss2", role="superadmin")
     st = _cfg(client, boss, mode="on")
-    assert st["active"] is True and "b3d_boss2" in [r["username"] for r in st["reviewers"]]
+    names = [r["username"] for r in st["reviewers"]]
+    assert st["active"] is True and names == ["b3d_boss2"], names
+    assert "b3d_boss" not in names and "demo" not in names
     # auto 且名單空：沒有第二人 ⇒ 未啟用（原因寫明）——on 的備援只在強制送審時才用
     st = _cfg(client, boss, mode="auto")
     assert st["active"] is False and "沒有申請人以外的審核人" in st["reason"]

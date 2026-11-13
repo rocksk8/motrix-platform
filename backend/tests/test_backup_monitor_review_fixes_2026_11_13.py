@@ -35,6 +35,14 @@ loopback_net = pytest.mark.allow_outbound
 # ── 共用夾具 ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
+def _logs_dir_in_tmp(monkeypatch, tmp_path):
+    """備份互斥鎖檔寫在 LOGS_DIR/backup_run.lock；沒用到 hb_cfg 的題目不能寫進真的 backend/logs（BK19：測試不准寫 repo）。
+    autouse 先於明確要求的夾具建立，題目自己再 monkeypatch LOGS_DIR 時以它為準。"""
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs_auto"))
+
+
+@pytest.fixture(autouse=True)
 def _no_real_network(monkeypatch):
     """safe_ping 走 http.client，conftest 的 `_netguard` 攔不到它；這裡自己守：只准連 127.0.0.1，連別處＝那一題紅。
     網域解析預設回公開位址（假的），寄信一律記下來不寄。"""
@@ -594,16 +602,16 @@ def test_manual_backup_is_refused_when_the_lock_file_cannot_be_opened(client, ma
     import archive
     called = []
     monkeypatch.setattr(archive, "_daily_backup", lambda: called.append(1))
-    _unopenable(monkeypatch)
-    with pytest.raises(archive.BackupLockUnavailable):
-        with archive.backup_run_lock(strict=True):
-            pass
-    h = _login(client, make_user, "n4_sa")
-    r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
-    assert r.status_code == 503 and "無法確認" in r.json()["detail"] and "權限" in r.json()["detail"]
-    assert called == [] and fresh._running["on"] is False
-    assert (fresh._get_setting(fresh._LAST_KEY, "") or "") == ""
-    monkeypatch.undo()
+    with monkeypatch.context() as unopenable:                          # 只還原「鎖檔打不開」這一個替身；不能用 monkeypatch.undo()——它連 lock_dir／autouse 導到 tmp 的 LOGS_DIR 也一起還原，
+        _unopenable(unopenable)                                        # 之後的 backup_run_lock() 就會在真的 backend/logs 建 backup_run.lock（BK19）
+        with pytest.raises(archive.BackupLockUnavailable):
+            with archive.backup_run_lock(strict=True):
+                pass
+        h = _login(client, make_user, "n4_sa")
+        r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
+        assert r.status_code == 503 and "無法確認" in r.json()["detail"] and "權限" in r.json()["detail"]
+        assert called == [] and fresh._running["on"] is False
+        assert (fresh._get_setting(fresh._LAST_KEY, "") or "") == ""
     with archive.backup_run_lock():                                    # 嚴格模式失敗後執行緒鎖有放掉
         pass
 
