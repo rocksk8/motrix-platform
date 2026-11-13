@@ -1,0 +1,150 @@
+/* settings-matrix.css — 共用「矩陣設定表」元件的樣式（搭配 ../static/settings-matrix.js；2026-11-13）。
+   只用 style.css 的色彩 token（--surface／--line／--ink-*／--success／--info／--danger…），深色模式沿用全站的反轉機制。
+   所有 class 以 mx- 開頭，不會影響別的頁面；≤ 900px 表格換成「依群組的卡片」。 */
+
+.mx-root { position: relative; font-size: 14px; color: var(--text-primary); }
+.mx-root.mx-busy { cursor: progress; }
+.mx-root.mx-busy .mx-wrap, .mx-root.mx-busy .mx-cards, .mx-root.mx-busy .mx-batch { pointer-events: none; opacity: .65; }
+.mx-mute { color: var(--ink-secondary); font-weight: 400; font-size: 12px; }
+.mx-dash { color: var(--ink-muted); }
+.mx-empty { padding: 28px; text-align: center; color: var(--ink-secondary); }
+.mx-hide { display: none !important; }
+
+/* 工具列 */
+.mx-sticky { position: sticky; top: var(--topbar-h, 0px); z-index: 5; background: var(--white); }
+.mx-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; padding: 8px 0; }
+.mx-grow { flex: 1 1 auto; }
+
+/* 草稿：頂端固定儲存列＋未儲存的列（左側黃條） */
+.mx-draftbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; margin: 8px 0 0; border: 1px solid var(--warning); border-left-width: 6px; border-radius: var(--radius); background: var(--warning-light); color: var(--warning); font-weight: 600; }
+.mx-row.mx-draft td:first-child, .mx-card-row.mx-draft { box-shadow: inset 4px 0 0 var(--warning); }
+.mx-row.mx-draft td { background: var(--warning-light); }
+.mx-row.mx-draft:hover td { background: var(--warning-light); }
+.mx-ck input:disabled { cursor: not-allowed; opacity: .4; }
+.mx-search { flex: 1 1 220px; min-width: 160px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; }
+.mx-fchip { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text-primary); }
+.mx-fchip[aria-pressed="true"] { background: var(--black); color: var(--text-on-dark); border-color: var(--black); }
+.mx-input { padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; width: 100%; max-width: 160px; box-sizing: border-box; }
+.mx-input[type="number"] { max-width: 90px; }
+.mx-input[aria-invalid="true"] { border-color: var(--danger, #c0392b); }
+.mx-sw.mx-dis, .mx-select.mx-dis, .mx-input.mx-dis { opacity: .45; cursor: not-allowed; }
+.mx-sw.mx-ro, .mx-select.mx-ro, .mx-input.mx-ro, .mx-chip.mx-ro, .mx-rc.mx-ro { cursor: default; }          /* 唯讀：看得到值、不能改（不像 disabled 那樣變淡） */
+.mx-sw.mx-ro[disabled], .mx-select.mx-ro[disabled] { opacity: 1; }
+.mx-select { padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; max-width: 100%; }
+
+/* 按鈕 */
+.mx-btn { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--radius); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text-primary); }
+.mx-btn:hover { background: var(--surface-sunken); }
+.mx-btn:disabled { opacity: .5; cursor: not-allowed; }
+.mx-btn-sm { padding: 2px 8px; font-size: 12px; }
+.mx-btn-primary { background: var(--black); color: var(--text-on-dark); border-color: var(--black); }
+.mx-btn-primary:hover { background: var(--sidebar-active); }
+.mx-btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.mx-btn-danger:hover { background: var(--accent-hover); }
+.mx-root button:focus-visible, .mx-root input:focus-visible, .mx-root select:focus-visible, .mx-dlg button:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* 表格 */
+.mx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.mx-table { width: 100%; border-collapse: collapse; }
+.mx-table th { position: sticky; top: 0; background: var(--surface-muted); font-size: 12px; font-weight: 600; color: var(--ink-secondary); padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mx-table th.mx-name, .mx-table td.mx-name { text-align: left; min-width: 240px; }
+.mx-table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
+.mx-table td.mx-name { padding-left: 10px; }
+.mx-ck { width: 34px; text-align: center !important; }
+.mx-th-chip { width: 44px; padding-left: 2px !important; padding-right: 2px !important; }
+.mx-row.sel td { background: var(--info-light); }
+.mx-row:hover td { background: var(--surface-muted); }
+.mx-row.sel:hover td { background: var(--info-light); }
+.mx-grp td { background: var(--surface-sunken); font-weight: 600; text-align: left; cursor: pointer; }
+.mx-gacts { text-align: right !important; }
+.mx-nm { font-weight: 600; }
+.mx-sub { font-size: 11px; color: var(--ink-secondary); font-family: ui-monospace, Consolas, monospace; margin-top: 2px; }
+.mx-cards { display: none; }
+
+/* 標籤 */
+.mx-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-neutral); color: var(--ink-secondary); border: 1px solid var(--line); vertical-align: 1px; }
+.mx-pill-good { background: var(--success-light); color: var(--success); border-color: var(--success-border); }
+.mx-pill-warn { background: var(--warning-light); color: var(--warning); border-color: var(--line); }
+.mx-pill-bad, .mx-pill-crit { background: var(--danger-light); color: var(--danger); border-color: var(--danger-border); }
+.mx-pill-info { background: var(--info-light); color: var(--info); border-color: var(--info-border); }
+
+/* 開關 */
+.mx-sw { position: relative; width: 40px; height: 22px; border-radius: 999px; border: 0; background: var(--line-strong); cursor: pointer; padding: 0; transition: background .15s; flex: none; }
+.mx-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: var(--shadow-sm); }
+.mx-sw[aria-checked="true"] { background: var(--success); }
+.mx-sw[aria-checked="true"]::after { transform: translateX(18px); }
+
+/* 角色格（✓ 方塊）：on a＝指定（綠）、on f＝篩選原收件人（灰藍） */
+.mx-rc { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface); color: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+.mx-rc.on.a { background: var(--success-light); border-color: var(--success); color: var(--success); }
+.mx-rc.on.f { background: var(--info-light); border-color: var(--info); color: var(--info); }
+.mx-rc.dis { opacity: .35; cursor: not-allowed; }
+.mx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mx-chip { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12px; cursor: pointer; color: var(--ink-secondary); }
+.mx-chip.on.a { background: var(--success-light); border-color: var(--success); color: var(--success); font-weight: 600; }
+.mx-chip.on.f { background: var(--info-light); border-color: var(--info); color: var(--info); font-weight: 600; }
+.mx-chip.dis { opacity: .35; cursor: not-allowed; }
+
+/* 批次列（固定在畫面底部） */
+.mx-batch { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 40; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: calc(100vw - 24px);
+  background: var(--black); color: var(--text-on-dark); padding: 10px 14px; border-radius: 12px; box-shadow: var(--shadow-popover); }
+.mx-batch .mx-btn { background: var(--sidebar-active); color: var(--text-on-dark); border-color: var(--sidebar-hover); }
+.mx-batch .mx-btn:hover { background: var(--sidebar-hover); }
+.mx-sep { width: 1px; height: 22px; background: var(--text-on-dark-dim); opacity: .5; }
+.mx-cap { font-size: 12px; color: var(--text-on-dark-dim); }
+
+/* 對話框 */
+.mx-modal { position: fixed; inset: 0; z-index: 100; background: var(--overlay-backdrop); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.mx-dlg { background: var(--surface); color: var(--text-primary); border-radius: var(--radius-lg); width: min(560px, 100%); max-height: calc(88vh / var(--fz,1)); overflow: auto; padding: 20px 22px; box-shadow: var(--shadow-popover); }
+.mx-dlg h3 { margin: 0 0 10px; font-size: 17px; }
+.mx-dlg-body { font-size: 14px; line-height: 1.6; }
+.mx-dlg-body ul { margin: 8px 0; padding-left: 20px; }
+.mx-dlg-body .mx-danger-box { background: var(--danger-light); border: 1px solid var(--danger-border); color: var(--danger); border-radius: var(--radius); padding: 10px 12px; margin: 10px 0; }
+.mx-dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+
+/* 提示（含復原） */
+.mx-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 120; background: var(--black); color: var(--text-on-dark); padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow-popover);
+  display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 24px); font-size: 14px; }
+.mx-toast button { background: transparent; border: 0; color: var(--text-on-dark); text-decoration: underline; font: inherit; font-weight: 700; cursor: pointer; }
+.mx-toast-error { background: var(--danger); color: #fff; }
+.mx-toast-error button { color: #fff; }
+
+/* 手機：表格 → 依群組卡片 */
+@media (max-width: 900px) {
+  .mx-wrap { display: none; }
+  .mx-cards { display: block; }
+  .mx-sticky { position: static; }
+  .mx-draftbar { position: sticky; top: var(--topbar-h, 0px); z-index: 6; }
+  .mx-gcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); margin-bottom: 12px; overflow: hidden; }
+  .mx-ghead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-sunken); font-weight: 600; flex-wrap: wrap; cursor: pointer; }
+  .mx-ghead .mx-gname { flex: 1 1 auto; }
+  .mx-card-row { padding: 10px 12px; border-top: 1px solid var(--line); }
+  .mx-card-row.sel { background: var(--info-light); }
+  .mx-card-top { display: flex; align-items: center; gap: 10px; }
+  .mx-card-name { flex: 1 1 auto; min-width: 0; }
+  .mx-crow { margin-top: 8px; }
+  .mx-crow .mx-select { width: 100%; }
+  .mx-batch { left: 8px; right: 8px; transform: none; bottom: 8px; max-width: none; }
+  .mx-toast { bottom: 96px; }
+}
+@media (prefers-reduced-motion: reduce) { .mx-sw, .mx-sw::after { transition: none; } }
+
+/* S1b：C6「?」說明、C7 來源、C8 與預設不同、C11 欄頭選取、通知預覽 */
+.mx-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: 4px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--ink-secondary); font: inherit; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: 1px; }
+.mx-help:hover { background: var(--info-light); color: var(--info); border-color: var(--info-border); }
+.mx-help-sec { margin: 0 0 12px; }
+.mx-help-sec:last-child { margin-bottom: 0; }
+.mx-help-sec h4 { margin: 0 0 2px; font-size: 13px; color: var(--ink-secondary); }
+.mx-help-sec p { margin: 0; }
+.mx-src { font-size: 11px; color: var(--ink-secondary); margin-top: 2px; }
+.mx-dflt { font-size: 12px; color: var(--ink-secondary); margin-top: 3px; }
+.mx-row.mx-changed td:first-child, .mx-card-row.mx-changed { box-shadow: inset 4px 0 0 var(--warning); }            /* 與預設不同：左側橘條（草稿列的黃條同位置，草稿優先） */
+.mx-row.mx-draft.mx-changed td:first-child, .mx-card-row.mx-draft.mx-changed { box-shadow: inset 4px 0 0 var(--warning), inset 8px 0 0 var(--warning-light); }
+.mx-csel { display: block; margin: 4px auto 0; }
+.mx-csel:disabled { cursor: not-allowed; opacity: .4; }
+.mx-dlg-body .mx-preview { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--info-border); border-radius: var(--radius); background: var(--info-light); }
+.mx-dlg-body .mx-preview > b { display: block; margin-bottom: 4px; color: var(--info); font-size: 13px; }
+@media (max-width: 900px) {
+  .mx-help { width: 28px; height: 28px; font-size: 14px; }
+  .mx-dflt .mx-btn { min-height: 32px; }
+}

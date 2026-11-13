@@ -58,6 +58,9 @@ EXEMPT = {
         "稽核 menu_categories.override 由 helpers/menu_categories.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
     ("menu_categories.py", "PUT", "/api/menu/settings-help/override"):
         "稽核 settings_help.override 由 helpers/settings_help.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",
+    # ── LINE 事件矩陣批次預覽（2026-11-13）：POST 只為帶「想套用的改動」，不寫設定、不寫稽核 ──
+    ("system.py", "POST", "/api/settings/line-notify/events/batch-preview"):
+        "preview：只在記憶體內算套用前後的收件人數與每月則數（line_notify.preview_events_* 純計算、不 commit、不寫任何資料）；僅最高管理者。真正寫入的 /events/batch 與 /events/batch-undo 各記一筆稽核。",
     # ── 通知用語預覽（t62 S-X3）：POST 只為帶草稿範本，不寫任何資料 ──
     ("notify_templates.py", "POST", "/api/notify-templates/{event}/preview"):
         "preview：只在記憶體內驗證草稿範本並以樣本值渲染（NT.preview 不 commit、不寫任何資料）；僅最高管理者、builder_notify 旗標關閉時 404。",

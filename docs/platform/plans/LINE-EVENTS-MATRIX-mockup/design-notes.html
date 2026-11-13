@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE 通知矩陣：設計說明</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--soft:#faf9f6;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--soft:#1f1f23;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px;padding-top:8px;border-top:1px solid var(--line)}h3{font-size:15px;margin:16px 0 4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:10px 0}
+.mute{color:var(--mute)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--soft)}
+code{font:12.5px ui-monospace,Consolas,monospace;background:var(--soft);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font:12.5px/1.5 ui-monospace,Consolas,monospace}
+.tag{display:inline-block;font-size:12px;padding:0 8px;border-radius:9px}
+.t-ok{background:var(--okbg);color:var(--ok)}.t-warn{background:var(--warnbg);color:var(--warn)}.t-bad{background:var(--redbg);color:var(--red)}
+.q{background:var(--warnbg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0}
+ul,ol{margin:4px 0 4px 20px;padding:0}
+a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>LINE 通知矩陣：設計說明</h1>
+<p class="mute">分支 <code>feat/line-events-matrix</code>（設計階段，使用者看過才動手實作）。畫面見同資料夾 <a href="index.html">index.html</a>（假資料、真實事件名稱與群組；左上可切到「現況（對照）」）。</p>
+
+<div class="card">
+<b>一句話：</b>把「70 個事件各自展開、各自勾 6 個角色」改成「一張矩陣一眼看完、點格子切換、勾選多項一次套用」，
+並讓預設偏向「指定人員」而不是整份 Email 收件名單；後端資料結構不動，只加一支批次端點和每項用量欄位。
+</div>
+
+<h2>1. 現況的問題</h2>
+<p class="mute">以下數字來自目前程式（<code>notification-settings.html</code>、<code>line_catalog</code>／<code>line_notify</code>）：</p>
+<table>
+<tr><th>問題</th><th>具體情形</th></tr>
+<tr><td>每項都要各自操作</td><td>已接線事件 70 項（10 個群組）。每項一個開關、<b>6 個角色勾選框</b>（共 420 個）、再各自展開「設定誰要發」（選模式、選角色、加人員、按儲存）。把 8 個系統告警改成「只發給我」＝約 8 次展開＋8 次選模式＋8 次選人＋8 次儲存。</td></tr>
+<tr><td>沒有批次、搜尋、篩選</td><td>只有群組可收合。找不到「哪些事件已經開了」，也無法只看「還是發給整份名單」的事件。</td></tr>
+<tr><td>每一下都是一次請求</td><td>每個勾選各送一支 <code>PUT …/events/{key}</code>、<code>…/roles</code> 或 <code>…/audience</code>；批次沒有原子性，中途失敗會留下一半的設定。</td></tr>
+<tr><td>預設與「LINE 只給特定人」相反</td><td>事件一開，預設 <code>mode=business</code>＝發給該事件原本的 Email 收件名單（人數由各事件的收件設定決定，可能是整個部門）。要「只發給特定人」得另外展開改。</td></tr>
+<tr><td>兩套「角色」語意擠在同一格</td><td>列上的 6 個勾選是「原本收件人中，哪些角色可以收」（<code>event_roles</code>）；展開裡的角色是「另外指定誰」（<code>audiences.roles</code>）。同一頁出現兩組很像的勾選，意思不同。</td></tr>
+<tr><td>看不到用量</td><td>只有頁首的整體用量條，沒有「這個事件近 30 天發了幾則」，也不知道開了某個事件會耗多少額度（免費方案 200 則／月，每位收件人算一則；達 90% 非「重要」事件會暫停）。</td></tr>
+</table>
+
+<h2>2. 新設計（對照使用者的六點）</h2>
+<table>
+<tr><th>需求</th><th>做法</th><th>mockup 看哪裡</th></tr>
+<tr><td>① 矩陣檢視</td><td>列＝事件，依 10 個群組分段、可收合；欄＝開／關、收件對象、6 個角色、指定人員、近 30 天。點格子即切換，不用展開。</td><td>桌面寬度的主表格</td></tr>
+<tr><td>② 批次操作</td><td>勾選多個事件（左側方塊；群組標題的方塊＝整組；按住 Shift 連選一段），底部出現批次列：開／關、預設組合、指定人員／角色。群組標題列有「全開／全關」。批次套用前先出確認視窗（顯示筆數與預估用量），套用後 6 秒內可「復原」。</td><td>選「系統告警」群組方塊 → 按「只發給我」</td></tr>
+<tr><td>③ 篩選與搜尋</td><td>關鍵字搜尋（事件名稱、代碼、群組）；「已開啟／未開啟／發給整份名單／重要」；群組下拉；展開／收合全部。搜尋時自動展開有結果的群組。</td><td>工具列</td></tr>
+<tr><td>④ 預設組合</td><td>「只發給我」「最高管理者」「照 Email 收件人」，一鍵套用到選取的事件；另有「指定人員／角色…」自訂。預設組合只是前端把對象展開成既有的 <code>audience</code> 欄位，後端不存「組合」。</td><td>批次列</td></tr>
+<tr><td>⑤ 用量提示</td><td>頁首：本月用量／剩餘（免費 200 則）、依近 30 天推估每月用量、與 90% 保留線的距離。每列顯示近 30 天則數；列上標「量大」「發給整份名單（約 N 人）」「沒有人會收到」。批次確認視窗顯示「預估每月 125 → 74 則」。</td><td>頁首、「⚠ 發給整份名單」篩選</td></tr>
+<tr><td>⑥ 手機版</td><td>寬度 ≤ 900px 改成依群組的卡片（開關、對象下拉、角色晶片、近 30 天），批次列固定在畫面下方；桌面一律是矩陣。</td><td>縮小視窗或用手機寬度</td></tr>
+<tr><td>預設偏向指定人員</td><td>「新開啟的事件，預設發給」（預設＝只發給我）：把事件從「關」切到「開」時，若它目前是「照原本收件人」，自動改成這個對象並提示；仍可逐項改回。</td><td>頁面上方的下拉</td></tr>
+</table>
+
+<h3>矩陣上「收件對象」三種模式與角色格的意思</h3>
+<p class="mute">沿用現有三種模式（<code>AUDIENCE_MODES</code>），不新增語意；角色格的顏色區分兩種意思：</p>
+<table>
+<tr><th>收件對象</th><th>角色格（6 格）</th><th>指定人員</th><th>對應的現有資料</th></tr>
+<tr><td>照原本收件人（<code>business</code>）</td><td><span class="tag t-ok" style="background:#7c8aa5;color:#fff">灰藍</span>＝<b>篩選</b>原本收件人：只有這些角色的人才收（全亮＝不篩選）</td><td>不可用（後端此模式不接受指定人員）</td><td><code>event_roles[key]</code>（全亮＝移除該鍵）</td></tr>
+<tr><td>原本＋指定（<code>business_plus</code>）</td><td><span class="tag t-ok">綠</span>＝<b>另外加入</b>的角色</td><td>另外加入的人員</td><td><code>audiences[key]</code></td></tr>
+<tr><td>只發給指定（<code>only</code>）</td><td><span class="tag t-ok">綠</span>＝收件角色</td><td>收件人員（沒有任何人＝這則不會發，紅字提示）</td><td><code>audiences[key]</code></td></tr>
+</table>
+<p>人員挑選視窗沿用現行規則：沒有該事件所屬模組權限的人不能指定（<code>ineligible_users</code>）、尚未綁定 LINE 的人以刪除線標示（收不到）、本人自行關閉的仍會尊重。批次時，只要有一個選取的事件某人沒權限，該人就不能被指定（整批一致）。</p>
+
+<h2>3. 需要改的 API／後端（越小越好）</h2>
+<h3>3.1 新增一支批次端點（唯一必要的新端點）</h3>
+<pre>POST /api/settings/line-notify/events/batch      （最高管理者；比照現有端點）
+{
+  "keys": ["backup_stale", "cert_expiry", "..."],      // 1～100 個，必須全是已接線事件
+  "enabled": true,                                    // 可省略＝不改開關
+  "audience": { "mode": "only", "roles": ["superadmin"], "users": ["zhang"] },   // 可省略＝不改對象
+  "roles": null                                       // 可省略；mode=business 時的角色篩選（null＝所有角色）
+}
+→ 200 { "ok": true, "changed": ["backup_stale", ...], "unchanged": [...] }
+→ 400 { "detail": { "message": "...", "errors": [ {"key": "...", "message": "..."} ] } }   // 任何一項不合法 ⇒ 整批不改</pre>
+<ul>
+<li><b>原子</b>：先驗證全部（事件是否已接線、角色是否合法、帳號是否存在、指定的人是否有該事件的模組權限——沿用 <code>set_audience</code> 的檢查），通過才在同一把 <code>settings_lock</code> 下一次讀改寫寫回，不會出現半套狀態，也比 N 次單項請求少 N−1 次設定寫入。</li>
+<li>新 helper：<code>line_notify.set_events_batch(keys, enabled, audience, roles)</code>；單項函式 <code>set_event</code>／<code>set_event_roles</code>／<code>set_audience</code> 的規則不變，批次內部共用同一組驗證。</li>
+<li><b>稽核</b>：一筆 <code>settings.line_notify.batch</code>（內容：事件清單、開關、對象、角色），不是 N 筆；單項端點仍各記一筆。</li>
+<li>「預設組合」不進後端：前端依目前登入者展開（「只發給我」＝<code>users:[自己]</code>；「最高管理者」＝<code>roles:["superadmin"]</code>；「照 Email 收件人」＝<code>{mode:"business"}</code>＋<code>roles:null</code>）。後端沒有組合表要維護。</li>
+</ul>
+
+<h3>3.2 每項用量（讀取端，純新增欄位）</h3>
+<ul>
+<li><code>GET /api/settings/line-notify</code> 的 <code>events[]</code> 每項新增 <code>sent30</code>（近 30 天推出則數）；頂層新增 <code>usage</code>（總則數）。舊欄位與順序不動，舊前端忽略新欄位。</li>
+<li><b>現有資料只有「本月」計數</b>（<code>line_event_usage = {month, events:{key:n}}</code>，推播成功後由 <code>_usage_add</code> 累加；換月歸零）。要做真正的「最近 30 天」需新增一份按日的計數 <code>line_event_usage_daily = {YYYY-MM-DD: {key: n}}</code>，在 <code>_usage_add</code> 同處累加、只保留 31 天（資料量＝已開事件數 × 31，很小）。見下方「要使用者決定的事」第 2 項。</li>
+<li>（選配）<code>events[].recipient_count</code>＝目前會收到的人數估計，讓列上能顯示「約 N 人」。每項要解析一次收件人，70 項一次算會多 70 次查詢；建議只在矩陣頁的 GET 帶 <code>?with=recipients</code> 才算，並快取數十秒。mockup 的「約 N 人」是示意。</li>
+</ul>
+
+<h3>3.3 前端</h3>
+<ul>
+<li>矩陣寬（桌面約 1100px 以上）放不進目前「通知設定」頁裡的卡片，建議<b>獨立頁</b> <code>line-events.html</code>（通知設定頁的 LINE 卡片留 token／啟用／綁定等設定，加一個「LINE 事件管理」入口）。這是要使用者決定的事之一。</li>
+<li>元件放獨立的 <code>static/line-events-matrix.js</code>＋CSS，不再增加 <code>notification-settings.html</code>（已 1100 多行）。</li>
+</ul>
+
+<h2>4. 相容性</h2>
+<table>
+<tr><th>項目</th><th>結論</th></tr>
+<tr><td>設定資料結構</td><td>不變：<code>line_notify.events</code>／<code>event_roles</code>／<code>audiences</code> 與其讀寫規則（含 fail-closed）原樣；批次只是一次改多個鍵。</td></tr>
+<tr><td>既有 API</td><td>單項三支端點與回應不動；<code>GET</code> 只新增欄位。舊頁面與新矩陣頁可並存，切換前不影響任何人。</td></tr>
+<tr><td>發送邏輯</td><td>不動（<code>deliver_event</code>／<code>resolve_audience</code>／額度保留／每月上限／補發佇列都不碰）。</td></tr>
+<tr><td>行為差異（需使用者同意）</td><td>只有「新開啟時預設對象」一項是新行為：事件從關切到開時，預設改成「只發給我」而不是「整份名單」。若不採用，下拉預設改成「照 Email 收件人」即與現況一致。</td></tr>
+<tr><td>測試與守門</td><td>預期會動到：<code>route_inventory</code>／<code>route_table_golden</code>（新端點）、<code>response_keys_baseline</code>（<code>GET</code> 新欄位）、L1 snapshot 與 <code>modules.json</code> 的 L1.units（新 helper 函式若進公開介面）、<code>core/CHANGELOG.md</code> 的 <code>(next)</code>；<code>line_notify</code> 契約題加批次案例；e2e 要遵守 e2e lint（動作後先等再讀）。</td></tr>
+<tr><td>權限</td><td>與現有端點相同：只有最高管理者。</td></tr>
+</table>
+
+<h2>5. 要先讓使用者決定的事</h2>
+<div class="q"><ol>
+<li><b>新開啟事件的預設對象</b>：採「只發給我」（建議，符合「LINE 只給特定人」），還是維持「照 Email 收件人」？這是唯一會改變現況行為的地方。</li>
+<li><b>「近 30 天」要不要真的做滾動 30 天</b>：(A) 新增按日計數（建議；小改動、之後才有資料，<b>上線後要累積 30 天才完整</b>）；(B) 先沿用現有「本月」計數（零後端改動，但月初會歸零、看起來沒資料）。</li>
+<li><b>矩陣放獨立頁，還是留在通知設定頁的卡片裡</b>（建議獨立頁，理由見 3.3）。</li>
+<li><b>系統告警（「重要」）可不可以被批次關掉</b>：mockup 允許，但關閉前的確認視窗會用紅字提醒；若要更保守，可以讓「重要」事件不出現在批次關閉的範圍。</li>
+<li><b>角色格兩種顏色</b>（篩選＝灰藍、指定＝綠）使用者看得懂嗎？如果覺得混淆，替代方案是把「照原本收件人」模式的角色篩選收進「進階」，矩陣主畫面只留「指定」語意。</li>
+<li>預設組合清單要不要加：例如「管理者＋我」「財務角色」。目前只放使用者提的三個＋自訂。</li>
+</ol></div>
+
+<h2>6. 實作拆分（核可後）</h2>
+<ol>
+<li>後端：<code>set_events_batch</code>＋批次端點＋<code>GET</code> 新欄位（含按日計數，若選 A）＋契約題與守門更新。</li>
+<li>前端：矩陣元件（桌面表格＋手機卡片）、批次列、確認視窗、人員挑選視窗、復原；通知設定頁加入口。</li>
+<li>e2e：開關／角色格切換、群組全開全關、批次預設組合、搜尋篩選、手機寬度無橫向捲動；不含重型全量測試。</li>
+</ol>
+
+<h2>7. mockup 的限制（請見諒）</h2>
+<ul>
+<li>所有開關、對象、近 30 天則數、人員（王經理、李業務…）與「約 N 人」都是假資料；事件名稱、群組、「僅 LINE／LINE 細項／重要」標籤與模組權限需求取自真實事件目錄（70 項）。</li>
+<li>「預估每月推出」用近 30 天則數乘以收件人數的變化做粗估，只有已開啟、且有歷史則數的事件能推估；新開啟的事件會標註「無法推估」。</li>
+<li>復原、確認視窗、批次原子性在 mockup 只是示意；實作時批次由後端整批驗證、整批寫入。</li>
+</ul>
+</div>
+</body>
+</html>
