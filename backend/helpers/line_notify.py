@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
-[公開介面] AUDIENCE_MODES, BATCH_MAX_KEYS, BatchConflict, CALLBACK_PATH, CriticalConfirmRequired, DEFAULT_EVENT_SPEC, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_AUDIENCE_USERS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_DAILY_KEEP_DAYS, USAGE_KEY, WIRED_EVENTS, audience_view, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, event_spec, events_view, ids_for, is_linked, is_wired, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, preview_events_batch, public_base, push, push_async, quota, restore_events_batch, retry_pending, safe_link, set_audience, set_confirmed, set_event, set_event_roles, set_events_batch, settings_lock, unlink_user, usage_daily_view, valid_login_id, valid_login_secret, valid_token, verify_token, wired_events
+[公開介面] AUDIENCE_MODES, BATCH_MAX_KEYS, BatchConflict, CALLBACK_PATH, CriticalConfirmRequired, DEFAULT_EVENT_SPEC, HTTP_TIMEOUT, LINE_API_BASE, LINE_EVENTS, LINKS_KEY, LINK_PAGES, MARKS_KEY, MARK_KEEP_DAYS, MAX_AUDIENCE_USERS, MAX_TEXT, MONTHLY_LIMIT_FALLBACK, MULTICAST_LIMIT, PENDING_KEY, PENDING_TTL_DAYS, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, USAGE_DAILY_KEEP_DAYS, USAGE_KEY, WIRED_EVENTS, audience_view, binding_view, build_text, callback_url, deliver_event, enabled, event_enabled, event_roles_view, event_spec, events_view, ids_for, is_linked, is_wired, link_user, links_enabled, login_credentials, mask, month_cap_percent, normalize_public_base, notify_event, notify_users, preview_events_batch, preview_events_changes, public_base, push, push_async, quota, restore_events_batch, retry_pending, safe_link, set_audience, set_confirmed, set_event, set_event_roles, set_events_batch, set_events_changes, settings_lock, unlink_user, usage_daily_view, valid_login_id, valid_login_secret, valid_token, verify_token, wired_events
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -577,6 +577,21 @@ def _is_critical(event_key: str) -> bool:
     return event_spec(event_key).get("priority") == "critical"
 
 
+def _with_narrowed(cfg: dict, new_cfg: dict, keys, crit) -> list:
+    """「重要」告警的確認範圍＝**關閉** ＋ **縮小收件範圍**（hichan-9 M1、PM 裁示 2026-11-13）：事件前後都是開著，但可能收到的人變少
+    （例如角色篩選清成 `[]`、改成「只發給指定」而指定的人都已離職或沒綁定、照原本改成只發給一個人）⇒ 等同被靜音，同樣要 `confirm_critical`。
+    人數用 `line_recipients.potential_counts`（在職、已綁定、輪得到、沒退訂；照原本收件人時是上限）。⇒ `crit` 加上這些事件（去重、保持順序）。"""
+    from . import line_recipients as _lr
+    m = lambda c, k: c.get(k) if isinstance(c.get(k), dict) else {}          # noqa: E731
+    ev0, ev1 = m(cfg, "events"), m(new_cfg, "events")
+    cand = [k for k in keys if k not in crit and _is_critical(k) and ev0.get(k) is True and ev1.get(k) is True]
+    if not cand:
+        return list(crit)
+    before = _lr.potential_counts(cand, roles_map=m(cfg, "event_roles"), aud_map=m(cfg, "audiences"))
+    after = _lr.potential_counts(cand, roles_map=m(new_cfg, "event_roles"), aud_map=m(new_cfg, "audiences"))
+    return list(crit) + [k for k in cand if after[k]["n"] < before[k]["n"]]
+
+
 def _state_token(cfg: dict, k: str) -> str:
     """事件 k 目前「開關＋誰要發＋角色篩選」的短指紋（給「復原這一批」比對：套用後記下、復原時比、不一樣 ⇒ 被改過）。"""
     import hashlib
@@ -670,38 +685,111 @@ def set_events_batch(keys, enabled=None, audience=None, roles=_UNSET, confirm_cr
     default_user：事件從關切到開、且沒有指定對象時套用「只發給我」（不變式 ⑭）。
     ⇒ `{"changed", "unchanged", "defaulted", "critical_off"}`（事件 key 清單）。不合法 ⇒ `ValueError`；缺確認 ⇒ `CriticalConfirmRequired`（是 ValueError 的子類）。"""
     keys, roles_given, ev_roles, norm_aud = _batch_inputs(keys, enabled, audience, roles, confirm_critical)
-    crit0 = _plan_batch(_cfg(), keys, enabled, norm_aud, roles_given, ev_roles, default_user)[3]
+    cfg0 = _cfg()
+    new0, _ch, _df, crit0 = _plan_batch(cfg0, keys, enabled, norm_aud, roles_given, ev_roles, default_user)
+    crit0 = _with_narrowed(cfg0, new0, keys, crit0)
     if crit0 and not confirm_critical:
         raise CriticalConfirmRequired(crit0)
     with _lock:
         if any(k not in WIRED_EVENTS for k in keys):                                  # 進鎖後複查：驗證到寫入之間模組可能被停用
             raise ValueError("有事件已不在支援 LINE 的清單內，請重新整理")
-        c, changed, defaulted, crit = _plan_batch(_cfg(), keys, enabled, norm_aud, roles_given, ev_roles, default_user)
+        cfg1 = _cfg()
+        c, changed, defaulted, crit = _plan_batch(cfg1, keys, enabled, norm_aud, roles_given, ev_roles, default_user)
+        crit = _with_narrowed(cfg1, c, keys, crit)
         if crit and not confirm_critical:                                             # 驗證到寫入之間別人把事件打開了
             raise CriticalConfirmRequired(crit)
-        if changed or enabled is not None:
+        if changed:                                                                   # 沒有任何變動就不寫（不留下多餘的 False 項目）
             _set_setting(SETTING_KEY, c)
         after = {k: _state_token(c, k) for k in keys}
     return {"changed": changed, "unchanged": [k for k in keys if k not in changed], "defaulted": defaulted, "critical_off": crit, "after": after}
 
 
-def preview_events_batch(keys, enabled=None, audience=None, roles=_UNSET, default_user: str = None) -> dict:
-    """批次預覽（**不寫入、不記稽核**）：同 `set_events_batch` 的輸入與驗證，回每個事件套用前後的開關、可能收件人數與每月則數估算。
-    ⇒ `{"events": [{key, enabled_before, enabled_after, n_before, n_after, exact_after, sent30, est_after, changed, defaulted, critical_off}], "total": {...}}`。
-    估算：以該事件近 30 天實際推播數（`sent30`）按「可能收件人數」的比例推算套用後的每月則數（`est_after`）；沒有歷史（sent30＝0）或套用前人數為 0 ⇒ `None`（無法估算）。
-    關閉事件 ⇒ 0。人數是上限（見 `line_recipients.potential_counts`）。`total` 把能估算的相加，`unknown`＝無法估算的事件數。"""
+def _changes_inputs(changes) -> dict:
+    """草稿儲存：`changes = {事件key: {"enabled"?, "audience"?, "roles"?}}`（每個事件各自的改動；沒帶的欄位＝不動，roles 帶 null＝移除角色篩選）。
+    進鎖前整理與驗證（規則同 `_batch_inputs`）⇒ `{key: (enabled|None, norm_aud|None, roles_given, ev_roles)}`（保持輸入順序）。不合法 ⇒ `ValueError`。"""
+    if not isinstance(changes, dict) or not changes or len(changes) > BATCH_MAX_KEYS:
+        raise ValueError("changes 必須是 {事件代碼: {enabled／audience／roles}}（1～%d 個事件）" % BATCH_MAX_KEYS)
+    unknown = [k for k in changes if not isinstance(k, str) or k not in WIRED_EVENTS]
+    if unknown:
+        raise ValueError("這些通知尚未支援 LINE：%s" % "、".join(str(x) for x in unknown[:5]))
+    from .mail_types import ROLES
+    plan = {}
+    for k, ch in changes.items():
+        if not isinstance(ch, dict) or not ch or set(ch) - {"enabled", "audience", "roles"}:
+            raise ValueError("%s 的改動格式不正確（只能有 enabled、audience、roles，至少一個）" % k)
+        en = ch.get("enabled")
+        if "enabled" in ch and not isinstance(en, bool):
+            raise ValueError("%s 的 enabled 必須是 true 或 false" % k)
+        rg = "roles" in ch
+        rl = ch.get("roles")
+        if rg and rl is not None:
+            if not isinstance(rl, list) or not all(isinstance(r, str) and r in ROLES for r in rl):
+                raise ValueError("%s 的 roles 必須是角色清單（%s）或 null" % (k, "、".join(ROLES)))
+            rl = list(dict.fromkeys(rl))
+        na = None
+        if "audience" in ch:
+            a = ch["audience"]
+            if not isinstance(a, dict) or "mode" not in a:
+                raise ValueError("%s 的 audience 必須是 {mode, roles, users}" % k)
+            r0, u0 = _check_audience(k, a["mode"], a.get("roles"), a.get("users"))
+            na = {"mode": a["mode"], "roles": r0, "users": u0}
+        plan[k] = (en if "enabled" in ch else None, na, rg, rl if rg else None)
+    return plan
+
+
+def _plan_changes(cfg: dict, plan: dict, default_user):
+    """**純函式**：逐事件套用各自的改動 ⇒ `(新設定, changed, defaulted, critical_off)`（同 `_plan_batch`，只是每個事件改的內容不同）。"""
+    c, changed, defaulted, crit = cfg, [], [], []
+    for k, (en, na, rg, rl) in plan.items():
+        c, ch, df, cr = _plan_batch(c, [k], en, na, rg, rl, default_user)
+        changed += ch
+        defaulted += df
+        crit += cr
+    return c, changed, defaulted, crit
+
+
+def set_events_changes(changes, confirm_critical: bool = False, default_user: str = None, expect=None) -> dict:
+    """儲存草稿：一次套用「每個事件各自的改動」；**全部成功或全部不改**（一次 `_set_setting`），回應同 `set_events_batch`（含 `after` 指紋）。
+    `expect`＝`{key: 指紋}`（載入頁面時 GET 給的 `version`）：任一個事件從載入到現在被別人改過 ⇒ `BatchConflict`（整批不存，不蓋掉別人的修改）。
+    關閉「重要」告警必須 `confirm_critical=True`（`CriticalConfirmRequired`）。"""
+    if not isinstance(confirm_critical, bool):
+        raise ValueError("confirm_critical 必須是 true 或 false")
+    plan = _changes_inputs(changes)
+    keys = list(plan)
+    if expect is not None and (not isinstance(expect, dict) or not all(isinstance(v, str) for v in expect.values())):
+        raise ValueError("expect 必須是 {事件代碼: 字串}")
+    cfg0 = _cfg()
+    new0, _ch, _df, crit0 = _plan_changes(cfg0, plan, default_user)
+    crit0 = _with_narrowed(cfg0, new0, keys, crit0)
+    if crit0 and not confirm_critical:
+        raise CriticalConfirmRequired(crit0)
+    with _lock:
+        if any(k not in WIRED_EVENTS for k in keys):
+            raise ValueError("有事件已不在支援 LINE 的清單內，請重新整理")
+        cfg = _cfg()
+        stale = [k for k in keys if expect and k in expect and _state_token(cfg, k) != expect[k]]
+        if stale:
+            raise BatchConflict(stale)
+        c, changed, defaulted, crit = _plan_changes(cfg, plan, default_user)
+        crit = _with_narrowed(cfg, c, keys, crit)
+        if crit and not confirm_critical:
+            raise CriticalConfirmRequired(crit)
+        if changed:
+            _set_setting(SETTING_KEY, c)
+        after = {k: _state_token(c, k) for k in keys}
+    return {"changed": changed, "unchanged": [k for k in keys if k not in changed], "defaulted": defaulted, "critical_off": crit, "after": after}
+
+
+def _preview_from(cfg: dict, new_cfg: dict, keys, changed, defaulted, crit) -> dict:
+    """`preview_events_batch`／`preview_events_changes` 共用：算套用前後的可能收件人數與每月則數估算（說明見 `preview_events_batch`）。"""
     from . import line_recipients as _lr
-    keys, roles_given, ev_roles, norm_aud = _batch_inputs(keys, enabled, audience, roles, False)
-    cfg = _cfg()
-    new_cfg, changed, defaulted, crit = _plan_batch(cfg, keys, enabled, norm_aud, roles_given, ev_roles, default_user)
-    before = _lr.potential_counts(keys, roles_map=cfg.get("event_roles") if isinstance(cfg.get("event_roles"), dict) else {},
-                                  aud_map=cfg.get("audiences") if isinstance(cfg.get("audiences"), dict) else {})
-    after = _lr.potential_counts(keys, roles_map=new_cfg.get("event_roles") if isinstance(new_cfg.get("event_roles"), dict) else {},
-                                 aud_map=new_cfg.get("audiences") if isinstance(new_cfg.get("audiences"), dict) else {})
+    m = lambda c, k: c.get(k) if isinstance(c.get(k), dict) else {}          # noqa: E731
+    before = _lr.potential_counts(keys, roles_map=m(cfg, "event_roles"), aud_map=m(cfg, "audiences"))
+    after = _lr.potential_counts(keys, roles_map=m(new_cfg, "event_roles"), aud_map=m(new_cfg, "audiences"))
     sent = usage_daily_view(30)["by_event"]
-    ev0 = cfg.get("events") if isinstance(cfg.get("events"), dict) else {}
-    ev1 = new_cfg.get("events") if isinstance(new_cfg.get("events"), dict) else {}
+    ev0, ev1 = m(cfg, "events"), m(new_cfg, "events")
     rows, tot_now, tot_after, unknown = [], 0, 0, 0
+    narrow = [k for k in _with_narrowed(cfg, new_cfg, keys, crit) if k not in crit]      # 關閉以外、「縮小收件範圍」的重要告警
     for k in keys:
         on0, on1 = ev0.get(k) is True, ev1.get(k) is True
         s30 = int(sent.get(k, 0) or 0)
@@ -718,15 +806,35 @@ def preview_events_batch(keys, enabled=None, audience=None, roles=_UNSET, defaul
         else:
             tot_after += est
         rows.append({"key": k, "enabled_before": on0, "enabled_after": on1, "n_before": n0, "n_after": n1, "exact_after": after[k]["exact"],
-                     "sent30": s30, "est_after": est, "changed": k in changed, "defaulted": k in defaulted, "critical_off": k in crit})
+                     "sent30": s30, "est_after": est, "changed": k in changed, "defaulted": k in defaulted, "critical_off": k in crit, "critical_narrow": k in narrow})
     return {"events": rows, "total": {"sent30": tot_now, "est_after": tot_after, "unknown": unknown}}
+
+
+def preview_events_changes(changes, default_user: str = None) -> dict:
+    """草稿儲存前的預覽（不寫入）：輸入同 `set_events_changes` 的 `changes`，輸出同 `preview_events_batch`。"""
+    plan = _changes_inputs(changes)
+    cfg = _cfg()
+    new_cfg, changed, defaulted, crit = _plan_changes(cfg, plan, default_user)
+    return _preview_from(cfg, new_cfg, list(plan), changed, defaulted, crit)
+
+
+def preview_events_batch(keys, enabled=None, audience=None, roles=_UNSET, default_user: str = None) -> dict:
+    """批次預覽（**不寫入、不記稽核**）：同 `set_events_batch` 的輸入與驗證，回每個事件套用前後的開關、可能收件人數與每月則數估算。
+    ⇒ `{"events": [{key, enabled_before, enabled_after, n_before, n_after, exact_after, sent30, est_after, changed, defaulted, critical_off}], "total": {...}}`。
+    估算：以該事件近 30 天實際推播數（`sent30`）按「可能收件人數」的比例推算套用後的每月則數（`est_after`）；沒有歷史（sent30＝0）或套用前人數為 0 ⇒ `None`（無法估算）。
+    關閉事件 ⇒ 0。人數是上限（見 `line_recipients.potential_counts`）。`total` 把能估算的相加，`unknown`＝無法估算的事件數。"""
+    keys, roles_given, ev_roles, norm_aud = _batch_inputs(keys, enabled, audience, roles, False)
+    cfg = _cfg()
+    new_cfg, changed, defaulted, crit = _plan_batch(cfg, keys, enabled, norm_aud, roles_given, ev_roles, default_user)
+    return _preview_from(cfg, new_cfg, keys, changed, defaulted, crit)
 
 
 def restore_events_batch(states, expect) -> dict:
     """「復原這一批」：把每個事件寫回套用前的狀態，**前提是它們從套用到現在都沒被別人改過**。
     states：`{key: {"enabled": bool, "audience": {"mode","roles","users"}, "roles": None|[角色…]}}`；expect：`{key: 套用後的指紋}`（`set_events_batch` 回的 `after`）。
     全部成功或全部不改（一次 `_set_setting`）；任何一個事件的指紋與現在不同 ⇒ `BatchConflict`（整批不復原）；內容不合法 ⇒ `ValueError`。
-    ⇒ `{"restored": [key…], "after": {key: 指紋}}`。不要求 confirm_critical：復原只是把事件寫回使用者自己先前的狀態。"""
+    ⇒ `{"restored": [key…], "after": {key: 指紋}}`。不要求 confirm_critical：復原只是把事件寫回使用者自己先前的狀態（即使這會關閉或縮小「重要」告警，也是回到使用者自己先前的設定）。
+    若先前指定的人後來離職、被刪除或失去該事件所屬模組的權限，整批以 `ValueError`（400）拒絕、一個都不復原。"""
     if not isinstance(states, dict) or not isinstance(expect, dict) or not states or len(states) > BATCH_MAX_KEYS:
         raise ValueError("states／expect 必須是 {事件代碼: …}（1～%d 個）" % BATCH_MAX_KEYS)
     if set(states) != set(expect):
@@ -747,7 +855,10 @@ def restore_events_batch(states, expect) -> dict:
         if rl is not None and (not isinstance(rl, list) or not all(isinstance(r, str) and r in ROLES for r in rl)):
             raise ValueError("%s 的 roles 必須是角色清單或 null" % k)
         a = st["audience"]
-        r0, u0 = _check_audience(k, a["mode"], a.get("roles"), a.get("users"))
+        try:
+            r0, u0 = _check_audience(k, a["mode"], a.get("roles"), a.get("users"))
+        except ValueError as e:
+            raise ValueError("無法復原：%s（原先指定的人可能已離職、被刪除，或失去這個通知所屬模組的權限；請改用手動設定）" % e)
         plan[k] = (st["enabled"], {"mode": a["mode"], "roles": r0, "users": u0}, None if rl is None else list(dict.fromkeys(rl)))
     with _lock:
         cfg = _cfg()
@@ -972,10 +1083,12 @@ def _usage_daily_add(event_key: str, n: int, now: datetime = None) -> None:
         try:
             conn.execute("INSERT INTO line_event_usage_daily (day, event_key, n) VALUES (?, ?, ?) "
                          "ON CONFLICT(day, event_key) DO UPDATE SET n = n + excluded.n", (day, event_key, int(n)))
-            if _usage_pruned_day != day:
+            prune = _usage_pruned_day != day
+            if prune:
                 conn.execute("DELETE FROM line_event_usage_daily WHERE day < ?", ((today - timedelta(days=USAGE_DAILY_KEEP_DAYS - 1)).isoformat(),))
-                _usage_pruned_day = day
             conn.commit()
+            if prune:
+                _usage_pruned_day = day                                              # commit 成功之後才記「今天清過了」（失敗就明天／下一則再清）
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001

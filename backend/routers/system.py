@@ -2821,10 +2821,12 @@ def get_line_notify(authorization: str = Header(None)):
     safe["event_groups"] = list(_cat.GROUP_ORDER)
     u30 = _ln.usage_daily_view(30)          # 按日計數（LINE 事件矩陣票）：近 30 天每個事件推出幾則；資料未滿 30 天 ⇒ complete=False、accumulated_days＝已累積幾天
     safe["usage30"] = {k: u30[k] for k in ("days", "accumulated_days", "complete", "total")}
+    safe["audit_mark"] = _audit_mark()               # 草稿儲存的衝突說明用：載入當下的稽核紀錄編號（見 `/events/batch` 的 `since_audit`）
+    _cfg_ln = _ln._cfg()
     rc = _lr.potential_counts(_ln.WIRED_EVENTS)      # 每個事件目前可能收到的人數（在職、已綁定、輪得到、沒退訂）；exact＝只發給指定時才精確，其餘是上限
     safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
                        "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
-                       "sent30": u30["by_event"].get(k, 0), "recipient_count": rc[k]["n"], "recipient_exact": rc[k]["exact"],
+                       "sent30": u30["by_event"].get(k, 0), "recipient_count": rc[k]["n"], "recipient_exact": rc[k]["exact"], "version": _ln._state_token(_cfg_ln, k),
                        "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
 
@@ -2919,6 +2921,27 @@ def set_line_notify_event(key: str, body: dict = Body(...), authorization: str =
 _BATCH_FIELDS = {"keys", "enabled", "audience", "roles", "confirm_critical"}
 
 
+_CHANGES_FIELDS = {"changes", "confirm_critical", "expect", "since_audit"}
+
+
+def _parse_line_changes_body(b: dict) -> dict:
+    """草稿儲存的請求本體：`{changes: {事件key: {enabled?, audience?, roles?}}, expect?: {key: version}, since_audit?, confirm_critical?}`。嚴格解析 ⇒ 400。"""
+    extra = sorted(set(b) - _CHANGES_FIELDS)
+    if extra:
+        raise HTTPException(400, "草稿儲存不認得的欄位：%s（可用：%s）" % ("、".join(str(x) for x in extra[:5]), "、".join(sorted(_CHANGES_FIELDS))))
+    if not isinstance(b.get("changes"), dict):
+        raise HTTPException(400, "changes 必須是 {事件代碼: {enabled／audience／roles}}")
+    if "confirm_critical" in b and b["confirm_critical"] is not None and not isinstance(b["confirm_critical"], bool):
+        raise HTTPException(400, "confirm_critical 必須是 true 或 false")
+    since = b.get("since_audit", 0)
+    if isinstance(since, bool) or not isinstance(since, int):
+        raise HTTPException(400, "since_audit 必須是整數")
+    ex = b.get("expect")
+    if ex is not None and (not isinstance(ex, dict) or not all(isinstance(v, str) for v in ex.values())):
+        raise HTTPException(400, "expect 必須是 {事件代碼: 字串}")
+    return {"changes": b["changes"], "expect": ex, "since_audit": since, "confirm_critical": b.get("confirm_critical") is True}
+
+
 def _parse_line_batch_body(body) -> tuple:
     """批次請求本體的嚴格解析（批次與預覽共用）⇒ `(keys, kw)`；格式不對 ⇒ 400。`kw` 含 enabled／audience／confirm_critical／roles（沒帶就不放）。"""
     from helpers import line_notify as _ln
@@ -2947,10 +2970,13 @@ def preview_line_notify_events_batch(body: dict = Body(...), authorization: str 
     給確認視窗顯示「預估每月 X → Y 則」。人數是上限；沒有歷史推播量的事件 `est_after` 為 null（無法估算）。"""
     actor = _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln, line_catalog as _cat
-    keys, kw = _parse_line_batch_body(body)
-    kw.pop("confirm_critical", None)
     try:
-        res = _ln.preview_events_batch(keys, default_user=actor["username"], **kw)
+        if isinstance(body, dict) and "changes" in body:                       # 草稿儲存前的預覽：每個事件各自的改動
+            res = _ln.preview_events_changes(_parse_line_changes_body(body)["changes"], default_user=actor["username"])
+        else:
+            keys, kw = _parse_line_batch_body(body)
+            kw.pop("confirm_critical", None)
+            res = _ln.preview_events_batch(keys, default_user=actor["username"], **kw)
     except ValueError as e:
         raise HTTPException(400, str(e))
     for r in res["events"]:
@@ -2969,6 +2995,8 @@ def set_line_notify_events_batch(body: dict = Body(...), authorization: str = He
     actor = _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln, line_catalog as _cat
     b = body if isinstance(body, dict) else {}
+    if "changes" in b:                                                        # 草稿儲存：每個事件各自的改動，一次寫入、一筆稽核；`expect` 防蓋掉別人的修改
+        return _save_line_changes(b, actor, authorization)
     keys, kw = _parse_line_batch_body(body)
     kw["default_user"] = actor["username"]
     try:
@@ -2980,6 +3008,24 @@ def set_line_notify_events_batch(body: dict = Body(...), authorization: str = He
     _audit(_tok(authorization), "settings.line_notify.batch", "settings", "", "LINE 通知批次設定：%d 個事件（變更 %d）" % (len(keys), len(res["changed"])),
            {"keys": keys, "enabled": kw["enabled"], "audience": kw["audience"], "roles": b.get("roles", "（不動）"), "changed": res["changed"],
             "audience_defaulted": res["defaulted"], "critical_off": res["critical_off"]})
+    return {"ok": True, **res, "audit_mark": _audit_mark()}
+
+
+def _save_line_changes(b: dict, actor: dict, authorization) -> dict:
+    from helpers import line_notify as _ln, line_catalog as _cat
+    p = _parse_line_changes_body(b)
+    try:
+        res = _ln.set_events_changes(p["changes"], confirm_critical=p["confirm_critical"], default_user=actor["username"], expect=p["expect"])
+    except _ln.CriticalConfirmRequired as e:
+        raise HTTPException(400, {"code": "confirm_critical_required", "message": str(e), "critical": [{"key": k, "name": _cat.name_of(k)} for k in e.keys]})
+    except _ln.BatchConflict as e:
+        who = _line_conflict_who(e.keys, p["since_audit"])
+        raise HTTPException(409, {"code": "conflict", "message": "這些事件在你載入頁面之後又被改過，為了不蓋掉別人的修改，系統拒絕儲存。",
+                                  "keys": [{"key": k, "name": _cat.name_of(k)} for k in e.keys], **who})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.batch", "settings", "", "LINE 通知儲存草稿：%d 個事件（變更 %d）" % (len(p["changes"]), len(res["changed"])),
+           {"changes": p["changes"], "changed": res["changed"], "audience_defaulted": res["defaulted"], "critical_off": res["critical_off"]})
     return {"ok": True, **res, "audit_mark": _audit_mark()}
 
 
@@ -3002,9 +3048,21 @@ def _line_conflict_who(keys, since_id: int) -> dict:
     try:
         rows = conn.execute("SELECT id, at, username, display_name, action, target_id, detail FROM audit_log WHERE id>? AND action LIKE 'settings.line_notify%' ORDER BY id DESC LIMIT 200",
                             (int(since_id or 0),)).fetchall()
+        want = set(keys)
         for r in rows:
-            blob = "%s %s" % (r["target_id"] or "", r["detail"] or "")
-            if any(k in blob for k in keys):
+            touched = {r["target_id"] or ""}                                     # 精確比對事件代碼（不用子字串：approved 不會誤中 next_tier_approved）
+            try:
+                d = json.loads(r["detail"] or "{}")
+            except ValueError:
+                d = {}
+            if isinstance(d, dict):
+                for f in ("keys",):
+                    if isinstance(d.get(f), list):
+                        touched |= {x for x in d[f] if isinstance(x, str)}
+                for f in ("changes", "states"):
+                    if isinstance(d.get(f), dict):
+                        touched |= {x for x in d[f] if isinstance(x, str)}
+            if touched & want:
                 by, at = (r["display_name"] or r["username"] or ""), (r["at"] or "")
                 break
     except Exception:                                    # noqa: BLE001
