@@ -2385,7 +2385,11 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         # 而改內容的人反而被排除在簽核之外。沒有原送審紀錄（舊資料）⇒ 退回舊行為（記為改內容的人）。改內容的人另記 editedBy。
         _old_appr = _old_dj.get("approval") if isinstance(_old_dj.get("approval"), dict) else {}
         _orig_req = str(_old_appr.get("requestedBy") or "") or editor["username"]
-        _orig_req_disp = (str(_old_appr.get("requestedByDisplay") or "") if _orig_req == str(_old_appr.get("requestedBy") or "") else "")             or (editor["display_name"] or editor["username"] if _orig_req == editor["username"] else _orig_req)
+        _prev_req = str(_old_appr.get("requestedBy") or "")
+        if _prev_req:
+            _orig_req_disp = str(_old_appr.get("requestedByDisplay") or "") or _prev_req
+        else:                                                                    # 退回舊行為：送審人記為改內容的人
+            _orig_req_disp = editor["display_name"] or editor["username"]
         _unlock_cleared = _QEN.signed_layers(_old_appr)
         _unlock_info = {"originalRequester": _orig_req, "originalRequesterDisplay": _orig_req_disp,
                         "cleared": [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]}
