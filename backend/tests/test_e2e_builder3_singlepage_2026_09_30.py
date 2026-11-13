@@ -155,8 +155,8 @@ def test_edit_preview_toggle_swaps_the_same_canvas_in_place(live_server, make_us
     page.wait_for_selector("#mb-canvas.is-preview")
     assert page.evaluate("() => window.__cv === document.getElementById('mb-canvas')") is True     # 同一個畫布元素
     assert page.url == url and len(page.context.pages) == pages
-    assert not page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
-    assert page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first.is_visible()          # 區塊標題以填單樣式列出
+    page.locator("#mb-canvas .mb-fc__bar").first.wait_for(state="hidden")          # 點完立刻 is_visible() 會輸給 Alpine x-show 一個影格（閘門偶發紅）⇒ 改等狀態
+    page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first.wait_for(state="visible")          # 區塊標題以填單樣式列出
     assert page.locator("#mb-preview-actions button").count() >= 1
     assert page.locator('.mb-fc[data-field-key="cust"] input').first.is_enabled()                 # 可操作（不存檔）
     n0 = page.locator('[data-mock-table="lines"] tbody tr').count()
@@ -167,7 +167,7 @@ def test_edit_preview_toggle_swaps_the_same_canvas_in_place(live_server, make_us
     page.wait_for_selector("#mb-canvas:not(.is-preview)")
     assert page.locator('.mb-fc[data-field-key="cust"].is-sel').count() == 1                        # 選中狀態保留
     assert page.locator('#mb-props-pane [data-props-for]').count() == 1
-    assert page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
+    page.locator("#mb-canvas .mb-fc__bar").first.wait_for(state="visible")
     assert not errors, errors
 
 
