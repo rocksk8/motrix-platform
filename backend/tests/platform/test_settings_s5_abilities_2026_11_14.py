@@ -99,10 +99,13 @@ def test_cross_check_receives_the_connection_when_it_accepts_one(conn):
     R.register_group(GA, "跨欄測試", [f], help="測試用群組。", cross_check=cc)
     with pytest.raises(R.SettingError):
         R.publish(GA, {"doc": []}, reason="r", user="s5_a", conn=conn)
-    assert seen and all(c is conn for c in seen)
+    assert seen and all(c is not None for c in seen)                                           # 預檢沒有連線時開臨時連線，不把 None 交給要查庫的檢查
+    seen.clear()
+    R.publish(GA, {"doc": ["k"]}, reason="r", user="s5_a", conn=conn)
+    assert any(c is conn for c in seen)                                                        # 寫入時帶真正的（同交易）連線
     R._GROUPS.pop(GA)
     R.register_group(GA, "跨欄測試", [f], help="測試用群組。", cross_check=lambda v: [])         # 單參數仍可用
-    assert R.publish(GA, {"doc": ["k"]}, reason="r", user="s5_a", conn=conn)["changed"]
+    assert R.publish(GA, {"doc": ["k2"]}, reason="r", user="s5_a", conn=conn)["changed"]
 
 
 def test_pending_exists_blocks_silent_overwrite_of_another_actors_document(conn):
@@ -136,6 +139,10 @@ def test_materialize_due_isolates_a_failing_adapter_to_its_own_group(conn):
     R.register_group(GA, "正常的群組", [_doc_field()], help="測試用群組。", risk="money", legacy_adapter=_adapter(GA))
     R.publish(GB, {"doc": ["b"]}, reason="r", user="s5_a", conn=conn)
     R.publish(GA, {"doc": ["a"]}, reason="r", user="s5_a", conn=conn)
+    conn.commit()
+    for g_ in (GA, GB):
+        for r_ in L.pending(conn, 'setting:' + g_):
+            assert L.approve(conn, r_['id'], 's5_b')['ok']                                  # 第二位最高管理者核准
     conn.commit()
     R.materialize_due(conn, now=later)
     assert STORE[GA] == ["a"]                                                              # 其他群組照常生效
