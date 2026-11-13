@@ -687,10 +687,27 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 使用方 | M01 `modules/case/api/quotations.py::_sync_device_stock`（案件設備登載 `devices[]` 的序號比對；即時存檔與半解鎖審核套用兩條路徑） |
 | 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("stock.serial", "supply"): inventory._StockSerials})`<br>取用：`s = registry.single_provider("stock.serial")`；`None` ⇒ 退化。`s.claim(conn, sn, quote_no=…, device_id=…, actor=…, now=…) -> None｜狀態`；`s.release(conn, sn, device_id=…, now=…)` |
-| 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
+| 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）；例外（一條龍 P0c，旗標 `onepipe.ship_install_ok` 開）：同一案件出貨（`shipped` 且 `quote_no` 相同）的序號也標成 installed 並回 `"in_stock"`，`release` 時回到 `shipped`。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
 | 對方不在時 | 案件存檔照常；序號不同步庫存；有序號變動時回應帶 `stockNotice`＝「設備序號未同步庫存：採購・庫存・出貨模組未安裝」，案件頁存檔狀態列顯示「已儲存；…」；沒有序號變動就不帶 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側隨模組 |
+
+---
+
+## IP-117　`stock.case_summary`：案件的庫存序號彙總（M03 → M01 物料流程時間軸；暫定號，列車定號；2026-11-13，一條龍 P1'）
+
+案件「物料流程」時間軸（`GET /api/quotations/{no}/material-flow`，旗標 `onepipe.timeline`）的「入庫」格：該案件已安裝／已出貨的序號台數與料號。**只回數量與料號，沒有任何金額欄位**；案件可見性由案件側先檢查（M03 不認識案件成員）。提案 `docs/platform/plans/PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md` §2.2／§2.3。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/case_summary.py::case_summary` |
+| 使用方 | M01 案件：`modules/case/material_flow.py`（入庫格；唯讀） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.case_summary", "supply"): case_summary`；取用：`fn = registry.single_provider("stock.case_summary")`；`None` ⇒ 入庫格整格隱藏。`fn(conn, quote_no, caller) -> {"installed", "shipped", "void", "parts": [{"partNo", "installed", "shipped"}]}`（讀呼叫端連線、不寫、不 commit；`caller` 有給時須有「檢視庫存」同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），沒有 ⇒ 丟 HTTPException 403、呼叫端該格顯示「無權限檢視」；沒給不檢查；也保留給之後加成本欄位時依呼叫者遮罩） |
+| 回傳 | 只算 `stock_items.quote_no` 等於該案件者；沒有 ⇒ 全 0 |
+| 對方不在時 | M03 不在 ⇒ 入庫格與出貨格整格隱藏（回應 `stockPresent`＝false）；M03 在但提供者丟例外 ⇒ 該格顯示「庫存暫時讀不到」（不隱藏，免得被誤認沒有倉儲），其餘格照常 |
+| 契約版本 | 1（2026-11-13） |
+| 守門 | `backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py` |
 
 ---
 

@@ -1227,3 +1227,8 @@ _lodging_freshness._register(S, _register_core)
 from helpers import settings_groups_tender_closing as _tender_closing  # noqa: E402
 
 _tender_closing._register(S, _register_core)
+
+# 物料流程一條龍各批次的開關（拆檔，同屬 core；P0b／P0d／P0a／P0c／P1' 共用一個群組）
+from helpers import settings_groups_onepipe as _onepipe  # noqa: E402
+
+_onepipe._register(S, _register_core)

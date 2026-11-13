@@ -723,6 +723,25 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
     _async_send(to, _mt.subject("returned", _subject_text(_tf, "報價單退回修改：{no}（{cust}）", doc_label, no=quote_no, cust=customer)), html, *((_rt,) if _rt else ()))
 
 
+def shipping_link(note_no: str) -> str:
+    """出貨單通知要開的頁面（相對 /pages/）。一條龍 P0a（旗標 `onepipe.links`）：出貨單沒有獨立頁面（`shipping-notes.html` 不存在），
+    旗標開 ⇒ 該案件頁的出貨單分頁 `case-management.html?q=<案號>&tab=shipping`；旗標關、查不到案號或任何錯誤 ⇒ 空字串（呼叫端維持原本的值）。"""
+    try:
+        from helpers.onepipe_flags import flag_on
+        if not flag_on("links"):
+            return ""
+        import db
+        conn = db.get_db()
+        try:
+            row = conn.execute("SELECT quote_no FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+        finally:
+            conn.close()
+        qn = ((row["quote_no"] if row else "") or "").strip()
+        return ("case-management.html?q=%s&tab=shipping" % _urlquote(qn, safe="")) if qn else ""
+    except Exception:                                                # noqa: BLE001
+        return ""
+
+
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
     """出貨單送審 → 通知當層簽核人"""
     _line_event("shipping_submitted", usernames=approver_usernames, title="出貨單待簽核", rows=[("出貨單號", note_no), ("客戶名稱", customer)], reason="輪到您簽核，請登入系統處理")
@@ -730,7 +749,7 @@ def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: l
     if not to:
         logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
         return
-    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    page = f"{_base_url()}/pages/{shipping_link(note_no) or 'shipping-notes.html?no=' + note_no}"
     html = _build_html("shipping_submitted", 
         "出貨單簽核申請", "待您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer)],
@@ -750,7 +769,7 @@ def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
         logger.warning("notify_shipping_next_tier: 第 %d 層簽核人 %s 皆無設定 email（note_no=%r）",
                        tier_no, approver_usernames, note_no)
         return
-    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    page = f"{_base_url()}/pages/{shipping_link(note_no) or 'shipping-notes.html?no=' + note_no}"
     html = _build_html("shipping_next_tier", 
         "出貨單簽核流程通知", "輪到您簽核", "#2F6FD6",
         [("出貨單號", note_no), ("客戶名稱", customer),
@@ -769,7 +788,7 @@ def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requ
     if not to:
         logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
-    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    page = f"{_base_url()}/pages/{shipping_link(note_no) or 'shipping-notes.html?no=' + note_no}"
     html = _build_html("shipping_approved", 
         "出貨單簽核完成", "已核准", "#16A34A",
         [("出貨單號", note_no), ("客戶名稱", customer), ("核准人", approved_by)],
@@ -787,7 +806,7 @@ def notify_shipping_returned(note_no: str, customer: str, note: str, requester_u
     if not to:
         logger.warning("notify_shipping_returned: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
-    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    page = f"{_base_url()}/pages/{shipping_link(note_no) or 'shipping-notes.html?no=' + note_no}"
     html = _build_html("shipping_returned", 
         "出貨單退回通知", "請修改後重新送審", "#DC2626",
         [("出貨單號", note_no), ("客戶名稱", customer)],

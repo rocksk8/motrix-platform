@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 964,
-  "endpoints_api": 960,
+  "endpoints_total": 965,
+  "endpoints_api": 961,
   "write_total": 519,
   "write_api": 519,
-  "get_api": 441,
-  "distinct_paths_api": 816,
+  "get_api": 442,
+  "distinct_paths_api": 817,
   "write_with_body_api": 384,
   "write_with_path_param_api": 364
  },
@@ -543,11 +543,6 @@
    "pp": 0,
    "body": false
   },
-  "GET /api/bootstrap": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
   "GET /api/build-info": {
    "w": false,
    "pp": 0,
@@ -859,11 +854,6 @@
    "body": false
   },
   "GET /api/dashboard/activity-feed": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/dashboard/bundle": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1759,6 +1749,11 @@
    "body": false
   },
   "GET /api/quotations/{quote_no}/material-coverage": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-flow": {
    "w": false,
    "pp": 1,
    "body": false
@@ -4737,6 +4732,16 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "GET /api/bootstrap": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/bundle": {
+   "w": false,
+   "pp": 0,
+   "body": false
   },
   "GET /api/license/overview": {
    "w": false,
