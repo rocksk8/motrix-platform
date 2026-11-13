@@ -442,6 +442,18 @@
   ],
   "s": 400
  },
+ "PUT /api/menu/categories/override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/menu/settings-help/override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"
