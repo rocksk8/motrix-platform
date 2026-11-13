@@ -25,11 +25,18 @@ def _func_body(src: str, name: str) -> str:
     return src[i:i + 2600]
 
 
+def _rel_page(name):
+    """頁面相對 repo 根的路徑（由 core.source_tree.page_file() 推得，不寫死）。"""
+    import pathlib
+    from core import source_tree
+    return source_tree.page_file(name).resolve().relative_to(pathlib.Path(__file__).resolve().parents[2]).as_posix()
+
+
 # ── 綠燈：沒有新的寫入路徑 ───────────────────────────────────────────────
 def test_new_ui_adds_no_fetch_and_no_write_call():
     """T84 新增的介面（摘要格、空狀態、reasons 標籤、scrollToCol）不得打任何 API：整支頁面的 fetch 呼叫與重排前相同。"""
     import subprocess
-    old = subprocess.run(["git", "show", "d72cfef93~1:" + "/".join(("frontend", "pages", "approval-queue.html"))],   # git 歷史裡的舊路徑（不是讀現行頁面），所以不走 page_file()
+    old = subprocess.run(["git", "show", "d72cfef93~1:" + _rel_page("approval-queue.html")],   # git 歷史裡的舊版內容；路徑仍由 page_file() 推得
                          capture_output=True, cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]), check=True).stdout.decode("utf-8")
     def calls(s):
         return sorted(re.findall(r"fetch\(`?\$\{API\}([^`'\")]+)", s))

@@ -11,18 +11,7 @@
 - 前端：`quotation-form.html` 讀業務聯絡資料時優先用 `quoteEmailEffective`（舊名 `quoteEmail` 還在、值相同，保留一版）。
 - 測試：`tests/test_quote_email_2026_11_13.py`（偽造信箱被覆蓋、舊值保留、其他通知信同帶 Reply-To）。
 
-## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
-- 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
-- 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。
-
-## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
-- 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
-
-## 1.0.219 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
-- 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
-- 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
-
-## 1.0.219（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
+## 1.0.222（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
 - 新增：`quotations.doc_type`（migration v10：`quote`＝報價單〔預設，舊資料一律是它〕｜`estimate`＝估價單）。流程（簽核、狀態、權限、轉單、業績）兩種完全相同。
 - 單號：估價單字首預設 `ME`（`ME-YYYYMM-NNN`），流水號與報價單（`MQ`）各自獨立（`quote_seq` 鍵＝`ME-YYYYMM`，MQ 維持 `YYYYMM`）；字首在設定中心「報價單預設值」→「估價單單號字首」可改（恰 2 個大寫字母、不可與其他單據字首相撞）；改字首只影響之後新開的單，舊單照常。`GET /api/next-quote-no` 加選填 `doc_type`。
 - 類型開立（第一次存檔）時定案、**之後不可改**（PUT 一律以資料庫現值為準；單號字首隨類型，要換類型請「複製到新單」）；補登歷史單一律是報價單。
@@ -34,6 +23,17 @@
 - 內容指紋：`docType` 加進 `content_fp.EXCLUDED_KEYS`（讀取時由資料庫欄位注入、開立後不可改，同 `status`；舊單沒有這個鍵，既有指紋不失效、`FP_VERSION` 不變）。否則 GET 回的 `contentFp` 含 docType、伺服器用已存內容重算不含 ⇒ 複查編輯／核准一律 409「內容已更新」。複查編輯端點同 PUT：頁面送回的 `docType` 一律改回資料庫現值。**排除清單變動，請 K 審。**
 - 測試：`tests/test_estimate_doc_type_2026_11_13.py`。
 - 串接點（新增）：提供 `case.estimate_prefixes`（IP-ESTQ1，編號暫定）——曾開過估價單的單號字首，供 L1 `helpers/doc_type` 在字首改過後仍認得舊估價單號（L1 不讀 `quotations`）；`modules/case/quotations.py::_estimate_prefixes`。
+
+## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
+- 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
+- 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。
+
+## 1.0.220 — 2026-11-13（feat/auth-lockout-alert；保固到期 LINE 已推播鑰匙改用設備序號）〔train_number：1.0.219 → 1.0.220〕
+- 變更（內部，不影響對外介面）：`case_deadlines._check_warranty_expiry` 呼叫 `email_notify._send_warranty_expiry` 時多傳 `sn=sn`（與 `warranty_notif.*` 已通知記號同一個設備識別），LINE 的「已推播」鑰匙因此逐台設備區分（同一張單兩台同名設備不再共用鑰匙）。測試：`tests/test_auth_lockout_alert_2026_11_12.py`。
+
+## 1.0.219 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）
+- 變更（只改 `module.json`）：系統中樞「利潤口徑與管銷比率」卡片改連設定中心的管銷分攤比率群組，拿掉 planned（PM 裁示，T67 SO-S1）。無 API／資料／權限變更。
+- 測試：`tests/platform/test_system_hub.py`（卡片開啟設定中心群組、不再是規劃中）。
 
 ## 1.0.218 — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
