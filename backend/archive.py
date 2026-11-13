@@ -450,7 +450,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
     try:
         os.makedirs(_ALERT_DIR, exist_ok=True)
         banner = (
-            f"[{level}] MOTRIX ERP 備份警示\n"
+            f"[{level}] MOTRIX PLATFORM 備份警示\n"
             f"時間: {now}\n"
             f"原因: {reason}\n"
             f"\n"

@@ -133,7 +133,7 @@ def _write_initial_credentials(username: str, password: str, path: str = None) -
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(
-                "MOTRIX ERP — 首次安裝管理員帳號（請登入後立即修改密碼，並刪除此檔）\n"
+                "MOTRIX PLATFORM — 首次安裝管理員帳號（請登入後立即修改密碼，並刪除此檔）\n"
                 f"建立時間: {datetime.now().isoformat()}\n"
                 f"帳號: {username}\n"
                 f"臨時密碼: {password}\n"

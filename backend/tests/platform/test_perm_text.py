@@ -59,8 +59,8 @@ def test_questions_and_role_sentences_read_like_people_talk():
 
 def test_delegation_summary_sentence_matches_the_users_example():
     s = T.sentence_delegation("李主任", "王小明", ["zz.slip.submit", "zz.slip.edit"], "2031-11-30", 24)
-    assert s == "你即將讓王小明代理李主任：送出勞報單、修改勞報單，到 11/30，24 小時後生效"
-    assert T.sentence_delegation("李主任", "王小明", ["zz.slip.view"], "", 0) == "你即將讓王小明代理李主任：查看勞報單，儲存後立即生效"
+    assert s == "您即將讓王小明代理李主任：送出勞報單、修改勞報單，到 11/30，24 小時後生效"
+    assert T.sentence_delegation("李主任", "王小明", ["zz.slip.view"], "", 0) == "您即將讓王小明代理李主任：查看勞報單，儲存後立即生效"
 
 
 def test_explain_text_for_every_source_is_a_plain_sentence():

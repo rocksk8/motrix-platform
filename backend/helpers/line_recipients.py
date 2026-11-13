@@ -372,7 +372,7 @@ def set_muted(username: str, event_key: str, muted: bool, role: str = None) -> N
     if not isinstance(muted, bool):
         raise ValueError("enabled 必須是 true 或 false")
     if role is not None and not visible_to(event_key, username, role):
-        raise ValueError("這種 LINE 通知不開放給你的角色")
+        raise ValueError("這種 LINE 通知不開放給您的角色")
     with _lock:
         prefs = dict(_prefs())
         before = muted_events(username)

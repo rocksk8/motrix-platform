@@ -128,7 +128,7 @@ def register(S, _register_core):
     )
     _register_core(
         "procurement_labels", "採購建議：狀態名稱",
-        [f("procurement_labels", "suggested", "採購建議「還沒下單」的狀態，要顯示成什麼名稱？", "「待下單」的顯示名稱", "庫存頁採購建議視窗的第一個狀態。"),
+        [f("procurement_labels", "suggested", "採購建議「尚未下單」的狀態，要顯示成什麼名稱？", "「待下單」的顯示名稱", "庫存頁採購建議視窗的第一個狀態。"),
          f("procurement_labels", "ordered", "採購建議「已經下單、東西在路上」的狀態，要顯示成什麼名稱？", "「已下單」的顯示名稱", "庫存頁採購建議視窗的第二個狀態與「標記已下單」按鈕。"),
          f("procurement_labels", "received", "採購建議「已經到貨」的狀態，要顯示成什麼名稱？", "「已到貨」的顯示名稱", "庫存頁採購建議視窗的「標記已到貨」按鈕。")],
         sensitive=False, risk="none", cross_check=_cross("procurement_labels"),

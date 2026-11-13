@@ -161,7 +161,7 @@ def guard_writes(body, values, existing, user) -> tuple:
         empty = lambda v: v in (None, "", [], {})
         if (empty(new) and empty(old)) or _same(new, old):
             continue
-        forbidden.append({"key": k, "message": "%s：你沒有修改這個欄位的權限" % (f.get("label") or k)})
+        forbidden.append({"key": k, "message": "%s：您沒有修改這個欄位的權限" % (f.get("label") or k)})
     return vals, forbidden
 
 

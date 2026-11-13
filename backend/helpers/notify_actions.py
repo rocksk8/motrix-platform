@@ -412,12 +412,12 @@ def compare(old, new):
     if b["ch"] - a["ch"]:
         loosen.append("新增通道：%s" % "、".join(CHANNEL_LABELS.get(c, c) for c in sorted(b["ch"] - a["ch"])))
     if a["ch"] - b["ch"]:
-        tighten.append("拿掉通道：%s" % "、".join(CHANNEL_LABELS.get(c, c) for c in sorted(a["ch"] - b["ch"])))
+        tighten.append("移除通道：%s" % "、".join(CHANNEL_LABELS.get(c, c) for c in sorted(a["ch"] - b["ch"])))
     if b["ph"] - a["ph"]:
         loosen.append("範本新增占位符：%s" % "、".join("{%s}" % x for x in sorted(b["ph"] - a["ph"])))
     for f in a["when"]:                                      # 條件放寬：拿掉條件、或同一欄位的值變多
         if f not in b["when"]:
-            loosen.append("拿掉條件「%s」" % f)
+            loosen.append("移除條件「%s」" % f)
         elif b["when"][f] - a["when"][f]:
             loosen.append("條件「%s」多了值：%s" % (f, "、".join(sorted(b["when"][f] - a["when"][f]))))
         elif a["when"][f] - b["when"][f]:

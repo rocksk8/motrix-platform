@@ -23,14 +23,14 @@ PROVIDERS = [
     {
         "key": "gmail", "label": "Gmail（Google 信箱）", "host": "smtp.gmail.com", "port": 587,
         "passwordLabel": "應用程式密碼（16 碼）",
-        "passwordHelp": "不是你登入 Google 的密碼。要先開啟「兩步驟驗證」，再到 Google 的「應用程式密碼」頁面建立一組 16 碼（中間的空格可以一起貼上）。",
+        "passwordHelp": "不是您登入 Google 的密碼。要先開啟「兩步驟驗證」，再到 Google 的「應用程式密碼」頁面建立一組 16 碼（中間的空格可以一起貼上）。",
         "helpUrl": "https://myaccount.google.com/apppasswords", "helpLabel": "開啟 Google 的應用程式密碼頁面",
         "userHint": "例：your@gmail.com", "note": "",
     },
     {
         "key": "microsoft365", "label": "Microsoft 365／Outlook（公司信箱）", "host": "smtp.office365.com", "port": 587,
         "passwordLabel": "信箱密碼或應用程式密碼",
-        "passwordHelp": "多數公司的 Microsoft 365 已關閉這種寄信方式。如果下一步失敗，系統會產生一張「設定單」，請交給你們的資訊廠商處理。",
+        "passwordHelp": "多數公司的 Microsoft 365 已關閉這種寄信方式。如果下一步失敗，系統會產生一張「設定單」，請交給您們的資訊廠商處理。",
         "helpUrl": "", "helpLabel": "",
         "userHint": "例：name@公司網域.com", "note": "Microsoft 365 預設常關閉「已驗證的 SMTP 寄信」，不是貼密碼就能解決。",
     },
@@ -44,14 +44,14 @@ PROVIDERS = [
     {
         "key": "zoho", "label": "Zoho Mail", "host": "smtp.zoho.com", "port": 587,
         "passwordLabel": "應用程式密碼",
-        "passwordHelp": "若有開兩步驟驗證，要用「應用程式密碼」。你的帳號在歐洲、印度或澳洲資料中心時，主機網址結尾不同（.eu／.in／.com.au），請改選「其他信箱」填寫。",
+        "passwordHelp": "若有開兩步驟驗證，要用「應用程式密碼」。您的帳號在歐洲、印度或澳洲資料中心時，主機網址結尾不同（.eu／.in／.com.au），請改選「其他信箱」填寫。",
         "helpUrl": "https://accounts.zoho.com", "helpLabel": "開啟 Zoho 帳號頁面",
         "userHint": "例：name@公司網域.com", "note": "",
     },
     {
         "key": "other", "label": "其他信箱", "host": "", "port": 587,
         "passwordLabel": "信箱密碼（或該信箱要求的應用程式密碼）",
-        "passwordHelp": "主機與連接埠這兩個值，請向你的信箱或網域代管廠商詢問（常見寫法：「SMTP 寄信伺服器」與「連接埠」）。",
+        "passwordHelp": "主機與連接埠這兩個值，請向您的信箱或網域代管廠商詢問（常見寫法：「SMTP 寄信伺服器」與「連接埠」）。",
         "helpUrl": "", "helpLabel": "", "userHint": "例：name@公司網域.com", "note": "",
     },
 ]
@@ -99,7 +99,7 @@ def validate_config(data: dict):
             return "連接埠要在 1 到 65535 之間（常見是 587 或 465）。"
     base = str(data.get("base_url") or "").strip()
     if base and not re.match(r"^https?://[^\s/]+", base, re.I):
-        return "系統網址要以 http:// 或 https:// 開頭（例：https://erp.你的公司.com）。"
+        return "系統網址要以 http:// 或 https:// 開頭（例：https://motrix.example.com）。"
     if len(str(data.get("from_name") or "")) > 80:
         return "寄件人顯示名稱太長（最多 80 字）。"
     return None
@@ -127,7 +127,7 @@ def classify_error(exc: BaseException, host: str = "", provider_key: str = "") -
         if provider_key == "gmail" and ("534" in raw or "5.7.9" in raw or "5.7.8" in raw or "application-specific" in raw):
             return {"category": "auth", "ticketKind": "",
                     "title": "帳號或密碼不對：Gmail 需要「應用程式密碼」",
-                    "hint": "請不要貼 Google 登入密碼。先開啟兩步驟驗證，再到「應用程式密碼」頁面建立 16 碼貼上。"}
+                    "hint": "請勿貼 Google 登入密碼。先開啟兩步驟驗證，再到「應用程式密碼」頁面建立 16 碼貼上。"}
         return {"category": "auth", "ticketKind": "",
                 "title": "帳號或密碼不對",
                 "hint": "請確認信箱帳號沒有打錯，密碼是否為該信箱要求的「應用程式密碼」（很多信箱不接受登入密碼）。"}

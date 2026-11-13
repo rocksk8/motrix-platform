@@ -200,7 +200,7 @@ def _can_decide(conn, row, user):
         return False, 403, "展示帳號不能審核"
     if user.get("role") == "superadmin" or user["username"] in names or (names & set(active_delegators_for(conn, user["username"]))):
         return True, 200, ""
-    return False, 403, "你不是這份定義的審核人"
+    return False, 403, "您不是這份定義的審核人"
 
 
 def decide(conn, module_key, version, user, approve, note=""):

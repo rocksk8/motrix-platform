@@ -191,7 +191,7 @@ def save_page_size(conn, user, list_id, body, if_match=None) -> dict:
         if etag_of(cur) != (if_match or ""):
             if began:
                 conn.rollback()
-            raise ViewError(409, "設定在你開啟之後被改過（可能在另一個視窗），請重新載入")
+            raise ViewError(409, "設定在您開啟之後被改過（可能在另一個視窗），請重新載入")
         conn.execute("INSERT INTO user_list_view_prefs (username, list_id, prefs_json, updated_at) VALUES (?,?,?,?) "
                      "ON CONFLICT(username, list_id) DO UPDATE SET prefs_json=excluded.prefs_json, updated_at=excluded.updated_at",
                      (username, list_id, new_json, datetime.now().isoformat(timespec="seconds")))

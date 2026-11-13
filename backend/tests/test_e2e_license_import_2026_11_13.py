@@ -59,7 +59,7 @@ def test_superadmin_rescues_a_blocked_system_from_the_explanation_page(
     link.click()
     page.wait_for_url("**/license-settings.html", timeout=20000)        # 授權頁沒有被 402 導走
 
-    page.locator("#ls-headline").filter(has_text="還沒有安裝授權").wait_for(state="visible", timeout=10000)
+    page.locator("#ls-headline").filter(has_text="尚未安裝授權").wait_for(state="visible", timeout=10000)
     assert page.locator("#ls-machine-code").text_content() == TEST_LICENSE_MACHINE      # 申請授權要提供的機器代碼
 
     # 選一個「給別台電腦」的檔 ⇒ 白話原因、沒有確認按鈕

@@ -57,7 +57,7 @@ def test_warning_wording_follows_the_start_and_legal_parts_stay_fixed(monkeypatc
         monkeypatch.setattr(lp, "_reminder_start", lambda conn=None: start)
         return lp.year_status(V, today)
     w10 = [w for w in at(date(2026, 10, 5), (10, 1))["warnings"] if "2027" in w][0]
-    assert w10.startswith("已進入 10 月，2027 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）還沒有設定")
+    assert w10.startswith("已進入 10 月，2027 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）尚未設定")
     w12 = [w for w in at(date(2026, 12, 5), (12, 1))["warnings"] if "2027" in w][0]
     assert w12.startswith("已進入 12 月，2027 年的法規參數"), "起算日 12/1 時文字與原本逐字相同"
     wd = [w for w in at(date(2026, 11, 20), (11, 15))["warnings"] if "2027" in w][0]

@@ -209,8 +209,8 @@ def test_template_referring_to_a_removed_field_still_draws(client, make_user):
 
 
 @pytest.mark.parametrize("body,why", [
-    ({"name": "x", "fields": []}, "還沒有可以預覽的欄位"),
-    ({"name": "x"}, "還沒有可以預覽的欄位"),
+    ({"name": "x", "fields": []}, "尚無可以預覽的欄位"),
+    ({"name": "x"}, "尚無可以預覽的欄位"),
     ({"name": "x", "fields": [{"label": "甲"}, {"key": "b", "type": "formula"}]}, "所有欄位都尚未完成"),
 ], ids=["空欄位", "沒有欄位", "全部未完成"])
 def test_nothing_drawable_is_422_with_a_reason(client, make_user, body, why):

@@ -98,7 +98,7 @@ def _check_columns(c, spec):
     pinned, hidden = set(c.get("pinned", [])), set(c.get("defaultHidden", []))
     req = {x["id"] for x in spec["columns"] if x.get("required")}
     if not req <= allowed:
-        out.append(_p("columns.allowed", "必留欄位不可拿掉：%s" % "、".join(sorted(req - allowed))))
+        out.append(_p("columns.allowed", "必留欄位不可移除：%s" % "、".join(sorted(req - allowed))))
     if not pinned <= allowed:
         out.append(_p("columns.pinned", "固定欄位必須在允許欄位內"))
     if hidden & (pinned | req):
@@ -202,7 +202,7 @@ def _setcmp(o, n, what, loosen, tighten, more_is_loose=True):
         if n - o:
             grow.append("%s新增：%s" % (what, _names(n - o)))
         if o - n:
-            shrink.append("%s拿掉：%s" % (what, _names(o - n)))
+            shrink.append("%s移除：%s" % (what, _names(o - n)))
 
 
 def _as_set(v):

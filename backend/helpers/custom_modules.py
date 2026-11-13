@@ -112,7 +112,7 @@ def templates(include_gaps: bool = False):
                        {c.get("type") for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "table"
                         for c in f.get("columns", []) if isinstance(c, dict)})
         if any(x not in FIELD_TYPES + ("formula",) for x in types):
-            gaps.append({"key": key, "reason": "用到還沒就緒的型別：%s" % "、".join(x for x in types if x not in FIELD_TYPES)})
+            gaps.append({"key": key, "reason": "用到尚未就緒的型別：%s" % "、".join(x for x in types if x not in FIELD_TYPES)})
             continue
         probs = validate_module(dict(body, permission="custom.%s" % key), key if KEY_RE.match(key) else "")
         if probs:
@@ -973,7 +973,7 @@ def preview_output(body: dict) -> tuple:
             shown.append(f)
         used.add(k)
     if len(placeholders) == len(shown):
-        raise CustomModuleError("還沒有可以預覽的欄位" if not shown else "所有欄位都尚未完成",
+        raise CustomModuleError("尚無可以預覽的欄位" if not shown else "所有欄位都尚未完成",
                                 problems=[{"path": "fields[%d]" % i, "message": msg} for i, _l, msg in placeholders.values()] or
                                 [{"path": "fields", "message": "至少要有一個欄位"}], status=422)
     wf = body.get("workflow") if isinstance(body.get("workflow"), dict) else {}

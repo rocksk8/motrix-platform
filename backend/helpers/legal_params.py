@@ -281,7 +281,7 @@ def year_status(versions, today) -> dict:
     this_missing = str(t.year) not in years
     warnings = []
     if next_missing:
-        warnings.append("%s，%d 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）還沒有設定；"
+        warnings.append("%s，%d 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）尚未設定；"
                         "1 月起開立的勞報單會沿用 %s 版。請到「法規參數設定」新增一版（沿用也要新增一版以示確認）"
                         % (("已進入 %d 月" % sm) if sd == 1 else ("已過 %d 月 %d 日" % (sm, sd)), t.year + 1, current["version"] if current else "—"))
     if this_missing and current:

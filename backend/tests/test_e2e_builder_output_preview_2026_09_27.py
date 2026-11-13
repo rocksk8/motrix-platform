@@ -120,7 +120,7 @@ def test_output_half_done_shows_placeholder_and_422_keeps_the_last_picture(live_
     page.wait_for_function("() => { const n = document.querySelector('.fp-output__note'); return n && !n.hidden }")
     assert page.locator('.fp-output__note li[data-field="memo"]').count() == 1
     page.evaluate("() => window.__h.update({name: 'x', fields: []})")
-    page.wait_for_function("() => document.querySelector('.fp-output__note').textContent.indexOf('還沒有可以預覽的欄位') >= 0")
+    page.wait_for_function("() => document.querySelector('.fp-output__note').textContent.indexOf('尚無可以預覽的欄位') >= 0")
     assert "〈折扣〉尚未完成" in _frame_text(page), "畫不出來時保留上一次的畫面"
     page.evaluate("() => window.__h.destroy()")
     assert page.evaluate("() => document.querySelectorAll('#host *').length") == 0

@@ -69,7 +69,7 @@ class BackupBusy(Exception):
 class BackupLockProblem(Exception):
     """備份鎖檔打不開（資料夾權限？），無法確認有沒有另一個備份在跑 ⇒ 手動備份不執行（審查 N4）。"""
 
-    MESSAGE = ("現在無法確認是不是已經有備份在進行（備份的鎖檔打不開，可能是資料夾權限問題，也可能有另一個備份正在進行）。"
+    MESSAGE = ("現在無法確認是否已經有備份在進行（備份的鎖檔打不開，可能是資料夾權限問題，也可能有另一個備份正在進行）。"
                "為了避免兩份備份同時寫入，這次不執行。請稍後再試；問題持續請聯絡維運檢查資料夾權限。")
 
 
@@ -174,7 +174,7 @@ def _backups_block(now: datetime, stale_hours: int, cloud_expected: bool) -> lis
             out.append(r)
             return
         if not at:
-            r["note"] = "還沒有成功的紀錄。"
+            r["note"] = "尚無成功紀錄。"
             r["level"] = "na"
         elif act in fail_actions:
             r.update(result="failed", level="error", note="最近一次沒有完成。")
@@ -189,7 +189,7 @@ def _backups_block(now: datetime, stale_hours: int, cloud_expected: bool) -> lis
         out.append(r)
 
     row("local", "本機備份（資料庫快照）", ("backup.sqlite_snapshot", "backup.sqlite_snapshot_same"), (), ("backup.snapshot_rejected",),
-        check_stale=True, help_text="每天自動把整個資料庫複製一份存在這台電腦上，是最後的還原保險。")
+        check_stale=True, help_text="每日自動將整個資料庫複製一份，存放於本機，作為最後的還原備援。")
     row("daily", "雲端每日備份", ("backup.daily_ok",), ("backup.daily_partial",), (), cloud_only=True, check_stale=True,
         help_text="每天把各種資料匯出成檔案，存到雲端硬碟；近期誤刪、誤改時用它還原。")
     row("weekly", "雲端每週備份", ("backup.weekly_ok",), cloud_only=True, help_text="每週一份報價單與客戶的匯出，中期還原點。")
@@ -431,7 +431,7 @@ def _validate_ping_url(url: str, *, resolve: bool = True) -> str:
     if not url:
         return ""
     if len(url) > _PING_URL_MAX:
-        raise InvalidPingUrl("網址太長了（最多 %d 個字）。請確認有沒有多貼了別的內容。" % _PING_URL_MAX)
+        raise InvalidPingUrl("網址太長了（最多 %d 個字）。請確認是否有多貼了別的內容。" % _PING_URL_MAX)
     if re.search(r"\s", url) or any(ord(c) < 32 for c in url):
         raise InvalidPingUrl("網址裡不能有空白或換行，請重新複製。")
     try:
@@ -754,9 +754,9 @@ def approve_disable(change_id: int, actor, ip: str = "") -> dict:
         kind = "change" if row["field"] == _FIELD_CHANGE else "disable"
         res = L.approve(conn, int(change_id), actor, "")
         if not res["ok"]:
-            raise DisableError({"申請人不能核准自己的變更": "這是你自己提出的申請，要由另一位最高管理者核准。",
+            raise DisableError({"申請人不能核准自己的變更": "這是您自己提出的申請，要由另一位最高管理者核准。",
                                 "這筆變更已不是待生效狀態": "這筆申請已經處理過了（可能已被核准、撤回或被新的申請取代）。",
-                                "你已經核准過了": "你已經核准過了。"}.get(res["why"], "沒有核准成功。"))
+                                "您已經核准過了": "您已經核准過了。"}.get(res["why"], "沒有核准成功。"))
         done = res["approvals"] >= res["required"]
         if done:
             if kind == "disable":
@@ -831,7 +831,7 @@ def reject_disable(change_id: int, actor, reason: str = "") -> dict:
         if L.state_of(conn, int(change_id)) != "pending":
             raise DisableError("這筆申請已經處理過了。")
         if (row["actor"] or "") == _username(actor):
-            raise DisableError("這是你自己提出的申請，要放棄請按「撤回」。")
+            raise DisableError("這是您自己提出的申請，要放棄請按「撤回」。")
         kind = "change" if row["field"] == _FIELD_CHANGE else "disable"
         requested_by = row["actor_display"] or row["actor"]
         L.cancel(conn, int(change_id), actor, "駁回：" + why)
@@ -876,26 +876,26 @@ def _ping(url: str) -> tuple:
     except safe_ping.PingFailed as exc:
         logger.warning("測試心跳失敗：%s", getattr(exc, "kind", "") or type(exc).__name__)
         if exc.kind == "dns":
-            return False, "找不到這個網站的位址。請確認網址有沒有貼對，以及這台電腦的網路與 DNS 是否正常。"
+            return False, "找不到這個網站的位址。請確認網址是否有貼對，以及這台電腦的網路與 DNS 是否正常。"
         if exc.kind == "tls":
             return False, "監控服務的安全憑證驗證沒通過。請確認網址沒有貼錯；如果網址正確，請聯絡維運檢查這台電腦的日期時間與憑證。"
         if exc.kind == "timeout":
             return False, "等了很久監控服務都沒有回應。請稍後再試，或確認這台電腦的網路可以連到外部。"
-        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址有沒有貼對。"
+        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
     except Exception as exc:  # noqa: BLE001
         logger.warning("測試心跳失敗：%s", type(exc).__name__)
-        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址有沒有貼對。"
+        return False, "這台電腦連不到監控服務。請確認網路可以連到外部，以及網址是否有貼對。"
     if 200 <= status < 300:
         return True, "監控服務有收到這次打卡。"
     if status in (404, 410):
-        return False, "監控服務說找不到這個網址，請確認有沒有貼完整、或在監控服務裡是不是被刪除了。"
+        return False, "監控服務說找不到這個網址，請確認是否有貼完整、或在監控服務裡是否被刪除了。"
     if status in (401, 403):
-        return False, "監控服務拒絕了這次打卡，請確認網址是不是正確的 Ping URL。"
+        return False, "監控服務拒絕了這次打卡，請確認網址是否為正確的 Ping URL。"
     if status == 429:
         return False, "打得太頻繁，監控服務暫時拒絕了。請稍後再試。"
     if status >= 500:
         return False, "監控服務那邊暫時出問題了，請稍後再試。"
-    return False, "監控服務回應了，但不是成功的結果。請確認網址有沒有貼完整。"
+    return False, "監控服務回應了，但不是成功的結果。請確認網址是否有貼完整。"
 
 
 def test_heartbeat() -> dict:
@@ -907,6 +907,6 @@ def test_heartbeat() -> dict:
         _hb_last["at"] = time.monotonic() or 1.0
     url = _read_ping_url()
     if not url:
-        return {"ok": False, "message": "還沒有設定監控網址，請先貼上網址並儲存。"}
+        return {"ok": False, "message": "尚未設定監控網址，請先貼上網址並儲存。"}
     ok, msg = _ping(url)
     return {"ok": ok, "message": msg}
