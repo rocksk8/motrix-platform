@@ -58,19 +58,7 @@ FAKE_PEND = {"quote_approval.max_valid_days": dict(val=45, eff="11/20", need2=Tr
 for k in list(FAKE) + list(FAKE_PEND):
     assert k in ids, k
 
-DEPS = {}
-for k in ("total_text", "note_template", "show_unpicked_in_pdf", "alt_groups_max", "combo_view_max", "combo_view_default_open"):
-    DEPS["quote_alt." + k] = "quote_alt.alt_enabled"
-for k in ("due_soon_payable_days", "due_soon_planned_days"):
-    DEPS["finance_cashier." + k] = "finance_cashier.custom_due_soon"
-for k in ("bank_alias_date", "bank_alias_amount", "bank_alias_desc"):
-    DEPS["finance_cashier." + k] = "finance_cashier.custom_bank_aliases"
-for k in ("aging_day1", "aging_day2", "aging_day3"):
-    DEPS["finance_reports." + k] = "finance_reports.custom_aging"
-for k in ("require_stages", "require_payment_items", "require_settlement", "count_unfinished_extra_expenses"):
-    DEPS["case_close_gates." + k] = "case_close_gates.enabled"
-for k in ("prefill_unsigned", "qty_mode", "default_status", "include_headers", "brand_prefix"):
-    DEPS["completion_note." + k] = "completion_note.auto_prefill"
+DEPS = C.DEPS
 for k, v in DEPS.items():
     assert k in ids and v in ids, (k, v)
 

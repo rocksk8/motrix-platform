@@ -122,7 +122,7 @@ function ctl(r) {
   return h;
 }
 function checkbox(r) {
-  if (r.type === 'str') return '';
+  if (r.type === 'str') return '<span class="mute" title="' + esc(r.why) + '">✎</span>';
   const dis = !r.elig;
   return '<input type="checkbox" data-act="sel" data-id="' + r.id + '"' + (S.sel.has(r.id) ? ' checked' : '') + (dis ? ' disabled title="' + esc(r.why) + '"' : '') + ' aria-label="選取 ' + esc(r.name) + '">';
 }
