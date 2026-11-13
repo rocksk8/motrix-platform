@@ -34186,8 +34186,8 @@
     "file:backend/tests/_requires.py",
     "page:index.html",
     "page:pages/case-management.html",
-    "page:pages/change-password.html",
     "page:pages/customers.html",
+    "page:pages/my-account.html",
     "page:pages/quotations.html",
     "page:pages/suppliers.html"
    ],
@@ -34200,8 +34200,8 @@
     "page": [
      "frontend/index.html",
      "frontend/pages/case-management.html",
-     "frontend/pages/change-password.html",
      "frontend/pages/customers.html",
+     "frontend/pages/my-account.html",
      "frontend/pages/quotations.html",
      "frontend/pages/suppliers.html"
     ],
