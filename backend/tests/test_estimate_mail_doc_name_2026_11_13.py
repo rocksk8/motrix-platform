@@ -242,9 +242,9 @@ def test_approval_mail_subjects_keep_user_text_and_quotes_are_unchanged(mails, m
     monkeypatch.setattr(E, "_tpl_fields", lambda *a, **k: {})
     cust = "報價單客戶"
     calls = (
-        ("approval_request", lambda lab, no: E.notify_approval_request(no, cust, ["u"], lab), "待審核"),
-        ("next_tier", lambda lab, no: E.notify_next_tier(no, cust, 2, 3, ["u"], lab), "審核通知（第 2/3 層）"),
-        ("approved", lambda lab, no: E.notify_approved(no, cust, "某人", "u", lab), "審核完成"),
+        ("approval_request", lambda lab, no: E.notify_approval_request(no, cust, ["u"], lab), "待簽核"),
+        ("next_tier", lambda lab, no: E.notify_next_tier(no, cust, 2, 3, ["u"], lab), "簽核通知（第 2/3 層）"),
+        ("approved", lambda lab, no: E.notify_approved(no, cust, "某人", "u", lab), "簽核完成"),
         ("returned", lambda lab, no: E.notify_returned(no, "N-R1", cust, "備註", "u", lab), "退回修改"),
         ("resubmit", lambda lab, no: E.notify_resubmit_requester(no, "N", cust, "u", ["某人"], lab), "已送審"),
     )
