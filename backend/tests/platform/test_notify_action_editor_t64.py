@@ -158,7 +158,7 @@ def test_list_shows_names_events_and_status_in_plain_chinese_and_empty_hint():
     assert n == 2 and "完工單送審通知" in text and "使用中" in text and "還沒發布" in text and "當「完工單狀態改變」時通知" in text and "當「案件階段即將到期」時通知" in text
     assert "na_aaa" not in text and "na_bbb" not in text, "內部代號不可顯示"
     r = _run({"status": _status(), "list": [], "run": _SETUP + "await E._loadList(); return allText()"})
-    assert "還沒有額外通知" in r["v"]
+    assert "尚無額外通知" in r["v"]
 
 
 def test_one_click_suggestion_fills_a_valid_definition_and_matches_the_backend():
@@ -221,7 +221,7 @@ def test_conditions_email_channel_and_throttle_round_trip_into_the_body():
     ("f.body = '已核准的單'", "官方狀態字樣"),
     ("f.dedupe = '0'", "分鐘"),
     ("f.perDay = '21'", "每人每天"),
-    ("f.when.push({field: '', values: '', picked: null})", "還沒選欄位"),
+    ("f.when.push({field: '', values: '', picked: null})", "尚未選欄位"),
     ("f.when.push({field: '新狀態', values: '', picked: []})", "1～10 個值"),
 ])
 def test_client_side_problems_are_plain_chinese(mut, frag):

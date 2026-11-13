@@ -196,7 +196,7 @@ def test_delete_needs_two_clicks_and_add_creates_a_valid_default_rule():
     r = run([OPEN, {"do": "click", "act": "del:0"}, {"do": "snap"}, {"do": "click", "act": "del-no"}, {"do": "snap"},
              {"do": "click", "act": "del:0"}, {"do": "click", "act": "del-yes:0"}, {"do": "snap"}, {"do": "click", "act": "add"}])
     assert "刪除？" in r["snaps"][0]["html"] and "刪除？" not in r["snaps"][1]["html"] and "低毛利" in r["snaps"][1]["html"]
-    assert "還沒有規則" in r["snaps"][2]["html"]
+    assert "尚無規則" in r["snaps"][2]["html"]
     n = r["rules"][0]
     assert n["id"] == "rule_1" and n["mode"] == "mark" and n["on_failure"] == "degrade_loud" and n["when"] == {"op": "lt", "field": "netMarginPct", "value": 0}
 

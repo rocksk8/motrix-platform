@@ -29,7 +29,7 @@ def isolated(monkeypatch, tmp_path):
     import archive
     monkeypatch.setattr(archive, "_daily_backup", lambda *a, **k: calls.__setitem__("backup", calls["backup"] + 1))
     monkeypatch.setattr(archive, "_weekly_backup", lambda *a, **k: None)
-    monkeypatch.setattr(bm, "_ping", lambda u: (calls.__setitem__("ping", calls["ping"] + 1), (True, "監控服務有收到這次打卡。"))[1])
+    monkeypatch.setattr(bm, "_ping", lambda u: (calls.__setitem__("ping", calls["ping"] + 1), (True, "監控服務有收到這次回報。"))[1])
     # 解析網域與寄信都換成假的：測試不碰網路與 SMTP
     from core import safe_ping
     import helpers.email_notify as en

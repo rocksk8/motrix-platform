@@ -127,7 +127,7 @@ def test_line_step_needs_enabled_and_at_least_one_bound_user(client, make_user, 
     assert _st(_get(client, su))["line"]["status"] == "todo"
     monkeypatch.setattr(ln, "enabled", lambda: True)
     s = _st(_get(client, su))["line"]
-    assert s["status"] == "todo" and "沒有同仁綁定" in s["detail"] and s["optional"] is True
+    assert s["status"] == "todo" and "尚無同仁綁定" in s["detail"] and s["optional"] is True
     ln.link_user(u, "U" + "a" * 32)
     s = _st(_get(client, su))["line"]
     assert s["status"] == "done" and "1／" in s["detail"]

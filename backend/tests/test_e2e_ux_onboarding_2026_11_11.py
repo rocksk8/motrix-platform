@@ -109,7 +109,7 @@ def test_first_run_wizard_superadmin_four_steps(live_server, make_user, new_page
     with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp1:
         page.click("[data-testid=cw-next]")
     assert resp1.value.status == 200
-    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶如何聯絡貴公司')", timeout=10000)
     page.fill("[data-testid=cw-field-phone]", "02-1234-5678")
     with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp2:
         page.click("[data-testid=cw-next]")
@@ -200,7 +200,7 @@ def test_gate_card_edits_the_identity_that_actually_takes_effect(live_server, ma
     page.fill("[data-testid=cw-field-name]", "新公司股份有限公司")
     page.fill("[data-testid=cw-field-tax_id]", ubn)
     page.click("[data-testid=cw-next]")
-    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶如何聯絡貴公司')", timeout=10000)
     page.fill("[data-testid=cw-field-phone]", "02-1234-5678")
     page.click("[data-testid=cw-next]")
     page.click("[data-testid=cw-skip]")

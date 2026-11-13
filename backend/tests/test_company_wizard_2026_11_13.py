@@ -160,13 +160,13 @@ def test_full_flow_each_step_saves_then_resumes_then_done(client, live_server, m
     page.wait_for_function("document.querySelector('[data-testid=cw-tax-msg]').innerText.includes('格式正確')", timeout=10000)
     assert "格式正確" in page.locator("[data-testid=cw-tax-msg]").inner_text()
     _profile_put_ok(page, lambda: page.click("[data-testid=cw-next]"))
-    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶如何聯絡貴公司')", timeout=10000)
     _no_hscroll(page)
 
     # 中途離開（只存了步驟 1）→ 重新載入，接在步驟 2
     page.goto(f"{live_server}{WIZARD_URL}")
     page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=15000)
-    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要怎麼聯絡"), "要接在還沒做完的必填步驟"
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶如何聯絡貴公司"), "要接在還沒做完的必填步驟"
     assert page.input_value("[data-testid=cw-field-phone]") == ""
     page.fill("[data-testid=cw-field-phone]", "02-8765-4321")
     _profile_put_ok(page, lambda: page.click("[data-testid=cw-next]"))

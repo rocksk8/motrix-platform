@@ -381,10 +381,10 @@ def test_heartbeat_test_ok_then_rate_limited(client, make_user, hb_cfg, fresh_li
     bm = fresh_limits
     hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
     seen = []
-    monkeypatch.setattr(bm, "_ping", lambda u: (seen.append(u), (True, "監控服務有收到這次打卡。"))[1])
+    monkeypatch.setattr(bm, "_ping", lambda u: (seen.append(u), (True, "監控服務有收到這次回報。"))[1])
     h = _login(client, make_user)
     r = client.post("/api/system/backup-monitor/heartbeat-test", headers=h, json={"confirm": True})
-    assert r.status_code == 200 and r.json() == {"ok": True, "message": "監控服務有收到這次打卡。"}
+    assert r.status_code == 200 and r.json() == {"ok": True, "message": "監控服務有收到這次回報。"}
     assert seen == [SECRET]
     r2 = client.post("/api/system/backup-monitor/heartbeat-test", headers=h, json={"confirm": True})
     assert r2.status_code == 429 and "秒" in r2.json()["detail"]
