@@ -265,7 +265,7 @@ SettingsMatrix.mount(el, {
 3. **維持立即生效、但存檔後要發通知**：**獎金預設、營運目標、報價條款**（§13-7 的通知元件）。
 4. 這些項目的原頁面也套用 §13 的草稿＋儲存列＋離開警告。
 
-### 15.A S5 補強：四項變更管制怎麼接（r3.4＝依 h11 規格審 MUST-FIX 1–8 修訂；原 r3.3 見 git `62defafcd`；依據＝`h3/S5-WRITE-POINTS.md`）
+### 15.A S5 補強：四項變更管制怎麼接（r3.5＝r3.4 再加 h11 複核 N1–N4；r3.4＝依 h11 規格審 MUST-FIX 1–8 修訂；原 r3.3 見 git `62defafcd`；依據＝`h3/S5-WRITE-POINTS.md`）
 
 **原則**：**不做第二條等待路徑**。四項都登記成登錄表群組，用「舊儲存轉接器（legacy adapter）」讀寫原本的儲存位置，讓 `plan()`／`publish()`／待生效／第二位最高管理者核准（`otherSuperadmins`）／帳本／通知全部沿用。**讀取端**：只改 4 個咽喉點，改為經登錄表讀「生效值」（§15.A.5-1）；舊鍵雙寫保留作回退。
 
@@ -299,7 +299,7 @@ SettingsMatrix.mount(el, {
 
 #### 15.A.5 h11 規格審 MUST-FIX 1–8 的決定
 1. **讀取端落差（選 A）**：待生效只在 `materialize_due()` 寫進舊鍵，而它由每日排程（`daily_checks.run_once`）執行；若讀取端直接讀舊鍵，會出現「設定頁說已生效、薪資／傳票／T100 還在用舊值」最多一天（排程失敗則更久）。**決定**：只改 4 個咽喉點，改為經登錄表讀生效值（含到期待生效覆蓋層）——`legal_params.load_versions`、`bonus_vouchers.configured_accounts`、`accounting_export._t100_config`、`profit_guard.rule_mode`／`charity_mode`／`migration_done`；體量小、其餘 9 處扣繳讀取端因此自動正確；舊鍵雙寫保留作回退。**另加每日漂移檢查**（併入 `daily_checks`）：`adapter.read(conn)` 對比登錄表「已 materialize 後的生效值」，不一致就警示最高管理者（`_stored` 偏好定義列，任何登錄表以外對舊鍵的寫入——工具、還原——都會讓登錄表看不見，光靠 §15.A.3-2 的 grep 擋不住未來新增的）。
-2. **`adapter.write` 的交易**：(a) 只用傳入的 `conn`（§15.A.1-1）；為 `legal_params`、獎金科目、T100、口徑各提供 conn 版寫入函式，原函式改成它的薄包裝。(b) `materialize_due` 目前所有群組同一筆交易，一個 `write` 丟例外會整批回滾、隔天又失敗，餓死其他群組。**決定**：每個群組各包一個 `SAVEPOINT`；轉接器失敗時 `config_ledger.cancel` 該群組的到期列並帶原因、**通知最高管理者**（現行取消路徑只有 `logger.warning`）、其餘群組照常。
+2. **`adapter.write` 的交易**：(a) 只用傳入的 `conn`（§15.A.1-1）；為 `legal_params`、獎金科目、T100、口徑各提供 conn 版寫入函式，原函式改成它的薄包裝。(b) `materialize_due` 目前所有群組同一筆交易，一個 `write` 丟例外會整批回滾、隔天又失敗，餓死其他群組。**決定**：每個群組各包一個 `SAVEPOINT`；轉接器失敗時**先 `ROLLBACK TO` 該 savepoint**（連同先前已寫入的 `D.publish_direct` 定義列一併撤銷，避免定義列與舊鍵分歧），再 `config_ledger.cancel` 該群組的到期列並帶原因，**外層 commit 之後**才通知最高管理者（現行取消路徑只有 `logger.warning`）；其餘群組照常。測試加一題：轉接器失敗後定義列保持不變。
 3. **`cross_check` 接 conn**：§15.A.1-4。
 4. **口徑連動放進「值」**：§15.A.2 最後一列。
 5. **json 待生效大小懸崖**：待生效列把新值放在 `config_changes.new_json`，`config_ledger._dump` 對超過 `_VALUE_MAX=20000` 字元的值會換成 `{"_truncated":true,…}`，覆蓋層讀到的是垃圾、驗證失敗、待生效被取消，復原與差異也會錯。**決定**：送出時 json 欄位超過 **15000 字元**就拒絕並回白話訊息（「這份設定太大，請聯絡工程師」）；上限放在欄位定義可調；加強制超大值的測試。
@@ -308,5 +308,16 @@ SettingsMatrix.mount(el, {
 8. **治理檢查**：每個新 money／legal 欄位要有 `risk_text` 與 `impact_scope`（`effective="pending"`），共 9 欄（§15.A.2）。
 - **(d) 扣繳生效日規則改為兩段**：送出時**軟檢查**——新增／修改的版本 `effectiveFrom` 必須晚於「今天＋確認天數」，白話提示；**硬檢查在 materialize**——以 `frozen_changes` 對當時的實際狀態重驗，若期間已變成凍結 ⇒ 取消該筆並通知（同 §15.A.5-2b）。「完成日」在需要核准時送出當下算不出來（實際生效＝max(生效日、核准時間、下次 materialize)），所以不在送出時硬擋。**緊急追溯更正**的逃生口明講：由工程師用工具處理（類似 `overhead_migrate`），設定中心做不到。
 
-#### 15.A.6 請 h11 複核的範圍
-只複核 §15.A.5 的 1–8 與 (a)(d)；h3 可先做不受影響的部分（§15.A.3-3 的三項通知）。
+#### 15.A.6 h11 複核（r3.4）新增的 N1–N4（r3.5）
+**N1 遞迴**：§15.A.1-1 說 `adapter.read` 走 `load_versions` 正規化，§15.A.5-1 又讓 `load_versions` 讀登錄表生效值 ⇒ 登錄表 `_stored` → `adapter.read` → `load_versions` → `get_group` → `_stored`… 無限遞迴（`configured_accounts`、`_t100_config`、`profit_guard.*` 同）。**決定**：每個咽喉點拆成兩層——**RAW 函式**（讀舊鍵＋正規化，接受 `conn`，`adapter.read` 與每日漂移檢查專用）與**公開函式**（讀登錄表生效值，所有讀取端用）。RAW 命名統一加 `_raw` 後綴（`load_versions_raw`、`configured_accounts_raw`、`t100_config_raw`、`profit_guard.rule_mode_raw`…）。測試：把 `get_group` 換成會丟例外的替身，`adapter.read` 不得觸發它。
+
+**N2 金額讀取端不得退回程式預設**：`settings_registry.get_group` 讀取出錯時會吞例外並回快取或 `_defaults`、遵守 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1`（直接回預設）、並有每程序 15 秒快取（`invalidate()` 只清寫入的那個程序）。對這 4 個群組「預設」＝錯的扣繳率／傳票科目／T100 科目。**決定**：咽喉點呼叫**嚴格版本** `get_group_effective(group, strict=True)`——登錄表讀取失敗時退回 **RAW 舊鍵讀取**（＝最後一次 materialize 的值，**絕不用程式預設**）並記 log；這 4 個群組**忽略** `DEFAULTS_ONLY`（設了該旗標開機也不影響這四個；若實作上辦不到就改成「設了就拒絕啟動」，二選一由實作者在 PR 說明寫明）。多程序 15 秒快取落差列為**可接受**（只影響剛 materialize 的瞬間，且舊鍵雙寫在同一刻）。
+
+**N3 舊端點包裝器只送「有變的欄位」**：`publish()` 會取代 `values` 裡**每個欄位**先前未到期的待生效列（不論該欄有沒有變）。舊 PUT 都是整份 body（5 個科目、整份 T100、`ruleMode`＋`charityMode`），包裝器若整份轉送，第二位管理者只是把表單原樣送回，就會取消第一位在其他欄位的待生效。**決定**：包裝器先把 body 與「目前生效值」比對，只對**有變的欄位**呼叫 `publish()`（並帶這些欄位的 `expected_values`；`supersede` 只在畫面明確確認後才帶）。測試：A 讓 `payable` 科目進待生效，B 儲存表單只改 `expense` 科目 ⇒ A 的待生效仍在。
+
+**N4 `external=True` 的可見度與權限**：§15.A.1-5 讓它們不出現在一般清單與搜尋，但「待生效與最近變更仍顯示」，且一般設定中心路由是用群組代號讀寫，仍能碰到它們；而 T100 的 GET 現在要財務權限、扣繳／傳票科目各有自己頁面的權限。**決定**：(a) 一般設定中心的 GET／PUT 對 external 群組**一律拒絕**，回訊息指向原頁面（不得有第二個寫入入口、不得繞過權限）；(b) 待生效與最近變更中 external 群組的列**只顯示 `summarize()` 文字、不顯示原始值**，且只給「具備該原頁面權限」的檢視者（最高管理者作為核准人永遠可見）；(c) 這些待生效列的核准／撤銷維持**只有最高管理者**可做，與現行相同。
+
+**測試新增（併入 §15.A.3-6）**：`adapter.read` 不觸發登錄表；登錄表讀取失敗時咽喉點退回 RAW 舊鍵（不是預設）、`DEFAULTS_ONLY` 對這 4 群組無效；包裝器只送有變欄位（A/B 兩人情境）；external 群組走一般路由被拒；external 待生效列無原始值且受原頁面權限限制；轉接器失敗後定義列不變。
+
+#### 15.A.7 請 h11 複核的範圍
+r3.5 只增 §15.A.6（N1–N4）與 §15.A.5-2 的 savepoint 細節；h11 只看這次 diff。h3 可先做不受影響的部分（§15.A.3-3 的三項通知）。
