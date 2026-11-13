@@ -35,6 +35,14 @@ loopback_net = pytest.mark.allow_outbound
 # ── 共用夾具 ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
+def _logs_dir_in_tmp(monkeypatch, tmp_path):
+    """備份互斥鎖檔寫在 LOGS_DIR/backup_run.lock；沒用到 hb_cfg 的題目不能寫進真的 backend/logs（BK19：測試不准寫 repo）。
+    autouse 先於明確要求的夾具建立，題目自己再 monkeypatch LOGS_DIR 時以它為準。"""
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs_auto"))
+
+
+@pytest.fixture(autouse=True)
 def _no_real_network(monkeypatch):
     """safe_ping 走 http.client，conftest 的 `_netguard` 攔不到它；這裡自己守：只准連 127.0.0.1，連別處＝那一題紅。
     網域解析預設回公開位址（假的），寄信一律記下來不寄。"""
