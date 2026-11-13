@@ -2,16 +2,16 @@
  "_說明": "已出貨的 apply 腳本基準（T83）：最近一次實際發布的完整包裡 apply_update.ps1／apply_module_update.ps1 的版號與內容雜湊（去 BOM、CRLF→LF 的 sha256）。**只有 `delivery.py publish` 成功之後由程式寫**（record_baseline），不要手改；寫完要 commit。守門 test_apply_script_baseline：腳本內容和這裡不同 ⇒ 版號必須嚴格大於這裡的版號。",
  "scripts": {
   "apply_update": {
-   "version": "2026-11-13b",
-   "sha256": "fb4a2663ba55b6264e7ffbfb8374d5eb20ef63b8a1fdf8d35749ec0432f90367",
-   "shipped_in": "20261113_232746_b4c54215_full",
-   "commit": "b4c542153ef71b55920585746154afb763d412ca"
+   "version": "2026-11-13c",
+   "sha256": "8c4d37b3c84cb265ba59c960a2bc63827f0d74fc7aff1af3c136cd1e77025e0b",
+   "shipped_in": "20261114_050923_5f1a4a5d_full",
+   "commit": "5f1a4a5d85253199c6f04986776aff16eb9f2b8a"
   },
   "apply_module_update": {
-   "version": "2026-11-13b",
-   "sha256": "b139c7274d9b3d9d0623cf0f06b5af1ed550d6c473d4a44780d4788b5dc14903",
-   "shipped_in": "20261113_232746_b4c54215_full",
-   "commit": "b4c542153ef71b55920585746154afb763d412ca"
+   "version": "2026-11-13c",
+   "sha256": "52237d98774cf2a17edd3727c9c6739a98e03e8ed61d13b6b8db92fcc4495319",
+   "shipped_in": "20261114_050923_5f1a4a5d_full",
+   "commit": "5f1a4a5d85253199c6f04986776aff16eb9f2b8a"
   }
  }
 }
