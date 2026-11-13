@@ -1,3 +1,4 @@
+# 依第42班使用者裁示（傳票／出納／財務金額能力只屬財務角色與 superadmin；財務與出納合併），刪除 1 題原本 skip 的測試：test_finance_module_can_view_but_not_execute（2026-11-13 chore/test-prune）
 """需要外包工班（M04）的題：刪掉 modules/subcontract 時隨模組消失（PLAYBOOK §B-11，稽核 D M04-M1）。
 
 （2026-09-26 自 tests/test_cashier_module_2026_08_31.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
@@ -129,38 +130,6 @@ def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_
     assert pay.status_code == 200, pay.text
     r2 = client.get("/api/cashier/payable-queue", headers=_auth(token))
     assert v_soon not in [v["voucherNo"] for v in r2.json()]
-
-
-@needs_m01
-@_NEEDS_ARAP
-@pytest.mark.skip(reason="第42班（財務與出納合併）：「財務只能看、不能執行」的分工不再存在；財務角色可查看也可執行")
-def test_finance_module_can_view_but_not_execute(client, make_user):
-    """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
-    payable/receivable/execution-history），但標記動作走 admin+/cashier 專用
-    的 mark_payment／paid-toggle，finance 不含在內，維持查看/執行分權。"""
-    admin_username, admin_password = make_user(username="cash_admin5", role="superadmin")
-    admin_token = _login(client, admin_username, admin_password)
-    voucher_no = _make_approved_voucher(client, admin_token, "MQ-CASH-050")
-    _make_quotation_with_unreceived_item("MQ-CASH-051")
-
-    finance_username, finance_password = make_user(username="finance_user", role="sales", modules=["finance"])
-    finance_token = _login(client, finance_username, finance_password)
-
-    assert client.get("/api/cashier/payable-queue", headers=_auth(finance_token)).status_code == 200
-    assert client.get("/api/cashier/receivable-queue?status=all", headers=_auth(finance_token)).status_code == 200
-    assert client.get("/api/cashier/execution-history", headers=_auth(finance_token)).status_code == 200
-
-    pay = client.post(
-        f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(finance_token),
-        json={"action": "pay", "paid_at": "2026-08-31"},
-    )
-    assert pay.status_code == 403, pay.text
-
-    mark = client.patch(
-        "/api/quotations/MQ-CASH-051/payment/0", headers=_auth(finance_token),
-        json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 30000, "feeAmount": 0},
-    )
-    assert mark.status_code == 403, mark.text
 
 
 @needs_m01
