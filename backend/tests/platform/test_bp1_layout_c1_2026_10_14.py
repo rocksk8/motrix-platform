@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune：刪 test_flag_gated_x_show_has_no_static_inline_display——已併入 tests/platform/test_xshow_inline_display_2026_10_14.py（頁面：case-management.html；旗標函式一律 `[a-zA-Z]Shown(`＋layoutOn＋store，是原四份的聯集）
 """C1：案件頁「案件資訊」分頁的區塊（健康總覽、合約資訊、人員角色、專案期間、自訂欄位、個資告知、客戶回簽單）接上版面引擎（list `bizBlocks`）。
 
 1. 登記：7 個區塊，核心＝合約資訊、人員角色、個資告知、客戶回簽單（不可隱藏）；fallback＝登記順序；每個區塊在頁面上都有綁定。
@@ -78,19 +79,6 @@ def test_all_layout_style_bindings_return_objects():
     seg = src[src.index("  _bcols()"):src.index("  _bix(f)")]
     assert "[]" in seg
     assert "{ order: (this._bix(f) + 1) * 10 + (n || 0) } : {}" in src and "'order:" not in src[src.index("  _bcols()"):src.index("  _bcols()") + 900]
-
-
-def test_flag_gated_x_show_has_no_static_inline_display():
-    bad = []
-    for m in re.finditer(r"<[a-zA-Z][^<>]*?>", _page(), re.S):
-        tag = m.group(0)
-        xs = re.search(r'x-show="([^"]*)"', tag)
-        if not xs or not re.search(r"\b(?:[lfctb]Shown|cShown|tShown|bShown)\(|\blayoutOn\b", xs.group(1)):
-            continue
-        st = re.search(r'(?<![:\w-])style="([^"]*)"', tag)
-        if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
-            bad.append(re.sub(r"\s+", " ", tag)[:120])
-    assert not bad, bad
 
 
 # ── 2/3. node：中性值與 ON 的順序 ─────────────────────────────────────────
