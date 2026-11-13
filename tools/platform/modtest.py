@@ -1610,6 +1610,8 @@ def main(argv=None):
                     help="--full 不記最慢 %d 題（預設會記，寫進 full_results/<commit>.json 的 slowest）" % DURATIONS)
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
+    ap.add_argument("--allow-other-python", dest="allow_other_python", action="store_true",
+                    help="--full 時允許用正式閘門（.venv312）以外的直譯器（預設拒跑；也可設環境變數 MOTRIX_ALLOW_OTHER_PYTHON=1）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
     ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
     ap.add_argument("--transitive", action="store_true", help="舊規則：改動單位一律沿反向 import 遞移擴散（預設：介面沒變只到直接依賴，§C-11a）")
@@ -1630,6 +1632,12 @@ def main(argv=None):
         return 2 if not r["rebased"] else (3 if r["high_impact"] else 0)   # 3＝影響大（差異題擴大＋月台註明），不是「跑全量」
     global PYEXE
     PYEXE = resolve_python(a.python)
+
+    if a.full and not a.dry_run and "PYTEST_CURRENT_TEST" not in os.environ:
+        bad = project_env.interpreter_mismatch(PYEXE, dict(os.environ, **({project_env.ALLOW_OTHER_PYTHON_ENV: "1"} if a.allow_other_python else {})))
+        if bad:                                         # 全量（預跑／閘門證據）一定要與建包同一個直譯器；不一致就拒跑，不是警告
+            print("[全閘門] ✗ 拒跑：" + bad)
+            return 2
 
     if a.full:
         if a.dry_run:

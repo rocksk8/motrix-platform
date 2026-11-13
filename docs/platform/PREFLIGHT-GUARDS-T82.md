@@ -120,3 +120,10 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
   ⇒ 要讓建包沿用，請用 `python tools/platform/heavy_run.py --class official --window <我> -- python tools/platform/modtest.py --full`（或直接 run-stage／建包）。
 - 該旗標不進建包指紋（`_ENV_IGNORE`），不然 official 與非 official 的紀錄永遠對不上。
 - 守門：`tests/platform/test_gate_only_wiring_2026_11_13.py`（標記有註冊、兩檔都帶、只有一個同名 hook、兩條路徑都設 1、非 official 票不繼承 1、modtest 非 official 不寫紀錄）。
+
+## 預跑與閘門必須同一個直譯器（2026-11-13，T82 閘門抓到）
+預跑用 `.venv`、閘門用 `.venv312` ⇒ `test_merge_drivers` 兩題（假設 `sys.executable` 不在 `.venv312` 之下）預跑綠、閘門紅。現在：
+- **`modtest --full`（真的跑時）直譯器不是主工作樹的 `.venv312` ⇒ 拒跑，回 2**；`run-stage`（建包同一支）同樣拒跑、不寫紀錄。判定只有一份：`tools/platform/project_env.py::interpreter_mismatch`。
+- 明知要用別的環境（例：測 3.13）才放行：`modtest --full --allow-other-python` 或環境變數 `MOTRIX_ALLOW_OTHER_PYTHON=1`。沒有 `.venv312` 的機器不擋。
+- `preflight_guards` 本來就固定 `.venv312`；`--dry-run` 與 pytest 內呼叫 modtest 的工具測不受影響。
+- 守門：`tests/platform/test_formal_interpreter_2026_11_13.py`。

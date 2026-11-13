@@ -41,6 +41,42 @@ def main_worktree_root():
         return REPO
 
 
+#: 正式閘門（run-stage／建包／全閘門預跑）固定用的環境：不吃 MOTRIX_PROJECT_VENV。
+#: 2026-11-13（T82 閘門）：預跑用 .venv、閘門用 .venv312 ⇒ test_merge_drivers 預跑綠、閘門紅（測試假設 sys.executable 不在 .venv312 之下）。
+FORMAL_VENV_DIR = ".venv312"
+ALLOW_OTHER_PYTHON_ENV = "MOTRIX_ALLOW_OTHER_PYTHON"
+
+
+def formal_python():
+    """正式閘門的直譯器（主工作樹的 .venv312）；沒有 ⇒ None。"""
+    p = main_worktree_root() / FORMAL_VENV_DIR / "Scripts" / "python.exe"
+    if p.is_file():
+        return p
+    p2 = main_worktree_root() / FORMAL_VENV_DIR / "bin" / "python"
+    return p2 if p2.is_file() else None
+
+
+def interpreter_mismatch(py, env=None):
+    """py 不是正式閘門的直譯器 ⇒ 說明；一致（同一個 venv 底下）或明確放行（MOTRIX_ALLOW_OTHER_PYTHON=1）⇒ None。
+    正式閘門的環境不存在（沒有 .venv312）⇒ 沒有可比對的對象 ⇒ None（不擋；PLAYBOOK 另有 project_env check）。"""
+    env = os.environ if env is None else env
+    if str(env.get(ALLOW_OTHER_PYTHON_ENV, "")).strip() == "1":
+        return None
+    want = formal_python()
+    if want is None:
+        return None
+    norm = lambda x: os.path.normcase(os.path.abspath(str(x)))      # noqa: E731
+    try:
+        got_root = norm(Path(py).parent.parent)
+    except (TypeError, ValueError):
+        got_root = norm(py)
+    if got_root == norm(want.parent.parent):
+        return None
+    return ("直譯器 %s 不是正式閘門用的 %s（建包／run-stage 用它）。預跑與閘門用不同環境，套件版本與 sys.executable 的假設就不同：\n"
+            "  test_merge_drivers 兩題預跑綠、閘門紅就是這樣（2026-11-13 T82）。請改用該直譯器；"
+            "明知要用別的（例：測 3.13）才設 %s=1 或 modtest 加 --allow-other-python。" % (py, want, ALLOW_OTHER_PYTHON_ENV))
+
+
 def venv_python():
     p = main_worktree_root() / VENV_DIR / "Scripts" / "python.exe"
     if not p.is_file():

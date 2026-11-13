@@ -290,6 +290,18 @@ def collect_reds(fail_stream_dir, limit=500):
     return out
 
 
+def _interpreter_mismatch(python, repo):
+    """用 tools/platform/project_env.py 的同一份判定（formal_python／interpreter_mismatch）；載不到它 ⇒ 不擋（fail-open，只是少一道檢查）。"""
+    try:
+        import importlib.util as _iu
+        sp = _iu.spec_from_file_location("_bt_project_env", str(Path(repo) / "tools" / "platform" / "project_env.py"))
+        pe = _iu.module_from_spec(sp)
+        sp.loader.exec_module(pe)
+        return pe.interpreter_mismatch(python)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
 def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False):
     """**獨立跑一段也算數**（建包優化 2 項 2）：跑與建包同一組指令；開跑與結束的指紋相同且工作樹乾淨 ⇒ 把這一段（綠或紅）寫進沿用紀錄
     （source=standalone）。之後建包遇到同指紋、12 小時內的綠就直接沿用這一段，不再跑第二次。
@@ -302,6 +314,11 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     import tempfile
     python = python or sys.executable
     repo = Path(repo)
+    if runner is None:                              # 真的要跑（測試注入 runner 時不查）：run-stage 與預跑（modtest --full）必須同一個直譯器
+        bad = _interpreter_mismatch(python, repo)
+        if bad:
+            note("[run-stage] ✗ 拒跑：" + bad)
+            return 2, False, "直譯器不是正式閘門用的環境"
     fp0 = fingerprint(repo)
     backend = repo / "backend"
     base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S")))
