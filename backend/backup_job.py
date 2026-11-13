@@ -37,19 +37,32 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     logger.info("=== MOTRIX ERP backup_job 開始 ===")
     exit_code = 0
+    # 備份互斥（2026-11-13）：網頁上的「立即備份」或 ERP 每 2 小時的排程備份正在跑時，這支不重疊著再跑一份
+    # （兩邊會同時寫同一個日資料夾與 .done）；那一次備份做的事與這支相同，所以略過不算失敗。
     try:
-        from archive import _daily_backup, _weekly_backup
-        _daily_backup()
-        logger.info("每日備份完成")
+        from archive import BackupInProgress, backup_run_lock, _daily_backup, _weekly_backup
     except Exception:
-        logger.exception("每日備份失敗")
-        exit_code = 1
+        logger.exception("備份模組載入失敗")
+        logger.info("=== MOTRIX ERP backup_job 結束（exit=1）===")
+        sys.exit(1)
     try:
-        from archive import _weekly_backup
-        _weekly_backup()
-        logger.info("週備份完成")
+        with backup_run_lock():
+            try:
+                _daily_backup()
+                logger.info("每日備份完成")
+            except Exception:
+                logger.exception("每日備份失敗")
+                exit_code = 1
+            try:
+                _weekly_backup()
+                logger.info("週備份完成")
+            except Exception:
+                logger.exception("週備份失敗")
+                exit_code = 1
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這次排程備份略過")
     except Exception:
-        logger.exception("週備份失敗")
+        logger.exception("備份啟動失敗")
         exit_code = 1
     logger.info("=== MOTRIX ERP backup_job 結束（exit=%d）===", exit_code)
     sys.exit(exit_code)

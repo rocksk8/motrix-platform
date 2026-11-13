@@ -28,6 +28,18 @@
    "icon": "user"
   },
   {
+   "id": "backup-monitor",
+   "section": "data",
+   "title": "備份與監控",
+   "desc": "最近一次備份有沒有成功、硬碟還剩多少、系統是否在線，一頁看完",
+   "impact": "影響：只是查看；頁面上的「立即備份」「測試心跳」要確認後才會執行。",
+   "href": "backup-monitor.html",
+   "perm": "superadmin",
+   "order": 5,
+   "keywords": "備份 監控 心跳 硬碟 空間 告警 還原",
+   "icon": "disk"
+  },
+  {
    "id": "storage-settings",
    "section": "data",
    "title": "儲存位置",

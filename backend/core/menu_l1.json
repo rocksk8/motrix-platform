@@ -188,6 +188,13 @@
   },
   {
    "group": "system",
+   "href": "backup-monitor.html",
+   "label": "備份與監控",
+   "order": 46,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "storage-settings.html",
    "label": "儲存位置",
    "order": 47,

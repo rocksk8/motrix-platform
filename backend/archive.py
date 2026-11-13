@@ -3164,13 +3164,120 @@ def _daily_first_tick():
     _daily_tick()
 
 
+class BackupInProgress(Exception):
+    """已經有另一個備份在跑（同一行程的另一條執行緒，或另一個行程：排程的 `backup_job.py`）。"""
+
+
+class BackupLockUnavailable(Exception):
+    """備份鎖檔打不開（權限、磁碟）⇒ 無法確認有沒有另一個行程在備份。嚴格模式（手動備份）直接拒絕。"""
+
+
+_BACKUP_RUN_THREAD_LOCK = threading.Lock()
+
+
+def _backup_lock_path() -> str:
+    return os.path.join(_paths.LOGS_DIR, "backup_run.lock")
+
+
+def _os_lock(fh) -> bool:
+    """對鎖檔第 0 個位元組上不等待的互斥鎖；別人持有 ⇒ False。鎖由作業系統持有：行程不論怎麼死（含被強制終止、斷電重開）鎖都會放掉，
+    所以不需要「過期時間」，也不會留下卡死的鎖。"""
+    fh.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fh) -> None:
+    try:
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+_LOCK_ALERTED = {"on": False}
+
+
+def _alert_lock_unavailable() -> None:
+    """排程備份遇到鎖檔打不開：照常備份（不能因此整天沒備份），但**不安靜地降級**——記 ERROR、寫系統告警（同一行程只寫一次，不洗版）。"""
+    logger.error("備份互斥鎖檔打不開：這一輪備份沒有跨行程互斥（可能與另一個備份同時寫入）。請檢查 logs 資料夾權限，以及排程帳號與服務帳號是否相同。")
+    if _LOCK_ALERTED["on"]:
+        return
+    _LOCK_ALERTED["on"] = True
+    try:
+        _write_backup_alert("備份互斥鎖檔打不開（logs 資料夾權限？排程與服務是否用不同的 Windows 帳號？）：備份仍照常執行，"
+                            "但可能與另一個備份同時寫入。請聯絡維運檢查資料夾權限。", level="ERROR")
+    except Exception:  # noqa: BLE001
+        logger.exception("鎖檔告警寫入失敗")
+
+
+class backup_run_lock:
+    """備份互斥（備份與監控頁 M3，2026-11-13）：「立即備份」、`_daily_tick`、`backup_job.py` 同一時間只准一個在跑
+    （否則兩邊同時寫同一個 `.done`／日資料夾／快照檔，可能互相覆蓋或留下半成品，又各自記一筆稽核）。
+    `with backup_run_lock():`——拿不到 ⇒ 立刻丟 `BackupInProgress`（不等待）。
+    執行緒鎖擋同行程；檔案鎖（`logs/backup_run.lock`）擋跨行程。
+    **鎖檔打不開（權限、磁碟、排程與服務不同帳號）時不安靜降級（審查 N4）**：`strict=True`（手動備份）⇒ 丟 `BackupLockUnavailable`、拒絕執行；
+    排程備份（預設）⇒ 照常備份（不能因此整天沒備份），但記 ERROR 並寫系統告警。"""
+
+    def __init__(self, strict: bool = False):
+        self._strict = bool(strict)
+        self._fh = None
+
+    def __enter__(self):
+        if not _BACKUP_RUN_THREAD_LOCK.acquire(blocking=False):
+            raise BackupInProgress()
+        self._fh = None
+        try:
+            try:
+                os.makedirs(_paths.LOGS_DIR, exist_ok=True)
+                self._fh = open(_backup_lock_path(), "a+b")
+            except OSError:
+                if self._strict:
+                    raise BackupLockUnavailable() from None
+                _alert_lock_unavailable()
+                self._fh = None
+            if self._fh is not None and not _os_lock(self._fh):
+                self._fh.close()
+                self._fh = None
+                raise BackupInProgress()
+        except BaseException:
+            _BACKUP_RUN_THREAD_LOCK.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._fh is not None:
+                _os_unlock(self._fh)
+                self._fh.close()
+        finally:
+            _BACKUP_RUN_THREAD_LOCK.release()
+        return False
+
+
 def _daily_tick():
     try:
-        _daily_backup()
+        with backup_run_lock():
+            _daily_backup()
         try:
             _cleanup_sessions()
         except Exception:  # noqa: BLE001
             logger.exception("_cleanup_sessions failed in daily schedule")
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪每日備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_daily_backup failed in daily schedule")
     finally:
@@ -3220,7 +3327,10 @@ def _schedule_weekly():
 
 def _weekly_tick():
     try:
-        _weekly_backup()
+        with backup_run_lock():
+            _weekly_backup()
+    except BackupInProgress:
+        logger.info("已有備份在進行中，這一輪週備份略過（下一輪再跑）")
     except Exception:  # noqa: BLE001
         logger.exception("_weekly_backup failed in weekly schedule")
     finally:

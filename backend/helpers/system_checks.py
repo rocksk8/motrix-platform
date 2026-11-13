@@ -180,6 +180,8 @@ def _check_cert_expiry() -> None:
 # 做法比照 _check_cert_expiry()：掛在既有的每日 08:00 排程上，不另起 job；
 # 用 system_settings 當「今天寄過了沒」的 guard，一天最多一封。
 
+# 2026-11-13：下面三個數字是**預設值**（＝設定中心 `monitoring` 群組的預設，凍結基準 settings_deploy_baseline.json）；
+# 實際門檻由 `alert_thresholds()` 讀設定（備份與監控頁、設定中心都能改），讀不到才退回這裡。
 _BACKUP_STALE_HOURS = 36        # 每日備份的容許間隔（正常 24h，留一天的餘裕）
 _DISK_FREE_MIN_PCT  = 10        # 剩餘空間低於此百分比 → 告警
 # 2026-09-15：20 → 50 GB。這兩個門檻是 AND（見 _check_disk_space 的說明），所以在
@@ -187,6 +189,21 @@ _DISK_FREE_MIN_PCT  = 10        # 剩餘空間低於此百分比 → 告警
 # 「每跑一次測試就寫 3～4 GB」的開發機來說太晚——剩 20 GB 時只剩五次測試的餘裕，
 # 而且備份寫不進去通常會先發作。
 _DISK_FREE_MIN_GB   = 50        # 或剩餘絕對量低於此 GB → 告警（大碟用百分比會太晚）
+
+
+def alert_thresholds() -> dict:
+    """目前生效的告警門檻 `{backup_stale_hours, disk_free_min_gb, disk_free_min_pct}`：讀設定中心 `monitoring` 群組；
+    讀不到（登錄表壞了、值不是整數）一律退回上面的預設常數——**監控不可以因為設定壞掉而不響**。永不丟例外。"""
+    out = {"backup_stale_hours": _BACKUP_STALE_HOURS, "disk_free_min_gb": _DISK_FREE_MIN_GB, "disk_free_min_pct": _DISK_FREE_MIN_PCT}
+    try:
+        from helpers import settings_groups, settings_registry as sr     # noqa: F401
+        for k in list(out):
+            v = sr.get("monitoring", k)
+            if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+                out[k] = v
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("讀取監控告警門檻失敗，用預設值：%s", exc)
+    return out
 
 # 測試暫存總量超過這個值就寄信。**這條跟剩餘空間無關**：2026-09-15 實測 84 個
 # `motrix-pytest-*` 目錄吃掉 136 GB，而碟上還剩 293 GB——剩餘空間的門檻不管怎麼調
@@ -214,7 +231,7 @@ def _latest_audit_at(conn, actions: tuple) -> Optional[datetime]:
 
 
 def _check_backup_freshness() -> None:
-    """每日檢查「最後一次成功備份」離現在多久；超過 _BACKUP_STALE_HOURS 就寄信。
+    """每日檢查「最後一次成功備份」離現在多久；超過 `alert_thresholds()["backup_stale_hours"]`（預設 36）就寄信。
 
     分兩條線各自判斷，因為它們的失效原因完全不同：
       本機 SQLite 快照（`backup.sqlite_snapshot`）——不依賴雲端碟，這條斷掉
@@ -253,6 +270,7 @@ def _check_backup_freshness() -> None:
             return          # 同上：不上傳雲端的機器只看本機那條，它也還沒跑過
 
         now = datetime.now()
+        stale_hours = alert_thresholds()["backup_stale_hours"]
         stale = []
         lines = [("本機 SQLite 快照", local_at)]
         if cloud_expected:
@@ -262,7 +280,7 @@ def _check_backup_freshness() -> None:
                 stale.append((label, None))
             else:
                 hours = (now - ts).total_seconds() / 3600
-                if hours > _BACKUP_STALE_HOURS:
+                if hours > stale_hours:
                     stale.append((label, ts))
 
         guard_key = "backup_stale_last_notified"
@@ -289,7 +307,7 @@ def _check_backup_freshness() -> None:
         # 代價是「**告警自己壞了**」變成不可觀測的——而那正是最需要被觀測的那一種失敗。
         def _send_alert():
             try:
-                notify_backup_stale(stale, _BACKUP_STALE_HOURS)
+                notify_backup_stale(stale, stale_hours)
             except Exception:  # noqa: BLE001
                 _logger.exception("notify_backup_stale failed —— 旗標不寫，今天仍會重試")
                 return
@@ -401,6 +419,7 @@ def _check_disk_space() -> None:
     """
     try:
         import shutil as _shutil
+        th = alert_thresholds()
         problems = []
         for label, path in _disk_targets():
             try:
@@ -409,7 +428,7 @@ def _check_disk_space() -> None:
                 continue        # 碟沒掛上／路徑不可用 → 那是備份告警的守備範圍
             free_gb  = usage.free / (1024 ** 3)
             free_pct = (usage.free / usage.total * 100) if usage.total else 0
-            if free_gb < _DISK_FREE_MIN_GB and free_pct < _DISK_FREE_MIN_PCT:
+            if free_gb < th["disk_free_min_gb"] and free_pct < th["disk_free_min_pct"]:
                 problems.append({
                     "label": label, "path": path,
                     "free_gb": round(free_gb, 1),

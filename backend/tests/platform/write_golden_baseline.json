@@ -280,6 +280,42 @@
   ],
   "s": 400
  },
+ "POST /api/system/backup-monitor/backup-now": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "POST /api/system/backup-monitor/heartbeat-test": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/ledger/roles": {
   "k": [
    "detail"
@@ -345,6 +381,12 @@
   "s": 400
  },
  "PUT /api/settings/line-notify/events/{key}/roles": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/system/backup-monitor/heartbeat-url": {
   "k": [
    "detail"
   ],
