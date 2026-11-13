@@ -521,7 +521,7 @@ def test_alt_quote_brings_in_only_picked_items_and_reports_unselected_groups(cli
     assert _ids(r) == ["p-1", "a-2"]                         # 未選的 a-1、整個 B 組都不在
     j = r.json()
     assert j["unselectedGroups"] == ["B"] and j["sourceState"] == "alt_unselected"
-    assert any("還沒選定" in w for w in j["warnings"])
+    assert any("尚未選定" in w for w in j["warnings"])
     txt = json.dumps(j, ensure_ascii=False)
     for needle in ("a-1", "b-1", "b-2", "unitPrice"):
         assert needle not in txt, needle

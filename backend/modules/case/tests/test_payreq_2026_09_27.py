@@ -329,7 +329,7 @@ def test_paid_date_only_after_approval_for_cashier_and_admin_alike(client, make_
     ha = _peer(client, make_user, req, "pr_boss3", role="superadmin")
     for h in (hc, ha):
         r = client.patch(dates, json={"paidDate": "2031-03-15"}, headers=h)
-        assert r.status_code == 409 and "還沒核准" in r.json()["detail"], r.text
+        assert r.status_code == 409 and "尚未核准" in r.json()["detail"], r.text
     assert _paid(req) == ""
     _approve(client, req)
     r = client.patch(dates, json={"paidDate": "2031-03-15"}, headers=hc)

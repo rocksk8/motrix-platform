@@ -178,5 +178,5 @@ def test_new_material_request_stays_unsent_until_submit(live_server, make_user, 
     page.locator(f'{PANEL} [data-testid="mo-submit"]').last.click()
     page.wait_for_timeout(1500)
     assert (len(_orders()), len(_approvals())) == before, "缺供應商不得留下任何列"
-    assert "還沒選供應商" in page.locator(PANEL).inner_text()
+    assert "尚未選供應商" in page.locator(PANEL).inner_text()
     assert not errors, errors

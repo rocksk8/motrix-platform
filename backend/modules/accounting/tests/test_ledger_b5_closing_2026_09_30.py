@@ -103,7 +103,7 @@ def test_preview_lines_are_balanced_and_state_prerequisites(conn):
     by = {l["account_code"]: l for l in v1["lines"]}
     assert by["4111"]["debit"] == 10000 and by["5111"]["credit"] == 4000 and by["6112"]["credit"] == 1000 and by["3353"]["credit"] == 5000
     assert [(l["account_code"], l["debit"], l["credit"]) for l in v2["lines"]] == [("3353", 5000, 0), ("3351", 0, 5000)]
-    assert any("還沒結帳" in u for u in pv["prerequisites_unmet"])            # 1～11 期都還開著 ⇒ 前置未滿足要明說
+    assert any("尚未結帳" in u for u in pv["prerequisites_unmet"])            # 1～11 期都還開著 ⇒ 前置未滿足要明說
 
 
 def test_preview_for_a_loss_year_reverses_the_direction(conn):
@@ -119,7 +119,7 @@ def test_generate_refuses_until_periods_are_closed_then_makes_two_drafts_once(co
     y = _new_year(conn)
     with pytest.raises(CL.ClosingError) as ei:
         CL.generate(conn, y, "acc")
-    assert "還沒結帳" in str(ei.value)
+    assert "尚未結帳" in str(ei.value)
     _close_periods(conn, y)
     made = CL.generate(conn, y, "acc")
     conn.commit()
@@ -202,7 +202,7 @@ def test_reverse_controls_each_missing_prerequisite_blocks_year_close(conn):
     y = _new_year(conn)
     with pytest.raises(CL.ClosingError) as ei:
         CL.close_year(conn, y, "acc")
-    assert "還沒結帳" in str(ei.value)
+    assert "尚未結帳" in str(ei.value)
     # ②損益科目還有餘額（沒結轉）
     _close_periods(conn, y)
     with pytest.raises(CL.ClosingError) as ei:
@@ -213,7 +213,7 @@ def test_reverse_controls_each_missing_prerequisite_blocks_year_close(conn):
     conn.commit()
     with pytest.raises(CL.ClosingError) as ei:
         CL.close_year(conn, y, "acc")
-    assert "損益科目還有餘額" in str(ei.value) or "還沒過帳" in str(ei.value)
+    assert "損益科目還有餘額" in str(ei.value) or "尚未過帳" in str(ei.value)
     # ④壞帳（借貸不平衡）連期間都結不了
     y2 = _new_year(conn)
     _v(conn, "%d-03-05" % y2, [("1113", 500, 0), ("3111", 0, 400)])

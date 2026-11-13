@@ -50,7 +50,7 @@ def test_finalize_is_refused_until_the_quote_is_won(W):
     _set_tot()
     _set_deal_tag("")
     r = _put(c, h, _honest(c, h))
-    assert r.status_code == 409 and "還沒成案" in r.text
+    assert r.status_code == 409 and "尚未成案" in r.text
     assert _put(c, h, {"status": "draft", "items": [], "offsets": []}).status_code == 200            # 草稿存檔不受影響
     _set_deal_tag("已成案")
     assert _put(c, h, _honest(c, h)).status_code == 200
