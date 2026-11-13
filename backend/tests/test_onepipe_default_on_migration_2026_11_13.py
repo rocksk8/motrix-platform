@@ -35,15 +35,16 @@ PERM_FLAGS = ("buyer_access", "receive_permission", "po_skip_resign")      # 放
 
 
 def _all_fields():
+    """群組登錄的每一個欄位（含放寬權限類旗標與不是開關的選項）：存整組定義時要全給（缺欄位 ⇒ 驗證不通過）。"""
     from helpers import settings_registry as SR
     import helpers.settings_groups  # noqa: F401
-    from helpers import startup
-    return [f for f in SR._g(GROUP)["fields"] if f not in startup._ONEPIPE_NOT_FLAGS]     # 「不是開關」的選項另有專測（一次性遷移不碰它）
+    return list(SR._g(GROUP)["fields"])
 
 
 def _fields():
-    """會被遷移打開的欄位＝群組全部欄位去掉放寬權限類旗標。"""
-    return [f for f in _all_fields() if f not in PERM_FLAGS]
+    """會被遷移打開的欄位＝群組全部欄位去掉放寬權限類旗標與「不是開關」的選項（`_ONEPIPE_NOT_FLAGS`，另有專測）。"""
+    from helpers import startup
+    return [f for f in _all_fields() if f not in PERM_FLAGS and f not in startup._ONEPIPE_NOT_FLAGS]
 
 
 def _effective():
@@ -62,7 +63,7 @@ def _store(**over):
     import db
     from core import definitions as D
     from helpers import settings_registry as SR
-    vals = {f: 0 for f in _all_fields()}                 # 群組驗證器要求每個欄位都有值（含放寬權限類）
+    vals = {f: 0 for f in _all_fields()}                 # 群組驗證器要求每個欄位都有值（含放寬權限類、選項）
     vals.update(over)
     c = db.get_db()
     try:
