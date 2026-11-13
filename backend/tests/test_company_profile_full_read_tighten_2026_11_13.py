@@ -98,6 +98,12 @@ def test_legacy_stored_zero_is_tightened_once_with_an_audit_record(fresh):
     assert username == "system" and display == "系統升級"
     assert d["changes"] == [{"field": FIELD, "old": 0, "new": 1}]
     assert "T84" in d["reason"] and "0→1" in d["reason"] and "設定中心" in d["reason"]
+    ch = _sql("SELECT actor, actor_display, field, old_json, new_json, reason FROM config_changes WHERE domain=? AND key=? AND field=?",
+              ("setting:%s" % GROUP, GROUP, FIELD))
+    assert len(ch) == 1, "變更明細要有一列（真的走設定中心引擎發布）：%r" % (ch,)
+    actor, actor_display, field, old, new, reason = ch[0]
+    assert (actor, actor_display, field, json.loads(old), json.loads(new)) == ("system", "系統升級", FIELD, 0, 1)
+    assert "T84" in reason
 
 
 def test_running_again_changes_nothing(fresh):
