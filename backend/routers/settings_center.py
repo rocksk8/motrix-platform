@@ -86,10 +86,23 @@ def list_groups(authorization: str = Header(None)):
             last = ledger.history(conn, "setting:%s" % g, g, limit=1)
             out.append({"group": g, "status": "open", "plannedTrain": None, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "risk": meta["risk"],
                         "values": sr.get_group(g), "fieldCount": len(meta["fields"]),
+                        "fieldTexts": [x for f in meta["fields"] for x in (f.get("label"), f.get("question")) if x],         # 搜尋用：欄位名稱與問句（批次 9）
                         "lastChange": ({"at": last[0]["at"], "actor": last[0]["actor_display"] or last[0]["actor"], "reason": last[0]["reason"]} if last else None)})
     finally:
         conn.close()
-    return {"groups": out, "plannedFeatures": _spine.planned_cards()}        # 『即將推出』：開發中、還沒有設定群組的功能（只有名稱與預計班次）
+    from helpers import menu_categories as _mc
+    cats = _mc.categories_view("settings_group", {g["group"]: g["label"] for g in out})       # 同一份分類資料檔（批次 9）：分類、區段、一句話說明、公司覆寫的名稱
+    by_id = {it["id"]: (c["key"], it) for c in cats for it in c["items"]}
+    for g in out:
+        ck, it = by_id.get(g["group"], ("", None))
+        g["category"], g["section"] = ck, (it["section"] if it else "")
+        g["blurb"], g["when"] = (it["blurb"], it["when"]) if it else ("", "")
+        g["catStatus"], g["catNote"] = (it["status"], it["note"]) if it else ("keep", "")
+        g["registryLabel"] = g["label"]
+        if it:
+            g["label"] = it["name"]                                              # 公司可以改群組名稱；沒改就是登錄表的名稱
+    return {"groups": out, "plannedFeatures": _spine.planned_cards(),            # 『即將推出』：開發中、還沒有設定群組的功能（只有名稱與預計班次）
+            "categories": [{"key": c["key"], "name": c["name"], "tier": c["tier"], "blurb": c["blurb"], "when": c["when"]} for c in cats]}
 
 
 @router.get("/api/settings-center/groups/{group}")
@@ -108,8 +121,13 @@ def get_group(group: str, authorization: str = Header(None)):
     finally:
         conn.close()
     values = sr.get_group(group)
+    from helpers import settings_help as _sh
+    fields = sr.field_views(group, values)
+    ov = _sh.get_override()
+    for f in fields:
+        f["helpInfo"] = _sh.help_view(group, f, ov)                            # 「?」說明（四段；第四段由欄位 metadata 產生）或「標籤已夠清楚」
     return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "status": "open", "plannedTrain": None,
-            "fields": sr.field_views(group, values), "values": values, "history": hist}
+            "fields": fields, "values": values, "history": hist}
 
 
 @router.post("/api/settings-center/groups/{group}")

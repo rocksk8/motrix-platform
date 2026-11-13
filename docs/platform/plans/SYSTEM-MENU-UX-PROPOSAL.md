@@ -529,6 +529,16 @@
 
 **依賴與順序：** 需要批次 1「其餘」的分類資料檔與守門先落地（或同批一起做）；`?` 元件可以先單獨出，給 5a／3 的新畫面直接用。**實作時間另外排。**
 
+**批次 9 實作紀錄（2026-11-13，分支 `feat/menu-ux-b9`，基底 `feat/menu-ux-5a` 93938b9aa；hichan-6）：**
+- **共用分類資料檔** `backend/core/menu_categories_l1.json`（10 個分類＋47 個設定群組歸位；項目鍵 `settings_group:<群組>`，`page:`／`card:` 前綴保留給總覽批次）；`helpers/menu_categories.py` 驗證、讀取、公司覆蓋（`system_settings.menu_categories_override`）；`GET /api/menu/categories`、`PUT /api/menu/categories/override`。設定中心與總覽讀同一份，沒有登記到分類的群組放「其他」，不會消失。
+- **「?」說明資料檔** `backend/core/settings_help.json`（鍵 `群組.欄位`；「這是什麼／什麼時候要改／改了會影響什麼」三段手寫，「預設值與建議」由欄位登記的預設值與建議值自動組出）；`helpers/settings_help.py`；公司可覆蓋（`settings_help_override`，`PUT /api/menu/settings-help/override`，即「全部可自定」）。**165 個欄位：104 個有說明、61 個標籤本身已清楚（白名單）而不放「?」**；沒有第三種。
+- **守門**（`tests/test_settings_center_b9_2026_11_13.py`）：每個欄位必須在白名單或有說明；說明不得為空；說明文字不得含工程用語（詞表讀 hichan-7 的 `tools/ux_audit_config.json`，沒有該檔就跳過並說明原因，不複製詞表）；每個群組必須歸入分類。
+- **共用「?」元件** `static/hint-popover.js`＋`css/hint-popover.css`（`.hint[data-hint]` 自動升級；桌機滑過／聚焦顯示、點一下釘住、Esc 關；手機點一下開底部面板，有「關閉」鈕；aria 完整；內容一律以文字寫入）。設定中心先用，業務頁之後沿用同一元件。
+- **設定中心頁**：左欄依分類／區段分組、搜尋涵蓋欄位問句與「什麼時候需要」、每個欄位旁有「?」、沒有預設組時不顯示「預設組」頁籤。14 個客製開關歸在「畫面與客製」。
+- **合併／淘汰標記**：逐組檢視後沒有需要淘汰的群組（狀態皆為 `keep`）；以「區段標題」與「補充」說明處理名稱相近的群組，後續要合併時改資料檔即可。
+- **hichan-10 審查修正（同日）**：①手機面板可點暗色背景收起、焦點進面板並鎖住、收起後回到 ?、? 點擊範圍 ≥ 44px、桌機 tooltip 裡不放按鈕、彈出框掛 body（不受祖先 transform 影響）；②兩支覆寫 API 的稽核列寫真實帳號與被改的鍵（不記文字）；③工程用語守門內建後備清單（共用檔不在時不略過；與共用檔逐項同步由測試守住），覆寫 API 一律擋工程用語；④名稱與說明擋零寬／方向控制／控制字元；⑤`GET /api/menu/categories` 對非最高管理者不回設定群組；⑥說明第四段範例與預設值相同時不重複、提到「另一位最高管理者」的影響句補「只有一位最高管理者時怎麼辦」。回應鍵基準的資料長大鍵以註解說明（`routers/menu_categories.py`）。
+- 基準檔：`route_inventory.json`（+3 條路由）、`response_keys_baseline.json`（只收 `/api/menu/categories` 與 `/api/settings-center/groups` 的新增鍵）；測試 `test_settings_center_b9_2026_11_13.py`（16）、`test_e2e_settings_center_b9_2026_11_13.py`（3）。
+
 ---
 
 ## 十一、與既有計畫的關係

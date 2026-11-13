@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 956,
-  "endpoints_api": 952,
-  "write_total": 515,
-  "write_api": 515,
-  "get_api": 437,
-  "distinct_paths_api": 808,
-  "write_with_body_api": 380,
+  "endpoints_total": 959,
+  "endpoints_api": 955,
+  "write_total": 517,
+  "write_api": 517,
+  "get_api": 438,
+  "distinct_paths_api": 811,
+  "write_with_body_api": 382,
   "write_with_path_param_api": 364
  },
  "select_star": {
@@ -4796,6 +4796,21 @@
   "PUT /api/getting-started/steps/{step_id}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "GET /api/menu/categories": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/menu/categories/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/settings-help/override": {
+   "w": true,
+   "pp": 0,
    "body": true
   }
  }
