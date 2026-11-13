@@ -1,10 +1,27 @@
 # 案件 更新紀錄
 
+## (next) — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
+- **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
+- 守門補登：`docs/platform/case_read_scope.json` 登記 `GET /api/quotations/{quote_no}/material-flow`（row_access）；`modules.json` 補歸屬（M01：`case/material_flow`、`case/api/material_flow`）；畫面字串「叫料」依 2026-10-02 用詞守門改稱「材料申請」。
+- 案件管理頁：旗標開時，「執行管理 › 材料申請」頂端多「開請購單」「開採購單」兩個連結（帶案號與單據類型到 `payment-request.html`）；網址 `?q=<案號>&sub=materials` 直接落在該子頁。`payment-request.html` 吃 `?case=<案號>&type=purchase_req|purchase_order`：案件與類型已選好（看不到該案件 ⇒ 維持原本的挑案件畫面）。
+- 新增 `frontend/static/onepipe.js`（讀既有的 `GET /api/settings-center/public?groups=onepipe`；讀不到＝全關）。旗標關時以上全部不出現、不生效。無 migration、無新端點。
+- P1' 物料流程時間軸：新端點 `GET /api/quotations/{no}/material-flow`（唯讀；旗標 `onepipe.timeline` 關 ⇒ 404；案件成員才看得到，非成員同一個 404）＋新頁 `material-flow.html?q=<案號>`＋案件頁上方連結列「物料流程」（旗標開才出現）。七格：叫料、採購、到貨（逐張叫料單到了／沒到）、入庫（只顯示已安裝／已出貨台數，其餘標「第 2 階段後提供」）、出貨、設備、保固；入庫與出貨經 `stock.case_summary`（IP-117）與 `shipping.list_for_case`（IP-18）：M03 不在 ⇒ 該格隱藏、讀取出錯 ⇒「暫時讀不到」、出貨單無權限 ⇒ 該段不回傳。**回應沒有任何金額欄位**。無 migration、不動權限。
+- 物料流程入庫格：呼叫者沒有「檢視庫存」權限（提供者回 403）⇒ 這一格只顯示「無權限檢視」，不回台數與料號。
+- 測試：`modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py`（旗標關 404、七格、逐張到貨、金額掃描、非成員 404、M03 不在／出錯／出貨無權限三種降級）、- 測試：`tests/test_onepipe_p0a_links_2026_11_13.py`、`tests/test_e2e_onepipe_p0a_2026_11_13.py`。
+
+## 1.0.227（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+- 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
+- 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
+
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
 - 預覽路由（`POST /api/quotations/preview-html`）與存檔版 PDF 改以 `quotations.doc_type` 欄位為準（同 `generate_pdf_bytes`），前端帶舊／缺的 docType 不再印回報價字樣。
 - 出貨單「關聯○○單」標籤用 `esc()` 包起來（固定字串，輸出不變；讓未逸出內插棘輪不必加基線）。
 - 測試：`tests/test_estimate_static_labels_2026_11_13.py`、`tests/test_estimate_doc_type_2026_11_13.py`。
+
+## 1.0.226（next，未取號）— 2026-11-13（fix/quotations-tablet-searchbar-t84；報價單頁平板搜尋列）
+- 修正（版面）：報價單頁在平板 768–1023 寬度，搜尋列（≤1023 兩欄格線）裡「緊湊」按鈕自己佔一整列。「欄位」「緊湊」包進同一個 `.ql-pair`：桌機（>1023）與手機（≤767）`display:contents`（版面不變），平板併成跨整列的兩欄格線、兩顆並排各半。
+- 測試：`tests/test_e2e_quote_list_t84_2026_11_13.py`（靜態規則＋平板 900／768 並排＋桌機 1440／手機 390 版面不變）。
 
 ## 1.0.225 — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
 - 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
@@ -17,12 +34,25 @@
 - **（併入）(next) — 2026-11-13（fix/quote-first-put-history，審查後修訂：整包比對不看階段）**
 - 修正（編輯紀錄）：新報價單第一次 PUT 不再多寫一筆使用者沒改的「其他內容」。原因＝建單時階段（`caseRecord.stages`）被 `_sync_stages_to_json` 重建成資料表的樣子（真實 id、補齊 dependsOn／visits／assignedTo），使用者手上那份還是暫時 id、欄位不齊，整包比對就判成有變更；而 PUT 本來就完全忽略用戶端的 stages（case_stages 表為權威），所以階段差異都是幻影。`_summarize_quote_changes` 的整包比對改用 `_diff_view`（不看 `caseRecord.stages`；款項日期套與存檔相同的 YYYY-MM-DD 正規化，三個日期欄位共用常數 `_PAYMENT_DATE_KEYS`）；會被存下來而且真的改了的值（頂層未追蹤欄位、款項金額…）仍記一筆。內容指紋（content_fp）、存檔內容、API 不變。
 - 測試：`tests/test_quote_first_put_history_2026_11_13.py`（9 題：修前 7 題紅；階段差異不記＋前提確認資料庫階段沒被改、頂層未追蹤欄位／款項金額的正向對照、幻影與真改動同時存在仍記、「檢視不改輸入、content_fp 不變」）。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn-4；T86＋審查補強＋殘留暫存目錄每日清掃；版號由列車取）**
+- 審查補強（h12 L1–L3）：①核准上傳複製到一半失敗，連「寫到一半的目的檔」一併回收；②刪整筆額外支出在鎖內也重驗狀態（草稿／已駁回）與權限；③核准／駁回的暫存檔路徑一律經 `canonical_upload_path`（不合格略過，不複製、不刪，也不產生指向它的紀錄）。取捨：核准上傳的 `shutil.copy2` 在寫鎖內做（單檔上限 `max_file_bytes`＝20MB、同磁碟複製，鎖內時間約隨檔數×檔案大小線性成長；核准是最高管理者的低頻動作）——改成「鎖外先複製到暫存、鎖內 rename」會多出一套暫存狀態與清理路徑，換來的只是毫秒級，不做。已知取捨：commit 與刪檔之間程序崩潰 ⇒ 留下無人引用的孤兒檔（不會有指向不存在檔案的紀錄）；`_pending_case_changes/{id}` 殘留目錄由每日維護（`sweep_stale_staging`）一併清：申請已不是 staging／pending（approved／rejected／cancelled，或根本沒有對應列）、目錄還在、最新的檔超過 24 小時 ⇒ 刪（新的、pending、未過期 staging 的目錄不動）。
+- 修正（內部，API 路徑與回應形狀不變）：剩下所有「先動實體檔、後寫庫」的路徑收尾，一律改為「鎖內重讀 → 只改紀錄 → commit → commit 之後才動實體檔」。①額外支出：刪附件（鎖內重讀並重驗狀態，舊作法鎖外檢查後整包寫回）、刪變更申請待核准附件、撤銷變更申請（先清紀錄 commit、再刪待核准附件；舊作法先刪檔）、刪整筆／作廢（附件清單改以鎖內讀到的為準）。②案件留言整則刪除：鎖內重讀 files_json、DELETE、commit 後才刪附件（舊作法先刪檔、後 DELETE）。③已結案半解鎖：拒絕變更改在寫鎖內重驗 pending、先改狀態 commit、再清暫存檔（舊作法先清暫存檔，且與核准不互斥）；核准上傳類變更改為「複製」暫存檔進正式路徑、commit 成功後才清暫存（舊作法 `shutil.move`：commit 失敗後暫存檔已不在原處、重試核准會寫入指向不存在檔案的紀錄；失敗時複製出的正式檔會回收）。④`_apply_case_change_request` 的 `deferred_files`／`deferred_staged`／`created_files` 改為必填（關鍵字）參數，不再有「沒傳就先刪」的退路。 測試：`tests/test_upload_files_txn4_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn-3；T85；版號由列車取）**
+- 修正（內部，API 路徑與回應形狀不變）：報價單 JSON 內嵌的附件刪除——款項發票（`DELETE …/payment/{idx}/invoice-files/{id}`）、叫料附件、叫料發票附件，以及案件留言附件（`DELETE …/updates/{uid}/files/{id}`）——原本「先刪實體檔、再寫庫」：寫庫失敗（鎖逾時、觸發器擋下、磁碟錯誤）會留下「有紀錄、沒檔案」的壞連結，且刪檔在寫鎖內做。改為「鎖內重讀 → 只改清單 → commit → **commit 之後**才刪實體檔」：寫庫失敗＝紀錄與檔都還在，刪檔（慢動作）不再占著寫鎖。案件留言附件改走 `remove_json_item`（鎖內重讀 `files_json`，並發的附件變動不會被整包覆寫）。②已結案半解鎖案件的三種「刪除類變更」被最高管理者核准時（`_apply_case_change_request`）同樣改為：實體檔排進 `deferred_files`，`approve_case_change` commit 之後才刪（核准途中任何失敗 ⇒ 整筆 rollback，檔案不動）。 測試：`tests/test_upload_files_txn3_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/upload-files-txn-2；T84＋審查補強；版號由列車取）**
+- 修正（審查 M1）：資源回收筒判斷「案件底下還有其他單據」時，`case_change_requests` 不再把 `staging`（上傳途中預留編號）與 `cancelled`（上傳失敗）算進去（`recycle_adapter._DEPENDENT_WHERE`）；否則一次失敗的上傳會讓案件刪不掉。pending／approved／rejected 照舊算。
+- 新增（審查 Q2）：每日維護（`daily.check`，`case_deadlines.run_daily_checks` 最前面）呼叫 `quotations.sweep_stale_staging()`：超過 24 小時還停在 `staging` 的預留列（上傳途中當機／重啟的殘骸）標成 `cancelled` 並清掉 `_pending_case_changes/{id}/` 底下的暫存檔；pending／approved／rejected 與新的 staging 不動。測試：`tests/test_upload_files_txn2_2026_11_13.py`。
+- 變更（內部，API 路徑與回應形狀不變）：①已結案半解鎖案件的三條上傳類變更（款項發票／叫料附件／叫料發票附件）改為「預留編號（status='staging'，簽核佇列看不到、核准回 409）→ 存檔 → 鎖內一次升為 pending＋寫 staged_files_json → commit 之後才通知」：原本先建 pending 申請（立刻通知最高管理者）再存檔，存檔失敗（格式／大小 400、寫庫出錯）會留下沒有檔案的「鬼申請」；現在失敗＝這筆標 `cancelled`、回收檔、不通知。`_create_case_change_request` 拆成 `_insert_case_change_request`（不 commit）＋`_announce_case_change_request`（commit 後通知＋稽核），其他呼叫端行為不變。②款項發票／叫料附件／叫料發票附件／案件留言補附件改用 `helpers.uploads.files_txn`：項目被刪（404）或寫庫出錯時回收剛存的檔。③案件留言（`POST …/updates`）INSERT 失敗回收剛存的檔，且存檔失敗不再漏關連線。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）**
 - 變更（內部）：完工單回簽附件（`api/completion_notes.py`）、報價單客戶回簽單（`api/quotations.py` signed-files）上傳／刪除。附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（fix/contractor-voucher-wording-t83；承攬商憑據「送出簽核」用詞統一）**
 - 文字（T83 用詞統一）：案件管理頁「承攬商憑據」列的按鈕「送出審核」→「送出簽核」（與開票憑據、出貨單一致；傳票頁維持原字）；不動 API／資料／權限
-- **（併入）(next) — fix/superadmin-approver-edit-entry（報價單表單 V3.45）**
+- **（併入）(next) — fix/superadmin-approver-edit-entry（報價單表單 V3.45）；併入 fix/unlock-edit-keep-requester（解鎖編輯保留送審人；簽核卡顯示修改人）**
 - 修正：最高管理者開著待審核／簽核中的報價單（尤其同時是當層簽核人）原本完全沒有編輯入口；工具列補上「解鎖編輯」（tooltip 說明存檔後整條簽核會重跑），解鎖後欄位真的可編輯，「重新鎖定」「取消解鎖」真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。只改 `quotation-form.html`＋測試，不改後端權限（unlock-edit 本來就允許最高管理者）。
+- 修正（解鎖編輯保留送審人；使用者裁示）：最高管理者解鎖編輯存檔時，`approval.requestedBy` 維持**原送審人**，改內容的人另記 `approval.editedBy`（`quotations.py` 解鎖段）；重建簽核鏈時原送審人與改內容的人都不在簽核層裡（`_exclude_requester`；無簽核層時 `check_no_tier_self_approval` 也擋 `editedBy`），所以原送審人不會變成能簽自己的單、改內容的人不簽自己改的內容；沒有原送審紀錄的舊單退回舊行為（送審人記為改內容的人）。原送審人因此可以「收回草稿」（以前被換成最高管理者而 403）。
+- 新增：被清掉的已簽簽核人收到通知「內容已被修改，請重新簽核」——站內通知＋信件（新信件類型 `approval_content_edited`，登記在 `quote_edit_notify.py`，自動併入個人通知偏好；LINE 在「報價單與簽核」群組、預設關），**預設只發給本人**，信內不放金額。`editHistory` 與稽核（`quotation.unlock_edit`）記：誰改的、原送審人、清掉哪幾層（層號＋帳號）。解鎖確認彈窗改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」。
+- 新增（畫面）：待我簽核的卡片與報價單簽核區塊多一行「修改人：○○○（時間）」，只在 `approval.editedBy` 存在時顯示（佇列項目條件式多回 `editedBy`／`editedByDisplay`，沒被解鎖改過的單回應不變）。
+- 已知限制：原送審人已停用時，解鎖彈窗仍寫「送審人維持○○○」，但後端實際把送審人記為改內容的人（彈窗不知道對方已停用）；不影響簽核鏈與通知，字句落差先接受。
 
 ## 1.0.224 — 2026-11-13（T82 預跑 #1 修正；整合者）
 - 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。

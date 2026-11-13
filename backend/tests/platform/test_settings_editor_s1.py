@@ -54,7 +54,7 @@ def test_banner_levels_and_conditions():
     b = R.banner_of(amber, 5, days=7)
     assert b["level"] == "amber" and b["fallback"] is False and len(b["lines"]) == 3
     assert "已回簽的擇一報價單" in b["lines"][0] and "業務、財務" in b["lines"][1]
-    assert "可以復原" in b["lines"][2] and "7 天確認期間" in b["lines"][2] and "另一位最高管理者核准" in b["lines"][2]
+    assert "可以復原" in b["lines"][2] and "需等 7 天" in b["lines"][2] and "另一位最高管理者核准" in b["lines"][2]
     assert R.banner_of(amber, 0) is None                              # 預設值不顯示
     tighter = _f(risk="money", risk_text="金額可能不一致。", loosen="up", default=5, min=0, max=10, impact_scope=dict(SCOPE, effective="pending"))
     assert R.banner_of(tighter, 2) is None                            # 往收緊方向不顯示

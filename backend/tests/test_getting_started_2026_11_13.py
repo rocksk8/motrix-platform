@@ -58,7 +58,7 @@ def test_seven_steps_in_order_with_the_three_fixed_facts(client, su):
     assert [s["id"] for s in res["steps"]] == ["company", "quote_style", "people", "email", "backup", "line", "import"]
     assert [s["n"] for s in res["steps"]] == list(range(1, 8))
     for s in res["steps"]:
-        assert s["minutes"] and s["prepare"] and s["confirm"] and s["why"] and s["href"].endswith(".html") and s["link"]
+        assert s["minutes"] and s["prepare"] and s["confirm"] and s["why"] and s["href"].split("#")[0].endswith(".html") and s["link"]
         assert s["status"] in ("done", "todo", "skipped")
     assert res["progress"]["total"] == 7 and set(res["progress"]) == {"done", "skipped", "total"}
     assert res["next"] is None or res["next"]["id"] in GS.STEP_IDS

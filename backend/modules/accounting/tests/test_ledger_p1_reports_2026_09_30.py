@@ -316,8 +316,13 @@ def test_api_accounts_and_role_validation(client, make_user, conn):
     assert r.status_code == 200 and any(a["code"] == "1113" for a in r.json()["accounts"]) and r.json()["roles"]
     assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "111"}).status_code == 400   # 非葉節點
     assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "0000"}).status_code == 400
-    # T69：角色對應的變更要另一位最高管理者核准（完整流程見 test_ledger_settings_t69.py）；這裡只驗申請被接受（202、尚未生效）
-    assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "1112", "reason": "測試申請"}).status_code == 202
+    # T69：角色對應的變更要另一位**真人**最高管理者核准（完整流程見 test_ledger_settings_t69.py）；這裡只驗申請被接受（202、尚未生效）。
+    # 測試庫唯一預設的最高管理者是展示帳號 demo、不算第二位（config_ledger.real_superadmins）⇒ 先建一位真人；
+    # 沒有第二位真人時直接生效（200；與 T69 的 sole_superadmin 題一致），有第二位真人 ⇒ 202。
+    solo = client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "1112", "reason": "測試申請"})
+    assert solo.status_code == 200 and solo.json()["pending"] is False, solo.text           # 單人公司：直接生效（2026-11-13 裁示）
+    make_user(username="gl_p1_acc_second", role="superadmin", modules=["finance"])
+    assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "1113", "reason": "測試申請"}).status_code == 202
     assert client.patch("/api/ledger/accounts/1199", headers=hdr, json={"display_name": "備抵損失—應收款項"}).status_code == 200
     assert client.patch("/api/ledger/accounts/1199", headers=hdr, json={"acct_type": "revenue"}).status_code == 400     # 類別不開放
     assert client.patch("/api/ledger/accounts/0000", headers=hdr, json={"note": "x"}).status_code == 404

@@ -128,7 +128,8 @@
       .ns-card-body .btn{min-height:40px}
     }
   </style>
-  <script src="../static/ux-wizard.js"></script><!-- A1：?setup=1 時套用首次設定精靈外殼（隱藏頂欄、步驟條） -->
+  <script>(function () { try { if (new URLSearchParams(location.search).get('setup') === '1') location.replace('company-setup-wizard.html?setup=1') } catch (e) {} })()</script><!-- T84：首次設定（閘門）改由「公司設定精靈」處理 -->
+  <script src="../static/ux-wizard.js"></script><!-- A1：?setup=1 時套用首次設定精靈外殼（已被上面導向精靈；留著給舊書籤的瞬間） -->
 </head>
 <body x-data="companyProfilePage()" x-init="init()" x-cloak>
   <header id="app-topbar" class="topbar"></header>
@@ -314,6 +315,7 @@
               <div class="ns-field">
                 <label>聯絡方式（顯示用）</label>
                 <input type="text" x-model="cfg.contact_info" placeholder="例：Tel: 02-1234-5678｜service@example.com">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px" data-testid="cp-contact-info-note">此欄會顯示給所有使用者，請勿填銀行資料。</div>
               </div>
             </div>
             <!-- H10：電話、email 單獨一欄（單據抬頭與報表讀這兩欄；留空 ⇒ 從上面的「聯絡方式」拆） -->
@@ -1232,12 +1234,11 @@
             // 金鑰回的是遮蔽字（或空字串）。**不放進輸入框**，只當狀態。
             this.keyMasked = data.google_maps_api_key || ''
             this.keySet = !!this.keyMasked
-            this.keyText = ''
-            this.keyCleared = false
             this.bkMasked = data.google_maps_browser_key || ''
             this.bkSet = !!this.bkMasked
-            this.bkText = ''
-            this.bkCleared = false
+            // ⚠️ 不在這裡把 keyText／bkText／keyCleared／bkCleared 歸零：它們一開始就是空／false，init 只跑一次；
+            // 這個 GET 的回應若晚於使用者已經輸入的金鑰（或按下「清除金鑰」），歸零會把使用者剛填的值靜默吃掉，
+            // 存檔時就存成空字串（T83 e2e 閘門抓到：map 設定頁測試 fill 在回應之前）。
           } else if (r.status === 403) {
             // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
             this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true

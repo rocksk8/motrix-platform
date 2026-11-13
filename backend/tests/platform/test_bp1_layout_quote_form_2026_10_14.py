@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune：刪 test_flag_gated_x_show_has_no_static_inline_display——已併入 tests/platform/test_xshow_inline_display_2026_10_14.py（頁面：quotation-form.html；旗標函式一律 `[a-zA-Z]Shown(`＋layoutOn＋store，是原四份的聯集）
 """Q1：報價單表單（quotation-form.html）的非金額區塊——基、客戶、案件、條件——接上 P9 版面引擎，預設關閉。
 
 1. 登記：module.json 通過驗證；fallback＝登記順序；核心欄位如耦合文件 §3.2；沒有金額欄；每個登記欄位在頁面上都有 fShown／fo／fLabel 綁定。
@@ -226,19 +227,6 @@ def test_restricted_role_gets_the_same_api_answer_before_and_after_a_layout(clie
 
 
 # ── 6. OFF 守門：flag 綁定的 x-show 不掛在帶行內 display 的元素 ───────────────────
-def test_flag_gated_x_show_has_no_static_inline_display():
-    bad = []
-    for m in re.finditer(r"<[a-zA-Z][^<>]*?>", _page(), re.S):
-        tag = m.group(0)
-        xs = re.search(r'x-show="([^"]*)"', tag)
-        if not xs or not re.search(r"\b[lf]Shown\(|\blayoutOn\b", xs.group(1)):
-            continue
-        st = re.search(r'(?<![:\w-])style="([^"]*)"', tag)
-        if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
-            bad.append(re.sub(r"\s+", " ", tag)[:120])
-    assert not bad, bad
-
-
 def test_registry_entry_and_notes_are_in_the_single_registry():
     reg = json.loads((ROOT / "frontend" / "static" / "layout-pages.json").read_text(encoding="utf-8"))
     e = [x for x in reg if x["flag"] == "quotation_form"][0]

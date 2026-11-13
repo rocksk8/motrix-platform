@@ -1586,6 +1586,25 @@ def pytest_collection_modifyitems(config, items):
     """
     config.addinivalue_line(
         "markers", "%s: 這一題確實需要對外連線（目前一個都沒有）" % _ALLOW_OUTBOUND)
+    _skip_gate_only(items)
+
+
+#: 只在正式閘門跑的慢題（升級演練，約 100 秒）。正式閘門＝`heavy_run --class official`（它把環境變數設成 1）或建包的
+#: `run_stage`（同）。預跑、守門題組（preflight_guards）、各視窗自己跑 pytest／modtest 都不設 ⇒ 這些題 skip。
+#: ⚠️ 掛在上面既有的 `pytest_collection_modifyitems` 上：同名 hook 會互相覆蓋，不能另開一個。
+#: ⚠️ 漏跑的風險由 tests/platform/test_gate_only_wiring_2026_11_13.py 守：標記有註冊、兩個檔都帶、
+#: 三條閘門路徑（heavy_run official、run-stage、建包 ps1）都設環境變數、modtest 在沒設時不寫建包沿用紀錄。
+GATE_ONLY = "gate_only"
+GATE_OFFICIAL_ENV = "MOTRIX_GATE_OFFICIAL"
+
+
+def _skip_gate_only(items):
+    if os.environ.get(GATE_OFFICIAL_ENV, "").strip() == "1":
+        return
+    skip = pytest.mark.skip(reason="gate_only：升級演練只在正式閘門跑（%s=1）；預跑／守門題組／自己跑全量都跳過" % GATE_OFFICIAL_ENV)
+    for it in items:
+        if it.get_closest_marker(GATE_ONLY):
+            it.add_marker(skip)
 
 
 @pytest.fixture(autouse=True)

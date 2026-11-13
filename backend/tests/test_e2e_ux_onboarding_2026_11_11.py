@@ -16,6 +16,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from tests._e2e_login import bootstrap_unavailable  # noqa: E402
+
 from helpers import company_setup as cs  # noqa: E402
 from tests.test_company_setup_core_2026_09_28 import make_ubn  # noqa: E402
 
@@ -87,35 +89,42 @@ def test_first_run_wizard_superadmin_four_steps(live_server, make_user, new_page
     page.fill("input[type=password]", NEW_PW)
     page.keyboard.press("Enter")
 
-    # 步驟 2：公司資料閘門——只剩一張卡（原本 7000px 長頁）
-    _wait_path(page, "/company-profile-settings.html?setup=1")
-    page.locator("[data-company-setup-card]").wait_for(state="visible", timeout=15000)
+    # 步驟 2：公司設定精靈（T84）——外層步驟條仍是「步驟 2／4」，裡面分 5 個短步驟，每步各自儲存
+    _wait_path(page, "/company-setup-wizard.html?setup=1")
+    page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=15000)
     page.locator("[data-testid=ux-wizard-count]").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard-count]").inner_text() == "步驟 2／4：確認公司資料"
     assert not page.locator("#app-topbar").is_visible()
-    visible_cards = page.evaluate("[...document.querySelectorAll('.ns-card')].filter(e => e.offsetParent !== null).length")
-    assert visible_cards == 1, "閘門模式只該看到確認卡這一張"
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("先填公司的名稱")
     assert page.evaluate("document.documentElement.scrollHeight") <= 1400
-    for sel in ("[data-brand-card]", "[data-privacy-notice-card]"):
-        assert not page.locator(sel).is_visible()
-    btn = page.locator("[data-company-setup-confirm]")
-    assert btn.is_disabled()
+    assert page.locator("[data-testid=cw-next]").is_disabled()
 
     # 統編即時驗證：錯的說明原因，對的打勾
-    page.fill("#gate-name", "愛思歐測試股份有限公司")
-    page.fill("#gate-tax", "12345678")
-    assert "檢查碼不符" in page.locator("[data-gate-tax-msg]").inner_text()
+    page.fill("[data-testid=cw-field-name]", "愛思歐測試股份有限公司")
+    page.fill("[data-testid=cw-field-tax_id]", "12345678")
+    assert "檢查碼不符" in page.locator("[data-testid=cw-tax-msg]").inner_text()
     ubn = make_ubn("2456789")
-    page.fill("#gate-tax", ubn)
-    assert "格式正確" in page.locator("[data-gate-tax-msg]").inner_text()
-    page.fill("#gate-phone", "02-1234-5678")
-    page.check("[data-company-setup-ack]")
+    page.fill("[data-testid=cw-field-tax_id]", ubn)
+    assert "格式正確" in page.locator("[data-testid=cw-tax-msg]").inner_text()
+    with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp1:
+        page.click("[data-testid=cw-next]")
+    assert resp1.value.status == 200
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
+    page.fill("[data-testid=cw-field-phone]", "02-1234-5678")
+    with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp2:
+        page.click("[data-testid=cw-next]")
+    assert resp2.value.status == 200
+    page.click("[data-testid=cw-skip]")                                   # 步驟 3：收款帳戶先略過
+    page.click("[data-testid=cw-skip]")                                   # 步驟 4：Logo 先略過
+    page.locator("[data-testid=cw-summary]").wait_for(state="visible", timeout=10000)
+    btn = page.locator("[data-testid=cw-confirm]")
+    assert btn.is_disabled()
+    page.check("[data-testid=cw-ack]")
     with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp:
         btn.click()
     assert resp.value.status == 200
-    done = page.locator("[data-company-setup-done]")
+    done = page.locator("[data-testid=cw-done]")
     done.wait_for(state="visible", timeout=10000)
-    page.locator("[data-company-setup-card]").wait_for(state="hidden", timeout=10000)
 
     # 步驟 3：兩步驟驗證（可略過）——只剩 TOTP 卡，沒有密碼表單
     page.click("[data-testid=wizard-next]")
@@ -180,22 +189,27 @@ def test_gate_card_edits_the_identity_that_actually_takes_effect(live_server, ma
     username, password = make_user(username="e2e_ux_gate_loc", role="superadmin")
     page = new_page(viewport={"width": 1440, "height": 900})
     login_as(page, (username, password))
-    page.goto(f"{live_server}/pages/company-profile-settings.html?setup=1")
-    page.locator("[data-company-setup-card]").wait_for(state="visible", timeout=15000)
+    page.goto(f"{live_server}/pages/company-setup-wizard.html?setup=1")
+    page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=15000)
     # 顯示的是生效的那一份（據點[0]），不是頂層空白
-    assert page.input_value("#gate-name") == "舊公司股份有限公司"
-    assert page.input_value("#gate-tax") == "00000000"
-    assert "保留" in page.locator("[data-gate-tax-msg]").inner_text()     # N1：示範統編不能被當成「格式正確」
-    assert page.locator("[data-company-setup-confirm]").is_disabled()
+    assert page.input_value("[data-testid=cw-field-name]") == "舊公司股份有限公司"
+    assert page.input_value("[data-testid=cw-field-tax_id]") == "00000000"
+    assert "保留" in page.locator("[data-testid=cw-tax-msg]").inner_text()     # N1：示範統編不能被當成「格式正確」
+    assert page.locator("[data-testid=cw-next]").is_disabled()
     ubn = make_ubn("2456789")
-    page.fill("#gate-name", "新公司股份有限公司")
-    page.fill("#gate-tax", ubn)
-    page.fill("#gate-phone", "02-1234-5678")
-    page.check("[data-company-setup-ack]")
+    page.fill("[data-testid=cw-field-name]", "新公司股份有限公司")
+    page.fill("[data-testid=cw-field-tax_id]", ubn)
+    page.click("[data-testid=cw-next]")
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
+    page.fill("[data-testid=cw-field-phone]", "02-1234-5678")
+    page.click("[data-testid=cw-next]")
+    page.click("[data-testid=cw-skip]")
+    page.click("[data-testid=cw-skip]")
+    page.check("[data-testid=cw-ack]")
     with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp:
-        page.click("[data-company-setup-confirm]")
+        page.click("[data-testid=cw-confirm]")
     assert resp.value.status == 200
-    page.locator("[data-company-setup-done]").wait_for(state="visible", timeout=10000)
+    page.locator("[data-testid=cw-done]").wait_for(state="visible", timeout=10000)
     conn = db.get_db()
     try:
         saved = cs._get(conn, "company_profile")
@@ -411,6 +425,7 @@ def test_build_footer_is_admin_only(live_server, make_user, new_page, login_as):
 
     pa = new_page(viewport={"width": 1440, "height": 900})
     login_as(pa, admin)
+    bootstrap_unavailable(pa)            # 攔的是原端點 /api/build-info；bootstrap 開著時第一趟由它供應（真值，不是替身）
     pa.route("**/api/build-info", route)
     pa.goto(f"{live_server}/pages/customers.html")
     pa.locator("#build-footer").wait_for(state="visible", timeout=15000)
@@ -418,6 +433,7 @@ def test_build_footer_is_admin_only(live_server, make_user, new_page, login_as):
 
     ps = new_page(viewport={"width": 1440, "height": 900})
     login_as(ps, sales)
+    bootstrap_unavailable(ps)
     ps.route("**/api/build-info", route)
     ps.goto(f"{live_server}/pages/customers.html")
     ps.locator("#app-topbar").wait_for(state="visible", timeout=15000)

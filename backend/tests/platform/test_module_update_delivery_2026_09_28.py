@@ -312,10 +312,8 @@ def test_ship_tests_adds_consumers_of_a_changed_provider():
     """第②級選題（使用者裁示甲）：case 的提供者有改 ⇒ 選題含 netplan（case.access 的直接消費端）的題。"""
     import sys
     sys.path.insert(0, str(REPO / "tools" / "platform"))
-    import ship_tier as ST
-    src = {p.relative_to(REPO).as_posix(): p.read_text(encoding="utf-8")
-           for p in (REPO / "backend").rglob("*.py") if "__pycache__" not in p.parts}
-    pc = ST.provider_check(ST.Repo(src), "case", ["backend/modules/case/api/quotations.py"], policy="consumers")
+    from tests.platform import _shared_repo as SR     # D3：與 test_ship_tier 共用同一份已解析的 backend
+    pc = SR.ST.provider_check(SR.new_real_repo(), "case", ["backend/modules/case/api/quotations.py"], policy="consumers")
     sel = MU.ship_tests("case", {"provider": pc})
     assert "tests/platform" in sel and "modules/case/tests" in sel
     assert any(s.startswith("modules/netplan/tests/") for s in sel), sel

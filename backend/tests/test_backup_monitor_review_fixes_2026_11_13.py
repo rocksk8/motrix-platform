@@ -35,6 +35,14 @@ loopback_net = pytest.mark.allow_outbound
 # ── 共用夾具 ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
+def _logs_dir_in_tmp(monkeypatch, tmp_path):
+    """備份互斥鎖檔寫在 LOGS_DIR/backup_run.lock；沒用到 hb_cfg 的題目不能寫進真的 backend/logs（BK19：測試不准寫 repo）。
+    autouse 先於明確要求的夾具建立，題目自己再 monkeypatch LOGS_DIR 時以它為準。"""
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs_auto"))
+
+
+@pytest.fixture(autouse=True)
 def _no_real_network(monkeypatch):
     """safe_ping 走 http.client，conftest 的 `_netguard` 攔不到它；這裡自己守：只准連 127.0.0.1，連別處＝那一題紅。
     網域解析預設回公開位址（假的），寄信一律記下來不寄。"""
@@ -594,16 +602,16 @@ def test_manual_backup_is_refused_when_the_lock_file_cannot_be_opened(client, ma
     import archive
     called = []
     monkeypatch.setattr(archive, "_daily_backup", lambda: called.append(1))
-    _unopenable(monkeypatch)
-    with pytest.raises(archive.BackupLockUnavailable):
-        with archive.backup_run_lock(strict=True):
-            pass
-    h = _login(client, make_user, "n4_sa")
-    r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
-    assert r.status_code == 503 and "無法確認" in r.json()["detail"] and "權限" in r.json()["detail"]
-    assert called == [] and fresh._running["on"] is False
-    assert (fresh._get_setting(fresh._LAST_KEY, "") or "") == ""
-    monkeypatch.undo()
+    with monkeypatch.context() as unopenable:                          # 只還原「鎖檔打不開」這一個替身；不能用 monkeypatch.undo()——它連 lock_dir／autouse 導到 tmp 的 LOGS_DIR 也一起還原，
+        _unopenable(unopenable)                                        # 之後的 backup_run_lock() 就會在真的 backend/logs 建 backup_run.lock（BK19）
+        with pytest.raises(archive.BackupLockUnavailable):
+            with archive.backup_run_lock(strict=True):
+                pass
+        h = _login(client, make_user, "n4_sa")
+        r = client.post("/api/system/backup-monitor/backup-now", headers=h, json={"confirm": True})
+        assert r.status_code == 503 and "無法確認" in r.json()["detail"] and "權限" in r.json()["detail"]
+        assert called == [] and fresh._running["on"] is False
+        assert (fresh._get_setting(fresh._LAST_KEY, "") or "") == ""
     with archive.backup_run_lock():                                    # 嚴格模式失敗後執行緒鎖有放掉
         pass
 
@@ -1325,4 +1333,53 @@ def test_a_request_from_someone_who_left_can_still_be_cleared_by_rejecting(clien
         conn.close()
     assert client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": "申請人已離職"}).status_code == 200
     assert client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"] is None
+    assert _cfg_url(hb_cfg) == SECRET
+
+
+# ══ 展示帳號 demo 不算「另一位最高管理者」、不能核准／駁回（2026-11-13，PM 裁示；與 helpers/config_ledger.real_superadmins 同一個規則）══════
+
+def _add_demo_superadmin():
+    import db
+    c = db.get_db()
+    try:
+        if not c.execute("SELECT 1 FROM users WHERE username='demo'").fetchone():
+            c.execute("INSERT INTO users (username, password_hash, display_name, role, modules, active, created_at, must_change_password) "
+                      "VALUES ('demo', 'x', '展示帳號', 'superadmin', '[]', 1, '2026-01-01T00:00:00', 1)")
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_one_real_superadmin_plus_demo_disables_immediately(client, make_user, hb_cfg, mails):
+    """只有一位真人最高管理者 ⇒ 立即停用＋寄信，不是等一個永遠不會來的 demo 核准。"""
+    ha = _login(client, make_user, "dm_solo")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    r = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"})
+    assert r.status_code == 200 and r.json()["pending"] is False and r.json()["disabled"] is True, r.text
+
+
+def test_waiting_for_list_never_names_the_demo_account(client, make_user, hb_cfg, mails):
+    ha = _login(client, make_user, "dm_pa")
+    _login(client, make_user, "dm_pb")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    assert client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["pending"] is True
+    rq = client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]
+    assert rq["waitingFor"] == ["dm_pb"], rq["waitingFor"]
+
+
+def test_demo_account_can_neither_approve_nor_reject(client, make_user, hb_cfg, mails):
+    from helpers import backup_monitor as bm
+    ha = _login(client, make_user, "dm_qa")
+    _login(client, make_user, "dm_qb")
+    _add_demo_superadmin()
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
+    demo = {"username": "demo", "role": "superadmin", "display_name": "展示帳號"}
+    with pytest.raises(bm.DisableError, match="展示帳號"):
+        bm.approve_disable(cid, demo)
+    with pytest.raises(bm.DisableError, match="展示帳號"):
+        bm.reject_disable(cid, demo, "不認得這筆申請")
+    assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"]["id"] == cid      # 申請還在、什麼都沒變
     assert _cfg_url(hb_cfg) == SECRET

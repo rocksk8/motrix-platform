@@ -18,7 +18,7 @@
     '  <div class="ns-card-body">',
     '',
     '    <!-- 已設定好：只顯示摘要，要改再展開 -->',
-    '    <div x-show="!wz.open" data-testid="es-summary">',
+    '    <div x-show="loaded && !wz.open" data-testid="es-summary">',
     '      <div style="font-size:13px;margin-bottom:10px">',
     '        目前的寄件信箱：<strong x-text="cfg.smtp_user || \'（尚未設定）\'"></strong>',
     '        <span x-show="cfg.enabled" style="color:var(--success);font-weight:600">（Email 通知已啟用）</span>',
@@ -447,9 +447,17 @@
       //    第二次的回應晚一步抵達，會把使用者這段期間改過的欄位用伺服器上的舊值無聲蓋回去。
       _initDone: false,
 
+      // loaded：設定讀回來（或讀失敗）之前，摘要區不顯示——否則一開頁就先閃出預設值「（尚未設定）（尚未啟用）」，
+      // 使用者與測試都可能讀到還沒載入的舊畫面（2026-11-13 閘門 e2e 紅燈）。無論成功失敗都在 finally 設成 true，不會卡在空白。
+      loaded: false,
+
       async init() {
         if (this._initDone) return
         this._initDone = true
+        try { await this._loadInit() } finally { this.loaded = true }
+      },
+
+      async _loadInit() {
         const tk = token()
         if (!tk) return                      // 沒登入：頁面的 auth-guard 會處理導向
         const r = await fetch('/api/settings/email-notify', { headers: { Authorization: 'Bearer ' + tk } })

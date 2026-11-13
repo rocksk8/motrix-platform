@@ -1,19 +1,19 @@
 {
  "summary": {
-  "endpoints_total": 962,
-  "endpoints_api": 958,
-  "write_total": 519,
-  "write_api": 519,
-  "get_api": 439,
-  "distinct_paths_api": 814,
-  "write_with_body_api": 384,
+  "endpoints_total": 969,
+  "endpoints_api": 965,
+  "write_total": 521,
+  "write_api": 521,
+  "get_api": 444,
+  "distinct_paths_api": 820,
+  "write_with_body_api": 386,
   "write_with_path_param_api": 364
  },
  "select_star": {
-  "modules": 288,
+  "modules": 287,
   "archive": 97,
   "routers": 11,
-  "helpers": 11,
+  "helpers": 12,
   "core": 5,
   "main_db": 7
  },
@@ -543,11 +543,6 @@
    "pp": 0,
    "body": false
   },
-  "GET /api/bootstrap": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
   "GET /api/build-info": {
    "w": false,
    "pp": 0,
@@ -859,11 +854,6 @@
    "body": false
   },
   "GET /api/dashboard/activity-feed": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/dashboard/bundle": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1759,6 +1749,11 @@
    "body": false
   },
   "GET /api/quotations/{quote_no}/material-coverage": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-flow": {
    "w": false,
    "pp": 1,
    "body": false
@@ -4738,6 +4733,16 @@
    "pp": 0,
    "body": true
   },
+  "GET /api/bootstrap": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/bundle": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/license/overview": {
    "w": false,
    "pp": 0,
@@ -4834,6 +4839,26 @@
    "body": true
   },
   "POST /api/settings/email-notify/wizard/test-me": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings-center/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/daily-tasks/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/mail-types/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/mail-types/mine": {
    "w": true,
    "pp": 0,
    "body": true

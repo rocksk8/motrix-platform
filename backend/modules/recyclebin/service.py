@@ -407,4 +407,5 @@ def due_ids(conn, today=None) -> list:
 
 
 def superadmins(conn) -> list:
-    return [r[0] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()]
+    from helpers import config_ledger as _cl
+    return _cl.real_superadmins(conn)               # 通知名單只列真人（展示帳號不是簽核人）

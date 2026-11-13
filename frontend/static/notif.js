@@ -106,7 +106,8 @@
   window.motrixApplyBanners = _applyBanners
   window.fetch = async function () {
     var r = await _origFetch.apply(this, arguments)
-    if (_isApi(arguments) && r.status < 500) _applyBanners({ setup: r.headers.get('X-Motrix-Company-Setup'), license: r.headers.get('X-Motrix-License'), expiry: r.headers.get('X-Motrix-License-Expiry') })
+    // 橫幅標頭只是附帶資訊：讀不到（沒有 headers 的替身回應、被包裝過的 fetch）不可以讓整個請求失敗——改版前每個標頭各自 try/catch，這裡維持同樣的保護
+    if (_isApi(arguments) && r.status < 500) { try { _applyBanners({ setup: r.headers.get('X-Motrix-Company-Setup'), license: r.headers.get('X-Motrix-License'), expiry: r.headers.get('X-Motrix-License-Expiry') }) } catch (e) {} }
     if (r.status === 402 && !_redirecting && _isApi(arguments)) {
       try {
         var d402 = await r.clone().json()
@@ -125,10 +126,10 @@
         var d428 = await r.clone().json()
         if (d428 && d428.code === 'company_setup_required') {
           var here = window.location.pathname.split('/').pop()
-          if (['company-profile-settings.html', 'company-setup-required.html', 'login.html'].indexOf(here) < 0) {
+          if (['company-profile-settings.html', 'company-setup-wizard.html', 'company-setup-required.html', 'login.html'].indexOf(here) < 0) {
             _redirecting = true
             var inPages = window.location.pathname.includes('/pages/')
-            var target = d428.canFix ? 'company-profile-settings.html?setup=1' : 'company-setup-required.html'
+            var target = d428.canFix ? 'company-setup-wizard.html?setup=1' : 'company-setup-required.html'
             window.location.replace(inPages ? target : 'pages/' + target)
           }
         }

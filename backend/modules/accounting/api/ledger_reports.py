@@ -4,8 +4,9 @@
 只讀＝cashier／finance；改科目屬性與角色＝finance（superadmin 直通）。報表的日期一律 YYYY-MM-DD。
 """
 import datetime as _dt
+import unicodedata as _ud
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Header, HTTPException, Query, Response
 
 from core.txn import begin_write
 from db import get_db
@@ -181,8 +182,15 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
 # ── 角色→科目對應（金流）：變更要第二位最高管理者核准（T69 使用者裁示 a）────────────────────────────
 # 走設定帳本 config_ledger：申請＝寫一筆 pending 明細（risk=money、approvals_required=1、通知其他最高管理者），
 # 另一位最高管理者核准後**立即**套用到 gl_account_roles（沒有確認期間）；申請人不能核准自己的。
-# 沒有第二位在職最高管理者 ⇒ 擋下（409）並說明，不自動放行（待使用者裁示，見 t69-ledger-notes.md）。
+# 沒有其他真人最高管理者（單人公司）⇒ 使用者裁示 2026-11-13：原因必填、直接生效（200）、稽核註明「單人公司：無第二位核准」。
 _ROLE_DOMAIN = "ledger:role"
+_SOLO_NOTE = "單人公司：無第二位核准"
+_BLANKISH = {"\u3164", "\u115f", "\u1160", "\uffa0", "\u2800"}          # 看起來是空白、但不是空白類別的填充字元
+
+
+def _visible_len(text):
+    """原因的有效字數：去掉空白、零寬／格式字元（Cf）與韓文填充字元之後的長度（只填看不見的字元不算有填原因）。"""
+    return len([c for c in text or "" if not c.isspace() and _ud.category(c) not in ("Cf", "Zs", "Cc") and c not in _BLANKISH])
 
 
 def _role_key(p):
@@ -255,8 +263,11 @@ def list_roles(authorization: str = Header(None)):
 
 
 @router.put("/roles", status_code=202)
-def put_role(body: dict = Body(...), authorization: str = Header(None)):
-    """申請設定角色→科目（可帶 scope 與生效日）；**不會立刻生效**，要另一位最高管理者核准。科目必須存在；停用中的科目不可作為角色科目。"""
+def put_role(response: Response, body: dict = Body(...), authorization: str = Header(None)):
+    """設定角色→科目（可帶 scope 與生效日）；科目必須存在，停用中的科目不可作為角色科目；原因必填。
+    - 有其他真人最高管理者 ⇒ **不會立刻生效**（202），要另一位最高管理者核准。
+    - 沒有其他真人最高管理者（單人公司；展示帳號不算）⇒ 使用者裁示 2026-11-13：填原因後**直接生效**（200），
+      寫入 gl_account_roles、稽核（`ledger.role.put`，原因註明「單人公司：無第二位核准」），回應帶 `warning`。"""
     user = _require_super(authorization, "設定角色對應的科目")                # B：角色→科目對應只有最高管理者
     b = body or {}
     p = {"role": str(b.get("role") or "").strip(), "account_code": str(b.get("account_code") or "").strip(),
@@ -265,23 +276,34 @@ def put_role(body: dict = Body(...), authorization: str = Header(None)):
     reason = str(b.get("reason") or "").strip()
     if not p["role"] or not p["account_code"]:
         raise HTTPException(400, "需要 role 與 account_code。")
-    if len(reason) < 2:
-        raise HTTPException(400, "請填寫變更原因（角色對應影響金流，另一位最高管理者要看得到原因）。")
+    if _visible_len(reason) < 2:
+        raise HTTPException(400, "請填寫變更原因（角色對應影響金流，要留在稽核紀錄裡）。")
     conn = get_db()
     try:
         begin_write(conn)
         _roles.ensure_meta(conn)
         _check_role_target(conn, p["account_code"])
         others = _L.real_superadmins(conn, user["username"])        # 展示帳號不算第二位
-        if not others:
-            raise HTTPException(409, "角色對應的變更需要另一位在職的最高管理者核准；目前沒有第二位最高管理者，無法申請。")
-        if _current_role_code(conn, p) == p["account_code"]:
+        old_code = _current_role_code(conn, p)
+        if old_code == p["account_code"]:
             raise HTTPException(409, "這個角色目前已經是這個科目，不需要變更。")
         key = _role_key(p)
         for r in _role_rows(conn):
             if r["key"] == key and r["state"] == "pending":
                 _L.supersede(conn, r["id"], user, "被較新的申請取代")
-        rec = _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": _current_role_code(conn, p), "new": p}], reason, user,
+        if not others:
+            why = "%s（%s）" % (reason, _SOLO_NOTE)
+            _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": old_code, "new": p}], why, user,
+                      risk="money", audit_action="ledger.role.put",
+                      target_label="角色 %s → %s（%s）" % (p["role"], p["account_code"], _SOLO_NOTE), link="ledger-settings.html")
+            conn.execute("INSERT INTO gl_account_roles(role,scope_type,scope_key,account_code,effective_from) VALUES(?,?,?,?,?)"
+                         " ON CONFLICT(role,scope_type,scope_key,effective_from) DO UPDATE SET account_code=excluded.account_code",
+                         (p["role"], p["scope_type"], p["scope_key"], p["account_code"], p["effective_from"]))
+            conn.commit()
+            response.status_code = 200
+            return {"ok": True, "pending": False, "applied": True, "role": p["role"], "account_code": p["account_code"],
+                    "warning": "建議到『使用者管理』再設一位最高管理者，之後角色變更才有第二人把關。"}
+        rec = _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": old_code, "new": p}], reason, user,
                         risk="money", effective_at=_dt.datetime.now().isoformat(timespec="seconds"), approvals_required=1,
                         audit_action="ledger.role.request", target_label="角色 %s → %s（待核准）" % (p["role"], p["account_code"]),
                         link="ledger-settings.html")

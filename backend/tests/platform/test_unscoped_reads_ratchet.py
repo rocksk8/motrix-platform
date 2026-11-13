@@ -16,7 +16,9 @@ from tests.platform import _unscoped_reads as U
 # 865 = 864 + 1（授權匯入 T83 2026-11-13：`license_manager.recent_activity` 讀 `audit_log` 最近幾筆 `license.import`／`license.import_rejected`——只回時間、操作者顯示名稱與白話結果（不含授權內容），端點只限最高管理者（GET /api/license/overview）；不得接其他使用者端點）
 # 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
 # 870 = 868 + 2（T83 整合 2026-11-13：備份與監控頁 `helpers/backup_monitor._audit_latest_map`／`_alerts_block` 讀 `audit_log` 的備份事件（`backup.*` 動作的最後時間、最近 N 筆警示）——只回時間與（過濾過路徑的）事件文字、不回個人資料，端點限最高管理者；audit_log 不是案件範圍資料，沒有 row_access 可套。feat/backup-monitor-page 分支當初漏登記）
-MAX_ENTRIES = 873      # 868 + 2；上一行之前：856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
+# 880 = 879 + 1（S1d 設定變更通知 2026-11-13，PM 核准 +1：`settings_registry._notice_watermark` 只在 sqlite_sequence 查不到 notifications 的 seq 列這個罕見分支回退讀 `MAX(id)`——通知水位線、只讀 id、無業務資料；取不到回 None＝跳過去重）
+# 874 = 873 + 1（T84 feat/upload-files-txn-2 2026-11-13：每日維護 `quotations.sweep_stale_staging` 讀 `case_change_requests` 找逾時的 staging 預留列——系統排程、沒有使用者；只讀 id、不回傳給任何人，只把這幾列標成 cancelled 並清掉它們的暫存檔）
+MAX_ENTRIES = 880      # 879 + 1；上一行之前：856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
                         # 另 `_coarse_member_sql`／`_stage_assigned` 各讀 case_stages。每一筆回傳前都被 `_is_member` 擋過、只回白名單欄位（無金額）；測試 test_membership_equals_the_existing_case_member_rule_for_every_path 釘住與 `_is_case_member` 同義）
                         # 856 = 853 + 3（T80c 外勤 S2 2026-11-12：新端點 `GET /api/field/cases/{quote_no}` 的 `get_field_case` 讀 quotations／case_stages／case_updates 各一——一律先過 `_is_member`（案件成員，CM14；不再是 `_guard_case`＋`case_manage` 放行，見上一段 861 的說明）、只回白名單欄位（無金額），與 `GET /api/quotations/{no}/stages`、`/updates` 同型；（當時列表走 row_access.filter_sql 不新增；後來列表也改成員口徑，見上一段 +5））
@@ -41,6 +43,9 @@ MAX_ENTRIES = 873      # 868 + 2；上一行之前：856 + 5（T80c 外勤 S2 K�
                         # （併入）861 + 2（「開始使用」清單 2026-11-13：`getting_started._d_import` 數 `customers` 筆數、`_latest_audit_at` 讀 `audit_log` 最近一列的時間——
                         # 兩者都只回計數／時間字串、不回任何一筆資料，端點只限最高管理者（GET /api/getting-started）；不得接其他使用者端點）
                         # （併入）861 + 1（「開始使用」清單 2026-11-13：`getting_started._d_import` 數 `customers` 筆數——只回計數、不回任何一筆資料，端點只限最高管理者（GET /api/getting-started）；不得接其他使用者端點）
+                        # （併入）861 + 4（一條龍 P0a／P0c／P1' 2026-11-13：①`email_notify.shipping_link` 與 `inventory._StockSerials.release` 各讀 `shipping_notes` 一次，只用單號查「存在／仍是已核准」（`release` 是案件存檔交易內、舊資料維持 in_stock 的判斷；`shipping_link` 是通知連結的查案號），不回傳資料給使用者；②`case/material_flow._purchase` 讀 `case_extra_expenses`，**端點先過 `require_case`（案件成員）**且只取單據代號／狀態／日期、沒有金額；③`supply/case_summary` 讀 `stock_items` 彙總該案台數，案件可見性由案件側先檢查、呼叫者另要有檢視庫存的模組權限。測試 modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py）
+                        # （併入）868 + 2；上一行之前：856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
+                        # （併入）872 + 1（txn-4 `_sweep_decided_staging_dirs` 讀 case_change_requests.status：每日維護清掃，系統排程、無使用者、只讀 status 判斷已決定與否、不回傳，比照 txn-2 的 sweep_stale_staging；h7 整合時提出）；上一行之前：868 + 2；再之前：856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
 #: 掃描器自己的下限：掃到的筆數太少 ⇒ 掃描壞了（假綠）
 SCAN_FLOOR = 100
 

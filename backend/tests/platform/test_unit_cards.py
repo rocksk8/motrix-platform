@@ -22,8 +22,22 @@ BASE_REF = "origin/platform"
 _spec = importlib.util.spec_from_file_location("_unit_index", REPO / "tools" / "platform" / "unit_index.py")
 U = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(U)
-#: dep_scan.build() 約 9 秒；同一個 pytest 行程內原始碼不變 ⇒ 只算一次
-U.direct_users = functools.lru_cache(maxsize=1)(U.direct_users)
+#: dep_scan.build() 約 9～15 秒；同一個 pytest 行程內原始碼不變 ⇒ 只算一次。D7（2026-11-13）：圖改用 _shared_repo 的行程共用版
+#: （與 test_module_boundaries／test_generated_maps／test_route_ownership 同一份），不再自己另掃一次。
+_orig_direct_users = U.direct_users
+
+
+@functools.lru_cache(maxsize=1)
+def _cached_direct_users():
+    from tests.platform import _shared_repo
+    return _orig_direct_users(_shared_repo.real_dep_graph()["units"])
+
+
+def _direct_users(graph_units=None):
+    return _orig_direct_users(graph_units) if graph_units is not None else _cached_direct_users()
+
+
+U.direct_users = _direct_users
 
 
 def _git(repo, *args):

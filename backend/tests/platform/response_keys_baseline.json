@@ -5170,6 +5170,9 @@
    "pageModules.lodging-records.html",
    "pageModules.lodging-records.html.key",
    "pageModules.lodging-records.html.name",
+   "pageModules.material-flow.html",
+   "pageModules.material-flow.html.key",
+   "pageModules.material-flow.html.name",
    "pageModules.network-plan-form.html",
    "pageModules.network-plan-form.html.key",
    "pageModules.network-plan-form.html.name",
@@ -8836,6 +8839,34 @@
    "items.settings_group:uploads.status",
    "items.settings_group:uploads.tier",
    "items.settings_group:uploads.when",
+   "version"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-flow": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/mail-types/mine": {
+  "k": [
+   "categories",
+   "categories.approval",
+   "categories.business",
+   "categories.system",
+   "hasEmail",
+   "items",
+   "items[].action",
+   "items[].category",
+   "items[].categoryLabel",
+   "items[].event",
+   "items[].impact",
+   "items[].key",
+   "items[].lowRisk",
+   "items[].managedElsewhere",
+   "items[].name",
+   "items[].receive",
    "version"
   ],
   "s": 200
