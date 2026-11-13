@@ -6344,13 +6344,14 @@ def preview_quotation_html(body: dict = Body(...), authorization: str = Header(N
         row = None
         if quote_no:
             row = conn.execute(
-                "SELECT status, deal_tag, location_id FROM quotations WHERE quote_no=?",
+                "SELECT status, deal_tag, location_id, doc_type FROM quotations WHERE quote_no=?",
                 (quote_no,)).fetchone()
         if row:
             _guard_case(conn, quote_no, user, allow_approver=True)
             status = row["status"] or ""
             deal_tag = row["deal_tag"] or q.get("dealTag") or ""
             q["locationId"] = row["location_id"] or ""
+            q["docType"] = _DT.norm(row["doc_type"])      # 估價單：單據類型以欄位為準（同 generate_pdf_bytes），不信前端帶來的 docType
         else:
             require_any_module(user, ["quotation"], "報價單")
             status = q.get("status") or "草稿"

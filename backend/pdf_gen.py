@@ -297,11 +297,11 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                            unapproved_status: str = None) -> str:
     # 估價單：版型完全沿用報價單，只有標題與浮水印／橫幅用語的「報價單」換成「估價單」（報價單 ⇒ 字串逐位元不變）
     _dlabel = _DT.label(q.get('docType'))
-    if _dlabel != '報價單':
-        watermark_text = (watermark_text or '').replace('報價單', _dlabel)
-        notice_text = (notice_text or '').replace('報價單', _dlabel)
-    # 估價單：單號／日期／合計／條件四處的固有用語跟著類型走（報價單 ⇒ 「報價編號」「報價日期」「四、報價合計」「五、報價條件」，輸出逐位元不變）
     _dpre = _dlabel[:-1]                                              # 報價／估價
+    if _dlabel != '報價單':
+        watermark_text = (watermark_text or '').replace('報價單', _dlabel).replace('本案報價未成立', '本案' + _dpre + '未成立')
+        notice_text = (notice_text or '').replace('報價單', _dlabel).replace('本案報價未成立', '本案' + _dpre + '未成立')
+    # 估價單：單號／日期／合計／條件／承辦人五處的固有用語跟著類型走（報價單 ⇒ 「報價編號」「報價日期」「四、報價合計」「五、報價條件」「報　價　人」，輸出逐位元不變）
     _dno = '報價編號' if _dlabel == '報價單' else _dlabel + '號'          # 報價編號／估價單號
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
@@ -530,7 +530,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         f'  <div><span>{_dno}：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
         f'  <div><span>{_dpre}日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
         f'  <div><span>有效期限：</span>{esc(str(q.get("validDays",30)))} 日內</div>\n'
-        f'  <div><span>報　價　人：</span>{esc(q.get("salesPerson",""))}</div>\n'
+        f'  <div><span>{"　".join(_dpre + "人")}：</span>{esc(q.get("salesPerson",""))}</div>\n'
         f'  <div><span>電　　　話：</span>{esc(q.get("salesPhone",""))}</div>\n'
         f'  <div><span>E-mail：</span>{esc(q.get("salesEmail",""))}</div>\n'
         '</div>\n'
@@ -1162,13 +1162,14 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         row = conn.execute(
             # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
         # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
-        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "SELECT data_json, status, deal_tag, location_id, doc_type FROM quotations "
         "WHERE quote_no=?", (quote_no,)
         ).fetchone()
         conn.close()
         if not row:
             return
         q        = json.loads(row["data_json"] or "{}")
+        q["docType"] = _DT.norm(row["doc_type"])      # 估價單：單據類型以欄位為準（存檔版 PDF 的用語；同 generate_pdf_bytes）
         q["locationId"] = row["location_id"] or ""      # QL7：欄位才是權威
         deal_tag = row["deal_tag"] or q.get("dealTag") or ""
         status   = row["status"] or ""
@@ -1365,7 +1366,7 @@ def _build_shipping_html(n: dict) -> str:
         '<div class="meta">\n'
         f'  <div><span>出貨單號：</span><strong style="font-family:Arial,sans-serif">{esc(n.get("noteNo",""))}</strong></div>\n'
         f'  <div><span>出貨日期：</span>{esc(n.get("shipDate",""))}</div>\n'
-        f'  <div><span>關聯{_DT.label_of_no(n.get("quoteNo"))}：</span>{esc(n.get("quoteNo",""))}</div>\n'
+        f'  <div><span>關聯{esc(_DT.label_of_no(n.get("quoteNo")))}：</span>{esc(n.get("quoteNo",""))}</div>\n'
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'

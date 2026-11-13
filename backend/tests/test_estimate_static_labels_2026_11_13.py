@@ -360,5 +360,51 @@ def test_estimate_pdf_differs_from_quote_pdf_only_in_those_places():
     est = _pdf_html(docType="estimate")
     for old, new in _PDF_FOUR:
         est = est.replace(new, old)
-    est = est.replace("估　價　單", "報　價　單").replace("估價單", "報價單")
+    est = est.replace("估　價　單", "報　價　單").replace("估　價　人：", "報　價　人：").replace("估價單", "報價單")
     assert est == _pdf_html()
+
+
+def test_estimate_pdf_wide_case_watermark_internal_items_maps_back_to_the_quote_pdf():
+    """浮水印＋提示句＋內部版＋有品項：估價單把『估價』用語換回報價後必須與報價單逐位元相同（沒有多動別處）。"""
+    import pdf_gen
+    items = [{"description": "品項一", "qty": 2, "unit": "台", "unitPrice": 500, "cost": 300}]
+    wm = dict(show_watermark=True, watermark_text="本案報價未成立　僅供存查備存", show_notice=True,
+              notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用", unapproved_status="草稿", internal=True)
+    base = dict(_PDF_BASE, items=items, salesPerson="業務")
+    est = pdf_gen._build_quote_html(dict(base, docType="estimate"), base["tot"], **wm)
+    quo = pdf_gen._build_quote_html(dict(base), base["tot"], **wm)
+    assert "品項一" in est
+    for old, new in _PDF_FOUR:
+        est = est.replace(new, old)
+    est = (est.replace("估　價　單", "報　價　單").replace("估　價　人：", "報　價　人：")
+              .replace("本案估價未成立", "本案報價未成立").replace("估價單", "報價單"))
+    assert est == quo
+
+
+def test_estimate_pdf_salesperson_label_and_unsettled_wording_follow_the_type():
+    """使用者裁示（T83）：估價單印「估　價　人」、未成案浮水印／提示句寫「本案估價未成立…」；報價單逐位元不變。"""
+    import pdf_gen
+    wm = dict(show_watermark=True, watermark_text="本案報價未成立　僅供存查備存", show_notice=True,
+              notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用", unapproved_status="草稿")
+    est = pdf_gen._build_quote_html(dict(_PDF_BASE, docType="estimate"), _PDF_BASE["tot"], **wm)
+    quo = pdf_gen._build_quote_html(dict(_PDF_BASE), _PDF_BASE["tot"], **wm)
+    assert "估　價　人：" in est and "報　價　人" not in est and "報價" not in est
+    assert "本案估價未成立　僅供存查備存" in est and "本案估價未成立，此份文件僅供存查備存使用" in est
+    assert "報　價　人：" in quo and "估　價　人" not in quo and "估價" not in quo
+    assert "本案報價未成立　僅供存查備存" in quo and "本案報價未成立，此份文件僅供存查備存使用" in quo
+    # 預覽／存檔路徑共用的規則（_quote_watermark_kwargs）經同一支 builder ⇒ 估價單同樣換字
+    kw = pdf_gen._quote_watermark_kwargs("草稿", "未成案")
+    e2 = pdf_gen._build_quote_html(dict(_PDF_BASE, docType="estimate"), _PDF_BASE["tot"], **kw)
+    assert "本案估價未成立" in e2 and "報價" not in e2
+
+
+def test_label_of_no_in_shipping_pdf_is_escape_safe_so_wrapping_it_changes_nothing():
+    """出貨單「關聯○○單」用 esc() 包起來（棘輪不加基線）：固定標籤字串經逸出後必須逐字不變。"""
+    from helpers import doc_type as D
+    from helpers.doc_template import html_text
+    for label in D.LABELS.values():
+        assert html_text(label, falsy_empty=True) == label
+    import pdf_gen
+    base = {"noteNo": "SN-1", "shipDate": "2026-11-13", "items": [], "customerName": "客"}
+    assert "關聯報價單：" in pdf_gen._build_shipping_html(dict(base, quoteNo=QUO_NO))
+    assert "關聯估價單：" in pdf_gen._build_shipping_html(dict(base, quoteNo=EST_NO))
