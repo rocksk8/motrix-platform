@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）；併入 fix/quote-items-align（報價單表單品項明細對齊）
+## 1.0.223 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）；併入 fix/quote-items-align（報價單表單品項明細對齊）
 - 文字（T82 用詞整理）：案件管理頁「開票憑據」「出貨單」列的按鈕「送出審核」→「送出簽核」（承攬憑據與傳票頁維持原字）；不動 API／資料／權限
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。

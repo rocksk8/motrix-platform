@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
+## 1.2.29 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
 ## 1.2.28（next，未取號）— 2026-11-13（feat/estimate-quote-type；單號辨識改用單據類型規則）

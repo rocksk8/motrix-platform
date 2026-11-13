@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）
+## 1.0.62 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）
 - 文字（T82 用詞整理）：開票憑據、匯款申請「僅草稿狀態可送出審核」409 訊息 → 「…可送出簽核」；僅訊息文字，狀態判斷不變
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 

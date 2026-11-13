@@ -1,6 +1,6 @@
 # 刪除暫存區 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+## 1.0.10 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
 ## 1.0.9 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）

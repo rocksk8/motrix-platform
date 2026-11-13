@@ -1,6 +1,6 @@
 # 檔案中心 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+## 1.0.9 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
 ## 1.0.8（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
