@@ -1100,7 +1100,7 @@
         keyText: '', keyMasked: '', keySet: false, keyCleared: false,
         bkText: '', bkMasked: '', bkSet: false, bkCleared: false,
         // 公司資料讀回來之前（loading）或讀取失敗（error／denied）時整頁不可編輯、save() 不送：見 <fieldset data-cfg-fieldset>
-        cfgState: 'loading',
+        cfgState: 'loading',   // 只有最高管理者的畫面會用到（其他人的範本沒有這張表單）；離開 'loading' 的路徑：ready／denied／error
         saving: false,
         saved: false,
         msg: '',
@@ -1234,8 +1234,14 @@
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
           } catch (e) { r = null }
+          let data = null
           if (r && r.ok) {
-            const data = await r.json()
+            // 200 但內容不是 JSON／整形失敗：同樣算讀取失敗（不能停在 loading，也不能在半套資料上開放編輯）
+            try { data = await r.json() } catch (e) { data = null }
+            if (!data || typeof data !== 'object') r = null
+          }
+          if (r && r.ok) {
+           try {
             this.cfg = { ...this.cfg, ...data }
             // ⚠️ 座標可能是 `null` ⇒ 顯示空字串，**不要顯示 `null` 或 `0`**。
             this.locations = (data.locations || []).map(l => this._toRow(l))
@@ -1250,6 +1256,10 @@
             // 現在整頁在 cfgState==='ready' 之前是 disabled（見 <fieldset data-cfg-fieldset>），使用者根本打不到欄位，
             // 所以這個賦值蓋不掉任何人輸入的內容；金鑰那組狀態仍保留不歸零（它們與 cfg 分開存）。
             this.cfgState = 'ready'
+           } catch (e) {          // 整形資料時丟例外：不停在 loading，也不開放編輯
+            this.msg = '讀取公司資料失敗，請重新整理頁面再試。'; this.isError = true
+            this.cfgState = 'error'
+           }
           } else if (r && r.status === 403) {
             // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
             this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true

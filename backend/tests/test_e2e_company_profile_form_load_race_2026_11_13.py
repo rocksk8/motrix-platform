@@ -103,3 +103,31 @@ def test_normal_load_is_editable_and_saves(live_server, make_user, e2e_browser):
     assert page.locator("[data-cfg-fieldset]").evaluate("el => el.disabled") is False
     page.fill("#google_maps_map_id", "MAP-OK-1")
     assert page.evaluate(f"() => {DATA}.cfg.google_maps_map_id") == "MAP-OK-1"
+
+
+@pytest.mark.e2e
+def test_unparsable_200_body_ends_in_error_not_stuck_loading(live_server, make_user, e2e_browser):
+    """審查 h5 S1：200 但內容不是 JSON ⇒ 與讀取失敗同樣收斂到 error（表單鎖定、有訊息、不送 PUT），不能停在 loading。"""
+    sa = make_user(username="cp_sa4", role="superadmin")
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, *sa)
+    puts = []
+
+    def handler(route):
+        req = route.request
+        if req.method == "PUT" and req.url.split("?")[0].endswith(URL_PART):
+            puts.append(req.url)
+            route.continue_()
+        elif _is_profile_get(route):
+            route.fulfill(status=200, content_type="application/json", body="{not json")
+        else:
+            route.continue_()
+    page.route("**/api/settings/company-profile*", handler)
+    page.goto(f"{live_server}/pages/company-profile-settings.html")
+    page.wait_for_function(f"() => {DATA}.cfgState === 'error'", timeout=20000)
+    assert page.locator("[data-cfg-fieldset]").evaluate("el => el.disabled") is True
+    assert page.evaluate(f"() => /讀取公司資料失敗/.test({DATA}.msg)")
+    page.evaluate(f"() => {DATA}.save()")
+    page.evaluate(f"() => {DATA}.save(true)")
+    assert puts == []
+    page.wait_for_function(f"() => {DATA}.sysLoading === false", timeout=20000)   # init 繼續往下跑（其他卡片照常載入），不是中途丟例外
