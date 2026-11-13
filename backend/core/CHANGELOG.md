@@ -62,6 +62,7 @@
 - **（併入）(next) — 2026-11-13（fix/settings-center-valueof；設定中心輸入元件顯示目前值）**
 - 前端修正（無介面變動）：`settings-center.html` 單選沒有選取、數字框空白（正式機使用者回報兩次，旁邊卻寫「目前：…」）。根因：元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名，Alpine 的範圍代理用 `Reflect.has`（含原型鏈）解析名稱，x-for 內的 `valueOf(f)` 解析到原生函式，所有輸入元件（選項／數字／開關／文字）都拿不到目前值。改名 `curVal`，選項比對改 `choiceOn`（代碼數字或字串皆可）。
 - 測試：`tests/test_settings_center_valueof_2026_11_13.py`（3 題：node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一種；舊 bug 對照；全站元件方法名不得蓋住 Object.prototype 成員）。
+- 測試補強（T84 小項，只動測試）：valueof 的 node 前端題在 `MOTRIX_TRAIN=1` 且找不到 node 時改為**紅**（原本略過）；方法名守門 regex 放寬並抽成 `_BAD_MEMBER`（方法簡寫含 async／generator、`get`／`set` 存取子、`name: function`／箭頭函式、帶引號的鍵、`__define*__`／`__lookup*__`），新增守門自己的正對照題（每種寫法抓得到、正常名稱不誤報）。測試共 4 題。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。
