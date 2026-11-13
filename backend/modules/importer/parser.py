@@ -143,7 +143,7 @@ def _decode_csv(data: bytes) -> str:
             return data.decode(enc)
         except UnicodeDecodeError:
             continue
-    raise ParseError("這個檔案的文字編碼讀不出來（請用 Excel 另存成 .xlsx，或存成 UTF-8 的 CSV）")
+    raise ParseError("這個檔案的文字編碼無法辨識（請用 Excel 另存成 .xlsx，或存成 UTF-8 的 CSV）")
 
 
 def _rows_from_csv(data: bytes, max_scan: int, deadline=None):
@@ -154,7 +154,7 @@ def _rows_from_csv(data: bytes, max_scan: int, deadline=None):
     except csv.Error as exc:
         if "limit" in str(exc):
             raise ParseError("有一格的欄位內容超過 %d 字，請確認 CSV 的引號有成對，或改用 .xlsx" % csv.field_size_limit())
-        raise ParseError("這個 CSV 的格式讀不出來（引號沒有成對？），請用 Excel 另存成 .xlsx 再上傳")
+        raise ParseError("這個 CSV 的格式無法讀取（引號是否成對？），請用 Excel 另存成 .xlsx 再上傳")
 
 
 def _csv_rows(text, max_scan, deadline):

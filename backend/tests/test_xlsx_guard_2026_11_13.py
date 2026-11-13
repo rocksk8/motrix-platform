@@ -102,7 +102,7 @@ def test_one_million_blank_styled_cells_rejected_fast():
             yield '<c r="B1"/>'
         yield '</row>' + TAIL
     msg = _rejected(_mk(g()))
-    assert "儲存格太多" in msg
+    assert "儲存格數量過多" in msg
 
 
 def test_cells_cap_is_exact():
@@ -133,7 +133,7 @@ def test_column_over_limit_names_the_column():
 def test_row_number_far_below_rejected():
     def g():
         yield HEAD + '<row r="2">' + _cell("A2") + '</row><row r="10000000">' + _cell("A10000000") + '</row>' + TAIL
-    assert "列太多" in _rejected(_mk(g()))
+    assert "列數過多" in _rejected(_mk(g()))
 
 
 def test_row_tag_count_rejected():
@@ -156,7 +156,7 @@ def test_sheet_xml_size_rejected():
         for r in range(1, 20000):
             yield '<row r="%d">%s</row>' % (r, _cell("A%d" % r, "x" * 60))
         yield TAIL
-    assert "太大" in _rejected(_mk(g()), limits=lim)
+    assert "過大" in _rejected(_mk(g()), limits=lim)
 
 
 def test_cells_cap_is_total_across_sheets():
@@ -199,7 +199,7 @@ def test_zip_ratio_bomb_rejected():
         z.writestr("xl/workbook.xml", WB)
         z.writestr("xl/media/image1.bin", b"\x00" * (20 << 20))          # 20MB 全 0：壓縮比極高
     assert len(bio.getvalue()) < (200 << 10)
-    assert "太大" in str(pytest.raises(X.XlsxRejected, X.guard, bio.getvalue()).value)
+    assert "過大" in str(pytest.raises(X.XlsxRejected, X.guard, bio.getvalue()).value)
 
 
 def test_deadline_is_enforced_in_rows_and_prescan():
@@ -298,7 +298,7 @@ def test_contractors_import_rejects_bomb_with_400(client, make_user):
     t = time.time()
     r = client.post("/api/contractors/import", headers=h,
                     files={"file": ("a.xlsx", _bomb_cells(), "application/octet-stream")})
-    assert r.status_code == 400 and "儲存格太多" in r.text, (r.status_code, r.text[:200])
+    assert r.status_code == 400 and "儲存格數量過多" in r.text, (r.status_code, r.text[:200])
     assert time.time() - t < 12
 
 
@@ -306,7 +306,7 @@ def test_contractors_import_rejects_oversized_upload(client, make_user):
     h = _auth(client, make_user, "xg_ct2")
     r = client.post("/api/contractors/import", headers=h,
                     files={"file": ("a.xlsx", b"x" * ((5 << 20) + 10), "application/octet-stream")})
-    assert r.status_code == 400 and "太大" in r.text
+    assert r.status_code == 400 and "超過上限" in r.text
 
 
 def test_contractors_import_normal_file_and_row_numbers(client, make_user):
@@ -339,7 +339,7 @@ def test_netplan_import_rejects_bomb_with_400(client, make_user):
     pid = _plan_id(client, h)
     r = client.post("/api/network-plans/%s/import/excel" % pid, headers=h,
                     files={"file": ("a.xlsx", _bomb_cells(), "application/octet-stream")})
-    assert r.status_code == 400 and "儲存格太多" in r.text, (r.status_code, r.text[:200])
+    assert r.status_code == 400 and "儲存格數量過多" in r.text, (r.status_code, r.text[:200])
 
 
 def test_netplan_import_roundtrip_still_works(client, make_user):
@@ -426,8 +426,8 @@ def test_styles_xf_bomb_rejected_fast():
     data = _sheet_zip([HEAD, '<row r="1">' + _cell("A1") + "</row>", TAIL], extra={"xl/styles.xml": styles})
     assert len(data) < (2 << 20)
     msg = _rejected(data, limits=X.with_limits(max_styles_xml=64 << 20))        # 放寬大小上限，單看 xf 數
-    assert "格式太多" in msg
-    assert "格式資訊太多" in _rejected(data)                                      # 預設的大小上限（5MB）也擋得住
+    assert "格式過多" in msg
+    assert "格式資訊過多" in _rejected(data)                                      # 預設的大小上限（5MB）也擋得住
 
 
 def test_junk_after_sheetdata_is_bounded_by_part_size():
@@ -437,7 +437,7 @@ def test_junk_after_sheetdata_is_bounded_by_part_size():
         for i in range(850_000):
             yield '<mergeCell ref="A%d:B%d"/>' % (i + 2, i + 2)
         yield "</mergeCells></worksheet>"
-    assert "太大" in _rejected(_sheet_zip(g()))
+    assert "過大" in _rejected(_sheet_zip(g()))
 
 
 def test_hidden_sheets_are_scanned_too():
@@ -537,7 +537,7 @@ def test_hard_timeout_kills_the_child():
     t = time.time()
     with pytest.raises(X.XlsxRejected) as ei:
         X.read_rows(_normal(3), lim, slot_name="t_kill")
-    assert "太久" in str(ei.value) and time.time() - t < 5
+    assert "時間過長" in str(ei.value) and time.time() - t < 5
 
 
 def test_child_memory_limit_is_applied():
@@ -547,7 +547,7 @@ def test_child_memory_limit_is_applied():
     lim = X.with_limits(max_child_memory=24 << 20)
     with pytest.raises(X.XlsxRejected) as ei:
         X.read_rows(_normal(3), lim, slot_name="t_mem")
-    assert "處理失敗" in str(ei.value) or "記憶體" in str(ei.value) or "讀不出來" in str(ei.value), str(ei.value)
+    assert "處理失敗" in str(ei.value) or "記憶體" in str(ei.value) or "無法讀取" in str(ei.value), str(ei.value)
 
 
 def test_result_size_cap():

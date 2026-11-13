@@ -141,7 +141,7 @@
         (cfg.roles || []).map(function (x) { return '<label><input type="checkbox" data-role="' + esc(x) + '"' + (st.roles.indexOf(x) >= 0 ? ' checked' : '') + ' data-testid="ms-pick-role-' + esc(x) + '"> ' + esc(roleName(x)) + '</label>' }).join('') + '</div>' +
         '<div style="margin-top:8px"><b>指定帳號</b></div><div class="ms-people-list">' +
         (users.length ? users.map(function (u) { return '<label><input type="checkbox" data-user="' + esc(u.username) + '"' + (st.users.indexOf(u.username) >= 0 ? ' checked' : '') + ' data-testid="ms-pick-user-' + esc(u.username) + '"> ' + esc(u.displayName || u.display_name || u.username) + '（' + esc(u.username) + '）</label>' }).join('') : '<span class="mx-mute">沒有可指定的帳號</span>') + '</div>' +
-        '<div class="mx-mute">指定的帳號與角色，除了這類信件原本的事件相關人員之外另外寄送；本人自行退訂、沒有 email 的人收不到。</div>'
+        '<div class="mx-mute">指定的帳號與角色，除了這類信件原本的事件相關人員之外另外寄送；本人自行退訂、沒有 email 的人不會收到。</div>'
       return SettingsMatrix.openDialog({
         title: '「' + r.name + '」誰要收',
         html: html,

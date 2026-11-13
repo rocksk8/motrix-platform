@@ -191,4 +191,4 @@ def test_hidden_block_values_still_save_unchanged_without_false_409(client, make
 def test_registry_note_describes_blocks_and_limits():
     reg = {e["flag"]: e for e in json.loads((ROOT / "frontend" / "static" / "layout-pages.json").read_text(encoding="utf-8"))}
     txt = " ".join(reg["case_management"]["notes"])
-    assert "區塊" in txt and "核心區塊" in txt and "健康總覽固定在最上" in txt and "照樣保存" in txt
+    assert "區塊" in txt and "核心區塊" in txt and "健康總覽固定在最上" in txt and "仍會保存" in txt

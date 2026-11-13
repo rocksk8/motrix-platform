@@ -181,7 +181,7 @@
       if (narrow.length) html += '<div class="mx-danger-box">下列通知<b>縮小了收件範圍</b>（實際會收到的人變少，甚至變成 0 人）：</div>' + listHtml(names(narrow))
       return [{
         title: off.length ? '關閉「重要」系統告警？' : '縮小「重要」系統告警的收件範圍？', danger: true, okLabel: off.length ? '仍要關閉' : '仍要縮小',
-        html: html + '<div class="mx-mute">這是系統安全／營運告警；請確認有其他管道（Email、系統內通知）接手。</div>',
+        html: html + '<div class="mx-mute">這是系統安全／營運告警；請確認有其他管道（Email、系統內通知）承接。</div>',
       }]
     }
     var columns = [

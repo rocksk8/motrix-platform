@@ -134,7 +134,7 @@ def test_disable_with_an_unpublished_draft_asks_twice_and_does_not_overwrite_sil
            "await new Promise(r => setTimeout(r, 30)); return first")
     r = _run({"status": _status(), "preview": _TIGHT, "list": [{"key": "na_live"}], "defs": defs, "run": run})
     msg, label = r["v"]
-    assert "尚未發布的修改" in msg and "丟掉" in msg and label == "確認停用" and "再按一次這顆按鈕" in msg and "再按一次「再按一次" not in msg
+    assert "尚未發布的修改" in msg and "捨棄" in msg and label == "確認停用" and "再按一次此按鈕" in msg and "再按一次「再按一次" not in msg
     assert not any(c.startswith("PUT ") for c in r["calls"]), "第一次按不可以改草稿"
     run2 = _SETUP + "await E._loadList(); click('disable'); click('disable'); await new Promise(r => setTimeout(r, 80)); return 1"
     r = _run({"status": _status(), "preview": _TIGHT, "list": [{"key": "na_live"}], "defs": defs, "publish": {}, "run": run2})

@@ -192,7 +192,7 @@
 
             <div class="iw-err" data-testid="iw-uncertain" x-show="uncertain">
               <b>結果不確定。</b>網路中斷或等太久，這次匯入<b>可能已經完成，也可能沒有</b>。請勿重新上傳或再按一次「確認匯入」，先按下面的按鈕查詢這次的結果：
-              若已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；若沒有，會直接補做這一次。
+              若已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；若沒有，會直接補行執行。
               <div class="iw-row" style="margin-top:6px"><button type="button" class="iw-btn primary" data-testid="iw-query" :disabled="busy" @click="queryResult()">查詢這次匯入結果</button></div>
             </div>
             <div class="iw-row">

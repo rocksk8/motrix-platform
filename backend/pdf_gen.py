@@ -46,7 +46,7 @@ PAYMENT_REQUEST_PDF_EXPORT = "arap:payment-request-pdf"
 
 def _decor_sample(title):
     return ("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>%s（樣本頁）</h2>"
-            "<p>本頁僅供預覽頁尾與浮水印文字的位置；文件的內容、金額與程式產生的橫幅不受影響。</p></body></html>" % title)
+            "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；文件的內容、金額與程式產生的橫幅不受影響。</p></body></html>" % title)
 
 
 _ET.register_export(QUOTE_PDF_EXPORT, label="報價單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"), sample_html=_decor_sample("報價單"))
@@ -557,7 +557,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
-        '      <th style="width:190px">品名／規格說明</th>\n'
+        '      <th style="width:190px">品名 / 規格說明</th>\n'
         '      <th style="width:110px">廠牌 / 型號</th>\n'
         '      <th class="r" style="width:48px">數量</th>\n'
         '      <th style="width:70px">單位</th>\n'
@@ -681,7 +681,7 @@ def _quote_watermark_kwargs(status: str, deal_tag: str) -> dict:
         watermark_text="本案報價未成立　僅供存查備存" if is_unsettled else "報價單預覽稿　尚未正式生效",
         watermark_font_size=18 if is_unsettled else 28,
         show_notice=is_unsettled,
-        notice_text="本案報價未成立，此份文件僅供存查使用，請勿對外提供或引用",
+        notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
         unapproved_status=(status or "草稿") if status != "已送出" else None,
     )
 
@@ -1180,7 +1180,7 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         html_content = _build_quote_html(q, tot, show_watermark=show_wm, watermark_text=wm_text,
                                          watermark_font_size=18 if is_unsettled else 28,
                                          show_notice=is_unsettled,
-                                         notice_text="本案報價未成立，此份文件僅供存查使用，請勿對外提供或引用",
+                                         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
                                          unapproved_status=(status or "草稿") if status != "已送出" else None)
 
         # 時間戳到「秒」（2026-09-14 改）——原本只到「日」，靠 `_2`…`_19` 後綴避開
@@ -1386,7 +1386,7 @@ def _build_shipping_html(n: dict) -> str:
         '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
-        '      <th>品名／規格說明</th>\n'
+        '      <th>品名 / 規格說明</th>\n'
         '      <th>廠牌 / 型號</th>\n'
         '      <th class="r" style="width:56px">數量</th>\n'
         '      <th style="width:48px">單位</th>\n'
@@ -2210,7 +2210,7 @@ def _build_payment_request_html_core(v: dict) -> str:
             )
         items_table_html = (
             '<div class="section-label">三、請款品項明細（未稅，稅額另計，見下方總額）</div>\n'
-            '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名／規格</th>'
+            '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名 / 規格</th>'
             '<th class="r" style="width:44px">數量</th><th style="width:40px">單位</th>'
             '<th class="r" style="width:70px">單價（未稅）</th><th class="r" style="width:90px">金額（未稅）</th></tr></thead>\n'
             f'  <tbody>{sel_rows}</tbody>\n</table>\n'
@@ -2239,7 +2239,7 @@ def _build_payment_request_html_core(v: dict) -> str:
         if quote_item_rows:
             quote_items_html = (
                 '<div class="section-label">四、報價品項參考</div>\n'
-                '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名／規格</th>'
+                '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名 / 規格</th>'
                 '<th class="r" style="width:44px">數量</th><th style="width:40px">單位</th>'
                 '<th class="r" style="width:70px">單價</th><th class="r" style="width:90px">金額</th></tr></thead>\n'
                 f'  <tbody>{quote_item_rows}</tbody>\n</table>\n'
@@ -2837,7 +2837,7 @@ def _build_case_closing_html(data: dict) -> str:
         f'<div class="section-label">{next(_cn_nums)}、額外支出明細</div>'
         '<table><thead><tr><th style="width:90px">類別</th><th>說明</th><th class="r" style="width:100px">金額</th>'
         '<th style="width:88px">支出日期</th><th style="width:92px">單號</th>'
-        '<th style="width:84px">支出人</th><th style="width:72px">狀態</th><th>發票／收據附件</th></tr></thead>'
+        '<th style="width:84px">支出人</th><th style="width:72px">狀態</th><th>發票/收據附件</th></tr></thead>'
         f'<tbody>{extra_rows_html or _no_extra_row}</tbody></table>'
     ) if s.get("extraItems") else ""
 

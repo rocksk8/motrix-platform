@@ -117,14 +117,14 @@ async def read_upload(upload, limits=DEFAULT):
             break
         buf += chunk
         if len(buf) > limits.max_bytes:
-            raise XlsxRejected("檔案太大了（上限 %d MB）" % max(1, limits.max_bytes >> 20))
+            raise XlsxRejected("檔案大小超過上限（%d MB）" % max(1, limits.max_bytes >> 20))
     return bytes(buf)
 
 
 # ───────────────────────── ① 預掃 ─────────────────────────
 
 _NOT_XLSX = "這個檔案不是有效的 Excel（.xlsx）檔，請用 Excel 另存成 .xlsx 再上傳"
-_BAD_STRUCT = "這個檔案的工作表結構讀不出來，請用 Excel 另存成 .xlsx 再上傳"
+_BAD_STRUCT = "這個檔案的工作表結構無法讀取，請用 Excel 另存成 .xlsx 再上傳"
 
 
 def check_zip(data, limits=DEFAULT):
@@ -171,7 +171,7 @@ def _small_xml(z, name, cap):
     except KeyError:
         raise XlsxRejected(_BAD_STRUCT)
     if info.file_size > cap:
-        raise XlsxRejected("這個檔案的內容太大了（%s），請拆成多個檔案或另存成一般的 .xlsx" % name)
+        raise XlsxRejected("這個檔案的內容過大（%s），請拆成多個檔案或另存成一般的 .xlsx" % name)
     blob = z.read(info)
     _no_dtd(blob)                                    # 小部件整份掃（不只檔頭：DOCTYPE 可以藏在很長的註解後面）
     try:
@@ -202,7 +202,7 @@ def _sheet_parts(z, limits=DEFAULT):
             raise XlsxRejected(_BAD_STRUCT)
         out.append(((el.get("name") or "").strip(), path, el.get("state") or "visible"))
         if len(out) > limits.max_sheets:
-            raise XlsxRejected("這個檔案的工作表太多了（上限 %d 張）" % limits.max_sheets)
+            raise XlsxRejected("這個檔案的工作表數量超過上限（%d 張）" % limits.max_sheets)
     if not out:
         raise XlsxRejected(_BAD_STRUCT)
     return out
@@ -328,13 +328,13 @@ def _prescan_styles(z, limits, deadline):
     except KeyError:
         return
     if info.file_size > limits.max_styles_xml:
-        raise XlsxRejected("這個檔案的格式資訊太多了（styles），請用 Excel 另存成新的 .xlsx 再上傳")
+        raise XlsxRejected("這個檔案的格式資訊過多（styles），請用 Excel 另存成新的 .xlsx 再上傳")
     xf = 0
     for ev, el in _events(z, info, deadline, limits):
         if ev == "start" and _local(el.tag) == "xf":
             xf += 1
             if xf > limits.max_xf:
-                raise XlsxRejected("這個檔案的儲存格格式太多了，請用 Excel 另存成新的 .xlsx 再上傳")
+                raise XlsxRejected("這個檔案的儲存格格式過多，請用 Excel 另存成新的 .xlsx 再上傳")
         elif ev == "end":
             el.clear()
 
@@ -346,7 +346,7 @@ def guard(data, limits=DEFAULT, sheets=None, deadline=None):
     z = check_zip(data, limits)
     try:
         if z.getinfo("xl/sharedStrings.xml").file_size > limits.max_shared_strings:
-            raise XlsxRejected("這個檔案的文字內容太多了，請拆成多個檔案")
+            raise XlsxRejected("這個檔案的文字內容過多，請拆成多個檔案")
     except KeyError:
         pass
     parts = _sheet_parts(z, limits)
@@ -368,7 +368,7 @@ def _open_workbook(data, data_only):
         from openpyxl import load_workbook
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=data_only)
     except Exception as exc:                                  # noqa: BLE001
-        raise XlsxRejected("這個檔案讀不出來（%s）。請用 Excel 另存成 .xlsx 再上傳" % type(exc).__name__)
+        raise XlsxRejected("這個檔案無法讀取（%s）。請用 Excel 另存成 .xlsx 再上傳" % type(exc).__name__)
     for ws in wb.worksheets:
         reset = getattr(ws, "reset_dimensions", None)
         if reset:
@@ -400,7 +400,7 @@ def rows(ws, deadline=None, limits=DEFAULT, max_rows=None, header_rows=0, **kw):
         if i & 255 == 0:
             check_deadline(deadline, limits)
         if max_rows is not None and i > max_rows:
-            raise XlsxRejected("檔案的列數太多了（上限 %d 列），請拆成多個檔案" % (max_rows - header_rows))
+            raise XlsxRejected("檔案的列數超過上限（%d 列），請拆成多個檔案" % (max_rows - header_rows))
         yield row
 
 
@@ -509,7 +509,7 @@ def _extract(data, limits, req):
                         cells.pop()
                 budget -= 16 + sum(len(str(c)) + 4 for c in cells)
                 if budget < 0:
-                    raise XlsxRejected("檔案的內容太多了，請拆成多個檔案")
+                    raise XlsxRejected("檔案的內容過多，請拆成多個檔案")
                 body.append(cells)
             out.append({"name": ws.title, "rows": body})
         return {"titles": titles, "sheets": out}
@@ -683,7 +683,7 @@ def _run_child(data, limits, req):
         except OSError:
             _kill_tree(proc)
             proc.communicate()
-            raise XlsxRejected("這個檔案讀不出來，請用 Excel 另存成 .xlsx 再上傳")
+            raise XlsxRejected("這個檔案無法讀取，請用 Excel 另存成 .xlsx 再上傳")
     finally:
         if proc.poll() is None:
             _kill_tree(proc)
@@ -691,16 +691,16 @@ def _run_child(data, limits, req):
         if job:
             _win_close(job)
     if len(stdout) > limits.max_result_bytes + (1 << 20):
-        raise XlsxRejected("檔案的內容太多了，請拆成多個檔案")
+        raise XlsxRejected("檔案的內容過多，請拆成多個檔案")
     try:
         payload = json.loads(stdout.decode("utf-8"))
     except Exception:                                                   # noqa: BLE001
         # 沒有結果＝子行程被殺（記憶體上限）或崩潰
-        raise XlsxRejected("這個檔案處理失敗（可能內容太多或格式不正常），請用 Excel 另存成 .xlsx 或拆成多個檔案再上傳")
+        raise XlsxRejected("這個檔案處理失敗（可能內容過多或格式不正常），請用 Excel 另存成 .xlsx 或拆成多個檔案再上傳")
     if not payload.get("ok"):
         if payload.get("kind") == "rejected":
             raise XlsxRejected(payload["message"])
-        raise XlsxRejected("這個檔案讀不出來（%s）。請用 Excel 另存成 .xlsx 再上傳" % payload.get("message", ""))
+        raise XlsxRejected("這個檔案無法讀取（%s）。請用 Excel 另存成 .xlsx 再上傳" % payload.get("message", ""))
     return payload["result"]
 
 

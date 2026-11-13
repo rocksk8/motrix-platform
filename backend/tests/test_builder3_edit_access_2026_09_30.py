@@ -92,7 +92,7 @@ def test_required_and_editable_restricted_is_a_publish_problem(client, make_user
     b = _body()
     b["fields"][1]["required"] = True
     probs = _publish(client, hb, b, key="b3edit2")
-    assert probs and any("看得到或改得到" in p["message"] for p in probs) and probs[0]["path"].startswith("fields[")
+    assert probs and any("可檢視或編輯" in p["message"] for p in probs) and probs[0]["path"].startswith("fields[")
     b2 = _body()
     b2["fields"][1]["access"] = {"editableTo": {"roles": ["nope"]}}
     assert any("不認得的角色" in p["message"] for p in _publish(client, hb, b2, key="b3edit3"))

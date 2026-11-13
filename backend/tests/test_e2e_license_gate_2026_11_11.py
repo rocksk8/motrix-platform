@@ -38,7 +38,7 @@ def test_blocked_license_lands_on_the_explanation_page_and_recovers(
     page.locator("#lr-kv dd", has_text="missing").wait_for(state="visible", timeout=10000)
     text = box.inner_text()
     assert "尚未安裝授權金鑰" in page.locator("#lr-title").inner_text()
-    assert "不是系統故障" in text and "系統供應商" in text                                       # 不是系統壞了＋找誰
+    assert "非系統故障" in text and "系統供應商" in text                                       # 不是系統壞了＋找誰
     assert "狀態代碼" in text and "機器代碼" in text and license_test_key["machine"] in text    # 簽發方要的資料
 
     # 授權補上後按「重新檢查」⇒ 離開說明頁（不用重新登入）

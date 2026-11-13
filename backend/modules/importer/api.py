@@ -87,7 +87,7 @@ def importer_parse(response: Response, kind: str = Form(...), file: UploadFile =
         raise HTTPException(400, str(e))
     except Exception as exc:                                              # noqa: BLE001 — 訊息不帶例外內容
         logger.error("importer parse failed kind=%s type=%s", kind, type(exc).__name__)
-        raise HTTPException(400, "這個檔案讀不出來，請確認是依範本填的 .xlsx 或 .csv")
+        raise HTTPException(400, "這個檔案無法讀取，請確認是依範本填的 .xlsx 或 .csv")
     finally:
         _PARSE_SLOTS.release()
     response.headers["Cache-Control"] = "no-store"

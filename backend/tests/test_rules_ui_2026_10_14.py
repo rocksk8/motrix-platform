@@ -208,7 +208,7 @@ def test_compound_conditions_are_shown_but_not_editable():
     d = {"status": 200, "body": {"draft": None, "latest": {"version": 1, "body": {"rules": [comp]}}}}
     r = run([OPEN, {"do": "click", "act": "edit:0"}, {"do": "snap"}], routes(**{"GET /api/definitions/rule_set/case": d}))
     h = r["snaps"][0]["html"]
-    assert "進階條件（且／或／非）" in h and "不能編輯條件" in h and 'data-rb-in="field"' not in h
+    assert "進階條件（且／或／非）" in h and "不可編輯條件" in h and 'data-rb-in="field"' not in h
 
 
 @needs_node

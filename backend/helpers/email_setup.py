@@ -130,7 +130,7 @@ def classify_error(exc: BaseException, host: str = "", provider_key: str = "") -
                     "hint": "請勿貼 Google 登入密碼。先開啟兩步驟驗證，再到「應用程式密碼」頁面建立 16 碼貼上。"}
         return {"category": "auth", "ticketKind": "",
                 "title": "帳號或密碼不對",
-                "hint": "請確認信箱帳號沒有輸入錯誤，密碼是否為該信箱要求的「應用程式密碼」（很多信箱不接受登入密碼）。"}
+                "hint": "請確認信箱帳號沒有輸入錯誤，密碼是否為該信箱要求的「應用程式密碼」（部分信箱不接受登入密碼）。"}
     if isinstance(exc, (smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError)):
         return {"category": "rejected", "ticketKind": "m365_auth" if _is_m365(host) else "",
                 "title": "信箱服務拒絕了這封信",

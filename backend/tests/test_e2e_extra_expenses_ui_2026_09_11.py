@@ -189,7 +189,7 @@ def test_approved_row_is_readonly_with_locked_files_and_edit_button(
     assert page.is_disabled(f"{PANEL} input[placeholder='品項說明（必填）']")
     body = page.locator(PANEL).inner_text()
     assert "已核准的項目不可直接修改" in body
-    assert "附件已上鎖" in body, "畫面要說得出為什麼不能傳，不能只在後端擋"
+    assert "附件已鎖定" in body, "畫面要說得出為什麼不能傳，不能只在後端擋"
     # ⚠️ 一定要加 `:visible`：Alpine 的 x-show 是 display:none，元素還留在
     #    DOM 裡，`.count()` 照樣數得到——單看 count 會得到一個假的綠燈。
     #    另外 has-text 是子字串比對，「＋ 上傳憑證」也會被「＋ 上傳」匹配到，

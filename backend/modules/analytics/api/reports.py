@@ -3427,11 +3427,11 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
             elif rcvd and rat and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", rat):
                 kind, hint = ("received_bad_date",
                               "已收款但收款日期格式無法辨識（請改成 YYYY-MM-DD）——"
-                              "這筆不屬於任何月份，當月收入無法擷取到它")
+                              "這筆不屬於任何月份，當月收入不會計入這筆")
             elif rcvd and not rat:
                 kind, hint = ("received_no_date",
                               "已勾「已收款」但未填寫收款日期——這筆不屬於任何月份，"
-                              "當月收入與未收款項都無法擷取到它")
+                              "當月收入與未收款項都不會計入這筆")
             elif rat and not rcvd:
                 kind, hint = ("date_not_received",
                               "已填寫收款日期但未勾選「已收款」——收入報表不算（未收），"

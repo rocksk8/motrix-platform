@@ -45,7 +45,7 @@ def test_card_and_header_show_sales_owner_with_original_labels():
 def test_role_select_label_hint_and_note_present():
     h = _page()
     assert 'for="cm-role-sales">業績歸屬（業務負責）</label>' in h
-    assert 'data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。沒填時退回報價人；有填但對不到帳號，獎金不帶人。<' in h
+    assert 'data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。未填寫時以報價人為準；已填寫但無對應帳號時，不指定獎金對象。<' in h
     assert 'data-testid="cm-sales-diff-note"' in h and 'x-text="salesRoleDiffNote"' in h
     assert 'x-model="roleSel.sales"' in h                      # 下拉仍綁同一個 roleSel.sales（只改文字，不改讀寫）
 
@@ -56,7 +56,7 @@ def test_hint_and_note_state_bonus_follows_sales_owner_now_that_bonus_code_switc
     h = _page()
     i = h.index('data-testid="cm-role-sales-hint"')
     seg = h[i:i + 260]
-    assert "業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動" in seg and "有填但對不到帳號，獎金不帶人" in seg
+    assert "業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動" in seg and "已填寫但無對應帳號時，不指定獎金對象" in seg
     biz = BIZ_JS.read_text(encoding="utf-8")
     tail = biz[biz.index("get salesRoleDiffNote()"):]
     assert "業務獎金（尚未建立分潤單者）依業務負責，已建立的分潤單不回頭更動" in tail      # 與 D1 不回溯一致：不可寫成無條件的「獎金依業務負責」

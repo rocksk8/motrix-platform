@@ -265,10 +265,10 @@ def test_payments_undated_rows_are_reported_not_silently_dropped(client, make_us
     h = _hdr(client, make_user, "rtp2")
     d = _run(client, h, "payments", "date_from=2026-01-01&date_to=2026-12-31").json()
     assert "MQ-T4" not in {r["quoteNo"] for r in d["rows"]}
-    assert any("1 筆" in n and "沒填" in n for n in d["notes"]), d["notes"]
+    assert any("1 筆" in n and "未填寫" in n for n in d["notes"]), d["notes"]
     d = _run(client, h, "payments").json()
     assert "MQ-T4" in {r["quoteNo"] for r in d["rows"]}
-    assert not any("沒填" in n for n in d["notes"])
+    assert not any("未填寫" in n for n in d["notes"])
 
 
 def test_payments_amounts_match_operating_report(client, make_user):
@@ -429,8 +429,8 @@ def test_multi_installment_payments_match_operating_report_by_index(client, make
     assert got[("MQ-T7", 0)] == (200000, True) and got[("MQ-T7", 1)] == (200000, False)
     # 同一案兩期各依自己的日期挑：7 月只有第一期（實收 07-01），第二期預計 09-01 不在
     d = _run(client, h, "payments", "date_from=2026-07-01&date_to=2026-07-31").json()
-    assert {(r["quoteNo"], r["idx"]) for r in d["rows"]} == {("MQ-T7", 0)}, "MQ-T8 已收但沒填實收日，不在 7 月"
-    assert any("已收但沒填實收日" in n and "2 筆" in n for n in d["notes"]), d["notes"]   # MQ-T4（未收沒預計日）＋MQ-T8（已收沒實收日）
+    assert {(r["quoteNo"], r["idx"]) for r in d["rows"]} == {("MQ-T7", 0)}, "MQ-T8 已收但未填實收日，不在 7 月"
+    assert any("已收但未填實收日" in n and "2 筆" in n for n in d["notes"]), d["notes"]   # MQ-T4（未收沒預計日）＋MQ-T8（已收沒實收日）
 
 
 def test_sales_perf_owner_order_and_totals_match_operating_report(client, make_user):

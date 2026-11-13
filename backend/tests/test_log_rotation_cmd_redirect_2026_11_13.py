@@ -93,7 +93,7 @@ def test_other_process_cannot_truncate_but_leaves_everything_untouched(tmp_path,
         assert (tmp_path / "server.log.2").read_bytes() == b"gen2-keep-me"
         assert not (tmp_path / "server.log.3").exists()
         assert not (tmp_path / "server.log.rotating").exists(), "暫存檔要清掉"
-        warns = [r for r in caplog.records if "輪替沒成功" in r.getMessage()]
+        warns = [r for r in caplog.records if "輪替未成功" in r.getMessage()]
         errs = [r for r in caplog.records if r.levelname == "ERROR"]
         assert len(warns) == 1, "24 小時內同一個檔只提示一次：%r" % [r.getMessage() for r in caplog.records]
         assert not errs, "不要每輪都 ERROR＋堆疊"

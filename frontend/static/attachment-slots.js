@@ -220,7 +220,7 @@
           this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '尚無自訂附件種類')
           this.loading = false
         } catch (e) {
-          this.loadError = '讀取附件種類失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後再打開重試'
+          this.loadError = '讀取附件種類失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後重新開啟再試'
         }
       },
 
@@ -232,7 +232,7 @@
       saveDraft: function () { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次') },
       publish: function () { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經處理，請關閉後重新開啟，並查看版本清單確認') },
       restore: function (v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉後重新開啟，並查看版本清單確認') },
-      discard: function () { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉再打開確認') },
+      discard: function () { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉後重新開啟確認') },
       simulate: function () { var self = this; return this._guard(function () { return self._simulate() }, '模擬失敗') },
       _mark: function (problems) {
         var probs = {}

@@ -52,7 +52,7 @@ def search(q: str = Query(""), types: str = Query(""), exts: str = Query(""), da
     if not quote_no.strip() and not (u.get("role") == "superadmin" or user_has_module(u, "file_center")):
         raise HTTPException(403, "沒有「檔案中心」的權限")
     if page > MAX_PAGE:
-        raise HTTPException(400, "結果太多：請加條件（關鍵字、日期區間、類別）縮小範圍，最多可瀏覽至第 %d 頁" % MAX_PAGE)
+        raise HTTPException(400, "結果過多：請加條件（關鍵字、日期區間、類別）縮小範圍，最多可瀏覽至第 %d 頁" % MAX_PAGE)
     crit = S.normalize_crit({"q": q, "types": types, "exts": exts, "date_from": date_from, "date_to": date_to, "uploader": uploader,
                              "quote_no": quote_no, "doc_no": doc_no, "customer": customer, "take": page * size + 1})
     conn = get_db()

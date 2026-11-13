@@ -350,7 +350,7 @@
           const h = this.s && this.s.heartbeat
           if (!h) return ''
           if (h.level === 'na') return '這台電腦沒有心跳監控（例如開發用的電腦）。'
-          if (h.status === 'ok' && h.level === 'error') return '心跳排程可能已經停止執行：狀態紀錄很久沒有更新了。'
+          if (h.status === 'ok' && h.level === 'error') return '心跳排程可能已經停止執行：狀態紀錄已長時間未更新。'
           return { ok: '系統在線，外部監控有收到回報。', ext_unset: '只檢查本機，沒有通知外部監控（尚未設定監控網址）。',
                    ext_fail: '本機正常，但對外部監控回報失敗；可能是本機無法連線至外部網路。', local_down: '本機服務沒有回應。' }[h.status]
             || '心跳排程可能從來沒有執行過，或狀態紀錄讀不懂。'

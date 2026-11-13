@@ -258,7 +258,7 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
         miss_page = (
             "<div class='att miss'><div class='att-h'>未能併入的附件"
             "（%d 筆）</div><ul>%s</ul>"
-            "<p>以上附件仍登記在這張傳票上，而它們的檔案本次未併入。"
+            "<p>以上附件仍登記在這張傳票上，而它們的檔案這一次沒有併進來。"
             "請到傳票頁的附件區確認。</p></div>" % (len(missing), items))
 
     cols = "".join("<col style='width:%.1fpt'>" % w for w in _COL_W)

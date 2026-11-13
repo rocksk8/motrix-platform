@@ -241,7 +241,7 @@
           this.sync()
           this.loadUsage()
         } catch (e) {
-          this.loadError = '讀取欄位定義失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後再打開重試'
+          this.loadError = '讀取欄位定義失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後重新開啟再試'
         }
       },
 
@@ -252,9 +252,9 @@
         finally { this.busy = false }
       },
       saveDraft: function () { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次') },
-      publish: function () { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經處理，請關閉再打開、看版本清單確認') },
-      restore: function (v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉再打開、看版本清單確認') },
-      discard: function () { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉再打開確認') },
+      publish: function () { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經處理，請關閉後重新開啟，並查看版本清單確認') },
+      restore: function (v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉後重新開啟，並查看版本清單確認') },
+      discard: function () { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉後重新開啟確認') },
       _mark: function (problems) {
         // path 形如 fields[2].label ⇒ 標在第 2 列
         var probs = {}

@@ -939,7 +939,7 @@
             <!-- 科目代號設定完成度一眼可見，不用展開設定面板才知道 -->
             <span style="white-space:nowrap;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600"
             :style="t100Config ? (t100ConfigComplete ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEF3C7;color:var(--warning)') : 'background:#F0EEE9;color:var(--text-dim)'"
-            x-text="!t100Config ? '科目代號讀取中…' : (t100ConfigComplete ? '✓ 科目代號已設定' : (_role()==='superadmin' ? '⚠ 科目代號尚未設定完整 → 請點右方「展開科目代號設定」填寫' : '⚠ 科目代號尚未設定完整 → 請聯絡系統管理員設定'))"></span>
+            x-text="!t100Config ? '科目代號讀取中…' : (t100ConfigComplete ? '✓ 科目代號已設定' : (_role()==='superadmin' ? '⚠ 科目代號尚未設定完整 → 請按右方「展開科目代號設定」填寫' : '⚠ 科目代號尚未設定完整 → 請聯絡系統管理員設定'))"></span>
             </div>
 
             <!-- KPI 一覽：待確認事件/金額/已設定銀行帳戶數，切換進頁籤就自動載入 -->
@@ -1095,7 +1095,7 @@
             <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="if (t100Config.defaultBankAccountCode === b.acctCode) t100Config.defaultBankAccountCode = ''; t100Config.bankAccounts.splice(bi,1)">刪除</button>
             </div>
             </template>
-            <div style="font-size:12px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">點 ☆ 可把該帳戶設為系統預設（標記已付款／已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
+            <div style="font-size:12px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">按 ☆ 可把該帳戶設為系統預設（標記已付款／已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
             <div x-show="_role()==='superadmin' && (!t100Config.bankAccounts || !t100Config.bankAccounts.length)" style="font-size:12px;color:var(--warning);margin-bottom:6px">⚠ 尚未設定任何銀行帳戶，標記已付款／已收款時將無法選擇帳戶</div>
             <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.push({name:'',acctCode:''})">+ 新增銀行帳戶</button>
             </div>
@@ -1289,7 +1289,7 @@
         <input type="date" class="field-input" x-model="receiveDate">
         <label class="field-label">實收金額（銀行實際入帳金額，已扣客戶內扣手續費）</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
-        <label class="field-label">手續費 / 扣款（客戶內扣；另列費用，不再從實收扣）</label>
+        <label class="field-label">手續費／扣款（客戶內扣；另列費用，不再從實收扣）</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
         <div x-show="receiveAmountError()" x-text="receiveAmountError()"
              style="margin:-4px 0 8px;font-size:12px;color:#B91C1C;font-family:var(--font-zh)"></div>
