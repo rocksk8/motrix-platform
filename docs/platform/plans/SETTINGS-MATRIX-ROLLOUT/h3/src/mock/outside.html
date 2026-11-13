@@ -11,8 +11,8 @@
 <div class="hl" id="splitmsg" style="margin-top:8px">三類比例合計：<b>100%</b> ✔</div>
 <div class="mute" style="margin-top:6px">權限：讀寫都只有最高管理者。整包寫入、沒有並行控制（後存的蓋掉先存的）；獎金比率與三類比例是<b>兩次分開寫入，不在同一個交易裡</b>。所以<b>不提供批次與復原</b>。</div><div class="savebar hide" data-bar="bonus"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary" id="bonusSave">儲存</button><button class="btn sm">還原</button></div></div></div></section>
 
-<section class="card pg" id="ot-voucher"><div class="pgh"><h3>② 憑證（傳票）科目對應</h3><span class="pill heavy">影響大</span><span class="pill pnd">變更管制</span><span class="k">bonus.html「傳票科目」・/api/bonus/cases/voucher-accounts</span></div><div class="pgb">
-<div class="was"><b>現況</b>獎金進入待發放、標記已發放時自動開傳票草稿用的 5 個科目；現在改了就直接生效，沒有等待。<br><br><b>變更管制（使用者裁示）</b>改科目要填原因，儲存後進「待生效」，等確認期或第二位最高管理者核准才生效；等待中仍用舊科目。<br><br><b>新設計</b>科目欄「輸入代號 → 即時顯示科目名稱」，後來被停用的科目標紅字；5 個欄位其中 2 個預設同為 2252，提醒「代扣稅款與代收補充保費目前是同一科目」。</div>
+<section class="card pg" id="ot-voucher"><div class="pgh"><h3>② 憑證（傳票）科目對應</h3><span class="pill heavy">影響大</span><span class="pill pnd">變更管制</span><span class="pill ext">待 PM 確認指哪一項</span><span class="k">bonus.html「傳票科目」・/api/bonus/cases/voucher-accounts</span></div><div class="pgb">
+<div class="was"><b>現況</b>盤點找不到字面「憑證帳戶」，暫以最可能的「獎金傳票科目」呈現（其他候選：銀行帳戶清單見⑥、個人 Passkey 歸丙、Google Maps 金鑰歸乙）。獎金進入待發放、標記已發放時自動開傳票草稿用 5 個科目；現在改了就直接生效，沒有等待。<br><br><b>變更管制（使用者裁示）</b>改科目要填原因，儲存後進「待生效」，等確認期或第二位最高管理者核准才生效；等待中仍用舊科目。<br><br><b>新設計</b>科目欄「輸入代號 → 即時顯示科目名稱」，後來被停用的科目標紅字；5 個欄位其中 2 個預設同為 2252，提醒「代扣稅款與代收補充保費目前是同一科目」。</div>
 <div class="new"><table class="mx stack"><thead><tr><th class="l">用途</th><th>科目代號</th><th>科目名稱</th><th>預設</th></tr></thead><tbody>
 <tr><td class="l" data-l="用途"><b>費用（薪資支出）</b><div class="k">expense</div></td><td data-l="代號"><input type="text" value="6111" data-d style="width:90px"></td><td data-l="名稱">薪資支出（示意）</td><td data-l="預設">6111</td></tr>
 <tr><td class="l" data-l="用途"><b>應付（應付薪資）</b><div class="k">payable</div></td><td data-l="代號"><input type="text" value="2191" data-d style="width:90px"></td><td data-l="名稱">應付薪資（示意）</td><td data-l="預設">2191</td></tr>
