@@ -11,11 +11,14 @@
     讀取時到期即生效（`in_effect`），`materialize_due()` 再把到期值寫進定義版本；⑦環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 一律回程式預設（出事時的逃生口）。
 [契約題] backend/tests/platform/test_settings_registry_t54.py
 """
+import copy
+import inspect
 import json
 import logging
 import os
 import threading
 import time
+from collections import namedtuple
 
 from core import definitions as D
 from core import registry as _reg
@@ -29,7 +32,17 @@ SCOPE = "company"
 _TTL = 15.0
 DEFAULT_CONFIRM_DAYS = 7                       # 變更確認期間預設天數（設定 `change_control.confirm_period_days` 沒有值時用；下限 1 天）
 CONFIRM_GROUP, CONFIRM_FIELD = "change_control", "confirm_period_days"
-_TYPES = ("int", "float", "bool", "str")
+_TYPES = ("int", "float", "bool", "str", "json")
+#: 自訂舊儲存轉接器（SPEC §15.A.1）：`read(conn)->{欄位: 值}`（讀舊儲存並經原本的正規化；**不得**呼叫登錄表，否則遞迴）；
+#: `write(conn, values, *, old=None)`（**只用傳入的 conn**、同一筆交易內、冪等；不得自開連線 commit）；`normalize(值)->值`（選填，json 欄位 CAS 前先正規化）。
+Adapter = namedtuple("Adapter", "read write normalize", defaults=(None,))
+JSON_MAX_CHARS = 15000                         # json 欄位序列化後的長度上限（待生效明細層 20000 會截斷，留餘裕；欄位定義可調）
+
+
+def _canon(v):
+    """標準 JSON（sort_keys、無空白、不轉義中文）：json 欄位 CAS／相等比較用。"""
+    return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
 DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
 RISK_ORDER = ("none", "ops", "money", "legal", "security")
 #: 結構化影響範圍（脊柱 E-e；欄位版面框架 §16.6／§17）：documents／roles＝白話清單；amounts＝一句話；reversible＝可否復原；effective＝immediate｜pending（須與欄位旗標一致）。
@@ -90,13 +103,15 @@ class SettingError(ValueError):
 class SettingConflict(Exception):
     """逐欄 CAS 失敗：呼叫端看到的舊值，在送出前已被別人改掉。`keys`＝衝突欄位鍵；`by`／`at`＝最近改的人與時間
     （沒有帳本紀錄 ⇒ by＝「系統預設」或「舊路徑寫入，時間不明」、at＝空字串）。**不是** SettingError（不是 400 的輸入問題）。"""
-    def __init__(self, keys, by="", at=""):
+    def __init__(self, keys, by="", at="", code="conflict"):
         super().__init__("這些設定在你送出前已被別人改動：%s" % "、".join(keys))
-        self.keys, self.by, self.at = list(keys), by, at
+        self.keys, self.by, self.at, self.code = list(keys), by, at, code        # code：conflict｜pending_exists（json 欄位已有別人的待生效申請）
 
 
 def _same_value(a, b):
     """CAS 用的相等：數字不分 int／float（JSON 來回），布林與數字不混。"""
+    if isinstance(a, (list, dict)) or isinstance(b, (list, dict)):
+        return isinstance(a, (list, dict)) and isinstance(b, (list, dict)) and _canon(a) == _canon(b)      # 巢狀 True==1、1==1.0 不會假相等
     if isinstance(a, bool) or isinstance(b, bool):
         return isinstance(a, bool) and isinstance(b, bool) and a == b       # True == 1 在 Python 成立，這裡不讓它成立
     num = lambda v: isinstance(v, (int, float))                               # noqa: E731
@@ -151,11 +166,11 @@ class SettingDef:
     收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
                  "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max", "impact_scope",
-                 "when", "external")
+                 "when", "external", "summarize", "max_chars")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None, when="", external=""):
+                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None, when="", external="", summarize=None, max_chars=JSON_MAX_CHARS):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -172,11 +187,14 @@ class SettingDef:
         self.when, self.external = (when or "").strip(), (external or "").strip()
         if self.when and self.when == (help or "").strip():
             raise ValueError("設定欄位 %r 的 when 不得與 help 完全相同" % (key,))
+        self.summarize, self.max_chars = summarize, int(max_chars)       # json 欄位：summarize(old, new)->[白話行]；畫面只顯示摘要，不傾倒原始內容
         if loosen not in (None, "up", "down", "both"):
             raise ValueError("loosen 只能是 up／down／both／None：%r" % (loosen,))
-        if loosen and type not in ("int", "float"):
-            # 放寬判定只認數字（publish()._loosens）：bool／str 設了 loosen 不會觸發待生效，等於沒管制。選項欄位請用整數代碼（0/1、1..n）。
-            raise ValueError("設定欄位 %r：loosen 只能用在數字欄位（int／float）；選項請用整數代碼" % (key,))
+        if loosen in ("up", "down") and type not in ("int", "float"):
+            # 方向只對數字有意義；文字／json／選項要管制就用 both（任何變更都算放寬，走第二位最高管理者核准）。
+            raise ValueError("設定欄位 %r：loosen 的 up／down 只能用在數字欄位（int／float）；其他型別請用 both" % (key,))
+        if type == "json" and summarize is not None and not callable(summarize):
+            raise ValueError("設定欄位 %r：summarize 必須是函式" % (key,))
         self.zero_is_max = bool(zero_is_max)   # 0 代表「不限／永久」（比任何正數都寬鬆）：判斷放寬方向時 0 視為無限大
         self.loosen = loosen          # 數值往哪個方向變是「放寬」（up＝調大算放寬，如允許更大的檔案；down＝調小算放寬，如更短的密碼長度）；放寬要雙人核准
         miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
@@ -200,6 +218,14 @@ class SettingDef:
             if not isinstance(v, bool):
                 return "必須是「是」或「否」"
             return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
+        if self.type == "json":
+            if not isinstance(v, (list, dict)):
+                return "內容格式不對"
+            try:
+                n = len(_canon(v))
+            except (TypeError, ValueError):
+                return "內容無法儲存"
+            return "這份設定太大，請聯絡工程師" if n > self.max_chars else ""
         if self.type == "str":
             if not isinstance(v, str):
                 return "必須是文字"
@@ -220,12 +246,15 @@ class SettingDef:
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
                 "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
                 "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
-                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope, "when": self.when, "needsExternal": self.external,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope, "when": self.when, "needsExternal": self.external, "hasSummary": self.summarize is not None,
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
-def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None):
-    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。
+def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None,
+                   legacy_adapter=None, external=False):
+    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values[, conn])->[問題]`＝跨欄位檢查（函式有第二個參數或叫 conn ⇒ 傳寫入／驗證當下的連線；部分驗證合併的是預設值，每條檢查要對單一欄位也成立）；
+    `sensitive`＝只有設定權限者能讀。`legacy_adapter`＝`Adapter(read, write[, normalize])`（有的話忽略 legacy_key）；`external=True`＝登記但不出現在一般群組清單／搜尋，
+    一般設定中心路由讀寫一律拒絕（只能走原頁面的舊端點），待生效頁只顯示摘要。重複登錄 ⇒ ValueError。
     `owner`：擁有者（模組鍵）；省略 ⇒ 載入器 import 該模組期間自動帶入（`core.registry.owner_scope`），不在範圍內 ⇒ `core`。"""
     if group in _GROUPS:
         raise ValueError("設定群組已登錄：%r" % group)
@@ -239,12 +268,12 @@ def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_
     if len(set(names)) != len(names):
         raise ValueError("群組 %r 欄位重複" % group)
     _GROUPS[group] = {"label": label, "fields": {f.key: f for f in fields}, "sensitive": bool(sensitive), "risk": risk,
-                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help,
+                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help, "adapter": legacy_adapter, "external": bool(external),
                       "owner": owner if owner is not None else (cur or "core")}
 
 
 def groups():
-    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"], "owner": v["owner"],
+    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"], "owner": v["owner"], "external": v["external"],
                 "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in list(_GROUPS.items())}
 
 
@@ -369,7 +398,7 @@ def _merged(base, over):
 
 
 def _defaults(group):
-    return {k: f.default for k, f in _g(group)["fields"].items()}
+    return {k: (copy.deepcopy(f.default) if f.type == "json" else f.default) for k, f in _g(group)["fields"].items()}
 
 
 def clamp_value(f, v):
@@ -383,8 +412,19 @@ def clamp_value(f, v):
     return int(v) if f.type == "int" else v
 
 
-def validate_values(group, values, *, partial=False):
-    """逐欄 + 跨欄位檢查（寫入時嚴格，不夾值）。回 `[{path, message}]`。"""
+def _call_cross(fn, merged, conn):
+    """跨欄位檢查函式可以只收值，也可以多收連線（第二個位置參數或 conn 參數）。"""
+    try:
+        ps = inspect.signature(fn).parameters.values()
+        takes = any(p.name == "conn" or p.kind == p.VAR_POSITIONAL for p in ps) or \
+            sum(1 for p in ps if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)) >= 2
+    except (TypeError, ValueError):
+        takes = False
+    return fn(merged, conn) if takes else fn(merged)
+
+
+def validate_values(group, values, *, partial=False, conn=None):
+    """逐欄 + 跨欄位檢查（寫入時嚴格，不夾值）。回 `[{path, message}]`。`conn`＝給需要查資料庫的跨欄位檢查用（可為 None）。"""
     g = _g(group)
     if not isinstance(values, dict):
         return [{"path": "", "message": "values 必須是物件"}]
@@ -409,7 +449,7 @@ def validate_values(group, values, *, partial=False):
                 out.append({"path": k, "message": "缺少欄位"})
     if not out and g["cross_check"]:
         try:
-            out += list(g["cross_check"](_merged(_defaults(group), values)))
+            out += list(_call_cross(g["cross_check"], _merged(_defaults(group), values), conn))
         except Exception as e:                      # noqa: BLE001
             out.append({"path": "", "message": "跨欄位檢查失敗：%s" % e})
     return out
@@ -417,8 +457,18 @@ def validate_values(group, values, *, partial=False):
 
 # --- 讀 ---------------------------------------------------------------
 
-def _legacy_values(conn, group):
+def _legacy_values(conn, group, strict=False):
     g = _g(group)
+    ad = g.get("adapter")
+    if ad is not None:                              # 自訂轉接器（SPEC §15.A.1）：讀舊儲存並經原本的正規化；出錯 ⇒ 當作沒有（strict＝金額／法遵讀取端：丟出去）
+        try:
+            raw = ad.read(conn)
+        except Exception:                           # noqa: BLE001
+            if strict:
+                raise
+            logger.warning("settings: 群組 %s 的舊儲存轉接器讀取失敗", group, exc_info=True)
+            return {}
+        return {k: v for k, v in raw.items() if k in g["fields"]} if isinstance(raw, dict) else {}
     if not g["legacy_key"]:
         return {}
     row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (g["legacy_key"],)).fetchone()
@@ -435,7 +485,7 @@ def _legacy_values(conn, group):
     return {k: raw[f.legacy] for k, f in g["fields"].items() if f.legacy and f.legacy != SCALAR_LEGACY and f.legacy in raw}
 
 
-def _stored(conn, group):
+def _stored(conn, group, strict=False):
     """資料庫裡的值（定義最新發布版優先，否則舊鍵）；沒有 ⇒ {}。"""
     try:
         row = D.get(conn, KIND, group, SCOPE)
@@ -448,7 +498,7 @@ def _stored(conn, group):
             return vals
         logger.warning("settings: 群組 %s 的定義內容格式不對，改用預設", group)
         return {}
-    return _legacy_values(conn, group)
+    return _legacy_values(conn, group, strict)
 
 
 def _due_pending(conn, group, now):
@@ -469,10 +519,10 @@ def _due_pending(conn, group, now):
     return due
 
 
-def _effective(conn, group, now=None, overlay=True):
+def _effective(conn, group, now=None, overlay=True, strict=False):
     g = _g(group)
     out = _defaults(group)
-    for k, v in _stored(conn, group).items():
+    for k, v in _stored(conn, group, strict).items():
         f = g["fields"].get(k)
         if f is None:
             continue
@@ -486,7 +536,7 @@ def _effective(conn, group, now=None, overlay=True):
     if overlay:
         from datetime import datetime
         for r in _due_pending(conn, group, now or datetime.now().isoformat(timespec="seconds")):
-            if not validate_values(group, {r["field"]: r["new"]}, partial=True):      # 含版本邊界：邊界收緊後，舊的待生效值不會生效
+            if not validate_values(group, {r["field"]: r["new"]}, partial=True, conn=conn):      # 含版本邊界：邊界收緊後，舊的待生效值不會生效
                 out[r["field"]] = r["new"]
     return out
 
@@ -516,6 +566,23 @@ def get_group(group, *, conn=None, now=None):
         with _lock:
             _cache[ck] = (tick, vals)
     return dict(vals)
+
+
+def get_group_effective(group, *, conn=None, now=None):
+    """**金額／法遵讀取端用的嚴格版**（SPEC §15.A.6 N2）：永遠讀即時的生效值（含到時的待生效），**忽略 `MOTRIX_SETTINGS_DEFAULTS_ONLY`**、不用行程內快取；
+    登錄表讀取失敗 ⇒ 退回轉接器 RAW 舊儲存（＝最後一次生效的值），**絕不退回程式預設**；連 RAW 也讀不到 ⇒ 丟例外（寧可大聲失敗，也不用錯的金額）。"""
+    g = _g(group)
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        try:
+            return _effective(c, group, now, strict=True)
+        except Exception:                           # noqa: BLE001
+            logger.error("settings: 嚴格讀取群組 %s 失敗，退回舊儲存（不用預設）", group, exc_info=True)
+            return _merged(_defaults(group), _legacy_values(c, group, strict=True))      # 轉接器讀不到 ⇒ 這裡丟例外（大聲失敗）
+    finally:
+        if own:
+            c.close()
 
 
 def get(group, field, *, conn=None, now=None):
@@ -551,9 +618,12 @@ def invalidate(group=None):
 
 # --- 寫 ---------------------------------------------------------------
 
-def _write_legacy(conn, group, values):
-    """雙寫舊鍵（一班過渡）：只動有 `legacy` 名的欄位，保留舊 dict 裡其他鍵。"""
+def _write_legacy(conn, group, values, old=None):
+    """雙寫舊鍵（一班過渡）：只動有 `legacy` 名的欄位，保留舊 dict 裡其他鍵。有自訂轉接器 ⇒ 交給它（只用傳入的 conn、冪等）。"""
     g = _g(group)
+    if g.get("adapter") is not None:
+        g["adapter"].write(conn, dict(values), old=old)
+        return
     if not g["legacy_key"]:
         return
     from datetime import datetime
@@ -740,6 +810,8 @@ def _split(g, eff, values):
     """把本次送出的欄位分成 (待生效 pend, 立即 imm, 放寬 loose)。`publish()` 與 `plan()`（預覽）共用同一個分類，不得各寫一份。"""
     def _loosens(f, new_v):
         old_v = eff[f.key]
+        if f.loosen == "both" and f.type not in ("int", "float"):     # 文字／json／選項：任何實質變更都算放寬（不分方向）
+            return not _same_value(new_v, old_v)
         if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
             return False
         if f.loosen == "both":                          # 兩個方向都算放寬（例：同一門檻被多條規則以不同方向引用）：任何變動都走放寬流程
@@ -753,7 +825,14 @@ def _split(g, eff, values):
 
 
 def show_value(f, v):
-    """給人看的值（白話）：選項型＝中文標籤；開關＝開／關；其他＝值＋單位。內部代碼不外露。"""
+    """給人看的值（白話）：選項型＝中文標籤；開關＝開／關；json＝摘要（不傾倒原始內容）；其他＝值＋單位。內部代碼不外露。"""
+    if f.type == "json":
+        if f.summarize is not None:
+            try:
+                return "；".join(f.summarize(None, v)) or "（空）"
+            except Exception:                       # noqa: BLE001
+                pass
+        return "已設定內容"
     for c in f.choices:
         if c[0] == v:
             return c[1]
@@ -762,11 +841,39 @@ def show_value(f, v):
     return "%s%s" % (v, (" " + f.unit) if f.unit else "")
 
 
+def _summary_of(f, old, new):
+    """json 欄位的「改了什麼」白話行（確認視窗、通知、待生效頁用）；沒有 summarize 或出錯 ⇒ 空清單。"""
+    if f.type != "json" or f.summarize is None:
+        return []
+    try:
+        return [str(x) for x in f.summarize(old, new)]
+    except Exception:                               # noqa: BLE001
+        return []
+
+
+def _normalized(group, values):
+    """json 欄位送進來先過轉接器的 normalize（CAS 與驗證兩邊都對正規化後的值算）；沒有 normalize 或出錯 ⇒ 原樣。"""
+    g = _g(group)
+    ad = g.get("adapter")
+    if ad is None or ad.normalize is None or not isinstance(values, dict):
+        return values
+    out = dict(values)
+    for k, v in values.items():
+        f = g["fields"].get(k)
+        if f is not None and f.type == "json":
+            try:
+                out[k] = ad.normalize(v)
+            except Exception:                       # noqa: BLE001
+                pass
+    return out
+
+
 def plan(group, values, *, user="", conn=None):
     """預覽（dry-run）：**不寫入、不 commit**。回逐欄分類與驗證結果，分類與 `publish()` 完全一致（共用 `_split`）。
     `kind`：`immediate`（立即生效）｜`pending`（確認期間後生效）｜`pending_approval`（確認期間後且需另一位最高管理者核准）｜`unchanged`。"""
     from datetime import datetime, timedelta
     g = _g(group)
+    values = _normalized(group, values)
     st = group_status(group)
     if st != "open":
         return {"ok": False, "problems": [{"path": "", "message": _NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。")}], "fields": [], "warnings": [],
@@ -783,12 +890,12 @@ def plan(group, values, *, user="", conn=None):
         days = confirm_period_days(c)
         from helpers import config_ledger as _L
         others = len(_L.real_superadmins(c, user))          # 展示帳號不算第二位
+        pend, imm, loose = _split(g, eff, values)
+        merged = _merged(_merged(base, imm), pend)
+        cross = validate_values(group, merged, conn=c)           # 與 publish 相同：整組＋跨欄位檢查（跨欄位檢查可查資料庫）
     finally:
         if own:
             c.close()
-    pend, imm, loose = _split(g, eff, values)
-    merged = _merged(_merged(base, imm), pend)
-    cross = validate_values(group, merged)                       # 與 publish 相同：整組＋跨欄位檢查
     if cross:
         out.update(ok=False, problems=cross)
         return out
@@ -798,10 +905,10 @@ def plan(group, values, *, user="", conn=None):
         f = g["fields"][k]
         if k in pend:
             old = eff[k]
-            kind = "unchanged" if v == old else ("pending_approval" if (k in loose and others > 0) else "pending")
+            kind = "unchanged" if _same_value(v, old) else ("pending_approval" if (k in loose and others > 0) else "pending")
         else:
             old = base[k]
-            kind = "unchanged" if v == old else "immediate"
+            kind = "unchanged" if _same_value(v, old) else "immediate"
         approvals = 1 if kind == "pending_approval" else 0
         if kind == "immediate":
             when_text = "立即"
@@ -816,7 +923,8 @@ def plan(group, values, *, user="", conn=None):
         out["fields"].append({"field": k, "label": f.label, "question": f.question, "unit": f.unit, "old": old, "new": v,
                               "oldText": show_value(f, old), "newText": show_value(f, v), "kind": kind,
                               "effectiveAt": when if kind in ("pending", "pending_approval") else None,
-                              "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
+                              "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days),
+                              "summary": _summary_of(f, old, v) if kind != "unchanged" else []})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
         out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天後生效」，儲存後會留下紀錄。" % days)
     return out
@@ -871,7 +979,7 @@ def live_impact(group, field, value, *, timeout=None):
     return res
 
 
-def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None, expected_values=None):
+def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None, expected_values=None, supersede=False):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
     `requires_pending` 欄位與放寬（`loosen`）：不立即生效——寫待生效明細（確認期間後，可撤銷），讀取時到期即生效。
@@ -880,11 +988,14 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     驗證不過 ⇒ SettingError（帶 problems）；有送審中的版本 ⇒ `core.definitions.DefinitionConflict`。
     `expected_values`（選填，`{欄位鍵: 呼叫端看到的值}`）＝逐欄 CAS：在 `begin_write` 之後、寫入前，逐欄比對目前**生效值**
     （含已到時的待生效覆蓋層）；任一欄不符 ⇒ `SettingConflict(keys, by, at)`，什麼都不寫。只比對有列出的欄位——
-    同群組別的欄位被別人改，不會誤拒。復原＝以 `expected_values=套用後的值` 回寫套用前的值。"""
+    同群組別的欄位被別人改，不會誤拒。復原＝以 `expected_values=套用後的值` 回寫套用前的值。
+    json 欄位（整份文件）：同欄位已有**別人**未到期的待生效申請 ⇒ `SettingConflict(code="pending_exists")`，除非 `supersede=True`（畫面確認後才帶）；
+    json 值在比對與驗證前先過轉接器的 normalize。"""
     from datetime import datetime, timedelta
     from core.txn import begin_write
     from helpers import config_ledger as L
     g = _g(group)
+    values, expected_values = _normalized(group, values), (_normalized(group, expected_values) if expected_values else expected_values)
     st = group_status(group)
     if st != "open":                                # 功能狀態（脊柱）：開發中／隱藏的群組一律不能寫——引擎層攔截，內部呼叫端（預設組、還原…）一併被擋
         raise SettingError(_NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。"))
@@ -909,9 +1020,15 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             if bad:
                 by, at = _conflict_origin(c, group, g, eff, bad)
                 raise SettingConflict(bad, by, at)
+        if not supersede:                               # json 欄位＝整份文件：不能無聲蓋掉別人還沒到期的申請（純量沒關係，維持取代）
+            me = L._actor(actor if actor is not None else user)[0]
+            for r in L.pending(c, "setting:%s" % group):
+                f_ = g["fields"].get(r["field"])
+                if f_ is not None and f_.type == "json" and r["field"] in values and r["key"] == group and r["actor"] != me:
+                    raise SettingConflict([r["field"]], r.get("actor_display") or r["actor"], r.get("at") or "", code="pending_exists")
         pend, imm, loose = _split(g, eff, values)
         new = _merged(base, imm)
-        problems = validate_values(group, _merged(new, pend))
+        problems = validate_values(group, _merged(new, pend), conn=c)
         if problems:
             raise SettingError("設定未儲存（%d 個問題）" % len(problems), problems)
         changes = [{"field": k, "old": base[k], "new": new[k]} for k in g["fields"] if base[k] != new[k]]
@@ -929,7 +1046,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
             L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
                      audit_action="settings.%s.update" % group, target_label=g["label"])
-            _write_legacy(c, group, new)
+            _write_legacy(c, group, new, old=base)
             result.update(changed=True, version=out["version"], values=_merged(eff, new), changes=changes)
         if pend:
             days = confirm_period_days(c)
@@ -972,7 +1089,7 @@ def materialize_due(conn=None, now=None):
     now = now or datetime.now().isoformat(timespec="seconds")
     own = conn is None
     c = conn if conn is not None else get_db()
-    began, total = False, 0
+    began, total, failed = False, 0, []
     try:
         began = begin_write(c)
         for group in list(_GROUPS):
@@ -984,24 +1101,23 @@ def materialize_due(conn=None, now=None):
             due = _due_pending(c, group, now)
             if not due:
                 continue
-            base = _effective(c, group, overlay=False)
-            new = dict(base)
-            for r in list(due):
-                if validate_values(group, {r["field"]: r["new"]}, partial=True):
-                    logger.warning("settings: 待生效項 #%s（%s.%s=%r）超出目前的欄位範圍或版本邊界，自動撤銷", r["id"], group, r["field"], r["new"])
-                    L.cancel(c, r["id"], "system", "超出目前的欄位範圍或版本邊界，到期時自動撤銷")
-                    due.remove(r)
-                    continue
-                new[r["field"]] = r["new"]
-            if not due:
-                continue
-            out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
-            _write_legacy(c, group, new)
-            total += len(L.promote_due(c, now, domain="setting:%s" % group))
-            invalidate(group)
-            logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
+            sp = "mat_%d" % (len(failed) + total + 1)
+            c.execute("SAVEPOINT " + sp)                 # 每個群組各一個：轉接器寫入失敗只影響這一群組（SPEC §15.A.5-2）
+            try:
+                total += _materialize_group(c, group, due, now)
+                c.execute("RELEASE " + sp)
+            except Exception as e:                       # noqa: BLE001
+                c.execute("ROLLBACK TO " + sp)           # 連同剛寫的定義列一併撤銷：定義列與舊鍵不得分歧
+                c.execute("RELEASE " + sp)
+                logger.error("settings: 群組 %s 的待生效值寫入失敗，已取消該群組到期的待生效項：%s", group, e, exc_info=True)
+                for r in due:
+                    L.cancel(c, r["id"], "system", "到期寫入失敗，自動取消（%s）" % str(e)[:80])
+                failed.append((group, str(e)[:120]))
+                invalidate(group)
         if began or own:
             c.commit()
+        for group, why in failed:                         # 外層 commit 之後才通知最高管理者（取消與通知各自可失敗，不拖垮每日工作）
+            _notify_materialize_failure(group, why)
         return total
     except Exception:
         if began and c.in_transaction:
@@ -1012,13 +1128,50 @@ def materialize_due(conn=None, now=None):
             c.close()
 
 
+def _notify_materialize_failure(group, why):
+    try:
+        from helpers import config_ledger as L
+        from datetime import datetime
+        conn = get_db()
+        try:
+            L._notify_others(conn, "", "setting:%s" % group, group, "money", "settings-center.html", datetime.now().isoformat(timespec="seconds"),
+                             "設定「%s」到期要生效時寫入失敗，已取消這次待生效的變更，請重新申請：%s" % (_g(group)["label"], why))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:                               # noqa: BLE001
+        logger.warning("settings: 通知待生效寫入失敗時出錯（群組 %s）", group, exc_info=True)
+
+
+def _materialize_group(c, group, due, now):
+    """把一個群組到期的待生效值寫進定義版本＋舊儲存並標 activated；回處理的明細列數。丟例外 ⇒ 呼叫端回復這個群組的 savepoint。"""
+    from helpers import config_ledger as L
+    base = _effective(c, group, overlay=False)
+    new = dict(base)
+    for r in list(due):
+        if validate_values(group, {r["field"]: r["new"]}, partial=True, conn=c):
+            logger.warning("settings: 待生效項 #%s（%s.%s=%r）超出目前的欄位範圍或版本邊界，自動撤銷", r["id"], group, r["field"], r["new"])
+            L.cancel(c, r["id"], "system", "超出目前的欄位範圍或版本邊界，到期時自動撤銷")
+            due.remove(r)
+            continue
+        new[r["field"]] = r["new"]
+    if not due:
+        return 0
+    out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
+    _write_legacy(c, group, new, old=base)
+    n = len(L.promote_due(c, now, domain="setting:%s" % group))
+    invalidate(group)
+    logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
+    return n
+
+
 # --- 預設組（政策設定檔；販售時依客戶／版本套用，走同一條 publish 管制）-------------
 
 def profiles():
     """所有欄位 `presets` 裡出現過的預設組名稱 → 涵蓋的欄位數。"""
     out = {}
     for gk, g in list(_GROUPS.items()):
-        if group_status(gk) != "open":              # 開發中／隱藏的群組不算在預設組裡（略過，見 profile_skipped）
+        if group_status(gk) != "open" or g.get("external"):      # 開發中／隱藏／外部的群組不算在預設組裡（外部群組只能走原頁面）
             continue
         for f in g["fields"].values():
             for name in f.presets:
@@ -1031,7 +1184,7 @@ def profile_skipped(name):
     out = []
     for gk, g in list(_GROUPS.items()):
         st = group_status(gk)
-        if st == "open":
+        if st == "open" or g.get("external"):
             continue
         n = sum(1 for f in g["fields"].values() if name in f.presets)
         if n:
@@ -1044,7 +1197,7 @@ def profile_preview(name, *, conn=None):
     """套用預設組會改哪些欄位（目前值 → 新值）；不寫入。"""
     out = []
     for gk, g in list(_GROUPS.items()):
-        if group_status(gk) != "open":
+        if group_status(gk) != "open" or g.get("external"):
             continue
         cur = get_group(gk, conn=conn)
         for k, f in g["fields"].items():

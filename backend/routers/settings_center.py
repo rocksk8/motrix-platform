@@ -56,9 +56,11 @@ _PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
 
 
 def _need(group):
-    """群組要存在且不是 hidden（hidden 對外等同不存在）。"""
+    """群組要存在且不是 hidden（hidden 對外等同不存在）。external 群組（設定中心以外的變更管制）一律拒絕：只能走原頁面，不得有第二個寫入入口。"""
     if group not in sr.groups() or sr.group_status(group) == "hidden":
         raise HTTPException(404, "沒有這個設定群組：%s" % group)
+    if sr.groups()[group].get("external"):
+        raise HTTPException(403, "這項設定要在原本的頁面調整，不能從設定中心的一般入口修改。")
 
 
 def _need_open(group):
@@ -76,6 +78,8 @@ def list_groups(authorization: str = Header(None)):
     conn = get_db()
     try:
         for g, meta in sr.groups().items():
+            if meta.get("external"):                              # 設定中心以外的群組不進一般清單與搜尋
+                continue
             info = sr.group_info(g)
             if info["status"] == "hidden":
                 continue
@@ -143,23 +147,25 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
     expected = body.get("expectedValues")
     if expected is not None and not isinstance(expected, dict):
         raise HTTPException(400, "expectedValues 必須是物件")
-    return _do_publish(group, values, reason, request, actor, expected)
+    return _do_publish(group, values, reason, request, actor, expected, supersede=bool(body.get("supersede")))
 
 
 def conflict_body(group, e):
     """409 衝突的 body（與 LINE 事件矩陣同形）：`{code, message, keys:[{key,name}], by, at}`；name＝欄位白話名。"""
     defs = sr.field_defs(group)
-    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。",
+    msg = ("這一項已有別人送出、還在等待生效的申請；繼續送出會取代它。" if getattr(e, "code", "") == "pending_exists"
+           else "這些設定在你送出前已被別人改動，請重新整理後再改。")
+    return {"code": getattr(e, "code", "conflict"), "message": msg,
             "keys": [{"key": k, "name": (defs[k].label or defs[k].question or k) if k in defs else k} for k in e.keys],
             "by": e.by, "at": e.at}
 
 
-def _do_publish(group, values, reason, request, actor, expected=None):
+def _do_publish(group, values, reason, request, actor, expected=None, supersede=False):
     """儲存／重置共用：先算分類（與 publish 共用 `_split`，寫入前的狀態才準）、再 publish。"""
     try:
         cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
-                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected)
+                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected, supersede=supersede)
     except sr.SettingConflict as e:
         raise HTTPException(409, conflict_body(group, e))
     except sr.SettingError as e:
@@ -308,7 +314,7 @@ def public_values(groups: str = "", authorization: str = Header(None)):
     is_admin = user.get("role") == "superadmin"
     out = {}
     for g in names:
-        if g not in meta or sr.group_status(g) == "hidden":        # hidden 對任何登入者都等同不存在
+        if g not in meta or sr.group_status(g) == "hidden" or meta[g].get("external"):        # hidden／外部群組對這個通用讀取口等同不存在
             raise HTTPException(404, "沒有這個設定群組：%s" % g)
         if meta[g]["sensitive"] and not is_admin:
             raise HTTPException(403, "此設定群組需要設定權限：%s" % g)
@@ -331,9 +337,11 @@ def list_pending(authorization: str = Header(None)):
         if r["key"] in meta and sr.group_status(r["key"]) != "open":   # 非 open 群組的待生效項不列（啟動時已取消；漏網的也不顯示）
             continue
         f = sr.field_defs(r["key"]).get(r["field"]) if r["key"] in meta else None
+        hide_raw = bool(r["key"] in meta and (meta[r["key"]].get("external") or (f is not None and f.type == "json")))      # 外部群組／整份文件：只給摘要，不給原始內容
         out.append({"id": r["id"], "group": r["key"], "groupLabel": meta[r["key"]]["label"] if r["key"] in meta else r["key"],
                     "field": r["field"], "label": f.label if f else r["field"],
-                    "old": r["old"], "new": r["new"],
+                    "old": None if hide_raw else r["old"], "new": None if hide_raw else r["new"],
+                    "summary": sr._summary_of(f, r["old"], r["new"]) if (f is not None and hide_raw) else [],
                     "oldText": sr.show_value(f, r["old"]) if f else str(r["old"]), "newText": sr.show_value(f, r["new"]) if f else str(r["new"]),
                     "reason": r["reason"], "actor": r["actor_display"] or r["actor"], "actorUser": r["actor"], "at": r["at"], "effectiveAt": r["effective_at"],
                     "approvals": list(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)})
