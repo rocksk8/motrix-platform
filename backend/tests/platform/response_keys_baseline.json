@@ -1770,6 +1770,12 @@
   ],
   "s": 200
  },
+ "/api/completion-notes/case-prefill": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "/api/completion-notes/quote-items": {
   "k": [
    "detail"
