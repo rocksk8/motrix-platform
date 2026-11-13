@@ -1528,12 +1528,38 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
         if "不大於 0" not in str(e):
             raise HTTPException(400, str(e))
     from helpers.settings import _set_setting
+    old_rate, old_split = _case_defaults()          # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值
+    new_split = {c: split.get(c, 0) for c in CATEGORIES}
     _set_setting(_RATE_KEY, rate)
-    _set_setting(_SPLIT_KEY, {c: split.get(c, 0) for c in CATEGORIES})
+    _set_setting(_SPLIT_KEY, new_split)
     _audit(_tok(authorization), "bonus.case.settings", "settings", "bonus_case_defaults",
            "獎金分潤預設：比率 %s、業務／專案／後勤 %s" % (_pct_text(rate), "／".join(
                _pct_text(split.get(c, 0)) for c in CATEGORIES)))
+    _notify_case_defaults_changed(old_rate, old_split, rate, new_split, user["username"])
     return {"ok": True}
+
+
+_SPLIT_LABELS = {"sales": "業務", "project": "專案", "admin": "後勤"}
+
+
+def _notify_case_defaults_changed(old_rate, old_split, new_rate, new_split, actor):
+    """SPEC §15-3：獎金預設維持立即生效，**存檔後**發通知（最高管理者全部＋無額外角色；一次存檔多欄合併成一則）。
+    只列有變的欄位；沒有任何欄位變 ⇒ 不發。永不丟例外（`notify_change` 自己吞）。"""
+    try:
+        from helpers import settings_notify as SN
+        rows = []
+        if old_rate != new_rate:
+            rows.append(("獎金預設／基本發放比例", _pct_text(old_rate) + "%", _pct_text(new_rate) + "%"))
+        for c in CATEGORIES:
+            if old_split.get(c, 0) != new_split.get(c, 0):
+                rows.append(("獎金預設／%s比例" % _SPLIT_LABELS.get(c, c), _pct_text(old_split.get(c, 0)) + "%", _pct_text(new_split.get(c, 0)) + "%"))
+        if not rows:
+            return
+        with SN.batch():
+            for label, o, n in rows:
+                SN.notify_change("bonus_default", label, o, n, actor=actor, risk="ops", link="bonus.html")
+    except Exception:                                                  # noqa: BLE001
+        logger.warning("獎金預設變更通知失敗（設定已存好）", exc_info=True)
 
 
 def _deduction_view(conn, award, lines):
