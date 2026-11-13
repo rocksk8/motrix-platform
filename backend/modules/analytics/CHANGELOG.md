@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 一條龍 P0a（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`，預設關＝與今天逐位元相同）
+## (next) — 一條龍 P0a（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`，預設關＝與今天逐位元相同）；已併 T82 凍結 head f66dfd9ef
 - `warranty.html`：旗標開時案號可點進該案件頁（`case-management.html?q=<案號>`）；旗標關時照舊為純文字。不改 API、資料、權限。
 
 ## 1.0.50 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
