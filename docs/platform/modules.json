@@ -155,6 +155,7 @@
    "js:static/approval-return.js",
    "js:static/attachment-slots.js",
    "js:static/auth-guard.js",
+   "js:static/company-wizard.js",
    "js:static/motrix-error.js",
    "js:static/getting-started-card.js",
    "js:static/hint-popover.js",
