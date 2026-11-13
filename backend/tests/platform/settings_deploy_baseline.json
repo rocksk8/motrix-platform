@@ -156,6 +156,18 @@
      null,
      false
     ],
+    "label_estimate": [
+     "估價單",
+     null,
+     null,
+     false
+    ],
+    "label_estimate_version": [
+     "估價單存檔版本",
+     null,
+     null,
+     false
+    ],
     "label_shipping": [
      "出貨單",
      null,

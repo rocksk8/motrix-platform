@@ -1362,7 +1362,7 @@ def _build_shipping_html(n: dict) -> str:
         '<div class="meta">\n'
         f'  <div><span>出貨單號：</span><strong style="font-family:Arial,sans-serif">{esc(n.get("noteNo",""))}</strong></div>\n'
         f'  <div><span>出貨日期：</span>{esc(n.get("shipDate",""))}</div>\n'
-        f'  <div><span>關聯報價單：</span>{esc(n.get("quoteNo",""))}</div>\n'
+        f'  <div><span>關聯{_DT.label_of_no(n.get("quoteNo"))}：</span>{esc(n.get("quoteNo",""))}</div>\n'
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'
@@ -2007,7 +2007,7 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     from helpers.builtin_fields import finance_rows as _fin_rows
     _fr = _fin_rows(v.get("quoteNo"))
     if _fr and "</body>" in out:
-        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（報價單）</div>'
+        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（' + _DT.label_of_no(v.get("quoteNo")) + '）</div>'
                 + ''.join(f'<div><span style="color:#666">{_html_text(lb, falsy_empty=True)}：</span>{_html_text(val, falsy_empty=True)}</div>' for lb, val in _fr)
                 + '</div>')
         out = out.replace("</body>", _blk + "</body>", 1)
@@ -2293,7 +2293,7 @@ def _build_payment_request_html_core(v: dict) -> str:
     _fr = _fin_rows(v.get('quoteNo'))
     if _fr:
         terms_section += (
-            '<div class="section-label">其他資訊（報價單）</div>'
+            '<div class="section-label">其他資訊（' + _DT.label_of_no(v.get('quoteNo')) + '）</div>'
             + ''.join(term_block(lb, val) for lb, val in _fr)
         )
 

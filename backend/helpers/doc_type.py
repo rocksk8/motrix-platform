@@ -15,7 +15,7 @@
 
 [單位] helper:doc_type    [層] L1    [穩定度] 契約
 [公開介面] DEFAULT_ESTIMATE_PREFIX, ESTIMATE, LABELS, NumberRule, QUOTE, QUOTE_PREFIX, RESERVED_PREFIXES, all_rules, case_no_re,
-          doc_type_of_no, estimate_prefix, estimate_prefixes_in_use, label, no_re, norm, prefix_for, relabel, rule_for, rule_of_no,
+          doc_type_of_no, estimate_prefix, estimate_prefixes_in_use, label, label_of_no, no_re, norm, prefix_for, relabel, rule_for, rule_of_no,
           seq_key, used_prefixes, validate_prefix
 [不變式] ① 單號的字首／日期格式／流水號位數只由 NumberRule 決定，其餘程式不寫死 `MQ-\\d{6}-\\d{3}` 之類（稽核、獎金、通知、PDF 一律問這裡）。
          ② 報價單單號（`MQ-YYYYMM-NNN`）與 `quote_seq` 鍵（`YYYYMM`）不因估價單而改變；估價單字首改過後，舊字首的單號仍被認得。
@@ -113,6 +113,12 @@ def norm(v):
 
 def label(doc_type):
     return LABELS[norm(doc_type)]
+
+
+def label_of_no(no, conn=None):
+    """單號 → 單據類型名稱（報價單／估價單）。只有單號、沒有 `doc_type` 欄位可用的地方（通知信、PDF 上「關聯單據」的字樣）用這支；
+    手上有 `quotations.doc_type` 的地方照舊用 `label(doc_type)`（欄位才是權威，這支只看字首）。查不到字首 ⇒ 報價單。"""
+    return label(doc_type_of_no(no, conn))
 
 
 def used_prefixes(conn=None):

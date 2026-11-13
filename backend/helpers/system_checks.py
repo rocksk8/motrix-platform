@@ -717,6 +717,9 @@ def _check_approval_reminders() -> None:
                 desc      = src["desc"](row, snap)
                 doc_no    = row["doc_no"]
                 doc_type  = src["label"]
+                if src["table"] == "quotations":
+                    from helpers import doc_type as _DT
+                    doc_type = _DT.label_of_no(doc_no)                  # 只看單號字首，不 SELECT quotations.doc_type（該欄位來自 case 的 migration；沒裝 case 的機器 SELECT 會讓整輪催辦中止）；報價單 ⇒ 仍是「報價單」
                 guard_base = f"approval_notif.{src['table']}.{doc_no}.{requested_at}"
 
                 def _mark(stage: str) -> None:

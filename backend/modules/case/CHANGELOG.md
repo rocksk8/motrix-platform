@@ -1,6 +1,11 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
+## (next) — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
+- 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
+- 中性用語（使用者裁示：共用名稱一律「報價單／估價單」）：信件類型名稱、通知偏好、簽核流程設定頁、行事曆事件目錄、稽核模組名、業務開發頁轉建／連結彈窗與輸入框提示（不再寫 MQ- 字首）。
+- 刻意不動：API 錯誤訊息（HTTPException）維持「報價單」；「轉建時選估價單」是新功能，不在本票。LINE 推播標題與列標籤（next_tier／approved／returned／resubmit、精算完結、結案報表、結案被擋、已結案變更）也依單據類型換字。已知未涵蓋：簽核佇列「報價單附件刪除」類型名（承攬商報價單附件，待 PM 確認是否屬於案件的報價單／估價單）。
+- 測試：`tests/test_estimate_static_labels_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）**
 - 變更（內部，不影響對外介面）：案件頁（`case-management-core.js`）、核准佇列（`approval-queue.html`）、報價單（`quotation-form.html`）讀據點清單／公司名稱改打 `GET /api/settings/company-profile/public`（只含名稱、統編、聯絡方式、據點 id＋名稱）；顯示與行為不變。完整端點只剩公司資料設定頁在用（後端新增「完整內容只給最高管理者」開關，預設關）。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
 - **（併入）(next) — 2026-11-13（fix/quote-first-put-history，審查後修訂：整包比對不看階段）**
@@ -13,7 +18,7 @@
 - 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。
 - 測試：簽核佇列過濾測試改認共用的 `visible_queue_items`（P1.5 把組項目與過濾抽成共用函式，過濾仍然只有一處）；公開品牌回應測試補 `tagline`；頭像選單 e2e 認「我的帳號」。
 
-## 1.0.223 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）；併入 fix/quote-items-align（報價單表單品項明細對齊）
+## 1.0.223 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）；併入 fix/quote-items-align（報價單表單品項明細對齊）；併入 fix/estimate-mail-doc-name（估價單信件用語）
 - 文字（T82 用詞整理）：案件管理頁「開票憑據」「出貨單」列的按鈕「送出審核」→「送出簽核」（承攬憑據與傳票頁維持原字）；不動 API／資料／權限
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
@@ -31,6 +36,8 @@
 - 測試：`tests/test_quote_list_waiting_on_t84_2026_11_13.py`（可見性／壞資料／查詢次數／現名／不帶參數鍵不存在／沒有報價金額檢視權的人看到的「等誰」與有權限者相同且金額遮蔽）、`tests/test_e2e_quote_list_t84_2026_11_13.py`（1280／390 瀏覽器）；更新被釘住的 t55／bp1／list_view_c1／p1_review_fixes／e2e_on_state 與 `quotations_list_off.json` golden。
 - 修正（前端，`quotation-form.html` FORM_VERSION V3.43→V3.44，≥768px 才套用；手機卡片版面不變）：① 品項明細同一列的輸入框改為全部貼同一條上緣（原本品名／廠牌貼列首、數量／單位／成本／毛利率／售價在列中間，列因「＋備註」「擇一方案」變高時差到 80px）；備註與擇一方案往下長，不再把別的欄推到中間。② 區段標題列（如「WiFi 7 無線AP」）在「顯示成本欄」時少了成本／毛利率／單項毛利三格，底色只到「售價」附近；補空格讓底色鋪滿整列。**已知未處理（另案，PM 2026-11-13 裁示不另修）**：已存品項若有數量與售價卻沒有 `amount`，載入後金額格會是空白、小計／合計不含該列、PDF 印 0。查證：正式機這類品項 0 筆（有數量單價但 amount 缺／0、amount 與數量×單價不符、有數量成本卻沒單價，三類皆 0）；正式機 `overhead_rule_mode`＝v2，存檔時伺服器會依數量×單價把每個品項的 `amount` 補寫回去。來源（承攬派工匯入報價單品項寫入 `unitPrice=None`／`amount=0`）另由 `fix/append-items-price` 在寫入時補算。故不做載入時正規化、不做 PDF fallback、也不對 legacy 模式做伺服器正規化（簽核中／已簽核單的內容指紋涵蓋 items.amount，正規化只能對草稿）。
 - 測試：`tests/test_e2e_quote_items_row_alignment_2026_11_13.py`（同列輸入框上緣差 ≤2px、標題列格數＝表頭欄數且鋪滿、手機無橫向捲動且標題列補格隱藏）；`tests/test_form_version_bumped_2026_09_24.py` 登記 V3.44。
+- **（併入）(next) — 2026-11-13（fix/estimate-mail-doc-name；估價單的信件／行事曆／PDF 用語）**
+- 用語補齊：估價單走到的信件／行事曆／PDF 不再寫死「報價單」——簽核逾期催辦、精算完結、結案報表、結案被擋、變更申請、審核中被編輯、成案行事曆事件、站內活動通知信的模組名稱（`quotations.py` 11 處 `notify_module_activity`）、出貨單「關聯○○單」、請款單／開票憑據「其他資訊（○○單）」，全依 `helpers.doc_type`（單號字首或 `doc_type` 欄位）取名；報價單文字逐字不變。獎金信用的是「案件單號」，不含「報價單」字樣，不需改。盤點後刻意不動：API 錯誤訊息／稽核紀錄文字、功能目錄標籤、開發案件重新關聯的措辭。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
 
 ## 1.0.222（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
 - 新增：`quotations.doc_type`（migration v10：`quote`＝報價單〔預設，舊資料一律是它〕｜`estimate`＝估價單）。流程（簽核、狀態、權限、轉單、業績）兩種完全相同。
@@ -38,7 +45,7 @@
 - 類型開立（第一次存檔）時定案、**之後不可改**（PUT 一律以資料庫現值為準；單號字首隨類型，要換類型請「複製到新單」）；補登歷史單一律是報價單。
 - 用語：PDF 標題「估　價　單」、站內通知與簽核 Email（標題／內文／按鈕／主旨）隨類型換名稱；報價單文字逐字不變。`email_notify` 五支簽核通知只加選填 `doc_label`，核心不動。
 - 清單：`GET /api/quotations` 加選填 `doc_type` 篩選、每列回 `doc_type`；前端清單有「新增估價單」、類型篩選與「估價單」標籤。
-- 已知未涵蓋（另開後續票）：案件批次匯出欄位未加類型欄；API 錯誤訊息、簽核逾期提醒（`system_checks`）、成本結算／獎金等其他 Email 仍寫「報價單」。
+- 已知未涵蓋（另開後續票）：案件批次匯出欄位未加類型欄；API 錯誤訊息仍寫「報價單」（信件部分見下一條補齊）。
 - 審查修正（hichan-2）：① 取用戶端暫定單號時，`quote_seq` 記在**單號自己的月份**（上個月取號、跨午夜才存檔不會把本月序號推高；本分支改寫時一度寫成「現在的月份」，已改回原行為，附測試）。② `docType` 加進編輯紀錄的忽略鍵（舊單第一次原樣存檔不再憑空多一筆「其他內容」）。③ 估價單字首不可撞任何現在實際有效的單據前綴：`helpers/doc_type.used_prefixes()`＝靜態保底（補上 BT／LN／HC／LV／OT／QT）＋站內表單範本檔＋已發布的自訂模組＋費用類型（預設與公司另外發布）；反方向，自訂模組與費用類型編輯器存前綴時不可等於目前或曾用過的估價單字首。**這個完整檢查只在「存設定」時跑**；執行期的 `estimate_prefix()`（每次稽核寫入／取號／PDF／通知）只做格式＋靜態保留清單的便宜檢查，不碰資料庫（測試釘住：200 次 `case_no_re()` 不呼叫 `used_prefixes`、不開連線、每次 < 0.1 ms）。④ 前端估價單換字時，使用者自己輸入、本身含「報價單」的內容（客戶名、專案名、條款…）原樣保留；歷史字首快取改為單一物件、一次讀寫。
 - 回滾須知：migration 0010 只加欄位（預設 `quote`），回滾程式碼不需動資料；但回滾後舊程式的 `_next_revision_no` 只認 `MQ-`，退回修改的估價單會變成 `ME-…-R1-R1`；舊指紋程式把 `docType` 算進內容，部署後被碰過的待簽估價單與舊單的已存指紋會對不上（需重新對帳）。已開出的估價單回滾前先結案或另行處理。
 - 內容指紋：`docType` 加進 `content_fp.EXCLUDED_KEYS`（讀取時由資料庫欄位注入、開立後不可改，同 `status`；舊單沒有這個鍵，既有指紋不失效、`FP_VERSION` 不變）。否則 GET 回的 `contentFp` 含 docType、伺服器用已存內容重算不含 ⇒ 複查編輯／核准一律 409「內容已更新」。複查編輯端點同 PUT：頁面送回的 `docType` 一律改回資料庫現值。**排除清單變動，請 K 審。**

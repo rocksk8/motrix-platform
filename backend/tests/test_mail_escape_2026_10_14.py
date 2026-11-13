@@ -19,10 +19,12 @@ from helpers import email_notify as EN
 #: 舊版（逸出前）`_build_html`，原樣保留作比對基準。
 _LEGACY_SRC = '''
 def _legacy_build_html(mail_key, title, badge_text, badge_color, rows, quote_no, base_url,
-                       note="", intro="", button_text="前往系統查看", impact=None, action=None):
+                       note="", intro="", button_text="前往系統查看", impact=None, action=None, doc_label=None):
     t = EN._mt.get(mail_key)
-    impact = impact if impact is not None else (t.impact if t else "")
-    action = action if action is not None else (t.action if t else "")
+    if doc_label is None:      # 2026-11-13 估價單：登記表共用名稱「報價單／估價單」依單據換成實際名稱（逸出行為與舊版相同）
+        doc_label = EN._doc_label_of(quote_no) if quote_no else "報價單"
+    impact = impact if impact is not None else (EN._concrete(t.impact, doc_label) if t else "")
+    action = action if action is not None else (EN._concrete(t.action, doc_label) if t else "")
     row_html = "".join(
         f'<div class="lbl">{k}</div><div class="val">{v}</div>'
         for k, v in rows
@@ -31,7 +33,7 @@ def _legacy_build_html(mail_key, title, badge_text, badge_color, rows, quote_no,
     note_html  = f'<div class="note">{note}</div>' if note else ""
     link = f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url
     sent_at = EN.datetime.now().strftime("%Y-%m-%d %H:%M")
-    source = "MOTRIX 系統（%s）／信件類型：%s" % (base_url, t.name if t else mail_key)
+    source = "MOTRIX 系統（%s）／信件類型：%s" % (base_url, EN._concrete(t.name, doc_label) if t else mail_key)
 
     def _sec(label, body):
         return (f'<div class="lbl" style="margin-top:14px;font-weight:700">{label}</div>'
