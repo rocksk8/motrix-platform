@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-11-13b"
+$ApplyScriptVersion = "2026-11-13c"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -498,6 +498,82 @@ function Start-InstallService {
     Start-Process -FilePath (Join-Path $env:WINDIR "System32\cmd.exe") -ArgumentList "/c `"$bat`"" `
         -WorkingDirectory $BackendDir -WindowStyle Hidden
     Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
+}
+
+# ── T84（2026-11-13，T82 事故）：停服之後「有人把服務拉回來」的防護＋啟動後 schema 一致性檢查 ───────────────
+# 事故（T82）：第一次啟動 core migration 13／14 沒跑、accounting 印舊版號（讀到半新半舊的程式樹），/api/ping 照過、套用報成功；
+#   只重啟一次就正常（程式樹早已完整）。證據：[2/6] 沒找到 autostart 迴圈（T76～T78 都找得到）、停服到啟動之間沒有再掃行程、健檢只 ping。
+# 最可能的原因（推論，沒有直接證據）：[2/6] 看不到的啟動器在殺掉服務後約 5 秒把服務拉起，與 robocopy 重疊。本腳本不賭原因，兩道防線：
+#   ① Stop-RespawnedService：複製完成後、啟動前各掃一次；有服務在跑（聽 $Port，或 uvicorn main:app --port $Port）＝停服後被拉起 ⇒ 再停一次。
+#   ② Invoke-SchemaVerify：健檢通過後，用**已安裝的新程式**唯讀比對「庫內 module_schema_versions」與「這份程式登記的最高 migration 版號」；
+#      不一致 ⇒ 重啟一次再驗；仍不一致 ⇒ 失敗結束（unhealthy_not_rolled_back，**不自動回滾**——回滾會還原資料庫，不能因為一個檢查就做）。
+#      驗不到（工具缺、當掉、輸出沒有標記）⇒ 大聲警告＋::NOTE::，不擋（人工照步驟 3 #12 查）。
+#   🔴 重生那一段（停服後被拉起）沒有真實環境可測：測試只能驗腳本結構與 python 工具，驗不到「迴圈真的重生時」。
+function Test-InstallServiceRunning {
+    $l = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if ($l.Count -gt 0) { return $true }
+    $portRe = '--port[= ]+' + $Port + ''
+    foreach ($p in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+        if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) { return $true }
+    }
+    return $false
+}
+
+function Wait-PortFreed {
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) { return $true }
+    }
+    return $false
+}
+
+$script:RespawnDetected = $false
+function Stop-RespawnedService([string]$Stage) {
+    if (-not (Test-InstallServiceRunning)) { return $false }
+    Warn "  [$Stage] 偵測到服務在停服之後又被拉起（複製期間啟動的行程可能讀到半新半舊的程式）⇒ 再停一次。"
+    $script:RespawnDetected = $true
+    $null = Stop-InstallService
+    $null = Wait-PortFreed
+    # 迴圈類啟動器約 5 秒後會再拉起：多等一個週期再看一次，最多再停一次
+    Start-Sleep -Seconds 6
+    if (Test-InstallServiceRunning) {
+        Warn "  [$Stage] 再停之後又被拉起 ⇒ 啟動器不在本腳本認得的範圍（不是 cmd.exe … autostart.bat）。再停一次；請事後人工確認排程工作與常駐啟動器。"
+        $null = Stop-InstallService
+        $null = Wait-PortFreed
+    }
+    Write-Host "::NOTE:: respawn_detected stage=$Stage"
+    return $true
+}
+
+# 回 @{ State = ok|mismatch|unverifiable; Text }。唯讀：不寫庫、不跑 init_db（tools\migrate_like_startup.py --verify-schema）。
+function Invoke-SchemaVerify {
+    $tool = Join-Path $BackendDir "tools\migrate_like_startup.py"
+    if (-not (Test-Path $tool)) { return @{ State = "unverifiable"; Text = "tool_missing（找不到 $tool）" } }
+    $pyArgs = @($tool, "--verify-schema")
+    foreach ($d in @((Join-Path $BackendDir "motrix_erp.db"), (Join-Path $BackendDir "motrix_erp_demo.db"))) {
+        if (Test-Path $d) { $pyArgs += @("--db", $d) }
+    }
+    if ($pyArgs -notcontains "--db") { return @{ State = "unverifiable"; Text = "no_db（找不到任何庫）" } }
+    $lic = Join-Path $BackendDir "license.key"
+    if (Test-Path $lic) { $pyArgs += @("--license", $lic) }
+    Push-Location $BackendDir
+    try { $r = Invoke-Py $pyArgs } finally { Pop-Location }
+    $state = "unverifiable"
+    if ($r.Text -match "SCHEMA_VERIFY_OK") { $state = "ok" }
+    elseif ($r.Text -match "SCHEMA_VERIFY_MISMATCH") { $state = "mismatch" }
+    return @{ State = $state; Text = $r.Text }
+}
+
+# 停 → 等 port → 啟動 → 等 ping；回是否健康。
+function Restart-InstallServiceAndWait {
+    $null = Stop-InstallService
+    $null = Wait-PortFreed
+    Start-InstallService | Out-Null
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Seconds 2
+        if (Test-Ping -Url $PingUrl -TimeoutSec 5) { return $true }
+    }
+    return $false
 }
 
 # AH-M3（2026-09-28 A 稽核）：停服**之後**才發生的失敗出口——不可以讓服務一直停著。
@@ -1008,6 +1084,7 @@ Get-ChildItem -Path $PackagePath -File | Where-Object { $_.Name -ne "deploy_mani
     Copy-Item $_.FullName -Destination $ProdRoot -Force
 }
 Ok "  程式碼＋文件已套用。"
+Stop-RespawnedService "複製後" | Out-Null
 
 # ============================================================
 # Step 4: 安裝/更新 Python 依賴
@@ -1052,6 +1129,7 @@ if (Test-Path $reqPath) {
 # 不必要的回滾，事後用同一行 curl.exe 手動重測完全正常）。單次逾時
 # 3→5 秒、迴圈次數 15→20（總等待上限拉寬，多數情況仍會在前幾次就成功
 # 提前跳出，不影響正常部署的速度）。
+Stop-RespawnedService "啟動前" | Out-Null
 Info "`n[4b/6] 重新啟動服務..."
 Start-InstallService
 
@@ -1063,6 +1141,33 @@ for ($i = 0; $i -lt 20; $i++) {
     $thisTry = Test-Ping -Url $PingUrl -TimeoutSec 5
     Info "    健檢第 $($i + 1)/20 次（經過 $([int]$hcStopwatch.Elapsed.TotalSeconds)s）：$(if ($thisTry) { '成功' } else { '無回應' })"
     if ($thisTry) { $healthy = $true; break }
+}
+
+# T84：啟動後 schema 一致性檢查（見 Invoke-SchemaVerify 上方的說明）。放在讀 log 之前——它可能重啟服務，之後的 log 範圍才是最後一次啟動。
+$schemaVerify = "skipped"
+if ($healthy) {
+    $sv = Invoke-SchemaVerify
+    $schemaVerify = $sv.State
+    if ($sv.State -eq "mismatch") {
+        Write-Host $sv.Text
+        Warn "  啟動後 schema 一致性檢查未過：服務第一次啟動沒有把 migration 跑完（常見原因：啟動時讀到半新半舊的程式）⇒ 重啟服務一次再驗。"
+        $healthy = Restart-InstallServiceAndWait
+        if ($healthy) {
+            $sv = Invoke-SchemaVerify
+            Write-Host $sv.Text
+            if ($sv.State -eq "ok") { $schemaVerify = "ok_after_restart"; Ok "  重啟後 schema 一致性檢查通過（第一次啟動漏跑 migration，已由重啟補上）。" }
+            elseif ($sv.State -eq "mismatch") {
+                $script:ServiceState = "up"
+                Fail "重啟後 schema 一致性檢查仍未過：庫內 module_schema_versions 落後於這份程式登記的 migration（見上方逐項）。新程式碼留在原地、**不自動回滾**（回滾會還原資料庫）；請人工判斷：回滾程式（rollback_update.ps1）或查 server.log／app.log 的 migration 錯誤。" "unhealthy_not_rolled_back"
+            } else { $schemaVerify = "unverifiable_after_restart"; Warn "  重啟後的 schema 一致性檢查驗不到（$($sv.Text.Trim())）⇒ 請人工照步驟 3 #12 查。" }
+        } else { $schemaVerify = "restart_unhealthy" }
+    } elseif ($sv.State -eq "ok") {
+        Ok "  啟動後 schema 一致性檢查通過（庫內 module_schema_versions 與這份程式登記的 migration 一致）。"
+    } else {
+        Write-Host $sv.Text
+        Warn "  啟動後 schema 一致性檢查驗不到 ⇒ 不代表一致；請人工照步驟 3 #12（module_schema_versions）查。"
+    }
+    Write-Host "::NOTE:: schema_verify=$schemaVerify respawn_detected=$($script:RespawnDetected)"
 }
 
 $logErrors = @()

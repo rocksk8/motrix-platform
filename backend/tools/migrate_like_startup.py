@@ -2,7 +2,7 @@
 """照服務啟動時的規則跑 migration：先載入模組、再 init_db、再確認模組 migration 都做完。
 
 [單位] tool:migrate_like_startup    [層] 部署工具
-[公開介面] run, main, check_expected_modules
+[公開介面] run, main, check_expected_modules, verify_schema
 [不變式] 載入模組與 main.py 走同一支（helpers.module_startup.load_modules_like_startup）；停用清單讀第一個 --db；
     模組 migration 未完成（core.migrations.incomplete 非空）或沒有結果（None）⇒ 失敗；
     模組載入失敗、停用清單讀不到 ⇒ 失敗（這次驗不到那些模組的 migration，不可以當通過）
@@ -19,6 +19,10 @@ init_db 跑到；乾跑與轉換原本只 `import db; db.init_db(p)` ⇒ 模組 
   --expect-module（B55 單一模組更新包 §1.3 步驟 5，apply_module_update.ps1 用）：照啟動規則載入之後，
       該模組必須 state=loaded 且 version＝給的版本 ⇒ 印 `MODULE_LOAD_OK <key>=<version>`；
       否則印 `MODULE_LOAD_FAIL <key>：<原因>`（與 migration 失敗分開，ps1 據此給不同 status）
+  --verify-schema（T84，apply_update.ps1 啟動後一致性檢查用）：**唯讀**——照啟動規則載入模組後，不跑 init_db，
+      逐庫（只讀開啟）比對 module_schema_versions 與「這份程式登記的各模組最高 migration 版號」；
+      有任何模組的庫內版號 < 登記的最高版號 ⇒ 印 `SCHEMA_VERIFY_MISMATCH`（逐項列出）exit 3；全部到位 ⇒ `SCHEMA_VERIFY_OK` exit 0。
+      用途：服務第一次啟動若讀到半新半舊的程式（停服後被舊啟動器拉起、與複製重疊），migration 會漏跑而 ping 照過（T82 實例）。
   exit 0 印 MIGRATE_LIKE_STARTUP_OK；失敗 exit 2 並印 MIGRATE_LIKE_STARTUP_FAIL 與原因
 """
 import argparse
@@ -91,6 +95,48 @@ def check_expected_modules(expect):
     return ok, bad
 
 
+def _read_versions_ro(path):
+    """只讀開啟 `path`，回 {模組: 版號}；表不存在回 {}。唯讀＝不建庫、不寫入（服務正在跑也可讀，WAL）。"""
+    import sqlite3
+    uri = "file:%s?mode=ro" % os.path.abspath(path).replace("\\", "/").replace("?", "%3f").replace("#", "%23")
+    conn = sqlite3.connect(uri, uri=True, timeout=10)
+    try:
+        try:
+            return {m: int(v) for m, v in conn.execute("SELECT module, version FROM module_schema_versions")}
+        except sqlite3.OperationalError:
+            return {}
+    finally:
+        conn.close()
+
+
+def verify_schema(dbs, license_path=None):
+    """T84：回 (mismatches, notes)。mismatches＝[(庫, 模組, 庫內版號, 登記的最高版號)]（庫內 < 登記）；空＝一致。
+
+    「登記的最高版號」＝照啟動規則載入模組之後 `core.migrations.registered()`（core 在 import 時登記、模組在載入時登記；
+    停用／未授權／載入失敗的模組不登記 ⇒ 不比，與服務啟動時一致）。庫內版號 > 登記（程式比庫舊）只記 notes，不算不一致。
+    不跑 init_db、不寫任何庫。舊包（沒有 helpers/module_startup.py）⇒ 拋 RuntimeError（驗不到，不可以當通過）。"""
+    if BACKEND not in sys.path:
+        sys.path.insert(0, BACKEND)
+    if not has_module_startup():
+        raise RuntimeError("這份程式沒有照啟動規則載入模組（舊包）⇒ 驗不到")
+    from helpers import licensing, module_startup
+    if license_path:
+        licensing.LICENSE_PATH = license_path
+    module_startup.load_modules_like_startup(db_path=dbs[0])
+    from core import migrations
+    expected = {m: max(v) for m, v in migrations.registered().items() if v}
+    mismatches, notes = [], []
+    for p in dbs:
+        have = _read_versions_ro(p)
+        for mod, top in sorted(expected.items()):
+            got = have.get(mod, 0)
+            if got < top:
+                mismatches.append((p, mod, got, top))
+            elif got > top:
+                notes.append("%s：模組 %s 庫內版號 %d 高於這份程式登記的 %d（程式比庫舊）" % (p, mod, got, top))
+    return mismatches, notes
+
+
 def _parse_expect(items):
     out = []
     for it in items or []:
@@ -111,7 +157,24 @@ def main(argv=None):
     ap.add_argument("--license")
     ap.add_argument("--expect-module", action="append", default=[],
                     help="<key>=<version>：載入後該模組必須 loaded 且版本相同（可重複）")
+    ap.add_argument("--verify-schema", action="store_true",
+                    help="唯讀：比對各庫 module_schema_versions 與這份程式登記的最高 migration 版號（不跑 init_db）")
     a = ap.parse_args(argv)
+    if a.verify_schema:
+        try:
+            mism, notes = verify_schema(a.db, a.license)
+        except Exception as exc:        # noqa: BLE001 — 驗不到＝不是「一致」，也不是「不一致」：印明確標記讓 ps1 分開處理
+            print("SCHEMA_VERIFY_UNVERIFIABLE %s: %s" % (type(exc).__name__, exc))
+            return 4
+        for n in notes:
+            print("  note " + n)
+        if mism:
+            for p, mod, got, top in mism:
+                print("  %s：模組 %s 庫內版號 %d，這份程式登記到 %d" % (p, mod, got, top))
+            print("SCHEMA_VERIFY_MISMATCH %d" % len(mism))
+            return 3
+        print("SCHEMA_VERIFY_OK")
+        return 0
     expect = _parse_expect(a.expect_module)
     problems = run(a.db, a.license)
     print("modules=%s" % ("like_startup" if has_module_startup() else "none（舊包：只跑 init_db）"))
