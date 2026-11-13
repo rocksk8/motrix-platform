@@ -203,9 +203,10 @@ def _appr(row) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) -> dict:
+def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None, auto_note: str = "") -> dict:
     """送審（草稿／已退回 → 待審核；沒設簽核層 ⇒ 直接已核准）。回 `{status, tierCount, firstApprovers, autoApproved}`。
-    實質欄位的雜湊在**核准當下**以目前的叫料內容存（`order`＝目前 materialOrders 該列）。"""
+    實質欄位的雜湊在**核准當下**以目前的叫料內容存（`order`＝目前 materialOrders 該列）。
+    `auto_note`（一條龍 D6=B，預設空＝與以往相同）：有值 ⇒ 連到已核准採購單且沒超出，不走簽核層、直接已核准，說明文字記在審核紀錄。"""
     item_id = str(order.get("itemId") or "")
     row = get(conn, quote_no, item_id)
     if row is None:
@@ -214,7 +215,7 @@ def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) 
         raise MaterialApprovalError(409, "「%s」狀態不可送審" % row["status"])
     flow = resolve_active_flow_setting(DOC_TYPE)
     try:
-        tiers = setting_to_active_tiers(flow, conn, user["username"])
+        tiers = [] if auto_note else setting_to_active_tiers(flow, conn, user["username"])
     except UnresolvedManagerError as e:
         raise MaterialApprovalError(400, str(e))
     now = _now()
@@ -223,13 +224,13 @@ def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) 
     link_snap = {"linkSnapshot": snapshot} if snapshot else {}                      # 32-S4：送審當下的連結／超出計畫判定，簽核人看到的是這份
     if not tiers:
         appr.update(link_snap)
-        appr.update({"autoApproved": True, "note": "未設定任何簽核層，送審即視為核准", "requestedBy": user["username"],
+        appr.update({"autoApproved": True, **({"poAutoApproved": True} if auto_note else {}), "note": auto_note or "未設定任何簽核層，送審即視為核准", "requestedBy": user["username"],
                      "requestedByDisplay": _display(user), "requestedAt": now})
-        hist.append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": "自動核准"})
+        hist.append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": auto_note or "自動核准"})
         appr["history"] = hist
         _save(conn, quote_no, item_id, S_APPROVED, appr, now, submitted_by=user["username"], submitted_at=now, approved_at=now,
               content_hash=content_hash(order))
-        return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True}
+        return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True, **({"poAutoApproved": True} if auto_note else {})}
     appr = {"requestedBy": user["username"], "requestedByDisplay": _display(user), "requestedAt": now, "tiers": tiers, "currentTier": 0,
             "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}], **link_snap}
     if _appr(row).get("grandfathered"):                                              # 重建 approval_json 不可丟掉「舊單不適用強制採購單」的標記（退回重送／核准後改都要認得）

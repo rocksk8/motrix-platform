@@ -77,11 +77,57 @@ list_catalog.register_list("supply:suppliers", "supply", {
 })
 
 
+#: 一條龍 P5a：非管理員（有採購模組權限）能看到的供應商欄位——**白名單**，一個函式；沒有列在這裡的鍵（銀行帳號、customFields、聯絡人明細、備註…）一律不回。
+#: 欄位＝id／code／name／taxId／phone／leadTimeDays＋清單目錄（`supply:suppliers`）的欄位 alias／category／contact／currency／paymentTerms／active。
+BUYER_SUPPLIER_FIELDS = ("id", "code", "name", "taxId", "phone", "leadTimeDays", "alias", "category", "contact", "currency", "paymentTerms", "active")
+
+
+def _buyer_list_allowed(user) -> bool:
+    from helpers.auth import user_has_module
+    from helpers.onepipe_flags import flag_on
+    return flag_on("buyer_access") and user_has_module(user, "procurement")
+
+
+def _buyer_row(row, d) -> dict:
+    """唯讀白名單列：只取 `BUYER_SUPPLIER_FIELDS`；`d`＝data_json（取不到的鍵給安全預設，不原樣倒出）。"""
+    d = d if isinstance(d, dict) else {}
+    src = {"id": row["id"], "code": row["code"] or "", "name": row["name"], "taxId": row["tax_id"], "phone": row["phone"],
+           "leadTimeDays": row["lead_time_days"]}
+    out = {k: src[k] for k in ("id", "code", "name", "taxId", "phone", "leadTimeDays")}
+    for k in ("alias", "category", "currency", "paymentTerms"):
+        v = d.get(k)
+        out[k] = v if isinstance(v, str) else ""
+    cs = d.get("contacts")                                   # 「主要聯絡人」＝第一位聯絡人的姓名（清單欄位 contact）；只取姓名，不帶職稱／電話／信箱／LINE
+    first = cs[0] if isinstance(cs, list) and cs and isinstance(cs[0], dict) else {}
+    out["contact"] = first.get("name") if isinstance(first.get("name"), str) else ""
+    out["active"] = d.get("active") if isinstance(d.get("active"), bool) else True
+    return out
+
+
+def _buyer_list() -> list:
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, code, name, tax_id, phone, lead_time_days, data_json FROM suppliers ORDER BY name").fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        out.append(_buyer_row(r, d))
+    return out
+
+
 @router.get("/api/suppliers")
 def list_suppliers(authorization: str = Header(None)):
     user = _require_user(authorization)
     perm.require(user, "supply.supplier.view")
     if user["role"] not in ("superadmin", "admin"):
+        # 一條龍 P5a（旗標 onepipe.buyer_access，預設關＝與今天相同回空）：擁有採購模組權限者看唯讀白名單欄位（見 `_buyer_row`）
+        if _buyer_list_allowed(user):
+            return _buyer_list()
         return []
     conn = get_db()
     rows = conn.execute(
@@ -173,6 +219,45 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
     return {"ok": True}
 
 
+def _supplier_references(conn, sid: int) -> dict:
+    """一條龍 P5b：誰在用這個供應商——採購單（`case_extra_expenses.data_json.supplierId`）與材料申請（`quotations.data_json` 的 `materialOrders[].supplierId`）。
+    只做『先用 LIKE 粗篩、再逐筆解析比對』（不用 json_extract）；案件模組沒裝（沒有那些表）⇒ 空。回 `{"po": [單號…], "orders": [案號…]}`。"""
+    out = {"po": [], "orders": []}
+
+    def _hit(v):
+        try:
+            return int(v) == int(sid)
+        except (TypeError, ValueError):
+            return False
+    try:
+        for r in conn.execute("SELECT doc_code, data_json FROM case_extra_expenses WHERE kind='purchase_order' AND data_json LIKE '%\"supplierId\"%'").fetchall():
+            try:
+                if _hit((json.loads(r["data_json"] or "{}") or {}).get("supplierId")):
+                    out["po"].append(r["doc_code"] or "")
+            except ValueError:
+                continue
+        for r in conn.execute("SELECT quote_no, data_json FROM quotations WHERE data_json LIKE '%\"supplierId\"%'").fetchall():
+            try:
+                d = json.loads(r["data_json"] or "{}") or {}
+            except ValueError:
+                continue
+            orders = ((d.get("caseRecord") or {}).get("materialOrders") if isinstance(d.get("caseRecord"), dict) else None) or []
+            if any(isinstance(o, dict) and _hit(o.get("supplierId")) for o in orders):
+                out["orders"].append(r["quote_no"])
+    except Exception:                                                          # noqa: BLE001  沒有那些表（案件模組未安裝）⇒ 沒有引用
+        return {"po": [], "orders": []}
+    return out
+
+
+def _refs_message(name: str, refs: dict) -> str:
+    parts = []
+    if refs["po"]:
+        parts.append("%d 張採購單（%s%s）" % (len(refs["po"]), "、".join(refs["po"][:3]), "…" if len(refs["po"]) > 3 else ""))
+    if refs["orders"]:
+        parts.append("%d 個案件的材料申請（%s%s）" % (len(refs["orders"]), "、".join(refs["orders"][:3]), "…" if len(refs["orders"]) > 3 else ""))
+    return "供應商「%s」已被%s使用，無法刪除。請先更換這些單據的供應商，或將此供應商改為停用。" % (name, "與".join(parts))
+
+
 @router.delete("/api/suppliers/{sid}")
 def delete_supplier(sid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -183,6 +268,12 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, "供應商不存在")
     sname = row['name']
+    from helpers.onepipe_flags import flag_on
+    if flag_on("supplier_master", conn=conn):                                             # 一條龍 P5b：被採購單／材料申請引用的供應商不能刪（旗標關＝與目前相同）
+        refs = _supplier_references(conn, sid)
+        if refs["po"] or refs["orders"]:
+            conn.close()
+            raise HTTPException(409, _refs_message(sname, refs))
     conn.execute("DELETE FROM suppliers WHERE id=?", (sid,))
     conn.commit()
     conn.close()

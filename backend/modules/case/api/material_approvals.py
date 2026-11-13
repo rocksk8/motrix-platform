@@ -166,7 +166,8 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
         if chk["problems"]:
             raise HTTPException(400, "；".join(p["message"] for p in chk["problems"]))
         try:
-            res = MA.submit(conn, quote_no, order, user, snapshot=chk["snapshot"])
+            from modules.case.po_auto_approve import auto_approve_note
+            res = MA.submit(conn, quote_no, order, user, snapshot=chk["snapshot"], auto_note=auto_approve_note(conn, quote_no, order))          # 一條龍 D6=B：旗標關時永遠是空字串＝與以往相同
         except MA.MaterialApprovalError as e:
             raise _http(e)
         row = MA.get(conn, quote_no, item_id)
@@ -175,8 +176,9 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.submit" if not res["autoApproved"] else "material_orders.auto_approve", "quotation", quote_no,
-           "材料申請 %s（%s）%s" % (info["docCode"], info["itemName"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
-           {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"]})
+           "材料申請 %s（%s）%s" % (info["docCode"], info["itemName"], "送審" if not res["autoApproved"] else ("連到已核准採購單，免再簽核" if res.get("poAutoApproved") else "未設定簽核層，直接核准")),
+           {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"],
+            **({"poAutoApproved": True, "poDocCode": str(order.get("poDocCode") or "")} if res.get("poAutoApproved") else {})})
     if res["autoApproved"]:
         _notify_after("approved", info, {"requester": user["username"]})
     else:
@@ -193,7 +195,8 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
                 conn2.close()
         except Exception:                                                          # noqa: BLE001 — 知會是附帶動作
             pass
-    return {"ok": True, "status": res["status"], "docCode": info["docCode"], "tierCount": res["tierCount"], "autoApproved": res["autoApproved"]}
+    return {"ok": True, "status": res["status"], "docCode": info["docCode"], "tierCount": res["tierCount"], "autoApproved": res["autoApproved"],
+            **({"poAutoApproved": True} if res.get("poAutoApproved") else {})}
 
 
 @router.post(_BASE + "/approve")

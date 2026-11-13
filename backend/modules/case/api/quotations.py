@@ -3468,6 +3468,8 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
                                 f"{quote_no}（{cname}）", "quotations.html")
         if body.deal_tag == '已成案' and old_tag != '已成案':
             spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
+            from modules.case.notify_next import notify_next               # 一條龍 P6（旗標 notify_next）：成交 ⇒ 通知採購開請購單；旗標關＝什麼都不做
+            notify_next("won", quote_no, actor=user["username"])
         if body.deal_tag == '已結案':
             try:
                 actor_u = _require_user(authorization)

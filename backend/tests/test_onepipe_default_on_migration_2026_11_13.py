@@ -31,10 +31,18 @@ def _sql(sql, args=()):
         c.close()
 
 
-def _fields():
+PERM_FLAGS = ("buyer_access", "receive_permission", "po_skip_resign")      # 放寬權限類旗標：預設關，不被遷移打開（P5a 起 buyer_access 已登錄）
+
+
+def _all_fields():
     from helpers import settings_registry as SR
     import helpers.settings_groups  # noqa: F401
     return list(SR._g(GROUP)["fields"])
+
+
+def _fields():
+    """會被遷移打開的欄位＝群組全部欄位去掉放寬權限類旗標。"""
+    return [f for f in _all_fields() if f not in PERM_FLAGS]
 
 
 def _effective():
@@ -53,7 +61,7 @@ def _store(**over):
     import db
     from core import definitions as D
     from helpers import settings_registry as SR
-    vals = {f: 0 for f in _fields()}
+    vals = {f: 0 for f in _all_fields()}                 # 群組驗證器要求每個欄位都有值（含放寬權限類）
     vals.update(over)
     c = db.get_db()
     try:
@@ -224,11 +232,15 @@ def test_permission_loosening_flags_are_never_opened_by_the_migration(fresh, mon
     assert set(startup._ONEPIPE_PERMISSION_FLAGS) >= {"buyer_access", "receive_permission"}
     victim = "links"                                          # 借一個已登錄的欄位演練排除清單
     monkeypatch.setattr(startup, "_ONEPIPE_PERMISSION_FLAGS", tuple(startup._ONEPIPE_PERMISSION_FLAGS) + (victim,))
-    _store()                                                  # 舊庫：每個旗標存成 0，沒有任何明細
+    _store(**{k: 0 for k in _all_fields()})                   # 舊庫：每個旗標（含放寬權限類）存成 0，沒有任何明細
     _run()
     eff = _effective()
+    from helpers import settings_registry as SR
+    for k in PERM_FLAGS:
+        if k in _all_fields():
+            assert int(SR.get(GROUP, k)) == 0, "%s：放寬權限類旗標遷移後仍是 0" % k
     assert eff[victim] == 0, "權限類旗標遷移後仍是 0"
-    assert all(v == 1 for k, v in eff.items() if k != victim), "其他 0 照開"
+    assert all(v == 1 for k, v in eff.items() if k != victim and k not in startup._ONEPIPE_PERMISSION_FLAGS), "其他 0 照開（放寬權限類旗標除外）"
     for k in startup._ONEPIPE_PERMISSION_FLAGS:               # 這兩個一旦登錄在群組裡，也同樣不開
         if k in eff:
             assert eff[k] == 0

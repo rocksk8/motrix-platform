@@ -6898,6 +6898,7 @@
    "groups[].values.bank_alias_date",
    "groups[].values.bank_alias_desc",
    "groups[].values.brand_prefix",
+   "groups[].values.buyer_access",
    "groups[].values.cancel_after_deal",
    "groups[].values.cancel_after_export",
    "groups[].values.cancel_after_invoice",
@@ -6997,6 +6998,7 @@
    "groups[].values.no_access",
    "groups[].values.note_template",
    "groups[].values.notification_keep_days",
+   "groups[].values.notify_next",
    "groups[].values.on_denied",
    "groups[].values.onsite",
    "groups[].values.ordered",
@@ -7009,6 +7011,7 @@
    "groups[].values.per_person",
    "groups[].values.phone",
    "groups[].values.planning",
+   "groups[].values.po_skip_resign",
    "groups[].values.prefill_unsigned",
    "groups[].values.procurement",
    "groups[].values.qty_mode",
@@ -7044,6 +7047,7 @@
    "groups[].values.start_month",
    "groups[].values.style",
    "groups[].values.suggested",
+   "groups[].values.supplier_master",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
    "groups[].values.tagline",
@@ -9013,6 +9017,15 @@
  "/api/daily-tasks/case-options": {
   "k": [
    "items"
+  ],
+  "s": 200
+ },
+ "/api/extra-expenses/suppliers": {
+  "k": [
+   "suppliers",
+   "suppliers[].code",
+   "suppliers[].id",
+   "suppliers[].name"
   ],
   "s": 200
  }

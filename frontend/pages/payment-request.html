@@ -222,6 +222,16 @@
             <div class="pr-hint">核准後，預定日前 3 天與當天會提醒財務；不填就不提醒。</div>
           </div>
           <!-- 採購單廠商收款帳戶（第 47 班）：出納付款時看得到這裡填的快照；完整帳號只有出納與最高管理者看得到，其他人只看末四碼 -->
+          <!-- 一條龍 P5b（旗標 onepipe.supplier_master）：採購單廠商可從供應商主檔挑選；旗標關或沒有選單權限 ⇒ 選單不出現，廠商照舊手動輸入 -->
+          <div class="pr-f" x-show="typeCode === 'purchase_order' && suppliers.length" data-testid="pr-po-supplier-block" style="margin-top:10px">
+            <label>從供應商主檔選擇廠商
+              <select x-model="form.supplierId" @change="pickSupplier()" data-testid="pr-po-supplier">
+                <option value="">不選擇（在上方「廠商」欄手動輸入）</option>
+                <template x-for="s in suppliers" :key="s.id"><option :value="String(s.id)" x-text="(s.code ? s.code + ' ' : '') + s.name"></option></template>
+              </select>
+            </label>
+            <div class="pr-hint">選擇後，廠商名稱以供應商主檔為準；材料申請連到此採購單時會沿用這家供應商。</div>
+          </div>
           <fieldset class="pr-f" x-show="typeCode === 'purchase_order'" data-testid="pr-po-bank-block" style="margin-top:10px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:8px 12px">
             <legend style="font-size:13px;font-weight:600;padding:0 4px">廠商收款帳戶（建議填寫；未填寫時，出納付款前將提醒向您確認）</legend>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
@@ -424,14 +434,15 @@
   <script>
     function paymentRequestPage() {
       function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
-      function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '', plannedPayDate: '', poBank: '', poBranch: '', poAccount: '', poAccountName: '' } }
+      function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '', plannedPayDate: '', poBank: '', poBranch: '', poAccount: '', poAccountName: '', supplierId: '' } }
       return {
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         tab: 'new', busy: false, err: '', result: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
         types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
-        prReqs: [], prrSel: {}, prrQty: {}, prrErr: '',                         // 第 44 班：採購單「從請購單帶入」（多選；部分數量）
+        suppliers: [],                                                           // 一條龍 P5b：採購單的供應商主檔選單（旗標關／無權限 ⇒ 空）
+        prReqs: [], prrSel: {}, prrQty: {}, prrErr: '',                       // 第 44 班：採購單「從請購單帶入」（多選；部分數量）
         form: blank(),
         pkOther: null, pkInv: null, _simple: null,        // 附件挑選器（累加、可移除；第44班）：附件／發票兩個框，數量與合計大小一起算
         mine: [], mineP: {}, mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {}, plannedDraft: {},
@@ -678,7 +689,25 @@
             this.linkedIds = []; this.prReasons = {}
             await this.loadPrItems()
             await this.loadPrReqs()
+            await this.loadSuppliers()
           } catch (e) { this.err = e.message }
+        },
+        // 一條龍 P5b：只在採購單載入；旗標關（404）或沒有權限（403）⇒ 空清單＝選單不出現
+        async loadSuppliers() {
+          this.suppliers = []; this.form.supplierId = ''
+          if (this.typeCode !== 'purchase_order') return
+          try {
+            var r = await fetch('/api/extra-expenses/suppliers', { headers: this._h() })
+            if (r.ok) this.suppliers = (await r.json()).suppliers || []
+          } catch (e) { this.suppliers = [] }
+        },
+        pickSupplier() {
+          var self = this
+          var s = this.suppliers.find(function (x) { return String(x.id) === String(self.form.supplierId) })
+          if (!s || !this._df) return
+          var v = this._df.getValue()
+          v.data.vendor = s.name
+          this._df.setValue({ data: v.data, lines: v.lines })
         },
         async saveTyped(submit) {
           this.err = ''; this.result = null
@@ -699,6 +728,11 @@
             if (ac && !/^\d{5,20}$/.test(ac)) { this.err = '收款帳號只能是數字（5～20 碼）'; return }
             if (ac && !bk) { this.err = '填了收款帳號請一併填銀行名稱'; return }
             if (bk || ac) payee = { payeeType: 'vendor', payeeName: an || String(v.data.vendor || '').trim(), payeeBank: (bk + (br ? ' ' + br : '')).trim(), payeeAccount: ac }
+          }
+          if (this.typeCode === 'purchase_order' && this.suppliers.length) {     // 一條龍 P5b：有選供應商主檔 ⇒ 送編號＋以主檔名稱為廠商；沒選 ⇒ 明確送空值（清掉先前的選擇，改回手動輸入）
+            var sp = this.form.supplierId ? this.suppliers.find((x) => String(x.id) === String(this.form.supplierId)) : null
+            v.data.supplierId = sp ? Number(sp.id) : null
+            if (sp) v.data.vendor = sp.name
           }
           var no = this.picked ? this.picked.quoteNo : '-'                       // 哨兵「-」＝無案件（W2 路徑）
           var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'

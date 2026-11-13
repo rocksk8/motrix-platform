@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 991,
-  "endpoints_api": 987,
+  "endpoints_total": 992,
+  "endpoints_api": 988,
   "write_total": 534,
   "write_api": 534,
-  "get_api": 453,
-  "distinct_paths_api": 840,
+  "get_api": 454,
+  "distinct_paths_api": 841,
   "write_with_body_api": 399,
   "write_with_path_param_api": 364
  },
  "select_star": {
-  "modules": 287,
+  "modules": 288,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -1034,6 +1034,11 @@
    "body": false
   },
   "GET /api/extra-expenses/po-bank-block": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/extra-expenses/suppliers": {
    "w": false,
    "pp": 0,
    "body": false

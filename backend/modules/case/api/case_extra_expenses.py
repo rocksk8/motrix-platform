@@ -305,9 +305,66 @@ def _caseless_create_allowed(user) -> bool:
     return user.get("role") in ("superadmin", "admin") or user_has_module(user, "expense_forms")
 
 
-def _guard_case(conn, quote_no: str, user: dict):
+def _buyer_pr_visible(conn, quote_no: str, user: dict) -> bool:
+    """一條龍 P5a（旗標 `onepipe.buyer_access`，預設關）：擁有採購模組權限者「看得到的案件」（`case_documents_readable`：案件成員／管理員／持案件管理模組）。
+    旗標關、沒有採購模組權限、案件看不到 ⇒ False（＝今天的行為）。只給「請購單」相關的守門用，不放寬其他單據。"""
+    from helpers.onepipe_flags import flag_on
+    if not quote_no or not flag_on("buyer_access") or not user_has_module(user, "procurement"):
+        return False
+    from helpers.case_access import case_documents_readable
+    return bool(case_documents_readable(conn, quote_no, user))
+
+
+def _buyer_pr_ok(conn, quote_no: str, user: dict, kind=None, exp_id=None) -> bool:
+    """採購同仁（旗標開）可以碰的只有「請購單」：新增＝`kind=="purchase_req"`；修改／送審／刪除＝**自己建立的**請購單列。其他一律 False。"""
+    if exp_id is None:
+        if kind != "purchase_req":
+            return False
+    else:
+        row = conn.execute("SELECT kind, created_by FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no)).fetchone()
+        if not row or (row["kind"] or "") != "purchase_req" or (row["created_by"] or "") != user.get("username"):
+            return False
+    return _buyer_pr_visible(conn, quote_no, user)
+
+
+def _notify_po_approved(row, quote_no: str, user: dict) -> None:
+    """一條龍 P6：採購單（有案件）最終核准 ⇒ 通知持有庫存模組、看得到案件的人準備收貨。旗標關／其他單據種類／無案件 ⇒ 什麼都不做；永不丟例外。"""
+    try:
+        if quote_no and (_col(row, "kind", "") or "") == "purchase_order":
+            from modules.case.notify_next import notify_next
+            notify_next("po_approved", quote_no, actor=user.get("username") or "", doc=_col(row, "doc_code", "") or "")
+    except Exception:                                                          # noqa: BLE001
+        pass
+
+
+def _po_supplier(conn, kind: str, data: dict, existing: dict = None, body_data=None, typed_name: str = ""):
+    """一條龍 P5b（旗標 `onepipe.supplier_master`，預設開）：採購單 `data.supplierId`＝從供應商主檔挑的廠商。
+    回傳主檔的廠商名稱（呼叫端據此把收款人類型／名稱以主檔為準）；沒有挑（手動輸入）、不是採購單、旗標關 ⇒ None（行為與目前相同）。
+    供應商不存在 ⇒ 400（白話）。就地整理 `data["supplierId"]` 為整數。
+    編輯時：既有單據帶著供應商、這次沒有明確送 `supplierId`、卻手動改了廠商名稱 ⇒ 視為改回手動輸入，移除 `supplierId`（不讓名稱與編號不一致）。"""
+    if kind != "purchase_order" or "supplierId" not in data:
+        return None
+    from helpers.onepipe_flags import flag_on
+    if not flag_on("supplier_master"):
+        return None
+    sid = data.get("supplierId")
+    explicit = isinstance(body_data, dict) and "supplierId" in body_data
+    if existing is not None and not explicit and typed_name and typed_name != (existing.get("_payee_name") or ""):
+        data.pop("supplierId", None)
+        return None
+    if isinstance(sid, bool) or not isinstance(sid, (int, str)) or not str(sid).strip().isdigit():
+        raise HTTPException(400, "供應商編號不正確，請重新選擇供應商，或改為手動輸入廠商名稱。")
+    row = conn.execute("SELECT name FROM suppliers WHERE id=?", (int(str(sid).strip()),)).fetchone()
+    if not row:
+        raise HTTPException(400, "找不到所選的供應商（可能已被刪除），請重新選擇，或改為手動輸入廠商名稱。")
+    data["supplierId"] = int(str(sid).strip())
+    return (row["name"] or "").strip() or None
+
+
+def _guard_case(conn, quote_no: str, user: dict, kind=None, exp_id=None):
     """報價單存在＋擁有者檢查。`quote_no` 可列舉，不擋就是 IDOR。
-    准不准只看 L1 `case_owner_readable`（附件提供者用同一支，稽核 D AT-M1b）；這裡只負責說出原因。"""
+    准不准只看 L1 `case_owner_readable`（附件提供者用同一支，稽核 D AT-M1b）；這裡只負責說出原因。
+    一條龍 P5a：`kind`（新增）／`exp_id`（改／送審／刪除）有給、且旗標開＋採購模組權限＋案件看得到＋是「請購單」時，另外放行（`_buyer_pr_ok`）。"""
     if quote_no == "":
         return          # 無案件：沒有報價單可查；逐列可見規則在 `_load`（`_caseless_visible`），建立權限在 create_extra_expense
     q = conn.execute(
@@ -317,6 +374,8 @@ def _guard_case(conn, quote_no: str, user: dict):
     if not q:
         deny_case(None, quote_no, user, "not_found")
     if not case_owner_readable(conn, quote_no, user):
+        if (kind is not None or exp_id is not None) and _buyer_pr_ok(conn, quote_no, user, kind, exp_id):
+            return                                          # 一條龍 P5a：採購同仁的請購單（旗標預設關）
         deny_case(None, quote_no, user, "denied")          # M01-O1：看不到＝不存在（同一個 404，audit 記真正原因）
 
 
@@ -512,7 +571,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
         raise HTTPException(403, "沒有建立無案件費用單據的權限")
     conn = get_db()
     try:
-        _guard_case(conn, quote_no, user)
+        _guard_case(conn, quote_no, user, kind=(body.kind or "").strip() or None)
         now = datetime.now().isoformat(timespec="seconds")
         kind = EF.check_kind(body.kind)
         if not kind:
@@ -524,6 +583,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             lines, over_plan = PI.check_lines(conn, quote_no, kind, lines)          # 32-S2：明細連案件品項（沒有 itemId ⇒ 原樣）
             PI.stamp_from_pr(data, lines)                                           # 第 44 班：data.fromPr／pr_no 依明細的請購單連結同步
             PI.check_from_pr(conn, quote_no, kind, data)
+            sup_name = _po_supplier(conn, kind, data)                                # 一條龍 P5b（旗標 supplier_master）：採購單挑供應商主檔
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
             cat_col = EF.doc_category(lines, body.category or "其他", conn)                # 費用單據的便利欄：取明細金額最大的類別（不再一律「其他」）
@@ -531,6 +591,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             lines, total, data, doc_code, over_plan = [], _recalc(body), {}, "", []
             desc = (body.description or "").strip()
             cat_col = body.category or "其他"
+            sup_name = None
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
             "INSERT INTO case_extra_expenses "
@@ -547,7 +608,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
              now, now, display,
              kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
-             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
+             "vendor" if sup_name else body.payeeType, sup_name or (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
              EF.current_def_version(conn, kind),                 # 建立當下的類型定義版本（送審時再釘一次）
              normalize_date(body.plannedPayDate, "預定付款日")),
         )
@@ -571,7 +632,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
     _validate(body)
     conn = get_db()
     try:
-        _guard_case(conn, quote_no, user)
+        _guard_case(conn, quote_no, user, exp_id=exp_id)
         row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可編輯（僅草稿與已駁回可改）")
@@ -591,11 +652,14 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             lines, over_plan = PI.check_lines(conn, quote_no, row_kind, lines, exclude_id=exp_id)      # 32-S2
             PI.stamp_from_pr(data, lines)                                                              # 第 44 班
             PI.check_from_pr(conn, quote_no, row_kind, data)
+            sup_name = _po_supplier(conn, row_kind, data, existing=dict(_jcol(row, "data_json"), _payee_name=_col(row, "payee_name", "") or ""),
+                                    body_data=body.data, typed_name=(body.payeeName or "").strip())      # 一條龍 P5b
             desc = (body.description or "").strip() or row["description"]
             cat_col = EF.doc_category(lines, body.category or "其他", conn)
         else:
             lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
             over_plan = []
+            sup_name = None
             cat_col = body.category or "其他"
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
@@ -610,8 +674,8 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
              now, user.get("display_name") or user["username"],
              json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines),
              EF.department_of(data, body.departmentId) if row_kind else _col(row, "department_id", None),
-             _payee_val(body, "payeeType", row, "payee_type"),
-             _payee_val(body, "payeeName", row, "payee_name"),
+             "vendor" if sup_name else _payee_val(body, "payeeType", row, "payee_type"),
+             sup_name or _payee_val(body, "payeeName", row, "payee_name"),
              _payee_val(body, "payeeBank", row, "payee_bank"),
              _payee_val(body, "payeeAccount", row, "payee_account"),
              normalize_date(body.plannedPayDate, "預定付款日") if body.plannedPayDate is not None else (_col(row, "planned_pay_date", "") or ""),
@@ -656,12 +720,30 @@ def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
             " ORDER BY updated_at DESC", (kw, kw, kw))
         out = []
         for r in rows:
-            if case_owner_readable(conn, r["quote_no"], user):
+            if case_owner_readable(conn, r["quote_no"], user) or _buyer_pr_visible(conn, r["quote_no"], user):          # P5a：旗標開＋採購模組權限者也能挑自己看得到的案件
                 out.append({"quoteNo": r["quote_no"], "customerName": r["customer_name"] or "",
                             "projectName": r["project_name"] or ""})
                 if len(out) >= PAYREQ_CASES_MAX:
                     break
         return out
+    finally:
+        conn.close()
+
+
+@router.get("/api/extra-expenses/suppliers")
+def po_supplier_picker(authorization: str = Header(None)):
+    """一條龍 P5b（旗標 `onepipe.supplier_master`）：採購單挑廠商用的供應商選單，只回 id／code／name（沒有統編、電話、銀行、聯絡人）。
+    旗標關 ⇒ 404（與沒有這條路由相同）。對象＝與 `GET /api/suppliers` 看得到名單的人相同或更窄：管理員以上，或（旗標 `onepipe.buyer_access` 開＋持採購模組）；其他人 403，不因此放寬。"""
+    from helpers.onepipe_flags import flag_on
+    user = _require_user(authorization)
+    if not flag_on("supplier_master"):
+        raise HTTPException(404, "Not Found")
+    if user.get("role") not in ("superadmin", "admin") and not (flag_on("buyer_access") and user_has_module(user, "procurement")):
+        raise HTTPException(403, "您沒有查看供應商名單的權限，無法選擇供應商；請直接輸入廠商名稱。")
+    conn = get_db()
+    try:
+        return {"suppliers": [{"id": r["id"], "code": r["code"] or "", "name": r["name"] or ""}
+                              for r in conn.execute("SELECT id, code, name FROM suppliers ORDER BY name, id").fetchall()]}
     finally:
         conn.close()
 
@@ -725,7 +807,8 @@ def payreq_mine(authorization: str = Header(None)):
             " WHERE e.created_by = ? ORDER BY e.id DESC LIMIT 100", (user["username"],)).fetchall()
         out = []
         for r in rows:
-            if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user):      # 無案件列＝自己建立的，照列
+            if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user) and not (
+                    (r["kind"] or "") == "purchase_req" and _buyer_pr_visible(conn, r["quote_no"], user)):      # 無案件列＝自己建立的，照列；P5a：採購同仁自己的請購單也列
                 continue
             d = _row_to_dict(r, full_account=has_finance_access(user))
             d.update({"quoteNo": r["quote_no"], "customerName": r["_cust"] or "", "projectName": r["_proj"] or ""})
@@ -830,7 +913,7 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
     user = _require_user(authorization)
     conn = get_db()
     try:
-        _guard_case(conn, quote_no, user)
+        _guard_case(conn, quote_no, user, exp_id=exp_id)
         row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
@@ -935,7 +1018,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
     user = _require_user(authorization)
     conn = get_db()
     try:
-        _guard_case(conn, quote_no, user)
+        _guard_case(conn, quote_no, user, exp_id=exp_id)
         row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可送審")
@@ -975,6 +1058,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
                     f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}；未設定簽核層，送審即核准）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=user["username"], payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 送審即核准 ⇒ 有預定付款日就建「付款待辦」
+            _notify_po_approved(row, quote_no, user)             # 一條龍 P6（旗標 notify_next）：採購單核准 ⇒ 通知下一棒（收貨）
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -1087,6 +1171,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
                         f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=requester or "", payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 最終核准 ⇒ 有預定付款日就建「付款待辦」
+            _notify_po_approved(row, quote_no, user)             # 一條龍 P6
             notify_module_activity("案件管理", "支出申請核准", display, f"{XN.doc_ident(conn, row)}｜{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),

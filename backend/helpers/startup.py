@@ -822,7 +822,7 @@ def _tighten_company_profile_full_read_once() -> None:
 _ONEPIPE_DEFAULT_ON_MARK = "migration_onepipe_default_on_t84"
 #: 使用者裁示（2026-11-14）：放寬權限類的一條龍旗標（買方可見、收貨權限…）預設關，**不被這個一次性遷移打開**——
 #: 即使欄位存成 0、也沒有人為關閉的明細。要開由最高管理者在設定中心自己開。新增這類旗標時請加進來。
-_ONEPIPE_PERMISSION_FLAGS = ("buyer_access", "receive_permission")
+_ONEPIPE_PERMISSION_FLAGS = ("buyer_access", "receive_permission", "po_skip_resign")
 
 
 def enable_onepipe_defaults_once() -> None:
