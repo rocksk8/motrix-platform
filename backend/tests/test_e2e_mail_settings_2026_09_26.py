@@ -9,6 +9,7 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import expect  # noqa: E402
 
 from tests._e2e_login import inject_login  # noqa: E402
 
@@ -25,17 +26,22 @@ def _q(sql, args=()):
 
 
 @pytest.mark.e2e
-def test_superadmin_sets_recipients_in_page(live_server, make_user, e2e_browser):
+def test_superadmin_sets_recipients_in_page(live_server, make_user, new_page, login_as):
+    """S3b：信件矩陣是草稿制——選「指定帳號／角色」→ 選人視窗勾工程角色 → 頂端儲存列「儲存」才寫入。"""
     sa = make_user(username="ms_e2e_sa", role="superadmin")
-    page = e2e_browser.new_page()
-    inject_login(page, live_server, *sa)
+    page = new_page(viewport={"width": 1500, "height": 1800})
+    login_as(page, sa)
     page.goto(f"{live_server}/pages/mail-settings.html")
-    page.locator('[data-testid="ms-mode-settlement_finalized"]').wait_for(timeout=20000)
-    page.select_option('[data-testid="ms-mode-settlement_finalized"]', "custom")
-    page.locator('[data-testid="ms-role-settlement_finalized-engineer"]').click()
-    page.locator('[data-testid="ms-save-settlement_finalized"]').click()
-    page.wait_for_function(
-        f"() => {DATA}.items.find(t => t.key === 'settlement_finalized').okMsg === '已儲存'", timeout=15000)
+    row = page.locator('[data-testid="mx-row-settlement_finalized"]')
+    row.wait_for(timeout=20000)
+    row.locator('select[data-col="mode"]').select_option("custom")
+    page.locator('[data-testid="ms-pick-role-engineer"]').check()
+    page.locator(".mx-dlg button").filter(has_text="套用").click()
+    expect(page.locator("[data-testid=mx-draft-count]")).to_contain_text("1 項未儲存的修改")
+    assert not _q("SELECT value_json FROM system_settings WHERE key='mail_recipient_overrides'"), "草稿階段不寫入"
+    page.locator("[data-testid=mx-draft-save]").click()
+    page.locator(".mx-dlg button").filter(has_text="儲存").last.click()
+    expect(page.locator("[data-testid=mx-draftbar]")).to_have_count(0)
     rows = _q("SELECT value_json FROM system_settings WHERE key='mail_recipient_overrides'")
     assert json.loads(rows[0]["value_json"])["settlement_finalized"] == {
         "mode": "custom", "users": [], "roles": ["engineer"]}

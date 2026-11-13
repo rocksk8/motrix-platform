@@ -843,6 +843,7 @@
   "routers/item_reads.py::_latest_by_others::dev_logs": "unscoped",
   "routers/item_reads.py::_latest_by_others::work_logs": "unscoped",
   "routers/item_reads.py::module_counts::audit_log": "unscoped",
+  "routers/mail_settings.py::_conflict_who::audit_log": "unscoped",
   "routers/map_points.py::_data_fingerprint::<from>": "dynamic",
   "routers/map_points.py::_json_points::<from>": "dynamic",
   "routers/map_points.py::_map_geocode_backlog::<from>": "dynamic",

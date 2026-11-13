@@ -1,10 +1,10 @@
-"""瀏覽器端對端：信件 × 行事曆通知矩陣（MAIL-CAL 階段 1；使用者裁示 2026-10-05）。
+"""瀏覽器端對端：信件 × 行事曆通知矩陣（MAIL-CAL 階段 1；使用者裁示 2026-10-05；S3b 2026-11-13 起改為共用矩陣元件的草稿制）。
 
-在 mail-settings.html 逐格操作，觀測點打在資料庫落地值（system_settings）與元件狀態：
-- 業務類信件格取消勾選 ⇒ mail_recipient_overrides[key].off；重新勾選 ⇒ 設定消失（與升級前位元相同）
-- 簽核類信件格取消勾選要先確認：取消確認 ⇒ 勾選還原、沒寫入；確認 ⇒ 寫入
-- 鎖住的資安類信件格停用；沒有日期的行事曆格停用
-- 行事曆格 ⇒ google_calendar.events（與 Google 行事曆設定頁同一份）；副列「同上」；僅行事曆的列信件格停用
+在 mail-settings.html 逐格操作（點格子只進草稿、頂端儲存列「儲存」才寫入），觀測點打在資料庫落地值（system_settings）：
+- 業務類信件格關閉 ⇒ mail_recipient_overrides[key].off；重新開啟 ⇒ 設定消失（與升級前位元相同）
+- 簽核類信件關閉要先確認（第二段警告）：取消 ⇒ 沒寫入；確認 ⇒ 寫入
+- 鎖住的資安類信件格停用；沒有日期的信件沒有行事曆格
+- 行事曆格 ⇒ google_calendar.events（與 Google 行事曆設定頁同一份）；副列「同上」；僅行事曆的列沒有信件格
 """
 import json
 import os
@@ -12,10 +12,7 @@ import os
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-
-from tests._e2e_login import inject_login  # noqa: E402
-
-DATA = "Alpine.$data(document.querySelector('[x-data]'))"
+from playwright.sync_api import expect  # noqa: E402
 
 
 def _setting(key):
@@ -28,84 +25,108 @@ def _setting(key):
         conn.close()
 
 
-def _tid(page, tid):
-    return page.locator('[data-testid="%s"]' % tid)
+def _row(page, key):
+    return page.locator('[data-testid="mx-row-%s"]' % key)
+
+
+def _mail(page, key):
+    return _row(page, key).locator(".mx-sw")
+
+
+def _cal(page, key):
+    return _row(page, key).locator('[data-mx="chip"][data-col="cal"]')
+
+
+def _dlg(page, text):
+    return page.locator(".mx-dlg button").filter(has_text=text).last
+
+
+def _save(page, second=None):
+    """頂端儲存列「儲存」→ 確認視窗「儲存」；second＝要再按的第二段（簽核／系統類關閉的警告）。"""
+    page.locator("[data-testid=mx-draft-save]").click()
+    _dlg(page, "儲存").wait_for(state="visible", timeout=10000)
+    _dlg(page, "儲存").click()
+    if second:
+        _dlg(page, second).wait_for(state="visible", timeout=10000)
+        _dlg(page, second).click()
+    expect(page.locator("[data-testid=mx-draftbar]")).to_have_count(0)
+
+
+def _open(live_server, make_user, new_page, login_as, name, key):
+    sa = make_user(username=name, role="superadmin")
+    page = new_page(viewport={"width": 1500, "height": 1800})
+    login_as(page, sa)
+    page.goto(f"{live_server}/pages/mail-settings.html")
+    _row(page, key).wait_for(timeout=20000)
+    return page
 
 
 @pytest.mark.e2e
-def test_matrix_cells_write_back_to_the_existing_stores(live_server, make_user, e2e_browser):
-    sa = make_user(username="nm_e2e_sa", role="superadmin")
-    page = e2e_browser.new_page(viewport={"width": 1500, "height": 900})
-    inject_login(page, live_server, *sa)
-    page.goto(f"{live_server}/pages/mail-settings.html")
-    _tid(page, "ms-row-settlement_finalized").wait_for(timeout=20000)
+def test_matrix_cells_write_back_to_the_existing_stores(live_server, make_user, new_page, login_as):
+    page = _open(live_server, make_user, new_page, login_as, "nm_e2e_sa", "settlement_finalized")
 
-    # 業務類：取消勾選 ⇒ off；再勾選 ⇒ 設定消失
-    box = _tid(page, "ms-mail-settlement_finalized")
-    assert box.is_checked() and box.is_enabled()
-    box.click()
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'settlement_finalized').mailOff === true", timeout=15000)
-    assert _setting("mail_recipient_overrides")["settlement_finalized"]["off"] is True and not box.is_checked()
-    _tid(page, "ms-off-settlement_finalized").wait_for(state="visible", timeout=5000)
-    box.click()
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'settlement_finalized').mailOff === false", timeout=15000)
-    assert "settlement_finalized" not in _setting("mail_recipient_overrides") and box.is_checked()
+    # 業務類：關閉 ⇒ 草稿不寫入、儲存後 off；再開 ⇒ 設定消失
+    sw = _mail(page, "settlement_finalized")
+    expect(sw).to_have_attribute("aria-checked", "true")
+    sw.click()
+    expect(sw).to_have_attribute("aria-checked", "false")
+    assert "settlement_finalized" not in _setting("mail_recipient_overrides"), "草稿階段不寫入"
+    _save(page)
+    assert _setting("mail_recipient_overrides")["settlement_finalized"]["off"] is True
+    expect(_mail(page, "settlement_finalized")).to_have_attribute("aria-checked", "false")
+    _mail(page, "settlement_finalized").click()
+    _save(page)
+    assert "settlement_finalized" not in _setting("mail_recipient_overrides")
 
-    # 簽核類：確認警告——先取消（不寫入、勾選還原），再確認（寫入）
-    box = _tid(page, "ms-mail-payment_request_submitted")
-    seen = []
-    page.once("dialog", lambda d: (seen.append(d.message), d.dismiss()))
-    box.click()
-    page.wait_for_timeout(600)
-    assert seen and "payment_request_submitted" not in _setting("mail_recipient_overrides") and box.is_checked(), "取消確認後不可寫入、勾選要還原"
-    page.once("dialog", lambda d: (seen.append(d.message), d.accept()))
-    box.click()
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'payment_request_submitted').mailOff === true", timeout=15000)
-    assert _setting("mail_recipient_overrides")["payment_request_submitted"]["off"] is True and "簽核" in seen[-1]
+    # 簽核類：第二段警告——先取消（不寫入），再確認（寫入）
+    _mail(page, "payment_request_submitted").click()
+    page.locator("[data-testid=mx-draft-save]").click()
+    _dlg(page, "儲存").click()
+    _dlg(page, "仍要關閉").wait_for(state="visible", timeout=10000)
+    assert "相關人員不會再收到通知" in page.locator(".mx-dlg").last.inner_text()
+    _dlg(page, "取消").click()
+    assert "payment_request_submitted" not in _setting("mail_recipient_overrides"), "取消確認後不可寫入"
+    _save(page, second="仍要關閉")
+    assert _setting("mail_recipient_overrides")["payment_request_submitted"]["off"] is True
 
-    # 停用格：鎖住的資安類信件格、沒有日期的行事曆格
-    locked = _tid(page, "ms-mail-backup_error")
-    assert locked.is_disabled() and locked.is_checked()
-    assert _tid(page, "ms-cal-payment_request_submitted").is_disabled() and _tid(page, "ms-cal-backup_error").is_disabled()
+    # 停用格：鎖住的資安類信件格；沒有日期的信件沒有行事曆格
+    assert _mail(page, "backup_error").is_disabled()
+    assert _cal(page, "payment_request_submitted").count() == 0 and _cal(page, "backup_error").count() == 0
 
-    # 行事曆格：主列寫 events；副列「同上」；停用的信件格（僅行事曆列）
+    # 行事曆格：主列寫 events；副列「同上」；僅行事曆的列沒有信件格
     page.screenshot(path=os.environ["MATRIX_SHOT"]) if os.environ.get("MATRIX_SHOT") else None
-    cal = _tid(page, "ms-cal-case_stage_deadline")
-    assert cal.is_checked()
+    cal = _cal(page, "case_stage_deadline")
+    expect(cal).to_have_attribute("aria-pressed", "true")
     cal.click()
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'case_stage_deadline_manager').calendar.enabled === false", timeout=15000)
+    _save(page)
     assert _setting("google_calendar")["events"]["stage_due"] is False
-    assert "同上" in _tid(page, "ms-cal-case_stage_deadline_manager").inner_text()
-    assert _tid(page, "ms-mail-cal:receipt_logged").evaluate("e => e.tagName") == "SPAN"
-    only = _tid(page, "ms-cal-cal:receipt_logged")
-    assert not only.is_checked()
+    assert "同上" in _row(page, "case_stage_deadline_manager").locator('[data-testid="ms-calnote-case_stage_deadline_manager"]').inner_text()
+    assert _mail(page, "cal:receipt_logged").count() == 0
+    only = _cal(page, "cal:receipt_logged")
+    expect(only).to_have_attribute("aria-pressed", "false")
     only.click()
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'cal:receipt_logged').calendar.enabled === true", timeout=15000)
+    _save(page)
     assert _setting("google_calendar")["events"]["receipt_logged"] is True
 
 
 @pytest.mark.e2e
-def test_phase2_date_event_cells_default_off_and_write_back_one_by_one(live_server, make_user, e2e_browser):
+def test_phase2_date_event_cells_default_off_and_write_back_together(live_server, make_user, new_page, login_as):
     """階段 2：三個新日期型事件的行事曆格——預設未勾、可勾、寫回 google_calendar.events；信件格不受影響。"""
-    sa = make_user(username="nm_e2e_p2", role="superadmin")
-    page = e2e_browser.new_page(viewport={"width": 1500, "height": 900})
-    inject_login(page, live_server, *sa)
-    page.goto(f"{live_server}/pages/mail-settings.html")
-    _tid(page, "ms-row-warranty_expiry").wait_for(timeout=20000)
+    page = _open(live_server, make_user, new_page, login_as, "nm_e2e_p2", "warranty_expiry")
     cells = (("warranty_expiry", "warranty_expiry"), ("range_task_deadline", "range_task_due"), ("case_project_overdue", "project_end"))
     for mail, code in cells:
-        cal = _tid(page, "ms-cal-" + mail)
-        assert cal.is_enabled() and not cal.is_checked(), "%s：預設要可勾且未勾" % mail
-        assert _tid(page, "ms-mail-" + mail).is_checked(), "%s：信件格不受影響" % mail
+        cal = _cal(page, mail)
+        assert cal.is_enabled() and cal.get_attribute("aria-pressed") == "false", "%s：預設要可勾且未勾" % mail
+        assert _mail(page, mail).get_attribute("aria-checked") == "true", "%s：信件格不受影響" % mail
     assert not _setting("google_calendar").get("events"), "沒動任何格子 ⇒ 沒有寫入"
-    for mail, code in cells:                                        # 逐格：勾一個、只有那一個寫入
-        _tid(page, "ms-cal-" + mail).click()
-        page.wait_for_function(f"() => {DATA}.items.find(t => t.key === '{mail}').calendar.enabled === true", timeout=15000)
-        ev = _setting("google_calendar")["events"]
-        assert ev[code] is True and [c for c, v in ev.items() if v is True and c in ("warranty_expiry", "range_task_due", "project_end")].count(code) == 1
+    for mail, code in cells:                                        # 三格一起勾、一次儲存
+        _cal(page, mail).click()
+    expect(page.locator("[data-testid=mx-draft-count]")).to_contain_text("3 項未儲存的修改")
+    assert not _setting("google_calendar").get("events"), "草稿階段不寫入"
+    _save(page)
     ev = _setting("google_calendar")["events"]
     assert all(ev[c] is True for _, c in cells)
-    _tid(page, "ms-cal-warranty_expiry").click()                    # 再取消：回到關
-    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'warranty_expiry').calendar.enabled === false", timeout=15000)
+    _cal(page, "warranty_expiry").click()                           # 再取消：回到關
+    _save(page)
     assert _setting("google_calendar")["events"]["warranty_expiry"] is False
     assert "warranty_expiry" not in _setting("mail_recipient_overrides"), "行事曆格不寫信件設定"

@@ -279,7 +279,8 @@ def test_pages_bind_the_registry():
     assert "/api/mail-types/receivable?user_id=" in users and ":disabled=\"!item.receivable\"" in users
     assert "{key:'approval_request'" not in users              # 不再有寫死的副本
     page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
-    assert "'/api/mail-types/' + encodeURIComponent(t.key) + '/recipients'" in page
+    # S3b（2026-11-13）：頁面改成共用矩陣元件的草稿制，儲存走批次端點（單列 PUT 保留給舊呼叫端）
+    assert "/api/settings/mail/batch-preview" in page and "/api/settings/mail/batch'" in page and "/api/settings/mail/batch-undo" in page
     # C4：選單宣告在 core/menu_l1.json（sidebar.js 不再寫死清單）
     from core import menu as M
     assert any(it["href"] == "mail-settings.html" for it in M.load_l1()["items"])
@@ -359,4 +360,4 @@ def test_monthly_report_has_one_recipient_source(client, staff):
 def test_settings_page_shows_no_recipient_and_elsewhere():
     from core import source_tree   # 頁面位置一律經 page_file（C1；列車 train/0926-0415 交會）
     page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
-    assert 'x-show="t.noRecipient"' in page and "t.managedElsewhere" in page
+    assert "r.noRecipient" in page and "r.managedElsewhere" in page          # S3b：矩陣元件（rowTags／欄位 disabled）
