@@ -142,6 +142,8 @@
 - L1（新增，只增；快照由整合者重產）：新單位 `helpers/user_perm_batch.py`（`BATCH_GRANT_REFUSED`、`MAX_USERS`、`list_catalog`、`parse_request`、`preview`、`apply`）；`helpers.duty_roles.gate_reason(touched, reason, extra_keys=())`（相容擴充：批次拒絕清單也走同一條原因規則）、`record_user_modules_change(..., sensitive=True)`（相容擴充）。
 - 行為變更（新端點）：`POST /api/users/permissions/batch/preview`（唯讀）、`POST /api/users/permissions/batch`（最高管理者）；`GET /api/modules/catalog` 新增 `highSensitiveKeys`／`batchGrantRefused`／`financeKeys`（前端不寫死）。規則：高敏感鍵與批次拒絕清單（案件待辦－工程主管確認／業務確認、報價單、費用單據、檔案中心、外包名冊）**授予一律略過、取消要原因（≥4 個不同字）並寫權限變更紀錄**；財務三鍵批次不動；最高管理者不納入；範本預覽＝套用（`planHash` 不符 409）；整批同一個寫入交易。既有 `PUT／POST /api/users` 與職責角色各動作行為不變。
 - 測試：`tests/test_user_perm_batch_2026_11_13.py`（四條路徑各一題）。
+- 行為變更（通知，S1d 共用元件）：批次套用／復原在 commit **之後**經 `settings_notify`（`batch()`）發**一則**合併通知給其他在職最高管理者（操作者本人不收）；動到高敏感／批次拒絕鍵的人 ⇒ 該項 `risk=security`＋`sensitive`（非最高管理者看不到值與原因，另發 LINE 給最高管理者）。通知失敗不影響已 commit 的寫入。
+- 行為變更（審查修正）：範本與復原絕不新增個人扣項；範本套用必帶 `planHash`（否則 400）；取消可點名對方仍持有的舊鍵；取消對方沒有的權限回報略過。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

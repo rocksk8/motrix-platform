@@ -528,3 +528,61 @@ def test_undo_of_a_revoke_of_a_role_given_key_restores_it(client, world):
     r = client.post(BATCH + "/undo", json={"changes": [p for p in ap.json()["people"] if p["status"] == "change"]}, headers=h)
     assert r.status_code == 200 and r.json()["applied"] == [bob], r.text
     assert _subtract_rows(bob) == [] and _effective_of(bob) == before
+
+
+# ── 通知（S1d 共用元件；SPEC §13-7／§12.10）────────────────────────────────
+
+def _notes(username):
+    import db
+    conn = db.get_db()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT message, ref_label FROM notifications WHERE username=? AND type='settings_changed' ORDER BY id", (username,)).fetchall()]
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
+def line_calls(monkeypatch):
+    calls = []
+    from helpers import line_notify as LN
+    monkeypatch.setattr(LN, "notify_event", lambda *a, **kw: calls.append((a, kw)))
+    return calls
+
+
+def test_a_batch_sends_one_merged_notice_to_the_other_superadmins_without_the_actor(client, world, line_calls):
+    h, amy, bob = world["h"], world["amy"], world["bob"]
+    r = _post(client, h, {"userIds": [amy, bob], "grant": ["map"]})
+    assert r.status_code == 200 and sorted(r.json()["applied"]) == sorted([amy, bob])
+    assert _notes("root") == [], "操作者本人不收站內通知"
+    n = _notes("boss2")
+    assert len(n) == 1, "兩個人的變更合併成一則"
+    assert "amy" in n[0]["message"] and "bob" in n[0]["message"]
+    assert line_calls == [], "沒有高敏感項目 ⇒ 不發 LINE"
+
+
+def test_a_gated_change_goes_to_line_and_hides_values_from_non_superadmins(client, world, line_calls, make_user):
+    h, amy = world["h"], world["amy"]
+    make_user("sales_watch", role="sales")
+    r = _post(client, h, {"userIds": [amy], "revoke": ["settings"], "reason": "人員轉調收回系統設定"})
+    assert r.status_code == 200
+    assert len(line_calls) == 1 and line_calls[0][0] == ("settings_changed",), "高敏感 ⇒ LINE 給最高管理者"
+    kw = line_calls[0][1]
+    assert "人員轉調收回系統設定" not in json.dumps(kw, ensure_ascii=False)
+    full = _notes("boss2")
+    assert len(full) == 1 and "人員轉調收回系統設定" in full[0]["message"], "最高管理者看得到原因"
+
+
+def test_undo_sends_its_own_single_notice_and_a_notify_failure_never_breaks_the_write(client, world, monkeypatch):
+    h, amy, bob = world["h"], world["amy"], world["bob"]
+    ap = _post(client, h, {"userIds": [amy, bob], "grant": ["map"]})
+    before = len(_notes("boss2"))
+    r = client.post(BATCH + "/undo", json={"changes": [p for p in ap.json()["people"] if p["status"] == "change"]}, headers=h)
+    assert r.status_code == 200 and len(_notes("boss2")) == before + 1, "復原也是一批＝一則"
+    from helpers import settings_notify as sn
+
+    def boom(*a, **kw):
+        raise RuntimeError("notify down")
+    monkeypatch.setattr(sn, "emit", boom)
+    r2 = _post(client, h, {"userIds": [amy], "grant": ["map"]})
+    assert r2.status_code == 200 and "map" in _mods(amy), "通知壞掉不影響已 commit 的寫入"

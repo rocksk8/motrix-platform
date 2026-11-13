@@ -296,6 +296,31 @@ def _write_people(conn, actor, plan, reason, ip) -> list:
     return applied
 
 
+def _notify(actor, plan, applied, reason, undo=False) -> None:
+    """commit **之後**通知（共用元件 `settings_notify`，SPEC §13-7／§12.10）：一批＝**一則**合併通知（`batch()`）；
+    動到高敏感／批次拒絕鍵的人 ⇒ 該項 `risk="security"`＋`sensitive`（非最高管理者看不到值與原因；另發 LINE 給最高管理者）。
+    只放「誰、幾項」不放權限鍵名清單。永不丟例外、不影響已 commit 的寫入。"""
+    try:
+        from helpers import settings_notify as sn
+        done = set(applied or ())
+        who = (actor or {}).get("username") or ""
+        with sn.batch(verb="復原" if undo else "", header="復原一批權限調整" if undo else "批次調整權限"):
+            for p in plan["people"]:
+                if p["userId"] not in done:
+                    continue
+                bits = []
+                if p["effectiveAdded"] or p["effectiveRemoved"]:
+                    bits.append("實際生效多%d項、少%d項" % (len(p["effectiveAdded"]), len(p["effectiveRemoved"])))
+                if p["bind"] or p["unbind"]:
+                    bits.append("角色綁定+%d／-%d" % (len(p["bind"]), len(p["unbind"])))
+                gated = bool(p["gated"])
+                sn.emit([sn.make_item("permission", "%s的權限" % (p["name"] or p["username"]), "調整前", "，".join(bits) or "已調整", "updated",
+                                      actor=who, reason=reason, risk="security" if gated else "none", sensitive=gated, link="users.html")])
+    except Exception:                                    # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("user_perm_batch._notify 失敗（不影響已 commit 的寫入）", exc_info=True)
+
+
 def apply(conn, actor, body, ip="") -> dict:
     """套用：同一個寫入交易重算計畫（與預覽同一支函式）、過共用檢查點、逐人寫入並記 `permission_changes`＋`audit_log`。
     `planHash` 有帶且與重算結果不同 ⇒ 409。任何例外 ⇒ rollback（全部不寫）。回應的 `people[*]` 就是「復原這一批」要送回的內容。"""
@@ -314,6 +339,7 @@ def apply(conn, actor, body, ip="") -> dict:
     except Exception:
         conn.rollback()
         raise
+    _notify(actor, plan, applied, reason)
     out = _public(plan)
     out["ok"] = True
     out["applied"] = applied
@@ -392,6 +418,7 @@ def undo(conn, actor, body, ip="") -> dict:
     except Exception:
         conn.rollback()
         raise
+    _notify(actor, plan, applied, reason, undo=True)
     out = _public(plan)
     out.update({"ok": True, "applied": applied, "conflicts": conflicts})
     out["summary"].update({"restored": len(applied), "conflicts": len(conflicts)})
