@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune：刪 test_flag_gated_x_show_has_no_static_inline_display——已併入 tests/platform/test_xshow_inline_display_2026_10_14.py（頁面：case-management.html；旗標函式一律 `[a-zA-Z]Shown(`＋layoutOn＋store，是原四份的聯集）
 """C2：案件頁「執行管理」分頁的子分頁（執行進度、材料申請、設備登錄、保固備註、待辦事項、成員）接上版面引擎（list `execTabs`）。
 登記／綁定／核心（執行進度）、OFF 中性（node）、ON 順序與隱藏（node＋真的 runtime）、被隱藏的目前子分頁退回「執行進度」、金額遮蔽不受影響。"""
 import json
@@ -91,15 +92,3 @@ def test_progress_is_core_the_rest_can_be_hidden_renamed_and_restored(client, ma
     assert client.post(BASE + "/restore/1", headers=boss, params={"scope": "company"}, json={"note": "b"}).status_code == 200
     assert mine() == v1
 
-
-def test_flag_gated_x_show_has_no_static_inline_display():
-    bad = []
-    for m in re.finditer(r"<[a-zA-Z][^<>]*?>", _page(), re.S):
-        tag = m.group(0)
-        xs = re.search(r'x-show="([^"]*)"', tag)
-        if not xs or not re.search(r"\b[a-zA-Z]Shown\(", xs.group(1)):
-            continue
-        st = re.search(r'(?<![:\w-])style="([^"]*)"', tag)
-        if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
-            bad.append(re.sub(r"\s+", " ", tag)[:120])
-    assert not bad, bad
