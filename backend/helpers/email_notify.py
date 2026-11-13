@@ -2467,8 +2467,8 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
             ("狀態檔最後更新", st.get("seen_at") or "—")]
     intro = _safe("監控本身可能沒有在正常運作：" + "；".join(_esc(str(p)) for p in (problems or [summary])))
     note = _safe(
-        "<b>這代表什麼</b>：心跳是「獨立於本機」的當機告警（本機停止打卡 ⇒ healthchecks.io 寄信）。"
-        "它壞掉時，<b>真正當機或斷電可能不會有人被通知</b>。"
+        "<b>這代表什麼</b>：心跳是「獨立於本機」的服務中斷告警（本機停止打卡 ⇒ healthchecks.io 寄信）。"
+        "它故障時，<b>真正發生系統異常或斷電可能不會有人被通知</b>。"
         "<br><br><b>請依序檢查（正式機）</b>："
         "<br>1. 登入 healthchecks.io 看這個 check 的狀態與歷史，確認<b>收件人設定仍有效</b>"
         "<br>2. 排程工作「MOTRIX ERP Heartbeat」是否還在、最近一次執行結果"

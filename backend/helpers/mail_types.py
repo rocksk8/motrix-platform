@@ -213,7 +213,7 @@ register("license_expiry", "系統授權即將到期", _S, "superadmins", "",
 register("backup_stale", "備份已停止運作", _S, "superadmins", "",
          "超過規定時間沒有成功的備份，發生故障時可能遺失資料。", "請檢查備份排程、雲端硬碟掛載與磁碟空間，處理後確認下一次備份成功。")
 register("heartbeat_stale", "心跳監控本身異常", _S, "superadmins", "",
-         "心跳監控壞掉時，伺服器當機或斷電可能沒有人被通知。", "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。")
+         "心跳監控故障時，伺服器異常或斷電可能沒有人被通知。", "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。")
 register("disk_space_low", "磁碟空間不足", _S, "superadmins", "",
          "磁碟空間不足時，備份與上傳可能失敗。", "請清理暫存檔案或擴充磁碟空間。")
 register("line_quota_warning", "LINE 本月訊息額度告警", _S, "superadmins", "",
