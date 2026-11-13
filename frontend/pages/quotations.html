@@ -121,6 +121,7 @@
       tr.ql-row .row-actions .icon-btn { width:44px; height:44px; }
       tr.ql-lane { display:block; }
       tr.ql-lane > td { display:block; }
+    }  /* 收 @media (max-width:1023px)（原本漏關，T84 合併後整段 T84 樣式被包進平板 media query） */
     /* ── T84：三個有定義的數字、目前條件列、提示框、下一步、緊湊密度、手機卡片 ── */
     .ql-sum { display:flex; flex-direction:column; gap:2px; flex:1 1 150px; min-width:0; text-align:left; background:none; border:none; border-radius:var(--radius); padding:6px 10px; cursor:pointer; font-family:var(--font-zh); color:inherit; }
     .ql-sum + .ql-sum { border-left:1px solid var(--border-light); border-radius:0 var(--radius) var(--radius) 0; }
@@ -214,7 +215,7 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
           新增報價單
         </a>
-        <a href="quotation-form.html?type=estimate" class="action-btn" data-testid="ql-new-estimate" style="text-decoration:none">
+        <a href="quotation-form.html?type=estimate" class="action-btn action-btn--ghost" data-testid="ql-new-estimate" style="text-decoration:none">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
           新增估價單
         </a>
