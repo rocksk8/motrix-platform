@@ -52,6 +52,6 @@ for g, (cat, plain) in G.items():
 groups = {g: {"plain": G[g][0:2][1], "category": G[g][0], "currentName": src[g]["label"], "privacy": g in PRIVACY} for g in G}
 out = {"_doc": "設定中心外框的頁面對應（SPEC §14.5）。分類只有這一套；安全＝存取、登入、保存與隱私。style：checkbox／form／preset-only。產生器：make_shell_groups.py；改完請跑 gen_seed.py 與 --check。",
        "categoryOrder": [Y, C, S, A], "pages": pages, "groups": groups}
-json.dump(out, open("D:/Claude-pm/hichan4-matrix/wt/docs/platform/plans/SETTINGS-MATRIX-ROLLOUT/data/shell_groups.json", "w", encoding="utf-8", newline="\n"), ensure_ascii=False, indent=1)
+json.dump(out, open(HERE / "shell_groups.json", "w", encoding="utf-8", newline="\n"), ensure_ascii=False, indent=1)
 import collections
 print(len(pages), "pages;", collections.Counter(p["category"] for p in pages.values()), "groups by cat", collections.Counter(v["category"] for v in groups.values()))
