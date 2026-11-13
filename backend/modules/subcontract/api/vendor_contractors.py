@@ -22,6 +22,7 @@ from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from modules.subcontract.api.contractors import _stamp_passbook
+from helpers.image_guard import ImageRejected
 from helpers.auth import has_finance_access, finance_duty_person  # 第42班（Q5）；R2 D5 縫
 
 router = APIRouter()
@@ -481,6 +482,7 @@ def upload_vendor_passbook(vid: int, body: dict = Body(...), authorization: str 
         raise HTTPException(400, "無效的圖片格式，需為 data URI")
     if passbook:
         try: passbook = _stamp_passbook(passbook)
+        except ImageRejected as e: raise HTTPException(e.status, e.user_message)
         except Exception: pass
     conn = get_db()
     existing = conn.execute("SELECT data_json, name FROM vendor_contractors WHERE id=?", (vid,)).fetchone()

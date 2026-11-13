@@ -27,6 +27,19 @@ from typing import List, NamedTuple
 from fastapi import HTTPException, UploadFile
 
 from core import paths as _paths
+from helpers.image_guard import ImageRejected, open_checked, run_decode
+
+_PIXEL_CHECKED_EXTS = frozenset(('.jpg', '.jpeg', '.png', '.gif', '.webp'))
+
+
+def _reject_oversize_image(raw, filename):
+    """超過像素上限 ⇒ 400；打不開的檔（壞檔、非 Pillow 格式）這裡不管，維持原本行為。"""
+    try:
+        open_checked(raw, draft_long_side=None)          # 只驗長寬，不需要縮小解碼
+    except ImageRejected as e:
+        raise HTTPException(e.status, f"{e.user_message}（{filename}）")
+    except Exception:
+        pass
 UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
@@ -241,34 +254,49 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         cap = limits.get('max_request_bytes')
         if cap and total > cap:
             raise HTTPException(400, f"這次上傳的檔案合計超過 {cap // (1024 * 1024)}MB，請分批上傳")
+        if ext in _PIXEL_CHECKED_EXTS:                          # 解壓縮炸彈：幾 KB 的檔宣告 2 萬×2 萬像素；只讀檔頭長寬，不解碼
+            _reject_oversize_image(raw, upload.filename)
         prepared.append((upload, ext, raw))
 
     # 第二階段：寫入
     os.makedirs(save_dir, exist_ok=True)
     saved = []
     now = datetime.now().isoformat()
-    for upload, ext, raw in prepared:
-        if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
+    written = []
+    try:
+        for upload, ext, raw in prepared:
+            if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
+                try:
+                    from photos import _process_project_photo
+                    raw = (await run_decode(_process_project_photo, raw, watermark_by))[0]     # 解碼會等名額：在事件迴圈上排隊、不占執行緒池
+                except ImageRejected as e:
+                    raise HTTPException(e.status, f"{e.user_message}（{upload.filename}）")
+                except Exception:
+                    # 浮水印失敗不該讓整次上傳失敗——原圖照存，比丟掉使用者的檔案好。
+                    # （Pillow 沒裝時 _process_project_photo 本身就會原樣回傳。）
+                    pass
+            fname = uuid.uuid4().hex[:16] + ext
+            written.append(os.path.join(save_dir, fname))
+            with open(written[-1], 'wb') as f:
+                f.write(raw)
+            saved.append({
+                "id":         uuid.uuid4().hex[:8],
+                "filename":   upload.filename or fname,
+                "path":       f"{subfolder}/{doc_no}/{fname}",
+                "size":       len(raw),
+                "mime":       upload.content_type or '',
+                "uploadedBy": uploaded_by,
+                "uploadedAt": now,
+                **({"slot": policy.slot} if policy is not None and policy.slot else {}),
+            })
+    except BaseException:
+        # 整批全收或全不收：後面某張被擋（400／503）或斷線 ⇒ 刪掉這次已寫的檔，不留孤兒
+        for _p in written:
             try:
-                from photos import _process_project_photo
-                raw = _process_project_photo(raw, watermark_by)[0]
-            except Exception:
-                # 浮水印失敗不該讓整次上傳失敗——原圖照存，比丟掉使用者的檔案好。
-                # （Pillow 沒裝時 _process_project_photo 本身就會原樣回傳。）
+                os.remove(_p)
+            except OSError:
                 pass
-        fname = uuid.uuid4().hex[:16] + ext
-        with open(os.path.join(save_dir, fname), 'wb') as f:
-            f.write(raw)
-        saved.append({
-            "id":         uuid.uuid4().hex[:8],
-            "filename":   upload.filename or fname,
-            "path":       f"{subfolder}/{doc_no}/{fname}",
-            "size":       len(raw),
-            "mime":       upload.content_type or '',
-            "uploadedBy": uploaded_by,
-            "uploadedAt": now,
-            **({"slot": policy.slot} if policy is not None and policy.slot else {}),
-        })
+        raise
     return saved
 
 

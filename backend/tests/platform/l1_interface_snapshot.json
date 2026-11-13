@@ -1,5 +1,5 @@
 {
- "core_version": "1.162",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1099,6 +1099,30 @@
    "request_hash": "def(*parts)",
    "run": "async def(username, key, endpoint, req_hash, handler, status_code=…, abort_on_cancel=…)",
    "run_sync": "def(username, key, endpoint, req_hash, handler, status_code=…)"
+  },
+  "helper:image_guard": {
+   "ALLOWED_FORMATS": "const",
+   "BUSY_MESSAGE": "const",
+   "DECODE_THREAD_WAIT_SECONDS": "const",
+   "DECODE_WAIT_SECONDS": "const",
+   "DRAFT_LONG_SIDE": "const",
+   "ImageBusy": "class",
+   "ImageRejected": "class",
+   "ImageRejected.__init__": "def(self, detail=…)",
+   "ImageTooLarge": "class",
+   "ImageUnsupported": "class",
+   "JPEG_FULL_DECODE_MAX": "const",
+   "MAX_CONCURRENT_DECODES": "const",
+   "MAX_PIXELS": "const",
+   "MAX_PIXELS_JPEG": "const",
+   "MAX_WAITING_ASYNC": "const",
+   "MAX_WAITING_THREADS": "const",
+   "USER_MESSAGE": "const",
+   "check_pixels": "def(img, max_pixels=…)",
+   "decode_slot": "def(wait=…)",
+   "open_checked": "def(data, formats=…, max_pixels=…, draft_long_side=…)",
+   "run_decode": "async def(fn, *a, **kw)",
+   "with_decode_slot": "def(fn)"
   },
   "helper:legal_params": {
    "ARTICLE_8_DELETED": "const",

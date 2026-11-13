@@ -18,6 +18,7 @@
    "helper:builtin_fields",
    "helper:auth",
    "helper:branding",
+   "helper:image_guard",
    "helper:build_info",
    "helper:business_days",
    "helper:config_ledger",

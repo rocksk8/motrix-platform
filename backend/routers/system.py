@@ -23,6 +23,7 @@ from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PL
 from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
+from helpers.image_guard import ImageRejected, run_decode
 import trail
 
 router = APIRouter()
@@ -807,26 +808,41 @@ async def _upload_work_log_photos_impl(wid, files, authorization, user):
     os.makedirs(save_dir, exist_ok=True)
 
     new_photos = []
-    for upload in files:
-        raw_bytes = await upload.read()
-        ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
-        # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
-        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
-            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
-        _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
-        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
-        fname = uuid.uuid4().hex[:14] + ext.lower()
-        with open(os.path.join(save_dir, fname), 'wb') as f:
-            f.write(processed)
-        new_photos.append({
-            "id":          uuid.uuid4().hex[:8],
-            "filename":    fname,
-            "path":        f"{url_prefix}/worklog_{wid}/{today}/{fname}",
-            "gps":         gps_str,
-            "watermark":   wm_str,
-            "uploaded_by": user['display_name'],
-            "uploaded_at": datetime.now().isoformat(),
-        })
+    written = []
+    try:
+        for upload in files:
+            raw_bytes = await upload.read()
+            ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
+            # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
+            if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
+                raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
+            _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
+            try:
+                processed, gps_str, wm_str = await run_decode(_process_project_photo, raw_bytes, user['display_name'])
+            except ImageRejected as e:
+                raise HTTPException(e.status, f"{e.user_message}（{upload.filename}）")
+            fname = uuid.uuid4().hex[:14] + ext.lower()
+            written.append(os.path.join(save_dir, fname))
+            with open(written[-1], 'wb') as f:
+                f.write(processed)
+            new_photos.append({
+                "id":          uuid.uuid4().hex[:8],
+                "filename":    fname,
+                "path":        f"{url_prefix}/worklog_{wid}/{today}/{fname}",
+                "gps":         gps_str,
+                "watermark":   wm_str,
+                "uploaded_by": user['display_name'],
+                "uploaded_at": datetime.now().isoformat(),
+            })
+    except BaseException:
+        # 整批要嘛全收要嘛全不收：任何一張失敗（400／503／斷線）⇒ 這次已寫到磁碟的檔案刪掉，免得留下孤兒、客戶端重試又重複一份
+        for _p in written:
+            try:
+                os.remove(_p)
+            except OSError:
+                pass
+        conn.close()
+        raise
 
     all_photos = existing + new_photos
     conn.execute("UPDATE work_logs SET photos=? WHERE id=?",

@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門；版號由列車取）
+- 變更（內部，API 路徑與回應形狀不變）：外包名冊的證件／存摺浮水印（`api/contractors.py::_stamp_id_card／_stamp_passbook`、`api/vendor_contractors.py` 存摺）改用共用 helper `helpers/image_guard`——開圖前先看宣告的長寬（超過上限回 400 白話訊息）、JPEG／MPO 超過 4000 萬像素改縮小解碼、同時解碼最多 2 件（滿了回 503）。一般尺寸照片行為不變。
+- 測試：`tests/test_image_guard_2026_11_13.py`。
+
 ## 1.1.45 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api/vendor_contractors.py` 承攬商報價單附件刪除申請接上 LINE 獨立通道（僅 LINE 事件 `dispatch_file_delete_request`；申請送出與輪到下一層時各整批發一則，沒有簽核層時由最高管理者收；不放檔名與原因），泛用的 module_activity 對這件事加 `line_skip` 不重複推；`dispatch_notify.py` 信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`。
