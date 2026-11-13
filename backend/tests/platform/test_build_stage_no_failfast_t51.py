@@ -61,7 +61,7 @@ def _runner(code, reds=(), seen=None):
 
 def test_default_run_stage_is_unchanged_failfast_on_no_reds_field(repo, tmp_path):
     rec, seen = tmp_path / "rec.jsonl", {}
-    rc, wrote, why = btr.run_stage(repo, "not_e2e", rec, runner=_runner(1, ["t::a"], seen), note=lambda *_: None)
+    rc, wrote, why = btr.run_stage(repo, "not_e2e", rec, runner=_runner(1, ["t::a"], seen), note=lambda *_: None, retry_failed=0)   # 2026-11-13：預設現在會重試紅的題；這題守的是「不重試」的原行為（--no-retry）
     assert rc == 1 and wrote and seen["MOTRIX_FAILFAST"] == "1" and seen["MOTRIX_FAIL_STREAM_DIR"].endswith("-failstream")
     line = json.loads(rec.read_text(encoding="utf-8").splitlines()[-1])
     assert "reds" not in line["stages"]["not_e2e"] and "failfast" not in line["stages"]["not_e2e"], "原行為：不多記欄位"
@@ -70,7 +70,7 @@ def test_default_run_stage_is_unchanged_failfast_on_no_reds_field(repo, tmp_path
 
 def test_no_failfast_turns_only_failfast_off_and_lists_every_red_once(repo, tmp_path):
     rec, seen = tmp_path / "rec.jsonl", {}
-    rc, wrote, why = btr.run_stage(repo, "not_e2e", rec, runner=_runner(1, ["t::a", "t::b", "t::c"], seen), note=lambda *_: None, no_failfast=True)
+    rc, wrote, why = btr.run_stage(repo, "not_e2e", rec, runner=_runner(1, ["t::a", "t::b", "t::c"], seen), note=lambda *_: None, no_failfast=True, retry_failed=0)   # 2026-11-13：重試與否與這題無關，關掉才看得到正式指令的環境
     assert rc == 1 and wrote
     assert seen["MOTRIX_FAILFAST"] == "0" and seen["MOTRIX_FAILFIRST"] == "1" and seen["MOTRIX_FAIL_STREAM_STAGE"] == "not_e2e", "其餘開關與正式指令相同"
     e = json.loads(rec.read_text(encoding="utf-8").splitlines()[-1])["stages"]["not_e2e"]

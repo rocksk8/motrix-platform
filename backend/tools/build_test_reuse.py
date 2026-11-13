@@ -470,7 +470,7 @@ def _run_stage(repo, stage, records, python=None, runner=None, workers=None, not
     repo = Path(repo)
     fp0 = fingerprint(repo)
     backend = repo / "backend"
-    base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S")))
+    base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S"), os.urandom(3).hex()))   # 末尾隨機：同一秒起兩輪也不共用 fail_stream 目錄（舊明細會被當成這一輪的紅）
     cmd = stage_command(stage, python, workers or default_workers(stage), base)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))

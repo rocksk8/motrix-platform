@@ -83,6 +83,12 @@ class Runner:
         return self.retry_rc if self.retry_rc is not None else (1 if self.still else 0)
 
 
+def _marker(cmd):
+    """pytest 指令裡 `-m <標記>` 的標記（跳過開頭的 `python -m pytest`）。"""
+    rest = cmd[3:]
+    return rest[rest.index("-m") + 1]
+
+
 def _run(repo, tmp_path, runner, stage="not_e2e", **kw):
     recs = tmp_path / "rec.jsonl"
     rc, wrote, why = btr.run_stage(repo, stage, recs, runner=runner, note=lambda *_: None, **kw)
@@ -169,14 +175,13 @@ def test_retry_command_is_serial_scoped_and_quiet(tiny_repo, tmp_path):
     (cmd1, env1), (cmd2, env2) = rn.calls
     assert env1["MOTRIX_FAILFAST"] == "1" and env1["MOTRIX_FAILFAST_N"] == "6" and env1["MOTRIX_FAILFAST_QUIET_MIN"] == "0", "第一輪 failfast 要讓『紅≤上限』的一輪跑完"
     assert cmd2[cmd2.index("-n") + 1] == "0", "重試必須單程序"
-    assert R1 in cmd2 and R2 in cmd2 and "-m" in cmd2 and cmd2[cmd2.index("-m") + 1] == "not e2e"
+    assert R1 in cmd2 and R2 in cmd2 and _marker(cmd2) == "not e2e"
     assert not any(a.startswith("--durations") for a in cmd2) and "failfast" not in cmd2 and "fail_stream" in cmd2
     assert env2["MOTRIX_FAILFAST"] == "0" and env2["MOTRIX_FAILFIRST"] == "0"
     assert env2["MOTRIX_FAIL_STREAM_DIR"] != env1["MOTRIX_FAIL_STREAM_DIR"], "重試的明細要在自己的目錄"
     rn_e2e = Runner([R1])
     _run(tiny_repo, tmp_path, rn_e2e, stage="e2e")
-    c = rn_e2e.calls[1][0]
-    assert c[c.index("-m") + 1] == "e2e"
+    assert _marker(rn_e2e.calls[1][0]) == "e2e"
 
 
 def test_no_retry_keeps_the_old_failfast_and_never_retries(tiny_repo, tmp_path):
