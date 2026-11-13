@@ -86,14 +86,17 @@ def test_a_failed_read_keeps_the_card_locked_and_never_puts_an_empty_form(live_s
 
 
 @pytest.mark.e2e
-def test_an_unparseable_response_is_an_error_not_a_blank_editable_form(live_server, make_user, new_page, login_as):
+@pytest.mark.parametrize("body", ["not json", "null", "[]", '"text"'])
+def test_an_unusable_response_is_an_error_not_a_blank_editable_form(live_server, make_user, new_page, login_as, body):
+    """200 但解析失敗／不是設定物件（null、陣列、字串）：都當讀取失敗；不可拿預設值解鎖，摘要區也不顯示「（尚未設定）」。"""
     def handler(route):
         if _is_cfg_get(route):
-            route.fulfill(status=200, content_type="application/json", body="not json")
+            route.fulfill(status=200, content_type="application/json", body=body)
         else:
             route.continue_()
     page, writes = _open(live_server, make_user, new_page, login_as, "es_lock3", handler)
     page.wait_for_function(f"() => {DATA}.loaded === true", timeout=20000)
     assert page.evaluate(f"() => {DATA}.cfgState") == "error"
     assert page.locator(SEL).is_disabled()
+    assert page.locator("[data-testid=es-summary]").is_hidden(), "讀取失敗時摘要區不可顯示預設值"
     assert writes == []

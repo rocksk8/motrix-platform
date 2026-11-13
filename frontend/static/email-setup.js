@@ -18,7 +18,7 @@
     '  <div class="ns-card-body">',
     '',
     '    <!-- 已設定好：只顯示摘要，要改再展開 -->',
-    '    <div x-show="loaded && !wz.open" data-testid="es-summary">',
+    '    <div x-show="!cfgLocked && !wz.open" data-testid="es-summary">',
     '      <div style="font-size:13px;margin-bottom:10px">',
     '        目前的寄件信箱：<strong x-text="cfg.smtp_user || \'（尚未設定）\'"></strong>',
     '        <span x-show="cfg.enabled" style="color:var(--success);font-weight:600">（Email 通知已啟用）</span>',
@@ -480,6 +480,7 @@
         if (!r.ok) { this.cfgState = 'error'; return }          // 讀不到就不讓人編輯：用預設空值去儲存會蓋掉伺服器上的設定
         {
           const data = await r.json()
+          if (!data || typeof data !== 'object' || Array.isArray(data)) { this.cfgState = 'error'; return }   // 200 但不是設定物件（null／[]）：當讀取失敗，不拿預設值解鎖
           this.cfg = { ...this.cfg, ...data }
           if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
           // 2026-11-13：伺服器沒存系統網址時，預填你現在開的這個網址（不寫死任何一台機器；按「儲存」才生效）
