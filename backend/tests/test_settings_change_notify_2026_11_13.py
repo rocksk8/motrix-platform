@@ -507,6 +507,36 @@ def test_batch_conflict_after_precheck_reports_applied_and_not_applied(client, m
     assert [x["group"] for x in d["groups"]] == ["zz_nt_b"] and R.get("zz_nt_a", "days") == 12 and R.get("zz_nt_b", "cap") == 40
 
 
+def test_batch_pending_exists_has_its_own_message_and_code_not_plain_conflict(client, make_user, zz_groups):
+    from routers import settings_center as SC
+    pe = R.SettingConflict(["cap"], "王經理", "2026-11-13T10:00:00", code="pending_exists")
+    one = SC._batch_conflict_body([("zz_nt_b", pe)], [], "zz_nt_b", [])
+    assert one["code"] == "pending_exists" and "等待生效" in one["message"] and one["groups"][0]["code"] == "pending_exists", one
+    assert one["groups"][0]["by"] == "王經理" and one["groups"][0]["label"] == "通知測試乙"
+    plain = R.SettingConflict(["days"], "李", "t")
+    mixed = SC._batch_conflict_body([("zz_nt_b", pe), ("zz_nt_a", plain)], [], None, [])
+    assert mixed["code"] == "conflict" and [x["code"] for x in mixed["groups"]] == ["pending_exists", "conflict"]      # 混合 ⇒ 一般衝突（要重新整理）
+    assert SC._batch_conflict_body([("zz_nt_a", plain)], [], None, [])["code"] == "conflict"
+
+
+def test_batch_400_messages_are_plain_language_without_programmer_words(client, make_user, zz_groups):
+    h = _hdr(client, make_user, "nt_u6")
+    bad = [
+        {"groups": {"zz_nt_b": {"values": {"cap": 22}}}, "reason": "x", "undo": "yes"},                                           # undo 不是布林
+        {"groups": {"zz_nt_b": {"values": {"cap": 22}}}, "reason": "x", "undo": True},                                            # 復原沒帶比對資料
+        {"groups": {"zz_nt_b": {"values": {"cap": 22}, "expectedValues": {}}}, "reason": "x"},                                    # 比對資料是空的
+        {"groups": {"zz_nt_a": {"values": {"days": 12, "limit": 120}, "expectedValues": {"days": 7}}}, "reason": "x"},            # 沒涵蓋每個要改的欄位
+    ]
+    for body in bad:
+        r = client.post("/api/settings-center/batch", json=body, headers=h)
+        assert r.status_code == 400, (body, r.text)
+        txt = json.dumps(r.json(), ensure_ascii=False)
+        for w in ("expectedValues", "undo", "true", "false", "json", "JSON", "key"):
+            assert w not in txt, (w, txt)
+        assert "請重新整理畫面後再試" in txt, txt
+    assert "額度上限" in client.post("/api/settings-center/batch", json=bad[3], headers=h).text            # 缺的欄位用白話名稱，不是欄位代碼
+
+
 def test_expected_conflict_precheck_is_read_only_and_reports_who_changed_it(client, make_user, zz_groups):
     h = _hdr(client, make_user, "nt_u5")
     assert R.expected_conflict("zz_nt_b", {"cap": 5}) is None

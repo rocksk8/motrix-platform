@@ -231,7 +231,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         raise HTTPException(400, "沒有送出任何要變更的群組")
     undo = body.get("undo")
     if undo is not None and not isinstance(undo, bool):
-        raise HTTPException(400, "undo 必須是 true／false")
+        raise HTTPException(400, "復原的要求格式不對，請重新整理畫面後再試。")
     if len(groups) > _BATCH_MAX_GROUPS:
         raise HTTPException(400, "一次最多只能儲存 %d 個群組" % _BATCH_MAX_GROUPS)
     values_by, expected_by, supersede_by = {}, {}, set()
@@ -243,11 +243,11 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         values_by[g] = vals
         exp = spec.get("expectedValues")
         if exp is not None and (not isinstance(exp, dict) or not exp):
-            raise HTTPException(400, "群組 %s 的 expectedValues 必須是非空物件" % g)
+            raise HTTPException(400, "「%s」送出的比對資料格式不對，請重新整理畫面後再試。" % sr.groups()[g]["label"])
         if undo and not exp:                                   # 復原一定要逐欄比對：沒帶就會把別人後來改的蓋回去
-            raise HTTPException(400, "復原必須為每個群組帶 expectedValues（套用後的值），否則可能蓋掉別人後來的修改")
+            raise HTTPException(400, "復原需要帶上每個群組「套用後的值」，才不會蓋掉別人後來的修改；請重新整理畫面後再試。")
         if exp and [k for k in vals if k not in exp]:          # 與 publish 同規則（S1c）：帶了就要涵蓋每個要改的欄位；先在這裡擋，免得寫到一半才失敗
-            raise HTTPException(400, "群組 %s 的 expectedValues 必須涵蓋每個要改的欄位，缺：%s" % (g, "、".join(k for k in vals if k not in exp)))
+            raise HTTPException(400, "「%s」送出的比對資料沒有涵蓋所有要改的項目（缺：%s），請重新整理畫面後再試。" % (sr.groups()[g]["label"], "、".join((sr.field_defs(g)[k].label or k) if k in sr.field_defs(g) else k for k in vals if k not in exp)))
         if exp:
             expected_by[g] = exp
         if spec.get("supersede") is True:                      # 畫面確認「取代別人還在等待的申請」後才帶（json 欄位）
