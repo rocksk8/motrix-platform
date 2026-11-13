@@ -160,8 +160,9 @@ def queue_items(conn) -> list:
     from helpers import approval_queue as _aq
     from helpers import config_ledger as _cl
     _real = set(_cl.real_superadmins(conn))          # 「等誰簽核」只列真人（展示帳號不是簽核人）
+    _all = conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
     supers = [{"username": r["username"], "displayName": r["display_name"] or r["username"], "status": "pending"}
-              for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id") if r["username"] in _real]
+              for r in ([r for r in _all if r["username"] in _real] or _all)]      # 只有展示帳號（隔離的展示庫）⇒ 照列，否則「等誰簽核」空白
     out = []
     for r in conn.execute("SELECT id, request_no, label, approval_json FROM gl_action_requests WHERE status='待審核' ORDER BY id DESC LIMIT 500"):
         raw = _aq.approval_raw_of(r["approval_json"], "ledger_action", r["request_no"])       # 壞一筆只跳過那一筆（QJ-M1）

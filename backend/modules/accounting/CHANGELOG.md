@@ -1,7 +1,7 @@
 # 會計 更新紀錄
 
 ## 1.1.70（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
-- 變更（內部，不影響對外介面）：`api/ledger_requests.py`（通知名單、「等誰簽核」佇列）、`api/voucher_common.py`（`with_final_superadmin_tier` 最後一層簽核人）、`api/vouchers.py`（下一層簽核人名單）只列真人最高管理者，不含展示帳號 `demo`。
+- 變更（內部，不影響對外介面）：`api/ledger_requests.py`（通知名單、「等誰簽核」佇列）、`api/voucher_common.py`（`with_final_superadmin_tier` 最後一層簽核人）、`api/vouchers.py`（下一層簽核人名單）只列真人最高管理者，不含展示帳號 `demo`。庫裡只剩展示帳號時（隔離的展示庫）照舊由它當最後一層、「等誰簽核」照列（h12 M1），展示環境才看得到完整流程。
 
 ## 1.1.69 — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
 - 變更（內部，不影響對外介面）：`api/ledger_reports.py` 角色對應申請判斷「有沒有另一位在職最高管理者」改用 `config_ledger.real_superadmins()`（不含展示帳號 demo）；只有一位真人最高管理者時，訊息與行為與原本「沒有第二位」相同。

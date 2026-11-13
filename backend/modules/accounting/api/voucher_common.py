@@ -172,12 +172,14 @@ def with_final_superadmin_tier(conn, tiers):
     - 流程設定（system_settings voucher_approval_flow／voucher_auto_approval_flow）**一個字都不改**，在送審建立簽核層時才補上這一層；
     - 設定裡最後一層本來就全是在職最高管理者 ⇒ 不重複補；沒有設定流程（內建兩格）⇒ 只有這一層；
     - 這一層的簽核人＝目前所有在職最高管理者（同一層任一人核准即可，與其他層規則相同）；製票人是最高管理者可自簽（使用者 2026-09-24 裁示）。
-    - 沒有任何在職最高管理者（不會發生）⇒ 不補，避免傳票永遠送不出去。
+    - 只有展示帳號（隔離的展示庫）⇒ 由展示帳號當這一層；完全沒有在職最高管理者（不會發生）⇒ 不補，避免傳票永遠送不出去。
     過帳仍要求狀態＝已核准，所以沒經過這一層核准的傳票不可能過帳。"""
     from helpers import config_ledger as _cl
     _real = set(_cl.real_superadmins(conn))          # 簽核人只列真人（展示帳號不是簽核人，否則「等誰簽核」會列一個永遠不會簽的人）
-    rows = [r for r in conn.execute("SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
-            if r["username"] in _real]
+    allrows = conn.execute("SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
+    rows = [r for r in allrows if r["username"] in _real]
+    if not rows:
+        rows = list(allrows)                            # 庫裡只有展示帳號（隔離的展示庫）⇒ 展示帳號當最後一層，展示環境才看得到真實流程
     if not rows:
         return tiers
     supers = {r["username"] for r in rows}

@@ -168,3 +168,32 @@ def test_contact_info_field_warns_that_everyone_can_see_it():
     html = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "company-profile-settings.html").read_text(encoding="utf-8")
     i = html.index('x-model="cfg.contact_info"')
     assert "此欄會顯示給所有使用者，請勿填銀行資料" in html[i:i + 600]
+
+
+# ── 傳票最後一層：真人在 ⇒ 不含 demo；庫裡只剩 demo（隔離的展示庫）⇒ demo 當這一層，不是整層消失 ──────────
+def _final_tier_usernames():
+    import db
+    from modules.accounting.api import voucher_common as vc
+    c = db.get_db()
+    try:
+        tiers = vc.with_final_superadmin_tier(c, [])
+    finally:
+        c.close()
+    return [a["username"] for a in tiers[-1]["approvers"]] if tiers else None
+
+
+def test_final_voucher_tier_lists_only_real_superadmins_when_one_exists(make_user):
+    _only_real(make_user, "dm_final_real")
+    assert _final_tier_usernames() == ["dm_final_real"]
+
+
+def test_final_voucher_tier_falls_back_to_demo_when_it_is_the_only_superadmin(make_user):
+    import db
+    _demo()
+    c = db.get_db()
+    try:
+        c.execute("UPDATE users SET active=0 WHERE role='superadmin' AND username<>'demo'")
+        c.commit()
+    finally:
+        c.close()
+    assert _final_tier_usernames() == ["demo"], "展示庫只有 demo：最後一層要在（展示環境看得到真實流程）"
