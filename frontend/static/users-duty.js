@@ -33,7 +33,7 @@
       // 這次存檔動到（授予或取消）的高敏感權限鍵——與伺服器 helpers.duty_roles.user_perm_change 同一條規則：
       //  · 兩邊都是最高管理者＝modules 惰性、不算；改成最高管理者＝收緊、不算；
       //  · 降級（原本最高管理者、現在不是）＝存著的 modules 此刻才生效 ⇒ 以目前 modules 從無到有算（不論有沒有改）；
-      //  · 角色改成財務（原本不是）＝財務三鍵由角色補上 ⇒ 三鍵算授予；離開財務角色不算；
+      //  · 角色改成財務（原本不是）＝財務三鍵由角色補上 ⇒ 三鍵算授予；離開財務角色＝用角色收回三鍵 ⇒ 也算；
       //  · 其餘＝新舊個人勾選的差異（授予＋取消）。
       permGateTouched() {
         const g = this.permGate
@@ -44,6 +44,7 @@
         let b = new Set(g.origModules)
         if (was === 'superadmin') b = new Set()
         if (role === 'finance' && was !== 'finance') FIN_KEYS.forEach(k => a.add(k))
+        else if (was === 'finance' && role !== 'finance') FIN_KEYS.forEach(k => { b.add(k); a.delete(k) })      // 離開財務角色＝用角色收回三鍵
         return g.hi.filter(k => a.has(k) !== b.has(k))
       },
       // 另顯示輸入框：有高敏感差異、而職責角色那一格沒顯示時

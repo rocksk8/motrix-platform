@@ -116,14 +116,18 @@ def test_unit_entering_the_finance_role_grants_the_three_finance_keys():
     ok = dr.user_perm_gate("sales", [], "finance", [], "調任財務人員")
     assert ok[0] is True and ok[3] == {"cashier", "finance", "financial_view"}
     assert dr.user_perm_gate("finance", [], "finance", [], "")[0] is False, "本來就是財務角色 ⇒ 沒動"
-    assert dr.user_perm_gate("finance", [], "sales", [], "")[0] is False, "離開財務角色不算授予"
+    with pytest.raises(dr.DutyError):
+        dr.user_perm_gate("finance", [], "sales", [], "")                     # 離開財務角色＝收回三鍵，要原因
+    ok2 = dr.user_perm_gate("finance", [], "sales", [], "調離財務職務")
+    assert ok2[0] is True and ok2[2] == {"cashier", "finance", "financial_view"} and ok2[3] == set()
+    assert dr.user_perm_gate("finance", [], "superadmin", [], "")[0] is False, "改成最高管理者＝收緊，不算"
     with pytest.raises(dr.DutyError):
         dr.user_perm_gate("superadmin", [], "finance", [], "")                 # 最高管理者改成財務＝降級後得到財務三鍵
 
 
 def test_unit_reason_is_normalized_before_counting_distinct_characters():
     zw = "\u200b"
-    for bad in ("ａａａａ", "a" + zw + "a" + zw + "a" + zw + "a", "AaAaAa", "１１１１", "\u3000" * 5, "好\u200d好\u200d好\u200d好"):
+    for bad in ("ａａａａ", "a" + zw + "a" + zw + "a" + zw + "a", "AaAaAa", "１１１１", "\u3000" * 5, "好\u200d好\u200d好\u200d好", "\u3164\u3164\u3164好", "\u115f\u1160\uffa0接"):
         with pytest.raises(dr.DutyError):
             dr.gate_reason(["cashier"], bad)
     assert dr.gate_reason(["cashier"], "ａｂｃｄ")[0] is True, "全形但確實是 4 個不同字 ⇒ 過（正規化後 abcd）"
@@ -301,10 +305,16 @@ def test_put_role_to_finance_needs_a_reason_and_is_recorded(client, make_user):
     ch = _changes(uid)
     assert len(ch) == 1 and json.loads(ch[0]["added"]) == ["cashier", "finance", "financial_view"] and ch[0]["reason"] == "調任財務人員"
     assert len(_audit("user.role_change", uid)) == 1, "原有的 role_change 稽核照舊"
-    # 離開財務角色不算授予；已是財務角色再存也不要求
+    # 已是財務角色再存不要求
     assert client.put("/api/users/%d" % uid, json={"role": "finance", "phone": "0912"}, headers=h).status_code == 200
-    assert client.put("/api/users/%d" % uid, json={"role": "sales"}, headers=h).status_code == 200
     assert len(_changes(uid)) == 1
+    # 離開財務角色＝收回三鍵：要原因、寫變更列（removed＝三鍵）
+    assert client.put("/api/users/%d" % uid, json={"role": "sales"}, headers=h).status_code == 400
+    assert _row(uid)[0] == "finance"
+    assert client.put("/api/users/%d" % uid, json={"role": "sales", "reason": "調離財務職務"}, headers=h).status_code == 200
+    ch = _changes(uid)
+    assert len(ch) == 2 and json.loads(ch[1]["removed"]) == ["cashier", "finance", "financial_view"] and json.loads(ch[1]["added"]) == []
+    assert ch[1]["reason"] == "調離財務職務" and len(_audit("user.perm_change", uid)) == 2
 
 
 def test_create_with_finance_role_needs_a_reason(client, world):
