@@ -196,38 +196,28 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
     return changes
 
 
-#: 階段（caseRecord.stages）裡「存檔真的會存進 case_stages 表」的欄位＝`_sync_json_stages_to_table` 的 UPDATE 寫的那幾個。
-#: 其餘（id、dependsOn、visits、stageKey…）是伺服器維護的：建單時 `_sync_stages_to_json` 會把階段重建成表裡的樣子（配真實 id、補齊欄位），
-#: 而使用者手上那份還是暫時 id、欄位不齊——第一次 PUT 把兩邊拿來比，就會多出一筆使用者根本沒改的「其他內容」（2026-11-13 修）。
-_STAGE_PERSISTED = (("label", ""), ("doneAt", ""), ("startDate", ""), ("dueDate", ""))
-
-
-def _stage_core(st):
-    if not isinstance(st, dict):
-        return st
-    out = {k: (st.get(k) or d) for k, d in _STAGE_PERSISTED}
-    out["done"] = bool(st.get("done"))
-    out["assignedTo"] = st.get("assignedTo") or []
-    return out
+#: 款項日期欄位：PUT 存檔時一律正規化成 YYYY-MM-DD 的那三個（建單不做）；整包比對用同一份清單，兩處不會各寫一份而漂移。
+_PAYMENT_DATE_KEYS = ("receivedAt", "expectedReceiptDate", "invoiceDate")
 
 
 def _diff_view(d: dict) -> dict:
-    """整包比對用的「正規化檢視」：拿掉紀錄類／每次存檔都變的鍵；階段只留會被存檔的欄位；款項日期套與存檔相同的 YYYY-MM-DD 正規化。
-    只用在「有沒有『其他內容』變更」的判斷——**只讓伺服器自己會改寫的差異不算變更**；使用者真的改了的值（階段名稱、日期、款項金額、
-    頂層未追蹤欄位…）正規化後仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）。"""
+    """整包比對用的「正規化檢視」：拿掉紀錄類／每次存檔都變的鍵與 `caseRecord.stages`，款項日期套與存檔相同的 YYYY-MM-DD 正規化。
+    只用在「有沒有『其他內容』變更」的判斷——**只讓伺服器自己會改寫、或根本不會被存檔採用的差異不算變更**：
+    ① 階段（stages）：PUT 完全忽略用戶端的 stages，case_stages 表才是權威（見 update_quotation 寫入後的 `_sync_stages_to_json`）；
+       建單時階段又被重建成表的樣子（真實 id、補齊欄位），所以任何階段差異都是「幻影」（第一次 PUT 多記一筆「其他內容」的根因，2026-11-13 修）。
+    ② 款項日期：只在 PUT 才正規化。
+    使用者真的改了、而且會被存下來的值（頂層未追蹤欄位、款項金額…）仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）、不改輸入。"""
     out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
     cr = out.get("caseRecord")
     if isinstance(cr, dict):
-        cr = dict(cr)
-        if isinstance(cr.get("stages"), list):
-            cr["stages"] = [_stage_core(s) for s in cr["stages"]]
+        cr = {k: v for k, v in cr.items() if k != "stages"}
         pay = cr.get("payment")
         if isinstance(pay, dict) and isinstance(pay.get("items"), list):
             items = []
             for it in pay["items"]:
                 if isinstance(it, dict):
                     it = dict(it)
-                    for k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+                    for k in _PAYMENT_DATE_KEYS:
                         if it.get(k):
                             it[k] = norm_ymd(it[k])
                 items.append(it)
@@ -2325,7 +2315,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
-            for _k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+            for _k in _PAYMENT_DATE_KEYS:
                 if _pi.get(_k):
                     _pi[_k] = norm_ymd(_pi[_k])
 
