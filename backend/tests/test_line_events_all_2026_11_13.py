@@ -169,7 +169,7 @@ def test_every_wired_event_has_a_group_and_a_valid_priority(env):
 def test_priority_critical_only_for_system_alerts_approvals_and_assignees_are_normal(env):
     from helpers import line_notify as L
     crit = {k for k in L.WIRED_EVENTS if L.event_spec(k)["priority"] == "critical"}
-    assert crit == {"backup_error", "backup_stale", "heartbeat_stale", "disk_space_low", "cert_expiry", "company_setup_alert", "auth_lockout"}
+    assert crit == {"backup_error", "backup_stale", "heartbeat_stale", "disk_space_low", "cert_expiry", "company_setup_alert", "auth_lockout", "license_expiry"}
     for k in ("approval_request", "next_tier", "approved", "returned", "approval_reminder", "shipping_submitted", "dev_case_assigned",
               "dev_case_unassigned", "daily_task_assigned", "crm_case_status", "module_activity"):
         assert L.event_spec(k)["priority"] == "normal", k
