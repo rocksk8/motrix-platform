@@ -1,8 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 一條龍 P0c（feat/onepipe-p0-p1；旗標 `onepipe.ship_install_ok`，預設關＝與今天逐位元相同；L1 介面不變）
+## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設關＝與今天逐位元相同）
 - `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。
 - `release`：旗標開時，從出貨狀態登載來的序號（還帶著出貨單號）釋放後回到 `shipped`（保留案號與出貨單號），不是在庫；在庫來的照舊回 `in_stock`。
+- 一條龍 P0a（旗標 `onepipe.links`）：出貨單的四種信件與站內通知（送審、輪到簽核、核准、退回）、模組活動信的連結改為該案件頁的出貨單分頁 `case-management.html?q=<案號>&tab=shipping`（原連結 `shipping-notes.html` 不存在）；旗標關或查不到案號 ⇒ 連結與站內通知的 link 欄與今天相同。新增 L1 公開函式 `helpers.email_notify.shipping_link(note_no)`。
+- 一條龍 P1'：新提供者 `stock.case_summary`（IP-117，暫定號；`modules/supply/case_summary.py`）——該案件已安裝／已出貨／作廢的序號台數與料號（唯讀、只有數量沒有金額），給案件的物料流程時間軸入庫格用。
 - 測試：`tests/test_onepipe_p0c_ship_install_2026_11_13.py`（旗標關仍衝突；開：同案登載／釋放、他案與已認領仍衝突、在庫路徑不變）。無 migration、無新表。
 
 ## 1.0.36 — 2026-11-11（fix/t80-conn-leak-net；進貨建批的重複序號檢查納入寫鎖；L1 介面不變）

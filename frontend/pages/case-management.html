@@ -15,6 +15,7 @@
   <script src="../static/profit-rules.js"></script>
   <script src="../static/status-chip.js"></script>
   <script src="../js/status-display-editor.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script src="../js/case-management-core.js"></script>
   <script src="../js/case-management-list.js"></script>
   <script src="../js/case-management-close.js"></script>
@@ -697,7 +698,11 @@
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
                     <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
-                         x-show="caseMapUrl() || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                         x-show="caseMapUrl() || onepipe.timeline || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                      <!-- 一條龍 P1'（旗標 onepipe.timeline，預設關＝不出現）：唯讀的物料流程時間軸 -->
+                      <template x-if="onepipe.timeline && selected">
+                        <a data-testid="case-link-material-flow" :href="'material-flow.html?q=' + encodeURIComponent(selected.quote_no)">物料流程</a>
+                      </template>
                       <template x-if="caseMapUrl()">
                         <a data-testid="case-link-map" :href="caseMapUrl()">在地圖上看</a>
                       </template>
@@ -1124,6 +1129,13 @@
 
               <!-- ── 材料申請 ── -->
               <div x-show="execSubTab==='materials'">
+                <!-- 一條龍 P0a（旗標 onepipe.links，預設關＝這一塊不出現）：從案件直接開請購單／採購單，案件已帶好，不必重新搜尋 -->
+                <div x-show="onepipe.links && selected" x-cloak data-testid="op-open-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+                  <a data-testid="op-open-pr" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_req'"
+                     style="font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;text-decoration:none;font-family:var(--font-zh)">開請購單</a>
+                  <a data-testid="op-open-po" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_order'"
+                     style="font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;text-decoration:none;font-family:var(--font-zh)">開採購單</a>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
                   <span class="cm-section-title" style="margin-bottom:0">材料申請清單</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
                   <div style="display:flex;gap:8px">

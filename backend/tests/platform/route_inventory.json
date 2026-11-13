@@ -1748,6 +1748,11 @@
    "pp": 1,
    "body": false
   },
+  "GET /api/quotations/{quote_no}/material-flow": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
   "GET /api/quotations/{quote_no}/material-link-status": {
    "w": false,
    "pp": 1,

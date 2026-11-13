@@ -58,6 +58,7 @@ window.CM_PARTS.push(() => ({
     signedBackBusy: false, signedBackErr: '',
     fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
+    onepipe: { links: false, timeline: false },     // 一條龍各批次開關（static/onepipe.js；預設全關＝畫面與今天相同）
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
@@ -115,6 +116,7 @@ window.CM_PARTS.push(() => ({
       this.$watch('moDirty', v => { window.motrixIsDirty = !!v || !!this.dirty })   // 材料申請有未儲存的新增／修改：離頁（beforeunload）與站內切換都提示
       this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
+      if (window.MotrixOnepipe) window.MotrixOnepipe.flags().then(f => { this.onepipe = f })
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
       this.loadLocations()
@@ -179,6 +181,11 @@ window.CM_PARTS.push(() => ({
           this.loadCases()
         }
         if (_found) await this.selectCase(_found.quote_no)
+        // 一條龍 P0a（旗標 onepipe.links）：?sub=materials ⇒ 直接落在「執行管理 › 材料申請」（旗標關或沒帶 ⇒ 與今天相同）
+        if (_found && new URLSearchParams(location.search).get('sub') === 'materials' && window.MotrixOnepipe && (await window.MotrixOnepipe.flags()).links) {
+          this.activeTab = 'exec'; this.execSubTab = 'materials'
+          this.loadMaterialOrders(_found.quote_no)
+        }
       }
     },
 

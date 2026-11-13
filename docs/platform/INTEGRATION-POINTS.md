@@ -694,6 +694,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-117　`stock.case_summary`：案件的庫存序號彙總（M03 → M01 物料流程時間軸；暫定號，列車定號；2026-11-13，一條龍 P1'）
+
+案件「物料流程」時間軸（`GET /api/quotations/{no}/material-flow`，旗標 `onepipe.timeline`）的「入庫」格：該案件已安裝／已出貨的序號台數與料號。**只回數量與料號，沒有任何金額欄位**；案件可見性由案件側先檢查（M03 不認識案件成員）。提案 `docs/platform/plans/PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md` §2.2／§2.3。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/case_summary.py::case_summary` |
+| 使用方 | M01 案件：`modules/case/material_flow.py`（入庫格；唯讀） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.case_summary", "supply"): case_summary`；取用：`fn = registry.single_provider("stock.case_summary")`；`None` ⇒ 入庫格整格隱藏。`fn(conn, quote_no, caller) -> {"installed", "shipped", "void", "parts": [{"partNo", "installed", "shipped"}]}`（讀呼叫端連線、不寫、不 commit；`caller` 目前不影響內容，保留給之後加成本欄位時依呼叫者遮罩） |
+| 回傳 | 只算 `stock_items.quote_no` 等於該案件者；沒有 ⇒ 全 0 |
+| 對方不在時 | M03 不在 ⇒ 入庫格與出貨格整格隱藏（回應 `stockPresent`＝false）；M03 在但提供者丟例外 ⇒ 該格顯示「庫存暫時讀不到」（不隱藏，免得被誤認沒有倉儲），其餘格照常 |
+| 契約版本 | 1（2026-11-13） |
+| 守門 | `backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py` |
+
+---
+
 ## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）
 
 主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `modules/accounting/api/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。

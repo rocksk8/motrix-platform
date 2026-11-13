@@ -12,6 +12,7 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/definition-form.js"></script>
   <script src="../static/public-flags.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -406,6 +407,24 @@
           this.pkInv = AttachPicker.create({ peers: function () { return [self.pkOther] } })
           this.searchCases(); this.loadTypes()
           try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
+          this._openFromCase()
+        },
+        // 一條龍 P0a（旗標 onepipe.links）：?case=<案號>&type=purchase_req|purchase_order ⇒ 案件已選好、單據類型已選好（從案件頁「開請購單／開採購單」連過來）。旗標關 ⇒ 什麼都不做
+        async _openFromCase() {
+          try {
+            var qs = new URLSearchParams(location.search), no = (qs.get('case') || '').trim(), ty = (qs.get('type') || '').trim()
+            if (!no || !window.MotrixOnepipe || !(await window.MotrixOnepipe.flags()).links) return
+            var r = await fetch('/api/extra-expenses/cases?q=' + encodeURIComponent(no), { headers: this._h() })
+            var list = r.ok ? await r.json() : []
+            var c = (list || []).find(function (x) { return x.quoteNo === no })
+            if (!c) return                                           // 看不到這個案件 ⇒ 維持原本的挑案件畫面（不洩漏案件存在與否）
+            this.caseQ = no; this.cases = list; this.casesLoaded = true
+            await this.pickCase(c)
+            if (ty === 'purchase_req' || ty === 'purchase_order') {
+              for (var i = 0; i < 40 && !this.types.length; i++) await new Promise(function (ok) { setTimeout(ok, 100) })     // 類型清單載入完才能選
+              if (this.types.some(function (x) { return x.code === ty })) { this.typeCode = ty; await this.selectType() }
+            }
+          } catch (e) { /* 入口只是方便；失敗就停在原本的畫面 */ }
         },
         _h(json) { var h = { Authorization: 'Bearer ' + (this.session.token || '') }; if (json) h['Content-Type'] = 'application/json'; return h },
         async _json(r) { try { return await r.json() } catch (e) { return {} } },

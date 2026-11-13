@@ -3,6 +3,7 @@
 from core.registry import ModuleSpec
 
 from modules.supply import attachments
+from modules.supply import case_summary as _case_summary
 from modules.supply import gl_events
 from modules.supply import material_link
 from modules.supply import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
@@ -18,6 +19,8 @@ MODULE = ModuleSpec(
         ("shipping.list_for_case", "supply"): shipping_notes.list_shipping_notes_for_case,
         # IP-19：M01 案件設備序號認領／釋放庫存
         ("stock.serial", "supply"): inventory._StockSerials,
+        # IP-117（暫定號）：M01 物料流程時間軸讀該案件的庫存序號彙總（唯讀；只有數量與料號）
+        ("stock.case_summary", "supply"): _case_summary.case_summary,
         # IP-20：M06 T100 付款傳票的料件進貨段
         ("inventory.paid_batches", "supply"): inventory.paid_batches,
         # IP-GL1（W4 總帳 C4）：進貨批次入庫 E08、進貨發票進項稅額 E08b、進貨付款 E09；唯讀

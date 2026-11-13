@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>保固追蹤 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -168,7 +169,9 @@
             <template x-for="c in group.cases" :key="c.quoteNo">
               <div class="case-block">
                 <div class="case-header">
-                  <span class="case-qno" x-text="c.quoteNo"></span>
+                  <span class="case-qno" x-show="!(op.links && c.quoteNo && c.quoteNo !== '—')" x-text="c.quoteNo"></span>
+                  <!-- 一條龍 P0a（旗標 onepipe.links）：案號可點進案件頁 -->
+                  <a class="case-qno" data-testid="op-warranty-case-link" x-show="op.links && c.quoteNo && c.quoteNo !== '—'" x-cloak :href="'case-management.html?q=' + encodeURIComponent(c.quoteNo)" style="text-decoration:underline" x-text="c.quoteNo"></a>
                   <span class="case-name" x-text="c.projectName || '（無案件名稱）'"></span>
                   <span :class="'dt ' + (c.dealTag==='已成案' ? 'dt-active' : c.dealTag==='已結案' ? 'dt-closed' : 'dt-none')" x-text="c.dealTag || '—'"></span>
                   <span class="case-count" x-text="c.devices.length + ' 台'"></span>
@@ -212,6 +215,7 @@
   function warrantyPage() {
     return {
       session: {},
+      op: { links: false },              // 一條龍開關（static/onepipe.js；預設關＝與今天相同）
       devices: [],
       loading: true,
       search: '',
@@ -230,6 +234,7 @@
         const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
         if (!s?.token) { location.href = '../index.html'; return }
         this.session = s
+        if (window.MotrixOnepipe) window.MotrixOnepipe.flags().then(f => { this.op = f })
         await this.load()
         // auto-expand customers that have urgent items
         const g = this.grouped

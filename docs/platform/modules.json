@@ -423,6 +423,7 @@
     "page:pages/case-management.html",
     "page:pages/case-stage-board.html",
     "page:pages/completion-note-form.html",
+    "page:pages/material-flow.html",
     "page:pages/payment-request.html",
     "page:pages/quotation-form.html",
     "page:pages/quotations.html",

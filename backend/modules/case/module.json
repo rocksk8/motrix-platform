@@ -386,6 +386,9 @@
     },
     {
       "path": "sales-orders.html"
+    },
+    {
+      "path": "material-flow.html"
     }
   ],
   "system_cards": [

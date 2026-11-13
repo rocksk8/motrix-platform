@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>物料流程 - MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .mf-body { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 28px 60px; font-family: var(--font-zh); }
+    .mf-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px }
+    .mf-title { font-size:18px; font-weight:700 }
+    .mf-sub { font-size:13px; color:var(--text-dim) }
+    .mf-back { font-size:13px; color:var(--accent); text-decoration:none }
+    .mf-next { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 18px; padding:10px 14px; border:1px solid var(--border-light); border-radius:8px; background:#fff; font-size:13px }
+    .mf-next a { padding:5px 12px; border-radius:6px; background:var(--accent); color:#fff; text-decoration:none; font-size:13px }
+    .mf-line { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px }
+    .mf-cell { border:1px solid var(--border-light); border-radius:10px; padding:14px 16px; background:#fff; display:flex; flex-direction:column; gap:8px }
+    .mf-cell h3 { margin:0; font-size:14px; display:flex; align-items:center; gap:8px }
+    .mf-chip { font-size:12px; padding:2px 8px; border-radius:10px; border:1px solid var(--border-light); color:var(--text-dim); font-weight:400 }
+    .mf-chip--done { background:var(--tone-success-bg, #E6F4EA); color:var(--tone-success-fg, #1E6B34); border-color:transparent }
+    .mf-chip--inprogress { background:var(--tone-info-bg, #E8F0FE); color:var(--tone-info-fg, #1A4FA0); border-color:transparent }
+    .mf-chip--skipped { background:var(--tone-neutral-bg, #F0EEE9); color:var(--text-dim); border-color:transparent }
+    .mf-sum { font-size:13px; line-height:1.5 }
+    .mf-items { margin:0; padding:0; list-style:none; font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:3px }
+    .mf-items b { color:var(--text-main); font-weight:600 }
+    .mf-go { font-size:12px; color:var(--accent); text-decoration:none; margin-top:auto }
+    .mf-note { font-size:12px; color:var(--text-dim); margin-top:14px }
+    .mf-err { margin-top:16px; padding:12px 14px; border:1px solid var(--border-light); border-radius:8px; background:#fff; font-size:13px }
+  </style>
+</head>
+<body x-data="materialFlow()" x-init="init()" x-cloak>
+  <div class="mf-body" data-testid="mf-page">
+    <div class="mf-head">
+      <span class="mf-title">物料流程</span>
+      <span class="mf-sub" x-text="quoteNo"></span>
+      <a class="mf-back" data-testid="mf-back" :href="'case-management.html?q=' + encodeURIComponent(quoteNo)">← 回到案件</a>
+    </div>
+    <div class="mf-sub">這個案件的叫料、採購、到貨、出貨、設備與保固走到哪。只顯示現在算得出來的部分，這個畫面只能看、不能改，也不顯示金額。</div>
+
+    <div class="mf-err" x-show="err" data-testid="mf-err" x-text="err"></div>
+
+    <template x-if="data">
+      <div>
+        <div class="mf-next" data-testid="mf-next" x-show="data.next">
+          <span>下一步建議：</span><b x-text="data.next && data.next.label"></b>
+          <a :href="data.next && data.next.href" data-testid="mf-next-go">前往</a>
+        </div>
+        <div class="mf-next" data-testid="mf-allclear" x-show="!data.next"><span>目前沒有需要接著處理的項目。</span></div>
+        <div class="mf-line">
+          <template x-for="c in data.cells" :key="c.key">
+            <div class="mf-cell" :data-testid="'mf-cell-' + c.key" :data-state="c.state">
+              <h3><span x-text="c.label"></span><span class="mf-chip" :class="'mf-chip--' + c.state" x-text="stateLabel(c.state)"></span></h3>
+              <div class="mf-sum" x-text="c.summary"></div>
+              <ul class="mf-items" x-show="(c.items || []).length">
+                <template x-for="(it, i) in (c.items || [])" :key="i">
+                  <li x-html="itemLine(c.key, it)"></li>
+                </template>
+              </ul>
+              <a class="mf-go" x-show="c.href" :href="c.href" x-text="'到「' + c.label + '」相關頁面'"></a>
+            </div>
+          </template>
+        </div>
+        <div class="mf-note" data-testid="mf-note" x-show="!data.stockPresent">這個系統沒有安裝倉儲模組，所以不顯示入庫與出貨。</div>
+      </div>
+    </template>
+  </div>
+
+  <script>
+  function materialFlow() {
+    return {
+      session: {}, quoteNo: '', data: null, err: '',
+      _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) },
+      stateLabel(s) { return ({ inprogress: '進行中', done: '完成', skipped: '略過', na: '尚未開始／尚未提供' })[s] || s },
+      itemLine(key, it) {
+        const e = (v) => this._esc(v)
+        if (key === 'call') return '<b>' + e(it.docCode) + '</b> ' + e(it.name) + '（' + e(it.status) + '）'
+        if (key === 'arrive') return '<b>' + e(it.docCode) + '</b> ' + e(it.name) + '：' + (it.arrived ? '已到貨 ' + e(it.receivedOn) : '還沒到')
+        if (key === 'purchase') return '<b>' + e(it.kindLabel) + ' ' + e(it.docCode) + '</b>（' + e(it.status) + (it.date ? '，' + e(it.date) : '') + '）'
+        if (key === 'ship') return '<b>' + e(it.noteNo) + '</b>（' + e(it.status) + (it.shipDate ? '，' + e(it.shipDate) : '') + (it.signed ? '，已回簽' : '') + '）'
+        if (key === 'stock') return '<b>' + e(it.partNo || '（未填料號）') + '</b>：已安裝 ' + e(it.installed) + '、已出貨 ' + e(it.shipped)
+        return e(JSON.stringify(it))
+      },
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
+        if (!s || !s.token) { location.href = '../index.html'; return }
+        this.session = s
+        this.quoteNo = (new URLSearchParams(location.search).get('q') || '').trim()
+        if (!this.quoteNo) { this.err = '請從案件頁進入物料流程（網址缺少案號）。'; return }
+        try {
+          const r = await fetch('/api/quotations/' + encodeURIComponent(this.quoteNo) + '/material-flow', { headers: { Authorization: 'Bearer ' + s.token } })
+          if (r.status === 404) { this.err = '查無這個案件，或物料流程尚未開放。'; return }
+          if (!r.ok) { this.err = '讀取失敗（HTTP ' + r.status + '），請稍後再試。'; return }
+          this.data = await r.json()
+        } catch (e) { this.err = '連不上系統，請確認網路後再試一次。' }
+      },
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>
