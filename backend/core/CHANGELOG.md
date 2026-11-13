@@ -28,6 +28,7 @@
 - **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。**
 - 新增（啟動遷移）：`helpers/startup.enable_onepipe_defaults_once()`（`main.py` 在 `init_unlock_passwords` 之後呼叫；標記 `system_settings.migration_onepipe_default_on_t84`）。看「資料庫裡存的值」（不看有效值）：群組 `onepipe` 登錄的每個欄位存成 0 ⇒ 一次經設定中心引擎 `publish` 成 1（寫 `config_changes` 與稽核 `settings.onepipe.update`：系統升級、0→1、原因含 T84）；沒存過或已是 1 ⇒ 只記標記。發布失敗（例如有送審中的版本）⇒ 不記標記、不丟例外、下次啟動再試。不碰其他鍵（P0d 的 `onepipe.warranty_closed_baseline` 靜默基準照舊）。
 - 加強（人為關閉的保留，PM 裁示）：遷移前先查 `config_changes`（domain＝`setting:onepipe`）——該欄位只要有過任何一筆新值＝0 的紀錄，就視為有人在設定中心明確關掉過，**跳過不動**（記在標記 JSON 的 `kept_off`，稽核也不列）；沒有紀錄的 0（舊版直接寫入）才當舊預設開啟。讀明細失敗 ⇒ 不記標記、下次再試。測試 +1。
+- 加強（權限類旗標排除，使用者裁示 2026-11-14）：遷移加明確排除清單 `_ONEPIPE_PERMISSION_FLAGS`＝`buyer_access`、`receive_permission`（放寬權限類，預設關）——不論存值是否為 0、有無人為關閉明細，一律不被一次性遷移打開（記在標記 JSON 的 `excluded`，稽核也不列）。新增這類旗標時加進清單。測試 +1。
 - 行為變更：`helpers/settings_groups_onepipe.py` 所有欄位 default／recommended 0→1，選項標籤「開啟（預設）」；`helpers/onepipe_flags.flag_on` **仍是 fail-closed**（群組沒登錄或讀取例外 ⇒ 當關）。L1 公開介面不變（`enable_onepipe_defaults_once` 只供 `main.py`，同公司資料收緊遷移的作法）。部署基準 `settings_deploy_baseline.json` onepipe 欄位 default 0→1。
 - 測試：`tests/test_onepipe_default_on_migration_2026_11_13.py`（舊存值 0→1＋稽核與明細、只跑一次、使用者之後關掉的保留、只動 0 的欄位、已是 1 只記標記、失敗不記標記後重試、不動其他鍵、main.py 有呼叫）；`tests/test_onepipe_p0a_links_2026_11_13.py` 改驗預設開＋設定中心關閉＋讀取失敗仍關。
 - 新增（設定中心）：群組 `onepipe`（`helpers/settings_groups_onepipe.py`，拆檔同 lodging_freshness）——各批次共用的開關，欄位皆 0／1、（原預設 0；T84 起預設 1，見上）：`worklog_case`（P0b 工作日誌可選案件）、`warranty_closed_notify`（P0d 保固到期通知納入已結案案件）。P0a／P0c／P1' 的欄位 `links`（案件與採購的快速入口、出貨單通知連結）、`ship_install_ok`（同案先出貨後登載設備不再序號衝突）、`timeline`（案件物料流程時間軸）亦在同一份清單，預設 0。
@@ -73,6 +74,15 @@
   - 每次實際變更寫一筆稽核 `user.notification_prefs.self`（`by:"self"`、改成不收／改成要收的類型、前後清單長度）。只改本人，不通知別人（不走 `notify_change`）。
 - 前端：`pages/my-account.html` 通知分頁最上方新增「Email 通知」卡，用共用矩陣元件（`settings-matrix.js` 草稿模式：點選只算草稿，按「儲存」才寫入；業務類可批次、簽核／系統技術類不能批次且儲存前跳確認視窗）。LINE 卡原樣不動；「沒有可自己設定的通知」的空狀態提示改成只談 LINE（Email 卡永遠在）。
 - 不變：管理員代設定（`PUT /api/users/{id}` 的 `notification_muted`、使用者管理頁）完全沒動；L1 公開介面沒有變動（新函式都是底線私有，`core_version` 只因 (next) 佔位而是 `"next"`）。
+- 新增（P0b，旗標 `onepipe.worklog_case`，預設關）：工作日誌可選案件。`GET /api/work-logs/case-options?q=`（登入＋工作日誌或案件管理模組；只回案號／客戶／案名，進行中案件、這個人看得到該案動態的才列，最多 30 筆；旗標關 ⇒ 404）；旗標開時 `POST／PUT /api/work-logs` 的 `case_no` 必須是看得到該案動態的案件（`guard_case_access`，看不到＝404、稽核另記）；改掛才檢查，清空與原樣不動不擋；旗標關＝今天的行為（不檢查）。畫面 `work-log.html` 旗標開才出現「關聯案件」欄位與列表欄，關時 DOM 與送出內容都不變。日誌可見範圍（`GET /api/work-logs`）不變。
+- L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.case_access.attachable_cases(conn, user, q, limit, max_scan)`——給上面選單用，規則與 `case_documents_readable` 同一條；讀 `quotations` 仍只在 `helpers/case_access.py`。
+- 測試：`tests/test_onepipe_worklog_case_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/settings-matrix-s3a；使用者權限頁：批次授予／取消、範本套用、職責角色連動綁定）**
+- L1（新增，只增；快照由整合者重產）：新單位 `helpers/user_perm_batch.py`（`BATCH_GRANT_REFUSED`、`MAX_USERS`、`list_catalog`、`parse_request`、`preview`、`apply`）；`helpers.duty_roles.gate_reason(touched, reason, extra_keys=())`（相容擴充：批次拒絕清單也走同一條原因規則）、`record_user_modules_change(..., sensitive=True)`（相容擴充）。
+- 行為變更（新端點）：`POST /api/users/permissions/batch/preview`（唯讀）、`POST /api/users/permissions/batch`（最高管理者）；`GET /api/modules/catalog` 新增 `highSensitiveKeys`／`batchGrantRefused`／`financeKeys`（前端不寫死）。規則：高敏感鍵與批次拒絕清單（案件待辦－工程主管確認／業務確認、報價單、費用單據、檔案中心、外包名冊）**授予一律略過、取消要原因（≥4 個不同字）並寫權限變更紀錄**；財務三鍵批次不動；最高管理者不納入；範本預覽＝套用（`planHash` 不符 409）；整批同一個寫入交易。既有 `PUT／POST /api/users` 與職責角色各動作行為不變。
+- 測試：`tests/test_user_perm_batch_2026_11_13.py`（四條路徑各一題）。
+- 行為變更（通知，S1d 共用元件）：批次套用／復原在 commit **之後**經 `settings_notify`（`batch()`）發**一則**合併通知給其他在職最高管理者（操作者本人不收）；動到高敏感／批次拒絕鍵的人 ⇒ 該項 `risk=security`＋`sensitive`（非最高管理者看不到值與原因，另發 LINE 給最高管理者）。通知失敗不影響已 commit 的寫入。
+- 行為變更（審查修正）：範本與復原絕不新增個人扣項；範本套用必帶 `planHash`（否則 400）；取消可點名對方仍持有的舊鍵；取消對方沒有的權限回報略過。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

@@ -11,6 +11,9 @@
 - `POST /api/duty-roles/subtracts/remove` 解除扣項 {userId, key, reason}
 - `POST /api/duty-roles/preview`        生效權限預覽（唯讀）{userId, modules[], roleIds[], subtracts[], role?}
 - `GET  /api/duty-roles/changes`         權限變更紀錄（只讀；沒有任何更新／刪除端點）
+- `POST /api/users/permissions/batch/preview` 批次／範本套用預覽（唯讀；設定矩陣 S3a，邏輯在 helpers/user_perm_batch.py）
+- `POST /api/users/permissions/batch`    批次授予／取消／綁定角色／套用範本 {userIds, grant, revoke, bindRoleIds, unbindRoleIds, template, reason, planHash}
+- `POST /api/users/permissions/batch/undo` 復原這一批（逐人 compare-and-set；{changes:[套用回應 people 中有變更的筆], reason}）
 原因：只有高敏感變更必填（≥4 字，見 helpers/duty_roles.py）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException, Request
@@ -138,6 +141,30 @@ def unsubtract(request: Request, body: dict = Body(...), authorization: str = He
     uid, key = _body_ids(body), str(body.get("key") or "")
     _run(lambda c: dr.unset_subtract(c, actor, uid, key, body.get("reason"), _ip(request)))
     return {"ok": True}
+
+
+@router.post("/api/users/permissions/batch/preview")
+def batch_preview(body: dict = Body(...), authorization: str = Header(None)):
+    """批次／範本套用預覽（唯讀）：每人實際會變什麼、略過什麼與原因、要不要原因、`planHash`。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import user_perm_batch as upb
+    return _run(lambda c: upb.preview(c, actor, body))
+
+
+@router.post("/api/users/permissions/batch")
+def batch_apply(request: Request, body: dict = Body(...), authorization: str = Header(None)):
+    """批次授予／取消／綁定角色／套用範本（SPEC §12）：同一個寫入交易、走共用原因檢查點；被略過的項目照實回報。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import user_perm_batch as upb
+    return _run(lambda c: upb.apply(c, actor, body, _ip(request)))
+
+
+@router.post("/api/users/permissions/batch/undo")
+def batch_undo(request: Request, body: dict = Body(...), authorization: str = Header(None)):
+    """復原這一批（逐人 compare-and-set）：被別人改過的人只拒絕那一位並說明，其餘照復原。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import user_perm_batch as upb
+    return _run(lambda c: upb.undo(c, actor, body, _ip(request)))
 
 
 @router.get("/api/duty-roles/changes")

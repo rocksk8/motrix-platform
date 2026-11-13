@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 969,
-  "endpoints_api": 965,
-  "write_total": 521,
-  "write_api": 521,
-  "get_api": 444,
-  "distinct_paths_api": 820,
-  "write_with_body_api": 386,
+  "endpoints_total": 975,
+  "endpoints_api": 971,
+  "write_total": 523,
+  "write_api": 523,
+  "get_api": 448,
+  "distinct_paths_api": 824,
+  "write_with_body_api": 388,
   "write_with_path_param_api": 364
  },
  "select_star": {
@@ -4862,6 +4862,36 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "GET /api/settings/estimate-payment-terms": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-terms-presets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/settings/estimate-payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-terms-presets": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/completion-notes/case-prefill": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/work-logs/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
   }
  }
 }

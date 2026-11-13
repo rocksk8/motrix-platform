@@ -1016,12 +1016,19 @@ window.CM_PARTS.push(() => ({
     ganttTrim: true,   // 匯出時裁掉前後空白。固定啟用：沒有人會想要一張大半是空白的圖，
                        // 不用多一個選項去問
 
+    // 一條龍 P4b（旗標 onepipe.entry_unify）：新增出勤記錄時預填「今天」與「人次」（沿用這個階段上一筆的人次，沒有就 1）；
+    // 只是預填，欄位照常可改。旗標關＝送空白列，與以前相同。
+    _visitPrefill(st) {
+      if (!this.onepipe || !this.onepipe.entryUnify) return {}
+      const last = (st.visits || []).filter(v => Number(v.visitPeople) > 0).slice(-1)[0]
+      return { visitDate: MotrixDate.today(), visitPeople: last ? Number(last.visitPeople) : 1 }
+    },
     async addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
       if (!st) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits`, {
-          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({})
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify(this._visitPrefill(st))
         })
         if (!r.ok) { MotrixUI.toast('新增記錄失敗', {kind: 'error'}); return }
         Object.assign(st, await r.json())

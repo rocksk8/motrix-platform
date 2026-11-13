@@ -350,19 +350,31 @@ def server_reason_entries(q: dict, presets: list, default_payment_terms: str) ->
     return compute_approval_reason_entries(with_server_margins(q), presets, default_payment_terms)
 
 
-def load_terms_settings():
-    """(presets, default_payment_terms)：與 `routers/quotations._apply_server_submit_reasons` 讀的設定同一份（條款組、預設付款條件）。"""
+def terms_setting_keys(doc_type=None) -> tuple:
+    """(條款組設定鍵, 預設付款條件設定鍵)。估價單有自己的一組（2026-11-13，使用者：報價單有獨立條款、估價單也要）；
+    其餘（含沒帶／舊資料）一律是報價單那組——報價單的鍵與行為逐位元不變。"""
+    from helpers import doc_type as _DT
+    if _DT.norm(doc_type) == _DT.ESTIMATE:
+        return "estimate_terms_presets", "estimate_default_payment_terms"
+    return "quote_terms_presets", "default_payment_terms"
+
+
+def load_terms_settings(doc_type=None):
+    """(presets, default_payment_terms)：與 `routers/quotations._apply_server_submit_reasons` 讀的設定同一份（條款組、預設付款條件）。
+    `doc_type='estimate'` ⇒ 讀估價單自己的條款；沒帶＝報價單（與改版前相同）。"""
     from helpers.settings import _get_setting
-    raw = _get_setting("quote_terms_presets", {}) or {}
+    k_presets, k_pay = terms_setting_keys(doc_type)
+    raw = _get_setting(k_presets, {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
     presets = presets if isinstance(presets, list) else []
-    return presets, (_get_setting("default_payment_terms", DEFAULT_TERMS["paymentTerms"]) or "")
+    return presets, (_get_setting(k_pay, DEFAULT_TERMS["paymentTerms"]) or "")
 
 
 def current_reason_entries(data: dict) -> list:
     """可重複呼叫的介面（給 S3）：輸入目前的 `data_json`（dict），回這一版的原因集合 `[{"key","text"}]`。
-    純讀：不改 `data`、不寫資料庫（只讀設定）；毛利一律伺服器重算。不含「代理送出」那一行（那是送審人身分，不是內容規則）。"""
-    presets, default_pt = load_terms_settings()
+    純讀：不改 `data`、不寫資料庫（只讀設定）；毛利一律伺服器重算。不含「代理送出」那一行（那是送審人身分，不是內容規則）。
+    條款比對基準依單據類型（`data["docType"]`）：估價單讀估價單自己的條款組與預設付款條件。"""
+    presets, default_pt = load_terms_settings(data.get("docType") if isinstance(data, dict) else None)
     return server_reason_entries(data, presets, default_pt)
 
 

@@ -1409,6 +1409,9 @@
    "menu.pageModules.lodging-records.html",
    "menu.pageModules.lodging-records.html.key",
    "menu.pageModules.lodging-records.html.name",
+   "menu.pageModules.material-flow.html",
+   "menu.pageModules.material-flow.html.key",
+   "menu.pageModules.material-flow.html.name",
    "menu.pageModules.network-plan-form.html",
    "menu.pageModules.network-plan-form.html.key",
    "menu.pageModules.network-plan-form.html.name",
@@ -8870,5 +8873,24 @@
    "version"
   ],
   "s": 200
+ },
+ "/api/settings/estimate-payment-terms": {
+  "k": [
+   "text"
+  ],
+  "s": 200
+ },
+ "/api/settings/estimate-terms-presets": {
+  "k": [
+   "defaultKey",
+   "presets"
+  ],
+  "s": 200
+ },
+ "/api/work-logs/case-options": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  }
 }

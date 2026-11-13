@@ -690,6 +690,39 @@ def list_work_logs(
     return result
 
 
+def _worklog_case_on() -> bool:
+    """onepipe P0b 旗標：工作日誌可選案件。預設關；任何讀取錯誤 ⇒ 當作關（關＝與今天逐位元相同）。"""
+    from helpers import onepipe_flags                  # 以模組引用（測試以 monkeypatch `helpers.onepipe_flags.flag_on` 換掉）
+    return onepipe_flags.flag_on("worklog_case")       # 讀不到／群組沒登錄 ⇒ 關
+
+
+def _worklog_case_guard(case_no: str, user: dict) -> None:
+    """旗標開時，日誌要掛的案件必須是「這個人看得到該案動態」的案件（`guard_case_access`，與 `GET /api/quotations/{no}/updates` 同一條規則）。
+    看不到＝不存在：一律 404、稽核另記真正原因（M01-O1）。"""
+    from helpers.case_access import guard_case_access
+    conn = get_db()
+    try:
+        guard_case_access(conn, case_no, user, allow_module="case_manage")
+    finally:
+        conn.close()                                   # 拒絕時 guard 已關過一次，再關一次無害
+
+
+@router.get("/api/work-logs/case-options")
+def work_log_case_options(q: str = "", authorization: str = Header(None)):
+    """P0b：工作日誌「關聯案件」選單的資料（只有案號／客戶／案名；進行中的案件、這個人看得到動態的才列；最多 30 筆，`q` 搜尋）。
+    旗標 `onepipe.worklog_case` 關（預設）⇒ 404，與這支路由不存在時逐字相同。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
+    if not _worklog_case_on():
+        raise HTTPException(404, "Not Found")
+    from helpers.case_access import attachable_cases
+    conn = get_db()
+    try:
+        return {"items": attachable_cases(conn, user, (q or "")[:60])}
+    finally:
+        conn.close()
+
+
 def _work_log_fields(conn, body: dict, keys) -> dict:
     """工作日誌欄位的型別與範圍檢查（W1c 稽核）：原本 `float("abc")`、`.strip()` 打在非字串、不存在的 user_id 都是 500 或寫進壞資料；
     現在一律 422。只檢查 `keys` 裡且有帶的欄位；回傳正規化後的值（日期 YYYY-MM-DD、時數 float、user_id int、文字去頭尾空白）。"""
@@ -756,6 +789,8 @@ def _create_work_log_impl(body, authorization, u):
     hours    = _f.get("hours", 8.0)
     case_no  = _f.get("case_no", "")
     contact_type = _f.get("contact_type", "")
+    if case_no and _worklog_case_on():                  # P0b：旗標開 ⇒ 只能掛自己看得到動態的案件（關＝今天的行為，不檢查）
+        _worklog_case_guard(case_no, u)
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
@@ -790,6 +825,10 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
     except HTTPException:
         conn.close()
         raise
+    if _f.get("case_no") and _f["case_no"] != (row["case_no"] or "") and _worklog_case_on():
+        conn.close()                                                    # P0b：改掛到別的案件才檢查（清空、原樣不動都不擋）；旗標關＝今天的行為
+        _worklog_case_guard(_f["case_no"], u)
+        conn = get_db()
     if "user_id" in _f and _f["user_id"] != row["user_id"] and u["role"] != "superadmin":
         conn.close()                                                    # 第49班 W1c-P5：記錄對象只有最高管理者能改（本人／管理員不能把日誌轉給別人）
         raise HTTPException(403, "只有最高管理者可以更改工作日誌的人員")
@@ -2632,6 +2671,91 @@ def get_quote_terms_presets(authorization: str = Header(None)):
     """報價人要靠它切換條款組，所以只要求登入（內容不是機密，是公司對外條款）。"""
     _require_user(authorization)
     return _quote_terms_presets()
+
+
+# ── 估價單自己的條款（2026-11-13，使用者：「報價單有獨立條款，估價單也要」）──────────────────────────────
+# 報價單的條款組（system_settings.quote_terms_presets）與預設付款條件（default_payment_terms）**逐位元不變**；
+# 估價單另有一組：`estimate_terms_presets`（同形：{presets, defaultKey}）與 `estimate_default_payment_terms`。
+# 升級時由 case migration 0011 把「目前報價單的值」複製成估價單的初始值（既有行為不變），之後兩邊各自改。
+# 五欄預設文字（DEFAULT_TERMS，沒有任何設定時的內建文字）兩邊共用同一份內建值——它不是設定，沒有各自改的入口。
+# 上面報價單的 PUT 沒動（留給 S5 通知那條線）；清洗邏輯另寫在 `_clean_terms_presets`，之後要合併再收斂。
+
+def _estimate_terms_presets() -> dict:
+    raw = _get_setting("estimate_terms_presets", {}) or {}
+    if not isinstance(raw, dict):
+        return {"presets": [], "defaultKey": ""}
+    presets = raw.get("presets")
+    if not isinstance(presets, list):
+        presets = []
+    return {"presets": presets, "defaultKey": raw.get("defaultKey") or ""}
+
+
+def _clean_terms_presets(body: "QuoteTermsPresetsBody"):
+    """整組覆寫的驗證與清洗（與報價單那支同規則）⇒ (cleaned, default_key)。"""
+    if len(body.presets) > 30:
+        raise HTTPException(400, "條款組最多 30 組")
+    seen, cleaned = set(), []
+    for p in body.presets:
+        name = (p.name or "").strip()
+        if not name:
+            raise HTTPException(400, "條款組名稱不可空白")
+        if len(name) > 30:
+            raise HTTPException(400, f"條款組名稱過長（{name[:10]}…），上限 30 字")
+        key = (p.key or "").strip() or uuid.uuid4().hex[:8]
+        if key in seen:
+            raise HTTPException(400, f"條款組 key 重複：{key}")
+        seen.add(key)
+        item = {"key": key, "name": name}
+        for f in _TERMS_FIELDS:
+            v = getattr(p, f) or ""
+            if len(v) > 5000:
+                raise HTTPException(400, f"「{name}」的{f}內容過長（上限 5000 字）")
+            item[f] = v
+        cleaned.append(item)
+    default_key = (body.defaultKey or "").strip()
+    if default_key and default_key not in seen:
+        default_key = ""                                           # 預設那組被刪 ⇒ 落到第一組（同報價單）
+    if not default_key and cleaned:
+        default_key = cleaned[0]["key"]
+    return cleaned, default_key
+
+
+@router.get("/api/settings/estimate-terms-presets")
+def get_estimate_terms_presets(authorization: str = Header(None)):
+    """估價單的條款組（登入即可讀；內容是公司對外條款）。"""
+    _require_user(authorization)
+    return _estimate_terms_presets()
+
+
+@router.put("/api/settings/estimate-terms-presets")
+def set_estimate_terms_presets(body: QuoteTermsPresetsBody, authorization: str = Header(None)):
+    """估價單條款組整組覆寫（最高管理者）。只動 `estimate_terms_presets`，報價單的條款組不受影響。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    cleaned, default_key = _clean_terms_presets(body)
+    value = {"presets": cleaned, "defaultKey": default_key}
+    _set_setting("estimate_terms_presets", value)
+    default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
+    _audit(_tok(authorization), "settings.estimate_terms_presets.update", "settings",
+           "estimate_terms_presets", f"估價條款組共 {len(cleaned)} 組，預設為「{default_name}」")
+    notify_module_activity("系統設定", "變更估價條款組", actor.get("display_name") or actor["username"],
+                            f"{len(cleaned)} 組，預設「{default_name}」", "quotation-form.html")
+    return value
+
+
+@router.get("/api/settings/estimate-payment-terms")
+def get_estimate_default_payment_terms(authorization: str = Header(None)):
+    _require_user(authorization)
+    terms = _quote_default_terms()
+    return {"text": _get_setting("estimate_default_payment_terms", terms["paymentTerms"] if terms else "")}
+
+
+@router.put("/api/settings/estimate-payment-terms")
+def set_estimate_default_payment_terms(body: PaymentTermsBody, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    _set_setting("estimate_default_payment_terms", body.text)
+    _audit(_tok(authorization), "settings.estimate_payment_terms.update", "settings",
+           "estimate_default_payment_terms", "估價單預設付款條件")
+    return {"ok": True}
 
 
 @router.put("/api/settings/quote-terms-presets")

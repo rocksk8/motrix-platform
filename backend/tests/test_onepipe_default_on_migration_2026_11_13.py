@@ -215,3 +215,24 @@ def test_a_flag_deliberately_turned_off_in_the_ledger_is_kept_off_by_the_migrati
     assert m["kept_off"] == ["timeline"] and "timeline" not in m["fields"] and m["result"] == "enabled"
     d = json.loads(_audits()[0][2])
     assert "timeline" not in {x["field"] for x in d["changes"]}, "稽核也不列被保留的欄位"
+
+
+def test_permission_loosening_flags_are_never_opened_by_the_migration(fresh, monkeypatch):
+    """使用者裁示（2026-11-14）：放寬權限類旗標（buyer_access、receive_permission）預設關、不被一次性遷移打開——
+    即使欄位存成 0 且沒有人為關閉的明細。清單釘死；排除機制用「清單裡有的欄位」實測（欄位登錄後，這兩個自動走同一條路）。"""
+    from helpers import startup
+    assert set(startup._ONEPIPE_PERMISSION_FLAGS) >= {"buyer_access", "receive_permission"}
+    victim = "links"                                          # 借一個已登錄的欄位演練排除清單
+    monkeypatch.setattr(startup, "_ONEPIPE_PERMISSION_FLAGS", tuple(startup._ONEPIPE_PERMISSION_FLAGS) + (victim,))
+    _store()                                                  # 舊庫：每個旗標存成 0，沒有任何明細
+    _run()
+    eff = _effective()
+    assert eff[victim] == 0, "權限類旗標遷移後仍是 0"
+    assert all(v == 1 for k, v in eff.items() if k != victim), "其他 0 照開"
+    for k in startup._ONEPIPE_PERMISSION_FLAGS:               # 這兩個一旦登錄在群組裡，也同樣不開
+        if k in eff:
+            assert eff[k] == 0
+    m = _mark()
+    assert victim in m["excluded"] and victim not in m["fields"] and m["result"] == "enabled"
+    d = json.loads(_audits()[0][2])
+    assert victim not in {x["field"] for x in d["changes"]}, "稽核也不列被排除的欄位"

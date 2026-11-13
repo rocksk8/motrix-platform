@@ -58,7 +58,7 @@ window.CM_PARTS.push(() => ({
     signedBackBusy: false, signedBackErr: '',
     fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
-    onepipe: { links: false, timeline: false },     // 一條龍各批次開關（static/onepipe.js；預設全關＝畫面與今天相同）
+    onepipe: { links: false, timeline: false, entryUnify: false },     // 一條龍各批次開關（static/onepipe.js；讀到之前／讀不到＝全關＝畫面與今天相同）
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
@@ -871,6 +871,23 @@ window.CM_PARTS.push(() => ({
     // 不要用 toISOString() 取日期——它是 UTC，台灣 UTC+8 在本地每天 00:00–08:00 之間會被誤判成前一天。
     _localDateStr(d) {
       return MotrixDate.ymd(d)
+    },
+
+    // 一條龍 P4b：「登載」統一入口的捷徑。feed＝切到「動態」分頁並把游標放進發文框（發文框本來就會依填的欄位寫留言或工作日誌）；
+    // visit＝切到「執行管理 › 執行進度」（各階段有「新增記錄」，已預填今天與人次）。權限與資料寫入走原本的畫面。
+    openLogEntry(kind) {
+      if (!this.selected) return
+      if (kind === 'feed') {
+        this.activeTab = 'feed'
+        this.loadCaseUpdates(this.selected.quote_no)
+        this.$nextTick(() => { const el = document.querySelector('.feed-compose__box'); if (el) el.focus() })
+      } else if (kind === 'visit') {
+        this.activeTab = 'exec'; this.execSubTab = 'progress'
+      }
+    },
+    // 每日工作事項：最高管理者一律可；現場人員要有「每日工作事項」模組（旗標 entry_unify 由入口本身的 x-if 管）
+    canLogTask() {
+      return this.session.role === 'superadmin' || this.hasModule('daily_task')
     },
 
     // 2026-08-31（財務/出納權限分工）：是否具備指定模組——session.modules 是

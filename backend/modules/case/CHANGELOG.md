@@ -1,6 +1,9 @@
 # 案件 更新紀錄
 
 ## (next) — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
+- 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
+- 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。
+- 一條龍 P4b-③ 案件頁「登載」統一入口（旗標 `onepipe.entry_unify`）：案件頁連結列多一行「登載：留言／工作日誌、階段出勤、每日工作事項」，只是捷徑、不合併資料表——留言／工作日誌＝切到「動態」並把游標放進發文框（依填的欄位寫留言或日誌，原本行為）；階段出勤＝切到「執行管理 › 執行進度」（各階段「新增記錄」已預填今天與人次，見 P4b-①）；每日工作事項＝`daily-tasks.html?case_no=<案號>`。每個選項只在這個人真的能做時才出現（依動態／執行管理／進度的顯示權限與每日工作事項模組）。旗標關 ⇒ 整行不出現。純前端，無新端點。
 - **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
 - 守門補登：`docs/platform/case_read_scope.json` 登記 `GET /api/quotations/{quote_no}/material-flow`（row_access）；`modules.json` 補歸屬（M01：`case/material_flow`、`case/api/material_flow`）；畫面字串「叫料」依 2026-10-02 用詞守門改稱「材料申請」。
 - 案件管理頁：旗標開時，「執行管理 › 材料申請」頂端多「開請購單」「開採購單」兩個連結（帶案號與單據類型到 `payment-request.html`）；網址 `?q=<案號>&sub=materials` 直接落在該子頁。`payment-request.html` 吃 `?case=<案號>&type=purchase_req|purchase_order`：案件與類型已選好（看不到該案件 ⇒ 維持原本的挑案件畫面）。
@@ -8,10 +11,19 @@
 - P1' 物料流程時間軸：新端點 `GET /api/quotations/{no}/material-flow`（唯讀；旗標 `onepipe.timeline` 關 ⇒ 404；案件成員才看得到，非成員同一個 404）＋新頁 `material-flow.html?q=<案號>`＋案件頁上方連結列「物料流程」（旗標開才出現）。七格：叫料、採購、到貨（逐張叫料單到了／沒到）、入庫（只顯示已安裝／已出貨台數，其餘標「第 2 階段後提供」）、出貨、設備、保固；入庫與出貨經 `stock.case_summary`（IP-117）與 `shipping.list_for_case`（IP-18）：M03 不在 ⇒ 該格隱藏、讀取出錯 ⇒「暫時讀不到」、出貨單無權限 ⇒ 該段不回傳。**回應沒有任何金額欄位**。無 migration、不動權限。
 - 物料流程入庫格：呼叫者沒有「檢視庫存」權限（提供者回 403）⇒ 這一格只顯示「無權限檢視」，不回台數與料號。
 - 測試：`modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py`（旗標關 404、七格、逐張到貨、金額掃描、非成員 404、M03 不在／出錯／出貨無權限三種降級）、- 測試：`tests/test_onepipe_p0a_links_2026_11_13.py`、`tests/test_e2e_onepipe_p0a_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/onepipe-p0d-warranty-closed；物料流程一條龍 P0d：保固到期通知納入已結案案件）**
+- 新增（旗標 `onepipe.warranty_closed_notify`，**預設關＝與今天逐位元相同**）：每日保固檢查 `case_deadlines._check_warranty_expiry` 開啟後也掃「已結案」案件的設備保固，同門檻（設定中心『保固郵件天數』）、同收件人（案件業務＋群組）、同去重鍵 `warranty_notif.{案號}_{序號}_{門檻}`、先寄成功才記。
+- **不會一開就洗歷史**：開啟後第一次每日檢查「靜默建基準」——當下已在提醒期間內的已結案設備只寫去重記號、不寄信（記號 `onepipe.warranty_closed_baseline` 存基準日）；到期日早於基準日的永遠不通知；之後只有新進入提醒期間的才寄。關閉旗標時基準作廢，再開重新建基準（關閉期間錯過的不補寄）。
+- 補登的歷史案件（T70 `approval.historical`）即使結案也排除；已結案那一段任何例外都被隔離，不影響進行中案件原本的通知；已結案查詢不用 `json_extract`（Python 判斷，棘輪不增）。行事曆對帳 `_sync_warranty_calendar` 與進行中案件查詢不動。
+- 測試：`tests/test_onepipe_warranty_closed_2026_11_13.py`（旗標關不寄且不寫記號、首次靜默、新跨門檻只寄一次、已過期永不寄、關→開重建基準、歷史案排除、錯誤隔離、暫時寄送失敗隔天補寄；變異驗證：拿掉截止日／靜默記號皆會紅）。
 
 ## 1.0.227（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
 - 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
 - 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
+
+## 1.0.227（next，未取號）— 2026-11-13（feat/estimate-own-terms；估價單自己的條款）
+- **估價單自己的條款（feat/estimate-own-terms，使用者：「報價單有獨立條款，估價單也要」）**：估價單有自己的條款組（`system_settings.estimate_terms_presets`）與預設付款條件（`estimate_default_payment_terms`），端點 `GET/PUT /api/settings/estimate-terms-presets`、`GET/PUT /api/settings/estimate-payment-terms`（讀＝登入、寫＝最高管理者、稽核）；報價單的端點、設定鍵與行為一個位元都不變。遷移 0011：把目前報價單的條款設定複製成估價單初始值（冪等、不蓋已有的、報價單沒設過就不建），之後兩邊各改各的。送審重算（`submit_reasons`／`compute_approval_reasons` 的比對基準）依單據類型讀對應那組，類型以資料庫現值為準；估價單開啟／複製／切換類型時前端載入估價單的條款組與預設付款條件，PDF「五、估價條件」本來就讀單據自己的條款欄位。內建五欄預設文字（`DEFAULT_TERMS`）兩邊共用。
+- 測試：`tests/test_estimate_own_terms_2026_11_13.py`。
 
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
