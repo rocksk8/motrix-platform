@@ -806,7 +806,7 @@
       </div>
       <div style="padding:20px">
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.6">
-          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定<span x-show="isPendingStatus()">；<strong>存檔後整條簽核會重跑（重新送審）</strong></span>。
+          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定<span x-show="isPendingStatus()" data-testid="qf-unlock-consequence">；<strong>存檔後，已簽的層全部清除重簽，送審人會改成你</strong></span>。
         </div>
         <div style="margin-bottom:4px">
           <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
@@ -1127,7 +1127,7 @@
       <!-- 最高管理者的編輯入口：已送出 ⇒ 解鎖編輯；待審核／簽核中 ⇒ 同一顆（V3.45：原本最高管理者＋當層簽核人在待審核完全沒有入口；後端 unlock-edit 本來就允許） -->
       <template x-if="canUnlockEdit()">
         <button class="btn btn-ghost btn-sm" @click="showUnlockModal=true; unlockPwd=''; unlockError=''" data-testid="qf-unlock-edit"
-                :title="isPendingStatus() ? '解鎖後可直接修改內容；存檔後整條簽核會重跑（重新送審）' : '解鎖後可修改內容；存檔後需重新簽核'"
+                :title="isPendingStatus() ? '解鎖後可直接修改內容；存檔後已簽的層全部清除重簽，送審人會改成你（整條簽核會重跑）' : '解鎖後可修改內容；存檔後需重新簽核'"
                 style="border-color:#FDE68A;color:#92400E;background:#FFFBEB">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           解鎖編輯
@@ -1191,19 +1191,19 @@
           <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出簽核'"></span>
         </button>
       </template>
-      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !reviewEditing">
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !reviewEditing && !unlocked">
         <button class="btn btn-approve btn-sm" data-testid="qf-approve-open-preview" @click="openPreview('external')" title="查看對外預覽後確認簽核">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           預覽後簽核
         </button>
       </template>
-      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !unlocked">
         <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;" @click="rejectQuote()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
           退回修改
         </button>
       </template>
-      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !unlocked">
         <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="rejectFinalQuote()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
           駁回結案
@@ -2589,19 +2589,19 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost btn-sm" @click="previewMode=null">關閉</button>
-        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !unlocked">
           <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;" @click="previewMode=null; rejectQuote()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
             退回修改
           </button>
         </template>
-        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !unlocked">
           <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="previewMode=null; rejectFinalQuote()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
             駁回結案
           </button>
         </template>
-        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !unlocked">
           <button class="btn btn-approve btn-sm" data-testid="qf-approve-from-preview" @click="approveQuote(); previewMode=null">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             確認簽核
@@ -3710,6 +3710,7 @@
       },
 
       autoSave() {
+        if (this.unlocked) return             // 解鎖編輯一律手動按「儲存修改」（存檔會重跑簽核鏈，不該被計時器碰；自動存檔的 PUT 不帶 _isUnlockEdit，必被 403）
         if (this.isApproverLocked()) return   // 簽核人檢視中不存檔（PUT 在待審核會被擋）；欄位已鎖，這是最後一道防線
         if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
         if (this.saveConflictBanner) return   // 已知衝突：等使用者載入最新版（橫幅上的按鈕）；手動「儲存草稿」仍可再試（對方若剛好又存過會再 409）
@@ -4896,8 +4897,15 @@
         }
       },
 
-      cancelUnlock() {
-        this.unlocked = false          // 「重新鎖定」／「取消解鎖」要真的鎖回去（原本只關彈窗，unlocked 沒有還原）
+      async cancelUnlock() {
+        // 「重新鎖定」／「取消解鎖」要真的鎖回去（原本只關彈窗，unlocked 沒有還原）。有未存的修改 ⇒ 先確認，確認後載回伺服器版（不留「鎖住卻顯示改過的值」）
+        if (this.unlocked && this.isDirty) {
+          if (!confirm('重新鎖定會放棄尚未儲存的修改，確定嗎？')) return
+          await this.reloadLatestAfterConflict()
+          if (this.isDirty) return      // 載入失敗：保持解鎖、修改仍在畫面上（reloadLatestAfterConflict 已提示）
+          this.toast('已放棄未儲存的修改')
+        }
+        this.unlocked = false
         this.showUnlockModal = false
         this.unlockPwd = ''
         this.unlockError = ''
