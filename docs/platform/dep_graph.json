@@ -1904,7 +1904,8 @@
    "imports": [
     "helper:audit",
     "helper:settings",
-    "helper:settings_help"
+    "helper:settings_help",
+    "plat:paths"
    ],
    "kind": "helper",
    "path": "backend/helpers/menu_categories.py",
@@ -2584,7 +2585,8 @@
    "imports": [
     "helper:audit",
     "helper:settings",
-    "helper:settings_registry"
+    "helper:settings_registry",
+    "plat:paths"
    ],
    "kind": "helper",
    "path": "backend/helpers/settings_help.py",

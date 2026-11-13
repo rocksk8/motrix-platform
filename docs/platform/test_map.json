@@ -26316,6 +26316,7 @@
     "page:pages/account-items.html",
     "page:pages/approval-history.html",
     "page:pages/approval-settings.html",
+    "page:pages/backup-monitor.html",
     "page:pages/change-password.html",
     "page:pages/contractor-voucher-approval-settings.html",
     "page:pages/file-center.html",
@@ -26345,6 +26346,7 @@
      "frontend/pages/account-items.html",
      "frontend/pages/approval-history.html",
      "frontend/pages/approval-settings.html",
+     "frontend/pages/backup-monitor.html",
      "frontend/pages/change-password.html",
      "frontend/pages/contractor-voucher-approval-settings.html",
      "frontend/pages/file-center.html",
@@ -27442,7 +27444,6 @@
     "core:db",
     "core:heartbeat_job",
     "dir:backend/tools/",
-    "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
     "helper:backup_monitor",
@@ -27452,6 +27453,7 @@
     "plat:__init__",
     "plat:paths",
     "plat:safe_ping",
+    "plat:source_tree",
     "router:backup_monitor"
    ],
    "evidence": {
@@ -27460,6 +27462,7 @@
      "backend/core/__init__.py",
      "backend/core/paths.py",
      "backend/core/safe_ping.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/heartbeat_job.py",
      "backend/helpers/__init__.py",
@@ -27478,9 +27481,7 @@
     "path": [
      "backend/backup_job.py",
      "backend/heartbeat_job.py",
-     "backend/tools/",
-     "frontend/pages/",
-     "frontend/pages/backup-monitor.html"
+     "backend/tools/"
     ]
    },
    "login_fixture": true
@@ -36105,15 +36106,18 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "dir:frontend/pages/",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_review_edit_lock_2026_11_11.py",
     "helper:auth",
-    "page:pages/quotation-form.html"
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/auth.py",
      "backend/tests/_e2e_login.py",
@@ -36121,10 +36125,6 @@
      "backend/tests/test_e2e_review_edit_lock_2026_11_11.py"
     ],
     "page": [
-     "frontend/pages/quotation-form.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/quotation-form.html"
     ]
    }
@@ -39425,7 +39425,8 @@
     "plat:__init__",
     "plat:source_tree",
     "router:auth",
-    "router:bootstrap"
+    "router:bootstrap",
+    "router:my_account"
    ],
    "evidence": {
     "import": [
@@ -39434,7 +39435,8 @@
     ],
     "api": [
      "backend/routers/auth.py",
-     "backend/routers/bootstrap.py"
+     "backend/routers/bootstrap.py",
+     "backend/routers/my_account.py"
     ],
     "page": [
      "frontend/index.html",
@@ -39919,7 +39921,6 @@
      "backend/routers/system.py",
      "frontend/index.html",
      "frontend/js/",
-     "frontend/pages/notification-settings.html",
      "frontend/static/email-setup.js",
      "frontend/static/menu-editor.js",
      "frontend/static/role-label.js",
@@ -44143,14 +44144,25 @@
   "backend/tests/test_settings_center_valueof_2026_11_13.py": {
    "kind": "audit",
    "units": [
-    "page:pages/settings-center.html"
+    "dir:frontend/js/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_frontend_sources.py",
+    "page:pages/settings-center.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_frontend_sources.py"
+    ],
     "page": [
      "frontend/pages/settings-center.html"
     ],
     "path": [
-     "frontend/pages/settings-center.html"
+     "frontend/js/"
     ]
    }
   },
@@ -46103,6 +46115,7 @@
     "dir:backend/modules/tender_radar/",
     "helper:company_setup",
     "helper:email_notify",
+    "helper:email_setup",
     "helper:geo",
     "helper:line_binding",
     "helper:notify_actions",
@@ -46124,6 +46137,7 @@
     "path": [
      "backend/helpers/company_setup.py",
      "backend/helpers/email_notify.py",
+     "backend/helpers/email_setup.py",
      "backend/helpers/geo.py",
      "backend/helpers/line_binding.py",
      "backend/helpers/notify_actions.py",
@@ -46238,6 +46252,7 @@
     "router:item_reads",
     "router:licensing",
     "router:list_prefs",
+    "router:menu_categories",
     "router:notify_templates",
     "router:option_lists",
     "router:platform_menu_preview",
@@ -46273,6 +46288,7 @@
      "backend/routers/export_templates.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/menu_categories.py",
      "backend/routers/notify_templates.py",
      "backend/routers/option_lists.py",
      "backend/routers/platform_menu_preview.py",
