@@ -17,6 +17,7 @@ CHILD_TABLES = {
     "bonus_item_people", "daily_task_completions", "daily_task_edit_log", "custom_record_files", "custom_record_finance_outbox",
     "custom_record_log", "custom_record_revisions", "custom_record_snapshots", "custom_record_values",
     "voucher_attachments", "voucher_edit_log", "voucher_lines",
+    "stock_item_events",      # 一條龍 P2a：序號異動紀錄＝stock_items（owner_unit_id 表）的子表，經 stock_item_id／序號跟著母列，不另存單位
 }
 GLOBAL_TABLES = {
     "access_categories", "access_fit", "access_products", "access_scenarios", "automation_categories", "automation_fit",

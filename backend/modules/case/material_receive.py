@@ -15,6 +15,7 @@ import re
 from datetime import datetime
 
 from core import registry
+from helpers.validation import body_flag
 from modules.case import material_approval as MA
 from modules.case import purchase_items as PI
 
@@ -73,7 +74,7 @@ def receive_stock(conn, quote_no, item_id, order, body, user) -> dict:
     mode = str(body.get("mode") or "stock").strip()
     if mode not in MODES:
         raise MA.MaterialApprovalError(400, "到貨方式只能是入庫、直送客戶現場或耗材")
-    supplement = bool(body.get("supplement"))
+    supplement = body_flag(body, "supplement")
     serials = parse_serials(body)
     if len(serials) > MAX_SERIALS:
         raise MA.MaterialApprovalError(400, "序號一次最多 %d 筆，請分次登載（目前 %d 筆）" % (MAX_SERIALS, len(serials)))

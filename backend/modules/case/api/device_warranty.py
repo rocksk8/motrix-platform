@@ -15,10 +15,7 @@ from modules.case import device_warranty as DW
 router = APIRouter()
 
 
-def _case(conn, user, quote_no):
-    q = conn.execute("SELECT data_json, sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-    require_case(user, q, quote_no)
-    return q
+_SQL = "SELECT data_json, sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?"
 
 
 @router.get("/api/quotations/{quote_no}/device-prefill")
@@ -28,7 +25,9 @@ def get_device_prefill(quote_no: str, authorization: str = Header(None)):
     try:
         if not onepipe_flags.flag_on("ship_device_warranty", conn):
             raise HTTPException(404, "Not Found")
-        return DW.prefill(conn, quote_no, _case(conn, user, quote_no))
+        q = conn.execute(_SQL, (quote_no,)).fetchone()
+        require_case(user, q, quote_no)                    # 案件成員才看得到；看不到＝查無（同一個 404）
+        return DW.prefill(conn, quote_no, q)
     finally:
         conn.close()
 
@@ -40,6 +39,8 @@ def get_device_history(quote_no: str, sn: str, authorization: str = Header(None)
     try:
         if not onepipe_flags.flag_on("ship_device_warranty", conn):
             raise HTTPException(404, "Not Found")
-        return DW.history(conn, quote_no, _case(conn, user, quote_no), sn)
+        q = conn.execute(_SQL, (quote_no,)).fetchone()
+        require_case(user, q, quote_no)
+        return DW.history(conn, quote_no, q, sn)
     finally:
         conn.close()

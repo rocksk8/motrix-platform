@@ -2648,7 +2648,7 @@
                               <label x-show="!m._wiz.supplement">這次到貨數量 <input class="fi fi--sm" type="number" min="1" style="width:80px" x-model="m._wiz.qty" data-testid="mo-wiz-qty"></label>
                               <span x-show="!m._wiz.supplement" style="color:var(--text-dim)" x-text="'（還可登載 ' + moWizRemaining(m) + '）'"></span>
                               <label>到貨方式
-                                <select class="fi fi--sm" x-model="m._wiz.mode" data-testid="mo-wiz-mode">
+                                <select class="fi fi--sm" x-model="m._wiz.mode" data-saved-field data-testid="mo-wiz-mode">
                                   <option value="stock">入庫</option>
                                   <option value="direct" x-show="!m._wiz.supplement">直送客戶現場</option>
                                   <option value="consumable" x-show="!m._wiz.supplement">耗材（到貨即領用）</option>

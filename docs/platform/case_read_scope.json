@@ -62,6 +62,18 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/device_warranty.py",
+   "path": "/api/quotations/{quote_no}/device-prefill",
+   "handler": "get_device_prefill",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/device_warranty.py",
+   "path": "/api/quotations/{quote_no}/device-history",
+   "handler": "get_device_history",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/alt_plan.py",
    "path": "/api/quotations/{quote_no}/plan-view",
    "handler": "get_plan_view",

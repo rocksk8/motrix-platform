@@ -4,8 +4,8 @@
 `case.access` 是「M01 在不在」的唯一訊號（helpers.case_access.CASE_PRESENT），殘留就會讓 L1 以為 M01 在。
 
 ① `modules/case/` 底下沒有任何 `registry.provide(...)`（掃描器＋反向控制）
-② ModuleSpec 宣告的就是這 13 個（能力, 名稱）
-③ 執行期：這 13 個都不在 import 時登記表（`_LEGACY_PROVIDERS`）裡；模組在時由載入器提供
+② ModuleSpec 宣告的就是這些（能力, 名稱）
+③ 執行期：這些都不在 import 時登記表（`_LEGACY_PROVIDERS`）裡；模組在時由載入器提供
 """
 import ast
 from pathlib import Path
@@ -21,6 +21,7 @@ EXPECTED = {
     ("gl.events", "case"),                                   # W4 總帳 C4b：額外支出／叫料事件提供者（唯讀）
     ("case.shipped_summary", "case"),                        # 第 43 班（IP-SH5）：整案訂購／已出貨數量小計（營運報表匯出用；只有數量）
     ("material.shippable", "case"),                          # 34-S1：出貨單連動——已核准且已到貨確認的材料申請（唯讀；supply 經 registry 取用）
+    ("material.received_list", "case"),                       # IP-119（T85 一條龍 P2a）：已確認到貨的材料申請清單（M03 入庫對帳表用；唯讀、無金額）
     ("case.access", "case"), ("case.summary", "case"), ("case.locations", "case"), ("case.recognition", "case"),
     ("rules.entity", "case"),                                # BP-2（t62，IP-RULES1）：標示型規則的案件紀錄來源（唯讀）
     ("case.default_terms", "case"), ("case.doc_version", "case"), ("case.estimate_prefixes", "case"), ("case.alt_view", "case"), ("daily.check", "case_deadlines"),

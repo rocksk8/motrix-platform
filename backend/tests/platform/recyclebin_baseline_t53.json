@@ -229,6 +229,10 @@
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
   },
+  "modules/supply/receive.py::stock_batches": {
+   "count": 1,
+   "reason": "exempt: 撤銷到貨確認（IP-122）時收回該次登載建立的入庫表頭（直送／耗材／無序號列）；已有為該材料申請入庫的序號、或批次已登記付款即回 BLOCKED 不刪，不會碰到使用者另行處理過的庫存資料"
+  },
   "modules/tender_radar/api.py::tender_fetch_log": {
    "count": 1,
    "reason": "exempt: 標案抓取紀錄（可重建）"
