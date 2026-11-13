@@ -169,8 +169,9 @@ def preview_whatif(conn, user_id, raw_modules, role_ids, subtracts, role=None) -
 # ── 寫：服務層（每個動作＝一筆 permission_changes）──────────────────────────────
 
 #: 零寬／雙向控制／軟連字號等看不見的字元：塞進原因裡湊「不同字元數」用（`a<零寬>a<零寬>a…`）；驗證前一律拿掉
-_INVISIBLE = dict.fromkeys(map(ord, "​‌‍‎‏⁠⁡⁢⁣⁤﻿­᠎"
-                                    "‪‫‬‭‮⁦⁧⁨⁩"))
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180e"
+                                    "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+                                    "\u115f\u1160\u3164\uffa0"))          # 最後一行：諺文填充字（Lo 類、看不見；h12 L2 殘項）
 
 
 def _normalize_for_check(text: str) -> str:
@@ -212,7 +213,8 @@ def user_perm_change(before_role, before_mods, after_role, after_mods):
     - 最高管理者的 modules 不影響生效權限（全功能）⇒ 兩邊都是最高管理者＝惰性（touched 空）；
       **降級**（原本最高管理者、之後不是）＝存著的 modules 此刻才開始生效 ⇒ 以「降級後生效的 modules」從無到有算（不論這次有沒有帶 modules、
       帶的是不是和存著的一樣）；改成最高管理者＝只是收緊，不算。
-    - 角色**改成**財務角色（`helpers.auth.FINANCE_ROLE`）＝財務三鍵由角色補上（`effective_modules`）⇒ 三鍵算被授予（離開財務角色不算）。
+    - 角色**改成**財務角色（`helpers.auth.FINANCE_ROLE`）＝財務三鍵由角色補上（`effective_modules`）⇒ 三鍵算被授予；
+      **離開**財務角色＝用角色收回三鍵 ⇒ 同樣算（要原因、寫變更列；比照「收回高敏感也要原因」）。改成最高管理者不算（收緊）。
     - 其餘＝新舊個人勾選的差異（授予＋取消）。`before`／`after` 是拿去記錄的集合（含角色補上的財務三鍵）。"""
     from helpers.auth import FINANCE_ROLE, FINANCE_MODULE_KEYS
     b, a = set(before_mods or ()), set(after_mods or ())
@@ -220,9 +222,15 @@ def user_perm_change(before_role, before_mods, after_role, after_mods):
         return set(), set(), set()
     if before_role == "superadmin":                                   # 降級：存著的 modules 此刻才生效 ⇒ 從無到有
         b = set()
+    fin = set(FINANCE_MODULE_KEYS)
+    force = set()
     if after_role == FINANCE_ROLE and before_role != FINANCE_ROLE:    # 角色補上財務三鍵
-        a |= set(FINANCE_MODULE_KEYS)
-    touched = (a ^ b) & set(HIGH_SENSITIVITY_KEYS)
+        a |= fin
+    elif before_role == FINANCE_ROLE and after_role != FINANCE_ROLE:  # 離開財務角色＝用角色收回財務三鍵（個人勾選裡的三鍵對非財務角色本來就不生效）
+        b |= fin
+        a -= fin
+        force = fin
+    touched = ((a ^ b) & set(HIGH_SENSITIVITY_KEYS)) | force
     return touched, b, a
 
 
