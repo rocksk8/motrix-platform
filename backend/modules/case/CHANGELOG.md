@@ -13,6 +13,10 @@
 - 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
 - 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
 
+## 1.0.227（next，未取號）— 2026-11-13（feat/estimate-own-terms；估價單自己的條款）
+- **估價單自己的條款（feat/estimate-own-terms，使用者：「報價單有獨立條款，估價單也要」）**：估價單有自己的條款組（`system_settings.estimate_terms_presets`）與預設付款條件（`estimate_default_payment_terms`），端點 `GET/PUT /api/settings/estimate-terms-presets`、`GET/PUT /api/settings/estimate-payment-terms`（讀＝登入、寫＝最高管理者、稽核）；報價單的端點、設定鍵與行為一個位元都不變。遷移 0011：把目前報價單的條款設定複製成估價單初始值（冪等、不蓋已有的、報價單沒設過就不建），之後兩邊各改各的。送審重算（`submit_reasons`／`compute_approval_reasons` 的比對基準）依單據類型讀對應那組，類型以資料庫現值為準；估價單開啟／複製／切換類型時前端載入估價單的條款組與預設付款條件，PDF「五、估價條件」本來就讀單據自己的條款欄位。內建五欄預設文字（`DEFAULT_TERMS`）兩邊共用。
+- 測試：`tests/test_estimate_own_terms_2026_11_13.py`。
+
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
 - 預覽路由（`POST /api/quotations/preview-html`）與存檔版 PDF 改以 `quotations.doc_type` 欄位為準（同 `generate_pdf_bytes`），前端帶舊／缺的 docType 不再印回報價字樣。

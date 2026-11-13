@@ -472,6 +472,18 @@
   ],
   "s": 400
  },
+ "PUT /api/settings/estimate-payment-terms": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "PUT /api/settings/estimate-terms-presets": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"

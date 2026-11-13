@@ -8870,5 +8870,18 @@
    "version"
   ],
   "s": 200
+ },
+ "/api/settings/estimate-payment-terms": {
+  "k": [
+   "text"
+  ],
+  "s": 200
+ },
+ "/api/settings/estimate-terms-presets": {
+  "k": [
+   "defaultKey",
+   "presets"
+  ],
+  "s": 200
  }
 }

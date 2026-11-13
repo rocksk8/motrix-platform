@@ -2634,6 +2634,91 @@ def get_quote_terms_presets(authorization: str = Header(None)):
     return _quote_terms_presets()
 
 
+# ── 估價單自己的條款（2026-11-13，使用者：「報價單有獨立條款，估價單也要」）──────────────────────────────
+# 報價單的條款組（system_settings.quote_terms_presets）與預設付款條件（default_payment_terms）**逐位元不變**；
+# 估價單另有一組：`estimate_terms_presets`（同形：{presets, defaultKey}）與 `estimate_default_payment_terms`。
+# 升級時由 case migration 0011 把「目前報價單的值」複製成估價單的初始值（既有行為不變），之後兩邊各自改。
+# 五欄預設文字（DEFAULT_TERMS，沒有任何設定時的內建文字）兩邊共用同一份內建值——它不是設定，沒有各自改的入口。
+# 上面報價單的 PUT 沒動（留給 S5 通知那條線）；清洗邏輯另寫在 `_clean_terms_presets`，之後要合併再收斂。
+
+def _estimate_terms_presets() -> dict:
+    raw = _get_setting("estimate_terms_presets", {}) or {}
+    if not isinstance(raw, dict):
+        return {"presets": [], "defaultKey": ""}
+    presets = raw.get("presets")
+    if not isinstance(presets, list):
+        presets = []
+    return {"presets": presets, "defaultKey": raw.get("defaultKey") or ""}
+
+
+def _clean_terms_presets(body: "QuoteTermsPresetsBody", label: str):
+    """整組覆寫的驗證與清洗（與報價單那支同規則）⇒ (cleaned, default_key)。`label`＝錯誤訊息裡的單據名。"""
+    if len(body.presets) > 30:
+        raise HTTPException(400, "條款組最多 30 組")
+    seen, cleaned = set(), []
+    for p in body.presets:
+        name = (p.name or "").strip()
+        if not name:
+            raise HTTPException(400, "條款組名稱不可空白")
+        if len(name) > 30:
+            raise HTTPException(400, f"條款組名稱過長（{name[:10]}…），上限 30 字")
+        key = (p.key or "").strip() or uuid.uuid4().hex[:8]
+        if key in seen:
+            raise HTTPException(400, f"條款組 key 重複：{key}")
+        seen.add(key)
+        item = {"key": key, "name": name}
+        for f in _TERMS_FIELDS:
+            v = getattr(p, f) or ""
+            if len(v) > 5000:
+                raise HTTPException(400, f"「{name}」的{f}內容過長（上限 5000 字）")
+            item[f] = v
+        cleaned.append(item)
+    default_key = (body.defaultKey or "").strip()
+    if default_key and default_key not in seen:
+        default_key = ""                                           # 預設那組被刪 ⇒ 落到第一組（同報價單）
+    if not default_key and cleaned:
+        default_key = cleaned[0]["key"]
+    return cleaned, default_key
+
+
+@router.get("/api/settings/estimate-terms-presets")
+def get_estimate_terms_presets(authorization: str = Header(None)):
+    """估價單的條款組（登入即可讀；內容是公司對外條款）。"""
+    _require_user(authorization)
+    return _estimate_terms_presets()
+
+
+@router.put("/api/settings/estimate-terms-presets")
+def set_estimate_terms_presets(body: QuoteTermsPresetsBody, authorization: str = Header(None)):
+    """估價單條款組整組覆寫（最高管理者）。只動 `estimate_terms_presets`，報價單的條款組不受影響。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    cleaned, default_key = _clean_terms_presets(body, "估價單")
+    value = {"presets": cleaned, "defaultKey": default_key}
+    _set_setting("estimate_terms_presets", value)
+    default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
+    _audit(_tok(authorization), "settings.estimate_terms_presets.update", "settings",
+           "estimate_terms_presets", f"估價條款組共 {len(cleaned)} 組，預設為「{default_name}」")
+    notify_module_activity("系統設定", "變更估價條款組", actor.get("display_name") or actor["username"],
+                            f"{len(cleaned)} 組，預設「{default_name}」", "quotation-form.html")
+    return value
+
+
+@router.get("/api/settings/estimate-payment-terms")
+def get_estimate_default_payment_terms(authorization: str = Header(None)):
+    _require_user(authorization)
+    terms = _quote_default_terms()
+    return {"text": _get_setting("estimate_default_payment_terms", terms["paymentTerms"] if terms else "")}
+
+
+@router.put("/api/settings/estimate-payment-terms")
+def set_estimate_default_payment_terms(body: PaymentTermsBody, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    _set_setting("estimate_default_payment_terms", body.text)
+    _audit(_tok(authorization), "settings.estimate_payment_terms.update", "settings",
+           "estimate_default_payment_terms", "估價單預設付款條件")
+    return {"ok": True}
+
+
 @router.put("/api/settings/quote-terms-presets")
 def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = Header(None)):
     """整組覆寫（建立／改名／改內容／刪除／設預設都走這一支）。

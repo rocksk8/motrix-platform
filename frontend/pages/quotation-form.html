@@ -2815,6 +2815,7 @@
       rejectFinalNote: '',
       rejectingFinal: false,
       _prevDealTag: '',
+      _termsDocType: 'quote',      // 條款設定現在載的是哪一種單據的（estimate＝估價單自己的條款；見 _termsUrl／_ensureTermsDocType）
       _defaultPaymentTerms: DEFAULT_TERMS.paymentTerms,  // 送審前比對用；new-record 模式下會被 init() 換成後端目前設定的預設值
 
       //: 公司資料裡的據點清單。空的時候選擇器不顯示（QL14）。
@@ -3503,9 +3504,36 @@
 
       // ── 條款組 ────────────────────────────────────────────────────────
 
+      // 條款設定的來源依單據類型：報價單＝原本的 quote-terms-presets／payment-terms；估價單＝自己的 estimate-*（互不影響）
+      _termsUrl(kind) {
+        const est = this._termsDocType === 'estimate'
+        if (kind === 'presets') return `${this.API}/settings/${est ? 'estimate-terms-presets' : 'quote-terms-presets'}`
+        return `${this.API}/settings/${est ? 'estimate-payment-terms' : 'payment-terms'}`
+      },
+
+      async loadDefaultPaymentTerms() {
+        this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms || this._defaultPaymentTerms
+        try {
+          const rp = await fetch(this._termsUrl('payment'), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (rp.ok) {
+            const d = await rp.json()
+            if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
+          }
+        } catch(e) {}
+      },
+
+      // 單據類型確定（或切換）後，把條款組與預設付款條件換成該類型自己的那組；類型沒變＝什麼都不做
+      async _ensureTermsDocType(t) {
+        t = t === 'estimate' ? 'estimate' : 'quote'
+        if (this._termsDocType === t) return
+        this._termsDocType = t
+        await this.loadDefaultPaymentTerms()
+        await this.loadTermsPresets()
+      },
+
       async loadTermsPresets() {
         try {
-          const r = await fetch(`${this.API}/settings/quote-terms-presets`, {
+          const r = await fetch(this._termsUrl('presets'), {
             headers: { Authorization: 'Bearer ' + this.session.token },
           })
           if (!r.ok) return
@@ -3595,7 +3623,7 @@
         }
         this.termsSaving = true
         try {
-          const res = await fetch(`${this.API}/settings/quote-terms-presets`, {
+          const res = await fetch(this._termsUrl('presets'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json',
                        Authorization: 'Bearer ' + this.session.token },
@@ -3635,7 +3663,7 @@
         if (!text) { alert('付款條件內容不可空白'); return }
         if (!confirm('確定要把目前這段文字，存為之後所有「新增報價單」的預設付款條件嗎？\n（已存在的舊報價單不受影響）')) return
         try {
-          const res = await fetch(`${this.API}/settings/payment-terms`, {
+          const res = await fetch(this._termsUrl('payment'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({ text })
@@ -4955,12 +4983,32 @@
       async setDocType(t) {
         t = t === 'estimate' ? 'estimate' : 'quote'
         if (this.isNewRecord === false || this.q.docType === t) return
+        // 條款還是「預設的樣子」（使用者沒動過）才跟著換成新類型的預設；動過就保留使用者的內容，只換比對基準
+        const prev = this._termsBaseline()
+        const untouched = this.termsFieldDefs.every(f => (this.q[f.key] || '').trim() === (prev[f.key] || '').trim())
         this.q.docType = t
         this.q.quoteNo = ''
         this._quoteNoFrozen = false
         this.isDirty = true
         this._applyDocSkin()
+        await this._ensureTermsDocType(t)
+        if (untouched) this._applyDefaultTermsForNew()
+        else this.checkApproval()
         await this._peekQuoteNo()
+      },
+      // 新單：套用目前這種單據的預設條款（預設那組 ⇒ 沒有就用單欄位預設付款條件＋內建四欄）。只給「切換單據類型」用；
+      // init() 的新增模式有自己的一段（含使用者動過就不帶預設的判斷），這裡不動它。
+      _applyDefaultTermsForNew() {
+        if (this.termsDefaultKey && this._presetByKey(this.termsDefaultKey)) {
+          this.applyTermsPreset(this.termsDefaultKey, true)
+        } else {
+          this.q.termsPresetKey = ''
+          this.q.paymentTerms = this._defaultPaymentTerms
+          if (this._termsDefaultsLoaded) {
+            for (const k of ['deliveryTerms', 'acceptanceTerms', 'warrantyTerms', 'afterSales']) this.q[k] = DEFAULT_TERMS[k]
+          }
+        }
+        this.checkApproval()
       },
       _applyDocSkin() {
         const est = this.q.docType === 'estimate'
@@ -5171,13 +5219,13 @@
         } catch(e) {}
 
         // ── 目前後端設定的預設付款條件（不論新增/編輯都要先取得，供「報價條件與預設不同」比對基準）──
-        try {
-          const rp = await fetch(`${this.API}/settings/payment-terms`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (rp.ok) {
-            const d = await rp.json()
-            if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
-          }
-        } catch(e) {}
+        // 估價單有自己的條款（2026-11-13）：新增模式帶 ?type=estimate 就先讀估價單那組；編輯／複製要等讀到單據才知道類型，
+        // 載入後由 _ensureTermsDocType() 換成對的那組（報價單：網址與行為與改版前完全相同）。
+        {
+          const _p0 = new URLSearchParams(window.location.search)
+          if (!_p0.get('id') && _p0.get('copy') !== '1' && _p0.get('type') === 'estimate') this._termsDocType = 'estimate'
+        }
+        await this.loadDefaultPaymentTerms()
 
         // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
         // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
@@ -5200,6 +5248,7 @@
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
               this._applyDocSkin()
+              await this._ensureTermsDocType(this.q.docType)          // 估價單複製出來的新單：條款基準用估價單那組
               this._fillMissingTerms(t)
               this.isNewRecord = true
               this.isDirty = true
@@ -5231,6 +5280,7 @@
             if (res.ok) {
               const row = await res.json()
               Object.assign(this.q, row.data)
+              await this._ensureTermsDocType(row.data && row.data.docType)   // 估價單：「與預設不同」的比對基準讀估價單自己的條款組
               this._fillMissingTerms(row.data)
               this.q.quoteNo = editNo
               this._prevDealTag = this.q.dealTag || ''
