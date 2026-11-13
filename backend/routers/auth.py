@@ -1274,7 +1274,7 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
                 "INSERT INTO webauthn_credentials "
                 "(user_id, credential_id, public_key, name, created_at, rp_id) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (user["id"], cred_raw_id, public_key_bytes, "新Passkey",
+                (user["id"], cred_raw_id, public_key_bytes, "新 Passkey",
                  datetime.now().isoformat(), _webauthn_rp_id()),
             )
             conn.commit()

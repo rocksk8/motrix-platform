@@ -2887,7 +2887,7 @@ _EMAIL_DEFAULTS = {
     "smtp_port":     587,
     "smtp_user":     "",
     "smtp_password": "",
-    "from_name":     "MOTRIX專案管理系統",
+    "from_name":     "MOTRIX 專案管理系統",
     "base_url":      "",  # 2026-11-13：新安裝不預填內部位址（畫面預填目前網址）；已儲存的值不動。舊預設見 email_notify._LEGACY_DEFAULT_BASE_URL
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
