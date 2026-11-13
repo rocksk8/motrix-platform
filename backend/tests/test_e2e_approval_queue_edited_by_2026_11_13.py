@@ -38,6 +38,10 @@ def _open(page, live_server, items):
 
 
 def _select(page, no):
+    # 詳情是蓋在列表上的抽屜（有遮罩）：已經開著一張時，先照使用者的做法按 Esc 關掉，才點得到列表上的下一張
+    if page.locator(".aq-drawer-mask").is_visible():
+        page.keyboard.press("Escape")
+        page.locator(".aq-drawer-mask").wait_for(state="hidden", timeout=5000)
     page.locator(f'[data-testid="aq-item-{no}"]').first.click()
     # 點完不要馬上讀 UI：先等 Alpine 把 selected 換成這一張
     page.wait_for_function("(no) => { const d = Alpine.$data(document.body); return d.selected && d.selected.quoteNo === no }",
