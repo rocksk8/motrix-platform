@@ -22,7 +22,9 @@
 
 子命令（exit：0 通過／1 不通過或拒絕）：
   keygen   --private-out <路徑>                 產生 Ed25519 金鑰：私鑰寫到檔（已存在就拒絕），公鑰印出（貼進 DELIVERY_PUBKEY_PEM）
-  publish  --pkg <完整包> --root <交付資料夾> --private-key <私鑰檔> [--keep 3]
+  publish  --pkg <完整包> --root <交付資料夾> --private-key <私鑰檔> [--keep 3] [--baseline <基準檔>]
+           發布前對照「已出貨腳本基準」（版號必須比基準大、除非內容相同）；DELIVERY_PUBLISH_OK 之後才更新基準（T83）
+  baseline-record --root <交付資料夾> --name <包名>   手動補寫基準（發布成功但寫基準失敗時）
   scan     --root <交付資料夾>
   stage    --root <交付資料夾> --name <包名> --staging <staging 根>
   verify   --staged <staging\\包名> --install-root <安裝根目錄> [--skip-verify-package]
@@ -189,6 +191,107 @@ def script_version(payload):
     return (m.group(1) if m and not problems else None), problems
 
 
+# ── 已出貨腳本基準（T83）──────────────────────────────────────────────────────
+#: AH-O7 只比「腳本內容 vs 登記檔」，不知道哪一版已經出貨：13a 已隨 T81 出貨，後來有人改了腳本行為卻把版號留在 13a，
+#: 登記檔 sha256 照更新、AH-O7 綠，正式機已裝的 13a（舊內容）與新包的 13a 對不出差異 ⇒ apply 判不出要換腳本。
+#: 基準檔記「最近一次**實際發布**的包」裡兩支腳本的 版號＋sha256；之後腳本內容和基準不同 ⇒ 版號必須嚴格變大。
+#: 寫入點只有一個：`publish` 成功之後（`record_baseline`）；失敗的發布不碰它。
+BASELINE_REL = "docs/platform/prod-baseline/apply_scripts.json"
+_MOD_VER_RE = re.compile(r'^\$ApplyModuleScriptVersion = "([^"]+)"', re.M)
+#: 名稱 → (腳本相對路徑, 版號 regex)。新增一支「正式機會用」的版本化腳本＝加一列，守門自動涵蓋。
+BASELINE_SCRIPTS = {"apply_update": (_PS1, _PS1_VER_RE), "apply_module_update": (_MOD_PS1, _MOD_VER_RE)}
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def default_baseline_path():
+    """原始碼樹（backend/tools/delivery.py 往上兩層＝repo 根）裡的基準檔路徑；不保證存在。"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), *BASELINE_REL.split("/"))
+
+
+def read_baseline(path):
+    """⇒ {名稱: {version, sha256, shipped_in, commit}}；檔案不存在 ⇒ None；壞掉 ⇒ DeliveryError（不猜）。"""
+    if not os.path.isfile(path):
+        return None
+    try:
+        data = json.load(open(path, encoding="utf-8-sig"))
+        scripts = data["scripts"]
+        if not isinstance(scripts, dict):
+            raise TypeError("scripts 不是物件")
+        return scripts
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise DeliveryError("已出貨腳本基準檔讀不懂（%s）：%s" % (path, e))
+
+
+def script_facts(root):
+    """⇒ {名稱: (版號或 None, sha256)}。root＝含 backend/tools/ 的目錄（repo 根或包的 payload）。
+    **直接讀腳本本身**（不信 *.version.json 登記檔——登記檔是人填的，守門要驗的就是它有沒有被誤填）；沒有那支腳本 ⇒ 不列。"""
+    out = {}
+    for name, (rel, ver_re) in BASELINE_SCRIPTS.items():
+        p = os.path.join(root, *rel.split("/"))
+        if not os.path.isfile(p):
+            continue
+        raw = open(p, "rb").read()
+        m = ver_re.search(raw.decode("utf-8-sig", "replace"))
+        out[name] = (m.group(1) if m else None, ps1_digest(raw))
+    return out
+
+
+def baseline_problems(facts, baseline):
+    """純函式：腳本現況 vs 已出貨基準 ⇒ 問題清單（空＝通過）。
+    - 內容（sha256）與基準相同 ⇒ 版號必須相同（沒改內容卻動了版號，也是搞錯）。
+    - 內容不同 ⇒ 版號必須**嚴格大於**基準版號（用 tool_version_key 比，不用字串比）；不判斷是不是只改註解（改了就升一格）。
+    - 基準缺這支腳本、或基準本身格式不對 ⇒ 問題（不猜）。"""
+    problems = []
+    for name, (ver, sha) in sorted(facts.items()):
+        b = (baseline or {}).get(name)
+        if not isinstance(b, dict) or not _SHA_RE.match(str(b.get("sha256") or "")) or tool_version_key(b.get("version")) is None:
+            problems.append("[%s] 已出貨基準缺這支腳本或格式不對（%s）" % (name, BASELINE_REL))
+            continue
+        if ver is None or tool_version_key(ver) is None:
+            problems.append("[%s] 腳本裡讀不到合格的版號（格式 YYYY-MM-DD＋小寫字母）" % name)
+        elif sha == b["sha256"]:
+            if ver != b["version"]:
+                problems.append("[%s] 內容與已出貨的 %s 完全相同，版號卻是 %s（版號不該動）" % (name, b["version"], ver))
+        elif tool_version_key(ver) <= tool_version_key(b["version"]):
+            problems.append("[%s] 內容與已出貨的 %s（%s）不同，版號卻是 %s（沒有升）：行為有變就必須升到比 %s 大；"
+                            "升版後把 *.version.json 的 sha256 一起更新（AH-O7）"
+                            % (name, b["version"], str(b.get("shipped_in") or "?"), ver, b["version"]))
+    return problems
+
+
+def record_baseline(root, name, path=None):
+    """發布成功之後把這個包裡的腳本版號＋sha256 寫成新的基準（原子寫）⇒ 路徑。只收完整包；寫之前再驗一次不退版
+    （手動補寫也不能把基準往回倒）。"""
+    path = path or default_baseline_path()
+    pkg = os.path.join(root, "packages", name)
+    meta = json.load(open(os.path.join(pkg, META_JSON), encoding="utf-8-sig"))
+    if meta.get("kind", KIND_FULL) != KIND_FULL:
+        raise DeliveryError("單模組包不寫腳本基準：%s" % name)
+    facts = script_facts(os.path.join(pkg, PAYLOAD))
+    if not facts:
+        raise DeliveryError("包裡沒有任何登記的腳本，不寫基準：%s" % name)
+    for n, (v, _s) in facts.items():
+        if v is None:
+            raise DeliveryError("[%s] 包裡的腳本讀不到版號，不寫基準" % n)
+    old = read_baseline(path) or {}
+    problems = baseline_problems({n: f for n, f in facts.items() if n in old}, old)
+    if problems:
+        raise DeliveryError("新基準會讓版號退版或矛盾，不寫：" + "；".join(problems))
+    new = dict(old)
+    for n, (v, s) in facts.items():
+        new[n] = {"version": v, "sha256": s, "shipped_in": name, "commit": meta.get("commit")}
+    doc = {"_說明": "已出貨的 apply 腳本基準（T83）：最近一次實際發布的完整包裡 apply_update.ps1／apply_module_update.ps1 的版號與內容雜湊"
+                    "（去 BOM、CRLF→LF 的 sha256）。**只有 `delivery.py publish` 成功之後由程式寫**（record_baseline），不要手改；"
+                    "寫完要 commit。守門 test_apply_script_baseline：腳本內容和這裡不同 ⇒ 版號必須嚴格大於這裡的版號。",
+           "scripts": new}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(doc, ensure_ascii=False, indent=1) + "\n")
+    os.replace(tmp, path)
+    return path
+
+
 # ── 開發機：發布 ──────────────────────────────────────────────────────────────
 
 def _require_root(root):
@@ -252,7 +355,7 @@ def module_package_meta(pkg, tools_dir=None):
         "min_apply_module_script": ver}
 
 
-def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None, tools_dir=None):
+def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None, tools_dir=None, baseline_path=None):
     """發布一份包（完整包或單模組包）⇒ 包名。步驟：複製到 incoming\\<包>.partial\\payload → 寫 delivery.json、清單、簽章 → 改名成 packages\\<包>。
     包裡有 module-update.lock.json ⇒ kind＝module（只含該模組與宣告頁面；不帶 tools，不要求 apply_update.ps1）。"""
     _require_root(root)
@@ -271,6 +374,12 @@ def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None, tools_dir=None)
     if problems:
         shutil.rmtree(partial)
         raise DeliveryError("包的 apply_update 版本不一致，不發布：" + "；".join(problems))
+    if baseline_path:                                # T83：腳本內容和已出貨基準不同、版號卻沒升 ⇒ 不發布（CLI 預設帶上；單元測試不帶＝不查）
+        base = read_baseline(baseline_path)
+        bp = baseline_problems(script_facts(payload), base) if base is not None else ["已出貨腳本基準檔不存在：%s" % baseline_path]
+        if bp:
+            shutil.rmtree(partial)
+            raise DeliveryError("腳本版號與已出貨基準衝突，不發布：" + "；".join(bp))
     entries = payload_entries(payload)
     meta = {"format": FORMAT, "name": name, "kind": KIND_FULL, "commit": manifest.get("commit"),
             "product": manifest.get("product"),
@@ -793,6 +902,9 @@ def main(argv=None, resolver=None):
     #: --root 省略 ⇒ 讀「系統設定→儲存位置」的更新交付資料夾（configured_root）
     p = sub.add_parser("publish"); p.add_argument("--pkg", required=True); p.add_argument("--root")
     p.add_argument("--private-key", required=True); p.add_argument("--keep", type=int, default=KEEP_DEFAULT)
+    p.add_argument("--baseline", help="已出貨腳本基準檔（預設＝這份原始碼樹的 %s；發布前驗版號、發布成功後更新）" % BASELINE_REL)
+    br = sub.add_parser("baseline-record"); br.add_argument("--root"); br.add_argument("--name", required=True)
+    br.add_argument("--baseline", help="預設同 publish")
     s = sub.add_parser("scan"); s.add_argument("--root")
     st = sub.add_parser("stage"); st.add_argument("--root"); st.add_argument("--name", required=True)
     st.add_argument("--staging", required=True)
@@ -806,14 +918,25 @@ def main(argv=None, resolver=None):
                    help="套用開始的 epoch 秒：只看這之後寫的結果檔（必填：不帶會拿到別次套用的結果，稽核 D W-M1）")
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ("publish", "scan", "stage", "writeback") and not a.root:
+        if a.cmd in ("publish", "scan", "stage", "writeback", "baseline-record") and not a.root:
             a.root = configured_root(resolver)
         if a.cmd == "keygen":
             print(keygen(a.private_out).decode("ascii"))
             print("DELIVERY_KEYGEN_OK（私鑰：%s；公鑰貼進 backend/tools/delivery.py 的 DELIVERY_PUBKEY_PEM）" % a.private_out)
         elif a.cmd == "publish":
-            name = publish(a.pkg, a.root, open(a.private_key, "rb").read(), a.keep)
+            bpath = a.baseline or default_baseline_path()
+            name = publish(a.pkg, a.root, open(a.private_key, "rb").read(), a.keep,
+                           baseline_path=bpath if os.path.isfile(bpath) or a.baseline else None)
             print("DELIVERY_PUBLISH_OK %s" % name)
+            if not os.path.isfile(bpath) and not a.baseline:        # 不在原始碼樹裡跑（沒有基準檔）：發布照常，只提醒
+                print("DELIVERY_BASELINE_SKIPPED 找不到 %s（不是在原始碼樹裡跑的？）：沒有驗版號也沒有更新基準" % bpath)
+            else:
+                try:                                                # 只在發布成功之後才寫；寫不成不推翻已發布的包，但要大聲講
+                    print("DELIVERY_BASELINE_UPDATED %s（要 commit）" % record_baseline(a.root, name, bpath))
+                except (DeliveryError, OSError, ValueError) as e:
+                    print("DELIVERY_BASELINE_FAILED %s ⇒ 包已發布；請用 `delivery.py baseline-record --name %s` 補寫，否則基準會停在舊版" % (e, name))
+        elif a.cmd == "baseline-record":
+            print("DELIVERY_BASELINE_UPDATED %s" % record_baseline(a.root, a.name, a.baseline or default_baseline_path()))
         elif a.cmd == "scan":
             print(json.dumps(scan(a.root), ensure_ascii=False, indent=1))
         elif a.cmd == "stage":

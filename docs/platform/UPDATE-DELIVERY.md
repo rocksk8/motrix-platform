@@ -180,6 +180,11 @@
 - ~~公鑰 `DELIVERY_PUBKEY_PEM` 目前是空的 ⇒ 正式機一律拒絕，不退回「不驗章」。~~（**2026-11-11 更正**：公鑰已由 f860e88e2 寫入 `delivery.py`；公鑰為空時一律拒絕、不退回「不驗章」的規則不變。）使用者執行 `python backend/tools/delivery.py keygen --private-out <開發機本機路徑>`：私鑰寫到那個檔，公鑰印出後貼進 `DELIVERY_PUBKEY_PEM`，隨版本出貨（U-4：私鑰另外做離線備份）。
 - 結構檢查用**正式機已安裝版本**的 `verify_package.py`。`--expect-db-version` 取自已安裝的 `db.py`（V9 基準凍結＝獨立訊號，不取自包本身）。
 - 腳本版本（AH-O7）：包裡 `$ApplyScriptVersion`＝`apply_update.version.json` 的 version，而且內容雜湊相符，才發布、才驗得過。
+- **已出貨腳本基準（T83）**：`docs/platform/prod-baseline/apply_scripts.json` 記「最近一次實際發布的完整包」裡 `apply_update.ps1`／`apply_module_update.ps1` 的版號＋內容雜湊（sha256，去 BOM、CRLF→LF）。AH-O7 只比「腳本 vs 登記檔」，抓不到「行為改了、版號還是已出貨版」（正式機已裝的舊內容與新包同版號 ⇒ apply 判不出要換腳本）；基準補這個洞：
+  - 守門 `tests/platform/test_apply_script_baseline_2026_11_13.py`：腳本內容與基準不同 ⇒ 版號必須**嚴格大於**基準版號（`delivery.tool_version_key`，不用字串比）；內容相同 ⇒ 版號必須相同。**不判斷是不是只改註解**——內容變了就升一格。守門直接讀腳本本身，不信 `*.version.json`。
+  - `delivery.py publish`（CLI 預設帶基準；`--baseline` 可指定）發布前再驗一次，衝突 ⇒ `DELIVERY_REFUSED`、不留 `.partial`；**`DELIVERY_PUBLISH_OK` 之後**才更新基準（`DELIVERY_BASELINE_UPDATED`，要 commit）；發布失敗不碰基準；基準寫失敗 ⇒ `DELIVERY_BASELINE_FAILED`（包已發布，不推翻），用 `delivery.py baseline-record --name <包名>` 補寫，否則基準停在舊版而守門變鬆。補寫也不能把版號往回倒。
+  - 基準檔不手改。管不到的：`rollback_update.ps1`（沒有版號登記）、單模組包（走 `min_apply_module_script`，不寫基準）。
+  - 首版基準＝T81 實際出貨值（包 `20261113_095433_0147b3d5_full`；apply_update `2026-11-13a`／apply_module_update `2026-09-29a`），與 `git show 0147b3d53` 重算的 sha256 一致。
 - 保留份數（U-5＝3）：更舊的只刪「`results\` 已有結果」的包；正式機還沒回報的不刪。
 
 ### 9.2 (e) apply_update／rollback_update 要補的兩個檔（**介面寫死**，H 照這裡接；改動要先改本節）
