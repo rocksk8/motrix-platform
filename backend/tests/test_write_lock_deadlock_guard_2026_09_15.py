@@ -119,6 +119,18 @@ def _is_conn_commit(node) -> bool:
             and isinstance(f.value, ast.Name) and "conn" in f.value.id.lower())
 
 
+def _is_files_txn_with(node) -> bool:
+    """`with files_txn(conn, …):`（helpers/uploads.py；進入＝BEGIN IMMEDIATE 拿寫鎖、**離開區塊＝commit**；例外時 rollback＋關連線）。"""
+    if not isinstance(node, ast.With):
+        return False
+    for it in node.items:
+        c = it.context_expr
+        if (isinstance(c, ast.Call) and _call_name(c) == "files_txn" and c.args
+                and isinstance(c.args[0], ast.Name) and "conn" in c.args[0].id.lower()):
+            return True
+    return False
+
+
 def _is_cross_conn_write(name: str) -> bool:
     return name in _CROSS_CONN_WRITERS or name.startswith(_CROSS_CONN_PREFIXES)
 
@@ -136,9 +148,21 @@ def _scan(func) -> list:
             continue
         yield_order = getattr(node, "lineno", 0)
         node._line = yield_order
-    calls = sorted((n for n in ast.walk(func) if isinstance(n, ast.Call)),
-                   key=lambda n: (getattr(n, "lineno", 0), getattr(n, "col_offset", 0)))
-    for call in calls:
+    # 事件＝呼叫，加上 `with files_txn(conn, …)` 的「進入（拿寫鎖）」與「離開（commit，放鎖）」兩個合成事件（T84 上傳交易；
+    # 離開事件排在區塊最後一行之後，區塊內的呼叫都在它之前）
+    events = [((getattr(n, "lineno", 0), getattr(n, "col_offset", 0)), "call", n) for n in ast.walk(func) if isinstance(n, ast.Call)]
+    for n in ast.walk(func):
+        if _is_files_txn_with(n):
+            events.append(((n.lineno, n.col_offset - 1), "enter", n))
+            events.append(((getattr(n, "end_lineno", n.lineno), 10 ** 6), "exit", n))
+    events.sort(key=lambda e: e[0])
+    for _pos, kind, call in events:
+        if kind == "enter":
+            holding = True
+            continue
+        if kind == "exit":
+            holding = False
+            continue
         name = _call_name(call)
         if _is_conn_write(call) or name in _WRITE_HELPERS:
             holding = True
@@ -200,3 +224,38 @@ def test_the_guard_accepts_the_fixed_shape():
     )
     func = ast.parse(src).body[0]
     assert _scan(func) == []
+
+
+def test_files_txn_block_exit_releases_the_write_lock_but_a_call_inside_it_is_flagged():
+    """T84：`with files_txn(conn, …):` 離開區塊就 commit（放鎖）——之後再 _audit() 是安全的（create_dev_log 的形狀）；
+    但**區塊裡面**呼叫另開連線寫入的函式（鎖還拿著）必須照樣被抓。兩個方向都要有，才不是「files_txn 一律放行」。"""
+    safe = (
+        "def after_block(conn, authorization):\n"
+        "    with files_txn(conn, saved_files):\n"
+        "        conn.execute('INSERT INTO dev_logs VALUES (1)')\n"
+        "    _audit(authorization, 'a.b', 'dev_log', 'X', 'label')\n"
+    )
+    assert _scan(ast.parse(safe).body[0]) == []
+    inside = (
+        "def inside_block(conn, authorization):\n"
+        "    with files_txn(conn, saved_files):\n"
+        "        _audit(authorization, 'a.b', 'dev_log', 'X', 'label')\n"
+        "        conn.execute('INSERT INTO dev_logs VALUES (1)')\n"
+    )
+    assert [n for n, _ in _scan(ast.parse(inside).body[0])] == ["_audit"]
+    written_then_inside = (
+        "def write_then_audit_in_block(conn, authorization):\n"
+        "    with uploads_mod.files_txn(conn, saved_files):\n"
+        "        conn.execute('INSERT INTO dev_logs VALUES (1)')\n"
+        "        _audit(authorization, 'a.b', 'dev_log', 'X', 'label')\n"
+    ).replace("uploads_mod.files_txn", "files_txn")
+    assert [n for n, _ in _scan(ast.parse(written_then_inside).body[0])] == ["_audit"]
+    no_conn_commit = (                      # 區塊離開放鎖，但之後又寫、又 _audit、沒 commit ⇒ 仍要抓（放鎖不是一勞永逸）
+        "def later_write(conn, authorization):\n"
+        "    with files_txn(conn, saved_files):\n"
+        "        conn.execute('INSERT INTO dev_logs VALUES (1)')\n"
+        "    conn.execute('UPDATE dev_logs SET x=1')\n"
+        "    _audit(authorization, 'a.b', 'dev_log', 'X', 'label')\n"
+    )
+    assert [n for n, _ in _scan(ast.parse(no_conn_commit).body[0])] == ["_audit"]
+
