@@ -454,7 +454,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // 頭像個人選單（2026-11-13）：頭像（姓氏圓圈）是按鈕，展開「我的帳號／修改密碼／登出」；頂端顯示姓名＋職務中文名。
     // 「我的帳號」頁（my-account.html）由另一條線交付：MY_ACCOUNT_READY 為 false 時不顯示該項（避免點到 404）；頁面上線後改 true，
     // 屆時「修改密碼」改指向 my-account.html#security。
-    var MY_ACCOUNT_READY = false
+    var MY_ACCOUNT_READY = true
     function buildAcctMenu(cpHref) {
       var items = []
       if (MY_ACCOUNT_READY) items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + (inPg ? 'my-account.html' : 'pages/my-account.html') + '">我的帳號</a>')
