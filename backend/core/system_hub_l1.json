@@ -31,7 +31,7 @@
    "id": "backup-monitor",
    "section": "data",
    "title": "備份與監控",
-   "desc": "最近一次備份有沒有成功、硬碟還剩多少、系統是否在線，一頁看完",
+   "desc": "最近一次備份是否成功、硬碟剩餘空間與系統是否在線，一頁查看",
    "impact": "影響：只是查看；頁面上的「立即備份」「測試心跳」要確認後才會執行。",
    "href": "backup-monitor.html",
    "perm": "superadmin",
@@ -115,8 +115,8 @@
    "id": "approval-delegates",
    "section": "identity",
    "title": "簽核代理人",
-   "desc": "請假或出差期間，指定誰代你簽核",
-   "impact": "影響：代理期間內，要你簽的單據也會交給代理人簽。",
+   "desc": "請假或出差期間，指定誰代您簽核",
+   "impact": "影響：代理期間內，要您簽的單據也會交給代理人簽。",
    "href": "approval-delegates.html",
    "perm": [
     "quotation"
