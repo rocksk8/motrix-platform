@@ -551,10 +551,8 @@ def check_no_tier_self_approval(conn, appr: dict, user: dict) -> Optional[str]:
     否則會永久卡死無人可簽。"""
     if appr.get("requestedBy") != user["username"]:
         return None
-    other_admin = conn.execute(
-        "SELECT 1 FROM users WHERE role='superadmin' AND active=1 AND username!=? LIMIT 1",
-        (user["username"],),
-    ).fetchone()
+    from helpers import config_ledger as _cl
+    other_admin = _cl.real_superadmins(conn, user["username"])      # 展示帳號不算第二位：只有一位真人最高管理者時才不會卡死
     if other_admin:
         return "申請人不得自行審核，請由其他最高管理者審核"
     return None

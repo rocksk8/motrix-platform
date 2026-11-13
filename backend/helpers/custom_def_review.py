@@ -60,8 +60,8 @@ def review_state(conn, submitter="") -> dict:
     if mode == "off":
         return {"mode": mode, "active": False, "reviewers": listed, "reason": "審核已由最高管理者關閉：發布為直接發布"}
     if mode == "on" and not listed:
-        listed = _user_rows(conn, [r["username"] for r in conn.execute(
-            "SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()], submitter)
+        from helpers import config_ledger as _cl          # 展示帳號 demo 不是真人審核人：只有一位真人時走「直接發布」而不是等一個不會來的審核
+        listed = _user_rows(conn, _cl.real_superadmins(conn, submitter), submitter)
     if listed:
         return {"mode": mode, "active": True, "reviewers": listed, "reason": ""}
     return {"mode": mode, "active": False, "reviewers": [],

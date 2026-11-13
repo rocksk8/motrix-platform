@@ -2,7 +2,7 @@
 """設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。
 
 [單位] helper:config_ledger    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] EVENTS, HIGH_RISK, RISKS, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, promote_due, record, register_domain,
+[公開介面] DEMO_USERNAME, EVENTS, HIGH_RISK, RISKS, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, promote_due, real_superadmins, record, register_domain,
     restore_version, snapshot_version, state_of, supersede
 [不變式] ①`config_changes` 與 `config_change_events` 只增不改不刪（資料庫觸發器擋）；②狀態**不是欄位**：目前狀態＝該變更最後一個事件
     （`pending`／`activated`／`cancelled`／`superseded`），沒有事件＝立即生效；③`record()` 在**呼叫端的交易內**寫變更明細、稽核與
@@ -60,6 +60,19 @@ def _actor(actor):
     if isinstance(actor, dict):
         return actor.get("username") or "", actor.get("display_name") or "", actor.get("id")
     return str(actor or ""), "", None
+
+
+#: 展示帳號（開機時由 startup 建立的 `demo`，role＝superadmin）。它不是真人：不能算「另一位最高管理者」。
+DEMO_USERNAME = "demo"
+
+
+def real_superadmins(conn, exclude=""):
+    """在職、真人的最高管理者帳號（不含展示帳號 `demo`，也不含 `exclude` 那位）。
+    「要不要第二位核准」「自簽逃生條款」「建議再設一位」都用這個數：把展示帳號算進去，只有一位真人最高管理者的公司會被要求
+    一個永遠不會有人給的核准（放寬類變更卡死），而不是退回『原因＋確認期間＋警告』。"""
+    rows = conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>? AND username<>? ORDER BY id",
+                        (DEMO_USERNAME, exclude or "")).fetchall()
+    return [r[0] for r in rows]
 
 
 def _now():

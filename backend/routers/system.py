@@ -1941,8 +1941,8 @@ def company_setup_status(authorization: str = Header(None)):
         # CG-S5：只有一位最高管理者 ⇒ 設定頁建議再設一位（唯一的人不在時只剩本機暫時放行）
         conn = _gdb()
         try:
-            out["superadminCount"] = conn.execute(
-                "SELECT COUNT(*) FROM users WHERE role='superadmin' AND active=1").fetchone()[0]
+            from helpers import config_ledger as _cl
+            out["superadminCount"] = len(_cl.real_superadmins(conn))      # 展示帳號不算（建議再設一位真人最高管理者）
         finally:
             conn.close()
     return out
