@@ -1,0 +1,69 @@
+<p class="sub">這 7 項不在「設定中心」裡，散在各業務頁面，且<b>都是舊路徑直接寫入</b>（只有稽核紀錄，沒有「要等 N 天才生效」、沒有雙人核准）。每項下方標出：在哪裡改、現在的問題、新畫面、風險標示。欄位名稱與預設取自程式（唯讀盤點）。</p>
+<div class="hl">要 PM 裁示：下列「影響大」的項目（科目代號、扣繳參數、管銷／公益口徑）是否要納入變更管制（讓它們也走等待期＋雙人核准）？本稿先<b>照現況</b>畫成直接寫入，並明確標出，不替系統偷偷加規則。</div>
+
+<section class="card pg" id="ot-bonus"><div class="pgh"><h3>① 獎金分潤預設比例</h3><span class="pill oth">影響別人</span><span class="k">bonus.html「預設比例設定」・GET/PUT /api/bonus/cases/settings</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在獎金頁的一顆按鈕裡，只有最高管理者看得到。<br><br><b>新設計</b>搬進同一套設定頁排版；三類比例旁邊即時顯示合計，不是 100% 時存檔鈕灰掉並說原因。只影響之後新建的草稿。</div>
+<div class="new"><table class="mx stack" data-scope="bonus"><thead><tr><th class="l">項目</th><th>目前值</th><th>預設</th><th>來源</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>獎金比率（營業利益的 %）</b><div class="k">rate_bp</div></td><td data-l="目前值"><input type="number" step="0.01" value="10" data-d style="width:90px">%</td><td data-l="預設">10%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>業務比例</b><div class="k">split_bp.sales</div></td><td data-l="目前值"><input type="number" value="50" data-d data-split style="width:90px">%</td><td data-l="預設">50%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>專案比例</b><div class="k">split_bp.project</div></td><td data-l="目前值"><input type="number" value="30" data-d data-split style="width:90px">%</td><td data-l="預設">30%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr>
+<tr><td class="l" data-l="項目"><b>後勤比例</b><div class="k">split_bp.admin</div></td><td data-l="目前值"><input type="number" value="20" data-d data-split style="width:90px">%</td><td data-l="預設">20%</td><td data-l="來源"><span class="pill adv">預設</span></td></tr></tbody></table>
+<div class="hl" id="splitmsg" style="margin-top:8px">三類比例合計：<b>100%</b> ✔</div>
+<div class="savebar hide" data-bar="bonus"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary" id="bonusSave">儲存</button><button class="btn sm">還原</button></div></div></div></section>
+
+<section class="card pg" id="ot-voucher"><div class="pgh"><h3>② 憑證（傳票）科目對應</h3><span class="pill heavy">影響大</span><span class="pill ext">待 PM 確認指哪一項</span><span class="k">bonus.html「傳票科目」・/api/bonus/cases/voucher-accounts</span></div><div class="pgb">
+<div class="was"><b>現況</b>盤點找不到字面「憑證帳戶」，暫以最可能的「獎金傳票科目」呈現。<br>其他候選：銀行帳戶清單（見⑥）、個人 Passkey（歸丙）、Google Maps 金鑰（歸乙）。<br><br><b>新設計</b>科目欄「輸入代號 → 即時顯示科目名稱」，後來被停用的科目標紅字；5 個欄位其中 2 個預設同為 2252，提醒「代扣稅款與代收補充保費目前是同一科目」。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">用途</th><th>科目代號</th><th>科目名稱</th><th>預設</th></tr></thead><tbody>
+<tr><td class="l" data-l="用途"><b>費用（薪資支出）</b><div class="k">expense</div></td><td data-l="代號"><input type="text" value="6111" data-d style="width:90px"></td><td data-l="名稱">薪資支出（示意）</td><td data-l="預設">6111</td></tr>
+<tr><td class="l" data-l="用途"><b>應付（應付薪資）</b><div class="k">payable</div></td><td data-l="代號"><input type="text" value="2191" data-d style="width:90px"></td><td data-l="名稱">應付薪資（示意）</td><td data-l="預設">2191</td></tr>
+<tr><td class="l" data-l="用途"><b>代扣稅款</b><div class="k">withholding</div></td><td data-l="代號"><input type="text" value="2252" data-d style="width:90px"></td><td data-l="名稱">代收款（示意）</td><td data-l="預設">2252</td></tr>
+<tr><td class="l" data-l="用途"><b>代收補充保費</b><div class="k">nhi</div></td><td data-l="代號"><input type="text" value="2252" data-d style="width:90px"></td><td data-l="名稱">代收款（示意）</td><td data-l="預設">2252</td></tr>
+<tr class="warnrow"><td class="l" data-l="用途"><b>銀行存款</b><div class="k">bank</div></td><td data-l="代號"><input type="text" value="1113" data-d style="width:90px"></td><td data-l="名稱">⚠ 這個科目目前已停用，請重新選擇</td><td data-l="預設">1113</td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">不存在或已停用的代號會被擋下，整批都不寫（現況行為）。</div>
+<div class="savebar hide" data-bar="voucher"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存傳票科目</button></div></div></div></section>
+
+<section class="card pg" id="ot-deduct"><div class="pgh"><h3>③ 獎金扣繳與補充保費</h3><span class="pill heavy">影響大</span><span class="pill oth">影響別人</span><span class="k">legal-params（費率）＋bonus.html「投保金額與全年累計」</span></div><div class="pgb">
+<div class="was"><b>現況</b>沒有獨立的「扣款設定」。費率與門檻在「法規參數」頁（依生效日分版本，見「獨立頁面改版」的⑥），每人的投保金額另在獎金頁。沒有投保金額的人，獎金不能標記已發放。<br><br><b>新設計</b>兩塊並列、互相連結：左＝「目前適用版本」唯讀摘要（點進法規參數矩陣），右＝「人 × 年度」投保金額小矩陣（個資敏感，只有最高管理者看得到）。</div>
+<div class="new"><div class="hl">目前適用：2026 版（生效 2026-01-01）　補充保費費率 2.11%　獎金補充保費門檻＝投保金額 × 4　<button class="btn sm">到「法規參數」編輯</button></div>
+<table class="mx stack"><thead><tr><th class="l">人員</th><th>投保金額</th><th>MOTRIX 以外全年累計（2026）</th><th>MOTRIX 已發放</th><th>全年累計</th></tr></thead><tbody>
+<tr><td class="l" data-l="人員"><b>王經理</b></td><td data-l="投保金額"><input type="number" value="72800" data-d style="width:100px"></td><td data-l="外部累計"><input type="number" value="0" data-d style="width:100px"></td><td data-l="已發放">120,000</td><td data-l="全年累計">120,000</td></tr>
+<tr class="warnrow"><td class="l" data-l="人員"><b>李業務</b></td><td data-l="投保金額"><input type="number" placeholder="未設定" data-d style="width:100px"></td><td data-l="外部累計"><input type="number" value="0" data-d style="width:100px"></td><td data-l="已發放">0</td><td data-l="全年累計">0 <span class="err">未設定投保金額：獎金不能標記已發放</span></td></tr></tbody></table>
+<div class="mute" style="margin-top:6px">扣繳規則本身（起扣、扣多少）不能在這裡改，來自法規參數。</div>
+<div class="savebar hide" data-bar="deduct"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存</button></div></div></div></section>
+
+<section class="card pg" id="ot-oh"><div class="pgh"><h3>④ 管銷與公益金的計算方式</h3><span class="pill heavy">影響大</span><span class="pill oth">影響別人</span><span class="k">GET/PUT /api/overhead/settings</span></div><div class="pgb">
+<div class="was"><b>現況</b>畫面上沒有切換入口，只能用工具或 API 改；切換有前置條件（遷移標記）。<br><br><b>新設計</b>只做<b>唯讀顯示＋「切換精靈」</b>：前置檢查 → 影響預覽 → 確認 → 套用。不放成一般開關，避免誤按。兩個比率（管銷分攤、公益捐款）已在設定中心的甲份 76 欄裡，不重複。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">項目</th><th>目前</th><th>預設</th><th>狀態</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>管銷口徑</b><div class="k">ruleMode</div></td><td data-l="目前">舊制：管銷＝稅前金額 × 10%</td><td data-l="預設">舊制</td><td data-l="狀態"><span class="pill adv">預設</span> <button class="btn sm" data-wizard="oh">切換到新制…</button></td></tr>
+<tr><td class="l" data-l="項目"><b>公益金基數</b><div class="k">charityMode</div></td><td data-l="目前">直接毛利 × 公益率</td><td data-l="預設">直接毛利</td><td data-l="狀態"><span class="pill adv">預設</span> <button class="btn sm" disabled title="須先轉新制並完成遷移">切換到報價含稅金額…</button></td></tr></tbody></table>
+<div class="hide" id="ohwiz"><div class="step" style="margin-top:8px"><span class="on">1 前置檢查</span><span>2 影響預覽</span><span>3 確認</span><span>4 套用</span></div><div class="hl">前置檢查：管銷遷移已完成 ✔　新制＝直接毛利（不低於 0）× 管銷比率（目前 25%）。轉回舊制時，公益基數會一併強制改回「直接毛利」。<button class="btn sm primary">下一步：看影響預覽</button></div></div></div></div></section>
+
+<section class="card pg" id="ot-target"><div class="pgh"><h3>⑤ 年度營運目標</h3><span class="pill oth">影響別人</span><span class="k">reports.html「設定目標」・/api/settings/operating-targets</span></div><div class="pgb">
+<div class="was"><b>現況</b>報表頁的彈窗；一次只存一年，儲存會整份覆蓋；後端沒有上下限，只有畫面擋。<br><br><b>新設計</b>目標年度放最上面並顯示「已設定／未設定」；業務員配額做成可增減的列＋合計；0＝未設定目標（報表不算達成率）。</div>
+<div class="new"><label>目標年度 <select><option>2026</option><option>2027</option></select></label> <span class="pill adv">預設：全部 0＝未設定</span>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">目標</th><th>目前值</th></tr></thead><tbody>
+<tr><td class="l" data-l="目標"><b>年度合約總額目標</b><span class="unit">元，含稅</span><div class="k">annual.revenue</div></td><td data-l="值"><input type="number" value="30000000" min="0" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>年度新成案數目標</b><span class="unit">件</span><div class="k">annual.newCases</div></td><td data-l="值"><input type="number" value="60" min="0" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>收款率目標</b><span class="unit">%</span><div class="k">annual.collectionRate</div></td><td data-l="值"><input type="number" step="0.1" value="92" min="0" max="100" data-d style="width:140px"></td></tr>
+<tr><td class="l" data-l="目標"><b>平均營業利益率目標</b><span class="unit">%</span><div class="k">annual.avgNetMarginPct</div></td><td data-l="值"><input type="number" step="0.1" value="18" min="0" max="100" data-d style="width:140px"></td></tr></tbody></table>
+<div class="mute">另有：年度收款金額目標、年度實際營業利益目標（精算後），同上排版。</div>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">業務員配額</th><th>配額目標（元）</th><th>案件數配額（件）</th><th></th></tr></thead><tbody><tr><td class="l" data-l="業務員"><input type="text" value="張業務" data-d></td><td data-l="配額"><input type="number" value="8000000" data-d></td><td data-l="案件數"><input type="number" value="15" data-d></td><td><button class="btn sm danger">移除</button></td></tr></tbody></table><button class="btn sm" style="margin-top:4px">＋新增業務員</button>
+<div class="savebar hide" data-bar="target"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存 2026 年目標</button></div></div></div></section>
+
+<section class="card pg" id="ot-t100"><div class="pgh"><h3>⑥ T100 匯出的科目代號</h3><span class="pill heavy">影響大</span><span class="k">cashier.html「展開科目代號設定」・/api/settings/t100-export-config</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在出納頁的展開區；科目代號沒有名稱對照；儲存時不擋不存在的科目，只在畫面警示。<br><br><b>新設計</b>「逐列編輯＋預覽」：每個代號即時顯示科目名稱，不可用的標紅；銀行帳戶清單可設一個★預設帳戶；匯出程式本身沒有可調參數。</div>
+<div class="new"><table class="mx stack"><thead><tr><th class="l">項目</th><th>科目代號</th><th>對應科目</th></tr></thead><tbody>
+<tr><td class="l" data-l="項目"><b>銷貨收入</b><div class="k">salesRevenueAccount</div></td><td data-l="代號"><input type="text" value="4101" data-d style="width:100px"></td><td data-l="科目">銷貨收入（示意）</td></tr>
+<tr><td class="l" data-l="項目"><b>銷項稅額</b><div class="k">outputTaxAccount</div></td><td data-l="代號"><input type="text" value="2171" data-d style="width:100px"></td><td data-l="科目">銷項稅額（示意）</td></tr>
+<tr><td class="l" data-l="項目"><b>承攬商費用</b><div class="k">contractorExpenseAccount</div></td><td data-l="代號"><input type="text" value="" placeholder="未設定" data-d style="width:100px"></td><td data-l="科目" class="mute">留空也能匯出，但該欄會是空的</td></tr>
+<tr><td class="l" data-l="項目"><b>傳票別</b><div class="k">voucherCategory</div></td><td data-l="代號"><select data-d><option>現</option><option selected>轉</option><option>記</option></select></td><td data-l="科目" class="mute">預設「轉」</td></tr></tbody></table>
+<table class="mx stack" style="margin-top:6px"><thead><tr><th class="l">銀行帳戶</th><th>科目代號</th><th>系統預設</th><th></th></tr></thead><tbody><tr><td class="l" data-l="帳戶"><input type="text" value="第一銀行 123-456" data-d></td><td data-l="代號"><input type="text" value="1102" data-d style="width:90px"></td><td data-l="預設">★</td><td><button class="btn sm danger">刪除</button></td></tr></tbody></table><button class="btn sm" style="margin-top:4px">＋新增銀行帳戶</button>
+<div class="mute" style="margin-top:6px">另有：匯款／收款手續費、部門別、各料件分類的成本科目（分類 × 代號逐列編輯）。</div>
+<div class="savebar hide" data-bar="t100"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存</button></div></div></div></section>
+
+<section class="card pg" id="ot-terms"><div class="pgh"><h3>⑦ 報價單條款組與預設付款條件</h3><span class="pill cust">客戶看得到</span><span class="pill oth">影響別人</span><span class="k">quotation-form.html「管理條款組」・/api/settings/quote-terms-presets、/payment-terms</span></div><div class="pgb">
+<div class="was"><b>現況</b>藏在報價單表單裡的彈窗，要先開一張報價單才找得到。<br><br><b>新設計</b>獨立在設定頁：左邊組名清單（★預設、最多 30 組），右邊五段條款文字＋「客戶看到的樣子」預覽。報價單是複製文字而不是連結，改範本不會動到已開的單。</div>
+<div class="new" style="display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px"><div><div class="opt on"><b>★ 純購料</b></div><div class="opt"><b>含安裝工程</b></div><div class="opt"><b>年度維護</b></div><button class="btn sm">＋新增條款組</button><div class="mute" style="margin-top:6px">3／30 組</div></div>
+<div><label>組名（必填，最多 30 字）<br><input type="text" value="純購料" style="width:100%" data-d></label><label style="display:block;margin-top:6px">付款條件<br><textarea rows="3" style="width:100%" data-d>三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</textarea></label>
+<div class="mute">交貨條件、驗收標準、保固條件、售後服務及備註說明：同上排版（各最多 5000 字）。</div><div class="hl" style="margin-top:6px"><b>客戶看到的樣子</b>　付款條件：三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</div><label style="display:block;margin-top:8px">預設付款條件（沒選條款組時帶入）<br><textarea rows="2" style="width:100%" data-d>三期付款：簽約 50%、到貨 30%、驗收 20%，次月 25 日支付。</textarea></label><span class="mute">不可空白。</span></div>
+<div class="savebar hide" data-bar="terms" style="grid-column:1/-1"><span class="cnt">已改 0 處，尚未儲存</span><button class="btn sm primary">儲存條款組</button></div></div></div></section>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設定矩陣 mockup：業務與財務規則</title>
+<style>
+/*STYLE*/
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>設定改版 mockup：業務與財務規則（甲份）</h1>
+<p class="sub">分支 feat/settings-matrix-rollout ・ 設計階段，使用者看過才實作。設定中心 20 群組／76 欄、7 個獨立頁、7 個「設定中心以外」的項目。欄位名稱、選項、範圍、預設取自設定登錄表（settings_groups.json）；<b>目前值、來源、人名、日期都是假資料</b>。</p>
+<div class="banner">示範重點：①搜尋與篩選（「與預設不同」「影響大」…）　②勾選「可批次」的項目 → 套用建議值／套用預設組合／重設為預設 → 確認視窗 → 套用 → 「復原這一批」（版本檢查）　③改單一項目：一般項目直接生效；影響大的項目要填原因、要等 7 天才生效，放寬還要第二位最高管理者核准。　<button class="btn sm" data-act="demo-conflict">示範：套用後，別人改了同一群組</button></div>
+<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-t="t1" aria-selected="true">設定中心（20 群組／76 項）</button><button class="tab" role="tab" data-act="tab" data-t="t2" aria-selected="false">獨立頁面改版（7 頁）</button><button class="tab" role="tab" data-act="tab" data-t="t3" aria-selected="false">設定中心以外（7 項）</button></div>
+<div id="t1"></div>
+<div id="t2" class="hide">
+<!--PAGES-->
+</div>
+<div id="t3" class="hide">
+<!--OUTSIDE-->
+</div>
+</div>
+<div id="batch" class="batch hide" aria-live="polite"></div>
+<div id="toast" class="toast hide" role="status" aria-live="polite"></div>
+<div id="ov" class="ov hide"></div>
+<script>
+const D = /*DATA*/;
+</script>
+<script>
+/*APP*/
+</script>
+<script>
+/*PAGESJS*/
+</script>
+</body>
+</html>
