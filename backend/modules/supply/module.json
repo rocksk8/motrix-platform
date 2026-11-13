@@ -1,7 +1,7 @@
 {
   "key": "supply",
   "name": "採購・庫存・出貨",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "core": ">=1.0,<2.0",
   "license_key": "supply",
   "permissions": [
@@ -15,9 +15,10 @@
     "stock_items",
     "stock_batches",
     "purchase_suggestion_status",
-    "shipping_notes"
+    "shipping_notes",
+    "stock_item_events"
   ],
-  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。本模組不在時表仍在：M01 案件查詢、M08 儀表板、L1 料號／搜尋／備份照樣讀得到（唯讀）",
+  "tables_note": "舊表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組自有 migration v1（T85 一條龍 P2a）：進貨批次與序號的外鍵欄位＋序號異動紀錄表 stock_item_events。本模組不在時表仍在：M01 案件查詢、M08 儀表板、L1 料號／搜尋／備份照樣讀得到（唯讀）",
   "data": {
     "tables": [
       {
@@ -38,6 +39,10 @@
       },
       {
         "name": "shipping_notes",
+        "class": "T1"
+      },
+      {
+        "name": "stock_item_events",
         "class": "T1"
       }
     ],

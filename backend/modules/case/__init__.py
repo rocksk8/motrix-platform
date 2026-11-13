@@ -8,7 +8,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
+from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_received, material_shippable, payables, quotations
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
@@ -115,6 +115,8 @@ MODULE = ModuleSpec(
         ("gl.events", "case"): gl_events.gl_events,
         # 34-S1：出貨單連動材料申請——可出貨的材料（已核准＋已到貨確認）；supply 經 registry 取用，不 import 本模組
         ("material.shippable", "case"): material_shippable.material_shippable,
+        # IP-119（暫定號）：已確認到貨的材料申請清單（M03 入庫對帳表用；唯讀、無金額）
+        ("material.received_list", "case"): material_received.received_items,
         # 第 43 班（IP-SH5）：整案「訂購／已出貨／占用中」數量小計（營運報表匯出用；只有數量）
         ("case.shipped_summary", "case"): item_shipped.case_shipped_summary,
         # IP-RB1（第 53 班 P1）：資源回收筒的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）

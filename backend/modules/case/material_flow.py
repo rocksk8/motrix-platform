@@ -94,6 +94,14 @@ def _stock(conn, quote_no, user):
     except Exception:                                                # noqa: BLE001 — 供應端壞了只影響這一格
         return _cell("stock", "入庫", "na", "庫存暫時讀不到", unavailable=True)
     ins, shp = int(s.get("installed") or 0), int(s.get("shipped") or 0)
+    if "receivedInStock" in s:                                       # 一條龍 P2a（旗標 onepipe.receive_ledger 開）：入庫格完整（提案 §2.2 ④）
+        rec, direct = int(s.get("receivedInStock") or 0), int(s.get("directBatches") or 0)
+        if not (ins or shp or rec or direct):
+            return _cell("stock", "入庫", "na", "目前沒有這個案件的入庫紀錄")
+        text = "已入庫尚未認領 %d 台、已安裝 %d 台、已出貨 %d 台" % (rec, ins, shp) + ("；%d 批直送客戶現場" % direct if direct else "")
+        return _cell("stock", "入庫", "inprogress", text,
+                     [{"partNo": p.get("partNo", ""), "inStock": int(p.get("inStock") or 0), "installed": int(p.get("installed") or 0), "shipped": int(p.get("shipped") or 0)}
+                      for p in (s.get("parts") or [])])
     if not (ins or shp):
         return _cell("stock", "入庫", "na", "目前沒有這個案件的序號；已入庫但尚未認領的，第 2 階段後提供")
     return _cell("stock", "入庫", "inprogress", "已安裝 %d 台、已出貨 %d 台；已入庫但尚未被這個案件認領的，第 2 階段後提供" % (ins, shp),

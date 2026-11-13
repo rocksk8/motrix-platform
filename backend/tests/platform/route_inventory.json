@@ -1078,6 +1078,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/inventory/reconcile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/inventory/stock-items": {
    "w": false,
    "pp": 0,

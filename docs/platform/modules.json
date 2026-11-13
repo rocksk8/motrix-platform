@@ -523,6 +523,7 @@
     "mod:case/material_payment_cashier",
     "mod:case/material_recognize",
     "mod:case/item_shipped",
+    "mod:case/material_received",
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
     "mod:case/purchase_items",
@@ -598,6 +599,8 @@
     "mod:supply/recycle_adapter",
     "mod:supply/api/inventory",
     "mod:supply/case_summary",
+    "mod:supply/receive",
+    "mod:supply/stock_events",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
     "mod:supply/attachments"
@@ -606,6 +609,7 @@
     "purchase_suggestion_status",
     "shipping_notes",
     "stock_batches",
+    "stock_item_events",
     "stock_items",
     "suppliers"
    ],

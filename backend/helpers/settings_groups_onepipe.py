@@ -10,6 +10,7 @@
       warranty_closed_notify  P0d 保固到期通知納入已結案案件（本檔）
       links／ship_install_ok／timeline  P0a／P0c／P1'（hichan-1 的班次接著加在下面的清單裡）
       entry_unify             P4 現場人員自建案件每日事項（hichan-1，D5＝A）
+      receive_ledger          T85 P2a 入庫底層：到貨入庫與案件材料申請對應、序號異動紀錄、入庫對帳表（hichan-1，D1＝A、D9）
 [契約題] backend/tests/test_onepipe_p0a_links_2026_11_13.py、backend/modules/supply/tests/test_onepipe_p0c_ship_install_2026_11_13.py、backend/modules/case/tests/test_onepipe_p1_timeline_2026_11_13.py、backend/modules/daily_tasks/tests/test_onepipe_p4a_staff_create_2026_11_13.py、backend/tests/test_onepipe_worklog_case_2026_11_13.py、backend/tests/test_onepipe_warranty_closed_2026_11_13.py
 """
 
@@ -55,6 +56,12 @@ def _register(S, _register_core):
                    "事項只有本人看得到（與目前被指派的事項相同）；修改與刪除仍然只有最高管理者。",
               impact="只放寬「新增」這一個動作，範圍限縮在自己的案件與自己身上；不改既有事項、不改誰看得到事項。關閉後同仁又不能新增，已建立的事項保留。立即生效，可隨時改回。",
               choices=[(0, "關閉", "只有最高管理者能新增每日工作事項，與目前完全相同。"), (1, "開啟（預設）", "現場人員可新增掛案件、指派給自己的單次事項。")]),
+            S("receive_ledger", "int", 1, min=0, max=1, risk="ops", recommended=1,
+              question="材料到貨時，是否讓庫存這一側記錄這批貨是為哪個案件、哪張材料申請入庫？", label="到貨入庫與案件對應",
+              help="開啟後：進貨批次可記錄對應的案件、採購單與材料申請；到貨時可選擇「入庫」或「直送客戶現場」；序號的進貨、出貨、安裝、退回等異動會留下紀錄（只從開啟當天起記錄，不回補）；"
+                   "管理員可在入庫對帳表查看「案件已確認到貨、庫存尚未入庫」的材料申請。案件的物料流程時間軸入庫格也會顯示完整數量。",
+              impact="只多記錄與多一張唯讀對帳表，不改既有庫存、序號與金額；誰能入庫仍照目前規則。關閉後新的對應與異動紀錄不再寫入，已寫入的保留。立即生效，可隨時改回。",
+              choices=[(0, "關閉", "庫存與序號資料、畫面與目前完全相同。"), (1, "開啟（預設）", "多記錄到貨與案件的對應及序號異動，並提供入庫對帳表。")]),
         ],
         sensitive=False, risk="ops",
         help="物料流程各階段的功能開關；預設全部開啟（本次更新起）；可在這裡逐項關閉，關閉就與目前完全相同。",

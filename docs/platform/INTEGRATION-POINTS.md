@@ -711,6 +711,41 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-118　`stock.receive`：一站式到貨的入庫那一半（M01 案件 → M03 庫存；暫定號，列車定號；2026-11-14，T85 一條龍 P2a）
+
+案件側的到貨確認（一站式到貨，P2b）與庫存側入庫在**同一筆交易**：案件開寫入交易、確認到貨，再呼叫本提供者把序號寫進庫存，一起 commit。提案 `PROCUREMENT-FLOW-ONEPIPE-PROPOSAL-v3.md` §2.3、決策 D1＝A（入庫或直送）、D9。旗標 `onepipe.receive_ledger`。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/receive.py::receive` |
+| 使用方 | M01 案件：一站式到貨端點（P2b） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("stock.receive", "supply"): receive`；取用：`fn = registry.single_provider("stock.receive")`；`None` ⇒ 只做案件那一半。`fn(conn, quote_no, lines, caller) -> {"ok", "batches": [{"batchNo", "partNo", "materialItemId", "poDocCode", "mode", "written", "rows": [{"serialNo", "status", "reason"}]}], "written", "rejected"}`；`lines`＝`[{"partNo", "materialItemId", "poDocCode", "supplierId", "invoiceNo", "cost", "note", "mode": "stock"｜"direct", "serials": [{"serialNo", "mac", "note"}]}]` |
+| 回傳 | 整體做不了 ⇒ `{"ok": False, "reason": "DISABLED"（旗標關）｜"NO_PERMISSION"（呼叫者沒有入庫權限）｜"NO_CASE"}`，**不寫任何庫存**；逐列回報：重複、空白、已存在於庫存的序號不寫、不擋其他列；一列最多 50 筆（超過 ⇒ 該列整列不寫）；`direct` 只留一筆批次表頭（`delivery_mode='direct'`），不建序號列 |
+| 交易契約 | **吃呼叫端的連線、不 commit**（比照 IP-19 的 `claim`／`release`）；呼叫端須先 `begin_write` 拿寫鎖，重複序號檢查與寫入才在同一把鎖內 |
+| 對方不在時 | M03 不在 ⇒ `single_provider` 回 `None`，案件只做自己那一半並明示；對帳表（`GET /api/inventory/reconcile`）列出「案件已到貨、庫存還沒有」的材料申請 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py` |
+
+---
+
+## IP-119　`material.received_list`：已確認到貨的材料申請清單（M01 案件 → M03 入庫對帳表；暫定號，列車定號；2026-11-14，T85 一條龍 P2a）
+
+入庫對帳表（`GET /api/inventory/reconcile`，旗標 `onepipe.receive_ledger`，限管理員）用：列出案件側已確認到貨的材料申請，庫存側扣掉已有入庫或直送紀錄的，剩下的就是待補入庫。**唯讀、沒有任何金額欄位**；不做案件可見性檢查（呼叫端限管理員）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/material_received.py::received_items` |
+| 使用方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::reconcile` |
+| 形式 | provider，單一提供者（名稱 `case`） |
+| 語法 | 提供：`("material.received_list", "case"): received_items`；取用：`fn = registry.single_provider("material.received_list")`；`None` ⇒ 對帳表回空清單（`caseAvailable=false`）。`fn(conn, since, limit) -> [{"quoteNo", "itemId", "docCode", "name", "unit", "appliedQty", "receivedOn", "receivedBy"}]`（到貨日新到舊；`since` 為 YYYY-MM-DD） |
+| 回傳 | 只含已核准且已確認到貨（`received_on` 非空）的材料申請，條件同 IP-110 `material.shippable` |
+| 對方不在時 | M01 不在 ⇒ 空清單；M03 不在 ⇒ 沒有對帳表 |
+| 契約版本 | 1（2026-11-14） |
+| 守門 | `backend/tests/test_onepipe_p2a_receive_ledger_2026_11_14.py` |
+
+---
+
 ## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）
 
 主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `modules/accounting/api/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。

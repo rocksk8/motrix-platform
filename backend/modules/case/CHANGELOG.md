@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## 1.0.230 — T85 一條龍 P2a（train/t85-p2-h1；版號由列車取）
+- 新提供者 `material.received_list`（IP-119，暫定號；`modules/case/material_received.py`）：已確認到貨（已核准且 `received_on` 非空）的材料申請清單，給庫存的入庫對帳表用；唯讀、沒有金額、不寫入。
+- 物料流程時間軸的入庫格：`stock.case_summary` 帶 `receivedInStock` 時（旗標 `onepipe.receive_ledger` 開）顯示完整數字——「已入庫尚未認領 N 台、已安裝 N 台、已出貨 N 台」，有直送批次時加註；旗標關時文字與今天相同。
+- 測試：`tests/test_onepipe_p2a_receive_ledger_2026_11_14.py`（supply 側）。
+
 ## 1.0.229 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
 - 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
 - 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。

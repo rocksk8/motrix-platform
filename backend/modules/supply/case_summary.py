@@ -27,4 +27,24 @@ def case_summary(conn, quote_no, caller=None) -> dict:
             p = parts.setdefault(r["part_no"] or "", {"partNo": r["part_no"] or "", "installed": 0, "shipped": 0})
             p[st] += n
     out["parts"] = list(parts.values())
+    _with_received(conn, quote_no, out, parts)
     return out
+
+
+def _with_received(conn, quote_no, out, parts) -> None:
+    """一條龍 P2a（旗標 `onepipe.receive_ledger` 開）：多回「為這個案件入庫、還在庫」的台數（`receivedInStock`，每料號 `inStock`）與直送批次數（`directBatches`）。
+    旗標關 ⇒ 回應與今天完全相同（沒有這幾個鍵）。直送＝只留批次表頭、沒有序號列。"""
+    from modules.supply import stock_events
+    if not stock_events.ledger_on(conn):
+        return
+    rows = conn.execute("SELECT si.part_no, COUNT(*) AS n FROM stock_items si JOIN stock_batches sb ON sb.batch_no = si.batch_no"
+                        " WHERE sb.quote_no=? AND si.status='in_stock' GROUP BY si.part_no ORDER BY si.part_no", (quote_no,)).fetchall()
+    total = 0
+    for r in rows:
+        n = int(r["n"])
+        total += n
+        p = parts.setdefault(r["part_no"] or "", {"partNo": r["part_no"] or "", "installed": 0, "shipped": 0})
+        p["inStock"] = n
+    out["parts"] = list(parts.values())
+    out["receivedInStock"] = total
+    out["directBatches"] = int(conn.execute("SELECT COUNT(*) FROM stock_batches WHERE quote_no=? AND delivery_mode='direct'", (quote_no,)).fetchone()[0])

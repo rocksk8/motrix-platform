@@ -335,6 +335,7 @@
 ["GET", "/api/inventory/parts-summary", "parts_summary_api_inventory_parts_summary_get", [["header", "authorization", false], ["query", "category", false], ["query", "q", false]], [], []]
 ["GET", "/api/inventory/purchase-suggestions", "purchase_suggestions_api_inventory_purchase_suggestions_get", [["header", "authorization", false]], [], []]
 ["POST", "/api/inventory/purchase-suggestions/{part_no}/status", "set_purchase_suggestion_status_api_inventory_purchase_suggestions__part_no__status_post", [["header", "authorization", false], ["path", "part_no", true]], [["application/json", ""]], []]
+["GET", "/api/inventory/reconcile", "reconcile_api_inventory_reconcile_get", [["header", "authorization", false], ["query", "since", false]], [], []]
 ["GET", "/api/inventory/stock-items", "list_stock_items_api_inventory_stock_items_get", [["header", "authorization", false], ["query", "batch_no", false], ["query", "part_no", false], ["query", "q", false], ["query", "status", false]], [], []]
 ["DELETE", "/api/inventory/stock-items/{item_id}", "delete_stock_item_api_inventory_stock_items__item_id__delete", [["header", "authorization", false], ["path", "item_id", true]], [], []]
 ["POST", "/api/inventory/stock-items/{item_id}/adjust", "adjust_stock_item_api_inventory_stock_items__item_id__adjust_post", [["header", "authorization", false], ["path", "item_id", true]], [["application/json", ""]], []]
