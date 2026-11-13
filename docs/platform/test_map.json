@@ -25068,23 +25068,22 @@
   "backend/tests/platform/test_s6_standalone_registration_2026_11_14.py": {
    "kind": "api",
    "units": [
-    "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
     "helper:settings_pages",
     "helper:settings_shell",
-    "page:pages/my-account.html"
+    "page:pages/my-account.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/settings_pages.py",
      "backend/helpers/settings_shell.py"
     ],
     "page": [
-     "frontend/pages/my-account.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/my-account.html"
     ]
    }

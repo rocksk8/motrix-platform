@@ -8877,6 +8877,7 @@
    "items[].field",
    "items[].group",
    "items[].groupPlain",
+   "items[].href",
    "items[].kind",
    "items[].label",
    "items[].page",

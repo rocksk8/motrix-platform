@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """S6：「我要收的 Email 通知（自己的）」以獨立頁登記在設定外框（保留 my-account.html?tab=notify），並讓全域搜尋找得到。"""
 import re
-from pathlib import Path
 
+from core import source_tree
 from helpers import settings_pages as SP
 from helpers import settings_shell as SH
 
@@ -18,7 +18,7 @@ def test_my_email_prefs_is_registered_as_a_standalone_page():
 
 
 def test_the_link_target_exists_and_the_tab_is_deep_linkable():
-    page = (Path(__file__).resolve().parents[3] / "frontend" / "pages" / "my-account.html").read_text(encoding="utf-8")
+    page = source_tree.page_file("my-account.html").read_text(encoding="utf-8")
     assert re.search(r"key:\s*'notify'", page), "我的帳號沒有 notify 分頁，連結會落空"
     assert "URLSearchParams(location.search).get('tab')" in page, "my-account 不吃 ?tab=，深連結會落到第一個分頁"
     assert 'id="email-prefs-card"' in page
