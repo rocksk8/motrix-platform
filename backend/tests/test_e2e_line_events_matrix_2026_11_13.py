@@ -78,12 +78,14 @@ def test_batch_on_confirm_then_apply_and_filters(live_server, make_user, new_pag
         _row(page, k).locator("input[data-mx=sel]").check()
     expect(page.locator("[data-testid=mx-batch-count]")).to_have_text("已選 2 項")
     page.locator("[data-testid=mx-batch-on]").click()
-    _dlg_btn(page, "開啟").wait_for(state="visible", timeout=5000)
+    _dlg_btn(page, "套用").wait_for(state="visible", timeout=5000)
+    expect(page.locator(".mx-dlg-body")).to_contain_text("預估每月")          # 確認視窗：每月則數預估＋可能收件人數
+    expect(page.locator(".mx-dlg-body")).to_contain_text("可能收件人")
     _dlg_btn(page, "取消").click()
     expect(page.locator(".mx-dlg")).to_have_count(0)
     assert not any(L.event_enabled(k) for k in keys), "取消 ⇒ 不動"
     page.locator("[data-testid=mx-batch-on]").click()
-    _dlg_btn(page, "開啟").click()
+    _dlg_btn(page, "套用").click()
     expect(page.locator("[data-testid=mx-toast-text]")).to_contain_text("已開啟")
     assert all(L.event_enabled(k) for k in keys)
     assert all(L.audience_view()[k]["users"] == ["e2e_mx2"] for k in keys)
@@ -131,7 +133,7 @@ def test_undo_batch_refused_when_changed_by_someone_else(live_server, make_user,
     for k in keys:
         _row(page, k).locator("input[data-mx=sel]").check()
     page.locator("[data-testid=mx-batch-on]").click()
-    _dlg_btn(page, "開啟").click()
+    _dlg_btn(page, "套用").click()
     expect(page.locator("[data-testid=mx-toast-text]")).to_contain_text("已開啟")
     L.set_event("dev_case_unassigned", False)                                 # 套用之後，別的視窗改了其中一個
     page.locator("[data-testid=mx-undo]").click()

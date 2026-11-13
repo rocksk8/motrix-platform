@@ -530,3 +530,96 @@ def test_undo_restores_critical_off_state_without_second_confirm_and_roles_null(
     r2 = client.post(UNDO, json={"states": before, "expect": r.json()["after"]}, headers=sa)
     assert r2.status_code == 200, r2.text
     assert _state_of(CRIT) == before[CRIT] and _state_of(CRIT)["enabled"] is True
+
+
+# ── 收件人數 recipient_count／批次預覽（PM 2026-11-13：確認視窗顯示「預估每月 X → Y 則」）─────────────
+
+PREVIEW = "/api/settings/line-notify/events/batch-preview"
+
+
+def _events_by_key(client, sa):
+    j = client.get("/api/settings/line-notify", headers=sa).json()
+    return {e["key"]: e for e in j["events"]}
+
+
+def test_get_events_carry_recipient_count_and_exactness(client, env):
+    from helpers import line_notify as L
+    sa = _hdr(client, "sa")
+    k = "approval_request"
+    L.set_event(k, True)
+    L.set_audience(k, "only", [], ["sa"])
+    e = _events_by_key(client, sa)[k]
+    assert e["recipient_count"] == 1 and e["recipient_exact"] is True, "只發給指定 ⇒ 人數精確"
+    L.set_audience(k, "only", ["superadmin", "admin"], [])
+    e = _events_by_key(client, sa)[k]
+    assert e["recipient_count"] == 2, "角色成員（最高管理者＋管理員）各一位，且都已綁定 LINE"
+    L.set_audience(k, "business", [], [])
+    e = _events_by_key(client, sa)[k]
+    assert e["recipient_exact"] is False, "照原本收件人：每一則的收件人不同，人數是上限"
+    assert isinstance(e["recipient_count"], int) and e["recipient_count"] >= 0
+
+
+def test_recipient_count_skips_unlinked_muted_and_inactive(client, env):
+    from helpers import line_notify as L, line_recipients as LR
+    from db import get_db
+    sa = _hdr(client, "sa")
+    k = "approval_request"
+    L.set_event(k, True)
+    L.set_audience(k, "only", ["superadmin", "admin"], [])
+    assert _events_by_key(client, sa)[k]["recipient_count"] == 2
+    LR.set_muted("bob", k, True)
+    assert _events_by_key(client, sa)[k]["recipient_count"] == 1, "本人退訂的不算"
+    LR.set_muted("bob", k, False)
+    L.unlink_user("bob")
+    assert _events_by_key(client, sa)[k]["recipient_count"] == 1, "沒綁定 LINE 的不算"
+    c = get_db()
+    c.execute("UPDATE users SET active=0 WHERE username='sa'")
+    c.commit()
+    c.close()
+    assert LR.potential_counts([k])[k]["n"] == 0, "停用的帳號不算"
+
+
+def test_preview_writes_nothing_and_reports_before_after(client, env, writes):
+    from helpers import line_notify as L
+    sa = _hdr(client, "sa")
+    k = "approval_request"
+    L.set_event(k, True)
+    L.set_audience(k, "only", [], ["sa"])
+    snap = _snapshot()
+    n_writes = len(writes)
+    audits = _count_audit("settings.line_notify.batch")
+    r = client.post(PREVIEW, json={"keys": [k], "audience": {"mode": "only", "roles": ["superadmin", "admin"], "users": []}}, headers=sa)
+    assert r.status_code == 200, r.text
+    row = r.json()["events"][0]
+    assert row["key"] == k and row["name"] and row["n_before"] == 1 and row["n_after"] == 2 and row["changed"] is True
+    assert _snapshot() == snap and len(writes) == n_writes and _count_audit("settings.line_notify.batch") == audits, "預覽不寫入、不記稽核"
+
+
+def test_preview_estimates_monthly_messages_from_30_day_history(client, env):
+    from helpers import line_notify as L
+    sa = _hdr(client, "sa")
+    on, off, fresh = "approval_request", "next_tier", "returned"
+    L.set_event(on, True)
+    L.set_audience(on, "only", [], ["sa"])
+    L._usage_add(on, 6)
+    L._usage_add(off, 9)                                    # 有歷史但目前關閉
+    body = {"keys": [on, off, fresh], "enabled": True, "audience": {"mode": "only", "roles": ["superadmin", "admin"], "users": []}}
+    j = client.post(PREVIEW, json=body, headers=sa).json()
+    rows = {r["key"]: r for r in j["events"]}
+    assert rows[on]["sent30"] == 6 and rows[on]["est_after"] == 12, "1 人 → 2 人：近 30 天 6 則 ⇒ 預估 12 則"
+    n0 = rows[off]["n_before"]
+    assert n0 > 1 and rows[off]["n_after"] == 2 and rows[off]["est_after"] == round(9 * 2 / n0), "目前關閉但有歷史：按『照原本』的可能人數比例推算"
+    assert rows[fresh]["est_after"] is None and rows[fresh]["sent30"] == 0, "沒有歷史推播量 ⇒ 無法估算"
+    assert j["total"]["sent30"] == 15 and j["total"]["est_after"] == 12 + rows[off]["est_after"] and j["total"]["unknown"] == 1
+    off_body = {"keys": [on], "enabled": False}
+    r2 = client.post(PREVIEW, json=off_body, headers=sa).json()["events"][0]
+    assert r2["est_after"] == 0 and r2["enabled_after"] is False, "關閉 ⇒ 之後 0 則"
+
+
+def test_preview_validates_like_batch_and_is_superadmin_only(client, env):
+    sa, bob = _hdr(client, "sa"), _hdr(client, "bob")
+    assert client.post(PREVIEW, json={"keys": ["approval_request"], "enabled": True}, headers=bob).status_code == 403
+    for body in ({}, {"keys": []}, {"keys": ["approval_request"]}, {"keys": ["nope"], "enabled": True}, {"keys": ["approval_request"], "enabled": "yes"},
+                 {"keys": ["approval_request"], "audience": {"mode": "weird"}}, {"keys": ["approval_request"], "extra": 1, "enabled": True},
+                 {"keys": ["approval_request"], "audience": {"mode": "only", "users": ["ghost"]}}):
+        assert client.post(PREVIEW, json=body, headers=sa).status_code == 400, body

@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 944,
-  "endpoints_api": 940,
-  "write_total": 508,
-  "write_api": 508,
+  "endpoints_total": 945,
+  "endpoints_api": 941,
+  "write_total": 509,
+  "write_api": 509,
   "get_api": 432,
-  "distinct_paths_api": 796,
-  "write_with_body_api": 374,
+  "distinct_paths_api": 797,
+  "write_with_body_api": 375,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -4169,6 +4169,11 @@
    "body": true
   },
   "POST /api/settings/line-notify/events/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-preview": {
    "w": true,
    "pp": 0,
    "body": true

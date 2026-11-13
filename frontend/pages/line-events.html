@@ -234,36 +234,69 @@
       })
     }
     function applied(res, label) { return { res: res, message: label + '（' + res.changed.length + ' 項有變動' + (res.unchanged && res.unchanged.length ? '、' + res.unchanged.length + ' 項本來就是這樣' : '') + '）' } }
+    // 確認視窗：向伺服器要「預覽」（不寫入），列出每個事件套用前後的收件人數與每月則數估算（額度是 LINE 的核心考量）
+    function previewRows(res) {
+      var rows = res.events.filter(function (r) { return r.changed })
+      var shown = rows.slice(0, 8).map(function (r) {
+        var who = r.n_before + ' → ' + r.n_after + ' 人' + (r.exact_after ? '' : '（上限）')
+        var est = !r.enabled_after ? (r.sent30 ? r.sent30 + ' → 0' : '0') : (r.est_after == null ? '—' : r.sent30 + ' → ' + r.est_after)
+        return '<tr><td>' + esc(r.name) + (r.defaulted ? ' <span class="mx-mute">（預設只發給你）</span>' : '') + '</td><td style="text-align:right;white-space:nowrap">' + who + '</td><td style="text-align:right;white-space:nowrap">' + est + '</td></tr>'
+      }).join('')
+      return '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--ink-secondary)"><th style="text-align:left">事件</th><th style="text-align:right">可能收件人</th><th style="text-align:right">每月則數</th></tr></thead><tbody>' + shown + '</tbody></table>' +
+        (rows.length > 8 ? '<div class="mx-mute">…另有 ' + (rows.length - 8) + ' 項</div>' : '')
+    }
+    function previewDialog(keys, fields, title, okLabel) {
+      return call('/api/settings/line-notify/events/batch-preview', 'POST', Object.assign({ keys: keys }, fields)).then(function (res) {
+        var changed = res.events.filter(function (r) { return r.changed }).length
+        if (!changed) throw new Error('這些項目本來就是這樣，沒有要變更的')
+        var t = res.total, q = window.__leQuota, html = '<div>將變更 <b>' + changed + '</b> 項' + (keys.length - changed ? '，略過 <b>' + (keys.length - changed) + '</b> 項（本來就是這樣）' : '') + '。</div>' + previewRows(res)
+        html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 套用後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項沒有推播紀錄、無法估算）</span>' : '') + '</div>'
+        html += '<div class="mx-mute">估算方式：以近 30 天實際推播量，按「可能收件人數」的比例推算；「上限」＝照原本收件人時每一則的實際收件人可能更少。</div>'
+        if (q && q.limit != null && !q.unlimited) html += '<div style="margin-top:6px">本月額度 <b>' + esc(q.limit) + '</b> 則，已用 <b>' + esc(q.used) + '</b> 則。</div>'
+        if (q && q.limit != null && !q.unlimited && t.est_after > q.limit) html += '<div class="mx-danger-box">預估每月 ' + t.est_after + ' 則，超過 LINE 免費額度 ' + esc(q.limit) + ' 則：用量到 90% 時一般通知會暫停（重要告警照發）。</div>'
+        return { title: title + '（' + changed + ' 項）', okLabel: okLabel, html: html }
+      })
+    }
+    var pickedCustom = null
+    function act(id, label, done, fieldsOf, extra) {
+      var a = {
+        id: id, label: label, doneLabel: done,
+        confirm: function (keys) {
+          var fields = fieldsOf(keys)
+          if (fields === null) return null
+          return previewDialog(keys, fields, label === '開啟' || label === '關閉' ? label + '通知' : '改收件對象：' + label, label === '關閉' ? '繼續' : '套用').then(function (d) {
+            return [d].concat(id === 'off' ? critDialog(keys) : [])
+          })
+        },
+        run: function (keys, ctx) {
+          var fields = fieldsOf(keys)
+          if (id === 'off') fields = Object.assign({}, fields, { confirm_critical: !!ctx.confirmed && critDialog(keys).length > 0 })
+          return batch(keys, fields).then(function (r) { return applied(r, done) })
+        },
+      }
+      return Object.assign(a, extra || {})
+    }
     var batchCfg = {
       groupActions: [{ action: 'on', label: '全開' }, { action: 'off', label: '全關' }],
       actions: [
-        { id: 'on', label: '開啟', doneLabel: '已開啟',
-          confirm: function (keys) {
-            var fresh = keys.filter(function (k) { var e = evByKey(k); return e && !e.enabled && aud(e).mode === 'business' })
-            if (!fresh.length) return []
-            return [{ title: '開啟 ' + keys.length + ' 項 LINE 通知', okLabel: '開啟',
-              html: '其中 <b>' + fresh.length + '</b> 項是第一次從關閉變成開啟：<b>預設只發給你本人</b>（之後可再改成其他人），避免一開就推給所有人。' + listHtml(names(fresh).slice(0, 8)) + (fresh.length > 8 ? '<div class="mx-mute">…等 ' + fresh.length + ' 項</div>' : '') }]
-          },
-          run: function (keys) { return batch(keys, { enabled: true }).then(function (r) { return applied(r, '已開啟') }) } },
-        { id: 'off', label: '關閉', doneLabel: '已關閉',
-          confirm: function (keys) {
-            var crit = critDialog(keys)
-            return crit.length ? [{ title: '關閉 ' + keys.length + ' 項 LINE 通知？', okLabel: '繼續', html: '將關閉 <b>' + keys.length + '</b> 項，其中包含「重要」系統告警，下一步會列出受影響的情況。' }].concat(crit) : []
-          },
-          run: function (keys, ctx) { return batch(keys, { enabled: false, confirm_critical: !!ctx.confirmed && critDialog(keys).length > 0 }).then(function (r) { return applied(r, '已關閉') }) } },
-        { id: 'me', label: '只發給我', dividerBefore: true, caption: '收件對象：', doneLabel: '已改為只發給你',
-          run: function (keys) { return batch(keys, { audience: { mode: 'only', roles: [], users: [ME] } }).then(function (r) { return applied(r, '已改為只發給你') }) } },
-        { id: 'su', label: '最高管理者', doneLabel: '已改為只發給最高管理者',
-          run: function (keys) { return batch(keys, { audience: { mode: 'only', roles: ['superadmin'], users: [] } }).then(function (r) { return applied(r, '已改為只發給最高管理者') }) } },
-        { id: 'biz', label: '照 Email 收件人', doneLabel: '已改為照原本收件人',
-          run: function (keys) { return batch(keys, { audience: { mode: 'business', roles: [], users: [] } }).then(function (r) { return applied(r, '已改為照原本收件人') }) } },
-        { id: 'custom', label: '自訂…', doneLabel: '已更新收件對象',
-          run: function (keys) {
+        act('on', '開啟', '已開啟', function () { return { enabled: true } }),
+        act('off', '關閉', '已關閉', function () { return { enabled: false } }),
+        act('me', '只發給我', '已改為只發給你', function () { return { audience: { mode: 'only', roles: [], users: [ME] } } }, { dividerBefore: true, caption: '收件對象：' }),
+        act('su', '最高管理者', '已改為只發給最高管理者', function () { return { audience: { mode: 'only', roles: ['superadmin'], users: [] } } }),
+        act('biz', '照 Email 收件人', '已改為照原本收件人', function () { return { audience: { mode: 'business', roles: [], users: [] } } }),
+        // 自訂：先開指定視窗（confirm 階段），取消 ⇒ 不繼續；選好後才要預覽
+        (function () {
+          var a = act('custom', '自訂…', '已更新收件對象', function () { return pickedCustom ? { audience: pickedCustom } : null })
+          var inner = a.confirm
+          a.confirm = function (keys) {
             return pickDialog(keys.map(evByKey).filter(Boolean), { mode: 'only', roles: [], users: [] }).then(function (p) {
-              if (!p) throw cancelled()
-              return batch(keys, { audience: p }).then(function (r) { return applied(r, '已更新收件對象') })
+              if (!p) return null
+              pickedCustom = p
+              return inner(keys)
             })
-          } },
+          }
+          return a
+        })(),
       ],
       snapshot: snapshot,
       restore: restore,

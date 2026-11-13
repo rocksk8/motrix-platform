@@ -2767,9 +2767,10 @@ def get_line_notify(authorization: str = Header(None)):
     safe["event_groups"] = list(_cat.GROUP_ORDER)
     u30 = _ln.usage_daily_view(30)          # 按日計數（LINE 事件矩陣票）：近 30 天每個事件推出幾則；資料未滿 30 天 ⇒ complete=False、accumulated_days＝已累積幾天
     safe["usage30"] = {k: u30[k] for k in ("days", "accumulated_days", "complete", "total")}
+    rc = _lr.potential_counts(_ln.WIRED_EVENTS)      # 每個事件目前可能收到的人數（在職、已綁定、輪得到、沒退訂）；exact＝只發給指定時才精確，其餘是上限
     safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
                        "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
-                       "sent30": u30["by_event"].get(k, 0),
+                       "sent30": u30["by_event"].get(k, 0), "recipient_count": rc[k]["n"], "recipient_exact": rc[k]["exact"],
                        "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
 
@@ -2864,16 +2865,9 @@ def set_line_notify_event(key: str, body: dict = Body(...), authorization: str =
 _BATCH_FIELDS = {"keys", "enabled", "audience", "roles", "confirm_critical"}
 
 
-@router.post("/api/settings/line-notify/events/batch")
-def set_line_notify_events_batch(body: dict = Body(...), authorization: str = Header(None)):
-    """一次改多個 LINE 通知事件（LINE 事件矩陣票）：開關 `enabled`、誰要發 `audience`（`{mode, roles, users}`）、角色篩選 `roles`
-    （**沒帶＝不動；帶 null＝移除篩選（所有角色）；帶清單＝只收這些角色**）。`keys` 1～100 個（去重）。
-
-    **全部成功或全部不改**：任何一項不合法 ⇒ 400、一個都不改；成功時整批只寫一次設定、只記**一筆**稽核。
-    關閉「重要」系統告警的事件必須帶 `confirm_critical: true`，否則 400（`code: confirm_critical_required`、`critical`＝需要確認的事件）。
-    事件從關切到開、而且沒有帶 `audience` 也還沒有指定對象時，套用預設「只發給我」（操作者本人）。"""
-    actor = _require_user(authorization, require_superadmin=True)
-    from helpers import line_notify as _ln, line_catalog as _cat
+def _parse_line_batch_body(body) -> tuple:
+    """批次請求本體的嚴格解析（批次與預覽共用）⇒ `(keys, kw)`；格式不對 ⇒ 400。`kw` 含 enabled／audience／confirm_critical／roles（沒帶就不放）。"""
+    from helpers import line_notify as _ln
     b = body if isinstance(body, dict) else {}
     extra = sorted(set(b) - _BATCH_FIELDS)
     if extra:
@@ -2887,10 +2881,42 @@ def set_line_notify_events_batch(body: dict = Body(...), authorization: str = He
             raise HTTPException(400, "%s 必須是 true 或 false" % fld)
     if "audience" in b and not isinstance(b["audience"], dict):
         raise HTTPException(400, "audience 必須是 {mode, roles, users}")
-    kw = {"enabled": b.get("enabled"), "audience": b.get("audience"), "confirm_critical": b.get("confirm_critical") is True,
-          "default_user": actor["username"]}
+    kw = {"enabled": b.get("enabled"), "audience": b.get("audience"), "confirm_critical": b.get("confirm_critical") is True}
     if "roles" in b:                                  # 沒帶 ≠ 帶 null（移除角色篩選）
         kw["roles"] = b["roles"]
+    return keys, kw
+
+
+@router.post("/api/settings/line-notify/events/batch-preview")
+def preview_line_notify_events_batch(body: dict = Body(...), authorization: str = Header(None)):
+    """批次預覽（不寫入、不記稽核）：同 `/events/batch` 的輸入與驗證，回每個事件套用前後的開關、可能收件人數、每月則數估算（`recipient_count` 的來源見 `line_recipients.potential_counts`）。
+    給確認視窗顯示「預估每月 X → Y 則」。人數是上限；沒有歷史推播量的事件 `est_after` 為 null（無法估算）。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln, line_catalog as _cat
+    keys, kw = _parse_line_batch_body(body)
+    kw.pop("confirm_critical", None)
+    try:
+        res = _ln.preview_events_batch(keys, default_user=actor["username"], **kw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    for r in res["events"]:
+        r["name"] = _cat.name_of(r["key"])
+    return {"ok": True, **res}
+
+
+@router.post("/api/settings/line-notify/events/batch")
+def set_line_notify_events_batch(body: dict = Body(...), authorization: str = Header(None)):
+    """一次改多個 LINE 通知事件（LINE 事件矩陣票）：開關 `enabled`、誰要發 `audience`（`{mode, roles, users}`）、角色篩選 `roles`
+    （**沒帶＝不動；帶 null＝移除篩選（所有角色）；帶清單＝只收這些角色**）。`keys` 1～100 個（去重）。
+
+    **全部成功或全部不改**：任何一項不合法 ⇒ 400、一個都不改；成功時整批只寫一次設定、只記**一筆**稽核。
+    關閉「重要」系統告警的事件必須帶 `confirm_critical: true`，否則 400（`code: confirm_critical_required`、`critical`＝需要確認的事件）。
+    事件從關切到開、而且沒有帶 `audience` 也還沒有指定對象時，套用預設「只發給我」（操作者本人）。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln, line_catalog as _cat
+    b = body if isinstance(body, dict) else {}
+    keys, kw = _parse_line_batch_body(body)
+    kw["default_user"] = actor["username"]
     try:
         res = _ln.set_events_batch(keys, **kw)
     except _ln.CriticalConfirmRequired as e:

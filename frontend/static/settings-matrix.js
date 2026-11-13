@@ -21,7 +21,7 @@
  *     groupSummary: (name, rows) => '已開 3／共 8',                              // 群組列的說明（選填）
  *     batch: {
  *       actions: [{ id: 'off', label: '關閉', run: (keys, ctx) => api(...),      // ctx.confirmed＝使用者勾過的確認（見 confirm）
- *                   confirm: keys => [{ title, html, okLabel, danger }] }],         // 回 0 個以上確認視窗；全部按「套用」才會執行
+ *                   confirm: keys => [{ title, html, okLabel, danger }] }],         // 回 0 個以上確認視窗（可回 Promise；回 null＝取消）；全部按「套用」才會執行
  *       groupActions: [{ action: 'on', label: '全開' }, { action: 'off', label: '全關' }],   // 群組列的快捷鈕（對群組內「目前列出的」列）
  *       snapshot: keys => ({...}),            // 套用前記下目前的狀態（復原用；格式自訂）
  *       restore: (snap, res) => Promise,      // 復原這一批：res＝該批 run() 的回傳；有人在這之間改過 ⇒ 丟帶說明的 Error（整批不復原）。單格操作沒有復原
@@ -304,12 +304,17 @@
       })
       return chain
     }
+    // a.confirm(keys)：回確認視窗陣列，或回 Promise（例如先向伺服器要預覽）；回 null／false ⇒ 使用者在前置步驟取消、靜默放棄；丟錯 ⇒ 顯示錯誤、不執行
     function runAction(a, keys) {
-      var dialogs = a.confirm ? (a.confirm(keys) || []) : []
-      return askAll(dialogs).then(function (ok) {
-        if (!ok) return
-        return perform(a.doneLabel || a.label, keys, function () { return a.run(keys, { confirmed: dialogs.length > 0 }) }, { undo: true })
-      })
+      if (S.busy) return Promise.resolve()
+      return Promise.resolve().then(function () { return a.confirm ? a.confirm(keys) : [] }).then(function (dialogs) {
+        if (dialogs === null || dialogs === false) return
+        dialogs = dialogs || []
+        return askAll(dialogs).then(function (ok) {
+          if (!ok) return
+          return perform(a.doneLabel || a.label, keys, function () { return a.run(keys, { confirmed: dialogs.length > 0 }) }, { undo: true })
+        })
+      }).catch(fail)
     }
     // 單格操作：column.confirm(row, value) 可回確認視窗（例如關閉「重要」告警）；set／toggle 丟出 {cancelled:true} ⇒ 靜默放棄、畫面回原狀
     function runCell(label, key, col, r, value, fn) {
