@@ -186,7 +186,7 @@ def record(client, headers, paths) -> dict:
                 out[p] = {"s": r.status_code, "k": []}
         elif EXPORT.search(p) or "csv" in ct or "spreadsheetml" in ct:
             try:
-                out[p] = {"s": r.status_code, "ct": ct.split(";")[0], "hdr": export_header(ct, r.content)}
+                out[p] = {"s": r.status_code, "ct": ct.split(";")[0], "hdr": _mask_dates(export_header(ct, r.content))}
             except Exception:                                                # noqa: BLE001
                 out[p] = {"s": r.status_code, "ct": ct.split(";")[0], "hdr": ["<unreadable>"]}
         else:
@@ -208,11 +208,16 @@ def leaks(rec: dict) -> list:
 
 
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+#: 『2026-11 當月收支明細』『2026 年 11 月』『2026年度收支總表』：表頭帶『執行當下的年月／年』，換月（12/1）、換年（1/1）就變；只遮數字段，欄位名與結構照比。
+_YM = re.compile(r"(?<![A-Za-z\d-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])(?![A-Za-z\d-])")
+_ZH_YM = re.compile(r"(?<!\d)(?:19|20)\d{2} ?年(?: ?\d{1,2} ?月)?")
 
 
 def _mask_dates(hdr):
-    """匯出表頭裡的日期（『截至 2026-10-13』）隨執行日變動；比對時遮掉，欄位名與結構照比。"""
-    return None if hdr is None else [_DATE.sub("YYYY-MM-DD", h) for h in hdr]
+    """匯出表頭裡隨執行日變動的日期／年月（『截至 2026-10-13』『2026-11 當月…』『2026 年 11 月』『2026年度』）；比對與記錄都先遮掉。冪等。"""
+    if hdr is None:
+        return None
+    return [_ZH_YM.sub("<年月>", _YM.sub("YYYY-MM", _DATE.sub("YYYY-MM-DD", h))) for h in hdr]
 
 
 # 有套限流的匯出／PDF 路由（基準裡記到 429 的那幾條）；新增項目要有證據（基準裡真的記到 429）

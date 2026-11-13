@@ -216,3 +216,18 @@ def test_norm_keys_only_collapses_whole_year_month_segments():
     assert N(N(["a.2026-11", "a.2026-12"])) == ["a.<月>"], "冪等"
     assert N(None) is None and N([]) == []
     assert N(["b", "a.2026-11", "a.2026-12", "a"]) == ["a", "a.<月>", "b"], "去重＋排序"
+
+def test_export_header_month_year_tokens_are_masked_but_structure_is_compared():
+    """匯出表頭裡的『YYYY-MM』『YYYY 年 M 月』『YYYY年度』隨執行月／年變動：遮掉才不會 12/1、1/1 無故轉紅；欄位名／工作表名變了照報。"""
+    M = RK._mask_dates
+    a = ["當月收支|2026-11 當月收支明細", "本期收款明細|本期收款明細 — 2026 年 11 月", "今年度收支|2026年度收支總表", "未收款清單|未收款清單 — 截至 2026-11-13"]
+    b = [h.replace("2026-11-13", "2026-12-01").replace("2026-11", "2026-12").replace("2026 年 11 月", "2027 年 1 月").replace("2026年度", "2027年度") for h in a]
+    assert b != a and M(a) == M(b), "換月／換年不該有差異"
+    assert M(M(a)) == M(a) and M(None) is None, "冪等＋None"
+    assert M(["x|2026-13 y", "x|a2026-11b"]) == ["x|2026-13 y", "x|a2026-11b"], "13 月／黏字不遮"
+    route = "/api/reports/export"
+    base = {route: {"s": 200, "ct": "x", "hdr": M(a)}}
+    same = {route: {"s": 200, "ct": "x", "hdr": M(b)}}
+    assert RK.diff(base, same)["changed"] == {}
+    renamed = {route: {"s": 200, "ct": "x", "hdr": M([h.replace("當月收支", "本月收支") for h in b])}}
+    assert list(RK.diff(base, renamed)["changed"]) == [route], "工作表名／表頭文字變了必須報"
