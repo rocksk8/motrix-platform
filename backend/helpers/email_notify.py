@@ -617,11 +617,11 @@ def _dl_fill(tpl, doc_label, **vals):
     return _re.sub(r"\{(\w+)\}", lambda m: str(vals[m.group(1)]) if m.group(1) in vals else m.group(0), _dl(tpl, doc_label))
 
 
-def _subject_text(_tf, default_tpl, doc_label, **vals):
+def _subject_text(_tf, default_tpl, doc_label, *, no, cust, t=None, tt=None):
     """信件主旨的主文：範本設定檔有給 reason 就用它（管理員自己寫的字，整段換名稱），否則走預設範本。"""
     if "reason" in _tf:
         return _dl(_tf["reason"], doc_label)
-    return _dl_fill(default_tpl, doc_label, **vals)
+    return _dl_fill(default_tpl, doc_label, no=no, cust=cust, t=t, tt=tt)       # 明列關鍵字（case_summary_purpose 守門禁非字面值 **）；t／tt 只有 next_tier 的範本用得到
 
 
 def _doc_label_of(quote_no) -> str:
