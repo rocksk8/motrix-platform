@@ -225,6 +225,16 @@
    "count": 1,
    "class": "not-body",
    "note": "刪除暫存區還原：整張單據還原，不是就地修改本文"
+  },
+  "modules/case/api/quotations.py::upload_quotation_signed_files::helper:signed_files_json[updated_at]": {
+   "count": 1,
+   "class": "not-body",
+   "note": "客戶回簽單附件上傳（回簽的產物，P1 明確放行）；T83 起經 L1 helpers.uploads.append_json_list 只寫 signed_files_json（＋updated_at），不碰本文欄位"
+  },
+  "modules/case/api/quotations.py::delete_quotation_signed_file::helper:signed_files_json[updated_at]": {
+   "count": 1,
+   "class": "not-body",
+   "note": "客戶回簽單附件刪除；T83 起經 L1 helpers.uploads.remove_json_item 只寫 signed_files_json（＋updated_at），不碰本文欄位"
   }
  }
 }
