@@ -97,7 +97,7 @@ def mails(client, monkeypatch):
     _set_flag(False)
     box = []
 
-    def fake(device_name, customer, quote_no, days_left, expiry_iso, owner_username="", out=None):
+    def fake(device_name, customer, quote_no, days_left, expiry_iso, owner_username="", out=None, sn=""):
         box.append((quote_no, device_name, days_left))
         return True
     monkeypatch.setattr(CD._en, "_send_warranty_expiry", fake)
@@ -234,7 +234,7 @@ def test_transient_mail_failure_on_closed_case_leaves_no_mark_and_retries(client
     _run()
     _set_devices("MQ-P0D-CLOSED", [_dev("A", 10)])
 
-    def fail(device_name, customer, quote_no, days_left, expiry_iso, owner_username="", out=None):
+    def fail(device_name, customer, quote_no, days_left, expiry_iso, owner_username="", out=None, sn=""):
         out["outcome"] = CD._en.SEND_TRANSIENT_FAIL
         return False
     monkeypatch.setattr(CD._en, "_send_warranty_expiry", fail)

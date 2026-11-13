@@ -44,6 +44,7 @@ def _seed_case(quote_no, owner=None, tag="已成案", customer=None, project="�
 
 def _set_flag(on):
     import db
+    from helpers import settings_groups  # noqa: F401  # 單獨跑時要先把群組登錄進去
     from helpers import settings_registry as SR
     c = db.get_db()
     try:
@@ -55,7 +56,7 @@ def _set_flag(on):
 
 
 @pytest.fixture(autouse=True)
-def _flag_off_unless_asked():
+def _flag_off_unless_asked(client):
     """預設值之後會改成「開」（一條龍上線＝預設開，由 h1 統一遷移）：本檔的『關』路徑測試一律先明確關掉，不靠預設值；要開的用 flag_on。"""
     _set_flag(False)
     yield
