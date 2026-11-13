@@ -1,0 +1,252 @@
+{
+ "change_control": {
+  "category": "安全",
+  "plain": "重大設定要誰核准、等幾天",
+  "currentName": "變更管制"
+ },
+ "retention": {
+  "category": "系統",
+  "plain": "資料保存多久",
+  "currentName": "保存期限"
+ },
+ "uploads": {
+  "category": "系統",
+  "plain": "上傳檔案的大小與數量",
+  "currentName": "上傳容量"
+ },
+ "system_hub": {
+  "category": "系統",
+  "plain": "系統中心頁面",
+  "currentName": "系統中心"
+ },
+ "material_order": {
+  "category": "業務",
+  "plain": "材料申請規則",
+  "currentName": "材料申請"
+ },
+ "quote_alt": {
+  "category": "業務",
+  "plain": "報價單的「擇一方案」",
+  "currentName": "擇一方案"
+ },
+ "material_recognition": {
+  "category": "財務",
+  "plain": "材料成本怎麼認列",
+  "currentName": "材料卡片認列採購單"
+ },
+ "download_name": {
+  "category": "系統",
+  "plain": "下載檔案怎麼命名",
+  "currentName": "下載檔名"
+ },
+ "project_margin": {
+  "category": "財務",
+  "plain": "專案毛利率口徑",
+  "currentName": "專案毛利%"
+ },
+ "quote_approval": {
+  "category": "業務",
+  "plain": "報價單什麼時候要送審",
+  "currentName": "報價送審門檻"
+ },
+ "finance_reports": {
+  "category": "財務",
+  "plain": "財務報表選項",
+  "currentName": "財務報表"
+ },
+ "finance_cashier": {
+  "category": "財務",
+  "plain": "出納作業",
+  "currentName": "出納"
+ },
+ "case_close_gates": {
+  "category": "業務",
+  "plain": "案件結案前要先完成什麼",
+  "currentName": "結案條件加嚴"
+ },
+ "builder_status_display": {
+  "category": "系統",
+  "plain": "自訂狀態的名稱與顏色",
+  "currentName": "狀態顯示名稱與顏色"
+ },
+ "ui_format": {
+  "category": "系統",
+  "plain": "數字與日期怎麼顯示",
+  "currentName": "數字與日期顯示格式"
+ },
+ "completion_note": {
+  "category": "業務",
+  "plain": "完工單",
+  "currentName": "完工單"
+ },
+ "builder_layout": {
+  "category": "系統",
+  "plain": "自訂畫面的版面",
+  "currentName": "自訂畫面版面"
+ },
+ "builder_governance": {
+  "category": "系統",
+  "plain": "自訂功能的版本與發布管控",
+  "currentName": "建構器治理（版本帳本與發布前影響預覽）"
+ },
+ "builder_rules": {
+  "category": "系統",
+  "plain": "自訂規則（標示型）",
+  "currentName": "規則（標示型）"
+ },
+ "builder_menu": {
+  "category": "系統",
+  "plain": "自訂選單",
+  "currentName": "選單建構器"
+ },
+ "builder_custom_fields": {
+  "category": "系統",
+  "plain": "內建畫面的自訂欄位",
+  "currentName": "自訂欄位（內建畫面）"
+ },
+ "builder_actions": {
+  "category": "系統",
+  "plain": "自訂按鈕",
+  "currentName": "自訂按鈕"
+ },
+ "builder_slots": {
+  "category": "系統",
+  "plain": "附件種類與存放位置",
+  "currentName": "附件種類與儲存位置"
+ },
+ "builder_exports": {
+  "category": "系統",
+  "plain": "自訂匯出",
+  "currentName": "自訂匯出"
+ },
+ "builder_option_lists": {
+  "category": "系統",
+  "plain": "自訂下拉選項",
+  "currentName": "自訂選項清單"
+ },
+ "list_prefs": {
+  "category": "系統",
+  "plain": "清單個人偏好（公司預設）",
+  "currentName": "清單個人偏好"
+ },
+ "alerts": {
+  "category": "業務",
+  "plain": "到期提醒",
+  "currentName": "到期預警"
+ },
+ "account_security": {
+  "category": "安全",
+  "plain": "登入與密碼規則",
+  "currentName": "登入與密碼"
+ },
+ "external_login": {
+  "category": "安全",
+  "plain": "從外網登入的防護",
+  "currentName": "外網登入防護"
+ },
+ "builder_notify": {
+  "category": "系統",
+  "plain": "自訂通知用語",
+  "currentName": "自訂通知用語"
+ },
+ "builder_stage_templates": {
+  "category": "系統",
+  "plain": "自訂案件階段樣板",
+  "currentName": "自訂案件階段樣板"
+ },
+ "builder_custom_modules": {
+  "category": "系統",
+  "plain": "建立自訂模組",
+  "currentName": "自訂模組引擎（建立新模組）"
+ },
+ "quote_output": {
+  "category": "業務",
+  "plain": "報價單輸出（PDF）",
+  "currentName": "報價單輸出"
+ },
+ "quote_privacy": {
+  "category": "業務",
+  "plain": "報價單的個資欄位",
+  "currentName": "報價單個人資料欄位"
+ },
+ "profit_warning": {
+  "category": "財務",
+  "plain": "利潤提醒色帶",
+  "currentName": "利潤提醒色帶"
+ },
+ "quote_defaults": {
+  "category": "業務",
+  "plain": "報價單預設值",
+  "currentName": "報價單預設值"
+ },
+ "profit_rules": {
+  "category": "財務",
+  "plain": "利潤怎麼算",
+  "currentName": "利潤口徑"
+ },
+ "list_view": {
+  "category": "系統",
+  "plain": "清單檢視（個人偏好）",
+  "currentName": "清單檢視（個人偏好）"
+ },
+ "netplan_labels": {
+  "category": "業務",
+  "plain": "網路規劃：狀態名稱",
+  "currentName": "網路規劃：狀態名稱"
+ },
+ "procurement_labels": {
+  "category": "業務",
+  "plain": "採購建議：狀態名稱",
+  "currentName": "採購建議：狀態名稱"
+ },
+ "lodging_labels": {
+  "category": "業務",
+  "plain": "住宿紀錄：計價單位與詢價管道",
+  "currentName": "住宿紀錄：計價單位與詢價管道"
+ },
+ "payslip_dispatch_picker": {
+  "category": "財務",
+  "plain": "勞報單派發選單",
+  "currentName": "勞報單選派發下拉"
+ },
+ "legal_params_reminder": {
+  "category": "財務",
+  "plain": "法規參數跨年提醒",
+  "currentName": "法規參數跨年提醒"
+ },
+ "recycle_bin": {
+  "category": "系統",
+  "plain": "資源回收筒",
+  "currentName": "資源回收筒"
+ },
+ "brand": {
+  "category": "系統",
+  "plain": "系統標語",
+  "currentName": "系統標語"
+ },
+ "login_greeting": {
+  "category": "系統",
+  "plain": "登入畫面問候語",
+  "currentName": "登入問候語"
+ },
+ "quote_backfill": {
+  "category": "業務",
+  "plain": "補登歷史案件",
+  "currentName": "補登歷史案件"
+ },
+ "overhead": {
+  "category": "財務",
+  "plain": "管銷分攤比率",
+  "currentName": "管銷分攤比率"
+ },
+ "lodging_freshness": {
+  "category": "業務",
+  "plain": "附近旅宿：資料新舊提示",
+  "currentName": "附近旅宿：資料新舊提示"
+ },
+ "tender_closing": {
+  "category": "業務",
+  "plain": "地圖：標案即將截止標記",
+  "currentName": "地圖：標案即將截止標記"
+ }
+}

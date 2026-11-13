@@ -48,12 +48,16 @@ def dump_registry():
     return out
 
 
+FINANCE_ROLE_KEYS = ("cashier", "finance", "financial_view")          # 由角色決定，批次永遠唯讀
+BATCH_GRANT_REFUSED = ("project_approve_eng", "project_approve_biz", "quotation", "expense_forms", "file_center", "contractor_list")  # C4
+
+
 def batchable(f, group_sensitive=False):
     """PM 2026-11-13 M1：risk none／ops 可批次（ops 要確認視窗）；security／money／legal、受 change_control 管（待生效／放寬）、`sensitive` 群組者永不進批次。"""
     if group_sensitive or f["risk"] in ("security", "money", "legal") or f["requiresPending"] or f["loosen"]:
         return "否（永不進批次）"
     if f["type"] == "str" and not f["choices"]:
-        return "否（逐列編輯＋預覽）"  # 自由文字：每家公司內容不同，不能「一鍵套同一段字」；逐列編輯、儲存前預覽
+        return "否（文字欄位，逐列編輯）"  # 自由文字：每家公司內容不同，不能「一鍵套同一段字」；逐列編輯、儲存前預覽
     return "是（需確認視窗）" if f["risk"] == "ops" else "是"
 
 
@@ -148,8 +152,11 @@ def bing_csv():
                          "notification_prefs.EVENT_GROUPS", "是"] + _fill("個人 Email 通知事件", label))
     sens = set(DR.HIGH_SENSITIVITY_KEYS)
     for key, label, grp in MR.MODULES:
+        # 使用者裁示 C4：另列「批次拒絕清單」——禁止批次授予（取消可以），不併入高敏感清單
+        batch = ("否（由角色決定，唯讀）" if key in FINANCE_ROLE_KEYS else "授予否／取消可（高敏感）" if key in sens
+                 else "授予否／取消可（批次拒絕清單）" if key in BATCH_GRANT_REFUSED else "是")
         rows.append(["個人權限鍵", "users.html（存取模組）", grp, key, label, "", "高敏感權限：要原因、寫權限變更紀錄" if key in sens else "", "依角色範本", "module_registry.MODULES",
-                     "否（高敏感）" if key in sens else "是"] + _fill("個人權限鍵", label.split("（")[0], sens=key in sens))
+                     batch] + _fill("個人權限鍵", label.split("（")[0], sens=key in sens))
     from helpers import google_calendar as GC, notify_matrix as NM
     cal = {x["code"]: x for x in GC.event_types()}
     for code in NM.calendar_only_codes(GC.EVENT_CODES):
@@ -161,10 +168,39 @@ def bing_csv():
     return _write_seed("bing-items", cols, rows)
 
 
+def check_batchable():
+    """自我檢查（PM r3 ②）：不經 batchable()，另依 SPEC §4.1 文字獨立重算，與 seed／工作檔的「可批次?」欄逐列比對；不符就 raise。
+    用法：python -I gen_seed.py --check（不需 import 後端，只讀 settings_groups.json＋兩份 CSV）。"""
+    groups = json.load(open(HERE / "settings_groups.json", encoding="utf-8"))
+    want = {}
+    for g, v in groups.items():
+        for f in v["fields"]:
+            if v.get("sensitive") or f["risk"] in ("security", "money", "legal") or f.get("requiresPending") or f.get("loosen"):
+                w = "否（永不進批次）"
+            elif f["type"] == "str" and not f["choices"]:
+                w = "否（文字欄位，逐列編輯）"
+            else:
+                w = "是（需確認視窗）" if f["risk"] == "ops" else "是"
+            want[(g, f["key"])] = w
+    for name in ("settings-center-items.seed.csv", "settings-center-items.csv"):
+        with open(HERE / name, encoding="utf-8-sig", newline="") as fh:
+            rows = [r for r in csv.DictReader(fh) if r["段"].startswith("一")]
+        got = {(r["群組代碼"], r["欄位代碼"]): r["可批次?"] for r in rows}
+        assert set(got) == set(want), "%s：欄位集合與 settings_groups.json 不同" % name
+        bad = [k for k in want if got[k] != want[k]]
+        assert not bad, "%s：可批次? 與 SPEC §4.1 重算不符 %d 列，例：%s" % (name, len(bad), bad[:5])
+        n_yes = sum(1 for k in want if want[k].startswith("是"))
+        print("check ok  %s  rows=%d 可批次=%d" % (name, len(rows), n_yes))
+
+
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    if "--check" in sys.argv:
+        check_batchable(); sys.exit(0)
     reg = dump_registry()
     n_fields = sum(len(v["fields"]) for v in reg.values())
     print("groups=%d fields=%d" % (len(reg), n_fields))
     print("settings-center-items.csv rows=%d" % settings_center_csv(reg))
     print("bing-items.csv rows=%d" % bing_csv())
-    sys.stdout.reconfigure(encoding="utf-8"); print("style words:", STYLE_WORDS)
+    print("style words:", STYLE_WORDS)
+    print("（工作檔的【填】欄不會被覆寫；只有 *.seed.csv 重寫。工作檔「可批次?」欄請用 --check 驗證）")
