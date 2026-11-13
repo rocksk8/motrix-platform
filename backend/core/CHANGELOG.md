@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（fix/google-quota-conn-t84；Google 額度頁一次請求開約 200 條連線）
+- 效能修正（`helpers/geo.py`，行為與公開介面不變）：`GET /api/settings/google-quota` 在正式機一次 8.6～9.8 秒，原因是 `quota_calculator()` 對待暖清單每個地址呼叫 `cached_only()`，每次各開一條讀連線（約 200 條）。計算器的「待查地址數」迴圈改包進 `cache_read_session()`（範圍內共用一條讀連線，finally 關閉）；`_warm_backlog()` 是同一個寫法，改成先收齊再在同一範圍內過濾（順序與去重結果不變）。
+- 測試：`tests/test_google_quota_conn_2026_11_13.py`（5 → 200 個地址連線數相同、絕對上限、端點層、結果與舊語意相同、計數器正對照）。
+
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
 - `helpers/email_setup.py` 單位卡補 `[契約題]`，`[公開介面]` 補 `provider_by_key`／`valid_email`（註解，行為不變）。
