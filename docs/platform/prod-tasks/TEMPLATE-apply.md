@@ -50,3 +50,14 @@
 ## 步驟 5：回報
 
 - 步驟 0 第 2 項：`verification.mode`、`verification.scoped.base` 與 `.deployed_commit.json` 的 `commit`（兩個值都寫出來）。
+
+## 發布者收尾（開發機／整合者；不是正式機 Claude 做的，寫在這裡是因為每班都要記得）
+
+- `delivery.py publish` 印出 `DELIVERY_PUBLISH_OK` 後，程式會更新 `docs/platform/prod-baseline/apply_scripts.json`（已出貨 apply 腳本的版號＋sha256；見 UPDATE-DELIVERY.md §9.1「已出貨腳本基準」）。
+  - 🔴 **印出 `DELIVERY_BASELINE_UPDATED` 後要把這個檔 commit 進分支／列車**（不 commit，下一班守門就拿舊基準比，等於放鬆）。不手改它。
+  - 印出 `DELIVERY_BASELINE_FAILED`：包已發布、不用重發；補跑 `python backend/tools/delivery.py baseline-record --name <包名>`，再 commit。
+  - 印出 `DELIVERY_REFUSED …腳本版號與已出貨基準衝突`：本班改了 `apply_update.ps1`／`apply_module_update.ps1` 的內容卻沒升版號——升 `$ApplyScriptVersion`（模組那支是 `$ApplyModuleScriptVersion`）並更新 `*.version.json` 的 sha256，重建包再發布。
+  - 單模組包（`kind=module`）：印出 `DELIVERY_BASELINE_NOT_APPLICABLE` 是正常的——它不涉及 `apply_update.ps1` 的版號，沒有驗也不更新基準，不用處理。
+  - 基準檔不存在 ⇒ `delivery.py publish` 直接拒絕（先把基準檔還原：`git checkout <列車> -- docs/platform/prod-baseline/apply_scripts.json`）；真的不可用才明確帶 `--no-baseline`（會印 `DELIVERY_BASELINE_SKIPPED`，下一班守門拿舊基準比，要在回報裡寫出來）。
+  - 用 `--baseline <別的檔>` 時，發布輸出會印 `DELIVERY_BASELINE_FILE <實際路徑>`；那個檔不是守門讀的那一份，更新完要自己搬回 `docs/platform/prod-baseline/apply_scripts.json`。
+  - 「基準」一詞在本範本只指**這份腳本版號基準檔**；與步驟 0／步驟 1 裡「正式機基準（`.deployed_commit.json` 的 commit）」是兩回事（後者是正式機上實際已套用的 commit）。T83 整合時與 683e3b765 上 h8 的那句對齊。
