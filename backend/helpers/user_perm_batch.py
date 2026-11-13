@@ -1,0 +1,289 @@
+# -*- coding: utf-8 -*-
+"""使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。
+
+[單位] helper:user_perm_batch    [層] L1    [穩定度] 實作（S3a 第一段；「復原這一批」見後續提交）
+[公開介面] BATCH_GRANT_REFUSED, MAX_USERS, list_catalog, parse_request, preview, apply
+[契約題] tests/test_user_perm_batch_2026_11_14.py
+
+## 規則（SPEC §12；守門題逐條驗）
+1. **共用檢查點**：原因規則一律走 `helpers.duty_roles.gate_reason`（與 `PUT／POST /api/users`、職責角色各動作同一支）；寫入走
+   `duty_roles.record_user_modules_change`（`permission_changes`＋同交易 `audit_log`）。本檔不自帶第二份原因規則。
+2. **授予／取消不對稱**：高敏感鍵（`HIGH_SENSITIVITY_KEYS`）與批次拒絕清單（`BATCH_GRANT_REFUSED`，使用者裁示 C4）——
+   **授予一律略過**（要逐人填原因）；**取消可以批次**，但要填原因（≥4 個不同字）並寫變更紀錄。
+3. **財務三鍵**（`FINANCE_KEYS`）由角色決定：批次永遠不動（授予、取消都略過並說明）。
+4. **最高管理者不納入**：維持全功能，批次與範本都略過。
+5. **範本**：伺服器在預覽時就把範本展開成「每人明確的授予／取消清單」；套用時**重算同一份**，與預覽的 `planHash` 不同就 409（不照過期預覽寫入）。
+   範本只動「個人勾選」：個人扣項與職責角色綁定不動；被個人扣項扣掉的鍵不授予（回報略過）。
+6. **取消職責角色給的權限**：該權限不在個人勾選裡 ⇒ 改設「個人扣項」（與 `duty_roles.set_subtract` 同表同規則），不是假裝取消了。
+7. **整批同一個寫入交易**（`core.txn.begin_write`）：任何例外 ⇒ 全部不寫；被略過的項目不是錯誤，照實回報。
+"""
+import hashlib
+import json
+import sqlite3
+from datetime import datetime
+
+from helpers import duty_roles as dr
+
+#: 使用者裁示 C4（SPEC §4.9）：禁止批次授予、批次取消可以。清單由 API 回傳（`list_catalog`），前端不寫死。
+BATCH_GRANT_REFUSED = ("project_approve_eng", "project_approve_biz", "quotation", "expense_forms", "file_center", "contractor_list")
+
+#: 一次最多處理幾個人（防誤送整份名冊；公司規模遠小於此）
+MAX_USERS = 200
+
+
+def list_catalog() -> dict:
+    """給畫面：高敏感清單、批次拒絕清單、財務三鍵（前端不寫死任何一份）。"""
+    return {"highSensitiveKeys": list(dr.HIGH_SENSITIVITY_KEYS), "batchGrantRefused": list(BATCH_GRANT_REFUSED),
+            "financeKeys": list(dr.FINANCE_KEYS)}
+
+
+def _gated_keys() -> set:
+    return set(dr.HIGH_SENSITIVITY_KEYS) | set(BATCH_GRANT_REFUSED)
+
+
+def _json_list(v) -> list:
+    try:
+        out = json.loads(v) if isinstance(v, str) else v
+        return [k for k in out if isinstance(k, str)] if isinstance(out, list) else []
+    except (TypeError, ValueError):
+        return []
+
+
+def _int_list(v, label) -> list:
+    if v in (None, ""):
+        return []
+    if not isinstance(v, (list, tuple)):
+        raise dr.DutyError("%s必須是清單" % label)
+    try:
+        return sorted({int(i) for i in v if not isinstance(i, bool)})
+    except (TypeError, ValueError):
+        raise dr.DutyError("%s必須是整數清單" % label)
+
+
+def parse_request(body) -> dict:
+    """驗證請求。{userIds, grant[], revoke[], bindRoleIds[], unbindRoleIds[], template, reason, planHash} ⇒ 正規化後的 dict。"""
+    if not isinstance(body, dict):
+        raise dr.DutyError("請求內容必須是物件")
+    ids = _int_list(body.get("userIds"), "userIds")
+    if not ids:
+        raise dr.DutyError("請至少選一位使用者")
+    if len(ids) > MAX_USERS:
+        raise dr.DutyError("一次最多 %d 位" % MAX_USERS)
+    grant = dr._check_perm_keys(body.get("grant") or [])
+    revoke = dr._check_perm_keys(body.get("revoke") or [])
+    both = sorted(set(grant) & set(revoke))
+    if both:
+        raise dr.DutyError("同一個權限不能同時授予與取消：%s" % "、".join(both))
+    bind_ids, unbind_ids = _int_list(body.get("bindRoleIds"), "bindRoleIds"), _int_list(body.get("unbindRoleIds"), "unbindRoleIds")
+    if set(bind_ids) & set(unbind_ids):
+        raise dr.DutyError("同一個職責角色不能同時綁定與解除")
+    template = body.get("template") or ""
+    if template:
+        from helpers import module_registry as mr
+        if not isinstance(template, str) or template not in mr.ROLE_TEMPLATES:
+            raise dr.DutyError("不認得的範本：%s" % template)
+        if grant or revoke or bind_ids or unbind_ids:
+            raise dr.DutyError("套用範本時不能同時送個別的授予／取消／綁定")
+    if not (grant or revoke or bind_ids or unbind_ids or template):
+        raise dr.DutyError("沒有要變更的內容")
+    plan_hash = body.get("planHash") or ""
+    if not isinstance(plan_hash, str):
+        raise dr.DutyError("planHash 必須是字串")
+    reason = body.get("reason")
+    return {"userIds": ids, "grant": grant, "revoke": revoke, "bindRoleIds": bind_ids, "unbindRoleIds": unbind_ids,
+            "template": template, "reason": reason if isinstance(reason, str) else "", "planHash": plan_hash}
+
+
+# ── 讀：目前狀態 ─────────────────────────────────────────────────────────────
+
+def _load_state(conn, ids) -> dict:
+    marks = ",".join("?" * len(ids))
+    users = {r["id"]: r for r in conn.execute(
+        "SELECT id, username, display_name, role, modules FROM users WHERE id IN (%s)" % marks, ids).fetchall()}
+    roles, bound, subs = {}, {}, {}
+    try:
+        for r in conn.execute("SELECT id, key, name, active, permissions FROM duty_roles").fetchall():
+            roles[r["id"]] = {"id": r["id"], "key": r["key"], "name": r["name"], "active": bool(r["active"]),
+                              "permissions": _json_list(r["permissions"])}
+        for r in conn.execute("SELECT user_id, role_id FROM user_duty_roles WHERE user_id IN (%s)" % marks, ids).fetchall():
+            bound.setdefault(r["user_id"], set()).add(r["role_id"])
+        for r in conn.execute("SELECT user_id, perm_key FROM user_perm_subtracts WHERE user_id IN (%s)" % marks, ids).fetchall():
+            subs.setdefault(r["user_id"], set()).add(r["perm_key"])
+    except sqlite3.OperationalError:                      # migration 尚未跑：沒有職責角色資料
+        pass
+    return {"users": users, "roles": roles, "bound": bound, "subs": subs}
+
+
+def _effective(role, raw, role_ids, roles, subs) -> set:
+    """與真實路徑同一條：`apply_duty`（啟用中的綁定角色權限＋個人扣項）再套 `effective_modules` 的財務規則。"""
+    from helpers.auth import effective_modules
+    lists = [roles[i]["permissions"] for i in sorted(role_ids) if i in roles and roles[i]["active"]]
+    return set(effective_modules(role, dr.apply_duty(list(raw), lists, set(subs), bool(role_ids))))
+
+
+def _refusal_for_grant(key) -> str:
+    if key in dr.FINANCE_KEYS:
+        return "財務三鍵由角色決定，批次不動"
+    if key in dr.HIGH_SENSITIVITY_KEYS:
+        return "高敏感權限：授予要逐人填原因，不能批次"
+    if key in BATCH_GRANT_REFUSED:
+        return "影響較大的權限：授予要逐人確認，不能批次"
+    return ""
+
+
+def _plan_person(uid, req, st, known, template_keys) -> dict:
+    u = st["users"].get(uid)
+    p = {"userId": uid, "username": "", "name": "", "role": "", "status": "nochange", "note": "", "adds": [], "removes": [],
+         "bind": [], "unbind": [], "subtractAdds": [], "skipped": [], "effectiveAdded": [], "effectiveRemoved": [], "gated": []}
+    if u is None:
+        p.update(status="skipped", note="找不到這位使用者")
+        return p
+    p.update(username=u["username"], name=u["display_name"] or u["username"], role=u["role"])
+    if u["role"] == "superadmin":
+        p.update(status="skipped", note="最高管理者不納入批次（維持全功能）")
+        return p
+    raw = _json_list(u["modules"])
+    rawset = set(raw)
+    roles, bound, subs = st["roles"], set(st["bound"].get(uid, ())), set(st["subs"].get(uid, ()))
+    role_keys = set()
+    for rid in bound:
+        if rid in roles and roles[rid]["active"]:
+            role_keys |= set(roles[rid]["permissions"])
+    if template_keys is not None:
+        tset = set(template_keys)
+        want_grant = [k for k in template_keys if k not in rawset]
+        want_revoke = [k for k in raw if k in known and k not in tset and k not in dr.FINANCE_KEYS]
+    else:
+        want_grant, want_revoke = list(req["grant"]), list(req["revoke"])
+
+    def skip(kind, key, why):
+        p["skipped"].append({"kind": kind, "key": key, "reason": why})
+
+    for k in want_grant:
+        if k in rawset:
+            continue
+        why = _refusal_for_grant(k)
+        if why:
+            skip("grant", k, why)
+        elif k in subs:
+            skip("grant", k, "目前被個人扣項扣掉，請先到「職責角色」頁解除扣項")
+        else:
+            p["adds"].append(k)
+    new_subs = set()
+    for k in want_revoke:
+        if k in dr.FINANCE_KEYS:
+            skip("revoke", k, "財務三鍵由角色決定，批次不動")
+            continue
+        in_raw = k in rawset
+        from_role = k in role_keys and k not in subs
+        if in_raw:
+            p["removes"].append(k)
+        if from_role:
+            new_subs.add(k)                               # 角色給的權限：改設個人扣項才算真的取消
+    p["subtractAdds"] = sorted(new_subs)
+    for rid in req["bindRoleIds"]:
+        r = roles.get(rid)
+        if r is None:
+            skip("bind", rid, "找不到這個職責角色")
+        elif not r["active"]:
+            skip("bind", rid, "這個職責角色已停用")
+        elif rid in bound:
+            continue
+        elif set(r["permissions"]) & _gated_keys():
+            skip("bind", rid, "這個角色含高敏感或影響較大的權限：綁定要逐人填原因，不能批次")
+        else:
+            p["bind"].append(rid)
+    for rid in req["unbindRoleIds"]:
+        if rid in bound and rid in roles:
+            p["unbind"].append(rid)
+    raw_after = [k for k in raw if k not in set(p["removes"])] + [k for k in p["adds"] if k not in rawset]
+    bound_after = (bound | set(p["bind"])) - set(p["unbind"])
+    subs_after = subs | set(p["subtractAdds"])
+    before = _effective(u["role"], raw, bound, roles, subs)
+    after = _effective(u["role"], raw_after, bound_after, roles, subs_after)
+    p["effectiveAdded"], p["effectiveRemoved"] = sorted(after - before), sorted(before - after)
+    touched = (before ^ after) | set(p["adds"]) | set(p["removes"])
+    p["gated"] = sorted(touched & _gated_keys())
+    changed = bool(p["adds"] or p["removes"] or p["bind"] or p["unbind"] or p["subtractAdds"])
+    p["status"] = "change" if changed else "nochange"
+    p["_rawAfter"], p["_before"], p["_after"] = raw_after, sorted(before), sorted(after)
+    p["_rawChanged"] = bool(p["adds"] or p["removes"])
+    return p
+
+
+def _template_keys(template, known):
+    if not template:
+        return None
+    from helpers import module_registry as mr
+    return [k for k in mr.ROLE_TEMPLATES[template] if k in known and k not in dr.FINANCE_KEYS]
+
+
+def _plan(conn, req) -> dict:
+    st = _load_state(conn, req["userIds"])
+    known = dr.known_keys()
+    tkeys = _template_keys(req["template"], known)
+    template_skipped = []
+    if tkeys is not None:
+        from helpers import module_registry as mr
+        template_skipped = [k for k in mr.ROLE_TEMPLATES[req["template"]] if k in dr.FINANCE_KEYS]
+    people = [_plan_person(uid, req, st, known, tkeys) for uid in req["userIds"]]
+    gated = sorted({k for p in people for k in p["gated"]})
+    digest = hashlib.sha256(json.dumps(
+        [[p["userId"], p["adds"], p["removes"], p["bind"], p["unbind"], p["subtractAdds"]] for p in sorted(people, key=lambda x: x["userId"])],
+        ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:32]
+    return {"people": people, "gatedKeys": gated, "needsReason": bool(gated), "planHash": digest, "templateFinanceKeysLeftAlone": template_skipped}
+
+
+def _public(plan) -> dict:
+    people = [{k: v for k, v in p.items() if not k.startswith("_")} for p in plan["people"]]
+    return {"people": people, "gatedKeys": plan["gatedKeys"], "needsReason": plan["needsReason"], "planHash": plan["planHash"],
+            "templateFinanceKeysLeftAlone": plan["templateFinanceKeysLeftAlone"],
+            "summary": {"requested": len(people), "changed": sum(1 for p in people if p["status"] == "change"),
+                        "unchanged": sum(1 for p in people if p["status"] == "nochange"),
+                        "skippedPeople": sum(1 for p in people if p["status"] == "skipped"),
+                        "skippedItems": sum(len(p["skipped"]) for p in people)},
+            "lists": list_catalog()}
+
+
+def preview(conn, actor, body) -> dict:
+    """唯讀：算出每個人實際會變什麼、略過什麼與原因、需不需要原因。不寫任何東西。"""
+    return _public(_plan(conn, parse_request(body)))
+
+
+def apply(conn, actor, body, ip="") -> dict:
+    """套用：同一個寫入交易重算計畫（與預覽同一支函式）、過共用檢查點、逐人寫入並記 `permission_changes`＋`audit_log`。
+    `planHash` 有帶且與重算結果不同 ⇒ 409。任何例外 ⇒ rollback（全部不寫）。"""
+    from core.txn import begin_write
+    req = parse_request(body)
+    begin_write(conn)
+    try:
+        plan = _plan(conn, req)
+        if req["planHash"] and req["planHash"] != plan["planHash"]:
+            raise dr.DutyError("名單或權限在預覽之後有變動，請重新預覽再套用", 409)
+        _sens, reason = dr.gate_reason(plan["gatedKeys"], req["reason"], extra_keys=BATCH_GRANT_REFUSED)
+        now = datetime.now().isoformat(timespec="seconds")
+        applied = []
+        for p in plan["people"]:
+            if p["status"] != "change":
+                continue
+            uid = p["userId"]
+            if p["_rawChanged"]:
+                conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(p["_rawAfter"], ensure_ascii=False), uid))
+            for rid in p["bind"]:
+                conn.execute("INSERT INTO user_duty_roles (user_id, role_id, granted_by, granted_at, reason) VALUES (?,?,?,?,?)",
+                             (uid, rid, (actor or {}).get("id"), now, reason))
+            for rid in p["unbind"]:
+                conn.execute("DELETE FROM user_duty_roles WHERE user_id=? AND role_id=?", (uid, rid))
+            for k in p["subtractAdds"]:
+                conn.execute("INSERT INTO user_perm_subtracts (user_id, perm_key, set_by, set_at, reason) VALUES (?,?,?,?,?)",
+                             (uid, k, (actor or {}).get("id"), now, reason))
+            dr.record_user_modules_change(conn, actor, uid, p["username"], p["_before"], p["_after"], reason, ip, sensitive=bool(p["gated"]))
+            applied.append(uid)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    out = _public(plan)
+    out["ok"] = True
+    out["applied"] = applied
+    return out

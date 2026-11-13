@@ -14,4 +14,7 @@ router = APIRouter()
 @router.get("/api/modules/catalog")
 def get_module_catalog(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    return catalog()
+    from helpers import user_perm_batch as upb
+    out = catalog()
+    out.update(upb.list_catalog())               # highSensitiveKeys／batchGrantRefused／financeKeys：前端不寫死（SPEC §12-3）
+    return out

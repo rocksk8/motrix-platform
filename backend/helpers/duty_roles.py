@@ -192,19 +192,21 @@ def _is_trivial_reason(reason: str) -> bool:
     return len({c for c in _normalize_for_check(reason) if c.isalnum()}) < REASON_MIN
 
 
-def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
+def _require_reason_if_sensitive(sensitive: bool, reason: str, what=None) -> None:
     if sensitive and (len(reason) < REASON_MIN or _is_trivial_reason(reason)):
-        raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 個不同的字，不可只有標點或重複同一個字）" % ("、".join(HIGH_SENSITIVITY_KEYS), REASON_MIN))
+        raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 個不同的字，不可只有標點或重複同一個字）" % ("、".join(what or HIGH_SENSITIVITY_KEYS), REASON_MIN))
 
 
-def gate_reason(touched, reason):
+def gate_reason(touched, reason, extra_keys=()):
     """**高敏感權限的共用檢查點**（伺服器端；職責角色各動作、`PUT /api/users/{id}` 的個人勾選、之後的批次／範本套用都走這一支）。
     `touched`＝這次動到（授予或取消）的權限鍵；其中含 `HIGH_SENSITIVITY_KEYS` 任一個 ⇒ 原因必填（正規化後 `REASON_MIN` 個不同字元、≤`REASON_MAX`）。
     ⇒ `(sensitive, reason)`；不合格 raise `DutyError`（400）。**原因長度（≤`REASON_MAX`）在這一支一律檢查**（職責角色各動作的原因本來就一律限長，行為不變）；
     沒動到高敏感鍵時只檢查長度、不要求內容。`PUT／POST /api/users` 走 `user_perm_gate`：沒動到高敏感鍵時連長度都不看。"""
     reason = _clean_reason(reason)
-    sensitive = bool(set(touched or ()) & set(HIGH_SENSITIVITY_KEYS))
-    _require_reason_if_sensitive(sensitive, reason)
+    gated = set(HIGH_SENSITIVITY_KEYS) | set(extra_keys or ())       # extra_keys＝批次拒絕清單（helpers.user_perm_batch）：同一條原因規則
+    hit = set(touched or ()) & gated
+    sensitive = bool(hit)
+    _require_reason_if_sensitive(sensitive, reason, sorted(hit) if extra_keys else None)
     return sensitive, reason
 
 
@@ -245,11 +247,11 @@ def user_perm_gate(before_role, before_mods, after_role, after_mods, reason):
     return sensitive, reason, b, a
 
 
-def record_user_modules_change(conn, actor, user_id, label, before, after, reason, ip=""):
+def record_user_modules_change(conn, actor, user_id, label, before, after, reason, ip="", sensitive=True):
     """個人勾選含高敏感鍵的變更：`permission_changes` 一列（kind=`user_modules`）＋同一交易一筆 `audit_log`（`user.perm_change`）。
-    不 commit（呼叫端與 `UPDATE users` 同一個交易一起 commit）。"""
+    不 commit（呼叫端與 `UPDATE users` 同一個交易一起 commit）。`sensitive=False` 只給批次端點（每人都留一列，高敏感旗標照實）。"""
     b, a = set(before or ()), set(after or ())
-    _record(conn, actor, "user_modules", "user", user_id, label, a - b, b - a, {"modules": sorted(b)}, {"modules": sorted(a)}, True, reason, ip,
+    _record(conn, actor, "user_modules", "user", user_id, label, a - b, b - a, {"modules": sorted(b)}, {"modules": sorted(a)}, bool(sensitive), reason, ip,
             audit=("user.perm_change", "user", user_id, label))
 
 
