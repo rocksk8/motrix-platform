@@ -131,7 +131,7 @@ def test_each_template_has_its_own_parameters_and_remembers_them(live_server, ma
     page.fill("[data-testid=rt-param-date_from]", "2026-01-01")
     page.fill("[data-testid=rt-param-date_to]", "2026-12-31")
     _run(page, 1)
-    assert "沒填" in page.locator("[data-testid=rt-notes]").inner_text()
+    assert "未填寫" in page.locator("[data-testid=rt-notes]").inner_text()
 
     page.click("[data-testid=rt-tab-case-list]")
     page.wait_for_selector("[data-testid=rt-param-sales_person]", state="attached")

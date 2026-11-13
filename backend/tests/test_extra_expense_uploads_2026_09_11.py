@@ -124,7 +124,7 @@ def test_upload_locked_after_approval(client, make_user, seed_extra_expense):
 
     r = _upload(client, token, exp_id)
     assert r.status_code == 409, "已核准的項目不可再上傳附件"
-    assert "上鎖" in r.json()["detail"], "訊息要指出改走變更申請，不能只說不可修改"
+    assert "已鎖定" in r.json()["detail"], "訊息要指出改走變更申請，不能只說不可修改"
 
     # 刪除既有附件同樣上鎖——只擋上傳等於還是能把憑證弄不見
     r_del = client.delete(f"{_files_url(exp_id)}/anything", headers=_auth(token))

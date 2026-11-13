@@ -1034,7 +1034,7 @@ def test_approval_that_cannot_write_the_config_is_rolled_back_and_can_be_retried
     real = bm._write_config
     monkeypatch.setattr(bm, "_write_config", lambda url: (_ for _ in ()).throw(PermissionError("locked")))
     r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True})
-    assert r.status_code == 500 and "再按一次" in r.json()["detail"]
+    assert r.status_code == 500 and "再試一次" in r.json()["detail"]
     assert _cfg_url(hb_cfg) == SECRET
     monkeypatch.setattr(bm, "_write_config", real)
     r = client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True})
