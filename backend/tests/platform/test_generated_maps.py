@@ -31,7 +31,28 @@ import test_map as TM  # noqa: E402
 
 @pytest.fixture(scope="module")
 def graph():
-    return D.build()
+    from tests.platform import _shared_repo
+    return _shared_repo.real_dep_graph(D)               # 真實 repo 的圖：每個行程只掃一次（D6／D7）
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _one_test_map_build_per_module():
+    """D6（2026-11-13）：`TM.main(["--check"])` 每次都現算一次整棵樹的 test_map（約 20 秒）；本檔有三題會走到它
+    （過期偵測、列車用的「是否最新」、三守門反向控制），同一個行程內原始碼不變 ⇒ 只算一次，之後給深拷貝（呼叫端會改 dict）。
+    比對的對象（OUT 檔）仍由各題自己換成過期／最新的檔，所以「讀檔比對」這條路完全照舊。"""
+    import copy
+    real_build = TM.build
+    memo = {}
+
+    def build(*args, **kwargs):
+        key = (args, tuple(sorted(kwargs.items())))
+        if key not in memo:
+            memo[key] = real_build(*args, **kwargs)
+        return copy.deepcopy(memo[key])
+    mp = pytest.MonkeyPatch()
+    mp.setattr(TM, "build", build)
+    yield
+    mp.undo()
 
 
 def _graph_text(g):
