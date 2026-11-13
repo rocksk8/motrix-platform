@@ -356,7 +356,7 @@ def _po_supplier(conn, kind: str, data: dict, existing: dict = None, body_data=N
         raise HTTPException(400, "供應商編號不正確，請重新選擇供應商，或改為手動輸入廠商名稱。")
     row = conn.execute("SELECT name FROM suppliers WHERE id=?", (int(str(sid).strip()),)).fetchone()
     if not row:
-        raise HTTPException(400, "找不到所選的供應商（可能已被刪除），請重新選擇，或改為手動輸入廠商名稱。")
+        raise HTTPException(400, "查無所選的供應商（可能已被刪除），請重新選擇，或改為手動輸入廠商名稱。")
     data["supplierId"] = int(str(sid).strip())
     return (row["name"] or "").strip() or None
 
