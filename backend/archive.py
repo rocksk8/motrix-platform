@@ -542,7 +542,7 @@ def _alert_email_failed(reason: str, why: str) -> None:
     try:
         # BACKUP_ALERT.txt 每次告警都整檔覆寫 ⇒ 註記每次都要補上（不節流；檔案不會變長）
         with open(os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt"), "a", encoding="utf-8") as f:
-            f.write("\n⚠ 這則告警的通知信寄不出去（%s）—— 請直接處理，不要等信\n" % why)
+            f.write("\n⚠ 這則告警的通知信寄不出去（%s）—— 請直接處理，無須等候通知信。\n" % why)
     except Exception:
         logger.exception("_alert_email_failed: 寫警示檔失敗")
 

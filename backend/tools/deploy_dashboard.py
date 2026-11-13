@@ -1039,7 +1039,7 @@ def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
     try:
         r = requests.post(base + "/api/auth/login", json={"username": username, "password": password}, verify=False, timeout=15)
     except requests.RequestException as e:
-        raise ValueError("連不到本機 ERP（%s）：%s" % (base, e))
+        raise ValueError("連不到本機 MOTRIX PLATFORM（%s）：%s" % (base, e))
     if r.status_code != 200:
         raise ValueError("帳號或密碼不正確")
     d = r.json()
