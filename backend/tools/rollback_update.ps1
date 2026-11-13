@@ -235,69 +235,85 @@ function Invoke-Py([string[]]$PyArgs) {
 }
 
 function Stop-InstallService {
-    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
-    $byPid = @{}
-    foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
-    $batFull = (Join-Path $BackendDir "autostart.bat").ToLowerInvariant()
-    $loops = New-Object System.Collections.Generic.List[int]
-    foreach ($p in $all) {
-        if ($p.Name -eq "cmd.exe" -and $p.CommandLine -and $p.CommandLine.ToLowerInvariant().Contains($batFull)) {
-            $loops.Add([int]$p.ProcessId)
-        }
-    }
-    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-        ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
-    foreach ($lp in $listeners) {
-        $cur = $byPid[$lp]
-        $hops = 0
-        while ($cur -and $hops -lt 6) {
-            $parent = $byPid[[int]$cur.ParentProcessId]
-            if (-not $parent) { break }
-            if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match 'autostart\.bat') {
-                if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
-                break
-            }
-            if ($parent.Name -notmatch '^(python|pythonw|uvicorn)(\.exe)?$') { break }
-            $cur = $parent
-            $hops++
-        }
-    }
-    $targets = New-Object System.Collections.Generic.List[int]
-    function Add-Tree([int]$rootPid) {
-        if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
-        foreach ($c in $all) {
-            if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
-                Add-Tree ([int]$c.ProcessId)
+    param([switch]$ListOnly)
+    # 2026-11-13（T84，T82 事故）：①迴圈＝本安裝 $BackendDir 底下**任何** autostart*.bat 的 cmd.exe（含 autostart_guard.bat，
+    #   正式機排程工作 → wscript autostart_guard.vbs → cmd /c autostart_guard.bat → call autostart.bat :loop；命令列裡只有
+    #   autostart_guard.bat），不只是「有子行程的」——沒有 uvicorn 子行程的殭屍迴圈（父行程已不在）照樣會在下一次停服後把服務拉回來；
+    #   ②再加上聽 $Port 的行程沿父行程鏈往上找到的 cmd.exe（命令列有 autostart*.bat；排程工作用相對路徑啟動時靠這一條）。
+    #   ③迴圈 5 秒的 timeout 在隱藏的非互動 cmd 下實測只等 0.3 秒 ⇒ 殺掉服務後**立刻**重生：所以每一輪都先殺迴圈再殺服務，
+    #   殺完重新掃描，直到沒有目標為止（最多 5 輪）——不靠「等幾秒再看」。-ListOnly：只列目標不動手，回 @{ Targets; Loops; ByPid }。
+    $totalStopped = 0
+    for ($round = 0; $round -lt 5; $round++) {
+        $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+        $byPid = @{}
+        foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
+        $backendLow = ([string]$BackendDir).TrimEnd('\').ToLowerInvariant()
+        $loopRe = 'autostart[a-z0-9_-]*\.bat'
+        $loops = New-Object System.Collections.Generic.List[int]
+        foreach ($p in $all) {
+            if ($p.Name -eq "cmd.exe" -and $p.CommandLine) {
+                $cl = $p.CommandLine.ToLowerInvariant()
+                if ($cl.Contains($backendLow) -and $cl -match $loopRe) { $loops.Add([int]$p.ProcessId) }
             }
         }
-    }
-    foreach ($l in $loops) { Add-Tree $l }
-    foreach ($lp in $listeners) {
-        $proc = $byPid[$lp]
-        if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
-        elseif ($proc) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
-    }
-    $portRe = '--port[= ]+' + $Port + '\b'
-    foreach ($p in $all) {
-        if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
-            Add-Tree ([int]$p.ProcessId)
+        $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
+        foreach ($lp in $listeners) {
+            $cur = $byPid[$lp]
+            $hops = 0
+            while ($cur -and $hops -lt 6) {
+                $parent = $byPid[[int]$cur.ParentProcessId]
+                if (-not $parent) { break }
+                if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match $loopRe) {
+                    if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
+                    break
+                }
+                if ($parent.Name -notmatch '^(python|pythonw|uvicorn|cmd)(\.exe)?$') { break }
+                $cur = $parent
+                $hops++
+            }
         }
-    }
-    foreach ($p in $all) {
-        if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
-            Add-Tree ([int]$p.ProcessId)
+        $targets = New-Object System.Collections.Generic.List[int]
+        function Add-Tree([int]$rootPid) {
+            if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
+            foreach ($c in $all) {
+                if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
+                    Add-Tree ([int]$c.ProcessId)
+                }
+            }
         }
+        foreach ($l in $loops) { Add-Tree $l }
+        foreach ($lp in $listeners) {
+            $proc = $byPid[$lp]
+            if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
+            elseif ($proc -and -not $ListOnly) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
+        }
+        $portRe = '--port[= ]+' + $Port + '\b'
+        foreach ($p in $all) {
+            if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
+                Add-Tree ([int]$p.ProcessId)
+            }
+        }
+        foreach ($p in $all) {
+            if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
+                Add-Tree ([int]$p.ProcessId)
+            }
+        }
+        if ($ListOnly) { return @{ Targets = @($targets); Loops = @($loops); ByPid = $byPid } }
+        if ($round -eq 0 -and $loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart*.bat，含 autostart_guard.bat）。" }
+        if ($targets.Count -eq 0) { break }
+        foreach ($t in $targets) {
+            $p = $byPid[$t]
+            $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
+            $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
+            if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
+            Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
+            Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
+        }
+        $totalStopped += $targets.Count
+        Start-Sleep -Milliseconds 700   # 比迴圈重生延遲（實測 0.3 秒）長：之後重掃才看得到「又被拉起」的
     }
-    if ($loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart.bat）。" }
-    foreach ($t in $targets) {
-        $p = $byPid[$t]
-        $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
-        $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
-        if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
-        Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
-        Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
-    }
-    return $targets.Count
+    return $totalStopped
 }
 
 function Start-InstallService {

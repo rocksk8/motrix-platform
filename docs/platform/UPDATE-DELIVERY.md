@@ -61,7 +61,7 @@
 - **不放進 ERP 本身**（port 666 的 app）：套用時要停掉它，自己停自己沒有人收尾。
 - 正式機另跑一個本機儀表板：`deploy_dashboard.py` 的「正式機模式」，同一支程式、不同進入點。
   - 只綁 `127.0.0.1`；以登入者身分由排程工作或捷徑啟動。
-  - 它是 apply_update 的父行程，只有它在套用期間不能被停。`Stop-InstallService` 只停 autostart 迴圈與它的行程樹，不含儀表板，這一點成立。
+  - 它是 apply_update 的父行程，只有它在套用期間不能被停。`Stop-InstallService` 只停 autostart 迴圈與它的行程樹，不含儀表板，這一點成立。（T84，2026-11-13：「autostart 迴圈」＝本安裝 `$BackendDir` 底下命令列含 `autostart*.bat` 的所有 cmd.exe，**含 `autostart_guard.bat`（排程工作的入口）與沒有 uvicorn 子行程的殭屍迴圈**，另沿 port listener 的父行程鏈找 cmd；每輪先殺迴圈再殺服務、重掃到沒有目標為止——T82 事故：舊版只認 `autostart.bat`，guard 迴圈在服務被殺 0.3 秒後就把它拉回來，與 robocopy 重疊。）
 
 ### 3.2 偵測
 

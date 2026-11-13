@@ -163,6 +163,8 @@ _EXITS = [
     ("545", "unhealthy_not_rolled_back", "applied",            0, "failed"),
     ("621", "unhealthy_rolled_back",     "restored",           1, "failed"),
     ("646", "success",                   "applied",            0, "succeeded"),
+    # 2026-11-13 T84：啟動後 schema 兜底閘門不過 ⇒ 既有值 unhealthy_not_rolled_back，但這條 exit=1（舊的那條只有 -SkipAutoRollback 才 exit 0）
+    ("t84", "unhealthy_not_rolled_back", "applied",            1, "failed"),
     # 2026-09-28 日常更新（platform 套 platform）新增的出口；第一欄只是標籤
     ("v28", "script_not_from_package",   "not_applied",        1, "failed"),
     ("l28", "apply_locked",              "not_applied",        1, "failed"),

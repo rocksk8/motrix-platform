@@ -21,7 +21,9 @@ init_db 跑到；乾跑與轉換原本只 `import db; db.init_db(p)` ⇒ 模組 
       否則印 `MODULE_LOAD_FAIL <key>：<原因>`（與 migration 失敗分開，ps1 據此給不同 status）
   --verify-schema（T84，apply_update.ps1 啟動後一致性檢查用）：**唯讀**——照啟動規則載入模組後，不跑 init_db，
       逐庫（只讀開啟）比對 module_schema_versions 與「這份程式登記的各模組最高 migration 版號」；
-      有任何模組的庫內版號 < 登記的最高版號 ⇒ 印 `SCHEMA_VERIFY_MISMATCH`（逐項列出）exit 3；全部到位 ⇒ `SCHEMA_VERIFY_OK` exit 0。
+      **主庫**（第一個 --db）有任何模組的庫內版號 < 登記的最高版號 ⇒ 印 `SCHEMA_VERIFY_MISMATCH`（逐項列出）exit 3；
+      主庫到位 ⇒ `SCHEMA_VERIFY_OK` exit 0（其餘庫＝demo 落後只印 `SCHEMA_VERIFY_DEMO_BEHIND n` 警告，仍 exit 0）；
+      驗不到（工具例外、庫被鎖／不在）⇒ `SCHEMA_VERIFY_UNVERIFIABLE` exit 4。
       用途：服務第一次啟動若讀到半新半舊的程式（停服後被舊啟動器拉起、與複製重疊），migration 會漏跑而 ping 照過（T82 實例）。
   exit 0 印 MIGRATE_LIKE_STARTUP_OK；失敗 exit 2 並印 MIGRATE_LIKE_STARTUP_FAIL 與原因
 """
@@ -95,22 +97,27 @@ def check_expected_modules(expect):
     return ok, bad
 
 
-def _read_versions_ro(path):
-    """只讀開啟 `path`，回 {模組: 版號}；表不存在回 {}。唯讀＝不建庫、不寫入（服務正在跑也可讀，WAL）。"""
+def _read_versions_ro(path, timeout=10):
+    """只讀開啟 `path`，回 {模組: 版號}。唯讀＝不建庫、不寫入（服務正在跑也可讀，WAL）。
+    只有「沒有 module_schema_versions 這張表」回 {}（＝一個 migration 都沒跑）；其他錯（檔案不在、被鎖、損毀…）一律往外拋 ⇒
+    呼叫端當「驗不到」，不可以吞成「全部版號 0」而假裝成不一致（A1），也不可以吞成通過。"""
     import sqlite3
     uri = "file:%s?mode=ro" % os.path.abspath(path).replace("\\", "/").replace("?", "%3f").replace("#", "%23")
-    conn = sqlite3.connect(uri, uri=True, timeout=10)
+    conn = sqlite3.connect(uri, uri=True, timeout=timeout)
     try:
         try:
             return {m: int(v) for m, v in conn.execute("SELECT module, version FROM module_schema_versions")}
-        except sqlite3.OperationalError:
-            return {}
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return {}
+            raise
     finally:
         conn.close()
 
 
 def verify_schema(dbs, license_path=None):
-    """T84：回 (mismatches, notes)。mismatches＝[(庫, 模組, 庫內版號, 登記的最高版號)]（庫內 < 登記）；空＝一致。
+    """T84：回 (mismatches, demo_behind, notes)。mismatches／demo_behind＝[(庫, 模組, 庫內版號, 登記的最高版號)]（庫內 < 登記）。
+    `dbs[0]` 是主庫：它落後 ⇒ mismatches（空＝一致）；其餘庫（demo）落後 ⇒ demo_behind（服務容忍，只警告，不算不一致；A2）。
 
     「登記的最高版號」＝照啟動規則載入模組之後 `core.migrations.registered()`（core 在 import 時登記、模組在載入時登記；
     停用／未授權／載入失敗的模組不登記 ⇒ 不比，與服務啟動時一致）。庫內版號 > 登記（程式比庫舊）只記 notes，不算不一致。
@@ -125,16 +132,16 @@ def verify_schema(dbs, license_path=None):
     module_startup.load_modules_like_startup(db_path=dbs[0])
     from core import migrations
     expected = {m: max(v) for m, v in migrations.registered().items() if v}
-    mismatches, notes = [], []
-    for p in dbs:
+    mismatches, demo_behind, notes = [], [], []
+    for idx, p in enumerate(dbs):
         have = _read_versions_ro(p)
         for mod, top in sorted(expected.items()):
             got = have.get(mod, 0)
             if got < top:
-                mismatches.append((p, mod, got, top))
+                (mismatches if idx == 0 else demo_behind).append((p, mod, got, top))
             elif got > top:
                 notes.append("%s：模組 %s 庫內版號 %d 高於這份程式登記的 %d（程式比庫舊）" % (p, mod, got, top))
-    return mismatches, notes
+    return mismatches, demo_behind, notes
 
 
 def _parse_expect(items):
@@ -162,12 +169,16 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.verify_schema:
         try:
-            mism, notes = verify_schema(a.db, a.license)
+            mism, demo_behind, notes = verify_schema(a.db, a.license)
         except Exception as exc:        # noqa: BLE001 — 驗不到＝不是「一致」，也不是「不一致」：印明確標記讓 ps1 分開處理
             print("SCHEMA_VERIFY_UNVERIFIABLE %s: %s" % (type(exc).__name__, exc))
             return 4
         for n in notes:
             print("  note " + n)
+        for p, mod, got, top in demo_behind:
+            print("  （demo 庫，只警告）%s：模組 %s 庫內版號 %d，這份程式登記到 %d" % (p, mod, got, top))
+        if demo_behind:
+            print("SCHEMA_VERIFY_DEMO_BEHIND %d" % len(demo_behind))
         if mism:
             for p, mod, got, top in mism:
                 print("  %s：模組 %s 庫內版號 %d，這份程式登記到 %d" % (p, mod, got, top))
