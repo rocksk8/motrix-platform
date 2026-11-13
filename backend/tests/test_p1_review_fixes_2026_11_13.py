@@ -90,9 +90,10 @@ def test_m4_end_states_use_slate_not_purple():
 def test_m5_lane_is_in_review_summary_and_tab_are_pending_sign():
     s = read("pages/quotations.html")
     assert "{ key: 'review', label: '送審中'" in s
-    assert "<div class=\"summary-item__label\">待簽核</div>" in s and "{ key: '待審核', label: '待簽核' }" in s
+    # T84：頁頂改成三個數字；「待簽核」留在「等別人」卡片的小字（只算待審核這個狀態值）與分頁
+    assert "'待簽核 ' + summaryData.pending" in s and "{ key: '待審核', label: '待簽核' }" in s
     # 摘要卡與分頁「都只算待審核這個狀態值」；泳道＝待審核＋簽核中（兩個名字不同、範圍也不同）
-    assert "this.quotes.filter(q => q.status === '待審核').length" in s
+    assert "mine.filter(q => q.status === '待審核').length" in s
     assert "if (s === '待審核' || s === '簽核中') return 'review'" in s
 
 
