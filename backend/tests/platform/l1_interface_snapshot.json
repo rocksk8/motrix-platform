@@ -1,5 +1,5 @@
 {
- "core_version": "1.166",
+ "core_version": "1.167",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -2147,6 +2147,17 @@
    "setting_item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
    "setting_item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"
   },
+  "helper:settings_pages": {
+   "CATEGORIES": "const",
+   "GROUPS": "const",
+   "PAGES": "const",
+   "coverage": "def(registry_groups=…)",
+   "group_plain": "def(group)",
+   "page_of": "def(group)",
+   "pages": "def()",
+   "privacy_flag": "def(page)",
+   "register_standalone": "def(page_id, plain, category, href, *, keywords=…)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
@@ -2197,6 +2208,11 @@
    "show_value": "def(f, v)",
    "unregister_owner": "def(owner)",
    "validate_values": "def(group, values, *, partial=…, conn=…)"
+  },
+  "helper:settings_shell": {
+   "overview": "def(conn)",
+   "recent": "def(conn, limit=…, high_only=…)",
+   "search_index": "def()"
   },
   "helper:settings_strict": {
    "strict_value": "def(conn, group, field)"

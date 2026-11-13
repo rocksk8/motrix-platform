@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## 1.0.229 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
+## 1.0.230 — 一條龍 P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.links`、`onepipe.timeline`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同）；L1 介面不變）；已併 T82 凍結 head f66dfd9ef；`material-flow.html` 補 `_initDone` 守衛
 - 一條龍 P4b-① 階段出勤預填（旗標 `onepipe.entry_unify`）：案件管理頁「執行管理 › 執行進度」各階段按「新增記錄」時，新列預填「今天」與「人次」（沿用該階段最近一筆有人次的記錄，沒有就 1）；只是預填、欄位照常可改。旗標關／讀不到旗標 ⇒ 送空白列，與以前相同。純前端（`case-management-exec.js` `_visitPrefill`、`case-management-core.js` 的 `onepipe.entryUnify` 預設 false）。
 - 一條龍 P4b-② 完工單施工紀錄預填（旗標 `onepipe.entry_unify`）：新增端點 `GET /api/completion-notes/case-prefill?quote_no=`（唯讀）回 `startDate`（該案件各階段出勤紀錄最早一天）與 `workSummary`（掛在該案件的工作日誌，依日期逐行「日期　內容」，上限 40 筆／1800 字，超過加「…（其餘請見案件動態）」）；完工單新增頁只對**空白**的「開工日」「施工說明」預填並顯示「已依案件紀錄預填…請確認」，存檔前由人確認、可改。權限＝與建立完工單同一道閘（管理員）＋看得到該案件的動態（`case_documents_readable`，與 `GET /api/quotations/{no}/updates` 同規則；現場人員即使是案件成員仍 403）；看不到＝查無（同一句 404）；回應只有兩個鍵（沒有時數、照片、記錄人、金額）。旗標關 ⇒ 404（與路由不存在逐字相同）、前端什麼都不做。登記 `case_read_scope.json`（own_rule）、`route_inventory.json`、`route_table_golden.json`。
 - 一條龍 P4b-③ 案件頁「登載」統一入口（旗標 `onepipe.entry_unify`）：案件頁連結列多一行「登載：留言／工作日誌、階段出勤、每日工作事項」，只是捷徑、不合併資料表——留言／工作日誌＝切到「動態」並把游標放進發文框（依填的欄位寫留言或日誌，原本行為）；階段出勤＝切到「執行管理 › 執行進度」（各階段「新增記錄」已預填今天與人次，見 P4b-①）；每日工作事項＝`daily-tasks.html?case_no=<案號>`。每個選項只在這個人真的能做時才出現（依動態／執行管理／進度的顯示權限與每日工作事項模組）。旗標關 ⇒ 整行不出現。純前端，無新端點。
@@ -17,23 +17,23 @@
 - 補登的歷史案件（T70 `approval.historical`）即使結案也排除；已結案那一段任何例外都被隔離，不影響進行中案件原本的通知；已結案查詢不用 `json_extract`（Python 判斷，棘輪不增）。行事曆對帳 `_sync_warranty_calendar` 與進行中案件查詢不動。
 - 測試：`tests/test_onepipe_warranty_closed_2026_11_13.py`（旗標關不寄且不寫記號、首次靜默、新跨門檻只寄一次、已過期永不寄、關→開重建基準、歷史案排除、錯誤隔離、暫時寄送失敗隔天補寄；變異驗證：拿掉截止日／靜默記號皆會紅）。
 
-## 1.0.228（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）〔train_number：1.0.227 → 1.0.228〕
+## 1.0.229（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）〔train_number：1.0.227 → 1.0.228〕
 - 變更（內部，不影響對外介面）：`api/quotations.py` 送審時通知最高管理者、`content_fp.py` 的通知名單，改用 `config_ledger.real_superadmins`（真人；不含申請人與展示帳號 `demo`）。展示帳號不是簽核人，不該被列進「等誰簽核」或收到簽核通知。
 - 測試：`tests/test_demo_approver_lists_2026_11_13.py`（跨模組一起守）。
 
-## 1.0.227（next，未取號）— 2026-11-13（feat/estimate-own-terms；估價單自己的條款）
+## 1.0.228（next，未取號）— 2026-11-13（feat/estimate-own-terms；估價單自己的條款）
 - **估價單自己的條款（feat/estimate-own-terms，使用者：「報價單有獨立條款，估價單也要」）**：估價單有自己的條款組（`system_settings.estimate_terms_presets`）與預設付款條件（`estimate_default_payment_terms`），端點 `GET/PUT /api/settings/estimate-terms-presets`、`GET/PUT /api/settings/estimate-payment-terms`（讀＝登入、寫＝最高管理者、稽核）；報價單的端點、設定鍵與行為一個位元都不變。遷移 0011：把目前報價單的條款設定複製成估價單初始值（冪等、不蓋已有的、報價單沒設過就不建），之後兩邊各改各的。送審重算（`submit_reasons`／`compute_approval_reasons` 的比對基準）依單據類型讀對應那組，類型以資料庫現值為準；估價單開啟／複製／切換類型時前端載入估價單的條款組與預設付款條件，PDF「五、估價條件」本來就讀單據自己的條款欄位。內建五欄預設文字（`DEFAULT_TERMS`）兩邊共用。
 - 測試：`tests/test_estimate_own_terms_2026_11_13.py`。
+
+## 1.0.227（next，未取號）— 2026-11-13（fix/quotations-tablet-searchbar-t84；報價單頁平板搜尋列）
+- 修正（版面）：報價單頁在平板 768–1023 寬度，搜尋列（≤1023 兩欄格線）裡「緊湊」按鈕自己佔一整列。「欄位」「緊湊」包進同一個 `.ql-pair`：桌機（>1023）與手機（≤767）`display:contents`（版面不變），平板併成跨整列的兩欄格線、兩顆並排各半。
+- 測試：`tests/test_e2e_quote_list_t84_2026_11_13.py`（靜態規則＋平板 900／768 並排＋桌機 1440／手機 390 版面不變）。
 
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
 - 預覽路由（`POST /api/quotations/preview-html`）與存檔版 PDF 改以 `quotations.doc_type` 欄位為準（同 `generate_pdf_bytes`），前端帶舊／缺的 docType 不再印回報價字樣。
 - 出貨單「關聯○○單」標籤用 `esc()` 包起來（固定字串，輸出不變；讓未逸出內插棘輪不必加基線）。
 - 測試：`tests/test_estimate_static_labels_2026_11_13.py`、`tests/test_estimate_doc_type_2026_11_13.py`。
-
-## 1.0.226（next，未取號）— 2026-11-13（fix/quotations-tablet-searchbar-t84；報價單頁平板搜尋列）
-- 修正（版面）：報價單頁在平板 768–1023 寬度，搜尋列（≤1023 兩欄格線）裡「緊湊」按鈕自己佔一整列。「欄位」「緊湊」包進同一個 `.ql-pair`：桌機（>1023）與手機（≤767）`display:contents`（版面不變），平板併成跨整列的兩欄格線、兩顆並排各半。
-- 測試：`tests/test_e2e_quote_list_t84_2026_11_13.py`（靜態規則＋平板 900／768 並排＋桌機 1440／手機 390 版面不變）。
 
 ## 1.0.225 — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
 - 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
