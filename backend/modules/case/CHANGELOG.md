@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（fix/quote-first-put-history）
+- 修正（編輯紀錄）：新報價單第一次 PUT 不再多寫一筆使用者沒改的「其他內容」。原因＝建單時階段（`caseRecord.stages`）被 `_sync_stages_to_json` 重建成資料表的樣子（真實 id、補齊 dependsOn／visits／assignedTo），使用者手上那份還是暫時 id、欄位不齊，整包比對就判成有變更；款項日期只在 PUT 才正規化也是同型來源。`_summarize_quote_changes` 的整包比對改用 `_diff_view`（階段只比會被存檔的欄位、款項日期同存檔規則）；真的改了的值仍記一筆。內容指紋（content_fp）、存檔內容、API 不變。
+- 測試：`tests/test_quote_first_put_history_2026_11_13.py`（9 題：修前 5 題紅；含改階段名稱／日期／完成／負責人／刪階段、頂層未追蹤欄位、款項金額的正向對照，及「檢視不改輸入、content_fp 不變」）。
+
 ## 1.0.221 — 2026-11-13（T81 整合；版號由列車取）
 - 變更（前端，報價單表單 `quotation-form.html` FORM_VERSION V3.42→V3.43）：手機／直立平板版面（工具列可換行、品項明細卡片化）與使用者可見稱呼統一為「最高管理者」兩支分支同改此頁，整合時 bump 一次並登記雜湊。無 API／資料／權限變更。
 - 測試：`tests/test_form_version_bumped_2026_09_24.py`（V3.43 登記）；通知層更名（待審核→待簽核）後 `test_review_edit_chain_reset_2026_11_11.py` 的主旨斷言跟上。

@@ -191,11 +191,49 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
                         "to":   f"{len(n_items)} 項"})
 
     if not changes:
-        stripped_old = {k: v for k, v in old.items() if k not in _DIFF_IGNORE_KEYS}
-        stripped_new = {k: v for k, v in new.items() if k not in _DIFF_IGNORE_KEYS}
-        if stripped_old != stripped_new:
+        if _diff_view(old) != _diff_view(new):
             changes.append({"field": "其他內容", "from": "", "to": ""})
     return changes
+
+
+#: 階段（caseRecord.stages）裡「存檔真的會存進 case_stages 表」的欄位＝`_sync_json_stages_to_table` 的 UPDATE 寫的那幾個。
+#: 其餘（id、dependsOn、visits、stageKey…）是伺服器維護的：建單時 `_sync_stages_to_json` 會把階段重建成表裡的樣子（配真實 id、補齊欄位），
+#: 而使用者手上那份還是暫時 id、欄位不齊——第一次 PUT 把兩邊拿來比，就會多出一筆使用者根本沒改的「其他內容」（2026-11-13 修）。
+_STAGE_PERSISTED = (("label", ""), ("doneAt", ""), ("startDate", ""), ("dueDate", ""))
+
+
+def _stage_core(st):
+    if not isinstance(st, dict):
+        return st
+    out = {k: (st.get(k) or d) for k, d in _STAGE_PERSISTED}
+    out["done"] = bool(st.get("done"))
+    out["assignedTo"] = st.get("assignedTo") or []
+    return out
+
+
+def _diff_view(d: dict) -> dict:
+    """整包比對用的「正規化檢視」：拿掉紀錄類／每次存檔都變的鍵；階段只留會被存檔的欄位；款項日期套與存檔相同的 YYYY-MM-DD 正規化。
+    只用在「有沒有『其他內容』變更」的判斷——**只讓伺服器自己會改寫的差異不算變更**；使用者真的改了的值（階段名稱、日期、款項金額、
+    頂層未追蹤欄位…）正規化後仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）。"""
+    out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
+    cr = out.get("caseRecord")
+    if isinstance(cr, dict):
+        cr = dict(cr)
+        if isinstance(cr.get("stages"), list):
+            cr["stages"] = [_stage_core(s) for s in cr["stages"]]
+        pay = cr.get("payment")
+        if isinstance(pay, dict) and isinstance(pay.get("items"), list):
+            items = []
+            for it in pay["items"]:
+                if isinstance(it, dict):
+                    it = dict(it)
+                    for k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+                        if it.get(k):
+                            it[k] = norm_ymd(it[k])
+                items.append(it)
+            cr["payment"] = {**pay, "items": items}
+        out["caseRecord"] = cr
+    return out
 
 
 def _append_edit_history(q: dict, user: dict, now: str, entry_type: str,
