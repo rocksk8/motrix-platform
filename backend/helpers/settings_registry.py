@@ -826,7 +826,11 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     began = False
     try:
         began = begin_write(c)
-        _notice_mark = c.execute("SELECT COALESCE(MAX(id),0) FROM notifications").fetchone()[0]   # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的
+        # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的。
+        # 水位線取自 sqlite_sequence（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），
+        # 不直接 SELECT notifications：那會是一筆新的未範圍讀取（unscoped_reads 基準只減不增；這裡只要一個數字、沒有列資料）。
+        _row = c.execute("SELECT seq FROM sqlite_sequence WHERE name='notifications'").fetchone()
+        _notice_mark = int(_row[0]) if _row and _row[0] is not None else 0
         _who = user or ((actor.get("username") or "") if isinstance(actor, dict) else str(actor or ""))
         _items = []                                 # 變更通知項目（commit 之後才發；見 helpers/settings_notify）
         base = _effective(c, group, overlay=False)
