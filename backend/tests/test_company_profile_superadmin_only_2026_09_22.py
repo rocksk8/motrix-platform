@@ -312,6 +312,11 @@ def test_sa2_the_google_key_value_is_never_recorded(client, make_user):
 def test_sa4_reading_stays_open_to_any_logged_in_user(client, make_user):
     """🔴 SA4（A 裁）：**讀取維持「登入即可」。**
 
+    ⚠️ **2026-11-13 使用者裁示已改變這個結論（保留原文，只轉方向）**：完整版 `GET /api/settings/company-profile`
+    預設只給最高管理者（設定中心「完整公司資料只給最高管理者看」，預設開）；「登入即可讀」現在只剩
+    `GET /api/settings/company-profile/public`（名稱／統編／聯絡方式／據點名稱）。下面的斷言因此改成：
+    完整版 403、公開子集 200——它防的原意不變：**不可以因為把門關緊就讓一般使用者的頁面整個壞掉。**
+
     🔑 理由：**匯款帳號本來就印在寄給客戶的請款單上，它不是秘密。**
     ⚠️ 這一題是**回歸守門** —— 它防的是「SA1 把門關緊」時順手把讀取也關掉，
     ☠️ 而那會讓一般使用者的請款單頁面整個壞掉，**而症狀離成因很遠**。
@@ -321,9 +326,14 @@ def test_sa4_reading_stays_open_to_any_logged_in_user(client, make_user):
     token = _login(client, username, password)
 
     r = client.get("/api/settings/company-profile", headers=_auth(token))
+    assert r.status_code == 403, (
+        f"一般登入使用者讀得到完整公司資料（{r.status_code}）—— "
+        "2026-11-13 裁示：完整版預設只給最高管理者。"
+    )
+    r = client.get("/api/settings/company-profile/public", headers=_auth(token))
     assert r.status_code == 200, (
-        f"一般登入使用者讀不到公司資料（{r.status_code}）—— "
-        "請款單要印它，而它不是秘密。"
+        f"一般登入使用者連公開子集都讀不到（{r.status_code}）—— "
+        "頁面要用的名稱／統編／據點名稱不能一起被關掉。"
     )
 
 

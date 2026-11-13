@@ -66,6 +66,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode, set_request_ctx
 from helpers import (
     init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks, _license_startup_check,
+    _tighten_company_profile_full_read_once,
     init_unlock_passwords, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
@@ -314,7 +315,7 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
     ("GET", "/api/license/overview"): "授權頁讀取目前授權概況（licensing.LICENSE_EXEMPT_PATHS；限最高管理者且非示範帳號，端點自己驗權限）",
     ("POST", "/api/license/import"): "授權頁預覽與匯入新授權檔（licensing.LICENSE_EXEMPT_PATHS；限最高管理者，有大小上限、頻率限制與稽核，端點自己驗權限）",
-    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理者才看得到完整內容，端點自己驗權限）",
+    ("GET", "/api/settings/company-profile"): "設定頁與公司設定精靈讀取本公司資料（預設只有最高管理者讀得到完整內容；設定中心開關可放寬為登入即可，端點自己驗權限）",
     ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理者，端點自己驗權限）",
     ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理者，端點自己驗權限）",
     ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理者，端點自己驗權限）",
@@ -1047,6 +1048,8 @@ flag_weak_passwords()
 _startup_step("flag_weak_passwords")
 init_unlock_passwords()
 _startup_step("init_unlock_passwords")
+_tighten_company_profile_full_read_once()     # T84：公司資料完整版預設收緊的一次性遷移（每庫一次；經 helpers/startup.py）
+_startup_step("tighten_company_profile_full_read")
 _cleanup_sessions()
 _startup_step("cleanup_sessions")
 
