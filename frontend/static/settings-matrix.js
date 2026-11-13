@@ -52,7 +52,8 @@
  *   //   cfg.help(row)→{what,when,impact,recommend}：名稱旁的「?」，點開四段說明（空段略過、全空不畫；文字跳脫）。
  *   //   cfg.source(row)→{kind:'default'|'company'|'pending'|'legacy'|'personal', by, at, reason, until}：來源徽章＋「來源：…」一行（'personal' 只給真的有個人層的欄位）。
  *   //   cfg.diff={isDefault(row), defaultText(row), reset(row,ctx), draft(row), canReset(row), confirm(row)}：「與預設不同」標記＋篩選晶片＋「預設：X［還原預設］」（只在不同時顯示）。
- *   //   欄位 colSelect={draft(row,on,itemValue), run(keys,on,itemValue,ctx), confirm(keys,on,itemValue)}（switch／chips 欄）：欄頭核取方塊，整欄一次開／關（略過不能批次或鎖住的列）。
+ *   //   欄位 colSelect={draft(row,on,itemValue), run(keys,on,itemValue,ctx), confirm(keys,on,itemValue)}（switch／chips 欄；只在桌面表格的欄頭，手機卡片沒有欄頭）：整欄一次開／關，略過不能批次或鎖住的列；
+ *   //     草稿頁只吃 draft（沒給＝不動，草稿頁絕不直接寫入；略過幾列會在「已加入草稿」提示裡說），非草稿頁吃 run（走確認視窗→寫入→復原這一批）。
  *   //   cfg.notifyPreview({kind,keys,changes,action,skipped})→raw html：確認視窗最後加「通知預覽」。
  *   // 群組快捷鈕總開關：batch.groupActionsEnabled: false（設定中心不開放「全部開啟」）
  *   mx.setRows(rows)  mx.refresh()  mx.selection()  mx.clearSelection()  mx.toast(msg, { undo })  mx.stage(key, patch)  mx.draftCount()  mx.discard()  mx.save()  mx.destroy()
@@ -654,13 +655,13 @@
     function resetRow(key) {
       var r = rowByKey(key)
       if (!DF || !r || !differs(r) || (DF.canReset && DF.canReset(r) === false)) return Promise.resolve()
-      if (D && DF.draft) return stageCell(key, function () { return DF.draft(r) })
+      if (D) return DF.draft ? stageCell(key, function () { return DF.draft(r) }) : Promise.resolve()      // 草稿頁絕不直接寫入
       if (!DF.reset) return Promise.resolve()
       var dialogs = DF.confirm ? (DF.confirm(r) || []) : []
-      return askAll(dialogs).then(function (ok) {
+      return withPreview(dialogs, { kind: 'reset', keys: [key] }).then(function (ds) { dialogs = ds; return askAll(dialogs) }).then(function (ok) {
         if (!ok) return
         return perform(rn(r) + '：' + T('diffReset'), [key], function () { return DF.reset(r, { confirmed: dialogs.length > 0 }) })
-      })
+      }).catch(fail)
     }
     // C11 欄頭選取（on＝true 全開／false 全關）；val＝chips 欄的項目值。略過的列（不能批次／該格鎖住／不顯示）一律不動並在提示裡計數。
     function colSelect(c, val, on) {
@@ -677,10 +678,10 @@
           }, Promise.resolve()).then(function () { render(); toast(T('colSelStaged', { n: n }) + (skipped ? T('colSelSkipped', { k: skipped }) : '')) })
         }).catch(function (e) { if (!(e && e.cancelled)) fail(e); render() })
       }
-      if (!cs.run) { render(); return Promise.resolve() }
+      if (D || !cs.run) { render(); return Promise.resolve() }                  // 草稿頁絕不直接寫入：沒有 colSelect.draft ⇒ 不動（原生核取方塊回原狀）
       return runAction({ id: 'colsel:' + c.id, label: (c.label || '') + (on ? '：全部勾選' : '：全部取消'), previewKind: 'colselect',
         confirm: function (keys) { return cs.confirm ? cs.confirm(keys, on, val) : [] },
-        run: function (keys, ctx) { return cs.run(keys, on, val, ctx) } }, targets)
+        run: function (keys, ctx) { return cs.run(keys, on, val, ctx) } }, targets).then(function () { render() })       // 取消／確認視窗回 null 時也要重畫，原生核取方塊才會回到實際狀態
     }
     // 單格操作：column.confirm(row, value) 可回確認視窗（例如關閉「重要」告警）；set／toggle 丟出 {cancelled:true} ⇒ 靜默放棄、畫面回原狀
     function runCell(label, key, col, r, value, fn) {

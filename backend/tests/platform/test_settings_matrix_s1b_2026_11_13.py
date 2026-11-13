@@ -170,3 +170,8 @@ def test_notify_preview_and_reset_paths_exist_in_source_and_go_through_confirm_a
     assert "perform(rn(r) + '：' + T('diffReset'), [key]" in src and "stageCell(key, function () { return DF.draft(r) })" in src      # 還原預設：立即＝perform、草稿＝併入草稿
     assert "runAction({ id: 'colsel:'" in src and "cs.draft(rowByKey(k), on, val)" in src                                           # 欄頭整欄：立即＝走批次流程（確認／略過／復原）、草稿＝逐列併入
     assert re.search(r"function colTargets\(c\) \{\s*return visKeys\(\)\.filter\(function \(k\) \{ var r = rowByKey\(k\); return r && eligibleOf\(r\)\.ok && colShown\(c, r\) && !locked\(c, r\) \}\)", src)
+    # h9 review M1／N2：整欄選取取消確認後要重畫（原生核取方塊回原狀）；草稿頁絕不直接寫入
+    assert "targets).then(function () { render() })" in src
+    assert "if (D || !cs.run) { render(); return Promise.resolve() }" in src
+    assert "if (D) return DF.draft ? stageCell(key, function () { return DF.draft(r) }) : Promise.resolve()" in src
+    assert "withPreview(dialogs, { kind: 'reset', keys: [key] })" in src                          # N1：還原預設也過通知預覽
