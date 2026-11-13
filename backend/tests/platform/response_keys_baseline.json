@@ -6191,7 +6191,10 @@
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "s": 200
+  "k": [
+   "detail"
+  ],
+  "s": 429
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6312,11 +6315,10 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "hdr": [
-   "銷項發票清單|銷項發票清單（全部區間）"
+  "k": [
+   "detail"
   ],
-  "s": 200
+  "s": 429
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6814,12 +6816,18 @@
    "events[].need",
    "events[].priority",
    "events[].roles",
+   "events[].sent30",
    "include_links",
    "login_channel_id",
    "login_channel_secret",
    "public_base_url",
    "quota_thresholds",
-   "role_choices"
+   "role_choices",
+   "usage30",
+   "usage30.accumulated_days",
+   "usage30.complete",
+   "usage30.days",
+   "usage30.total"
   ],
   "s": 200
  },

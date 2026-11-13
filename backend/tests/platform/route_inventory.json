@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 942,
-  "endpoints_api": 938,
-  "write_total": 506,
-  "write_api": 506,
+  "endpoints_total": 944,
+  "endpoints_api": 940,
+  "write_total": 508,
+  "write_api": 508,
   "get_api": 432,
-  "distinct_paths_api": 794,
-  "write_with_body_api": 372,
+  "distinct_paths_api": 796,
+  "write_with_body_api": 374,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -418,6 +418,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/auth/greeting": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/auth/login/qr-info": {
    "w": false,
    "pp": 0,
@@ -429,6 +434,16 @@
    "body": false
   },
   "GET /api/auth/me": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/preferences": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/profile": {
    "w": false,
    "pp": 0,
    "body": false
@@ -864,6 +879,11 @@
    "body": false
   },
   "GET /api/dashboard/funnel": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/mine": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1349,6 +1369,11 @@
    "body": false
   },
   "GET /api/lodging/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/login-greeting/phrases": {
    "w": false,
    "pp": 0,
    "body": false
@@ -4143,6 +4168,16 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/settings/line-notify/events/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/settings/line-notify/verify": {
    "w": true,
    "pp": 0,
@@ -4291,6 +4326,11 @@
   "POST /api/work-logs/{wid}/photos": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/auth/preferences": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/bank-accounts/{user_id}": {
@@ -4451,6 +4491,11 @@
   "PUT /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/mail-types/{key}/recipients": {
@@ -4691,41 +4736,6 @@
   "PUT /api/work-logs/{wid}": {
    "w": true,
    "pp": 1,
-   "body": true
-  },
-  "GET /api/auth/greeting": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/dashboard/mine": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/login-greeting/phrases": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/login-greeting/phrases": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/auth/preferences": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/auth/profile": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/auth/preferences": {
-   "w": true,
-   "pp": 0,
    "body": true
   }
  }

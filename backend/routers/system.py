@@ -2765,8 +2765,11 @@ def get_line_notify(authorization: str = Header(None)):
     aud = _ln.audience_view()
     names = _line_user_names({u for a in aud.values() for u in a["users"]})
     safe["event_groups"] = list(_cat.GROUP_ORDER)
+    u30 = _ln.usage_daily_view(30)          # 按日計數（LINE 事件矩陣票）：近 30 天每個事件推出幾則；資料未滿 30 天 ⇒ complete=False、accumulated_days＝已累積幾天
+    safe["usage30"] = {k: u30[k] for k in ("days", "accumulated_days", "complete", "total")}
     safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
                        "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
+                       "sent30": u30["by_event"].get(k, 0),
                        "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
 
@@ -2843,17 +2846,118 @@ def get_line_notify_quota(refresh: bool = False, authorization: str = Header(Non
 
 @router.put("/api/settings/line-notify/events/{key}")
 def set_line_notify_event(key: str, body: dict = Body(...), authorization: str = Header(None)):
-    """勾選／取消某種信件「同時發 LINE」。只接受已接線的類型；enabled 必須是布林。"""
-    _require_user(authorization, require_superadmin=True)
+    """勾選／取消某種信件「同時發 LINE」。只接受已接線的類型；enabled 必須是布林。
+    從關切到開、而且還沒有指定收件對象時，伺服器套用預設「只發給我」（操作者本人；LINE 事件矩陣票）：回應 `audience_defaulted: true`。"""
+    actor = _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln
     if key not in _ln.WIRED_EVENTS:
         raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
     on = (body or {}).get("enabled")
     if not isinstance(on, bool):
         raise HTTPException(400, "enabled 必須是 true 或 false")
-    _ln.set_event(key, on)
-    _audit(_tok(authorization), "settings.line_notify.event", "settings", key, "LINE 通知事件開關：%s → %s" % (key, "開" if on else "關"))
-    return {"ok": True, "key": key, "enabled": on}
+    defaulted = _ln.set_event(key, on, default_user=actor["username"])
+    _audit(_tok(authorization), "settings.line_notify.event", "settings", key,
+           "LINE 通知事件開關：%s → %s%s" % (key, "開" if on else "關", "（收件對象預設：只發給操作者本人）" if defaulted else ""))
+    return {"ok": True, "key": key, "enabled": on, "audience_defaulted": defaulted}
+
+
+_BATCH_FIELDS = {"keys", "enabled", "audience", "roles", "confirm_critical"}
+
+
+@router.post("/api/settings/line-notify/events/batch")
+def set_line_notify_events_batch(body: dict = Body(...), authorization: str = Header(None)):
+    """一次改多個 LINE 通知事件（LINE 事件矩陣票）：開關 `enabled`、誰要發 `audience`（`{mode, roles, users}`）、角色篩選 `roles`
+    （**沒帶＝不動；帶 null＝移除篩選（所有角色）；帶清單＝只收這些角色**）。`keys` 1～100 個（去重）。
+
+    **全部成功或全部不改**：任何一項不合法 ⇒ 400、一個都不改；成功時整批只寫一次設定、只記**一筆**稽核。
+    關閉「重要」系統告警的事件必須帶 `confirm_critical: true`，否則 400（`code: confirm_critical_required`、`critical`＝需要確認的事件）。
+    事件從關切到開、而且沒有帶 `audience` 也還沒有指定對象時，套用預設「只發給我」（操作者本人）。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln, line_catalog as _cat
+    b = body if isinstance(body, dict) else {}
+    extra = sorted(set(b) - _BATCH_FIELDS)
+    if extra:
+        raise HTTPException(400, "不認得的欄位：%s（可用：%s）" % ("、".join(str(x) for x in extra[:5]), "、".join(sorted(_BATCH_FIELDS))))
+    raw = b.get("keys")
+    if not isinstance(raw, list) or len(raw) > 10 * _ln.BATCH_MAX_KEYS or not all(isinstance(k, str) for k in raw):
+        raise HTTPException(400, "keys 必須是事件代碼的清單（1～%d 個）" % _ln.BATCH_MAX_KEYS)
+    keys = list(dict.fromkeys(raw))
+    for fld in ("enabled", "confirm_critical"):
+        if fld in b and b[fld] is not None and not isinstance(b[fld], bool):
+            raise HTTPException(400, "%s 必須是 true 或 false" % fld)
+    if "audience" in b and not isinstance(b["audience"], dict):
+        raise HTTPException(400, "audience 必須是 {mode, roles, users}")
+    kw = {"enabled": b.get("enabled"), "audience": b.get("audience"), "confirm_critical": b.get("confirm_critical") is True,
+          "default_user": actor["username"]}
+    if "roles" in b:                                  # 沒帶 ≠ 帶 null（移除角色篩選）
+        kw["roles"] = b["roles"]
+    try:
+        res = _ln.set_events_batch(keys, **kw)
+    except _ln.CriticalConfirmRequired as e:
+        raise HTTPException(400, {"code": "confirm_critical_required", "message": str(e), "critical": [{"key": k, "name": _cat.name_of(k)} for k in e.keys]})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.batch", "settings", "", "LINE 通知批次設定：%d 個事件（變更 %d）" % (len(keys), len(res["changed"])),
+           {"keys": keys, "enabled": kw["enabled"], "audience": kw["audience"], "roles": b.get("roles", "（不動）"), "changed": res["changed"],
+            "audience_defaulted": res["defaulted"], "critical_off": res["critical_off"]})
+    return {"ok": True, **res, "audit_mark": _audit_mark()}
+
+
+def _audit_mark() -> int:
+    """目前稽核紀錄的最大編號（給「復原這一批」找「套用之後是誰改的」用；查不到 ⇒ 0）。"""
+    conn = get_db()
+    try:
+        r = conn.execute("SELECT MAX(id) m FROM audit_log").fetchone()
+        return int(r["m"] or 0)
+    except Exception:                                    # noqa: BLE001
+        return 0
+    finally:
+        conn.close()
+
+
+def _line_conflict_who(keys, since_id: int) -> dict:
+    """套用之後、誰在何時改過這些事件 ⇒ {"by", "at", "keys"}（找不到明確的人 ⇒ by／at 為空字串；只給提示用，不影響是否拒絕）。"""
+    by, at = "", ""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, at, username, display_name, action, target_id, detail FROM audit_log WHERE id>? AND action LIKE 'settings.line_notify%' ORDER BY id DESC LIMIT 200",
+                            (int(since_id or 0),)).fetchall()
+        for r in rows:
+            blob = "%s %s" % (r["target_id"] or "", r["detail"] or "")
+            if any(k in blob for k in keys):
+                by, at = (r["display_name"] or r["username"] or ""), (r["at"] or "")
+                break
+    except Exception:                                    # noqa: BLE001
+        pass
+    finally:
+        conn.close()
+    return {"by": by, "at": at}
+
+
+@router.post("/api/settings/line-notify/events/batch-undo")
+def undo_line_notify_events_batch(body: dict = Body(...), authorization: str = Header(None)):
+    """「復原這一批」：把一次批次設定寫回套用前的狀態（`states`），前提是這些事件從套用到現在都沒被別人改過（`expect`＝套用回應裡的 `after`）。
+    任何一個被改過 ⇒ 409 `{code:'conflict', keys, by, at}`、整批不復原；成功只寫一次設定、只記一筆稽核（`settings.line_notify.batch_undo`）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln, line_catalog as _cat
+    b = body if isinstance(body, dict) else {}
+    extra = sorted(set(b) - {"states", "expect", "since_audit"})
+    if extra:
+        raise HTTPException(400, "不認得的欄位：%s" % "、".join(str(x) for x in extra[:5]))
+    since = b.get("since_audit", 0)
+    if isinstance(since, bool) or not isinstance(since, int):
+        raise HTTPException(400, "since_audit 必須是整數")
+    try:
+        res = _ln.restore_events_batch(b.get("states"), b.get("expect"))
+    except _ln.BatchConflict as e:
+        who = _line_conflict_who(e.keys, since)
+        raise HTTPException(409, {"code": "conflict", "message": "這些事件在你套用之後又被改過，為了不蓋掉別人的修改，系統拒絕整批復原。",
+                                  "keys": [{"key": k, "name": _cat.name_of(k)} for k in e.keys], **who})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.batch_undo", "settings", "", "LINE 通知批次復原：%d 個事件" % len(res["restored"]),
+           {"keys": res["restored"], "states": b.get("states")})
+    return {"ok": True, **res, "audit_mark": _audit_mark()}
 
 
 @router.put("/api/settings/line-notify")
