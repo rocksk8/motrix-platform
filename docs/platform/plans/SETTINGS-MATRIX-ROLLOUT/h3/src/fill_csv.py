@@ -32,7 +32,7 @@ for row in rows[1:]:
         row[cR] = r["danger"]
         row[cY] = r["style"]
         sec = next((s[2] for grp in C.A.SECTIONS for s in grp[2] if s[0] == r["sec"]), "")
-        batch = ("可批次（套用建議值／預設組合／重設為預設" + ("；營運類要確認視窗" if r["confirm"] else "") + "）") if r["elig"] else "不進批次（影響大或要等 N 天才生效／放寬須核准，須逐項設定）"
+        batch = ("可批次（套用建議值／預設組合／重設為預設" + ("；營運類要確認視窗" if r["confirm"] else "") + "）") if r["elig"] else "不進批次：" + r["why"]
         parts = [C.scrub(it["note"]) if it.get("note") else "", batch, "mockup 分區：" + sec]
         if r["when"]:
             parts.append("「什麼時候要改」（SettingDef.when 草稿）：" + r["when"])

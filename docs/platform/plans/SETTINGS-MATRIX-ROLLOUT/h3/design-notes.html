@@ -25,13 +25,14 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}f
 
 <h2>2. 規則怎麼落實（對照 README §二）</h2>
 <table><tr><th>規則</th><th>在畫面上怎麼做</th></tr>
-<tr><td>M1 批次只限 none／ops</td><td>勾選格只出現在可批次的列；不可批次的列勾選格灰掉、tooltip 寫原因；群組標題的全選自動略過，確認視窗列「已略過 N 項：原因」。批次列只有三顆：套用建議值、套用預設組合、重設為預設（外加取消選取）。營運類（ops）項目在確認視窗多一個「我確認要改這 N 項營運設定」勾選。</td></tr>
+<tr><td>M1 批次只限 none／ops</td><td>勾選格只出現在可批次的列（27 項）；敏感群組（quote_approval、quote_alt、overhead、profit_rules、material_recognition、change_control）整群不可批次；不可批次的列勾選格灰掉、tooltip 寫原因；群組標題的全選自動略過，確認視窗列「已略過 N 項：原因」。批次列只有三顆：套用建議值、套用預設組合、重設為預設（外加取消選取）。營運類（ops）項目在確認視窗多一個「我確認要改這 N 項營運設定」勾選。</td></tr>
 <tr><td>批次不繞過變更管制</td><td>確認視窗把「放寬方向／要等 N 天」的項目標成「等待生效」並說明：不會立即生效，會依原規則進入等待。</td></tr>
-<tr><td>文字類欄位不畫勾選格</td><td>quote_defaults.estimate_no_prefix、quote_alt.total_text／note_template、finance_cashier.bank_alias_* 共 6 項：不畫勾選格，做成逐列編輯＋即時預覽（客戶看到的樣子、單號樣子、欄名標籤）。</td></tr>
+<tr><td>文字類欄位不畫勾選格</td><td>quote_defaults.estimate_no_prefix、quote_alt.total_text／note_template、finance_cashier.bank_alias_* 共 6 項（列上的 ✎ 提示原因）：不畫勾選格，做成逐列編輯＋即時預覽（客戶看到的樣子、單號樣子、欄名標籤）。</td></tr>
 <tr><td>N2 復原這一批</td><td>套用後吐司「復原這一批」。復原時比對涉及群組的版本；別人改過就整批拒絕，顯示誰、何時、哪一項（可用頁首「示範」按鈕看）。沒有欄位層級的 6 秒復原；單項修改的吐司只說「要還原請到變更紀錄」。</td></tr>
 <tr><td>N3 來源</td><td>只用「預設／公司／等待生效」。本份 76 欄沒有任何一欄有個人設定層，所以沒有「個人」徽章。</td></tr>
 <tr><td>N4 說明由登錄表產生</td><td>「?」四段：這是什麼＝question＋help；什麼時候要改＝<b>新增 SettingDef.when</b>（我先寫了 76 條草稿，附在盤點表備註欄，採用就貼進登錄表）；改了會影響什麼＝impact＋riskText；建議值＝recommended＋各選項後果。</td></tr>
 <tr><td>N5 群組風險</td><td>群組標題不標高低風險，只在內含影響大的項目時顯示「內含高風險項目 ▾」，點開列出是哪幾項。</td></tr>
+<tr><td>「什麼時候要改」（SettingDef.when 草稿）</td><td>依 h11 審查修正：有前置開關的 23 欄開頭先寫「要先開啟…」；只有單一可選項的 6 條 quote_alt 規則明寫「目前只有一個可選項」；會走到放寬方向的欄位註明「需第二位最高管理者核准並等待 N 天才生效」。</td></tr>
 <tr><td>用語表</td><td>畫面不出現 true／false、整數選項代碼、「影子」「閘門」「確認期間」。<b>但登錄表原文有</b>（見 §6），mockup 顯示時改寫，來源仍待改。</td></tr></table>
 
 <h2>3. 設定中心 20 群組怎麼分區（7 大區、15 小區）</h2>
@@ -59,18 +60,19 @@ img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}f
 <tr><td>presets 內容</td><td>profit_warning（3 組）與 finance_reports 帳齡（3 組）是我的提案；其餘群組沒有預設組合。</td></tr>
 <tr><td>需外部設定標籤</td><td>76 欄裡只有 alerts.cert_warn_days（要到開發者端換發簽章確認檔）。</td></tr>
 <tr><td>expected-version</td><td>復原這一批要 publish() 帶 expected_version；mockup 以「群組版本」示範。</td></tr>
-<tr><td>設定中心以外的 7 項</td><td>全是舊路徑直接寫入（只有稽核紀錄；沒有要等 N 天、沒有雙人核准）。是否納入變更管制要 PM 裁示（見 §7）。</td></tr></table>
+<tr><td>設定中心以外的 7 項</td><td>全是舊路徑直接寫入（只有稽核紀錄；沒有要等 N 天、沒有雙人核准）。是否納入變更管制由使用者決定（見 §7）。其中整包寫入、沒有並行控制的項目（獎金預設、傳票科目、營運目標、T100、報價條款）不提供批次與復原；法規參數有自己的保護機制；管銷／公益口徑的切換只寫一般稽核、不寫 config_changes。</td></tr></table>
 
 <h2>6. 登錄表原文違反用語表的地方（來源要改；mockup 顯示時已改寫）</h2>
 <p>我的 76 欄中，<b>26 欄</b>的 label／question／help／impact／riskText／選項含「確認期間」（27 處）或「影子」（4 處，quote_approval.reconfirm_mode 的選項「影子（只記錄）」→ 建議「先試跑（只記錄）」）。「確認期間」建議統一改成「要等 N 天才生效」。欄位清單：alerts 4 欄、case_close_gates.enabled、change_control.confirm_period_days、finance_cashier.receivable_grace_days、finance_reports.settle_overdue_days、legal_params_reminder 2 欄、overhead.default_pct、profit_rules.charity_rate_pct、quote_alt 9 條鎖定規則、quote_approval 4 欄、quote_output.hidden_terms_pdf_mode。</p>
 
-<h2>7. 要 PM／使用者決定的事</h2>
+<h2>7. 已裁示與要使用者決定的事</h2>
+<p><b>已裁示（PM）：</b>「憑證帳戶」＝獎金傳票科目（PUT /api/bonus/cases/voucher-accounts，5 個會計科目）；管銷與公益口徑做成唯讀加切換精靈（精靈最後一步只能寫「請工程師執行遷移工具」）；登錄表禁用詞實作時從原始來源改寫（清單見 §6）。</p>
+<p><b>要使用者決定（PM 會放進同一個選單）：</b></p>
 <ol>
-<li><b>「憑證帳戶」指哪一項？</b>程式裡找不到這個字。我暫以「獎金傳票科目」呈現；其他候選：銀行帳戶清單（T100）、個人 Passkey（歸丙）、Google Maps 金鑰（歸乙）。</li>
-<li><b>設定中心以外 7 項要不要納入變更管制？</b>目前都是直接寫入。影響大的是：傳票科目、扣繳參數（法規參數）、T100 科目代號、管銷／公益口徑。本稿照現況畫，並標出來。</li>
-<li><b>管銷口徑／公益口徑</b>現在沒有任何畫面可以切換，只能用工具。本稿建議只做「唯讀＋切換精靈」，不放成一般開關。</li>
-<li><b>盤點表「可批次?」欄對文字欄位</b>寫了「是」（estimate_no_prefix、bank_alias_*×3）；依「文字類不畫勾選格」本稿把它們排除，畫面上可批次 31 項、盤點表是 35 項。請 h4 確認以哪個為準。</li>
-<li><b>預設組合內容</b>（利潤色帶、帳齡）是否採用我的提案。</li></ol>
+<li>設定中心以外 7 項要不要納入變更管制？目前都是舊路徑直接寫入。建議納入：傳票科目、扣繳參數、T100 科目、管銷／公益口徑（調整後要等 N 天，或需第二位最高管理者核准）。本稿先照現況畫並標出。</li>
+<li>預設組合的內容：利潤色帶（標準／較嚴／較寬）與帳齡（30／60／90、15／30／60、45／90／180）是我的提案，登錄表 presets 目前是 0 個。</li>
+</ol>
+<p><b>等 h4：</b>盤點表「可批次?」欄的產生器沒有敏感群組檢查，修好後我會重產我的列。畫面可勾選的是 <b>27 項</b>（SPEC §4.1：none／ops、非待生效、非放寬、非敏感群組、非文字欄位）。不可批次的列寫出真正原因：敏感群組／文字欄位／影響大／放寬須核准。</p>
 
 <h2>8. 畫面</h2>
 <figure><img src="shots/01-settings-center.png" alt=""><figcaption>設定中心：摘要、篩選晶片、分區與每列的白話名稱／標籤／來源／等待生效。</figcaption></figure>

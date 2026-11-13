@@ -20,6 +20,35 @@ LOOSEN_ZH = {"up": "往大調", "down": "往小調"}
 SCRUB = [("影子（只記錄）", "先試跑（只記錄）"), ("影子", "先試跑"), ("確認期間", "等待期"), ("閘門", "檢查")]
 
 
+DEPS = {}
+for _k in ("total_text", "note_template", "show_unpicked_in_pdf", "alt_groups_max", "combo_view_max", "combo_view_default_open"):
+    DEPS["quote_alt." + _k] = "quote_alt.alt_enabled"
+for _k in ("due_soon_payable_days", "due_soon_planned_days"):
+    DEPS["finance_cashier." + _k] = "finance_cashier.custom_due_soon"
+for _k in ("bank_alias_date", "bank_alias_amount", "bank_alias_desc"):
+    DEPS["finance_cashier." + _k] = "finance_cashier.custom_bank_aliases"
+for _k in ("aging_day1", "aging_day2", "aging_day3"):
+    DEPS["finance_reports." + _k] = "finance_reports.custom_aging"
+for _k in ("require_stages", "require_payment_items", "require_settlement", "count_unfinished_extra_expenses"):
+    DEPS["case_close_gates." + _k] = "case_close_gates.enabled"
+for _k in ("prefill_unsigned", "qty_mode", "default_status", "include_headers", "brand_prefix"):
+    DEPS["completion_note." + _k] = "completion_note.auto_prefill"
+
+
+def compose_when(gk, f, g):
+    w = H.WHEN.get(f"{gk}.{f['key']}", "")
+    if not w:
+        return w
+    dep = DEPS.get(f"{gk}.{f['key']}")
+    if dep:
+        dg, dk = dep.split(".")
+        dn = next(x["label"] for x in g[dg]["fields"] if x["key"] == dk)
+        w = f"要先開啟「{dn}」才有作用。" + w
+    if f["loosen"] and "尚未提供" not in w:
+        w += f"若要往放寬方向調整（{LOOSEN_ZH[f['loosen']]}），需第二位最高管理者核准並等待 N 天才生效。"
+    return w
+
+
 def scrub(t):
     if not isinstance(t, str):
         return t
@@ -119,13 +148,28 @@ def rows():
         for f in G["fields"]:
             it = A.ITEMS[(gk, f["key"])]
             btxt, gflag = bm[(gk, f["key"])]
-            elig = btxt.startswith("是")
             confirm = "需確認" in btxt
-            why = "" if elig else "永不進批次（影響大、要等 N 天才生效，或放寬須核准，須逐項設定）"
+            # 以 SPEC §4.1 為準：敏感群組與文字欄位一律不可批次（盤點表該欄的產生器漏了敏感檢查，h4 修後會跟上）
+            if f["type"] == "str":
+                elig, why = False, "文字欄位：逐列編輯＋預覽，不畫勾選格、不批次"
+            elif G["sensitive"]:
+                elig, why = False, "敏感群組（" + G["label"] + "）：一律逐項設定"
+            elif gk == "change_control":
+                elig, why = False, "變更管制本身：永遠逐項設定"
+            elif f["risk"] in ("money", "legal", "security"):
+                elig, why = False, f"影響大（風險：{RISK_ZH.get(f['risk'])}）：永遠逐項設定"
+            elif f["requiresPending"]:
+                elig, why = False, "要等 N 天才生效：須逐項設定"
+            elif f["loosen"]:
+                elig, why = False, "放寬方向須第二位最高管理者核准：須逐項設定"
+            else:
+                elig, why = True, ""
+            if not elig:
+                confirm = False
             sec = it.get("sec") or A.GROUP_SEC[gk]
             out.append(dict(gk=gk, G=G, f=f, it=it, elig=elig, confirm=confirm, why=why, sec=sec, gflag=gflag,
                             default_text=fmt(f, f["default"]), style=style_of(gk, f, elig), danger=danger_text(gk, G, f),
-                            when=H.WHEN.get(f"{gk}.{f['key']}", "")))
+                            when=compose_when(gk, f, g)))
     return out
 
 
