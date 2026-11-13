@@ -1739,7 +1739,7 @@ def _checked_quote_email(v):
 
 
 @router.post("/api/users", status_code=201)
-def create_user(body: UserIn, authorization: str = Header(None)):
+def create_user(body: UserIn, request: Request, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
@@ -1757,6 +1757,12 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     unknown = [k for k in (body.notification_muted or []) if _mt.get(k) is None and k not in _EVENT_KEYS]
     if unknown:
         raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
+    # 高敏感權限的共用檢查點（與 PUT /api/users/{id}、職責角色同一條規則）：建帳號時 modules 帶高敏感鍵 ⇒ 原因必填；建成最高管理者 ⇒ modules 不影響生效權限，不算授予
+    from helpers import duty_roles as _dr
+    try:
+        _sens, _reason = _dr.user_modules_gate([], body.modules or [], body.reason, inert=(body.role == "superadmin"))
+    except _dr.DutyError as e:
+        raise HTTPException(e.status, str(e))
     conn = get_db()
     try:
         conn.execute("""
@@ -1776,8 +1782,11 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             body.department_id or None,
             _qe_new or '',
         ))
-        conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        if _sens:                                   # 與 INSERT 同一個交易：permission_changes（kind=user_modules）＋audit_log（user.perm_change）
+            _dr.record_user_modules_change(conn, actor, user_id, body.display_name or body.username.strip(), [], list(body.modules or []), _reason,
+                                           _trusted_client_ip(request))
+        conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(409, "帳號已存在")

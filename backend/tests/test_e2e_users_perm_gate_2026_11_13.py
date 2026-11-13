@@ -62,3 +62,26 @@ def test_high_sensitive_toggle_requires_a_reason_and_is_recorded(live_server, ma
     assert "settings" in json.loads(_q("SELECT modules FROM users WHERE id=?", (uid,))[0]["modules"])
     ch = _q("SELECT kind, reason, high_sensitivity, audit_id FROM permission_changes WHERE target_id=?", (uid,))
     assert len(ch) == 1 and (ch[0]["kind"], ch[0]["reason"], ch[0]["high_sensitivity"]) == ("user_modules", "接手系統設定維護", 1) and ch[0]["audit_id"]
+
+
+@pytest.mark.e2e
+def test_creating_a_user_with_a_high_sensitive_key_requires_a_reason(live_server, make_user, e2e_browser):
+    sa = make_user(username="pg_sa2", role="superadmin")
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/users.html")
+    page.wait_for_function(f"() => {DATA}.users && {DATA}.users.length > 0", timeout=20000)
+    page.evaluate(f"() => {DATA}.openCreate()")
+    page.wait_for_function(f"() => {DATA}.permGate.hi.length > 0", timeout=20000)
+    page.evaluate(f"() => {{ const d = {DATA}; d.form.username = 'pg_new'; d.form.displayName = '新人'; d.form.password = 'Zx9-strong-Pass!'; d.form.confirmPassword = 'Zx9-strong-Pass!'; "
+                  f"d.form.modules = ['dashboard']; d.toggleModule('payslip') }}")
+    page.locator('[data-testid="perm-gate"]').wait_for(state="visible", timeout=5000)
+    page.evaluate(f"() => {DATA}.saveUser()")
+    page.wait_for_function(f"() => /原因/.test({DATA}.formError)", timeout=10000)
+    assert _q("SELECT COUNT(*) AS n FROM users WHERE username='pg_new'")[0]["n"] == 0
+    page.fill('[data-testid="perm-gate-reason"]', "新進薪資人員")
+    page.evaluate(f"() => {DATA}.saveUser()")
+    page.wait_for_function(f"() => {DATA}.showModal === false", timeout=20000)
+    uid = _q("SELECT id FROM users WHERE username='pg_new'")[0]["id"]
+    ch = _q("SELECT kind, reason FROM permission_changes WHERE target_id=?", (uid,))
+    assert [(c["kind"], c["reason"]) for c in ch] == [("user_modules", "新進薪資人員")]

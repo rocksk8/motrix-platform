@@ -221,3 +221,70 @@ def test_duty_roles_path_still_requires_the_reason(client, world):
     assert r.status_code == 400 and "原因" in r.json()["detail"]
     r = client.post("/api/duty-roles", json={"key": "gate_t_role", "name": "閘門測試", "description": "", "permissions": ["cashier"], "reason": "新增出納職責"}, headers=h)
     assert r.status_code == 201, r.text
+
+
+# ── 4. POST /api/users（建立帳號時帶 modules）同一條規則 ───────────────────
+def _create(client, h, username, modules, **extra):
+    body = {"username": username, "password": "Zx9-strong-Pass!", "display_name": "新人" + username, "role": "sales", "modules": modules}
+    body.update(extra)
+    return client.post("/api/users", json=body, headers=h)
+
+
+def test_create_with_high_key_without_reason_is_400_and_creates_nothing(client, world):
+    h = world["h"]
+    r = _create(client, h, "newbie", ["dashboard", "cashier"])
+    assert r.status_code == 400 and "原因" in r.json()["detail"], r.text
+    import db
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM users WHERE username='newbie'").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM permission_changes").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("bad", ["", "接手", "aaaa", "。。。。"])
+def test_create_reason_too_short_or_trivial_is_400(client, world, bad):
+    assert _create(client, world["h"], "newbie2", ["payslip"], reason=bad).status_code == 400
+    assert _create(client, world["h"], "newbie2", ["payslip"], reason="字" * 201).status_code == 400
+
+
+def test_create_with_reason_writes_permission_changes_and_audit(client, world):
+    h = world["h"]
+    r = _create(client, h, "newbie3", ["dashboard", "settings", "payslip"], reason="新進人事兼系統管理")
+    assert r.status_code in (200, 201), r.text
+    uid = r.json()["id"]
+    ch = _changes(uid)
+    assert len(ch) == 1
+    c = ch[0]
+    assert (c["kind"], c["high_sensitivity"], c["reason"], c["actor_username"]) == ("user_modules", 1, "新進人事兼系統管理", "root")
+    assert json.loads(c["added"]) == ["dashboard", "payslip", "settings"] and json.loads(c["removed"]) == []
+    assert json.loads(c["before_json"]) == {"modules": []}
+    a = _audit("user.perm_change", uid)
+    assert len(a) == 1 and c["audit_id"] == a[0]["id"]
+    assert len(_audit("user.create", "newbie3")) == 1, "原有的 user.create 稽核照舊"
+
+
+def test_create_without_high_keys_is_unchanged(client, world):
+    h = world["h"]
+    r = _create(client, h, "newbie4", ["dashboard", "quotation"])            # 沒帶 reason 也沒關係
+    assert r.status_code in (200, 201), r.text
+    assert _changes(r.json()["id"]) == []
+    r = _create(client, h, "newbie5", [])
+    assert r.status_code in (200, 201) and _changes(r.json()["id"]) == []
+    r = _create(client, h, "newbie6", ["dashboard"], reason="多餘的原因也不記")
+    assert r.status_code in (200, 201) and _changes(r.json()["id"]) == []
+
+
+def test_create_a_superadmin_is_inert(client, world):
+    r = _create(client, world["h"], "root3", ["settings"], role="superadmin")
+    assert r.status_code in (200, 201), r.text
+    assert _changes(r.json()["id"]) == []
+
+
+def test_duplicate_username_with_reason_leaves_no_change_row(client, world):
+    h = world["h"]
+    assert _create(client, h, "dupe", ["cashier"], reason="第一次建立帳號").status_code in (200, 201)
+    n = len(_changes(_uid("dupe")))
+    assert _create(client, h, "dupe", ["cashier"], reason="第二次重複建立").status_code == 409
+    assert len(_changes(_uid("dupe"))) == n == 1
