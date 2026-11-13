@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正與守門補登；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設關＝與今天逐位元相同）
+## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正、守門補登與 case_summary 註記；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設關＝與今天逐位元相同）
 - 守門補登：`modules.json` 補歸屬（M03：`supply/case_summary`）；未經範圍讀取基準登記 `release`／`case_summary` 兩筆（理由見 `test_unscoped_reads_ratchet.py` 的 MAX_ENTRIES 註解）。
 - `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。
 - `release`：**看資料、不看旗標**——從出貨狀態登載來的序號（`installed` 且還帶著出貨單號；在庫認領的一定沒有單號，旗標全程關時不會進這個分支）釋放後，若該出貨單仍是已核准 ⇒ 回到 `shipped`（保留案號與出貨單號）；出貨單已不是已核准 ⇒ 回 `in_stock` 並清掉出貨單號。在庫來的照舊回 `in_stock`。`claim` 的更新加 `AND status='shipped'` 並檢查 rowcount。
