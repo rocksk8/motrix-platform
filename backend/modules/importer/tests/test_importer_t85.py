@@ -73,7 +73,7 @@ def test_missing_required_header_and_header_only_and_example_only_files():
         _parse([CUST_HEAD])
     with pytest.raises(P.ParseError, match="沒有資料列"):
         _parse([CUST_HEAD, [P.EXAMPLE_MARK + "範例公司", "12345675"]])
-    with pytest.raises(P.ParseError, match="第一列要放欄位名稱"):
+    with pytest.raises(P.ParseError, match="第一列須為欄位名稱"):
         _parse([["abc", "def"], [1, 2]])
 
 
@@ -186,15 +186,15 @@ def test_zip_without_workbook_and_oversize_unzip_are_rejected():
             z.writestr(n, src.read(n))
         z.writestr("xl/media/huge.bin", b"\x00" * (60 << 20))             # 解開 60 MB、壓縮後很小
     assert len(bomb.getvalue()) < (5 << 20)
-    with pytest.raises(P.ParseError, match="解開後太大"):
+    with pytest.raises(P.ParseError, match="解壓縮後容量過大"):
         P.parse_file(bomb.getvalue(), "a.xlsx", "customers")
 
 
 def test_file_size_limit_and_row_cap():
-    with pytest.raises(P.ParseError, match="檔案太大"):
+    with pytest.raises(P.ParseError, match="檔案大小超過上限"):
         P.parse_file(_xlsx([CUST_HEAD, ["甲", ""]]), "a.xlsx", "customers", max_bytes=100)
     rows = [["帳號", "姓名"]] + [["u%d" % i, "人%d" % i] for i in range(P.MAX_ROWS["users"] + 1)]
-    with pytest.raises(P.ParseError, match="上限 300"):
+    with pytest.raises(P.ParseError, match="上限（300 列）"):
         P.parse_file(_xlsx(rows), "u.xlsx", "users")
     ok = [["帳號", "姓名"]] + [["u%d" % i, "人%d" % i] for i in range(P.MAX_ROWS["users"])]
     assert P.parse_file(_xlsx(ok), "u.xlsx", "users")["rowCount"] == 300
@@ -294,7 +294,7 @@ def test_row_cap_counts_filled_rows_not_blank_ones():
     rows = [CUST_HEAD] + [["公司%d" % i, ""] if i % 2 == 0 else [] for i in range(2 * P.MAX_ROWS["customers"])]
     res = _parse(rows)
     assert res["rowCount"] == P.MAX_ROWS["customers"]
-    with pytest.raises(P.ParseError, match="太多"):
+    with pytest.raises(P.ParseError, match="資料列數超過上限"):
         _parse([CUST_HEAD] + [["公司%d" % i, ""] for i in range(P.MAX_ROWS["customers"] + 1)])
 
 
@@ -525,7 +525,7 @@ def test_parse_concurrency_is_limited_and_busy_is_a_plain_429(client, make_user,
 
 def test_csv_with_an_oversized_field_gets_a_specific_message():
     big = "公司名稱" + chr(10) + "x" * 200000 + chr(10)
-    with pytest.raises(P.ParseError, match="內容太長"):
+    with pytest.raises(P.ParseError, match="欄位內容超過"):
         P.parse_file(big.encode("utf-8"), "big.csv", "customers")
 
 

@@ -143,7 +143,7 @@ def check_zip(data, limits=DEFAULT):
         total += zi.file_size
         if total > limits.max_unzipped or (
                 zi.compress_size and zi.file_size / max(zi.compress_size, 1) > limits.max_ratio and zi.file_size > (1 << 20)):
-            raise XlsxRejected("檔案解開後太大，無法處理（可能是壓縮炸彈或內含過大的圖片）")
+            raise XlsxRejected("檔案解壓縮後容量過大，無法處理（可能是壓縮炸彈或內含過大的圖片）")
     return z
 
 

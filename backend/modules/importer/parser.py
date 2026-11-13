@@ -153,7 +153,7 @@ def _rows_from_csv(data: bytes, max_scan: int, deadline=None):
         return _csv_rows(text, max_scan, deadline)
     except csv.Error as exc:
         if "limit" in str(exc):
-            raise ParseError("有一格的內容太長了（超過 %d 字），請確認 CSV 的引號有成對，或改用 .xlsx" % csv.field_size_limit())
+            raise ParseError("有一格的欄位內容超過 %d 字，請確認 CSV 的引號有成對，或改用 .xlsx" % csv.field_size_limit())
         raise ParseError("這個 CSV 的格式讀不出來（引號沒有成對？），請用 Excel 另存成 .xlsx 再上傳")
 
 
@@ -174,7 +174,7 @@ def _csv_rows(text, max_scan, deadline):
             continue
         out.append((i + 1, cells, [], []))
         if len(out) > max_scan:
-            raise ParseError("檔案的列數太多了（上限 %d 列），請拆成多個檔案" % (max_scan - 2))
+            raise ParseError("檔案的列數超過上限（%d 列），請拆成多個檔案" % (max_scan - 2))
     return out
 
 
@@ -213,7 +213,7 @@ def _rows_from_xlsx(data: bytes, max_scan: int, deadline=None):
         out.append((r_no, cells, formulas, numeric))
         filled += 1
         if filled > max_scan:
-            raise ParseError("檔案的列數太多了（上限 %d 列），請拆成多個檔案" % (max_scan - 2))
+            raise ParseError("檔案的列數超過上限（%d 列），請拆成多個檔案" % (max_scan - 2))
     return out
 
 
@@ -289,7 +289,7 @@ def parse_file(data: bytes, filename: str, kind: str, max_bytes: int = MAX_BYTES
     if not data:
         raise ParseError("檔案是空的")
     if len(data) > max_bytes:
-        raise ParseError("檔案太大了（上限 %d MB），請拆成多個檔案" % max(1, max_bytes >> 20))
+        raise ParseError("檔案大小超過上限（%d MB），請拆成多個檔案" % max(1, max_bytes >> 20))
     is_zip = data[:2] == b"PK"
     if ext == "xlsx" and not is_zip:
         raise ParseError("檔案內容不是 Excel（.xlsx）格式，請用 Excel 另存成 .xlsx 再上傳")
@@ -352,7 +352,7 @@ def parse_file(data: bytes, filename: str, kind: str, max_bytes: int = MAX_BYTES
                 part_numeric += 1
         out.append(_BUILD[kind](v, r_no, warn))
         if len(out) > cap:
-            raise ParseError("資料列太多了（上限 %d 列），請拆成多個檔案" % cap)
+            raise ParseError("資料列數超過上限（%d 列），請拆成多個檔案" % cap)
     for g in gaps[:5]:
         warn(g, "（空白區段）", "第 %d 列後有空白區段，之後的資料已一併讀取" % g)
     if len(gaps) > 5:
