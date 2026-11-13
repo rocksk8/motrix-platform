@@ -246,10 +246,10 @@ def test_changes_mode_has_the_same_critical_narrowing_rule(client, env):
     sa = _hdr(client, "sa")
     _on_for(client, sa)
     before = _snapshot()
-    r = client.post(URL, json={"changes": {BE: {"roles": []}}}, headers=sa)
+    r = client.post(URL, json=_save_body(client, sa, {BE: {"roles": []}}), headers=sa)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "confirm_critical_required"
     assert _snapshot() == before
-    assert client.post(URL, json={"changes": {BE: {"roles": []}}, "confirm_critical": True}, headers=sa).status_code == 200
+    assert client.post(URL, json=_save_body(client, sa, {BE: {"roles": []}}, confirm_critical=True), headers=sa).status_code == 200
 
 
 def test_preview_flags_critical_narrowing_separately_from_off(client, env):
@@ -732,12 +732,18 @@ def _versions(client, sa):
     return {e["key"]: e["version"] for e in j["events"]}, j["audit_mark"]
 
 
+def _save_body(client, sa, changes, **extra):
+    """草稿儲存的請求本體：照頁面做法，expect＝目前每個事件的 version（儲存一定要帶）。"""
+    ver, mark = _versions(client, sa)
+    return {"changes": changes, "expect": {k: ver.get(k, "x") for k in changes}, "since_audit": mark, **extra}
+
+
 def test_changes_apply_per_event_with_one_write_and_one_audit_row(client, env, writes):
     sa = _hdr(client, "sa")
     a, b, c = NORMAL
-    body = {"changes": {a: {"enabled": True, "audience": {"mode": "only", "roles": [], "users": ["amy"]}},
-                        b: {"enabled": True},
-                        c: {"roles": ["admin", "sales"]}}}
+    body = _save_body(client, sa, {a: {"enabled": True, "audience": {"mode": "only", "roles": [], "users": ["amy"]}},
+                                   b: {"enabled": True},
+                                   c: {"roles": ["admin", "sales"]}})
     r = client.post(URL, json=body, headers=sa)
     assert r.status_code == 200, r.text
     j = r.json()
@@ -759,7 +765,7 @@ def test_changes_all_or_nothing_on_any_invalid_entry(client, env, writes):
                     {a: {"enabled": True}, b: {"enabled": "yes"}},
                     {a: {"enabled": True}, b: {"unknown_field": 1}},
                     {a: {"enabled": True}, b: {"roles": ["nobody"]}}):
-        assert client.post(URL, json={"changes": changes}, headers=sa).status_code == 400, changes
+        assert client.post(URL, json=_save_body(client, sa, changes), headers=sa).status_code == 400, changes
     assert _snapshot() == snap and not writes
 
 
@@ -780,13 +786,12 @@ def test_changes_rejects_malformed_bodies(client, env, body):
 def test_changes_critical_off_requires_confirm_and_only_superadmin(client, env):
     sa, bob = _hdr(client, "sa"), _hdr(client, "bob")
     _turn_on(client, sa, CRIT)
-    body = {"changes": {CRIT: {"enabled": False}}}
-    r = client.post(URL, json=body, headers=sa)
+    r = client.post(URL, json=_save_body(client, sa, {CRIT: {"enabled": False}}), headers=sa)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "confirm_critical_required"
     assert _cfg()["events"][CRIT] is True
-    assert client.post(URL, json={**body, "confirm_critical": True}, headers=sa).status_code == 200
+    assert client.post(URL, json=_save_body(client, sa, {CRIT: {"enabled": False}}, confirm_critical=True), headers=sa).status_code == 200
     assert _cfg()["events"][CRIT] is False
-    assert client.post(URL, json=body, headers=bob).status_code == 403
+    assert client.post(URL, json=_save_body(client, sa, {CRIT: {"enabled": False}}), headers=bob).status_code == 403
 
 
 def test_changes_expect_detects_edits_made_after_page_load(client, env, writes):
@@ -830,6 +835,22 @@ def test_preview_with_changes_writes_nothing(client, env, writes):
     assert rows[a]["n_after"] == 2 and rows[a]["changed"] and rows[b]["defaulted"] and rows[b]["n_after"] == 1
     assert _snapshot() == snap and not writes and _count_audit("settings.line_notify.batch") == 0
     assert client.post(PREVIEW, json={"changes": {a: {"enabled": "x"}}}, headers=sa).status_code == 400
+
+
+def test_changes_save_requires_expect_for_every_key_and_noop_leaves_no_audit(client, env, writes):
+    sa = _hdr(client, "sa")
+    a, b, _c = NORMAL
+    snap = _snapshot()
+    for body in ({"changes": {a: {"enabled": True}}},                                          # 沒帶 expect：會悄悄蓋掉別人的修改
+                 {"changes": {a: {"enabled": True}, b: {"enabled": True}}, "expect": {a: "x"}}):   # 少一個事件的 version
+        r = client.post(URL, json=body, headers=sa)
+        assert r.status_code == 400 and "expect" in r.json()["detail"], body
+    assert _snapshot() == snap and not writes
+    # 預覽不需要 expect
+    assert client.post(PREVIEW, json={"changes": {a: {"enabled": True}}}, headers=sa).status_code == 200
+    # 沒有實質變動的儲存：不寫設定、不留稽核
+    ok = client.post(URL, json=_save_body(client, sa, {a: {"enabled": False}}), headers=sa)
+    assert ok.status_code == 200 and ok.json()["changed"] == [] and not writes and _count_audit("settings.line_notify.batch") == 0
 
 
 # ── hichan-9 L2／L5／L6 ───────────────────────────────────────────────────────
