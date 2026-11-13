@@ -818,6 +818,55 @@ def _tighten_company_profile_full_read_once() -> None:
             conn.close()
 
 
+#: T84 一次性遷移的標記（`system_settings` 的 key）：有這一列＝這個庫處理過了，之後使用者自己關掉的旗標要保留，不再改。
+_ONEPIPE_DEFAULT_ON_MARK = "migration_onepipe_default_on_t84"
+
+
+def _enable_onepipe_defaults_once() -> None:
+    """T84 升級（使用者裁示 2026-11-13：「一條龍上線就開啟」）：群組 `onepipe` 的每個旗標預設 0→1。預設值只對沒存過該群組的庫生效；
+    設定中心存檔會把整個群組存成明確值，所以曾存過這個群組的既有環境仍是舊值 0。這裡**每庫只跑一次**：資料庫裡存成 0 的欄位
+    （**群組裡登錄的每一個欄位**，之後新增的旗標自動涵蓋）⇒ 一次經設定中心引擎發布成 1（寫設定變更明細與稽核：誰＝系統升級、0→1、原因含 T84），
+    然後記標記；沒存過／已是 1 ⇒ 只記標記。標記存在後不再動——之後使用者自己關掉（設 0）會被保留。
+    不丟例外：發布失敗（例如該群組有送審中的版本）⇒ 不記標記、下次啟動再試，服務照常起來。
+    只改群組裡的旗標值，不碰別的鍵（例：保固通知的靜默基準 `onepipe.warranty_closed_baseline` 照舊）。"""
+    conn = None
+    try:
+        conn = get_db()
+        if conn.execute("SELECT 1 FROM system_settings WHERE key=?", (_ONEPIPE_DEFAULT_ON_MARK,)).fetchone():
+            return
+        from core import definitions as _D
+        from helpers import settings_groups  # noqa: F401 — 確保群組已登記
+        from helpers import settings_registry as _sr
+        group = "onepipe"
+        result = "already_on"
+        # 看「資料庫裡存的值」，不看有效值：預設現在是 1，讀不到時退回預設會把讀取失敗誤記成「已經是 1」而永遠不遷移；
+        # 讀失敗 ⇒ 例外 ⇒ 不記標記、下次再試。沒存過這個群組（全新安裝）⇒ 沒有存成 0 的欄位 ⇒ 只記標記。
+        row = _D.get(conn, _sr.KIND, group, _sr.SCOPE)
+        vals = ((row or {}).get("body") or {}).get("values") if row else None
+        fields = set(_sr._g(group)["fields"])
+        zero = {}
+        if isinstance(vals, dict):
+            for k, v in vals.items():
+                if k in fields and isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0:
+                    zero[k] = 1
+        if zero:
+            _sr.publish(group, zero, user="system", actor={"username": "system", "display_name": "系統升級"},
+                        note="T84 升級：一條龍功能預設開啟",
+                        reason="系統升級（T84）：一條龍功能（%s）預設改為開啟，既有環境一併開啟（0→1）；不需要的項目可到設定中心逐項關閉。" % "、".join(sorted(zero)))
+            result = "enabled"
+        conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+                     "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                     (_ONEPIPE_DEFAULT_ON_MARK,
+                      json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "result": result, "fields": sorted(zero)}, ensure_ascii=False),
+                      datetime.now().isoformat()))
+        conn.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("_enable_onepipe_defaults_once failed（不記標記，下次啟動再試）")
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def _version_to_updated_at(date_str: str, version: str, time_str: str = "") -> str:
     """Convert manifest date/time/version fields to an ISO datetime string.
 
