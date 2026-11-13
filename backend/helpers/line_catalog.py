@@ -42,6 +42,8 @@ LINE_ONLY_EVENTS = {
                                 "line_group": None, "kind": "line_only"},
     "dispatch_file_delete_request": {"name": "承攬商報價單附件刪除申請待簽核（當層簽核人）", "group": "承攬商", "mail_key": "dispatch_submitted",
                                      "line_group": None, "kind": "line_only"},
+    "settings_changed": {"name": "設定中心：高風險設定被變更／核准／生效／撤銷（只發最高管理者）", "group": "系統告警", "mail_key": "company_setup_alert",
+                         "line_group": None, "kind": "line_only"},
     "crm_case_created": {"name": "業務開發：新增案件", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_case_status": {"name": "業務開發：案件狀態（階段）變更", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_case_progress": {"name": "業務開發：案件進度回報（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
@@ -71,7 +73,7 @@ _GROUP_RULES = (
     ("財務提醒", ("case_invoice_uploaded",), ("payable_due_",)),
     ("標案雷達", (), ("tender_",)),
     ("系統告警", ("cert_expiry", "backup_stale", "backup_error", "disk_space_low", "heartbeat_stale", "company_setup_alert",
-              "auth_lockout", "geo_quota_warning", "license_expiry"), ()),
+              "auth_lockout", "geo_quota_warning", "license_expiry", "settings_changed"), ()),
     ("通知與報表", ("monthly_report", "module_activity", "user_notice"), ()),
 )
 
@@ -162,6 +164,7 @@ def mail_key_of(key: str) -> str:
 #: LINE-only／細項事件「原本收件人」的說明（依事件本身語意決定，**不借用任何 Email 收件設定**；審查 h8 M3）。設定頁顯示用。
 WHO_OF = {
     "dev_case_unassigned": "被取消指派的前任負責人",
+    "settings_changed": "全部在職最高管理者（只發高風險設定：資安／金額／法規）",
     "dev_case_deadline_changed": "被指派人",
     "dev_log_directive_reply": "下批示的人",
     "dispatch_file_delete_request": "當層簽核人（沒有簽核層級時為最高管理者）",

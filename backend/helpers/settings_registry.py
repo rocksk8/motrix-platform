@@ -802,6 +802,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     from datetime import datetime, timedelta
     from core.txn import begin_write
     from helpers import config_ledger as L
+    from helpers import settings_notify as _SN
     g = _g(group)
     st = group_status(group)
     if st != "open":                                # 功能狀態（脊柱）：開發中／隱藏的群組一律不能寫——引擎層攔截，內部呼叫端（預設組、還原…）一併被擋
@@ -814,6 +815,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     began = False
     try:
         began = begin_write(c)
+        _notice_mark = c.execute("SELECT COALESCE(MAX(id),0) FROM notifications").fetchone()[0]   # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的
+        _who = user or ((actor.get("username") or "") if isinstance(actor, dict) else str(actor or ""))
+        _items = []                                 # 變更通知項目（commit 之後才發；見 helpers/settings_notify）
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
         pend, imm, loose = _split(g, eff, values)
@@ -834,6 +838,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
                      audit_action="settings.%s.update" % group, target_label=g["label"])
             _write_legacy(c, group, new)
+            _items += [_SN.item(group, x["field"], x["old"], x["new"], "updated", actor=_who, reason=reason or note) for x in changes]
             result.update(changed=True, version=out["version"], values=_merged(eff, new), changes=changes)
         if pend:
             days = confirm_period_days(c)
@@ -850,14 +855,19 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                                    audit_action="settings.%s.pending" % group, target_label=g["label"], approvals_required=need)
                     result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
                                           for i, x in zip(rec["ids"], part)]
+                    _items += [_SN.item(group, x["field"], x["old"], x["new"], "pending_approval" if need else "pending", actor=_who,
+                                        reason=reason or note, effective_at=when, required=need) for x in part]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
                     result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
         if not changes and not pend and not result["superseded"]:
             if began:
                 c.rollback()
             return result
+        if _items:                                  # 設定中心的通知（commit 後發）取代帳本對高風險變更的簡短通知（同一件事不發兩則）：同交易內刪掉剛寫的那幾列
+            c.execute("DELETE FROM notifications WHERE id>? AND type='config_change' AND ref_label LIKE 'setting:%'", (_notice_mark,))
         c.commit()
         invalidate(group)
+        _SN.emit(_items)                            # commit 之後、不在任何鎖內；永不丟例外
         return result
     except Exception:
         if began and c.in_transaction:
@@ -873,10 +883,12 @@ def materialize_due(conn=None, now=None):
     from datetime import datetime
     from core.txn import begin_write
     from helpers import config_ledger as L
+    from helpers import settings_notify as _SN
     now = now or datetime.now().isoformat(timespec="seconds")
     own = conn is None
     c = conn if conn is not None else get_db()
     began, total = False, 0
+    _items = []                                     # 到期生效的通知項目（commit 之後合併成一則發）
     try:
         began = begin_write(c)
         for group in list(_GROUPS):
@@ -902,10 +914,12 @@ def materialize_due(conn=None, now=None):
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
             _write_legacy(c, group, new)
             total += len(L.promote_due(c, now, domain="setting:%s" % group))
+            _items += [_SN.item(group, r["field"], r["old"], r["new"], "activated", reason=r.get("reason") or "") for r in due]
             invalidate(group)
             logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
         if began or own:
             c.commit()
+            _SN.emit(_items)
         return total
     except Exception:
         if began and c.in_transaction:
@@ -961,11 +975,13 @@ def apply_profile(name, *, reason="", user="", ip="", conn=None, actor=None):
     """套用預設組：每個群組各走一次 `publish()`（放寬照樣需要雙人核准／24 小時）。回 `{群組: publish 結果}`。"""
     if name not in profiles():
         raise SettingError("沒有這個預設組：%s" % name)
+    from helpers import settings_notify as _SN
     by_group = {}
     for ch in profile_preview(name, conn=conn):
         by_group.setdefault(ch["group"], {})[ch["field"]] = ch["new"]
-    return {gk: publish(gk, vals, note="套用預設組「%s」" % name, user=user, reason=reason or "套用預設組「%s」" % name, ip=ip, conn=conn, actor=actor)
-            for gk, vals in by_group.items()}
+    with _SN.batch():                               # 跨多個群組的各次 publish 只發**一則**通知
+        return {gk: publish(gk, vals, note="套用預設組「%s」" % name, user=user, reason=reason or "套用預設組「%s」" % name, ip=ip, conn=conn, actor=actor)
+                for gk, vals in by_group.items()}
 
 
 # --- 定義種類／版本 adapter ----------------------------------------------

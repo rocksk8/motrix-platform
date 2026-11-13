@@ -1,5 +1,5 @@
 {
- "core_version": "1.163",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1987,6 +1987,17 @@
   },
   "helper:settings_groups_recycle_bin": {},
   "helper:settings_groups_tender_closing": {},
+  "helper:settings_notify": {
+   "EVENT_KEY": "const",
+   "LINE_RISKS": "const",
+   "LINK": "const",
+   "NOTIF_TYPE": "const",
+   "batch": "class",
+   "compose": "def(items, names=…)",
+   "emit": "def(items)",
+   "item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
+   "item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
