@@ -16,6 +16,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 from core import paths as _paths
+from helpers.image_guard import ImageRejected, open_checked, with_decode_slot   # 炸彈守門（先看長寬再解碼）＋解碼同時最多 2 件
 
 _PHOTO_UPLOAD_BASE = _paths.PROJECT_PHOTOS_DIR
 
@@ -38,14 +39,17 @@ def _gps_to_decimal(dms) -> Optional[float]:
         return None
 
 
+@with_decode_slot
 def _process_project_photo(image_bytes: bytes, uploader_name: str):
-    """Add date/time/GPS watermark with auto contrast text. Returns (bytes, gps_str, watermark_str)."""
+    """Add date/time/GPS watermark with auto contrast text. Returns (bytes, gps_str, watermark_str).
+    圖片宣告像素超過上限／HEIF ⇒ 丟 ImageRejected 子類（呼叫端轉 400）；同時解碼滿 ⇒ ImageBusy（503）；其他失敗仍回原檔。
+    同步且會等解碼名額：async 端點要用 run_in_threadpool 呼叫。"""
     gps_str, watermark_str = '', ''
     try:
         from PIL import Image, ImageDraw, ImageFont, ImageOps
         from PIL.ExifTags import TAGS, GPSTAGS
 
-        img = Image.open(io.BytesIO(image_bytes))
+        img = open_checked(image_bytes)          # 先看宣告長寬、超過 4000 萬像素就不解碼（炸彈）
         # 來源格式一定要在任何 convert() 之前抓——convert 出來的新影像 .format 是 None
         src_format = (img.format or '').upper()
 
@@ -150,6 +154,8 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
     except ImportError:
         logger.warning("Pillow not installed — photo saved without watermark")
         return image_bytes, gps_str, watermark_str
+    except ImageRejected:
+        raise                                        # 炸彈／HEIF 不可吞掉後原檔照存：交給呼叫端轉 400／503（ImageBusy 在進函式前就丟）
     except Exception:
         logger.exception("_process_project_photo failed")
         return image_bytes, gps_str, watermark_str

@@ -51,6 +51,8 @@ _VIEW_MODULES = ('netplan', 'netplan_edit', 'case_manage')
 from modules.netplan.export import build_plan_excel, build_plan_pdf_bytes, parse_plan_excel
 from modules.netplan.topology import build_topology_svg
 from helpers.errors import trace_id
+from helpers import xlsx_guard as _xg
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 from helpers.xlsx_out import export_logged   # noqa: E402  匯出稽核（2026-09-30）
@@ -367,9 +369,15 @@ async def import_network_plan_excel(plan_id: int, file: UploadFile = File(...),
     conn = get_db()
     row = _load_visible_plan(conn, plan_id, user)                      # 第 49 班：寫入端點同讀取端點，看不到該案 ⇒ 404、什麼都不寫
 
-    content = await file.read()
     try:
-        result = parse_plan_excel(content)
+        content = await _xg.read_upload(file)
+        result = await run_in_threadpool(parse_plan_excel, content)         # 檔案炸彈守門＝helpers.xlsx_guard；CPU 工作不卡事件迴圈
+    except _xg.XlsxBusy as e:
+        conn.close()
+        raise HTTPException(429, str(e))
+    except _xg.XlsxRejected as e:
+        conn.close()
+        raise HTTPException(400, str(e))
     except Exception as e:
         conn.close()
         tid = trace_id()

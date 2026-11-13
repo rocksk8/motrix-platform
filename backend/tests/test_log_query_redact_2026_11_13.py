@@ -23,7 +23,7 @@ import pytest
 from helpers import log_setup as ls
 
 BACKEND = str(Path(__file__).resolve().parents[1])
-SECRETS = ("SECRETPT", "SECRETTOKEN", "SECRETCODE", "AIzaSIMKEY", "TRBKEY123")
+SECRETS = ("SECRETPT", "SECRETTOKEN", "SECRETCODE", "AIzaSIMKEY", "TRBKEY123", "SECRETFRAG", "SECRETPW", "SECRETREL", "Zm9vYmFyYmF6cXV4MTIzNA")
 
 
 # ── 單元 ────────────────────────────────────────────────────────────────────
@@ -38,7 +38,15 @@ SECRETS = ("SECRETPT", "SECRETTOKEN", "SECRETCODE", "AIzaSIMKEY", "TRBKEY123")
     ("abc123&def456", "***"),                                            # 相鄰的整段遮合併成一個
     ("=SECRET", "***"),
     ("%70t=SECRET", "***"),                                              # 名字有 `%`（編碼過）不當名字留
-    ("a" * 41 + "=SECRET", "***"),                                      # 名字太長（像 token 本身）
+    ("a" * 24 + "=SECRET", "***"),                                      # 名字太長（像 token 本身）
+    ("g" * 23 + "=SECRET", "g" * 23 + "=***"),
+    ("Zm9vYmFyYmF6cXV4MTIzNA==", "***"),                                   # hichan-11 M1：22 字 base64＋`==` 補位，名字不夠長也要整段遮
+    ("AbCdEfGhIjKlMnOpQrStUv==&x=1", "***&x=***"),
+    ("a1B2c3D4=SECRET", "***"),                                            # 短的大小寫＋數字混合（像 token）
+    ("department_id=3&activity_limit=8&activityLimit=2", "department_id=***&activity_limit=***&activityLimit=***"),   # 真正的蛇形／駝峰名字不誤遮                            # 23 字以內的識別字名字照留
+    ("ZXlKaGJHY2lPaUpJVXpJMU5pSjk=&v=1", "***&v=***"),                   # hichan-10 L-a：base64 補位的 token 當名字
+    ("0123456789abcdef0123=SECRET", "***"),                              # 十六進位長串當名字
+    ("deadbeef=x", "deadbeef=***"),                                      # 短的十六進位字（可能是一般名字）照留
     ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig==", "***"),   # JWT 當 key＋`=` 補位
     ("a=%26pt=SECRET", "a=***"),                                         # `%26` 夾帶不會被拆成新參數
     ("", ""),
@@ -75,6 +83,9 @@ def test_redact_text_handles_urls_in_sentences():
     assert ls.redact_text("沒有問號的訊息") == "沒有問號的訊息"
     assert ls.redact_text("為什麼這樣？不確定 a/b?") == "為什麼這樣？不確定 a/b?"            # 不誤傷一般句子
     assert ls.redact_text("Is it OK? yes?no") == "Is it OK? yes?no"
+    assert ls.redact_text("cb https://h.example.com/cb#access_token=SECRET done") == "cb https://h.example.com/cb done"     # hichan-10 L-b：沒有 ? 的 fragment 也丟掉
+    assert "SECRET" not in ls.redact_text("see https://h.example.com/p?x=1#access_token=SECRET.")
+    assert ls.redact_text("anchor #section and issue #123") == "anchor #section and issue #123"                              # 非網址的 # 不動
 
 
 @pytest.mark.parametrize("text", [
@@ -181,6 +192,61 @@ def test_other_loggers_and_exception_text_are_redacted(redacted_logging):
     assert not any(s in out for s in SECRETS)
 
 
+def test_filter_masks_fragment_and_userinfo_messages_that_have_no_question_mark(redacted_logging):
+    """hichan-11 H1：過濾器的入口以前只在文字含 `?` 時才呼叫 redact_text ⇒ 只有 fragment／userinfo 的訊息（沒有 `?`）原樣寫出。
+    這一題走真的 logging（訊息與例外文字兩條路），不直接呼叫 redact_text。"""
+    lg = logging.getLogger("some.app.module")
+    lg.info("cb https://h.example.com/cb#access_token=SECRETFRAG done")
+    lg.info("connect https://user:SECRETPW@h.example.com/x failed")
+    lg.info("redirect to /pages/login.html#access_token=SECRETREL ok")
+    lg.info("short-token url https://h.example.com/p?Zm9vYmFyYmF6cXV4MTIzNA==")
+    for text in ("cb https://h.example.com/cb#access_token=SECRETFRAG", "connect https://user:SECRETPW@h.example.com/x"):
+        try:
+            raise ConnectionError(text)
+        except ConnectionError:
+            lg.exception("outbound call failed")
+    out = redacted_logging["root"].getvalue()
+    assert not any(x in out for x in ("SECRETFRAG", "SECRETPW", "SECRETREL", "Zm9vYmFyYmF6cXV4MTIzNA")), out
+    assert "https://h.example.com/cb done" in out and "https://***@h.example.com/x failed" in out and "/pages/login.html ok" in out
+    assert "ConnectionError: cb https://h.example.com/cb" in out and "ConnectionError: connect https://***@h.example.com/x" in out   # traceback 還在，只是憑證被遮
+
+
+@pytest.mark.parametrize("text", [
+    "issue #123 fixed", "run #5/6 done", "C# and F# are languages", "see #section", "ratio 3:#1", "a#b", "no url here at all",
+])
+def test_hash_in_ordinary_text_is_left_alone(text):
+    assert ls.redact_text(text) == text
+
+
+def test_no_real_route_parameter_name_is_masked_by_the_shape_rule(client):
+    """hichan-11 M1／PM：名字的「形狀」規則不得誤遮任何真正的路由參數。掃遍 app 所有路由的 query 參數名（含相依注入的），
+    每一個都要 `redact_query("<name>=v")` ⇒ `<name>=***`。正對照：一個 base64 形狀的名字一定被遮（掃描器有牙齒）。"""
+    seen = set()
+
+    def walk(dep):
+        for prm in list(getattr(dep, "query_params", []) or []):
+            seen.add(prm.alias or prm.name)
+        for sub in getattr(dep, "dependencies", []) or []:
+            walk(sub)
+
+    def routes_of(routes):
+        for route in routes:
+            sub = getattr(route, "original_router", None)                          # 新版 FastAPI 的 include_router 留成 _IncludedRouter，要往裡展開
+            if sub is not None:
+                yield from routes_of(sub.routes)
+            else:
+                yield route
+
+    for route in routes_of(client.app.routes):
+        dep = getattr(route, "dependant", None)
+        if dep is not None:
+            walk(dep)
+    assert len(seen) > 50, "只掃到 %d 個參數名——掃描失效" % len(seen)
+    over = sorted(n for n in seen if ls.redact_query(n + "=v") != n + "=***")
+    assert not over, "這些真正的參數名被形狀規則誤遮：%s" % over
+    assert ls.redact_query("Zm9vYmFyYmF6cXV4MTIzNA==") == "***"                  # 正對照
+
+
 def test_filter_never_raises_on_odd_records(redacted_logging):
     lg = logging.getLogger("uvicorn.access")
     lg.info("short %s", "args")                                                   # 參數數量不是 uvicorn 的形狀
@@ -222,6 +288,10 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     log.warning("outbound failed: https://maps.example.com/geocode?address=A&key=AIzaSIMKEY")
+    log.warning("oauth callback https://h.example.com/cb#access_token=SECRETFRAG done")                 # 沒有 `?`：只有 fragment（hichan-11 H1）
+    log.warning("connect https://user:SECRETPW@h.example.com/x failed")                                # 沒有 `?`：只有 userinfo
+    log.warning("redirect to /pages/login.html#access_token=SECRETREL ok")                             # 相對網址的 fragment（L1）
+    log.warning("short-token url https://h.example.com/p?Zm9vYmFyYmF6cXV4MTIzNA==")                    # 22 字 base64 當「名字」（M1）
     try:
         raise ConnectionError("HTTPSConnectionPool: Max retries exceeded with url: /geo/json?address=x&key=TRBKEY123 (Caused by X)")
     except ConnectionError:
@@ -305,6 +375,9 @@ def test_positive_control_without_the_filter_the_credentials_do_leak(tmp_path):
     logs = _run_real_uvicorn(tmp_path, redact=False)
     assert "SECRETPT" in logs["access.log"] and "SECRETTOKEN" in logs["access.log"]
     assert "AIzaSIMKEY" in logs["server.log"] or "AIzaSIMKEY" in logs["app.log"]
+    both = logs["server.log"] + logs["app.log"]
+    for secret in ("SECRETFRAG", "SECRETPW", "SECRETREL", "Zm9vYmFyYmF6cXV4MTIzNA"):                  # 新規則也量得到：沒掛遮罩時這四種都會漏
+        assert secret in both, (secret, both[-1500:])
 
 
 # ── 守門：日誌呼叫裡不得出現會帶憑證的寫法 ──────────────────────────────────────────

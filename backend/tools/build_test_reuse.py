@@ -306,6 +306,16 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     cmd = stage_command(stage, python, workers or default_workers(stage), base)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    try:                                           # 這就是閘門本身：整合者持有閘門鎖時自動帶 token（conftest 的重型直接跑檢查認它），不靠人記得 export
+        import importlib.util as _iu
+        _sp = _iu.spec_from_file_location("_bt_heavy_run", str(repo / "tools" / "platform" / "heavy_run.py"))
+        _hr = _iu.module_from_spec(_sp)
+        _sp.loader.exec_module(_hr)
+        _lock = _hr.read_gate()
+        if _lock:
+            env[_hr.GATE_TOKEN_ENV] = _lock["token"]
+    except Exception:                              # noqa: BLE001 — 讀不到就不帶（fail-open；只是少一個放行憑證）
+        pass
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
                 "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
     # 失敗明細一律落在這一輪專用目錄（failfast 提早停也一樣）：run-stage 結束時讀回、印出路徑與紅題，不必再去主工作樹翻 jsonl
