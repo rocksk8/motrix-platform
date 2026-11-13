@@ -543,6 +543,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/bootstrap": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/build-info": {
    "w": false,
    "pp": 0,
@@ -854,6 +859,11 @@
    "body": false
   },
   "GET /api/dashboard/activity-feed": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/bundle": {
    "w": false,
    "pp": 0,
    "body": false

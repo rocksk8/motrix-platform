@@ -67,6 +67,11 @@ def _guard(**kw):
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+def _boot_calls(r):
+    """啟動請求（bootstrap／auth-me）本身；放行後的「偏好同步」`/api/auth/preferences`（我的帳號，2026-09 起、auth/me 通過才打）不算在內。"""
+    return [c for c in r["calls"] if c != "/api/auth/preferences"]
+
+
 def _stored(r):
     """auth-guard 現在存 JSON {p, t}（路徑＋時間戳）。"""
     d = json.loads(r["stored"][1])
@@ -100,14 +105,14 @@ def test_valid_session_stores_nothing_and_does_not_redirect():
 def test_guard_fires_bootstrap_and_auth_me_in_parallel_and_publishes_the_boot_data():
     """放行只看 auth/me（首繪不被 bootstrap 拖慢，見 test_bootstrap_frontend 的 B1 守門）；bootstrap 同時發出、只供應資料。"""
     r = _guard(pathname="/pages/bonus.html", session={"token": "t"})
-    assert r["calls"] == ["/api/bootstrap", "/api/auth/me"] and r["boot"] == "data" and r["replaced"] is None and r["forgot"] is True
+    assert _boot_calls(r) == ["/api/bootstrap", "/api/auth/me"] and r["boot"] == "data" and r["replaced"] is None and r["forgot"] is True
 
 
 @pytest.mark.parametrize("code", [401, 402, 403, 404, 428, 500])
 def test_bootstrap_failure_only_nulls_the_boot_data_the_outcome_is_auth_mes(code):
     """bootstrap 非 200（必須先改密碼 403、舊伺服器 404、428、5xx…）：MotrixBoot＝null、各處退回打原端點；放行／轉頁的結果只由 auth/me 決定（與改版前一樣）。"""
     r = _guard(pathname="/pages/bonus.html", session={"token": "t"}, boot=code)
-    assert r["calls"] == ["/api/bootstrap", "/api/auth/me"] and r["boot"] == "null"
+    assert _boot_calls(r) == ["/api/bootstrap", "/api/auth/me"] and r["boot"] == "null"
     assert r["replaced"] is None and r["removed"] is False
 
 
