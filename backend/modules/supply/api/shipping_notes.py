@@ -19,6 +19,7 @@ from core.txn import begin_write
 from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
 from modules.supply import recycle_adapter as _RA
 from helpers import download_name
+from helpers.email_notify import shipping_link   # 一條龍 P0a：出貨單通知連結（旗標 onepipe.links）
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
@@ -320,7 +321,7 @@ def create_shipping_note(body: ShippingNoteIn, authorization: str = Header(None)
     conn.close()
     _audit(_tok(authorization), "shipping.create", "shipping_note", note_no, f"{note_no}（{customer_name}）")
     notify_module_activity("出貨單", "建立", user.get("display_name") or user["username"],
-                            f"{note_no}（{customer_name}）", "shipping-notes.html")
+                            f"{note_no}（{customer_name}）", shipping_link(note_no) or "shipping-notes.html")
     return {"note_no": note_no, "created_at": now}
 
 
@@ -390,7 +391,7 @@ def delete_shipping_note(note_no: str, authorization: str = Header(None)):
                                     'shipping_returned'])
     _audit(_tok(authorization), "shipping.delete", "shipping_note", note_no, note_no + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
     notify_module_activity("出貨單", "刪除", user.get("display_name") or user["username"],
-                            note_no, "shipping-notes.html")
+                            note_no, shipping_link(note_no) or "shipping-notes.html")
     return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
 
 
@@ -443,7 +444,7 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
         first_tier_usernames = []
         for a in active_tiers[0].get("approvers") or []:
             _notify(a["username"], "shipping_approval_request", note_no, note_no,
-                    f"出貨單 {note_no}（{cname}）需要您簽核")
+                    f"出貨單 {note_no}（{cname}）需要您簽核", link=shipping_link(note_no) or None)
             first_tier_usernames.append(a["username"])
 
     # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已在組織職權頂端），
@@ -521,7 +522,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
             if not all_done:
                 for na in tiers[landed].get("approvers") or []:
                     _notify(na["username"], "shipping_approval_request", note_no, note_no,
-                            f"出貨單 {note_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
+                            f"出貨單 {note_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）", link=shipping_link(note_no) or None)
                     next_tier_usernames.append(na["username"])
                 notify_shipping_next_tier(note_no, cname, landed + 1, len(tiers), next_tier_usernames)
         else:
@@ -603,7 +604,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         spawn_bg_thread(push_event_for_shipping_note, args=(note_no,))
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "shipping_approved", note_no, note_no, f"出貨單 {note_no}（{cname}）已核准")
+            _notify(requester, "shipping_approved", note_no, note_no, f"出貨單 {note_no}（{cname}）已核准", link=shipping_link(note_no) or None)
             notify_shipping_approved(note_no, cname, approver_name, requester)
         detail_status = "已核准"
     else:
@@ -676,7 +677,7 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     conn.close()
     if requester:
         msg = f"出貨單 {note_no}（{cname}）核准已被撤銷，請確認後重新送審" + (f"：{note}" if note else "")
-        _notify(requester, "shipping_returned", note_no, note_no, msg)
+        _notify(requester, "shipping_returned", note_no, note_no, msg, link=shipping_link(note_no) or None)
         notify_shipping_returned(note_no, cname, note, requester)
     _audit(_tok(authorization), "shipping.revoke_approval", "shipping_note", note_no, f"{note_no}（{cname}）",
            {"note": note, "stockReturned": len(returned_rows)})
@@ -720,7 +721,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     conn.close()
     if requester:
         msg = f"出貨單 {note_no}（{cname}）已退回，請確認後重新送審" + (f"：{note}" if note else "")
-        _notify(requester, "shipping_returned", note_no, note_no, msg)
+        _notify(requester, "shipping_returned", note_no, note_no, msg, link=shipping_link(note_no) or None)
         notify_shipping_returned(note_no, cname, note, requester)
     _audit(_tok(authorization), "shipping.reject", "shipping_note", note_no, f"{note_no}（{cname}）", {"note": note})
     return {"ok": True}
@@ -840,7 +841,7 @@ def toggle_signed(note_no: str, body: dict = Body(...), authorization: str = Hea
     conn.close()
     _audit(_tok(authorization), f"shipping.{action}", "shipping_note", note_no, note_no, {"note": note})
     notify_module_activity("出貨單", "已回簽" if action == "sign" else "取消回簽",
-                            user.get("display_name") or user["username"], note_no, "shipping-notes.html",
+                            user.get("display_name") or user["username"], note_no, shipping_link(note_no) or "shipping-notes.html",
                             detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
