@@ -1,9 +1,6 @@
 # 案件 更新紀錄
 
-## 1.0.223（next，未取號）— 2026-11-13（fix/estimate-mail-doc-name；估價單的信件／行事曆／PDF 用語）
-- 用語補齊：估價單走到的信件／行事曆／PDF 不再寫死「報價單」——簽核逾期催辦、精算完結、結案報表、結案被擋、變更申請、審核中被編輯、成案行事曆事件、站內活動通知信的模組名稱（`quotations.py` 11 處 `notify_module_activity`）、出貨單「關聯○○單」、請款單／開票憑據「其他資訊（○○單）」，全依 `helpers.doc_type`（單號字首或 `doc_type` 欄位）取名；報價單文字逐字不變。獎金信用的是「案件單號」，不含「報價單」字樣，不需改。盤點後刻意不動：API 錯誤訊息／稽核紀錄文字、功能目錄標籤、開發案件重新關聯的措辭。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
-
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/estimate-mail-doc-name（估價單信件用語）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 - 新增（UX P1.5）：首頁「我的工作」的案件分組——提供者 `dashboard.mine_groups`（`api/dashboard_groups.py::mine_groups`：我的案件、應收款項追蹤；件數經清單本體 `list_quotations_for`，與案件頁同一份篩選與權限、同一個母體）與 `greeting.new_quotes`（`new_quotes_since`：離開期間新增報價單數，只給最高管理者）；`api/quotations.py` 把 `list_quotations` 的本體抽成 `list_quotations_for(user, …)`（端點行為不變）。
 - 修正（UX 提案 D2）：簽核佇列的報價單項目新增 `locationId`（`approval_queue_items`），簽核頁「據點」列才有資料來源；同時簽核頁改向 `/api/settings/company-profile` 取據點清單（原本少了 `/api`，404）。
@@ -13,6 +10,8 @@
 - 變更：新增／更新／補登歷史案件時，伺服器端驗證 `salesEmail`——必須是該業務可用的三個信箱之一（報價用信箱、公司對外信箱、本人 Email），否則改寫成系統解析出的值；舊報價單沒動它（也沒換業務員）就維持原樣；換了業務員但信箱還是舊的，會重新驗證。（用戶端寫進去的值不再被信任，信件 Reply-To 靠它。）
 - 前端：`quotation-form.html` 讀業務聯絡資料時優先用 `quoteEmailEffective`（舊名 `quoteEmail` 還在、值相同，保留一版）。
 - 測試：`tests/test_quote_email_2026_11_13.py`（偽造信箱被覆蓋、舊值保留、其他通知信同帶 Reply-To）。
+- **（併入）(next) — 2026-11-13（fix/estimate-mail-doc-name；估價單的信件／行事曆／PDF 用語）**
+- 用語補齊：估價單走到的信件／行事曆／PDF 不再寫死「報價單」——簽核逾期催辦、精算完結、結案報表、結案被擋、變更申請、審核中被編輯、成案行事曆事件、站內活動通知信的模組名稱（`quotations.py` 11 處 `notify_module_activity`）、出貨單「關聯○○單」、請款單／開票憑據「其他資訊（○○單）」，全依 `helpers.doc_type`（單號字首或 `doc_type` 欄位）取名；報價單文字逐字不變。獎金信用的是「案件單號」，不含「報價單」字樣，不需改。盤點後刻意不動：API 錯誤訊息／稽核紀錄文字、功能目錄標籤、開發案件重新關聯的措辭。測試：`tests/test_estimate_mail_doc_name_2026_11_13.py`。
 
 ## 1.0.222（next，未取號）— 2026-11-13（feat/estimate-quote-type；開立報價單時可選「估價單」）
 - 新增：`quotations.doc_type`（migration v10：`quote`＝報價單〔預設，舊資料一律是它〕｜`estimate`＝估價單）。流程（簽核、狀態、權限、轉單、業績）兩種完全相同。
