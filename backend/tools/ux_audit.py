@@ -127,12 +127,17 @@ def term_hits(visible, js, terms):
 # ───────────────────────── 掃描 ─────────────────────────
 
 def iter_frontend(root):
-    fe = os.path.join(root, "frontend")
-    for dirpath, dirnames, filenames in os.walk(fe):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for fn in filenames:
-            if fn.endswith((".html", ".js")):
-                yield os.path.join(dirpath, fn)
+    """frontend 底下的 .html／.js，加上各模組自己的頁面（backend/modules/<key>/pages/，頁面搬進模組後不會被安靜地少掃）。"""
+    roots = [os.path.join(root, "frontend")]
+    mods = os.path.join(root, "backend", "modules")
+    if os.path.isdir(mods):
+        roots += [os.path.join(mods, m, "pages") for m in sorted(os.listdir(mods)) if os.path.isdir(os.path.join(mods, m, "pages"))]
+    for top in roots:
+        for dirpath, dirnames, filenames in os.walk(top):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in filenames:
+                if fn.endswith((".html", ".js")):
+                    yield os.path.join(dirpath, fn)
 
 
 def scan(root, config=None):
@@ -275,7 +280,7 @@ def to_markdown(report, config, baseline_problems=None):
         L.append("| （無） | | | |")
     L += ["", "## 4. 各頁頁頭與主按鈕（HTML 頁，只列有問題者）", "", "| 檔案 | H1 | 有 `.pg` 頁頭 | 頁頭內主按鈕 | 全頁 `.btn-primary` | 行內樣式 | `toLocaleString(` |", "|---|---|---|---|---|---|---|"]
     for rel, e in sorted(report["files"].items()):
-        if e.get("kind") == "html" and rel.startswith("frontend/pages/") and (e["primary_in_header"] > 1 or e["h1_count"] != 1):
+        if e.get("kind") == "html" and "/pages/" in rel and (e["primary_in_header"] > 1 or e["h1_count"] != 1):
             L.append("| `%s` | %d | %s | %d | %d | %d | %d |" % (rel, e["h1_count"], "是" if e["has_pg_header"] else "否", e["primary_in_header"], e["btn_primary_total"], e["inline_styles"], e["to_locale_string"]))
     sv = report["status_vocab"]
     L += ["", "## 5. 狀態詞彙一致性（`status-chip.js` MAP vs `status_display.py` STATUS_KEYS）", ""]

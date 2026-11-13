@@ -13,7 +13,7 @@ from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
 # 864 = 861 + 3（fix/excel-import-dataloss 2026-11-13：Excel 匯入的比對讀客戶／料號主檔——與同檔 list_customers／get_customer 同為全公司共用主檔、權限由模組檢查，沒有單位欄位可範圍化）
-MAX_ENTRIES = 864      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
+MAX_ENTRIES = 866      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
                         # 最後在 Python 逐筆用 `_is_member` 判定（與單件同一支）——所以 quotations／case_stages／case_updates 的讀取不再走 row_access.filter_sql（它不認 roles／階段負責人，會讓現場工程師列表恆空）；
                         # 另 `_coarse_member_sql`／`_stage_assigned` 各讀 case_stages。每一筆回傳前都被 `_is_member` 擋過、只回白名單欄位（無金額）；測試 test_membership_equals_the_existing_case_member_rule_for_every_path 釘住與 `_is_case_member` 同義）
                         # 856 = 853 + 3（T80c 外勤 S2 2026-11-12：新端點 `GET /api/field/cases/{quote_no}` 的 `get_field_case` 讀 quotations／case_stages／case_updates 各一——一律先過 `_is_member`（案件成員，CM14；不再是 `_guard_case`＋`case_manage` 放行，見上一段 861 的說明）、只回白名單欄位（無金額），與 `GET /api/quotations/{no}/stages`、`/updates` 同型；（當時列表走 row_access.filter_sql 不新增；後來列表也改成員口徑，見上一段 +5））
@@ -30,6 +30,9 @@ MAX_ENTRIES = 864      # 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `l
                         # 847 = 845 + 2（T73：assign_dev_case／update_dev_case_progress 讀 dev_cases 後自己在 Python 層判權限
                         # ——/assign 限管理員、/progress 比對 user["id"]==assigned_to，不是 row_access 範圍查詢；
                         # 兩輪獨立稽核都已確認這個判權限方式，見 AUDIT-hichan3-t73.md／AUDIT-pm-sub-t73.md 的驗收列）
+                        # （併入）861 + 2（UX P1.5 2026-11-13：`helpers/login_greeting._last_audit_login` 以呼叫端的 user_id 讀自己最後一次 `auth.login`（舊帳號回填，只回時間、不回列）；
+                        # `modules/case/api/dashboard_groups.new_quotes_since` 只回 COUNT(*)（登入問候語「離開期間新增 N 張報價單」，呼叫端只對最高管理者呼叫，IP-GR1，L1 不直接讀 quotations）。皆無 row_access 可套、不回傳資料列）
+                        # 861 = 856 + 5（T80c 外勤 S2 K審修 2026-11-12：列表 `list_field_cases` 改成「案件成員」口徑（CM14：業務／協作者／角色／階段負責人），SQL 只做 instr 粗篩（超集）、
 #: 掃描器自己的下限：掃到的筆數太少 ⇒ 掃描壞了（假綠）
 SCAN_FLOOR = 100
 

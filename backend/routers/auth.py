@@ -467,6 +467,11 @@ def system_branding(authorization: str = Header(None)):
            "shortName": short_name(ident["company_name"]),
            # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
            "assets": asset_urls()}
+    try:
+        from helpers.settings_groups_brand import brand_tagline
+        out["tagline"] = brand_tagline()        # UX P1.5：系統標語（公司可自訂，預設 MOTRIX PLATFORM；登入頁也用得到，所以放 public）
+    except Exception:  # noqa: BLE001
+        out["tagline"] = "MOTRIX PLATFORM"
     if authorization:
         try:
             _require_user(authorization)
@@ -682,6 +687,8 @@ def _issue_session(conn, row, must_change: bool) -> dict:
         (token, row["id"], row["username"], now, expires_at, now)
     )
     conn.commit()
+    from helpers.login_greeting import record_login      # 登入問候語要的「上一次登入」；永不讓登入失敗；要在寫稽核之前（舊帳號回填看稽核）
+    record_login(row["id"])
     _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
            {'mustChangePassword': must_change})
     _acct_success(row["username"])
@@ -1573,6 +1580,65 @@ def auth_me(authorization: str = Header(None)):
         "modules":            effective_modules(row["role"], row["modules"], user_id=row["id"]),   # 第42班：財務三鍵由角色決定
         "mustChangePassword": bool(row["must_change_password"]),
     }
+
+
+# ── 登入問候語（2026-11-13 UX P1.5；邏輯見 helpers/login_greeting.py）──────────────────
+@router.get("/api/auth/greeting")
+def auth_greeting(authorization: str = Header(None), todo: Optional[int] = Query(None, ge=0, le=100000)):
+    """首頁大標題下的問候語：單一端點回「標題＋問候句＋離開期間摘要＋待辦句」，前端只顯示。
+    `todo`＝首頁目前顯示的待辦件數（只用來決定要不要帶「0 件／超過 10 件」那句）。
+    「待簽核幾張」走 `approval_queue.my_pending_items`（與角標同一份）；只有真的要顯示離開期間摘要時才會去查。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization)
+
+    def _pending():
+        from routers.approval_queue import my_pending_items
+        return len(my_pending_items(u))
+
+    def _new_quotes():
+        if u.get("role") != "superadmin":              # 新報價單的可見範圍因人而異；只有看得到全部的最高管理者才附這個數字
+            return None
+        st = LG.get_state(u["id"])
+        prev = LG._parse(st.get("prev"))
+        if not prev:
+            return None
+        from core import registry
+        fn = registry.single_provider("greeting.new_quotes")      # 案件模組提供（L1 不直接讀 quotations 表）；模組不在 ⇒ 不附這個數字
+        if fn is None:
+            return None
+        # 建立時間是本地時間的 ISO 字串（datetime.now().isoformat()）⇒ 與「上一次登入的台北時間」逐字比較，精確到時分秒
+        return fn(prev.astimezone(LG.TZ).replace(tzinfo=None).isoformat(timespec="seconds"))
+
+    return LG.greeting_for_user(u, todo=todo, pending=_pending, new_quotes=_new_quotes)
+
+
+class GreetingPhrasesIn(BaseModel):
+    category: str
+    style: str
+    lines: List[str] = []
+
+
+@router.get("/api/login-greeting/phrases")
+def login_greeting_phrases(authorization: str = Header(None)):
+    """最高管理者：每個情境的內建句與目前的自訂句（設定畫面用）。"""
+    from helpers import login_greeting as LG
+    _require_user(authorization, require_superadmin=True)
+    return {"categories": LG.phrases_table(), "maxLen": LG.GP.MAX_LEN, "maxLines": LG.GP.MAX_LINES,
+            "placeholders": list(LG.GP.PLACEHOLDERS)}
+
+
+@router.put("/api/login-greeting/phrases")
+def login_greeting_phrases_save(body: GreetingPhrasesIn, authorization: str = Header(None)):
+    """最高管理者：改寫或新增某情境＋風格的句子（整組取代該情境該風格的內建句；`lines` 空＝回內建）。內容守則同內建句。"""
+    from helpers import login_greeting as LG
+    u = _require_user(authorization, require_superadmin=True)
+    try:
+        saved = LG.set_custom(body.category, body.style, body.lines)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(authorization[7:], 'login_greeting.phrases', 'login_greeting', body.category,
+           LG.GP.CATEGORY_LABELS.get(body.category, body.category), {"style": body.style, "count": len(saved)})
+    return {"ok": True, "saved": saved}
 
 
 @router.patch("/api/auth/change-password")

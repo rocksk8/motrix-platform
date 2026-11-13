@@ -79,6 +79,10 @@
    "helper:settings_groups_overhead",
    "helper:settings_groups_lodging_freshness",
    "helper:settings_groups_tender_closing",
+   "helper:settings_groups_brand",
+   "helper:greeting_calendar",
+   "helper:greeting_phrases",
+   "helper:login_greeting",
    "helper:profit_warning",
    "helper:display_labels",
    "helper:quote_output",
@@ -255,6 +259,7 @@
    "plat:upgrade",
    "router:approval_delegates",
    "router:approval_queue",
+   "router:dashboard_mine",
    "router:attachment_slots",
    "router:auth",
    "router:company_lookup",
@@ -328,6 +333,9 @@
    "webauthn_credentials",
    "work_logs"
   ],
+  "routes": [
+   "/api/dashboard/mine"
+  ],
   "api_prefixes": [
    "/api/approval-delegates",
    "/api/approval-queue",
@@ -359,6 +367,7 @@
    "/api/legal-params",
    "/api/license",
    "/api/line",
+   "/api/login-greeting",
    "/api/list-prefs",
    "/api/list-views",
    "/api/mail-types",
@@ -450,6 +459,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/dashboard_groups",
     "mod:case/api/quotation_stages",
     "mod:case/api/material_links",
     "mod:case/api/settlement_actuals",

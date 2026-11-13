@@ -6,6 +6,8 @@
 - **（併入）(next) — 2026-11-13（fix/xlsx-guard；使用者上傳 xlsx 的小檔案展開守門；版號由列車取）**
 - 變更（內部，API 路徑與回應形狀不變）：外包名冊匯入（`api/contractors.py`）改走共用 helper `helpers/xlsx_guard.read_rows`——先預掃（儲存格／欄／列號／巢狀深度等上限、禁 DTD）、再在子行程解析（硬逾時、記憶體上限）；最多 5000 列。炸彈檔回 400（白話訊息，例如『第 N 列的「XFD 欄」有內容…』）、同時匯入的人太多回 429；正常檔案結果與先前相同。
 - 測試：`tests/test_xlsx_guard_2026_11_13.py`（含外包名冊 5001 列＋XFD 儲存格的 400 與正常檔正對照）。
+- **（併入）(next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）**
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
 ## 1.1.45 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api/vendor_contractors.py` 承攬商報價單附件刪除申請接上 LINE 獨立通道（僅 LINE 事件 `dispatch_file_delete_request`；申請送出與輪到下一層時各整批發一則，沒有簽核層時由最高管理者收；不放檔名與原因），泛用的 module_activity 對這件事加 `line_skip` 不重複推；`dispatch_notify.py` 信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。

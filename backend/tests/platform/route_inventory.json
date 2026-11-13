@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 935,
-  "endpoints_api": 931,
-  "write_total": 504,
-  "write_api": 504,
-  "get_api": 427,
-  "distinct_paths_api": 789,
-  "write_with_body_api": 370,
+  "endpoints_total": 939,
+  "endpoints_api": 935,
+  "write_total": 505,
+  "write_api": 505,
+  "get_api": 430,
+  "distinct_paths_api": 792,
+  "write_with_body_api": 371,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -4691,6 +4691,26 @@
   "PUT /api/work-logs/{wid}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "GET /api/auth/greeting": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/login-greeting/phrases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
    "body": true
   }
  }

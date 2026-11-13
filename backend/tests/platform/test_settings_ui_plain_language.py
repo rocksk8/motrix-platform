@@ -13,7 +13,7 @@ import pytest
 from helpers import settings_groups  # noqa: F401
 from helpers import settings_registry as R
 
-ALLOW = {"MOTRIX", "PDF", "MB", "GB", "KB", "OK", "Excel", "Word", "Google", "QR", "ID"}
+ALLOW = {"MOTRIX", "PLATFORM", "PDF", "MB", "GB", "KB", "OK", "Excel", "Word", "Google", "QR", "ID"}
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 

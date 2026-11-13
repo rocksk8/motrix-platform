@@ -627,6 +627,7 @@
  },
  "/api/approval-queue": {
   "k": [
+   "myCount",
    "myDelegatedFor",
    "queue",
    "queue[].count",
@@ -641,6 +642,7 @@
    "queue[].items[].customer",
    "queue[].items[].isEditApproval",
    "queue[].items[].linkedQuoteNo",
+   "queue[].items[].mine",
    "queue[].items[].projectName",
    "queue[].items[].quoteDate",
    "queue[].items[].quoteNo",
@@ -768,6 +770,23 @@
    "config.threshold",
    "config.windowMinutes",
    "locks"
+  ],
+  "s": 200
+ },
+ "/api/auth/greeting": {
+  "k": [
+   "action",
+   "action.href",
+   "action.label",
+   "awayLine",
+   "category",
+   "companyStyle",
+   "kind",
+   "line",
+   "pref",
+   "style",
+   "title",
+   "todoLine"
   ],
   "s": 200
  },
@@ -2486,6 +2505,28 @@
   ],
   "s": 200
  },
+ "/api/dashboard/mine": {
+  "k": [
+   "empty",
+   "generatedAt",
+   "groups",
+   "groups[].count",
+   "groups[].empty",
+   "groups[].href",
+   "groups[].hrefLabel",
+   "groups[].items",
+   "groups[].items[].href",
+   "groups[].items[].sub",
+   "groups[].items[].title",
+   "groups[].items[].tone",
+   "groups[].key",
+   "groups[].kind",
+   "groups[].order",
+   "groups[].title",
+   "partial"
+  ],
+  "s": 200
+ },
  "/api/dashboard/monthly": {
   "k": [
    "items",
@@ -3614,6 +3655,23 @@
    "nextAllowedAt",
    "stale",
    "staleDays"
+  ],
+  "s": 200
+ },
+ "/api/login-greeting/phrases": {
+  "k": [
+   "categories",
+   "categories[].category",
+   "categories[].formal",
+   "categories[].formal.builtin",
+   "categories[].formal.custom",
+   "categories[].humor",
+   "categories[].humor.builtin",
+   "categories[].humor.custom",
+   "categories[].label",
+   "maxLen",
+   "maxLines",
+   "placeholders"
   ],
   "s": 200
  },
@@ -6068,10 +6126,7 @@
   "s": 200
  },
  "/api/reports/financial/pdf": {
-  "k": [
-   "detail"
-  ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/ledger-diff": {
   "k": [
@@ -6192,10 +6247,11 @@
   "s": 422
  },
  "/api/reports/tax-export": {
-  "k": [
-   "detail"
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "銷項發票清單|銷項發票清單（全部區間）"
   ],
-  "s": 429
+  "s": 200
  },
  "/api/reports/tax-export/pdf": {
   "k": [
@@ -6396,9 +6452,11 @@
    "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
+   "groups[].values.style",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
+   "groups[].values.tagline",
    "groups[].values.thousands",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
@@ -6695,6 +6753,25 @@
    "public_base_url",
    "quota_thresholds",
    "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  },
@@ -6998,6 +7075,7 @@
    "companyName",
    "companyNameEn",
    "shortName",
+   "tagline",
    "taxId"
   ],
   "s": 200
@@ -7653,25 +7731,6 @@
    "[].photos",
    "[].user_id",
    "[].username"
-  ],
-  "s": 200
- },
- "/api/settings/line-notify/bindings": {
-  "k": [
-   "available",
-   "linked",
-   "total",
-   "unlinked",
-   "users",
-   "users[].confirmed",
-   "users[].display",
-   "users[].hasEmail",
-   "users[].lastReminded",
-   "users[].linked",
-   "users[].linkedAt",
-   "users[].modules",
-   "users[].role",
-   "users[].username"
   ],
   "s": 200
  }

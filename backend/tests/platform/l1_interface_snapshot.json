@@ -1070,6 +1070,22 @@
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
   },
+  "helper:greeting_calendar": {
+   "COVERED_UNTIL_YEAR": "const",
+   "FESTIVAL_LABELS": "const",
+   "coverage_warning": "def(today)",
+   "festival_keys_on": "def(d)",
+   "reopen_day": "def(year)",
+   "spring_festival": "def(year)"
+  },
+  "helper:greeting_phrases": {
+   "BUILTIN": "const",
+   "CATEGORY_LABELS": "const",
+   "MAX_LEN": "const",
+   "MAX_LINES": "const",
+   "PLACEHOLDERS": "const",
+   "check_phrase": "def(text)"
+  },
   "helper:heartbeat_status": {
    "BAD_GRACE_MINUTES": "const",
    "EXT_UNSET_ALERT_HOURS": "const",
@@ -1421,6 +1437,30 @@
    "redact_query": "def(query)",
    "redact_target": "def(target)",
    "redact_text": "def(text)"
+  },
+  "helper:login_greeting": {
+   "CUSTOM_KEY": "const",
+   "PERSONAL_STYLES": "const",
+   "START_HREF": "const",
+   "START_LABEL": "const",
+   "STATE_PREFIX": "const",
+   "away_category": "def(prev_date, today)",
+   "away_line": "def(pending, new_quotes)",
+   "build_greeting": "def(*, now, user_id, name, style, state, custom=…, todo=…, pending=…, new_quotes=…)",
+   "choose_category": "def(now, *, first, logged_today, prev_date)",
+   "company_style": "def()",
+   "effective_style": "def(company, pref)",
+   "get_custom": "def()",
+   "get_state": "def(user_id)",
+   "greeting_for_user": "def(user, *, todo=…, pending=…, new_quotes=…, now=…)",
+   "personal_pref": "def(user_id)",
+   "phrases_table": "def()",
+   "record_login": "def(user_id, now=…)",
+   "season_category": "def(d)",
+   "set_custom": "def(cat, style, lines)",
+   "taipei_now": "def()",
+   "time_category": "def(hour)",
+   "title_category": "def(hour)"
   },
   "helper:mail_types": {
    "CATEGORIES": "const",
@@ -1876,6 +1916,10 @@
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
   },
+  "helper:settings_groups_brand": {
+   "DEFAULT_TAGLINE": "const",
+   "brand_tagline": "def()"
+  },
   "helper:settings_groups_legal_reminder": {},
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
@@ -2008,6 +2052,7 @@
    "changed_fields": "def(table)",
    "compare": "def(old, new)",
    "defaults": "def()",
+   "duplicate_warnings": "def(table=…)",
    "effective_table": "def(body)",
    "enabled": "def(conn=…)",
    "ensure_registered": "def()",

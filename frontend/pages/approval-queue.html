@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>待我簽核 — MOTRIX 專案管理系統</title>
+  <title>待我簽核 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -137,6 +137,11 @@
       color: var(--text-dim); font-size: 12px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .aq-card__wait { font-size: 12px; color: var(--text-dim); }
+    /* 詳情底部的操作列：手機黏在畫面底部，核准／退回不必捲到最底（LINE 通知把人帶進來，手機一定要能完成簽核） */
+    .aq-actbar { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-light); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--white); }
+    .aq-actbar__note { font-size: 12px; color: var(--text-dim); }
+    .aq-actbar__hint { flex: 1 0 100%; margin: 2px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
     .aq-qrow__age {
       margin-left: auto; font-size: 12px; color: var(--text-dim); flex: 0 0 auto;
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
@@ -381,6 +386,9 @@
     .aq-runway { grid-template-columns:minmax(0,1fr); gap:22px; }
     .aq-drawer { width:100vw; padding:16px 14px 28px; border-left:none; }
     .aq-card__act { width:100%; margin-left:0; }
+    .aq-card__act .btn { flex:1; min-height:44px; justify-content:center; font-size:14px; }      /* 手指好按：至少 44px 高 */
+    .aq-actbar { position:sticky; bottom:0; z-index:3; margin:16px -14px 0; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); box-shadow:0 -8px 14px rgba(0,0,0,.08); }
+    .aq-actbar .btn { flex:1 1 40%; min-height:44px; justify-content:center; }
     .mob-back-aq { display:inline-flex !important; }
   }
 
@@ -521,9 +529,10 @@
                       </template>
                       <template x-if="item.type !== 'custom_record' && item.type !== 'custom_module_def'">
                         <span style="display:contents">
-                          <button type="button" class="btn btn-primary btn-sm" data-testid="aq-quick-approve"
+                          <span class="aq-card__wait" x-show="!canApprove(item)">同一層有人排在您前面，請點開看詳情</span>
+                          <button type="button" class="btn btn-primary btn-sm" data-testid="aq-quick-approve" x-show="canApprove(item)"
                                   @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
-                          <button type="button" class="btn btn-reject btn-sm"
+                          <button type="button" class="btn btn-reject btn-sm" x-show="canApprove(item)"
                                   @click.stop="quickReject(item)" :disabled="actioning">退回</button>
                         </span>
                       </template>
@@ -570,7 +579,7 @@
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                 <template x-for="tg in (item.tags || [])" :key="tg.text"><span class="aq-type-tag" data-testid="aq-tag" :style="tg.tone === 'warn' ? 'background:var(--tone-warning-bg);color:var(--warning)' : ''" x-text="tg.text"></span></template>
                 <span class="aq-qrow__who" x-text="item.customer"></span>
-                <span class="aq-qrow__age" x-text="ageText(item)"></span>
+                <span class="aq-qrow__age" data-testid="aq-stuck" x-text="stuckText(item)"></span>
               </div>
             </template>
           </div>
@@ -651,7 +660,7 @@
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                  拒絕結案
+                  駁回結案
                 </button>
               </div>
             </template>
@@ -666,7 +675,7 @@
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                  拒絕結案
+                  駁回結案
                 </button>
               </div>
             </template>
@@ -976,7 +985,7 @@
         </div>
 
         <!-- Bottom action bar: show when canApprove and there's content to scroll past -->
-        <div x-show="canApprove(selected)" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <div x-show="canApprove(selected)" class="aq-actbar" data-testid="aq-actbar">
           <button class="btn btn-approve" @click="doApprove()" data-testid="aq-approve" :disabled="actioning" style="min-width:110px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span x-show="!actioning">確認簽核</span>
@@ -988,12 +997,16 @@
           </button>
           <button x-show="!isVoucher(selected)" class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-            拒絕結案
+            駁回結案
           </button>
-          <span style="font-size:12px;color:var(--text-dim)">
+          <span class="aq-actbar__note">
             <span x-text="'第 ' + ((selected?.currentTier ?? 0) + 1) + '/' + (selected?.tierCount || 1) + ' 層'"></span>
             簽核確認後無法撤回
           </span>
+          <p class="aq-actbar__hint" data-testid="aq-reject-hint">
+            <strong x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'"></strong>：送回申請人修改，改好可以重新送簽。
+            <template x-if="!isVoucher(selected)"><span><strong>駁回結案</strong>：這張單不再處理，不會再回到簽核。</span></template>
+          </p>
         </div>
 
       </div><!-- /detail -->
@@ -1046,7 +1059,7 @@
   <!-- Reject-final modal -->
   <div class="reject-modal-overlay" x-show="rejectFinalModalOpen" @click.self="rejectFinalModalOpen=false">
     <div class="reject-modal" style="border-top:4px solid #1C1917">
-      <h3 style="color:#1C1917">拒絕結案</h3>
+      <h3 style="color:#1C1917">駁回結案</h3>
       <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:7px;padding:10px 13px;margin-bottom:14px;font-size:12px;color:#B91C1C;line-height:1.6">
         ⚠ 此操作<strong>不可逆</strong>。報價單將永久鎖定為「已拒絕」狀態，申請人無法再修改或重送。
       </div>
@@ -1148,8 +1161,17 @@
           return '停留 ' + d + ' 天'
         },
 
-        get myItems()   { return this.flatItems.filter(i => this.canApprove(i)) },
-        get flowItems() { return this.flatItems.filter(i => !this.canApprove(i)) },
+        // 「輪到我」只有一個來源：伺服器在每一項標 `mine`（與側欄角標／首頁 `/api/approval-queue/count` 同一個判斷）。
+        // 摘要數字、「待我簽核」欄、「流程中」欄都從它來，三處不會對不上（UX P1.5）。舊伺服器沒有 mine 欄位時才退回 canApprove()。
+        isMine(i) { return i && typeof i.mine === 'boolean' ? i.mine : this.canApprove(i) },
+        // 流程中的一筆：卡在誰、已經幾天（業務的第一個問題「我的單卡在誰」；分組標頭已寫人名，這裡每筆再寫一次才不用往上找）
+        stuckText(item) {
+          const d = this._ageDays(item)
+          return '卡在：' + this.blockerOf(item).display + '，' + (d === 0 ? '今天送達' : '已 ' + d + ' 天')
+        },
+
+        get myItems()   { return this.flatItems.filter(i => this.isMine(i)) },
+        get flowItems() { return this.flatItems.filter(i => !this.isMine(i)) },
 
         get myOverdueCount() { return this.myItems.filter(i => this.ageTone(i) === 'crit').length },
 
@@ -1462,9 +1484,7 @@
           this.previewItemData = null
         },
 
-        // 壓力帶上「待我簽核」的數字。**一定要跟下面清單同一個判斷（myItems／canApprove）**：
-        // 以前這裡自己用 currentApprovers 另算一套，沒有簽核層、由最高管理者簽的項目 currentApprovers 是空的，
-        // 結果數字寫「0 待我簽核」、清單卻有 1 件（兩個數字互相矛盾）。
+        // 摘要的「待我簽核」＝「待我簽核」欄的件數（同一份 isMine；不再自己用 currentApprovers 另算一次）
         get myPendingCount() { return this.myItems.length },
 
         // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
@@ -1909,7 +1929,7 @@
               return
             }
             this.rejectFinalModalOpen = false
-            this._toast('✗ 已永久拒絕結案', '#1C1917')
+            this._toast('✗ 已永久駁回結案', '#1C1917')
             this.selected = null
             await this.loadQueue()
           } catch (e) {

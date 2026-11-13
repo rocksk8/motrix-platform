@@ -326,6 +326,12 @@
   ],
   "s": 200
  },
+ "PUT /api/login-greeting/phrases": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/settings/line-notify": {
   "k": [
    "detail"

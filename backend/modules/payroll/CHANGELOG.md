@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+- 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
+
 ## 1.2.27 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
 - 變更（內部，不影響對外介面）：`api/payslips.py` 勞報單的模組動態通知（送出／核准／退回／作廢）加 `line_skip=True`——薪資與勞報屬敏感資料，模組動態永不發 LINE。無 API／資料／權限判斷變更。
 - 測試：`tests/test_line_events_all_2026_11_13.py`（勞報單／獎金／薪資的模組動態不發 LINE）。
