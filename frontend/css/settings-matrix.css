@@ -11,10 +11,25 @@
 .mx-hide { display: none !important; }
 
 /* 工具列 */
-.mx-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; position: sticky; top: var(--topbar-h, 0px); z-index: 5; background: var(--white); padding: 8px 0; }
+.mx-sticky { position: sticky; top: var(--topbar-h, 0px); z-index: 5; background: var(--white); }
+.mx-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; padding: 8px 0; }
+.mx-grow { flex: 1 1 auto; }
+
+/* 草稿：頂端固定儲存列＋未儲存的列（左側黃條） */
+.mx-draftbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; margin: 8px 0 0; border: 1px solid var(--warning); border-left-width: 6px; border-radius: var(--radius); background: var(--warning-light); color: var(--warning); font-weight: 600; }
+.mx-row.mx-draft td:first-child, .mx-card-row.mx-draft { box-shadow: inset 4px 0 0 var(--warning); }
+.mx-row.mx-draft td { background: var(--warning-light); }
+.mx-row.mx-draft:hover td { background: var(--warning-light); }
+.mx-ck input:disabled { cursor: not-allowed; opacity: .4; }
 .mx-search { flex: 1 1 220px; min-width: 160px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; }
 .mx-fchip { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text-primary); }
 .mx-fchip[aria-pressed="true"] { background: var(--black); color: var(--text-on-dark); border-color: var(--black); }
+.mx-input { padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; width: 100%; max-width: 160px; box-sizing: border-box; }
+.mx-input[type="number"] { max-width: 90px; }
+.mx-input[aria-invalid="true"] { border-color: var(--danger, #c0392b); }
+.mx-sw.mx-dis, .mx-select.mx-dis, .mx-input.mx-dis { opacity: .45; cursor: not-allowed; }
+.mx-sw.mx-ro, .mx-select.mx-ro, .mx-input.mx-ro, .mx-chip.mx-ro, .mx-rc.mx-ro { cursor: default; }          /* 唯讀：看得到值、不能改（不像 disabled 那樣變淡） */
+.mx-sw.mx-ro[disabled], .mx-select.mx-ro[disabled] { opacity: 1; }
 .mx-select { padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; max-width: 100%; }
 
 /* 按鈕 */
@@ -98,7 +113,8 @@
 @media (max-width: 900px) {
   .mx-wrap { display: none; }
   .mx-cards { display: block; }
-  .mx-toolbar { position: static; }
+  .mx-sticky { position: static; }
+  .mx-draftbar { position: sticky; top: var(--topbar-h, 0px); z-index: 6; }
   .mx-gcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); margin-bottom: 12px; overflow: hidden; }
   .mx-ghead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-sunken); font-weight: 600; flex-wrap: wrap; cursor: pointer; }
   .mx-ghead .mx-gname { flex: 1 1 auto; }

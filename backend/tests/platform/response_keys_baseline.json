@@ -6798,6 +6798,7 @@
  },
  "/api/settings/line-notify": {
   "k": [
+   "audit_mark",
    "callback_url",
    "channel_access_token",
    "enabled",
@@ -6819,6 +6820,7 @@
    "events[].recipient_exact",
    "events[].roles",
    "events[].sent30",
+   "events[].version",
    "include_links",
    "login_channel_id",
    "login_channel_secret",
