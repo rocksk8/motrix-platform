@@ -508,3 +508,66 @@ def test_x_change_file_upload_then_delete_after_reject_is_allowed_and_removes_af
     seen = _spy_os_remove(monkeypatch, lambda _p: {"listed": [x["id"] for x in _chg(eid)[1].get("addFiles", [])], "lock_free": _lock_free()})
     assert client.delete(url + "/change-request/files/" + f["id"], headers=h).status_code == 200
     assert seen == [{"listed": [], "lock_free": True}], seen
+
+
+# ═════════════════════════ h12 審查補強（L1／L2／L3） ═════════════════════════
+
+def test_x_delete_expense_rechecks_status_under_lock(expense, monkeypatch):
+    """鎖外檢查是草稿、拿鎖之前被送審 ⇒ 鎖內重驗 409；單據與附件都在。"""
+    client, h, eid = expense
+    f = _x_upload(client, h, eid)
+    from modules.case.api import case_extra_expenses as M
+    real = M.begin_write
+
+    def flip_then_lock(conn):
+        _exec("UPDATE case_extra_expenses SET status='待審核' WHERE id=?", (eid,))
+        monkeypatch.setattr(M, "begin_write", real)
+        return real(conn)
+    monkeypatch.setattr(M, "begin_write", flip_then_lock)
+    r = client.delete(_x_url(eid), headers=h)
+    assert r.status_code == 409, r.text
+    assert _rows("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE id=?", (eid,))[0]["n"] == 1
+    assert [x["id"] for x in _x_files(eid)] == [f["id"]] and _on_disk([f]) == [f]
+
+
+def test_g_approve_copy_failure_leaves_no_half_written_destination(staged_request, monkeypatch):
+    """複製到一半失敗（目的檔已寫了一半）：目的資料夾不留任何檔、暫存檔還在、申請仍是 pending。"""
+    client, su, cid, qn, staged = staged_request
+    from modules.case.api import quotations as Q
+    real = Q.shutil.copy2
+
+    def half_then_boom(src, dst, *a, **k):
+        with open(dst, "wb") as fh:
+            fh.write(b"half")
+        raise OSError("disk full (test)")
+    monkeypatch.setattr(Q.shutil, "copy2", half_then_boom)
+    with pytest.raises(Exception):
+        client.post("/api/case-changes/%s/approve" % cid, headers=su)
+    monkeypatch.setattr(Q.shutil, "copy2", real)
+    import helpers.uploads as up
+    d = os.path.join(up.UPLOADS_ROOT, "quotation_materials", "%s_0" % qn)
+    assert not os.path.isdir(d) or os.listdir(d) == []
+    assert _status(cid) == "pending" and _on_disk(staged) == staged and _final_files(qn) == []
+
+
+def test_g_staging_helpers_refuse_paths_outside_uploads(staged_request, tmp_path):
+    """staged_files_json 裡的路徑指到上傳根目錄之外：核准不複製、駁回不刪（外面的檔案原封不動）。"""
+    client, su, cid, qn, staged = staged_request
+    victim = tmp_path / "victim.bin"
+    victim.write_bytes(b"keep")
+    bad = [{"id": "z", "filename": "z.png", "path": str(victim)}, {"id": "y", "filename": "y.png", "path": "../" + victim.name}]
+    _exec("UPDATE case_change_requests SET staged_files_json=? WHERE id=?", (json.dumps(bad), cid))
+    r = client.post("/api/case-changes/%s/reject" % cid, headers=su, json={"reason": "x"})
+    assert r.status_code == 200, r.text
+    assert victim.read_bytes() == b"keep"
+
+
+def test_g_approve_with_bad_staged_path_adds_no_record_and_deletes_nothing(staged_request, tmp_path):
+    client, su, cid, qn, staged = staged_request
+    victim = tmp_path / "victim2.bin"
+    victim.write_bytes(b"keep")
+    _exec("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+          (json.dumps([{"id": "z", "filename": "z.png", "path": str(victim)}]), cid))
+    r = client.post("/api/case-changes/%s/approve" % cid, headers=su)
+    assert r.status_code == 200, r.text
+    assert _final_files(qn) == [] and victim.read_bytes() == b"keep"

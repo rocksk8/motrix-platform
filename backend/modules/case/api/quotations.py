@@ -3930,17 +3930,9 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
 
 def _cleanup_staged_files(staged_files: list) -> None:
     """拒絕核准時清掉暫存檔案（含空資料夾），套用時搬移失敗或找不到檔案都
-    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。"""
-    for f in staged_files or []:
-        try:
-            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
-            if os.path.isfile(full):
-                os.remove(full)
-            d = os.path.dirname(full)
-            if os.path.isdir(d) and not os.listdir(d):
-                os.rmdir(d)
-        except Exception:
-            pass
+    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。
+    T86：路徑一律經 `canonical_upload_path`（不在上傳根目錄之內的略過），空資料夾順手清掉（同 `purge_document_files`）。"""
+    _uploads_mod.purge_document_files([f for f in (staged_files or []) if isinstance(f, dict)])
 
 
 def _copy_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
@@ -3956,8 +3948,12 @@ def _copy_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
     os.makedirs(dest_dir, exist_ok=True)
     moved = []
     for f in staged_files or []:
-        src = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
-        ext = os.path.splitext(f["path"])[1]
+        src_rel = _uploads_mod.canonical_upload_path(f.get("path") if isinstance(f, dict) else None)
+        if not src_rel:                                       # 暫存路徑不合格（目前都由伺服器產生，不會發生）⇒ 不複製、也不產生指向它的紀錄
+            logger.warning("暫存附件路徑不在上傳根目錄之內，略過：%r", str((f or {}).get("path") if isinstance(f, dict) else f)[:120])
+            continue
+        src = os.path.join(_uploads_mod.UPLOADS_ROOT, *src_rel.split("/"))
+        ext = os.path.splitext(src_rel)[1]
         fname = uuid.uuid4().hex[:16] + ext
         dest_rel = f"{eff_subfolder}/{doc_no}/{fname}"
         dest_full = os.path.join(_uploads_mod.UPLOADS_ROOT, dest_rel)
@@ -3967,7 +3963,7 @@ def _copy_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
             try:
                 shutil.copy2(src, dest_full)
             except BaseException:
-                _uploads_mod.purge_document_files(moved)      # 複製到一半失敗 ⇒ 已複製的不留（這個函式沒回傳，呼叫端收不到）
+                _uploads_mod.purge_document_files(moved + [new_meta])   # 複製到一半失敗 ⇒ 已複製的、以及這一個寫到一半的目的檔都不留（這個函式沒回傳，呼叫端收不到）
                 raise
         moved.append(new_meta)
     return moved
