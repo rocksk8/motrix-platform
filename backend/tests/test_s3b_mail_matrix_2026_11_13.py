@@ -278,3 +278,23 @@ def test_endpoints_are_superadmin_only(client, make_user):
     for path in ("/batch", "/batch-preview", "/batch-undo"):
         assert client.post(P + path, headers=h, json={"changes": {"a": {"mode": "default"}}}).status_code in (401, 403)
     assert client.post(P + "/batch", json={}).status_code in (401, 403)
+
+
+def test_undo_cannot_bypass_the_rules_of_the_normal_batch(client, make_user):
+    """h9 審查（低）：復原也要過同樣的檢查——復原成「關閉」的簽核／系統類要 confirm_system；系統類指定收件人時至少要有人收得到。"""
+    h = _h(client, make_user)
+    key = _free("approval", True)
+    cur, mark = _versions(client, h, [key])
+    off_state = {"mode": "default", "users": [], "roles": [], "off": True, "cal": None}
+    r = client.post(P + "/batch-undo", headers=h, json={"states": {key: off_state}, "expect": cur, "since_audit": mark})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "confirm_system_required" and [x["key"] for x in r.json()["detail"]["critical"]] == [key]
+    assert not nm.is_mail_off(key, _overrides())
+    r = client.post(P + "/batch-undo", headers=h, json={"states": {key: off_state}, "expect": cur, "since_audit": mark, "confirm_system": True})
+    assert r.status_code == 200 and nm.is_mail_off(key, _overrides())
+    # 系統類：指定的角色裡沒人收得到 ⇒ 復原也拒絕
+    sysk = next((t.key for t in mt.all_types() if t.category == "system" and t.key not in mt.MANAGED_ELSEWHERE and not nm.mail_off_lock_reason(t.key)), None)
+    if sysk:
+        cur2, mark2 = _versions(client, h, [sysk])
+        bad = {"mode": "custom", "users": [], "roles": ["engineer"], "off": False, "cal": None}
+        r = client.post(P + "/batch-undo", headers=h, json={"states": {sysk: bad}, "expect": cur2, "since_audit": mark2})
+        assert r.status_code == 400, r.text

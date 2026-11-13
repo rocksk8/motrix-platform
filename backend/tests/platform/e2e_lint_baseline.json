@@ -155,7 +155,6 @@
   "tests/test_e2e_nav_hierarchy_2026_11_11.py::test_every_old_entry_is_still_reachable::count#1": 1,
   "tests/test_e2e_nav_hierarchy_2026_11_11.py::test_every_old_entry_is_still_reachable::get_attribute#1": 1,
   "tests/test_e2e_nav_hierarchy_2026_11_11.py::test_every_old_entry_is_still_reachable::get_attribute#2": 1,
-  "tests/test_e2e_notify_matrix_2026_10_05.py::test_matrix_cells_write_back_to_the_existing_stores::is_checked#1": 1,
   "tests/test_e2e_pdf_unapproved_2026_09_30.py::_do_return::inner_text#1": 1,
   "tests/test_e2e_pending_readonly_for_non_approvers_2026_11_11.py::_clicks_without_effect::is_visible#1": 1,
   "tests/test_e2e_playwright_2026_09_07.py::test_login_create_submit_approve_smoke::inner_text#1": 1,

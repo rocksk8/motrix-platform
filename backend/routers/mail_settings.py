@@ -567,7 +567,7 @@ def undo_mail_batch(body: dict = Body(...), authorization: str = Header(None)):
     （`expect`＝儲存回應裡的 `after`）；被改過 ⇒ 409、整批不復原。成功只寫一次、記一筆稽核（`settings.mail.batch_undo`）、發一則「復原了…」通知。"""
     actor = _require_user(authorization, require_superadmin=True)
     b = body if isinstance(body, dict) else {}
-    extra = sorted(set(b) - {"states", "expect", "since_audit"})
+    extra = sorted(set(b) - {"states", "expect", "since_audit", "confirm_system"})
     if extra:
         raise HTTPException(400, "不認得的欄位：%s" % "、".join(str(x) for x in extra[:5]))
     states, ex = b.get("states"), b.get("expect")
@@ -602,6 +602,10 @@ def undo_mail_batch(body: dict = Body(...), authorization: str = Header(None)):
             raise HTTPException(400, mt.MANAGED_ELSEWHERE[key] + "，不在本頁設定。")
         if st["off"] and nm.mail_off_lock_reason(key):
             raise HTTPException(400, "「%s」的信件不能關閉" % t.name)
+        if not st["off"]:                            # 與一般批次同一條規則：指定收件人時，系統技術類至少要有人收得到（復原也不能繞過）
+            blocked = custom_override_blockers(key, {"mode": mode, "users": us if mode == "custom" else [], "roles": rs if mode == "custom" else []})
+            if blocked:
+                raise HTTPException(400, blocked[0])
         users += us
         targets[key] = {"mode": mode, "users": us if mode == "custom" else [], "roles": rs if mode == "custom" else [], "off": st["off"], "cal": st.get("cal")}
     _check_users_exist(users)
@@ -610,6 +614,10 @@ def undo_mail_batch(body: dict = Body(...), authorization: str = Header(None)):
         conflicts = _cas_conflicts(list(targets), ex, o, sw)
         if conflicts:
             raise _conflict_response(conflicts, since, names)
+        critical = [k for k, st in targets.items() if not k.startswith("cal:") and st.get("off") and not nm.is_mail_off(k, o) and nm.mail_off_needs_confirm(k)]
+        if critical and b.get("confirm_system") is not True:             # 復原成「關閉」的簽核／系統技術類信件：和一般批次一樣要確認
+            raise HTTPException(400, {"code": "confirm_system_required", "message": "下列信件復原後會是關閉狀態，相關人員不會再收到通知；請確認後帶 confirm_system=true 再送一次。",
+                                      "critical": [{"key": k, "name": _row_name(k, names)} for k in critical]})
         for key, st in targets.items():
             if "cal" in st and st["cal"] is None:
                 st["cal"] = _state_of(key, o, sw).get("cal")                  # 這列沒有自己的行事曆格：保持現狀

@@ -4842,6 +4842,36 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "POST /api/settings/line-notify/events/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/mail/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/mail/batch-preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/mail/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
   }
  }
 }

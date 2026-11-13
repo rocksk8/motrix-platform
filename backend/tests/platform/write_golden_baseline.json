@@ -321,6 +321,24 @@
   ],
   "s": 400
  },
+ "POST /api/settings/mail/batch": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/settings/mail/batch-preview": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/settings/mail/batch-undo": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/system/backup-monitor/backup-now": {
   "k": [
    "detail"
