@@ -3511,10 +3511,12 @@
 
       async loadDefaultPaymentTerms() {
         this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms || this._defaultPaymentTerms
+        const t = this._termsDocType           // 回應慢到、期間已切到另一種單據 ⇒ 丟掉（否則另一種的設定蓋上來）
         try {
           const rp = await fetch(this._termsUrl('payment'), { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (rp.ok) {
             const d = await rp.json()
+            if (this._termsDocType !== t) return
             if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
           }
         } catch(e) {}
@@ -3525,17 +3527,21 @@
         t = t === 'estimate' ? 'estimate' : 'quote'
         if (this._termsDocType === t) return
         this._termsDocType = t
+        this.termsPresets = []                 // 載入失敗時顯示內建基準，不留著另一種單據的條款組（否則管理視窗存檔會把它寫到這一種）
+        this.termsDefaultKey = ''
         await this.loadDefaultPaymentTerms()
         await this.loadTermsPresets()
       },
 
       async loadTermsPresets() {
+        const t = this._termsDocType           // 同上：過期的回應不採用
         try {
           const r = await fetch(this._termsUrl('presets'), {
             headers: { Authorization: 'Bearer ' + this.session.token },
           })
           if (!r.ok) return
           const d = await r.json()
+          if (this._termsDocType !== t) return
           this.termsPresets = Array.isArray(d.presets) ? d.presets : []
           this.termsDefaultKey = d.defaultKey || ''
         } catch {}
