@@ -146,3 +146,7 @@ tools/platform/author_gate_results/
 
 # 刪除暫存區的隔離資料夾（第 53 班；內含被刪單據的附件＝可能有個資，絕不可 git add）
 資源回收筒/
+
+# 偶發排行榜（tools/platform/flaky_leaderboard.py）：只記錄、本機狀態
+tools/platform/flaky_leaderboard.jsonl
+tools/platform/flaky_leaderboard.jsonl.tmp
