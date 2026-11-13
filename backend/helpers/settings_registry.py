@@ -685,20 +685,10 @@ def _sources(group, vals, conn):
     default（等於程式預設、沒有紀錄）／legacy（不等於預設、帳本沒有紀錄＝舊位置寫的）。個人層（personal）只給個人偏好頁，設定中心不會有。"""
     from helpers import config_ledger as L
     g = _g(group)
-    pend, eff = {}, {}
-    for r in L.history(conn, "setting:%s" % group, group, limit=1000):          # 新→舊
-        f = r["field"]
-        if f not in g["fields"]:
-            continue
-        if r["state"] == "pending" and not L.in_effect(r):
-            pend.setdefault(f, r)
-        elif L.in_effect(r):
-            eff.setdefault(f, r)
     out = {}
     for k, f in g["fields"].items():
-        r, kind = pend.get(k), "pending"
-        if r is None:
-            r, kind = eff.get(k), "company"
+        e, p = L.field_rows(conn, "setting:%s" % group, group, k)               # 依欄位查，不受同群組其他欄位的筆數影響
+        r, kind = (p, "pending") if p is not None else (e, "company")
         if r is not None:
             out[k] = {"kind": kind, "by": r.get("actor_display") or r.get("actor") or "", "at": r.get("effective_at") or r.get("at") or "",
                       "reason": r.get("reason") or ""}

@@ -205,19 +205,28 @@ def history(conn, domain=None, key=None, limit=100, offset=0):
 def last_effective_change(conn, domain, key, field, now=None):
     """某欄位最近一次**已生效**的變更（立即、已套用、或已到時且票數夠的待生效）的 `(誰, 何時)`；沒有任何紀錄 ⇒ None。
     給逐欄 CAS 的衝突訊息用（「這個欄位剛被某某在某時改了」）。唯讀。依欄位查、每頁 100 筆往回找（不受同網域其他欄位的筆數影響）。"""
-    off = 0
+    eff, _pend = field_rows(conn, domain, key, field, now)
+    return None if eff is None else (eff.get("actor_display") or eff.get("actor") or "", eff.get("effective_at") or eff.get("at") or "")
+
+
+def field_rows(conn, domain, key, field, now=None):
+    """某欄位 `(最近一次已生效的變更列, 比它新且還在等待的待生效列)`，各自可能是 None。依欄位查、每頁 100 筆新→舊往回找，
+    找到已生效的就停（再舊的待生效列必然已被取代）。列的形狀同 `history()`（含 state／approvals）。唯讀。"""
+    pend, off = None, 0
     while True:
         rows = conn.execute("SELECT * FROM config_changes WHERE domain=? AND key=? AND field=? ORDER BY id DESC LIMIT 100 OFFSET ?",
                             (domain, str(key), str(field), off)).fetchall()
         if not rows:
-            return None
+            return None, pend
         ids = [r["id"] for r in rows]
         ev, ap = _last_events(conn, ids), _approvals(conn, ids)
         for r in rows:
             d = _row(r, ev.get(r["id"]))
             d["approvals"] = ap.get(r["id"], [])
             if in_effect(d, now):
-                return (d.get("actor_display") or d.get("actor") or "", d.get("effective_at") or d.get("at") or "")
+                return d, pend
+            if d["state"] == "pending" and pend is None:
+                pend = d
         off += 100
 
 
