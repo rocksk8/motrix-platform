@@ -100,7 +100,7 @@ def _check_impact_scope(key, s, *, pending):
     if not _zh(s["amounts"]):
         raise ValueError("設定欄位 %r 的 impact_scope.amounts 需要一句繁中白話" % key)
     if not isinstance(s["reversible"], bool):
-        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是 true／false" % key)
+        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是布林值（是／否）" % key)
     if s["effective"] not in ("immediate", "pending"):
         raise ValueError("設定欄位 %r 的 impact_scope.effective 只能是 immediate／pending" % key)
     if (s["effective"] == "pending") != bool(pending):
@@ -160,7 +160,7 @@ class SettingDef:
         """回問題描述字串；合法回 ''."""
         if self.type == "bool":
             if not isinstance(v, bool):
-                return "必須是 true／false"
+                return "必須是布林值（是／否）"
             return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if self.type == "str":
             if not isinstance(v, str):
@@ -585,9 +585,9 @@ def banner_of(f, value, *, default=None, days=None):
             return None
     n = int(days or DEFAULT_CONFIRM_DAYS)
     if f.loosen:
-        when = "需等 %d 天確認期間，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、等確認期間後生效）" % n
+        when = "需等 %d 天，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、同樣等待期滿後生效）" % n
     elif f.requires_pending:
-        when = "需等 %d 天確認期間後才會生效，期間內可以撤銷" % n
+        when = "需等 %d 天後才會生效，期間內可以撤銷" % n
     else:
         when = "儲存後立即生效"
     s = f.impact_scope
@@ -728,9 +728,9 @@ def plan(group, values, *, user="", conn=None):
         if kind == "immediate":
             when_text = "立即"
         elif kind == "pending":
-            when_text = "%d 天確認期間後（%s 起）" % (days, when[:10])
+            when_text = "%d 天後（%s 起）" % (days, when[:10])
         elif kind == "pending_approval":
-            when_text = "另一位最高管理者核准、且 %d 天確認期間後（%s 起）" % (days, when[:10])
+            when_text = "另一位最高管理者核准、且 %d 天後（%s 起）" % (days, when[:10])
         else:
             when_text = "不變"
         effect = (f.effect.replace("{名稱}", f.label).replace("{舊}", show_value(f, old)).replace("{新}", show_value(f, v))
@@ -740,7 +740,7 @@ def plan(group, values, *, user="", conn=None):
                               "effectiveAt": when if kind in ("pending", "pending_approval") else None,
                               "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
-        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。" % days)
+        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天後生效」，儲存後會留下紀錄。" % days)
     return out
 
 
@@ -852,7 +852,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                     result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
                                           for i, x in zip(rec["ids"], part)]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
-                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天後生效」，並已留下紀錄。" % days)
         if not changes and not pend and not result["superseded"]:
             if began:
                 c.rollback()
