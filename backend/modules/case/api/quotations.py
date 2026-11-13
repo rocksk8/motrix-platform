@@ -53,6 +53,7 @@ from helpers import row_access
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
+from modules.case import quote_edit_notify as _QEN  # noqa: E402  解鎖編輯後通知已簽過的人（信件類型 approval_content_edited）
 from modules.case import review_edit_notify as _REN  # noqa: E402  審核中被編輯的通知信（信件類型 approval_review_edit，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications, _mark_notifications_read, notify_approval_request,
@@ -683,6 +684,19 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
         )
 
 
+def _user_is_active(username: str) -> bool:
+    """帳號存在且在職（active=1）。查不到／出錯 ⇒ False（呼叫端把它當「不能代表這個人」，退回保守行為）。"""
+    try:
+        _c = get_db()
+        try:
+            r = _c.execute("SELECT active FROM users WHERE username=?", (username,)).fetchone()
+        finally:
+            _c.close()
+        return bool(r and r["active"])
+    except Exception:                                                            # noqa: BLE001
+        return False
+
+
 def _exclude_requester(tiers: list, requester: str) -> list:
     """Drop the requester from tier approver lists — a submitter must never end up
     required to approve their own quotation. Tiers left with no approvers after
@@ -761,6 +775,9 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             _tconn.close()
         _before_ct = len(active_tiers)
         active_tiers = _exclude_requester(active_tiers, requester_uname)
+        _editor_uname = appr.get("editedBy") or ""
+        if _editor_uname and _editor_uname != requester_uname:      # 解鎖改版：改內容的最高管理者不簽自己改的內容（送審人維持原送審人，所以要另外剔除）
+            active_tiers = _exclude_requester(active_tiers, _editor_uname)
         if len(active_tiers) != _before_ct:
             logger.warning("approval tiers self-excluded — quote=%r requester=%r before=%d after=%d",
                            quote_no, requester_uname, _before_ct, len(active_tiers))
@@ -815,7 +832,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             ).fetchall()
             _conn.close()
             for adm in admins:
-                if adm["username"] != requester:
+                if adm["username"] not in (requester, appr.get("editedBy")):
                     _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(adm["username"])
                     _appr_labels.append(adm["username"])
@@ -2526,17 +2543,35 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             raise HTTPException(403, "解鎖編輯需要最高管理者權限")
         # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
         try:
-            _h0 = (json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}).get("editHistory")
+            _old_dj = json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}
         except (TypeError, ValueError):
-            _h0 = None
+            _old_dj = {}
+        _h0 = _old_dj.get("editHistory")
         edit_rev = (len(_h0) if isinstance(_h0, list) else 0) + 1
+        # 送審人維持原送審人（使用者裁示）：最高管理者解鎖改內容，不會變成「送審人」——否則原送審人看到的是「他人送審」、不能收回，
+        # 而改內容的人反而被排除在簽核之外。沒有原送審紀錄（舊資料）⇒ 退回舊行為（記為改內容的人）。改內容的人另記 editedBy。
+        _old_appr = _old_dj.get("approval") if isinstance(_old_dj.get("approval"), dict) else {}
+        _orig_req = str(_old_appr.get("requestedBy") or "") or editor["username"]
+        _prev_req = str(_old_appr.get("requestedBy") or "")
+        if _prev_req and not _user_is_active(_prev_req):                         # 原送審人已離職／停用：沒有人能代表他收回或收退件通知 ⇒ 同「沒有原送審紀錄」
+            _prev_req = ""
+            _orig_req = editor["username"]
+        if _prev_req:
+            _orig_req_disp = str(_old_appr.get("requestedByDisplay") or "") or _prev_req
+        else:                                                                    # 退回舊行為：送審人記為改內容的人
+            _orig_req_disp = editor["display_name"] or editor["username"]
+        _unlock_cleared = _QEN.signed_layers(_old_appr)
+        _unlock_info = {"originalRequester": _orig_req, "originalRequesterDisplay": _orig_req_disp,
+                        "cleared": [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]}
         # Force re-approval regardless of current status
         new_status = "待審核"
         q["approval"] = {
-            "requestedBy":        editor["username"],
-            "requestedByDisplay": editor["display_name"] or editor["username"],
+            "requestedBy":        _orig_req,
+            "requestedByDisplay": _orig_req_disp,
             "requestedAt":        now,
             "isEditApproval":     True,
+            "editedBy":           editor["username"],
+            "editedByDisplay":    editor["display_name"] or editor["username"],
             "status":             "pending",
             "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"],
         }
@@ -2627,10 +2662,20 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         if isinstance(_db_hist, list):
             q["editHistory"] = _db_hist
         if is_unlock_edit:
+            # 被清掉的已簽層以**交易內讀到的現值**為準（前面那份是寫鎖之前讀的：兩次讀之間若有人剛簽完，他也要被通知與記進稽核）。
+            # 送審人／簽核層已在上面依較早的讀取建好，這裡不改（兩次之間換了送審人是極罕見的情況）。
+            try:
+                _txn_appr = (json.loads(existing["data_json"] or "{}") or {}).get("approval")
+            except (TypeError, ValueError):
+                _txn_appr = None
+            _unlock_cleared = _QEN.signed_layers(_txn_appr)
+            _unlock_info["cleared"] = [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]
             _hist = q.get("editHistory") if isinstance(q.get("editHistory"), list) else []
             edit_rev = len(_hist) + 1
             _hist.append({"rev": edit_rev, "at": now, "by": user["username"],
-                          "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit"})
+                          "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit",
+                          "originalRequester": _unlock_info["originalRequester"],          # 送審人維持原送審人；誰改的看 by
+                          "clearedSigners": _unlock_info["cleared"]})                      # 這次被清掉的已簽層（層號＋帳號）
             q["editHistory"] = _hist
         try:
             require_case(user, existing, quote_no)
@@ -2814,7 +2859,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,
-               f"{quote_no}（{q.get('customerName','')}）", {"rev": edit_rev, "pendingApproval": True})
+               f"{quote_no}（{q.get('customerName','')}）",
+               {"rev": edit_rev, "pendingApproval": True, "editedBy": user["username"],
+                "originalRequester": _unlock_info["originalRequester"], "clearedSigners": _unlock_info["cleared"]})
+        # 已簽過、被清掉的人要知道內容被改了（站內＋信件＋LINE；預設只發給本人；附帶動作，失敗只記 log）
+        spawn_bg_thread(_QEN.fire, args=(quote_no, q.get("customerName") or "", _unlock_cleared),
+                        kwargs={"editor": user["username"], "editor_display": user.get("display_name") or user["username"],
+                                "requester_display": _unlock_info["originalRequesterDisplay"]})
         # save PDF snapshot of this revision (includes editor name in filename)
         editor_display = (q.get("editHistory") or [{}])[-1].get("byDisplay", "")
         spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, editor_display, '修改'))
@@ -3523,7 +3574,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
             raise
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
-                                     'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
+                                     'approval_rejected', 'approval_content_edited', 'case_stage_deadline', 'approval_reminder'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進資源回收筒）" if res else "（資源回收筒未安裝，已直接刪除）"),
            {"reason": _void_reason, "historical": True} if _hist_void else None)
     for c in orphaned:
@@ -5352,6 +5403,9 @@ def approval_queue_items(conn) -> list:
             "requestedByDisplay":  f["requestedByDisplay"],
             "requestedAt":         f["requestedAt"],
             "isEditApproval":      f["appr"].get("isEditApproval", False),
+            # 解鎖改版：誰改了內容（只有解鎖改版的單才有；簽核人要看得到。改的時間＝requestedAt）
+            **({"editedBy": f["appr"]["editedBy"], "editedByDisplay": f["appr"].get("editedByDisplay") or f["appr"]["editedBy"]}
+               if f["appr"].get("editedBy") else {}),
             "reasons":             f["appr"].get("reasons") or [],
             "tiers":               f["tiers"],
             "currentTier":         f["currentTier"],
@@ -5980,6 +6034,9 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         if requester:
             _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
             notify_returned(quote_no, new_no, cname, note, requester, doc_label=_DT.label(d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：送審人維持原送審人，改這份內容的最高管理者也要知道被退回
+        if _editor_u and _editor_u != requester:
+            _notify(_editor_u, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
@@ -6043,6 +6100,11 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         if requester:
             suffix = f"：{note}" if note else ""
             _notify(requester, "approval_rejected", quote_no, quote_no,
+                    _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：改內容的最高管理者也要知道被駁回
+        if _editor_u and _editor_u != requester:
+            suffix = f"：{note}" if note else ""
+            _notify(_editor_u, "approval_rejected", quote_no, quote_no,
                     _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,

@@ -259,6 +259,7 @@ _NOTIF_SOURCE_CHECK = {
     'approval_notice':           "SELECT 1 FROM quotations WHERE quote_no=?",
     'approval_returned':         "SELECT 1 FROM quotations WHERE quote_no=?",
     'approval_rejected':         "SELECT 1 FROM quotations WHERE quote_no=?",
+    'approval_content_edited':   "SELECT 1 FROM quotations WHERE quote_no=?",
     'case_stage_deadline':       "SELECT 1 FROM quotations WHERE quote_no=?",
     'shipping_approval_request': "SELECT 1 FROM shipping_notes WHERE note_no=?",
     'shipping_approval_notice':  "SELECT 1 FROM shipping_notes WHERE note_no=?",

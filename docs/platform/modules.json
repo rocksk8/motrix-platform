@@ -500,6 +500,7 @@
     "mod:case/expense_notify",
     "mod:case/invoice_notify",
     "mod:case/review_edit_notify",
+    "mod:case/quote_edit_notify",
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:case/material_coverage",
