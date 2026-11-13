@@ -6920,6 +6920,7 @@
    "groups[].values.bank_alias_date",
    "groups[].values.bank_alias_desc",
    "groups[].values.brand_prefix",
+   "groups[].values.buyer_access",
    "groups[].values.cancel_after_deal",
    "groups[].values.cancel_after_export",
    "groups[].values.cancel_after_invoice",

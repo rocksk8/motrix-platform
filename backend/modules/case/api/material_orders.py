@@ -125,7 +125,14 @@ def update_material_orders(quote_no: str,
 
         # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
         if user["role"] not in ("superadmin", "admin") and not finance_duty_person(user) and not user_has_module(user, "project_manage"):
-            raise HTTPException(403, "權限不足：只有管理員、財務角色或專案經理可以修改材料申請")
+            _msg = "權限不足：只有管理員、財務角色或專案經理可以修改材料申請"
+            try:                                            # 一條龍 P5a（旗標 onepipe.buyer_access，預設關＝訊息與今天完全相同）：採購同仁被擋時說清楚為什麼、改走哪裡
+                from helpers.onepipe_flags import flag_on
+                if flag_on("buyer_access") and user_has_module(user, "procurement"):
+                    _msg += "。材料申請有單價與金額，需要財務檢視權限；採購同仁請改用「請購單」提出需求，要叫料請洽管理員或財務角色。"
+            except Exception:                               # noqa: BLE001
+                pass
+            raise HTTPException(403, _msg)
         if not material_money_visible(user):          # 第42班（Q6）：材料申請日常作業維持 admin
             # CM13（2026-09-24）：這支整份取代叫料清單且單價／小計為必填——看不到金額的人
             # 送不出正確的值，照收就是用猜的數字蓋掉真正的價格（比照 D1 報價單 403）。

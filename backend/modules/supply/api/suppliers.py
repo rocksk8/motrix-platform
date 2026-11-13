@@ -77,11 +77,57 @@ list_catalog.register_list("supply:suppliers", "supply", {
 })
 
 
+#: 一條龍 P5a：非管理員（有採購模組權限）能看到的供應商欄位——**白名單**，一個函式；沒有列在這裡的鍵（銀行帳號、customFields、聯絡人明細、備註…）一律不回。
+#: 欄位＝id／code／name／taxId／phone／leadTimeDays＋清單目錄（`supply:suppliers`）的欄位 alias／category／contact／currency／paymentTerms／active。
+BUYER_SUPPLIER_FIELDS = ("id", "code", "name", "taxId", "phone", "leadTimeDays", "alias", "category", "contact", "currency", "paymentTerms", "active")
+
+
+def _buyer_list_allowed(user) -> bool:
+    from helpers.auth import user_has_module
+    from helpers.onepipe_flags import flag_on
+    return flag_on("buyer_access") and user_has_module(user, "procurement")
+
+
+def _buyer_row(row, d) -> dict:
+    """唯讀白名單列：只取 `BUYER_SUPPLIER_FIELDS`；`d`＝data_json（取不到的鍵給安全預設，不原樣倒出）。"""
+    d = d if isinstance(d, dict) else {}
+    src = {"id": row["id"], "code": row["code"] or "", "name": row["name"], "taxId": row["tax_id"], "phone": row["phone"],
+           "leadTimeDays": row["lead_time_days"]}
+    out = {k: src[k] for k in ("id", "code", "name", "taxId", "phone", "leadTimeDays")}
+    for k in ("alias", "category", "currency", "paymentTerms"):
+        v = d.get(k)
+        out[k] = v if isinstance(v, str) else ""
+    cs = d.get("contacts")                                   # 「主要聯絡人」＝第一位聯絡人的姓名（清單欄位 contact）；只取姓名，不帶職稱／電話／信箱／LINE
+    first = cs[0] if isinstance(cs, list) and cs and isinstance(cs[0], dict) else {}
+    out["contact"] = first.get("name") if isinstance(first.get("name"), str) else ""
+    out["active"] = d.get("active") if isinstance(d.get("active"), bool) else True
+    return out
+
+
+def _buyer_list() -> list:
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, code, name, tax_id, phone, lead_time_days, data_json FROM suppliers ORDER BY name").fetchall()
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except ValueError:
+            d = {}
+        out.append(_buyer_row(r, d))
+    return out
+
+
 @router.get("/api/suppliers")
 def list_suppliers(authorization: str = Header(None)):
     user = _require_user(authorization)
     perm.require(user, "supply.supplier.view")
     if user["role"] not in ("superadmin", "admin"):
+        # 一條龍 P5a（旗標 onepipe.buyer_access，預設關＝與今天相同回空）：擁有採購模組權限者看唯讀白名單欄位（見 `_buyer_row`）
+        if _buyer_list_allowed(user):
+            return _buyer_list()
         return []
     conn = get_db()
     rows = conn.execute(
