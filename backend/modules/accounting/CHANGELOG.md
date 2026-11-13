@@ -8,12 +8,12 @@
 - 前端（文字）：`ledger-settings.html` 科目角色對應頁，直接生效時顯示「已套用（單人公司，已留稽核），後接 `warning`（建議再設一位最高管理者）。
 - 測試：`tests/test_ledger_settings_t69.py`（單人直接生效＋稽核、單人原因空白／非葉節點被擋、單人要求目前科目 409、展示帳號不算第二位、兩位真人仍 202）、`tests/test_ledger_p1_reports_2026_09_30.py`（單人 200、有第二位真人 202）。
 
+## 1.1.72（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+- 變更（內部，不影響對外介面）：`api/ledger_requests.py`（通知名單、「等誰簽核」佇列）、`api/voucher_common.py`（`with_final_superadmin_tier` 最後一層簽核人）、`api/vouchers.py`（下一層簽核人名單）只列真人最高管理者，不含展示帳號 `demo`。庫裡只剩展示帳號時（隔離的展示庫）照舊由它當最後一層、「等誰簽核」照列（h12 M1），展示環境才看得到完整流程。
+
 ## 1.1.70（next，未取號）— 2026-11-13（fix/t83-red2-h11；科目角色變更的單人提示）
 - 變更（對外訊息）：科目角色變更（`PUT /api/ledger/roles`）在沒有第二位最高管理者時仍回 409，提示改成先新增第二位：「目前只有一位最高管理者，科目角色變更需要第二位核准。請先到『使用者管理』新增第二位最高管理者。」
 - 測試：`tests/test_ledger_settings_t69.py`（單人訊息）、`tests/test_ledger_p1_reports_2026_09_30.py`（單人 409、有第二位真人最高管理者仍 202）。
-
-## 1.1.70（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
-- 變更（內部，不影響對外介面）：`api/ledger_requests.py`（通知名單、「等誰簽核」佇列）、`api/voucher_common.py`（`with_final_superadmin_tier` 最後一層簽核人）、`api/vouchers.py`（下一層簽核人名單）只列真人最高管理者，不含展示帳號 `demo`。庫裡只剩展示帳號時（隔離的展示庫）照舊由它當最後一層、「等誰簽核」照列（h12 M1），展示環境才看得到完整流程。
 
 ## 1.1.69 — 2026-11-13（fix/loosen-demo-count-h11；展示帳號不算第二位最高管理者）
 - 變更（內部，不影響對外介面）：`api/ledger_reports.py` 角色對應申請判斷「有沒有另一位在職最高管理者」改用 `config_ledger.real_superadmins()`（不含展示帳號 demo）；只有一位真人最高管理者時，訊息與行為與原本「沒有第二位」相同。
