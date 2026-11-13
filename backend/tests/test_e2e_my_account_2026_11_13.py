@@ -205,3 +205,45 @@ def test_default_light_pref_does_not_reset_a_topbar_dark_choice_and_logout_clear
     assert _theme_state(page)["attr"] == "dark"
     left = page.evaluate("() => { window.motrixLogout(); return localStorage.getItem('motrix_theme') }")
     assert left is None                                                                  # 登出清掉，下一位使用者不會繼承這台電腦的深色
+
+
+_TOUCH_JS = """() => {
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; };
+  const root = document.querySelector('[data-testid=tab-security]');
+  const rows = (sel) => [...root.querySelectorAll(sel)].filter(vis).map(e => { const r = e.getBoundingClientRect(); return { h: Math.round(r.height), w: Math.round(r.width), fs: parseFloat(getComputedStyle(e).fontSize) }; });
+  const mini = document.createElement('button'); mini.className = 'btn-mini'; mini.textContent = '改名'; root.appendChild(mini);
+  const miniH = Math.round(mini.getBoundingClientRect().height); mini.remove();
+  const card = root.querySelector('.card').getBoundingClientRect();
+  return { inputs: rows('.form-input'), buttons: rows('.btn-primary,.btn-secondary'), miniH, cardW: Math.round(card.width),
+           pad: parseFloat(getComputedStyle(document.querySelector('.page-main')).paddingLeft), scrollW: document.documentElement.scrollWidth, winW: window.innerWidth };
+}"""
+
+
+@pytest.mark.e2e
+def test_security_tab_touch_targets_at_375_and_tablet(live_server, make_user, new_page, login_as):
+    """T81 為舊 change-password.html 做的手機觸控尺寸規則，改成轉址頁後搬到「帳號安全」分頁（行動版 ≤767、平板直式 768–1023）。"""
+    u = make_user(username="e2e_ma_touch", role="sales")
+    page = new_page(viewport={"width": 375, "height": 900})
+    login_as(page, u)
+    page.goto(f"{live_server}/pages/my-account.html?tab=security")
+    page.locator("[data-testid=tab-security]").wait_for(state="visible", timeout=20000)
+    page.locator("[data-testid=tab-security] input.form-input").first.wait_for(state="visible", timeout=10000)
+    m = page.evaluate(_TOUCH_JS)
+    assert m["inputs"] and m["buttons"], m
+    assert all(i["fs"] >= 16 and i["h"] >= 44 for i in m["inputs"]), m["inputs"]        # 16px 以上 iOS 才不會自動放大；高度 ≥ 44
+    assert all(b["h"] >= 44 for b in m["buttons"]), m["buttons"]
+    assert all(b["w"] >= m["cardW"] - 40 for b in m["buttons"]), m                       # 手機上按鈕撐滿卡片寬
+    assert m["miniH"] >= 40, m
+    assert m["pad"] == 12 and m["cardW"] >= 300, m                                        # 卡片不再被 32px 內距壓扁
+    assert m["scrollW"] <= m["winW"] + 1, m                                               # 沒有橫向捲動
+    # 平板直式（768–1023）：輸入與按鈕 ≥ 42
+    page.set_viewport_size({"width": 800, "height": 1000})
+    page.wait_for_function("() => parseFloat(getComputedStyle(document.querySelector('.page-main')).paddingLeft) === 20", timeout=5000)
+    t = page.evaluate(_TOUCH_JS)
+    assert all(i["h"] >= 42 for i in t["inputs"]) and all(b["h"] >= 42 for b in t["buttons"]), t
+    assert t["miniH"] >= 36, t
+    # 桌面（≥1024）不套：輸入維持原本的小尺寸
+    page.set_viewport_size({"width": 1280, "height": 1000})
+    page.wait_for_function("() => parseFloat(getComputedStyle(document.querySelector('.page-main')).paddingLeft) === 32", timeout=5000)
+    d = page.evaluate(_TOUCH_JS)
+    assert all(i["fs"] == 13 and i["h"] < 42 for i in d["inputs"]), d["inputs"]
