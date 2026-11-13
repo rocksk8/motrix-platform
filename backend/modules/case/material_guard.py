@@ -157,6 +157,33 @@ def _valid_supplier_id(v) -> bool:
         return False
 
 
+def _inherit_po_supplier(conn, quote_no, order: dict):
+    """一條龍 P5b（旗標 `onepipe.supplier_master`）：新的材料申請連到採購單（`poDocCode`），而該採購單是從供應商主檔挑的（`data.supplierId`）⇒
+    沒填供應商就沿用採購單的；填了不同的供應商 ⇒ 回白話訊息（呼叫端擋下）。就地補 `order["supplierId"]`。
+    旗標關、沒連採購單、找不到採購單、採購單是手動輸入廠商（沒有 supplierId）⇒ 回 None 且不動（與目前相同）。"""
+    try:
+        from helpers.onepipe_flags import flag_on
+        if not flag_on("supplier_master"):
+            return None
+        po = str(order.get("poDocCode") or "").strip()
+        if not po:
+            return None
+        row = conn.execute("SELECT data_json FROM case_extra_expenses WHERE quote_no=? AND doc_code=? AND kind='purchase_order'",
+                           (quote_no, po)).fetchone()
+        sid = (json.loads(row["data_json"] or "{}") if row else {}).get("supplierId")
+    except Exception:                                                          # noqa: BLE001  讀不到 ⇒ 不沿用（今天的行為）
+        return None
+    if not _valid_supplier_id(sid):
+        return None
+    sid = int(sid)
+    if _valid_supplier_id(order.get("supplierId")):
+        if int(order["supplierId"]) != sid:
+            return "材料申請的供應商與所連採購單 %s 的供應商不一致，請改選採購單的供應商，或先修改採購單。" % po
+        return None
+    order["supplierId"] = sid
+    return None
+
+
 def _valid_order(o: dict):
     """基本驗證（與專屬端點同一組）；回 None＝合法，否則回錯誤訊息。"""
     name = o.get("itemName") or o.get("itemId")
@@ -237,6 +264,10 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             msg = _valid_order(no)
             if msg:
                 _rej(rejected, iid, "*", "invalid", msg)
+                continue
+            sup_msg = _inherit_po_supplier(conn, quote_no, no)                          # 一條龍 P5b：沿用採購單的供應商（旗標 supplier_master）
+            if sup_msg and actor is not None:
+                _rej(rejected, iid, "supplierId", "supplier_mismatch", sup_msg)
                 continue
             if actor is not None and _supplier_required(no) and not _valid_supplier_id(no.get("supplierId")):
                 _rej(rejected, iid, "supplierId", "supplier_required", "新增材料申請必須選擇供應商")

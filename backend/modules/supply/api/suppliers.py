@@ -219,6 +219,45 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
     return {"ok": True}
 
 
+def _supplier_references(conn, sid: int) -> dict:
+    """一條龍 P5b：誰在用這個供應商——採購單（`case_extra_expenses.data_json.supplierId`）與材料申請（`quotations.data_json` 的 `materialOrders[].supplierId`）。
+    只做『先用 LIKE 粗篩、再逐筆解析比對』（不用 json_extract）；案件模組沒裝（沒有那些表）⇒ 空。回 `{"po": [單號…], "orders": [案號…]}`。"""
+    out = {"po": [], "orders": []}
+
+    def _hit(v):
+        try:
+            return int(v) == int(sid)
+        except (TypeError, ValueError):
+            return False
+    try:
+        for r in conn.execute("SELECT doc_code, data_json FROM case_extra_expenses WHERE kind='purchase_order' AND data_json LIKE '%\"supplierId\"%'").fetchall():
+            try:
+                if _hit((json.loads(r["data_json"] or "{}") or {}).get("supplierId")):
+                    out["po"].append(r["doc_code"] or "")
+            except ValueError:
+                continue
+        for r in conn.execute("SELECT quote_no, data_json FROM quotations WHERE data_json LIKE '%\"supplierId\"%'").fetchall():
+            try:
+                d = json.loads(r["data_json"] or "{}") or {}
+            except ValueError:
+                continue
+            orders = ((d.get("caseRecord") or {}).get("materialOrders") if isinstance(d.get("caseRecord"), dict) else None) or []
+            if any(isinstance(o, dict) and _hit(o.get("supplierId")) for o in orders):
+                out["orders"].append(r["quote_no"])
+    except Exception:                                                          # noqa: BLE001  沒有那些表（案件模組未安裝）⇒ 沒有引用
+        return {"po": [], "orders": []}
+    return out
+
+
+def _refs_message(name: str, refs: dict) -> str:
+    parts = []
+    if refs["po"]:
+        parts.append("%d 張採購單（%s%s）" % (len(refs["po"]), "、".join(refs["po"][:3]), "…" if len(refs["po"]) > 3 else ""))
+    if refs["orders"]:
+        parts.append("%d 個案件的材料申請（%s%s）" % (len(refs["orders"]), "、".join(refs["orders"][:3]), "…" if len(refs["orders"]) > 3 else ""))
+    return "供應商「%s」已被%s使用，無法刪除。請先改掉那些單據的供應商，或將此供應商改為停用。" % (name, "與".join(parts))
+
+
 @router.delete("/api/suppliers/{sid}")
 def delete_supplier(sid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -229,6 +268,12 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, "供應商不存在")
     sname = row['name']
+    from helpers.onepipe_flags import flag_on
+    if flag_on("supplier_master"):                                             # 一條龍 P5b：被採購單／材料申請引用的供應商不能刪（旗標關＝與目前相同）
+        refs = _supplier_references(conn, sid)
+        if refs["po"] or refs["orders"]:
+            conn.close()
+            raise HTTPException(409, _refs_message(sname, refs))
     conn.execute("DELETE FROM suppliers WHERE id=?", (sid,))
     conn.commit()
     conn.close()

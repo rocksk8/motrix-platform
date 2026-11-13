@@ -327,6 +327,30 @@ def _buyer_pr_ok(conn, quote_no: str, user: dict, kind=None, exp_id=None) -> boo
     return _buyer_pr_visible(conn, quote_no, user)
 
 
+def _po_supplier(conn, kind: str, data: dict, existing: dict = None, body_data=None, typed_name: str = ""):
+    """一條龍 P5b（旗標 `onepipe.supplier_master`，預設開）：採購單 `data.supplierId`＝從供應商主檔挑的廠商。
+    回傳主檔的廠商名稱（呼叫端據此把收款人類型／名稱以主檔為準）；沒有挑（手動輸入）、不是採購單、旗標關 ⇒ None（行為與目前相同）。
+    供應商不存在 ⇒ 400（白話）。就地整理 `data["supplierId"]` 為整數。
+    編輯時：既有單據帶著供應商、這次沒有明確送 `supplierId`、卻手動改了廠商名稱 ⇒ 視為改回手動輸入，移除 `supplierId`（不讓名稱與編號不一致）。"""
+    if kind != "purchase_order" or "supplierId" not in data:
+        return None
+    from helpers.onepipe_flags import flag_on
+    if not flag_on("supplier_master"):
+        return None
+    sid = data.get("supplierId")
+    explicit = isinstance(body_data, dict) and "supplierId" in body_data
+    if existing is not None and not explicit and typed_name and typed_name != (existing.get("_payee_name") or ""):
+        data.pop("supplierId", None)
+        return None
+    if isinstance(sid, bool) or not isinstance(sid, (int, str)) or not str(sid).strip().isdigit():
+        raise HTTPException(400, "供應商編號不正確，請重新選擇供應商，或改為手動輸入廠商名稱。")
+    row = conn.execute("SELECT name FROM suppliers WHERE id=?", (int(str(sid).strip()),)).fetchone()
+    if not row:
+        raise HTTPException(400, "找不到所選的供應商（可能已被刪除），請重新選擇，或改為手動輸入廠商名稱。")
+    data["supplierId"] = int(str(sid).strip())
+    return (row["name"] or "").strip() or None
+
+
 def _guard_case(conn, quote_no: str, user: dict, kind=None, exp_id=None):
     """報價單存在＋擁有者檢查。`quote_no` 可列舉，不擋就是 IDOR。
     准不准只看 L1 `case_owner_readable`（附件提供者用同一支，稽核 D AT-M1b）；這裡只負責說出原因。
@@ -549,6 +573,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             lines, over_plan = PI.check_lines(conn, quote_no, kind, lines)          # 32-S2：明細連案件品項（沒有 itemId ⇒ 原樣）
             PI.stamp_from_pr(data, lines)                                           # 第 44 班：data.fromPr／pr_no 依明細的請購單連結同步
             PI.check_from_pr(conn, quote_no, kind, data)
+            sup_name = _po_supplier(conn, kind, data)                                # 一條龍 P5b（旗標 supplier_master）：採購單挑供應商主檔
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
             cat_col = EF.doc_category(lines, body.category or "其他", conn)                # 費用單據的便利欄：取明細金額最大的類別（不再一律「其他」）
@@ -556,6 +581,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             lines, total, data, doc_code, over_plan = [], _recalc(body), {}, "", []
             desc = (body.description or "").strip()
             cat_col = body.category or "其他"
+            sup_name = None
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
             "INSERT INTO case_extra_expenses "
@@ -572,7 +598,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
              now, now, display,
              kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
-             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
+             "vendor" if sup_name else body.payeeType, sup_name or (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
              EF.current_def_version(conn, kind),                 # 建立當下的類型定義版本（送審時再釘一次）
              normalize_date(body.plannedPayDate, "預定付款日")),
         )
@@ -616,11 +642,14 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             lines, over_plan = PI.check_lines(conn, quote_no, row_kind, lines, exclude_id=exp_id)      # 32-S2
             PI.stamp_from_pr(data, lines)                                                              # 第 44 班
             PI.check_from_pr(conn, quote_no, row_kind, data)
+            sup_name = _po_supplier(conn, row_kind, data, existing=dict(_jcol(row, "data_json"), _payee_name=_col(row, "payee_name", "") or ""),
+                                    body_data=body.data, typed_name=(body.payeeName or "").strip())      # 一條龍 P5b
             desc = (body.description or "").strip() or row["description"]
             cat_col = EF.doc_category(lines, body.category or "其他", conn)
         else:
             lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
             over_plan = []
+            sup_name = None
             cat_col = body.category or "其他"
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
@@ -635,8 +664,8 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
              now, user.get("display_name") or user["username"],
              json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines),
              EF.department_of(data, body.departmentId) if row_kind else _col(row, "department_id", None),
-             _payee_val(body, "payeeType", row, "payee_type"),
-             _payee_val(body, "payeeName", row, "payee_name"),
+             "vendor" if sup_name else _payee_val(body, "payeeType", row, "payee_type"),
+             sup_name or _payee_val(body, "payeeName", row, "payee_name"),
              _payee_val(body, "payeeBank", row, "payee_bank"),
              _payee_val(body, "payeeAccount", row, "payee_account"),
              normalize_date(body.plannedPayDate, "預定付款日") if body.plannedPayDate is not None else (_col(row, "planned_pay_date", "") or ""),
@@ -687,6 +716,26 @@ def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
                 if len(out) >= PAYREQ_CASES_MAX:
                     break
         return out
+    finally:
+        conn.close()
+
+
+@router.get("/api/extra-expenses/suppliers")
+def po_supplier_picker(authorization: str = Header(None)):
+    """一條龍 P5b（旗標 `onepipe.supplier_master`）：採購單挑廠商用的供應商選單，只回 id／code／name（沒有統編、電話、銀行、聯絡人）。
+    旗標關 ⇒ 404（與沒有這條路由相同）。對象＝會開單據的人（管理員／財務、或持採購／費用單據／案件管理／報價單模組）；其他人 403。
+    `GET /api/suppliers` 對非管理員仍是空清單，不因此放寬。"""
+    from helpers.onepipe_flags import flag_on
+    user = _require_user(authorization)
+    if not flag_on("supplier_master"):
+        raise HTTPException(404, "Not Found")
+    if user.get("role") not in ("superadmin", "admin", "finance") and not any(
+            user_has_module(user, m) for m in ("procurement", "expense_forms", "case_manage", "quotation")):
+        raise HTTPException(403, "您沒有開立採購單的權限，無法選擇供應商。")
+    conn = get_db()
+    try:
+        return {"suppliers": [{"id": r["id"], "code": r["code"] or "", "name": r["name"] or ""}
+                              for r in conn.execute("SELECT id, code, name FROM suppliers ORDER BY name, id").fetchall()]}
     finally:
         conn.close()
 
@@ -750,7 +799,8 @@ def payreq_mine(authorization: str = Header(None)):
             " WHERE e.created_by = ? ORDER BY e.id DESC LIMIT 100", (user["username"],)).fetchall()
         out = []
         for r in rows:
-            if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user):      # 無案件列＝自己建立的，照列
+            if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user) and not (
+                    (r["kind"] or "") == "purchase_req" and _buyer_pr_visible(conn, r["quote_no"], user)):      # 無案件列＝自己建立的，照列；P5a：採購同仁自己的請購單也列
                 continue
             d = _row_to_dict(r, full_account=has_finance_access(user))
             d.update({"quoteNo": r["quote_no"], "customerName": r["_cust"] or "", "projectName": r["_proj"] or ""})

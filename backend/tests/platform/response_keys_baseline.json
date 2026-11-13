@@ -7067,6 +7067,7 @@
    "groups[].values.start_month",
    "groups[].values.style",
    "groups[].values.suggested",
+   "groups[].values.supplier_master",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
    "groups[].values.tagline",

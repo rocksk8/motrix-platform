@@ -118,7 +118,7 @@ def test_admin_path_is_unchanged_and_still_full(W, monkeypatch):
     _flag(monkeypatch, True)
     c, h = W
     rows = c.get("/api/suppliers", headers=h["sa"]).json()
-    assert len(rows) == 1 and "bankAccount" in json.dumps(rows[0], ensure_ascii=False) or "customFields" in json.dumps(rows[0])
+    assert len(rows) == 1 and all(k in rows[0] for k in ("bankAccount", "customFields"))
 
 
 # ── 請購單 ─────────────────────────────────────────────────────────────────
@@ -207,3 +207,76 @@ def test_material_order_refusal_explains_in_plain_words_only_when_flag_on(W, mon
     if on.status_code == 403:
         assert "請購單" not in off.text
         assert "請購單" in on.text
+
+
+# ── 真實的設定接線（不 monkeypatch）──────────────────────────────────────────
+def test_real_flag_wiring_default_off_then_on_after_the_waiting_period(client):
+    from datetime import datetime, timedelta
+    from helpers.onepipe_flags import flag_on
+    from helpers import settings_registry as R
+    assert flag_on("buyer_access") is False, "全新資料庫：預設關"
+    conn = db.get_db()
+    try:
+        out = R.publish("onepipe", {"buyer_access": 1}, user="admin", conn=conn, reason="測試開啟採購第一道牆，驗證設定接線。")
+        assert out["pending"], "放寬權限：要先等待，不立即生效"
+        assert R.get("onepipe", "buyer_access", conn=conn) == 0
+        later = (datetime.now() + timedelta(days=8)).isoformat(timespec="seconds")
+        assert R.materialize_due(conn, now=later) >= 1
+        conn.commit()
+    finally:
+        conn.close()
+    R.invalidate()
+    assert flag_on("buyer_access") is True
+
+
+# ── 覆核補強（h9／h11 2026-11-14）──────────────────────────────────────────
+def test_flag_off_is_exactly_today(W, monkeypatch):
+    """關閉＝與今天相同：供應商清單恆為 []、請購單 404、材料申請沒有請購單提示。"""
+    _flag(monkeypatch, False)
+    c, h = W
+    r = c.get("/api/suppliers", headers=h["buyer"])
+    assert r.status_code == 200 and r.json() == []
+    assert c.post(BASE, headers=h["buyer"], json=_body()).status_code == 404
+
+
+def _admin_made(kind, no=NO):
+    conn = db.get_db()
+    try:
+        cur = conn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, kind, doc_code, status, created_by, created_by_name,"
+                           " created_at, updated_at, data_json, lines_json, total_cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                           (no, "其他", "管理員開的", kind, "X-%s-1" % kind, "草稿", "p5a_sa", "p5a_sa", "2026-11-14T00:00:00", "2026-11-14T00:00:00", "{}", "[]", 0))
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def test_buyer_cannot_touch_admin_made_rows_even_a_purchase_req(W, monkeypatch):
+    _flag(monkeypatch, True)
+    c, h = W
+    for kind in ("purchase_req", "purchase_order"):
+        eid = _admin_made(kind)
+        for r in (c.patch("%s/%d" % (BASE, eid), headers=h["buyer"], json=_body(kind)),
+                  c.post("%s/%d/submit" % (BASE, eid), headers=h["buyer"]),
+                  c.delete("%s/%d" % (BASE, eid), headers=h["buyer"])):
+            assert r.status_code == 404, (kind, r.status_code, r.text)
+
+
+def test_row_of_case_a_is_not_reachable_through_case_b_path(W, monkeypatch):
+    _flag(monkeypatch, True)
+    c, h = W
+    eid = c.post(BASE, headers=h["buyer"], json=_body()).json()["id"]
+    other = "/api/quotations/%s/extra-expenses" % HIDDEN
+    for r in (c.patch("%s/%d" % (other, eid), headers=h["buyer"], json=_body()),
+              c.post("%s/%d/submit" % (other, eid), headers=h["buyer"]),
+              c.delete("%s/%d" % (other, eid), headers=h["buyer"])):
+        assert r.status_code == 404, r.text
+
+
+def test_buyer_still_sees_own_purchase_req_in_mine_after_reload(W, monkeypatch):
+    _flag(monkeypatch, True)
+    c, h = W
+    eid = c.post(BASE, headers=h["buyer"], json=_body()).json()["id"]
+    assert eid in [x["id"] for x in c.get("/api/extra-expenses/mine", headers=h["buyer"]).json()]
+    _flag(monkeypatch, False)
+    assert eid not in [x["id"] for x in c.get("/api/extra-expenses/mine", headers=h["buyer"]).json()], "旗標關＝回到今天（看不到案件就不列）"
