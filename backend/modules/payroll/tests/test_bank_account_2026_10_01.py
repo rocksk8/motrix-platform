@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 依第42班使用者裁示（傳票／出納／財務金額能力只屬財務角色與 superadmin；財務與出納合併），刪除 1 題原本 skip 的測試：test_cashier_sees_masked_by_default_reveals_with_audit_and_cannot_edit（2026-11-13 chore/test-prune）
 """員工收款帳號（payroll v3 `user_bank_accounts`）：驗證、遮蔽矩陣、IDOR、稽核不含全碼、快照、提供者 reveal 必帶 token。
 
 設計：D:\\開發測試檔\\expense-forms-design-ae.md 切片 1。
@@ -149,28 +150,6 @@ def test_plain_users_and_approvers_cannot_see_others_at_all(client, make_user):
         assert client.get("/api/bank-accounts", headers=h).status_code == 404
         assert client.get("/api/bank-accounts/%d/history" % uid, headers=h).status_code == 404
         assert client.put("/api/bank-accounts/%d" % uid, json={**GOOD, "accountNumber": "55555555"}, headers=h).status_code == 404
-
-
-@pytest.mark.skip(reason="第42班（財務與出納合併）：出納唯讀／財務可編輯的分工不再存在；財務角色的行為由 test_finance_and_superadmin_can_maintain_others… 涵蓋")
-def test_cashier_sees_masked_by_default_reveals_with_audit_and_cannot_edit(client, make_user):
-    _a, uid = _seed_owner(client, make_user)
-    cash = _login(client, make_user(username="ba_cash", role="viewer", modules=["cashier"]))
-    r = client.get("/api/bank-accounts/%d" % uid, headers=cash)
-    acc = r.json()["account"]
-    assert r.status_code == 200 and acc["masked"] is True and acc["accountNumber"] == "" and acc["accountNumberMasked"] == "****4556"
-    assert NUM not in r.text and r.json()["canEdit"] is False
-    assert _audit_rows("user.bank_account.reveal") == []
-    r = client.get("/api/bank-accounts/%d?reveal=1" % uid, headers=cash)
-    assert r.json()["account"]["accountNumber"] == NUM and r.json()["account"]["masked"] is False
-    rev = _audit_rows("user.bank_account.reveal")
-    assert len(rev) == 1 and json.loads(rev[0]["detail"]) == {"last4": "4556", "purpose": "profile"}
-    _no_full_number_anywhere()
-    # 出納看清單：只有末四碼
-    lst = client.get("/api/bank-accounts", headers=cash)
-    assert lst.status_code == 200 and NUM not in lst.text and "4556" in lst.text and lst.json()["canEdit"] is False
-    # 出納不能改別人的、也不能看歷史
-    assert client.put("/api/bank-accounts/%d" % uid, json={**GOOD, "accountNumber": "55555555"}, headers=cash).status_code == 404
-    assert client.get("/api/bank-accounts/%d/history" % uid, headers=cash).status_code == 404
 
 
 def test_finance_and_superadmin_can_maintain_others_and_it_is_audited_as_by_admin(client, make_user):
