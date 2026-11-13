@@ -169,3 +169,15 @@ def test_pending_page_shows_summary_not_raw_json(client, make_user, conn):
     tok = client.post("/api/auth/login", json={"username": username, "password": password}).json()["token"]
     body = client.get("/api/settings-center/pending", headers={"Authorization": "Bearer " + tok})
     assert "secret-token" not in body.text and "清單由 0 項改為 1 項" in body.text
+
+
+def test_strict_reader_raises_for_groups_with_no_legacy_source_instead_of_defaults(conn, monkeypatch):
+    f = _doc_field(loosen=None, risk="ops", risk_text="", impact_scope=None)
+    R.register_group(GA, "只存在定義裡", [f], help="測試用群組。")                       # 沒有 adapter、沒有 legacy_key
+    R.publish(GA, {"doc": ["real"]}, reason="r", user="s5_a", conn=conn)
+    conn.commit()
+    assert R.get_group_effective(GA, conn=conn)["doc"] == ["real"]
+    monkeypatch.setattr(R.D, "get", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("定義表讀不到")))
+    with pytest.raises(RuntimeError):
+        R.get_group_effective(GA, conn=conn)                                              # 嚴格：丟例外
+    assert R.get_group(GA, conn=conn)["doc"] == []                                        # 一般讀取維持「讀不到就預設」（不拖垮畫面）
