@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
+- 變更（內部，不影響對外介面）：案件頁（`case-management-core.js`）、核准佇列（`approval-queue.html`）、報價單（`quotation-form.html`）讀據點清單／公司名稱改打 `GET /api/settings/company-profile/public`（只含名稱、統編、聯絡方式、據點 id＋名稱）；顯示與行為不變。完整端點只剩公司資料設定頁在用（後端新增「完整內容只給最高管理者」開關，預設關）。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
+
 ## 1.0.224 — 2026-11-13（T82 預跑 #1 修正；整合者）
 - 文字：估價單／報價單表單的瀏覽器分頁標題後綴改「MOTRIX PLATFORM」（估價單分支加的那一行漏了 P1.5 的品牌文字統一）；簽核頁一行程式註解不再寫成「業務」。不動 API／資料／權限。
 - 測試：簽核佇列過濾測試改認共用的 `visible_queue_items`（P1.5 把組項目與過濾抽成共用函式，過濾仍然只有一處）；公開品牌回應測試補 `tagline`；頭像選單 e2e 認「我的帳號」。

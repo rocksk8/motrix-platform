@@ -16,6 +16,10 @@
 - 行為變更：展示帳號（開機建立、role＝superadmin、active＝1）不再被算成第二位最高管理者——設定中心放寬類變更（plan／publish）、帳務「角色對應」與權限矩陣的雙人核准、無簽核層時的自簽逃生條款、公司資料設定頁「只有一位最高管理者」提示的計數都改用 `real_superadmins()`。只有一位真人最高管理者的公司，放寬變更改走「原因＋確認期間＋警告」，不再卡在一個不會來的核准；有第二位真人時行為不變。簽核人／通知名單（誰能簽、誰收通知）不動：展示庫裡 demo 本來就是唯一的簽核人。
 - **（追加 2026-11-13，hichan-12 審查 M1 的修正，新 commit）**：`helpers.custom_def_review.review_state` 在審核模式「開」且沒指定審核人時，預設審核人（申請人以外的最高管理者）改用 `real_superadmins()`：只有一位真人最高管理者時不啟用審核、直接發布（稽核照記「未經第二人審核」），不再等展示帳號。有第二位真人時審核人＝那一位。
 - 測試：`tests/test_loosening_demo_not_second_approver_2026_11_13.py`（一位真人＋demo ⇒ 不要求第二位核准、兩位真人仍要求、plan 的 otherSuperadmins、自簽逃生條款、設定頁計數、變異：demo 名稱換掉全紅、守門：各處不准再各寫一份含 demo 的計數）。
+- **（併入）(next) — 2026-11-13（feat/company-profile-public-h11；公司資料公開子集＋「完整內容只給最高管理者」開關）**
+- 行為變更：①新增 `GET /api/settings/company-profile/public`（任何登入者；白名單 name／tax_id／contact_info／locations[{id,name}]；不含匯款帳號、地址、電話、email、座標、金鑰、告知文字、據點自己的銀行與抬頭欄位）。②案件頁、核准佇列、報價單、傳票、勞報單五個呼叫者改打 /public（完整端點只剩公司資料設定頁在用；守門題鎖住）。③設定中心「登入與密碼」新增欄位 `company_profile_full_read_superadmin_only`（預設 0＝與今天相同，任何登入者仍讀得到完整資料；改 1 ＝ 非最高管理者讀完整端點回 403，改回 0 屬放寬須第二位最高管理者核准）。預設值不變，部署零行為變更；是否打開、是否推翻 SA4（A 裁）待使用者裁示。
+- **（追加 2026-11-13，hichan-12 審查 M1／L1／L2／L3 的修正，新 commit）**：①公司資料設定頁在開關開啟、非最高管理者讀到 403 時顯示「完整的公司資料只有最高管理者可以查看。」，不再是一張靜默的空表單。②開關問句改成說明統編與聯絡方式仍會顯示給所有人。③守門題的完整端點名單加上公司設定精靈（`company-wizard.js`，T84，最高管理者專用），並認得拼接、變數基底與 %2D 編碼寫法。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（逐角色：/public 只有白名單、完整端點預設不變／開關開後非超管 403／超管照讀、白名單變異、舊安裝補總公司、讀不到設定 fail-closed、前端只有設定頁讀完整端點）；route_inventory／response_keys／settings_deploy 基準同步。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

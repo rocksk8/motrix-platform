@@ -1235,6 +1235,9 @@
             this.bkSet = !!this.bkMasked
             this.bkText = ''
             this.bkCleared = false
+          } else if (r.status === 403) {
+            // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
+            this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true
           }
           await this.loadSetup()
           if (this.isSuperadmin) {

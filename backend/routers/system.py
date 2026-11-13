@@ -1662,9 +1662,42 @@ def _migrated_locations(profile):
              "lat": profile.get("office_lat"), "lon": profile.get("office_lon")}]
 
 
+#: 公開子集（`GET /api/settings/company-profile/public`，任何登入者可讀）——**白名單**：欄位只增不自動：profile 之後新增的鍵預設是私有的。
+#: 內容＝目前所有非設定頁的畫面真的用到的東西（案件／核准／報價單的據點名稱、傳票抬頭、勞報單預填公司名稱／統編／聯絡方式）。
+#: 不含：匯款帳號四欄、地址／電話／email、座標、金鑰、告知文字、據點自己的銀行與抬頭欄位。單據列印在伺服器端組（pdf_gen／company_identity），不經這個端點。
+_PUBLIC_PROFILE_FIELDS = ("name", "tax_id", "contact_info")
+_PUBLIC_LOCATION_FIELDS = ("id", "name")
+
+#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 0 ＝ 維持原本（登入即可讀）。
+_FULL_READ_GROUP, _FULL_READ_FIELD = "account_security", "company_profile_full_read_superadmin_only"
+
+
+def _full_read_superadmin_only() -> bool:
+    """讀不到設定 ⇒ 當作開（只影響非最高管理者：他們改用 /public，不會壞）。"""
+    try:
+        from helpers import settings_registry as _sr
+        return bool(int(_sr.get(_FULL_READ_GROUP, _FULL_READ_FIELD)))
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).warning("公司資料讀取限制：讀不到設定，保守地只讓最高管理者讀完整內容", exc_info=True)
+        return True
+
+
+@router.get("/api/settings/company-profile/public")
+def get_company_profile_public(authorization: str = Header(None)):
+    """任何登入者可讀的公司資料子集（白名單）：名稱、統編、聯絡方式、據點（只有 id 與名稱）。"""
+    _require_user(authorization)
+    profile = {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
+    out = {k: str(profile.get(k) or "") for k in _PUBLIC_PROFILE_FIELDS}
+    out["locations"] = [{k: l.get(k, "") for k in _PUBLIC_LOCATION_FIELDS}
+                        for l in _migrated_locations(profile) if isinstance(l, dict) and l.get("id")]
+    return out
+
+
 @router.get("/api/settings/company-profile")
 def get_company_profile(authorization: str = Header(None)):
-    _require_user(authorization)
+    me = _require_user(authorization)
+    if me.get("role") != "superadmin" and _full_read_superadmin_only():
+        raise HTTPException(403, "完整的公司資料只有最高管理者可以查看。")
     # 既有安裝的 DB 值可能是新增銀行欄位前存的舊 shape，缺的鍵補上空字串，
     # 前端才不用每個欄位都自己防 undefined。
     profile = {**_COMPANY_PROFILE_DEFAULT,

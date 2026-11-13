@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 944,
-  "endpoints_api": 940,
+  "endpoints_total": 945,
+  "endpoints_api": 941,
   "write_total": 507,
   "write_api": 507,
-  "get_api": 433,
-  "distinct_paths_api": 796,
+  "get_api": 434,
+  "distinct_paths_api": 797,
   "write_with_body_api": 372,
   "write_with_path_param_api": 360
  },
@@ -4735,6 +4735,11 @@
   },
   "POST /api/license/import": {
    "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/company-profile/public": {
+   "w": false,
    "pp": 0,
    "body": false
   }
