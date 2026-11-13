@@ -45,12 +45,12 @@ def test_superadmin_who_is_the_current_approver_gets_an_unlock_entry_on_a_pendin
     assert _is_locked(page)
     btn = page.locator('[data-testid="qf-unlock-edit"]')
     btn.wait_for(state="visible", timeout=5000)
-    assert "簽核會重跑" in (btn.get_attribute("title") or "") and "送審人會改成你" in (btn.get_attribute("title") or "")
+    assert "已簽的層需重新簽核" in (btn.get_attribute("title") or "") and "送審人維持" in (btn.get_attribute("title") or "")
     assert not page.is_visible('[data-testid="qf-review-edit-start"]'), "最高管理者不走複查編輯（不改後端權限）"
     # 解鎖：輸入個人解鎖密碼 ⇒ 欄位真的可編輯
     btn.click()
-    assert "送審人會改成你" in page.inner_text('[data-testid="qf-unlock-consequence"]'), "彈窗要講清楚後果（PM）"
-    assert "已簽的層全部清除重簽" in page.inner_text('[data-testid="qf-unlock-consequence"]')
+    cons = page.inner_text('[data-testid="qf-unlock-consequence"]')
+    assert "已簽的層需重新簽核，並通知他們" in cons and "送審人維持" in cons, "彈窗要講清楚後果（PM）：" + cons
     page.fill('input[placeholder="輸入解鎖密碼"]', _UNLOCK_PW)
     page.get_by_role("button", name="確認解鎖").click()
     page.wait_for_selector('[data-testid="qf-unlocked-banner"]', state="visible", timeout=10000)

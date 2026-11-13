@@ -806,7 +806,7 @@
       </div>
       <div style="padding:20px">
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.6">
-          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定<span x-show="isPendingStatus()" data-testid="qf-unlock-consequence">；<strong>存檔後，已簽的層全部清除重簽，送審人會改成你</strong></span>。
+          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定；<strong data-testid="qf-unlock-consequence" x-text="unlockConsequence()"></strong>
         </div>
         <div style="margin-bottom:4px">
           <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
@@ -1127,7 +1127,7 @@
       <!-- 最高管理者的編輯入口：已送出 ⇒ 解鎖編輯；待審核／簽核中 ⇒ 同一顆（V3.45：原本最高管理者＋當層簽核人在待審核完全沒有入口；後端 unlock-edit 本來就允許） -->
       <template x-if="canUnlockEdit()">
         <button class="btn btn-ghost btn-sm" @click="showUnlockModal=true; unlockPwd=''; unlockError=''" data-testid="qf-unlock-edit"
-                :title="isPendingStatus() ? '解鎖後可直接修改內容；存檔後已簽的層全部清除重簽，送審人會改成你（整條簽核會重跑）' : '解鎖後可修改內容；存檔後需重新簽核'"
+                :title="'解鎖後可修改內容。' + unlockConsequence()"
                 style="border-color:#FDE68A;color:#92400E;background:#FFFBEB">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           解鎖編輯
@@ -2697,6 +2697,7 @@
   //   併入 fix/quote-items-align：品項明細對齊（≥768px 同一列輸入框貼同一條上緣；區段標題列補齊成本／毛利率／單項毛利三格）。
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
+  //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
   const FORM_VERSION = 'V3.45'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
@@ -4219,6 +4220,12 @@
           && (!this.unlocked || (this.isCurrentTierApprover() && this.session.role !== 'superadmin'))
       },
       isPendingStatus() { return this.q.status === '待審核' || this.q.status === '簽核中' },
+      // 解鎖存檔的後果（後端：已簽的層清除重簽並通知他們；送審人維持原送審人、改內容的人另記 editedBy）。沒有原送審紀錄的舊單：送審人記為改內容的人
+      unlockConsequence() {
+        const a = this.q.approval || {}
+        const who = a.requestedByDisplay || a.requestedBy
+        return '存檔後，已簽的層需重新簽核，並通知他們；送審人' + (who ? '維持' + who : '記為你')
+      },
       // 「解鎖編輯」入口：最高管理者、尚未解鎖；已送出，或待審核／簽核中且不在複查編輯中。伺服器為準（unlock-edit 需最高管理者密碼＋最高管理者角色）。
       canUnlockEdit() {
         return this.session?.role === 'superadmin' && !this.unlocked && !this.reviewEditing

@@ -549,7 +549,8 @@ def check_no_tier_self_approval(conn, appr: dict, user: dict) -> Optional[str]:
     自己的申請。回傳 None 表示可以放行；回傳字串表示應該擋下（訊息內容即為
     錯誤訊息）。逃生條款：申請人是目前唯一在職的最高管理者時允許自簽，
     否則會永久卡死無人可簽。"""
-    if appr.get("requestedBy") != user["username"]:
+    # 解鎖改版：送審人維持原送審人，改內容的最高管理者記在 editedBy——兩者都不能自簽（editedBy 只在解鎖改版的簽核物件上才有）
+    if user["username"] not in (appr.get("requestedBy"), appr.get("editedBy")):
         return None
     other_admin = conn.execute(
         "SELECT 1 FROM users WHERE role='superadmin' AND active=1 AND username!=? LIMIT 1",
