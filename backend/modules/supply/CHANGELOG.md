@@ -1,6 +1,7 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）
+## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 fix/wording-t82-sweep（T82 用詞整理）
+- 文字（T82 用詞整理）：出貨單「僅草稿狀態可送出審核」409 訊息 → 「…可送出簽核」；僅訊息文字，狀態判斷不變
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。
 
 ## 1.0.37 — 2026-11-13（fix/backlog-bugs-20261113；T81 backlog 修正，版號由列車取）

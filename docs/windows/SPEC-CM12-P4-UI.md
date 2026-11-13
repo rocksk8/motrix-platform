@@ -89,7 +89,7 @@ assert natives == []                            # 頁面若還在用原生對話
 | 38 | `closeCaseAction`（2687） | alert | alert('網路錯誤，請稍後再試') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 39 | `updateDealTag`（2808） | alert | alert(err.detail \|\| '操作失敗，請稍後再試') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 40 | `updateDealTag`（2811） | alert | alert('網路錯誤，請稍後再試') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 41 | `unlockCase`（2817） | confirm | confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套… | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
+| 41 | `unlockCase`（2817） | confirm | confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理者於簽核佇列審核通過後才會套… | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
 | 42 | `unlockCase`（2826） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '解鎖失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 43 | `unlockCase`（2828） | alert | alert('網路錯誤：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 44 | `lockCase`（2833） | confirm | confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。') | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
@@ -165,11 +165,11 @@ assert natives == []                            # 頁面若還在用原生對話
 | 187 | `uploadInvoiceVoucherIssuedFiles`（5208） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '上傳失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 188 | `uploadInvoiceVoucherIssuedFiles`（5210） | alert | alert('上傳失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 189 | `uploadPaymentItemInvoiceFiles`（5226） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '上傳失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 190 | `uploadPaymentItemInvoiceFiles`（5228） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 190 | `uploadPaymentItemInvoiceFiles`（5228） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 191 | `uploadPaymentItemInvoiceFiles`（5236） | alert | alert('上傳失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 192 | `deletePaymentItemInvoiceFile`（5241） | confirm | confirm('確定刪除此附件？') | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
 | 193 | `deletePaymentItemInvoiceFile`（5248） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '刪除失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 194 | `deletePaymentItemInvoiceFile`（5250） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 194 | `deletePaymentItemInvoiceFile`（5250） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 195 | `deletePaymentItemInvoiceFile`（5255） | alert | alert('刪除失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 220 | `deleteInvoiceVoucherIssuedFile`（5409） | confirm | confirm('確定刪除此附件？') | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
 | 221 | `deleteInvoiceVoucherIssuedFile`（5415） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '刪除失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
@@ -271,18 +271,18 @@ assert natives == []                            # 頁面若還在用原生對話
 | 185 | `deleteShippingSignedFile`（5192） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '刪除失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 186 | `deleteShippingSignedFile`（5194） | alert | alert('刪除失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 196 | `uploadMaterialFiles`（5270） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '上傳失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 197 | `uploadMaterialFiles`（5272） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 197 | `uploadMaterialFiles`（5272） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 198 | `uploadMaterialFiles`（5280） | alert | alert('上傳失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 199 | `deleteMaterialFile`（5285） | confirm | confirm('確定刪除此附件？') | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
 | 200 | `deleteMaterialFile`（5292） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '刪除失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 201 | `deleteMaterialFile`（5294） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 201 | `deleteMaterialFile`（5294） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 202 | `deleteMaterialFile`（5299） | alert | alert('刪除失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 203 | `uploadMaterialInvoiceFiles`（5314） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '上傳失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 204 | `uploadMaterialInvoiceFiles`（5316） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 204 | `uploadMaterialInvoiceFiles`（5316） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 205 | `uploadMaterialInvoiceFiles`（5324） | alert | alert('上傳失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 206 | `deleteMaterialInvoiceFile`（5329） | confirm | confirm('確定刪除此發票附件？') | confirm(danger) | `if (!(await MotrixUI.confirm(…, {danger: true}))) return` |  |  |
 | 207 | `deleteMaterialInvoiceFile`（5336） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '刪除失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
-| 208 | `deleteMaterialInvoiceFile`（5338） | alert | alert(body.message \|\| '已送出，待最高管理員審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
+| 208 | `deleteMaterialInvoiceFile`（5338） | alert | alert(body.message \|\| '已送出，待最高管理者審核後套用') | toast(ok) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 209 | `deleteMaterialInvoiceFile`（5343） | alert | alert('刪除失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 210 | `uploadDispatchFiles`（5357） | alert | alert((await r.json().catch(() => ({}))).detail \|\| '上傳失敗') | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |
 | 211 | `uploadDispatchFiles`（5361） | alert | alert('上傳失敗：' + e.message) | toast(error) | 改 `MotrixUI.toast(…, {kind})`（不再阻塞；後面的 return 照舊） |  |  |

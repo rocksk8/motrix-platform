@@ -51,7 +51,7 @@ frontend/pages/users.html:266   <input x-model="rlForm.superadmin" placeholder="
 最高管理者  9   daily_tasks.py:419,472,552
                 dev_crm.py:463,660
                 quotations.py:1865,2420,2463,3372
-最高管理員  3   approval_delegates.py:66,116
+最高管理者  3   approval_delegates.py:66,116
                 quotations.py:477
 超級管理員 17   auth.py:228,230,1550,1584,1643,1692
                 quotations.py:1401,1571,1905,3462,4308,4465
@@ -119,14 +119,14 @@ frontend/pages/users.html            :771 / :773   （Alpine 初值＋表單初�
                                                     是合理的 fallback，不在母體）
 ```
 
-☠️ **第四個詞「超管」**——最初的三詞掃描（`最高管理者`／`最高管理員`／`超級管理員`）
+☠️ **第四個詞「超管」**——最初的三詞掃描（`最高管理者`／`最高管理者`／`超級管理員`）
 **完全沒有看到它**。
 🔑 它證明「有三種說法」這個數字本身**是沒查完的**。
 
 ### §2c 使用者自己也混用 ⇒ **這一題沒有裁示可依**
 
 ```
-STATE.md 使用者原話   最高管理者 23 ／ 最高管理員 5 ／ 超級管理員 20
+STATE.md 使用者原話   最高管理者 23 ／ 最高管理者 5 ／ 超級管理員 20
 ```
 📌 而**甲案不需要那個裁示**——它讀設定，而設定是客戶自己填的。
 
@@ -251,8 +251,8 @@ raise HTTPException(403, f"僅{role_label('superadmin')}可執行此操作")
 ⚠️ **逐條改，不要 sed** ——81 條的句型不只一種，其中三條不是「僅 X 可…」：
 
 ```
-approval_delegates.py:66   「…如需代替他人設定請聯絡最高管理員」
-quotations.py:477          「…或聯繫最高管理員」
+approval_delegates.py:66   「…如需代替他人設定請聯絡最高管理者」
+quotations.py:477          「…或聯繫最高管理者」
 quotations.py:1905         「案件已結案，僅超級管理員可變更案件進度」
 ```
 
@@ -420,7 +420,7 @@ quotations.py:2159         「款項收款狀態需由管理員或**出納**標�
    ⚠️ 而那個排序**沒有寫在任何地方**，也不隨改名而變
 ```
 ② 前端**非對照表**形式的硬寫（例如 bonus.html:150 的
-   「新增獎金項目只有<strong>最高管理員（superadmin）</strong>做得到」）
+   「新增獎金項目只有<strong>最高管理者（superadmin）</strong>做得到」）
    —— 那是散文不是對照表，這一份規格**沒有涵蓋它**
 ③ PDF／信件範本裡的角色名稱
 ```
