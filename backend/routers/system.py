@@ -2870,7 +2870,7 @@ _BATCH_FIELDS = {"keys", "enabled", "audience", "roles", "confirm_critical"}
 _CHANGES_FIELDS = {"changes", "confirm_critical", "expect", "since_audit"}
 
 
-def _parse_line_changes_body(b: dict) -> dict:
+def _parse_line_changes_body(b: dict, need_expect: bool = False) -> dict:
     """草稿儲存的請求本體：`{changes: {事件key: {enabled?, audience?, roles?}}, expect?: {key: version}, since_audit?, confirm_critical?}`。嚴格解析 ⇒ 400。"""
     extra = sorted(set(b) - _CHANGES_FIELDS)
     if extra:
@@ -2885,6 +2885,12 @@ def _parse_line_changes_body(b: dict) -> dict:
     ex = b.get("expect")
     if ex is not None and (not isinstance(ex, dict) or not all(isinstance(v, str) for v in ex.values())):
         raise HTTPException(400, "expect 必須是 {事件代碼: 字串}")
+    if need_expect:                                                          # 儲存草稿一定要帶載入時的 version，否則會悄悄蓋掉別人的修改
+        if ex is None:
+            raise HTTPException(400, "草稿儲存必須帶 expect（{事件代碼: 載入時的 version}），否則會蓋掉別人的修改")
+        missing = [k for k in b["changes"] if k not in ex]
+        if missing:
+            raise HTTPException(400, "expect 缺少這些事件的 version：%s" % "、".join(str(x) for x in missing[:5]))
     return {"changes": b["changes"], "expect": ex, "since_audit": since, "confirm_critical": b.get("confirm_critical") is True}
 
 
@@ -2959,7 +2965,7 @@ def set_line_notify_events_batch(body: dict = Body(...), authorization: str = He
 
 def _save_line_changes(b: dict, actor: dict, authorization) -> dict:
     from helpers import line_notify as _ln, line_catalog as _cat
-    p = _parse_line_changes_body(b)
+    p = _parse_line_changes_body(b, need_expect=True)
     try:
         res = _ln.set_events_changes(p["changes"], confirm_critical=p["confirm_critical"], default_user=actor["username"], expect=p["expect"])
     except _ln.CriticalConfirmRequired as e:
@@ -2970,8 +2976,9 @@ def _save_line_changes(b: dict, actor: dict, authorization) -> dict:
                                   "keys": [{"key": k, "name": _cat.name_of(k)} for k in e.keys], **who})
     except ValueError as e:
         raise HTTPException(400, str(e))
-    _audit(_tok(authorization), "settings.line_notify.batch", "settings", "", "LINE 通知儲存草稿：%d 個事件（變更 %d）" % (len(p["changes"]), len(res["changed"])),
-           {"changes": p["changes"], "changed": res["changed"], "audience_defaulted": res["defaulted"], "critical_off": res["critical_off"]})
+    if res["changed"]:                                                       # 沒有實質變動 ⇒ 沒寫設定，也不留稽核雜訊
+        _audit(_tok(authorization), "settings.line_notify.batch", "settings", "", "LINE 通知儲存草稿：%d 個事件（變更 %d）" % (len(p["changes"]), len(res["changed"])),
+               {"changes": p["changes"], "changed": res["changed"], "audience_defaulted": res["defaulted"], "critical_off": res["critical_off"]})
     return {"ok": True, **res, "audit_mark": _audit_mark()}
 
 
