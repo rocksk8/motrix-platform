@@ -1,12 +1,14 @@
 # 案件 更新紀錄
 
+## 1.0.227（next，未取號）— 2026-11-13（feat/estimate-own-terms；估價單自己的條款）
+- **估價單自己的條款（feat/estimate-own-terms，使用者：「報價單有獨立條款，估價單也要」）**：估價單有自己的條款組（`system_settings.estimate_terms_presets`）與預設付款條件（`estimate_default_payment_terms`），端點 `GET/PUT /api/settings/estimate-terms-presets`、`GET/PUT /api/settings/estimate-payment-terms`（讀＝登入、寫＝最高管理者、稽核）；報價單的端點、設定鍵與行為一個位元都不變。遷移 0011：把目前報價單的條款設定複製成估價單初始值（冪等、不蓋已有的、報價單沒設過就不建），之後兩邊各改各的。送審重算（`submit_reasons`／`compute_approval_reasons` 的比對基準）依單據類型讀對應那組，類型以資料庫現值為準；估價單開啟／複製／切換類型時前端載入估價單的條款組與預設付款條件，PDF「五、估價條件」本來就讀單據自己的條款欄位。內建五欄預設文字（`DEFAULT_TERMS`）兩邊共用。
+- 測試：`tests/test_estimate_own_terms_2026_11_13.py`。
+
 ## 1.0.226（next，未取號）— 2026-11-13（fix/estimate-pdf-labels-t83；估價單 PDF 本文用語）
 - 估價單 PDF 本文固有用語跟著單據類型（`pdf_gen._build_quote_html_core`，用 `_DT.label(docType)`）：「估價單號」「估價日期」「四、估價合計」「五、估價條件」「估　價　人」；未成案浮水印／提示句改「本案估價未成立…」。報價單輸出逐位元不變。
 - 預覽路由（`POST /api/quotations/preview-html`）與存檔版 PDF 改以 `quotations.doc_type` 欄位為準（同 `generate_pdf_bytes`），前端帶舊／缺的 docType 不再印回報價字樣。
 - 出貨單「關聯○○單」標籤用 `esc()` 包起來（固定字串，輸出不變；讓未逸出內插棘輪不必加基線）。
 - 測試：`tests/test_estimate_static_labels_2026_11_13.py`、`tests/test_estimate_doc_type_2026_11_13.py`。
-- **估價單自己的條款（feat/estimate-own-terms，使用者：「報價單有獨立條款，估價單也要」）**：估價單有自己的條款組（`system_settings.estimate_terms_presets`）與預設付款條件（`estimate_default_payment_terms`），端點 `GET/PUT /api/settings/estimate-terms-presets`、`GET/PUT /api/settings/estimate-payment-terms`（讀＝登入、寫＝最高管理者、稽核）；報價單的端點、設定鍵與行為一個位元都不變。遷移 0011：把目前報價單的條款設定複製成估價單初始值（冪等、不蓋已有的、報價單沒設過就不建），之後兩邊各改各的。送審重算（`submit_reasons`／`compute_approval_reasons` 的比對基準）依單據類型讀對應那組，類型以資料庫現值為準；估價單開啟／複製／切換類型時前端載入估價單的條款組與預設付款條件，PDF「五、估價條件」本來就讀單據自己的條款欄位。內建五欄預設文字（`DEFAULT_TERMS`）兩邊共用。
-- 測試：`tests/test_estimate_own_terms_2026_11_13.py`。
 
 ## 1.0.225 — 2026-11-13（fix/estimate-static-labels；估價單的登記表／目錄／佇列／下載檔名用語）
 - 用語補齊（接續 fix/estimate-mail-doc-name）：依單據類型換字（估價單→「估價單」；報價單字串逐字不變）——簽核信 footer「信件類型」與預設影響／處理方式、簽核佇列卡片標籤（`approval_queue_items` 加 `typeLabel`）、完工單帶入提示（`completion_sync.gate_message(status, label)`＋`completion_notes` 各訊息）、資源回收筒轉接器訊息／清單標籤、業務開發轉建的行事曆文字與通知、報價單／估價單 PDF 下載檔名（`download_name` 新增 `estimate`／`estimate_version`，設定頁多兩個可改的用語）。
