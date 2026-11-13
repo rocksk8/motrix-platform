@@ -86,7 +86,10 @@ def _rotated_log_in_boot_window(tmp_path):
     return log
 
 
-def _tail_body(text, log, not_before=None):
+def _tail_body(text, log, not_before="default"):
+    """not_before：datetime＝服務重啟時間；"default"＝一天前；None＝呼叫端沒給（helper 必須 fail-closed、不接 .1）。"""
+    if not_before == "default":
+        not_before = datetime.now() - timedelta(days=1)
     nb = "([datetime]'%s')" % not_before.strftime("%Y-%m-%d %H:%M:%S") if not_before else "$null"
     return "\n".join([
         "$ErrorActionPreference = 'Stop'",
@@ -223,6 +226,7 @@ def test_module_log_check_sees_loaded_line_and_errors_across_the_rotation(tmp_pa
             "$ErrorActionPreference = 'Stop'", "function Info($msg) { }",
             _fn(text, "Get-StartupRange"), _fn(text, "Get-ServerLogTail"), _fn(text, "Get-LogCheck"),
             "$BackendDir = '%s'" % _q(tmp_path),
+            "$script:RestartedAtTime = (Get-Date).AddDays(-1)",
             "$lc = Get-LogCheck 'tender_radar' '1.5.13'",
             "Write-Output ('RESULT ' + (@{ loaded = [bool]$lc.Loaded; boot = [bool]$lc.Boot; errors = @($lc.Errors).Count } | ConvertTo-Json -Compress))",
         ])
@@ -236,8 +240,11 @@ def test_module_log_check_sees_loaded_line_and_errors_across_the_rotation(tmp_pa
 def test_both_apply_scripts_carry_the_identical_helper_and_call_it():
     a, m = _src("apply_update.ps1"), _src("apply_module_update.ps1")
     assert _fn(a, "Get-ServerLogTail") and _fn(a, "Get-ServerLogTail") == _fn(m, "Get-ServerLogTail"), "兩份要逐字相同（同 Get-StartupRange 的規矩）"
-    assert "Get-ServerLogTail $logPath 200 $script:StartedAtTime" in a and "Get-ServerLogTail $logPath 200 $script:StartedAtTime" in m
-    assert "$script:StartedAtTime = Get-Date" in a and "$script:StartedAtTime = Get-Date" in m
+    call = "Get-ServerLogTail $logPath 200 $script:RestartedAtTime"
+    assert a.count(call) == 1 and m.count(call) == 1
+    assert "StartedAtTime" not in a and "StartedAtTime" not in m, "$notBefore 不可以是腳本開始時間（見 test_old_process_rotation_before_restart_is_not_adopted）"
+    for t in (a, m):
+        assert "$script:RestartedAtTime = Get-Date" in _fn(t, "Start-InstallService"), "每次（重新）啟動服務都要更新 $script:RestartedAtTime（回滾重啟也算）"
     assert "-Encoding UTF8" in _fn(a, "Get-ServerLogTail"), "server.log 是 UTF-8 無 BOM，PS 5.1 預設 ANSI 讀會讓中文比對不到"
 
 
@@ -296,3 +303,98 @@ def test_prod_health_facts_module_lines_come_from_server_log_1_after_rotation(tm
     ])
     d = _ps_run(tmp_path, body)
     assert d == {"n": 1, "hit": True}, d
+
+
+# ── 審查（hichan-6）補的題 ────────────────────────────────────────────────────
+
+@needs_ps
+@pytest.mark.parametrize("name", ["apply_update.ps1", "apply_module_update.ps1"])
+def test_old_process_rotation_before_restart_is_not_adopted(tmp_path, name):
+    """審查 ②：腳本開始 ≠ 服務重啟。舊行程在「腳本開始之後、服務重啟之前」輪替 ⇒ .1 的 mtime 晚於腳本開始時間、裡面是**舊行程**的啟動行；
+    新行程的啟動範圍被錯誤風暴擠出最後 200 行時，helper 若接 .1 就會採用舊啟動 ⇒ 假綠。
+    $notBefore＝服務重啟時間 ⇒ .1 早於它 ⇒ 不接。$notBefore 沒給（$null）⇒ fail-closed，一樣不接。"""
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    _write(logs / "server.log", ["ERROR:    Traceback storm line %d" % i for i in range(260)])     # 新行程：只剩錯誤，啟動範圍已捲出
+    prev = logs / "server.log.1"
+    _write(prev, FILLER + BOOT)                                                                      # 舊行程的完整啟動
+    restart = datetime.now()
+    gap = (restart - timedelta(seconds=30)).timestamp()                                              # 舊行程在重啟前 30 秒輪替
+    os.utime(prev, (gap, gap))
+    text = _src(name)
+    d = _ps_run(tmp_path, _tail_body(text, logs / "server.log", not_before=restart))
+    assert d["boot"] is False and d["count"] == 200, "舊行程輪替出來的 .1 被接進來了 ⇒ 採用舊啟動 ⇒ 假綠：%s" % d
+    fresh = datetime.now().timestamp()
+    os.utime(prev, (fresh, fresh))
+    d = _ps_run(tmp_path, _tail_body(text, logs / "server.log", not_before=None))
+    assert d["boot"] is False and d["count"] == 200, "沒給 $notBefore 要 fail-closed：%s" % d
+
+
+def test_stale_lock_boundary_is_exactly_the_max_age(tmp_path, monkeypatch):
+    monkeypatch.setattr(archive, "_PROCESS_STARTED_MONO", time.monotonic() - 3600)
+    lock = tmp_path / ".apply.lock"
+    lock.write_text("{}", encoding="utf-8")
+    t = 1_700_000_000.0
+    os.utime(lock, (t, t))
+    mx = archive._APPLY_LOCK_MAX_AGE_SECONDS
+    assert archive._server_log_rotation_deferred_reason(lock_path=str(lock), now_wall=t + mx - 1), "差 1 秒到期：仍視為進行中"
+    assert archive._server_log_rotation_deferred_reason(lock_path=str(lock), now_wall=t + mx + 1) == "", "過期 1 秒：視為殘留"
+
+
+def test_deferral_arms_one_retry_right_after_the_grace_so_crash_loops_still_rotate(client, monkeypatch, tmp_path):
+    """審查 ①：行程每 < 2 小時就重啟（崩潰重啟迴圈）時，只靠每 2 小時的 tick 永遠輪替不到 ⇒ 延後時排一次寬限結束後的補輪替。"""
+    timers, rotated = [], []
+    monkeypatch.setattr(archive, "_start_timer", lambda sec, fn: timers.append((sec, fn)))
+    monkeypatch.setattr(archive, "_rotate_server_log_if_large", lambda *a, **k: rotated.append(1) or False)
+    monkeypatch.setattr(archive, "_archive_base", lambda: "")
+    monkeypatch.setattr(archive, "_apply_lock_path", lambda: str(tmp_path / ".apply.lock"))
+    monkeypatch.setattr(archive, "_ROTATE_RETRY_PENDING", False)
+    monkeypatch.setattr(archive, "_PROCESS_STARTED_MONO", time.monotonic() - 30)
+    archive._daily_backup()
+    archive._daily_backup()                                                         # 再延後一次不可以堆第二個 timer
+    retries = [(sec, fn) for sec, fn in timers if fn is archive._rotation_retry_tick]
+    assert len(retries) == 1, timers
+    sec, fn = retries[0]
+    expect = archive._ROTATE_BOOT_GRACE_SECONDS - 30 + archive._ROTATE_RETRY_AFTER_SECONDS
+    assert expect - 3 <= sec <= expect + 3, (sec, expect)
+    assert rotated == []
+    monkeypatch.setattr(archive, "_PROCESS_STARTED_MONO", time.monotonic() - 200)   # 時間走到寬限之後
+    fn()
+    assert rotated == [1], "寬限結束後的補輪替沒有輪替"
+    assert archive._ROTATE_RETRY_PENDING is False
+
+
+def test_retry_keeps_polling_while_apply_lock_exists_then_rotates(monkeypatch, tmp_path):
+    timers, rotated = [], []
+    monkeypatch.setattr(archive, "_start_timer", lambda sec, fn: timers.append((sec, fn)))
+    monkeypatch.setattr(archive, "_rotate_server_log_if_large", lambda *a, **k: rotated.append(1) or False)
+    lock = tmp_path / ".apply.lock"
+    lock.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(archive, "_apply_lock_path", lambda: str(lock))
+    monkeypatch.setattr(archive, "_ROTATE_RETRY_PENDING", False)
+    monkeypatch.setattr(archive, "_PROCESS_STARTED_MONO", time.monotonic() - 3600)
+    archive._schedule_rotation_retry()
+    assert [sec for sec, _ in timers] == [archive._ROTATE_RETRY_LOCK_POLL_SECONDS]
+    timers.pop()[1]()                                                               # 鎖還在：不輪替、再排一次
+    assert rotated == [] and len(timers) == 1
+    lock.unlink()
+    timers.pop()[1]()                                                               # 鎖放掉：輪替
+    assert rotated == [1] and timers == []
+
+
+@needs_ps
+def test_prod_health_facts_does_not_mix_stale_server_log_1_into_current_boot_lines(tmp_path):
+    """審查 Extra：現行檔已有本次啟動的模組行時，只用現行檔；.1 裡舊行程的模組行不可混進清單。"""
+    text = _src("_prod_health_facts.ps1")
+    i = text.index("$modLog = @()")
+    j = text.index("\n}\n", text.index("$modLog = @(", i + 20)) + 3
+    block = text[i:j]
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    _write(logs / "server.log", ["INFO:core.loader:模組 case 1.0.221 已載入"] + AFTER)
+    _write(logs / "server.log.1", ["INFO:core.loader:模組 case 1.0.220 已載入", "INFO:core.loader:模組 crm 1.2.3 已載入"])
+    body = "\n".join([
+        "$ErrorActionPreference = 'Stop'", "$b = '%s'" % _q(tmp_path), block,
+        "Write-Output ('RESULT ' + (@{ n = @($modLog).Count; stale = [bool](@($modLog | Where-Object { $_ -like '*1.0.220*' -or $_ -like '*crm*' }).Count -gt 0) } | ConvertTo-Json -Compress))",
+    ])
+    assert _ps_run(tmp_path, body) == {"n": 1, "stale": False}

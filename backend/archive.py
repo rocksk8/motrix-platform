@@ -1852,6 +1852,40 @@ def _server_log_rotation_deferred_reason(now_mono: float = None, lock_path: str 
     return ""
 
 
+#: 延後之後的補輪替：寬限／鎖解除後約這麼久再試一次（秒）。沒有它，行程若每 < 2 小時就重啟一次（崩潰重啟迴圈），
+#: 每次都只跑到寬限內的第一輪 ⇒ 永遠輪替不到。
+_ROTATE_RETRY_AFTER_SECONDS = 5
+_ROTATE_RETRY_LOCK_POLL_SECONDS = 60
+_ROTATE_RETRY_PENDING = False
+
+
+def _schedule_rotation_retry():
+    """被延後時排「一次」補輪替（旗標防止堆疊）：寬限剩多少就等多少再 +5 秒；因鎖延後就 60 秒後再看。永不丟例外。"""
+    global _ROTATE_RETRY_PENDING
+    if _ROTATE_RETRY_PENDING:
+        return
+    try:
+        up = time.monotonic() - _PROCESS_STARTED_MONO
+        delay = (_ROTATE_BOOT_GRACE_SECONDS - up + _ROTATE_RETRY_AFTER_SECONDS) if up < _ROTATE_BOOT_GRACE_SECONDS else _ROTATE_RETRY_LOCK_POLL_SECONDS
+        _ROTATE_RETRY_PENDING = True
+        _start_timer(max(delay, 1), _rotation_retry_tick)
+    except Exception:  # noqa: BLE001
+        _ROTATE_RETRY_PENDING = False
+        logger.exception("_schedule_rotation_retry failed")
+
+
+def _rotation_retry_tick():
+    global _ROTATE_RETRY_PENDING
+    _ROTATE_RETRY_PENDING = False
+    try:
+        if _server_log_rotation_deferred_reason():
+            _schedule_rotation_retry()           # 還在延後（例如套用鎖還在）⇒ 再排一次；鎖 2 小時後視為殘留，不會無限排
+        else:
+            _rotate_server_log_if_large()
+    except Exception:  # noqa: BLE001
+        logger.exception("_rotation_retry_tick failed")
+
+
 def _prune_old_logs(log_dir: str = None, keep_days=None) -> list:
     """輪替出來的舊日誌（access.log.N.gz／app.log.N.gz／server.log.N）超過 `retention.log_keep_days`（設定中心，預設 30）就刪。
     現行檔與 `server.log.rotating` 永遠不刪。整套日誌分流的設計見 `helpers/log_setup.py` 檔頭。永不丟例外（清日誌不可以拖累備份）。回被刪的檔名。"""
@@ -3005,7 +3039,8 @@ def _daily_backup():
     # 開機 120 秒內或套用鎖在時不輪替（健康檢查正在讀 server.log，見 _ROTATE_BOOT_GRACE_SECONDS）——延到下一個 tick
     _deferred = _server_log_rotation_deferred_reason()
     if _deferred:
-        logger.info("server.log 輪替延後到下一輪：%s", _deferred)
+        logger.info("server.log 輪替延後：%s", _deferred)
+        _schedule_rotation_retry()
     else:
         _rotate_server_log_if_large()
     _prune_old_logs()

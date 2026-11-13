@@ -107,11 +107,12 @@ print(row[0] if row else "")
 $modLog = @()
 $serverLog = Join-Path $b "logs\server.log"
 if (Test-Path $serverLog) {
-    # server.log 被輪替（≥50 MB 清成 0 byte，2026-11-13 T81）後，啟動時印的「模組 X 已載入」在 server.log.1 ⇒ 先讀 .1、再讀現行檔（時間順序），取最後 40 筆
-    $modSrc = @()
-    if (Test-Path "$serverLog.1") { $modSrc += "$serverLog.1" }
-    $modSrc += $serverLog
-    $modLog = @($modSrc | ForEach-Object { Get-Content $_ -Tail 3000 -Encoding UTF8 } | Where-Object { $_ -match '模組 \S+ (\S+ )?(已載入|未載入)' } | Select-Object -Last 40 | ForEach-Object { [string]$_ })
+    $modLog = @(Get-Content $serverLog -Tail 3000 -Encoding UTF8 | Where-Object { $_ -match '模組 \S+ (\S+ )?(已載入|未載入)' } | Select-Object -Last 40 | ForEach-Object { [string]$_ })
+    # server.log 被輪替（≥50 MB 清成 0 byte，2026-11-13 T81）後，啟動時印的「模組 X 已載入」在 server.log.1。
+    # **不混讀**：現行檔一筆都沒有才改讀 .1（兩邊混在一起，.1 裡舊行程的行會混進這次啟動的清單）。
+    if ($modLog.Count -eq 0 -and (Test-Path "$serverLog.1")) {
+        $modLog = @(Get-Content "$serverLog.1" -Tail 3000 -Encoding UTF8 | Where-Object { $_ -match '模組 \S+ (\S+ )?(已載入|未載入)' } | Select-Object -Last 40 | ForEach-Object { [string]$_ })
+    }
 }
 # 正式機的 Python 版本與套件（唯讀）：開發機的專案 venv 要對齊它，「在正式機的環境裡驗證過」才成立
 $pyVersion = $null

@@ -301,6 +301,7 @@ function Stop-InstallService {
 }
 
 function Start-InstallService {
+    $script:RestartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore：舊行程在此之前已停；server.log.1 比這晚才算「本次行程輪替出來的」
     $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
     if ($task -and $task.State -ne "Disabled") {
         Start-ScheduledTask -TaskName $AutostartTaskName

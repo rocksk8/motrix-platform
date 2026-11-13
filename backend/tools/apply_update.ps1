@@ -162,7 +162,6 @@ $script:ServiceState = "unknown"
 $script:LockHeld = $false
 $script:RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $script:StartedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$script:StartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore（server.log.1 是不是本次輪替出來的）
 $script:ResultScript = "apply_update"
 $script:ResultScriptVersion = $ApplyScriptVersion
 $script:ResultPackage = $PackagePath
@@ -289,15 +288,18 @@ function Get-StartupRange($tail) {
 # 讀 server.log 最後 $n 行（UTF-8）；**本次啟動的起點不在裡面、而 server.log.1 存在 ⇒ 往前接上 server.log.1 的最後 $n 行**。
 #   為什麼（2026-11-13 T81 正式機）：archive 的 server.log 輪替（≥50 MB，原地清成 0 byte）會把啟動行搬去 server.log.1，
 #   只讀 server.log 就找不到「MOTRIX ERP starting／Uvicorn running on」（字面不符；或掃空檔假綠）。
-#   $notBefore（DateTime，可 $null）＝本次套用開始時間：server.log.1 的修改時間早於它，代表那是「上一個行程」的舊檔、不是本次輪替出來的 ⇒ 不接
+#   $notBefore（DateTime）＝**本次服務（重新）啟動的時間**（Start-InstallService 開頭記下的 $script:RestartedAtTime；舊行程在那之前已被停掉）：
+#   server.log.1 的修改時間早於它，代表那是「上一個行程」的舊檔、不是本次行程輪替出來的 ⇒ 不接
 #   （接了會把上一個行程印過的啟動行當成本次的，回滾後的檢查會假綠；輪替是 copy2，.1 的 mtime＝輪替當下 log 最後一次寫入）。
+#   ⚠ 不可以用「腳本開始時間」：腳本開始到服務重啟之間，舊行程若剛好輪替，.1 的 mtime 會晚於腳本開始時間、裡面是舊行程的啟動行。
+#   $notBefore 是 $null（還沒重啟過／呼叫端沒給）⇒ 一律不接 .1（寧可「驗不到」，不可假綠）。
 #   回傳一律用 `return ,$x` 保持陣列（0 行也是陣列）。
 function Get-ServerLogTail([string]$logPath, [int]$n = 200, $notBefore = $null) {
     $tail = @(Get-Content $logPath -Tail $n -Encoding UTF8)
     if ($null -ne (Get-StartupRange $tail)) { return ,$tail }
     $prev = "$logPath.1"
-    if (-not (Test-Path $prev)) { return ,$tail }
-    if ($null -ne $notBefore -and (Get-Item $prev).LastWriteTime -lt $notBefore) { return ,$tail }
+    if ($null -eq $notBefore -or -not (Test-Path $prev)) { return ,$tail }
+    if ((Get-Item $prev).LastWriteTime -lt $notBefore) { return ,$tail }
     $older = @(Get-Content $prev -Tail $n -Encoding UTF8)
     return ,@($older + $tail)
 }
@@ -481,6 +483,7 @@ function Stop-InstallService {
 # 複製完、健康檢查之前啟動。排程工作優先：從遠端工作階段（部署儀表板走 WinRM）直接 Start-Process 的
 # 迴圈是那個工作階段的子行程，工作階段結束時可能被一起結束。
 function Start-InstallService {
+    $script:RestartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore：舊行程在此之前已停；server.log.1 比這晚才算「本次行程輪替出來的」
     $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
     if ($task -and $task.State -ne "Disabled") {
         Start-ScheduledTask -TaskName $AutostartTaskName
@@ -1065,7 +1068,7 @@ for ($i = 0; $i -lt 20; $i++) {
 $logErrors = @()
 $logPath = Join-Path $BackendDir "logs\server.log"
 if (Test-Path $logPath) {
-    $tail = Get-ServerLogTail $logPath 200 $script:StartedAtTime
+    $tail = Get-ServerLogTail $logPath 200 $script:RestartedAtTime
     $bootRange = Get-StartupRange $tail
     # crash-restart 迴圈搶 port 666 重新綁定時，重試階段偶爾會留下 1～2 次
     # [Errno 10048]（位址已被使用）之類的暫時性錯誤，迴圈本身會自動重試到成功；
