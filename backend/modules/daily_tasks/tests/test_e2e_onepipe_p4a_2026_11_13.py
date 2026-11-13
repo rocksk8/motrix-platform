@@ -89,3 +89,19 @@ def test_superadmin_never_sees_the_self_add_button(live_server, make_user, e2e_b
     _open(page, live_server)
     page.wait_for_timeout(1500)
     assert page.locator(BTN).count() == 0
+
+
+@pytest.mark.e2e
+def test_flag_on_staff_without_any_case_is_told_why_the_list_is_empty(live_server, make_user, e2e_browser):
+    """沒有可掛的案件時，下拉不是靜默空白：說出原因、下拉停用（h9 審查：不留沒有說明的空清單）。"""
+    u, p = make_user(username="p4ae_nocase", role="engineer", modules=["daily_task"])
+    _flag(True)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    _open(page, live_server)
+    page.locator(BTN).wait_for(state="visible", timeout=10000)
+    page.click(BTN)
+    note = page.locator('[data-testid="dt-self-cases-notice"]')
+    note.wait_for(state="visible", timeout=5000)
+    page.wait_for_function("() => document.querySelector('[data-testid=dt-self-cases-notice]').innerText.includes('沒有可關聯')", timeout=10000)
+    assert page.locator('[data-testid="dt-self-case"]').is_disabled()

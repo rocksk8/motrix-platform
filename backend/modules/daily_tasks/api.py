@@ -392,6 +392,45 @@ def list_daily_tasks(
     return {"items": items}
 
 
+@router.get("/api/daily-tasks/case-options")
+def staff_case_options(q: str = "", authorization: str = Header(None)):
+    """一條龍 P4a：現場人員「新增我的案件事項」小視窗的案件清單。只回案號／客戶／案名（**沒有金額、地址、業務欄位**）。
+    範圍＝伺服器建立事項時接受的同一組：已成案、且這個人看得到（`row_access` 的 `case`／owner，與 `require_case` 同一條規則）；最多 100 筆，`q` 比對案號／客戶／案名。
+    旗標 `onepipe.entry_unify` 關、或案件模組不在 ⇒ 404（與這支路由不存在時逐字相同）。
+    宣告在 `/api/daily-tasks/{task_id}` 之前（否則 `case-options` 會被當成 task_id 而 422）。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
+    from helpers import case_access, onepipe_flags, row_access
+    if not onepipe_flags.flag_on("entry_unify") or not case_access.case_module_present():
+        raise HTTPException(404, "Not Found")
+    frag, params = row_access.filter_sql("case", user)
+    sql = ("SELECT quote_no, customer_name, project_name, deal_tag, data_json FROM quotations "
+           "WHERE (deal_tag = '已成案' OR COALESCE(deal_tag, '') = '')" + frag)
+    args = list(params)
+    key = (q or "").strip()[:60]
+    if key:
+        like = "%" + key.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"      # 跳脫字元用 !：使用者輸入的 % _ 當一般字元
+        sql += " AND (quote_no LIKE ? ESCAPE '!' OR customer_name LIKE ? ESCAPE '!' OR project_name LIKE ? ESCAPE '!')"
+        args += [like, like, like]
+    sql += " ORDER BY id DESC LIMIT 1000"
+    out = []
+    conn = get_db()
+    try:
+        for r in conn.execute(sql, args).fetchall():
+            if not (r["deal_tag"] or ""):                    # 欄位空 ⇒ 看 data_json.dealTag（與各處的 deal_tag 判斷同義）
+                try:
+                    if (json.loads(r["data_json"] or "{}") or {}).get("dealTag") != "已成案":
+                        continue
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            out.append({"quoteNo": r["quote_no"], "customer": r["customer_name"] or "", "projectName": r["project_name"] or ""})
+            if len(out) >= 100:
+                break
+    finally:
+        conn.close()
+    return {"items": out}
+
+
 @router.get("/api/daily-tasks/{task_id}")
 def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -428,6 +467,7 @@ def _check_staff_self_create(user: dict, body: "DailyTaskIn") -> None:
     case_no = (body.case_no or "").strip()
     if not case_no:
         raise HTTPException(403, "現場人員新增工作事項時，須掛在一個案件上")
+    body.case_no = case_no                          # 存的就是查過的那個案號（前後空白不進資料庫，否則案件篩選與徽章對不上）
     others = [u for u in (body.assigned_to or []) if u != user["username"]]
     if others or (body.supervisors or []):
         raise HTTPException(403, "現場人員只能把工作事項指派給自己，不能指派他人或指定主管")
