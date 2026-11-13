@@ -5,6 +5,9 @@
  * 進度不另存：每一步「做完沒有」由已儲存的欄位算出來（名稱＋統編、電話或 Email、收款帳戶、Logo），回來時從第一個沒做完的步驟接著做。
  * 所有文字都用 textContent 輸出（不拼 HTML 字串）。
  *
+ * 已知限制（h11 N2）：舊的「公司資料設定」頁存檔時整包 PUT，開著過期分頁再存一次，可能蓋掉精靈剛存的欄位；精靈自己只送這一步改到的欄位（並先重讀據點），不會蓋別人的。
+ * 請求都帶 X-Motrix-Ui: wizard，稽核 detail 才分得出「精靈存的」與「設定頁存的」。
+ *
  * 「？」說明：欄位旁放空的 <span class="hint" data-hint='{…}' data-hint-label="…">，等 hint-popover.js／css 合併後（批次 9）自動長出「？」；
  * 沒載入時是看不見的空殼，欄位下方另有一行白話說明，所以不依賴它。
  */
@@ -15,14 +18,14 @@
   var SEEN_KEY = 'motrix_cw_seen'
   // 欄位在「主要據點」（locations[0]）裡的同名欄：後端的身分是「主要據點有填就優先、頂層只是後備」，
   // 所以讀要讀生效的那一份、寫要頂層一定寫、據點[0] 已經有填同一欄時一併改（沒填的不去動它）。
-  var LOC_KEY = { name: 'company_name', name_en: 'company_name_en', tax_id: 'tax_id', phone: 'phone', email: 'email',
+  var LOC_KEY = { name: 'company_name', company_name_en: 'company_name_en', tax_id: 'tax_id', phone: 'phone', email: 'email',
                   bank_name: 'bank_name', bank_branch: 'bank_branch', bank_account_name: 'bank_account_name', bank_account_number: 'bank_account_number' }
 
   var FIELDS = {
     name: { step: 1, label: '公司名稱（中文）', req: true, ph: '例：範例科技股份有限公司', auto: 'organization',
             note: '照公司登記的全名填寫。',
             hint: { what: '公司登記的中文全名。', when: '第一次設定時填；公司改名時回來修改。', impact: '會印在報價單、請款單與寄給客戶的信件抬頭。', suggest: '照經濟部登記資料填寫，不要簡稱。' } },
-    name_en: { step: 1, label: '公司英文名稱（選填）', ph: '例：Example Technology Co., Ltd.', auto: 'off',
+    company_name_en: { step: 1, label: '公司英文名稱（選填）', ph: '例：Example Technology Co., Ltd.', auto: 'off',
                note: '有英文文件才需要，沒有可以留空。',
                hint: { what: '公司的英文名稱。', when: '要開英文報價單或對外英文文件時。', impact: '只會出現在有用到英文抬頭的文件上。', suggest: '沒有英文名稱就留空。' } },
     tax_id: { step: 1, label: '統一編號', req: true, ph: '8 碼數字，例：12345678', inputmode: 'numeric', max: 12, auto: 'off',
@@ -49,11 +52,11 @@
                            note: '填錯會讓客戶匯錯地方，請再核對一次。',
                            hint: { what: '收款的銀行帳號。', when: '要開請款單前。', impact: '印在請款單上，客戶會照這個帳號匯款。', suggest: '填完請對照存摺再核對一次。' } },
   }
-  var STEP_FIELDS = { 1: ['name', 'name_en', 'tax_id'], 2: ['phone', 'email', 'contact_info'], 3: ['bank_name', 'bank_branch', 'bank_account_name', 'bank_account_number'] }
+  var STEP_FIELDS = { 1: ['name', 'company_name_en', 'tax_id'], 2: ['phone', 'email', 'contact_info'], 3: ['bank_name', 'bank_branch', 'bank_account_name', 'bank_account_number'] }
 
   var session = {}
   try { session = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {} } catch (e) { session = {} }
-  var AUTH = { Authorization: 'Bearer ' + (session.token || '') }
+  var AUTH = { Authorization: 'Bearer ' + (session.token || ''), 'X-Motrix-Ui': 'wizard' }   // X-Motrix-Ui：只讓稽核分得出「精靈存的」與「設定頁存的」
 
   var st = {
     profile: null,      // GET company-profile 的回應（遮蔽字原樣，不回寫）
@@ -136,31 +139,36 @@
   function say(text, bad) { st.msg = text || ''; st.msgBad = !!bad; render() }
 
   // ── 對伺服器 ───────────────────────────────────────────────────────────
+  function toLogin() { try { location.replace('login.html') } catch (e) { /* 忽略 */ } }
   function api(method, url, body) {
     var opt = { method: method, headers: Object.assign({}, AUTH) }
     if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body) }
     return fetch(url, opt).then(function (r) {
+      if (r.status === 401) { toLogin(); return { ok: false, status: 401, data: {} } }
       return r.json().catch(function () { return {} }).then(function (d) { return { ok: r.ok, status: r.status, data: d } })
     })
   }
   function loadAll() {
     var mine = ++seq
-    return Promise.all([
-      api('GET', '/api/settings/company-profile'),
-      api('GET', '/api/settings/company-setup/status'),
-      api('GET', '/api/settings/branding'),
-    ]).then(function (rs) {
+    // 先只讀 status：非最高管理者（canFix 不是 true／被擋）⇒ 不顯示表單，也**不去讀公司資料**；確定可以改才讀公司資料與 Logo
+    return api('GET', '/api/settings/company-setup/status').then(function (rs) {
       if (mine !== seq) return
-      // 兩支 GET 對任何登入者都回 200，所以以 status 的 canFix 為準（非最高管理者 ⇒ 不顯示表單，也不讀公司資料）
-      if (rs[0].status === 403 || rs[1].status === 403 || rs[2].status === 403 || (rs[1].ok && rs[1].data && rs[1].data.canFix === false)) { st.denied = true; render(); return }
-      if (!rs[0].ok) { st.failed = true; render(); return }
-      st.profile = rs[0].data
-      st.setup = rs[1].ok ? rs[1].data : null
-      st.brand = (rs[2].ok && rs[2].data && rs[2].data.assets) || {}
-      st.loaded = true
-      var h = hash()
-      st.step = h || firstStep()
-      render()
+      if (rs.status === 401) return
+      if (rs.status === 403 || (rs.ok && rs.data && rs.data.canFix === false)) { st.denied = true; render(); return }
+      if (!rs.ok) { st.failed = true; render(); return }
+      return Promise.all([api('GET', '/api/settings/company-profile'), api('GET', '/api/settings/branding')]).then(function (rr) {
+        if (mine !== seq) return
+        if (rr[0].status === 401 || rr[1].status === 401) return
+        if (rr[0].status === 403 || rr[1].status === 403) { st.denied = true; render(); return }
+        if (!rr[0].ok) { st.failed = true; render(); return }
+        st.profile = rr[0].data
+        st.setup = rs.data
+        st.brand = (rr[1].ok && rr[1].data && rr[1].data.assets) || {}
+        st.loaded = true
+        var h = hash()
+        st.step = h || firstStep()
+        render()
+      })
     }).catch(function () { st.failed = true; render() })
   }
 
@@ -234,7 +242,7 @@
         delete payload.confirmIdentity
         mergeSaved(payload); if (payload.locations) st.profile.locations = payload.locations
         st.confirmed = true; st.needReconfirm = false; st.ack = false
-        if (window.MotrixWizard && window.MotrixWizard.finish && !window.MotrixWizard.isSuper) window.MotrixWizard.finish()
+        try { if (window.MotrixWizard && window.MotrixWizard.finish && !window.MotrixWizard.isSuper) window.MotrixWizard.finish() } catch (e) { /* 確認已經成功；外殼的收尾出錯不要當成連線異常 */ }
         render()
         return loadSetupOnly()
       }
@@ -253,9 +261,10 @@
     var fd = new FormData()
     fd.append('file', file)
     fetch('/api/settings/branding/' + encodeURIComponent(kind), { method: 'PUT', headers: Object.assign({}, AUTH), body: fd })
-      .then(function (r) { return r.json().catch(function () { return {} }).then(function (d) { return { ok: r.ok, data: d } }) })
+      .then(function (r) { if (r.status === 401) { toLogin(); return { ok: false, unauth: true, data: {} } } return r.json().catch(function () { return {} }).then(function (d) { return { ok: r.ok, data: d } }) })
       .then(function (r) {
         st.busy = false
+        if (r.unauth) return
         if (r.ok) { st.brand = r.data.assets || st.brand; say('已更換：' + ((st.brand[kind] && st.brand[kind].label) || '圖檔'), false) }
         else say(typeof r.data.detail === 'string' ? r.data.detail : '上傳失敗，請換一張圖再試。', true)
       })
@@ -347,7 +356,7 @@
       n.style.display = (text || fallback) ? '' : 'none'
     }
     set('name', String(val('name') || '').trim(), '（公司名稱）')
-    set('name_en', String(val('name_en') || '').trim(), '')
+    set('name_en', String(val('company_name_en') || '').trim(), '')
     var tax = taxDigits()
     set('ids', tax ? '統一編號 ' + tax : '', '（統一編號）')
     var c = []

@@ -1763,8 +1763,14 @@ def _profile_audit_detail(before, after, sent_keys):
     return {"changed": changed, "values": values}
 
 
+def _ui_is_wizard(h) -> bool:
+    """公司設定精靈（company-setup-wizard.html）的請求帶 `X-Motrix-Ui: wizard`：只用來讓稽核看得出「是精靈存的還是設定頁存的」，不影響任何判斷。"""
+    return str(h or "").strip().lower() == "wizard"
+
+
 @router.put("/api/settings/company-profile")
-def set_company_profile(body: CompanyProfile, authorization: str = Header(None)):
+def set_company_profile(body: CompanyProfile, authorization: str = Header(None),
+                        x_motrix_ui: str = Header(None, alias="X-Motrix-Ui")):
     """部分更新：**這次沒送的欄位保留現值。**
 
     🔴 原本是 `body.model_dump()` 整筆覆蓋，而 `CompanyProfile` 每個欄位都有
@@ -1867,9 +1873,12 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     # 🔴 SA2：稽核要記**哪些欄位變了**，金錢／身分欄位連前後值（遮成末四碼）。
     # ⚠️ `target_label` 仍然放公司名（那是「這筆紀錄講的是哪個對象」），
     # 而**真正回答「改了什麼」的是 `detail`** —— 那個參數在這裡從來沒被傳過。
+    _detail = _profile_audit_detail(cur, value, sent.keys())
+    if _ui_is_wizard(x_motrix_ui):
+        _detail["ui"] = "wizard"
     _audit(_tok(authorization), "settings.company_profile.update", "settings",
            "company_profile", value.get("name", ""),
-           detail=_profile_audit_detail(cur, value, sent.keys()))
+           detail=_detail)
     if confirm_identity:
         from helpers import company_setup as _cs
         from db import get_db as _gdb
@@ -1884,7 +1893,8 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
             conn.close()
         _cs.reset_cache()
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
-               value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
+               value.get("name", ""),
+               detail=dict({"fields_hash": rec["fields_hash"], "via": rec["via"]}, **({"ui": "wizard"} if _ui_is_wizard(x_motrix_ui) else {})))
         return {"ok": True, "confirmed": True}
     return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
@@ -3699,7 +3709,8 @@ def get_branding_settings(authorization: str = Header(None)):
 
 
 @router.put("/api/settings/branding/{kind}")
-async def upload_branding_asset(kind: str, file: UploadFile = File(...), authorization: str = Header(None)):
+async def upload_branding_asset(kind: str, file: UploadFile = File(...), authorization: str = Header(None),
+                                x_motrix_ui: str = Header(None, alias="X-Motrix-Ui")):
     user = _require_user(authorization, require_superadmin=True)   # 只有 superadmin（不接受持有 settings 模組）
     _branding_refuse_demo()
     from helpers import branding
@@ -3711,12 +3722,14 @@ async def upload_branding_asset(kind: str, file: UploadFile = File(...), authori
     except branding.BrandingRejected as e:
         raise HTTPException(400, str(e))
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
-           branding.KINDS[kind]["label"], {"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]})
+           branding.KINDS[kind]["label"],
+           dict({"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]}, **({"ui": "wizard"} if _ui_is_wizard(x_motrix_ui) else {})))
     return {"ok": True, "kind": kind, "v": saved["v"], "assets": _branding_state_out()}
 
 
 @router.delete("/api/settings/branding/{kind}")
-def reset_branding_asset(kind: str, authorization: str = Header(None)):
+def reset_branding_asset(kind: str, authorization: str = Header(None),
+                         x_motrix_ui: str = Header(None, alias="X-Motrix-Ui")):
     _require_user(authorization, require_superadmin=True)
     _branding_refuse_demo()
     from helpers import branding
@@ -3724,5 +3737,6 @@ def reset_branding_asset(kind: str, authorization: str = Header(None)):
         raise HTTPException(404, "查無此圖檔種類")
     had = branding.reset_asset(kind)
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
-           branding.KINDS[kind]["label"], {"kind": kind, "op": "reset", "hadCustom": had})
+           branding.KINDS[kind]["label"],
+           dict({"kind": kind, "op": "reset", "hadCustom": had}, **({"ui": "wizard"} if _ui_is_wizard(x_motrix_ui) else {})))
     return {"ok": True, "kind": kind, "assets": _branding_state_out()}
