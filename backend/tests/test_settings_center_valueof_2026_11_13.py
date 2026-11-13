@@ -20,7 +20,16 @@ FRONTEND = os.path.dirname(PAGE)
 
 
 NODE = shutil.which("node")
-needs_node = pytest.mark.skipif(not NODE, reason="沒有 node，前端行為題略過（CI 機有 node）")
+
+
+def _need_node():
+    """前端行為題要 node。列車／出貨閘門（`MOTRIX_TRAIN=1`）下找不到 node ⇒ **紅**（不是略過：略過會讓這個 bug 在沒 node 的機器上悄悄出貨）；
+    一般開發機沒有 node ⇒ 略過並說明。"""
+    if NODE:
+        return
+    if os.environ.get("MOTRIX_TRAIN") == "1":
+        pytest.fail("MOTRIX_TRAIN=1 但找不到 node：設定中心前端行為題不能略過（請安裝 node，或讓閘門機的 PATH 找得到 node）")
+    pytest.skip("沒有 node，前端行為題略過（一般開發機；列車閘門下會紅）")
 
 _HARNESS = r"""
 const fs = require('fs'), vm = require('vm');
@@ -103,8 +112,8 @@ CHOICES_INT = [{"value": 0, "label": "關閉（預設）"}, {"value": 1, "label"
 CHOICES_STR = [{"value": "a", "label": "甲"}, {"value": "b", "label": "乙"}]
 
 
-@needs_node
 def test_every_input_type_shows_the_current_effective_value_under_alpines_scope_proxy(tmp_path):
+    _need_node()
     radio_checked = _expr("'sc-choice-' + f.key", ":checked")
     radio_cls = re.search(r"'is-on': ([^}]+)\}", _line('class="sc-choice"')).group(1)
     num_value = _expr("'sc-input-' + f.key", ":value")
@@ -145,16 +154,37 @@ def test_every_input_type_shows_the_current_effective_value_under_alpines_scope_
     assert got == expect
 
 
-@needs_node
 def test_harness_reproduces_the_original_bug_valueof_resolves_to_object_prototype(tmp_path):
     """對照：舊的 `valueOf(f)` 在 x-for 範圍代理下拿到的是範圍物件（不是值）。這題證明上面的題目真的抓得到那個 bug。"""
+    _need_node()
     got = _run_node(tmp_path, [{"expr": "valueOf(f)", "f": _field("k", "int", 7), "c": None, "state": {}}])
     assert got[0]["v"] == "__OBJECT__"
 
 
+# Object.prototype 的成員（含舊式 __define*__／__lookup*__）：元件上同名的成員會被 Alpine 範圍代理的 Reflect.has（含原型鏈）搶先解析
+_PROTO = "valueOf|toString|toLocaleString|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__"
+_BAD_MEMBER = re.compile(
+    r"^\s*(?:(?:async\s+)?\*?\s*|(?:get|set)\s+)['\"]?(?:%(p)s)['\"]?\s*\([^)]*\)\s*\{"                                # 方法簡寫、async／generator、get／set 存取子
+    r"|^\s*['\"]?(?:%(p)s)['\"]?\s*:\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)"                # name: function／async function／箭頭函式（含單參數）
+    % {"p": _PROTO}, re.M)
+
+
+def test_member_name_guard_catches_every_way_of_defining_a_shadowing_member_and_spares_normal_names():
+    """守門自己的正對照（守門不能只在「沒東西」時綠）：每一種定義寫法都抓得到；正常名稱不誤報。"""
+    bad = ["    valueOf(f) { return 1 },", "    async toString() {", "    *hasOwnProperty() {", "    get constructor() { return 1 },", "    set valueOf(v) {",
+           "    valueOf: function (f) { return 1 },", "    valueOf: async function () {}", "    toString: (a, b) => a,", "    toString: x => x,", "    valueOf: async (f) => 1,",
+           "    'valueOf': function () {},", '    "toString"(f) {', "    __defineGetter__(n, fn) {", "    __lookupSetter__: function (n) {}", "    get __lookupGetter__() {",
+           "    isPrototypeOf: () => 1,", "    propertyIsEnumerable(k) {"]
+    good = ["    curVal(f) { return 1 },", "    valueOfX(f) {", "    myToString() {", "    constructorName: function () {}", "    x.valueOf()", "    return valueOf(f)",
+            "    total: 5,", "    valueOf: 5,", "    // valueOf(f) { 說明文字 }", "    getValue() {", "    gettoString() {"]
+    missed = [x for x in bad if not _BAD_MEMBER.search(x)]
+    flagged = [x for x in good if _BAD_MEMBER.search(x)]
+    assert missed == [] and flagged == []
+
+
 def test_no_alpine_component_method_shadows_an_object_prototype_member():
-    """全站守門：x-data 元件的方法名不能是 Object.prototype 的成員（valueOf／toString…）：Alpine 的範圍代理會解析到繼承來的原生函式。"""
-    bad = re.compile(r"^\s*(?:async\s+)?(valueOf|toString|toLocaleString|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|constructor)\s*\([^)]*\)\s*\{", re.M)
+    """全站守門：x-data 元件的成員名不能是 Object.prototype 的成員（valueOf／toString…）：Alpine 的範圍代理會解析到繼承來的原生函式。
+    抓：方法簡寫（含 async／generator）、get／set 存取子、`name: function`／箭頭函式、帶引號的鍵、`__define*__`／`__lookup*__`。"""
     hits = []
     for root, dirs, files in os.walk(FRONTEND):
         dirs[:] = [d for d in dirs if d not in ("vendor", "node_modules")]
@@ -162,5 +192,5 @@ def test_no_alpine_component_method_shadows_an_object_prototype_member():
             if f.endswith((".html", ".js")):
                 p = os.path.join(root, f)
                 src = open(p, encoding="utf-8", errors="ignore").read()
-                hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(1)) for m in bad.finditer(src)]
+                hits += ["%s:%s" % (os.path.relpath(p, FRONTEND), m.group(0).strip()[:60]) for m in _BAD_MEMBER.finditer(src)]
     assert hits == []
