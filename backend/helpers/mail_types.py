@@ -221,7 +221,7 @@ register("line_quota_warning", "LINE 本月訊息額度告警", _S, "superadmins
          "請確認本月用量，必要時減少勾選「同時發 LINE」的通知類型，或調整 LINE 方案。")
 register("backup_error", "備份嚴重錯誤", _S, "superadmins", "",
          "本次備份沒有完成，發生故障時可能遺失資料。",
-         "請確認雲端硬碟是否已掛載、本機快照（backend/db_backups/）是否存在，以及伺服器磁碟空間。")
+         "請確認雲端硬碟是否已掛載、本機備份是否存在，以及伺服器磁碟空間；到「系統 → 備份與監控」頁可以看到每種備份最近的結果與硬碟剩餘空間。")
 register("geo_quota_warning", "地圖定位額度達警戒線", _S, "superadmins", "",
          "達到額度上限後，系統改用精度較低的免費定位來源；功能不會關閉。", "如需維持定位精度，請調整額度設定；下一個計費週期開始時自動恢復。")
 register("company_setup_alert", "本公司資料設定狀態告警", _S, "superadmins", "",

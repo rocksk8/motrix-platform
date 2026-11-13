@@ -42,6 +42,7 @@ motrix_erp.db
 
 # Deployment-specific config (per-machine, not app code)
 backend/heartbeat_config.json
+backend/heartbeat_config.json.pending
 backend/tools/.guide_sync_config.json
 backend/certs/
 

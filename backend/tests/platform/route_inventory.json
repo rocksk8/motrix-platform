@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 945,
-  "endpoints_api": 941,
-  "write_total": 507,
-  "write_api": 507,
-  "get_api": 434,
-  "distinct_paths_api": 797,
-  "write_with_body_api": 372,
-  "write_with_path_param_api": 360
+  "endpoints_total": 953,
+  "endpoints_api": 949,
+  "write_total": 514,
+  "write_api": 514,
+  "get_api": 435,
+  "distinct_paths_api": 805,
+  "write_with_body_api": 379,
+  "write_with_path_param_api": 363
  },
  "select_star": {
   "modules": 288,
@@ -4742,6 +4742,46 @@
    "w": false,
    "pp": 0,
    "body": false
+  },
+  "GET /api/system/backup-monitor": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/system/backup-monitor/backup-now": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-test": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/system/backup-monitor/heartbeat-url": {
+   "w": true,
+   "pp": 0,
+   "body": true
   }
  }
 }
