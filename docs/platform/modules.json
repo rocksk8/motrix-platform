@@ -399,6 +399,7 @@
    "/api/list-views",
    "/api/mail-types",
    "/api/map",
+   "/api/menu",
    "/api/module-versions",
    "/api/modules",
    "/api/notifications",
