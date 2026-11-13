@@ -556,7 +556,16 @@ def _begin(conn):
 
 
 def _other_superadmins(conn, username: str) -> int:
-    return conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (username or "",)).fetchone()[0]
+    """除了 `username` 以外、在職的**真人**最高管理者人數（展示帳號 demo 不算：把它算進去，只有一位真人時申請會等一個永遠不會來的核准）。"""
+    from . import config_ledger as L
+    return len(L.real_superadmins(conn, username))
+
+
+def _refuse_demo(actor) -> None:
+    """展示帳號不是真人，不能核准／駁回任何申請（它的請求平常走隔離的展示庫，到不了這裡；這是第二道）。"""
+    from . import config_ledger as L
+    if _username(actor) == L.DEMO_USERNAME:
+        raise DisableError("展示帳號不能核准或駁回申請。")
 
 
 def _hours_waiting(at) -> int:
@@ -569,13 +578,14 @@ def _hours_waiting(at) -> int:
 
 def _approver_names(requester: str) -> list:
     """可以核准的人（在職的其他最高管理者）的顯示名稱；畫面只有最高管理者看得到。"""
+    from . import config_ledger as L
     conn = get_db()
     try:
-        rows = conn.execute("SELECT username, display_name FROM users WHERE active=1 AND role='superadmin' AND username<>? ORDER BY username",
-                            (requester or "",)).fetchall()
+        names = L.real_superadmins(conn, requester)            # 真人、在職、不含申請人與展示帳號
+        by = {r["username"]: r["display_name"] for r in conn.execute("SELECT username, display_name FROM users WHERE active=1 AND role='superadmin'").fetchall()}
     finally:
         conn.close()
-    return [(r["display_name"] or r["username"]) for r in rows]
+    return [(by.get(u) or u) for u in sorted(names)]
 
 
 def _pending_rows(conn) -> list:
@@ -733,6 +743,7 @@ def approve_disable(change_id: int, actor, ip: str = "") -> dict:
     """第二位最高管理者核准申請（停用或換主機）：票數夠就真的執行（寫設定檔失敗 ⇒ 整筆回復、票不算，可以重按）。申請人自己不能核准。
     回 `{disabled, changed, kind}`。"""
     from . import config_ledger as L
+    _refuse_demo(actor)
     user = _username(actor)
     conn = get_db()
     try:
@@ -809,6 +820,7 @@ def reject_disable(change_id: int, actor, reason: str = "") -> dict:
     """駁回別人提出的申請（停用／換主機）：**不是申請人**才能駁回（申請人要放棄請用 `cancel_disable`）；必填原因；留稽核、寄信給所有最高管理者。
     ledger 沒有獨立的「駁回」事件（EVENTS 是共用的；加事件要動共用表格），這裡記成 `cancelled`、原因加「駁回：」前綴，稽核用獨立的 `system.heartbeat_disable_rejected`。"""
     from . import config_ledger as L
+    _refuse_demo(actor)
     why = _clean_reason(reason)
     conn = get_db()
     try:
