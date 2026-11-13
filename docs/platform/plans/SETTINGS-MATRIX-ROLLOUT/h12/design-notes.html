@@ -25,9 +25,9 @@ code{font:12.5px ui-monospace,Consolas,monospace;color:var(--mute)}
 
 <h2>1. 範圍與數量（以「實際呈現的頁面」計）</h2>
 <table><tr><th>項目</th><th>數量</th><th>說明</th></tr>
-<tr><td>設定中心欄位</td><td>107 欄／30 群組</td><td>取自 <code>settings_groups.json</code> 真實登錄；呈現為 10 頁（<code>shell_groups.json</code> 分類：安全 2、系統 7、業務 2 頁；其中「自訂功能的開關」合併 13 個 builder 群組）</td></tr>
+<tr><td>設定中心欄位</td><td>107 欄／30 群組</td><td>取自 <code>settings_groups.json</code> 真實登錄；呈現為 11 頁（<code>shell_groups.json</code> r3.2 分類：安全 4、系統 5、業務 2 頁；「自訂功能的開關」合併 13 個 builder 群組、「清單與下載檔名」合併 list_view＋list_prefs＋download_name、「首頁外觀、數字與日期」合併 ui_format＋login_greeting＋brand）</td></tr>
 <tr><td>規則上可批次（①）</td><td>41 欄</td><td>風險為 none／ops、非放寬、非 requires_pending、非敏感群組、非文字欄位</td></tr>
-<tr><td><b>畫面提供勾選格（②）</b></td><td><b>41 欄</b></td><td>依 PM 裁示改以「實際呈現的頁面」計：builder_* 22 欄在同一頁（單欄總開關可重複套用）、清單 7 欄（list_view 6＋list_prefs 1）、下載檔名 5 欄（name_layout／separator／case_name_max_chars／total_max_chars／add_date）、首頁外觀 5 欄（ui_format 4＋login_greeting 1）、小設定 2 欄（lodging_freshness／tender_closing）。每頁都有 ≥2 個可批次欄，所以①＝②。<b>請 h4 的 gen_seed 乙份 ② 以 41 計</b>（之前依群組算是 27）</td></tr>
+<tr><td><b>畫面提供勾選格（②）</b></td><td><b>41 欄</b></td><td>依 PM 裁示改以「實際呈現的頁面」計：builder_* 22 欄在同一頁（單欄總開關可重複套用）、清單 7 欄（list_view 6＋list_prefs 1）、下載檔名 5 欄（與清單同頁；name_layout／separator／case_name_max_chars／total_max_chars／add_date）、首頁外觀 5 欄（ui_format 4＋login_greeting 1）、小設定 2 欄（lodging_freshness／tender_closing）。每頁都有 ≥2 個可批次欄，所以①＝②。<b>請 h4 的 gen_seed 乙份 ② 以 41 計</b>（之前依群組算是 27）</td></tr>
 <tr><td>文字欄位（永不批次）</td><td>26 欄</td><td>下載檔名用語 13＋網路規劃 3＋採購建議 3＋住宿 6＋首頁小標語 1：逐列編輯＋預覽</td></tr>
 <tr><td>永不批次</td><td>40 欄</td><td>安全 20、法遵 3、金額 1、放寬類（enforce_* 5、uploads 3、保留期限 loosen）、含高風險群組（retention）</td></tr>
 <tr><td>設定中心以外</td><td>4 項</td><td>回收桶隔離目錄（既有卡片改白話）、標案雷達排程、備份與監控頁（T83）、自訂表單審核</td></tr>
@@ -36,7 +36,7 @@ code{font:12.5px ui-monospace,Consolas,monospace;color:var(--mute)}
 <h2>2. 外框與共同元件（SPEC §14）</h2>
 <ul>
 <li><b>頂列</b>：欄位級全域搜尋（點結果跳到該頁並框出該欄）、「待生效 N」、「最近變更」；<b>分段</b>全部｜業務｜財務｜系統｜安全；<b>左側兩層導覽</b>：分類 → 白話群組名（取自 <code>shell_groups.json</code>），旁邊顯示「與預設不同 N」橘點數與 🔴「內含高風險項目」。<b>分類只有這一套</b>，我原本自己的四分類已拿掉。</li>
-<li><b>偏離外框的一處</b>：builder_* 13 個群組合成一頁「自訂功能的開關（13 組）」，因為它們有「總開關＋子開關」的階層，分開 13 頁反而看不出誰沒開；請 PM 認可。「清單與畫面用語」依分類拆成「清單與下載檔名用語」（系統）與「網路規劃、採購、住宿的狀態名稱」（業務）兩頁。</li>
+<li><b>偏離外框的一處</b>：builder_* 13 個群組合成一頁「自訂功能的開關（13 組）」，因為它們有「總開關＋子開關」的階層，分開 13 頁反而看不出誰沒開；請 PM 認可。頁面分組已與 h4 的 <code>shell_groups.json</code> r3.2 完全一致（不需改 <code>make_shell_groups.py</code> 的 MERGED）：安全 4 頁＝登入與密碼規則／從外網登入的防護／資料保存多久／刪除的單據保留幾天；系統 5 頁＝上傳／系統中心…／自訂功能的開關（13 組）／清單與下載檔名／首頁外觀、數字與日期；業務 2 頁＝網路規劃、採購、住宿的狀態名稱／旅宿與標案地圖的小設定。</li>
 <li><b>每列</b>：白話名稱＋小字代碼＋標籤（影響大／需外部設定／影響別人／個人／進階；另有「調小＝放寬」「只需等待」）＋來源徽章（預設／公司‧誰‧何時／等待生效／未儲存）；與預設不同的列左邊橘條。</li>
 <li><b>「?」由登錄表產生</b>：這是什麼＝question＋help｜什麼時候要改＝<code>SettingDef.when</code>，<b>逐欄</b>（external_login 14、retention 11、download_name 21 都已逐欄寫在盤點表備註）｜改了會影響什麼＝impact＋riskText｜建議值＝<code>recommended</code>，<b>沒有 recommended 的欄位整段不顯示</b>（external_login 5 欄：三個預設不強制角色、算外網的網址、內網網段）。</li>
 <li><b>重設為預設＝刪除公司設定值</b>（不是寫入預設值）：按鈕有 tooltip，草稿與確認視窗都寫「重設為預設（刪除公司設定）」，儲存後來源徽章回到「預設」。</li></ul>
@@ -95,10 +95,10 @@ code{font:12.5px ui-monospace,Consolas,monospace;color:var(--mute)}
 <figure><a href="shots/12-hosts-list-editor.png"><img src="shots/12-hosts-list-editor.png" alt=""></a><figcaption>12 算外網的網址：清單編輯器</figcaption></figure>
 <figure><a href="shots/13-save-wait-only.png"><img src="shots/13-save-wait-only.png" alt=""></a><figcaption>13 只需等待（不需第二位核准）</figcaption></figure>
 <figure><a href="shots/14-retention.png"><img src="shots/14-retention.png" alt=""></a><figcaption>14 資料保存多久</figcaption></figure>
-<figure><a href="shots/15-download-name.png"><img src="shots/15-download-name.png" alt=""></a><figcaption>15 下載檔案怎麼命名（勾選格＋即時預覽）</figcaption></figure>
+<figure><a href="shots/14b-recycle-days.png"><img src="shots/14b-recycle-days.png" alt=""></a><figcaption>14b 刪除的單據保留幾天</figcaption></figure>
+<figure><a href="shots/15-list-and-download-name.png"><img src="shots/15-list-and-download-name.png" alt=""></a><figcaption>15 清單與下載檔名（個人調整清單＋檔名用語＋命名勾選格＋即時預覽）</figcaption></figure>
 <figure><a href="shots/16-home-format.png"><img src="shots/16-home-format.png" alt=""></a><figcaption>16 首頁外觀、數字與日期（預設組合＝提案）</figcaption></figure>
 <figure><a href="shots/17-small.png"><img src="shots/17-small.png" alt=""></a><figcaption>17 小設定</figcaption></figure>
-<figure><a href="shots/18-views.png"><img src="shots/18-views.png" alt=""></a><figcaption>18 清單與下載檔名用語</figcaption></figure>
 <figure><a href="shots/19-labels.png"><img src="shots/19-labels.png" alt=""></a><figcaption>19 狀態名稱（文字欄位逐列編輯＋預覽）</figcaption></figure>
 <figure><a href="shots/20-radar-over-12.png"><img src="shots/20-radar-over-12.png" alt=""></a><figcaption>20 標案雷達：超過 12 個時段</figcaption></figure>
 <figure><a href="shots/21-radar-save-confirm.png"><img src="shots/21-radar-save-confirm.png" alt=""></a><figcaption>21 標案雷達存檔確認（每次都要確認）</figcaption></figure>
