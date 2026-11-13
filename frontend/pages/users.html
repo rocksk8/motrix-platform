@@ -9,6 +9,7 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/users-duty.js"></script>
+  <script src="../static/users-batch.js"></script>
   <script src="../static/org-gaps.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -264,6 +265,95 @@
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
             新增自訂角色
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批次調整權限（設定矩陣 S3a；static/users-batch.js）：選人 → 選動作與權限 → 預覽 → 確認 → 套用 → 復原這一批 -->
+    <div x-show="isSuperAdmin" style="margin-bottom:16px" id="batch-perm-panel">
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer"
+             :style="batch.open ? 'border-bottom:1px solid var(--border-light)' : ''" @click="batchToggleOpen()" data-testid="batch-open">
+          <span style="font-size:13px;font-weight:600">批次調整權限</span>
+          <span style="font-size:12px;color:var(--text-dim)">一次給多位同仁開或收同樣的權限、套用角色範本、綁定職責角色</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="batchSelectedIds().length ? '已選 ' + batchSelectedIds().length + ' 位' : ''"></span>
+        </div>
+        <div x-show="batch.open" style="padding:14px 16px;display:grid;gap:14px">
+          <div x-show="batch.result" style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;gap:10px" data-testid="batch-result">
+            <span x-text="'已套用：變更 ' + (batch.result ? batch.result.applied.length : 0) + ' 位。'"></span>
+            <button class="btn btn-ghost btn-sm" :disabled="batch.undoBusy" @click="batchUndo()" data-testid="batch-undo">復原這一批</button>
+            <span style="color:var(--text-dim)">被別人改過的人不會被復原。</span>
+          </div>
+          <div x-show="batch.undoMsg" style="font-size:12px;color:var(--text-dim)" x-text="batch.undoMsg" data-testid="batch-undo-msg"></div>
+
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">① 選同仁（最高管理者不在批次範圍）</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+              <input class="form-input" type="text" x-model="batch.q" placeholder="搜尋帳號／顯示名稱" style="max-width:240px;font-size:12px;padding:6px 9px">
+              <button class="btn btn-ghost btn-sm" @click="batchToggleAll(true)">全選目前列出的</button>
+              <button class="btn btn-ghost btn-sm" @click="batchToggleAll(false)">全部取消</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto">
+              <template x-for="u in batchPeople()" :key="u.id">
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;padding:4px 8px;cursor:pointer">
+                  <input type="checkbox" x-model="batch.sel[u.id]" :data-testid="'batch-user-' + u.id">
+                  <span x-text="u.displayName || u.username"></span>
+                  <span style="color:var(--text-dim)" x-text="roleLabel(u.role)"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">② 要做什麼</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:12px">
+              <label><input type="radio" name="batch-action" value="grant" :checked="batch.action==='grant'" @change="batchSetAction('grant')"> 授予權限</label>
+              <label><input type="radio" name="batch-action" value="revoke" :checked="batch.action==='revoke'" @change="batchSetAction('revoke')"> 取消權限</label>
+              <label><input type="radio" name="batch-action" value="template" :checked="batch.action==='template'" @change="batchSetAction('template')"> 套用角色範本</label>
+              <label><input type="radio" name="batch-action" value="bind" :checked="batch.action==='bind'" @change="batchSetAction('bind')"> 綁定職責角色</label>
+              <label><input type="radio" name="batch-action" value="unbind" :checked="batch.action==='unbind'" @change="batchSetAction('unbind')"> 解除職責角色</label>
+            </div>
+          </div>
+
+          <div x-show="batch.action==='grant' || batch.action==='revoke'">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px" x-text="batch.action==='grant' ? '③ 要授予哪些權限（高敏感與影響較大的權限不能批次授予，要到個別使用者逐人填原因）' : '③ 要取消哪些權限（取消高敏感或影響較大的權限要填原因，並留下權限變更紀錄）'"></div>
+            <template x-for="g in moduleGroups" :key="g.group">
+              <div style="margin-bottom:8px">
+                <div style="font-size:12px;color:var(--text-dim);margin-bottom:3px" x-text="g.group"></div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <template x-for="m in g.mods" :key="m.key">
+                    <label style="display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;padding:4px 8px"
+                           :style="batchKeyState(m.key).disabled ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'"
+                           :title="batchKeyState(m.key).note">
+                      <input type="checkbox" :checked="batch.keys.includes(m.key)" :disabled="batchKeyState(m.key).disabled" @change="batchToggleKey(m.key)" :data-testid="'batch-key-' + m.key">
+                      <span x-text="m.label"></span>
+                      <span x-show="batchKeyState(m.key).note" style="color:var(--text-dim)" x-text="'（' + batchKeyState(m.key).note + '）'"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div x-show="batch.action==='template'">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">③ 套用哪個範本（預覽會逐人列出取消與新增的權限）</div>
+            <select class="form-input" x-model="batch.template" style="max-width:240px;font-size:12px" data-testid="batch-template">
+              <option value="">請選擇</option>
+              <template x-for="p in batchTemplates()" :key="p.key"><option :value="p.key" x-text="p.label + '範本'"></option></template>
+            </select>
+          </div>
+          <div x-show="batch.action==='bind' || batch.action==='unbind'">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">③ 哪個職責角色（含高敏感或影響較大權限的角色不能批次綁定）</div>
+            <select class="form-input" x-model="batch.roleId" style="max-width:280px;font-size:12px" data-testid="batch-role">
+              <option value="">請選擇</option>
+              <template x-for="r in batch.roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+            </select>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="btn btn-primary" :disabled="!batchCanPreview()" @click="batchPreview()" data-testid="batch-preview">預覽變更</button>
+            <span style="font-size:12px;color:var(--text-dim)">預覽不會寫入任何東西；確認後才會套用。</span>
+            <span style="font-size:12px;color:#B91C1C" x-text="batch.error" x-show="batch.error && !batch.showPlan" data-testid="batch-error"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -792,6 +882,41 @@
   </div>
 
   <!-- ══ 自訂角色 Modal ══ -->
+  <!-- 批次調整權限：預覽與確認視窗（逐人列出；需要原因時必填） -->
+  <div class="modal-overlay" x-show="batch.showPlan" x-transition style="display:none" data-testid="batch-plan">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head">
+        <span class="modal-head__title">確認批次變更</span>
+        <button class="modal-close" @click="batchClosePlan()">×</button>
+      </div>
+      <div class="modal-body" style="max-height:60vh;overflow:auto">
+        <div style="font-size:13px;margin-bottom:8px" x-text="batchSummaryText()"></div>
+        <div x-show="batchPlanNote()" style="font-size:12px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:8px 10px;margin-bottom:8px" x-text="batchPlanNote()"></div>
+        <template x-for="p in ((batch.plan||{}).people||[])" :key="p.userId">
+          <div style="border-top:1px solid var(--border-light);padding:8px 0;font-size:12px">
+            <div style="font-weight:600" x-text="p.name || ('#' + p.userId)"></div>
+            <div x-show="p.status==='skipped'" style="color:var(--text-dim)" x-text="'略過：' + p.note"></div>
+            <div x-show="p.status==='nochange'" style="color:var(--text-dim)">沒有需要變更的項目</div>
+            <div x-show="batchCancelKeys(p).length" x-text="'取消 ' + batchCancelKeys(p).length + ' 項（' + batchKeysText(batchCancelKeys(p)) + '）'"></div>
+            <div x-show="p.adds.length" x-text="'新增 ' + p.adds.length + ' 項（' + batchKeysText(p.adds) + '）'"></div>
+            <div x-show="p.bind.length" x-text="'綁定職責角色 ' + p.bind.length + ' 個'"></div>
+            <div x-show="p.unbind.length" x-text="'解除職責角色 ' + p.unbind.length + ' 個'"></div>
+            <template x-for="s in p.skipped" :key="s.kind + s.key"><div style="color:var(--text-dim)" x-text="'略過 ' + batchSkipText(s)"></div></template>
+          </div>
+        </template>
+        <div x-show="(batch.plan||{}).needsReason" style="margin-top:10px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">變更原因（這次動到高敏感或影響較大的權限，必填；至少 4 個不同的字）</div>
+          <input class="form-input" type="text" maxlength="200" x-model="batch.reason" style="font-size:12px" data-testid="batch-reason">
+        </div>
+        <div x-show="batch.error" style="margin-top:8px;font-size:12px;color:#B91C1C" x-text="batch.error" data-testid="batch-plan-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="batchClosePlan()">取消</button>
+        <button class="btn btn-primary" :disabled="batch.busy || !(((batch.plan||{}).summary||{}).changed)" @click="batchApply()" data-testid="batch-apply">套用</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" x-show="showCrModal" x-transition style="display:none">
     <div class="modal-box" style="max-width:460px">
       <div class="modal-head">
@@ -912,6 +1037,7 @@
 
   function usersPage() {
     return {
+      ...(window.usersBatchMixin ? window.usersBatchMixin() : {}),   // 設定矩陣 S3a：批次調整權限面板（static/users-batch.js）
       ...(window.usersDutyMixin ? window.usersDutyMixin() : {}),     // R2 第 2 步：職責角色／個人扣項／生效權限預覽（static/users-duty.js）
       session:   {},
       users:     [],
@@ -1496,6 +1622,7 @@
           if (!r.ok) throw new Error('HTTP ' + r.status)
           const d = await r.json()
           this.allModules = d.modules || []
+          this.batchLists = { high: d.highSensitiveKeys || [], refused: d.batchGrantRefused || [], finance: d.financeKeys || [] }     // 清單來自伺服器，不寫死
           ROLE_MODULES = d.roleTemplates || {}
           if (!this.allModules.length) throw new Error('empty')
         } catch (e) {
