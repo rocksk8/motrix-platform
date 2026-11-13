@@ -1995,10 +1995,10 @@
    "NOTIF_TYPE": "const",
    "batch": "class",
    "batch.__init__": "def(self, verb=…, header=…)",
-   "compose": "def(items, names=…, header=…)",
+   "compose": "def(items, names=…, header=…, full=…)",
    "emit": "def(items)",
-   "make_item": "def(kind, label, old, new, phase=…, *, actor=…, reason=…, effective_at=…, approvals=…, required=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…)",
-   "notify_change": "def(kind, label, old, new, *, actor=…, reason=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…, phase=…, effective_at=…, approvals=…, required=…)",
+   "make_item": "def(kind, label, old, new, phase=…, *, actor=…, reason=…, effective_at=…, approvals=…, required=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…, sensitive=…)",
+   "notify_change": "def(kind, label, old, new, *, actor=…, reason=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…, phase=…, effective_at=…, approvals=…, required=…, sensitive=…)",
    "preview_recipients": "def(items, conn=…)",
    "setting_item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
    "setting_item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"

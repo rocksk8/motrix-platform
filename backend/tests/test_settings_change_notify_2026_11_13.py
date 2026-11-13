@@ -64,7 +64,8 @@ def test_immediate_change_notifies_every_active_superadmin_with_who_what_old_new
     r = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 10}, "reason": "磁碟快滿了"}, headers=h)
     assert r.status_code == 200 and r.json()["changed"] is True
     label = R.groups()["uploads"]["label"]
-    for u in ("nt_sa1", "nt_sa2"):                                  # 操作者本人也收到（看到「確實存了」）
+    assert _notes("nt_sa1") == []                                   # 操作者本人不收自己操作的站內通知（他自己知道；PM 2026-11-13）
+    for u in ("nt_sa2",):                                           # 其他在職最高管理者收到（ops 風險、非敏感群組 ⇒ 看得到值與原因）
         n = _notes(u)
         assert len(n) == 1, (u, n)
         m = n[0]["message"]
@@ -78,16 +79,18 @@ def test_immediate_change_notifies_every_active_superadmin_with_who_what_old_new
 def test_inactive_superadmin_is_not_notified(client, make_user):
     h = _hdr(client, make_user, "nt_sa3")
     make_user(username="nt_sa4", role="superadmin")
+    make_user(username="nt_sa3b", role="superadmin")
     conn = get_db()
     conn.execute("UPDATE users SET active=0 WHERE username='nt_sa4'")
     conn.commit()
     conn.close()
     assert client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 11}, "reason": "測"}, headers=h).status_code == 200
-    assert len(_notes("nt_sa3")) == 1 and _notes("nt_sa4") == []
+    assert len(_notes("nt_sa3b")) == 1 and _notes("nt_sa4") == [] and _notes("nt_sa3") == []
 
 
 def test_roles_listed_in_impact_scope_are_notified_and_unlisted_are_not(client, make_user, line_calls):
     h = _hdr(client, make_user, "nt_sa5")
+    make_user(username="nt_sa5b", role="superadmin")
     make_user(username="nt_sales", role="sales")
     make_user(username="nt_viewer", role="viewer")
     make_user(username="nt_admin2", role="admin")
@@ -98,7 +101,10 @@ def test_roles_listed_in_impact_scope_are_notified_and_unlisted_are_not(client, 
     assert "業務" in scope["roles"] and "管理員" not in scope["roles"]
     assert len(_notes("nt_sales")) == 1                              # 「業務」⇒ sales
     assert _notes("nt_viewer") == [] and _notes("nt_admin2") == []
-    assert len(_notes("nt_sa5")) == 1
+    assert _notes("nt_sa5") == []                                    # 操作者本人不收
+    assert len(_notes("nt_sa5b")) == 1 and "→" in _notes("nt_sa5b")[0]["message"]      # 其他最高管理者看得到值
+    sales = _notes("nt_sales")[0]["message"]                         # money 風險：業務只知道「已變更」，看不到值與原因
+    assert "設定已變更" in sales and "→" not in sales and "原因" not in sales and "試行" not in sales
 
 
 def test_money_risk_goes_to_line_only_to_superadmins_without_free_text(client, make_user, line_calls):
@@ -167,7 +173,8 @@ def test_profile_apply_across_groups_sends_exactly_one_merged_notification(clien
     assert len(R.profile_preview("zzprofile")) == 3
     r = client.post("/api/settings-center/profiles/zzprofile/apply", json={"reason": "套預設組"}, headers=h)
     assert r.status_code == 200, r.text
-    for u in ("nt_sa10", "nt_sa11"):
+    assert _notes("nt_sa10") == []                                    # 操作者本人不收
+    for u in ("nt_sa11",):
         n = _notes(u)
         assert len(n) == 1, (u, n)                                    # 兩個群組、三個欄位 ⇒ 一則
         m = n[0]["message"]
@@ -177,12 +184,13 @@ def test_profile_apply_across_groups_sends_exactly_one_merged_notification(clien
 
 def test_batch_context_collects_and_sends_once_even_when_a_later_publish_raises(client, make_user, zz_groups):
     _hdr(client, make_user, "nt_sa12")
+    make_user(username="nt_sa12b", role="superadmin")
     with pytest.raises(R.SettingError):
         with SN.batch():
             R.publish("zz_nt_b", {"cap": 9}, user="nt_sa12", reason="先成功")
             R.publish("zz_nt_b", {"cap": 999}, user="nt_sa12", reason="超出範圍")       # 驗證不過 ⇒ 丟例外
-    n = _notes("nt_sa12")
-    assert len(n) == 1 and "9" in n[0]["message"]                      # 已 commit 的第一筆照樣通知（一則）
+    n = _notes("nt_sa12b")
+    assert len(n) == 1 and "9" in n[0]["message"] and _notes("nt_sa12") == []                      # 已 commit 的第一筆照樣通知（一則）
 
 
 def test_notification_is_sent_after_commit_and_outside_every_lock(client, make_user, zz_groups, monkeypatch):
@@ -235,19 +243,21 @@ def test_due_pending_taking_effect_is_notified_once_merged(client, make_user, zz
 
 def test_reset_and_restore_paths_also_notify(client, make_user, zz_groups):
     h = _hdr(client, make_user, "nt_sa16")
+    make_user(username="nt_sa16b", role="superadmin")
     assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 20}, "reason": "先改"}, headers=h).status_code == 200
-    n0 = len(_notes("nt_sa16"))
+    n0 = len(_notes("nt_sa16b"))
     assert client.post("/api/settings-center/groups/zz_nt_b/reset", json={"fields": ["cap"], "reason": "改回預設"}, headers=h).status_code == 200
-    assert len(_notes("nt_sa16")) == n0 + 1
+    assert len(_notes("nt_sa16b")) == n0 + 1
 
 
 def test_message_has_chinese_option_names_not_codes(client, make_user, line_calls):
     h = _hdr(client, make_user, "nt_sa17")
+    make_user(username="nt_sa17b", role="superadmin")
     cur = R.get("quote_approval", "reconfirm_mode")
     new = 2 if cur < 2 else 1
     assert client.post("/api/settings-center/groups/quote_approval", json={"values": {"reconfirm_mode": new}, "reason": "測試"}, headers=h).status_code == 200
     f = R.field_defs("quote_approval")["reconfirm_mode"]
-    m = _notes("nt_sa17")[-1]["message"]
+    m = _notes("nt_sa17b")[-1]["message"]
     assert R.show_value(f, new) in m and R.show_value(f, cur) in m
 
 
@@ -255,16 +265,23 @@ def test_message_has_chinese_option_names_not_codes(client, make_user, line_call
 
 def test_generic_item_notify_change_reaches_superadmins_role_users_and_listed_accounts_and_line_for_security(client, make_user, line_calls):
     _hdr(client, make_user, "nt_g1")
+    make_user(username="nt_g1b", role="superadmin")
     make_user(username="nt_g_sales", role="sales")
     make_user(username="nt_g_other", role="viewer")
     make_user(username="nt_g_named", role="viewer")
     SN.notify_change("permission", "王經理的權限：案件管理", "只能看", "可編輯", actor="nt_g1", reason="升任", risk="security", roles=["業務", "簽核人"],
                      recipients=["nt_g_named", "nobody_here"], plain=True, ref="perm:wang")
-    for u in ("nt_g1", "nt_g_sales", "nt_g_named"):
+    assert _notes("nt_g1") == []                                       # 操作者本人不收
+    full = _notes("nt_g1b")
+    assert len(full) == 1 and "只能看 → 可編輯" in full[0]["message"] and "升任" in full[0]["message"]        # 其他最高管理者：值與原因都看得到
+    for u in ("nt_g1b", "nt_g_sales", "nt_g_named"):
         n = _notes(u)
         assert len(n) == 1, (u, n)
-        assert "王經理的權限：案件管理" in n[0]["message"] and "只能看 → 可編輯" in n[0]["message"] and n[0]["ref_id"] == "perm:wang"
+        assert "王經理的權限：案件管理" in n[0]["message"] and n[0]["ref_id"] == "perm:wang"
         assert n[0]["ref_label"].startswith("權限變更")
+    for u in ("nt_g_sales", "nt_g_named"):                               # security 風險：非最高管理者只知道「已變更」，沒有值也沒有原因
+        m = _notes(u)[0]["message"]
+        assert "設定已變更" in m and "→" not in m and "只能看" not in m and "可編輯" not in m and "升任" not in m and "原因" not in m
     assert _notes("nt_g_other") == []                                  # 角色不符、沒被點名
     assert len(line_calls) == 1 and line_calls[0][1]["title"] == "權限變更（高風險）" and "nt_g_sales" not in line_calls[0][1]["usernames"]
     assert "升任" not in json.dumps(line_calls[0][1], ensure_ascii=False)
@@ -278,12 +295,13 @@ def test_generic_item_unknown_kind_falls_back_and_values_are_clipped():
 
 def test_preview_recipients_is_a_dry_run_and_lists_unsupported_role_phrases(client, make_user, line_calls):
     _hdr(client, make_user, "nt_g2")
+    make_user(username="nt_g2b", role="superadmin")
     make_user(username="nt_g2_sales", role="sales")
     before = get_db().execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
     it = SN.make_item("approval_flow", "簽核流程／層級", "2 層", "3 層", "pending", actor="nt_g2", risk="money", roles=["業務", "簽核人", "受影響同仁的主管"])
     pv = SN.preview_recipients([it])
-    assert _display("nt_g2") in pv["superadmins"]
-    assert [o["username"] for o in pv["others"]] == ["nt_g2_sales"]
+    assert _display("nt_g2b") in pv["superadmins"] and _display("nt_g2") not in pv["superadmins"]      # 操作者本人不收站內通知 ⇒ 不列
+    assert [o["username"] for o in pv["others"]] == ["nt_g2_sales"] and pv["redactedForOthers"] is True   # money 風險：業務只看到「已變更」
     assert pv["ignoredRoles"] == ["簽核人", "受影響同仁的主管"]       # 目前不支援的收件人：誠實列出
     assert pv["line"]["willSend"] is False and "未啟用" in pv["line"]["reason"]    # money 風險但 LINE 事件沒勾
     assert SN.preview_recipients([])["superadmins"] == []
@@ -297,8 +315,8 @@ def test_plan_and_preview_route_return_recipients(client, make_user, zz_groups):
     r = client.post("/api/settings-center/groups/zz_nt_b/preview", json={"values": {"cap": 17}}, headers=h)
     assert r.status_code == 200
     rc = r.json()["recipients"]
-    assert set(rc) == {"superadmins", "others", "ignoredRoles", "line"}
-    assert len(rc["superadmins"]) >= 2 and rc["ignoredRoles"] == []
+    assert set(rc) == {"superadmins", "others", "ignoredRoles", "redactedForOthers", "line"}
+    assert len(rc["superadmins"]) >= 1 and _display("nt_g3") not in rc["superadmins"] and rc["ignoredRoles"] == []
     same = client.post("/api/settings-center/groups/zz_nt_b/preview", json={"values": {"cap": R.get("zz_nt_b", "cap")}}, headers=h).json()
     assert same["recipients"]["superadmins"] == []                      # 沒有實際變更 ⇒ 沒有人會被通知
     assert _notes("nt_g3") == []                                          # 預覽不通知
@@ -312,10 +330,10 @@ def test_batch_endpoint_saves_several_groups_and_sends_exactly_one_message(clien
     assert r.status_code == 200, r.text
     assert set(r.json()["groups"]) == {"zz_nt_a", "zz_nt_b"}
     assert R.get("zz_nt_a", "days") == 11 and R.get("zz_nt_b", "cap") == 21
-    for u in ("nt_g4", "nt_g4_b"):
-        n = _notes(u)
-        assert len(n) == 1 and n[0]["ref_id"] == "batch" and "通知測試甲" in n[0]["message"] and "通知測試乙" in n[0]["message"], (u, n)
-    assert "共 2 項" in _notes("nt_g4")[0]["message"]
+    assert _notes("nt_g4") == []                                          # 操作者本人不收
+    n = _notes("nt_g4_b")
+    assert len(n) == 1 and n[0]["ref_id"] == "batch" and "通知測試甲" in n[0]["message"] and "通知測試乙" in n[0]["message"], n
+    assert "共 2 項" in n[0]["message"]
 
 
 def test_batch_endpoint_all_validation_first_nothing_written_when_any_group_is_bad(client, make_user, zz_groups):
@@ -347,19 +365,20 @@ def test_batch_endpoint_input_rules_reason_empty_unknown_group_superadmin_only_a
 
 def test_restore_sends_one_restored_message_not_one_per_publish(client, make_user, zz_groups):
     h = _hdr(client, make_user, "nt_g7")
+    make_user(username="nt_g7b", role="superadmin")
     assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 31}, "reason": "一"}, headers=h).status_code == 200
     assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 32}, "reason": "二"}, headers=h).status_code == 200
     vs = client.get("/api/settings-center/groups/zz_nt_b/versions", headers=h).json()["versions"]
     first = min(v["version"] for v in vs)
-    n0 = len(_notes("nt_g7"))
+    n0 = len(_notes("nt_g7b"))
     r = client.post("/api/settings-center/groups/zz_nt_b/restore/%d" % first, json={"reason": "改回去"}, headers=h)
     assert r.status_code == 200, r.text
-    n = _notes("nt_g7")
+    n = _notes("nt_g7b")
     assert len(n) == n0 + 1
     assert "已復原到第 %d 版" % first in n[-1]["message"] and "復原了" in n[-1]["message"] and R.get("zz_nt_b", "cap") == 31
-    pv = len(_notes("nt_g7"))
+    pv = len(_notes("nt_g7b"))
     client.post("/api/settings-center/groups/zz_nt_b/restore/%d" % first, json={"preview": True}, headers=h)
-    assert len(_notes("nt_g7")) == pv                                     # 預覽不通知
+    assert len(_notes("nt_g7b")) == pv                                     # 預覽不通知
 
 
 def test_more_than_eight_lines_ends_with_full_detail_line_and_links_to_the_change_log_tab():
@@ -378,10 +397,12 @@ def test_more_than_eight_lines_ends_with_full_detail_line_and_links_to_the_chang
 
 def test_notify_change_inside_batch_merges_with_registry_changes_into_one_message(client, make_user, zz_groups):
     _hdr(client, make_user, "nt_g8")
+    make_user(username="nt_g8b", role="superadmin")
     with SN.batch():
         R.publish("zz_nt_b", {"cap": 33}, user="nt_g8", reason="設定")
         SN.notify_change("mail", "信件／寄件人", "舊", "新", actor="nt_g8", reason="信件")
-    n = _notes("nt_g8")
+    n = _notes("nt_g8b")
+    assert _notes("nt_g8") == []
     assert len(n) == 1 and "通知測試乙" in n[0]["message"] and "信件／寄件人" in n[0]["message"] and n[0]["ref_label"].startswith("設定變更")
 
 
@@ -395,6 +416,135 @@ def test_page_reads_tab_query_and_shows_recipients_line():
     html = open(PAGE, encoding="utf-8").read()
     assert "URLSearchParams(location.search)" in html and "'versions'" in html
     assert 'data-testid="sc-recipients"' in html and "recipientsText()" in html
+    assert "redactedForOthers" in html and "不會收到自己操作的通知" in html
+
+
+# ─────────── h11 審查修正（2026-11-13）：隱私去識別、None 項目、逐人隔離、notApplied、原因不擠掉完整明細 ───────────
+
+def test_security_change_to_all_users_scope_shows_values_and_reason_only_to_other_superadmins(client, make_user, line_calls):
+    """h11 M1：external_login 的 impact_scope.roles＝「所有使用者」且 risk＝security。一般使用者只能知道「某某設定已變更、由誰何時操作」，看不到值與原因。"""
+    h = _hdr(client, make_user, "nt_p1")
+    make_user(username="nt_p1b", role="superadmin")
+    make_user(username="nt_p_user", role="viewer")
+    make_user(username="nt_p_sales", role="sales")
+    f = R.field_defs("external_login")["lock_threshold"]
+    assert f.risk == "security" and "所有使用者" in f.impact_scope["roles"]
+    cur = R.get("external_login", "lock_threshold")
+    new = cur - 1 if cur > 3 else cur + 1
+    r = client.post("/api/settings-center/groups/external_login", json={"values": {"lock_threshold": new}, "reason": "機密原因XYZ"}, headers=h)
+    assert r.status_code == 200, r.text
+    assert R.groups()["external_login"]["sensitive"] is True
+    sa = _notes("nt_p1b")[0]["message"]
+    assert "→" in sa and "機密原因XYZ" in sa and f.label in sa                # 其他最高管理者：完整
+    assert _notes("nt_p1") == []                                           # 操作者本人不收
+    for u in ("nt_p_user", "nt_p_sales"):
+        n = _notes(u)
+        assert len(n) == 1, (u, n)
+        m = n[0]["message"]
+        assert "設定已變更" in m and f.label in m and _display("nt_p1") in m and "立即生效" in m
+        assert "→" not in m and "機密原因XYZ" not in m and "原因" not in m and ("%s → %s" % (cur, new)) not in m
+
+
+def test_sensitive_group_with_ops_risk_is_also_redacted_for_non_superadmins():
+    """sensitive 群組（即使欄位風險是 ops）也去識別；非敏感＋ops 風險的照常完整。"""
+    secret = SN.make_item("setting", "G／F", "舊值AAA", "新值BBB", "updated", actor="a", reason="私密原因", sensitive=True)
+    plain = SN.make_item("setting", "G／F2", "舊值CCC", "新值DDD", "updated", actor="a", reason="一般原因")
+    _l, m_user = SN.compose([secret], {}, full=False)
+    assert "舊值AAA" not in m_user and "新值BBB" not in m_user and "私密原因" not in m_user and "設定已變更" in m_user
+    _l, m_sa = SN.compose([secret], {}, full=True)
+    assert "舊值AAA → 新值BBB" in m_sa and "私密原因" in m_sa
+    _l, m_plain = SN.compose([plain], {}, full=False)
+    assert "舊值CCC → 新值DDD" in m_plain and "原因" not in m_plain                  # 非敏感：值照給；原因一律只給最高管理者
+    mixed = SN.compose([secret, plain], {}, full=False)[1]
+    assert "舊值AAA" not in mixed and "舊值CCC → 新值DDD" in mixed and "私密原因" not in mixed
+
+
+def test_activated_notification_reaches_other_superadmins_in_full(client, make_user, zz_groups):
+    _hdr(client, make_user, "nt_p2")
+    make_user(username="nt_p2b", role="superadmin")
+    out = R.publish("zz_nt_a", {"limit": 250}, user="nt_p2", reason="私密原因QQQ")
+    assert out["pending"]
+    assert R.materialize_due(now="2099-01-01T00:00:00") >= 1
+    sa = [x for x in _notes("nt_p2b") if "已生效" in x["message"]]
+    assert sa and "私密原因QQQ" in sa[-1]["message"]                          # 最高管理者看得到（money：值與原因）
+
+
+def test_item_that_failed_to_build_does_not_delete_the_ledger_notification(client, make_user, zz_groups, monkeypatch):
+    """h11 S1：setting_item 失敗（None）時，帳本自己對高風險變更的簡短通知不能被刪（否則誰都沒被通知）。"""
+    _hdr(client, make_user, "nt_p3")
+    make_user(username="nt_p3b", role="superadmin")
+    monkeypatch.setattr(SN, "setting_item", lambda *a, **k: None)
+    out = R.publish("zz_nt_a", {"limit": 220}, user="nt_p3", reason="測")
+    assert out["pending"]
+    assert _notes("nt_p3b") == []                                           # 新通知元件沒發（項目建不出來）
+    assert len(_notes("nt_p3b", "config_change")) >= 1                      # 帳本的簡短通知還在
+
+
+def test_one_recipient_failing_does_not_drop_the_others(client, make_user, zz_groups, monkeypatch):
+    """h11 S5：某個收件人的站內通知寫入失敗，其他人照發、LINE 照發。"""
+    from helpers import audit
+    h = _hdr(client, make_user, "nt_p4")
+    make_user(username="nt_p4b", role="superadmin")
+    make_user(username="nt_p4c", role="superadmin")
+    real = audit._notify_in_txn
+
+    def flaky(conn, user, *a, **k):
+        if user == "nt_p4b":
+            raise RuntimeError("boom")
+        return real(conn, user, *a, **k)
+
+    monkeypatch.setattr(audit, "_notify_in_txn", flaky)
+    assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 14}, "reason": "測"}, headers=h).status_code == 200
+    assert _notes("nt_p4b") == [] and len(_notes("nt_p4c")) == 1
+
+
+def test_batch_409_lists_not_applied_groups(client, make_user, zz_groups, monkeypatch):
+    h = _hdr(client, make_user, "nt_p5")
+    real = R.publish
+
+    def boom_on_b(group, *a, **k):
+        if group == "zz_nt_a":
+            raise RuntimeError("故意失敗")
+        return real(group, *a, **k)
+
+    monkeypatch.setattr(R, "publish", boom_on_b)
+    body = {"groups": {"zz_nt_b": {"values": {"cap": 15}}, "zz_nt_a": {"values": {"days": 13}}, "uploads": {"values": {"max_file_mb": 12}}}, "reason": "測"}
+    r = client.post("/api/settings-center/batch", json=body, headers=h)
+    assert r.status_code == 409
+    d = r.json()["detail"]
+    assert d["applied"] == ["zz_nt_b"] and d["failed"] == "zz_nt_a" and d["notApplied"] == ["uploads"]
+
+
+def test_long_reason_never_cuts_the_full_detail_line():
+    its = [SN.make_item("setting", "群組／項目%d" % i, "舊" * 30, "新" * 30, "updated", actor="a", reason="很長的原因" * 40, ref="g") for i in range(11)]
+    _l, msg = SN.compose(its, {})
+    assert "完整明細：變更紀錄" in msg and len(msg) <= SN._MAX_MSG
+    assert msg.index("完整明細：變更紀錄") < msg.index("原因：")
+
+
+def test_actor_only_system_sends_no_in_app_notification_but_preview_says_so(client, make_user, zz_groups):
+    h = _hdr(client, make_user, "nt_p6")
+    conn = get_db()
+    try:
+        others = [r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>?", ("nt_p6",)).fetchall()]
+        for u in others:
+            conn.execute("UPDATE users SET active=0 WHERE username=?", (u,))
+        conn.commit()
+    finally:
+        conn.close()
+    try:
+        pv = client.post("/api/settings-center/groups/zz_nt_b/preview", json={"values": {"cap": 16}}, headers=h).json()["recipients"]
+        assert pv["superadmins"] == [] and pv["others"] == []
+        assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 16}, "reason": "測"}, headers=h).status_code == 200
+        assert _notes("nt_p6") == []
+    finally:
+        conn = get_db()
+        try:
+            for u in others:
+                conn.execute("UPDATE users SET active=1 WHERE username=?", (u,))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 # ═══════════════════════════ 前端（node＋Alpine 同款範圍代理）═══════════════════════════

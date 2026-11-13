@@ -398,9 +398,12 @@ function settingsCenterPage() {
     recipientsText() {
       const r = this.preview && this.preview.recipients
       if (!r || !r.superadmins) return ''
-      let t = '儲存後會通知：' + (r.superadmins.length ? r.superadmins.join('、') + '（最高管理者）' : '最高管理者')
       const o = r.others || []
-      if (o.length) t += '，以及 ' + o.slice(0, 5).map(x => x.display).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : '')
+      const who = []
+      if (r.superadmins.length) who.push(r.superadmins.join('、') + '（最高管理者）')
+      if (o.length) who.push(o.slice(0, 5).map(x => x.display).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : ''))
+      let t = who.length ? '儲存後會通知：' + who.join('，以及 ') : '儲存後不會另外通知其他人（你自己不會收到自己操作的通知）'
+      if (o.length && r.redactedForOthers) t += '。一般同仁只會看到「設定已變更、由誰操作」，看不到數值與原因'
       if (r.line && r.line.willSend) t += '；並發 LINE 給最高管理者'
       if ((r.ignoredRoles || []).length) t += '。另有「' + r.ignoredRoles.join('、') + '」不在自動通知對象內，請自行告知'
       return t
