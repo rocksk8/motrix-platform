@@ -43,7 +43,7 @@ def _canon(v):
     """標準 JSON（sort_keys、無空白、不轉義中文）：json 欄位 CAS／相等比較用。"""
     return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
-DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
+DEFAULT_EFFECT = "您即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
 RISK_ORDER = ("none", "ops", "money", "legal", "security")
 #: 結構化影響範圍（脊柱 E-e；欄位版面框架 §16.6／§17）：documents／roles＝白話清單；amounts＝一句話；reversible＝可否復原；effective＝immediate｜pending（須與欄位旗標一致）。
 _IMPACT_SCOPE_KEYS = ("documents", "roles", "amounts", "reversible", "effective")
@@ -104,7 +104,7 @@ class SettingConflict(Exception):
     """逐欄 CAS 失敗：呼叫端看到的舊值，在送出前已被別人改掉。`keys`＝衝突欄位鍵；`by`／`at`＝最近改的人與時間
     （沒有帳本紀錄 ⇒ by＝「系統預設」或「舊路徑寫入，時間不明」、at＝空字串）。**不是** SettingError（不是 400 的輸入問題）。"""
     def __init__(self, keys, by="", at="", code="conflict"):
-        super().__init__("這些設定在你送出前已被別人改動：%s" % "、".join(keys))
+        super().__init__("這些設定在您送出前已被其他人改動：%s" % "、".join(keys))
         self.keys, self.by, self.at, self.code = list(keys), by, at, code        # code：conflict｜pending_exists（json 欄位已有別人的待生效申請）
 
 
