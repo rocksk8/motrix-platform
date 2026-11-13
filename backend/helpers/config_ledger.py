@@ -137,7 +137,7 @@ def audit_event(conn, actor, action, key, detail, *, target_label=""):
 
 def _notify_others(conn, actor_username, domain, key, risk, link, now, message):
     """同交易 INSERT 站內通知（不呼叫 helpers.audit._notify：它自己開連線，會撞呼叫端的寫鎖）。"""
-    rows = conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>? ORDER BY id", (actor_username or "",)).fetchall()
+    rows = [(u,) for u in real_superadmins(conn, actor_username)]          # 展示帳號不是人，不寄未讀通知給它
     for r in rows:
         try:
             conn.execute("INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) VALUES (?,?,?,?,?,0,?,?)",

@@ -669,9 +669,8 @@ def _check_approval_reminders() -> None:
     today_str = today.isoformat()
     try:
         conn = get_db()
-        superadmins = [r["username"] for r in conn.execute(
-            "SELECT username FROM users WHERE role='superadmin' AND active=1"
-        ).fetchall()]
+        from helpers import config_ledger as _cl
+        superadmins = _cl.real_superadmins(conn)          # 提醒名單只列真人（展示帳號不是簽核人）
 
         for src in _APPROVAL_REMINDER_SOURCES:
             rows = conn.execute(

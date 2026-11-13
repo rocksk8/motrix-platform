@@ -597,7 +597,8 @@ def _audit_in_txn(conn, action: str, quote_no: str, detail: dict, user: dict = N
 
 
 def _superadmins(conn) -> list:
-    return [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1")]
+    from helpers import config_ledger as _cl
+    return _cl.real_superadmins(conn)               # 通知名單只列真人（展示帳號不是簽核人）
 
 
 def _write_notices(conn, quote_no: str, notices: list) -> int:

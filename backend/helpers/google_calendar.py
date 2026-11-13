@@ -133,9 +133,8 @@ def _notify_push_failure(context_label: str, error: str) -> None:
         from db import get_db
         from .audit import _notify
         conn = get_db()
-        supers = [r["username"] for r in conn.execute(
-            "SELECT username FROM users WHERE role='superadmin' AND active=1"
-        ).fetchall()]
+        from . import config_ledger as _cl
+        supers = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
         conn.close()
         for username in supers:
             _notify(username, "google_calendar_push_failed", "", context_label,
