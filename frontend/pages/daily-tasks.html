@@ -2714,6 +2714,7 @@ function app() {
       if (window.MotrixOnepipe) window.MotrixOnepipe.flags().then(f => { this.selfCreate = !!f.entryUnify })
       await this.loadTasks()
       this.loadActiveCases()
+      this._openFromCaseParam()
       // 桌機版預設開啟日曆視圖
       if (window.innerWidth >= 768) {
         this.calMode = true
@@ -3085,7 +3086,21 @@ function app() {
     openSelfCreate() {
       this.selfForm = { task_date: MotrixDate.today(), title: '', description: '', case_no: '' }
       this.showSelfModal = true
-      this.loadSelfCases()
+      return this.loadSelfCases()
+    },
+    // 一條龍 P4b：從案件頁「登載」來的 ?case_no=<案號> ⇒ 直接開新增視窗並帶好案件。
+    // 最高管理者開完整的新增視窗；現場人員只在旗標開、且伺服器列得出這個案件（＝他看得到）時開自建小視窗。沒帶參數、旗標關、案件不在清單＝什麼都不做。
+    async _openFromCaseParam() {
+      try {
+        const cn = new URLSearchParams(location.search).get('case_no')
+        if (!cn) return
+        if (this.session.role === 'superadmin') { this.openCreate(); this.form.case_no = cn; return }
+        const f = window.MotrixOnepipe ? await window.MotrixOnepipe.flags() : {}
+        if (!f.entryUnify) return
+        this.selfCreate = true
+        await this.openSelfCreate()
+        if (this.selfCases.some(c => c.quoteNo === cn)) this.selfForm.case_no = cn
+      } catch (e) { /* 帶不進去就維持空白，使用者自己選 */ }
     },
     // 載入自己可掛的案件（伺服器只列「已成案、自己看得到」的）。沒有清單時一定說出原因，不留空白下拉。
     async loadSelfCases() {

@@ -62,6 +62,65 @@ def _case_page(page, live_server):
 
 
 @pytest.mark.e2e
+def test_flag_off_case_page_has_no_log_entry(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_off", role="superadmin")
+    _case()
+    _flag(False)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    _case_page(page, live_server)
+    page.wait_for_timeout(1500)
+    assert page.locator('[data-testid="case-log-entry"]').count() == 0
+
+
+@pytest.mark.e2e
+def test_flag_on_superadmin_sees_log_entry_and_task_link_lands_on_the_new_task_form_with_the_case(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_on", role="superadmin")
+    _case()
+    _flag(True)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    _case_page(page, live_server)
+    page.locator('[data-testid="case-log-entry"]').wait_for(state="visible", timeout=15000)
+    href = page.get_attribute('[data-testid="case-log-task"]', "href")
+    assert href == "daily-tasks.html?case_no=" + NO, href
+    page.goto(f"{live_server}/pages/{href}")
+    page.wait_for_function(f"() => {{ const d = Alpine.$data({ROOT}); return d.showModal === true && d.form.case_no === '{NO}' }}", timeout=15000)
+
+
+@pytest.mark.e2e
+def test_flag_on_staff_case_param_opens_the_self_create_form_with_the_case(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_staff", role="engineer", modules=["daily_task"])
+    _case(assigned=[u])
+    _flag(True)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/daily-tasks.html?case_no={NO}")
+    page.wait_for_function(f"() => {{ const d = Alpine.$data({ROOT}); return d.showSelfModal === true && d.selfForm.case_no === '{NO}' }}", timeout=15000)
+
+
+@pytest.mark.e2e
+def test_flag_off_case_param_does_nothing_and_unseen_case_is_not_chosen(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_none", role="engineer", modules=["daily_task"])
+    _case(assigned=[u])
+    _flag(False)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/daily-tasks.html?case_no={NO}")
+    page.wait_for_selector("[data-testid=dt-more]", timeout=20000)
+    page.wait_for_timeout(1500)
+    assert page.evaluate(f"() => Alpine.$data({ROOT}).showSelfModal") is False, "旗標關＝不開"
+    _flag(True)
+    u2, p2 = make_user(username="p4be_other", role="engineer", modules=["daily_task"])   # 看不到這個案件（不是成員）
+    page2 = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page2, live_server, u2, p2)
+    page2.goto(f"{live_server}/pages/daily-tasks.html?case_no={NO}")
+    page2.wait_for_function(f"() => Alpine.$data({ROOT}).showSelfModal === true", timeout=15000)   # 視窗會開（旗標開）
+    page2.wait_for_timeout(1500)
+    assert page2.evaluate(f"() => Alpine.$data({ROOT}).selfForm.case_no") == "", "列不出這個案件＝不替他選，下拉維持空白"
+
+
+@pytest.mark.e2e
 def test_flag_on_completion_note_form_is_prefilled_from_case_records_and_says_so(live_server, make_user, e2e_browser):
     u, p = make_user(username="p4be_adm", role="admin")
     _case(assigned=[u], visits=[("2026-03-05", 2), ("2026-03-02", 3)], logs=[("2026-03-02", "拉線到二樓"), ("2026-03-05", "收尾清潔")])

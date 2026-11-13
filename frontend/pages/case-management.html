@@ -698,7 +698,17 @@
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
                     <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
-                         x-show="caseMapUrl() || onepipe.timeline || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                         x-show="caseMapUrl() || onepipe.timeline || onepipe.entryUnify || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                      <!-- 一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
+                           只是捷徑：不合併資料表，各類型照原本的畫面與權限寫入 -->
+                      <template x-if="onepipe.entryUnify && selected">
+                        <span data-testid="case-log-entry" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">
+                          <span style="color:var(--text-dim)">登載：</span>
+                          <a href="#" data-testid="case-log-feed" x-show="tShown('feed')" @click.prevent="openLogEntry('feed')">留言／工作日誌</a>
+                          <a href="#" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click.prevent="openLogEntry('visit')">階段出勤</a>
+                          <a data-testid="case-log-task" x-show="canLogTask()" :href="'daily-tasks.html?case_no=' + encodeURIComponent(selected.quote_no)">每日工作事項</a>
+                        </span>
+                      </template>
                       <!-- 一條龍 P1'（旗標 onepipe.timeline，預設關＝不出現）：唯讀的物料流程時間軸 -->
                       <template x-if="onepipe.timeline && selected">
                         <a data-testid="case-link-material-flow" :href="'material-flow.html?q=' + encodeURIComponent(selected.quote_no)">物料流程</a>
