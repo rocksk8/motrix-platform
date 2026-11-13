@@ -24333,8 +24333,9 @@
   "page:pages/mail-settings.html": {
    "api_calls": [
     "/api/mail-types",
-    "/api/mail-types/",
-    "/api/settings/google-calendar",
+    "/api/settings/mail/batch",
+    "/api/settings/mail/batch-preview",
+    "/api/settings/mail/batch-undo",
     "/api/system/branding/favicon",
     "/api/users"
    ],
@@ -24348,6 +24349,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/notif.js",
+    "js:static/settings-matrix.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
@@ -30760,7 +30762,8 @@
   },
   "router:mail_settings": {
    "api_prefixes": [
-    "/api/mail-types"
+    "/api/mail-types",
+    "/api/settings"
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
@@ -30840,7 +30843,9 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:settings",
-    "plat:txn"
+    "helper:settings_notify",
+    "plat:txn",
+    "router:system"
    ],
    "kind": "router",
    "path": "backend/routers/mail_settings.py",
@@ -30848,38 +30853,58 @@
    "routes": [
     {
      "func": "list_mail_types",
-     "line": 74,
+     "line": 78,
      "method": "GET",
      "path": "/api/mail-types"
     },
     {
      "func": "set_mail_recipients",
-     "line": 89,
+     "line": 288,
      "method": "PUT",
      "path": "/api/mail-types/{key}/recipients"
     },
     {
+     "func": "preview_mail_batch",
+     "line": 477,
+     "method": "POST",
+     "path": "/api/settings/mail/batch-preview"
+    },
+    {
+     "func": "save_mail_batch",
+     "line": 528,
+     "method": "POST",
+     "path": "/api/settings/mail/batch"
+    },
+    {
+     "func": "undo_mail_batch",
+     "line": 568,
+     "method": "POST",
+     "path": "/api/settings/mail/batch-undo"
+    },
+    {
      "func": "list_receivable",
-     "line": 229,
+     "line": 721,
      "method": "GET",
      "path": "/api/mail-types/receivable"
     },
     {
      "func": "my_mail_prefs",
-     "line": 285,
+     "line": 777,
      "method": "GET",
      "path": "/api/mail-types/mine"
     },
     {
      "func": "set_my_mail_prefs",
-     "line": 301,
+     "line": 793,
      "method": "PUT",
      "path": "/api/mail-types/mine"
     }
    ],
    "tables_ddl": [],
    "tables_named": [],
-   "tables_r": [],
+   "tables_r": [
+    "audit_log"
+   ],
    "tables_r_transitive": [
     "approval_delegates",
     "audit_log",
@@ -30906,6 +30931,7 @@
     "users"
    ],
    "tables_w": [
+    "system_settings",
     "users"
    ],
    "tables_w_transitive": [
@@ -35215,6 +35241,7 @@
     "mod:case/quotations",
     "router:definitions",
     "router:item_reads",
+    "router:mail_settings",
     "router:system"
    ],
    "tables_r": [],
@@ -38031,7 +38058,8 @@
     "mod:case/case_deadlines",
     "mod:tender_radar/source",
     "plat:migrations",
-    "plat:upgrade"
+    "plat:upgrade",
+    "router:mail_settings"
    ]
   },
   "table:system_settings_unit": {

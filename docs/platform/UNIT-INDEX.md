@@ -165,7 +165,7 @@
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：資源回收筒保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
 | `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
 | `helper:settings_help` | L1 | 設定中心「?」說明（選單去工程師化 批次 9，2026-11-13）：每個設定欄位要嘛「標籤已夠清楚」（白名單），要嘛有四段說明。 | 16 | 3 | `tests/test_settings_center_b9_2026_11_13.py` |
-| `helper:settings_notify` | L1 | 變更通知元件（2026-11-13，feat/settings-change-notify；使用者：「變更後要有通知，或是儲存選項；點選後沒人知道變動了」）。 | 13 | 5 | `backend/tests/test_settings_change_notify_2026_11_13.py` |
+| `helper:settings_notify` | L1 | 變更通知元件（2026-11-13，feat/settings-change-notify；使用者：「變更後要有通知，或是儲存選項；點選後沒人知道變動了」）。 | 13 | 6 | `backend/tests/test_settings_change_notify_2026_11_13.py` |
 | `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 44 | 63 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 6 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 5 | `backend/tests/platform/test_stage_templates_t62.py` |
