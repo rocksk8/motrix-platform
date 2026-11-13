@@ -724,7 +724,7 @@ if ($runNonE2e -or $runE2e) {
 # manifest 的 verification：每一段是實跑還是沿用、哪些題是偶發重跑通過的
 $BuildVerification = [ordered]@{ not_e2e = "ran"; e2e = "ran"; flaky_retried = @() }
 foreach ($st in @($stageReuse.Keys)) {
-    $BuildVerification[$st] = "reused $($stageReuse[$st].tested_at)（$($stageReuse[$st].source)，commit $($stageReuse[$st].commit)）"
+    $BuildVerification[$st] = "reused $($stageReuse[$st].tested_at)（$($stageReuse[$st].source)，commit $($stageReuse[$st].commit)）$(if ($stageReuse[$st].retry) { "，綠（重試 $($stageReuse[$st].retry.count) 題）" })"
     $BuildVerification["flaky_retried"] += @($stageReuse[$st].flaky_retried | Where-Object { $_ })
 }
 
@@ -880,7 +880,7 @@ if ($testExit -ne 0) {
 Record-Stage "not_e2e" $true $nonE2eFlaky
 Write-Host "[OK] 非 e2e 測試全數通過$(if ($nonE2eFlaky) { '（含已登記的偶發重跑，見上）' })。" -ForegroundColor Green
 } else {
-    Write-Host "`n[測試] 非 e2e：沿用 $($stageReuse['not_e2e'].tested_at) 的綠（$($stageReuse['not_e2e'].source)，同一份 tree 與環境）—— 只跑 e2e" -ForegroundColor Cyan
+    Write-Host "`n[測試] 非 e2e：沿用 $($stageReuse['not_e2e'].tested_at) 的綠（$($stageReuse['not_e2e'].source)，同一份 tree 與環境）$(if ($stageReuse['not_e2e'].retry) { "，綠（重試 $($stageReuse['not_e2e'].retry.count) 題）" })—— 只跑 e2e" -ForegroundColor Cyan
     $BuildStats["reused_not_e2e_from"] = $stageReuse['not_e2e'].tested_at
 }
 
@@ -944,7 +944,7 @@ if ($e2eExit -ne 0 -and -not $ffStopped["e2e"]) {
     if ($retry.Ok) { $e2eFlaky = $retry.ResultFile; $e2eExit = 0 }
 }
 } else {
-    Write-Host "`n[測試] e2e：沿用 $($stageReuse['e2e'].tested_at) 的綠（$($stageReuse['e2e'].source)，同一份 tree 與環境）" -ForegroundColor Cyan
+    Write-Host "`n[測試] e2e：沿用 $($stageReuse['e2e'].tested_at) 的綠（$($stageReuse['e2e'].source)，同一份 tree 與環境）$(if ($stageReuse['e2e'].retry) { "，綠（重試 $($stageReuse['e2e'].retry.count) 題）" })" -ForegroundColor Cyan
     $BuildStats["reused_e2e_from"] = $stageReuse['e2e'].tested_at
 }
 Pop-Location

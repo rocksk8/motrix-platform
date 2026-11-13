@@ -122,3 +122,4 @@ T76：prod_status_snapshot、response_keys_baseline、font_zoom raw-vh、quote_a
 **② 閘門期間全機安靜**：閘門鎖（`heavy_run --gate-lock acquire`）被持有時，conftest 會拒絕非持有者的 pytest——**含單檔**（`【閘門期間：不開始臨時 pytest】`，exit 4）。放行：持有者（`MOTRIX_WINDOW`＝持有者視窗或帶對 `MOTRIX_GATE_TOKEN`）、heavy_run 排過隊的行程（`MOTRIX_CI_TICKET`）、建包子行程、`--collect-only`、`MOTRIX_QUEUE_GUARD=0`（知道後果才用）。
 `run-stage` 真的跑的時候**自己持有閘門鎖**（沒人持有才取；綁行程 `holder_pid`，被殺就不再擋；TTL 3 小時兜底；跑完放；別人已持有就不動）。整合者顯式取的鎖不綁行程、照舊靠 TTL。
 測試：`tests/platform/test_gate_retry_failed_and_quiet_2026_11_13.py`。
+**已知限制（h10 審查）**：①任何**真跑**的 run-stage（`--no-failfast` 診斷跑除外）都會持有閘門鎖整段（15～30 分鐘）⇒ 這段時間其他視窗的 pytest 被拒絕——這是設計；診斷用 `--no-failfast`（不重試、不取鎖）。②單程序重試會洗掉「順序污染」型的紅（例如同 worker 前一題留下的 audit_log 列）——這類交給污染偵測器（h4）；run-stage 對同一題 24 小時內重試達 3 次以上會在結束訊息警告，累計看 `retry-counts`。③「綠（重試 k 題）」會標在 run-stage 結束訊息、`explain`、建包沿用訊息與 manifest verification（儀表板的建包閘門讀的是 modtest 全量結果，不經 run-stage 紀錄）。
