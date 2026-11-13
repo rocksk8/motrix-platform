@@ -77,14 +77,16 @@
 ### S1d 通知元件通用化（h9；審查 h11；T84～T85）
 h9 的 8 項（來源：h9 2026-11-13 訊息）：
 1. 通用項目 `make_item(kind,label,old,new,phase,roles,recipients,risk,plain,ref,link)`＋`setting_item()` 轉接 registry 欄位。
-2. **跨群組一次存檔＝單一端點** `POST /api/settings-center/batch`（body `{groups:{group:{values, expectedValues?}}, reason, preview?:true, undo?:true}`；伺服器先逐群組 `plan()` 預驗，任一不合法 400 全不寫；通過後一次 server-side `batch()` 只發**一則**通知；**不是跨群組原子**，中途失敗回 409 `{applied, failed}`）。設定頁在多於一個群組有草稿時呼叫它。**復原（item 4）也走這支**：`undo:true`＋每群組 `expectedValues`（S1c 的逐欄 CAS），否則復原會退化成 N 次單群組呼叫＝N 則通知；undo 模式的 409 body＝`{applied:[group…], failed:[{group, keys, by, at}]}`（跨群組＝逐群組、可部分復原；同群組整批拒絕）。（h11 意見，已採納；h9 實作時請確認。）
+2. **跨群組一次存檔＝單一端點** `POST /api/settings-center/batch`（body `{groups:{group:{values, expectedValues?}}, reason, preview?:true, undo?:true}`；伺服器先逐群組 `plan()` 預驗，任一不合法 400 全不寫；通過後一次 server-side `batch()` 只發**一則**通知；**不是跨群組原子**，中途失敗回 409 `{applied, failed}`）。設定頁在多於一個群組有草稿時呼叫它。**多群組復原（item 4 的多群組版）也走這支，但 S1d 不含**：
+   - **現況（h9 確認）**：`undo`／`expectedValues` 在 /batch 尚未實作（需 S1c 的逐欄 CAS，不在 h9 的 base）；兩個鍵任一出現就回 400「多群組復原尚未開放」，不會被當成一般存檔。**單群組復原已只發一則「已復原到第 N 版」**。多群組復原＝**依賴 S1c**，與 S2 一起做（T86），不算 S1d 驗收。
+   - 目標設計：`undo:true`＋每群組 `expectedValues`（S1c 的逐欄 CAS），否則復原會退化成 N 次單群組呼叫＝N 則通知；undo 模式的 409 body＝`{applied:[group…], failed:[{group, keys, by, at}]}`（跨群組＝逐群組、可部分復原；同群組整批拒絕）。（h11 意見，已採納；h9 實作時請確認。）
 3. `plan()` 回 `recipients {superadmins, others, ignoredRoles, line}`；`preview_recipients()` 給確認視窗做 dry-run。**目前只支援最高管理者、角色片語、明列使用者；簽核人與受影響者的主管尚不支援**（列在 `ignoredRoles`，SPEC 已註明）——所以簽核流程頁的通知對象 SPEC §13-7 要降級（見 §6 開放問題）。
 4. 復原（單／多群組）只發**一則**「已復原到第 N 版」。
-5. 超過 8 行時最後一行放「完整明細：變更紀錄」連結，連到 `settings-center.html?tab=versions`（**頁面初始化要讀 `?tab=versions`**，S2 要接）。**依賴 S2**：S2（T86）之前頁面不讀這個參數，所以這一行連結在 S1d 先 ship 時要嘛指向現有「版本」分頁的實際 id（開工時查現有頁面），要嘛 S1d 先不放連結、等 S2 補上（h11 意見）。
+5. 超過 8 行時最後一行放「完整明細：變更紀錄」連結，連到 `settings-center.html?tab=versions`（**頁面初始化要讀 `?tab=versions`**，S2 要接）。**現況（h9 確認）**：S1d 的頁面**已經**讀 `?tab=versions`（與 `&group=`），不必等 S2。限制：版本分頁是逐群組的，跨群組訊息的連結沒帶 group 時會開第一個群組的版本分頁；真正跨群組的「最近變更」是 S2 的內容。
 6. `notify_change(kind,label,old,new,risk,roles,recipients…)` 一行式，給其他頁用；高敏感權限變更（h10 gate）呼叫它，`kind="permission", risk="security"` → 最高管理者站內＋LINE；介面先預留，h10 合併後接。
-7. （PM 追加，T84 小項）valueOf 測試 1–2 在 `MOTRIX_TRAIN=1` 且缺 node 時要**紅**不是 skip；放寬方法名守門 regex（`name: function/arrow`、`get name()`、`__define*__`／`__lookup*__`）（B 類 5）。
+7. （PM 追加，T84 小項；**h9 回報分支尚未做**，隨 valueOf 之後 T83→T84 進）valueOf 測試 1–2 在 `MOTRIX_TRAIN=1` 且缺 node 時要**紅**不是 skip；放寬方法名守門 regex（`name: function/arrow`、`get name()`、`__define*__`／`__lookup*__`）（B 類 5）。
 8. 合併順序：`fix/settings-center-valueof`（`2ad78c914`，h11 已核可）先進 T83；通知分支再 rebase（`settings-center.html` 同行衝突取 valueOf 版本）。前端剩：確認視窗顯示收件人、呼叫 batch 端點、`?tab=versions`。
-- 測試：既有 `test_settings_change_notify_2026_11_13.py`（21 題）＋batch 端點／dry-run／復原合併／8 行連結。
+- 測試：既有 `test_settings_change_notify_2026_11_13.py`（21 題）＋batch 端點／dry-run／復原合併／8 行連結（h9 回報目前 34 題：batch 端點 5、dry-run、plan recipients、單群組復原一則、>8 行連結、batch 合併、never-raises、標記）。
 - 截圖：通知訊息範例（站內、LINE；批次合併一則；復原一則）＋設定中心儲存列（已在 v1）與確認視窗的收件人預覽。
 
 ### S2 設定中心外框（h4；審查 h11（後端）、h9（前端）；T86）
