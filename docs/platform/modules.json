@@ -35,6 +35,7 @@
    "helper:getting_started",
    "helper:daily_checks",
    "helper:duty_roles",
+   "helper:user_perm_batch",
    "helper:perm",
    "helper:perm_text",
    "helper:custom_builder_support",
