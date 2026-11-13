@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-11-13（fix/image-bomb-guard＋fix/xlsx-guard；使用者上傳圖片／xlsx 的守門；T82 整合；版號由列車取）
+## (next) — 2026-11-13（fix/image-bomb-guard＋fix/xlsx-guard＋feat/ux-p0-p1-text；使用者上傳圖片／xlsx 的守門、頁面標題後綴；T82 整合；版號由列車取）
 - 變更（內部，API 路徑與回應形狀不變）：外包名冊的證件／存摺浮水印（`api/contractors.py::_stamp_id_card／_stamp_passbook`、`api/vendor_contractors.py` 存摺）改用共用 helper `helpers/image_guard`——開圖前先看宣告的長寬（超過上限回 400 白話訊息）、JPEG／MPO 超過 4000 萬像素改縮小解碼、同時解碼最多 2 件（滿了回 503）。一般尺寸照片行為不變。
 - 測試：`tests/test_image_guard_2026_11_13.py`。
 - **（併入）(next) — 2026-11-13（fix/xlsx-guard；使用者上傳 xlsx 的小檔案展開守門；版號由列車取）**

@@ -1,6 +1,6 @@
 # 網路規劃 更新紀錄
 
-## (next) — 2026-11-13（fix/xlsx-guard；使用者上傳 xlsx 的小檔案展開守門；版號由列車取）
+## (next) — 2026-11-13（fix/xlsx-guard＋feat/ux-p0-p1-text；xlsx 守門、頁面標題後綴；T82 整合；版號由列車取）
 - 變更（內部，API 路徑與回應形狀不變）：網路規劃書「匯入 Excel」（`export.py::parse_plan_excel`、`api.py` 匯入端點）改走共用 helper `helpers/xlsx_guard.read_rows`——先預掃（儲存格／欄／列號／巢狀深度等上限、禁 DTD）、再在子行程解析（硬逾時、記憶體上限）；每張表最多讀 `_PLAN_IMPORT_MAX_ROWS` 列。不合格的檔案回 400（白話訊息）、同時匯入的人太多回 429；正常檔案結果與先前相同。
 - 測試：`tests/test_xlsx_guard_2026_11_13.py`（含網路規劃書匯入的炸彈 400＋正常檔正對照）。
 - **（併入）(next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）**

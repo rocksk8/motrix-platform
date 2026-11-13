@@ -121,11 +121,11 @@ def test_m6_audit_log_shows_new_word_but_keeps_action_values():
 
 
 # ── L3：重複的顯示字要提出警告 ──────────────────────────────────────────────────
-def test_l3_defaults_have_no_unexpected_duplicate_display_text():
+def test_review_dup_defaults_have_no_unexpected_duplicate_display_text():
     assert S.duplicate_warnings() == [], S.duplicate_warnings()
 
 
-def test_l3_duplicate_is_reported_even_for_unchanged_default_fields():
+def test_review_dup_duplicate_is_reported_even_for_unchanged_default_fields():
     # 把「簽核中」改成「待簽核」：與（內建改名後的）『待審核』撞名
     tbl = S.effective_table({"statuses": {"簽核中": {"label": "待簽核"}}})
     w = S.duplicate_warnings(tbl)
@@ -134,10 +134,10 @@ def test_l3_duplicate_is_reported_even_for_unchanged_default_fields():
     assert not any("已退回" in x["message"] for x in S.duplicate_warnings())
 
 
-def test_l3_known_duplicate_is_only_the_quote_list_returned_pair():
+def test_review_dup_known_duplicate_is_only_the_quote_list_returned_pair():
     assert S._KNOWN_DUPLICATES == {("quote_list", "已退回")}
 
 
-def test_l3_payload_carries_warnings_and_never_raises(monkeypatch):
+def test_review_dup_payload_carries_warnings_and_never_raises(monkeypatch):
     monkeypatch.setattr(S, "_texts", lambda *a, **k: 1 / 0)
     assert S.duplicate_warnings() == []

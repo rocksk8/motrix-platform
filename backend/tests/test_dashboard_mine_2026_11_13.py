@@ -211,7 +211,7 @@ def test_m3_approvals_failure_is_partial(monkeypatch):
     assert r["partial"] is True and r["empty"] is False
 
 
-def test_l1_cache_key_has_user_id_and_demo_flag(monkeypatch):
+def test_review_cache_key_has_user_id_and_demo_flag(monkeypatch):
     k1 = DM._cache_key({"id": 1, "username": "x", "role": "sales", "modules": "[]"})
     k2 = DM._cache_key({"id": 2, "username": "x", "role": "sales", "modules": "[]"})
     assert k1 != k2                                                    # 刪掉重建同名帳號
@@ -219,7 +219,7 @@ def test_l1_cache_key_has_user_id_and_demo_flag(monkeypatch):
     assert DM._cache_key({"id": 1, "username": "x", "role": "sales", "modules": "[]"}) != k1       # 示範 vs 正式
 
 
-def test_l2_fresh_cannot_hammer_providers(monkeypatch):
+def test_review_fresh_cannot_hammer_providers(monkeypatch):
     from core import registry
     calls = {"n": 0}
 
@@ -237,18 +237,18 @@ def test_l2_fresh_cannot_hammer_providers(monkeypatch):
 
 @pytest.mark.parametrize("bad", ["javascript:alert(1)", "JaVaScRiPt:x", "data:text/html,x", "//evil.example/x", "vbscript:x",
                                  "pages\\x", "pages/a\n.html", " javascript:x"])
-def test_l3_unsafe_hrefs_are_dropped(bad):
+def test_review_unsafe_hrefs_are_dropped(bad):
     g = DM._clean_group({"key": "k", "title": "T", "href": bad, "items": [{"title": "a", "href": bad}]})
     assert g["href"] == "" and g["items"][0]["href"] == ""
 
 
 @pytest.mark.parametrize("good", ["pages/case-management.html?quick=mine,stage_overdue", "pages/approval-queue.html", "/pages/x.html#a",
                                   "https://example.com/a?b=c", "http://example.com/"])
-def test_l3_safe_hrefs_pass(good):
+def test_review_safe_hrefs_pass(good):
     assert DM._clean_group({"key": "k", "title": "T", "href": good})["href"] == good
 
 
-def test_l5_finance_without_case_module_gets_count_but_no_link(client, make_user):
+def test_review_finance_without_case_module_gets_count_but_no_link(client, make_user):
     u = make_user("dm_l5_fin", role="finance", modules=[])
     DM.reset_cache()
     g = next((g for g in client.get("/api/dashboard/mine", headers=_h(client, *u)).json()["groups"] if g["key"] == "receivable_overdue"), None)
