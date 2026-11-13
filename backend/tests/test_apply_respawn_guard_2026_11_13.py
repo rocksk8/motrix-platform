@@ -139,12 +139,15 @@ $BackendDir = "C:\Users\Motrix\Desktop\V9.0\backend"
 $PingUrl = "http://127.0.0.1:666/api/ping"
 $script:calls = New-Object System.Collections.Generic.List[string]
 $script:killed = New-Object System.Collections.Generic.List[int]
+$script:batches = New-Object System.Collections.Generic.List[int]
 $script:procs = New-Object System.Collections.ArrayList
 $script:listen = @()
 function Warn($m) { $script:calls.Add("warn") }
 function Info($m) { }
 function Ok($m) { $script:calls.Add("ok") }
 function Start-Sleep { }
+$AutostartTaskName = "MotrixAutostart"
+function Get-ScheduledTask { param($TaskName) $null }   # 預設沒有排程工作（Suspend-AutostartTask 什麼都不做）；要測排程工作的題目在 body 裡覆寫
 function Add-P($id, $pp, $name, $cmd) {
     [void]$script:procs.Add([pscustomobject]@{ ProcessId = [uint32]$id; ParentProcessId = [uint32]$pp; Name = $name; CommandLine = $cmd; CreationDate = (Get-Date) })
 }
@@ -159,10 +162,13 @@ function Get-NetTCPConnection {
 }
 function Stop-Process {
     param($Id)
-    $script:killed.Add([int]$Id)
-    $victim = $script:procs.ToArray() | Where-Object { [int]$_.ProcessId -eq [int]$Id }
-    if ($victim) { $script:procs.Remove($victim) }
-    if (Get-Command Stop-Process-Hook -ErrorAction SilentlyContinue) { Stop-Process-Hook ([int]$Id) }
+    $script:batches.Add(@($Id).Count)
+    foreach ($one in @($Id)) {
+        $script:killed.Add([int]$one)
+        $victim = $script:procs.ToArray() | Where-Object { [int]$_.ProcessId -eq [int]$one }
+        if ($victim) { $script:procs.Remove($victim) }
+        if (Get-Command Stop-Process-Hook -ErrorAction SilentlyContinue) { Stop-Process-Hook ([int]$one) }
+    }
 }
 '''
 
@@ -198,6 +204,9 @@ _PROD_LOOPS = "11916,23148,24764,19892"
 def _run_ps(body, tmp_path, funcs=("Stop-InstallService",), src="apply_update.ps1"):
     t = _src(src)
     parts = []
+    funcs = tuple(funcs)
+    if "Stop-InstallService" in funcs:   # Stop-InstallService 會呼叫排程工作的停用／恢復（T84 一次殺光所有迴圈）
+        funcs += tuple(x for x in ("Suspend-AutostartTask", "Restore-AutostartTask") if x not in funcs)
     for n in funcs:
         f = _fn(t, n)
         assert f, "找不到函式 %s" % n
@@ -276,6 +285,94 @@ $n = Stop-InstallService
     assert "n=12" in out
     left = _ids(out, "left")
     assert left == {4, 1620, 16944}, "只剩 System／services／cloudflared：" + out
+
+
+@needs_ps
+def test_all_loops_die_in_one_batch_before_any_service_so_a_surviving_loop_cannot_grab_the_port(tmp_path):
+    """T83 正式機實證（23:45:01）：逐一結束迴圈時，還活著的迴圈在 port 一釋放就用舊程式把 uvicorn 拉起。
+    替身：服務（23376）被殺時只要還有任何一個迴圈活著，就立刻長出新的 uvicorn。正對照：先殺服務再殺迴圈，替身確實會重生。"""
+    hook = r'''
+function Stop-Process-Hook($id) {
+    $loopAlive = @($script:procs.ToArray() | Where-Object { $_.Name -eq "cmd.exe" -and $_.CommandLine -match 'autostart[a-z0-9_-]*\.bat' })
+    if ($id -eq 23376 -and $loopAlive.Count -gt 0) {
+        Add-P 13000 $loopAlive[0].ProcessId "python.exe" 'C:\Python312\python.exe -m uvicorn main:app --port 666'
+        $script:listen = @(13000)
+        $script:calls.Add("respawned")
+    }
+}
+'''
+    ctrl = _run_ps(_PROD_CHAIN + _ZOMBIES + hook + r'''
+Stop-Process -Id 23376
+"calls=$($script:calls -join ',')"
+''', tmp_path)
+    assert "respawned" in ctrl, "正對照：替身要能重現「先殺服務、迴圈還活著 ⇒ 被拉起」：" + ctrl
+    out = _run_ps(_PROD_CHAIN + _ZOMBIES + hook + r'''
+$n = Stop-InstallService
+"batches=$($script:batches -join ',')"
+"order=$($script:killed -join ',')"
+"calls=$($script:calls -join ',')"
+"left=$(($script:procs.ToArray() | ForEach-Object { $_.ProcessId } | Sort-Object) -join ',')"
+''', tmp_path)
+    assert "respawned" not in out, "迴圈要一次全殺完才碰服務：" + out
+    batches = [int(x) for x in re.search(r"batches=([0-9,]+)", out).group(1).split(",")]
+    assert batches[0] == len(_PROD_LOOPS.split(",")), "第一個 Stop-Process 呼叫就要帶全部迴圈：" + out
+    order = [int(x) for x in re.search(r"order=([0-9,]+)", out).group(1).split(",")]
+    first_service = min(order.index(i) for i in (19544, 23376))
+    assert all(order.index(int(i)) < first_service for i in _PROD_LOOPS.split(",")), out
+    assert _ids(out, "left") == {4, 1620, 16944}, out
+
+
+_TASK_PS = r'''
+$AutostartTaskName = "MotrixAutostart"
+$script:taskState = "Ready"
+$script:taskOps = New-Object System.Collections.Generic.List[string]
+function Get-ScheduledTask { param($TaskName) [pscustomobject]@{ TaskName = $TaskName; State = $script:taskState } }
+function Disable-ScheduledTask { param($TaskName) $script:taskOps.Add("disable"); $script:taskState = "Disabled" }
+function Enable-ScheduledTask { param($TaskName) $script:taskOps.Add("enable"); $script:taskState = "Ready" }
+'''
+
+
+@needs_ps
+def test_scheduled_task_is_disabled_while_stopping_and_restored_exactly_once(tmp_path):
+    out = _run_ps(_TASK_PS + _PROD_CHAIN + r'''
+$null = Stop-InstallService -ListOnly
+"after_list=$($script:taskOps -join ',')"
+$n = Stop-InstallService
+"after_stop=$($script:taskOps -join ',')|state=$($script:taskState)"
+$n = Stop-InstallService
+"after_second_stop=$($script:taskOps -join ',')"
+Restore-AutostartTask
+Restore-AutostartTask
+"after_restore=$($script:taskOps -join ',')|state=$($script:taskState)"
+''', tmp_path, funcs=("Stop-InstallService", "Suspend-AutostartTask", "Restore-AutostartTask"))
+    assert re.search(r"^after_list=$", out, re.M), "-ListOnly 不動排程工作：" + out
+    assert "after_stop=disable|state=Disabled" in out, out
+    assert re.search(r"^after_second_stop=disable$", out, re.M), "再停一次不重複停用：" + out
+    assert "after_restore=disable,enable|state=Ready" in out, "恢復只做一次：" + out
+
+
+@needs_ps
+def test_scheduled_task_that_was_already_disabled_is_left_alone(tmp_path):
+    out = _run_ps(_TASK_PS + r'''
+$script:taskState = "Disabled"
+Suspend-AutostartTask
+Restore-AutostartTask
+"ops=$($script:taskOps -join ',')|state=$($script:taskState)"
+''', tmp_path, funcs=("Suspend-AutostartTask", "Restore-AutostartTask"))
+    assert "ops=|state=Disabled" in out, "管理者本來就停用的不要替他啟用：" + out
+
+
+def test_restore_happens_before_start_and_on_every_exit_in_all_three_scripts():
+    for n in ("apply_update.ps1", "apply_module_update.ps1", "rollback_update.ps1"):
+        s = _src(n)
+        for fn in ("Suspend-AutostartTask", "Restore-AutostartTask", "Start-InstallService", "Exit-InstallLock"):
+            assert _fn(s, fn), (n, fn)
+        assert _fn(s, "Start-InstallService").split(chr(10))[1].strip().startswith("Restore-AutostartTask"), n
+        assert "Restore-AutostartTask" in _fn(s, "Exit-InstallLock"), n
+        assert "Suspend-AutostartTask" in _fn(s, "Stop-InstallService"), n
+    parts = [(_fn(_src(n), "Suspend-AutostartTask"), _fn(_src(n), "Restore-AutostartTask"), _fn(_src(n), "Exit-InstallLock"), _fn(_src(n), "Start-InstallService"))
+             for n in ("apply_update.ps1", "apply_module_update.ps1", "rollback_update.ps1")]
+    assert parts[0] == parts[1] == parts[2], "四個函式在三支腳本逐字相同"
 
 
 @needs_ps
@@ -414,7 +511,7 @@ $r = Stop-RespawnedService "停服後"
 def test_stop_respawned_service_is_bounded_and_says_so_when_nothing_can_be_killed(tmp_path):
     out = _run_ps(_PROD_CHAIN + r'''
 $script:RespawnDetected = $false
-function Stop-Process { param($Id) $script:killed.Add([int]$Id) }   # 殺不掉（權限不足）
+function Stop-Process { param($Id) foreach ($one in @($Id)) { $script:killed.Add([int]$one) } }   # 殺不掉（權限不足）；一次可帶多個 PID
 $r = Stop-RespawnedService "啟動前"
 "result=$r killed=$($script:killed.Count)"
 ''', tmp_path, _RESPAWN_FUNCS)
