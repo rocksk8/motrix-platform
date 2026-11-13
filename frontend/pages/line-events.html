@@ -33,7 +33,7 @@
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="le-main">
     <div class="le-title">LINE 通知事件</div>
-    <div class="le-sub">一張表管理所有 LINE 通知：每個事件要不要發、發給誰。點格子立即生效；勾選多列可一次套用，套用後可按「復原這一批」（只要這些事件沒被別人改過）。
+    <div class="le-sub">一張表管理所有 LINE 通知：每個事件要不要發、發給誰。點格子立即生效；你的點選與批次動作都只是<b>草稿</b>，按頂端「儲存」才會生效；儲存後可按「復原這一批」（只要這些事件沒被別人改過）。
       連線設定、綁定、總開關在 <a href="notification-settings.html" data-testid="le-back-link">通知設定</a>。</div>
     <div class="le-bar" id="le-bar" aria-live="polite"></div>
     <div class="le-legend" aria-label="圖例">
@@ -81,10 +81,10 @@
       if (!r.ok) { var err = new Error(detailText(d, '操作失敗（' + r.status + '）')); err.status = r.status; err.data = d; throw err }
       return d
     }
-    function batch(keys, fields) { return call('/api/settings/line-notify/events/batch', 'POST', Object.assign({ keys: keys }, fields)) }
 
     // ── 資料 ──
-    function rowsOf(c) { return (c.events || []).map(function (e) { return e }) }
+    // 預設規則把「重要」告警視為影響大（risk=security，不能批次）；LINE 頁登記了覆寫（見下），其餘事件 risk=none
+    function rowsOf(c) { return (c.events || []).map(function (e) { return Object.assign({ risk: e.priority === 'critical' ? 'security' : 'none' }, e) }) }
     async function load() {
       var d = await call('/api/settings/line-notify')
       cfg = d
@@ -150,50 +150,67 @@
     }
     function cancelled() { var e = new Error('cancelled'); e.cancelled = true; return e }
 
-    // ── 欄位 ──
+    // ── 草稿 ──（使用者規則 2026-11-13：點選只算草稿，頂端固定儲存列按「儲存」才寫入）
+    // patch 的形狀＝伺服器 `changes[key]`：{ enabled?: bool, audience?: {mode, roles, users:[帳號]}, roles?: null|[角色] }
     var roleItems = function () { return (cfg.role_choices || []).map(function (r) { return { value: r, label: roleName(r), short: roleName(r).slice(0, 2) } }) }
-    function critDialog(keys) {
-      var crit = keys.filter(function (k) { var e = evByKey(k); return e && e.priority === 'critical' })
-      if (!crit.length) return []
+    function userObj(u) {
+      var b = bind.users.filter(function (x) { return x.username === u })[0]
+      return { username: u, display: b ? (b.display || u) : u, active: true, muted: false, linked: b ? !!b.linked : true }
+    }
+    // 把草稿 patch 套到列上，給畫面顯示（含伺服器的「新開啟預設只發給我」，讓畫面與儲存後一致）
+    function applyPatch(raw, patch) {
+      var r = Object.assign({}, raw)
+      if (patch.enabled !== undefined) r.enabled = patch.enabled
+      if ('roles' in patch) r.roles = patch.roles
+      if (patch.audience) r.audience = { mode: patch.audience.mode, roles: (patch.audience.roles || []).slice(), users: (patch.audience.users || []).map(userObj) }
+      else if (patch.enabled === true && !raw.enabled && aud(raw).mode === 'business') r.audience = { mode: 'only', roles: [], users: [userObj(ME)] }
+      return r
+    }
+    function canon(r) {
+      var a = aud(r)
+      return JSON.stringify([!!r.enabled, r.roles == null ? null : r.roles.slice().sort(), a.mode, a.mode === 'business' ? [] : (a.roles || []).slice().sort(), a.mode === 'business' ? [] : users(r).map(function (u) { return u.username }).sort()])
+    }
+    function sameAsRaw(raw, patch) { return canon(applyPatch(raw, patch)) === canon(raw) }
+    function critDialog(off, narrow) {
+      narrow = narrow || []
+      if (!off.length && !narrow.length) return []
+      var html = ''
+      if (off.length) html += '<div class="mx-danger-box">下列通知關閉後，<b>這些情況發生時將不會再用 LINE 通知任何人</b>：</div>' + listHtml(names(off))
+      if (narrow.length) html += '<div class="mx-danger-box">下列通知<b>縮小了收件範圍</b>（實際會收到的人變少，甚至變成 0 人）：</div>' + listHtml(names(narrow))
       return [{
-        title: '關閉「重要」系統告警？', danger: true, okLabel: '仍要關閉',
-        html: '<div class="mx-danger-box">下列通知關閉後，<b>這些情況發生時將不會再用 LINE 通知任何人</b>：</div>' + listHtml(names(crit)) + '<div class="mx-mute">這是系統安全／營運告警；關閉後請確認有其他管道（Email、系統內通知）接手。</div>',
+        title: off.length ? '關閉「重要」系統告警？' : '縮小「重要」系統告警的收件範圍？', danger: true, okLabel: off.length ? '仍要關閉' : '仍要縮小',
+        html: html + '<div class="mx-mute">這是系統安全／營運告警；請確認有其他管道（Email、系統內通知）接手。</div>',
       }]
     }
     var columns = [
       { id: 'on', type: 'switch', label: '開／關', width: 64,
         get: function (r) { return r.enabled },
-        confirm: function (r, v) { return v ? [] : critDialog([r.key]) },
-        set: function (r, v, ctx) { return batch([r.key], { enabled: v, confirm_critical: !!(ctx && ctx.confirmed) }) } },
+        draft: function (r, v) { return { enabled: v } } },
       { id: 'mode', type: 'select', label: '收件對象', width: 150, options: MODES,
         show: function (r) { return r.enabled },
         get: function (r) { return aud(r).mode },
-        set: function (r, v) {
-          if (v === 'business') return batch([r.key], { audience: { mode: 'business', roles: [], users: [] } })
+        draft: function (r, v) {
+          if (v === 'business') return { audience: { mode: 'business', roles: [], users: [] } }
           var a = aud(r)
-          var have = (a.roles || []).length || users(r).length
-          if (have) return batch([r.key], { audience: { mode: v, roles: a.roles || [], users: users(r).map(function (u) { return u.username }) } })
+          if ((a.roles || []).length || users(r).length) return { audience: { mode: v, roles: a.roles || [], users: users(r).map(function (u) { return u.username }) } }
           return pickDialog([r], { mode: v, roles: [], users: [] }).then(function (p) {
             if (!p) throw cancelled()
-            return batch([r.key], { audience: p })
+            return { audience: p }
           })
         } },
       { id: 'roles', type: 'chips', label: '角色', items: [],   // items 於 mount 前以 role_choices 填入
         show: function (r) { return r.enabled },
         get: function (r) { return aud(r).mode === 'business' ? r.roles : (aud(r).roles || []) },
         tone: function (r) { return aud(r).mode === 'business' ? 'f' : 'a' },
-        toggle: function (r, role, on) {
+        draft: function (r, role, on) {
           var all = (cfg.role_choices || [])
           var business = aud(r).mode === 'business'
           var cur = business ? (r.roles == null ? all.slice() : r.roles.slice()) : (aud(r).roles || []).slice()
           cur = on ? (cur.indexOf(role) >= 0 ? cur : cur.concat([role])) : cur.filter(function (x) { return x !== role })
-          if (business) {
-            var send = all.every(function (x) { return cur.indexOf(x) >= 0 }) ? null : all.filter(function (x) { return cur.indexOf(x) >= 0 })
-            return batch([r.key], { roles: send })
-          }
-          return batch([r.key], { audience: { mode: aud(r).mode, roles: all.filter(function (x) { return cur.indexOf(x) >= 0 }), users: users(r).map(function (u) { return u.username }) } })
+          if (business) return { roles: all.every(function (x) { return cur.indexOf(x) >= 0 }) ? null : all.filter(function (x) { return cur.indexOf(x) >= 0 }) }
+          return { audience: { mode: aud(r).mode, roles: all.filter(function (x) { return cur.indexOf(x) >= 0 }), users: users(r).map(function (u) { return u.username }) } }
         } },
-      { id: 'who', type: 'html', label: '指定人員', width: 200,
+      { id: 'who', type: 'html', raw: true, label: '指定人員', width: 200,
         show: function (r) { return r.enabled },
         render: function (r) {
           var a = aud(r)
@@ -205,12 +222,12 @@
           else if (!us.length) txt = '<span class="mx-mute">（只有角色）</span>'
           return '<span class="le-who" data-testid="le-who-' + esc(r.key) + '">' + txt + '</span> <button type="button" class="mx-btn mx-btn-sm" data-mx="act" data-act="people" data-key="' + esc(r.key) + '" data-testid="le-people-' + esc(r.key) + '">編輯</button>'
         } },
-      { id: 'sent30', type: 'html', label: '近 30 天', width: 70,
+      { id: 'sent30', type: 'html', raw: true, label: '近 30 天', width: 70,
         render: function (r) { return '<span data-testid="le-sent30-' + esc(r.key) + '">' + esc(r.sent30 || 0) + '</span>' } },
     ]
 
-    // ── 批次 ──
-    function snapshot(keys) {
+    // ── 儲存／復原 ──
+    function snapshot(keys) {                                       // 套用前的狀態（取伺服器原值，不是草稿）
       var out = {}
       keys.forEach(function (k) {
         var e = evByKey(k); if (!e) return
@@ -219,21 +236,23 @@
       return out
     }
     // 復原這一批：把套用前的狀態整批寫回；前提是這些事件從套用到現在沒被別人改過（伺服器比對指紋）。被改過 ⇒ 409、整批不復原，說明是誰、何時
+    function conflictError(e, head) {
+      var d = e.data && e.data.detail
+      if (e.status === 409 && d && d.code === 'conflict') {
+        var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
+        var err = new Error(head + d.keys.map(function (x) { return x.name }).join('、') + (who ? ' ' + who : ' ') + '改過，為了不蓋掉別人的修改，系統拒絕整批' + (head.indexOf('復原') >= 0 ? '復原' : '儲存') + '。')
+        err.status = 409
+        return err
+      }
+      return e
+    }
     function restore(snap, res) {
       var r = res && res.res
       if (!r || !r.after) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原'))
-      return call('/api/settings/line-notify/events/batch-undo', 'POST', { states: snap, expect: r.after, since_audit: r.audit_mark || 0 }).catch(function (e) {
-        var d = e.data && e.data.detail
-        if (e.status === 409 && d && d.code === 'conflict') {
-          var who = d.by ? '被 ' + d.by + (d.at ? ' 於 ' + String(d.at).slice(0, 16).replace('T', ' ') : '') + ' ' : ''
-          var err = new Error('無法復原這一批：' + d.keys.map(function (x) { return x.name }).join('、') + ' 在你套用之後' + (who ? who : '') + '改過，為了不蓋掉別人的修改，系統拒絕整批復原。')
-          err.status = 409
-          throw err
-        }
-        throw e
-      })
+      return call('/api/settings/line-notify/events/batch-undo', 'POST', { states: snap, expect: r.after, since_audit: r.audit_mark || 0 }).catch(function (e) { throw conflictError(e, '無法復原這一批：') })
     }
     function applied(res, label) { return { res: res, message: label + '（' + res.changed.length + ' 項有變動' + (res.unchanged && res.unchanged.length ? '、' + res.unchanged.length + ' 項本來就是這樣' : '') + '）' } }
+    function changesOf(list) { var o = {}; list.forEach(function (c) { o[c.key] = c.patch }); return o }
     // 確認視窗：向伺服器要「預覽」（不寫入），列出每個事件套用前後的收件人數與每月則數估算（額度是 LINE 的核心考量）
     function previewRows(res) {
       var rows = res.events.filter(function (r) { return r.changed })
@@ -245,62 +264,55 @@
       return '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--ink-secondary)"><th style="text-align:left">事件</th><th style="text-align:right">可能收件人</th><th style="text-align:right">每月則數</th></tr></thead><tbody>' + shown + '</tbody></table>' +
         (rows.length > 8 ? '<div class="mx-mute">…另有 ' + (rows.length - 8) + ' 項</div>' : '')
     }
-    function previewDialog(keys, fields, title, okLabel) {
-      return call('/api/settings/line-notify/events/batch-preview', 'POST', Object.assign({ keys: keys }, fields)).then(function (res) {
+    var lastCritical = []
+    function confirmSave(list) {
+      return call('/api/settings/line-notify/events/batch-preview', 'POST', { changes: changesOf(list) }).then(function (res) {
         var changed = res.events.filter(function (r) { return r.changed }).length
-        if (!changed) throw new Error('這些項目本來就是這樣，沒有要變更的')
-        var t = res.total, q = window.__leQuota, html = '<div>將變更 <b>' + changed + '</b> 項' + (keys.length - changed ? '，略過 <b>' + (keys.length - changed) + '</b> 項（本來就是這樣）' : '') + '。</div>' + previewRows(res)
-        html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 套用後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項沒有推播紀錄、無法估算）</span>' : '') + '</div>'
+        if (!changed) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        var t = res.total, q = window.__leQuota
+        var html = '<div>將儲存 <b>' + changed + '</b> 項變更' + (list.length - changed ? '，<b>' + (list.length - changed) + '</b> 項本來就是這樣（略過）' : '') + '。</div>' + previewRows(res)
+        html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 儲存後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項沒有推播紀錄、無法估算）</span>' : '') + '</div>'
         html += '<div class="mx-mute">估算方式：以近 30 天實際推播量，按「可能收件人數」的比例推算；「上限」＝照原本收件人時每一則的實際收件人可能更少。</div>'
         if (q && q.limit != null && !q.unlimited) html += '<div style="margin-top:6px">本月額度 <b>' + esc(q.limit) + '</b> 則，已用 <b>' + esc(q.used) + '</b> 則。</div>'
         if (q && q.limit != null && !q.unlimited && t.est_after > q.limit) html += '<div class="mx-danger-box">預估每月 ' + t.est_after + ' 則，超過 LINE 免費額度 ' + esc(q.limit) + ' 則：用量到 90% 時一般通知會暫停（重要告警照發）。</div>'
-        return { title: title + '（' + changed + ' 項）', okLabel: okLabel, html: html }
+        html += '<div class="mx-mute" style="margin-top:6px">儲存後會留下操作紀錄，並可按「復原這一批」。</div>'
+        var off = res.events.filter(function (r) { return r.critical_off }).map(function (r) { return r.key })
+        var nar = res.events.filter(function (r) { return r.critical_narrow }).map(function (r) { return r.key })
+        lastCritical = off.concat(nar)
+        return [{ title: '儲存 ' + changed + ' 項變更', okLabel: '儲存', html: html }].concat(critDialog(off, nar))
       })
     }
+    function save(list, ctx) {
+      var expect = {}
+      list.forEach(function (c) { if (c.row && c.row.version) expect[c.key] = c.row.version })
+      return call('/api/settings/line-notify/events/batch', 'POST', { changes: changesOf(list), expect: expect, since_audit: cfg.audit_mark || 0, confirm_critical: lastCritical.length > 0 && !!ctx.confirmed })
+        .then(function (r) { return applied(r, '已儲存') })
+        .catch(function (e) { throw conflictError(e, '無法儲存：') })
+    }
+    // 批次動作只改草稿（patch 記進每個選取的列）；寫入在「儲存」
     var pickedCustom = null
-    function act(id, label, done, fieldsOf, extra) {
-      var a = {
-        id: id, label: label, doneLabel: done,
-        confirm: function (keys) {
-          var fields = fieldsOf(keys)
-          if (fields === null) return null
-          return previewDialog(keys, fields, label === '開啟' || label === '關閉' ? label + '通知' : '改收件對象：' + label, label === '關閉' ? '繼續' : '套用').then(function (d) {
-            return [d].concat(id === 'off' ? critDialog(keys) : [])
-          })
-        },
-        run: function (keys, ctx) {
-          var fields = fieldsOf(keys)
-          if (id === 'off') fields = Object.assign({}, fields, { confirm_critical: !!ctx.confirmed && critDialog(keys).length > 0 })
-          return batch(keys, fields).then(function (r) { return applied(r, done) })
-        },
-      }
-      return Object.assign(a, extra || {})
+    function act(id, label, patchOf, extra) {
+      return Object.assign({ id: id, label: label, draft: function (keys) { return patchOf(keys) } }, extra || {})
     }
     var batchCfg = {
       groupActions: [{ action: 'on', label: '全開' }, { action: 'off', label: '全關' }],
+      groupActionsEnabled: true,                                    // LINE 頁保留群組全開／全關；它們也只是草稿，儲存時才會確認
       actions: [
-        act('on', '開啟', '已開啟', function () { return { enabled: true } }),
-        act('off', '關閉', '已關閉', function () { return { enabled: false } }),
-        act('me', '只發給我', '已改為只發給你', function () { return { audience: { mode: 'only', roles: [], users: [ME] } } }, { dividerBefore: true, caption: '收件對象：' }),
-        act('su', '最高管理者', '已改為只發給最高管理者', function () { return { audience: { mode: 'only', roles: ['superadmin'], users: [] } } }),
-        act('biz', '照 Email 收件人', '已改為照原本收件人', function () { return { audience: { mode: 'business', roles: [], users: [] } } }),
-        // 自訂：先開指定視窗（confirm 階段），取消 ⇒ 不繼續；選好後才要預覽
-        (function () {
-          var a = act('custom', '自訂…', '已更新收件對象', function () { return pickedCustom ? { audience: pickedCustom } : null })
-          var inner = a.confirm
-          a.confirm = function (keys) {
-            return pickDialog(keys.map(evByKey).filter(Boolean), { mode: 'only', roles: [], users: [] }).then(function (p) {
-              if (!p) return null
-              pickedCustom = p
-              return inner(keys)
-            })
-          }
-          return a
-        })(),
+        act('on', '開啟', function () { return { enabled: true } }),
+        act('off', '關閉', function () { return { enabled: false } }),
+        act('me', '只發給我', function () { return { audience: { mode: 'only', roles: [], users: [ME] } } }, { dividerBefore: true, caption: '收件對象：' }),
+        act('su', '最高管理者', function () { return { audience: { mode: 'only', roles: ['superadmin'], users: [] } } }),
+        act('biz', '照 Email 收件人', function () { return { audience: { mode: 'business', roles: [], users: [] } } }),
+        act('custom', '自訂…', function (keys) {
+          return pickDialog(keys.map(evByKey).filter(Boolean), { mode: 'only', roles: [], users: [] }).then(function (p) { return p ? { audience: p } : null })
+        }),
       ],
       snapshot: snapshot,
       restore: restore,
     }
+    // 「重要」告警：預設規則視為影響大（不能批次），LINE 頁依使用者 2026-11-13 的裁示登記覆寫——允許批次關閉，但儲存時必須二次確認，伺服器端另外強制 confirm_critical
+    SettingsMatrix.registerEligibleOverride('line-events', function () { return true },
+      '使用者 2026-11-13 裁示：LINE「重要」系統告警允許批次關閉；儲存時要額外警告視窗列出將停止通知的情況，伺服器端強制 confirm_critical')
     var filters = [
       { id: 'on', label: '已開啟', test: function (r) { return r.enabled } },
       { id: 'off', label: '已關閉', test: function (r) { return !r.enabled } },
@@ -319,7 +331,8 @@
       await loadBind()
       columns[2].items = roleItems()
       mx = SettingsMatrix.mount(document.getElementById('le-box'), {
-        rows: rows, groups: cfg.event_groups || [],
+        rows: rows, groups: cfg.event_groups || [], eligible: 'line-events',
+        draft: { apply: applyPatch, same: sameAsRaw, confirm: confirmSave, save: save },
         rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.group }, rowSub: function (r) { return r.key },
         nameLabel: '通知事件', searchPlaceholder: '搜尋事件名稱或代碼',
         rowTags: function (r) {
@@ -337,8 +350,8 @@
         onAction: function (act, r) {
           if (act !== 'people') return
           var a = aud(r)
-          pickDialog([r], { mode: a.mode, roles: a.roles || [], users: users(r).map(function (u) { return u.username }) }).then(function (p) {
-            if (p) mx.perform('已更新「' + r.name + '」的收件對象', [r.key], function () { return batch([r.key], { audience: p }) })
+          pickDialog([r], { mode: a.mode === 'business' ? 'only' : a.mode, roles: a.roles || [], users: users(r).map(function (u) { return u.username }) }).then(function (p) {
+            if (p) mx.stage(r.key, { audience: p })
           })
         },
       })

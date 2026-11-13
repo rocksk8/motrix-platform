@@ -179,6 +179,106 @@ def test_critical_confirm_is_rechecked_inside_the_lock(env, monkeypatch):
         L.set_events_batch([CRIT], enabled=False)
 
 
+# ── M1（hichan-9 審查、PM 裁示）：重要告警「實際收件人變成 0」或「縮小」也要確認 ───────────
+
+BE = "backup_error"                       # priority=critical
+
+
+def _on_for(client, sa, **aud):
+    body = {"keys": [BE], "enabled": True, "audience": aud or {"mode": "business"}}
+    assert client.post(URL, json=body, headers=sa).status_code == 200
+
+
+def _need_confirm(client, sa, body, keys=(BE,)):
+    before = _snapshot()
+    r = client.post(URL, json=body, headers=sa)
+    assert r.status_code == 400, r.text
+    d = r.json()["detail"]
+    assert d["code"] == "confirm_critical_required" and [x["key"] for x in d["critical"]] == list(keys)
+    assert _snapshot() == before, "沒確認 ⇒ 不改"
+    ok = client.post(URL, json={**body, "confirm_critical": True}, headers=sa)
+    assert ok.status_code == 200, ok.text
+    return ok
+
+
+def test_critical_roles_cleared_to_empty_needs_confirm(client, env):
+    """backup_error 照原樣開著，把角色篩選清成 []（沒有任何人符合）⇒ 等同靜音 ⇒ 必須確認（原本會直接放行）。"""
+    sa = _hdr(client, "sa")
+    _on_for(client, sa)
+    _need_confirm(client, sa, {"keys": [BE], "roles": []})
+    assert _cfg()["event_roles"][BE] == []
+
+
+def _more_superadmins(env, *names, line=True):
+    """重要的系統告警只有最高管理者看得到 ⇒ 要有第二、第三位最高管理者才有「縮小」可言。"""
+    for n in names:
+        _mk(env["make_user"], n, "superadmin", line=line)
+
+
+def test_critical_only_audience_of_departed_or_unbound_users_needs_confirm(client, env):
+    sa = _hdr(client, "sa")
+    _more_superadmins(env, "sa2")
+    _more_superadmins(env, "sa3", line=False)                             # 沒綁定 LINE
+    _on_for(client, sa, mode="only", users=["sa", "sa2"])
+    from db import get_db
+    c = get_db()
+    c.execute("UPDATE users SET active=0 WHERE username='sa2'")           # 離職
+    c.commit()
+    c.close()
+    from helpers import line_notify as L
+    n = L.preview_events_batch([BE], audience={"mode": "only", "roles": [], "users": ["sa3"]})
+    assert n["events"][0]["n_after"] == 0, "指定的人沒綁定 ⇒ 實際收件人 0"
+    _need_confirm(client, sa, {"keys": [BE], "audience": {"mode": "only", "users": ["sa3"]}})
+
+
+def test_critical_narrowing_the_recipient_set_needs_confirm_but_widening_does_not(client, env):
+    sa = _hdr(client, "sa")
+    _more_superadmins(env, "sa2", "sa3")
+    _on_for(client, sa, mode="only", users=["sa", "sa2"])
+    _need_confirm(client, sa, {"keys": [BE], "audience": {"mode": "only", "users": ["sa"]}})        # 2 → 1：縮小
+    r = client.post(URL, json={"keys": [BE], "audience": {"mode": "only", "users": ["sa", "sa2", "sa3"]}}, headers=sa)
+    assert r.status_code == 200, r.text                                                              # 1 → 3：放寬不用確認
+    r = client.post(URL, json={"keys": [BE], "audience": {"mode": "only", "users": ["sa", "sa2", "sa3"]}}, headers=sa)
+    assert r.status_code == 200                                                                      # 沒變：不用確認
+
+
+def test_changes_mode_has_the_same_critical_narrowing_rule(client, env):
+    sa = _hdr(client, "sa")
+    _on_for(client, sa)
+    before = _snapshot()
+    r = client.post(URL, json={"changes": {BE: {"roles": []}}}, headers=sa)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "confirm_critical_required"
+    assert _snapshot() == before
+    assert client.post(URL, json={"changes": {BE: {"roles": []}}, "confirm_critical": True}, headers=sa).status_code == 200
+
+
+def test_preview_flags_critical_narrowing_separately_from_off(client, env):
+    sa = _hdr(client, "sa")
+    _on_for(client, sa)
+    P = "/api/settings/line-notify/events/batch-preview"
+    rows = client.post(P, json={"keys": [BE], "roles": []}, headers=sa).json()["events"]
+    assert rows[0]["critical_narrow"] is True and rows[0]["critical_off"] is False
+    rows = client.post(P, json={"keys": [BE], "enabled": False}, headers=sa).json()["events"]
+    assert rows[0]["critical_off"] is True and rows[0]["critical_narrow"] is False
+
+
+def test_undo_never_needs_confirm_even_when_it_restores_a_narrow_state(client, env):
+    sa = _hdr(client, "sa")
+    _on_for(client, sa)
+    before = {BE: _state_of(BE)}
+    ok = _need_confirm(client, sa, {"keys": [BE], "roles": []})
+    r = client.post(UNDO, json={"states": before, "expect": ok.json()["after"]}, headers=sa)
+    assert r.status_code == 200, r.text
+
+
+def test_batch_without_any_real_change_does_not_write(client, env, writes):
+    sa = _hdr(client, "sa")
+    _on_for(client, sa)
+    writes.clear()
+    r = client.post(URL, json={"keys": [BE], "enabled": True}, headers=sa)
+    assert r.status_code == 200 and r.json()["changed"] == [] and writes == []
+
+
 # ── 請求輸入嚴格 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("bad", [
@@ -623,3 +723,168 @@ def test_preview_validates_like_batch_and_is_superadmin_only(client, env):
                  {"keys": ["approval_request"], "audience": {"mode": "weird"}}, {"keys": ["approval_request"], "extra": 1, "enabled": True},
                  {"keys": ["approval_request"], "audience": {"mode": "only", "users": ["ghost"]}}):
         assert client.post(PREVIEW, json=body, headers=sa).status_code == 400, body
+
+
+# ── 草稿儲存：`changes`（每個事件各自的改動）＋ `expect`（載入時的 version；PM 2026-11-13 草稿＋儲存列模型）──────────
+
+def _versions(client, sa):
+    j = client.get("/api/settings/line-notify", headers=sa).json()
+    return {e["key"]: e["version"] for e in j["events"]}, j["audit_mark"]
+
+
+def test_changes_apply_per_event_with_one_write_and_one_audit_row(client, env, writes):
+    sa = _hdr(client, "sa")
+    a, b, c = NORMAL
+    body = {"changes": {a: {"enabled": True, "audience": {"mode": "only", "roles": [], "users": ["amy"]}},
+                        b: {"enabled": True},
+                        c: {"roles": ["admin", "sales"]}}}
+    r = client.post(URL, json=body, headers=sa)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert sorted(j["changed"]) == sorted(NORMAL) and set(j["after"]) == set(NORMAL) and j["audit_mark"] > 0
+    assert len(writes) == 1 and _count_audit("settings.line_notify.batch") == 1
+    cfg = _cfg()
+    assert cfg["events"][a] is True and cfg["audiences"][a] == {"mode": "only", "roles": [], "users": ["amy"]}
+    assert cfg["events"][b] is True and cfg["audiences"][b] == {"mode": "only", "roles": [], "users": ["sa"]}, "沒帶對象的新開事件：預設只發給操作者本人"
+    assert cfg["event_roles"][c] == ["admin", "sales"] and cfg["events"].get(c) is not True
+
+
+def test_changes_all_or_nothing_on_any_invalid_entry(client, env, writes):
+    sa = _hdr(client, "sa")
+    snap = _snapshot()
+    a, b, _c = NORMAL
+    for changes in ({a: {"enabled": True}, b: {"audience": {"mode": "only", "users": ["ghost"]}}},
+                    {a: {"enabled": True}, "not_wired": {"enabled": True}},
+                    {a: {"enabled": True}, b: {}},
+                    {a: {"enabled": True}, b: {"enabled": "yes"}},
+                    {a: {"enabled": True}, b: {"unknown_field": 1}},
+                    {a: {"enabled": True}, b: {"roles": ["nobody"]}}):
+        assert client.post(URL, json={"changes": changes}, headers=sa).status_code == 400, changes
+    assert _snapshot() == snap and not writes
+
+
+@pytest.mark.parametrize("body", [
+    {"changes": []}, {"changes": {}}, {"changes": {"approval_request": {"enabled": True}}, "keys": ["approval_request"]},
+    {"changes": {"approval_request": {"enabled": True}}, "enabled": True},
+    {"changes": {"approval_request": {"enabled": True}}, "expect": {"approval_request": 5}},
+    {"changes": {"approval_request": {"enabled": True}}, "since_audit": "1"},
+    {"changes": {"approval_request": {"enabled": True}}, "confirm_critical": "yes"},
+])
+def test_changes_rejects_malformed_bodies(client, env, body):
+    sa = _hdr(client, "sa")
+    snap = _snapshot()
+    assert client.post(URL, json=body, headers=sa).status_code == 400
+    assert _snapshot() == snap
+
+
+def test_changes_critical_off_requires_confirm_and_only_superadmin(client, env):
+    sa, bob = _hdr(client, "sa"), _hdr(client, "bob")
+    _turn_on(client, sa, CRIT)
+    body = {"changes": {CRIT: {"enabled": False}}}
+    r = client.post(URL, json=body, headers=sa)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "confirm_critical_required"
+    assert _cfg()["events"][CRIT] is True
+    assert client.post(URL, json={**body, "confirm_critical": True}, headers=sa).status_code == 200
+    assert _cfg()["events"][CRIT] is False
+    assert client.post(URL, json=body, headers=bob).status_code == 403
+
+
+def test_changes_expect_detects_edits_made_after_page_load(client, env, writes):
+    sa = _hdr(client, "sa")
+    k1, k2, _ = NORMAL
+    ver, mark = _versions(client, sa)
+    # 載入之後，別的視窗改了 k2
+    assert client.put("/api/settings/line-notify/events/%s" % k2, json={"enabled": True}, headers=sa).status_code == 200
+    snap = _snapshot()
+    n = len(writes)
+    body = {"changes": {k1: {"enabled": True}, k2: {"enabled": False}}, "expect": {k1: ver[k1], k2: ver[k2]}, "since_audit": mark}
+    r = client.post(URL, json=body, headers=sa)
+    assert r.status_code == 409, r.text
+    d = r.json()["detail"]
+    assert d["code"] == "conflict" and [x["key"] for x in d["keys"]] == [k2] and d["by"] and d["at"]
+    assert _snapshot() == snap and len(writes) == n, "衝突 ⇒ 整批都不存（包含沒被改過的 k1）"
+    ver2, mark2 = _versions(client, sa)
+    ok = client.post(URL, json={"changes": {k1: {"enabled": True}, k2: {"enabled": False}}, "expect": {k1: ver2[k1], k2: ver2[k2]}, "since_audit": mark2}, headers=sa)
+    assert ok.status_code == 200, ok.text
+    ver3, _ = _versions(client, sa)
+    assert ver3[k1] != ver2[k1] and ver3[k2] != ver2[k2], "version 會隨狀態改變"
+
+
+def test_get_version_is_stable_and_changes_with_state(client, env):
+    sa = _hdr(client, "sa")
+    v1, _ = _versions(client, sa)
+    v2, _ = _versions(client, sa)
+    assert v1 == v2
+    assert client.put("/api/settings/line-notify/events/approval_request/roles", json={"roles": ["admin"]}, headers=sa).status_code == 200
+    v3, _ = _versions(client, sa)
+    assert v3["approval_request"] != v1["approval_request"] and v3["next_tier"] == v1["next_tier"]
+
+
+def test_preview_with_changes_writes_nothing(client, env, writes):
+    sa = _hdr(client, "sa")
+    snap = _snapshot()
+    a, b, _ = NORMAL
+    r = client.post(PREVIEW, json={"changes": {a: {"enabled": True, "audience": {"mode": "only", "roles": ["superadmin", "admin"], "users": []}}, b: {"enabled": True}}}, headers=sa)
+    assert r.status_code == 200, r.text
+    rows = {x["key"]: x for x in r.json()["events"]}
+    assert rows[a]["n_after"] == 2 and rows[a]["changed"] and rows[b]["defaulted"] and rows[b]["n_after"] == 1
+    assert _snapshot() == snap and not writes and _count_audit("settings.line_notify.batch") == 0
+    assert client.post(PREVIEW, json={"changes": {a: {"enabled": "x"}}}, headers=sa).status_code == 400
+
+
+# ── hichan-9 L2／L5／L6 ───────────────────────────────────────────────────────
+
+def test_conflict_who_matches_exact_event_keys_not_substrings(client, env):
+    """稽核明細裡有 `next_tier_approved` 之類較長的代碼，不能被「approved」子字串誤認成同一個事件的修改者。"""
+    from db import get_db
+    from routers.system import _line_conflict_who
+    c = get_db()
+    try:
+        c.execute("INSERT INTO audit_log (at, username, display_name, action, target_type, target_id, detail) VALUES (?,?,?,?,?,?,?)",
+                  ("2026-11-13 10:00:00", "bob", "Bob", "settings.line_notify.batch", "settings", "", '{"changes": {"next_tier_approved": {"enabled": true}}}'))
+        c.execute("INSERT INTO audit_log (at, username, display_name, action, target_type, target_id, detail) VALUES (?,?,?,?,?,?,?)",
+                  ("2026-11-13 10:05:00", "amy", "Amy", "settings.line_notify.batch", "settings", "", '{"changes": {"approved": {"enabled": true}}}'))
+        c.commit()
+    finally:
+        c.close()
+    assert _line_conflict_who(["approved"], 0)["by"] == "Amy"
+    assert _line_conflict_who(["next_tier_approved"], 0)["by"] == "Bob"
+    assert _line_conflict_who(["appro"], 0) == {"by": "", "at": ""}
+
+
+def test_undo_error_names_the_possible_reason_when_a_prior_user_is_gone(client, env):
+    sa = _hdr(client, "sa")
+    _more_superadmins(env, "sa2")
+    _on_for(client, sa, mode="only", users=["sa", "sa2"])
+    before = {BE: _state_of(BE)}
+    ok = _need_confirm(client, sa, {"keys": [BE], "audience": {"mode": "only", "users": ["sa"]}})
+    from db import get_db
+    c = get_db()
+    c.execute("DELETE FROM users WHERE username='sa2'")
+    c.commit()
+    c.close()
+    r = client.post(UNDO, json={"states": before, "expect": ok.json()["after"]}, headers=sa)
+    assert r.status_code == 400 and "無法復原" in r.json()["detail"] and "離職" in r.json()["detail"]
+
+
+def test_usage_prune_day_is_recorded_only_after_a_successful_commit(env, monkeypatch):
+    from helpers import line_notify as L
+    monkeypatch.setattr(L, "_usage_pruned_day", "")
+    import db as _db
+    real = _db.get_db
+
+    class Boom:
+        def __init__(self, c):
+            self.c = c
+
+        def execute(self, *a, **k):
+            return self.c.execute(*a, **k)
+
+        def commit(self):
+            raise RuntimeError("disk full")
+
+        def close(self):
+            self.c.close()
+    monkeypatch.setattr(_db, "get_db", lambda: Boom(real()))
+    L._usage_daily_add("approval_request", 1)                          # 內部吞掉例外（計數失敗不影響寄送）
+    assert L._usage_pruned_day == "", "commit 失敗 ⇒ 不能記成「今天清過了」"
