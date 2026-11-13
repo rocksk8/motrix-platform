@@ -19,8 +19,8 @@ def _fresh_alert_state():
     la._ALERTED.clear()
 
 
-def _login(make_user, new_page, login_as, name):
-    user = make_user(username=name, role="admin")
+def _login(make_user, new_page, login_as, name, role="admin"):
+    user = make_user(username=name, role=role)
     page = new_page()
     login_as(page, tuple(user)[:2])
     return page
@@ -29,7 +29,7 @@ def _login(make_user, new_page, login_as, name):
 @pytest.mark.e2e
 def test_blocked_license_lands_on_the_explanation_page_and_recovers(
         live_server, make_user, new_page, login_as, monkeypatch, tmp_path, license_test_key):
-    page = _login(make_user, new_page, login_as, "e2e_lic_block")
+    page = _login(make_user, new_page, login_as, "e2e_lic_block", role="superadmin")   # 狀態／機器代碼只給最高管理者看（T83 L5）
     monkeypatch.setattr(lic, "LICENSE_PATH", str(tmp_path / "none" / "license.key"))          # 沒有授權金鑰
     page.goto(f"{live_server}/pages/customers.html")
     page.wait_for_url("**/license-required.html", timeout=20000)
@@ -50,7 +50,7 @@ def test_blocked_license_lands_on_the_explanation_page_and_recovers(
 @pytest.mark.e2e
 def test_machine_mismatch_page_explains_the_hardware_change(
         live_server, make_user, new_page, login_as, monkeypatch):
-    page = _login(make_user, new_page, login_as, "e2e_lic_mm")
+    page = _login(make_user, new_page, login_as, "e2e_lic_mm", role="superadmin")
     monkeypatch.setattr(lic, "machine_fingerprint", lambda: "deadbeefdeadbeef")               # 硬體換了
     monkeypatch.setattr(lic, "_LICENSE_FILE_CACHE", None)                                      # 快取鍵不含指紋（正式機指紋是行程常數）；測試換指紋要清它
     page.goto(f"{live_server}/pages/customers.html")

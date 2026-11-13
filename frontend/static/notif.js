@@ -54,6 +54,43 @@
     el.setAttribute('data-kind', value.indexOf('emergency') === 0 ? 'emergency' : 'dev_key')
     el.textContent = text
   }
+  // ③ 回應標頭 X-Motrix-License-Expiry（T83）：`days=12;level=warning;kind=subscription`（授權剩 30 天內、或永久授權已過維護期）⇒ 頂端橫幅，
+  //    30／14／7 天各一個嚴重程度（notice／warning／critical）；值 `none` ⇒ 移除。規則同上（已登入的回應一定帶；沒有標頭 ⇒ 不動）。
+  //    **只有最高管理者**收到標頭、看到橫幅（橫幅帶「前往授權頁」連結；頁面本身仍由伺服器驗權限）；其他角色不顯示剩餘天數。
+  function _licenseExpiryBanner(value) {
+    var el = document.getElementById('motrix-license-expiry-banner')
+    var m = value ? /days=(-?[0-9]+);level=([a-z]+);kind=([a-z]+)/.exec(value) : null
+    if (!m) { if (el) el.remove(); return }
+    if (!document.body) return
+    var days = parseInt(m[1], 10), level = m[2], perpetual = m[3] === 'perpetual'
+    var what = perpetual ? '授權的維護期' : '系統授權'
+    var text
+    if (level === 'ended') text = what + '已結束 ' + (-days) + ' 天，系統仍可繼續使用，但不再提供更新。'
+    else if (days === 0) text = what + '今天' + (perpetual ? '結束' : '到期') + '。'
+    else text = what + '將在 ' + days + ' 天後' + (perpetual ? '結束' : '到期') + (perpetual ? '，之後仍可繼續使用但不再提供更新' : '，到期後系統會暫停使用') + '。'
+    // 只有最高管理者看得到（伺服器只對最高管理者回這個標頭；這裡再擋一次，萬一標頭被別的角色收到也不顯示）
+    var role = ''
+    try { role = (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).role || '' } catch (e) {}
+    if (role !== 'superadmin') { if (el) el.remove(); return }
+    text += ' 請向供應商取得新授權檔後匯入。'
+    var critical = level === 'critical'
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'motrix-license-expiry-banner'
+      el.setAttribute('role', 'alert')
+      document.body.insertBefore(el, document.body.firstChild)
+    }
+    el.style.cssText = 'position:sticky;top:0;z-index:9997;padding:8px 14px;font-size:13px;text-align:center;' +
+      (critical ? 'background:var(--danger-light);color:var(--danger);border-bottom:1px solid var(--danger-border)'
+                : 'background:var(--warning-light);color:var(--warning);border-bottom:1px solid var(--warning)')
+    el.setAttribute('data-level', level)
+    el.textContent = text
+    var a = document.createElement('a')
+    a.href = (window.location.pathname.includes('/pages/') ? '' : 'pages/') + 'license-settings.html'
+    a.textContent = '前往授權頁'
+    a.style.cssText = 'margin-left:8px;color:inherit;font-weight:600;text-decoration:underline'
+    el.appendChild(a)
+  }
   function _isApi(args) {
     var u = args && args[0]
     u = (u && u.url) || String(u || '')
@@ -64,13 +101,15 @@
     if (_isApi(arguments) && r.status < 500) {
       try { _setupBanner(r.headers.get('X-Motrix-Company-Setup')) } catch (e) {}
       try { var lh = r.headers.get('X-Motrix-License'); if (lh !== null) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
+      try { var xh = r.headers.get('X-Motrix-License-Expiry'); if (xh !== null) _licenseExpiryBanner(xh === 'none' ? '' : xh) } catch (e) {}
     }
     if (r.status === 402 && !_redirecting && _isApi(arguments)) {
       try {
         var d402 = await r.clone().json()
         if (d402 && d402.code === 'license_required') {
           var here402 = window.location.pathname.split('/').pop()
-          if (['license-required.html', 'login.html'].indexOf(here402) < 0) {
+          // 授權頁（license-settings.html）也不導：授權失效時它正是用來匯入新授權的頁面（它只呼叫授權豁免端點，不會走到這裡；保險用）
+          if (['license-required.html', 'login.html'].indexOf(here402) < 0 && here402 !== 'license-settings.html') {
             _redirecting = true
             window.location.replace(window.location.pathname.includes('/pages/') ? 'license-required.html' : 'pages/license-required.html')
           }
