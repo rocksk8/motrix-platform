@@ -27,14 +27,14 @@
           const r = await fetch('/api/duty-roles', { headers: this._headers() })
           if (!r.ok) return
           const d = await r.json()
-          if (this.editingId === user.id) { g.hi = d.highSensitiveKeys || []; g.keys = d.keys || [] }
+          if (!user || this.editingId === user.id) { g.hi = d.highSensitiveKeys || []; g.keys = d.keys || [] }
         } catch (e) { /* 取不到清單 ⇒ 不先擋；伺服器仍會擋並回原因 */ }
       },
       // 這次存檔動到（授予或取消）的高敏感個人勾選；改完仍是最高管理者 ⇒ 不算（伺服器同一條規則）
       permGateTouched() {
         const g = this.permGate
-        if (!this.editingId || !g.hi.length) return []
-        if (g.origRole === 'superadmin' && this.form.role === 'superadmin') return []
+        if (!g.hi.length) return []
+        if (this.form.role === 'superadmin' && (g.origRole === 'superadmin' || !this.editingId)) return []      // 改完／建成最高管理者 ⇒ 不算授予（伺服器同一條規則）
         const a = new Set(g.origModules), b = new Set(this.form.modules || [])
         return g.hi.filter(k => a.has(k) !== b.has(k))
       },

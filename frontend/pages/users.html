@@ -629,7 +629,7 @@
           </div>
         </div>
         <!-- 個人勾選動到高敏感權限鍵：原因必填（伺服器 PUT /api/users/{id} 強制；職責角色那一格有顯示時共用那一格） -->
-        <div class="form-group" x-show="editingId && permGateShowOwnReason()" x-cloak data-testid="perm-gate">
+        <div class="form-group" x-show="permGateShowOwnReason()" x-cloak data-testid="perm-gate">
           <label class="form-label">變更原因
             <span style="color:var(--danger)" data-testid="perm-gate-required"> * 涉及高敏感權限（<span x-text="permGateTouched().map(k => permGateLabel(k)).join('、')"></span>），必填</span></label>
           <input class="form-input" type="text" maxlength="200" x-model="permGate.reason" data-testid="perm-gate-reason" placeholder="例如：接手系統管理業務">
@@ -1246,6 +1246,7 @@
 
       openCreate() {
         this.editingId = null
+        if (this.permGateOpen) this.permGateOpen(null)          // 新增帳號：modules 帶高敏感鍵一樣要原因（POST /api/users）
         this.form = { username:'', displayName:'', email:'', phone:'', quoteEmail:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
                       notificationMuted: [],
@@ -1337,9 +1338,9 @@
           department_id:        this.form.departmentId || 0,
         }
         if (this.form.password) payload.password = this.form.password
-        if (this.editingId && this.permGateTouched && this.permGateTouched().length) payload.reason = this.permGateReason()   // 個人勾選動到高敏感鍵：伺服器要原因
+        if (this.permGateTouched && this.permGateTouched().length) payload.reason = this.permGateReason()   // 個人勾選動到高敏感鍵：伺服器要原因
 
-        if (this.editingId && this.permGatePrecheck && !this.permGatePrecheck()) return
+        if (this.permGatePrecheck && !this.permGatePrecheck()) return
         if (this.editingId && this.dutyPrecheck && !this.dutyPrecheck()) return
         if (this.editingId && this.dutyBefore && !(await this.dutyBefore())) return      // 解除扣項要在 PUT 之前（要勾回的鍵不能還被扣著）
 
