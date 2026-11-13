@@ -571,3 +571,65 @@ def test_g_approve_with_bad_staged_path_adds_no_record_and_deletes_nothing(stage
     r = client.post("/api/case-changes/%s/approve" % cid, headers=su)
     assert r.status_code == 200, r.text
     assert _final_files(qn) == [] and victim.read_bytes() == b"keep"
+
+
+# ═════════════════════════ 每日清掃：已決定申請殘留的 _pending_case_changes/{id}/ ═════════════════════════
+
+def _age(entries, hours):
+    import helpers.uploads as up
+    import time
+    t = time.time() - hours * 3600
+    for e in entries:
+        os.utime(os.path.join(up.UPLOADS_ROOT, e["path"]), (t, t))
+
+
+def _mk_stage_dir(req_id, hours_old):
+    import helpers.uploads as up
+    rel = up._effective_subfolder("_pending_case_changes/%s" % req_id)
+    d = os.path.join(up.UPLOADS_ROOT, *rel.split("/"))
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, "leftover.png")
+    open(p, "wb").write(PNG)
+    entry = {"path": rel + "/leftover.png"}
+    _age([entry], hours_old)
+    return d, entry
+
+
+@pytest.mark.parametrize("status", ["approved", "rejected", "cancelled"])
+def test_sweep_removes_old_leftover_dir_of_decided_request(staged_request, status):
+    client, su, cid, qn, staged = staged_request
+    _exec("UPDATE case_change_requests SET status=? WHERE id=?", (status, cid))
+    _age(staged, 48)
+    from modules.case.api import quotations as Q
+    Q.sweep_stale_staging()
+    assert _on_disk(staged) == []
+
+
+def test_sweep_keeps_recent_leftover_and_pending_and_staging(staged_request):
+    client, su, cid, qn, staged = staged_request
+    from modules.case.api import quotations as Q
+    _age(staged, 48)                                                  # pending ＋ 很舊 ⇒ 不動
+    Q.sweep_stale_staging()
+    assert _on_disk(staged) == staged
+    _exec("UPDATE case_change_requests SET status='approved' WHERE id=?", (cid,))
+    _age(staged, 1)                                                   # 已決定但還很新（可能是剛核准、清暫存還沒做完）⇒ 不動
+    Q.sweep_stale_staging()
+    assert _on_disk(staged) == staged
+    _exec("UPDATE case_change_requests SET status='staging', requested_at=? WHERE id=?", ("2999-01-01T00:00:00", cid))
+    _age(staged, 48)                                                  # staging（未過期）⇒ 不動
+    Q.sweep_stale_staging()
+    assert _on_disk(staged) == staged
+
+
+def test_sweep_removes_old_dir_without_a_request_row_and_ignores_foreign_names(staged_request):
+    client, su, cid, qn, staged = staged_request
+    d, entry = _mk_stage_dir(987654, 48)
+    import helpers.uploads as up
+    foreign = os.path.join(os.path.dirname(d), "not-a-number")
+    os.makedirs(foreign, exist_ok=True)
+    open(os.path.join(foreign, "keep.txt"), "w").write("x")
+    from modules.case.api import quotations as Q
+    Q.sweep_stale_staging()
+    assert _on_disk([entry]) == [] and not os.path.isdir(d)
+    assert os.path.isfile(os.path.join(foreign, "keep.txt"))
+    assert up.UPLOADS_ROOT
