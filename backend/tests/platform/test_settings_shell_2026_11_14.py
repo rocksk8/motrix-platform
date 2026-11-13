@@ -159,3 +159,34 @@ def test_new_routes_require_superadmin(client, make_user):
     for path in ("/overview", "/recent", "/index"):
         assert client.get(P + path, headers=h).status_code in (401, 403)
         assert client.get(P + path).status_code in (401, 403)
+
+
+def test_json_field_never_exposes_the_raw_document_in_overview_recent_or_index(client, make_user, monkeypatch):
+    """h11 L3：整份文件（json）欄位只給摘要／固定句，不得把原始內容帶進任何外框資料。"""
+    h = _hdr(client, make_user, "shell_json")
+    R.register_group("zz_shell_json", "整份文件測試群組", [
+        R.SettingDef("doc", "json", [], question="這份清單要放什麼？", label="清單", help="測試用的整份清單。", impact="影響之後使用清單的畫面。", risk="ops")],
+        help="測試用的設定群組。")
+    try:
+        monkeypatch.setattr(SP, "PAGES", list(SP.PAGES) + [{"id": "zz_json_page", "plain": "整份文件測試頁", "category": "系統", "groups": ["zz_shell_json"], "style": "checkbox"}])
+        c = get_db()
+        R.publish("zz_shell_json", {"doc": [{"k": "SECRET-123"}]}, reason="放入文件", user="shell_json", conn=c)
+        c.commit()
+        c.close()
+        bodies = [client.get(P + p, headers=h).json() for p in ("/overview", "/recent", "/index")]
+        assert all("SECRET-123" not in str(b) for b in bodies)
+        rec = [r for r in bodies[1]["changes"] if r["group"] == "zz_shell_json"][0]
+        assert rec["old"] is None and rec["new"] is None and isinstance(rec["summary"], list)
+    finally:
+        R._GROUPS.pop("zz_shell_json", None)
+        R.invalidate()
+
+
+def test_recent_high_includes_pending_loosening_with_its_state_text(client, make_user, grp, monkeypatch):
+    """h11 L3：只看高風險時，待生效的放寬也要在，狀態寫「等待生效」。"""
+    h = _hdr(client, make_user, "shell_pend")
+    _with_page(monkeypatch)
+    R.publish(G, {"cap": 50}, reason="放寬一下", user="shell_pend", conn=grp)           # 調大＝放寬 ⇒ 待生效
+    grp.commit()
+    hi = [r for r in client.get(P + "/recent?high=1", headers=h).json()["changes"] if r["group"] == G]
+    assert hi and hi[0]["state"] == "pending" and hi[0]["stateText"] == "等待生效" and hi[0]["effectiveAt"]

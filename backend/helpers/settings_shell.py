@@ -75,7 +75,8 @@ def overview(conn):
 
 
 def recent(conn, limit=50, high_only=False):
-    """最近變更（新→舊）。`high_only`＝只看 money／legal／security 欄位。"""
+    """最近變更（新→舊）。`high_only`＝只看 money／legal／security 欄位。帳本裡欄位已不存在的舊紀錄、hidden／planned 群組的紀錄會被略過；
+    掃描上限是帳本最近 1000 筆，被略過的很多時，可見筆數可能少於 limit。"""
     regs = sr.groups()
     limit = max(1, min(int(limit), 200))
     out = []

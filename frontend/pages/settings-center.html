@@ -491,7 +491,7 @@
         '<h3 style="font-size:15px;margin:6px 0">最近 5 筆變更 <button type="button" class="sc-link" data-card="recent" style="font-size:13px;margin-left:6px">看全部</button></h3>' + recentTable(o.recent, 'sc-overview-recent') +
         '<h3 style="font-size:15px;margin:18px 0 6px" id="sc-differs-h">與預設不同的設定</h3>' +
         (items.length ? '<table class="sc-table" data-testid="sc-differs-list"><thead><tr><th>設定</th><th>目前</th><th>預設</th></tr></thead><tbody>' + items.map(function (d) {
-          return '<tr><td><button type="button" class="sc-link" data-open="' + esc(d.page) + '" data-flash="' + esc(d.group + '.' + d.field) + '">' + esc(d.groupPlain + '／' + d.label) + '</button></td><td>' + esc(d.value) + '</td><td>' + esc(d.default) + '</td></tr>'
+          return '<tr><td><button type="button" class="sc-link" data-open="' + esc(d.page) + '" data-flash="' + esc(d.group + '.' + d.field) + '">' + esc(d.groupPlain + '／' + d.label) + '</button></td><td>' + (d.value === d.default ? '內容已自訂' : esc(d.value)) + '</td><td>' + (d.value === d.default ? '—' : esc(d.default)) + '</td></tr>'
         }).join('') + '</tbody></table>' + (o.differsItems.length > items.length ? '<div class="sc-sub">…另有 ' + (o.differsItems.length - items.length) + ' 項，請從左邊各頁查看。</div>' : '') : '<div class="sc-empty">全部設定都和預設一致。</div>')
       $('sc-v-overview').innerHTML = html
     }
