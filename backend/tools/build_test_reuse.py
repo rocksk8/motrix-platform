@@ -43,6 +43,8 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
                "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # 2026-11-13：正式閘門旗標不進指紋——它決定的是「升級演練跑不跑」，由 modtest.record_for_build 明確只在它為 1 時寫紀錄
+               "MOTRIX_GATE_OFFICIAL",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
@@ -316,6 +318,7 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
             env[_hr.GATE_TOKEN_ENV] = _lock["token"]
     except Exception:                              # noqa: BLE001 — 讀不到就不帶（fail-open；只是少一個放行憑證）
         pass
+    env["MOTRIX_GATE_OFFICIAL"] = "1"               # run-stage 就是正式閘門：gate_only 題（升級演練）要跑（conftest._skip_gate_only）
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
                 "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
     # 失敗明細一律落在這一輪專用目錄（failfast 提早停也一樣）：run-stage 結束時讀回、印出路徑與紅題，不必再去主工作樹翻 jsonl

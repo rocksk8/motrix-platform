@@ -2,6 +2,11 @@
 import sys
 from pathlib import Path
 
+import pytest
+
+# gate_only：只在正式閘門跑（MOTRIX_GATE_OFFICIAL=1；conftest._skip_gate_only）。預跑、守門題組、各視窗自己跑全量都跳過（2026-11-13 chore/test-prune，PM 轉達使用者裁示）
+pytestmark = pytest.mark.gate_only
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import stepfile_drill as SD  # noqa: E402
 

@@ -1230,6 +1230,15 @@ def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, to
     return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
 
 
+GATE_OFFICIAL_ENV = "MOTRIX_GATE_OFFICIAL"
+
+
+def gate_official(env=None):
+    """這一輪是不是正式閘門（heavy_run --class official／建包 run-stage 會設 MOTRIX_GATE_OFFICIAL=1）。
+    只有它為 1 時 backend/conftest 才放行 `gate_only` 題（升級演練）；modtest 也據此決定寫不寫建包沿用紀錄。"""
+    return (env if env is not None else os.environ).get(GATE_OFFICIAL_ENV, "").strip() == "1"
+
+
 OVERLAP_ENV = "MOTRIX_FULL_OVERLAP"
 OVERLAP_MIN_GB_ENV = "MOTRIX_FULL_OVERLAP_MIN_GB"
 
@@ -1460,6 +1469,10 @@ def run_full(extra, a):
     if keep_going(a):
         result["keep_going"] = True
         print("[全閘門] --keep-going：不中斷預跑（failfast 關、slice0 紅也照跑其餘片與 e2e）；紅的結果照記，不可當放行證據")
+    result["gate_official"] = gate_official()
+    if not result["gate_official"]:
+        print("[全閘門] ⚠ 非正式閘門（%s≠1）：標了 gate_only 的題（升級演練 2 組，約 100 秒）本輪跳過；"
+              "這輪不寫建包沿用紀錄，建包會自己重跑。正式閘門用 `heavy_run --class official -- … modtest --full` 或建包 run-stage" % GATE_OFFICIAL_ENV)
     result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
     if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
         print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
@@ -1553,8 +1566,11 @@ def run_full(extra, a):
         except Exception as e:                      # noqa: BLE001 — 寫不出結果檔要說出來，不可靜默
             print("[全量結果] ⚠ 寫不出全量結果檔：%r" % e)
         try:
-            done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
-                                         stream_evidence(_FAIL_STREAM_RUN, dict(main_windows, e2e=a.window + "e2e")))
+            if not result["gate_official"]:                  # 升級演練沒跑 ⇒ 不能當建包的「已跑過」證據
+                done, why = False, "非正式閘門：gate_only 題（升級演練）被跳過"
+            else:
+                done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
+                                             stream_evidence(_FAIL_STREAM_RUN, dict(main_windows, e2e=a.window + "e2e")))
             print("[建包沿用] %s：%s" % ("已寫入" if done else "未寫入", why))
         except Exception as e:                      # noqa: BLE001
             print("[建包沿用] ⚠ 寫不進沿用紀錄：%r（建包會自己重跑，不影響正確性）" % e)
