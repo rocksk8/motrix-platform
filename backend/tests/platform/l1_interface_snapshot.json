@@ -1796,6 +1796,17 @@
    "rate_text": "def(pct)",
    "rules_config": "def(conn=…)"
   },
+  "helper:quote_email": {
+   "PROFILE_KEY": "const",
+   "company_external_email": "def()",
+   "domain_hint": "def(email, company_email=…)",
+   "enforce_sales_email": "def(conn, q, old_data=…)",
+   "reply_to_for_quote": "def(quote_no)",
+   "resolve": "def(user_quote_email, company_external_email, personal_email)",
+   "resolve_for_row": "def(row)",
+   "resolve_for_user_id": "def(user_id)",
+   "valid": "def(email)"
+  },
   "helper:quote_output": {
    "TERMS": "const",
    "hidden_terms": "def(conn=…)"
@@ -2205,6 +2216,16 @@
    "enabled": "def(conn=…)",
    "preview": "def(conn, caller, definition, module, page, username=…)",
    "visible_buttons": "def(conn, user, module, page)"
+  },
+  "helper:user_prefs": {
+   "PrefError": "class",
+   "SCHEMA": "const",
+   "TABLE": "const",
+   "defaults": "def()",
+   "get": "def(user_id, key, default=…)",
+   "get_all": "def(user_id)",
+   "set_many": "def(user_id, changes)",
+   "validate": "def(changes)"
   },
   "helper:validation": {
    "body_flag": "def(body, key, default=…)",

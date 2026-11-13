@@ -43,6 +43,7 @@ from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
 from modules.case.quotations import is_historical_json, put_approval_first, sql_hist_hint, sql_not_historical  # T70 補登單標示／靜音
+from helpers import quote_email as _QE
 from helpers import download_name
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
@@ -1806,6 +1807,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
         ).fetchone() if sp_name else None
         sp_id = sp_row["id"] if sp_row else None
+        _QE.enforce_sales_email(conn, q, None)          # 業務員信箱快照（Reply-To、PDF 都讀它）：伺服器驗證，不信任客戶端
 
         # Ensure quote_seq row exists for peek helper
         conn.execute(
@@ -2227,6 +2229,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["quoteNo"] = qno
         sp_name = (q.get("salesPerson") or "").strip()
         sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
+        _QE.enforce_sales_email(conn, q, None)          # 補登也一樣：業務員信箱快照不信任客戶端（PDF 會印出來）
         MG.enforce(conn, qno, q, actor=user)
         try:
             conn.execute("""
@@ -2401,6 +2404,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                                  real_approval=bool(is_unlock_edit or new_status == "待審核"))   # T69：補登標記以資料庫現值為準；進入真簽核由伺服器事實判定
         except (TypeError, ValueError):
             _pin_backfill_marker(q, {})
+        try:
+            _QE.enforce_sales_email(conn, q, json.loads(existing["data_json"] or "{}") or {})   # 沒改＝舊單維持原樣；改了就必須是這位業務員三層解析的值之一
+        except (TypeError, ValueError):
+            _QE.enforce_sales_email(conn, q, {})
         # 編輯紀錄只由伺服器維護：此處（寫入交易內）放回資料庫現值；解鎖編輯的那一筆也在這裡追加
         try:
             _db_hist = (json.loads(existing["data_json"] or "{}") or {}).get("editHistory")

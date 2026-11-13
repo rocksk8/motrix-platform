@@ -695,6 +695,7 @@
 
       _storeSessionAndRedirect(data) {
         if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
+        try { localStorage.removeItem('motrix_prefs'); localStorage.removeItem('motrix_font_zoom'); localStorage.removeItem('motrix_theme'); sessionStorage.removeItem('motrix_prefs_synced'); sessionStorage.removeItem('motrix_home_done') } catch (e) {}   // 換人登入：前一位的個人偏好快取不留（登入後第一個頁面會向伺服器重新同步）
         localStorage.setItem('motrix_session', JSON.stringify({
           token:       data.token,
           userId:      data.userId,

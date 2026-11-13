@@ -520,6 +520,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "switch_products", "switch_scenarios", "system_settings",
     "t100_export_confirmations", "tender_fetch_log", "tender_hits",
     "tender_watches", "tenders", "user_activity_daily", "user_list_prefs", "user_list_view_prefs",
+    "user_prefs",   # 個人偏好（「我的帳號」票，core 遷移 13）；整張清
     "user_request_log", "users", "vendor_contractors",
     # ── v95 傳票五張（`SPEC-VOUCHER §八`）──────────────────────────
     #

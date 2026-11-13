@@ -210,7 +210,7 @@
             <div class="ns-desc" x-show="wizardNext() !== 'totp'">您可以開始使用了。Logo、據點、收款帳戶等進階設定，隨時能回到這一頁補上。</div>
             <div class="ns-done-actions">
               <template x-if="wizardNext() === 'totp'">
-                <a class="btn btn-primary" data-testid="wizard-next" href="change-password.html?wizard=totp">下一步：兩步驟驗證</a>
+                <a class="btn btn-primary" data-testid="wizard-next" href="my-account.html?wizard=totp">下一步：兩步驟驗證</a>
               </template>
               <template x-if="wizardNext() === 'totp'">
                 <a class="btn btn-ghost" data-testid="wizard-skip" href="../index.html" @click="wizardFinish()">略過，直接開始使用</a>
@@ -325,6 +325,15 @@
               <div class="ns-field">
                 <label>Email</label>
                 <input type="text" x-model="cfg.email" inputmode="email" autocomplete="email" placeholder="例：service@example.com">
+              </div>
+            </div>
+            <!-- 2026-11-13 報價用公司信箱：同仁沒有自己的「報價用公司信箱」時，報價單／PDF／信件的聯絡 Email 用這一個；已開出的報價單不會被改 -->
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label>公司對外信箱 <span style="color:var(--text-dim);font-size:12px">（報價用）</span></label>
+                <input type="text" x-model="cfg.external_email" data-testid="cfg-external-email" placeholder="例：sales@your-company.com">
+                <div class="ns-field-msg" style="color:var(--text-secondary)">有些同仁是用私人信箱註冊的。這裡填公司的對外信箱，這些同仁開報價單時就會自動帶入它；若某位同仁在「使用者管理」另外設了自己的報價用公司信箱，則以他自己的為準。已經開出的報價單不會被改動。</div>
+                <div class="ns-field-msg" x-show="emailHint" x-text="emailHint" data-testid="external-email-hint" style="color:#B45309"></div>
               </div>
             </div>
             <!-- ── 據點（分公司）──────────────────────────────────────
@@ -1053,9 +1062,10 @@
     function companyProfilePage() {
       return {
         session: {},
+        emailHint: '',
         cfg: {
           name: '', tax_id: '', contact_info: '', address: '',
-          company_name_en: '', phone: '', email: '',
+          company_name_en: '', phone: '', email: '', external_email: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
           privacy_notice: '', privacy_notice_contact: '', privacy_notice_user: '',
         },
@@ -1703,7 +1713,7 @@
             // ⚠️ 不重新 GET —— 那會把使用者其他還沒存的欄位蓋掉。
             // 後端會配發 id、並把導出的舊欄位寫好 ⇒ 重新讀一次那一段，
             // 否則下一次存檔會把新據點當成「又一筆新的」再配一個 id。
-            r.clone().json().catch(() => null).then(() => this._reloadLocations())
+            r.clone().json().catch(() => null).then((d) => { this.emailHint = (d && d.emailHint) || ''; return this._reloadLocations() })
             if (this.keyCleared) { this.keySet = false; this.keyMasked = '' }
             else if (this.keyText.trim()) {
               this.keySet = true

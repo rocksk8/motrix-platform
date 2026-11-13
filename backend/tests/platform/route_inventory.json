@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 939,
-  "endpoints_api": 935,
-  "write_total": 505,
-  "write_api": 505,
-  "get_api": 430,
-  "distinct_paths_api": 792,
-  "write_with_body_api": 371,
+  "endpoints_total": 942,
+  "endpoints_api": 938,
+  "write_total": 506,
+  "write_api": 506,
+  "get_api": 432,
+  "distinct_paths_api": 794,
+  "write_with_body_api": 372,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -4709,6 +4709,21 @@
    "body": false
   },
   "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/auth/preferences": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/profile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PUT /api/auth/preferences": {
    "w": true,
    "pp": 0,
    "body": true

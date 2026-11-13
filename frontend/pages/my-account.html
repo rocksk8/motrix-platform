@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>我的帳號 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script src="../static/ux-wizard.js"></script><!-- A1：首次設定精靈外殼（只在 ?forced=1／?wizard=totp 啟用） -->
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:32px;max-width:420px}
+    .form-group{margin-bottom:18px}
+    .form-label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-weight:500}
+    .form-input{width:100%;padding:9px 12px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);font-weight:600;cursor:pointer;transition:background .15s;min-width:110px}
+    .btn-primary:hover{background:var(--accent-hover)}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+    .alert{padding:10px 14px;border-radius:var(--radius);font-size:12px;margin-bottom:16px;line-height:1.5}
+    .alert-err{background:var(--danger-light);color:var(--danger);border:1px solid #FECACA}
+    .alert-ok{background:var(--success-light);color:var(--success);border:1px solid #BBF7D0}
+    .hint{font-size:12px;color:var(--text-dim);margin-top:4px}
+    .pw-hint{font-size:12px;color:var(--warning);margin-top:4px;white-space:pre-line;line-height:1.5}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .card-title{font-size:15px;font-weight:700;margin-bottom:4px}
+    .card-sub{font-size:12px;color:var(--text-secondary);margin-bottom:18px;line-height:1.6}
+    .totp-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px}
+    .totp-on{background:var(--success-light);color:var(--success)}
+    .totp-off{background:#F3F4F6;color:var(--text-dim)}
+    .btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 20px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);font-weight:600;cursor:pointer}
+    .btn-secondary:hover{background:#F9FAFB}
+    .btn-danger-outline{border-color:#FECACA;color:var(--danger)}
+    .totp-qr{display:block;margin:14px 0;border:1px solid var(--border-light);border-radius:var(--radius);width:180px;height:180px}
+    .totp-secret{font-family:monospace;font-size:13px;letter-spacing:.05em;background:#F9FAFB;border:1px solid var(--border-light);border-radius:6px;padding:8px 10px;word-break:break-all;margin-bottom:4px}
+    .recovery-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0;font-family:monospace;font-size:13px}
+    .recovery-code{background:#F9FAFB;border:1px solid var(--border-light);border-radius:6px;padding:6px 10px;text-align:center}
+  </style>
+</head>
+<body x-data="changePwPage()" x-init="init()" x-cloak>
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <div class="page-main">
+
+    <div style="margin-bottom:24px" x-show="!wiz">
+      <div class="pg__eyebrow">系統</div>
+        <h1 class="pg__t">我的帳號</h1>
+    </div>
+
+
+    <div role="tablist" aria-label="我的帳號" data-testid="account-tabs" x-show="!wiz" style="display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 18px;border-bottom:1px solid var(--border-light);overflow-x:auto">
+      <template x-for="tb in tabs" :key="tb.key">
+        <button type="button" role="tab" :aria-selected="tab === tb.key" :data-testid="'tab-btn-' + tb.key" @click="goTab(tb.key)"
+                :style="'padding:10px 14px;border:0;background:none;cursor:pointer;font-size:14px;white-space:nowrap;border-bottom:2px solid ' + (tab === tb.key ? 'var(--accent)' : 'transparent') + ';color:' + (tab === tb.key ? 'var(--accent)' : 'var(--text-secondary)') + ';font-weight:' + (tab === tb.key ? '700' : '500')" x-text="tb.label"></button>
+      </template>
+    </div>
+
+    <div x-show="tab === 'security' || !!wiz" data-testid="tab-security">
+    <div class="card" x-show="wiz !== 'totp'">
+      <div x-show="errMsg" class="alert alert-err" x-text="errMsg"></div>
+      <div x-show="okMsg"  class="alert alert-ok"  x-text="okMsg"></div>
+
+      <form @submit.prevent="submit()" x-show="!okMsg">
+        <div class="form-group">
+          <label class="form-label">目前密碼</label>
+          <input class="form-input" type="password" data-pw-hint x-model="form.current" required autocomplete="current-password" placeholder="輸入目前使用的密碼">
+        </div>
+        <div class="form-group">
+          <label class="form-label">新密碼</label>
+          <input class="form-input" type="password" data-pw-hint x-model="form.newPw" required autocomplete="new-password" placeholder="至少 8 個字元">
+          <div class="hint">至少 8 個字元</div>
+        </div>
+        <div class="form-group" style="margin-bottom:24px">
+          <label class="form-label">確認新密碼</label>
+          <input class="form-input" type="password" data-pw-hint x-model="form.confirm" required autocomplete="new-password" placeholder="再次輸入新密碼">
+        </div>
+        <button class="btn-primary" type="submit" :disabled="submitting">
+          <svg x-show="submitting" style="animation:spin 1s linear infinite" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span x-show="!submitting">更新密碼</span>
+          <span x-show="submitting">更新中…</span>
+        </button>
+      </form>
+    </div>
+
+    <div class="card" :style="wiz === 'totp' ? '' : 'margin-top:20px'" x-show="!totp.loading && wiz !== 'pw'">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <div class="card-title">兩步驟驗證（TOTP）</div>
+        <span class="totp-badge" :class="totp.enabled ? 'totp-on' : 'totp-off'"
+              x-text="totp.enabled ? '已啟用' : '未啟用'"></span>
+      </div>
+      <div class="card-sub">
+        用手機驗證 App（Google Authenticator／Microsoft Authenticator 等）為登入加上第二道防護。
+        <template x-if="!totp.enabled">
+          <span>建議管理員／最高管理者帳號啟用，密碼外洩時仍能擋下未授權登入。</span>
+        </template>
+      </div>
+
+      <div x-show="totp.err" class="alert alert-err" x-text="totp.err"></div>
+
+      <!-- 未啟用、尚未開始設定 -->
+      <template x-if="!totp.enabled && totp.step === 'idle'">
+        <button class="btn-secondary" @click="totpStart()" :disabled="totp.busy">
+          <span x-text="totp.busy ? '產生中…' : '開始設定'"></span>
+        </button>
+      </template>
+
+      <!-- 設定中：顯示 QR code + 密鑰 + 輸入驗證碼確認 -->
+      <template x-if="totp.step === 'confirm'">
+        <div>
+          <div class="hint" style="margin-bottom:6px">用驗證 App 掃描下方 QR code，或手動輸入密鑰：</div>
+          <img class="totp-qr" :src="totp.qr" alt="TOTP QR code">
+          <div class="totp-secret" x-text="totp.secret"></div>
+          <div class="form-group" style="margin-top:14px;margin-bottom:12px">
+            <label class="form-label">驗證 App 顯示的 6 位數驗證碼</label>
+            <input class="form-input" type="text" inputmode="numeric" x-model="totp.code"
+                   placeholder="123456" style="max-width:160px">
+          </div>
+          <button class="btn-primary" @click="totpConfirm()" :disabled="totp.busy">
+            <span x-text="totp.busy ? '驗證中…' : '確認啟用'"></span>
+          </button>
+          <button class="btn-secondary" style="margin-left:8px" @click="totpCancel()">取消</button>
+        </div>
+      </template>
+
+      <!-- 啟用成功：一次性顯示救援碼 -->
+      <template x-if="totp.step === 'recovery'">
+        <div>
+          <!-- 這個畫面被「初次啟用」與「重新產生」兩種情境共用，文案要分開：
+               重產時說「已啟用！」會讓人以為剛剛發生了別的事 -->
+          <div class="alert alert-ok" x-show="!totp.recoveryFromRegen">已啟用！請把下方 10 組救援碼另外存放安全處——手機遺失或驗證 App 移除時可用來登入，畫面關閉後就無法再次查看。</div>
+          <div class="alert alert-ok" x-show="totp.recoveryFromRegen">已重新產生 10 組救援碼，<b>舊的那一批現在全部失效</b>。請把下方新碼另外存放安全處並作廃舊清單——畫面關閉後就無法再次查看。</div>
+          <div class="recovery-grid">
+            <template x-for="c in totp.recoveryCodes" :key="c">
+              <div class="recovery-code" x-text="c"></div>
+            </template>
+          </div>
+          <button class="btn-primary" @click="totpFinishRecovery()">我已儲存救援碼</button>
+        </div>
+      </template>
+
+      <!-- 已啟用、非設定流程中：救援碼存量 + 重新產生 + 停用 -->
+      <template x-if="totp.enabled && totp.step === 'idle'">
+        <div>
+          <!-- 救援碼存量（2026-09-11 新增）：救援碼用一組少一組，先前沒有任何
+               地方看得到還剩幾組，使用者只會在最後一組也用完、驗證 App 又不在
+               手邊時才發現被鎖在外面——而那時已經來不及自助補救。 -->
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border-radius:8px"
+               :style="totp.recoveryRemaining <= 2 ? 'background:#FEF2F2;border:1px solid #FECACA' : (totp.recoveryRemaining <= 4 ? 'background:#FFFBEB;border:1px solid #FDE68A' : 'background:#F9FAFB;border:1px solid var(--border-light)')">
+            <span style="font-size:13px">
+              救援碼剩餘
+              <b class="recovery-remaining" style="font-family:monospace;font-size:15px" x-text="totp.recoveryRemaining"></b>
+              / 10 組
+            </span>
+            <span style="font-size:12px;color:var(--text-dim)"
+                  x-show="totp.recoveryRemaining > 4">手機遺失或驗證 App 移除時可用來登入。</span>
+            <span style="font-size:12px;color:#B45309;font-weight:500"
+                  x-show="totp.recoveryRemaining > 2 && totp.recoveryRemaining <= 4">快用完了，建議現在重新產生。</span>
+            <span style="font-size:12px;color:#B91C1C;font-weight:600"
+                  x-show="totp.recoveryRemaining <= 2">⚠️ 用完之後，驗證 App 不在手邊就會登不進來。請立即重新產生。</span>
+            <button class="btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px"
+                    x-show="!totp.regenerating" @click="totp.regenerating = true">重新產生救援碼</button>
+          </div>
+
+          <template x-if="totp.regenerating">
+            <div style="max-width:340px;margin-bottom:14px">
+              <div class="alert alert-err" style="font-size:12px">
+                重新產生會讓<b>目前這 10 組全部失效</b>（包含還沒用過的）。如果你手上有印出來或存起來的舊清單，產生後請直接作廢整張。
+              </div>
+              <div class="form-group">
+                <label class="form-label">輸入目前密碼以確認</label>
+                <input class="form-input" type="password" data-pw-hint x-model="totp.regenPassword" autocomplete="current-password">
+              </div>
+              <button class="btn-primary" @click="totpRegenerateRecovery()" :disabled="totp.busy">
+                <span x-text="totp.busy ? '產生中…' : '確認重新產生'"></span>
+              </button>
+              <button class="btn-secondary" style="margin-left:8px"
+                      @click="totp.regenerating=false; totp.regenPassword=''">取消</button>
+            </div>
+          </template>
+
+          <template x-if="!totp.disabling">
+            <button class="btn-secondary btn-danger-outline" @click="totp.disabling = true">停用兩步驟驗證</button>
+          </template>
+          <template x-if="totp.disabling">
+            <div style="max-width:280px">
+              <div class="form-group">
+                <label class="form-label">輸入目前密碼以確認停用</label>
+                <input class="form-input" type="password" data-pw-hint x-model="totp.disablePassword" autocomplete="current-password">
+              </div>
+              <button class="btn-secondary btn-danger-outline" @click="totpDisable()" :disabled="totp.busy">
+                <span x-text="totp.busy ? '處理中…' : '確認停用'"></span>
+              </button>
+              <button class="btn-secondary" style="margin-left:8px" @click="totp.disabling=false; totp.disablePassword=''">取消</button>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- Passkey 設備管理 -->
+    <!-- 2026-09-16：功能暫緩期間整張卡片不顯示（連同已綁定的裝置清單）——
+         後端 /api/auth/webauthn/* 全部回 404，留著卡片只會讓人按了拿錯誤。
+         既有憑證資料沒有被刪，恢復開關後清單會原樣回來。 -->
+    <div class="card" style="margin-top:20px" x-show="passkeyFeatureEnabled && !wiz">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <div class="card-title">Passkey 設備</div>
+        <!-- 2026-09-11：全部憑證都因網域變更失效時不能顯示「已設定」——那會讓
+             使用者以為還能用，直到登入失敗才發現。這種狀態要一眼看得出來。 -->
+        <span class="totp-badge"
+              :class="passkeys.list.length > 0 && !passkeys.list.every(p => p.stale) ? 'totp-on' : 'totp-off'"
+              x-text="passkeys.list.length === 0 ? '未設定'
+                      : (passkeys.list.every(p => p.stale) ? '已失效' : '已設定')"></span>
+      </div>
+      <div class="card-sub">
+        用 Windows Hello、Touch ID 或 Security Key 登入——比密碼更安全、更快速的登入方式。
+      </div>
+
+      <div x-show="passkeys.err" class="alert alert-err" x-text="passkeys.err"></div>
+      <div x-show="passkeys.ok" class="alert alert-ok" x-text="passkeys.ok"></div>
+
+      <template x-if="passkeys.list.length === 0">
+        <div style="margin:12px 0;color:#999;font-size:13px">尚未設定任何 Passkey 設備</div>
+      </template>
+
+      <template x-if="passkeys.list.length > 0">
+        <div style="margin:12px 0">
+          <template x-for="pk in passkeys.list" :key="pk.id">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light)">
+              <div>
+                <div style="font-weight:500">
+                  <span x-text="pk.name"></span>
+                  <!-- 2026-09-11：系統網域（RP ID）變更後，既有 Passkey 會失效且
+                       無法復原。登入前的錯誤訊息刻意維持統一（避免用戶枚舉），
+                       所以這裡是使用者唯一能看懂「為什麼突然不能用」的地方。 -->
+                  <span x-show="pk.stale"
+                        style="margin-left:6px;font-size:12px;font-weight:600;color:var(--danger);
+                               background:#FEE2E2;border-radius:4px;padding:1px 6px">已失效</span>
+                </div>
+                <div style="font-size:12px;color:#999" x-text="'建立於 ' + MotrixFormat.date(new Date(pk.created_at))"></div>
+                <div x-show="pk.stale" style="font-size:12px;color:var(--danger);margin-top:2px">
+                  系統網域已變更，這張 Passkey 無法再用於登入（無法復原）。請刪除後重新註冊一張。
+                </div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn-mini" @click="passkeyRenaming = pk.id; passkeyNewName = pk.name" :disabled="passkeys.busy">改名</button>
+                <button class="btn-mini btn-danger-outline" @click="passkeyDelete(pk.id)" :disabled="passkeys.busy">刪除</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <template x-if="passkeyRenaming">
+        <div style="margin:12px 0;padding:12px;background:#F9FAFB;border-radius:6px">
+          <div class="form-group">
+            <label class="form-label">新名稱</label>
+            <input class="form-input" type="text" x-model="passkeyNewName" style="max-width:200px">
+          </div>
+          <button class="btn-primary" @click="passkeyRenameSave()" :disabled="passkeys.busy">
+            <span x-text="passkeys.busy ? '保存中…' : '保存'"></span>
+          </button>
+          <button class="btn-secondary" style="margin-left:8px" @click="passkeyRenaming = null">取消</button>
+        </div>
+      </template>
+
+      <button class="btn-secondary" @click="passkeyRegisterStart()" :disabled="passkeys.busy" x-show="webauthnConfigured">
+        <span x-text="passkeys.busy ? '處理中…' : '新增 Passkey'"></span>
+      </button>
+      <div x-show="!webauthnConfigured" style="font-size:12px;color:var(--text-dim);line-height:1.6">
+        尚未設定 WebAuthn 網域，Passkey 功能暫不可用。請聯繫系統管理員在系統設定中填入 WebAuthn 設定。
+      </div>
+    </div>
+
+    </div>
+
+    <!-- ══ 通知分頁：LINE 綁定卡（hichan-6 的元件原樣沿用，只換容器） ══ -->
+    <div x-show="tab === 'notify' && !wiz" x-cloak data-testid="tab-notify">
+
+    <!-- LINE 通知綁定（T79）：管理員設好 LINE Login 與對外網址之後才顯示。電腦發起、手機掃 QR 授權；綁定的是「目前登入的這個帳號」。
+         獨立元件 lineBindCard()（資料來源 GET/POST/DELETE /api/line/binding*）；不用 x-init（Alpine 會自己叫 init()）。 -->
+    <div class="card" id="line-bind-card" style="margin-top:20px" x-data="lineBindCard()" x-show="available && !wiz" x-cloak>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <div class="card-title">LINE 通知</div>
+        <span class="totp-badge" :class="linked ? 'totp-on' : 'totp-off'" x-text="linked ? '已綁定' : '未綁定'"></span>
+      </div>
+      <div class="card-sub">
+        綁定後，管理員開啟的通知（例如報價單審核中被編輯）除了 Email，也會推播到您的 LINE。綁定只用來辨識您的 LINE 帳號，不會取得您的暱稱或頭像。
+        <b>QR 等同您的綁定權限：不要截圖或分享。</b>若發現不是您本人的手機完成綁定，請立刻按「解除綁定」。
+      </div>
+      <div x-show="err" class="alert alert-err" x-text="err"></div>
+      <div x-show="ok" class="alert alert-ok" x-text="ok"></div>
+      <div x-show="linked && confirmed === false" class="alert alert-err" data-testid="line-unconfirmed">
+        已綁定，但測試訊息沒有送達。常見原因：LINE Login 與 Messaging API 不在同一個 Provider。請通知管理員檢查。
+      </div>
+      <div x-show="linked" class="hint" style="margin-bottom:10px">綁定時間：<span x-text="linkedAt"></span></div>
+
+      <div x-show="qr" style="margin:12px 0">
+        <img class="totp-qr" :src="qr" alt="LINE 綁定 QR code" data-testid="line-qr">
+        <div class="hint">請用手機的相機或 LINE 掃描上方 QR，在手機上按「同意」。10 分鐘內有效；完成後這裡會自動更新。</div>
+        <button class="btn-secondary" style="margin-top:8px" @click="cancel()">取消</button>
+      </div>
+
+      <div x-show="!qr">
+        <button class="btn-secondary" @click="start()" :disabled="busy">
+          <span x-text="busy ? '產生中…' : (linked ? '重新綁定' : '綁定 LINE')"></span>
+        </button>
+        <button class="btn-secondary btn-danger-outline" style="margin-left:8px" x-show="linked" @click="unlink()" :disabled="busy">解除綁定</button>
+      </div>
+
+      <!-- 我要收哪些 LINE 通知（個人勾選；預設全收，可自行退訂；只列「公司已開啟、且我的角色被允許」的類型）。資料來源 GET/PUT /api/line/prefs* -->
+      <div x-show="linked && prefs.length" style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:12px" data-testid="line-prefs">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">我要收的 LINE 通知</div>
+        <template x-for="e in prefs" :key="e.key">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;cursor:pointer">
+            <input type="checkbox" :data-testid="'line-pref-' + e.key" :checked="e.enabled" @change="setPref(e, $event.target.checked)" style="width:15px;height:15px">
+            <span x-text="e.name"></span>
+          </label>
+        </template>
+        <div class="hint" style="margin-top:6px">取消勾選後，這類通知不再推播到您的 LINE（Email 不受影響）。</div>
+      </div>
+      <div x-show="!linked && prefs.length" class="hint" style="margin-top:12px" data-testid="line-prefs-need-link">綁定 LINE 後，可以在這裡選擇要收哪些通知。</div>
+    </div>
+
+      <div class="card" style="margin-top:20px" x-show="lineAvail === false" data-testid="notify-empty-hint" x-cloak>
+        <div class="card-title">通知</div>
+        <div class="card-sub">目前沒有可以自己設定的通知。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的通知。</div>
+      </div>
+    </div>
+
+    <!-- ══ 個人資料分頁 ══ -->
+    <div x-show="tab === 'profile' && !wiz" x-cloak x-data="accountProfile()" data-testid="tab-profile">
+      <div class="card">
+        <div class="card-title">個人資料</div>
+        <div class="card-sub">這些資料由管理者維護，所以這裡只能看、不能改，需要更正請聯絡管理者。報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」，不是這裡的個人 Email。</div>
+        <div x-show="err" class="alert alert-err" x-text="err"></div>
+        <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
+          <div :style="'width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;background:' + avatarBg()" x-text="initial()" data-testid="profile-avatar"></div>
+          <div>
+            <div style="font-weight:700;font-size:16px" x-text="p.displayName || p.username" data-testid="profile-name"></div>
+            <div class="hint" x-text="roleText()" data-testid="profile-role"></div>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label">顯示名稱</label><input class="form-input" type="text" :value="p.displayName" disabled data-testid="profile-displayname"></div>
+        <div class="form-group"><label class="form-label">登入帳號</label><input class="form-input" type="text" :value="p.username" disabled></div>
+        <div class="form-group"><label class="form-label">所屬部門</label><input class="form-input" type="text" :value="p.department || '（尚未歸屬部門）'" disabled></div>
+        <div class="form-group"><label class="form-label">Email（登入與系統通知用）</label><input class="form-input" type="text" :value="p.email || '（未填）'" disabled data-testid="profile-email">
+          <div class="hint">登入與系統通知信會寄到這個信箱，由管理者維護。報價單上帶的是下方的「報價用信箱」。</div></div>
+        <div class="form-group"><label class="form-label">手機／電話</label><input class="form-input" type="text" :value="p.phone || '（未填）'" disabled data-testid="profile-phone">
+          <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
+        <div class="form-group" data-testid="profile-quote-email-group"><label class="form-label">報價用信箱（開報價單時帶入）</label>
+          <input class="form-input" type="text" :value="p.quoteEmailEffective || '（尚未設定）'" disabled data-testid="profile-quote-email">
+          <div class="hint" x-show="p.quoteEmailSource === 'user'">此資料由管理者維護，會顯示在報價單上。這是管理者幫你設定的報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource === 'company'">此資料由管理者維護，會顯示在報價單上。你沒有自己的報價用信箱，所以使用公司對外信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource === 'personal'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定報價用公司信箱：目前報價單會帶入你的個人信箱。請聯絡管理者設定報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company' && p.quoteEmailSource !== 'personal'" data-testid="profile-quote-email-none" style="color:#B45309">尚未設定：目前報價單上不會有你的信箱。請聯絡管理者設定報價用信箱。</div></div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">頭像顏色</div>
+        <div class="card-sub">只改你自己看到的頭像圓圈顏色，不會出現在任何單據上。</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px" data-testid="avatar-colors">
+          <template x-for="c in colors" :key="c.value">
+            <button type="button" class="btn-ghost" :data-testid="'avatar-' + c.value" @click="setColor(c.value)"
+                    :style="'min-width:64px;border:2px solid ' + (color === c.value ? 'var(--accent)' : 'var(--border-light)')">
+              <span :style="'display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:-2px;background:' + (c.value === 'auto' ? '#94A3B8' : swatch(c.value))"></span><span x-text="c.label"></span>
+            </button>
+          </template>
+        </div>
+        <div x-show="ok" class="alert alert-ok" style="margin-top:12px" x-text="ok"></div>
+      </div>
+    </div>
+
+    <!-- ══ 偏好設定分頁 ══ -->
+    <div x-show="tab === 'prefs' && !wiz" x-cloak x-data="accountPrefs()" data-testid="tab-prefs">
+      <div class="card">
+        <div class="card-title">偏好設定</div>
+        <div class="card-sub">只影響你自己看到的畫面，存在伺服器上，換電腦或手機登入也會保留，不會改變報價單或其他單據的內容。</div>
+        <div x-show="err" class="alert alert-err" x-text="err"></div>
+        <template x-for="k in keys" :key="k">
+          <div class="form-group" style="margin-top:14px">
+            <label class="form-label" x-text="opt[k]?.label"></label>
+            <select class="form-input" :data-testid="'pref-' + k" :value="prefs[k]" :disabled="locked(k)" @change="save(k, $event.target.value)">
+              <template x-for="c in (opt[k]?.choices || [])" :key="c.value"><option :value="c.value" :selected="prefs[k] === c.value" x-text="c.label"></option></template>
+            </select>
+            <div class="hint" x-show="locked(k)" style="color:var(--warning)" x-text="lockedMsg[k]" :data-testid="'pref-locked-' + k"></div>
+            <div class="hint" x-show="help[k] && !locked(k)" x-text="help[k]"></div>
+          </div>
+        </template>
+        <div x-show="ok" class="alert alert-ok" style="margin-top:12px" x-text="ok" data-testid="pref-saved"></div>
+      </div>
+    </div>
+
+    <!-- A1 精靈第 3 步：兩步驟驗證可略過；啟用完成也走同一顆「開始使用」 -->
+    <div x-show="wiz === 'totp'" style="margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap" data-testid="wizard-totp-footer">
+      <button type="button" class="btn-primary" data-testid="wizard-finish" @click="wizardFinish()"
+              x-text="totp.enabled ? '完成，開始使用' : '稍後再說，開始使用'"></button>
+      <span style="font-size:12px;color:var(--text-dim)" x-show="!totp.enabled">之後隨時可以到右上角「修改密碼」頁開啟。</span>
+    </div>
+
+  </div>
+
+  <script>
+  /* pw-hint:begin ── 密碼欄位輸入提示（login.html 與 change-password.html 此區逐字相同，守門：test_pw_hint_2026_11_11.py）
+     用法：在 <input> 加 data-pw-hint，且欄位要在 .form-group 之內（提示是欄位的下一個兄弟）。事件委派，所以 x-if 動態長出來的欄位也適用。
+     純前端：不讀欄位的值、不讀按鍵內容、不送出任何資料。
+     ① 大寫鎖定：KeyboardEvent／MouseEvent.getModifierState('CapsLock')，keydown／keyup／mousedown 時判斷。
+        限制：Caps Lock 在「還沒有任何鍵盤或滑鼠事件」時瀏覽器讀不到，所以打開頁面、尚未按任何鍵時不會預先顯示。
+     ② 非英文輸入法：只能抓「正在組字」（compositionstart～compositionend）。不是偵測輸入法圖示的模式：
+        開著中文輸入法卻打純英數（多數輸入法的字母模式不組字）抓不到＝已知限制，不是 bug。
+        另：Windows 上的 Chromium 等瀏覽器預期會在「密碼遮蔽」時直接關掉輸入法（尚待正式機實機確認），
+        若如此，遮蔽狀態下不會組字、這個提示不會出現；按眼睛顯示密碼（欄位變 type=text）後才有作用。大寫鎖定不受影響。
+     欄位失焦（focusout）即收掉；兩種提示各自獨立，同時成立就兩行都顯示。
+     ⚠ 版面：提示出現會把下方元素往下推、收掉會往上跳。滑鼠按著的期間（mousedown→mouseup）不可以動版面，
+        否則 mousedown 把焦點移走→提示被移除→按鈕上跳→mouseup 落在別的元素上→click 不產生（按鈕下緣點不到）。
+        所以滑鼠按著時只把提示「隱藏」（visibility:hidden，高度保留），放開後才真的移除。 */
+  (function () {
+    var MSG_CAPS = '⚠ 大寫鎖定已開啟', MSG_IME = '⚠ 輸入法可能不是英文，請確認'
+    var states = new WeakMap()
+    var mouseDown = false          // 滑鼠按著中：不動版面
+    var pending = []               // 失焦時因滑鼠按著而只隱藏、等放開後才移除的狀態
+    function field(e) {
+      var t = e.target
+      return t && t.nodeType === 1 && t.hasAttribute('data-pw-hint') ? t : null
+    }
+    function state(input) {
+      var s = states.get(input)
+      if (!s) { s = { caps: false, ime: false, el: null }; states.set(input, s) }
+      return s
+    }
+    function render(input) {
+      var s = state(input), lines = []
+      if (s.caps) lines.push(MSG_CAPS)
+      if (s.ime) lines.push(MSG_IME)
+      if (!lines.length || !input.isConnected) {
+        if (!s.el) return
+        if (mouseDown && input.isConnected) {       // 先隱藏、保留高度；放開滑鼠後 flush() 才移除
+          s.el.style.visibility = 'hidden'
+          if (pending.indexOf(s) < 0) pending.push(s)
+        } else { s.el.remove(); s.el = null }
+        return
+      }
+      if (!s.el) {
+        s.el = document.createElement('div')
+        s.el.className = 'pw-hint'
+        s.el.setAttribute('role', 'status')
+        ;(input.closest('.pw-wrap') || input).insertAdjacentElement('afterend', s.el)
+      }
+      s.el.style.visibility = ''
+      var text = lines.join('\n')
+      if (s.el.textContent !== text) s.el.textContent = text   // 沒變就不寫：避免螢幕閱讀器每按一鍵重念
+    }
+    function flush() {
+      mouseDown = false
+      var list = pending; pending = []
+      list.forEach(function (s) {
+        if (s.el && !s.caps && !s.ime) { s.el.remove(); s.el = null }
+        else if (s.el) s.el.style.visibility = ''
+      })
+    }
+    function caps(e) {
+      var input = field(e)
+      if (!input || typeof e.getModifierState !== 'function') return
+      state(input).caps = !!e.getModifierState('CapsLock')
+      render(input)
+    }
+    document.addEventListener('keydown', function (e) { mouseDown = false; if (pending.length) flush(); caps(e) }, true)   // 有鍵盤事件＝滑鼠不在按著（mouseup 遺失時也不會卡住旗標）
+    document.addEventListener('keyup', caps, true)
+    document.addEventListener('mousedown', function (e) { mouseDown = true; caps(e) }, true)
+    document.addEventListener('mouseup', function () { setTimeout(flush, 0) }, true)   // click 緊接在 mouseup 之後；延後一拍再動版面
+    window.addEventListener('blur', flush)
+    document.addEventListener('compositionstart', function (e) {
+      var input = field(e); if (!input) return
+      state(input).ime = true; render(input)
+    }, true)
+    document.addEventListener('compositionend', function (e) {
+      var input = field(e); if (!input) return
+      state(input).ime = false; render(input)
+    }, true)
+    document.addEventListener('focusout', function (e) {
+      var input = field(e); if (!input) return
+      var s = state(input); s.caps = false; s.ime = false; render(input)
+    }, true)
+  })()
+  /* pw-hint:end */
+  </script>
+  <script>
+  // 我的帳號：個人資料（唯讀）／頭像顏色／偏好設定。資料來源 GET /api/auth/profile、GET·PUT /api/auth/preferences（只讀寫自己）。
+  (function () {
+    const hdr = () => ({ Authorization: 'Bearer ' + (JSON.parse(localStorage.getItem('motrix_session') || '{}').token || '') })
+    const SW = { blue: '#2563EB', green: '#16A34A', orange: '#EA580C', red: '#DC2626', purple: '#7C3AED', teal: '#0D9488', gray: '#64748B' }
+    const AUTO = ['#2563EB', '#16A34A', '#EA580C', '#7C3AED', '#0D9488', '#DC2626']
+    function saveLocal(prefs) {
+      try { localStorage.setItem('motrix_prefs', JSON.stringify(prefs)) } catch (e) {}
+      if (window.MotrixPrefs) window.MotrixPrefs.apply(prefs)
+    }
+    async function putPref(patch) {
+      const r = await fetch('/api/auth/preferences', { method: 'PUT', headers: { ...hdr(), 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : '儲存失敗，請稍後再試')
+      saveLocal(d.prefs)
+      return d
+    }
+    window.accountProfile = function () {
+      return {
+        p: { displayName: '', username: '', role: '', department: '', email: '', phone: '', quoteEmail: '', quoteEmailEffective: '', quoteEmailSource: '' },
+        color: 'auto', colors: [], opt: null, err: '', ok: '', _t: null,
+        async init() {
+          const [a, b] = await Promise.all([
+            fetch('/api/auth/profile', { headers: hdr() }).catch(() => null),
+            fetch('/api/auth/preferences', { headers: hdr() }).catch(() => null),
+          ])
+          if (a && a.ok) this.p = await a.json(); else this.err = '個人資料暫時讀不到，請重新整理'
+          if (b && b.ok) {
+            const d = await b.json()
+            this.color = d.prefs.avatar_color || 'auto'
+            this.colors = d.options.avatar_color.choices
+          }
+        },
+        initial() { return ((this.p.displayName || this.p.username || '?').trim()[0] || '?').toUpperCase() },
+        roleText() { return window.MotrixRole ? window.MotrixRole.label(this.p.role) : this.p.role },
+        swatch(v) { return SW[v] || '#94A3B8' },
+        avatarBg() {
+          if (this.color !== 'auto') return this.swatch(this.color)
+          let h = 0; for (const c of (this.p.username || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0
+          return AUTO[h % AUTO.length]
+        },
+        async setColor(v) {
+          this.err = ''; this.ok = ''
+          try { await putPref({ avatar_color: v }); this.color = v; this.ok = '已儲存'; clearTimeout(this._t); this._t = setTimeout(() => { this.ok = '' }, 2500) }
+          catch (e) { this.err = e.message }
+        },
+      }
+    }
+    window.accountPrefs = function () {
+      return {
+        keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, company: {}, err: '', ok: '', _t: null,
+        help: {
+          font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
+          theme: '只是你自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
+          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選別的就以你的選擇為準。',
+          home_page: '每次登入後第一個看到的頁面（只有你的權限看得到的頁面才會生效）。',
+        },
+        // 公司設為「關閉」是總開關：個人選什麼都不會讓問候語出現，所以選單停用並說明原因（個人值照舊保留，公司重新開啟後依個人選擇）
+        lockedMsg: { login_greeting: '公司已關閉登入問候語' },
+        locked(k) { return k === 'login_greeting' && !!(this.company && this.company.login_greeting_off) },
+        async init() {
+          const r = await fetch('/api/auth/preferences', { headers: hdr() }).catch(() => null)
+          if (!r || !r.ok) { this.err = '偏好設定暫時讀不到，請重新整理'; return }
+          const d = await r.json()
+          this.opt = d.options; this.prefs = d.prefs; this.company = d.company || {}
+        },
+        async save(k, v) {
+          this.err = ''; this.ok = ''
+          try {
+            const d = await putPref({ [k]: v })
+            this.prefs = d.prefs
+            this.ok = '已儲存：' + this.opt[k].label
+            clearTimeout(this._t); this._t = setTimeout(() => { this.ok = '' }, 2500)
+          } catch (e) { this.err = e.message; await this.init() }
+        },
+      }
+    }
+  })()
+  </script>
+  <script>
+  function changePwPage() {
+    return {
+      session: {},
+      // A1：首次設定精靈模式（'pw' 設新密碼｜'totp' 兩步驟驗證｜'' 一般修改密碼頁）；由 ux-wizard.js 依網址判定
+      wiz: (window.MotrixWizard && window.MotrixWizard.mode) || '',
+      form: { current: '', newPw: '', confirm: '' },
+      submitting: false,
+      errMsg: '',
+      okMsg: '',
+      webauthnConfigured: false,
+      // 2026-09-16 Passkey 功能暫緩。預設 false：停用是目前的常態，先畫出卡片
+      // 再抽掉會讓使用者以為功能還在（還可能來得及按下去拿 404）；反過來晚一個
+      // round-trip 才出現只是稍慢。恢復功能時端點回 enabled:true，卡片就回來。
+      passkeyFeatureEnabled: false,
+      totp: {
+        loading: true, enabled: false, step: 'idle', busy: false, err: '',
+        secret: '', qr: '', code: '', recoveryCodes: [],
+        disabling: false, disablePassword: '',
+        // 2026-09-11：救援碼存量與重新產生。預設 10 是為了避免狀態還沒載到
+        // 的那一瞬間先閃一下「剩餘 0 組」的紅色警告
+        recoveryRemaining: 10, regenerating: false, regenPassword: '', recoveryFromRegen: false,
+      },
+      passkeys: {
+        list: [], busy: false, err: '', ok: '',
+      },
+      passkeyRenaming: null,
+      passkeyNewName: '',
+
+      // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
+      //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
+      // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
+      //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
+      _initDone: false,
+
+      // 「我的帳號」分頁：?tab=profile|security|notify|prefs（舊網址 change-password.html 會轉到 ?tab=security）
+      tabs: [
+        { key: 'profile', label: '個人資料' }, { key: 'security', label: '帳號安全' },
+        { key: 'notify', label: '通知' }, { key: 'prefs', label: '偏好設定' },
+      ],
+      tab: 'profile',
+      lineAvail: null,      // null＝還沒查到（不顯示空狀態提示，免得閃一下）；false＝管理者沒開 LINE
+      goTab(k) {
+        this.tab = k
+        try { const u = new URL(location.href); u.searchParams.set('tab', k); history.replaceState(null, '', u) } catch (e) {}
+      },
+
+      init() {
+        if (this._initDone) return
+        this._initDone = true
+        const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
+        if (!s?.token) { location.href = '../index.html'; return }
+        this.session = s
+        try {
+          const q = new URLSearchParams(location.search).get('tab')
+          if (this.tabs.some(x => x.key === q)) this.tab = q
+        } catch (e) {}
+        if (this.wiz) this.tab = 'security'
+        fetch('/api/line/binding', { headers: { Authorization: 'Bearer ' + s.token } })
+          .then(r => r.ok ? r.json() : null).then(d => { this.lineAvail = !!(d && d.available) }).catch(() => {})
+        this.loadTotpStatus()
+        // 2026-09-16：先問功能開關，確認還開著才去抓 Passkey 清單。
+        // 停用時 /api/auth/webauthn/credentials 回 404，這裡若照舊無條件呼叫，
+        // 每次進頁面都會在主控台留一筆沒有意義的 404。
+        this.checkWebauthnConfig().then(() => {
+          if (this.passkeyFeatureEnabled) this.loadPasskeys()
+        })
+      },
+
+      async checkWebauthnConfig() {
+        try {
+          const r = await fetch('/api/system/webauthn-config-status')
+          const data = await r.json().catch(() => ({}))
+          this.webauthnConfigured = !!data.configured
+          // 2026-09-16 Passkey 功能暫緩：`enabled:false` 時整張卡片不顯示。
+          // 用 `!== false` 而不是 `!!data.enabled`——舊版後端沒有這個欄位，
+          // 那時要維持原本行為（顯示），不能因為欄位不存在就把卡片藏掉。
+          this.passkeyFeatureEnabled = data.enabled !== false
+        } catch {}
+      },
+
+      async loadPasskeys() {
+        this.passkeys.busy = true
+        try {
+          const r = await fetch('/api/auth/webauthn/credentials', { headers: this._authHeaders() })
+          const data = await r.json().catch(() => [])
+          if (r.ok) this.passkeys.list = data
+        } catch {}
+        this.passkeys.busy = false
+      },
+
+      async loadTotpStatus() {
+        this.totp.loading = true
+        try {
+          const r = await fetch('/api/auth/totp/status', { headers: this._authHeaders() })
+          const data = await r.json().catch(() => ({}))
+          this.totp.enabled = !!data.enabled
+          if (typeof data.recoveryCodesRemaining === 'number') {
+            this.totp.recoveryRemaining = data.recoveryCodesRemaining
+          }
+        } catch {}
+        this.totp.loading = false
+      },
+
+      _authHeaders() {
+        return { Authorization: 'Bearer ' + this.session.token }
+      },
+
+      async totpStart() {
+        this.totp.err = ''
+        this.totp.busy = true
+        try {
+          const r = await fetch('/api/auth/totp/setup', { method: 'POST', headers: this._authHeaders() })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) { this.totp.err = data.detail || '設定失敗，請稍後再試'; this.totp.busy = false; return }
+          this.totp.secret = data.secret
+          this.totp.qr     = data.qrCodePng
+          this.totp.code   = ''
+          this.totp.step   = 'confirm'
+        } catch {
+          this.totp.err = '連線異常，請稍後再試'
+        }
+        this.totp.busy = false
+      },
+
+      totpCancel() {
+        this.totp.step = 'idle'
+        this.totp.code = ''
+        this.totp.err  = ''
+      },
+
+      async totpConfirm() {
+        this.totp.err = ''
+        if (!this.totp.code) { this.totp.err = '請輸入驗證碼'; return }
+        this.totp.busy = true
+        try {
+          const r = await fetch('/api/auth/totp/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+            body: JSON.stringify({ code: this.totp.code.trim() })
+          })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) { this.totp.err = data.detail || '驗證碼不正確'; this.totp.busy = false; return }
+          this.totp.enabled           = true
+          this.totp.recoveryFromRegen = false
+          this.totp.recoveryCodes     = data.recoveryCodes
+          this.totp.recoveryRemaining = (data.recoveryCodes || []).length
+          this.totp.step              = 'recovery'
+        } catch {
+          this.totp.err = '連線異常，請稍後再試'
+        }
+        this.totp.busy = false
+      },
+
+      totpFinishRecovery() {
+        this.totp.step          = 'idle'
+        this.totp.secret        = ''
+        this.totp.qr            = ''
+        this.totp.code          = ''
+        this.totp.recoveryCodes = []
+        this.totp.recoveryFromRegen = false
+      },
+
+      async totpRegenerateRecovery() {
+        // 與停用同一個態度對待：需要目前密碼。成功後直接重用「一次性顯示
+        // 救援碼」那個畫面（step='recovery'），使用者看到的流程跟當初啟用時一模一樣，
+        // 不用再學一次。明文只會出現這一次，DB 只存雜湊。
+        this.totp.err = ''
+        if (!this.totp.regenPassword) { this.totp.err = '請輸入目前密碼'; return }
+        this.totp.busy = true
+        try {
+          const r = await fetch('/api/auth/totp/recovery-codes/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+            body: JSON.stringify({ password: this.totp.regenPassword })
+          })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) { this.totp.err = data.detail || '重新產生失敗'; this.totp.busy = false; return }
+          this.totp.recoveryCodes     = data.recoveryCodes || []
+          this.totp.recoveryRemaining = (data.recoveryCodes || []).length
+          this.totp.regenerating      = false
+          this.totp.recoveryFromRegen = true
+          this.totp.regenPassword     = ''
+          this.totp.step              = 'recovery'
+        } catch {
+          this.totp.err = '連線異常，請稍後再試'
+        }
+        this.totp.busy = false
+      },
+
+      async totpDisable() {
+        this.totp.err = ''
+        if (!this.totp.disablePassword) { this.totp.err = '請輸入目前密碼'; return }
+        this.totp.busy = true
+        try {
+          const r = await fetch('/api/auth/totp/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+            body: JSON.stringify({ password: this.totp.disablePassword })
+          })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) { this.totp.err = data.detail || '密碼不正確'; this.totp.busy = false; return }
+          this.totp.enabled        = false
+          this.totp.disabling      = false
+          this.totp.disablePassword = ''
+        } catch {
+          this.totp.err = '連線異常，請稍後再試'
+        }
+        this.totp.busy = false
+      },
+
+      async passkeyRegisterStart() {
+        this.passkeys.err = ''
+        this.passkeys.busy = true
+        try {
+          const r = await fetch('/api/auth/webauthn/register/begin', { method: 'POST', headers: this._authHeaders() })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) { this.passkeys.err = data.detail || '開始失敗'; this.passkeys.busy = false; return }
+          const opts = data.options
+          // 後端回傳的 options 裡，所有二進位欄位都是 base64 字串，瀏覽器要的是
+          // ArrayBuffer——每一個都要轉，漏一個就是一句看不懂的 TypeError。
+          if (typeof opts.challenge === 'string') opts.challenge = this._b64ToUint8Array(opts.challenge)
+          if (opts.user && typeof opts.user.id === 'string') opts.user.id = this._b64ToUint8Array(opts.user.id)
+          // 2026-09-11：這裡原本漏了 excludeCredentials。它是「已經註冊過的認證器」
+          // 清單，用來擋同一個認證器重複註冊——**帳號還沒有任何 Passkey 時是空陣列，
+          // 所以完全看不出問題**，等使用者成功註冊第一張之後，第二次註冊才會炸：
+          //   Failed to read the 'id' property from 'PublicKeyCredentialDescriptor':
+          //   The provided value is not of type '(ArrayBuffer or ArrayBufferView)'
+          // login.html 對 allowCredentials 一直都有做同樣的轉換，只有這裡漏掉。
+          if (Array.isArray(opts.excludeCredentials)) {
+            opts.excludeCredentials = opts.excludeCredentials.map(c => ({
+              ...c, id: typeof c.id === 'string' ? this._b64ToUint8Array(c.id) : c.id
+            }))
+          }
+          const cred = await navigator.credentials.create({ publicKey: opts })
+          if (!cred) { this.passkeys.err = '已取消'; this.passkeys.busy = false; return }
+          await this.passkeyRegisterComplete(data.challengeToken, cred)
+        } catch (e) {
+          this.passkeys.err = e.message || '註冊失敗'
+        }
+        this.passkeys.busy = false
+      },
+
+      async passkeyRegisterComplete(token, cred) {
+        try {
+          const body = {
+            challengeToken: token,
+            id: cred.id,
+            // WebAuthn 規格的 credential 一定帶 type（恆為 "public-key"），
+            // py_webauthn 會驗它，少了就是 InvalidJSONStructure。2026-09-10 補。
+            type: cred.type || 'public-key',
+            rawId: this._uint8ArrayToB64(new Uint8Array(cred.rawId)),
+            response: {
+              clientDataJSON: this._uint8ArrayToB64(new Uint8Array(cred.response.clientDataJSON)),
+              attestationObject: this._uint8ArrayToB64(new Uint8Array(cred.response.attestationObject)),
+            }
+          }
+          const r = await fetch('/api/auth/webauthn/register/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+            body: JSON.stringify(body)
+          })
+          if (!r.ok) { const d = await r.json().catch(() => ({})); this.passkeys.err = d.detail || '註冊失敗'; return }
+          this.passkeys.ok = '已新增 Passkey！'
+          await this.loadPasskeys()
+        } catch (e) {
+          this.passkeys.err = e.message || '連線失敗'
+        }
+      },
+
+      async passkeyRenameSave() {
+        this.passkeys.err = ''
+        if (!this.passkeyNewName) return
+        this.passkeys.busy = true
+        try {
+          const r = await fetch(`/api/auth/webauthn/credentials/${this.passkeyRenaming}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+            body: JSON.stringify({ name: this.passkeyNewName })
+          })
+          if (!r.ok) { const d = await r.json().catch(() => ({})); this.passkeys.err = d.detail || '改名失敗'; }
+          else { this.passkeys.ok = '已改名'; this.passkeyRenaming = null; await this.loadPasskeys() }
+        } catch { this.passkeys.err = '連線失敗' }
+        this.passkeys.busy = false
+      },
+
+      async passkeyDelete(id) {
+        if (!confirm('確認要刪除此 Passkey 嗎？')) return
+        this.passkeys.err = ''
+        this.passkeys.busy = true
+        try {
+          const r = await fetch(`/api/auth/webauthn/credentials/${id}`, {
+            method: 'DELETE',
+            headers: this._authHeaders()
+          })
+          if (!r.ok) { const d = await r.json().catch(() => ({})); this.passkeys.err = d.detail || '刪除失敗'; }
+          else { this.passkeys.ok = '已刪除'; await this.loadPasskeys() }
+        } catch { this.passkeys.err = '連線失敗' }
+        this.passkeys.busy = false
+      },
+
+      _b64ToUint8Array(b64) {
+        // WebAuthn 使用 URL-safe base64（用 - 和 _ 替代 + 和 /），轉換為標準 base64
+        const std64 = b64.replace(/-/g, '+').replace(/_/g, '/')
+        const binary = atob(std64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return bytes
+      },
+
+      _uint8ArrayToB64(bytes) {
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        // 轉回 URL-safe base64 供 WebAuthn 使用
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+      },
+
+      async submit() {
+        this.errMsg = ''
+        if (this.form.newPw !== this.form.confirm) {
+          this.errMsg = '新密碼與確認密碼不一致'
+          return
+        }
+        if (this.form.newPw.length < 8) {   // 2026-09-14：與後端 MIN_PASSWORD_LEN = 8 對齊
+          this.errMsg = '新密碼至少需要 8 個字元'
+          return
+        }
+        this.submitting = true
+        try {
+          const r = await fetch('/api/auth/change-password', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + this.session.token
+            },
+            body: JSON.stringify({
+              current_password: this.form.current,
+              new_password: this.form.newPw
+            })
+          })
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) {
+            this.errMsg = data.detail || '更新失敗，請稍後再試'
+          } else {
+            this.okMsg = this.wiz === 'pw'
+              ? '步驟 1 完成！密碼已更新，2 秒後請用新密碼重新登入，接著進行下一步。'
+              : '密碼已更新！2 秒後將重新登入…'
+            setTimeout(() => {
+              localStorage.removeItem('motrix_session')
+              location.href = '../index.html'
+            }, 2000)
+          }
+        } catch {
+          this.errMsg = '連線異常，請稍後再試'
+        } finally {
+          this.submitting = false
+        }
+      },
+
+      // A1 第 3 步結束（啟用或略過）：清精靈旗標，回儀表板
+      wizardFinish() {
+        if (window.MotrixWizard && window.MotrixWizard.finish) window.MotrixWizard.finish()
+        location.href = '../index.html'
+      },
+
+      logout() {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).finally(() => {
+          localStorage.removeItem('motrix_session')
+          location.href = '../index.html'
+        })
+      }
+    }
+  }
+  </script>
+  <script>
+  // LINE 綁定卡片（T79）。流程見 backend/helpers/line_login.py：電腦按「綁定」→ 顯示 QR → 手機授權 → 這裡輪詢到「已綁定」。
+  function lineBindCard() {
+    const hdr = () => {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return { Authorization: 'Bearer ' + s.token }
+    }
+    return {
+      available: false, linked: false, linkedAt: '', confirmed: null,
+      qr: '', busy: false, err: '', ok: '', _timer: null, _until: 0, _before: '', prefs: [],
+      async init() { await this.load() },
+      async load() {
+        const r = await fetch('/api/line/binding', { headers: hdr() })
+        if (!r.ok) return
+        const d = await r.json()
+        this.available = !!d.available; this.linked = !!d.linked; this.linkedAt = d.linkedAt || ''; this.confirmed = d.confirmed
+        if (this.available) await this.loadPrefs()
+      },
+      async loadPrefs() {
+        const r = await fetch('/api/line/prefs', { headers: hdr() })
+        if (r.ok) this.prefs = (await r.json()).events || []
+      },
+      async setPref(e, on) {
+        this.err = ''; this.ok = ''
+        const r = await fetch('/api/line/prefs/' + encodeURIComponent(e.key), { method: 'PUT', headers: { ...hdr(), 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }) })
+        if (r.ok) { e.enabled = on; this.ok = (on ? '已恢復：' : '已取消：') + e.name }
+        else { const d = await r.json().catch(() => ({})); this.err = d.detail || '更新失敗'; await this.loadPrefs() }
+      },
+      async start() {
+        this.err = ''; this.ok = ''; this.busy = true
+        const r = await fetch('/api/line/binding/start', { method: 'POST', headers: hdr() })
+        this.busy = false
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.err = d.detail || '無法發起綁定'; return }
+        this.qr = d.qrCodePng; this._before = this.linkedAt; this._until = Date.now() + (d.expiresIn || 600) * 1000
+        this._poll()
+      },
+      _poll() {
+        clearInterval(this._timer)
+        this._timer = setInterval(async () => {
+          await this.load()
+          if (this.linked && this.linkedAt !== this._before) { this._stop(); this.ok = '綁定完成'; return }
+          if (Date.now() > this._until) { this._stop(); this.err = '綁定已逾時，請重新操作' }
+        }, 3000)
+      },
+      _stop() { clearInterval(this._timer); this._timer = null; this.qr = '' },
+      cancel() { this._stop() },
+      async unlink() {
+        this.err = ''; this.ok = ''; this.busy = true
+        const r = await fetch('/api/line/binding', { method: 'DELETE', headers: hdr() })
+        this.busy = false
+        if (r.ok) { this.ok = '已解除綁定'; await this.load() } else { this.err = '解除失敗' }
+      },
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

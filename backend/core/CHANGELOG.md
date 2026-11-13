@@ -16,6 +16,13 @@
 - 串接點（新增）：IP-DB1 `dashboard.mine_groups`（各模組 → L1 `dashboard_mine`；分組由使用者實際權限決定、`href` 白名單）、IP-GR1 `greeting.new_quotes`（M01 → L1 問候語；L1 不直接讀 `quotations` 表）。
 - 行為變更：`routers/auth.py::_issue_session` 登入成功時記錄登入時間（永不丟例外）；顯示名稱表新增情境 `voucher`（傳票維持「待審核」）。
 - 測試：`tests/test_login_greeting_2026_11_13.py`、`test_dashboard_mine_2026_11_13.py`、`test_approval_queue_single_source_2026_11_13.py`、`test_brand_tagline_2026_11_13.py`、e2e 三支。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-myaccount；「我的帳號」＋報價用公司信箱：L1 新增 `helpers.user_prefs`、`helpers.quote_email`）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：
+  - `helpers.user_prefs`（`SCHEMA／TABLE／PrefError／defaults／get／get_all／set_many／validate`）——個人偏好（字級、外觀、登入問候語、登入後首頁、頭像色），每人每鍵一列；白名單驗證，只讀寫呼叫者自己的列。
+  - `helpers.quote_email`（`valid／domain_hint／resolve／resolve_for_row／resolve_for_user_id／company_external_email／enforce_sales_email／reply_to_for_quote／PROFILE_KEY`）——報價用公司信箱三層解析（使用者設定 → 公司對外信箱 → 個人信箱）；`enforce_sales_email` 在儲存報價單時由伺服器驗證業務員信箱快照；`reply_to_for_quote` 供報價相關通知信加 Reply-To。
+- core migration：13＝`user_prefs`、14＝`users.quote_email`（編號已佔用，其他分支請從 15 起；見 `core/migrations.py` 註解）。
+- 行為變更：每日 JSON 備份新增「個人偏好」；刪除使用者時連帶清除其 `user_prefs`；`/api/auth/profile`、`/api/auth/preferences` 列入「本公司資料未設定」放行清單（皆有理由）。
+- 測試：`tests/test_my_account_prefs_2026_11_13.py`、`tests/test_quote_email_2026_11_13.py`、`tests/test_e2e_my_account_2026_11_13.py`。
 
 ## 1.162 — 2026-11-13（feat/line-events-all；LINE 全信件接線＋誰要發＋綁定狀況）〔train_number：1.161 → 1.162〕
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.line_catalog`（`LINE_ONLY_EVENTS`／`GROUP_ORDER`／`EXCLUDED_*`／`group_of`／`kind_of`／`mail_key_of`／`name_of`／`exclusion_reason`／`is_known`）、`helpers.line_binding`（`status`／`remind`）；`helpers.line_notify` 加 `DEFAULT_EVENT_SPEC`／`event_spec`／`is_wired`／`wired_events`／`audience_view`／`set_audience`／`AUDIENCE_MODES`／`MAX_AUDIENCE_USERS`，`WIRED_EVENTS` 改為由「信件登記表」推導（惰性物件），`deliver_event`／`notify_event` 多選填關鍵字 `group`；`helpers.line_recipients` 加 `audience_of`／`audience_view`／`resolve_audience`／`visible_to`／`allowed_roles_view`；`helpers.event_audience.group_usernames`／`resolve_usernames` 多選填關鍵字 `mail_key`；`helpers.email_notify.notify_module_activity` 多 `line_event`／`line_usernames`／`line_exclude`／`line_skip`（信件完全不變）。

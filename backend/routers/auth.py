@@ -364,6 +364,7 @@ class UserIn(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    quote_email: Optional[str] = None      # 2026-11-13 報價用公司信箱（建立／修改使用者都只有最高管理者能呼叫）
     role: Optional[str] = None
     modules: Optional[List[str]] = None
     notification_muted: Optional[List[str]] = None
@@ -1688,7 +1689,7 @@ def list_users(authorization: str = Header(None)):
     full_view = caller["role"] in ("superadmin", "admin")             # 第 47 班（使用者裁示）：只有管理員以上看得到全部人的聯絡方式／權限勾選／信件退訂
     conn = get_db()
     rows = conn.execute("""
-        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
+        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.quote_email, u.modules,
                u.notification_muted, u.active, u.created_at,
                u.department_id, dep.name AS department_name,
                dep.division_id, dv.name AS division_name
@@ -1699,6 +1700,8 @@ def list_users(authorization: str = Header(None)):
     """).fetchall()
     conn.close()
     from helpers.startup import builtin_admin_username
+    from helpers import quote_email as _quote_email
+    _company_ext = _quote_email.company_external_email()
     builtin = builtin_admin_username()
     result = []
     for r in rows:
@@ -1712,11 +1715,25 @@ def list_users(authorization: str = Header(None)):
         d["departmentName"]      = d.pop("department_name")
         d["divisionId"]          = d.pop("division_id")
         d["divisionName"]        = d.pop("division_name")
+        # 2026-11-13 報價用公司信箱：三層解析結果（使用者設定 → 公司對外信箱 → 個人信箱）；報價單／估價單填入業務員資料時用 quoteEmailEffective
+        _qe = _quote_email.resolve(d.get("quote_email"), _company_ext, d.get("email"))
+        d["quoteEmail"]          = d.pop("quote_email") or ""
+        d["quoteEmailEffective"] = _qe["email"]
+        d["quoteEmailSource"]    = _qe["source"]
         if not full_view and d["username"] != caller["username"]:        # 一般人員：別人的 Email／電話／權限勾選／信件退訂不給（自己的那一列照舊，個人設定頁與報價單帶入業務員資料要用）
-            for _k in ("email", "phone", "modules", "notificationMuted"):
+            for _k in ("email", "phone", "modules", "notificationMuted", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"):
                 d.pop(_k, None)
         result.append(d)
     return result
+
+
+def _checked_quote_email(v):
+    """報價用公司信箱：空字串＝清除；有值就要是正確的 Email 格式（否則 400，先驗再寫）。網域提醒只在畫面上顯示，不阻擋。"""
+    from helpers import quote_email as _qe
+    s = str(v or "").strip()
+    if s and not _qe.valid(s):
+        raise HTTPException(400, "報價用公司信箱的格式不正確（例：name@your-company.com）")
+    return s
 
 
 @router.post("/api/users", status_code=201)
@@ -1729,6 +1746,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     if is_weak_password(body.password):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
+    _qe_new = _checked_quote_email(body.quote_email)
     refuse_unknown_new_keys(body.modules)
     if body.role is not None and body.role not in VALID_ROLES:          # 第42班：角色只能是已知值（含 finance）
         raise HTTPException(400, "不認得的角色：%s" % body.role)
@@ -1741,8 +1759,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     try:
         conn.execute("""
             INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password, department_id)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
+                               notification_muted, active, created_at, must_change_password, department_id, quote_email)
+            VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?)
         """, (
             body.username.strip(),
             _hash_pw(body.password),
@@ -1754,6 +1772,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
             body.department_id or None,
+            _qe_new or '',
         ))
         conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -1813,6 +1832,13 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
     if body.email        is not None: sets.append("email=?");        params.append(body.email)
     if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
+    if body.quote_email  is not None:
+        try:
+            _qe_val = _checked_quote_email(body.quote_email)
+        except HTTPException:
+            conn.close()
+            raise
+        sets.append("quote_email=?"); params.append(_qe_val)
     if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
     if body.notification_muted is not None:
         # 個人退訂只接受登記過的信件類型（CORE-SPEC 信件收件人④）：打錯字或不存在的 key 存進去不會有任何效果，
@@ -1907,6 +1933,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     uname  = row["username"]
     ulabel = row["display_name"] or uname
     try:
+        conn.execute("DELETE FROM user_prefs WHERE user_id=?", (user_id,))      # 個人偏好跟著帳號走：帳號刪了就清（避免新帳號沿用舊 id 的偏好）；刪不成功（有關聯資料）時下面整筆 rollback
         conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         conn.commit()
@@ -1965,12 +1992,16 @@ def users_sales_contact(username: str = Query(..., min_length=1, max_length=64),
     require_any_module(user, ["quotation"], "報價單")
     conn = get_db()
     try:
-        row = conn.execute("SELECT id, display_name, username, phone, email FROM users WHERE username=? AND active=1", (username,)).fetchone()
+        row = conn.execute("SELECT id, display_name, username, phone, email, quote_email FROM users WHERE username=? AND active=1", (username,)).fetchone()
     finally:
         conn.close()
     if not row:
         raise HTTPException(404, "找不到這位報價人")
-    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or ""}
+    from helpers import quote_email as _qe
+    eff = _qe.resolve_for_row(row)               # 報價用信箱：使用者設定 → 公司對外信箱 → 個人信箱
+    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or "",
+            "quoteEmailEffective": eff["email"], "quoteEmailSource": eff["source"],
+            "quoteEmail": eff["email"]}        # 舊欄位名（值＝解析後的信箱）保留一版以相容；新程式一律讀 quoteEmailEffective，下一版移除
 
 
 @router.get("/api/users/selectable")
