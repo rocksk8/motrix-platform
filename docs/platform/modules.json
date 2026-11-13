@@ -368,6 +368,7 @@
    "/api/attachment-slots",
    "/api/audit-log",
    "/api/auth",
+   "/api/bootstrap",
    "/api/build-info",
    "/api/company",
    "/api/customers",
