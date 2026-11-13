@@ -74,6 +74,19 @@ def _approval_row():
         conn.close()
 
 
+def _wizard_flag(on):
+    """一條龍 P2b `onepipe.receive_wizard`（預設開）。本檔主流程驗**舊的**「確認到貨」按鈕（旗標關＝與改版前逐位元相同），所以主流程先關；
+    新的一站式到貨由本檔最後一題 `test_receive_wizard_consumable_in_the_browser` 另外驗。"""
+    import db
+    from helpers import settings_groups, settings_registry as SR       # noqa: F401
+    c = db.get_db()
+    try:
+        SR.publish("onepipe", {"receive_wizard": 1 if on else 0}, reason="e2e", user="ma-e2e", conn=c)
+        c.commit()
+    finally:
+        c.close()
+
+
 def _open_finance(page, base):
     page.goto(f"{base}/pages/case-management.html?q={NO}")
     page.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
@@ -105,6 +118,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     finally:
         conn.close()
 
+    _wizard_flag(False)                                                                     # 舊的「確認到貨」流程（一站式到貨另有專題）
     page = e2e_browser.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -210,4 +224,61 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.check('[data-testid="mat-arrived"]')
     _wait_db(page, lambda c: c["materials"][0].get("arrived") is True, "已到料已存")
     _shot(page, "06-arrived")
+    assert not errors, errors
+
+
+def _wait_qty(page, want, timeout=20):
+    import db
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        c = db.get_db()
+        try:
+            r = c.execute("SELECT received_on, received_qty FROM case_material_approvals WHERE quote_no=?", ("MQ-MA-WIZ",)).fetchone()
+        finally:
+            c.close()
+        if r and r["received_qty"] == want:
+            return dict(r)
+        page.wait_for_timeout(300)                                                           # 不用 time.sleep（見 _wait_db 的說明）
+    raise AssertionError("已到數量沒有達到 %s" % want)
+
+
+@pytest.mark.e2e
+def test_receive_wizard_consumable_in_the_browser(live_server, make_user, e2e_browser):
+    """一條龍 P2b（旗標預設開）：已核准的材料申請用「到貨登載」分兩批登載耗材到貨（不需要庫存權限）；
+    已到數量累計、全數到齊後登載鈕消失、剩撤銷。"""
+    import db
+    adm, ap = make_user(username="e2e_wiz_adm", role="superadmin")
+    data = {"dealTag": "已成案", "caseRecord": {"materialOrders": [{"itemId": "i1", "itemName": "耗材線材", "quantity": 3, "unitPrice": 10, "totalPrice": 30}]}}
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR REPLACE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag, quote_date)"
+                  " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                  ("MQ-MA-WIZ", "已送出", "到貨客", "到貨專", 100, 95, json.dumps(data, ensure_ascii=False), "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "2026-01-01"))
+        c.execute("INSERT OR REPLACE INTO case_material_approvals (quote_no, item_id, doc_code, status, received_on) VALUES (?,?,?,?,?)", ("MQ-MA-WIZ", "i1", "MO-WIZ-1", "已核准", ""))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, adm, ap)
+    page.goto(f"{live_server}/pages/case-management.html?q=MQ-MA-WIZ")
+    page.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
+    page.click('.cm-tab:has-text("財務")')
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-wiz-open"]', timeout=20000)
+    page.click(f'{PANEL} [data-testid="mo-wiz-open"]')
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-wiz-submit"]', state="visible", timeout=10000)
+    page.select_option(f'{PANEL} [data-testid="mo-wiz-mode"]', "consumable")
+    page.fill(f'{PANEL} [data-testid="mo-wiz-day"]', "2031-03-06")
+    page.fill(f'{PANEL} [data-testid="mo-wiz-qty"]', "2")
+    page.click(f'{PANEL} [data-testid="mo-wiz-submit"]')
+    first = _wait_qty(page, 2.0)
+    assert first["received_on"] == "2031-03-06"
+    page.wait_for_function("() => (document.querySelector('#fin-material-orders [data-testid=mo-wiz-msg]')?.innerText || '').includes('已到 2／3')", timeout=15000)
+    assert page.locator(f'{PANEL} [data-testid="mo-wiz-open"]').first.is_visible()          # 還沒到齊 ⇒ 還能再登載
+    page.fill(f'{PANEL} [data-testid="mo-wiz-qty"]', "1")
+    page.click(f'{PANEL} [data-testid="mo-wiz-submit"]')
+    _wait_qty(page, 3.0)
+    page.wait_for_function("() => !document.querySelector('#fin-material-orders [data-testid=mo-wiz-open]') || document.querySelector('#fin-material-orders [data-testid=mo-wiz-open]').offsetParent === null", timeout=15000)
+    assert page.locator(f'{PANEL} [data-testid="mo-recv-undo"]').first.is_visible()          # 到齊 ⇒ 登載鈕隱藏、剩撤銷
     assert not errors, errors
