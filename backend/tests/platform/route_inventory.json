@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 959,
-  "endpoints_api": 955,
-  "write_total": 517,
-  "write_api": 517,
-  "get_api": 438,
-  "distinct_paths_api": 811,
-  "write_with_body_api": 382,
+  "endpoints_total": 962,
+  "endpoints_api": 958,
+  "write_total": 519,
+  "write_api": 519,
+  "get_api": 439,
+  "distinct_paths_api": 814,
+  "write_with_body_api": 384,
   "write_with_path_param_api": 364
  },
  "select_star": {
@@ -4809,6 +4809,21 @@
    "body": true
   },
   "PUT /api/menu/settings-help/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/settings/email-notify/providers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/settings/email-notify/wizard/activate": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/email-notify/wizard/test-me": {
    "w": true,
    "pp": 0,
    "body": true

@@ -49,6 +49,12 @@
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.getting_started`（`STEPS`、`STEP_IDS`、`STATE_KEY`、`MANUAL_DONE_IDS`、`BACKUP_HREF`、`BACKUP_OK_ACTIONS`、`EMAIL_TEST_ACTION`、`overview`、`set_step`）——每步的自動偵測（只讀）＋存在 `system_settings.getting_started_v1` 的人工旗標（略過／手動確認）。
 - 新端點（只限最高管理者）：`GET /api/getting-started`、`PUT /api/getting-started/steps/{step_id}`；新頁 `getting-started.html`、系統中心卡片 `getting-started`、系統中心進度卡 `static/getting-started-card.js`。不改既有設定值、欄位、API。
 - 測試：`tests/test_getting_started_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/menu-ux-3；選單去工程師化 批 3：寄信帳號精靈）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.email_setup`（`PROVIDERS`、`provider_list`、`provider_by_key`、`valid_email`、`normalize_password`、`validate_config`、`config_fingerprint`、`classify_error`、`build_ticket`）——寄信帳號精靈的供應商清單、設定檢查、失敗分類與「設定單」。
+- L1（相容擴充）：`helpers.email_notify._send_raising` 新增選填參數 `ignore_enabled=False`（精靈在啟用前寄測試信用）與 `cfg=None`（精靈拿候選設定直接測試、不先存進系統設定）；既有呼叫不受影響。
+- 行為變更：寄信連線改走共用的 `_smtp_open`——埠 465 用 SMTP_SSL、其餘用 STARTTLS（原本一律 STARTTLS，465 的信箱寄不出去）。
+- 新端點：`GET /api/settings/email-notify/providers`、`POST /api/settings/email-notify/wizard/test-me`、`POST /api/settings/email-notify/wizard/activate`；`PUT /api/settings/email-notify` 加格式驗證（422）。
+- 行為變更（hichan-3 審查 C／D／E／F）：測試信用候選設定寄、**測試失敗不動正在用的設定**，按「我收到了」才寫入；`PUT` 由未啟用改啟用必須有同一份設定 24 小時內的測試證明（否則 422）；`PUT` 缺欄位改為併入現有設定（不再重設成預設）；`test-me` 每帳號 10 分鐘最多 5 次、埠限 25／465／587／2525（內網主機仍可，回應不回原始錯誤）。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

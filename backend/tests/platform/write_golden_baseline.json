@@ -279,6 +279,18 @@
   ],
   "s": 201
  },
+ "POST /api/settings/email-notify/wizard/activate": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/settings/email-notify/wizard/test-me": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "POST /api/settings/line-notify/bindings/remind": {
   "k": [
    "detail"
