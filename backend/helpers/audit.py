@@ -60,7 +60,13 @@ _DOC_TARGET_TYPES = frozenset({
 _FAIL_REASON_LABELS = {
     "permission_denied": "沒有權限", "not_found_or_hidden": "找不到或看不到", "conflict": "狀態衝突",
     "validation": "資料不合格", "gate_blocked": "被閘門擋下", "server_error": "系統錯誤", "login_failed": "登入失敗",
+    # 2026-11-12 登入失敗告警票：密碼以外的登入失敗來源（`_audit_login_failed` 的 reason_code；action 一律 auth.login_failed）
+    "totp_failed": "驗證碼錯誤（兩步驟）", "qr_failed": "QR 核准失敗", "passkey_failed": "Passkey 驗證失敗",
+    # 2026-11-12 外網登入強化票：單一帳號鎖定／外網強制兩步驟（helpers/account_lock.py、routers/auth.py 的稽核列 reason_code）
+    "account_locked": "帳號登入失敗過多而鎖定", "ext_totp_required": "外網登入須先啟用兩步驟驗證",
 }
+#: 登入失敗稽核列的來源 ⇒ reason_code（密碼維持歷史值 login_failed，既有查詢與報表不變）
+LOGIN_FAIL_REASONS = {"password": "login_failed", "totp": "totp_failed", "qr": "qr_failed", "passkey": "passkey_failed"}
 _FAIL_STATUS_REASON = {403: "permission_denied", 404: "not_found_or_hidden", 409: "conflict", 422: "validation",
                        428: "gate_blocked", 500: "server_error", 401: "login_failed"}
 #: 這些狀態碼的寫入請求才記失敗列（不記 GET、不記 401 過期——登入失敗另走 `_audit_login_failed`）
@@ -427,11 +433,15 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
         return "error"
 
 
-def _audit_login_failed(username: str, ip: str = "", now: float = None) -> str:
-    """登入失敗（401）：記嘗試的帳號名與來源 IP，**不記密碼**。同帳號＋同 IP 60 秒限流（累加 repeat）。"""
+def _audit_login_failed(username: str, ip: str = "", now: float = None, source: str = "password") -> str:
+    """登入失敗（401）：記嘗試的帳號名與來源 IP，**不記密碼／驗證碼／token**。同帳號＋同 IP＋同來源 60 秒限流（累加 repeat）。
+    `source`：password（預設，reason_code=login_failed，歷史行為）／totp／qr／passkey（reason_code 見 `LOGIN_FAIL_REASONS`，detail 多一個 method）；
+    不認得的來源當 password（reason_code 只收固定詞彙）。"""
     try:
+        source = source if source in LOGIN_FAIL_REASONS else "password"
+        reason_code = LOGIN_FAIL_REASONS[source]
         mono = time.monotonic() if now is None else now
-        key = ("login", (username or "")[:64], ip or "")
+        key = ("login", (username or "")[:64], ip or "") if source == "password" else ("login", (username or "")[:64], ip or "", source)
         with _FAIL_LOCK:
             last = _FAIL_LAST.get(key)
             row_id = last[1] if last and mono - last[0] < _FAIL_WINDOW_SECONDS else None
@@ -450,9 +460,11 @@ def _audit_login_failed(username: str, ip: str = "", now: float = None) -> str:
                     return "repeat"
             cur = conn.execute(
                 "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,"
-                "module,case_no,ref_no,result,reason_code,status_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'fail','login_failed',401)",
+                "module,case_no,ref_no,result,reason_code,status_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'fail',?,401)",
                 (datetime.now().isoformat(), None, (username or "")[:64], "", "auth.login_failed", "user", (username or "")[:64],
-                 (username or "")[:64], json.dumps({"ip": ip or "", "repeat": 0}, ensure_ascii=False), "auth", "", ""),
+                 (username or "")[:64], json.dumps(({"ip": ip or "", "repeat": 0} if source == "password"
+                                                    else {"ip": ip or "", "repeat": 0, "method": source}), ensure_ascii=False),
+                 "auth", "", "", reason_code),
             )
             conn.commit()
             with _FAIL_LOCK:

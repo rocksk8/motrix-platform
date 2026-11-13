@@ -58,6 +58,38 @@
     .bn-empty{padding:30px;text-align:center;color:var(--text-dim);font-size:12px;font-family:var(--font-zh)}
     .bn-log{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bn-layout{grid-template-columns:1fr}}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：案件清單與明細上下堆疊，清單一長就要滑很久才看到明細 ⇒ 手機清單限高、自己捲動，
+       搜尋與狀態籤釘在清單頂；明細列（姓名／比例／金額／換人／移除）允許換行；輸入 16px（免 iOS 自動放大）、按鈕 ≥44px；
+       投保金額表格改橫向捲動。 */
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 28px}
+      .bn-list{max-height:calc(52vh / var(--fz,1));overflow-y:auto}
+      .bn-list-tools{position:sticky;top:0;background:#fff;z-index:1}
+      .bn-tabs{gap:8px}
+      .bn-tab{font-size:13px;padding:8px 14px;min-height:40px;border-radius:20px}
+      .bn-case{padding:12px}
+      .bn-card{padding:14px}
+      .bn-row{flex-wrap:wrap;row-gap:6px}
+      .bn-row .who{flex:1 1 140px;min-width:0;overflow-wrap:anywhere}
+      .bn-row .amt{min-width:0;margin-left:auto}
+      .bn-in{width:84px;min-height:44px;font-size:16px;box-sizing:border-box}
+      .bn-sel{font-size:16px;min-height:44px;max-width:100%;box-sizing:border-box}
+      .bn-sel[style*="width:110px"],.bn-sel[style*="width:180px"]{width:100% !important}
+      .bn-btn{min-height:44px;padding:8px 16px}
+      .bn-actions .bn-btn{flex:1 1 auto}
+      .bn-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+      .bn-table input.bn-in{width:96px !important}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:20px}
+      .bn-layout{grid-template-columns:260px 1fr;gap:14px}
+      .bn-tab{padding:6px 10px;min-height:32px}
+      .bn-case{padding:12px}
+      .bn-in{min-height:38px;font-size:14px}
+      .bn-sel{min-height:38px}
+      .bn-btn{min-height:38px}
+      .bn-table{display:block;overflow-x:auto}
+    }
   </style>
 </head>
 <body x-data="bonusPage()" x-init="init()" x-cloak>
@@ -168,7 +200,7 @@
 
           <!-- 右：明細 -->
           <div>
-            <div class="bn-card bn-empty" x-show="!selectedNo">請從左側選一個案件</div>
+            <div class="bn-card bn-empty" x-show="!selectedNo">請先從案件清單選一個案件</div>
             <div class="bn-card bn-err" x-show="selectedNo && detailError" x-text="detailError"></div>
 
             <template x-if="detail">

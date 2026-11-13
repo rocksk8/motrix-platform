@@ -2,7 +2,7 @@
 """LINE 本月訊息額度的常駐監控與門檻告警（2026-11-12；PM 裁示 D3／D4／D5／D6）。
 
 [單位] helper:line_quota    [層] L1    [穩定度] 實作
-[公開介面] CACHE_SECONDS, DEFAULT_THRESHOLDS, MAX_THRESHOLDS, STATE_KEY, after_push, check_and_alert, evaluate, month_key, normalize_thresholds, refresh, snapshot, thresholds
+[公開介面] CACHE_SECONDS, DEFAULT_THRESHOLDS, MAX_THRESHOLDS, RESERVE_PERCENT, STATE_KEY, after_push, cached_percent, check_and_alert, evaluate, month_key, normalize_thresholds, refresh, reserve_paused, snapshot, thresholds
 [契約題] tests/test_line_quota_2026_11_12.py
 [不變式]
   ① 用量**一律以 LINE 回的 `totalUsage` 為準**（`line_notify.quota()`：兩支唯讀 GET，不耗額度）；本機不自己計數（會跟 LINE 漂移，LINE 控制台手動發送也耗額度）。
@@ -247,6 +247,29 @@ def _active() -> bool:
         return bool(allowed)
     except Exception:  # noqa: BLE001
         return False
+
+
+#: 額度保留（使用者 2026-11-12 裁示）：本月用量達這個百分比後，非 critical 的事件暫停推播（critical 照發）。
+RESERVE_PERCENT = 90
+
+
+def cached_percent(now: datetime = None):
+    """本月用量百分比，**只讀持久狀態、不連 LINE**（額度保留判斷用；狀態由推播後刷新／設定頁／每日 08:00 備援更新）。
+    狀態不是本月、沒有上限（無限方案）、讀不到 ⇒ None（＝不暫停）。永不丟例外。"""
+    try:
+        now = now or datetime.now()
+        st = _state()
+        if st.get("month") != month_key(now):
+            return None
+        return evaluate(st.get("used"), st.get("limit"), [], None)["percent"]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def reserve_paused(now: datetime = None) -> bool:
+    """用量已達 `RESERVE_PERCENT` ⇒ True（呼叫端對非 critical 事件暫停推播）。讀不到用量 ⇒ False（不因為讀不到就擋）。"""
+    p = cached_percent(now)
+    return p is not None and p >= RESERVE_PERCENT
 
 
 def after_push(now: datetime = None) -> None:

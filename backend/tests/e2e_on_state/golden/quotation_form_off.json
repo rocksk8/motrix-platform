@@ -1,6 +1,7 @@
 {
  "text": [
   "報價單",
+  "通知",
   "off_qf",
   "小",
   "標",
@@ -8,10 +9,7 @@
   "特",
   "在線",
   "1",
-  "通知",
   "？",
-  "修改密碼",
-  "登出",
   "o",
   "儀表板",
   "客戶與業務",
@@ -185,7 +183,7 @@
   "GET /api/system/bonus-module-status",
   "GET /api/system/modules/availability",
   "GET /api/users",
-  "GET /css/style.css?v=20260805g",
+  "GET /css/style.css",
   "GET /pages/quotation-form.html?id=x",
   "GET /static/alt-items.js",
   "GET /static/approval-cascade.js",

@@ -28,7 +28,8 @@ def _tpl(monkeypatch, titles):
 
 def _h(client, make_user, name):
     u, pw = make_user(username=name, role="superadmin")[:2]
-    t = client.post("/api/auth/login", json={"username": u, "password": pw}, headers={"X-Forwarded-For": "203.0.113.77"}).json()["token"]
+    # 2026-11-12 外網登入強化：帶 X-Forwarded-For 一律當外網（超管外網未開兩步驟會被拒）；這支測試只要登入身分，用內網直連
+    t = client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]
     return {"Authorization": "Bearer " + t}
 
 

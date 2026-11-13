@@ -54,15 +54,31 @@
     .sc-table th, .sc-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
     .sc-table th { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
     .sc-note { font-size: 12px; color: var(--text-secondary); }
+    .sc-navtoggle { display: none; }
+    /* ≤899px：二十幾個設定群組原本排成一條要左右滑的長條、搜尋框還被藏起來 → 改成「目前群組」一顆大按鈕，點開才展開成兩欄清單（搜尋框一起出現），選了就收起來 */
     @media (max-width: 899px) {
       .sc-layout { grid-template-columns: 1fr; }
-      .sc-side { position: static; display: flex; gap: 6px; overflow-x: auto; padding: 8px; }
-      .sc-side input { display: none; }
-      .sc-gbtn { width: auto; white-space: nowrap; }
+      .sc-side { position: static; padding: 8px; }
+      .sc-navtoggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); font-size: 15px; font-weight: 700; color: inherit; cursor: pointer; text-align: left; }
+      .sc-navtoggle small { font-weight: 400; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+      .sc-navpanel { display: none; margin-top: 8px; }
+      .sc-side.is-open .sc-navpanel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: calc(60vh / var(--fz, 1)); overflow-y: auto; }
+      .sc-side.is-open .sc-navpanel input { grid-column: 1 / -1; margin: 0; font-size: 16px; min-height: 44px; }
+      .sc-gbtn { width: 100%; min-height: 44px; flex-wrap: wrap; text-align: left; }
+      .sc-navpanel > .sc-help, .sc-navpanel > div.sc-gbtn { grid-column: 1 / -1; }
     }
     @media (min-width: 901px) { body.sys-rail-on .sc-bar { left: calc(var(--sidebar-w) + 208px); } } /* 系統中心分類欄（sidebar.js RAIL_W）佔掉左側 208px */
     @media (max-width: 767px) { .sc-main { margin-left: 0; padding: 20px 16px 140px; } .sc-bar { left: 0; padding: 10px 16px; } }
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .sc-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .sc-main select,
+      .sc-main textarea { font-size: 16px; min-height: 44px; }
+      .sc-main .btn { min-height: 44px; }
+      .sc-main input[type=checkbox],
+      .sc-main input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="settingsCenterPage()" x-init="init()" x-cloak>
   <header id="app-topbar" class="topbar"></header>
@@ -81,10 +97,15 @@
     <div x-show="err" class="sc-bad" data-testid="sc-err" x-text="err"></div>
 
     <div class="sc-layout">
-      <nav class="sc-side" aria-label="設定群組">
+      <nav class="sc-side" :class="{'is-open': navOpen}" aria-label="設定群組">
+        <button type="button" class="sc-navtoggle" data-testid="sc-navtoggle" :aria-expanded="navOpen ? 'true' : 'false'" @click="navOpen = !navOpen">
+          <span x-text="(groups.find(g => g.group === current) || {}).label || '選擇設定群組'"></span>
+          <small x-text="navOpen ? '收起 ▴' : '切換群組 ▾'"></small>
+        </button>
+        <div class="sc-navpanel">
         <input type="search" x-model="search" placeholder="搜尋設定群組" data-testid="sc-search">
         <template x-for="g in filteredGroups()" :key="g.group">
-          <button type="button" class="sc-gbtn" :class="{'is-on': g.group === current}" :data-testid="'sc-group-' + g.group" @click="pick(g.group)">
+          <button type="button" class="sc-gbtn" :class="{'is-on': g.group === current}" :data-testid="'sc-group-' + g.group" @click="pick(g.group); navOpen = false">
             <span x-text="g.label"></span>
             <span class="sc-dot" x-show="g.status !== 'planned' && g.lastChange">已調整過</span>
             <span class="sc-dot sc-dot--warn" x-show="g.status === 'planned'" :data-testid="'sc-planned-chip-' + g.group">開發中</span>
@@ -97,6 +118,7 @@
             <div class="sc-help" :data-testid="'sc-soon-text-' + p.code" x-text="'開發中，尚未開放'"></div>
           </div>
         </template>
+        </div>
       </nav>
 
       <section x-show="detail">
@@ -317,7 +339,7 @@
 function settingsCenterPage() {
   return {
     // 清單與目前群組
-    groups: [], plannedFeatures: [], current: '', detail: null, search: '', showAdv: false,
+    groups: [], plannedFeatures: [], current: '', detail: null, search: '', showAdv: false, navOpen: false,
     // 編輯狀態
     drafts: {}, preview: null, impacts: {}, reason: '', ack: false, busy: false, msg: '', err: '',
     tab: 'values',
@@ -357,7 +379,12 @@ function settingsCenterPage() {
       if (this._initDone) return
       this._initDone = true
       await this.loadGroups()
-      if (this.groups.length) await this.pick(this.groups[0].group)
+      // 網址帶 #群組代碼（系統中心的卡片這樣連過來，例如 #retention）⇒ 直接開那一組；不認得就開第一組
+      let want = ''
+      try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (e) { want = '' }
+      const hit = this.groups.find(g => g.group === want)
+      if (hit) await this.pick(hit.group)
+      else if (this.groups.length) await this.pick(this.groups[0].group)
     },
     async loadGroups() {
       try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || [] } catch (e) { this._fail(e) }

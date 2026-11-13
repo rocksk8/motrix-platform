@@ -45,6 +45,42 @@
     .bc-log{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
     .bc-neg{color:var(--danger)}.bc-pos{color:#15803D}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bc-layout{grid-template-columns:1fr}}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：明細列「人員／目前金額／更正後(輸入)／差額／移除」五欄一行在 375px 放不下、輸入框 12px 小又窄。
+       ⇒ 手機每位人員一塊：姓名一行、三個金額並排（各有小標）、輸入 16px／44px 高；表頭列在手機隱藏（改由各格小標說明）。 */
+    /* 觸控：頁內小連結（回獎金分潤／原單 xxx）高度只有 19px ⇒ 用 padding 撐到 ~40px、負 margin 保持原版面（K 審 D） */
+    @media (hover:none){.page-main a[href^="bonus.html"]{display:inline-block;padding:10px 6px;margin:-10px -6px}}
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 28px}
+      .bc-card{padding:14px}
+      .bc-row{flex-wrap:wrap}
+      .bc-row[style*="font-weight:600"]{display:none}
+      .bc-row:has(> .who){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;padding:10px 0;border-bottom:1px dashed var(--border-light)}
+      .bc-row > .who{grid-column:1 / -1;font-weight:600;font-size:13px}
+      .bc-row .num{min-width:0;text-align:left}
+      .bc-row[data-testid^="bc-line-"] > .num::before,.bc-row[data-testid^="bc-view-"] > .num::before{display:block;font-size:11px;font-weight:400;color:var(--text-dim)}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(2)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(2)::before{content:"目前金額"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(3)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(3)::before{content:"更正後"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(4)::before,.bc-row[data-testid^="bc-view-"] > :nth-child(4)::before{content:"差額"}
+      .bc-row[data-testid^="bc-line-"] > :nth-child(5){grid-column:1 / -1;width:auto !important}
+      .bc-row[data-testid^="bc-ded-"]{grid-template-columns:1fr 1fr}
+      .bc-in{width:100%;min-height:44px;font-size:16px;box-sizing:border-box}
+      .bc-sel,.bc-txt{font-size:16px;min-height:44px;box-sizing:border-box}
+      .bc-sel{max-width:100%}
+      textarea.bc-txt{min-height:88px}
+      .bc-txt[style*="width:180px"]{width:100% !important}
+      .bc-row > .bc-txt[style*="flex:1"]{flex:1 1 100% !important}
+      .bc-btn{min-height:44px;padding:8px 16px}
+      .bc-actions .bc-btn{flex:1 1 auto}
+      .bc-item{padding:14px 12px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:20px}
+      .bc-layout{grid-template-columns:240px 1fr;gap:14px}
+      .bc-in{width:90px;min-height:38px}
+      .bc-sel,.bc-txt{min-height:38px}
+      .bc-btn{min-height:38px}
+      .bc-item{padding:12px}
+    }
   </style>
 </head>
 <body x-data="bonusCorrectionPage()" x-init="init()" x-cloak>
@@ -234,7 +270,7 @@
             </div>
           </template>
 
-          <div class="bc-empty" x-show="!form && !detail">從左邊選一張更正單，或輸入已發放的案件單號開新單。</div>
+          <div class="bc-empty" x-show="!form && !detail">從清單選一張更正單，或輸入已發放的案件單號開新單。</div>
         </div>
       </div>
     </main>

@@ -678,6 +678,24 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     import routers.auth as auth_module
     monkeypatch.setattr(auth_module, "_rl_state", {})
 
+    # 登入鎖定告警（helpers/auth_alert，2026-11-12）：節流狀態同樣是 process-global（以鎖定範圍為鍵，TestClient 全是 "testclient"）⇒ 每題換一份乾淨的；
+    # 背景發送預設改成不做事——其他題累積 5 次登入失敗只是為了驗鎖定，不該在背景執行緒裡碰 Email／LINE／已拆掉的測試 DB。
+    # 要驗告警本身的題（tests/test_auth_lockout_alert_2026_11_12.py）自己把 `_spawn` 換成同步版。
+    import helpers.auth_alert as _auth_alert_module
+    monkeypatch.setattr(_auth_alert_module, "_alerted", {})
+    monkeypatch.setattr(_auth_alert_module, "_sent_at", [])
+    monkeypatch.setattr(_auth_alert_module, "_suppressed", [])
+    monkeypatch.setattr(_auth_alert_module, "_timer", None)
+    monkeypatch.setattr(_auth_alert_module, "_spawn", lambda fn, *a: None)
+    # 外網登入強化（2026-11-12）：帳號鎖定表（helpers/account_lock）是同一個形狀的第三個 process-global dict——不清的話，
+    # 一支測試累積的失敗會讓同帳號名（admin 等）在之後的測試被鎖。另外 TestClient 的對端叫 "testclient"（不是 IP），
+    # 正式規則「判斷不出來＝外網」「本機直連 loopback 預設不算內網」會讓全套測試（含 e2e 的 live server，對端 127.0.0.1）的管理員登入都被要求 TOTP；這裡讓這幾個對端視為內網。
+    # 要測外網的題目自己帶 CF 標頭／Host，或把 INTERNAL_PEER_NAMES 蓋回空集合。
+    import helpers.account_lock as _account_lock_module
+    import helpers.external_access as _external_access_module
+    _account_lock_module.reset_for_tests()
+    monkeypatch.setattr(_external_access_module, "INTERNAL_PEER_NAMES", frozenset({"testclient", "127.0.0.1", "::1"}))
+
     # pdf_gen.py 的 6 類 PDF 存檔目錄（報價單／出貨單／承攬商匯款申請／開票申請
     # 憑據／請款單／結案報表）各自算自己的路徑，跟上面 uploads/photos 一樣**不受
     # 任何既有 patch 影響**——這是 2026-09-07 那批隔離修正唯一漏掉的一個。
@@ -1163,6 +1181,31 @@ def _read_lock(path):
         return None
 
 
+def _queue_guard(config):
+    """重型 pytest（全量或 -n≥2）沒有經 `tools/platform/heavy_run.py` 排隊時的處置（T82：整合期間別人的全量把閘門拖紅）。
+
+    判斷是 heavy_run.direct_run_verdict 的純函式：閘門鎖持有中 ⇒ 不是持有者的直接重型跑法拒絕；沒有閘門鎖 ⇒ 只印警告。
+    `--collect-only` 不算（數秒、不跑題）。**找不到 heavy_run、讀檔出任何錯 ⇒ 放行**（出貨包沒有 tools/、這道只防「順手跑一下」，不能反過來擋住測試）。
+    """
+    if getattr(config.option, "collectonly", False):
+        return
+    try:
+        import importlib.util as _iu
+        hr_path = Path(__file__).resolve().parents[1] / "tools" / "platform" / "heavy_run.py"
+        if not hr_path.is_file():
+            return
+        spec = _iu.spec_from_file_location("_motrix_heavy_run_guard", str(hr_path))
+        hr = _iu.module_from_spec(spec)
+        spec.loader.exec_module(hr)
+        level, msg = hr.direct_run_verdict(os.environ, hr.read_gate())
+    except Exception:                    # noqa: BLE001 — fail open
+        return
+    if level == "refuse":
+        raise pytest.UsageError("【測試佇列】" + msg)
+    if level == "warn":
+        _lock_say("\n[測試佇列] " + msg, flush=True)
+
+
 def pytest_configure(config):
     """在**任何一支測試跑起來之前**擋下來。
 
@@ -1194,6 +1237,7 @@ def pytest_configure(config):
     if not _is_heavy_run(config):
         _refuse_light_run_during_build(config)
         return                       # 單檔臨時跑，不搶鎖（建包獨佔期間例外：直接拒絕，見上一行）
+    _queue_guard(config)             # 重型但沒經 heavy_run 排隊：閘門鎖期間拒絕、平時警告（判斷在 tools/platform/heavy_run.py）
 
     slots = _lock_slots()
     wait = _env_seconds("MOTRIX_PYTEST_LOCK_WAIT", LOCK_WAIT_SECONDS_DEFAULT)

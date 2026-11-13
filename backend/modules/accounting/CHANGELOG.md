@@ -1,5 +1,12 @@
 # 會計 更新紀錄
 
+## 1.1.67 — 2026-11-13（fix/t81-line-reds；T81 LINE 全信件接線的 CHANGELOG 補記，版號由列車取）
+- 變更（內部，不影響對外介面）：`notify.py` 的傳票／總帳申請通知多了 LINE 獨立通道（`voucher_submitted`／`voucher_next_tier`／`voucher_approved`／`voucher_returned`／`ledger_action_submitted`／`ledger_action_approved`／`ledger_action_returned`；只放單號與狀態，不放摘要與退回說明）；信件內文「簽核佇列」改「待我簽核」。無 API／資料／權限判斷變更。
+- 測試：`tests/test_line_events_all_2026_11_13.py`（全信件對應的 LINE 事件）。
+
+## 1.1.66（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- `voucher.html`、`account-items.html`、`ledger-hub.html`、`ledger-periods.html`、`ledger-reports.html`、`ledger-settings.html`、`ledger-statements.html`：手機（≤767px）／直立平板（768–1023px）版面——工具列與科目列可換行、輸入框 16px／44px 高（避免 iOS 聚焦放大、觸控目標不足）、分頁籤可橫向捲動、傳票版面單欄；`ledger-periods.html` 的表格加橫向捲動＋表頭固定（`m-scroll m-sticky`）。桌機版不變。
+
 ## 1.1.65 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 選單宣告（B2／B3）：財務會計下拉依 `section` 分「日常／月結／設定」小標題（憑證＝日常；總帳／會計期間＝月結；科目項目＝設定）；`ledger-statements.html`／`ledger-reports.html`／`ledger-settings.html` 改掛到「報表」群組（頁籤 財務／帳簿／設定），網址與權限不變，仍可由報表中心與選單進入。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。

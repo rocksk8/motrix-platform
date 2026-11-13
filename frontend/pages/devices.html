@@ -77,6 +77,17 @@
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
     .detail-pane { width:100% !important; left:0 !important; right:0; }
+    /* 2026-11-12 手機版 */
+    .page-main { padding: 16px 12px 32px }
+    .search-wrap { flex: 1 1 100% }
+    .search-input { font-size: 16px; min-height: 44px; box-sizing: border-box }
+    .filter-bar { gap: 8px }
+    .filter-bar select { font-size: 16px; min-height: 44px }
+    .detail-head { padding: 14px 14px }
+    .detail-body { padding: 14px 14px 32px }
+    .detail-close { width: 44px; height: 44px; font-size: 20px }
+    .d-row { font-size: 13px }
+    .d-lbl { min-width: 84px }
   }
   </style>
 </head>
@@ -192,7 +203,7 @@
           <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
           <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
           <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
-          <table class="data-table">
+          <table class="data-table m-scroll m-sticky">
             <thead><tr>
               <template x-for="c in $store.layout.cols('devices')" :key="c.field">
                 <th :data-layout-col="c.field" x-text="$store.layout.colLabel('devices', c.field, layoutLabel(c.field))"></th>
@@ -222,7 +233,7 @@
         </template>
         <template x-if="filtered.length > 0">
           <div class="table-scroll" x-show="!layoutOn">
-          <table class="data-table">
+          <table class="data-table m-scroll m-sticky">
             <thead>
               <tr>
                 <th>設備名稱</th>

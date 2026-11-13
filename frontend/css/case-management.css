@@ -640,7 +640,11 @@ transition:background .1s;
   .mob-back-cm { display:none; }
   @media (max-width:767px) {
 .cm-layout { flex-direction:column; height:auto; min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); overflow:visible; }
-.cm-list { width:100%; min-width:0; max-height:calc(44vh / var(--fz,1)); border-right:none; border-bottom:1px solid var(--border-light); }
+/* 手機清單（2026-11-12）：舊寫法 .cm-list 用視窗高度比例當上限＋overflow:hidden，清單標頭（標題列／搜尋／排序／分頁／篩選晶片）
+   就佔掉 ~320px，內層 .cm-list__body 只剩 70–150px ⇒ 只看到半張卡片，下方整片空白。
+   手機整頁本來就可捲（.cm-layout height:auto），清單改成跟著內容長高、由頁面捲動，不再自成一個小捲動區。 */
+.cm-list { width:100%; min-width:0; max-height:none; overflow:visible; border-right:none; border-bottom:1px solid var(--border-light); }
+.cm-list__body { flex:none; overflow:visible; }
 .cm-detail { min-height:calc(54vh / var(--fz,1)); }
 .cm-list.mob-hidden  { display:none !important; }
 .cm-detail.mob-hidden { display:none !important; }
@@ -752,3 +756,29 @@ transition:background .1s;
 :where(:root[data-theme="dark"] body.cm-page) a { color: var(--tone-info-fg); }
 /* 切換鈕選中狀態：深色模式不用近白的亮底（會成為全頁最亮的一塊），改中灰底＋深字（對比約 8.8） */
 :root[data-theme="dark"] body.cm-page .aq-sort.on { background: var(--ink-secondary); border-color: var(--ink-secondary); }
+
+/* ══ 手機／平板直式觸控補強（2026-11-12 UI 檢查）══════════════════════════════
+   既有手機版已把清單／明細改成上下堆疊、分頁籤可左右滑；這裡只補「手指好不好點」：
+   ① 輸入框 12px ⇒ iOS 聚焦會自動放大整頁 ⇒ 手機一律 16px、≥44px 高
+   ② 返回「列表」鈕 45×21、「更多」「儲存」~30px、操作紀錄連結 19px、分頁籤 39px ⇒ 補到 ≥40～44px
+   ③ 篩選籤（.aq-sort）彼此間距 0，容易點到隔壁 ⇒ 加 6px 間距、高度 40px
+   （放在檔尾、只用 min-height／padding／間距，不改既有版面規則，也不碰詳情頭／橫幅元件。） */
+@media (max-width:767px) {
+  .cm-list__search-input, .fi { font-size:16px; min-height:44px; }
+  textarea.fi { min-height:88px; }
+  .cm-list__tab { min-height:44px; }
+  .aq-sort { min-height:40px; padding:8px 12px; margin:0 6px 6px 0; }
+  .mob-back-cm { min-height:44px; padding:8px 14px; }
+  .cm-more__btn, .btn-save { min-height:44px; }
+  .cm-tab { padding:13px 14px; }
+  .cm-header__back { min-height:40px; display:inline-flex; align-items:center; }
+  button[x-text*="操作紀錄"] { min-height:40px; padding:10px 6px; }
+}
+@media (min-width:768px) and (max-width:1023px) {
+  .cm-list__search-input, .fi { min-height:40px; }
+  .cm-list__tab { min-height:40px; }
+  .aq-sort { min-height:36px; padding:6px 12px; margin:0 4px 4px 0; }
+  .cm-more__btn, .btn-save { min-height:40px; }
+  .cm-tab { padding:12px 14px; }
+  button[x-text*="操作紀錄"] { min-height:36px; padding:8px 6px; }
+}

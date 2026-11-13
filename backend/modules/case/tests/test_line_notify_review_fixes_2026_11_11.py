@@ -37,9 +37,10 @@ def _targets_of(line):
     return out
 
 
-@pytest.mark.parametrize("outcome,expect_push", [("skipped", 0), ("transient_fail", 0), ("sent", 1), ("unknown", 1), ("permanent_fail", 1)])
-def test_warranty_line_follows_the_mark_writing_outcomes(client, make_user, line, monkeypatch, outcome, expect_push):
-    """與「可以寫已通知記號」同一組結果才發 LINE：暫時失敗／機器層級略過 ⇒ 明天會重試，今天不推；其餘（寄出、不確定、永久失敗）⇒ 記號會寫，推一次。"""
+@pytest.mark.parametrize("outcome,expect_push", [("skipped", 1), ("transient_fail", 1), ("sent", 1), ("unknown", 1), ("permanent_fail", 1)])
+def test_warranty_line_is_independent_of_the_mail_outcome(client, make_user, line, monkeypatch, outcome, expect_push):
+    """2026-11-12（LINE 獨立通道）：不論信件結果如何，LINE 都推一次（信件暫時失敗／略過時呼叫端隔天重試，由 `line_key` 的「已推播」記號擋住不重推，見下一題）；
+    呼叫端能不能寫記號（`ok`）仍只看信件結果。"""
     from helpers import email_notify as EN
     from helpers import line_notify as L
     uid = _owner(make_user)
@@ -52,7 +53,7 @@ def test_warranty_line_follows_the_mark_writing_outcomes(client, make_user, line
 
 
 def test_warranty_retry_days_push_line_exactly_once(client, make_user, line, monkeypatch):
-    """SMTP 沒設好連續 3 天（skipped／transient）⇒ 0 則 LINE；第 4 天寄出 ⇒ 1 則。不會同一台設備天天推。"""
+    """SMTP 沒設好連續 3 天（skipped／transient）、第 4 天寄出：LINE 第 1 天就推（獨立通道），之後每天重試都被「已推播」記號擋住 ⇒ 全程只有 1 則，不會同一台設備天天推。"""
     from helpers import email_notify as EN
     from helpers import line_notify as L
     uid = _owner(make_user)

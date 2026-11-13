@@ -34,6 +34,7 @@
     .recent-pop__i{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--radius);color:var(--text-primary);text-decoration:none;font-size:13px}
     .recent-pop__i:hover{background:var(--surface-sunken)}
     .row.is-denied{opacity:.62;background:var(--surface-sunken);cursor:not-allowed}
+    .row.is-planned{opacity:.8;cursor:default}
     .row__why{font-size:12px;color:var(--tone-danger-fg);margin-top:3px}
     .adv{margin-top:26px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:var(--surface);padding:10px 14px;font-size:13px}
     .adv summary{cursor:pointer;color:var(--text-secondary);font-weight:600}
@@ -100,7 +101,16 @@
       .pane-sub{margin-left:0}
     }
     @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .page-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .page-main select,
+      .page-main textarea { font-size: 16px; min-height: 44px; }
+      .page-main .btn { min-height: 44px; }
+      .page-main input[type=checkbox],
+      .page-main input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="systemHub()" :class="{'has-rail': loaded && sections.length > 0}" x-cloak>
   <header id="app-topbar" class="topbar"></header>
@@ -158,17 +168,18 @@
                 <div class="pane-sub">跨所有分組；清空搜尋回到分組檢視</div>
                 <div class="rows" x-show="results.length">
                   <template x-for="it in results" :key="it.id">
-                    <a class="row" :class="{'is-denied': it.denied}" :href="it.denied ? null : it.href" :aria-disabled="it.denied ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
+                    <a class="row" :class="{'is-denied': it.denied, 'is-planned': it.planned && !it.denied}" :href="(it.denied || it.planned) ? null : it.href" :aria-disabled="(it.denied || it.planned) ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
                       <span class="row__ico" x-html="icon(it.icon)"></span>
                       <span class="row__main">
                         <div class="row__title"><span x-html="hl(it.title)"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-html="hl(it.desc)"></div>
                         <div class="row__impact" x-text="it.impact"></div>
                         <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
+                        <div class="row__why" x-show="it.planned && !it.denied">這項功能還在開發中，目前還不能開啟。</div>
                         <div class="row__grp" x-text="it._sec"></div>
                       </span>
                       <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
-                      <svg class="row__go" x-show="!it.denied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                      <svg class="row__go" x-show="!it.denied && !it.planned" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                     </a>
                   </template>
                 </div>
@@ -181,16 +192,17 @@
                 <div class="pane-sub" x-text="current.sub"></div>
                 <div class="rows">
                   <template x-for="it in current.items" :key="it.id">
-                    <a class="row" :class="{'is-denied': it.denied}" :href="it.denied ? null : it.href" :aria-disabled="it.denied ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
+                    <a class="row" :class="{'is-denied': it.denied, 'is-planned': it.planned && !it.denied}" :href="(it.denied || it.planned) ? null : it.href" :aria-disabled="(it.denied || it.planned) ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
                       <span class="row__ico" x-html="icon(it.icon)"></span>
                       <span class="row__main">
                         <div class="row__title"><span x-text="it.title"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-text="it.desc"></div>
                         <div class="row__impact" x-text="it.impact"></div>
                         <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
+                        <div class="row__why" x-show="it.planned && !it.denied">這項功能還在開發中，目前還不能開啟。</div>
                       </span>
                       <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
-                      <svg class="row__go" x-show="!it.denied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                      <svg class="row__go" x-show="!it.denied && !it.planned" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                     </a>
                   </template>
                 </div>
@@ -277,7 +289,7 @@ function systemHub() {
       return this.recent.map(function (id) { return by[id] }).filter(function (it) { return it && !it.denied })
     },
     open(e, it) {
-      if (it.denied) { e.preventDefault(); return }
+      if (it.denied || it.planned) { e.preventDefault(); return }       // 規劃中的頁面還不存在：點了只會 404
       this.remember(it)
     },
     goRecent(it) { this.remember(it); location.href = it.href },

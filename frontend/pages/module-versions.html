@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>版本紀錄 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -408,6 +409,48 @@
       .mv-timeline-view { padding: 16px 16px; }
       .mv-right-panel { padding: 16px; }
     }
+
+    /* ══ 手機／直立平板補強（hichan-17，2026-11-12）══════════════════════════
+       ① 原本 ≤780 直接把左側模組清單 display:none ⇒ 手機上**沒有任何方式切換模組**。
+          改成橫向可捲的「模組晶片」列（選中那顆反白），右側歷史在下方整寬顯示。
+       ② 工具列原本單列 52px：標題被擠成一字一行、「依模組／時間軸」直排。
+          改兩列（標題＋切換＋新增 ／ 搜尋整寬），--mv-top 同步加高。
+       ③ 按鈕、輸入 ≥44px／16px；刪除鈕在觸控裝置不再藏起來（原本只有 hover 才出現）。 */
+    @media (max-width: 780px) {
+      :root { --mv-top: calc(var(--topbar-h) + 104px); }
+      .mv-toolbar { height: 104px; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: 44px 44px;
+                    gap: 6px 10px; padding: 8px 14px; align-content: center; box-sizing: border-box; }
+      .mv-toolbar__title { white-space: nowrap; margin: 0; }
+      .mv-toolbar__spacer { display: none; }
+      .mv-view-toggle { justify-self: start; }
+      .mv-view-btn { min-height: 38px; padding: 4px 14px; font-size: 14px; white-space: nowrap; }
+      .mv-search { grid-column: 1 / -1; grid-row: 2; max-width: none; width: 100%; box-sizing: border-box;
+                   min-height: 44px; font-size: 16px; }
+      .mv-toolbar > .btn { grid-column: 3; grid-row: 1; min-height: 44px; font-size: 14px !important; white-space: nowrap; }
+      .mv-split { flex-direction: column; }
+      .mv-left-panel { display: flex; flex-direction: row; gap: 8px; width: auto; flex: 0 0 auto;
+                       overflow-x: auto; overflow-y: hidden; padding: 8px 14px; border-right: 0;
+                       border-bottom: 1px solid var(--border-light); -webkit-overflow-scrolling: touch; }
+      .mv-mod-item { flex: 0 0 auto; min-height: 52px; padding: 6px 12px; border: 1px solid var(--border-light);
+                     border-left-width: 1px; border-radius: 10px; background: #fff; justify-content: center; }
+      .mv-mod-item.selected { border-color: var(--accent); }
+      .mv-mod-item__name { font-size: 14px; white-space: nowrap; }
+      .mv-mod-item__ver { padding-left: 15px; white-space: nowrap; }
+      .mv-right-panel { flex: 1 1 auto; min-height: 0; }
+      .mv-right-header { margin-bottom: 16px; }
+      .mv-tl-content { font-size: 14px; }
+      .mv-tl-dot { font-size: 10px; letter-spacing: -.02em; }   /* "NEW" 比 29px 圓還寬被切 */
+      .mv-tl-date, .mv-tl-meta { font-size: 12px; }
+      .mv-add-inline { min-height: 44px; font-size: 14px; width: 100%; justify-content: center; }
+      .mv-modal-overlay { align-items: flex-end; padding: 0; }
+      .mv-modal { max-width: none; border-radius: 16px 16px 0 0; max-height: calc(92dvh / var(--fz,1)); overflow-y: auto; padding: 20px 16px calc(16px + env(safe-area-inset-bottom)); }
+      .mv-form-row input, .mv-form-row textarea { font-size: 16px; min-height: 44px; }
+      .mv-form-row label { font-size: 13px; }
+      .mv-form-actions .btn { min-height: 44px; flex: 1; }
+    }
+    @media (hover: none) {
+      .mv-tl-del { opacity: .75; min-height: 36px; min-width: 44px; }
+    }
   </style>
 </head>
 <body>
@@ -450,8 +493,14 @@
     <!-- Loading -->
     <div class="mv-loading" x-show="loading">載入中…</div>
 
+    <!-- 讀取失敗：蓋住下面空的清單（否則畫面是「無符合結果」，像是真的沒有版本紀錄） -->
+    <div class="mv-loading" x-show="!loading && loadErr" x-cloak role="alert" data-testid="load-error" style="flex-direction:column;gap:12px;text-align:center;padding:0 24px">
+      <div style="color:var(--danger)"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <!-- ── Module view (split) ── -->
-    <div class="mv-split" x-show="!loading && view==='module'">
+    <div class="mv-split" x-show="!loading && !loadErr && view==='module'">
 
       <!-- Left: module list -->
       <div class="mv-left-panel">
@@ -532,7 +581,7 @@
     </div><!-- /mv-split -->
 
     <!-- ── Timeline view ── -->
-    <div class="mv-timeline-view" x-show="!loading && view==='timeline'">
+    <div class="mv-timeline-view" x-show="!loading && !loadErr && view==='timeline'">
       <div x-show="timelineGroups.length===0"
            style="padding:60px;text-align:center;color:var(--text-dim);font-size:14px">
         無符合結果
@@ -646,6 +695,7 @@
     return {
       modules:        [],
       loading:        true,
+      loadErr:        '',            // 讀取失敗的白話原因
       view:           'module',
       selected:       null,
       search:         '',
@@ -705,6 +755,7 @@
         })
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
           .then(data => {
+            this.loadErr = ''
             this.modules = data
             this.computeStaleness()
             // Restore selection after refresh
@@ -715,9 +766,10 @@
             // Auto-select first if nothing selected
             if (!this.selected && data.length > 0) this.selected = data[0]
           })
-          .catch(e => console.error('fetch failed:', e))
+          .catch(e => { if (e === 401) { MotrixError.sessionExpired(); return } console.error('fetch failed:', e); this.loadErr = MotrixError.loadText(e) })
           .finally(() => { this.loading = false })
       },
+      retryLoad() { this.loadErr = ''; this.fetch() },
 
       selectModule(m) {
         this.selected = m

@@ -60,6 +60,17 @@
     .status-chip.void{background:#F0EEE9;color:var(--text-dim)}
     .filter-chip{padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--border-light);cursor:pointer;background:#fff}
     .filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+    /* ── 手機版（2026-11-12）：邊距、搜尋整列、表單控制項 16px／44px、表格橫向捲動（第一欄固定） ── */
+    @media (max-width: 767px) {
+      .page-main { padding: 16px 12px 32px }
+      .toolbar { gap: 8px }
+      .search-wrap { flex: 1 1 100% }
+      .search-input, .toolbar select { font-size: 16px; min-height: 44px; box-sizing: border-box }
+      .modal-box { padding: 18px 14px; width: 100% }
+      .action-btn { min-height: 40px; padding: 8px 12px; font-size: 13px }
+      .action-btn + .action-btn { margin-left: 6px }
+    }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -112,7 +123,7 @@
       <template x-if="!loading">
         <div>
           <div class="table-scroll">
-          <table class="data-table" x-show="filtered.length > 0">
+          <table class="data-table m-scroll m-sticky" x-show="filtered.length > 0">
             <thead>
               <tr>
                 <th>料號</th>
@@ -249,7 +260,7 @@
     <div class="loading-text" x-show="detail.loading">載入中…</div>
     <template x-if="!detail.loading">
       <div>
-        <table class="data-table" x-show="detailFiltered.length > 0">
+        <table class="data-table m-scroll m-sticky" x-show="detailFiltered.length > 0">
           <thead><tr><th>序號</th><th>MAC</th><th>狀態</th><th>批次</th><th>入庫時間</th><th>關聯</th><th>操作</th></tr></thead>
           <tbody>
             <template x-for="it in detailFiltered" :key="it.id">
@@ -288,7 +299,7 @@
     <div class="loading-text" x-show="batches.loading">載入中…</div>
     <template x-if="!batches.loading">
       <div class="table-scroll" style="max-height:calc(60vh / var(--fz,1));overflow-y:auto">
-        <table class="data-table" x-show="batches.items.length > 0">
+        <table class="data-table m-scroll m-sticky" x-show="batches.items.length > 0">
           <thead><tr>
             <th>批次號</th><th>料號</th><th style="text-align:right">數量</th><th style="text-align:right">金額</th>
             <th>供應商</th><th>發票號</th><th>付款狀態</th><th>操作</th>
@@ -349,7 +360,7 @@
           <a href="suppliers.html" style="color:var(--warning);text-decoration:underline">前往供應商管理填寫</a>
         </div>
         <div class="table-scroll" style="max-height:calc(60vh / var(--fz,1));overflow-y:auto">
-          <table class="data-table" x-show="purchaseSuggestions.items.length > 0">
+          <table class="data-table m-scroll m-sticky" x-show="purchaseSuggestions.items.length > 0">
             <thead><tr>
               <th style="text-align:center">水位</th><th>料號</th><th>品名</th><th style="text-align:right">在庫</th>
               <th style="text-align:right">安全庫存</th><th style="text-align:right">建議採購量</th>

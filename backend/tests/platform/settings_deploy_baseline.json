@@ -252,6 +252,12 @@
     7,
     3650,
     false
+   ],
+   "log_keep_days": [
+    30,
+    7,
+    3650,
+    false
    ]
   },
   "quote_alt": {"alt_enabled": [true, null, null, false], "total_text": ["依方案選擇", null, null, false], "note_template": ["項次{items}為{group}擇一方案選擇", null, null, false], "show_unpicked_in_pdf": [false, null, null, false], "alt_groups_max": [10, 1, 20, false], "combo_view_max": [24, 1, 200, false], "combo_view_default_open": [false, null, null, false], "lock_scope": [1, 1, 2, false], "cancel_after_deal": [1, 1, 3, false], "move_out_of_sent": [1, 1, 2, false], "reject_final_keep": [1, 1, 2, false], "unlock_edit_signed": [1, 1, 2, false], "approval_basis": [1, 1, 2, false], "cancel_after_export": [1, 1, 2, false], "cancel_after_invoice": [1, 1, 2, false], "cancel_after_settle": [1, 1, 2, false]},
@@ -342,6 +348,7 @@
   "alerts": {"warranty_report_days": [90, 30, 365, false], "warranty_mail_early_days": [30, 8, 180, false], "warranty_mail_urgent_days": [7, 1, 30, false], "cert_warn_days": [30, 7, 90, false]},
   "payslip_dispatch_picker": {"page_size": [30, 10, 100, false]},
   "account_security": {"password_min_len": [8, 8, 64, false], "login_days": [30, 1, 30, false]},
+  "external_login": {"ext_totp_enabled": [1, 0, 1, false], "ext_totp_role_superadmin": [1, 0, 1, false], "ext_totp_role_admin": [1, 0, 1, false], "ext_totp_role_finance": [1, 0, 1, false], "ext_totp_role_sales": [0, 0, 1, false], "ext_totp_role_engineer": [0, 0, 1, false], "ext_totp_role_viewer": [0, 0, 1, false], "lock_threshold": [10, 3, 100, false], "lock_window_min": [30, 5, 1440, false], "lock_minutes": [30, 5, 1440, false], "lock_scope": [1, 1, 2, false], "external_hosts": ["", null, null, false], "loopback_is_internal": [0, 0, 1, false], "internal_networks": ["10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10", null, null, false]},
   "builder_rules": {
    "enabled": [
     0,

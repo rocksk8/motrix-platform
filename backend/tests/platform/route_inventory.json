@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 931,
-  "endpoints_api": 927,
-  "write_total": 500,
-  "write_api": 500,
-  "get_api": 427,
-  "distinct_paths_api": 785,
-  "write_with_body_api": 366,
-  "write_with_path_param_api": 360
+  "endpoints_total": 938,
+  "endpoints_api": 934,
+  "write_total": 505,
+  "write_api": 505,
+  "get_api": 429,
+  "distinct_paths_api": 792,
+  "write_with_body_api": 371,
+  "write_with_path_param_api": 361
  },
  "select_star": {
-  "modules": 287,
+  "modules": 288,
   "archive": 97,
   "routers": 11,
   "helpers": 11,
@@ -4669,6 +4669,41 @@
    "body": true
   },
   "PUT /api/work-logs/{wid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "GET /api/auth/account-locks": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/line-notify/bindings": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/auth/account-locks/unlock": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/customers/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/parts/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/bindings/remind": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify/events/{key}/audience": {
    "w": true,
    "pp": 1,
    "body": true
