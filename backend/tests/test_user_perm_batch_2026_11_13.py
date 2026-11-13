@@ -335,7 +335,7 @@ def test_unbind_and_revoke_the_same_key_leaves_no_redundant_subtract(client, wor
     assert r.status_code == 200, r.text
     p = _person(r, bob)
     assert p["subtractAdds"] == [] and p["unbind"] == [rid]
-    assert not any(s["key"] == "customer" for s in p["skipped"]), "沒有「對方沒有這個權限」的誤報：它本來就來自被解除的角色"
+    assert not any("目前沒有" in s["reason"] for s in p["skipped"]), "沒有「對方沒有這個權限」的誤報；說明的是「來自同時解除的角色」（h10 L1）"
 
 
 def test_revoke_may_name_a_legacy_key_the_person_still_holds(client, world):
@@ -528,3 +528,43 @@ def test_undo_of_a_revoke_of_a_role_given_key_restores_it(client, world):
     r = client.post(BATCH + "/undo", json={"changes": [p for p in ap.json()["people"] if p["status"] == "change"]}, headers=h)
     assert r.status_code == 200 and r.json()["applied"] == [bob], r.text
     assert _subtract_rows(bob) == [] and _effective_of(bob) == before
+
+
+# ── 輸入形狀（審查 h10 S1／S2／L1／L2）──────────────────────────────────────
+
+@pytest.mark.parametrize("bad", [10 ** 30, 0, -1, 1.9, True, "x", None, [1]])
+def test_user_ids_must_be_real_in_range_integers(client, world, bad):
+    r = _post(client, world["h"], {"userIds": [bad], "grant": ["map"]})
+    assert r.status_code == 400, (bad, r.status_code, r.text)
+
+
+@pytest.mark.parametrize("field,val", [("adds", 5), ("removes", "settings"), ("subtractAdds", 7), ("subtractRemoves", {"a": 1}),
+                                       ("adds", [3]), ("bind", "12"), ("unbind", [True])])
+def test_undo_change_fields_are_shape_checked_not_500(client, world, field, val):
+    n = _count("permission_changes")
+    r = client.post(BATCH + "/undo", json={"changes": [{"userId": world["bob"], field: val}]}, headers=world["h"])
+    assert r.status_code == 400, (field, val, r.status_code, r.text)
+    assert _count("permission_changes") == n
+
+
+@pytest.mark.parametrize("uid", [True, 10 ** 30, 1.5, "abc", None])
+def test_undo_user_id_must_be_a_real_integer(client, world, uid):
+    r = client.post(BATCH + "/undo", json={"changes": [{"userId": uid, "adds": ["map"]}]}, headers=world["h"])
+    assert r.status_code == 400, (uid, r.status_code, r.text)
+
+
+def test_non_string_reason_is_a_400_in_apply_and_undo(client, world):
+    h, bob = world["h"], world["bob"]
+    assert _post(client, h, {"userIds": [bob], "grant": ["map"], "reason": 12345}).status_code == 400
+    r = client.post(BATCH + "/undo", json={"changes": [{"userId": bob, "adds": ["map"]}], "reason": 12345}, headers=h)
+    assert r.status_code == 400
+
+
+def test_revoking_a_key_only_the_unbound_role_gave_is_reported_as_skipped(client, world):
+    """審查 h10 L1：同一請求解除角色、又取消只有那個角色給的鍵 ⇒ 不是靜默無事，要說明（本來就會消失）。"""
+    h, bob = world["h"], world["bob"]
+    rid = _role(client, h, "gone_role", ["customer"])
+    client.post("/api/duty-roles/bindings", json={"userId": bob, "roleId": rid, "reason": ""}, headers=h)
+    r = _post(client, h, {"userIds": [bob], "unbindRoleIds": [rid], "revoke": ["customer"]})
+    p = _person(r, bob)
+    assert [s["key"] for s in p["skipped"]] == ["customer"] and "同時解除" in p["skipped"][0]["reason"] and p["unbind"] == [rid]
