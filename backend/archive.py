@@ -1818,6 +1818,74 @@ def _rotate_server_log_if_large(
         return False
 
 
+#: 行程啟動後這麼久之內不輪替 server.log（秒）。**為什麼**（2026-11-13 T81 正式機實況）：每日備份第一輪在啟動後 30 秒就跑，
+#: 而 `apply_update.ps1`／`apply_module_update.ps1` 的健康檢查正好在這個時間窗內讀 server.log 找「MOTRIX ERP starting／Uvicorn running on」
+#: 並掃錯誤——輪替把檔案清成 0 byte、啟動行搬去 server.log.1 ⇒ 檢查字面不符（最好）或掃到空檔假綠、模組更新路徑還可能假回滾。
+_ROTATE_BOOT_GRACE_SECONDS = 120
+#: 套用／回滾鎖（apply_update.ps1／apply_module_update.ps1 的 `Enter-InstallLock` 建立）超過這麼久視為殘留，不再擋輪替（秒）。
+_APPLY_LOCK_MAX_AGE_SECONDS = 2 * 3600
+#: 本行程的啟動時間（monotonic）。archive 在啟動 import 階段載入，等於行程啟動時間。
+_PROCESS_STARTED_MONO = time.monotonic()
+
+
+def _apply_lock_path() -> str:
+    return os.path.join(_paths.BACKEND_DIR, ".apply.lock")
+
+
+def _server_log_rotation_deferred_reason(now_mono: float = None, lock_path: str = None, now_wall: float = None) -> str:
+    """要不要延後這一輪 server.log 輪替？回理由字串（延後）或 ""（可以輪替）。永不丟例外（拿不準就不延後之外的行為不變：讀鎖檔失敗視為沒有鎖）。
+    延後 ⇒ 不做任何事，下一個 tick（`_DAILY_INTERVAL_SECONDS`）自然再試——檔案多長 2 小時的量，不會爆。
+    ① 行程啟動未滿 `_ROTATE_BOOT_GRACE_SECONDS`；② `backend/.apply.lock` 存在且未過期（套用或回滾正在進行，健康檢查會讀 server.log）。"""
+    now_mono = time.monotonic() if now_mono is None else now_mono
+    up = now_mono - _PROCESS_STARTED_MONO
+    if up < _ROTATE_BOOT_GRACE_SECONDS:
+        return "行程啟動僅 %d 秒（< %d 秒）" % (up, _ROTATE_BOOT_GRACE_SECONDS)
+    lock_path = lock_path or _apply_lock_path()
+    try:
+        if os.path.exists(lock_path):
+            now_wall = time.time() if now_wall is None else now_wall
+            age = now_wall - os.path.getmtime(lock_path)
+            if age < _APPLY_LOCK_MAX_AGE_SECONDS:
+                return "套用／回滾鎖 %s 存在（%d 秒前建立）" % (lock_path, max(age, 0))
+    except OSError:
+        pass
+    return ""
+
+
+#: 延後之後的補輪替：寬限／鎖解除後約這麼久再試一次（秒）。沒有它，行程若每 < 2 小時就重啟一次（崩潰重啟迴圈），
+#: 每次都只跑到寬限內的第一輪 ⇒ 永遠輪替不到。
+_ROTATE_RETRY_AFTER_SECONDS = 5
+_ROTATE_RETRY_LOCK_POLL_SECONDS = 60
+_ROTATE_RETRY_PENDING = False
+
+
+def _schedule_rotation_retry():
+    """被延後時排「一次」補輪替（旗標防止堆疊）：寬限剩多少就等多少再 +5 秒；因鎖延後就 60 秒後再看。永不丟例外。"""
+    global _ROTATE_RETRY_PENDING
+    if _ROTATE_RETRY_PENDING:
+        return
+    try:
+        up = time.monotonic() - _PROCESS_STARTED_MONO
+        delay = (_ROTATE_BOOT_GRACE_SECONDS - up + _ROTATE_RETRY_AFTER_SECONDS) if up < _ROTATE_BOOT_GRACE_SECONDS else _ROTATE_RETRY_LOCK_POLL_SECONDS
+        _ROTATE_RETRY_PENDING = True
+        _start_timer(max(delay, 1), _rotation_retry_tick)
+    except Exception:  # noqa: BLE001
+        _ROTATE_RETRY_PENDING = False
+        logger.exception("_schedule_rotation_retry failed")
+
+
+def _rotation_retry_tick():
+    global _ROTATE_RETRY_PENDING
+    _ROTATE_RETRY_PENDING = False
+    try:
+        if _server_log_rotation_deferred_reason():
+            _schedule_rotation_retry()           # 還在延後（例如套用鎖還在）⇒ 再排一次；鎖 2 小時後視為殘留，不會無限排
+        else:
+            _rotate_server_log_if_large()
+    except Exception:  # noqa: BLE001
+        logger.exception("_rotation_retry_tick failed")
+
+
 def _prune_old_logs(log_dir: str = None, keep_days=None) -> list:
     """輪替出來的舊日誌（access.log.N.gz／app.log.N.gz／server.log.N）超過 `retention.log_keep_days`（設定中心，預設 30）就刪。
     現行檔與 `server.log.rotating` 永遠不刪。整套日誌分流的設計見 `helpers/log_setup.py` 檔頭。永不丟例外（清日誌不可以拖累備份）。回被刪的檔名。"""
@@ -2969,7 +3037,13 @@ def _daily_backup():
 
     # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
     # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
-    _rotate_server_log_if_large()
+    # 開機 120 秒內或套用鎖在時不輪替（健康檢查正在讀 server.log，見 _ROTATE_BOOT_GRACE_SECONDS）——延到下一個 tick
+    _deferred = _server_log_rotation_deferred_reason()
+    if _deferred:
+        logger.info("server.log 輪替延後：%s", _deferred)
+        _schedule_rotation_retry()
+    else:
+        _rotate_server_log_if_large()
     _prune_old_logs()
 
     if not _archive_ok():

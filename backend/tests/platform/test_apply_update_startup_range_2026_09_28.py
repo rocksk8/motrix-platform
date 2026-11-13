@@ -60,7 +60,7 @@ def _fn(text, name):
 
 def _step5_segment(text):
     """Step 5：從讀 tail 到 $scanRange 算完（逐字）＋$switchNames＋呼叫 Get-SwitchMismatch 那一行（逐字）。"""
-    i = text.index("    $tail = Get-Content $logPath")
+    i = text.index("    $tail = Get-ServerLogTail $logPath")
     j = text.index("        $scanRange = @()\n    }\n", i) + len("        $scanRange = @()\n    }\n")
     names = re.search(r"^\s*\$switchNames = @\(.*\)$", text, re.M).group(0)
     call = re.search(r"^\s*\$sm = Get-SwitchMismatch .*$", text, re.M).group(0)
@@ -76,6 +76,7 @@ def _run(tmp_path, log_lines, autostart=AUTOSTART_BOTH, text=None):
     body = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         _fn(text, "Get-StartupRange"),
+        _fn(text, "Get-ServerLogTail"),
         _fn(text, "Get-SwitchMismatch"),
         "$logPath = '%s'" % str(log).replace("'", "''"),
         "$autostartText = @'\n%s\n'@" % autostart.replace("\r\n", "\n"),

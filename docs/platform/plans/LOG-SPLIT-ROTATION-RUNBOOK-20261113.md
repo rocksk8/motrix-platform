@@ -36,7 +36,7 @@ $b = "<ROOT>\backend\logs"
 # 3.1 新的 log 檔已出現，而且在長大
 Get-ChildItem $b -File -Filter "access.log*", "app.log*" | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
 # 3.2 開機那一段仍在 server.log（健康檢查靠它）
-Get-Content "$b\server.log" -Tail 400 -Encoding UTF8 | Select-String -Pattern "MOTRIX ERP starting","Uvicorn running on","已載入" | Select-Object -Last 6
+Get-Content "$b\server.log.1","$b\server.log" -Tail 400 -Encoding UTF8 -ErrorAction SilentlyContinue | Select-String -Pattern "MOTRIX ERP starting","Uvicorn running on","已載入" | Select-Object -Last 6   # server.log 若剛被輪替（≥50 MB 清空），啟動行在 server.log.1
 # 3.3 server.log 不再被 access 灌：開機之後不應該有 `"GET /... HTTP/1.1" 200` 這種行
 (Get-Content "$b\server.log" -Tail 2000 -Encoding UTF8 | Select-String -Pattern 'HTTP/1\.1" \d{3}').Count
 # 3.4 沒有 PermissionError（備份／輪替那一步）
