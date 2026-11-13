@@ -31,7 +31,7 @@ ACTIONS = ("menu", "view", "view_money", "view_sensitive", "create", "edit", "su
            "pay", "delete", "export", "print", "attach", "comment", "reassign", "config")
 #: 動作的白話名稱與一句話說明（頁面欄位標題用；使用者不讀程式碼，畫面上只有這些中文）。詞彙固定，所以這張表是框架的一部分、不是業務內容。
 ACTION_INFO = {
-    "menu": ("看得到選單", "導覽列與系統中樞會不會出現這個入口（只是藏入口，不等於能不能開）"),
+    "menu": ("看得到選單", "導覽列與系統中樞是否顯示此入口（僅隱藏入口，不代表能否開啟）"),
     "view": ("查看", "可以打開並閱讀這類資料"),
     "view_money": ("查看金額", "可以看到成本、毛利、報價與付款金額"),
     "view_sensitive": ("查看個資", "可以看到銀行帳號、身分證字號、電話等敏感資料"),
