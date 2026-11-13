@@ -291,6 +291,10 @@
    "count": 1,
    "reason": "tmp: 心跳狀態檔寫入失敗時刪自己的暫存檔（.tmp，非用戶資料）"
   },
+  "helpers/backup_monitor.py": {
+   "count": 2,
+   "reason": "tmp: 心跳設定檔換檔失敗時刪自己的 .tmp、清除 .pending 待審網址檔（程式設定暫存檔，非用戶單據）"
+  },
   "helpers/branding.py": {
    "count": 1,
    "reason": "exempt: 品牌圖檔（可重新上傳，非單據）"
