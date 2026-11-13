@@ -185,7 +185,7 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
 # 沒有其他真人最高管理者（單人公司）⇒ 使用者裁示 2026-11-13：原因必填、直接生效（200）、稽核註明「單人公司：無第二位核准」。
 _ROLE_DOMAIN = "ledger:role"
 _SOLO_NOTE = "單人公司：無第二位核准"
-_BLANKISH = {"ㅤ", "ᅟ", "ᅠ", "ﾠ", "⠀"}          # 看起來是空白、但不是空白類別的填充字元
+_BLANKISH = {"\u3164", "\u115f", "\u1160", "\uffa0", "\u2800"}          # 看起來是空白、但不是空白類別的填充字元
 
 
 def _visible_len(text):

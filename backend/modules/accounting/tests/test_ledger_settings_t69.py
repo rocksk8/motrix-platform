@@ -171,10 +171,10 @@ def test_invisible_characters_do_not_count_as_a_reason(client, sup_a, conn):
     """零寬字元、全形空白、韓文填充字元組成的「原因」＝沒填：單人直接生效與一般申請都擋。"""
     _only("t69_sup_a")
     before = _role_code()
-    for bad in ("​​​", "ㅤㅤ", "　　", " ​ ", "﻿⁠", "x​"):
+    for bad in ("\u200b\u200b\u200b", "\u3164\u3164", "\u3000\u3000", " \u200b ", "\ufeff\u2060", "x\u200b"):
         assert _put(client, sup_a, reason=bad).status_code == 400, repr(bad)
     assert _role_code() == before
-    assert _put(client, sup_a, reason="調整​").status_code == 200        # 可見字數夠就過
+    assert _put(client, sup_a, reason="調整\u200b").status_code == 200        # 可見字數夠就過
 
 
 def test_sole_superadmin_direct_change_supersedes_an_older_pending_request(client, sup_a, sup_b, conn):
