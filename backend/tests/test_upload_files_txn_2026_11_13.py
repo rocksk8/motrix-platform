@@ -284,3 +284,41 @@ def test_dispatch_delete_approve_keeps_entry_written_by_another_request(client, 
     finally:
         conn.close()
     assert ids == ["other001"], ids
+
+
+def test_upload_lock_timeout_leaves_no_files(site, monkeypatch):
+    """拿寫鎖失敗（BEGIN IMMEDIATE：database is locked，正是爭用時會發生的事）：with 不會呼叫 __exit__，
+    所以 files_txn.__enter__ 自己要回收剛存的檔（審查 hichan-12 M1）。"""
+    import sqlite3
+    import core.txn as ctxn
+    saved = _spy_save(site, monkeypatch)
+
+    def locked(conn):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(ctxn, "begin_write", locked)
+    with pytest.raises(Exception):
+        _post(site)
+    assert saved and _on_disk(saved) == []
+    assert (site.items() or []) == []
+
+
+def test_files_txn_releases_lock_before_purging(client, monkeypatch):
+    """失敗路徑：先 rollback＋關連線（放掉寫鎖）再刪檔——刪檔時不可還握著寫鎖。"""
+    import db
+    import helpers.uploads as up
+    conn = db.get_db()
+    order = []
+    real_purge = up.purge_document_files
+
+    def spy_purge(files):
+        try:
+            conn.execute("SELECT 1")
+            order.append("purge-with-open-conn")
+        except Exception:
+            order.append("purge-after-close")
+        return real_purge(files)
+    monkeypatch.setattr(up, "purge_document_files", spy_purge)
+    with pytest.raises(RuntimeError):
+        with up.files_txn(conn, []):
+            raise RuntimeError("boom")
+    assert order == ["purge-after-close"], order

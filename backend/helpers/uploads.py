@@ -383,7 +383,11 @@ class files_txn:
         self._w = write_txn(conn)
 
     def __enter__(self):
-        self._w.__enter__()
+        try:
+            self._w.__enter__()                   # BEGIN IMMEDIATE 可能失敗（database is locked）：with 不會再呼叫 __exit__ ⇒ 這裡自己回收
+        except BaseException:
+            purge_document_files(self.new_files)
+            raise
         return self.conn
 
     def __exit__(self, exc_type, exc, tb):
@@ -392,11 +396,12 @@ class files_txn:
                 self.conn.commit()
                 return False
             except BaseException:
+                self._w.__exit__(*sys.exc_info())      # 先 rollback＋關連線（放掉寫鎖），再刪檔
                 purge_document_files(self.new_files)
-                self._w.__exit__(*sys.exc_info())
                 raise
+        suppress = self._w.__exit__(exc_type, exc, tb)  # 先 rollback＋關連線（放掉寫鎖），再刪檔：unlink 不在持鎖時做
         purge_document_files(self.new_files)
-        return self._w.__exit__(exc_type, exc, tb)
+        return suppress
 
 
 def _read_json_list(conn, table, col, where_col, key):
@@ -406,7 +411,9 @@ def _read_json_list(conn, table, col, where_col, key):
 
 
 def _row_exists(conn, table, col, where_col, key) -> bool:
-    """列在不在（`UPDATE … SET col=col` 的 rowcount；在寫交易內、不改任何資料）。"""
+    """列在不在（`UPDATE … SET col=col` 的 rowcount；在寫交易內、不改任何資料）。
+    ⚠️ 這個 no-op UPDATE 會觸發該表的 UPDATE 觸發器（含 `UPDATE OF col`）：目前呼叫端的表（invoice_vouchers／completion_notes／
+    shipping_notes／quotations／contractor_dispatches）都沒有 UPDATE 觸發器；之後替這些表加了觸發器要回頭看這裡。"""
     return conn.execute("UPDATE %s SET %s=%s WHERE %s = ?" % (table, col, col, where_col), (key,)).rowcount > 0
 
 

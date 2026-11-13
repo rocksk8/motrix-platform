@@ -17,6 +17,8 @@ BACKEND = pathlib.Path(__file__).resolve().parents[1]
 LIST = json.loads((pathlib.Path(__file__).parent / "data" / "quote_write_paths.json").read_text(encoding="utf-8"))["paths"]
 _SQL = re.compile(r"UPDATE\s+quotations\b", re.I)
 #: 經 L1 helper 寫「表.欄」的函式（簽章：helper(conn, table, col, where_col, key, …, extra_set=None)）
+#: ⚠️ 限制（審查 hichan-12 Q3）：以呼叫名稱比對——`import … as 別名` 的呼叫認不出來；只檢查 table 實參是字面常數（col／extra_set 不是字面 ⇒ 另判為違規）。
+#:    要替 helper 取別名請先來改這份掃描器。
 _HELPERS = ("append_json_list", "remove_json_item")
 #: 經 helper 寫 quotations 時，唯一允許的欄位與 extra_set 欄位
 _HELPER_OK_COLS = {"signed_files_json"}
