@@ -12,6 +12,18 @@ from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D
 needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_calendar_retry_sleep(monkeypatch):
+    """D10（2026-11-13）：轉建／重新連結會在背景執行緒推 Google 行事曆事件（push_event_for_dev_case_converted）；測試機沒有設定行事曆 ⇒
+    第一次建立失敗 ⇒ `_create_event_with_retry` 睡 5 秒再試一次 ⇒ `client` 收尾要等這條背景執行緒（conftest._join_own_background_threads）
+    ⇒ 11 題裡 7 題各多等 5 秒（單檔 54 秒、每題實際只要 0.5 秒）。本檔驗的是衝突／連結／權限，不驗行事曆；
+    把「建立事件」換成立即成功（不睡、不通知），推送函式本身照跑。行事曆本身的題在 tests/ 的 google_calendar 檔。"""
+    from helpers import google_calendar as gc
+    monkeypatch.setattr(gc, "_create_all_day_event", lambda *a, **k: "test-event")
+
 
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})

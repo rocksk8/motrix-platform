@@ -1,5 +1,16 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 一條龍 P0c／P0a／P1'（feat/onepipe-p0-p1，含審查修正、守門補登與 case_summary 註記；旗標 `onepipe.ship_install_ok`、`onepipe.links`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同））；已併 T82 凍結 head f66dfd9ef
+- **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
+- 守門補登：`modules.json` 補歸屬（M03：`supply/case_summary`）；未經範圍讀取基準登記 `release`／`case_summary` 兩筆（理由見 `test_unscoped_reads_ratchet.py` 的 MAX_ENTRIES 註解）。
+- `stock.serial` 的 `claim`：旗標開時，**同一案件**出貨（`shipped` 且 `quote_no` 相同）的序號可由該案登載成設備 ⇒ 標成 `installed`、保留出貨單號、回 `"in_stock"`（不再報序號衝突）；他案出貨、無案號或已被認領的序號仍回原狀態（衝突）。
+- `release`：**看資料、不看旗標**——從出貨狀態登載來的序號（`installed` 且還帶著出貨單號；在庫認領的一定沒有單號，旗標全程關時不會進這個分支）釋放後，若該出貨單仍是已核准 ⇒ 回到 `shipped`（保留案號與出貨單號）；出貨單已不是已核准 ⇒ 回 `in_stock` 並清掉出貨單號。在庫來的照舊回 `in_stock`。`claim` 的更新加 `AND status='shipped'` 並檢查 rowcount。
+- 撤銷出貨單核准（`POST /api/shipping-notes/{no}/revoke-approval`）：這張單的序號有 `installed`（先出貨後登載）⇒ 409「這張出貨單有設備已登載安裝，請先從案件移除設備再撤回」；旗標從沒開過就不會有這種列，行為與今天相同。
+- `stock.case_summary` 有給 `caller` 時，要有「檢視庫存」同一組模組權限（`inventory`／`procurement`／`case_manage`／`netplan_edit`），沒有 ⇒ 403；沒給（內部呼叫）不檢查。
+- 一條龍 P0a（旗標 `onepipe.links`）：出貨單的四種信件與站內通知（送審、輪到簽核、核准、退回）、模組活動信的連結改為該案件頁的出貨單分頁 `case-management.html?q=<案號>&tab=shipping`（原連結 `shipping-notes.html` 不存在）；旗標關或查不到案號 ⇒ 連結與站內通知的 link 欄與今天相同。新增 L1 公開函式 `helpers.email_notify.shipping_link(note_no)`。
+- 一條龍 P1'：新提供者 `stock.case_summary`（IP-117，暫定號；`modules/supply/case_summary.py`）——該案件已安裝／已出貨／作廢的序號台數與料號（唯讀、只有數量沒有金額），給案件的物料流程時間軸入庫格用。
+- 測試：`tests/test_onepipe_p0c_ship_install_2026_11_13.py`（旗標關仍衝突；開：同案登載／釋放、他案與已認領仍衝突、在庫路徑不變）。無 migration、無新表。
+
 ## 1.0.39 — 2026-11-13（feat/upload-files-txn；T83；版號由列車取）
 - 變更（內部）：出貨單回簽附件（`api/shipping_notes.py` signed-files 上傳／刪除）。附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
 

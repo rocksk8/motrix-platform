@@ -119,6 +119,29 @@ def test_diff_reports_added_removed_and_changed_keys():
     assert RK.diff(base, base) == {"missing": [], "added": [], "changed": {}}
 
 
+def test_key_paths_records_keys_of_every_list_element_not_only_the_first_50():
+    """T84：陣列只取前 50 筆時，設定中心群組一過 51 個，排在後面的群組（tender_closing 的 closing_soon_days）掉出取樣，
+    基準「少了」鍵、而陣列後段新增／消失的鍵會被靜默漏看。守門：第 51 筆以後、含巢狀陣列裡的鍵也要被記到。
+    正對照：同一份資料只取前 50 筆（舊行為）時，這些鍵確實記不到——證明這題有牙齒。"""
+    rows = [{"id": i} for i in range(60)]
+    rows[54]["late_key"] = 1                                          # 第 55 筆才有的鍵
+    rows[59]["nested"] = [{"a": i} for i in range(55)]                # 最後一筆裡的巢狀陣列，其第 55 筆才有 deep_key
+    rows[59]["nested"][54]["deep_key"] = 1
+    got = RK.key_paths({"groups": rows})
+    assert "groups[].late_key" in got, "第 55 筆的鍵沒被記到：陣列又被截斷了"
+    assert "groups[].nested[].deep_key" in got, "巢狀陣列第 55 筆的鍵沒被記到"
+    assert "groups[].id" in got and "groups[].nested[].a" in got
+    old = RK.key_paths({"groups": rows[:50]})                         # 舊行為的樣子
+    assert "groups[].late_key" not in old and "groups[].nested" not in old, "正對照失效：前 50 筆本來就不含這些鍵"
+    assert RK.key_paths({"groups": []}) == ["groups"] and RK.key_paths([]) == [] and RK.key_paths({"a": [1, 2, 3]}) == ["a"]
+    # 巢狀截斷單獨成立（h5 note 1）：外層只有一筆、巢狀陣列放在第 1 筆裡，外層截斷不可能遮住它
+    inner = [{"a": i} for i in range(55)]
+    inner[54]["deep_key"] = 1
+    only_nested = {"groups": [{"nested": inner}]}
+    assert "groups[].nested[].deep_key" in RK.key_paths(only_nested), "巢狀陣列第 55 筆的鍵沒被記到（只截斷巢狀的情況）"
+    assert "groups[].nested[].deep_key" not in RK.key_paths({"groups": [{"nested": inner[:50]}]}), "正對照失效：前 50 筆本來就不含 deep_key"
+
+
 def test_seed_every_table_creates_rows_so_lists_have_keys(client):
     import db
     c = db.get_db()

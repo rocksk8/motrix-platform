@@ -3,6 +3,7 @@ import threading
 import inspect
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -10,7 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Depends, Request
 from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送（選填 Idempotency-Key）
 from pydantic import BaseModel, model_validator
 
@@ -249,11 +250,67 @@ def get_operating_targets(authorization: str = Header(None)):
 @router.put("/api/settings/operating-targets")
 def put_operating_targets(body: OperatingTargetsBody, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    _set_setting("operating_targets", body.model_dump())
+    try:
+        old = _get_setting("operating_targets") or {}    # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值；讀不到不能害儲存失敗
+    except Exception:                                    # noqa: BLE001
+        old = None
+        logger.warning("年度營運目標：讀不到舊值，這次儲存不發通知", exc_info=True)
+    new = body.model_dump()
+    _set_setting("operating_targets", new)
     _audit(_tok(authorization), "settings.operating_targets.update", "settings",
            "operating_targets", f"{body.year} 年度目標",
            {"year": body.year, "changedBy": user.get("display_name") or user["username"]})
+    _notify_operating_targets_changed(old, new, user["username"])
     return {"ok": True}
+
+
+_TARGET_ANNUAL_LABELS = (("revenue", "營收目標", "元"), ("newCases", "新成案數", "件"), ("collectionAmount", "收款金額", "元"),
+                         ("collectionRate", "收款率", "%"), ("avgNetMarginPct", "平均營業利益率", "%"), ("grossProfit", "毛利目標", "元"))
+
+
+def _target_num(v, unit):
+    try:
+        v = float(v or 0)
+        if not math.isfinite(v):
+            v = 0.0
+    except (TypeError, ValueError):
+        v = 0.0
+    return ("{:,.0f}" if v == int(v) else "{:,.2f}").format(v) + (" " + unit if unit == "元" else unit)
+
+
+def _notify_operating_targets_changed(old, new, actor):
+    """SPEC §15-3：年度營運目標維持立即生效，**存檔後**發通知（最高管理者全部＋財務；一次存檔多欄合併成一則）。
+    整份覆蓋、一次只存一年：年度不同＝換了一年的目標，舊年度的數字不拿來逐欄比，只告知年度換了。永不丟例外。"""
+    try:
+        if old is None:                                                # 寫入前讀不到舊值 ⇒ 不知道改了什麼，不發
+            return
+        from helpers import settings_notify as SN
+        old = old if isinstance(old, dict) else {}
+        oy, ny = old.get("year"), new.get("year")
+        same_year = oy == ny
+        oa = (old.get("annual") or {}) if same_year else {}
+        na = new.get("annual") or {}
+        rows = []
+        if not same_year:
+            rows.append(("年度營運目標／目標年度", ("%s 年度" % oy) if oy else "（尚未設定）", "%s 年度" % ny))
+        for k, lb, unit in _TARGET_ANNUAL_LABELS:
+            if (oa.get(k) or 0) != (na.get(k) or 0) or (not same_year and (na.get(k) or 0) != 0):
+                rows.append(("年度營運目標／%s" % lb, _target_num(oa.get(k), unit), _target_num(na.get(k), unit)))
+        osp = [(x.get("name"), x.get("revenue"), x.get("cases")) for x in (old.get("salesperson") or [])]
+        nsp = [(x.get("name"), x.get("revenue"), x.get("cases")) for x in (new.get("salesperson") or [])]
+        if not same_year:
+            if osp or nsp:                                             # 換年度：只告知人數（顯示舊年度實際人數），不逐人比
+                rows.append(("年度營運目標／業務員配額", "%d 位" % len(osp), "%d 位" % len(nsp)))
+        elif osp != nsp:
+            n_o, n_n = "%d 位" % len(osp), "%d 位" % len(nsp)
+            rows.append(("年度營運目標／業務員配額", n_o, n_n if len(osp) != len(nsp) else n_n + "（內容已調整）"))
+        if not rows:
+            return
+        with SN.batch():
+            for label, o, n in rows:
+                SN.notify_change("ops_target", label, o, n, actor=actor, risk="ops", roles=("財務",), link="reports.html")
+    except Exception:                                                  # noqa: BLE001
+        logger.warning("年度營運目標變更通知失敗（設定已存好）", exc_info=True)
 
 
 # ── Monthly report recipients（2026-08-27，取代原本寫死只寄 superadmin 的規則）────
@@ -1669,7 +1726,7 @@ def _migrated_locations(profile):
 _PUBLIC_PROFILE_FIELDS = ("name", "tax_id", "contact_info")
 _PUBLIC_LOCATION_FIELDS = ("id", "name")
 
-#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 0 ＝ 維持原本（登入即可讀）。
+#: 設定中心「登入與密碼」群組的開關：1 ＝ 完整公司資料只有最高管理者讀得到（其他人 403，請改用 /public）。預設 1（2026-11-13 使用者裁示：公司資料完整版預設只限最高管理者）；0 ＝ 登入即可讀（放寬，須第二位最高管理者核准）。
 _FULL_READ_GROUP, _FULL_READ_FIELD = "account_security", "company_profile_full_read_superadmin_only"
 
 
@@ -1797,8 +1854,14 @@ def _profile_audit_detail(before, after, sent_keys):
     return {"changed": changed, "values": values}
 
 
+def _ui_is_wizard(request) -> bool:
+    """公司設定精靈（company-setup-wizard.html）的請求帶 `X-Motrix-Ui: wizard`：只用來讓稽核看得出「是精靈存的還是設定頁存的」，不影響任何判斷。
+    ⚠️ 用 `Request` 讀、不宣告成 `Header(...)` 參數：宣告了會進 OpenAPI，路由表 golden（route_table_golden.json）要跟著重錄；這個標記不是 API 契約。"""
+    return str(request.headers.get("X-Motrix-Ui") or "").strip().lower() == "wizard"
+
+
 @router.put("/api/settings/company-profile")
-def set_company_profile(body: CompanyProfile, authorization: str = Header(None)):
+def set_company_profile(body: CompanyProfile, request: Request, authorization: str = Header(None)):
     """部分更新：**這次沒送的欄位保留現值。**
 
     🔴 原本是 `body.model_dump()` 整筆覆蓋，而 `CompanyProfile` 每個欄位都有
@@ -1901,9 +1964,12 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     # 🔴 SA2：稽核要記**哪些欄位變了**，金錢／身分欄位連前後值（遮成末四碼）。
     # ⚠️ `target_label` 仍然放公司名（那是「這筆紀錄講的是哪個對象」），
     # 而**真正回答「改了什麼」的是 `detail`** —— 那個參數在這裡從來沒被傳過。
+    _detail = _profile_audit_detail(cur, value, sent.keys())
+    if _ui_is_wizard(request):
+        _detail["ui"] = "wizard"
     _audit(_tok(authorization), "settings.company_profile.update", "settings",
            "company_profile", value.get("name", ""),
-           detail=_profile_audit_detail(cur, value, sent.keys()))
+           detail=_detail)
     if confirm_identity:
         from helpers import company_setup as _cs
         from db import get_db as _gdb
@@ -1918,7 +1984,8 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
             conn.close()
         _cs.reset_cache()
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
-               value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
+               value.get("name", ""),
+               detail=dict({"fields_hash": rec["fields_hash"], "via": rec["via"]}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
         return {"ok": True, "confirmed": True}
     return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
@@ -2010,11 +2077,61 @@ def get_default_payment_terms(authorization: str = Header(None)):
 
 @router.put("/api/settings/payment-terms")
 def set_default_payment_terms(body: PaymentTermsBody, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True)
+    try:
+        terms = _quote_default_terms()
+        old = _get_setting("default_payment_terms", terms["paymentTerms"] if terms else "")   # §15：寫入前記下目前值（與 GET 同一個預設來源）；讀不到不能害儲存失敗
+    except Exception:                                                                          # noqa: BLE001
+        old = None
+        logger.warning("預設付款條件：讀不到舊值，這次儲存不發通知", exc_info=True)
     _set_setting("default_payment_terms", body.text)
     _audit(_tok(authorization), "settings.payment_terms.update", "settings",
            "default_payment_terms", "報價單預設付款條件")
+    _notify_quote_terms_changed([("報價單預設付款條件", old or "（空白）", body.text or "（空白）")] if old is not None and (old or "") != (body.text or "") else [], user["username"])
     return {"ok": True}
+
+
+def _notify_quote_terms_changed(rows, actor):
+    """SPEC §15-3：報價條款（條款組、預設付款條件）維持立即生效，**存檔後**發通知（最高管理者全部＋業務；多列合併成一則）。
+    `rows`＝[(label, 舊白話值, 新白話值)]，空 ⇒ 不發。永不丟例外。"""
+    try:
+        if not rows:
+            return
+        from helpers import settings_notify as SN
+        with SN.batch():
+            for label, o, n in rows:
+                SN.notify_change("quote_terms", label, o, n, actor=actor, risk="ops", roles=("業務",), link="quotation-form.html")
+    except Exception:                                                  # noqa: BLE001
+        logger.warning("報價條款變更通知失敗（設定已存好）", exc_info=True)
+
+
+def _quote_terms_change_rows(old, new):
+    """條款組整組覆寫前後比對（以 key 對應）⇒ 通知列：新增／刪除／改名／內容修改／預設組改變。"""
+    olds = {p.get("key"): p for p in (old.get("presets") or []) if isinstance(p, dict)}
+    news = {p.get("key"): p for p in (new.get("presets") or []) if isinstance(p, dict)}
+    q = lambda names: "".join("「%s」" % n for n in names)
+    rows = []
+    added = [news[k].get("name") for k in news if k not in olds]
+    gone = [olds[k].get("name") for k in olds if k not in news]
+    if added:
+        rows.append(("報價條款組／新增", "（無）", q(added)))
+    if gone:
+        rows.append(("報價條款組／刪除", q(gone), "（已刪除）"))
+    for k in news:
+        if k in olds and olds[k].get("name") != news[k].get("name"):
+            rows.append(("報價條款組／改名", q([olds[k].get("name")]), q([news[k].get("name")])))
+    edited = []
+    for k in news:
+        if k in olds:
+            fields = [f for f in _TERMS_FIELDS if (olds[k].get(f) or "") != (news[k].get(f) or "")]
+            if fields:
+                edited.append("「%s」" % news[k].get("name"))
+    if edited:
+        rows.append(("報價條款組／內容修改", "（舊內容）", "".join(edited)))
+    nm = lambda d, key: next((p.get("name") for p in (d.get("presets") or []) if p.get("key") == key), "（無）")
+    if (old.get("defaultKey") or "") != (new.get("defaultKey") or ""):
+        rows.append(("報價條款組／預設條款組", q([nm(old, old.get("defaultKey"))]), q([nm(new, new.get("defaultKey"))])))
+    return rows
 
 
 # ── Edge path setting ─────────────────────────────────────────────────────────
@@ -2558,15 +2675,20 @@ def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = He
         default_key = cleaned[0]["key"]
 
     value = {"presets": cleaned, "defaultKey": default_key}
+    try:
+        old_value = _quote_terms_presets()                          # §15：寫入前記下目前值，存檔後通知「誰改了什麼」；讀不到不能害儲存失敗
+    except Exception:                                               # noqa: BLE001
+        old_value = None
+        logger.warning("報價條款組：讀不到舊值，這次儲存不發通知", exc_info=True)
     _set_setting("quote_terms_presets", value)
     default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
     _audit(_tok(authorization), "settings.quote_terms_presets.update", "settings",
            "quote_terms_presets",
            f"報價條款組共 {len(cleaned)} 組，預設為「{default_name}」")
-    notify_module_activity("系統設定", "變更報價條款組",
-                            actor.get("display_name") or actor["username"],
-                            f"{len(cleaned)} 組，預設「{default_name}」",
-                            "quotation-form.html")
+    # 使用者裁示（2026-11-13）：條款組變更只發「設定變更通知」一則（誰改了什麼、舊→新）；原本的 notify_module_activity
+    # （「系統設定：變更報價條款組」email＋群組 LINE module_activity）拿掉，不再並存發兩則。
+    if old_value is not None:
+        _notify_quote_terms_changed(_quote_terms_change_rows(old_value, value), actor["username"])
     return value
 
 
@@ -4168,7 +4290,7 @@ def get_branding_settings(authorization: str = Header(None)):
 
 
 @router.put("/api/settings/branding/{kind}")
-async def upload_branding_asset(kind: str, file: UploadFile = File(...), authorization: str = Header(None)):
+async def upload_branding_asset(kind: str, request: Request, file: UploadFile = File(...), authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)   # 只有 superadmin（不接受持有 settings 模組）
     _branding_refuse_demo()
     from helpers import branding
@@ -4180,12 +4302,13 @@ async def upload_branding_asset(kind: str, file: UploadFile = File(...), authori
     except branding.BrandingRejected as e:
         raise HTTPException(400, str(e))
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
-           branding.KINDS[kind]["label"], {"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]})
+           branding.KINDS[kind]["label"],
+           dict({"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
     return {"ok": True, "kind": kind, "v": saved["v"], "assets": _branding_state_out()}
 
 
 @router.delete("/api/settings/branding/{kind}")
-def reset_branding_asset(kind: str, authorization: str = Header(None)):
+def reset_branding_asset(kind: str, request: Request, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     _branding_refuse_demo()
     from helpers import branding
@@ -4193,5 +4316,6 @@ def reset_branding_asset(kind: str, authorization: str = Header(None)):
         raise HTTPException(404, "查無此圖檔種類")
     had = branding.reset_asset(kind)
     _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
-           branding.KINDS[kind]["label"], {"kind": kind, "op": "reset", "hadCustom": had})
+           branding.KINDS[kind]["label"],
+           dict({"kind": kind, "op": "reset", "hadCustom": had}, **({"ui": "wizard"} if _ui_is_wizard(request) else {})))
     return {"ok": True, "kind": kind, "assets": _branding_state_out()}

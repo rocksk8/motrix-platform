@@ -134,6 +134,28 @@ def _conflict_origin(conn, group, g, eff, keys):
     return ("系統預設", "") if all(_same_value(eff[k], g["fields"][k].default) for k in keys) else ("舊路徑寫入，時間不明", "")
 
 
+def expected_conflict(group, expected, *, conn=None):
+    """唯讀預檢（跨群組批次用）：`expected`＝`{欄位鍵: 呼叫端看到的值}`；有任一欄與目前生效值不同 ⇒ 回 `SettingConflict`（**不丟**），否則 `None`。
+    只是「先看一眼、別寫到一半才發現」；真正的把關仍是 `publish(expected_values=)` 在寫鎖內的逐欄比對。未知欄位 ⇒ SettingError。"""
+    g = _g(group)
+    expected = _normalized(group, expected)                        # 與 publish 相同：json 值先過轉接器 normalize 再比
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        eff = _effective(c, group)
+        unknown = [k for k in expected if k not in g["fields"]]
+        if unknown:
+            raise SettingError("expected_values 含不存在的欄位：%s" % "、".join(map(str, unknown)))
+        bad = [k for k, v in expected.items() if not _same_value(eff[k], v)]
+        if not bad:
+            return None
+        by, at = _conflict_origin(c, group, g, eff, bad)
+        return SettingConflict(bad, by, at)
+    finally:
+        if own:
+            c.close()
+
+
 def _check_impact_scope(key, s, *, pending):
     """`impact_scope` 的結構驗證（None 合法＝尚未宣告）。`effective` 必須與欄位旗標一致（有 `requires_pending`／`loosen` ⇒ pending）。"""
     if s is None:
@@ -585,7 +607,8 @@ def get_group(group, *, conn=None, now=None):
 
 def get_group_effective(group, *, conn=None, now=None):
     """**金額／法遵讀取端用的嚴格版**（SPEC §15.A.6 N2）：永遠讀即時的生效值（含到時的待生效），**忽略 `MOTRIX_SETTINGS_DEFAULTS_ONLY`**、不用行程內快取；
-    登錄表讀取失敗 ⇒ 退回轉接器 RAW 舊儲存（＝最後一次生效的值），**絕不退回程式預設**；連 RAW 也讀不到 ⇒ 丟例外（寧可大聲失敗，也不用錯的金額）。"""
+    登錄表讀取失敗 ⇒ 退回轉接器 RAW 舊儲存（＝最後一次生效的值），**絕不退回程式預設**；連 RAW 也讀不到 ⇒ 丟例外（寧可大聲失敗，也不用錯的金額）。
+    **呼叫者契約**：呼叫者（排程／通知／匯出）必須自行 try/except；失敗關閉＝跳過該筆並記錄，不可讓整個迴圈中止。"""
     g = _g(group)
     own = conn is None
     c = conn if conn is not None else get_db()
@@ -944,7 +967,17 @@ def plan(group, values, *, user="", conn=None):
                               "summary": _summary_of(f, old, v) if kind != "unchanged" else []})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
         out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天後生效」，儲存後會留下紀錄。" % days)
+    out["recipients"] = plan_recipients(group, out["fields"], user=user)
     return out
+
+
+def plan_recipients(group, fields, *, user=""):
+    """收件人預覽（dry-run；確認視窗用）：`fields`＝`plan()["fields"]`。⇒ `helpers.settings_notify.preview_recipients` 的結果
+    （`superadmins`／`others`／`ignoredRoles`／`line`）；沒有實際變更的欄位不算。永不丟例外。"""
+    from helpers import settings_notify as _SN
+    phase = {"immediate": "updated", "pending": "pending", "pending_approval": "pending_approval"}
+    items = [_SN.setting_item(group, x["field"], x["old"], x["new"], phase[x["kind"]], actor=user, effective_at=x.get("effectiveAt") or "") for x in fields if x["kind"] in phase]
+    return _SN.preview_recipients(items)
 
 
 _IMPACT_CACHE = {}          # (db, group, field, 值) -> (monotonic, 結果)
@@ -996,6 +1029,26 @@ def live_impact(group, field, value, *, timeout=None):
     return res
 
 
+def _notice_watermark(c):
+    """notifications 的水位線（寫鎖內呼叫）：之後新增的列 id 一定 > 回傳值；取不到 ⇒ `None`（呼叫端跳過去重，最壞多發一則通知）。
+
+    平常取自 `sqlite_sequence`（notifications.id 是 AUTOINCREMENT：seq＝曾經用過的最大 id，≥ MAX(id)），不讀 notifications 的列。
+    ⚠️ 查不到 seq 列有兩種情況：新庫還沒寫過任何通知，或（不該發生）有人清掉了 sqlite_sequence 而舊通知還在。
+    ☠️ 兩者不分、一律當 0 的話，第二種會讓去重的 DELETE 把舊的 `setting:*` 通知一起刪掉；改成「跳過去重」則新庫的第一次存檔會多發一則。
+    ⇒ 只在這個罕見分支回退 `SELECT MAX(id) FROM notifications`（通知水位線、只讀 id、無業務資料）；
+       這一筆未範圍讀取已登記進 unscoped_reads 基準（PM 核准 +1，原因見 test_unscoped_reads_ratchet 的 MAX_ENTRIES 註解）。
+       ⛔ 不在 notifications 寫暫存列來取 id（PM 否決：NOT NULL 欄位、日後 trigger／監聽、會推進 sqlite_sequence、稽核看不懂）。
+    任何一步出錯 ⇒ `None`（跳過去重，不讓設定存檔失敗）。"""
+    try:
+        row = c.execute("SELECT seq FROM sqlite_sequence WHERE name='notifications'").fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+        return int(c.execute("SELECT COALESCE(MAX(id),0) FROM notifications").fetchone()[0])
+    except Exception:   # noqa: BLE001
+        logger.exception("settings_registry: 取不到通知水位線，這次略過通知去重")
+        return None
+
+
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None, expected_values=None, supersede=False):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
@@ -1011,6 +1064,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     from datetime import datetime, timedelta
     from core.txn import begin_write
     from helpers import config_ledger as L
+    from helpers import settings_notify as _SN
     g = _g(group)
     values, expected_values = _normalized(group, values), (_normalized(group, expected_values) if expected_values else expected_values)
     st = group_status(group)
@@ -1024,6 +1078,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     began = False
     try:
         began = begin_write(c)
+        _notice_mark = _notice_watermark(c)         # 寫鎖內：之後新增的 config_change 通知都是這次 record 寫的
+        _who = user or ((actor.get("username") or "") if isinstance(actor, dict) else str(actor or ""))
+        _items = []                                 # 變更通知項目（commit 之後才發；見 helpers/settings_notify）
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
         if expected_values:
@@ -1064,6 +1121,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
                      audit_action="settings.%s.update" % group, target_label=g["label"])
             _write_legacy(c, group, new, old=base)
+            _items += [_SN.setting_item(group, x["field"], x["old"], x["new"], "updated", actor=_who, reason=reason or note) for x in changes]
             result.update(changed=True, version=out["version"], values=_merged(eff, new), changes=changes)
         if pend:
             days = confirm_period_days(c)
@@ -1080,14 +1138,20 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                                    audit_action="settings.%s.pending" % group, target_label=g["label"], approvals_required=need)
                     result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
                                           for i, x in zip(rec["ids"], part)]
+                    _items += [_SN.setting_item(group, x["field"], x["old"], x["new"], "pending_approval" if need else "pending", actor=_who,
+                                        reason=reason or note, effective_at=when, required=need) for x in part]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
                     result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天後生效」，並已留下紀錄。" % days)
         if not changes and not pend and not result["superseded"]:
             if began:
                 c.rollback()
             return result
+        _items = [i for i in _items if i]           # setting_item 失敗會回 None：先濾掉；沒有任何有效項目 ⇒ 不刪帳本的簡短通知（否則誰都沒被通知）
+        if _items and _notice_mark is not None:     # 設定中心的通知（commit 後發）取代帳本對高風險變更的簡短通知（同一件事不發兩則）：同交易內刪掉剛寫的那幾列
+            c.execute("DELETE FROM notifications WHERE id>? AND type='config_change' AND ref_label LIKE 'setting:%'", (_notice_mark,))
         c.commit()
         invalidate(group)
+        _SN.emit(_items)                            # commit 之後、不在任何鎖內；永不丟例外
         return result
     except Exception:
         if began and c.in_transaction:
@@ -1099,14 +1163,18 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
 
 
 def materialize_due(conn=None, now=None):
-    """把已到時的待生效值寫進定義版本並標 activated（每日工作呼叫；漏跑也不影響效力——讀取時本來就套用到時的待生效值）。回處理的明細列數。"""
+    """把已到時的待生效值寫進定義版本並標 activated（每日工作呼叫；漏跑也不影響效力——讀取時本來就套用到時的待生效值）。回處理的明細列數。
+    通知只在**本函式自己 commit 之後**發（自己開連線，或 `begin_write` 由本函式開了交易）；呼叫端傳入的連線已在自己的交易裡（`began` 為 False、由呼叫端稍後 commit）⇒ **不發通知**
+    （commit 之前發會通知到還沒落盤的變更；呼叫端要通知請在自己 commit 之後 `settings_notify.emit()`）。每日工作走自己的連線，不受影響。"""
     from datetime import datetime
     from core.txn import begin_write
     from helpers import config_ledger as L
+    from helpers import settings_notify as _SN
     now = now or datetime.now().isoformat(timespec="seconds")
     own = conn is None
     c = conn if conn is not None else get_db()
     began, total, failed = False, 0, []
+    _items = []                                     # 到期生效的通知項目（commit 之後合併成一則發）
     try:
         began = begin_write(c)
         for group in list(_GROUPS):
@@ -1120,9 +1188,11 @@ def materialize_due(conn=None, now=None):
                 continue
             sp = "mat_%d" % (len(failed) + total + 1)
             c.execute("SAVEPOINT " + sp)                 # 每個群組各一個：轉接器寫入失敗只影響這一群組（SPEC §15.A.5-2）
+            loc = []                                     # 這個群組的通知項目：savepoint 成功釋放才併入（失敗回復就丟掉，不通知沒生效的變更）
             try:
-                total += _materialize_group(c, group, due, now)
+                total += _materialize_group(c, group, due, now, loc)
                 c.execute("RELEASE " + sp)
+                _items += loc
             except Exception as e:                       # noqa: BLE001
                 c.execute("ROLLBACK TO " + sp)           # 連同剛寫的定義列一併撤銷：定義列與舊鍵不得分歧
                 c.execute("RELEASE " + sp)
@@ -1133,6 +1203,7 @@ def materialize_due(conn=None, now=None):
                 invalidate(group)
         if began or own:
             c.commit()
+            _SN.emit(_items)                              # 外層 commit 之後、不在鎖內；永不丟例外
         for group, why in failed:                         # 外層 commit 之後才通知最高管理者（取消與通知各自可失敗，不拖垮每日工作）
             _notify_materialize_failure(group, why)
         return total
@@ -1160,8 +1231,9 @@ def _notify_materialize_failure(group, why):
         logger.warning("settings: 通知待生效寫入失敗時出錯（群組 %s）", group, exc_info=True)
 
 
-def _materialize_group(c, group, due, now):
-    """把一個群組到期的待生效值寫進定義版本＋舊儲存並標 activated；回處理的明細列數。丟例外 ⇒ 呼叫端回復這個群組的 savepoint。"""
+def _materialize_group(c, group, due, now, items=None):
+    """把一個群組到期的待生效值寫進定義版本＋舊儲存並標 activated；回處理的明細列數。丟例外 ⇒ 呼叫端回復這個群組的 savepoint。
+    `items`（選填 list）：把「已生效」的通知項目放進去（`settings_notify.setting_item(..., "activated")`）；由呼叫端在 savepoint 成功後才取用。"""
     from helpers import config_ledger as L
     base = _effective(c, group, overlay=False)
     new = dict(base)
@@ -1177,6 +1249,9 @@ def _materialize_group(c, group, due, now):
     out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
     _write_legacy(c, group, new, old=base)
     n = len(L.promote_due(c, now, domain="setting:%s" % group))
+    if items is not None:
+        from helpers import settings_notify as _SN
+        items += [_SN.setting_item(group, r["field"], r["old"], r["new"], "activated", reason=r.get("reason") or "") for r in due]
     invalidate(group)
     logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
     return n
@@ -1227,11 +1302,13 @@ def apply_profile(name, *, reason="", user="", ip="", conn=None, actor=None):
     """套用預設組：每個群組各走一次 `publish()`（放寬照樣需要雙人核准／24 小時）。回 `{群組: publish 結果}`。"""
     if name not in profiles():
         raise SettingError("沒有這個預設組：%s" % name)
+    from helpers import settings_notify as _SN
     by_group = {}
     for ch in profile_preview(name, conn=conn):
         by_group.setdefault(ch["group"], {})[ch["field"]] = ch["new"]
-    return {gk: publish(gk, vals, note="套用預設組「%s」" % name, user=user, reason=reason or "套用預設組「%s」" % name, ip=ip, conn=conn, actor=actor)
-            for gk, vals in by_group.items()}
+    with _SN.batch():                               # 跨多個群組的各次 publish 只發**一則**通知
+        return {gk: publish(gk, vals, note="套用預設組「%s」" % name, user=user, reason=reason or "套用預設組「%s」" % name, ip=ip, conn=conn, actor=actor)
+                for gk, vals in by_group.items()}
 
 
 # --- 定義種類／版本 adapter ----------------------------------------------

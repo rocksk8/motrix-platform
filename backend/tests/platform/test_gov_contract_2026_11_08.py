@@ -52,7 +52,10 @@ def _restore_definition_registries(_app):
     用 module 範圍而不是每題還原：kind 的登記靠 import 副作用，import 只會跑一次，每題清掉後下一題就找不到 kind。
     依賴 _app：user_buttons／expense_types／remit_kinds 在 import 時就登記，要先讓 main 載完再拍快照，否則還原會把它們一併抹掉。"""
     from core import definitions as D
-    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS)]      # noqa: SLF001
+    from core import spine as SP
+    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS, SP._KIND_GATES)]      # noqa: SLF001
+    # SP._KIND_GATES（核心 spine 的 kind 開關登記）也是行程內全域狀態：案例走到 ensure_kind() 會登記，沒還原就留給同 worker 的後續檔
+    # （T84 汙染偵測器 tools/platform/pollution_detector.py 抓到的洩漏）。
     yield
     for t, saved in snap:
         t.clear()

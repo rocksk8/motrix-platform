@@ -721,8 +721,10 @@ class _StockSerials:
     @staticmethod
     def claim(conn, sn, *, quote_no, device_id, actor, now):
         """序號不在庫存系統 ⇒ None（不追蹤，不擋存檔）；在庫 ⇒ 標成 installed、回 "in_stock"；
-        在庫存系統但不是在庫（已出貨、已被別案認領…）⇒ 不動、回它目前的狀態（呼叫端列為衝突）。"""
-        row = conn.execute("SELECT id, status FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)).fetchone()
+        在庫存系統但不是在庫（已出貨、已被別案認領…）⇒ 不動、回它目前的狀態（呼叫端列為衝突）。
+        一條龍 P0c（旗標 `onepipe.ship_install_ok`）：**同一案件**出貨的序號（shipped 且 quote_no 相同）可由該案登載成設備 ⇒ 標成 installed、
+        保留出貨單號（之後釋放會回到 shipped，不是在庫）、回 "in_stock"；他案出貨或已被認領仍回原狀態（衝突）。"""
+        row = conn.execute("SELECT id, status, quote_no FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)).fetchone()
         if not row:
             return None
         if row["status"] == "in_stock":
@@ -731,14 +733,30 @@ class _StockSerials:
                 SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
                 WHERE id=?
             """, (quote_no, device_id, now, actor, now, row["id"]))
+        elif row["status"] == "shipped" and quote_no and (row["quote_no"] or "") == quote_no and _ship_install_ok(conn):
+            cur = conn.execute("UPDATE stock_items SET status='installed', case_device_id=?, updated_at=? WHERE id=? AND status='shipped'", (device_id, now, row["id"]))
+            return "in_stock" if cur.rowcount else "installed"
         return row["status"]
 
     @staticmethod
     def release(conn, sn, *, device_id, now):
-        """這個設備先前認領的序號放回在庫（只放本設備認領的那一筆）。"""
+        """這個設備先前認領的序號放回在庫（只放本設備認領的那一筆）。
+        一條龍 P0c：**看資料、不看旗標**——從出貨狀態登載來的（installed 且還帶著出貨單號；在庫認領的 installed 一定沒有出貨單號，
+        所以旗標全程關時永遠不會進這個分支）⇒ 該出貨單**仍是已核准**就回到 shipped（保留案號與出貨單號）；
+        出貨單已不是已核准（被撤銷／作廢）⇒ 回在庫並清掉出貨單號。"""
         conn.execute("""
             UPDATE stock_items
-            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
+            SET status='shipped', case_device_id='', updated_at=?
+            WHERE serial_no=? AND status='installed' AND case_device_id=? AND shipping_note_no<>''
+              AND shipping_note_no IN (SELECT note_no FROM shipping_notes WHERE status='已核准')
+        """, (now, sn, device_id))
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', quote_no='', shipping_note_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
             WHERE serial_no=? AND status='installed' AND case_device_id=?
         """, (now, sn, device_id))
 
+
+def _ship_install_ok(conn) -> bool:
+    from helpers.onepipe_flags import flag_on
+    return flag_on("ship_install_ok", conn=conn)

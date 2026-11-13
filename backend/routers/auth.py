@@ -14,7 +14,7 @@ from typing import Optional, List
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, HTTPException, Header, Query, Request, Depends
+from fastapi import APIRouter, HTTPException, Header, Query, Request, Depends, Response
 from pydantic import BaseModel
 from webauthn import (
     generate_registration_options,
@@ -24,6 +24,7 @@ from webauthn import (
     options_to_json,
 )
 
+from core.txn import write_txn
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers.module_registry import refuse_unknown_new_keys
 from helpers.auth import effective_modules, require_any_module, VALID_ROLES
@@ -31,6 +32,7 @@ from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
 
+from helpers.errors import trace_id
 from helpers.audit import _audit_login_failed
 from helpers.client_ip import client_ip as _trusted_client_ip
 from helpers.client_ip import rate_limit_key as _rl_key
@@ -371,6 +373,8 @@ class UserIn(BaseModel):
     password: Optional[str] = None
     active: Optional[bool] = None
     department_id: Optional[int] = None
+    #: 變更原因：`PUT /api/users/{id}` 授予或取消高敏感權限鍵（`helpers.duty_roles.HIGH_SENSITIVITY_KEYS`）時必填（≥4 個不同字）；其餘欄位的變更用不到
+    reason: Optional[str] = None
 
 
 class WebauthnRegisterBeginIn(BaseModel):
@@ -1736,15 +1740,33 @@ def _checked_quote_email(v):
     return s
 
 
+def _password_problem(pw, min_len=None):
+    """設定新密碼的規則檢查（最短長度＋弱密碼清單）⇒ 問題訊息或 None。`create_user` 與員工匯入的臨時密碼用同一支，訊息逐字相同。"""
+    n = _min_pw() if min_len is None else min_len
+    if len(pw) < n:
+        return f"密碼至少 {n} 碼"
+    if is_weak_password(pw):
+        return "密碼過於簡單或為已知弱密碼，請改用更強的密碼"
+    return None
+
+
+def _insert_new_user(conn, username, password_hash, display_name, role, email, phone, modules_json, muted_json, now, department_id, quote_email=''):
+    """新增一個帳號的唯一 INSERT（不 commit）：`create_user` 與員工匯入（`import_user_rows`）共用。一律啟用、`must_change_password=1`（第一次登入必須改密碼）。"""
+    conn.execute("""
+        INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
+                           notification_muted, active, created_at, must_change_password, department_id, quote_email)
+        VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?)
+    """, (username, password_hash, display_name, role, email, phone, modules_json, muted_json, now, department_id, quote_email or ''))
+
+
 @router.post("/api/users", status_code=201)
-def create_user(body: UserIn, authorization: str = Header(None)):
+def create_user(body: UserIn, request: Request, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
-    if len(body.password) < _min_pw():
-        raise HTTPException(400, f"密碼至少 {_min_pw()} 碼")
-    if is_weak_password(body.password):
-        raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+    _pw_problem = _password_problem(body.password)
+    if _pw_problem:
+        raise HTTPException(400, _pw_problem)
     now = datetime.now().isoformat()
     _qe_new = _checked_quote_email(body.quote_email)
     refuse_unknown_new_keys(body.modules)
@@ -1755,13 +1777,16 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     unknown = [k for k in (body.notification_muted or []) if _mt.get(k) is None and k not in _EVENT_KEYS]
     if unknown:
         raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
+    # 高敏感權限的共用檢查點（與 PUT /api/users/{id}、職責角色同一條規則）：建帳號時 modules 帶高敏感鍵 ⇒ 原因必填；建成最高管理者 ⇒ modules 不影響生效權限，不算授予
+    from helpers import duty_roles as _dr
+    try:
+        _sens, _reason, _gb, _ga = _dr.user_perm_gate(None, [], body.role or "viewer", body.modules or [], body.reason)
+    except _dr.DutyError as e:
+        raise HTTPException(e.status, str(e))
     conn = get_db()
     try:
-        conn.execute("""
-            INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password, department_id, quote_email)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?)
-        """, (
+        _insert_new_user(
+            conn,
             body.username.strip(),
             _hash_pw(body.password),
             body.display_name or '',
@@ -1773,9 +1798,11 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             now,
             body.department_id or None,
             _qe_new or '',
-        ))
-        conn.commit()
+        )
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        if _sens:                                   # 與 INSERT 同一個交易：permission_changes（kind=user_modules）＋audit_log（user.perm_change）
+            _dr.record_user_modules_change(conn, actor, user_id, body.username.strip(), _gb, _ga, _reason, _trusted_client_ip(request))
+        conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(409, "帳號已存在")
@@ -1784,6 +1811,99 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     notify_module_activity("使用者管理", "建立帳號", actor.get("display_name") or actor["username"],
                             body.display_name or body.username, "users.html")
     return {"id": user_id, "created_at": now, "mustChangePassword": True}
+
+
+@router.post("/api/users/import-rows")
+def import_user_rows(body: dict, response: Response, authorization: str = Header(None), idempotency_key: str = Header(None)):
+    """員工匯入（T85 匯入精靈；規劃邏輯在 `helpers/user_import.py`）。**只有最高管理者**。契約與客戶／料號的 `import-rows` 相同：
+    只有 `dryRun` 明確是 false 才會寫入，其他一律只回預覽；寫入要帶預覽拿到的 `planHash`，資料在預覽後有變 ⇒ 409；整批一個交易。
+    只新增（既有帳號一律略過、不更新）；角色只允許業務／工程師／檢視者；模組勾選一律空；一律 `must_change_password=1`。
+    🔴 臨時密碼在寫入當下才產生，只出現在**這一次**成功回應的 `credentials`（`Cache-Control: no-store`）；不進計畫雜湊、預覽回應、錯誤訊息、日誌、稽核、任何資料表。
+    **冪等（M3）**：寫入請求可帶 `Idempotency-Key`；回應掉了、頁面重送同一把 key ⇒ 回第一次的結果（建了哪些帳號 `createdAccounts`），
+    **不再建立、不含任何密碼**（`replayed: true`、`passwordsShown: false`）；密碼已遺失的帳號請用既有的重設流程（`PUT /api/users/{id}` 設新密碼，會強制第一次登入改密碼）。
+    帳號規則（M1）：正規化（NFKC＋小寫）後 `^[a-z0-9._-]{3,32}$`，存的是正規化後的值（見 `helpers/user_import.py`）。"""
+    from helpers import user_import as UI
+    actor = _require_user(authorization, require_superadmin=True)
+    rows = body.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "沒有可匯入的資料列")
+    if len(rows) > UI.IMPORT_MAX_ROWS:
+        raise HTTPException(400, "一次最多匯入 %d 列，請分檔" % UI.IMPORT_MAX_ROWS)
+    response.headers["Cache-Control"] = "no-store"
+    real = body.get("dryRun") is False
+    min_pw = _min_pw()
+    conn = get_db()
+    created = []
+    call = None
+    try:
+        if not real:
+            return UI.plan_summary(UI.plan_users_import(conn, rows))
+        if not isinstance(body.get("planHash"), str) or not body["planHash"]:
+            raise HTTPException(400, "請先預覽再確認匯入")
+        from helpers import idempotency as _idem
+        key = _idem.parse_key(idempotency_key)
+        if key:                                                       # 重送同一把 key ⇒ 回第一次的結果（不含密碼），不再建立
+            call = _idem.begin(actor["username"], key, "POST /api/users/import-rows", _idem.request_hash(rows, body["planHash"]))
+            if call.replay is not None:
+                rp = _idem.replay_response(call)
+                rp.headers["Cache-Control"] = "no-store"
+                return rp
+        stale = {"code": "plan_changed", "message": "資料在你預覽之後有變動，請重新預覽再確認"}
+        plan = UI.plan_users_import(conn, rows)
+        if UI.plan_hash(plan) != body["planHash"]:
+            raise HTTPException(409, stale)
+        # 密碼雜湊很慢（每個約 0.1 秒、300 個約 28 秒）：拿寫鎖之前先算好（多執行緒：hashlib 會放掉 GIL），鎖內只做 INSERT
+        names = [p["username"] for p in plan if p["action"] == "create"]
+        pws = {u: UI.new_password(min_pw, lambda pw: _password_problem(pw, min_pw)) for u in names}
+        from concurrent.futures import ThreadPoolExecutor
+        import os as _os
+        with ThreadPoolExecutor(max_workers=max(1, min(8, _os.cpu_count() or 2))) as pool:
+            hashes = dict(zip(names, pool.map(_hash_pw, [pws[u] for u in names])))
+        now = datetime.now().isoformat()
+        with write_txn(conn):
+            plan = UI.plan_users_import(conn, rows)                  # 拿鎖之後重算
+            if UI.plan_hash(plan) != body["planHash"]:
+                raise HTTPException(409, stale)
+            for p in plan:
+                if p["action"] != "create":
+                    continue
+                _insert_new_user(conn, p["username"], hashes[p["username"]], p["displayName"], p["role"], p["in"]["email"], p["in"]["phone"],
+                                 "[]", "[]", now, p.get("departmentId"))
+                uid = conn.execute("SELECT id FROM users WHERE username=?", (p["username"],)).fetchone()["id"]
+                created.append((uid, p["username"], p["displayName"], pws[p["username"]], p["role"]))
+            conn.commit()
+    except HTTPException:
+        if call is not None:
+            call.abort()                                              # 失敗（含 409 重新預覽）⇒ 釋放這把 key
+        raise
+    except Exception as exc:                                         # noqa: BLE001 — 訊息不帶例外內容（避免任何機敏值外流）
+        if call is not None:
+            call.abort()
+        tid = trace_id()
+        logger.error("user import failed trace=%s type=%s", tid, type(exc).__name__)
+        raise HTTPException(500, {"code": "import_failed", "message": f"匯入失敗，沒有任何帳號被建立（代碼 {tid}）"})
+    finally:
+        conn.close()
+    result = UI.plan_summary(plan)
+    accounts = [{"id": i, "username": u, "displayName": d} for i, u, d, _pw, _r in created]
+    if call is not None:                                              # 存起來重播的版本：有建了哪些帳號，沒有任何密碼
+        call.finish(200, dict(result, createdAccounts=accounts, replayed=True, passwordsShown=False))
+    result["createdAccounts"] = accounts
+    result["credentials"] = [{"id": i, "username": u, "displayName": d, "password": pw} for i, u, d, pw, _r in created]
+    result["replayed"] = False
+    result["passwordsShown"] = True
+    try:                                                              # 帳號已建立：之後的稽核／通知失敗只記錄；稽核在 commit 之後（`_audit` 自己開連線）
+        if created:
+            from routers.customers import _audit_rows
+            tok = _tok(authorization)
+            _audit(tok, "user.import", "user", "", "Excel 匯入員工", {"created": len(created), "skipped": len(result["skipped"]),
+                                                                    "manual": len(result["manual"]), "failed": result["failed"]})
+            _audit_rows(tok, [("user.create", "user", u, d, {"via": "excel_import", "role": r}) for _i, u, d, _pw, r in created])
+            notify_module_activity("使用者管理", "匯入", actor.get("display_name") or actor["username"],
+                                   "Excel 匯入：新增 %d 個帳號" % len(created), "users.html")
+    except Exception:                                                 # noqa: BLE001
+        logger.warning("user import post-commit steps failed (accounts already created)")
+    return result
 
 
 #: 秒級退場旗標（R2 第 2 步 2c）：`system_settings.users_put_reject_subtracted`；預設開（拒絕）；設 0／"0"／false／"off" ⇒ 回舊行為（不檢查）
@@ -1805,13 +1925,13 @@ def _subtracted_clash(conn, user_id, modules) -> list:
 
 
 @router.put("/api/users/{user_id}")
-def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+def update_user(user_id: int, body: UserIn, request: Request, authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     if body.role is not None and body.role not in VALID_ROLES:          # 第42班
         conn.close()
         raise HTTPException(400, "不認得的角色：%s" % body.role)
-    _before = conn.execute("SELECT role, modules FROM users WHERE id=?", (user_id,)).fetchone()
+    _before = conn.execute("SELECT role, modules, username FROM users WHERE id=?", (user_id,)).fetchone()
     if not conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "使用者不存在")
@@ -1827,6 +1947,21 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
             conn.close()
             _audit(_tok(authorization), "user.put_rejected_subtract", "user", str(user_id), str(user_id), {"keys": _clash})
             raise HTTPException(400, "下列權限目前被「個人扣項」扣掉，勾選不會生效：%s。請先到「職責角色」頁解除扣項再勾選。" % "、".join(_clash))
+    _perm_audit = None        # 高敏感權限變更：(before, after, reason, label) —— 與 UPDATE 同一個交易寫 permission_changes＋audit_log
+    if body.modules is not None or body.role is not None:
+        # 高敏感權限的共用檢查點（`helpers.duty_roles.user_perm_gate`→`gate_reason`；職責角色同一條規則）：授予／取消高敏感鍵 ⇒ 原因必填。
+        # 角色也算：降級最高管理者（存著的 modules 此刻才生效，不論這次有沒有帶 modules）、改成財務角色（財務三鍵由角色補上）。
+        from helpers import duty_roles as _dr
+        _old_m = json.loads((_before["modules"] if _before else None) or "[]")
+        _b_role = _before["role"] if _before else None
+        try:
+            _sens, _reason, _gb, _ga = _dr.user_perm_gate(_b_role, _old_m, body.role if body.role is not None else _b_role,
+                                                         body.modules if body.modules is not None else _old_m, body.reason)
+        except _dr.DutyError as e:
+            conn.close()
+            raise HTTPException(e.status, str(e))
+        if _sens:
+            _perm_audit = (_gb, _ga, _reason, _before["username"] if _before else str(user_id))
     sets, params = [], []
     if body.display_name is not None: sets.append("display_name=?"); params.append(body.display_name)
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
@@ -1876,6 +2011,10 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if sets:
         params.append(user_id)
         conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=?", params)
+        if _perm_audit:
+            from helpers import duty_roles as _dr
+            _dr.record_user_modules_change(conn, actor, user_id, _perm_audit[3], _perm_audit[0], _perm_audit[1], _perm_audit[2],
+                                           _trusted_client_ip(request))
         conn.commit()
     conn.close()
     _audit(_tok(authorization), 'user.update', 'user', str(user_id), body.display_name or str(user_id))

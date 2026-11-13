@@ -118,7 +118,7 @@ def full_result_path(results_dir: Path, commit_full_sha: str) -> Path:
 
 
 def last_full(path: Path, commit_full_sha: str) -> dict:
-    """回傳 {state, detail, record}；state ∈ missing／unreadable／other_commit／dirty／failed／ok。"""
+    """回傳 {state, detail, record}；state ∈ missing／unreadable／other_commit／dirty／failed／not_official／ok。"""
     path = Path(path)
     if not path.exists():
         return {"state": "missing", "detail": "這個 commit 沒有全量紀錄（沒跑過、跑的時候工作樹有未 commit 的改動，或結果檔不在主工作樹）", "record": None}
@@ -133,6 +133,9 @@ def last_full(path: Path, commit_full_sha: str) -> dict:
         return {"state": "dirty", "detail": "那次全量跑的時候工作樹有未 commit 的改動，結果不代表這個 commit", "record": rec}
     if rec.get("ok") is not True:
         return {"state": "failed", "detail": "這個 commit 的全量沒有全綠", "record": rec}
+    # 2026-11-13 gate_only：沒帶 MOTRIX_GATE_OFFICIAL=1 的全量跳過了升級演練，綠燈不代表正式閘門（缺欄位＝舊結果，照舊放行）
+    if rec.get("gate_official") is False:
+        return {"state": "not_official", "detail": "這個 commit 的全量不是正式閘門跑的（升級演練被跳過）；請用 heavy_run --class official 或 run-stage 重跑", "record": rec}
     # 稽核 B-S4：放行以最新一輪為準，但先前紅過要說出來（偶發紅常常是真的競態）
     red = sum(1 for h in rec.get("history") or [] if h.get("ok") is not True)
     if red:

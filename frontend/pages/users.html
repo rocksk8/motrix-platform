@@ -631,6 +631,12 @@
             </template>
           </div>
         </div>
+        <!-- 個人勾選動到高敏感權限鍵：原因必填（伺服器 PUT /api/users/{id} 強制；職責角色那一格有顯示時共用那一格） -->
+        <div class="form-group" x-show="permGateShowOwnReason()" x-cloak data-testid="perm-gate">
+          <label class="form-label">變更原因
+            <span style="color:var(--danger)" data-testid="perm-gate-required"> * 涉及高敏感權限（<span x-text="permGateTouched().map(k => permGateLabel(k)).join('、')"></span>），必填</span></label>
+          <input class="form-input" type="text" maxlength="200" x-model="permGate.reason" data-testid="perm-gate-reason" placeholder="例如：接手系統管理業務">
+        </div>
         <!-- 職責角色／個人扣項／生效權限預覽（R2 第 2 步）：只有編輯既有、非最高管理者；勾選仍只存「原始勾選」，預覽由伺服器算 -->
         <div class="form-group" x-show="editingId && duty.visible" x-cloak data-testid="duty-section">
           <label class="form-label">職責角色與個人扣項
@@ -1243,6 +1249,7 @@
 
       openCreate() {
         this.editingId = null
+        if (this.permGateOpen) this.permGateOpen(null)          // 新增帳號：modules 帶高敏感鍵一樣要原因（POST /api/users）
         this.form = { username:'', displayName:'', email:'', phone:'', quoteEmail:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
                       notificationMuted: [],
@@ -1282,6 +1289,7 @@
         this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
+        if (this.permGateOpen) this.permGateOpen(user)
         if (this.dutyOpen) this.dutyOpen(user)
         this.loadNotifyTypes(user.id).then(() => {
           for (const { group, items } of this.notifyGroups) {
@@ -1333,7 +1341,9 @@
           department_id:        this.form.departmentId || 0,
         }
         if (this.form.password) payload.password = this.form.password
+        if (this.permGateTouched && this.permGateTouched().length) payload.reason = this.permGateReason()   // 個人勾選動到高敏感鍵：伺服器要原因
 
+        if (this.permGatePrecheck && !this.permGatePrecheck()) return
         if (this.editingId && this.dutyPrecheck && !this.dutyPrecheck()) return
         if (this.editingId && this.dutyBefore && !(await this.dutyBefore())) return      // 解除扣項要在 PUT 之前（要勾回的鍵不能還被扣著）
 

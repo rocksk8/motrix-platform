@@ -1,3 +1,4 @@
+# 2026-11-13 chore/test-prune（PM 轉達使用者裁示）：刪佔位題 test_overdue_reminder_in_app_notice_content_after_l1_lands（skip＋`raise AssertionError("placeholder")`，等 L1 payable_due_core），已在 docs/windows/BACKLOG.md 記一條
 """瀏覽器端對端：預定付款日缺口（承攬商匯款／叫料匯款；docs/platform/plans/PAYDATE-GAP-DESIGN-T48.md G1／G2／G3）。
 
 - 承攬商匯款「建立」視窗可填預定付款日（選填、與合約應付款日不同、不互相預填）→ 送到後端落地 → 派發卡片顯示 → 出納「應付」佇列改期／清除；
@@ -201,9 +202,3 @@ def test_material_payment_create_with_planned_date_shows_in_list_and_cashier_edi
     _wait(page, lambda: _q("SELECT planned_pay_date FROM case_material_payments WHERE id=?", (pid,))[0]["planned_pay_date"] == "2031-10-18", "出納改期落地")
     assert not errors, errors
 
-
-@pytest.mark.e2e
-@pytest.mark.skip(reason="等第 47 班 L1（payable_due_core）進 platform 才寫：以假日期呼叫 run_reminders(today=…)，斷言逾期站內通知落地且內容不含金額／受款人／廠商名；"
-                         "對照 train/t47-int 或 wip/t45-paydate-l1 的 subcontract/payable_due.py、case/material_payable_event.py")
-def test_overdue_reminder_in_app_notice_content_after_l1_lands():
-    raise AssertionError("placeholder：L1 落地後實作")

@@ -806,7 +806,11 @@ def quota_calculator() -> dict:
                 addresses.update(a for a in (fn() or []) if a)
             except Exception:   # noqa: BLE001
                 logger.exception("quota_calculator: 一個待暖來源壞了")
-        uncached = sum(1 for a in addresses if cached_only(a) is None)
+        # 🔴 正式機 2026-11-13：`GET /api/settings/google-quota` 一次 8.6～9.8 秒，同一請求開了約 200 條 `get_db()`
+        #    （`cached_only()` 每個地址各開一次讀連線）。⇒ 整段共用一條讀連線（`cache_read_session`；用 finally 關）。
+        #    📌 只包這個迴圈：上面的 `_WARM_SOURCES` 來源函式各自開自己的連線，不放進共用範圍。
+        with cache_read_session():
+            uncached = sum(1 for a in addresses if cached_only(a) is None)
     except Exception:   # noqa: BLE001
         logger.exception("quota_calculator: 待暖清單算不出來")
 
@@ -1765,7 +1769,7 @@ def _warm_backlog():
     ⚠️ 一個來源壞掉不可以拖垮其他來源：那會讓「背景沒在跑」變成
     一個**跟資料無關**的原因，而 log 裡只有一行堆疊。
     """
-    seen, out = set(), []
+    seen, candidates = set(), []
     for source in _WARM_SOURCES:
         try:
             items = source() or []
@@ -1777,10 +1781,11 @@ def _warm_backlog():
             if not address or address in seen:
                 continue
             seen.add(address)
-            if cached_only(address) is not None:
-                continue                      # 已經知道了，不算待辦
-            out.append(address)
-    return out
+            candidates.append(address)
+    # 已經知道的不算待辦。整批共用一條讀連線（原本每個地址各開一條，與 quota_calculator 同一個寫法；
+    # 先收齊再過濾 ⇒ 來源函式不在共用範圍內，順序與去重結果與舊寫法相同）。
+    with cache_read_session():
+        return [a for a in candidates if cached_only(a) is None]
 
 
 def _check_quota_warning():

@@ -49,7 +49,9 @@ def seed_every_table(conn) -> int:
 
 
 def key_paths(obj, prefix="", out=None) -> list:
-    """遞迴鍵路徑（排序、去重）；list 元素合併成 `prefix[]`。"""
+    """遞迴鍵路徑（排序、去重）；list 元素合併成 `prefix[]`，**所有**元素的鍵取聯集、不設筆數上限。
+    （曾經只取前 50 筆：設定中心群組加到第 51 個後，排在後面的群組——tender_closing 的 closing_soon_days——掉出取樣，
+    基準「少了」一個其實還在的鍵；更糟的是陣列後段新增／消失的鍵會被靜默漏看。T84 修。種子每表一列，清單都很短，全掃的成本可忽略。）"""
     top = out is None
     out = set() if top else out
     if isinstance(obj, dict):
@@ -58,7 +60,7 @@ def key_paths(obj, prefix="", out=None) -> list:
             out.add(p)
             key_paths(v, p, out)
     elif isinstance(obj, list):
-        for v in obj[:50]:
+        for v in obj:
             key_paths(v, prefix + "[]", out)
     return sorted(out) if top else []
 

@@ -115,6 +115,13 @@ def case_save(c, kind):
     _code(_p(c, "/groups/" + GROUP[kind], {"values": {"note": 9}, "reason": "測試"}), 409, 404, kind)
 
 
+def case_batch(c, kind):
+    """跨群組一次儲存：任何一組是 planned ⇒ 409、hidden ⇒ 404（逐組檢查、整批驗證先於寫入）；open 組照常可存。"""
+    _code(_p(c, "/batch", {"groups": {GROUP[kind]: {"values": {"note": 9}}}, "reason": "測試"}), 409, 404, kind)
+    r = _p(c, "/batch", {"groups": {OPEN: {"values": {"note": 9}}, GROUP[kind]: {"values": {"note": 9}}}, "reason": "測試"})
+    _code(r, 409, 404, kind)                                                             # 混合批次：非 open 的那組擋下整批
+
+
 def case_preview(c, kind):
     _code(_p(c, "/groups/%s/preview" % GROUP[kind], {"values": {"note": 9}}), 409, 404, kind)
 
@@ -211,6 +218,7 @@ CASES = {
     ("GET", P + "/groups"): case_list_groups,
     ("GET", P + "/groups/{group}"): case_get_group,
     ("POST", P + "/groups/{group}"): case_save,
+    ("POST", P + "/batch"): case_batch,
     ("POST", P + "/groups/{group}/preview"): case_preview,
     ("POST", P + "/groups/{group}/impact"): case_impact,
     ("POST", P + "/groups/{group}/reset"): case_reset,

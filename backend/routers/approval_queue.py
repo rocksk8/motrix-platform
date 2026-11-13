@@ -598,7 +598,8 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
             (now, user.get("id"), user.get("username") or "", user.get("display_name") or "", "approval.reassign", body.type, body.id, label,
              detail_json, d["module"], d["case_no"], d["ref_no"]))
-        supers = [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id")]
+        from helpers import config_ledger as _cl
+        supers = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
         conn.commit()
     finally:
         conn.close()

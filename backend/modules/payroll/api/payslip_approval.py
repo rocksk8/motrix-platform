@@ -150,7 +150,8 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
                      [status, json.dumps(appr, ensure_ascii=False), now] + args + [slip_no, S_DRAFT])
         recipients = current_approvers(conn, appr) if status == S_REVIEW else []
         if status == S_REVIEW and not tiers:                          # 無簽核層的待審核：通知其他在職最高管理者
-            recipients = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+            from helpers import config_ledger as _cl
+            recipients = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
         fin = _finance_users(conn) if status == S_APPROVED else []
         conn.commit()
     finally:
@@ -326,7 +327,8 @@ def _notify_bypass(slip_no, slip_date, user, bypass):
     try:
         conn = get_db()
         try:
-            who = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+            from helpers import config_ledger as _cl
+            who = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
         finally:
             conn.close()
         _pn.fire_bypass(slip_no, slip_date, user["username"], bypass["approver"], bypass["reason"], who)

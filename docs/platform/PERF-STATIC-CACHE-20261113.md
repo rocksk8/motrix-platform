@@ -2,7 +2,7 @@
 
 分支 `perf/static-cache-20261113-h11`（基底 `adc6bd58d`；PM 指定的 `perf/static-cache-20261113` 已被 hichan-2 的 worktree 佔著，內容只有一支未接線的草稿，已併入本分支）。
 程式：`backend/helpers/static_cache.py`（版本計算、引用改寫、表頭）、`backend/main.py`（接線）、`frontend/static/sidebar.js`＋`pages/online-stats.html`（輪詢）。
-測試：`backend/tests/test_static_cache_versioning_2026_11_13.py`（24 題）。
+測試：`backend/tests/test_static_cache_versioning_2026_11_13.py`（24 題）；版本守門見下方「版本守門」。
 
 ## 問題（正式機量測，PM 提供）
 本機首頁 14～24 ms；外網每個請求約 1 s（公司網路走 IPv4 被 Cloudflare 繞美西，單趟約 130 ms）。伺服器與 DB 不是瓶頸。
@@ -58,6 +58,19 @@
 - 暖載入剩下的 wire 請求幾乎都是 `/api/*`（首頁 22 支）＋ HTML 的 304 重驗：**靜態檔已經不是瓶頸，API 瀑布才是**（見第二階段）。第三頁剩的 1 MB 是第一次到該頁才抓的 `xlsx` vendor（861 KB，之後走快取）與頁面本身 88 KB（HTML 每次重驗，內容變了才重抓）。
 - 以真實外網（每請求 ≈1 s）估：暖載入每頁省下的是 **JS／CSS 約 6～17 個請求**（這些以前是 6 個並行 ×數趟），首頁暖載入頂欄預期從約 1.5～2 s 降到約 1 s（HTML 304＋auth/me 兩趟）。實際值要正式機上線後用 `Server-Timing` 與 DevTools 對照量，這裡的數字是模擬。
 
+## 版本守門（2026-11-13 補：不帶 `?v=` 的 js／css 網址會被 Cloudflare 預設快取約 4 小時）
+測試：`backend/tests/test_asset_version_coverage_2026_11_13.py`（11 題）。補 `test_static_cache_versioning` 的三個盲點：
+① 只認路徑含 static／js／css 目錄的 `src=／href=`（`<script src="foo.js">`、無引號、`<link rel=stylesheet href=…>` 它看不見）；
+② 動態載入只看 `.src =` 同一行（`js.src = src`、`link.href`、`setAttribute`、`import()`、`importScripts`、`Worker`、`serviceWorker.register` 沒人數）；
+③ 引號包起來但改寫器吃不下的字串（跳脫引號、`?x=1`、`#frag`）沒有全域掃描。
+
+**規則**：本站 js／css 引用必須是改寫器認得的形狀（`REF_RE`），伺服器送出時一律 `?v=<目前版本>`（含實際送出的每頁 HTML 與 sidebar.js）。
+**例外只有三份清單，每項都附理由，清單外的新增＝紅燈、清單內已不存在的項目＝紅燈（不留過期項）**：
+- `VENDOR_VERSIONED`：`static/vendor/<名稱>` 底下檔名（資料夾名）自帶版本號的第三方庫（alpine-3.17.1、chart-4.4.0、frappe-gantt-0.6.1、leaflet-1.9.4、leaflet.markercluster-1.5.3、markerclusterer-2.6.2、sortable-1.15.3、xlsx-0.18.5）；名字裡沒有版本號也是紅燈。
+- `EXTERNAL_ALLOW`：外部網址（目前空）。
+- `DYNAMIC_ALLOW`：沒有字面值的動態載入點，目前三個——`map.html` 的 `o.scriptUrl`（同源 `/map-overlays/…`，不在版本化路徑、舊規則 no-store）、`map-google.js` 的 `loadScript(src)`（呼叫端只有 Google Maps API 與 vendor 資料夾）、`approval-settings.html` 的 `load(src)`（呼叫端引數都是字面值）。後兩者另有題鎖住呼叫端。
+
+動態組網址的唯一正路：**把完整路徑寫成字串字面值**（`'../static/x.js'`），讓同一個 `rewrite_refs` 補版本；`'static/' + name` 這類拼接不被接受。
 ## Cloudflare 邊緣快取規則建議（只快取帶版本的靜態檔）
 前提：網址帶 `?v=<雜湊>` ＝內容不可變，換版網址就變，**不需要 purge**。目前 Cloudflare 預設會依副檔名快取 js／css／圖（只要原站表頭允許）；以前因為 `no-store` 完全沒被邊緣快取，改版後帶 `public, max-age=31536000, immutable` 就會開始被快取——這是想要的，但請明確規則化，避免 HTML／API 被誤快取：
 

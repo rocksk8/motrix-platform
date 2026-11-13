@@ -8,8 +8,10 @@ import pytest
 
 from core import source_tree
 
-PAGES = ["case-management.html", "suppliers.html", "procurement.html", "devices.html", "vendor-contractors.html"]
-FLAG_GATED = re.compile(r"\b[lf]Shown\(|\blayoutOn\b|\$store\.layout|\$store\.cf\b|\$store\.ub\b")
+PAGES = ["case-management.html", "suppliers.html", "procurement.html", "devices.html", "vendor-contractors.html",
+         "quotations.html", "quotation-form.html"]
+# 任何 `<字母>Shown(`（l／f／c／t／T／b…）都算旗標函式：原本 bp1 的 c1／c2／q2／quote_form 四份各用不同字母集合，這裡取聯集（c2 的 `[a-zA-Z]Shown(` 是最寬的）
+FLAG_GATED = re.compile(r"\b[a-zA-Z]Shown\(|\blayoutOn\b|\$store\.layout|\$store\.cf\b|\$store\.ub\b")
 
 
 def drift(html):
@@ -35,3 +37,5 @@ def test_positive_control_detects_the_known_bad_shape():
     assert drift('<span style="display:flex;gap:6px" x-show="lShown(\'a\')"></span>')
     assert not drift('<span class="row" x-show="lShown(\'a\')"></span>')
     assert not drift('<span style="display:flex" x-show="v.code"></span>')
+    for fn in ("cShown", "tShown", "bShown", "TShown"):                                  # 併入原 c1／q2 用的函式名
+        assert drift('<span style="display:flex" x-show="%s(\'a\')"></span>' % fn), fn

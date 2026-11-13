@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>匯入精靈 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    匯入精靈（L2 模組 importer；T85）：下載範本 → 上傳 Excel／CSV → 解析 → 預覽 → 確認 → 結果。
+    - 本頁不自己寫資料：檔案先送 /api/importer/parse 解析，列再送到既有的 import-rows 端點（客戶／料號／員工）預覽與確認（planHash）。
+    - 員工匯入只有最高管理者；臨時密碼只在「確認匯入」那一次的回應裡出現，畫面顯示一次、可下載一次，之後就沒有了（不存 localStorage、不寫 console）。
+    - 設定中心 import_wizard.enabled 關閉時，解析與範本端點回 404，本頁顯示「尚未開放」。
+  -->
+  <style>
+    .iw-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .iw-wrap { max-width: 980px; }
+    .iw-steps { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 18px; padding: 0; list-style: none; font-size: 13px; }
+    .iw-steps li { padding: 4px 12px; border-radius: 14px; background: var(--border-light); color: var(--text-secondary); }
+    .iw-steps li.on { background: var(--primary, #1F3A5F); color: #fff; font-weight: 600; }
+    .iw-steps li.done { background: #dcfce7; color: #166534; }
+    .iw-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+    .iw-kind { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: #fff; cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; }
+    .iw-kind:hover { border-color: var(--primary, #1F3A5F); }
+    .iw-kind b { display: block; font-size: 16px; margin-bottom: 4px; }
+    .iw-kind small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+    .iw-kind[disabled] { opacity: .5; cursor: default; }
+    .iw-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin: 12px 0; font-size: 13px; background: #fff; line-height: 1.7; }
+    .iw-warn { padding: 8px 12px; border-radius: var(--radius); background: #fef3c7; color: #92400e; font-size: 13px; margin: 8px 0; line-height: 1.6; }
+    .iw-err { padding: 8px 12px; border-radius: var(--radius); background: #fee2e2; color: #b91c1c; font-size: 13px; margin: 8px 0; line-height: 1.6; }
+    .iw-ok { padding: 8px 12px; border-radius: var(--radius); background: #dcfce7; color: #166534; font-size: 13px; margin: 8px 0; line-height: 1.6; }
+    .iw-btn { padding: 8px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; min-height: 36px; }
+    .iw-btn.primary { background: var(--primary, #1F3A5F); color: #fff; border-color: transparent; }
+    .iw-btn[disabled] { opacity: .5; cursor: default; }
+    .iw-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+    .iw-nums { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0; }
+    .iw-nums div { min-width: 90px; padding: 8px 14px; border: 1px solid var(--border-light); border-radius: var(--radius); }
+    .iw-nums b { display: block; font-size: 22px; }
+    table.iw-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.iw-t th, table.iw-t td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    .iw-pw { font-family: ui-monospace, Consolas, monospace; user-select: all; }
+    .iw-list { margin: 4px 0 4px 18px; padding: 0; }
+    @media (max-width: 900px) { .iw-main { margin-left: 0; padding: 16px; } }
+    @media (max-width: 1023px) { .iw-btn { min-height: 44px; } }
+    @media (max-width: 767px) { .iw-main { padding: 14px 12px 40px; } .iw-nums div { flex: 1 1 40%; } }
+  </style>
+</head>
+<body x-data="importWizardPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="iw-main">
+    <div class="iw-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統</div>
+          <h1 class="pg__t">匯入精靈</h1>
+          <p class="pg__s">把原本的客戶、料號、員工資料搬進來：下載範本、填好、上傳，先看預覽，確認沒問題才真的寫入。</p>
+        </div>
+      </div>
+
+      <div class="iw-card" data-testid="iw-off" x-show="loaded && !enabled">
+        <b>匯入精靈目前沒有開放。</b><br>請最高管理者到「設定中心 → 匯入精靈」開啟後再使用。客戶頁、料號頁原本的匯入按鈕不受影響。
+      </div>
+
+      <div x-show="enabled">
+        <ol class="iw-steps" data-testid="iw-steps">
+          <template x-for="(t, i) in stepNames" :key="i">
+            <li :class="{ on: stepNo === i, done: stepNo > i }" x-text="(i + 1) + '. ' + t"></li>
+          </template>
+        </ol>
+
+        <div class="iw-err" data-testid="iw-error" x-show="err" x-text="err"></div>
+        <div class="iw-warn" data-testid="iw-notice" x-show="notice" x-text="notice"></div>
+
+        <!-- 1 選對象 -->
+        <section x-show="step === 'choose'" data-testid="iw-choose">
+          <p>要匯入哪一種資料？<b>建議順序：員工 → 客戶 → 料號</b>（客戶的「負責業務」要對得上員工姓名）。</p>
+          <div class="iw-kinds">
+            <button type="button" class="iw-kind" data-testid="iw-kind-users" :disabled="!isSuper" @click="pick('users')">
+              <b>員工（可登入的帳號）</b>
+              <small x-show="isSuper">只新增帳號，已存在的不動；系統產生臨時密碼，匯入完成後只顯示一次。</small>
+              <small x-show="!isSuper">只有最高管理者可以匯入員工。</small>
+            </button>
+            <button type="button" class="iw-kind" data-testid="iw-kind-customers" @click="pick('customers')">
+              <b>客戶</b>
+              <small>以統一編號判斷是不是同一家；已有的客戶只補空白欄位，不會蓋掉拜訪紀錄。</small>
+            </button>
+            <button type="button" class="iw-kind" data-testid="iw-kind-parts" @click="pick('parts')">
+              <b>料號</b>
+              <small>以料號判斷是不是同一個品項；留空的欄位不會更新（成本不會被清成 0）。</small>
+            </button>
+          </div>
+        </section>
+
+        <!-- 2 範本與上傳 -->
+        <section x-show="step === 'upload'" data-testid="iw-upload">
+          <h2 style="font-size:16px;margin:0 0 6px" x-text="'匯入' + kindName"></h2>
+          <div class="iw-card">
+            <b>第一步：下載範本</b>（有欄位說明和範例；範例列會自動略過）<br>
+            <button type="button" class="iw-btn" data-testid="iw-template" :disabled="busy" @click="downloadTemplate()">下載範本（.xlsx）</button>
+            <div style="margin-top:10px"><b>第二步：上傳填好的檔案</b>（.xlsx 或 .csv，<span x-text="limits.mb"></span> MB 以內，最多 <span x-text="limits.rows"></span> 列；舊版 .xls 請先另存成 .xlsx）</div>
+            <div class="iw-row">
+              <input type="file" accept=".xlsx,.csv" data-testid="iw-file" @change="onFile($event)" :disabled="busy">
+              <span x-show="busy" style="color:var(--text-secondary)">處理中…</span>
+            </div>
+          </div>
+          <button type="button" class="iw-btn" @click="reset()">← 換一種資料</button>
+        </section>
+
+        <!-- 3 解析結果與預覽 -->
+        <section x-show="step === 'preview'" data-testid="iw-preview">
+          <h2 style="font-size:16px;margin:0 0 6px" x-text="'預覽：' + kindName + '（' + fileName + '）'"></h2>
+          <div class="iw-card" x-show="parsed">
+            <div>檔案共讀到 <b x-text="parsed && parsed.rowCount"></b> 列資料<span x-show="parsed && parsed.skippedExamples">（已略過 <span x-text="parsed && parsed.skippedExamples"></span> 列範例）</span>。</div>
+            <div class="iw-warn" data-testid="iw-unused" x-show="parsed && parsed.unusedColumns.length">這些欄位系統不認得，<b>不會匯入</b>：<span x-text="parsed && parsed.unusedColumns.join('、')"></span></div>
+            <div class="iw-warn" x-show="parsed && parsed.warnings.length" data-testid="iw-parse-warnings">
+              <b>檔案裡有 <span x-text="parsed && parsed.warnings.length"></span> 個提醒</b>（不會擋住匯入，但請看一下）：
+              <ul class="iw-list"><template x-for="w in (parsed ? parsed.warnings.slice(0, 30) : [])" :key="w.row + w.field + w.message"><li>第 <span x-text="w.row"></span> 列〔<span x-text="w.field"></span>〕<span x-text="w.message"></span></li></template></ul>
+              <div x-show="parsed && parsed.warnings.length > 30">…還有 <span x-text="parsed.warnings.length - 30"></span> 個</div>
+            </div>
+          </div>
+
+          <div x-show="plan" data-testid="iw-plan">
+            <div class="iw-nums">
+              <div><b x-text="plan && plan.created" data-testid="iw-n-created"></b>將新增</div>
+              <div x-show="kind !== 'users'"><b x-text="plan && plan.updated"></b>將更新</div>
+              <div x-show="kind === 'users'"><b x-text="plan && plan.skipped ? plan.skipped.length : 0"></b>已存在（略過）</div>
+              <div x-show="kind === 'users'"><b x-text="plan && plan.manual ? plan.manual.length : 0"></b>需手動建立</div>
+              <div x-show="kind !== 'users'"><b x-text="plan && plan.duplicates ? plan.duplicates.length : 0"></b>可能重複（不匯入）</div>
+              <div><b x-text="plan && plan.failed" data-testid="iw-n-failed"></b>有錯誤（不匯入）</div>
+            </div>
+
+            <div class="iw-err" data-testid="iw-errors" x-show="plan && plan.errors && plan.errors.length">
+              <b>這些列有問題，不會匯入：</b>
+              <ul class="iw-list"><template x-for="e in (plan ? plan.errors.slice(0, 50) : [])" :key="e"><li x-text="e"></li></template></ul>
+              <div x-show="plan && plan.errors.length > 50">…還有 <span x-text="plan.errors.length - 50"></span> 個。請修正檔案後重新上傳。</div>
+            </div>
+
+            <div class="iw-warn" data-testid="iw-dups" x-show="plan && plan.duplicates && plan.duplicates.length">
+              <b>可能重複，系統不猜、不匯入：</b>
+              <ul class="iw-list"><template x-for="d in (plan ? plan.duplicates.slice(0, 50) : [])" :key="d.row"><li>第 <span x-text="d.row"></span> 列「<span x-text="d.name"></span>」：<span x-text="d.reason"></span></li></template></ul>
+            </div>
+
+            <div class="iw-warn" data-testid="iw-confirms" x-show="plan && plan.confirms && plan.confirms.length">
+              <b>統編相同但名稱不同（可能是統編打錯）</b>——預設不寫入；確定是同一家才勾選：
+              <template x-for="c in (plan ? plan.confirms : [])" :key="c.row">
+                <label style="display:block;margin:4px 0"><input type="checkbox" x-model="c.tick">
+                  第 <span x-text="c.row"></span> 列：<span x-text="c.reason"></span></label>
+              </template>
+            </div>
+
+            <div class="iw-warn" data-testid="iw-manual" x-show="plan && plan.manual && plan.manual.length">
+              <b>此角色需手動建立</b>（管理員、財務、最高管理者權限高，請最高管理者到「帳號」頁一個一個建立）：
+              <ul class="iw-list"><template x-for="m in (plan ? plan.manual : [])" :key="m.row"><li>第 <span x-text="m.row"></span> 列：<span x-text="m.username"></span>（<span x-text="m.displayName"></span>）</li></template></ul>
+            </div>
+            <div class="iw-card" data-testid="iw-skipped" x-show="plan && plan.skipped && plan.skipped.length">
+              <b>已存在的帳號，沒有更動：</b>
+              <ul class="iw-list"><template x-for="m in (plan ? plan.skipped.slice(0, 50) : [])" :key="m.row"><li>第 <span x-text="m.row"></span> 列：<span x-text="m.username"></span>　<span x-text="m.reason"></span></li></template></ul>
+            </div>
+            <div class="iw-warn" x-show="plan && plan.warnings && plan.warnings.length">
+              <b>提醒：</b>
+              <ul class="iw-list"><template x-for="w in (plan ? plan.warnings.slice(0, 30) : [])" :key="w.row + w.message"><li>第 <span x-text="w.row"></span> 列：<span x-text="w.message"></span></li></template></ul>
+            </div>
+
+            <div class="iw-card" data-testid="iw-changes" x-show="plan && plan.changes && plan.changes.length">
+              <b>會更新的內容</b>（只列有變動的欄位<span x-show="plan && plan.changesTruncated">；只顯示前 200 筆</span>）
+              <table class="iw-t"><thead><tr><th>列</th><th>名稱</th><th>欄位</th><th>原本</th><th>改成</th></tr></thead>
+                <tbody>
+                  <template x-for="c in (plan ? plan.changes.slice(0, 60) : [])" :key="c.row">
+                    <template x-for="f in c.fields" :key="c.row + f.field">
+                      <tr><td x-text="c.row"></td><td x-text="c.name"></td><td x-text="f.label"></td><td x-text="f.old || '（空白）'"></td><td x-text="f.new"></td></tr>
+                    </template>
+                  </template>
+                </tbody></table>
+            </div>
+
+            <div class="iw-warn" data-testid="iw-ubn-ack" x-show="ubnWarnCount > 0">
+              <b>有 <span x-text="ubnWarnCount"></span> 列的統一編號檢查碼不對。</b>統編是判斷「同一家客戶」的依據：打錯了，系統會把它當成<b>新客戶</b>，不會併進原本那一家。
+              <label style="display:block;margin-top:4px"><input type="checkbox" data-testid="iw-ubn-ack-box" x-model="ubnAck"> 我已確認這些統編沒有打錯（例如海外或特殊客戶），照樣匯入</label>
+            </div>
+
+            <div class="iw-card" x-show="kind === 'users' && plan && plan.created > 0" data-testid="iw-users-note">
+              確認後會建立 <b x-text="plan && plan.created"></b> 個可登入的帳號：角色只會是業務／工程師／檢視者，<b>沒有任何模組權限</b>（匯入後到權限頁設定）。
+              系統會產生臨時密碼，<b>只在下一個畫面顯示一次</b>，請馬上交給同仁；第一次登入必須改密碼。
+            </div>
+
+            <div class="iw-err" data-testid="iw-uncertain" x-show="uncertain">
+              <b>結果不確定。</b>網路中斷或等太久，這次匯入<b>可能已經完成，也可能沒有</b>。請不要重新上傳或再按一次「確認匯入」，先按下面的按鈕查詢這次的結果：
+              如果已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；如果沒有，會直接補做這一次。
+              <div class="iw-row" style="margin-top:6px"><button type="button" class="iw-btn primary" data-testid="iw-query" :disabled="busy" @click="queryResult()">查詢這次匯入結果</button></div>
+            </div>
+            <div class="iw-row">
+              <button type="button" class="iw-btn primary" data-testid="iw-commit" :disabled="!canCommit || uncertain" @click="commit()">確認匯入</button>
+              <button type="button" class="iw-btn" @click="reset()">取消，重新來</button>
+              <span x-show="busy" style="color:var(--text-secondary)">處理中…</span>
+            </div>
+            <div style="color:var(--text-secondary);font-size:12px" x-show="plan && plan.created === 0 && (plan.updated || 0) === 0">沒有可寫入的資料。請修正上面的問題後重新上傳。</div>
+          </div>
+        </section>
+
+        <!-- 4 結果 -->
+        <section x-show="step === 'result'" data-testid="iw-result">
+          <h2 style="font-size:16px;margin:0 0 6px" x-text="kindName + '匯入完成'"></h2>
+          <div class="iw-ok" data-testid="iw-result-summary" x-text="resultText"></div>
+          <div class="iw-warn" data-testid="iw-replayed" x-show="replayed">
+            這是<b>先前那次匯入</b>的結果：下面的帳號已經建立，但臨時密碼<b>無法再顯示</b>（系統不留存）。請替每位同仁按「重設臨時密碼」，會產生新的臨時密碼並只顯示一次；同仁第一次登入必須改密碼。
+          </div>
+          <div class="iw-card" data-testid="iw-lost" x-show="lostAccounts.length">
+            <b>需要重設臨時密碼的帳號</b>
+            <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th></th></tr></thead>
+              <tbody><template x-for="a in lostAccounts" :key="a.id"><tr><td x-text="a.username"></td><td x-text="a.displayName"></td>
+                <td><button type="button" class="iw-btn" data-testid="iw-reset-pw" :disabled="a.busy || a.done" @click="resetPw(a)" x-text="a.done ? '已重設（見下方）' : '重設臨時密碼'"></button>
+                  <span x-show="a.err" style="color:var(--danger,#b91c1c);font-size:12px" x-text="a.err"></span></td></tr></template></tbody></table>
+          </div>
+          <div class="iw-card" data-testid="iw-credentials" x-show="credentials.length">
+            <b>臨時密碼（只顯示這一次）</b>
+            <div class="iw-warn">請現在就複製或下載，交給同仁本人。離開或重新整理後就看不到了；如果這個畫面沒顯示完整就離開，請不要重新匯入，到「帳號」頁替同仁重設密碼。同仁第一次登入必須改密碼。</div>
+            <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th>臨時密碼</th></tr></thead>
+              <tbody><template x-for="c in credentials" :key="c.username + ':' + c.password"><tr><td x-text="c.username"></td><td x-text="c.displayName"></td><td class="iw-pw" x-text="c.password"></td></tr></template></tbody></table>
+            <div class="iw-row">
+              <button type="button" class="iw-btn" data-testid="iw-cred-download" @click="downloadCredentials()">下載（.csv）</button>
+              <button type="button" class="iw-btn primary" data-testid="iw-cred-done" @click="clearCredentials()">我已記下，清除畫面上的密碼</button>
+            </div>
+          </div>
+          <div class="iw-err" x-show="resultErrors.length" data-testid="iw-result-errors">
+            <b>沒有匯入的列：</b>
+            <ul class="iw-list"><template x-for="e in resultErrors.slice(0, 50)" :key="e"><li x-text="e"></li></template></ul>
+          </div>
+          <div class="iw-row">
+            <button type="button" class="iw-btn" :disabled="credentials.length > 0" @click="reset()">再匯入一份</button>
+            <span x-show="credentials.length" style="color:var(--text-secondary);font-size:12px">請先清除畫面上的臨時密碼</span>
+            <a class="iw-btn" :href="afterHref" x-show="afterHref" x-text="afterLabel"></a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function importWizardPage() {
+      return {
+        _initDone: false, loaded: false, enabled: false, isSuper: false,
+        step: 'choose', kind: '', busy: false, err: '', notice: '',
+        fileName: '', parsed: null, plan: null, ubnAck: false,
+        credentials: [], resultText: '', resultErrors: [],
+        uncertain: false, replayed: false, lostAccounts: [], _idemKey: '', _commitBody: null,
+        stepNames: ['選對象', '範本與上傳', '預覽與確認', '完成'],
+        get stepNo() { return { choose: 0, upload: 1, preview: 2, result: 3 }[this.step] },
+        get kindName() { return { customers: '客戶', parts: '料號', users: '員工' }[this.kind] || '' },
+        get limits() { return { mb: this.maxMb, rows: this.kind === 'users' ? 300 : 5000 } },
+        maxMb: 5,
+        get afterHref() { return { customers: 'customers.html', parts: 'parts.html', users: 'users.html' }[this.kind] || '' },
+        get afterLabel() { return { customers: '前往客戶頁', parts: '前往料號頁', users: '前往帳號頁（設定權限）' }[this.kind] || '' },
+        get ubnWarnCount() {
+          return this.kind === 'customers' && this.parsed ? this.parsed.warnings.filter(w => w.field === '統一編號').length : 0
+        },
+        get canCommit() {
+          const p = this.plan
+          if (!p || this.busy) return false
+          if (this.ubnWarnCount > 0 && !this.ubnAck) return false
+          const applies = (p.created || 0) + (p.updated || 0)
+          return applies > 0
+        },
+        _token() { let s = {}; try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {} return s.token || '' },
+        _hdr(json) { const h = { Authorization: 'Bearer ' + this._token() }; if (json) h['Content-Type'] = 'application/json'; return h },
+        async init() {
+          if (this._initDone) return                    // <body> 的 x-init 與 Alpine 自動呼叫 ⇒ 不守衛會跑兩遍
+          this._initDone = true
+          try {
+            const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+            this.isSuper = s.role === 'superadmin' || (s.user && s.user.role === 'superadmin')
+          } catch (e) {}
+          try {
+            const r = await fetch('/api/settings-center/public?groups=import_wizard', { headers: this._hdr() })
+            const d = r.ok ? await r.json() : null
+            const g = d && d.groups && d.groups.import_wizard
+            this.enabled = !!(g && Number(g.enabled) === 1)
+            if (g && Number(g.max_file_mb) > 0) this.maxMb = Number(g.max_file_mb)
+          } catch (e) { this.enabled = false }
+          this.loaded = true
+          window.addEventListener('beforeunload', () => { this.credentials = [] })
+        },
+        pick(k) {
+          if (k === 'users' && !this.isSuper) return
+          this.kind = k; this.step = 'upload'; this.err = ''; this.notice = ''
+        },
+        reset() {
+          this.step = 'choose'; this.kind = ''; this.parsed = null; this.plan = null; this.fileName = ''; this.err = ''; this.notice = ''
+          this.ubnAck = false; this.credentials = []; this.resultText = ''; this.resultErrors = []
+          this.uncertain = false; this.replayed = false; this.lostAccounts = []; this._idemKey = ''; this._commitBody = null
+          this._rows = null; this._planPayload = null
+        },
+        async _fail(r) {
+          const d = await r.json().catch(() => null)
+          const det = d && d.detail
+          return (det && det.message) || (typeof det === 'string' ? det : '失敗（' + r.status + '）')
+        },
+        async downloadTemplate() {
+          this.err = ''; this.busy = true
+          try {
+            const r = await fetch('/api/importer/templates/' + this.kind, { headers: this._hdr() })
+            if (!r.ok) throw new Error(await this._fail(r))
+            const url = URL.createObjectURL(await r.blob())
+            const a = document.createElement('a')
+            a.href = url; a.download = 'MOTRIX_匯入範本_' + this.kindName + '.xlsx'
+            document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(() => URL.revokeObjectURL(url), 2000)
+          } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
+        },
+        async onFile(ev) {
+          const f = ev.target.files && ev.target.files[0]
+          ev.target.value = ''
+          if (!f) return
+          this.err = ''; this.notice = ''; this.busy = true; this.plan = null; this.parsed = null; this.ubnAck = false
+          try {
+            const fd = new FormData()
+            fd.append('kind', this.kind); fd.append('file', f, f.name)
+            const r = await fetch('/api/importer/parse', { method: 'POST', headers: this._hdr(false), body: fd })
+            if (!r.ok) throw new Error(await this._fail(r))
+            this.parsed = await r.json()
+            this.fileName = this.parsed.fileName || f.name
+            this._rows = this.parsed.rows
+            await this._preview()
+            this.step = 'preview'
+          } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
+        },
+        _endpoint() { return { customers: '/api/customers/import-rows', parts: '/api/parts/import-rows', users: '/api/users/import-rows' }[this.kind] },
+        async _post(body, extraHeaders) {
+          let r
+          try {
+            r = await fetch(this._endpoint(), { method: 'POST', headers: Object.assign(this._hdr(true), extraHeaders || {}), body: JSON.stringify(body) })
+          } catch (netErr) {                                  // 網路中斷／逾時：伺服器有沒有收到、做完沒有，都不知道
+            const e = new Error('連線中斷或逾時')
+            e.unknown = true
+            throw e
+          }
+          if (!r.ok) {
+            const d = await r.json().catch(() => null)
+            const det = d && d.detail
+            const e = new Error((det && det.message) || (typeof det === 'string' ? det : '失敗（' + r.status + '）'))
+            e.code = (det && det.code) || ''
+            e.status = r.status
+            // 伺服器明確回了「沒做」的錯誤（含 import_failed＝整批回復）才算確定；5xx 沒有明確代碼（例如閘道逾時）、409 處理中 ⇒ 結果不確定
+            e.unknown = (r.status >= 500 && e.code !== 'import_failed') || (r.status === 409 && e.code !== 'plan_changed')
+            throw e
+          }
+          return r.json()
+        },
+        _newKey() {
+          const u = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))
+          return 'iw-' + String(u).replace(/[^A-Za-z0-9_-]/g, '')
+        },
+        async _preview() {
+          const p = await this._post({ rows: this._rows, dryRun: true })
+          if (p.confirms) p.confirms = p.confirms.map(c => ({ ...c, tick: false }))
+          this.plan = p
+        },
+        async commit() {
+          if (!this.canCommit || this.uncertain) return
+          this.busy = true; this.err = ''; this.notice = ''
+          const ticked = new Set(this.plan.confirms ? this.plan.confirms.filter(c => c.tick).map(c => c.row) : [])
+          // 與預覽送出的列逐位元相同；只在使用者勾選的「需確認」列加上 confirm:true
+          const rows = this._rows.map(r => ticked.has(r.row) ? { ...r, confirm: true } : r)
+          this._commitBody = { rows, dryRun: false, planHash: this.plan.planHash }
+          this._idemKey = this.kind === 'users' ? this._newKey() : ''     // 員工匯入：每次送出一把新 key（重送同一次才沿用）
+          await this._send()
+        },
+        async queryResult() {                                   // 結果不確定 ⇒ 用同一把 key、同一份內容再問一次：做過就回原結果，沒做過就補做
+          if (!this._commitBody || this.busy) return
+          this.busy = true; this.err = ''
+          await this._send()
+        },
+        async _send() {
+          try {
+            const res = await this._post(this._commitBody, this._idemKey ? { 'Idempotency-Key': this._idemKey } : null)
+            this.uncertain = false
+            this._finish(res)
+          } catch (e) {
+            if (e.code === 'plan_changed') {
+              this.uncertain = false; this._idemKey = ''; this._commitBody = null
+              try {
+                await this._preview()
+                let n = '資料在你預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。'
+                if (this.kind === 'users' && this.plan.skipped && this.plan.skipped.length) {
+                  n += '另外，有 ' + this.plan.skipped.length + ' 個帳號現在變成「已存在」而被略過（可能剛剛有人建立了，或上一次匯入其實已經完成），請到帳號頁確認。'
+                }
+                this.notice = n
+              } catch (e2) { this.err = String(e2.message || e2) }
+            } else if (e.unknown && this.kind === 'users') {
+              this.uncertain = true                             // 不可以說「沒有建立」：可能已經建了
+              this.err = ''
+            } else {
+              this.uncertain = false
+              this.err = String(e.message || e) + (this.kind === 'users' && (e.code === 'import_failed' || e.status === 400 || e.status === 403 || e.status === 422) ? '（沒有任何帳號被建立）' : '')
+              if (this.kind === 'users' && e.status === 422) this._idemKey = ''
+            }
+          } finally { this.busy = false }
+        },
+        _finish(res) {
+          this.credentials = Array.isArray(res.credentials) ? res.credentials : []
+          this.replayed = !!res.replayed
+          this.lostAccounts = (this.replayed && Array.isArray(res.createdAccounts)) ? res.createdAccounts.map(a => ({ ...a, busy: false, done: false, err: '' })) : []
+          this._commitBody = null; this._idemKey = ''
+          if (this.kind === 'users') {
+            this.resultText = '已建立 ' + (res.created || 0) + ' 個帳號；略過已存在 ' + ((res.skipped || []).length) + '；需手動建立 ' + ((res.manual || []).length) + '；有問題未匯入 ' + (res.failed || 0) + '。'
+          } else {
+            this.resultText = '新增 ' + (res.created || 0) + ' 筆、更新 ' + (res.updated || 0) + ' 筆；有問題未匯入 ' + (res.failed || 0) + '；可能重複未匯入 ' + ((res.duplicates || []).length) + '。'
+          }
+          this.resultErrors = (res.errors || []).concat((res.duplicates || []).map(d => '第 ' + d.row + ' 列「' + d.name + '」：' + d.reason))
+          this.plan = null; this._rows = null; this.parsed = null
+          this.step = 'result'
+        },
+        downloadCredentials() {
+          // 試算表會把 = + - @ 與 Tab／CR 開頭的儲存格當公式執行：一律加前導單引號（M2）
+          const esc = v => { let t = String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"' }
+          const lines = ['帳號,姓名,臨時密碼'].concat(this.credentials.map(c => [c.username, c.displayName, c.password].map(esc).join(',')))
+          const url = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+          const a = document.createElement('a')
+          a.href = url; a.download = 'MOTRIX_臨時密碼_' + MotrixDate.today() + '.csv'
+          document.body.appendChild(a); a.click(); a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 2000)
+        },
+        clearCredentials() { this.credentials = [] },
+        _genPassword() {
+          const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', n = 20
+          for (;;) {
+            const buf = new Uint32Array(n); crypto.getRandomValues(buf)
+            const pw = Array.from(buf, x => A[x % A.length]).join('')
+            if (/[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw)) return pw
+          }
+        },
+        async resetPw(a) {                                      // 不經過匯入：直接用帳號頁同一支「設定新密碼」的端點
+          if (a.busy || a.done) return
+          a.busy = true; a.err = ''
+          const pw = this._genPassword()
+          try {
+            const r = await fetch('/api/users/' + a.id, { method: 'PUT', headers: this._hdr(true), body: JSON.stringify({ password: pw }) })
+            if (!r.ok) throw new Error(await this._fail(r))
+            this.credentials = this.credentials.concat([{ id: a.id, username: a.username, displayName: a.displayName, password: pw }])
+            a.done = true
+          } catch (e) { a.err = String(e.message || e) } finally { a.busy = false }
+        },
+      }
+    }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>
