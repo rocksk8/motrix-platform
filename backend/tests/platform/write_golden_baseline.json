@@ -67,6 +67,12 @@
   ],
   "s": 200
  },
+ "POST /api/importer/parse": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -279,6 +285,12 @@
   ],
   "s": 201
  },
+ "POST /api/settings-center/batch": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "POST /api/settings/email-notify/wizard/activate": {
   "k": [
    "detail"
@@ -374,6 +386,112 @@
    "detail"
   ],
   "s": 400
+ },
+ "POST /api/users/import-rows": {
+  "k": [
+   "created",
+   "errors",
+   "failed",
+   "manual",
+   "planHash",
+   "skipped",
+   "warnings",
+   "willCreate",
+   "willCreate[].displayName",
+   "willCreate[].role",
+   "willCreate[].row",
+   "willCreate[].username"
+  ],
+  "s": 200
+ },
+ "POST /api/users/permissions/batch": {
+  "k": [
+   "applied",
+   "gatedKeys",
+   "lists",
+   "lists.batchGrantRefused",
+   "lists.financeKeys",
+   "lists.highSensitiveKeys",
+   "needsReason",
+   "ok",
+   "people",
+   "people[].adds",
+   "people[].bind",
+   "people[].effectiveAdded",
+   "people[].effectiveRemoved",
+   "people[].gated",
+   "people[].name",
+   "people[].note",
+   "people[].removes",
+   "people[].role",
+   "people[].skipped",
+   "people[].status",
+   "people[].subtractAdds",
+   "people[].subtractRemoves",
+   "people[].unbind",
+   "people[].userId",
+   "people[].username",
+   "planHash",
+   "summary",
+   "summary.changed",
+   "summary.requested",
+   "summary.skippedItems",
+   "summary.skippedPeople",
+   "summary.unchanged",
+   "templateFinanceKeysLeftAlone"
+  ],
+  "s": 200
+ },
+ "POST /api/users/permissions/batch/preview": {
+  "k": [
+   "gatedKeys",
+   "lists",
+   "lists.batchGrantRefused",
+   "lists.financeKeys",
+   "lists.highSensitiveKeys",
+   "needsReason",
+   "people",
+   "people[].adds",
+   "people[].bind",
+   "people[].effectiveAdded",
+   "people[].effectiveRemoved",
+   "people[].gated",
+   "people[].name",
+   "people[].note",
+   "people[].removes",
+   "people[].role",
+   "people[].skipped",
+   "people[].status",
+   "people[].subtractAdds",
+   "people[].subtractRemoves",
+   "people[].unbind",
+   "people[].userId",
+   "people[].username",
+   "planHash",
+   "summary",
+   "summary.changed",
+   "summary.requested",
+   "summary.skippedItems",
+   "summary.skippedPeople",
+   "summary.unchanged",
+   "templateFinanceKeysLeftAlone"
+  ],
+  "s": 200
+ },
+ "POST /api/users/permissions/batch/undo": {
+  "k": [
+   "applied",
+   "conflicts",
+   "conflicts[].name",
+   "conflicts[].reason",
+   "conflicts[].userId",
+   "ok",
+   "people",
+   "summary",
+   "summary.conflicts",
+   "summary.restored"
+  ],
+  "s": 200
  },
  "PUT /api/auth/preferences": {
   "k": [
@@ -478,6 +596,12 @@
   ],
   "s": 400
  },
+ "PUT /api/mail-types/mine": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/menu/categories/override": {
   "k": [
    "detail"
@@ -485,6 +609,18 @@
   "s": 400
  },
  "PUT /api/menu/settings-help/override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/settings/estimate-payment-terms": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "PUT /api/settings/estimate-terms-presets": {
   "k": [
    "detail"
   ],

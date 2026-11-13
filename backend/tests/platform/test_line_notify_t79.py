@@ -149,6 +149,7 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     assert g.pop("event_groups")[0] == "報價單與簽核"                    # 設定頁依模組分組（簽核優先）
     assert g.pop("role_choices") == ["superadmin", "admin", "sales", "engineer", "viewer", "finance"]         # 收件人角色（2026-11-12）
     assert g.pop("usage30")["days"] == 30                                                                      # 2026-11-13（LINE 事件矩陣票）：近 30 天用量（按日計數）
+    g.pop("audit_mark", None)                                                                                  # 2026-11-13（LINE 事件矩陣票）：草稿儲存的衝突基準（最新稽核編號；值隨環境，形狀由 test_line_events_batch 守）
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
     assert TOKEN not in client.get("/api/settings/line-notify", headers=sa).text

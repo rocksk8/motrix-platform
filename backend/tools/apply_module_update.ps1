@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-11-13b"
+$ApplyModuleScriptVersion = "2026-11-13c"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -146,6 +146,7 @@ function Enter-InstallLock([string]$scriptName, [string]$pkg) {
 }
 
 function Exit-InstallLock {
+    if (Get-Command Restore-AutostartTask -ErrorAction SilentlyContinue) { Restore-AutostartTask }   # 任何出口都不把排程工作留在停用狀態
     if ($script:LockHeld) {
         Remove-Item (Join-Path $BackendDir ".apply.lock") -Force -ErrorAction SilentlyContinue
         $script:LockHeld = $false
@@ -287,72 +288,170 @@ function Write-CompanyBankNote([string]$CliText) {
 }
 
 function Stop-InstallService {
-    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
-    $byPid = @{}
-    foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
-    $batFull = (Join-Path $BackendDir "autostart.bat").ToLowerInvariant()
-    $loops = New-Object System.Collections.Generic.List[int]
-    foreach ($p in $all) {
-        if ($p.Name -eq "cmd.exe" -and $p.CommandLine -and $p.CommandLine.ToLowerInvariant().Contains($batFull)) {
-            $loops.Add([int]$p.ProcessId)
-        }
-    }
-    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-        ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
-    foreach ($lp in $listeners) {
-        $cur = $byPid[$lp]
-        $hops = 0
-        while ($cur -and $hops -lt 6) {
-            $parent = $byPid[[int]$cur.ParentProcessId]
-            if (-not $parent) { break }
-            if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match 'autostart\.bat') {
-                if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
-                break
+    param([switch]$ListOnly)
+    # 2026-11-13（T84，T82 事故）：①迴圈＝本安裝 $BackendDir 底下**任何** autostart*.bat 的 cmd.exe（含 autostart_guard.bat，
+    #   正式機排程工作 → wscript autostart_guard.vbs → cmd /c autostart_guard.bat → call autostart.bat :loop；命令列裡只有
+    #   autostart_guard.bat），不只是「有子行程的」——沒有 uvicorn 子行程的殭屍迴圈（父行程已不在）照樣會在下一次停服後把服務拉回來；
+    #   ②再加上聽 $Port 的行程沿父行程鏈往上找到的 cmd.exe（命令列有 autostart*.bat；排程工作用相對路徑啟動時靠這一條）。
+    #   ③迴圈 5 秒的 timeout 在隱藏的非互動 cmd 下實測只等 0.3 秒 ⇒ 殺掉服務後**立刻**重生：所以每一輪都先殺迴圈再殺服務，
+    #   殺完重新掃描，直到沒有目標為止（最多 5 輪）——不靠「等幾秒再看」。-ListOnly：只列目標不動手，回 @{ Targets; Loops; ByPid }。
+    $totalStopped = 0
+    if (-not $ListOnly) { Suspend-AutostartTask }
+    for ($round = 0; $round -lt 5; $round++) {
+        $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+        $byPid = @{}
+        foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
+        # 本安裝路徑的各種拼法（命令列可能是長路徑／短檔名 8.3／映射磁碟的 UNC／含 .. 的寫法；一律小寫、結尾補 \ 再比對子字串）
+        $roots = New-Object System.Collections.Generic.List[string]
+        $rawRoot = ([string]$BackendDir).TrimEnd('\')
+        $cands = New-Object System.Collections.Generic.List[string]
+        $cands.Add($rawRoot)
+        try { $cands.Add([System.IO.Path]::GetFullPath($rawRoot).TrimEnd('\')) } catch { }
+        try {
+            $fso = New-Object -ComObject Scripting.FileSystemObject
+            if ($fso.FolderExists($rawRoot)) { $fd = $fso.GetFolder($rawRoot); $cands.Add([string]$fd.Path); $cands.Add([string]$fd.ShortPath) }
+        } catch { }
+        try {
+            if ($rawRoot -match '^([A-Za-z]:)(\\.*)?$') {
+                $drv = $Matches[1]; $rest = $Matches[2]
+                $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$drv'" -ErrorAction SilentlyContinue
+                if ($ld -and $ld.ProviderName) { $cands.Add(([string]$ld.ProviderName).TrimEnd('\') + $rest) }
             }
-            if ($parent.Name -notmatch '^(python|pythonw|uvicorn)(\.exe)?$') { break }
-            $cur = $parent
-            $hops++
+        } catch { }
+        foreach ($c in $cands) {
+            if ($c) { $lc = $c.TrimEnd('\').ToLowerInvariant() + '\'; if (-not $roots.Contains($lc)) { $roots.Add($lc) } }
         }
-    }
-    $targets = New-Object System.Collections.Generic.List[int]
-    function Add-Tree([int]$rootPid) {
-        if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
-        foreach ($c in $all) {
-            if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
-                Add-Tree ([int]$c.ProcessId)
+        $loopRe = 'autostart[a-z0-9_-]*\.bat'
+        $loops = New-Object System.Collections.Generic.List[int]
+        foreach ($p in $all) {
+            if ($p.Name -eq "cmd.exe" -and $p.CommandLine) {
+                $cl = $p.CommandLine.ToLowerInvariant()
+                $inRoot = $false
+                foreach ($r in $roots) { if ($cl.Contains($r)) { $inRoot = $true; break } }
+                if ($inRoot -and $cl -match $loopRe) { $loops.Add([int]$p.ProcessId) }
             }
         }
-    }
-    foreach ($l in $loops) { Add-Tree $l }
-    foreach ($lp in $listeners) {
-        $proc = $byPid[$lp]
-        if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
-        elseif ($proc) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
-    }
-    $portRe = '--port[= ]+' + $Port + '\b'
-    foreach ($p in $all) {
-        if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
-            Add-Tree ([int]$p.ProcessId)
+        $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
+        foreach ($lp in $listeners) {
+            $cur = $byPid[$lp]
+            $hops = 0
+            while ($cur -and $hops -lt 6) {
+                $parent = $byPid[[int]$cur.ParentProcessId]
+                if (-not $parent) { break }
+                if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match $loopRe) {
+                    if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
+                    break
+                }
+                if ($parent.Name -notmatch '^(python|pythonw|uvicorn|cmd)(\.exe)?$') { break }
+                $cur = $parent
+                $hops++
+            }
         }
-    }
-    foreach ($p in $all) {
-        if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
-            Add-Tree ([int]$p.ProcessId)
+        $targets = New-Object System.Collections.Generic.List[int]
+        function Add-Tree([int]$rootPid) {
+            if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
+            foreach ($c in $all) {
+                if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
+                    Add-Tree ([int]$c.ProcessId)
+                }
+            }
         }
+        foreach ($l in $loops) { Add-Tree $l }
+        foreach ($lp in $listeners) {
+            $proc = $byPid[$lp]
+            if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
+            elseif ($proc -and -not $ListOnly) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
+        }
+        $portRe = '--port[= ]+' + $Port + '\b'
+        foreach ($p in $all) {
+            if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
+                Add-Tree ([int]$p.ProcessId)
+            }
+        }
+        foreach ($p in $all) {
+            if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
+                Add-Tree ([int]$p.ProcessId)
+            }
+        }
+        # 不殺自己（本腳本行程）與祖先：apply 若是從某個迴圈／服務底下開的主控台執行，Add-Tree 會把整棵子樹（含自己）列為目標。
+        $selfIds = New-Object System.Collections.Generic.List[int]
+        $sp = [int]$PID
+        for ($k = 0; $k -lt 12 -and $sp -gt 0 -and -not $selfIds.Contains($sp); $k++) {
+            $selfIds.Add($sp)
+            $sp = if ($byPid.ContainsKey($sp)) { [int]$byPid[$sp].ParentProcessId } else { 0 }
+        }
+        $hitSelf = @($targets | Where-Object { $selfIds.Contains([int]$_) })
+        if ($hitSelf.Count -gt 0) {
+            if (-not $ListOnly) { Warn "  本腳本（PID $PID）在要結束的行程樹裡（$(($hitSelf | Sort-Object) -join ',')）：不結束自己與祖先；若其中有迴圈，它仍會在停服後把服務拉回來——請從迴圈之外的主控台執行。" }
+            foreach ($h in $hitSelf) { [void]$targets.Remove([int]$h) }
+        }
+        if ($ListOnly) { return @{ Targets = @($targets); Loops = @($loops); ByPid = $byPid } }
+        if ($round -eq 0 -and $loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart*.bat，含 autostart_guard.bat）。" }
+        if ($round -eq 0) {
+            $unattributed = @($all | Where-Object { $_.Name -eq "cmd.exe" -and $_.CommandLine -and $_.CommandLine -match $loopRe -and -not $loops.Contains([int]$_.ProcessId) })
+            if ($unattributed.Count -gt 0) { Warn "  有 $($unattributed.Count) 個 cmd.exe 的命令列含 autostart*.bat，但路徑不在 $BackendDir 下、也不在 port $Port 的父行程鏈上（別的安裝？相對路徑啟動？）：不動它。PID：$(($unattributed | ForEach-Object { $_.ProcessId }) -join ',')。若它是這台的迴圈，停服後仍會把服務拉回來——請人工確認。" }
+        }
+        if ($targets.Count -eq 0) { break }
+        # 先把所有迴圈一次結束（單一 Stop-Process 呼叫；逐個殺會讓還活著的迴圈在 port 一釋放就把服務拉回來），再結束服務行程。
+        $loopT = @($targets | Where-Object { $loops.Contains([int]$_) })
+        $restT = @($targets | Where-Object { -not $loops.Contains([int]$_) })
+        foreach ($t in @($loopT) + @($restT)) {
+            $p = $byPid[$t]
+            $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
+            $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
+            if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
+            Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
+        }
+        if ($loopT.Count -gt 0) { Stop-Process -Id $loopT -Force -ErrorAction SilentlyContinue }
+        if ($restT.Count -gt 0) { Stop-Process -Id $restT -Force -ErrorAction SilentlyContinue }
+        $totalStopped += $targets.Count
+        Start-Sleep -Milliseconds 700   # 比迴圈重生延遲（實測 0.3 秒）長：之後重掃才看得到「又被拉起」的
     }
-    if ($loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart.bat）。" }
-    foreach ($t in $targets) {
-        $p = $byPid[$t]
-        $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
-        $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
-        if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
-        Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
-        Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
+    return $totalStopped
+}
+
+# ── T84（2026-11-13，T83 正式機實證）：停服要「先停排程、一次殺光所有迴圈、確認沒有才複製」──────────────────────────────
+# 證據（正式機回報\20261113_234700_b4c54215_成功）：手動逐一結束 4 個迴圈時，23:45:01 還活著的其他迴圈在 port 一釋放就用舊程式把 uvicorn 拉起
+#   （PID 24044／22408）⇒ 「一次殺一個」會被其他迴圈搶起來。做法：①先暫時停用排程工作（停服期間不讓它叫起新迴圈）；
+#   ②Stop-InstallService 先把本輪找到的**所有**迴圈一次結束（單一 Stop-Process 呼叫、中間不夾別的動作），再結束服務行程；
+#   ③停服後／複製後／啟動前由 Stop-RespawnedService 核對沒有迴圈與 listener；④只由 Start-InstallService 一個來源重啟，啟動前恢復排程工作
+#   （任何出口都會經 Exit-InstallLock 恢復，不會把排程工作留在停用狀態）。
+$script:AutostartTaskDisabledByApply = $false
+# 標記檔：Suspend 時寫、Restore 成功才刪。套用行程中途死掉（WinRM 工作階段結束／被人殺掉／斷電）⇒ 排程工作會停在停用狀態、重開機後服務不會自己起來；
+#   標記檔讓**下一次** apply／rollback 認得「這個停用是上次中斷的我們留下的」並在結束前恢復（也可人工：Enable-ScheduledTask -TaskName <名稱>）。
+function Get-AutostartTaskMarker { return (Join-Path $BackendDir ".autostart_task_disabled_by_apply") }
+function Suspend-AutostartTask {
+    if ($script:AutostartTaskDisabledByApply) { return }
+    try {
+        $t = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
+        if ($t -and $t.State -eq "Disabled" -and (Test-Path (Get-AutostartTaskMarker))) {
+            $script:AutostartTaskDisabledByApply = $true
+            Warn "  排程工作「$AutostartTaskName」是停用的，且有上次中斷的套用留下的標記檔 ⇒ 本次啟動前會把它恢復。"
+        } elseif ($t -and $t.State -ne "Disabled") {
+            Disable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
+            $script:AutostartTaskDisabledByApply = $true
+            try { Set-Content -Path (Get-AutostartTaskMarker) -Value ((Get-Date).ToString("s") + " pid=" + $PID) -Encoding ASCII -ErrorAction Stop } catch { Warn "  標記檔寫入失敗：$($_.Exception.Message)（若本次套用被中斷，請人工 Enable-ScheduledTask -TaskName `"$AutostartTaskName`"）。" }
+            Info "  已暫時停用排程工作「$AutostartTaskName」（停服期間不讓它叫起新迴圈；啟動前恢復）。"
+        }
+    } catch {
+        Warn "  無法停用排程工作「$AutostartTaskName」：$($_.Exception.Message)（改靠一次結束所有迴圈）。"
     }
-    return $targets.Count
+}
+function Restore-AutostartTask {
+    if (-not $script:AutostartTaskDisabledByApply) { return }
+    try {
+        Enable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
+        $script:AutostartTaskDisabledByApply = $false
+        Remove-Item -Path (Get-AutostartTaskMarker) -Force -ErrorAction SilentlyContinue
+        Info "  已恢復排程工作「$AutostartTaskName」。"
+    } catch {
+        Warn "  ⚠ 無法恢復排程工作「$AutostartTaskName」：$($_.Exception.Message) —— 請人工執行 Enable-ScheduledTask -TaskName `"$AutostartTaskName`"，否則重開機後服務不會自己起來。"
+    }
 }
 
 function Start-InstallService {
+    Restore-AutostartTask   # 啟動前恢復排程工作（Stop-InstallService 停用的）；下面才判斷排程工作能不能用
     $script:RestartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore：舊行程在此之前已停；server.log.1 比這晚才算「本次行程輪替出來的」
     $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
     if ($task -and $task.State -ne "Disabled") {
@@ -368,6 +467,72 @@ function Start-InstallService {
     Start-Process -FilePath (Join-Path $env:WINDIR "System32\cmd.exe") -ArgumentList "/c `"$bat`"" `
         -WorkingDirectory $BackendDir -WindowStyle Hidden
     Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
+}
+
+# ── T84（2026-11-13，T82 事故）：停服後迴圈 0.3 秒就把服務拉回來 ─────────────────────────────────────────────
+# 證據（正式機回報\20261113_T82根因證據）：迴圈是 cmd /c …\backend\autostart_guard.bat（排程 → wscript autostart_guard.vbs → bat 先查 666
+#   有沒有在聽 → call autostart.bat 的 :loop）。舊的 Stop-InstallService 只認命令列含 autostart.bat ⇒ 迴圈沒被認出、沒被結束；
+#   18:38:23.84 服務被殺、18:38:24.14（0.3 秒後）迴圈就重新啟動它，那時 robocopy 才剛開始 ⇒ 服務讀到半新半舊的程式樹
+#   （accounting 1.1.67 舊、case 新 migration 有跑、core 13／14 沒跑），ping 照過。另有 3 個父行程已不在的殭屍迴圈（各帶 timeout，沒有 uvicorn 子行程）。
+# 修法（三層）：
+#   ① Stop-InstallService 認得所有 autostart*.bat 的迴圈（含沒有子行程的），每輪先殺迴圈再殺服務，重掃到沒有目標為止；
+#   ② Stop-RespawnedService 在停服後、複製後、啟動前核對「沒有迴圈／服務活著」，有就印出證據再停；
+#   ③ 兜底（apply_update.ps1 才有；根因若不只這一個）：Invoke-SchemaGate 在健檢後驗「聽 $Port 的行程是不是比程式複製完成還早起來」與
+#      「庫內 module_schema_versions ≥ 程式登記的最高 migration 版號」，任一不符 ⇒ 重啟一次再驗；
+#      主庫仍不一致 ⇒ 失敗結束（unhealthy_not_rolled_back，**不自動回滾**——回滾會還原資料庫）；驗不到 ⇒ 警告，不擋。
+#   🔴 測試用正式機的行程鏈當替身驗①②；「迴圈真的在 0.3 秒內重生並與 robocopy 重疊」那一段沒有真實環境可測。
+$script:RespawnDetected = $false
+function Test-InstallServiceRunning {
+    $info = Stop-InstallService -ListOnly
+    return ($info.Targets.Count -gt 0)
+}
+
+function Wait-PortFreed {
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) { return $true }
+    }
+    return $false
+}
+
+function Write-InstallServiceDiag($info) {
+    $n = 0
+    foreach ($id in $info.Targets) {
+        if ($n -ge 12) { Info "    …（其餘略）"; break }
+        $p = $info.ByPid[[int]$id]
+        if (-not $p) { continue }
+        $pp = $info.ByPid[[int]$p.ParentProcessId]
+        $made = if ($p.CreationDate) { ([datetime]$p.CreationDate).ToString("MM-dd HH:mm:ss.fff") } else { "?" }
+        $cmd = if ($p.CommandLine) { [string]$p.CommandLine } else { "" }
+        if ($cmd.Length -gt 140) { $cmd = $cmd.Substring(0, 140) + "…" }
+        $par = if ($pp) { "$($pp.Name)#$($pp.ProcessId)" } else { "（父行程已不在：$($p.ParentProcessId)）" }
+        Info "    PID $($p.ProcessId) | $($p.Name) | 建立 $made | 父 $par | $cmd"
+        $n++
+    }
+}
+
+# 停服（或複製）之後的核對：還有 autostart 迴圈或服務行程在 ⇒ 印出它們（PID、父行程、建立時間：找「看不見的啟動器」的證據）再停；最多 3 輪。
+# 回「有沒有發現」。呼叫點：停服後、複製後、啟動前——啟動前沒有迴圈活著，Start-InstallService 才不會替自己再疊一個迴圈。
+function Stop-RespawnedService([string]$Stage) {
+    $detected = $false
+    for ($i = 0; $i -lt 3; $i++) {
+        $info = Stop-InstallService -ListOnly
+        if ($info.Targets.Count -eq 0) { break }
+        if (-not $detected) { Warn "  [$Stage] 還有 autostart 迴圈或服務行程在（停服後被拉起，或有殘留迴圈）⇒ 再停；它們的 PID／父行程／建立時間如下（事後找啟動器用）：" }
+        $detected = $true
+        Write-InstallServiceDiag $info
+        $null = Stop-InstallService
+        $null = Wait-PortFreed
+    }
+    $left = Stop-InstallService -ListOnly
+    if ($left.Targets.Count -gt 0) {
+        Warn "  [$Stage] 仍有 $($left.Targets.Count) 個行程停不掉（權限不足？）——程式複製可能與它們重疊；套用後的啟動時間與 schema 檢查會再驗。"
+        Write-Host "::NOTE:: respawn_unresolved stage=$Stage"
+    } elseif ($detected) {
+        Write-Host "::NOTE:: respawn_detected stage=$Stage"
+    }
+    if ($detected) { $script:RespawnDetected = $true }
+    return $detected
 }
 
 function Get-StartupRange($tail) {
@@ -681,6 +846,7 @@ Ok "  乾跑通過：migration 完成、$($script:ModuleKey) $($script:ToVersion
 Info "[4/7] 停止服務..."
 Stop-InstallService | Out-Null
 $script:ServiceState = "down"
+Stop-RespawnedService "停服後" | Out-Null
 
 # ── Step 7：換檔 ────────────────────────────────────────────────
 Info "[5/7] 替換模組..."
@@ -723,6 +889,7 @@ $script:ProdState = "applied"
 
 # ── Step 8／9：重啟＋健檢 ─────────────────────────────────────────
 Info "[6/7] 重新啟動並健康檢查..."
+Stop-RespawnedService "啟動前" | Out-Null
 $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
 Start-InstallService
 $hc = Test-ModuleHealth $script:ModuleKey $script:ToVersion $restartAt

@@ -661,7 +661,7 @@ def test_card_fragments_land_somewhere_real():
 
 def test_settings_center_opens_the_group_named_in_the_url_hash():
     html = source_tree.page_file("settings-center.html").read_text(encoding="utf-8")
-    assert "location.hash" in html and "g.group === want" in html
+    assert "location.hash" in html and "pageOfGroup(hash)" in html          # 舊網址 #群組代碼：由外框找出那個群組所在的設定頁
 
 
 def test_backup_card_description_promises_only_what_the_target_group_offers():

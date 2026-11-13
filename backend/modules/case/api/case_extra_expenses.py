@@ -46,7 +46,7 @@ from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒�
 from helpers import row_access
 from helpers import recycle_bin                       # 第 53 班 P1：刪除先進資源回收筒（IP-RB2）
 from modules.case import recycle_adapter as _RA
-from helpers.uploads import purge_document_files, limits_for as _upload_limits_for      # 草稿刪除時一併刪實體檔案（第44班）
+from helpers.uploads import purge_document_files, pop_document_file, remove_physical_file, limits_for as _upload_limits_for      # 草稿刪除時一併刪實體檔案（第44班）
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module, has_finance_access, has_cashier_access
 from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
@@ -64,7 +64,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files,
 )
 from helpers.tiered_approval import cascade_self_tiers, sign_first_pending  # noqa: E402（helpers/__init__ 鎖定，直接取）
 
@@ -836,8 +836,13 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
-        orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
         begin_write(conn)                          # 讀快照前先拿寫鎖
+        row = _load(conn, quote_no, exp_id, user)  # 鎖內重讀：附件清單以這份為準（鎖外那份可能漏掉剛進來的附件 ⇒ 留孤兒）
+        if row["status"] not in EDITABLE_STATUSES:                       # 狀態與權限也在鎖內重驗（鎖外檢查後、拿鎖之前可能剛被送審／核准）
+            raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
+        orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
         with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
                 res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進資源回收筒（附件一併搬走、30 天內最高管理者可還原）
@@ -882,9 +887,9 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
             raise HTTPException(409, "「%s」狀態不可作廢（草稿與已駁回請直接刪除；送審中請先駁回）" % row["status"])
         if (row["paid_date"] or "").strip():
             raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理者更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
-        change = _change_of(row)
         now = datetime.now().isoformat(timespec="seconds")
         begin_write(conn)
+        change = _change_of(_load(conn, quote_no, exp_id, user))   # 鎖內重讀待核准附件清單（鎖外讀的可能漏掉剛上傳的）
         if (_col(row, "kind", "") or "") == PI.REQ:                          # 第 44 班：已被採購單引用的請購單不能作廢（寫鎖內再查，與採購單送審互斥）
             _users = PI.claimed_by(conn, quote_no, _col(row, "doc_code", "") or "")
             if _users:
@@ -1271,8 +1276,10 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id, user)
         _guard_files_mutation(row, user)
-        remaining = delete_document_file(
-            "case_extra_expense", f"{quote_no}_{exp_id}", _files_of(row), file_id)
+        begin_write(conn)                                   # T86：鎖內重讀、重驗狀態；只改清單，commit 之後才刪實體檔
+        row = _load(conn, quote_no, exp_id, user)
+        _guard_files_mutation(row, user)
+        gone, remaining = pop_document_file(_files_of(row), file_id)
         conn.execute(
             "UPDATE case_extra_expenses SET files_json=?, updated_at=?, updated_by_name=? "
             "WHERE id=? AND quote_no=?",
@@ -1283,6 +1290,7 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
         conn.commit()
     finally:
         conn.close()
+    remove_physical_file(gone)                              # commit 之後才刪：寫庫失敗＝紀錄與檔都還在
     _audit(_tok(authorization), "extra_expense.delete_file", *_audit_target(quote_no, exp_id),
            f"{quote_no or '無案件'} 額外支出 #{exp_id} 刪除附件")
     return {"ok": True}
@@ -1353,14 +1361,11 @@ def _clear_change(conn, quote_no: str, exp_id: int):
 
 
 def _discard_pending_files(quote_no: str, exp_id: int, change: dict):
-    """撤銷／駁回後撤銷時刪掉待核准附件的實體檔案。失敗不擋流程——留一個孤兒檔
-    比讓使用者撤銷不掉好。"""
-    files = change.get("addFiles") or []
-    for f in list(files):
-        try:
-            delete_document_file("case_extra_expense", f"{quote_no}_{exp_id}", files, f.get("id"))
-        except Exception:
-            pass
+    """撤銷／作廢後刪掉待核准附件的實體檔案。**必須在 commit 之後呼叫**（T86：寫庫失敗時紀錄還在、檔不能先沒了）。
+    失敗不擋流程——留一個孤兒檔比讓使用者撤銷不掉好。"""
+    for f in list(change.get("addFiles") or []):
+        if isinstance(f, dict):
+            remove_physical_file(f)
 
 
 def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> float:
@@ -1493,9 +1498,14 @@ def cancel_change_request(quote_no: str, exp_id: int, authorization: str = Heade
             raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不可撤銷")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以撤銷變更申請")
-        _discard_pending_files(quote_no, exp_id, _change_of(row))
+        begin_write(conn)                                   # T86：鎖內重讀（待核准附件清單／狀態），先清紀錄、commit，之後才刪實體檔
+        row = _load(conn, quote_no, exp_id, user)
+        if (_col(row, "change_status", "") or "") not in ("草稿", "已駁回"):
+            raise HTTPException(409, "變更申請狀態已變動，請重新整理")
+        pending = _change_of(row)
         _clear_change(conn, quote_no, exp_id)
         conn.commit()
+        _discard_pending_files(quote_no, exp_id, pending)
         _audit(_tok(authorization), "extra_expense.change_cancel", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} 撤銷變更申請")
         return {"ok": True}
@@ -1561,14 +1571,18 @@ def delete_change_request_file(quote_no: str, exp_id: int, file_id: str,
             raise HTTPException(409, "送審中的變更申請不可增刪附件")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除變更申請附件")
+        begin_write(conn)                                   # T86：鎖內重讀、重驗狀態；只改清單，commit 之後才刪實體檔
+        row = _load(conn, quote_no, exp_id, user)
+        if (_col(row, "change_status", "") or "") not in ("草稿", "已駁回"):
+            raise HTTPException(409, "送審中的變更申請不可增刪附件")
         change = _change_of(row)
-        change["addFiles"] = delete_document_file(
-            "case_extra_expense", f"{quote_no}_{exp_id}", change.get("addFiles") or [], file_id)
+        gone, change["addFiles"] = pop_document_file([f for f in (change.get("addFiles") or []) if isinstance(f, dict)], file_id)
         conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
                      (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
         conn.commit()
     finally:
         conn.close()
+    remove_physical_file(gone)
     _audit(_tok(authorization), "extra_expense.change_delete_file", *_audit_target(quote_no, exp_id),
            f"{quote_no or '無案件'} 額外支出 #{exp_id} 刪除變更申請待核准附件")
     return {"ok": True}

@@ -1,0 +1,611 @@
+{
+ "_doc": "設定中心外框的頁面對應（SPEC §14.5）。分類只有這一套；安全＝存取、登入、保存與隱私。style：checkbox／form／preset-only。產生器：make_shell_groups.py；改完請跑 gen_seed.py 與 --check。",
+ "categoryOrder": [
+  "業務",
+  "財務",
+  "系統",
+  "安全"
+ ],
+ "pages": {
+  "builder_all": {
+   "plain": "自訂功能的開關（13 組）",
+   "category": "系統",
+   "groups": [
+    "builder_status_display",
+    "builder_layout",
+    "builder_governance",
+    "builder_rules",
+    "builder_menu",
+    "builder_custom_fields",
+    "builder_actions",
+    "builder_slots",
+    "builder_exports",
+    "builder_option_lists",
+    "builder_notify",
+    "builder_stage_templates",
+    "builder_custom_modules"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "list_download": {
+   "plain": "清單與下載檔名",
+   "category": "系統",
+   "groups": [
+    "list_view",
+    "list_prefs",
+    "download_name"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "home_look": {
+   "plain": "首頁外觀、數字與日期",
+   "category": "系統",
+   "groups": [
+    "ui_format",
+    "login_greeting",
+    "brand"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "labels_biz": {
+   "plain": "網路規劃、採購、住宿的狀態名稱",
+   "category": "業務",
+   "groups": [
+    "netplan_labels",
+    "procurement_labels",
+    "lodging_labels"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "small_misc": {
+   "plain": "旅宿與標案地圖的小設定",
+   "category": "業務",
+   "groups": [
+    "lodging_freshness",
+    "tender_closing"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "account_security": {
+   "plain": "登入與密碼規則",
+   "category": "安全",
+   "groups": [
+    "account_security"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "external_login": {
+   "plain": "從外網登入的防護",
+   "category": "安全",
+   "groups": [
+    "external_login"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "change_control": {
+   "plain": "重大設定要等幾天才生效",
+   "category": "安全",
+   "groups": [
+    "change_control"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "retention": {
+   "plain": "資料保存多久",
+   "category": "安全",
+   "groups": [
+    "retention"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "recycle_bin": {
+   "plain": "刪除的單據保留幾天",
+   "category": "安全",
+   "groups": [
+    "recycle_bin"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_privacy": {
+   "plain": "報價單的個人資料欄位（能不能隱藏）",
+   "category": "安全",
+   "groups": [
+    "quote_privacy"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "uploads": {
+   "plain": "上傳檔案的大小與數量",
+   "category": "系統",
+   "groups": [
+    "uploads"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "system_hub": {
+   "plain": "系統中心要不要列出你沒有權限的項目",
+   "category": "系統",
+   "groups": [
+    "system_hub"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "material_order": {
+   "plain": "材料申請規則",
+   "category": "業務",
+   "groups": [
+    "material_order"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "material_recognition": {
+   "plain": "誰能把採購單認列到材料卡片",
+   "category": "業務",
+   "groups": [
+    "material_recognition"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_alt": {
+   "plain": "報價單的「擇一方案」",
+   "category": "業務",
+   "groups": [
+    "quote_alt"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_approval": {
+   "plain": "報價單什麼時候要送審",
+   "category": "業務",
+   "groups": [
+    "quote_approval"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_output": {
+   "plain": "隱藏的報價條件要不要印在 PDF",
+   "category": "業務",
+   "groups": [
+    "quote_output"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_defaults": {
+   "plain": "報價單預設值",
+   "category": "業務",
+   "groups": [
+    "quote_defaults"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "quote_backfill": {
+   "plain": "補登歷史案件",
+   "category": "業務",
+   "groups": [
+    "quote_backfill"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "case_close_gates": {
+   "plain": "案件結案前要先完成什麼",
+   "category": "業務",
+   "groups": [
+    "case_close_gates"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "completion_note": {
+   "plain": "完工單怎麼從報價單帶入",
+   "category": "業務",
+   "groups": [
+    "completion_note"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "alerts": {
+   "plain": "保固與確認檔到期提醒",
+   "category": "業務",
+   "groups": [
+    "alerts"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "project_margin": {
+   "plain": "專案毛利率低於多少要提醒",
+   "category": "財務",
+   "groups": [
+    "project_margin"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "finance_reports": {
+   "plain": "帳齡與未精算提醒",
+   "category": "財務",
+   "groups": [
+    "finance_reports"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "finance_cashier": {
+   "plain": "出納頁與銀行對帳單",
+   "category": "財務",
+   "groups": [
+    "finance_cashier"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "profit_warning": {
+   "plain": "利潤提醒色帶",
+   "category": "財務",
+   "groups": [
+    "profit_warning"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "profit_rules": {
+   "plain": "公益捐款比率",
+   "category": "財務",
+   "groups": [
+    "profit_rules"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "overhead": {
+   "plain": "管銷怎麼分攤",
+   "category": "財務",
+   "groups": [
+    "overhead"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "payslip_dispatch_picker": {
+   "plain": "勞報單「選派發」下拉一次載入幾筆",
+   "category": "財務",
+   "groups": [
+    "payslip_dispatch_picker"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  },
+  "legal_params_reminder": {
+   "plain": "法規參數跨年提醒",
+   "category": "財務",
+   "groups": [
+    "legal_params_reminder"
+   ],
+   "style": "checkbox",
+   "reason": ""
+  }
+ },
+ "groups": {
+  "account_security": {
+   "plain": "登入與密碼規則",
+   "category": "安全",
+   "currentName": "登入與密碼",
+   "privacy": false
+  },
+  "external_login": {
+   "plain": "從外網登入的防護",
+   "category": "安全",
+   "currentName": "外網登入防護",
+   "privacy": false
+  },
+  "change_control": {
+   "plain": "重大設定要等幾天才生效",
+   "category": "安全",
+   "currentName": "變更管制",
+   "privacy": false
+  },
+  "retention": {
+   "plain": "資料保存多久",
+   "category": "安全",
+   "currentName": "保存期限",
+   "privacy": false
+  },
+  "recycle_bin": {
+   "plain": "刪除的單據保留幾天",
+   "category": "安全",
+   "currentName": "資源回收筒",
+   "privacy": false
+  },
+  "quote_privacy": {
+   "plain": "報價單的個人資料欄位（能不能隱藏）",
+   "category": "安全",
+   "currentName": "報價單個人資料欄位",
+   "privacy": true
+  },
+  "uploads": {
+   "plain": "上傳檔案的大小與數量",
+   "category": "系統",
+   "currentName": "上傳容量",
+   "privacy": false
+  },
+  "system_hub": {
+   "plain": "系統中心要不要列出你沒有權限的項目",
+   "category": "系統",
+   "currentName": "系統中心",
+   "privacy": false
+  },
+  "download_name": {
+   "plain": "下載檔案怎麼命名",
+   "category": "系統",
+   "currentName": "下載檔名",
+   "privacy": true
+  },
+  "ui_format": {
+   "plain": "數字與日期怎麼顯示",
+   "category": "系統",
+   "currentName": "數字與日期顯示格式",
+   "privacy": false
+  },
+  "brand": {
+   "plain": "系統標語",
+   "category": "系統",
+   "currentName": "系統標語",
+   "privacy": false
+  },
+  "login_greeting": {
+   "plain": "登入畫面問候語",
+   "category": "系統",
+   "currentName": "登入問候語",
+   "privacy": false
+  },
+  "list_prefs": {
+   "plain": "要不要開放個人調整清單",
+   "category": "系統",
+   "currentName": "清單個人偏好",
+   "privacy": false
+  },
+  "list_view": {
+   "plain": "清單各項個人調整",
+   "category": "系統",
+   "currentName": "清單檢視（個人偏好）",
+   "privacy": false
+  },
+  "builder_status_display": {
+   "plain": "自訂狀態的名稱與顏色",
+   "category": "系統",
+   "currentName": "狀態顯示名稱與顏色",
+   "privacy": false
+  },
+  "builder_layout": {
+   "plain": "自訂畫面的版面",
+   "category": "系統",
+   "currentName": "自訂畫面版面",
+   "privacy": false
+  },
+  "builder_governance": {
+   "plain": "自訂功能的版本與發布管控",
+   "category": "系統",
+   "currentName": "建構器治理（版本帳本與發布前影響預覽）",
+   "privacy": false
+  },
+  "builder_rules": {
+   "plain": "自訂規則（標示型）",
+   "category": "系統",
+   "currentName": "規則（標示型）",
+   "privacy": false
+  },
+  "builder_menu": {
+   "plain": "自訂選單",
+   "category": "系統",
+   "currentName": "選單建構器",
+   "privacy": false
+  },
+  "builder_custom_fields": {
+   "plain": "內建畫面的自訂欄位",
+   "category": "系統",
+   "currentName": "自訂欄位（內建畫面）",
+   "privacy": false
+  },
+  "builder_actions": {
+   "plain": "自訂按鈕",
+   "category": "系統",
+   "currentName": "自訂按鈕",
+   "privacy": false
+  },
+  "builder_slots": {
+   "plain": "附件種類與存放位置",
+   "category": "系統",
+   "currentName": "附件種類與儲存位置",
+   "privacy": false
+  },
+  "builder_exports": {
+   "plain": "自訂匯出",
+   "category": "系統",
+   "currentName": "自訂匯出",
+   "privacy": false
+  },
+  "builder_option_lists": {
+   "plain": "自訂下拉選項",
+   "category": "系統",
+   "currentName": "自訂選項清單",
+   "privacy": false
+  },
+  "builder_notify": {
+   "plain": "自訂通知用語",
+   "category": "系統",
+   "currentName": "自訂通知用語",
+   "privacy": false
+  },
+  "builder_stage_templates": {
+   "plain": "自訂案件階段樣板",
+   "category": "系統",
+   "currentName": "自訂案件階段樣板",
+   "privacy": false
+  },
+  "builder_custom_modules": {
+   "plain": "建立自訂模組",
+   "category": "系統",
+   "currentName": "自訂模組引擎（建立新模組）",
+   "privacy": false
+  },
+  "material_order": {
+   "plain": "材料申請規則",
+   "category": "業務",
+   "currentName": "材料申請",
+   "privacy": false
+  },
+  "material_recognition": {
+   "plain": "誰能把採購單認列到材料卡片",
+   "category": "業務",
+   "currentName": "材料卡片認列採購單",
+   "privacy": false
+  },
+  "quote_alt": {
+   "plain": "報價單的「擇一方案」",
+   "category": "業務",
+   "currentName": "擇一方案",
+   "privacy": false
+  },
+  "quote_approval": {
+   "plain": "報價單什麼時候要送審",
+   "category": "業務",
+   "currentName": "報價送審門檻",
+   "privacy": false
+  },
+  "quote_output": {
+   "plain": "隱藏的報價條件要不要印在 PDF",
+   "category": "業務",
+   "currentName": "報價單輸出",
+   "privacy": false
+  },
+  "quote_defaults": {
+   "plain": "報價單預設值",
+   "category": "業務",
+   "currentName": "報價單預設值",
+   "privacy": false
+  },
+  "quote_backfill": {
+   "plain": "補登歷史案件",
+   "category": "業務",
+   "currentName": "補登歷史案件",
+   "privacy": false
+  },
+  "case_close_gates": {
+   "plain": "案件結案前要先完成什麼",
+   "category": "業務",
+   "currentName": "結案條件加嚴",
+   "privacy": false
+  },
+  "completion_note": {
+   "plain": "完工單怎麼從報價單帶入",
+   "category": "業務",
+   "currentName": "完工單",
+   "privacy": false
+  },
+  "alerts": {
+   "plain": "保固與確認檔到期提醒",
+   "category": "業務",
+   "currentName": "到期預警",
+   "privacy": false
+  },
+  "netplan_labels": {
+   "plain": "網路規劃：狀態名稱",
+   "category": "業務",
+   "currentName": "網路規劃：狀態名稱",
+   "privacy": false
+  },
+  "procurement_labels": {
+   "plain": "採購建議：狀態名稱",
+   "category": "業務",
+   "currentName": "採購建議：狀態名稱",
+   "privacy": false
+  },
+  "lodging_labels": {
+   "plain": "住宿紀錄：計價單位與詢價管道",
+   "category": "業務",
+   "currentName": "住宿紀錄：計價單位與詢價管道",
+   "privacy": false
+  },
+  "lodging_freshness": {
+   "plain": "附近旅宿：資料新舊提示",
+   "category": "業務",
+   "currentName": "附近旅宿：資料新舊提示",
+   "privacy": false
+  },
+  "tender_closing": {
+   "plain": "地圖：標案即將截止標記",
+   "category": "業務",
+   "currentName": "地圖：標案即將截止標記",
+   "privacy": false
+  },
+  "project_margin": {
+   "plain": "專案毛利率低於多少要提醒",
+   "category": "財務",
+   "currentName": "專案毛利%",
+   "privacy": false
+  },
+  "finance_reports": {
+   "plain": "帳齡與未精算提醒",
+   "category": "財務",
+   "currentName": "財務報表",
+   "privacy": false
+  },
+  "finance_cashier": {
+   "plain": "出納頁與銀行對帳單",
+   "category": "財務",
+   "currentName": "出納",
+   "privacy": false
+  },
+  "profit_warning": {
+   "plain": "利潤提醒色帶",
+   "category": "財務",
+   "currentName": "利潤提醒色帶",
+   "privacy": false
+  },
+  "profit_rules": {
+   "plain": "公益捐款比率",
+   "category": "財務",
+   "currentName": "利潤口徑",
+   "privacy": false
+  },
+  "overhead": {
+   "plain": "管銷怎麼分攤",
+   "category": "財務",
+   "currentName": "管銷分攤比率",
+   "privacy": false
+  },
+  "payslip_dispatch_picker": {
+   "plain": "勞報單「選派發」下拉一次載入幾筆",
+   "category": "財務",
+   "currentName": "勞報單選派發下拉",
+   "privacy": false
+  },
+  "legal_params_reminder": {
+   "plain": "法規參數跨年提醒",
+   "category": "財務",
+   "currentName": "法規參數跨年提醒",
+   "privacy": false
+  }
+ }
+}

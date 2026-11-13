@@ -199,6 +199,11 @@ def main(argv=None):
                            "run": a.run_id, "stage": a.stage, "nodeid": ",".join(ids), "when": "retry", "module": "core",
                            "modules": ["core"], "summary": ("; ".join(f["nodeid"] for f in flaky) if ok else " | ".join(msgs))[:500],
                            "results": results})
+    try:                                                              # 偶發排行榜（T84）：只記錄；結果與結束碼都已定案，這裡任何例外都吞掉，絕不影響建包綠／紅
+        import flaky_leaderboard as _lb
+        _lb.record(results, a.run_id, a.stage)
+    except Exception:  # noqa: BLE001
+        pass
     if ok:
         print("[偶發重跑] 通過：%d 題重跑綠且已登記（flaky_retried）——繼續打包" % len(flaky))
         for f in flaky:

@@ -157,6 +157,14 @@ EXEMPT = {
         "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（核准票 ledger.role.approve＋套用 ledger.role.put 與 gl_account_roles 變更同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
     ("modules/accounting/api/ledger_reports.py", "POST", "/roles/pending/{pid}/cancel"):
         "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（撤銷與 ledger.role.cancel 同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
+    ("settings_center.py", "POST", "/api/settings-center/batch"):
+        "T84：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record／audit_event 寫入（save_batch 對每個有變動的群組各呼叫一次 sr.publish，動作 settings.<group>.update／.pending），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_audit_guard_exempt_batch_2026_11_14.py 呼叫一次→audit_log 多一筆",
+    ("duty_roles.py", "POST", "/api/users/permissions/batch/preview"):
+        "純試算：helpers/user_perm_batch.preview 只算生效權限差異（唯讀），不寫 audit_log／permission_changes／users；測試 test_audit_guard_exempt_batch_2026_11_14.py 驗呼叫前後列數不變",
+    ("duty_roles.py", "POST", "/api/users/permissions/batch"):
+        "T84：稽核在同一個交易內由 helpers/user_perm_batch.apply→helpers/duty_roles.record_user_modules_change→_record→_write_audit 寫入（動作 user.perm_change，逐人一列、與 permission_changes 同交易），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_audit_guard_exempt_batch_2026_11_14.py 呼叫一次→audit_log 多一筆",
+    ("duty_roles.py", "POST", "/api/users/permissions/batch/undo"):
+        "T84：稽核在同一個交易內由 helpers/user_perm_batch.undo→helpers/duty_roles.record_user_modules_change→_record→_write_audit 寫入（動作 user.perm_change，逐人一列），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_audit_guard_exempt_batch_2026_11_14.py 呼叫一次→audit_log 多一筆",
     ("settings_center.py", "POST", "/api/settings-center/profiles/{name}/apply"):
         "稽核在同一個交易內由 helpers/config_ledger.record 寫入（每個群組各一次 publish，動作 settings.<group>.update／.pending），端點本身不再另呼叫 _audit；失敗整筆回滾",
     ("settings_center.py", "POST", "/api/settings-center/groups/{group}"):

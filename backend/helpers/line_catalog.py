@@ -58,7 +58,7 @@ GROUP_ORDER = ("報價單與簽核", "出貨單", "請款與開票", "承攬商"
 
 #: (分組, 完全相同的 key, key 前綴)；由上往下第一個符合的為準
 _GROUP_RULES = (
-    ("報價單與簽核", ("approval_request", "next_tier", "approved", "returned", "resubmit_requester", "approval_review_edit", "approval_reminder"), ()),
+    ("報價單與簽核", ("approval_request", "next_tier", "approved", "returned", "resubmit_requester", "approval_review_edit", "approval_content_edited", "approval_reminder"), ()),
     ("出貨單", (), ("shipping_",)),
     ("請款與開票", (), ("payment_request_", "invoice_voucher_")),
     ("承攬商", (), ("contractor_voucher_", "dispatch_")),

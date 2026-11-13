@@ -88,10 +88,13 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 2026-10-01（W3，wip/w3-etype-editor）+1：新增 expense-types.html（請款類型編輯頁），Alpine，有 _initDone 守衛。
 #: 2026-10-01（W1，wip/w1-attach-p3-a3）+1：新增 file-center.html（檔案中心），Alpine，有 _initDone 守衛。
 #: 2026-10-02（wip/t33-remit-s0-a3）+1：新增 remit-kinds-settings.html（匯款款別設定頁，Alpine，_initDone 守衛）
+#: 2026-11-13（一條龍 P1'）+1：material-flow.html（案件物料流程時間軸，Alpine、_initDone 守衛）。
 #: 2026-11-13（T83，feat/backup-monitor-page）+1：新增 backup-monitor.html（備份監控頁，Alpine、_initDone 守衛）。
+#: 2026-11-14（S2，feat/settings-matrix-s2）-1：settings-center.html 改成矩陣表外框（不再用 Alpine），離開母體。
 #:   同班新增的 getting-started.html（無 Alpine）、license-settings.html（刻意不用 Alpine）不在母體。
+#: 2026-11-13（T85，feat/import-wizard）+1：新增 import-wizard.html（匯入精靈，Alpine、_initDone 守衛）。
 #: 2026-11-13（S3b，feat/settings-matrix-s3b）-1：mail-settings.html 改成共用矩陣元件（SettingsMatrix，不用 Alpine），不再是會跑 `init()` 的頁。
-PAGE_POPULATION = 50 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 - 1             # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html；+1：expense-types.html（請款類型編輯頁，有 _initDone 守衛）；+1：file-center.html（檔案中心，W1 wip/w1-attach-p3-a3，有 _initDone 守衛）；+1：duty-roles.html（職責角色化 R1，Alpine、有 _initDone 守衛，2026-10-06）  # 第67班：+1 permission-matrix.html（權限設定，有 _initDone 守衛）  # 第54班：+1 settings-center.html（設定中心索引頁，有 _initDone 守衛）；第 53 班：+1 recycle-bin.html（刪除暫存區，有 _initDone 守衛）
+PAGE_POPULATION = 50 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 - 1 - 1             # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html；+1：expense-types.html（請款類型編輯頁，有 _initDone 守衛）；+1：file-center.html（檔案中心，W1 wip/w1-attach-p3-a3，有 _initDone 守衛）；+1：duty-roles.html（職責角色化 R1，Alpine、有 _initDone 守衛，2026-10-06）  # 第67班：+1 permission-matrix.html（權限設定，有 _initDone 守衛）  # 第54班：+1 settings-center.html（設定中心索引頁，有 _initDone 守衛）；第 53 班：+1 recycle-bin.html（刪除暫存區，有 _initDone 守衛）
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

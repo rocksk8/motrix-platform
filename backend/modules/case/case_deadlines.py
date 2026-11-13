@@ -232,6 +232,74 @@ def _check_case_project_timeline_deadline() -> None:
 
 _WARR_THRESHOLDS = (7, 30)  # days — must be in ascending order
 
+#: onepipe P0d（旗標 `onepipe.warranty_closed_notify`，預設關）：已結案案件的保固到期也通知。
+#: 基準記號：旗標開啟後第一次每日檢查「靜默建基準」（只寫去重記號、不寄信）的日期；之後只通知「基準日當天或之後才到期」、
+#: 而且新進入提醒期間的設備。旗標關著時這個記號會被清掉，下次再開重新建基準（關閉期間錯過的不補寄）。
+_CLOSED_BASELINE_KEY = "onepipe.warranty_closed_baseline"
+
+
+def _closed_warranty_on() -> bool:
+    from helpers import onepipe_flags                  # 以模組引用（測試以 monkeypatch `helpers.onepipe_flags.flag_on` 換掉）
+    return onepipe_flags.flag_on("warranty_closed_notify")      # 讀不到／群組沒登錄 ⇒ 關
+
+
+def _closed_baseline_date():
+    """基準日（date）；沒建過／壞掉 ⇒ None。"""
+    st = _get_setting(_CLOSED_BASELINE_KEY)
+    try:
+        return _date.fromisoformat(str(st["date"])[:10]) if isinstance(st, dict) and st.get("date") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _closed_warranty_rows(conn) -> list:
+    """已結案（欄位優先、空才看 data_json.dealTag）、不是補登的歷史案件（T70 靜音）、有設備保固資料的案件。
+    回與主迴圈同形的列：`quote_no`／`customer_name`／`cr_json`。不用 json_extract（棘輪）：在 Python 判斷。"""
+    out = []
+    for r in conn.execute("SELECT quote_no, customer_name, deal_tag, data_json FROM quotations "
+                          "WHERE COALESCE(deal_tag, '') IN ('已結案', '')").fetchall():
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        if not isinstance(d, dict) or (r["deal_tag"] or d.get("dealTag") or "") != "已結案":
+            continue
+        if _is_hist(d):
+            continue
+        cr = d.get("caseRecord")
+        if not isinstance(cr, dict) or not cr.get("devices"):
+            continue
+        out.append({"quote_no": r["quote_no"], "customer_name": r["customer_name"],
+                    "cr_json": json.dumps(cr, ensure_ascii=False)})
+    return out
+
+
+def _baseline_closed_warranty(conn, rows, today, early, urgent) -> None:
+    """第一次建基準：目前已經在提醒期間內的已結案設備只寫「已通知」記號（與正常寄信同一把去重鍵），**不寄信**；已過期的不記（也不會通知）。
+    全部寫完才寫基準日——中途失敗 ⇒ 基準日沒寫，下次重做（重做安全：記號已存在就跳過）。"""
+    today_str = today.isoformat()
+    n = 0
+    for row in rows:
+        try:
+            cr = json.loads(row["cr_json"] or "{}")
+        except Exception:
+            continue
+        for dev in cr.get("devices") or []:
+            ws, wm = dev.get("warrantyStart") or "", dev.get("warrantyMonths")
+            if not ws or not wm:
+                continue
+            expiry, days_left = _warranty_expiry(ws, wm)
+            if expiry is None or days_left > early or expiry < today:
+                continue
+            threshold = urgent if days_left <= urgent else early
+            sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
+            guard_key = f"warranty_notif.{row['quote_no']}_{sn}_{threshold}"
+            if not _get_setting(guard_key):
+                _set_setting(guard_key, today_str)
+                n += 1
+    _set_setting(_CLOSED_BASELINE_KEY, {"date": today_str, "at": datetime.now().isoformat(timespec="seconds"), "silenced": n})
+    _logger.info("_check_warranty_expiry: 已結案案件保固通知首次建基準（靜默，不寄信）：%d 筆記號，基準日 %s", n, today_str)
+
 
 def _check_warranty_expiry() -> None:
     """Scan active-case devices; send email once per device × threshold crossing."""
@@ -249,6 +317,23 @@ def _check_warranty_expiry() -> None:
               AND json_extract(data_json, '$.caseRecord') IS NOT NULL
         """).fetchall()
 
+        # P0d：旗標開 ⇒ 已結案案件也掃（首次靜默建基準；之後只通知基準日之後才到期、新進入提醒期間的）；旗標關 ⇒ 與今天完全相同
+        closed_rows, cutoff = [], None
+        try:
+            if _closed_warranty_on():
+                cutoff = _closed_baseline_date()
+                crows = _closed_warranty_rows(conn)
+                if cutoff is None:
+                    _baseline_closed_warranty(conn, crows, today, _early, _urgent)
+                    cutoff = None                                 # 這一輪只建基準，已結案的不寄
+                else:
+                    closed_rows = crows
+            elif _get_setting(_CLOSED_BASELINE_KEY):
+                _set_setting(_CLOSED_BASELINE_KEY, {})            # 旗標關 ⇒ 基準作廢，下次再開重新建基準
+        except Exception as exc:                                  # noqa: BLE001  已結案這一段的任何錯誤都不能影響原本進行中案件的通知
+            _logger.warning("_check_warranty_expiry: 已結案案件保固通知略過（%s）", exc)
+            closed_rows, cutoff = [], None
+
         owner_cache = {}      # quote_no → 業務帳號（走 sales_person_id 外鍵；沒有／已停用 ⇒ ""，只寄群組收件人）
 
         def _owner(qn):
@@ -261,9 +346,11 @@ def _check_warranty_expiry() -> None:
             return owner_cache[qn]
 
         halted = False        # 寄送暫時失敗／機器略過 ⇒ 本輪不再往下寄（逐台各等一次會把後面的每日檢查拖很久；記號沒寫，明天補）
-        for row in rows:
+        closed_ids = {id(c) for c in closed_rows}
+        for row in list(rows) + closed_rows:
             if halted:
                 break
+            is_closed = id(row) in closed_ids
             try:
                 cr = json.loads(row["cr_json"] or "{}")
             except Exception:
@@ -277,6 +364,8 @@ def _check_warranty_expiry() -> None:
                 expiry, days_left = _warranty_expiry(ws, wm)
                 if expiry is None or days_left > _early:
                     continue
+                if is_closed and cutoff is not None and expiry < cutoff:
+                    continue                      # P0d：基準日之前就已經過期的已結案設備，永遠不通知
 
                 threshold = _urgent if days_left <= _urgent else _early
                 sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
@@ -396,6 +485,11 @@ def run_daily_checks(mode: str = "daily") -> None:
         expire_backfill_if_due()
     except Exception as exc:                             # noqa: BLE001
         _logger.warning("expire_backfill_if_due failed: %s", exc)
+    try:                                                 # 已結案變更上傳途中當機留下的預留列／暫存檔（T84）
+        from modules.case.api.quotations import sweep_stale_staging
+        sweep_stale_staging()
+    except Exception as exc:                             # noqa: BLE001
+        _logger.warning("sweep_stale_staging failed: %s", exc)
     _check_warranty_expiry()
     _check_case_stage_deadline()
     _check_case_project_timeline_deadline()

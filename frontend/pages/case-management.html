@@ -15,6 +15,7 @@
   <script src="../static/profit-rules.js"></script>
   <script src="../static/status-chip.js"></script>
   <script src="../js/status-display-editor.js"></script>
+  <script src="../static/onepipe.js"></script>
   <script src="../js/case-management-core.js"></script>
   <script src="../js/case-management-list.js"></script>
   <script src="../js/case-management-close.js"></script>
@@ -697,7 +698,21 @@
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
                     <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
-                         x-show="caseMapUrl() || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                         x-show="caseMapUrl() || onepipe.timeline || onepipe.entryUnify || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                      <!-- 一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
+                           只是捷徑：不合併資料表，各類型照原本的畫面與權限寫入 -->
+                      <template x-if="onepipe.entryUnify && selected">
+                        <span data-testid="case-log-entry" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">
+                          <span style="color:var(--text-dim)">登載：</span>
+                          <a href="#" data-testid="case-log-feed" x-show="tShown('feed')" @click.prevent="openLogEntry('feed')">留言／工作日誌</a>
+                          <a href="#" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click.prevent="openLogEntry('visit')">階段出勤</a>
+                          <a data-testid="case-log-task" x-show="canLogTask()" :href="'daily-tasks.html?case_no=' + encodeURIComponent(selected.quote_no)">每日工作事項</a>
+                        </span>
+                      </template>
+                      <!-- 一條龍 P1'（旗標 onepipe.timeline，預設關＝不出現）：唯讀的物料流程時間軸 -->
+                      <template x-if="onepipe.timeline && selected">
+                        <a data-testid="case-link-material-flow" :href="'material-flow.html?q=' + encodeURIComponent(selected.quote_no)">物料流程</a>
+                      </template>
                       <template x-if="caseMapUrl()">
                         <a data-testid="case-link-map" :href="caseMapUrl()">在地圖上看</a>
                       </template>
@@ -1124,6 +1139,13 @@
 
               <!-- ── 材料申請 ── -->
               <div x-show="execSubTab==='materials'">
+                <!-- 一條龍 P0a（旗標 onepipe.links，預設關＝這一塊不出現）：從案件直接開請購單／採購單，案件已帶好，不必重新搜尋 -->
+                <div x-show="onepipe.links && selected" x-cloak data-testid="op-open-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+                  <a data-testid="op-open-pr" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_req'"
+                     style="font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;text-decoration:none;font-family:var(--font-zh)">開請購單</a>
+                  <a data-testid="op-open-po" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_order'"
+                     style="font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;text-decoration:none;font-family:var(--font-zh)">開採購單</a>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
                   <span class="cm-section-title" style="margin-bottom:0">材料申請清單</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
                   <div style="display:flex;gap:8px">

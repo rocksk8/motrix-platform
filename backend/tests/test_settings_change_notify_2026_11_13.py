@@ -9,8 +9,6 @@
 import json
 import os
 import re
-import shutil
-import subprocess
 
 import pytest
 
@@ -571,7 +569,7 @@ def test_notify_change_never_raises(monkeypatch):
 def test_page_reads_tab_query_and_shows_recipients_line():
     html = open(PAGE, encoding="utf-8").read()
     assert "URLSearchParams(location.search)" in html and "'versions'" in html
-    assert 'data-testid="sc-recipients"' in html and "recipientsText()" in html
+    assert 'data-testid="sc-recipients"' in html and "function recipientsText(" in html
     assert "redactedForOthers" in html and "不會收到自己操作的通知" in html
 
 
@@ -702,190 +700,16 @@ def test_actor_only_system_sends_no_in_app_notification_but_preview_says_so(clie
             conn.close()
 
 
-# ═══════════════════════════ 前端（node＋Alpine 同款範圍代理）═══════════════════════════
+# ═══════════════════════════ 前端（S2 起：設定中心是單一矩陣表，不再是 Alpine 元件）═══════════════════════════
+# 行為（欄位顯示目前值、儲存前確認、收件人那一行、儲存結果白話）由 test_e2e_settings_center_shell_2026_11_14.py 與 SettingsMatrix 核心測試用真瀏覽器驗；
+# 這裡只留靜態守門：頁面一定要把「誰會收到通知」這一行與離開警告接上，且不得再寫死不誠實的通知句。
 
-NODE = shutil.which("node")
-needs_node = pytest.mark.skipif(not NODE, reason="沒有 node，前端行為題略過（CI 機有 node）")
-
-_HARNESS = r"""
-const fs = require('fs'), vm = require('vm');
-const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const html = fs.readFileSync(input.page, 'utf8');
-const at = html.indexOf('function settingsCenterPage'); const m = [null, html.slice(html.lastIndexOf('<script>', at) + 8, html.indexOf('</script>', at))];
-const listeners = {};
-const sandbox = { window: { addEventListener: (n, fn) => { listeners[n] = fn } }, localStorage: { getItem: () => null }, location: { hash: '' },
-                  document: {}, fetch: async () => { throw new Error('no network') }, setTimeout, clearTimeout, console };
-vm.createContext(sandbox);
-vm.runInContext(m[1] + '\n;this.__page = settingsCenterPage;', sandbox);
-// Alpine 3.17.1 的範圍代理（原樣照抄 alpine-3.17.1.min.js 的 pi）：has／get 用 Reflect.has（含原型鏈）
-const pi = {
-  has({ objects }, t) { return t == Symbol.unscopables ? false : objects.some(r => Object.prototype.hasOwnProperty.call(r, t) || Reflect.has(r, t)) },
-  get({ objects }, t, r) { return t == 'toJSON' ? (() => {}) : Reflect.get(objects.find(n => Reflect.has(n, t)) || {}, t, r) },
-  set({ objects }, t, v) { const o = objects.find(n => Reflect.has(n, t)) || objects[objects.length - 1]; o[t] = v; return true },
-};
-const out = [];
-for (const c of input.cases) {
-  const comp = sandbox.__page();
-  Object.assign(comp, c.state || {});
-  if (c.call) {
-    let prevented = 0, e = { preventDefault() { prevented++ }, returnValue: 'unset' };
-    if (c.call === 'init') {
-      comp.loadGroups = async () => {}; comp.pick = async () => {}; comp.groups = [];
-      comp.init().then(() => {
-        const ev = { preventDefault() { prevented++ }, returnValue: 'unset' };
-        listeners.beforeunload && listeners.beforeunload(ev);
-        out.push({ registered: !!listeners.beforeunload, prevented, rv: ev.returnValue });
-      });
-      continue;
-    }
-    if (c.call === 'leaveGuard') { const r = comp.leaveGuard(e); out.push({ r: r === undefined ? null : r, prevented, rv: e.returnValue }); continue }
-    if (c.call === 'saveSummary') { out.push(comp.saveSummary(c.arg)); continue }
-  }
-  const scope = new Proxy({ objects: [{ f: c.f, c: c.c }, comp] }, pi);
-  const fn = new Function('scope', 'with (scope) { return (' + c.expr + ') }');
-  let v;
-  try { v = fn(scope) } catch (err) { v = '__ERR__' + err.message }
-  out.push({ v: (v !== null && typeof v === 'object') ? '__OBJECT__' : v });
-}
-setTimeout(() => process.stdout.write(JSON.stringify(out)), 50);
-"""
-
-
-def _run_node(tmp_path, cases):
-    h = tmp_path / "harness.js"
-    h.write_text(_HARNESS, encoding="utf-8")
-    inp = tmp_path / "in.json"
-    inp.write_text(json.dumps({"page": PAGE, "cases": cases}, ensure_ascii=False), encoding="utf-8")
-    p = subprocess.run([NODE, str(h), str(inp)], capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert p.returncode == 0, p.stderr
-    return json.loads(p.stdout)
-
-
-def _html():
-    return open(PAGE, encoding="utf-8").read()
-
-
-def _line(marker):
-    for ln in _html().splitlines():
-        if marker in ln:
-            return ln
-    raise AssertionError("頁面上找不到：" + marker)
-
-
-def _expr(marker, attr):
-    m = re.search(r'%s="([^"]+)"' % re.escape(attr), _line(marker))
-    assert m, (marker, attr)
-    return m.group(1).replace("&amp;", "&")
-
-
-def _field(key, typ, value, **kw):
-    f = {"key": key, "type": typ, "value": value, "default": value, "choices": [], "recommended": None}
-    f.update(kw)
-    return f
-
-
-CHOICES_INT = [{"value": 0, "label": "關閉（預設）"}, {"value": 1, "label": "影子"}, {"value": 2, "label": "開啟"}]
-CHOICES_STR = [{"value": "a", "label": "甲"}, {"value": "b", "label": "乙"}]
-
-
-@needs_node
-def test_every_input_type_shows_the_current_effective_value_under_alpines_scope_proxy(tmp_path):
-    radio_checked = _expr("'sc-choice-' + f.key", ":checked")
-    radio_cls = re.search(r"'is-on': ([^}]+)\}", _line('class="sc-choice"')).group(1)
-    num_value = _expr("'sc-input-' + f.key", ":value")
-    bool_checked = _expr("'sc-bool-' + f.key", ":checked")
-    text_value = _expr("'sc-text-' + f.key", ":value")
-    cases, expect = [], []
-
-    def add(expr, f, c, want, drafts=None):
-        cases.append({"expr": expr, "f": f, "c": c, "state": {"drafts": drafts or {}}})
-        expect.append(want)
-
-    # 選項型：數字碼（使用者回報的 reconfirm_mode：目前 2＝開啟 ⇒ 只有「開啟」被選取）
-    f = _field("reconfirm_mode", "int", 2, choices=CHOICES_INT)
-    for c in CHOICES_INT:
-        add(radio_checked, f, c, c["value"] == 2)
-        add(radio_cls, f, c, c["value"] == 2)
-    add(radio_checked, f, CHOICES_INT[0], True, drafts={"reconfirm_mode": 0})            # 草稿覆蓋目前值
-    add(radio_checked, f, CHOICES_INT[2], False, drafts={"reconfirm_mode": 0})
-    add(radio_checked, _field("m", "int", 0, choices=CHOICES_INT), CHOICES_INT[0], True)  # 代碼 0 也要能選取（假值）
-    # 選項型：字串碼；伺服器給數字、選項給字串（或反過來）也要選得到
-    fs = _field("s", "str", "b", choices=CHOICES_STR)
-    for c in CHOICES_STR:
-        add(radio_checked, fs, c, c["value"] == "b")
-    add(radio_checked, _field("mix", "int", 1, choices=[{"value": "1", "label": "一"}]), {"value": "1", "label": "一"}, True)
-    # 數字型 int／float（使用者回報的 confirm_period_days：目前 7 ⇒ 輸入框顯示 7）
-    add(num_value, _field("confirm_period_days", "int", 7), None, 7)
-    add(num_value, _field("pct", "float", 1.5), None, 1.5)
-    add(num_value, _field("zero", "int", 0), None, 0)
-    add(num_value, _field("confirm_period_days", "int", 7), None, 9, drafts={"confirm_period_days": 9})
-    # 開關型
-    add(bool_checked, _field("on", "bool", True), None, True)
-    add(bool_checked, _field("off", "bool", False), None, False)
-    add(bool_checked, _field("on", "bool", True), None, False, drafts={"on": False})
-    # 文字型
-    add(text_value, _field("name", "str", "abc"), None, "abc")
-    add(text_value, _field("name", "str", "abc"), None, "xyz", drafts={"name": "xyz"})
-    got = [r["v"] for r in _run_node(tmp_path, cases)]
-    assert got == expect
-
-
-@needs_node
-def test_harness_reproduces_the_original_bug_valueof_resolves_to_object_prototype(tmp_path):
-    """對照：舊的 `valueOf(f)` 在 x-for 範圍代理下拿到的是範圍物件（不是值）。這題證明上面的題目真的抓得到那個 bug。"""
-    got = _run_node(tmp_path, [{"expr": "valueOf(f)", "f": _field("k", "int", 7), "c": None, "state": {}}])
-    assert got[0]["v"] == "__OBJECT__"
-
-
-@needs_node
-def test_recommended_badge_only_on_the_recommended_choice_and_reads_as_suggested_value(tmp_path):
-    line = _line("'sc-rec-'")
-    assert "建議值</span>" in line
-    show = re.search(r'x-show="([^"]+)"', line).group(1)
-    cases = [{"expr": show, "f": _field("k", "int", 2, choices=CHOICES_INT, recommended=0), "c": c, "state": {}} for c in CHOICES_INT]
-    cases += [{"expr": show, "f": _field("k", "int", 2, choices=CHOICES_INT, recommended=None), "c": c, "state": {}} for c in CHOICES_INT]
-    cases += [{"expr": show, "f": {"key": "k", "choices": CHOICES_INT}, "c": CHOICES_INT[0], "state": {}}]      # 欄位沒有 recommended 屬性
-    got = [r["v"] for r in _run_node(tmp_path, cases)]
-    assert got == [True, False, False, False, False, False, False]
-
-
-@needs_node
-def test_leave_page_warning_only_when_there_are_unsaved_drafts(tmp_path):
-    got = _run_node(tmp_path, [
-        {"call": "leaveGuard", "state": {"drafts": {"a": 1}}},
-        {"call": "leaveGuard", "state": {"drafts": {}}},
-        {"call": "init", "state": {"drafts": {"a": 1}}},
-    ])
-    assert got[0]["prevented"] == 1 and got[0]["rv"] == "" and "尚未儲存" in got[0]["r"]
-    assert got[1] == {"r": None, "prevented": 0, "rv": "unset"}
-    assert got[2] == {"registered": True, "prevented": 1, "rv": ""}      # init() 真的把 beforeunload 掛上去
-
-
-@needs_node
-def test_save_result_wording_instant_vs_waiting_for_second_superadmin(tmp_path):
-    got = _run_node(tmp_path, [
-        {"call": "saveSummary", "arg": {"changed": True, "pending": []}},
-        {"call": "saveSummary", "arg": {"changed": False, "pending": [{"approvalsRequired": 1, "effectiveAt": "2026-11-20T10:00:00"}]}},
-        {"call": "saveSummary", "arg": {"changed": False, "pending": [{"approvalsRequired": 0, "effectiveAt": "2026-11-18T10:00:00"}]}},
-        {"call": "saveSummary", "arg": {"changed": True, "pending": [{"approvalsRequired": 1, "effectiveAt": "2026-11-20T10:00:00"}]}},
-        {"call": "saveSummary", "arg": {"changed": False, "pending": []}},
-    ])
-    assert got[0] == {"kind": "ok", "text": "已生效"}
-    assert got[1] == {"kind": "wait", "text": "已送出，待第二位最高管理者核准，預計 11 月 20 日生效"}
-    assert got[2] == {"kind": "wait", "text": "已送出，等待期滿後生效，預計 11 月 18 日生效"}
-    assert got[3]["text"] == "已生效；已送出，待第二位最高管理者核准，預計 11 月 20 日生效"
-    assert got[4]["text"] == "沒有任何變更"
-
-
-def test_page_markup_unsaved_markers_bottom_bar_and_buttons():
-    html = _html()
-    assert re.search(r'class="sc-unsaved"[^>]*x-show="isDirty\(f\)"[^>]*>未儲存<', html) or ('sc-unsaved' in _line("'sc-unsaved-'") and "未儲存" in _line("'sc-unsaved-'"))
-    bar = re.search(r'<div class="sc-bar"[^>]*>', html).group(0)
-    assert 'x-show="dirtyCount()"' in bar                               # 任何頁籤都看得到
-    assert "'有 ' + dirtyCount() + ' 項未儲存'" in html
-    assert re.search(r'data-testid="sc-save"[^>]*>儲存</button>', html)
-    assert re.search(r'data-testid="sc-discard"[^>]*>放棄</button>', html)
-    assert 'data-testid="sc-toast"' in html and "beforeunload" in html
+def test_page_confirm_dialog_shows_server_recipients_and_never_hardcodes_a_no_notify_claim():
+    html = open(PAGE, encoding="utf-8").read()
+    assert "preview: true" in html and "'/batch'" in html                           # 預覽與儲存都走同一支批次介面（單一通知、整批預檢）
+    assert "recipientsText(ST.recipients)" in html and 'data-testid="sc-recipients"' in html
+    assert "儲存後會留下紀錄，不會另外通知別人" not in html and "儲存後立即生效，會留下變更紀錄" not in html   # 兩位以上最高管理者時那是假話（M1）
+    assert "beforeunload" in html or "SettingsMatrix" in html                      # 離開警告由矩陣核心提供（草稿存在時才攔）
 
 
 def test_no_alpine_component_method_shadows_an_object_prototype_member():

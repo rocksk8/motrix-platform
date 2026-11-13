@@ -126,10 +126,10 @@
         var d428 = await r.clone().json()
         if (d428 && d428.code === 'company_setup_required') {
           var here = window.location.pathname.split('/').pop()
-          if (['company-profile-settings.html', 'company-setup-required.html', 'login.html'].indexOf(here) < 0) {
+          if (['company-profile-settings.html', 'company-setup-wizard.html', 'company-setup-required.html', 'login.html'].indexOf(here) < 0) {
             _redirecting = true
             var inPages = window.location.pathname.includes('/pages/')
-            var target = d428.canFix ? 'company-profile-settings.html?setup=1' : 'company-setup-required.html'
+            var target = d428.canFix ? 'company-setup-wizard.html?setup=1' : 'company-setup-required.html'
             window.location.replace(inPages ? target : 'pages/' + target)
           }
         }

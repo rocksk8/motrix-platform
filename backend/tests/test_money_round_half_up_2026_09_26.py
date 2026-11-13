@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# 2026-11-13 chore/test-prune：刪 test_accounting_voucher_line_rounds_half_up——與 modules/accounting/tests/test_money_round_half_up_2026_09_26.py 同名題逐字相同（正本在模組內）
 """金額捨入統一四捨五入（X-VAT，2026-09-26；R 稽核修正帶出：開票申請的營業稅用內建 round()）。
 
 內建 `round()` 是銀行家捨入（.5 取偶數：round(1250.5) == 1250）；前端 `Math.round(a * b)` 在浮點乘積
@@ -167,16 +168,6 @@ def _stock(part_no, cost, created, category="其他"):
         conn.commit()
     finally:
         conn.close()
-
-
-@requires_module("accounting", "_voucher_line 是會計模組（M06）的內部函式（第十三班列車發現）")
-def test_accounting_voucher_line_rounds_half_up():
-    """傳票匯出的借貸金額：10.5 ⇒ 11（舊：10）、12.5 ⇒ 13（舊：12）。accounting_export L251"""
-    from modules.accounting.api.accounting_export import _voucher_line
-    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 10.5, 12.5, "", "", "")
-    assert (ln["debit"], ln["credit"]) == (11, 13)
-    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 11.5, 0, "", "", "")      # 正對照
-    assert (ln["debit"], ln["credit"]) == (12, 0)
 
 
 @needs_m01

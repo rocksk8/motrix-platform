@@ -16,6 +16,14 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-13 T84：apply 停服要認得 autostart_guard.bat 迴圈；啟動後 schema 兜底（fix/apply-respawn-guard-t84）
+
+- **現象**（T82 套用）：第一次啟動漏跑 core migration 13／14、accounting 載入印舊版號 1.1.67，/api/ping 照過、套用報成功；重啟後才正常。
+- **根因（正式機證據 `正式機回報\20261113_T82根因證據`）**：排程工作 → `wscript autostart_guard.vbs` → `cmd /c …\backend\autostart_guard.bat` → `call autostart.bat`（`:loop`）。舊 `Stop-InstallService` 只認命令列含 `autostart.bat`，guard 迴圈沒被認出、沒被結束；服務被殺 **0.3 秒**後（隱藏非互動 cmd 下 `timeout /t 5` 幾乎不等）迴圈就把它拉回，與 robocopy 重疊 ⇒ 讀到半新半舊的程式樹。另有 3 個沒有 uvicorn 子行程的殭屍 guard 迴圈。
+- **修法**：①`Stop-InstallService`（apply_update／apply_module_update／rollback_update 逐字相同）認本安裝路徑（長路徑／短檔名／UNC／大小寫／`..` 皆正規化）下所有 `autostart*.bat` 的 cmd（含殭屍）＋ port listener 沿父行程鏈找到的 cmd；每輪先殺迴圈樹再殺服務、重掃到沒有目標（最多 5 輪）；不殺自己與所有祖先；無法歸屬的 autostart*.bat cmd 只警告。②`Stop-RespawnedService`：停服後／複製後／啟動前核對，有就印 PID／父行程／建立時間再停。③`apply_update.ps1` 啟動後兜底 `Invoke-SchemaGate`（見下）。腳本升 `2026-11-13c`。
+- **行為變更（使用者裁示 2026-11-13）**：啟動後主庫 `module_schema_versions` 落後於程式登記的 migration（或服務行程比程式複製完成還早起來）⇒ 重啟一次再驗；**版號持續對不上時停下報錯（`unhealthy_not_rolled_back`、exit 1），不自動還原資料庫**——模組 migration 失敗通常不是還原資料庫能解，且第一次啟動已有使用者寫入；訊息附回滾快照與手動回滾指令（`rollback_update.ps1 -SnapshotTimestamp`）。驗不到（工具缺／逾時／庫被鎖）只警告。demo 庫落後只警告。
+- **驗證限制**：迴圈「0.3 秒內真的重生並與 robocopy 重疊」那一段沒有真實環境可測，測試用正式機行程鏈（逐字命令列與 PID）當替身驗偵測與殺序。
+
 ## 2026-11-11 T79：來源 IP 只信該信的——登入鎖定不可被 X-Forwarded-For 繞過（fix/trusted-client-ip）
 
 - **現象／風險**（外網存取 go-live 前必修）：`routers/auth.py::_client_ip` 無條件信第一個 `X-Forwarded-For` ⇒ 登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）每次換 XFF 就繞過 ⇒ 無限次猜密碼。cloudflared 與本程式同機時，所有外部使用者對本程式都是 127.0.0.1 ⇒ 若只改成「不信 XFF」，一個人輸錯 5 次會鎖住全部外部使用者，稽核 IP 也全變 127.0.0.1。

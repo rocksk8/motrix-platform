@@ -173,7 +173,6 @@
   "tests/test_e2e_remit_fee_2026_09_30.py::test_cashier_remit_fee_diff_review_end_to_end::inner_text#1": 1,
   "tests/test_e2e_remit_fee_2026_09_30.py::test_cashier_remit_fee_diff_review_end_to_end::inner_text#2": 1,
   "tests/test_e2e_review_edit_lock_2026_11_11.py::test_locked_form_keeps_cost_toggle_and_long_text_selectable::inner_text#1": 1,
-  "tests/test_e2e_settings_center_edit_s1.py::test_loosening_needs_ack_then_second_superadmin_approves::is_disabled#1": 1,
   "tests/test_e2e_system_hub_t54.py::test_superadmin_hub_groups_hash_keyboard_search_and_plain_language::inner_text#1": 1,
   "tests/test_e2e_system_settings_ui_2026_09_11.py::test_s3_fields_appear_only_when_s3_selected::count#1": 1,
   "tests/test_e2e_ui_dialogs_2026_09_24.py::test_prompt_values_cancel_and_required::inner_text#1": 1,

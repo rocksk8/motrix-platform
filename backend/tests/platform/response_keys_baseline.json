@@ -1388,6 +1388,9 @@
    "menu.pageModules.file-center.html",
    "menu.pageModules.file-center.html.key",
    "menu.pageModules.file-center.html.name",
+   "menu.pageModules.import-wizard.html",
+   "menu.pageModules.import-wizard.html.key",
+   "menu.pageModules.import-wizard.html.name",
    "menu.pageModules.inventory.html",
    "menu.pageModules.inventory.html.key",
    "menu.pageModules.inventory.html.name",
@@ -1409,6 +1412,9 @@
    "menu.pageModules.lodging-records.html",
    "menu.pageModules.lodging-records.html.key",
    "menu.pageModules.lodging-records.html.name",
+   "menu.pageModules.material-flow.html",
+   "menu.pageModules.material-flow.html.key",
+   "menu.pageModules.material-flow.html.name",
    "menu.pageModules.network-plan-form.html",
    "menu.pageModules.network-plan-form.html.key",
    "menu.pageModules.network-plan-form.html.name",
@@ -1516,6 +1522,10 @@
    "moduleAvailability.filehub.label",
    "moduleAvailability.filehub.name",
    "moduleAvailability.filehub.state",
+   "moduleAvailability.importer",
+   "moduleAvailability.importer.label",
+   "moduleAvailability.importer.name",
+   "moduleAvailability.importer.state",
    "moduleAvailability.lodging",
    "moduleAvailability.lodging.label",
    "moduleAvailability.lodging.name",
@@ -4345,6 +4355,9 @@
  },
  "/api/modules/catalog": {
   "k": [
+   "batchGrantRefused",
+   "financeKeys",
+   "highSensitiveKeys",
    "modules",
    "modules[].group",
    "modules[].key",
@@ -5153,6 +5166,9 @@
    "pageModules.file-center.html",
    "pageModules.file-center.html.key",
    "pageModules.file-center.html.name",
+   "pageModules.import-wizard.html",
+   "pageModules.import-wizard.html.key",
+   "pageModules.import-wizard.html.name",
    "pageModules.inventory.html",
    "pageModules.inventory.html.key",
    "pageModules.inventory.html.name",
@@ -5174,6 +5190,9 @@
    "pageModules.lodging-records.html",
    "pageModules.lodging-records.html.key",
    "pageModules.lodging-records.html.name",
+   "pageModules.material-flow.html",
+   "pageModules.material-flow.html.key",
+   "pageModules.material-flow.html.name",
    "pageModules.network-plan-form.html",
    "pageModules.network-plan-form.html.key",
    "pageModules.network-plan-form.html.name",
@@ -6917,6 +6936,7 @@
    "groups[].values.cases_personal_page_size",
    "groups[].values.cert_warn_days",
    "groups[].values.charity_rate_pct",
+   "groups[].values.closing_soon_days",
    "groups[].values.cloud_daily_keep_days",
    "groups[].values.cloud_monthly_keep_days",
    "groups[].values.cloud_weekly_keep_days",
@@ -6950,6 +6970,7 @@
    "groups[].values.enforce_output_template",
    "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
+   "groups[].values.entry_unify",
    "groups[].values.estimate_no_prefix",
    "groups[].values.ext_totp_enabled",
    "groups[].values.ext_totp_role_admin",
@@ -6978,6 +6999,7 @@
    "groups[].values.label_quotation_version",
    "groups[].values.label_shipping",
    "groups[].values.label_voucher",
+   "groups[].values.links",
    "groups[].values.local_db_keep_days",
    "groups[].values.local_pre_update_keep",
    "groups[].values.lock_minutes",
@@ -7036,6 +7058,7 @@
    "groups[].values.separator",
    "groups[].values.settle_overdue_days",
    "groups[].values.settlement_good",
+   "groups[].values.ship_install_ok",
    "groups[].values.show_denied",
    "groups[].values.show_unpicked_in_pdf",
    "groups[].values.stale_days",
@@ -7047,17 +7070,20 @@
    "groups[].values.suppliers",
    "groups[].values.tagline",
    "groups[].values.thousands",
+   "groups[].values.timeline",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
    "groups[].values.unlock_edit_signed",
    "groups[].values.valid_days",
    "groups[].values.vendor_contractors",
    "groups[].values.warn_pct",
+   "groups[].values.warranty_closed_notify",
    "groups[].values.warranty_mail_early_days",
    "groups[].values.warranty_mail_urgent_days",
    "groups[].values.warranty_report_days",
    "groups[].values.website",
    "groups[].values.who_may",
+   "groups[].values.worklog_case",
    "groups[].when",
    "plannedFeatures",
    "plannedFeatures[].code",
@@ -7794,6 +7820,10 @@
    "filehub.label",
    "filehub.name",
    "filehub.state",
+   "importer",
+   "importer.label",
+   "importer.name",
+   "importer.state",
    "lodging",
    "lodging.label",
    "lodging.name",
@@ -8588,6 +8618,15 @@
    "items.settings_group:finance_reports.status",
    "items.settings_group:finance_reports.tier",
    "items.settings_group:finance_reports.when",
+   "items.settings_group:import_wizard",
+   "items.settings_group:import_wizard.blurb",
+   "items.settings_group:import_wizard.category",
+   "items.settings_group:import_wizard.note",
+   "items.settings_group:import_wizard.order",
+   "items.settings_group:import_wizard.section",
+   "items.settings_group:import_wizard.status",
+   "items.settings_group:import_wizard.tier",
+   "items.settings_group:import_wizard.when",
    "items.settings_group:legal_params_reminder",
    "items.settings_group:legal_params_reminder.blurb",
    "items.settings_group:legal_params_reminder.category",
@@ -8678,6 +8717,15 @@
    "items.settings_group:netplan_labels.status",
    "items.settings_group:netplan_labels.tier",
    "items.settings_group:netplan_labels.when",
+   "items.settings_group:onepipe",
+   "items.settings_group:onepipe.blurb",
+   "items.settings_group:onepipe.category",
+   "items.settings_group:onepipe.note",
+   "items.settings_group:onepipe.order",
+   "items.settings_group:onepipe.section",
+   "items.settings_group:onepipe.status",
+   "items.settings_group:onepipe.tier",
+   "items.settings_group:onepipe.when",
    "items.settings_group:overhead",
    "items.settings_group:overhead.blurb",
    "items.settings_group:overhead.category",
@@ -8841,6 +8889,151 @@
    "items.settings_group:uploads.tier",
    "items.settings_group:uploads.when",
    "version"
+  ],
+  "s": 200
+ },
+ "/api/settings-center/index": {
+  "k": [
+   "items",
+   "items[].category",
+   "items[].field",
+   "items[].group",
+   "items[].groupPlain",
+   "items[].kind",
+   "items[].label",
+   "items[].page",
+   "items[].pagePlain",
+   "items[].question",
+   "items[].text"
+  ],
+  "s": 200
+ },
+ "/api/settings-center/overview": {
+  "k": [
+   "categories",
+   "differsItems",
+   "differsItems[].default",
+   "differsItems[].field",
+   "differsItems[].group",
+   "differsItems[].groupPlain",
+   "differsItems[].label",
+   "differsItems[].page",
+   "differsItems[].risk",
+   "differsItems[].value",
+   "pages",
+   "pages[].category",
+   "pages[].differs",
+   "pages[].groups",
+   "pages[].highRisk",
+   "pages[].href",
+   "pages[].id",
+   "pages[].pending",
+   "pages[].plain",
+   "pages[].privacy",
+   "pages[].standalone",
+   "pages[].status",
+   "recent",
+   "stats",
+   "stats.differs",
+   "stats.highRiskGroups",
+   "stats.pending"
+  ],
+  "s": 200
+ },
+ "/api/settings-center/recent": {
+  "k": [
+   "changes"
+  ],
+  "s": 200
+ },
+ "/api/importer/status": {
+  "k": [
+   "ok"
+  ],
+  "s": 200
+ },
+ "/api/importer/templates/{kind}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/quotations/{quote_no}/material-flow": {
+  "k": [
+   "cells",
+   "cells[].href",
+   "cells[].items",
+   "cells[].items[].docCode",
+   "cells[].items[].name",
+   "cells[].items[].noteNo",
+   "cells[].items[].receivedOn",
+   "cells[].items[].shipDate",
+   "cells[].items[].signed",
+   "cells[].items[].status",
+   "cells[].key",
+   "cells[].label",
+   "cells[].state",
+   "cells[].summary",
+   "next",
+   "next.href",
+   "next.key",
+   "next.label",
+   "quoteNo",
+   "shipPresent",
+   "stockPresent"
+  ],
+  "s": 200
+ },
+ "/api/mail-types/mine": {
+  "k": [
+   "categories",
+   "categories.approval",
+   "categories.business",
+   "categories.system",
+   "hasEmail",
+   "items",
+   "items[].action",
+   "items[].category",
+   "items[].categoryLabel",
+   "items[].event",
+   "items[].impact",
+   "items[].key",
+   "items[].lowRisk",
+   "items[].managedElsewhere",
+   "items[].name",
+   "items[].receive",
+   "version"
+  ],
+  "s": 200
+ },
+ "/api/settings/estimate-payment-terms": {
+  "k": [
+   "text"
+  ],
+  "s": 200
+ },
+ "/api/settings/estimate-terms-presets": {
+  "k": [
+   "defaultKey",
+   "presets"
+  ],
+  "s": 200
+ },
+ "/api/work-logs/case-options": {
+  "k": [
+   "items"
+  ],
+  "s": 200
+ },
+ "/api/completion-notes/case-prefill": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "/api/daily-tasks/case-options": {
+  "k": [
+   "items"
   ],
   "s": 200
  }

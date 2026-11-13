@@ -7,6 +7,7 @@
 新增路由必須在 `tests/platform/test_settings_center_status_routes.py` 的路由表裡分類，否則該測試紅。
 
 - GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）；每組多 `status`／`plannedTrain`；另有 `plannedFeatures`（開發中、尚無設定群組的功能：code／label／plannedTrain）
+- GET  /api/settings-center/overview               外框總覽（S2）：設定頁清單＋統計＋最近 5 筆；GET …/recent 最近變更；GET …/index 全域搜尋索引（唯讀）
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）；回應附 `classification`（逐欄 立即／待生效／需核准）
 - POST /api/settings-center/groups/{group}/preview 預覽（dry-run，不寫入）：逐欄分類、效果句、橫幅、驗證問題（S1-4）
@@ -57,9 +58,11 @@ _PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
 
 
 def _need(group):
-    """群組要存在且不是 hidden（hidden 對外等同不存在）。"""
+    """群組要存在且不是 hidden（hidden 對外等同不存在）。external 群組（設定中心以外的變更管制）一律拒絕：只能走原頁面，不得有第二個寫入入口。"""
     if group not in sr.groups() or sr.group_status(group) == "hidden":
         raise HTTPException(404, "沒有這個設定群組：%s" % group)
+    if sr.groups()[group].get("external"):
+        raise HTTPException(403, "這項設定要在原本的頁面調整，不能從設定中心的一般入口修改。")
 
 
 def _need_open(group):
@@ -77,6 +80,8 @@ def list_groups(authorization: str = Header(None)):
     conn = get_db()
     try:
         for g, meta in sr.groups().items():
+            if meta.get("external"):                              # 設定中心以外的群組不進一般清單與搜尋
+                continue
             info = sr.group_info(g)
             if info["status"] == "hidden":
                 continue
@@ -104,6 +109,40 @@ def list_groups(authorization: str = Header(None)):
             g["label"] = it["name"]                                              # 公司可以改群組名稱；沒改就是登錄表的名稱
     return {"groups": out, "plannedFeatures": _spine.planned_cards(),            # 『即將推出』：開發中、還沒有設定群組的功能（只有名稱與預計班次）
             "categories": [{"key": c["key"], "name": c["name"], "tier": c["tier"], "blurb": c["blurb"], "when": c["when"]} for c in cats]}
+
+
+@router.get("/api/settings-center/overview")
+def overview(authorization: str = Header(None)):
+    """外框用（S2）：設定頁清單（分類／白話名／與預設不同／待生效／高風險）＋統計卡＋最近 5 筆＋「與預設不同」清單。唯讀；hidden 群組不出現。"""
+    _require_user(authorization, require_superadmin=True)
+    from db import get_db
+    from helpers import settings_shell as shell
+    conn = get_db()
+    try:
+        return shell.overview(conn)
+    finally:
+        conn.close()
+
+
+@router.get("/api/settings-center/recent")
+def recent_changes(limit: int = 50, high: int = 0, authorization: str = Header(None)):
+    """最近變更（新→舊；`high=1` 只看影響大）。整份文件與設定中心以外的群組只給摘要。"""
+    _require_user(authorization, require_superadmin=True)
+    from db import get_db
+    from helpers import settings_shell as shell
+    conn = get_db()
+    try:
+        return {"changes": shell.recent(conn, limit, bool(high))}
+    finally:
+        conn.close()
+
+
+@router.get("/api/settings-center/index")
+def search_index(authorization: str = Header(None)):
+    """全域搜尋索引（欄位中文名稱、代碼、說明、選項標籤、群組名；不含值）。前端比對。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import settings_shell as shell
+    return {"items": shell.search_index()}
 
 
 @router.get("/api/settings-center/groups/{group}")
@@ -144,23 +183,25 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
     expected = body.get("expectedValues")
     if expected is not None and not isinstance(expected, dict):
         raise HTTPException(400, "expectedValues 必須是物件")
-    return _do_publish(group, values, reason, request, actor, expected)
+    return _do_publish(group, values, reason, request, actor, expected, supersede=bool(body.get("supersede")))
 
 
 def conflict_body(group, e):
     """409 衝突的 body（與 LINE 事件矩陣同形）：`{code, message, keys:[{key,name}], by, at}`；name＝欄位白話名。"""
     defs = sr.field_defs(group)
-    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。",
+    msg = ("這一項已有別人送出、還在等待生效的申請；繼續送出會取代它。" if getattr(e, "code", "") == "pending_exists"
+           else "這些設定在你送出前已被別人改動，請重新整理後再改。")
+    return {"code": getattr(e, "code", "conflict"), "message": msg,
             "keys": [{"key": k, "name": (defs[k].label or defs[k].question or k) if k in defs else k} for k in e.keys],
             "by": e.by, "at": e.at}
 
 
-def _do_publish(group, values, reason, request, actor, expected=None):
+def _do_publish(group, values, reason, request, actor, expected=None, supersede=False):
     """儲存／重置共用：先算分類（與 publish 共用 `_split`，寫入前的狀態才準）、再 publish。"""
     try:
         cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
-                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected)
+                         ip=(client_ip(request) if request else ""), actor=actor, expected_values=expected, supersede=supersede)
     except sr.SettingConflict as e:
         raise HTTPException(409, conflict_body(group, e))
     except sr.SettingError as e:
@@ -193,7 +234,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         raise HTTPException(400, "undo 必須是 true／false")
     if len(groups) > _BATCH_MAX_GROUPS:
         raise HTTPException(400, "一次最多只能儲存 %d 個群組" % _BATCH_MAX_GROUPS)
-    values_by, expected_by = {}, {}
+    values_by, expected_by, supersede_by = {}, {}, set()
     for g, spec in groups.items():
         _need_open(g)
         vals = spec.get("values") if isinstance(spec, dict) else None
@@ -209,6 +250,8 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
             raise HTTPException(400, "群組 %s 的 expectedValues 必須涵蓋每個要改的欄位，缺：%s" % (g, "、".join(k for k in vals if k not in exp)))
         if exp:
             expected_by[g] = exp
+        if spec.get("supersede") is True:                      # 畫面確認「取代別人還在等待的申請」後才帶（json 欄位）
+            supersede_by.add(g)
     preview = body.get("preview") is True
     reason = _clip(str(body.get("reason") or "").strip())
     if undo and not reason:
@@ -241,7 +284,7 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         for g, v in values_by.items():
             try:
                 results[g] = sr.publish(g, v, note=reason, user=actor["username"], reason=reason, ip=client_ip(request), actor=actor,
-                                        expected_values=expected_by.get(g))
+                                        expected_values=expected_by.get(g), supersede=g in supersede_by)
             except Exception as e:                             # noqa: BLE001
                 rest = list(values_by)
                 rest = rest[rest.index(g) + 1:]                # 失敗那組之後根本沒試過：回 notApplied，畫面才能分「失敗」與「未處理」
@@ -259,8 +302,10 @@ def _batch_conflict_body(found, applied, failed, not_applied):
     out = []
     for g, e in found:
         b = conflict_body(g, e)
-        out.append({"group": g, "label": sr.groups()[g]["label"], "keys": b["keys"], "by": b["by"], "at": b["at"]})
-    return {"code": "conflict", "message": "這些設定在你送出前已被別人改動，請重新整理後再改。", "groups": out,
+        out.append({"group": g, "label": sr.groups()[g]["label"], "code": b["code"], "message": b["message"], "keys": b["keys"], "by": b["by"], "at": b["at"]})
+    codes = {x["code"] for x in out}
+    return {"code": codes.pop() if len(codes) == 1 else "conflict",       # 都是 pending_exists 才回 pending_exists（畫面可帶 supersede 重送）；混合或一般衝突 ⇒ conflict
+            "message": out[0]["message"] if len(out) == 1 else "這些設定在你送出前已被別人改動，請重新整理後再改。", "groups": out,
             "applied": applied, "failed": failed, "notApplied": not_applied}
 
 
@@ -409,7 +454,7 @@ def public_values(groups: str = "", authorization: str = Header(None)):
     is_admin = user.get("role") == "superadmin"
     out = {}
     for g in names:
-        if g not in meta or sr.group_status(g) == "hidden":        # hidden 對任何登入者都等同不存在
+        if g not in meta or sr.group_status(g) == "hidden" or meta[g].get("external"):        # hidden／外部群組對這個通用讀取口等同不存在
             raise HTTPException(404, "沒有這個設定群組：%s" % g)
         if meta[g]["sensitive"] and not is_admin:
             raise HTTPException(403, "此設定群組需要設定權限：%s" % g)
@@ -432,9 +477,11 @@ def list_pending(authorization: str = Header(None)):
         if r["key"] in meta and sr.group_status(r["key"]) != "open":   # 非 open 群組的待生效項不列（啟動時已取消；漏網的也不顯示）
             continue
         f = sr.field_defs(r["key"]).get(r["field"]) if r["key"] in meta else None
+        hide_raw = bool(r["key"] in meta and (meta[r["key"]].get("external") or (f is not None and f.type == "json")))      # 外部群組／整份文件：只給摘要，不給原始內容
         out.append({"id": r["id"], "group": r["key"], "groupLabel": meta[r["key"]]["label"] if r["key"] in meta else r["key"],
                     "field": r["field"], "label": f.label if f else r["field"],
-                    "old": r["old"], "new": r["new"],
+                    "old": None if hide_raw else r["old"], "new": None if hide_raw else r["new"],
+                    "summary": sr._summary_of(f, r["old"], r["new"]) if (f is not None and hide_raw) else [],
                     "oldText": sr.show_value(f, r["old"]) if f else str(r["old"]), "newText": sr.show_value(f, r["new"]) if f else str(r["new"]),
                     "reason": r["reason"], "actor": r["actor_display"] or r["actor"], "actorUser": r["actor"], "at": r["at"], "effectiveAt": r["effective_at"],
                     "approvals": list(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)})

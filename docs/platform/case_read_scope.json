@@ -56,6 +56,12 @@
    "scope": "own_rule"
   },
   {
+   "file": "modules/case/api/material_flow.py",
+   "path": "/api/quotations/{quote_no}/material-flow",
+   "handler": "get_material_flow",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/alt_plan.py",
    "path": "/api/quotations/{quote_no}/plan-view",
    "handler": "get_plan_view",
@@ -132,6 +138,12 @@
    "path": "/api/completion-notes",
    "handler": "list_completion_notes",
    "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/completion_notes.py",
+   "path": "/api/completion-notes/case-prefill",
+   "handler": "completion_case_prefill",
+   "scope": "own_rule"
   },
   {
    "file": "modules/case/api/completion_notes.py",

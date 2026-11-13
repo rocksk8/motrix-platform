@@ -800,4 +800,4 @@ def _core_next_line_event_usage_daily(conn):
     return None
 
 
-register("core", NEXT, _core_next_line_event_usage_daily)
+register("core", 15, _core_next_line_event_usage_daily)

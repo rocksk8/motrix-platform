@@ -130,9 +130,8 @@ def approver_recipients(conn, award, appr, requester):
             return []
         who = [nxt.get("username") or ""] + delegates_of(conn, nxt.get("username") or "")
     else:
-        who = [r["username"] for r in conn.execute(
-            "SELECT username FROM users WHERE active = 1 AND role = 'superadmin' ORDER BY id")
-            if r["username"] != requester]
+        from helpers import config_ledger as _cl
+        who = _cl.real_superadmins(conn, requester)          # 真人最高管理者（不含申請人與展示帳號）
     return _active(conn, list(dict.fromkeys(w for w in who if w)))
 
 

@@ -53,6 +53,7 @@ from helpers import row_access
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
+from modules.case import quote_edit_notify as _QEN  # noqa: E402  解鎖編輯後通知已簽過的人（信件類型 approval_content_edited）
 from modules.case import review_edit_notify as _REN  # noqa: E402  審核中被編輯的通知信（信件類型 approval_review_edit，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications, _mark_notifications_read, notify_approval_request,
@@ -63,7 +64,7 @@ from helpers import (
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
     files_txn, append_json_list, remove_json_item,
-    delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
+    notify_case_close_blocked, notify_case_change_requested, norm_at,
     active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items, norm_ymd,
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
@@ -330,26 +331,153 @@ def _check_case_gate(conn, quote_no: str) -> bool:
     return True
 
 
-def _create_case_change_request(conn, quote_no: str, user: dict, authorization: str,
-                                action_type: str, summary: str, payload: dict,
-                                staged_files: list = None) -> int:
+def _insert_case_change_request(conn, quote_no: str, user: dict, action_type: str, summary: str, payload: dict,
+                                staged_files: list = None, status: str = "pending") -> int:
+    """只寫入、不 commit、不通知。`status='staging'`＝預留編號用（簽核佇列只列 pending、核准／駁回對非 pending 回 409 ⇒ 看不到也動不了）。"""
     now = datetime.now().isoformat()
     cur = conn.execute(
         "INSERT INTO case_change_requests "
         "(quote_no, action_type, summary, payload_json, staged_files_json, status, "
         " requested_by, requested_by_display, requested_at) "
-        "VALUES (?,?,?,?,?,'pending',?,?,?)",
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (quote_no, action_type, summary, json.dumps(payload, ensure_ascii=False),
-         json.dumps(staged_files or [], ensure_ascii=False),
+         json.dumps(staged_files or [], ensure_ascii=False), status,
          user["username"], user.get("display_name") or user["username"], now),
     )
-    conn.commit()
-    change_id = cur.lastrowid
+    return cur.lastrowid
+
+
+def _announce_case_change_request(quote_no: str, user: dict, authorization: str, change_id: int, summary: str) -> None:
+    """commit 之後才呼叫：背景寄信通知最高管理者＋稽核。"""
     requester_display = user.get("display_name") or user["username"]
     spawn_bg_thread(_notify_case_change_requested_bg, args=(quote_no, summary, requester_display))
     _audit(_tok(authorization), "case.change_requested", "quotation", quote_no,
            f"{quote_no}（待審核 #{change_id}：{summary}）")
+
+
+def _create_case_change_request(conn, quote_no: str, user: dict, authorization: str,
+                                action_type: str, summary: str, payload: dict,
+                                staged_files: list = None) -> int:
+    change_id = _insert_case_change_request(conn, quote_no, user, action_type, summary, payload, staged_files)
+    conn.commit()
+    _announce_case_change_request(quote_no, user, authorization, change_id, summary)
     return change_id
+
+
+async def _stage_upload_change_request(conn, quote_no: str, doc_idx, user: dict, authorization: str,
+                                       action_type: str, summary: str, payload: dict, files) -> int:
+    """已結案（半解鎖）案件的上傳類變更：檔案暫存到 `_pending_case_changes/{變更編號}/`，核准後才併入。
+
+    T84（G 組）：舊作法先建一筆 pending 申請（立刻通知最高管理者）、再存檔——存檔失敗（格式／大小 400、寫庫出錯）
+    ⇒ 簽核佇列留下一筆沒有檔案的「鬼申請」，且已經寄出通知。現在：
+      ① 預留編號：寫一筆 status='staging'（commit；佇列只列 pending、核准／駁回對非 pending 回 409 ⇒ 看不到也動不了）
+      ② 存檔（慢動作；失敗 ⇒ 這筆標 cancelled、回收檔、往外丟）
+      ③ 寫鎖內一次升為 pending＋寫 staged_files_json、commit
+      ④ commit 之後才通知＋稽核
+    編號要先有，是因為暫存資料夾與讀檔權限（attachments.py）都以變更編號當路徑。"""
+    display = user.get("display_name") or user["username"]
+    change_id = _insert_case_change_request(conn, quote_no, user, action_type, summary, payload, status="staging")
+    conn.commit()
+    new_files = []
+    try:
+        new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{quote_no}_{doc_idx}", files, display)
+        with write_txn(conn):
+            cur = conn.execute("UPDATE case_change_requests SET staged_files_json=?, status='pending' WHERE id=? AND status='staging'",
+                               (json.dumps(new_files, ensure_ascii=False), change_id))
+            if cur.rowcount != 1:
+                raise HTTPException(409, "變更申請狀態異常，請重新上傳")
+            conn.commit()
+    except BaseException:
+        _uploads_mod.purge_document_files(new_files)
+        _cancel_staging_request(change_id)
+        raise
+    _announce_case_change_request(quote_no, user, authorization, change_id, summary)
+    return change_id
+
+
+#: 預留（staging）超過幾小時還沒升為 pending ⇒ 視為上傳途中當機／重啟留下的殘骸，每日維護清掉
+STAGING_STALE_HOURS = 24
+
+
+def _staged_entries_of(change_id) -> list:
+    """`_pending_case_changes/{id}/` 底下實際存在的檔（staging 列的 staged_files_json 還是空的，只能看磁碟）⇒ `[{"path": 相對路徑}]`。"""
+    base = os.path.join(_uploads_mod.UPLOADS_ROOT, *_uploads_mod._effective_subfolder("_pending_case_changes/%s" % int(change_id)).split("/"))
+    out = []
+    for d, _dirs, names in os.walk(base):
+        rel_d = os.path.relpath(d, _uploads_mod.UPLOADS_ROOT).replace(os.sep, "/")
+        out += [{"path": "%s/%s" % (rel_d, n)} for n in names]
+    return out
+
+
+def _sweep_decided_staging_dirs(conn, hours: int) -> int:
+    """`_pending_case_changes/{id}/` 目錄：該申請已經不是 staging／pending（approved／rejected／cancelled，或列根本不存在）、
+    目錄還在、最新的檔也超過 `hours` 小時 ⇒ 清掉（核准／駁回在 commit 與清暫存之間程序崩潰會留下它們）。回清掉幾個目錄。
+    staging／pending 的目錄與新的目錄一律不動。"""
+    root = os.path.join(_uploads_mod.UPLOADS_ROOT, *_uploads_mod._effective_subfolder("_pending_case_changes").split("/"))
+    if not os.path.isdir(root):
+        return 0
+    cutoff_ts = datetime.now().timestamp() - hours * 3600
+    n = 0
+    for name in os.listdir(root):
+        d = os.path.join(root, name)
+        if not (name.isdigit() and os.path.isdir(d)):
+            continue
+        row = conn.execute("SELECT status FROM case_change_requests WHERE id=?", (int(name),)).fetchone()
+        if row and row["status"] in ("staging", "pending"):
+            continue
+        entries = _staged_entries_of(int(name))
+        try:
+            newest = max([os.path.getmtime(os.path.join(_uploads_mod.UPLOADS_ROOT, *e["path"].split("/"))) for e in entries] or [os.path.getmtime(d)])
+        except OSError:
+            continue
+        if newest > cutoff_ts:
+            continue
+        _uploads_mod.purge_document_files(entries)
+        try:
+            os.rmdir(d)                       # 空了就收掉（purge 只會收檔案所在的資料夾；這裡是申請目錄本身）
+        except OSError:
+            pass
+        n += 1
+    return n
+
+
+def sweep_stale_staging(hours: int = STAGING_STALE_HOURS) -> int:
+    """每日維護（`daily.check`，case_deadlines.run_daily_checks 呼叫）：超過 `hours` 小時還停在 staging 的預留列
+    ⇒ 標 cancelled（先 commit）再清掉它的暫存檔；回清掉幾列。pending／approved／rejected 與新的 staging 列一律不動。
+    順手清「已決定（approved／rejected／cancelled）或沒有對應列、目錄還在、且超過 `hours` 小時」的 `_pending_case_changes/{id}/` 殘留目錄。"""
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    conn = get_db()
+    n = 0
+    try:
+        for r in conn.execute("SELECT id FROM case_change_requests WHERE status='staging' AND requested_at < ?", (cutoff,)).fetchall():
+            entries = _staged_entries_of(r["id"])
+            cur = conn.execute("UPDATE case_change_requests SET status='cancelled', reject_reason='上傳未完成，逾時自動清理' WHERE id=? AND status='staging'",
+                               (r["id"],))
+            conn.commit()
+            if cur.rowcount:
+                _uploads_mod.purge_document_files(entries)
+                n += 1
+        try:
+            _sweep_decided_staging_dirs(conn, hours)
+        except Exception:                      # noqa: BLE001（附帶清掃：出錯不可讓每日維護失敗）
+            logger.exception("清掃已決定申請的暫存目錄失敗")
+    finally:
+        conn.close()
+    return n
+
+
+def _cancel_staging_request(change_id: int) -> None:
+    """上傳失敗：把預留的 staging 申請標成 cancelled（用新連線；盡力而為，失敗只留一筆看不到的 staging／cancelled 列）。"""
+    try:
+        c2 = get_db()
+        try:
+            c2.execute("UPDATE case_change_requests SET status='cancelled', reject_reason='上傳失敗，未送出' WHERE id=? AND status='staging'",
+                       (change_id,))
+            c2.commit()
+        finally:
+            c2.close()
+    except Exception:                                                # noqa: BLE001
+        pass
 
 
 def _gate_case_edit(conn, quote_no: str, user: dict, authorization: str, action_type: str,
@@ -556,6 +684,19 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
         )
 
 
+def _user_is_active(username: str) -> bool:
+    """帳號存在且在職（active=1）。查不到／出錯 ⇒ False（呼叫端把它當「不能代表這個人」，退回保守行為）。"""
+    try:
+        _c = get_db()
+        try:
+            r = _c.execute("SELECT active FROM users WHERE username=?", (username,)).fetchone()
+        finally:
+            _c.close()
+        return bool(r and r["active"])
+    except Exception:                                                            # noqa: BLE001
+        return False
+
+
 def _exclude_requester(tiers: list, requester: str) -> list:
     """Drop the requester from tier approver lists — a submitter must never end up
     required to approve their own quotation. Tiers left with no approvers after
@@ -634,6 +775,9 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             _tconn.close()
         _before_ct = len(active_tiers)
         active_tiers = _exclude_requester(active_tiers, requester_uname)
+        _editor_uname = appr.get("editedBy") or ""
+        if _editor_uname and _editor_uname != requester_uname:      # 解鎖改版：改內容的最高管理者不簽自己改的內容（送審人維持原送審人，所以要另外剔除）
+            active_tiers = _exclude_requester(active_tiers, _editor_uname)
         if len(active_tiers) != _before_ct:
             logger.warning("approval tiers self-excluded — quote=%r requester=%r before=%d after=%d",
                            quote_no, requester_uname, _before_ct, len(active_tiers))
@@ -683,15 +827,14 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
         elif not tiers:
             msg = _submitted_msg(quote_no, label, cname, _dt)
             _conn = get_db()
-            admins = _conn.execute(
-                "SELECT username FROM users WHERE role='superadmin' AND active=1"
-            ).fetchall()
+            from helpers import config_ledger as _cl
+            admins = _cl.real_superadmins(_conn, requester)         # 真人最高管理者（不含申請人與展示帳號：展示帳號不是簽核人，不該收到簽核通知）
             _conn.close()
             for adm in admins:
-                if adm["username"] != requester:
-                    _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
-                    _appr_names.append(adm["username"])
-                    _appr_labels.append(adm["username"])
+                if adm not in (requester, appr.get("editedBy")):    # real_superadmins 回帳號字串（已排除申請人與展示帳號）；解鎖改版的編輯者另外排除
+                    _notify(adm, "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(adm)
+                    _appr_labels.append(adm)
             notify_approval_request(quote_no, cname, _appr_names, doc_label=_dlabel)
 
         # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已是組織職權頂端，
@@ -1812,10 +1955,12 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     from helpers.settings import _get_setting
     from helpers import clause_titles as _CT
     _CT.freeze(q)                                                  # S-Q2：送審當下把條款標題凍結進單據（範本生效時）；沒生效 ⇒ 清掉舊的凍結值。要在算原因之前。
-    raw = _get_setting("quote_terms_presets", {}) or {}
+    from modules.case.quote_terms import terms_setting_keys
+    k_presets, k_pay = terms_setting_keys(q.get("docType"))         # 估價單讀自己的條款組／預設付款條件；報價單鍵不變
+    raw = _get_setting(k_presets, {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
     presets = presets if isinstance(presets, list) else []
-    default_pt = _get_setting("default_payment_terms", DEFAULT_TERMS["paymentTerms"]) or ""
+    default_pt = _get_setting(k_pay, DEFAULT_TERMS["paymentTerms"]) or ""
     appr = q.get("approval") if isinstance(q.get("approval"), dict) else {}
     q["approval"] = appr
     appr["reasons"] = submit_reasons(q, user.get("display_name") or user["username"],
@@ -2399,17 +2544,35 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             raise HTTPException(403, "解鎖編輯需要最高管理者權限")
         # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
         try:
-            _h0 = (json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}).get("editHistory")
+            _old_dj = json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}
         except (TypeError, ValueError):
-            _h0 = None
+            _old_dj = {}
+        _h0 = _old_dj.get("editHistory")
         edit_rev = (len(_h0) if isinstance(_h0, list) else 0) + 1
+        # 送審人維持原送審人（使用者裁示）：最高管理者解鎖改內容，不會變成「送審人」——否則原送審人看到的是「他人送審」、不能收回，
+        # 而改內容的人反而被排除在簽核之外。沒有原送審紀錄（舊資料）⇒ 退回舊行為（記為改內容的人）。改內容的人另記 editedBy。
+        _old_appr = _old_dj.get("approval") if isinstance(_old_dj.get("approval"), dict) else {}
+        _orig_req = str(_old_appr.get("requestedBy") or "") or editor["username"]
+        _prev_req = str(_old_appr.get("requestedBy") or "")
+        if _prev_req and not _user_is_active(_prev_req):                         # 原送審人已離職／停用：沒有人能代表他收回或收退件通知 ⇒ 同「沒有原送審紀錄」
+            _prev_req = ""
+            _orig_req = editor["username"]
+        if _prev_req:
+            _orig_req_disp = str(_old_appr.get("requestedByDisplay") or "") or _prev_req
+        else:                                                                    # 退回舊行為：送審人記為改內容的人
+            _orig_req_disp = editor["display_name"] or editor["username"]
+        _unlock_cleared = _QEN.signed_layers(_old_appr)
+        _unlock_info = {"originalRequester": _orig_req, "originalRequesterDisplay": _orig_req_disp,
+                        "cleared": [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]}
         # Force re-approval regardless of current status
         new_status = "待審核"
         q["approval"] = {
-            "requestedBy":        editor["username"],
-            "requestedByDisplay": editor["display_name"] or editor["username"],
+            "requestedBy":        _orig_req,
+            "requestedByDisplay": _orig_req_disp,
             "requestedAt":        now,
             "isEditApproval":     True,
+            "editedBy":           editor["username"],
+            "editedByDisplay":    editor["display_name"] or editor["username"],
             "status":             "pending",
             "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"],
         }
@@ -2443,10 +2606,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             # Instead, compare against the status currently stored in the DB.
             _chk = get_db()
             _old = _chk.execute(
-                "SELECT status FROM quotations WHERE quote_no=?", (quote_no,)
+                "SELECT status, doc_type FROM quotations WHERE quote_no=?", (quote_no,)
             ).fetchone()
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
+            if _old:
+                q["docType"] = _DT.norm(_old["doc_type"])     # 條款比對基準依單據類型：以資料庫現值為準（用戶端送什麼都不採用；之後 2487 行同一規則）
             is_new_submission = _old_status not in ("待審核", "簽核中")
             # N13：只在「轉為待審核」的那一次重算（前端也只在送審時算）；
             # 解鎖編輯的「解鎖後修改，需重新簽核」維持原樣，不在移植範圍
@@ -2500,10 +2665,20 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         if isinstance(_db_hist, list):
             q["editHistory"] = _db_hist
         if is_unlock_edit:
+            # 被清掉的已簽層以**交易內讀到的現值**為準（前面那份是寫鎖之前讀的：兩次讀之間若有人剛簽完，他也要被通知與記進稽核）。
+            # 送審人／簽核層已在上面依較早的讀取建好，這裡不改（兩次之間換了送審人是極罕見的情況）。
+            try:
+                _txn_appr = (json.loads(existing["data_json"] or "{}") or {}).get("approval")
+            except (TypeError, ValueError):
+                _txn_appr = None
+            _unlock_cleared = _QEN.signed_layers(_txn_appr)
+            _unlock_info["cleared"] = [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]
             _hist = q.get("editHistory") if isinstance(q.get("editHistory"), list) else []
             edit_rev = len(_hist) + 1
             _hist.append({"rev": edit_rev, "at": now, "by": user["username"],
-                          "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit"})
+                          "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit",
+                          "originalRequester": _unlock_info["originalRequester"],          # 送審人維持原送審人；誰改的看 by
+                          "clearedSigners": _unlock_info["cleared"]})                      # 這次被清掉的已簽層（層號＋帳號）
             q["editHistory"] = _hist
         try:
             require_case(user, existing, quote_no)
@@ -2687,7 +2862,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,
-               f"{quote_no}（{q.get('customerName','')}）", {"rev": edit_rev, "pendingApproval": True})
+               f"{quote_no}（{q.get('customerName','')}）",
+               {"rev": edit_rev, "pendingApproval": True, "editedBy": user["username"],
+                "originalRequester": _unlock_info["originalRequester"], "clearedSigners": _unlock_info["cleared"]})
+        # 已簽過、被清掉的人要知道內容被改了（站內＋信件＋LINE；預設只發給本人；附帶動作，失敗只記 log）
+        spawn_bg_thread(_QEN.fire, args=(quote_no, q.get("customerName") or "", _unlock_cleared),
+                        kwargs={"editor": user["username"], "editor_display": user.get("display_name") or user["username"],
+                                "requester_display": _unlock_info["originalRequesterDisplay"]})
         # save PDF snapshot of this revision (includes editor name in filename)
         editor_display = (q.get("editHistory") or [{}])[-1].get("byDisplay", "")
         spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, editor_display, '修改'))
@@ -3396,7 +3577,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
             raise
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
-                                     'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
+                                     'approval_rejected', 'approval_content_edited', 'case_stage_deadline', 'approval_reminder'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進資源回收筒）" if res else "（資源回收筒未安裝，已直接刪除）"),
            {"reason": _void_reason, "historical": True} if _hist_void else None)
     for c in orphaned:
@@ -3944,51 +4125,48 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
 
 def _cleanup_staged_files(staged_files: list) -> None:
     """拒絕核准時清掉暫存檔案（含空資料夾），套用時搬移失敗或找不到檔案都
-    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。"""
-    for f in staged_files or []:
-        try:
-            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
-            if os.path.isfile(full):
-                os.remove(full)
-            d = os.path.dirname(full)
-            if os.path.isdir(d) and not os.listdir(d):
-                os.rmdir(d)
-        except Exception:
-            pass
+    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。
+    T86：路徑一律經 `canonical_upload_path`（不在上傳根目錄之內的略過），空資料夾順手清掉（同 `purge_document_files`）。"""
+    _uploads_mod.purge_document_files([f for f in (staged_files or []) if isinstance(f, dict)])
 
 
-def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
+def _copy_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
     """核准套用上傳類變更時，把暫存於 uploads/_pending_case_changes/{change_id}/
-    的檔案搬進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
-    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。"""
+    的檔案**複製**進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
+    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。
+
+    T86：原本是 `shutil.move`（先搬走暫存檔、再寫庫）：之後 commit 失敗時，申請列還是 pending、
+    但暫存檔已經不在原處 ⇒ 重試核准會把指向不存在檔案的紀錄寫進案件。改成複製：暫存檔留著直到
+    commit 成功（呼叫端 commit 之後才清暫存），失敗時呼叫端把這裡複製出來的正式檔回收。"""
     eff_subfolder = _effective_subfolder(subfolder)
     dest_dir = os.path.join(_uploads_mod.UPLOADS_ROOT, eff_subfolder, doc_no)
     os.makedirs(dest_dir, exist_ok=True)
     moved = []
-    src_dirs = set()
     for f in staged_files or []:
-        src = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
-        src_dirs.add(os.path.dirname(src))
-        ext = os.path.splitext(f["path"])[1]
+        src_rel = _uploads_mod.canonical_upload_path(f.get("path") if isinstance(f, dict) else None)
+        if not src_rel:                                       # 暫存路徑不合格（目前都由伺服器產生，不會發生）⇒ 不複製、也不產生指向它的紀錄
+            logger.warning("暫存附件路徑不在上傳根目錄之內，略過：%r", str((f or {}).get("path") if isinstance(f, dict) else f)[:120])
+            continue
+        src = os.path.join(_uploads_mod.UPLOADS_ROOT, *src_rel.split("/"))
+        ext = os.path.splitext(src_rel)[1]
         fname = uuid.uuid4().hex[:16] + ext
         dest_rel = f"{eff_subfolder}/{doc_no}/{fname}"
         dest_full = os.path.join(_uploads_mod.UPLOADS_ROOT, dest_rel)
-        if os.path.isfile(src):
-            shutil.move(src, dest_full)
         new_meta = dict(f)
         new_meta["path"] = dest_rel
+        if os.path.isfile(src):
+            try:
+                shutil.copy2(src, dest_full)
+            except BaseException:
+                _uploads_mod.purge_document_files(moved + [new_meta])   # 複製到一半失敗 ⇒ 已複製的、以及這一個寫到一半的目的檔都不留（這個函式沒回傳，呼叫端收不到）
+                raise
         moved.append(new_meta)
-    for d in src_dirs:
-        try:
-            if os.path.isdir(d) and not os.listdir(d):
-                os.rmdir(d)
-        except Exception:
-            pass
     return moved
 
 
 def _apply_case_change_request(conn, req, approver: dict, authorization: str,
-                                deferred_audits: list, deferred_calendar: list = None, deferred_notices: list = None) -> dict:
+                                deferred_audits: list, deferred_calendar: list = None, deferred_notices: list = None,
+                                *, deferred_files: list, deferred_staged: list, created_files: list) -> dict:
     """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
     回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
 
@@ -4079,10 +4257,12 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         else:
             arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
         idx = _locate_item(arr, idx, payload.get("itemId"), "索引超出範圍")
-        moved = _move_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        moved = _copy_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        created_files.extend(moved)                    # 核准失敗（rollback）時由呼叫端回收這批剛複製的正式檔
         arr[idx].setdefault(field, [])
         arr[idx][field].extend(moved)
         save_quotation_json(conn, quote_no, data)
+        deferred_staged.extend(staged_files or [])      # 暫存檔等 commit 成功之後才清
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）", None))
         if deferred_notices is not None and action_type != "material_file_upload":   # 發票才通知（到貨憑證附件不寄）；commit 之後才寄
@@ -4107,8 +4287,9 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
             arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
         idx = _locate_item(arr, idx, payload.get("itemId"), "索引超出範圍")
         existing = arr[idx].get(field) or []
-        arr[idx][field] = delete_document_file(subfolder, f"{quote_no}_{idx}", existing, file_id)
+        gone, arr[idx][field] = _uploads_mod.pop_document_file(existing, file_id)   # 只改清單；實體檔等 commit 之後（呼叫端刪 deferred_files）
         save_quotation_json(conn, quote_no, data)
+        deferred_files.append(gone)                    # 必填（T86）：實體檔一律等呼叫端 commit 之後才刪，不留「忘了傳就先刪」的退路
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用）", None))
 
@@ -4170,18 +4351,27 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         deferred_audits: list = []
         deferred_calendar: list = []
         deferred_notices: list = []
+        deferred_files: list = []                     # 核准刪除的實體檔：commit 之後才刪（寫庫失敗＝紀錄與檔都在）
+        deferred_staged: list = []                    # 核准上傳：暫存檔 commit 成功之後才清（T86：失敗時暫存檔還在、可重試）
+        created_files: list = []                      # 核准上傳：這次複製出來的正式檔；失敗（rollback）要回收
         try:
             apply_result = _apply_case_change_request(conn, req, user, authorization,
-                                                      deferred_audits, deferred_calendar, deferred_notices)
-        except HTTPException:
-            conn.close()
+                                                      deferred_audits, deferred_calendar, deferred_notices,
+                                                      deferred_files=deferred_files, deferred_staged=deferred_staged,
+                                                      created_files=created_files)
+            now = datetime.now().isoformat()
+            approver_display = user.get("display_name") or user["username"]
+            conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                         (approver_display, now, change_id))
+            conn.commit()
+        except BaseException:
+            conn.close()                              # 先 rollback＋關連線，再回收（紀錄沒寫成，複製出來的正式檔沒人引用）
+            _uploads_mod.purge_document_files(created_files)
             raise
-        now = datetime.now().isoformat()
-        approver_display = user.get("display_name") or user["username"]
-        conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
-                     (approver_display, now, change_id))
-        conn.commit()
         conn.close()
+        for _f in deferred_files:                     # commit 之後才刪實體檔（永不丟例外）
+            _uploads_mod.remove_physical_file(_f)
+        _cleanup_staged_files(deferred_staged)
         # 到這裡寫鎖已經放掉，`_audit()` 自己那條連線才進得去
         for action, target_type, target_id, target_label, detail in deferred_audits:
             _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
@@ -4201,27 +4391,28 @@ def reject_case_change(change_id: int, body: dict = Body(default={}), authorizat
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
     conn = get_db()
-    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
-    if not req:
-        conn.close()
-        raise HTTPException(404, "找不到此筆變更申請")
-    if req["status"] != "pending":
-        conn.close()
-        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
-    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
-    if self_msg:
-        conn.close()
-        raise HTTPException(403, self_msg)
     reason = (body or {}).get("reason") or ""
-    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))
-    now = datetime.now().isoformat()
-    approver_display = user.get("display_name") or user["username"]
-    conn.execute(
-        "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
-        (approver_display, now, reason, change_id),
-    )
-    conn.commit()
-    conn.close()
+    with write_txn(conn):   # T86：狀態在寫鎖內讀（與同時進來的核准互斥：原本兩邊都讀到 pending，駁回把暫存檔刪了、核准又搬不到檔）
+        req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+        if not req:
+            conn.close()
+            raise HTTPException(404, "找不到此筆變更申請")
+        if req["status"] != "pending":
+            conn.close()
+            raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+        self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+        if self_msg:
+            conn.close()
+            raise HTTPException(403, self_msg)
+        now = datetime.now().isoformat()
+        approver_display = user.get("display_name") or user["username"]
+        conn.execute(
+            "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
+            (approver_display, now, reason, change_id),
+        )
+        conn.commit()
+        conn.close()
+    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))     # commit 之後才清暫存檔（原本在改狀態之前清）
     _audit(_tok(authorization), "case.change_rejected", "quotation", req["quote_no"],
            f"{req['quote_no']}（拒絕變更 #{change_id}：{req['summary']}）", {"reason": reason})
     _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
@@ -4654,25 +4845,20 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
         data, pits, idx = _load_payment_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         label = pits[idx].get('label', f'第{idx+1}期')
         if _check_case_gate(conn, no):
-            change_id = _create_case_change_request(
-                conn, no, user, authorization, "payment_invoice_upload",
-                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
+            change_id = await _stage_upload_change_request(
+                conn, no, idx, user, authorization, "payment_invoice_upload",
+                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId}, files,
             )
-            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
-                                                  user.get("display_name") or user["username"])
-            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
-                         (json.dumps(new_files, ensure_ascii=False), change_id))
-            conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
-        data, pits, idx = _load_payment_item(conn, no, req_idx, itemId)
-        pits[idx].setdefault("invoiceFiles", [])
-        pits[idx]["invoiceFiles"].extend(new_files)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
+        with files_txn(conn, new_files):       # T84：項目被刪（404）／寫庫出錯 ⇒ 回收剛存的檔
+            data, pits, idx = _load_payment_item(conn, no, req_idx, itemId)
+            pits[idx].setdefault("invoiceFiles", [])
+            pits[idx]["invoiceFiles"].extend(new_files)
+            saved_at = save_quotation_json(conn, no, data)
         _inv_notice = _INV_NOTIFY.notice(no, data, kind="payment", item_label=label,
                                          uploader=user.get("display_name") or user["username"], file_count=len(new_files))
     finally:
@@ -4699,11 +4885,12 @@ def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, itemId: Op
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = pits[idx].get("invoiceFiles") or []
-        pits[idx]["invoiceFiles"] = delete_document_file("quotation_payment_items", f"{no}_{idx}", existing, file_id)
+        gone, pits[idx]["invoiceFiles"] = _uploads_mod.pop_document_file(existing, file_id)   # 鎖內重讀（_load_payment_item）→ 只改清單
         saved_at = save_quotation_json(conn, no, data)
         conn.commit()
     finally:
         conn.close()
+    _uploads_mod.remove_physical_file(gone)           # commit 之後才刪實體檔：寫庫失敗＝紀錄與檔都還在
     _audit(_tok(authorization), "payment.delete_invoice_file", "quotation", no, no)
     return {"ok": True, "updated_at": saved_at}
 
@@ -4736,25 +4923,20 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
         data, mats, idx = _load_material_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
-            change_id = _create_case_change_request(
-                conn, no, user, authorization, "material_file_upload",
-                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
+            change_id = await _stage_upload_change_request(
+                conn, no, idx, user, authorization, "material_file_upload",
+                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId}, files,
             )
-            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
-                                                  user.get("display_name") or user["username"])
-            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
-                         (json.dumps(new_files, ensure_ascii=False), change_id))
-            conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
-        data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
-        mats[idx].setdefault("files", [])
-        mats[idx]["files"].extend(new_files)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
+        with files_txn(conn, new_files):       # T84：項目被刪（404）／寫庫出錯 ⇒ 回收剛存的檔
+            data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
+            mats[idx].setdefault("files", [])
+            mats[idx]["files"].extend(new_files)
+            saved_at = save_quotation_json(conn, no, data)
     finally:
         conn.close()
     _audit(_tok(authorization), "material.upload_files", "quotation", no,
@@ -4778,11 +4960,12 @@ def delete_material_file(no: str, idx: int, file_id: str, itemId: Optional[str] 
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = mats[idx].get("files") or []
-        mats[idx]["files"] = delete_document_file("quotation_materials", f"{no}_{idx}", existing, file_id)
+        gone, mats[idx]["files"] = _uploads_mod.pop_document_file(existing, file_id)          # 鎖內重讀（_load_material_item）→ 只改清單
         saved_at = save_quotation_json(conn, no, data)
         conn.commit()
     finally:
         conn.close()
+    _uploads_mod.remove_physical_file(gone)           # commit 之後才刪實體檔
     _audit(_tok(authorization), "material.delete_file", "quotation", no, no)
     return {"ok": True, "updated_at": saved_at}
 
@@ -4802,25 +4985,20 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
         data, mats, idx = _load_material_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
-            change_id = _create_case_change_request(
-                conn, no, user, authorization, "material_invoice_upload",
-                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
+            change_id = await _stage_upload_change_request(
+                conn, no, idx, user, authorization, "material_invoice_upload",
+                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId}, files,
             )
-            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
-                                                  user.get("display_name") or user["username"])
-            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
-                         (json.dumps(new_files, ensure_ascii=False), change_id))
-            conn.commit()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理者審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
-        data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
-        mats[idx].setdefault("invoiceFiles", [])
-        mats[idx]["invoiceFiles"].extend(new_files)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
+        with files_txn(conn, new_files):       # T84：項目被刪（404）／寫庫出錯 ⇒ 回收剛存的檔
+            data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
+            mats[idx].setdefault("invoiceFiles", [])
+            mats[idx]["invoiceFiles"].extend(new_files)
+            saved_at = save_quotation_json(conn, no, data)
         _inv_notice = _INV_NOTIFY.notice(no, data, kind="material", item_label=name,
                                          uploader=user.get("display_name") or user["username"], file_count=len(new_files))
     finally:
@@ -4847,11 +5025,12 @@ def delete_material_invoice_file(no: str, idx: int, file_id: str, itemId: Option
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理者審核通過後才會套用"}
         existing = mats[idx].get("invoiceFiles") or []
-        mats[idx]["invoiceFiles"] = delete_document_file("quotation_materials_invoices", f"{no}_{idx}", existing, file_id)
+        gone, mats[idx]["invoiceFiles"] = _uploads_mod.pop_document_file(existing, file_id)   # 鎖內重讀（_load_material_item）→ 只改清單
         saved_at = save_quotation_json(conn, no, data)
         conn.commit()
     finally:
         conn.close()
+    _uploads_mod.remove_physical_file(gone)           # commit 之後才刪實體檔
     _audit(_tok(authorization), "material.delete_invoice_file", "quotation", no, no)
     return {"ok": True, "updated_at": saved_at}
 
@@ -5227,6 +5406,9 @@ def approval_queue_items(conn) -> list:
             "requestedByDisplay":  f["requestedByDisplay"],
             "requestedAt":         f["requestedAt"],
             "isEditApproval":      f["appr"].get("isEditApproval", False),
+            # 解鎖改版：誰改了內容（只有解鎖改版的單才有；簽核人要看得到。改的時間＝requestedAt）
+            **({"editedBy": f["appr"]["editedBy"], "editedByDisplay": f["appr"].get("editedByDisplay") or f["appr"]["editedBy"]}
+               if f["appr"].get("editedBy") else {}),
             "reasons":             f["appr"].get("reasons") or [],
             "tiers":               f["tiers"],
             "currentTier":         f["currentTier"],
@@ -5855,6 +6037,9 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         if requester:
             _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
             notify_returned(quote_no, new_no, cname, note, requester, doc_label=_DT.label(d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：送審人維持原送審人，改這份內容的最高管理者也要知道被退回
+        if _editor_u and _editor_u != requester:
+            _notify(_editor_u, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname, d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
@@ -5918,6 +6103,11 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         if requester:
             suffix = f"：{note}" if note else ""
             _notify(requester, "approval_rejected", quote_no, quote_no,
+                    _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
+        _editor_u = appr.get("editedBy")                   # 解鎖改版：改內容的最高管理者也要知道被駁回
+        if _editor_u and _editor_u != requester:
+            suffix = f"：{note}" if note else ""
+            _notify(_editor_u, "approval_rejected", quote_no, quote_no,
                     _DT.relabel(f"報價單 {quote_no}（{cname}）已被駁回結案{suffix}", d.get("docType")))
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
@@ -6122,23 +6312,25 @@ async def _post_case_update_impl(quote_no, content, important, files, authorizat
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     update_type = "important" if important else "comment"
     saved_files = []
-    if files:
-        # 存檔在 INSERT 之前：檔案存失敗（格式/大小）就整批擋下，不會留下
-        # 一則沒有附件的留言讓使用者以為傳成功了
-        saved_files = await save_document_files(
-            "case_updates", quote_no, files,
-            user.get("display_name") or user["username"],
-            watermark_by=user.get("display_name") or user["username"],
-        )
-    cur = conn.execute(
-        "INSERT INTO case_updates (quote_no, author, content, type, created_at, files_json) "
-        "VALUES (?,?,?,?,?,?)",
-        (quote_no, user["username"], content, update_type, now,
-         json.dumps(saved_files, ensure_ascii=False)),
-    )
-    new_id = cur.lastrowid
-    conn.commit()
-    conn.close()
+    try:
+        if files:
+            # 存檔在 INSERT 之前：檔案存失敗（格式/大小）就整批擋下，不會留下
+            # 一則沒有附件的留言讓使用者以為傳成功了
+            saved_files = await save_document_files(
+                "case_updates", quote_no, files,
+                user.get("display_name") or user["username"],
+                watermark_by=user.get("display_name") or user["username"],
+            )
+        with files_txn(conn, saved_files):       # T84：INSERT 失敗 ⇒ 回收剛存的檔（也不再因存檔失敗而漏關連線）
+            cur = conn.execute(
+                "INSERT INTO case_updates (quote_no, author, content, type, created_at, files_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (quote_no, user["username"], content, update_type, now,
+                 json.dumps(saved_files, ensure_ascii=False)),
+            )
+            new_id = cur.lastrowid
+    finally:
+        conn.close()
     dn_row = None
     try:
         c2 = get_db()
@@ -6236,11 +6428,10 @@ async def _add_case_update_files_impl(quote_no, uid, files, geo, user, authoriza
     # 拿鎖之後重讀、只追加自己這批（慢動作＝存檔已經做完；同一則留言同時補檔不會互相蓋掉）
     conn = get_db()
     try:
-        with write_txn(conn):
+        with files_txn(conn, saved):                # T84：任何失敗（留言被刪 404、寫庫出錯）都回收剛存的檔
             cur_row = conn.execute("SELECT files_json FROM case_updates WHERE id=? AND quote_no=?",
                                    (uid, quote_no)).fetchone()
-            if not cur_row:           # 存檔期間留言被刪了 ⇒ 清掉剛存的檔，回 404
-                _remove_saved_files(saved)
+            if not cur_row:           # 存檔期間留言被刪了 ⇒ 404（files_txn 回收剛存的檔）
                 raise HTTPException(404, "留言不存在")
             try:
                 cur_files = json.loads(cur_row["files_json"] or "[]")
@@ -6248,7 +6439,6 @@ async def _add_case_update_files_impl(quote_no, uid, files, geo, user, authoriza
                 cur_files = []
             conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
                          (json.dumps(cur_files + saved, ensure_ascii=False), uid))
-            conn.commit()
     finally:
         conn.close()
     notify_module_activity("案件留言板", "補上附件", display, quote_no, "case-management.html",
@@ -6258,17 +6448,13 @@ async def _add_case_update_files_impl(quote_no, uid, files, geo, user, authoriza
     return {"ok": True, "id": uid, "added": len(saved), "files": saved}
 
 
-def _remove_saved_files(saved):
-    """存檔之後留言才被刪 ⇒ 把剛存的檔清掉（走既有的 `purge_document_files`：驗路徑在 uploads 底下、空資料夾順手清）。"""
-    _uploads_mod.purge_document_files(saved)
-
 
 @router.delete("/api/quotations/{quote_no}/updates/{uid}")
 def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
     ).fetchone()
     if not row:
         conn.close()
@@ -6278,16 +6464,18 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
         raise HTTPException(403, "只能刪除自己的留言")
     # 留言刪掉，它的附件也要從磁碟上清掉——否則 uploads/ 會留下永遠沒人引用的
     # 孤兒檔案，而且 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
-    try:
-        for f in json.loads(row["files_json"] or "[]"):
-            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
-            if f.get("path") and os.path.isfile(full):
-                os.remove(full)
-    except Exception:
-        pass
-    conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
-    conn.commit()
+    # T86：寫鎖內重讀 files_json（鎖外讀的可能漏掉剛補上的附件）→ DELETE → commit，**commit 之後**才刪實體檔
+    # （原本先刪檔、後 DELETE：寫庫失敗＝留言還在、附件沒了）
+    with write_txn(conn):
+        _cur = conn.execute("SELECT files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)).fetchone()
+        try:
+            _files = json.loads((_cur["files_json"] if _cur else "") or "[]")
+        except Exception:
+            _files = []
+        conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
+        conn.commit()
     conn.close()
+    _uploads_mod.purge_document_files([f for f in _files if isinstance(f, dict)])
     notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
     _audit(_tok(authorization), 'case.update_delete', 'case_update', quote_no, quote_no, {'id': uid})
@@ -6309,16 +6497,13 @@ def delete_case_update_file(quote_no: str, uid: int, file_id: str,
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_module="case_manage")
     row = conn.execute(
-        "SELECT id, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
-    ).fetchone()
+        "SELECT id FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+    ).fetchone()                                      # 留言屬於哪張案件不會變；只確認「這則留言是這張案件的」
     if not row:
         conn.close()
         raise HTTPException(404, "留言不存在")
-    existing = json.loads(row["files_json"] or "[]")
-    remaining = delete_document_file("case_updates", quote_no, existing, file_id)
-    conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
-                 (json.dumps(remaining, ensure_ascii=False), uid))
-    conn.commit()
+    # 寫鎖內重讀 files_json、濾掉、commit，commit 之後才刪實體檔（寫庫失敗＝紀錄與檔都還在；並發的附件變動不會被整包覆寫）
+    remaining = _uploads_mod.remove_json_item(conn, "case_updates", "files_json", "id", uid, file_id, not_found="留言不存在")
     conn.close()
     _audit(_tok(authorization), "case_update.delete_file", "quotation", quote_no,
            f"{quote_no} 留言 #{uid} 刪除附件")

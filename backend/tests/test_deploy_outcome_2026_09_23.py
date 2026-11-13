@@ -163,6 +163,8 @@ _EXITS = [
     ("545", "unhealthy_not_rolled_back", "applied",            0, "failed"),
     ("621", "unhealthy_rolled_back",     "restored",           1, "failed"),
     ("646", "success",                   "applied",            0, "succeeded"),
+    # 2026-11-13 T84：啟動後 schema 兜底閘門不過 ⇒ 既有值 unhealthy_not_rolled_back，但這條 exit=1（舊的那條只有 -SkipAutoRollback 才 exit 0）
+    ("t84", "unhealthy_not_rolled_back", "applied",            1, "failed"),
     # 2026-09-28 日常更新（platform 套 platform）新增的出口；第一欄只是標籤
     ("v28", "script_not_from_package",   "not_applied",        1, "failed"),
     ("l28", "apply_locked",              "not_applied",        1, "failed"),
@@ -394,8 +396,12 @@ def test_p0_00_every_exit_prints_exactly_one_result_line():
     for _l, status, _r, _e, _x in _EXITS:
         hits = _re.findall(
             r'(?:Fail|Emit-Result)[^\n]*"%s"' % _re.escape(status), src)
-        if len(hits) != 1:
-            wrong.append(f"{status}: {len(hits)} 次")
+        # T84（使用者裁示 2026-11-13）：啟動後 schema 兜底閘門失敗沿用既有值 unhealthy_not_rolled_back（exit 1），
+        # 與讀 log 的那條出口（exit 0）共用同一個值——dashboard 靠 exit 碼與 ::NOTE:: schema_verify 分辨（見下面 _EXITS 的 t84 列）。
+        # 這是**唯一**允許共用的值；其他值仍須恰好一次。
+        expected = 2 if status == "unhealthy_not_rolled_back" else 1
+        if len(hits) != expected:
+            wrong.append(f"{status}: {len(hits)} 次（預期 {expected}）")
     assert not wrong, (
         "這些 `status` 值不是**恰好一次**出現在 `Fail`／`Emit-Result` 的引數上：\n  "
         + "\n  ".join(wrong)

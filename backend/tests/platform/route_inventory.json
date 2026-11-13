@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 965,
-  "endpoints_api": 961,
-  "write_total": 520,
-  "write_api": 520,
-  "get_api": 441,
-  "distinct_paths_api": 817,
-  "write_with_body_api": 385,
+  "endpoints_total": 991,
+  "endpoints_api": 987,
+  "write_total": 534,
+  "write_api": 534,
+  "get_api": 453,
+  "distinct_paths_api": 840,
+  "write_with_body_api": 399,
   "write_with_path_param_api": 364
  },
  "select_star": {
-  "modules": 288,
+  "modules": 287,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -4869,6 +4869,106 @@
    "body": true
   },
   "POST /api/settings/mail/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "GET /api/completion-notes/case-prefill": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/daily-tasks/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/templates/{kind}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/mail-types/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-flow": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings-center/index": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/overview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/recent": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-payment-terms": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-terms-presets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/work-logs/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/importer/parse": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch/undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/mail-types/mine": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-terms-presets": {
    "w": true,
    "pp": 0,
    "body": true

@@ -1,0 +1,84 @@
+﻿kind,禁用詞,檔案,行,字串節錄
+ui,確認期間,backend/helpers/settings_groups.py,29,只影響之後的清理：超過天數的舊備份會在下一次例行清理時被刪除，已刪除的備份無法找回；改大則不會補回已刪的。調長立即生效；縮短（會更早刪除）屬放寬，須另一位最高管理者核准，並等「變更確認期間」後才生效。
+ui,確認期間,backend/helpers/settings_groups.py,35,變更確認期間（天）
+ui,確認期間,backend/helpers/settings_groups.py,37,影響之後送出的高風險變更；已經在等待中的變更仍照原本的生效時間。縮短確認期間等於放寬管制，須另一位最高管理者核准，並等目前的確認期間後才生效。
+ui,確認期間,backend/helpers/settings_groups.py,62,只影響之後的清理：超過份數的舊快照會被刪除。更新失敗時要靠它退回，不建議調太少；調少須另一位最高管理者核准並等確認期間。
+ui,確認期間,backend/helpers/settings_groups.py,66,超過天數的稽核紀錄會被永久刪除，無法找回；只影響之後的清理，已存在的紀錄在到期前不受影響。縮短保存期限會讓較舊的紀錄提早消失，所以縮短須另一位最高管理者核准，並等「變更確認期間」後才生效。
+ui,確認期間,backend/helpers/settings_groups.py,88,影響所有上傳附件的畫面（單據附件、發票、簽回檔等），只影響之後的上傳；已上傳的檔案不受影響。調大會占用更多硬碟與備份空間，屬放寬：須另一位最高管理者核准並等確認期間；調小立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,91,只影響支出申請單之後的上傳；已超過新上限的舊單據不會被刪除，但不能再加附件。調大須另一位最高管理者核准並等確認期間；調小立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,94,只影響之後的上傳；超過時請使用者分批上傳。調大須另一位最高管理者核准並等確認期間；調小立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,154,放寬（往後面的選項）須原因、另一位最高管理者核准並等確認期間；收緊立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,231,只影響之後送審的擇一方案報價單的審核原因清單。放寬須另一位最高管理者核准並等確認期間。
+ui,確認期間,backend/helpers/settings_groups.py,415,調低＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經確認期間）；調高＝更多（立即生效）。不改簽核層與簽核規則，也不改任何金額。
+ui,確認期間,backend/helpers/settings_groups.py,421,調大＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經確認期間）；調小＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。注意：上限調到低於「新報價單預設有效天數」（報價單預設值）時，每張新報價單一開始就會被列為『有效期限過長』。
+ui,確認期間,backend/helpers/settings_groups.py,427,調高＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經確認期間）；調低＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。
+ui,影子,backend/helpers/settings_groups.py,433,【高影響】調小後（開→影子、開→關、影子→關），簽核人簽完之後內容被改的單子不再被要求重新複查，已簽的層會沿用舊簽核。
+ui,影子,backend/helpers/settings_groups.py,436,預設關閉（簽核人簽完後內容怎麼被改都不受影響）。「影子」只記錄「如果開了會作廢誰」供評估，不改任何簽核；建議先影子跑一週再開。「開」＝已簽的層，內容被改後回到待複查，並通知該簽核人、後續層與送審人。
+ui,確認期間,backend/helpers/settings_groups.py,437,往大調（關→影子→開）立即生效；往小調（開→影子、開→關、影子→關）＝放寬，需第二位最高管理者核准並經確認期間。不改任何金額，也不改簽核流向；只影響『已簽核之後內容被修改』的處理。
+ui,影子,backend/helpers/settings_groups.py,437,往大調（關→影子→開）立即生效；往小調（開→影子、開→關、影子→關）＝放寬，需第二位最高管理者核准並經確認期間。不改任何金額，也不改簽核流向；只影響『已簽核之後內容被修改』的處理。
+ui,影子,backend/helpers/settings_groups.py,439,影子（只記錄）
+ui,確認期間,backend/helpers/settings_groups.py,474,只影響報表裡「已結案未精算」清單與總覽件數（畫面、Excel、PDF 一致）；不改任何案件或金額。調大＝案件更晚才列入（放寬，需第二位最高管理者核准並經確認期間）；調小＝更早（立即生效）。
+ui,確認期間,backend/helpers/settings_groups.py,502,只影響出納頁應收款的「逾期」旗標與紅字；不改任何金額或收款資料。調大＝逾期標示更晚出現（放寬，需第二位最高管理者核准並經確認期間）；調小＝更早（立即生效）。
+ui,確認期間,backend/helpers/settings_groups.py,529,只會讓更多案件暫時不能結案，不會改任何資料。關閉屬於放寬，需要另一位最高管理者核准並經確認期間。
+ui,確認期間,backend/helpers/settings_groups.py,690,只在發布當下多一道檢查。選單編輯器會自動帶上預覽；版面編輯器若尚未接上，開啟後就無法發布版面，請先確認編輯器已更新。關閉強制屬於放寬，需經確認期間與另一位最高管理者核准才生效。
+ui,確認期間,backend/helpers/settings_groups.py,696,只在發布當下多一道檢查；欄位編輯器未接上預覽時開啟會無法發布。關閉強制屬於放寬，需經確認期間與另一位最高管理者核准才生效。
+ui,確認期間,backend/helpers/settings_groups.py,702,只在發布當下多一道檢查；按鈕編輯器未接上預覽時開啟會無法發布。關閉強制屬於放寬，需經確認期間與另一位最高管理者核准才生效。
+ui,確認期間,backend/helpers/settings_groups.py,708,只在發布當下多一道檢查；版型編輯器未接上預覽時開啟會無法發布。關閉強制屬於放寬，需經確認期間與另一位最高管理者核准才生效。
+ui,確認期間,backend/helpers/settings_groups.py,714,只在發布當下多一道檢查；規則頁已內建預覽，建議在規則功能上線時就開啟。關閉強制屬於放寬，需經確認期間與另一位最高管理者核准才生效。
+ui,確認期間,backend/helpers/settings_groups.py,824,只影響之後產生或重新開啟的報價單文件，內部列印也會一起多印這個區；已經寄出的文件不會改，也不會動到任何已存的內容。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回只給內部人員立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,833,只影響之後產生或重新開啟的請款單與開票申請憑據文件；已經寄出的文件不會改，金額、稅額與單據狀態完全不變。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回不附立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,931,只影響報表的呈現與統計：天數調短，報表看到的預警會變少（設備與保固資料本身不變）；調短須另一位最高管理者核准並等確認期間後才生效，調長立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,935,只影響之後的提醒：每台設備、每個階段只寄一次。調短會晚一點才提醒，須另一位最高管理者核准並等確認期間；調長立即生效（可能讓已寄過的設備再收到一次新階段的信）。
+ui,確認期間,backend/helpers/settings_groups.py,939,只影響之後的提醒，每台設備只寄一次。調短會更晚才緊急提醒，須另一位最高管理者核准並等確認期間；調長立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,943,只影響提醒出現的時間，不影響確認檔本身是否有效。調短會晚一點才提醒，須另一位最高管理者核准並等確認期間；調長立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,964,只影響之後「新設或更改密碼」的長度檢查：已經設好的密碼不受影響，也不會有人被要求改密碼，登入照舊。系統只存密碼的雜湊，無法得知現有密碼多長，所以看不到有多少人低於新的長度。調高立即生效，調回較低的數字須另一位最高管理者核准並等確認期間。
+ui,確認期間,backend/helpers/settings_groups.py,971,只影響之後新登入的人，已經登入的人維持原來的期限；縮短立即生效，調回較長的天數須另一位最高管理者核准並等確認期間。
+ui,確認期間,backend/helpers/settings_groups.py,989,只影響之後的外網登入，已經登入的人不受影響。調成「不強制」屬於放寬，須另一位最高管理者核准並等確認期間；調成「強制」立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1002,只影響之後的外網登入；內網登入完全不變。關閉屬於放寬，須另一位最高管理者核准並等確認期間；開啟立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1010,只影響之後的失敗計數。調高（更寬鬆）須另一位最高管理者核准並等確認期間；調低立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1016,只影響之後的失敗計數。縮短（更寬鬆）須另一位最高管理者核准並等確認期間；拉長立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1022,只影響之後新發生的鎖定。縮短（更寬鬆）須另一位最高管理者核准並等確認期間；拉長立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1028,只影響之後的帳號鎖定判斷。從「全部來源」改回「只擋外網」屬於放寬，須另一位最高管理者核准並等確認期間；改成「全部來源」立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1036,只影響之後的外網判定；變更須經確認期間後才生效。
+ui,確認期間,backend/helpers/settings_groups.py,1042,只影響之後的登入判定。改成「算內網」屬於放寬，須另一位最高管理者核准並等確認期間；改回「不算」立即生效。
+ui,確認期間,backend/helpers/settings_groups.py,1049,只影響之後的內外網判定；變更須經確認期間後才生效。
+ui,確認期間,backend/helpers/settings_groups_legal_reminder.py,19,只影響提醒什麼時候開始出現，不改任何稅額、扣繳或勞報單內容。往後延會更晚才提醒，須另一位最高管理者核准並等確認期間；提前則立即生效。
+ui,確認期間,backend/helpers/settings_groups_legal_reminder.py,25,只影響提醒什麼時候開始出現，不改任何稅額、扣繳或勞報單內容。往後延會更晚才提醒，須另一位最高管理者核准並等確認期間；提前則立即生效。
+ui,確認期間,backend/helpers/settings_groups_overhead.py,39,調高＝多抽管銷、營業利益變低（立即生效）；調低＝少抽管銷、營業利益與獎金基數變高（放寬，需第二位最高管理者核准並經確認期間）。只影響設定生效之後新建的報價單；已建立的報價單與已完結精算不回頭改寫。
+ui,確認期間,backend/helpers/settings_groups_profit.py,115,調高＝多扣公益金（立即生效）；調低＝少扣公益金、營業利益變高（放寬，需第二位最高管理者核准並經確認期間）。只影響之後新算的數字；已完結精算的存檔公益金不回頭改寫。
+ui,確認期間,backend/helpers/settings_groups_q0.py,102,只影響之後產生或重新開啟的報價單 PDF 與預覽；已寄出的文件不會改，也不會刪掉任何已存的內容。改成不印屬於放寬，需要第二位最高管理者核准並經確認期間；改回照印立即生效。
+ui,確認期間,backend/helpers/settings_groups_recycle_bin.py,21,只影響設定生效之後才被刪除的單據；已經在資源回收筒的項目到期日不變。縮短會讓之後的刪除項目更早永久消失，所以縮短須另一位最高管理者核准並等確認期間；延長則立即生效。
+ui,true/false,backend/helpers/settings_registry.py,103,設定欄位 %r 的 impact_scope.reversible 必須是 true／false
+ui,true/false,backend/helpers/settings_registry.py,163,必須是 true／false
+ui,確認期間,backend/helpers/settings_registry.py,588,需等 %d 天確認期間，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、等確認期間後生效）
+ui,確認期間,backend/helpers/settings_registry.py,590,需等 %d 天確認期間後才會生效，期間內可以撤銷
+ui,確認期間,backend/helpers/settings_registry.py,730,%d 天確認期間後（%s 起）
+ui,確認期間,backend/helpers/settings_registry.py,732,另一位最高管理者核准、且 %d 天確認期間後（%s 起）
+ui,確認期間,backend/helpers/settings_registry.py,742,目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。
+ui,確認期間,backend/helpers/settings_registry.py,854,目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。
+cmt,確認期間,backend/helpers/settings_groups.py,100,# 系統中心（第 54 班）：『沒有權限的項目要不要列出來』是『放寬可見度』的設定——走設定登錄表（版本、影響說明、稽核同交易、放寬要確認期間與第二人核准）。
+cmt,確認期間,backend/helpers/settings_groups.py,252,# 放寬（讓有案件權限的人也能認列、關閉通知、提高寄信上限）要另一位最高管理者核准並等確認期間；收緊立即生效。收件人在「信件與通知收件設定」維護（只有一個來源）。
+cmt,確認期間,backend/helpers/settings_groups.py,298,# 放寬（顯示客戶名稱、對沒有案件權限的人顯示案件名、勞報單由不顯示改顯示）要另一位最高管理者核准並等確認期間；收緊立即生效。
+cmt,確認期間,backend/helpers/settings_groups.py,406,# 調低門檻＝更少報價單需要審核＝放寬（走確認期間與第二位最高管理者核准）；調高即時生效。只影響『要不要多一條審核原因』，不改簽核層與簽核規則本身。
+cmt,影子,backend/helpers/settings_groups.py,429,# 0＝今天的行為（簽核人簽完後內容被改，簽核不受影響）；1＝影子（只記錄「本來會作廢誰」，不改簽核）；2＝開（內容被改 ⇒ 已簽層回到待複查）。
+cmt,確認期間,backend/helpers/settings_groups.py,430,# 往小調（2→1、2→0、1→0）＝放寬：確認期間＋第二位最高管理者核准。⚠ 與 K 的字面不同處：1→0（影子→關）本來只是停止記錄、不算放寬，
+cmt,影子,backend/helpers/settings_groups.py,430,# 往小調（2→1、2→0、1→0）＝放寬：確認期間＋第二位最高管理者核准。⚠ 與 K 的字面不同處：1→0（影子→關）本來只是停止記錄、不算放寬，
+cmt,影子,backend/helpers/settings_groups.py,431,# 但單一數字欄位表達不了「2→1 要管、1→0 不管」，取較嚴的一邊（影子→關也走放寬流程）；0→1、1→2、0→2 立即生效。
+cmt,閘門,backend/helpers/settings_groups.py,519,# 案件結案閘門的『只收緊』選項（財務盤點 S-C1；設計 FINANCE-FRAMEWORK-INVENTORY-T62.md §5）：預設全關＝與今天相同。
+cmt,確認期間,backend/helpers/settings_groups.py,520,# 這裡只能讓更多案件「不能結案」，不能拿掉任何一關；關掉主開關或任一選項都是放寬，要第二位最高管理者核准並經確認期間。
+cmt,確認期間,backend/helpers/settings_groups.py,980,#    調高門檻、縮短鎖定、改回只鎖外網…）一律走確認期間＋第二位最高管理者核准。判定與規則見 helpers/external_access.py、helpers/account_lock.py。 ──
+cmt,確認期間,backend/helpers/settings_groups.py,1153,# 使用者裁示：開關**立即生效、僅強制稽核**（不經第二位最高管理者核准、不設確認期間），所以不設 `loosen`。
+doc,確認期間,backend/helpers/settings_groups_overhead.py,2,T69 設定群組：管銷分攤比率的全域預設值（overhead.default_pct）。**預設值＝上線前的 25（`profit_rules.DEFAULT_OVERHEAD_PCT`）**，部署零行為變更。 [單位] helper:settings_groups_overhe
+doc,確認期間,backend/helpers/settings_groups_profit.py,2,T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 [單位] helper:settings_groups_profit [層] L1 [穩定度] 實驗 [公開
+doc,確認期間,backend/helpers/settings_groups_q0.py,2,T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 [單位] helper:settings_groups_q0 [層] L1 [穩定度] 實驗 [公開介面] quote_cf
+doc,確認期間,backend/helpers/settings_groups_recycle_bin.py,2,T69 設定群組：資源回收筒保留天數（recycle_bin.retention_days）。 [單位] helper:settings_groups_recycle_bin [層] L1 [穩定度] 實驗 [公開介面] （無） [不變式] 只決定『之後刪除的項目』在資源回收筒放
+cmt,確認期間,backend/helpers/settings_registry.py,30,# 變更確認期間預設天數（設定 `change_control.confirm_period_days` 沒有值時用；下限 1 天）
+doc,確認期間,backend/helpers/settings_registry.py,113,一個設定欄位。畫面規則（使用者 2026-10-10，CORE-SPEC 零技術門檻）：問白話問題、少量選項、標示建議、說明影響；內部鍵 `key` 不顯示。 **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之
+doc,確認期間,backend/helpers/settings_registry.py,556,變更確認期間（天）：`change_control.confirm_period_days`，預設 7、下限 1（程式下限，設定與授權邊界都不能低於）。永不丟例外。
+doc,確認期間,backend/helpers/settings_registry.py,575,"畫面橫幅（欄位版面框架 §16.6）：回 None（不顯示）或 `{""level"": ""amber""|""red"", ""lines"": [三行白話], ""fallback"": bool}`。 只在『風險 ≥ money、值不是預設、且（有 `loosen` 的數值欄位）往放寬方向』"
+doc,確認期間,backend/helpers/settings_registry.py,688,預覽（dry-run）：**不寫入、不 commit**。回逐欄分類與驗證結果，分類與 `publish()` 完全一致（共用 `_split`）。 `kind`：`immediate`（立即生效）｜`pending`（確認期間後生效）｜`pending_approval`（確認
+doc,確認期間,backend/helpers/settings_registry.py,796,唯一寫入口。`values`＝要改的欄位（部分即可）。 一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。 `requires_pending` 欄位與放寬（`loosen
+doc,true/false,backend/helpers/settings_registry.py,796,唯一寫入口。`values`＝要改的欄位（部分即可）。 一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。 `requires_pending` 欄位與放寬（`loosen
+cmt,閘門,backend/helpers/settings_registry.py,1023,# 通用定義路由對 setting_group 的 hidden／planned 閘門
+doc,確認期間,backend/routers/settings_center.py,2,設定中心（L1；第 54 班 Train A／S0）。群組由程式登錄（helpers/settings_registry），索引頁由登錄自動產生。 功能狀態（脊柱 E-b；`features[].status`）對每條路由的行為——**hidden ⇒ 一律 404（連 supe
+doc,true/false,backend/routers/settings_center.py,2,設定中心（L1；第 54 班 Train A／S0）。群組由程式登錄（helpers/settings_registry），索引頁由登錄自動產生。 功能狀態（脊柱 E-b；`features[].status`）對每條路由的行為——**hidden ⇒ 一律 404（連 supe

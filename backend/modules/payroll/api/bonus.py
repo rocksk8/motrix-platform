@@ -1528,12 +1528,44 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
         if "不大於 0" not in str(e):
             raise HTTPException(400, str(e))
     from helpers.settings import _set_setting
+    try:
+        old_rate, old_split = _case_defaults()      # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值；讀不到不能害儲存失敗
+    except Exception:                               # noqa: BLE001
+        old_rate = old_split = None
+        logger.warning("獎金預設：讀不到舊值，這次儲存不發通知", exc_info=True)
+    new_split = {c: split.get(c, 0) for c in CATEGORIES}
     _set_setting(_RATE_KEY, rate)
-    _set_setting(_SPLIT_KEY, {c: split.get(c, 0) for c in CATEGORIES})
+    _set_setting(_SPLIT_KEY, new_split)
     _audit(_tok(authorization), "bonus.case.settings", "settings", "bonus_case_defaults",
            "獎金分潤預設：比率 %s、業務／專案／後勤 %s" % (_pct_text(rate), "／".join(
                _pct_text(split.get(c, 0)) for c in CATEGORIES)))
+    _notify_case_defaults_changed(old_rate, old_split, rate, new_split, user["username"])
     return {"ok": True}
+
+
+_SPLIT_LABELS = {"sales": "業務", "project": "專案", "admin": "後勤"}
+
+
+def _notify_case_defaults_changed(old_rate, old_split, new_rate, new_split, actor):
+    """SPEC §15-3：獎金預設維持立即生效，**存檔後**發通知（最高管理者全部＋無額外角色；一次存檔多欄合併成一則）。
+    只列有變的欄位；沒有任何欄位變 ⇒ 不發。永不丟例外（`notify_change` 自己吞）。"""
+    try:
+        if old_rate is None or old_split is None:                       # 寫入前讀不到舊值 ⇒ 不知道改了什麼，不發
+            return
+        from helpers import settings_notify as SN
+        rows = []
+        if old_rate != new_rate:
+            rows.append(("獎金預設／基本發放比例", _pct_text(old_rate) + "%", _pct_text(new_rate) + "%"))
+        for c in CATEGORIES:
+            if old_split.get(c, 0) != new_split.get(c, 0):
+                rows.append(("獎金預設／%s比例" % _SPLIT_LABELS.get(c, c), _pct_text(old_split.get(c, 0)) + "%", _pct_text(new_split.get(c, 0)) + "%"))
+        if not rows:
+            return
+        with SN.batch():
+            for label, o, n in rows:
+                SN.notify_change("bonus_default", label, o, n, actor=actor, risk="ops", link="bonus.html")
+    except Exception:                                                  # noqa: BLE001
+        logger.warning("獎金預設變更通知失敗（設定已存好）", exc_info=True)
 
 
 def _deduction_view(conn, award, lines):
@@ -2075,7 +2107,8 @@ def _notify_bypass(quote_no, user, bypass):
     try:
         conn = get_db()
         try:
-            who = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+            from helpers import config_ledger as _cl
+            who = _cl.real_superadmins(conn)          # 通知名單只列真人（展示帳號不是簽核人）
             row = conn.execute("SELECT COALESCE(customer_name, '') AS c FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
         finally:
             conn.close()
@@ -2288,6 +2321,9 @@ def put_insurance_profile(username: str, body: dict = Body(...), authorization: 
     prof[username] = cur
     from helpers.settings import _set_setting
     _set_setting(bonus_deductions.PROFILE_KEY, prof)
+    # 稽核只記「誰的哪些欄位改了」，**不記金額**：投保金額／外部已發獎金是薪資等級資料，稽核紀錄（audit_log 權限者都看得到）不可含明文（h11 發現；
+    # 金額的變更前後只存在 system_settings 的設定檔，由最高管理者專用的 GET /insurance 讀）。
+    _fields = [("insuredAmount" if k == "insuredAmount" else "ytdExternal[%s]" % "、".join(sorted(v))) for k, v in changes.items()]
     _audit(_tok(authorization), "bonus.insurance", "settings", username,
-           "投保金額／全年累計：%s" % json.dumps(changes, ensure_ascii=False))
+           "投保金額／全年累計：變更欄位 %s" % "、".join(_fields))
     return {"ok": True, "profile": cur}

@@ -11,6 +11,8 @@
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/settings-matrix.css?v=20261113a">
+  <script src="../static/settings-matrix.js"></script><!-- S6：通知分頁的「我要收的 Email 通知」用共用矩陣元件（草稿模式） -->
   <script src="../static/ux-wizard.js"></script><!-- A1：首次設定精靈外殼（只在 ?forced=1／?wizard=totp 啟用） -->
   <style>
     [x-cloak]{display:none!important}
@@ -311,6 +313,17 @@
     <!-- ══ 通知分頁：LINE 綁定卡（hichan-6 的元件原樣沿用，只換容器） ══ -->
     <div x-show="tab === 'notify' && !wiz" x-cloak data-testid="tab-notify">
 
+    <!-- S6：我要收哪些 Email 通知（本人自己勾；預設全收＝opt-out 清單 users.notification_muted 為空）。
+         資料來源 GET／PUT /api/mail-types/mine；只列「寄得到我」的類型。業務類可批次；簽核／系統技術類逐項、儲存前要確認。
+         管理員代設定的入口（使用者管理頁）不變。點選只算草稿，頂端儲存列按「儲存」才寫入。 -->
+    <div class="card" id="email-prefs-card" data-testid="email-prefs" style="margin-top:20px;max-width:none"
+         x-data="accountEmailPrefs()" x-effect="tab === 'notify' && !wiz && boot()" x-cloak>
+      <div class="card-title">Email 通知</div>
+      <div class="card-sub">預設會收到寄給您的所有 Email 通知。不想收的可以在下面取消勾選，按「儲存」才會生效。簽核與系統技術類通知漏收可能耽誤處理，要逐項勾選並再確認一次。</div>
+      <div id="ep-note" data-testid="ep-note"></div>
+      <div id="ep-box" data-testid="ep-matrix"></div>
+    </div>
+
     <!-- LINE 通知綁定（T79）：管理員設好 LINE Login 與對外網址之後才顯示。電腦發起、手機掃 QR 授權；綁定的是「目前登入的這個帳號」。
          獨立元件 lineBindCard()（資料來源 GET/POST/DELETE /api/line/binding*）；不用 x-init（Alpine 會自己叫 init()）。 -->
     <div class="card" id="line-bind-card" style="margin-top:20px" x-data="lineBindCard()" x-show="available && !wiz" x-cloak>
@@ -362,8 +375,8 @@
     </div>
 
       <div class="card" style="margin-top:20px" x-show="lineAvail === false" data-testid="notify-empty-hint" x-cloak>
-        <div class="card-title">通知</div>
-        <div class="card-sub">目前沒有可以自己設定的通知。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的通知。</div>
+        <div class="card-title">LINE 通知</div>
+        <div class="card-sub">LINE 通知目前沒有開放。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的 LINE 通知。</div>
       </div>
     </div>
 
@@ -1041,6 +1054,131 @@
         const r = await fetch('/api/line/binding', { method: 'DELETE', headers: hdr() })
         this.busy = false
         if (r.ok) { this.ok = '已解除綁定'; await this.load() } else { this.err = '解除失敗' }
+      },
+    }
+  }
+  </script>
+  <script>
+  // S6：我要收的 Email 通知（通知分頁）。GET／PUT /api/mail-types/mine（只改本人的 users.notification_muted；opt-out 清單，預設全收）。
+  // 用共用矩陣元件的草稿模式：點勾選只算草稿，頂端儲存列按「儲存」才寫入；簽核／系統技術類（非業務類）不能批次，
+  // 取消勾選時儲存前先跳確認視窗（伺服器端同樣要求 confirm=true，不靠前端守）。boot() 由 x-effect 在進入通知分頁時呼叫，只跑一次。
+  function accountEmailPrefs() {
+    var started = false, mx = null, version = '', lastRisky = []   // 不放進 Alpine 的反應式狀態：x-effect 才不會被自己觸發
+    var esc = SettingsMatrix.esc
+    function hdr(json) {
+      var s = {}
+      try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
+      var h = { Authorization: 'Bearer ' + (s.token || '') }
+      if (json) h['Content-Type'] = 'application/json'
+      return h
+    }
+    function detailText(d, fallback) {
+      if (!d) return fallback
+      if (typeof d.detail === 'string') return d.detail
+      if (d.detail && d.detail.message) return d.detail.message
+      return fallback
+    }
+    async function call(path, init) {
+      var r = await fetch(path, init || { headers: hdr(false) })
+      var d = await r.json().catch(function () { return {} })
+      if (!r.ok) { var err = new Error(detailText(d, '操作失敗（' + r.status + '）')); err.status = r.status; err.data = d; throw err }
+      return d
+    }
+    function put(body) { return call('/api/mail-types/mine', { method: 'PUT', headers: hdr(true), body: JSON.stringify(body) }) }
+    function noteHtml(d) {
+      var h = ''
+      if (!d.hasEmail) h += '<div class="alert alert-err" data-testid="ep-no-email">您的帳號還沒有 Email，目前不會收到任何 Email 通知。請管理者在「使用者管理」幫您補上；這裡的選擇會先存起來，補上之後生效。</div>'
+      return h
+    }
+    // 伺服器的列 → 矩陣的列：非業務類（簽核／系統技術）不能批次勾選
+    function rowsOf(d) {
+      return (d.items || []).map(function (it) {
+        return Object.assign({ selectable: !!it.lowRisk, selectableReason: it.lowRisk ? '' : '簽核／系統技術類通知要逐項勾選，不能批次' }, it)
+      })
+    }
+    async function load() {
+      var d = await call('/api/mail-types/mine')
+      version = d.version
+      var note = document.getElementById('ep-note')
+      if (note) note.innerHTML = noteHtml(d)
+      return rowsOf(d)
+    }
+    function riskDialog(names) {
+      return [{
+        title: '不收這些通知？', danger: true, okLabel: '仍要不收',
+        html: '<div class="mx-danger-box">取消後，下列通知<b>您不會再收到 Email</b>，相關提醒或告警可能因此漏掉：</div><ul>' +
+          names.map(function (n) { return '<li>' + esc(n) + '</li>' }).join('') + '</ul>' +
+          '<div class="mx-mute">這是簽核或系統技術類通知；請確認有其他人或其他管道（系統內通知、LINE）會處理。</div>',
+      }]
+    }
+    // 儲存前先問伺服器「實際會變哪些、哪些是高影響」：同時提早擋下「最後一位最高管理者不能退訂系統技術類」
+    function confirmSave(list) {
+      var body = { changes: changesOf(list), expect: version, preview: true }
+      return put(body).then(function (res) {
+        if (!res.changed.length) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        lastRisky = res.risky || []
+        return lastRisky.length ? riskDialog(lastRisky) : []
+      })
+    }
+    function changesOf(list) {
+      var m = {}
+      list.forEach(function (c) { if (c.patch && typeof c.patch.receive === 'boolean') m[c.key] = c.patch.receive })
+      return m
+    }
+    function save(list, ctx) {
+      return put({ changes: changesOf(list), expect: version, confirm: lastRisky.length > 0 && !!ctx.confirmed }).then(function (res) {
+        version = res.version
+        return { res: res, message: '已儲存（' + res.changed.length + ' 項有變動）' }
+      })
+    }
+    function mount(rows) {
+      if (!rows.length) {
+        document.getElementById('ep-box').innerHTML = '<div class="hint" data-testid="ep-empty" style="margin-top:12px">目前沒有會寄給您的 Email 通知類型。</div>'
+        return
+      }
+      var cats = []
+      rows.forEach(function (r) { if (cats.indexOf(r.categoryLabel) < 0) cats.push(r.categoryLabel) })
+      mx = SettingsMatrix.mount(document.getElementById('ep-box'), {
+        rows: rows, groups: cats,
+        draft: {
+          apply: function (raw, patch) { return Object.assign({}, raw, patch) },
+          same: function (raw, merged) { return merged.receive === raw.receive },
+          confirm: confirmSave, save: save,
+        },
+        rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.categoryLabel },
+        rowSub: function (r) { return r.managedElsewhere || '' },
+        rowTags: function (r) { return r.lowRisk ? [] : [{ text: r.category === 'system' ? '系統技術' : '簽核', tone: 'warn' }] },
+        help: function (r) { return { what: r.event ? '收件人：' + r.event : '', impact: r.impact, recommend: r.action } },
+        nameLabel: 'Email 通知', searchPlaceholder: '搜尋通知名稱',
+        searchText: function (r) { return r.name + ' ' + r.categoryLabel },
+        groupSummary: function (g, all) { return '收 ' + all.filter(function (e) { return e.receive }).length + '／共 ' + all.length },
+        columns: [{ id: 'recv', type: 'switch', label: '要收', width: 64,
+          get: function (r) { return r.receive },
+          draft: function (r, v) { return { receive: v } } }],
+        filters: [
+          { id: 'on', label: '有收', test: function (r) { return r.receive } },
+          { id: 'off', label: '不收', test: function (r) { return !r.receive } },
+        ],
+        batch: {
+          groupActions: [{ action: 'on', label: '全收' }, { action: 'off', label: '全不收' }],
+          groupActionsEnabled: true,
+          actions: [
+            { id: 'on', label: '都收', draft: function () { return { receive: true } } },
+            { id: 'off', label: '都不收', draft: function () { return { receive: false } } },
+          ],
+          snapshot: function (keys) { var s = {}; keys.forEach(function (k) { s[k] = 1 }); return s },
+        },
+        reload: load,
+      })
+    }
+    return {
+      boot() {
+        if (started) return
+        started = true
+        load().then(mount).catch(function (e) {
+          document.getElementById('ep-box').innerHTML = '<div class="alert alert-err" data-testid="ep-error">讀取失敗：' + esc(e.message) + '</div>'
+          started = false
+        })
       },
     }
   }

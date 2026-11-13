@@ -135,7 +135,8 @@ def test_rc_group_not_installed_is_not_reported(tmp_path):
 
 def test_real_tree_has_no_route_ownership_errors():
     """真實的樹：每一條路由都有歸屬（明列或前綴）。"""
-    g = D.build()
+    from tests.platform import _shared_repo
+    g = _shared_repo.real_dep_graph(D)                  # 真實 repo 的圖：每個行程只掃一次（D7）
     assert D.check_route_ownership(g["units"]) == []
 
 

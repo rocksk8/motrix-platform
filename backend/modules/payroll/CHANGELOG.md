@@ -1,8 +1,20 @@
 # 薪資獎金 更新紀錄
 
+## 1.2.32 — 2026-11-13（feat/settings-s5-notify；獎金預設存檔後通知）
+- 行為變更：`PUT /api/bonus/cases/settings`（獎金預設：基本發放比例與業務／專案／後勤分配）存檔後發「設定變更通知」（最高管理者；一次存檔多欄合併成一則、只列有變的欄位，舊→新）；仍是立即生效。寫入前讀不到舊值時這次不發通知、不影響儲存。
+- 不變：API 回應、欄位、權限、計算一律沒動。
+- 測試：`tests/test_s5_notify_only_2026_11_13.py`（核心測試目錄，涵蓋三個頁）。
+
+## 1.2.31（next，未取號）— 2026-11-13（fix/demo-approver-h11；展示帳號不列入簽核／通知名單）
+- 變更（內部，不影響對外介面）：`api/bonus.py`、`api/payslip_approval.py`（送審與越權通知）、`bonus_payouts.approver_recipients`（獎金簽核收件人）改用真人最高管理者名單，不含展示帳號 `demo`。
+
 ## 1.2.30 — 2026-11-13（feat/company-profile-public-h11；讀公司資料改打公開子集）
 - 變更（內部，不影響對外介面）：勞報單表單（`payslip-form.html`）預填公司名稱／統編／聯絡方式改打 `GET /api/settings/company-profile/public`；預填內容不變。
 - 測試：`tests/test_company_profile_public_2026_11_13.py`（前端呼叫者守門）。
+
+## 1.2.30（next，未取號）— 2026-11-13（fix/user-perm-sensitive-gate；安全：投保／扣繳設定的稽核紀錄不再含金額明文）
+- 修正（安全）：`PUT /api/bonus/insurance/{username}` 以前把 `{"insuredAmount": 45800, "ytdExternal": {...}}` 整段寫進稽核 `bonus.insurance` 的 `target_label`——投保金額與 MOTRIX 以外已發的獎金是薪資等級資料，任何有稽核權限的人都讀得到。現在只記「變更欄位 insuredAmount、ytdExternal[年]」，不記金額；金額本身照常存在 `system_settings`、只由最高管理者專用的 `GET /api/bonus/insurance` 讀取。API 回應不變。
+- 測試：`tests/test_insurance_audit_no_amount_2026_11_13.py`（稽核列無金額明文〔含千分位寫法〕、只改單一欄位／清除、金額仍可由 GET 讀回、被拒的請求不留稽核列）。
 
 ## 1.2.29 — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；T82 整合（併入估價單、我的帳號）
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。

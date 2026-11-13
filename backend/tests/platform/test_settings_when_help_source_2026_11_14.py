@@ -32,9 +32,10 @@ def _by_key(rows):
 
 
 def test_when_must_not_equal_help():
-    with pytest.raises(ValueError):
-        R.SettingDef("x", "int", 1, question="問？", label="名", help="一樣的話", when="一樣的話", impact="影響。")
-    assert R.SettingDef("x", "int", 1, question="問？", label="名", help="這個", when="那個", impact="影響。").when == "那個"
+    ok = dict(question="這項要設多少？", label="測試項目", impact="影響測試用的畫面。")
+    with pytest.raises(ValueError, match="when"):                                      # 必須是 when 規則擋下，不是別的必填欄位缺漏
+        R.SettingDef("x", "int", 1, help="一樣的話。", when="一樣的話。", **ok)
+    assert R.SettingDef("x", "int", 1, help="這個。", when="那個。", **ok).when == "那個。"
 
 
 def test_help_parts_have_four_sections_and_omit_the_empty_ones(grp):
@@ -62,3 +63,14 @@ def test_source_failure_never_breaks_the_page(grp, monkeypatch):
     monkeypatch.setattr(R, "_sources", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     v = _by_key(R.field_views(G, conn=grp))
     assert v["cap"]["source"] is None and v["cap"]["helpParts"]
+
+
+def test_source_is_found_even_when_a_sibling_field_has_over_1000_rows(grp):
+    from helpers import config_ledger as L
+    domain = "setting:" + G
+    L.record(grp, domain, G, [{"field": "days", "old": 5, "new": 6}], "很久以前改的", "hs_old")
+    for i in range(1100):
+        L.record(grp, domain, G, [{"field": "cap", "old": i, "new": i + 1}], "雜訊", "hs_noise")
+    grp.commit()
+    v = _by_key(R.field_views(G, conn=grp))
+    assert v["days"]["source"]["kind"] == "company" and v["days"]["source"]["by"] == "hs_old"

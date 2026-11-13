@@ -166,8 +166,10 @@ def _with_superadmins(conn, tiers, submitter):
     if not tiers:
         tiers = [{"order": 0, "approvers": []}]
     have = {a.get("username") for t in tiers for a in t.get("approvers", [])}
+    from helpers import config_ledger as _cl
+    real = set(_cl.real_superadmins(conn, submitter))            # 真人最高管理者（不含申請人與展示帳號：否則只有一位真人時，佇列會等一個永遠不會來的人）
     for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall():
-        if r["username"] != submitter and r["username"] not in have:
+        if r["username"] in real and r["username"] not in have:
             tiers[0].setdefault("approvers", []).append({"username": r["username"], "displayName": r["display_name"] or r["username"], "status": "pending"})
     return tiers
 
@@ -193,6 +195,9 @@ def _can_decide(conn, row, user):
     if (appr.get("requestedBy") or row.get("submitted_by") or "") == user["username"]:
         return False, 403, "不能審核自己送出的定義"
     names = set(_approver_names(row))
+    from helpers import config_ledger as _cl
+    if user["username"] == _cl.DEMO_USERNAME:            # 展示帳號不是真人，不能決定任何審核（平常到不了這裡，這是第二道）
+        return False, 403, "展示帳號不能審核"
     if user.get("role") == "superadmin" or user["username"] in names or (names & set(active_delegators_for(conn, user["username"]))):
         return True, 200, ""
     return False, 403, "你不是這份定義的審核人"

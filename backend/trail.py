@@ -553,6 +553,7 @@ PAGE_LABELS = {
     "change-password.html": "我的帳號",
     "my-account.html": "我的帳號",
     "company-profile-settings.html": "公司資料設定",
+    "company-setup-wizard.html": "公司設定精靈",
     "completion-note-form.html": "完工單",
     "contractor-voucher-approval-settings.html": "承攬商匯款申請簽核設定",
     "contractors.html": "外包名冊",

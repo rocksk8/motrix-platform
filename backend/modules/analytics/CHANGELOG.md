@@ -1,5 +1,9 @@
 # 營運分析 更新紀錄
 
+## 1.0.52 — 一條龍 P0a（feat/onepipe-p0-p1，含審查修正；旗標 `onepipe.links`，預設開（升級後一條龍功能預設開啟；關閉＝與今天逐位元相同））；已併 T82 凍結 head f66dfd9ef
+- **升級後一條龍功能預設開啟（T84 使用者裁示：一條龍上線就開啟）：群組 `onepipe` 每個旗標預設 1；既有環境啟動時一次性遷移把存成 0 的改成 1（經設定中心引擎、稽核「系統升級」、只跑一次，之後使用者自己關掉的保留）；仍可在設定中心逐項關閉，關閉＝與今天逐位元相同。** 本模組的一條龍行為（旗標見標題）升級後即生效；預設值與遷移見 core 的 CHANGELOG。
+- `warranty.html`：旗標開時案號可點進該案件頁（`case-management.html?q=<案號>`）；旗標關時照舊為純文字。不改 API、資料、權限。
+
 ## 1.0.51 — 2026-11-13（perf/bootstrap-bundle-20261113；外網載入效能第二階段）
 - 新增 `GET /api/dashboard/bundle`（`?department_id=&activity_limit=`）：把首頁儀表板的六支（stats／monthly／expenses-monthly／funnel／ops-alerts／activity-feed）合成一支，每個區段**直接呼叫原端點的處理函式**（權限檢查與遮蔽同一份、不比原端點多給任何資料）；某段被拒／出錯 ⇒ 該段 null＋`errors`。回 `Cache-Control: no-store`。守門：`tests/test_bootstrap_bundle_2026_11_13.py`（逐區段、逐角色比對）。無 migration、無設定變動。
 

@@ -304,6 +304,9 @@
             <textarea class="cnf-in" rows="4" x-model="form.work_summary" :disabled="!editable()" @input="dirty=true"
                       placeholder="這次做了什麼、範圍到哪裡"></textarea>
             <div class="cnf-hint">留空的話，這一區不會出現在完工單上。</div>
+            <div x-show="recordsNote" data-testid="cnf-records-note"
+                 style="margin-top:8px;padding:8px 12px;border-radius:6px;background:#EFF6FF;border:1px solid #BFDBFE;font-size:12px;color:#1E40AF;font-family:var(--font-zh)"
+                 x-text="recordsNote"></div>
           </div>
           <div class="cnf-card">
             <div class="cnf-card-title" x-text="labels.sectionTest"></div>
@@ -361,6 +364,7 @@
       approval: {}, previewOpen: false, previewUrl: '',
       msg: '', msgError: false, prefilled: false,
       diffOpen: false, diffRows: [], _diffRes: null,
+      recordsNote: '',   // 一條龍 P4b：依案件紀錄預填開工日／施工說明的提示
       quoteNote: '', quoteChanged: false, _quoteFp: '', _quoteOpts: null, progress: {},   // 從報價單帶入（第 57 班）
       noteNo: '',
       status: '草稿',
@@ -495,6 +499,21 @@
         this.form.completion_date = MotrixDate.today()
         this.form.site_manager = this.session.displayName || this.session.username || ''
         this._syncLabels()
+        await this._prefillFromRecords()
+      },
+
+      // 一條龍 P4b：開工日＝這個案件階段出勤紀錄裡最早的一天；施工說明＝掛在這個案件上的工作日誌（逐行「日期　內容」）。
+      // 只填空白欄位、存檔前由人確認、可改；旗標關（伺服器回 404）、看不到紀錄、任何失敗＝什麼都不做（畫面與以前相同）。
+      async _prefillFromRecords() {
+        try {
+          const r = await fetch('/api/completion-notes/case-prefill?quote_no=' + encodeURIComponent(this.form.quote_no), { headers: this._auth() })
+          if (!r.ok) return
+          const d = await r.json()
+          const got = []
+          if (d.startDate && !this.form.start_date) { this.form.start_date = d.startDate; got.push('開工日（最早一次階段出勤）') }
+          if (d.workSummary && !this.form.work_summary) { this.form.work_summary = d.workSummary; got.push('施工說明（案件上的工作日誌）') }
+          if (got.length) { this.recordsNote = '已依案件紀錄預填：' + got.join('、') + '。請確認或修改後再存檔。'; this.dirty = true }
+        } catch (e) { /* 預填失敗不影響填單 */ }
       },
 
       // 取可帶入的項目；失敗時用白話顯示原因（例如報價單還在簽核中）並回 null

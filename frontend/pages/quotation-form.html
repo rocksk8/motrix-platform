@@ -806,7 +806,7 @@
       </div>
       <div style="padding:20px">
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;line-height:1.6">
-          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定<span x-show="isPendingStatus()" data-testid="qf-unlock-consequence">；<strong>存檔後，已簽的層全部清除重簽，送審人會改成你</strong></span>。
+          <span x-text="isPendingStatus() ? '此報價單正在簽核中。' : '此報價單已簽核完成。'"></span>輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定；<strong data-testid="qf-unlock-consequence" x-text="unlockConsequence()"></strong>
         </div>
         <div style="margin-bottom:4px">
           <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
@@ -1127,7 +1127,7 @@
       <!-- 最高管理者的編輯入口：已送出 ⇒ 解鎖編輯；待審核／簽核中 ⇒ 同一顆（V3.45：原本最高管理者＋當層簽核人在待審核完全沒有入口；後端 unlock-edit 本來就允許） -->
       <template x-if="canUnlockEdit()">
         <button class="btn btn-ghost btn-sm" @click="showUnlockModal=true; unlockPwd=''; unlockError=''" data-testid="qf-unlock-edit"
-                :title="isPendingStatus() ? '解鎖後可直接修改內容；存檔後已簽的層全部清除重簽，送審人會改成你（整條簽核會重跑）' : '解鎖後可修改內容；存檔後需重新簽核'"
+                :title="'解鎖後可修改內容。' + unlockConsequence()"
                 style="border-color:#FDE68A;color:#92400E;background:#FFFBEB">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           解鎖編輯
@@ -2180,6 +2180,7 @@
         </div>
         <div><b>申請人：</b><span x-text="q.approval?.requestedByDisplay || q.approval?.requestedBy || ''"></span></div>
         <div><b>申請時間：</b><span x-text="q.approval?.requestedAt ? MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') : ''"></span></div>
+        <div x-show="q.approval?.editedBy" data-testid="qf-edited-by"><b>修改人：</b><span x-text="(q.approval?.editedByDisplay || q.approval?.editedBy || '') + (q.approval?.requestedAt ? '（' + MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') + '）' : '')"></span></div>
         <div x-show="q.approval?.reasons?.length">
           <b>簽核品項</b>
           <ul style="margin:2px 0 0 14px;padding:0">
@@ -2697,6 +2698,7 @@
   //   併入 fix/quote-items-align：品項明細對齊（≥768px 同一列輸入框貼同一條上緣；區段標題列補齊成本／毛利率／單項毛利三格）。
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
+  //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
   const FORM_VERSION = 'V3.45'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
@@ -2813,6 +2815,8 @@
       rejectFinalNote: '',
       rejectingFinal: false,
       _prevDealTag: '',
+      _termsLoadFailed: false,    // 目前這種單據的條款組讀取失敗（true ⇒ 不給開管理視窗，免得拿空清單覆寫設定）
+      _termsDocType: 'quote',      // 條款設定現在載的是哪一種單據的（estimate＝估價單自己的條款；見 _termsUrl／_ensureTermsDocType）
       _defaultPaymentTerms: DEFAULT_TERMS.paymentTerms,  // 送審前比對用；new-record 模式下會被 init() 換成後端目前設定的預設值
 
       //: 公司資料裡的據點清單。空的時候選擇器不顯示（QL14）。
@@ -3501,16 +3505,56 @@
 
       // ── 條款組 ────────────────────────────────────────────────────────
 
-      async loadTermsPresets() {
+      // 條款設定的來源依單據類型：報價單＝原本的 quote-terms-presets／payment-terms；估價單＝自己的 estimate-*（互不影響）
+      _termsUrl(kind) {
+        const est = this._termsDocType === 'estimate'
+        if (kind === 'presets') return `${this.API}/settings/${est ? 'estimate-terms-presets' : 'quote-terms-presets'}`
+        return `${this.API}/settings/${est ? 'estimate-payment-terms' : 'payment-terms'}`
+      },
+
+      async loadDefaultPaymentTerms() {
+        this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms || this._defaultPaymentTerms
+        const t = this._termsDocType           // 回應慢到、期間已切到另一種單據 ⇒ 丟掉（否則另一種的設定蓋上來）
         try {
-          const r = await fetch(`${this.API}/settings/quote-terms-presets`, {
+          const rp = await fetch(this._termsUrl('payment'), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (rp.ok) {
+            const d = await rp.json()
+            if (this._termsDocType !== t) return
+            if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
+          }
+        } catch(e) {}
+      },
+
+      // 單據類型確定（或切換）後，把條款組與預設付款條件換成該類型自己的那組；類型沒變＝什麼都不做
+      async _ensureTermsDocType(t) {
+        t = t === 'estimate' ? 'estimate' : 'quote'
+        if (this._termsDocType === t) return
+        this._termsDocType = t
+        this._termsLoadFailed = false
+        this.termsPresets = []                 // 載入失敗時顯示內建基準，不留著另一種單據的條款組（否則管理視窗存檔會把它寫到這一種）
+        this.termsDefaultKey = ''
+        await this.loadDefaultPaymentTerms()
+        await this.loadTermsPresets()
+      },
+
+      async loadTermsPresets() {
+        const t = this._termsDocType           // 同上：過期的回應不採用
+        try {
+          const r = await fetch(this._termsUrl('presets'), {
             headers: { Authorization: 'Bearer ' + this.session.token },
           })
-          if (!r.ok) return
+          if (!r.ok) throw new Error('HTTP ' + r.status)
           const d = await r.json()
+          if (this._termsDocType !== t) return
           this.termsPresets = Array.isArray(d.presets) ? d.presets : []
           this.termsDefaultKey = d.defaultKey || ''
-        } catch {}
+          this._termsLoadFailed = false
+        } catch {
+          if (this._termsDocType !== t) return
+          // 讀取失敗：不可以拿另一種單據的條款組頂替，也不可以讓管理視窗拿空清單去覆寫設定 ⇒ 明講、鎖住管理視窗
+          this._termsLoadFailed = true
+          this.toast((t === 'estimate' ? '估價單' : '報價單') + '的條款組載入失敗，請重新整理頁面再試（目前顯示內建條款）')
+        }
       },
 
       _presetByKey(key) {
@@ -3565,6 +3609,7 @@
       },
 
       openTermsManager() {
+        if (this._termsLoadFailed) { this.toast('條款組沒有載入成功，請重新整理頁面後再管理（避免用空清單蓋掉設定）'); return }
         // 深拷貝——在 modal 裡改到一半按叉叉不該影響外面已載入的清單
         this.termsDraft = JSON.parse(JSON.stringify(this.termsPresets))
         this.termsDraftDefault = this.termsDefaultKey
@@ -3593,7 +3638,7 @@
         }
         this.termsSaving = true
         try {
-          const res = await fetch(`${this.API}/settings/quote-terms-presets`, {
+          const res = await fetch(this._termsUrl('presets'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json',
                        Authorization: 'Bearer ' + this.session.token },
@@ -3633,7 +3678,7 @@
         if (!text) { alert('付款條件內容不可空白'); return }
         if (!confirm('確定要把目前這段文字，存為之後所有「新增報價單」的預設付款條件嗎？\n（已存在的舊報價單不受影響）')) return
         try {
-          const res = await fetch(`${this.API}/settings/payment-terms`, {
+          const res = await fetch(this._termsUrl('payment'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({ text })
@@ -4219,6 +4264,12 @@
           && (!this.unlocked || (this.isCurrentTierApprover() && this.session.role !== 'superadmin'))
       },
       isPendingStatus() { return this.q.status === '待審核' || this.q.status === '簽核中' },
+      // 解鎖存檔的後果（後端：已簽的層清除重簽並通知他們；送審人維持原送審人、改內容的人另記 editedBy）。沒有原送審紀錄的舊單：送審人記為改內容的人
+      unlockConsequence() {
+        const a = this.q.approval || {}
+        const who = a.requestedByDisplay || a.requestedBy
+        return '存檔後，已簽的層需重新簽核，並通知他們；送審人' + (who ? '維持' + who : '記為你')
+      },
       // 「解鎖編輯」入口：最高管理者、尚未解鎖；已送出，或待審核／簽核中且不在複查編輯中。伺服器為準（unlock-edit 需最高管理者密碼＋最高管理者角色）。
       canUnlockEdit() {
         return this.session?.role === 'superadmin' && !this.unlocked && !this.reviewEditing
@@ -4947,12 +4998,32 @@
       async setDocType(t) {
         t = t === 'estimate' ? 'estimate' : 'quote'
         if (this.isNewRecord === false || this.q.docType === t) return
+        // 條款還是「預設的樣子」（使用者沒動過）才跟著換成新類型的預設；動過就保留使用者的內容，只換比對基準
+        const prev = this._termsBaseline()
+        const untouched = this.termsFieldDefs.every(f => (this.q[f.key] || '').trim() === (prev[f.key] || '').trim())
         this.q.docType = t
         this.q.quoteNo = ''
         this._quoteNoFrozen = false
         this.isDirty = true
         this._applyDocSkin()
+        await this._ensureTermsDocType(t)
+        if (untouched) this._applyDefaultTermsForNew()
+        else this.checkApproval()
         await this._peekQuoteNo()
+      },
+      // 新單：套用目前這種單據的預設條款（預設那組 ⇒ 沒有就用單欄位預設付款條件＋內建四欄）。只給「切換單據類型」用；
+      // init() 的新增模式有自己的一段（含使用者動過就不帶預設的判斷），這裡不動它。
+      _applyDefaultTermsForNew() {
+        if (this.termsDefaultKey && this._presetByKey(this.termsDefaultKey)) {
+          this.applyTermsPreset(this.termsDefaultKey, true)
+        } else {
+          this.q.termsPresetKey = ''
+          this.q.paymentTerms = this._defaultPaymentTerms
+          if (this._termsDefaultsLoaded) {
+            for (const k of ['deliveryTerms', 'acceptanceTerms', 'warrantyTerms', 'afterSales']) this.q[k] = DEFAULT_TERMS[k]
+          }
+        }
+        this.checkApproval()
       },
       _applyDocSkin() {
         const est = this.q.docType === 'estimate'
@@ -5163,13 +5234,13 @@
         } catch(e) {}
 
         // ── 目前後端設定的預設付款條件（不論新增/編輯都要先取得，供「報價條件與預設不同」比對基準）──
-        try {
-          const rp = await fetch(`${this.API}/settings/payment-terms`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (rp.ok) {
-            const d = await rp.json()
-            if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
-          }
-        } catch(e) {}
+        // 估價單有自己的條款（2026-11-13）：新增模式帶 ?type=estimate 就先讀估價單那組；編輯／複製要等讀到單據才知道類型，
+        // 載入後由 _ensureTermsDocType() 換成對的那組（報價單：網址與行為與改版前完全相同）。
+        {
+          const _p0 = new URLSearchParams(window.location.search)
+          if (!_p0.get('id') && _p0.get('copy') !== '1' && _p0.get('type') === 'estimate') this._termsDocType = 'estimate'
+        }
+        await this.loadDefaultPaymentTerms()
 
         // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
         // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
@@ -5192,6 +5263,7 @@
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
               this._applyDocSkin()
+              await this._ensureTermsDocType(this.q.docType)          // 估價單複製出來的新單：條款基準用估價單那組
               this._fillMissingTerms(t)
               this.isNewRecord = true
               this.isDirty = true
@@ -5223,6 +5295,7 @@
             if (res.ok) {
               const row = await res.json()
               Object.assign(this.q, row.data)
+              await this._ensureTermsDocType(row.data && row.data.docType)   // 估價單：「與預設不同」的比對基準讀估價單自己的條款組
               this._fillMissingTerms(row.data)
               this.q.quoteNo = editNo
               this._prevDealTag = this.q.dealTag || ''

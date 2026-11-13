@@ -48,6 +48,10 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                # MOTRIX_WINDOW（誰在跑）、MOTRIX_CI_DIR／MOTRIX_REQUIRE_QUEUE／MOTRIX_QUEUE_GUARD（排隊機制）。
                # 它們只決定「排不排隊、拿不拿得到鎖」，不決定哪些題存在或過不過；進指紋 ⇒ 經 heavy_run 跑的 run-stage 與直接跑的建包永遠對不上。
                "MOTRIX_CI_TICKET", "MOTRIX_GATE_TOKEN", "MOTRIX_WINDOW", "MOTRIX_CI_DIR", "MOTRIX_REQUIRE_QUEUE", "MOTRIX_QUEUE_GUARD",
+               # 2026-11-13：正式閘門旗標不進指紋——它決定的是「升級演練跑不跑」，由 modtest.record_for_build 明確只在它為 1 時寫紀錄
+               "MOTRIX_GATE_OFFICIAL",
+               # 2026-11-13：只放行直譯器檢查（modtest／run-stage 的 interpreter_mismatch）；直譯器本身已由 python／pip_freeze 進指紋
+               "MOTRIX_ALLOW_OTHER_PYTHON",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
@@ -310,6 +314,18 @@ def collect_reds(fail_stream_dir, limit=500):
     return out
 
 
+def _interpreter_mismatch(python, repo):
+    """用 tools/platform/project_env.py 的同一份判定（formal_python／interpreter_mismatch）；載不到它 ⇒ 不擋（fail-open，只是少一道檢查）。"""
+    try:
+        import importlib.util as _iu
+        sp = _iu.spec_from_file_location("_bt_project_env", str(Path(repo) / "tools" / "platform" / "project_env.py"))
+        pe = _iu.module_from_spec(sp)
+        sp.loader.exec_module(pe)
+        return pe.interpreter_mismatch(python)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
 #: run-stage 一段跑完後，紅的題數 ≤ 這個數就自動在安靜環境單獨重跑一次（0＝關）。**不是 flake 登記**：known_flakes 不動，
 #: 每次重試都留證據（紀錄的 stages.<段>.retry＋retry_log.jsonl），同一題累計次數給雜訊排行榜用。
 RETRY_MAX_DEFAULT = 5
@@ -481,6 +497,11 @@ def _run_stage(repo, stage, records, python=None, runner=None, workers=None, not
     import tempfile
     python = python or sys.executable
     repo = Path(repo)
+    if runner is None:                              # 真的要跑（測試注入 runner 時不查）：run-stage 與預跑（modtest --full）必須同一個直譯器
+        bad = _interpreter_mismatch(python, repo)
+        if bad:
+            note("[run-stage] ✗ 拒跑：" + bad)
+            return 2, False, "直譯器不是正式閘門用的環境"
     fp0 = fingerprint(repo)
     backend = repo / "backend"
     base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S"), os.urandom(3).hex()))   # 末尾隨機：同一秒起兩輪也不共用 fail_stream 目錄（舊明細會被當成這一輪的紅）
@@ -497,6 +518,7 @@ def _run_stage(repo, stage, records, python=None, runner=None, workers=None, not
             env[_hr.GATE_TOKEN_ENV] = _lock["token"]
     except Exception:                              # noqa: BLE001 — 讀不到就不帶（fail-open；只是少一個放行憑證）
         pass
+    env["MOTRIX_GATE_OFFICIAL"] = "1"               # run-stage 就是正式閘門：gate_only 題（升級演練）要跑（conftest._skip_gate_only）
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
                 "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
     # 失敗明細一律落在這一輪專用目錄（failfast 提早停也一樣）：run-stage 結束時讀回、印出路徑與紅題，不必再去主工作樹翻 jsonl

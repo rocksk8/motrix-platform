@@ -19,7 +19,7 @@ def fixed_thresholds(monkeypatch):
     monkeypatch.setattr(QT, "min_item_margin_pct", lambda: 30.0)
     monkeypatch.setattr(QT, "max_valid_days", lambda: 30)
     monkeypatch.setattr(QT, "discount_review_above", lambda: 0)
-    monkeypatch.setattr(QT, "load_terms_settings", lambda: ([], QT.DEFAULT_TERMS["paymentTerms"]))
+    monkeypatch.setattr(QT, "load_terms_settings", lambda doc_type=None: ([], QT.DEFAULT_TERMS["paymentTerms"]))
 
 
 def _q(items, **over):
