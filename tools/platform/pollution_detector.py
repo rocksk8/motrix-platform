@@ -151,6 +151,9 @@ class Detector:
         if st is not None and (self._db_cache is None or self._db_cache[0] != st[0] or self._db_cache[2] != st):      # 檔案在兩個檔之間被動過 ⇒ 基線重數，免得誤報
             c = self._db_counts(st[0])
             self._db_cache = (st[0], c, st) if c is not None else None          # 數不出來 ⇒ 基線無效：這個檔不比 DB，免得誤報
+        # 這張快照當下的各表筆數，跟著快照走：diff() 的「之前」要用它。若 diff 去讀 self._db_cache，會讀到下一張快照（`diff(snap, snapshot())` 先算
+        # 後面那個參數）剛重數過的「之後」——前後相同 ⇒ 「audit_log +3」永遠抓不到（2026-11-14 診斷：test_pollution_detector 紅）。
+        snap["dbc"] = self._db_cache[1] if (st is not None and self._db_cache and self._db_cache[0] == st[0]) else None
         self.cost_ms += (time.perf_counter() - t0) * 1000
         return snap
 
@@ -243,7 +246,7 @@ class Detector:
         # db：只在 session DB 檔被寫過時才數表（先比 stat；基線筆數在 snapshot 時就備好）
         d0, d1 = a.get("db"), self._dbstat()
         if d0 is not None and d1 is not None and d0[0] == d1[0] and d0 != d1:
-            before = self._db_cache[1] if self._db_cache and self._db_cache[0] == d0[0] else None
+            before = a.get("dbc")
             after = self._db_counts(d1[0])
             if after is not None and before is not None:
                 grew = sorted("%s +%d" % (t, n - before.get(t, 0)) for t, n in after.items() if n > before.get(t, 0))
@@ -302,7 +305,10 @@ def _safe_snapshot():
     except Exception as exc:                              # noqa: BLE001
         _cfg["disabled"] = True
         _state["mod"], _state["snap"] = None, None
-        sys.stderr.write("pollution_detector: snapshot failed, detector disabled for this run: %r\n" % (exc,))
+        # pytest 的擷取（fd 層級）會吞掉停用當下寫的 stderr——停用發生在第一題 setup，那題沒紅就永遠看不到；
+        # 所以留下訊息，session 結束、擷取解除後由 _emit_list() 再說一次（2026-11-14 診斷：只在 stderr 說一次的約定要真的看得到）
+        _cfg["disabled_msg"] = "pollution_detector: snapshot failed, detector disabled for this run: %r\n" % (exc,)
+        sys.stderr.write(_cfg["disabled_msg"])
         return None
 
 
@@ -433,6 +439,8 @@ def _emit_list():
     (d / (rid + ".pollution-list.json")).write_text(json.dumps({"run": rid, "files_checked": len(_RECS), "cost_ms_this_process": round(_det.cost_ms, 2), "files_this_process": _det.files,
                                                           "dist": _cfg["dist"], "attribution": "reliable" if _cfg["reliable"] else "approximate（分配模式不是 loadfile／loadscope：檔與檔的題目可能交錯，歸屬僅供參考）",
                                                           "disabled": _cfg["disabled"], "polluters": lst, "suspects": suspect_list(_RECS)}, ensure_ascii=False, indent=1), encoding="utf-8")
+    if _cfg.get("disabled_msg"):
+        sys.stderr.write(_cfg["disabled_msg"])
     sys.stdout.write("\nPOLLUTION-LIST run=%s files=%d polluters=%d → %s\n" % (rid, len(_RECS), len(lst), d / (rid + ".pollution-list.json")))
     for p in lst[:30]:
         sys.stdout.write("  %s %s ← %s\n" % (p["state"], p["keys"][:6], ", ".join(p["files"][:4])))
