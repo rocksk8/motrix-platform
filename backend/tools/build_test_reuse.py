@@ -356,9 +356,11 @@ def retry_eligibility(rc, st, limit):
     summ = (st or {}).get("summary")
     if not summ:
         return False, "沒有 fail_stream summary，無法確認這輪跑完"
+    reds = (st or {}).get("reds") or []
+    if len(reds) > limit:
+        return False, "紅 %d 題 > %d 題上限：不重試（這不是雜訊，是真的問題）" % (len(reds), limit)
     if summ.get("aborted") or summ.get("aborted_by"):
         return False, "這輪被中斷／提早停止（%s）：沒跑到的題不能靠重試補" % (summ.get("aborted_by") or "aborted")
-    reds = (st or {}).get("reds") or []
     if not reds:
         return False, "沒抓到任何紅題（紅清單是空的）"
     if len(reds) < int(summ.get("failed", 0)) + int(summ.get("errors", 0)):
@@ -367,8 +369,6 @@ def retry_eligibility(rc, st, limit):
         return False, "有 collect 階段的紅（檔案載入失敗，那檔的題根本沒跑）"
     if any("::" not in n for n in reds):
         return False, "紅清單裡有不是 路徑::題名 的項目"
-    if len(reds) > limit:
-        return False, "紅 %d 題 > %d 題上限：不重試（這不是雜訊，是真的問題）" % (len(reds), limit)
     return True, ""
 
 
