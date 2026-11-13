@@ -23,7 +23,9 @@ _TOOLS = Path(__file__).resolve().parents[2] / "tools"
 NEW = "apply_module_update.ps1"
 SHARED = ("Test-Ping", "Fail", "Info", "Warn", "Ok", "Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile",
           "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange", "Get-ServerLogTail",
-          "Write-CompanyBankNote")      # 第二十一班（E4S3-S1）
+          "Write-CompanyBankNote",      # 第二十一班（E4S3-S1）
+          # T84（2026-11-13）：停服後迴圈重生防護，與 apply_update.ps1 逐字相同
+          "Test-InstallServiceRunning", "Wait-PortFreed", "Write-InstallServiceDiag", "Stop-RespawnedService")
 NEW_STATUSES = {"module_preflight_failed", "module_load_dryrun_failed", "module_copy_failed",
                 "module_unhealthy_rolled_back", "module_restore_failed"}
 

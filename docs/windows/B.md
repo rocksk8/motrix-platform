@@ -1483,7 +1483,7 @@ Step 3 (:355)  robocopy 開始覆蓋 backend/
 | 10 | **361** | `copy_failed_frontend` | 🔴 `applied_no_restore` | 1 |
 | 11 | 140 | `checkonly_ok` | `not_applied` | 0 |
 | 12 | 143 | `checkonly_failed` | `not_applied` | 1 |
-| 13 | **545** | `unhealthy_not_rolled_back` | `applied` | **0** 🔴 P0-00 |
+| 13 | **545** | `unhealthy_not_rolled_back` | `applied` | **0** 🔴 P0-00（T84，2026-11-13 起另有一條 **exit 1**：啟動後 schema 兜底閘門 `Invoke-SchemaGate` 重啟後仍不過／重啟後 ping 無回應；兩條都不自動回滾，判定一律 failed） |
 | 14 | 621 | `unhealthy_rolled_back` | `restored` / `restored_unhealthy` | 1 |
 | 15 | 646 | `success` | `applied` | 0 |
 
