@@ -179,9 +179,9 @@ def decode_slot(wait=None):
 def with_decode_slot(fn):
     """decode_slot 的裝飾器版（保留簽章，L1 介面快照看得到原簽章）。"""
     @functools.wraps(fn)
-    def wrapper(*a, **kw):
+    def wrapper(*a):                    # 只轉發位置參數（不用 ** 轉發；現有三個被裝飾的函式都只用位置參數呼叫，關鍵字參數會直接 TypeError）
         with decode_slot():
-            return fn(*a, **kw)
+            return fn(*a)
     return wrapper
 
 
@@ -193,6 +193,8 @@ async def run_decode(fn, *a, **kw):
     （最多 MAX_CONCURRENT_DECODES 件進執行緒池、排隊上限 MAX_WAITING_ASYNC、等待上限 DECODE_WAIT_SECONDS，
     超過 ⇒ ImageBusy），拿到名額才丟 run_in_threadpool——排隊的請求不占任何執行緒池的執行緒。
     （fn 裡面的 decode_slot 仍在，當作同步端點共用同一組名額的後盾。）"""
+    if kw:                              # 簽章保留 **kw（L1 介面快照）；但不再用 ** 轉發——現有呼叫端都只傳位置參數
+        raise TypeError("run_decode 只轉發位置參數：%s" % ", ".join(sorted(kw)))
     loop = asyncio.get_running_loop()
     st = _ASYNC_STATE.get(loop)
     if st is None:
@@ -207,6 +209,6 @@ async def run_decode(fn, *a, **kw):
     finally:
         st[1] -= 1
     try:
-        return await run_in_threadpool(fn, *a, **kw)
+        return await run_in_threadpool(fn, *a)
     finally:
         st[0].release()
