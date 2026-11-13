@@ -38,6 +38,7 @@
 驅動只看得到三份檔案、看不到合併後的程式碼，所以「重算」那一半仍要靠本工具。
 """
 import argparse
+import difflib
 import hashlib
 import importlib.util
 import json
@@ -152,8 +153,18 @@ def has_markers(text):
 
 # ── 衝突中的檔：三方合併 ─────────────────────────────────────────────────────
 
+def _pure_additions(base, side):
+    """side 相對 base 只有「插入」、沒有刪除或改寫任何一行？"""
+    sm = difflib.SequenceMatcher(None, base.splitlines(), side.splitlines(), autojunk=False)
+    return all(tag in ("equal", "insert") for tag, *_ in sm.get_opcodes())
+
+
 def _union_changelog(o, a, b):
-    """驅動看不懂的 CHANGELOG 形狀：逐行聯集，再把多塊 (next) 併成一塊。⇒ 文字或 None。"""
+    """驅動看不懂的 CHANGELOG 形狀：逐行聯集，再把多塊 (next) 併成一塊。⇒ 文字或 None。
+    只有「兩邊相對基底都只是插入」才聯集；任何一邊改寫／刪除了基底的行（同一行兩邊都改、一邊刪一邊改…）⇒ None（留給人，
+    逐行聯集會把兩個版本都塞進去、或把被刪的行復活，還報告成『已解決』——hichan-3 審查 M1）。"""
+    if not (_pure_additions(o, a) and _pure_additions(o, b)):
+        return None
     text = MD._union_text(o, a, b)
     if text is None or has_markers(text):
         return None
@@ -177,7 +188,7 @@ def merge_conflicted(repo, path, stages):
             if got is not None:
                 return got, "兩邊的新增都留（(next) 併成一塊）"
             got = _union_changelog(o, a, b)
-            return got, ("驅動看不懂這個形狀，改用逐行聯集再併 (next) —— 請目視確認內容" if got is not None else "兩邊改了同一段舊內容：請人看")
+            return got, ("驅動看不懂這個形狀；兩邊都只是新增 ⇒ 逐行聯集再併 (next)（請目視確認順序）" if got is not None else "兩邊改了／刪了同一段舊內容：請人看（沒有自動解、沒有 git add）")
         if kind == "manifest":
             got = MD.merge_manifest(o, a, b)
             return got, ("兩邊新增的條目都留" if got is not None else "兩邊改了同一筆舊條目或排版不符：請人看")
@@ -315,12 +326,13 @@ def post_unscoped(repo, dry, skip):
                 changed.append(RATCHET)
                 notes.append("MAX_ENTRIES %d → %d（＝聯集後的基準筆數）" % (cap, len(base)))
             elif cap > len(base):
-                notes.append("MAX_ENTRIES %d 比基準筆數 %d 大 %d（有餘裕，沒動；要縮小請手動）" % (cap, len(base), cap - len(base)))
+                notes.append("MAX_ENTRIES %d 比基準筆數 %d 大 %d（有餘裕，沒動；要縮小請手動。若兩邊登記了同一筆讀取，合併時兩邊的 +1 都加進來了 ⇒ 多出來的就是重複的部分）" % (cap, len(base), cap - len(base)))
     return changed, problems, notes
 
 
 def post_route_summary(repo, dry, skip):
-    """route_inventory.json 的 summary 由 endpoints 重算、select_star 由原始碼重算 ⇒ (改過的檔, 問題)。"""
+    """route_inventory.json 的 summary 由 endpoints 重算；select_star **不改寫**——它是基底＋兩邊增量（合併驅動／人合出來的值），
+    只拿來跟目前原始碼比，不符就列為問題（新增的 SELECT * 沒登記，不能由本工具吸收進基準；hichan-3 審查 M2）⇒ (改過的檔, 問題)。"""
     if ROUTE_INV in skip:
         return [], []
     p = Path(repo) / ROUTE_INV
@@ -337,11 +349,15 @@ def post_route_summary(repo, dry, skip):
     if rc != 0:
         return [], ["路由盤點合計重算跑不起來（%s）" % (err.strip().splitlines() or ["?"])[-1][:200]]
     want = json.loads(out.strip().splitlines()[-1])
-    if inv.get("summary") == want["summary"] and inv.get("select_star") == want["select_star"]:
-        return [], []
-    inv["summary"], inv["select_star"] = want["summary"], want["select_star"]
+    problems = []
+    if inv.get("select_star") != want["select_star"]:
+        problems.append("%s 的 select_star 與原始碼不符（基準 %s、原始碼 %s）：不自動改；新增的 SELECT * 要先處理或照 route_inventory 守門的流程登記"
+                        % (ROUTE_INV, inv.get("select_star"), want["select_star"]))
+    if inv.get("summary") == want["summary"]:
+        return [], problems
+    inv["summary"] = want["summary"]
     _write(repo, ROUTE_INV, json.dumps(inv, ensure_ascii=False, indent=1, sort_keys=False) + "\n", dry)
-    return [ROUTE_INV], []
+    return [ROUTE_INV], problems
 
 
 def _changelog_pending(repo):

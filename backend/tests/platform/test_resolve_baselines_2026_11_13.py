@@ -206,8 +206,8 @@ def repo2(tmp_path):
 
 def test_git_merge_with_json_drivers_has_no_conflict(repo2):
     r = repo2
-    SETUP.install(r)
-    assert SETUP.problems(r) == []
+    SETUP.install(r, strict=False)
+    assert SETUP.problems(r, strict=False) == []
     _g(r, "merge", "-q", "--no-ff", "wip/a", "-m", "a")
     res = _g(r, "merge", "--no-ff", "wip/b", "-m", "b", check=False)
     assert res.returncode == 0, res.stdout + res.stderr
@@ -411,3 +411,43 @@ def test_extra_json_baselines_exist_and_are_in_a_supported_layout(rel):
     hand_laid = {"backend/tests/platform/settings_deploy_baseline.json"}     # 手排：靠逐行聯集備援（與結構合併結果相同才用）
     got = MD.detect_renderer(p.read_text(encoding="utf-8"))
     assert (got is None) == (rel in hand_laid), "%s 的排版驅動認不得（或已變成規則排版，可從 hand_laid 拿掉）" % rel
+
+
+# ── hichan-3 審查 M1／M2 的回歸題 ─────────────────────────────────────────────────
+
+_CL_BASE = "# 紀錄\n\n## (next)\n- 基底 A\n- 基底 B\n\n## 1.0 — old\n- old\n"
+
+
+def test_changelog_union_still_works_when_both_sides_only_add_lines():
+    a = _CL_BASE.replace("- 基底 B\n", "- 基底 B\n- 甲新增\n")
+    b = _CL_BASE.replace("- 基底 A\n", "- 基底 A\n- 乙新增\n")
+    got = RB._union_changelog(_CL_BASE, a, b)
+    assert got is not None and "- 甲新增" in got and "- 乙新增" in got and "- 基底 A" in got and "- 基底 B" in got
+
+
+@pytest.mark.parametrize("a,b", [
+    (_CL_BASE.replace("- 基底 A", "- A 版"), _CL_BASE.replace("- 基底 A", "- B 版")),                  # 同一行兩邊都改
+    (_CL_BASE.replace("- 基底 B\n", ""), _CL_BASE.replace("- 基底 B", "- 基底 B（補充）")),            # 一邊刪、一邊改
+    (_CL_BASE.replace("- old\n", ""), _CL_BASE.replace("- 基底 A\n", "- 基底 A\n- 乙新增\n")),         # 一邊只刪（另一邊純新增）也不自動
+])
+def test_changelog_union_refuses_when_either_side_rewrote_or_deleted_a_base_line(a, b):
+    assert RB._union_changelog(_CL_BASE, a, b) is None
+
+
+def test_select_star_mismatch_is_reported_and_summary_is_still_recomputed(tmp_path, monkeypatch):
+    inv = {"summary": {"endpoints_total": 5}, "select_star": {"modules": 288}, "endpoints": {}}
+    p = tmp_path / RB.ROUTE_INV
+    p.parent.mkdir(parents=True)
+    p.write_text(json.dumps(inv, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    fake = json.dumps({"summary": {"endpoints_total": 0}, "select_star": {"modules": 289}})
+    monkeypatch.setattr(RB, "_py_run", lambda *a, **k: (0, fake + "\n", ""))
+    changed, problems = RB.post_route_summary(tmp_path, False, set())
+    after = json.loads(p.read_text(encoding="utf-8"))
+    assert changed == [RB.ROUTE_INV] and after["summary"] == {"endpoints_total": 0}
+    assert after["select_star"] == {"modules": 288}, "select_star 不由原始碼改寫"
+    assert len(problems) == 1 and "select_star" in problems[0] and "288" in problems[0] and "289" in problems[0]
+
+
+def test_max_entries_surplus_note_mentions_duplicate_registration():
+    import inspect
+    assert "兩邊登記了同一筆" in inspect.getsource(RB.post_unscoped)

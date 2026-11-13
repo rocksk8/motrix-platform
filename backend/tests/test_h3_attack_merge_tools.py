@@ -33,7 +33,6 @@ BASE = "# 紀錄\n\n## (next) — base\n- 基底 A\n- 基底 B\n\n## 1.0 — old
 
 
 # ── M1 ────────────────────────────────────────────────────────────────────
-@pytest.mark.xfail(strict=True, reason="M1：兩邊改同一行 ⇒ 逐行聯集後當成已解決（請目視只是一行字、exit 0）")
 def test_both_sides_rewrote_the_same_changelog_line_is_left_for_a_human():
     a = BASE.replace("- 基底 A", "- A 版")
     b = BASE.replace("- 基底 A", "- B 版")
@@ -41,7 +40,6 @@ def test_both_sides_rewrote_the_same_changelog_line_is_left_for_a_human():
     assert RB._union_changelog(BASE, a, b) is None, "兩個版本都塞進去、沒人決定"
 
 
-@pytest.mark.xfail(strict=True, reason="M1：一邊刪掉一行、另一邊改同一行 ⇒ 刪除被靜默復活")
 def test_one_side_deleted_a_line_the_other_edited_is_not_silently_resurrected():
     a = BASE.replace("- 基底 B\n", "")
     b = BASE.replace("- 基底 B", "- 基底 B（重要補充）")
@@ -59,7 +57,6 @@ def test_report_for_union_resolved_changelog_still_says_nothing_to_do():
 
 
 # ── M2 ────────────────────────────────────────────────────────────────────
-@pytest.mark.xfail(strict=True, reason="M2：select_star 被改成目前原始碼的數字 ⇒ 新增的 SELECT * 被吸收")
 def test_post_route_summary_does_not_absorb_new_select_star(tmp_path, monkeypatch):
     inv = {"summary": {"endpoints_total": 0}, "select_star": {"modules": 288}, "endpoints": {}}
     p = tmp_path / RB.ROUTE_INV
@@ -75,12 +72,12 @@ def test_post_route_summary_does_not_absorb_new_select_star(tmp_path, monkeypatc
 
 # ── 綠燈：確認過的行為 ─────────────────────────────────────────────────────
 def test_check_mode_writes_nothing_even_when_a_regeneration_is_needed(tmp_path, monkeypatch):
-    inv = {"summary": {"endpoints_total": 0}, "select_star": {"modules": 288}, "endpoints": {}}
+    inv = {"summary": {"endpoints_total": 5}, "select_star": {"modules": 288}, "endpoints": {}}   # summary 與 endpoints 不符 ⇒ 需要重算
     p = tmp_path / RB.ROUTE_INV
     p.parent.mkdir(parents=True)
     raw = json.dumps(inv, ensure_ascii=False, indent=1) + "\n"
     p.write_text(raw, encoding="utf-8")
-    fake = json.dumps({"summary": {"endpoints_total": 0}, "select_star": {"modules": 289}})
+    fake = json.dumps({"summary": {"endpoints_total": 0}, "select_star": {"modules": 288}})
     monkeypatch.setattr(RB, "_py_run", lambda *a, **k: (0, fake + "\n", ""))
     changed, _ = RB.post_route_summary(tmp_path, True, set())
     assert changed == [RB.ROUTE_INV] and p.read_text(encoding="utf-8") == raw
@@ -117,7 +114,6 @@ def _flag(src):
     return bool(E.scan_source("tests/x_e2e.py", src))
 
 
-@pytest.mark.xfail(strict=True, reason="M3：只掃檔名含 e2e 的檔、且排除 tests/platform；瀏覽器測試（new_page）漏掃")
 def test_every_browser_test_file_is_scanned():
     scanned = {p.resolve() for p in E.e2e_files()}
     missing = []
@@ -130,31 +126,34 @@ def test_every_browser_test_file_is_scanned():
     assert not missing, "%d 個瀏覽器測試檔沒被掃：%s" % (len(missing), missing[:5])
 
 
-@pytest.mark.xfail(strict=True, reason="M4a：with expect_response(): click() 之後讀取是正確寫法，卻被判違規（誤報 ⇒ 逼人亂加豁免）")
 def test_click_inside_expect_response_block_counts_as_waited():
     assert not _flag(_w('with page.expect_response("**/api/x"):\n    page.click("#go")\nassert page.locator(".row").count() == 3'))
 
 
-@pytest.mark.xfail(strict=True, reason="M4b：名字含 wait 的 DB 輪詢（_wait_db）被當成 UI 等待 ⇒ 之後立刻讀 UI 不報（漏報）")
 def test_db_polling_helper_named_wait_is_not_a_ui_wait():
     src = _w('page.click("#go")\n_wait_db(lambda: True)\nassert page.locator("#ok").is_visible()',
              "def _wait_db(pred):\n    import time\n    time.sleep(0.1)\n    return pred()\n")
     assert _flag(src)
 
 
-@pytest.mark.xfail(strict=True, reason="M4c：helper 先等再 click（結尾是 click）、或另一個 helper 內部才讀 UI ⇒ 漏報")
 @pytest.mark.parametrize("src", [
-    _w('_go(page)\nassert page.locator("#ok").is_visible()', "def _go(p):\n    p.wait_for_selector('#a')\n    p.click('#a')\n"),
-    _w('page.click("#go")\nassert _vis(page, "#ok")', "def _vis(p, s):\n    return p.locator(s).is_visible()\n"),
     _w('page.click("#go")\nassert len(page.query_selector_all(".r")) == 3'),
-    _w('page.click("#go")\nassert page.evaluate("document.querySelectorAll(\'.r\').length") == 3'),
     _w('for i in range(3):\n    assert page.locator(".r").count() == i\n    page.click("#add")'),
 ])
 def test_other_unwaited_reads_are_flagged(src):
     assert _flag(src)
 
 
-@pytest.mark.xfail(strict=True, reason="M4d：Python 容器的 .clear()／str.count() 被當成 Playwright 動作／讀取（誤報）")
+@pytest.mark.xfail(strict=True, reason="已知限制（寫在 _e2e_lint 模組說明）：helper 最後一步是 click、或另一個 helper「內部」才讀 UI／page.evaluate 讀取 ⇒ 看不到")
+@pytest.mark.parametrize("src", [
+    _w('_go(page)\nassert page.locator("#ok").is_visible()', "def _go(p):\n    p.wait_for_selector('#a')\n    p.click('#a')\n"),
+    _w('page.click("#go")\nassert _vis(page, "#ok")', "def _vis(p, s):\n    return p.locator(s).is_visible()\n"),
+    _w('page.click("#go")\nassert page.evaluate("document.querySelectorAll(\'.r\').length") == 3'),
+])
+def test_documented_blind_spots_stay_blind_until_someone_extends_the_rule(src):
+    assert _flag(src)
+
+
 @pytest.mark.parametrize("src", [
     _w('errors.clear()\nassert page.locator("#a").is_visible()'),
     _w('page.click("#go")\nassert page.content().count("x") == 1'),
@@ -163,6 +162,5 @@ def test_non_playwright_clear_and_count_are_not_flagged(src):
     assert not _flag(src)
 
 
-@pytest.mark.xfail(strict=True, reason="L：豁免理由一個字元就過、沒有數量上限／登記")
 def test_exemption_needs_a_real_reason():
     assert _flag(_w('page.click("#go")\nassert page.locator("#ok").is_visible()  # e2e-lint: ok x'))

@@ -32,6 +32,7 @@ def _wrap(body):
     ('page.fill("#q", "x")\nassert page.locator("#hint").is_hidden()', "is_hidden"),         # fill 之後讀「別的元素」的可見性
     ('page.click("#a")\nif cond:\n    assert page.locator("#ok").is_visible()', "is_visible"),   # 巢狀區塊
     ('for i in range(3):\n    page.click("#a")\n    assert page.get_attribute("#a", "x") == "1"', "get_attribute"),
+    ('page.click("#go")\nwait_until_saved(page)\nassert page.locator("#ok").is_visible()', "is_visible"),   # 名字含 wait 不算等待（沒有同檔定義＝看不到內容）
 ])
 def test_unwaited_read_after_action_is_flagged(body, read):
     got = _hits(_wrap(body))
@@ -51,7 +52,6 @@ def test_unwaited_read_after_action_is_flagged(body, read):
     'page.goto("/x")\nassert page.locator("#ok").is_visible()',                               # goto 不是本規則的動作
     'page.fill("#q", "x")\nassert page.input_value("#q") == "x"',                             # fill 後讀同一個值：同步、確定
     'page.check("#c")\nassert page.is_checked("#c")',
-    'page.click("#go")\nwait_until_saved(page)\nassert page.locator("#ok").is_visible()',     # 名字含 wait
 ])
 def test_waited_or_not_racy_reads_are_not_flagged(body):
     assert _hits(_wrap(body)) == []
@@ -102,10 +102,9 @@ def test_syntax_error_is_reported_not_silently_skipped():
 # ── 真實檔案樹 + 基準（只准縮小）──────────────────────────────────────────────────
 
 def test_scanner_actually_sees_the_e2e_files():
-    files = E.e2e_files()
-    assert len(files) > 50, "掃到的 e2e 檔太少：glob 壞了？"
-    assert all("e2e" in p.name for p in files)
-    assert not any(p.parts[-3:-1] == ("tests", "platform") for p in files)
+    files = E.browser_files()
+    assert len(files) > 150, "掃到的瀏覽器測試檔太少：選檔壞了？"
+    assert all("e2e" in p.name.lower() or E._BROWSER_RE.search(p.read_text(encoding="utf-8", errors="replace")) for p in files)
 
 
 def test_no_new_unwaited_reads_after_actions_in_e2e_tests():
@@ -135,3 +134,96 @@ def test_baseline_file_is_one_entry_per_line_sorted_and_loadable():
 def test_baseline_ids_do_not_point_at_missing_files():
     for k in E.load_baseline():
         assert (E.BACKEND / k.split("::")[0]).is_file(), k
+
+
+# ── hichan-3 審查（M3／M4／L）─────────────────────────────────────────────────
+
+def test_files_are_selected_by_content_not_only_by_name(tmp_path, monkeypatch):
+    (tmp_path / "tests" / "platform").mkdir(parents=True)
+    (tmp_path / "venv").mkdir()
+    bad = "def test_a(page):\n    page.click('#a')\n    assert page.is_visible('#b')\n"
+    (tmp_path / "tests" / "test_plain_name.py").write_text("def test_x(e2e_browser):\n    pass\n" + bad, encoding="utf-8")    # e2e_browser 夾具
+    (tmp_path / "tests" / "platform" / "test_in_platform.py").write_text("from playwright.sync_api import sync_playwright\n" + bad, encoding="utf-8")
+    (tmp_path / "tests" / "test_np.py").write_text("def t(b):\n    p = b.new_page()\n" + bad, encoding="utf-8")
+    (tmp_path / "tests" / "test_marked.py").write_text("import pytest\n@pytest.mark.e2e\ndef t():\n    pass\n" + bad, encoding="utf-8")
+    (tmp_path / "tests" / "test_not_browser.py").write_text(bad, encoding="utf-8")                                                  # 沒有瀏覽器線索 ⇒ 不掃
+    (tmp_path / "venv" / "test_e2e_vendored.py").write_text(bad, encoding="utf-8")                                                  # 虛擬環境 ⇒ 不掃
+    monkeypatch.setattr(E, "BACKEND", tmp_path)
+    got = sorted(p.name for p in E.browser_files())
+    assert got == ["test_in_platform.py", "test_marked.py", "test_np.py", "test_plain_name.py"]
+    assert len(E.scan_all()) == 4
+
+
+def test_click_inside_expect_block_counts_as_waited_after_the_block():
+    assert _hits(_wrap('with page.expect_response("**/api/x"):\n    page.click("#go")\nassert page.locator(".row").count() == 3')) == []
+    assert _hits(_wrap('with page.expect_navigation():\n    page.click("#go")\nassert page.is_visible("#ok")')) == []
+    # 區塊「裡面」還沒等過就讀，照樣違規；區塊之後又動作也照樣違規
+    assert _hits(_wrap('with page.expect_response("**/api/x"):\n    page.click("#go")\n    assert page.is_visible("#ok")'))
+    assert _hits(_wrap('with page.expect_response("**/api/x"):\n    page.click("#a")\npage.click("#b")\nassert page.is_visible("#ok")'))
+
+
+def test_a_helper_named_wait_that_only_polls_the_database_is_not_a_ui_wait():
+    src = ("def _wait_db(pred):\n    import time\n    time.sleep(0.1)\n    return pred()\n\n"
+           "def test_a(page):\n    page.click('#go')\n    _wait_db(lambda: True)\n    assert page.locator('#ok').is_visible()\n")
+    assert _hits(src)
+
+
+def test_polling_helper_called_with_a_lambda_that_reads_the_ui_is_a_wait():
+    src = ("def _wait(pred):\n    import time\n    time.sleep(0.1)\n    return pred()\n\n"
+           "def test_a(page):\n    page.click('#go')\n    _wait(lambda: page.locator('#ok').is_visible())\n    assert page.locator('#ok').is_visible()\n")
+    assert _hits(src) == []
+
+
+def test_helper_is_judged_by_content_wait_then_click_does_not_count():
+    waits_then_clicks = ("def _go(p):\n    p.wait_for_selector('#a')\n    p.click('#a')\n\n"
+                         "def test_a(page):\n    _go(page)\n    assert page.locator('#ok').is_visible()\n")
+    clicks_then_waits = ("def _go(p):\n    p.click('#a')\n    p.wait_for_selector('#b')\n\n"
+                         "def test_a(page):\n    page.click('#x')\n    _go(page)\n    assert page.locator('#ok').is_visible()\n")
+    assert _hits(waits_then_clicks.replace("_go(page)\n    assert", "page.click('#x')\n    _go(page)\n    assert"))   # 最後一步是 click ⇒ _go 不算等待
+    assert _hits(clicks_then_waits) == []
+
+
+def test_imported_helpers_need_the_whitelist():
+    import ast
+    assert _hits(_wrap('page.click("#go")\nwait_dialog(page)\nassert page.locator("#ok").is_visible()')) == []
+    assert _hits(_wrap('page.click("#go")\nsome_other_wait(page)\nassert page.locator("#ok").is_visible()'))
+    assert {"wait_logged_in", "wait_dialog"} == set(E.WAIT_HELPER_WHITELIST)
+    for mod, fn in (("_e2e_login.py", "wait_logged_in"), ("_ui_dialogs.py", "wait_dialog")):       # 白名單裡的函式真的等
+        tree = ast.parse((E.BACKEND / "tests" / mod).read_text(encoding="utf-8"))
+        f = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == fn][0]
+        assert any(E._is_wait_name(E._call_name(c)) for c in ast.walk(f) if isinstance(c, ast.Call)), fn
+
+
+@pytest.mark.parametrize("src", [
+    _wrap('errors.clear()\nassert page.locator("#a").is_visible()'),                       # Python 容器的 clear() 不是動作
+    _wrap('page.click("#go")\nassert page.content().count("x") == 1'),                      # str.count(x)
+    _wrap('page.click("#go")\nn = items.count(3)'),
+])
+def test_non_playwright_clear_and_count_are_not_flagged(src):
+    assert _hits(src) == []
+
+
+def test_locator_count_without_arguments_is_still_flagged():
+    assert _hits(_wrap('page.click("#go")\nassert page.locator(".r").count() == 3'))
+
+
+def test_loop_carries_the_previous_iterations_action_into_the_next():
+    assert _hits(_wrap('for i in range(3):\n    assert page.locator(".r").count() == i\n    page.click("#add")'))
+    assert _hits(_wrap('for i in range(3):\n    page.click("#add")\n    page.locator(".r").nth(i).wait_for()\n    assert page.locator(".r").count() == i + 1')) == []
+
+
+def test_query_selector_all_is_a_read():
+    assert _hits(_wrap('page.click("#go")\nassert len(page.query_selector_all(".r")) == 3'))
+
+
+@pytest.mark.parametrize("reason,ok", [("x", False), ("太短了", False), ("九個字九個字九個字", False), ("click 的 handler 同步改 DOM", True),
+                                       ("0123456789", True)])
+def test_exemption_reason_needs_at_least_ten_characters(reason, ok):
+    src = _wrap('page.click("#go")\nassert page.locator("#ok").is_visible()  # e2e-lint: ok ' + reason)
+    assert (_hits(src) == []) == ok
+
+
+def test_documented_limitations_are_written_in_the_module_docstring():
+    doc = E.__doc__
+    for phrase in ("輔助函式「裡面」才讀 UI", "page.evaluate", "基準 id", "WAIT_HELPER_WHITELIST"):
+        assert phrase in doc, phrase
