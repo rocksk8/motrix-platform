@@ -525,7 +525,7 @@ def test_migration_is_idempotent_and_keeps_the_first_since_date(env):
         assert M._core_next_line_event_usage_daily(c) is None and M._core_next_line_event_usage_daily(c) is None
         assert _get_setting("line_event_usage_since", "") == "2026-01-02", "已有開始日期就不改"
         cols = [r[1] for r in c.execute("PRAGMA table_info(line_event_usage_daily)").fetchall()]
-        assert cols == ["day", "event_key", "n"]
+        assert cols == ["day", "event_key", "n", "owner_unit_id"]      # T84：單位分類為單位歸屬表（owner_unit_id INTEGER NOT NULL DEFAULT 1）
     finally:
         c.close()
 
