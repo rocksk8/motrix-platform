@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-13（fix/company-profile-full-read-default；公司資料完整版預設只限最高管理者）
+- 行為變更（對外介面）：設定中心開關 `account_security.company_profile_full_read_superadmin_only` 預設 `0→1`（使用者裁示 2026-11-13，方案 A）。`GET /api/settings/company-profile`（完整版）對非最高管理者預設回 403；公開子集 `GET /api/settings/company-profile/public`（name／tax_id／contact_info／locations[id,name]）不變、任何登入者可讀。開關保留：關閉（0）＝登入即可讀完整版，屬放寬，需第二位最高管理者核准（既有機制，沒動）。
+- 設定登錄（`helpers/settings_groups.py`、`core/settings_help.json`）：預設值、選項文字（拿掉「(目前的做法)」，改標「預設、建議」）、說明同步；`tests/platform/settings_deploy_baseline.json` 同步為 `[1, 0, 1, false]`。
+- `main.py` 公司設定 428 閘門放行理由改正：設定頁與公司設定精靈讀取本公司資料，預設只有最高管理者讀得到完整內容。
+- 不變：PUT company-profile／branding 仍限最高管理者；L1 公開介面無變動。
+- 測試：`tests/test_company_profile_public_2026_11_13.py`（新增「全新安裝非最高管理者讀完整版得 403／最高管理者讀得到且金鑰遮罩／開關明確關閉後恢復登入即可讀／預設值為 1 且登錄為『收緊』類」）；`test_company_profile_superadmin_only_2026_09_22.py`、`test_api_integration.py` 對齊新預設。
+
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
 - `helpers/email_setup.py` 單位卡補 `[契約題]`，`[公開介面]` 補 `provider_by_key`／`valid_email`（註解，行為不變）。
