@@ -269,17 +269,21 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
         for g, p in plans.items():
             items += _SN_items(g, p["fields"], actor["username"])
         return {"ok": True, "groups": plans, "recipients": _SN.preview_recipients(items)}
-    if expected_by:                                            # 預檢：任何一組已被別人改動 ⇒ 整批不寫（不留下寫一半的狀態）
-        found = []
-        for g, exp in expected_by.items():
+    # 預檢：任何一組已被別人改動、或有別人還在等待的 json 申請（未帶 supersede）⇒ 整批不寫（不留下寫一半的狀態）
+    found = []
+    for g in values_by:
+        c = None
+        if g in expected_by:
             try:
-                c = sr.expected_conflict(g, exp)
+                c = sr.expected_conflict(g, expected_by[g])
             except sr.SettingError as e:
                 raise HTTPException(400, {"message": str(e), "problems": e.problems})
-            if c:
-                found.append((g, c))
-        if found:
-            raise HTTPException(409, _batch_conflict_body(found, [], None, list(values_by)))
+        if c is None and g not in supersede_by:
+            c = _pending_exists_conflict(g, values_by[g], actor)
+        if c:
+            found.append((g, c))
+    if found:
+        raise HTTPException(409, _batch_conflict_body(found, [], None, list(values_by)))
     applied, results = [], {}
     with (_SN.batch(verb="復原", header="已復原批次儲存") if undo else _SN.batch()):
         for g, v in values_by.items():
@@ -297,6 +301,23 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
     return {"ok": True, "groups": {g: {**results[g], "classification": plans[g]["fields"]} for g in applied}}
 
 
+def _pending_exists_conflict(group, values, actor):
+    """唯讀預檢：與 `sr.publish` 的 pending_exists 同規則——json 欄位（整份文件）已有**別人**未到期的待生效申請 ⇒ 回 `SettingConflict(code='pending_exists')`
+    （不丟）；否則 None。跨群組批次要在**寫第一組之前**就知道，不然前面群組已寫、後面群組才被擋＝部分套用。真正的把關仍是 publish 在寫鎖內的檢查。"""
+    from db import get_db
+    defs = sr.field_defs(group)
+    me = actor.get("username") or ""
+    conn = get_db()
+    try:
+        for r in ledger.pending(conn, "setting:%s" % group):
+            f = defs.get(r["field"])
+            if f is not None and f.type == "json" and r["field"] in values and r["key"] == group and r["actor"] != me:
+                return sr.SettingConflict([r["field"]], r.get("actor_display") or r["actor"], r.get("at") or "", code="pending_exists")
+    finally:
+        conn.close()
+    return None
+
+
 def _batch_conflict_body(found, applied, failed, not_applied):
     """跨群組批次的 409 衝突 body：`{code:'conflict', message, groups:[{group,label,keys:[{key,name}],by,at}], applied, failed, notApplied}`。
     `found`＝`[(群組, SettingConflict)]`；單群組的形狀見 `conflict_body`（每個 groups 元素＝它加上 group／label）。"""
@@ -305,8 +326,14 @@ def _batch_conflict_body(found, applied, failed, not_applied):
         b = conflict_body(g, e)
         out.append({"group": g, "label": sr.groups()[g]["label"], "code": b["code"], "message": b["message"], "keys": b["keys"], "by": b["by"], "at": b["at"]})
     codes = {x["code"] for x in out}
-    return {"code": codes.pop() if len(codes) == 1 else "conflict",       # 都是 pending_exists 才回 pending_exists（畫面可帶 supersede 重送）；混合或一般衝突 ⇒ conflict
-            "message": out[0]["message"] if len(out) == 1 else "這些設定在你送出前已被別人改動，請重新整理後再改。", "groups": out,
+    code = codes.pop() if len(codes) == 1 else "conflict"                 # 都是 pending_exists 才回 pending_exists（畫面可帶 supersede 重送）；混合或一般衝突 ⇒ conflict
+    if len(out) == 1:
+        msg = out[0]["message"]
+    elif code == "pending_exists":                                        # 多群組都是「別人還在等待」：不能套「已被改動、請重新整理」那句（重新整理救不了，要確認取代）
+        msg = "這幾個群組都已有別人送出、還在等待生效的申請；繼續送出會取代它們。"
+    else:
+        msg = "這些設定在你送出前已被別人改動，請重新整理後再改。"
+    return {"code": code, "message": msg, "groups": out,
             "applied": applied, "failed": failed, "notApplied": not_applied}
 
 
