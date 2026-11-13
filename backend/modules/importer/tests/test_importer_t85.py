@@ -259,7 +259,8 @@ def test_row_numbers_far_below_the_data_are_rejected_not_scanned():
 
 
 def test_oversized_sheet_xml_is_rejected_before_reading_it():
-    big = _raw_xlsx('<row r="1">%s</row>' % ('<c r="A1" t="inlineStr"><is><t>%s</t></is></c>' % ("x" * (P.MAX_SHEET_XML + 10))))
+    from helpers import xlsx_guard as XG
+    big = _raw_xlsx('<row r="1">%s</row>' % ('<c r="A1" t="inlineStr"><is><t>%s</t></is></c>' % ("x" * (XG.DEFAULT.max_sheet_xml + 10))))
     with pytest.raises(P.ParseError):
         P.parse_file(big, "big.xlsx", "customers", max_bytes=50 << 20)
 
@@ -525,3 +526,14 @@ def test_csv_with_an_oversized_field_gets_a_specific_message():
     big = "公司名稱" + chr(10) + "x" * 200000 + chr(10)
     with pytest.raises(P.ParseError, match="內容太長"):
         P.parse_file(big.encode("utf-8"), "big.csv", "customers")
+
+
+def test_xlsx_busy_is_not_turned_into_a_parse_error(monkeypatch):
+    """同時解析太多（XlsxBusy）要原樣丟出去讓端點轉 429，不能被吞成 400 的 ParseError。"""
+    from helpers import xlsx_guard as XG
+
+    def _busy(*a, **k):
+        raise XG.XlsxBusy("目前有其他人正在匯入檔案，請稍等幾秒再試")
+    monkeypatch.setattr(XG, "read_rows", _busy)
+    with pytest.raises(XG.XlsxBusy):
+        _parse([CUST_HEAD, ["甲", ""]])
