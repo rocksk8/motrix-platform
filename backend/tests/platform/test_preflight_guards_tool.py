@@ -369,3 +369,44 @@ def test_skipping_every_group_is_an_error_not_a_run_of_everything(tmp_path):
     code, _t, _d = P.preflight(tmp_path, only=["ga"], skip=["ga"], config=cfg, runner=lambda *a: ran.append(1) or (0, "", 0.0, None), **KW)
     assert code == 2 and not ran, "--only 與 --skip 相消也算空"
 
+
+def test_runner_env_asks_for_branch_mode_placeholders(tmp_path):
+    holder = {}
+    P._make_runner(tmp_path, holder, None, tee=False)([sys.executable, "-c", "import os;print(os.environ.get('MOTRIX_PLACEHOLDERS_BY_BRANCH'), os.environ.get('MOTRIX_TRAIN'))"], {"PATH": "x"}, 0)
+    assert "1 1" in holder["out"], "預檢帶 MOTRIX_TRAIN=1＋MOTRIX_PLACEHOLDERS_BY_BRANCH=1（分支上 (next) 佔位不算紅；列車上仍紅由分支規則決定）"
+
+
+def test_branch_mode_info_reports_placeholders_on_a_wip_branch_and_nothing_on_train(tmp_path):
+    r = tmp_path / "br"
+    (r / "backend" / "tests").mkdir(parents=True)
+    (r / "backend" / "core").mkdir(parents=True)
+    import shutil
+    shutil.copy(BACKEND / "tests" / "_version_slots.py", r / "backend" / "tests" / "_version_slots.py")
+    (r / "backend" / "core" / "CHANGELOG.md").write_text("# c\n\n## (next) — d\n\n## 1.0 — d\n", encoding="utf-8")
+    _git(r, "init", "-q", "-b", "wip/x")
+    _git(r, "add", "-A")
+    _git(r, "commit", "-qm", "c")
+    ok, why, n = P.branch_mode_info(r)
+    assert ok is True and n == 1 and "wip/x" in why
+    _git(r, "checkout", "-q", "-b", "train/t82-int")
+    assert P.branch_mode_info(r)[0] is False, "列車分支：不是分支模式（佔位照紅）"
+    assert P.branch_mode_info(tmp_path / "nothing")[0] is False, "讀不到 ⇒ 不是分支模式"
+
+
+def test_report_notes_branch_mode_and_a0_is_dropped_like_skip_generated(tmp_path, monkeypatch):
+    stale = [{"code": "A0", "where": "產生檔", "msg": "過期：dep_graph.json", "fix": "regen", "unchecked": False},
+             {"code": "A1", "where": "x", "msg": "m", "fix": "f", "unchecked": False}]
+    monkeypatch.setattr(P, "static_findings", lambda repo, base: [dict(f) for f in stale])
+    cfg = _cfg_two(tmp_path)
+    (tmp_path / "backend" / "tests" / "test_c.py").write_text("def test_x(): pass", encoding="utf-8")
+    cfg["groups"].append({"id": "generated", "label": "G", "paths": ["tests/test_c.py"], "watch": ["x"], "fix": "y"})
+    kw = dict(KW, run_static=True)
+    run = lambda repo, ts, marker: (0, "6 passed", 1.0, _junit(tests__test_a=(2, 0, 0), tests__test_b=(2, 0, 0), tests__test_c=(2, 0, 0)))
+    code, text, _d = P.preflight(tmp_path, skip=["generated"], config=cfg, runner=run, branch_info=lambda r: (True, "分支 wip/x", 3), **kw)
+    assert "A0" not in text.split("A 靜態旗標")[1].split("ℹ")[0], "A0 與 --skip generated 一致：不列、不算紅"
+    assert "[A1]" in text and code == 1, "其他靜態旗標照舊"
+    assert "分支模式（分支 wip/x）：樹裡 3 個 (next) 版號佔位不算紅" in text and "A0 產生檔過期檢查" in text
+    code, text, _d = P.preflight(tmp_path, config=cfg, runner=run, branch_info=lambda r: (False, "分支 train/t82-int", 0), **kw)
+    assert "[A0]" in text, "沒有 skip generated ⇒ A0 照報"
+    assert "分支模式" not in text, "列車分支：不講分支模式"
+
