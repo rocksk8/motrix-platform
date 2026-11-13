@@ -7,8 +7,8 @@
   "kinds": {
    "api": 898,
    "e2e": 366,
-   "audit": 208,
-   "unit": 154
+   "audit": 209,
+   "unit": 153
   },
   "routes": 944
  },
@@ -38701,23 +38701,29 @@
    "login_fixture": true
   },
   "backend/tests/test_js_asi_hazard_guard_2026_11_13.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
+    "dir:frontend/js/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_frontend_sources.py",
     "js:static/auth-guard.js",
     "js:static/sidebar.js",
     "plat:__init__",
-    "plat:paths",
     "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/paths.py",
-     "backend/core/source_tree.py"
+     "backend/core/source_tree.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_frontend_sources.py"
     ],
     "page": [
      "frontend/static/auth-guard.js",
      "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/js/"
     ]
    }
   },
