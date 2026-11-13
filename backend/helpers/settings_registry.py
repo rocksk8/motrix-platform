@@ -420,7 +420,15 @@ def _call_cross(fn, merged, conn):
             sum(1 for p in ps if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)) >= 2
     except (TypeError, ValueError):
         takes = False
-    return fn(merged, conn) if takes else fn(merged)
+    if not takes:
+        return fn(merged)
+    if conn is not None:
+        return fn(merged, conn)
+    c = get_db()                                    # 呼叫端沒給連線（預檢、定義種類驗證器）：開一條唯讀的臨時連線，別把 None 交給要查庫的檢查
+    try:
+        return fn(merged, c)
+    finally:
+        c.close()
 
 
 def validate_values(group, values, *, partial=False, conn=None):
@@ -498,7 +506,7 @@ def _stored(conn, group, strict=False):
             return vals
         logger.warning("settings: 群組 %s 的定義內容格式不對，改用預設", group)
         return {}
-    return _legacy_values(conn, group, strict)
+    return _legacy_values(conn, group, True) if strict else _legacy_values(conn, group)
 
 
 def _due_pending(conn, group, now):
@@ -522,7 +530,7 @@ def _due_pending(conn, group, now):
 def _effective(conn, group, now=None, overlay=True, strict=False):
     g = _g(group)
     out = _defaults(group)
-    for k, v in _stored(conn, group, strict).items():
+    for k, v in (_stored(conn, group, True) if strict else _stored(conn, group)).items():     # 非嚴格時維持舊呼叫形狀（測試會換掉 _stored）
         f = g["fields"].get(k)
         if f is None:
             continue

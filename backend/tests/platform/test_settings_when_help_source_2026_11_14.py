@@ -32,9 +32,10 @@ def _by_key(rows):
 
 
 def test_when_must_not_equal_help():
-    with pytest.raises(ValueError):
-        R.SettingDef("x", "int", 1, question="問？", label="名", help="一樣的話", when="一樣的話", impact="影響。")
-    assert R.SettingDef("x", "int", 1, question="問？", label="名", help="這個", when="那個", impact="影響。").when == "那個"
+    ok = dict(question="這項要設多少？", label="測試項目", impact="影響測試用的畫面。")
+    with pytest.raises(ValueError, match="when"):                                      # 必須是 when 規則擋下，不是別的必填欄位缺漏
+        R.SettingDef("x", "int", 1, help="一樣的話。", when="一樣的話。", **ok)
+    assert R.SettingDef("x", "int", 1, help="這個。", when="那個。", **ok).when == "那個。"
 
 
 def test_help_parts_have_four_sections_and_omit_the_empty_ones(grp):
