@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.237 — 2026-11-14（train/t85-text；T85 整合補修；版號由列車取）
+- 畫面（行為不變）：到貨登載的「到貨單照片」選檔欄 `accept` 由 `image/*` 改為明列常見圖片型別（jpeg／png／webp／heic）加 PDF；報價單表單版號 V3.47（文字）；`notify_next`／`po_auto_approve` 補登 modules.json 歸屬。
+
 ## 1.0.236 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。
 
