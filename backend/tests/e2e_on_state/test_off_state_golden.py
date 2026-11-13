@@ -48,6 +48,7 @@ ALLOWED_EXTRA = {
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",                                                   # T64 A／B：靜態腳本載入
         "GET /static/custom-fields.js",
         "GET /static/status-chip.js",                                                                                         # UX P1（2026-11-13）：報價單表單改用 MotrixStatus.label 顯示「待簽核」，要載入這支靜態腳本
+        "GET /api/auth/preferences",                                                                                      # T82：我的帳號（側欄使用者選單讀個人偏好；唯讀 GET，不寫入）
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format,builder_status_display"]),      # M1：沿用既有的那一次設定讀取多帶一個群組（旗標關＝什麼都不改）
     "quotations_list_off": set(_JS + [
         "GET /static/profit-warning.js", "GET /static/motrix-format.js",
