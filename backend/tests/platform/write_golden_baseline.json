@@ -67,6 +67,12 @@
   ],
   "s": 200
  },
+ "POST /api/importer/parse": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -356,6 +362,23 @@
    "detail"
   ],
   "s": 400
+ },
+ "POST /api/users/import-rows": {
+  "k": [
+   "created",
+   "errors",
+   "failed",
+   "manual",
+   "planHash",
+   "skipped",
+   "warnings",
+   "willCreate",
+   "willCreate[].displayName",
+   "willCreate[].role",
+   "willCreate[].row",
+   "willCreate[].username"
+  ],
+  "s": 200
  },
  "PUT /api/auth/preferences": {
   "k": [
