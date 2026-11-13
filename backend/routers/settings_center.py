@@ -30,6 +30,7 @@ from helpers import config_ledger as ledger
 from helpers.client_ip import client_ip
 from helpers import settings_groups  # noqa: F401  登錄群組
 from helpers import settings_registry as sr
+from helpers import settings_notify as _SN
 
 router = APIRouter()
 
@@ -346,6 +347,8 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
             raise HTTPException(409, "這筆變更已不是待生效狀態")
         ledger.audit_event(conn, actor, "settings.%s.pending_cancel" % row["key"], row["key"],
                            "撤銷待生效：%s（#%d）原因：%s" % (row["field"], change_id, reason))   # 同交易：變更與稽核一起成功
+        _note = _SN.item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "cancelled",
+                                     actor=actor["username"], reason=reason)
         conn.commit()
     except Exception:
         if began and conn.in_transaction:
@@ -354,6 +357,7 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
     finally:
         conn.close()
     sr.invalidate(row["key"])
+    _SN.emit([_note])                                      # commit 之後、連線已關（不在寫鎖內）
     return {"ok": True}
 
 
@@ -380,6 +384,8 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
             raise HTTPException(409, out["why"])
         ledger.audit_event(conn, actor, "settings.%s.approve" % row["key"], row["key"],
                            "核准待生效變更：%s（#%d）%d／%d" % (row["field"], change_id, out["approvals"], out["required"]))
+        _note = _SN.item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "approved",
+                                     actor=actor["username"], reason=reason, approvals=out["approvals"], required=out["required"])
         conn.commit()
     except Exception:
         if began and conn.in_transaction:
@@ -388,6 +394,7 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
     finally:
         conn.close()
     sr.invalidate(row["key"])
+    _SN.emit([_note])                                      # commit 之後、連線已關（不在寫鎖內）
     return {"ok": True, "approvals": out["approvals"], "required": out["required"]}
 
 
