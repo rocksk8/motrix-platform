@@ -17,7 +17,7 @@ OUT = {
     src="預設 6111／2191／2252／2252／1113；顯示目前科目名稱＋來源徽章（預設／公司）；後來被停用的科目標紅字警示",
     danger="影響大（科目錯了傳票就記錯）；使用者裁示要加變更管制（SPEC §15-2，新的後端工作）：改了要等確認期，或由第二位最高管理者核准才生效，接既有 change_control／config_ledger；原頁面套用草稿＋儲存列",
     style="單項表單、搜尋篩選、手機卡片",
-    note="【待 PM 確認指哪一項】盤點找不到字面「憑證帳戶」。暫以最可能的 (A) 獎金傳票科目呈現（SPEC §15 的「傳票科目」變更管制若指的是這一項，則歸變更管制）（bonus.html:130–143；API /api/bonus/cases/voucher-accounts，bonus.py:1575／:1590；bonus_vouchers.py:25–31）。其他候選：(B) 銀行帳戶清單＋T100 科目（見 T100 匯出）、(C) 個人 Passkey（my-account，歸丙，目前暫停）、(D) Google Maps 金鑰（company-profile-settings，歸乙）。mockup：科目欄做成「輸入代號→即時顯示科目名稱」下拉。"),
+    note="【已裁示：PM 裁示 2026-11-13，「憑證帳戶」＝獎金傳票科目；SPEC §15 稱「傳票科目」，歸變更管制】盤點找不到字面「憑證帳戶」，曾列候選，現定為 (A) 獎金傳票科目（bonus.html:130–143；API /api/bonus/cases/voucher-accounts，bonus.py:1575／:1590；bonus_vouchers.py:25–31）。其他候選：(B) 銀行帳戶清單＋T100 科目（見 T100 匯出）、(C) 個人 Passkey（my-account，歸丙，目前暫停）、(D) Google Maps 金鑰（company-profile-settings，歸乙）。mockup：科目欄做成「輸入代號→即時顯示科目名稱」下拉。"),
 "扣款設定": dict(
     name="獎金扣繳與補充保費",
     desc="獎金撥付時的代扣稅與二代健保補充保費，費率與門檻來自「法規參數」（依生效日分版本，已生效版本不可改）；另有每人的投保金額與全年累計。",
