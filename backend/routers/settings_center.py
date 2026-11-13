@@ -205,6 +205,8 @@ def save_batch(request: Request, body: dict = Body(...), authorization: str = He
             raise HTTPException(400, "群組 %s 的 expectedValues 必須是非空物件" % g)
         if undo and not exp:                                   # 復原一定要逐欄比對：沒帶就會把別人後來改的蓋回去
             raise HTTPException(400, "復原必須為每個群組帶 expectedValues（套用後的值），否則可能蓋掉別人後來的修改")
+        if exp and [k for k in vals if k not in exp]:          # 與 publish 同規則（S1c）：帶了就要涵蓋每個要改的欄位；先在這裡擋，免得寫到一半才失敗
+            raise HTTPException(400, "群組 %s 的 expectedValues 必須涵蓋每個要改的欄位，缺：%s" % (g, "、".join(k for k in vals if k not in exp)))
         if exp:
             expected_by[g] = exp
     preview = body.get("preview") is True

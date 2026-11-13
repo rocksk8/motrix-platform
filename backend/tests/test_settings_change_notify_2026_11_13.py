@@ -106,6 +106,14 @@ def _db_exec(sql, args=()):
         conn.close()
 
 
+def _db_rows(sql, args=()):
+    conn = get_db()
+    try:
+        return [tuple(r) for r in conn.execute(sql, args).fetchall()]
+    finally:
+        conn.close()
+
+
 def _tighten_uploads(client, h, mb):
     r = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": mb}, "reason": "測"}, headers=h)
     assert r.status_code == 200 and r.json()["changed"] is True, r.text
@@ -435,12 +443,80 @@ def test_batch_endpoint_input_rules_reason_empty_unknown_group_superadmin_only_a
     assert client.post("/api/settings-center/batch", json={"groups": ok, "preview": "yes"}, headers=h).status_code == 400 and R.get("zz_nt_b", "cap") == 5
     pv = client.post("/api/settings-center/batch", json={"groups": ok, "preview": True}, headers=h)
     assert pv.status_code == 200 and "recipients" in pv.json() and R.get("zz_nt_b", "cap") == 5 and _notes("nt_g6") == []
-    # 多群組復原（undo／expectedValues）尚未開放：明確 400，絕不悄悄當成一般儲存
+    # 復原（undo）一定要每組帶 expectedValues、且涵蓋每個要改的欄位；格式不對一律 400，什麼都沒寫
     assert client.post("/api/settings-center/batch", json={"groups": ok, "reason": "x", "undo": True}, headers=h).status_code == 400
-    assert client.post("/api/settings-center/batch", json={"groups": {"zz_nt_b": {"values": {"cap": 22}, "expectedValues": {"cap": 5}}}, "reason": "x"}, headers=h).status_code == 400
-    assert R.get("zz_nt_b", "cap") == 5
+    assert client.post("/api/settings-center/batch", json={"groups": ok, "reason": "x", "undo": "yes"}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/batch", json={"groups": {"zz_nt_b": {"values": {"cap": 22}, "expectedValues": {}}}, "reason": "x"}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/batch", json={"groups": {"zz_nt_a": {"values": {"days": 12, "limit": 120}, "expectedValues": {"days": 7}}}, "reason": "x"}, headers=h).status_code == 400
+    assert R.get("zz_nt_b", "cap") == 5 and R.get("zz_nt_a", "days") == 7
     low = _hdr(client, make_user, "nt_g6_admin", role="admin")
     assert client.post("/api/settings-center/batch", json={"groups": ok, "reason": "x"}, headers=low).status_code in (401, 403)
+
+
+def _batch(client, h, groups, **kw):
+    return client.post("/api/settings-center/batch", json={"groups": groups, **kw}, headers=h)
+
+
+def test_batch_undo_restores_both_groups_with_one_restored_message(client, make_user, zz_groups):
+    """S1d＋S1c：套用 → 復原（expectedValues＝套用後的值）→ 兩組都回到原值；只發一則「復原了…」，且預設原因＝復原批次。"""
+    h = _hdr(client, make_user, "nt_u1")
+    make_user(username="nt_u1b", role="superadmin")
+    assert _batch(client, h, {"zz_nt_a": {"values": {"days": 11}}, "zz_nt_b": {"values": {"cap": 21}}}, reason="先改").status_code == 200
+    n0 = len(_notes("nt_u1b"))
+    r = _batch(client, h, {"zz_nt_a": {"values": {"days": 7}, "expectedValues": {"days": 11}},
+                           "zz_nt_b": {"values": {"cap": 5}, "expectedValues": {"cap": 21}}}, undo=True)
+    assert r.status_code == 200, r.text
+    assert R.get("zz_nt_a", "days") == 7 and R.get("zz_nt_b", "cap") == 5
+    n = _notes("nt_u1b")
+    assert len(n) == n0 + 1 and "復原了" in n[-1]["message"] and "已復原批次儲存" in n[-1]["message"], n[-1]
+    rows = _db_rows("SELECT reason FROM config_changes WHERE domain='setting:zz_nt_b' ORDER BY id DESC LIMIT 1")
+    assert rows and rows[0][0] == "復原批次", rows                                     # 沒填原因 ⇒ 預設「復原批次」寫進帳本
+
+
+def test_batch_undo_refused_when_someone_changed_a_field_after_apply_and_nothing_is_written(client, make_user, zz_groups):
+    h = _hdr(client, make_user, "nt_u2")
+    make_user(username="nt_u2b", role="superadmin")
+    assert _batch(client, h, {"zz_nt_a": {"values": {"days": 11}}, "zz_nt_b": {"values": {"cap": 21}}}, reason="先改").status_code == 200
+    assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 33}, "reason": "別人又改"}, headers=h).status_code == 200
+    n0 = len(_notes("nt_u2b"))
+    r = _batch(client, h, {"zz_nt_a": {"values": {"days": 7}, "expectedValues": {"days": 11}},
+                           "zz_nt_b": {"values": {"cap": 5}, "expectedValues": {"cap": 21}}}, undo=True)
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "conflict", r.text
+    assert [(x["group"], [k["key"] for k in x["keys"]]) for x in d["groups"]] == [("zz_nt_b", ["cap"])] and d["groups"][0]["label"] == "通知測試乙"
+    assert d["applied"] == [] and d["failed"] is None and d["notApplied"] == ["zz_nt_a", "zz_nt_b"]
+    assert R.get("zz_nt_a", "days") == 11 and R.get("zz_nt_b", "cap") == 33          # 預檢：連沒衝突的甲組也不寫
+    assert len(_notes("nt_u2b")) == n0
+
+
+def test_batch_save_with_expected_values_works_and_a_stale_one_is_409(client, make_user, zz_groups):
+    h = _hdr(client, make_user, "nt_u3")
+    ok = _batch(client, h, {"zz_nt_b": {"values": {"cap": 22}, "expectedValues": {"cap": 5}}}, reason="帶 CAS 的一般儲存")
+    assert ok.status_code == 200 and R.get("zz_nt_b", "cap") == 22
+    stale = _batch(client, h, {"zz_nt_b": {"values": {"cap": 23}, "expectedValues": {"cap": 5}}}, reason="看到的是舊值")
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "conflict" and R.get("zz_nt_b", "cap") == 22
+
+
+def test_batch_conflict_after_precheck_reports_applied_and_not_applied(client, make_user, zz_groups, monkeypatch):
+    """預檢過了、寫入時才被別人改（競態）：照樣是 conflict 形狀，並說清楚已寫入／未處理。"""
+    h = _hdr(client, make_user, "nt_u4")
+    monkeypatch.setattr(R, "expected_conflict", lambda g, exp, **kw: None)           # 模擬預檢看不到、之後才變
+    assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 40}, "reason": "搶先"}, headers=h).status_code == 200
+    r = _batch(client, h, {"zz_nt_a": {"values": {"days": 12}, "expectedValues": {"days": 7}},
+                           "zz_nt_b": {"values": {"cap": 6}, "expectedValues": {"cap": 5}}}, reason="競態")
+    d = r.json()["detail"]
+    assert r.status_code == 409 and d["code"] == "conflict" and d["applied"] == ["zz_nt_a"] and d["failed"] == "zz_nt_b" and d["notApplied"] == [], r.text
+    assert [x["group"] for x in d["groups"]] == ["zz_nt_b"] and R.get("zz_nt_a", "days") == 12 and R.get("zz_nt_b", "cap") == 40
+
+
+def test_expected_conflict_precheck_is_read_only_and_reports_who_changed_it(client, make_user, zz_groups):
+    h = _hdr(client, make_user, "nt_u5")
+    assert R.expected_conflict("zz_nt_b", {"cap": 5}) is None
+    assert client.post("/api/settings-center/groups/zz_nt_b", json={"values": {"cap": 9}, "reason": "改"}, headers=h).status_code == 200
+    c = R.expected_conflict("zz_nt_b", {"cap": 5})
+    assert isinstance(c, R.SettingConflict) and c.keys == ["cap"] and c.by and R.get("zz_nt_b", "cap") == 9
+    with pytest.raises(R.SettingError):
+        R.expected_conflict("zz_nt_b", {"nope": 1})
 
 
 def test_restore_sends_one_restored_message_not_one_per_publish(client, make_user, zz_groups):
