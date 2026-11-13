@@ -12,6 +12,14 @@ def _no_background_mail(monkeypatch):
     monkeypatch.setattr(api, "spawn_bg_thread", lambda target, args=(), **kw: None)
 
 
+@pytest.fixture(autouse=True)
+def _legacy_without_onepipe_entry_unify(monkeypatch):
+    """本檔驗的是「只有最高管理者建立」的原始規則。一條龍 P4a（旗標 onepipe.entry_unify，T84 起預設開）開啟時，非最高管理者可建立
+    「掛案件、指派給自己」的事項——那條路徑由 test_onepipe_p4a_staff_create 驗；這裡把旗標釘成關，驗旗標關時的原行為。"""
+    from helpers import onepipe_flags
+    monkeypatch.setattr(onepipe_flags, "flag_on", lambda field, conn=None: False)
+
+
 def _token(client, make_user, username, role, modules=None):
     u, pw = make_user(username=username, role=role, modules=modules)
     r = client.post("/api/auth/login", json={"username": u, "password": pw})

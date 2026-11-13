@@ -4,7 +4,17 @@
 原本：`float("abc")` ⇒ 500；`content` 不是字串 ⇒ `AttributeError` 500；不存在的 `user_id` 寫進去（日誌從此沒有主人）；
 `PUT` 直接把 body 的值寫進欄位（`hours: "abc"`、`log_date: "昨天"`、`content: 123`）。
 """
+import pytest
+
 import db
+
+
+@pytest.fixture(autouse=True)
+def _legacy_without_onepipe_worklog_case(monkeypatch):
+    """本檔驗的是欄位型別與範圍檢查，`case_no` 只是一般字串。一條龍 P0b（旗標 onepipe.worklog_case，T84 起預設開）開啟時，
+    `case_no` 必須是看得到的案件——那條規則由 test_onepipe_worklog_case 驗；這裡把旗標釘成關，驗旗標關時的原行為。"""
+    from helpers import onepipe_flags
+    monkeypatch.setattr(onepipe_flags, "flag_on", lambda field, conn=None: False)
 
 
 def _hdr(client, make_user, name="wl_a"):
