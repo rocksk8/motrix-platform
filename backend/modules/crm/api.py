@@ -117,10 +117,10 @@ class DevLogIn(BaseModel):
     status_snapshot: Optional[str] = ''
 
 
-import os
 
 import helpers.uploads as _uploads_mod
-from helpers.uploads import save_document_files, delete_document_file, files_txn
+from helpers.uploads import save_document_files, files_txn, remove_json_item, purge_document_files
+from core.txn import begin_write
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -1304,6 +1304,7 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
     user = _require_dev(authorization)
     conn = get_db()
     try:
+        begin_write(conn)                               # T86：讀（含附件清單）與 DELETE 在同一把寫鎖裡——鎖外讀的清單可能漏掉剛補上的附件 ⇒ 留孤兒檔
         row = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
         if not row:
             raise HTTPException(404, "記錄不存在")
@@ -1326,14 +1327,9 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
             raise HTTPException(409, "此開發記錄已有後續處理紀錄，不可刪除")
         # 記錄刪掉，附件也要從磁碟清掉——否則 uploads/ 會留下沒人引用的孤兒檔案，
         # 而 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
-        for f in _log_files(row):
-            try:
-                full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
-                if f.get("path") and os.path.isfile(full):
-                    os.remove(full)
-            except Exception:
-                pass
+        # T86：**commit 之後**才刪實體檔（原本在 commit 之前刪：commit 失敗＝紀錄還在、檔案沒了）；路徑經 canonical_upload_path 驗證
         conn.commit()
+        purge_document_files(_log_files(row))
         _audit(_tok(authorization), "dev_log.delete", "dev_log", str(log_id), "")
         _sync_customer_visit(conn, row["case_id"], log_id, "delete")
         case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
@@ -1357,14 +1353,10 @@ def delete_dev_log_file(log_id: int, file_id: str, authorization: str = Header("
         raise HTTPException(403, "僅管理員以上可刪除附件")
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
-        if not row:
+        if not conn.execute("SELECT 1 FROM dev_logs WHERE id=?", (log_id,)).fetchone():
             raise HTTPException(404, "記錄不存在")
-        existing = _log_files(row)
-        remaining = delete_document_file("dev_logs", str(row["case_id"]), existing, file_id)
-        conn.execute("UPDATE dev_logs SET files_json=? WHERE id=?",
-                     (json.dumps(remaining, ensure_ascii=False), log_id))
-        conn.commit()
+        # T86：寫鎖內重讀 files_json、濾掉、commit，commit 之後才刪實體檔（寫庫失敗＝紀錄與檔都還在；並發的補附件不會被整包覆寫）
+        remaining = remove_json_item(conn, "dev_logs", "files_json", "id", log_id, file_id, not_found="記錄不存在")
         _audit(_tok(authorization), "dev_log.delete_file", "dev_log", str(log_id), "")
         return {"ok": True, "files": remaining}
     finally:

@@ -10,7 +10,7 @@
   "write_with_path_param_api": 360
  },
  "select_star": {
-  "modules": 288,
+  "modules": 287,
   "archive": 97,
   "routers": 11,
   "helpers": 11,

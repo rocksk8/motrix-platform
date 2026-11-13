@@ -329,12 +329,22 @@ def remove_physical_file(target: dict) -> None:
 
 
 def _remove_physical(target: dict) -> None:
-    """刪一筆附件 metadata 指的實體檔（失敗不丟例外）。"""
+    """刪一筆附件 metadata 指的實體檔（失敗不丟例外）。
+
+    T86：路徑一律先過 `canonical_upload_path`（拒絕絕對路徑／`..`／反斜線／冒號／連結；realpath 必須落在上傳根目錄底下），
+    不合格 ⇒ **拒絕刪除並記 warning**。附件 metadata 目前都由伺服器產生（`_strip_foreign_file_entries` 擋掉前端夾帶的路徑），
+    這是第二道：萬一哪天有路徑能由使用者寫進 JSON，也不會變成「可以刪任意檔」。"""
     try:
         # 直接用 target["path"] 存的完整相對路徑（已含 demo 前綴，若有的話）解析，
         # 不要重新呼叫 _effective_subfolder() 再組一次——避免刪除當下的 demo
         # 狀態跟建立當下不一致時解析到錯誤路徑。
-        full = os.path.join(UPLOADS_ROOT, target["path"])
+        raw = target.get("path") if isinstance(target, dict) else None
+        rel = canonical_upload_path(raw)
+        if not rel:
+            import logging
+            logging.getLogger(__name__).warning("附件路徑不在上傳根目錄之內，拒絕刪除：%r", str(raw)[:120])
+            return
+        full = os.path.join(UPLOADS_ROOT, *rel.split("/"))
         if os.path.isfile(full):
             os.remove(full)
     except Exception:

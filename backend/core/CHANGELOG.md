@@ -1,6 +1,7 @@
 # L0／L1 底層 更新紀錄
 
 ## (next) — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
+- L1（行為修正，介面不變；T86 feat/upload-files-txn-4）：`helpers.uploads._remove_physical`（`delete_document_file`／`remove_physical_file`／`remove_json_item` 共用）刪檔前先過 `canonical_upload_path`：路徑為絕對路徑／含 `..`／反斜線／冒號／連結，或 realpath 不在上傳根目錄之內 ⇒ 拒絕刪除並記 warning（附件 metadata 目前都由伺服器產生，這是第二道防線）。 測試：`tests/test_upload_files_txn4_2026_11_13.py`。
 - L1（新增，只增；T85 feat/upload-files-txn-3）：`helpers.uploads` 新增 `pop_document_file(existing_files, file_id)`（只改清單、不碰實體檔，回 `(被刪那筆, 剩下的清單)`，找不到 404）與 `remove_physical_file(target)`（commit 之後刪實體檔，失敗不丟例外）：給「附件清單內嵌在別的 JSON 裡」的刪除用（先 commit、後刪檔）。`delete_document_file` 行為不變（其餘單據仍用它）。 測試：`tests/test_upload_files_txn3_2026_11_13.py`。
 - L1（行為修正，介面不變；T84 feat/upload-files-txn-2）：`routers/custom_records.py` 自訂模組暫存附件上傳——暫存列寫入失敗（`register_staged`）時回收剛存的檔（原本留下沒有紀錄的孤兒檔）。 測試：`tests/test_upload_files_txn2_2026_11_13.py`。
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產；T83 feat/upload-files-txn）：`helpers.uploads` 新增 `files_txn(conn, new_files)`（拿寫鎖、離開時 commit；區塊內任何例外或 commit 失敗 ⇒ rollback、關連線、回收 `new_files` 剛存的檔）、`append_json_list(conn, table, col, where_col, key, new_items, *, extra_set=None, not_found, guard=None)`（寫鎖內重讀 JSON 清單、只加自己這批；列不存在 ⇒ 404）、`remove_json_item(conn, table, col, where_col, key, file_id, *, extra_set=None, not_found, missing_ok=False, inside=None)`（寫鎖內重讀、濾掉一筆、commit 之後才刪實體檔；`inside(conn)` 讓簽核流程把自己的申請列與刪附件放同一個交易）。`helpers.uploads.delete_document_file` 行為不變（內部拆出 `_remove_physical`）；`helpers/__init__` 一併匯出三個新名。資源回收筒基準：helpers/uploads.py 的 `os.remove` 數量不變（搬位置、不新增）。

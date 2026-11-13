@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（feat/upload-files-txn-4；T86；版號由列車取）
+- 修正（內部，API 路徑與回應形狀不變）：剩下所有「先動實體檔、後寫庫」的路徑收尾，一律改為「鎖內重讀 → 只改紀錄 → commit → commit 之後才動實體檔」。①額外支出：刪附件（鎖內重讀並重驗狀態，舊作法鎖外檢查後整包寫回）、刪變更申請待核准附件、撤銷變更申請（先清紀錄 commit、再刪待核准附件；舊作法先刪檔）、刪整筆／作廢（附件清單改以鎖內讀到的為準）。②案件留言整則刪除：鎖內重讀 files_json、DELETE、commit 後才刪附件（舊作法先刪檔、後 DELETE）。③已結案半解鎖：拒絕變更改在寫鎖內重驗 pending、先改狀態 commit、再清暫存檔（舊作法先清暫存檔，且與核准不互斥）；核准上傳類變更改為「複製」暫存檔進正式路徑、commit 成功後才清暫存（舊作法 `shutil.move`：commit 失敗後暫存檔已不在原處、重試核准會寫入指向不存在檔案的紀錄；失敗時複製出的正式檔會回收）。④`_apply_case_change_request` 的 `deferred_files`／`deferred_staged`／`created_files` 改為必填（關鍵字）參數，不再有「沒傳就先刪」的退路。 測試：`tests/test_upload_files_txn4_2026_11_13.py`。
+
 ## (next) — 2026-11-13（feat/upload-files-txn-3；T85；版號由列車取）
 - 修正（內部，API 路徑與回應形狀不變）：報價單 JSON 內嵌的附件刪除——款項發票（`DELETE …/payment/{idx}/invoice-files/{id}`）、叫料附件、叫料發票附件，以及案件留言附件（`DELETE …/updates/{uid}/files/{id}`）——原本「先刪實體檔、再寫庫」：寫庫失敗（鎖逾時、觸發器擋下、磁碟錯誤）會留下「有紀錄、沒檔案」的壞連結，且刪檔在寫鎖內做。改為「鎖內重讀 → 只改清單 → commit → **commit 之後**才刪實體檔」：寫庫失敗＝紀錄與檔都還在，刪檔（慢動作）不再占著寫鎖。案件留言附件改走 `remove_json_item`（鎖內重讀 `files_json`，並發的附件變動不會被整包覆寫）。②已結案半解鎖案件的三種「刪除類變更」被最高管理者核准時（`_apply_case_change_request`）同樣改為：實體檔排進 `deferred_files`，`approve_case_change` commit 之後才刪（核准途中任何失敗 ⇒ 整筆 rollback，檔案不動）。 測試：`tests/test_upload_files_txn3_2026_11_13.py`。
 

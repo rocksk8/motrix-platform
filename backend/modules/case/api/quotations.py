@@ -3943,39 +3943,39 @@ def _cleanup_staged_files(staged_files: list) -> None:
             pass
 
 
-def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
+def _copy_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
     """核准套用上傳類變更時，把暫存於 uploads/_pending_case_changes/{change_id}/
-    的檔案搬進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
-    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。"""
+    的檔案**複製**進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
+    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。
+
+    T86：原本是 `shutil.move`（先搬走暫存檔、再寫庫）：之後 commit 失敗時，申請列還是 pending、
+    但暫存檔已經不在原處 ⇒ 重試核准會把指向不存在檔案的紀錄寫進案件。改成複製：暫存檔留著直到
+    commit 成功（呼叫端 commit 之後才清暫存），失敗時呼叫端把這裡複製出來的正式檔回收。"""
     eff_subfolder = _effective_subfolder(subfolder)
     dest_dir = os.path.join(_uploads_mod.UPLOADS_ROOT, eff_subfolder, doc_no)
     os.makedirs(dest_dir, exist_ok=True)
     moved = []
-    src_dirs = set()
     for f in staged_files or []:
         src = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
-        src_dirs.add(os.path.dirname(src))
         ext = os.path.splitext(f["path"])[1]
         fname = uuid.uuid4().hex[:16] + ext
         dest_rel = f"{eff_subfolder}/{doc_no}/{fname}"
         dest_full = os.path.join(_uploads_mod.UPLOADS_ROOT, dest_rel)
-        if os.path.isfile(src):
-            shutil.move(src, dest_full)
         new_meta = dict(f)
         new_meta["path"] = dest_rel
+        if os.path.isfile(src):
+            try:
+                shutil.copy2(src, dest_full)
+            except BaseException:
+                _uploads_mod.purge_document_files(moved)      # 複製到一半失敗 ⇒ 已複製的不留（這個函式沒回傳，呼叫端收不到）
+                raise
         moved.append(new_meta)
-    for d in src_dirs:
-        try:
-            if os.path.isdir(d) and not os.listdir(d):
-                os.rmdir(d)
-        except Exception:
-            pass
     return moved
 
 
 def _apply_case_change_request(conn, req, approver: dict, authorization: str,
                                 deferred_audits: list, deferred_calendar: list = None, deferred_notices: list = None,
-                                deferred_files: list = None) -> dict:
+                                *, deferred_files: list, deferred_staged: list, created_files: list) -> dict:
     """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
     回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
 
@@ -4066,10 +4066,12 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         else:
             arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
         idx = _locate_item(arr, idx, payload.get("itemId"), "索引超出範圍")
-        moved = _move_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        moved = _copy_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        created_files.extend(moved)                    # 核准失敗（rollback）時由呼叫端回收這批剛複製的正式檔
         arr[idx].setdefault(field, [])
         arr[idx][field].extend(moved)
         save_quotation_json(conn, quote_no, data)
+        deferred_staged.extend(staged_files or [])      # 暫存檔等 commit 成功之後才清
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）", None))
         if deferred_notices is not None and action_type != "material_file_upload":   # 發票才通知（到貨憑證附件不寄）；commit 之後才寄
@@ -4096,10 +4098,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         existing = arr[idx].get(field) or []
         gone, arr[idx][field] = _uploads_mod.pop_document_file(existing, file_id)   # 只改清單；實體檔等 commit 之後（呼叫端刪 deferred_files）
         save_quotation_json(conn, quote_no, data)
-        if deferred_files is not None:
-            deferred_files.append(gone)
-        else:                                          # 沒有呼叫端接手（目前唯一呼叫端是 approve_case_change，一定會傳）
-            _uploads_mod.remove_physical_file(gone)
+        deferred_files.append(gone)                    # 必填（T86）：實體檔一律等呼叫端 commit 之後才刪，不留「忘了傳就先刪」的退路
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用）", None))
 
@@ -4162,20 +4161,26 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         deferred_calendar: list = []
         deferred_notices: list = []
         deferred_files: list = []                     # 核准刪除的實體檔：commit 之後才刪（寫庫失敗＝紀錄與檔都在）
+        deferred_staged: list = []                    # 核准上傳：暫存檔 commit 成功之後才清（T86：失敗時暫存檔還在、可重試）
+        created_files: list = []                      # 核准上傳：這次複製出來的正式檔；失敗（rollback）要回收
         try:
             apply_result = _apply_case_change_request(conn, req, user, authorization,
-                                                      deferred_audits, deferred_calendar, deferred_notices, deferred_files)
-        except HTTPException:
-            conn.close()
+                                                      deferred_audits, deferred_calendar, deferred_notices,
+                                                      deferred_files=deferred_files, deferred_staged=deferred_staged,
+                                                      created_files=created_files)
+            now = datetime.now().isoformat()
+            approver_display = user.get("display_name") or user["username"]
+            conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                         (approver_display, now, change_id))
+            conn.commit()
+        except BaseException:
+            conn.close()                              # 先 rollback＋關連線，再回收（紀錄沒寫成，複製出來的正式檔沒人引用）
+            _uploads_mod.purge_document_files(created_files)
             raise
-        now = datetime.now().isoformat()
-        approver_display = user.get("display_name") or user["username"]
-        conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
-                     (approver_display, now, change_id))
-        conn.commit()
         conn.close()
         for _f in deferred_files:                     # commit 之後才刪實體檔（永不丟例外）
             _uploads_mod.remove_physical_file(_f)
+        _cleanup_staged_files(deferred_staged)
         # 到這裡寫鎖已經放掉，`_audit()` 自己那條連線才進得去
         for action, target_type, target_id, target_label, detail in deferred_audits:
             _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
@@ -4195,27 +4200,28 @@ def reject_case_change(change_id: int, body: dict = Body(default={}), authorizat
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
     conn = get_db()
-    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
-    if not req:
-        conn.close()
-        raise HTTPException(404, "找不到此筆變更申請")
-    if req["status"] != "pending":
-        conn.close()
-        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
-    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
-    if self_msg:
-        conn.close()
-        raise HTTPException(403, self_msg)
     reason = (body or {}).get("reason") or ""
-    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))
-    now = datetime.now().isoformat()
-    approver_display = user.get("display_name") or user["username"]
-    conn.execute(
-        "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
-        (approver_display, now, reason, change_id),
-    )
-    conn.commit()
-    conn.close()
+    with write_txn(conn):   # T86：狀態在寫鎖內讀（與同時進來的核准互斥：原本兩邊都讀到 pending，駁回把暫存檔刪了、核准又搬不到檔）
+        req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+        if not req:
+            conn.close()
+            raise HTTPException(404, "找不到此筆變更申請")
+        if req["status"] != "pending":
+            conn.close()
+            raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+        self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+        if self_msg:
+            conn.close()
+            raise HTTPException(403, self_msg)
+        now = datetime.now().isoformat()
+        approver_display = user.get("display_name") or user["username"]
+        conn.execute(
+            "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
+            (approver_display, now, reason, change_id),
+        )
+        conn.commit()
+        conn.close()
+    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))     # commit 之後才清暫存檔（原本在改狀態之前清）
     _audit(_tok(authorization), "case.change_rejected", "quotation", req["quote_no"],
            f"{req['quote_no']}（拒絕變更 #{change_id}：{req['summary']}）", {"reason": reason})
     _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
@@ -6243,7 +6249,7 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
     ).fetchone()
     if not row:
         conn.close()
@@ -6253,16 +6259,18 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
         raise HTTPException(403, "只能刪除自己的留言")
     # 留言刪掉，它的附件也要從磁碟上清掉——否則 uploads/ 會留下永遠沒人引用的
     # 孤兒檔案，而且 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
-    try:
-        for f in json.loads(row["files_json"] or "[]"):
-            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
-            if f.get("path") and os.path.isfile(full):
-                os.remove(full)
-    except Exception:
-        pass
-    conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
-    conn.commit()
+    # T86：寫鎖內重讀 files_json（鎖外讀的可能漏掉剛補上的附件）→ DELETE → commit，**commit 之後**才刪實體檔
+    # （原本先刪檔、後 DELETE：寫庫失敗＝留言還在、附件沒了）
+    with write_txn(conn):
+        _cur = conn.execute("SELECT files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)).fetchone()
+        try:
+            _files = json.loads((_cur["files_json"] if _cur else "") or "[]")
+        except Exception:
+            _files = []
+        conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
+        conn.commit()
     conn.close()
+    _uploads_mod.purge_document_files([f for f in _files if isinstance(f, dict)])
     notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
     _audit(_tok(authorization), 'case.update_delete', 'case_update', quote_no, quote_no, {'id': uid})
