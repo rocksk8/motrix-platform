@@ -2,6 +2,7 @@
 import inspect
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -248,7 +249,11 @@ def get_operating_targets(authorization: str = Header(None)):
 @router.put("/api/settings/operating-targets")
 def put_operating_targets(body: OperatingTargetsBody, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    old = _get_setting("operating_targets") or {}        # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值
+    try:
+        old = _get_setting("operating_targets") or {}    # §15：存檔後要通知「誰改了什麼、舊→新」，所以寫入前先記下目前值；讀不到不能害儲存失敗
+    except Exception:                                    # noqa: BLE001
+        old = None
+        logger.warning("年度營運目標：讀不到舊值，這次儲存不發通知", exc_info=True)
     new = body.model_dump()
     _set_setting("operating_targets", new)
     _audit(_tok(authorization), "settings.operating_targets.update", "settings",
@@ -265,6 +270,8 @@ _TARGET_ANNUAL_LABELS = (("revenue", "營收目標", "元"), ("newCases", "新�
 def _target_num(v, unit):
     try:
         v = float(v or 0)
+        if not math.isfinite(v):
+            v = 0.0
     except (TypeError, ValueError):
         v = 0.0
     return ("{:,.0f}" if v == int(v) else "{:,.2f}").format(v) + (" " + unit if unit == "元" else unit)
@@ -274,6 +281,8 @@ def _notify_operating_targets_changed(old, new, actor):
     """SPEC §15-3：年度營運目標維持立即生效，**存檔後**發通知（最高管理者全部＋財務；一次存檔多欄合併成一則）。
     整份覆蓋、一次只存一年：年度不同＝換了一年的目標，舊年度的數字不拿來逐欄比，只告知年度換了。永不丟例外。"""
     try:
+        if old is None:                                                # 寫入前讀不到舊值 ⇒ 不知道改了什麼，不發
+            return
         from helpers import settings_notify as SN
         old = old if isinstance(old, dict) else {}
         oy, ny = old.get("year"), new.get("year")
@@ -286,10 +295,14 @@ def _notify_operating_targets_changed(old, new, actor):
         for k, lb, unit in _TARGET_ANNUAL_LABELS:
             if (oa.get(k) or 0) != (na.get(k) or 0) or (not same_year and (na.get(k) or 0) != 0):
                 rows.append(("年度營運目標／%s" % lb, _target_num(oa.get(k), unit), _target_num(na.get(k), unit)))
-        osp = [(x.get("name"), x.get("revenue"), x.get("cases")) for x in ((old.get("salesperson") or []) if same_year else [])]
+        osp = [(x.get("name"), x.get("revenue"), x.get("cases")) for x in (old.get("salesperson") or [])]
         nsp = [(x.get("name"), x.get("revenue"), x.get("cases")) for x in (new.get("salesperson") or [])]
-        if osp != nsp:
-            rows.append(("年度營運目標／業務員配額", "%d 位" % len(osp), "%d 位" % len(nsp)))
+        if not same_year:
+            if osp or nsp:                                             # 換年度：只告知人數（顯示舊年度實際人數），不逐人比
+                rows.append(("年度營運目標／業務員配額", "%d 位" % len(osp), "%d 位" % len(nsp)))
+        elif osp != nsp:
+            n_o, n_n = "%d 位" % len(osp), "%d 位" % len(nsp)
+            rows.append(("年度營運目標／業務員配額", n_o, n_n if len(osp) != len(nsp) else n_n + "（內容已調整）"))
         if not rows:
             return
         with SN.batch():
@@ -2021,12 +2034,16 @@ def get_default_payment_terms(authorization: str = Header(None)):
 @router.put("/api/settings/payment-terms")
 def set_default_payment_terms(body: PaymentTermsBody, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    terms = _quote_default_terms()
-    old = _get_setting("default_payment_terms", terms["paymentTerms"] if terms else "")   # §15：寫入前記下目前值（與 GET 同一個預設來源）
+    try:
+        terms = _quote_default_terms()
+        old = _get_setting("default_payment_terms", terms["paymentTerms"] if terms else "")   # §15：寫入前記下目前值（與 GET 同一個預設來源）；讀不到不能害儲存失敗
+    except Exception:                                                                          # noqa: BLE001
+        old = None
+        logger.warning("預設付款條件：讀不到舊值，這次儲存不發通知", exc_info=True)
     _set_setting("default_payment_terms", body.text)
     _audit(_tok(authorization), "settings.payment_terms.update", "settings",
            "default_payment_terms", "報價單預設付款條件")
-    _notify_quote_terms_changed([("報價單預設付款條件", old or "（空白）", body.text or "（空白）")] if (old or "") != (body.text or "") else [], user["username"])
+    _notify_quote_terms_changed([("報價單預設付款條件", old or "（空白）", body.text or "（空白）")] if old is not None and (old or "") != (body.text or "") else [], user["username"])
     return {"ok": True}
 
 
@@ -2614,7 +2631,11 @@ def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = He
         default_key = cleaned[0]["key"]
 
     value = {"presets": cleaned, "defaultKey": default_key}
-    old_value = _quote_terms_presets()                              # §15：寫入前記下目前值，存檔後通知「誰改了什麼」
+    try:
+        old_value = _quote_terms_presets()                          # §15：寫入前記下目前值，存檔後通知「誰改了什麼」；讀不到不能害儲存失敗
+    except Exception:                                               # noqa: BLE001
+        old_value = None
+        logger.warning("報價條款組：讀不到舊值，這次儲存不發通知", exc_info=True)
     _set_setting("quote_terms_presets", value)
     default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
     _audit(_tok(authorization), "settings.quote_terms_presets.update", "settings",
@@ -2624,7 +2645,8 @@ def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = He
                             actor.get("display_name") or actor["username"],
                             f"{len(cleaned)} 組，預設「{default_name}」",
                             "quotation-form.html")
-    _notify_quote_terms_changed(_quote_terms_change_rows(old_value, value), actor["username"])
+    if old_value is not None:
+        _notify_quote_terms_changed(_quote_terms_change_rows(old_value, value), actor["username"])
     return value
 
 
