@@ -44,7 +44,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files, files_txn, append_json_list, remove_json_item,
     guard_case_access, require_any_module,
 )
 from modules.case.completion_pdf import generate_completion_pdf_bytes
@@ -936,13 +936,12 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
     try:
         # 2026-09-30 P0：原本任何登入者都能對任何完工單上傳 ⇒ 同單筆讀取規則（看不到＝不存在）
         row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
-        existing = json.loads(row["signed_files_json"] or "[]")
         new_files = await save_document_files("completion_notes", note_no, files,
                                               user.get("display_name") or user["username"])
-        conn.execute("UPDATE completion_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                     (json.dumps(existing + new_files, ensure_ascii=False),
-                      datetime.now().isoformat(), note_no))
-        conn.commit()
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔
+        with files_txn(conn, new_files):
+            append_json_list(conn, "completion_notes", "signed_files_json", "note_no", note_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="完工單不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "completion.upload_signed_files", "completion_note", note_no,
@@ -968,16 +967,9 @@ def delete_completion_signed_file(note_no: str, file_id: str, authorization: str
         raise HTTPException(403, "僅管理員以上可刪除回簽附件")
     conn = get_db()
     try:
-        row = conn.execute("SELECT signed_files_json FROM completion_notes WHERE note_no=?",
-                           (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
-        remaining = delete_document_file("completion_notes", note_no,
-                                         json.loads(row["signed_files_json"] or "[]"), file_id)
-        conn.execute("UPDATE completion_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
-                     (json.dumps(remaining, ensure_ascii=False),
-                      datetime.now().isoformat(), note_no))
-        conn.commit()
+        # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔（單據不存在 ⇒ 404 完工單不存在）
+        remove_json_item(conn, "completion_notes", "signed_files_json", "note_no", note_no, file_id,
+                         extra_set={"updated_at": datetime.now().isoformat()}, not_found="完工單不存在")
     finally:
         conn.close()
     _audit(_tok(authorization), "completion.delete_signed_file", "completion_note", note_no, note_no)

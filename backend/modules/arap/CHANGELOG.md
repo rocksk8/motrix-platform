@@ -1,6 +1,7 @@
 # 應收應付 更新紀錄
 
 ## 1.0.61（next，未取號）— 2026-11-13（ui/mobile-tablet-combined 的改動；條目由 fix/mobile-cases-layout-v2 補，依各頁 git 歷史照實記錄；僅前端版面，不動 API／資料／權限判斷）
+- 變更（內部）：已開立發票附件（`api/invoice_vouchers.py` issued-files 上傳／刪除）附件清單寫回改用 L1 `helpers.uploads.files_txn／append_json_list／remove_json_item`（T83 審計 C 組）：原本先讀出現有清單、存檔（數秒）、再整份寫回，兩個請求同時上傳會互相蓋掉紀錄（先寫那批的檔成孤兒、請求卻早已回 201），寫庫失敗或單據在上傳途中被刪也會留下沒有紀錄的檔（舊寫法 UPDATE 影響 0 列仍回 201）；刪除端點則是先刪實體檔、再整份寫回。現在：存檔做完才拿寫鎖、重讀目前清單、只加自己這批，任何失敗回收這次剛存的檔；單據不存在 ⇒ 404；刪除在寫鎖內重讀、commit 之後才刪實體檔。API 路徑與回應形狀不變。 測試：`tests/test_upload_files_txn_2026_11_13.py`。
 - `cashier.html`：手機卡片化——KPI 方塊不再被 `max-width:200px` 卡成窄條、九個子頁籤不再一字一行、明細表在手機改為卡片列（值為空的欄位連標籤一起隱藏）、客戶歷史兩欄改上下排。
 - `payment-request-form.html`：`.page-wrap` 上方留白不再把頂欄高度加兩次（**全寬度都生效，桌機上方空白會比以前少一個頂欄高**）；≤900px 單欄、輸入框 16px／44px 高、預覽彈窗手機全螢幕。
 

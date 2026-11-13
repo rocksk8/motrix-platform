@@ -40,7 +40,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
-    save_document_files, delete_document_file,
+    save_document_files, files_txn, append_json_list, remove_json_item,
     guard_case_access, require_any_module,
 
     can_see_financial, is_document_approver,
@@ -825,16 +825,16 @@ async def upload_invoice_voucher_issued_files(voucher_no: str, files: List[Uploa
     if not row:
         conn.close()
         raise HTTPException(404, "憑據不存在")
-    _guard_voucher(conn, row, user)
-    existing = json.loads(row["issued_files_json"] or "[]")
-    new_files = await save_document_files("invoice_vouchers", voucher_no, files,
-                                          user.get("display_name") or user["username"])
-    all_files = existing + new_files
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
-                 (json.dumps(all_files, ensure_ascii=False), now, voucher_no))
-    conn.commit()
-    conn.close()
+    try:
+        _guard_voucher(conn, row, user)
+        new_files = await save_document_files("invoice_vouchers", voucher_no, files,
+                                              user.get("display_name") or user["username"])
+        # T83：存檔（慢）做完才拿寫鎖、重讀目前的清單、只加自己這批；失敗回收剛存的檔（不再「讀舊清單＋整份寫回」）
+        with files_txn(conn, new_files):
+            append_json_list(conn, "invoice_vouchers", "issued_files_json", "voucher_no", voucher_no, new_files,
+                             extra_set={"updated_at": datetime.now().isoformat()}, not_found="憑據不存在")
+    finally:
+        conn.close()
     _audit(_tok(authorization), "invoice_voucher.upload_issued_files", "invoice_voucher", voucher_no,
            f"{voucher_no}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files}
@@ -852,12 +852,9 @@ def delete_invoice_voucher_issued_file(voucher_no: str, file_id: str, authorizat
         conn.close()
         raise HTTPException(404, "憑據不存在")
     _guard_voucher(conn, row, user)
-    existing = json.loads(row["issued_files_json"] or "[]")
-    remaining = delete_document_file("invoice_vouchers", voucher_no, existing, file_id)
-    now = datetime.now().isoformat()
-    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
-                 (json.dumps(remaining, ensure_ascii=False), now, voucher_no))
-    conn.commit()
+    # T83：寫鎖內重讀、濾掉這一筆、commit 之後才刪實體檔
+    remove_json_item(conn, "invoice_vouchers", "issued_files_json", "voucher_no", voucher_no, file_id,
+                     extra_set={"updated_at": datetime.now().isoformat()}, not_found="憑據不存在")
     conn.close()
     _audit(_tok(authorization), "invoice_voucher.delete_issued_file", "invoice_voucher", voucher_no, voucher_no)
     return {"ok": True}
