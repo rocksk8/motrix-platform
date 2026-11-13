@@ -2564,7 +2564,7 @@ tr.in-period{{background:#EFF6FF}}
 <!-- 帳齡分析 -->
 {_pdf_ar_aging(data.get("arAging") or {}, tbl_hdr, fmt)}
 
-<div class="footer">{company_heading("此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考")} ｜ {gen_at}</div>
+<div class="footer">{company_heading("此報表由 MOTRIX PLATFORM 系統自動產製，僅供內部管理參考")} ｜ {gen_at}</div>
 </body></html>"""
     return _drop_pdf_sections(html, _off) if _off else html
 
