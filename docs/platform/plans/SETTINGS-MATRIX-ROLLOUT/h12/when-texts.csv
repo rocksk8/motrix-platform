@@ -1,0 +1,108 @@
+﻿群組代碼,欄位代碼,白話名稱,when（SettingDef.when 建議文字）
+account_security,password_min_len,密碼至少要幾碼,公司資安規範要求更長的密碼、或要縮短登入有效期時。
+account_security,login_days,登入後多久要重新登入,公司資安規範要求更長的密碼、或要縮短登入有效期時。
+brand,tagline,首頁小標語,想讓首頁小標語換成公司自己的系統名稱或口號時。
+builder_actions,enabled,開放自訂按鈕（供應商管理頁）,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_custom_fields,enabled,開放自訂欄位（案件資訊、供應商）,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_custom_fields,quote_enabled,開放自訂欄位（報價單）,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_custom_fields,quote_in_customer_output,自訂欄位印在報價單上（客戶看得到）,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_custom_fields,quote_on_finance_docs,自訂欄位附在請款單與開票憑據上,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_custom_modules,enabled,開放自行建立新表單（自訂模組）,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_exports,enabled,開放自訂匯出欄位與標題,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enabled,改版前先預覽，並保留歷史版本,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enforce_layout,版面發布前一定要先看預覽,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enforce_custom_fields,自訂欄位發布前一定要先看預覽,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enforce_user_buttons,自訂按鈕發布前一定要先看預覽,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enforce_output_template,列印版型發布前一定要先看預覽,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_governance,enforce_rule_set,提醒規則發布前一定要先看預覽,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,suppliers,供應商管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,case_management,案件管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,procurement,採購管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,devices,設備登載可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,vendor_contractors,承攬商管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,customers,客戶管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,quotation_form,報價單表單可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_layout,quotations,報價單管理可自訂欄位版面,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_menu,enabled,開放調整側欄選單名稱與分組,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_notify,enabled,開放自訂簽核通知文字,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_option_lists,enabled,開放自訂下拉選單選項,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_rules,enabled,開放「條件成立就標紅」提醒規則,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_rules,k01_seed,專案毛利提醒門檻改由提醒規則管理,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_slots,enabled,開放自訂附件種類與存放位置,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_stage_templates,enabled,開放自訂案件階段樣板,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+builder_status_display,enabled,開放自訂狀態名稱與顏色,公司想自己調整畫面、欄位、通知文字，又不想每次找開發商時再開；平常不需要，預設全部關閉。
+download_name,name_layout,下載檔名怎麼組成,同仁抱怨下載的檔案名稱不好找，或想把案件編號、客戶放進檔名時。
+download_name,separator,檔名各部分之間的符號,檔名在別的系統或雲端硬碟裡顯示不順（例如空白造成問題）時。
+download_name,case_name_source,檔名裡的案件名用哪個名稱,檔名裡的案件名太長，或想用客戶名稱方便辨識時。
+download_name,no_access,沒有案件權限的人看到的檔名,擔心沒有案件權限的人（例如出納）從檔名看到案件或客戶資訊時。
+download_name,payslip_show_name,勞報單檔名是否寫出承攬人姓名,勞報單檔案會外傳或存雲端，擔心檔名洩漏承攬人姓名時。
+download_name,case_name_max_chars,檔名裡案件名最多幾個字,檔名太長被截斷，或在手機與雲端硬碟顯示不完整時。
+download_name,total_max_chars,檔名總長度上限,存到或同步到有路徑長度限制的地方（雲端硬碟、舊系統）出錯時。
+download_name,add_date,檔名加上日期,同一份文件常下載多次，想從檔名看出是哪一天的版本時。
+download_name,label_quotation,檔名用語：報價單,公司習慣不叫「報價單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_quotation_version,檔名用語：報價單存檔版本,公司習慣不叫「報價單存檔版本」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_close_report,檔名用語：結案報表,公司習慣不叫「結案報表」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_execution_report,檔名用語：專案執行報告,公司習慣不叫「專案執行報告」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_completion,檔名用語：完工單,公司習慣不叫「完工單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_expense_form,檔名用語：費用單,公司習慣不叫「費用單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_shipping,檔名用語：出貨單,公司習慣不叫「出貨單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_payment_request,檔名用語：請款單,公司習慣不叫「請款單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_invoice_voucher,檔名用語：開票申請,公司習慣不叫「開票申請」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_contractor_voucher,檔名用語：承攬商傳票,公司習慣不叫「承攬商傳票」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_payslip,檔名用語：勞報單,公司習慣不叫「勞報單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_bonus_award,檔名用語：獎金分配單,公司習慣不叫「獎金分配單」，想改成你們的說法時（檔名會跟著變）。
+download_name,label_voucher,檔名用語：傳票,公司習慣不叫「傳票」，想改成你們的說法時（檔名會跟著變）。
+external_login,ext_totp_enabled,從外網登入時強制兩步驟驗證（總開關）,想讓外網登入更安全，或發現有人從外面試密碼時，先確認這個總開關是開的。
+external_login,ext_totp_role_superadmin,外網登入強制兩步驟驗證：最高管理者,最高管理者還有人沒設好兩步驟驗證、被擋在外網門外時（請先請他們設好，再考慮放寬）。
+external_login,ext_totp_role_admin,外網登入強制兩步驟驗證：管理員,管理員要從外面處理系統事務，但還有人沒設好驗證時。
+external_login,ext_totp_role_finance,外網登入強制兩步驟驗證：財務,財務同仁要從外面查帳或出帳，但驗證還沒設好時；財務資料敏感，不建議放寬。
+external_login,ext_totp_role_sales,外網登入強制兩步驟驗證：業務,業務常在外面連回系統查報價與客戶，想加一道保護時（預設不強制）。
+external_login,ext_totp_role_engineer,外網登入強制兩步驟驗證：工程師,工程師常從現場連回系統，想加一道保護時（預設不強制）。
+external_login,ext_totp_role_viewer,外網登入強制兩步驟驗證：檢視者,只看資料的同仁也要從外網登入，公司想一視同仁加保護時（預設不強制）。
+external_login,lock_threshold,密碼輸錯幾次就鎖住帳號,有人報告帳號被亂試密碼，或同仁常因手滑被鎖住時，調整容忍次數。
+external_login,lock_window_min,輸錯次數的計算時間（分鐘）,想讓「輸錯幾次」的計算更嚴（拉長時間）或更寬鬆（縮短時間）時。
+external_login,lock_minutes,帳號鎖住多久,被鎖住的同仁抱怨等太久，或擔心有人持續試密碼時，調整鎖定長度。
+external_login,lock_scope,帳號被鎖住時，公司內網也擋嗎,有人故意在內網輸錯密碼把別人鎖住，或想連內網一起擋時。
+external_login,external_hosts,算「外網」的網址,公司換了對外網域、或外網連進來的網址變了時（通常由安裝人員設定）。
+external_login,loopback_is_internal,在伺服器本機開網頁算公司內網嗎,在伺服器本機開網頁測試，卻被當成外網要求驗證時（一般不用改）。
+external_login,internal_networks,公司內網的網段,公司換了網路、或新增分公司網段時；請先向網路管理者確認。
+list_prefs,enabled,開放每個人自訂清單（欄位、排序、每頁筆數）,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。
+list_view,quotes_personal_columns,報價單清單：每人可隱藏／調整欄位,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+list_view,quotes_personal_default_tab,報價單清單：每人可設預設頁籤,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+list_view,quotes_personal_page_size,報價單清單：每人可選每頁筆數,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+list_view,cases_personal_default_tab,案件清單：每人可設預設頁籤,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+list_view,cases_personal_page_size,案件清單：每人可選每次載入筆數,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+list_view,cases_merge_won_tab,案件清單：合併重複的「已成案」頁籤,同仁想自己決定清單看哪些欄位、開頁停在哪個頁籤時。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。｜不放進「全部開放」組合：這項影響所有人看到的案件分頁，要單獨設定。
+lodging_freshness,stale_days,旅宿資料多久沒更新就提醒（天）,覺得旅宿資料提醒太早或太晚出現時。
+lodging_labels,per_night,住宿計價單位的名稱：「每晚」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+lodging_labels,per_person,住宿計價單位的名稱：「每人」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+lodging_labels,phone,住宿詢價管道的名稱：「電話」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+lodging_labels,website,住宿詢價管道的名稱：「官網」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+lodging_labels,onsite,住宿詢價管道的名稱：「現場」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+lodging_labels,other,住宿詢價管道的名稱：「其他」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+login_greeting,style,首頁問候語的口氣,覺得問候語太吵、或想換成更正式或更輕鬆的口氣時。
+netplan_labels,planning,網路規劃狀態的名稱：「規劃中」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+netplan_labels,confirmed,網路規劃狀態的名稱：「已確認」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+netplan_labels,delivered,網路規劃狀態的名稱：「已交付」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+procurement_labels,suggested,採購建議狀態的名稱：「待下單」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+procurement_labels,ordered,採購建議狀態的名稱：「已下單」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+procurement_labels,received,採購建議狀態的名稱：「已到貨」,公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。
+recycle_bin,retention_days,資源回收筒保留幾天,誤刪單據後來不及找回，或想縮短回收筒占用空間時。
+retention,local_db_keep_days,本機資料庫備份保留天數,這台電腦的硬碟快滿，或想保留更久以前的本機備份時。
+retention,cloud_daily_keep_days,雲端每日備份保留天數,想要能回到更久以前的每日還原點，或雲端空間吃緊時。
+retention,cloud_weekly_keep_days,雲端每週備份保留天數,中期還原點不夠用，或要縮減雲端占用時（在「進階」）。
+retention,cloud_monthly_keep_days,雲端每月備份保留天數（可選永久）,稽核或法規要求保存更久，或決定不再永久保留月備份時。
+retention,local_pre_update_keep,系統更新前自動備份保留份數,更新失敗曾退不回去，或更新很頻繁、備份占滿硬碟時。
+retention,audit_log_keep_days,操作紀錄保留天數,法規或稽核對操作紀錄的保存年限有要求時（預設約 5 年）。
+retention,notification_keep_days,站內通知保留天數,同仁覺得通知清單太長，或需要更久之前的通知可回頭看時。
+retention,request_log_keep_days,使用軌跡保留天數,要追查誰在什麼時候做過什麼、需要更久的軌跡，或硬碟吃緊要縮減時。
+retention,log_keep_days,系統運作日誌保留天數,出問題要追查超過一個月前的事件，或日誌占硬碟太多時。
+system_hub,show_denied,系統總覽是否列出沒有權限的項目,不希望沒有權限的同仁知道系統裡有哪些管理功能，或想讓他們看到「需要什麼權限」時。
+tender_closing,closing_soon_days,標案幾天內截止算「即將截止」,想調整地圖上「即將截止」的標案範圍時。
+ui_format,enabled,開放自訂數字與日期顯示,公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+ui_format,thousands,數字加千分位逗號,公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+ui_format,decimals,金額顯示幾位小數,公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+ui_format,date_style,日期寫法,公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。｜預設組合為提案：要先登錄進 registry（profiles() 目前為 0），使用者看過才上線；mockup 標「提案」。
+uploads,max_file_mb,單一檔案最大幾 MB,同仁常反映檔案傳不上去，或硬碟與備份空間吃緊時。
+uploads,case_extra_expense_max_files,一張支出申請最多附幾個檔案,同仁常反映檔案傳不上去，或硬碟與備份空間吃緊時。
+uploads,case_extra_expense_max_request_mb,支出申請一次送出的檔案合計上限（MB）,同仁常反映檔案傳不上去，或硬碟與備份空間吃緊時。
