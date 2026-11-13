@@ -39,14 +39,16 @@ _m0006 = importlib.import_module("modules.case.migrations.0006_material_changes"
 _m0007 = importlib.import_module("modules.case.migrations.0007_planned_pay_date")
 _m0008 = importlib.import_module("modules.case.migrations.0008_material_payment_planned_pay_date")
 _m0009 = importlib.import_module("modules.case.migrations.0009_stage_key")
+_m0010 = importlib.import_module("modules.case.migrations.0010_quote_doc_type")
 
 MODULE = ModuleSpec(
     key="case",
     # v6：case_material_changes（材料申請變更申請覆核表，33-M2a，2026-10-03）
     # v9：case_stages.stage_key（階段樣板 S-ST2，2026-10-14；NULL＝手動階段）
+    # v10：quotations.doc_type（單據類型 quote／estimate，2026-11-13；舊資料＝quote）
     # v7：case_extra_expenses.planned_pay_date（預定付款日，2026-10-05；提醒信＋行事曆「付款待辦」）
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up), (10, _m0010.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_quotation_stages.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router, _api_project_margin.router, _api_field_cases.router],
@@ -63,6 +65,8 @@ MODULE = ModuleSpec(
         # IP-91／IP-92：報價預設條款（L1 system）、PDF 版本紀錄（L1 pdf_gen）
         ("case.default_terms", "case"): quotations._default_terms,
         ("case.doc_version", "case"): quotations._record_doc_version,
+        # IP-ESTQ1：曾開過估價單的單號字首（L1 helpers/doc_type 改字首後仍認得舊單號）
+        ("case.estimate_prefixes", "case"): quotations._estimate_prefixes,
         # IP-ALT1：擇一方案客戶版輸出資料（L1 pdf_gen 取用；只含客戶看得到的內容）
         ("case.alt_view", "case"): alt_view.view,
         # IP-DB1：首頁「我的工作」的案件分組（L1 routers/dashboard_mine.py 彙整，2026-11-13）

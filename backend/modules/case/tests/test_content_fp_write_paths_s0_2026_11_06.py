@@ -89,6 +89,7 @@ EXCLUDED_PROPOSED = frozenset({
     "altPickedAt",             # 回簽時間戳（與 altPicks 成對寫；altPicks 本身維持內容）
     "altPickedBy",             # 回簽人
     "dealWonAt",               # 成案時間戳（由 dealTag 轉換產生）
+    "docType",                 # 估價單（2026-11-13）：單據類型，讀取時由資料庫欄位注入、開立後不可改（同 status）；待 K 審
 })
 #: 請求暫存欄位：寫入前 `q.pop(...)`，不會進 data_json；列在這裡只是讓掃描器的歸類表完整
 TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit"})
@@ -310,8 +311,8 @@ def test_dynamic_table_data_json_writer_is_pinned_and_never_pointed_at_quotation
 # ── 4. 排除清單 ───────────────────────────────────────────────────────────────────────────
 def test_exclusion_list_is_locked():
     assert EXCLUDED_SPEC == {"approval", "statusLog", "editHistory", "returnInfo", "clauseTitles", "locationIdentity", "status"}
-    assert EXCLUDED_KEYS == EXCLUDED_SPEC | {"updatedAt", "docVersions", "googleCalendarEventId", "altPickedAt", "altPickedBy", "dealWonAt"}
-    from modules.case import content_fp            # S1 起排除清單有了 production 常數：兩邊必須逐字相等
+    assert EXCLUDED_KEYS == EXCLUDED_SPEC | {"updatedAt", "docVersions", "googleCalendarEventId", "altPickedAt", "altPickedBy", "dealWonAt", "docType"}   # docType：估價單（2026-11-13）讀取時注入、開立後不可改，同 status
+    from modules.case import content_fp           # S1 起排除清單有了 production 常數：兩邊必須逐字相等
     assert content_fp.EXCLUDED_KEYS == EXCLUDED_KEYS
     # 排除清單與內容清單不得重疊；內容清單裡的核心鍵一個都不能被排除（突變：把它們搬進排除清單，這裡必須翻紅）
     assert not (EXCLUDED_KEYS & (CONTENT_KEYS | CONTENT_PENDING_K))

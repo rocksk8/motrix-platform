@@ -145,6 +145,10 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
           新增報價單
         </a>
+        <a href="quotation-form.html?type=estimate" class="action-btn" data-testid="ql-new-estimate" style="text-decoration:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+          新增估價單
+        </a>
       </div>
     </div>
 
@@ -210,6 +214,11 @@
         <template x-for="m in monthOptions" :key="m">
           <option :value="m" x-text="m"></option>
         </template>
+      </select>
+      <select class="search-input" x-model="filterDocType" data-testid="ql-filter-doctype" style="max-width:130px;cursor:pointer">
+        <option value="">所有單據類型</option>
+        <option value="quote">報價單</option>
+        <option value="estimate">估價單</option>
       </select>
       <select class="search-input" x-model="filterDealTag" style="max-width:140px;cursor:pointer">
         <option value="">所有案件進度</option>
@@ -341,6 +350,9 @@
                   <a :href="'quotation-form.html?id=' + q.quote_no"
                      style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
                      x-text="q.quote_no"></a>
+                  <template x-if="q.doc_type === 'estimate'">
+                    <span data-testid="ql-doctype-tag" style="font-size:12px;font-weight:700;padding:1px 5px;border-radius:3px;background:#DBEAFE;color:#1E3A8A;letter-spacing:.03em;flex-shrink:0">估價單</span>
+                  </template>
                   <template x-if="/\-R\d+$/.test(q.quote_no)">
                     <span style="font-size:12px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FED7AA;color:#7C2D12;letter-spacing:.03em;flex-shrink:0">改版</span>
                   </template>
@@ -532,6 +544,7 @@
       filterSales: '',
       filterMonth: '',
       filterDealTag: '',
+      filterDocType: '',          // 單據類型篩選：''＝全部｜quote｜estimate（舊資料一律是報價單）
       dealTagLostModal: false,
       dealTagLostInfo: null,
       dealTagLostReason: '',
@@ -576,6 +589,7 @@
           && (!this.filterSales || q.sales_person === this.filterSales)
           && (!this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth))
           && (!this.filterDealTag || (q.deal_tag || '') === this.filterDealTag)
+          && (!this.filterDocType || (q.doc_type || 'quote') === this.filterDocType)
         )
       },
       phaseCount(key) { return this.pipelineBase.filter(q => this.lifecycleOf(q) === key).length },
@@ -683,10 +697,10 @@
       // E1：空狀態分三種（none 從未有資料／filtered 篩選後沒有／error 載入失敗）
       get emptyKind() { return this.loadErr ? 'error' : (this.quotes.length ? 'filtered' : 'none') },
       get hasActiveFilter() {
-        return !!(this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.phaseFilter || this.activeTab !== 'all')
+        return !!(this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.filterDocType || this.phaseFilter || this.activeTab !== 'all')
       },
       clearFilters() {
-        this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.phaseFilter = ''; this.activeTab = 'all'
+        this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.filterDocType = ''; this.phaseFilter = ''; this.activeTab = 'all'
       },
 
       get filtered() {
@@ -709,8 +723,9 @@
           const matchSales   = !this.filterSales || q.sales_person === this.filterSales
           const matchMonth   = !this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth)
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
+          const matchDocType = !this.filterDocType || (q.doc_type || 'quote') === this.filterDocType
           const matchPhase   = !this.phaseFilter || this.lifecycleOf(q) === this.phaseFilter
-          return matchTab && matchSearch && matchSales && matchMonth && matchDealTag && matchPhase
+          return matchTab && matchSearch && matchSales && matchMonth && matchDealTag && matchDocType && matchPhase
         })
         return applyListSort(base, this.sortPref, {
           quote_date:    q => q.quote_date || q.created_at || '',
@@ -903,12 +918,12 @@
       async duplicateQuote(quoteNo) {
         if (!confirm(`確定要以 ${quoteNo} 為範本複製一張新的草稿報價單？`)) return
         try {
-          const [rSrc, rNo] = await Promise.all([
-            fetch(`${API}/quotations/${quoteNo}`, { headers: { Authorization: 'Bearer ' + this.session.token } }),
-            fetch(`${API}/next-quote-no`, { headers: { Authorization: 'Bearer ' + this.session.token } }),
-          ])
-          if (!rSrc.ok || !rNo.ok) { this.toast('複製失敗，請重試', '#DC2626'); return }
+          const rSrc = await fetch(`${API}/quotations/${quoteNo}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!rSrc.ok) { this.toast('複製失敗，請重試', '#DC2626'); return }
           const src   = (await rSrc.json()).data
+          // 估價單：新單號用來源單的類型（估價單複製出 ME 開頭、報價單複製出 MQ 開頭；兩種流水號各自獨立）
+          const rNo = await fetch(`${API}/next-quote-no?doc_type=${encodeURIComponent(src.docType || 'quote')}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!rNo.ok) { this.toast('複製失敗，請重試', '#DC2626'); return }
           const newNo = (await rNo.json()).quote_no
           const genId = () => (window.crypto && window.crypto.randomUUID)
             ? window.crypto.randomUUID()
@@ -1024,7 +1039,7 @@
         const LV = window.MotrixListView
         this.pv = LV.sanitize(await LV.load(tk, 'quotations.view'), { tabs: this.tabs.map(t => t.key) })
         if (this.lvOn.tab && this.pv.tab && this.activeTab === 'all' && !this._restoredTab) this.activeTab = this.pv.tab
-        if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'phaseFilter'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
+        if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
         if (this.lvOn.columns) {
           await this.$nextTick()
           this._stopOrder = LV.watchOrder(document.querySelector('table.data-table'), () => this.pv.order)
@@ -1073,7 +1088,7 @@
         // 2026-09-24：篩選條件存 sessionStorage（同一個瀏覽器分頁內有效），
         // 從報價單返回清單時還原，不必重選。讀寫失敗（私密視窗等）就當作沒有。
         const _FK = 'motrix_quote_list_filters'
-        const _FIELDS = ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'phaseFilter']
+        const _FIELDS = ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter']
         try {
           const saved = JSON.parse(sessionStorage.getItem(_FK) || 'null')
           if (saved && typeof saved === 'object') {

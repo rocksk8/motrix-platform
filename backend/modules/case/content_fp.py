@@ -23,6 +23,7 @@ FP_VERSION = "1"
 EXCLUDED_KEYS = frozenset({
     "approval", "statusLog", "editHistory", "returnInfo", "clauseTitles", "locationIdentity", "status",
     "updatedAt", "docVersions", "googleCalendarEventId", "altPickedAt", "altPickedBy", "dealWonAt",
+    "docType",      # 估價單：單據類型以資料庫欄位為準、讀取時注入、開立後不可改——和 status 一樣不是內容（舊單沒有這個鍵，指紋不變）
 })
 
 #: `POST /approve` 的 `expectedFp` 是否必填。H3 寫「必填」；S1 先設 False——舊前端沒帶就照舊放行、帶了且不符才 409。

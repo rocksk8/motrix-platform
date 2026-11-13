@@ -23,6 +23,13 @@
 - core migration：13＝`user_prefs`、14＝`users.quote_email`（編號已佔用，其他分支請從 15 起；見 `core/migrations.py` 註解）。
 - 行為變更：每日 JSON 備份新增「個人偏好」；刪除使用者時連帶清除其 `user_prefs`；`/api/auth/profile`、`/api/auth/preferences` 列入「本公司資料未設定」放行清單（皆有理由）。
 - 測試：`tests/test_my_account_prefs_2026_11_13.py`、`tests/test_quote_email_2026_11_13.py`、`tests/test_e2e_my_account_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/estimate-quote-type；估價單：單號規則依單據類型導出）**
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.doc_type`（`QUOTE`／`ESTIMATE`／`LABELS`／`DEFAULT_ESTIMATE_PREFIX`、`NumberRule`、`rule_for`／`all_rules`／`rule_of_no`／`prefix_for`、`case_no_re`、`seq_key` 等）——單據類型（報價單／估價單）的單號規則（字首／日期格式／流水號位數）與用語；稽核、獎金、通知、PDF 的單號正則由規則導出，不寫死 `MQ-`。
+- 串接點（新增，IP-ESTQ1，編號暫定）：`case.estimate_prefixes`（M01 提供、L1 `helpers/doc_type` 取用）——曾開過估價單的單號字首；L1 不讀 `quotations` 表。
+- 設定中心新增項目「估價單單號字首」（預設 `ME`；`helpers/settings_groups_profit.py`，部署基準 `settings_deploy_baseline.json` 同步）。
+- 行為：不改既有報價單單號（`MQ-YYYYMM-NNN`）與 `quote_seq` 鍵；`helpers/audit.py` 的案件單號推導改用規則導出的正則（對舊 `MQ-` 單號結果不變）。凍結的歷史遷移副本 `core/migrations.py` 刻意不動。
+- L1（審查修正，只增）：`helpers.doc_type` 再加 `used_prefixes`（現在實際有效的各單據單號前綴：靜態保底＋表單範本檔＋已發布自訂模組＋費用類型）、`estimate_prefixes_in_use`（目前＋曾用過的估價單字首）；`validate_prefix` 改查 `used_prefixes`。`helpers.expense_types.used_prefixes(conn)`（新公開介面）／`helpers.custom_modules.used_prefixes(conn)` 為兩邊各自提供的前綴清單；`custom_modules._validate_numbering` 與 `expense_types.validate_expense_type` 存前綴時不可等於估價單字首（目前與曾用過的）。
+- 測試：`tests/test_estimate_doc_type_2026_11_13.py`、`tests/test_e2e_estimate_ui_2026_11_13.py`。
 
 ## 1.162 — 2026-11-13（feat/line-events-all；LINE 全信件接線＋誰要發＋綁定狀況）〔train_number：1.161 → 1.162〕
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：新單位 `helpers.line_catalog`（`LINE_ONLY_EVENTS`／`GROUP_ORDER`／`EXCLUDED_*`／`group_of`／`kind_of`／`mail_key_of`／`name_of`／`exclusion_reason`／`is_known`）、`helpers.line_binding`（`status`／`remind`）；`helpers.line_notify` 加 `DEFAULT_EVENT_SPEC`／`event_spec`／`is_wired`／`wired_events`／`audience_view`／`set_audience`／`AUDIENCE_MODES`／`MAX_AUDIENCE_USERS`，`WIRED_EVENTS` 改為由「信件登記表」推導（惰性物件），`deliver_event`／`notify_event` 多選填關鍵字 `group`；`helpers.line_recipients` 加 `audience_of`／`audience_view`／`resolve_audience`／`visible_to`／`allowed_roles_view`；`helpers.event_audience.group_usernames`／`resolve_usernames` 多選填關鍵字 `mail_key`；`helpers.email_notify.notify_module_activity` 多 `line_event`／`line_usernames`／`line_exclude`／`line_skip`（信件完全不變）。

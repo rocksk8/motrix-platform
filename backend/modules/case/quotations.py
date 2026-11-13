@@ -598,6 +598,19 @@ def _default_terms() -> dict:
     return dict(DEFAULT_TERMS)
 
 
+def _estimate_prefixes(conn=None):
+    """`case.estimate_prefixes`（IP-ESTQ1，2026-11-13）：曾開過估價單的單號字首（去重）。L1 `helpers/doc_type` 靠它在字首改過之後
+    仍認得舊估價單號；資料屬 M01，所以由這裡讀、L1 不讀 quotations。只回字首（不含任何案件內容）。"""
+    import db
+    own = conn is None
+    c = conn if conn is not None else db.get_db()
+    try:
+        return [r[0] for r in c.execute("SELECT DISTINCT SUBSTR(quote_no, 1, 2) FROM quotations WHERE doc_type = 'estimate'").fetchall()]
+    finally:
+        if own:
+            c.close()
+
+
 def _record_doc_version(quote_no: str, entry: dict, keep: int) -> None:
     """`case.doc_version`（M01-PLAN §3-8「pdf_gen W」）：把一筆 PDF 版本紀錄追加進 quotations.data_json 的 docVersions[]
     （只留最後 `keep` 筆；`entry["seq"]` 由這裡依現有筆數編）。L1 `pdf_gen` 產生 PDF 後呼叫，不再自己寫 M01 的表。
