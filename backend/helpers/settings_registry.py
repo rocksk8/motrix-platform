@@ -493,11 +493,18 @@ def _legacy_values(conn, group, strict=False):
     return {k: raw[f.legacy] for k, f in g["fields"].items() if f.legacy and f.legacy != SCALAR_LEGACY and f.legacy in raw}
 
 
+def _has_legacy_source(group):
+    g = _g(group)
+    return g.get("adapter") is not None or bool(g.get("legacy_key"))
+
+
 def _stored(conn, group, strict=False):
     """資料庫裡的值（定義最新發布版優先，否則舊鍵）；沒有 ⇒ {}。"""
     try:
         row = D.get(conn, KIND, group, SCOPE)
     except Exception:                               # noqa: BLE001 — 定義表還沒建（極舊庫／獨立執行的備份工作）⇒ 只看舊鍵
+        if strict and not _has_legacy_source(group):
+            raise                                   # 嚴格讀取、又沒有舊儲存可退：讀不到就是讀不到，不能默默當成沒存過（會變預設值）
         row = None
     if row is not None:
         body = row.get("body") or {}
@@ -586,6 +593,8 @@ def get_group_effective(group, *, conn=None, now=None):
         try:
             return _effective(c, group, now, strict=True)
         except Exception:                           # noqa: BLE001
+            if not _has_legacy_source(group):
+                raise                               # 這個群組的值只存在登錄表的定義裡；讀不到就大聲失敗，不退回預設值
             logger.error("settings: 嚴格讀取群組 %s 失敗，退回舊儲存（不用預設）", group, exc_info=True)
             return _merged(_defaults(group), _legacy_values(c, group, strict=True))      # 轉接器讀不到 ⇒ 這裡丟例外（大聲失敗）
     finally:
