@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 962,
-  "endpoints_api": 958,
-  "write_total": 519,
-  "write_api": 519,
-  "get_api": 439,
-  "distinct_paths_api": 814,
-  "write_with_body_api": 384,
+  "endpoints_total": 965,
+  "endpoints_api": 961,
+  "write_total": 520,
+  "write_api": 520,
+  "get_api": 441,
+  "distinct_paths_api": 817,
+  "write_with_body_api": 385,
   "write_with_path_param_api": 364
  },
  "select_star": {
@@ -4834,6 +4834,11 @@
    "body": true
   },
   "POST /api/settings/email-notify/wizard/test-me": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings-center/batch": {
    "w": true,
    "pp": 0,
    "body": true

@@ -1,5 +1,5 @@
 {
- "core_version": "1.165",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -2103,6 +2103,22 @@
    "system_data": "def()",
    "term_problems": "def(text)"
   },
+  "helper:settings_notify": {
+   "EVENT_KEY": "const",
+   "KIND_LABELS": "const",
+   "LINE_RISKS": "const",
+   "LINK": "const",
+   "NOTIF_TYPE": "const",
+   "batch": "class",
+   "batch.__init__": "def(self, verb=…, header=…)",
+   "compose": "def(items, names=…, header=…)",
+   "emit": "def(items)",
+   "make_item": "def(kind, label, old, new, phase=…, *, actor=…, reason=…, effective_at=…, approvals=…, required=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…)",
+   "notify_change": "def(kind, label, old, new, *, actor=…, reason=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…, phase=…, effective_at=…, approvals=…, required=…)",
+   "preview_recipients": "def(items, conn=…)",
+   "setting_item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
+   "setting_item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
@@ -2138,6 +2154,7 @@
    "materialize_due": "def(conn=…, now=…)",
    "owner_groups": "def(owner)",
    "plan": "def(group, values, *, user=…, conn=…)",
+   "plan_recipients": "def(group, fields, *, user=…)",
    "profile_preview": "def(name, *, conn=…)",
    "profile_skipped": "def(name)",
    "profiles": "def()",

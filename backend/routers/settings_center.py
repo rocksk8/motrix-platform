@@ -162,6 +162,63 @@ def _do_publish(group, values, reason, request, actor):
     return {"ok": True, **out, "classification": cls}
 
 
+_BATCH_MAX_GROUPS = 40
+
+
+@router.post("/api/settings-center/batch")
+def save_batch(request: Request, body: dict = Body(...), authorization: str = Header(None)):
+    """**跨群組一次儲存**（畫面「儲存」一次改了好幾個群組時用）：body `{"groups": {群組: {"values": {欄位: 值}}}, "reason": "...", "preview": false}`。
+    ① 全部群組先驗證（`plan()`；任何一組不合法 ⇒ 整批 400、一組都不寫）② 之後逐群組 publish（每組各自一個交易；**不是跨群組原子**——極少見的中途失敗會回 409，
+    `applied` 列出已寫入的群組、`failed` 是失敗的那組，已寫入的仍照常通知）③ **整批只發一則通知**（伺服器端單一 `batch()`，呼叫端不必自己合併）。
+    `preview:true` ⇒ 只回各群組的 `plan()`（含 `recipients` 收件人預覽）與合併後的 `recipients`，不寫入。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    groups = body.get("groups")
+    if not isinstance(groups, dict) or not groups:
+        raise HTTPException(400, "沒有送出任何要變更的群組")
+    if "undo" in body or any(isinstance(sp, dict) and "expectedValues" in sp for sp in groups.values()):
+        # 多群組復原（`undo`＋每群組 `expectedValues` 逐欄比對）要等 S1c 的 CAS；現在不認得就明確拒絕，絕不悄悄當成一般儲存
+        raise HTTPException(400, "多群組復原尚未開放（需要逐欄比對，之後的版本提供）；請逐一群組使用「還原到某一版」。")
+    if len(groups) > _BATCH_MAX_GROUPS:
+        raise HTTPException(400, "一次最多只能儲存 %d 個群組" % _BATCH_MAX_GROUPS)
+    values_by = {}
+    for g, spec in groups.items():
+        _need_open(g)
+        vals = spec.get("values") if isinstance(spec, dict) else None
+        if not isinstance(vals, dict) or not vals:
+            raise HTTPException(400, "群組 %s 沒有送出任何要變更的欄位" % g)
+        values_by[g] = vals
+    preview = body.get("preview") is True
+    reason = _clip(str(body.get("reason") or "").strip())
+    if not preview and not reason:
+        raise HTTPException(400, "請填寫變更原因")
+    plans = {g: sr.plan(g, v, user=actor["username"]) for g, v in values_by.items()}
+    bad = {g: p["problems"] for g, p in plans.items() if not p["ok"]}
+    if bad:
+        raise HTTPException(400, {"message": "設定未儲存（%d 個群組有問題，一組都沒寫入）" % len(bad), "problems": [
+            {"path": "%s.%s" % (g, x.get("path", "")), "message": x["message"]} for g, ps in bad.items() for x in ps]})
+    if preview:
+        items = []
+        for g, p in plans.items():
+            items += _SN_items(g, p["fields"], actor["username"])
+        return {"ok": True, "groups": plans, "recipients": _SN.preview_recipients(items)}
+    applied, results = [], {}
+    with _SN.batch():
+        for g, v in values_by.items():
+            try:
+                results[g] = sr.publish(g, v, note=reason, user=actor["username"], reason=reason, ip=client_ip(request), actor=actor)
+            except Exception as e:                             # noqa: BLE001
+                raise HTTPException(409, {"message": "有群組沒有存成功：%s（%s）。已寫入的群組仍然有效，請重新整理確認。" % (sr.groups()[g]["label"], str(e) or type(e).__name__),
+                                          "applied": applied, "failed": g})
+            applied.append(g)
+    return {"ok": True, "groups": {g: {**results[g], "classification": plans[g]["fields"]} for g in applied}}
+
+
+def _SN_items(group, fields, user):
+    phase = {"immediate": "updated", "pending": "pending", "pending_approval": "pending_approval"}
+    return [i for i in (_SN.setting_item(group, x["field"], x["old"], x["new"], phase[x["kind"]], actor=user, effective_at=x.get("effectiveAt") or "")
+                        for x in fields if x["kind"] in phase) if i]
+
+
 @router.post("/api/settings-center/groups/{group}/preview")
 def preview_group(group: str, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
@@ -252,6 +309,11 @@ def group_diff(group: str, a: str = "default", b: str = "current", authorization
 def restore_group(group: str, version: int, request: Request, body: dict = Body(default={}), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     _need_open(group)
+    with _SN.batch(verb="復原", header="已復原到第 %d 版" % version):     # 一次復原＝一則「已復原」通知（離開時、連線已關才發）
+        return _restore_impl(group, version, body, actor)
+
+
+def _restore_impl(group, version, body, actor):
     from core.txn import begin_write
     from db import get_db
     conn = get_db()
@@ -347,7 +409,7 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
             raise HTTPException(409, "這筆變更已不是待生效狀態")
         ledger.audit_event(conn, actor, "settings.%s.pending_cancel" % row["key"], row["key"],
                            "撤銷待生效：%s（#%d）原因：%s" % (row["field"], change_id, reason))   # 同交易：變更與稽核一起成功
-        _note = _SN.item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "cancelled",
+        _note = _SN.setting_item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "cancelled",
                                      actor=actor["username"], reason=reason)
         conn.commit()
     except Exception:
@@ -384,7 +446,7 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
             raise HTTPException(409, out["why"])
         ledger.audit_event(conn, actor, "settings.%s.approve" % row["key"], row["key"],
                            "核准待生效變更：%s（#%d）%d／%d" % (row["field"], change_id, out["approvals"], out["required"]))
-        _note = _SN.item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "approved",
+        _note = _SN.setting_item_from_ledger(conn.execute("SELECT key, field, old_json, new_json, reason, effective_at FROM config_changes WHERE id=?", (change_id,)).fetchone(), "approved",
                                      actor=actor["username"], reason=reason, approvals=out["approvals"], required=out["required"])
         conn.commit()
     except Exception:

@@ -344,6 +344,7 @@
               <div class="sc-note" style="color:inherit" x-text="'• ' + r.effect"></div>
             </template>
             <template x-for="w in preview.warnings" :key="w"><div class="sc-note" style="color:var(--warning)" x-text="'⚠ ' + w"></div></template>
+            <div class="sc-note" style="color:inherit" x-show="recipientsText()" data-testid="sc-recipients" x-text="recipientsText()"></div>
           </div>
         </template>
         <template x-for="m in previewProblems()" :key="m"><div class="sc-err" x-text="m"></div></template>
@@ -411,6 +412,17 @@ function settingsCenterPage() {
       clearTimeout(this._toastTimer)
       this._toastTimer = setTimeout(() => { this.toast = null }, 9000)
     },
+    // 儲存前的「誰會收到通知」（伺服器 plan().recipients 的白話）；角色片語以外的對象（簽核人、主管…）目前不會自動通知，誠實寫出來
+    recipientsText() {
+      const r = this.preview && this.preview.recipients
+      if (!r || !r.superadmins) return ''
+      let t = '儲存後會通知：' + (r.superadmins.length ? r.superadmins.join('、') + '（最高管理者）' : '最高管理者')
+      const o = r.others || []
+      if (o.length) t += '，以及 ' + o.slice(0, 5).map(x => x.display).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : '')
+      if (r.line && r.line.willSend) t += '；並發 LINE 給最高管理者'
+      if ((r.ignoredRoles || []).length) t += '。另有「' + r.ignoredRoles.join('、') + '」不在自動通知對象內，請自行告知'
+      return t
+    },
     dayText(iso) {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '')
       return m ? (parseInt(m[2], 10) + ' 月 ' + parseInt(m[3], 10) + ' 日') : ''
@@ -432,6 +444,12 @@ function settingsCenterPage() {
       if (this._initDone) return
       this._initDone = true
       window.addEventListener('beforeunload', e => this.leaveGuard(e))
+      // 通知裡的「完整明細：變更紀錄」連結帶 ?tab=versions（可再帶 &group=群組）⇒ 直接開「版本與變更紀錄」頁籤
+      try {
+        const q = new URLSearchParams(location.search)
+        if (['values', 'versions'].includes(q.get('tab'))) this.tab = q.get('tab')
+        if (q.get('group') && !location.hash) location.hash = '#' + encodeURIComponent(q.get('group'))
+      } catch (e) { /* 網址解析失敗就用預設頁籤 */ }
       await this.loadGroups()
       // 網址帶 #群組代碼（系統中心的卡片這樣連過來，例如 #retention）⇒ 直接開那一組；不認得就開第一組
       let want = ''
