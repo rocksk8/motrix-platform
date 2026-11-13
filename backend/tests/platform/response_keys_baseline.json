@@ -1,4 +1,58 @@
 {
+ "/api/settings-center/index": {
+  "k": [
+   "items",
+   "items[].category",
+   "items[].field",
+   "items[].group",
+   "items[].groupPlain",
+   "items[].kind",
+   "items[].label",
+   "items[].page",
+   "items[].pagePlain",
+   "items[].question",
+   "items[].text"
+  ],
+  "s": 200
+ },
+ "/api/settings-center/overview": {
+  "k": [
+   "categories",
+   "differsItems",
+   "differsItems[].default",
+   "differsItems[].field",
+   "differsItems[].group",
+   "differsItems[].groupPlain",
+   "differsItems[].label",
+   "differsItems[].page",
+   "differsItems[].risk",
+   "differsItems[].value",
+   "pages",
+   "pages[].category",
+   "pages[].differs",
+   "pages[].groups",
+   "pages[].highRisk",
+   "pages[].href",
+   "pages[].id",
+   "pages[].pending",
+   "pages[].plain",
+   "pages[].privacy",
+   "pages[].standalone",
+   "pages[].status",
+   "recent",
+   "stats",
+   "stats.differs",
+   "stats.highRiskGroups",
+   "stats.pending"
+  ],
+  "s": 200
+ },
+ "/api/settings-center/recent": {
+  "k": [
+   "changes"
+  ],
+  "s": 200
+ },
  "/api/importer/status": {
   "k": [
    "ok"
@@ -8626,6 +8680,15 @@
    "items.settings_group:finance_reports.status",
    "items.settings_group:finance_reports.tier",
    "items.settings_group:finance_reports.when",
+   "items.settings_group:import_wizard",
+   "items.settings_group:import_wizard.blurb",
+   "items.settings_group:import_wizard.category",
+   "items.settings_group:import_wizard.note",
+   "items.settings_group:import_wizard.order",
+   "items.settings_group:import_wizard.section",
+   "items.settings_group:import_wizard.status",
+   "items.settings_group:import_wizard.tier",
+   "items.settings_group:import_wizard.when",
    "items.settings_group:legal_params_reminder",
    "items.settings_group:legal_params_reminder.blurb",
    "items.settings_group:legal_params_reminder.category",
@@ -8716,6 +8779,15 @@
    "items.settings_group:netplan_labels.status",
    "items.settings_group:netplan_labels.tier",
    "items.settings_group:netplan_labels.when",
+   "items.settings_group:onepipe",
+   "items.settings_group:onepipe.blurb",
+   "items.settings_group:onepipe.category",
+   "items.settings_group:onepipe.note",
+   "items.settings_group:onepipe.order",
+   "items.settings_group:onepipe.section",
+   "items.settings_group:onepipe.status",
+   "items.settings_group:onepipe.tier",
+   "items.settings_group:onepipe.when",
    "items.settings_group:overhead",
    "items.settings_group:overhead.blurb",
    "items.settings_group:overhead.category",
