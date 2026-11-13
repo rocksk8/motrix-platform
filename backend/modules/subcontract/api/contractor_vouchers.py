@@ -644,7 +644,7 @@ def submit_contractor_voucher(voucher_no: str, authorization: str = Header(None)
         raise HTTPException(404, "申請不存在")
     if row["status"] != "草稿":
         conn.close()
-        raise HTTPException(409, "僅草稿狀態可送出審核")
+        raise HTTPException(409, "僅草稿狀態可送出簽核")
 
     snap  = json.loads(row["snapshot_json"] or "{}")
     vname = snap.get("vendorName") or "外包人員點工"

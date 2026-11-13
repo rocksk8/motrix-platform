@@ -3263,7 +3263,7 @@
                           </span>
 
                           <div x-show="v.status==='草稿'" style="display:flex;gap:6px">
-                            <button @click="submitContractorVoucher(v)" style="padding:3px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
+                            <button @click="submitContractorVoucher(v)" style="padding:3px 10px;font-size:12px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出簽核</button>
                             <button @click="deleteContractorVoucher(v)" style="padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                           </div>
                           <div x-show="v.status==='待審核' || v.status==='簽核中'" style="display:flex;gap:6px">
