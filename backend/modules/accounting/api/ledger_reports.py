@@ -4,6 +4,7 @@
 只讀＝cashier／finance；改科目屬性與角色＝finance（superadmin 直通）。報表的日期一律 YYYY-MM-DD。
 """
 import datetime as _dt
+import unicodedata as _ud
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, Response
 
@@ -184,6 +185,12 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
 # 沒有其他真人最高管理者（單人公司）⇒ 使用者裁示 2026-11-13：原因必填、直接生效（200）、稽核註明「單人公司：無第二位核准」。
 _ROLE_DOMAIN = "ledger:role"
 _SOLO_NOTE = "單人公司：無第二位核准"
+_BLANKISH = {"ㅤ", "ᅟ", "ᅠ", "ﾠ", "⠀"}          # 看起來是空白、但不是空白類別的填充字元
+
+
+def _visible_len(text):
+    """原因的有效字數：去掉空白、零寬／格式字元（Cf）與韓文填充字元之後的長度（只填看不見的字元不算有填原因）。"""
+    return len([c for c in text or "" if not c.isspace() and _ud.category(c) not in ("Cf", "Zs", "Cc") and c not in _BLANKISH])
 
 
 def _role_key(p):
@@ -269,7 +276,7 @@ def put_role(response: Response, body: dict = Body(...), authorization: str = He
     reason = str(b.get("reason") or "").strip()
     if not p["role"] or not p["account_code"]:
         raise HTTPException(400, "需要 role 與 account_code。")
-    if len(reason) < 2:
+    if _visible_len(reason) < 2:
         raise HTTPException(400, "請填寫變更原因（角色對應影響金流，要留在稽核紀錄裡）。")
     conn = get_db()
     try:
@@ -295,7 +302,7 @@ def put_role(response: Response, body: dict = Body(...), authorization: str = He
             conn.commit()
             response.status_code = 200
             return {"ok": True, "pending": False, "applied": True, "role": p["role"], "account_code": p["account_code"],
-                    "warning": "單人公司：沒有第二位最高管理者核准，已直接套用並留稽核。建議到『使用者管理』再設一位最高管理者。"}
+                    "warning": "建議到『使用者管理』再設一位最高管理者，之後角色變更才有第二人把關。"}
         rec = _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": old_code, "new": p}], reason, user,
                         risk="money", effective_at=_dt.datetime.now().isoformat(timespec="seconds"), approvals_required=1,
                         audit_action="ledger.role.request", target_label="角色 %s → %s（待核准）" % (p["role"], p["account_code"]),

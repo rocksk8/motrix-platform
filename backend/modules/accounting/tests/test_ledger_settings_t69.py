@@ -167,6 +167,28 @@ def test_sole_superadmin_still_needs_a_reason_and_a_valid_account(client, sup_a,
     assert _role_code() == before and not [x for x in _audits("ledger.role.put") if x["username"] == "t69_sup_a"]
 
 
+def test_invisible_characters_do_not_count_as_a_reason(client, sup_a, conn):
+    """零寬字元、全形空白、韓文填充字元組成的「原因」＝沒填：單人直接生效與一般申請都擋。"""
+    _only("t69_sup_a")
+    before = _role_code()
+    for bad in ("​​​", "ㅤㅤ", "　　", " ​ ", "﻿⁠", "x​"):
+        assert _put(client, sup_a, reason=bad).status_code == 400, repr(bad)
+    assert _role_code() == before
+    assert _put(client, sup_a, reason="調整​").status_code == 200        # 可見字數夠就過
+
+
+def test_sole_superadmin_direct_change_supersedes_an_older_pending_request(client, sup_a, sup_b, conn):
+    """兩位真人時甲送出待核准；乙離職後甲再改同一個角色 ⇒ 直接生效，舊的待核准被取代，不留下無人能核准的待辦。"""
+    r = _put(client, sup_a)
+    assert r.status_code == 202
+    assert len(client.get("/api/ledger/roles", headers=sup_a).json()["pending"]) == 1
+    _only("t69_sup_a")
+    r2 = _put(client, sup_a, code="1111", reason="乙離職後單人調整")
+    assert r2.status_code == 200, r2.text
+    assert _role_code() == "1111"
+    assert client.get("/api/ledger/roles", headers=sup_a).json()["pending"] == []
+
+
 def test_sole_superadmin_requesting_the_current_account_is_a_409(client, sup_a, conn):
     _only("t69_sup_a")
     assert _put(client, sup_a).status_code == 200
