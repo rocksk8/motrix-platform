@@ -58,7 +58,7 @@ window.CM_PARTS.push(() => ({
     signedBackBusy: false, signedBackErr: '',
     fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
-    onepipe: { links: false, timeline: false },     // 一條龍各批次開關（static/onepipe.js；預設全關＝畫面與今天相同）
+    onepipe: { links: false, timeline: false, entryUnify: false },     // 一條龍各批次開關（static/onepipe.js；讀到之前／讀不到＝全關＝畫面與今天相同）
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,

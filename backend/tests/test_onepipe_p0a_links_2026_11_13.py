@@ -106,7 +106,7 @@ def test_front_end_entries_are_gated_by_the_flag():
     cm = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     assert re.search(r'data-testid="op-open-bar"[^>]*', cm) and 'x-show="onepipe.links && selected"' in cm
     core = (FRONTEND / "js" / "case-management-core.js").read_text(encoding="utf-8")
-    assert "onepipe: { links: false, timeline: false }" in core
+    assert "onepipe: { links: false, timeline: false, entryUnify: false }" in core
     wy = source_tree.page_file("warranty.html").read_text(encoding="utf-8")
     assert "op: { links: false }" in wy and 'x-if="!(op.links' in wy
     pr = source_tree.page_file("payment-request.html").read_text(encoding="utf-8")
