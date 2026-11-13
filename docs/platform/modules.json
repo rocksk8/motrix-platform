@@ -144,6 +144,7 @@
    "js:static/attachment-slots.js",
    "js:static/auth-guard.js",
    "js:static/getting-started-card.js",
+   "js:static/company-wizard.js",
    "js:static/motrix-error.js",
    "js:static/motrix-date.js",
    "js:js/module-builder-consts.js",

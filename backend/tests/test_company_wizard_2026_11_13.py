@@ -149,9 +149,11 @@ def test_full_flow_each_step_saves_then_resumes_then_done(client, live_server, m
     assert page.locator("[data-testid=cw-next]").is_disabled()
     page.fill("[data-testid=cw-field-name]", name)
     page.fill("[data-testid=cw-field-tax_id]", "12345678")
+    page.wait_for_function("document.querySelector('[data-testid=cw-tax-msg]').innerText.includes('檢查碼不符')", timeout=10000)
     assert "檢查碼不符" in page.locator("[data-testid=cw-tax-msg]").inner_text()
     assert page.locator("[data-testid=cw-next]").is_disabled()
     page.fill("[data-testid=cw-field-tax_id]", ubn)
+    page.wait_for_function("document.querySelector('[data-testid=cw-tax-msg]').innerText.includes('格式正確')", timeout=10000)
     assert "格式正確" in page.locator("[data-testid=cw-tax-msg]").inner_text()
     _profile_put_ok(page, lambda: page.click("[data-testid=cw-next]"))
     page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要怎麼聯絡')", timeout=10000)
@@ -332,11 +334,13 @@ def test_skip_keeps_pending_reconfirm_edits_and_asks_before_dropping_own_step(cl
     page.click("[data-testid=cw-skip]")                                   # 第 3 步沒有自己的未存內容 ⇒ 直接略過
     page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('放上公司 Logo')", timeout=10000)
     page.click("[data-testid=cw-step-5]")
+    page.wait_for_function("document.querySelector('[data-testid=cw-summary]').innerText.includes('待確認改名股份有限公司')", timeout=10000)
     assert "待確認改名股份有限公司" in page.locator("[data-testid=cw-summary]").inner_text(), "略過別步不能丟掉等待確認的修改"
     # 第 3 步自己有未存修改：第一次按略過只提醒
     page.click("[data-testid=cw-step-3]")
     page.fill("[data-testid=cw-field-bank_name]", "測試銀行")
     page.click("[data-testid=cw-skip]")
+    page.wait_for_function("document.querySelector('[data-testid=cw-msg]').innerText.includes('再按一次')", timeout=10000)
     assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要把錢匯到哪裡")
     assert "再按一次" in page.locator("[data-testid=cw-msg]").inner_text()
     page.click("[data-testid=cw-skip]")
