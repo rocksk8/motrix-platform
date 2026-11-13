@@ -77,6 +77,12 @@
 - 新增（P0b，旗標 `onepipe.worklog_case`，預設關）：工作日誌可選案件。`GET /api/work-logs/case-options?q=`（登入＋工作日誌或案件管理模組；只回案號／客戶／案名，進行中案件、這個人看得到該案動態的才列，最多 30 筆；旗標關 ⇒ 404）；旗標開時 `POST／PUT /api/work-logs` 的 `case_no` 必須是看得到該案動態的案件（`guard_case_access`，看不到＝404、稽核另記）；改掛才檢查，清空與原樣不動不擋；旗標關＝今天的行為（不檢查）。畫面 `work-log.html` 旗標開才出現「關聯案件」欄位與列表欄，關時 DOM 與送出內容都不變。日誌可見範圍（`GET /api/work-logs`）不變。
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.case_access.attachable_cases(conn, user, q, limit, max_scan)`——給上面選單用，規則與 `case_documents_readable` 同一條；讀 `quotations` 仍只在 `helpers/case_access.py`。
 - 測試：`tests/test_onepipe_worklog_case_2026_11_13.py`。
+- **（併入）(next) — 2026-11-13（feat/settings-matrix-s3a；使用者權限頁：批次授予／取消、範本套用、職責角色連動綁定）**
+- L1（新增，只增；快照由整合者重產）：新單位 `helpers/user_perm_batch.py`（`BATCH_GRANT_REFUSED`、`MAX_USERS`、`list_catalog`、`parse_request`、`preview`、`apply`）；`helpers.duty_roles.gate_reason(touched, reason, extra_keys=())`（相容擴充：批次拒絕清單也走同一條原因規則）、`record_user_modules_change(..., sensitive=True)`（相容擴充）。
+- 行為變更（新端點）：`POST /api/users/permissions/batch/preview`（唯讀）、`POST /api/users/permissions/batch`（最高管理者）；`GET /api/modules/catalog` 新增 `highSensitiveKeys`／`batchGrantRefused`／`financeKeys`（前端不寫死）。規則：高敏感鍵與批次拒絕清單（案件待辦－工程主管確認／業務確認、報價單、費用單據、檔案中心、外包名冊）**授予一律略過、取消要原因（≥4 個不同字）並寫權限變更紀錄**；財務三鍵批次不動；最高管理者不納入；範本預覽＝套用（`planHash` 不符 409）；整批同一個寫入交易。既有 `PUT／POST /api/users` 與職責角色各動作行為不變。
+- 測試：`tests/test_user_perm_batch_2026_11_13.py`（四條路徑各一題）。
+- 行為變更（通知，S1d 共用元件）：批次套用／復原在 commit **之後**經 `settings_notify`（`batch()`）發**一則**合併通知給其他在職最高管理者（操作者本人不收）；動到高敏感／批次拒絕鍵的人 ⇒ 該項 `risk=security`＋`sensitive`（非最高管理者看不到值與原因，另發 LINE 給最高管理者）。通知失敗不影響已 commit 的寫入。
+- 行為變更（審查修正）：範本與復原絕不新增個人扣項；範本套用必帶 `planHash`（否則 400）；取消可點名對方仍持有的舊鍵；取消對方沒有的權限回報略過。
 
 ## 1.165 — 2026-11-13（T83 整合；已合入分支的 L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T83 已合入、但尚未登記到 `docs/platform/modules.json` 的 L1 單位補上歸屬——`helper:menu_categories`、`helper:settings_help`、`router:menu_categories`、`js:static/hint-popover.js`（menu-ux b9：設定中心分類與「?」說明）、`router:bootstrap`（perf：GET /api/bootstrap）。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
@@ -141,13 +147,6 @@
 - 前端修正（無介面變動）：`settings-center.html` 單選沒有選取、數字框空白（正式機使用者回報兩次，旁邊卻寫「目前：…」）。根因：元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名，Alpine 的範圍代理用 `Reflect.has`（含原型鏈）解析名稱，x-for 內的 `valueOf(f)` 解析到原生函式，所有輸入元件（選項／數字／開關／文字）都拿不到目前值。改名 `curVal`，選項比對改 `choiceOn`（代碼數字或字串皆可）。
 - 測試：`tests/test_settings_center_valueof_2026_11_13.py`（3 題：node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一種；舊 bug 對照；全站元件方法名不得蓋住 Object.prototype 成員）。
 - 測試補強（T84 小項，只動測試）：valueof 的 node 前端題在 `MOTRIX_TRAIN=1` 且找不到 node 時改為**紅**（原本略過）；方法名守門 regex 放寬並抽成 `_BAD_MEMBER`（方法簡寫含 async／generator、`get`／`set` 存取子、`name: function`／箭頭函式、帶引號的鍵、`__define*__`／`__lookup*__`），新增守門自己的正對照題（每種寫法抓得到、正常名稱不誤報）。測試共 4 題。
-
-## (next) — 2026-11-13（feat/settings-matrix-s3a；使用者權限頁：批次授予／取消、範本套用、職責角色連動綁定）
-- L1（新增，只增；快照由整合者重產）：新單位 `helpers/user_perm_batch.py`（`BATCH_GRANT_REFUSED`、`MAX_USERS`、`list_catalog`、`parse_request`、`preview`、`apply`）；`helpers.duty_roles.gate_reason(touched, reason, extra_keys=())`（相容擴充：批次拒絕清單也走同一條原因規則）、`record_user_modules_change(..., sensitive=True)`（相容擴充）。
-- 行為變更（新端點）：`POST /api/users/permissions/batch/preview`（唯讀）、`POST /api/users/permissions/batch`（最高管理者）；`GET /api/modules/catalog` 新增 `highSensitiveKeys`／`batchGrantRefused`／`financeKeys`（前端不寫死）。規則：高敏感鍵與批次拒絕清單（案件待辦－工程主管確認／業務確認、報價單、費用單據、檔案中心、外包名冊）**授予一律略過、取消要原因（≥4 個不同字）並寫權限變更紀錄**；財務三鍵批次不動；最高管理者不納入；範本預覽＝套用（`planHash` 不符 409）；整批同一個寫入交易。既有 `PUT／POST /api/users` 與職責角色各動作行為不變。
-- 測試：`tests/test_user_perm_batch_2026_11_13.py`（四條路徑各一題）。
-- 行為變更（通知，S1d 共用元件）：批次套用／復原在 commit **之後**經 `settings_notify`（`batch()`）發**一則**合併通知給其他在職最高管理者（操作者本人不收）；動到高敏感／批次拒絕鍵的人 ⇒ 該項 `risk=security`＋`sensitive`（非最高管理者看不到值與原因，另發 LINE 給最高管理者）。通知失敗不影響已 commit 的寫入。
-- 行為變更（審查修正）：範本與復原絕不新增個人扣項；範本套用必帶 `planHash`（否則 400）；取消可點名對方仍持有的舊鍵；取消對方沒有的權限回報略過。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。
