@@ -62,6 +62,37 @@ def _case_page(page, live_server):
 
 
 @pytest.mark.e2e
+def test_flag_on_completion_note_form_is_prefilled_from_case_records_and_says_so(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_adm", role="admin")
+    _case(assigned=[u], visits=[("2026-03-05", 2), ("2026-03-02", 3)], logs=[("2026-03-02", "拉線到二樓"), ("2026-03-05", "收尾清潔")])
+    _flag(True)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/completion-note-form.html?q={NO}")
+    note = page.locator('[data-testid="cnf-records-note"]')
+    note.wait_for(state="visible", timeout=15000)
+    assert "請確認" in note.inner_text()
+    assert page.evaluate(f"() => Alpine.$data({ROOT}).form.start_date") == "2026-03-02", "開工日＝最早一次階段出勤"
+    ws = page.evaluate(f"() => Alpine.$data({ROOT}).form.work_summary")
+    assert ws.split("\n") == ["2026-03-02　拉線到二樓", "2026-03-05　收尾清潔"]
+
+
+@pytest.mark.e2e
+def test_flag_off_completion_note_form_is_not_prefilled(live_server, make_user, e2e_browser):
+    u, p = make_user(username="p4be_adm_off", role="admin")
+    _case(assigned=[u], visits=[("2026-03-02", 3)], logs=[("2026-03-02", "拉線")])
+    _flag(False)
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/completion-note-form.html?q={NO}")
+    page.wait_for_function(f"() => Alpine.$data({ROOT}).loading === false", timeout=15000)
+    page.wait_for_timeout(1000)
+    assert page.locator('[data-testid="cnf-records-note"]').is_hidden()
+    assert page.evaluate(f"() => Alpine.$data({ROOT}).form.start_date") in ("", None)
+    assert page.evaluate(f"() => Alpine.$data({ROOT}).form.work_summary") in ("", None)
+
+
+@pytest.mark.e2e
 def test_visit_prefill_is_today_and_last_head_count_only_when_flag_on(live_server, make_user, e2e_browser):
     u, p = make_user(username="p4be_visit", role="superadmin")
     _case()

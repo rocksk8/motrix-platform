@@ -623,6 +623,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/completion-notes/case-prefill": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/completion-notes/quote-items": {
    "w": false,
    "pp": 0,

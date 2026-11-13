@@ -406,6 +406,48 @@ def completion_quote_items(quote_no: str, exclude_note: str = "", authorization:
 
 
 
+#: 完工單「施工說明」預填的上限（筆數、字數）：只是起稿，超過的請人自己看案件動態
+_PREFILL_MAX_LOGS = 40
+_PREFILL_MAX_CHARS = 1800
+
+
+@router.get("/api/completion-notes/case-prefill")
+def completion_case_prefill(quote_no: str, authorization: str = Header(None)):
+    """一條龍 P4b：新增完工單時的「施工紀錄預填」（唯讀）。回 `startDate`（這個案件各階段出勤紀錄裡最早的一天，沒有 ⇒ ""）與
+    `workSummary`（掛在這個案件上的工作日誌，依日期排成「日期　內容」逐行；沒有 ⇒ ""）。**只預填，前端放進空白欄位、存檔前由人確認**，伺服器不寫任何東西。
+    **路由須註冊在 `/{note_no}` 之前**。權限＝與建立完工單同一道閘（`_require_admin`）＋「看得到這個案件的動態」（與 `GET /api/quotations/{no}/updates` 同一條規則：
+    `case_documents_readable`）；看不到＝查無（同一句 404，不洩漏案件存在）。回應只有日期與日誌內容文字——沒有時數、照片、記錄人、金額。
+    旗標 `onepipe.entry_unify` 關 ⇒ 404（與這支路由不存在時逐字相同）。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    from helpers import onepipe_flags
+    if not onepipe_flags.flag_on("entry_unify"):
+        raise HTTPException(404, "Not Found")
+    from helpers.case_access import case_documents_readable
+    conn = get_db()
+    try:
+        if not case_documents_readable(conn, quote_no, user):
+            raise HTTPException(404, _QI_NOT_FOUND.replace("報價單", _DT.label_of_no(quote_no)))
+        start = conn.execute(
+            "SELECT MIN(v.visit_date) FROM case_stage_visits v JOIN case_stages s ON s.id=v.stage_id "
+            "WHERE s.quote_no=? AND v.visit_date != ''", (quote_no,)).fetchone()[0] or ""
+        lines, used = [], 0
+        for w in conn.execute("SELECT log_date, content FROM work_logs WHERE case_no=? ORDER BY log_date, id LIMIT ?",
+                              (quote_no, _PREFILL_MAX_LOGS)).fetchall():
+            text = " ".join(str(w["content"] or "").split())            # 內容壓成一行（換行、連續空白收成一個空格）
+            if not text:
+                continue
+            line = "%s　%s" % (w["log_date"] or "", text)
+            if used + len(line) > _PREFILL_MAX_CHARS:
+                lines.append("…（其餘請見案件動態）")
+                break
+            lines.append(line)
+            used += len(line) + 1
+        return {"startDate": start, "workSummary": "\n".join(lines)}
+    finally:
+        conn.close()
+
+
 @router.get("/api/completion-notes/{note_no}")
 def get_completion_note(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
