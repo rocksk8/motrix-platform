@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-29a"
+$ApplyModuleScriptVersion = "2026-11-13c"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -87,6 +87,7 @@ $script:ServiceState = "unknown"
 $script:LockHeld = $false
 $script:RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $script:StartedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$script:StartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore（server.log.1 是不是本次輪替出來的）
 $script:ResultScript = "apply_module_update"
 $script:ResultScriptVersion = $ApplyModuleScriptVersion
 $script:ResultPackage = $PackagePath
@@ -381,6 +382,22 @@ function Get-StartupRange($tail) {
     return $null
 }
 
+# 讀 server.log 最後 $n 行（UTF-8）；**本次啟動的起點不在裡面、而 server.log.1 存在 ⇒ 往前接上 server.log.1 的最後 $n 行**。
+#   為什麼（2026-11-13 T81 正式機）：archive 的 server.log 輪替（≥50 MB，原地清成 0 byte）會把啟動行搬去 server.log.1，
+#   只讀 server.log 就找不到「MOTRIX ERP starting／Uvicorn running on」（字面不符；或掃空檔假綠）。
+#   $notBefore（DateTime，可 $null）＝本次套用開始時間：server.log.1 的修改時間早於它，代表那是「上一個行程」的舊檔、不是本次輪替出來的 ⇒ 不接
+#   （接了會把上一個行程印過的啟動行當成本次的，回滾後的檢查會假綠；輪替是 copy2，.1 的 mtime＝輪替當下 log 最後一次寫入）。
+#   回傳一律用 `return ,$x` 保持陣列（0 行也是陣列）。
+function Get-ServerLogTail([string]$logPath, [int]$n = 200, $notBefore = $null) {
+    $tail = @(Get-Content $logPath -Tail $n -Encoding UTF8)
+    if ($null -ne (Get-StartupRange $tail)) { return ,$tail }
+    $prev = "$logPath.1"
+    if (-not (Test-Path $prev)) { return ,$tail }
+    if ($null -ne $notBefore -and (Get-Item $prev).LastWriteTime -lt $notBefore) { return ,$tail }
+    $older = @(Get-Content $prev -Tail $n -Encoding UTF8)
+    return ,@($older + $tail)
+}
+
 # module_update.py 子命令（--json）：回 @{ Ok; Data; Text }。
 #   Data＝最後一行 `MODULE_UPDATE_RESULT {json}` 解出的物件；沒有那一行 ⇒ Ok=$false、Data=$null（ps1 視為失敗）。
 function Invoke-ModuleUpdate([string[]]$ToolArgs) {
@@ -430,7 +447,7 @@ function Get-LogCheck([string]$key, [string]$version) {
     $notLoadedSeen = $false
     $logPath = Join-Path $BackendDir "logs\server.log"
     if (-not (Test-Path $logPath)) { return @{ Errors = @(); Loaded = $false; NotLoaded = $false; Boot = $false } }
-    $tail = Get-Content $logPath -Tail 200 -Encoding UTF8
+    $tail = Get-ServerLogTail $logPath 200 $script:StartedAtTime
     $bootRange = Get-StartupRange $tail
     $lastStartIdx = -1
     for ($i = $tail.Count - 1; $i -ge 0; $i--) {

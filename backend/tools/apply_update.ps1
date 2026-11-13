@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-11-13a"
+$ApplyScriptVersion = "2026-11-13c"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -162,6 +162,7 @@ $script:ServiceState = "unknown"
 $script:LockHeld = $false
 $script:RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $script:StartedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$script:StartedAtTime = Get-Date   # Get-ServerLogTail 的 $notBefore（server.log.1 是不是本次輪替出來的）
 $script:ResultScript = "apply_update"
 $script:ResultScriptVersion = $ApplyScriptVersion
 $script:ResultPackage = $PackagePath
@@ -283,6 +284,22 @@ function Get-StartupRange($tail) {
         if ($tail[$i] -like "*MOTRIX ERP starting*") { return ,@($tail[$i..($tail.Count - 1)]) }
     }
     return $null
+}
+
+# 讀 server.log 最後 $n 行（UTF-8）；**本次啟動的起點不在裡面、而 server.log.1 存在 ⇒ 往前接上 server.log.1 的最後 $n 行**。
+#   為什麼（2026-11-13 T81 正式機）：archive 的 server.log 輪替（≥50 MB，原地清成 0 byte）會把啟動行搬去 server.log.1，
+#   只讀 server.log 就找不到「MOTRIX ERP starting／Uvicorn running on」（字面不符；或掃空檔假綠）。
+#   $notBefore（DateTime，可 $null）＝本次套用開始時間：server.log.1 的修改時間早於它，代表那是「上一個行程」的舊檔、不是本次輪替出來的 ⇒ 不接
+#   （接了會把上一個行程印過的啟動行當成本次的，回滾後的檢查會假綠；輪替是 copy2，.1 的 mtime＝輪替當下 log 最後一次寫入）。
+#   回傳一律用 `return ,$x` 保持陣列（0 行也是陣列）。
+function Get-ServerLogTail([string]$logPath, [int]$n = 200, $notBefore = $null) {
+    $tail = @(Get-Content $logPath -Tail $n -Encoding UTF8)
+    if ($null -ne (Get-StartupRange $tail)) { return ,$tail }
+    $prev = "$logPath.1"
+    if (-not (Test-Path $prev)) { return ,$tail }
+    if ($null -ne $notBefore -and (Get-Item $prev).LastWriteTime -lt $notBefore) { return ,$tail }
+    $older = @(Get-Content $prev -Tail $n -Encoding UTF8)
+    return ,@($older + $tail)
 }
 
 # 開關生效檢查的判定（Step 5 呼叫；抽出來才測得到）。$range＝Get-StartupRange 的結果。
@@ -1048,7 +1065,7 @@ for ($i = 0; $i -lt 20; $i++) {
 $logErrors = @()
 $logPath = Join-Path $BackendDir "logs\server.log"
 if (Test-Path $logPath) {
-    $tail = Get-Content $logPath -Tail 200 -Encoding UTF8
+    $tail = Get-ServerLogTail $logPath 200 $script:StartedAtTime
     $bootRange = Get-StartupRange $tail
     # crash-restart 迴圈搶 port 666 重新綁定時，重試階段偶爾會留下 1～2 次
     # [Errno 10048]（位址已被使用）之類的暫時性錯誤，迴圈本身會自動重試到成功；
