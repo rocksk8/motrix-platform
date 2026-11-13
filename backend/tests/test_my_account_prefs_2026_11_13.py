@@ -1,5 +1,6 @@
 """「我的帳號」個人偏好（2026-11-13）：存伺服器端、換 session 仍在、只能動自己的、只收白名單。"""
 import pytest
+from core.source_tree import page_file as _page_file
 
 
 def _login(client, u, p):
@@ -183,6 +184,6 @@ def test_company_greeting_off_is_reported_and_picker_is_locked_in_page(client, m
 
 def test_page_disables_greeting_picker_with_plain_reason():
     from pathlib import Path
-    src = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "my-account.html").read_text(encoding="utf-8")
+    src = _page_file("my-account.html").read_text(encoding="utf-8")
     assert "公司已關閉登入問候語" in src and ':disabled="locked(k)"' in src and "d.company" in src
     assert "login_greeting_off" in src

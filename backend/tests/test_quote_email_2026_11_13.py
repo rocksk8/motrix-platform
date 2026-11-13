@@ -1,5 +1,6 @@
 """報價用公司信箱（2026-11-13）：使用者設定 → 公司對外信箱 → 個人信箱；只有最高管理者能設；已開出的報價單不變；信件只加 Reply-To。"""
 import json
+from core.source_tree import page_file as _page_file
 from pathlib import Path
 
 import pytest
@@ -298,7 +299,7 @@ def test_update_forged_email_is_overridden_but_an_untouched_old_value_stays(clie
     assert _snap(qno)["salesEmail"] == "upd@corp.com"              # 改成不合法的值 ⇒ 覆寫成解析值
 
 
-def test_other_quote_mails_also_carry_reply_to(monkeypatch):
+def test_other_quote_mails_also_carry_reply_to(client, monkeypatch):
     """next_tier／approved／returned／resubmit_requester 與 approval_request 一致：有快照才加 Reply-To，沒有就維持舊呼叫形狀。"""
     from db import get_db
     from helpers import email_notify as EN
@@ -330,7 +331,7 @@ def test_sales_contact_new_field_name_and_old_name_kept(client, make_user, su):
 
 def test_profile_copy_distinguishes_personal_email_from_quote_email():
     import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "my-account.html").read_text(encoding="utf-8")
+    html = _page_file("my-account.html").read_text(encoding="utf-8")
     assert "報價單與報價相關信件上帶的信箱，是下方的「報價用信箱」" in html
     assert "profile-quote-email-none" in html and "尚未設定：目前報價單上不會有你的信箱" in html
     assert "（尚未設定）" in html
