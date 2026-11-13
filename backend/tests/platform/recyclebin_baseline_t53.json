@@ -154,8 +154,8 @@
    "reason": "exempt: 建立失敗時刪掉剛建的那一筆（補償動作，不是使用者刪除）"
   },
   "modules/case/case_deadlines.py::system_settings": {
-   "count": 1,
-   "reason": "exempt: 系統設定鍵值（非單據）"
+   "count": 2,
+   "reason": "exempt: 系統設定鍵值（非單據）；T84 階段到期去重鍵修剪多一處"
   },
   "modules/case/material_payment.py::case_material_payment_lines": {
    "count": 1,

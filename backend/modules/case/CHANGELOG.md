@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-13（fix/case-deadline-notif-holes；T84 案件階段到期通知補三個洞）
+- 修正（洞 1）：`casestage_notif.*` 去重鍵不再只寫不刪——每次階段到期掃描結尾修剪，只留「還沒完成、到期日 ≥ 今天－1 天」的階段的鍵（慣例同 `caseproj_notif`；看不懂格式的鍵不動）。鍵格式不變，舊鍵（純日期）仍視為「已處理」⇒ 上線當下不會補發；過去已逾期的階段永遠不會被選到。
+- 修正（洞 2）：同一個人同一天有多個階段到期 ⇒ 站內通知彙整成一則、信件（與 LINE）一人一封（主管同理，一位主管一封）；只有一個階段時內容與措辭同舊版。信件內容由 `helpers/email_notify.py` 新增的 `_send_case_stage_digest` 組出（沿用 `case_stage_deadline`／`case_stage_deadline_manager` 兩個信件類型與收件人設定）。
+- 修正（洞 3）：不再「先寫鍵、再丟 daemon thread 寄信」。站內通知與去重鍵（`p:<旗標>:<日期>`）在同一筆交易寫入；信件改成同步等寄送結果，寄出（含結果不明／永久失敗／沒有收件人）才把鍵寫成最終；暫時失敗或機器略過 ⇒ 本輪停止後續信件、鍵停在 `p:`，到期日之前（含 2、1 天前）每次每日檢查只重試外部通道，**不重發站內通知與事件**——最多重發一次，不會永遠漏發。
+- 測試：`tests/test_case_stage_deadline_holes_2026_11_13.py`（修剪、彙整、兩階段重試、主管那封單獨補、交易原子性、事件只發一次、上線不補發、補登單靜音）；`tests/test_completion_note_events_t63.py` 的「同人兩階段」改為彙整後 1 則。
+
 ## (next) — 2026-11-13（feat/ux-p15-dashboard；UX P1.5）；併入 feat/menu-ux-myaccount（報價用信箱；表單 V3.44）；併入 fix/wording-t82-sweep（T82 用詞整理）；併入 feat/quote-list-ux（T84 報價清單重排）
 - 文字（T82 用詞整理）：案件管理頁「開票憑據」「出貨單」列的按鈕「送出審核」→「送出簽核」（承攬憑據與傳票頁維持原字）；不動 API／資料／權限
 - 前端（文字）：頁面 `<title>` 後綴「專案管理系統」一律改為「MOTRIX PLATFORM」（系統標語改由公司設定 `brand.tagline` 決定，預設 MOTRIX PLATFORM）；不動 API／資料／權限。

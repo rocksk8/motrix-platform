@@ -6,6 +6,7 @@
 程式碼逐字搬移；測試 patch 的名字（notify_* 等）是本模組的屬性。
 """
 import calendar
+import hashlib
 import json
 import os
 import threading
@@ -41,11 +42,80 @@ from modules.case import payable_reminders  # noqa: E402
 from modules.case.quotations import is_historical_json as _is_hist, sql_hist_hint as _hist_hint  # noqa: E402  T70 補登單靜音
 
 
+# ── 案件階段到期（T84：補三個既有的洞）──────────────────────────────────────────────────────────
+# 去重鍵 `casestage_notif.{案號}.{階段id}.{帳號}.{3d|deadline}`（格式不變，舊鍵照樣有效 ⇒ 上線當下不會重發）。鍵的值：
+#   "<日期>"          ＝已處理（舊版寫的就是這種；最終狀態）
+#   "p:<旗標>:<日期>"  ＝站內通知已送（與鍵同一筆交易寫入），外部通道（信件／LINE）還沒確定送出；旗標 a＝負責人那一封已送、m＝主管那一封已送
+# 洞 1（只寫不修）：每次掃描結尾修剪——只留「還沒完成、到期日 ≥ 今天－1 天」的階段的鍵（與 `caseproj_notif` 同一個「只留還活著的」慣例）。
+# 洞 2（逐階段發）：同一個人同一天的階段彙整成一則站內通知＋一封信（主管同理一人一封）；只有一個階段時內容與舊版相同。
+# 洞 3（先寫鍵再發送、發送在 daemon thread）：站內通知與鍵同交易；信件改成同步等結果，寄出（或結果不明／永久失敗／沒有收件人）才把鍵寫成最終；
+#   暫時失敗 ⇒ 鍵停在 p: ⇒ 到期日之前每次每日檢查只重試外部通道，**不會重發站內通知**；最多重發一次，不會永遠漏發（重試窗口＝到期前 3 天～到期當天）。
+# 不補發：只看「今天～今天＋3 天」到期的階段，過去已逾期的永遠不會被選到；首次嘗試仍只在到期前 3 天與當天兩個日子（與舊版相同），
+#   「到期前 1～2 天」只用來重試已經有 p: 鍵的項目，沒有鍵的不會憑空新發。
+def _send_stage_digest(items, **kw):
+    """階段到期通知一人一封（彙整）、同步等結果（T84）；用模組屬性呼叫（`_en._x`），不 from-import L1 的底線名稱。測試 patch 這個名字。"""
+    return _en._send_case_stage_digest(items, **kw)
+
+
+_STAGE_GUARD_PREFIX = "casestage_notif."
+_STAGE_GUARD_KEEP_DAYS = 1       # 到期日之後再留幾天才修剪（同一天重跑、時鐘誤差的緩衝）
+
+
+def _stage_state(val):
+    """鍵的值 ⇒ (kind, flags)：kind＝none／done／pending。"""
+    if not val:
+        return "none", ""
+    sv = str(val)
+    if sv.startswith("p:"):
+        parts = sv.split(":", 2)
+        return "pending", (parts[1] if len(parts) > 2 else "")
+    return "done", ""
+
+
+def _stage_put_states(conn, states: dict) -> None:
+    now = datetime.now().isoformat()
+    conn.executemany(
+        "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+        [(k, json.dumps(v, ensure_ascii=False), now) for k, v in states.items()])
+
+
+def _when_text(days_ahead: int) -> str:
+    return "今日到期" if days_ahead <= 0 else f"{days_ahead} 天後到期"
+
+
+def _prune_case_stage_guard_keys(live: set) -> None:
+    """清掉不再需要的 `casestage_notif.*` 鍵（T84 洞 1）。`live`＝{(案號, 階段 id 字串)}：還沒完成、到期日 ≥ 今天－KEEP 的階段（由掃描本體
+    查好傳進來——不在這裡另讀 case_stages）；不在裡面的（階段已刪除、已完成、早已過期）一律刪，過期的階段永遠不會再被掃到，留著沒有作用。
+    看不懂格式的鍵不動（不刪自己不認得的東西）。"""
+    conn = get_db()
+    try:
+        existing = [r["key"] for r in conn.execute(
+            "SELECT key FROM system_settings WHERE key LIKE ?", (_STAGE_GUARD_PREFIX + "%",)).fetchall()]
+        stale = []
+        for k in existing:
+            rest = k[len(_STAGE_GUARD_PREFIX):].rsplit(".", 1)[0]          # 去掉尾端的 3d／deadline
+            parts = rest.split(".", 2)                                      # 案號、階段 id、帳號（案號與帳號都可能含 "."，所以由左邊切兩刀）
+            if len(parts) < 3:
+                continue
+            if (parts[0], parts[1]) not in live:
+                stale.append(k)
+        if stale:
+            conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
+            conn.commit()
+            _logger.info("Pruned %d stale casestage_notif guard keys", len(stale))
+    except Exception as exc:
+        _logger.warning("_prune_case_stage_guard_keys failed: %s", exc)       # 收斂失敗不該讓每日檢查掛掉
+    finally:
+        conn.close()
+
+
 def _check_case_stage_deadline() -> None:
-    """Notify assignees of case execution-progress stages (caseRecord.stages, stored in
-    quotations.data_json) due in 3 days or due today, if not yet marked done."""
+    """Notify assignees of case execution-progress stages (case_stages) due in 3 days or due today, if not yet marked done.
+    同一個人同一天彙整成一則；站內通知與去重鍵同交易；信件寄出才把鍵寫成最終（見上面的 T84 說明）。"""
     today     = _date.today()
     today_str = today.isoformat()
+    live_stages = None            # 修剪用：還活著的階段（查不到＝None ⇒ 不修剪，絕不在不確定時刪鍵）
     try:
         conn = get_db()
         users   = conn.execute("SELECT id, username, display_name FROM users").fetchall()
@@ -62,13 +132,12 @@ def _check_case_stage_deadline() -> None:
                 JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
             """).fetchall()
         }
-        # Phase 5（2026-08-23）：改成直接 JOIN case_stages 表，SQL 層就用 done=0 AND
-        # due_date IN (...) 篩出真正要處理的列，取代原本「撈全部已成案案件的整包
-        # stages JSON，Python 迴圈逐一比對到期日」的寫法——正規化橋樑（3a/3b/v52）
-        # 已保證這張表對每個有執行進度的案件都是權威、完整的來源。
+        floor = (today - _timedelta(days=_STAGE_GUARD_KEEP_DAYS)).isoformat()
+        live_stages = {(r["quote_no"], str(r["id"])) for r in conn.execute(
+            "SELECT quote_no, id FROM case_stages WHERE done=0 AND due_date >= ?", (floor,)).fetchall()}
+        # Phase 5（2026-08-23）：直接 JOIN case_stages 表，SQL 層用 done=0 AND due_date 篩出要處理的列（正規化橋樑已保證這張表是權威）。
+        # T84：範圍改成「今天～今天＋3 天」——首次嘗試仍只在 3 天前與當天（下面判斷），中間兩天只用來重試已有 p: 鍵的項目。
         check_date_3d = (today + _timedelta(days=3)).isoformat()
-        check_date_0  = today_str
-        date_to_type = {check_date_3d: (3, "3d"), check_date_0: (0, "deadline")}
         rows = conn.execute("""
             SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person_id,
                    cs.id AS stage_id, cs.label, cs.due_date, cs.assigned_to,
@@ -77,15 +146,25 @@ def _check_case_stage_deadline() -> None:
             JOIN quotations q ON q.quote_no = cs.quote_no
             WHERE COALESCE(NULLIF(q.deal_tag,''), json_extract(q.data_json,'$.dealTag'), '') = '已成案'
               AND cs.done = 0
-              AND cs.due_date IN (?, ?)
-        """, (check_date_3d, check_date_0)).fetchall()
+              AND cs.due_date BETWEEN ? AND ?
+        """, (today_str, check_date_3d)).fetchall()
+        states = {}
+        for r in conn.execute("SELECT key, value_json FROM system_settings WHERE key LIKE ?", (_STAGE_GUARD_PREFIX + "%",)).fetchall():
+            try:
+                states[r["key"]] = json.loads(r["value_json"])
+            except (TypeError, ValueError):
+                states[r["key"]] = r["value_json"]
         conn.close()
 
+        items = []                       # 每個 (階段, 負責人, 類型) 一筆
         for row in rows:
             if _is_hist(row["hist_dj"]):          # T70：補登的歷史案件不發階段到期提醒
                 continue
-            days_ahead, notif_type = date_to_type[row["due_date"]]
-            check_date = row["due_date"]
+            try:
+                days_left = (_date.fromisoformat(row["due_date"]) - today).days
+            except (TypeError, ValueError):
+                continue
+            primary = "3d" if row["due_date"] == check_date_3d else "deadline" if row["due_date"] == today_str else None
             assignees = list(json.loads(row["assigned_to"] or "[]"))
             if not assignees:
                 fallback = uid_map.get(row["sales_person_id"])
@@ -94,45 +173,126 @@ def _check_case_stage_deadline() -> None:
             for username in assignees:
                 if not username:
                     continue
-                guard_key = f"casestage_notif.{row['quote_no']}.{row['stage_id']}.{username}.{notif_type}"
-                if _get_setting(guard_key):
-                    continue
-                _set_setting(guard_key, today_str)
-                display = dn_map.get(username, username)
-                threading.Thread(
-                    target=notify_case_stage_deadline,
-                    args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
-                          username, display, row["customer_name"] or "", row["project_name"] or "", None),
-                    daemon=True,
-                ).start()
-                _notify(username, "case_stage_deadline", row["quote_no"],
-                        f"{row['quote_no']} · {row['label'] or ''}",
-                        "案件執行進度「" + (row["label"] or "") + "」" +
-                        ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
-                try:                                                         # BP-4 S4：額外通知的事件（同一個 guard 之內只發一次；連匯入失敗也不能中斷這一輪掃描）
+                for ty in ("3d", "deadline"):
+                    key = f"{_STAGE_GUARD_PREFIX}{row['quote_no']}.{row['stage_id']}.{username}.{ty}"
+                    kind, flags = _stage_state(states.get(key))
+                    if kind == "done" or (kind == "none" and ty != primary):
+                        continue
+                    dept_id = dept_map.get(username)
+                    mgr = dept_mgr_username.get(dept_id) if dept_id else None
+                    items.append({"key": key, "kind": kind, "flags": flags, "username": username, "display": dn_map.get(username, username),
+                                  "quote_no": row["quote_no"], "label": row["label"] or "", "due": row["due_date"], "days_left": days_left,
+                                  "customer": row["customer_name"] or "", "project": row["project_name"] or "",
+                                  "mgr": mgr if (mgr and mgr != username) else None})
+
+        # ── 階段 1：站內通知（一人一則）＋ 鍵寫成 p:——同一筆交易（回滾＝兩者一起沒有，下次當作全新的再發）──────────────
+        fresh = [i for i in items if i["kind"] == "none"]
+        if fresh:
+            by_user, by_mgr = {}, {}
+            for it in fresh:
+                by_user.setdefault(it["username"], []).append(it)
+                if it["mgr"]:
+                    by_mgr.setdefault(it["mgr"], []).append(it)
+            from helpers.audit import _notify_in_txn
+            wconn = get_db()
+            try:
+                for username, its in sorted(by_user.items()):
+                    f = its[0]
+                    if len(its) == 1:
+                        _notify_in_txn(wconn, username, "case_stage_deadline", f["quote_no"], f"{f['quote_no']} · {f['label']}",
+                                       "案件執行進度「" + f["label"] + "」" + _when_text(f["days_left"]))
+                    else:
+                        _notify_in_txn(wconn, username, "case_stage_deadline", f["quote_no"], f"{len(its)} 個案件階段即將到期",
+                                       "；".join(f"{i['quote_no']}「{i['label']}」{_when_text(i['days_left'])}" for i in its)[:400])
+                for mgr, its in sorted(by_mgr.items()):
+                    f = its[0]
+                    if len(its) == 1:
+                        _notify_in_txn(wconn, mgr, "case_stage_deadline_manager", f["quote_no"], f"{f['quote_no']} · {f['label']}",
+                                       f"部門成員 {f['display']} 負責的案件執行進度「{f['label']}」" + _when_text(f["days_left"]))
+                    else:
+                        _notify_in_txn(wconn, mgr, "case_stage_deadline_manager", f["quote_no"], f"部門成員 {len(its)} 個案件階段即將到期",
+                                       "；".join(f"{i['display']}：{i['quote_no']}「{i['label']}」{_when_text(i['days_left'])}" for i in its)[:400])
+                _stage_put_states(wconn, {it["key"]: f"p::{today_str}" for it in fresh})
+                wconn.commit()
+            except BaseException:
+                try:
+                    wconn.rollback()
+                except Exception:                # noqa: BLE001
+                    pass
+                raise
+            finally:
+                wconn.close()
+            for it in fresh:
+                it["kind"] = "pending"
+                try:                                                         # BP-4 S4：額外通知的事件（站內通知同一刻只發一次；連匯入失敗也不能中斷這一輪掃描）
                     from helpers.notify_actions import emit as _emit_event
-                    _emit_event("case.deadline_near", {"quoteNo": row["quote_no"], "stage": row["label"] or "", "dueDate": check_date,
-                                                       "daysLeft": days_ahead, "assignee": username})
+                    _emit_event("case.deadline_near", {"quoteNo": it["quote_no"], "stage": it["label"], "dueDate": it["due"],
+                                                       "daysLeft": it["days_left"], "assignee": it["username"]})
                 except Exception:                                            # noqa: BLE001
                     _logger.warning("案件階段到期事件發佈失敗", exc_info=True)
-                # 案件/專案管理延伸（2026-08-22）：額外通知負責人所屬部門的主管，
-                # 跟指派人自己收到的 case_stage_deadline 是兩條獨立路徑
-                dept_id = dept_map.get(username)
-                mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
-                if mgr_username and mgr_username != username:
-                    _notify(mgr_username, "case_stage_deadline_manager", row["quote_no"],
-                            f"{row['quote_no']} · {row['label'] or ''}",
-                            f"部門成員 {display} 負責的案件執行進度「{row['label'] or ''}」" +
-                            ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
-                    threading.Thread(
-                        target=notify_case_stage_deadline_manager,
-                        args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
-                              username, display, dept_id, row["customer_name"] or "", row["project_name"] or ""),
-                        daemon=True,
-                    ).start()
+
+        # ── 階段 2：外部通道（信件／LINE），一人一封、同步等結果；寄出才寫進度旗標 ──────────────────────────────────
+        halted = False
+
+        def _is_final(it):
+            return "a" in it["flags"] and (not it["mgr"] or "m" in it["flags"])
+
+        def _persist(its):
+            """把這批項目的鍵依旗標寫回：負責人那封與（有主管的）主管那封都送了 ⇒ 最終（只留日期）；否則 p:<旗標>:<日期>。"""
+            c = get_db()
+            try:
+                _stage_put_states(c, {it["key"]: (today_str if _is_final(it) else f"p:{it['flags']}:{today_str}") for it in its})
+                c.commit()
+                for it in its:
+                    it["persisted"] = True
+            finally:
+                c.close()
+
+        def _dispatch(its, flag, **kw):
+            nonlocal halted
+            out = {}
+            who = kw.get("assignee_username") or ("m:" + kw.get("manager_username", ""))
+            lk = "casestage-%s:%s:%s" % (who, today_str, hashlib.md5("|".join(sorted(i["key"] for i in its)).encode("utf-8")).hexdigest()[:10])
+            try:
+                ok = _send_stage_digest([{k: i[k] for k in ("quote_no", "label", "due", "days_left", "customer", "project", "display")} for i in its],
+                                        out=out, line_key=lk, **kw)
+            except Exception as exc:                                         # noqa: BLE001
+                _logger.warning("_check_case_stage_deadline: 寄送例外（%s）：%s", who, exc)
+                ok, out = False, {"outcome": _en.SEND_TRANSIENT_FAIL}
+            if ok:
+                for i in its:
+                    if flag not in i["flags"]:
+                        i["flags"] += flag
+                _persist(its)
+            elif out.get("outcome") in (_en.SEND_TRANSIENT_FAIL, _en.SEND_SKIPPED):
+                _logger.warning("_check_case_stage_deadline: 寄送%s，本輪停止後續階段信（鍵停在 p:，下次每日檢查只重試外部通道）", out.get("outcome"))
+                halted = True
+
+        by_user_ext = {}
+        for it in items:
+            if "a" not in it["flags"]:
+                by_user_ext.setdefault(it["username"], []).append(it)
+        for username, its in sorted(by_user_ext.items()):
+            if halted:
+                break
+            _dispatch(its, "a", assignee_username=username)
+        by_mgr_ext = {}
+        for it in items:
+            if it["mgr"] and "m" not in it["flags"]:
+                by_mgr_ext.setdefault(it["mgr"], []).append(it)
+        for mgr, its in sorted(by_mgr_ext.items()):
+            if halted:
+                break
+            _dispatch(its, "m", manager_username=mgr)
+        _done_unwritten = [it for it in items if _is_final(it) and not it.get("persisted")]      # 旗標早就齊了、鍵卻還掛 p:（上次寫回前中斷）⇒ 收斂成最終
+        if _done_unwritten:
+            _persist(_done_unwritten)
         _logger.info("Case stage deadline check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_case_stage_deadline failed: %s", exc)
+    finally:
+        if live_stages is not None:
+            _prune_case_stage_guard_keys(live_stages)
 
 
 def _check_project_deadline() -> None:

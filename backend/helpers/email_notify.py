@@ -1686,6 +1686,61 @@ def notify_case_stage_deadline_manager(
     _async_send(to, _mt.subject("case_stage_deadline_manager", f"部門成員案件進度到期提醒：{name} · {label} · {stage_label}"), html)
 
 
+def _case_stage_digest_parts(items: list, manager: bool) -> dict:
+    """案件階段到期通知的內容（一人一天彙整成一封／一則 LINE；T84）。items＝[{quote_no, label, due, days_left, customer, project, display}]。
+    **只有一個階段 ⇒ 與舊的逐階段信件同樣的欄位與措辭**（老使用者看到的不變）；多個階段 ⇒ 一張清單。"""
+    n = len(items)
+    if n == 1:
+        it = items[0]
+        label = f"{it['customer']}{'／' if it['customer'] and it['project'] else ''}{it['project']}" or it["quote_no"]
+        name = it["display"]
+        rows = [("案件單號", it["quote_no"]), ("階段", it["label"]), ("到期日期", it["due"]), ("負責人員", name)]
+        if it["days_left"] <= 0:
+            badge_text, badge_color = "已逾期", "#DC2626"
+            reason = (f"您部門的 {name} 負責的案件「{label}」執行進度階段「{it['label']}」已於 {it['due']} 到期尚未完成，請關注處理狀況。" if manager else
+                      f"{name} 負責的案件「{label}」執行進度階段「{it['label']}」已於 {it['due']} 到期尚未完成，請盡速確認處理狀況。")
+        else:
+            badge_text, badge_color = f"剩餘 {it['days_left']} 天", "#D97706"
+            reason = (f"您部門的 {name} 負責的案件「{label}」執行進度階段「{it['label']}」將於 {it['due']} 到期，尚餘 {it['days_left']} 天，請儘早關注。" if manager else
+                      f"{name} 負責的案件「{label}」執行進度階段「{it['label']}」將於 {it['due']} 到期，尚餘 {it['days_left']} 天，請儘早確認進度。")
+        return {"title": "部門成員案件執行進度即將到期" if manager else "案件執行進度即將到期", "rows": rows, "reason": reason,
+                "badge_text": badge_text, "badge_color": badge_color, "link": f"{_base_url()}/pages/case-management.html?q={it['quote_no']}",
+                "subject": ((f"部門成員案件進度到期提醒：{name} · {label} · {it['label']}") if manager else (f"案件執行進度到期提醒：{name} · {label} · {it['label']}"))}
+    today_n = sum(1 for it in items if it["days_left"] <= 0)
+    rows = [(f"{it['quote_no']} · {it['label']}" + (f"（{it['display']}）" if manager else ""),
+             "今天到期" if it["days_left"] <= 0 else f"{it['due']}（尚餘 {it['days_left']} 天）") for it in items]
+    who = "您部門的成員有" if manager else "您有"
+    reason = f"{who} {n} 個案件執行進度階段即將到期" + (f"（其中 {today_n} 個今天到期）" if today_n else "") + "，請儘早確認進度。"
+    return {"title": f"{'部門成員' if manager else ''}案件執行進度即將到期（{n} 個階段）", "rows": rows, "reason": reason,
+            "badge_text": f"{n} 個階段", "badge_color": "#DC2626" if today_n else "#D97706",
+            "link": f"{_base_url()}/pages/case-management.html", "subject": f"{'部門成員' if manager else ''}案件進度到期提醒：{n} 個階段"}
+
+
+def _send_case_stage_digest(items: list, *, assignee_username: str = "", manager_username: str = "", out: dict = None, line_key: str = "") -> bool:
+    """案件階段到期 → 負責人（＋群組收件人）或部門主管，**一人一封（彙整）並等寄送結果**（T84）。回 True＝呼叫端可以寫「已通知」記號
+    （寄出／結果不明／永久失敗／沒有收件人）；False＝暫時失敗或機器略過（不寫記號，下次每日檢查重試）。語意同 `_send_warranty_expiry`。
+    負責人那一封：收件人＝負責人＋群組收件人（與舊的逐階段信件同一組）；主管那一封：只寄主管。LINE 走登記表（`line_key` 擋重推）。"""
+    try:
+        if manager_username:
+            m = _case_stage_digest_parts(items, manager=True)
+            ok = send_registered("case_stage_deadline_manager", title=m["title"], rows=m["rows"], usernames=[manager_username], to_group=False,
+                                 reason=m["reason"], badge_text=m["badge_text"], badge_color=m["badge_color"], link=m["link"],
+                                 button_text="前往案件管理", wait=True, out=out, line_key=line_key)
+        else:
+            m = _case_stage_digest_parts(items, manager=False)
+            ok = send_registered("case_stage_deadline", title=m["title"], rows=m["rows"], usernames=[assignee_username] if assignee_username else [],
+                                 to_group=True, reason=m["reason"], badge_text=m["badge_text"], badge_color=m["badge_color"], link=m["link"],
+                                 button_text="前往案件管理", wait=True, out=out, line_key=line_key)
+        if not ok and out is not None and out.get("outcome") == "no_recipient":
+            return True               # 沒有任何收件人：重試也不會有結果（加了收件人之後的新階段照常發）
+        return ok
+    except Exception:
+        logger.exception("_send_case_stage_digest 失敗（不寫已通知記號，下次重試；assignee=%r manager=%r）", assignee_username, manager_username)
+        if out is not None:
+            out["outcome"] = SEND_TRANSIENT_FAIL
+        return False
+
+
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
     """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""

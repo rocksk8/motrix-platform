@@ -142,7 +142,9 @@ def test_deadline_scan_survives_an_event_import_failure(client, make_user, monke
     CD._check_case_stage_deadline()
     conn = db.get_db()
     try:
-        n = conn.execute("SELECT COUNT(*) c FROM notifications WHERE username='cne_dl2' AND type='case_stage_deadline'").fetchone()["c"]
+        rows = conn.execute("SELECT message FROM notifications WHERE username='cne_dl2' AND type='case_stage_deadline'").fetchall()
     finally:
         conn.close()
-    assert n == 2, "事件匯入失敗不可以中斷掃描：兩個階段的原本通知都要送出"
+    # T84：同一個人同一天的階段彙整成一則（原本一個階段一則）；事件匯入失敗仍不可以中斷掃描——兩個階段都要在這一則裡
+    assert len(rows) == 1, "事件匯入失敗不可以中斷掃描：兩個階段的通知都要送出（彙整成一則）"
+    assert "施工" in rows[0]["message"] and "驗收" in rows[0]["message"]
