@@ -319,8 +319,8 @@
         async request() {
           this.error = ''; this.notice = ''
           try {
-            await this._api('PUT', '/api/ledger/roles', { role: this.nr.role, account_code: this.nr.account_code, reason: this.nr.reason.trim() })
-            this.notice = '已送出申請，等另一位最高管理者核准後才會生效。'
+            const d = await this._api('PUT', '/api/ledger/roles', { role: this.nr.role, account_code: this.nr.account_code, reason: this.nr.reason.trim() })
+            this.notice = d && d.pending === false ? '已套用（單人公司，已留稽核）。' : '已送出申請，等另一位最高管理者核准後才會生效。'
             this.nr = { role: '', account_code: '', reason: '' }
             await this.load()
           } catch (e) { this.error = e.message }
