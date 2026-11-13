@@ -69,7 +69,7 @@ def load_csv_batch():
     m = {}
     for r in rows[1:]:
         if r[ix["群組代碼"]]:
-            m[(r[ix["群組代碼"]], r[ix["欄位代碼"]])] = (r[ix["可批次?"]], r[ix["群組風險標示(內含高風險項目?)"]])
+            m[(r[ix["群組代碼"]], r[ix["欄位代碼"]])] = (r[ix["規則上可批次?"]], r[ix["群組風險標示(內含高風險項目?)"]], r[ix["畫面提供勾選格?"]])
     return m
 
 
@@ -147,7 +147,7 @@ def rows():
         G = g[gk]
         for f in G["fields"]:
             it = A.ITEMS[(gk, f["key"])]
-            btxt, gflag = bm[(gk, f["key"])]
+            btxt, gflag, tick = bm[(gk, f["key"])]
             confirm = "需確認" in btxt
             # 以 SPEC §4.1 為準：敏感群組與文字欄位一律不可批次（盤點表該欄的產生器漏了敏感檢查，h4 修後會跟上）
             if f["type"] == "str":
@@ -166,8 +166,11 @@ def rows():
                 elig, why = True, ""
             if not elig:
                 confirm = False
+            rule_elig = elig
+            if elig and not tick.startswith("是"):
+                elig, why, confirm = False, "本群組只有這一欄規則上可批次，且建議值＝預設值，勾選批次沒有比逐列「重設為預設」多的功能", False
             sec = it.get("sec") or A.GROUP_SEC[gk]
-            out.append(dict(gk=gk, G=G, f=f, it=it, elig=elig, confirm=confirm, why=why, sec=sec, gflag=gflag,
+            out.append(dict(csv_rule=btxt, csv_tick=tick, gk=gk, G=G, f=f, it=it, elig=elig, confirm=confirm, why=why, sec=sec, gflag=gflag,
                             default_text=fmt(f, f["default"]), style=style_of(gk, f, elig), danger=danger_text(gk, G, f),
                             when=compose_when(gk, f, g)))
     return out
