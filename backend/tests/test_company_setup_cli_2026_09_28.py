@@ -105,10 +105,19 @@ def test_prod_script_has_no_parameter_to_skip_the_preflight():
     assert skip_preflight_params(planted) == ["SkipCompanySetupPreflight"]         # 正對照
 
 
+def _first_main_flow_stop(code: str) -> int:
+    """主流程（第 0 欄、不在任何函式裡）第一次呼叫 Stop-InstallService 的位置。
+    T84 起 Stop-RespawnedService／Restart-InstallServiceAndWait 等「函式」裡也會呼叫它（縮排的、定義在預檢之前）——
+    那些只是函式定義，不是這次套用的停服時點；真正的停服是主流程第 0 欄的 `$stoppedCount = Stop-InstallService`。"""
+    ms = list(re.finditer(r"^(?:\$\w+ = )?(?:\$null = )?Stop-InstallService\s*$", code, re.M))
+    assert ms, "找不到主流程的 Stop-InstallService 呼叫（寫法變了 ⇒ 守門失效，改抽取方式）"
+    return min(m.start() for m in ms)
+
+
 def test_preflight_runs_before_the_service_stops_and_post_check_rolls_back():
     code = "\n".join(l for l in _ps1().splitlines() if not l.lstrip().startswith("#"))
     pre = code.find('@("preflight"')
-    first_stop_call = min(i for i in (m.start() for m in re.finditer(r"^\s*\$null = Stop-InstallService|^\s*Stop-InstallService\s*$", code, re.M)))
+    first_stop_call = _first_main_flow_stop(code)
     assert 0 < pre < first_stop_call, "預檢必須在第一次停服之前"
     assert '"refused_company_setup"' in code and 'Emit-Result "company_setup_rolled_back" 1' in code
     # 結果真的決定行為：$gatePre／$gatePost 來自 Invoke-CompanySetupCli；不允許 ⇒ 拒絕／判成健康檢查失敗
@@ -318,8 +327,7 @@ def test_bank_note_runs_after_a_passing_preflight_before_the_service_stops():
     code = "\n".join(l for l in _ps1().splitlines() if not l.lstrip().startswith("#"))
     ok = code.index("Ok \"  本公司資料設定預檢通過")
     note = code.index("$null = Write-CompanyBankNote $gatePre.Text")
-    first_stop_call = min(m.start() for m in re.finditer(
-        r"^\s*\$null = Stop-InstallService|^\s*Stop-InstallService\s*$", code, re.M))
+    first_stop_call = _first_main_flow_stop(code)
     assert ok < note < first_stop_call, "匯款欄位註記要在預檢通過之後、第一次停服之前"
     fn = _ps_function(_ps1(), "Write-CompanyBankNote")
     assert "::RESULT::" not in fn and "Fail" not in fn and "exit" not in fn.lower()          # 只報不擋、不動 RESULT 行
