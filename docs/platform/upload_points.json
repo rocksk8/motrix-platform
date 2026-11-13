@@ -1,6 +1,10 @@
 {
   "_note": "每一個會收檔案（UploadFile／request.form／save_document_files／data:image 內文）的端點都要在這裡分類：catalog＝進附件目錄（source_type 必須被某個 attachments.catalog 提供者的 CATEGORIES 認領）；excluded＝不進目錄＋理由（PII／暫存／設定／未核准暫存檔）；pending＝已決定要進、尚未做（P3）。守門：backend/tests/platform/test_upload_points_registered.py；契約：INTEGRATION-POINTS IP-105。",
   "points": {
+    "POST /api/importer/parse": {
+      "module": "importer",
+      "excluded": "匯入精靈解析上傳的 Excel／CSV：只在這一次請求的記憶體裡解析、不存檔、不留暫存、不進附件目錄（SPEC IMW1）；稽核只記檔名與雜湊"
+    },
     "POST /api/quotations/{quote_no}/signed-files": {
       "module": "case",
       "catalog": "quotation_signed"

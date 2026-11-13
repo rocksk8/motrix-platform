@@ -88,6 +88,8 @@
    "helper:list_catalog",
    "helper:list_pref_policy",
    "helper:idempotency",
+   "helper:user_import",
+   "helper:settings_groups_import_wizard",
    "helper:list_view_prefs",
    "helper:alert_settings",
    "helper:clause_titles",
