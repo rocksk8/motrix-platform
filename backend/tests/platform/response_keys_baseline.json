@@ -7358,6 +7358,8 @@
    "events[].name",
    "events[].need",
    "events[].priority",
+   "events[].recipient_count",
+   "events[].recipient_exact",
    "events[].roles",
    "events[].sent30",
    "include_links",
