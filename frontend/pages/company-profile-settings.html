@@ -149,7 +149,10 @@
     </template>
 
     <template x-if="isSuperadmin">
-      <div>
+      <!-- 公司資料還沒讀回來（或讀取失敗）時整頁不可編輯、不可儲存：晚到的 GET 會把使用者已輸入的欄位蓋回伺服器的舊值，
+           或（讀取失敗時）把一張空表單存回去（fix/company-profile-form-load-race-t84）。fieldset disabled 一次擋住底下所有輸入框與按鈕。 -->
+      <fieldset :disabled="cfgState !== 'ready'" data-cfg-fieldset :data-cfg-state="cfgState" style="border:0;margin:0;padding:0;min-width:0">
+        <div class="ns-desc" data-cfg-loading x-show="cfgState === 'loading'">載入公司資料中…</div>
         <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：未確認 ⇒ 其他功能暫停；最高管理者在這裡按「確認本公司資料」。
              一般的「儲存」不算確認（複製來的資料庫只要存一次任何設定就「確認」了）。 -->
         <div class="ns-card" data-company-setup-card x-show="(setup && setup.configured !== true) || reconfirm">
@@ -1057,7 +1060,7 @@
           </div>
         </div>
         </div><!-- /data-company-advanced -->
-      </div>
+      </fieldset>
     </template>
 
   </main>
@@ -1096,6 +1099,8 @@
         // 前端不送＝正確的行為，後端擋＝前端回歸時的防線。
         keyText: '', keyMasked: '', keySet: false, keyCleared: false,
         bkText: '', bkMasked: '', bkSet: false, bkCleared: false,
+        // 公司資料讀回來之前（loading）或讀取失敗（error／denied）時整頁不可編輯、save() 不送：見 <fieldset data-cfg-fieldset>
+        cfgState: 'loading',   // 只有最高管理者的畫面會用到（其他人的範本沒有這張表單）；離開 'loading' 的路徑：ready／denied／error
         saving: false,
         saved: false,
         msg: '',
@@ -1223,11 +1228,20 @@
           this._initDone = true
           this.session = JSON.parse(localStorage.getItem('motrix_session') || '{}')
           if (!this.session.token) { location.replace('login.html'); return }
-          const r = await fetch('/api/settings/company-profile', {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
-          if (r.ok) {
-            const data = await r.json()
+          let r = null
+          try {
+            r = await fetch('/api/settings/company-profile', {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+          } catch (e) { r = null }
+          let data = null
+          if (r && r.ok) {
+            // 200 但內容不是 JSON／整形失敗：同樣算讀取失敗（不能停在 loading，也不能在半套資料上開放編輯）
+            try { data = await r.json() } catch (e) { data = null }
+            if (!data || typeof data !== 'object') r = null
+          }
+          if (r && r.ok) {
+           try {
             this.cfg = { ...this.cfg, ...data }
             // ⚠️ 座標可能是 `null` ⇒ 顯示空字串，**不要顯示 `null` 或 `0`**。
             this.locations = (data.locations || []).map(l => this._toRow(l))
@@ -1239,9 +1253,21 @@
             // ⚠️ 不在這裡把 keyText／bkText／keyCleared／bkCleared 歸零：它們一開始就是空／false，init 只跑一次；
             // 這個 GET 的回應若晚於使用者已經輸入的金鑰（或按下「清除金鑰」），歸零會把使用者剛填的值靜默吃掉，
             // 存檔時就存成空字串（T83 e2e 閘門抓到：map 設定頁測試 fill 在回應之前）。
-          } else if (r.status === 403) {
+            // 現在整頁在 cfgState==='ready' 之前是 disabled（見 <fieldset data-cfg-fieldset>），使用者根本打不到欄位，
+            // 所以這個賦值蓋不掉任何人輸入的內容；金鑰那組狀態仍保留不歸零（它們與 cfg 分開存）。
+            this.cfgState = 'ready'
+           } catch (e) {          // 整形資料時丟例外：不停在 loading，也不開放編輯
+            this.msg = '讀取公司資料失敗，請重新整理頁面再試。'; this.isError = true
+            this.cfgState = 'error'
+           }
+          } else if (r && r.status === 403) {
             // 設定中心開了「完整公司資料只給最高管理者看」：沒權限的人不能看到一張空表單，要明講原因
             this.msg = '完整的公司資料只有最高管理者可以查看。'; this.isError = true
+            this.cfgState = 'denied'
+          } else {
+            // 讀不到（網路或伺服器錯誤）：維持不可編輯，否則「空表單＋儲存」會把公司資料清掉
+            this.msg = '讀取公司資料失敗，請重新整理頁面再試。'; this.isError = true
+            this.cfgState = 'error'
           }
           await this.loadSetup()
           if (this.isSuperadmin) {
@@ -1649,6 +1675,7 @@
         },
 
         async save(confirmIdentity) {
+          if (this.cfgState !== 'ready') return          // 資料還沒讀回來（或讀取失敗）：不送（送出去就是用空表單蓋掉公司資料）
           this.coordWarn = ''
           const locations = []
           for (let i = 0; i < this.locations.length; i++) {
