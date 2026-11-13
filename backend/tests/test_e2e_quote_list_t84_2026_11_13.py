@@ -310,3 +310,54 @@ def test_confirmed_quote_next_step_and_no_lane_headers_while_a_number_is_selecte
     page.wait_for_function("() => document.querySelectorAll('tr.ql-row').length === 3", timeout=5000)
     assert page.locator("tr.ql-lane:visible").count() == 0, "選了數字就不分階段標題"
     assert page.locator(".filter-tab.active").count() == 0, "選了數字時分頁不亮「進行中」"
+
+
+# ── 平板（768–1023）搜尋列：「欄位」「緊湊」併成一列（fix/quotations-tablet-searchbar-t84）─────────────────
+
+def _page_html():
+    from core.source_tree import page_file
+    return page_file("quotations.html").read_text(encoding="utf-8")
+
+
+def test_tablet_searchbar_pairs_columns_and_density_buttons_in_one_row_static():
+    """靜態規則：兩顆在同一個 .ql-pair 裡；.ql-pair 預設 display:contents（桌機／手機不變）；
+    只有 768–1023 的 media 規則把它變成跨整列的兩欄格線、兩顆各半。"""
+    import re
+    html = _page_html()
+    m = re.search(r'<div class="ql-pair">(.*?)\n      </div>\n    </div>', html, re.S)
+    assert m, "找不到 .ql-pair 區塊"
+    assert 'data-testid="ql-cols-btn"' in m.group(1) and 'data-testid="ql-density"' in m.group(1)
+    assert re.search(r"\n\s*\.ql-pair \{ display:contents; \}", html), "預設必須是 display:contents（桌機、手機版面不變）"
+    tab = re.search(r"@media \(min-width: 768px\) and \(max-width: 1023px\) \{(.*?)\n    \}", html, re.S)
+    assert tab, "找不到平板 768–1023 的 media 規則"
+    body = tab.group(1)
+    assert re.search(r"\.search-bar \.ql-pair \{[^}]*display:grid[^}]*grid-template-columns: 1fr 1fr[^}]*grid-column: 1 / -1", body)
+    # 平板以外的 media（桌機 >1023、手機 ≤767）不得改 .ql-pair
+    outside = html.replace(body, "")
+    assert not re.search(r"\.search-bar \.ql-pair|@media[^{]*\{[^}]*\.ql-pair", outside)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width,height", [(900, 900), (768, 1024)])
+def test_tablet_columns_and_density_buttons_sit_side_by_side(live_server, make_user, new_page, login_as, width, height):
+    page = _open(live_server, make_user, new_page, login_as, "t84e_tabbar_%d" % width, width=width, height=height)
+    a = page.get_by_test_id("ql-cols-btn")
+    b = page.get_by_test_id("ql-density")
+    a.wait_for(state="visible", timeout=5000)
+    ba, bb = a.bounding_box(), b.bounding_box()
+    assert abs(ba["y"] - bb["y"]) < 2, "「欄位」「緊湊」要在同一列：%s %s" % (ba, bb)
+    assert ba["x"] + ba["width"] <= bb["x"] + 1, "「欄位」在左、「緊湊」在右"
+    assert abs(ba["width"] - bb["width"]) < 4, "兩顆各半"
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width,height", [(1440, 900), (390, 844)])
+def test_desktop_and_phone_searchbar_layout_is_unchanged_pair_has_no_box(live_server, make_user, new_page, login_as, width, height):
+    """桌機／手機：.ql-pair 是 display:contents（不產生方框），兩顆按鈕仍是搜尋列的直接版面成員。"""
+    page = _open(live_server, make_user, new_page, login_as, "t84e_pairbox_%d" % width, width=width, height=height)
+    assert page.evaluate("getComputedStyle(document.querySelector('.ql-pair')).display") == "contents"
+    if width >= 1024:
+        ba = page.get_by_test_id("ql-cols-btn").bounding_box()
+        bb = page.get_by_test_id("ql-density").bounding_box()
+        assert abs(ba["y"] - bb["y"]) < 2, "桌機一列排開"
