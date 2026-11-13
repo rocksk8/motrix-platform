@@ -366,13 +366,20 @@ function Stop-InstallService {
 #   ③停服後／複製後／啟動前由 Stop-RespawnedService 核對沒有迴圈與 listener；④只由 Start-InstallService 一個來源重啟，啟動前恢復排程工作
 #   （任何出口都會經 Exit-InstallLock 恢復，不會把排程工作留在停用狀態）。
 $script:AutostartTaskDisabledByApply = $false
+# 標記檔：Suspend 時寫、Restore 成功才刪。套用行程中途死掉（WinRM 工作階段結束／被人殺掉／斷電）⇒ 排程工作會停在停用狀態、重開機後服務不會自己起來；
+#   標記檔讓**下一次** apply／rollback 認得「這個停用是上次中斷的我們留下的」並在結束前恢復（也可人工：Enable-ScheduledTask -TaskName <名稱>）。
+function Get-AutostartTaskMarker { return (Join-Path $BackendDir ".autostart_task_disabled_by_apply") }
 function Suspend-AutostartTask {
     if ($script:AutostartTaskDisabledByApply) { return }
     try {
         $t = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
-        if ($t -and $t.State -ne "Disabled") {
+        if ($t -and $t.State -eq "Disabled" -and (Test-Path (Get-AutostartTaskMarker))) {
+            $script:AutostartTaskDisabledByApply = $true
+            Warn "  排程工作「$AutostartTaskName」是停用的，且有上次中斷的套用留下的標記檔 ⇒ 本次啟動前會把它恢復。"
+        } elseif ($t -and $t.State -ne "Disabled") {
             Disable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
             $script:AutostartTaskDisabledByApply = $true
+            try { Set-Content -Path (Get-AutostartTaskMarker) -Value ((Get-Date).ToString("s") + " pid=" + $PID) -Encoding ASCII -ErrorAction Stop } catch { Warn "  標記檔寫入失敗：$($_.Exception.Message)（若本次套用被中斷，請人工 Enable-ScheduledTask -TaskName `"$AutostartTaskName`"）。" }
             Info "  已暫時停用排程工作「$AutostartTaskName」（停服期間不讓它叫起新迴圈；啟動前恢復）。"
         }
     } catch {
@@ -384,6 +391,7 @@ function Restore-AutostartTask {
     try {
         Enable-ScheduledTask -TaskName $AutostartTaskName -ErrorAction Stop | Out-Null
         $script:AutostartTaskDisabledByApply = $false
+        Remove-Item -Path (Get-AutostartTaskMarker) -Force -ErrorAction SilentlyContinue
         Info "  已恢復排程工作「$AutostartTaskName」。"
     } catch {
         Warn "  ⚠ 無法恢復排程工作「$AutostartTaskName」：$($_.Exception.Message) —— 請人工執行 Enable-ScheduledTask -TaskName `"$AutostartTaskName`"，否則重開機後服務不會自己起來。"
