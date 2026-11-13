@@ -5250,6 +5250,9 @@ def approval_queue_items(conn) -> list:
             "requestedByDisplay":  f["requestedByDisplay"],
             "requestedAt":         f["requestedAt"],
             "isEditApproval":      f["appr"].get("isEditApproval", False),
+            # 解鎖改版：誰改了內容（只有解鎖改版的單才有；簽核人要看得到。改的時間＝requestedAt）
+            **({"editedBy": f["appr"]["editedBy"], "editedByDisplay": f["appr"].get("editedByDisplay") or f["appr"]["editedBy"]}
+               if f["appr"].get("editedBy") else {}),
             "reasons":             f["appr"].get("reasons") or [],
             "tiers":               f["tiers"],
             "currentTier":         f["currentTier"],

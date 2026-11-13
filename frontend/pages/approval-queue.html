@@ -782,6 +782,10 @@
               <span class="aq-info-label">申請人</span>
               <span class="aq-info-value" x-text="selected?.requestedByDisplay || selected?.requestedBy || '—'"></span>
             </div>
+            <div class="aq-info-row" x-show="selected?.editedBy" data-testid="aq-edited-by">
+              <span class="aq-info-label">修改人</span>
+              <span class="aq-info-value" x-text="(selected?.editedByDisplay || selected?.editedBy || '') + (selected?.requestedAt ? '（' + MotrixFormat.dt(new Date(selected.requestedAt), 'plain') + '）' : '')"></span>
+            </div>
             <div class="aq-info-row" style="grid-column:1/-1">
               <span class="aq-info-label">申請時間</span>
               <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif"

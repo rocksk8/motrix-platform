@@ -2180,6 +2180,7 @@
         </div>
         <div><b>申請人：</b><span x-text="q.approval?.requestedByDisplay || q.approval?.requestedBy || ''"></span></div>
         <div><b>申請時間：</b><span x-text="q.approval?.requestedAt ? MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') : ''"></span></div>
+        <div x-show="q.approval?.editedBy" data-testid="qf-edited-by"><b>修改人：</b><span x-text="(q.approval?.editedByDisplay || q.approval?.editedBy || '') + (q.approval?.requestedAt ? '（' + MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') + '）' : '')"></span></div>
         <div x-show="q.approval?.reasons?.length">
           <b>簽核品項</b>
           <ul style="margin:2px 0 0 14px;padding:0">

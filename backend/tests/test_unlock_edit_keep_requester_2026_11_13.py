@@ -287,3 +287,39 @@ def test_when_the_requester_is_the_only_other_superadmin_recall_is_the_way_out(c
         conn.close()
     r = client.post(f"/api/quotations/{NO}/recall", headers=_login(client, *world["users"]["ke_sa2"]))
     assert r.status_code == 200, r.text
+
+
+def _queue_item(client, user):
+    q = client.get("/api/approval-queue", headers=_login(client, *user)).json()["queue"]
+    return next((it for g in q for it in g["items"] if it.get("quoteNo") == NO), None)
+
+
+def test_queue_item_carries_edited_by_only_for_unlock_edited_quotes(client, world):
+    """N2：待我簽核的卡片要看得到「誰改了內容」；沒被解鎖改過的單，佇列項目沒有 editedBy／editedByDisplay 這兩個鍵（回應不變）。"""
+    _flow([["ke_a1"], ["ke_a2"]])
+    _seed(status="待審核", signed=(), pending=("ke_a1",))
+    before = _queue_item(client, world["users"]["ke_a1"])
+    assert before is not None and "editedBy" not in before and "editedByDisplay" not in before, before
+    from db import get_db
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM quotations WHERE quote_no=?", (NO,))
+        conn.commit()
+    finally:
+        conn.close()
+    _seed(status="簽核中", signed=("ke_a1",), pending=("ke_a2",))
+    assert _unlock_put(client, world["headers"]).status_code == 200
+    after = _queue_item(client, world["users"]["ke_a1"])
+    assert after is not None, "解鎖改版後第 1 層重簽，ke_a1 應在待簽佇列"
+    assert after["editedBy"] == "ke_sa" and after["editedByDisplay"], after
+    assert after["requestedBy"] == "ke_req", "送審人欄位仍是原送審人"
+
+
+def test_pages_show_the_edited_by_row_only_when_edited_by_exists():
+    """N2 靜態檢查：兩個畫面都有「修改人」那一行，且以 `editedBy` 為顯示條件（真瀏覽器版放在 e2e 批次）。"""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages"
+    q = (root / "approval-queue.html").read_text(encoding="utf-8")
+    f = (root / "quotation-form.html").read_text(encoding="utf-8")
+    assert 'data-testid="aq-edited-by"' in q and 'x-show="selected?.editedBy"' in q and "修改人" in q
+    assert 'data-testid="qf-edited-by"' in f and 'x-show="q.approval?.editedBy"' in f and "<b>修改人：</b>" in f
