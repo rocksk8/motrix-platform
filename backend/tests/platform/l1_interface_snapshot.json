@@ -1989,14 +1989,19 @@
   "helper:settings_groups_tender_closing": {},
   "helper:settings_notify": {
    "EVENT_KEY": "const",
+   "KIND_LABELS": "const",
    "LINE_RISKS": "const",
    "LINK": "const",
    "NOTIF_TYPE": "const",
    "batch": "class",
-   "compose": "def(items, names=…)",
+   "batch.__init__": "def(self, verb=…, header=…)",
+   "compose": "def(items, names=…, header=…)",
    "emit": "def(items)",
-   "item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
-   "item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"
+   "make_item": "def(kind, label, old, new, phase=…, *, actor=…, reason=…, effective_at=…, approvals=…, required=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…)",
+   "notify_change": "def(kind, label, old, new, *, actor=…, reason=…, risk=…, roles=…, recipients=…, plain=…, ref=…, link=…, phase=…, effective_at=…, approvals=…, required=…)",
+   "preview_recipients": "def(items, conn=…)",
+   "setting_item": "def(group, field, old, new, phase, *, actor=…, reason=…, effective_at=…, approvals=…, required=…)",
+   "setting_item_from_ledger": "def(row, phase, *, actor=…, reason=…, approvals=…, required=…)"
   },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
@@ -2033,6 +2038,7 @@
    "materialize_due": "def(conn=…, now=…)",
    "owner_groups": "def(owner)",
    "plan": "def(group, values, *, user=…, conn=…)",
+   "plan_recipients": "def(group, fields, *, user=…)",
    "profile_preview": "def(name, *, conn=…)",
    "profile_skipped": "def(name)",
    "profiles": "def()",

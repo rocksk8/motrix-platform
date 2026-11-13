@@ -1,12 +1,13 @@
 # L0／L1 底層 更新紀錄
 
 ## (next) — 2026-11-13（feat/settings-change-notify；設定變更通知＋設定中心輸入元件顯示目前值）
-- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新單位 `helpers.settings_notify`（`item`／`item_from_ledger`／`batch`／`emit`／`compose`、常數 `EVENT_KEY`／`NOTIF_TYPE`／`LINK`／`LINE_RISKS`）。
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新單位 `helpers.settings_notify`——**通用變更通知元件**（SPEC §13-7；所有頁共用）：`make_item`（通用項目 kind／label／old／new／roles／recipients／risk）、`setting_item`／`setting_item_from_ledger`（設定中心欄位的轉接）、`notify_change`（其他頁一行呼叫；永不丟例外）、`emit`／`batch(verb, header)`（合併成一則）、`compose`、`preview_recipients`（收件人 dry-run）、常數 `EVENT_KEY`／`KIND_LABELS`／`LINE_RISKS`／`LINK`／`NOTIF_TYPE`。收件人只支援：全部在職最高管理者＋角色片語（`_ROLE_USERS`）＋明列帳號；簽核人、受影響同仁的主管等**目前不支援**（`preview_recipients` 的 `ignoredRoles` 如實列出）。
 - 行為變更：設定中心有任何變更（儲存、還原、重置、套用預設組、待生效項的送出／核准／到期生效／撤銷）⇒ **commit 之後**發站內通知給全部在職最高管理者（含操作者）與欄位 `impact_scope.roles` 對得上的角色（業務／管理員／財務／出納／所有使用者）：誰改的、群組／欄位、舊→新（繁中選項名稱）、原因、「立即生效」或「待核准／確認期間後生效」。一次操作改多欄／預設組跨多群組／每日到期生效 ⇒ 合併成一則。新單位 `helpers/settings_notify.py`（非 L1 單位，無介面快照變動）；`settings_registry.publish／materialize_due／apply_profile` 與 `routers/settings_center` 的核准／撤銷只在 commit 後呼叫它（公開簽章不變）。
 - 行為變更：高風險（money／legal／security）設定的帳本簡短通知（`config_change`）改由新通知取代（`publish()` 同交易內刪掉剛寫的那幾列，同一件事不發兩則）；`config_ledger.record` 本身不變。
+- 新增 `POST /api/settings-center/batch`（跨群組一次儲存：全部群組先驗證、任何一組不合法整批 400 一組都不寫；之後逐群組 publish，**整批只發一則通知**；中途失敗回 409 並列 `applied`／`failed`；`preview:true` 只回各組 `plan()` 與合併後的 `recipients`）。`plan()`／預覽路由多回 `recipients`（dry-run 收件人：最高管理者、其他人、不支援的片語、LINE 會不會發）。復原（`restore`）整批發**一則**「已復原到第 N 版」。通知超過 8 行 ⇒ 最後一行「完整明細：變更紀錄」，連結 `settings-center.html?tab=versions[&group=…]`（頁面讀 `?tab=versions`）。
 - 新增 LINE-only 事件 `settings_changed`（分組「系統告警」，只發最高管理者，內容不含原因與數值；預設與所有 LINE 事件一樣全關，由管理者勾選）。
 - 前端修正：`settings-center.html` 單選不選取、數字框空白（使用者兩張截圖）的根因是元件方法名 `valueOf` 與 `Object.prototype.valueOf` 同名（Alpine 範圍代理在 x-for 內解析到原生函式）⇒ 改名 `curVal`；新增「未儲存」標記、底部「有 N 項未儲存」列（儲存／放棄）、離開頁面警告、儲存結果提示（已生效／已送出待核准預計 X 日生效）、「建議值」徽章。
-- 測試：`tests/test_settings_change_notify_2026_11_13.py`（21 題：收件人／內容／commit 之後且不在鎖內／待生效流程／合併／LINE；前端以 node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一題，含舊 bug 的對照題與全站「方法名不得蓋住 Object.prototype 成員」守門）。
+- 測試：`tests/test_settings_change_notify_2026_11_13.py`（33 題：收件人／內容／commit 之後且不在鎖內／待生效流程／合併／LINE；前端以 node 在 Alpine 同款範圍代理下求值頁面真正的綁定式，int／float／str／選項（數字碼、字串碼）／bool 各一題，含舊 bug 的對照題與全站「方法名不得蓋住 Object.prototype 成員」守門）。
 
 ## 1.163 — 2026-11-13（fix/image-bomb-guard；使用者上傳圖片的解壓縮炸彈守門）
 - L1（行為修正，公開簽章不變；T82 預跑紅燈修正）：`helpers.image_guard`（`run_decode`／`with_decode_slot` 的包裝）與 `helpers.xlsx_guard`（`rows`／`with_limits`／子行程 `_run_child`／`_worker_main`）不再用 `**` 轉發參數（test_case_summary_purpose 基準 0）：`run_decode(fn, *a, **kw)` 簽章保留但帶任何關鍵字 ⇒ TypeError（呼叫端只傳位置參數）；`rows(..., **kw)` 簽章保留，`**kw` 只收 `min_row／max_row／min_col／max_col／values_only` 並逐一明列傳給 iter_rows（多的 ⇒ TypeError）；`with_limits` 逐欄覆寫（新增內部 `_limits_from`）；子行程的 `with_types` 旗標改嚴格比對 `is True`（父行程組的內部字典，不是請求本文；子行程不能 import helpers.validation）。 測試：`tests/test_guard_no_star_kwargs_2026_11_13.py`。

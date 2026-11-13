@@ -740,7 +740,17 @@ def plan(group, values, *, user="", conn=None):
                               "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
         out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。" % days)
+    out["recipients"] = plan_recipients(group, out["fields"], user=user)
     return out
+
+
+def plan_recipients(group, fields, *, user=""):
+    """收件人預覽（dry-run；確認視窗用）：`fields`＝`plan()["fields"]`。⇒ `helpers.settings_notify.preview_recipients` 的結果
+    （`superadmins`／`others`／`ignoredRoles`／`line`）；沒有實際變更的欄位不算。永不丟例外。"""
+    from helpers import settings_notify as _SN
+    phase = {"immediate": "updated", "pending": "pending", "pending_approval": "pending_approval"}
+    items = [_SN.setting_item(group, x["field"], x["old"], x["new"], phase[x["kind"]], actor=user, effective_at=x.get("effectiveAt") or "") for x in fields if x["kind"] in phase]
+    return _SN.preview_recipients(items)
 
 
 _IMPACT_CACHE = {}          # (db, group, field, 值) -> (monotonic, 結果)
@@ -838,7 +848,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
                      audit_action="settings.%s.update" % group, target_label=g["label"])
             _write_legacy(c, group, new)
-            _items += [_SN.item(group, x["field"], x["old"], x["new"], "updated", actor=_who, reason=reason or note) for x in changes]
+            _items += [_SN.setting_item(group, x["field"], x["old"], x["new"], "updated", actor=_who, reason=reason or note) for x in changes]
             result.update(changed=True, version=out["version"], values=_merged(eff, new), changes=changes)
         if pend:
             days = confirm_period_days(c)
@@ -855,7 +865,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                                    audit_action="settings.%s.pending" % group, target_label=g["label"], approvals_required=need)
                     result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
                                           for i, x in zip(rec["ids"], part)]
-                    _items += [_SN.item(group, x["field"], x["old"], x["new"], "pending_approval" if need else "pending", actor=_who,
+                    _items += [_SN.setting_item(group, x["field"], x["old"], x["new"], "pending_approval" if need else "pending", actor=_who,
                                         reason=reason or note, effective_at=when, required=need) for x in part]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
                     result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
@@ -914,7 +924,7 @@ def materialize_due(conn=None, now=None):
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
             _write_legacy(c, group, new)
             total += len(L.promote_due(c, now, domain="setting:%s" % group))
-            _items += [_SN.item(group, r["field"], r["old"], r["new"], "activated", reason=r.get("reason") or "") for r in due]
+            _items += [_SN.setting_item(group, r["field"], r["old"], r["new"], "activated", reason=r.get("reason") or "") for r in due]
             invalidate(group)
             logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
         if began or own:

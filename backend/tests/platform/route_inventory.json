@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 942,
-  "endpoints_api": 938,
-  "write_total": 506,
-  "write_api": 506,
+  "endpoints_total": 943,
+  "endpoints_api": 939,
+  "write_total": 507,
+  "write_api": 507,
   "get_api": 432,
-  "distinct_paths_api": 794,
-  "write_with_body_api": 372,
+  "distinct_paths_api": 795,
+  "write_with_body_api": 373,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -4086,6 +4086,11 @@
   "POST /api/settings-center/groups/{group}": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/batch": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "POST /api/settings-center/groups/{group}/impact": {
