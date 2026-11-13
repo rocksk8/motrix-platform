@@ -239,12 +239,8 @@ _CLOSED_BASELINE_KEY = "onepipe.warranty_closed_baseline"
 
 
 def _closed_warranty_on() -> bool:
-    try:
-        from helpers import settings_groups  # noqa: F401  確保群組已登錄（沒登錄會 KeyError ⇒ 被當成關）
-        from helpers import settings_registry as _SR
-        return int(_SR.get("onepipe", "warranty_closed_notify") or 0) == 1
-    except Exception:                                  # noqa: BLE001
-        return False
+    from helpers import onepipe_flags                  # 以模組引用（測試以 monkeypatch `helpers.onepipe_flags.flag_on` 換掉）
+    return onepipe_flags.flag_on("warranty_closed_notify")      # 讀不到／群組沒登錄 ⇒ 關
 
 
 def _closed_baseline_date():
@@ -350,10 +346,11 @@ def _check_warranty_expiry() -> None:
             return owner_cache[qn]
 
         halted = False        # 寄送暫時失敗／機器略過 ⇒ 本輪不再往下寄（逐台各等一次會把後面的每日檢查拖很久；記號沒寫，明天補）
+        closed_ids = {id(c) for c in closed_rows}
         for row in list(rows) + closed_rows:
             if halted:
                 break
-            is_closed = any(row is c for c in closed_rows)
+            is_closed = id(row) in closed_ids
             try:
                 cr = json.loads(row["cr_json"] or "{}")
             except Exception:
