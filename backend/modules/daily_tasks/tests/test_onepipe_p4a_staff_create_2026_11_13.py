@@ -169,3 +169,72 @@ def test_staff_self_create_does_not_notify_the_creator(client, world, monkeypatc
     monkeypatch.setattr(api, "_notify", lambda *a, **k: sent.append(a))
     assert _post(client, world["eng"]).status_code == 201
     assert sent == [], "自己建給自己，不發站內通知"
+
+
+# ── 案件選單（h9 審查 MUST-FIX：/api/sales-orders 只給財務／最高管理者，現場人員選不到案件）────────────────────────
+
+def _seed_other(no, members, deal="已成案", customer="別家客戶"):
+    import db
+    now = "2026-01-02T00:00:00"
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag, assigned_user_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     (no, "已送出", customer, "別案工程", 98765, 90000, json.dumps({"dealTag": deal}, ensure_ascii=False), now, now, deal,
+                      json.dumps([_uid(u) for u in members])))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_picker_lists_only_my_closed_won_cases_and_never_an_amount(client, world, monkeypatch):
+    _flag(monkeypatch, True)
+    _seed_other("MQ-P4A-OTHER", ["p4a_out"])                       # 別人的案件（eng 不是成員）
+    _seed_other("MQ-P4A-DRAFT", ["p4a_eng"], deal="")              # 我的案件，但還沒成案
+    r = client.get("/api/daily-tasks/case-options", headers=world["eng"])
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert [i["quoteNo"] for i in items] == [NO], items
+    assert set(items[0]) == {"quoteNo", "customer", "projectName"}, "只回案號／客戶／案名"
+    assert "98765" not in r.text and "1000" not in r.text and "total" not in r.text.lower() and "pretax" not in r.text.lower()
+    out = client.get("/api/daily-tasks/case-options", headers=world["out"]).json()["items"]
+    assert [i["quoteNo"] for i in out] == ["MQ-P4A-OTHER"], "別人只看到自己的案件，看不到我的"
+    # 清單裡的每一筆，伺服器都收（選單與新增守門同一條規則）
+    assert _post(client, world["eng"], case_no=items[0]["quoteNo"]).status_code == 201
+
+
+def test_picker_search_and_the_listed_case_is_exactly_what_create_accepts(client, world, monkeypatch):
+    _flag(monkeypatch, True)
+    assert client.get("/api/daily-tasks/case-options?q=自建客戶", headers=world["eng"]).json()["items"][0]["quoteNo"] == NO
+    assert client.get("/api/daily-tasks/case-options?q=不存在的字", headers=world["eng"]).json()["items"] == []
+    assert client.get("/api/daily-tasks/case-options?q=%25", headers=world["eng"]).json()["items"] == [], "% 當一般字元，不是萬用字元"
+
+
+def test_picker_is_404_when_the_flag_is_off_and_403_without_the_module(client, make_user, world, monkeypatch):
+    _flag(monkeypatch, False)
+    r = client.get("/api/daily-tasks/case-options", headers=world["eng"])
+    assert r.status_code == 404 and r.json()["detail"] == "Not Found"
+    _flag(monkeypatch, True)
+    h = _login(client, make_user, "p4a_nomod2", "engineer", ["dashboard"])
+    assert client.get("/api/daily-tasks/case-options", headers=h).status_code == 403
+    assert client.get("/api/daily-tasks/case-options").status_code in (401, 403)
+
+
+def test_the_case_no_is_stored_trimmed(client, world, monkeypatch):
+    _flag(monkeypatch, True)
+    r = _post(client, world["eng"], case_no="  %s  " % NO)
+    assert r.status_code == 201, r.text
+    assert _rows("SELECT case_no FROM daily_tasks WHERE id=?", r.json()["id"])[0]["case_no"] == NO
+
+
+def test_real_flag_end_to_end_through_the_settings_engine(client, world):
+    """不 monkeypatch：旗標走設定中心引擎（T84 起預設開；存成 0 就關、改回 1 就開）。"""
+    from helpers import settings_registry as SR
+    SR.publish("onepipe", {"entry_unify": 1}, user="t", reason="test")
+    try:
+        assert _post(client, world["eng"]).status_code == 201
+        SR.publish("onepipe", {"entry_unify": 0}, user="t", reason="test")
+        r = _post(client, world["eng"])
+        assert r.status_code == 403 and r.json()["detail"] == DENIED
+        assert client.get("/api/daily-tasks/case-options", headers=world["eng"]).status_code == 404
+    finally:
+        SR.publish("onepipe", {"entry_unify": 1}, user="t", reason="test")

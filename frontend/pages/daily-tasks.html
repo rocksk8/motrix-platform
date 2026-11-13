@@ -2365,13 +2365,13 @@
       </div>
       <div class="dt-field">
         <label class="dt-field-label">關聯案件 <span class="req">*</span></label>
-        <select x-model="selfForm.case_no" class="dt-input" data-testid="dt-self-case" :disabled="!!casesNotice">
+        <select x-model="selfForm.case_no" class="dt-input" data-testid="dt-self-case" :disabled="!!selfCasesNotice">
           <option value="">— 請選擇案件 —</option>
-          <template x-for="c in activeCases" :key="c.quoteNo">
+          <template x-for="c in selfCases" :key="c.quoteNo">
             <option :value="c.quoteNo" x-text="c.quoteNo + '　' + c.customer + (c.projectName ? '　' + c.projectName : '')"></option>
           </template>
         </select>
-        <p class="dt-field-note" x-show="casesNotice" x-text="casesNotice"></p>
+        <p class="dt-field-note" data-testid="dt-self-cases-notice" x-show="selfCasesNotice" x-text="selfCasesNotice"></p>
       </div>
       <div class="dt-field">
         <label class="dt-field-label">事項標題 <span class="req">*</span></label>
@@ -2651,6 +2651,7 @@ function app() {
     activeCases: [],
     selfCreate: false, showSelfModal: false, savingSelf: false,   // 一條龍 P4a
     selfForm: { task_date: '', title: '', description: '', case_no: '' },
+    selfCases: [], selfCasesNotice: '',   // 自建小視窗的案件清單：專用端點 /daily-tasks/case-options（只回案號／客戶／案名，不含金額；不用 /sales-orders——那支只給財務／最高管理者）
     casesNotice: '',   // M01 不在（/api/sales-orders 404）⇒ 說出原因，不是「沒有已成案的案件」（M01-PLAN §5 ④ SO）
 
     showModal:  false,
@@ -3084,6 +3085,26 @@ function app() {
     openSelfCreate() {
       this.selfForm = { task_date: MotrixDate.today(), title: '', description: '', case_no: '' }
       this.showSelfModal = true
+      this.loadSelfCases()
+    },
+    // 載入自己可掛的案件（伺服器只列「已成案、自己看得到」的）。沒有清單時一定說出原因，不留空白下拉。
+    async loadSelfCases() {
+      this.selfCases = []
+      this.selfCasesNotice = '案件清單載入中…'
+      try {
+        const r = await fetch(`${API}/daily-tasks/case-options`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.selfCases = d.items || []
+          this.selfCasesNotice = this.selfCases.length ? '' : '你目前沒有可關聯的進行中案件（只列出你負責或被指派協作的已成案案件）；請找最高管理者建立事項。'
+        } else if (r.status === 404) {
+          this.selfCasesNotice = '這項功能目前沒有開放，或案件模組未安裝；請找最高管理者建立事項。'
+        } else if (r.status === 403) {
+          this.selfCasesNotice = '你沒有「每日工作事項」的權限，無法新增事項。'
+        } else {
+          this.selfCasesNotice = '案件清單載入失敗（' + r.status + '），請稍後再試。'
+        }
+      } catch (e) { this.selfCasesNotice = '案件清單載入失敗，請檢查網路後再試。' }
     },
     async saveSelfForm() {
       const f = this.selfForm

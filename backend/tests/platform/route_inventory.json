@@ -833,6 +833,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/daily-tasks/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/daily-tasks/{task_id}": {
    "w": false,
    "pp": 1,
