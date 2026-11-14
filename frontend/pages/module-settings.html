@@ -59,6 +59,8 @@
       .ms-table td:nth-child(4)::before { content: "重啟後　"; color: var(--text-dim); font-size: 12px; }
       .ms-table td:nth-child(5) { grid-column: 2; grid-row: 1 / span 4; align-self: center; }
       .ms-table td:nth-child(5) .btn { min-width: 76px; min-height: 44px; }
+      .ms-table td:nth-child(5) label { display: flex; align-items: center; gap: 8px; min-width: 76px; min-height: 44px; }
+      .ms-table td:nth-child(5) .ms-check { width: 24px; height: 24px; }
       .ms-table tr:has(td[colspan]) { display: block; }
       .ms-table td[colspan] { grid-column: auto; }
     }
@@ -79,7 +81,7 @@
 
     <div class="ms-note" data-testid="ms-restart-note">
       <b>啟用／停用在重新啟動服務後才生效。</b>
-      「目前狀態」是這次啟動實際的樣子；「重啟後」是依目前設定、下次啟動會變成的樣子，兩者不同的列會標示「待重啟」。
+      「目前狀態」是這次啟動實際的樣子；「重啟後」是依目前設定、下次啟動會變成的樣子，兩者不同的列會標示「待重啟」（即篩選鈕「尚未生效」所列的模組）。
       本頁不提供重啟：重新啟動服務屬於部署與維運的動作，請依既有程序進行。
       <span x-show="startedAt">（這次啟動時間：<span x-text="startedAt"></span>）</span>
     </div>
@@ -130,12 +132,13 @@
       </ul>
       <div style="margin-top:8px; display:flex; gap:8px">
         <button type="button" class="btn btn-primary" :disabled="busy" @click="apply()" data-testid="ms-apply">確定套用</button>
-        <button type="button" class="btn" :disabled="busy" @click="previewing = false" data-testid="ms-preview-cancel">先不要</button>
+        <button type="button" class="btn" :disabled="busy" @click="previewing = false" data-testid="ms-preview-cancel">取消</button>
       </div>
     </div>
 
     <div class="ms-draft" x-show="lastBatch.length" data-testid="ms-undo-bar" style="background:#F0FDF4;border-color:#86EFAC">
       <span>剛套用了 <b x-text="lastBatch.length"></b> 項變更。</span>
+      <span class="ms-reason">會把這批改回套用前的設定。</span>
       <button type="button" class="btn" :disabled="busy" @click="undoLast()" data-testid="ms-undo">復原這一批</button>
     </div>
 
@@ -227,6 +230,9 @@
           this.licenseNotes = [...new Set(this.modules.map(m => m.note).filter(Boolean))]
           this.disabledList = d.disabledList || { source: '', message: '' }
           this.startedAt = d.startedAt || ''
+          const dr = { ...this.draft }
+          this.modules.forEach(m => { if (Object.prototype.hasOwnProperty.call(dr, m.key) && dr[m.key] === this.orig(m)) delete dr[m.key] })
+          this.draft = dr
           this.loaded = true
         },
 
@@ -279,10 +285,12 @@
               if (res.ok) done.push(it); else failed.push(it.name + '：' + (res.d.detail || ('操作失敗（' + res.status + '）')))
             }
             this.lastBatch = done
-            this.draft = {}; this.previewing = false
+            const keep = {}
+            items.forEach(it => { if (!done.includes(it)) keep[it.key] = it.now })
+            this.draft = keep; this.previewing = false
             this.isError = failed.length > 0
             this.msg = (done.length ? '已套用 ' + done.length + ' 項，重新啟動服務後生效。' : '') +
-                       (failed.length ? (done.length ? ' ' : '') + failed.length + ' 項沒有成功：' + failed.join('；') : '')
+                       (failed.length ? (done.length ? ' ' : '') + failed.length + ' 項未成功：' + failed.join('；') : '')
             await this.reload()
           } finally {
             this.busy = false
@@ -295,14 +303,21 @@
           this.busy = true; this.msg = ''; this.isError = false
           const failed = []
           try {
+            await this.reload()
+            const cur = {}
+            this.modules.forEach(m => { cur[m.key] = this.orig(m) })
+            const skipped = []
+            let n = 0
             for (const it of items) {
+              if (cur[it.key] !== it.now) { skipped.push(it.name); continue }      // 套用後已被他人改過：不覆蓋
               const res = await this._put(it.key, it.was)
-              if (!res.ok) failed.push(it.name + '：' + (res.d.detail || ('操作失敗（' + res.status + '）')))
+              if (res.ok) n += 1; else failed.push(it.name + '：' + (res.d.detail || ('操作失敗（' + res.status + '）')))
             }
             this.lastBatch = []
             this.isError = failed.length > 0
-            this.msg = failed.length ? ('復原時 ' + failed.length + ' 項沒有成功：' + failed.join('；'))
-                                     : '已復原這一批（' + items.length + ' 項），重新啟動服務後生效。'
+            this.msg = (n ? '已復原這一批（' + n + ' 項），重新啟動服務後生效。' : '') +
+                       (skipped.length ? (n ? ' ' : '') + skipped.length + ' 項在套用後已被其他人更改，未復原：' + skipped.join('、') + '。' : '') +
+                       (failed.length ? ' 復原時 ' + failed.length + ' 項未成功：' + failed.join('；') : '')
             await this.reload()
           } finally {
             this.busy = false
