@@ -26,7 +26,7 @@
 - （規格寫成 `{id: 占用量}`；本契約加 `shipped` 與 `notes` 供畫面三格與取消阻擋用，**向下相容於只讀 `reserved+shipped` 的呼叫端**——請 2e 確認。）
 
 ## 3. 出貨單明細（加性）
-`items_json[i].materialLink = {"materialItemId": str, "docCode": str, "qty": number>0}`；舊單無此鍵＝行為不變。一列對一筆材料申請；同一張出貨單內同一 `materialItemId` 的列數量合計計算。**與 `part_no`／`serials` 同列互斥**（400 `ship_link_serial_exclusive`）。
+`items_json[i].materialLink = {"materialItemId": str, "docCode": str, "qty": number>0}`；舊單無此鍵＝行為不變。一列對一筆材料申請；同一張出貨單內同一 `materialItemId` 的列數量合計計算。~~與 `part_no`／`serials` 同列互斥（400 `ship_link_serial_exclusive`）~~——**T86 放寬：可同列並存**，兩邊都要驗證一致：序號筆數 ≤ 連結數量（400 `ship_link_serial_qty`，存檔／送審／核准都擋）；**每個序號**都必須是為這個案件、這筆材料申請入庫的：`stock_items.part_no`＝列上 `part_no`、`stock_items.material_item_id`＝連結的 `materialItemId`，且該序號所屬批次（`stock_batches.delivery_mode='stock'`）的 `quote_no`＝本單案件（400 `ship_link_serial_part`，訊息點名序號，送審／核准擋）。別案的、一般庫存（沒綁材料申請）的、另一筆材料申請入庫的同料號序號都不能掛上（否則占用 A 的到料量、扣的卻是別處庫存，成本與數量歸屬對不上）；沒有入庫紀錄＝不通過。序號本身仍照一般出貨規則於核准時驗在庫並扣庫；連結數量仍占用材料申請的到料量（序號不另外重複計）。只有連結或只有序號的列行為與放寬前逐位元相同。錯誤碼 `ship_link_serial_exclusive` 不再產生。
 
 ## 4. supply 驗證（送審與核准各一次；核准時防競態）
 對每個 `materialLink`（以 `case` 提供者取 `shippable`，找不到該 `materialItemId`／`docCode` 不符 ⇒ 400 `ship_link_invalid`「材料申請未核准、未到貨、已取消或不存在」）：
@@ -38,7 +38,7 @@ case 取消材料申請／變更申請下限／三格數量：呼叫 `registry.s
 
 ## 6. 守門與測試
 - AST 守門：`modules/supply` 不得 import `modules.case`、反之亦然（既有 `test_supply_moved_guards` 風格擴充）。
-- 契約題：兩個提供者各自回傳形狀；`reserved`／`shipped` 狀態對照（草稿、退回不計）；`exclude_note_no`；超量 400；核准時重檢（送審後另一單先核准 ⇒ 本單核准 400）；序號互斥；舊單不變（無 `materialLink` 的出貨單送審／核准／PDF 逐位相同）。
+- 契約題：兩個提供者各自回傳形狀；`reserved`／`shipped` 狀態對照（草稿、退回不計）；`exclude_note_no`；超量 400；核准時重檢（送審後另一單先核准 ⇒ 本單核准 400）；~~序號互斥~~（T86 改為並存驗證，見 §3）；舊單不變（無 `materialLink` 的出貨單送審／核准／PDF 逐位相同）。
 - L1：新能力名登記於 core 介面快照（`--update --pending`），CHANGELOG (next)。
 
 ## 7. 切分

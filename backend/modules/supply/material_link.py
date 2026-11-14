@@ -6,7 +6,10 @@
 - **不跨模組**：M03 不 import M01。可出貨量由 case 的提供者 `material.shippable` 給（已核准＋已到貨確認的材料申請與到貨量）；
   已占用／已出貨量由本模組的提供者 `shipping.material_shipped` 給（`reserved`＝待審核／簽核中，`shipped`＝已核准；草稿與已退回不計）。
 - 檢查（出貨單**送審**與**核准**各一次，後者防競態）：同一筆材料申請所有活的連結數量合計 ≤ `arrivedQty`，否則 `ship_exceeds_arrived`；
-  連到不存在／未核准／未到貨／已取消的材料申請 ⇒ `ship_link_invalid`；M01 不在 ⇒ `ship_link_module_off`；同列帶庫存序號 ⇒ `ship_link_serial_exclusive`。
+  連到不存在／未核准／未到貨／已取消的材料申請 ⇒ `ship_link_invalid`；M01 不在 ⇒ `ship_link_module_off`。
+- **連結與庫存序號可同列並存**（T86；原 33-S1 的 `ship_link_serial_exclusive` 已放寬）：同列帶 `materialLink` 與 `part_no`＋`serials` 時兩邊都要驗證一致——
+  序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）、**每個序號**都必須是為這個案件、這筆材料申請入庫的（`stock_items.material_item_id`＋批次案件單號＋料號，stock 方式批次；別案、一般庫存、另一筆材料申請入庫的同料號序號不行；`ship_link_serial_part`，送審／核准擋）；
+  只有連結、或只有序號的列，行為與放寬前逐位元相同。
 - E6（不擋）：`unlinked_warnings`＝該案件已到料且還有剩餘可出貨量、而這張單沒有連結的品項（送審前顯示警示）。
 全部函式唯讀、不 commit。
 """
@@ -53,15 +56,26 @@ def parse_link(it):
     return mid, doc, qty
 
 
+def coexist_serials(it) -> list:
+    """同列「連結＋庫存序號並存」時的序號清單；不是並存（沒有連結、沒有料號、沒有序號）⇒ `[]`。序號不是清單 ⇒ LinkError。"""
+    if it.get("materialLink") is None or not (it.get("part_no") or "").strip() or not it.get("serials"):
+        return []
+    sers = it.get("serials")
+    if not isinstance(sers, list):
+        raise LinkError("ship_link_invalid", "序號的格式不正確")
+    return [str(x).strip() for x in sers if str(x).strip()]
+
+
 def links_of(items) -> list:
-    """`[(列序, 列, (materialItemId, docCode, qty))]`；同列帶庫存序號 ⇒ LinkError。"""
+    """`[(列序, 列, (materialItemId, docCode, qty))]`；形狀不對 ⇒ LinkError。並存列的序號筆數不得多於連結數量（T86）。"""
     out = []
     for i, it in enumerate(items):
         lk = parse_link(it)
         if lk is None:
             continue
-        if (it.get("part_no") or "").strip() and it.get("serials"):
-            raise LinkError("ship_link_serial_exclusive", "第 %d 列同時帶庫存序號與材料申請連結：庫存出貨與材料申請出貨請分成不同列" % (i + 1))
+        sers = coexist_serials(it)
+        if len(sers) > lk[2] + _EPS:
+            raise LinkError("ship_link_serial_qty", "第 %d 列的序號有 %d 筆，多於連結的材料申請數量 %s" % (i + 1, len(sers), _fmt(lk[2])))
         out.append((i, it, lk))
     return out
 
@@ -133,6 +147,27 @@ def _fmt(x):
     return ("%g" % x)
 
 
+def _serial_bound(conn, quote_no, mid, part_no, serial_no) -> bool:
+    """這個序號是否是「為這個案件、這筆材料申請」入庫的（stock 方式批次；序號列的 `material_item_id`＋批次的案件單號＋料號都要對上）。
+    別案的、一般庫存（沒有綁材料申請）的、或另一筆材料申請入庫的同料號序號都回 False；舊庫沒有這幾欄 ⇒ False。"""
+    try:
+        return conn.execute("SELECT 1 FROM stock_items si JOIN stock_batches sb ON sb.batch_no = si.batch_no"
+                            " WHERE si.part_no=? AND si.serial_no=? AND si.material_item_id=? AND sb.quote_no=? AND sb.delivery_mode='stock' LIMIT 1",
+                            (part_no, serial_no, mid, quote_no)).fetchone() is not None
+    except Exception:                                                                        # noqa: BLE001
+        return False
+
+
+def _check_coexist_parts(conn, quote_no, links) -> None:
+    """T86：連結＋序號並存的列，**逐個序號**都必須是為這筆材料申請入庫的（否則領料與庫存扣帳會對不上：占用 A 的到料量、扣的卻是別處的庫存）。
+    送審與核准都跑（核准時另驗序號在庫）。錯誤碼 `ship_link_serial_part`，訊息點名序號。"""
+    for i, it, (mid, doc, _qty) in links:
+        pn = (it.get("part_no") or "").strip()
+        for sn in coexist_serials(it):
+            if not _serial_bound(conn, quote_no, mid, pn, sn):
+                raise LinkError("ship_link_serial_part", "第 %d 列的序號 %s（料號 %s）不是為材料申請 %s 入庫的（別案、一般庫存或另一筆材料申請入庫的序號不能掛在這筆材料申請上）" % (i + 1, sn, pn, doc))
+
+
 def check_note(conn, note_no, quote_no, items_json) -> None:
     """送審／核准前的檢查；有問題 raise LinkError。沒有任何 materialLink ⇒ 什麼都不做（舊單行為不變）。"""
     links = links_of(_items(items_json))
@@ -148,6 +183,7 @@ def check_note(conn, note_no, quote_no, items_json) -> None:
         s = ship.get(mid)
         if s is None or s.get("docCode") != doc:
             raise LinkError("ship_link_invalid", "材料申請 %s 未核准、未確認到貨、已取消或不存在，不能連結出貨" % doc)
+    _check_coexist_parts(conn, quote_no, links)
     for mid, qty in mine.items():
         s, u = ship[mid], used.get(mid, {"reserved": 0.0, "shipped": 0.0})
         arrived = _num(s.get("arrivedQty")) or 0.0

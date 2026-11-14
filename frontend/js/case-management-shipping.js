@@ -271,7 +271,9 @@ window.CM_PARTS.push(() => ({
       if (this.serialPicker.partNo && this.serialPicker.selected.length) {
         it.part_no = this.serialPicker.partNo
         it.serials = [...this.serialPicker.selected]
-        it.qty = this.serialPicker.selected.length
+        // 連結材料申請的列：出貨數量是連結數量，不因選了幾個序號而縮水；序號比數量多時才把數量補到序號筆數（後端：序號筆數不得多於連結數量）
+        it.qty = it.materialLink ? Math.max(Number(it.qty) || 0, it.serials.length) : it.serials.length
+        this.syncLinkQty(it)
       } else {
         delete it.part_no
         delete it.serials
