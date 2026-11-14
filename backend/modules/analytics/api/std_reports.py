@@ -396,7 +396,7 @@ def _build_gross_margin(p: dict, u: dict) -> dict:
         _kpi("actMargin", "實際營業利益率", act if act is not None else _state("unsettled"), "pct",
              f"僅計已精算 {len(settled)} 件，以金額加權"),
         _kpi("settledCount", "已精算件數", len(settled), "count", f"共 {len(cases)} 件案件"),
-        _kpi("gap", "實際與預估差距", gap if gap is not None else _state("unsettled"), "pct",
+        _kpi("gap", "實際與預估差距（百分點）", gap if gap is not None else _state("unsettled"), "pct",
              "百分點；僅比較已精算的案件"),
     ]
     rows = []
