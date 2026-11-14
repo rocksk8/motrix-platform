@@ -3,7 +3,7 @@
 
 [單位] tool:auto_apply    [層] 部署工具（正式機本機；由 deploy_dashboard 呼叫，不開網路端點）
 [公開介面] capture_state, diff_state, compare_diffs, integrity_check, precheck, rehearse, consent_digest,
-    verify_after, apply_with_verification, estimate_downtime, render_report, write_report, audit_event, audit_chain_problems,
+    verify_after, apply_with_verification, estimate_downtime, render_report, write_report, write_blocked_report, audit_event, audit_chain_problems,
     structure_hash, finish, finish_crashed, build_notice, notify_result, load_expectations, is_loopback_url, python_exe
 [不變式]
   - **不碰 apply_update.ps1／rollback_update.ps1／delivery.py**：套用本身仍是 delivery.apply_staged（它的備份、
@@ -221,10 +221,10 @@ def compare_diffs(expected, actual):
     if expected["schema_version"] != actual["schema_version"]:
         fails.append("schema_version：預期 %s，實際 %s" % (expected["schema_version"], actual["schema_version"]))
     em, am = expected["modules"], actual["modules"]
-    _set_problems("模組 schema 版號新增", set(em["added"].items()), set(am["added"].items()), fails)
-    _set_problems("模組 schema 版號變更", {(k, tuple(v)) for k, v in em["changed"].items()},
+    _set_problems("模組資料結構版本新增", set(em["added"].items()), set(am["added"].items()), fails)
+    _set_problems("模組資料結構版本變更", {(k, tuple(v)) for k, v in em["changed"].items()},
                   {(k, tuple(v)) for k, v in am["changed"].items()}, fails)
-    _set_problems("模組 schema 版號移除", set(em["removed"]), set(am["removed"]), fails)
+    _set_problems("模組資料結構版本移除", set(em["removed"]), set(am["removed"]), fails)
     for key in ("added", "removed", "changed"):
         _set_problems("資料庫物件" + {"added": "新增", "removed": "移除", "changed": "定義變更"}[key],
                       set(expected["objects"][key]), set(actual["objects"][key]), fails)
@@ -774,8 +774,8 @@ def render_report(rec):
         lines += ["## 事後驗證", "", "沒有做事後驗證（套用沒有成功，或套用腳本回報的狀態無法確認成功）。", ""]
     if rec.get("outcome") != "succeeded":
         lines += ["## 後續處置（停下，由人決定）", "",
-                  "- 系統**不會**自動回滾（套用腳本內建的健康檢查失敗回滾除外，結果見上方 rolled_back）。",
-                  "- 需要回滾時由使用者或 PM 明確指示後，人工執行（預設只回程式、資料庫保留）：",
+                  "- 系統**不會**自動回復到套用前（套用腳本內建的健康檢查失敗時的自動回復除外，結果見上方 rolled_back）。",
+                  "- 需要回復到套用前時，由使用者或 PM 明確指示後人工執行（預設只回復程式、資料庫保留）：",
                   "", "    " + rollback_hint(rec.get("install_root") or "", r), ""]
     nt = rec.get("notified")
     if nt is not None:
@@ -812,6 +812,38 @@ def write_report(install_root, rec, stamp=None):
         return md, js
     except OSError:
         return None, None
+
+
+def render_blocked_report(name, step, problems, by=""):
+    """準備或預演就停下來的白話報告（還沒有套用，正式系統沒有被改動）。只放：包名、停在哪一步、原因（每則截 300 字）。"""
+    lines = ["# 沒有開始套用：%s" % name, "",
+             "- **結果**：被擋下，停在「%s」。" % step,
+             "- **正式系統沒有被改動**（程式、資料庫與設定都維持原狀；這一步只用到安裝目錄外的暫存資料夾與資料庫的備份副本）。",
+             "- 操作者：%s" % (by or "（準備與預演階段不需要登入，未記錄）"), "",
+             "## 原因", ""]
+    lines += ["- %s" % str(p).replace("\n", " ")[:300] for p in (problems or ["（沒有說明）"])]
+    lines += ["", "## 接下來", "",
+              "- 請把上面的原因交給負責出包的人，更換或重做更新包後，再從「準備」重新開始。",
+              "- 這一步不會發通知；要套用時操作的人就在畫面前。", ""]
+    return "\n".join(lines)
+
+
+def write_blocked_report(install_root, name, step, problems, by=""):
+    """準備／預演失敗：寫 `backend/logs/a1_report_blocked_<時間戳>.md` ＋一筆 `apply_blocked` 稽核事件（含 step）。
+    ⇒ 報告檔名（只有檔名）或 None；永不丟例外。**不發通知**（準備與預演時操作的人就在畫面前）。"""
+    try:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        d = os.path.join(install_root, "backend", "logs")
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, "a1_report_blocked_%s.md" % stamp)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(render_blocked_report(name, step, problems, by))
+        short = [str(p)[:300] for p in (problems or [])][:20]
+        audit_event(install_root, {"event": "apply_blocked", "step": step, "name": name, "by": by, "problems": short,
+                                   "report": os.path.basename(path)})
+        return os.path.basename(path)
+    except Exception:                                               # noqa: BLE001 — 報告寫不出來不可以讓準備／預演本身出錯
+        return None
 
 
 def rewrite_report(rec):

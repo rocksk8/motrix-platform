@@ -78,14 +78,16 @@ def test_apply_from_the_dashboard_end_to_end(dashboard, make_user, new_context):
     page.wait_for_function("() => /沒有開始套用/.test(document.querySelector('[data-testid=\"dl-result\"]').textContent)",
                            timeout=20000)
     assert not (dashboard["root"] / "results").exists()
-    # 對的帳密 ⇒ 套用 ⇒ 結果
+    assert page.input_value('[data-testid="dl-pass"]') == "" and not page.is_checked('[data-testid="dl-ack"]'), "同意與密碼只用一次：被拒絕後也清掉"
+    # 對的帳密 ⇒ 重新勾選確認 ⇒ 套用 ⇒ 結果
     page.fill('[data-testid="dl-pass"]', pw)
+    page.check('[data-testid="dl-ack"]')
     page.click('[data-testid="dl-apply"]')
     page.locator('[data-testid="dl-result"][data-outcome="succeeded"]').wait_for(timeout=30000)
     assert "成功" in page.text_content('[data-testid="dl-result"]')
     back = json.loads((dashboard["root"] / "results" / (dashboard["name"] + ".result.json")).read_text(encoding="utf-8"))
     assert back["outcome"] == "succeeded" and back["commit"] == COMMIT
     assert (dashboard["install"] / "backend" / "tools" / "apply_update.ps1").read_bytes() == PS1.encode("utf-8")
-    page.wait_for_function("() => /success/.test(document.querySelector('[data-testid=\"dl-last\"]').textContent)", timeout=10000)
+    page.wait_for_function("() => /成功.*新版已套用/.test(document.querySelector('[data-testid=\"dl-last\"]').textContent)", timeout=10000)
     assert page.input_value('[data-testid="dl-pass"]') == "", "密碼送出後清掉"
     assert not errors, errors

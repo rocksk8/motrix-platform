@@ -1138,6 +1138,14 @@ def _delivery_summary(staged: str) -> dict:
     return out
 
 
+def _blocked_report(name: str, step: str, problems) -> "str | None":
+    """準備、預演或套用前檢查就停下來：寫白話報告（a1_report_blocked_*.md）＋一筆 apply_blocked 稽核。⇒ 報告檔名或 None；永不丟例外，不發通知。"""
+    try:
+        return _trusted_auto_apply().write_blocked_report(str(DELIVERY_INSTALL_ROOT), name, step, list(problems or []))
+    except Exception:                                           # noqa: BLE001 — 寫不出報告不可以讓準備／預演／套用本身出錯
+        return None
+
+
 class DeliveryPrepareBody(BaseModel):
     name: str
 
@@ -1182,7 +1190,7 @@ def delivery_prepare(body: DeliveryPrepareBody):
             DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
             staged = _dl.stage(root, body.name, str(DELIVERY_STAGING_ROOT))
         except _dl.DeliveryError as e:
-            return JSONResponse(status_code=409, content={"detail": str(e)})
+            return JSONResponse(status_code=409, content={"detail": str(e), "report": _blocked_report(body.name, "準備", [str(e)])})
         verified = _dl.verify_staged(staged, str(DELIVERY_INSTALL_ROOT))
         summary = _delivery_summary(staged) if verified["ok"] else {}
         with _delivery_lock:
@@ -1196,7 +1204,8 @@ def delivery_prepare(body: DeliveryPrepareBody):
     except Exception:                                           # noqa: BLE001 — 估計值拿不到不擋準備（含模組不可信：套用時另會擋）
         downtime = None
     meta = verified.get("meta") or {}
-    return {"ok": verified["ok"], "problems": verified["problems"], "notes": verified["notes"] + summary.get("notes", []),
+    report = None if verified["ok"] else _blocked_report(body.name, "準備", verified["problems"])
+    return {"ok": verified["ok"], "problems": verified["problems"], "report": report, "notes": verified["notes"] + summary.get("notes", []),
             "commit": meta.get("commit"), "builtAt": meta.get("built_at"), "product": meta.get("product"),
             "deleteCount": summary.get("deleteCount"), "addedCount": summary.get("addedCount"),
             "changes": summary.get("changes", []), "downtime": downtime, "requireRehearsal": REQUIRE_REHEARSAL}
@@ -1217,6 +1226,8 @@ def _rehearse_run(name: str, staged: str):
     except Exception as e:                                      # noqa: BLE001 — 預演本身出錯＝不放行，但不讓執行緒默默死掉
         rh = {"ok": False, "problems": ["預演程序本身出錯：%s" % e], "summary": [], "expected_diff": None,
               "digest": None, "pkg_digest": None, "seconds": None, "db_mb": None, "at": time.time(), "notes": [], "tool_tail": ""}
+    if not rh.get("ok"):
+        rh["report"] = _blocked_report(name, "預演", rh.get("problems"))
     with _delivery_lock:
         _delivery_state["rehearsals"][name] = rh
         _delivery_state["rehearsing"] = None
@@ -1252,7 +1263,7 @@ def delivery_rehearse_status(name: str = ""):
     rh = _delivery_state["rehearsals"].get(name)
     slim = None
     if rh:
-        slim = {k: rh.get(k) for k in ("ok", "problems", "notes", "seconds", "db_mb", "summary", "digest", "at", "tool_tail")}
+        slim = {k: rh.get(k) for k in ("ok", "problems", "notes", "seconds", "db_mb", "summary", "digest", "at", "tool_tail", "report")}
         slim["empty"] = bool(rh.get("ok")) and not rh.get("summary")
     return {"rehearsing": _delivery_state["rehearsing"], "result": slim}
 
@@ -1333,6 +1344,7 @@ def delivery_apply(body: DeliveryApplyBody):
     # 暫存包完整性也在要求密碼**之前**檢查：簽章清單、逐檔雜湊、不得有清單外多出的檔（預演或任何人弄髒了暫存包就在這裡擋）
     again = _dl.verify_staged(prep["staged"], str(DELIVERY_INSTALL_ROOT), run_verify_package=False)
     if not again["ok"]:
+        _blocked_report(body.name, "套用前檢查（暫存包完整性）", again["problems"])
         return JSONResponse(status_code=409, content={"detail": "暫存的包與簽章清單不符（被改過或多出檔案），已拒絕：" + "；".join(again["problems"])})
     if REQUIRE_REHEARSAL:
         try:
@@ -1340,9 +1352,11 @@ def delivery_apply(body: DeliveryApplyBody):
         except OSError:
             same = False
         if not same:
+            _blocked_report(body.name, "套用前檢查（暫存包摘要）", ["預演之後暫存的包被換過（包摘要與預演時不同）"])
             return JSONResponse(status_code=409, content={"detail": "預演之後暫存的包被換過，預演結果不再適用：請重新預演"})
     # 密碼只准送到本機：位址不是 localhost／127.0.0.1／[::1] 就在送出之前拒絕（驗證連線不驗憑證，送到別的主機等於洩漏密碼）
     if not _aa.is_loopback_url(_erp_base_url()):
+        _blocked_report(body.name, "套用前檢查（ERP 位址）", ["ERP 位址（MOTRIX_DELIVERY_ERP_URL）不是本機，為了保護密碼拒絕套用"])
         return JSONResponse(status_code=409, content={"detail": "ERP 位址（MOTRIX_DELIVERY_ERP_URL）不是本機：為了保護密碼，已拒絕套用"})
     try:
         who = _verify_superadmin(body.username, body.password, body.totp)

@@ -49,6 +49,13 @@
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
   .badge.ok { background: #14532D; color: #4ADE80; }
   .badge.bad { background: #450A0A; color: #F87171; }
+  .dl-steps { font-size: 13px; color: #bbb; margin: 0 0 12px; padding-left: 20px; line-height: 1.6; }
+  .dl-label { display: block; font-size: 12px; color: #aaa; margin: 4px 0 2px; }
+  .dl-h3 { font-size: 14px; margin: 0 0 8px; color: #F5F4F0; }
+  #dlResult { border-left: 4px solid #555; }
+  #dlResult[data-outcome="succeeded"] { border-left-color: #16A34A; }
+  #dlResult[data-outcome="verify_failed"], #dlResult[data-outcome="unknown"], #dlResult[data-outcome="crashed"] { border-left-color: #D97706; }
+  #dlResult[data-outcome="failed"] { border-left-color: #DC2626; }
   .hidden { display: none; }
 </style>
 </head>
@@ -155,32 +162,39 @@
 
   <div class="card" style="margin-bottom:16px" id="dlCard">
     <h2>6. 套用更新（正式機本機；交付資料夾）</h2>
-    <div style="font-size:12px;color:#aaa;margin-bottom:8px">
-      在正式機上使用：偵測交付資料夾的新包 → 按「準備」（複製到安裝目錄外、驗簽章與逐檔雜湊）→ 確認 commit、變更摘要、刪除檔數 →
-      按「預演」（在正式資料庫的備份副本上先跑一遍，列出預期的資料庫變更）→ 輸入本機最高管理者帳密 → 套用。
-      套用腳本自己的健康檢查失敗時會自動回到套用前。套用後系統會自動逐項驗證，若有項目未通過，只會停下來並產生報告，不會自動回滾，由您決定。
-      結果同時寫回交付資料夾。
-    </div>
-    <div class="row"><span>交付資料夾</span><span id="dlRoot" data-testid="dl-root">…</span></div>
-    <div class="row"><span>上一次套用</span><span id="dlLast" data-testid="dl-last">…</span></div>
+    <ol class="dl-steps">
+      <li>按「準備（驗證）」：把交付資料夾裡的新包複製到安裝目錄外的暫存資料夾，驗證簽章與逐檔雜湊。</li>
+      <li>確認 commit、變更摘要與刪除、新增的檔案數。</li>
+      <li>按「預演」：在正式資料庫的備份副本上先跑一遍，列出預期的資料庫變更。預演不會變動正式資料庫。</li>
+      <li>勾選確認，輸入本機最高管理者的帳號與密碼，按「套用到正式機」。</li>
+      <li>套用腳本自己的健康檢查失敗時，會自動回復到套用前。套用後系統會自動逐項驗證；若有項目未通過，只會停下來並產生報告，不會自動回復到套用前，由您依報告決定。</li>
+      <li>結果同時寫回交付資料夾。</li>
+    </ol>
+    <div class="row"><span>交付資料夾</span><span id="dlRoot" data-testid="dl-root" style="word-break:break-all;text-align:right;margin-left:12px">…</span></div>
+    <div class="row"><span>上一次套用</span><span id="dlLast" data-testid="dl-last" style="word-break:break-all;text-align:right;margin-left:12px">…</span></div>
     <div class="confirm-box hidden" id="dlNotice" data-testid="dl-notice"></div>
+    <label class="dl-label" for="dlPkg">更新包</label>
     <select id="dlPkg" data-testid="dl-pkg"></select>
     <button class="ghost" id="dlPrepareBtn" data-testid="dl-prepare" onclick="dlPrepare()">準備（驗證）</button>
     <div class="log hidden" id="dlVerify" data-testid="dl-verify" style="white-space:normal"></div>
     <div class="confirm-box hidden" id="dlConfirm" data-testid="dl-confirm">
+      <h3 class="dl-h3">確認套用內容</h3>
       <div id="dlConfirmText" data-testid="dl-confirm-text"></div>
       <div id="dlRehearseBox" data-testid="dl-rehearse-box" style="margin:8px 0">
         <button class="ghost" id="dlRehearseBtn" data-testid="dl-rehearse" onclick="dlRehearse()">預演</button>
-        <span style="font-size:12px;color:#aaa">預演只讀取正式資料庫，不會變動它。</span>
+        <span style="font-size:12px;color:#aaa">預演在備份副本上進行，不會變動正式資料庫。</span>
         <div id="dlRehearseText" data-testid="dl-rehearse-text" style="white-space:pre-wrap;margin-top:6px"></div>
       </div>
-      <input id="dlUser" data-testid="dl-user" placeholder="本機最高管理者帳號" autocomplete="off">
-      <input id="dlPass" data-testid="dl-pass" type="password" placeholder="密碼" autocomplete="off">
-      <input id="dlTotp" data-testid="dl-totp" placeholder="兩步驟驗證碼（有啟用才填）" autocomplete="off">
+      <label class="dl-label" for="dlUser">本機最高管理者帳號</label>
+      <input id="dlUser" data-testid="dl-user" autocomplete="username">
+      <label class="dl-label" for="dlPass">密碼</label>
+      <input id="dlPass" data-testid="dl-pass" type="password" autocomplete="current-password">
+      <label class="dl-label" for="dlTotp">兩步驟驗證碼（有啟用才填寫）</label>
+      <input id="dlTotp" data-testid="dl-totp" autocomplete="one-time-code" inputmode="numeric">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0">
         <input type="checkbox" id="dlAck" data-testid="dl-ack" style="width:auto;margin:0">我已確認上面的版本與變更內容
       </label>
-      <button class="danger" id="dlApplyBtn" data-testid="dl-apply" onclick="dlApply()">套用</button>
+      <button class="danger" id="dlApplyBtn" data-testid="dl-apply" onclick="dlApply()">套用到正式機</button>
     </div>
     <div class="log hidden" id="dlResult" data-testid="dl-result" style="white-space:normal"></div>
   </div>
@@ -201,49 +215,128 @@ let pendingDeploy = null;
 let pendingRollback = null;
 
 // ── 6. 套用更新（UPDATE-DELIVERY §3／§4）──────────────────────────────────
+// 用語：「回復到套用前」＝把程式與資料庫還原成套用前的狀態（介面與文件統一用這個詞）。
 function dlShow(id, text, show) {
   const el = document.getElementById(id);
   el.textContent = text || '';
   el.classList.toggle('hidden', !show);
 }
-function dlDescribe(last) {
+const DL_OUTCOME = { succeeded: '成功', verify_failed: '已套用，事後驗證未通過或沒有完成', crashed: '程序中斷，狀態未知，請人工確認現況', failed: '失敗' };
+const DL_STATUS = { success: '成功', unhealthy_rolled_back: '健康檢查失敗，已回復到套用前', module_unhealthy_rolled_back: '模組載入失敗，已回復到套用前',
+                    migration_dryrun_failed: '資料庫遷移預檢失敗，沒有套用' };
+const DL_STATE = { applied: '新版已套用', restored: '已回復到套用前', restored_unhealthy: '已回復到套用前，但回復後服務仍不健康',
+                   applied_no_restore: '新版已套用，沒有回復', not_applied: '沒有套用', restoring: '回復到套用前進行中' };
+const DL_SERVICE = { up: '服務運作中', down: '服務已停止' };
+function dlCode(map, v) {
+  if (v === undefined || v === null || v === '') return '';
+  return map[v] || ('（未知：' + v + '）');
+}
+function dlDescribe(last, withOutcome) {
   if (!last) return '（沒有紀錄）';
   const r = last.result || last;
-  if (!r || !r.status) return last.outcome ? (last.outcome + '：' + (last.problems || []).join('；')) : '（沒有紀錄）';
-  return (last.outcome ? (last.outcome === 'succeeded' ? '成功' : (last.outcome === 'verify_failed' ? '已套用，驗證未通過' : '失敗')) + '　' : '') + (r.status || '') +
-    '（' + (r.rolled_back || '') + '，服務 ' + (r.service || '') + '）' + (r.finished_at ? '　' + r.finished_at : '');
+  if (!r || !r.status) {
+    return last.outcome ? (dlCode(DL_OUTCOME, last.outcome) + ((last.problems || []).length ? '：' + last.problems.join('；') : '')) : '（沒有紀錄）';
+  }
+  const parts = [];
+  if (withOutcome && last.outcome) parts.push(dlCode(DL_OUTCOME, last.outcome));
+  if (r.status !== 'success' || (withOutcome && !last.outcome)) parts.push(dlCode(DL_STATUS, r.status));
+  parts.push(dlCode(DL_STATE, r.rolled_back), dlCode(DL_SERVICE, r.service));
+  return parts.filter(Boolean).join('，') + (r.finished_at ? '　' + r.finished_at : '');
+}
+function dlLockText(lock) {
+  const bits = [];
+  if (lock.package) bits.push('更新包 ' + lock.package);
+  if (lock.started_at) bits.push('開始於 ' + lock.started_at);
+  if (lock.host) bits.push('主機 ' + lock.host);
+  return '目前有套用或回復作業正在執行' + (bits.length ? '（' + bits.join('，') + '）' : '') +
+    '。請等它結束；若確定沒有人在執行，請洽技術人員確認。';
+}
+function dlPackageLabel(p) {
+  const m = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_([0-9a-f]+)_/.exec(p.name || '');
+  const kind = p.product === 'full' ? '完整包' : (p.product || '');
+  if (!m) return (p.name || '') + '（' + kind + '，' + (p.files || 0) + ' 檔）';
+  return m[1] + '-' + m[2] + '-' + m[3] + ' ' + m[4] + ':' + m[5] + '　commit ' + m[6] + '　' + kind + '　' + (p.files || 0) + ' 檔';
+}
+// 同意與密碼只用一次：任何會改變「要套用什麼」的動作（準備、預演、套用）之前都清掉
+function dlResetConsent() {
+  document.getElementById('dlAck').checked = false;
+  document.getElementById('dlPass').value = '';
+  document.getElementById('dlTotp').value = '';
+}
+function dlReportLine(d) {
+  return d && d.report ? '\n報告：' + d.report + '（在安裝目錄的 backend\\logs 資料夾）。正式系統沒有被改動。' : '';
+}
+function dlSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// 輪詢：單次失敗（網路中斷、非 JSON、502）不丟出去，連續失敗 30 次（約 1 分鐘）才放棄 ⇒ 回傳 null
+async function dlPollJson(url, isDone) {
+  let fails = 0;
+  for (;;) {
+    await dlSleep(2000);
+    try {
+      const res = await fetch(url);
+      const s = await res.json();
+      fails = 0;
+      if (isDone(s)) return s;
+    } catch (e) {
+      if (++fails >= 30) return null;
+    }
+  }
+}
+function dlVerifyBox(text, tech) {
+  const el = document.getElementById('dlVerify');
+  el.textContent = text;
+  el.classList.remove('hidden');
+  if (tech && tech.length) {
+    const d = document.createElement('details');
+    const s = document.createElement('summary');
+    s.textContent = '技術資訊';
+    const p = document.createElement('div');
+    p.style.whiteSpace = 'pre-wrap';
+    p.textContent = tech.join('\n');
+    d.appendChild(s); d.appendChild(p);
+    el.appendChild(d);
+  }
 }
 async function dlRefresh() {
   let d;
   try { d = await (await fetch('/api/delivery/overview')).json(); } catch (e) { return; }
   document.getElementById('dlRoot').textContent = d.available ? d.root : '未設定';
-  document.getElementById('dlLast').textContent = dlDescribe(d.last);
+  document.getElementById('dlLast').textContent = dlDescribe(d.last, true);
   dlShow('dlNotice', d.available ? '' : d.notice, !d.available);
-  if (d.lock) dlShow('dlNotice', '有套用或回滾正在執行，或有殘留的鎖檔：' + JSON.stringify(d.lock), true);
+  if (d.lock) dlShow('dlNotice', dlLockText(d.lock), true);
   const sel = document.getElementById('dlPkg');
   sel.innerHTML = '';
   (d.packages || []).forEach(p => {
     const o = document.createElement('option');
-    o.value = p.name; o.textContent = p.name + '（' + (p.product || '') + '，' + (p.files || 0) + ' 檔）';
+    o.value = p.name; o.textContent = dlPackageLabel(p);
     sel.appendChild(o);
   });
 }
 async function dlPrepare() {
   const name = document.getElementById('dlPkg').value;
   document.getElementById('dlConfirm').classList.add('hidden');
+  dlResetConsent();
   if (!name) { dlShow('dlVerify', '交付資料夾裡沒有可用的包', true); return; }
-  dlShow('dlVerify', '準備中（複製到 staging、驗證）…', true);
+  dlShow('dlVerify', '準備中（複製到安裝目錄外的暫存資料夾、驗證）…', true);
   const res = await fetch('/api/delivery/prepare', { method: 'POST', headers: {'Content-Type': 'application/json'},
                                                      body: JSON.stringify({ name }) });
   const d = await res.json().catch(() => ({}));
-  if (!res.ok) { dlShow('dlVerify', '無法準備：' + (d.detail || res.status), true); return; }
-  if (!d.ok) { dlShow('dlVerify', '驗證沒有通過，不能套用：' + (d.problems || []).join('；'), true); return; }
-  dlShow('dlVerify', '驗證通過。' + ((d.notes || []).length ? '提示：' + d.notes.join('；') : ''), true);
+  if (!res.ok) { dlShow('dlVerify', '無法準備：' + (d.detail || res.status) + dlReportLine(d), true); return; }
+  if (!d.ok) { dlShow('dlVerify', '驗證沒有通過，不能套用：' + (d.problems || []).join('；') + dlReportLine(d), true); return; }
+  const plain = [], tech = [];
+  (d.notes || []).forEach(n => {
+    if (String(n).indexOf('刪除計畫試算失敗') === 0) { plain.push('無法試算刪除與新增的檔案數，套用仍可進行；原因請看下方技術資訊。'); tech.push(n); }
+    else plain.push(n);
+  });
+  dlVerifyBox('驗證通過。' + (plain.length ? '提示：' + plain.join('；') : ''), tech);
   const changes = (d.changes || []).map(c => '・' + c.module + ' ' + c.version + '：' + c.content).join('\n');
+  const nul = v => v === null || v === undefined;
+  const counts = (nul(d.deleteCount) || nul(d.addedCount))
+    ? '刪除舊程式檔：' + (nul(d.deleteCount) ? '無法試算' : d.deleteCount + ' 個') + '；新增：' + (nul(d.addedCount) ? '無法試算' : d.addedCount + ' 個')
+    : '刪除舊程式檔 ' + d.deleteCount + ' 個；新增 ' + d.addedCount + ' 個';
   document.getElementById('dlConfirmText').textContent =
-    'commit ' + String(d.commit || '').slice(0, 8) + '（' + (d.product || '') + '，建於 ' + (d.builtAt || '') + '）\n' +
-    '刪除舊程式檔 ' + (d.deleteCount === null || d.deleteCount === undefined ? '（無法試算）' : d.deleteCount) + ' 個、' +
-    '新增 ' + (d.addedCount === null || d.addedCount === undefined ? '（無法試算）' : d.addedCount) + ' 個\n' +
+    'commit ' + String(d.commit || '').slice(0, 8) + '（' + (d.product === 'full' ? '完整包' : (d.product || '')) + '，建置於 ' + (d.builtAt || '') + '）\n' +
+    counts + '\n' +
     '變更摘要：\n' + (changes || '（沒有新的版本紀錄）') + '\n' + dlDowntimeText(d.downtime);
   document.getElementById('dlConfirmText').style.whiteSpace = 'pre-wrap';
   dlRh.require = d.requireRehearsal !== false;
@@ -257,7 +350,7 @@ const dlRh = { require: true, digest: null };
 function dlDowntimeText(t) {
   if (!t || !t.samples) return '預估套用耗時：沒有歷史紀錄可估算。';
   return '預估套用耗時：通常約 ' + t.typical + ' 秒，最長約 ' + t.max + ' 秒（依最近 ' + t.samples +
-    ' 次成功的套用，含套用前的備份與乾跑，並非只有服務停止的時間）。';
+    ' 次成功的套用，含套用前的備份與預演，並非只有服務停止的時間）。';
 }
 async function dlRehearse() {
   const name = document.getElementById('dlPkg').value;
@@ -265,6 +358,7 @@ async function dlRehearse() {
   const btn = document.getElementById('dlRehearseBtn');
   btn.disabled = true;
   dlRh.digest = null;
+  dlResetConsent();
   document.getElementById('dlApplyBtn').disabled = true;
   out.textContent = '預演中…（依資料庫大小，可能需要數分鐘）';
   try {
@@ -272,32 +366,34 @@ async function dlRehearse() {
                                                         body: JSON.stringify({ name }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { out.textContent = '無法預演：' + (d.detail || res.status); return; }
-    for (;;) {
-      await new Promise(r => setTimeout(r, 2000));
-      const s = await (await fetch('/api/delivery/rehearse/status?name=' + encodeURIComponent(name))).json();
-      if (s.rehearsing) continue;
-      const r = s.result;
-      if (!r) { out.textContent = '預演沒有結果，請重新預演。'; return; }
-      if (!r.ok) {
-        out.textContent = '預演未通過，不能套用：' + (r.problems || []).join('；') +
-          (r.tool_tail ? '\n工具輸出（末段）：\n' + r.tool_tail : '');
-        return;
-      }
-      out.textContent = '預演通過（用時 ' + r.seconds + ' 秒，資料庫 ' + r.db_mb + ' MB）。\n' +
-        (r.empty ? '預期資料庫沒有結構變更。' : '預期的資料庫變更：\n' + r.summary.map(x => '・' + x).join('\n')) +
-        ((r.notes || []).length ? '\n注意：' + r.notes.join('；') : '');
-      dlRh.digest = r.digest;
-      document.getElementById('dlApplyBtn').disabled = false;
+    const s = await dlPollJson('/api/delivery/rehearse/status?name=' + encodeURIComponent(name), x => !x.rehearsing);
+    if (!s) { out.textContent = '無法取得預演狀態，請重新整理本頁確認結果。'; return; }
+    const r = s.result;
+    if (!r) { out.textContent = '預演沒有結果，請重新預演。'; return; }
+    if (!r.ok) {
+      out.textContent = '預演未通過，不能套用：' + (r.problems || []).join('；') +
+        (r.tool_tail ? '\n工具輸出（末段）：\n' + r.tool_tail : '') + dlReportLine(r);
       return;
     }
+    out.textContent = '預演通過（用時 ' + r.seconds + ' 秒，資料庫 ' + r.db_mb + ' MB）。\n' +
+      (r.empty ? '預期資料庫沒有結構變更。' : '預期的資料庫變更：\n' + r.summary.map(x => '・' + x).join('\n')) +
+      ((r.notes || []).length ? '\n注意：' + r.notes.join('；') : '');
+    dlRh.digest = r.digest;
+    document.getElementById('dlApplyBtn').disabled = false;
   } finally { btn.disabled = false; }
 }
 function dlVerifyText(last) {
   const v = last.verify;
   if (!v) return '';
   const mark = { ok: '通過', warn: '警告', fail: '未通過' };
-  return '\n事後驗證：\n' + (v.items || []).map(i => '・[' + (mark[i.severity] || '?') + '] ' + i.title +
+  return '\n事後驗證：\n' + (v.items || []).map(i => '・[' + (mark[i.severity] || '（未知：' + i.severity + '）') + '] ' + i.title +
     (i.detail ? '：' + i.detail : '')).join('\n') + ((v.warnings || []).length ? '\n警告：' + v.warnings.join('；') : '');
+}
+function dlResult(text, outcome) {
+  const el = document.getElementById('dlResult');
+  el.setAttribute('data-outcome', outcome);
+  dlShow('dlResult', text, true);
+  el.scrollIntoView({ block: 'nearest' });
 }
 async function dlApply() {
   const name = document.getElementById('dlPkg').value;
@@ -308,28 +404,23 @@ async function dlApply() {
   btn.disabled = true;
   try {
     const res = await fetch('/api/delivery/apply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-    document.getElementById('dlPass').value = '';
+    dlResetConsent();               // 密碼、驗證碼與勾選都只用一次
     const d = await res.json().catch(() => ({}));
-    if (!res.ok) { dlShow('dlResult', '沒有開始套用：' + (d.detail || res.status), true); return; }
+    if (!res.ok) { dlResult('沒有開始套用：' + (d.detail || res.status), 'failed'); return; }
     dlRh.digest = null;     // 預演是一次性的：套用一開始就作廢，再套用必須重新預演
     document.getElementById('dlRehearseText').textContent = '這次預演已經使用（一次性）。再套用請重新預演。';
-    dlShow('dlResult', '套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', true);
-    for (;;) {
-      await new Promise(r => setTimeout(r, 2000));
-      const s = await (await fetch('/api/delivery/status')).json();
-      if (s.running) continue;
-      const last = s.last || {};
-      const head = last.outcome === 'succeeded' ? '成功：' : (last.outcome === 'verify_failed' ? '已套用，但事後驗證有項目未通過（系統不會自動回滾，請由您決定）：' : (last.outcome === 'crashed' ? '套用程序中斷，狀態未知，請人工確認現況：' : '失敗：'));
-      const txt = head + dlDescribe(last) +
-        (s.rolledBackText ? '\n正式機現況：' + s.rolledBackText : '') +
-        (last.downtime_seconds !== null && last.downtime_seconds !== undefined ? '\n實際無法連線的時間約 ' + last.downtime_seconds + ' 秒' : '') +
-        ((last.problems || []).length ? '\n' + last.problems.join('\n') : '') + dlVerifyText(last) +
-        (last.report && last.report.md ? '\n報告：' + last.report.md : '');
-      document.getElementById('dlResult').setAttribute('data-outcome', last.outcome || 'failed');
-      dlShow('dlResult', txt, true);
-      dlRefresh();
-      break;
-    }
+    dlResult('套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', 'running');
+    const s = await dlPollJson('/api/delivery/status', x => !x.running);
+    if (!s) { dlResult('無法取得套用狀態，請重新整理本頁確認結果。', 'unknown'); return; }
+    const last = s.last || {};
+    const head = last.outcome === 'succeeded' ? '成功：' : (last.outcome === 'verify_failed' ? '已套用，但事後驗證有項目未通過（系統不會自動回復到套用前，請依報告決定）：' : (last.outcome === 'crashed' ? '套用程序中斷，狀態未知，請人工確認現況：' : '失敗：'));
+    const txt = head + dlDescribe(last, false) +
+      (s.rolledBackText ? '\n正式機現況：' + s.rolledBackText : '') +
+      (last.downtime_seconds !== null && last.downtime_seconds !== undefined ? '\n實際無法連線的時間約 ' + last.downtime_seconds + ' 秒' : '') +
+      ((last.problems || []).length ? '\n' + last.problems.join('\n') : '') + dlVerifyText(last) +
+      (last.report && last.report.md ? '\n報告：' + last.report.md + '（回復到套用前的指令在報告的「後續處置」）' : '');
+    dlResult(txt, last.outcome || 'failed');
+    dlRefresh();
   } finally { btn.disabled = dlRh.require && !dlRh.digest; }
 }
 

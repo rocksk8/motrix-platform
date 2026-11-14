@@ -1174,3 +1174,110 @@ def test_dashboard_refuses_an_untrusted_auto_apply_module(env, monkeypatch, tmp_
     monkeypatch.syspath_prepend(str(shadow))
     with pytest.raises(dd.DeliveryModuleUntrusted):
         dd._trusted_auto_apply()
+
+
+# ── 準備／預演／套用前檢查被擋：白話報告＋apply_blocked 稽核（PM 10 之 ②）──────────
+
+def _audit_rows(root):
+    p = Path(root) / "backend" / "logs" / "a1_audit.jsonl"
+    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines()] if p.exists() else []
+
+
+def _blocked_files(root):
+    d = Path(root) / "backend" / "logs"
+    return sorted(d.glob("a1_report_blocked_*.md")) if d.exists() else []
+
+
+def test_write_blocked_report_writes_plain_report_and_a_chained_apply_blocked_audit(tmp_path):
+    name = AA.write_blocked_report(str(tmp_path), "pkgX", "預演", ["壞了：" + "長" * 500, "第二個原因"])
+    assert name and name.startswith("a1_report_blocked_") and name.endswith(".md")
+    text = (tmp_path / "backend" / "logs" / name).read_text(encoding="utf-8")
+    assert "沒有開始套用：pkgX" in text and "停在「預演」" in text and "正式系統沒有被改動" in text
+    assert "第二個原因" in text and "長" * 301 not in text, "每則原因截 300 字"
+    rows = _audit_rows(tmp_path)
+    assert len(rows) == 1 and rows[0]["event"] == "apply_blocked" and rows[0]["step"] == "預演" and rows[0]["report"] == name
+    assert AA.audit_chain_problems(str(tmp_path / "backend" / "logs" / "a1_audit.jsonl")) == []
+    name2 = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["x"])
+    assert name2 != name, "同一秒連續兩次也不會互相覆蓋"
+    assert len(_blocked_files(tmp_path)) == 2
+
+
+def test_write_blocked_report_never_raises_and_returns_none_when_it_cannot_write(tmp_path):
+    f = tmp_path / "afile"
+    f.write_text("x", encoding="utf-8")
+    assert AA.write_blocked_report(str(f), "pkgX", "準備", ["x"]) is None, "安裝目錄是檔案 ⇒ 寫不出來也不丟例外"
+    assert AA.write_blocked_report(str(tmp_path), "pkgX", "準備", None) is not None, "沒有原因也寫得出報告"
+
+
+def test_prepare_failure_writes_a_blocked_report_and_audit_without_notifying(env, monkeypatch):
+    notified = []
+    monkeypatch.setattr(AA, "notify_result", lambda *a, **k: notified.append(1) or {"ok": True})
+    r = env["c"].post("/api/delivery/prepare", json={"name": "沒有這個包"})
+    assert r.status_code == 409 and r.json()["report"]
+    root = dd.DELIVERY_INSTALL_ROOT
+    assert (Path(root) / "backend" / "logs" / r.json()["report"]).exists()
+    rows = _audit_rows(root)
+    assert rows and rows[-1]["event"] == "apply_blocked" and rows[-1]["step"] == "準備"
+    assert notified == [], "準備階段不發通知"
+
+
+def test_prepare_verification_failure_writes_a_blocked_report(env, monkeypatch):
+    monkeypatch.setattr(dd._trusted_delivery(), "verify_staged", lambda *a, **k: {"ok": False, "problems": ["簽章不符"], "notes": []})
+    d = env["c"].post("/api/delivery/prepare", json={"name": env["name"]}).json()
+    assert d["ok"] is False and d["report"]
+    text = (Path(dd.DELIVERY_INSTALL_ROOT) / "backend" / "logs" / d["report"]).read_text(encoding="utf-8")
+    assert "簽章不符" in text and "停在「準備」" in text
+
+
+def test_prepare_success_writes_no_blocked_report(env):
+    d = env["c"].post("/api/delivery/prepare", json={"name": env["name"]}).json()
+    assert d["ok"] and d["report"] is None and _blocked_files(dd.DELIVERY_INSTALL_ROOT) == []
+
+
+def test_rehearse_failure_writes_a_blocked_report_and_the_status_shows_its_name(env, monkeypatch):
+    notified = []
+    monkeypatch.setattr(AA, "notify_result", lambda *a, **k: notified.append(1) or {"ok": True})
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch, ok=False)
+    res = _rehearse_and_wait(env)
+    assert not res["ok"] and res["report"]
+    assert (Path(dd.DELIVERY_INSTALL_ROOT) / "backend" / "logs" / res["report"]).exists()
+    assert _audit_rows(dd.DELIVERY_INSTALL_ROOT)[-1]["step"] == "預演" and notified == []
+
+
+def test_rehearse_that_crashes_also_writes_a_blocked_report(env, monkeypatch):
+    _gate_env(env, monkeypatch)
+    monkeypatch.setattr(AA, "rehearse", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("炸了")))
+    res = _rehearse_and_wait(env)
+    assert not res["ok"] and res["report"] and "預演程序本身出錯" in res["problems"][0]
+
+
+def test_rehearse_success_writes_no_blocked_report(env, monkeypatch):
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    res = _rehearse_and_wait(env)
+    assert res["ok"] and not res.get("report") and _blocked_files(dd.DELIVERY_INSTALL_ROOT) == []
+
+
+def test_apply_gate_refusals_after_the_rehearsal_write_blocked_reports(env, monkeypatch):
+    """預演之後、套用之前被擋（暫存包多檔、包被換過、ERP 位址不是本機）：都留報告與 apply_blocked，不發通知，預演不消耗。"""
+    notified = []
+    monkeypatch.setattr(AA, "notify_result", lambda *a, **k: notified.append(1) or {"ok": True})
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    res = _rehearse_and_wait(env)
+    monkeypatch.setenv("MOTRIX_DELIVERY_ERP_URL", "http://10.0.0.5:666")
+    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 409
+    staged = Path(dd._delivery_state["prepared"][env["name"]]["staged"])
+    monkeypatch.delenv("MOTRIX_DELIVERY_ERP_URL")
+    (staged / "payload" / "stray.db").write_bytes(b"x")
+    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 409
+    steps = [r["step"] for r in _audit_rows(dd.DELIVERY_INSTALL_ROOT) if r["event"] == "apply_blocked"]
+    assert steps == ["套用前檢查（ERP 位址）", "套用前檢查（暫存包完整性）"], steps
+    assert len(_blocked_files(dd.DELIVERY_INSTALL_ROOT)) == 2 and notified == []
+
+
+def test_blocked_report_failure_never_breaks_prepare(env, monkeypatch):
+    monkeypatch.setattr(AA, "write_blocked_report", lambda *a, **k: (_ for _ in ()).throw(OSError("磁碟壞了")))
+    r = env["c"].post("/api/delivery/prepare", json={"name": "沒有這個包"})
+    assert r.status_code == 409 and r.json()["report"] is None
