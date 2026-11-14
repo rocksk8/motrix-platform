@@ -11,7 +11,7 @@
     "tables": [],
     "files": []
   },
-  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports"],
+  "provides": {"api_prefixes": ["/api/custom-reports", "/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports"],
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports-hub.html",
@@ -26,6 +26,20 @@
      "menu": {"group": "supply", "label": "保固追蹤", "order": 80, "perm": ["equipment"], "badge": "sb-mod-warranty"}},
     {"path": "procurement.html",
      "menu": {"group": "supply", "label": "採購管理", "order": 60, "perm": ["procurement"], "badge": "sb-mod-procurement"}}
+  ],
+  "capabilities": [
+    {"key": "analytics.custom_report.view", "label": "使用自訂報表",
+     "legacy": {"any": [{"module": "quotation"}, {"module": "case_manage"}, {"module": "dev_crm"}]},
+     "risk": "low", "delegable": true,
+     "desc": "可以在自訂報表頁選報價單、案件或商機的欄位與條件來產出報表，並存成自己的報表。",
+     "impact": "只能使用自己本來就有權限的資料來源；報表裡看得到哪些欄位與列，完全依各人原本的權限，沒有金額權限的人看不到金額欄。此項目不會讓任何人多看到資料。",
+     "question": "{who}可以使用自訂報表嗎？"},
+    {"key": "analytics.custom_report.export", "label": "匯出自訂報表",
+     "legacy": {"any": [{"module": "quotation"}, {"module": "case_manage"}, {"module": "dev_crm"}]},
+     "risk": "mid", "delegable": true,
+     "desc": "可以把自訂報表的結果匯出成 Excel（同時附 PDF）；每次匯出都會留下稽核紀錄。",
+     "impact": "匯出檔只含這位使用者看得到的欄位與列。匯出對象另受「自訂報表」設定限制（可限定只有最高管理者，或完全關閉）；已匯出的檔案無法收回。",
+     "question": "{who}可以匯出自訂報表嗎？"}
   ],
   "customization": {
     "schema": 1,

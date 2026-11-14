@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 1006,
-  "endpoints_api": 1002,
-  "write_total": 542,
-  "write_api": 542,
-  "get_api": 460,
-  "distinct_paths_api": 855,
-  "write_with_body_api": 407,
+  "endpoints_total": 1008,
+  "endpoints_api": 1004,
+  "write_total": 543,
+  "write_api": 543,
+  "get_api": 461,
+  "distinct_paths_api": 857,
+  "write_with_body_api": 408,
   "write_with_path_param_api": 365
  },
  "select_star": {
@@ -781,6 +781,11 @@
   "GET /api/custom-modules/{key}/definition/review": {
    "w": false,
    "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-reports/sources": {
+   "w": false,
+   "pp": 0,
    "body": false
   },
   "GET /api/custom/{key}/meta": {
@@ -3166,6 +3171,11 @@
   "POST /api/custom-modules/{key}/output/preview": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "POST /api/custom-reports/preview": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "POST /api/custom/{key}/compute": {

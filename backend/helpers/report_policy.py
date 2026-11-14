@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""自訂報表的四項設定讀取（T87 B2；後端每次請求都經這裡讀當下值，前端隱藏不是防線）。
+"""自訂報表的設定讀取（旗標＋四項設定）（T87 B2；後端每次請求都經這裡讀當下值，前端隱藏不是防線）。
 
 [單位] helper:report_policy    [層] L1    [穩定度] 實驗
-[公開介面] DEFAULTS, EXPORT_SAME_AS_USE, EXPORT_ADMIN_ONLY, EXPORT_OFF, export_allowed, export_scope, quote_money_wide, recycle_deleted, sharing_enabled
+[公開介面] DEFAULTS, EXPORT_SAME_AS_USE, EXPORT_ADMIN_ONLY, EXPORT_OFF, enabled, export_allowed, export_scope, quote_money_wide, recycle_deleted, sharing_enabled
 [不變式] ①讀不到／壞值 ⇒ 出廠預設（較嚴格的一邊；`settings_registry.get` 永不丟例外，這裡再包一層保險）。
     ②`export_allowed(user)` 只回答「這個人在目前設定下能不能匯出」；能不能『使用』自訂報表、看得到哪些欄位與列，是別的層（report_runner／row_access）。
     ③最高管理者＝`role == "superadmin"`（同設定中心的改設定者）；沒有其他放行路徑。
@@ -14,7 +14,7 @@ _log = logging.getLogger(__name__)
 
 GROUP = "custom_reports"
 EXPORT_SAME_AS_USE, EXPORT_ADMIN_ONLY, EXPORT_OFF = 0, 1, 2
-DEFAULTS = {"export_scope": EXPORT_SAME_AS_USE, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
+DEFAULTS = {"enabled": 0, "export_scope": EXPORT_SAME_AS_USE, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
 
 
 def _get(field, conn=None):
@@ -25,6 +25,11 @@ def _get(field, conn=None):
     except Exception:                                          # noqa: BLE001 — 讀不到 ⇒ 出廠預設
         _log.warning("custom_reports 設定讀取失敗：%s；使用預設值", field, exc_info=True)
         return DEFAULTS[field]
+
+
+def enabled(conn=None) -> bool:
+    """旗標：關（預設、讀不到、壞值）⇒ 路由 404、不讀寫表。"""
+    return _get("enabled", conn) == 1
 
 
 def export_scope(conn=None) -> int:

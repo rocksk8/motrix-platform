@@ -1,5 +1,5 @@
 {
- "core_version": "1.171",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -2063,6 +2063,50 @@
    "request_scope_end": "def(state)",
    "reserved_ids": "def(conn, entity_type=…)"
   },
+  "helper:report_catalog": {
+   "AGG_BY_TYPE": "const",
+   "OPS_BY_TYPE": "const",
+   "TYPES": "const",
+   "field_of": "def(source_id, field_id)",
+   "field_visible": "def(field, user, wide=…)",
+   "get_source": "def(source_id)",
+   "register_source": "def(source_id, owner, spec)",
+   "restore": "def(snap)",
+   "snapshot": "def()",
+   "source_available": "def(source_id, user)",
+   "source_problems": "def(source_id, spec)",
+   "sources": "def()",
+   "sources_for": "def(user)",
+   "visible_fields": "def(source_id, user)"
+  },
+  "helper:report_policy": {
+   "DEFAULTS": "const",
+   "GROUP": "const",
+   "enabled": "def(conn=…)",
+   "export_allowed": "def(user, conn=…)",
+   "export_scope": "def(conn=…)",
+   "quote_money_wide": "def(conn=…)",
+   "recycle_deleted": "def(conn=…)",
+   "sharing_enabled": "def(conn=…)"
+  },
+  "helper:report_runner": {
+   "CompiledPlan": "class",
+   "CompiledPlan.__init__": "def(self, token, **kw)",
+   "MAX_DEFINITION_BYTES": "const",
+   "MAX_EXPORT_ROWS": "const",
+   "PREVIEW_ROWS": "const",
+   "ReportError": "class",
+   "ReportError.__init__": "def(self, status, message, details=…)",
+   "ReportRefused": "class",
+   "ReportRefused.__init__": "def(self, message, details=…)",
+   "SourceUnavailable": "class",
+   "SourceUnavailable.__init__": "def(self)",
+   "TIME_LIMIT_SECONDS": "const",
+   "assemble": "def(plan, raw)",
+   "compile": "def(definition, user, mode=…, today=…, conn=…)",
+   "preview": "def(definition, user, today=…)",
+   "run_owned": "def(plan, accept)"
+  },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
    "OwnerRule": "class",
@@ -2133,6 +2177,7 @@
    "DEFAULT_TAGLINE": "const",
    "brand_tagline": "def()"
   },
+  "helper:settings_groups_custom_reports": {},
   "helper:settings_groups_external": {
    "BONUS_SLOTS": "const",
    "GROUPS": "const",

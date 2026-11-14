@@ -978,10 +978,12 @@
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:analytics/api/report_templates",
+    "mod:analytics/api/custom_reports",
     "mod:analytics/api/ledger_diff"
    ],
    "tables": [],
    "api_prefixes": [
+    "/api/custom-reports",
     "/api/dashboard",
     "/api/devices",
     "/api/materials-summary",

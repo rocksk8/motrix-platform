@@ -43,14 +43,14 @@ def conn(client):
 # ── ① 出廠值與各選項的後端行為 ────────────────────────────────────────────────
 
 def test_factory_defaults_are_the_documented_ones():
-    assert {k: R.get(G, k) for k in RP.DEFAULTS} == {"export_scope": 0, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
-    assert RP.DEFAULTS == {"export_scope": RP.EXPORT_SAME_AS_USE, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
+    assert {k: R.get(G, k) for k in RP.DEFAULTS} == {"enabled": 0, "export_scope": 0, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
+    assert RP.DEFAULTS == {"enabled": 0, "export_scope": RP.EXPORT_SAME_AS_USE, "sharing": 0, "recycle_deleted": 0, "quote_money_scope": 0}
 
 
-def test_group_is_sensitive_and_has_exactly_the_four_settings():
+def test_group_is_sensitive_and_has_exactly_the_five_settings():
     meta = R.groups()[G]
     assert meta["sensitive"] is True and meta["owner"] == "core"
-    assert [f["key"] for f in meta["fields"]] == ["export_scope", "sharing", "recycle_deleted", "quote_money_scope"]
+    assert [f["key"] for f in meta["fields"]] == ["enabled", "export_scope", "sharing", "recycle_deleted", "quote_money_scope"]
 
 
 @pytest.mark.parametrize("value, admin_ok, other_ok", [(0, True, True), (1, True, False), (2, False, False)])

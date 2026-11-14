@@ -2,6 +2,8 @@
 
 ## 1.0.241 — 2026-11-14（整合者；T86 F① 追加：h5 瀏覽器複測小項）
 - 前端（只改顯示，無 API／欄位／權限語意變更）：案件頁任務清單在「沒有 daily_task／case_manage 模組而不送請求」的提早返回路徑上一併把 `caseTasksLoading` 設回 false，避免殘留「載入中…」。既有 F① 測試（`tests/test_t86_finance_af_2026_11_14.py`）維持通過。
+- **（併入）(next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）**
+- 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 
 ## 1.0.240 — 2026-11-14（feat/t86-finance-af-h1；T86 財務 A＋F，使用者裁示）
 - **A（行為）**：`GET /api/quotations/{案號}/item-shipped`（精算頁「已出貨數量」）的逐案規則由擁有者規則改為與案件頁本體相同的**讀取規則**（`scope="read"`，cashier 可讀）。模組檢查（`case_manage`／`quotation`／`financial_view` 三擇一）不變；回應只有數量、沒有金額與成本；非讀取資格者仍 404。派工／出貨單／完工單／動態（B～E）**不開**。
