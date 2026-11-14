@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-finance-af-h1；T86 財務 F①）
+- 前端（無 API／欄位／權限語意變更）：`static/notif.js` 鈴鐺的每日工作事項角標，非 superadmin 且沒有 `daily_task`／`case_manage` 模組時不再送 `GET /api/daily-tasks`（原本每一頁載入都會打一次、一定 403）；與側邊欄同一份 `session.modules`。
+
 ## 1.170 — 2026-11-14（feat/t86-core-major-h7；T86 核心大版本升級工具與守門；版號由列車取）
 - 新增（工具與守門，執行期行為、API、資料表、L1 介面都不變；這包**不**升核心主版號）：`tools/platform/core_major_bump.py`（`status`／`check`／`apply [--dry-run] [--skip-tests]`）——核心要升主版號（1.x → 2.0）時，先做 L1 相容檢查與各模組測試，全過才一次把所有 `module.json` 的 `core` 上限放寬到下一個主版號（下限與 `version` 不動），並寫各模組與核心的 `## (next)` CHANGELOG 段落；預演不寫檔、重跑不再改。
 - 守門：`train_number.py assign`／`--check` 在「這包要升主版號」而任何模組的 core 範圍還沒接受新主版號時直接失敗並指到該工具（原本要等到啟動時所有模組載入失敗、路由 404 才發現；本批用 stub 繞過的就是這件事）；`train_number.py` 只加了一個檢查函式與一處呼叫，取號邏輯不變。模組更新（`module_update._core_ok`）與載入器（`core_compatible`）本來就用同一套範圍比較，放寬後的範圍新、舊核心都接受（測試釘住）。

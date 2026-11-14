@@ -512,6 +512,9 @@ function notifStore() {
       try {
         const me = this._sess.username
         if (!me) return
+        // T86 F①：後端要 daily_task 或 case_manage 模組（最高管理者直通）；沒有就一定 403 ⇒ 不送（與側邊欄 has() 同一份 session.modules）
+        const _mods = Array.isArray(this._sess.modules) ? this._sess.modules : []
+        if (this._sess.role !== 'superadmin' && !_mods.includes('daily_task') && !_mods.includes('case_manage')) return
         const _d = new Date()                                   // 本地日期（notif.js 每頁都載，不靠 motrix-date.js 有沒有先載）
         const today = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0')
         const r = await fetch('/api/daily-tasks?date=' + today + '&username=' + encodeURIComponent(me), {

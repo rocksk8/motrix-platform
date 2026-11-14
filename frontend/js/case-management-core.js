@@ -416,6 +416,7 @@ window.CM_PARTS.push(() => ({
         await this._seedDefaultStagesIfEmpty()
         if (!live()) return
         this._resetCaseScoped('late', data)
+        this._notePartAccess(parts)
         this.loadDispatches(quoteNo, parts.dispatches)
         // 2026-09-14：這三個原本是「點分頁才載」，但分頁上的數量徽章要在沒點過
         // 之前就正確——沒載入時綁 .length 會顯示 0，看起來像「這案子沒有出貨單」，
@@ -931,6 +932,31 @@ window.CM_PARTS.push(() => ({
       return (this.session.modules || []).includes(key)
     },
 
+    // T86 F②：案件整包裡「這個帳號沒有權限」的四塊（派工／出貨單／完工單／動態）——分頁不再只是空白，改說白話需要哪個模組。
+    //   · 只在「被擋（403／404）、且不是模組未安裝（那種有自己的說明）、且帳號確實沒有對應模組」時才說；
+    //   · 案件本體已經讀得到，所以不會洩漏案件存不存在；有模組卻被擋（逐案規則）不亂說是模組問題。
+    partBlocked: {},
+    _BLOCK_NEEDS: {
+      dispatch:   { part: 'dispatches',      mods: ['procurement', 'case_manage', 'contractor_list', 'quotation'], label: '案件管理' },
+      shipping:   { part: 'shippingNotes',   mods: ['case_manage'], label: '案件管理' },
+      completion: { part: 'completionNotes', mods: ['case_manage', 'quotation'], label: '案件管理' },
+      feed:       { part: 'updates',         mods: ['case_manage'], label: '案件管理' }
+    },
+    _notePartAccess(parts) {
+      const out = {}
+      for (const [tab, n] of Object.entries(this._BLOCK_NEEDS)) {
+        const p = (parts || {})[n.part]
+        out[tab] = !!(p && p.ok === false && (p.status === 403 || p.status === 404) && !/未安裝/.test(String(p.detail || '')))
+      }
+      this.partBlocked = out
+    },
+    blockedNote(tab) {
+      const n = this._BLOCK_NEEDS[tab]
+      if (!n || !this.partBlocked[tab] || this.session.role === 'superadmin') return ''
+      if (n.mods.some(k => this.hasModule(k))) return ''
+      return `此項需要「${n.label}」模組權限，您目前沒有；需要的話請洽系統管理員。`
+    },
+
     canMarkPayment() {
       return this.canFinanceRole()
     },
@@ -990,6 +1016,7 @@ window.CM_PARTS.push(() => ({
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
     _reset_core(phase, data) {
       if (phase === 'early') {
+        this.partBlocked = {}   // T86 F②：新案件的「被擋說明」在整包判讀完（late）前不沿用上一件的
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
         // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
         // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，

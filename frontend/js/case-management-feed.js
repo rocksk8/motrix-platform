@@ -102,6 +102,8 @@ window.CM_PARTS.push(() => ({
 
     async _loadCaseTasks(quoteNo) {
       if (!quoteNo) return
+      // T86 F①：後端要 daily_task 或 case_manage 模組（最高管理者直通）；沒有就一定 403 ⇒ 不送
+      if (this.session.role !== 'superadmin' && !this.hasModule('daily_task') && !this.hasModule('case_manage')) { this.caseTasks = []; return }
       const live = this._selectLive()
       this.caseTasksLoading = true
       try {

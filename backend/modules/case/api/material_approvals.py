@@ -113,7 +113,9 @@ def get_item_shipped(quote_no: str, exclude_note: str = "", authorization: str =
     conn = get_db()
     try:
         q = _load_case(conn, quote_no)
-        require_case(user, q, quote_no)
+        # T86（使用者裁示 A）：逐案規則與案件頁本體相同（讀取規則，cashier 可讀）。模組檢查早就放行 financial_view，
+        # 逐案卻用擁有者規則 ⇒ 財務在精算頁永遠 404（2026-11-11 對五關／版本清單／材料審核摘要做過同一種修正，這支漏了）。
+        require_case(user, q, quote_no, scope="read")
         try:
             data = json.loads(q["data_json"] or "{}") or {}
         except (TypeError, ValueError):

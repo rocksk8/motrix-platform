@@ -883,3 +883,7 @@ div:has(> .cm-section-title) { flex-wrap:wrap; row-gap:6px; }
 .cm-devcase:hover { text-decoration:underline; }
 .cm-devcase--head { display:inline-block; max-width:100%; margin:0 0 0 10px; vertical-align:baseline; }
 @media (max-width:767px) { .cm-header__row2 .cm-devcase--head { flex:1 0 100%; margin:2px 0 0; } }
+
+/* T86 F②：案件整包裡這個帳號沒有權限的分頁（派工／出貨單／完工單／動態）——只顯示一句白話說明，不顯示空清單 */
+.cm-pane-blocked > :not(.cm-blocked) { display:none !important; }
+.cm-blocked { text-align:center; padding:40px 16px; font-size:13px; line-height:1.7; color:var(--text-dim); }
