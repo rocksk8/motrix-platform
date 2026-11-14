@@ -618,7 +618,7 @@ function networkPlanForm() {
         { key: 'groupName', label: '群組名稱' },
         { key: 'members', label: '成員（IP／網段／Port）' },
         { key: 'usage', label: '用途' },
-        { key: 'referencedBy', label: '被哪些規則引用' },
+        { key: 'referencedBy', label: '引用此項目的規則' },
         { key: 'status', label: '狀態', type: 'select', options: ['規劃中', '已完成', '待確認'] },
         { key: 'note', label: '備註' },
       ]},
@@ -831,7 +831,7 @@ function networkPlanForm() {
       if (added > 0) this.dirty()
       this.actionResultMsg = added > 0
         ? `已新增 ${added} 筆資料到「${tab.label}」（可再逐筆檢查欄位是否對應正確）`
-        : '沒有偵測到可用的資料列'
+        : '未偵測到可用的資料列'
     },
 
     // 依「設備清單」交換器的 RJ45／SFP 埠數，補齊「交換器 Port 對應」缺少的埠列。

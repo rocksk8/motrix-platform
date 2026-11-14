@@ -88,8 +88,8 @@
   var HANDLED_ATTRS = { options: 1, default: 1, columns: 1 }
   var COL_TYPES = [['text', '文字'], ['number', '數字'], ['date', '日期'], ['select', '選單'], ['formula', '自動計算']]
   var BUILTIN_FILLS = [
-    { token: 'today', label: '今天日期', why: '打開表單的那一天。', example: '2026/10/01', applies_to: [['date', null]], lockable: true },
-    { token: 'now', label: '現在的日期和時間', why: '打開表單的那一刻。', example: '2026/10/01 14:30', applies_to: [['date', null]], lockable: true },
+    { token: 'today', label: '今天日期', why: '開啟表單的那一天。', example: '2026/10/01', applies_to: [['date', null]], lockable: true },
+    { token: 'now', label: '現在的日期和時間', why: '開啟表單的那一刻。', example: '2026/10/01 14:30', applies_to: [['date', null]], lockable: true },
     { token: 'requester', label: '申請人本人', why: '填表的人是誰就帶誰。', example: '王小明', applies_to: [['ref', 'users']], lockable: true }
   ]
 
@@ -243,7 +243,7 @@
     var n = this.allProblems().length
     this.els.bar.innerHTML = '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="undo" title="復原（Ctrl+Z）" aria-label="復原"' + (this.at <= 0 ? ' disabled' : '') + '>' + ic('undo') + '</button>' +
       '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="redo" title="重做（Ctrl+Y）" aria-label="重做"' + (this.at >= this.hist.length - 1 ? ' disabled' : '') + '>' + ic('redo') + '</button>' +
-      '<span class="fd-grow"></span><button type="button" class="fd-btn" data-fd-act="check" title="把每個設定的白話標題、一句說明和例子列成一張表，方便檢查字句">用語檢查表</button>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '目前沒有要改的地方</span>') +
+      '<span class="fd-grow"></span><button type="button" class="fd-btn" data-fd-act="check" title="把每個設定的白話標題、一句說明和例子列成一張表，方便檢查字句">用語檢查表</button>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '尚無需要修改之處</span>') +
       '<div class="fd-seg" role="group" aria-label="檢視"><button type="button" data-fd-mode="edit" aria-pressed="' + (this.mode === 'edit') + '">編輯</button><button type="button" data-fd-mode="final" aria-pressed="' + (this.mode === 'final') + '">看成品</button></div>'
   }
   proto.renderLeft = function () {
@@ -292,7 +292,7 @@
   proto.formulaText = function (f) {
     var c = this.calcOf(f)
     if (c === null) return '進階公式'
-    if (!c.p) return '尚未選要算什麼'
+    if (!c.p) return '尚未選擇計算方式'
     var meta = M.CALCS.find(function (x) { return x.id === c.p }).name
     return meta
   }
@@ -393,7 +393,7 @@
     h += '</div>'
     var fixedOpts = this.caps.fixedOptions && this.caps.fixedOptions[f.key]
     if (M.OPTION_TYPES[f.type] && fixedOpts) h += '<div class="fd-box" data-fd-fixedopts="1"><h3>選項（固定）</h3><ul class="fd-fixedlist">' + fixedOpts.map(function (o) { return '<li>' + esc(o) + '</li>' }).join('') + '</ul><div class="fd-why">這個欄位的選項是固定的，系統其他地方會用到，故不可修改。例：' + esc(fixedOpts.join('、')) + '。</div></div>'
-    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">輸入後按 Enter 即新增一格；亦可一次貼上多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
+    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可選內容）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">輸入後按 Enter 即新增一格；亦可一次貼上多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
     if (f.type === 'formula') h += '<div class="fd-box"><h3>自動計算</h3>' + this.calcUI(f, f) + '</div>'
     if (f.type === 'table') h += this.tableUI(f)
     h += this.fillUI(f)
@@ -548,14 +548,14 @@
     ['欄位名稱', '表單上顯示給使用者看的字。', '「出差地點」'], ['說明文字（選填）', '會用小字顯示在欄位下面。', '「請填發票上的金額」'],
     ['一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。'],
     ['想改成', '把這個欄位換成相近的種類。', '文字 ⇒ 單選選單'],
-    ['選項（使用者可以選哪些）', '一格一個；Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '「國內」Enter「國外」⇒ 兩個選項'],
-    ['自動帶入', '使用者打開表單時，這一格已經填好什麼。', '申請人本人 ⇒ 王小明'],
+    ['選項（使用者可選內容）', '一格一個；Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '「國內」Enter「國外」⇒ 兩個選項'],
+    ['自動帶入', '使用者開啟表單時，這一格已經填好什麼。', '申請人本人 ⇒ 王小明'],
     ['「○○」不能改', '自動帶入的內容使用者看得到但不能自己改。', '「申請人本人」不能改'],
     ['只有出納能修改', '其他人看得到，但不能填；只有出納可以改。', '「付款日」'],
     ['在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '清單多一欄「地點」'],
     ['明細表的設定', '最少／最多幾列、新增按鈕的字；每一欄可展開設定種類、是否必填、選項、計算。', '最少 1 列、最多 20 列'],
     ['區塊名稱／＋ 新增區塊', '把欄位分成幾段；區塊可上下移、刪除。', '基本資料、出差資訊'],
-    ['看成品', '隱藏編輯用的框線，看使用者實際看到的樣子。', '—'],
+    ['預覽成品', '隱藏編輯用的框線，看使用者實際看到的樣子。', '—'],
     ['復原／重做', '做錯可以回上一步（Ctrl+Z／Ctrl+Y）；刪除後 6 秒內也可按「復原」。', '—']
   ]
   proto.showChecklist = function () {

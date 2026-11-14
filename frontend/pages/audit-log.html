@@ -426,7 +426,7 @@
       <span class="seg">
         <button :class="{on: fResult===''}" @click="fResult=''; applyFilter()">全部</button>
         <button :class="{on: fResult==='ok'}" @click="fResult='ok'; applyFilter()">成功</button>
-        <button :class="{on: fResult==='fail', fail: true}" @click="fResult='fail'; applyFilter()">只看失敗</button>
+        <button :class="{on: fResult==='fail', fail: true}" @click="fResult='fail'; applyFilter()">僅顯示失敗</button>
       </span>
       <button class="filter" style="padding:7px 12px" @click="resetFilter()">清除</button>
     </div>

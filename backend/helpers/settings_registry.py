@@ -315,7 +315,7 @@ def group_info(group):
         return {"status": "open", "plannedTrain": None, "feature": None}
 
 
-_NOT_OPEN_MSG = {"planned": "這項功能還在開發中，尚未開放調整。", "hidden": "沒有這個設定群組。"}
+_NOT_OPEN_MSG = {"planned": "這項功能開發中，尚未開放調整。", "hidden": "沒有這個設定群組。"}
 
 
 def cancel_pending_of_nonopen(conn=None):

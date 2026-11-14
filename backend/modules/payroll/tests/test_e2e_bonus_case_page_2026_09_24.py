@@ -166,7 +166,7 @@ def test_outsider_without_finance_rights_sees_menu_entry_and_empty_state(live_se
     _login(page, live_server, *u["pg_out"])
     page.goto(f"{live_server}/pages/bonus.html")
     page.locator('[data-testid="bn-empty"]').wait_for(timeout=20000)
-    assert "目前沒有您的獎金分潤資料" in page.inner_text('[data-testid="bn-empty"]')
+    assert "尚無您的獎金分潤資料" in page.inner_text('[data-testid="bn-empty"]')
     assert "需要對應的模組權限" not in page.inner_text("body")
     links = page.evaluate("""() => [...document.querySelectorAll('a[href]')]
         .filter(a => /bonus\.html$/.test(a.getAttribute('href') || '')).length""")

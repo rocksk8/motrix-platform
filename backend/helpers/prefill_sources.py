@@ -163,7 +163,7 @@ _register("requesterManager", "申請人的主管", "申請人在人事資料裡
           [("ref", "users")], _safe(_r_manager))
 _register("today", "今天日期", "打開表單的那一天。", "2026/10/01",
           [("date", None)], _safe(_r_today))
-_register("now", "現在的日期與時間", "打開表單的那一刻（欄位要設成含時間）。", "2026/10/01 14:30",
+_register("now", "現在的日期與時間", "開啟表單的那一刻（欄位要設成含時間）。", "2026/10/01 14:30",
           [("date", None)], _safe(_r_now), requires_time=True)
 _register("company", "公司名稱", "系統設定裡的公司名稱。", "○○機械股份有限公司",
           [("text", None)], _safe(_r_company))

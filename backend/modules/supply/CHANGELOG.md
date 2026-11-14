@@ -9,6 +9,8 @@
 - **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9；供應商聯絡人「已告知」紀錄對非管理員遮罩）**
 - 行為變更（資料範圍收窄）：`GET /api/suppliers/{id}/privacy-notice`（及 `POST …/contacts/{ctid}/privacy-notice/ack`——已記錄過時回傳的是既有紀錄，同一支 `_ack_view` 遮罩，否則會成為繞過的後門；伺服器端寫入的紀錄與稽核仍是完整的）對非管理員（只有供應商檢視權者，與 `GET /api/suppliers` 同一條線）只回 `{聯絡人id: {at}}`＝已告知與日期，不再帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）；管理員（admin／superadmin）照舊看完整紀錄。回應形狀不變（只是少欄位）、沒有新增權限鍵。
 - 測試：`modules/supply/tests/test_supplier_privacy_notice_mask_2026_11_14.py`（管理員完整、非管理員只有 `at` 且全文不含記錄人／雜湊／聯絡人個資、POST ack 對已告知聯絡人不外洩既有紀錄、首次告知伺服器端仍存完整紀錄、無紀錄回空與 404、無檢視權 403；突變驗證：拿掉遮罩分支 ⇒ 非管理員題紅）。
+- **（併入）(next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
 
 ## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
 - 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。

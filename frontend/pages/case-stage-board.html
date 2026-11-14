@@ -225,7 +225,7 @@
         <div class="field">
           <input class="filter" type="text" x-model="searchQ" placeholder="搜尋客戶／案件…">
         </div>
-        <button type="button" class="toggle-chip" :class="{active: onlyMine}" @click="onlyMine = !onlyMine">只看我的</button>
+        <button type="button" class="toggle-chip" :class="{active: onlyMine}" @click="onlyMine = !onlyMine">僅顯示我的</button>
         <div class="view-toggle">
           <button type="button" :class="{active: viewMode==='board'}" @click="viewMode='board'">看板</button>
           <button type="button" :class="{active: viewMode==='timeline'}" @click="viewMode='timeline'; $nextTick(() => _measureTimelineWidth())">跨案時間軸</button>
@@ -235,7 +235,7 @@
     </div>
 
     <div x-show="!loading && items.length === 0" class="board-empty">
-      目前沒有進行中的案件執行階段（僅統計已成案且有設定執行階段的案件）
+      尚無進行中的案件執行階段（僅統計已成案且有設定執行階段的案件）
     </div>
 
     <template x-if="items.length > 0">
@@ -347,7 +347,7 @@
               </template>
             </div>
           </template>
-          <div x-show="!timelineRows.length" class="board-empty">目前沒有進行中的案件執行階段</div>
+          <div x-show="!timelineRows.length" class="board-empty">尚無進行中的案件執行階段</div>
         </div>
 
         <!-- ══ 依人力 ══ -->
@@ -394,7 +394,7 @@
                 </div>
               </div>
             </template>
-            <div x-show="!assigneeColumns.length" class="board-empty">目前沒有任何指派紀錄</div>
+            <div x-show="!assigneeColumns.length" class="board-empty">尚無任何指派紀錄</div>
           </div>
         </div>
       </div>

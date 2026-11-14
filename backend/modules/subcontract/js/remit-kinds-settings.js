@@ -126,9 +126,9 @@ function remitKindsPage() {
       this.busy = true
       try {
         var r = await this._call({ method: 'DELETE' }, BASE + '/draft')
-        if (!r.ok) { this._fail(r, '丟棄草稿失敗'); return }
+        if (!r.ok) { this._fail(r, '捨棄草稿失敗'); return }
         await this.reload()
-        this.msg = '草稿已丟棄，回到目前生效的版本'
+        this.msg = '草稿已捨棄，回到目前生效的版本'
       } finally { this.busy = false }
     },
     openGov(tab) { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: KEY, scope: 'company', title: '匯款款別', tab: tab, readonly: true }) },

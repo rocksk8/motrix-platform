@@ -128,8 +128,8 @@
         <div x-text="healthText" style="font-weight:600"></div>
         <div style="margin-top:2px;opacity:.85">
           <template x-if="status && status.lastFetchedAt">
-            <span>上次抓取 <span x-text="status.lastFetchedAt"></span>
-              ・丟棄 <span x-text="status.lastDropped"></span> 筆</span>
+            <span>上次擷取 <span x-text="status.lastFetchedAt"></span>
+              ・捨棄 <span x-text="status.lastDropped"></span> 筆</span>
           </template>
           <template x-if="status && !status.lastFetchedAt">
             <span>尚未執行過</span>
@@ -170,7 +170,7 @@
                x-text="mapInfo ? mapInfo.points.length : '—'"></div>
         </div>
         <div>
-          <div style="font-size:12px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:12px;color:var(--text-secondary)">尚無地點資訊</div>
           <div style="font-size:18px;font-weight:600"
                :style="mapInfo && mapInfo.withoutLocation ? 'color:var(--warning)' : ''"
                x-text="mapInfo ? mapInfo.withoutLocation : '—'"></div>
@@ -205,7 +205,7 @@
           <div x-show="mapInfo && mapInfo.withoutLocation > 0" style="color:var(--warning)">
             ⚠️ 有 <span x-text="mapInfo ? mapInfo.withoutLocation : 0"></span>
             筆標案<strong>無法定位</strong>，仍列於下方清單，但不會顯示於地圖。
-            原因為<strong>機關名稱查無地圖資料</strong>，或詳細頁的地點資訊尚未取得（每日有抓取上限，後續時段會補上）。
+            原因為<strong>機關名稱查無地圖資料</strong>，或詳細頁的地點資訊尚未取得（每日有擷取上限，後續時段會補上）。
           </div>
           <div x-show="mapInfo && mapInfo.officeMissing" style="color:var(--warning)">
             ⚠️ 尚未設定<strong>辦公室地址</strong>，無法計算距離。
@@ -241,7 +241,7 @@
       <div class="tr-panel-body">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
           <div data-layout-field="schedule:scanHours" :style="'order:' + $store.layout.fieldOrder('schedule', 'scanHours')">
-            <label class="fi-label">抓取時段（逗號分隔，0-23）</label>
+            <label class="fi-label">擷取時段（逗號分隔，0-23）</label>
             <input class="fi" style="width:180px" type="text" x-model="scanHoursText"
                    placeholder="9,12,15,18">
           </div>
@@ -258,8 +258,8 @@
         <!-- 📌 「留空＝不寄」要寫出來：它是一個合法設定，而它看起來像「還沒設」。
              不寫的話使用者不會知道自己可以關掉它。 -->
         <div style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.7">
-          抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天擷取四次、只在傍晚寄一封，
-          也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會抓一次。<br>
+          擷取與寄信是<strong>兩份獨立的設定</strong>：可以一天擷取四次、只在傍晚寄一封，
+          也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會擷取一次。<br>
           超過 <span x-text="schedule ? schedule.highFrequencyThreshold : 12"></span>
           個時段會先向您確認一次——此並非上限，確認後即儲存。
         </div>
@@ -390,7 +390,7 @@
              @input="onSearch()" placeholder="搜尋標案名稱／機關／案號">
       <button class="btn btn-ghost btn-sm" x-show="search"
               @click="search = ''; loadTenders()">清除</button>
-      <span style="font-size:12px;color:var(--text-secondary)">只看</span>
+      <span style="font-size:12px;color:var(--text-secondary)">僅顯示</span>
       <span data-layout-personal="tenders"></span>
       <select class="fi filter" style="width:190px" x-model="watchFilter">
         <option value="">全部（不篩選）</option>
@@ -415,13 +415,13 @@
          前端自己去打 `watches` API 判斷的話是兩次往返加一個競態。 -->
     <div class="tr-note" x-show="matchedEmptyReason === 'no_watches'"
          style="margin-bottom:8px">
-      目前<strong>一個搜尋條件都沒有</strong>，所以沒有標案會被標上標籤，
+      目前<strong>尚未設定任何搜尋條件</strong>，所以沒有標案會被標上標籤，
       也不會有通知信。上面的「搜尋條件」可以新增。
     </div>
     <div class="tr-note" x-show="matchedEmptyReason === 'no_hits'"
          style="margin-bottom:8px">
-      有搜尋條件，但<strong>目前的標案一筆都沒命中</strong>——
-      要調整的是條件本身，不是再等一次抓取。
+      有搜尋條件，但<strong>查無符合條件的標案</strong>——
+      要調整的是條件本身，不是再等一次擷取。
     </div>
     <div class="tr-note" style="background:var(--danger-light);color:var(--danger);margin-bottom:8px"
          x-show="markError" x-text="markError"></div>
@@ -901,7 +901,7 @@ function tenderRadarPage() {
         this.schedule.notifyHours = d.notifyHours
         this.scanHoursText = d.scanHours
         this.notifyHoursText = d.notifyHours
-        this.scheduleMsg = `已儲存：抓取 ${d.scanHours || '（不抓）'}／寄信 ${d.notifyHours || '（不寄）'}`
+        this.scheduleMsg = `已儲存：擷取 ${d.scanHours || '（不擷取）'}／寄信 ${d.notifyHours || '（不寄）'}`
       } catch (_e) { this.scheduleMsg = '連線失敗' }
     },
 
@@ -922,7 +922,7 @@ function tenderRadarPage() {
                               { method: 'POST', headers: this._h() })
         const d = await r.json().catch(() => ({}))
         if (d.skipped === 'daily_limit') {
-          alert('今天已經抓過了。抓取頻率硬上限是每日一次 —— 此為對政府網站的使用節制，並非設定值。')
+          alert('今天已經擷取過了。擷取頻率硬上限是每日一次 —— 此為對政府網站的使用節制，並非設定值。')
         } else if (d.skipped === 'disabled') {
           alert('總開關關閉中，不會對外連線。')
         }

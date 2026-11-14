@@ -27,7 +27,7 @@
       left.appendChild(n)
     }
     box.appendChild(left)
-    var a = el('a', '看完整清單 →')
+    var a = el('a', '查看完整清單 →')
     a.href = 'getting-started.html'
     a.setAttribute('data-testid', 'gs-card-link')
     a.style.cssText = 'font-weight:600;white-space:nowrap;text-decoration:underline;color:inherit'

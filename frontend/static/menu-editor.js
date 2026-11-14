@@ -379,7 +379,7 @@
     box.appendChild(el('div', { class: 'me-scope-note', text: note }))
     var wp = willPublish()                                                  // 隨編輯即時更新：按發布會寫入哪些模組
     box.appendChild(el('div', { class: 'me-scope-will', 'data-testid': 'me-will-publish', 'data-count': String(wp.length),
-      text: wp.length ? '按發布會' + (k ? '建立或更新「' + roleLabel(k) + '」角色層' : '更新公司層') + '的 ' + wp.length + ' 個模組：' + wp.join('、') : '目前沒有要發布的調整。' }))
+      text: wp.length ? '按發布會' + (k ? '建立或更新「' + roleLabel(k) + '」角色層' : '更新公司層') + '的 ' + wp.length + ' 個模組：' + wp.join('、') : '尚無要發布的調整。' }))
     return box
   }
   // 預覽身分：公司層＝自由填帳號（空白＝我自己）；角色層＝只能選該角色的在職帳號

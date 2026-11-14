@@ -58,7 +58,7 @@
     },
     'approval-queue.html': {
       purpose: '輪到您簽核的單據都在這裡。',
-      steps: ['左欄「待我簽核」逐筆點開看內容。', '核准、退回或加上意見。', '處理完的會移到「已處理」。'],
+      steps: ['左欄「待我簽核」逐筆展開查看內容。', '核准、退回或加上意見。', '處理完的會移到「已處理」。'],
       hint: '初次使用？「待我簽核」為輪到您處理的單據；開啟單據可查看內容，再選擇核准或退回。',
       anchor: '.aq-layout',
       terms: ['approval'],
@@ -89,7 +89,7 @@
   var GENERIC_STEPS = [
     '上方選單依「客戶與業務／案件／採購與庫存／報表／財務會計…」分類；找不到功能時，請使用上方搜尋框輸入關鍵字。',
     '多數列表頁右上角有「新增」按鈕；列表空白代表尚無資料，並非故障。',
-    '看不懂的名詞，可以在下方「名詞解釋」查。',
+    '不熟悉的名詞，可在下方「名詞解釋」查詢。',
   ]
 
   // ── 小工具 ───────────────────────────────────────────────────────────────
@@ -133,8 +133,8 @@
     box.setAttribute('data-testid', 'ux-first-hint')
     box.innerHTML = '<span>' + esc(cfg.hint) + '</span>'
       + '<span class="ux-first-hint__btns">'
-      + '<button type="button" class="hint-x" data-ux="more">看說明</button>'
-      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="我知道了，不用再顯示">我知道了</button>'
+      + '<button type="button" class="hint-x" data-ux="more">查看說明</button>'
+      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="已了解，不再顯示">我知道了</button>'
       + '</span>'
     box.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-ux]')

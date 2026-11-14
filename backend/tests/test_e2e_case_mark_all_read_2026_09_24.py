@@ -63,7 +63,7 @@ def test_mark_all_read_does_not_bounce_back(live_server, client, make_user, e2e_
             time.sleep(1.5)                  # 已讀請求比件數重抓晚回來
         route.continue_()
     page.route("**/api/reads", slow)
-    page.locator(".cm-unread-bar button:has-text('一鍵已讀')").click()
+    page.locator(".cm-unread-bar button:has-text('全部標示已讀')").click()
     page.wait_for_timeout(4000)
     assert page.evaluate(f"() => {DATA_JS}.unreadCount()") == 0, "一鍵已讀後未讀數又回來了"
     assert not bar.is_visible(), "一鍵已讀後未讀列又出現了"

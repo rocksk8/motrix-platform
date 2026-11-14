@@ -137,7 +137,7 @@ def test_in_page_checklist_lists_every_setting_with_title_one_liner_and_example(
         assert any(must in t for t in titles), must
     assert all(r[2] for r in rows), "每一列都要有一句說明"
     blanks = [r[1] for r in rows if r[3] in ("", "—")]
-    assert set(blanks) <= {"看成品", "復原／重做"}, blanks
+    assert set(blanks) <= {"預覽成品", "復原／重做"}, blanks
     assert not BANNED.search(" ".join(" ".join(r) for r in rows)), BANNED.search(" ".join(" ".join(r) for r in rows))
     page.click("dialog[data-fd-checklist] [data-r]")
     page.wait_for_selector("dialog[data-fd-checklist]", state="detached")

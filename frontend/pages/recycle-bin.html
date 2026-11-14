@@ -148,7 +148,7 @@
               </td>
             </tr>
           </template>
-          <tr x-show="loaded && !items.length"><td colspan="8" style="color:var(--text-secondary)" data-testid="rb-empty">沒有符合的項目。</td></tr>
+          <tr x-show="loaded && !items.length"><td colspan="8" style="color:var(--text-secondary)" data-testid="rb-empty">查無符合條件的項目。</td></tr>
         </tbody>
       </table>
       <div class="rb-bar" x-show="total > size">
@@ -160,7 +160,7 @@
       <div class="rb-card" data-testid="rb-approved">
         <b>刪除已核可單據（最高管理者專用）</b>
         <div style="color:var(--text-secondary);margin:4px 0 8px">一般刪除仍只限草稿等現行規則。這個入口把<b>已核可</b>的單據也送進資源回收筒（可還原，不是硬刪），先看影響清單再確認。</div>
-        <div class="rb-warn" x-show="!Object.keys(types).length" data-testid="rb-no-types">目前沒有任何單據類型開放（由各擁有模組提供）。</div>
+        <div class="rb-warn" x-show="!Object.keys(types).length" data-testid="rb-no-types">尚無任何單據類型開放（由各擁有模組提供）。</div>
         <div class="rb-bar" x-show="Object.keys(types).length">
           <select x-model="ap.entity_type" data-testid="rb-ap-type">
             <option value="">選擇單據類型</option>
@@ -173,7 +173,7 @@
           <div class="rb-err" x-show="!ap.supported" x-text="ap.reason || '此單據不能走這個入口'"></div>
           <ul x-show="ap.supported" style="margin:6px 0 6px 18px">
             <template x-for="(im, i) in ap.impact" :key="i"><li x-text="im.label + (im.blocking ? '（會被影響）' : '')"></li></template>
-            <li x-show="!ap.impact.length">沒有已知的下游影響。</li>
+            <li x-show="!ap.impact.length">尚無已知的下游影響。</li>
           </ul>
           <div class="rb-bar" x-show="ap.supported">
             <input type="text" :placeholder="'再輸入一次單據編號（' + ap.entity_id + '）確認'" x-model.trim="ap.confirm_text" data-testid="rb-ap-confirm">

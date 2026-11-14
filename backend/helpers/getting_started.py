@@ -48,7 +48,7 @@ STEPS = (
      "href": "company-setup-wizard.html#s3", "link": "到公司設定精靈（收款帳戶）"},
     {"id": "people", "title": "人員與簽核",
      "why": "單據要送給誰簽、誰負責財務，都取決於部門、主管與職務；缺了任何一項，送審就會被擋下。",
-     "minutes": "約 15 分鐘", "prepare": ["員工名單（姓名、Email、所屬部門）", "每個部門的主管是誰"],
+     "minutes": "約 15 分鐘", "prepare": ["員工名單（姓名、Email、所屬部門）", "各部門主管設定"],
      "confirm": "「組織設定檢查」全部通過（每位同仁有部門、每個部門有主管、有人擔任財務）。",
      "href": "users.html", "link": "到使用者管理"},
     {"id": "email", "title": "寄信",

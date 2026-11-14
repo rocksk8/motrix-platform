@@ -112,7 +112,7 @@
       </div>
 
       <div class="ai-bar">
-        <button class="ai-btn" @click="expandTo(1)">只看一級</button>
+        <button class="ai-btn" @click="expandTo(1)">僅顯示一級</button>
         <button class="ai-btn" @click="expandTo(2)">展開到二級</button>
         <button class="ai-btn" @click="expandAll()">全部展開</button>
         <input class="ai-search" type="search" x-model="q"
@@ -179,7 +179,7 @@
           </div>
         </template>
         <div class="ai-empty" x-show="!visibleRows.length"
-             x-text="q.trim() ? '沒有符合的科目。' : '目前沒有會計科目。'"></div>
+             x-text="q.trim() ? '查無符合條件的科目。' : '尚無會計科目。'"></div>
       </div>
 
       <div class="ai-empty" x-show="!loaded" x-text="loadError || '載入中…'"></div>

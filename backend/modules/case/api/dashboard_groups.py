@@ -41,16 +41,16 @@ def mine_groups(user: dict) -> list:
         if recv:
             items.append({"title": "有款項已過預計收款日", "sub": "%d 件案件" % recv, "href": HREF + "?quick=mine,recv_overdue", "tone": "crit"})
         out.append({"key": "my_cases", "title": "我的案件", "count": active, "href": HREF + "?quick=mine",
-                    "hrefLabel": "看我的案件", "items": items, "kind": "work", "order": 40,
-                    "empty": "目前沒有進行中的案件"})
+                    "hrefLabel": "查看我的案件", "items": items, "kind": "work", "order": 40,
+                    "empty": "尚無進行中的案件"})
     if money:
         recv_all = _n(user, recv_overdue=1)
         link = (HREF + "?quick=recv_overdue") if can_case else ""
         items = ([{"title": "款項已過預計收款日", "sub": "%d 件案件" % recv_all, "href": link, "tone": "crit"}]
                  if recv_all else [])
         out.append({"key": "receivable_overdue", "title": "應收款項追蹤", "count": recv_all, "href": link,
-                    "hrefLabel": "去追款", "items": items, "kind": "money", "order": 60,
-                    "empty": "沒有逾期未收的款項"})
+                    "hrefLabel": "前往催收", "items": items, "kind": "money", "order": 60,
+                    "empty": "尚無逾期未收的款項"})
     return out
 
 

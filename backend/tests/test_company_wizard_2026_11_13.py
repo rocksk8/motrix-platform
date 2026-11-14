@@ -176,7 +176,7 @@ def test_full_flow_each_step_saves_then_resumes_then_done(client, live_server, m
     page.fill("[data-testid=cw-field-phone]", "02-8765-4321")
     _profile_put_ok(page, lambda: page.click("[data-testid=cw-next]"))
     # 步驟 3：看得到固定的單號格式說明；略過
-    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶要把錢匯到哪裡')", timeout=10000)
+    page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('客戶匯款帳戶')", timeout=10000)
     assert "MQ-" in page.locator("[data-testid=cw-numbering]").inner_text()
     _no_hscroll(page)
     page.click("[data-testid=cw-skip]")
@@ -350,7 +350,7 @@ def test_skip_keeps_pending_reconfirm_edits_and_asks_before_dropping_own_step(cl
     page.fill("[data-testid=cw-field-bank_name]", "測試銀行")
     page.click("[data-testid=cw-skip]")
     page.wait_for_function("document.querySelector('[data-testid=cw-msg]').innerText.includes('再按一次')", timeout=10000)
-    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要把錢匯到哪裡")
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶匯款帳戶")
     assert "再按一次" in page.locator("[data-testid=cw-msg]").inner_text()
     page.click("[data-testid=cw-skip]")
     page.wait_for_function("document.querySelector('[data-testid=cw-title]').innerText.startsWith('放上公司 Logo')", timeout=10000)

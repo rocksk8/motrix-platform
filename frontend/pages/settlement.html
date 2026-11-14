@@ -405,7 +405,7 @@
     <div x-show="confirmDiscard" x-cloak data-testid="stl-conflict-confirm" style="flex-basis:100%;border-top:1px solid var(--stl-warn-line);padding-top:6px">
       <b>重新載入會捨棄尚未儲存的編輯（上列 <span x-text="dirtyList.length"></span> 項）。</b>
       <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-discard" @click="location.reload()">確認捨棄並重新載入</button>
-      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-keep" @click="confirmDiscard = false">先保留我的編輯</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-keep" @click="confirmDiscard = false">保留我的編輯</button>
     </div>
   </div>
   <!-- 載入中 -->
@@ -720,7 +720,7 @@
           <span x-text="'未對應 NT$ ' + fmt(mapSummary.unTotal) + ' ＋ 已對應 NT$ ' + fmt(mapSummary.asTotal) + ' ＝ NT$ ' + fmt(mapSummary.all)"></span>
           <small x-text="mapSummary.byKind.map(b => kindLabel(b.kind) + ' ' + fmt(b.un) + '＋' + fmt(b.as)).join('　')"></small>
         </div>
-        <div x-show="!unmappedRows().length" data-testid="stl-unmapped-none" style="padding:8px 2px;font-size:12px;color:var(--text-secondary)">目前沒有未對應的項目。</div>
+        <div x-show="!unmappedRows().length" data-testid="stl-unmapped-none" style="padding:8px 2px;font-size:12px;color:var(--text-secondary)">尚無未對應的項目。</div>
         <div x-show="mappedRows().length" data-testid="stl-mapped" style="margin-top:14px">
           <div style="font-size:12px;font-weight:600;margin-bottom:4px">已對應到品項（已帶入，不會再出現在上面的未對應清單；同一筆僅能對應一個去向）</div>
           <div class="stl-legend" data-testid="stl-legend"><span><i class="is-mapped"></i>淺綠底＋「已對應」＝已帶入某個品項的實際成本</span><span><i></i>白底＝尚未對應（計入額外支出）</span></div>
