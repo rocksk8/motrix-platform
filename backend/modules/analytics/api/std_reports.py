@@ -349,7 +349,8 @@ def _build_revenue(p: dict, u: dict) -> dict:
         _kpi("revenue", "本期營收", revenue_total, "money",
              "" if sel is not None else "這個口徑沒有資料來源，不是 0 元"),
         _kpi("contract", "合約金額", contract, "money", "期間內成案的案件"),
-        _kpi("collectionRate", "收款率", round(tc / tr * 100, 1) if tr > 0 else 0, "pct", "已收款項 ÷ 應收款項"),
+        _kpi("collectionRate", "收款率", round(tc / tr * 100, 1) if tr > 0 else None, "pct",
+             "已收款項 ÷ 應收款項" if tr > 0 else "期間內成案的案件尚無應收款項"),
         _kpi("caseCount", "案件數", len(in_period), "count"),
     ]
 
@@ -371,7 +372,7 @@ def _build_revenue(p: dict, u: dict) -> dict:
     rows = []
     for s in sorted(agg.values(), key=lambda x: (-x["revenue"], x["owner"])):
         rows.append({"owner": s["owner"], "cases": s["cases"], "contract": s["contract"], "revenue": s["revenue"],
-                     "share": round(s["revenue"] / total_rev * 100, 1) if total_rev > 0 else 0})
+                     "share": round(s["revenue"] / total_rev * 100, 1) if total_rev > 0 else None})
     tables = [_table("bySales", "依業務彙總",
                      [_col("owner", "業務"), _col("cases", "案件數", "count"), _col("contract", "合約金額", "money"),
                       _col("revenue", "營收", "money"), _col("share", "占比", "pct")], rows)]
@@ -617,7 +618,7 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         else:
             s["amount"] += int(amt)
     dev = [{"status": v["status"], "count": v["count"], "amount": v["amount"] if money_ok else None,
-            "missing": v["missing"]} for v in by.values() if v["status"] in _DEV_STATUS_ORDER or v["count"]]
+            "missing": v["missing"]} for v in by.values() if v["status"] in _DEV_STATUS_ORDER or v["count"]] if can_dev else []
     won, lost = by["成案"]["count"], by["未成案"]["count"]
     dev_rate = round(won / (won + lost) * 100, 1) if (won + lost) else None
     q = None
@@ -626,7 +627,7 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
              "won": quote_rows.count("won"), "lost": quote_rows.count("lost")}
     q_rate = round(q["won"] / (q["won"] + q["lost"]) * 100, 1) if (q and (q["won"] + q["lost"])) else None
     open_n, open_missing = by["洽談中"]["count"], by["洽談中"]["missing"]
-    if not money_ok:
+    if not can_dev or not money_ok:                          # 沒有商機權限或沒有金額權限 ⇒ 看不到，不是 0 元
         pipeline = None
     elif open_n and open_missing == open_n:
         pipeline = _state("unfilled")
