@@ -50,7 +50,7 @@ def test_settings_card_saves_login_channel_and_masks_the_secret(live_server, mak
     page.goto(f"{live_server}/pages/notification-settings.html")
     panel = page.locator("#line-panel")
     panel.wait_for(state="visible", timeout=20000)
-    page.wait_for_function("() => document.querySelectorAll('#line-panel input[id^=chk-line-ev-]').length >= 2", timeout=20000)
+    page.locator("[data-testid=le-matrix] [data-testid='mx-row-approval_review_edit']").wait_for(state="attached", timeout=20000)
     panel.locator("input[placeholder^='https://']").fill("https://line.example.com")
     panel.locator("input[placeholder^='Channel ID']").fill(CID)
     panel.locator("input[placeholder^='Channel secret']").fill(SECRET)

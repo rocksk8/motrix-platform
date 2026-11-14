@@ -1,0 +1,12 @@
+/* LINE 通知事件矩陣的附屬樣式（static/line-events-matrix.js；pages/line-events.html 與 pages/notification-settings.html 共用） */
+.le-bar { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 14px; font-size: 13px; align-items: center; }
+.le-bar b { font-weight: 700; }
+.le-bar a { color: var(--info); }
+.le-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); margin: 6px 0 0; align-items: center; }
+.le-legend .mx-rc { width: 18px; height: 18px; font-size: 11px; cursor: default; vertical-align: middle; margin-right: 4px; }
+.le-warn { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--danger-border); background: var(--danger-light); color: var(--danger); border-radius: var(--radius); font-size: 13px; }
+.le-people-list { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin: 6px 0; }
+.le-people-list label, .le-roles label { display: block; padding: 3px 0; cursor: pointer; }
+.le-roles label { display: inline-block; margin-right: 14px; }
+.le-flag { color: var(--warning); font-size: 12px; margin-left: 4px; }
+.le-who { font-size: 12px; }

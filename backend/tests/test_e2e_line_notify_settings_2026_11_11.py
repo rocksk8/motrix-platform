@@ -1,6 +1,6 @@
 """瀏覽器端對端：通知設定頁的「LINE 通知」卡片（T79 候選，2026-11-11）。
 
-驗每個按鈕真的動：儲存（token 遮罩、重新整理後仍是遮罩）、驗證 token（LINE 對外呼叫換成假的）、事件勾選立即生效、
+驗每個按鈕真的動：儲存（token 遮罩、重新整理後仍是遮罩）、驗證 token（LINE 對外呼叫換成假的）、事件開關已移到內嵌的事件矩陣（見 test_e2e_line_events_matrix_*）、
 沒填對外網址就開「帶連結」會被擋並顯示原因。對外呼叫一律換掉 `line_notify._http`，不連 LINE。
 """
 import pytest
@@ -29,7 +29,7 @@ def _open(live_server, make_user, new_page, login_as, name):
     login_as(page, u)
     page.goto(f"{live_server}/pages/notification-settings.html")
     page.locator("#line-panel").wait_for(state="visible", timeout=20000)
-    page.wait_for_function("() => document.querySelectorAll('#line-panel input[id^=chk-line-ev-]').length >= 2", timeout=20000)
+    page.locator("[data-testid=le-matrix] [data-testid='mx-row-approval_review_edit']").wait_for(state="attached", timeout=20000)
     return page
 
 
@@ -59,7 +59,7 @@ def test_line_card_save_masks_token_and_verify_shows_account_and_quota(live_serv
 
 
 @pytest.mark.e2e
-def test_line_card_event_checkbox_takes_effect_immediately_and_links_need_a_public_url(live_server, make_user, new_page, login_as, fake_line):
+def test_line_card_links_need_a_public_url(live_server, make_user, new_page, login_as, fake_line):
     from helpers import line_notify as L
     page = _open(live_server, make_user, new_page, login_as, "e2e_ln2")
     panel = page.locator("#line-panel")
@@ -67,15 +67,6 @@ def test_line_card_event_checkbox_takes_effect_immediately_and_links_need_a_publ
     panel.locator("#chk-line-enabled").check()
     panel.get_by_role("button", name="儲存 LINE 設定").click()
     page.locator("[data-testid=line-msg]").filter(has_text="LINE 設定已儲存").wait_for(state="visible", timeout=10000)
-    # 事件勾選：不用按儲存，立即生效
-    box = panel.locator("#chk-line-ev-approval_review_edit")
-    assert box.is_checked() is False and L.event_enabled("approval_review_edit") is False
-    box.check()
-    page.locator("[data-testid=line-msg]").filter(has_text="已開啟").wait_for(state="visible", timeout=10000)
-    assert L.event_enabled("approval_review_edit") is True and L.event_enabled("warranty_expiry") is False
-    box.uncheck()
-    page.locator("[data-testid=line-msg]").filter(has_text="已關閉").wait_for(state="visible", timeout=10000)
-    assert L.event_enabled("approval_review_edit") is False
     # 沒有對外網址就開「帶連結」⇒ 被擋、畫面顯示原因、設定沒被改
     panel.locator("#chk-line-links").check()
     panel.get_by_role("button", name="儲存 LINE 設定").click()
