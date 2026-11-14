@@ -450,6 +450,7 @@
       background: #fff; color: var(--text-secondary);
     }
     .dc-user-check.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .dc-user-check:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
     .dc-hint {
       font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle, #F8FAFC);
       padding: 6px 10px; border-radius: 6px; margin-top: 6px; line-height: 1.5;
@@ -529,7 +530,7 @@
       .dc-funnel__s.rate { min-width: 96px; }
       .dc-funnel__v { font-size: 18px; }
       .dc-funnel__l small { display: none; }
-      .dc-tap, .dc-relink-btn, .dc-link-btn { min-height: 44px; }
+      .dc-tap, .dc-relink-btn, .dc-link-btn, .dc-doc-type .dc-user-check { min-height: 44px !important; }
       .dc-link-btn { padding: 0 8px; font-size: 14px; }
       .dc-funnel-note { font-size: 13px; }
       .dc-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; padding: 0 14px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--white); color: var(--text-secondary); font-family: var(--font-zh); font-size: 14px; cursor: pointer; }
@@ -738,7 +739,7 @@
               <span class="dc-badge dc-badge--unlinked" data-testid="card-unlinked" style="margin-left:4px"
                     x-show="c.status==='成案' && !c.convertedQuoteNo">尚未連結單據</span>
               <span class="dc-badge dc-badge--won" data-testid="card-linked-talk" style="margin-left:4px"
-                    x-show="c.status==='洽談中' && c.convertedQuoteNo">已連結報價單（洽談中）</span>
+                    x-show="c.status==='洽談中' && c.convertedQuoteNo">已連結單據（洽談中）</span>
               <template x-if="c.pendingDelete">
                 <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
               </template>
@@ -890,7 +891,7 @@
                         title="按「轉建報價單／估價單」建立並連結">尚未連結單據</span>
                   <span class="dc-badge dc-badge--won" data-testid="detail-linked-talk"
                         x-show="selectedCase.status==='洽談中' && selectedCase.convertedQuoteNo"
-                        title="狀態回到洽談中，但單據連結仍保留；要解除請用「修改連結」">已連結報價單（洽談中）</span>
+                        title="狀態回到洽談中，但單據連結仍保留；要解除請用「修改連結」">已連結單據（洽談中）</span>
                   <span x-show="selectedCase.customerName" x-text="selectedCase.customerName"></span>
                   <span x-show="selectedCase.customerName" style="color:var(--border-light)">|</span>
                   <span x-text="'建立：' + (selectedCase.createdAt||'').slice(0,10)"></span>
@@ -2192,6 +2193,9 @@ function devCrmPage() {
       if (!c) { this._toast('找不到這個案件，或您沒有權限查看。', 5000); return }
       this.filterStatus = ''; this.filterYear = ''; this.filterMonth = ''; this.searchQ = ''
       this.filterPerson = ''                                                    // 清單篩選不能把要看的那一件藏起來（不寫回偏好）
+      // 篩選條件剛被清掉：重抓清單，確保左邊列表（手機按「← 案件列表」回去時）也有這一件
+      await this.loadCases()
+      if (!this.cases.some(x => x.id === c.id)) this.cases.unshift(c)
       await this.selectCase(c)
     },
 

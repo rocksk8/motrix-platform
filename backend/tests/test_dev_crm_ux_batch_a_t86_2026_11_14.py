@@ -174,7 +174,7 @@ def test_status_change_asks_first_and_never_fails_silently():
     assert "重回洽談中不會動到單據，連結會保留" in DC
     assert "狀態沒有更新：" in DC          # 失敗有提示
     assert "markConverted" not in DC and "convertQuoteNo" not in DC   # 手動輸入單號已拿掉（PM 2026-11-14）
-    assert 'data-testid="card-linked-talk"' in DC and "已連結報價單（洽談中）" in DC   # #6：洽談中仍連著單據要標示
+    assert 'data-testid="card-linked-talk"' in DC and "已連結單據（洽談中）" in DC   # #6：洽談中仍連著單據要標示
 
 
 def test_convert_hands_over_customer_project_type_and_case_id():
@@ -258,3 +258,10 @@ def test_save_and_next_keeps_form_open_with_channel_and_date(live_server, make_u
     page.evaluate("() => { %s.logForm.content = '第二筆' }" % data)
     page.locator('[data-testid="log-save"]').click()
     page.wait_for_function("() => %s.devLogs.length === 2 && !%s.showLogForm" % (data, data), timeout=8000)
+
+
+def test_review_fixes_h5():
+    assert ".dc-user-check:focus-within" in DC                        # 單據類型晶片要有鍵盤焦點框
+    assert ".dc-doc-type .dc-user-check { min-height: 44px !important; }" in DC
+    m = re.search(r"async _openFromUrl\(\) \{.*?\n    \},\n", DC, re.S)
+    assert m and "await this.loadCases()" in m.group(0)               # 深連結清篩選後要重抓清單
