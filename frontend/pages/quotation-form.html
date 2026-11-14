@@ -1249,8 +1249,8 @@
            不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
       <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
            style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
-        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請先載入最新版，再重新進行您要修改的部分。</span>
-        <button class="btn btn-sm" data-testid="qf-save-conflict-keep" @click="reloadKeepMine()">載入最新版，保留我的修改</button>
+        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請選擇「載入最新版，保留我的修改」，或「載入最新版」並放棄未存的修改。</span>
+        <button class="btn btn-sm btn-primary" data-testid="qf-save-conflict-keep" @click="reloadKeepMine()">載入最新版，保留我的修改</button>
         <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
       </div>
 
@@ -2717,7 +2717,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.49'
+  const FORM_VERSION = 'V3.50'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -3871,8 +3871,12 @@
       async reloadKeepMine() {
         clearTimeout(this.autoSaveTimer)
         const SKIP = ['tot', 'approval', 'editHistory', 'exportLog', 'exportCount', 'isSigned', 'signedBy', 'signedAt', 'signedLog', 'signedFiles', 'returnInfo', 'dealTag', 'status', 'quoteNo']
-        const LABEL = { customerName: '公司名稱', projectName: '專案名稱', items: '報價品項', paymentTerms: '付款條件', notes: '備註', validDays: '有效天數',
-          contactName: '聯絡人', contactPhone: '電話', contactEmail: 'Email', deliveryAddress: '送貨地址', taxRate: '稅別', discount: '折扣' }
+        // 欄位鍵 → [表單, 預設名稱]：名稱走表單自己的 fLabel（含自訂標籤）；沒登記的鍵一律說「其他欄位」，不把內部欄位鍵露給使用者
+        const LABEL = { customerName: ['qcustomer', '公司名稱'], projectName: ['qproject', '案件名稱'], contactName: ['qcustomer', '聯絡人'],
+          contactPhone: ['qcustomer', '電話 / 分機'], contactEmail: ['qcustomer', 'E-mail'], deliveryAddress: ['qcustomer', '送貨地址 / 發票地址'],
+          deliveryLocation: ['qproject', '交貨地點'], validDays: ['qbasic', '有效天數'], salesPerson: ['qbasic', '報價人'], locationId: ['qbasic', '開立據點'],
+          paymentTerms: ['qterms', '付款條件'], deliveryTerms: ['qterms', '交貨條件'], acceptanceTerms: ['qterms', '驗收標準'],
+          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL] }
         const mineNow = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
         const base = this._qBase || {}
         const changed = Object.keys(mineNow).filter(k => !SKIP.includes(k) && JSON.stringify(mineNow[k]) !== JSON.stringify(base[k]))
@@ -3884,10 +3888,10 @@
         changed.forEach(k => { this.q[k] = mineNow[k] })
         this.calcTotals()
         this.isDirty = changed.length > 0
-        const name = k => LABEL[k] || k
+        const names = keys => Array.from(new Set(keys.map(k => k === 'items' ? '報價品項' : (LABEL[k] ? this.fLabel(LABEL[k][0], k, LABEL[k][1]) : '其他欄位'))))
         this.toast(changed.length
-          ? '已載入最新版並保留您修改的欄位（' + changed.map(name).join('、') + '）'
-            + (both.length ? '；其中「' + both.map(name).join('、') + '」對方也改過，已用您的內容，請確認後再儲存' : '，確認後請按儲存')
+          ? '已載入最新版並保留您修改的欄位（' + names(changed).join('、') + '）'
+            + (both.length ? '；其中「' + names(both).join('、') + '」對方也改過，已用您的內容，請確認後再儲存' : '，確認後請按儲存')
           : '已載入最新版（您沒有改到任何欄位）')
       },
 
