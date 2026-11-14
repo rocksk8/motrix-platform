@@ -402,3 +402,41 @@ def test_frontend_can_see_financial_uses_the_server_answer_then_falls_back_to_ro
     assert json.loads(out.stdout.strip()) is want
     src = CORE_JS.read_text(encoding="utf-8")
     assert "financeViewOk: undefined," in src and "motrixBoot('financeView')" in src
+
+
+# ── 模組區段改走提供者 bootstrap.section（IP-BS1）：L1 不 import L2 ─────────────────────────────────────────────
+
+MODULE_SECTIONS = {"profitWarning", "vendorsSelectable", "contractorsSelectable"}
+
+
+def test_module_owned_sections_are_provided_through_the_registry_not_imported(client):
+    from core import registry
+    got = registry.providers("bootstrap.section")
+    assert MODULE_SECTIONS <= set(got), sorted(got)
+    src = Path(B.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(from|import)\s+modules\b", src, re.M), "routers/bootstrap.py 不可以直接 import 任何 L2 模組"
+    # 提供者就是原端點的處理函式本身（同一份權限檢查）
+    from modules.case.api import project_margin
+    from modules.subcontract.api import contractors, vendor_contractors
+    assert got["profitWarning"] is project_margin.get_profit_warning_config
+    assert got["vendorsSelectable"] is vendor_contractors.list_vendors_selectable
+    assert got["contractorsSelectable"] is contractors.list_contractors_selectable
+
+
+def test_missing_provider_means_the_section_is_absent_and_everything_else_still_works(client, world, monkeypatch):
+    from core import registry
+    real = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap, *a, **k: {} if cap == "bootstrap.section" else real(cap, *a, **k))
+    d = client.get("/api/bootstrap?page=case", headers=world["admin"]).json()
+    for name in MODULE_SECTIONS:
+        assert name not in d and name not in d["errors"], name
+    for name in set(_page_sections()) - MODULE_SECTIONS:
+        assert name in d or name in d["errors"], name
+    assert d["me"]["username"] == "pc_admin"
+
+
+def test_a_provider_cannot_add_a_section_that_is_not_in_the_page_table(client, monkeypatch):
+    from core import registry
+    real = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap, *a, **k: {**real(cap, *a, **k), "evil": (lambda authorization=None: {"x": 1})} if cap == "bootstrap.section" else real(cap, *a, **k))
+    assert "evil" not in B._page_handlers("case")
