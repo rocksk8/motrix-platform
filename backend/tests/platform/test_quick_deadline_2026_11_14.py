@@ -159,3 +159,47 @@ def test_e2e_stage_cut_by_the_deadline_is_not_complete(monkeypatch, tmp_path):
     assert any(u["item"] == "backend/tests/test_e2e_p.py" for u in agg["unrun"])
     agg2, _ = _stages(monkeypatch, tmp_path, _sel(), [{}, {}, {}])
     assert agg2["e2e"]["complete"] is True
+
+
+# ── T87 實測發現：檔名含 test_e2e_ 的靜態守門被送進 e2e 段 ─────────────────────
+
+def _git_repo(tmp_path, files):
+    def run(*a):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@x.invalid", "-c", "user.name=t", *a], check=True, capture_output=True)
+    run("init", "-q")
+    for rel, text in files.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-q", "-m", "x")
+
+
+def test_e2e_is_decided_by_marker_not_by_file_name(tmp_path):
+    """test_e2e_lint 這類靜態守門沒有 e2e 題：以檔名判斷會把它送進 `-m e2e` 的段、收集到 0 題、守門從沒跑。"""
+    _git_repo(tmp_path, {
+        "backend/tests/platform/test_e2e_lint_x.py": "def test_lint():\n    assert True\n",
+        "backend/tests/test_e2e_real.py": "import pytest\n@pytest.mark.e2e\ndef test_page():\n    pass\n",
+        "backend/tests/test_whole_file.py": "import pytest\npytestmark = pytest.mark.e2e\n",
+        "backend/tests/test_plain.py": "def test_a():\n    pass\n",
+        # 真實案例：test_e2e_lint 的測試資料字串裡寫著 @pytest.mark.e2e——字串裡出現不算 marker
+        "backend/tests/platform/test_lint_with_fixture_text.py": 'SRC = "import pytest\\n@pytest.mark.e2e\\ndef t():\\n    pass\\n"\n'})
+    marked = AG.e2e_marked_files("HEAD", tmp_path)
+    assert marked == {"backend/tests/test_e2e_real.py", "backend/tests/test_whole_file.py"}, marked
+    assert AG.e2e_marked_files("no-such-ref", tmp_path) is None or AG.e2e_marked_files("no-such-ref", tmp_path) == set(), "查不到不能丟例外"
+
+
+def test_a_stage_that_collects_no_tests_is_not_run_and_never_red(monkeypatch, tmp_path):
+    """pytest exit 5＝沒收集到題：列『未跑：沒有收集到 e2e 題』，e2e 不算紅（沒有失敗題卻標紅會誤導）。"""
+    out = [{}, {"rc": 5, "text": "no tests ran in 0.9s"}, {}]
+    agg, _ = _stages(monkeypatch, tmp_path, _sel(), out)
+    assert agg["e2e"]["green"] is True and agg["e2e"]["complete"] is False and agg["e2e"]["failed"] == []
+    miss = [u for u in agg["unrun"] if u["item"] == "backend/tests/test_e2e_p.py"]
+    assert miss and "沒有收集到 e2e 題" in miss[0]["reason"] and "未跑" in miss[0]["reason"]
+
+
+def test_quick_result_carries_the_recall_disclaimer():
+    kw = dict(head="h", base="b", tree_sha="t", selector_sha="s", groups={}, counts={"passed": 1}, failures_new=[], failures_known=[], duration_s=1,
+              estimate_s=1, workers=1, stopped_by_failfast=False, forced_full=False, started="", finished="")
+    assert "25%" in AG.make_result(quick=True, **kw)["quick_note"] and "整段閘門" in AG.QUICK_DISCLAIMER
+    assert "quick_note" not in AG.make_result(quick=False, **kw)
