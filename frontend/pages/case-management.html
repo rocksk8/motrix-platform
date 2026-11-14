@@ -1164,7 +1164,7 @@
                 </div>
                 <p class="cm-ro-note" data-testid="mtl-readonly-note" x-show="caseReadOnly()" x-cloak style="margin:0 0 10px;font-size:13px;color:var(--text-secondary)">您不是本案成員，材料資料僅供檢視：無法匯入品項、確認到貨或同步至設備登錄，入庫與出貨進度亦不提供檢視。</p>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                  <span class="cm-section-title" style="margin-bottom:0">材料申請清單</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
+                  <span class="cm-section-title" style="margin-bottom:0">材料申請清單</span><span class="save-mode save-mode--auto" data-save-mode="auto" x-show="!caseReadOnly()" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
                   <div style="display:flex;gap:8px">
                     <button class="btn-add" @click="openImportModal('materials')" :title="caseReadOnly() ? '您不是本案成員，無法匯入品項' : ''" data-testid="mtl-import-quote" style="padding:5px 10px">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>

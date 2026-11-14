@@ -79,7 +79,7 @@ window.CM_PARTS.push(() => ({
       else if (po && !o) { req.state = 'done'; req.cap = '由採購單認列' }
       else if (!o) {
         const cands = this.mlCandidatesFor ? this.mlCandidatesFor(mat) : []
-        if (cands.length === 1) req.act = { label: '帶入並連結', run: () => this.mlPickCandidate(mat, this.mlGroupKey(cands[0])) }
+        if (cands.length === 1 && canEdit) req.act = { label: '帶入並連結', run: () => this.mlPickCandidate(mat, this.mlGroupKey(cands[0])) }
         else req.act = { label: '開請購單', href: 'payment-request.html?case=' + case_ + '&type=purchase_req' }
       } else if (a.legacy) { req.state = 'done'; req.cap = '舊單（未經審核）' }
       else if (a.status === '已核准') { req.state = 'done'; req.cap = (a.docCode || '') + '\n已核准' }
