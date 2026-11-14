@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏、催辦用語中性化、覆核補正、首頁待簽核空狀態統一）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
+
 ## (next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）
 - schema：本批只動 crm 模組 migration（`modules/crm/migrations/0005_dev_case_expected.py`，crm 模組 schema 4→5，`module_schema_versions` 記錄）；核心 `db.py` `CURRENT_VERSION`（V9 基準 118）與 module.json 版本不變。驗包若要核對「資料庫版本」，核心數字不會因本批改變；模組版本以 `module_schema_versions` 的 crm＝5 為準。
 - **（併入）(next) — 2026-11-14（feat/t86-usage-h9；T86 使用紀錄優化 U6／U9：LINE 通知設定、自訂模組預覽改成先檢核＋白話原因）**

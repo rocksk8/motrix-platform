@@ -152,7 +152,7 @@ register("bonus_correction_approved", "獎金更正單核准", _A, "none", "申�
          "請登入系統查看更正單；出納請於出納頁「獎金待發放」處理補發。（信中不含金額）")
 register("bonus_correction_returned", "獎金更正單駁回", _A, "none", "申請人",
          "更正單已駁回，修改並重新送審之前不會生效。", _RETURN_ACT)
-register("approval_reminder", "簽核逾期催辦", _A, "superadmins", "當層簽核人",
+register("approval_reminder", "簽核逾期提醒", _A, "superadmins", "當層簽核人",
          "單據停留在同一層超過規定工作日，後續作業延遲。", _APPROVE_ACT)
 register("dev_case_delete_request", "業務開發案件刪除申請", _A, "superadmins", "",
          "案件在核准或駁回之前維持待刪除狀態。", "請登入系統，於業務開發頁確認申請理由後核准或駁回。")
