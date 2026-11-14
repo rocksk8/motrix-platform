@@ -121,11 +121,11 @@ def _notif_calls(role, modules):
     ("sales", ["daily_task"], 1),
     ("superadmin", [], 1),
 ])
-def test_f1_bell_only_asks_for_daily_tasks_when_the_account_may_read_them(role, mods, n):
+def test_af_f1_bell_only_asks_for_daily_tasks_when_the_account_may_read_them(role, mods, n):
     assert len(_notif_calls(role, mods)) == n
 
 
-def test_f1_the_case_page_task_list_follows_the_same_rule():
+def test_af_f1_the_case_page_task_list_follows_the_same_rule():
     s = FEED.read_text(encoding="utf-8")
     a = s.index("async _loadCaseTasks(quoteNo)")
     blk = s[a:s.index("fetch(`/api/daily-tasks", a)]
@@ -155,7 +155,7 @@ def _notes(role, modules, parts):
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
-def test_f2_a_blocked_tab_says_which_module_is_needed():
+def test_af_f2_a_blocked_tab_says_which_module_is_needed():
     parts = {"dispatches": {"ok": False, "status": 403, "detail": "沒有權限"}, "shippingNotes": DENIED, "completionNotes": DENIED, "updates": DENIED}
     notes = _notes("finance", ["cashier", "financial_view"], parts)
     assert all("「案件管理」" in n and "模組權限" in n for n in notes), notes
@@ -165,14 +165,14 @@ def test_f2_a_blocked_tab_says_which_module_is_needed():
     assert all("您目前沒有" in n and "系統管理員" in n for n in notes), notes
 
 
-def test_f2_the_note_is_cleared_when_the_next_case_starts_loading():
+def test_af_f2_the_note_is_cleared_when_the_next_case_starts_loading():
     s = CORE.read_text(encoding="utf-8")
     a = s.index("_reset_core(phase, data) {")
     assert "this.partBlocked = {}" in s[a:s.index("phase === 'late'", a)]
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
-def test_f2_nothing_is_said_when_the_account_has_the_module_is_superadmin_or_the_part_loaded():
+def test_af_f2_nothing_is_said_when_the_account_has_the_module_is_superadmin_or_the_part_loaded():
     parts = {"dispatches": DENIED, "shippingNotes": DENIED, "completionNotes": DENIED, "updates": DENIED}
     assert _notes("finance", ["case_manage"], parts) == ["", "", "", ""]          # 有模組卻被擋＝逐案規則，不亂說是模組問題
     assert _notes("superadmin", [], parts) == ["", "", "", ""]
@@ -181,13 +181,13 @@ def test_f2_nothing_is_said_when_the_account_has_the_module_is_superadmin_or_the
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
-def test_f2_module_not_installed_keeps_its_own_notice():
+def test_af_f2_module_not_installed_keeps_its_own_notice():
     gone = {"ok": False, "status": 404, "detail": "採購・庫存・出貨模組未安裝：沒有出貨單資料"}
     notes = _notes("finance", ["cashier"], {"dispatches": OK, "shippingNotes": gone, "completionNotes": OK, "updates": OK})
     assert notes == ["", "", "", ""]
 
 
-def test_f2_each_of_the_four_panes_carries_the_notice_and_the_css_hides_the_rest():
+def test_af_f2_each_of_the_four_panes_carries_the_notice_and_the_css_hides_the_rest():
     html = page_file("case-management.html").read_text(encoding="utf-8")
     for tab in ("dispatch", "shipping", "completion", "feed"):
         assert f"data-testid=\"cm-blocked-{tab}\"" in html and f"blockedNote('{tab}')" in html, tab
@@ -215,14 +215,14 @@ def _open_home(live_server, e2e_browser, u):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("mods,n", [(["cashier"], 0), (["cashier", "case_manage"], 1)])
-def test_e2e_f1_home_sends_daily_tasks_request_only_when_the_account_has_the_module(live_server, make_user, e2e_browser, mods, n):
+def test_e2e_af_f1_home_sends_daily_tasks_request_only_when_the_account_has_the_module(live_server, make_user, e2e_browser, mods, n):
     u = make_user(username=f"af_e2e_fin{n}", role="finance", modules=mods)
     _page, seen = _open_home(live_server, e2e_browser, u)
     assert len(seen) == n, seen
 
 
 @pytest.mark.e2e
-def test_e2e_f2_a_blocked_pane_shows_only_the_plain_notice(live_server, make_user, e2e_browser):
+def test_e2e_af_f2_a_blocked_pane_shows_only_the_plain_notice(live_server, make_user, e2e_browser):
     """案件頁本身要 case_manage 才進得去，所以這題用「有 case_manage 才能開頁」的帳號開案件，
     再把這個帳號的模組表改成沒有 case_manage、並餵入被擋的整包段落，驗畫面：白話說明出現、空清單被藏起來。"""
     u = make_user(username="af_e2e_blk", role="finance", modules=["cashier", "case_manage"])
