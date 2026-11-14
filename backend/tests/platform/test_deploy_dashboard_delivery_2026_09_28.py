@@ -68,6 +68,21 @@ def fake_run(install, status="success", rolled_back="applied", service="up", cod
     return run
 
 
+def fresh_state():
+    return {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None}
+
+
+def patch_auto_apply(monkeypatch):
+    """T87 A1 M1：這幾份測試驗的是「儀表板 ⇄ delivery」的接線，不是半自動套用本身（那在 test_a1_auto_apply_2026_11_14.py）。
+    ⇒ 關掉預演閘門，並把 auto_apply 的前後記錄／事後驗證換成直通（測試用的安裝目錄沒有正式庫與服務，預檢必擋）。"""
+    import auto_apply as AA
+    monkeypatch.setattr(dd, "REQUIRE_REHEARSAL", False)
+    monkeypatch.setattr(AA, "apply_with_verification",
+                        lambda name, staged, root, apply_fn, rh, who, base, **k: dict(apply_fn(), name=name, by=who, verify=None, notes=[],
+                                                                                         install_root=root))
+    monkeypatch.setattr(AA, "finish", lambda rec, root, db_path=None: rec)
+
+
 @pytest.fixture()
 def env(tmp_path, monkeypatch):
     priv, pub = _keys()
@@ -80,7 +95,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(D, "_run_powershell", fake_run(install))
     monkeypatch.setattr(dd, "DELIVERY_INSTALL_ROOT", install)
     monkeypatch.setattr(dd, "DELIVERY_STAGING_ROOT", tmp_path / "staging")
-    monkeypatch.setattr(dd, "_delivery_state", {"prepared": {}, "running": False, "last": None})
+    monkeypatch.setattr(dd, "_delivery_state", fresh_state())
+    patch_auto_apply(monkeypatch)
     monkeypatch.setattr(dd, "_verify_superadmin", lambda u, p, t="": u if (u, p) == ("boss", "right") else
                         (_ for _ in ()).throw(ValueError("帳號或密碼不正確")))
     name = D.publish(str(make_package(tmp_path, [{"module": "系統設定/儲存位置", "version": "2026-09-28a", "content": "新頁"},
@@ -155,7 +171,7 @@ def test_apply_runs_writes_back_and_status_survives(env):
     assert back["outcome"] == "succeeded" and back["commit"] == COMMIT and "package" not in back
     assert (env["install"] / "backend" / "tools" / "apply_update.ps1").read_bytes() == PS1.encode("utf-8"), "AH-M2：先換上包裡的 tools"
     # 重開儀表板（記憶體狀態清空）⇒ 從結果檔讀上一次
-    dd._delivery_state.update({"prepared": {}, "running": False, "last": None})
+    dd._delivery_state.update(fresh_state())
     d = env["c"].get("/api/delivery/overview").json()
     assert d["last"]["status"] == "success"
 

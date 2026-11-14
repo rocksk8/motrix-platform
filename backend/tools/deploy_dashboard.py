@@ -1024,8 +1024,11 @@ def prod_status():
 # 判定、鎖、結果檔一律經 delivery.py（不另寫）。
 DELIVERY_INSTALL_ROOT = PROJECT_ROOT
 DELIVERY_STAGING_ROOT = PROJECT_ROOT.parent / "motrix-staging"          # 安裝目錄外
-_delivery_state = {"prepared": {}, "running": False, "last": None}
+_delivery_state = {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None}
 _delivery_lock = threading.Lock()
+#: T87 A1 M1：套用前必須有一份「針對這個包、夠新、使用者看過」的預演（auto_apply.rehearse）。
+#: 常數而不是設定值：關掉它等於回到沒有預演的舊流程，要改就改程式、走審查。
+REQUIRE_REHEARSAL = True
 
 
 def _erp_base_url() -> str:
@@ -1087,6 +1090,18 @@ def _trusted_delivery():
     return _dl
 
 
+def _trusted_auto_apply():
+    """取 auto_apply 模組，同樣必須是已安裝的那一份（與 `_trusted_delivery` 同理：預演與驗證的判定不能由新包提供）。"""
+    import auto_apply as _aa
+    where = os.path.normcase(os.path.realpath(getattr(_aa, "__file__", None) or ""))
+    expect = os.path.normcase(os.path.realpath(str(TOOLS_DIR / "auto_apply.py")))
+    if where != expect:
+        raise DeliveryModuleUntrusted(
+            "載入的 auto_apply 模組不是已安裝的那一份（載入的是 %s，應該是 %s）⇒ 拒絕"
+            % (getattr(_aa, "__file__", None), TOOLS_DIR / "auto_apply.py"))
+    return _aa
+
+
 def _delivery_summary(staged: str) -> dict:
     """確認框用：刪除／新增檔數（包裡的 apply_plan 對本機試算，只讀）＋變更摘要（包裡有、安裝版沒有的版本紀錄）。"""
     payload = os.path.join(staged, "payload")
@@ -1131,6 +1146,7 @@ class DeliveryApplyBody(BaseModel):
     password: str
     totp: str = ""
     confirm: bool = False
+    rehearsalDigest: str = ""        # 同意畫面顯示的預演結果的綁定值；與目前有效預演不同 ⇒ 拒絕（畫面上看到的不是現在要套用的）
 
 
 @app.get("/api/delivery/overview")
@@ -1152,6 +1168,9 @@ def delivery_prepare(body: DeliveryPrepareBody):
         _dl = _trusted_delivery()
     except DeliveryModuleUntrusted as e:
         return JSONResponse(status_code=409, content={"detail": str(e)})
+    with _delivery_lock:                        # 套用或預演進行中不可重新暫存（會換掉它們正在用的資料夾）
+        if _delivery_state["running"] or _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "套用或預演正在執行，請等它結束再準備"})
     try:
         root = _dl.configured_root()
         DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1162,25 +1181,90 @@ def delivery_prepare(body: DeliveryPrepareBody):
     summary = _delivery_summary(staged) if verified["ok"] else {}
     with _delivery_lock:
         _delivery_state["prepared"][body.name] = {"staged": staged, "verified": verified, "at": time.time()}
+        _delivery_state["rehearsals"].pop(body.name, None)      # 重新暫存＝之前的預演作廢
+    downtime = None
+    try:
+        downtime = _trusted_auto_apply().estimate_downtime(str(DELIVERY_INSTALL_ROOT)) if verified["ok"] else None
+    except Exception:                                           # noqa: BLE001 — 估計值拿不到不擋準備（含模組不可信：套用時另會擋）
+        downtime = None
     meta = verified.get("meta") or {}
     return {"ok": verified["ok"], "problems": verified["problems"], "notes": verified["notes"] + summary.get("notes", []),
             "commit": meta.get("commit"), "builtAt": meta.get("built_at"), "product": meta.get("product"),
             "deleteCount": summary.get("deleteCount"), "addedCount": summary.get("addedCount"),
-            "changes": summary.get("changes", [])}
+            "changes": summary.get("changes", []), "downtime": downtime, "requireRehearsal": REQUIRE_REHEARSAL}
 
 
-def _delivery_run(name: str, staged: str, verified: dict, root: str):
+class DeliveryRehearseBody(BaseModel):
+    name: str
+
+
+def _rehearse_run(name: str, staged: str):
+    try:
+        _aa = _trusted_auto_apply()
+        work = str(DELIVERY_STAGING_ROOT / "_rehearsal_work")
+        rh = _aa.rehearse(staged, str(DELIVERY_INSTALL_ROOT), work)
+    except Exception as e:                                      # noqa: BLE001 — 預演本身出錯＝不放行，但不讓執行緒默默死掉
+        rh = {"ok": False, "problems": ["預演程序本身出錯：%s" % e], "summary": [], "expected_diff": None,
+              "digest": None, "pkg_digest": None, "seconds": None, "db_mb": None, "at": time.time(), "notes": [], "tool_tail": ""}
+    with _delivery_lock:
+        _delivery_state["rehearsals"][name] = rh
+        _delivery_state["rehearsing"] = None
+
+
+@app.post("/api/delivery/rehearse")
+def delivery_rehearse(body: DeliveryRehearseBody):
+    """套用前預演：在正式庫的線上備份副本上跑新包的遷移，取預期的資料庫變更。**不動正式庫、不需要密碼**（只讀正式庫＋用暫存空間），
+    背景執行；用 GET /api/delivery/rehearse/status 輪詢。"""
+    try:
+        _trusted_delivery()
+        _trusted_auto_apply()
+    except DeliveryModuleUntrusted as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
+    prep = _delivery_state["prepared"].get(body.name)
+    if not prep or not prep["verified"].get("ok"):
+        return JSONResponse(status_code=409, content={"detail": "這個包還沒有準備好（先按「準備」並通過驗證）"})
+    with _delivery_lock:
+        if _delivery_state["running"]:
+            return JSONResponse(status_code=409, content={"detail": "套用正在執行"})
+        if _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "另一個預演正在執行"})
+        _delivery_state["rehearsing"] = body.name
+        _delivery_state["rehearsals"].pop(body.name, None)
+    threading.Thread(target=_rehearse_run, args=(body.name, prep["staged"]), daemon=True).start()
+    return {"started": True}
+
+
+@app.get("/api/delivery/rehearse/status")
+def delivery_rehearse_status(name: str = ""):
+    rh = _delivery_state["rehearsals"].get(name)
+    slim = None
+    if rh:
+        slim = {k: rh.get(k) for k in ("ok", "problems", "notes", "seconds", "db_mb", "summary", "digest", "at", "tool_tail")}
+        slim["empty"] = bool(rh.get("ok")) and not rh.get("summary")
+    return {"rehearsing": _delivery_state["rehearsing"], "result": slim}
+
+
+def _delivery_run(name: str, staged: str, verified: dict, root: str, who: str = "", rehearsal=None):
     try:
         _dl = _trusted_delivery()
-        r = _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line))
-        rec = {"name": name, "outcome": r["outcome"], "started": r["started"], "problems": r["problems"],
-               "result": r.get("result"), "lock": r.get("lock")}
-        if r["started"] and r.get("result") and "unreadable" not in r["result"]:
+        _aa = _trusted_auto_apply()
+        # 套用本身仍是 delivery.apply_staged（判定函式留在這裡）；auto_apply 只在前後加記錄與事後驗證，且事後驗證失敗不回滾。
+        rec = _aa.apply_with_verification(
+            name, staged, str(DELIVERY_INSTALL_ROOT),
+            lambda: _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line)),
+            rehearsal, who, _erp_base_url())
+        if rec["started"] and rec.get("result") and "unreadable" not in rec["result"]:
             try:
-                _dl.write_back(root, name, r["result"], r["outcome"])
+                # write_back 只收 succeeded／failed：事後驗證沒過 ⇒ 寫 failed（開發機不可當成功），細節在旁檔 <包名>.a1.json
+                final = _dl.write_back(root, name, rec["result"], "succeeded" if rec["outcome"] == "succeeded" else "failed")
+                _aa.write_summary_next_to(final, rec)
             except (_dl.DeliveryError, OSError) as e:
                 rec["problems"] = rec["problems"] + ["結果寫回交付資料夾失敗：%s" % e]
-    except Exception as e:                                          # noqa: BLE001 — 不讓背景執行緒默默死掉
+        try:
+            _aa.finish(rec, str(DELIVERY_INSTALL_ROOT))
+        except Exception as e:                                      # noqa: BLE001 — 報告／稽核寫失敗不可蓋掉已經發生的套用結果
+            rec["problems"] = rec["problems"] + ["寫報告或稽核失敗：%s" % e]
+    except Exception as e:                                         # noqa: BLE001 — 不讓背景執行緒默默死掉
         rec = {"name": name, "outcome": "failed", "started": False, "problems": ["套用程序本身出錯：%s" % e], "result": None}
     with _delivery_lock:                        # 先放結果、再清旗標：輪詢不會看到「沒在跑、也沒有結果」的中間態
         _delivery_state["last"] = rec
@@ -1192,6 +1276,7 @@ def delivery_apply(body: DeliveryApplyBody):
     """一次確認（U-3）＋本機 superadmin 帳密（U-2）＋同一時間只准一個。套用前對同一個 staging 再驗一次（中間被換過就擋）。"""
     try:
         _dl = _trusted_delivery()
+        _aa = _trusted_auto_apply()
     except DeliveryModuleUntrusted as e:
         return JSONResponse(status_code=409, content={"detail": str(e)})
     if not body.confirm:
@@ -1199,6 +1284,17 @@ def delivery_apply(body: DeliveryApplyBody):
     prep = _delivery_state["prepared"].get(body.name)
     if not prep or not prep["verified"].get("ok"):
         return JSONResponse(status_code=409, content={"detail": "這個包還沒有準備好（先按「準備」並通過驗證）"})
+    # 預演閘門（T87 A1 M1）：先檢查再驗帳密，沒預演就不必讓使用者輸入密碼
+    rh = _delivery_state["rehearsals"].get(body.name)
+    if REQUIRE_REHEARSAL:
+        if _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "預演還在執行，請等它結束"})
+        if not rh or not rh.get("ok"):
+            return JSONResponse(status_code=409, content={"detail": "這個包還沒有通過預演：請先按「預演」，確認預期的資料庫變更後再套用"})
+        if time.time() - float(rh.get("at") or 0) > _aa.REHEARSAL_MAX_AGE_SEC:
+            return JSONResponse(status_code=409, content={"detail": "預演已經超過 12 小時，正式資料庫可能已經變動：請重新預演"})
+        if not body.rehearsalDigest or body.rehearsalDigest != rh.get("digest"):
+            return JSONResponse(status_code=409, content={"detail": "畫面上的預演結果與目前有效的預演不同：請重新整理畫面，確認預期變更後再套用"})
     try:
         who = _verify_superadmin(body.username, body.password, body.totp)
     except ValueError as e:
@@ -1206,6 +1302,13 @@ def delivery_apply(body: DeliveryApplyBody):
     again = _dl.verify_staged(prep["staged"], str(DELIVERY_INSTALL_ROOT), run_verify_package=False)
     if not again["ok"]:
         return JSONResponse(status_code=409, content={"detail": "準備之後 staging 被改過，已拒絕：" + "；".join(again["problems"])})
+    if REQUIRE_REHEARSAL:
+        try:
+            same = _aa.package_digest(prep["staged"]) == rh.get("pkg_digest")
+        except OSError:
+            same = False
+        if not same:
+            return JSONResponse(status_code=409, content={"detail": "預演之後暫存的包被換過，預演結果不再適用：請重新預演"})
     try:
         root = _dl.configured_root()
     except _dl.DeliveryError as e:
@@ -1213,9 +1316,11 @@ def delivery_apply(body: DeliveryApplyBody):
     with _delivery_lock:
         if _delivery_state["running"]:
             return JSONResponse(status_code=409, content={"detail": "另一個套用正在執行"})
+        if _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "預演還在執行，請等它結束"})
         _delivery_state["running"] = True
         _delivery_state["last"] = None
-    threading.Thread(target=_delivery_run, args=(body.name, prep["staged"], prep["verified"], root), daemon=True).start()
+    threading.Thread(target=_delivery_run, args=(body.name, prep["staged"], prep["verified"], root, who, rh), daemon=True).start()
     return {"started": True, "by": who}
 
 

@@ -19,7 +19,7 @@ pytest.importorskip("playwright.sync_api")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_deploy_dashboard_delivery_2026_09_28 import (  # noqa: E402
-    COMMIT, D, PS1, _keys, dd, fake_run, make_install, make_package)
+    COMMIT, D, PS1, _keys, dd, fake_run, fresh_state, make_install, make_package, patch_auto_apply)
 
 
 @pytest.fixture()
@@ -36,7 +36,8 @@ def dashboard(tmp_path, monkeypatch, live_server):
     monkeypatch.setattr(D, "_run_powershell", fake_run(install))
     monkeypatch.setattr(dd, "DELIVERY_INSTALL_ROOT", install)
     monkeypatch.setattr(dd, "DELIVERY_STAGING_ROOT", tmp_path / "staging")
-    monkeypatch.setattr(dd, "_delivery_state", {"prepared": {}, "running": False, "last": None})
+    monkeypatch.setattr(dd, "_delivery_state", fresh_state())
+    patch_auto_apply(monkeypatch)
     monkeypatch.setenv("MOTRIX_DELIVERY_ERP_URL", live_server)
     name = D.publish(str(make_package(tmp_path, [{"module": "系統設定/儲存位置", "version": "2026-09-28a", "content": "新頁"}])),
                      str(root), priv, now=datetime(2026, 9, 28, 3, 0, 0))
