@@ -1,6 +1,6 @@
 # 標案雷達 更新紀錄
 
-## (next) — 2026-11-14（train/t86-int；整合者：h9 空值防護併入）
+## 1.5.17 — 2026-11-14（train/t86-int；整合者：h9 空值防護併入）
 - 前端（行為不變，只補空值防護）：標案雷達 `tender-radar.html` 的 `mapInfo.office` 在尚未載入時不再讀 null（pageerror）。（h9 `fix/home-widgets-null-t86-h9-r2`）
 
 ## 1.5.16 — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正）
