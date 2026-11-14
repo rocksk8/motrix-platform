@@ -91,7 +91,7 @@ window.CM_PARTS.push(() => ({
 
     gotoGate(g) {
       if (this.settleGateLinks(g)) {
-        window.location.href = 'settlement.html?no=' + encodeURIComponent(this.selected.quote_no)
+        window.location.href = 'settlement.html?no=' + encodeURIComponent(this.selected.quote_no) + '&from=case'
         return
       }
       const t = this._gateTab(g)

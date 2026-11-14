@@ -178,7 +178,7 @@ def test_close_entry_beside_health_gates_lists_gaps_and_settlement_goto_opens_se
     chip = page.locator("[data-testid=case-health] [data-health-gate='精算']")
     assert "▶" in chip.inner_text(), chip.inner_text()
     chip.click()
-    page.wait_for_url(f"**/settlement.html?no={NO}", timeout=10000)
+    page.wait_for_url(f"**/settlement.html?no={NO}&from=case", timeout=10000)
     assert _deal_tag() == "已成案"
 
 

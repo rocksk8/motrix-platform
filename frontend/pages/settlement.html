@@ -336,10 +336,11 @@
 <!-- ── 工具列 ── -->
 <div class="stl-toolbar">
   <div class="stl-toolbar__left">
-    <a :href="'quotation-form.html?no=' + quoteNo"
+    <a :href="fromCase ? 'case-management.html?q=' + encodeURIComponent(quoteNo) : 'quotation-form.html?no=' + quoteNo"
+       data-testid="stl-back"
        style="font-size:12px;color:var(--text-secondary);text-decoration:none;display:flex;align-items:center;gap:4px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
-      返回報價單
+      <span x-text="fromCase ? '返回案件' : '返回報價單'">返回報價單</span>
     </a>
     <span style="color:var(--border-light)">|</span>
     <span style="font-size:14px;font-weight:700;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="quoteNo"></span>
@@ -446,7 +447,7 @@
 
       <!-- ── (b) 需處理：每項可「前往」該列 ── -->
       <div class="stl-card" data-testid="stl-exceptions">
-        <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列；門檻集中在 STL_CONFIG</div></div>
+        <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列</div></div>
         <template x-if="!exceptionsList.length"><div style="padding:12px 20px;background:var(--success-light);color:var(--success);font-weight:700">✔ 沒有需處理的項目</div></template>
         <template x-for="(e, i) in exceptionsList" :key="i">
           <div class="stl-exc__it" :class="'is-' + e.lv" :data-testid="'stl-exc-' + e.key">
@@ -1249,6 +1250,7 @@ function settlementPage() {
   return {
     session: null,
     quoteNo: '',
+    fromCase: false,                      // T86 #27：從案件管理進來 ⇒ 返回連結回到該案件
     customerName: '',
     projectName:  '',
     loading: true,
@@ -1352,6 +1354,7 @@ function settlementPage() {
 
       const params = new URLSearchParams(location.search)
       this.quoteNo = params.get('no') || ''
+      this.fromCase = params.get('from') === 'case'
       try { this._dispatchNoteSeen = localStorage.getItem('stl_dispatch_basis_note_' + this.quoteNo) === '1' } catch (e) { /* 讀不到就當沒看過 */ }
       if (!this.quoteNo) {
         this.toastErr('未指定報價單號'); this.loading = false; return

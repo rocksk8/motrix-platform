@@ -675,7 +675,7 @@
               <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
                    精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
               <a class="cm-tab-link" x-show="canSeeFinancial()" :style="tTail()" data-testid="cm-tab-settlement"
-                 :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
+                 :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'">精算 ▶</a>
             </div>
 
             <!-- Tab content -->
@@ -2920,7 +2920,7 @@
                       <span x-show="closingReportDownloading">產生中…</span>
                     </button>
                   </template>
-                  <a :href="'settlement.html?no=' + (selected?.quote_no||'')"
+                  <a :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'"
                      :style="cr.dealTag==='已結案' ? '' : 'margin-left:auto'"
                      style="font-size:12px;padding:5px 12px;background:var(--tone-info-bg);color:var(--tone-info-fg);border:1px solid var(--tone-info-border);border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
                     前往精算頁面 ▶
