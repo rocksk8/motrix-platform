@@ -114,6 +114,17 @@
   <aside class="sidebar" id="app-sidebar"></aside>
 
   <main class="os-main">
+    <!-- 2026-11-14：非最高管理者不建立頁面本體。側欄的「沒有權限」畫面會在 Alpine 起來之後才把 <main> 換掉，
+         已排進佇列的 x-show／x-text／x-for 這時對著脫離文件的節點求值 ⇒ 一頁 19 個 pageerror（end/items/loadErr… is not defined）。
+         用 x-if 讓這些節點對非授權者根本不存在（isSuper 由 localStorage 的 session 決定，與 init() 同一個判斷）。 -->
+    <template x-if="!isSuper">
+      <div style="max-width:520px;margin:64px auto;text-align:center" data-testid="os-denied">
+        <div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.9">使用狀況僅限最高管理者檢視。</div>
+      </div>
+    </template>
+    <template x-if="isSuper">
+    <div data-testid="os-body">
     <div class="pg">
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
@@ -281,6 +292,8 @@
         這份資料只有最高管理者可檢視。
       </span>
     </div>
+    </div>
+    </template>
 </main>
 
   <script src="../static/notif.js"></script>
@@ -288,6 +301,7 @@
     function onlineStatsPage() {
       return {
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
+        get isSuper() { return (this.session.role || '') === 'superadmin' },
         online: { count: 0, users: [] },
         items: [],
         start: '',
@@ -300,13 +314,8 @@
         // 這一頁只有最高管理者能用；後端兩支端點也都是 superadmin 限定，
         // 前端這道只是讓非授權者看到的是說明而不是一片載入失敗。
         init() {
-          if ((this.session.role || '') !== 'superadmin') {
-            document.querySelector('.os-main').innerHTML =
-              '<div style="max-width:520px;margin:64px auto;text-align:center">'
-              + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>'
-              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">使用狀況僅限最高管理者檢視。</div></div>'
-            return
-          }
+          // 非最高管理者：不動 DOM（<main> 內的說明由 x-if 樣板負責）。在 init() 裡換掉 <main> 會讓 Alpine 還沒處理的子節點變成脫離文件的節點 ⇒ 一堆 pageerror。
+          if (!this.isSuper) return
           this.thisMonth()
           this.loadOnline()
           // 看不見的分頁不打（2026-11-13「外網載入效能」）；motrixVisiblePoll 由 sidebar.js 提供，沒有就退回原本的 60 秒

@@ -18,6 +18,9 @@
   - **U7 首頁**：開頁改用既有的 `GET /api/dashboard/bundle` 一趟取回儀表板六段（某段 null／整包失敗 ⇒ 該段退回原端點）；開頁第一趟簽核數吃 bootstrap（`approvalCount` 供應次數 2→3）；`GET /api/approval-queue/count`、`GET /api/dashboard/mine` 加 `ETag`／`304`（`Cache-Control: private, no-cache`，內容逐位相同才 304；`generatedAt` 不算內容）。新增 `helpers/http_etag.json_etag`。
 - 新路由 1 條（`_available`）：`route_inventory.json`／`response_keys_baseline.json` 已補。
 - 測試：`test_usage_u4_no_doomed_requests_*`、`test_usage_u5_case_denials_*`、`test_usage_u7_etag_*`、`test_google_quota_cache_t86_*`（新）；首頁三支 e2e 對齊（開頁走 bundle／bootstrap 後，原本攔單支端點的題目改成先讓 bundle／bootstrap 失敗再攔）；`test_case_module_spec` 補 `bootstrap.section/profitWarning`（h1b 漏補）。
+- **（併入）(next) — 2026-11-14（fix/online-stats-denied-no-pageerror-t86-h9；T86 使用狀況頁非最高管理者不再丟 pageerror）**
+- 前端（行為不變，只改畫面建立時機）：`pages/online-stats.html` 頁面本體包進 `<template x-if="isSuper">`，非最高管理者改由 `x-if="!isSuper"` 顯示「您沒有這個頁面的權限」；`init()` 對非授權者不再改寫 `<main>`（原本在 Alpine 處理子節點前換掉 DOM，已排隊的 x-show／x-text／x-for 對脫離文件的節點求值，一頁 19 個 `… is not defined`）。無 API、權限、欄位變更。
+- 測試：`test_e2e_online_stats_denied_no_pageerror_2026_11_14`（admin／user 看到說明且 0 pageerror；最高管理者頁面照常）。
 - **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏、催辦用語中性化、覆核補正、首頁空狀態統一）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
 - **（併入）(next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）**
