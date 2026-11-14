@@ -1165,3 +1165,16 @@ def test_admin_login_happens_after_enabling_loopback_internal_and_the_deviation_
     b = SRC[SRC.index("    def setup_admin_and_delivery_root"):SRC.index("    @property")]
     assert b.index("self.enable_loopback_internal()") < b.index("DMA.setup_company(") < b.index('"/api/auth/login"')
     assert any("loopback_is_internal" in x for x in AD.DEVIATIONS)
+
+
+def test_loopback_internal_code_really_publishes_in_a_real_backend_db(client, capsys):
+    """演練器用的那段程式要對真的後端驗證器過關（先前只有假 run_tool 的測試，沒抓到「缺欄位」被擋）。"""
+    from helpers import settings_registry as R
+    R.invalidate()
+    assert R.get("external_login", "loopback_is_internal") == 0
+    R.invalidate()                                        # 上一行的讀取會進快取（TTL 15 秒）；演練器是全新行程，沒有這個問題
+    exec(AD.LOOPBACK_INTERNAL_CODE, {})
+    assert "LOOPBACK_INTERNAL 1" in capsys.readouterr().out
+    R.invalidate()
+    assert R.get("external_login", "loopback_is_internal") == 1
+    assert R.get("external_login", "lock_threshold") is not None      # 其他欄位沒被洗掉

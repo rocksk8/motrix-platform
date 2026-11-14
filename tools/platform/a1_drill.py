@@ -96,6 +96,16 @@ PUBKEY_RE = re.compile(r"(DELIVERY_PUBKEY_PEM = \()(.*?)(\n\)|\n    \))", re.S)
 DASHBOARD_FILES = ("deploy_dashboard.py", "deploy_dashboard.html")
 
 
+# 演練庫專用（見 DEVIATIONS）。驗證器要整組的值（缺欄位會被擋）⇒ 先讀整組有效值、只改這一格再發布；要 import settings_groups 才有登錄。
+LOOPBACK_INTERNAL_CODE = (
+    "import db;from core import definitions as D;from helpers import settings_groups, settings_registry as SR;"
+    "c=db.get_db();v=SR.get_group('external_login',conn=c);v['loopback_is_internal']=1;"
+    "D.publish_direct(c,'setting_group','external_login','company',"
+    "{'group':'external_login','values':v},'a1 drill','a1-drill');c.close();"
+    "print('LOOPBACK_INTERNAL',SR.get('external_login','loopback_is_internal'))"
+)
+
+
 class DrillError(Exception):
     pass
 
@@ -686,10 +696,7 @@ class Drill:
     def enable_loopback_internal(self):
         """演練庫專用（見 DEVIATIONS）：用安裝的後端自己的 `core.definitions.publish_direct` 把 `external_login.loopback_is_internal` 寫成 1，
         再等設定快取（TTL 15 秒）過期。只動演練安裝裡的演練庫；經 guard.run_tool（乾淨環境）。"""
-        code = ("import db;from core import definitions as D;from helpers import settings_registry as SR;"
-                "c=db.get_db();D.publish_direct(c,'setting_group','external_login','company',"
-                "{'group':'external_login','values':{'loopback_is_internal':1}},'a1 drill','a1-drill');c.close();"
-                "print('LOOPBACK_INTERNAL',SR.get('external_login','loopback_is_internal'))")
+        code = LOOPBACK_INTERNAL_CODE
         rc, out = self.guard.run_tool([self.python, "-c", code], cwd=self.in_base(self.inst / "backend"), timeout=120)
         if rc != 0 or "LOOPBACK_INTERNAL 1" not in out:
             raise DrillError("演練庫設定「本機直連算內網」失敗（rc=%s）：%s" % (rc, out[-400:]))
