@@ -556,6 +556,9 @@ def _alive(pid):
 
 def test_killable_hard_rules():
     assert not PF.killable(4, "system") and not PF.killable(999, "python.exe") and not PF.killable(1500, "svchost.exe")
+    # 身分已證明（編排器自己記錄 pid＋建立時間的程序或其後代）的小 pid 可殺；但系統名稱與 pid<=4 永遠不殺、沒證明的小 pid 不殺
+    assert PF.killable(628, "cmd.exe", verified=True) and not PF.killable(628, "cmd.exe") and not PF.killable(628, "cmd.exe", verified=False)
+    assert not PF.killable(628, "svchost.exe", verified=True) and not PF.killable(4, "python.exe", verified=True) and not PF.killable(0, "x", verified=True)
     for n in ("System", "smss.exe", "csrss.exe", "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", "svchost.exe", "conhost.exe", "explorer.exe"):
         assert not PF.killable(5000, n), n
     assert PF.killable(5000, "python.exe") and PF.killable(1000, "cmd.exe")
@@ -616,12 +619,13 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
 import os  # noqa: E402
 
 
-def test_monitor_kill_only_owned_and_never_low_pids():
+def test_monitor_kill_only_owned_and_never_system_pids():
+    """擁有清單是權威（它已套硬性規則）：清單裡的小 pid（身分已證明，例如演練的 cmd.exe 是 pid 628）要殺；pid<=4 與不在清單的一律不殺。"""
     killed = []
-    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append, owned_fn=lambda: [1500, 4, 999])
+    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append, owned_fn=lambda: [1500, 4, 628])
     m._log = lambda rec: None
-    m._kill([0, 4, 5, 999, 1500, 7777])
-    assert killed == [[1500]], killed
+    m._kill([0, 4, 5, 628, 999, 1500, 7777])
+    assert killed == [[628, 1500]], killed
 
 
 def test_monitor_kill_without_owned_list_still_applies_hard_pid_rule():

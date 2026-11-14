@@ -445,15 +445,16 @@ $anc = New-Object 'System.Collections.Generic.HashSet[int]'
 $cur = $me; $guard = 0
 while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
 $own = New-Object 'System.Collections.Generic.HashSet[int]'
-foreach ($r in $recs) { $pr = $r.Split(':'); $id = [int]$pr[0]; if ($byId.ContainsKey($id) -and (Ticks $byId[$id]) -eq [long]$pr[1]) { [void]$own.Add($id) } }
+$ver = New-Object 'System.Collections.Generic.HashSet[int]'
+foreach ($r in $recs) { $pr = $r.Split(':'); $id = [int]$pr[0]; if ($byId.ContainsKey($id) -and (Ticks $byId[$id]) -eq [long]$pr[1]) { [void]$own.Add($id); [void]$ver.Add($id) } }
 $needleRe = '(?i)' + [regex]::Escape($needle) + '($|[\\\s"''/])'
 function ParentOk($p) { $pp = [int]$p.ParentProcessId; if (-not $byId.ContainsKey($pp)) { return $true }; return ((Ticks $byId[$pp]) -gt (Ticks $p)) }
-if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and [regex]::IsMatch([string]$p.CommandLine, $needleRe) -and (Ticks $p) -ge $start -and (ParentOk $p)) { [void]$own.Add([int]$p.ProcessId) } } }
-foreach ($a in $anc) { [void]$own.Remove([int]$a) }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and [regex]::IsMatch([string]$p.CommandLine, $needleRe) -and (Ticks $p) -ge $start -and (ParentOk $p) -and [int]$p.ProcessId -ge %(minpid)d) { [void]$own.Add([int]$p.ProcessId) } } }
+foreach ($a in $anc) { [void]$own.Remove([int]$a); [void]$ver.Remove([int]$a) }
 $grew = $true
-while ($grew) { $grew = $false; foreach ($p in $all) { $pp = [int]$p.ParentProcessId; if ($pp -ge %(minpid)d -and $own.Contains($pp) -and -not $own.Contains([int]$p.ProcessId) -and (Ticks $p) -ge (Ticks $byId[$pp])) { [void]$own.Add([int]$p.ProcessId); $grew = $true } } }
+while ($grew) { $grew = $false; foreach ($p in $all) { $pp = [int]$p.ProcessId; $par = [int]$p.ParentProcessId; if ($own.Contains($par) -and ($ver.Contains($par) -or $par -ge %(minpid)d) -and -not $own.Contains($pp) -and (Ticks $p) -ge (Ticks $byId[$par])) { [void]$own.Add($pp); if ($ver.Contains($par)) { [void]$ver.Add($pp) }; $grew = $true } } }
 $out = @()
-foreach ($id in $own) { if ($id -lt %(minpid)d -or $id -eq $me -or $id -eq [int]$PID -or $anc.Contains($id) -or -not $byId.ContainsKey($id)) { continue }; $n = ([string]$byId[$id].Name).ToLower(); if ($protNames -contains $n) { continue }; $out += @{ id = $id; name = $n; created = (Ticks $byId[$id]) } }
+foreach ($id in $own) { if (($id -lt %(minpid)d -and -not $ver.Contains($id)) -or $id -le 4 -or $id -eq $me -or $id -eq [int]$PID -or $anc.Contains($id) -or -not $byId.ContainsKey($id)) { continue }; $n = ([string]$byId[$id].Name).ToLower(); if ($protNames -contains $n) { continue }; $out += @{ id = $id; name = $n; created = (Ticks $byId[$id]); verified = [bool]$ver.Contains($id) } }
 ConvertTo-Json -Compress -Depth 4 @{ owned = @($out) }
 """
 
@@ -474,9 +475,12 @@ def now_ticks(slack_seconds=5):
     return int((time.time() - slack_seconds + 62135596800) * 10_000_000)
 
 
-def killable(pid, name=""):
-    """硬性規則：pid < 1000、名稱是系統／殼層程序 ⇒ 永遠不殺。"""
-    return int(pid) >= MIN_KILL_PID and str(name).lower() not in PROTECTED_NAMES
+def killable(pid, name="", verified=False):
+    """硬性規則：名稱是系統／殼層程序 ⇒ 永遠不殺；pid <= 4 永遠不殺；pid < 1000 不殺，**除非身分已被證明**（`verified`＝編排器自己啟動並記下 pid＋建立時間、
+    現在建立時間仍相符的程序，或它們的後代）。這台機器上一般程序也會拿到小 pid（2026-11-14 實測：演練的 cmd.exe 是 pid 628，整棵演練程序樹因此沒被收尾殺掉、留在演練埠上）。"""
+    if str(name).lower() in PROTECTED_NAMES or int(pid) <= 4:
+        return False
+    return int(pid) >= MIN_KILL_PID or bool(verified)
 
 
 def owned_processes(records, base, start_ticks, me=None):
@@ -494,8 +498,8 @@ def owned_processes(records, base, start_ticks, me=None):
     items = doc.get("owned") or []
     if isinstance(items, dict):
         items = [items]
-    return [{"id": int(i["id"]), "name": str(i["name"]), "created": int(i["created"])} for i in items
-            if killable(i["id"], i["name"]) and int(i["id"]) != (me or os.getpid())]
+    return [{"id": int(i["id"]), "name": str(i["name"]), "created": int(i["created"]), "verified": bool(i.get("verified"))} for i in items
+            if killable(i["id"], i["name"], bool(i.get("verified"))) and int(i["id"]) != (me or os.getpid())]
 
 
 # 連線清單用 `netstat -ano`：這台機器上 Get-NetTCPConnection 什麼都查不到（CIM MSFT_NetTCPConnection 是空的），
@@ -616,8 +620,10 @@ class ConnectionMonitor:
         （`taskkill /T` 殺祖先會連編排器一起殺掉）。被略過的記在紀錄裡；查不到擁有清單 ⇒ 什麼都不殺（已中止演練，由收尾處理）。"""
         protected = {os.getpid()} | set(self._ancestors)
         tree = [int(p) for p in tree]
-        skipped = sorted(p for p in tree if p in protected or p < MIN_KILL_PID)
-        keep = [p for p in tree if p not in protected and p >= MIN_KILL_PID]
+        # 有擁有清單時它就是權威（owned_processes 已套硬性規則，含「身分已證明的小 pid」例外）；沒有清單（測試）才用數字門檻
+        low = (lambda p: p <= 4) if self.owned_fn is not None else (lambda p: p < MIN_KILL_PID)
+        skipped = sorted(p for p in tree if p in protected or low(p))
+        keep = [p for p in tree if p not in protected and not low(p)]
         if self.owned_fn is not None:
             try:
                 owned = {int(p) for p in self.owned_fn()}
@@ -886,7 +892,7 @@ def stop_drill_processes(base, records, start_ticks, log=None, killer=None):
     殺之前逐一記 pid／名稱／建立時間。查詢失敗 ⇒ 丟例外、不殺任何程序。⇒ 被殺的 pid。"""
     owned = owned_processes(records, base, start_ticks)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    kill = sorted((o for o in owned if killable(o["id"], o["name"])), key=lambda o: -o["id"])
+    kill = sorted((o for o in owned if killable(o["id"], o["name"], o.get("verified"))), key=lambda o: -o["id"])
     for o in kill:
         if log:
             log("收尾殺程序 pid=%d name=%s created_ticks=%d" % (o["id"], o["name"], o["created"]))
