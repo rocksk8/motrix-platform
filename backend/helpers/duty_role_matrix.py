@@ -108,7 +108,7 @@ def _plan_role(role, req, known, members) -> dict:
             "version": role["version"] if role else 0, "adds": [], "removes": [], "after": [], "gated": [], "financeNote": [], "notes": [],
             "members": len(members), "memberNames": members[:_MEMBER_NAMES], "status": "skipped", "note": "", "_new": None}
     if role is None:
-        base["note"] = "找不到這個職責角色"
+        base["note"] = "找不到此職責角色。"
         return base
     old = list(role["permissions"])
     adds = [k for k in req["grant"] if k not in old]
@@ -116,7 +116,7 @@ def _plan_role(role, req, known, members) -> dict:
     new = [k for k in old if k not in removes] + adds
     legacy = sorted(k for k in new if k not in known)
     if legacy:                                          # 與 PUT 相同：新清單裡有已下架的鍵會被擋；先講清楚，不讓整批因為它失敗
-        base["note"] = "這個角色含已下架的權限鍵（%s），請先取消它們再調整其他項目" % "、".join(legacy)
+        base["note"] = "此角色含已下架的權限鍵（%s），請先取消這些權限鍵，再調整其他項目。" % "、".join(legacy)
         return base
     base.update({"adds": adds, "removes": removes, "after": new, "_new": new})
     base["gated"] = sorted((set(adds) | set(removes)) & set(dr.HIGH_SENSITIVITY_KEYS))
@@ -194,12 +194,12 @@ def apply(conn, actor, body, ip="") -> dict:
     from core.txn import begin_write
     req = parse_request(body)
     if not req["planHash"]:
-        raise dr.DutyError("套用要帶預覽的 planHash（請先預覽再套用）")
+        raise dr.DutyError("套用時必須帶有預覽的 planHash，請先預覽再套用。")
     begin_write(conn)
     try:
         plan = _plan(conn, req)
         if req["planHash"] != plan["planHash"]:
-            raise dr.DutyError("角色或權限在預覽之後有變動，請重新預覽再套用", 409)
+            raise dr.DutyError("角色或權限在預覽之後已有變動，請重新預覽再套用。", 409)
         _sens, reason = dr.gate_reason(plan["gatedKeys"], req["reason"])
         applied = _write_roles(conn, actor, plan, reason, ip)
     except Exception:
@@ -236,7 +236,7 @@ def undo(conn, actor, body, ip="") -> dict:
             adds, removes = by_role[rid]
             role = roles.get(rid)
             if role is None:
-                conflicts.append({"roleId": rid, "name": "", "reason": "找不到這個職責角色"})
+                conflicts.append({"roleId": rid, "name": "", "reason": "找不到此職責角色。"})
                 continue
             cur = set(role["permissions"])
             drift = ["「%s」已被改過" % k for k in adds if k not in cur] + ["「%s」已被改過" % k for k in removes if k in cur]

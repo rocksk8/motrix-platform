@@ -1,5 +1,5 @@
 {
- "core_version": "1.167",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -786,6 +786,14 @@
    "build": "def(doc_type, *, quote_no=…, doc_no=…, ext=…, user=…, conn=…, extra=…, inline=…)",
    "content_disposition": "def(name, inline=…)"
   },
+  "helper:duty_role_matrix": {
+   "MAX_ROLES": "const",
+   "UNDO_DEFAULT_REASON": "const",
+   "apply": "def(conn, actor, body, ip=…)",
+   "parse_request": "def(body)",
+   "preview": "def(conn, actor, body)",
+   "undo": "def(conn, actor, body, ip=…)"
+  },
   "helper:duty_roles": {
    "DutyError": "class",
    "DutyError.__init__": "def(self, message, status=…)",
@@ -808,7 +816,7 @@
    "set_subtract": "def(conn, actor, user_id, key, reason=…, ip=…)",
    "unbind_role": "def(conn, actor, user_id, role_id, reason=…, ip=…)",
    "unset_subtract": "def(conn, actor, user_id, key, reason=…, ip=…)",
-   "update_role": "def(conn, actor, role_id, *, name=…, description=…, permissions=…, active=…, reason=…, ip=…)",
+   "update_role": "def(conn, actor, role_id, *, name=…, description=…, permissions=…, active=…, reason=…, ip=…, commit=…)",
    "user_perm_change": "def(before_role, before_mods, after_role, after_mods)",
    "user_perm_gate": "def(before_role, before_mods, after_role, after_mods, reason)"
   },

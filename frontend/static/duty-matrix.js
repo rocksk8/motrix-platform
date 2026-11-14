@@ -126,7 +126,7 @@
         '<label style="display:block;margin:4px 0"><input type="radio" name="dm-mode" value="revoke" data-testid="dm-pick-revoke"> 取消下列角色</label>' +
         '<div style="margin-top:8px"><b>角色</b></div><div style="display:flex;flex-wrap:wrap;gap:6px 14px">' +
         state.roles.map(function (r) { return '<label><input type="checkbox" data-role="' + esc(rid(r.id)) + '" data-testid="dm-pick-role-' + esc(r.id) + '"> ' + esc(r.name) + (r.active ? '' : '（停用）') + '</label>' }).join('') + '</div>' +
-        '<div class="mx-mute" style="margin-top:8px">這裡只會加進草稿；按頂端的「儲存」才會預覽並寫入。</div>'
+        '<div class="mx-mute" style="margin-top:8px">此處僅加入草稿。按頂端「儲存」後，才會預覽並寫入。</div>'
       return SM.openDialog({
         title: '指定角色', html: html,
         buttons: [{ label: '取消', value: null }, { label: '加入草稿', value: 'ok', kind: 'primary' }],
@@ -140,11 +140,11 @@
       }).then(function (v) { return v === 'ok' && st.roles.length ? st : null })
     }
     var batchCfg = {
-      groupActions: [{ action: 'all', label: '全部角色都有' }, { action: 'none', label: '全部取消' }],
+      groupActions: [{ action: 'all', label: '授予全部角色' }, { action: 'none', label: '取消全部角色' }],
       groupActionsEnabled: true,                                        // 群組總開關：也只是草稿，儲存時才預覽、確認
       actions: [
-        { id: 'all', label: '全部角色都有', draft: function (keys) { stageEach(keys, function () { return allRoleIds() }); mx.clearSelection(); return null } },
-        { id: 'none', label: '全部取消', draft: function (keys) { stageEach(keys, function () { return [] }); mx.clearSelection(); return null } },
+        { id: 'all', label: '授予全部角色', draft: function (keys) { stageEach(keys, function () { return allRoleIds() }); mx.clearSelection(); return null } },
+        { id: 'none', label: '取消全部角色', draft: function (keys) { stageEach(keys, function () { return [] }); mx.clearSelection(); return null } },
         { id: 'some', label: '指定角色…', dividerBefore: true,
           draft: function (keys) {
             return pickRolesDialog(keys.length).then(function (p) {
@@ -185,14 +185,14 @@
       var s = plan.summary
       var html = '<div data-testid="dm-plan-summary">將調整 <b>' + s.changed + '</b> 個角色：多 <b>' + s.cellsAdded + '</b> 格、少 <b>' + s.cellsRemoved + '</b> 格' +
         (s.membersAffected ? '，影響 <b>' + s.membersAffected + '</b> 位成員（成員的實際權限會跟著變）' : '') + '。' +
-        (s.unchanged ? '另有 ' + s.unchanged + ' 個角色本來就是這樣（略過）。' : '') + '</div>'
+        (s.unchanged ? '另有 ' + s.unchanged + ' 個角色與目前設定相同，已略過。' : '') + '</div>'
       plan.roles.forEach(function (p) {
         html += '<div style="border-top:1px solid var(--border-light,#e5e7eb);padding:8px 0;font-size:13px" data-testid="dm-plan-role-' + esc(p.roleId) + '"><b>' + esc(p.name || ('#' + p.roleId)) + '</b>' +
           (p.status === 'change' ? ' <span class="mx-mute">（' + p.members + ' 位成員' + (p.memberNames.length ? '：' + esc(p.memberNames.join('、')) + (p.members > p.memberNames.length ? ' 等' : '') : '') + '）</span>' : '')
         if (p.status === 'skipped') html += '<div class="mx-mute">略過：' + esc(p.note) + '</div>'
-        if (p.status === 'nochange') html += '<div class="mx-mute">沒有需要變更的項目</div>'
-        if (p.adds.length) html += '<div style="color:#047857">多了：' + labelList(p.adds) + '</div>'
-        if (p.removes.length) html += '<div style="color:#B91C1C">少了：' + labelList(p.removes) + '</div>'
+        if (p.status === 'nochange') html += '<div class="mx-mute">沒有需要變更的項目。</div>'
+        if (p.adds.length) html += '<div style="color:#047857">新增權限：' + labelList(p.adds) + '</div>'
+        if (p.removes.length) html += '<div style="color:#B91C1C">移除權限：' + labelList(p.removes) + '</div>'
         p.notes.forEach(function (n) { html += '<div class="mx-mute">' + esc(n) + '</div>' })
         html += '</div>'
       })
@@ -201,9 +201,9 @@
     // 確認視窗自己開（要收「變更原因」；核心的確認視窗沒有輸入框）：取消 ⇒ 靜默放棄（回 null）；確認 ⇒ 回 []（不再接其他視窗），原因記在 lastReason
     function confirmSave(list) {
       var changes = requestOf(list)
-      if (!changes.length) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+      if (!changes.length) throw new Error('這些修改與目前的設定相同，無需儲存。')
       return call('POST', '/api/duty-roles/matrix/preview', { changes: changes }).then(function (plan) {
-        if (!plan.summary.changed) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        if (!plan.summary.changed) throw new Error('這些修改與目前的設定相同，無需儲存。')
         lastPlan = plan
         var html = planHtml(plan)
         if (plan.needsReason) {
@@ -225,7 +225,7 @@
       })
     }
     function save(list) {
-      if (!lastPlan) return Promise.reject(new Error('請先預覽再儲存'))
+      if (!lastPlan) return Promise.reject(new Error('請先預覽再儲存。'))
       return call('POST', '/api/duty-roles/matrix/apply', { changes: requestOf(list), reason: lastReason, planHash: lastPlan.planHash }).then(function (res) {
         lastReason = ''
         return { res: res, message: '已儲存（' + res.applied.length + ' 個角色有變動）' }
@@ -233,13 +233,13 @@
     }
     function undoLast(done) {
       var r = done && done.res
-      if (!r || !r.roles) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原'))
+      if (!r || !r.roles) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原。'))
       var changes = r.roles.filter(function (p) { return p.status === 'change' }).map(function (p) { return { roleId: p.roleId, adds: p.adds, removes: p.removes } })
       return call('POST', '/api/duty-roles/matrix/undo', { changes: changes, reason: '' }).then(function (u) {
         if (u.conflicts && u.conflicts.length) {
           var why = u.conflicts.map(function (c) { return (c.name || ('#' + c.roleId)) + '：' + c.reason }).join('；')
-          if (!u.applied.length) throw new Error('無法復原：' + why + '（為了不覆蓋其他使用者的修改，這些角色沒有動）')
-          mx.toast('已復原 ' + u.applied.length + ' 個角色；未復原：' + why)
+          if (!u.applied.length) throw new Error('無法復原：' + why + '（為避免覆蓋其他使用者的修改，這些角色未做任何變更。）')
+          mx.toast('已復原 ' + u.applied.length + ' 個角色；未復原的角色：' + why + '。')
         }
         return u
       })
@@ -275,7 +275,7 @@
           groupSummary: function (g, all) { return '共 ' + all.length + ' 項・有角色持有 ' + all.filter(function (r) { return (r.roles || []).length }).length + ' 項' },
           columns: columns, filters: filters, batch: batchCfg,
           reload: function () { return load() },
-          onError: function (e) { if (opts.onError) opts.onError(e) },
+          onError: function (e) { if (mx) mx.toast((e && e.message) || '操作失敗', { error: true }); if (opts.onError) opts.onError(e) },     // 核心有 onError 就不再自己吐司：這裡補上，使用者才看得到原因／衝突說明
         })
         return api()
       })

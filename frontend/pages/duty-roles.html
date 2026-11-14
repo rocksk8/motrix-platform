@@ -91,7 +91,7 @@
     <!-- 角色 -->
     <section x-show="tab === 'roles'">
       <!-- 職責 × 權限矩陣（T86；static/duty-matrix.js）：欄＝角色、列＝權限（依群組）；點格子／欄頭／群組列／勾列批次都只是草稿，儲存時先預覽→確認→套用，可復原這一批 -->
-      <div class="dr-sub" style="max-width:1200px;margin-top:14px">權限矩陣：點格子授予或取消；欄頭＝整欄一次勾；群組列＝群組總開關；框起的「高敏感」權限變更要填原因。修改先放進草稿，按頂端「儲存」才會預覽並寫入。</div>
+      <div class="dr-sub" style="max-width:1200px;margin-top:14px">權限矩陣：按一下格子即可授予或取消；欄頭可整欄一次勾選；群組列為群組總開關；標示「高敏感」的權限，變更時必須填寫原因。修改會先放入草稿，按頂端「儲存」後才會預覽並寫入。</div>
       <div id="dm-box" style="max-width:1200px;margin-top:8px" data-testid="dm-box"></div>
       <div class="dr-sub" style="max-width:1200px;margin-top:18px;font-weight:600">角色管理（名稱、說明、啟用／停用）</div>
       <div class="dr-card">
@@ -122,8 +122,8 @@
               <label x-show="form.id"><input type="checkbox" x-model="form.active"> 啟用</label>
             </div>
             <div style="margin-top:8px"><label>說明 <input class="dr-in" style="width:420px" x-model="form.description"></label></div>
-            <div class="dr-sub" style="margin-top:10px" x-show="!form.id">新角色建立後沒有任何權限；請在上方權限矩陣勾選它那一欄，再按「儲存」。</div>
-            <div class="dr-sub" style="margin-top:10px" x-show="form.id">這個角色的權限請在上方權限矩陣調整；這裡只改名稱、說明與啟用狀態。</div>
+            <div class="dr-sub" style="margin-top:10px" x-show="!form.id">新角色建立後尚無任何權限。請在上方權限矩陣勾選該角色的欄位，再按「儲存」。</div>
+            <div class="dr-sub" style="margin-top:10px" x-show="form.id">此角色的權限請在上方權限矩陣調整，此處僅修改名稱、說明與啟用狀態。</div>
             <div style="margin-top:10px"><label>變更原因 <span x-show="formSensitive()" style="color:var(--danger)">*（高敏感必填）</span>
               <input class="dr-in" style="width:420px" x-model="form.reason" data-testid="dr-reason"></label></div>
             <div style="margin-top:12px;display:flex;gap:8px">
