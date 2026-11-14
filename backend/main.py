@@ -842,6 +842,9 @@ async def auth_middleware(request: Request, call_next):
             "detail": _company_setup.MSG_REQUIRED, "code": _company_setup.CODE_REQUIRED,
             "canFix": row["role"] == "superadmin", "settingsUrl": _company_setup.SETTINGS_URL})
     response = await call_next(request)
+    _fail_reason = response.headers.get("x-fail-reason")      # T86 U1：端點帶的失敗原因碼（固定詞彙；不認得的碼由 _audit_failure 退回依狀態碼的預設）
+    if _fail_reason:
+        request.state.audit_reason = _fail_reason
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
     await run_in_threadpool(_after_response_records, request, row, now_dt, path, response.status_code)       # 一次 hop：軌跡＋失敗稽核

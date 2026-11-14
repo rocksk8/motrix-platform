@@ -102,6 +102,13 @@ from pdf_gen import (
 )
 
 router = APIRouter()
+
+
+def _FAIL_HDR(code: str) -> dict:
+    """失敗原因碼（固定詞彙，見 helpers.audit._FAIL_REASON_LABELS）：放在回應標頭 X-Fail-Reason，main.py 的失敗稽核據此記 reason_code，
+    前端也用它顯示「怎麼處理」。不改回應本文、不含個資。"""
+    return {"X-Fail-Reason": code}
+
 from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 from helpers.field_policy import mask_flags as _mask_flags, tier_allowed as _tier_allowed   # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生（出口保留自己的 money 短路）
 from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：案件批次匯出的欄位目錄）
@@ -2523,7 +2530,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if not quote_money_visible(user):
         # CM13 D1（2026-09-24 使用者裁示）：看不到金額就不能編報價——這支整份取代 data_json，
         # 報價品項沒有穩定 id，無法可靠地把被遮蔽的單價與成本補回去。
-        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
+        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單", headers=_FAIL_HDR("finance_view"))
     q   = body.data
     now = datetime.now().isoformat()
 
@@ -2562,7 +2569,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if is_unlock_edit:
         editor = _require_user(authorization)
         if editor["role"] != "superadmin":
-            raise HTTPException(403, "解鎖編輯需要最高管理者權限")
+            raise HTTPException(403, "解鎖編輯需要最高管理者權限", headers=_FAIL_HDR("unlock_superadmin"))
         # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
         try:
             _old_dj = json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}
@@ -2734,10 +2741,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                                                           keep_orders=_fl["keep_orders"])
                 except PaymentStructureChange:
                     conn.close()
-                    raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
+                    raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別", headers=_FAIL_HDR("finance_view"))
         if existing["status"] == "已拒絕":
             conn.close()
-            raise HTTPException(403, "已駁回結案的報價單不可修改")
+            raise HTTPException(403, "已駁回結案的報價單不可修改", headers=_FAIL_HDR("rejected_locked"))
         try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
             _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
@@ -2773,7 +2780,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
         if existing["status"] in _LOCKED and not is_unlock_edit:
             conn.close()
-            raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
+            raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改", headers=_FAIL_HDR("status_locked"))
         # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
         # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
         # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
