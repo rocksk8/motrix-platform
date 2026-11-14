@@ -354,7 +354,7 @@
       if (r.superadmins.length) who.push(r.superadmins.join('、') + '（最高管理者）')
       if (o.length) who.push(o.slice(0, 5).map(function (x) { return x.display }).join('、') + (o.length > 5 ? ' 等 ' + o.length + ' 人' : ''))
       var t = who.length ? '儲存後會通知：' + who.join('，以及 ') : '儲存後不會另外通知其他人（您自己不會收到自己操作的通知）'
-      if (o.length && r.redactedForOthers) t += '。一般同仁只會看到「設定已變更、由誰操作」，看不到數值與原因'
+      if (o.length && r.redactedForOthers) t += '。一般同仁僅會顯示「設定已變更、由誰操作」，不顯示數值與原因'
       if (r.line && r.line.willSend) t += '；並發 LINE 給最高管理者'
       if ((r.ignoredRoles || []).length) t += '。另有「' + r.ignoredRoles.join('、') + '」不在自動通知對象內，請自行告知'
       return t

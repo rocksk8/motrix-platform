@@ -95,7 +95,7 @@ def register(S, _register_core):
         "quote_output", "報價單輸出",
         [
             S("hidden_terms_pdf_mode", "int", 0, min=0, max=1, risk="legal", loosen="up", recommended=0,
-              risk_text="【高影響】選「不印」後，被管理者隱藏的報價條件（付款、交貨、驗收、保固、售後）不會印在報價單 PDF 上，客戶看不到這些條件，之後可能因為條件沒寫而起爭議。",
+              risk_text="【高影響】選「不印」後，被管理者隱藏的報價條件（付款、交貨、驗收、保固、售後）不會印在報價單 PDF 上，客戶無法檢視這些條件，之後可能因為條件沒寫而起爭議。",
               impact_scope={"documents": ["報價單 PDF", "報價單預覽"], "roles": ["業務", "客戶"], "amounts": "不改任何金額；只決定被隱藏的報價條件文字是否會印在客戶版文件上。", "reversible": True, "effective": "pending"},
               question="報價單上被隱藏的報價條件欄位，PDF 是否仍照常列印？", label="隱藏的報價條件是否印在 PDF",
               help="管理者可以在表單上隱藏某個報價條件欄位。預設照印：隱藏只是不顯示輸入框，已存的條件（含範本預設文字）仍印在 PDF。改成不印後，被隱藏的欄位不會印出。",

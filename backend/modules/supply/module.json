@@ -138,11 +138,11 @@
   "capabilities": [
     {"key": "supply.supplier.view", "label": "查看供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
      "desc": "可以打開供應商清單與單一供應商（含聯絡人、統一編號與付款條件），以及聯絡人的個資告知紀錄。",
-     "impact": "勾選後，這個角色（或這個人）可以看到所有供應商的資料與聯絡人；原本沒有「客戶／採購／庫存」功能勾選的人也會看得到。",
+     "impact": "勾選後，這個角色（或這個人）可以檢視所有供應商的資料與聯絡人；原本沒有「客戶／採購／庫存」功能勾選的人也可檢視。",
      "question": "{who}可以查看供應商嗎？"},
     {"key": "supply.supplier.create", "label": "新增供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
      "desc": "可以建立新的供應商資料。",
-     "impact": "勾選後，可以新增供應商與聯絡人；新增的資料全公司有權查看的人都看得到。",
+     "impact": "勾選後，可以新增供應商與聯絡人；新增的資料全公司有權查看的人都可檢視。",
      "question": "{who}可以新增供應商嗎？"},
     {"key": "supply.supplier.edit", "label": "修改供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
      "desc": "可以修改供應商資料、更新拜訪紀錄，以及登記聯絡人已收到個資告知。",

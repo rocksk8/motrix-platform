@@ -29,7 +29,7 @@
   "capabilities": [
     {"key": "payroll.payslip.view", "label": "查看勞報單", "legacy": {"module": "payslip"},
      "desc": "可以打開勞報單清單與單張勞報單，並查詢稅率規則、派工連結與「選派發」下拉清單。",
-     "impact": "勾選後，這個角色（或這個人）可以看到勞報單的內容與金額；原本沒有「勞報單」功能勾選的人也會看得到。",
+     "impact": "勾選後，這個角色（或這個人）可以檢視勞報單的內容與金額；原本沒有「勞報單」功能勾選的人也可檢視。",
      "question": "{who}可以查看勞報單嗎？"},
     {"key": "payroll.payslip.create", "label": "新增勞報單", "legacy": {"module": "payslip"},
      "desc": "可以建立新的勞報單草稿並取得單號。",

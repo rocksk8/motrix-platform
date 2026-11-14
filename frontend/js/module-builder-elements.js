@@ -103,7 +103,7 @@
       visHas(scope, kind, v, which) { return this.visOf(scope, which)[kind].indexOf(v) >= 0 },
       visSummary(scope, which) {
         var v = this.visOf(scope, which)
-        if (!v.roles.length && !v.users.length) return which === 'editableTo' ? '看得到的人都改得到' : '所有人（有這個模組權限的都看得到）'
+        if (!v.roles.length && !v.users.length) return which === 'editableTo' ? '可檢視的人都改得到' : '所有人（有這個模組權限的都可檢視）'
         var self = this
         return '限：' + v.roles.map(function (r) { return self.roleLabel(r) }).concat(v.users.map(function (u) { return self.userLabel(u) })).join('、')
       },

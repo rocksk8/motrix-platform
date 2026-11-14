@@ -415,7 +415,7 @@ def test_timeline_stock_cell_shows_received_counts_when_flag_on(client, make_use
         off = MF._stock(conn, "MQ-P2A-030", None)
     finally:
         conn.close()
-    assert off["summary"].startswith("目前沒有這個案件的序號")                                    # 關＝與今天相同的文字
+    assert off["summary"].startswith("尚無這個案件的序號")                                    # 關＝與今天相同的文字
 
 
 # ── 審查補強（h9）：直送防重複、材料申請歸屬、對帳表分頁與 since、刪除事件 ────────────────

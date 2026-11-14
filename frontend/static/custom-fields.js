@@ -318,7 +318,7 @@
           this.busy = false
           return
         }
-        if (!(await this._ask('發布後，所有內部人員在這個畫面就會看到這些欄位。確定要發布嗎？'))) { this.busy = false; return }
+        if (!(await this._ask('發布後，所有內部人員在這個畫面就會顯示這些欄位。確定要發布嗎？'))) { this.busy = false; return }
         // T62：治理旗標開時，看過的影響預覽雜湊 preview_hash 隨發布送出（管理者開啟強制時沒帶會被擋）；旗標關／未載入 ⇒ 請求本體只有 note，與先前相同
         var pubBody = { note: this.note }
         if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('custom_fields')) {

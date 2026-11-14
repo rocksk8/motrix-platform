@@ -189,7 +189,7 @@
     if (st.who.trim()) body.user = st.who.trim()
     return api('POST', '/api/platform/menu/preview', body).then(function (d) {
       st.preview = d; st.previewKey = key; st.busy = false
-      st.msg = d.skipped && d.skipped.length ? '有 ' + d.skipped.length + ' 項操作對這位使用者不適用（沒有權限或看不到目的群組），已略過。' : '預覽完成。'
+      st.msg = d.skipped && d.skipped.length ? '有 ' + d.skipped.length + ' 項操作對這位使用者不適用（沒有權限或無法檢視目的群組），已略過。' : '預覽完成。'
       render()
     }).catch(function (e) { st.busy = false; st.msg = '預覽失敗：' + e.message; st.msgBad = true; render() })
   }
@@ -250,8 +250,8 @@
     chain.then(function () {
       st.busy = false; st.msgBad = false
       var text = pend.length ? pendingText(pend, done)
-        : sc === 'company' ? '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'
-          : '已發布（' + done + ' 個模組的版面）到' + where + '的角色層。該角色的使用者重新整理頁面後即可看到；其他角色不受影響。'
+        : sc === 'company' ? '已發布（' + done + ' 個模組的版面）。重新整理頁面即可顯示新的側欄。'
+          : '已發布（' + done + ' 個模組的版面）到' + where + '的角色層。該角色的使用者重新整理頁面後即會顯示；其他角色不受影響。'
       if (pend.length) { st.msg = text; st.state = 'pending'; render(); return }           // 待核准：選單沒有變，不重讀、不說已發布
       st.state = 'published'
       return load().then(function () { st.msg = text; st.state = 'published'; render() })
@@ -374,7 +374,7 @@
     } else {
       var layered = st.roles.filter(function (r) { return st.roleLayers[r.key] }).map(function (r) { return r.label })
       note = '公司預設會套用給所有沒有自己角色層的角色。'
-        + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會看到這裡的調整；請至該角色的範圍修改。' : '')
+        + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會套用這裡的調整；請至該角色的範圍修改。' : '')
     }
     box.appendChild(el('div', { class: 'me-scope-note', text: note }))
     var wp = willPublish()                                                  // 隨編輯即時更新：按發布會寫入哪些模組

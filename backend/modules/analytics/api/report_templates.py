@@ -172,7 +172,7 @@ def _collection(items: list) -> dict:
 def _case_notes(cases: list, undated: int, rate_scope: str) -> list:
     notes = ["日期條件依「報價日」。業務欄為案件管理的「業務負責」（未填寫時為開單者），與營運報表的業務員績效同一歸屬。"]
     if undated:
-        notes.append(f"有 {undated} 件案件沒有報價日，因為有日期條件所以未列入；不設日期條件即可看到。")
+        notes.append(f"有 {undated} 件案件沒有報價日，因為有日期條件所以未列入；不設日期條件即會列入。")
     no_pay = sum(1 for c in cases if not c["hasPaymentItems"])
     notes.append(rate_scope)
     if no_pay:
@@ -244,7 +244,7 @@ def _run_payments(p: dict, u: dict):
     ]
     notes = ["日期條件：已收款項依「實收日」，未收款項依「預計收款日」。"]
     if undated:
-        notes.append(f"有 {undated} 筆款項未填寫對應日期（已收但未填實收日，或未收且未填預計收款日），因為有日期條件所以未列入；不設日期條件即可看到。")
+        notes.append(f"有 {undated} 筆款項未填寫對應日期（已收但未填實收日，或未收且未填預計收款日），因為有日期條件所以未列入；不設日期條件即會列入。")
     return rows, summary, notes
 
 

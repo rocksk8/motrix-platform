@@ -1548,7 +1548,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
                 bad.append("%s（沒有業務開發模組權限）" % name)
             elif not row_access.visible("dev_case", {"id": u["id"], "role": u["role"], "modules": u["modules"],
                                                      "username": u["username"], "display_name": u["display_name"]}, case_row):
-                bad.append("%s（看不到此案件）" % name)
+                bad.append("%s（無法檢視此案件）" % name)
         if bad:
             raise HTTPException(400, "以下對象無法指定：" + "、".join(bad))
         now = _TW_NOW()

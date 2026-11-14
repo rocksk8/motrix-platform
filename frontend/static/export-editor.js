@@ -260,7 +260,7 @@
       el('input', { type: 'text', placeholder: '帳號（空白＝我自己）', value: st.user, style: 'font-size:12px', oninput: function (ev) { st.user = ev.target.value; st.preview = null; st.state = 'idle' } }),
       el('select', { onchange: function (ev) { st.sample = ev.target.value; st.preview = null; st.state = 'idle' } }, [
         el('option', { value: 'sample', text: '樣本資料', selected: st.sample === 'sample' ? 'selected' : null }),
-        el('option', { value: 'visible', text: '這個帳號看得到的真實資料', selected: st.sample === 'visible' ? 'selected' : null })
+        el('option', { value: 'visible', text: '這個帳號可檢視的真實資料', selected: st.sample === 'visible' ? 'selected' : null })
       ]),
       el('button', { type: 'button', class: 'btn btn-sm', text: '預覽', disabled: st.busy ? 'disabled' : null, onclick: doPreview })
     ]))

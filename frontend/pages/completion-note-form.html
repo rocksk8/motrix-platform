@@ -788,7 +788,7 @@
       },
 
       async previewPdf() {
-        if (this.dirty && !confirm('有未儲存的變更，預覽看到的會是已儲存的版本。仍要預覽？')) return
+        if (this.dirty && !confirm('有未儲存的變更，預覽顯示的會是已儲存的版本。仍要預覽？')) return
         this.busy = true
         try {
           const r = await fetch(`/api/completion-notes/${this.noteNo}/pdf-download`, { headers: this._auth() })
