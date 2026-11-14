@@ -35,6 +35,15 @@
     .ms-reason { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
     .ms-mnote { color: #92400E; font-size: 12px; margin-top: 4px; font-weight: 700; }
     .ms-note--warn { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
+    .ms-bar { max-width: 960px; margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+    .ms-bar input[type=search] { padding: 6px 10px; border: 1px solid var(--border-light); border-radius: 8px; min-width: 200px; }
+    .ms-chip { padding: 4px 12px; border: 1px solid var(--border-light); border-radius: 14px; background: #fff; cursor: pointer; font-size: 12px; }
+    .ms-chip--on { background: var(--primary, #2563EB); color: #fff; border-color: transparent; }
+    .ms-draft { max-width: 960px; margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: #EFF6FF; border: 1px solid #93C5FD; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+    .ms-diff { color: #1D4ED8; font-weight: 700; font-size: 12px; margin-left: 6px; }
+    .ms-preview { max-width: 960px; margin-top: 12px; padding: 12px 16px; border-radius: 8px; background: #fff; border: 2px solid #F59E0B; font-size: 13px; line-height: 1.7; }
+    .ms-preview li { margin: 2px 0; }
+    .ms-check { width: 18px; height: 18px; cursor: pointer; vertical-align: middle; }
     .ms-msg { max-width: 960px; margin-top: 12px; font-size: 13px; }
     .ms-msg--err { color: var(--danger); }
     /* 手機／直立平板：5 欄表格改成一模組一張卡（狀態欄原本被擠成一字一行）；停用／啟用鈕放大到好點 */
@@ -90,12 +99,52 @@
 
     <div class="ms-msg" :class="{ 'ms-msg--err': isError }" x-show="msg" x-text="msg" data-testid="ms-msg"></div>
 
+    <div class="ms-bar" data-testid="ms-filter-bar">
+      <input type="search" x-model="q" placeholder="搜尋模組名稱或代碼" data-testid="ms-search" aria-label="搜尋模組">
+      <template x-for="f in filters" :key="f.id">
+        <button type="button" class="ms-chip" :class="{ 'ms-chip--on': filter === f.id }" @click="filter = f.id"
+                :data-testid="'ms-filter-' + f.id" x-text="f.label + '（' + countOf(f.id) + '）'"></button>
+      </template>
+      <span style="flex:1"></span>
+      <button type="button" class="btn" :disabled="busy || !visibleToggleable.length" @click="setAll(true)" data-testid="ms-all-on">列出的全部設為啟用</button>
+      <button type="button" class="btn" :disabled="busy || !visibleToggleable.length" @click="setAll(false)" data-testid="ms-all-off">列出的全部設為停用</button>
+    </div>
+
+    <div class="ms-draft" x-show="dirtyKeys.length" data-testid="ms-draft-bar">
+      <b>有 <span x-text="dirtyKeys.length" data-testid="ms-dirty-count"></span> 項變更尚未套用</b>
+      <button type="button" class="btn btn-primary" :disabled="busy" @click="openPreview()" data-testid="ms-preview-btn">預覽這批變更</button>
+      <button type="button" class="btn" :disabled="busy" @click="discard()" data-testid="ms-discard">放棄這批</button>
+    </div>
+
+    <div class="ms-preview" x-show="previewing" data-testid="ms-preview">
+      <b>確認這批變更（共 <span x-text="dirtyKeys.length"></span> 項）</b>
+      <ul>
+        <template x-for="m in dirtyModules" :key="m.key">
+          <li :data-testid="'ms-preview-' + m.key">
+            <b x-text="draft[m.key] ? '啟用' : '停用'"></b>「<span x-text="m.name"></span>」：
+            <span x-text="draft[m.key]
+              ? '下次重新啟動後，它的畫面入口、功能與排程會恢復。'
+              : ('下次重新啟動後，它的畫面入口（' + ((m.pages || []).length) + ' 個）與功能會消失、排程不再執行；資料保留。')"></span>
+          </li>
+        </template>
+      </ul>
+      <div style="margin-top:8px; display:flex; gap:8px">
+        <button type="button" class="btn btn-primary" :disabled="busy" @click="apply()" data-testid="ms-apply">確定套用</button>
+        <button type="button" class="btn" :disabled="busy" @click="previewing = false" data-testid="ms-preview-cancel">先不要</button>
+      </div>
+    </div>
+
+    <div class="ms-draft" x-show="lastBatch.length" data-testid="ms-undo-bar" style="background:#F0FDF4;border-color:#86EFAC">
+      <span>剛套用了 <b x-text="lastBatch.length"></b> 項變更。</span>
+      <button type="button" class="btn" :disabled="busy" @click="undoLast()" data-testid="ms-undo">復原這一批</button>
+    </div>
+
     <table class="ms-table" data-testid="ms-table">
       <thead>
-        <tr><th>模組</th><th>版本</th><th>目前狀態</th><th>重啟後</th><th></th></tr>
+        <tr><th>模組</th><th>版本</th><th>目前狀態</th><th>重啟後</th><th>重啟後要啟用</th></tr>
       </thead>
       <tbody>
-        <template x-for="m in modules" :key="m.key">
+        <template x-for="m in shown" :key="m.key">
           <tr :data-testid="'ms-row-' + m.key">
             <td><div x-text="m.name"></div><div class="ms-reason" x-text="m.key"></div></td>
             <td x-text="m.version"></td>
@@ -111,9 +160,11 @@
             </td>
             <td>
               <template x-if="m.canToggle">
-                <button class="btn" :disabled="busy" @click="toggle(m)"
-                        :data-testid="'ms-toggle-' + m.key"
-                        x-text="m.afterRestart === 'loaded' ? '停用' : '啟用'"></button>
+                <label>
+                  <input type="checkbox" class="ms-check" :checked="want(m)" :disabled="busy" @change="setWant(m, $event.target.checked)"
+                         :data-testid="'ms-toggle-' + m.key" :aria-label="'重啟後要啟用 ' + m.name">
+                  <span class="ms-diff" x-show="isDirty(m)" x-text="want(m) ? '改成：啟用' : '改成：停用'" :data-testid="'ms-diff-' + m.key"></span>
+                </label>
               </template>
               <template x-if="!m.canToggle">
                 <span class="ms-reason">無法以管理者開關處理</span>
@@ -122,6 +173,7 @@
           </tr>
         </template>
         <tr x-show="loaded && modules.length === 0"><td colspan="5" class="ms-reason">這個安裝包裡沒有可選配的模組。</td></tr>
+        <tr x-show="loaded && modules.length > 0 && shown.length === 0"><td colspan="5" class="ms-reason">沒有符合的模組。</td></tr>
       </tbody>
     </table>
   </main>
@@ -136,6 +188,12 @@
         startedAt: '',
         loaded: false,
         busy: false,
+        q: '',
+        filter: 'all',
+        filters: [{ id: 'all', label: '全部' }, { id: 'pending', label: '待重啟' }, { id: 'disabled', label: '已停用' }, { id: 'locked', label: '無法切換' }],
+        draft: {},            // key -> 重啟後想要啟用(true)／停用(false)；只放跟現況不同的
+        previewing: false,
+        lastBatch: [],        // 剛套用的這一批：[{key, name, was, now}]，供「復原這一批」
         msg: '',
         isError: false,
         // Alpine 3 會自己呼叫 init()，body 上的 x-init 又呼叫一次 ⇒ 用旗標擋第二次
@@ -149,6 +207,9 @@
         async init() {
           if (this._initDone) return
           this._initDone = true
+          window.addEventListener('beforeunload', (e) => {
+            if (this.dirtyKeys.length) { e.preventDefault(); e.returnValue = '' }
+          })
           await this.reload()
         },
 
@@ -169,19 +230,79 @@
           this.loaded = true
         },
 
-        async toggle(m) {
-          const enable = m.afterRestart !== 'loaded'
+        orig(m) { return m.afterRestart === 'loaded' },
+        want(m) { return Object.prototype.hasOwnProperty.call(this.draft, m.key) ? this.draft[m.key] : this.orig(m) },
+        isDirty(m) { return Object.prototype.hasOwnProperty.call(this.draft, m.key) },
+        setWant(m, v) {
+          this.previewing = false
+          const d = { ...this.draft }
+          if (v === this.orig(m)) delete d[m.key]; else d[m.key] = v
+          this.draft = d
+        },
+        setAll(v) { this.visibleToggleable.forEach(m => this.setWant(m, v)) },
+        get dirtyKeys() { return Object.keys(this.draft) },
+        get dirtyModules() { return this.modules.filter(m => this.isDirty(m)) },
+        get visibleToggleable() { return this.shown.filter(m => m.canToggle) },
+        _match(m, f) {
+          if (f === 'pending') return !!m.pendingRestart
+          if (f === 'disabled') return m.afterRestart !== 'loaded'
+          if (f === 'locked') return !m.canToggle
+          return true
+        },
+        countOf(f) { return this.modules.filter(m => this._match(m, f)).length },
+        get shown() {
+          const q = this.q.trim().toLowerCase()
+          return this.modules.filter(m => this._match(m, this.filter) &&
+            (!q || (m.name + ' ' + m.key).toLowerCase().includes(q)))
+        },
+        openPreview() { if (this.dirtyKeys.length) this.previewing = true },
+        discard() { this.draft = {}; this.previewing = false },
+
+        async _put(key, enabled) {
+          const r = await fetch('/api/system/modules/' + encodeURIComponent(key), {
+            method: 'PUT',
+            headers: { ...this._auth(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+          })
+          const d = await r.json().catch(() => ({}))
+          return { ok: r.ok, status: r.status, d }
+        },
+
+        async apply() {
+          const items = this.dirtyModules.map(m => ({ key: m.key, name: m.name, was: this.orig(m), now: this.draft[m.key] }))
+          if (!items.length) return
           this.busy = true; this.msg = ''; this.isError = false
+          const done = [], failed = []
           try {
-            const r = await fetch('/api/system/modules/' + encodeURIComponent(m.key), {
-              method: 'PUT',
-              headers: { ...this._auth(), 'Content-Type': 'application/json' },
-              body: JSON.stringify({ enabled: enable }),
-            })
-            const d = await r.json().catch(() => ({}))
-            if (!r.ok) { this.isError = true; this.msg = d.detail || ('操作失敗（' + r.status + '）'); return }
-            this.msg = '已' + (enable ? '啟用' : '停用') + '「' + m.name + '」，' +
-                       (d.restartRequired ? '重新啟動服務後生效。' : '與目前狀態相同，不需要重新啟動。')
+            for (const it of items) {
+              const res = await this._put(it.key, it.now)
+              if (res.ok) done.push(it); else failed.push(it.name + '：' + (res.d.detail || ('操作失敗（' + res.status + '）')))
+            }
+            this.lastBatch = done
+            this.draft = {}; this.previewing = false
+            this.isError = failed.length > 0
+            this.msg = (done.length ? '已套用 ' + done.length + ' 項，重新啟動服務後生效。' : '') +
+                       (failed.length ? (done.length ? ' ' : '') + failed.length + ' 項沒有成功：' + failed.join('；') : '')
+            await this.reload()
+          } finally {
+            this.busy = false
+          }
+        },
+
+        async undoLast() {
+          const items = this.lastBatch.slice()
+          if (!items.length) return
+          this.busy = true; this.msg = ''; this.isError = false
+          const failed = []
+          try {
+            for (const it of items) {
+              const res = await this._put(it.key, it.was)
+              if (!res.ok) failed.push(it.name + '：' + (res.d.detail || ('操作失敗（' + res.status + '）')))
+            }
+            this.lastBatch = []
+            this.isError = failed.length > 0
+            this.msg = failed.length ? ('復原時 ' + failed.length + ' 項沒有成功：' + failed.join('；'))
+                                     : '已復原這一批（' + items.length + ' 項），重新啟動服務後生效。'
             await this.reload()
           } finally {
             this.busy = false

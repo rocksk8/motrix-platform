@@ -1,7 +1,7 @@
 """CORE-SPEC §9c 模組管理頁與選單（e2e）。
 
-① superadmin 在「模組管理」頁看到合成模組「啟用」；按停用 ⇒ 該列標「待重啟」、訊息說「重新啟動服務後生效」，
-   目前狀態仍是「啟用」（重啟後生效）；再按一次回復。頁面沒有重啟按鈕。
+① superadmin 在「模組管理」頁看到合成模組「啟用」；取消勾選→預覽→確定套用 ⇒ 該列標「待重啟」、訊息說「重新啟動服務後生效」，
+   目前狀態仍是「啟用」（重啟後生效）；「復原這一批」回復；放棄草稿不寫入。頁面沒有重啟按鈕。
 ② 選單：這次啟動沒載入的模組（狀態表改成 disabled 模擬重啟後的結果）⇒ 側欄入口不見；
    正對照：狀態是 loaded 時入口看得到。
 ③ A-3：狀態帶「授權檢查未啟用」⇒ 該列與頁面頂端都標出來；正對照：沒有這個狀態時兩者都不出現。
@@ -54,17 +54,41 @@ def test_module_settings_page_toggle_is_pending_until_restart(live_server, make_
     assert "重新啟動服務後才生效" in page.locator("[data-testid='ms-restart-note']").inner_text()
 
     toggle = page.locator(f"[data-testid='ms-toggle-{KEY}']")
-    assert toggle.inner_text().strip() == "停用"
-    toggle.click()
+    assert toggle.is_checked()
+    toggle.uncheck()                                                # 只是草稿：還沒寫入
+    page.locator(f"[data-testid='ms-diff-{KEY}']").wait_for(state="visible", timeout=10000)
+    assert page.locator("[data-testid='ms-dirty-count']").inner_text().strip() == "1"
+    assert not page.locator(f"[data-testid='ms-pending-{KEY}']").is_visible()
+    page.locator("[data-testid='ms-preview-btn']").click()
+    page.locator(f"[data-testid='ms-preview-{KEY}']").wait_for(state="visible", timeout=10000)
+    assert "資料保留" in page.locator(f"[data-testid='ms-preview-{KEY}']").inner_text()
+    page.locator("[data-testid='ms-apply']").click()
     page.locator(f"[data-testid='ms-pending-{KEY}']").wait_for(state="visible", timeout=10000)
     assert "重新啟動服務後生效" in page.locator("[data-testid='ms-msg']").inner_text()
     assert state.inner_text().strip() == "啟用", "目前狀態要到重啟後才變"
-    assert toggle.inner_text().strip() == "啟用"
+    assert not toggle.is_checked()
 
-    toggle.click()                                                  # 回復
+    page.locator("[data-testid='ms-undo']").click()                 # 復原這一批
     page.locator(f"[data-testid='ms-pending-{KEY}']").wait_for(state="hidden", timeout=10000)
-    assert toggle.inner_text().strip() == "停用"
+    assert toggle.is_checked()
     assert page.locator("button:has-text('重啟'), button:has-text('重新啟動')").count() == 0
+
+
+@pytest.mark.e2e
+def test_module_settings_page_discard_and_filter(live_server, make_user, e2e_browser, only_synthetic):
+    """批次草稿：放棄這批＝回到現況、不寫入；搜尋沒有符合時顯示空狀態；全部設為停用後可預覽。"""
+    page = _open(e2e_browser, live_server, make_user, "mse_sa2", "module-settings.html")
+    page.locator(f"[data-testid='ms-state-{KEY}']").wait_for(timeout=15000)
+    page.locator("[data-testid='ms-all-off']").click()
+    page.locator("[data-testid='ms-dirty-count']").wait_for(state="visible", timeout=10000)
+    assert not page.locator(f"[data-testid='ms-toggle-{KEY}']").is_checked()
+    page.locator("[data-testid='ms-discard']").click()
+    page.locator("[data-testid='ms-draft-bar']").wait_for(state="hidden", timeout=10000)
+    assert page.locator(f"[data-testid='ms-toggle-{KEY}']").is_checked()
+    assert not page.locator(f"[data-testid='ms-pending-{KEY}']").is_visible(), "放棄不得寫入"
+    page.locator("[data-testid='ms-search']").fill("不存在的模組")
+    page.locator(f"[data-testid='ms-row-{KEY}']").wait_for(state="detached", timeout=10000)
+    assert "沒有符合的模組" in page.locator("[data-testid='ms-table']").inner_text()
 
 
 @pytest.mark.e2e
