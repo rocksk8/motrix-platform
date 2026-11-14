@@ -1224,9 +1224,12 @@ def _delivery_summary(staged: str) -> dict:
     plan_tool = os.path.join(payload, "backend", "tools", "apply_plan.py")
     tmp = os.path.join(staged, "summary_plan.json")
     try:
-        r = subprocess.run([sys.executable, plan_tool, "plan", "--root", str(DELIVERY_INSTALL_ROOT), "--pkg", payload,
+        # 🔴 -B＋PYTHONDONTWRITEBYTECODE：apply_plan 會 import 暫存包自己的 backend（core.upgrade 等）。不加的話 .pyc 寫進暫存包，
+        #    預演之後／套用前的完整性重驗就判成「清單外多出的檔」而擋下（2026-11-14 A1 演練抓到；正式機同樣會發生）。
+        r = subprocess.run([sys.executable, "-B", plan_tool, "plan", "--root", str(DELIVERY_INSTALL_ROOT), "--pkg", payload,
                             "--out", tmp, "--max", "1000000"], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=300, creationflags=CREATE_NO_WINDOW)
+                           errors="replace", timeout=300, creationflags=CREATE_NO_WINDOW,
+                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1"))
         if r.returncode == 0:
             plan = json.load(open(tmp, encoding="utf-8"))
             out["deleteCount"], out["addedCount"] = len(plan.get("delete") or []), len(plan.get("added") or [])

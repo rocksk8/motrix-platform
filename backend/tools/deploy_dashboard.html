@@ -367,7 +367,7 @@ async function dlRehearse() {
                                                         body: JSON.stringify({ name }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { out.textContent = '無法預演：' + (d.detail || res.status); return; }
-    const s = await dlPollJson('/api/delivery/rehearse/status?name=' + encodeURIComponent(name), x => x.rehearsing === false);
+    const s = await dlPollJson('/api/delivery/rehearse/status?name=' + encodeURIComponent(name), x => !x.rehearsing);   // 伺服器閒置時回 null（不是 false），所以用「沒有在預演」判斷；嚴格比對 false 永遠等不到（2026-11-14 A1 演練抓到）
     if (!s) { out.textContent = '無法取得預演狀態，請重新整理本頁確認結果。'; return; }
     const r = s.result;
     if (!r) { out.textContent = '預演沒有結果，請重新預演。'; return; }
