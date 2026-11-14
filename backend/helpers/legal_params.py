@@ -118,7 +118,7 @@ def _as_date(v) -> date:
 
 
 def sort_versions(versions) -> list:
-    return sorted((copy.deepcopy(v) for v in versions or []), key=lambda v: str(v.get("effectiveFrom", "")))
+    return sorted((copy.deepcopy(v) for v in versions or []), key=lambda v: str(v.get("effectiveFrom", "")) if isinstance(v, dict) else "")
 
 
 def rules_for_date(versions, on) -> dict:

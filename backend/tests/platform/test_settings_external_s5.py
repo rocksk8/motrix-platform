@@ -191,3 +191,82 @@ def test_drift_report_flags_old_key_changed_behind_the_registry(client, make_use
         assert "t100_export" in [g for g, _ in X.drift_report(conn)]
     finally:
         conn.close()
+
+
+# ── 審查修正（h10）：M1 非物件項目 400／M3 工具不可繞過登錄表／L1 CAS 期望值用原始值／L2 一次讀取 ─────────────────
+def test_tax_rules_put_with_non_object_item_is_400_not_500(client, make_user):
+    h = _auth(client, make_user, "s5_sa_tax_bad")
+    for body in ({"versions": [1]}, {"versions": ["x"]}, {"versions": [None]}, {"versions": []}, {"nope": 1}):
+        r = client.put("/api/legal-params/tax-rules", headers=h, json=body)
+        assert r.status_code == 400, (body, r.status_code, r.text)
+    r = client.put("/api/legal-params/tax-rules", headers=h, json={"versions": [1]})
+    assert "物件" in r.text
+
+
+def _load_tool(name):
+    import importlib.util
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tools", name + ".py")
+    spec = importlib.util.spec_from_file_location("s5_tool_" + name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _put_overhead_definition(client, h):
+    conn = db.get_db()
+    try:
+        X.raw_put(conn, "overhead_migration_done", {"doneAt": "2026-10-09T00:00:00", "by": "test"})
+        conn.commit()
+    finally:
+        conn.close()
+    r = client.put("/api/overhead/settings", headers=h, json={"ruleMode": "v2", "confirm": True})
+    assert r.status_code == 200 and r.json()["pending"], r.text
+    activate_now("overhead_basis")
+
+
+def test_migration_tools_refuse_to_write_old_keys_once_the_registry_has_a_definition(client, make_user, capsys):
+    h = _auth(client, make_user, "s5_sa_tool")
+    oh, ch = _load_tool("overhead_migrate"), _load_tool("charity_migrate")
+    conn = db.get_db()
+    try:
+        assert oh._dbbind.overhead_basis_definition(conn) is None, "還沒發布過定義 ⇒ 工具照舊可寫"
+    finally:
+        conn.close()
+    _put_overhead_definition(client, h)
+    conn = db.get_db()
+    try:
+        assert (oh._dbbind.overhead_basis_definition(conn) or {}).get("ruleMode") == "v2"
+    finally:
+        conn.close()
+    before = {k: _raw(k) for k in ("overhead_rule_mode", "charity_basis_mode", "overhead_migration_done")}
+    for tool, argv in ((oh, ["mode", "legacy", "--apply"]), (oh, ["recalc", "--apply", "--set-mode-v2", "--no-backup"]),
+                       (ch, ["mode", "total", "--apply"]), (ch, ["recalc", "--apply", "--set-total", "--no-backup"])):
+        assert tool.main(["--db", db.DB_PATH] + argv) == 2, argv
+        assert "設定中心" in capsys.readouterr().err, argv
+    assert before == {k: _raw(k) for k in before}, "拒絕時不可動到任何舊鍵"
+
+
+def test_overhead_cas_expected_value_is_the_raw_registry_value_even_when_marker_is_missing(client, make_user):
+    """舊儲存 v2 但遷移標記不見 ⇒ `rule_mode()` 失效安全成 legacy；CAS 期望值要用原始 v2，不能拿 legacy 去比而誤報 409。"""
+    from modules.case import profit_guard as PG
+    h = _auth(client, make_user, "s5_sa_cas")
+    _put_overhead_definition(client, h)
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM system_settings WHERE key='overhead_migration_done'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert PG.rule_mode() == "legacy" and PG.basis_effective()["ruleMode"] == "v2"
+    from helpers import settings_registry as _SR
+    assert _SR.get_group_effective("overhead_basis")["ruleMode"] == PG.basis_effective()["ruleMode"], "CAS 比的是登錄表生效值，期望值必須取同一份"
+
+
+def test_charity_basis_reads_the_registry_once(client, make_user, monkeypatch):
+    from modules.case import profit_guard as PG
+    calls = []
+    real = PG._basis
+    monkeypatch.setattr(PG, "_basis", lambda: (calls.append(1), real())[1])
+    PG.charity_basis()
+    assert len(calls) == 1

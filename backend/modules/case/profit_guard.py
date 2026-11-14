@@ -74,8 +74,14 @@ def _basis() -> dict:
         conn.close()
 
 
-def rule_mode() -> str:
-    m = _basis().get("ruleMode")
+def basis_effective() -> dict:
+    """目前生效的**原始**口徑 `{ruleMode, charityMode}`（未套失效安全判斷）。給 CAS 的期望值用：登錄表存的是原始值，不是 `rule_mode()` 的失效安全結果。"""
+    return _basis()
+
+
+def rule_mode(basis=None) -> str:
+    """`basis`（選填）＝呼叫端已讀到的 `_basis()`，同一次計算多次判斷時傳入，避免每次都重讀登錄表。"""
+    m = (basis if basis is not None else _basis()).get("ruleMode")
     if m == "v2" and not migration_done():                        # 失效安全：沒有遷移完成標記就算 legacy（防止新舊口徑的單混在一起）
         _log.warning("overhead_rule_mode=v2 但沒有 %s 標記 ⇒ 視為 legacy", MIGRATION_KEY)
         return "legacy"
@@ -111,15 +117,17 @@ def charity_migration_done() -> bool:
     return isinstance(m, dict) and bool(m.get("doneAt"))
 
 
-def charity_mode() -> str:
+def charity_mode(basis=None) -> str:
     """設定值（不含失效安全判斷）：`direct`｜`total`；缺鍵或不合法＝direct。"""
-    m = _basis().get("charityMode")
+    m = (basis if basis is not None else _basis()).get("charityMode")
     return m if m in CHARITY_MODES else PR.CHARITY_DIRECT
 
 
-def charity_basis() -> str:
-    """實際生效的公益基數：只有 overhead v2（含遷移標記）＋ 公益遷移標記＋ 模式 total 三者齊備才是 total，否則 direct。"""
-    if charity_mode() == PR.CHARITY_TOTAL and rule_mode() == "v2" and charity_migration_done():
+def charity_basis(basis=None) -> str:
+    """實際生效的公益基數：只有 overhead v2（含遷移標記）＋ 公益遷移標記＋ 模式 total 三者齊備才是 total，否則 direct。
+    只讀一次登錄表（模式與口徑共用同一份讀值）。"""
+    b = basis if basis is not None else _basis()
+    if charity_mode(b) == PR.CHARITY_TOTAL and rule_mode(b) == "v2" and charity_migration_done():
         return PR.CHARITY_TOTAL
     return PR.CHARITY_DIRECT
 
@@ -410,7 +418,8 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     changed = Decimal(repr(new)) != Decimal(repr(base))
     if changed and (user or {}).get("role") != "superadmin":
         raise HTTPException(403, _ONLY_SUPERADMIN)
-    mode = rule_mode()
+    snap = _basis()                                               # 同一次存檔只讀一次登錄表：模式與公益基數用同一份讀值（也不會讀到兩個不同時間點）
+    mode = rule_mode(snap)
     if stored is not None or changed or mode == "v2":           # legacy 模式只在有存值或被最高管理者明確改過時才存比率（資料形狀不憑空變）
         q["overheadPct"] = new
     else:
@@ -427,7 +436,7 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
             if isinstance(i, dict):
                 i["amount"] = item_amount(i)                       # 品項金額由伺服器重算寫回（用戶端送的 amount 不採用）
         tot.update(server_totals(q, old_tot))
-        basis = charity_basis()
+        basis = charity_basis(snap)
         tot.update(server_profit(q, new, PR.FORMULA_VER, pretax=tot["pretax"], total=tot["total"], charity_basis=basis))
         tot["overheadPct"], tot["formulaVer"] = new, PR.FORMULA_VER
         if basis == PR.CHARITY_TOTAL:

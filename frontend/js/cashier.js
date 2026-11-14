@@ -878,7 +878,15 @@ function cashierApp() {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '儲存失敗')
         }
-        alert('已儲存 T100 科目代號設定')
+        // S5：科目代號改走設定中心的待生效機制——有實質變更時回 pending（等待期＋第二位最高管理者核准後才生效）
+        var jr = await res.json().catch(function () { return {} })
+        var pend = (jr && jr.pending) || []
+        if (pend.length) {
+          alert('已送出 T100 科目代號變更，' + (pend.some(function (p) { return p.approvalsRequired }) ? '需第二位最高管理者核准，且' : '') +
+            '等待期滿（' + String(pend[0].effectiveAt || '').slice(0, 10) + '）後才生效；目前生效的仍是原本的設定')
+        } else {
+          alert('已儲存 T100 科目代號設定')
+        }
       } catch (e) {
         alert('儲存失敗：' + (e.message || e))
       } finally {
