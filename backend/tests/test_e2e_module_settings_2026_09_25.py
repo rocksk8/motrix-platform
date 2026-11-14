@@ -75,6 +75,22 @@ def test_module_settings_page_toggle_is_pending_until_restart(live_server, make_
 
 
 @pytest.mark.e2e
+def test_module_settings_protected_module_stays_enabled(live_server, make_user, e2e_browser, only_synthetic, monkeypatch):
+    """核心必須模組：勾選框鎖住並說明原因；「列出的全部設為停用」不會動它。"""
+    from helpers import module_switches
+    monkeypatch.setitem(module_switches.PROTECTED_MODULES, KEY, "測試用：必須保持啟用。")
+    page = _open(e2e_browser, live_server, make_user, "mse_sa3", "module-settings.html")
+    toggle = page.locator(f"[data-testid='ms-toggle-{KEY}']")
+    toggle.wait_for(timeout=15000)
+    assert toggle.is_disabled() and toggle.is_checked()
+    page.locator(f"[data-testid='ms-protected-{KEY}']").wait_for(state="visible", timeout=10000)
+    assert "必須保持啟用" in page.locator(f"[data-testid='ms-protected-{KEY}']").inner_text()
+    page.locator("[data-testid='ms-all-off']").click()
+    assert page.locator("[data-testid='ms-draft-bar']").is_hidden()  # e2e-lint: ok 全部停用略過受保護列＝沒有草稿，確認未產生變更
+    assert toggle.is_checked()
+
+
+@pytest.mark.e2e
 def test_module_settings_page_discard_and_filter(live_server, make_user, e2e_browser, only_synthetic):
     """批次草稿：放棄這批＝回到現況、不寫入；搜尋沒有符合時顯示空狀態；全部設為停用後可預覽。"""
     page = _open(e2e_browser, live_server, make_user, "mse_sa2", "module-settings.html")
@@ -88,7 +104,7 @@ def test_module_settings_page_discard_and_filter(live_server, make_user, e2e_bro
     assert not page.locator(f"[data-testid='ms-pending-{KEY}']").is_visible(), "放棄不得寫入"
     page.locator("[data-testid='ms-search']").fill("不存在的模組")
     page.locator(f"[data-testid='ms-row-{KEY}']").wait_for(state="detached", timeout=10000)
-    assert "沒有符合的模組" in page.locator("[data-testid='ms-table']").inner_text()
+    page.locator("[data-testid='ms-table']").get_by_text("沒有符合的模組").wait_for(state="visible", timeout=10000)
 
 
 @pytest.mark.e2e

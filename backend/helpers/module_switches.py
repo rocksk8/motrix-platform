@@ -157,6 +157,14 @@ def read_disabled_at_startup(db_path: str = None) -> frozenset:
         return frozenset()
 
 
+#: 不可由管理者開關停用的模組（key → 原因）。停用它們會讓管理者失去在畫面上調整權限／模組的入口，
+#: 所以「模組管理」頁與 PUT /api/system/modules/{key} 都擋（只擋停用；已被停用的仍可重新啟用）。
+#: 要新增請只改這裡；測試以 monkeypatch 這個 dict 驗證。
+PROTECTED_MODULES = {
+    "permmatrix": "權限設定頁屬於這個模組；停用後，管理者無法在畫面上調整各角色的權限。",
+}
+
+
 def configured_disabled() -> list:
     """目前設定值（可能與本次啟動實際生效的不同 ⇒ 待重啟）。"""
     from helpers.settings import _get_setting

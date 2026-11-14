@@ -164,9 +164,10 @@
             <td>
               <template x-if="m.canToggle">
                 <label>
-                  <input type="checkbox" class="ms-check" :checked="want(m)" :disabled="busy" @change="setWant(m, $event.target.checked)"
+                  <input type="checkbox" class="ms-check" :checked="want(m)" :disabled="busy || (m.protected && want(m))" @change="setWant(m, $event.target.checked)"
                          :data-testid="'ms-toggle-' + m.key" :aria-label="'重啟後要啟用 ' + m.name">
                   <span class="ms-diff" x-show="isDirty(m)" x-text="want(m) ? '改成：啟用' : '改成：停用'" :data-testid="'ms-diff-' + m.key"></span>
+                  <div class="ms-reason" x-show="m.protected" x-text="'不可停用：' + m.protectedReason" :data-testid="'ms-protected-' + m.key"></div>
                 </label>
               </template>
               <template x-if="!m.canToggle">
@@ -245,7 +246,7 @@
           if (v === this.orig(m)) delete d[m.key]; else d[m.key] = v
           this.draft = d
         },
-        setAll(v) { this.visibleToggleable.forEach(m => this.setWant(m, v)) },
+        setAll(v) { this.visibleToggleable.filter(m => v || !m.protected).forEach(m => this.setWant(m, v)) },
         get dirtyKeys() { return Object.keys(this.draft) },
         get dirtyModules() { return this.modules.filter(m => this.isDirty(m)) },
         get visibleToggleable() { return this.shown.filter(m => m.canToggle) },
