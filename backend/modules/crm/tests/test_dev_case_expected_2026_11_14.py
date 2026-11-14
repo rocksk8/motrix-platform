@@ -117,6 +117,7 @@ def test_missing_key_keeps_values_and_null_or_empty_clears(client, make_user):
 @pytest.mark.parametrize("body", [
     {"expectedAmount": -1}, {"expectedAmount": 1.5}, {"expectedAmount": "abc"}, {"expectedAmount": True},
     {"expectedAmount": [1]}, {"expectedAmount": 10_000_000_000},
+    {"expectedAmount": "9" * 5000}, {"expectedAmount": "١٢٣"}, {"expectedCloseDate": "٢٠٢٦-12-31"},
     {"expectedCloseDate": "2026/12/31"}, {"expectedCloseDate": "2026-13-40"}, {"expectedCloseDate": "20261231"}, {"expectedCloseDate": 20261231},
 ])
 def test_invalid_values_are_400_not_422_and_nothing_saved(client, make_user, body):

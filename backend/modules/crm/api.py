@@ -307,7 +307,7 @@ def _clean_expected_amount(v):
         v = int(v)
     elif isinstance(v, str):
         s = v.strip().replace(",", "")
-        if not re.fullmatch(r"\d+", s):
+        if not re.fullmatch(r"[0-9]{1,15}", s):
             raise HTTPException(400, "預估金額必須是 0 以上的整數")
         v = int(s)
     elif not isinstance(v, int):
@@ -323,7 +323,7 @@ def _clean_expected_close_date(v):
     """預計成交日：None／空字串 ⇒ None；必須是 YYYY-MM-DD 的真實日期（否則 400）。過去的日期可存（補登已成交的案件）。"""
     if v is None or (isinstance(v, str) and not v.strip()):
         return None
-    if not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v.strip()):
+    if not isinstance(v, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v.strip()):
         raise HTTPException(400, "預計成交日格式必須是 YYYY-MM-DD")
     try:
         date.fromisoformat(v.strip())
