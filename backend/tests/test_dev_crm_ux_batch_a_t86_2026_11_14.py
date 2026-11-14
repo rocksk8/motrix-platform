@@ -309,3 +309,11 @@ def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, m
     p2.get_by_role("button", name="編輯案件").click()
     assert p2.locator('[data-testid="case-expected-amount"]').locator("visible=true").count() == 0
     assert p2.locator('[data-testid="dc-pipeline-amount"]').locator("visible=true").count() == 0
+
+
+def test_pipeline_amount_card_does_not_show_zero_as_a_real_total():
+    """全部洽談中都沒填金額（或沒有洽談中）時，漏斗金額顯示「—」，不顯示像真實合計的「NT$ 0」。"""
+    src = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
+    assert "pipelineCount === 0 || pipelineMissing >= pipelineCount ? '—'" in src
+    assert "尚無洽談中案件" in src
+    assert "尚未填寫" in src and "件已填，" in src

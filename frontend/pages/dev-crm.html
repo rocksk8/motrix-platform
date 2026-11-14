@@ -593,8 +593,8 @@
     </button>
     <div class="dc-funnel__s rate" data-testid="dc-pipeline-amount" x-show="expSummary && expSummary.visible"
          title="全部洽談中案件的預估金額合計，不受搜尋與篩選影響">
-      <span class="dc-funnel__v" x-text="fmtMoney(expSummary && expSummary.byStatus && expSummary.byStatus['洽談中'] ? expSummary.byStatus['洽談中'].total : 0)"></span>
-      <span class="dc-funnel__l">洽談中預估金額<small x-text="pipelineMissing > 0 ? pipelineMissing + ' 件未填金額' : '全部都有填'"></small></span>
+      <span class="dc-funnel__v" x-text="pipelineCount === 0 || pipelineMissing >= pipelineCount ? '—' : fmtMoney(pipelineTotal)"></span>
+      <span class="dc-funnel__l">洽談中預估金額<small x-text="pipelineCount === 0 ? '尚無洽談中案件' : (pipelineMissing >= pipelineCount ? '尚未填寫' : (pipelineMissing > 0 ? '（' + (pipelineCount - pipelineMissing) + ' 件已填，' + pipelineMissing + ' 件未填）' : '全部都有填'))"></small></span>
     </div>
     <div class="dc-funnel__s rate">
       <span class="dc-funnel__v" x-text="winRate"></span>
@@ -1758,6 +1758,14 @@ function devCrmPage() {
       return d === 0 ? '今日更新' : d + ' 天未更新'
     },
 
+    get pipelineCount() {
+      const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
+      return b ? b.count : 0
+    },
+    get pipelineTotal() {
+      const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
+      return b ? b.total : 0
+    },
     get pipelineMissing() {
       const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
       return b ? b.missing : 0
