@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）
+- schema：本批只動 crm 模組 migration（`modules/crm/migrations/0005_dev_case_expected.py`，crm 模組 schema 4→5，`module_schema_versions` 記錄）；核心 `db.py` `CURRENT_VERSION`（V9 基準 118）與 module.json 版本不變。驗包若要核對「資料庫版本」，核心數字不會因本批改變；模組版本以 `module_schema_versions` 的 crm＝5 為準。
+
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 - **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**

@@ -2,9 +2,15 @@
 
 ## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：看得到／看到等權限與顯示用語）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：說明與提示中的「看得到／看不到／看到」依語境改為「可檢視／無法檢視」（權限）或「顯示／所見」（畫面），並補正前一批漏改的空狀態文字。
-
-## (next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）
+- **（併入）(next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
+- **（併入）(next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 預估金額／預計成交日；版號由列車取）**
+- **schema +1：crm 模組 schema 版本 4→5**（模組 migration `0005_dev_case_expected`，`dev_cases` 新增 `expected_amount INTEGER NULL`、`expected_close_date TEXT NULL`；可重跑、表不存在時回報原因不報錯）。核心 `db.py` `CURRENT_VERSION`（V9 基準 118）不變——核心 migration 已凍結，新欄位走模組 migration。
+- API（只增不減）：`GET/POST/PATCH /api/dev-cases…` 的案件物件多 `expectedAmount`（整數，無金額權限時為 null）、`expectedAmountVisible`、`expectedCloseDate`（`YYYY-MM-DD`）；寫入欄位 `expectedAmount`／`expectedCloseDate`（未帶＝維持原值，`null` 或空字串＝清除）。金額須為 0 至 9,999,999,999 的整數、日期須為有效日期（過去日期允許），否則 400。
+- 權限：金額跟既有財務檢視權限（`can_see_financial`）走；沒有權限的人看到 null（頁面顯示「—」），填寫金額回 403「無權限填寫預估金額」，送 null 則維持原值。稽核紀錄不含金額（只記「已設定／已變更」）。
+- 新增 `GET /api/dev-cases/expected-summary`：漏斗「預估金額合計」由後端算（依案件可見範圍、排除已刪除），回傳 `visible`、`total`、`count`、`missing`（未填金額件數）與各狀態 `byStatus`；沒有金額權限時 `total` 為 null。清單 `GET /api/dev-cases` 仍是純陣列，所以合計另開端點。
+- 前端 `dev-crm.html` 不在本批（由頁面負責視窗接）。
+- 測試：`tests/test_dev_case_expected_2026_11_14.py`；`tests/test_dev_log_directive_2026_11_04.py` 的 crm 版本釘住改為 5；`tests/platform/response_keys_baseline.json`、`route_inventory.json` 同步。
 
 ## 1.2.8 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。

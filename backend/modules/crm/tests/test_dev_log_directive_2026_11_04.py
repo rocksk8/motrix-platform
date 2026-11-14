@@ -504,8 +504,8 @@ def test_migration_0004_on_a_populated_crm_v3_database_keeps_every_existing_row(
     try:
         ran = mg.run_all(conn)
         conn.commit()
-        assert ran.get("crm") == (3, 4), ran
-        assert mg.current_version(conn, "crm") == 4
+        assert ran.get("crm") == (3, 5), ran                                         # v3 → 0004（本檔主角）→ 0005（T86 預估金額兩欄，冪等：欄位已在）
+        assert mg.current_version(conn, "crm") == 5
         assert mg.run_all(conn).get("crm") is None                                   # 再跑：版號已前進，什麼都不做
     finally:
         conn.close()
