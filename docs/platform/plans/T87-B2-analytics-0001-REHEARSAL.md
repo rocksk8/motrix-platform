@@ -12,7 +12,8 @@
 ## 檔案
 - 預演腳本：`docs/platform/plans/T87-B2-analytics-0001-REHEARSAL.py`（`check` 以 `mode=ro` 唯讀；`apply`＝SAVEPOINT→`up()`→RELEASE→寫版號，與 `core/migrations.py run_all` 同序；`rollback`＝回滾演練）。
 - 用法（於備份副本旁；`<副本>` 是用 SQLite backup API 從正式 DB 以 `mode=ro` 複製出的暫存檔，演練後連 `-wal`／`-shm` 一併刪除）：
-  `python -B T87-B2-analytics-0001-REHEARSAL.py <副本>.db <包內>\backend\modules\analytics\migrations\0001_custom_reports.py check|apply|rollback`
+  `python -B T87-B2-analytics-0001-REHEARSAL.py <副本>.db <包內>\backend\modules\analytics\migrations\0001_custom_reports.py check`（唯讀，不受限）；改 `apply --i-am-a-copy`、`rollback --i-am-a-copy` 即為執行與回滾演練。
+- **防呆**：`apply`／`rollback` 在 ①沒帶 `--i-am-a-copy`、②目標檔名是 `motrix_erp.db`、③目標絕對路徑（解析後）落在任何 `backend` 目錄底下，三種情況一律拒絕、印原因、exit 3；只有 `check` 不受限。所以副本要改名、放在 backend 目錄之外。
 
 ## 步驟與預期
 1. **預演前 `check`**（唯讀）。預期：`integrity_check=ok`；`module_schema_versions` **沒有 analytics 列**（其他模組列記下來，供前後比對）；兩新表**不存在**、新索引無；記下「既有表數」與 `sqlite_master` 物件數。
