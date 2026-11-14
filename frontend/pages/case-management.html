@@ -3780,7 +3780,7 @@
                     </template>
                   </tbody>
                 </table>
-                <div style="padding:14px;color:var(--text-dim)" data-testid="cm-allfiles-empty" x-show="caseFilesFor === selected.quote_no && !caseFilesLoading && !caseFiles.length && !caseFilesErr">這個案件沒有您可檢視的上傳檔案。</div>
+                <div style="padding:14px;color:var(--text-dim)" data-testid="cm-allfiles-empty" x-show="caseFilesFor === selected.quote_no && !caseFilesLoading && !caseFiles.length && !caseFilesErr">這個案件尚無您可檢視的上傳檔案。</div>
               </div>
 
               <div x-show="activeTab==='feed'" class="feed-wrap">
@@ -3934,7 +3934,7 @@
                     <div class="feed-empty">目前尚無動態，請發布第一則更新。</div>
                   </template>
                   <template x-if="!updatesLoading && caseUpdates.length > 0 && filteredFeedItems().length === 0">
-                    <div class="feed-empty" x-text="feedCalSelDate ? '這天沒有動態紀錄' : '目前沒有一般動態；系統自動記錄已摺疊，可按上方「顯示」查看。'"></div>
+                    <div class="feed-empty" x-text="feedCalSelDate ? '這天尚無動態紀錄' : '尚無一般動態；系統自動記錄已摺疊，可按上方「顯示」查看。'"></div>
                   </template>
                   <template x-for="item in filteredFeedItems()" :key="item.id">
                     <div class="feed-item">
