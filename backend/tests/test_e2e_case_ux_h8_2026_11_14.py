@@ -102,7 +102,8 @@ def test_auto_feed_items_are_folded_until_shown(live_server, make_user, e2e_brow
     assert "已摺疊" in bar.inner_text()
     assert page.locator(".feed-item").count() == 0
     badge = page.locator(".cm-tab", has_text="動態").first.locator(".cm-tab__n")
-    assert badge.count() == 0 or badge.is_hidden(), "只有被摺疊的自動記錄時，分頁角標不可顯示數字"
+    if badge.count():
+        badge.first.wait_for(state="hidden", timeout=5000)      # 只有被摺疊的自動記錄時，分頁角標不可顯示數字
     page.locator('[data-testid="cm-feed-autobar-toggle"]').click()
     page.wait_for_function("() => document.querySelectorAll('.feed-item').length === 1", timeout=5000)
     assert badge.first.inner_text().strip() == "1", "展開後角標與看得到的則數一致"
@@ -310,7 +311,7 @@ def test_compose_type_dropdown_adds_a_stage_visit_from_the_feed_tab(live_server,
     sel.select_option("visit")
     stage = page.locator('[data-testid="cm-compose-stage"]')
     stage.wait_for(state="visible", timeout=5000)
-    assert page.locator('[data-testid="cm-feed-fields"]').is_hidden(), "選了階段出勤，留言用的欄位（執行時數等）要收起來"
+    page.locator('[data-testid="cm-feed-fields"]').wait_for(state="hidden", timeout=5000)     # 選了階段出勤，留言用的欄位（執行時數等）要收起來
     assert stage.input_value() != "", "預設帶入第一個未完成的階段"
     assert page.locator('[data-testid="cm-compose-people"]').input_value() == "1"
     send = page.locator('[data-testid="cm-compose-send"]')
@@ -382,7 +383,9 @@ def test_received_period_is_frozen_for_anyone_who_cannot_mark_payment(live_serve
     assert page.locator('#pay-1-received-at').is_visible()
     page.evaluate(f"() => {{ {DATA_JS}.canMarkPayment = () => false }}")
     page.wait_for_function("() => document.querySelector('#pay-1-expected').disabled", timeout=5000)
-    assert page.locator('#pay-1-note').is_disabled()
-    assert page.locator('#pay-1-received-at').is_hidden() and page.locator('[data-testid="pay-received-at-ro"]').first.is_visible()
-    assert page.locator('[data-testid="pay-frozen-note"]').first.is_visible()
+    # Alpine 的 :disabled 與 x-show 不在同一個影格更新：不可在 disabled 一成立就立刻斷言隱藏／可見（會輸一個影格），一律等狀態
+    page.wait_for_function("() => document.querySelector('#pay-1-note').disabled", timeout=5000)
+    page.locator('#pay-1-received-at').wait_for(state="hidden", timeout=5000)
+    page.locator('[data-testid="pay-received-at-ro"]').first.wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="pay-frozen-note"]').first.wait_for(state="visible", timeout=5000)
     assert page.locator('#pay-2-expected').is_enabled(), "未收款的期別不凍結"
