@@ -234,6 +234,7 @@ def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_
             "green": green, "duration_s": round(duration_s, 1), "estimate_s": round(estimate_s, 1),
             "stopped_by_failfast": bool(stopped_by_failfast), "forced_full_for_build": forced_full, "e2e": e2e,
             "quick_skipped": list(skipped or []), "quick_over_budget": bool(over_budget),
+            **({"quick_note": QUICK_DISCLAIMER} if quick else {}),
             "started": started, "finished": finished}
 
 
@@ -422,6 +423,16 @@ def strip_backend(paths):
 
 # ── 主流程 ───────────────────────────────────────────────────────────────
 
+def e2e_marked_files(head, repo):
+    """head 樹上真的帶 e2e marker（`@pytest.mark.e2e`／`pytestmark = …e2e…`）的檔 ⇒ set；git grep 失敗 ⇒ None（呼叫端退回只看檔名）。
+    T87：檔名含 test_e2e_ 不代表它有 e2e 題（test_e2e_lint 是靜態守門）——被分到 e2e 段用 `-m e2e` 篩就是 0 題、守門從沒跑。"""
+    rc, out, _err = _git("grep", "-l", "-I", "-E", r"mark\.e2e|pytestmark.*e2e", head, "--", "backend", repo=repo)
+    if rc not in (0, 1):
+        return None
+    pref = head + ":"
+    return {ln[len(pref):] if ln.startswith(pref) else ln for ln in out.splitlines() if ln.strip()}
+
+
 def select_for(base, head, repo=REPO, full_floor=False, quick=False, workers=2, budget_min=None, times=None):
     import stage_select as SS
     from pre_train_check import GUARDS, expand_guards
@@ -434,11 +445,15 @@ def select_for(base, head, repo=REPO, full_floor=False, quick=False, workers=2, 
     sel["guard_args"], sel["guards_missing"] = guard_args, missing
     if quick:
         e2e_collected = set((plan_e or {}).get("collected") or [])
+        marked = e2e_marked_files(head, repo)             # None＝查不到 ⇒ 退回檔名判斷（舊行為）
         apply_quick_plan(sel, base, head, repo, tree, changed, workers, 5 if budget_min is None else budget_min, times if times is not None else load_times(),
-                         is_e2e=lambda f: "test_e2e_" in f.rsplit("/", 1)[-1] or f in e2e_collected)
+                         is_e2e=lambda f: f in e2e_collected or (f in marked if marked is not None else "test_e2e_" in f.rsplit("/", 1)[-1]))
     return sel, plan_n, plan_e
 
 
+#: --quick 結尾聲明（T87 PM 裁示 A）：quick 是約 5 分鐘的冒煙測試，不是閘門
+QUICK_DISCLAIMER = ("⚠ quick＝約 5 分鐘的冒煙測試：T87 對 18 個 breaker 實測召回只有約 25%（5 分鐘 23%、10 分鐘 26%）；綠燈≠安全，"
+                    "不能取代整合者的整段閘門。")
 E2E_FILE_SECONDS = 9.0                 # 預算估算：e2e 檔每檔（單行程序列）秒數。T87 三個 breaker 實測 6.0／7.2／7.5 s／檔（含起伺服器＋瀏覽器），取 9 留餘裕
 
 
@@ -534,6 +549,11 @@ def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2
         t1 = time.time()
         rc, out = run_pytest(cmd, repo / "backend", e2, hard_timeout=remaining + 90)
         killed = TIMED_OUT["flag"]
+        if rc == 5 and not killed:                        # pytest exit 5＝沒有收集到任何題：不是紅，是沒跑（T87：e2e 段送進沒有 e2e 題的檔）
+            mark("沒有收集到 e2e 題" if st["name"] == "e2e" else "沒有收集到題")
+            if st["name"] == "e2e":
+                agg["e2e"] = {"files": len(files), "ran": parse_counts(out), "failed": [], "seconds": round(time.time() - t1, 1), "green": True, "complete": False}
+            continue
         fs_ = parse_failures(out)
         counts = parse_counts(out)
         for k, v in counts.items():
@@ -686,6 +706,8 @@ def main(argv=None):
         "綠" if res["green"] else "紅", sum(counts.get(k, 0) for k in ("passed", "failed", "errors")), dur / 60, est / 60, res["tree_sha"][:12], outp))
     if sel.get("quick_skipped"):
         print("⚠ 未跑 %d 項（上面列了；不是通過）：quick 只當部分證據" % len(sel["quick_skipped"]))
+    if a.quick:
+        print(QUICK_DISCLAIMER)
     if new:
         print("紅（新）：" + "\n  ".join(f["nodeid"] for f in new[:30]))
     if kn:
