@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-request-timing-h7；T86 請求耗時記錄；版號由列車取）
+- 新增（內部／維運，無 API、資料表、欄位、權限變更；核心 V9 基準 118 不動）：`logs\request_timing.log`——每個 `/api/` 請求一行「時間 方法 路由樣板 狀態碼 耗時ms」，讓正式機能統計最耗時的請求。不含使用者、IP、查詢參數、標頭、實際路徑（只寫路由樣板；沒比對到路由寫 `(unmatched)`）。
+- 機制：純 ASGI 中介層 `helpers.log_setup.RequestTimingMiddleware`（`main.py` 在 InternalColsMiddleware 之前加，仍是第二外層）＋ `QueueHandler`／背景 `QueueListener` 寫檔：請求端只做一次 `put_nowait`，佇列（2 萬筆）滿了丟掉並計數，不等檔案 I/O；打不開檔 ⇒ 不啟用、請求照常；pytest 之下不建檔。輪替（15 MB × 10 份、gzip）與保留天數（`retention.log_keep_days`）沿用 access.log／app.log 同一套，`prune_rotated_logs` 認得 `request_timing.log.N.gz`。
+- 測試：`tests/test_request_timing_log_2026_11_14.py`。
+
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 - **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**
