@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+- **（併入）(next) — 2026-11-14（feat/settings-matrix-email-users；T86：使用者管理「Email 通知偏好」改成矩陣）**
+- L1（新增，只增）：`js:static/users-email-prefs.js`（`usersEmailPrefsMixin`；已登記 modules.json）；`GET /api/mail-types/receivable` 的每列只增 `category`、`lowRisk`（與 `/api/mail-types/mine` 同一條規則：只有業務類能批次）。
+- 行為變更（畫面）：使用者管理編輯視窗的 Email 通知偏好由手風琴改成共用矩陣（總覽一行、群組總開關「全收／全不收」、勾選批次、篩選、搜尋、「復原這一批」）；收不到的類型仍列出但反灰；非業務類逐項勾選、取消前先確認。矩陣只改表單狀態，視窗「儲存變更」才一起送 `notification_muted`（欄位與值、伺服器規則包含「最後一位最高管理者不能退訂」都不變）。
+- 測試：`tests/test_users_email_prefs_matrix_t86_2026_11_14.py`、`tests/test_e2e_users_email_prefs_matrix_t86_2026_11_14.py`；既有 `test_mail_registry`／`test_e2e_mail_settings` 改看矩陣。
+
 ## 1.167 — 2026-11-14（T84 整合者；L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T84 設定改版（S2／S3a）新增、尚未登記到 `docs/platform/modules.json` 的單位補上歸屬——`helper:settings_pages`、`helper:settings_shell`、`js:static/settings-matrix.js`、`js:static/users-batch.js`。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
 

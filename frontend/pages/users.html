@@ -9,10 +9,13 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/users-duty.js"></script>
+  <script src="../static/settings-matrix.js"></script><!-- T86：Email 通知偏好用共用矩陣元件 -->
+  <script src="../static/users-email-prefs.js"></script>
   <script src="../static/users-batch.js"></script>
   <script src="../static/org-gaps.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/settings-matrix.css?v=20261113a">
   <style>
     .users-main {
       margin-left: var(--sidebar-w);
@@ -782,39 +785,10 @@
             <div x-show="duty.progress" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="'已完成：' + duty.progress"></div>
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:12px">（取消勾選＝不寄該類信件給此帳號）</span></label>
-          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
-            <template x-for="(grp, grpIdx) in notifyGroups" :key="grp.group">
-              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
-                <div @click="toggleNotifyGroup(grp.group)"
-                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
-                  <span style="display:flex;align-items:center;gap:6px">
-                    <span x-text="_notifyGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
-                    <span x-text="grp.group"></span>
-                  </span>
-                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
-                        x-text="notifyGroupOnCount(grp.items) + ' / ' + grp.items.length"></span>
-                </div>
-                <div x-show="_notifyGroupOpen[grp.group]" x-cloak
-                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
-                  <template x-for="item in grp.items" :key="item.key">
-                    <label style="position:relative;display:flex;align-items:center;gap:5px;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                           :style="!item.receivable ? 'color:var(--text-dim);cursor:default' : (!form.notificationMuted.includes(item.key) ? 'cursor:pointer;border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : 'cursor:pointer')"
-                           :data-testid="'notify-type-' + item.key">
-                      <input type="checkbox" style="position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none"
-                             :disabled="!item.receivable"
-                             :checked="item.receivable && !form.notificationMuted.includes(item.key)"
-                             @change="toggleNotifyType(item.key)">
-                      <span x-text="(item.receivable && !form.notificationMuted.includes(item.key)) ? '✓ ' : ''"></span>
-                      <span x-text="item.label"></span>
-                      <span x-show="!item.receivable" style="font-size:12px">（此帳號不在收件範圍；由「信件與通知收件設定」決定）</span>
-                    </label>
-                  </template>
-                </div>
-              </div>
-            </template>
-          </div>
+        <div class="form-group" data-testid="user-email-prefs">
+          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:12px">（關掉＝不寄該類信件給此帳號；按下方「儲存」才會寫入）</span></label>
+          <div class="hint" style="margin:4px 0 6px" x-show="emailPrefsStatText()" x-text="emailPrefsStatText()" data-testid="up-email-summary"></div>
+          <div id="up-email-box" x-ignore data-testid="up-email-matrix"></div>
         </div>
         <div class="form-group">
           <label class="form-label" x-text="editingId ? '新密碼（留空不更改）' : '密碼 *'"></label>
@@ -1041,6 +1015,7 @@
   function usersPage() {
     return {
       ...(window.usersBatchMixin ? window.usersBatchMixin() : {}),   // 設定矩陣 S3a：批次調整權限面板（static/users-batch.js）
+      ...(window.usersEmailPrefsMixin ? window.usersEmailPrefsMixin() : {}),     // T86：Email 通知偏好矩陣（static/users-email-prefs.js）
       ...(window.usersDutyMixin ? window.usersDutyMixin() : {}),     // R2 第 2 步：職責角色／個人扣項／生效權限預覽（static/users-duty.js）
       session:   {},
       users:     [],
@@ -1064,7 +1039,6 @@
         window.MotrixPrivacyNotice.print(this.privacyNotice, this.form.displayName || this.form.username)
       },
       _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
-      _notifyGroupOpen: {}, // Email 通知偏好手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
       _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
@@ -1089,29 +1063,6 @@
       // 收件範圍由「信件與通知收件設定」決定——個人設定不能把自己加進受限的類型。
       allNotifyTypes: [],
 
-      get notifyGroups() {
-        const order = [], map = {}
-        for (const it of this.allNotifyTypes) {
-          if (!map[it.group]) { map[it.group] = []; order.push(it.group) }
-          map[it.group].push(it)
-        }
-        return order.map(g => ({ group: g, items: map[g] }))
-      },
-
-      toggleNotifyType(key) {
-        const idx = this.form.notificationMuted.indexOf(key)
-        if (idx >= 0) this.form.notificationMuted.splice(idx, 1)  // 取消靜音（勾選＝接收）
-        else           this.form.notificationMuted.push(key)      // 靜音（取消勾選＝不接收）
-      },
-
-      toggleNotifyGroup(group) {
-        this._notifyGroupOpen[group] = !this._notifyGroupOpen[group]
-      },
-
-      notifyGroupOnCount(items) {
-        return items.filter(it => it.receivable && !this.form.notificationMuted.includes(it.key)).length
-      },
-
       // 信件類型：既有帳號 ⇒ 依收件範圍標 receivable；新帳號 ⇒ 全部列出（建立後再依角色與設定決定）
       async loadNotifyTypes(userId) {
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
@@ -1120,11 +1071,11 @@
           if (userId) {
             const r = await fetch('/api/mail-types/receivable?user_id=' + encodeURIComponent(userId), { headers: h })
             const d = r.ok ? await r.json() : { items: [] }
-            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, receivable: t.receivable }))
+            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, category: t.category, lowRisk: t.lowRisk === true, receivable: t.receivable }))
           } else {
             const r = await fetch('/api/mail-types', { headers: h })
             const d = r.ok ? await r.json() : { items: [] }
-            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, receivable: true }))
+            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, category: t.category, lowRisk: t.category === 'business', receivable: true }))
           }
         } catch (e) { this.allNotifyTypes = [] }
       },
@@ -1386,10 +1337,10 @@
                       divisionId: 0, departmentId: 0 }
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
-        this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
-        this.loadNotifyTypes(null)
+        this.emailPrefsDestroy()
+        this.loadNotifyTypes(null).then(() => { if (this.showModal && !this.editingId) this.emailPrefsMount() })
       },
 
       openEdit(user) {
@@ -1415,17 +1366,13 @@
         }
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
-        this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
+        this.emailPrefsDestroy()
         if (this.permGateOpen) this.permGateOpen(user)
         if (this.dutyOpen) this.dutyOpen(user)
-        this.loadNotifyTypes(user.id).then(() => {
-          for (const { group, items } of this.notifyGroups) {
-            this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
-          }
-        })
         const uid = user.id
+        this.loadNotifyTypes(uid).then(() => { if (this.showModal && this.editingId === uid) this.emailPrefsMount() })     // 換人／關窗後才回來的結果不畫
         fetch(`/api/users/${uid}/privacy-notice`, { headers: this._headers() })
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d && this.editingId === uid) this.privacyAck = d.ack || null })
@@ -1434,6 +1381,7 @@
 
       closeModal() {
         this.showModal = false; this.editingId = null; this.formError = ''
+        this.emailPrefsDestroy()
         if (this.dutyClose) this.dutyClose()
       },
 

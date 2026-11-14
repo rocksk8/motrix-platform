@@ -730,6 +730,7 @@ def list_receivable(user_id: int, authorization: str = Header(None)):
     o = _overrides()
     order = list(mt.CATEGORIES)
     items = [{"key": t.key, "name": t.name, "categoryLabel": mt.CATEGORIES[t.category],
+              "category": t.category, "lowRisk": t.category == "business",         # 使用者管理頁的矩陣：只有業務類能批次（與 /mine 同一條規則）
               "receivable": receivable(t, o, u["username"], u["role"])}
              for t in sorted(mt.all_types(), key=lambda t: (order.index(t.category), t.name))]
     return {"items": items}

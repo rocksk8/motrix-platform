@@ -229,6 +229,7 @@
    "js:static/display-labels.js",
    "js:static/users-duty.js",
    "js:static/users-batch.js",
+   "js:static/users-email-prefs.js",
    "js:static/settings-matrix.js",
    "js:static/ui.js",
    "page:index.html",
