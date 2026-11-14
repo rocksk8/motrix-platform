@@ -195,7 +195,8 @@ def render(result, title, base, head, exclude_re=DEFAULT_EXCLUDE):
 
 def git_diff(root, base, head):
     r = subprocess.run(["git", "-C", str(root), "-c", "core.quotepath=off", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames",
-                        "%s..%s" % (base, head)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+                        "%s..%s" % (base, head)], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if r.returncode != 0:
         raise SystemExit("git diff 失敗：" + r.stderr.strip()[:300])
     return r.stdout
