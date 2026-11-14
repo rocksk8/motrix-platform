@@ -169,9 +169,10 @@ def test_first_request_is_served_from_bootstrap_then_real():
     assert out["real"] == ["/api/platform/menu"]
 
 
-def test_sections_used_by_two_loaders_are_served_twice():
-    out = _run([{"url": "/api/approval-queue/count"}] * 3)
-    assert [r[1] for r in out["results"]] == [{"count": 3}, {"count": 3}, {"real": "/api/approval-queue/count"}]
+def test_sections_used_by_several_loaders_are_served_that_many_times():
+    # 簽核數：側欄角標＋鈴鐺＋首頁（T86 U7）各一次，第四次起是真請求
+    out = _run([{"url": "/api/approval-queue/count"}] * 4)
+    assert [r[1] for r in out["results"]] == [{"count": 3}, {"count": 3}, {"count": 3}, {"real": "/api/approval-queue/count"}]
 
 
 def test_everything_that_cannot_be_trusted_goes_to_the_real_endpoint():
@@ -227,8 +228,8 @@ def test_failed_sections_are_not_served_even_if_present_as_null():
 
 
 def test_motrix_boot_helper_hands_out_each_section_once():
-    out = _run([{"boot": "menu"}, {"boot": "menu"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}])
-    assert [r[2] for r in out["results"]] == [{"groups": [1]}, None, {"count": 3}, {"count": 3}, None]
+    out = _run([{"boot": "menu"}, {"boot": "menu"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}])
+    assert [r[2] for r in out["results"]] == [{"groups": [1]}, None, {"count": 3}, {"count": 3}, {"count": 3}, None]
 
 
 def test_banner_headers_of_the_bootstrap_response_are_applied_on_first_serve():

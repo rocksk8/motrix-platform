@@ -14,7 +14,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
 
 from core import registry
@@ -22,6 +22,7 @@ from core.txn import begin_write
 from db import get_db
 from helpers import _require_user, _tok, _audit, _notify, active_delegators_for, can_see_financial
 from helpers import audit as _audit_mod
+from helpers.http_etag import json_etag
 from helpers.approval_queue import ApprovalUnreadable, active_tiers, current_tier_idx
 from helpers.case_access import SYSTEM, case_module_present, guard_case_access, is_document_approver
 
@@ -274,7 +275,6 @@ def my_pending_items(u: dict) -> list:
     return mine
 
 
-@router.get("/api/approval-queue/count")
 def get_approval_queue_count(authorization: str = Header(None)):
     """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
     （`_queue_provider_items`），兩邊才對得起來。"""
@@ -283,11 +283,18 @@ def get_approval_queue_count(authorization: str = Header(None)):
     # 首頁「等我簽核」的數字與清單同一份（2026-09-30 使用者：儀表板與簽核佇列沒有連動）：
     # 清單＝角標的那些項目（最早送審的在前，最多 10 筆），不含金額（首頁不做財務遮蔽判斷）。
     return {"count": len(mine),
-            "items": [{"type": it.get("type") or "", "typeLabel": _item_type_label(it),
-                       "quoteNo": it.get("quoteNo") or "", "customer": it.get("customer") or "",
-                       "projectName": it.get("projectName") or "",
-                       "requestedByDisplay": it.get("requestedByDisplay") or it.get("requestedBy") or ""}
-                      for it in mine[:10]]}
+           "items": [{"type": it.get("type") or "", "typeLabel": _item_type_label(it),
+                      "quoteNo": it.get("quoteNo") or "", "customer": it.get("customer") or "",
+                      "projectName": it.get("projectName") or "",
+                      "requestedByDisplay": it.get("requestedByDisplay") or it.get("requestedBy") or ""}
+                     for it in mine[:10]]}
+
+
+@router.get("/api/approval-queue/count")
+def approval_queue_count_http(request: Request, authorization: str = Header(None)):
+    """T86 U7：回到分頁會重打這支，內容多半沒變 ⇒ ETag／304。bootstrap 直接呼叫的是上面那支（參數只有 authorization，
+    守門：test_every_called_handler_takes_only_authorization），所以 ETag 包在這層。"""
+    return json_etag(request, get_approval_queue_count(authorization))
 
 
 # ── 詳情（依 type 分流到擁有模組的 `approval.detail`）─────────────────────────

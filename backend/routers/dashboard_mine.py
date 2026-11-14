@@ -21,10 +21,11 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, Request
 
 from core import registry
 from helpers import _require_user
+from helpers.http_etag import json_etag
 from helpers.auth import has_finance_access
 from db import is_demo_mode
 from routers.approval_queue import visible_queue_items
@@ -221,6 +222,8 @@ def build_mine(user: dict, *, fresh: bool = False) -> dict:
 
 
 @router.get("/api/dashboard/mine")
-def dashboard_mine(fresh: int = Query(0), authorization: str = Header(None)):
+def dashboard_mine(fresh: int = Query(0), authorization: str = Header(None), request: Request = None):
     user = _require_user(authorization)
-    return build_mine(user, fresh=bool(fresh))
+    out = build_mine(user, fresh=bool(fresh))
+    # T86 U7：`generatedAt` 只是時間戳、不算內容有變；其餘逐位相同才 304
+    return json_etag(request, out, volatile=("generatedAt",)) if request is not None else out

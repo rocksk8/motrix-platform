@@ -18,6 +18,9 @@ def _home(e2e_browser, live_server, make_user, name, route=None):
     page = e2e_browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
     if route:
         page.route("**/api/approval-queue/count", route)
+        # T86 U7：開頁第一趟的簽核數改由 bootstrap 暖載入供應（正式環境該端點出錯時 bootstrap 的 errors 會讓前端退回真請求）；
+        # 這題要模擬的是「/count 讀不到」，所以讓 bootstrap 也失敗 ⇒ 前端走原端點
+        page.route("**/api/bootstrap*", lambda r: r.abort())
     inject_login(page, live_server, u, p)
     page.goto(f"{live_server}/index.html")
     return page

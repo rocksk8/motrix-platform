@@ -27,7 +27,7 @@
   var BOOT_SECTIONS = {
     '/api/auth/me': ['me', 2], '/api/platform/menu': ['menu', 1], '/api/system/branding': ['branding', 2],
     '/api/build-info': ['buildInfo', 1], '/api/system/bonus-module-status': ['bonusModuleStatus', 1],
-    '/api/system/modules/availability': ['moduleAvailability', 1], '/api/approval-queue/count': ['approvalCount', 2],
+    '/api/system/modules/availability': ['moduleAvailability', 1], '/api/approval-queue/count': ['approvalCount', 3],
     '/api/notifications/mine': ['notifications', 1], '/api/reads/module-counts': ['moduleCounts', 1],
     '/api/online-users': ['onlineUsers', 1], '/api/auth/totp/status': ['totp', 1]
   };
