@@ -40,6 +40,7 @@ KNOWN_PRODUCT_FILES = {
     r"backend\setup_autostart_task.ps1", r"backend\setup_heartbeat_task.ps1", r"backend\version_manifest.json",
     r"backend\tools\apply_module_update.ps1", r"backend\tools\fetch_root_ca.ps1", r"backend\tools\https_setup.ps1",
     r"backend\tools\setup_passkey_client.ps1",
+    r"firewall_setup.bat",          # 隨產品出貨的防火牆規則（內網 172.16.10.0/23 允許進站）；演練不執行它
 }
 SKIP_DIRS = {".git", "node_modules", "__pycache__", "logs", ".venv", "venv", "docs", "tests", "frontend", "_rehearsal_work"}
 
@@ -88,7 +89,7 @@ class Probes:
     def route_info(self, ip):
         """被動：本機路由表怎麼走（Find-NetRoute 只做路由選擇，不送封包）。⇒ 一行文字；查不到回 None。只當資訊。"""
         ps = ("$r = Find-NetRoute -RemoteIPAddress '%s' -ErrorAction SilentlyContinue | Select-Object -First 1; "
-              "if ($r) { 'ROUTE ' + $r.InterfaceAlias + ' ' + $r.NextHop } else { 'NOROUTE' }") % ip
+              "if ($r) { 'ROUTE interface#' + $r.InterfaceIndex + ' via ' + $r.NextHop } else { 'NOROUTE' }") % ip
         r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
         out = (r.stdout or "").strip().splitlines()
         return out[-1] if out and r.returncode == 0 else None
@@ -363,12 +364,13 @@ $anc = New-Object 'System.Collections.Generic.HashSet[int]'
 $cur = $me; $guard = 0
 while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
 $tree = New-Object 'System.Collections.Generic.HashSet[int]'
-foreach ($r in $roots) { [void]$tree.Add([int]$r) }
-if ($needle.Length -gt 0) { foreach ($p in $all) { if (($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) { [void]$tree.Add([int]$p.ProcessId) } } }
+foreach ($r in $roots) { if ([int]$r -gt 4) { [void]$tree.Add([int]$r) } }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) { [void]$tree.Add([int]$p.ProcessId) } } }
 foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
 $grew = $true
-while ($grew) { $grew = $false; foreach ($p in $all) { if ($tree.Contains([int]$p.ParentProcessId) -and -not $tree.Contains([int]$p.ProcessId)) { [void]$tree.Add([int]$p.ProcessId); $grew = $true } } }
+while ($grew) { $grew = $false; foreach ($p in $all) { if ([int]$p.ParentProcessId -gt 4 -and $tree.Contains([int]$p.ParentProcessId) -and -not $tree.Contains([int]$p.ProcessId)) { [void]$tree.Add([int]$p.ProcessId); $grew = $true } } }
 [void]$tree.Remove([int]$PID)
+foreach ($low in @(0,4)) { [void]$tree.Remove([int]$low) }
 foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
 ConvertTo-Json -Compress @{ tree = @($tree); ancestors = @($anc) }
 """
@@ -461,7 +463,7 @@ class ConnectionMonitor:
         if net.returncode != 0 or "TCP" not in net.stdout:
             raise RuntimeError("監看取樣（netstat）失敗 rc=%s" % net.returncode)
         roots = set(int(p) for p in pids) | listening_pids(net.stdout, self.ports)
-        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in sorted(roots)) or "0", "needle": self.drill_root.replace("'", "''"), "me": os.getpid()}
+        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in sorted(roots)) or "", "needle": self.drill_root.replace("'", "''"), "me": os.getpid()}
         r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
         if r.returncode != 0 or not r.stdout.strip():
             raise RuntimeError("監看取樣（程序樹）失敗 rc=%s %s" % (r.returncode, (r.stderr or "")[:120]))
@@ -483,7 +485,7 @@ class ConnectionMonitor:
     def _kill(self, tree):
         """殺程序。**編排器自己與它所有祖先（外層 shell／包裝腳本，命令列也可能含演練目錄）一律不殺**：
         `taskkill /T` 殺祖先會連編排器一起殺掉，報告與摘要就寫不出來。被略過的記在紀錄裡。"""
-        protected = {os.getpid()} | set(self._ancestors)
+        protected = {0, 4, os.getpid()} | set(self._ancestors)
         skipped = sorted(int(p) for p in tree if int(p) in protected)
         tree = [int(p) for p in tree if int(p) not in protected]
         if skipped:
@@ -713,13 +715,13 @@ def stop_drill_processes(base, ports=(ERP_PORT, DASH_PORT), log=None):
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     net = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
     roots = listening_pids(net.stdout or "", ports)
-    script = _TREE_PS % {"pids": ",".join(str(p) for p in sorted(roots)) or "0", "needle": str(base).replace("'", "''"), "me": os.getpid()}
+    script = _TREE_PS % {"pids": ",".join(str(p) for p in sorted(roots)) or "", "needle": str(base).replace("'", "''"), "me": os.getpid()}
     r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
     if r.returncode != 0 or not r.stdout.strip():
         raise RuntimeError("收尾找不到演練程序（PowerShell rc=%s）" % r.returncode)
     doc = json.loads(r.stdout.strip().splitlines()[-1])
     tree = [doc["tree"]] if isinstance(doc["tree"], int) else list(doc["tree"] or [])
-    kill = [int(x) for x in tree if int(x) != os.getpid() and int(x) != 0]
+    kill = [int(x) for x in tree if int(x) > 4 and int(x) != os.getpid()]
     for pid in sorted(kill, reverse=True):
         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=flags)
     if log:
