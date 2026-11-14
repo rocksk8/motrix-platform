@@ -29,14 +29,24 @@ Windows 的 asyncio proactor 事件迴圈，在**客戶端突然斷線**（關�
 把 asyncio logger 開到 DEBUG 時留一行不帶 traceback 的摘要。其他例外（包含別種 ConnectionResetError）照舊完整記錄。
 （部署腳本掃 log 時本來就會把這個區塊濾掉，行為相容。）
 
+## 請求耗時（T86，PM 裁示 C：不動資料表，改寫獨立輪替檔）
+`logs\\request_timing.log`：一行一筆「時間 方法 路由樣板 狀態碼 耗時ms」（例：`2026-11-14 10:00:00,123 GET /api/dev-cases/{case_id} 200 37`）。
+用途＝正式機統計「最耗時的請求」。**只記 /api/ 請求**；**不含使用者、IP、查詢參數、實際路徑**（只有路由樣板，編號已被樣板去掉；
+沒比對到路由的一律寫 `(unmatched)`，不寫原始路徑）。寫入走 `QueueHandler`＋背景 `QueueListener`：請求執行緒只做一次 `put_nowait`，
+佇列滿了就丟掉並計數（`dropped`），絕不等檔案 I/O、絕不擋請求；檔案打不開 ⇒ 不啟用（`install_request_timing` 回 None），請求照常。
+輪替／gzip／保留天數與 access.log 同一套（`GzipRotatingFileHandler`、`retention.log_keep_days`）。pytest 之下不建檔。
+契約測試：tests/test_request_timing_log_2026_11_14.py。
+
 ## 保留期
-輪替出來的舊檔（`access.log.N.gz`、`app.log.N.gz`、舊的 `server.log.N`）超過 `retention.log_keep_days`（設定中心「保存期限」群組，預設 30 天）
+輪替出來的舊檔（`access.log.N.gz`、`app.log.N.gz`、`request_timing.log.N.gz`、舊的 `server.log.N`）超過 `retention.log_keep_days`（設定中心「保存期限」群組，預設 30 天）
 就刪——由 `archive._daily_backup` 每天呼叫 `prune_rotated_logs`（納入既有的備份／保留機制）。現行檔（`access.log`、`app.log`、`server.log`）永遠不刪。
 """
+import asyncio
 import gzip
 import logging
 import logging.handlers
 import os
+import queue
 import re
 import sys
 import threading
@@ -44,6 +54,7 @@ import time
 
 APP_LOG_NAME = "app.log"
 ACCESS_LOG_NAME = "access.log"
+TIMING_LOG_NAME = "request_timing.log"
 #: 單檔 15 MB（PM：10～20 MB）× 保留 10 份（輪替出來的是 gzip，實際佔用遠小於 150 MB）
 DEFAULT_MAX_BYTES = 15 * 1024 * 1024
 DEFAULT_BACKUPS = 10
@@ -56,7 +67,7 @@ _APP_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 _ACCESS_FORMAT = "%(asctime)s %(message)s"
 
 #: 保留期清理要認的檔名：輪替出來的世代（含壓縮中的暫存檔）。⚠️ 現行檔與 `server.log.rotating`（接手用）不在內
-_ROTATED_RE = re.compile(r"^(?:access\.log|app\.log|server\.log)\.\d+(?:\.gz)?(?:\.pending|\.tmp)?$")
+_ROTATED_RE = re.compile(r"^(?:access\.log|app\.log|request_timing\.log|server\.log)\.\d+(?:\.gz)?(?:\.pending|\.tmp)?$")
 
 
 # ── 輪替＋gzip 的 handler ───────────────────────────────────────────────────
@@ -471,6 +482,160 @@ def install(log_dir, max_bytes=DEFAULT_MAX_BYTES, backups=DEFAULT_BACKUPS, boot_
     out.noise_logger = attach_noise_filter()
     attach_redact_filter()                        # 新加的檔案 handler 也要有（查詢字串遮罩）
     return out
+
+
+# ── 請求耗時（request_timing.log）────────────────────────────────────────
+
+#: 佇列上限：背景執行緒寫不動時最多積這麼多筆，再多就丟（寧可少一筆耗時資料，也不能讓記憶體或請求受影響）
+TIMING_QUEUE_MAX = 20000
+_TIMING_METHOD_RE = re.compile(r"^[A-Z]{3,10}$")
+_TIMING = None                                  # 目前裝上的 TimingInstalled；None ＝ 沒啟用（中介層直接放行）
+
+
+class _DropQueueHandler(logging.handlers.QueueHandler):
+    """佇列滿了就丟（`dropped` 計數），不阻塞、不丟例外。"""
+
+    def __init__(self, q):
+        super().__init__(q)
+        self.dropped = 0
+
+    def enqueue(self, record):
+        try:
+            self.queue.put_nowait(record)
+        except queue.Full:
+            self.dropped += 1
+
+
+class TimingInstalled:
+    def __init__(self, logger, qh, listener, file_handler):
+        self.logger, self.queue_handler, self.listener, self.file_handler = logger, qh, listener, file_handler
+        self._stopped = False
+
+    @property
+    def dropped(self):
+        return self.queue_handler.dropped
+
+    def stop(self):
+        """停掉背景執行緒（把佇列裡剩的寫完）並關檔、解除登記。可重複呼叫。"""
+        global _TIMING
+        if self._stopped:
+            return
+        self._stopped = True
+        if _TIMING is self:
+            _TIMING = None
+        self.logger.removeHandler(self.queue_handler)
+        try:
+            try:
+                self.listener.stop()
+            except queue.Full:                    # 佇列塞滿、結束訊號放不進去 ⇒ 丟掉積壓的再試一次
+                q = self.queue_handler.queue
+                while True:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        break
+                self.listener.stop()
+        except Exception:                         # noqa: BLE001  已經停過（_thread 是 None）等：收尾不可以丟例外
+            pass
+        finally:
+            self.file_handler.close()
+
+
+def install_request_timing(log_dir, max_bytes=DEFAULT_MAX_BYTES, backups=DEFAULT_BACKUPS, queue_max=TIMING_QUEUE_MAX):
+    """裝上 request_timing.log（輪替＋gzip，背景寫入）。成功回 `TimingInstalled`；打不開檔 ⇒ 什麼都不改、回 None（原因寫 stderr）。"""
+    global _TIMING
+    if _TIMING is not None:                       # 重複安裝（重載、測試）⇒ 先停掉上一個，不留執行緒與檔案控制代碼
+        _TIMING.stop()
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        # 不呼叫 recover_pending：main.py 先跑 install()，它已掃整個目錄（含 request_timing.log.*.gz.pending）；
+        # 這裡再掃一次會對同一個 pending 檔起第二條壓縮執行緒、兩條同時寫同一個 .tmp
+        fh = GzipRotatingFileHandler(os.path.join(log_dir, TIMING_LOG_NAME), maxBytes=max_bytes, backupCount=backups)
+    except Exception as exc:                                      # noqa: BLE001
+        try:
+            sys.stderr.write("[log_setup] 請求耗時記錄沒有啟用（%s: %s）\n" % (type(exc).__name__, exc))
+        except Exception:                                         # noqa: BLE001
+            pass
+        return None
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    q = queue.Queue(maxsize=queue_max)
+    qh = _DropQueueHandler(q)
+    listener = logging.handlers.QueueListener(q, fh, respect_handler_level=True)
+    lg = logging.getLogger("motrix.request_timing")
+    lg.setLevel(logging.INFO)
+    lg.propagate = False                          # 不進 app.log／server.log：這是獨立的資料檔
+    for h in list(lg.handlers):
+        lg.removeHandler(h)
+    lg.addHandler(qh)
+    listener.start()
+    _TIMING = TimingInstalled(lg, qh, listener, fh)
+    return _TIMING
+
+
+def route_template(scope):
+    """路由樣板（`/api/dev-cases/{case_id}`）。沒比對到路由 ⇒ `(unmatched)`——**絕不回原始路徑**（原始路徑含編號、可能含個資）。"""
+    try:
+        route = scope.get("route")
+        path = getattr(route, "path", None) or getattr(route, "path_format", None)
+        if isinstance(path, str) and path.startswith("/"):
+            return path
+    except Exception:                                             # noqa: BLE001
+        pass
+    return "(unmatched)"
+
+
+def record_request_timing(method, route, status, ms):
+    """寫一行。沒啟用 ⇒ 立刻返回。任何例外都吞掉。"""
+    t = _TIMING
+    if t is None:
+        return
+    try:
+        m = method if isinstance(method, str) and _TIMING_METHOD_RE.match(method) else "?"
+        t.logger.info("%s %s %d %d", m, route, int(status or 0), int(ms))
+    except Exception:                                             # noqa: BLE001
+        pass
+
+
+class RequestTimingMiddleware:
+    """純 ASGI 中介層：量一個 /api/ 請求從進來到回應送完的耗時。沒啟用時只多一次全域變數判斷。
+    狀態碼取自 `http.response.start`；回應送完（最後一個 body 區塊）才算結束；處理時丟例外 ⇒ 記 500 再把例外原樣丟出去。
+    客戶端在回應開始前就斷線（沒有狀態碼也沒有例外）⇒ 不記。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if _TIMING is None or scope.get("type") != "http" or not str(scope.get("path", "")).startswith("/api/"):
+            return await self.app(scope, receive, send)
+        t0 = time.perf_counter()
+        state = {"status": 0, "done": False}
+
+        def _finish(status):
+            if state["done"]:
+                return
+            state["done"] = True
+            record_request_timing(scope.get("method"), route_template(scope), status, (time.perf_counter() - t0) * 1000)
+
+        async def _send(message):
+            kind = message.get("type")
+            if kind == "http.response.start":
+                state["status"] = message.get("status", 0)
+            await send(message)
+            if kind == "http.response.body" and not message.get("more_body", False):
+                _finish(state["status"])
+
+        try:
+            await self.app(scope, receive, _send)
+        except BaseException as exc:
+            if isinstance(exc, (asyncio.CancelledError, GeneratorExit)) and not state["status"]:
+                state["done"] = True                      # 客戶端中途斷線／被取消：不是真的 500，不記（會污染「最耗時請求」統計）
+            else:
+                _finish(state["status"] or 500)
+            raise
+        else:
+            if state["status"]:
+                _finish(state["status"])
 
 
 # ── 保留期 ────────────────────────────────────────────────────────────────

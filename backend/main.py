@@ -123,6 +123,7 @@ _log_setup.attach_redact_filter()      # 查詢字串遮罩：token 不進任何
 if _log_setup.enabled_by_environment():
     from core import paths as _log_paths
     _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
+    _log_setup.install_request_timing(_log_paths.LOGS_DIR)     # logs/request_timing.log：每個 /api/ 請求一行耗時（背景寫入，不拖慢請求）
 else:
     _LOG_SPLIT = None
 
@@ -943,6 +944,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+app.add_middleware(_log_setup.RequestTimingMiddleware)   # T86：請求耗時（純 ASGI；放在 InternalCols 之前加，仍是第二外層）
 app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不得出現在任何 JSON 回應（最後加＝最外層，看到的是最終本文）
 
 

@@ -6,6 +6,10 @@
 - 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。
 - 行為變更（只改訊息與前端）：模組建構器的編號預覽、輸出預覽在規則／欄位未完成時先在畫面說明，不送請求；`numbering/preview`、`output/preview` 的 422 訊息補處理方式（狀態碼與判斷不變）。
 - 測試：`tests/test_line_settings_messages_2026_11_14.py`、`tests/test_custom_module_preview_messages_2026_11_14.py`、`tests/test_e2e_line_settings_precheck_2026_11_14.py`、`tests/test_e2e_builder_preview_precheck_2026_11_14.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-request-timing-h7；T86 請求耗時記錄；版號由列車取）**
+- 新增（內部／維運，無 API、資料表、欄位、權限變更；核心 V9 基準 118 不動）：`logs\request_timing.log`——每個 `/api/` 請求一行「時間 方法 路由樣板 狀態碼 耗時ms」，讓正式機能統計最耗時的請求。不含使用者、IP、查詢參數、標頭、實際路徑（只寫路由樣板；沒比對到路由寫 `(unmatched)`）。
+- 機制：純 ASGI 中介層 `helpers.log_setup.RequestTimingMiddleware`（`main.py` 在 InternalColsMiddleware 之前加，仍是第二外層）＋ `QueueHandler`／背景 `QueueListener` 寫檔：請求端只做一次 `put_nowait`，佇列（2 萬筆）滿了丟掉並計數，不等檔案 I/O；打不開檔 ⇒ 不啟用、請求照常；pytest 之下不建檔。輪替（15 MB × 10 份、gzip）與保留天數（`retention.log_keep_days`）沿用 access.log／app.log 同一套，`prune_rotated_logs` 認得 `request_timing.log.N.gz`。
+- 測試：`tests/test_request_timing_log_2026_11_14.py`。
 
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
