@@ -42,11 +42,13 @@ def _seed(quote_no, status):
         conn.close()
 
 
-def _fail_rows():
+def _fail_rows(username):
+    """只讀**這個測試自己的使用者**寫下的失敗列：audit_log 是整個 worker 共用的表，讀整張會撞到前面測試留下的 login_failed 等列。"""
     import db
     conn = db.get_db()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM audit_log WHERE result='fail' ORDER BY id").fetchall()]
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM audit_log WHERE result='fail' AND username=? ORDER BY id", (username,)).fetchall()]
     finally:
         conn.close()
 
@@ -65,7 +67,7 @@ def test_locked_status_put_is_403_with_status_locked_code_in_header_and_audit(cl
     assert r.status_code == 403, r.text
     assert r.headers.get("X-Fail-Reason") == "status_locked"
     assert "請透過正式流程操作或解鎖後修改" in r.json()["detail"], "回應本文不變"
-    rows = [x for x in _fail_rows() if x["status_code"] == 403]
+    rows = [x for x in _fail_rows(u) if x["status_code"] == 403]
     assert len(rows) == 1 and rows[0]["reason_code"] == "status_locked"
     assert "status_locked" in A._FAIL_REASON_LABELS
 
@@ -77,7 +79,7 @@ def test_rejected_quote_put_is_403_with_rejected_locked_code(client, make_user):
     r = _put(client, h, "MQ-2611-902", "已拒絕")
     assert r.status_code == 403, r.text
     assert r.headers.get("X-Fail-Reason") == "rejected_locked"
-    assert [x["reason_code"] for x in _fail_rows() if x["status_code"] == 403] == ["rejected_locked"]
+    assert [x["reason_code"] for x in _fail_rows(u) if x["status_code"] == 403] == ["rejected_locked"]
 
 
 def test_version_conflict_409_keeps_default_conflict_code(client, make_user):
@@ -87,10 +89,10 @@ def test_version_conflict_409_keeps_default_conflict_code(client, make_user):
     r = _put(client, h, "MQ-2611-903", "草稿", {"_expectedUpdatedAt": "2020-01-01T00:00:00"})
     assert r.status_code == 409, r.text
     assert not r.headers.get("X-Fail-Reason"), "版本衝突沒有另帶碼（維持依狀態碼的預設）"
-    assert [x["reason_code"] for x in _fail_rows() if x["status_code"] == 409] == ["conflict"]
+    assert [x["reason_code"] for x in _fail_rows(u) if x["status_code"] == 409] == ["conflict"]
 
 
 def test_unknown_reason_code_falls_back_to_status_default():
     """不認得的碼不能被寫進 reason_code（固定詞彙）：退回依狀態碼的預設。"""
-    A._audit_failure(5, "u", "U", "PUT", "/api/quotations/{quote_no}", 403, reason="made_up_code", now=10.0)
-    assert [x["reason_code"] for x in _fail_rows()] == ["permission_denied"]
+    A._audit_failure(5, "qf_unknown_code_user", "U", "PUT", "/api/quotations/{quote_no}", 403, reason="made_up_code", now=10.0)
+    assert [x["reason_code"] for x in _fail_rows("qf_unknown_code_user")] == ["permission_denied"]
