@@ -24,6 +24,7 @@ import openpyxl
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 
+from core import registry as _registry
 from db import get_db
 from helpers import _require_user, can_see_financial, download_name, row_access, user_has_module
 from helpers.auth import has_finance_access
@@ -288,7 +289,7 @@ def _build_revenue(p: dict, u: dict) -> dict:
     cmap = {c["quoteNo"]: c for c in cases}
     filtered = bool(p.get("sales_id") or p.get("customer"))
     rec = _rp._recognition()
-    cash_ok = _rp._registry.single_provider("receivables.income_items") is not None
+    cash_ok = _registry.single_provider("receivables.income_items") is not None
     notes = [BASIS_NOTES[basis]]
 
     def items_for(which: str):
