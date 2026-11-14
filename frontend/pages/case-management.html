@@ -3197,7 +3197,8 @@
               </div><!-- /fin -->
 
               <!-- ══ 承攬商派發 Tab ══ -->
-              <div x-show="activeTab==='dispatch'">
+              <div x-show="activeTab==='dispatch'" :class="{'cm-pane-blocked': blockedNote('dispatch')}">
+                <div class="cm-blocked" data-testid="cm-blocked-dispatch" x-show="blockedNote('dispatch')" x-text="blockedNote('dispatch')"></div>
 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <!-- KPI bar -->
@@ -3497,7 +3498,8 @@
               </div><!-- /dispatch -->
 
               <!-- ══ 出貨單 Tab ══ -->
-              <div x-show="activeTab==='shipping'">
+              <div x-show="activeTab==='shipping'" :class="{'cm-pane-blocked': blockedNote('shipping')}">
+                <div class="cm-blocked" data-testid="cm-blocked-shipping" x-show="blockedNote('shipping')" x-text="blockedNote('shipping')"></div>
 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <!-- KPI bar -->
@@ -3668,7 +3670,8 @@
               <!-- ══ 完工單 Tab（2026-09-12）══
                    資料在 completion_notes 表（DB v77），走與出貨單同一套分層簽核。
                    欄位設計與理由見 backend/db.py::_m077_completion_notes()。 -->
-              <div x-show="activeTab==='completion'">
+              <div x-show="activeTab==='completion'" :class="{'cm-pane-blocked': blockedNote('completion')}">
+                <div class="cm-blocked" data-testid="cm-blocked-completion" x-show="blockedNote('completion')" x-text="blockedNote('completion')"></div>
 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
@@ -3788,7 +3791,8 @@
                 <div style="padding:14px;color:var(--text-dim)" data-testid="cm-allfiles-empty" x-show="caseFilesFor === selected.quote_no && !caseFilesLoading && !caseFiles.length && !caseFilesErr">這個案件尚無您可檢視的上傳檔案。</div>
               </div>
 
-              <div x-show="activeTab==='feed'" class="feed-wrap">
+              <div x-show="activeTab==='feed'" class="feed-wrap" :class="{'cm-pane-blocked': blockedNote('feed')}">
+                <div class="cm-blocked" data-testid="cm-blocked-feed" x-show="blockedNote('feed')" x-text="blockedNote('feed')"></div>
                 <!-- 月曆總覽 toggle -->
                 <div class="feed-cal-toggle-row">
                   <button class="feed-cal-toggle-btn" :class="{on: feedCalMode}" @click="toggleFeedCalMode()">
