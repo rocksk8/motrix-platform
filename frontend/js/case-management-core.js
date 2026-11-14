@@ -390,6 +390,9 @@ window.CM_PARTS.push(() => ({
         const data = bundle.quotation
         const parts = bundle.parts || {}
         this.selected = data
+        // T86 #30：手機上整頁一起捲（清單與明細上下堆疊）。從清單深處點進案件時，頁面還停在
+        // 清單的捲動位置，案件標題列就落在頂欄底下被蓋住 ⇒ 開啟案件時回到頁面頂端。
+        if (this.isMobileView) window.scrollTo(0, 0)
         // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
         //      那一筆的未讀標記必須還在。
         this._markCaseRead(quoteNo)
