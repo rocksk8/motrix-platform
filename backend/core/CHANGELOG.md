@@ -1,7 +1,6 @@
 # L0／L1 底層 更新紀錄
 
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
-- 行為變更：設定 `list_view.cases_merge_won_tab` 預設 0→1（案件清單預設把「已成案」併進全部；已存過值的公司不受影響，只有從未儲存過這組設定的公司會改變）。L1 介面不變；部署基準（settings_deploy_baseline）與種子 CSV 同步。
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 - **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**
 - 行為變更（預設值）：案件清單預設合併「進行中」與重複的「已成案」頁籤（設定 `list_view.cases_merge_won_tab` 預設 0→1）；可到設定中心改回「兩個都保留」。**不做 migration**：正式機已明確存過 0 的公司不會跟著變（預期行為）。此設定現在不需開啟「自訂畫面版面」也會生效（案件頁多帶一個 `list_view` 群組，同一個設定請求）。
