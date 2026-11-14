@@ -209,7 +209,7 @@ if (typeof module !== 'undefined' && module.exports) {
     st.id = 'gs-mobile-css'
     st.textContent = '@media (max-width:767px){'
       + '.gs-drop{position:fixed !important;left:8px !important;right:8px !important;width:auto !important;max-width:none !important;'
-      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100vh - var(--topbar-bar-h) - 24px) !important;max-height:calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 24px) !important}'
+      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 24px) !important}'
       + '.gs-item{min-height:calc(44px / var(--fz, 1));display:flex !important;flex-direction:column;justify-content:center}'
       + '}'
     document.head.appendChild(st)
