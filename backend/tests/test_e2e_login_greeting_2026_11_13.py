@@ -22,9 +22,9 @@ def test_first_login_shows_welcome_and_start_button(live_server, make_user, new_
     btn = page.locator("[data-testid=login-greeting-action]")
     assert btn.is_visible() and btn.inner_text() == "開始使用" and "my-account.html" in btn.get_attribute("href")
     # 標題仍是「早安／午安／晚安，名字。」＋原本的待辦句（問候語不取代標題）
-    page.wait_for_function("/件事等您處理|沒有待您簽核/.test(document.querySelector('h1.h-hero__t').innerText)", timeout=20000)
+    page.wait_for_function("/件事等您處理|尚無待您簽核/.test(document.querySelector('h1.h-hero__t').innerText)", timeout=20000)
     h1 = page.locator("h1.h-hero__t").inner_text()
-    assert h1[:2] in ("早安", "午安", "晚安") and ("件事等您處理" in h1 or "沒有待您簽核" in h1)
+    assert h1[:2] in ("早安", "午安", "晚安") and ("件事等您處理" in h1 or "尚無待您簽核" in h1)
 
 
 @pytest.mark.e2e

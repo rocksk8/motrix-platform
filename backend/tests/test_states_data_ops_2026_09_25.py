@@ -392,7 +392,7 @@ def test_state_cn03_failed_email_is_not_throttled_and_leaves_a_trace(alert_env):
     archive._write_backup_alert("雲端路徑不可用", level="ERROR")
     join()
     assert "backup.alert_email_failed" in audits
-    assert "寄不出去" in (d / "BACKUP_ALERT.txt").read_text(encoding="utf-8")
+    assert "無法寄出" in (d / "BACKUP_ALERT.txt").read_text(encoding="utf-8")
     state["outcome"] = en.SEND_SENT
     archive._write_backup_alert("雲端路徑不可用", level="ERROR")      # 下一輪重寄
     join()
@@ -412,7 +412,7 @@ def test_state_cn03_failure_trace_is_rate_limited_per_day(alert_env):
     assert len(sent) == 5                                           # 寄信照樣每輪重試
     assert audits.count("backup.alert_email_failed") == 1
     txt = (d / "BACKUP_ALERT.txt").read_text(encoding="utf-8")
-    assert txt.count("寄不出去") == 1 and "設定成不寄信" in txt
+    assert txt.count("無法寄出") == 1 and "設定成不寄信" in txt
     state["outcome"] = en.SEND_TRANSIENT_FAIL                       # 不同的寄不出去原因 ⇒ 另留一筆
     archive._write_backup_alert("雲端路徑不可用", level="ERROR")
     join()

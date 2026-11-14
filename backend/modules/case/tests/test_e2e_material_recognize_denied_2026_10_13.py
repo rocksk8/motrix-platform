@@ -25,6 +25,15 @@ def _cr():
         c.close()
 
 
+
+def _expand_first_material(page):
+    """T86-3：材料明細預設收合在時間軸那一列下面；已展開就不再按（按了會收回去）。"""
+    more = page.locator('[data-testid^="mtl-more-"]').first
+    more.wait_for(state="visible", timeout=20000)
+    if more.get_attribute("aria-expanded") != "true":
+        more.dispatch_event("click")
+    page.wait_for_selector(".mat-card", state="visible", timeout=20000)
+
 def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_user, e2e_browser):
     import db
     from helpers import _set_setting
@@ -60,7 +69,7 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     pg.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     pg.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
     pg.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
-    pg.wait_for_selector(".mat-card", timeout=20000)
+    _expand_first_material(pg)
     pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
     card = pg.locator(".mat-card").first
     card.locator('[data-testid="mat-order-oneclick"]').dispatch_event('click')               # 編輯中提示框（presence）可能蓋住按鈕：直接送出 click 事件
@@ -82,7 +91,7 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     page.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     page.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
     page.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
-    page.wait_for_selector(".mat-card", timeout=20000)
+    _expand_first_material(page)
     page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
     page.locator(".mat-card").first.locator('[data-testid="mat-order-oneclick"]').dispatch_event('click')
     page.wait_for_function("() => document.querySelector('[data-testid=mat-po-recognized]')", timeout=8000)
@@ -102,7 +111,7 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     p3.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     p3.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
     p3.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
-    p3.wait_for_selector(".mat-card", timeout=20000)
+    _expand_first_material(p3)
     p3.locator(".mat-card .btn-del").first.dispatch_event('click')
     p3.locator('[data-testid="ui-dialog-ok"]').click()
     p3.wait_for_selector('[data-testid="ui-toast"]:has-text("不能刪除")', timeout=8000)

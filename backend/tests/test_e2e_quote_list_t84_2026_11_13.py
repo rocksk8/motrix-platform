@@ -105,11 +105,11 @@ def test_three_numbers_default_filter_next_step_columns_and_remembered_choice(li
     # 客戶名稱併進單號格
     first = page.locator("tr.ql-row[data-quote-no='MQ-T84E-001'] td[data-col=quoteNo]").inner_text()
     assert "MQ-T84E-001" in first and "客戶001" in first
-    # 下一步：等誰簽核（現名）、已核准待寄客戶、被退回
+    # 下一步：等誰簽核（現名）、已核准待寄客戶、已退回（T86 用語：被退回→已退回）
     nxt = lambda no: page.locator("tr.ql-row[data-quote-no='%s'] td[data-col=next]" % no).inner_text()   # noqa: E731
     assert "等 王經理 簽核" in nxt("MQ-T84E-002")
     assert "簽完了，請寄給客戶" in nxt("MQ-T84E-003")
-    assert "被退回" in nxt("MQ-T84E-004")
+    assert "已退回，請修改後重新送審" in nxt("MQ-T84E-004")
     assert "尚未送簽" in nxt("MQ-T84E-001")
     # 案件進度小選單仍在（E3：一次選擇完成），未標記有說明
     sel = page.locator("tr.ql-row[data-quote-no='MQ-T84E-005'] td[data-col=dealTag] select")

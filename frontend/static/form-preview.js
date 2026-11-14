@@ -303,12 +303,12 @@
   }
 
   /** 輸出預覽一定畫不出來的草稿 ⇒ 回白話原因（不送請求）；其餘（欄位填到一半）伺服器會用佔位照畫。T86 U9：custom-modules preview 422 ×6。
-   *  規則同伺服器 `helpers/custom_modules.preview_output`：沒有欄位、或沒有任何一個欄位有合法 key ⇒ 422。 */
+   *  規則同伺服器 `helpers/custom_modules.preview_output`：沒有欄位、或沒有任何一個欄位有合法 key ⇒ 422。欄位 key 的規則是 custom_fields.KEY_RE（1～40 字，單一字母也合法；2～40 字是『模組 key』的規則，兩者不同）。 */
   function outputBlocker(def) {
     var fs = (def && Array.isArray(def.fields)) ? def.fields : []
     if (!fs.length) return '尚無可以預覽的欄位：請先到「欄位」步驟新增至少一個欄位（填上顯示名稱與 key），這裡就會出現預覽。'
-    if (!fs.some(function (f) { return f && /^[a-z][a-z0-9_]{1,39}$/.test(String(f.key || '')) }))
-      return '所有欄位都尚未完成，暫時無法預覽：請替至少一個欄位填上 key（小寫英文字母開頭，可含數字與底線，2～40 字，例如 amount）。'
+    if (!fs.some(function (f) { return f && /^[a-z][a-z0-9_]{0,39}$/.test(String(f.key || '')) }))
+      return '所有欄位都尚未完成，暫時無法預覽：請替至少一個欄位填上 key（小寫英文字母開頭，可含數字與底線，最長 40 字，例如 amount）。'
     return ''
   }
 

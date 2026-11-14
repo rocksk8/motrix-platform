@@ -105,5 +105,5 @@ def test_flag_on_staff_without_any_case_is_told_why_the_list_is_empty(live_serve
     page.click(BTN)
     note = page.locator('[data-testid="dt-self-cases-notice"]')
     note.wait_for(state="visible", timeout=5000)
-    page.wait_for_function("() => document.querySelector('[data-testid=dt-self-cases-notice]').innerText.includes('沒有可關聯')", timeout=10000)
+    page.wait_for_function("() => document.querySelector('[data-testid=dt-self-cases-notice]').innerText.includes('尚無可關聯')", timeout=10000)
     assert page.locator('[data-testid="dt-self-case"]').is_disabled()

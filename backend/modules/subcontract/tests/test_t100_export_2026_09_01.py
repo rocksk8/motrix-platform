@@ -102,11 +102,25 @@ def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_use
     username, password = make_user(username="t100_admin2", role="superadmin")
     token = _login(client, username, password)
 
-    client.put(
+    # S5：科目設定改走 publish()——新填的科目代號必須存在於會計科目表（原本直接寫舊鍵、不驗證）
+    import db as _db
+    _c = _db.get_db()
+    try:
+        for _code in ("4101", "2191", "6101"):
+            _c.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
+                       " VALUES (?, 4, ?, '', 'custom', 1)", (_code, "測試科目" + _code))
+        _c.commit()
+    finally:
+        _c.close()
+    _put = client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
         json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
               "contractorExpenseAccount": "6101"},
     )
+    assert _put.status_code == 200 and _put.json()["pending"], _put.text   # 有實質變更 ⇒ 待生效
+
+    from tests._settings_activate import activate_now      # S5：科目設定走確認期間＋雙人核准；測試用捷徑讓它立刻生效
+    activate_now("t100_export")
 
     v_in_range = _make_paid_contractor_voucher(client, token, "MQ-T100-001", "2026-08-15")
     v_out_of_range = _make_paid_contractor_voucher(client, token, "MQ-T100-002", "2026-01-05")

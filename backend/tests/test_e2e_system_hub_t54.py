@@ -70,7 +70,7 @@ def test_user_without_system_permissions_sees_the_plain_empty_state_and_no_nav_e
     page = new_context(viewport={"width": 1440, "height": 900}).new_page()
     _open_hub(page, live_server, u)
     page.wait_for_selector("[data-testid=hub-empty]", state="visible", timeout=25000)
-    assert "沒有可用的系統功能" in page.locator("[data-testid=hub-empty]").inner_text()
+    assert "尚無可用的系統功能" in page.locator("[data-testid=hub-empty]").inner_text()
     assert page.locator("#app-mainnav a.mnav__top", has_text="系統").count() == 0
 
 

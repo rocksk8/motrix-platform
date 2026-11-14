@@ -79,7 +79,7 @@ def _grant_in_users_page(page, base, username, module_label):
     row.get_by_role("button", name="編輯").click()
     modal = page.locator(".modal-box", has=page.locator(".modal-head__title", has_text="編輯使用者"))
     modal.wait_for(state="visible")
-    modal.get_by_text("自訂模組", exact=True).click()
+    # T86：帳號編輯改用共用的權限勾選元件——分組不再折疊，且點分組標題＝整組全選／全取消，所以不能再點「自訂模組」標題來展開
     chip = modal.locator("label", has=page.get_by_text(module_label, exact=True))
     chip.wait_for(state="visible")
     with page.expect_response(lambda r: r.request.method == "PUT" and "/api/users/" in r.url) as resp:
