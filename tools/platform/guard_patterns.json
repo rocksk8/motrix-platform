@@ -62,6 +62,10 @@
   {
    "glob": "*module_registry*",
    "why": "模組登記／權限目錄顯示名（第 32 班 r32-perm-catalog：改字後權限目錄題紅）"
+  },
+  {
+   "glob": "*text_anchor*",
+   "why": "測試寫法守門：新測試不得用文字子字串當計數／錨點（T86 fx33 教訓；T87 A2）"
   }
  ],
  "static_in_e2e_named": [

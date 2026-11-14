@@ -7,8 +7,11 @@
 用法（repo 根目錄；工作樹必須乾淨，含未追蹤檔）：
   python tools/platform/author_gate.py [--base <ref>] [--head HEAD] [--workers 2] [--budget-min 12] [--json-out <路徑>]
                                        [--dry-run] [--skip-e2e] [--quick] [--known-red <json>]
-  --quick：約 10 分鐘的快速版——只跑 A2 樣式守門檔＋A3／A4（依 diff 與本分支改動的測試檔），不含 A1（整個 tests/platform、工具演練）；
-           輸出與結果檔都標 quick，整包由階段測試涵蓋。每片推 sha 前用它；完整版留給獨佔窗口。
+  --quick：5 分鐘內的快速版（T87 A2；預設預算 5 分鐘，--budget-min 可改）。依優先層選題（tools/platform/quick_select.py）：
+           T0 本分支改動的測試 → T1 被 diff 觸發的整合守門組（preflight_guards.json 的 watch；太大的組列為未跑）→
+           T2 diff 刪掉的字面值反查測試（舊文案／舊結構留在測試裡＝最常見的過期斷言）→ T3 檔名樣式守門（含 text_anchor）→
+           T4 改動模組自己的測試／頁面關聯測試（預算不夠時只砍這層）。不含 A1（整個 tests/platform、工具演練）。
+           砍掉或整組略過的每一項都印成「未跑」並寫進結果檔 quick_skipped——**未跑不是通過**；輸出與結果檔都標 quick，整包由階段測試涵蓋。
   python tools/platform/author_gate.py replay [--cases <json>] [--run] [--case <名稱> ...]
 
 選題（去重取聯集）：
@@ -218,7 +221,7 @@ def classify_failures(failures, known_red):
 
 
 def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_new, failures_known, duration_s, estimate_s,
-                workers, stopped_by_failfast, forced_full, started, finished, e2e=None, quick=False):
+                workers, stopped_by_failfast, forced_full, started, finished, e2e=None, quick=False, skipped=None):
     """結果 JSON（綠＝沒有任何「新的紅」且確實有題被收集；紅了不可能寫 green:true）。"""
     ran_any = counts.get("passed", 0) + counts.get("failed", 0) + counts.get("errors", 0) > 0
     green = bool(ran_any and not failures_new and counts.get("failed", 0) + counts.get("errors", 0) == len(failures_known)
@@ -229,6 +232,7 @@ def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_
             "ran": counts, "failed_new": [f["nodeid"] for f in failures_new], "failed_known": [f["nodeid"] for f in failures_known],
             "green": green, "duration_s": round(duration_s, 1), "estimate_s": round(estimate_s, 1),
             "stopped_by_failfast": bool(stopped_by_failfast), "forced_full_for_build": forced_full, "e2e": e2e,
+            "quick_skipped": list(skipped or []),
             "started": started, "finished": finished}
 
 
@@ -383,15 +387,45 @@ def strip_backend(paths):
 
 # ── 主流程 ───────────────────────────────────────────────────────────────
 
-def select_for(base, head, repo=REPO, full_floor=False, quick=False):
+def select_for(base, head, repo=REPO, full_floor=False, quick=False, workers=2, budget_min=None, times=None):
     import stage_select as SS
     from pre_train_check import GUARDS, expand_guards
     plan_n = SS.plan_stage("not_e2e", base, head, str(repo))
     plan_e = SS.plan_stage("e2e", base, head, str(repo))
     guard_args, missing = expand_guards(Path(repo) / "backend", GUARDS)
-    sel = build_selection(plan_n, plan_e, tree_files_at(head, repo), changed_files(base, head, repo), guard_args, full_floor=full_floor, quick=quick)
+    tree = tree_files_at(head, repo)
+    changed = changed_files(base, head, repo)
+    sel = build_selection(plan_n, plan_e, tree, changed, guard_args, full_floor=full_floor, quick=quick)
     sel["guard_args"], sel["guards_missing"] = guard_args, missing
+    if quick:
+        e2e_collected = set((plan_e or {}).get("collected") or [])
+        apply_quick_plan(sel, base, head, repo, tree, changed, workers, 5 if budget_min is None else budget_min, times if times is not None else load_times(),
+                         is_e2e=lambda f: "test_e2e_" in f.rsplit("/", 1)[-1] or f in e2e_collected)
     return sel, plan_n, plan_e
+
+
+E2E_FILE_SECONDS = 20.0                # 預算估算：e2e 檔每檔約 20 s（起伺服器＋瀏覽器；實測 T86 區間中位數附近，只用來排預算）
+
+
+def apply_quick_plan(sel, base, head, repo, tree, changed, workers, budget_min, times, is_e2e=None):
+    """--quick：用 quick_select 的優先層重排 non_e2e（T0 改動測試 → T1 整合守門組 → T2 刪掉的字面值反查 → T3 樣式守門 → T4 其餘選題，T4 依預算砍）。
+    被砍／整組略過的每一項都放進 sel["quick_skipped"]（輸出與結果檔必須寫「未跑」）。"""
+    import quick_select as QS
+    rc, diff, _err = _git("diff", "--no-renames", "-U0", base, head, repo=repo)
+    is_e2e = is_e2e or (lambda f: "test_e2e_" in f.rsplit("/", 1)[-1])
+    secs = lambda f: E2E_FILE_SECONDS if is_e2e(f) else file_seconds(f, times, repo)       # noqa: E731
+    e2e_in = sorted(set(sel["E"]))                                                          # 本來就要跑的 e2e（改動的 e2e 測試、改到頁面選到的）
+    plan = QS.plan_quick(changed=changed, diff_text=diff if rc == 0 else "", tree_files=tree, a2=sel["A2"], a4=sel["A4"], extra_t4=sel["A3"] + e2e_in,
+                         repo=repo, ref=head, seconds_fn=secs, workers=workers, budget_s=budget_min * 60)
+    sel["quick_plan"] = plan
+    sel["quick_skipped"] = plan["skipped"]
+    planned = sorted(set(plan["files"]))
+    sel["E"] = sorted(f for f in planned if is_e2e(f))                                      # e2e 檔（T1／T2 選到的也算）走 e2e 那一段，不混進 not_e2e
+    sel["non_e2e"] = [f for f in planned if not is_e2e(f)]
+    sel["guard_args"] = sorted(set(sel["guard_args"]) | set(n[len("backend/"):] for n in plan["nodes"] if n.startswith("backend/")))
+    sel["A3"] = sorted(f for f in set(plan["tiers"]["T4"].get("run", [])) if not is_e2e(f))
+    sel["budget_min"] = budget_min
+    return sel
 
 
 def main(argv=None):
@@ -407,12 +441,12 @@ def main(argv=None):
     ap.add_argument("--base")
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--workers", type=int, default=2, help="pytest -n（預設 2＝全機測試名額；1＝不用 -n）")
-    ap.add_argument("--budget-min", type=int, default=12)
+    ap.add_argument("--budget-min", type=int, default=None, help="預算分鐘（預設：完整版 12、--quick 5）。完整版只警告；--quick 只砍最低優先層 T4，並把被砍的列為「未跑」")
     ap.add_argument("--json-out")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-e2e", action="store_true")
     ap.add_argument("--full-floor", action="store_true", help="連建包底板的 F0b／F0c／F0d（global_tests、unmapped、掃目錄型）也跑；預設不含")
-    ap.add_argument("--quick", action="store_true", help="快速版（約 10 分鐘）：只跑 A2 樣式守門檔＋A3／A4 依 diff 選到的檔＋本分支改動的測試檔，不含 A1（整個 tests/platform、工具演練）；整包由階段測試涵蓋")
+    ap.add_argument("--quick", action="store_true", help="快速版（5 分鐘內，T87 A2）：依優先層選題（改動的測試→被觸發的整合守門組→刪掉字面值反查→樣式守門→模組自己的測試），預算只砍最低層，砍掉的列為「未跑」；不含 A1；整包由階段測試涵蓋")
     ap.add_argument("--known-red", help="已登記的既有紅（JSON：{\"nodeids\": [...]}）；只准縮短，列出但不計入")
     ap.add_argument("--repo", default=str(REPO))
     a = ap.parse_args(argv)
@@ -427,12 +461,14 @@ def main(argv=None):
             return 2
         head = resolve(a.head, repo)
         base = resolve(a.base, repo) if a.base else default_base(head, repo)
-        sel, plan_n, plan_e = select_for(base, head, repo, a.full_floor, a.quick)
+        times = load_times()
+        workers = max(1, a.workers)
+        budget_min = a.budget_min if a.budget_min is not None else (5 if a.quick else 12)
+        sel, plan_n, plan_e = select_for(base, head, repo, a.full_floor, a.quick, workers=workers, budget_min=budget_min, times=times)
     except RuntimeError as e:
         print("作者閘門：%s" % e)
         return 2
-    times = load_times()
-    workers = max(1, a.workers)
+    a.budget_min = budget_min
     est = estimate_seconds(sel["non_e2e"], times, workers, repo)
     print("作者閘門 %s → 基準 %s" % (head[:8], base[:8]))
     print("  A1 底板 %d 檔（不含建包才需要的底板 %d 檔，--full-floor 加入）｜A2 樣式守門 %d 檔｜A3 受影響 %d 檔｜A4 改動測試 %d 檔｜不含 e2e 共 %d 檔｜e2e %d 檔（單獨一段）" % (
@@ -441,7 +477,10 @@ def main(argv=None):
     if a.quick:
         print("  quick：不含整個 tests/platform（A1）與工具演練，整包由階段測試涵蓋；只當部分證據")
         if sel.get("quick_cut"):
-            print("  quick：A3／e2e 只含「改動模組自己的測試」＋因改到的頁面／前端 js 選到的測試；相依連帶選題不跑，由階段測試涵蓋")
+            print("  quick：e2e 只含「改動模組自己的測試」＋因改到的頁面／前端 js 選到的測試；相依連帶選題不跑，由階段測試涵蓋")
+        if sel.get("quick_plan"):
+            import quick_select as QS
+            print(QS.format_plan(sel["quick_plan"]))
     if sel["guards_missing"]:
         print("  ⚠ GUARDS 找不到檔（被改名？）：" + "、".join(sel["guards_missing"]))
     if sel["forced_full"]:
@@ -490,12 +529,14 @@ def main(argv=None):
     import stage_select as SS
     res = make_result(head=head, base=base, tree_sha=tree_sha_of(head, repo), selector_sha=SS.selector_sha(SS.GitReader(str(repo), head)),
                       groups=sel, counts=counts, failures_new=new, failures_known=kn, duration_s=dur, estimate_s=est, workers=workers,
-                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick)
+                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick, skipped=sel.get("quick_skipped"))
     outp = Path(a.json_out) if a.json_out else RESULT_DIR / (head[:12] + ".json")
     outp.parent.mkdir(parents=True, exist_ok=True)
     outp.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     print("作者閘門：%s，實跑 %d 題，%.1f 分鐘（預估 %.1f 分），tree=%s，結果檔=%s" % (
         "綠" if res["green"] else "紅", sum(counts.get(k, 0) for k in ("passed", "failed", "errors")), dur / 60, est / 60, res["tree_sha"][:12], outp))
+    if sel.get("quick_skipped"):
+        print("⚠ 未跑 %d 項（上面列了；不是通過）：quick 只當部分證據" % len(sel["quick_skipped"]))
     if new:
         print("紅（新）：" + "\n  ".join(f["nodeid"] for f in new[:30]))
     if kn:
