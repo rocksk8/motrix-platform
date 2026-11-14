@@ -17,6 +17,8 @@ detail.reason＝denied／not_found）。判定只在這裡：`guard_case_access`
 M01 停用、未授權或不在安裝包時，表與資料照樣在（稽核 D CA-M1）。
 """
 import json
+import contextlib as _ctx
+import contextvars as _cv
 import sqlite3
 
 from fastapi import HTTPException
@@ -34,8 +36,25 @@ def case_not_found_message(quote_no: str) -> str:
     return f"報價單 {quote_no} 不存在"
 
 
+_QUIET = _cv.ContextVar("case_denial_audit_quiet", default=False)
+
+
+@_ctx.contextmanager
+def quiet_part_denials():
+    """案件整包（case-bundle）逐段組合時使用：這一段的 404 是「你有權看這個案件、但沒有這一塊的權限」的預期結果
+    （例：只靠 cashier 模組唯讀進案件的財務，看不到派工／出貨／完工／動態），不是探測別人的案件。
+    案件本體（get_quotation）的拒絕不在這個範圍——它仍照常稽核；每次開案件留 3 筆稽核（T86 U5）只是雜訊。"""
+    tok = _QUIET.set(True)
+    try:
+        yield
+    finally:
+        _QUIET.reset(tok)
+
+
 def _audit_case_denial(user: dict, quote_no: str, reason: str) -> None:
     """記真正原因。背景執行緒寫：呼叫端可能正拿著寫鎖、或例外之後會 rollback（同一條連線寫 audit 會一起消失）。"""
+    if _QUIET.get():
+        return
     from db import get_db, spawn_bg_thread, get_request_ctx
     from datetime import datetime
 

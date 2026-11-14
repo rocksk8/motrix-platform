@@ -1143,6 +1143,7 @@ feedCount(key) {
         document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
         window.addEventListener('focus', () => this.loadApprovalMine(true))
         window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
+        this._dashBundleStart()        // T86 U7：儀表板六支合成一趟（後端 /api/dashboard/bundle 早就有、前端沒接）；各 loader 先取自己那段
         await Promise.all([this.loadStats(), this.loadApprovalMine()])
         // A3：上手清單（等 stats 讀完才判定「報價單有沒有」）；從 ux-help.js 的「？」抽屜可重新打開
         this.loadChecklist()
@@ -1156,6 +1157,25 @@ feedCount(key) {
         // 2026-09-14：圖表已移至營運報表，此處不再初始化 Chart.js
       },
 
+      //: T86 U7：開頁那一次的儀表板六段（stats／monthly／expenses／funnel／opsAlerts／activityFeed）走 `/api/dashboard/bundle` 一趟拿完。
+      //  ⚠️ 只供**開頁第一次**：每段只取一次（`_dashTaken`），之後（換部門、重新整理）一律打原端點；某段是 null（被拒／出錯）或整包失敗 ⇒
+      //  該段退回原端點（回應形狀與狀態碼照舊，畫面行為不變）。bundle 的每一段都是直接呼叫原端點處理函式（權限、遮蔽同一份）。
+      _dashTaken: {},      // ⚠️ bundle 的 Promise 放 window.__dashB：Alpine 的 Proxy 包住 Promise 會 Illegal invocation（同 __mineInflight）
+      _dashBundleStart() {
+        const qs = (this.departmentId ? `&department_id=${this.departmentId}` : '')
+        window.__dashB = fetch(`${API}/dashboard/bundle?activity_limit=8${qs}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          .then(r => r.ok ? r.json() : null).catch(() => null)
+      },
+      async _dashFetch(section, url) {
+        const opts = { headers: { Authorization: 'Bearer ' + this.session.token } }
+        if (window.__dashB && !this._dashTaken[section]) {
+          this._dashTaken[section] = true
+          const b = await window.__dashB
+          const v = b && b[section]
+          if (v !== null && v !== undefined) return new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return fetch(url, opts)
+      },
       //: 「等我簽核」單一真相：`/api/approval-queue/count`（與側欄角標、簽核佇列頁同一份 `_counts_for_me`；
       //  含代理人與所有單據類型）。數字與清單都來自這一個回應，不再用 `dashboard/stats` 只算報價單的版本。
       //  讀不到 ⇒ `mineLoaded=false`，畫面說「讀不到」，不可以顯示成 0。
@@ -1205,7 +1225,10 @@ feedCount(key) {
       async _loadApprovalMineOnce() {
         const seq = this._mineSeq = (this._mineSeq || 0) + 1
         try {
-          const r = await fetch(`${API}/approval-queue/count`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          // T86 U7：**只有開頁後第一趟**吃 bootstrap 暖載入（同一份資料側欄角標／鈴鐺本來就在要）；之後（focus、簽完回來、補讀）
+          // 一律真請求——使用者正是為了看最新數字才回來的，不能拿 20 秒內的舊暖載入給他
+          const first = !window.__mineBootUsed; window.__mineBootUsed = true
+          const r = await (first && window.motrixBootFetch || fetch)(`${API}/approval-queue/count`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (seq !== this._mineSeq) return
           if (!r.ok) { this.mineLoaded = false; return }
           const d = await r.json()
@@ -1307,9 +1330,7 @@ feedCount(key) {
       async loadStats() {
         try {
           const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
-          const r = await fetch(`${API}/dashboard/stats${qs}`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('stats', `${API}/dashboard/stats${qs}`)
           // 🔴 **合併，不要整個覆蓋**（D 2026-09-22）。
           // ☠️ 直接指派的話，回應少了哪個鍵，畫面就印
           //    「我的待簽核 undefined 件」給使用者看 —— `:486`／`:487`
@@ -1342,9 +1363,7 @@ feedCount(key) {
       async loadMonthly() {
         try {
           const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
-          const r = await fetch(`${API}/dashboard/monthly${qs}`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('monthly', `${API}/dashboard/monthly${qs}`)
           if (r.ok) { const d = await r.json(); return d.items || [] }
         } catch {}
         return []
@@ -1353,9 +1372,7 @@ feedCount(key) {
       async loadExpenses() {
         try {
           const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
-          const r = await fetch(`${API}/dashboard/expenses-monthly${qs}`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('expenses', `${API}/dashboard/expenses-monthly${qs}`)
           if (r.ok) { const d = await r.json(); return d.items || [] }
         } catch {}
         return []
@@ -1363,9 +1380,7 @@ feedCount(key) {
 
       async loadFunnel() {
         try {
-          const r = await fetch(`${API}/dashboard/funnel`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('funnel', `${API}/dashboard/funnel`)
           if (r.ok) {
             const d = await r.json()
             this.funnel         = d.funnel         || {}
@@ -1377,9 +1392,7 @@ feedCount(key) {
 
       async loadOpsAlerts() {
         try {
-          const r = await fetch(`${API}/dashboard/ops-alerts`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('opsAlerts', `${API}/dashboard/ops-alerts`)
           if (r.ok) this.opsAlerts = await r.json()
         } catch {}
       },
@@ -1387,9 +1400,7 @@ feedCount(key) {
       async loadActivityFeed() {
         try {
           const deptQs = this.departmentId ? `&department_id=${this.departmentId}` : ''
-          const r = await fetch(`${API}/dashboard/activity-feed?limit=8${deptQs}`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
+          const r = await this._dashFetch('activityFeed', `${API}/dashboard/activity-feed?limit=8${deptQs}`)
           if (r.ok) this.activityFeed = (await r.json()).items || []
         } catch {}
       },

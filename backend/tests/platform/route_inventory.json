@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 1005,
-  "endpoints_api": 1001,
+  "endpoints_total": 1006,
+  "endpoints_api": 1002,
   "write_total": 542,
   "write_api": 542,
-  "get_api": 459,
-  "distinct_paths_api": 854,
+  "get_api": 460,
+  "distinct_paths_api": 855,
   "write_with_body_api": 407,
   "write_with_path_param_api": 365
  },
@@ -891,6 +891,11 @@
   "GET /api/dashboard/stats": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/def-governance/{kind}/_available": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/def-governance/{kind}/{key}/diff": {

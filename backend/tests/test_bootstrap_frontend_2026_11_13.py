@@ -169,9 +169,10 @@ def test_first_request_is_served_from_bootstrap_then_real():
     assert out["real"] == ["/api/platform/menu"]
 
 
-def test_sections_used_by_two_loaders_are_served_twice():
-    out = _run([{"url": "/api/approval-queue/count"}] * 3)
-    assert [r[1] for r in out["results"]] == [{"count": 3}, {"count": 3}, {"real": "/api/approval-queue/count"}]
+def test_sections_used_by_several_loaders_are_served_that_many_times():
+    # 簽核數：側欄角標＋鈴鐺＋首頁（T86 U7）各一次，第四次起是真請求
+    out = _run([{"url": "/api/approval-queue/count"}] * 4)
+    assert [r[1] for r in out["results"]] == [{"count": 3}, {"count": 3}, {"count": 3}, {"real": "/api/approval-queue/count"}]
 
 
 def test_everything_that_cannot_be_trusted_goes_to_the_real_endpoint():
@@ -200,14 +201,35 @@ def test_user_driven_refresh_events_invalidate_the_snapshot(ev):
     assert out["real"] == ["/api/platform/menu", "/api/approval-queue/count"]
 
 
+@pytest.mark.parametrize("status", (403, 404))
+def test_a_section_bootstrap_was_refused_is_answered_with_the_same_status_without_a_request(status):
+    """T86 U5：bootstrap 剛問過原端點、回 403／404 ⇒ 20 秒內再問只會得到同一個答案 ⇒ 不再送請求（只供應一次，之後照舊真的送）。"""
+    out = _run([{"url": "/api/build-info"}, {"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": status}})
+    assert out["results"][0][1] == {"detail": "沒有權限" if status == 403 else "不存在"}
+    assert out["results"][1][1] == {"real": "/api/build-info"} and out["real"] == ["/api/build-info"]
+
+
+@pytest.mark.parametrize("status", (428, 500, 502))
+def test_other_failures_are_still_retried_for_real(status):
+    out = _run([{"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": status}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+
+
+def test_a_refused_section_is_not_replayed_after_20_seconds_or_for_someone_else():
+    out = _run([{"advance": 20001}, {"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": 403}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+    out = _run([{"url": "/api/build-info", "token": "OTHER"}], extra={"buildInfo": None, "errors": {"buildInfo": 403}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+
+
 def test_failed_sections_are_not_served_even_if_present_as_null():
     out = _run([{"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": 500}})
     assert out["results"][0][1] == {"real": "/api/build-info"}
 
 
 def test_motrix_boot_helper_hands_out_each_section_once():
-    out = _run([{"boot": "menu"}, {"boot": "menu"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}])
-    assert [r[2] for r in out["results"]] == [{"groups": [1]}, None, {"count": 3}, {"count": 3}, None]
+    out = _run([{"boot": "menu"}, {"boot": "menu"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}, {"boot": "approvalCount"}])
+    assert [r[2] for r in out["results"]] == [{"groups": [1]}, None, {"count": 3}, {"count": 3}, {"count": 3}, None]
 
 
 def test_banner_headers_of_the_bootstrap_response_are_applied_on_first_serve():

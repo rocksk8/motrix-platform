@@ -230,12 +230,35 @@
     if (a.indexOf('restore-yes:') === 0) { await restore(a.slice(12)); return render() }
   }
 
+  var availMemo = null
   window.MotrixDefGovernance = {
+    //: 先在前端判斷、不送注定失敗的請求（T86 U4；正式機 30 天 `…/_probe/ledger` 404 ×10）：
+    //:   ① 不是最高管理者 ⇒ 直接 false（後端本來就只給最高管理者）；
+    //:   ② 問專門回答「這個種類現在可不可用」的端點 `_available`（永遠 200，旗標關 ⇒ {available:false}，不再用 404 當開關訊號）；
+    //:   ③ 同一頁、同一個 kind 只問一次（一頁有好幾個編輯器會各問一次），結果也記在 sessionStorage 5 分鐘。
     async available(kind) {
+      var k = kind || 'layout'
+      var s = {}
+      try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {} } catch (e) {}
+      if (s.role !== 'superadmin') return false
+      var key = 'motrix_dg_avail:' + k + ':' + (s.userId || '')
       try {
-        var r = await fetch('/api/def-governance/' + enc(kind || 'layout') + '/_probe/ledger?scope=company', { headers: hdr() })
-        return r.status !== 404 && r.status !== 401 && r.status !== 403      // 旗標開：通過把關後 400/200 都算可用；關：404
-      } catch (e) { return false }
+        var c = JSON.parse(sessionStorage.getItem(key) || 'null')
+        if (c && typeof c.v === 'boolean' && Date.now() - c.at < 300000) return c.v
+      } catch (e) {}
+      availMemo = availMemo || {}
+      if (!availMemo[k]) {
+        availMemo[k] = (async function () {
+          try {
+            var r = await fetch('/api/def-governance/' + enc(k) + '/_available', { headers: hdr() })
+            if (!r.ok) return false
+            var v = (await r.json()).available === true
+            try { sessionStorage.setItem(key, JSON.stringify({ v: v, at: Date.now() })) } catch (e) {}
+            return v
+          } catch (e) { return false }
+        })()
+      }
+      return availMemo[k]
     },
     async open(o) {
       if (!o || !o.kind || !o.key) return

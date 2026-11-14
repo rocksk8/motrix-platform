@@ -205,3 +205,29 @@ def test_restore_of_an_old_version_with_a_now_invalid_key_is_rejected_by_the_cur
     r = c.post(BASE + "/restore/1", headers=h["sa"], json={})
     assert r.status_code == 422 and r.json()["problems"]
     assert c.get(GOV + "/ledger", headers=h["sa"]).json()["live"] == 2
+
+
+# ── T86 U4：`_available`（取代前端拿 `_probe/ledger` 的 404 當開關訊號）─────────────────────────
+
+def test_available_endpoint_answers_200_false_when_the_flag_is_off(api):
+    c, h = api
+    r = c.get("/api/def-governance/custom_fields/_available", headers=h["sa"])
+    assert r.status_code == 200 and r.json() == {"available": False}
+    assert c.get("/api/def-governance/custom_fields/_available").status_code == 401
+    assert c.get("/api/def-governance/custom_fields/_available", headers=h["adm"]).status_code in (401, 403)
+
+
+def test_available_endpoint_is_true_when_the_flag_is_on_and_false_for_an_unknown_kind(api, flag_on):
+    c, h = api
+    assert c.get("/api/def-governance/custom_fields/_available", headers=h["sa"]).json() == {"available": True}
+    assert c.get("/api/def-governance/no_such_kind/_available", headers=h["sa"]).json() == {"available": False}
+
+
+def test_available_endpoint_uses_the_same_gate_as_the_ledger(api, flag_on):
+    """同一把關：`_available` 說可用 ⇔ 帳本路由不是 404（防兩份判準分岔）。"""
+    c, h = api
+    for kind in ("custom_fields", "no_such_kind"):
+        avail = c.get("/api/def-governance/%s/_available" % kind, headers=h["sa"]).json()["available"]
+        ledger = c.get("/api/def-governance/%s/%s/ledger" % (kind, KEY), headers=h["sa"]).status_code
+        assert avail == (ledger != 404), (kind, avail, ledger)
+

@@ -1,9 +1,16 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏、催辦用語中性化、覆核補正、首頁空狀態統一）
+## (next) — 2026-11-14（feat/t86-usage-h1；T86 正式機用量優化 U4／U5／U7／U11）
+- 內部（無欄位／權限語意變更）：
+  - **U11 Google 額度頁**：`GET /api/system/google-quota`（慢查詢 8～10 秒）的「地址數」那一半改走行程內快取（TTL 300 秒；過期先回舊值、背景單飛重算；不占用 DB 連線、不擋其他請求）；用量／額度／單價／剩餘照舊即時算。`helpers/geo.quota_calculator(use_cache=False)` 預設行為不變。
+  - **U4 不送注定失敗的請求**：定義治理新增 `GET /api/def-governance/{kind}/_available`（最高管理者限定、永遠 200：`{available}`），前端改問它而不是靠 `_probe/ledger` 的 404；新建中、尚未存過的報價單不問 `plan-view`（存檔成功那一刻才問）。
+  - **U5 財務開案件頁**：只靠 cashier 模組唯讀進案件的人（`cashierReadOnly`）不再送預設階段的 5 個 POST；bootstrap 已回報 403／404 的區段，20 秒內前端不再為同一個答案多送請求；案件整包（`case-bundle`）逐段組合時，「有權看案件、但沒有這一塊權限」的預期結果不再每次寫 `case.access_denied`（案件本體被拒仍照常稽核；單獨呼叫各端點也仍稽核）。
+  - **U7 首頁**：開頁改用既有的 `GET /api/dashboard/bundle` 一趟取回儀表板六段（某段 null／整包失敗 ⇒ 該段退回原端點）；開頁第一趟簽核數吃 bootstrap（`approvalCount` 供應次數 2→3）；`GET /api/approval-queue/count`、`GET /api/dashboard/mine` 加 `ETag`／`304`（`Cache-Control: private, no-cache`，內容逐位相同才 304；`generatedAt` 不算內容）。新增 `helpers/http_etag.json_etag`。
+- 新路由 1 條（`_available`）：`route_inventory.json`／`response_keys_baseline.json` 已補。
+- 測試：`test_usage_u4_no_doomed_requests_*`、`test_usage_u5_case_denials_*`、`test_usage_u7_etag_*`、`test_google_quota_cache_t86_*`（新）；首頁三支 e2e 對齊（開頁走 bundle／bootstrap 後，原本攔單支端點的題目改成先讓 bundle／bootstrap 失敗再攔）；`test_case_module_spec` 補 `bootstrap.section/profitWarning`（h1b 漏補）。
+- **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏、催辦用語中性化、覆核補正、首頁空狀態統一）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
-
-## (next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）
+- **（併入）(next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）**
 - schema：本批只動 crm 模組 migration（`modules/crm/migrations/0005_dev_case_expected.py`，crm 模組 schema 4→5，`module_schema_versions` 記錄）；核心 `db.py` `CURRENT_VERSION`（V9 基準 118）與 module.json 版本不變。驗包若要核對「資料庫版本」，核心數字不會因本批改變；模組版本以 `module_schema_versions` 的 crm＝5 為準。
 - **（併入）(next) — 2026-11-14（feat/t86-usage-h9；T86 使用紀錄優化 U6／U9：LINE 通知設定、自訂模組預覽改成先檢核＋白話原因）**
 - 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。

@@ -317,6 +317,7 @@ def test_checklist_does_not_remember_a_failed_stats_load(live_server, make_user,
     username, password = make_user(username="e2e_ux_check_fail", role="superadmin")
     page = new_page(viewport={"width": 1440, "height": 900})
     login_as(page, (username, password))
+    page.route("**/api/dashboard/bundle*", lambda route: route.abort())      # T86 U7：bundle 失敗 ⇒ 各段退回原端點（stats 回 500）
     page.route("**/api/dashboard/stats*", lambda route: route.fulfill(status=500, body="{}"))
     page.goto(f"{live_server}/index.html")
     page.wait_for_timeout(3000)

@@ -560,7 +560,7 @@ def _safe_close(conn) -> None:
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
 from modules.case.quotations import (  # noqa: E402
     is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
-from helpers.case_access import deny_case, guard_case_access, require_case, require_case_money  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
+from helpers.case_access import deny_case, guard_case_access, quiet_part_denials, require_case, require_case_money  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
@@ -3365,7 +3365,8 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
 
     def part(fn, *args, **kwargs):
         try:
-            return {"ok": True, "data": fn(*args, **kwargs)}
+            with quiet_part_denials():        # 案件本體已通過可見性檢查；某一段沒權限是預期結果，不留稽核（T86 U5）
+                return {"ok": True, "data": fn(*args, **kwargs)}
         except HTTPException as e:
             return {"ok": False, "status": e.status_code, "detail": e.detail}
 

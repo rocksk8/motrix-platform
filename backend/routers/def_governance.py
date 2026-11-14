@@ -221,6 +221,22 @@ def _flag_gate(kind):
     return conn
 
 
+@router.get("/api/def-governance/{kind}/_available")
+def def_available(kind: str, authorization: str = Header(None)):
+    """這個種類的版本帳本／影響預覽現在可不可用（前端編輯器決定要不要顯示入口）。僅最高管理者（其他人 403）。
+    永遠 200：旗標關閉、種類沒登錄 ⇒ `{"available": false}`——取代前端原本拿 `…/_probe/ledger` 的 404 當開關訊號（每開一次編輯器就多一筆 404）。
+    判定與帳本／差異／預覽三支用同一個把關（`_flag_gate`）。"""
+    _require_user(authorization, require_superadmin=True)
+    try:
+        conn = _flag_gate(kind)
+    except HTTPException as e:
+        if e.status_code == 404:
+            return {"available": False}
+        raise
+    conn.close()
+    return {"available": True}
+
+
 @router.get("/api/def-governance/{kind}/{key}/ledger")
 def def_ledger(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)

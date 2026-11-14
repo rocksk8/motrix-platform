@@ -45,6 +45,7 @@ def test_focus_before_stats_returns_still_refreshes_the_approval_count(live_serv
     ctx = e2e_browser.new_context(viewport={"width": 1440, "height": 900})
     page = ctx.new_page()
     held = []
+    page.route("**/api/dashboard/bundle*", lambda route: route.abort())          # T86 U7：儀表板六段開頁走 bundle；這題要卡的是單打 stats ⇒ bundle 失敗、各段退回原端點
     page.route("**/api/dashboard/stats*", lambda route: held.append(route))      # stats 一直不回
     sess = inject_login(page, live_server, u, p)
     h = {"Authorization": "Bearer " + sess["token"]}

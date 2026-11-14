@@ -27,7 +27,7 @@
   var BOOT_SECTIONS = {
     '/api/auth/me': ['me', 2], '/api/platform/menu': ['menu', 1], '/api/system/branding': ['branding', 2],
     '/api/build-info': ['buildInfo', 1], '/api/system/bonus-module-status': ['bonusModuleStatus', 1],
-    '/api/system/modules/availability': ['moduleAvailability', 1], '/api/approval-queue/count': ['approvalCount', 2],
+    '/api/system/modules/availability': ['moduleAvailability', 1], '/api/approval-queue/count': ['approvalCount', 3],
     '/api/notifications/mine': ['notifications', 1], '/api/reads/module-counts': ['moduleCounts', 1],
     '/api/online-users': ['onlineUsers', 1], '/api/auth/totp/status': ['totp', 1]
   };
@@ -80,8 +80,18 @@
     var auth = opts && opts.headers && (opts.headers.Authorization || opts.headers.authorization);
     if (!m || method !== 'GET' || !auth || !window.MotrixBoot) return fetch(url, opts);
     return window.MotrixBoot.then(function () {
-      var v = (auth === 'Bearer ' + boot.token && (boot.used[m[0]] || 0) < m[1]) ? bootValue(m[0], boot.token) : undefined;
-      if (v === undefined) return fetch(url, opts);
+      var mine = auth === 'Bearer ' + boot.token && (boot.used[m[0]] || 0) < m[1];
+      var v = mine ? bootValue(m[0], boot.token) : undefined;
+      if (v === undefined) {
+        // T86 U5：bootstrap 剛問過這支原端點、它回 403／404（這個人沒有這項權限／這項功能沒開）⇒ 20 秒內再問一次只會得到同一個答案
+        // （權限不會在 20 秒內自己變）⇒ 直接給同狀態碼的回應、不再送一個注定被擋的請求（也不在伺服器端多留一筆被拒紀錄）。500／428 等不算：照舊真的送。
+        var es = mine && boot.data && boot.data.errors && Date.now() - boot.at <= BOOT_TTL_MS ? boot.data.errors[m[0]] : 0;
+        if (es === 403 || es === 404) {
+          boot.used[m[0]] = (boot.used[m[0]] || 0) + 1;
+          return new Response(JSON.stringify({ detail: es === 403 ? '沒有權限' : '不存在' }), { status: es, headers: { 'Content-Type': 'application/json' } });
+        }
+        return fetch(url, opts);
+      }
       boot.used[m[0]] = (boot.used[m[0]] || 0) + 1;
       // 橫幅標頭（授權／本公司資料設定）原本由真的回應帶來；第一次供應時補上同樣的標頭，notif.js 的橫幅邏輯才不會漏掉
       try { if (window.motrixApplyBanners && boot.hdr) window.motrixApplyBanners(boot.hdr); } catch (e) {}
