@@ -682,7 +682,7 @@
     nameDialog(true)
   }
   function deleteReport(rp) {
-    confirmDlg('刪除報表', LIST.recycleDeleted ? '報表會移到刪除暫存區，需要時可由管理員還原。是否繼續？' : '刪除後無法復原，是否繼續？', '刪除', function () {
+    confirmDlg('刪除報表', LIST.recycleDeleted ? '報表會移到資源回收筒，需要時可由管理員還原。是否繼續？' : '刪除後無法復原，是否繼續？', '刪除', function () {
       api('DELETE', API + '/' + rp.id).then(function (r) {
         if (!r.ok && r.status !== 404) { toast(errMsg(r, '刪除失敗，請稍後再試。')); return }
         toast('已刪除。')

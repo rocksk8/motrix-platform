@@ -15,9 +15,12 @@ class GoldenError(AssertionError):
     pass
 
 
-def record_write(client, headers, method, url, body=None, expect=(2,), files=None):
+def record_write(client, headers, method, url, body=None, expect=(2,), files=None, extra_headers=None):
     """回 {"s": 狀態碼, "k": [鍵路徑]}；狀態碼類別不在 expect 或回應非 JSON ⇒ GoldenError。
-    `files`（選填）＝multipart 上傳（此時 `body` 當表單欄位 data）；不給＝先前的 JSON 行為，逐位元相同。"""
+    `files`（選填）＝multipart 上傳（此時 `body` 當表單欄位 data）；不給＝先前的 JSON 行為，逐位元相同。
+    `extra_headers`（選填，T87 B2）＝加在登入標頭之上的請求標頭（例如 PUT 需要的 `If-Match`）；不給＝與先前逐位元相同。"""
+    if extra_headers:
+        headers = {**headers, **extra_headers}
     if files:
         r = client.request(method.upper(), url, headers=headers, data=body or {}, files=files)
     else:

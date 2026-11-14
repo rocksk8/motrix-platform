@@ -333,7 +333,7 @@ def test_write_endpoints_leave_audit_rows_without_names_or_values(client, make_u
     client.delete("%s/%d" % (BASE, b["id"]), headers=h)
     c = get_db()
     try:
-        rows = c.execute("SELECT action, target_label, detail FROM audit_log WHERE action LIKE 'custom_reports.%' ORDER BY id").fetchall()
+        rows = c.execute("SELECT action, target_label, detail FROM audit_log WHERE username = ? AND action LIKE 'custom_reports.%' ORDER BY id", ("st_a14",)).fetchall()
     finally:
         c.close()
     assert [r["action"] for r in rows] == ["custom_reports.create", "custom_reports.delete"]

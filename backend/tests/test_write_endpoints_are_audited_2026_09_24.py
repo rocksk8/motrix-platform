@@ -50,11 +50,19 @@ AUDIT_WRAPPERS = {
     # 備份與監控頁：動作完成後才寫稽核，寫失敗只記 log（不讓使用者看到 500 而重按）；內部直接呼叫 `_audit`
     # S3b 信件矩陣草稿儲存／復原：寫入成功後一次 `_audit_batch`（內部直接呼叫 `_audit`：settings.mail.batch／settings.mail.batch_undo；行事曆格另寫 settings.google_calendar.event_toggle）；驗證／衝突／未確認都在前面 raise、不寫
     "_audit_batch": ("routers/mail_settings.py", "批次儲存／復原成功才寫 settings.mail.batch／batch_undo"),
+    # T87 B2 自訂報表：新增／修改／刪除／複製／分享的端點在 store 寫入成功後才呼叫這兩支（內部直接呼叫 `_audit`；拒絕與驗證失敗都在前面 raise，不寫）
+    "_audit_report": ("modules/analytics/api/custom_reports.py", "新增／修改／刪除／複製成功後寫 custom_reports.create／update／delete／copy"),
+    "_audit_shares": ("modules/analytics/api/custom_reports.py", "分享名單異動成功後每位增減各寫 custom_reports.share_add／share_remove"),
     "_safe_audit": ("routers/backup_monitor.py", "立即備份／設定網址／測試心跳完成後寫 system.backup_now／heartbeat_url_set／heartbeat_test"),
 }
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 自訂報表（T87 B2）：預覽只算不寫；匯出由 export_logged 包裝寫 export 稽核 ──
+    ("modules/analytics/api/custom_reports.py", "POST", "/api/custom-reports/preview"):
+        "preview：只在記憶體內編譯定義並唯讀執行（report_runner.preview 不開寫入、不 commit、不留稽核；每人每分鐘 20 次限頻），僅持有使用能力的人；真正寫入的新增／修改／刪除／複製／分享端點都寫 custom_reports.* 稽核",
+    ("modules/analytics/api/custom_reports.py", "POST", "/api/custom-reports/{rid}/export"):
+        "匯出由 @export_logged(\"xlsx\", \"analytics\", \"custom_report\") 包裝，成功時寫 export 稽核（報表編號、列數、已隱藏欄位數，不含值）；端點本身沒有寫業務資料，不另呼叫 _audit",
     # ── 選單分類／設定說明覆寫（批次 9）：稽核在 helper 的 set_override 內直接呼叫 _audit（寫入成功後才寫；驗證失敗丟 ValueError、不寫），端點本身只轉呼叫 ──
     ("menu_categories.py", "PUT", "/api/menu/categories/override"):
         "稽核 menu_categories.override 由 helpers/menu_categories.set_override 在寫入成功後直接呼叫 _audit（驗證不過丟 ValueError 不寫、端點轉 400）；端點本身只轉呼叫，不再另寫；測試 test_settings_center_b9_2026_11_13.py 驗稽核列存在",

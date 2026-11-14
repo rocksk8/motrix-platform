@@ -97,10 +97,15 @@ def test_all_text_decodes_character_references_positive_control():
     assert "含稅總額" in text and "客戶" in text
 
 
-def _audits(action):
+def _audits(action, *users):
+    """只讀指定使用者自己寫的稽核列（不讀全域；別的測試寫的列不影響），依 id 排序。"""
     c = get_db()
     try:
-        return [dict(r) for r in c.execute("SELECT action, target_id, target_label, detail FROM audit_log WHERE action=? ORDER BY id", (action,))]
+        rows = []
+        for u in users:
+            rows += [dict(r) for r in c.execute(
+                "SELECT id, action, target_id, target_label, detail FROM audit_log WHERE username = ? AND action = ? ORDER BY id", (u, action))]
+        return sorted(rows, key=lambda r: r["id"])
     finally:
         c.close()
 
@@ -159,7 +164,7 @@ def test_user_without_financial_access_gets_a_file_without_the_money_column_or_v
     assert str(SENT) not in text and "含稅總額" not in text
     info = {row[0].value: row[1].value for row in wb["說明"].iter_rows()}
     assert info["已隱藏欄位數"] == 1
-    d = json.dumps(_audits("export.xlsx"), ensure_ascii=False)
+    d = json.dumps(_audits("export.xlsx", "ex_eng1"), ensure_ascii=False)
     assert str(SENT) not in d and "匯出客戶" not in d and "工程師報表" not in d
 
 
@@ -307,7 +312,7 @@ def test_export_writes_an_audit_row_without_values_and_stamps_last_exported_for_
     X._export_times.clear()
     assert client.post("%s/%d/export" % (BASE, rep["id"]), headers=a).status_code == 200
     assert client.get("%s/%d" % (BASE, rep["id"]), headers=a).json()["lastExportedAt"]
-    rows = _audits("export.xlsx")
+    rows = _audits("export.xlsx", "ex_a9", "ex_b9")
     assert len(rows) == 2 and all(r["target_id"] == "custom_report" for r in rows)
     d = json.dumps(rows, ensure_ascii=False)
     assert "稽核客戶-5531" not in d and str(SENT) not in d and "稽核報表" not in d
@@ -333,8 +338,8 @@ def test_pdf_sibling_same_permissions_audit_and_does_not_use_the_excel_cooldown(
     assert client.post("%s/%d/export" % (BASE, rid_e), headers=eng).status_code == 200            # PDF 沒吃掉 Excel 冷卻
     r2 = client.post("%s/%d/export-pdf" % (BASE, rid_s), headers=sa)
     assert r2.status_code == 200 and "7,654,321" in html[-1]                                        # 正對照
-    assert len(_audits("export.pdf")) == 2
-    assert str(SENT) not in json.dumps(_audits("export.pdf"))
+    assert len(_audits("export.pdf", "ex_eng_pdf", "ex_sa_pdf")) == 2
+    assert str(SENT) not in json.dumps(_audits("export.pdf", "ex_eng_pdf", "ex_sa_pdf"))
     from helpers import perm
     monkeypatch.setattr(perm, "can", lambda u, k: False if k == CR.CAP_EXPORT else True)
     assert client.post("%s/%d/export-pdf" % (BASE, rid_s), headers=sa).status_code == 403

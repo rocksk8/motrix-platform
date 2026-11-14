@@ -14,6 +14,7 @@
     ⑧狀態／成交標記／精算狀態的選項取自**呼叫者看得到的列**（同一套列權限）、只讀實體欄位、每人快取 60 秒；沒有使用者 ⇒ 空。
 [契約題] backend/tests/platform/test_report_catalog_t87.py
 """
+import functools
 import time
 
 from helpers import doc_type as _DT
@@ -33,30 +34,34 @@ _OPT_TTL = 60.0
 _OPT_CACHE = {}                                          # (欄位, 使用者 id) -> (時間, 選項)；每人各一份（列範圍不同）
 
 
-def _distinct_options(column):
+def _column_options(column, conn, user=None):
     """列舉值取自**呼叫者看得到的列**（套用與報表同一套列權限）：`SELECT DISTINCT <欄位>`，只讀實體欄位（不碰 `data_json`、不做 JSON 運算），
     每人快取 60 秒、最多 200 個值。沒有使用者 ⇒ 空（fail closed）。回傳 [(值, 白話)]；空字串顯示為「（未填）」。
     舊資料若實體欄位是空、值只在 `data_json` 裡，選項看不到（條件仍可手動輸入該值）。"""
-    def _opts(conn, user=None):
-        if not user:
-            return []
-        key = (column, user.get("id"))
-        hit = _OPT_CACHE.get(key)
-        now = time.monotonic()
-        if hit and now - hit[0] < _OPT_TTL:
-            return list(hit[1])
-        from helpers import row_access
-        frag, params = row_access.filter_sql("case", user, scope="read")
-        frag = frag.strip()
-        where = (frag[4:] if frag.upper().startswith("AND ") else frag) if frag else "1=1"
-        rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations WHERE %s ORDER BY 1 LIMIT 200" % (column, where), params).fetchall()
-        out = [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
-        if len(_OPT_CACHE) > 500:
-            _OPT_CACHE.clear()
-        _OPT_CACHE[key] = (now, out)
-        return list(out)
-    _opts.labels_are_values = True
-    return _opts
+    if not user:
+        return []
+    key = (column, user.get("id"))
+    hit = _OPT_CACHE.get(key)
+    now = time.monotonic()
+    if hit and now - hit[0] < _OPT_TTL:
+        return list(hit[1])
+    from helpers import row_access
+    frag, params = row_access.filter_sql("case", user, scope="read")
+    frag = frag.strip()
+    where = (frag[4:] if frag.upper().startswith("AND ") else frag) if frag else "1=1"
+    rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations WHERE %s ORDER BY 1 LIMIT 200" % (column, where), params).fetchall()
+    out = [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
+    if len(_OPT_CACHE) > 500:
+        _OPT_CACHE.clear()
+    _OPT_CACHE[key] = (now, out)
+    return list(out)
+
+
+def _distinct_options(column):
+    """欄位的列舉選項函式（`fn(conn, user)`）：實作在模組層級的 `_column_options`（使用者是參數、不靠閉包）；標籤＝值本身。"""
+    opts = functools.partial(_column_options, column)
+    opts.labels_are_values = True
+    return opts
 
 
 def _execute(plan):

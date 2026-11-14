@@ -66,10 +66,11 @@ def _targets(client, h, q=""):
     return r.json()
 
 
-def _audits(like="custom_reports.share_%"):
+def _audits(owner, like="custom_reports.share_%"):
+    """只讀擁有者自己寫的分享稽核列（不讀全域）。"""
     c = get_db()
     try:
-        return [dict(r) for r in c.execute("SELECT action, target_id, target_label, detail FROM audit_log WHERE action LIKE ? ORDER BY id", (like,))]
+        return [dict(r) for r in c.execute("SELECT action, target_id, target_label, detail FROM audit_log WHERE username = ? AND action LIKE ? ORDER BY id", (owner, like))]
     finally:
         c.close()
 
@@ -144,7 +145,7 @@ def test_batch_add_and_remove_with_audit_rows_per_person_and_no_etag_change(clie
     assert [p["username"] for p in r2.json()["shared"]] == ["shs_d1"] and r2.json()["added"] == [] and r2.json()["removed"] == ["shs_d2", "shs_d3"]
     got = client.get(url, headers=a).json()
     assert [p["username"] for p in got["shared"]] == ["shs_d1"] and got["sharingEnabled"] is True and got["max"] == 20
-    rows = _audits()
+    rows = _audits("shs_d")
     assert [(x["action"], json.loads(x["detail"])["user"]) for x in rows] == [
         ("custom_reports.share_add", "shs_d1"), ("custom_reports.share_add", "shs_d2"), ("custom_reports.share_add", "shs_d3"),
         ("custom_reports.share_remove", "shs_d2"), ("custom_reports.share_remove", "shs_d3")]
@@ -158,7 +159,7 @@ def test_backend_rechecks_capability_even_if_the_target_was_in_an_old_candidate_
     url = "%s/%d/shares" % (BASE, rep["id"])
     r = client.post(url, json={"add": ["shs_nocap_e"]}, headers=a)
     assert r.status_code == 422 and r.json()["detail"]["message"] == "無法分享給此同事。" and "shs_nocap_e" not in r.text
-    assert client.get(url, headers=a).json()["shared"] == [] and _audits() == []                       # 沒寫入、沒稽核
+    assert client.get(url, headers=a).json()["shared"] == [] and _audits("shs_e") == []                       # 沒寫入、沒稽核
 
 
 def test_every_kind_of_ineligible_target_gets_the_very_same_answer(client, make_user):

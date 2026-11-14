@@ -2873,11 +2873,12 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
         for idx, pi in enumerate(pay):
             if idx in bad:                                    # 金額算不出來的款項：帳齡與明細（detail）一律略過，兩邊才會一致
                 continue
+            stage = _stage_name(pi, idx)          # 期別顯示名稱只在這裡取一次（明細與 B1 項目共用；census S-F1 守門限定呼叫處數）
             if pi.get("received"):
                 if detail is not None:
                     detail.append({
                         "quoteNo": row["quote_no"], "customer": row["customer_name"] or "", "project": row["project_name"] or "",
-                        "owner": owner_label, "stage": _stage_name(pi, idx), "pct": pi.get("pct") or 0, "amount": amounts[idx],
+                        "owner": owner_label, "stage": stage, "pct": pi.get("pct") or 0, "amount": amounts[idx],
                         "received": True, "quoteDate": (row["quote_date"] or "")[:10], "expectedDate": str(pi.get("expectedReceiptDate") or "")[:10],
                         "receivedDate": str(pi.get("receivedAt") or "")[:10], "days": None, "band": None})
                 continue
@@ -2888,7 +2889,7 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
             if detail is not None:
                 detail.append({
                     "quoteNo": row["quote_no"], "customer": row["customer_name"] or "", "project": row["project_name"] or "",
-                    "owner": owner_label, "stage": _stage_name(pi, idx), "pct": pi.get("pct") or 0, "amount": amt,
+                    "owner": owner_label, "stage": stage, "pct": pi.get("pct") or 0, "amount": amt,
                     "received": False, "quoteDate": (row["quote_date"] or "")[:10], "expectedDate": str(pi.get("expectedReceiptDate") or "")[:10],
                     "receivedDate": "", "days": days, "band": band})
             item = {
@@ -2897,7 +2898,7 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
                 "dealTag":     row["deal_tag"]       or "",
-                "type":        _stage_name(pi, idx),
+                "type":        stage,
                 "pct":         pi.get("pct") or 0,
                 "amount":      amt,
                 "quoteDate":   row["quote_date"] or "",

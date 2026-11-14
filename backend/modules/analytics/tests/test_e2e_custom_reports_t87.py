@@ -109,18 +109,22 @@ def test_focus_kept_indeterminate_header_and_undo_invalidated_by_other_edits(liv
     was = page.is_checked(box)
     page.focus(box)
     page.keyboard.press("Space")
+    page.wait_for_function("([s, w]) => document.querySelector(s).checked !== w", arg=[box, was], timeout=20000)
     assert page.is_checked(box) != was
     assert page.evaluate("() => document.activeElement.getAttribute('data-fk')") == "m:status:show"      # 重畫後焦點還在同一格
     # 部分欄位顯示：表頭核取框是 indeterminate
     assert page.evaluate("() => document.querySelector('[data-fk=showAll]').indeterminate") is True
     # 批次 → 出現「復原上一次批次」；之後做了別的編輯 ⇒ 復原鈕作廢
     page.click("[data-fk='batch:hide']")
+    page.locator("#btnUndo").wait_for(state="visible", timeout=20000)
     assert page.locator("#btnUndo").is_visible()
     page.check("[data-fk='m:customer_name:g']")
+    page.locator("#btnUndo").wait_for(state="hidden", timeout=20000)
     assert page.locator("#btnUndo").is_hidden()
     # 批次訊息：略過 0 項時不寫「略過」
     page.check("[data-fk='m:quote_no:pick']")
     page.click("[data-fk='batch:show']")
+    page.wait_for_function("() => document.getElementById('batchMsg').textContent.includes('已套用')", timeout=20000)
     assert "略過" not in page.locator("#batchMsg").inner_text()
     # 提示節點常駐 DOM
     assert page.locator("#toast[role=status]").count() == 1
@@ -211,8 +215,10 @@ def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hid
         page.wait_for_function("() => document.querySelectorAll('#shCands li label.row').length === 3", timeout=20000)     # 沒有權限的「林無權」不在名單
         assert "林無權" not in page.inner_text("[data-testid=cr-sh-cands]")
         page.check("[data-testid=cr-sh-selcands]")
+        page.wait_for_function("() => { const b = document.querySelector('[data-testid=cr-sh-add]'); return !b.disabled && b.textContent.includes('（3）') }", timeout=20000)
         assert page.is_enabled("[data-testid=cr-sh-add]") and "（3）" in page.inner_text("[data-testid=cr-sh-add]")
         page.uncheck("[data-testid=cr-sh-selcands]")                                         # 全選可以切換成清除
+        page.wait_for_function("() => document.querySelector('[data-testid=cr-sh-add]').disabled", timeout=20000)
         assert page.is_disabled("[data-testid=cr-sh-add]")
         page.check("[data-testid=cr-sh-selcands]")
         page.click("[data-testid=cr-sh-add]")
@@ -240,7 +246,7 @@ def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hid
         page.click("[data-testid=cr-sh-close]")
         c = get_db()
         try:
-            acts = [r[0] for r in c.execute("SELECT action FROM audit_log WHERE action LIKE 'custom_reports.share_%' ORDER BY id")]
+            acts = [r[0] for r in c.execute("SELECT action FROM audit_log WHERE username = ? AND action LIKE 'custom_reports.share_%' ORDER BY id", ("e2e_sh_owner",))]
         finally:
             c.close()
         assert acts == ["custom_reports.share_add"] * 3 + ["custom_reports.share_remove"] * 2
@@ -260,8 +266,10 @@ def test_undo_returns_focus_to_page_not_body_header_show_all_reports_skips_and_p
         eng.wait_for_function("() => document.getElementById('batchMsg').textContent.includes('略過')", timeout=20000)
         assert "含稅總額（無權限）" in eng.locator("#batchMsg").inner_text()
         eng.click("[data-fk='batch:hide']")
+        eng.locator("#btnUndo").wait_for(state="visible", timeout=20000)
         assert eng.locator("#btnUndo").is_visible()
         eng.click("#btnUndo")
+        eng.locator("#btnUndo").wait_for(state="hidden", timeout=20000)
         assert eng.locator("#btnUndo").is_hidden()
         assert eng.evaluate("() => document.activeElement && document.activeElement !== document.body") is True       # 按鈕消失後焦點不掉到 BODY
         eng.close()

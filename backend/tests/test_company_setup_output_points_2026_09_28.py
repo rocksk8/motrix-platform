@@ -73,6 +73,10 @@ NO_COMPANY_DATA = {
         "標準報表 XLSX（T87 B1）：只有報表明細、篩選條件與彙總，不印本公司抬頭或統編；PDF 姊妹（add_pdf_sibling）自己經第二道",
     ("modules/analytics/api/std_reports.py", "_build_xlsx"):
         "標準報表 XLSX 的產生端（同上）：只有報表明細、篩選條件與彙總，不含本公司資料（§1.3）",
+    ("modules/analytics/api/custom_reports.py", "export_report"):
+        "自訂報表 XLSX（T87 B2）：只有使用者自己看得到的欄位標籤、條件白話與數字，不印本公司抬頭或統編；PDF 姊妹（add_pdf_sibling）自己經第二道",
+    ("modules/analytics/api/custom_reports.py", "_build_xlsx"):
+        "自訂報表 XLSX 的產生端（同上）：只有可見欄位、條件白話、產製者與時間，不含本公司資料（§1.3；與標準報表同一類）",
     ("modules/case/api/quotations.py", "download_quotation_version"): "已存檔的歷史版本 PDF 原樣下載（§1.4：產生當時已凍結）",
     ("modules/case/api/quotations.py", "case_batch_export"): "案件批次 XLSX：案件欄位清單，不印本公司抬頭（§1.3）",
     ("modules/daily_tasks/api.py", "export_task_history"): "每日任務 CSV：任務紀錄，不含本公司資料（§1.3）",
