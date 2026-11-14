@@ -107,6 +107,7 @@
    "helper:option_lists",
    "helper:list_catalog",
    "helper:report_catalog",
+   "helper:report_runner",
    "helper:report_policy",
    "helper:list_pref_policy",
    "helper:idempotency",

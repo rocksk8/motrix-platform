@@ -96,6 +96,7 @@ def _bad(mut, needle):
     ("is_me_without_mine", lambda s: _field(s, "name").update(isMe=True), "mine"),
     ("mine_param_count", lambda s: s.update(mine={"sql": _DEAL, "params": ("id",)}), "mine"),
     ("mine_sql_not_registered", lambda s: s.update(mine={"sql": "1=1", "params": ()}), "mine"),
+    ("mine_without_reads", lambda s: s.update(mine={"sql": _DEAL, "params": ()}), "mine"),
     ("execute_not_callable", lambda s: s.update(execute="boom"), "execute"),
     ("default_filter_on_unfilterable", lambda s: s.update(defaultFilters=[{"field": "nope", "op": "eq", "value": 1}]), "defaultFilters"),
     ("date_group_without_bucket", lambda s: s["fields"].append(
@@ -359,9 +360,15 @@ def test_sources_for_lists_only_available_sources_in_registration_order(loaded_o
     assert not any(s.startswith("t_") for s in RC.sources_for(_u("viewer")))
 
 
-def test_real_sources_are_not_listed_until_the_runner_supplies_execute():
-    """S0b 的狀態：登記齊全但還沒有執行函式 ⇒ 任何人都看不到來源（含超管）；S1 補上 execute 後這題改為正對照。"""
+def test_real_sources_have_owner_execute_and_are_listed_for_the_right_people(monkeypatch):
+    from core import registry
+    monkeypatch.setattr(registry, "is_loaded", lambda k: True)
     for sid in REAL:
-        spec = RC.get_source(sid)
-        if spec.get("execute") is None:
-            assert RC.source_available(sid, _u("superadmin")) is False
+        assert callable(RC.get_source(sid)["execute"]), sid                       # 擁有模組登記了執行回呼
+        assert RC.source_available(sid, _u("superadmin")) is True
+    assert RC.source_available("quotation", _u("sales", '["quotation"]')) is True
+    assert RC.source_available("case", _u("sales", '["case_manage"]')) is True
+    assert RC.source_available("quotation", _u("sales", '[]')) is False            # 沒有來源的模組鍵 ⇒ 不列出（能力不取代模組存取）
+    assert RC.source_available("dev_case", _u("admin")) is True                    # 與 _require_dev 一致：admin 直通
+    assert RC.source_available("dev_case", _u("sales", '["dev_crm"]')) is True
+    assert RC.source_available("dev_case", _u("sales", '["quotation","case_manage"]')) is False

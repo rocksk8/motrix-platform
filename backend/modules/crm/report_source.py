@@ -8,12 +8,18 @@
     ③預估金額走欄位目錄 `dev_case.expected_amount`（天花板 `financial_view`＝`auth.can_see_financial`，與 CRM 頁面 `expectedAmountVisible` 同一條）；不受報價單金額欄範圍設定（D7）影響。
     ④商機的「業務」「企劃」是 JSON 成員陣列：v1 不開放分組、不登記為欄位（分組會讓一筆被算進多組）；「我是成員」快捷不在 v1（清單端點沒有此篩選，沒有可對照的列集合）。
     ⑤階段選項取自 CRM 的 `_STATUS_OPTIONS`（由 api 傳進來，同一份），不在這裡另寫一份。
-    ⑥`execute` 由 report_runner 切片補上；沒有 `execute` 的來源不會列給使用者。
+    ⑥`execute` 只轉呼叫 `report_runner.run_owned`，並限定接受自己的來源（dev_case）。
 [契約題] backend/tests/platform/test_report_catalog_t87.py
 """
 from helpers import report_catalog as _RC
 
 OWNER = "crm"
+
+
+def _execute(plan):
+    """擁有模組的執行回呼（D6）：只接受 `compile()` 產生、且來源是自己的計畫。"""
+    from helpers import report_runner as RR
+    return RR.run_owned(plan, ("dev_case",))
 
 
 def _f(fid, label, typ, **kw):
@@ -38,7 +44,7 @@ def register(status_options) -> list:
            aggregate=("count", "sum", "avg", "min", "max")),
     ]
     return _RC.register_source("dev_case", OWNER, {
-        "label": "商機", "table": "dev_cases", "modules": ["dev_crm"], "adminPass": True,
+        "label": "商機", "table": "dev_cases", "modules": ["dev_crm"], "adminPass": True, "execute": _execute,
         "rowAccess": {"kind": "dev_case", "scope": "owner"}, "softDelete": "is_deleted",
         "exprs": (), "fields": fields,
         "defaults": {"columns": ["case_name", "customer_name", "status", "expected_close_date", "expected_amount"],

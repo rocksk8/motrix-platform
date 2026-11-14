@@ -10,7 +10,7 @@
     ④單據類型（報價單／估價單）是可篩選、可分組的欄位，預設不加條件（與清單預設同列）；選項取自 `helpers.doc_type`。
     ⑤「案件」別名沿用報價單的表、列規則、欄位與執行函式；預設篩選＝成交標記為已成案或已結案（案件頁「案件總覽」的母體），使用者可改，不是強制條件。
     ⑥金額與毛利率欄位走欄位目錄（`quotation.*`）；不可見者的處理（拿掉顯示欄／422 拒絕篩選與排序）在 report_runner。
-    ⑦`execute`（擁有模組的執行函式）由 report_runner 切片補上；沒有 `execute` 的來源不會列給使用者。
+    ⑦`execute`（擁有模組的執行回呼）只轉呼叫 `report_runner.run_owned`，並限定接受自己的來源（quotation／case）。
 [契約題] backend/tests/platform/test_report_catalog_t87.py
 """
 from helpers import doc_type as _DT
@@ -32,6 +32,12 @@ def _distinct_options(expr):
         rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations ORDER BY 1" % expr).fetchall()
         return [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
     return _opts
+
+
+def _execute(plan):
+    """擁有模組的執行回呼（D6）：只接受 `compile()` 產生、且來源是自己的計畫；唯讀連線與授權器在 `run_owned`。"""
+    from helpers import report_runner as RR
+    return RR.run_owned(plan, ("quotation", "case"))
 
 
 def _f(fid, label, typ, **kw):
@@ -66,7 +72,8 @@ def register(mine_sql) -> list:
         "label": "報價單", "table": "quotations", "modules": list(MODULES),
         "rowAccess": {"kind": "case", "scope": "read"},
         "exprs": (deal_sql, settle_sql, SQL_QUOTE_DATE, mine_sql),
-        "mine": {"sql": mine_sql, "params": _MINE_PARAMS},
+        "mine": {"sql": mine_sql, "params": _MINE_PARAMS, "reads": ("sales_person_id", "sales_person", "assigned_user_ids", "data_json")},
+        "execute": _execute,
         "fields": fields,
         "defaults": {"columns": ["quote_no", "customer_name", "project_name", "doc_type", "status", "total"],
                      "sort": {"field": "quote_date", "dir": "desc"}},

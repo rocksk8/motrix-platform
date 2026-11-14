@@ -172,9 +172,11 @@ def source_problems(source_id, spec) -> list:
     mine = spec.get("mine")
     if mine is not None:
         ps = mine.get("params") if isinstance(mine, dict) else None
+        rd = mine.get("reads") if isinstance(mine, dict) else None
         if not isinstance(mine, dict) or not _is_const(mine.get("sql"), exprs) or not isinstance(ps, (list, tuple)) or any(x not in _MINE_PARAMS for x in ps) \
-                or mine["sql"].count("?") != len(ps):
-            out.append("%s：mine 必須是 {sql:登錄常數, params:id|display_name|username 的清單，個數同 ? 數}" % source_id)
+                or mine["sql"].count("?") != len(ps) \
+                or not isinstance(rd, (list, tuple)) or not rd or any(not isinstance(r, str) or not _COL_RE.match(r) or _internal(r) for r in rd):
+            out.append("%s：mine 必須是 {sql:登錄常數, params:id|display_name|username 的清單（個數同 ? 數）, reads:讀取的欄位名單}" % source_id)
     if any(f.get("isMe") for f in by.values()) and mine is None:
         out.append("%s：有 isMe 欄位就必須登記 mine（清單的「我負責的」語意）" % source_id)
     d = spec.get("defaults")
