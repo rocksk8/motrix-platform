@@ -37,12 +37,21 @@ def _wait_db(page, pred, what, timeout=25):
     raise AssertionError("資料庫沒有達到預期狀態：" + what)
 
 
+def _expand_first_material(page):
+    """T86-3：材料明細預設收合在時間軸那一列下面；已展開就不再按（按了會收回去）。"""
+    more = page.locator('[data-testid^="mtl-more-"]').first
+    more.wait_for(state="visible", timeout=20000)
+    if more.get_attribute("aria-expanded") != "true":
+        more.dispatch_event("click")
+    page.wait_for_selector(".mat-card", state="visible", timeout=20000)
+
+
 def _open_materials(page, live_server):
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     page.click('.cm-tab:has-text("執行管理")')
     page.click('.cm-tab:has-text("材料申請")')
-    page.wait_for_selector(".mat-card", timeout=20000)
+    _expand_first_material(page)
     page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
 
 

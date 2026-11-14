@@ -30,7 +30,7 @@ GLOBAL_KEYS = {
     "batchSel", "batchExec", "batchMember", "batchBusy", "batchMsg", "t100BankAccounts", "t100DefaultBankAcctCode",
     "_casesSeq", "_searchTimer", "_selectSeq", "_autoSaveTimer", "_saveToastTimer", "_initDone", "_readAtLocal",
     "_caseSortable", "_subSortables", "_ptCache", "_partsOptions", "saveToast", "savedFlash", "_pendingUrlTab",
-    "_saveRun", "_saveAgain", "headerMoreOpen", "_moReqFor", "_xeReqFor", "_cnReqFor", "feedCalYear",
+    "_saveRun", "_saveAgain", "_mtlReq", "headerMoreOpen", "_moReqFor", "_xeReqFor", "_cnReqFor", "feedCalYear",
     "feedCalMonth", "newCommentLogDate", "newCommentUserId", "_SVG_STYLE_PROPS", "ganttView",
 }
 

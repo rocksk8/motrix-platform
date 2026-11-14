@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """表單設計器的「看得懂」守門（FORM-DESIGNER-DESIGN §6 R3、§8 G-D1／G-D3）。
 
-G-D1 清晰度：右側面板每個設定列（`.fd-row`）與每個開關（`.fd-switch`）都要有「一句說明＋例子」——文字裡有「例」或「使用者會看到」；
+G-D1 清晰度：右側面板每個設定列（`.fd-row`）與每個開關（`.fd-switch`）都要有「一句說明＋例子」——文字裡有「例」或「使用者端顯示」；
      每種欄位種類（含明細表欄展開、計算器各個計算器）都逐一選過。沒有說明＋例子的選項不准上畫面。
 G-D3 詞彙：左／中／右畫面文字不得出現內部名詞（代碼、參照、dataClass、options、formula、locked、editableBy、optionsFrom…）；
      例外：「進階公式」這個標籤（舊文字公式的標示）、以及「進階設定」摺疊區（預設收合，內容不在可見文字裡）。
@@ -26,7 +26,7 @@ AUDIT_JS = """() => {
   for (const r of document.querySelectorAll('.fd-right .fd-row, .fd-right .fd-switch')) {
     if (r.closest('details.fd-adv:not([open])')) continue
     const t = r.innerText || ''
-    if (!/例|使用者會看到/.test(t)) bad.push(t.trim().slice(0, 60))
+    if (!/例|使用者端顯示/.test(t)) bad.push(t.trim().slice(0, 60))
   }
   return bad
 }"""

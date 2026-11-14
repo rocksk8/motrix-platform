@@ -177,7 +177,7 @@ def test_case_page_has_a_settlement_tab_right_of_extra_expense_that_opens_the_se
     assert labels[-2:] == ["額外支出", "精算 ▶"], labels
     _shot(page, "case-tab-settlement")
     tab.click()
-    page.wait_for_url(f"**/settlement.html?no={NO}", timeout=20000)
+    page.wait_for_url(f"**/settlement.html?no={NO}&from=case", timeout=20000)      # T86 #27：從案件進來帶 from=case，精算頁的返回連結回到案件
     page.locator('[data-testid="stl-unassigned"]').wait_for(state="visible", timeout=20000)
     _shot(page, "case-tab-settlement-landed")
 

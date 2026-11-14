@@ -159,7 +159,7 @@
       .stl-strip { position: static !important; border: 0; }
       .stl-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 4px; }
       .stl-k__v { font-size: 13px !important; }
-      .stl-k { padding: 4px 6px; }
+      .stl-k { padding: 4px 6px; grid-column: auto !important; }   /* T86 #28 手機規則（第五張跨整列）在 A4 寬度也會命中；列印維持單列 5 欄 */
       .stl-card, .stl-k, .stl-ready { break-inside: avoid; }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }

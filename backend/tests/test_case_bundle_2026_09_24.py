@@ -82,7 +82,9 @@ def test_every_part_equals_the_separate_endpoint(client, make_user, role, module
             assert got["data"] == want["data"], k
         else:
             assert got["status"] == want["status"], (k, got, want)
-    assert set(body["parts"]) == set(PARTS)
+    # T86 業務開發 D：bundle 多一段 devCase（來源商機；沒有獨立端點可對照，所以不在 PARTS）。本案沒有來源商機 ⇒ 成功、資料為 None。
+    assert set(body["parts"]) == set(PARTS) | {"devCase"}
+    assert body["parts"]["devCase"]["ok"] is True and body["parts"]["devCase"]["data"] is None
 
 
 @needs_m01

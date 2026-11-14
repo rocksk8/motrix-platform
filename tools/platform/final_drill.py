@@ -225,12 +225,12 @@ def explain_plan(present, first_quote=None) -> list:
                     "/api/quotations/%s/network-plan" % urllib.parse.quote(first_quote or "Q-NONE"), 404, ["案件模組未安裝"]))
     if P("accounting"):
         need = [msg for key, msg in (("subcontract", "外包工班模組未安裝"), ("arap", ARAP_ABSENT),
-                                     ("supply", "採購・庫存・出貨模組未安裝")) if A(key)]
+                                     ("supply", "採購與庫存模組未安裝")) if A(key)]
         if need:
             out.append(("IP-14/99/20", "T100 預覽：來源模組缺席",
                         "/api/reports/t100-export/preview?start=2026-01-01&end=2026-09-30", 200, need))
     if P("case") and first_quote:
-        need = [msg for key, msg in (("subcontract", "外包工班模組未安裝"), ("supply", "採購・庫存・出貨模組未安裝"),
+        need = [msg for key, msg in (("subcontract", "外包工班模組未安裝"), ("supply", "採購與庫存模組未安裝"),
                                      ("accounting", "會計傳票模組未安裝")) if A(key)]
         if need:
             out.append(("IP-15/18/22", "案件整包：各段缺席",

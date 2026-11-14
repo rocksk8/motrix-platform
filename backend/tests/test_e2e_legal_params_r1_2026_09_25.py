@@ -53,7 +53,10 @@ def test_settings_page_adds_next_year_and_saves(live_server, make_user, new_page
     bonus = row.locator("input[data-field='bonus_multiple']")
     assert bonus.input_value() == "4" and bonus.is_enabled(), "獎金補充保費倍數要看得到、改得到"
     page.locator("[data-save]").click()
-    page.wait_for_function(f"() => {ROOT}.okMsg === '已儲存'", timeout=10000)
+    # S5：法規參數的變更改走設定中心——畫面先提示「已送出變更…等待期滿後才生效」，核准＋期滿後才進生效版本（測試用 activate_now 模擬）
+    page.wait_for_function(f"() => String({ROOT}.okMsg).indexOf('已送出變更') === 0", timeout=10000)
+    from tests._settings_activate import activate_now
+    activate_now("tax_rules")
     vs = lp.load_versions()
     assert [v["version"] for v in vs] == ["2026", "2027"]
     assert vs[1]["minimum_wage"]["monthly"] == 30900 and vs[1]["nhi"]["thresholds"]["50"] == 30900

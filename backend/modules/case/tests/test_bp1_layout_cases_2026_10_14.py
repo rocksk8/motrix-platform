@@ -86,7 +86,7 @@ def test_flag_default_off_and_page_is_deferred():
     assert re.search(r"MotrixLayout\.init\(\{[^}]*deferred:\s*true", part, re.S)
     assert part.count("MotrixLayout.start()") == 1
     body = part[part.index("async initLayout()"):]
-    assert body.index("case_management !== true) return") < body.index("MotrixLayout.start()")
+    assert body.index("case_management !== true) {") < body.index("MotrixLayout.start()")   # T86：旗標關時先套合併頁籤設定再 return（區塊式 early return）
     assert "/api/layout" not in src
 
 

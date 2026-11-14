@@ -291,7 +291,7 @@ def test_no_change_is_400_and_writes_nothing(client, make_user):
     before = _row()
     g = _get(client, hs[0])
     r = client.post("/api/quotations/%s/review-edit" % NO, headers=hs[0], json={"data": g["data"], "expectedFp": g["contentFp"]})
-    assert r.status_code == 400 and "沒有任何變動" in r.text
+    assert r.status_code == 400 and "內容無任何變動" in r.text
     assert _row() == before
 
 
