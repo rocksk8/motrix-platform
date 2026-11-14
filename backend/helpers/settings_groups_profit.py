@@ -104,7 +104,7 @@ def register(S, _register_core):
             S("estimate_no_prefix", "str", "ME", risk="none", recommended="ME",
               question="估價單的單號要用哪兩個英文字母開頭？", label="估價單單號字首",
               help="開立「估價單」時，單號最前面的兩個大寫英文字母就是這裡設定的字首，後面的年月與流水號跟報價單各自獨立計算、互不搶號。必須是 2 個大寫英文字母，且不能跟報價單或其他單據已使用的字首相同。",
-              impact="只影響之後新開立的估價單的單號；已經開出去的估價單單號不變、仍可正常開啟與搜尋。不影響報價單的單號。立即生效。",
+              impact="只影響之後新開立的估價單的單號；已經開立的估價單單號不變、仍可正常開啟與搜尋。不影響報價單的單號。立即生效。",
               when="想讓估價單單號一眼和報價單分開，或字首與其他單據撞了時。"),
         ],
         sensitive=False, risk="none", cross_check=lambda v: _valid_days_cross_check(v) + _estimate_prefix_cross_check(v),

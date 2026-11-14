@@ -760,7 +760,7 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     return {"user": caller.get("username"), "role": caller.get("role"), "event": body["event"], "label": ev["label"], "sample": pay,
             "usesSample": not payload, "matches": matches, "conditions": conds, "recipients": recs, "knownRecipientCount": total,
             "eventDependentRecipients": unknown, "overCap": shown_over,
-            "readable": "未檢查：試跑用的不是真實單據，實際派發時每位收件人都要讀得到那張單據才會收到" if not payload else "未檢查：試跑只看人數與文字",
+            "readable": "未檢查：試跑用的不是真實單據，實際派發時每位收件人都要讀得到那張單據才會收到" if not payload else "未檢查：試跑僅顯示人數與文字",
             "renders": renders, "estimate": {"last30DaysSent": n30, "perDay": round(n30 / 30.0, 1)},
             "classification": {"class": cls, "reasons": reasons}, "warnings": warnings}
 

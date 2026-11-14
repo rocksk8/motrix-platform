@@ -143,7 +143,7 @@
             <button class="btn" data-testid="rk-validate" @click="validate()">驗證</button>
             <button class="btn" data-testid="rk-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
             <button class="btn" data-testid="rk-changes" x-show="hasDraft" @click="showChanges()">與目前使用的版本比較</button>
-            <button class="btn btn-danger" data-testid="rk-discard" x-show="hasDraft" @click="discardDraft()">丟棄草稿</button>
+            <button class="btn btn-danger" data-testid="rk-discard" x-show="hasDraft" @click="discardDraft()">捨棄草稿</button>
           </div>
           <div data-testid="rk-problems" x-show="problems.length">
             <ul class="rk-prob">

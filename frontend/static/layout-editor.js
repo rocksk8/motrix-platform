@@ -211,7 +211,7 @@
         } catch (e) {
           // 讀不到角色／側欄（斷線）⇒ 不放開鎖：明說並維持鎖定，讓使用者關掉重開（與 loadScope 失敗同一個處理）
           this.state = 'error'
-          this.loadError = '排版器載入失敗（' + (e && e.message || e) + '），編輯已鎖定；請關閉後再打開'
+          this.loadError = '排版器載入失敗（' + (e && e.message || e) + '），編輯已鎖定；請關閉後再開啟'
           this.msg = this.loadError
           return
         }
@@ -385,7 +385,7 @@
       saveDraft() { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次存草稿') },
       publish() { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經發布，請關閉排版器後重新開啟，並查看版本清單確認後再決定') },
       restore(v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉排版器再打開、看版本清單確認') },
-      discard() { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉排版器再打開確認') },
+      discard() { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉排版器再開啟確認') },
       async _saveDraft() {
         this.busy = true
         this.lastOps = L.compileOps(this._pts(), this._page(), this.work)

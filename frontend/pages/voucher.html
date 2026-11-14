@@ -413,7 +413,7 @@
                 <!-- `JV34②`：補平差額——目前這一行借貸都空白、差額 ≠ 0 才可按（A 裁示的保守條件）。 -->
                 <td colspan="2"><button class="vc-btn" data-testid="voucher-balance" x-show="canEdit"
                             :disabled="!canBalance" @click="fillBalance()"
-                            :title="'把差額填進第 ' + (curLine + 1) + ' 行'">補平差額</button></td>
+                            :title="'將差額填入第 ' + (curLine + 1) + ' 行'">補平差額</button></td>
                 <td class="label">合　計</td>
                 <td class="num" data-testid="voucher-total-debit" x-text="fmt(totalDebit)"></td>
                 <td class="num" data-testid="voucher-total-credit" x-text="fmt(totalCredit)"></td>
@@ -458,7 +458,7 @@
                     <span style="color:var(--text-secondary)" x-text="e.customer_name"></span>
                   </button>
                 </template>
-                <div class="vc-src__empty" x-show="!panelCases().length">目前沒有可選的案件。</div>
+                <div class="vc-src__empty" x-show="!panelCases().length">尚無可選的案件。</div>
                 <!-- 案件清單的說明（M01 不在時：案件模組未安裝） -->
                 <div class="vc-src__empty" data-testid="source-cases-scope" x-show="(sourceNotes || {})['案件']"
                      x-text="(sourceNotes || {})['案件']"></div>
@@ -481,7 +481,7 @@
                   <div class="vc-src__empty" data-testid="summary-panel-msg" style="color:#B91C1C"
                        x-show="panelMsg" x-text="panelMsg"></div>
                   <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
-                       x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
+                       x-text="panelExpenseNote() || '尚無可帶入的支出項。'"></div>
                   <!-- 稽核 X-1：某一類來源整個缺（模組未安裝），不是「沒有」 -->
                   <template x-for="u in sourceUnavailable" :key="u.category">
                     <div class="vc-src__empty" data-testid="source-unavailable" style="color:#B91C1C" x-text="u.reason"></div>
@@ -827,7 +827,7 @@
         <button class="btn btn-sm" :disabled="exporting" @click="exportPdf(false)"
                 x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
         <button class="btn btn-sm" :disabled="exporting || !attachments.length"
-                :title="attachments.length ? '' : '這張傳票尚無附件，沒有東西可以併進去'"
+                :title="attachments.length ? '' : '這張傳票尚無附件，沒有東西可以併入'"
                 @click="exportPdf(true)">匯出 PDF（含附件）</button>
       </div>
       <!-- `JV17`：這句原本貼在主頁面兩顆匯出鈕旁邊，鈕搬進 modal 之後

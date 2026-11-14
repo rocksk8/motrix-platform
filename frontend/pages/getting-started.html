@@ -131,7 +131,7 @@
       var dl = el('dl')
       row(dl, '大約時間', s.minutes)
       row(dl, '要準備', s.prepare || [])
-      row(dl, '怎麼確認完成', s.confirm)
+      row(dl, '完成確認方式', s.confirm)
       body.appendChild(dl)
       if (s.detail) { var dd = el('div', 'gs-detail', s.detail); dd.setAttribute('data-testid', 'gs-detail-' + s.id); body.appendChild(dd) }
       var act = el('div', 'gs-actions')

@@ -48,7 +48,7 @@
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
           <button class="btn btn-sm" type="button" data-testid="mb-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
           <button class="btn btn-sm btn-primary" type="button" data-testid="mb-conflict-force" @click="conflictForce()">用我的覆蓋</button>
-          <button class="btn btn-sm" type="button" data-testid="mb-conflict-hold" @click="conflictHold()">先不處理</button>
+          <button class="btn btn-sm" type="button" data-testid="mb-conflict-hold" @click="conflictHold()">暫不處理</button>
         </span>
         <span x-show="conflictHeld"><button class="btn btn-sm" type="button" data-testid="mb-conflict-reopen" @click="conflictHeld = false">處理衝突</button></span>
       </div>
@@ -61,7 +61,7 @@
           <div class="mb-hint">範本是一份預填好的草稿（欄位、區塊、明細表、簽核、輸出版型）；選了之後可以自由修改，不再與範本連動。</div>
           <div class="mb-tpl">
             <button class="mb-tpl__c" id="mb-tpl-blank" :disabled="tplBusy" @click="chooseTemplate(null)">
-              <strong>空白</strong><span>從沒有欄位的空白表單開始</span>
+              <strong>空白</strong><span>自空白表單開始</span>
             </button>
             <template x-for="t in templates()" :key="t.key">
               <button class="mb-tpl__c" :data-template="t.key" :disabled="tplBusy" @click="chooseTemplate(t.key)">
@@ -193,7 +193,7 @@
                 </template>
               </div>
 <div class="mb-f" data-vis="menu">
-                <label>誰看得到</label>
+                <label>可檢視對象</label>
                 <div class="mb-hint" data-vis-summary x-text="visSummary('menu')"></div>
                 <div class="cr-opts">
                   <template x-for="r in (catalog.roles || [])" :key="r">
@@ -280,14 +280,14 @@
                     </template>
                   </div>
                 </template>
-                <div class="mb-hint" x-show="!paletteGroups().length">沒有符合的元件</div>
+                <div class="mb-hint" x-show="!paletteGroups().length">查無符合條件的元件</div>
               </aside>
 
               <!-- 中：畫布＝表單本身（與執行頁同一套 class 與標記）；預覽模式就地切成填單視角 -->
               <div class="mb3__center">
                 <div class="mb-canvas" id="mb-canvas" :class="{ 'is-over': dragOver, 'is-preview': formMode === 'preview' }" :data-mode="formMode"
                      @dragover.prevent="dragOver = formMode === 'edit'" @dragleave.self="dragOver = false" @drop.prevent="formMode === 'edit' && dropOn($event, -1, null)">
-                  <div class="mb-hint" x-show="!def.fields.length && formMode === 'edit'">把左邊的元件拖到這裡</div>
+                  <div class="mb-hint" x-show="!def.fields.length && formMode === 'edit'">將左側元件拖曳至此</div>
                   <h2 class="mb-canvas__title" style="font-size:18px;margin:4px 0 8px" x-text="def.name || '（未命名的表單）'"></h2>
                   <template x-for="(sec, si) in L.editorSections(def)" :key="'g' + sec.gi">
                     <div class="cr-sec mb-sec" :data-section-group="sec.gi" :data-group-index="sec.gi >= 0 ? sec.gi : null"
@@ -300,7 +300,7 @@
                                 @dragstart="$event.dataTransfer.setData('text/plain', 'group:' + sec.gi)">⠿</span>
                           <input class="mb-in" :data-group-title="sec.gi" :value="sec.title" placeholder="區塊標題（例：借用資訊）" aria-label="區塊標題"
                                  @change="def.ui = L.renameGroup(def, sec.gi, $event.target.value)">
-                          <select class="mb-in mb-in-s" :data-group-columns="sec.gi" :value="String(groupColumns(sec.gi))" aria-label="這個區塊一列幾欄"
+                          <select class="mb-in mb-in-s" :data-group-columns="sec.gi" :value="String(groupColumns(sec.gi))" aria-label="此區塊每列欄數"
                                   @change="setGroupColumns(sec.gi, $event.target.value)">
                             <option value="0">欄數：自動</option><option value="1">1 欄</option><option value="2">2 欄</option><option value="3">3 欄</option><option value="4">4 欄</option>
                           </select>
@@ -376,7 +376,7 @@
                             <div class="cr-help" x-show="it.f.help" :data-field-help="it.key" x-text="it.f.help"></div>
                           </div>
                         </template>
-                        <div class="mb-sec__drop mb-hint" x-show="!sec.items.length && formMode === 'edit'">把元件拖到這個區塊</div>
+                        <div class="mb-sec__drop mb-hint" x-show="!sec.items.length && formMode === 'edit'">將元件拖曳至此區塊</div>
                       </div>
                     </div>
                   </template>
@@ -561,7 +561,7 @@
                         </div>
                       </template>
                       <div class="mb-f" data-vis="field">
-                <label>誰看得到</label>
+                <label>可檢視對象</label>
                 <div class="mb-hint" data-vis-summary x-text="visSummary(sel)"></div>
                 <div class="cr-opts">
                   <template x-for="r in (catalog.roles || [])" :key="r">
@@ -577,7 +577,7 @@
                 </details>
               </div>
                       <div class="mb-f" data-vis="field-edit">
-                <label>誰改得到</label>
+                <label>可修改對象</label>
                 <div class="mb-hint" data-vis-summary x-text="visSummary(sel, 'editableTo')"></div>
                 <div class="cr-opts">
                   <template x-for="r in (catalog.roles || [])" :key="r">
@@ -1086,7 +1086,7 @@
               </div>
               <div class="mb-f" style="margin-top:12px">
                 <label for="mb-publish-note">發布說明</label>
-                <input id="mb-publish-note" class="mb-in" x-model="publishNote" placeholder="這一版改了什麼">
+                <input id="mb-publish-note" class="mb-in" x-model="publishNote" placeholder="本版變更內容">
               </div>
               <div class="mb-row" style="margin-top:10px">
                 <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy" x-text="defReview.active ? '送審' : '發布'">發布</button>

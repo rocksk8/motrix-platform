@@ -951,7 +951,7 @@ function cashierApp() {
     // 事件會從之後所有匯出/預覽自動排除，避免重複匯入
     async confirmT100Imported() {
       if (!this.t100Preview || !this.t100Preview.count) {
-        alert('目前沒有可確認的事件，請先預覽')
+        alert('尚無可確認的事件，請先預覽')
         return
       }
       if (!confirm('確認這 ' + this.t100Preview.count + ' 筆事件已經實際匯入 T100？確認後將自動從之後的匯出／預覽排除，避免重複匯入。')) return

@@ -23,12 +23,12 @@ STATES = ("inprogress", "done", "skipped", "na")
 _KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單"}
 _VOIDED = "已作廢"
 _NEXT = {  # 各格「下一步」要開的頁（只帶案號；開了就是現有頁面）
-    "call": ("去送材料申請", "case-management.html?q={q}&tab=exec&sub=materials"),
+    "call": ("送出材料申請", "case-management.html?q={q}&tab=exec&sub=materials"),
     "purchase": ("開請購單", "payment-request.html?case={q}&type=purchase_req"),
-    "arrive": ("去確認到貨", "case-management.html?q={q}&tab=fin"),
-    "ship": ("去開出貨單", "case-management.html?q={q}&tab=shipping"),
-    "device": ("去登載設備", "case-management.html?q={q}&tab=exec"),
-    "warranty": ("去填保固起始日", "case-management.html?q={q}&tab=exec"),
+    "arrive": ("確認到貨", "case-management.html?q={q}&tab=fin"),
+    "ship": ("開立出貨單", "case-management.html?q={q}&tab=shipping"),
+    "device": ("登載設備", "case-management.html?q={q}&tab=exec"),
+    "warranty": ("填寫保固起始日", "case-management.html?q={q}&tab=exec"),
 }
 
 
@@ -115,13 +115,13 @@ def _stock(conn, quote_no, user):
     if "receivedInStock" in s:                                       # 一條龍 P2a（旗標 onepipe.receive_ledger 開）：入庫格完整（提案 §2.2 ④）
         rec, direct = int(s.get("receivedInStock") or 0), int(s.get("directBatches") or 0)
         if not (ins or shp or rec or direct):
-            return _cell("stock", "入庫", "na", "目前沒有這個案件的入庫紀錄")
+            return _cell("stock", "入庫", "na", "尚無這個案件的入庫紀錄")
         text = "已入庫尚未認領 %d 台、已安裝 %d 台、已出貨 %d 台" % (rec, ins, shp) + ("；%d 批直送客戶現場" % direct if direct else "")
         return _cell("stock", "入庫", "inprogress", text,
                      [{"partNo": p.get("partNo", ""), "inStock": int(p.get("inStock") or 0), "installed": int(p.get("installed") or 0), "shipped": int(p.get("shipped") or 0)}
                       for p in (s.get("parts") or [])])
     if not (ins or shp):
-        return _cell("stock", "入庫", "na", "目前沒有這個案件的序號；已入庫但尚未認領的，第 2 階段後提供")
+        return _cell("stock", "入庫", "na", "尚無這個案件的序號；已入庫但尚未認領的，第 2 階段後提供")
     return _cell("stock", "入庫", "inprogress", "已安裝 %d 台、已出貨 %d 台；已入庫但尚未被這個案件認領的，第 2 階段後提供" % (ins, shp),
                  [{"partNo": p.get("partNo", ""), "installed": int(p.get("installed") or 0), "shipped": int(p.get("shipped") or 0)} for p in (s.get("parts") or [])])
 

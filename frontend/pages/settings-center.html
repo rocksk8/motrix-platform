@@ -224,7 +224,7 @@
           else html += '<button type="button" class="sc-navitem' + (ST.view === 'page' && ST.page === p.id ? ' active' : '') + (p.status === 'planned' ? ' planned' : '') + '" data-page="' + esc(p.id) + '" data-testid="sc-page-' + esc(p.id) + '"><span>' + esc(p.plain) + '</span><span>' + badges + '</span></button>'
         })
       })
-      $('sc-nav').innerHTML = html || '<div class="sc-empty">沒有符合的設定頁。</div>'
+      $('sc-nav').innerHTML = html || '<div class="sc-empty">查無符合條件的設定頁。</div>'
       var cur = ST.view === 'page' ? pageById(ST.page) : null
       $('sc-navtoggle-text').textContent = cur ? cur.plain : '選擇設定頁'
     }
@@ -549,7 +549,7 @@
     function renderPending() {
       var h = '<h2 class="sc-h">待生效</h2><div class="sc-sub">放寬類或重要的變更不會立即生效：要等到期，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>' +
         '<div class="sc-btnrow"><input type="text" class="sc-in" id="sc-pnote" placeholder="核准／撤銷的備註（選填）" style="min-width:260px" data-testid="sc-pending-note"></div>'
-      if (!ST.pending.length) h += '<div class="sc-empty" data-testid="sc-pending-empty">目前沒有等待生效的變更。</div>'
+      if (!ST.pending.length) h += '<div class="sc-empty" data-testid="sc-pending-empty">尚無等待生效的變更。</div>'
       else h += '<table class="sc-table" data-testid="sc-pending-list"><thead><tr><th>設定</th><th>改成</th><th>申請人／原因</th><th>生效時間</th><th>核准</th><th></th></tr></thead><tbody>' + ST.pending.map(function (p) {
         var chg = p.summary && p.summary.length ? esc(p.summary.join('；')) : esc(p.oldText) + ' → <b>' + esc(p.newText) + '</b>'
         return '<tr data-testid="sc-pending-' + esc(p.id) + '"><td>' + esc(p.groupLabel + '／' + p.label) + '</td><td>' + chg + '</td><td>' + esc(p.actor) + '<div class="sc-sub">' + esc(p.reason) + '</div></td><td>' + esc(stamp(p.effectiveAt)) + '</td><td>' + (p.required ? esc((p.approvals || []).length + '／' + p.required) : '不需要') + '</td><td style="white-space:nowrap">' +
@@ -626,7 +626,7 @@
     function renderProfiles() {
       var h = '<h2 class="sc-h">預設組</h2><div class="sc-sub">預設組是一組事先配好的建議值（例如「嚴格」）。套用前會先列出會改哪些設定；放寬的項目一樣要等到期與核准。</div><div class="sc-btnrow">' +
         ST.profiles.map(function (p) { return '<button type="button" class="mx-btn" data-profile="' + esc(p.name) + '" data-testid="sc-profile-' + esc(p.name) + '">' + esc(p.name) + '</button>' }).join('') + '</div>'
-      if (!ST.profiles.length) h += '<div class="sc-empty">目前沒有可用的預設組。</div>'
+      if (!ST.profiles.length) h += '<div class="sc-empty">尚無可用的預設組。</div>'
       if (ST.profilePv) {
         var sk = (ST.profileSkipped || []).reduce(function (a, s) { return a + (s.fields || 0) }, 0)
         h += '<div class="sc-box" data-testid="sc-profile-panel"><b>套用「' + esc(ST.profileName) + '」會改這些設定</b>' + (ST.profilePv.length ? '<table class="sc-table"><thead><tr><th>群組</th><th>設定</th><th>目前</th><th>改成</th></tr></thead><tbody>' + ST.profilePv.map(function (c) { return '<tr><td>' + esc(c.groupLabel) + '</td><td>' + esc(c.label) + '</td><td>' + esc(c.old) + ' ' + esc(c.unit || '') + '</td><td><b>' + esc(c.new) + '</b> ' + esc(c.unit || '') + '</td></tr>' }).join('') + '</tbody></table>' : '<div class="sc-sub">目前的設定已經和這個預設組一致。</div>') +

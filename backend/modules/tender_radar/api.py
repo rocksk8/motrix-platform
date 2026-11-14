@@ -377,19 +377,19 @@ def _source_notices(state, last):
     out = []
     if state.get("list") == "format_changed":
         out.append({"kind": "format_changed", "tone": "warn",
-                    "text": "來源網站格式異動：上次抓取成功解析 %s 筆、解析失敗 %s 筆，結果可能不完整（這不是「沒有符合的標案」），解析器需要調整。"
+                    "text": "來源網站格式異動：上次擷取成功解析 %s 筆、解析失敗 %s 筆，結果可能不完整（這不是「沒有符合的標案」），解析器需要調整。"
                             % (state.get("parsed", 0), state.get("dropped", 0))})
     if state.get("detail") == "captcha":
         out.append({"kind": "detail_captcha", "tone": "warn",
                     "text": "來源網站的標案詳細頁現在要求驗證碼：履約地點與招標方式暫時無法自動取得（列表中標示為「未取得」），"
-                            "標案列表不受影響。系統不會嘗試破解驗證碼，已停止抓取詳細頁。"})
+                            "標案列表不受影響。系統不會嘗試破解驗證碼，已停止擷取詳細頁。"})
     if state.get("list") == "empty_day":
         out.append({"kind": "empty_day", "tone": "idle",
-                    "text": "上次抓取：來源網站回報當日沒有公告（0 筆），不是錯誤。"})
+                    "text": "上次擷取：來源網站回報當日沒有公告（0 筆），不是錯誤。"})
     no_mail, why = tender_source.no_mail_today()
     if no_mail:
         out.append({"kind": "no_mail_day", "tone": "idle",
-                    "text": "今天是不寄信日（%s）：系統照常抓取，新標案的通知信會順延到下一個上班日寄出。" % why})
+                    "text": "今天是不寄信日（%s）：系統照常擷取，新標案的通知信會順延到下一個上班日寄出。" % why})
     d = tender_source.today()
     left = calendar_tw.days_until_expiry(d)
     if left is not None and 0 <= left <= tender_source.HOLIDAY_WARN_DAYS:
@@ -465,7 +465,7 @@ def set_schedule(body: dict = Body(...), authorization: str = Header(None)):
     confirmed = body_flag(body, "confirmHighFrequency", False)
     changes = []
     _hours_field(body, "scanHours", tender_source.SCAN_HOURS_SETTING,
-                 "抓取時段", confirmed, changes)
+                 "擷取時段", confirmed, changes)
     _hours_field(body, "notifyHours", tender_source.NOTIFY_HOURS_SETTING,
                  "寄信時段", confirmed, changes)
     if not changes:
@@ -528,7 +528,7 @@ if os.getenv("MOTRIX_TENDER_RADAR") == "1":
             conn.close()
         # 稽核一定要留：這是一個**放寬了節流**的動作，即使只在測試機上也要看得見。
         _audit(_tok(authorization), "tender_radar.reset_today", "tender_radar",
-               "", f"清掉今天的抓取紀錄 {removed} 筆（測試模式）")
+               "", f"清掉今天的擷取紀錄 {removed} 筆（測試模式）")
         return {"removed": removed}
 
 

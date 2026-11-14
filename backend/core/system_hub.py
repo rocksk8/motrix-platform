@@ -26,11 +26,11 @@ L1_CARDS = Path(__file__).with_name("system_hub_l1.json")
 
 #: 分組固定在 L1（模組只能選用）；順序即左欄顯示順序
 SECTIONS = (
-    {"key": "identity", "title": "帳號與權限", "sub": "誰能進系統、能看什麼、能做什麼"},
-    {"key": "workflow", "title": "簽核與流程", "sub": "誰簽什麼、單據類型與款別"},
-    {"key": "notify", "title": "通知與信件", "sub": "什麼事通知誰、怎麼通知"},
+    {"key": "identity", "title": "帳號與權限", "sub": "帳號、存取範圍與操作權限"},
+    {"key": "workflow", "title": "簽核與流程", "sub": "簽核人、單據類型與款別"},
+    {"key": "notify", "title": "通知與信件", "sub": "通知事件、對象與方式"},
     {"key": "data", "title": "資料與備份", "sub": "檔案位置、備份、刪除後的資源回收筒"},
-    {"key": "audit", "title": "稽核與紀錄", "sub": "誰在什麼時候做了什麼"},
+    {"key": "audit", "title": "稽核與紀錄", "sub": "操作人員、時間與內容"},
     {"key": "settings", "title": "公司與參數設定", "sub": "公司資料、法規參數、報表與利潤口徑（設定中心索引）"},
     {"key": "modules", "title": "模組與擴充", "sub": "功能開關與自訂模組"},
     {"key": "status", "title": "系統狀態與版本", "sub": "版本、資料庫結構、使用狀況"},

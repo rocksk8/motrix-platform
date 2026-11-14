@@ -498,7 +498,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         raise HTTPException(400, "此類型不支援轉簽（或該單據的模組未安裝）：" + str(body.type))
     to_username = (body.to_username or "").strip()
     if not to_username:
-        raise HTTPException(400, "請選擇要轉給誰")
+        raise HTTPException(400, "請選擇轉交對象")
 
     conn = get_db()
     try:

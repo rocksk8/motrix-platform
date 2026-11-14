@@ -109,7 +109,7 @@
     '          <div class="ns-desc">請至此信箱確認是否已收到測試信（若未收到，請一併查看垃圾郵件匣）。收到後請按「我收到了」，系統即會開始寄送通知信。</div>',
     '          <div class="ns-actions" style="margin-top:12px">',
     '            <button class="btn btn-primary" @click="wzActivate()" :disabled="wz.activating" data-testid="es-got-it">我收到了，啟用通知</button>',
-    '            <button class="btn btn-ghost" @click="wzSendTest()" :disabled="wz.sending">沒收到，重寄一次</button>',
+    '            <button class="btn btn-ghost" @click="wzSendTest()" :disabled="wz.sending">未收到，重新寄送</button>',
     '          </div>',
     '        </div>',
     '        <!-- 失敗 -->',

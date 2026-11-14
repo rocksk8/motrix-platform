@@ -83,8 +83,8 @@
 
   // 可替換的文案（cfg.labels 只需要寫要換的鍵）；{n}／{name}／{g}／{col}／{reason}／{k} 是樣板
   var DEFAULT_LABELS = {
-    all: '全部', allGroups: '全部群組', groupFilterAria: '只看某個群組', expand: '展開全部', collapse: '收合全部',
-    search: '搜尋', nameCol: '項目', empty: '沒有符合條件的項目',
+    all: '全部', allGroups: '全部群組', groupFilterAria: '僅顯示某個群組', expand: '展開全部', collapse: '收合全部',
+    search: '搜尋', nameCol: '項目', empty: '查無符合條件的項目',
     batchAria: '批次操作', selected: '已選 {n} 項', clearSel: '取消選取', selAllAria: '全選目前列出的列',
     selectRow: '選取 {name}', selectGroupAria: '選取「{g}」全部列出的列（不能批次的列會略過）',
     cellAria: '{name}：{col}', switchDefault: '開關', chipOn: '（是）', chipOff: '（否）',
@@ -94,7 +94,7 @@
     skippedBox: '已略過 {n} 項（不能批次，請逐項設定）：', skippedAll: '選取的項目都不能批次，請逐項設定', noneSelected: '沒有選取任何項目',
     partialTitle: '部分項目不能批次', partialBody: '將套用 {n} 項。', apply: '套用', cancel: '取消',
     undo: '復原這一批', undone: '已復原這一批（{n} 項）', updated: '已更新', turnedOn: '已開啟', turnedOff: '已關閉', failed: '失敗', invalidNumber: '請輸入數字',
-    help: '說明', helpTitle: '{name}：說明', helpWhat: '這是什麼', helpWhen: '什麼時候要改', helpImpact: '改了會影響什麼', helpRecommend: '建議值', close: '關閉',
+    help: '說明', helpTitle: '{name}：說明', helpWhat: '說明', helpWhen: '調整時機', helpImpact: '影響範圍', helpRecommend: '建議值', close: '關閉',
     srcLine: '來源：', srcDefault: '預設', srcCompany: '公司', srcPending: '等待生效', srcLegacy: '舊位置', srcPersonal: '個人',
     srcDefaultText: '系統預設', srcCompanyText: '公司設定', srcPendingText: '等待生效', srcLegacyText: '舊位置（唯讀提示）', srcPersonalText: '個人設定',
     diffTag: '與預設不同', diffFilter: '與預設不同', diffDefault: '預設：{v}', diffReset: '還原預設', diffResetTitle: '還原「{name}」為預設值',

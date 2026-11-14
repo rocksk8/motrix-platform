@@ -494,7 +494,7 @@
             <span class="h-kicker" x-text="branding.tagline || 'MOTRIX PLATFORM'">MOTRIX PLATFORM</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
-            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
+            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>尚無待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
             <!-- 登入問候語（UX P1.5；單一端點 /api/auth/greeting，伺服器判斷情境與風格，前端只顯示；關閉或讀不到 ⇒ 整塊不出現） -->
             <p class="h-hero__greet" data-testid="login-greeting" x-show="greet.line" x-text="greet.line"></p>
             <p class="h-hero__greet h-hero__greet--aux" data-testid="login-greeting-away" x-show="greet.awayLine" x-text="greet.awayLine"></p>
@@ -529,13 +529,13 @@
             <p class="h-sub">依您的權限，列出現在輪到您處理的事</p>
           </div>
         </div>
-        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；稍後重新整理看看。</p>
+        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；請稍後重新整理。</p>
         <template x-if="mineWork.empty">
           <div class="h-mine__empty" data-testid="home-mine-empty">
-            <p>目前沒有需要您處理的事。</p>
+            <p>尚無需要您處理的事項。</p>
             <div class="h-mine__acts">
-              <a href="pages/daily-tasks.html" class="h-ghost">看今日工作事項</a>
-              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">去報價單</a>
+              <a href="pages/daily-tasks.html" class="h-ghost">查看今日工作事項</a>
+              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">前往報價單</a>
             </div>
           </div>
         </template>
@@ -543,7 +543,7 @@
           <template x-for="g in mineWork.groups" :key="g.key">
             <div class="h-mine__c" :data-testid="'home-mine-' + g.key">
               <div class="h-mine__h"><span class="h-mine__t" x-text="g.title"></span><span class="h-mine__n" :class="g.count === 0 ? 'is-zero' : ''" x-text="g.count"></span></div>
-              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '目前沒有需要處理的項目'"></p>
+              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '尚無需要處理的項目'"></p>
               <ul class="h-mine__l" x-show="g.items.length > 0">
                 <template x-for="(it, ix) in g.items" :key="ix">
                   <li><a class="h-mine__i" :class="'h-mine__i--' + it.tone" :href="it.href || g.href"><b x-text="it.title"></b><span x-text="it.sub"></span></a></li>
@@ -564,7 +564,7 @@
             <div class="h-band__k">待我簽核</div>
             <div class="h-band__n" x-text="mineLoaded ? stats.waitingForMe : '—'"></div>
             <div class="h-band__t">前往簽核</div>
-            <p class="h-band__p" x-text="!mineLoaded ? '無法讀取待簽核清單（可能是連線異常或伺服器正在重新啟動），此處數字暫不準確。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '目前沒有待您簽核的單據。')"></p>
+            <p class="h-band__p" x-text="!mineLoaded ? '無法讀取待簽核清單（可能是連線異常或伺服器正在重新啟動），此處數字暫不準確。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '尚無待您簽核的單據。')"></p>
           </a>
           <!-- 這兩格的資料來自營運分析模組（/api/dashboard/funnel、/stats）；模組不在 ⇒ 顯示「—」＋明說，
                不可以顯示 0＋「沒有…」（那跟真的 0 筆長得一樣，稽核 ⑰ M-4、MODULE-GUIDE §1） -->
@@ -572,13 +572,13 @@
             <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : expiringQuotes.length"></div>
             <div class="h-band__t">報價單有效期將屆</div>
-            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '沒有需要追蹤的報價單。')"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '尚無需要追蹤的報價單。')"></p>
           </a>
           <a href="pages/warranty.html" class="h-band__c" data-testid="band-warranty">
             <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : (stats.warrantyWarnings || []).length"></div>
             <div class="h-band__t">設備保固 90 天內到期</div>
-            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '沒有已過保的設備。')"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '尚無已過保的設備。')"></p>
           </a>
         </div>
       </div>
@@ -655,7 +655,7 @@
         <div class="ux-check__n" data-testid="checklist-progress" x-text="checklistDone + ' / ' + checklistItems.length + ' 完成'"></div>
         <div class="ux-check__n" x-show="stats.totalQuotes === 0">系統目前尚無資料，從第一項開始。</div>
         <div class="ux-check__bar" aria-hidden="true"><i :style="'width:' + (checklistItems.length ? Math.round(checklistDone * 100 / checklistItems.length) : 0) + '%'"></i></div>
-        <button type="button" class="hint-x" data-testid="checklist-dismiss" @click="dismissOnboarding()" aria-label="先收起上手清單（之後可從右上角「？」再打開）">先收起來</button>
+        <button type="button" class="hint-x" data-testid="checklist-dismiss" @click="dismissOnboarding()" aria-label="暫時收起上手清單（之後可從右上角「？」再開啟）">暫時收起</button>
       </div>
       <ul class="ux-check__list">
         <template x-for="it in checklistItems" :key="it.id">
@@ -775,7 +775,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:12px;font-weight:600;color:#92400E;display:flex;align-items:center;gap:6px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3H5a2 2 0 00-2 2v16l4-4h11a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg>
-          出貨單卡簽核
+          出貨單簽核逾期
           <span style="background:#FDE68A;color:#92400E;font-size:12px;padding:1px 7px;border-radius:10px;font-weight:700" x-text="opsAlerts.shippingStuck.length + ' 筆'"></span>
           <span style="font-size:12px;font-weight:400;color:#B45309">送審超過 5 天尚未完成簽核</span>
         </div>
@@ -831,7 +831,7 @@
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往待我簽核'"></td>
             </tr>
             <tr x-show="!loading && mineLoaded && !mineItems.length">
-              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">清單是空的：沒有輪到您的簽核單</td>
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">尚無待您簽核的單據</td>
             </tr>
             <tr x-show="!loading && !mineLoaded">
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">讀不到待簽核清單，這裡的資料暫時不準</td>
@@ -984,19 +984,19 @@ feedCount(key) {
           return '有 ' + this.followUpQuotes.length + ' 張報價單送出後超過 14 天未收到客戶回應，建議先追蹤。'
         }
         if (overdue > 0) {
-          return '有 ' + overdue + ' 台設備已過保，先確認是否續約或更換。'
+          return '有 ' + overdue + ' 台設備已過保，請確認是否續約或更換。'
         }
         // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
         // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
         if (this.analyticsMissing) return '首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。'
         if (!this.statsLoaded) {
           return '目前讀不到儀表板資料（可能是連線或伺服器正在重啟），'
-               + '畫面上的數字暫時不準。重新整理可以再試一次。'
+               + '畫面上的數字暫時不準。請重新整理後再試。'
         }
         if (this.stats.totalQuotes === 0) {
           return '系統中尚無任何資料，從建立第一筆客戶與報價單開始。'
         }
-        return '沒有需要您立刻處理的事項。'
+        return '尚無需要您立刻處理的事項。'
       },
 
       // 後端的 stats 回應帶 financeVisible：false＝這個帳號不再取得財務卡片（資料被保留，不是沒有）；沒有這個鍵（舊 API）＝維持原本行為
@@ -1235,10 +1235,10 @@ feedCount(key) {
           }
         }
         const meta = {
-          customer: { label: '建立第一筆客戶', cta: '去建立', href: 'pages/customers.html' },
-          quote:    { label: '開立第一張報價單', cta: '去開立', href: 'pages/quotation-form.html' },
-          approval: { label: '確認簽核流程（誰要簽什麼）', cta: '去看看', href: 'pages/approval-settings.html' },
-          team:     { label: '邀請同事加入', cta: '去新增帳號', href: 'pages/users.html' },
+          customer: { label: '建立第一筆客戶', cta: '前往建立', href: 'pages/customers.html' },
+          quote:    { label: '開立第一張報價單', cta: '前往開立', href: 'pages/quotation-form.html' },
+          approval: { label: '確認簽核流程（簽核人與簽核項目）', cta: '前往查看', href: 'pages/approval-settings.html' },
+          team:     { label: '邀請同事加入', cta: '前往新增帳號', href: 'pages/users.html' },
         }
         this._ckSave(done)
         this.checklistItems = items.map(i => ({ ...meta[i.id], ...i }))

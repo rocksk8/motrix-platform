@@ -730,14 +730,14 @@
                  style="margin:0 0 10px;padding:9px 12px;border-radius:6px;
                         background:#FEF3C7;color:#92400E;font-size:12px;
                         font-weight:600;line-height:1.7">
-              ⚠️ 目前<strong>沒有設定費用上限</strong> —— 用多少算多少。
+              ⚠️ 目前<strong>沒有設定費用上限</strong> —— 依實際用量計。
               下方的警戒線與硬上限<strong>不會生效</strong>，要先填免費額度。
             </div>
             <div class="ns-desc">
               到達上限時系統會<strong>自動退回免費的定位來源</strong>（精度較低），
               <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
               <br>⚠️ <strong>額度留空 ＝ 不設上限</strong>（不是 0，也不是停用功能）：
-              警戒線不會寄信、硬上限不會降回免費，<strong>用多少算多少</strong>。
+              警戒線不會寄信、硬上限不會降回免費，<strong>依實際用量計</strong>。
               請填入您自己在 Google Cloud 主控台上看到的數字 ——
               每個服務（SKU）各自一組免費額度，<strong>不共用</strong>。
             </div>
@@ -754,7 +754,7 @@
                      📌 「不寫死在程式裡」與「寫在畫面上當提示」不衝突：
                         程式不依賴它，使用者拿得到一個出發點。 -->
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                  留空＝<strong>不設上限，超用多少算多少</strong>。
+                  留空＝<strong>不設上限，依實際用量計</strong>。
                   Google 目前給 Geocoding <strong>每月 10,000 次免費</strong>
                   （2026-09 查證，印度區另有例外），
                   <strong>實際額度以您的帳單為準</strong>。
@@ -965,7 +965,7 @@
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
-              產生 PDF 需要用到 Edge。<strong>正常情況下不用填</strong>——系統會自動偵測；
+              產生 PDF 需要用到 Edge。<strong>一般情況下無須填寫</strong>——系統會自動偵測；
               只有在自動偵測失敗（PDF 產生時發生錯誤、找不到 Edge）時才需要手動指定 <code>msedge.exe</code> 的完整路徑。
               檔案必須存在，否則儲存時將遭拒絕。
             </div>
@@ -1002,8 +1002,8 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               預設是「本機磁碟機」（Google 雲端硬碟掛載的資料夾）。
-              切換至 S3 相容物件儲存需要先在伺服器設好 access key 環境變數，<strong>沒設好的話備份會靜默失敗</strong>，
-              切換後請確認隔天的備份告警沒有跳出來。
+              切換至 S3 相容物件儲存需要先在伺服器設好 access key 環境變數，<strong>未設定完成時，備份失敗將不會通知</strong>，
+              切換後請確認隔天未出現備份告警。
             </div>
             <div class="ns-row full">
               <div class="ns-field">

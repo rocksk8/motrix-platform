@@ -49,7 +49,7 @@
           <span>下一步建議：</span><b x-text="data.next && data.next.label"></b>
           <a :href="data.next && data.next.href" data-testid="mf-next-go">前往</a>
         </div>
-        <div class="mf-next" data-testid="mf-allclear" x-show="!data.next"><span>目前沒有需要接著處理的項目。</span></div>
+        <div class="mf-next" data-testid="mf-allclear" x-show="!data.next"><span>尚無需要接著處理的項目。</span></div>
         <div class="mf-line">
           <template x-for="c in data.cells" :key="c.key">
             <div class="mf-cell" :data-testid="'mf-cell-' + c.key" :data-state="c.state">

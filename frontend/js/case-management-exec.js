@@ -15,7 +15,7 @@ window.CM_PARTS.push(() => ({
     stSummary() {
       const p = this.stDlg.plan
       if (!p) return ''
-      if (!p.stages.length) return '按下去不會新增任何階段。'
+      if (!p.stages.length) return '按下後不會新增任何階段。'
       const hasRatio = p.stages.some(s => s.ratioBp !== null)
       return '按下「建立階段」會在這個案件新增 ' + p.stages.length + ' 個階段（開始與結束日由基準日往後推算），已有的階段不會被改動。' +
         (hasRatio ? '階段會帶入建議的收入認列比例（合計 100%），建立後可以在各階段上修改。' : '') + '建立後可以再改名稱、日期、負責人，樣板之後的修改不會影響這個案件。'
@@ -1005,7 +1005,7 @@ window.CM_PARTS.push(() => ({
     async exportGanttImage(fmt) {
       const el = this.$refs.ganttContainer
       const svg = el && el.querySelector('svg')
-      if (!svg) { this.toast && this.toast('目前沒有可匯出的甘特圖'); return }
+      if (!svg) { this.toast && this.toast('尚無可匯出的甘特圖'); return }
       this.ganttExporting = true
       try {
         const rect = svg.getBoundingClientRect()
