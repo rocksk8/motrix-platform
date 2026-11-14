@@ -240,7 +240,7 @@ def breaker_units(rows):
     return out
 
 
-def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executable):
+def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executable, budget_min=None, only=None):
     """實測（解除安靜期後；會真的跑 pytest，重）：每個 breaker 一個拋棄式 worktree，用**目前**的 author_gate --quick（--repo 指向它）在 breaker 的樹上跑，
     結果檔裡 failed_new（含 e2e 段）出現該測試檔＝紅＝抓到。同時記錄實際耗時、over_budget、skipped 數、failfast 是否提前停。⇒ {breaker: {...}}。"""
     import shutil
@@ -248,7 +248,7 @@ def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executabl
     import time
     out_dir = Path(out_dir or tempfile.gettempdir())
     res = {}
-    for b in sorted({b for _f, b in units if b}):
+    for b in sorted({b for _f, b in units if b and (not only or b in only)}):
         wt = Path("D:/Claude-pm") / ("h9-qgrun-" + b)          # 暫存一律放 D:\Claude-pm
         shutil.rmtree(wt, ignore_errors=True)
         rc, _ = _git("worktree", "add", "--detach", str(wt), b, repo=repo)
@@ -258,8 +258,10 @@ def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executabl
         jp = out_dir / ("quickrun-%s.json" % b)
         t0 = time.time()
         try:
-            p = subprocess.run([python, str(HERE / "author_gate.py"), "--quick", "--base", b + "^", "--head", b, "--repo", str(wt), "--workers", str(workers),
-                                "--json-out", str(jp)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            cmd = [python, str(HERE / "author_gate.py"), "--quick", "--base", b + "^", "--head", b, "--repo", str(wt), "--workers", str(workers), "--json-out", str(jp)]
+            if budget_min is not None:
+                cmd += ["--budget-min", str(budget_min)]
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             dur = time.time() - t0
             try:
                 j = json.loads(jp.read_text(encoding="utf-8"))
@@ -289,6 +291,8 @@ def main(argv=None):
     ap.add_argument("--cases", default=str(DEFAULT_CASES))
     ap.add_argument("--case", action="append", default=[])
     ap.add_argument("--json-out")
+    ap.add_argument("--budget-min", type=float, default=None, help="--run 時傳給 author_gate 的預算（分鐘）；預設用 author_gate 的 quick 預設 5")
+    ap.add_argument("--only", action="append", default=[], help="--run 時只跑這些 breaker（短 sha，可重複）")
     ap.add_argument("--run", action="store_true", help="實測（重：真的在每個 breaker 的樹跑 author_gate --quick）；只在獨佔窗口／安靜期解除後用")
     a = ap.parse_args(argv)
     spec = json.loads(Path(a.cases).read_text(encoding="utf-8"))
@@ -316,7 +320,7 @@ def main(argv=None):
     measured = None
     if a.run:
         units = breaker_units(rows)
-        measured = measured_summary(units, run_measured(units))
+        measured = measured_summary(units, run_measured(units, budget_min=a.budget_min, only=a.only or None))
         print("實測（在 breaker 的樹真的跑 quick，確認預期測試檔紅）：%d/%d＝%.0f%%；無 breaker（未歸因，無從實跑）%d 個" % (measured["red"], measured["total"], measured["rate"] * 100, measured["no_breaker"]))
         for b, r in measured["per_breaker"].items():
             print("  breaker %s：%s 秒；紅 %s 檔；over_budget=%s；未跑 %s 項；failfast 提前停=%s" % (b, r.get("seconds"), len(r.get("failed_files", [])), r.get("over_budget"), r.get("skipped"), r.get("stopped_by_failfast")))
