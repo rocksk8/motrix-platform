@@ -132,24 +132,26 @@ def _finance_view(authorization=None):
 
 
 def _page_handlers(page):
-    """頁面專屬區段 → 處理函式（路徑參數／固定查詢值用 partial 先綁，呼叫時仍只帶 authorization）。"""
+    """頁面專屬區段 → 處理函式（路徑參數／固定查詢值用 partial 先綁，呼叫時仍只帶 authorization）。
+    L1 自己擁有的區段直接列在這裡；屬於 L2 模組的區段（利潤警示、承攬商／廠商下拉）由該模組以 `bootstrap.section` 提供者交出 ——
+    模組不在 ⇒ 沒有那個處理函式 ⇒ 區段不進回應（前端對缺的區段退回打原端點，與沒有 bootstrap 時相同），不是錯誤。"""
     from functools import partial
-    from modules.case.api import project_margin
-    from modules.subcontract.api import contractors, vendor_contractors
+    from core import registry
     from routers import auth, list_prefs, settings_center, system
     if page != "case":
         return {}
-    return {
+    out = {
         "onepipeFlags": partial(settings_center.public_values, "onepipe"),
         "builderGroups": partial(settings_center.public_values, ",".join(CASE_BUILDER_GROUPS)),
-        "profitWarning": project_margin.get_profit_warning_config,
         "usersSelectable": auth.users_selectable,
         "companyProfilePublic": system.get_company_profile_public,
         "listPrefCase": partial(list_prefs.get_list_pref, "case_list"),
-        "vendorsSelectable": vendor_contractors.list_vendors_selectable,
-        "contractorsSelectable": contractors.list_contractors_selectable,
         "financeView": _finance_view,
     }
+    for name, fn in registry.providers("bootstrap.section").items():
+        if name in PAGE_SECTIONS[page] and name not in out:
+            out[name] = fn
+    return out
 
 
 def sections_for(role, setup_blocked, page=None):
@@ -209,7 +211,7 @@ def bootstrap(response: Response, page: str = "", authorization: str = Header(No
         blocked = True
     page = page if page in PAGE_SECTIONS else None           # 不認得的頁面鍵＝沒帶（不報錯、不多給）
     handlers = {**_handlers(), **_page_handlers(page)}
-    names = sections_for(user.get("role"), blocked, page)
+    names = [n for n in sections_for(user.get("role"), blocked, page) if n in handlers]   # 提供者的模組不在 ⇒ 沒有這一區段
     paths = {**ORIGINAL_PATH, **PAGE_SECTIONS.get(page, {})}
     futs = [(n, _POOL.submit(contextvars.copy_context().run, _run_section, n, handlers[n], authorization, paths[n])) for n in names]
     out = {"v": 1}
@@ -222,6 +224,7 @@ def bootstrap(response: Response, page: str = "", authorization: str = Header(No
             errors[name] = val
     if blocked:                                             # 閘門擋掉的區段：明講是 428（前端不必退回打原端點——原端點也是 428）
         for name in set(sections_for(user.get("role"), False, page)) - set(sections_for(user.get("role"), True, page)):
-            errors[name] = 428
+            if name in handlers:
+                errors[name] = 428
     out["errors"] = errors
     return out

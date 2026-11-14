@@ -74,6 +74,8 @@ MODULE = ModuleSpec(
         ("case.alt_view", "case"): alt_view.view,
         # IP-DB1：首頁「我的工作」的案件分組（L1 routers/dashboard_mine.py 彙整，2026-11-13）
         ("dashboard.mine_groups", "case"): _dashboard_groups.mine_groups,
+        # IP-BS1：啟動資料（/api/bootstrap?page=case）裡屬於案件模組的區段——利潤警示門檻（同 GET /api/settings/profit-warning 的處理函式）
+        ("bootstrap.section", "profitWarning"): _api_project_margin.get_profit_warning_config,
         # IP-GR1：登入問候語的「離開期間新增 N 張報價單」（L1 routers/auth.py 取用；2026-11-13）
         ("greeting.new_quotes", "case"): _dashboard_groups.new_quotes_since,
         # IP-11：每日到期檢查

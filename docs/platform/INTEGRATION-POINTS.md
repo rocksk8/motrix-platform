@@ -1277,3 +1277,18 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 沒有提供者 ⇒ 離開期間摘要不附新增報價單數，其餘照常 |
 | 契約版本 | 1 |
 | 守門 | `backend/tests/test_login_greeting_2026_11_13.py::test_new_quotes_count_only_for_superadmin`；`backend/tests/platform/test_case_module_spec.py` |
+
+---
+
+## IP-BS1　`bootstrap.section`：啟動資料（`GET /api/bootstrap?page=…`）裡屬於 L2 模組的區段（各模組 → L1 `routers/bootstrap.py`；多提供者，名稱＝區段名；暫定號，列車定號；2026-11-14，T86 #10）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 任一模組（選用）；目前：M01 `modules/case/api/project_margin.py::get_profit_warning_config`（名稱 `profitWarning`）；M04 `modules/subcontract/api/vendor_contractors.py::list_vendors_selectable`（`vendorsSelectable`）、`modules/subcontract/api/contractors.py::list_contractors_selectable`（`contractorsSelectable`） |
+| 使用方 | L1 `backend/routers/bootstrap.py::_page_handlers`（`GET /api/bootstrap?page=case`） |
+| 形式 | provider，多提供者、以區段名稱區分；名稱不在 `PAGE_SECTIONS[page]` 裡的一律忽略 |
+| 語法 | 提供：`("bootstrap.section", "<區段名>"): fn`；`fn(authorization) -> 原端點的回應`——**就是原端點的處理函式本身**（同一份權限檢查，原端點拒絕就回同一個狀態碼，`errors` 記下，不多給資料）。取用：`registry.providers("bootstrap.section")` |
+| 回傳 | 原端點的回應原樣放進 bootstrap 的同名鍵 |
+| 對方不在時 | 沒有提供者 ⇒ 區段不進回應、也不進 `errors`；前端對缺的區段退回打原端點（與沒有 bootstrap 時相同，原端點不在就照原樣 404）。不是錯誤 |
+| 契約版本 | 1 |
+| 守門 | `backend/tests/test_bootstrap_page_case_2026_11_14.py`（逐區段逐角色與原端點比對、提供者缺席時區段不出現且其餘照常）；`tests/platform/test_module_boundaries.py`（L1 不 import L2）；`tests/platform/test_integration_points_registered.py` |
