@@ -63,6 +63,7 @@
 📌 2026-11-14 05:48：正式機已更新到 5f1a4a5d8（第八十四班 T84，最後一班〔併入原 T85〕：員工匯入精靈（新模組 importer，產品 full 15→16 個模組）、使用者批次權限、設定中心批次與變更通知、LINE 事件矩陣與用量、一條龍（onepipe）功能旗標預設開（既有環境一次性遷移）、公司資料完整內容預設只限最高管理者（一次性遷移）、估價單自有條款、簽核內容被改通知等；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261114-t84-apply.md；套件 20261114_052951_5f1a4a5d_full（package.sha256 4589333d…、1544 行）；core 1.165→1.167、8 個模組版號上升＋importer 1.0.4 新增；migration：core 15（line_event_usage_daily）、case 0011（估價單條款複製）、兩個一次性啟動遷移，schema 維持 118（module_schema_versions 只有 core 14→15、case 10→11；sqlite_master 490→492，只新增 line_event_usage_daily 與其自動索引）；設定群組 51→53；正式機 motrix-37 回報 applied_at 2026-11-14 05:48:49、status=success、未回滾、步驟 3 #1～#27 全過、載入版本＝磁碟版本、停機約 52 秒、13c 自停排程、步驟 D 後迴圈恰好 1 組；如實揭露：①第一版包 20261114_050923（內部 050510）因包內含 1 個 __pycache__／.pyc〔副整合離線算 sha 時從包目錄 import 所致〕被正式機擋下、作廢，重建無 pyc 的 20261114_052951；②#18 清單外多 1 個設定鍵 `onepipe.warranty_closed_baseline`〔預期行為，步驟檔漏列：保固通知旗標預設開後，每日檢查第一次靜默建基準〕）⇒ 基準改 5f1a4a5d8。
 📌 2026-11-14 08:54：正式機已更新到 c21e502d6（第八十五班 T85：文字專業化〔全系統畫面／通知／說明文字改寫成一致的專業用語，前後對照表 1989 組見 docs/platform/plans/TEXT-DIFF-TABLE.md；報價單／估價單 PDF、匯出、列印格式不動，只把輸出內系統名稱改為 MOTRIX PLATFORM〕＋一條龍收尾〔到貨入庫底層與精靈、出貨帶入設備保固、買方可見、供應商主檔、需處理時通知下一位、採購單免重簽〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261114-t85-apply.md；套件 20261114_083554_c21e502d_full（package.sha256 20d976ab…、1563 行、0 個 pyc）；core 1.167 不變、schema 118 不變；模組 migration：case 0012（case_material_approvals.received_qty）、supply 0001_receive_ledger（新表 stock_item_events＋3 索引＋stock_batches／stock_items 新欄位；module_schema_versions case 11→12、supply 新增；sqlite_master 492→496）；無新的一次性啟動遷移、設定鍵前後完全相同；正式機 motrix-37 回報 applied_at 2026-11-14 08:54:57、status=success、未回滾、步驟 3 #1～#27 全過、停機約 50 秒、迴圈恰好 1 組、無偏差）⇒ 基準改 c21e502d6。
 📌 2026-11-14 19:34：正式機已更新到 1580c8c1b（第八十六班 T86：設定中心改版收尾〔權限、職責、通知、LINE、使用者、組織、模組、郵件／行事曆各改成一張勾選表，變更前可預覽、可復原；4 個外部設定群組〔bonus_voucher、tax_rules、t100_export、overhead_basis〕改走確認期間＋第二位最高管理者核准〕＋案件管理畫面修正＋業務開發 UX（「案件」改稱「商機」、預估金額與預計成交日）＋財務讀取修正（財務含 cashier-only 帳號可讀精算頁出貨數量）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261114-t86-apply.md；套件 20261114_191358_1580c8c1_full（package.sha256 6a3440f9…、1580 行、0 個 pyc）；core 1.167→1.171、schema_version 118 不變；模組 migration：crm 0005_dev_case_expected（dev_cases 加 expected_amount、expected_close_date 兩個可空欄位；module_schema_versions crm 4→5）；無新的一次性啟動遷移；本包未新增版本紀錄（T86 變更說明由 T87 補登，使用者 2026-11-14 裁示）；正式機回報 applied_at 2026-11-14 19:34:45、status=success、未回滾、步驟 3 全過、停機約 45 秒、套用前備份 pre_t86_manual_20261114_193342.db（27,004,928 B、integrity ok）、dev_cases 31→33 欄、132 列不變）⇒ 基準改 1580c8c1b。
+📌 2026-11-15 04:50：正式機已更新到 1dc85e79e（第八十七班 T87：營運報表新增「標準報表」（營收、毛利、應收帳齡、案件進度、業務漏斗五張，依金額檢視權限遮罩，可匯出 Excel／PDF）與「自訂報表」（預設關閉；自選資料來源、欄位、條件、分組，存成我的報表；最高管理者在設定中心決定開放範圍）、應收款項髒資料防護（應收帳款三處非數字金額略過）、系統維運「更新套用」半自動化（套用前預演、套用後自動驗證與白話報告、通知項目「系統更新結果」；部署儀表板平常不執行，由步驟 5 放入 backend	ools，未啟動）、清單個人偏好讀取／存檔防呆；正式機 Claude 依步驟檔執行 apply_update（PM 轉達使用者授權「做完就套用，我只要先知道內容給管理層說明」），成功、無回滾，服務重啟約 50 秒）⇒ 基準改 1dc85e79。
 """
 import json
 import subprocess
@@ -71,7 +72,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "1580c8c1"
+BASELINE = "1dc85e79"
 
 
 def baseline_manifest():
