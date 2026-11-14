@@ -110,8 +110,12 @@ def test_cashier_only_finance_opening_a_case_leaves_no_denial_audit_for_the_part
     parts = r.json()["parts"]
     blocked = [k for k, v in parts.items() if not v["ok"]]
     assert blocked, "沒有任何一段被擋＝這題沒有測到東西（沙箱實測：dispatches／shippingNotes／completionNotes／updates）"
-    time.sleep(0.6)
-    assert _audit_n() == 0, "預期內的逐段無權限不該每次開案件寫稽核"
+    # 稽核由背景執行緒寫：一個「確實會寫」的對照（單獨呼叫被拒的端點）要多久才落地，這裡就等多久再斷言沒有
+    client.get(f"/api/quotations/{NO}/updates", headers=h)
+    end = time.time() + 5
+    while time.time() < end and _audit_n() == 0:
+        time.sleep(0.1)
+    assert _audit_n() == 1, "整包逐段的預期無權限不該寫稽核；只剩剛才單獨呼叫那一筆（正對照）"
 
 
 @needs_m01

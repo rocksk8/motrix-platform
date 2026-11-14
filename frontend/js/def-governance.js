@@ -251,11 +251,11 @@
         availMemo[k] = (async function () {
           try {
             var r = await fetch('/api/def-governance/' + enc(k) + '/_available', { headers: hdr() })
-            if (!r.ok) return false
+            if (!r.ok) { delete availMemo[k]; return false }      // 暫時性失敗不記住（下次再問）；只有伺服器明確答覆才記
             var v = (await r.json()).available === true
             try { sessionStorage.setItem(key, JSON.stringify({ v: v, at: Date.now() })) } catch (e) {}
             return v
-          } catch (e) { return false }
+          } catch (e) { delete availMemo[k]; return false }
         })()
       }
       return availMemo[k]
