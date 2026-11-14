@@ -339,7 +339,7 @@ def _privacy_contacts(conn, sid: int):
 
 @router.get("/api/suppliers/{sid}/privacy-notice")
 def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None)):
-    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。"""
+    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。管理員看完整紀錄；非管理員只看 `{at}`（已告知與日期）。"""
     from helpers import privacy_notice as _pn
     user = _require_user(authorization)
     perm.require(user, "supply.supplier.view")
@@ -348,7 +348,11 @@ def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None
     conn.close()
     if name is None:
         raise HTTPException(404, "供應商不存在")
-    return {"acks": _pn.acks_with_prefix("supplier_contact", sid)}
+    acks = _pn.acks_with_prefix("supplier_contact", sid)
+    if user["role"] not in ("superadmin", "admin"):
+        # T86（使用者方針：都處理）：與 GET /api/suppliers 同一條線——非管理員只看「是否已告知＋日期」，不帶記錄人（姓名／帳號）與告知文字雜湊
+        acks = {cid: {"at": (rec.get("at") or "")} for cid, rec in acks.items()}
+    return {"acks": acks}
 
 
 @router.post("/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack")
