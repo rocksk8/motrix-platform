@@ -67,7 +67,7 @@ def test_panel_lists_remaining_and_import_adds_a_linked_row(ui):
     assert DOC in pg.locator('[data-testid="ship-link-tag"]').inner_text()
     assert pg.locator('[data-testid="ship-qty-linked"]').input_value() == "5"
     serial_btn = pg.locator('tr:has([data-testid="ship-link-tag"]) button:has-text("選料號")')
-    assert serial_btn.is_disabled()                                                         # 與庫存序號同列互斥
+    assert serial_btn.is_enabled()                                                          # T86：連結與庫存序號可同列並存（原互斥放寬；後端另驗序號筆數與料號）
     # 改列上數量 ⇒ 連結數量跟著改；存檔後資料庫帶 materialLink
     pg.locator('[data-testid="ship-qty-linked"]').fill("3")
     pg.locator("button", has_text="儲存出貨單").click()
