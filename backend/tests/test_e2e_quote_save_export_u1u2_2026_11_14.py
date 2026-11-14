@@ -149,3 +149,24 @@ def test_export_pdf_reuses_same_version_without_regenerating_or_recounting(live_
     page.evaluate(f"() => {{ {ROOT}._lastUpdatedAt = 'changed' }}")
     page.evaluate(f"() => {ROOT}.directExport()")
     _wait_until(page, lambda: calls["pdf"] == 2, "版本變了重新產生")
+
+
+def test_conflict_keep_mine_toast_never_shows_internal_field_keys(live_server, make_user, e2e_browser):
+    """h5 審查：沒登記名稱的欄位（內部欄位鍵）不可原樣出現在提示裡，改說「其他欄位」；有登記的用表單自己的名稱。"""
+    u = make_user(username="u1_sa_f", role="superadmin")
+    no = "MQ-2611-916"
+    _seed(no, "草稿")
+    page, _puts = _open(live_server, e2e_browser, u, no)
+    data = json.loads(_db("SELECT data_json FROM quotations WHERE quote_no=?", (no,))[0]["data_json"])
+    data["customerName"] = "對方改的客戶"
+    _db("UPDATE quotations SET data_json=?, customer_name=?, updated_at=? WHERE quote_no=?",
+        (json.dumps(data, ensure_ascii=False), "對方改的客戶", "2099-01-01T00:00:00", no), write=True)
+    page.evaluate(f"() => {{ const d = {ROOT}; d.q.zzInternalKey = 'x'; d.q.zzOtherKey = 'y'; d.q.afterSales = '我改的售後'; d.q.customerName = '我也改的客戶'; d.setDirty(); d.autoSave() }}")
+    page.locator('[data-testid="qf-save-conflict"]').wait_for(state="visible", timeout=10000)
+    page.locator('[data-testid="qf-save-conflict-keep"]').click()
+    page.wait_for_function("() => Array.from(document.body.children).some(e => (e.textContent || '').startsWith('已載入最新版並保留'))", timeout=10000)
+    msg = page.evaluate("() => Array.from(document.body.children).find(e => (e.textContent || '').startsWith('已載入最新版並保留')).textContent")
+    assert "zzInternalKey" not in msg and "zzOtherKey" not in msg and "afterSales" not in msg and "customerName" not in msg, f"提示不可露出內部欄位鍵：{msg}"
+    mine = msg.split("；")[0]
+    assert mine.count("其他欄位") == 1, f"沒登記名稱的欄位合併成一個「其他欄位」（每段各去重）：{msg}"
+    assert "公司名稱" in msg and "對方也改過" in msg, f"兩邊都改過的欄位要點名：{msg}"
