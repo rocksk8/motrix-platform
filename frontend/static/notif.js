@@ -735,7 +735,7 @@ function globalSearchStore() {
     goCustomer()      { window.location.href = href('customers.html') },
     goSupplier()      { window.location.href = href('suppliers.html') },
     goQuotation(no)   { window.location.href = href('quotation-form.html') + '?id=' + encodeURIComponent(no) },
-    goDevCase()       { window.location.href = href('dev-crm.html') },
+    goDevCase(id)     { window.location.href = href('dev-crm.html') + (id ? '?case=' + encodeURIComponent(id) : '') },
     goPart()          { window.location.href = href('parts.html') },
 
     close() { this.open = false; this.q = ''; this.results = empty() }
