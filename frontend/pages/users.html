@@ -704,8 +704,8 @@
           <div data-testid="pk-user-picker">
             <div class="pk-bar">
               <span class="pk-sum" x-text="pkUser.summary()" data-testid="pk-user-summary"></span>
-              <input class="form-input" type="text" x-model="pkUser.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-user-q">
-              <select class="form-select" x-model="pkUser.show" style="max-width:130px;font-size:12px" data-testid="pk-user-show">
+              <input class="form-input filter" type="text" x-model="pkUser.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-user-q">
+              <select class="form-select filter" x-model="pkUser.show" style="max-width:130px;font-size:12px" data-testid="pk-user-show">
                 <option value="all">全部</option><option value="on">只看已選</option><option value="off">只看未選</option>
               </select>
               <button type="button" class="btn btn-ghost btn-sm" @click="pkUser.selectVisible()" data-testid="pk-user-all">全選目前列出的</button>
@@ -938,8 +938,8 @@
           <div data-testid="pk-cr-picker">
             <div class="pk-bar">
               <span class="pk-sum" x-text="pkCr.summary()" data-testid="pk-cr-summary"></span>
-              <input class="form-input" type="text" x-model="pkCr.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-cr-q">
-              <select class="form-select" x-model="pkCr.show" style="max-width:130px;font-size:12px" data-testid="pk-cr-show">
+              <input class="form-input filter" type="text" x-model="pkCr.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-cr-q">
+              <select class="form-select filter" x-model="pkCr.show" style="max-width:130px;font-size:12px" data-testid="pk-cr-show">
                 <option value="all">全部</option><option value="on">只看已選</option><option value="off">只看未選</option>
               </select>
               <button type="button" class="btn btn-ghost btn-sm" @click="pkCr.selectVisible()" data-testid="pk-cr-all">全選目前列出的</button>

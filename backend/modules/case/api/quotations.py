@@ -3954,6 +3954,14 @@ def _case_record_diff(old_cr: dict, new_cr: dict, requested=None) -> dict:
     return out
 
 
+def _audit_invoice_changes(authorization, quote_no, invoice_changes):
+    """MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核。只在呼叫端的寫鎖放掉（commit／close）之後呼叫；
+    獨立成模組層函式，write_lock_deadlock 守門才不會把它當成『持鎖中』的呼叫。"""
+    for _o, _n in invoice_changes:
+        _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
+               f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -4183,10 +4191,6 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # U8（2026-11-14）：存檔內容與資料庫現值完全相同（空存檔：按了「儲存」但沒改任何東西、或頁面補預設值後內容沒變）
         # ⇒ 不寫入、不備份、不記稽核、不動 updated_at（正式機 90 天 286 筆「案件更新」有一部分是這種空存檔）。
         # 回應維持原形狀（updated_at 回目前值），前端照常當成存檔成功。
-        def _audit_invoice_changes():                       # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核（只在寫鎖放掉＝commit／close 之後呼叫）
-            for _o, _n in invoice_changes:
-                _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
-                       f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         unchanged = _same_json(data, data_before) and not invoice_changes and bool(row["updated_at"])
         if unchanged and _CFP.reconcile_txn(conn, quote_no, data, source="funnel", actor=user):
             unchanged = False                   # 簽核複查模式≠off：對帳補了簽核基準（approval 有改）⇒ 要照常寫回，不能因為空存檔而丟掉
@@ -4194,7 +4198,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             conn.commit()                       # 不是 rollback：叫料審核閘（MG.enforce）若擋了項目，它的稽核／通知列寫在這個交易裡，要留
             conn.close()
             now = row["updated_at"]
-            _audit_invoice_changes()
+            _audit_invoice_changes(authorization, quote_no, invoice_changes)
         else:
             now = save_quotation_json(conn, quote_no, data, actor=user)
             conn.commit()
@@ -4204,7 +4208,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label,
                    _case_record_diff(data_before.get("caseRecord"), data.get("caseRecord"),
                                      requested=set(seg_keys) if body.segments is not None else None))
-            _audit_invoice_changes()
+            _audit_invoice_changes(authorization, quote_no, invoice_changes)
         if adopted:
             # 沒有財務檢視權的人：adopted（別人先存了、改用資料庫現值的分段）與 saved 同規則遮蔽——否則試探 defaults 就能讀到款項金額。
             # 欄位名與形狀不變，只有值被遮（款項期別金額鍵、叫料品項金額；其餘分段原樣）。

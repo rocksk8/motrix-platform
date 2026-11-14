@@ -1474,7 +1474,7 @@
           <template x-if="statusTarget !== '洽談中'">
             <div>
               <label style="font-size:12px;color:var(--text-secondary);font-family:var(--font-zh)">原因（選填，會記在開發記錄）</label>
-              <textarea class="dc-textarea" rows="3" data-testid="dc-status-reason" x-model="statusReason"
+              <textarea class="dc-textarea" rows="3" data-testid="dc-status-reason" data-saved-field x-model="statusReason"
                         placeholder="例如：客戶預算不足、改選其他廠商…"></textarea>
             </div>
           </template>

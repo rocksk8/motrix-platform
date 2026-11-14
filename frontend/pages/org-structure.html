@@ -472,7 +472,7 @@
       </div>
       <div class="modal-body">
         <div x-show="!mb.result">
-          <input class="form-input" type="text" x-model="mb.q" placeholder="篩選姓名或目前部門" style="font-size:12px;margin-bottom:8px" data-testid="org-batch-q">
+          <input class="form-input filter" type="text" x-model="mb.q" placeholder="篩選姓名或目前部門" style="font-size:12px;margin-bottom:8px" data-testid="org-batch-q">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:12px">
             <button type="button" class="btn btn-ghost btn-sm" @click="mbSelectShown(true)" data-testid="org-batch-all">全選目前列出的</button>
             <button type="button" class="btn btn-ghost btn-sm" @click="mbSelectShown(false)" data-testid="org-batch-none">全部取消</button>

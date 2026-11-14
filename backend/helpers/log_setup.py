@@ -611,7 +611,7 @@ class RequestTimingMiddleware:
         t0 = time.perf_counter()
         state = {"status": 0, "done": False}
 
-        def _finish(status):
+        def _end_request(status):
             if state["done"]:
                 return
             state["done"] = True
@@ -623,7 +623,7 @@ class RequestTimingMiddleware:
                 state["status"] = message.get("status", 0)
             await send(message)
             if kind == "http.response.body" and not message.get("more_body", False):
-                _finish(state["status"])
+                _end_request(state["status"])
 
         try:
             await self.app(scope, receive, _send)
@@ -631,11 +631,11 @@ class RequestTimingMiddleware:
             if isinstance(exc, (asyncio.CancelledError, GeneratorExit)) and not state["status"]:
                 state["done"] = True                      # 客戶端中途斷線／被取消：不是真的 500，不記（會污染「最耗時請求」統計）
             else:
-                _finish(state["status"] or 500)
+                _end_request(state["status"] or 500)
             raise
         else:
             if state["status"]:
-                _finish(state["status"])
+                _end_request(state["status"])
 
 
 # ── 保留期 ────────────────────────────────────────────────────────────────
