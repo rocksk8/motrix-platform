@@ -93,7 +93,7 @@ def test_matrix_rows_are_compact_no_event_codes_and_one_shared_recipient_note(li
     _configure()
     page = _open_settings(live_server, make_user, new_page, login_as, "e2e_t86_compact")
     box = page.locator("[data-testid=le-matrix]")
-    expect(page.locator("[data-testid=le-who-note]")).to_contain_text("與同名 Email 通知的收件設定相同")
+    expect(page.locator("[data-testid=le-who-note]")).to_contain_text("與同名 Email 通知相同")
     text = box.inner_text()
     assert "與這則 Email 通知的收件設定相同" not in text, "每列不該再重複整句說明"
     assert "voucher_submitted" not in text and "ledger_action_approved" not in text, "內部事件代碼不該顯示在畫面上"
