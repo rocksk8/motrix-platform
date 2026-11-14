@@ -641,7 +641,7 @@ def set_ping_url(url: str, actor=None, reason: str = "", ip: str = "") -> dict:
             finally:
                 conn.close()
             mailed = _notify_superadmins(
-                "有人申請把對外心跳監控換到另一個主機，等待另一位最高管理者核准",
+                "有人申請把對外心跳監控換至另一台主機，等待另一位最高管理者核准",
                 [("申請人", _display(actor)), ("時間", _mail_now()), ("原本的監控主機", old_host), ("要換成的主機", new_host), ("原因", why)],
                 "%s 申請把心跳監控換到 %s" % (_display(actor), new_host))
             return {**base, "changed": False, "pending": True, "id": rec["ids"][0], "mailed": mailed}
@@ -783,7 +783,7 @@ def approve_disable(change_id: int, actor, ip: str = "") -> dict:
     if done:
         if kind == "change":
             _clear_pending_file()
-        _notify_superadmins("對外心跳監控已被停用" if kind == "disable" else "對外心跳監控已換到另一個主機",
+        _notify_superadmins("對外心跳監控已被停用" if kind == "disable" else "對外心跳監控已換至另一台主機",
                             [("申請人", requested_by), ("核准人", _display(actor)), ("時間", _mail_now())]
                             + ([("新的監控主機", new_host)] if kind == "change" else []) + [("原因", reason or "")],
                             "對外心跳監控已%s（%s 申請、%s 核准）" % ("停用" if kind == "disable" else "換主機", requested_by, _display(actor)))

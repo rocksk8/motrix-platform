@@ -149,7 +149,7 @@ def _managed_message(kind):
     return _MANAGED_KINDS.get(kind) or _spine.managed_message(kind)
 
 
-_PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
+_PLANNED_MSG = "這項功能開發中，尚未開放調整。"
 
 
 def _lazy_kinds():

@@ -219,7 +219,7 @@
               </label>
             </template>
           </div>
-          <div x-show="q.contractorId && !personDispatches.length && !personDispatchNotice" style="font-size:12px;color:var(--text-dim)">這位人員目前沒有被排進任何派工。</div>
+          <div x-show="q.contractorId && !personDispatches.length && !personDispatchNotice" style="font-size:12px;color:var(--text-dim)">這位人員尚未排入任何派工。</div>
           <div x-show="personDispatchNotice" style="font-size:12px;color:var(--danger)" x-text="personDispatchNotice"></div>
           <div x-show="isNew" style="position:relative;margin-top:4px" @click.outside="dpClose()" data-testid="ps-form-dp">
           <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">

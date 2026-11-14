@@ -398,7 +398,7 @@
             try { nh = new URL(this.pingUrl.trim()).hostname.toLowerCase().replace(/\.$/, '') } catch (e) { nh = '' }
             if (nh && nh !== (this.s.heartbeat.pingHost || '').toLowerCase()) {
               this.urlNeedsReason = true
-              this.dlgBody = '這會把外部監控換到另一個主機（' + nh + '）。此變更等同更換「接收系統存活訊號的對象」，故須填寫原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
+              this.dlgBody = '這會把外部監控換至另一台主機（' + nh + '）。此變更等同更換「接收系統存活訊號的對象」，故須填寫原因；有多位最高管理者時，要另一位核准後才會生效，核准前仍用原本的網址。兩種情況都會寄信通知所有最高管理者。'
               this.dlgOk = '送出'
             }
           }

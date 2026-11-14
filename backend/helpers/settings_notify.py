@@ -228,7 +228,7 @@ def compose(items, names=None, header="", full=True):
         label = "%s（%d 項）" % (prefix, len(items))
         lines = ["• " + _sentence(i, names, full)[:_MAX_LINE] for i in items[:_MAX_LINES]]
         if len(items) > _MAX_LINES:
-            lines.append("…另 %d 項。完整明細：變更紀錄（點此開啟）" % (len(items) - _MAX_LINES))
+            lines.append("…另 %d 項。完整明細：變更紀錄（請按一下開啟）" % (len(items) - _MAX_LINES))
         body = (header + "，" if header else "") + "共 %d 項變更：\n%s" % (len(items), "\n".join(lines))
     reasons = list(dict.fromkeys(i["reason"] for i in items if i["reason"]))[:2] if full else []
     if reasons:

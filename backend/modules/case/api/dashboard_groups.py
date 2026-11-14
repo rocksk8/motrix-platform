@@ -49,7 +49,7 @@ def mine_groups(user: dict) -> list:
         items = ([{"title": "款項已過預計收款日", "sub": "%d 件案件" % recv_all, "href": link, "tone": "crit"}]
                  if recv_all else [])
         out.append({"key": "receivable_overdue", "title": "應收款項追蹤", "count": recv_all, "href": link,
-                    "hrefLabel": "前往催收", "items": items, "kind": "money", "order": 60,
+                    "hrefLabel": "前往收款追蹤", "items": items, "kind": "money", "order": 60,
                     "empty": "尚無逾期未收的款項"})
     return out
 

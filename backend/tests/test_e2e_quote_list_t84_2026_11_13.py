@@ -182,7 +182,7 @@ def test_superadmin_with_no_owned_quotes_is_not_shown_an_empty_page(live_server,
     page.wait_for_function("() => %s.loading === false && %s.quotes.length >= 6" % (DATA, DATA), timeout=20000)
     assert page.evaluate("() => %s._mineLimit" % DATA) is False
     assert page.evaluate("() => document.querySelectorAll('tr.ql-row').length") >= 5
-    assert "您目前沒有負責的報價，先顯示全部" in page.get_by_test_id("ql-mine-note").inner_text()
+    assert "您尚無負責的報價，先顯示全部" in page.get_by_test_id("ql-mine-note").inner_text()
     assert owner  # 夾具已建帳號
 
 
