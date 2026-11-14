@@ -116,7 +116,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">權限設定</h1>
-          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選的格子會先暫存在畫面上（還沒有儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
+          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選的格子會先暫存在畫面上（尚未儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
         </div>
       </div>
 
@@ -131,8 +131,8 @@
 
       <section x-show="tab === 'matrix'" data-testid="pm-matrix">
         <div class="pm-stagebar" x-show="stageCount()" data-testid="pm-stagebar">
-          <b x-text="'已暫存 ' + stageCount() + ' 格（還沒有儲存）'" data-testid="pm-stage-count"></b>
-          <span class="pm-sub">標「待套用」的格子是你剛勾的；按「預覽並套用」才會看到影響並儲存。</span>
+          <b x-text="'已暫存 ' + stageCount() + ' 格（尚未儲存）'" data-testid="pm-stage-count"></b>
+          <span class="pm-sub">標「待套用」的格子是您剛勾的；按「預覽並套用」才會看到影響並儲存。</span>
           <span style="flex:1"></span>
           <button class="pm-btn pri" :disabled="busy" data-testid="pm-stage-preview" @click="previewStage()">預覽並套用</button>
           <button class="pm-btn" :disabled="busy" data-testid="pm-stage-clear" @click="clearStage()">全部放棄</button>

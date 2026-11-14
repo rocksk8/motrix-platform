@@ -148,7 +148,7 @@ def _plan(conn, req) -> dict:
         people.append(row)
     if not src["tiers"] and any(p["status"] == "copy" for p in people):
         # 來源沒有任何簽核層 ⇒ 複製過去等於把對方改成「任一最高管理者簽核」＝放寬簽核：後端直接拒絕（不提供略過選項）
-        raise FlowCopyError("來源「%s」還沒有設定任何簽核層，複製過去會讓目標單據變成「任一最高管理者簽核」（放寬簽核）。請先在簽核設定頁設好來源流程再複製。" % _label(req["source"]), 409)
+        raise FlowCopyError("來源「%s」尚未設定任何簽核層，複製過去會讓目標單據變成「任一最高管理者簽核」（放寬簽核）。請先在簽核設定頁設好來源流程再複製。" % _label(req["source"]), 409)
     digest = hashlib.sha256(json.dumps({"source": [req["source"], src], "targets": [[p["docType"], p["status"], _normalize(_read_setting(conn, _key(p["docType"]), {"tiers": []}))] for p in people]},
                                        sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
     return {"source": req["source"], "sourceLabel": _label(req["source"]), "sourceDigest": _digest(src), "sourceEmpty": not src["tiers"],

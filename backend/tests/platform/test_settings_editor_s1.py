@@ -306,7 +306,7 @@ def test_versions_and_plain_diff(client, make_user):
     vs = client.get("/api/settings-center/groups/uploads/versions", headers=h).json()
     assert [v["version"] for v in vs["versions"]] == [v2, v1] and vs["latest"] == v2 and vs["versions"][0]["note"] == "收緊二" and vs["versions"][0]["by"]
     d = client.get("/api/settings-center/groups/uploads/diff?a=%d&b=%d" % (v1, v2), headers=h).json()
-    assert d["changes"] == [{"field": "max_file_mb", "label": "單檔大小上限", "oldText": "10 MB", "newText": "5 MB"}]
+    assert d["changes"] == [{"field": "max_file_mb", "label": "單一檔案最大幾 MB", "oldText": "10 MB", "newText": "5 MB"}]
     d = client.get("/api/settings-center/groups/uploads/diff?a=default&b=current", headers=h).json()
     assert [c["field"] for c in d["changes"]] == ["max_file_mb"] and d["changes"][0]["newText"] == "5 MB"
     assert client.get("/api/settings-center/groups/uploads/diff?a=99&b=current", headers=h).status_code == 404

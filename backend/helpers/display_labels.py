@@ -126,7 +126,7 @@ _PLAIN_LABEL = {
     ("procurement_labels", "ordered"): "採購建議狀態的名稱：「已下單」",
     ("procurement_labels", "received"): "採購建議狀態的名稱：「已到貨」",
 }
-_NAME_WHEN = "公司習慣用別的稱呼時，改這裡就能讓畫面用你們的說法。"
+_NAME_WHEN = "公司習慣用別的稱呼時，改這裡就能讓畫面使用貴公司習慣的說法。"
 
 
 def register(S, _register_core):
