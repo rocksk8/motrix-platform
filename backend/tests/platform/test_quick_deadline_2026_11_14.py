@@ -181,7 +181,9 @@ def test_e2e_is_decided_by_marker_not_by_file_name(tmp_path):
         "backend/tests/platform/test_e2e_lint_x.py": "def test_lint():\n    assert True\n",
         "backend/tests/test_e2e_real.py": "import pytest\n@pytest.mark.e2e\ndef test_page():\n    pass\n",
         "backend/tests/test_whole_file.py": "import pytest\npytestmark = pytest.mark.e2e\n",
-        "backend/tests/test_plain.py": "def test_a():\n    pass\n"})
+        "backend/tests/test_plain.py": "def test_a():\n    pass\n",
+        # 真實案例：test_e2e_lint 的測試資料字串裡寫著 @pytest.mark.e2e——字串裡出現不算 marker
+        "backend/tests/platform/test_lint_with_fixture_text.py": 'SRC = "import pytest\\n@pytest.mark.e2e\\ndef t():\\n    pass\\n"\n'})
     marked = AG.e2e_marked_files("HEAD", tmp_path)
     assert marked == {"backend/tests/test_e2e_real.py", "backend/tests/test_whole_file.py"}, marked
     assert AG.e2e_marked_files("no-such-ref", tmp_path) is None or AG.e2e_marked_files("no-such-ref", tmp_path) == set(), "查不到不能丟例外"

@@ -424,9 +424,9 @@ def strip_backend(paths):
 # ── 主流程 ───────────────────────────────────────────────────────────────
 
 def e2e_marked_files(head, repo):
-    """head 樹上真的帶 e2e marker（`@pytest.mark.e2e`／`pytestmark = …e2e…`）的檔 ⇒ set；git grep 失敗 ⇒ None（呼叫端退回只看檔名）。
+    """head 樹上真的帶 e2e marker（行首的 `@pytest.mark.e2e`／`pytestmark = …e2e…`；字串裡出現 mark.e2e 的 lint 檔不算）的檔 ⇒ set；git grep 失敗 ⇒ None（呼叫端退回只看檔名）。
     T87：檔名含 test_e2e_ 不代表它有 e2e 題（test_e2e_lint 是靜態守門）——被分到 e2e 段用 `-m e2e` 篩就是 0 題、守門從沒跑。"""
-    rc, out, _err = _git("grep", "-l", "-I", "-E", r"mark\.e2e|pytestmark.*e2e", head, "--", "backend", repo=repo)
+    rc, out, _err = _git("grep", "-l", "-I", "-E", r"^[ 	]*(@pytest\.mark\.e2e|pytestmark[ 	]*=.*e2e)", head, "--", "backend", repo=repo)
     if rc not in (0, 1):
         return None
     pref = head + ":"
