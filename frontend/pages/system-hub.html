@@ -146,7 +146,7 @@
 
         <div class="first-hint" x-show="hint && loaded && sections.length" data-testid="hub-first-hint">
           <span>初次使用？請於左側選擇分類，右側將列出該分類下可設定的項目；找不到時，請於上方搜尋框輸入關鍵字。</span>
-          <button type="button" class="hint-x" @click="dismissHint()" aria-label="已了解，不再顯示">我知道了</button>
+          <button type="button" class="hint-x" @click="dismissHint()" aria-label="我知道了，不再顯示">我知道了</button>
         </div>
 
         <div class="hub" x-show="loaded && sections.length">
@@ -215,7 +215,7 @@
           系統中心是否列出『您沒有權限使用』的項目？ <a :href="settingsLink && settingsLink.href" data-testid="hub-settings-link">到「<span x-text="settingsLink && settingsLink.title"></span>」調整</a>（預設隱藏；改為顯示須經確認期間並由另一位最高管理者核准）
         </div>
 
-        <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">您目前沒有可用的系統功能。</div>
+        <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">您尚無可用的系統功能。</div>
         <div class="empty" x-show="!loaded && !error">載入中…</div>
       </div>
     </main>

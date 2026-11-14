@@ -114,7 +114,7 @@
 ' <div class="ub-head">' +
 '  <div class="ub-row" style="justify-content:space-between"><strong>自訂按鈕</strong>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-close" @click="close()">關閉</button></div>' +
-'  <div class="ub-sub">按鈕僅作為入口，不會讓任何人檢視或匯出其原本無權存取的內容：每個人只看得到自己有權限的按鈕；目標頁面與匯出功能會另行檢查權限。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
+'  <div class="ub-sub">按鈕僅作為入口，不會讓任何人檢視或匯出其原本無權存取的內容：每個人僅可檢視自己有權限的按鈕；目標頁面與匯出功能會另行檢查權限。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
 '  <div class="ub-banner" data-testid="ub-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span> ' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="ub-ask-yes" @click="answer(true)">確定</button> ' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-ask-no" @click="answer(false)">取消</button></div>' +

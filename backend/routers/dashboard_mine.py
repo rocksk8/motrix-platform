@@ -128,10 +128,10 @@ def _approval_groups(user: dict, now) -> list:
         stuck.sort(key=lambda i: str(i.get("requestedAt") or ""))
         if stuck:
             out.append(_group(
-                "stuck", "逾期未處理單據（超過 2 天）",
+                "stuck", "待處理已滿 2 天的單據",
                 [{"title": _item_title(i), "sub": _stuck_text(i, now), "href": _item_href(i),
                   "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in stuck],
-                href="pages/approval-queue.html", href_label="催辦", order=30))
+                href="pages/approval-queue.html", href_label="前往跟進", order=30))
     return out
 
 

@@ -609,7 +609,7 @@
             <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : (stats.warrantyWarnings || []).length"></div>
             <div class="h-band__t">設備保固 90 天內到期</div>
-            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '尚無已過保的設備。')"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台保固已到期。') : '尚無保固已到期的設備。')"></p>
           </a>
         </div>
       </div>
@@ -1015,7 +1015,7 @@ feedCount(key) {
           return '有 ' + this.followUpQuotes.length + ' 張報價單送出後超過 14 天未收到客戶回應，建議先追蹤。'
         }
         if (overdue > 0) {
-          return '有 ' + overdue + ' 台設備已過保，請確認是否續約或更換。'
+          return '有 ' + overdue + ' 台設備保固已到期，請確認是否續約或更換。'
         }
         // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
         // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
@@ -1027,7 +1027,7 @@ feedCount(key) {
         if (this.stats.totalQuotes === 0) {
           return '系統中尚無任何資料，從建立第一筆客戶與報價單開始。'
         }
-        return '尚無需要您立刻處理的事項。'
+        return '尚無待您處理的事項。'
       },
 
       // 後端的 stats 回應帶 financeVisible：false＝這個帳號不再取得財務卡片（資料被保留，不是沒有）；沒有這個鍵（舊 API）＝維持原本行為

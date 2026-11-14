@@ -134,7 +134,7 @@
     box.innerHTML = '<span>' + esc(cfg.hint) + '</span>'
       + '<span class="ux-first-hint__btns">'
       + '<button type="button" class="hint-x" data-ux="more">查看說明</button>'
-      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="已了解，不再顯示">我知道了</button>'
+      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="我知道了，不再顯示">我知道了</button>'
       + '</span>'
     box.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-ux]')
@@ -165,7 +165,7 @@
     }
     h += '<section class="ux-drawer__foot">'
     if (cfg.hint) h += '<button type="button" class="hint-x" data-ux="replay">重看首次使用導覽</button> '
-    if (file === 'index.html') h += '<button type="button" class="hint-x" data-ux="checklist">重新打開上手清單</button> '
+    if (file === 'index.html') h += '<button type="button" class="hint-x" data-ux="checklist">重新開啟上手清單</button> '
     h += '<button type="button" class="hint-x" data-ux="terms">全部名詞解釋</button>'
     h += '<div data-ux-all style="display:none;margin-top:12px"><dl>' + Object.keys(TERMS).map(function (id) {
       return '<dt>' + esc(TERMS[id][0]) + '</dt><dd>' + esc(TERMS[id][1]) + '</dd>'

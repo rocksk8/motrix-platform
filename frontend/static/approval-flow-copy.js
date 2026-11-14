@@ -40,7 +40,7 @@
         const s = p.summary
         if (!s.changed) return ''
         let t
-        if (!s.inflightTotal) t = '目前沒有進行中的單據，複製後只影響之後送出的單據。'
+        if (!s.inflightTotal) t = '尚無進行中的單據，複製後只影響之後送出的單據。'
         else t = '目前有 ' + s.inflightTotal + ' 件單據正在簽核中：其中 ' + s.inflightUsingFlow + ' 件沒有自己的簽核層，複製後會改用新流程；其餘 ' +
           (s.inflightTotal - s.inflightUsingFlow) + ' 件照送審當時的流程簽完，不受影響。'
         if (!p.inflightComplete) t += '（有些模組沒有回應，件數可能不完整。）'
