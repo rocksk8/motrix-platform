@@ -260,7 +260,7 @@ def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executabl
         try:
             cmd = [python, str(HERE / "author_gate.py"), "--quick", "--base", b + "^", "--head", b, "--repo", str(wt), "--workers", str(workers), "--json-out", str(jp)]
             if budget_min is not None:
-                cmd += ["--budget-min", str(budget_min)]
+                cmd += ["--budget-min", "%d" % budget_min]
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             dur = time.time() - t0
             try:
@@ -291,7 +291,7 @@ def main(argv=None):
     ap.add_argument("--cases", default=str(DEFAULT_CASES))
     ap.add_argument("--case", action="append", default=[])
     ap.add_argument("--json-out")
-    ap.add_argument("--budget-min", type=float, default=None, help="--run 時傳給 author_gate 的預算（分鐘）；預設用 author_gate 的 quick 預設 5")
+    ap.add_argument("--budget-min", type=int, default=None, help="--run 時傳給 author_gate 的預算（分鐘）；預設用 author_gate 的 quick 預設 5")
     ap.add_argument("--only", action="append", default=[], help="--run 時只跑這些 breaker（短 sha，可重複）")
     ap.add_argument("--run", action="store_true", help="實測（重：真的在每個 breaker 的樹跑 author_gate --quick）；只在獨佔窗口／安靜期解除後用")
     a = ap.parse_args(argv)
