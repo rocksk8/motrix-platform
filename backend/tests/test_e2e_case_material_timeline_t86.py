@@ -97,15 +97,32 @@ def test_timeline_phone_width_has_no_horizontal_scroll(live_server, make_user, e
 
 
 @pytest.mark.e2e
-def test_material_flow_page_is_a_summary_that_points_back_into_the_case(live_server, make_user, e2e_browser):
-    u, p = make_user(username="mtl_t86c", role="superadmin")
+@pytest.mark.parametrize("width", [1440, 390])
+def test_material_flow_page_is_a_summary_that_points_back_into_the_case(live_server, make_user, e2e_browser, width):
+    """第 3、26 項：摘要頁帶回案件；有「申請→採購→到貨→入庫→出貨」進度條；沒有 #app-topbar／data-no-topbar 的 console 錯誤。"""
+    u, p = make_user(username="mtl_t86c%d" % width, role="superadmin")
     _case()
-    page = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+    page = e2e_browser.new_page(viewport={"width": width, "height": 900})
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     inject_login(page, live_server, u, p)
     page.goto(f"{live_server}/pages/material-flow.html?q={NO}")
     page.locator('[data-testid="mf-cell-call"]').wait_for(state="visible", timeout=15000)
     assert page.get_attribute('[data-testid="mf-open-case"]', "href") == f"case-management.html?q={NO}&tab=exec&sub=materials"
     assert page.locator(".mf-go").count() == 0, "各格不再各自帶往不同的相關頁面"
+    bar = page.locator('[data-testid="mf-bar"]')
+    bar.wait_for(state="visible", timeout=10000)
+    labels = [t.strip() for t in bar.locator(".mf-bar__lb").all_inner_texts()]
+    assert labels[:3] == ["申請", "採購", "到貨"], labels
+    assert set(labels) <= {"申請", "採購", "到貨", "入庫", "出貨"}
+    xs = [e.bounding_box()["x"] for e in bar.locator(".mf-bar__st").all()]
+    assert xs == sorted(xs), "進度條要橫向由左到右"
+    assert page.locator("#app-topbar").count() == 1
+    page.wait_for_timeout(500)
+    assert not [e for e in errors if "topbar" in e or "data-no-topbar" in e], errors
+    over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
+    _shot(page, "item26_material_flow_%d" % width)
 
 
 @pytest.mark.e2e
