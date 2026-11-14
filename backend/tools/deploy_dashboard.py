@@ -25,8 +25,11 @@ import time
 import uuid
 from pathlib import Path
 
-import requests
-import urllib3
+import http.client
+import ssl
+import urllib.error
+import urllib.request
+
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -34,10 +37,82 @@ from pydantic import BaseModel
 
 import deploy_insights  # 同目錄；CORE-SPEC §9e D2／D6／D7 的純函式
 
-# 正式機是自簽憑證（見 https_setup.ps1），這裡查狀態用的 verify=False 本來
-# 就是刻意跳過驗證（跟 apply_update.ps1 的 curl.exe -k 是同一件事），關掉
-# urllib3 每次都印的 InsecureRequestWarning，避免洗版這個小工具自己的輸出。
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ── HTTP 用標準庫（T87 A1 M1，PM 裁示 2026-11-14）──────────────────────────────
+# 正式機的 Python312 沒有 requests（只有 urllib3／fastapi／uvicorn／pydantic／websockets），
+# 而且不在正式機另外裝套件。所以這支小工具改用 urllib.request；下面的 `requests` 是
+# 這個檔案自己的小物件（不是第三方套件），保留 .get／.post／RequestException 這幾個名字，
+# 讓呼叫端與既有測試（monkeypatch.setattr(dd.requests, "get", …)）都不用動。
+# 行為同先前：HTTP 4xx/5xx 不丟例外、當成回應回傳；連線／逾時／TLS 失敗丟 RequestException；
+# verify=False 就是不驗憑證（正式機是自簽憑證，跟 apply_update.ps1 的 curl.exe -k 同一件事）。
+class _RequestException(Exception):
+    """連線、逾時、TLS 之類送不出去或收不到的錯誤（HTTP 狀態碼不算）。"""
+
+
+class _Response:
+    def __init__(self, status_code, body, url=""):
+        self.status_code = status_code
+        self.content = body or b""
+        self.url = url
+
+    @property
+    def ok(self):
+        return 200 <= self.status_code < 300                  # 3xx 不算 ok（不跟隨轉址，見 _NoRedirect）
+
+    @property
+    def text(self):
+        return self.content.decode("utf-8", "replace")
+
+    def json(self):
+        return json.loads(self.content.decode("utf-8"))
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """不跟隨轉址：urllib 預設會把 Authorization 等標頭原樣帶到轉址的目的地（requests 換主機時會拿掉），
+    超管 token 可能因此外洩，也可能讓正式機連到自己的對外 IP。3xx 當成回應回傳（會變成 HTTPError ⇒ _Response）。"""
+
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _http_request(method, url, json_body=None, headers=None, verify=True, timeout=None):
+    data = None
+    hdrs = dict(headers or {})
+    if json_body is not None:
+        data = json.dumps(json_body).encode("utf-8")
+        hdrs.setdefault("Content-Type", "application/json")
+    handlers = [_NoRedirect()]
+    if str(url).lower().startswith("https"):
+        ctx = ssl.create_default_context()
+        if not verify:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+    opener = urllib.request.build_opener(*handlers)
+    try:
+        req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+        with opener.open(req, timeout=timeout) as resp:
+            return _Response(resp.status, resp.read(), url)
+    except urllib.error.HTTPError as e:                      # 4xx／5xx：當回應回傳，跟 requests 一樣
+        try:
+            body = e.read()
+        except Exception:
+            body = b""
+        return _Response(e.code, body, url)
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:  # 連線／逾時／TLS／網址壞／回應不是 HTTP
+        raise _RequestException(str(e)) from e
+
+
+class requests:                                              # noqa: N801 —— 刻意同名，見上方說明
+    RequestException = _RequestException
+
+    @staticmethod
+    def get(url, headers=None, verify=True, timeout=None, **_ignored):
+        return _http_request("GET", url, None, headers, verify, timeout)
+
+    @staticmethod
+    def post(url, json=None, headers=None, verify=True, timeout=None, **_ignored):
+        return _http_request("POST", url, json, headers, verify, timeout)
 
 # 2026-09-11：所有 subprocess 一律帶這個旗標。本檔正常情況下是由 pythonw.exe
 # 啟動的（桌面捷徑／ctl 小程式都是），**主行程本身沒有主控台**，於是每呼叫一次
@@ -944,6 +1019,40 @@ def _delivered_status() -> dict:
                                for k, v in overlays.items()}}
 
 
+def _is_this_machine(host: str) -> bool:
+    """`host` 是不是這台機器自己的位址（含 127.x）。只在本機 bind 一個 UDP socket 試試：位址不屬於本機介面就會失敗；**不送任何封包**。"""
+    import ipaddress
+    import socket
+    try:
+        ipaddress.ip_address(host)                       # 只收 IP 字面值：空字串會 bind 到 INADDR_ANY、主機名會觸發 DNS
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.bind((host, 0))
+        return True
+    except (OSError, ValueError, UnicodeError):
+        return False
+
+
+def _prod_status_base_url():
+    """健康檢查要連的位址。⇒ URL，或 None（不連）。
+
+    兩種執行位置都要對（T87 A1：儀表板第一次裝到正式機上）：
+    - 開發機：`PROD_BASE_URL`（正式機的對外位址）照舊。
+    - 正式機自己：`PROD_HOST` 是這台機器自己的位址 ⇒ **不連自己的對外 IP**，改連本機 ERP（`_erp_base_url()`，預設 127.0.0.1:666）；
+      本機 ERP 位址若不是本機（例如環境變數被設成別台）⇒ None，什麼都不連。
+    - `PROD_BASE_URL` 本身已是本機位址（演練副本把它改成本機死路）⇒ 原樣使用。"""
+    from urllib.parse import urlparse
+    def _loopback(url):
+        try:
+            return (urlparse(url).hostname or "").lower() in ("127.0.0.1", "localhost", "::1")
+        except ValueError:
+            return False
+    host = urlparse(PROD_BASE_URL).hostname or ""
+    if _loopback(PROD_BASE_URL) or not _is_this_machine(host):
+        return PROD_BASE_URL
+    erp = _erp_base_url()
+    return erp if _loopback(erp) else None
+
+
 def _check_prod_status() -> dict:
     """實際打正式機的健康檢查＋版本查詢，REST 端點跟 WebSocket 共用同一份
     邏輯，避免以後改一邊忘了改另一邊（這個專案已經在部署工具腳本本身踩過
@@ -957,24 +1066,28 @@ def _check_prod_status() -> dict:
                      "source": "delivery"} if delivered.get("available") else {})
         return {"healthy": None, "deployed": deployed, "delivered": delivered,
                 "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
+    base = _prod_status_base_url()
     healthy = False
+    deployed = {}
+    system_version = {}
+    if base is None:                                    # 在正式機上跑、而本機 ERP 位址又不是本機 ⇒ 什麼都不連（寧可顯示「沒有檢查」）
+        return {"healthy": None, "deployed": deployed, "systemVersion": system_version, "delivered": delivered,
+                "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:
-        r = requests.get(f"{PROD_BASE_URL}/api/ping", verify=False, timeout=5)
+        r = requests.get(f"{base}/api/ping", verify=False, timeout=5)
         healthy = r.ok
     except Exception:
         pass
 
-    deployed = {}
     try:
-        r2 = requests.get(f"{PROD_BASE_URL}/api/system/deployed-version", verify=False, timeout=5)
+        r2 = requests.get(f"{base}/api/system/deployed-version", verify=False, timeout=5)
         if r2.ok:
             deployed = r2.json()
     except Exception:
         pass
 
-    system_version = {}
     try:
-        r3 = requests.get(f"{PROD_BASE_URL}/api/system/version", verify=False, timeout=5)
+        r3 = requests.get(f"{base}/api/system/version", verify=False, timeout=5)
         if r3.ok:
             system_version = r3.json()
     except Exception:
@@ -1024,8 +1137,11 @@ def prod_status():
 # 判定、鎖、結果檔一律經 delivery.py（不另寫）。
 DELIVERY_INSTALL_ROOT = PROJECT_ROOT
 DELIVERY_STAGING_ROOT = PROJECT_ROOT.parent / "motrix-staging"          # 安裝目錄外
-_delivery_state = {"prepared": {}, "running": False, "last": None}
+_delivery_state = {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None, "preparing": False}
 _delivery_lock = threading.Lock()
+#: T87 A1 M1：套用前必須有一份「針對這個包、夠新、使用者看過」的預演（auto_apply.rehearse）。
+#: 常數而不是設定值：關掉它等於回到沒有預演的舊流程，要改就改程式、走審查。
+REQUIRE_REHEARSAL = True
 
 
 def _erp_base_url() -> str:
@@ -1036,6 +1152,8 @@ def _erp_base_url() -> str:
 def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
     """本機 ERP 驗帳密（U-2）：登入成功、而且角色是 superadmin ⇒ 回使用者名稱；否則 ValueError（原因）。密碼不留。"""
     base = _erp_base_url()
+    if not _trusted_auto_apply().is_loopback_url(base):             # 縱深防禦：就算有人直接呼叫這個函式，密碼也不會出本機
+        raise ValueError("系統位址不是本機（%s）：不送出帳密" % base)
     try:
         r = requests.post(base + "/api/auth/login", json={"username": username, "password": password}, verify=False, timeout=15)
     except requests.RequestException as e:
@@ -1087,6 +1205,18 @@ def _trusted_delivery():
     return _dl
 
 
+def _trusted_auto_apply():
+    """取 auto_apply 模組，同樣必須是已安裝的那一份（與 `_trusted_delivery` 同理：預演與驗證的判定不能由新包提供）。"""
+    import auto_apply as _aa
+    where = os.path.normcase(os.path.realpath(getattr(_aa, "__file__", None) or ""))
+    expect = os.path.normcase(os.path.realpath(str(TOOLS_DIR / "auto_apply.py")))
+    if where != expect:
+        raise DeliveryModuleUntrusted(
+            "載入的 auto_apply 模組不是已安裝的那一份（載入的是 %s，應該是 %s）⇒ 拒絕"
+            % (getattr(_aa, "__file__", None), TOOLS_DIR / "auto_apply.py"))
+    return _aa
+
+
 def _delivery_summary(staged: str) -> dict:
     """確認框用：刪除／新增檔數（包裡的 apply_plan 對本機試算，只讀）＋變更摘要（包裡有、安裝版沒有的版本紀錄）。"""
     payload = os.path.join(staged, "payload")
@@ -1094,9 +1224,12 @@ def _delivery_summary(staged: str) -> dict:
     plan_tool = os.path.join(payload, "backend", "tools", "apply_plan.py")
     tmp = os.path.join(staged, "summary_plan.json")
     try:
-        r = subprocess.run([sys.executable, plan_tool, "plan", "--root", str(DELIVERY_INSTALL_ROOT), "--pkg", payload,
+        # 🔴 -B＋PYTHONDONTWRITEBYTECODE：apply_plan 會 import 暫存包自己的 backend（core.upgrade 等）。不加的話 .pyc 寫進暫存包，
+        #    預演之後／套用前的完整性重驗就判成「清單外多出的檔」而擋下（2026-11-14 A1 演練抓到；正式機同樣會發生）。
+        r = subprocess.run([sys.executable, "-B", plan_tool, "plan", "--root", str(DELIVERY_INSTALL_ROOT), "--pkg", payload,
                             "--out", tmp, "--max", "1000000"], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=300, creationflags=CREATE_NO_WINDOW)
+                           errors="replace", timeout=300, creationflags=CREATE_NO_WINDOW,
+                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1"))
         if r.returncode == 0:
             plan = json.load(open(tmp, encoding="utf-8"))
             out["deleteCount"], out["addedCount"] = len(plan.get("delete") or []), len(plan.get("added") or [])
@@ -1121,6 +1254,14 @@ def _delivery_summary(staged: str) -> dict:
     return out
 
 
+def _blocked_report(name: str, step: str, problems) -> "str | None":
+    """準備、預演或套用前檢查就停下來：寫白話報告（a1_report_blocked_*.md）＋一筆 apply_blocked 稽核。⇒ 報告檔名或 None；永不丟例外，不發通知。"""
+    try:
+        return _trusted_auto_apply().write_blocked_report(str(DELIVERY_INSTALL_ROOT), name, step, list(problems or []))
+    except Exception:                                           # noqa: BLE001 — 寫不出報告不可以讓準備／預演／套用本身出錯
+        return None
+
+
 class DeliveryPrepareBody(BaseModel):
     name: str
 
@@ -1131,6 +1272,7 @@ class DeliveryApplyBody(BaseModel):
     password: str
     totp: str = ""
     confirm: bool = False
+    rehearsalDigest: str = ""        # 同意畫面顯示的預演結果的綁定值；與目前有效預演不同 ⇒ 拒絕（畫面上看到的不是現在要套用的）
 
 
 @app.get("/api/delivery/overview")
@@ -1152,38 +1294,142 @@ def delivery_prepare(body: DeliveryPrepareBody):
         _dl = _trusted_delivery()
     except DeliveryModuleUntrusted as e:
         return JSONResponse(status_code=409, content={"detail": str(e)})
+    with _delivery_lock:                        # 套用、預演或另一個準備進行中不可重新暫存（會換掉它們正在用的資料夾）；旗標在鎖內設，暫存本身在鎖外跑
+        if _delivery_state["running"] or _delivery_state["rehearsing"] or _delivery_state.get("preparing"):
+            return JSONResponse(status_code=409, content={"detail": "套用、預演或另一個準備正在執行，請等它結束再準備"})
+        _delivery_state["preparing"] = True
+        _delivery_state["rehearsals"].pop(body.name, None)      # 開始重新暫存＝之前的預演與準備結果立刻作廢（資料夾正在被改寫）
+        _delivery_state["prepared"].pop(body.name, None)
     try:
-        root = _dl.configured_root()
-        DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
-        staged = _dl.stage(root, body.name, str(DELIVERY_STAGING_ROOT))
-    except _dl.DeliveryError as e:
-        return JSONResponse(status_code=409, content={"detail": str(e)})
-    verified = _dl.verify_staged(staged, str(DELIVERY_INSTALL_ROOT))
-    summary = _delivery_summary(staged) if verified["ok"] else {}
-    with _delivery_lock:
-        _delivery_state["prepared"][body.name] = {"staged": staged, "verified": verified, "at": time.time()}
+        try:
+            root = _dl.configured_root()
+            DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
+            staged = _dl.stage(root, body.name, str(DELIVERY_STAGING_ROOT))
+        except _dl.DeliveryError as e:
+            return JSONResponse(status_code=409, content={"detail": str(e), "report": _blocked_report(body.name, "準備", [str(e)])})
+        verified = _dl.verify_staged(staged, str(DELIVERY_INSTALL_ROOT))
+        summary = _delivery_summary(staged) if verified["ok"] else {}
+        with _delivery_lock:
+            _delivery_state["prepared"][body.name] = {"staged": staged, "verified": verified, "at": time.time()}
+    finally:
+        with _delivery_lock:
+            _delivery_state["preparing"] = False
+    downtime = None
+    try:
+        downtime = _trusted_auto_apply().estimate_downtime(str(DELIVERY_INSTALL_ROOT)) if verified["ok"] else None
+    except Exception:                                           # noqa: BLE001 — 估計值拿不到不擋準備（含模組不可信：套用時另會擋）
+        downtime = None
     meta = verified.get("meta") or {}
-    return {"ok": verified["ok"], "problems": verified["problems"], "notes": verified["notes"] + summary.get("notes", []),
+    report = None if verified["ok"] else _blocked_report(body.name, "準備", verified["problems"])
+    return {"ok": verified["ok"], "problems": verified["problems"], "report": report, "notes": verified["notes"] + summary.get("notes", []),
             "commit": meta.get("commit"), "builtAt": meta.get("built_at"), "product": meta.get("product"),
             "deleteCount": summary.get("deleteCount"), "addedCount": summary.get("addedCount"),
-            "changes": summary.get("changes", [])}
+            "changes": summary.get("changes", []), "downtime": downtime, "requireRehearsal": REQUIRE_REHEARSAL}
 
 
-def _delivery_run(name: str, staged: str, verified: dict, root: str):
+class DeliveryRehearseBody(BaseModel):
+    name: str
+
+
+def _rehearse_run(name: str, staged: str):
+    try:
+        _aa = _trusted_auto_apply()
+        _dl = _trusted_delivery()
+        work = str(DELIVERY_STAGING_ROOT / "_rehearsal_work")
+        # 預演結束後再驗一次暫存包（簽章清單、逐檔雜湊、不得有清單外的檔）：預演弄髒了暫存包就在這一步失敗，不是等使用者輸入密碼之後
+        rh = _aa.rehearse(staged, str(DELIVERY_INSTALL_ROOT), work,
+                          verify_fn=lambda: _dl.verify_staged(staged, str(DELIVERY_INSTALL_ROOT), run_verify_package=False))
+    except Exception as e:                                      # noqa: BLE001 — 預演本身出錯＝不放行，但不讓執行緒默默死掉
+        rh = {"ok": False, "problems": ["預演程序本身出錯：%s" % e], "summary": [], "expected_diff": None,
+              "digest": None, "pkg_digest": None, "seconds": None, "db_mb": None, "at": time.time(), "notes": [], "tool_tail": ""}
+    if not rh.get("ok"):
+        rh["report"] = _blocked_report(name, "預演", rh.get("problems"))
+    with _delivery_lock:
+        _delivery_state["rehearsals"][name] = rh
+        _delivery_state["rehearsing"] = None
+
+
+@app.post("/api/delivery/rehearse")
+def delivery_rehearse(body: DeliveryRehearseBody):
+    """套用前預演：在正式庫的線上備份副本上跑新包的遷移，取預期的資料庫變更。**不動正式庫、不需要密碼**（只讀正式庫＋用暫存空間），
+    背景執行；用 GET /api/delivery/rehearse/status 輪詢。"""
+    try:
+        _trusted_delivery()
+        _trusted_auto_apply()
+    except DeliveryModuleUntrusted as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
+    prep = _delivery_state["prepared"].get(body.name)
+    if not prep or not prep["verified"].get("ok"):
+        return JSONResponse(status_code=409, content={"detail": "這個包還沒有準備好（先按「準備」並通過驗證）"})
+    with _delivery_lock:
+        if _delivery_state["running"]:
+            return JSONResponse(status_code=409, content={"detail": "套用正在執行"})
+        if _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "另一個預演正在執行"})
+        if _delivery_state.get("preparing"):
+            return JSONResponse(status_code=409, content={"detail": "正在準備暫存包，請等它結束"})
+        _delivery_state["rehearsing"] = body.name
+        _delivery_state["rehearsals"].pop(body.name, None)
+    threading.Thread(target=_rehearse_run, args=(body.name, prep["staged"]), daemon=True).start()
+    return {"started": True}
+
+
+@app.get("/api/delivery/rehearse/status")
+def delivery_rehearse_status(name: str = ""):
+    rh = _delivery_state["rehearsals"].get(name)
+    slim = None
+    if rh:
+        slim = {k: rh.get(k) for k in ("ok", "problems", "notes", "seconds", "db_mb", "summary", "digest", "at", "tool_tail", "report")}
+        slim["empty"] = bool(rh.get("ok")) and not rh.get("summary")
+    return {"rehearsing": _delivery_state["rehearsing"], "result": slim}
+
+
+def _delivery_run(name: str, staged: str, verified: dict, root: str, who: str = "", rehearsal=None):
+    rec = None
+    aa = None
     try:
         _dl = _trusted_delivery()
-        r = _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line))
-        rec = {"name": name, "outcome": r["outcome"], "started": r["started"], "problems": r["problems"],
-               "result": r.get("result"), "lock": r.get("lock")}
-        if r["started"] and r.get("result") and "unreadable" not in r["result"]:
+        aa = _aa = _trusted_auto_apply()
+        # 套用本身仍是 delivery.apply_staged（判定函式留在這裡）；auto_apply 只在前後加記錄與事後驗證，且事後驗證失敗不回滾。
+        rec = _aa.apply_with_verification(
+            name, staged, str(DELIVERY_INSTALL_ROOT),
+            lambda: _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line)),
+            rehearsal, who, _erp_base_url())
+        # 順序：報告＋稽核收尾（得到鏈頭雜湊）→ 寫回交付資料夾（<包名>.a1.json 帶鏈頭，等於在另一處留底）→ 通知（報告寫完之後才發）
+        try:
+            _aa.finish(rec, str(DELIVERY_INSTALL_ROOT))
+        except Exception as e:                                      # noqa: BLE001 — 報告／稽核寫失敗不可蓋掉已經發生的套用結果
+            rec["problems"] = rec["problems"] + ["寫報告或稽核失敗：%s" % e]
+        if rec["started"] and rec.get("result") and "unreadable" not in rec["result"]:
             try:
-                _dl.write_back(root, name, r["result"], r["outcome"])
+                # write_back 只收 succeeded／failed：事後驗證沒過或沒做 ⇒ 寫 failed（開發機不可當成功），細節在旁檔 <包名>.a1.json
+                final = _dl.write_back(root, name, rec["result"], "succeeded" if rec["outcome"] == "succeeded" else "failed")
+                _aa.write_summary_next_to(final, rec)
             except (_dl.DeliveryError, OSError) as e:
                 rec["problems"] = rec["problems"] + ["結果寫回交付資料夾失敗：%s" % e]
-    except Exception as e:                                          # noqa: BLE001 — 不讓背景執行緒默默死掉
-        rec = {"name": name, "outcome": "failed", "started": False, "problems": ["套用程序本身出錯：%s" % e], "result": None}
-    with _delivery_lock:                        # 先放結果、再清旗標：輪詢不會看到「沒在跑、也沒有結果」的中間態
+    except DeliveryModuleUntrusted as e:                           # 模組被換掉：什麼都還沒做（沒有 apply_start），是被擋下，不是「狀態未知」的中斷
+        rec = {"name": name, "outcome": "failed", "started": False, "problems": [str(e)], "result": None, "by": who,
+               "install_root": str(DELIVERY_INSTALL_ROOT)}
+    except Exception as e:                                         # noqa: BLE001 — 不讓背景執行緒默默死掉；有 apply_start 就要補 apply_end（crashed）
+        if rec is None:
+            rec = {"name": name, "outcome": "failed", "started": False, "problems": [], "result": None, "by": who,
+                   "install_root": str(DELIVERY_INSTALL_ROOT)}
+        try:
+            if aa is not None:
+                aa.finish_crashed(rec, str(DELIVERY_INSTALL_ROOT), e)
+            else:
+                rec["outcome"] = "crashed"
+                rec["problems"] = list(rec["problems"]) + ["套用程序本身出錯：%s: %s" % (type(e).__name__, e)]
+        except Exception as e2:                                    # noqa: BLE001
+            rec["problems"] = list(rec["problems"]) + ["收尾也出錯：%s" % e2]
+    with _delivery_lock:                        # 結果先放出來（畫面立刻看得到）；旗標等通知送完再清，輪詢不會看到「沒在跑、也沒有結果」的中間態
         _delivery_state["last"] = rec
+    try:
+        if aa is not None:
+            aa.notify_result(rec, str(DELIVERY_INSTALL_ROOT))      # 成功、驗證未通過、失敗、被擋、中斷一律通知；永不丟例外
+    except Exception as e:                                         # noqa: BLE001
+        rec["problems"] = list(rec["problems"]) + ["通知程序出錯：%s" % e]
+    with _delivery_lock:
         _delivery_state["running"] = False
 
 
@@ -1192,6 +1438,7 @@ def delivery_apply(body: DeliveryApplyBody):
     """一次確認（U-3）＋本機 superadmin 帳密（U-2）＋同一時間只准一個。套用前對同一個 staging 再驗一次（中間被換過就擋）。"""
     try:
         _dl = _trusted_delivery()
+        _aa = _trusted_auto_apply()
     except DeliveryModuleUntrusted as e:
         return JSONResponse(status_code=409, content={"detail": str(e)})
     if not body.confirm:
@@ -1199,13 +1446,38 @@ def delivery_apply(body: DeliveryApplyBody):
     prep = _delivery_state["prepared"].get(body.name)
     if not prep or not prep["verified"].get("ok"):
         return JSONResponse(status_code=409, content={"detail": "這個包還沒有準備好（先按「準備」並通過驗證）"})
+    # 預演閘門（T87 A1 M1）：先檢查再驗帳密，沒預演就不必讓使用者輸入密碼
+    rh = _delivery_state["rehearsals"].get(body.name)
+    if REQUIRE_REHEARSAL:
+        if _delivery_state["rehearsing"]:
+            return JSONResponse(status_code=409, content={"detail": "預演還在執行，請等它結束"})
+        if not rh or not rh.get("ok"):
+            return JSONResponse(status_code=409, content={"detail": "這個包還沒有通過預演：請先按「預演」，確認預期的資料庫變更後再套用"})
+        if time.time() - float(rh.get("at") or 0) > _aa.REHEARSAL_MAX_AGE_SEC:
+            return JSONResponse(status_code=409, content={"detail": "預演已經超過 12 小時，正式資料庫可能已經變動：請重新預演"})
+        if not body.rehearsalDigest or body.rehearsalDigest != rh.get("digest"):
+            return JSONResponse(status_code=409, content={"detail": "畫面上的預演結果與目前有效的預演不同：請重新整理畫面，確認預期變更後再套用"})
+    # 暫存包完整性也在要求密碼**之前**檢查：簽章清單、逐檔雜湊、不得有清單外多出的檔（預演或任何人弄髒了暫存包就在這裡擋）
+    again = _dl.verify_staged(prep["staged"], str(DELIVERY_INSTALL_ROOT), run_verify_package=False)
+    if not again["ok"]:
+        rpt = _blocked_report(body.name, "套用前檢查（暫存包完整性）", again["problems"])
+        return JSONResponse(status_code=409, content={"detail": "暫存的包與簽章清單不符（被改過或多出檔案），已拒絕：" + "；".join(again["problems"]), "report": rpt})
+    if REQUIRE_REHEARSAL:
+        try:
+            same = _aa.package_digest(prep["staged"]) == rh.get("pkg_digest")
+        except OSError:
+            same = False
+        if not same:
+            rpt = _blocked_report(body.name, "套用前檢查（暫存包摘要）", ["預演之後暫存的包被換過（包摘要與預演時不同）"])
+            return JSONResponse(status_code=409, content={"detail": "預演之後暫存的包被換過，預演結果不再適用：請重新預演", "report": rpt})
+    # 密碼只准送到本機：位址不是 localhost／127.0.0.1／[::1] 就在送出之前拒絕（驗證連線不驗憑證，送到別的主機等於洩漏密碼）
+    if not _aa.is_loopback_url(_erp_base_url()):
+        rpt = _blocked_report(body.name, "套用前檢查（系統位址）", ["系統位址（設定 MOTRIX_DELIVERY_ERP_URL）不是本機，為了保護密碼拒絕套用"])
+        return JSONResponse(status_code=409, content={"detail": "系統位址（設定 MOTRIX_DELIVERY_ERP_URL）不是本機：為了保護密碼，已拒絕套用", "report": rpt})
     try:
         who = _verify_superadmin(body.username, body.password, body.totp)
     except ValueError as e:
         return JSONResponse(status_code=403, content={"detail": str(e)})
-    again = _dl.verify_staged(prep["staged"], str(DELIVERY_INSTALL_ROOT), run_verify_package=False)
-    if not again["ok"]:
-        return JSONResponse(status_code=409, content={"detail": "準備之後 staging 被改過，已拒絕：" + "；".join(again["problems"])})
     try:
         root = _dl.configured_root()
     except _dl.DeliveryError as e:
@@ -1213,9 +1485,15 @@ def delivery_apply(body: DeliveryApplyBody):
     with _delivery_lock:
         if _delivery_state["running"]:
             return JSONResponse(status_code=409, content={"detail": "另一個套用正在執行"})
+        if _delivery_state["rehearsing"] or _delivery_state.get("preparing"):
+            return JSONResponse(status_code=409, content={"detail": "預演或準備還在執行，請等它結束"})
+        # 預演是一次性的：套用一開始就作廢（成功、失敗、還原都一樣），再套用必須對「現在的」正式庫重新預演
+        used = _delivery_state["rehearsals"].pop(body.name, None)
+        if REQUIRE_REHEARSAL and used is not rh:
+            return JSONResponse(status_code=409, content={"detail": "預演在檢查期間被換掉或已使用，請重新預演"})
         _delivery_state["running"] = True
         _delivery_state["last"] = None
-    threading.Thread(target=_delivery_run, args=(body.name, prep["staged"], prep["verified"], root), daemon=True).start()
+    threading.Thread(target=_delivery_run, args=(body.name, prep["staged"], prep["verified"], root, who, rh), daemon=True).start()
     return {"started": True, "by": who}
 
 
