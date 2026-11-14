@@ -63,10 +63,10 @@ def test_settings_card_saves_login_channel_and_masks_the_secret(live_server, mak
     assert page.locator("#line-panel input[placeholder^='Channel ID']").input_value() == CID
     assert page.locator("#line-panel input[placeholder^='Channel secret']").input_value() == "••••••••"
     assert SECRET not in page.content()
-    # 秘密欄位填壞格式 ⇒ 被擋並顯示原因（不存）
+    # 秘密欄位填壞格式 ⇒ 被擋並顯示原因（不存）。T86：頁面先在前端擋下（lineProblem，「…必須剛好 32 個英數字（目前 N 個）…（尚未儲存）」），不再送到伺服器；伺服器端同一規則由 tests/platform/test_line_login_t79.py 的參數化題守
     page.locator("#line-panel input[placeholder^='Channel secret']").fill("short")
     page.get_by_role("button", name="儲存 LINE 設定").click()
-    page.locator("[data-testid=line-msg]").filter(has_text="Channel secret 格式不正確").wait_for(state="visible", timeout=10000)
+    page.locator("[data-testid=line-msg]").filter(has_text="Channel secret 必須剛好 32 個英數字").wait_for(state="visible", timeout=10000)
 
 
 @pytest.mark.e2e
