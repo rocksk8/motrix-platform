@@ -22,6 +22,7 @@
   <script src="../js/case-management-biz.js"></script>
   <script src="../js/case-management-exec.js"></script>
   <script src="../js/case-management-mlink.js"></script>
+  <script src="../js/case-management-mtl.js"></script>
   <script src="../js/case-management-mchange.js"></script>
   <script src="../js/case-management-dispatch.js"></script>
   <script src="../js/case-management-shipping.js"></script>
@@ -50,6 +51,7 @@
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
   <link rel="stylesheet" href="../css/style.css?v=20260924cm12p3">
+  <link rel="stylesheet" href="../css/case-material-timeline.css?v=20261114a">
   <link rel="stylesheet" href="../css/case-management.css">
 </head>
 
@@ -1163,8 +1165,42 @@
                 </div>
 
 
+                <!-- T86 第 3 項：物料時間軸——每個材料一列，申請→採購→到貨→入庫→出貨；目前這一關的按鈕就地操作（下方是各材料的明細欄位） -->
+                <div class="mtl" data-testid="mtl" x-effect="activeTab === 'exec' && execSubTab === 'materials' && mtlEnsure()">
+                  <div class="mtl-head" x-show="(cr.caseRecord?.materials || []).length">
+                    <span class="cm-section-title" style="margin-bottom:0">物料時間軸</span>
+                    <span class="mtl-sum" data-testid="mtl-sum" x-text="'共 ' + mtlSummary().total + ' 項｜已到貨 ' + mtlSummary().arrived + '｜尚無採購單 ' + mtlSummary().noPo + (mtlSummary().late ? '｜逾期 ' + mtlSummary().late : '')"></span>
+                  </div>
+                  <template x-for="mat in (cr.caseRecord?.materials || [])" :key="'tl-' + mat.id">
+                    <div class="mtl-row" :data-testid="'mtl-row-' + mat.id">
+                      <div class="mtl-row-h">
+                        <span class="mtl-name" x-text="mat.name || '（未命名）'"></span>
+                        <span class="mtl-model" x-text="[mat.model, mat.qty ? ('× ' + mat.qty + ' ' + (mat.unit || '台')) : ''].filter(Boolean).join(' ')"></span>
+                        <a href="javascript:void(0)" class="mtl-more" @click="mtlGoDetail(mat)">明細</a>
+                      </div>
+                      <div class="mtl-steps">
+                        <template x-for="st in mtlSteps(mat)" :key="st.key">
+                          <div class="mtl-st" :class="'mtl-st--' + st.state" :data-testid="'mtl-st-' + mat.id + '-' + st.key" :data-state="st.state">
+                            <div class="mtl-dot" x-text="st.state === 'done' ? '✓' : ''"></div>
+                            <div class="mtl-lb" x-text="st.label"></div>
+                            <div class="mtl-cap"><span x-text="st.cap" style="white-space:pre-line"></span><span class="mtl-late" x-show="st.late" x-text="' ' + st.late"></span></div>
+                            <div class="mtl-act" x-show="st.act">
+                              <template x-if="st.act && st.act.href"><a class="btn btn-sm btn-primary" :href="st.act.href" x-text="st.act.label" :data-testid="'mtl-act-' + mat.id + '-' + st.key"></a></template>
+                              <template x-if="st.act && !st.act.href"><button type="button" class="btn btn-sm btn-primary" @click="st.act.run()" x-text="st.act.label" :data-testid="'mtl-act-' + mat.id + '-' + st.key"></button></template>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <div class="mtl-case" x-show="mtlFlow && (mtlFlow.stock || mtlFlow.ship) && (cr.caseRecord?.materials || []).length" x-cloak data-testid="mtl-case">
+                    <template x-if="mtlFlow && mtlFlow.stock"><span><b>整案入庫</b>：<span x-text="mtlFlow.stock.summary"></span></span></template>
+                    <template x-if="mtlFlow && mtlFlow.ship"><span><b>整案出貨</b>：<span x-text="mtlFlow.ship.summary"></span>　<a href="javascript:void(0)" @click="activeTab = 'shipping'">開啟出貨單</a></span></template>
+                  </div>
+                </div>
+
                 <template x-for="(mat, idx) in (cr.caseRecord?.materials || [])" :key="mat.id">
-                  <div class="mat-card">
+                  <div class="mat-card" :id="'mat-card-' + mat.id">
                     <div class="mat-card__head">
                       <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
                       <input data-saved-field class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:12px;flex-shrink:0">

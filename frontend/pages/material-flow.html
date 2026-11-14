@@ -27,7 +27,7 @@
     .mf-sum { font-size:13px; line-height:1.5 }
     .mf-items { margin:0; padding:0; list-style:none; font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:3px }
     .mf-items b { color:var(--text-main); font-weight:600 }
-    .mf-go { font-size:12px; color:var(--accent); text-decoration:none; margin-top:auto }
+    .mf-open { display:inline-block; padding:5px 12px; border-radius:6px; background:var(--accent); color:#fff; text-decoration:none; font-size:13px }
     .mf-note { font-size:12px; color:var(--text-dim); margin-top:14px }
     .mf-err { margin-top:16px; padding:12px 14px; border:1px solid var(--border-light); border-radius:8px; background:#fff; font-size:13px }
   </style>
@@ -39,7 +39,8 @@
       <span class="mf-sub" x-text="quoteNo"></span>
       <a class="mf-back" data-testid="mf-back" :href="'case-management.html?q=' + encodeURIComponent(quoteNo)">← 回到案件</a>
     </div>
-    <div class="mf-sub">這個案件的材料申請、採購、到貨、出貨、設備與保固目前進度。僅顯示目前可計算的部分；本畫面僅供檢視、不可修改，亦不顯示金額。</div>
+    <div class="mf-sub">這個案件的材料申請、採購、到貨、入庫、出貨、設備與保固進度摘要。逐項操作請至案件內的物料時間軸；本畫面僅供檢視、不可修改，亦不顯示金額。</div>
+    <div style="margin-top:10px"><a class="mf-open" data-testid="mf-open-case" :href="'case-management.html?q=' + encodeURIComponent(quoteNo) + '&tab=exec&sub=materials'">在案件內處理物料</a></div>
 
     <div class="mf-err" x-show="err" data-testid="mf-err" x-text="err"></div>
 
@@ -60,7 +61,6 @@
                   <li x-html="itemLine(c.key, it)"></li>
                 </template>
               </ul>
-              <a class="mf-go" x-show="c.href" :href="c.href" x-text="'到「' + c.label + '」相關頁面'"></a>
             </div>
           </template>
         </div>
