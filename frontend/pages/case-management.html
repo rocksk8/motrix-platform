@@ -51,7 +51,7 @@
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
   <link rel="stylesheet" href="../css/style.css?v=20260924cm12p3">
-  <link rel="stylesheet" href="../css/case-material-timeline.css?v=20261114a">
+  <link rel="stylesheet" href="../css/case-materials-ux.css?v=20261114b">
   <link rel="stylesheet" href="../css/case-management.css">
 </head>
 
@@ -4996,53 +4996,38 @@
   </div>
 </div>
 
-<!-- ── 匯入品項選擇 Modal ── -->
-<div x-show="showImportModal" x-cloak
-       style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
+<!-- ── 匯入品項選擇 Modal ──（版面一律用 class：x-show 切換時會移除行內 display，:style 字串會整個蓋掉行內樣式，兩者都會讓置中與同列版面失效） -->
+<div x-show="showImportModal" x-cloak class="imp-back" data-testid="import-modal"
        @click.self="showImportModal=false"
        @keydown.escape.window="showImportModal=false">
-    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:500px;max-height:calc(82vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)">
-      <!-- 標題 -->
-      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+    <div class="imp-box">
+      <div class="imp-head">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink-secondary)" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <span style="font-size:13px;font-weight:600;flex:1;font-family:var(--font-zh)" x-text="importMode==='materials' ? '選取材料申請品項' : '選取設備品項'"></span>
-        <button @click="showImportModal=false" style="width:26px;height:26px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px;line-height:1;color:var(--text-secondary)">×</button>
+        <span class="imp-title" x-text="importMode==='materials' ? '選取材料申請品項' : '選取設備品項'"></span>
+        <button type="button" class="imp-x" @click="showImportModal=false" aria-label="關閉">×</button>
       </div>
-      <!-- 全選工具列 -->
-      <div style="padding:8px 18px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px">
-        <button @click="selectAllImportItems(true)"  style="font-size:12px;padding:3px 10px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">全選</button>
-        <button @click="selectAllImportItems(false)" style="font-size:12px;padding:3px 10px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">清除</button>
-        <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto"
-              x-text="Object.values(importSelectedItems).filter(Boolean).length + ' / ' + quoteItemsForImport().length + ' 項已選'"></span>
+      <div class="imp-tools">
+        <button type="button" class="imp-btn" @click="selectAllImportItems(true)">全選</button>
+        <button type="button" class="imp-btn" @click="selectAllImportItems(false)">清除</button>
+        <span class="imp-count" x-text="Object.values(importSelectedItems).filter(Boolean).length + ' / ' + quoteItemsForImport().length + ' 項已選'"></span>
       </div>
-      <!-- 品項清單 -->
-      <div style="flex:1;overflow-y:auto;padding:8px 14px">
+      <div class="imp-list">
         <template x-if="quoteItemsForImport().length===0">
-          <div style="padding:24px 0;text-align:center;font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">此報價單沒有可匯入的品項</div>
+          <div class="imp-empty">此報價單沒有可匯入的品項</div>
         </template>
+        <div class="imp-cols" x-show="quoteItemsForImport().length"><span></span><span>品名</span><span>廠牌</span><span class="imp-qty">數量</span></div>
         <template x-for="(qi, qi_idx) in quoteItemsForImport()" :key="qi_idx">
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:7px;cursor:pointer;border-bottom:1px solid var(--surface-sunken)"
-                 :style="importSelectedItems[qi_idx] ? 'background:var(--tone-info-bg);border-bottom-color:transparent' : ''">
-            <input type="checkbox" :checked="importSelectedItems[qi_idx]" @change="toggleImportItem(qi_idx)"
-                   style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:var(--accent)">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:500;font-family:var(--font-zh);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" x-text="qi.description || '(無品名)'"></div>
-              <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-top:1px"
-                   x-text="[qi.brand, (qi.qty||1) + ' ' + (qi.unit||'台')].filter(Boolean).join(' · ')"></div>
-            </div>
+          <label class="imp-row" :class="{ 'imp-row--on': importSelectedItems[qi_idx] }" :data-testid="'import-row-' + qi_idx">
+            <input type="checkbox" :checked="importSelectedItems[qi_idx]" @change="toggleImportItem(qi_idx)">
+            <span class="imp-name" x-text="qi.description || '（無品名）'" :title="qi.description"></span>
+            <span class="imp-brand" x-text="qi.brand || ''"></span>
+            <span class="imp-qty" x-text="(qi.qty||1) + ' ' + (qi.unit||'台')"></span>
           </label>
         </template>
       </div>
-      <!-- 底部按鈕 -->
-      <div style="padding:12px 18px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:8px">
-        <button @click="showImportModal=false"
-                style="padding:6px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">取消</button>
-        <button @click="doImport()"
-                :disabled="!Object.values(importSelectedItems).some(Boolean)"
-                style="padding:6px 16px;background:var(--accent);color:var(--surface);border:none;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-zh)"
-                :style="!Object.values(importSelectedItems).some(Boolean) ? 'opacity:.45;cursor:not-allowed' : ''">
-          匯入選取項目
-        </button>
+      <div class="imp-foot">
+        <button type="button" class="imp-btn" @click="showImportModal=false">取消</button>
+        <button type="button" class="imp-btn imp-btn--primary" @click="doImport()" :disabled="!Object.values(importSelectedItems).some(Boolean)" data-testid="import-confirm">匯入選取項目</button>
       </div>
     </div>
   </div>

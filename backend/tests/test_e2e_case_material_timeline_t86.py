@@ -22,7 +22,9 @@ NO = "MQ-MTL-T86"
 
 def _case():
     import db
-    data = {"dealTag": "已成案", "caseRecord": {"materials": [
+    data = {"dealTag": "已成案", "items": [
+        {"description": "網路攝影機 4MP", "brand": "Hikvision", "qty": 18, "unit": "台"},
+        {"description": "NVR 錄影主機 16 路", "brand": "Dahua", "qty": 1, "unit": "台"}], "caseRecord": {"materials": [
         {"id": "ma", "name": "壁掛機櫃", "model": "9U", "qty": 1, "unit": "座", "ordered": False, "arrived": False},
         {"id": "mb", "name": "網路交換器", "model": "SG350", "qty": 4, "unit": "台", "ordered": True, "arrived": True,
          "poLink": {"key": "g:sw", "docCodes": ["PO-2611-014"], "arrivedOn": "2026-11-10"}},
@@ -104,3 +106,27 @@ def test_material_flow_page_is_a_summary_that_points_back_into_the_case(live_ser
     page.locator('[data-testid="mf-cell-call"]').wait_for(state="visible", timeout=15000)
     assert page.get_attribute('[data-testid="mf-open-case"]', "href") == f"case-management.html?q={NO}&tab=exec&sub=materials"
     assert page.locator(".mf-go").count() == 0, "各格不再各自帶往不同的相關頁面"
+
+
+@pytest.mark.e2e
+def test_import_from_quote_dialog_is_centered_with_aligned_rows(live_server, make_user, e2e_browser):
+    """第 12 項：視窗置中；勾選框、品名、數量同一列；數量欄靠右對齊。"""
+    page = _open(live_server, make_user, e2e_browser, "mtl_t86d", 1440)
+    page.get_by_role("button", name="從報價單匯入").first.click()
+    box = page.locator('[data-testid="import-modal"] .imp-box')
+    box.wait_for(state="visible", timeout=10000)
+    vp = page.viewport_size
+    b = box.bounding_box()
+    assert abs((b["x"] + b["width"] / 2) - vp["width"] / 2) <= 4, "視窗要水平置中"
+    assert abs((b["y"] + b["height"] / 2) - vp["height"] / 2) <= 4, "視窗要垂直置中"
+    rows = [page.locator(f'[data-testid="import-row-{i}"]') for i in (0, 1)]
+    for r in rows:
+        cb, nm = r.locator("input").bounding_box(), r.locator(".imp-name").bounding_box()
+        assert abs((cb["y"] + cb["height"] / 2) - (nm["y"] + nm["height"] / 2)) <= 4, "勾選框與品名要同一列"
+    q0, q1 = (r.locator(".imp-qty").bounding_box() for r in rows)
+    assert abs((q0["x"] + q0["width"]) - (q1["x"] + q1["width"])) <= 1, "數量欄右緣要對齊"
+    assert page.locator('[data-testid="import-confirm"]').is_enabled()
+    _shot(page, "import_dialog_desktop")
+    page.locator('[data-testid="import-confirm"]').click()
+    page.locator('[data-testid="mtl-row-ma"]').wait_for(state="visible")
+    assert page.locator('[data-testid^="mtl-row-"]').count() >= 4, "匯入的品項進入時間軸"
