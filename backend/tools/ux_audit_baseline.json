@@ -264,6 +264,9 @@
   "frontend/pages/report-templates.html": {
    "th_count": 1
   },
+  "frontend/pages/reports-standard.html": {
+   "th_count": 1
+  },
   "frontend/pages/reports.html": {
    "inline_styles": 288,
    "th_count": 203,

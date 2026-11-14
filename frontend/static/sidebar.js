@@ -1016,10 +1016,12 @@ if (typeof module !== 'undefined' && module.exports) {
       })
       if (!hit) return
       nav.querySelectorAll('[data-crumb-grp]').forEach(function (n) { n.remove() })
-      var grp = document.createElement(hit.hub ? 'a' : 'span')
+      // 這位使用者進不去 hub（沒有 hub 的權限）時，群組名稱只當文字，不連到他打不開的頁
+      var hubOk = !!hit.hub && _permOk(hit.hub.perm)
+      var grp = document.createElement(hubOk ? 'a' : 'span')
       grp.setAttribute('data-crumb-grp', '')
       grp.textContent = hit.g.label
-      if (hit.hub) grp.href = _hrefOf(hit.hub.href)
+      if (hubOk) grp.href = _hrefOf(hit.hub.href)
       var sep = document.createElement('i')
       sep.setAttribute('data-crumb-grp', '')
       sep.setAttribute('aria-hidden', 'true')
@@ -1041,6 +1043,8 @@ if (typeof module !== 'undefined' && module.exports) {
         var hub = null
         g.items.forEach(function (it) { if (it.hub) hub = it })
         if (!hub || _pageOf(hub.href) === file) return
+        // 沒有進報表中心的權限（例如只有「業務開發」權限的業務，從側欄直接進標準報表）⇒ 不放回中心的連結，免得點到進不去的頁
+        if (!_permOk(hub.perm)) return
         g.items.forEach(function (it) { if (!it.hub && (it.active || []).indexOf(file) > -1) hit = { g: g, hub: hub } })
       })
       if (!hit) return
