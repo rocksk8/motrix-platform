@@ -14,6 +14,10 @@
 - L1（新增端點，皆僅最高管理者）：`POST /api/duty-roles/matrix/preview`（唯讀預覽，回每個角色實際多／少哪些權限、影響成員數、是否需原因、`planHash`）、`POST /api/duty-roles/matrix/apply`（必帶 `planHash`；同一個寫入交易、逐角色走 `update_role`，共用高敏感原因檢查點，寫 `permission_changes`＋`audit_log`）、`POST /api/duty-roles/matrix/undo`（復原這一批；逐角色 compare-and-set，被他人改過的角色只拒絕該筆並說明）。邏輯在新檔 `helpers/duty_role_matrix.py`（L1 新增公開介面：`preview`／`apply`／`undo`／`parse_request`、常數 `MAX_ROLES`／`UNDO_DEFAULT_REASON`）。
 - 前端：`duty-roles.html` 的權限池由 30 顆 chip 改為「職責 × 權限」矩陣（新增 `frontend/static/duty-matrix.js`，建在共用元件 `settings-matrix.js` 的草稿模式上：整欄勾選、群組總開關、批次、篩選、預覽→確認→套用、復原這一批）；鍵值不變，角色表單不再有權限 chip。
 - 測試：`tests/test_duty_role_matrix_2026_11_14.py`（39 題）、`tests/test_e2e_duty_role_matrix_2026_11_14.py`（5 題）；守門基準同包更新（route_inventory／route_table_golden／write_golden／稽核對照表）。
+- **（併入）(next) — 2026-11-14（feat/settings-matrix-email-users；T86：使用者管理「Email 通知偏好」改成矩陣）**
+- L1（新增，只增）：`js:static/users-email-prefs.js`（`usersEmailPrefsMixin`；已登記 modules.json）；`GET /api/mail-types/receivable` 的每列只增 `category`、`lowRisk`（與 `/api/mail-types/mine` 同一條規則：只有業務類能批次）。
+- 行為變更（畫面）：使用者管理編輯視窗的 Email 通知偏好由手風琴改成共用矩陣（總覽一行、群組總開關「全收／全不收」、勾選批次、篩選、搜尋、「復原這一批」）；收不到的類型仍列出但反灰；非業務類逐項勾選、取消前先確認。矩陣只改表單狀態，視窗「儲存變更」才一起送 `notification_muted`（欄位與值、伺服器規則包含「最後一位最高管理者不能退訂」都不變）。
+- 測試：`tests/test_users_email_prefs_matrix_t86_2026_11_14.py`、`tests/test_e2e_users_email_prefs_matrix_t86_2026_11_14.py`；既有 `test_mail_registry`／`test_e2e_mail_settings` 改看矩陣。
 
 ## 1.167 — 2026-11-14（T84 整合者；L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T84 設定改版（S2／S3a）新增、尚未登記到 `docs/platform/modules.json` 的單位補上歸屬——`helper:settings_pages`、`helper:settings_shell`、`js:static/settings-matrix.js`、`js:static/users-batch.js`。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。

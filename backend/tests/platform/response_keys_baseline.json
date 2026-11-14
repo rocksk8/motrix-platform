@@ -4275,6 +4275,7 @@
    "items[].groupLabel",
    "items[].impact",
    "items[].key",
+   "items[].lowRisk",
    "items[].mailOff",
    "items[].mailOffConfirm",
    "items[].mailOffLockReason",

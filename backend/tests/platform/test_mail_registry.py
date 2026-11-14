@@ -276,7 +276,10 @@ def test_pages_bind_the_registry():
     fe = Path(__file__).resolve().parents[3] / "frontend"
     from core import source_tree
     users = source_tree.page_file("users.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
-    assert "/api/mail-types/receivable?user_id=" in users and ":disabled=\"!item.receivable\"" in users
+    # T86（2026-11-14）：手風琴改成共用矩陣（static/users-email-prefs.js）；收不到的類型仍列出但反灰、不能動
+    assert "/api/mail-types/receivable?user_id=" in users and 'id="up-email-box"' in users
+    mx_js = (fe / "static" / "users-email-prefs.js").read_text(encoding="utf-8")
+    assert "return r.receivable ? false :" in mx_js and "if (!t || !t.receivable) return" in mx_js
     assert "{key:'approval_request'" not in users              # 不再有寫死的副本
     page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
     # S3b（2026-11-13）：頁面改成共用矩陣元件的草稿制，儲存走批次端點（單列 PUT 保留給舊呼叫端）

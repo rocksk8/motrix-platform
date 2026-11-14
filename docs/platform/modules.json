@@ -233,6 +233,7 @@
    "js:static/users-batch.js",
    "js:static/approval-flow-copy.js",
    "js:static/perm-key-picker.js",
+   "js:static/users-email-prefs.js",
    "js:static/settings-matrix.js",
    "js:static/duty-matrix.js",
    "js:static/ui.js",

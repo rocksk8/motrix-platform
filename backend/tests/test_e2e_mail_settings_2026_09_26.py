@@ -60,8 +60,7 @@ def test_admin_cannot_tick_a_system_type(live_server, make_user, e2e_browser):
     page.wait_for_function(f"() => {DATA}.allNotifyTypes.some(t => t.key === 'backup_stale')", timeout=15000)
     types = page.evaluate(f"() => Object.fromEntries({DATA}.allNotifyTypes.map(t => [t.key, t.receivable]))")
     assert types["backup_stale"] is False and types["settlement_finalized"] is True
-    for g in page.evaluate(f"() => {DATA}.notifyGroups.map(g => g.group)"):
-        page.evaluate(f"(g) => {{ {DATA}._notifyGroupOpen[g] = true }}", g)
-    box = page.locator('[data-testid="notify-type-backup_stale"] input[type=checkbox]')
-    box.wait_for(state="visible", timeout=10000)
-    assert box.is_disabled() and not box.is_checked()
+    # T86：手風琴改成共用矩陣——收不到的類型列出但開關反灰、不是「收」
+    box = page.locator('[data-testid="mx-row-backup_stale"] .mx-sw')
+    box.wait_for(state="attached", timeout=10000)
+    assert box.is_disabled() and box.get_attribute("aria-checked") == "false"
