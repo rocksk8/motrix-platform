@@ -138,6 +138,7 @@
       '.df-f input,.df-f select,.df-f textarea{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,var(--bg));color:var(--text-primary);min-width:0}',
       '.df-f textarea{min-height:64px;resize:vertical}',
       '.df-f.is-bad input,.df-f.is-bad select,.df-f.is-bad textarea{border-color:var(--danger,#c0392b)}',
+      '.df-tbl td.is-bad input,.df-tbl td.is-bad select{border-color:var(--danger,#c0392b);background:var(--tone-danger-bg,transparent)}',
       '.df-f .df-err{font-size:12px;color:var(--danger,#c0392b)}',
       '.df-f .df-help{font-size:12px;color:var(--text-secondary)}',
       '.df-ro{padding:6px 8px;font-size:13px;color:var(--text-primary);background:var(--border-light);border-radius:6px;min-height:20px}',
@@ -216,6 +217,7 @@
     function fieldEditable(f) {
       if (readOnly) return false
       if (f.locked) return false
+      if (opts.lockKeys && opts.lockKeys.indexOf(f.key) >= 0) return false      // 由呼叫端鎖定（例如申請人所屬部門）；值照常留在資料裡
       if (isCashierOnly(f) && !viewer.isCashier) return false
       return true
     }
@@ -281,6 +283,7 @@
       inputs[f.key] = inp
       wrap.appendChild(inp)
       if (f.locked) wrap.appendChild(el('div', { class: CLS + 'help', text: '已鎖定' }))
+      else if (opts.lockKeys && opts.lockKeys.indexOf(f.key) >= 0) wrap.appendChild(el('div', { class: CLS + 'help', text: opts.lockNote || '已鎖定' }))
       else if (isCashierOnly(f)) wrap.appendChild(el('div', { class: CLS + 'help', text: '核准後由出納填寫' }))
       if (f.help && !f.locked) wrap.appendChild(el('div', { class: CLS + 'help', text: f.help }))
       wrap.appendChild(el('div', { class: CLS + 'err', 'data-err': f.key }))
@@ -418,7 +421,12 @@
       container.querySelectorAll('.is-bad').forEach(function (n) { n.classList.remove('is-bad') })
       container.querySelectorAll('[data-err]').forEach(function (n) { n.textContent = '' })
       problems.forEach(function (p) {
-        var key = String(p.path || '').split('.')[0]
+        var parts = String(p.path || '').split('.')
+        if (parts[0] === 'lines' && parts.length === 3) {                          // 明細的某一格：把那一格標紅（整張表另有一則文字訊息）
+          var cell = container.querySelector('tr[data-row="' + parts[1] + '"] td[data-col="' + parts[2] + '"]')
+          if (cell) cell.classList.add('is-bad')
+        }
+        var key = parts[0]
         var box = container.querySelector('[data-field="' + key + '"]')
         if (box) {
           box.classList.add('is-bad')
@@ -441,6 +449,7 @@
         return problems
       },
       showProblems: showErrors,
+      firstBad: function () { return container.querySelector('td.is-bad input, td.is-bad select, .df-f.is-bad input, .df-f.is-bad select, .df-f.is-bad textarea') || container.querySelector('.is-bad') },
       destroy: function () { alive = false; while (container.firstChild) container.removeChild(container.firstChild) }
     }
 

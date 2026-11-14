@@ -5348,12 +5348,29 @@ def _xe_doc_no(r, suffix: str) -> str:
     return (r["doc_code"] or f"XE{r['id']}") + suffix
 
 
-def _xe_caseless_fields(r, *actions) -> dict:
-    """無案件單據的佇列項目補欄位（W1 A2-0 佇列契約）：`caseless=True`、`typeLabel`、各動作 URL（哨兵路徑 `-`）。有案件 ⇒ 空。"""
+def _xe_caseless_fields(r, *actions, change: bool = False, suffix: str = "") -> dict:
+    """費用單據的佇列項目補欄位。
+
+    - 無案件（W1 A2-0 佇列契約）：`caseless=True`、`typeLabel`、`docCode`、各動作 URL（哨兵路徑 `-`）。
+    - 有案件的類型化單據（請購單／採購單／差旅／零用金；T86 #19）：補 `typeLabel`（請購單…，不再顯示成「案件支出申請」）與
+      `displayNo`（單據編號，例如 PR-20261114-0001；`quoteNo` 仍是 `{案件}-XE{id}`，供路由與詳情使用，不動）。
+    - `docKindLabel`：單據類型名稱（不含「變更」類項目），首頁「等我簽核」摘要用；沒有類型的舊額外支出沒有這個鍵。
+    - 沒有類型的舊額外支出且有案件 ⇒ 空（回應與過去逐位元相同）。"""
+    kind_label = _XE_KIND_LABEL.get(r["kind"] or "", "")
     if r["quote_no"]:
-        return {}
+        if not kind_label:
+            return {}
+        out = {}
+        if r["doc_code"]:
+            out["displayNo"] = r["doc_code"] + suffix
+        if not change:
+            out["typeLabel"] = kind_label
+            out["docKindLabel"] = kind_label
+        return out
     base = "/api/quotations/-/extra-expenses/%d" % r["id"]
     out = {"caseless": True, "typeLabel": _XE_KIND_LABEL.get(r["kind"] or "", "費用單據"), "docCode": r["doc_code"] or ""}
+    if kind_label and not change:
+        out["docKindLabel"] = kind_label
     for a in actions:
         out[a.split("/")[-1] + "Url"] = base + "/" + a
     return out
@@ -5587,7 +5604,7 @@ def approval_queue_items(conn) -> list:
             "extraExpenseId":      r["id"],
             "previousTotal":       r["total_cost"] or 0,
             "pendingFileCount":    len(chg.get("addFiles") or []),
-            **_xe_caseless_fields(r, "change-request/approve", "change-request/reject"),
+            **_xe_caseless_fields(r, "change-request/approve", "change-request/reject", change=True, suffix="改"),
         })
 
     return items
