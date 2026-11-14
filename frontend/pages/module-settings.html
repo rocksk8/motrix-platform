@@ -190,7 +190,7 @@
         busy: false,
         q: '',
         filter: 'all',
-        filters: [{ id: 'all', label: '全部' }, { id: 'pending', label: '待重啟' }, { id: 'disabled', label: '已停用' }, { id: 'locked', label: '無法切換' }],
+        filters: [{ id: 'all', label: '全部' }, { id: 'pending', label: '尚未生效' }, { id: 'disabled', label: '已停用' }, { id: 'locked', label: '無法切換' }],
         draft: {},            // key -> 重啟後想要啟用(true)／停用(false)；只放跟現況不同的
         previewing: false,
         lastBatch: [],        // 剛套用的這一批：[{key, name, was, now}]，供「復原這一批」
