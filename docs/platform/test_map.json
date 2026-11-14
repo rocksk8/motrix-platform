@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1732,
+  "tests": 1733,
   "unmapped": 9,
   "kinds": {
    "api": 957,
-   "e2e": 407,
+   "e2e": 408,
    "audit": 217,
    "unit": 151
   },
@@ -10179,6 +10179,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/case/",
+    "dir:frontend/pages/",
     "helper:legal_params",
     "mod:case/api/case_extra_expenses",
     "mod:case/tests/test_purchase_item_lines_2026_10_02",
@@ -10196,6 +10197,10 @@
      "backend/modules/case/api/case_extra_expenses.py"
     ],
     "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "path": [
+     "frontend/pages/",
      "frontend/pages/settlement.html"
     ],
     "module_dir": [
@@ -16830,6 +16835,7 @@
     "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_settings_activate.py",
     "mod:accounting/api/accounting_export",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
@@ -16840,7 +16846,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_settings_activate.py"
     ],
     "api": [
      "backend/modules/accounting/api/accounting_export.py",
@@ -29280,8 +29287,11 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
+    "helper:custom_fields",
     "helper:custom_modules",
+    "js:static/form-preview.js",
     "router:custom_records",
     "router:definitions"
    ],
@@ -29289,12 +29299,20 @@
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
+     "backend/helpers/custom_fields.py",
      "backend/helpers/custom_modules.py",
      "backend/pdf_gen.py"
     ],
     "api": [
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/static/form-preview.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/form-preview.js"
     ]
    },
    "login_fixture": true
@@ -35697,13 +35715,15 @@
    "kind": "e2e",
    "units": [
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_settings_activate.py",
     "helper:legal_params",
     "page:pages/legal-params.html"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
-     "backend/helpers/legal_params.py"
+     "backend/helpers/legal_params.py",
+     "backend/tests/_settings_activate.py"
     ],
     "page": [
      "frontend/pages/legal-params.html"
@@ -36677,10 +36697,12 @@
    "units": [
     "page:pages/approval-queue.html",
     "page:pages/case-management.html",
+    "router:bootstrap",
     "router:system"
    ],
    "evidence": {
     "api": [
+     "backend/routers/bootstrap.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -48186,6 +48208,53 @@
     ],
     "path": [
      "frontend/pages/case-management.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_t86_finance_af_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:frontend/css/case-management.css",
+    "js:js/case-management-core.js",
+    "js:js/case-management-feed.js",
+    "js:static/notif.js",
+    "mod:case/api/material_approvals",
+    "mod:case/api/quotations",
+    "mod:daily_tasks/api",
+    "page:index.html",
+    "page:pages/case-management.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/daily_tasks/api.py"
+    ],
+    "page": [
+     "frontend/css/case-management.css",
+     "frontend/index.html",
+     "frontend/js/case-management-core.js",
+     "frontend/js/case-management-feed.js",
+     "frontend/pages/case-management.html",
+     "frontend/static/notif.js"
+    ],
+    "path": [
+     "frontend/css/case-management.css",
+     "frontend/js/case-management-core.js",
+     "frontend/js/case-management-feed.js",
+     "frontend/pages/case-management.html",
+     "frontend/static/notif.js"
     ]
    },
    "login_fixture": true
