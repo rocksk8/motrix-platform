@@ -51,7 +51,7 @@ def _muted_in_form(page):
 
 
 def _save(page):
-    page.locator(".modal-foot .btn-primary").click()
+    page.get_by_role("button", name="儲存變更").first.click()
     page.wait_for_function(f"() => !{DATA}.showModal", timeout=15000)
 
 

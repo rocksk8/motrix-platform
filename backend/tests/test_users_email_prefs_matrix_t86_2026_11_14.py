@@ -77,4 +77,15 @@ def test_mixin_keeps_the_s6_rules():
     assert "!v && !r.lowRisk" in js, "非業務類取消勾選要先確認"
     assert "if (!t || !t.receivable) return" in js, "收不到的類型不可被改動（與伺服器 receivable 檢查同向）"
     assert "snapshot" in js and "restore" in js and "groupActionsEnabled: true" in js
+    assert "throw new Error" not in js, "restore 不可同步 throw（元件卡在忙碌、沒有提示）；要拒絕就回 Promise.reject"
     assert "fetch(" not in js, "矩陣只改表單狀態，不直接寫伺服器（寫入由使用者表單的儲存一起送）"
+
+
+def test_matrix_layers_sit_above_the_users_modal():
+    """矩陣的確認視窗與提示條（含「復原這一批」）掛在 body；若層級低於本頁彈窗（200）就整個被蓋住、點不到。"""
+    page = _page()
+    m1 = re.search(r"\.mx-modal\s*\{\s*z-index:\s*(\d+)", page)
+    m2 = re.search(r"\.mx-toast\s*\{\s*z-index:\s*(\d+)", page)
+    m3 = re.search(r"\.modal-overlay\s*\{[^}]*?z-index:\s*(\d+)", page, re.S)
+    assert m1 and m2 and m3
+    assert int(m1.group(1)) > int(m3.group(1)) and int(m2.group(1)) > int(m1.group(1))

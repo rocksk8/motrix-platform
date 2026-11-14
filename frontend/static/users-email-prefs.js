@@ -11,8 +11,8 @@
  * 依賴：static/settings-matrix.js（SettingsMatrix）、css/settings-matrix.css。 */
 (function () {
   'use strict'
-  var NOT_IN_SCOPE = '此帳號不在收件範圍；由「信件與通知收件設定」決定'
-  var NO_BATCH = '簽核／系統技術類通知要逐項勾選，不能批次'
+  var NOT_IN_SCOPE = '此帳號不在收件範圍，由「信件與通知收件設定」決定。'
+  var NO_BATCH = '簽核與系統技術類通知須逐項勾選，無法批次調整。'
 
   window.usersEmailPrefsMixin = function () {
     var mx = null                                   // 不放進 Alpine 的反應式狀態：重繪才不會被自己觸發
@@ -72,7 +72,7 @@
         }
         function done(changed, verb) {
           var n = Object.keys(changed).length
-          return { applied: changed, message: n ? ('已' + verb + ' ' + n + ' 項（按下方「儲存」才會寫入此帳號）') : '這些項目本來就是這個狀態，沒有變動' }
+          return { applied: changed, message: n ? ('已' + verb + ' ' + n + ' 項（按下方「儲存變更」後才會寫入此帳號）。') : '這些項目已是此狀態，無須變動。' }
         }
         mx = window.SettingsMatrix.mount(box, {
           rows: rows, groups: cats,
@@ -112,7 +112,7 @@
             restore: function (snap, res) {
               var applied = (res && res.applied) || {}, muted = self.form.notificationMuted || []
               var moved = Object.keys(applied).filter(function (k) { return (muted.indexOf(k) < 0) !== applied[k] })
-              if (moved.length) throw new Error('有 ' + moved.length + ' 項在這一批之後又被改過，不能整批復原；請逐項調整。')
+              if (moved.length) return Promise.reject(new Error('有 ' + moved.length + ' 項在這一批之後又被改過，不能整批復原，請逐項調整。'))   // 不可同步 throw：元件在 click 裡直接呼叫 restore，同步例外會讓元件卡在忙碌、也沒有提示
               Object.keys(applied).forEach(function (k) { self._emailApply([k], !applied[k]) })
             },
           },
