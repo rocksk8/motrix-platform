@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1724,
+  "tests": 1730,
   "unmapped": 9,
   "kinds": {
-   "api": 955,
-   "e2e": 402,
+   "api": 957,
+   "e2e": 406,
    "audit": 216,
    "unit": 151
   },
@@ -34352,6 +34352,63 @@
     ]
    }
   },
+  "backend/tests/test_e2e_denial_screen_wording_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/case-management.html",
+    "page:pages/company-setup-wizard.html",
+    "page:pages/duty-roles.html",
+    "page:pages/online-stats.html",
+    "page:pages/recycle-bin.html",
+    "page:pages/settings-center.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/company-setup-wizard.html",
+     "frontend/pages/duty-roles.html",
+     "frontend/pages/online-stats.html",
+     "frontend/pages/recycle-bin.html",
+     "frontend/pages/settings-center.html"
+    ],
+    "path": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/company-setup-wizard.html",
+     "frontend/pages/duty-roles.html",
+     "frontend/pages/online-stats.html",
+     "frontend/pages/recycle-bin.html",
+     "frontend/pages/settings-center.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_denied_pages_and_role_label_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/duty-roles.html",
+    "page:pages/my-account.html",
+    "page:pages/settings-center.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/duty-roles.html",
+     "frontend/pages/my-account.html",
+     "frontend/pages/settings-center.html"
+    ],
+    "path": [
+     "frontend/pages/duty-roles.html",
+     "frontend/pages/my-account.html",
+     "frontend/pages/settings-center.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_designer_default_on_2026_10_03.py": {
    "kind": "e2e",
    "units": [
@@ -36399,6 +36456,27 @@
     ]
    }
   },
+  "backend/tests/test_e2e_mtl_no_permission_t86.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_case_material_timeline_t86.py",
+    "page:pages/case-management.html",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_case_material_timeline_t86.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/settlement.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_my_account_2026_11_13.py": {
    "kind": "e2e",
    "units": [
@@ -36725,6 +36803,20 @@
      "frontend/pages/case-management.html",
      "frontend/pages/completion-note-form.html",
      "frontend/pages/daily-tasks.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_online_stats_denied_no_pageerror_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "page:pages/online-stats.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/pages/online-stats.html"
+    ],
+    "path": [
+     "frontend/pages/online-stats.html"
     ]
    }
   },
@@ -42319,6 +42411,28 @@
     ]
    }
   },
+  "backend/tests/test_module_names_match_nav_2026_11_14.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/core/menu_l1.json",
+    "mod:permmatrix/api",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "path": [
+     "backend/core/menu_l1.json"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_module_no_admin_bypass_2026_09_14.py": {
    "kind": "api",
    "units": [
@@ -44297,6 +44411,34 @@
      "backend/pdf_gen.py"
     ]
    }
+  },
+  "backend/tests/test_permmatrix_unit_labels_2026_11_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "file:backend/helpers/__init__.py",
+    "helper:perm_text",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
+    "mod:permmatrix/views"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/perm_text.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/views.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "path": [
+     "backend/modules/"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_photo_exif_orientation_2026_11_11.py": {
    "kind": "unit",
