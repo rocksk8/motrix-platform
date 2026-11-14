@@ -4,14 +4,14 @@
   "apply_update": {
    "version": "2026-11-13c",
    "sha256": "8c4d37b3c84cb265ba59c960a2bc63827f0d74fc7aff1af3c136cd1e77025e0b",
-   "shipped_in": "20261114_083554_c21e502d_full",
-   "commit": "c21e502d645c8cc77b0186a7b5a8de1fb0a78ed6"
+   "shipped_in": "20261114_191358_1580c8c1_full",
+   "commit": "1580c8c1b30f2e8e5e359ae0132ed14cb9b8de98"
   },
   "apply_module_update": {
    "version": "2026-11-13c",
    "sha256": "52237d98774cf2a17edd3727c9c6739a98e03e8ed61d13b6b8db92fcc4495319",
-   "shipped_in": "20261114_083554_c21e502d_full",
-   "commit": "c21e502d645c8cc77b0186a7b5a8de1fb0a78ed6"
+   "shipped_in": "20261114_191358_1580c8c1_full",
+   "commit": "1580c8c1b30f2e8e5e359ae0132ed14cb9b8de98"
   }
  }
 }
