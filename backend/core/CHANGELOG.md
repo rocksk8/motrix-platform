@@ -1,5 +1,13 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
+- 行為變更：設定 `list_view.cases_merge_won_tab` 預設 0→1（案件清單預設把「已成案」併進全部；已存過值的公司不受影響，只有從未儲存過這組設定的公司會改變）。L1 介面不變；部署基準（settings_deploy_baseline）與種子 CSV 同步。
+- 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
+- **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**
+- 行為變更（預設值）：案件清單預設合併「進行中」與重複的「已成案」頁籤（設定 `list_view.cases_merge_won_tab` 預設 0→1）；可到設定中心改回「兩個都保留」。**不做 migration**：正式機已明確存過 0 的公司不會跟著變（預期行為）。此設定現在不需開啟「自訂畫面版面」也會生效（案件頁多帶一個 `list_view` 群組，同一個設定請求）。
+- 前端（無 API／欄位／權限鍵變更）：清單與看板卡片顯示專案名稱並標出搜尋命中；搜尋框組字中不查詢；矩陣末欄寫「缺：…」；五關旁加「結案」入口並先列缺漏；狀態列「精算」關直接開精算頁；手機案件頁標題區瘦身；精算頁「需處理」去掉內部代號、從案件進來時返回連結回案件、手機首屏需處理置頂。
+- 測試：`tests/platform/test_list_view_c1_t65.py`／`test_list_view_c2_t65.py`／`tests/e2e_on_state/test_list_view_c2_on_state.py` 改預設；案件頁兩份 golden 重錄；`tests/platform/settings_deploy_baseline.json` 的預設同步。
+
 - **（併入）(next) — 2026-11-14（feat/settings-s5-external；設定改版 S5：四個外部群組進登錄表）**
 - 行為變更（對外介面，端點與路徑不變）：`PUT /api/settings/t100-export-config`、`PUT /api/cases/voucher-accounts`（獎金傳票科目）、`PUT /api/legal-params/tax-rules`、`PUT /api/overhead/settings`（口徑）不再直接寫舊鍵——改走設定群組 `t100_export`／`bonus_voucher`／`tax_rules`／`overhead_basis` 的 `publish()`：**任何實質變更都是待生效**（確認期間＋第二位最高管理者核准＋稽核；只有一位最高管理者＝等待期＋警告）。回應多 `pending`／`warnings`；沒有實質變更不產生待生效；同群組已有待生效時再送 ⇒ 409（`supersede=true` 才取代）。
 - 行為變更：T100 設定存檔時，科目代號必須存在於科目表（400，列出哪個代號）；獎金傳票科目送出的每一格都驗證。
@@ -8,10 +16,6 @@
 - 審查修正（h10）：①法規參數 PUT 先驗結構（非物件項目回 400，不再 500）；②獎金傳票科目／T100／法規參數三處儲存後，有待生效時提示「等待期滿、需第二位最高管理者核准後才生效」，法規參數頁不再蓋掉剛輸入的版本；③兩支遷移工具在登錄表已有 `overhead_basis` 發布版本時，拒絕 `mode --apply`、`recalc --apply --set-*`、`rollback --apply`（舊鍵寫了不生效且會混基），改走 `PUT /api/overhead/settings`；④管銷設定 PUT 的 CAS 期望值取登錄表原始生效值；⑤`profit_guard` 表單存檔與 `charity_basis()` 只讀一次登錄表。
 - 已知限制：`tools/charity_migrate.py` 的前置檢查（`_prereq`）仍讀舊的管銷鍵（`overhead_rule_mode`／`overhead_migration_done`）；目前只因為「有定義時 `--set-total` 一律被拒」才不會出錯——日後若放寬該拒絕，必須先把 `_prereq` 改成讀登錄表生效值。
 - 測試：`tests/platform/test_settings_external_s5.py`；既有 PUT 後立刻讀的測試改為 `tests/_settings_activate.activate_now()`（只給測試用）。
-
-## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
-- 行為變更：設定 `list_view.cases_merge_won_tab` 預設 0→1（案件清單預設把「已成案」併進全部；已存過值的公司不受影響，只有從未儲存過這組設定的公司會改變）。L1 介面不變；部署基準（settings_deploy_baseline）與種子 CSV 同步。
-- 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 
 ## (next) — 2026-11-14（feat/duty-roles-matrix-t86；T86 職責角色權限矩陣）
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.duty_roles.update_role` 新增關鍵字參數 `commit=True`（預設行為不變；批次套用傳 `False`，由呼叫端在同一個交易統一 commit）。
