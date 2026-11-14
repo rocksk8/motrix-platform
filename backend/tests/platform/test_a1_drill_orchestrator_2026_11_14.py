@@ -488,11 +488,6 @@ def test_tree_script_never_uses_zero_placeholder_and_guards_low_pids():
     assert "$roots = @()" in script and "-gt 4" in script and "@(0,4)" in script
 
 
-def test_stop_drill_processes_with_nothing_running_kills_nothing():
-    logs = []
-    assert PF.stop_drill_processes(r"D:\Claude-pm\a1-drill\nonexistent_stamp_xyz", ports=(65111,), log=logs.append) == []
-    assert logs and "[]" in logs[0]
-
 
 def test_real_tree_sampler_with_no_roots_returns_no_system_pids():
     import os
@@ -504,14 +499,122 @@ def test_real_tree_sampler_with_no_roots_returns_no_system_pids():
     assert tree == [], tree
 
 
-def test_monitor_kill_never_targets_low_pids():
-    killed = []
-    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append)
-    m._log = lambda rec: None
-    m._kill([0, 4, 5, 123456])
-    assert killed == [[5, 123456]] or killed == [[123456, 5]] or sorted(killed[0]) == [5, 123456] and 4 not in killed[0] and 0 not in killed[0]
-
 
 def test_firewall_bat_is_the_only_allowlisted_prod_subnet_file_and_is_never_executed():
     assert r"firewall_setup.bat" in PF.KNOWN_PRODUCT_FILES
     assert "firewall_setup" not in SRC
+
+
+# ── 殺程序白名單（PM 2026-11-14）：只殺編排器啟動並記錄（pid＋建立時間）的程序與後代；pid<1000／系統名稱硬性跳過 ───────────────
+
+def _py_sleeper(extra_args=(), child=False):
+    import subprocess
+    import sys as _sys
+    code = "import subprocess,sys,time;" + ("subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)']);" if child else "") + "time.sleep(120)"
+    return subprocess.Popen([_sys.executable, "-c", code, *extra_args], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def _alive(pid):
+    import subprocess
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", "if (Get-Process -Id %d -ErrorAction SilentlyContinue) { 'Y' } else { 'N' }" % pid],
+                       capture_output=True, text=True, timeout=60)
+    return r.stdout.strip().endswith("Y")
+
+
+def test_killable_hard_rules():
+    assert not PF.killable(4, "system") and not PF.killable(999, "python.exe") and not PF.killable(1500, "svchost.exe")
+    for n in ("System", "smss.exe", "csrss.exe", "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", "svchost.exe", "conhost.exe", "explorer.exe"):
+        assert not PF.killable(5000, n), n
+    assert PF.killable(5000, "python.exe") and PF.killable(1000, "cmd.exe")
+
+
+def test_stop_drill_processes_with_nothing_recorded_kills_nothing(tmp_path):
+    logs = []
+    assert PF.stop_drill_processes(tmp_path / "nonexistent_stamp_xyz", [], PF.now_ticks(), log=logs.append) == []
+    assert logs and "沒有需要殺" in logs[0]
+
+
+def test_stop_does_not_use_root_sweeps_or_port_lookup():
+    import inspect
+    src = inspect.getsource(PF.stop_drill_processes) + inspect.getsource(PF.owned_processes)
+    assert "_TREE_PS" not in src and "listening_pids" not in src and "netstat" not in src
+    assert "/T" not in src
+
+
+def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_path):
+    base = tmp_path / "drill_base_xyz"
+    base.mkdir()
+    a = _py_sleeper(child=True)                                   # 記錄＋有子行程 ⇒ 兩個都該被殺
+    b = _py_sleeper()                                             # 沒記錄 ⇒ 不動
+    c = _py_sleeper()                                             # 記了、但建立時間不符（模擬 pid 被重複使用）⇒ 不動
+    d = _py_sleeper(extra_args=(str(base / "inst" / "autostart.bat"),))     # 孤兒類：命令列含演練目錄、白名單名稱 ⇒ 殺
+    started = PF.now_ticks(60)
+    try:
+        import time
+        time.sleep(2.5)                                           # 讓 A 的子行程起來
+        rec = [(a.pid, PF.process_created(a.pid)), (c.pid, PF.process_created(c.pid) - 12345)]
+        assert rec[0][1] and rec[1][1]
+        owned = PF.owned_processes(rec, base, started)
+        ids = {o["id"] for o in owned}
+        assert a.pid in ids and d.pid in ids, ids
+        assert b.pid not in ids and c.pid not in ids and os.getpid() not in ids
+        assert len(ids) >= 3, "A 的子行程也該在清單裡：%s" % ids
+        assert all(i >= PF.MIN_KILL_PID and PF.killable(i, o["name"]) for o in owned for i in [o["id"]])
+        logs = []
+        killed = PF.stop_drill_processes(base, rec, started, log=logs.append)
+        assert set(killed) == ids
+        time.sleep(1.5)
+        assert not _alive(a.pid) and not _alive(d.pid)
+        assert _alive(b.pid) and _alive(c.pid)
+        assert any("pid=%d" % a.pid in l and "name=python.exe" in l and "created_ticks=" in l for l in logs), logs
+    finally:
+        for pr in (a, b, c, d):
+            try:
+                pr.kill()
+            except OSError:
+                pass
+
+
+import os  # noqa: E402
+
+
+def test_monitor_kill_only_owned_and_never_low_pids():
+    killed = []
+    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append, owned_fn=lambda: [1500, 4, 999])
+    m._log = lambda rec: None
+    m._kill([0, 4, 5, 999, 1500, 7777])
+    assert killed == [[1500]], killed
+
+
+def test_monitor_kill_without_owned_list_still_applies_hard_pid_rule():
+    killed = []
+    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append)
+    m._log = lambda rec: None
+    m._kill([0, 4, 999, 1500])
+    assert killed == [[1500]]
+
+
+def test_monitor_kill_when_owned_query_fails_kills_nothing():
+    killed, logged = [], []
+
+    def boom():
+        raise RuntimeError("ps failed")
+    m = PF.ConnectionMonitor("unused.jsonl", lambda: [], killer=killed.append, owned_fn=boom)
+    m._log = logged.append
+    m._kill([1500])
+    assert killed == [] and any("不殺任何程序" in str(x) for x in logged)
+
+
+def test_guard_records_launches_with_creation_time(tmp_path, monkeypatch):
+    mon = FakeMonitor()
+    g = PF.DrillGuard(tmp_path, mon, base=tmp_path)
+    g.done = list(PF.DrillGuard.ORDER)
+    g._fp = g._fingerprint()
+    monkeypatch.setattr(g, "ready", lambda what="": True)
+    import sys as _sys
+    pr = g.launch([_sys.executable, "-c", "import time;time.sleep(1)"], tmp_path, "t", detached=False)
+    try:
+        assert g.records and g.records[-1][0] == pr.pid and g.records[-1][1]
+    finally:
+        pr.kill()
+

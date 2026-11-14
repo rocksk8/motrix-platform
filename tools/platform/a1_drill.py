@@ -417,8 +417,8 @@ class Drill:
 
     def _make_guard(self, interval):
         self.monitor = PF.ConnectionMonitor(self.reports / "monitor.jsonl", lambda: self.guard.pids(), interval=interval,
-                                            drill_root=self.base, ports=(self.port, self.dash))
-        self.guard = PF.DrillGuard(self.inst, self.monitor, erp_port=self.port, dash_port=self.dash)
+                                            drill_root=self.base, ports=(self.port, self.dash), owned_fn=lambda: self.guard.owned_pids())
+        self.guard = PF.DrillGuard(self.inst, self.monitor, erp_port=self.port, dash_port=self.dash, base=self.base)
 
     # -- 建置 -----------------------------------------------------------------
     def build_install(self):
@@ -519,7 +519,7 @@ class Drill:
 
     def stop_services(self):
         try:
-            return PF.stop_drill_processes(self.base, (self.port, self.dash), log=self.log)
+            return PF.stop_drill_processes(self.base, self.guard.records, self.guard.start_ticks, log=self.log)
         except Exception as e:                                          # noqa: BLE001 — 收尾不可丟例外
             self.log("停服務出錯：%s" % e)
             return []

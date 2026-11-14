@@ -374,6 +374,78 @@ foreach ($low in @(0,4)) { [void]$tree.Remove([int]$low) }
 foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
 ConvertTo-Json -Compress @{ tree = @($tree); ancestors = @($anc) }
 """
+# ── 殺程序的白名單（PM 2026-11-14）：只殺「編排器自己啟動並記錄（pid＋建立時間）的程序」與它們的後代 ──────────────────
+# 上面的 _TREE_PS 只用來「觀察」（連線取樣）；**任何殺程序的動作都只准用這個擁有清單**，不從根程序往下掃、不從埠或命令列撈。
+# 唯一的補充：命令列含「本次演練目錄」（含時間戳、全機唯一）、名稱在 OWN_NAMES 內、建立時間不早於演練開始的程序
+# （套用腳本自己重啟的 autostart 迴圈與 ERP 是孤兒、父程序已不在，只靠後代追不到）。
+MIN_KILL_PID = 1000
+PROTECTED_NAMES = {"system", "system idle process", "registry", "secure system", "memory compression", "smss.exe", "csrss.exe", "wininit.exe",
+                   "services.exe", "lsass.exe", "winlogon.exe", "svchost.exe", "conhost.exe", "explorer.exe", "fontdrvhost.exe", "dwm.exe"}
+OWN_NAMES = ("cmd.exe", "python.exe", "pythonw.exe", "powershell.exe", "pwsh.exe", "uvicorn.exe")
+_OWNED_PS = r"""
+$recs = @(%(recs)s)
+$needle = '%(needle)s'
+$me = %(me)d
+$start = [long]%(start)d
+$ownNames = @(%(ownnames)s)
+$protNames = @(%(protnames)s)
+$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine, CreationDate
+$byId = @{}; foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
+function Ticks($p) { if ($p.CreationDate) { [long]$p.CreationDate.ToUniversalTime().Ticks } else { [long]0 } }
+$anc = New-Object 'System.Collections.Generic.HashSet[int]'
+$cur = $me; $guard = 0
+while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
+$own = New-Object 'System.Collections.Generic.HashSet[int]'
+foreach ($r in $recs) { $pr = $r.Split(':'); $id = [int]$pr[0]; if ($byId.ContainsKey($id) -and (Ticks $byId[$id]) -eq [long]$pr[1]) { [void]$own.Add($id) } }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and (Ticks $p) -ge $start) { [void]$own.Add([int]$p.ProcessId) } } }
+$grew = $true
+while ($grew) { $grew = $false; foreach ($p in $all) { $pp = [int]$p.ParentProcessId; if ($pp -ge %(minpid)d -and $own.Contains($pp) -and -not $own.Contains([int]$p.ProcessId) -and (Ticks $p) -ge (Ticks $byId[$pp])) { [void]$own.Add([int]$p.ProcessId); $grew = $true } } }
+$out = @()
+foreach ($id in $own) { if ($id -lt %(minpid)d -or $id -eq $me -or $id -eq [int]$PID -or $anc.Contains($id) -or -not $byId.ContainsKey($id)) { continue }; $n = ([string]$byId[$id].Name).ToLower(); if ($protNames -contains $n) { continue }; $out += @{ id = $id; name = $n; created = (Ticks $byId[$id]) } }
+ConvertTo-Json -Compress -Depth 4 @{ owned = @($out) }
+"""
+
+
+def process_created(pid):
+    """某 pid 目前的建立時間（UTC ticks）；查不到 ⇒ None。啟動後立刻記，殺之前拿來確認「還是同一個程序」（pid 會被重複使用）。"""
+    ps = "$p = Get-CimInstance Win32_Process -Filter 'ProcessId=%d'; if ($p -and $p.CreationDate) { [string][long]$p.CreationDate.ToUniversalTime().Ticks }" % int(pid)
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    out = (r.stdout or "").strip().splitlines()
+    try:
+        return int(out[-1]) if out and r.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def now_ticks(slack_seconds=5):
+    return int((time.time() - slack_seconds + 62135596800) * 10_000_000)
+
+
+def killable(pid, name=""):
+    """硬性規則：pid < 1000、名稱是系統／殼層程序 ⇒ 永遠不殺。"""
+    return int(pid) >= MIN_KILL_PID and str(name).lower() not in PROTECTED_NAMES
+
+
+def owned_processes(records, base, start_ticks, me=None):
+    """⇒ [{id, name, created}]：records＝[(pid, 建立時間ticks)]（編排器啟動時記下的）。只含「建立時間相符的記錄程序」＋它們的後代＋命令列含演練目錄的白名單程序；
+    再套一次硬性規則（PowerShell 與 Python 兩邊各一次）。**查詢失敗 ⇒ 丟例外（呼叫端什麼都不殺）**。"""
+    recs = ",".join("'%d:%d'" % (int(p), int(t)) for p, t in records if t)
+    script = _OWNED_PS % {"recs": recs, "needle": str(base).replace("'", "''"), "me": me or os.getpid(), "start": int(start_ticks),
+                          "ownnames": ",".join("'%s'" % n for n in OWN_NAMES), "protnames": ",".join("'%s'" % n for n in sorted(PROTECTED_NAMES)),
+                          "minpid": MIN_KILL_PID}
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=90, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError("查擁有清單失敗（PowerShell rc=%s）：%s" % (r.returncode, (r.stderr or "")[:120]))
+    doc = json.loads(r.stdout.strip().splitlines()[-1])
+    items = doc.get("owned") or []
+    if isinstance(items, dict):
+        items = [items]
+    return [{"id": int(i["id"]), "name": str(i["name"]), "created": int(i["created"])} for i in items
+            if killable(i["id"], i["name"]) and int(i["id"]) != (me or os.getpid())]
+
+
 # 連線清單用 `netstat -ano`：這台機器上 Get-NetTCPConnection 什麼都查不到（CIM MSFT_NetTCPConnection 是空的），
 # 用它監看會永遠「0 連線」＝假綠燈；netstat 正常。所以取樣前一定先做正對照（見 positive_control）。
 _NETSTAT_LINE = re.compile(r"^\s*TCP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s*$", re.I)
@@ -443,7 +515,8 @@ class ConnectionMonitor:
     MAX_CONSECUTIVE_ERRORS = 2
 
     def __init__(self, log_path, roots_fn, interval=2.0, sampler=None, killer=None, prod_ip=PROD_IP, clock=time.time,
-                 drill_root=None, ports=(ERP_PORT, DASH_PORT)):
+                 drill_root=None, ports=(ERP_PORT, DASH_PORT), owned_fn=None):
+        self.owned_fn = owned_fn                  # 殺程序只准殺它回傳的 pid（白名單）；None＝只套硬性規則（測試用）
         self.log_path, self.roots_fn, self.interval = Path(log_path), roots_fn, interval
         self.drill_root, self.ports = str(drill_root or ""), tuple(ports)
         self.sampler, self.killer, self.prod_ip, self.clock = sampler or self._ps_sample, killer or self._ps_kill, prod_ip, clock
@@ -475,23 +548,32 @@ class ConnectionMonitor:
 
     @staticmethod
     def _ps_kill(tree):
-        for pid in sorted(tree, reverse=True):                              # 呼叫端（_kill）已濾掉編排器與祖先
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        for pid in sorted(tree, reverse=True):                              # 呼叫端（_kill）已套白名單與硬性規則；清單已含後代，不用 /T
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def _log(self, rec):
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     def _kill(self, tree):
-        """殺程序。**編排器自己與它所有祖先（外層 shell／包裝腳本，命令列也可能含演練目錄）一律不殺**：
-        `taskkill /T` 殺祖先會連編排器一起殺掉，報告與摘要就寫不出來。被略過的記在紀錄裡。"""
-        protected = {0, 4, os.getpid()} | set(self._ancestors)
-        skipped = sorted(int(p) for p in tree if int(p) in protected)
-        tree = [int(p) for p in tree if int(p) not in protected]
+        """殺程序。白名單：只殺 `owned_fn()`（編排器啟動並記錄、建立時間相符的程序＋後代）裡的 pid；pid < 1000、編排器自己與它所有祖先一律不殺
+        （`taskkill /T` 殺祖先會連編排器一起殺掉）。被略過的記在紀錄裡；查不到擁有清單 ⇒ 什麼都不殺（已中止演練，由收尾處理）。"""
+        protected = {os.getpid()} | set(self._ancestors)
+        tree = [int(p) for p in tree]
+        skipped = sorted(p for p in tree if p in protected or p < MIN_KILL_PID)
+        keep = [p for p in tree if p not in protected and p >= MIN_KILL_PID]
+        if self.owned_fn is not None:
+            try:
+                owned = {int(p) for p in self.owned_fn()}
+            except Exception as e:                                          # noqa: BLE001
+                self._log({"t": round(self.clock(), 1), "kill_error": "擁有清單查詢失敗，不殺任何程序：%s" % str(e)[:160]})
+                return
+            skipped += sorted(p for p in keep if p not in owned)
+            keep = [p for p in keep if p in owned]
         if skipped:
-            self._log({"t": round(self.clock(), 1), "event": "NOT_KILLED", "pids": skipped, "why": "編排器自己或它的祖先"})
+            self._log({"t": round(self.clock(), 1), "event": "NOT_KILLED", "pids": sorted(set(skipped)), "why": "編排器自己／祖先／pid<%d／不在擁有清單" % MIN_KILL_PID})
         try:
-            self.killer(tree)
+            self.killer(keep)
         except Exception as e:                                              # noqa: BLE001 — 殺不掉也要記
             self._log({"t": round(self.clock(), 1), "kill_error": str(e)[:200]})
 
@@ -607,7 +689,8 @@ class DrillGuard:
     GUARDED = (r"backend\tools\apply_update.ps1", r"backend\tools\rollback_update.ps1", r"backend\autostart.bat")
     ORDER = ("check", "scan", "control", "start")
 
-    def __init__(self, root, monitor, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None):
+    def __init__(self, root, monitor, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None, base=None):
+        self.base = Path(base) if base else None          # 本次演練目錄（含時間戳）；殺程序白名單用它比對命令列
         self.root, self.monitor, self.probes = Path(root), monitor, probes
         self.erp_port, self.dash_port, self.environ = erp_port, dash_port, environ
         self.done = []
@@ -615,6 +698,8 @@ class DrillGuard:
         self.scan_result = None
         self._fp = None
         self._children = []
+        self.records = []                         # [(pid, 建立時間 ticks)]：啟動時記下，殺之前用來確認「還是同一個程序」
+        self.start_ticks = now_ticks()
 
     def _need(self, step):
         i = self.ORDER.index(step)
@@ -653,6 +738,7 @@ class DrillGuard:
         self._need("start")
         if not self.monitor.control_done:
             raise DrillAbort("監看器沒做過正對照，不啟動")
+        self.records.append((os.getpid(), process_created(os.getpid())))
         self.monitor.start()
         self.done = list(self.ORDER)
         return self
@@ -683,6 +769,7 @@ class DrillGuard:
         if wait:
             pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw)
             self._children.append(pr)
+            self.records.append((pr.pid, process_created(pr.pid)))
             try:
                 out, _ = pr.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -692,7 +779,12 @@ class DrillGuard:
             return pr.returncode, (out or b"").decode("utf-8", "replace")
         pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
         self._children.append(pr)
+        self.records.append((pr.pid, process_created(pr.pid)))
         return pr
+
+    def owned_pids(self):
+        """殺程序的白名單（給監看器 `owned_fn`）：記錄過且建立時間相符的程序＋後代＋命令列含演練目錄的白名單程序；查詢失敗 ⇒ 丟例外。"""
+        return [o["id"] for o in owned_processes(self.records, self.base or self.root, self.start_ticks)]
 
     def pids(self):
         """監看器的根程序：編排器自己＋啟動過且還活著的子行程。"""
@@ -710,23 +802,22 @@ class DrillGuard:
         return True
 
 
-def stop_drill_processes(base, ports=(ERP_PORT, DASH_PORT), log=None):
-    """收尾：只殺「命令列／執行檔含演練目錄」與「聽著演練埠」的程序（含子孫）；編排器自己與祖先不殺。⇒ 被殺的 pid。"""
+def stop_drill_processes(base, records, start_ticks, log=None, killer=None):
+    """收尾：只殺 `owned_processes` 給的白名單（編排器啟動並記錄、建立時間相符的程序＋後代＋命令列含本次演練目錄的白名單程序）。
+    殺之前逐一記 pid／名稱／建立時間。查詢失敗 ⇒ 丟例外、不殺任何程序。⇒ 被殺的 pid。"""
+    owned = owned_processes(records, base, start_ticks)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    net = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
-    roots = listening_pids(net.stdout or "", ports)
-    script = _TREE_PS % {"pids": ",".join(str(p) for p in sorted(roots)) or "", "needle": str(base).replace("'", "''"), "me": os.getpid()}
-    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
-    if r.returncode != 0 or not r.stdout.strip():
-        raise RuntimeError("收尾找不到演練程序（PowerShell rc=%s）" % r.returncode)
-    doc = json.loads(r.stdout.strip().splitlines()[-1])
-    tree = [doc["tree"]] if isinstance(doc["tree"], int) else list(doc["tree"] or [])
-    kill = [int(x) for x in tree if int(x) > 4 and int(x) != os.getpid()]
-    for pid in sorted(kill, reverse=True):
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=flags)
-    if log:
-        log("收尾殺掉演練程序：%s" % kill)
-    return kill
+    kill = sorted((o for o in owned if killable(o["id"], o["name"])), key=lambda o: -o["id"])
+    for o in kill:
+        if log:
+            log("收尾殺程序 pid=%d name=%s created_ticks=%d" % (o["id"], o["name"], o["created"]))
+        if killer:
+            killer(o["id"])
+        else:
+            subprocess.run(["taskkill", "/PID", str(o["id"]), "/F"], capture_output=True, creationflags=flags)
+    if log and not kill:
+        log("收尾：沒有需要殺的演練程序")
+    return [o["id"] for o in kill]
 
 
 def main(argv=None):

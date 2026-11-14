@@ -254,9 +254,9 @@ def test_monitor_clean_run_logs_every_tick_and_states_zero_prod_connections(tmp_
 
 def test_monitor_prod_connection_kills_the_tree_trips_and_aborts(tmp_path):
     killed = []
-    m = _mon(tmp_path, [{"tree": [100, 101, 102], "conns": [_c("127.0.0.1"), _c(PROD, pid=101, port=666)]}], killed=killed)
+    m = _mon(tmp_path, [{"tree": [1100, 1101, 1102], "conns": [_c("127.0.0.1"), _c(PROD, pid=1101, port=666)]}], killed=killed)
     bad = m.tick()
-    assert [b["kind"] for b in bad] == ["prod"] and killed == [[100, 101, 102]]
+    assert [b["kind"] for b in bad] == ["prod"] and killed == [[1100, 1101, 1102]]
     assert m.summary()["prod_connections"] == 1 and m.summary()["tripped"] is True
     with pytest.raises(PF.DrillAbort) as ei:
         m.check_clean()
@@ -360,12 +360,12 @@ def test_real_sampler_tree_includes_the_given_pid_and_filters_connections_to_the
 
 def test_two_consecutive_sample_failures_abort_kill_and_mark_unproven_never_zero_connections(tmp_path):
     killed = []
-    m = _mon(tmp_path, [{"tree": [100, 101], "conns": []}, RuntimeError("壞1"), RuntimeError("壞2")], killed=killed)
+    m = _mon(tmp_path, [{"tree": [1100, 1101], "conns": []}, RuntimeError("壞1"), RuntimeError("壞2")], killed=killed)
     m.tick()
     m.tick()
     assert not m.unproven, "只失敗 1 次還不中止"
     m.tick()
-    assert m.unproven and killed and 101 in killed[0] and 100 in killed[0], "連續 2 次失敗 ⇒ 殺（最後一次成功的程序樹）"
+    assert m.unproven and killed and 1101 in killed[0] and 1100 in killed[0], "連續 2 次失敗 ⇒ 殺（最後一次成功的程序樹）"
     with pytest.raises(PF.DrillAbort) as ei:
         m.check_clean()
     assert "無法證明" in str(ei.value)
@@ -626,23 +626,23 @@ def test_kill_never_targets_the_orchestrator_or_its_ancestors_and_logs_them(tmp_
     import os
     killed = []
     me = os.getpid()
-    snap = {"tree": [100, 50, me, 101], "ancestors": [50, 40], "conns": [_c(PROD, pid=101)]}
+    snap = {"tree": [1100, 1050, me, 1101], "ancestors": [1050, 1040], "conns": [_c(PROD, pid=1101)]}
     m = _mon(tmp_path, [snap], killed=killed)
     m.tick()
-    assert killed == [[100, 101]], "祖先 50 與編排器自己都不殺"
+    assert killed == [[1100, 1101]], "祖先 50 與編排器自己都不殺"
     log = [json.loads(x) for x in (tmp_path / "mon.jsonl").read_text(encoding="utf-8").splitlines()]
     nk = [x for x in log if x.get("event") == "NOT_KILLED"]
-    assert nk and set(nk[0]["pids"]) == {50, me}, nk
+    assert nk and set(nk[0]["pids"]) == {1050, me}, nk
     with pytest.raises(PF.DrillAbort):
         m.check_clean()
 
 
 def test_unproven_kill_also_spares_the_ancestors(tmp_path):
     killed = []
-    m = _mon(tmp_path, [{"tree": [100, 50], "ancestors": [50], "conns": []}, RuntimeError("a"), RuntimeError("b")], killed=killed)
+    m = _mon(tmp_path, [{"tree": [1100, 1050], "ancestors": [1050], "conns": []}, RuntimeError("a"), RuntimeError("b")], killed=killed)
     for _ in range(3):
         m.tick()
-    assert m.unproven and killed and 50 not in killed[0] and 100 in killed[0]
+    assert m.unproven and killed and 1050 not in killed[0] and 1100 in killed[0]
 
 
 def test_real_sampler_reports_the_ancestors_of_this_process_and_keeps_them_out_of_the_tree():
