@@ -18,6 +18,7 @@ BACKEND = Path(__file__).resolve().parents[2]
 EXPECTED = {
     ("recyclebin.adapter", "quotation"), ("recyclebin.adapter", "extra_expense"),     # 第 53 班 P1（IP-RB1）：刪除暫存區的單據轉接
     ("recyclebin.adapter", "completion_note"), ("recyclebin.adapter", "material_order"),
+    ("bootstrap.section", "profitWarning"),                  # T86 #10（IP-BS1）：案件頁啟動資料的「利潤門檻」區段由 M01 交出（L1 不 import L2）
     ("gl.events", "case"),                                   # W4 總帳 C4b：額外支出／叫料事件提供者（唯讀）
     ("case.shipped_summary", "case"),                        # 第 43 班（IP-SH5）：整案訂購／已出貨數量小計（營運報表匯出用；只有數量）
     ("material.shippable", "case"),                          # 34-S1：出貨單連動——已核准且已到貨確認的材料申請（唯讀；supply 經 registry 取用）

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-usage-h1；T86 U5 財務開案件頁）
+- 內部（無 API／欄位／權限變更）：`GET /api/quotations/{no}/case-bundle` 逐段組合時，各段「無權限」的預期結果不再寫 `case.access_denied` 稽核（`helpers/case_access.quiet_part_denials`；案件本體被拒、單獨呼叫各端點仍照常稽核）。前端：唯讀（`cashierReadOnly`）進案件不再 POST 預設階段。
+
 ## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：短標籤專業化與看得到／看到用語）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面與提示的短標籤改為正式用語（前往／查看、尚無／查無符合條件的…、僅顯示等），說明中的「看得到／看到」依語境改為「可檢視」或「顯示」。
 
