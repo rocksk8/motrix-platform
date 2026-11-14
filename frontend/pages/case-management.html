@@ -989,10 +989,10 @@
 
                 <div x-show="stageView==='list'">
                 <!-- `AC2`：階段收入比例（權責口徑依階段完成月認列）。全部未設＝全部完工月一次認列。 -->
-                <div data-testid="stage-ratio-summary" x-show="(cr.caseRecord?.stages || []).length"
-                     style="font-size:12px;font-family:var(--font-zh);margin-bottom:8px"
-                     :style="stageRatioSummary().warn ? 'color:var(--tone-warning-fg)' : 'color:var(--text-dim)'"
-                     x-text="stageRatioSummary().text"></div>
+                <div class="stage-ratio-sum" :class="{ 'stage-ratio-sum--warn': stageRatioSummary().warn }" x-show="(cr.caseRecord?.stages || []).length">
+                  <span class="stage-ratio-sum__ico" aria-hidden="true" x-text="stageRatioSummary().warn ? '⚠' : 'ⓘ'"></span>
+                  <span data-testid="stage-ratio-summary" x-text="stageRatioSummary().text"></span>
+                </div>
                 <template x-for="(st, idx) in (cr.caseRecord?.stages || [])" :key="st.id">
                   <div class="stage-card" :class="st.done ? 'stage-card--done' : ''"
                        draggable="true"
@@ -1008,9 +1008,8 @@
                       <input type="checkbox" x-model="st.done"
                              @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || MotrixDate.today()) : ''})"
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
-                      <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
-                             style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
-                             :style="st.done ? 'text-decoration:line-through;color:var(--ink-muted)' : 'color:var(--text-primary)'">
+                      <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})" class="stage-name" :class="{ 'stage-name--done': st.done }"
+                             placeholder="階段名稱" aria-label="階段名稱">
                       <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
                         <input type="number" min="0" max="100" step="0.01" placeholder="比例"
                                data-testid="stage-ratio" :value="stageRatioPct(st)"

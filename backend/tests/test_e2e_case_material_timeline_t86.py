@@ -130,3 +130,27 @@ def test_import_from_quote_dialog_is_centered_with_aligned_rows(live_server, mak
     page.locator('[data-testid="import-confirm"]').click()
     page.locator('[data-testid="mtl-row-ma"]').wait_for(state="visible")
     assert page.locator('[data-testid^="mtl-row-"]').count() >= 4, "匯入的品項進入時間軸"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width", [1440, 390])
+def test_stage_fields_look_editable_and_ratio_hint_is_one_line(live_server, make_user, e2e_browser, width):
+    """第 13 項：階段名稱有邊框與底色；收入比例提示是 12px、單行（含圖示）。"""
+    u, p = make_user(username="mtl_t86e%d" % width, role="superadmin")
+    _case()
+    page = e2e_browser.new_page(viewport={"width": width, "height": 1000})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    page.wait_for_selector(f"text={NO}", timeout=15000)
+    page.get_by_role("button", name="執行管理").first.click()
+    name = page.locator("input.stage-name").first
+    name.wait_for(state="visible", timeout=15000)
+    css = name.evaluate("e => { const s = getComputedStyle(e); return [s.borderTopWidth, s.borderTopStyle, s.backgroundColor] }")
+    assert css[0] != "0px" and css[1] == "solid" and css[2] != "rgba(0, 0, 0, 0)", css
+    hint = page.locator(".stage-ratio-sum")
+    hint.wait_for(state="visible", timeout=10000)
+    fs, h = hint.evaluate("e => [getComputedStyle(e).fontSize, e.getBoundingClientRect().height]")
+    assert fs == "12px" and h <= 24, (fs, h)
+    over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
+    _shot(page, "stage_fields_%d" % width)

@@ -57,3 +57,13 @@
   .imp-cols, .imp-row { grid-template-columns: 22px minmax(0, 1fr) 64px; }
   .imp-brand, .imp-cols span:nth-child(3) { display: none; }
 }
+
+/* 階段欄位（第 13 項）：階段名稱看得出可編輯；收入比例提示收成一行（圖示＋提示） */
+.stage-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; font-family: var(--font-zh); color: var(--text-primary); background: var(--surface); border: 1px solid var(--border-light); border-radius: 5px; padding: 3px 8px; outline: none; }
+.stage-name:hover { border-color: var(--border); }
+.stage-name:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+.stage-name--done { text-decoration: line-through; color: var(--ink-muted); }
+.stage-ratio-sum { display: flex; align-items: center; gap: 6px; font-size: 12px; font-family: var(--font-zh); color: var(--text-dim); margin-bottom: 8px; white-space: nowrap; overflow: hidden; }
+.stage-ratio-sum > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.stage-ratio-sum--warn { color: var(--tone-warning-fg); }
+.stage-ratio-sum__ico { flex-shrink: 0; }
