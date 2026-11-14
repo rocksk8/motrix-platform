@@ -41,6 +41,7 @@ Windows 的 asyncio proactor 事件迴圈，在**客戶端突然斷線**（關�
 輪替出來的舊檔（`access.log.N.gz`、`app.log.N.gz`、`request_timing.log.N.gz`、舊的 `server.log.N`）超過 `retention.log_keep_days`（設定中心「保存期限」群組，預設 30 天）
 就刪——由 `archive._daily_backup` 每天呼叫 `prune_rotated_logs`（納入既有的備份／保留機制）。現行檔（`access.log`、`app.log`、`server.log`）永遠不刪。
 """
+import asyncio
 import gzip
 import logging
 import logging.handlers
@@ -543,9 +544,12 @@ class TimingInstalled:
 def install_request_timing(log_dir, max_bytes=DEFAULT_MAX_BYTES, backups=DEFAULT_BACKUPS, queue_max=TIMING_QUEUE_MAX):
     """裝上 request_timing.log（輪替＋gzip，背景寫入）。成功回 `TimingInstalled`；打不開檔 ⇒ 什麼都不改、回 None（原因寫 stderr）。"""
     global _TIMING
+    if _TIMING is not None:                       # 重複安裝（重載、測試）⇒ 先停掉上一個，不留執行緒與檔案控制代碼
+        _TIMING.stop()
     try:
         os.makedirs(log_dir, exist_ok=True)
-        recover_pending(log_dir)
+        # 不呼叫 recover_pending：main.py 先跑 install()，它已掃整個目錄（含 request_timing.log.*.gz.pending）；
+        # 這裡再掃一次會對同一個 pending 檔起第二條壓縮執行緒、兩條同時寫同一個 .tmp
         fh = GzipRotatingFileHandler(os.path.join(log_dir, TIMING_LOG_NAME), maxBytes=max_bytes, backupCount=backups)
     except Exception as exc:                                      # noqa: BLE001
         try:
@@ -623,8 +627,11 @@ class RequestTimingMiddleware:
 
         try:
             await self.app(scope, receive, _send)
-        except BaseException:
-            _finish(state["status"] or 500)
+        except BaseException as exc:
+            if isinstance(exc, (asyncio.CancelledError, GeneratorExit)) and not state["status"]:
+                state["done"] = True                      # 客戶端中途斷線／被取消：不是真的 500，不記（會污染「最耗時請求」統計）
+            else:
+                _finish(state["status"] or 500)
             raise
         else:
             if state["status"]:

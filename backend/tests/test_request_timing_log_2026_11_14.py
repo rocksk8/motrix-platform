@@ -261,3 +261,46 @@ def test_main_app_has_the_middleware_and_internal_cols_stays_outermost(client):
     assert classes[0].__name__ == "InternalColsMiddleware"
     assert ls.RequestTimingMiddleware in classes
     assert classes.index(ls.RequestTimingMiddleware) == 1
+
+
+def test_cancelled_request_before_response_is_not_logged_as_500():
+    import asyncio
+    recorded = []
+    orig, prev = ls.record_request_timing, ls._TIMING
+    ls.record_request_timing = lambda *a: recorded.append(a)
+    ls._TIMING = object()
+    try:
+        async def inner(scope, receive, send):
+            raise asyncio.CancelledError()
+
+        mw = ls.RequestTimingMiddleware(inner)
+
+        async def run():
+            await mw({"type": "http", "path": "/api/x", "method": "GET"}, None, None)
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(run())
+    finally:
+        ls.record_request_timing, ls._TIMING = orig, prev
+    assert recorded == []
+
+
+def test_installing_twice_stops_the_previous_instance(tmp_path):
+    first = ls.install_request_timing(str(tmp_path / "a"))
+    second = ls.install_request_timing(str(tmp_path / "b"))
+    try:
+        assert first is not None and second is not None and first._stopped
+        assert ls._TIMING is second
+    finally:
+        second.stop()
+
+
+def test_install_request_timing_does_not_rescan_pending_files(tmp_path, monkeypatch):
+    """recover_pending 只由 install() 跑一次；這裡再跑會對同一個 .gz.pending 起第二條壓縮執行緒。"""
+    calls = []
+    monkeypatch.setattr(ls, "recover_pending", lambda d: calls.append(d) or 0)
+    inst = ls.install_request_timing(str(tmp_path))
+    try:
+        assert calls == []
+    finally:
+        inst.stop()
