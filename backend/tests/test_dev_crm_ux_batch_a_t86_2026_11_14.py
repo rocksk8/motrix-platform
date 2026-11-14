@@ -265,3 +265,10 @@ def test_review_fixes_h5():
     assert ".dc-doc-type .dc-user-check { min-height: 44px !important; }" in DC
     m = re.search(r"async _openFromUrl\(\) \{.*?\n    \},\n", DC, re.S)
     assert m and "await this.loadCases()" in m.group(0)               # 深連結清篩選後要重抓清單
+
+
+def test_linked_case_points_to_case_management_with_existing_q_deeplink():
+    assert 'data-testid="dc-to-case-mgmt"' in DC
+    assert "'case-management.html?q=' + encodeURIComponent(selectedCase.convertedQuoteNo" in DC
+    assert "報價單成案後才會出現在案件管理。" in DC
+    assert "canOpenCaseMgmt" in DC and "case_manage" in DC

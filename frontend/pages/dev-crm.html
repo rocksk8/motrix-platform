@@ -907,6 +907,11 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     修改連結
                   </button>
+                  <a x-show="selectedCase.convertedQuoteNo && canOpenCaseMgmt" data-testid="dc-to-case-mgmt"
+                     class="dc-link-btn" style="font-size:12px"
+                     :href="'case-management.html?q=' + encodeURIComponent(selectedCase.convertedQuoteNo || '')">到案件管理查看</a>
+                  <span class="dc-link-note" data-testid="dc-case-mgmt-hint"
+                        x-show="selectedCase.convertedQuoteNo">報價單成案後才會出現在案件管理。</span>
                   <span class="dc-link-note" data-testid="dc-link-note"
                         x-show="selectedCase.convertedQuoteNo && !isAdmin">要修改連結或刪除案件，請洽主管。</span>
                   <template x-if="selectedCase.pendingRelink">
@@ -1729,6 +1734,12 @@ function devCrmPage() {
       return d === 0 ? '今日更新' : d + ' 天未更新'
     },
 
+    // 案件管理入口：超級管理者，或帳號有 case_manage 模組（與側欄同一條規則；沒權限就不顯示連結，只留說明）。
+    get canOpenCaseMgmt() {
+      const r = (this.session && this.session.role) || ''
+      const m = (this.session && Array.isArray(this.session.modules)) ? this.session.modules : []
+      return r === 'superadmin' || m.includes('case_manage')
+    },
     get hasActiveFilter() {
       return !!((this.searchQ || '').trim() || this.filterStatus || this.filterPerson || this.filterYear || this.filterMonth || this.unreadOnly || this.staleOnly)
     },
