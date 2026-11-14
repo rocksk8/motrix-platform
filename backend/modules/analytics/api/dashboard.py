@@ -554,6 +554,19 @@ def list_devices(
 # `/api/sales-orders` 已移到 M01 routers/quotations.py（M08 搬遷，主持裁示 a：資料屬於 M01）
 
 
+def classify_quote_funnel(status: str, deal_tag: str) -> str:
+    """報價漏斗的單一分類定義（首頁 `/api/dashboard/funnel` 與 T87 B1 標準報表「業務漏斗」共用，不可各寫一份）。
+    呼叫端只送「已送出過」的報價（狀態不是草稿）。⇒ `won`（已成案／已結案）、`lost`（未成案）、
+    `pending`（已送出、尚無成案標記）、`other`（其他狀態，只算進已送出總數）。"""
+    if deal_tag in ("已成案", "已結案"):
+        return "won"
+    if deal_tag == "未成案":
+        return "lost"
+    if status == "已送出" and not deal_tag:
+        return "pending"
+    return "other"
+
+
 @router.get("/api/dashboard/funnel")
 def dashboard_funnel(authorization: str = Header(None)):
     """銷售漏斗：Win Rate + 待追蹤報價（已送出>14天未回應 / 有效期快到期）"""
@@ -603,11 +616,12 @@ def dashboard_funnel(authorization: str = Header(None)):
         status   = r["status"]
         total_submitted += 1
 
-        if deal_tag in ("已成案", "已結案"):
+        kind = classify_quote_funnel(status, deal_tag)
+        if kind == "won":
             won_count += 1
-        elif deal_tag == "未成案":
+        elif kind == "lost":
             lost_count += 1
-        elif status == "已送出" and not deal_tag:
+        elif kind == "pending":
             pending_response += 1
             qdate_str = (r["quote_date"] or "")[:10]
             try:

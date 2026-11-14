@@ -1,5 +1,11 @@
 # 營運分析 更新紀錄
 
+## (next，未取號) — 2026-11-14（feat/t87-b1-be-h8；T87 B1 標準報表後端）
+- 新增 5 張標準報表（營收、毛利、應收帳齡、案件進度、業務漏斗）與共用篩選（期間、業務、客戶、部門；營收另有收入口徑）：`GET /api/std-reports`（目錄與可用性）、`GET /api/std-reports/{id}`（資料）、`GET /api/std-reports/{id}/excel`、`/pdf`（匯出，寫稽核、冷卻、PDF 姊妹）。新檔 `api/std_reports.py`；線上格式由前後端約定（設計文件 B1-reports.md、B1-api-contract.md，T87 設計資料夾）。
+- 金額不重算：營收、毛利取 `_collect()`／收入提供者／`case.recognition`；帳齡取 `_compute_ar_aging` 的實作 `_ar_aging_core`（新增可選的業務、客戶、部門篩選，**不帶參數時輸出與過去逐鍵相同**）；報價漏斗分類抽成 `dashboard.classify_quote_funnel`，首頁漏斗與新報表共用。
+- 權限：營收、毛利、應收帳齡沿用 `_require_reports_access`（不改）。案件進度、業務漏斗是新閘門（PM 2026-11-14 裁示）：不需要「營運報表」模組，只列呼叫者有權限的案件與商機（row_access）；案件進度不含金額；漏斗預估金額依 `can_see_financial`，無權限回 null、Excel 不輸出金額欄。看不到＝null、未填／未精算＝`{state}`，不當作 0。
+- 無 schema 變更、無 migration；既有 `/api/reports/*`、`/api/report-templates/*` 路徑、欄位、權限不變。
+
 ## 1.0.54 — 2026-11-14（train/t86-int；整合者：#11 商機改稱後的儀表板文字）
 - 文字／內部（行為、API、欄位、設定鍵、錯誤碼不變）：儀表板端點（`dashboard.py`）隨 T86 #11 業務開發「案件→商機」改稱與 U7 首頁六段合一（`/api/dashboard/bundle`、ETag/304）調整顯示文字；此條補寫於 T86 整合最後一次合併之後。
 - **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正）**
