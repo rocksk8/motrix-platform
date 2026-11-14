@@ -69,6 +69,9 @@ def test_settlement_shipped_column_says_no_permission_for_non_member_finance(liv
     u, p = make_user(username="mtl_np_stl", role="finance", modules=["case_manage", "cashier", "finance"])[:2]
     _case()
     page = e2e_browser.new_page(viewport={"width": 1440, "height": 1000})
+    # T86 A 之後財務帳號讀得到 item-shipped；仍被拒的是「有模組但非擁有者、也無財務讀取資格」者。本題驗的是前端
+    # 收到 404 時的顯示，故以路由模擬該回應（後端放寬與保留的邊界由 test_t86_finance_af 的 test_a_* 驗）。
+    page.route("**/api/quotations/*/item-shipped", lambda route: route.fulfill(status=404, content_type="application/json", body='{"detail":"x"}'))
     inject_login(page, live_server, u, p)
     page.goto(f"{live_server}/pages/settlement.html?no={NO}")
     page.wait_for_function("() => { const el = document.querySelector('body'); const d = el && el._x_dataStack && el._x_dataStack[0]; return d && d.itemShippedNoPerm === true }", timeout=20000)
