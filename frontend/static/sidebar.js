@@ -199,7 +199,23 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // ── 全域搜尋（跨客戶/供應商/報價單/業務開發案/料號）──────────────────────────
+  // 手機（≤767px）：下拉原本固定 340px、靠搜尋框左緣，右緣會超出畫面（390 寬時右緣在 442px）。
+  // 改成貼齊視窗左右各 8px 的固定位置，每個結果列至少 44px 高（實際畫面；字級縮放 zoom 會連 px 一起縮，所以除回去）。
+  // 樣式是行內的，所以用 !important 蓋；桌機（>767px）完全不受影響，維持 340px。
+  function ensureGlobalSearchCss() {
+    if (document.getElementById('gs-mobile-css')) return
+    var st = document.createElement('style')
+    st.id = 'gs-mobile-css'
+    st.textContent = '@media (max-width:767px){'
+      + '.gs-drop{position:fixed !important;left:8px !important;right:8px !important;width:auto !important;max-width:none !important;'
+      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100vh - var(--topbar-bar-h) - 24px) !important}'
+      + '.gs-item{min-height:calc(44px / var(--fz, 1));display:flex !important;flex-direction:column;justify-content:center}'
+      + '}'
+    document.head.appendChild(st)
+  }
+
   function buildGlobalSearch() {
+    ensureGlobalSearchCss()
     return `
       <div x-data="globalSearchStore()" x-init="init()" style="position:relative;flex:1;max-width:320px;margin:0 14px">
         <div style="position:relative">
@@ -208,7 +224,7 @@ if (typeof module !== 'undefined' && module.exports) {
                  placeholder="搜尋客戶／報價單／案件／料號…"
                  style="width:100%;padding:6px 10px 6px 28px;border:1px solid #333;border-radius:5px;background:#1a1a1a;color:#eee;font-size:12px;outline:none;box-sizing:border-box">
         </div>
-        <div x-show="open" @click.outside="close()" x-cloak
+        <div class="gs-drop" data-testid="gsearch-drop" x-show="open" @click.outside="close()" x-cloak
              style="display:none;position:absolute;top:calc(100% + 6px);left:0;width:340px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;max-height:420px;overflow-y:auto">
           <template x-if="!loading && !hasResults">
             <div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">查無符合結果</div>
@@ -217,7 +233,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">報價單</div>
               <template x-for="item in results.quotations" :key="'quote-'+item.quoteNo">
-                <div @click="goQuotation(item.quoteNo)" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goQuotation(item.quoteNo)" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.quoteNo + '　' + (item.customerName || '—')"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.projectName || item.status || ''"></div>
                 </div>
@@ -228,7 +244,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">業務開發案</div>
               <template x-for="item in results.devCases" :key="'dc-'+item.id">
-                <div @click="goDevCase()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goDevCase()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
                 </div>
@@ -239,7 +255,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">客戶</div>
               <template x-for="item in results.customers" :key="'c-'+item.id">
-                <div @click="goCustomer()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goCustomer()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
@@ -250,7 +266,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">供應商</div>
               <template x-for="item in results.suppliers" :key="'s-'+item.id">
-                <div @click="goSupplier()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goSupplier()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
@@ -261,7 +277,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div>
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">料號</div>
               <template x-for="item in results.parts" :key="'p-'+item.partNo">
-                <div @click="goPart()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goPart()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.partNo + '　' + item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.brand"></div>
                 </div>
