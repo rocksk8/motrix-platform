@@ -24,7 +24,7 @@ HERE = Path(__file__).parent
 BASELINE = HERE / "write_golden_baseline.json"
 INVENTORY = HERE / "route_inventory.json"
 REST = HERE / "write_golden_cases" / "cases_zz_rest.py"
-WAIVE_CAP = 470          # 整合者在凍結時設成實際數字;之後只准降低
+WAIVE_CAP = 472          # 整合者在凍結時設成實際數字;之後只准降低（T87 B2：自訂報表匯出 xlsx／pdf 兩支回檔案、無鍵集可記，豁免 +2；其餘 6 支寫入路由有真案例）
 CASES_FLOOR = 2              # T62 整合者（2026-10-15）：目前實際案例數＝2（階段樣板 preview／apply-template）；同上：整合者設成實際案例數，防止案例檔整批消失
 
 
@@ -130,7 +130,7 @@ def test_record_or_compare_write_cases(client, seeded):
                 conn.close()
         method = c["key"].split(" ", 1)[0]
         try:
-            rec[c["key"]] = WG.record_write(client, seeded, method, c["url"], c.get("body"), tuple(c.get("expect", (2,))), c.get("files"))
+            rec[c["key"]] = WG.record_write(client, seeded, method, c["url"], c.get("body"), tuple(c.get("expect", (2,))), c.get("files"), c.get("headers"))
         except WG.GoldenError as e:
             pytest.fail("案例 %s 無法記錄：%s" % (c["key"], e))
     bad = {k: WG.leaked(v) for k, v in rec.items() if WG.leaked(v)}

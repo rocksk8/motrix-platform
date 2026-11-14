@@ -1,4 +1,11 @@
 {
+ "DELETE /api/custom-reports/{rid}": {
+  "k": [
+   "deleted",
+   "recycled"
+  ],
+  "s": 200
+ },
  "DELETE /api/line/binding": {
   "k": [
    "ok",
@@ -106,6 +113,66 @@
  "POST /api/auth/account-locks/unlock": {
   "k": [
    "ok"
+  ],
+  "s": 200
+ },
+ "POST /api/custom-reports": {
+  "k": [
+   "definition",
+   "definition.columns",
+   "definition.source",
+   "definition.version",
+   "etag",
+   "id",
+   "isOwner",
+   "lastExportedAt",
+   "name",
+   "sharedWith",
+   "sourceId",
+   "updatedAt"
+  ],
+  "s": 201
+ },
+ "POST /api/custom-reports/preview": {
+  "k": [
+   "columns",
+   "columns[].key",
+   "columns[].label",
+   "columns[].type",
+   "hiddenCount",
+   "hiddenFields",
+   "notes",
+   "rows",
+   "rows[].k",
+   "rows[].v",
+   "totalRows",
+   "truncated"
+  ],
+  "s": 200
+ },
+ "POST /api/custom-reports/{rid}/copy": {
+  "k": [
+   "definition",
+   "definition.columns",
+   "definition.source",
+   "definition.version",
+   "etag",
+   "id",
+   "isOwner",
+   "lastExportedAt",
+   "name",
+   "sharedWith",
+   "sourceId",
+   "updatedAt"
+  ],
+  "s": 201
+ },
+ "POST /api/custom-reports/{rid}/shares": {
+  "k": [
+   "added",
+   "removed",
+   "shared",
+   "sharingEnabled"
   ],
   "s": 200
  },
@@ -710,6 +777,23 @@
    "prefs.home_page",
    "prefs.login_greeting",
    "prefs.theme"
+  ],
+  "s": 200
+ },
+ "PUT /api/custom-reports/{rid}": {
+  "k": [
+   "definition",
+   "definition.columns",
+   "definition.source",
+   "definition.version",
+   "etag",
+   "id",
+   "isOwner",
+   "lastExportedAt",
+   "name",
+   "sharedWith",
+   "sourceId",
+   "updatedAt"
   ],
   "s": 200
  },

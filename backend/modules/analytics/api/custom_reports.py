@@ -86,7 +86,8 @@ def _check_rate(user_id, hits=None, limit=PREVIEW_PER_MINUTE, what="預覽") -> 
         q.append(now)
 
 
-def _gate(authorization):
+def _require_view(authorization):
+    """登入＋功能開關＋使用能力（analytics.custom_report.view）；每支端點的第一道守門。刪除另在 store 驗擁有者（只有自己的報表）。"""
     user = _require_user(authorization)
     conn = get_db()
     try:
@@ -140,7 +141,7 @@ def _source_json(sid, user, conn):
 
 @router.get("/api/custom-reports/sources")
 def list_sources(authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         return {"sources": [_source_json(sid, user, conn) for sid in RC.sources_for(user)],
@@ -153,7 +154,7 @@ def list_sources(authorization: str = Header(None)):
 
 @router.post("/api/custom-reports/preview")
 def preview(definition=Body(...), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     _check_rate(user["id"])
     _run_slot()
     try:
@@ -191,7 +192,7 @@ def _audit_shares(authorization, rid, added, removed):
 
 @router.get("/api/custom-reports")
 def list_reports(authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         return {"mine": ST.list_mine(conn, user), "shared": ST.list_shared(conn, user), "sharingEnabled": RP.sharing_enabled(conn),
@@ -202,7 +203,7 @@ def list_reports(authorization: str = Header(None)):
 
 @router.post("/api/custom-reports", status_code=201)
 def create_report(body: dict = Body(...), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         if set(body) - {"name", "definition"}:
@@ -224,7 +225,7 @@ def create_report(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.get("/api/custom-reports/share-targets")
 def share_targets(q: str = Query("", max_length=80), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     _check_rate(user["id"], _target_hits, SHARE_TARGETS_PER_MINUTE, "查詢同事")        # 每人每分鐘 20 次（行程內滑動視窗；前端防抖動不是伺服器端的保險）
     conn = get_db()
     try:
@@ -238,7 +239,7 @@ def share_targets(q: str = Query("", max_length=80), authorization: str = Header
 
 @router.get("/api/custom-reports/{rid}")
 def get_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         try:
@@ -251,7 +252,7 @@ def get_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = He
 
 @router.put("/api/custom-reports/{rid}")
 def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(...), if_match: Optional[str] = Header(None), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         try:
@@ -271,7 +272,7 @@ def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(..
 
 @router.delete("/api/custom-reports/{rid}")
 def delete_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         try:
@@ -279,7 +280,7 @@ def delete_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str =
         except ST.StoreError as e:
             raise _store_http(e)
         after = out.pop("after_commit", None)
-        _audit_report(authorization, "custom_reports.delete", "刪除自訂報表" + ("（進刪除暫存區）" if out["recycled"] else ""), rid)
+        _audit_report(authorization, "custom_reports.delete", "刪除自訂報表" + ("（進資源回收筒）" if out["recycled"] else ""), rid)
         if after:
             after()
         return out
@@ -289,7 +290,7 @@ def delete_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str =
 
 @router.get("/api/custom-reports/{rid}/shares")
 def get_shares(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         try:
@@ -302,7 +303,7 @@ def get_shares(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = He
 
 @router.post("/api/custom-reports/{rid}/shares")
 def change_shares(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(...), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     if set(body) - {"add", "remove"}:
         raise HTTPException(422, {"message": "分享對象格式不正確。"})
     conn = get_db()
@@ -322,7 +323,7 @@ def change_shares(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(..
 
 @router.post("/api/custom-reports/{rid}/copy", status_code=201)
 def copy_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     conn = get_db()
     try:
         try:
@@ -354,24 +355,24 @@ def _build_xlsx(name, source_label, user, res, conds, now) -> bytes:
     ws = wb.active
     ws.title = "報表"
 
-    def put(sheet, r, c, v, **kw):
+    def _cell(sheet, r, c, v, bold=False, size=9):          # 關鍵字明列（案件摘要用途守門：不用 ** 展開）
         cell = sheet.cell(row=r, column=c, value=xl_safe_xlsx(v))
-        cell.font = f(**kw)
+        cell.font = f(bold=bold, size=size)
         return cell
-    put(ws, 1, 1, "%s　MOTRIX PLATFORM" % name, bold=True, size=12)
-    put(ws, 2, 1, "條件：" + ("；".join(conds) if conds else "（無）"), size=9)
-    put(ws, 3, 1, "產製者：%s　產製時間：%s" % (user.get("display_name") or user.get("username") or "", now), size=9)
+    _cell(ws, 1, 1, "%s　MOTRIX PLATFORM" % name, bold=True, size=12)
+    _cell(ws, 2, 1, "條件：" + ("；".join(conds) if conds else "（無）"), size=9)
+    _cell(ws, 3, 1, "產製者：%s　產製時間：%s" % (user.get("display_name") or user.get("username") or "", now), size=9)
     cols = res["columns"]
     head = PatternFill("solid", fgColor="E5E7EB")
     for ci, c in enumerate(cols, 1):
-        cell = put(ws, 5, ci, c["label"], bold=True, size=10)
+        cell = _cell(ws, 5, ci, c["label"], bold=True, size=10)
         cell.fill = head
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     band = PatternFill("solid", fgColor="F3F4F6")
     for ri, row in enumerate(res["rows"], 6):
         strong = row["k"] != "row"
         for ci, (c, v) in enumerate(zip(cols, row["v"]), 1):
-            cell = put(ws, ri, ci, v, bold=strong, size=10)
+            cell = _cell(ws, ri, ci, v, bold=strong, size=10)
             if strong:
                 cell.fill = band
             if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -387,8 +388,8 @@ def _build_xlsx(name, source_label, user, res, conds, now) -> bytes:
     info = [("資料來源", source_label), ("列數", sum(1 for r in res["rows"] if r["k"] == "row")), ("已隱藏欄位數", res["hiddenCount"]),
             ("資料截至", now)] + [("說明", n) for n in res["notes"]]
     for i, (k, v) in enumerate(info, 1):
-        put(w2, i, 1, k, bold=True, size=10)
-        put(w2, i, 2, v, size=10)
+        _cell(w2, i, 1, k, bold=True, size=10)
+        _cell(w2, i, 2, v, size=10)
     w2.column_dimensions["A"].width = 16
     w2.column_dimensions["B"].width = 60
     buf = io.BytesIO()
@@ -396,10 +397,13 @@ def _build_xlsx(name, source_label, user, res, conds, now) -> bytes:
     return buf.getvalue()
 
 
+_EXPORT_AREA = "analytics"            # 匯出稽核的區域標籤（不是權限鍵；與 report_templates／std_reports 同寫法）
+
+
 @router.post("/api/custom-reports/{rid}/export")
 @export_logged("xlsx", "analytics", "custom_report")
 def export_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
-    user = _gate(authorization)
+    user = _require_view(authorization)
     _perm.require(user, CAP_EXPORT)
     conn = get_db()
     try:
@@ -438,5 +442,5 @@ def export_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str =
     return Response(content=data, media_type=XLSX_MEDIA, headers={"Content-Disposition": download_name.content_disposition(fname)})
 
 
-add_pdf_sibling(router, "/api/custom-reports/{rid}/export-pdf", export_report, module="analytics", name="custom_report",
+add_pdf_sibling(router, "/api/custom-reports/{rid}/export-pdf", export_report, module=_EXPORT_AREA, name="custom_report",
                 title="自訂報表", method="POST")

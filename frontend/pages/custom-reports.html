@@ -94,7 +94,7 @@
     .cr-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #111; color: #fff; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; max-width: 90vw; z-index: 20; opacity: 0; pointer-events: none; }
     .cr-toast.show { opacity: 1; }
     /* 全站 reset 有 margin:0，會讓 showModal 的對話框貼在左上角（失去 margin:auto 置中）；--bg 在本站沒有定義，背景要用 --white */
-    dialog { margin: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; max-width: 560px; width: 92vw; max-height: 90vh; overflow-y: auto; background: var(--white); color: var(--text-primary); }
+    dialog { margin: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; max-width: 560px; width: 92vw; max-height: calc(90vh / var(--fz,1)); overflow-y: auto; background: var(--white); color: var(--text-primary); }
     dialog::backdrop { background: rgba(0, 0, 0, .35); }
     dialog h3 { margin: 0 0 8px; font-size: 16px; }
     dialog .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }

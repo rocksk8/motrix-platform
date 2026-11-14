@@ -48,10 +48,11 @@ def on(client):
     _set_flag(client, 1)
 
 
-def _audit_count():
+def _audit_count(username):
+    """只數這位使用者自己的稽核列（不讀全域；別的測試寫的列不影響）。"""
     c = get_db()
     try:
-        return c.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        return c.execute("SELECT COUNT(*) FROM audit_log WHERE username = ?", (username,)).fetchone()[0]
     finally:
         c.close()
 
@@ -155,10 +156,10 @@ def test_can_export_follows_both_the_capability_and_the_policy(client, make_user
 
 def test_preview_returns_rows_and_writes_no_audit(client, make_user, on):
     h = _login(client, make_user, "cra_sa3", "superadmin")
-    before = _audit_count()
+    before = _audit_count("cra_sa3")
     r = client.post(BASE + "/preview", json=_q(), headers=h)
     assert r.status_code == 200 and {"columns", "rows", "totalRows", "truncated", "hiddenFields", "hiddenCount"} <= set(r.json())
-    assert _audit_count() == before
+    assert _audit_count("cra_sa3") == before
 
 
 def test_refusals_use_a_fixed_message_shape_and_never_echo_values(client, make_user, on):
