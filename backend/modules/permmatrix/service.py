@@ -408,6 +408,114 @@ def set_role_cap(conn, actor, role, cap, granted, reason=""):
     return {"ok": True, "changed": True, "version": vid}
 
 
+# ── 角色格：暫存區批次（設定矩陣 S4c；先在畫面上勾好一批、再一次預覽、一次確認）─────────────────────────────────────
+BATCH_MAX = 200
+
+
+def _parse_batch(changes):
+    """`[{role, cap, granted}]` ⇒ 正規化清單；空的、重複的格子、型別不對 ⇒ PermError（不替人猜）。"""
+    if not isinstance(changes, list) or not changes:
+        raise PermError("請至少勾選一格要調整的項目")
+    if len(changes) > BATCH_MAX:
+        raise PermError("一次最多調整 %d 格" % BATCH_MAX)
+    out, seen = [], set()
+    for ch in changes:
+        if not isinstance(ch, dict) or not isinstance(ch.get("role"), str) or not isinstance(ch.get("cap"), str) or not isinstance(ch.get("granted"), bool):
+            raise PermError("調整內容格式不正確（需要 role、cap、granted）")
+        k = (ch["role"], ch["cap"])
+        if k in seen:
+            raise PermError("同一格出現兩次：%s／%s" % k)
+        seen.add(k)
+        out.append({"role": ch["role"], "cap": ch["cap"], "granted": ch["granted"]})
+    return out
+
+
+def _batch_cell(conn, ch):
+    """一格的現況與去向（預覽與套用共用，**同一支函式**）。
+    status：`nochange`（已經是這個狀態）｜`immediate`（立即生效）｜`pending`（放寬高風險：確認期間＋第二位最高管理者核准）。"""
+    from helpers import perm_text as T
+    c = _cap_or_err(ch["cap"])
+    if ch["role"] not in _roles():
+        raise PermError("角色不存在或不可調整：%s" % ch["role"])
+    seeded = ch["cap"] in P.seed_from_legacy(CAP.all_caps()).role_grants.get(ch["role"], ())
+    if ch["granted"] and not seeded and not c.delegable:
+        raise PermError("「%s」不可委派（僅最高管理者）" % c.label)
+    cur = conn.execute("SELECT granted FROM perm_role_caps WHERE role=? AND cap=?", (ch["role"], ch["cap"])).fetchone()
+    now_has = seeded if cur is None else bool(cur["granted"])
+    delay = ch["granted"] and c.risk == "high" and now_has != ch["granted"]
+    status = "nochange" if now_has == ch["granted"] else ("pending" if delay else "immediate")
+    return {"role": ch["role"], "cap": ch["cap"], "granted": ch["granted"], "label": c.label, "roleLabel": T.role_label(ch["role"]), "seeded": seeded,
+            "nowHas": now_has, "status": status, "risk": c.risk}
+
+
+def _batch_plan(conn, changes):
+    import hashlib
+    cells = [_batch_cell(conn, ch) for ch in _parse_batch(changes)]
+    users = {}
+    for x in cells:
+        if x["status"] != "nochange" and x["role"] not in users:
+            users[x["role"]] = conn.execute("SELECT COUNT(*) FROM users WHERE role=? AND active=1", (x["role"],)).fetchone()[0]
+    digest = hashlib.sha256(json.dumps([[x["role"], x["cap"], x["granted"], x["nowHas"], x["status"]] for x in cells], ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+    cnt = {k: sum(1 for x in cells if x["status"] == k) for k in ("immediate", "pending", "nochange")}
+    return {"cells": cells, "planHash": digest, "needsReason": cnt["pending"] > 0, "usersAffected": sum(users.values()),
+            "summary": {"changed": cnt["immediate"] + cnt["pending"], "immediate": cnt["immediate"], "pending": cnt["pending"], "unchanged": cnt["nochange"]}}
+
+
+def _batch_public(plan):
+    return {"cells": [{k: v for k, v in x.items() if k != "seeded"} for x in plan["cells"]], "planHash": plan["planHash"], "needsReason": plan["needsReason"],
+            "usersAffected": plan["usersAffected"], "summary": plan["summary"],
+            "reversibleText": "立即生效的部分可用「一鍵復原上一次調整」整批還原；等確認期間的項目在待生效清單可撤銷"}
+
+
+def preview_role_caps_batch(conn, changes):
+    """批次預覽（唯讀）：每格現況與去向、哪些要等確認期間＋核准、要不要原因、`planHash`。"""
+    out = _batch_public(_batch_plan(conn, changes))
+    out["confirmDays"] = _confirm_days(conn)
+    return out
+
+
+def set_role_caps_batch(conn, actor, changes, reason="", plan_hash=""):
+    """整批同一個寫入交易：重算計畫，`planHash` 與預覽不同 ⇒ 409；有放寬高風險格 ⇒ 原因必填（同單格規則）；
+    立即生效的格合併成**一個**版本（`一鍵復原上一次調整`＝整批還原）；每格各一筆稽核（與資料同交易）；等確認期間的格各進待生效。"""
+    _need_super(actor)
+    if not isinstance(plan_hash, str) or not plan_hash:
+        raise PermError("套用要帶預覽的 planHash（請先預覽再套用）")
+    begin_write(conn)
+    try:
+        plan = _batch_plan(conn, changes)
+        if plan_hash != plan["planHash"]:
+            raise PermError("權限在預覽之後有變動，請重新預覽再套用", 409)
+        if plan["needsReason"]:
+            _require_reason(reason)
+        applied, pending, notices = [], [], []
+        for x in plan["cells"]:
+            if x["status"] == "immediate":
+                _write_role_cell(conn, actor, x["role"], x["cap"], x["granted"], x["seeded"], reason)
+                applied.append(x)
+            elif x["status"] == "pending":
+                label = "%s 角色：%s %s" % (x["role"], x["label"], "勾選" if x["granted"] else "取消")
+                res, n = _request_pending(conn, actor, "role_cap", "%s:%s" % (x["role"], x["cap"]), {"granted": x["nowHas"]},
+                                          {"role": x["role"], "cap": x["cap"], "granted": True}, reason, label)
+                pending.append({"role": x["role"], "cap": x["cap"], "id": res["id"], "effectiveAt": res["effectiveAt"],
+                                "approvalsRequired": res["approvalsRequired"], "warnings": res["warnings"]})
+                notices.extend(n)
+        vid = _version(conn, actor, "role_cap.batch", reason) if applied else None
+        for x in applied:
+            label = "%s 角色：%s %s" % (x["role"], x["label"], "勾選" if x["granted"] else "取消")
+            _audit_tx(conn, actor, "permmatrix.role_cap.set", "perm_role_cap", "%s:%s" % (x["role"], x["cap"]), label,
+                      {"role": x["role"], "cap": x["cap"], "old": x["nowHas"], "new": x["granted"], "reason": reason, "version": vid, "batch": True})
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    _send(notices)
+    if applied:
+        P.invalidate()
+    out = _batch_public(plan)
+    out.update(ok=True, version=vid, applied=[{"role": x["role"], "cap": x["cap"]} for x in applied], pending=pending)
+    return out
+
+
 # ── 個人覆寫 ───────────────────────────────────────────────────────────────────────
 def _target_user(conn, user_id):
     r = conn.execute("SELECT id, username, role FROM users WHERE id=? AND active=1", (int(user_id),)).fetchone()

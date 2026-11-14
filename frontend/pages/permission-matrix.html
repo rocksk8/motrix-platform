@@ -42,6 +42,12 @@
     .pm-tag.off { background: #e5e7eb; color: var(--text-secondary); }
     .pm-sub { color: var(--text-secondary); font-size: 12px; }
     .pm-chg { color: #6d28d9; font-size: 12px; }
+    .pm-stg { color: #b45309; font-size: 12px; font-weight: 600; }
+    .pm-stagebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: var(--topbar-h); z-index: 5; padding: 10px 12px; margin: 10px 0; border: 1px solid #f59e0b; border-radius: var(--radius); background: #fffbeb; font-size: 13px; }
+    .pm-colbtns { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+    .pm-mini { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; font-weight: 400; }
+    .pm-mini[disabled] { opacity: .5; cursor: default; }
+    @media (max-width: 767px) { .pm-colbtns { display: none; } .pm-stagebar { top: 0; } }
     select.pm-sel { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: #fff; }
     @media (max-width: 900px) { .pm-main { margin-left: 0; padding: 16px; } .pm-scroll { overflow-x: auto; } }
 
@@ -110,7 +116,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">權限設定</h1>
-          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選前會先說明會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
+          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選的格子會先暫存在畫面上（還沒有儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
         </div>
       </div>
 
@@ -124,12 +130,20 @@
       </div>
 
       <section x-show="tab === 'matrix'" data-testid="pm-matrix">
+        <div class="pm-stagebar" x-show="stageCount()" data-testid="pm-stagebar">
+          <b x-text="'已暫存 ' + stageCount() + ' 格（還沒有儲存）'" data-testid="pm-stage-count"></b>
+          <span class="pm-sub">標「待套用」的格子是你剛勾的；按「預覽並套用」才會看到影響並儲存。</span>
+          <span style="flex:1"></span>
+          <button class="pm-btn pri" :disabled="busy" data-testid="pm-stage-preview" @click="previewStage()">預覽並套用</button>
+          <button class="pm-btn" :disabled="busy" data-testid="pm-stage-clear" @click="clearStage()">全部放棄</button>
+        </div>
         <div class="pm-note" x-show="m && !m.caps.length" data-testid="pm-empty">目前尚無任何功能宣告可調整的權限項目；各功能接入後會出現在這裡。</div>
         <div class="pm-sub" x-show="m && m.caps.length">最高管理者具備所有權限，不列在表中。標「已調整」的格子與預設不同。標「未接入」的項目尚未實際生效，暫時無法勾選。</div>
         <template x-for="g in groups()" :key="g.name">
           <div class="pm-scroll">
             <table class="pm-t pm-mt" style="margin-top:12px">
-              <thead><tr><th x-text="g.name"></th><template x-for="r in m.roles" :key="r.role"><th class="c" x-text="r.label"></th></template></tr></thead>
+              <thead><tr><th x-text="g.name"></th><template x-for="r in m.roles" :key="r.role"><th class="c"><span x-text="r.label"></span>
+                <div class="pm-colbtns"><button type="button" class="pm-mini" :disabled="busy" :data-testid="'pm-col-on-' + g.name + '-' + r.role" title="這一組全部勾起來（只動已接入的格子）" @click="stageGroupRole(g, r, true)">全勾</button><button type="button" class="pm-mini" :disabled="busy" :data-testid="'pm-col-off-' + g.name + '-' + r.role" title="這一組全部取消勾選" @click="stageGroupRole(g, r, false)">全清</button></div></th></template></tr></thead>
               <tbody>
                 <template x-for="c in g.caps" :key="c.key">
                   <tr :data-testid="'pm-row-' + c.key">
@@ -141,9 +155,10 @@
                     </td>
                     <template x-for="r in m.roles" :key="r.role">
                       <td class="c">
-                        <label class="pm-cell"><input type="checkbox" :checked="c.cells[r.role].granted" :disabled="!c.wired || busy" :data-testid="'pm-cell-' + c.key + '-' + r.role"
-                               :title="c.wired ? '' : '這個項目尚未接入，暫時不能調整'" @click.prevent="askRole(c, r, !c.cells[r.role].granted)"><span class="pm-cell-t" x-text="r.label"></span></label>
-                        <div class="pm-chg" x-show="c.cells[r.role].changed">已調整</div>
+                        <label class="pm-cell"><input type="checkbox" :checked="stagedValue(c, r)" :disabled="!c.wired || busy" :data-testid="'pm-cell-' + c.key + '-' + r.role"
+                               :title="c.wired ? '' : '這個項目尚未接入，暫時不能調整'" @click.prevent="toggleStage(c, r)"><span class="pm-cell-t" x-text="r.label"></span></label>
+                        <div class="pm-stg" x-show="isStaged(c, r)" :data-testid="'pm-staged-' + c.key + '-' + r.role">待套用</div>
+                        <div class="pm-chg" x-show="c.cells[r.role].changed && !isStaged(c, r)">已調整</div>
                       </td>
                     </template>
                   </tr>
@@ -224,6 +239,35 @@
     </div>
   </main>
 
+  <!-- 暫存區批次：預覽視窗（逐格列出：立即生效／要等確認期間並需核准／沒有變化；有放寬高風險格時原因必填；預覽之前沒有寫入任何東西） -->
+  <div class="pm-modal" x-show="bdlg" data-testid="pm-batch-dialog" @keydown.escape.window="bdlg = null">
+    <div x-show="bdlg">
+      <h3>確認這一批權限調整</h3>
+      <p data-testid="pm-batch-summary" x-text="batchSummary()"></p>
+      <div class="pm-sub" x-text="bdlg && bdlg.usersAffected ? '約影響 ' + bdlg.usersAffected + ' 位使用者' : ''"></div>
+      <div class="pm-note" x-show="bdlg && bdlg.summary.pending" data-testid="pm-batch-pending-note"
+           x-text="'其中 ' + (bdlg ? bdlg.summary.pending : 0) + ' 格是放寬高風險項目：要等 ' + (bdlg ? bdlg.confirmDays : '') + ' 天確認期間後才會生效，需要另一位最高管理者核准（只有一位最高管理者時改為填原因並等待）。'"></div>
+      <div style="max-height:calc(40vh / var(--fz,1));overflow:auto;margin-top:8px">
+        <template x-for="x in (bdlg ? bdlg.cells : [])" :key="x.role + x.cap">
+          <div style="border-top:1px solid var(--border-light);padding:6px 0;font-size:13px" :data-testid="'pm-batch-line-' + x.cap + '-' + x.role">
+            <b x-text="x.roleLabel + '／' + x.label"></b>
+            <span x-text="'：' + (x.granted ? '勾選' : '取消') + '　' + batchStatusText(x)"></span>
+          </div>
+        </template>
+      </div>
+      <div class="pm-sub" style="margin-top:8px" x-text="bdlg && bdlg.reversibleText"></div>
+      <label x-show="bdlg && bdlg.needsReason" style="display:block;margin-top:10px">
+        <span>原因（有放寬高風險項目，必填；至少 4 個不同的字）</span>
+        <textarea rows="2" x-model="reason" data-testid="pm-batch-reason"></textarea>
+      </label>
+      <div class="pm-err" x-show="berr" x-text="berr" data-testid="pm-batch-error"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="pm-btn" @click="bdlg = null" data-testid="pm-batch-cancel">取消</button>
+        <button class="pm-btn pri" :disabled="busy || !(bdlg && bdlg.summary.changed)" data-testid="pm-batch-apply" @click="applyStage()">確定儲存</button>
+      </div>
+    </div>
+  </div>
+
   <div class="pm-modal" x-show="dlg" data-testid="pm-dialog" @keydown.escape.window="dlg = null">
     <div x-show="dlg">
       <h3 x-text="dlg && dlg.title"></h3>
@@ -248,7 +292,7 @@
     function permMatrixPage() {
       return {
         _initDone: false,
-        tab: 'matrix', err: '', msg: '', busy: false, dlg: null, reason: '', ov: { cap: '', effect: 'allow' }, m: null, users: [], uid: '', eff: null, pending: [], versions: [],
+        tab: 'matrix', err: '', msg: '', busy: false, dlg: null, stage: {}, bdlg: null, berr: '', reason: '', ov: { cap: '', effect: 'allow' }, m: null, users: [], uid: '', eff: null, pending: [], versions: [],
         tabs: [{ id: 'matrix', label: '角色與功能' }, { id: 'effective', label: '個人' }, { id: 'pending', label: '待生效' }, { id: 'versions', label: '調整紀錄' }],
         _hdr() {
           let s = {}
@@ -264,6 +308,8 @@
         init() {
           if (this._initDone) return
           this._initDone = true
+          // 暫存區還有沒套用的勾選就離開頁面 ⇒ 瀏覽器先問（不會悄悄遺失）
+          window.addEventListener('beforeunload', (e) => { if (this.stageCount()) { e.preventDefault(); e.returnValue = '' } })
           this.go('matrix')
         },
         async go(t) {
@@ -315,14 +361,48 @@
           await this.go(this.tab)
           if (this.tab === 'effective' && this.uid) await this.loadEffective()
         },
-        async askRole(c, r, granted) {
-          this.err = ''; this.msg = ''
+        // ── 暫存區（設定矩陣 S4c）：點格子只是「暫存」；預覽與儲存都在按鈕之後，伺服器一次算好每一格的去向 ──
+        _sk(c, r) { return r.role + '|' + c.key },
+        isStaged(c, r) { return (this._sk(c, r)) in this.stage },
+        stagedValue(c, r) { const k = this._sk(c, r); return k in this.stage ? this.stage[k].granted : c.cells[r.role].granted },
+        stageCount() { return Object.keys(this.stage).length },
+        _setStage(c, r, granted) {
+          const k = this._sk(c, r), next = Object.assign({}, this.stage)
+          if (granted === c.cells[r.role].granted) delete next[k]
+          else next[k] = { role: r.role, cap: c.key, granted }
+          this.stage = next
+        },
+        toggleStage(c, r) { if (!c.wired || this.busy) return; this.err = ''; this.msg = ''; this._setStage(c, r, !this.stagedValue(c, r)) },
+        stageGroupRole(g, r, on) { for (const c of g.caps) if (c.wired) this._setStage(c, r, on) },
+        clearStage() { this.stage = {}; this.bdlg = null },
+        stageBody() { return { changes: Object.values(this.stage).map(x => ({ role: x.role, cap: x.cap, granted: x.granted })) } },
+        async previewStage() {
+          this.err = ''; this.msg = ''; this.berr = ''
+          if (!this.stageCount()) return
+          this.busy = true
           try {
-            const body = { role: r.role, cap: c.key, granted }
-            const pv = await this._post('/api/permmatrix/role-cap/preview', body)
-            if (!pv.changed) { this.msg = '沒有變更（已經是這個狀態）。'; return }
-            this._open('確認調整：' + r.label + '／' + c.label, pv, (reason) => this._post('/api/permmatrix/role-cap', Object.assign({ reason }, body)))
-          } catch (e) { this.err = String(e.message || e) }
+            this.reason = ''
+            this.bdlg = await this._post('/api/permmatrix/role-cap/batch/preview', this.stageBody())
+          } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
+        },
+        batchSummary() {
+          const s = this.bdlg && this.bdlg.summary
+          return s ? ('立即生效 ' + s.immediate + ' 格、要等確認期間 ' + s.pending + ' 格、沒有變化 ' + s.unchanged + ' 格') : ''
+        },
+        batchStatusText(x) {
+          return x.status === 'pending' ? '要等確認期間並經核准後生效' : (x.status === 'nochange' ? '已經是這個狀態，不變' : '儲存後立即生效')
+        },
+        async applyStage() {
+          const d = this.bdlg
+          if (!d || this.busy) return
+          if (d.needsReason && this.reason.trim().length < 2) { this.berr = '請填寫原因'; return }
+          this.busy = true; this.berr = ''
+          try {
+            const r = await this._post('/api/permmatrix/role-cap/batch', Object.assign(this.stageBody(), { reason: this.reason.trim(), planHash: d.planHash }))
+            this.bdlg = null; this.stage = {}
+            this.msg = '已儲存：立即生效 ' + r.applied.length + ' 格' + (r.pending.length ? '；' + r.pending.length + ' 格要等確認期間後才會生效，需要另一位最高管理者核准' : '') + '。'
+            await this.reloadAll()
+          } catch (e) { this.berr = String(e.message || e) } finally { this.busy = false }
         },
         async askUser() {
           this.err = ''; this.msg = ''

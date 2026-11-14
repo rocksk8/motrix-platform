@@ -77,6 +77,12 @@ class RoleCapIn(BaseModel):
     reason: str = ""
 
 
+class RoleCapBatchIn(BaseModel):
+    changes: list
+    reason: str = ""
+    planHash: str = ""
+
+
 class UserOverrideIn(BaseModel):
     user_id: StrictInt
     cap: str
@@ -98,6 +104,20 @@ def permmatrix_role_cap_preview(body: RoleCapIn, authorization: str = Header(Non
 def permmatrix_role_cap(body: RoleCapIn, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     return _run(lambda c: S.set_role_cap(c, actor, body.role, body.cap, body.granted, body.reason))
+
+
+@router.post("/api/permmatrix/role-cap/batch/preview")
+def permmatrix_role_cap_batch_preview(body: RoleCapBatchIn, authorization: str = Header(None)):
+    """暫存區批次預覽（唯讀；設定矩陣 S4c）：一次列出每一格的去向與要不要原因。"""
+    _require_user(authorization, require_superadmin=True)
+    return _run(lambda c: S.preview_role_caps_batch(c, body.changes))
+
+
+@router.post("/api/permmatrix/role-cap/batch")
+def permmatrix_role_cap_batch(body: RoleCapBatchIn, authorization: str = Header(None)):
+    """暫存區批次套用：整批同一個交易；`planHash` 過期 ⇒ 409；放寬高風險格各自進待生效。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    return _run(lambda c: S.set_role_caps_batch(c, actor, body.changes, body.reason, body.planHash))
 
 
 @router.post("/api/permmatrix/user-override/preview")
