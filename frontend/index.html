@@ -419,7 +419,8 @@
     .h-short__t { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14.5px; font-weight: 700; color: var(--text-primary); }
     .h-short__n { font-family: var(--font-en); font-size: 12px; font-weight: 600; min-width: 20px; text-align: center; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; }
     .h-short__p { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    @media (max-width: 640px) { .h-short { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .h-short__a:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (max-width: 640px) { .h-short { grid-template-columns: repeat(2, minmax(0, 1fr)); } .h-short__p { white-space: normal; } }
     .h-band { background: #2A2A2A; color: #F5F4F0; }
     .h-band__g { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
     .h-band__c { display: block; padding: clamp(20px, 2.6vw, 30px) clamp(18px, 2.2vw, 28px); border-left: 1px solid rgba(245,244,240,.14); text-decoration: none; color: inherit; transition: background .22s var(--v4-ease); }
