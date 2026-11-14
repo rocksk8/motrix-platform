@@ -80,7 +80,7 @@
         <div>
           <div class="ls-bar">
             <input class="ls-input" type="search" x-model="q" placeholder="搜尋代號或名稱…" data-testid="ls-search">
-            <label class="ls-note" style="margin:0"><input type="checkbox" x-model="onlyProblems" data-testid="ls-only-problems"> 僅顯示有問題的</label>
+            <label class="ls-note" style="margin:0"><input type="checkbox" x-model="onlyProblems" data-testid="ls-only-problems"> 僅顯示待處理項目</label>
             <span class="ls-note" style="margin:0" x-text="'共 ' + matchCount + ' 筆' + (matchCount > 300 ? '（只顯示前 300 筆，請縮小搜尋）' : '')"></span>
           </div>
           <table class="ls-table m-scroll m-sticky" data-testid="ls-accounts-table">

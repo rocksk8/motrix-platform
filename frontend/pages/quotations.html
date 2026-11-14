@@ -812,7 +812,7 @@
       get mineNote() {
         if (!this.onlyMine || this.showAll || this.focus || this.search.trim() || this.loading) return ''
         if (!this.mineOk) return '暫時無法判斷哪些是您負責的，先顯示全部'
-        return this.mineSet.size === 0 ? '您目前沒有負責的報價，先顯示全部' : ''
+        return this.mineSet.size === 0 ? '您尚無負責的報價，先顯示全部' : ''
       },
       // 清除條件後（暫時看全部）再按一下＝回到記住的「只看我負責的」，不改寫記住的選擇；其餘情況才是明確切換（會記住）
       toggleMine() {
