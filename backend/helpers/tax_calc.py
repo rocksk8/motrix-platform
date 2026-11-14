@@ -14,12 +14,59 @@ L1（pdf_gen）、M05（出納、開票申請）、M08（報表、儀表板）�
 #: L1 公開介面的底線名稱（b-g1 的 G1 顯式宣告）：`_invoice_amount` 被 M01 `helpers/quotations.validate_invoice_amounts` 使用
 __l1_public__ = ("_invoice_amount",)
 
+import logging
+import math
+
 from fastapi import HTTPException
 
 from helpers.legal_params import round_half_up
 
 __all__ = ["TAX_TYPES", "TAX_TYPE_LABELS", "LEGAL_TAX_RATE", "LEGACY_TAX_NOTE",
            "quote_tax_type", "tax_split", "invoice_amounts", "payment_item_amounts"]
+
+_log = logging.getLogger(__name__)
+
+#: （私有：L1 公開介面不外露——analytics 在 `reports.py` 有同規則的副本，`test_ar_dirty_payment_amounts` 比對兩邊一致）
+#: `_parse_money` 的「填了但不是有限數字」標記（例如 "5x00"、NaN、inf、True）。
+_MONEY_BAD = object()
+
+
+def _parse_money(v):
+    """款項欄位的防禦性轉換（T87 修：款項金額是字串 "5x00" 時整張報表 TypeError 500）。
+    ⇒ 數字（int／float；數字字串 "5000"、"1,250.5" 轉成數字）、`None`（沒填／空白）、或 `_MONEY_BAD`（填了但不是有限數字）。
+    乾淨的數字原樣回傳同一個物件（既有計算結果不變）。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, bool):
+        return _MONEY_BAD
+    if isinstance(v, (int, float)):
+        return v if math.isfinite(v) else _MONEY_BAD
+    if isinstance(v, str):
+        try:
+            f = float(v.strip().replace(",", ""))
+        except ValueError:
+            return _MONEY_BAD
+        if not math.isfinite(f):
+            return _MONEY_BAD
+        return int(f) if f.is_integer() else f
+    return _MONEY_BAD
+
+
+def _amount_unknown(pi) -> bool:
+    """這筆款項的應收金額算不出來？＝不是物件；或金額填了但不是數字；或沒填金額、又用比例反推而比例壞掉。
+    （金額有效時，比例／手續費壞掉不影響金額；`payment_item_amounts` 與報表的略過規則共用這個判斷。）"""
+    if not isinstance(pi, dict):
+        return True
+    a = _parse_money(pi.get("amount")) if "amount" in pi else None
+    if a is _MONEY_BAD:
+        return True
+    return a is None and "pct" in pi and _parse_money(pi.get("pct")) is _MONEY_BAD
+
+
+def _money(v, default=0):
+    """`_parse_money` 的簡化版：沒填或壞掉 ⇒ `default`（預設 0）。給「讀手續費這類欄位再相加」的地方用。"""
+    n = _parse_money(v)
+    return default if n is None or n is _MONEY_BAD else n
 
 #: 報價稅別。`legacy` 不是可選的稅別，是「已停用的 1～4%」舊單的讀取結果。
 TAX_TYPES = ("taxable", "zero", "exempt")
@@ -124,8 +171,9 @@ def receipt_amounts(receivable: float, actual, fee) -> tuple:
     損益＝`gross − fee(列費用) − 其他支出`＝`bank − 其他支出`，與銀行帳一致。
     歷史資料不改，只改計算。
     """
-    fee = float(fee or 0)
-    bank = float(actual) if actual is not None else float(receivable or 0) - fee
+    fee = float(_money(fee))                                   # 壞掉／沒填 ⇒ 0（T87 修：髒資料不丟例外）
+    actual = _parse_money(actual)
+    bank = float(actual) if actual is not None and actual is not _MONEY_BAD else float(_money(receivable)) - fee
     return bank, bank + fee, fee
 
 
@@ -172,6 +220,9 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
     _collect_tax_invoices() 呼叫點的說明）。"""
     if not pay_items:
         return []
+    # 髒資料防線（T87 修）：金額／比例不是數字 ⇒ 該筆當 0 算並記 warning，不丟例外（呼叫端各自有報表，不能因一筆壞資料整張 500）。
+    # 乾淨資料不複製、不改值，結果與過去逐位相同。
+    total, pretax, pay_items = _sanitize_for_amounts(total, pretax, pay_items)
     others = sum(
         p["amount"] if p.get("amount") is not None else round_half_up(total * (p.get("pct") or 0) / 100)
         for p in pay_items[1:]
@@ -188,6 +239,49 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
             amt = round_half_up(amt * pretax / total)
         out.append(amt)
     return out
+
+
+def _sanitize_for_amounts(total, pretax, pay_items):
+    """⇒ `(total, pretax, pay_items)`；髒欄位換成 0／None（只複製有改的那幾筆）。"""
+    bad = 0
+    t = _parse_money(total)
+    if t is _MONEY_BAD:
+        t, bad = 0, bad + 1
+    pt = _parse_money(pretax)
+    if pt is _MONEY_BAD:
+        pt, bad = None, bad + 1
+    fixed_items, changed = [], False
+    for pi in pay_items:
+        if not isinstance(pi, dict):
+            fixed_items.append({"amount": 0})
+            bad, changed = bad + 1, True
+            continue
+        patch = {}
+        for k in ("amount", "pct"):
+            if k in pi:
+                n = _parse_money(pi[k])
+                if n is _MONEY_BAD:
+                    n, bad = 0, bad + 1
+                if n is not pi[k]:
+                    patch[k] = n
+        if patch:
+            fixed_items.append({**pi, **patch})
+            changed = True
+        else:
+            fixed_items.append(pi)
+    # 第 1 筆沒填金額＝「總額扣掉其他筆」的餘數；後面有任何一筆金額算不出來，餘數就不可信（壞的那筆會被併進第 1 筆，帳會偏大）
+    # ⇒ 第 1 筆也算不出來，當 0（與報表的「略過並計數」同一條規則：算不出來 ⇒ 0＋warning）。
+    if len(fixed_items) > 1 and isinstance(fixed_items[0], dict) and _parse_money(fixed_items[0].get("amount")) is None \
+            and any(_amount_unknown(pi) for pi in pay_items[1:]):
+        fixed_items[0] = {**fixed_items[0], "amount": 0}
+        bad, changed = bad + 1, True
+    if bad:
+        _log.warning("款項金額／比例格式異常 %d 處，已當 0 處理（報表仍可產出，請修正原始資料）", bad)
+    if t is None:
+        t = 0
+    if not changed and not bad and t is total:
+        return total, pretax, pay_items
+    return t, pt, (fixed_items if changed else pay_items)
 
 
 # 2026-09-26 自 M01 `helpers/quotations.py` 逐字下沉（CA-O4；純函式，M08 報表用）；M01 保留同名別名
@@ -214,8 +308,9 @@ def summarize_payment_items(total: float, pay_items: list, pretax: float = None)
     for idx, pi in enumerate(pay_items or []):
         amt  = amounts[idx]
         rcvd = bool(pi.get("received"))
-        aa   = pi.get("actualAmount")
-        fee  = pi.get("feeAmount") or 0
+        aa   = _parse_money(pi.get("actualAmount"))
+        aa   = None if aa is _MONEY_BAD else aa
+        fee  = _money(pi.get("feeAmount"))
         # 已收款項的「實際入帳淨額」＝銀行入帳（receipt_amounts；實收已扣客戶內扣手續費，不再減一次；
         # 沒填實收 ⇒ 應收 − 手續費）——對應前端 netReceivedTotal()。
         net  = receipt_amounts(amt, aa, fee)[0] if rcvd else None
