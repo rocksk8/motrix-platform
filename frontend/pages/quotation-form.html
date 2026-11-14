@@ -2717,7 +2717,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.50'
+  const FORM_VERSION = 'V3.51'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -4231,12 +4231,17 @@
         if (!this.q.quoteNo) { this.toast('請先儲存報價單後再匯出'); return }
         if (this.q.dealTag === '未成案') return
         if (this.exporting) return
-        // 這一版（單號＋最後更新時間）這個頁面已經產生過 PDF：直接再下載同一份，不重新產生、不重複計入匯出次數
+        // 這一版（單號＋最後更新時間）這個頁面已經產生過 PDF：直接再下載同一份，不重新產生、不重複計入匯出次數；
+        // 但「誰在什麼時候又下載了一次」仍留一筆稽核（POST …/export?reused=1：只寫稽核，不加匯出次數）
         // （T86 U2：正式機同人 10 分鐘內反覆匯出；已送出的單內容不會變，重產只是多等幾秒＋多一筆紀錄）
         const _pk = this.q.quoteNo + '|external|' + (this._lastUpdatedAt || '')
         if (this._pdfCache && this._pdfCache.key === _pk) {
           this._saveBlobAs(this._pdfCache.blob, `${this.q.quoteNo}.pdf`)
-          this.toast('內容沒有變更，已重新下載剛才產生的 PDF（不重複計入匯出次數）。檔案在瀏覽器的「下載」。')
+          fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=external&reused=1`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + this.session.token },
+          }).then(r => { if (!r.ok) this.toast('已下載，但這次下載沒有記錄成功。') }).catch(() => this.toast('已下載，但這次下載沒有記錄成功（網路錯誤）。'))
+          this.toast('內容沒有變更，已重新下載剛才產生的 PDF（匯出次數不重複累加，下載仍有稽核紀錄）。檔案在瀏覽器的「下載」。')
           return
         }
         this.exporting = true

@@ -4646,7 +4646,10 @@ def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> N
 
 
 @router.post("/api/quotations/{quote_no}/export")
-def record_export(quote_no: str, mode: str = "external", authorization: str = Header(None)):
+def record_export(quote_no: str, mode: str = "external", reused: bool = False, authorization: str = Header(None)):
+    """記錄一次 PDF 匯出。reused=true（T86 U2）＝使用者重新下載「同一版」已產生過的 PDF（前端沿用上次的檔、沒有重新產生）：
+    只寫一筆稽核（detail 帶 reused=true，一次下載一筆），**不**累加 export_count／export_log——
+    export_count＝「PDF 產生次數」（每個版本、每次開啟分頁一次），重複下載看稽核紀錄。"""
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_module="case_manage")
@@ -4654,6 +4657,12 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if reused:
+        conn.close()
+        _audit(_tok(authorization), 'quotation.export_pdf', 'quotation', quote_no,
+               f"{quote_no} PDF 重新下載（{mode}，沿用同版已產生的檔）by {user['username']}",
+               {"reused": True, "mode": mode})
+        return {"export_count": row["export_count"] or 0, "log": json.loads(row["export_log"] or "[]"), "reused": True}
     log   = json.loads(row["export_log"] or "[]")
     count = (row["export_count"] or 0) + 1
     log.append({

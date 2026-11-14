@@ -129,6 +129,7 @@ def test_export_pdf_reuses_same_version_without_regenerating_or_recounting(live_
     _seed(no, "已送出")
     page, _puts = _open(live_server, e2e_browser, u, no)
     calls = {"pdf": 0, "export": 0}
+    export_urls = []
 
     def _pdf(route):
         calls["pdf"] += 1
@@ -136,6 +137,7 @@ def test_export_pdf_reuses_same_version_without_regenerating_or_recounting(live_
 
     def _exp(route):
         calls["export"] += 1
+        export_urls.append(route.request.url)
         route.fulfill(status=200, content_type="application/json", body=json.dumps({"export_count": calls["export"], "log": []}))
     page.route(f"**/api/quotations/{no}/pdf-download*", _pdf)
     page.route(f"**/api/quotations/{no}/export*", _exp)
@@ -144,7 +146,9 @@ def test_export_pdf_reuses_same_version_without_regenerating_or_recounting(live_
     page.evaluate(f"() => {ROOT}.directExport()")
     page.wait_for_function(f"() => !{ROOT}.exporting", timeout=10000)
     page.wait_for_timeout(500)
-    assert calls == {"pdf": 1, "export": 1}, f"同一版匯出第二次沿用上次的檔：{calls}"
+    _wait_until(page, lambda: calls["export"] == 2, "第二次下載仍送一筆稽核")
+    assert calls["pdf"] == 1, f"同一版匯出第二次沿用上次的檔，不重新產生：{calls}"
+    assert "reused=1" not in export_urls[0] and "reused=1" in export_urls[1], f"第一次正常記匯出、第二次標 reused：{export_urls}"
     # 版本變了（最後更新時間不同）⇒ 重新產生
     page.evaluate(f"() => {{ {ROOT}._lastUpdatedAt = 'changed' }}")
     page.evaluate(f"() => {ROOT}.directExport()")
