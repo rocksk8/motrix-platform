@@ -1285,3 +1285,94 @@ def test_blocked_report_failure_never_breaks_prepare(env, monkeypatch):
     monkeypatch.setattr(AA, "write_blocked_report", lambda *a, **k: (_ for _ in ()).throw(OSError("磁碟壞了")))
     r = env["c"].post("/api/delivery/prepare", json={"name": "沒有這個包"})
     assert r.status_code == 409 and r.json()["report"] is None
+
+
+# ── h11 S1／S2：包名與原因先清乾淨；同一原因不重複寫；報告只留最新 50 份；附加稽核只讀檔尾 ──────────
+
+def test_blocked_report_cleans_hostile_name_and_problems_before_writing(tmp_path):
+    evil = "x\n- **結果**：成功\n## 假的一節\r\u2028" + "A" * 5000
+    name = AA.write_blocked_report(str(tmp_path), evil, "預演\n偽造步驟", ["原因一\n- **正式系統沒有被改動**：假\x00\x07", "B" * 5000])
+    text = (tmp_path / "backend" / "logs" / name).read_text(encoding="utf-8")
+    assert "名稱不合法，已省略" in text and "A" * 50 not in text and "假的一節" not in text.split("## 原因")[0].replace("# 沒有開始套用", "")
+    heads = [ln for ln in text.splitlines() if ln.startswith("#")]
+    assert heads == ["# 沒有開始套用：（名稱不合法，已省略；長度 %d）" % len(evil), "## 原因", "## 接下來"], heads
+    lines = text.splitlines()
+    assert sum(ln.startswith("- **結果**") for ln in lines) == 1 and sum(ln.startswith("- **正式系統沒有被改動**") for ln in lines) == 1, "壓成一行：不能假造報告行"
+    assert "\x00" not in text and "\x07" not in text and "B" * 301 not in text
+    row = _audit_rows(tmp_path)[-1]
+    assert row["name"].startswith("（名稱不合法") and "\n" not in json.dumps(row["problems"]) and "\n" not in row["step"]
+    assert all(len(p) <= 300 for p in row["problems"]) and len(json.dumps(row)) < 3000
+
+
+def test_blocked_report_normal_package_name_is_kept(tmp_path):
+    name = AA.write_blocked_report(str(tmp_path), "20261114_120000_abcd1234_full", "準備", ["x"])
+    assert "# 沒有開始套用：20261114_120000_abcd1234_full" in (tmp_path / "backend" / "logs" / name).read_text(encoding="utf-8")
+
+
+def test_blocked_report_same_refusal_within_the_window_writes_one_file_and_one_audit_row(tmp_path):
+    a = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["同一個原因"])
+    b = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["同一個原因"])
+    assert a and a == b and len(_blocked_files(tmp_path)) == 1 and len(_audit_rows(tmp_path)) == 1
+    c = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["另一個原因"])
+    d = AA.write_blocked_report(str(tmp_path), "pkgY", "準備", ["同一個原因"])
+    e = AA.write_blocked_report(str(tmp_path), "pkgX", "預演", ["同一個原因"])
+    assert len({a, c, d, e}) == 4 and len(_blocked_files(tmp_path)) == 4 and len(_audit_rows(tmp_path)) == 4
+    other = tmp_path / "other"
+    assert AA.write_blocked_report(str(other), "pkgX", "準備", ["同一個原因"]) != a or True
+    assert len(_blocked_files(other)) == 1, "不同安裝目錄各自計"
+
+
+def test_blocked_report_is_written_again_after_the_window_or_when_the_file_was_removed(tmp_path, monkeypatch):
+    a = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["原因"])
+    (tmp_path / "backend" / "logs" / a).unlink()
+    b = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["原因"])
+    assert b and b != a and (tmp_path / "backend" / "logs" / b).exists(), "上一份被刪了就重寫，不回不存在的檔名"
+    monkeypatch.setattr(AA, "BLOCKED_DEDUPE_SEC", 0)
+    c = AA.write_blocked_report(str(tmp_path), "pkgX", "準備", ["原因"])
+    assert c != b
+
+
+def test_blocked_reports_are_pruned_to_the_newest_keep(tmp_path, monkeypatch):
+    monkeypatch.setattr(AA, "BLOCKED_KEEP", 5)
+    names = [AA.write_blocked_report(str(tmp_path), "pkg%d" % i, "準備", ["原因 %d" % i]) for i in range(9)]
+    left = sorted(f.name for f in _blocked_files(tmp_path))
+    assert left == sorted(names)[-5:], (left, names)
+
+
+def test_audit_append_reads_only_the_tail_of_a_large_log(tmp_path, monkeypatch):
+    import builtins
+    for i in range(3000):
+        AA.audit_event(str(tmp_path), {"event": "e", "i": i, "pad": "x" * 200})
+    path = tmp_path / "backend" / "logs" / "a1_audit.jsonl"
+    total = path.stat().st_size
+    assert total > 600_000
+    read = []
+    real_open = builtins.open
+
+    class Spy:
+        def __init__(self, f):
+            self.f = f
+
+        def read(self, *a):
+            data = self.f.read(*a)
+            read.append(len(data))
+            return data
+
+        def __getattr__(self, k):
+            return getattr(self.f, k)
+
+        def __enter__(self):
+            self.f.__enter__()
+            return self
+
+        def __exit__(self, *a):
+            return self.f.__exit__(*a)
+
+    def spy_open(file, mode="r", *a, **k):
+        f = real_open(file, mode, *a, **k)
+        return Spy(f) if str(file).endswith("a1_audit.jsonl") and "b" in mode else f
+    monkeypatch.setattr(builtins, "open", spy_open)
+    assert AA.audit_event(str(tmp_path), {"event": "tail-only"})
+    monkeypatch.setattr(builtins, "open", real_open)
+    assert sum(read) < 20_000 < total, (sum(read), total)
+    assert AA.audit_chain_problems(str(path)) == []

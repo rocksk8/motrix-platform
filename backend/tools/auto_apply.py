@@ -678,24 +678,41 @@ def verify_after(install_root, base_url, before, expected_diff, expectations, ap
 _audit_lock = threading.Lock()
 
 
+def _audit_tail_state(path):
+    """只讀檔尾（不是整個檔）⇒ (最後一筆讀得懂的紀錄的雜湊, 檔尾是不是殘行)。
+    先讀 8 KB，找不到讀得懂的一行就把範圍乘 4 往前擴（最後一筆超過 8 KB 也找得到），直到整個檔。附加稽核不隨檔案變大而變慢。"""
+    size = os.path.getsize(path)
+    if size == 0:
+        return "", False
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        torn = f.read(1) != b"\n"                                               # 上次寫到一半：先補換行，免得新的一筆黏在殘行後面
+        span = 8192
+        while True:
+            start = max(0, size - span)
+            f.seek(start)
+            lines = f.read(size - start).decode("utf-8", errors="replace").splitlines()
+            if start > 0 and lines:
+                lines = lines[1:]                                               # 第一行可能被截斷
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    return str(json.loads(line).get("hash", "")), torn
+                except (ValueError, AttributeError):
+                    continue                                                    # 殘行／壞行跳過，接在最後一筆讀得懂的後面（鏈驗證會把壞行報出來）
+            if start == 0:
+                return "", torn
+            span *= 4
+
+
 def audit_event(install_root, event):
     """附加一筆到 backend/logs/a1_audit.jsonl，每筆含前一筆的雜湊（竄改單筆可偵測）。event 不得含密碼／token／設定值。⇒ 雜湊或 None（寫失敗）。"""
     path = os.path.join(install_root, "backend", "logs", "a1_audit.jsonl")
     with _audit_lock:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            prev, torn = "", False
-            if os.path.isfile(path):
-                raw = open(path, "rb").read()
-                torn = bool(raw) and not raw.endswith(b"\n")                    # 上次寫到一半：先補換行，免得新的一筆黏在殘行後面
-                for line in reversed(raw.decode("utf-8", errors="replace").splitlines()):
-                    if not line.strip():
-                        continue
-                    try:
-                        prev = str(json.loads(line).get("hash", ""))
-                        break
-                    except (ValueError, AttributeError):
-                        continue                                                # 殘行／壞行跳過，接在最後一筆讀得懂的後面（鏈驗證會把壞行報出來）
+            prev, torn = _audit_tail_state(path) if os.path.isfile(path) else ("", False)
             rec = dict(event, at=datetime.now().isoformat(timespec="seconds"), prev=prev)
             body = json.dumps(rec, sort_keys=True, ensure_ascii=False)
             rec["hash"] = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -814,14 +831,32 @@ def write_report(install_root, rec, stamp=None):
         return None, None
 
 
+_NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f\u0085  ]+")
+BLOCKED_DEDUPE_SEC = 60                     # 同一個步驟、包、原因 60 秒內只留一份報告與一筆稽核（準備／預演不需要密碼，不能被連按灌爆）
+BLOCKED_KEEP = 50                           # a1_report_blocked_*.md 只留最新 50 份
+_blocked_recent = {}                        # {摘要: (時間, 報告檔名)}
+_blocked_lock = threading.Lock()
+
+
+def _safe_text(v, limit=300):
+    """請求內容（包名、原因）寫進報告與稽核之前：控制字元與換行壓成一個空白（不能假造報告行）、截長。"""
+    return _CONTROL.sub(" ", str(v)).strip()[:limit]
+
+
+def _safe_name(name):
+    n = str(name)
+    return n if _NAME_OK.match(n) else "（名稱不合法，已省略；長度 %d）" % len(n)
+
+
 def render_blocked_report(name, step, problems, by=""):
-    """準備或預演就停下來的白話報告（還沒有套用，正式系統沒有被改動）。只放：包名、停在哪一步、原因（每則截 300 字）。"""
-    lines = ["# 沒有開始套用：%s" % name, "",
-             "- **結果**：被擋下，停在「%s」。" % step,
+    """準備或預演就停下來的白話報告（還沒有套用，正式系統沒有被改動）。只放：包名（只准英數與 _-，否則省略）、停在哪一步、原因（每則壓成一行、截 300 字）。"""
+    lines = ["# 沒有開始套用：%s" % _safe_name(name), "",
+             "- **結果**：被擋下，停在「%s」。" % _safe_text(step, 80),
              "- **正式系統沒有被改動**（程式、資料庫與設定都維持原狀；這一步只用到安裝目錄外的暫存資料夾與資料庫的備份副本）。",
-             "- 操作者：%s" % (by or "（準備與預演階段不需要登入，未記錄）"), "",
+             "- 操作者：%s" % (_safe_text(by, 80) or "（準備與預演階段不需要登入，未記錄）"), "",
              "## 原因", ""]
-    lines += ["- %s" % str(p).replace("\n", " ")[:300] for p in (problems or ["（沒有說明）"])]
+    lines += ["- %s" % _safe_text(p) for p in (problems or ["（沒有說明）"])][:20]
     lines += ["", "## 接下來", "",
               "- 請把上面的原因交給負責出包的人，更換或重做更新包後，再從「準備」重新開始。",
               "- 這一步不會發通知；要套用時操作的人就在畫面前。", ""]
@@ -830,20 +865,48 @@ def render_blocked_report(name, step, problems, by=""):
 
 def write_blocked_report(install_root, name, step, problems, by=""):
     """準備／預演失敗：寫 `backend/logs/a1_report_blocked_<時間戳>.md` ＋一筆 `apply_blocked` 稽核事件（含 step）。
-    ⇒ 報告檔名（只有檔名）或 None；永不丟例外。**不發通知**（準備與預演時操作的人就在畫面前）。"""
+    ⇒ 報告檔名（只有檔名）或 None；永不丟例外。**不發通知**（準備與預演時操作的人就在畫面前）。
+    防灌爆（準備與預演不需要密碼）：同一個（安裝目錄、步驟、包、原因）`BLOCKED_DEDUPE_SEC` 秒內不重寫，回上一份的檔名；
+    報告檔只留最新 `BLOCKED_KEEP` 份；包名只准英數與 _-（否則記成「名稱不合法」與長度），原因壓成一行。"""
     try:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        shown_name = _safe_name(name)
+        short = [_safe_text(p) for p in (problems or [])][:20]
+        step_s, by_s = _safe_text(step, 80), _safe_text(by, 80)
         d = os.path.join(install_root, "backend", "logs")
-        os.makedirs(d, exist_ok=True)
-        path = os.path.join(d, "a1_report_blocked_%s.md" % stamp)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(render_blocked_report(name, step, problems, by))
-        short = [str(p)[:300] for p in (problems or [])][:20]
-        audit_event(install_root, {"event": "apply_blocked", "step": step, "name": name, "by": by, "problems": short,
-                                   "report": os.path.basename(path)})
-        return os.path.basename(path)
+        key = hashlib.sha256(json.dumps([str(install_root), step_s, shown_name, short, by_s], ensure_ascii=False).encode("utf-8")).hexdigest()
+        now = time.monotonic()
+        with _blocked_lock:
+            prev = _blocked_recent.get(key)
+            if prev and now - prev[0] < BLOCKED_DEDUPE_SEC and os.path.isfile(os.path.join(d, prev[1])):
+                return prev[1]
+            os.makedirs(d, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            path = os.path.join(d, "a1_report_blocked_%s.md" % stamp)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(render_blocked_report(name, step, problems, by))
+            fname = os.path.basename(path)
+            audit_event(install_root, {"event": "apply_blocked", "step": step_s, "name": shown_name, "by": by_s, "problems": short, "report": fname})
+            _blocked_recent[key] = (now, fname)
+            if len(_blocked_recent) > 500:                          # 記憶體上限：丟掉過期的
+                for k in [k for k, v in _blocked_recent.items() if now - v[0] >= BLOCKED_DEDUPE_SEC]:
+                    _blocked_recent.pop(k, None)
+            _prune_blocked_reports(d)
+        return fname
     except Exception:                                               # noqa: BLE001 — 報告寫不出來不可以讓準備／預演本身出錯
         return None
+
+
+def _prune_blocked_reports(d, keep=None):
+    keep = BLOCKED_KEEP if keep is None else keep
+    try:
+        files = sorted(f for f in os.listdir(d) if f.startswith("a1_report_blocked_") and f.endswith(".md"))   # 檔名內是時間戳，字典序＝時間序
+        for f in files[:-keep] if keep > 0 else files:
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def rewrite_report(rec):
