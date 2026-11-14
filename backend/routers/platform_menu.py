@@ -79,6 +79,35 @@ def _layout_for(user, groups, mod_items):
             "custom": [m["key"] for m in customs]}
 
 
+#: 由「設定旗標」控制是否開放的頁面：旗標關著時，選單裡不出現入口（直接打網址看到的是頁面自己的「尚未開放」）。
+#: {頁面檔名: 讀旗標的函式 (conn) -> bool}。報表中心的卡片與主選單都吃 /api/platform/menu，所以這裡一處管兩邊。
+def _flag_gated_pages():
+    from helpers import report_policy as RP
+    return {"custom-reports.html": RP.enabled}
+
+
+def _drop_flag_closed(groups):
+    """groups ⇒ 去掉旗標關閉的頁面項目（讀不到旗標＝當作關）。群組變空就由前端不顯示標題。"""
+    gated = _flag_gated_pages()
+    on = {}
+    try:
+        conn = get_db()
+        try:
+            on = {href: bool(fn(conn)) for href, fn in gated.items()}
+        finally:
+            conn.close()
+    except Exception:                                          # noqa: BLE001 讀不到旗標 ⇒ 當關閉（寧可少一個入口）
+        on = {href: False for href in gated}
+    closed = {h for h, v in on.items() if not v}
+    if not closed or not isinstance(groups, list):
+        return groups
+    out = []
+    for g in groups:
+        items = [it for it in (g.get("items") or []) if not (isinstance(it, dict) and it.get("href") in closed)]
+        out.append(dict(g, items=items))
+    return out
+
+
 #: main.py 啟動時組好的 core.pages page_map（{頁名: (模組key, 路徑)}）；/api/platform/menu 的完整 pageModules 用
 PAGE_MAP = {}
 
@@ -155,6 +184,9 @@ def platform_menu(authorization: str = Header(None)):
     l1, sa = core_menu.load_l1(), user.get("role") == "superadmin"
     groups = core_menu.build(l1, mod_items, modules, sa)
     layout = _layout_for(user, groups, mod_items)
+    groups = _drop_flag_closed(groups)
+    if isinstance(layout, dict) and "groups" in layout:
+        layout = dict(layout, groups=_drop_flag_closed(layout.get("groups")))
     setup = _company_setup_brief(sa)
     if setup["blocked"]:
         # 本公司資料未設定（COMPANY-SETUP-GATE §4.2）：其他頁的 API 全部 428 ⇒ 側欄只留設定頁入口

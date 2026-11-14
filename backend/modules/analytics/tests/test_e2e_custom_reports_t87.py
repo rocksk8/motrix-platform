@@ -147,6 +147,33 @@ def test_flag_off_shows_not_open_and_hides_hub_card(live_server, make_user, e2e_
     page.close()
 
 
+def _entries(page):
+    """這一頁的主選單與頁面本體裡，指向自訂報表的連結數（等選單依角色版面重建完才算）。"""
+    page.wait_for_function("() => document.documentElement.getAttribute('data-menu-seq')", timeout=20000)
+    page.wait_for_timeout(400)
+    return page.evaluate("() => ({nav: document.querySelectorAll('#app-mainnav a[href*=\"custom-reports.html\"]').length,"
+                         " card: document.querySelectorAll('[data-testid*=\"custom-reports\"]').length})")
+
+
+@pytest.mark.e2e
+def test_flag_off_means_no_entry_in_main_menu_or_reports_hub_flag_on_shows_both(live_server, make_user, e2e_browser):
+    """PM／h10：旗標關著時選單不能出現一個點了只會 404 的入口；開著時選單與報表中心兩邊都有。
+    工程師（只有報價模組）沒有報表中心，只靠主選單進得去——那條路最容易漏。"""
+    for who, kw in (("engineer", dict(role="engineer", modules=["quotation"])), ("boss", {})):
+        _set(enabled=0)
+        page = _open(live_server, make_user, e2e_browser, "e2e_cr_menu_" + who, path="reports-hub.html" if who == "boss" else "custom-reports.html", **kw)
+        off = _entries(page)
+        assert off == {"nav": 0, "card": 0}, (who, off)
+        _set(enabled=1)
+        page.reload()
+        on = _entries(page)
+        if who == "engineer":
+            assert on["nav"] >= 1, (who, on)                          # 沒有報表中心的人：主選單是唯一入口
+        else:
+            assert on["card"] >= 1, (who, on)                         # 有報表中心的人：選單把報表群組收成「報表中心」一個連結，入口是卡片
+        page.close()
+
+
 @pytest.mark.e2e
 def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hidden_when_off(live_server, make_user, e2e_browser):
     """分享面板（B2-S5）：搜尋→全選目前結果→分享；被分享者看得到；批次取消分享；設定關閉時入口不出現。"""
