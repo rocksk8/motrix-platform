@@ -33,7 +33,7 @@ TARGET = 0.80
 
 
 def _git(*args, repo=REPO):
-    p = subprocess.run(["git", "-C", str(repo)] + list(args), capture_output=True, text=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(["git", "-C", str(repo)] + list(args), capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return p.returncode, p.stdout
 
 
@@ -261,7 +261,7 @@ def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executabl
             cmd = [python, str(HERE / "author_gate.py"), "--quick", "--base", b + "^", "--head", b, "--repo", str(wt), "--workers", str(workers), "--json-out", str(jp)]
             if budget_min is not None:
                 cmd += ["--budget-min", "%d" % budget_min]
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             dur = time.time() - t0
             try:
                 j = json.loads(jp.read_text(encoding="utf-8"))
