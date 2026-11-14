@@ -1,6 +1,6 @@
 # 權限矩陣 更新紀錄
 
-## 1.2.0（next，未取號）— 2026-11-14（feat/settings-matrix-s4；T86 設定矩陣 S4c：角色格暫存區批次；含文字準則修正）
+## (next:minor) — 2026-11-14（feat/settings-matrix-s4；T86 設定矩陣 S4c：角色格暫存區批次；含文字準則修正）
 - 新增 API：`POST /api/permmatrix/role-cap/batch/preview`（唯讀：每格現況與去向、哪些要等待期並經核准、要不要原因、`planHash`）、`POST /api/permmatrix/role-cap/batch`（整批同一個寫入交易、`planHash` 過期 ⇒ 409；立即生效的格合併成一個版本，「一鍵復原上一次調整」整批還原；放寬高風險格各自進待生效；每格各一筆稽核、與資料同交易）。單格 `/role-cap` 與 `/role-cap/preview` 不變。
 - 前端（`permission-matrix.html`）：點格子改為「暫存」（待套用標記、暫存列、每組每角色「全勾／全清」），按「預覽並套用」看完整影響再儲存；離開頁面前若有未套用的暫存，瀏覽器會先詢問。畫面用詞「確認期間」改為「等待期」，提示文字依文字準則改用「您」「尚未」；暫存列在手機寬度貼在頂欄下方。
 - 測試：`tests/test_permmatrix_s3_writes.py`（批次：預覽唯讀、過期 409、原因規則、整批復原、輸入驗證）、`tests/test_e2e_permission_matrix_staging_2026_11_14.py`。金標：`write_golden_cases/cases_permmatrix.py`、`route_inventory.json`、`route_table_golden.json`。
