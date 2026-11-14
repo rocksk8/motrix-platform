@@ -180,6 +180,15 @@
               return
             }
             const d = await r.json()
+            const pend = d.pending || []
+            if (pend.length) {
+              // S5：變更改走設定中心的待生效機制——回傳的 versions 是「目前生效」的版本；剛輸入的新版本還在待生效（等待期＋第二位最高管理者核准），
+              // 所以不覆蓋畫面上已輸入的資料，只更新狀態並提示（以免新增的版本看起來消失）
+              this.status = d.status || this.status
+              this.okMsg = '已送出變更，' + (pend.some(p => p.approvalsRequired) ? '需第二位最高管理者核准，且' : '') + '等待期滿（' + String(pend[0].effectiveAt || '').slice(0, 10) +
+                '）後才生效；目前生效的仍是原本的版本，下方是您剛輸入的內容'
+              return
+            }
             this.versions = (d.versions || []).map(v => ({ ...v, _saved: true }))
             this.status = d.status || {}
             this.dirty = false

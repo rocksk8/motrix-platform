@@ -162,6 +162,10 @@ def main(argv=None):
             print("charity_basis_mode: %s → %s%s" % (cur, a.value, "" if a.apply else "（dry-run，加 --apply 才寫）"))
             if a.apply:
                 conn.execute("BEGIN IMMEDIATE")
+                if _dbbind.overhead_basis_definition(conn) is not None:      # S5：登錄表已有定義 ⇒ 舊鍵寫了不生效
+                    conn.execute("ROLLBACK")
+                    print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                    return 2
                 if a.value == "total":
                     ok, why = _prereq(conn)
                     if not ok or _get(conn, DONE_KEY) is None:
@@ -186,6 +190,9 @@ def main(argv=None):
                 print("（dry-run；加 --apply 才寫）")
                 return 0
             if cnt.get("restore"):
+                if _dbbind.overhead_basis_definition(conn) is not None:      # S5：還原會把舊鍵設回 direct 並刪標記，但生效基數以定義為準 ⇒ 混基；先經 API 改回 direct 再還原
+                    print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                    return 2
                 if not a.no_backup:
                     print("備份：", _backup(a.db, stamp))
                 conn.execute("BEGIN IMMEDIATE")
@@ -214,7 +221,11 @@ def main(argv=None):
             if not ok:
                 print("拒絕：" + why, file=sys.stderr)
                 return 2
-            mode = _get(conn, MODE_KEY, "direct")
+            defn = _dbbind.overhead_basis_definition(conn)             # S5：有定義 ⇒ 生效基數以定義為準；工具不可寫舊鍵（--set-total 拒絕）
+            if defn is not None and a.set_total:
+                print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                return 2
+            mode = defn.get("charityMode", "direct") if defn is not None else _get(conn, MODE_KEY, "direct")
             if mode != "total" and not a.set_total:
                 print("拒絕：公益基數模式目前是 %s。遷移後若不是 total，舊式表單重存會把單悄悄退回舊基；請加 --set-total（同一交易設定）。" % mode, file=sys.stderr)
                 return 2

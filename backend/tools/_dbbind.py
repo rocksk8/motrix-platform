@@ -44,3 +44,27 @@ def connect_path(path):
     conn = sqlite3.connect(require_file(path))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def overhead_basis_definition(conn):
+    """S5：管銷口徑／公益基數改由設定群組 `overhead_basis` 管理後，只要登錄表已有發布過的定義，**生效值以定義為準、舊鍵（system_settings）會被忽略**。
+    回 `{"ruleMode":…, "charityMode":…}`（定義裡的值）；沒有定義（或定義表不存在）⇒ None。工具用它判斷能不能直接寫舊鍵：有定義就不能（會寫了不生效，
+    或在重遷移時變成『單已重算成 v2、生效口徑仍是 legacy』的混基狀態），要改口徑請走 PUT /api/overhead/settings（第二位最高管理者核准）。"""
+    import json
+    try:
+        r = conn.execute("SELECT body_json FROM ui_definitions WHERE kind='setting_group' AND key='overhead_basis' AND scope='company' "
+                         "AND status='published' ORDER BY version DESC LIMIT 1").fetchone()
+    except Exception:                                                  # noqa: BLE001 — 定義表不存在（極舊庫）⇒ 沒有定義
+        return None
+    if r is None:
+        return None
+    try:
+        body = json.loads(r[0] or "{}")
+    except (TypeError, ValueError):
+        return {}
+    vals = body.get("values") if isinstance(body, dict) else None
+    return vals if isinstance(vals, dict) else {}
+
+
+REFUSE_REGISTRY_OWNS = ("拒絕：管銷口徑／公益基數已由設定中心的設定群組管理（overhead_basis 已有發布版本）；直接寫舊鍵不會生效，"
+                        "還會造成單已重算、生效口徑卻沒跟著變的混基。請改走 PUT /api/overhead/settings（需第二位最高管理者核准）。")

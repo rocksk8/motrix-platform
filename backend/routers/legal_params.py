@@ -84,12 +84,13 @@ def put_tax_rule_versions(body: dict = Body(...), supersede: bool = False, autho
     cur = lp.load_versions()
     pending, warnings = [], []
     try:
-        if isinstance(new, list) and lp.sort_versions(new) != lp.sort_versions(cur):
+        errs = lp.validate_versions(new)                    # 先驗結構（含「每一版必須是物件」）再比較，非物件項目不會在排序時炸成 500
+        if errs:
+            raise HTTPException(400, "；".join(errs))
+        if lp.sort_versions(new) != lp.sort_versions(cur):
             res = _sr.publish("tax_rules", {"versions": new}, user=user["username"], actor=user, reason="法規參數調整（法規參數設定頁）",
                               expected_values={"versions": cur}, supersede=supersede)
             pending, warnings = res.get("pending") or [], res.get("warnings") or []
-        elif not isinstance(new, list):
-            raise HTTPException(400, "；".join(lp.validate_versions(new)))
     except _sr.SettingConflict as e:
         raise HTTPException(409, {"code": e.code, "keys": e.keys, "by": e.by, "at": e.at})
     except _sr.SettingError as e:

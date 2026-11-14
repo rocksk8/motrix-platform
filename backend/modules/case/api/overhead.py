@@ -88,7 +88,8 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
         from helpers import settings_registry as _SR
         from helpers.settings_groups_external import problems_text
         from core.definitions import DefinitionConflict
-        cur = {"ruleMode": old_rule, "charityMode": old_charity}
+        raw = PG.basis_effective()                                   # CAS 期望值要用登錄表存的原始值；`old_rule` 是失效安全後的值（v2 缺遷移標記會顯示 legacy），拿來比會誤報 409
+        cur = {"ruleMode": raw.get("ruleMode"), "charityMode": raw.get("charityMode")}
         try:
             res = _SR.publish("overhead_basis", sent, user=user["username"], actor=user,
                               reason=str(body.get("reason") or "").strip() or "管銷口徑調整（管銷設定入口）", ip="",
