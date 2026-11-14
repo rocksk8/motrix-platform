@@ -55,11 +55,14 @@ def test_apply_layout_move_index_out_of_range_goes_last():
 
 # ── API：任取一個已載入、有選單項的模組 ───────────────────────────────────────────
 
+from routers.platform_menu import flag_gated_pages as _flag_gated  # 旗標關著就不服務的頁（測試挑「任一個選單頁」時要略過）
+
+
 def _pick():
     for m in registry.loaded():
         for p in (m.manifest or {}).get("pages") or []:
             perm = (p.get("menu") or {}).get("perm") if isinstance(p, dict) else None
-            if isinstance(p, dict) and p.get("menu") and not ({"cashier", "finance", "financial_view"} & set(perm if isinstance(perm, list) else [])):
+            if isinstance(p, dict) and p.get("menu") and p.get("path") not in _flag_gated() and not ({"cashier", "finance", "financial_view"} & set(perm if isinstance(perm, list) else [])):
                 # 第42班：財務三鍵由角色決定（有勾的帳號會變成財務角色），版面是「依角色」套用——任取項目時略過這類選單
                 return m.key, p["path"], m.manifest
     pytest.skip("沒有已載入、宣告選單項的模組 ⇒ 無對象")
@@ -121,7 +124,7 @@ def _gated_target(client, make_user):
         probes = ((m.manifest or {}).get("provides") or {}).get("probes") or []
         for p in (m.manifest or {}).get("pages") or []:
             perm = (p.get("menu") or {}).get("perm") if isinstance(p, dict) else None
-            if not isinstance(perm, list) or not probes or ({"cashier", "finance", "financial_view"} & set(perm)):
+            if not isinstance(perm, list) or not probes or p.get("path") in _flag_gated() or ({"cashier", "finance", "financial_view"} & set(perm)):
                 continue          # 第42班：財務三鍵由角色決定（有勾的帳號會變成財務角色，版面是依角色套用）
             for url in probes:
                 n += 1

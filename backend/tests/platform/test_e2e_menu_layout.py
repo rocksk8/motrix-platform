@@ -18,10 +18,13 @@ from tests._e2e_login import bootstrap_unavailable  # noqa: E402
 pytestmark = pytest.mark.e2e
 
 
+from routers.platform_menu import flag_gated_pages as _flag_gated  # 旗標關著就不服務的頁（測試挑「任一個選單頁」時要略過）
+
+
 def _pick():
     for m in registry.loaded():
         for p in (m.manifest or {}).get("pages") or []:
-            if isinstance(p, dict) and p.get("menu"):
+            if isinstance(p, dict) and p.get("menu") and p.get("path") not in _flag_gated():
                 return m.key, p["path"], p["menu"]["label"]
     pytest.skip("沒有已載入、宣告選單項的模組 ⇒ 無對象")
 

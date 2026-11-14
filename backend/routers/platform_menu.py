@@ -81,14 +81,14 @@ def _layout_for(user, groups, mod_items):
 
 #: 由「設定旗標」控制是否開放的頁面：旗標關著時，選單裡不出現入口（直接打網址看到的是頁面自己的「尚未開放」）。
 #: {頁面檔名: 讀旗標的函式 (conn) -> bool}。報表中心的卡片與主選單都吃 /api/platform/menu，所以這裡一處管兩邊。
-def _flag_gated_pages():
+def flag_gated_pages():
     from helpers import report_policy as RP
     return {"custom-reports.html": RP.enabled}
 
 
 def _drop_flag_closed(groups):
     """groups ⇒ 去掉旗標關閉的頁面項目（讀不到旗標＝當作關）。群組變空就由前端不顯示標題。"""
-    gated = _flag_gated_pages()
+    gated = flag_gated_pages()
     on = {}
     try:
         conn = get_db()
