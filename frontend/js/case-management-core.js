@@ -700,7 +700,7 @@ window.CM_PARTS.push(() => ({
       clearTimeout(this._autoSaveTimer)
       await this.saveCaseRecord()
       let msg = ''
-      if (this.saveStatus === 'saved' || (this.saveStatus === 'dirty' && this.saveMsg && !this.dirty)) {
+      if (!this._lastSaveNoop && (this.saveStatus === 'saved' || (this.saveStatus === 'dirty' && this.saveMsg && !this.dirty))) {
         msg = this.saveMsg || '已儲存'
       } else if (this._lastSaveNoop && !this.dirty && this.saveStatus !== 'error') {
         msg = '已是最新，沒有需要儲存的變更'      // U8：沒改任何東西時按「儲存」＝不送出、伺服器也不留空紀錄；說清楚，免得以為沒存到而一直按
@@ -713,7 +713,8 @@ window.CM_PARTS.push(() => ({
     },
     // U8：紅色「儲存」的狀態——畫面與資料庫一致時顯示灰色「已是最新」（仍可按：按下去會比對快照，有差異照樣存）
     saveIsClean() {
-      return !this.dirty && !this.saving && this.saveStatus !== 'error' && this.saveStatus !== 'dirty'
+      // 存檔後帶說明的狀態（已送出待審核、庫存提示…）saveStatus 也是 'dirty'，但那是訊息不是「有未存變更」；只有 setDirty() 設的『未儲存』才算
+      return !this.dirty && !this.saving && this.saveStatus !== 'error' && !(this.saveStatus === 'dirty' && this.saveMsg === '未儲存')
     },
     _lastSaveNoop: false,
 

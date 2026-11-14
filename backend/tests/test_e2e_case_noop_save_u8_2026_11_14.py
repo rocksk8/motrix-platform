@@ -77,15 +77,17 @@ def test_audit_page_shows_changed_segments(live_server, make_user, e2e_browser):
     u, p = make_user(username="u8_sa", role="superadmin", modules=[])
     _seed()
     from helpers.audit import _audit
-    _audit("", "case.update", "quotation", NO, f"{NO}（客戶／專案）", {"segments": ["contract", "payment"], "fields": {"contract": ["terms"]}})
+    _audit("", "case.update", "quotation", NO, f"{NO}（客戶／專案）", {"segments": ["contract", "payment", "someNewSeg"], "fields": {"contract": ["terms"]}})
+    _audit("", "case.update", "quotation", NO, f"{NO}（客戶／專案）", {"segments": [], "initial": ["roles"]})
     _audit("", "case.update", "quotation", NO, f"{NO}（客戶／專案）")          # 舊紀錄：detail 空 ⇒ 不顯示「改動」行
     page = e2e_browser.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     inject_login(page, live_server, u, p)
     page.goto(live_server + "/pages/audit-log.html")
-    page.wait_for_function("() => document.querySelectorAll('.tl-item').length >= 2", timeout=20000)
+    page.wait_for_function("() => document.querySelectorAll('.tl-item').length >= 3", timeout=20000)
     page.wait_for_function("() => [...document.querySelectorAll('[data-testid=audit-changed]')].some(e => e.offsetParent !== null)", timeout=5000)
     shown = page.evaluate("() => [...document.querySelectorAll('[data-testid=audit-changed]')].filter(e => e.offsetParent !== null).map(e => e.innerText)")
-    assert shown == ["改動：合約資訊（terms）、收款"], shown
+    # 只列分段中文名（欄位名是內部鍵不上畫面；未知分段 ⇒ 「其他欄位」）；補預設值 ⇒ 「初次建立預設內容」
+    assert sorted(shown) == sorted(["改動：合約資訊、收款、其他欄位", "初次建立預設內容"]), shown
     assert not errors, errors

@@ -492,7 +492,7 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 .btn-save { padding:7px 16px; background:var(--accent); color:var(--surface); border:none; border-radius:var(--radius); font-size:12px; font-weight:600; font-family:var(--font-zh); cursor:pointer; transition:all .12s; }
 .btn-save:hover:not(:disabled) { background:var(--accent-hover); }
 .btn-save:disabled { opacity:.4; cursor:default; }
-.btn-save.is-clean:not(:disabled) { filter:grayscale(1); opacity:.55; }   /* U8：沒有未儲存的變更 ⇒ 灰色「已是最新」（用 filter 變灰：不動主題色 token，主題 golden 不受影響） */
+.btn-save.is-clean:not(:disabled) { filter:grayscale(1); opacity:.7; }   /* U8：沒有未儲存的變更 ⇒ 灰色「已是最新」（用 filter 變灰：不動主題色 token，主題 golden 不受影響） */
 .btn-close-case { padding:5px 11px; background:var(--tone-violet-bg); color:var(--tone-violet-fg); border:1px solid var(--tone-violet-border); border-radius:6px; font-size:12px; font-weight:600; font-family:var(--font-zh); cursor:pointer; transition:all .12s; }
 .btn-close-case:hover { background:var(--tone-violet-bg); }
 .btn-add { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border:1px dashed var(--border-light); border-radius:6px; background:none; color:var(--text-secondary); font-size:12px; font-family:var(--font-zh); cursor:pointer; transition:all .12s; }
@@ -853,7 +853,7 @@ div:has(> .cm-section-title) { flex-wrap:wrap; row-gap:6px; }
   .cm-header__row1 .cm-header__customer { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:16px; }
   .cm-header__row1 .cm-header__spacer { display:none; }
   .cm-header__row1 .deal-tag-badge { flex-shrink:0; font-size:12px; padding:2px 6px; }
-  .cm-header__row1 .mob-back-cm { padding:8px 10px; }
+  .cm-header__row1 .mob-back-cm { padding:8px 10px; white-space:nowrap; flex:0 0 auto; }   /* U8：儲存鈕字樣在「儲存／已是最新」間切換，返回鈕不可被擠到折行（整列高度會跳） */
   .cm-header__row1 .btn-save { padding:7px 12px; flex-shrink:0; }
   .cm-header__row1 .cm-more__btn { padding:5px 8px; }
   .cm-header__save .save-label:not(.error) { display:none; }
