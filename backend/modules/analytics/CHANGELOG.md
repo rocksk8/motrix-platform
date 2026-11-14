@@ -1,6 +1,7 @@
 # 營運分析 更新紀錄
 
-## (next，未取號) — 2026-11-14（feat/t87-b1-be-h8；T87 B1 標準報表後端）
+## (next) — 2026-11-15（T87 整合：B1 標準報表後端＋髒款項防護、B2 自訂報表；版號由列車取）
+- **（併入）(next) — 2026-11-14（feat/t87-b1-be-h8；T87 B1 標準報表後端）**
 - 新增 5 張標準報表（營收、毛利、應收帳齡、案件進度、業務漏斗）與共用篩選（期間、業務、客戶、部門；營收另有收入口徑）：`GET /api/std-reports`（目錄與可用性）、`GET /api/std-reports/{id}`（資料）、`GET /api/std-reports/{id}/excel`、`/pdf`（匯出，寫稽核、冷卻、PDF 姊妹）。新檔 `api/std_reports.py`；線上格式由前後端約定（設計文件 B1-reports.md、B1-api-contract.md，T87 設計資料夾）。
 - 金額不重算：營收、毛利取 `_collect()`／收入提供者／`case.recognition`；帳齡取 `_compute_ar_aging` 的實作 `_ar_aging_core`（新增可選的業務、客戶、部門篩選，**不帶參數時輸出與過去逐鍵相同**）；報價漏斗分類抽成 `dashboard.classify_quote_funnel`，首頁漏斗與新報表共用。
 - 權限：營收、毛利、應收帳齡沿用 `_require_reports_access`（不改）。案件進度、業務漏斗是新閘門（PM 2026-11-14 裁示）：不需要「營運報表」模組，只列呼叫者有權限的案件與商機（row_access）；案件進度不含金額；漏斗預估金額依 `can_see_financial`，無權限回 null、Excel 不輸出金額欄。看不到＝null、未填／未精算＝`{state}`，不當作 0。
@@ -13,7 +14,7 @@
   營運報表／營收／毛利共用的 `reports._collect` 同樣先經 `_clean_pay_items`：款項項目不是物件（例如字串）或金額算不出來 ⇒ 略過並計數，回傳多 `dirtyCount`（僅有壞資料時）；B1 營收、毛利的說明帶「有 N 筆資料格式異常未計入」。營收的收入明細來源（`arap/receivables`）三個迴圈也略過非物件款項。
   不在此次範圍（T87 之後的待辦，尚無實例）：報價單本身 `total` 欄位是文字（除應收帳齡外仍可能讓部分端點 500）；款項項目不是物件時，儀表板、出納等其他讀取處未掃。
 
-## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正、匯出、自訂報表頁、分享給誰面板、複審修正、選單旗標過濾、應收帳款來源與來源排序、髒資料防護、財務角色可達性及預診斷修復（含匯出區域標籤統一，並與 B1 髒資料修正合併）；版號由列車取）
+- **（併入）(next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表）**
 - 新增（旗標 `custom_reports.enabled` 預設關：關＝路由 404、不讀寫表；既有端點與權限語意不變）：`/api/custom-reports/sources`、`/api/custom-reports/preview`（`modules/analytics/api/custom_reports.py`；預覽每人每分鐘 20 次、不留稽核）；新增兩格能力 `analytics.custom_report.view`／`.export`（legacy＝持有 quotation／case_manage／dev_crm 任一模組；能力與模組存取各查各的）。測試：`tests/platform/test_custom_reports_api_t87.py`。
 - 新增（schema +1：analytics 模組 schema 版本 0→1，模組 migration `0001_custom_reports`，只新增 `custom_reports`、`custom_report_shares` 兩張表；冪等、可重跑；回滾說明在檔頭）：「我的報表」儲存與 CRUD（`GET|POST /api/custom-reports`、`GET|PUT|DELETE /api/custom-reports/{id}`、`POST /api/custom-reports/{id}/copy`；每人 30 份、名稱不可重複、`If-Match` etag 409、非擁有者一律 404 同一句；分享依設定 `custom_reports.sharing`、刪除依設定 `custom_reports.recycle_deleted` 進刪除暫存區，adapter `custom_report`）。測試：`tests/platform/test_custom_reports_store_t87.py`。
 - 修正（旗標後；h11 審查）：被分享者讀定義時，沒有權限看的欄位連同篩選門檻、分組、彙總、排序都不回傳（只回 `partiallyHidden`），含這類條件的報表不能複製；預覽與匯出共用全程式庫並行上限 4（滿了回 429 白話說明）；建立／更新／複製遇未預期例外回固定訊息；`/sources` 的選項套列範圍；資源回收筒遮罩報表定義。
