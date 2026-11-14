@@ -2,7 +2,7 @@
 """S5 外部群組（SPEC §15.A，r3.5）：四個「設定值存在別處、操作入口在原頁面」的群組搬進設定中心的待生效／雙人核准／稽核機制。
 
 [單位] helper:settings_groups_external    [層] L1    [穩定度] 實驗
-[公開介面] register、T100_DEFAULT_CONFIG、BONUS_SLOTS、raw_get、raw_put、raw_delete、drift_report
+[公開介面] register、T100_DEFAULT_CONFIG、BONUS_SLOTS、raw_get、raw_put、raw_delete、drift_report、GROUPS、T100_ACCOUNT_FIELDS、T100_KEY、TAX_KEY、bonus_cross_check、bonus_read、bonus_write、check_drift、overhead_cross_check、overhead_read、overhead_write、problems_text、t100_cross_check、t100_normalize、t100_read、t100_summarize、t100_write、tax_cross_check、tax_normalize、tax_read、tax_summarize、tax_write
 [不變式]
   * 四個群組：`bonus_voucher`（獎金傳票科目 5 欄）、`tax_rules`（法規參數 1 個 json）、`t100_export`（T100 匯出科目 1 個 json）、
     `overhead_basis`（管銷口徑／公益基數 2 欄）。全部 `external=True`：設定中心的一般路由讀寫一律拒絕、不出現在清單，只能走原頁面的舊端點
