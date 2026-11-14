@@ -25,6 +25,7 @@ import time
 import uuid
 from pathlib import Path
 
+import http.client
 import ssl
 import urllib.error
 import urllib.request
@@ -56,7 +57,7 @@ class _Response:
 
     @property
     def ok(self):
-        return self.status_code < 400
+        return 200 <= self.status_code < 300                  # 3xx 不算 ok（不跟隨轉址，見 _NoRedirect）
 
     @property
     def text(self):
@@ -66,13 +67,21 @@ class _Response:
         return json.loads(self.content.decode("utf-8"))
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """不跟隨轉址：urllib 預設會把 Authorization 等標頭原樣帶到轉址的目的地（requests 換主機時會拿掉），
+    超管 token 可能因此外洩，也可能讓正式機連到自己的對外 IP。3xx 當成回應回傳（會變成 HTTPError ⇒ _Response）。"""
+
+    def redirect_request(self, *a, **k):
+        return None
+
+
 def _http_request(method, url, json_body=None, headers=None, verify=True, timeout=None):
     data = None
     hdrs = dict(headers or {})
     if json_body is not None:
         data = json.dumps(json_body).encode("utf-8")
         hdrs.setdefault("Content-Type", "application/json")
-    handlers = []
+    handlers = [_NoRedirect()]
     if str(url).lower().startswith("https"):
         ctx = ssl.create_default_context()
         if not verify:
@@ -90,7 +99,7 @@ def _http_request(method, url, json_body=None, headers=None, verify=True, timeou
         except Exception:
             body = b""
         return _Response(e.code, body, url)
-    except (urllib.error.URLError, OSError, ValueError) as e:  # 連線／逾時／TLS／網址壞
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:  # 連線／逾時／TLS／網址壞／回應不是 HTTP
         raise _RequestException(str(e)) from e
 
 
@@ -1012,8 +1021,10 @@ def _delivered_status() -> dict:
 
 def _is_this_machine(host: str) -> bool:
     """`host` 是不是這台機器自己的位址（含 127.x）。只在本機 bind 一個 UDP socket 試試：位址不屬於本機介面就會失敗；**不送任何封包**。"""
+    import ipaddress
     import socket
     try:
+        ipaddress.ip_address(host)                       # 只收 IP 字面值：空字串會 bind 到 INADDR_ANY、主機名會觸發 DNS
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.bind((host, 0))
         return True

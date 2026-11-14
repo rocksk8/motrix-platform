@@ -201,3 +201,102 @@ def test_https_verify_false_skips_certificate_check(dd, monkeypatch):
     with pytest.raises(dd.requests.RequestException):
         dd.requests.get("https://example.invalid/", timeout=1)
     assert seen["ctx"].verify_mode == dd.ssl.CERT_REQUIRED and seen["ctx"].check_hostname is True
+
+
+# ── h11 複審：不跟隨轉址、3xx 不算 ok、回應不是 HTTP 也要變成 RequestException ──────
+
+class _Target(http.server.BaseHTTPRequestHandler):
+    hits = []
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        _Target.hits.append((self.command, self.path, self.headers.get("Authorization")))
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    do_POST = do_GET
+
+
+def _redirector(code, location):
+    class R(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _go(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(n)
+            self.send_response(code)
+            self.send_header("Location", location)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_GET = do_POST = _go
+    return R
+
+
+def _serve(handler):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, "http://127.0.0.1:%d" % srv.server_address[1]
+
+
+@pytest.mark.parametrize("code", [301, 302, 307, 308])
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_redirects_are_not_followed_and_the_token_never_reaches_the_other_host(dd, code, method):
+    _Target.hits = []
+    target, turl = _serve(_Target)
+    redir, rurl = _serve(_redirector(code, turl.replace("127.0.0.1", "localhost") + "/stolen"))
+    try:
+        kw = {"headers": {"Authorization": "Bearer SECRET"}, "verify": False, "timeout": 5}
+        r = getattr(dd.requests, method)(rurl + "/api/x", **kw) if method == "get" else dd.requests.post(rurl + "/api/x", json={}, **kw)
+        assert r.status_code == code and not r.ok
+        assert _Target.hits == [], "轉址被跟隨了：%s" % _Target.hits
+    finally:
+        target.shutdown(); target.server_close(); redir.shutdown(); redir.server_close()
+
+
+def test_a_redirecting_ping_is_not_healthy(dd, monkeypatch):
+    redir, rurl = _serve(_redirector(307, "http://127.0.0.1:9/"))
+    try:
+        monkeypatch.setattr(dd, "PROD_BASE_URL", rurl)
+        monkeypatch.setattr(dd, "_delivered_status", lambda: {"configured": False})
+        st = dd._check_prod_status()
+        assert st["healthy"] is not True, st
+    finally:
+        redir.shutdown(); redir.server_close()
+
+
+def test_only_2xx_is_ok(dd):
+    for code, ok in ((200, True), (204, True), (301, False), (307, False), (400, False), (500, False)):
+        assert dd._Response(code, b"").ok is ok, code
+
+
+def test_a_reply_that_is_not_http_becomes_request_exception(dd):
+    import socket
+
+    ls = socket.socket()
+    ls.bind(("127.0.0.1", 0))
+    ls.listen(1)
+
+    def serve():
+        c, _ = ls.accept()
+        c.recv(4096)
+        c.sendall(b"NOTHTTP\r\n\r\n")
+        c.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    try:
+        with pytest.raises(dd.requests.RequestException):
+            dd.requests.get("http://127.0.0.1:%d/" % ls.getsockname()[1], timeout=5)
+    finally:
+        ls.close()
+
+
+def test_is_this_machine_accepts_only_ip_literals(dd):
+    assert dd._is_this_machine("") is False                    # 空字串 bind 會變 INADDR_ANY
+    assert dd._is_this_machine("localhost") is False           # 主機名會觸發 DNS，不是「不送封包」
+    assert dd._is_this_machine("127.0.0.1") is True

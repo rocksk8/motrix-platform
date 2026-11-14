@@ -78,7 +78,7 @@ def test_is_this_machine_uses_bind_only_and_sends_nothing(monkeypatch):
     monkeypatch.setattr(socket.socket, "sendto", boom)
     assert dd._is_this_machine("127.0.0.1") is True
     assert dd._is_this_machine("203.0.113.9") is False        # TEST-NET-3：不會是任何機器的位址
-    assert dd._is_this_machine("") is True or dd._is_this_machine("") is False       # 垃圾輸入不丟例外
+    assert dd._is_this_machine("") is False                  # 垃圾輸入不丟例外，也不當成本機（空字串 bind 會變 INADDR_ANY）
     assert dd._is_this_machine("not a host") is False
 
 
