@@ -208,7 +208,9 @@ def _title_expr(text):
 
 def _band_expr(text):
     """第一張 band 卡（待我簽核）副標的 `x-text` 運算式（結構錨點：第一個 `<p class="h-band__p" x-text=`）。"""
-    m = re.search(r'<p class="h-band__p" x-text="([^"]*)"', text)
+    # 現行頁面有 data-testid="band-approvals"：以它為錨（不怕卡片重排）；修正前的舊版沒有 ⇒ 退回「第一個 h-band__p」。
+    anchor = text.find('data-testid="band-approvals"')
+    m = re.search(r'<p class="h-band__p" x-text="([^"]*)"', text[anchor:] if anchor >= 0 else text)
     assert m, "`index.html` 裡找不到 band 副標的 x-text —— 這一題的前提不成立"
     return "x-text", m.group(1)
 
@@ -479,8 +481,13 @@ def test_fx33_a_genuinely_empty_system_still_gets_its_onboarding(page):
     # 🔑 而一個真的沒事要簽的人會看到一個**沒有任何說明的空白**。
     assert got["title"] is True, (
         f"拿到了、而且真的沒有待簽，標題卻不說「沒有待簽」：{got['stats']}")
-    assert got["band"] != _observe(page, None)["band"], (
-        f"拿到了、而且真的沒有待簽，副標那一行卻是：{got['band']!r}")
+    # 正向控制：真的是 0 時，副標要說**一句話**（非空、非 undefined、含中文字），
+    # 且與「讀不到」時說的不同（只比不同，空白或 undefined 也會過 ⇒ 先釘住「有說話」）。
+    zero_band = got["band"]
+    assert zero_band.strip() and zero_band != "undefined" and re.search(r"[一-鿿]", zero_band), (
+        f"拿到了、而且真的沒有待簽，副標那一行是空的或不是一句話：{zero_band!r}")
+    assert zero_band != _observe(page, None)["band"], (
+        f"拿到了、而且真的沒有待簽，副標那一行卻與「讀不到」時一樣：{zero_band!r}")
 
 
 def test_fx33_a_system_with_data_shows_neither(page):
