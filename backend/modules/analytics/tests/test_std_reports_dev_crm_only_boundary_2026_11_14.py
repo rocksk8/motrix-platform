@@ -25,7 +25,7 @@ LEGACY = [
 STD_MONEY = ["revenue", "gross-margin", "ar-aging"]
 
 #: 🔴 過渡開關：h8 的 /api/std-reports 併入整合分支時改 False（見檔頭）。False ⇒ 路由不存在就紅。
-BACKEND_PENDING = True
+BACKEND_PENDING = False
 
 
 def _headers(client, make_user, name, role="sales", modules=("dev_crm",)):
