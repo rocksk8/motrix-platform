@@ -773,18 +773,10 @@ def quota_status() -> dict:
     }
 
 
-def quota_calculator() -> dict:
-    """**真實**計算器 —— 每一個數字都從實際資料算，一個都不是估的（GB5）。
-
-    單價與免費額度**不寫死在程式裡**，它們是最高管理者填的欄位（GB6）。
-    Google 改過不止一次，而寫死的價格不會報錯，只會算錯。
-
-    `cost_this_period` 的前提是「一次請求 = 一個計費單位」，
-    而那一點**尚未查證**（A-2 讀過官方頁面沒有找到明文）=>
-    沒填單價就回 `None`，不要用 0 冒充：0 元會被讀成「不用錢」。
-    """
+def _quota_address_counts():
+    """重的那一半：`(快取中的相異地址數, 還沒快取的待暖地址數)`。要掃 geocode_cache 與所有待暖來源（報價單、客戶…的地址），
+    資料多時要數秒（正式機 2026-11-13：8.6～9.8 秒）。⇒ 端點走 `quota_calculator(use_cache=True)`，結果放行程記憶體（見下）。"""
     from db import get_db
-    settings = quota_settings()
     cached = uncached = 0
     conn = get_db()
     try:
@@ -813,6 +805,73 @@ def quota_calculator() -> dict:
             uncached = sum(1 for a in addresses if cached_only(a) is None)
     except Exception:   # noqa: BLE001
         logger.exception("quota_calculator: 待暖清單算不出來")
+    return cached, uncached
+
+
+#: T86 U11：額度頁的「重的那一半」結果快取（行程內）。新鮮 ⇒ 直接給；過期 ⇒ **先給舊值**、背景重算一次（同時只有一個在算，
+#: 不佔用請求的執行緒與連線）；一次都還沒算過 ⇒ 第一個請求算（其他同時來的等它，不各算一遍）。數字最多落後 TTL，頁面本來就是看概況。
+QUOTA_COUNTS_TTL_S = 300
+_QC_STATE = {"at": 0.0, "value": None, "refreshing": False}
+_QC_LOCK = threading.Lock()
+
+
+def invalidate_quota_counts():
+    """設定被改（週期、額度…）或測試要重算時用：下一次請求重算。"""
+    with _QC_LOCK:
+        _QC_STATE["at"], _QC_STATE["value"] = 0.0, None
+
+
+def _refresh_quota_counts():
+    try:
+        v = _quota_address_counts()
+        with _QC_LOCK:
+            _QC_STATE["at"], _QC_STATE["value"] = time.monotonic(), v
+    except Exception:   # noqa: BLE001
+        logger.exception("quota_calculator: 背景重算失敗（沿用舊值）")
+    finally:
+        with _QC_LOCK:
+            _QC_STATE["refreshing"] = False
+
+
+def _quota_address_counts_cached():
+    with _QC_LOCK:
+        v, at = _QC_STATE["value"], _QC_STATE["at"]
+        if v is not None and time.monotonic() - at < QUOTA_COUNTS_TTL_S:
+            return v
+        if v is not None:                                    # 過期：給舊值，背景重算（單飛）
+            if not _QC_STATE["refreshing"]:
+                _QC_STATE["refreshing"] = True
+                threading.Thread(target=_refresh_quota_counts, name="quota-counts", daemon=True).start()
+            return v
+    # 一次都沒算過：第一個進來的算；其餘等鎖後直接用它的結果
+    with _QC_COLD_LOCK:
+        with _QC_LOCK:
+            if _QC_STATE["value"] is not None:
+                return _QC_STATE["value"]
+        v = _quota_address_counts()
+        with _QC_LOCK:
+            _QC_STATE["at"], _QC_STATE["value"] = time.monotonic(), v
+        return v
+
+
+_QC_COLD_LOCK = threading.Lock()
+
+
+def quota_calculator(use_cache: bool = False) -> dict:
+    """**真實**計算器 —— 每一個數字都從實際資料算，一個都不是估的（GB5）。
+
+    單價與免費額度**不寫死在程式裡**，它們是最高管理者填的欄位（GB6）。
+    Google 改過不止一次，而寫死的價格不會報錯，只會算錯。
+
+    `cost_this_period` 的前提是「一次請求 = 一個計費單位」，
+    而那一點**尚未查證**（A-2 讀過官方頁面沒有找到明文）=>
+    沒填單價就回 `None`，不要用 0 冒充：0 元會被讀成「不用錢」。
+
+    `use_cache=True`（只有額度頁端點用）：地址數（要掃整個快取與待暖來源的那一半）走 `QUOTA_COUNTS_TTL_S` 的行程內快取；
+    本期用量、額度、單價、剩餘每次都現算（便宜）。預設 False ＝ 與以前相同，每次都重算。
+    """
+    settings = quota_settings()
+    cached, uncached = _quota_address_counts_cached() if use_cache else _quota_address_counts()
 
     used = usage_this_period()
     quota = quota_for()

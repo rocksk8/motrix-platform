@@ -114,8 +114,11 @@ def test_the_google_quota_endpoint_opens_a_bounded_number_of_connections(client,
     assert r.status_code == 200, r.text
     h = {"Authorization": "Bearer " + r.json()["token"]}
 
+    from helpers import geo as geo_mod
+
     def one_request(addrs):
         _use_warm_source(monkeypatch, addrs)
+        geo_mod.invalidate_quota_counts()      # T86 U11：端點的地址數有行程內快取；這題量的是「一次完整計算」的連線數 ⇒ 每次都要冷算
         count_conns.clear()
         resp = client.get("/api/settings/google-quota", headers=h)
         assert resp.status_code == 200, resp.text

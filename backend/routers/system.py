@@ -2438,7 +2438,7 @@ def get_google_quota_setting(authorization: str = Header(None)):
     return {
         "settings": geo.quota_settings(),
         "status": geo.quota_status(),
-        "calculator": geo.quota_calculator(),
+        "calculator": geo.quota_calculator(use_cache=True),      # T86 U11：重的那一半（地址數）走行程內快取，過期先給舊值、背景重算
         # 📌 SKU 清單給畫面用。**額度是 per-SKU 而且不 pool** ——
         #    一個「Google 還剩多少」的欄位在 2025-03-01 之後沒有意義。
         "skus": [
