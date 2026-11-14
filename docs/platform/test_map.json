@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1730,
+  "tests": 1731,
   "unmapped": 9,
   "kinds": {
    "api": 957,
    "e2e": 406,
-   "audit": 216,
+   "audit": 217,
    "unit": 151
   },
   "routes": 985
@@ -19961,6 +19961,42 @@
     "/api/zzy/1",
     "/api/zzy/{}"
    ]
+  },
+  "backend/tests/platform/test_core_major_bump_2026_11_14.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "file:CHANGELOG.md",
+    "file:backend/core/CHANGELOG.md",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/test_train_number.py",
+    "file:tools/platform/core_major_bump.py",
+    "file:tools/platform/module_update.py",
+    "file:tools/platform/train_number.py",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/test_train_number.py"
+    ],
+    "path": [
+     "CHANGELOG.md",
+     "backend/core/",
+     "backend/core/CHANGELOG.md",
+     "backend/core/registry.py",
+     "backend/modules/",
+     "tools/platform/core_major_bump.py",
+     "tools/platform/module_update.py",
+     "tools/platform/train_number.py"
+    ]
+   }
   },
   "backend/tests/platform/test_core_only_rc.py": {
    "kind": "audit",
