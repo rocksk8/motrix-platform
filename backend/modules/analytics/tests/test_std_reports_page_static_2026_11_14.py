@@ -22,6 +22,51 @@ def _script() -> str:
     return "\n".join(re.findall(r"<script>(.*?)</script>", PAGE, flags=re.S))
 
 
+def _balanced(src: str, start: int, open_ch: str, close_ch: str) -> int:
+    """src[start] 是 open_ch ⇒ 回傳配對的 close_ch 之後一格的位置（略過字串與註解裡的括號）。"""
+    depth, i, n = 0, start, len(src)
+    while i < n:
+        ch, two = src[i], src[i:i + 2]
+        if two == "//":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        if two == "/*":
+            i = n if src.find("*/", i + 2) < 0 else src.find("*/", i + 2) + 2
+            continue
+        if ch in "'\"`":
+            i += 1
+            while i < n and src[i] != ch:
+                i += 2 if src[i] == "\\" else 1
+            i += 1
+            continue
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise AssertionError("括號沒有配對：%r" % src[start:start + 40])
+
+
+def _member(js: str, name: str) -> str:
+    """元件物件裡 `name(...) { ... }`（含 async／get 前綴）的整段原始碼：靠「行首縮排＋名稱＋括號」的結構找，不靠文案。"""
+    m = re.search(r"^[ \t]+(?:async[ \t]+|get[ \t]+)?%s[ \t]*\(" % re.escape(name), js, flags=re.M)
+    assert m, "找不到成員：%s" % name
+    after_params = _balanced(js, m.end() - 1, "(", ")")
+    brace = re.compile(r"\s*\{").match(js, after_params)
+    assert brace, "成員 %s 沒有函式本體" % name
+    return js[m.start():_balanced(js, brace.end() - 1, "{", "}")]
+
+
+def _tag(html: str, pattern: str) -> str:
+    """第一個符合 pattern 的開頭標籤全文（pattern 寫在 `<` 之後、`>` 之前的內容）。"""
+    m = re.search(r"<(?:%s)[^>]*>" % pattern, html)
+    assert m, pattern
+    return m.group(0)
+
+
 @pytest.mark.parametrize("tid", [
     "sr-filters", "sr-run", "sr-reset", "sr-excel", "sr-pdf", "sr-result", "sr-kpis", "sr-notes",
     "sr-blocked", "sr-load-error", "sr-error", "sr-stale", "sr-masked", "sr-filter-hint",
@@ -56,25 +101,21 @@ def test_no_inline_styles_and_no_raw_to_locale_string():
 def test_query_only_carries_params_the_report_declares():
     """不適用的條件不能送出去（例如帳齡的日期）：後端對未知／不適用條件回 400。"""
     js = _script()
-    qs = js[js.index("_qs()"):]
-    qs = qs[:qs.index("async _fail")]
-    assert "self.has(k)" in qs
+    assert "self.has(k)" in _member(js, "_qs")
 
 
 def test_value_semantics_are_distinct():
     """null＝看不到、{state}＝沒填／未精算、0＝真的 0：三種在畫面上不可混為一談。"""
     js = _script()
     assert "'unfilled'" in js and "'unsettled'" in js
-    fmt = js[js.index("fmt(v, type, kpi)"):]
-    fmt = fmt[:fmt.index("// ── 營收逐月圖")]
-    assert fmt.index("v === null") < fmt.index("isState(v)")
+    fmt = _member(js, "fmt")
+    assert re.search(r"v === null", fmt).start() < re.search(r"isState\(v\)", fmt).start()
     assert "=== ''" in fmt and "v === 0" not in fmt, "0 不能被當成空值"
 
 
 def test_export_downloads_the_snapshot_not_the_live_form():
     js = _script()
-    dl = js[js.index("async download(kind)"):]
-    dl = dl[:dl.index("isNum(c)")]
+    dl = _member(js, "download")
     assert "this.shown" in dl and "snap.qs" in dl
     assert "this._qs()" not in dl
 
@@ -117,7 +158,8 @@ def test_report_ids_are_not_hardcoded_in_the_page():
 
 def test_toggle_and_tab_buttons_expose_state_to_assistive_tech():
     """口徑切換要有 aria-pressed；頁籤不宣告 tablist/tab（沒有 tabpanel／方向鍵就不要冒充）。"""
-    assert PAGE.count(":aria-pressed=") >= 2
+    for tid in ("sr-basis-cash", "sr-basis-accrual"):
+        assert ":aria-pressed=" in _tag(PAGE, r'button[^>]*data-testid="%s"' % tid), tid
     assert 'role="tablist"' not in PAGE and 'role="tab"' not in PAGE
     assert ":aria-current=" in PAGE
 
@@ -125,7 +167,7 @@ def test_toggle_and_tab_buttons_expose_state_to_assistive_tech():
 def test_monthly_chart_has_a_text_alternative():
     """柱狀圖只靠視覺／滑鼠提示不夠（手機沒有 hover、讀屏讀不到）：圖對輔助科技隱藏，旁邊給逐月數字表。"""
     assert re.search(r'class="sr-bars"[^>]*role="img"[^>]*:aria-label="seriesSummary"', PAGE)
-    assert "aria-hidden" not in PAGE.split('class="sr-bars"')[1].split(">")[0]
+    assert "aria-hidden" not in _tag(PAGE, r'div class="sr-bars"')
     assert 'data-testid="sr-series-table"' in PAGE
     assert ":title=" not in PAGE
 
@@ -133,11 +175,9 @@ def test_monthly_chart_has_a_text_alternative():
 def test_dash_is_only_for_masked_money_and_empty_stages_carry_no_amount():
     """「—」只代表看不到金額：0 件的階段不帶金額；算不出來的百分比寫明原因，不用「—」。"""
     js = _script()
-    dev = js[js.index("get devFunnel()"):]
-    dev = dev[:dev.index("get quoteFunnel()")]
+    dev = _member(js, "devFunnel")
     assert "d.count === 0" in dev and "'0 件'" in dev
-    fmt = js[js.index("fmt(v, type, kpi)"):]
-    fmt = fmt[:fmt.index("// ── 營收逐月圖")]
+    fmt = _member(js, "fmt")
     assert "type === 'pct'" in fmt and "無法計算" in fmt
 
 
@@ -159,8 +199,7 @@ def test_funnel_missing_count_never_wraps_inside_the_parenthesis():
 
 def test_empty_date_cells_say_why_and_dash_stays_for_masked_money():
     js = _script()
-    cell = js[js.index("cell(v, c)"):]
-    cell = cell[:cell.index("isNum(c)")]
+    cell = _member(js, "cell")
     assert "c.type === 'date'" in cell and "未填" in cell and "尚無跟進" in cell
     assert 'x-text="cell(r[c.key], c)"' in PAGE
 
