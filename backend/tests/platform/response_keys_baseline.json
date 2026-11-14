@@ -1376,6 +1376,9 @@
    "menu.pageModules.contractors.html",
    "menu.pageModules.contractors.html.key",
    "menu.pageModules.contractors.html.name",
+   "menu.pageModules.custom-reports.html",
+   "menu.pageModules.custom-reports.html.key",
+   "menu.pageModules.custom-reports.html.name",
    "menu.pageModules.daily-tasks.html",
    "menu.pageModules.daily-tasks.html.key",
    "menu.pageModules.daily-tasks.html.name",
@@ -2718,6 +2721,36 @@
    "reviewEnabled"
   ],
   "s": 200
+ },
+ "/api/custom-reports": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-reports/share-targets": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-reports/sources": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-reports/{rid}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-reports/{rid}/shares": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/custom/{key}/meta": {
   "k": [
@@ -4617,6 +4650,15 @@
    "items.settings_group:completion_note.status",
    "items.settings_group:completion_note.tier",
    "items.settings_group:completion_note.when",
+   "items.settings_group:custom_reports",
+   "items.settings_group:custom_reports.blurb",
+   "items.settings_group:custom_reports.category",
+   "items.settings_group:custom_reports.note",
+   "items.settings_group:custom_reports.order",
+   "items.settings_group:custom_reports.section",
+   "items.settings_group:custom_reports.status",
+   "items.settings_group:custom_reports.tier",
+   "items.settings_group:custom_reports.when",
    "items.settings_group:download_name",
    "items.settings_group:download_name.blurb",
    "items.settings_group:download_name.category",
@@ -5779,6 +5821,9 @@
    "pageModules.contractors.html",
    "pageModules.contractors.html.key",
    "pageModules.contractors.html.name",
+   "pageModules.custom-reports.html",
+   "pageModules.custom-reports.html.key",
+   "pageModules.custom-reports.html.name",
    "pageModules.daily-tasks.html",
    "pageModules.daily-tasks.html.key",
    "pageModules.daily-tasks.html.name",
@@ -7029,6 +7074,7 @@
    "types.completion_note",
    "types.contractor_dispatch",
    "types.contractor_voucher",
+   "types.custom_report",
    "types.extra_expense",
    "types.invoice_voucher",
    "types.material_order",
@@ -7051,6 +7097,7 @@
    "adapters.completion_note",
    "adapters.contractor_dispatch",
    "adapters.contractor_voucher",
+   "adapters.custom_report",
    "adapters.extra_expense",
    "adapters.invoice_voucher",
    "adapters.material_order",
@@ -7647,6 +7694,7 @@
    "groups[].values.enforce_user_buttons",
    "groups[].values.entry_unify",
    "groups[].values.estimate_no_prefix",
+   "groups[].values.export_scope",
    "groups[].values.ext_totp_enabled",
    "groups[].values.ext_totp_role_admin",
    "groups[].values.ext_totp_role_engineer",
@@ -7717,6 +7765,7 @@
    "groups[].values.quote_form_good",
    "groups[].values.quote_form_low",
    "groups[].values.quote_in_customer_output",
+   "groups[].values.quote_money_scope",
    "groups[].values.quote_on_finance_docs",
    "groups[].values.quotes_personal_columns",
    "groups[].values.quotes_personal_default_tab",
@@ -7726,6 +7775,7 @@
    "groups[].values.receive_wizard",
    "groups[].values.received",
    "groups[].values.reconfirm_mode",
+   "groups[].values.recycle_deleted",
    "groups[].values.reject_final_keep",
    "groups[].values.report_good",
    "groups[].values.report_low",
@@ -7737,6 +7787,7 @@
    "groups[].values.separator",
    "groups[].values.settle_overdue_days",
    "groups[].values.settlement_good",
+   "groups[].values.sharing",
    "groups[].values.ship_device_warranty",
    "groups[].values.ship_install_ok",
    "groups[].values.show_denied",
