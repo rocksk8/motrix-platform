@@ -1248,11 +1248,12 @@
 
       <!-- T86 業務開發→報價單：從商機「轉建」帶 ?devCase=<id> 進來時，第一次存檔成功後自動連回該商機（PATCH /api/dev-cases/<id>/convert）。
            連結失敗不准靜默：持續顯示原因與「重試連結」（報價單本身已存好，不會重複建單）。 -->
-      <div x-show="devCaseBanner.kind" x-cloak data-testid="qf-devcase-banner" role="alert"
-           :style="devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF')"
-           style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh)">
+      <div x-show="devCaseBanner.kind" x-cloak>
+      <div data-testid="qf-devcase-banner" role="alert"
+           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
         <span data-testid="qf-devcase-msg" x-text="devCaseBanner.msg"></span>
         <button class="btn btn-sm" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
+      </div>
       </div>
 
       <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->

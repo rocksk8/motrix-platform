@@ -92,6 +92,9 @@ def test_estimate_prefill_then_first_save_links_back_to_the_dev_case(live_server
     banner = page.locator("[data-testid=qf-devcase-banner]")
     banner.wait_for(state="visible", timeout=5000)
     assert "第一次存檔後會自動連回" in page.locator("[data-testid=qf-devcase-msg]").inner_text()
+    # 橫幅有內距與邊框（Alpine 的 :style 字串會整個取代 inline style，曾經把版面全洗掉）
+    box = banner.evaluate("e => { const c = getComputedStyle(e); return [c.paddingLeft, c.borderTopWidth, c.display] }")
+    assert box == ["16px", "1px", "flex"], box
     assert page.locator("[data-testid=qf-devcase-retry]").is_hidden()
     # 還沒存檔：商機沒被連結
     assert not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
