@@ -4,7 +4,7 @@
 // GET /api/quotations/{案號}/material-flow（旗標 onepipe.timeline；讀不到就只顯示前三關）。組合見 case-management-core.js 的 app()。
 window.CM_PARTS = window.CM_PARTS || []
 window.CM_PARTS.push(() => ({
-    mtlFlow: null,          // null＝尚未讀；false＝讀不到（旗標關／無權限）；否則 { stock, ship }（各為 cell 或 null）
+    mtlFlow: null,          // null＝尚未讀；false＝旗標關／讀不到；否則 { stock, ship, stockNoPerm, shipNoPerm }（cell 或 null；NoPerm＝無檢視權限，時間軸仍保留該關並顯示「無檢視權限」）
     _mtlFor: '',            // 已為哪個案件讀過（同一件只讀一次）
     _mtlReq: 0,
     mtlOpen: {},            // 哪幾個材料的明細展開了（預設全部收合；新增品項會自動展開）
@@ -26,19 +26,23 @@ window.CM_PARTS.push(() => ({
       let on = false
       try { on = !!(window.MotrixOnepipe && (await window.MotrixOnepipe.flags()).timeline) } catch (e) { on = false }
       if (this._mtlFor !== no) return
-      if (on) this.mtlLoadFlow(no)
-      else this.mtlFlow = false
+      if (!on) this.mtlFlow = false
+      // 不是本案成員（只靠出納模組唯讀進案件）：後端對物料流程回 404，不送注定失敗的請求；入庫／出貨兩關顯示「無檢視權限」
+      else if (this.caseReadOnly && this.caseReadOnly()) this.mtlFlow = { stock: null, ship: null, stockNoPerm: true, shipNoPerm: true }
+      else this.mtlLoadFlow(no)
     },
     async mtlLoadFlow(no) {
       const req = ++this._mtlReq
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(no)}/material-flow`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (req !== this._mtlReq || !this.selected || this.selected.quote_no !== no) return
+        if (r.status === 403 || r.status === 404) { this.mtlFlow = { stock: null, ship: null, stockNoPerm: true, shipNoPerm: true }; return }
         if (!r.ok) { this.mtlFlow = false; return }
         const d = await r.json()
         const cell = k => (d.cells || []).find(c => c.key === k) || null
         const ok = c => (c && !c.forbidden && !c.unavailable ? c : null)
-        this.mtlFlow = { stock: ok(cell('stock')), ship: ok(cell('ship')) }
+        const forbidden = c => !!(c && c.forbidden)
+        this.mtlFlow = { stock: ok(cell('stock')), ship: ok(cell('ship')), stockNoPerm: forbidden(cell('stock')), shipNoPerm: forbidden(cell('ship')) }
       } catch (e) { if (req === this._mtlReq) this.mtlFlow = false }
     },
 
@@ -63,7 +67,7 @@ window.CM_PARTS.push(() => ({
       const o = this.mtlOrderOf(mat)
       const a = o ? this.moAp(o) : null
       const po = !!(mat.poLink && mat.poLink.key)
-      const canEdit = !!(this.moCanEdit && this.moCanEdit())
+      const canEdit = !!(this.moCanEdit && this.moCanEdit()) && !(this.caseReadOnly && this.caseReadOnly())      // 非本案成員：後端擋寫入，這裡不放操作按鈕
       const approved = po || !!(a && (a.legacy || a.status === '已核准'))
       const case_ = this._mtlCase()
       const steps = []
@@ -75,7 +79,7 @@ window.CM_PARTS.push(() => ({
       else if (po && !o) { req.state = 'done'; req.cap = '由採購單認列' }
       else if (!o) {
         const cands = this.mlCandidatesFor ? this.mlCandidatesFor(mat) : []
-        if (cands.length === 1) req.act = { label: '帶入並連結', run: () => this.mlPickCandidate(mat, this.mlGroupKey(cands[0])) }
+        if (cands.length === 1 && canEdit) req.act = { label: '帶入並連結', run: () => this.mlPickCandidate(mat, this.mlGroupKey(cands[0])) }
         else req.act = { label: '開請購單', href: 'payment-request.html?case=' + case_ + '&type=purchase_req' }
       } else if (a.legacy) { req.state = 'done'; req.cap = '舊單（未經審核）' }
       else if (a.status === '已核准') { req.state = 'done'; req.cap = (a.docCode || '') + '\n已核准' }
@@ -115,15 +119,17 @@ window.CM_PARTS.push(() => ({
         const stock = { key: 'stock', label: '入庫', state: has ? 'done' : 'todo', cap: !arrived ? '—' : (has ? '整案有入庫紀錄' : '尚無入庫紀錄'), act: null }
         steps.push(stock)
       }
+      if (f && f.stockNoPerm) steps.push({ key: 'stock', label: '入庫', state: 'todo', cap: '無檢視權限', act: null, noperm: true })
       if (f && f.ship) {
         const sh = f.ship
         const ship = { key: 'ship', label: '出貨', state: arrived && sh.state === 'done' ? 'done' : 'todo', cap: arrived ? (sh.items && sh.items.length ? sh.items.map(i => i.noteNo).join('、') : '尚無出貨單') : '—', act: null }
         if (arrived && !(sh.items && sh.items.length)) ship.act = { label: this.shipCanCreate() ? '開出貨單' : '前往出貨單', run: () => this.shipOpenFromTimeline() }
         steps.push(ship)
       }
+      if (f && f.shipNoPerm) steps.push({ key: 'ship', label: '出貨', state: 'todo', cap: '無檢視權限', act: null, noperm: true })
 
       // 目前這一關＝第一個未完成的關卡
-      const cur = steps.findIndex(s => s.state !== 'done')
+      const cur = steps.findIndex(s => s.state !== 'done' && !s.noperm)      // 無檢視權限的關卡不當「目前這一關」
       steps.forEach((s, i) => { if (i === cur) s.state = 'cur' })
       return steps
     },

@@ -64,6 +64,7 @@ window.CM_PARTS.push(() => ({
 
     async loadItemShipped(quoteNo, live, excludeNote) {
       this.itemShipped = { items: {}, materialToItem: {} }
+      if (this.caseReadOnly && this.caseReadOnly()) return      // 非本案成員：後端回 404，不送注定失敗的請求（累計出貨欄顯示「—」）
       try {
         // excludeNote：編輯中的那張單不計入（否則待審核／簽核中的單會把自己的占用算進「其他出貨單」）
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/item-shipped` + (excludeNote ? `?exclude_note=${encodeURIComponent(excludeNote)}` : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })

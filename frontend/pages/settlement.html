@@ -542,7 +542,7 @@
                       <span><span x-text="fmtQty(shippedOf(item.id).shipped) + ' / ' + fmtQty(item.origQty)"></span>
                         <span x-show="shippedOf(item.id).reserved > 0" style="display:block;font-size:10px;color:var(--text-dim)" x-text="'占用 ' + fmtQty(shippedOf(item.id).reserved)"></span></span>
                     </template>
-                    <span x-show="!shippedOf(item.id)" style="color:var(--text-dim)">—</span>
+                    <span x-show="!shippedOf(item.id)" style="color:var(--text-dim)" x-text="itemShippedNoPerm ? '無檢視權限' : '—'">—</span>
                   </td>
                   <td data-label="報價金額" class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="'NT$ ' + fmt(item.origAmount)"></span>
@@ -1292,6 +1292,7 @@ function settlementPage() {
     _actualsOk: false,
     itemActuals: {},             // {品項 id: actuals.items[]}
     offsets: [],                 // 沖銷對應 [{kind: material|extra, ref, itemId}]，隨精算存檔（settlement.offsets）
+    itemShippedNoPerm: false,    // T86：出貨數量讀不到是因為無檢視權限（403／404）
     itemShipped: {},             // 第 43 班：{報價品項 id: {ordered, shipped, reserved, attributed}}（GET …/item-shipped；只有數量；拿不到＝空 ⇒ 顯示「—」）
     itemPo: {},                  // 32-S5：{報價品項 id: 已認列的採購單連結金額}（來源 GET …/purchase-items 的 actualAmount；拿不到＝空）
     // W1：匯款手續費（公司自付、已匯款者）：額外支出請款的手續費＋承攬商匯款單的手續費；併入「額外支出」成本（十二格鍵名不動）
@@ -1467,9 +1468,11 @@ function settlementPage() {
     // 這一頁只讀不寫——編輯入口已移到案件管理的「額外支出」分頁。
     async loadItemShipped() {
       this.itemShipped = {}
+      this.itemShippedNoPerm = false
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/item-shipped`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) this.itemShipped = (await r.json()).items || {}
+        else if (r.status === 403 || r.status === 404) this.itemShippedNoPerm = true      // 非本案成員（只靠財務／出納權限進精算頁）：出貨數量不提供檢視，欄位標明原因而不是顯示「—」
       } catch {}
     },
     shippedOf(id) { const e = this.itemShipped[String(id)]; return e && e.attributed ? e : null },
