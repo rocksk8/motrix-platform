@@ -237,7 +237,7 @@ register_group(
           question="內部「方案組合比較」最多列出幾種組合？", label="組合比較列數",
           help="只影響內部成本比較畫面（客戶看不到）。超過的組合只顯示總數。",
           impact="只影響內部畫面，不影響任何金額、列印或客戶看到的內容。",
-          when="要先開啟「啟用擇一方案」才有作用。內部比較畫面出現「只顯示前 N 種」而你想看更多時。"),
+          when="要先開啟「啟用擇一方案」才有作用。內部比較畫面出現「只顯示前 N 種」而您想查看更多時。"),
         S("combo_view_default_open", "bool", False, risk="ops", recommended=False, advanced=True,
           question="開啟報價單時，內部「方案組合比較」是否預設展開？", label="組合比較預設展開",
           help="預設收合，要看時再展開，開單比較快。",
