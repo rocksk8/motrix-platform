@@ -1041,6 +1041,8 @@ if (typeof module !== 'undefined' && module.exports) {
         var hub = null
         g.items.forEach(function (it) { if (it.hub) hub = it })
         if (!hub || _pageOf(hub.href) === file) return
+        // 沒有進報表中心的權限（例如只有「業務開發」權限的業務，從側欄直接進標準報表）⇒ 不放回中心的連結，免得點到進不去的頁
+        if (!_permOk(hub.perm)) return
         g.items.forEach(function (it) { if (!it.hub && (it.active || []).indexOf(file) > -1) hit = { g: g, hub: hub } })
       })
       if (!hit) return

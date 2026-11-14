@@ -24,7 +24,7 @@ def _script() -> str:
 
 @pytest.mark.parametrize("tid", [
     "sr-filters", "sr-run", "sr-reset", "sr-excel", "sr-pdf", "sr-result", "sr-kpis", "sr-notes",
-    "sr-unavailable", "sr-load-error", "sr-error", "sr-stale", "sr-masked", "sr-filter-hint",
+    "sr-blocked", "sr-load-error", "sr-error", "sr-stale", "sr-masked", "sr-filter-hint",
     "sr-param-date_from", "sr-param-date_to", "sr-param-sales_id", "sr-param-customer", "sr-param-department_id",
     "sr-basis-cash", "sr-basis-accrual", "sr-funnel-dev", "sr-funnel-quote", "sr-series", "sr-ar-basis",
 ])
@@ -79,8 +79,12 @@ def test_export_downloads_the_snapshot_not_the_live_form():
     assert "this._qs()" not in dl
 
 
-def test_unavailable_report_explains_itself():
-    assert "rep.reason" in PAGE and "!rep.available" in PAGE
+def test_only_visible_reports_get_a_tab_and_no_request():
+    """PM 裁示（同 U4）：看不到的報表不出頁籤、不送請求；原因只在「全部都看不到」的空狀態列出。"""
+    js = _script()
+    assert "t.available !== false" in js and "this.blocked" in js
+    assert "sr-unavailable" not in PAGE
+    assert 'x-for="t in reports"' in PAGE and 'x-for="b in blocked"' in PAGE
 
 
 def test_ar_aging_states_basis_on_the_table_title():
@@ -104,6 +108,6 @@ def test_text_style_banned_words_absent():
 def test_report_ids_are_not_hardcoded_in_the_page():
     """報表清單來自後端目錄；頁面不寫死有哪些報表（只有營收口徑與漏斗版面這類報表專屬區塊會認 id）。"""
     js = _script()
-    assert "this.reports = j.reports" in js
+    assert "j.reports" in js
     assert "/api/std-reports/' + encodeURIComponent" in js
     assert set(re.findall(r"result\.id === '([a-z-]+)'", PAGE)) <= set(REPORT_IDS)

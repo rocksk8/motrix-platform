@@ -121,6 +121,9 @@
       <div class="sr-empty" data-testid="sr-empty-all">
         <b>您的帳號尚無可檢視的標準報表</b>
         報表依權限顯示。需要「營運報表」、財務檢視權限，或「業務開發」「案件」的使用權限，請聯絡管理員開通。
+        <ul class="sr-notes sr-blocked" data-testid="sr-blocked" x-show="blocked.length > 0">
+          <template x-for="b in blocked" :key="b.id"><li x-text="b.title + '：' + (b.reason || '需要對應的權限')"></li></template>
+        </ul>
       </div>
     </template>
 
@@ -149,7 +152,7 @@
               </template>
             </select></label>
           <div class="sr-btns">
-            <button type="button" class="btn btn-primary" data-testid="sr-run" :disabled="loading || !rep.available" @click="run()" x-text="loading ? '產出中…' : '套用'"></button>
+            <button type="button" class="btn btn-primary" data-testid="sr-run" :disabled="loading" @click="run()" x-text="loading ? '產出中…' : '套用'"></button>
             <button type="button" class="btn" data-testid="sr-reset" @click="reset()">清除條件</button>
           </div>
           <div class="sr-btns">
@@ -176,14 +179,7 @@
         </div>
         <p class="sr-desc" x-text="rep.desc"></p>
 
-        <template x-if="!rep.available">
-          <div class="sr-empty" data-testid="sr-unavailable">
-            <b x-text="'您的帳號目前不能檢視「' + rep.title + '」'"></b>
-            <span x-text="rep.reason || '需要對應的權限，請聯絡管理員開通。'"></span>
-          </div>
-        </template>
-
-        <template x-if="rep.available">
+        <template x-if="rep">
           <div>
             <div class="sr-actions">
               <span class="sr-stale" data-testid="sr-stale" x-show="result && stale">條件已變更，下方仍是上一次的結果——請按「套用」。</span>
@@ -339,7 +335,7 @@
         'gross-margin': '期間（依成案月）、業務、客戶、部門皆可篩選。',
       }
       return {
-        reports: [], salesOptions: [], departmentOptions: [], rep: null,
+        reports: [], blocked: [], salesOptions: [], departmentOptions: [], rep: null,
         form: {}, forms: {}, results: {}, shownQs: {},
         result: null, shown: null, stale: false,
         loaded: false, loading: false, exporting: '', error: '', loadError: '', seq: 0,
@@ -353,7 +349,10 @@
             var res = await fetch('/api/std-reports', { headers: { Authorization: 'Bearer ' + this._token() } })
             if (!res.ok) { this.loadError = '載入失敗（' + res.status + '）'; this.loaded = true; return }
             var j = await res.json()
-            this.reports = j.reports || []
+            // 只畫這位使用者看得到的報表：看不到的不出頁籤、不送請求（原因只在「全部都看不到」時列在空狀態）
+            var all = j.reports || []
+            this.reports = all.filter(function (t) { return t.available !== false })
+            this.blocked = all.filter(function (t) { return t.available === false })
             this.salesOptions = j.salesOptions || []
             this.departmentOptions = j.departmentOptions || []
           } catch (_e) { this.loadError = '載入失敗，請重新整理'; this.loaded = true; return }
@@ -361,7 +360,7 @@
           var want = ''
           try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (_e) { want = '' }
           var first = this.reports.find(function (t) { return t.id === want })
-            || this.reports.find(function (t) { return t.available }) || this.reports[0]
+            || this.reports[0]
           if (first) this.pick(first.id, true)
         },
         // 換報表：條件整組保留（共用條件），只把這張報表不適用的條件停用；作廢還在路上的產出
@@ -372,11 +371,11 @@
           this.seq++; this.loading = false; this.exporting = ''
           this.result = null; this.shown = null; this.error = ''; this.stale = false
           try { history.replaceState(null, '', '#' + id) } catch (_e) { /* 網址不能改只是不記得頁籤 */ }
-          if (this.rep.available) this.run()
+          this.run()
         },
         has(key) { return !!this.rep && (this.rep.params || []).indexOf(key) >= 0 },
         get filterHint() { return this.rep ? ('本報表：' + (HINTS[this.rep.id] || '')) : '' },
-        get canExport() { return !!this.rep && this.rep.available && !!this.result && !this.stale && !this.loading && !this.exporting },
+        get canExport() { return !!this.rep && !!this.result && !this.stale && !this.loading && !this.exporting },
         get emptyText() { return '查無符合條件的資料。放寬條件（例如期間、業務或部門）再試一次。' },
         touch() { this.stale = true },
         _ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') },
@@ -409,7 +408,7 @@
           return typeof d === 'string' ? d : ('失敗（' + res.status + '）')
         },
         async run() {
-          if (!this.rep || !this.rep.available) return
+          if (!this.rep) return
           var mine = ++this.seq
           var rid = this.rep.id          // 這一趟屬於哪張報表、用哪組條件：匯出只認這份快照，不認畫面上當下的表單
           this.loading = true; this.error = ''
