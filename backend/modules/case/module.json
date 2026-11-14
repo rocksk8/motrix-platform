@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件管理",
-  "version": "1.0.240",
+  "version": "1.0.241",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
