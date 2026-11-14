@@ -18,8 +18,10 @@ from pathlib import Path
 import pytest
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend"
-QF = FRONT / "pages" / "quotation-form.html"
-CPS = FRONT / "pages" / "company-profile-settings.html"
+from core.source_tree import page_file  # noqa: E402
+
+QF = page_file("quotation-form.html")
+CPS = page_file("company-profile-settings.html")
 NODE = shutil.which("node")
 
 PLAN_HARNESS = r"""
@@ -80,14 +82,14 @@ def test_webauthn_config_is_only_read_after_the_always_200_status_endpoint_says_
     # 讀取（GET）設定的點只有這一處；PATCH 是使用者按儲存才送
     gets = [m.start() for m in re.finditer(r"fetch\('/api/settings/webauthn-config'", s)]
     assert len(gets) == 2 and gets[0] > a            # 一個 GET（在 loadWebauthnConfig 內）、一個 PATCH（save）
-    for p in ("pages/login.html", "pages/my-account.html"):
-        t = (FRONT / p).read_text(encoding="utf-8")
+    for p in ("login.html", "my-account.html"):
+        t = page_file(p).read_text(encoding="utf-8")
         assert "/api/settings/webauthn-config'" not in t and "/api/settings/webauthn-config`" not in t
 
 
 @pytest.mark.parametrize("page", ("customers.html", "suppliers.html", "vendor-contractors.html"))
 def test_tax_id_lookup_is_only_sent_for_a_full_8_digit_number(page):
-    s = (FRONT / "pages" / page).read_text(encoding="utf-8")
+    s = page_file(page).read_text(encoding="utf-8")
     a = s.index("/company/tax/")
     head = s[max(0, a - 900):a]
     assert re.search(r"\\d\{8\}", head), page

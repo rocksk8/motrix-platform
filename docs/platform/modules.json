@@ -67,6 +67,7 @@
    "helper:financial_mask",
    "helper:finance_params",
    "helper:geo",
+   "helper:http_etag",
    "helper:quote_email",
    "helper:status_display",
    "helper:legal_params",
