@@ -419,6 +419,8 @@ def render_report(ctx):
         L.append("- 程式碼裡的正式機位址（阻擋式；名單外一律不開跑）：已知且逐一說明的 %d 個——" % len(ctx["code_literals"]))
         for rel, why in ctx["code_literals"]:
             L.append("  - `%s`：%s" % (rel, why))
+    if ctx.get("dashboard_import"):
+        L.append("- 儀表板 import 檢查（乾淨環境、不起服務）：載入 `%(file)s`，PROD_HOST＝%(PROD_HOST)s，PROD_BASE_URL＝%(PROD_BASE_URL)s。" % ctx["dashboard_import"])
     if ctx.get("dashboard_files"):
         L.append("- 儀表板（%s）被 export-ignore，出貨包與 git archive 都沒有；演練從同一個 commit 以 `git show` 放進**演練安裝**、PROD_HOST／PROD_BASE_URL 改寫成本機死路 127.0.0.1:9"
                  "（改寫 %s 行），啟動前再驗一次，並**只從演練安裝目錄**啟動（不從 repo／worktree）。假 T87 包內容不含儀表板。"

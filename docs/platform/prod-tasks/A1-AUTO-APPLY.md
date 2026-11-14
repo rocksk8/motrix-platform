@@ -11,6 +11,19 @@
 步驟檔（例如 `20261114-t86-apply.md`）的「步驟 0 記錄套用前狀態」與「步驟 3 套用後驗收」原本由人手工做。M1 把這兩段做成程式，並在套用前多一道**預演**。
 套用本身沒有改：仍是 `delivery.apply_staged`，備份、預演、停服、複製、重啟、健康檢查與**腳本內建的自動回復到套用前**都照舊。
 
+## 儀表板怎麼到正式機（T87 步驟檔必須做這一步）
+
+**事實（`.gitattributes` 第 169–171 行，`git check-attr export-ignore` 皆為 set）**：`backend/tools/deploy_dashboard.py`、`deploy_dashboard.html`、`deploy_dashboard_ctl.pyw` 被 `export-ignore`，
+`git archive` 與出貨包**都不含**它們（`deploy_insights.py` 不在此列，會隨包到達）。所以 **A1 的「6. 套用更新」卡片，不會隨更新包出現在正式機**；包只帶得到 `auto_apply.py`、`a1_notify.py` 這類沒被 export-ignore 的檔。
+
+**因此** T87 步驟檔要有一個明確步驟，把「T87 commit 版」的 `deploy_dashboard.py` 與 `deploy_dashboard.html` 放到正式機安裝目錄的 `backend\tools\`（`deploy_dashboard_ctl.pyw` 視正式機是否用它啟動而定），並：
+1. 來源＝與 T87 包同一個 commit（`git show <commit>:backend/tools/deploy_dashboard.py`），不是任意一份開發機上的檔；步驟檔列出檔案的 SHA-256，放檔後比對；
+2. **不要**一起放 `_dashboard_remote.ps1`、`check_prod_drift.ps1`（開發機經 WinRM 打正式機用的腳本，正式機自己不需要）；
+3. 放完後確認儀表板能開、「交付」總覽正常。之後（T88 起）若更新動到儀表板本身，同樣要靠步驟檔，因為更新包帶不動它；
+4. 待 hichan-4／PM 確認：**正式機目前實際有沒有儀表板、放在哪、怎麼啟動**（撰寫本文件時沒有證據可查；演練從 commit 取檔放進演練目錄，不代表正式機現況）。
+
+演練（`tools/platform/a1_drill.py`）照這個模型做：從同一個 commit 以 `git show` 取這兩個檔放進演練安裝、把 `PROD_HOST` 改成本機死路、只從演練安裝目錄啟動。
+
 ## 操作流程（儀表板「6. 套用更新」）
 
 1. 選包，按「準備」：複製到安裝目錄外、驗簽章與逐檔雜湊（與以前相同）。畫面多一行預估耗時。準備進行中不能同時預演或套用（`preparing` 旗標）。
