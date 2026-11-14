@@ -286,3 +286,25 @@ def test_n1_over_budget_is_a_flag_in_the_plan_and_in_the_text():
     plan = _plan({}, a4=["backend/tests/test_changed.py"], budget_s=5, sec=lambda f: 60.0)
     assert plan["over_budget"] is True and "超過預算" in Q.format_plan(plan)
     assert _plan({}, a4=["backend/tests/test_changed.py"], budget_s=10_000)["over_budget"] is False
+
+
+def test_sc_page_literals_come_before_doc_literals_and_docs_have_their_own_cap(monkeypatch):
+    """h11 S-c：一份大文件改寫不能把頁面上真正被測試斷言的文案擠出名額。"""
+    monkeypatch.setattr(Q, "MAX_LITERALS", 5)
+    monkeypatch.setattr(Q, "MAX_DOC_LITERALS", 3)
+    doc_lines = "".join("-文件裡刪掉的很長的舊句子%s號\n" % c for c in "甲乙丙丁戊己庚辛壬癸子丑")
+    d = ("diff --git a/docs/big.md b/docs/big.md\n--- a/docs/big.md\n+++ b/docs/big.md\n@@ -1,12 +1,0 @@\n" + doc_lines +
+         "diff --git a/frontend/p.html b/frontend/p.html\n--- a/frontend/p.html\n+++ b/frontend/p.html\n@@ -1 +1 @@\n-<b>頁面按鈕短字</b>\n+<b>新</b>\n")
+    kept, cut = Q.diff_literals_ex(d)
+    assert "頁面按鈕短字" in kept, "頁面字面值不能因為文件字面值比較長而被擠掉"
+    assert sum(1 for t in kept if "文件裡刪掉" in t) == 3,"文件字面值另設上限"
+    assert cut["direct"] >= 9, "被文件上限砍掉的要算進截斷數（會印成未跑）"
+
+
+def test_sd_conftest_hit_selects_the_small_test_directory_and_lists_a_big_one_as_not_run():
+    tree = ["backend/m/tests/conftest.py"] + ["backend/m/tests/test_%d.py" % i for i in range(3)] + ["backend/m/tests/sub/test_deep.py"]
+    hits, skipped = Q.split_helper_hits({"backend/m/tests/conftest.py": ["y"]}, ".", None, grep_fn=lambda t: [], tree_files=tree)
+    assert sorted(hits) == ["backend/m/tests/test_0.py", "backend/m/tests/test_1.py", "backend/m/tests/test_2.py"] and not skipped
+    big = ["backend/m/tests/test_%d.py" % i for i in range(Q.CONFTEST_DIR_MAX + 1)]
+    hits, skipped = Q.split_helper_hits({"backend/m/tests/conftest.py": ["y"]}, ".", None, grep_fn=lambda t: [], tree_files=big)
+    assert hits == {} and len(skipped) == 1 and "未跑" in skipped[0]["reason"]

@@ -56,8 +56,52 @@ def test_check_against_base_uses_the_merge_base_baseline_and_flags_a_loosened_on
     more = {"files": {"a.py": 2, "b.py": 1, "c.py": 1}}
     res = R.check_against_base(rel, more, tmp_path)
     assert res["status"] == "violation" and any(v[0] == "<總數>" for v in res["violations"])
-    hat = {"files": {"a.py": 2, "b.py": 1}, "hatches": {"a.py": 1}}
-    assert R.check_against_base(rel, hat, tmp_path)["status"] == "violation", "逃生口使用數也只准減少"
+
+
+def test_real_git_rename_keeps_the_old_number_but_an_extra_hit_is_caught(tmp_path):
+    """h11 nit：用真的 git 改名（-M）驗證——改名後同數字＝沒變鬆；改名同時多一個命中＝紅。"""
+    body = "".join("line %d of a test file that is long enough for git to see the rename\n" % i for i in range(30))
+    rel = "base.json"
+    _repo(tmp_path, {rel: json.dumps({"total": 3, "files": {"tests/old_name.py": 2, "tests/b.py": 1}}), "tests/old_name.py": body, "tests/b.py": "x\n"})
+    _git(tmp_path, "checkout", "-q", "-b", "feat")
+    _git(tmp_path, "mv", "tests/old_name.py", "tests/new_name.py")
+    _git(tmp_path, "commit", "-q", "-m", "rename")
+    assert R.git_renames(R.merge_base(tmp_path)[0], tmp_path) == {"tests/new_name.py": "tests/old_name.py"}
+    same = {"files": {"tests/new_name.py": 2, "tests/b.py": 1}}
+    assert R.check_against_base(rel, same, tmp_path)["status"] == "ok", "改名後同數字不是變鬆"
+    more = {"files": {"tests/new_name.py": 3, "tests/b.py": 1}}
+    res = R.check_against_base(rel, more, tmp_path)
+    assert res["status"] == "violation" and ("tests/new_name.py", 3, 2) in res["violations"], "改名同時多一個命中要被抓"
+
+
+def test_integrator_gate_does_not_honor_an_env_base(tmp_path, monkeypatch):
+    """h11 S-b：整合閘門（環境有 MOTRIX_TRAIN）不接受 MOTRIX_RATCHET_BASE——不然可以指定一個比較寬的基準。"""
+    _repo(tmp_path, {"base.json": json.dumps({"total": 1, "files": {"a.py": 1}})})
+    monkeypatch.setenv("MOTRIX_TRAIN", "1")
+    res = R.check_against_base("base.json", {"files": {"a.py": 1}}, tmp_path, env_base="HEAD")
+    assert res["status"] == "violation" and "MOTRIX_RATCHET_BASE" in res["violations"][0][0]
+    monkeypatch.delenv("MOTRIX_TRAIN")
+    assert R.check_against_base("base.json", {"files": {"a.py": 1}}, tmp_path, env_base="HEAD")["status"] == "ok"
+
+
+def test_ok_result_names_the_base_sha_it_used(tmp_path):
+    _repo(tmp_path, {"base.json": json.dumps({"total": 1, "files": {"a.py": 1}})})
+    res = R.check_against_base("base.json", {"files": {"a.py": 1}}, tmp_path)
+    assert res["base"] and res["base"][:9] in res["note"], "回報要帶用到的基準 sha"
+
+
+def test_author_gate_lists_a_missing_base_as_not_run(tmp_path):
+    """h11 S-b：抓不到合併基準時 quick 必須把這一題列成『未跑』，不是讓 pytest 的 skip 看起來像綠。"""
+    import author_gate as AG
+    rel = AG.RATCHET_BASELINES[0]
+    _git(tmp_path, "init", "-q", "-b", "trunk")                                           # 沒有 master／main
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"total": 1, "files": {"a.py": 1}}), encoding="utf-8")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "x")
+    out = AG.ratchet_unrun("HEAD", tmp_path)
+    assert len(out) == 1 and "未跑" in out[0]["reason"] and "text_anchor_baseline" in out[0]["item"], out
 
 
 def test_check_against_base_reports_no_base_instead_of_passing(tmp_path):

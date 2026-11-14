@@ -40,20 +40,27 @@ T86 診斷紅燈的主要型態是「來源改了一句文案或一段結構，�
 - 守門測試：`backend/tests/platform/test_no_text_anchor_in_tests_2026_11_14.py`。
 - v2 掃描器（h11 審查 S4／S5）：認 f-string、字串相加、AnnAssign 與類別層級常數、走訪常數清單的迴圈變數、`re.findall(字面值, x)` 與 `str.count(x, 字面值)`、split 拆包與 `len(x.split(..))`；
   兩字中文（按鈕文字）與 `-`／`@` 標記字元也算。掃描範圍＝測試根底下所有 `.py`（含 `conftest.py` 與非 `test_` 開頭的輔助檔）。
-- 逃生口：同一行的**真正註解** `# text-anchor-ok: <理由>`（理由 ≥8 字元且≥2 詞或中文≥4 字；字串裡的不算）。逃生口使用數也記在基線、同樣只准減少，失敗輸出列出清單。
+- v3（h11 複審 S-a）：切出來**綁名稱再取索引／`len`／拆包**、`len(list(re.finditer(..)))`、`sum(1 for _ in re.finditer(..))`、`"尚無%s" % n`／`"尚無{}".format(n)` 的格式字串常數段、
+  後面同名常數蓋掉前面無害的那個（同名多次賦值**全部**都測）、bytes 標記都會抓。已知限制：標記從輔助函式的參數進來（`def _n(t, m): t.count(m)`）看不到呼叫端傳的字串（測試釘住這個限制）。
+- **沒有逃生口**（h11 F1，PM 裁示）：逃生口曾經是「基線 0、新增就紅，但訊息卻叫作者用它」的死結，現在整個移除——命中就改寫測試；舊的 `# text-anchor-ok` 註解不具任何效力，基線也不再記逃生口。
 - **棘輪（`tools/platform/ratchet.py` 三道檢查，兩個寫法守門共用）**：既有檔命中數記在 `text_anchor_baseline.json`，**只准減少**。
   1. 逐檔貼合：基線 > 現場＝有人改乾淨了卻沒重寫基線（空位之後會被補滿）⇒ 紅，要用 `--write-baseline` 重寫（只准往下寫；第一次建立要刪檔重來）。
-  2. 基線對照**合併基準上的基線**（`git show <base>:路徑`；改名用 `git diff -M` 對回舊名）：任何一檔變多、新檔、總數變多、逃生口變多＝紅。抓不到基準（沒 git／沒主線分支）⇒ `skip`＋原因（印「未跑」，不當通過）；可用 `MOTRIX_RATCHET_BASE` 指定。
+  2. 基線對照**合併基準上的基線**（`git show <base>:路徑`；改名用 `git diff -M` 對回舊名）：任何一檔變多、新檔、總數變多＝紅。抓不到基準（沒 git／沒主線分支）⇒ pytest `skip`＋原因，**而且 `author_gate --quick` 會把它列進「未跑」**（h11 S-b：不讓 skip 看起來像綠）。
+     `MOTRIX_RATCHET_BASE` 只給作者本機演練；環境有 `MOTRIX_TRAIN`（整合閘門）時設了它＝直接紅，作者端設了會印出實際用的基準 sha。真 git 改名（`-M`）與改名同時多一個命中有測試釘住。
   3. 不另存上限常數（上限就是合併基準上的基線；舊的 `BASELINE_TOTAL_CEILING` 已移除）。
-- 掃描數 787 → 896（228 → 249 檔）**不是變差**：是 v2 掃描器更嚴（上述新型態）重新量出來的基線；之後只准下降。
+- 掃描數 787 → 896（228 → 249 檔）→ 943（265 檔）**不是變差**：是 v2、v3 掃描器更嚴（上述新型態）重新量出來的基線（第一次建立，合併基準上沒有這份檔）；之後只准下降。
 - 已知限制（N2）：總數與逐檔數都不變的「同檔換一個錨點」看不出來，靠審查。
 - 要改的寫法：用 `data-testid`、結構（AST／正規式抓結構）、行為比對，不用文案當定位。
 
 ## 測試寫法守門：讀全域稽核表必須依自己的使用者／request 篩選
 
 - 起因：T86 正式閘門的 `test_quote_put_fail_reason_codes` 用 `SELECT * FROM audit_log WHERE result='fail'` 讀整個庫的失敗列再斷言 `len(rows)==1`，單跑綠、整包跑別的測試的列混進來而紅（`_fail_rows`）。
-- 掃描器 `tools/platform/audit_scope_scan.py`（AST）：SQL 敘述開頭（SELECT／WITH／DELETE／UPDATE）、`FROM audit_log`，且沒有 username／user_id／actor／request_id／target／entity／`id > ?` 水位線之類的範圍條件 ⇒ 命中。
-  守門測試 `test_audit_reads_scoped_to_own_rows_2026_11_14.py`；逃生口 `# audit-scope-ok: <理由>`；棘輪同上（基線 `audit_scope_baseline.json`，130 檔／204 處）。
+- 掃描器 `tools/platform/audit_scope_scan.py`（AST）：SQL 敘述開頭（SELECT／WITH／DELETE／UPDATE）、`FROM audit_log`，且 **WHERE 子句**（第一個 WHERE 之後、ORDER BY／GROUP BY／LIMIT 之前）裡沒有自己的範圍條件 ⇒ 命中（h11 F2）：
+  沒有 WHERE ⇒ 命中；範圍欄位（username／user_id／actor／request_id／target／entity／…）要和值比較（`= != <> IN LIKE`）才算；水位線 `id >`／`rowid >`／`created_at >`／`ts >` 右邊不能是數字常數（`id > 0` 等於沒篩）；
+  只出現在 SELECT 欄位清單或 ORDER BY 的欄位名不算；`"a" + "b"` 拼接的字串會合併後再看。
+  守門測試 `test_audit_reads_scoped_to_own_rows_2026_11_14.py`（含 h11 的探針：`SELECT username, result FROM audit_log WHERE result='fail'`、`WHERE id > 0`、`WHERE result=1 ORDER BY target` 都要被抓）；**沒有逃生口**；棘輪同上（基線 `audit_scope_baseline.json`，138 檔／225 處；掃描器變嚴後重新量的第一次基線）。
+- quick 選題兩處微調（h11 S-c／S-d）：T2 字面值截斷時，html／js／py 的字面值排在文件（docs／`*.md`）之前，文件另設 30 個上限（被砍的算進截斷、印「未跑」）；
+  命中 `conftest.py` 時，所在目錄的 `test_*.py` ≤15 個就全選，否則列「未跑」。
 - 已知限制：只認 `audit_log` 表名與 SQL 敘述開頭的字串；動態拼表名、ORM 讀取、別的全域表（例如 failure 表）看不到——要擴就在 `AUDIT_TABLES` 加表名。
 
 ## T86 紅燈 → 哪個 quick 檢查本來能抓到

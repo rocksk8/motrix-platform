@@ -31,7 +31,8 @@ HEAVY_GROUPS = ("static_scans2", "recent_interplay", "superadmin_login")
 LITERAL_MAX_HITS = 25                  # 一個字面值命中超過這麼多個測試檔 ⇒ 太通用，不選
 REF_MAX_HITS = 30                      # 一個檔名被超過這麼多個測試檔引用 ⇒ 太通用，不選
 MAX_TEST_SUBSTRINGS = 120              # 另外最多反查幾個「測試裡的字面值 ⊂ 被刪文字」
-MAX_LITERALS = 120                     # 每個 diff 最多反查幾個字面值（長的優先）
+MAX_DOC_LITERALS = 30                  # 文件（docs／*.md）被刪的字面值最多反查幾個（排在程式與頁面的字面值之後）
+MAX_LITERALS = 120                    # 每個 diff 最多反查幾個字面值（長的優先）
 SOURCE_SUFFIXES = (".html", ".js", ".py", ".css", ".json", ".md", ".sql", ".yml", ".yaml", ".ps1", ".txt", ".csv")
 SOURCE_PREFIXES = ("backend/", "frontend/", "tools/", "docs/")
 TEST_PATHSPECS = (":(glob)backend/tests/**/*.py", ":(glob)backend/core/tests/**/*.py", ":(glob)backend/modules/*/tests/**/*.py")
@@ -181,6 +182,10 @@ def literals_of(lines):
     return toks
 
 
+def is_doc_file(path):
+    return path.startswith("docs/") or path.endswith(".md")
+
+
 def diff_literals_ex(diff_text, test_tokens=None):
     """⇒ (kept 字面值清單, truncated {"direct": 被 MAX_LITERALS 截掉幾個, "reverse": 被 MAX_TEST_SUBSTRINGS 截掉幾個})。
 
@@ -188,14 +193,18 @@ def diff_literals_ex(diff_text, test_tokens=None):
     test_tokens＝測試檔裡出現的字面值集合（load_test_tokens）：測試常斷言「來源文字的一小段」（來源刪的是 `您沒有任何變動可儲存`、測試寫 `沒有任何變動`），
     只拿來源整段去 grep 會漏；所以另外把「測試裡的字面值 ⊂ 該檔被刪掉的文字、且不在該檔新增行」的也算進來（反向：以測試字面值為準，保證 grep 得到）。"""
     files = {f: d for f, d in parse_diff(diff_text).items() if is_source_file(f)}
-    gone, removed_by_file = set(), []
+    gone, gone_doc, removed_by_file = set(), set(), []
     for f, d in files.items():
         added_blob = "\n".join(d["added"])
-        gone |= {t for t in literals_of(d["removed"]) if t not in added_blob}
+        bucket = gone_doc if is_doc_file(f) else gone
+        bucket |= {t for t in literals_of(d["removed"]) if t not in added_blob}
         if d["removed"]:
             removed_by_file.append(("\n".join(d["removed"]), added_blob))
-    ordered = sorted(gone, key=lambda t: (-len(t), t))
-    kept, direct_cut = [], 0
+    gone_doc -= gone
+    # 優先序（h11 S-c）：html／js／py 等程式與頁面的字面值先，文件（docs／*.md）的排後面、另設上限——
+    # 一份大文件改寫不能把頁面上真正被測試斷言的文案擠出名額。
+    ordered = sorted(gone, key=lambda t: (-len(t), t)) + sorted(gone_doc, key=lambda t: (-len(t), t))[:MAX_DOC_LITERALS]
+    kept, direct_cut = [], max(0, len(gone_doc) - MAX_DOC_LITERALS)
     for t in ordered:
         if any(t in k for k in kept):
             continue
@@ -307,13 +316,25 @@ def narrow_generic(generic, changed, all_hit_counts, per_token=10):
     return picked, rest
 
 
-def split_helper_hits(hits, repo, ref, grep_fn):
+CONFTEST_DIR_MAX = 15                  # conftest.py 命中時，所在目錄的 test_*.py 不超過這個數就全選（h11 S-d）
+
+
+def split_helper_hits(hits, repo, ref, grep_fn, tree_files=None):
     """hits 裡不是 test_*.py 的檔（conftest.py、`_xyz.py` 輔助檔）收集不到任何測試：
     輔助檔 ⇒ 換成 import 它的 test_*.py；conftest.py ⇒ 記錄未選題。⇒ (只含 test_*.py 的 hits, skipped 項目)。"""
     out, skipped = {}, []
     for f, toks in hits.items():
         if is_test_basename(f):
             out.setdefault(f, []).extend(toks)
+            continue
+        if f.endswith("/conftest.py") and tree_files:
+            d = f.rsplit("/", 1)[0] + "/"
+            sibs = sorted(t for t in tree_files if t.startswith(d) and "/" not in t[len(d):] and is_test_basename(t))
+            if sibs and len(sibs) <= CONFTEST_DIR_MAX:
+                for t in sibs:
+                    out.setdefault(t, []).extend(toks)
+            else:
+                skipped.append({"tier": "T2", "item": f, "reason": "命中 conftest.py，所在目錄有 %d 個測試（超過 %d），未選題（未跑）" % (len(sibs), CONFTEST_DIR_MAX)})
             continue
         if f.endswith("/conftest.py") or grep_fn is not None:
             skipped.append({"tier": "T2", "item": f, "reason": "命中的是 %s（不是 test_*.py）；改動影響它所在目錄的測試，未選題（未跑）" % f.rsplit("/", 1)[-1]})
@@ -479,7 +500,7 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
             len(lit_generic), LITERAL_MAX_HITS, "、".join(list(lit_generic)[:3])))
         for tok, total, n in rest:
             skipped.append({"tier": "T2", "item": "字面值 %r" % tok[:30], "reason": "命中 %d 檔、太通用，選了 %d 檔，其餘 %d 檔未選題（未跑）" % (total, n, total - n)})
-    lit_hits, helper_skips = split_helper_hits(lit_hits, repo, ref, grep_fn)
+    lit_hits, helper_skips = split_helper_hits(lit_hits, repo, ref, grep_fn, tree_files)
     skipped += helper_skips
     t2_files = sorted(lit_hits)
     t2_why = {f: "刪掉的字面值 " + "、".join(repr(t) for t in lit_hits[f][:2]) for f in t2_files}
