@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）
+- 新增（旗標 `custom_reports.enabled` 預設關：關＝路由 404、不讀寫表；既有端點與權限語意不變）：`/api/custom-reports/sources`、`/api/custom-reports/preview`（`modules/analytics/api/custom_reports.py`；預覽每人每分鐘 20 次、不留稽核）；新增兩格能力 `analytics.custom_report.view`／`.export`（legacy＝持有 quotation／case_manage／dev_crm 任一模組；能力與模組存取各查各的）。測試：`tests/platform/test_custom_reports_api_t87.py`。
+
 ## 1.0.54 — 2026-11-14（train/t86-int；整合者：#11 商機改稱後的儀表板文字）
 - 文字／內部（行為、API、欄位、設定鍵、錯誤碼不變）：儀表板端點（`dashboard.py`）隨 T86 #11 業務開發「案件→商機」改稱與 U7 首頁六段合一（`/api/dashboard/bundle`、ETag/304）調整顯示文字；此條補寫於 T86 整合最後一次合併之後。
 - **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正）**
@@ -8,8 +11,6 @@
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：說明與提示中的「看得到／看不到／看到」依語境改為「可檢視／無法檢視」（權限）或「顯示／所見」（畫面），並補正前一批漏改的空狀態文字。
 - **（併入）(next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
-- **（併入）(next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）**
-- 新增（旗標 `custom_reports.enabled` 預設關：關＝路由 404、不讀寫表；既有端點與權限語意不變）：`/api/custom-reports/sources`、`/api/custom-reports/preview`（`modules/analytics/api/custom_reports.py`；預覽每人每分鐘 20 次、不留稽核）；新增兩格能力 `analytics.custom_report.view`／`.export`（legacy＝持有 quotation／case_manage／dev_crm 任一模組；能力與模組存取各查各的）。測試：`tests/platform/test_custom_reports_api_t87.py`。
 
 ## 1.0.53 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。
