@@ -78,6 +78,9 @@ _FAIL_REASON_LABELS = {
     "totp_failed": "驗證碼錯誤（兩步驟）", "qr_failed": "QR 核准失敗", "passkey_failed": "Passkey 驗證失敗",
     # 2026-11-12 外網登入強化票：單一帳號鎖定／外網強制兩步驟（helpers/account_lock.py、routers/auth.py 的稽核列 reason_code）
     "account_locked": "帳號登入失敗過多而鎖定", "ext_totp_required": "外網登入須先啟用兩步驟驗證",
+    # 2026-11-14 T86 U1：報價單整份存檔（PUT）被擋的細分原因（端點在回應標頭 X-Fail-Reason 帶碼，main.py 記進 reason_code；不含個資）
+    "status_locked": "單據狀態已鎖定（需解鎖或走正式流程）", "rejected_locked": "已駁回結案，不可修改",
+    "finance_view": "沒有財務檢視權限", "unlock_superadmin": "解鎖編輯需最高管理者",
 }
 #: 登入失敗稽核列的來源 ⇒ reason_code（密碼維持歷史值 login_failed，既有查詢與報表不變）
 LOGIN_FAIL_REASONS = {"password": "login_failed", "totp": "totp_failed", "qr": "qr_failed", "passkey": "passkey_failed"}
