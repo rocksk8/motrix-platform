@@ -899,6 +899,7 @@
       if (s.data.limits) Object.keys(s.data.limits).forEach(function (k) { LIM[k] = s.data.limits[k] })
       CAN_EXPORT = !!s.data.canExport
       if (l.ok && l.data) LIST = { mine: l.data.mine || [], shared: l.data.shared || [], sharingEnabled: !!l.data.sharingEnabled, recycleDeleted: !!l.data.recycleDeleted, max: l.data.max || 30, nameMax: l.data.nameMax || 40 }
+      if (!$('crLayout')) return
       $('crLayout').hidden = false
       if (window.innerWidth <= 760) $('repDetails').removeAttribute('open')
       var want = /^#(\d+)$/.exec(location.hash || '')

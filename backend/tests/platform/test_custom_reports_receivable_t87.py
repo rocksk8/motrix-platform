@@ -134,6 +134,18 @@ def test_one_dirty_payment_item_does_not_break_the_whole_source(client, make_use
     assert len(rows) == 1
 
 
+def test_finance_role_without_sales_modules_can_reach_the_page_and_the_source(client, make_user, world):
+    """h5 實機：財務角色沒有 quotation／case_manage／dev_crm 時原本進不了自訂報表（能力與頁面權限只認那三個模組）——應收帳款的對象到不了來源。"""
+    fin = _login(client, make_user, "ar_fin_only", role="finance", modules=["cashier"])
+    r = client.get(BASE + "/sources", headers=fin)
+    assert r.status_code == 200, r.text
+    ids = [x["id"] for x in r.json()["sources"]]
+    assert ids == ["receivable"]                                                         # 只有自己有權的來源；沒有被多放進報價單／案件／商機
+    assert _preview(client, fin).status_code == 200
+    menu = client.get("/api/platform/menu", headers=fin).json()
+    assert "custom-reports.html" in json.dumps(menu, ensure_ascii=False)
+
+
 def test_num_falls_back_on_non_numbers():
     from modules.analytics import report_source as S
     assert S._num("30%") == 0.0 and S._num(None) == 0.0 and S._num(float("nan")) == 0.0 and S._num(float("inf")) == 0.0
