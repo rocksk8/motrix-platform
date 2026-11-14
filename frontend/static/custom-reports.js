@@ -161,7 +161,7 @@
     if (fk) {
       var el = null
       try { el = document.querySelector('[data-fk="' + fk.replace(/"/g, '\\"') + '"]') } catch (_e) { el = null }
-      if (el && !el.disabled) el.focus(); else $('previewPanel').focus()
+      if (el && !el.disabled && !el.hidden && el.offsetParent !== null) el.focus(); else $('previewPanel').focus()      // 按完就被隱藏的按鈕（例如「復原上一次批次」）focus() 會無聲失敗，要當成消失處理
     }
   }
   function guard(go) {
@@ -290,7 +290,7 @@
       var on = S.loaded && S.loaded.id === rp.id
       var kids = [h('button', { class: 'open', type: 'button', 'data-fk': 'rep:' + rp.id, 'data-testid': 'cr-report-' + rp.id, 'aria-current': on ? 'true' : null,
         onclick: function () { guard(function () { openReport(rp.id) }) } },
-      [h('span', { class: 'nm', text: rp.name }), h('span', { class: 'src', text: srcLabel(rp.sourceId) + (mine ? '' : '　' + (rp.ownerName || '') + ' 分享') })])]
+      [h('span', { class: 'nm', text: rp.name }), h('span', { class: 'src', text: srcLabel(rp.sourceId) + (mine ? (LIST.sharingEnabled && rp.sharedCount ? '　已分享 ' + rp.sharedCount + ' 人' : '') : '　' + (rp.ownerName || '') + ' 分享') })])]
       if (mine) kids.push(h('button', { class: 'del', type: 'button', 'aria-label': '刪除報表 ' + rp.name, text: '刪除', 'data-testid': 'cr-del-' + rp.id, onclick: function () { deleteReport(rp) } }))
       return h('div', { class: 'cr-rep' + (on ? ' on' : '') }, kids)
     }
@@ -432,7 +432,9 @@
   }
   function renderFilters() {
     var box = $('filters'); clear(box)
-    if (!S.filters.length) { box.appendChild(h('p', { class: 'cr-empty', text: '目前沒有篩選條件。報表將包含您有權限查看的全部資料。' })); return }
+    var ph = !!(S.loaded && S.loaded.partiallyHidden)             // 分享來的報表：看不到的篩選條件已由後端移除，不能說「沒有條件」
+    if (!S.filters.length) { box.appendChild(h('p', { class: 'cr-empty', 'data-testid': 'cr-no-filters', text: ph ? '您可見的部分沒有篩選條件。另有條件或欄位因您的權限不顯示。' : '目前沒有篩選條件。報表將包含您有權限查看的全部資料。' })); return }
+    if (ph) box.appendChild(h('p', { class: 'cr-note flat', 'data-testid': 'cr-filters-hidden', text: '另有條件或欄位因您的權限不顯示；下列只是您可見的部分。' }))
     S.filters.forEach(function (flt, i) {
       var f = FBY(flt.field)
       var row = h('div', { class: 'cr-fl', 'data-testid': 'cr-filter-' + flt.field }, [])
@@ -549,6 +551,7 @@
     $('btnSaveAs').hidden = !L
     $('btnExport').hidden = !CAN_EXPORT
     $('btnExport').disabled = !canX
+    $('btnShare').hidden = !(LIST.sharingEnabled && L && L.isOwner)      // 公司設定不開放分享時入口不出現
     $('btnUndo').hidden = !UNDO
     window.motrixIsDirty = n > 0                                   // 離開頁面的守門（sidebar.js）
   }
@@ -564,8 +567,8 @@
   function batchShow(on) {
     pushUndo(); var done = 0, skip = []
     FIELDS().forEach(function (f) {
+      if (!ok(f)) { skip.push(f.label + '（無權限）'); return }      // 無權限欄位沒有 select 旗標：先判斷權限，才報得出略過
       if (!f.select) return
-      if (!ok(f)) { skip.push(f.label + '（無權限）'); return }
       toggle(S.cols, f.id, on); if (!on) dropAgg(f.id); done++
     })
     if (!on) S.sort = null
@@ -731,8 +734,126 @@
     })
   }
 
+  // ───────── 分享給誰（擁有者；設定 sharing 開啟時才有入口）─────────
+  // 候選名單與已分享名單都由後端給（只含在職、有使用能力的人）；增減走 POST /{id}/shares，後端逐位再查，這裡不做任何資格判斷。
+  var SH = { q: '', cands: [], truncated: false, shared: [], max: 20, pickC: {}, pickS: {}, seq: 0, timer: null, busy: false, loadErr: '' }
+  function shFocus(fn) {                                       // 面板內的焦點保留；元素消失就回面板標題（不掉出對話框）
+    var a = document.activeElement, fk = a && a.getAttribute ? a.getAttribute('data-fk') : null
+    fn()
+    if (fk) {
+      var el = null
+      try { el = document.querySelector('#dlgShare [data-fk="' + fk.replace(/"/g, '\\"') + '"]') } catch (_e) { el = null }
+      if (el && !el.disabled && !el.hidden && el.offsetParent !== null) el.focus(); else $('shTitle').focus()
+    }
+  }
+  function shSay(msg, isErr) { var m = $('shMsg'); m.textContent = msg || ''; m.className = 'cr-note msg' + (isErr ? ' cr-err' : '') }
+  function personRow(p, group, off, offText) {
+    var picked = group === 'S' ? SH.pickS : SH.pickC
+    var cb = h('input', { type: 'checkbox', 'data-fk': 'sh:' + group + ':' + p.username, 'aria-label': (group === 'S' ? '取消分享對象 ' : '分享給 ') + p.name + (p.department ? '（' + p.department + '）' : ''),
+      checked: !!picked[p.username], disabled: !!off, onchange: function (e) { picked[p.username] = e.target.checked; shFocus(shRender) } })
+    return h('li', {}, [h('label', { class: 'row' + (off ? ' off' : '') }, [cb,
+      h('span', { class: 'who' }, [h('b', { text: p.name }), h('small', { text: (p.department ? p.department + '　' : '') + p.username })]),
+      off ? h('span', { class: 'cr-chip', text: offText }) : null])])
+  }
+  function pickedNames(map, list) { return list.filter(function (p) { return map[p.username] }).map(function (p) { return p.username }) }
+  function sharedSet() { var s = {}; SH.shared.forEach(function (p) { s[p.username] = true }); return s }
+  function shRender() {
+    var inS = sharedSet()
+    var ul = $('shShared'); clear(ul)
+    if (!SH.shared.length) ul.appendChild(h('li', { class: 'empty', text: '目前沒有分享給任何人。' }))
+    SH.shared.forEach(function (p) { ul.appendChild(personRow(p, 'S')) })
+    var cl = $('shCands'); clear(cl)
+    if (SH.loadErr) cl.appendChild(h('li', { class: 'empty cr-err', text: SH.loadErr }))
+    else if (!SH.cands.length) cl.appendChild(h('li', { class: 'empty', text: SH.q ? '找不到符合的同事（只列出可使用自訂報表的在職同事）。' : '沒有可以加入的同事。' }))
+    SH.cands.forEach(function (p) { cl.appendChild(personRow(p, 'C', inS[p.username], '已分享')) })
+    var avail = SH.cands.filter(function (p) { return !inS[p.username] })
+    var nC = pickedNames(SH.pickC, avail).length, nS = pickedNames(SH.pickS, SH.shared).length
+    var room = SH.max - SH.shared.length
+    var a = $('shSelCands'); a.disabled = !avail.length || SH.busy; a.checked = avail.length > 0 && nC === avail.length; a.indeterminate = nC > 0 && nC < avail.length
+    var b = $('shSelShared'); b.disabled = !SH.shared.length || SH.busy; b.checked = SH.shared.length > 0 && nS === SH.shared.length; b.indeterminate = nS > 0 && nS < SH.shared.length
+    $('shAdd').disabled = !nC || SH.busy; $('shAdd').textContent = nC ? '分享給所選（' + nC + '）' : '分享給所選'
+    $('shRemove').disabled = !nS || SH.busy; $('shRemove').textContent = nS ? '取消分享所選（' + nS + '）' : '取消分享所選'
+    $('shCount').textContent = '已分享 ' + SH.shared.length + ' 位，最多 ' + SH.max + ' 位（還能加 ' + Math.max(0, room) + ' 位）。' + (SH.truncated ? '符合的人太多，只列出前 ' + SH.cands.length + ' 位，請用搜尋縮小範圍。' : '')
+  }
+  function shLoadCands(now) {
+    clearTimeout(SH.timer)
+    var seq = ++SH.seq
+    SH.timer = setTimeout(function () {
+      api('GET', API + '/share-targets?q=' + encodeURIComponent(SH.q)).then(function (r) {
+        if (seq !== SH.seq) return                                   // 更新的搜尋已送出：丟棄舊結果
+        if (r.ok && r.data) { SH.cands = r.data.people || []; SH.truncated = !!r.data.truncated; SH.loadErr = '' }
+        else { SH.cands = []; SH.truncated = false; SH.loadErr = errMsg(r, '讀取同事名單失敗，請稍後再試。') }
+        shFocus(shRender)
+      })
+    }, now ? 0 : 300)
+  }
+  function openShare() {
+    var L = S.loaded
+    if (!L || !L.isOwner) return
+    SH = { q: '', cands: [], truncated: false, shared: [], max: SH.max || 20, pickC: {}, pickS: {}, seq: 0, timer: null, busy: false, loadErr: '' }
+    $('shQ').value = ''; shSay('')
+    $('shTitle').textContent = '分享報表：' + L.name
+    shRender()
+    api('GET', API + '/' + L.id + '/shares').then(function (r) {
+      if (!r.ok) { toast(errMsg(r, '讀取分享名單失敗。')); $('dlgShare').close(); if (r.status === 404) refreshList(); return }
+      SH.shared = r.data.shared || []; SH.max = r.data.max || 20
+      shRender()
+    })
+    shLoadCands(true)
+    $('dlgShare').showModal(); $('shQ').focus()
+  }
+  function shApply(body, doneMsg) {
+    var L = S.loaded; if (!L) return
+    SH.busy = true; shSay('處理中…'); shRender()
+    api('POST', API + '/' + L.id + '/shares', body).then(function (r) {
+      SH.busy = false
+      if (!r.ok) {
+        shSay(errMsg(r, '儲存失敗，請稍後再試。'), true)
+        if (detailOf(r).reason === 'no_capability') shLoadCands(true)          // 名單過期（對方權限剛被收回）：重新讀
+        shFocus(shRender); return
+      }
+      SH.shared = r.data.shared || []; SH.pickC = {}; SH.pickS = {}
+      shSay(doneMsg(r.data)); shFocus(shRender); refreshList()
+    })
+  }
+  function shAddClick() {
+    var inS = sharedSet(), names = pickedNames(SH.pickC, SH.cands.filter(function (p) { return !inS[p.username] }))
+    if (!names.length) return
+    if (SH.shared.length + names.length > SH.max) { shSay('最多只能分享給 ' + SH.max + ' 位。目前已 ' + SH.shared.length + ' 位，再加 ' + names.length + ' 位會超過；請減少勾選或先取消一些分享。', true); return }
+    shApply({ add: names }, function (d) { return '已分享給 ' + d.added.length + ' 位同事。' })
+  }
+  function shRemoveClick() {
+    var names = pickedNames(SH.pickS, SH.shared)
+    if (!names.length) return
+    confirmDlg('取消分享', '將取消分享給 ' + names.length + ' 位同事。對方之後無法再開啟這份報表；對方先前已複製成自己的報表則不受影響。', '取消分享', function () {
+      shApply({ remove: names }, function (d) { return '已取消分享 ' + d.removed.length + ' 位同事。' })
+    })
+  }
+  function bindShare() {
+    $('btnShare').addEventListener('click', openShare)
+    $('shClose').addEventListener('click', function () { $('dlgShare').close() })
+    $('dlgShare').addEventListener('close', function () { clearTimeout(SH.timer); SH.seq++; var b = $('btnShare'); if (!b.hidden) b.focus() })
+    $('shQ').addEventListener('input', function (e) { SH.q = e.target.value.trim(); SH.pickC = {}; shLoadCands(false) })
+    $('shSelCands').addEventListener('change', function (e) {
+      var inS = sharedSet(), room = SH.max - SH.shared.length, n = 0
+      SH.pickC = {}
+      if (e.target.checked) SH.cands.forEach(function (p) { if (!inS[p.username] && n < room) { SH.pickC[p.username] = true; n++ } })
+      var avail = SH.cands.filter(function (p) { return !inS[p.username] }).length
+      shSay(e.target.checked && n < avail ? '名額只剩 ' + Math.max(0, room) + ' 位，已先勾選前 ' + n + ' 位。' : '')
+      shFocus(shRender)
+    })
+    $('shSelShared').addEventListener('change', function (e) {
+      SH.pickS = {}
+      if (e.target.checked) SH.shared.forEach(function (p) { SH.pickS[p.username] = true })
+      shFocus(shRender)
+    })
+    $('shAdd').addEventListener('click', shAddClick)
+    $('shRemove').addEventListener('click', shRemoveClick)
+  }
+
   // ───────── 事件 ─────────
   function bind() {
+    bindShare()
     $('btnNew').addEventListener('click', function () { guard(function () { newReport(S.source && SRC[S.source] ? S.source : firstSource()) }) })
     Array.prototype.forEach.call(document.querySelectorAll('[data-layout]'), function (b) {
       b.addEventListener('click', function () { S.layout = b.getAttribute('data-layout'); changed() })

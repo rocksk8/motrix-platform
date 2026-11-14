@@ -6,6 +6,8 @@
 - `GET  /api/custom-reports`          我的報表（＋分享給我的，設定開啟時）。`POST` 新增（≤30 份、名稱不可重複、定義存檔前完整驗證）。
 - `GET|PUT|DELETE /api/custom-reports/{id}`  讀／改（`If-Match` 帶 etag，不符 409）／刪（設定決定進暫存區或直接刪）。非擁有者（含不存在）一律 404 同一句；被分享者只能讀與複製。
 - `POST /api/custom-reports/{id}/copy`  複製成自己的一份。
+- `GET  /api/custom-reports/share-targets?q=`  「分享給誰」面板的候選同事（只列在職、有使用能力的人；設定 `sharing` 關 ⇒ 404）。
+- `GET|POST /api/custom-reports/{id}/shares`  擁有者看／批次增減分享對象（`{add:[帳號], remove:[帳號]}`；後端逐位再查能力；每位增減各寫一列稽核，只記帳號與報表編號）。
 - `POST /api/custom-reports/{id}/export`（Excel）、`/export-pdf`（PDF 姊妹）  只能匯出已儲存的報表；需 `analytics.custom_report.export` 能力＋設定 `export_scope` 放行；
   匯出時重新編譯定義、以**執行者當下**的權限與列範圍重算（A 存、B 匯出，B 看不到的欄位不出現、列不出現）；檔內只有可見欄位的標籤、條件的白話摘要、隱藏欄位**數量**（不寫名稱與值）。
 
@@ -27,7 +29,7 @@ from datetime import datetime
 from typing import Optional
 
 import openpyxl
-from fastapi import APIRouter, Body, Header, HTTPException, Path
+from fastapi import APIRouter, Body, Header, HTTPException, Path, Query
 from fastapi.responses import Response
 from openpyxl.styles import Alignment, PatternFill
 from openpyxl.utils import get_column_letter
@@ -175,6 +177,14 @@ def _audit_report(authorization, action, label, rid, source_id=None):
     _audit(_tok(authorization), action, "custom_report", str(rid), label, {"source": source_id} if source_id else {})
 
 
+def _audit_shares(authorization, rid, added, removed):
+    """每位增減各寫一列；只記對象帳號與報表編號（不記報表名稱、定義、條件值）。"""
+    for u in added:
+        _audit(_tok(authorization), "custom_reports.share_add", "custom_report", str(rid), "分享自訂報表", {"user": u})
+    for u in removed:
+        _audit(_tok(authorization), "custom_reports.share_remove", "custom_report", str(rid), "取消分享自訂報表", {"user": u})
+
+
 @router.get("/api/custom-reports")
 def list_reports(authorization: str = Header(None)):
     user = _gate(authorization)
@@ -208,6 +218,19 @@ def create_report(body: dict = Body(...), authorization: str = Header(None)):
         conn.close()
 
 
+@router.get("/api/custom-reports/share-targets")
+def share_targets(q: str = Query("", max_length=80), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            return ST.share_candidates(conn, user, q)
+        except ST.StoreError as e:
+            raise _store_http(e)
+    finally:
+        conn.close()
+
+
 @router.get("/api/custom-reports/{rid}")
 def get_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
     user = _gate(authorization)
@@ -235,7 +258,10 @@ def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(..
         except Exception:                                    # noqa: BLE001
             _log.exception("custom_reports update failed")
             raise HTTPException(500, {"message": "儲存失敗，請稍後再試；若持續發生請通知管理員。"})
+        changes = out.pop("_shareChanges", None)
         _audit_report(authorization, "custom_reports.update", "修改自訂報表", rid, out["sourceId"])
+        if changes:
+            _audit_shares(authorization, rid, *changes)
         return out
     finally:
         conn.close()
@@ -254,6 +280,39 @@ def delete_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str =
         _audit_report(authorization, "custom_reports.delete", "刪除自訂報表" + ("（進刪除暫存區）" if out["recycled"] else ""), rid)
         if after:
             after()
+        return out
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom-reports/{rid}/shares")
+def get_shares(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            return ST.shared_people(conn, user, rid)
+        except ST.StoreError as e:
+            raise _store_http(e)
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom-reports/{rid}/shares")
+def change_shares(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(...), authorization: str = Header(None)):
+    user = _gate(authorization)
+    if set(body) - {"add", "remove"}:
+        raise HTTPException(422, {"message": "分享對象格式不正確。"})
+    conn = get_db()
+    try:
+        try:
+            out = ST.change_shares(conn, user, rid, body.get("add") or [], body.get("remove") or [])
+        except ST.StoreError as e:
+            raise _store_http(e)
+        except Exception:                                    # noqa: BLE001
+            _log.exception("custom_reports change_shares failed")
+            raise HTTPException(500, {"message": "儲存失敗，請稍後再試；若持續發生請通知管理員。"})
+        _audit_shares(authorization, rid, out["added"], out["removed"])
         return out
     finally:
         conn.close()

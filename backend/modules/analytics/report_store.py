@@ -2,7 +2,7 @@
 """「我的報表」的儲存（T87 B2-S2）：表 `custom_reports`（＋`custom_report_shares`）的所有讀寫在這裡。
 
 [單位] analytics:report_store    [層] M08    [穩定度] 實驗
-[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, StoreError, copy_report, create, delete, etag_of, get_for_run, get_visible, list_mine, list_shared, mark_exported, redact_for_reader, update
+[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, TARGET_LIST_MAX, StoreError, change_shares, share_candidates, shared_people, copy_report, create, delete, etag_of, get_for_run, get_visible, list_mine, list_shared, mark_exported, redact_for_reader, update
 [不變式] ①鍵＝擁有者登入帳號：路徑與請求本文都沒有帳號參數，只讀寫呼叫者自己的列；非擁有者（含不存在）一律回**逐字相同**的 404「找不到這份報表。」
     （被分享者例外：只在設定 `custom_reports.sharing` 開啟、且確實被分享時可讀；只能讀與複製，不能改、不能刪、不能再分享）。
     ②儲存的是**設定**，不是結果、不是授權：定義存檔前用 `report_runner.compile`（不執行）完整驗證；執行時一律用執行者當下的權限重新算（A 存、B 跑、降權後都不例外）。
@@ -10,7 +10,9 @@
     ④刪除：設定 `custom_reports.recycle_deleted` 開且資源回收筒模組在 ⇒ 進刪除暫存區（可還原）；否則直接刪（連同分享列）。每一次都由後端當下讀設定決定。
     ⑥分享給別人看的定義一律先經 `redact_for_reader`：讀者沒有權限看的欄位，連同它的篩選門檻、分組、排序、彙總都不回傳，只回 `partiallyHidden` 旗標；
       有篩選／分組／排序被拿掉的報表不能複製（意義會變）。執行永遠用讀者自己的權限重算。
-    ⑤分享對象：存在、在職、不是自己、≤ `MAX_SHARES`；分享設定關閉時不接受新的分享（既有列保留但不顯示）。
+    ⑤分享對象：存在、在職、不是自己、≤ `MAX_SHARES`、**持有 `analytics.custom_report.view` 能力**（後端每次寫入都查，不信前端的候選名單）；
+      分享設定關閉時不接受新的分享（既有列保留但不顯示；取消分享隨時可做）。挑選面板的候選名單（`share_candidates`）只列符合同樣條件的人，
+      並且只回帳號、顯示名稱、部門名稱。增減分享走 `change_shares`（不動 etag，不影響擁有者正在編輯的定義），每位增減各寫一列稽核（只記帳號與報表編號）。
 [契約題] backend/tests/platform/test_custom_reports_store_t87.py
 """
 import json
@@ -19,6 +21,7 @@ from datetime import datetime
 from core.txn import begin_write
 from helpers import recycle_bin as RB
 from helpers import report_catalog as RC
+from helpers import perm as _perm
 from helpers import report_policy as RP
 from helpers import report_runner as RR
 
@@ -26,6 +29,9 @@ _COLS = "id, username, name, source_id, definition_json, created_at, updated_at,
 MAX_PER_USER = 30
 NAME_MAX = 40
 MAX_SHARES = 20
+CAP_VIEW = "analytics.custom_report.view"
+TARGET_LIST_MAX = 100                                      # 挑選面板一次最多列幾位
+_POOL_MAX = 300                                            # 能力檢查前最多取幾位候選（搜尋條件先縮小範圍）
 NOT_FOUND = "找不到這份報表。"
 
 
@@ -203,7 +209,95 @@ def _check_targets(conn, user, names) -> list:
         bad = [x for x in uniq if x not in ok]
         if bad:
             raise StoreError(422, "找不到下列同事，或已停用：%d 位。請重新選擇。" % len(bad), {"count": len(bad)})
+        no_cap = [x for x in uniq if not _can_view(x)]
+        if no_cap:
+            raise StoreError(422, "下列同事沒有使用自訂報表的權限，無法分享：%d 位。請重新選擇。" % len(no_cap),
+                             {"count": len(no_cap), "reason": "no_capability"})
     return uniq
+
+
+def _can_view(username) -> bool:
+    """這位同事目前有沒有「使用自訂報表」能力（含代理）；找不到或停用 ⇒ 否。"""
+    u = _perm.load_user(username)
+    return u is not None and _perm.can(u, CAP_VIEW)
+
+
+def _like(q) -> str:
+    return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def _people(conn, usernames) -> list:
+    """帳號 → [{username, name, department}]（依顯示名稱排序）。"""
+    if not usernames:
+        return []
+    rows = conn.execute(
+        "SELECT u.username, COALESCE(NULLIF(u.display_name,''), u.username) AS name, COALESCE(d.name,'') AS dept FROM users u "
+        "LEFT JOIN departments d ON d.id = u.department_id WHERE u.username IN (%s)" % ",".join("?" * len(usernames)), list(usernames)).fetchall()
+    out = [{"username": r["username"], "name": r["name"], "department": r["dept"]} for r in rows]
+    known = {p["username"] for p in out}
+    out += [{"username": x, "name": x, "department": ""} for x in usernames if x not in known]
+    return sorted(out, key=lambda p: (p["name"], p["username"]))
+
+
+def share_candidates(conn, user, q="") -> dict:
+    """挑選面板的候選：在職、不是自己、持有使用能力的人；可用姓名／帳號／部門搜尋。回 `{"people": [...], "truncated": bool}`。"""
+    if not RP.sharing_enabled(conn):
+        raise StoreError(404, NOT_FOUND)
+    q = " ".join((q or "").split())[:40]
+    sql = ("SELECT u.username FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.active=1 AND u.username<>?")
+    args = [user["username"]]
+    if q:
+        sql += " AND (u.display_name LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\')"
+        args += [_like(q)] * 3
+    sql += " ORDER BY COALESCE(NULLIF(u.display_name,''), u.username), u.username LIMIT %d" % (_POOL_MAX + 1)
+    names = [r[0] for r in conn.execute(sql, args)]
+    pool_cut = len(names) > _POOL_MAX
+    ok = [n for n in names[:_POOL_MAX] if _can_view(n)]
+    return {"people": _people(conn, ok[:TARGET_LIST_MAX]), "truncated": pool_cut or len(ok) > TARGET_LIST_MAX}
+
+
+def shared_people(conn, user, rid) -> dict:
+    """擁有者看自己這份報表分享給了誰（非擁有者、不存在 ⇒ 同一句 404）。"""
+    r = _row(conn, rid)
+    if r is None or r["username"] != user["username"]:
+        raise StoreError(404, NOT_FOUND)
+    on = RP.sharing_enabled(conn)
+    return {"shared": _people(conn, _shared_with(conn, rid)) if on else [], "sharingEnabled": on, "max": MAX_SHARES}
+
+
+def change_shares(conn, user, rid, add, remove) -> dict:
+    """擁有者批次增減分享對象。回 `{"shared": [...], "added": [帳號], "removed": [帳號], "sharingEnabled": True}`。
+    不改 `updated_at`；增加要分享設定開著＋對象合格；取消分享隨時可做；已經在（或不在）名單裡的人不算變動。"""
+    if not isinstance(add, list) or not isinstance(remove, list) or any(not isinstance(x, str) for x in add + remove):
+        raise StoreError(422, "分享對象格式不正確。")
+    if len(add) > MAX_SHARES * 5 or len(remove) > MAX_SHARES * 5:
+        raise StoreError(422, "一次處理的人數太多。")
+    began = begin_write(conn)
+    try:
+        r = _row(conn, rid)
+        if r is None or r["username"] != user["username"]:
+            raise StoreError(404, NOT_FOUND)
+        on = RP.sharing_enabled(conn)
+        cur = set(_shared_with(conn, rid))
+        rem = sorted({x.strip() for x in remove if x.strip()} & cur)
+        want = sorted({x.strip() for x in add if x.strip()} - cur - set(rem))
+        if want and not on:
+            raise StoreError(403, "公司目前不開放分享報表。", {"reason": "sharing_off"})
+        if want:
+            _check_targets(conn, user, want)                     # 存在、在職、不是自己、有使用能力（逐位後端再查）
+            if len(cur - set(rem)) + len(want) > MAX_SHARES:
+                raise StoreError(422, "最多只能分享給 %d 位同事。" % MAX_SHARES)
+        now = _now()
+        if rem:
+            conn.executemany("DELETE FROM custom_report_shares WHERE report_id=? AND shared_with=?", [(rid, x) for x in rem])
+        if want:
+            conn.executemany("INSERT INTO custom_report_shares (report_id, shared_with, created_at) VALUES (?,?,?)", [(rid, x, now) for x in want])
+        conn.commit()
+    except Exception:
+        if began and conn.in_transaction:
+            conn.rollback()
+        raise
+    return {"shared": _people(conn, _shared_with(conn, rid)) if on else [], "added": want, "removed": rem, "sharingEnabled": on}
 
 
 def create(conn, user, name, definition) -> dict:
@@ -244,6 +338,7 @@ def update(conn, user, rid, etag, body) -> dict:
         if (etag or "") != etag_of(r):
             raise StoreError(409, "這份報表已在其他視窗修改，請重新載入。", {"reason": "etag"})
         shares = None
+        old_shares = set(_shared_with(conn, rid))
         if "sharedWith" in body:
             if not RP.sharing_enabled(conn):
                 if body["sharedWith"]:
@@ -264,7 +359,10 @@ def update(conn, user, rid, etag, body) -> dict:
         if began and conn.in_transaction:
             conn.rollback()
         raise
-    return get_visible(conn, user, rid)
+    out = get_visible(conn, user, rid)
+    if shares is not None and (set(shares) != old_shares):
+        out["_shareChanges"] = (sorted(set(shares) - old_shares), sorted(old_shares - set(shares)))      # 給呼叫端寫稽核；呼叫端要先拿掉再回應
+    return out
 
 
 def copy_report(conn, user, rid) -> dict:

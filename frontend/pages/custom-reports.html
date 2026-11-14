@@ -93,16 +93,40 @@
     /* 提示訊息節點常駐 DOM（role=status 的節點從 hidden 切出來常不被螢幕閱讀器朗讀），用 class 切可見 */
     .cr-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #111; color: #fff; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; max-width: 90vw; z-index: 20; opacity: 0; pointer-events: none; }
     .cr-toast.show { opacity: 1; }
-    .cr-main dialog { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; max-width: 560px; width: 92vw; background: var(--bg); color: var(--text-primary); }
-    .cr-main dialog::backdrop { background: rgba(0, 0, 0, .35); }
-    .cr-main dialog h3 { margin: 0 0 8px; font-size: 16px; }
-    .cr-main dialog .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
-    .cr-main dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 8px 0 2px; }
-    .cr-main dialog input[type=text] { width: 100%; }
+    /* 全站 reset 有 margin:0，會讓 showModal 的對話框貼在左上角（失去 margin:auto 置中）；--bg 在本站沒有定義，背景要用 --white */
+    dialog { margin: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; max-width: 560px; width: 92vw; max-height: 90vh; overflow-y: auto; background: var(--white); color: var(--text-primary); }
+    dialog::backdrop { background: rgba(0, 0, 0, .35); }
+    dialog h3 { margin: 0 0 8px; font-size: 16px; }
+    dialog .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+    dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 8px 0 2px; }
+    dialog input[type=text] { width: 100%; }
     .cr-xl { border: 1px solid var(--border-light); border-radius: var(--radius); margin: 8px 0; }
     .cr-xl h4 { margin: 0; padding: 5px 10px; background: var(--cr-row-alt); font-size: 12px; border-bottom: 1px solid var(--border-light); }
     .cr-xl div { padding: 6px 10px; font-size: 12px; line-height: 1.7; }
+    /* 對話框在 <main> 外面（置於最上層）：.cr-main 底下的規則碰不到它，所以這裡另外寫 */
+    dialog [hidden] { display: none !important; }
+    dialog input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; vertical-align: middle; margin: 2px; }
+    dialog label.hit { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; min-width: 28px; cursor: pointer; margin: 0; font-size: 13px; color: inherit; }
+    dialog :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+    dialog input[type=text] { font: inherit; padding: 4px 6px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--bg); color: inherit; min-height: 32px; }
+    dialog .btn.cr-btn-sm { padding: 3px 10px; min-height: 30px; font-size: 13px; }
     .cr-err { color: var(--danger); }
+    /* 分享面板：兩段（已分享的人／加入同事），每段一個可捲動清單；選取框 24px 以上、整列都是點擊區 */
+    dialog#dlgShare { max-width: 640px; }
+    .cr-sh h4 { margin: 14px 0 4px; font-size: 14px; }
+    .cr-sh .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 6px; }
+    .cr-sh .bar .sp { flex: 1; }
+    .cr-sh .bar input[type=text] { flex: 1; min-width: 160px; width: auto; }
+    .cr-people { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-light); border-radius: var(--radius); max-height: 200px; overflow-y: auto; }
+    .cr-people li { border-bottom: 1px solid var(--border-light); }
+    .cr-people li:last-child { border-bottom: 0; }
+    .cr-people label.row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; min-height: 36px; cursor: pointer; margin: 0; font-size: 13px; color: inherit; }
+    .cr-people label.row.off { cursor: default; color: var(--text-secondary); }
+    .cr-people .who { flex: 1; min-width: 0; }
+    .cr-people .who b { font-weight: 600; }
+    .cr-people .who small { color: var(--text-secondary); margin-left: 6px; }
+    .cr-people .empty { padding: 10px; font-size: 12px; color: var(--text-secondary); }
+    .cr-sh .msg { min-height: 18px; margin: 8px 0 0; }
     .cr-btn-sm { padding: 3px 10px; min-height: 30px; font-size: 13px; }
     /* ── 手機／平板（≤1023px）觸控體驗：輸入框 16px 以上（iOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
     @media (max-width: 1023px) {
@@ -112,6 +136,10 @@
       .cr-main .btn, .cr-main .cr-btn-sm { min-height: 44px; }
       .cr-main input[type=checkbox] { width: 24px; height: 24px; }
       .cr-main .cellbtn { min-height: 36px; min-width: 44px; }
+      dialog .btn, dialog .btn.cr-btn-sm { min-height: 44px; }
+      dialog input[type=text] { font-size: 16px; min-height: 44px; }
+      dialog input[type=checkbox] { width: 24px; height: 24px; }
+      .cr-people label.row { min-height: 44px; }
     }
     @media (max-width: 767px) {
       .cr-main { padding: 20px 16px 60px; }
@@ -159,6 +187,7 @@
           <button class="btn btn-primary" id="btnSave" type="button" data-testid="cr-save">儲存</button>
           <button class="btn" id="btnSaveAs" type="button" data-testid="cr-saveas">另存新檔</button>
           <button class="btn" id="btnExport" type="button" data-testid="cr-export">匯出 Excel</button>
+          <button class="btn" id="btnShare" type="button" data-testid="cr-share" hidden>分享…</button>
         </div>
 
         <div class="cr-srcs" id="srcTabs" role="group" aria-label="資料來源"></div>
@@ -236,6 +265,34 @@
     <div class="cr-xl"><h4>工作表二「說明」</h4><div id="xl2"></div></div>
     <p class="cr-note cr-err" id="xlErr" role="alert"></p>
     <div class="acts"><button class="btn" type="button" id="xlClose">關閉</button><button class="btn" type="button" id="xlPdf" data-testid="cr-export-pdf">下載 PDF</button><button class="btn btn-primary" type="button" id="xlGo" data-testid="cr-export-go">下載 Excel</button></div>
+  </dialog>
+
+  <dialog id="dlgShare" class="cr-sh" aria-labelledby="shTitle" data-testid="cr-dlg-share">
+    <h3 id="shTitle" tabindex="-1">分享報表</h3>
+    <p class="cr-lead" id="shLead">對方只能檢視與複製，看不到、也算不出他沒有權限的欄位與資料；不能修改、刪除或再分享。分享的是<strong>已儲存</strong>的版本。</p>
+
+    <h4 id="shMineH">已分享的人</h4>
+    <div class="bar">
+      <label class="hit"><input type="checkbox" id="shSelShared" data-fk="sh:selshared" data-testid="cr-sh-selshared"> 全選已分享的人</label>
+      <span class="sp"></span>
+      <button class="btn cr-btn-sm" type="button" id="shRemove" data-fk="sh:remove" data-testid="cr-sh-remove" disabled>取消分享所選</button>
+    </div>
+    <ul class="cr-people" id="shShared" aria-labelledby="shMineH" data-testid="cr-sh-shared"></ul>
+
+    <h4 id="shAddH">加入同事</h4>
+    <div class="bar">
+      <label class="cr-sr" for="shQ">搜尋同事（姓名、帳號或部門）</label>
+      <input type="text" id="shQ" maxlength="40" placeholder="搜尋姓名、帳號或部門" data-fk="sh:q" data-testid="cr-sh-q" autocomplete="off">
+    </div>
+    <div class="bar">
+      <label class="hit"><input type="checkbox" id="shSelCands" data-fk="sh:selcands" data-testid="cr-sh-selcands"> 全選目前結果</label>
+      <span class="sp"></span>
+      <button class="btn btn-primary cr-btn-sm" type="button" id="shAdd" data-fk="sh:add" data-testid="cr-sh-add" disabled>分享給所選</button>
+    </div>
+    <ul class="cr-people" id="shCands" aria-labelledby="shAddH" data-testid="cr-sh-cands"></ul>
+    <p class="cr-note" id="shCount"></p>
+    <p class="cr-note msg" id="shMsg" role="status" data-testid="cr-sh-msg"></p>
+    <div class="acts"><button class="btn" type="button" id="shClose" data-testid="cr-sh-close">完成</button></div>
   </dialog>
 
   <script src="../static/notif.js"></script>

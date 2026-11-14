@@ -145,3 +145,113 @@ def test_flag_off_shows_not_open_and_hides_hub_card(live_server, make_user, e2e_
     hub.wait_for_selector("[data-testid*='custom-reports']", timeout=20000)
     hub.close()
     page.close()
+
+
+@pytest.mark.e2e
+def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hidden_when_off(live_server, make_user, e2e_browser):
+    """分享面板（B2-S5）：搜尋→全選目前結果→分享；被分享者看得到；批次取消分享；設定關閉時入口不出現。"""
+    from db import get_db
+    names = []
+    for i in range(3):
+        u, _p = make_user(username="e2e_sh_t%d" % i, role="sales", modules=["quotation"])
+        names.append(u)
+    nocap, _ = make_user(username="e2e_sh_nocap", role="sales", modules=["inventory"])
+    c = get_db()
+    try:
+        for u, dn in zip(names, ("林一號", "林二號", "林三號")):
+            c.execute("UPDATE users SET display_name=? WHERE username=?", (dn, u))
+        c.execute("UPDATE users SET display_name='林無權' WHERE username=?", (nocap,))
+        c.commit()
+    finally:
+        c.close()
+    _set(sharing=0)
+    try:
+        page = _open(live_server, make_user, e2e_browser, "e2e_sh_owner", role="engineer", modules=["quotation"])
+        _ready(page)
+        page.click("[data-testid=cr-save]")
+        page.fill("[data-testid=cr-name]", "分享用報表")
+        page.click("[data-testid=cr-name-ok]")
+        page.wait_for_function("() => document.getElementById('sbTitle').textContent === '分享用報表'", timeout=20000)
+        assert page.locator("[data-testid=cr-share]").is_hidden()                              # 設定關閉：沒有入口
+        _set(sharing=1)
+        page.goto(f"{live_server}/pages/custom-reports.html")
+        page.wait_for_selector("[data-testid^=cr-report-]", timeout=20000)
+        page.click("[data-testid^=cr-report-]:has-text('分享用報表')")
+        page.wait_for_selector("[data-testid=cr-share]:not([hidden])", timeout=20000)
+        page.click("[data-testid=cr-share]")
+        page.wait_for_selector("[data-testid=cr-dlg-share][open]")
+        page.fill("[data-testid=cr-sh-q]", "林")
+        page.wait_for_function("() => document.querySelectorAll('#shCands li label.row').length === 3", timeout=20000)     # 沒有權限的「林無權」不在名單
+        assert page.inner_text("[data-testid=cr-sh-cands]").count("林無權") == 0
+        page.check("[data-testid=cr-sh-selcands]")
+        assert page.is_enabled("[data-testid=cr-sh-add]") and "（3）" in page.inner_text("[data-testid=cr-sh-add]")
+        page.click("[data-testid=cr-sh-add]")
+        page.wait_for_function("() => document.getElementById('shMsg').textContent.includes('已分享給 3 位')", timeout=20000)
+        assert page.locator("#shShared li label.row").count() == 3
+        assert page.locator("#shCands li label.row.off").count() == 3                        # 已分享的人在候選名單標示、不能重複勾
+        # 被分享者看得到
+        other = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+        inject_login(other, live_server, names[0], "Test-Pass-123")
+        other.goto(f"{live_server}/pages/custom-reports.html")
+        other.wait_for_selector("[data-testid^=cr-report-]:has-text('分享用報表')", timeout=20000)
+        assert other.locator("[data-testid=cr-share]").is_hidden()                         # 被分享者沒有分享入口
+        other.close()
+        # 批次取消分享（先勾兩位，確認後移除）
+        page.check("[data-fk='sh:S:%s']" % names[1])
+        page.check("[data-fk='sh:S:%s']" % names[2])
+        page.click("[data-testid=cr-sh-remove]")
+        page.click("[data-testid=cr-confirm-yes]")
+        page.wait_for_function("() => document.getElementById('shMsg').textContent.includes('已取消分享 2 位')", timeout=20000)
+        assert page.locator("#shShared li label.row").count() == 1
+        page.click("[data-testid=cr-sh-close]")
+        c = get_db()
+        try:
+            acts = [r[0] for r in c.execute("SELECT action FROM audit_log WHERE action LIKE 'custom_reports.share_%' ORDER BY id")]
+        finally:
+            c.close()
+        assert acts == ["custom_reports.share_add"] * 3 + ["custom_reports.share_remove"] * 2
+        page.close()
+    finally:
+        _set(sharing=0)
+
+
+@pytest.mark.e2e
+def test_undo_returns_focus_to_page_not_body_header_show_all_reports_skips_and_partially_hidden_filters_text(live_server, make_user, e2e_browser):
+    """h5 實機複核三項 nits：復原後焦點不掉到 BODY；表頭「全部顯示」回報略過的無權限欄；有隱藏條件的分享報表，篩選面板不說「沒有條件」。"""
+    _set(sharing=1)
+    try:
+        eng = _open(live_server, make_user, e2e_browser, "e2e_nit_eng", role="engineer", modules=["quotation"])
+        _ready(eng)
+        eng.click("[data-fk=showAll]")                                          # 全部顯示 ⇒ 有無權限欄位被略過，要說出數量
+        eng.wait_for_function("() => document.getElementById('batchMsg').textContent.includes('略過')", timeout=20000)
+        assert "含稅總額（無權限）" in eng.locator("#batchMsg").inner_text()
+        eng.click("[data-fk='batch:hide']")
+        assert eng.locator("#btnUndo").is_visible()
+        eng.click("#btnUndo")
+        assert eng.locator("#btnUndo").is_hidden()
+        assert eng.evaluate("() => document.activeElement && document.activeElement !== document.body") is True       # 按鈕消失後焦點不掉到 BODY
+        eng.close()
+        # 分享報表：擁有者的篩選用到工程師看不到的「含稅總額」
+        owner = _open(live_server, make_user, e2e_browser, "e2e_nit_owner")
+        _ready(owner)
+        eng_user, _p = make_user(username="e2e_nit_eng2", role="engineer", modules=["quotation"])
+        made = owner.evaluate("""async (who) => {
+            const tok = JSON.parse(localStorage.getItem('motrix_session')).token
+            const H = {Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json'}
+            const d = {version: 1, source: 'quotation', layout: 'detail', columns: ['quote_no', 'customer_name', 'total'],
+                       filters: [{field: 'total', op: 'gte', value: 100000}], groupBy: [], aggregates: [], sort: []}
+            const c = await (await fetch('/api/custom-reports', {method: 'POST', headers: H, body: JSON.stringify({name: '含金額門檻', definition: d})})).json()
+            const r = await fetch('/api/custom-reports/' + c.id + '/shares', {method: 'POST', headers: H, body: JSON.stringify({add: [who]})})
+            return [c.id, r.status]
+        }""", eng_user)
+        assert made[1] == 200
+        owner.close()
+        rd = e2e_browser.new_page(viewport={"width": 1440, "height": 900})
+        inject_login(rd, live_server, eng_user, "Test-Pass-123")
+        rd.goto(f"{live_server}/pages/custom-reports.html#{made[0]}")
+        rd.wait_for_selector("[data-testid=cr-no-filters]", timeout=20000)
+        txt = rd.inner_text("[data-testid=cr-no-filters]")
+        assert "另有條件" in txt and "目前沒有篩選條件" not in txt
+        rd.close()
+    finally:
+        _set(sharing=0)
