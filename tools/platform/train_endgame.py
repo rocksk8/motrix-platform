@@ -19,7 +19,7 @@
   a1_expectations 檢查 ②：產生 backend/a1_expectations.json（A1 自動套用的包專屬驗證項；進 repo、凍結前 commit）
   changelog     CHANGELOG 摺疊前檢查：`(next)` 在最上面、標題順序、有功能變更的模組／核心都有 CHANGELOG 段落
   l1_pre        L1 介面快照＝目前介面（取號前）
-  assign        train_number assign（獨立 commit）→ --check
+  assign        train_number assign（獨立 commit）→ --check；取號會升核心主版號而 core_major_bump 還沒處理 ⇒ 停
   regen         regen_all（獨立 commit）→ --check
   l1_post       L1 介面快照＝目前介面（取號、重產之後）
   step_file     步驟檔「事實區塊」（版號、commit／檔案數、關卡備註）；沒有步驟檔就由範本產生草稿
@@ -483,6 +483,21 @@ def st_l1(name):
     return f
 
 
+def core_major_gap(repo, base):
+    """取號會把核心升到新主版號、而 core_major_bump 還沒處理 ⇒ 回傳問題清單；沒有這個情況 ⇒ []。
+    「處理過」的證據＝所有 module.json 的 core 範圍已接受下一個主版號（core_major_bump apply 的結果；T86 的 CORE 2.0 事故就是缺這一步）。
+    判斷本體沿用 core_major_bump（major_pending／guard_problems），不另寫一套。"""
+    import core_major_bump as CMB
+    pending, why = CMB.major_pending(repo, base)
+    if not pending:
+        return []
+    specs = {k: spec for k, (_p, spec) in CMB.module_specs(repo).items()}
+    probs = CMB.guard_problems(CMB.core_version(repo), specs, True)
+    if not probs:
+        return []
+    return ["取號會把核心升到新主版號（%s），而 core_major_bump 還沒處理：" % why] + probs
+
+
 def st_assign(c):
     rc, out = run_py(c.repo, "tools/platform/train_number.py", "assign", "--dry-run", "--base", c.base)
     if rc not in (0, 3):
@@ -490,6 +505,9 @@ def st_assign(c):
     if rc == 0:
         rc2, out2 = run_py(c.repo, "tools/platform/train_number.py", "--check", "--base", c.base)
         return Result("assign", DONE if rc2 == 0 else BLOCK, _tail(out2, 4))
+    gap = core_major_gap(c.repo, c.base)
+    if gap:
+        return Result("assign", BLOCK, gap + ["這是核心大版本升級，不是一般取號：先照上面的指令跑 core_major_bump，再重跑本工具。"])
     if c.dry:
         return Result("assign", WILL, ["有佔位要取號。"] + _tail(out, 8))
     rc, out = run_py(c.repo, "tools/platform/train_number.py", "assign", "--base", c.base)

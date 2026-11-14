@@ -235,3 +235,30 @@ def test_endgame_changelog_order_is_clean_when_the_entry_comes_last(eg, repo):
     _write(repo, "backend/modules/alpha/CHANGELOG.md", "# alpha\n\n## (next) — 2026-11-14（y）\n\n- b\n")
     _commit(repo, "entry after code")
     assert eg.changelog_order_problems(repo) == {}
+
+
+# ── 取號會升核心主版號：沒處理 core_major_bump 就停（T86 CORE 2.0 事故）──────────────────
+
+def _core_tree(repo, specs, next_head):
+    _write(repo, "backend/core/registry.py", 'CORE_VERSION = "1.9"\n')
+    _write(repo, "backend/core/CHANGELOG.md", "# core\n\n## %s\n- x\n\n## 1.9\n- y\n" % next_head)
+    for k, spec in specs.items():
+        _write(repo, "backend/modules/%s/module.json" % k, json.dumps({"version": "1.0.0", "core": spec}))
+
+
+def test_core_major_gap_blocks_when_ranges_not_relaxed(eg, repo):
+    _core_tree(repo, {"alpha": ">=1.0,<2.0", "beta": ">=1.0,<3.0"}, "(next:major)")
+    gap = eg.core_major_gap(repo, "base")
+    text = "\n".join(gap)
+    assert gap and "core_major_bump" in text and "alpha" in text
+    assert "beta" not in "\n".join(gap[1:-1])        # 已接受下一個主版號的模組不列
+
+
+def test_core_major_gap_passes_after_core_major_bump(eg, repo):
+    _core_tree(repo, {"alpha": ">=1.0,<3.0", "beta": ">=1.0,<3.0"}, "(next:major)")
+    assert eg.core_major_gap(repo, "base") == []
+
+
+def test_core_major_gap_silent_for_ordinary_assign(eg, repo):
+    _core_tree(repo, {"alpha": ">=1.0,<2.0"}, "(next)")
+    assert eg.core_major_gap(repo, "base") == []
