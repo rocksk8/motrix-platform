@@ -391,6 +391,7 @@ window.CM_PARTS.push(() => ({
         const data = bundle.quotation
         const parts = bundle.parts || {}
         this.selected = data
+        this.devCase = (parts.devCase && parts.devCase.ok && parts.devCase.data) || null      // T86 業務開發 D：來源商機（跟 selected 同一刻賋值，切換時不殘留上一件；看不到／沒有＝null）
         // T86 #30：手機上整頁一起捲（清單與明細上下堆疊）。從清單深處點進案件時，頁面還停在
         // 清單的捲動位置，案件標題列就落在頂欄底下被蓋住 ⇒ 開啟案件時回到頁面頂端。
         if (this.isMobileView) window.scrollTo(0, 0)
@@ -417,7 +418,6 @@ window.CM_PARTS.push(() => ({
         this.loadCompletionNotes(quoteNo, parts.completionNotes)
         this.loadCaseUpdates(quoteNo, parts.updates)
         this.loadExtraExpenses(quoteNo, parts.extraExpenses)
-        this.devCase = (parts.devCase && parts.devCase.ok && parts.devCase.data) || null      // T86 業務開發 D：來源商機（看不到／沒有＝null）
         this.ensureTabData(this.activeTab)
       } catch {}
     },

@@ -83,6 +83,19 @@ def test_dev_case_name_is_not_leaked_to_users_who_cannot_see_that_opportunity(ma
     assert admin is not None
 
 
+def test_http_wiring_hides_the_opportunity_from_a_crm_user_who_is_not_on_it(client, make_user):
+    u, p = make_user("dcrm_http_other", "Conn-Pass-123", role="sales", modules=["dev_crm", "case"])[:2]
+    _seed()
+    h = _hdr(client, u, p)
+    items = client.get("/api/quotations?deal_tag=已成案&with_dev_case=1&limit=50", headers=h).json()["items"]
+    by = {i["quote_no"]: i for i in items}
+    if QNO in by:
+        assert by[QNO]["dev_case"] is None, "不是那件商機的相關人 ⇒ 列表上也看不到名稱"
+    r = client.get("/api/quotations/%s/case-bundle" % QNO, headers=h)
+    if r.status_code == 200:
+        assert r.json()["parts"]["devCase"] == {"ok": True, "data": None}
+
+
 @pytest.mark.e2e
 def test_case_page_shows_the_source_link_on_card_and_header(live_server, make_user, e2e_browser):
     u, p = make_user(username="dcrm_e2e", role="superadmin")[:2]
@@ -100,6 +113,11 @@ def test_case_page_shows_the_source_link_on_card_and_header(live_server, make_us
     head.wait_for(state="visible", timeout=20000)
     assert head.get_attribute("href") == f"dev-crm.html?case={did}"
     assert "智慧工廠監控商機" in head.inner_text()
+    # 同一頁面內從有來源商機的 A 切到沒有的 B：標題列的連結要立刻消失，不可殘留 A 的
+    page.locator('.cm-card', has_text=QNO2).first.click()
+    page.locator('[data-testid="cm-header-devcase"]').wait_for(state="detached", timeout=20000)
+    page.wait_for_timeout(500)
+    assert page.locator('[data-testid="cm-header-devcase"]').count() == 0
     page.goto(f"{live_server}/pages/case-management.html?q={QNO2}")
     page.wait_for_selector(f"text={QNO2}", timeout=20000)
     page.wait_for_timeout(500)
