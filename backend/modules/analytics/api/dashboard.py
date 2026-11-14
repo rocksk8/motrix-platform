@@ -10,7 +10,6 @@ from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
                      user_has_module, can_see_financial, receipt_amounts,
                      require_any_module, _get_setting, _set_setting)
-from helpers.tax_calc import money   # 髒資料防線（T87 修）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import financial_mask as _FM
 from helpers.field_policy import mask_flags as _mask_flags
@@ -285,7 +284,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                 recv_total += amt
                 if p.get("received"):
                     recv_received += amt
-                    recv_fee      += money(p.get("feeAmount"))
+                    recv_fee      += R._money(p.get("feeAmount"))
                     act_amt        = p.get("actualAmount")
                     # 2026-09-30：實收＝銀行入帳（已扣客戶內扣手續費）⇒ 實收淨額＝入帳，不再減手續費
                     recv_actual   += receipt_amounts(amt, act_amt, p.get("feeAmount"))[0]
@@ -386,7 +385,7 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
                 amt = receipt_amounts(amounts[i], act_amt, p.get("feeAmount"))[1]   # 收入（含手續費）；net＝amount−fee＝銀行入帳
                 monthly_amount[mo] = monthly_amount.get(mo, 0) + amt
                 monthly_count[mo]  = monthly_count.get(mo, 0) + 1
-                monthly_fee[mo]    = monthly_fee.get(mo, 0) + money(p.get("feeAmount"))
+                monthly_fee[mo]    = monthly_fee.get(mo, 0) + R._money(p.get("feeAmount"))
 
         today = date.today()
         month_list = []

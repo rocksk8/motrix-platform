@@ -6,9 +6,10 @@
 - 權限：營收、毛利、應收帳齡沿用 `_require_reports_access`（不改）。案件進度、業務漏斗是新閘門（PM 2026-11-14 裁示）：不需要「營運報表」模組，只列呼叫者有權限的案件與商機（row_access）；案件進度不含金額；漏斗預估金額依 `can_see_financial`，無權限回 null、Excel 不輸出金額欄。看不到＝null、未填／未精算＝`{state}`，不當作 0。
 - 無 schema 變更、無 migration；既有 `/api/reports/*`、`/api/report-templates/*` 路徑、欄位、權限不變。
 - 修正（既有缺陷，h11 發現）：款項明細的金額／比例／實收／手續費不是數字（例如 `"5x00"`）時，營運報表主頁、營收、毛利、應收帳齡、資金水位、收款明細、儀表板等一律 500（TypeError）。
-  現在：共同入口 `helpers.tax_calc.payment_item_amounts`／`receipt_amounts`／`summarize_payment_items` 做防禦轉換（數字字串如 `"1,250.5"` 轉成數字；非數字、NaN、inf 當 0 並記 warning），
+  現在：共同入口 `helpers.tax_calc.payment_item_amounts`（L1 公開介面不變：新輔助函式皆私有）／`receipt_amounts`／`summarize_payment_items` 做防禦轉換（數字字串如 `"1,250.5"` 轉成數字；非數字、NaN、inf 當 0 並記 warning），
   所以所有呼叫點自動安全；應收帳齡（`_ar_aging_core`，營運報表、B1、資金水位共用）與收款明細（`_collect_receivable_items`）另外**略過壞筆並計數**，回應多 `dirtyCount`（B1 帳齡也有）並在說明帶「有 N 筆資料格式異常未計入」。
   乾淨資料的回應逐鍵不變（沒有 `dirtyCount`，計算與過去逐位相同，測試以修改前的公式逐位比對）。測試 `test_ar_dirty_payment_amounts_t87_2026_11_14.py`（含掃描全部無參數報表／儀表板／出納 GET 端點）。
+  規則（h11 審查）：「金額算不出來」＝款項不是物件／金額壞掉／沒填金額又靠壞掉的比例反推（`reports._amount_unknown`，`tax_calc._amount_unknown` 同規則；L1 不外露，公開介面不變）。第 1 筆沒填金額＝總額扣其他筆的餘數，後面有這種款項時第 1 筆也算不出來——當 0（報表略過並計數），不會把壞筆的金額併進第 1 筆讓應收偏大。金額有效、只有比例／手續費壞掉的款項照算（欄位清成 0）。款項明細不是清單算 1 筆壞資料。自訂報表「應收帳款」明細（`detail`）與 B1 帳齡同一條略過規則，合計與列數一致。
   不在此次範圍：報價單本身 `total` 欄位是文字、款項項目不是物件（非 dict）——這兩種仍可能讓部分端點 500（尚無實例）。
 
 ## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正、匯出、自訂報表頁、分享給誰面板、複審修正、選單旗標過濾、應收帳款來源與來源排序、髒資料防護及財務角色可達性；版號由列車取）

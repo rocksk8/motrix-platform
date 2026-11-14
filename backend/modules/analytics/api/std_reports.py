@@ -449,7 +449,10 @@ def _build_ar_aging(p: dict, u: dict) -> dict:
                      [_col("quoteNo", "案件號"), _col("customer", "客戶"), _col("owner", "業務"), _col("stage", "期別"),
                       _col("amount", "未收金額", "money"), _col("quoteDate", "報價日", "date"),
                       _col("days", "經過天數", "days"), _col("band", "帳齡區間")], rows)]
-    return _finish("ar-aging", p, kpis, tables, notes, **({"dirtyCount": ar["dirtyCount"]} if ar.get("dirtyCount") else {}))
+    out = _finish("ar-aging", p, kpis, tables, notes)
+    if ar.get("dirtyCount"):
+        out["dirtyCount"] = ar["dirtyCount"]
+    return out
 
 
 # ── 案件進度 ─────────────────────────────────────────────────────────────────

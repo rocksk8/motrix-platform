@@ -2718,7 +2718,43 @@ def _compute_ar_aging(sales_id: Optional[int] = None, customer: Optional[str] = 
     return _ar_aging_core(sales_id, customer, department_id, with_owner=False)
 
 
-from helpers.tax_calc import MONEY_BAD as _BAD, amount_unknown as _amount_unknown, money as _money, parse_money as _num_or_bad     # 髒資料防線共用 L1 的轉換（單一來源）
+_BAD = object()      # `_num_or_bad` 的「填了但不是有限數字」標記
+
+
+def _num_or_bad(v):
+    """款項欄位的防禦性轉換 ⇒ 數字、None（沒填／空白）或 _BAD（填了但不是有限數字，例如 "5x00"、NaN、inf、True）；數字字串（"1,250.5"）轉成數字。
+    與 `helpers/tax_calc._parse_money` 同一條規則（L1 不外露它，避免升核心版；`test_ar_dirty_payment_amounts…` 逐項比對兩邊一致）。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, bool):
+        return _BAD
+    if isinstance(v, (int, float)):
+        return v if math.isfinite(v) else _BAD
+    if isinstance(v, str):
+        try:
+            f = float(v.strip().replace(",", ""))
+        except ValueError:
+            return _BAD
+        if not math.isfinite(f):
+            return _BAD
+        return int(f) if f.is_integer() else f
+    return _BAD
+
+
+def _money(v, default=0):
+    """沒填或壞掉 ⇒ default（讀手續費這類欄位再相加用）。"""
+    n = _num_or_bad(v)
+    return default if n is None or n is _BAD else n
+
+
+def _amount_unknown(pi) -> bool:
+    """這筆款項的應收金額算不出來？＝不是物件；金額填了但不是數字；沒填金額又靠壞掉的比例反推。（同 `tax_calc._amount_unknown`）"""
+    if not isinstance(pi, dict):
+        return True
+    a = _num_or_bad(pi.get("amount")) if "amount" in pi else None
+    if a is _BAD:
+        return True
+    return a is None and "pct" in pi and _num_or_bad(pi.get("pct")) is _BAD
 
 
 _PAY_NUM_KEYS = ("amount", "pct", "actualAmount", "feeAmount")
@@ -2726,7 +2762,7 @@ _PAY_NUM_KEYS = ("amount", "pct", "actualAmount", "feeAmount")
 
 def _clean_pay_items(total, pretax, pay):
     """款項明細的髒資料防線（T87 修）：金額不是數字（例如 "5x00"）的款項不能讓整張報表 500。
-    ⇒ `(total, pretax, items, bad)`：`bad`＝金額算不出來的款項（見 `helpers.tax_calc.amount_unknown`）；金額算得出來、只有比例／實收／手續費壞掉的款項照算（壞欄位清成 0／None）。
+    ⇒ `(total, pretax, items, bad)`：`bad`＝金額算不出來的款項（見下方 `_amount_unknown`）；金額算得出來、只有比例／實收／手續費壞掉的款項照算（壞欄位清成 0／None）。
     `items` 與原清單等長（壞掉的一筆換成金額 0 的替身，讓其餘款項的金額與順序不變；例外：第 1 筆沒填金額＝餘數、而後面有金額算不出來的款項時，第 1 筆也算壞），
     `bad` 是壞筆的位置集合（呼叫端略過它們並計數）。`total`／`pretax` 壞掉 ⇒ 整張報價單的款項都算壞（`bad` 含全部位置）。
     乾淨的資料原樣回傳（同一個清單物件），不改變既有輸出。"""

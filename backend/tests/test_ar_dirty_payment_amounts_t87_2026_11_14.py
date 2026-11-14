@@ -272,3 +272,27 @@ def test_helper_forces_first_item_to_zero_when_remainder_is_undeterminable():
     assert payment_item_amounts(100000, [{}, {"pct": 50}]) == [50000, 50000]                  # 乾淨：不變
     assert payment_item_amounts(100000, [{"amount": 10}, {"amount": "5x00"}]) == [10, 0]      # 第 1 筆有金額：不動
     assert payment_item_amounts(100000, [{}, {"amount": 40000, "pct": "x"}]) == [60000, 40000]  # 壞比例但金額有效：不動
+
+
+def test_analytics_copy_and_l1_private_helpers_agree():
+    """L1 `tax_calc` 與 analytics `reports` 各有一份同規則的轉換（L1 不外露，避免升核心版）——逐項比對，防止兩邊各自演進。"""
+    from helpers import tax_calc as T
+    from modules.analytics.api import reports as R
+    vals = [None, "", "  ", 0, 5, -3, 1.5, "5000", " 12 ", "1,250.5", "5x00", "abc", "20%", "1e3", True, False, float("nan"),
+            float("inf"), "inf", "nan", [], {}, (1,)]
+    for v in vals:
+        a, b = T._parse_money(v), R._num_or_bad(v)
+        assert (a is T._MONEY_BAD) == (b is R._BAD), v
+        if a is not T._MONEY_BAD:
+            assert a == b and type(a) is type(b), v
+        assert T._money(v) == R._money(v), v
+    items = [{}, {"amount": "x"}, {"amount": 5, "pct": "x"}, {"pct": "x"}, {"pct": 5}, {"amount": None, "pct": "x"}, "垃圾", None, {"amount": ""}]
+    for pi in items:
+        assert T._amount_unknown(pi) == R._amount_unknown(pi), pi
+
+
+def test_l1_public_interface_has_no_new_names():
+    """新輔助函式不進 L1 公開介面（否則要升核心次版號、重錄快照）。"""
+    from helpers import tax_calc as T
+    assert not [n for n in dir(T) if n in ("parse_money", "money", "MONEY_BAD", "amount_unknown")]
+    assert not {"parse_money", "money", "MONEY_BAD", "amount_unknown"} & set(T.__all__)
