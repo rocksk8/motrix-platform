@@ -1182,3 +1182,35 @@ def test_loopback_internal_code_really_publishes_in_a_real_backend_db(client, ca
     R.invalidate()
     assert R.get("external_login", "loopback_is_internal") == 1
     assert R.get("external_login", "lock_threshold") is not None      # 其他欄位沒被洗掉
+
+
+def _licensing_tree(tmp_path, body):
+    f = tmp_path / "backend" / "helpers" / "licensing.py"
+    f.parent.mkdir(parents=True)
+    f.write_bytes(body)
+    return tmp_path, f
+
+
+@pytest.mark.parametrize("eol", [b"\n", b"\r\n"])
+def test_disable_license_gate_flips_exactly_one_line_keeping_line_endings(tmp_path, eol):
+    body = eol.join([b"X = 1", b"LICENSE_GATE_ENABLED = True", b"Y = 2", b"# LICENSE_GATE_ENABLED = True  (comment)"]) + eol
+    tree, f = _licensing_tree(tmp_path, body)
+    assert AD.disable_license_gate(tree) == 1
+    after = f.read_bytes()
+    assert after.count(b"LICENSE_GATE_ENABLED = False") == 1 and b"# LICENSE_GATE_ENABLED = True" in after
+    assert after == body.replace(b"LICENSE_GATE_ENABLED = True" + eol, b"LICENSE_GATE_ENABLED = False" + eol, 1)
+
+
+def test_disable_license_gate_refuses_when_not_exactly_one_or_missing(tmp_path):
+    with pytest.raises(AD.DrillError):
+        AD.disable_license_gate(tmp_path / "nothing")
+    tree, _f = _licensing_tree(tmp_path / "a", b"LICENSE_GATE_ENABLED = False\n")
+    with pytest.raises(AD.DrillError):
+        AD.disable_license_gate(tree)
+    tree2, _f2 = _licensing_tree(tmp_path / "b", b"LICENSE_GATE_ENABLED = True\nLICENSE_GATE_ENABLED = True\n")
+    with pytest.raises(AD.DrillError):
+        AD.disable_license_gate(tree2)
+
+
+def test_the_license_gate_deviation_is_listed():
+    assert any("LICENSE_GATE_ENABLED" in d for d in AD.DEVIATIONS)

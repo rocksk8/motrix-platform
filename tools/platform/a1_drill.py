@@ -69,6 +69,8 @@ DEVIATIONS = [
     "pip 離線（PIP_NO_INDEX=1）：演練 venv 已滿足 requirements，套用腳本照常執行 pip 步驟。",
     "演練庫把外網登入防護的「本機直連算內網」（`external_login.loopback_is_internal`）直接寫成 1：全新庫的最高管理者還沒啟用兩步驟驗證，"
     "而本機直連預設算外網（要先有 TOTP）⇒ 否則連登入都做不到。正式機的最高管理者有 TOTP，所以**演練沒有走到儀表板的 TOTP 輸入**（那一段只有單元測試涵蓋）。",
+    "演練副本（安裝與假 T87 包內容）把授權總開關 `LICENSE_GATE_ENABLED` 改成 False：演練機沒有授權金鑰，產生機器指紋要跑硬體 WMI 查詢（本機禁跑），也沒有簽發私鑰。"
+    "代價：演練**沒有驗授權閘門**（A1 不動授權；正式機的授權狀態由 T87 自己的關卡確認）。",
 ]
 
 AUTOSTART_A1 = r"""@echo off
@@ -188,6 +190,22 @@ def rewrite_dashboard_prod(tree):
     text = _DASH_URL_RE.sub(lambda _m: 'PROD_BASE_URL = f"http://{PROD_HOST}:%d"' % DEAD_END_PORT, text)
     p.write_bytes(text.encode("utf-8"))
     return 2
+
+
+_GATE_RE = re.compile(rb"^LICENSE_GATE_ENABLED\s*=\s*True(?![A-Za-z0-9_])", re.M)
+
+
+def disable_license_gate(tree):
+    """演練副本（安裝與假 T87 包內容）把授權總開關 `LICENSE_GATE_ENABLED` 關掉：演練機沒有授權金鑰，而機器指紋要靠硬體 WMI 查詢（禁跑），
+    也沒有簽發用的私鑰。不是 A1 要驗的東西；列在偏差清單。檔案必須存在且那行恰好一處，否則拒絕演練（不猜）。⇒ 1。"""
+    p = Path(tree) / "backend" / "helpers" / "licensing.py"
+    if not p.exists():
+        raise DrillError("找不到 backend/helpers/licensing.py，無法關閉演練副本的授權閘門")
+    raw = p.read_bytes()
+    if len(_GATE_RE.findall(raw)) != 1:
+        raise DrillError("licensing.py 的 LICENSE_GATE_ENABLED = True 不是恰好一行 ⇒ 不改寫、不演練（不猜）")
+    p.write_bytes(_GATE_RE.sub(b"LICENSE_GATE_ENABLED = False", raw))
+    return 1
 
 
 def swap_pubkey(tree, pub_pem):
@@ -552,6 +570,7 @@ class Drill:
             (self.inst / marker).write_text("drill\n", encoding="utf-8")
         self.ctx["dashboard_files"] = install_dashboard(self.guard.run_tool_bytes, REPO, self.commit, self.inst)
         rewritten = harden_tree(self.inst, self.inst, self.port, self.python)
+        rewritten["licensing.py"] = disable_license_gate(self.inst)
         if rewritten.get("deploy_dashboard.py") != 2:
             raise DrillError("演練安裝的儀表板 PROD_HOST 沒有改寫成功（%r）" % (rewritten.get("deploy_dashboard.py"),))
         from cryptography.hazmat.primitives import serialization
@@ -592,6 +611,7 @@ class Drill:
         (dest / "backend" / "export_ignore.json").write_text(json.dumps(EI.build(str(REPO), commit), ensure_ascii=False, indent=1), encoding="utf-8")
         (dest / "deploy_manifest.json").write_text(json.dumps({"commit": commit, "product": "full", "built_at": datetime.now().isoformat(timespec="seconds")}), encoding="utf-8")
         harden_tree(dest, self.inst, self.port, self.python)
+        disable_license_gate(dest)
         swap_pubkey(dest, self.pub)
         if mutate:
             mutate(dest)
