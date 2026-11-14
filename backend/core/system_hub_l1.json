@@ -190,7 +190,7 @@
    "section": "settings",
    "title": "設定中心",
    "desc": "所有可調整的設定集中在這裡：保存期限、上傳大小、確認期間等",
-   "impact": "影響：每一項設定都會先說明改了會影響什麼；重要的變更需要等待確認期間才會生效。",
+   "impact": "影響：每一項設定都會先說明影響範圍；重要的變更需要等待確認期間才會生效。",
    "href": "settings-center.html",
    "perm": "superadmin",
    "order": 10,
