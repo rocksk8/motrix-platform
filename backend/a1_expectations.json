@@ -1,0 +1,83 @@
+{
+ "pages": [
+  "/",
+  "/pages/case-management.html",
+  "/pages/custom-reports.html",
+  "/pages/quotations.html",
+  "/pages/reports-hub.html",
+  "/pages/reports-standard.html"
+ ],
+ "auth_required": [
+  {
+   "method": "GET",
+   "path": "/api/custom-reports"
+  },
+  {
+   "method": "GET",
+   "path": "/api/custom-reports/share-targets"
+  },
+  {
+   "method": "GET",
+   "path": "/api/custom-reports/sources"
+  },
+  {
+   "method": "GET",
+   "path": "/api/custom-reports/{rid}"
+  },
+  {
+   "method": "GET",
+   "path": "/api/custom-reports/{rid}/shares"
+  },
+  {
+   "method": "GET",
+   "path": "/api/std-reports"
+  },
+  {
+   "method": "GET",
+   "path": "/api/std-reports/{rid}"
+  },
+  {
+   "method": "GET",
+   "path": "/api/std-reports/{rid}/excel"
+  },
+  {
+   "method": "GET",
+   "path": "/api/std-reports/{rid}/pdf"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports/preview"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports/{rid}/copy"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports/{rid}/export"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports/{rid}/export-pdf"
+  },
+  {
+   "method": "POST",
+   "path": "/api/custom-reports/{rid}/shares"
+  }
+ ],
+ "files": [
+  "backend/modules/analytics/module.json",
+  "backend/modules/arap/module.json",
+  "backend/modules/case/module.json",
+  "backend/modules/crm/module.json"
+ ],
+ "log_forbid": [
+  "ImportError",
+  "no such column",
+  "no such table"
+ ]
+}
