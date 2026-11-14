@@ -10,6 +10,7 @@
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/users-duty.js"></script>
   <script src="../static/users-batch.js"></script>
+  <script src="../static/perm-key-picker.js"></script>
   <script src="../static/org-gaps.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -690,36 +691,37 @@
         <div class="form-group">
           <label class="form-label">存取模組</label>
           <div class="form-hint" data-testid="fin-keys-note" style="margin-top:2px">出納／財務／財務金額可視已改由「財務」角色決定，下列灰色勾選已失效（資料保留，不刪除）。</div>
-          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
-            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
-              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
-                <div @click="toggleModGroup(grp.group)"
-                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
-                  <span style="display:flex;align-items:center;gap:6px">
-                    <span x-text="_modGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
-                    <span x-text="grp.group"></span>
-                  </span>
-                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
-                        x-text="modGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
-                </div>
-                <div x-show="_modGroupOpen[grp.group]" x-cloak
-                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
-                  <template x-for="mod in grp.mods" :key="mod.key">
-                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                           :data-testid="'mod-chip-' + mod.key"
-                           :title="finKeyInert(mod.key) ? '財務／出納權限改由「財務」角色決定，此勾選已失效（資料保留，不刪除）' : ''"
-                           :style="finKeyInert(mod.key) ? 'cursor:default;opacity:.55;color:var(--text-dim);background:#f5f5f5' : (form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : '')">
-                      <input type="checkbox" style="display:none"
-                             :checked="finKeyInert(mod.key) ? false : form.modules.includes(mod.key)"
-                             :disabled="finKeyInert(mod.key)"
-                             @change="toggleModule(mod.key)">
-                      <span x-text="(finKeyInert(mod.key) ? finKeyEffective() : form.modules.includes(mod.key)) ? '✓ ' : ''"></span>
-                      <span x-text="mod.label"></span>
+          <div data-testid="pk-user-picker">
+            <div class="pk-bar">
+              <span class="pk-sum" x-text="pkUser.summary()" data-testid="pk-user-summary"></span>
+              <input class="form-input" type="text" x-model="pkUser.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-user-q">
+              <select class="form-select" x-model="pkUser.show" style="max-width:130px;font-size:12px" data-testid="pk-user-show">
+                <option value="all">全部</option><option value="on">只看已選</option><option value="off">只看未選</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" @click="pkUser.selectVisible()" data-testid="pk-user-all">全選目前列出的</button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="pkUser.clearAll()" data-testid="pk-user-none">全部取消</button>
+            </div>
+            <template x-for="g in pkUser.rows()" :key="g.group">
+              <div class="pk-grp">
+                <label class="pk-head" :data-testid="'pk-user-group-' + g.group">
+                  <input type="checkbox" :checked="pkUser.state(g) === 'all'" :indeterminate.prop="pkUser.state(g) === 'some'" @change="pkUser.toggleGroup(g)">
+                  <b x-text="g.group"></b>
+                  <span class="pk-cnt" x-text="g.selected + ' / ' + g.total"></span>
+                </label>
+                <div class="pk-keys">
+                  <template x-for="mod in g.mods" :key="mod.key">
+                    <label class="pk-chip" :class="[pkUser.isOn(mod.key) ? 'on' : '', pkUser.isInert(mod.key) ? 'inert' : '', pkUser.changeClass(mod.key)]"
+                           :data-testid="'mod-chip-' + mod.key" :title="pkUser.isInert(mod.key) ? '財務／出納權限改由「財務」角色決定，此勾選已失效（資料保留，不刪除）' : ''">
+                      <input type="checkbox" style="display:none" :checked="pkUser.isOn(mod.key)" :disabled="pkUser.isInert(mod.key)" @change="pkUser.toggle(mod.key)">
+                      <span x-text="pkUser.isOn(mod.key) ? '✓ ' : ''"></span><span x-text="mod.label"></span>
+                      <span x-show="pkUser.isHigh(mod.key)" style="font-size:12px;color:var(--danger)" title="高敏感權限">★</span>
                     </label>
                   </template>
                 </div>
               </div>
             </template>
+            <div class="form-hint" x-show="!pkUser.rows().length">沒有符合的權限項目。</div>
+            <div class="pk-diff" x-show="pkUser.hasDiff()" x-text="pkUser.diffText()" data-testid="pk-user-diff"></div>
           </div>
         </div>
         <!-- 個人勾選動到高敏感權限鍵：原因必填（伺服器 PUT /api/users/{id} 強制；職責角色那一格有顯示時共用那一格） -->
@@ -952,33 +954,37 @@
               套用基礎角色預設
             </button>
           </div>
-          <div style="border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
-            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
-              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
-                <div @click="toggleCrModGroup(grp.group)"
-                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
-                  <span style="display:flex;align-items:center;gap:6px">
-                    <span x-text="_crModGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
-                    <span x-text="grp.group"></span>
-                  </span>
-                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
-                        x-text="crModGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
-                </div>
-                <div x-show="_crModGroupOpen[grp.group]" x-cloak
-                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
-                  <template x-for="mod in grp.mods" :key="mod.key">
-                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                           :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
-                      <input type="checkbox" style="display:none"
-                             :checked="crForm.modules.includes(mod.key)"
-                             @change="toggleCrModule(mod.key)">
-                      <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
-                      <span x-text="mod.label"></span>
+          <div data-testid="pk-cr-picker">
+            <div class="pk-bar">
+              <span class="pk-sum" x-text="pkCr.summary()" data-testid="pk-cr-summary"></span>
+              <input class="form-input" type="text" x-model="pkCr.q" placeholder="篩選權限名稱" style="max-width:180px;font-size:12px" data-testid="pk-cr-q">
+              <select class="form-select" x-model="pkCr.show" style="max-width:130px;font-size:12px" data-testid="pk-cr-show">
+                <option value="all">全部</option><option value="on">只看已選</option><option value="off">只看未選</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" @click="pkCr.selectVisible()" data-testid="pk-cr-all">全選目前列出的</button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="pkCr.clearAll()" data-testid="pk-cr-none">全部取消</button>
+            </div>
+            <template x-for="g in pkCr.rows()" :key="g.group">
+              <div class="pk-grp">
+                <label class="pk-head" :data-testid="'pk-cr-group-' + g.group">
+                  <input type="checkbox" :checked="pkCr.state(g) === 'all'" :indeterminate.prop="pkCr.state(g) === 'some'" @change="pkCr.toggleGroup(g)">
+                  <b x-text="g.group"></b>
+                  <span class="pk-cnt" x-text="g.selected + ' / ' + g.total"></span>
+                </label>
+                <div class="pk-keys">
+                  <template x-for="mod in g.mods" :key="mod.key">
+                    <label class="pk-chip" :class="[pkCr.isOn(mod.key) ? 'on' : '', pkCr.isInert(mod.key) ? 'inert' : '', pkCr.changeClass(mod.key)]"
+                           :data-testid="'cr-chip-' + mod.key" :title="pkCr.isInert(mod.key) ? '財務／出納權限改由「財務」角色決定，此勾選已失效（資料保留，不刪除）' : ''">
+                      <input type="checkbox" style="display:none" :checked="pkCr.isOn(mod.key)" :disabled="pkCr.isInert(mod.key)" @change="pkCr.toggle(mod.key)">
+                      <span x-text="pkCr.isOn(mod.key) ? '✓ ' : ''"></span><span x-text="mod.label"></span>
+                      <span x-show="pkCr.isHigh(mod.key)" style="font-size:12px;color:var(--danger)" title="高敏感權限">★</span>
                     </label>
                   </template>
                 </div>
               </div>
             </template>
+            <div class="form-hint" x-show="!pkCr.rows().length">沒有符合的權限項目。</div>
+            <div class="pk-diff" x-show="pkCr.hasDiff()" x-text="pkCr.diffText()" data-testid="pk-cr-diff"></div>
           </div>
         </div>
       </div>
@@ -1063,11 +1069,10 @@
         if (!this.privacyNotice || !window.MotrixPrivacyNotice) return
         window.MotrixPrivacyNotice.print(this.privacyNotice, this.form.displayName || this.form.username)
       },
-      _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
       _notifyGroupOpen: {}, // Email 通知偏好手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
-      _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
+      pkUser: null, pkCr: null,   // 權限鍵矩陣選擇器（static/perm-key-picker.js）：使用者視窗與自訂角色視窗各一個，init() 建立
       form: { username:'', displayName:'', email:'', phone:'', quoteEmail:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
       get systemPresets() {
         return [
@@ -1198,14 +1203,6 @@
         return order.map(g => ({ group: g, mods: map[g] }))
       },
 
-      _initGroupOpenState(selectedMods) {
-        const open = {}
-        for (const { group, mods } of this.moduleGroups) {
-          open[group] = mods.some(m => selectedMods.includes(m.key))
-        }
-        return open
-      },
-
       _headers() {
         return {
           'Content-Type':  'application/json',
@@ -1234,19 +1231,16 @@
 
       applyRoleDefaults() {
         this.form.modules = [...(ROLE_MODULES[this.form.role] || [])]
-        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyPreset(key) {
         this.form.role    = key
         this.form.modules = [...(ROLE_MODULES[key] || [])]
-        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyCustomRole(cr) {
         this.form.role    = cr.baseRole
         this.form.modules = [...(cr.modules || [])]
-        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       get activePresetKey() {
@@ -1265,22 +1259,6 @@
         if (idx >= 0) this.form.modules.splice(idx, 1)
         else           this.form.modules.push(key)
         if (this.dutySchedule) this.dutySchedule()          // 預覽跟著原始勾選更新（伺服器算）
-      },
-
-      toggleModGroup(group) {
-        this._modGroupOpen[group] = !this._modGroupOpen[group]
-      },
-
-      toggleCrModGroup(group) {
-        this._crModGroupOpen[group] = !this._crModGroupOpen[group]
-      },
-
-      modGroupSelectedCount(mods) {
-        return mods.filter(m => this.form.modules.includes(m.key)).length
-      },
-
-      crModGroupSelectedCount(mods) {
-        return mods.filter(m => this.crForm.modules.includes(m.key)).length
       },
 
       // ── Custom role management ──────────────────────────────────────────────
@@ -1315,13 +1293,13 @@
 
       openCrCreate() {
         this.crForm = { editId: null, name: '', baseRole: 'sales', modules: [...ROLE_MODULES.sales] }
-        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
+        this.pkCr.reset()
         this.showCrModal = true
       },
 
       openCrEdit(cr) {
         this.crForm = { editId: cr.id, name: cr.name, baseRole: cr.baseRole, modules: [...(cr.modules || [])] }
-        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
+        this.pkCr.reset()
         this.showCrModal = true
       },
 
@@ -1329,13 +1307,6 @@
 
       applyCrBaseRole() {
         this.crForm.modules = [...(ROLE_MODULES[this.crForm.baseRole] || [])]
-        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
-      },
-
-      toggleCrModule(key) {
-        const idx = this.crForm.modules.indexOf(key)
-        if (idx >= 0) this.crForm.modules.splice(idx, 1)
-        else           this.crForm.modules.push(key)
       },
 
       async saveCr() {
@@ -1385,7 +1356,7 @@
                       unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'',
                       divisionId: 0, departmentId: 0 }
         this.formError = ''
-        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this.pkUser.reset()
         this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
@@ -1414,7 +1385,7 @@
           departmentId:           user.departmentId || 0,
         }
         this.formError = ''
-        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this.pkUser.reset()
         this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
@@ -1588,6 +1559,13 @@
           if (!this.session.token) { window.location.href = 'login.html'; return }
         } catch(e) { window.location.href = 'login.html'; return }
 
+        this.pkUser = window.MotrixPermPicker.create({
+          groups: () => this.moduleGroups, selected: () => this.form.modules,
+          set: (keys) => { this.form.modules = keys; if (this.dutySchedule) this.dutySchedule() },       // 預覽跟著原始勾選更新（伺服器算）
+          inert: (k) => this.finKeyInert(k), inertOn: () => this.finKeyEffective(), high: (k) => (this.batchLists.high || []).includes(k) })
+        this.pkCr = window.MotrixPermPicker.create({
+          groups: () => this.moduleGroups, selected: () => this.crForm.modules, set: (keys) => { this.crForm.modules = keys },
+          high: (k) => (this.batchLists.high || []).includes(k) })
         try { this.privacyNotice = await window.MotrixPrivacyNotice.load(this.session.token, 'user') } catch(e) {}
         const res = await fetch('/api/auth/me', {
           headers: {'Authorization': 'Bearer ' + this.session.token}
