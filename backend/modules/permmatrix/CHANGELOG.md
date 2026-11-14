@@ -1,6 +1,6 @@
 # 權限矩陣 更新紀錄
 
-## (next) — 2026-11-14（train/t86-int；整合者：h3 複測補修併入（非最高管理者的拒絕畫面））
+## 1.2.3 — 2026-11-14（train/t86-int；整合者：h3 複測補修併入（非最高管理者的拒絕畫面））
 - 前端（只改顯示；API、權限鍵不變）：`permission-matrix.html` 對非最高管理者改為與其他「僅限最高管理者」頁同一張拒絕畫面（「這一頁僅限最高管理者使用」），不再顯示頁面外框加「僅最高管理者可執行此操作」錯誤，也不再送 `/api/permmatrix/*` 請求。頁面本體包進 `<template x-if="isSuper">`。
 - 測試：`tests/test_e2e_role_label_and_permmatrix_denial_2026_11_14.py`。
 
