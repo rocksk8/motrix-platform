@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1723,
+  "tests": 1724,
   "unmapped": 9,
   "kinds": {
    "api": 955,
-   "e2e": 401,
+   "e2e": 402,
    "audit": 216,
    "unit": 151
   },
@@ -35385,6 +35385,39 @@
     ],
     "path": [
      "frontend/pages/notification-settings.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_home_empty_no_pageerror_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "helper:geo",
+    "page:index.html",
+    "page:pages/import-wizard.html",
+    "page:pages/notification-settings.html",
+    "page:pages/system-hub.html",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/import-wizard.html",
+     "frontend/pages/notification-settings.html",
+     "frontend/pages/system-hub.html",
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/import-wizard.html",
+     "frontend/pages/notification-settings.html",
+     "frontend/pages/system-hub.html",
+     "frontend/pages/tender-radar.html"
     ]
    }
   },
