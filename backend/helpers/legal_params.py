@@ -424,6 +424,13 @@ def load_versions_raw(conn) -> list:
     return tax_read(conn)["versions"]
 
 
+def save_versions(versions) -> None:
+    """已停用（保留介面，呼叫會報錯）。T86／S5 起扣繳參數的寫入只走設定登錄表（群組 `tax_rules` 的 publish；舊端點也是）。
+    保留這個名字是為了不刪 L1 公開介面（刪除要升主版號、而各模組宣告的核心相容範圍是 <2.0）；全庫沒有呼叫點（test_legal_params_save_versions_stub_t86）。
+    真正移除留到需要主版號升版的時候再做。"""
+    raise RuntimeError("已移除，請改用設定登錄表（群組 tax_rules 的 publish）；舊的直接寫入已停用")
+
+
 def load_versions() -> list:
     """目前生效的版本表（設定群組 `tax_rules` 的生效值，含已到時的待生效版本；忽略 DEFAULTS_ONLY）。
     登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。寫入只走 `settings_registry.publish("tax_rules", …)`（舊端點也是）。"""
