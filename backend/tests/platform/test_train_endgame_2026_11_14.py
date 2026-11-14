@@ -103,10 +103,24 @@ def test_endgame_version_record_escape_hatch_is_a_warning_not_a_pass(eg, repo):
     assert r.status == eg.WARN and "PM 核准" in " ".join(r.lines)
 
 
-@pytest.mark.parametrize("bad", ["", "因為趕時間", "PM 核准：沒有日期", "PM 核准（2026-11-14）：", "pm approved (2026-11-14): x"])
+def _allow(reason="使用者裁示先發布", days_ago=0):
+    import datetime
+    return "PM 核准（%s）：%s" % (datetime.date.today() - datetime.timedelta(days=days_ago), reason)
+
+
+@pytest.mark.parametrize("bad", ["", "因為趕時間", "PM 核准：沒有日期", "PM 核准（2026-11-14）：", "pm approved (2026-11-14): x",
+                                 "PM 核准（2026-13-45）：日期不存在", "PM 核准（2020-01-01）：太久以前", "PM 核准（2099-01-01）：未來"])
 def test_endgame_escape_hatch_text_must_name_pm_approval_date_and_reason(eg, bad):
-    assert not eg.ALLOW_RE.match(bad)
-    assert eg.ALLOW_RE.match("PM 核准（2026-11-14）：使用者裁示先發布")
+    with pytest.raises(ValueError):
+        eg.parse_allow(bad)
+
+
+def test_endgame_escape_hatch_accepts_a_recent_single_line_text_and_refuses_newlines(eg):
+    d, reason = eg.parse_allow(_allow("補登由下一班處理", days_ago=3))
+    assert reason == "補登由下一班處理" and d is not None
+    for evil in (_allow("原因\n- 備註：rm -rf /"), _allow("原因\r\nx"), _allow("x" * 300)):
+        with pytest.raises(ValueError):
+            eg.parse_allow(evil)
 
 
 def test_endgame_run_rejects_a_malformed_escape_hatch_before_doing_anything(eg, repo):
@@ -166,12 +180,59 @@ def test_endgame_bottom_layer_sync_appends_missing_entries_without_reordering(eg
 
 # ── 步驟檔 ─────────────────────────────────────────────────────────────────
 
-def test_endgame_fill_replaces_only_the_placeholders_it_was_given(eg, tmp_path):
+PKG = "20261114_191358_1580c8c1_full"
+
+
+def _pkg_dir(tmp_path, name=PKG):
+    d = tmp_path / name
+    d.mkdir()
+    (d / "package.sha256").write_bytes(b"abc  a.txt\n")
+    return d, hashlib.sha256(b"abc  a.txt\n").hexdigest()
+
+
+def _head(repo):
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+
+def test_endgame_fill_replaces_only_the_placeholders_it_was_given(eg, tmp_path, repo):
     f = tmp_path / "s.md"
     f.write_text("包 <PKG_NAME> sha <PKG_SHA256> 凍結 <FREEZE_SHA> 前綴 <FREEZE_8> 其他 <ROOT>\n", encoding="utf-8")
-    done = eg.fill_step_file(f, pkg_name="N", pkg_sha="S", freeze="1234567890abcdef")
+    d, sha = _pkg_dir(tmp_path)
+    head = _head(repo)
+    done = eg.fill_step_file(f, pkg_name=PKG, pkg_sha=sha, freeze=head, pkg_dir=d, repo=repo)
     assert done == ["<PKG_NAME>", "<PKG_SHA256>", "<FREEZE_SHA>", "<FREEZE_8>"]
-    assert f.read_text(encoding="utf-8") == "包 N sha S 凍結 1234567890abcdef 前綴 12345678 其他 <ROOT>\n"
+    assert f.read_text(encoding="utf-8") == "包 %s sha %s 凍結 %s 前綴 %s 其他 <ROOT>\n" % (PKG, sha, head, head[:8])
+    assert eg.unfilled_placeholders(f) == []
+
+
+def test_endgame_fill_rejects_unsafe_or_mismatched_values_and_writes_nothing(eg, tmp_path, repo):
+    f = tmp_path / "s.md"
+    text = "包 <PKG_NAME> sha <PKG_SHA256> 凍結 <FREEZE_SHA>\n"
+    f.write_text(text, encoding="utf-8")
+    d, sha = _pkg_dir(tmp_path)
+    head = _head(repo)
+    bad_cases = [
+        dict(pkg_name="x; rm -rf /", pkg_sha=sha, freeze=head, pkg_dir=d),                        # 包名格式
+        dict(pkg_name=PKG + "\\n`id`", pkg_sha=sha, freeze=head, pkg_dir=d),
+        dict(pkg_name=PKG, pkg_sha="a" * 63, freeze=head, pkg_dir=d),                             # sha 長度
+        dict(pkg_name=PKG, pkg_sha="b" * 64, freeze=head, pkg_dir=d),                             # 與 package.sha256 不符
+        dict(pkg_name=PKG, pkg_sha=sha, freeze="$(id)", pkg_dir=d),                               # 凍結格式
+        dict(pkg_name=PKG, pkg_sha=sha, freeze="f" * 40, pkg_dir=d),                              # 凍結不在 repo
+        dict(pkg_name=PKG, pkg_sha=sha, freeze=head),                                             # 沒給 --pkg-dir
+        dict(pkg_name="20261114_191358_deadbeef_full", pkg_sha=sha, freeze=head, pkg_dir=d),      # 資料夾名與包名不符
+    ]
+    for kw in bad_cases:
+        with pytest.raises(ValueError):
+            eg.fill_step_file(f, repo=repo, **kw)
+        assert f.read_text(encoding="utf-8") == text
+
+
+def test_endgame_fill_reports_placeholders_left_behind(eg, tmp_path, repo):
+    f = tmp_path / "s.md"
+    f.write_text("包 <PKG_NAME> 凍結 <FREEZE_SHA> 前綴 <FREEZE_8>\n", encoding="utf-8")
+    d, sha = _pkg_dir(tmp_path)
+    eg.fill_step_file(f, pkg_name=PKG, pkg_sha=sha, pkg_dir=d, repo=repo)
+    assert eg.unfilled_placeholders(f) == ["<FREEZE_8>", "<FREEZE_SHA>"]
 
 
 def test_endgame_step_file_facts_are_replaced_in_place_and_carry_the_override_note(eg, repo, tmp_path):
@@ -179,13 +240,12 @@ def test_endgame_step_file_facts_are_replaced_in_place_and_carry_the_override_no
     _write(repo, "backend/tests/_prod_baseline.py", 'BASELINE = "%s"\n' % subprocess.run(["git", "-C", str(repo), "rev-parse", "base"], capture_output=True, text=True).stdout.strip())
     _write(repo, "docs/platform/prod-tasks/s.md", "# 步驟\n\n正文\n")
     _commit(repo, "setup")
-    st = eg.load_state(repo)
-    st["allow_no_version_record"] = "PM 核准（2026-11-14）：補登由下一班處理"
-    eg.save_state(repo, st)
-    assert eg.write_step_file(repo, "base", "docs/platform/prod-tasks/s.md", "t") is True
+    allow = _allow("補登由下一班處理")
+    assert eg.write_step_file(repo, "base", "docs/platform/prod-tasks/s.md", "t", allow) is True
     first = (repo / "docs/platform/prod-tasks/s.md").read_text(encoding="utf-8")
-    assert "正文" in first and eg.FACTS_BEGIN in first and "core 9.9" in first and "PM 核准（2026-11-14）" in first
-    assert eg.write_step_file(repo, "base", "docs/platform/prod-tasks/s.md", "t") is False       # 冪等
+    assert "正文" in first and eg.FACTS_BEGIN in first and "core 9.9" in first and allow in first
+    assert "train-overrides/t.json" in first                                                      # 指到進版控的放行紀錄
+    assert eg.write_step_file(repo, "base", "docs/platform/prod-tasks/s.md", "t", allow) is False   # 冪等
     assert (repo / "docs/platform/prod-tasks/s.md").read_text(encoding="utf-8") == first
 
 
@@ -262,3 +322,163 @@ def test_core_major_gap_passes_after_core_major_bump(eg, repo):
 def test_core_major_gap_silent_for_ordinary_assign(eg, repo):
     _core_tree(repo, {"alpha": ">=1.0,<2.0"}, "(next)")
     assert eg.core_major_gap(repo, "base") == []
+
+
+# ── 複審修正（h11 M1–M3、S1–S4）：run 模式的安全與前置檢查 ────────────────────────────
+
+_STUB_TRAIN_NUMBER = """import sys
+from pathlib import Path
+M = Path(__file__).resolve().parents[2] / "backend" / "_assigned.txt"
+a = sys.argv[1:]
+if a[:2] == ["assign", "--dry-run"]:
+    sys.exit(0 if M.exists() else 3)
+if a[:1] == ["assign"]:
+    M.write_text("assigned\\n", encoding="utf-8")
+    sys.exit(0)
+if "--check" in a:
+    sys.exit(0 if M.exists() else 1)
+sys.exit(2)
+"""
+
+
+def _git_out(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8").stdout.strip()
+
+
+@pytest.fixture()
+def trainrepo(repo):
+    """有一個功能變更 commit（base..HEAD 非空）、有 stub 的 train_number.py、工作樹乾淨。"""
+    _write(repo, "backend/modules/alpha/api.py", "x = 2\n")
+    _write(repo, "tools/platform/train_number.py", _STUB_TRAIN_NUMBER)
+    _commit(repo, "feature + stub")
+    return repo
+
+
+def _stage(results, name):
+    return next(r for r in results if r.stage == name)
+
+
+def test_run_blocks_on_a_dirty_tree_and_commits_nothing(eg, trainrepo):
+    _write(trainrepo, "scratch.txt", "someone else's file\n")
+    before = _head(trainrepo)
+    res = eg.run_stages(trainrepo, "base", "t", dry=False, only="assign")
+    assert res[0].stage == "preflight" and res[0].status == eg.BLOCK and "scratch.txt" in " ".join(res[0].lines)
+    assert [r.stage for r in res] == ["preflight"]
+    assert _head(trainrepo) == before and not (trainrepo / "backend/_assigned.txt").exists()
+
+
+def test_assign_commit_contains_only_the_files_the_tool_changed(eg, trainrepo):
+    res = eg.run_stages(trainrepo, "base", "t", dry=False, only="assign")
+    r = _stage(res, "assign")
+    assert r.status == eg.DONE and len(r.commits) == 1
+    assert _git_out(trainrepo, "show", "--name-only", "--format=", "HEAD").splitlines() == ["backend/_assigned.txt"]
+    assert _git_out(trainrepo, "status", "--porcelain") == ""
+
+
+def test_stage_commit_does_not_sweep_files_that_were_already_dirty(eg, trainrepo):
+    """直接呼叫階段（略過 preflight）時，commit_tool_changes 也只帶走『階段開始之後』新出現的檔。"""
+    _write(trainrepo, "scratch.txt", "x\n")
+    ctx = eg.Ctx(trainrepo, "base", "t", None, None, "", False)
+    r = eg.st_assign(ctx)
+    assert r.status == eg.DONE
+    assert _git_out(trainrepo, "show", "--name-only", "--format=", "HEAD").splitlines() == ["backend/_assigned.txt"]
+    assert "scratch.txt" in _git_out(trainrepo, "status", "--porcelain")
+
+
+def test_assign_is_done_without_a_commit_when_nothing_is_left_to_assign(eg, trainrepo):
+    _write(trainrepo, "backend/_assigned.txt", "assigned\n")
+    _commit(trainrepo, "already assigned")
+    before = _head(trainrepo)
+    r = eg.st_assign(eg.Ctx(trainrepo, "base", "t", None, None, "", False))
+    assert r.status == eg.DONE and r.commits == [] and _head(trainrepo) == before
+
+
+def test_assign_stops_for_a_core_major_bump_that_core_major_bump_has_not_handled(eg, trainrepo):
+    _core_tree(trainrepo, {"alpha": ">=1.0,<2.0"}, "(next:major)")
+    _commit(trainrepo, "core tree")
+    before = _head(trainrepo)
+    r = eg.st_assign(eg.Ctx(trainrepo, "base", "t", None, None, "", False))
+    assert r.status == eg.BLOCK and "core_major_bump" in " ".join(r.lines)
+    assert _head(trainrepo) == before and not (trainrepo / "backend/_assigned.txt").exists()
+
+
+def test_preflight_blocks_a_base_that_is_head_or_unknown_or_not_an_ancestor(eg, repo):
+    assert eg.preflight(repo, "base", True)[0].status == eg.BLOCK                       # base＝HEAD，沒有差異
+    assert eg.preflight(repo, "no-such-ref", True)[0].status == eg.BLOCK
+    _git(repo, "checkout", "-q", "-b", "other")
+    _write(repo, "backend/modules/alpha/api.py", "x = 9\n")
+    _commit(repo, "other branch")
+    _git(repo, "tag", "otherbase")
+    _git(repo, "checkout", "-q", "main")
+    _write(repo, "backend/modules/alpha/api.py", "x = 8\n")
+    _commit(repo, "main moves on")
+    res, sha = eg.preflight(repo, "otherbase", False)
+    assert res.status == eg.BLOCK and "祖先" in " ".join(res.lines) and sha
+
+
+def test_preflight_ok_prints_both_shas_and_plan_only_warns_about_a_dirty_tree(eg, trainrepo):
+    res, sha = eg.preflight(trainrepo, "base", True)
+    assert res.status == eg.DONE and sha[:12] in res.lines[0] and _head(trainrepo)[:12] in res.lines[0]
+    _write(trainrepo, "scratch.txt", "x")
+    assert eg.preflight(trainrepo, "base", True)[0].status == eg.WARN
+    assert eg.preflight(trainrepo, "base", False)[0].status == eg.BLOCK
+
+
+def test_override_is_written_into_the_repo_bound_to_label_and_base(eg, trainrepo):
+    allow = _allow("T87 補登")
+    res = eg.run_stages(trainrepo, "base", "t87", allow=allow, dry=False, only="version_record")
+    assert _stage(res, "override").commits and _stage(res, "version_record").status == eg.WARN
+    rec = json.loads((trainrepo / "docs/platform/train-overrides/t87.json").read_text(encoding="utf-8"))
+    assert rec["label"] == "t87" and rec["base_sha"] == _git_out(trainrepo, "rev-parse", "base") and rec["text"] == allow
+    assert _git_out(trainrepo, "ls-files", "docs/platform/train-overrides/t87.json")             # 進版控
+    # 之後不帶旗標也採用（同班同 base）
+    res2 = eg.run_stages(trainrepo, "base", "t87", dry=False, only="version_record")
+    assert _stage(res2, "version_record").status == eg.WARN and allow in " ".join(_stage(res2, "override").lines)
+
+
+def test_override_does_not_carry_over_to_another_train_or_another_base(eg, trainrepo):
+    eg.run_stages(trainrepo, "base", "t87", allow=_allow("T87 補登"), dry=False, only="version_record")
+    # 另一班（label 不同）
+    res = eg.run_stages(trainrepo, "base", "t88", dry=False, only="version_record")
+    assert _stage(res, "version_record").status == eg.BLOCK
+    # 同 label、base 換了
+    _write(trainrepo, "backend/modules/alpha/api.py", "x = 77\n")
+    _commit(trainrepo, "later feature")
+    _git(trainrepo, "tag", "base2", "HEAD~1")
+    res = eg.run_stages(trainrepo, "base2", "t87", dry=False, only="version_record")
+    assert _stage(res, "version_record").status == eg.BLOCK and "別班" in " ".join(_stage(res, "override").lines)
+
+
+def test_run_stages_rejects_unsafe_labels(eg, trainrepo):
+    for bad in ("", "a b", "x;rm", "t\n87", "x" * 41):
+        with pytest.raises(ValueError):
+            eg.run_stages(trainrepo, "base", bad, dry=True)
+
+
+def test_run_lock_is_exclusive_and_released_after_the_run(eg, trainrepo):
+    p = eg.acquire_lock(trainrepo)
+    try:
+        with pytest.raises(ValueError):
+            eg.acquire_lock(trainrepo)
+        res = eg.run_stages(trainrepo, "base", "t", dry=False, only="pyc")
+        assert _stage(res, "lock").status == eg.BLOCK
+        assert [r.stage for r in eg.run_stages(trainrepo, "base", "t", dry=True, only="pyc")][-1] == "pyc"   # plan 不需要鎖
+    finally:
+        eg.release_lock(p)
+    res = eg.run_stages(trainrepo, "base", "t", dry=False, only="pyc")
+    assert _stage(res, "pyc").status == eg.DONE and not p.exists()
+
+
+def test_version_record_asks_for_a_human_check_when_units_outnumber_new_entries(eg, trainrepo):
+    _write(trainrepo, "frontend/pages/x.html", "<html>1</html>")
+    m = json.loads((trainrepo / "backend/version_manifest.json").read_text(encoding="utf-8"))
+    m.append({"module": "新/功能", "version": "next", "date": "2026-11-14", "time": "10:00", "content": "y"})
+    _write(trainrepo, "backend/version_manifest.json", json.dumps(m, ensure_ascii=False))
+    _commit(trainrepo, "two units, one entry")
+    r = eg.check_version_record(trainrepo, "base")
+    assert r.status == eg.WARN and "alpha" in " ".join(r.lines) and "frontend" in " ".join(r.lines)
+
+
+def test_package_check_counts_pyo_too(eg, tmp_path):
+    (tmp_path / "m.pyo").write_bytes(b"x")
+    assert eg.package_check(tmp_path)["pyc"] == 1

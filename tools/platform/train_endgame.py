@@ -34,12 +34,14 @@
 """
 import argparse
 import ast
+import datetime
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -52,7 +54,14 @@ A1_FILE = "backend/a1_expectations.json"
 TEMPLATE = "docs/platform/prod-tasks/TEMPLATE-apply.md"
 FACTS_BEGIN = "<!-- endgame:facts begin -->"
 FACTS_END = "<!-- endgame:facts end -->"
-ALLOW_RE = re.compile(r"^PM 核准（\d{4}-\d{2}-\d{2}）：\S.*")
+ALLOW_RE = re.compile(r"PM 核准（(\d{4}-\d{2}-\d{2})）：(\S[^\r\n]{0,199})")     # 用 fullmatch；不准有換行
+LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,40}")
+PKG_NAME_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{8}_full")
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
+FREEZE_RE = re.compile(r"[0-9a-f]{7,40}")
+OVERRIDE_DIR = "docs/platform/train-overrides"
+OVERRIDE_DAYS = 14                     # 核准日期距今最多幾天
+LOCK_STALE_SECONDS = 2 * 3600          # 鎖檔超過這麼久只提示、不自動刪
 LOG_FORBID_DEFAULT = ["ImportError", "no such column", "no such table"]
 _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -95,37 +104,127 @@ def changed_files(repo, base):
     return [l.strip() for l in out.splitlines() if l.strip()]
 
 
-def commit_paths(repo, paths, message, trailer=""):
-    """把 paths 加入並 commit；沒有改動 ⇒ 回傳 None。"""
+def porcelain_paths(repo):
+    """工作樹目前有改動的路徑（含未追蹤、已 staged、改名的新舊路徑）。"""
+    out = git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    parts, paths, i = out.split("\0"), [], 0
+    while i < len(parts):
+        e = parts[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        xy, p = e[:2], e[3:]
+        paths.append(p)
+        if ("R" in xy or "C" in xy) and i < len(parts):
+            paths.append(parts[i])
+            i += 1
+    return sorted(set(paths))
+
+
+def _commit_only(repo, paths, message, trailer=""):
+    """paths 加入並只 commit 這些路徑（不帶走 index 裡別的東西）；沒有改動 ⇒ None。"""
+    paths = list(paths)
+    if not paths:
+        return None
     git(repo, "add", "-A", "--", *paths)
-    if not git(repo, "diff", "--cached", "--name-only").strip():
+    if not git(repo, "diff", "--cached", "--name-only", "--", *paths).strip():
         return None
-    msg = message + (("\n\n" + trailer) if trailer else "")
-    git(repo, "commit", "-q", "-m", msg)
+    git(repo, "commit", "-q", "-m", message + (("\n\n" + trailer) if trailer else ""), "--", *paths)
     return git(repo, "rev-parse", "--short", "HEAD").strip()
 
 
-def commit_all_staged(repo, message, trailer=""):
-    if not git(repo, "diff", "--cached", "--name-only").strip():
-        return None
-    git(repo, "commit", "-q", "-m", message + (("\n\n" + trailer) if trailer else ""))
-    return git(repo, "rev-parse", "--short", "HEAD").strip()
+def commit_paths(repo, paths, message, trailer=""):
+    """明確指定的路徑 add＋commit；沒有改動 ⇒ 回傳 None。"""
+    return _commit_only(repo, paths, message, trailer)
 
 
-def state_path(repo):
-    gd = Path(git(repo, "rev-parse", "--git-dir").strip())
-    return (gd if gd.is_absolute() else Path(repo) / gd) / "train_endgame_state.json"
+def commit_tool_changes(repo, before, message, trailer=""):
+    """階段跑完後，只 commit「階段開始之後新出現」的改動路徑（before＝開始時的 porcelain_paths）。
+    不用 `add -A .`：工作樹裡原本就有的其他檔不會被帶進這個 commit。"""
+    seen = set(before)
+    return _commit_only(repo, [p for p in porcelain_paths(repo) if p not in seen], message, trailer)
 
 
-def load_state(repo):
+# ── 逃生口紀錄（綁班次與 base，進版控）──────────────────────────────────────
+
+def parse_allow(text):
+    """「PM 核准（YYYY-MM-DD）：原因」⇒ (日期, 原因)；格式錯、含換行、日期不存在或超過 OVERRIDE_DAYS 天 ⇒ ValueError。"""
+    m = ALLOW_RE.fullmatch(text or "")
+    if not m:
+        raise ValueError("--allow-no-version-record 必須寫成「PM 核准（YYYY-MM-DD）：原因」（單行、原因 1–200 字）")
     try:
-        return json.loads(state_path(repo).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+        d = datetime.date.fromisoformat(m.group(1))
+    except ValueError:
+        raise ValueError("核准日期不存在：%s" % m.group(1))
+    today = datetime.date.today()
+    if d > today or (today - d).days > OVERRIDE_DAYS:
+        raise ValueError("核准日期 %s 必須在最近 %d 天內（且不是未來）" % (d, OVERRIDE_DAYS))
+    return d, m.group(2)
 
 
-def save_state(repo, st):
-    state_path(repo).write_text(json.dumps(st, ensure_ascii=False, indent=1), encoding="utf-8")
+def override_rel(label):
+    return "%s/%s.json" % (OVERRIDE_DIR, label)
+
+
+def load_override(repo, label, base_sha):
+    """⇒ (紀錄 或 None, 說明 或 None)。檔案屬於別班或別的 base ⇒ 不採用，並說明。"""
+    p = Path(repo) / override_rel(label)
+    if not p.is_file():
+        return None, None
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        parse_shape = ALLOW_RE.fullmatch(rec["text"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, "放行紀錄 %s 讀不懂，不採用。" % override_rel(label)
+    if rec.get("label") != label or rec.get("base_sha") != base_sha or not parse_shape:
+        return None, "放行紀錄 %s 綁的是別班／別的 base（label %s、base %s），不採用。" % (
+            override_rel(label), rec.get("label"), str(rec.get("base_sha"))[:12])
+    return rec, None
+
+
+def write_override(repo, label, base_sha, text):
+    """寫放行紀錄；內容沒變 ⇒ 回傳 False。"""
+    d, reason = parse_allow(text)
+    rec = {"kind": "no_version_record", "label": label, "base_sha": base_sha, "approved_date": d.isoformat(), "reason": reason, "text": text}
+    new = json.dumps(rec, ensure_ascii=False, indent=1) + "\n"
+    p = Path(repo) / override_rel(label)
+    if p.is_file() and p.read_text(encoding="utf-8") == new:
+        return False
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(new, encoding="utf-8", newline="\n")
+    return True
+
+
+# ── 執行鎖 ─────────────────────────────────────────────────────────────────
+
+def lock_path(repo):
+    gd = Path(git(repo, "rev-parse", "--git-dir").strip())
+    return (gd if gd.is_absolute() else Path(repo) / gd) / "train_endgame.lock"
+
+
+def acquire_lock(repo):
+    """獨佔鎖（O_EXCL）。已被持有 ⇒ ValueError（快速失敗）；過期的鎖只提示，不自動刪。"""
+    p = lock_path(repo)
+    try:
+        fd = os.open(str(p), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            age = time.time() - p.stat().st_mtime
+            who = p.read_text(encoding="utf-8").strip()
+        except OSError:
+            age, who = 0, "?"
+        raise ValueError("另一個 train_endgame run 正在進行（鎖檔 %s，%s，已 %d 分鐘）。%s" % (
+            p, who, age // 60, "鎖檔已超過 %d 小時，確認沒人在跑後手動刪除。" % (LOCK_STALE_SECONDS // 3600) if age > LOCK_STALE_SECONDS else "等它結束。"))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("pid %d @ %s" % (os.getpid(), datetime.datetime.now().isoformat(timespec="seconds")))
+    return p
+
+
+def release_lock(path):
+    try:
+        Path(path).unlink()
+    except OSError:
+        pass
 
 
 # ── 檢查 ①：功能變更必須有版本紀錄 ─────────────────────────────────────────
@@ -164,23 +263,35 @@ def manifest_new_entries(repo, base):
     return [e for e in head if (e.get("module"), e.get("version")) not in old]
 
 
+def touched_units(fn):
+    """功能變更檔涉及的單位：backend/modules/<m>、core、frontend。"""
+    return sorted({f.split("/")[2] for f in fn if f.startswith("backend/modules/")}
+                  | ({"core"} if any(f.startswith("backend/core/") for f in fn) else set())
+                  | ({"frontend"} if any(f.startswith("frontend/") for f in fn) else set()))
+
+
 def check_version_record(repo, base, allow=None):
     changed = changed_files(repo, base)
     fn = functional_files(changed)
     new = manifest_new_entries(repo, base)
     if not fn:
         return Result("version_record", DONE, ["本車沒有功能變更檔，不需要新的版本紀錄。"])
+    units = touched_units(fn)
     if new:
-        return Result("version_record", DONE, ["功能變更檔 %d 個；version_manifest 新增 %d 筆。" % (len(fn), len(new))])
+        lines = ["功能變更檔 %d 個；version_manifest 新增 %d 筆。" % (len(fn), len(new))]
+        if len(units) > len(new):
+            # manifest 的 module 欄是自由中文標籤，沒有和程式單位的對應表 ⇒ 不能機械判定「每個單位都有紀錄」，只能請人核對
+            return Result("version_record", WARN, lines + [
+                "涉及 %d 個單位（%s），只新增 %d 筆：請人核對每個單位的變更都被某一筆涵蓋。" % (len(units), "、".join(units), len(new)),
+                "新增條目的 module：" + "；".join(str(e.get("module")) for e in new[:12])])
+        return Result("version_record", DONE, lines)
     if allow:
         return Result("version_record", WARN, ["功能變更檔 %d 個、沒有新增版本紀錄；已用 --allow-no-version-record：%s" % (len(fn), allow)])
-    mods = sorted({f.split("/")[2] for f in fn if f.startswith("backend/modules/")}
-                  | ({"core"} if any(f.startswith("backend/core/") for f in fn) else set())
-                  | ({"frontend"} if any(f.startswith("frontend/") for f in fn) else set()))
+    mods = units
     return Result("version_record", BLOCK, [
         "功能變更檔 %d 個（涉及：%s），但 %s 沒有新增任何條目。" % (len(fn), "、".join(mods) or "—", MANIFEST),
         "處理：補寫版本紀錄（`\"version\": \"next\"` 佔位，取號時代入），或由 PM 核准後用 "
-        "--allow-no-version-record \"PM 核准（YYYY-MM-DD）：原因\" 放行（會寫進步驟檔關卡紀錄）。",
+        "--allow-no-version-record \"PM 核准（YYYY-MM-DD）：原因\" 放行（寫成 %s/<班次>.json 進版控，綁班次與 base，並寫進步驟檔）。" % OVERRIDE_DIR,
         "前 5 個功能變更檔：" + "；".join(fn[:5]),
     ])
 
@@ -299,7 +410,7 @@ def disk_versions(repo):
     return out
 
 
-def step_facts(repo, base, prod=None):
+def step_facts(repo, base, prod=None, allow=None, label=None):
     prod = prod or prod_baseline(repo)
     head = git(repo, "rev-parse", "HEAD").strip()
     lines = [FACTS_BEGIN, "<!-- 本區塊由 tools/platform/train_endgame.py 產生；手改會在下次執行時被覆蓋 -->", "",
@@ -309,16 +420,15 @@ def step_facts(repo, base, prod=None):
                  len([l for l in git(repo, "diff", "--name-only", prod, "HEAD").splitlines() if l.strip()]) if prod else "?"),
              "- 版號（磁碟實際值）：" + "；".join("%s %s" % kv for kv in disk_versions(repo).items()),
              "- manifest 條目：%d 筆（本車新增 %d）" % (len(_entries(git_show(repo, "HEAD", MANIFEST))), len(manifest_new_entries(repo, base)))]
-    st = load_state(repo)
-    if st.get("allow_no_version_record"):
-        lines.append("- 備註：本包未新增版本紀錄；%s" % st["allow_no_version_record"])
+    if allow:
+        lines.append("- 備註：本包未新增版本紀錄；%s（放行紀錄：%s，綁定班次與 base）" % (allow, override_rel(label) if label else OVERRIDE_DIR))
     lines += ["", FACTS_END]
     return "\n".join(lines)
 
 
-def write_step_file(repo, base, rel, label):
+def write_step_file(repo, base, rel, label, allow=None):
     p = Path(repo) / rel
-    facts = step_facts(repo, base)
+    facts = step_facts(repo, base, allow=allow, label=label)
     if p.exists():
         raw = p.read_bytes().decode("utf-8")
         nl = "\r\n" if "\r\n" in raw else "\n"
@@ -340,8 +450,45 @@ def write_step_file(repo, base, rel, label):
     return True
 
 
-def fill_step_file(path, pkg_name=None, pkg_sha=None, freeze=None):
-    """包發布後代入佔位欄位；回傳實際代入的欄位名。"""
+def _fill_problems(pkg_name, pkg_sha, freeze, pkg_dir, repo):
+    probs = []
+    if pkg_name is not None and not PKG_NAME_RE.fullmatch(pkg_name):
+        probs.append("包名格式不對（要 YYYYMMDD_HHMMSS_<8 碼 hex>_full）：%r" % pkg_name[:80])
+    if pkg_sha is not None and not SHA256_RE.fullmatch(pkg_sha):
+        probs.append("sha256 必須是 64 碼小寫 hex：%r" % pkg_sha[:80])
+    if freeze is not None and not FREEZE_RE.fullmatch(freeze):
+        probs.append("凍結 sha 必須是 7–40 碼小寫 hex：%r" % freeze[:80])
+    if pkg_name is not None or pkg_sha is not None:
+        if not pkg_dir:
+            probs.append("給了 --pkg-name／--pkg-sha 就必須同時給 --pkg-dir（包資料夾），才能和 package.sha256 實際內容比對。")
+        else:
+            d = Path(pkg_dir)
+            f = d / "package.sha256"
+            if pkg_name is not None and d.name != pkg_name:
+                probs.append("包資料夾名 %r 與 --pkg-name %r 不符" % (d.name, pkg_name))
+            if not f.is_file():
+                probs.append("包資料夾裡沒有 package.sha256：%s" % d)
+            elif pkg_sha is not None and hashlib.sha256(f.read_bytes()).hexdigest() != pkg_sha:
+                probs.append("--pkg-sha 與 package.sha256 的實際 sha256 不符")
+    if freeze is not None and FREEZE_RE.fullmatch(freeze):
+        r = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", freeze + "^{commit}"], capture_output=True, creationflags=_NOWIN)
+        if r.returncode != 0:
+            probs.append("凍結 sha %s 不在這個 repo" % freeze)
+    return probs
+
+
+_PLACEHOLDER_RE = re.compile(r"<(?:PKG|FREEZE)_[A-Z0-9_]*>")
+
+
+def unfilled_placeholders(path):
+    return sorted(set(_PLACEHOLDER_RE.findall(Path(path).read_bytes().decode("utf-8"))))
+
+
+def fill_step_file(path, pkg_name=None, pkg_sha=None, freeze=None, pkg_dir=None, repo=None):
+    """包發布後代入佔位欄位；先驗證格式並與 package.sha256 比對，不符就丟 ValueError、什麼都不寫。回傳實際代入的欄位名。"""
+    probs = _fill_problems(pkg_name, pkg_sha, freeze, pkg_dir, repo or REPO)
+    if probs:
+        raise ValueError("fill 的輸入不合格，未寫入任何東西：\n  " + "\n  ".join(probs))
     p = Path(path)
     raw = p.read_bytes().decode("utf-8")
     done = []
@@ -363,7 +510,7 @@ def package_check(pkg_dir):
         cache += sum(1 for x in dirs if x == "__pycache__")
         for f in files:
             fp = Path(d) / f
-            if f.endswith(".pyc"):
+            if f.endswith((".pyc", ".pyo")):
                 pyc += 1
             rows.append((fp.relative_to(pkg).as_posix(), hashlib.sha256(fp.read_bytes()).hexdigest()))
     rows.sort()
@@ -372,7 +519,7 @@ def package_check(pkg_dir):
 
 
 def tracked_pyc(repo):
-    return [f for f in git(repo, "ls-files").splitlines() if f.endswith(".pyc") or "/__pycache__/" in f or f.startswith("__pycache__/")]
+    return [f for f in git(repo, "ls-files").splitlines() if f.endswith((".pyc", ".pyo")) or "/__pycache__/" in f or f.startswith("__pycache__/")]
 
 
 # ── 階段 ───────────────────────────────────────────────────────────────────
@@ -392,8 +539,9 @@ def st_baselines(c):
         return Result("baselines", DONE, ["基準檔都已處理。"])
     if c.dry:
         return Result("baselines", WILL, ["resolve_baselines --check 回報有東西要處理。"] + _tail(out))
+    before = porcelain_paths(c.repo)
     run_py(c.repo, "tools/platform/resolve_baselines.py")
-    sha = commit_all_staged(c.repo, "chore(%s): resolve_baselines" % c.label, c.trailer)
+    sha = commit_tool_changes(c.repo, before, "chore(%s): resolve_baselines" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/resolve_baselines.py", "--check")
     if rc2 != 0:
         return Result("baselines", BLOCK, ["resolve_baselines 之後仍有要人處理的項目："] + _tail(out2, 15), [sha] if sha else [])
@@ -510,10 +658,11 @@ def st_assign(c):
         return Result("assign", BLOCK, gap + ["這是核心大版本升級，不是一般取號：先照上面的指令跑 core_major_bump，再重跑本工具。"])
     if c.dry:
         return Result("assign", WILL, ["有佔位要取號。"] + _tail(out, 8))
+    before = porcelain_paths(c.repo)
     rc, out = run_py(c.repo, "tools/platform/train_number.py", "assign", "--base", c.base)
     if rc != 0:
         return Result("assign", BLOCK, _tail(out, 12))
-    sha = commit_paths(c.repo, ["."], "chore(%s): train_number assign" % c.label, c.trailer)
+    sha = commit_tool_changes(c.repo, before, "chore(%s): train_number assign" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/train_number.py", "--check", "--base", c.base)
     return Result("assign", DONE if rc2 == 0 else BLOCK, _tail(out2, 4), [sha] if sha else [])
 
@@ -524,10 +673,11 @@ def st_regen(c):
         return Result("regen", DONE, ["產生檔都是最新。"])
     if c.dry:
         return Result("regen", WILL, ["有產生檔過期：" + "；".join(l for l in out.splitlines() if l.strip().startswith(("docs/", "backend/")))[:300]])
+    before = porcelain_paths(c.repo)
     rc, out = run_py(c.repo, "tools/platform/regen_all.py")
     if rc != 0:
         return Result("regen", BLOCK, ["regen_all 失敗："] + _tail(out, 10))
-    sha = commit_paths(c.repo, ["."], "chore(%s): regen_all after assign" % c.label, c.trailer)
+    sha = commit_tool_changes(c.repo, before, "chore(%s): regen_all after assign" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/regen_all.py", "--check")
     return Result("regen", DONE if rc2 == 0 else BLOCK, _tail(out2, 4), [sha] if sha else [])
 
@@ -538,7 +688,7 @@ def st_step_file(c):
     if c.dry:
         p = Path(c.repo) / c.step_file
         return Result("step_file", WILL, ["步驟檔%s；將寫入事實區塊。" % ("已存在" if p.exists() else "不存在，將由範本產生草稿")])
-    changed = write_step_file(c.repo, c.base, c.step_file, c.label)
+    changed = write_step_file(c.repo, c.base, c.step_file, c.label, c.allow)
     sha = commit_paths(c.repo, [c.step_file], "docs(%s): 步驟檔事實區塊（自動產生）" % c.label, c.trailer) if changed else None
     return Result("step_file", DONE, ["步驟檔事實區塊已%s。" % ("更新" if changed else "是最新")], [sha] if sha else [])
 
@@ -556,39 +706,101 @@ IMPL = {"baselines": st_baselines, "bottom_layer": st_bottom_layer, "version_rec
 assert tuple(IMPL) == STAGES
 
 
+def preflight(repo, base, dry):
+    """前置檢查：base 解析得到且是 HEAD 的祖先、base..HEAD 有差異（否則所有「沒有功能變更」都是假綠燈）、工作樹乾淨。
+    ⇒ (Result, base 的完整 sha 或 None)。報告最上面一定印 base 與 HEAD 的 sha。"""
+    head = git(repo, "rev-parse", "HEAD").strip()
+    try:
+        base_sha = git(repo, "rev-parse", "--verify", "%s^{commit}" % base).strip()
+    except RuntimeError:
+        return Result("preflight", BLOCK, ["base %r 解析不到（先 git fetch，或檢查 --base）；HEAD %s" % (base, head[:12])]), None
+    lines = ["base %s ＝ %s；HEAD ＝ %s" % (base, base_sha[:12], head[:12])]
+    blocks = []
+    anc = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", base_sha, head], capture_output=True, creationflags=_NOWIN)
+    if anc.returncode != 0:
+        blocks.append("base 不是 HEAD 的祖先（分支錯了？）——相對它的比對沒有意義。")
+    elif base_sha == head:
+        blocks.append("base 就是 HEAD：base..HEAD 是空的，所有「沒有功能變更」的結論都會是假的。")
+    elif not changed_files(repo, base):
+        blocks.append("base..HEAD 沒有任何檔案差異，不是正常的一班車。")
+    dirty = porcelain_paths(repo)
+    if dirty:
+        msg = "工作樹不乾淨（%d 個路徑）：%s%s" % (len(dirty), "；".join(dirty[:10]), "…" if len(dirty) > 10 else "")
+        (lines if dry else blocks).append(msg + ("" if dry else "。先 commit 或移走，工具只 commit 自己改的檔。"))
+    if blocks:
+        return Result("preflight", BLOCK, lines + blocks), base_sha
+    return Result("preflight", WARN if dry and dirty else DONE, lines), base_sha
+
+
 def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=True, only=None):
-    """依序跑階段；run 模式遇 BLOCK 就停。plan 模式（dry）每個階段都評估（但取號之後的階段依賴前面，標註）。"""
-    if allow is not None and not ALLOW_RE.match(allow):
-        raise ValueError("--allow-no-version-record 必須寫成「PM 核准（YYYY-MM-DD）：原因」")
-    if allow and not dry:
-        st = load_state(repo)
-        st["allow_no_version_record"] = allow
-        save_state(repo, st)
-    elif not allow:
-        allow = load_state(repo).get("allow_no_version_record")
-    c = Ctx(repo, base, label, step_file, allow, trailer, dry)
-    results = []
-    for name in STAGES:
-        if only and name != only:
-            continue
+    """依序跑階段；run 模式遇 BLOCK 就停。plan 模式（dry）每個階段都評估（但取號之後的階段依賴前面，標註）。
+    run 模式：工作樹必須乾淨（每個階段開始時也檢查）、持有執行鎖、每個階段只 commit 自己改的檔。"""
+    if not LABEL_RE.fullmatch(label or ""):
+        raise ValueError("--label 只能是英數與 . _ -（1–40 字）：%r" % (label or "")[:60])
+    if allow is not None:
+        parse_allow(allow)                                                 # 格式／日期不對 ⇒ ValueError
+    pre, base_sha = preflight(repo, base, dry)
+    results = [pre]
+    if pre.status == BLOCK:
+        return results
+    lock = None
+    if not dry:
         try:
-            r = IMPL[name](c)
-        except Exception as e:                                             # noqa: BLE001
-            r = Result(name, BLOCK, ["階段出錯（%s: %s）" % (type(e).__name__, e)])
-            results.append(r)
+            lock = acquire_lock(repo)
+        except ValueError as e:
+            return results + [Result("lock", BLOCK, [str(e)])]
+    try:
+        stage_allow, notes, commits = None, [], []
+        rec, why = load_override(repo, label, base_sha)
+        if why:
+            notes.append(why)
+        if rec:
+            stage_allow = rec["text"]
+            notes.append("採用既有放行紀錄 %s（綁 label %s、base %s）。" % (override_rel(label), label, base_sha[:12]))
+        if allow:
+            stage_allow = allow
+            if dry:
+                notes.append("（plan）run 時會把放行寫成 %s 並 commit。" % override_rel(label))
+            else:
+                changed = write_override(repo, label, base_sha, allow)
+                sha = commit_paths(repo, [override_rel(label)], "chore(%s): 無版本紀錄放行紀錄（%s）" % (label, allow), trailer) if changed else None
+                notes.append("放行紀錄已寫入 %s（綁 label %s、base %s）。" % (override_rel(label), label, base_sha[:12]))
+                commits = [sha] if sha else []
+        if stage_allow or notes:
+            results.append(Result("override", WARN, ([stage_allow] if stage_allow else []) + notes, commits))
+        c = Ctx(repo, base, label, step_file, stage_allow, trailer, dry)
+        for name in STAGES:
+            if only and name != only:
+                continue
             if not dry:
+                dirty = porcelain_paths(repo)
+                if dirty:
+                    results.append(Result(name, BLOCK, ["階段開始時工作樹不乾淨：" + "；".join(dirty[:10])]))
+                    break
+            try:
+                r = IMPL[name](c)
+            except Exception as e:                                         # noqa: BLE001
+                r = Result(name, BLOCK, ["階段出錯（%s: %s）" % (type(e).__name__, e)])
+                results.append(r)
+                if not dry:
+                    break
+                continue
+            results.append(r)
+            if not dry and r.status == BLOCK:
                 break
-            continue
-        results.append(r)
-        if not dry and r.status == BLOCK:
-            break
-    return results
+        return results
+    finally:
+        if lock:
+            release_lock(lock)
+
+
+_DEPENDENT = ("regen", "l1_post", "step_file")
 
 
 def format_report(results, dry, base="origin/platform", label="train"):
     out = ["列車收尾一鍵（%s）" % ("plan：唯讀" if dry else "run")]
     for r in results:
-        out.append("[%s] %s" % (r.status, r.stage))
+        out.append("[%s] %s%s" % (r.status, r.stage, "（結果依賴前面階段先完成）" if dry and r.stage in _DEPENDENT and r.status == WILL else ""))
         out += ["    " + l for l in r.lines]
         if r.commits:
             out.append("    commit：" + "、".join(r.commits))
@@ -621,13 +833,18 @@ def main(argv=None):
     sp.add_argument("--pkg-name")
     sp.add_argument("--pkg-sha")
     sp.add_argument("--freeze")
+    sp.add_argument("--pkg-dir", help="包資料夾（用來和 package.sha256 實際內容比對；給 --pkg-name／--pkg-sha 時必填）")
     sp = sub.add_parser("pkg-check")
     sp.add_argument("package")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "fill":
-            done = fill_step_file(a.step_file, a.pkg_name, a.pkg_sha, a.freeze)
+            done = fill_step_file(a.step_file, a.pkg_name, a.pkg_sha, a.freeze, a.pkg_dir)
             print("已代入：" + ("、".join(done) or "（沒有可代入的佔位）"))
+            left = unfilled_placeholders(a.step_file)
+            if left:
+                print("步驟檔還有佔位沒代入：%s（半填的步驟檔不能出貨）" % "、".join(left))
+                return 1
             return 0
         if a.cmd == "pkg-check":
             r = package_check(a.package)
