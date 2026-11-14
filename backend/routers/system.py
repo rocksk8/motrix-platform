@@ -237,6 +237,43 @@ def set_approval_flow_for_doc_type(doc_type: str, body: ApprovalFlowSettings, au
     return {"ok": True}
 
 
+# ── 簽核流程複製（設定矩陣 S4c）：把一份流程複製到其他單據類型；先預覽（含進行中單據件數）、再確認、才寫入 ──────────────
+
+def _flow_copy_run(fn):
+    from helpers.approval_flow_copy import FlowCopyError
+    conn = get_db()
+    try:
+        return fn(conn)
+    except FlowCopyError as e:
+        conn.rollback()
+        raise HTTPException(e.status, str(e))
+    finally:
+        conn.close()
+
+
+@router.post("/api/approval/flows/copy/preview")
+def preview_copy_approval_flow(body: dict = Body(...), authorization: str = Header(None)):
+    """複製預覽（唯讀）：每個目標會不會變、略過原因、進行中單據件數（總數／會改用新流程的數）、`planHash`。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import approval_flow_copy as afc
+    return _flow_copy_run(lambda c: afc.preview(c, actor, body))
+
+
+@router.post("/api/approval/flows/copy")
+def copy_approval_flow(body: dict = Body(...), authorization: str = Header(None)):
+    """把來源流程（`unified` 或某一單據類型）複製到其他單據類型：同一個寫入交易、`planHash` 比對；稽核與通知在 commit 之後。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import approval_flow_copy as afc
+    out = _flow_copy_run(lambda c: afc.apply(c, actor, body))
+    for p in out["targets"]:
+        if p["docType"] in out["applied"]:
+            _audit(_tok(authorization), "settings.%s_approval_flow.copy" % p["docType"], "settings", "%s_approval_flow" % p["docType"],
+                   "複製簽核流程到%s" % p["label"], {"from": out["source"], "before": p["before"], "after": p["after"],
+                                                       "inflightTotal": p["inflight"]["total"], "inflightUsingFlow": p["inflight"]["usingFlow"]})
+    afc.notify(actor, out, out["applied"])
+    return out
+
+
 # ── Operating targets ─────────────────────────────────────────────────────────
 
 @router.get("/api/settings/operating-targets")
