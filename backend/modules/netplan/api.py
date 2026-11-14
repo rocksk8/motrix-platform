@@ -425,7 +425,7 @@ def get_network_plan_privacy_acks(plan_id: int, authorization: str = Header(None
     conn = get_db()
     _load_visible_plan(conn, plan_id, user, cols="id")
     conn.close()
-    return {"acks": _pn.acks_with_prefix("network_plan_contact", plan_id)}
+    return {"acks": _pn.acks_view(user, _pn.acks_with_prefix("network_plan_contact", plan_id))}
 
 
 @router.post("/api/network-plans/{plan_id}/privacy-notice/ack")
@@ -442,7 +442,7 @@ def ack_network_plan_privacy_notice(plan_id: int, body: dict = Body(...), author
     if created:
         _audit(_tok(authorization), "network_plan.privacy_notice_ack", "network_plan", row["plan_no"],
                f"{row['plan_no']}／{subject}", {"noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 # ══ 快速拓樸圖（2026-09-26 自 routers/network_plans_quick.py 併入；模組保持單層，守門的端點掃描收得到）══

@@ -342,6 +342,7 @@
     .h-sec  { padding-block: clamp(30px, 3.6vw, 52px); position: relative; }
     .h-sec > .h-wrap { z-index: 1; }
     .h-sec--band { background: #F0EEE9; }
+    .h-sec--tight { padding-block: clamp(22px, 2.6vw, 34px); }
 
     /* 2026-09-14：移除官網的 ASML 式直向網格線（原 .h-rails）。
        官網那裡是大片留白的行銷版面，格線用來撐出節奏；「最近的變動」是
@@ -411,6 +412,15 @@
     .h-mine__empty { background: #fff; border: 1px dashed var(--border-light); border-radius: 10px; padding: 18px 20px; }
     .h-mine__empty p { margin: 0 0 10px; font-size: 14px; }
     .h-mine__acts { display: flex; gap: 10px; flex-wrap: wrap; }
+    /* 常用捷徑（T86 U12）：依角色排序、依模組權限過濾；沒權限的不出現。只用既有 token */
+    .h-short { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+    .h-short__a { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px 14px; background: #fff; border: 1px solid var(--border-light); border-radius: 10px; text-decoration: none; color: inherit; transition: .2s var(--v4-ease); }
+    .h-short__a:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgba(20,24,30,.07); }
+    .h-short__t { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14.5px; font-weight: 700; color: var(--text-primary); }
+    .h-short__n { font-family: var(--font-en); font-size: 12px; font-weight: 600; min-width: 20px; text-align: center; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; }
+    .h-short__p { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .h-short__a:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (max-width: 640px) { .h-short { grid-template-columns: repeat(2, minmax(0, 1fr)); } .h-short__p { white-space: normal; } }
     .h-band { background: #2A2A2A; color: #F5F4F0; }
     .h-band__g { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
     .h-band__c { display: block; padding: clamp(20px, 2.6vw, 30px) clamp(18px, 2.2vw, 28px); border-left: 1px solid rgba(245,244,240,.14); text-decoration: none; color: inherit; transition: background .22s var(--v4-ease); }
@@ -494,7 +504,7 @@
             <span class="h-kicker" x-text="branding.tagline || 'MOTRIX PLATFORM'">MOTRIX PLATFORM</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
-            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
+            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>尚無待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
             <!-- 登入問候語（UX P1.5；單一端點 /api/auth/greeting，伺服器判斷情境與風格，前端只顯示；關閉或讀不到 ⇒ 整塊不出現） -->
             <p class="h-hero__greet" data-testid="login-greeting" x-show="greet.line" x-text="greet.line"></p>
             <p class="h-hero__greet h-hero__greet--aux" data-testid="login-greeting-away" x-show="greet.awayLine" x-text="greet.awayLine"></p>
@@ -519,6 +529,27 @@
       </div>
     </section>
 
+    <!-- ─── 常用捷徑（T86 U12，依正式機使用數據）：依角色排序、依模組權限過濾（規則同側欄：最高管理者全開，其餘看模組清單）；
+         一個都沒有 ⇒ 整區不出現。「待我簽核」的件數沿用下方同一份 stats.waitingForMe，讀不到就不顯示數字。 -->
+    <section class="h-sec h-sec--tight" data-testid="home-shortcuts" x-show="shortcuts.length > 0" x-cloak>
+      <div class="h-wrap">
+        <div class="h-head">
+          <div>
+            <h2 class="h-title">常用捷徑</h2>
+            <p class="h-sub">依您的角色與權限列出；未授權的項目不會顯示。</p>
+          </div>
+        </div>
+        <div class="h-short">
+          <template x-for="sc in shortcuts" :key="sc.key">
+            <a class="h-short__a" :href="sc.href" :data-testid="'home-shortcut-' + sc.key">
+              <span class="h-short__t"><span x-text="sc.label"></span><span class="h-short__n" x-show="sc.key === 'approval' && mineLoaded && stats.waitingForMe > 0" x-text="stats.waitingForMe"></span></span>
+              <span class="h-short__p" x-text="sc.hint"></span>
+            </a>
+          </template>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── 我的工作（UX P1.5）：依「使用者實際有的權限」由伺服器決定出現哪幾組（GET /api/dashboard/mine）。
          讀不到 ⇒ 整區不出現（不顯示成 0）；每一組都 0 ⇒ 只顯示一句話＋兩個去處。 -->
     <section class="h-sec" data-testid="home-mine-work" x-show="mineWork.loaded && (mineWork.groups.length > 0 || mineWork.partial)" x-cloak>
@@ -529,13 +560,13 @@
             <p class="h-sub">依您的權限，列出現在輪到您處理的事</p>
           </div>
         </div>
-        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；稍後重新整理看看。</p>
+        <p class="h-mine__e" data-testid="home-mine-partial" x-show="mineWork.partial">部分資料暫時讀不到，下面的數字可能不完整；請稍後重新整理。</p>
         <template x-if="mineWork.empty">
           <div class="h-mine__empty" data-testid="home-mine-empty">
-            <p>目前沒有需要您處理的事。</p>
+            <p>尚無需要您處理的事項。</p>
             <div class="h-mine__acts">
-              <a href="pages/daily-tasks.html" class="h-ghost">看今日工作事項</a>
-              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">去報價單</a>
+              <a href="pages/daily-tasks.html" class="h-ghost">查看今日工作事項</a>
+              <a href="pages/quotations.html" class="h-ghost" x-show="canQuotation">前往報價單</a>
             </div>
           </div>
         </template>
@@ -543,7 +574,7 @@
           <template x-for="g in mineWork.groups" :key="g.key">
             <div class="h-mine__c" :data-testid="'home-mine-' + g.key">
               <div class="h-mine__h"><span class="h-mine__t" x-text="g.title"></span><span class="h-mine__n" :class="g.count === 0 ? 'is-zero' : ''" x-text="g.count"></span></div>
-              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '目前沒有需要處理的項目'"></p>
+              <p class="h-mine__e" x-show="g.items.length === 0" x-text="g.empty || '尚無需要處理的項目'"></p>
               <ul class="h-mine__l" x-show="g.items.length > 0">
                 <template x-for="(it, ix) in g.items" :key="ix">
                   <li><a class="h-mine__i" :class="'h-mine__i--' + it.tone" :href="it.href || g.href"><b x-text="it.title"></b><span x-text="it.sub"></span></a></li>
@@ -564,7 +595,7 @@
             <div class="h-band__k">待我簽核</div>
             <div class="h-band__n" x-text="mineLoaded ? stats.waitingForMe : '—'"></div>
             <div class="h-band__t">前往簽核</div>
-            <p class="h-band__p" x-text="!mineLoaded ? '無法讀取待簽核清單（可能是連線異常或伺服器正在重新啟動），此處數字暫不準確。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '目前沒有待您簽核的單據。')"></p>
+            <p class="h-band__p" x-text="!mineLoaded ? '無法讀取待簽核清單（可能是連線異常或伺服器正在重新啟動），此處數字暫不準確。' : (stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '尚無待您簽核的單據。')"></p>
           </a>
           <!-- 這兩格的資料來自營運分析模組（/api/dashboard/funnel、/stats）；模組不在 ⇒ 顯示「—」＋明說，
                不可以顯示 0＋「沒有…」（那跟真的 0 筆長得一樣，稽核 ⑰ M-4、MODULE-GUIDE §1） -->
@@ -572,13 +603,13 @@
             <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : expiringQuotes.length"></div>
             <div class="h-band__t">報價單有效期將屆</div>
-            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '沒有需要追蹤的報價單。')"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '尚無需要追蹤的報價單。')"></p>
           </a>
           <a href="pages/warranty.html" class="h-band__c" data-testid="band-warranty">
             <div class="h-band__k">提醒</div>
             <div class="h-band__n" x-text="analyticsMissing ? '—' : (stats.warrantyWarnings || []).length"></div>
             <div class="h-band__t">設備保固 90 天內到期</div>
-            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '沒有已過保的設備。')"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '尚無已過保的設備。')"></p>
           </a>
         </div>
       </div>
@@ -655,7 +686,7 @@
         <div class="ux-check__n" data-testid="checklist-progress" x-text="checklistDone + ' / ' + checklistItems.length + ' 完成'"></div>
         <div class="ux-check__n" x-show="stats.totalQuotes === 0">系統目前尚無資料，從第一項開始。</div>
         <div class="ux-check__bar" aria-hidden="true"><i :style="'width:' + (checklistItems.length ? Math.round(checklistDone * 100 / checklistItems.length) : 0) + '%'"></i></div>
-        <button type="button" class="hint-x" data-testid="checklist-dismiss" @click="dismissOnboarding()" aria-label="先收起上手清單（之後可從右上角「？」再打開）">先收起來</button>
+        <button type="button" class="hint-x" data-testid="checklist-dismiss" @click="dismissOnboarding()" aria-label="暫時收起上手清單（之後可從右上角「？」再開啟）">暫時收起</button>
       </div>
       <ul class="ux-check__list">
         <template x-for="it in checklistItems" :key="it.id">
@@ -775,7 +806,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:12px;font-weight:600;color:#92400E;display:flex;align-items:center;gap:6px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3H5a2 2 0 00-2 2v16l4-4h11a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg>
-          出貨單卡簽核
+          出貨單簽核逾期
           <span style="background:#FDE68A;color:#92400E;font-size:12px;padding:1px 7px;border-radius:10px;font-weight:700" x-text="opsAlerts.shippingStuck.length + ' 筆'"></span>
           <span style="font-size:12px;font-weight:400;color:#B45309">送審超過 5 天尚未完成簽核</span>
         </div>
@@ -831,7 +862,7 @@
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往待我簽核'"></td>
             </tr>
             <tr x-show="!loading && mineLoaded && !mineItems.length">
-              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">清單是空的：沒有輪到您的簽核單</td>
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">尚無待您簽核的單據</td>
             </tr>
             <tr x-show="!loading && !mineLoaded">
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">讀不到待簽核清單，這裡的資料暫時不準</td>
@@ -984,24 +1015,48 @@ feedCount(key) {
           return '有 ' + this.followUpQuotes.length + ' 張報價單送出後超過 14 天未收到客戶回應，建議先追蹤。'
         }
         if (overdue > 0) {
-          return '有 ' + overdue + ' 台設備已過保，先確認是否續約或更換。'
+          return '有 ' + overdue + ' 台設備已過保，請確認是否續約或更換。'
         }
         // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
         // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
         if (this.analyticsMissing) return '首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。'
         if (!this.statsLoaded) {
           return '目前讀不到儀表板資料（可能是連線或伺服器正在重啟），'
-               + '畫面上的數字暫時不準。重新整理可以再試一次。'
+               + '畫面上的數字暫時不準。請重新整理後再試。'
         }
         if (this.stats.totalQuotes === 0) {
           return '系統中尚無任何資料，從建立第一筆客戶與報價單開始。'
         }
-        return '沒有需要您立刻處理的事項。'
+        return '尚無需要您立刻處理的事項。'
       },
 
       // 後端的 stats 回應帶 financeVisible：false＝這個帳號不再取得財務卡片（資料被保留，不是沒有）；沒有這個鍵（舊 API）＝維持原本行為
       get financeVisible() { return this.stats.financeVisible !== false },
       get showReceivables() { return this.canFinance && this.financeVisible },
+      //: 常用捷徑（T86 U12）：module = 側欄同一組模組 key（sidebar.js `_FILE_MODULE`）；最高管理者全開、其餘看 session.modules。
+      //  順序依角色（正式機使用數據：業務＝報價單／業務開發／案件；管理者＝簽核／案件／報價；財務＝簽核／報表；工程師＝案件／每日工作），
+      //  沒列到的角色用預設順序。沒權限的整個不出現。
+      _shortcutDefs: [
+        { key: 'approval',  label: '待我簽核',   hint: '等待您簽核的單據',     href: 'pages/approval-queue.html',  module: 'quotation' },
+        { key: 'case',      label: '案件管理',   hint: '進行中的案件與進度',     href: 'pages/case-management.html', module: 'case_manage' },
+        { key: 'quote-new', label: '新增報價單', hint: '建立新的報價單',       href: 'pages/quotation-form.html',  module: 'quotation' },
+        { key: 'quote-list', label: '報價單清單', hint: '查詢與追蹤報價單',      href: 'pages/quotations.html',      module: 'quotation' },
+        { key: 'dev-crm',   label: '業務開發',   hint: '商機與開發記錄',         href: 'pages/dev-crm.html',         module: 'dev_crm' },
+        { key: 'daily',     label: '今日工作事項', hint: '當日工作事項的登錄與查看',         href: 'pages/daily-tasks.html',     module: 'daily_task' },
+        { key: 'reports',   label: '報表',       hint: '營運與財務報表',         href: 'pages/reports-hub.html',     module: 'reports' },
+      ],
+      _shortcutOrder: {
+        sales:    ['quote-new', 'dev-crm', 'case', 'quote-list', 'approval', 'daily'],
+        engineer: ['case', 'daily'],
+        finance:  ['approval', 'reports', 'case', 'quote-list'],
+      },
+      get shortcuts() {
+        const r = this.session.role, m = this.session.modules || []
+        const has = k => r === 'superadmin' || m.includes(k)
+        const order = this._shortcutOrder[r] || ['approval', 'case', 'quote-list', 'quote-new', 'dev-crm', 'daily', 'reports']
+        const rank = k => { const i = order.indexOf(k); return i < 0 ? 99 : i }
+        return this._shortcutDefs.filter(d => has(d.module)).sort((a, b) => rank(a.key) - rank(b.key)).slice(0, 6)
+      },
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('finance')
@@ -1235,10 +1290,10 @@ feedCount(key) {
           }
         }
         const meta = {
-          customer: { label: '建立第一筆客戶', cta: '去建立', href: 'pages/customers.html' },
-          quote:    { label: '開立第一張報價單', cta: '去開立', href: 'pages/quotation-form.html' },
-          approval: { label: '確認簽核流程（誰要簽什麼）', cta: '去看看', href: 'pages/approval-settings.html' },
-          team:     { label: '邀請同事加入', cta: '去新增帳號', href: 'pages/users.html' },
+          customer: { label: '建立第一筆客戶', cta: '前往建立', href: 'pages/customers.html' },
+          quote:    { label: '開立第一張報價單', cta: '前往開立', href: 'pages/quotation-form.html' },
+          approval: { label: '確認簽核流程（簽核人與簽核項目）', cta: '前往查看', href: 'pages/approval-settings.html' },
+          team:     { label: '邀請同事加入', cta: '前往新增帳號', href: 'pages/users.html' },
         }
         this._ckSave(done)
         this.checklistItems = items.map(i => ({ ...meta[i.id], ...i }))

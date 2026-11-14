@@ -294,7 +294,7 @@
       </div>
       <div class="mp-note info" x-show="info && info.pendingGeocode > 0">
         <div>有 <strong x-text="(info || {}).pendingGeocode"></strong> 個地址<strong>尚未定位</strong>，
-          系統會在背景陸續完成（外部定位服務有查詢速率限制）；完成後重新開啟地圖即可看到，無須操作。
+          系統會在背景陸續完成（外部定位服務有查詢速率限制）；完成後重新開啟地圖即會顯示，無須操作。
           <!-- `MP8`：「繼續定位」鈕拿掉了——開地圖的請求不再對外查定位（使用者：
                「地圖模組每次使用者都要載入一次，讓流量很快卡死」），一律交給背景預熱。 -->
         </div>
@@ -438,7 +438,7 @@
                x-text="info ? view.points.length : '—'"></div>
         </div>
         <div>
-          <div style="font-size:12px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:12px;color:var(--text-secondary)">尚無地點資訊</div>
           <div style="font-size:18px;font-weight:600"
                x-text="info ? info.withoutLocation : '—'"></div>
         </div>

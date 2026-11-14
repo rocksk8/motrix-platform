@@ -351,9 +351,10 @@
             <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-submit" @click="submitSlip(selectedSlip)">送審</button>
           </div>
           <div x-show="selectedSlip.status === '待審核'" style="display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:12px;color:var(--text-dim)" data-testid="ps-review-note">待簽核：由簽核人簽核；退回後回到草稿，可修改後重新送審</div>
-            <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-approve" @click="approveSlip(selectedSlip)">簽核（核准）</button>
-            <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-testid="ps-reject" @click="rejectSlip(selectedSlip)">退回（需填原因）</button>
+            <div style="font-size:12px;color:var(--text-dim)" data-testid="ps-review-note"
+                 x-text="session.role === 'superadmin' ? '待簽核：由簽核人簽核；退回後回到草稿，可修改後重新送審' : '待簽核：只有最高管理者（簽核人）能核准或退回；您的帳號沒有這個動作，等簽核完成後再處理即可'"></div>
+            <button x-show="session.role === 'superadmin'" class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-approve" @click="approveSlip(selectedSlip)">簽核（核准）</button>
+            <button x-show="session.role === 'superadmin'" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-testid="ps-reject" @click="rejectSlip(selectedSlip)">退回（需填原因）</button>
           </div>
           <div x-show="selectedSlip.status === '已核准'" style="font-size:12px;color:var(--text-dim)" data-testid="ps-approved-note">已核准：可匯出 PDF（選填）；出納可直接付款，簽回檔為選填</div>
           <label x-show="selectedSlip.status === '已匯出' || selectedSlip.status === '已簽回'"

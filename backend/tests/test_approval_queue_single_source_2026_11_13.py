@@ -88,7 +88,7 @@ def test_page_uses_the_server_flag_and_has_no_second_algorithm():
 def test_flow_rows_say_stuck_with_whom_and_how_long():
     s = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
     assert 'data-testid="aq-stuck" x-text="stuckText(item)"' in s
-    assert "'卡在：' + this.blockerOf(item).display" in s
+    assert "'待' + this.blockerOf(item).display + '處理，'" in s
 
 
 def test_reject_vs_final_reject_is_explained_on_the_page():
@@ -112,7 +112,7 @@ def test_summary_equals_column_count_and_flow_rows_show_blocker(live_server, mak
     col = int(page.locator(".aq-col").first.locator(".aq-col__count").inner_text().split()[0])
     assert summary == col
     stuck = page.locator("[data-testid=aq-stuck]").all_inner_texts()
-    assert stuck and all(t.startswith("卡在：") and ("已" in t or "今天" in t) for t in stuck), stuck
+    assert stuck and all(t.startswith("待") and "處理，" in t and ("已" in t or "今天" in t) for t in stuck), stuck
     assert any("aq_e2e_b" in t for t in stuck)
 
 

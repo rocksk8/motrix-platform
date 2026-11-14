@@ -116,7 +116,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">權限設定</h1>
-          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選的格子會先暫存在畫面上（尚未儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會儲存，可隨時一鍵復原。</p>
+          <p class="pg__s">查看各角色、各人員可執行的操作及原因。僅最高管理者可查看。勾選的格子會先暫存在畫面上（尚未儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會儲存，可隨時復原。</p>
         </div>
       </div>
 
@@ -197,7 +197,7 @@
           </div>
         </div>
         <h3 style="margin-top:18px">目前的個人調整</h3>
-        <div class="pm-sub" x-show="!hasOverrides()">沒有任何個人調整。</div>
+        <div class="pm-sub" x-show="!hasOverrides()">尚無個人調整。</div>
         <template x-for="u in users.filter(x => x.overrides.length)" :key="u.id">
           <div class="pm-card">
             <b x-text="u.name"></b>
@@ -210,7 +210,7 @@
       </section>
 
       <section x-show="tab === 'pending'" data-testid="pm-pending">
-        <div class="pm-sub" x-show="!pending.length">目前沒有待生效的變更。</div>
+        <div class="pm-sub" x-show="!pending.length">尚無待生效的變更。</div>
         <template x-for="p in pending" :key="p.id">
           <div class="pm-card" :data-testid="'pm-pending-' + p.id">
             <b x-text="'變更 #' + p.id"></b>
@@ -226,7 +226,7 @@
 
       <section x-show="tab === 'versions'" data-testid="pm-versions">
         <div class="pm-sub" x-show="!versions.length">尚無任何調整紀錄。</div>
-        <button class="pm-btn pri" x-show="versions.length" :disabled="busy" data-testid="pm-undo" @click="askUndo()">一鍵復原上一次調整</button>
+        <button class="pm-btn pri" x-show="versions.length" :disabled="busy" data-testid="pm-undo" @click="askUndo()">復原上一次調整</button>
         <table class="pm-t pm-vt" x-show="versions.length" style="margin-top:8px">
           <thead><tr><th>時間</th><th>操作者</th><th>原因</th><th></th></tr></thead>
           <tbody>
@@ -352,7 +352,7 @@
             const r = await d.run(this.reason.trim())
             this.dlg = null
             this.msg = r && r.pending ? '已送出：需等待期後才會生效' + (r.approvalsRequired ? '，且需要另一位最高管理者核准' : '') + '。'
-              : (r && r.changed === false ? '沒有變更（已經是這個狀態）。' : '已儲存。')
+              : (r && r.changed === false ? '無變更（目前已是此狀態）。' : '已儲存。')
             await this.reloadAll()
           } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
         },
@@ -413,7 +413,7 @@
           } catch (e) { this.err = String(e.message || e) }
         },
         askClear(u, o) {
-          this._open('取消個別調整', { sentence: u.name + '：' + o.label + ' 的' + (o.effect === 'allow' ? '個別允許' : '個別禁止') + '會取消，回到依角色的結果。', reversibleText: '可隨時一鍵復原' },
+          this._open('取消個別調整', { sentence: u.name + '：' + o.label + ' 的' + (o.effect === 'allow' ? '個別允許' : '個別禁止') + '會取消，回到依角色的結果。', reversibleText: '可隨時復原' },
             (reason) => this._del('/api/permmatrix/user-override?user_id=' + u.id + '&cap=' + encodeURIComponent(o.key) + '&reason=' + encodeURIComponent(reason)),
             { needReason: o.effect === 'deny' })
         },
@@ -423,11 +423,11 @@
             (reason) => this._post('/api/permmatrix/pending/' + p.id + '/' + what, { reason }), { needReason: !ap, reasonLabel: ap ? '備註（選填）' : '撤銷原因（必填）' })
         },
         askUndo() {
-          this._open('一鍵復原', { sentence: '回到上一次調整之前的狀態。', reversibleText: '再按一次會繼續往前一步；歷史紀錄不會被刪掉。' },
+          this._open('復原', { sentence: '回到上一次調整之前的狀態。', reversibleText: '再按一次會繼續往前一步；歷史紀錄不會被刪掉。' },
             () => this._post('/api/permmatrix/undo'))
         },
         askRestore(v) {
-          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走等待期與核准。', reversibleText: '可隨時一鍵復原' },
+          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走等待期與核准。', reversibleText: '可隨時復原' },
             (reason) => this._post('/api/permmatrix/versions/' + v.id + '/restore', { reason }), { needReason: true })
         },
         hasOverrides() { return this.users.some(u => u.overrides.length) },

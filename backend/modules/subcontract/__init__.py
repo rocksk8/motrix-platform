@@ -32,6 +32,9 @@ MODULE = ModuleSpec(
         ("dispatch.brief", "subcontract"): dispatch_payslip_links.dispatch_brief,
         ("dispatch.by_person", "subcontract"): dispatch_payslip_links.dispatches_for_person,        # 第 48 班 IP-115（暫定）：外包名冊人員 → 他的派發（無金額）
         ("dispatch.search", "subcontract"): dispatch_payslip_links.dispatch_search,                 # 第 55 班 IP-116（暫定）：勞報單頁「選派發」下拉的可搜尋清單（無金額）
+        # IP-BS1：啟動資料（/api/bootstrap?page=case）裡屬於外包工班的區段——處理函式就是原端點的（同一份權限檢查，403 照給 403）
+        ("bootstrap.section", "vendorsSelectable"): vendor_contractors.list_vendors_selectable,
+        ("bootstrap.section", "contractorsSelectable"): contractors.list_contractors_selectable,
         # IP-15：M01 案件整包的承攬派工段
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
         # IP-15 追加：成本檢視（M06 傳票；只回金額、日期、案件、廠商、品項描述、外包人數，不回姓名）

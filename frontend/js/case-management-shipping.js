@@ -28,12 +28,24 @@ window.CM_PARTS.push(() => ({
 
     // ── 出貨單 ────────────────────────────────────────────────────────────────
 
+    _snPrefFor: '',      // 已讀過排序偏好的案件編號（''＝尚未讀）
+    async _ensureSnPref(quoteNo) {
+      if (!quoteNo || this._snPrefFor === quoteNo) return
+      this._snPrefFor = quoteNo
+      const live = this._selectLive()
+      const pref = await loadListPref(this.session.token, `sn:${quoteNo}`)
+      if (live()) { this.snSortPref = pref; this.$nextTick(() => this._initSubListSortable('sn')) }
+    },
+
     async loadShippingNotes(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       this.shippingNotesLoading = true
       this.shippingNotes = []
-      this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
+      // T86：開案件時（整包 pre 帶來資料）不再為了排序偏好多打一支；偏好只影響出貨單分頁內的排序，切到那個分頁（ensureTabData）才讀。
+      // 其他進來的路徑（點分頁、存檔後重載…）照舊先讀偏好
+      if (pre) { this._snPrefFor = ''; this.snSortPref = { sortMode: '', sortDir: 'desc', customOrder: [] } }
+      else { this._snPrefFor = quoteNo; this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`) }
       if (!live()) return
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {

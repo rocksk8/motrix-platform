@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
     資源回收筒（L2 模組 recyclebin；第 53 班 P0）：被刪的單據（含附件）先進這裡，預設 30 天內（天數是設定 recycle_bin.retention_days）可由最高管理者還原；超過天數自動永久清除。
-    - 只有最高管理者看得到（選單 perm=superadmin；所有 /api/recycle-bin 端點也是）。
+    - 只有最高管理者可檢視（選單 perm=superadmin；所有 /api/recycle-bin 端點也是）。
     - 列表與詳情的敏感欄位（帳號、身分證、電話、信箱、地址、影像…）已由伺服器遮罩；還原用的原文不經過畫面。
     - 還原失敗（單號被占用、擁有模組未載入…）＝資料與附件仍在資源回收筒，狀態「還原失敗」並顯示原因。
     - 永久刪除不能復原：要輸入「永久刪除」二次確認。
@@ -87,7 +87,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">資源回收筒</h1>
-          <p class="pg__s">被刪除的單據（含附件）先放在這裡，<b x-text="((st && st.retentionDays) || 30) + ' 天內'">30 天內</b>可還原；超過天數自動永久清除。只有最高管理者看得到。</p>
+          <p class="pg__s">被刪除的單據（含附件）先放在這裡，<b x-text="((st && st.retentionDays) || 30) + ' 天內'">30 天內</b>可還原；超過天數自動永久清除。只有最高管理者可檢視。</p>
         </div>
       </div>
 
@@ -148,7 +148,7 @@
               </td>
             </tr>
           </template>
-          <tr x-show="loaded && !items.length"><td colspan="8" style="color:var(--text-secondary)" data-testid="rb-empty">沒有符合的項目。</td></tr>
+          <tr x-show="loaded && !items.length"><td colspan="8" style="color:var(--text-secondary)" data-testid="rb-empty">查無符合條件的項目。</td></tr>
         </tbody>
       </table>
       <div class="rb-bar" x-show="total > size">
@@ -160,7 +160,7 @@
       <div class="rb-card" data-testid="rb-approved">
         <b>刪除已核可單據（最高管理者專用）</b>
         <div style="color:var(--text-secondary);margin:4px 0 8px">一般刪除仍只限草稿等現行規則。這個入口把<b>已核可</b>的單據也送進資源回收筒（可還原，不是硬刪），先看影響清單再確認。</div>
-        <div class="rb-warn" x-show="!Object.keys(types).length" data-testid="rb-no-types">目前沒有任何單據類型開放（由各擁有模組提供）。</div>
+        <div class="rb-warn" x-show="!Object.keys(types).length" data-testid="rb-no-types">尚無任何單據類型開放（由各擁有模組提供）。</div>
         <div class="rb-bar" x-show="Object.keys(types).length">
           <select x-model="ap.entity_type" data-testid="rb-ap-type">
             <option value="">選擇單據類型</option>
@@ -173,7 +173,7 @@
           <div class="rb-err" x-show="!ap.supported" x-text="ap.reason || '此單據不能走這個入口'"></div>
           <ul x-show="ap.supported" style="margin:6px 0 6px 18px">
             <template x-for="(im, i) in ap.impact" :key="i"><li x-text="im.label + (im.blocking ? '（會被影響）' : '')"></li></template>
-            <li x-show="!ap.impact.length">沒有已知的下游影響。</li>
+            <li x-show="!ap.impact.length">尚無已知的下游影響。</li>
           </ul>
           <div class="rb-bar" x-show="ap.supported">
             <input type="text" :placeholder="'再輸入一次單據編號（' + ap.entity_id + '）確認'" x-model.trim="ap.confirm_text" data-testid="rb-ap-confirm">

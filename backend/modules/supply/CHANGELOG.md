@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：看得到／看到等權限與顯示用語）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：說明與提示中的「看得到／看不到／看到」依語境改為「可檢視／無法檢視」（權限）或「顯示／所見」（畫面），並補正前一批漏改的空狀態文字。
+
 ## (next) — T86 出貨列「材料申請連結＋庫存序號並存」（feat/ship-link-serial-coexist-t86；h11 審查補強；整合併入供應商 privacy-notice 遮罩 h9；版號由列車取）
 - 放寬 33-S1：出貨單同一列可同時帶 `materialLink` 與 `part_no`＋`serials`（原錯誤碼 `ship_link_serial_exclusive` 不再產生）。並存時兩邊都要驗證一致：序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）；**每個序號**都必須是為這個案件、這筆材料申請入庫的（`stock_items.material_item_id`＋批次案件單號＋料號；別案、一般庫存、另一筆材料申請入庫的同料號序號不行；`ship_link_serial_part`，訊息點名序號，送審／核准都擋，沒有入庫紀錄＝不通過）。
 - 其餘不變：連結數量照舊占用材料申請到料量（序號不重複計）；序號於核准時照一般出貨規則驗在庫並扣庫；只有連結、或只有序號的列行為逐位元相同；沒有旗標（放寬前這種列存不進來，沒有舊資料要相容）。
@@ -9,6 +12,11 @@
 - **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9；供應商聯絡人「已告知」紀錄對非管理員遮罩）**
 - 行為變更（資料範圍收窄）：`GET /api/suppliers/{id}/privacy-notice`（及 `POST …/contacts/{ctid}/privacy-notice/ack`——已記錄過時回傳的是既有紀錄，同一支 `_ack_view` 遮罩，否則會成為繞過的後門；伺服器端寫入的紀錄與稽核仍是完整的）對非管理員（只有供應商檢視權者，與 `GET /api/suppliers` 同一條線）只回 `{聯絡人id: {at}}`＝已告知與日期，不再帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）；管理員（admin／superadmin）照舊看完整紀錄。回應形狀不變（只是少欄位）、沒有新增權限鍵。
 - 測試：`modules/supply/tests/test_supplier_privacy_notice_mask_2026_11_14.py`（管理員完整、非管理員只有 `at` 且全文不含記錄人／雜湊／聯絡人個資、POST ack 對已告知聯絡人不外洩既有紀錄、首次告知伺服器端仍存完整紀錄、無紀錄回空與 404、無檢視權 403；突變驗證：拿掉遮罩分支 ⇒ 非管理員題紅）。
+- **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9）（出貨單）**
+- 行為變更（資料範圍收窄）：`GET /api/shipping-notes/{no}/privacy-notice` 對非管理員只回「已告知＋日期」；管理員（admin／superadmin）照舊看完整紀錄；其他人只看「已告知＋日期」（`{at}`），不帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）。回應形狀不變（只是少欄位）、沒有新增權限鍵；伺服器端寫入的紀錄與稽核仍完整。（供應商端點改用 L1 共用的 `ack_view／acks_view`，行為不變。）
+- 測試：`tests/test_privacy_notice_ack_mask_siblings_2026_11_14.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
 
 ## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
 - 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。

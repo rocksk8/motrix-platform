@@ -631,7 +631,7 @@ function voucherPage() {
             names = decodeURIComponent(
               r.headers.get('X-Voucher-Missing-Attachment-Names') || '')
           } catch (e) { /* 解不開就只報筆數 */ }
-          this.attErr = '已匯出，而有 ' + n + ' 個附件沒有併進去'
+          this.attErr = '已匯出，而有 ' + n + ' 個附件未併入'
             + (names ? ('：' + names) : '')
             + '。PDF 最後一頁列出了它們；這些附件仍然登記在這張傳票上。'
         } else {

@@ -470,9 +470,9 @@ def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(
 def get_contractor_privacy_ack(cid: int, authorization: str = Header(None)):
     """R3（個資法 §8）：這位人員的「已告知」紀錄（沒有 ⇒ ack=None）。"""
     from helpers import privacy_notice as _pn
-    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     try:
-        return {"ack": _pn.get_ack("contractor", cid)}
+        return {"ack": _pn.ack_view(user, _pn.get_ack("contractor", cid))}
     except _pn.AcksCorrupted as e:          # 稽核 S-3：讀不懂 ≠ 沒有紀錄
         raise HTTPException(409, str(e))
 
@@ -494,7 +494,7 @@ def ack_contractor_privacy_notice(cid: int, authorization: str = Header(None)):
     if created:
         _audit(_tok(authorization), 'contractor.privacy_notice_ack', 'contractor', str(cid), row["name"],
                {"noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 @router.patch("/api/contractors/{cid}/active")

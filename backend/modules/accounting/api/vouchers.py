@@ -406,7 +406,7 @@ def summary_sources(q: str = "", quote_no: str = "",
 
     # ── 頁籤②：這個案件底下可帶入的憑證（`JV3` 與 `JV7` 共用同一支端點）──
     files = []
-    note2 = "請先選一個案件，才看得到它底下可以帶入的憑證。"
+    note2 = "請先選一個案件，才會列出它底下可以帶入的憑證。"
     picked = (quote_no or "").strip()
     hidden = {}                     # 因權限沒列出的附件：類別 ⇒ 個數（明說，不可以靜默少列）
     if picked:
@@ -429,7 +429,7 @@ def summary_sources(q: str = "", quote_no: str = "",
 
     # ── 頁籤③：這個案件底下的支出項（`JV21`）──
     expenses = []
-    note3 = "請先選一個案件，才看得到它底下的支出項。"
+    note3 = "請先選一個案件，才會列出它底下的支出項。"
     if picked:
         conn3 = get_db()
         try:

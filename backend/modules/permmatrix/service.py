@@ -467,7 +467,7 @@ def _batch_plan(conn, changes):
 def _batch_public(plan):
     return {"cells": [{k: v for k, v in x.items() if k != "seeded"} for x in plan["cells"]], "planHash": plan["planHash"], "needsReason": plan["needsReason"],
             "usersAffected": plan["usersAffected"], "summary": plan["summary"],
-            "reversibleText": "立即生效的部分可用「一鍵復原上一次調整」整批還原；等確認期間的項目在待生效清單可撤銷"}
+            "reversibleText": "立即生效的部分可用「復原上一次調整」整批還原；等確認期間的項目在待生效清單可撤銷"}
 
 
 def preview_role_caps_batch(conn, changes):
@@ -801,7 +801,7 @@ def _preview(conn, cap, sentence, users, delay, extra=None):
         "usersText": "約影響 %d 位使用者" % users,
         "appliesTo": "之後的操作會依新設定；已經送出或完成的單據與簽核紀錄不受影響",
         "reversible": True,
-        "reversibleText": "可隨時一鍵復原",
+        "reversibleText": "可隨時復原",
         "effective": ("%d 天確認期間後生效（這段時間內可以撤銷；需要另一位最高管理者核准）" % _confirm_days(conn)) if delay else "儲存後立即生效",
         "pending": bool(delay),
         "risk": _risk_hint(conn, cap.key),

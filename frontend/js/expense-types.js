@@ -326,7 +326,7 @@ function expenseTypesPage() {
       try {
         var r = await this._call('DELETE', '/api/definitions/' + KIND + '/' + encodeURIComponent(this.key) + '/draft')
         if (!r.ok) { this._fail(r, '刪除草稿失敗'); return }
-        if (this.meta && this.meta.latest) { var k = this.key; await this.open(k); this.msg = '草稿已丟棄，回到已發布版' } else this.back()
+        if (this.meta && this.meta.latest) { var k = this.key; await this.open(k); this.msg = '草稿已捨棄，回到已發布版' } else this.back()
       } finally { this.busy = false }
     },
     openGov(tab) { if (window.MotrixDefGovernance && this.key) window.MotrixDefGovernance.open({ kind: KIND, key: this.key, scope: 'company', title: '費用單據類型：' + this.key, tab: tab, readonly: true }) },

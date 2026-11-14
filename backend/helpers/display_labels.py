@@ -134,7 +134,7 @@ def register(S, _register_core):
         d = DEFAULTS[group][key]
         return S(key, "str", d, risk="none", recommended=d, question=question, label=_PLAIN_LABEL.get((group, key), label_), when=_NAME_WHEN,
                  help="%s目前的名稱是「%s」（＝畫面原本的字）。" % (where, d),
-                 impact="影響範圍：%s只換畫面上看到的名稱，不改任何資料、狀態判斷、順序或權限；已存的資料不變，立即生效，可隨時改回。" % where)
+                 impact="影響範圍：%s只換畫面上顯示的名稱，不改任何資料、狀態判斷、順序或權限；已存的資料不變，立即生效，可隨時改回。" % where)
 
     _register_core(
         "netplan_labels", "網路規劃：狀態名稱",
@@ -142,7 +142,7 @@ def register(S, _register_core):
          f("netplan_labels", "confirmed", "網路規劃書「客戶已確認、待交付」的狀態，要顯示成什麼名稱？", "「已確認」的顯示名稱", "網路規劃清單、分頁統計與規劃書頁面上的第二個狀態。"),
          f("netplan_labels", "delivered", "網路規劃書「已交付完成」的狀態，要顯示成什麼名稱？", "「已交付」的顯示名稱", "網路規劃清單、分頁統計與規劃書頁面上的第三個狀態。")],
         sensitive=False, risk="none", cross_check=_cross("netplan_labels"),
-        help="網路規劃書三個狀態在畫面上的名稱。只改看到的字；狀態順序（規劃中→已確認→已交付）與可做的操作不變。",
+        help="網路規劃書三個狀態在畫面上的名稱。只改顯示的字；狀態順序（規劃中→已確認→已交付）與可做的操作不變。",
     )
     _register_core(
         "procurement_labels", "採購建議：狀態名稱",
@@ -150,7 +150,7 @@ def register(S, _register_core):
          f("procurement_labels", "ordered", "採購建議「已經下單、東西在路上」的狀態，要顯示成什麼名稱？", "「已下單」的顯示名稱", "庫存頁採購建議視窗的第二個狀態與「標記已下單」按鈕。"),
          f("procurement_labels", "received", "採購建議「已經到貨」的狀態，要顯示成什麼名稱？", "「已到貨」的顯示名稱", "庫存頁採購建議視窗的「標記已到貨」按鈕。")],
         sensitive=False, risk="none", cross_check=_cross("procurement_labels"),
-        help="採購建議三個狀態在畫面上的名稱。只改看到的字；三個狀態必須依序經歷的規則不變。",
+        help="採購建議三個狀態在畫面上的名稱。只改顯示的字；三個狀態必須依序經歷的規則不變。",
     )
     _register_core(
         "lodging_labels", "住宿紀錄：計價單位與詢價管道",
@@ -161,5 +161,5 @@ def register(S, _register_core):
          f("lodging_labels", "onsite", "詢價管道「現場」要顯示成什麼名稱？", "「現場」的顯示名稱", "住宿報價清單與詳細頁的詢價管道。"),
          f("lodging_labels", "other", "詢價管道「其他」要顯示成什麼名稱？", "「其他」的顯示名稱", "住宿報價清單與詳細頁的詢價管道。")],
         sensitive=False, risk="none", cross_check=_cross("lodging_labels"),
-        help="住宿報價的計價單位與詢價管道在畫面上的名稱。只改看到的字；已存的報價資料不變。",
+        help="住宿報價的計價單位與詢價管道在畫面上的名稱。只改顯示的字；已存的報價資料不變。",
     )

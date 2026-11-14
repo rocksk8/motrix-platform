@@ -207,7 +207,7 @@ def rules_preview(payload: dict = Body(default={}), authorization: str = Header(
                 "added": len(after - before), "removed": len(before - after), "samples": samples,
                 "direction": direction, "reasons": reasons,
                 "degraded": new["degraded"], "notApplicable": new["notApplicable"],
-                "note": "依最近 %d 筆估算（不是全部紀錄）；只列您本來就看得到的紀錄與欄位。" % len(rows)}
+                "note": "依最近 %d 筆估算（不是全部紀錄）；只列您本來就可檢視的紀錄與欄位。" % len(rows)}
     finally:
         conn.close()
 

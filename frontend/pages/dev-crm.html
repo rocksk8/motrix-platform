@@ -634,7 +634,7 @@
           <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px"
                   x-model="filterPerson" @change="savePersonPref()">
             <option value="">所有人員</option>
-            <option value="__me__">只看我負責的</option>
+            <option value="__me__">僅顯示我負責的</option>
             <template x-for="n in personOptions" :key="n">
               <option :value="n" x-text="n"></option>
             </template>
@@ -649,7 +649,7 @@
             <option value="customer">客戶名稱</option>
           </select>
           <button type="button" class="dc-sortbtn" @click="toggleSortDir()"
-                  :title="sortPref.sortMode === 'updated' && sortPref.sortDir === 'asc' ? '最久沒動的排最前面' : ''"
+                  :title="sortPref.sortMode === 'updated' && sortPref.sortDir === 'asc' ? '最久未更新者排在最前' : ''"
                   x-text="sortPref.sortDir === 'asc' ? '↑ 由舊到新' : '↓ 由新到舊'"></button>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
@@ -672,15 +672,15 @@
       <div class="dc-unread-bar" x-show="unreadCount > 0" @click="unreadOnly = !unreadOnly">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
         <span x-text="unreadCount + ' 筆案件有更新未讀'"></span>
-        <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看未讀 →'"></span>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" @click.stop="markAllRead()">一鍵已讀</button>
+        <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '僅顯示未讀 →'"></span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" @click.stop="markAllRead()">全部標示已讀</button>
       </div>
 
       <!-- 洽談中逾期警示 -->
       <div class="dc-stale-bar" x-show="staleCount > 0" @click="staleOnly = !staleOnly">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
         <span x-text="staleCount + ' 筆案件洽談中超過 30 天未更新'"></span>
-        <span style="margin-left:auto;text-decoration:underline" x-text="staleOnly ? '顯示全部 →' : '只看逾期 →'"></span>
+        <span style="margin-left:auto;text-decoration:underline" x-text="staleOnly ? '顯示全部 →' : '僅顯示逾期 →'"></span>
       </div>
 
       <!-- admin 待審提示 -->

@@ -148,7 +148,7 @@ def normalize_public_base(v) -> str:
     s = str(v or "").strip().rstrip("/")
     if not s:
         return ""
-    bad = ValueError("對外網址只能是 https://網域（可含埠號 1～65535），不可含路徑、查詢或帳號")
+    bad = ValueError("對外網址格式不正確：只能是 https://網域（例如 https://erp.example.com，可含埠號 1～65535），不可含路徑、查詢或帳號，也不能用 http://")
     if len(s) > 255 or not _PUBLIC_BASE_RE.match(s):
         raise bad
     hostport = s[len("https://"):]
@@ -1325,18 +1325,18 @@ def verify_token(token: str = None) -> dict:
     try:
         tk = token or _cfg().get("channel_access_token") or ""
         if not tk:
-            return {"ok": False, "error": "尚未設定 channel access token"}
+            return {"ok": False, "error": "還沒有儲存 Channel access token，無法驗證。請先貼上 token 並按「儲存 LINE 設定」，再按驗證"}
         if not valid_token(tk):
-            return {"ok": False, "error": "channel access token 格式不正確（只能是英數與 + / = . _ -，20～512 字元），請重新貼上"}
+            return {"ok": False, "error": "已儲存的 Channel access token 格式不正確（只能有英數與 + / = . _ -，20～512 字元）。請重新貼上正確的 token 並儲存"}
         status, body = _http("GET", "/v2/bot/info", tk)
         if status == 200:
             return {"ok": True, "name": body.get("displayName", ""), "basicId": body.get("basicId", "")}
         if status in (401, 403):
-            return {"ok": False, "error": "token 無效或已過期（LINE 回 %s）" % status}
-        return {"ok": False, "error": "LINE 回應 %s" % status}
+            return {"ok": False, "error": "LINE 拒絕了這個 token（回應 %s）：token 可能貼錯、已被重新發行或已撤銷。請到 LINE Developers → Messaging API 分頁重新發行 token，貼上並儲存後再驗證" % status}
+        return {"ok": False, "error": "LINE 回應了非預期的狀態 %s，不是 token 的問題。可能是 LINE 暫時異常，請稍後再試；持續發生請通知管理員" % status}
     except Exception as exc:
         logger.warning("LINE verify error: %s", type(exc).__name__)
-        return {"ok": False, "error": "連不到 LINE（%s）" % type(exc).__name__}
+        return {"ok": False, "error": "這台主機連不到 LINE（%s）。請確認主機可以連外網，防火牆或 Proxy 有放行 api.line.me，稍後再試" % type(exc).__name__}
 
 
 def quota(token: str = None) -> dict:

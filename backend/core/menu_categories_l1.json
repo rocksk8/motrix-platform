@@ -156,10 +156,10 @@
   },
   "settings_group:system_hub": {
    "category": "people",
-   "section": "誰看得到什麼",
+   "section": "可檢視範圍",
    "tier": 1,
    "blurb": "系統中心是否列出『您沒有權限』的項目。",
-   "when": "想讓同事看得到（灰色）或看不到沒有權限的功能時。",
+   "when": "想讓同事顯示（灰色）或隱藏沒有權限的功能時。",
    "status": "keep",
    "note": "",
    "order": 80
@@ -199,7 +199,7 @@
    "section": "報價單",
    "tier": 1,
    "blurb": "被隱藏的報價條件，PDF 是否仍印出。",
-   "when": "想控制客戶看到的報價單內容時。",
+   "when": "想控制客戶所見的報價單內容時。",
    "status": "keep",
    "note": "",
    "order": 120

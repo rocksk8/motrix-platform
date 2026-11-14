@@ -89,7 +89,7 @@
     <!-- CORE-SPEC §9c：授權檢查沒有啟用時，狀態要標「授權檢查未啟用」（AUDIT-X-9c A-3）。
          忘了打開授權開關就出貨時，這一行是唯一看得出差別的地方。 -->
     <div class="ms-note ms-note--warn" x-show="licenseNotes.length" data-testid="ms-license-note">
-      <b x-text="licenseNotes.join('、')"></b>（開發模式）：所有模組一律可載入，沒有檢查授權金鑰。
+      <b x-text="licenseNotes.join('、')"></b>（開發模式）：所有模組一律可載入，未檢查授權金鑰。
     </div>
 
     <!-- STATES-PLATFORM P-SW-05：這次啟動讀不到停用清單（沿用快取／全部暫不載入）⇒ 頂端明說 -->
@@ -176,8 +176,8 @@
             </td>
           </tr>
         </template>
-        <tr x-show="loaded && modules.length === 0"><td colspan="5" class="ms-reason">這個安裝包裡沒有可選配的模組。</td></tr>
-        <tr x-show="loaded && modules.length > 0 && shown.length === 0"><td colspan="5" class="ms-reason">沒有符合的模組。</td></tr>
+        <tr x-show="loaded && modules.length === 0"><td colspan="5" class="ms-reason">此安裝包內尚無可選配的模組。</td></tr>
+        <tr x-show="loaded && modules.length > 0 && shown.length === 0"><td colspan="5" class="ms-reason">查無符合條件的模組。</td></tr>
       </tbody>
     </table>
   </main>

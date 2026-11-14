@@ -100,7 +100,7 @@
         '<div style="margin-top:8px"><b>指定角色</b>（該角色所有在職同仁）</div><div class="le-roles">' +
         (cfg.role_choices || []).map(function (r) { return '<label><input type="checkbox" data-role="' + esc(r) + '"' + (st.roles.indexOf(r) >= 0 ? ' checked' : '') + '> ' + esc(roleName(r)) + '</label>' }).join('') + '</div>' +
         '<div style="margin-top:8px"><b>指定人員</b>' + (evs.length > 1 ? '<span class="mx-mute">（只列出對所有選取事件都有權限的人）</span>' : '') + '</div><div class="le-people-list">' +
-        (cand.length ? cand.map(function (u) { return '<label><input type="checkbox" data-user="' + esc(u.username) + '"' + (st.users.indexOf(u.username) >= 0 ? ' checked' : '') + ' data-testid="le-pick-user-' + esc(u.username) + '"> ' + esc(u.display || u.username) + '（' + esc(roleName(u.role)) + '）' + (u.linked ? '' : '<span class="le-flag">尚未綁定 LINE</span>') + '</label>' }).join('') : '<span class="mx-mute">沒有可指定的人</span>') + '</div>' +
+        (cand.length ? cand.map(function (u) { return '<label><input type="checkbox" data-user="' + esc(u.username) + '"' + (st.users.indexOf(u.username) >= 0 ? ' checked' : '') + ' data-testid="le-pick-user-' + esc(u.username) + '"> ' + esc(u.display || u.username) + '（' + esc(roleName(u.role)) + '）' + (u.linked ? '' : '<span class="le-flag">尚未綁定 LINE</span>') + '</label>' }).join('') : '<span class="mx-mute">尚無可指定人員</span>') + '</div>' +
         '<div class="mx-mute">指定的人不受「可收角色」限制；本人自行關閉、離職、或尚未綁定 LINE 的人收不到。</div>'
       return SettingsMatrix.openDialog({
         title: evs.length > 1 ? '指定 ' + evs.length + ' 個事件的收件對象' : '「' + evs[0].name + '」誰要收',
@@ -236,10 +236,10 @@
     function confirmSave(list) {
       return post('/api/settings/line-notify/events/batch-preview', { changes: changesOf(list) }).then(function (res) {
         var changed = res.events.filter(function (r) { return r.changed }).length
-        if (!changed) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        if (!changed) throw new Error('所做修改與目前設定相同，無需儲存')
         var t = res.total, q = window.__leQuota
         var html = '<div>將儲存 <b>' + changed + '</b> 項變更' + (list.length - changed ? '，<b>' + (list.length - changed) + '</b> 項本來就是這樣（略過）' : '') + '。</div>' + previewRows(res)
-        html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 儲存後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項沒有推播紀錄、無法估算）</span>' : '') + '</div>'
+        html += '<div style="margin-top:10px">近 30 天共推 <b>' + t.sent30 + '</b> 則 → 儲存後預估每月 <b>' + t.est_after + '</b> 則' + (t.unknown ? '<span class="mx-mute">（另有 ' + t.unknown + ' 項無推播紀錄，無法估算）</span>' : '') + '</div>'
         html += '<div class="mx-mute">估算方式：以近 30 天實際推播量，按「可能收件人數」的比例推算；「上限」＝照原本收件人時每一則的實際收件人可能更少。</div>'
         if (q && q.limit != null && !q.unlimited) html += '<div style="margin-top:6px">本月額度 <b>' + esc(q.limit) + '</b> 則，已用 <b>' + esc(q.used) + '</b> 則。</div>'
         if (q && q.limit != null && !q.unlimited && t.est_after > q.limit) html += '<div class="mx-danger-box">預估每月 ' + t.est_after + ' 則，超過 LINE 免費額度 ' + esc(q.limit) + ' 則：用量到 90% 時一般通知會暫停（重要告警仍會發送）。</div>'

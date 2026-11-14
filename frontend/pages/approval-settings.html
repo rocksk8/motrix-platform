@@ -321,7 +321,7 @@
             <rect class="cmp-step" x="182" y="120" width="74" height="26" rx="5"/><text x="219" y="137" text-anchor="middle">最高管理者</text>
           </svg>
         </div>
-        <p class="as-caption" data-testid="as-caption">勾選＝共用統一流程；取消＝該單據使用獨立流程。按「調整」可看到切換後誰會核准（儲存前不會生效）。</p>
+        <p class="as-caption" data-testid="as-caption">勾選＝共用統一流程；取消＝該單據使用獨立流程。按「調整」可查看切換後誰會核准（儲存前不會生效）。</p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
           <template x-for="dt in docTypeOrder" :key="dt">
             <div class="scope-row" :id="'as-scope-' + dt" :data-doc-type="dt">
@@ -707,7 +707,7 @@
           const who = this.flowDigest(key)
           const label = key === 'unified'
             ? ((this.unifiedTypes.map(dt => this.docTypeMeta[dt]).join('／'))
-               || '（目前沒有任何文件類型套用統一流程）')
+               || '（目前尚無文件類型套用統一流程）')
             : this.docTypeMeta[key]
           // 統一流程那一句的主詞是一串類型名，中間要一個空格才讀得開
           const sep = key === 'unified' ? ' ' : ''
@@ -917,7 +917,7 @@
           if (f.includeSubmitterManagerTier) parts.push('申請人的部門主管（自動）')
           for (const st of (f.steps || [])) {
             const who = (st.approvers || []).map(ap => this.approverDigestName(ap)).filter(Boolean)
-            parts.push(who.length ? who.join('／') : '（這一層沒有指定簽核人）')
+            parts.push(who.length ? who.join('／') : '（此層尚未指定簽核人）')
           }
           if (!parts.length) return '預設模式：任一最高管理者簽核即可'
           return parts.join(' → ')

@@ -120,7 +120,7 @@ _DATE_SANITY_YEARS = 5
 EMPTY_RESULT_MARKER = "無符合條件資料"
 # ② 詳細頁改成先要「驗證碼檢核」（撲克牌）。我們**不解、不繞**：偵測到就停、記下、顯示狀態。
 CAPTCHA_MARKERS = ("驗證碼檢核", "撲克牌")
-CAPTCHA_ERROR = "來源網站要求驗證碼（撲克牌檢核），詳細頁無法自動讀取；已停止抓取詳細頁"
+CAPTCHA_ERROR = "來源網站要求驗證碼（撲克牌檢核），詳細頁無法自動讀取；已停止擷取詳細頁"
 # 最近一次掃描／詳細頁的狀態（JSON，存 system_settings；頁面的狀態列從這裡讀，不從「資料庫裡共有幾筆標案」推）
 SCAN_STATE_SETTING = "tender_radar_scan_state"
 # 每種告警一天最多寄一次（日期，存 system_settings）：key 為 ALERT_DAY_SETTING % <event key>
@@ -1428,7 +1428,7 @@ def _hours_setting(key, legacy_key, fallback, what):
 def scan_hours():
     """每天哪幾個時段抓。空 tuple ＝ 完全不抓（合法設定）。"""
     return _hours_setting(SCAN_HOURS_SETTING, SCAN_HOUR_SETTING,
-                          SCAN_HOURS, "抓取時段")
+                          SCAN_HOURS, "擷取時段")
 
 
 def notify_hours():

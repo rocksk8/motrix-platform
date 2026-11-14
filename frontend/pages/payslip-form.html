@@ -804,7 +804,7 @@ function payslipForm() {
       const remark = '派工單：' + rows.map(d => d.docCode || ('#' + d.id)).join('、') + (rows.some(d => d.caseVisible && d.quoteNo) ? '；案號：' + [...new Set(rows.filter(d => d.caseVisible && d.quoteNo).map(d => d.quoteNo))].join('、') : '')
       put('remarks', '備註', remark)
       if (filled.length) this.dirty()
-      this.personDispatchFillMsg = (filled.length ? '已帶入：' + filled.join('、') : '沒有可帶入的空欄位') + (kept.length ? '（' + kept.join('、') + ' 已有內容，沒覆蓋）' : '')
+      this.personDispatchFillMsg = (filled.length ? '已帶入：' + filled.join('、') : '尚無可帶入的空欄位') + (kept.length ? '（' + kept.join('、') + ' 已有內容，沒覆蓋）' : '')
     },
 
     // 第 51 班：從派發頁「新增勞報單」（?dispatchId=）進來——派發名單剛好只有一位外包名冊人員 ⇒ 直接選他（其餘情況維持手動選人）
@@ -983,6 +983,9 @@ function payslipForm() {
         if (!r.ok) {
           let msg = await r.text()
           try { msg = JSON.parse(msg).detail || msg } catch (e) {}
+          if (r.status === 403 && /權限不足/.test(msg)) msg = '您的帳號沒有這個動作的權限，所以存不了（' + msg.replace(/^權限不足[：:]\s*/, '') + '）。請洽最高管理者到「權限設定」替您勾選；資料仍留在這個畫面，不會遺失。'
+          else if (r.status === 401) msg = '登入已逾時，請重新登入後再存檔（目前填的內容請先複製保留）。'
+          else if (r.status >= 500) msg = '伺服器暫時處理不了這張單，內容沒有存入。請稍後再試；若重複發生，請把單號與時間告知管理者。'
           this.errMsg = '儲存失敗：' + msg; this.saving = false; return
         }
         const d = await r.json()

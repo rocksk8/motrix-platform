@@ -88,8 +88,8 @@
   var HANDLED_ATTRS = { options: 1, default: 1, columns: 1 }
   var COL_TYPES = [['text', '文字'], ['number', '數字'], ['date', '日期'], ['select', '選單'], ['formula', '自動計算']]
   var BUILTIN_FILLS = [
-    { token: 'today', label: '今天日期', why: '打開表單的那一天。', example: '2026/10/01', applies_to: [['date', null]], lockable: true },
-    { token: 'now', label: '現在的日期和時間', why: '打開表單的那一刻。', example: '2026/10/01 14:30', applies_to: [['date', null]], lockable: true },
+    { token: 'today', label: '今天日期', why: '開啟表單的那一天。', example: '2026/10/01', applies_to: [['date', null]], lockable: true },
+    { token: 'now', label: '現在的日期和時間', why: '開啟表單的那一刻。', example: '2026/10/01 14:30', applies_to: [['date', null]], lockable: true },
     { token: 'requester', label: '申請人本人', why: '填表的人是誰就帶誰。', example: '王小明', applies_to: [['ref', 'users']], lockable: true }
   ]
 
@@ -243,7 +243,7 @@
     var n = this.allProblems().length
     this.els.bar.innerHTML = '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="undo" title="復原（Ctrl+Z）" aria-label="復原"' + (this.at <= 0 ? ' disabled' : '') + '>' + ic('undo') + '</button>' +
       '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="redo" title="重做（Ctrl+Y）" aria-label="重做"' + (this.at >= this.hist.length - 1 ? ' disabled' : '') + '>' + ic('redo') + '</button>' +
-      '<span class="fd-grow"></span><button type="button" class="fd-btn" data-fd-act="check" title="把每個設定的白話標題、一句說明和例子列成一張表，方便檢查字句">用語檢查表</button>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '目前沒有要改的地方</span>') +
+      '<span class="fd-grow"></span><button type="button" class="fd-btn" data-fd-act="check" title="把每個設定的白話標題、一句說明和例子列成一張表，方便檢查字句">用語檢查表</button>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '尚無需要修改之處</span>') +
       '<div class="fd-seg" role="group" aria-label="檢視"><button type="button" data-fd-mode="edit" aria-pressed="' + (this.mode === 'edit') + '">編輯</button><button type="button" data-fd-mode="final" aria-pressed="' + (this.mode === 'final') + '">看成品</button></div>'
   }
   proto.renderLeft = function () {
@@ -292,7 +292,7 @@
   proto.formulaText = function (f) {
     var c = this.calcOf(f)
     if (c === null) return '進階公式'
-    if (!c.p) return '尚未選要算什麼'
+    if (!c.p) return '尚未選擇計算方式'
     var meta = M.CALCS.find(function (x) { return x.id === c.p }).name
     return meta
   }
@@ -325,7 +325,7 @@
   proto.renderCenter = function () {
     var self = this, d = this.def, view = M.groupsOf(d), explicit = M.hasExplicitGroups(d), final = this.mode === 'final'
     var h = '<div class="fd-paper' + (final ? ' is-final' : '') + '"><div class="fd-head"><div class="fd-title">' + esc(d.name || this.caps.titleFallback || '（未命名的表單）') + '</div><p>' +
-      (final ? '這就是使用者會看到的樣子。' : '中間就是使用者會看到的表單。點任何一個欄位，右邊會出現它的設定。') + '</p></div>'
+      (final ? '這就是使用者端顯示的樣子。' : '中間就是使用者端顯示的表單。點任何一個欄位，右邊會出現它的設定。') + '</p></div>'
     if (!(d.fields || []).length) h += '<div class="fd-bigempty">' + ic('lines') + '<h3>尚無任何欄位</h3><p>從左邊點一個欄位（例如「文字」），它就會出現在這張表單上。</p></div>'
     view.forEach(function (g, gi) {
       var real = !g.virtual && !g.other
@@ -335,7 +335,7 @@
           '<span class="fd-sectools"><button type="button" class="fd-mini" data-sec-up="' + gi + '" title="區塊往上移" aria-label="區塊往上移"' + (gi === 0 ? ' disabled' : '') + '>' + ic('up') + '</button>' +
           '<button type="button" class="fd-mini" data-sec-down="' + gi + '" title="區塊往下移" aria-label="區塊往下移"' + (gi >= self._realCount(view) - 1 ? ' disabled' : '') + '>' + ic('down') + '</button>' +
           '<button type="button" class="fd-mini fd-del" data-sec-del="' + gi + '" title="刪除這個區塊" aria-label="刪除這個區塊">' + ic('trash') + '</button></span>'
-          : '<b class="fd-sectitle">其他</b><span class="fd-dim">尚未放進任何區塊的欄位，使用者會在「其他」看到。拖到上面的區塊就會歸位。</span>') + '</div>'
+          : '<b class="fd-sectitle">其他</b><span class="fd-dim">尚未放進任何區塊的欄位，使用者端會顯示在「其他」。拖到上面的區塊就會歸位。</span>') + '</div>'
       }
       h += '<div class="fd-grid">'
       if (!g.keys.length) h += '<div class="fd-slot fd-empty" data-slot data-g="' + gi + '" data-i="0"><b>這個區塊目前是空的</b>請將左側欄位拖曳至此，或在左側按一下欄位。</div>'
@@ -393,19 +393,19 @@
     h += '</div>'
     var fixedOpts = this.caps.fixedOptions && this.caps.fixedOptions[f.key]
     if (M.OPTION_TYPES[f.type] && fixedOpts) h += '<div class="fd-box" data-fd-fixedopts="1"><h3>選項（固定）</h3><ul class="fd-fixedlist">' + fixedOpts.map(function (o) { return '<li>' + esc(o) + '</li>' }).join('') + '</ul><div class="fd-why">這個欄位的選項是固定的，系統其他地方會用到，故不可修改。例：' + esc(fixedOpts.join('、')) + '。</div></div>'
-    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">輸入後按 Enter 即新增一格；亦可一次貼上多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
+    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可選內容）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">輸入後按 Enter 即新增一格；亦可一次貼上多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
     if (f.type === 'formula') h += '<div class="fd-box"><h3>自動計算</h3>' + this.calcUI(f, f) + '</div>'
     if (f.type === 'table') h += this.tableUI(f)
     h += this.fillUI(f)
     h += '<div class="fd-box"><h3>誰能填、怎麼顯示</h3>'
     var cashierOk = !this.caps.cashierKeys || this.caps.cashierKeys.indexOf(f.key) >= 0
-    if (f.type !== 'formula') h += sw('cashier', f.editableBy === 'cashier', '只有出納能修改', cashierOk ? '其他人看得到，但不能填；只有出納可以改。' : '這個設定僅付款相關的欄位（付款條件、匯款日、付款日）可使用。', '「付款日」：業務只看得到，出納才能填。', !cashierOk && f.editableBy !== 'cashier')
+    if (f.type !== 'formula') h += sw('cashier', f.editableBy === 'cashier', '只有出納能修改', cashierOk ? '其他人可檢視，但不能填；只有出納可以改。' : '這個設定僅付款相關的欄位（付款條件、匯款日、付款日）可使用。', '「付款日」：業務僅可檢視，出納才能填。', !cashierOk && f.editableBy !== 'cashier')
     var hasFill = M.fillSelection(f) !== '', lk = M.canLock(f, this.registry())
-    if (f.type !== 'formula' && f.type !== 'table') h += sw('locked', !!f.locked, hasFill ? '「' + esc(this.fillLabel(f)) + '」不能改' : '帶入的內容不能改', !hasFill ? '要先在上面選好「自動帶入」才能開。' : (lk.ok ? '使用者看得到這一格，但不能自己改掉。' : '這個帶入來源每次可能不一樣，所以不能鎖住。'), hasFill ? '「申請人」自動帶入王小明，其他使用者不能改成其他使用者。' : '先選「申請人本人」，這裡才會能開。', !lk.ok && !f.locked)
+    if (f.type !== 'formula' && f.type !== 'table') h += sw('locked', !!f.locked, hasFill ? '「' + esc(this.fillLabel(f)) + '」不能改' : '帶入的內容不能改', !hasFill ? '要先在上面選好「自動帶入」才能開。' : (lk.ok ? '使用者可檢視這一格，但不能自己改掉。' : '這個帶入來源每次可能不一樣，所以不能鎖住。'), hasFill ? '「申請人」自動帶入王小明，其他使用者不能改成其他使用者。' : '先選「申請人本人」，這裡才會能開。', !lk.ok && !f.locked)
     h += sw('listed', M.isListed(this.def, f.key), '在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '開起來 ⇒ 清單多一欄「' + esc(f.label) + '」。')
     h += '</div>'
     h += this.moreUI(f)
-    if (this.caps.isSuper) h += '<details class="fd-adv"><summary>進階設定（只有最高管理者看得到）</summary><div class="fd-row"><label>系統內部代碼</label><input class="fd-in" value="' + esc(f.key) + '" readonly aria-readonly="true"><div class="fd-why">自動產生，發布後不可修改（舊單據依此尋找資料）；修改「欄位名稱」不會影響它。例：place。</div></div>' +
+    if (this.caps.isSuper) h += '<details class="fd-adv"><summary>進階設定（只有最高管理者可檢視）</summary><div class="fd-row"><label>系統內部代碼</label><input class="fd-in" value="' + esc(f.key) + '" readonly aria-readonly="true"><div class="fd-why">自動產生，發布後不可修改（舊單據依此尋找資料）；修改「欄位名稱」不會影響它。例：place。</div></div>' +
       (f.type === 'formula' && this.calcOf(f) === null ? '<div class="fd-row"><label>舊的文字公式</label><input class="fd-in" value="' + esc(f.formula) + '" readonly><div class="fd-why">這是用文字寫的公式，僅在此處可見；選擇上方的計算器即會取代它。例：round_half_up(qty * unitCost)。</div></div>' : '') + '</details>'
     h += '<button type="button" class="fd-dangerbtn" data-fd-act="delsel">' + ic('trash') + ' 刪除這個欄位</button>'
     el.innerHTML = h
@@ -430,9 +430,9 @@
     if (val === '*custom' && k !== 'checkbox') extra = '<input class="fd-in fd-mt6" data-fd="fillText" ' + (k === 'date' ? 'type="date"' : '') + ' value="' + esc(f.default) + '" placeholder="要預先填好的內容">'
     if (val === '*option') extra = '<select class="fd-in fd-mt6" data-fd="fillOpt">' + (f.options || []).map(function (x) { return '<option' + (x === f.default ? ' selected' : '') + '>' + esc(x) + '</option>' }).join('') + '</select>'
     var reg = this.registry().find(function (x) { return x.token === val })
-    if (val === '') info = '欄位一開始是空的。<br>使用者會看到：（空白）'
-    else if (reg) info = '<b>' + esc(reg.label) + '</b>：' + esc(reg.why) + '<br>使用者會看到：' + esc(reg.example)
-    else if (val.charAt(0) === '*') info = '使用者會看到您預先填好的內容。'
+    if (val === '') info = '欄位一開始是空的。<br>使用者端顯示：（空白）'
+    else if (reg) info = '<b>' + esc(reg.label) + '</b>：' + esc(reg.why) + '<br>使用者端顯示：' + esc(reg.example)
+    else if (val.charAt(0) === '*') info = '使用者端會顯示您預先填好的內容。'
     else info = '這個帶入來源目前系統不認得（' + esc(val) + '），原樣保留。'
     return h + extra + '<div class="fd-why fd-exbox">' + info + '</div></div></div>'
   }
@@ -548,14 +548,14 @@
     ['欄位名稱', '表單上顯示給使用者看的字。', '「出差地點」'], ['說明文字（選填）', '會用小字顯示在欄位下面。', '「請填發票上的金額」'],
     ['一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。'],
     ['想改成', '把這個欄位換成相近的種類。', '文字 ⇒ 單選選單'],
-    ['選項（使用者可以選哪些）', '一格一個；Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '「國內」Enter「國外」⇒ 兩個選項'],
-    ['自動帶入', '使用者打開表單時，這一格已經填好什麼。', '申請人本人 ⇒ 王小明'],
-    ['「○○」不能改', '自動帶入的內容使用者看得到但不能自己改。', '「申請人本人」不能改'],
-    ['只有出納能修改', '其他人看得到，但不能填；只有出納可以改。', '「付款日」'],
+    ['選項（使用者可選內容）', '一格一個；Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '「國內」Enter「國外」⇒ 兩個選項'],
+    ['自動帶入', '使用者開啟表單時，這一格已經填好什麼。', '申請人本人 ⇒ 王小明'],
+    ['「○○」不能改', '自動帶入的內容使用者可檢視但不能自己改。', '「申請人本人」不能改'],
+    ['只有出納能修改', '其他人可檢視，但不能填；只有出納可以改。', '「付款日」'],
     ['在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '清單多一欄「地點」'],
     ['明細表的設定', '最少／最多幾列、新增按鈕的字；每一欄可展開設定種類、是否必填、選項、計算。', '最少 1 列、最多 20 列'],
     ['區塊名稱／＋ 新增區塊', '把欄位分成幾段；區塊可上下移、刪除。', '基本資料、出差資訊'],
-    ['看成品', '隱藏編輯用的框線，看使用者實際看到的樣子。', '—'],
+    ['預覽成品', '隱藏編輯用的框線，查看使用者端實際顯示的樣子。', '—'],
     ['復原／重做', '做錯可以回上一步（Ctrl+Z／Ctrl+Y）；刪除後 6 秒內也可按「復原」。', '—']
   ]
   proto.showChecklist = function () {

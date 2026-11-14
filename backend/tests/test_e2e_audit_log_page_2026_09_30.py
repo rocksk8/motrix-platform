@@ -66,7 +66,7 @@ def test_audit_log_page_window_widen_filters_and_drill(live_server, new_context,
     page.wait_for_function("() => { const n = [...document.querySelectorAll('.drill-node')].find(x => x.innerText.includes('報價單')); return n && n.innerText.includes('3') }", timeout=10000)
     _shot(page, "audit-log-widened.png")
     # 只看失敗：清單只剩失敗列、上方原因 chip 出現
-    page.locator(".seg button", has_text="只看失敗").click()
+    page.locator(".seg button", has_text="僅顯示失敗").click()
     page.wait_for_function("() => document.querySelectorAll('.tl-item.is-fail').length > 0 && document.querySelectorAll('.tl-item:not(.is-fail)').length === 0", timeout=10000)
     assert page.locator(".chip").count() >= 1
     # 清除：回到全部、視窗回預設

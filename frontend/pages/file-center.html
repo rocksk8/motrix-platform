@@ -157,7 +157,7 @@
               </template>
             </tbody>
           </table>
-          <div class="fc-empty" id="fc-none" x-show="loaded && !loading && !items.length">沒有符合條件的檔案（只列出您有權限打開的）。</div>
+          <div class="fc-empty" id="fc-none" x-show="loaded && !loading && !items.length">查無符合條件的檔案（只列出您有權限開啟的）。</div>
           <div class="fc-pager" x-show="loaded && (page > 1 || hasMore)">
             <button class="btn btn-ghost btn-sm" id="fc-prev" :disabled="page <= 1 || loading" @click="go(page - 1)">上一頁</button>
             <span>第 <b x-text="page"></b> 頁</span>

@@ -91,9 +91,25 @@ def bonus_write(conn, values, old=None):
             raw_put(conn, BONUS_SLOTS[slot][0], str(v).strip())
 
 
+def _account_check():
+    """科目有效性檢查走提供者 `voucher.account_check`（會計模組宣告）；L1 不直接 import L2 模組。"""
+    from core import registry
+    return registry.single_provider("voucher.account_check")
+
+
+def _account_problem(check, conn, code):
+    """與 `payroll.bonus_vouchers.account_problem` 同義：空 ⇒ 尚未設定；沒有提供者 ⇒ 無法驗證（不當作有效）；否則照提供者回的訊息。"""
+    if not (code or "").strip():
+        return "尚未設定科目"
+    if check is None:
+        return "會計模組未安裝，無法驗證科目"
+    ok, err = check(conn, code)
+    return "" if ok else err
+
+
 def bonus_cross_check(values, conn):
     """每個**和目前不同**的科目：必須存在且未停用（原 `PUT /cases/voucher-accounts` 的 `account_problem`）。"""
-    from modules.payroll import bonus_vouchers as BV
+    check = _account_check()
     cur = bonus_read(conn)
     out = []
     for slot, (_k, _d, label) in BONUS_SLOTS.items():
@@ -101,7 +117,7 @@ def bonus_cross_check(values, conn):
         v = v.strip() if isinstance(v, str) else v
         if v == cur[slot]:
             continue
-        msg = BV.account_problem(conn, v if isinstance(v, str) else "")
+        msg = _account_problem(check, conn, v if isinstance(v, str) else "")
         if msg:
             out.append("%s：%s" % (label, msg))
     return out
@@ -211,10 +227,13 @@ def t100_cross_check(values, conn):
     if out:
         return out
     cur = dict(_t100_codes(t100_read(conn)["config"]))
-    from modules.accounting.api.accounting_export import validate_account_code
+    check = _account_check()
     for where, code in _t100_codes(cfg):
         if (code or "").strip() and cur.get(where) != code:
-            ok, err = validate_account_code(conn, code)
+            if check is None:
+                out.append("會計模組未安裝，無法驗證科目")
+                break
+            ok, err = check(conn, code)
             if not ok:
                 out.append(err)
     return out

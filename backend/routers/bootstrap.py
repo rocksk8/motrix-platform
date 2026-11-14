@@ -19,7 +19,9 @@ approval-queue/count、notifications/mine、reads/module-counts、system/brandin
 案件管理頁首屏本來自己再打 8 支「登入即可讀」的小請求（onepipe 旗標、版面與規則設定群組、利潤門檻、可選使用者、公司公開資料、清單排序偏好、
 兩支承攬商下拉），清單載入共 19 支 API。`GET /api/bootstrap?page=case` 在全站區段之外再多放這 8 段（`PAGE_SECTIONS["case"]`）：
 規矩與上面完全相同——直接呼叫原端點的處理函式（帶固定的路徑參數／查詢值）、同一份權限檢查、失敗只記 `errors`、閘門時一律 428；
-沒帶 `page` 或不認得的值＝與今天逐位元相同（不報錯、不多給）。前端只在案件管理頁才登記這些路徑（static/auth-guard.js），其他頁照舊直接 fetch。
+沒帶 `page` 或不認得的值＝與今天逐位元相同（不報錯、不多給）。
+另有一個「衍生區段」`financeView`（`DERIVED_SECTIONS`，沒有原端點）：只回呼叫者自己的一個布林 `{"financialView": …}`＝`helpers.auth.can_see_financial`
+的答案，讓案件頁依後端同一條規則（含財務旗標 `finance_via_effective` 開啟時的職責角色／個人扣項）決定要不要發 `finance-summary`；不含任何資料列。前端只在案件管理頁才登記這些路徑（static/auth-guard.js），其他頁照舊直接 fetch。
 
 原端點全部保留（相容；也是前端的退路）。守門：tests/test_bootstrap_bundle_2026_11_13.py 逐區段、逐角色比對 bootstrap 與原端點的回應。
 """
@@ -41,6 +43,9 @@ router = APIRouter()
 SETUP_GATE_OK = frozenset({"me", "menu", "branding", "totp"})
 #: 案件頁讀「版面/自訂欄位/規則…」那一支的群組清單（＝ case-management.html 傳給 MotrixPublicFlags.read 的順序；守門：test_bootstrap_page_case 比對前端字串）
 CASE_BUILDER_GROUPS = ("builder_layout", "builder_custom_fields", "builder_rules", "builder_slots", "builder_status_display", "builder_stage_templates", "ui_format", "list_view")
+#: 「沒有原端點」的衍生區段（只回呼叫者自己的一個布林）：路徑欄放這個標記；守門表（原端點逐欄比對、前端路徑表）一律略過它。
+DERIVED_PATH = "(derived)"
+DERIVED_SECTIONS = frozenset({"financeView"})
 #: 區段 → 原端點路徑（守門與文件用）
 ORIGINAL_PATH = {
     "me": "/api/auth/me",
@@ -66,6 +71,7 @@ PAGE_SECTIONS = {
         "listPrefCase": "/api/list-prefs/case_list",
         "vendorsSelectable": "/api/vendor-contractors/selectable",
         "contractorsSelectable": "/api/contractors/selectable",
+        "financeView": DERIVED_PATH,
     },
 }
 _SA_ONLY = frozenset({"onlineUsers"})
@@ -117,24 +123,35 @@ def _handlers():
     }
 
 
+def _finance_view(authorization=None):
+    """`{"financialView": bool}`＝**這個人**看不看得到案件財務金額：直接呼叫 `helpers.auth.can_see_financial`（後端各財務端點用的同一支，
+    旗標 `finance_via_effective` 的 off／shadow／on 全部照它）。前端據此決定要不要發 `finance-summary`，免得旗標開啟時前端只看角色而與後端不一致。
+    只回呼叫者自己的權限，沒有任何資料列。"""
+    from helpers.auth import can_see_financial
+    return {"financialView": bool(can_see_financial(_require_user(authorization)))}
+
+
 def _page_handlers(page):
-    """頁面專屬區段 → 處理函式（路徑參數／固定查詢值用 partial 先綁，呼叫時仍只帶 authorization）。"""
+    """頁面專屬區段 → 處理函式（路徑參數／固定查詢值用 partial 先綁，呼叫時仍只帶 authorization）。
+    L1 自己擁有的區段直接列在這裡；屬於 L2 模組的區段（利潤警示、承攬商／廠商下拉）由該模組以 `bootstrap.section` 提供者交出 ——
+    模組不在 ⇒ 沒有那個處理函式 ⇒ 區段不進回應（前端對缺的區段退回打原端點，與沒有 bootstrap 時相同），不是錯誤。"""
     from functools import partial
-    from modules.case.api import project_margin
-    from modules.subcontract.api import contractors, vendor_contractors
+    from core import registry
     from routers import auth, list_prefs, settings_center, system
     if page != "case":
         return {}
-    return {
+    out = {
         "onepipeFlags": partial(settings_center.public_values, "onepipe"),
         "builderGroups": partial(settings_center.public_values, ",".join(CASE_BUILDER_GROUPS)),
-        "profitWarning": project_margin.get_profit_warning_config,
         "usersSelectable": auth.users_selectable,
         "companyProfilePublic": system.get_company_profile_public,
         "listPrefCase": partial(list_prefs.get_list_pref, "case_list"),
-        "vendorsSelectable": vendor_contractors.list_vendors_selectable,
-        "contractorsSelectable": contractors.list_contractors_selectable,
+        "financeView": _finance_view,
     }
+    for name, fn in registry.providers("bootstrap.section").items():
+        if name in PAGE_SECTIONS[page] and name not in out:
+            out[name] = fn
+    return out
 
 
 def sections_for(role, setup_blocked, page=None):
@@ -170,7 +187,7 @@ def _run_section(name, fn, authorization, path=None):
     from db import set_request_ctx
     from helpers import company_setup as _cs
     # B3：診斷用的「是哪支端點」要記原端點的路徑，不是 /api/bootstrap（例如區段內的 403 稽核）
-    set_request_ctx("GET", (path or ORIGINAL_PATH[name]).split("?")[0])
+    set_request_ctx("GET", ("/api/bootstrap" if path == DERIVED_PATH else (path or ORIGINAL_PATH[name])).split("?")[0])
     try:
         return True, fn(authorization)
     except HTTPException as e:
@@ -194,7 +211,7 @@ def bootstrap(response: Response, page: str = "", authorization: str = Header(No
         blocked = True
     page = page if page in PAGE_SECTIONS else None           # 不認得的頁面鍵＝沒帶（不報錯、不多給）
     handlers = {**_handlers(), **_page_handlers(page)}
-    names = sections_for(user.get("role"), blocked, page)
+    names = [n for n in sections_for(user.get("role"), blocked, page) if n in handlers]   # 提供者的模組不在 ⇒ 沒有這一區段
     paths = {**ORIGINAL_PATH, **PAGE_SECTIONS.get(page, {})}
     futs = [(n, _POOL.submit(contextvars.copy_context().run, _run_section, n, handlers[n], authorization, paths[n])) for n in names]
     out = {"v": 1}
@@ -207,6 +224,7 @@ def bootstrap(response: Response, page: str = "", authorization: str = Header(No
             errors[name] = val
     if blocked:                                             # 閘門擋掉的區段：明講是 428（前端不必退回打原端點——原端點也是 428）
         for name in set(sections_for(user.get("role"), False, page)) - set(sections_for(user.get("role"), True, page)):
-            errors[name] = 428
+            if name in handlers:
+                errors[name] = 428
     out["errors"] = errors
     return out

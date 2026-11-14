@@ -21,7 +21,7 @@
     discount:    ['折讓', '成交後對客戶的價格減讓（例如抹零、客訴補償），會留下紀錄。'],
     internal:    ['內部成本與利潤', '只給公司內部看的成本與利潤區塊，不是給客戶看的內容。'],
     gross:       ['毛利率', '（售價 − 成本）÷ 售價。數字越高，代表這筆案件留在公司的利潤比例越高。'],
-    overhead:    ['管銷分攤', '把公司共同的管理與銷售費用，依比例分攤至每個案件，才看得出扣掉這些之後是否仍有獲利。'],
+    overhead:    ['管銷分攤', '把公司共同的管理與銷售費用，依比例分攤至每個案件，才能判斷扣掉這些之後是否仍有獲利。'],
     tax_id:      ['統一編號', '8 碼數字，最後一碼是檢查碼；輸入錯誤時系統會提示。'],
     backlog:     ['待辦清單（BACKLOG）', '已經提出、尚未開始做的事項。'],
   }
@@ -58,7 +58,7 @@
     },
     'approval-queue.html': {
       purpose: '輪到您簽核的單據都在這裡。',
-      steps: ['左欄「待我簽核」逐筆點開看內容。', '核准、退回或加上意見。', '處理完的會移到「已處理」。'],
+      steps: ['左欄「待我簽核」逐筆展開查看內容。', '核准、退回或加上意見。', '處理完的會移到「已處理」。'],
       hint: '初次使用？「待我簽核」為輪到您處理的單據；開啟單據可查看內容，再選擇核准或退回。',
       anchor: '.aq-layout',
       terms: ['approval'],
@@ -89,7 +89,7 @@
   var GENERIC_STEPS = [
     '上方選單依「客戶與業務／案件／採購與庫存／報表／財務會計…」分類；找不到功能時，請使用上方搜尋框輸入關鍵字。',
     '多數列表頁右上角有「新增」按鈕；列表空白代表尚無資料，並非故障。',
-    '看不懂的名詞，可以在下方「名詞解釋」查。',
+    '不熟悉的名詞，可在下方「名詞解釋」查詢。',
   ]
 
   // ── 小工具 ───────────────────────────────────────────────────────────────
@@ -133,8 +133,8 @@
     box.setAttribute('data-testid', 'ux-first-hint')
     box.innerHTML = '<span>' + esc(cfg.hint) + '</span>'
       + '<span class="ux-first-hint__btns">'
-      + '<button type="button" class="hint-x" data-ux="more">看說明</button>'
-      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="我知道了，不用再顯示">我知道了</button>'
+      + '<button type="button" class="hint-x" data-ux="more">查看說明</button>'
+      + '<button type="button" class="hint-x" data-ux="dismiss" aria-label="已了解，不再顯示">我知道了</button>'
       + '</span>'
     box.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-ux]')
