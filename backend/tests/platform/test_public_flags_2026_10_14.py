@@ -2,7 +2,6 @@
 """public-flags.js：一次讀多個公開設定群組；某個群組讀不到（hidden／未登錄 404、敏感 403）不拖垮其他旗標。
 node 真的執行 + 真的端點（GET /api/settings-center/public 對 hidden 群組整個回 404 是既有行為，這裡鎖住不變）。"""
 import json
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -214,9 +213,28 @@ def test_pages_do_not_open_the_panel_when_prefs_failed_to_load_and_save_is_singl
     assert "const loaded = await LV.load(tk, 'quotations.view')" in q and "if (!loaded) {" in q
     for src in (cm, q):
         assert "if (this.lvSaving) return" in src and "this.lvSaving = true" in src
-    for html in (cmh, q):                               # 兩顆按鈕（儲存／還原預設）都在存檔進行中停用——以標籤結構判斷，不數文字出現幾次
-        btns = [b for b in re.findall(r"<button\s[^>]*>", html) if "lvSave(" in b]
-        assert len(btns) == 2 and all(re.search(r':disabled="lvSaving"', b) for b in btns)
+    for html in (cmh, q):                               # 兩顆按鈕（儲存／還原預設）都在存檔進行中停用——用 HTML 解析器取出 <button> 元素的屬性判斷，不用正則數標籤
+        btns = [a for a in _button_attrs(html) if "lvSave(" in (a.get("@click") or "")]
+        assert [a.get("@click") for a in btns] == ["lvSave(false)", "lvSave(true)"]
+        assert all(a.get(":disabled") == "lvSaving" for a in btns)
+
+
+def _button_attrs(html):
+    """⇒ 每個 <button> 起始標籤的屬性 dict（html.parser 解析；Alpine 的 @click／:disabled 屬性名原樣保留）。"""
+    from html.parser import HTMLParser
+
+    class P(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.out = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "button":
+                self.out.append(dict(attrs))
+
+    p = P()
+    p.feed(html)
+    return p.out
 
 
 HARNESS_NOTICE = r"""
