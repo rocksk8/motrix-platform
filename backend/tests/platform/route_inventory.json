@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 997,
-  "endpoints_api": 993,
-  "write_total": 535,
-  "write_api": 535,
+  "endpoints_total": 1001,
+  "endpoints_api": 997,
+  "write_total": 539,
+  "write_api": 539,
   "get_api": 458,
-  "distinct_paths_api": 846,
-  "write_with_body_api": 400,
+  "distinct_paths_api": 850,
+  "write_with_body_api": 404,
   "write_with_path_param_api": 365
  },
  "select_star": {
@@ -2748,6 +2748,16 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/approval/flows/copy": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval/flows/copy/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/attachment-slots/{doc_type}/simulate": {
    "w": true,
    "pp": 1,
@@ -3739,6 +3749,16 @@
    "body": true
   },
   "POST /api/permmatrix/role-cap": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/batch/preview": {
    "w": true,
    "pp": 0,
    "body": true
