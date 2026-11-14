@@ -30,6 +30,7 @@ def _open(browser, base, user):
     # T86 案件 UX #9：「發票資料」預設收合；這支測試要填發票欄位，先按真的展開鈕（有待處理提示的期別本來就自動展開，不重複按）
     for i in range(page.locator('[data-testid^="pay-detail-toggle-"]').count()):
         t = page.locator(f'[data-testid="pay-detail-toggle-{i}"]')
+        t.wait_for(state="visible", timeout=10000)
         if t.get_attribute("aria-expanded") != "true":
             t.click()
     return page

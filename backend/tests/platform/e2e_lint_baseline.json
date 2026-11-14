@@ -133,7 +133,6 @@
   "tests/test_e2e_legal_params_r1_2026_09_25.py::test_settings_page_adds_next_year_and_saves::is_enabled#1": 1,
   "tests/test_e2e_line_events_all_2026_11_13.py::test_binding_status_list_remind_button_and_unlink::inner_text#1": 1,
   "tests/test_e2e_line_events_all_2026_11_13.py::test_binding_status_list_remind_button_and_unlink::inner_text#2": 1,
-  "tests/test_e2e_line_recipients_quota_2026_11_12.py::test_role_checkboxes_write_through_and_all_checked_means_default::is_checked#1": 1,
   "tests/test_e2e_login_enter_submits_2026_09_25.py::_eye_toggled_then_enter::get_attribute#1": 1,
   "tests/test_e2e_material_approval_2026_10_02.py::test_material_order_approval_round_trip_in_the_browser::count#1": 1,
   "tests/test_e2e_material_approval_2026_10_02.py::test_material_order_approval_round_trip_in_the_browser::count#2": 1,

@@ -112,6 +112,6 @@ def test_card_has_no_horizontal_scroll_on_phone_width(live_server, make_user, ne
     _configure()
     page = _open(live_server, make_user, new_page, login_as, "e2e_ev5", width=390)
     page.locator("[data-testid=line-bind-toggle]").click()
-    assert page.locator("[data-testid=le-matrix] .mx-card-row").first.is_visible(), "手機寬度矩陣改為卡片列"
+    page.locator("[data-testid=le-matrix] .mx-card-row").first.wait_for(state="visible", timeout=10000)   # 手機寬度矩陣改為卡片列
     over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert over <= 1, "手機寬度頁面不可橫向捲動（超出 %s px）" % over
