@@ -535,7 +535,7 @@
         <div class="h-head">
           <div>
             <h2 class="h-title">常用捷徑</h2>
-            <p class="h-sub">依您的角色與權限列出；沒有權限的項目不會出現</p>
+            <p class="h-sub">依您的角色與權限列出；未授權的項目不會顯示。</p>
           </div>
         </div>
         <div class="h-short">
@@ -1036,12 +1036,12 @@ feedCount(key) {
       //  順序依角色（正式機使用數據：業務＝報價單／業務開發／案件；管理者＝簽核／案件／報價；財務＝簽核／報表；工程師＝案件／每日工作），
       //  沒列到的角色用預設順序。沒權限的整個不出現。
       _shortcutDefs: [
-        { key: 'approval',  label: '待我簽核',   hint: '停在您這一關的單據',     href: 'pages/approval-queue.html',  module: 'quotation' },
+        { key: 'approval',  label: '待我簽核',   hint: '等待您簽核的單據',     href: 'pages/approval-queue.html',  module: 'quotation' },
         { key: 'case',      label: '案件管理',   hint: '進行中的案件與進度',     href: 'pages/case-management.html', module: 'case_manage' },
-        { key: 'quote-new', label: '新增報價單', hint: '開一張新的報價單',       href: 'pages/quotation-form.html',  module: 'quotation' },
+        { key: 'quote-new', label: '新增報價單', hint: '建立新的報價單',       href: 'pages/quotation-form.html',  module: 'quotation' },
         { key: 'quote-list', label: '報價單清單', hint: '查詢與追蹤報價單',      href: 'pages/quotations.html',      module: 'quotation' },
         { key: 'dev-crm',   label: '業務開發',   hint: '商機與開發記錄',         href: 'pages/dev-crm.html',         module: 'dev_crm' },
-        { key: 'daily',     label: '今日工作事項', hint: '今天要做的事',         href: 'pages/daily-tasks.html',     module: 'daily_task' },
+        { key: 'daily',     label: '今日工作事項', hint: '當日工作事項的登錄與查看',         href: 'pages/daily-tasks.html',     module: 'daily_task' },
         { key: 'reports',   label: '報表',       hint: '營運與財務報表',         href: 'pages/reports-hub.html',     module: 'reports' },
       ],
       _shortcutOrder: {
