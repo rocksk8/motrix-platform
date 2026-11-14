@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-14（feat/t86-finance-af-h1；T86 財務 F①）
+## 1.171 — 2026-11-14（feat/t86-finance-af-h1；T86 財務 F①）
 - 前端（無 API／欄位／權限語意變更）：`static/notif.js` 鈴鐺的每日工作事項角標，非 superadmin 且沒有 `daily_task`／`case_manage` 模組時不再送 `GET /api/daily-tasks`（原本每一頁載入都會打一次、一定 403）；與側邊欄同一份 `session.modules`。
 - 修正（無 API／欄位／權限變更）：建構器輸出預覽——`static/form-preview.js` 的欄位 key 規則由 `{1,39}`（模組 key 的 2～40 字）改為與 `helpers/custom_fields.KEY_RE` 相同的 `{0,39}`，合法的 1 字元欄位 key 不再被前端擋預覽；`helpers/custom_modules.preview_output` 的 `ok_key` 同樣改用欄位 key 規則，未完成的 1 字元欄位不再被改名為 `_incomplete_N`。測試：`tests/test_builder_output_preview_2026_09_27.py`（欄位 key 規則前後端一致、1 字元未完成欄位保留 key）。
 
