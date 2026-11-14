@@ -863,3 +863,9 @@ transition:background .1s;
   .cm-tab { padding:12px 14px; }
   button[x-text*="操作紀錄"] { min-height:36px; padding:8px 6px; }
 }
+
+/* T86 業務開發 D：案件卡片／詳情標題的「來自業務開發：○○商機」連結 */
+.cm-devcase { display:block; font-size:12px; color:var(--info); font-family:var(--font-zh); text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
+.cm-devcase:hover { text-decoration:underline; }
+.cm-devcase--head { display:inline-block; max-width:100%; margin:0 0 0 10px; vertical-align:baseline; }
+@media (max-width:767px) { .cm-header__row2 .cm-devcase--head { flex:1 0 100%; margin:2px 0 0; } }

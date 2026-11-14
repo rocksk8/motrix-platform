@@ -380,6 +380,7 @@
               <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')"><template x-for="(p, i) in hlParts(c.customer_name || '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
               <!-- T86 案件UX #2：搜尋會比對專案名稱，卡片就要看得到專案名稱（與客戶同名時不重複）；命中字樣標底色 -->
               <div class="cm-card__project" data-testid="cm-card-project" x-show="lShown('customer') && c.project_name && c.project_name !== c.customer_name" :style="lo('customer')" :title="c.project_name"><template x-for="(p, i) in hlParts(c.project_name || '')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
+              <template x-if="c.dev_case"><a class="cm-devcase" data-testid="cm-card-devcase" :href="'dev-crm.html?case=' + c.dev_case.id" @click.stop :title="'開啟業務開發商機：' + c.dev_case.name" x-text="'來自業務開發：' + c.dev_case.name"></a></template>
               <div class="cm-card__sales" x-show="salesOwnerName(c) && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + salesOwnerName(c)"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
@@ -560,6 +561,7 @@
                 <span class="cm-header__project-sub"
                       x-show="selected.project_name && selected.project_name !== selected.customer_name"
                       x-text="selected.project_name"></span>
+                <template x-if="devCase"><a class="cm-devcase cm-devcase--head" data-testid="cm-header-devcase" :href="'dev-crm.html?case=' + devCase.id" title="開啟業務開發商機" x-text="'來自業務開發：' + devCase.name"></a></template>
               </div>
 
               <!-- Row 3（2026-09-14 合併）：數字帶 + meta 同一列 -->

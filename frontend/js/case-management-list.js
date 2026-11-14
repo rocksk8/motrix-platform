@@ -225,6 +225,7 @@ window.CM_PARTS.push(() => ({
       if (q) qs.set('q', q)
       for (const [k, on] of Object.entries(this.caseQuick)) if (on) qs.set(k, '1')
       if (this.unreadOnly) qs.set('unread', '1')
+      qs.set('with_dev_case', '1')             // 卡片／詳情標「來自業務開發：○○商機」並連回去；伺服器多回 dev_case（{id, name} 或 null；看不到那件商機的人一律 null）
       qs.set('with_sales_owner', '1')          // 卡片「業務」顯示業務負責（roles.sales，沒填退回報價人）；伺服器多回 sales_owner
       const mode = this.caseSortPref?.sortMode
       if (mode && mode !== 'custom') { qs.set('sort', mode); qs.set('dir', this.caseSortPref.sortDir || 'desc') }
