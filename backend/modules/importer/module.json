@@ -1,7 +1,7 @@
 {
   "key": "importer",
   "name": "匯入精靈",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "core": ">=1.0,<2.0",
   "license_key": "importer",
   "permissions": [],
