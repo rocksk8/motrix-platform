@@ -585,7 +585,7 @@ def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=Tr
     return results
 
 
-def format_report(results, dry):
+def format_report(results, dry, base="origin/platform", label="train"):
     out = ["列車收尾一鍵（%s）" % ("plan：唯讀" if dry else "run")]
     for r in results:
         out.append("[%s] %s" % (r.status, r.stage))
@@ -595,6 +595,9 @@ def format_report(results, dry):
     todo = [r.stage for r in results if r.status in (WILL, BLOCK)]
     out.append("")
     out.append("結果：" + ("全部完成。" if not todo else "尚有 %d 個階段：%s" % (len(todo), "、".join(todo))))
+    if dry:
+        out.append("（選用）文字對照表（本班有用語改寫時）：python tools/platform/text_diff_table.py --base %s --head HEAD --title %s --out docs/platform/plans/TEXT-DIFF-TABLE-%s.md"
+                   % (base, label.upper(), label.upper()))
     return "\n".join(out)
 
 
@@ -632,7 +635,7 @@ def main(argv=None):
             return 0 if r["pyc"] == 0 and r["pycache"] == 0 else 1
         dry = a.cmd == "plan"
         res = run_stages(REPO, a.base, a.label, a.step_file, a.allow_no_version_record, a.trailer, dry, a.only)
-        print(format_report(res, dry))
+        print(format_report(res, dry, a.base, a.label))
         return 1 if any(r.status in (WILL, BLOCK) for r in res) else 0
     except ValueError as e:
         print("錯誤：%s" % e, file=sys.stderr)
