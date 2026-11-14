@@ -130,6 +130,7 @@ def test_f1_the_case_page_task_list_follows_the_same_rule():
     a = s.index("async _loadCaseTasks(quoteNo)")
     blk = s[a:s.index("fetch(`/api/daily-tasks", a)]
     assert "this.session.role !== 'superadmin' && !this.hasModule('daily_task') && !this.hasModule('case_manage')" in blk
+    assert "this.caseTasks = []; this.caseTasksLoading = false; return" in blk   # 提早 return 不能讓「載入中…」卡住（h5）
 
 
 # ───────────── F②：被擋的分頁說白話 ─────────────
