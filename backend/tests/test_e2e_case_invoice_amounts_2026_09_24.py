@@ -27,6 +27,11 @@ def _open(browser, base, user):
     page.goto(f"{base}/pages/case-management.html?q={NO}&tab=fin")
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=10000)
+    # T86 案件 UX #9：「發票資料」預設收合；這支測試要填發票欄位，先按真的展開鈕（有待處理提示的期別本來就自動展開，不重複按）
+    for i in range(page.locator('[data-testid^="pay-detail-toggle-"]').count()):
+        t = page.locator(f'[data-testid="pay-detail-toggle-{i}"]')
+        if t.get_attribute("aria-expanded") != "true":
+            t.click()
     return page
 
 

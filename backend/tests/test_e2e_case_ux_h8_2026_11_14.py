@@ -126,3 +126,75 @@ def test_feed_send_button_hint_and_focus_ring_not_error_red(live_server, make_us
     box.fill("測試內容")
     page.locator('[data-testid="cm-feed-send-hint"]').wait_for(state="hidden", timeout=5000)   # x-show 晚一個影格，不能立刻斷言
     assert send.is_enabled()
+
+
+# ── #9 財務款項卡：發票資料收合＋千分位＋提示改灰字 ─────────────────────────────────────
+def _open_fin(live_server, e2e_browser, user):
+    from tests.test_e2e_case_concurrent_edit_2026_09_24 import _login, NOTE_INPUT
+    from tests.test_case_money_mask_2026_09_24 import NO as MNO
+    page = e2e_browser.new_context().new_page()
+    page.on("dialog", lambda d: d.accept())
+    _login(page, live_server, *user)
+    page.goto(f"{live_server}/pages/case-management.html?q={MNO}&tab=fin")
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{MNO}'", timeout=10000)
+    return page
+
+
+@pytest.mark.e2e
+def test_payment_card_invoice_section_collapsed_by_default_and_expands(live_server, make_user, e2e_browser):
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_fin1", role="finance")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    toggle0 = page.locator('[data-testid="pay-detail-toggle-0"]')
+    toggle1 = page.locator('[data-testid="pay-detail-toggle-1"]')
+    assert toggle0.get_attribute("aria-expanded") == "false"
+    # 收合時：發票欄位不可見，但標題列摘要告知第一期已填了發票金額；第二期尚未填寫
+    assert not page.locator('[data-testid="invoice-pretax"]').nth(0).is_visible()
+    assert "已填發票金額" in toggle0.inner_text()
+    assert "尚未填寫" in toggle1.inner_text()
+    # 預設仍看得到的：預計收款日、收款日期、備註
+    assert page.locator('#pay-1-expected').is_visible() and page.locator('#pay-1-received-at').is_visible()
+    toggle0.click()
+    page.locator('[data-testid="invoice-pretax"]').nth(0).wait_for(state="visible", timeout=5000)
+    assert toggle0.get_attribute("aria-expanded") == "true"
+    assert page.locator('#pay-1-invno').is_visible()
+
+
+@pytest.mark.e2e
+def test_payment_card_half_filled_invoice_auto_expands(live_server, make_user, e2e_browser):
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_fin2", role="finance")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    toggle1 = page.locator('[data-testid="pay-detail-toggle-1"]')
+    toggle1.click()
+    page.locator('[data-testid="invoice-pretax"]').nth(1).fill("6000")
+    half = page.locator('[data-testid="invoice-half"]').nth(1)
+    half.wait_for(state="visible", timeout=5000)
+    assert "（需確認）" in toggle1.inner_text()
+    # 正對照：第一期（已完整填寫、合計與金額相符）不加「需確認」
+    assert "（需確認）" not in page.locator('[data-testid="pay-detail-toggle-0"]').inner_text()
+
+
+@pytest.mark.e2e
+def test_payment_amount_inputs_show_thousands_separator_and_rounding_note_is_not_warning_color(live_server, make_user, e2e_browser):
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_fin3", role="finance")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    # 第一期含稅 3087 ⇒ 3,087；未聚焦時顯示千分位
+    assert page.locator('[data-num="wt-1"]').input_value() == "3,087"
+    # 聚焦後改打帶千分位的數字仍能解析，存的是數值（第一期不是尾款，不受尾款自動吸收影響）
+    box = page.locator('[data-num="wt-1"]')
+    box.fill("5,000")
+    box.blur()
+    page.wait_for_function(f"() => {DATA_JS}.paymentItems()[0].amount === 5000", timeout=5000)
+    assert box.input_value() == "5,000"
+    note = page.locator('[data-testid="pay-rounding-note"]')
+    note.wait_for(state="visible", timeout=5000)
+    assert "↩" not in note.inner_text() and "四捨五入" in note.inner_text()
+    color = note.evaluate("e => getComputedStyle(e).color")
+    warn = page.evaluate("() => { const e = document.createElement('i'); e.style.color = 'var(--tone-orange-fg)'; document.body.appendChild(e); const c = getComputedStyle(e).color; e.remove(); return c }")
+    assert color != warn, "四捨五入說明仍用警示橘色"

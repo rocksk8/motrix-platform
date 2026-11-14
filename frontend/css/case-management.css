@@ -572,6 +572,16 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   /* 「發布更新」：可按時用品牌色；停用時用灰底＋深灰字並加邊框，旁邊另有提示文字說明原因 */
   .feed-compose__send { padding:5px 16px; font-size:12px; font-weight:600; border-radius:6px; border:1px solid transparent; cursor:pointer; font-family:var(--font-zh); transition:background .12s; background:var(--accent); color:var(--surface); }
   .feed-compose__send:disabled { background:var(--surface-neutral); color:var(--text-secondary); border-color:var(--line-strong); cursor:not-allowed; }
+  /* T86 案件 UX #9：含稅／未稅／稅額三格。原本把 display:grid 寫在 inline style，被 Alpine x-show 顯示時移除 inline display
+     而退回 block，三格直排；改用 class 才不會被 x-show 吃掉。 */
+  .pay-amt-grid { flex:1; min-width:0; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
+  /* T86 案件 UX #9：款項卡的「發票資料」收合區 */
+  .pay-detail { margin-top:8px; border-top:1px dashed var(--border-light); padding-top:6px; }
+  .pay-detail__toggle { display:flex; align-items:center; gap:8px; width:100%; padding:3px 0; border:0; background:none; cursor:pointer; text-align:left; font-size:12px; font-weight:600; color:var(--ink-strong); font-family:var(--font-zh); }
+  .pay-detail__toggle:focus-visible { outline:2px solid var(--ink-strong); outline-offset:2px; border-radius:4px; }
+  .pay-detail__caret { width:12px; color:var(--text-secondary); }
+  .pay-detail__sum { font-weight:400; color:var(--text-secondary); }
+  .pay-detail__body { padding:8px 0 2px 20px; }
   .feed-autobar { display:flex; align-items:center; gap:10px; padding:6px 20px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); background:var(--surface-muted); border-bottom:1px solid var(--border-light); flex-shrink:0; }
   .feed-autobar__btn { padding:1px 10px; font-size:12px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-strong); cursor:pointer; font-family:var(--font-zh); }
   .feed-compose__hint { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); }
