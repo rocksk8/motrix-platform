@@ -169,7 +169,7 @@ window.CM_PARTS.push(() => ({
     // 「只看有新動態」與「自訂（拖曳）排序」仍只作用在已載入的案件上。
     casePageSize: CM_LIST_PAGE_DEFAULT,
     // T65 C2：案件清單的個人檢視偏好／頁籤組合（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）
-    lvOn: { tab: false, size: false, mergeWon: false },
+    lvOn: { tab: false, size: false, mergeWon: true },      // T86 案件UX #8：預設合併（設定中心 cases_merge_won_tab 預設 1）；公司明確存了 0 才分開
     pv: { hidden: [], order: [], tab: '', size: 0 },
     lvOpen: false,
     get lvAny() { return this.lvOn.tab || this.lvOn.size },
@@ -178,7 +178,7 @@ window.CM_PARTS.push(() => ({
     async initListView(tk) {
       const g = await window.MotrixPublicFlags.read(['list_view'], { token: tk })
       const lv = g.list_view || {}
-      this.lvOn = { tab: lv.cases_personal_default_tab === 1, size: lv.cases_personal_page_size === 1, mergeWon: lv.cases_merge_won_tab === 1 }
+      this.lvOn = { tab: lv.cases_personal_default_tab === 1, size: lv.cases_personal_page_size === 1, mergeWon: lv.cases_merge_won_tab !== 0 }
       if (!(this.lvAny || this.lvOn.mergeWon)) return
       let reload = false
       if (this.lvOn.mergeWon && this.listTab === '已成案') { this.listTab = 'all'; reload = true }
@@ -309,7 +309,9 @@ window.CM_PARTS.push(() => ({
       return out.length ? out : [{ t, hit: false }]
     },
 
-    onCaseSearchInput() {
+    // 注音／拼音輸入法組字中（isComposing）不送搜尋：否則每打一個音就重新查詢、重畫清單，組字會被打斷；選定字（compositionend）才查
+    onCaseSearchInput(ev) {
+      if (ev && ev.isComposing) return
       clearTimeout(this._searchTimer)
       this._searchTimer = setTimeout(() => this.loadCases(), 300)
     },

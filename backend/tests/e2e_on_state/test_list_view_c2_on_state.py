@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """T65 C2 案件清單個人檢視偏好／頁籤組合 ON 狀態：真瀏覽器＋真的設定 API。
 場景：版面旗標＋list_view 開啟 ⇒ 面板出現；選預設頁籤「已結案」＋每次載入 25 件 ⇒ 儲存 ⇒ 重新載入仍套用；還原預設 ⇒ 回「進行中」＋100 件；
-合併「已成案」頁籤 ⇒ 該頁籤消失、其他三個仍在；預設（選項全 0）四個頁籤都在。
+預設（T86 起）合併「已成案」頁籤 ⇒ 只有 進行中／已結案／待精算；公司在設定中心明確存 0 ⇒ 四個頁籤都在。
 """
 import pytest
 
@@ -19,14 +19,15 @@ def _open(page, base, user):
     page.wait_for_function("() => %s.cases !== undefined && %s.loading === false" % (DATA_JS, DATA_JS), timeout=20000)
 
 
-def test_c2_default_has_four_tabs_and_options_do_nothing_when_off(live_server, make_user, new_context):
+def test_c2_default_merges_won_tab_and_options_do_nothing_when_off(live_server, make_user, new_context):
     u = make_user(username="on_lc0", role="superadmin")
     ctx = new_context()
     token_of(ctx, live_server, u)
     seed_case("MQ-ONLC-000")
     page = ctx.new_page()
     _open(page, live_server, u)
-    assert page.evaluate(TABS_JS) == ["進行中", "已成案", "已結案", "待精算"]
+    page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=10000)
+    assert page.evaluate(TABS_JS) == ["進行中", "已結案", "待精算"]
     assert page.evaluate("() => %s.casePageSize" % DATA_JS) == 100
     assert page.get_by_test_id("lv-toggle").count() == 1 and not page.get_by_test_id("lv-toggle").is_visible()
 
@@ -55,9 +56,12 @@ def test_c2_personal_prefs_persist_and_merge_won_tab(live_server, make_user, new
     page.get_by_test_id("lv-panel").wait_for(state="visible", timeout=5000)
     page.get_by_text("還原預設").click()
     page.wait_for_function("() => %s.casePageSize === 100" % DATA_JS, timeout=15000)
-    # 合併重複的「已成案」頁籤（公司層）：只剩三個；其他頁籤仍在
-    set_flag(ctx, live_server, tk, "list_view", "cases_merge_won_tab", 1, as_int=True)
-    page.reload()
-    page.wait_for_function("() => %s.lvOn && %s.lvOn.mergeWon === true" % (DATA_JS, DATA_JS), timeout=20000)
+    # 預設已合併：只有三個頁籤
     page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=10000)
     assert page.evaluate(TABS_JS) == ["進行中", "已結案", "待精算"]
+    # 公司明確存 0（想分開顯示）⇒ 四個頁籤都在（已經存過 0 的正式機不會跟著預設變）
+    set_flag(ctx, live_server, tk, "list_view", "cases_merge_won_tab", 0, as_int=True)
+    page.reload()
+    page.wait_for_function("() => %s.lvOn && %s.lvOn.mergeWon === false" % (DATA_JS, DATA_JS), timeout=20000)
+    page.wait_for_function("(js) => eval(js)().length === 4", arg=TABS_JS, timeout=10000)
+    assert page.evaluate(TABS_JS) == ["進行中", "已成案", "已結案", "待精算"]

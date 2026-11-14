@@ -215,7 +215,7 @@
           <div class="cm-list__search">
             <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input class="cm-list__search-input" type="text" placeholder="搜尋單號、客戶或專案…"
-                   x-model="search" @input="onCaseSearchInput()">
+                   x-model="search" @input="onCaseSearchInput($event)" @compositionend="onCaseSearchInput()">
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px" x-show="caseViewMode==='list'">
             <select class="cm-list__search-input" style="width:auto;flex:1;padding-left:10px;cursor:pointer"
@@ -5130,7 +5130,7 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
       // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format'], { token: s.token })
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format', 'list_view'], { token: s.token })
       if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
@@ -5150,7 +5150,11 @@ window.CM_PARTS.push(() => ({
       // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
       if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
           && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
-      if (!g.builder_layout || g.builder_layout.case_management !== true) return
+      // T86 案件UX #8：沒開自訂版面時也要套用「合併已成案頁籤」（公司層設定，預設合併）；個人檢視偏好仍要版面開啟才有
+      if (!g.builder_layout || g.builder_layout.case_management !== true) {
+        this.lvOn = { ...this.lvOn, mergeWon: ((g.list_view || {}).cases_merge_won_tab) !== 0 }
+        return
+      }
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
         st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}.cm-biz-lo{display:flex;flex-direction:column}'
