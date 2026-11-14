@@ -1285,7 +1285,7 @@
         const LV = window.MotrixListView
         const loaded = await LV.load(tk, 'quotations.view')
         if (!loaded) {                                // 讀不到個人偏好（不是「沒有偏好」：沒有列時伺服器回 200＋預設）：不開放編輯，否則存檔會把已存的偏好蓋成預設
-          this.toast('個人檢視設定讀取失敗，先以公司預設顯示；請重新整理頁面', '#DC2626')
+          this.toast('個人檢視設定讀取失敗，先以公司預設顯示；請重新整理頁面', '#DC2626', 6000)
           return
         }
         this.pv = LV.sanitize(loaded, { tabs: this.tabs.map(t => t.key) })

@@ -64,7 +64,7 @@
     el.setAttribute('role', 'alert')
     el.setAttribute('data-testid', 'flags-failed-notice')
     el.textContent = text
-    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;max-width:90vw;padding:10px 16px;border-radius:8px;' +
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;width:max-content;max-width:90vw;padding:10px 16px;border-radius:8px;' +
       'background:#991B1B;color:#fff;font:13px/1.5 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.25)'
     document.body.appendChild(el)
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el) }, 6000)
