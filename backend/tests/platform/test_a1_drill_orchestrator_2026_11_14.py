@@ -465,7 +465,7 @@ def test_default_ports_avoid_the_ports_other_windows_hold():
 
 
 @pytest.mark.parametrize("argv", [
-    ["--erp-port", "666"], ["--dash-port", "8765"], ["--erp-port", "80"], ["--dash-port", "70000"],
+    ["--erp-port", "666"], ["--dash-port", "8765"], ["--erp-port", "6766"], ["--dash-port", "6766"], ["--erp-port", "80"], ["--dash-port", "70000"],
     ["--erp-port", "7000", "--dash-port", "7000"],
 ])
 def test_main_rejects_unreasonable_ports(argv):

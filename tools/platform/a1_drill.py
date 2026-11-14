@@ -50,6 +50,7 @@ import a1_drill_preflight as PF  # noqa: E402
 import drill_module_apply as DMA  # noqa: E402
 
 ERP_PORT, DASH_PORT = PF.ERP_PORT, PF.DASH_PORT
+RESERVED_PORTS = (666, 6766, 8765)   # 正式 ERP／其他視窗的 ERP／預設儀表板：演練絕不佔用，也不讓埠類別去殺它們
 BASE_ROOT = PF.DRILL_BASE
 REPORT_ROOT = r"D:\Claude-pm\a1-drill-reports"
 SCENARIOS = ("G", "B1", "B2a", "B2b", "B3", "B4", "B5", "B6", "B7")
@@ -1291,8 +1292,8 @@ def main(argv=None):
     if bad:
         ap.error("不認得的情境：%s（可用：%s）" % (bad, ",".join(SCENARIOS)))
     for name in ("erp_port", "dash_port"):
-        if not 1024 <= getattr(a, name) <= 65535 or getattr(a, name) in (666, 8765):
-            ap.error("--%s 不合理（不可是正式 ERP 的 666 或儀表板預設的 8765）：%s" % (name.replace("_", "-"), getattr(a, name)))
+        if not 1024 <= getattr(a, name) <= 65535 or getattr(a, name) in RESERVED_PORTS:
+            ap.error("--%s 不合理（不可是正式 ERP 的 666、其他視窗用的 6766、儀表板預設的 8765）：%s" % (name.replace("_", "-"), getattr(a, name)))
     if a.limit_scale <= 0:
         ap.error("--limit-scale 必須大於 0")
     if a.erp_port == a.dash_port:

@@ -57,3 +57,43 @@ def test_owned_processes_port_class_finds_orphan_uvicorn_without_drill_dir_in_cm
     finally:
         p.kill()
         p.wait(10)
+
+
+def _spawn_port_uvicorn(port):
+    import subprocess
+    import sys
+    import time
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "uvicorn", "main:app", "--port", str(port)],
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    time.sleep(1.5)
+    return p
+
+
+def test_owned_processes_spares_a_process_created_before_the_drill_started(tmp_path):
+    """真程序反向對照：命令列完全符合演練埠，但建立時間早於「演練開始」⇒ 不能被找到（可能是別窗早就在跑的）。"""
+    port = 6878
+    p = _spawn_port_uvicorn(port)
+    try:
+        if p.pid < PF.MIN_KILL_PID:
+            pytest.skip("pid 太小")
+        base = str(tmp_path / "no-such-drill")
+        assert p.pid in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]          # 正對照：開始時間設得早 ⇒ 找得到
+        future = PF.now_ticks() + 10 * 60 * 10_000_000                                              # 演練「十分鐘後才開始」
+        assert p.pid not in [o["id"] for o in PF.owned_processes([], base, future, ports=(port,))]
+    finally:
+        p.kill()
+        p.wait(10)
+
+
+def test_owned_processes_spares_a_low_pid_process_that_is_not_in_the_records(tmp_path, monkeypatch):
+    """真程序反向對照：pid 低於硬性門檻、又不在編排器紀錄裡 ⇒ 不能被找到（門檻調到比這個真程序的 pid 還大來模擬「pid<1000」）。"""
+    port = 6879
+    p = _spawn_port_uvicorn(port)
+    try:
+        base = str(tmp_path / "no-such-drill")
+        assert p.pid in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]          # 正對照：門檻正常 ⇒ 找得到
+        monkeypatch.setattr(PF, "MIN_KILL_PID", p.pid + 1)
+        assert p.pid not in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]
+    finally:
+        p.kill()
+        p.wait(10)
