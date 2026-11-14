@@ -712,6 +712,8 @@ div:has(> .cm-section-title) { flex-wrap:wrap; row-gap:6px; }
 .pay-item__head { flex-wrap:wrap; row-gap:8px; }
 .pay-item__head .pay-amt-grid { flex:1 1 100%; order:20; }
 .fin-kpi4 { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
+.fin-kpi4 { align-items:start; }
+.fin-kpi4 > * { border-left:0 !important; padding-left:0 !important; min-width:0; }
 .pay-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
 .pay-grid > :last-child:nth-child(odd), .pay-grid > .pay-note { grid-column:1 / -1; }
 .visit-row { grid-template-columns:minmax(0,1fr) 56px !important; }
