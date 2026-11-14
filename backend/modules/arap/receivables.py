@@ -91,6 +91,8 @@ def collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None
         q_total  = float(row["total"] or 0)
         q_pretax = float(row["pretax"] or 0) or q_total
         for idx, pi in enumerate(items):
+            if not isinstance(pi, dict):                 # 款項項目不是物件（髒資料）：略過，不讓整張報表 500（T87 修）
+                continue
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
                 continue
@@ -181,7 +183,7 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
             continue
         amounts = payment_item_amounts(row["total"] or 0, pay, row["pretax"])
         for idx, pi in enumerate(pay):
-            if not pi.get("received"):
+            if not isinstance(pi, dict) or not pi.get("received"):     # 非物件（髒資料）略過（T87 修；營收報表的收入明細來源）
                 continue
             rat = norm_ymd(pi.get("receivedAt"))
             if not (d0 <= rat <= d1):
@@ -233,7 +235,7 @@ def expense_entries(conn, start, end):
             continue
         items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
         for idx, pi in enumerate(items):
-            if not pi.get("received"):
+            if not isinstance(pi, dict) or not pi.get("received"):
                 continue
             try:
                 fee = float(pi.get("feeAmount") or 0)

@@ -380,13 +380,16 @@ def _build_revenue(p: dict, u: dict) -> dict:
                       _col("revenue", "營收", "money"), _col("share", "占比", "pct")], rows)]
     p_out = dict(p)
     p_out["basis"] = basis
+    if collected.get("dirtyCount"):
+        notes.append(_rp._dirty_note(collected["dirtyCount"]) + "（款項的金額或比例不是數字）。")
     return _finish("revenue", p_out, kpis, tables, notes, series=series)
 
 
 # ── 毛利 ─────────────────────────────────────────────────────────────────────
 
 def _build_gross_margin(p: dict, u: dict) -> dict:
-    cases = [c for c in _cases_for(p) if _in_months(c["wonMonth"], p)]
+    data = _rp._collect("0000-01-01", "9999-12-31", p.get("department_id"))
+    cases = [c for c in _cases_for(p, data) if _in_months(c["wonMonth"], p)]
     cases.sort(key=lambda c: (c["quoteDate"] or "", c["quoteNo"]), reverse=True)
     settled = [c for c in cases if c["settleStatus"] == "finalized" and c["actualMarginPct"] is not None]
     est = _weighted_pct([(c["pretax"], c["netMarginPct"] or 0) for c in cases])
@@ -423,6 +426,8 @@ def _build_gross_margin(p: dict, u: dict) -> dict:
                       _col("dept", "部門"), _col("total", "合約金額", "money"), _col("estMargin", "預估營業利益率", "pct"),
                       _col("actMargin", "實際營業利益率", "pct"), _col("grossProfit", "毛利金額", "money"),
                       _col("settle", "精算", "badge")], rows)]
+    if data.get("dirtyCount"):
+        notes.append(_rp._dirty_note(data["dirtyCount"]) + "（款項的金額或比例不是數字）。")
     return _finish("gross-margin", p, kpis, tables, notes)
 
 

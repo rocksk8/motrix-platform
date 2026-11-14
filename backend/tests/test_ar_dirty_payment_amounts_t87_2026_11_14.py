@@ -296,3 +296,34 @@ def test_l1_public_interface_has_no_new_names():
     from helpers import tax_calc as T
     assert not [n for n in dir(T) if n in ("parse_money", "money", "MONEY_BAD", "amount_unknown")]
     assert not {"parse_money", "money", "MONEY_BAD", "amount_unknown"} & set(T.__all__)
+
+
+# ── 營運報表／營收／毛利共用的 reports._collect：款項項目不是物件（例如字串）⇒ 略過並計數，不 500 ────────────
+
+def test_collect_skips_non_object_payment_items_and_counts_them(client, hdr):
+    h, i = hdr
+    _case("CL-OK", i, "dirty_sa", pay=[{"type": "全額", "amount": 105000, "received": True, "receivedAt": "2026-10-20"}])
+    _case("CL-STR", i, "dirty_sa", pay=["垃圾", {"type": "尾款", "amount": 700, "received": False}], total=700, pretax=700)
+    _case("CL-NONE", i, "dirty_sa", pay=[None, 5, {"type": "尾款", "amount": "5x00", "received": False}])
+    from modules.analytics.api import reports as R
+    d = R._collect("0000-01-01", "9999-12-31")
+    assert d["dirtyCount"] == 4                                              # "垃圾"、None、5、"5x00"
+    qs = {(it["quoteNo"], it["type"]) for it in d["allItems"]}
+    assert ("CL-OK", "全額") in qs and ("CL-STR", "尾款") in qs
+    assert not [q for q in qs if q[0] == "CL-NONE"]                          # 三筆全壞的案件沒有任何款項列
+    for path in ("/api/reports/financial", "/api/std-reports/revenue", "/api/std-reports/gross-margin"):
+        r = client.get(path, headers=h)
+        assert r.status_code == 200, (path, r.text[:200])
+    rev = client.get("/api/std-reports/revenue", headers=h).json()
+    gm = client.get("/api/std-reports/gross-margin", headers=h).json()
+    assert any("有 4 筆資料格式異常未計入" in n for n in rev["notes"]) and any("有 4 筆資料格式異常未計入" in n for n in gm["notes"])
+
+
+def test_collect_clean_data_has_no_dirty_count_and_notes_unchanged(client, hdr):
+    h, i = hdr
+    _case("CL-C", i, "dirty_sa", pay=[{"type": "全額", "amount": 105000, "received": True, "receivedAt": "2026-10-20"}])
+    from modules.analytics.api import reports as R
+    assert "dirtyCount" not in R._collect("0000-01-01", "9999-12-31")
+    for path in ("/api/std-reports/revenue", "/api/std-reports/gross-margin"):
+        j = client.get(path, headers=h).json()
+        assert "dirtyCount" not in j and not any("資料格式異常" in n for n in j["notes"])
