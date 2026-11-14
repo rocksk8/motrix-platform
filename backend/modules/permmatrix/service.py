@@ -430,14 +430,16 @@ def _parse_batch(changes):
     return out
 
 
-def _batch_cell(conn, ch):
+def _batch_cell(conn, ch, seed_grants=None):
     """一格的現況與去向（預覽與套用共用，**同一支函式**）。
     status：`nochange`（已經是這個狀態）｜`immediate`（立即生效）｜`pending`（放寬高風險：確認期間＋第二位最高管理者核准）。"""
     from helpers import perm_text as T
     c = _cap_or_err(ch["cap"])
     if ch["role"] not in _roles():
         raise PermError("角色不存在或不可調整：%s" % ch["role"])
-    seeded = ch["cap"] in P.seed_from_legacy(CAP.all_caps()).role_grants.get(ch["role"], ())
+    if seed_grants is None:
+        seed_grants = P.seed_from_legacy(CAP.all_caps()).role_grants
+    seeded = ch["cap"] in seed_grants.get(ch["role"], ())
     if ch["granted"] and not seeded and not c.delegable:
         raise PermError("「%s」不可委派（僅最高管理者）" % c.label)
     cur = conn.execute("SELECT granted FROM perm_role_caps WHERE role=? AND cap=?", (ch["role"], ch["cap"])).fetchone()
@@ -450,7 +452,8 @@ def _batch_cell(conn, ch):
 
 def _batch_plan(conn, changes):
     import hashlib
-    cells = [_batch_cell(conn, ch) for ch in _parse_batch(changes)]
+    seed_grants = P.seed_from_legacy(CAP.all_caps()).role_grants        # 整批只算一次
+    cells = [_batch_cell(conn, ch, seed_grants) for ch in _parse_batch(changes)]
     users = {}
     for x in cells:
         if x["status"] != "nochange" and x["role"] not in users:

@@ -51,17 +51,20 @@ def test_groups_are_all_open_and_group_switch_and_chips_change_only_the_form(liv
     # 總開關：第一群全選 → 該群的鍵（能勾的）全在 form.modules；再按一次全部取消
     g0 = page.evaluate(f"() => {DATA}.moduleGroups[0]")
     togglable = [m["key"] for m in g0["mods"] if m["key"] not in ("cashier", "finance", "financial_view")]
-    page.locator(f'[data-testid="pk-user-group-{g0["group"]}"] input').click()
-    mods = page.evaluate(f"() => {DATA}.form.modules")
-    assert set(togglable) <= set(mods)
-    page.locator(f'[data-testid="pk-user-group-{g0["group"]}"] input').click()
-    mods = page.evaluate(f"() => {DATA}.form.modules")
-    assert not (set(togglable) & set(mods))
+    sw = page.locator(f'[data-testid="pk-user-group-{g0["group"]}"] input')
+    start_all = set(togglable) <= set(page.evaluate(f"() => {DATA}.form.modules"))   # 這個使用者原本可能已勾滿這一群 ⇒ 第一下是全部取消
+    sw.click()
+    mods = set(page.evaluate(f"() => {DATA}.form.modules"))
+    assert (not (set(togglable) & mods)) if start_all else (set(togglable) <= mods)
+    sw.click()
+    mods = set(page.evaluate(f"() => {DATA}.form.modules"))
+    assert (set(togglable) <= mods) if start_all else (not (set(togglable) & mods))
 
     # 差異預覽：相對於開窗當下；還沒存，資料庫不動
     page.locator(f'[data-testid="mod-chip-{first_chip}"]').click()
-    assert page.locator('[data-testid="pk-user-diff"]').is_visible()
-    assert "新增" in page.locator('[data-testid="pk-user-diff"]').inner_text()
+    page.locator('[data-testid="pk-user-diff"]').wait_for(state="visible", timeout=5000)
+    was_on = first_chip in ("dashboard", "equipment")          # 原本已勾 ⇒ 這一下是取消；否則是新增
+    assert ("取消 1 項" if was_on else "新增 1 項") in page.locator('[data-testid="pk-user-diff"]').inner_text()
     assert json.loads(_q("SELECT modules FROM users WHERE id=?", (uid,))[0]["modules"]) == ["dashboard", "equipment"]
 
 
@@ -121,4 +124,4 @@ def test_custom_role_modal_uses_the_same_picker(live_server, make_user, e2e_brow
     on0 = page.evaluate(f"() => {DATA}.crForm.modules.includes('{key}')")
     page.locator(f'[data-testid="cr-chip-{key}"]').click()
     assert page.evaluate(f"() => {DATA}.crForm.modules.includes('{key}')") is (not on0)
-    assert page.locator('[data-testid="pk-cr-diff"]').is_visible()
+    page.locator('[data-testid="pk-cr-diff"]').wait_for(state="visible", timeout=5000)

@@ -124,3 +124,35 @@ def test_apply_writes_audit_rows_after_commit(client, boss, flows):
         conn.close()
     assert len(rows) == 1
     json.dumps(rows[0][0])
+
+
+def test_empty_source_is_refused_with_409_on_preview_and_apply_and_nothing_is_written(client, boss, flows):
+    """來源沒有簽核層 ⇒ 複製過去＝把對方放寬成「任一最高管理者簽核」：後端直接拒絕，不提供略過旗標。"""
+    _set_setting("shipping_approval_flow", SRC)
+    for url in ("/api/approval/flows/copy/preview", "/api/approval/flows/copy"):
+        r = client.post(url, headers=boss, json={"source": "payment_request", "targets": ["shipping"], "planHash": "x"})
+        assert r.status_code == 409, (url, r.text)
+        assert "放寬" in r.json()["detail"]
+    assert _get_setting("shipping_approval_flow", None)["tiers"] == SRC["tiers"], "被拒絕後目標流程不變"
+    r = client.post("/api/approval/flows/copy/preview", headers=boss, json={"source": "payment_request", "targets": ["shipping"], "allowEmpty": True})
+    assert r.status_code == 409, "沒有 allowEmpty 這種後門"
+
+
+def test_a_source_that_follows_the_unified_flow_is_refused(client, boss, flows):
+    """報價單跟隨統一流程：它自己存的流程沒在用，當來源會複製到一份死資料 ⇒ 409 並指向正確來源。"""
+    r = client.post("/api/approval/flows/copy/preview", headers=boss, json={"source": "quotation", "targets": ["shipping"]})
+    assert r.status_code == 409 and "統一簽核流程" in r.json()["detail"], r.text
+
+
+def test_audit_keeps_the_previous_tiers_not_only_a_digest(client, boss, flows):
+    from db import get_db
+    _set_setting("shipping_approval_flow", {"tiers": [{"order": 1, "approvers": [{"sourceType": "user", "username": "old_one"}]}]})
+    h = client.post("/api/approval/flows/copy/preview", headers=boss, json=_body(targets=["shipping"])).json()["planHash"]
+    r = client.post("/api/approval/flows/copy", headers=boss, json=_body(targets=["shipping"], planHash=h))
+    assert r.status_code == 200 and "_before" not in r.json() and all("_beforeValue" not in t for t in r.json()["targets"])
+    conn = get_db()
+    try:
+        rows = [tuple(x) for x in conn.execute("SELECT * FROM audit_log WHERE action='settings.shipping_approval_flow.copy'").fetchall()]
+    finally:
+        conn.close()
+    assert len(rows) == 1 and "old_one" in json.dumps(rows[0], ensure_ascii=False), "稽核要能還原舊流程"

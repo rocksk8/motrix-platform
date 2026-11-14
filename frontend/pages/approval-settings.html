@@ -1175,8 +1175,6 @@
           </template>
         </div>
         <div x-show="afc.plan">
-          <div x-show="afc.plan && afc.plan.sourceEmpty" style="font-size:12px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:8px 10px;margin-bottom:8px" data-testid="afc-empty-warning">
-            這份流程沒有設定任何簽核層：複製過去的單據類型會改回預設（任一最高管理者簽核）。</div>
           <div style="font-size:13px;font-weight:600;margin-bottom:6px" x-text="afcSummaryText()" data-testid="afc-summary"></div>
           <div x-show="afcInflightText()" style="font-size:13px;margin-bottom:10px;padding:8px 10px;border-radius:6px;background:#F3F4F6" x-text="afcInflightText()" data-testid="afc-inflight"></div>
           <template x-for="t in ((afc.plan||{}).targets||[])" :key="t.docType">

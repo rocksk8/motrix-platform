@@ -265,10 +265,12 @@ def copy_approval_flow(body: dict = Body(...), authorization: str = Header(None)
     actor = _require_user(authorization, require_superadmin=True)
     from helpers import approval_flow_copy as afc
     out = _flow_copy_run(lambda c: afc.apply(c, actor, body))
+    before_values = out.pop("_before", {})
     for p in out["targets"]:
         if p["docType"] in out["applied"]:
             _audit(_tok(authorization), "settings.%s_approval_flow.copy" % p["docType"], "settings", "%s_approval_flow" % p["docType"],
                    "複製簽核流程到%s" % p["label"], {"from": out["source"], "before": p["before"], "after": p["after"],
+                                                       "beforeValue": before_values.get(p["docType"]),
                                                        "inflightTotal": p["inflight"]["total"], "inflightUsingFlow": p["inflight"]["usingFlow"]})
     afc.notify(actor, out, out["applied"])
     return out

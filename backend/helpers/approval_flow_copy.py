@@ -134,16 +134,21 @@ def _follows_unified(conn, doc_type) -> bool:
 
 
 def _plan(conn, req) -> dict:
+    if req["source"] != UNIFIED and _follows_unified(conn, req["source"]):
+        raise FlowCopyError("「%s」目前跟隨統一流程，它自己的流程不會生效，不能當來源。請改選「統一簽核流程」當來源，或先到簽核設定頁取消它的「跟隨統一流程」。" % _label(req["source"]), 409)
     src = _normalize(_read_setting(conn, _key(req["source"]), {"tiers": []}))
     people = []
     for dt in req["targets"]:
         cur = _normalize(_read_setting(conn, _key(dt), {"tiers": []}))
-        row = {"docType": dt, "label": _label(dt), "before": _digest(cur), "after": _digest(src), "status": "copy", "note": ""}
+        row = {"docType": dt, "label": _label(dt), "before": _digest(cur), "after": _digest(src), "status": "copy", "note": "", "_beforeValue": cur}
         if _follows_unified(conn, dt):
             row.update(status="skipped", note="目前跟隨統一流程：改它自己的流程不會生效。請先到簽核設定頁取消「跟隨統一流程」再複製。")
         elif _same(cur, src):
             row.update(status="nochange", note="流程已經一樣")
         people.append(row)
+    if not src["tiers"] and any(p["status"] == "copy" for p in people):
+        # 來源沒有任何簽核層 ⇒ 複製過去等於把對方改成「任一最高管理者簽核」＝放寬簽核：後端直接拒絕（不提供略過選項）
+        raise FlowCopyError("來源「%s」還沒有設定任何簽核層，複製過去會讓目標單據變成「任一最高管理者簽核」（放寬簽核）。請先在簽核設定頁設好來源流程再複製。" % _label(req["source"]), 409)
     digest = hashlib.sha256(json.dumps({"source": [req["source"], src], "targets": [[p["docType"], p["status"], _normalize(_read_setting(conn, _key(p["docType"]), {"tiers": []}))] for p in people]},
                                        sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
     return {"source": req["source"], "sourceLabel": _label(req["source"]), "sourceDigest": _digest(src), "sourceEmpty": not src["tiers"],
@@ -167,7 +172,9 @@ def _with_counts(plan, counts) -> dict:
 
 
 def _public(plan) -> dict:
-    return {k: v for k, v in plan.items() if not k.startswith("_")}
+    out = {k: v for k, v in plan.items() if not k.startswith("_")}
+    out["targets"] = [{k: v for k, v in t.items() if not k.startswith("_")} for t in plan["targets"]]
+    return out
 
 
 def preview(conn, actor, body) -> dict:
@@ -208,6 +215,7 @@ def apply(conn, actor, body) -> dict:
     out = _public(_with_counts(plan, counts))
     out["ok"] = True
     out["applied"] = applied
+    out["_before"] = {p["docType"]: p["_beforeValue"] for p in plan["targets"] if p["docType"] in applied}   # 稽核存舊值（路由取走後不回給前端）
     return out
 
 

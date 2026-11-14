@@ -283,8 +283,9 @@ def test_batch_input_validation(client, su):
 
 
 def test_batch_undo_with_the_existing_one_click_undo_restores_the_whole_batch(client, su):
-    cells = [{"role": "sales", "cap": "zz.doc.view", "granted": False}, {"role": "admin", "cap": "zz.doc.pay", "granted": False}]
+    # 注意：復原＝把取消的格子再授予回去；高風險項（如 zz.doc.pay）的再授予依既有規則要等確認期間，不在「立即復原」之列，所以這裡用一般項
+    cells = [{"role": "sales", "cap": "zz.doc.view", "granted": False}, {"role": "admin", "cap": "zz.doc.view", "granted": False}]
     assert _batch(client, su, cells).status_code == 200
-    assert _cell(client, su, "zz.doc.pay", "admin")["granted"] is False
+    assert _cell(client, su, "zz.doc.view", "admin")["granted"] is False
     assert client.post(B + "/undo", headers=su).status_code == 200
-    assert _cell(client, su, "zz.doc.view", "sales")["granted"] is True and _cell(client, su, "zz.doc.pay", "admin")["granted"] is True
+    assert _cell(client, su, "zz.doc.view", "sales")["granted"] is True and _cell(client, su, "zz.doc.view", "admin")["granted"] is True
