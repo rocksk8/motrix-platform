@@ -249,3 +249,27 @@ def test_without_ui_js_a_fallback_notice_node_appears_once_and_goes_away():
     out = json.loads(r.stdout.strip().splitlines()[-1])
     assert out["n"] == 1, "兩次讀取失敗、同一頁引入兩次，也只能有一則提示：%s" % out
     assert out["role"] == "alert" and "讀取失敗" in out["text"] and out["gone"] is True
+
+
+HARNESS_LV_SAVE = r"""
+const fs = require('fs')
+global.window = global
+global.document = {}
+const realSetTimeout = global.setTimeout
+global.setTimeout = (fn, ms, ...a) => realSetTimeout(fn, ms === 10000 ? 50 : ms, ...a)          // 10 秒逾時縮成 50 ms
+global.fetch = (url, opt) => new Promise((res, rej) => { if (opt && opt.signal) opt.signal.addEventListener('abort', () => rej(new Error('aborted'))) })     // 永遠不回應
+eval(fs.readFileSync(process.argv[1], 'utf8'))
+;(async () => {
+  const t0 = Date.now()
+  const ok = await window.MotrixListView.save('tk', 'case_list.view', window.MotrixListView.empty())
+  console.log(JSON.stringify({ ok, fast: Date.now() - t0 < 5000 }))
+})()
+"""
+
+
+@pytest.mark.skipif(not NODE, reason="沒有 node")
+def test_lv_save_that_never_answers_gives_up_and_returns_false():
+    """h11：存檔期間按鈕停用；PUT 掛住不能讓它們永遠停用 ⇒ save() 逾時（10 秒）就中止並回 false（頁面顯示儲存失敗、按鈕恢復）。"""
+    r = subprocess.run([NODE, "-e", HARNESS_LV_SAVE, str(LV_JS)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout.strip().splitlines()[-1]) == {"ok": False, "fast": True}

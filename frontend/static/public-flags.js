@@ -59,7 +59,11 @@
   var warned = false
   // 沒有 ui.js 的頁面用的備援提示：固定在畫面下方、role=alert（讀屏會念）、約 6 秒後自己消失；沒有 document 的環境（測試／worker）略過
   function showNotice(text) {
-    if (typeof document === 'undefined' || !document.body || typeof document.createElement !== 'function') return
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return
+    if (!document.body) {                                   // 腳本在 <head> 就讀失敗（body 還沒有）：等 DOM 好了再顯示，不要吞掉提示
+      if (typeof document.addEventListener === 'function') document.addEventListener('DOMContentLoaded', function () { showNotice(text) }, { once: true })
+      return
+    }
     var el = document.createElement('div')
     el.setAttribute('role', 'alert')
     el.setAttribute('data-testid', 'flags-failed-notice')

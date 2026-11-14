@@ -63,12 +63,16 @@
     return null
   }
 
+  /** ⇒ true／false。10 秒沒回應就中止並回 false（T87，h11）：頁面存檔時按鈕會停用，PUT 掛住不能讓它永遠停用。
+   *  PUT 是整筆覆寫、可重複送；逾時後伺服器若稍後才套用，結果也只是同一份偏好。 */
   async function save(token, key, o) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null
+    const timer = ctl ? setTimeout(() => ctl.abort(), 10000) : null
     try {
-      const r = await fetch('/api/list-prefs/' + encodeURIComponent(key), {
-        method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(serialize(o)) })
+      const r = await fetch('/api/list-prefs/' + encodeURIComponent(key), Object.assign({
+        method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(serialize(o)) }, ctl ? { signal: ctl.signal } : {}))
       return r.ok
-    } catch (e) { return false }
+    } catch (e) { return false } finally { if (timer) clearTimeout(timer) }
   }
 
   /** 依 order 重排表格裡帶 data-col 的儲存格（表頭與每一列）；已經是該順序就不動（可重複呼叫、不會觸發無限更新）。 */

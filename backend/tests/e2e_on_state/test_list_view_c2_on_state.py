@@ -160,3 +160,44 @@ def test_quotations_page_shows_the_flags_failed_notice_without_ui_js(live_server
     notice.wait_for(state="visible", timeout=30000)
     assert notice.get_attribute("role") == "alert" and "讀取失敗" in notice.inner_text()
     assert page.get_by_test_id("flags-failed-notice").count() == 1, "只提示一次"
+
+
+def test_c2_hung_save_times_out_and_buttons_come_back(live_server, make_user, new_context):
+    """h11：存檔時兩顆按鈕會停用（防連按）；PUT 一直沒回應不能讓它們永遠停用——10 秒逾時 ⇒ 顯示儲存失敗、按鈕恢復，使用者改的值還在。"""
+    u = make_user(username="on_lc6", role="superadmin")
+    ctx = new_context()
+    tk = token_of(ctx, live_server, u)
+    seed_case("MQ-ONLC-006")
+    set_flag(ctx, live_server, tk, "builder_layout", "case_management", 1)
+    set_flag(ctx, live_server, tk, "list_view", "cases_personal_page_size", 1, as_int=True)
+    page = ctx.new_page()
+    _open(page, live_server, u)
+    page.wait_for_function("() => %s.lvOn && %s.lvOn.size === true" % (DATA_JS, DATA_JS), timeout=20000)
+    page.route("**/api/list-prefs/case_list.view", lambda route: None if route.request.method == "PUT" else route.continue_())   # PUT 收了不回
+    page.get_by_test_id("lv-toggle").click()
+    page.get_by_test_id("lv-panel").wait_for(state="visible", timeout=5000)
+    page.evaluate("() => { const d = %s; d.pv = { ...d.pv, size: 25 } }" % DATA_JS)
+    page.get_by_test_id("lv-save").click()
+    page.wait_for_function("() => %s.lvSaving === true" % DATA_JS, timeout=5000)
+    assert page.get_by_test_id("lv-save").is_disabled()
+    page.get_by_text("儲存失敗，設定沒有改變").wait_for(state="visible", timeout=30000)
+    assert page.get_by_test_id("lv-save").is_enabled(), "逾時後按鈕要恢復，使用者才能再按一次"
+    assert page.evaluate("() => %s.casePageSize" % DATA_JS) == 100 and page.evaluate("() => %s.pv.size" % DATA_JS) == 25
+
+
+def test_quotations_prefs_read_failure_never_offers_the_panel(live_server, make_user, new_context):
+    """h11 nit：報價單清單頁的同一條路徑（和案件管理頁對稱）：偏好 GET 一直 500 ⇒ 入口不出現、沒有任何 PUT、提示讀取失敗。"""
+    u = make_user(username="on_lc7", role="superadmin")
+    ctx = new_context()
+    tk = token_of(ctx, live_server, u)
+    set_flag(ctx, live_server, tk, "builder_layout", "quotations", 1)
+    set_flag(ctx, live_server, tk, "list_view", "quotes_personal_page_size", 1, as_int=True)
+    page = ctx.new_page()
+    puts = []
+    page.on("request", lambda r: puts.append(r.url) if r.method == "PUT" and "/api/list-prefs/" in r.url else None)
+    page.route("**/api/list-prefs/quotations.view", lambda route: route.fulfill(status=500, body="{}") if route.request.method == "GET" else route.continue_())
+    inject_login(page, live_server, u[0], u[1])
+    page.goto(live_server + "/pages/quotations.html")
+    page.get_by_text("個人檢視設定讀取失敗").wait_for(state="visible", timeout=30000)
+    assert not page.get_by_test_id("lv-toggle").is_visible() and not page.get_by_test_id("lv-panel").is_visible()
+    assert puts == []
