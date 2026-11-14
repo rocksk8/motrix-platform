@@ -592,17 +592,23 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
                     last_log[l["case_id"]] = (l["d"] or "")[:10] or None
         if can_quote:
             frag, fparams = row_access.filter_sql("case", u, scope="read")
-            for r in conn.execute("SELECT quote_no, status, customer_name, quote_date, sales_person_id, deal_tag, data_json "
-                                  "FROM quotations WHERE status NOT IN ('草稿')" + frag, fparams).fetchall():
-                if p.get("sales_id") and r["sales_person_id"] != p["sales_id"]:
-                    continue
-                if p.get("department_id") and dept_of.get(r["sales_person_id"]) != p["department_id"]:
-                    continue
+            user_by_id, name_index = _rp._load_user_index(conn)
+            for r in conn.execute("SELECT quote_no, status, customer_name, quote_date, sales_person, sales_person_id, "
+                                  "deal_tag, data_json FROM quotations WHERE status NOT IN ('草稿')" + frag, fparams).fetchall():
                 if p.get("customer") and not _text_has(r["customer_name"], p["customer"]):
                     continue
                 if not _rt._in_range((r["quote_date"] or "")[:10], p):
                     continue
-                tag = r["deal_tag"] or _data(r).get("dealTag") or ""
+                qd = _data(r)
+                cr = qd.get("caseRecord") if isinstance(qd.get("caseRecord"), dict) else {}
+                # 業務與部門與案件進度同一個歸屬規則（案件管理的「業務負責」，沒填則回到開單者）
+                if p.get("sales_id"):
+                    key, _lbl = _rp._case_sales_owner(cr, r, name_index, user_by_id)
+                    if not (key[0] == "id" and key[1] == p["sales_id"]):
+                        continue
+                if p.get("department_id") and _rp._case_dept(cr, r, name_index, user_by_id)[0] != p["department_id"]:
+                    continue
+                tag = r["deal_tag"] or qd.get("dealTag") or ""
                 quote_rows.append(_db.classify_quote_funnel(r["status"], tag))
     finally:
         conn.close()
@@ -618,7 +624,7 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         else:
             s["amount"] += int(amt)
     dev = [{"status": v["status"], "count": v["count"], "amount": v["amount"] if money_ok else None,
-            "missing": v["missing"]} for v in by.values() if v["status"] in _DEV_STATUS_ORDER or v["count"]] if can_dev else []
+            "missing": v["missing"] if money_ok else None} for v in by.values() if v["status"] in _DEV_STATUS_ORDER or v["count"]] if can_dev else []
     won, lost = by["成案"]["count"], by["未成案"]["count"]
     dev_rate = round(won / (won + lost) * 100, 1) if (won + lost) else None
     q = None
@@ -635,7 +641,8 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         pipeline = by["洽談中"]["amount"]
     kpis = [
         _kpi("pipelineAmount", "洽談中預估金額", pipeline, "money",
-             "尚未填寫預估金額" if pipeline == _state("unfilled") else f"另有 {open_missing} 件未填" if open_missing else ""),
+             "" if not (can_dev and money_ok) else "尚未填寫預估金額" if pipeline == _state("unfilled")
+             else f"另有 {open_missing} 件未填" if open_missing else ""),
         _kpi("devWinRate", "商機成案率", dev_rate, "pct", "成案 ÷（成案＋未成案），不含洽談中與暫擱置"),
         _kpi("quoteWinRate", "報價成案率", q_rate, "pct", "成案 ÷（成案＋未成案），不含草稿與待回覆"),
         _kpi("quotePending", "待回覆報價", q["pending"] if q else None, "count", "已送出、尚無成案標記"),
@@ -653,8 +660,9 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         })
     open_rows.sort(key=lambda x: (x["expectedCloseDate"] is None, x["expectedCloseDate"] or "", x["caseName"]))
     notes += ["商機的日期條件依建立日，業務為被指派人與業務人員（未指派時為建立者），部門為這些人員所屬的部門；報價的日期條件依報價日。",
-              "預估金額只加總有填寫的商機，未填寫的另列件數，不當作 0 元。",
               "只列您有權限查看的商機與案件。"]
+    if can_dev and money_ok:
+        notes.insert(1, "預估金額只加總有填寫的商機，未填寫的另列件數，不當作 0 元。")
     if not can_dev:
         notes.append("您的帳號沒有業務開發模組權限，商機部分不顯示。")
     if not can_quote:
@@ -807,8 +815,8 @@ def _build_xlsx(rid: str, data: dict) -> bytes:
         if fn["dev"] or any(t["key"] == "openCases" for t in data["tables"]):
             cols = [_col("status", "狀態"), _col("count", "件數", "count"), _col("amount", "預估金額", "money"),
                     _col("missing", "未填件數", "count")]
-            if masked:
-                cols, _ = _drop_money(cols, [])
+            if masked:                                       # 未填件數也是金額欄位的資訊，一併不輸出
+                cols = [c for c in cols if c["type"] != "money" and c["key"] != "missing"]
             _put_table(wb, f, "商機漏斗", cols, fn["dev"], first=first)
             first = False
         if fn["quote"]:
