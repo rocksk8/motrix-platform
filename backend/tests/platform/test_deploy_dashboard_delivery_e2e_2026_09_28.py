@@ -19,7 +19,7 @@ pytest.importorskip("playwright.sync_api")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_deploy_dashboard_delivery_2026_09_28 import (  # noqa: E402
-    COMMIT, D, PS1, _keys, dd, fake_run, make_install, make_package)
+    COMMIT, D, PS1, _keys, dd, fake_run, fresh_state, make_install, make_package, patch_auto_apply)
 
 
 @pytest.fixture()
@@ -36,7 +36,8 @@ def dashboard(tmp_path, monkeypatch, live_server):
     monkeypatch.setattr(D, "_run_powershell", fake_run(install))
     monkeypatch.setattr(dd, "DELIVERY_INSTALL_ROOT", install)
     monkeypatch.setattr(dd, "DELIVERY_STAGING_ROOT", tmp_path / "staging")
-    monkeypatch.setattr(dd, "_delivery_state", {"prepared": {}, "running": False, "last": None})
+    monkeypatch.setattr(dd, "_delivery_state", fresh_state())
+    patch_auto_apply(monkeypatch)
     monkeypatch.setenv("MOTRIX_DELIVERY_ERP_URL", live_server)
     name = D.publish(str(make_package(tmp_path, [{"module": "系統設定/儲存位置", "version": "2026-09-28a", "content": "新頁"}])),
                      str(root), priv, now=datetime(2026, 9, 28, 3, 0, 0))
@@ -77,14 +78,16 @@ def test_apply_from_the_dashboard_end_to_end(dashboard, make_user, new_context):
     page.wait_for_function("() => /沒有開始套用/.test(document.querySelector('[data-testid=\"dl-result\"]').textContent)",
                            timeout=20000)
     assert not (dashboard["root"] / "results").exists()
-    # 對的帳密 ⇒ 套用 ⇒ 結果
+    assert page.input_value('[data-testid="dl-pass"]') == "" and not page.is_checked('[data-testid="dl-ack"]'), "同意與密碼只用一次：被拒絕後也清掉"
+    # 對的帳密 ⇒ 重新勾選確認 ⇒ 套用 ⇒ 結果
     page.fill('[data-testid="dl-pass"]', pw)
+    page.check('[data-testid="dl-ack"]')
     page.click('[data-testid="dl-apply"]')
     page.locator('[data-testid="dl-result"][data-outcome="succeeded"]').wait_for(timeout=30000)
     assert "成功" in page.text_content('[data-testid="dl-result"]')
     back = json.loads((dashboard["root"] / "results" / (dashboard["name"] + ".result.json")).read_text(encoding="utf-8"))
     assert back["outcome"] == "succeeded" and back["commit"] == COMMIT
     assert (dashboard["install"] / "backend" / "tools" / "apply_update.ps1").read_bytes() == PS1.encode("utf-8")
-    page.wait_for_function("() => /success/.test(document.querySelector('[data-testid=\"dl-last\"]').textContent)", timeout=10000)
+    page.wait_for_function("() => /成功.*新版已套用/.test(document.querySelector('[data-testid=\"dl-last\"]').textContent)", timeout=10000)
     assert page.input_value('[data-testid="dl-pass"]') == "", "密碼送出後清掉"
     assert not errors, errors

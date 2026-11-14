@@ -73,7 +73,7 @@ _GROUP_RULES = (
     ("財務提醒", ("case_invoice_uploaded",), ("payable_due_",)),
     ("標案雷達", (), ("tender_",)),
     ("系統告警", ("cert_expiry", "backup_stale", "backup_error", "disk_space_low", "heartbeat_stale", "company_setup_alert",
-              "auth_lockout", "geo_quota_warning", "license_expiry", "settings_changed"), ()),
+              "auth_lockout", "geo_quota_warning", "license_expiry", "settings_changed", "system_update_result"), ()),
     ("通知與報表", ("monthly_report", "module_activity", "user_notice"), ()),
 )
 
