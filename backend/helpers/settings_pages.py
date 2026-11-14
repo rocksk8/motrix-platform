@@ -63,7 +63,8 @@ PAGES = [{'id': 'builder_all',
  {'id': 'profit_rules', 'plain': '公益捐款比率', 'category': '財務', 'groups': ['profit_rules'], 'style': 'checkbox'},
  {'id': 'overhead', 'plain': '管銷分攤方式', 'category': '財務', 'groups': ['overhead'], 'style': 'checkbox'},
  {'id': 'payslip_dispatch_picker', 'plain': '勞報單「選派發」下拉選單載入筆數', 'category': '財務', 'groups': ['payslip_dispatch_picker'], 'style': 'checkbox'},
- {'id': 'legal_params_reminder', 'plain': '法規參數跨年提醒', 'category': '財務', 'groups': ['legal_params_reminder'], 'style': 'checkbox'}]
+ {'id': 'legal_params_reminder', 'plain': '法規參數跨年提醒', 'category': '財務', 'groups': ['legal_params_reminder'], 'style': 'checkbox'},
+ {'id': 'custom_reports', 'plain': '自訂報表的匯出、分享與金額欄範圍', 'category': '財務', 'groups': ['custom_reports'], 'style': 'checkbox'}]
 
 
 #: 群組的白話名稱、現行名稱（小字）、是否影響隱私（標籤）
@@ -119,7 +120,8 @@ GROUPS = {'account_security': {'plain': '登入與密碼規則', 'currentName': 
  'profit_rules': {'plain': '公益捐款比率', 'currentName': '利潤口徑', 'privacy': False},
  'overhead': {'plain': '管銷分攤方式', 'currentName': '管銷分攤比率', 'privacy': False},
  'payslip_dispatch_picker': {'plain': '勞報單「選派發」下拉選單載入筆數', 'currentName': '勞報單選派發下拉', 'privacy': False},
- 'legal_params_reminder': {'plain': '法規參數跨年提醒', 'currentName': '法規參數跨年提醒', 'privacy': False}}
+ 'legal_params_reminder': {'plain': '法規參數跨年提醒', 'currentName': '法規參數跨年提醒', 'privacy': False},
+ 'custom_reports': {'plain': '自訂報表的匯出、分享與金額欄範圍', 'currentName': '自訂報表', 'privacy': False}}
 
 
 _STANDALONE = []            # 獨立頁：{"id", "plain", "category", "href", "standalone": True, "keywords": [...]}

@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 1010,
-  "endpoints_api": 1006,
-  "write_total": 542,
-  "write_api": 542,
-  "get_api": 464,
-  "distinct_paths_api": 859,
-  "write_with_body_api": 407,
-  "write_with_path_param_api": 365
+  "endpoints_total": 1023,
+  "endpoints_api": 1019,
+  "write_total": 550,
+  "write_api": 550,
+  "get_api": 469,
+  "distinct_paths_api": 868,
+  "write_with_body_api": 411,
+  "write_with_path_param_api": 371
  },
  "select_star": {
   "modules": 289,
@@ -5064,6 +5064,71 @@
    "body": true
   },
   "PUT /api/work-logs/{wid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "DELETE /api/custom-reports/{rid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-reports": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-reports/share-targets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-reports/sources": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-reports/{rid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-reports/{rid}/shares": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/custom-reports/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/custom-reports/{rid}/copy": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports/{rid}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports/{rid}/export-pdf": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports/{rid}/shares": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/custom-reports/{rid}": {
    "w": true,
    "pp": 1,
    "body": true

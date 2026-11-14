@@ -16,8 +16,10 @@ from types import MappingProxyType
 
 #: 家族：同一家族一起判斷（成本藏了、毛利露出來＝可以反推成本）。
 FAMILIES = ("cost", "margin", "price", "payment", "note")
-#: 天花板（後端遮蔽的種類）：quote_money＝報價單層級金額；finance_money＝精算／款項／財務總覽；material_money＝叫料體系；cashier＝出納。
-CEILINGS = ("quote_money", "finance_money", "material_money", "cashier")
+#: 天花板（後端遮蔽的種類）：quote_money＝報價單層級金額；finance_money＝精算／款項／財務總覽；material_money＝叫料體系；cashier＝出納；
+#: financial_view＝`auth.can_see_financial`（超管＋財務角色；T87 B2 為商機「預估金額」新增，規則與 CRM 頁面相同）。
+#: 注意與 finance_money 區分：finance_money＝`financial_mask.money_visible`（另含被授予 cashier 模組者）；financial_view **不含** cashier 授予，不可互換。
+CEILINGS = ("quote_money", "finance_money", "material_money", "cashier", "financial_view")
 
 #: 遮蔽動作的種類：key＝dict 鍵剝除／置空（API_GROUPS 那五組）；subtree＝整段清空；text＝內容式文字替換或剝除；document＝整份輸出（例：內部 PDF）。
 KINDS = ("key", "subtree", "text", "document")
@@ -91,6 +93,9 @@ FIELDS = (
     # ── 版面欄位點＋匯出欄位（同一個『金額』欄位在三個地方登記的那一個）──
     _f("case_list.amount", "案件清單金額", "price", "quote_money", screen=(("case", "case", "amount"),), export=("case:case-batch", "amount")),
     _f("quote_list.amount", "報價單清單金額（含稅）", "price", "quote_money", screen=(("case", "quote", "amount"),)),
+    # ── 商機（業務開發）預估金額（T87 B2 D1）：api=None ⇒ 不進 financial_mask 的任何鍵名元組（既有遮蔽行為不變）；
+    #    可見規則由 CRM 端點自己呼叫 can_see_financial（維持不動），B2 經 field_policy.visible 取得同一答案。──
+    _f("dev_case.expected_amount", "商機預估金額", "price", "financial_view"),
     # ── 匯出的含金額工作表 ──
     _sheet("arap:cashier-history", "outgoing", "出納匯出：已匯款明細", "cashier"),
     _sheet("arap:cashier-history", "payreq", "出納匯出：支出申請付款明細", "cashier"),

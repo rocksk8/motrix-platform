@@ -51,7 +51,8 @@ def _ceiling_ok(ceiling, user) -> bool:
         from helpers import financial_mask as FM
         from helpers import auth
         fn = {"quote_money": FM.quote_money_visible, "finance_money": FM.money_visible,
-              "material_money": FM.material_money_visible, "cashier": auth.has_cashier_access}.get(ceiling)
+              "material_money": FM.material_money_visible, "cashier": auth.has_cashier_access,
+              "financial_view": auth.can_see_financial}.get(ceiling)
         return bool(fn(user)) if fn else False               # 不認得的天花板 ⇒ 不可見（fail closed）
     except Exception:                                        # noqa: BLE001
         logger.warning("天花板判斷失敗：%s", ceiling, exc_info=True)

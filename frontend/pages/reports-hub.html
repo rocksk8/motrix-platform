@@ -126,18 +126,31 @@
       return {
         items: [],
         current: '',
+        crOff: false,
+        crProbed: false,
         init() {
           this.load()
           window.addEventListener('motrix-menu-built', () => this.load())
         },
         load() {
           const M = window.MotrixMenu
-          this.items = (M && M.groupItems) ? M.groupItems('analysis') : []
+          this.items = ((M && M.groupItems) ? M.groupItems('analysis') : []).filter(i => !(this.crOff && /custom-reports\.html/.test(i.href || '')))
+          this.probeCustom()
           if (!this.tabs.includes(this.current)) {
             let want = ''
             try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) || localStorage.getItem('motrix_reports_tab') || '' } catch (_e) { want = '' }
             this.current = this.tabs.includes(want) ? want : (this.tabs[0] || '')
           }
+        },
+        // 自訂報表由設定開關控制（關閉時端點回 404）：卡片先照選單宣告出現，探測到 404 就收起來，不留一張點進去只會說「尚未開放」的卡片。
+        probeCustom() {
+          if (this.crProbed || !this.items.some(i => /custom-reports\.html/.test(i.href || ''))) return
+          this.crProbed = true
+          let tok = ''
+          try { tok = (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (_e) { tok = '' }
+          fetch('/api/custom-reports/sources', { headers: { Authorization: 'Bearer ' + tok } })
+            .then(r => { if (r.status === 404) { this.crOff = true; this.load() } })
+            .catch(() => { /* 探測失敗：卡片照常顯示 */ })
         },
         // 「設定」類（報表設定）不佔頁籤，收成頁頭右側的齒輪
         get gear() { return this.items.find(i => i.section === '設定') || null },

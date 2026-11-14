@@ -39,11 +39,13 @@ def _expected(ceiling, role, mode, uid):
         duty = role != "superadmin" and "finance" in eff
         finance_money = "financial_view" in eff or "cashier" in eff
         cashier = "cashier" in eff
+        financial_view = "financial_view" in eff           # T87 B2：auth.can_see_financial（旗標 on＝只看生效的 financial_view 鍵）
     else:                                                   # off／shadow：回傳舊規則（只看角色）
         duty = role == "finance"
-        finance_money = cashier = role in ("superadmin", "finance")
+        finance_money = cashier = financial_view = role in ("superadmin", "finance")
     quote = role in ("superadmin", "admin", "sales") or duty
-    return {"quote_money": quote, "material_money": quote, "finance_money": finance_money, "cashier": cashier}[ceiling]
+    return {"quote_money": quote, "material_money": quote, "finance_money": finance_money, "cashier": cashier,
+            "financial_view": financial_view}[ceiling]
 
 
 @pytest.fixture

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>自訂報表 — MOTRIX PLATFORM</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-format.js"></script>
+  <script src="../static/download.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票（見 style.css「DARK MODE」區塊）。 -->
+  <style>
+    .cr-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px 80px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
+      background: var(--white);
+      --cr-row-alt: #FAF9F6; --cr-lock-bg: #F1F0EC; --cr-na: #6B6962;
+    }
+    .cr-main [hidden] { display: none !important; }   /* .btn／label.hit 的 display 會蓋過 hidden 屬性 */
+    .cr-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .cr-main :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+    .cr-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+    .cr-side { background: var(--bg); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 12px; }
+    .cr-side summary { font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
+    .cr-side h2 { margin: 10px 0 4px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+    .cr-rep { display: flex; align-items: center; gap: 4px; border: 1px solid transparent; border-radius: var(--radius); }
+    .cr-rep.on { background: var(--info-light); border-color: var(--info-border); }
+    .cr-rep > button.open { flex: 1; text-align: left; background: none; border: 0; font: inherit; padding: 6px 8px; cursor: pointer; min-width: 0; min-height: 24px; color: inherit; }
+    .cr-rep .nm { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cr-rep .src { display: block; font-size: 12px; color: var(--text-secondary); }
+    .cr-rep .del { background: none; border: 0; cursor: pointer; color: var(--text-secondary); padding: 6px 8px; font: inherit; min-height: 24px; }
+    .cr-empty { font-size: 12px; color: var(--text-secondary); }
+    .cr-savebar { position: sticky; top: var(--topbar-h); z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--bg); border: 1px solid var(--border-light); border-left: 4px solid var(--border-light); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; }
+    .cr-savebar.dirty { border-left-color: #D97706; background: var(--warning-light); }
+    .cr-savebar .grow { flex: 1; min-width: 180px; }
+    .cr-savebar .ttl { font-weight: 700; }
+    .cr-srcs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 6px; flex-wrap: wrap; }
+    .cr-tab { appearance: none; background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 16px; font: inherit; font-weight: 600; color: var(--text-secondary); cursor: pointer; margin-bottom: -1px; min-height: 40px; }
+    .cr-tab[aria-current=true] { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .cr-tab[disabled] { opacity: .6; cursor: not-allowed; }
+    .cr-srcnote { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; min-height: 1px; }
+    .cr-jump { display: none; margin: 0 0 10px; font-size: 13px; }
+    .cr-work { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .cr-previewpanel { position: sticky; top: calc(var(--topbar-h) + 60px); }
+    @media (max-width: 1360px) { .cr-work { grid-template-columns: minmax(0, 1fr); } .cr-previewpanel { position: static; } .cr-jump { display: block; } }
+    .cr-panel { background: var(--bg); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; }
+    .cr-panel h2 { margin: 0 0 4px; font-size: 15px; }
+    .cr-lead { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; }
+    .cr-note { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
+    .cr-note.flat { margin: 0; }
+    .cr-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; }
+    .cr-toolbar .sp { flex: 1; }
+    .cr-seg { display: inline-flex; border: 1px solid var(--border-light); border-radius: var(--radius); overflow: hidden; }
+    .cr-seg button { font: inherit; border: 0; background: var(--bg); color: inherit; padding: 5px 12px; cursor: pointer; min-height: 32px; }
+    .cr-seg button[aria-pressed=true] { background: var(--text-primary); color: #fff; }
+    .cr-scroll { overflow-x: auto; }
+    .cr-main table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .cr-main th, .cr-main td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: left; white-space: nowrap; }
+    .cr-main thead th { font-size: 12px; color: var(--text-secondary); font-weight: 600; background: var(--cr-row-alt); }
+    .cr-main td.n, .cr-main th.n { text-align: right; font-variant-numeric: tabular-nums; }
+    .cr-main td.c, .cr-main th.c { text-align: center; }
+    .cr-main th.fname, .cr-main td.fname { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+    .cr-main thead th.fname { background: var(--cr-row-alt); }
+    .cr-main th[scope=rowgroup] { background: #EFEDE7; font-weight: 600; font-size: 12px; color: var(--text-secondary); }
+    .cr-main tr.subtotal td { background: #F7F6F1; font-weight: 700; }
+    .cr-main tr.total td { background: #EAE8E1; font-weight: 700; border-top: 2px solid var(--border); }
+    .cr-main td.lock { color: var(--text-dim); background: var(--cr-lock-bg); font-size: 12px; }
+    .cr-main td.lock .cellbtn { margin-left: 4px; }
+    .cr-main td.na { color: var(--cr-na); }
+    .cr-main td.ty { color: var(--text-secondary); }
+    .cellbtn { font: inherit; border: 1px solid var(--border-light); border-radius: 4px; background: var(--bg); color: inherit; min-width: 34px; min-height: 28px; cursor: pointer; padding: 1px 6px; }
+    .cellbtn.on { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+    /* 核取框：至少 24×24（WCAG 2.2 AA 2.5.8）；整個 label 都是點擊區 */
+    .cr-main input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; vertical-align: middle; margin: 2px; }
+    .cr-main label.hit { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; min-width: 28px; cursor: pointer; }
+    .cr-main select, .cr-main input[type=text], .cr-main input[type=number], .cr-main input[type=date] { font: inherit; padding: 4px 6px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--bg); color: inherit; min-height: 32px; }
+    .cr-legend { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; padding-left: 18px; }
+    .cr-legend li { margin: 0 0 2px; }
+    .cr-selbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; margin: 8px 0 0; }
+    .cr-fl { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; margin-bottom: 6px; }
+    .cr-fl .nm { font-weight: 600; }
+    .cr-fl .val { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .cr-banner { border: 1px solid #EBD7A8; background: #FBF3DD; color: var(--warning); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; margin: 0 0 10px; }
+    .cr-banner.deny { border-color: var(--danger-border); background: var(--danger-light); color: var(--danger); }
+    .cr-banner.info { border-color: var(--info-border); background: var(--info-light); color: var(--info); }
+    .cr-banner .btn { margin-top: 6px; display: block; }
+    .cr-chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; border: 1px solid var(--border-light); background: #F3F2EE; margin: 0 4px 2px 0; }
+    .cr-sumline { font-size: 13px; margin: 0 0 8px; }
+    /* 提示訊息節點常駐 DOM（role=status 的節點從 hidden 切出來常不被螢幕閱讀器朗讀），用 class 切可見 */
+    .cr-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #111; color: #fff; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; max-width: 90vw; z-index: 20; opacity: 0; pointer-events: none; }
+    .cr-toast.show { opacity: 1; }
+    /* 全站 reset 有 margin:0，會讓 showModal 的對話框貼在左上角（失去 margin:auto 置中）；--bg 在本站沒有定義，背景要用 --white */
+    dialog { margin: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; max-width: 560px; width: 92vw; max-height: 90vh; overflow-y: auto; background: var(--white); color: var(--text-primary); }
+    dialog::backdrop { background: rgba(0, 0, 0, .35); }
+    dialog h3 { margin: 0 0 8px; font-size: 16px; }
+    dialog .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+    dialog label { display: block; font-size: 12px; color: var(--text-secondary); margin: 8px 0 2px; }
+    dialog input[type=text] { width: 100%; }
+    .cr-xl { border: 1px solid var(--border-light); border-radius: var(--radius); margin: 8px 0; }
+    .cr-xl h4 { margin: 0; padding: 5px 10px; background: var(--cr-row-alt); font-size: 12px; border-bottom: 1px solid var(--border-light); }
+    .cr-xl div { padding: 6px 10px; font-size: 12px; line-height: 1.7; }
+    /* 對話框在 <main> 外面（置於最上層）：.cr-main 底下的規則碰不到它，所以這裡另外寫 */
+    dialog [hidden] { display: none !important; }
+    dialog input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; vertical-align: middle; margin: 2px; }
+    dialog label.hit { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; min-width: 28px; cursor: pointer; margin: 0; font-size: 13px; color: inherit; }
+    dialog :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+    dialog input[type=text] { font: inherit; padding: 4px 6px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--bg); color: inherit; min-height: 32px; }
+    dialog .btn.cr-btn-sm { padding: 3px 10px; min-height: 30px; font-size: 13px; }
+    .cr-err { color: var(--danger); }
+    /* 分享面板：兩段（已分享的人／加入同事），每段一個可捲動清單；選取框 24px 以上、整列都是點擊區 */
+    dialog#dlgShare { max-width: 640px; }
+    .cr-sh h4 { margin: 14px 0 4px; font-size: 14px; }
+    .cr-sh .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 6px; }
+    .cr-sh .bar .sp { flex: 1; }
+    .cr-sh .bar input[type=text] { flex: 1; min-width: 160px; width: auto; }
+    .cr-people { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-light); border-radius: var(--radius); max-height: 200px; overflow-y: auto; }
+    .cr-people li { border-bottom: 1px solid var(--border-light); }
+    .cr-people li:last-child { border-bottom: 0; }
+    .cr-people label.row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; min-height: 36px; cursor: pointer; margin: 0; font-size: 13px; color: inherit; }
+    .cr-people label.row.off { cursor: default; color: var(--text-secondary); }
+    .cr-people .who { flex: 1; min-width: 0; }
+    .cr-people .who b { font-weight: 600; }
+    .cr-people .who small { color: var(--text-secondary); margin-left: 6px; }
+    .cr-people .empty { padding: 10px; font-size: 12px; color: var(--text-secondary); }
+    .cr-sh .msg { min-height: 18px; margin: 8px 0 0; }
+    .cr-btn-sm { padding: 3px 10px; min-height: 30px; font-size: 13px; }
+    /* ── 手機／平板（≤1023px）觸控體驗：輸入框 16px 以上（iOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .cr-main input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
+      .cr-main select,
+      .cr-main textarea { font-size: 16px; min-height: 44px; }
+      .cr-main .btn, .cr-main .cr-btn-sm { min-height: 44px; }
+      .cr-main input[type=checkbox] { width: 24px; height: 24px; }
+      .cr-main .cellbtn { min-height: 36px; min-width: 44px; }
+      dialog .btn, dialog .btn.cr-btn-sm { min-height: 44px; }
+      dialog input[type=text] { font-size: 16px; min-height: 44px; }
+      dialog input[type=checkbox] { width: 24px; height: 24px; }
+      .cr-people label.row { min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .cr-main { padding: 20px 16px 60px; }
+      .cr-layout { grid-template-columns: minmax(0, 1fr); }
+      .cr-savebar { position: static; }
+      .cr-main .ty { display: none; }
+      .cr-fl { grid-template-columns: minmax(0, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <!-- 側欄必須是 <body> 的直接子元素（深色模式的反轉濾鏡排除清單只認直接子元素）。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="cr-main" id="crRoot">
+    <div class="pg">
+      <div class="pg__l">
+        <nav class="pg__crumb" aria-label="目前位置"><span>報表</span> › <span>自訂報表</span></nav>
+        <h1 class="pg__t">自訂報表</h1>
+        <p class="pg__s">選擇資料來源與欄位，設定篩選與分組小計，存成「我的報表」並匯出 Excel。畫面只列出您可使用的資料；標示「無權限」的欄位不會顯示在報表與匯出檔中。</p>
+      </div>
+    </div>
+
+    <div id="crLoadError" class="cr-banner deny" role="alert" hidden></div>
+
+    <div class="cr-layout" id="crLayout" hidden>
+      <aside class="cr-side" aria-label="我的報表">
+        <details id="repDetails" open>
+          <summary id="repSummary">我的報表</summary>
+          <div id="repList"></div>
+          <div id="sharedBox"></div>
+          <div><button class="btn cr-btn-sm" id="btnNew" type="button" data-testid="cr-new">新增報表</button></div>
+          <p class="cr-note" id="repNote">報表僅供本人使用。</p>
+        </details>
+      </aside>
+
+      <section>
+        <div class="cr-savebar" id="savebar" data-testid="cr-savebar">
+          <span class="ttl" id="sbTitle"></span>
+          <span class="grow" id="sbState" aria-live="polite"></span>
+          <button class="btn" id="btnDiscard" type="button">放棄修改</button>
+          <button class="btn btn-primary" id="btnSave" type="button" data-testid="cr-save">儲存</button>
+          <button class="btn" id="btnSaveAs" type="button" data-testid="cr-saveas">另存新檔</button>
+          <button class="btn" id="btnExport" type="button" data-testid="cr-export">匯出 Excel</button>
+          <button class="btn" id="btnShare" type="button" data-testid="cr-share" hidden>分享…</button>
+        </div>
+
+        <div class="cr-srcs" id="srcTabs" role="group" aria-label="資料來源"></div>
+        <p class="cr-srcnote" id="srcNote"></p>
+        <p class="cr-jump"><a href="#previewPanel" id="jump"></a></p>
+
+        <div class="cr-work">
+          <div>
+            <div class="cr-panel">
+              <h2>欄位矩陣</h2>
+              <p class="cr-lead">一張表決定報表怎麼組成。標示「無權限」的格子無法使用，原因列在表格下方的說明。</p>
+              <div class="cr-toolbar">
+                <span>常用組合：</span>
+                <span id="presets" class="cr-toolbar"></span>
+                <span class="sp"></span>
+                <span id="lyLbl">版型：</span>
+                <span class="cr-seg" role="group" aria-labelledby="lyLbl">
+                  <button type="button" id="lyDetail" data-layout="detail" data-fk="ly:detail">明細＋小計</button>
+                  <button type="button" id="lySummary" data-layout="summary" data-fk="ly:summary">僅彙總</button>
+                </span>
+                <label id="cntLbl" class="hit"><input type="checkbox" id="cntBox" data-fk="cnt"> 加入「筆數」欄</label>
+              </div>
+              <div class="cr-scroll"><table id="matrix" data-testid="cr-matrix"></table></div>
+              <p class="cr-note" id="sumNote" hidden>「僅彙總」版型只列出分組與彙總欄，「顯示」欄在此版型不使用。</p>
+              <ul class="cr-legend" id="legend"></ul>
+              <div class="cr-selbar">
+                <span id="selCount">已選 0 列</span>
+                <button class="btn cr-btn-sm" type="button" data-batch="show" data-fk="batch:show">顯示所選</button>
+                <button class="btn cr-btn-sm" type="button" data-batch="hide" data-fk="batch:hide">隱藏所選</button>
+                <button class="btn cr-btn-sm" type="button" data-batch="group" data-fk="batch:group">加入分組</button>
+                <button class="btn cr-btn-sm" type="button" id="btnUndo" data-fk="undo" hidden>復原上一次批次</button>
+                <span id="batchMsg" class="cr-note flat" aria-live="polite"></span>
+              </div>
+              <p class="cr-note">批次只會作用在可使用的格子，並回報已套用與略過的數量；沒有「全部開啟」。批次與常用組合的結果先進入草稿，按「儲存」才會寫入，也可按「復原上一次批次」還原。</p>
+            </div>
+
+            <div class="cr-panel">
+              <h2>篩選條件</h2>
+              <p class="cr-lead">在矩陣勾選「篩選」後，於此設定條件。</p>
+              <div id="filters" data-testid="cr-filters"></div>
+              <p class="cr-note" id="fcount" aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div class="cr-panel cr-previewpanel" id="previewPanel" tabindex="-1">
+            <h2>預覽</h2>
+            <p class="cr-lead">以您目前的權限即時計算，最多顯示前 50 列。</p>
+            <div id="preview" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="cr-toast" id="toast" role="status"></div>
+
+  <dialog id="dlgName" aria-labelledby="dlgNameTitle" data-testid="cr-dlg-name">
+    <h3 id="dlgNameTitle">儲存報表</h3>
+    <label for="inName">報表名稱</label>
+    <input type="text" id="inName" maxlength="40" aria-describedby="nameErr" data-testid="cr-name">
+    <p class="cr-note cr-err" id="nameErr" role="alert"></p>
+    <div class="acts"><button class="btn" type="button" id="nameCancel">取消</button><button class="btn btn-primary" type="button" id="nameOk" data-testid="cr-name-ok">儲存</button></div>
+  </dialog>
+
+  <dialog id="dlgConfirm" aria-labelledby="cfTitle">
+    <h3 id="cfTitle"></h3>
+    <p id="cfBody"></p>
+    <div class="acts"><button class="btn" type="button" id="cfNo">取消</button><button class="btn btn-primary" type="button" id="cfYes" data-testid="cr-confirm-yes"></button></div>
+  </dialog>
+
+  <dialog id="dlgExport" aria-labelledby="xlTitle" data-testid="cr-dlg-export">
+    <h3 id="xlTitle">匯出報表</h3>
+    <p>下列為匯出檔的內容；Excel 與 PDF 兩種版本都可下載，每次匯出皆留存稽核紀錄（不含欄位內容）。</p>
+    <div class="cr-xl"><h4>工作表一「報表」</h4><div id="xl1"></div></div>
+    <div class="cr-xl"><h4>工作表二「說明」</h4><div id="xl2"></div></div>
+    <p class="cr-note cr-err" id="xlErr" role="alert"></p>
+    <div class="acts"><button class="btn" type="button" id="xlClose">關閉</button><button class="btn" type="button" id="xlPdf" data-testid="cr-export-pdf">下載 PDF</button><button class="btn btn-primary" type="button" id="xlGo" data-testid="cr-export-go">下載 Excel</button></div>
+  </dialog>
+
+  <dialog id="dlgShare" class="cr-sh" aria-labelledby="shTitle" data-testid="cr-dlg-share">
+    <h3 id="shTitle" tabindex="-1">分享報表</h3>
+    <p class="cr-lead" id="shLead">對方只能檢視與複製，看不到、也算不出他沒有權限的欄位與資料；不能修改、刪除或再分享。分享的是<strong>已儲存</strong>的版本。</p>
+
+    <p class="cr-note msg" id="shMsg" role="status" tabindex="-1" data-testid="cr-sh-msg"></p>
+
+    <h4 id="shMineH">已分享的人</h4>
+    <div class="bar">
+      <label class="hit"><input type="checkbox" id="shSelShared" data-fk="sh:selshared" data-testid="cr-sh-selshared"> 全選已分享的人</label>
+      <span class="sp"></span>
+      <button class="btn cr-btn-sm" type="button" id="shRemove" data-fk="sh:remove" data-testid="cr-sh-remove" disabled>取消分享所選</button>
+    </div>
+    <ul class="cr-people" id="shShared" aria-labelledby="shMineH" data-testid="cr-sh-shared"></ul>
+
+    <h4 id="shAddH">加入同事</h4>
+    <div class="bar">
+      <label class="cr-sr" for="shQ">搜尋同事（姓名、帳號或部門）</label>
+      <input type="text" id="shQ" maxlength="40" placeholder="搜尋姓名、帳號或部門" data-fk="sh:q" data-testid="cr-sh-q" autocomplete="off">
+    </div>
+    <div class="bar">
+      <label class="hit"><input type="checkbox" id="shSelCands" data-fk="sh:selcands" data-testid="cr-sh-selcands"> 全選目前結果</label>
+      <span class="sp"></span>
+      <button class="btn btn-primary cr-btn-sm" type="button" id="shAdd" data-fk="sh:add" data-testid="cr-sh-add" disabled>分享給所選</button>
+    </div>
+    <ul class="cr-people" id="shCands" aria-labelledby="shAddH" data-testid="cr-sh-cands"></ul>
+    <p class="cr-note" id="shCount"></p>
+    <div class="acts"><button class="btn" type="button" id="shClose" data-testid="cr-sh-close">完成</button></div>
+  </dialog>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/custom-reports.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

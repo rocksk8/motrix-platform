@@ -68,7 +68,38 @@ def test_declaration_matches_platform_menu_for_the_same_user(client, make_user):
     _r, menu, _b = _served(client)
     u, pw = make_user(username="c4_inj_sa", role="superadmin")
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
-    assert _filter(menu["groups"], [], True) == client.get("/api/platform/menu", headers=h).json()["groups"]
+    served = client.get("/api/platform/menu", headers=h).json()["groups"]
+    # 公開宣告（未登入、靜態）刻意不含旗標狀態——不然未登入者能從宣告推出設定；登入後的選單才依旗標去掉「旗標關著的頁」。
+    # 所以這裡宣告側要先扣掉旗標關著的頁（旗標預設關）；不扣、也不全域開旗標：兩個方向各有另一題把關（見下一題）。
+    gated = set(PM.flag_gated_pages())
+    declared = [dict(g, items=[it for it in g["items"] if it.get("href") not in gated]) for g in _filter(menu["groups"], [], True)]
+    assert declared == served
+
+
+def test_flag_gated_page_is_only_served_to_the_menu_when_its_flag_is_on(client, make_user):
+    """宣告永遠有（靜態、與旗標無關）；登入後的選單：旗標關 ⇒ 沒有、旗標開 ⇒ 有。兩個方向都驗，才不會被『全域開旗標』蓋掉關閉的那一側。"""
+    from tests.platform.test_custom_reports_export_t87 import _set
+
+    gated = sorted(PM.flag_gated_pages())
+    assert gated, "正對照：目前至少有一個旗標管的頁"
+    _r, menu, _b = _served(client)
+    declared = {it["href"] for g in menu["groups"] for it in g["items"]}
+    assert set(gated) <= declared, "公開宣告不含旗標狀態：旗標管的頁一律在宣告裡"
+    u, pw = make_user(username="c4_inj_gate", role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+
+    def served_hrefs():
+        j = client.get("/api/platform/menu", headers=h).json()
+        return ({it["href"] for g in j["groups"] for it in g["items"]}, {it["href"] for g in j["layout"]["groups"] for it in g["items"]})
+    try:
+        _set(enabled=0)
+        off_groups, off_layout = served_hrefs()
+        assert not (set(gated) & off_groups) and not (set(gated) & off_layout)
+        _set(enabled=1)
+        on_groups, on_layout = served_hrefs()
+        assert set(gated) <= on_groups and set(gated) <= on_layout
+    finally:
+        _set(enabled=0)
 
 
 def test_unloaded_module_leaves_no_trace_in_the_public_declaration(client, make_user, monkeypatch):

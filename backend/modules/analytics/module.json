@@ -5,13 +5,16 @@
   "core": ">=1.0,<2.0",
   "license_key": "analytics",
   "permissions": ["dashboard", "reports", "finance", "equipment", "procurement"],
-  "tables": [],
-  "tables_note": "本模組不擁有任何表：儀表板與營運報表只讀其他模組的資料（DEPENDENCY-MAP §2 M08）；精算快照過期檢查的「列→金額」經 IP-1 dispatch.row，但**列出有效派工仍直讀 contractor_dispatches、vendor_contractors（M04 的表，唯讀）**——待 M04 公開「有效派工列表」提供者（ROADMAP）",
+  "tables": ["custom_reports", "custom_report_shares"],
+  "tables_note": "自訂報表（T87 B2）新增兩張表 custom_reports（使用者存的報表設定）與 custom_report_shares（分享對象），由 migrations/0001_custom_reports.py 建立；其餘儀表板與營運報表仍只讀其他模組的資料（DEPENDENCY-MAP §2 M08）；精算快照過期檢查的「列→金額」經 IP-1 dispatch.row，但**列出有效派工仍直讀 contractor_dispatches、vendor_contractors（M04 的表，唯讀）**——待 M04 公開「有效派工列表」提供者（ROADMAP）",
   "data": {
-    "tables": [],
+    "tables": [
+      {"name": "custom_reports", "class": "T1"},
+      {"name": "custom_report_shares", "class": "T1"}
+    ],
     "files": []
   },
-  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports", "/api/std-reports"],
+  "provides": {"api_prefixes": ["/api/custom-reports", "/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports", "/api/std-reports"],
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports-hub.html",
@@ -22,12 +25,28 @@
      "menu": {"group": "analysis", "label": "自選條件報表", "order": 15, "perm": ["finance", "reports"], "section": "營運", "desc": "可自訂日期區間、部門與案件狀態，重新產出案件清單、收款明細與業務員績效，並可下載 Excel"}},
     {"path": "reports-standard.html",
      "menu": {"group": "analysis", "label": "標準報表", "order": 12, "perm": ["finance", "reports", "dev_crm", "case_manage"], "section": "營運", "desc": "營收、毛利、應收帳齡、案件進度與業務漏斗（含商機預估金額）；共用期間、業務、客戶、部門條件，可匯出 Excel 與 PDF"}},
+    {"path": "custom-reports.html",
+     "menu": {"group": "analysis", "label": "自訂報表", "order": 16, "perm": ["quotation", "case_manage", "dev_crm"], "section": "營運", "desc": "自己挑選資料來源、欄位、篩選與分組小計，存成我的報表並匯出 Excel；只看得到自己有權限的資料"}},
     {"path": "devices.html",
      "menu": {"group": "supply", "label": "設備登載", "order": 70, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",
      "menu": {"group": "supply", "label": "保固追蹤", "order": 80, "perm": ["equipment"], "badge": "sb-mod-warranty"}},
     {"path": "procurement.html",
      "menu": {"group": "supply", "label": "採購管理", "order": 60, "perm": ["procurement"], "badge": "sb-mod-procurement"}}
+  ],
+  "capabilities": [
+    {"key": "analytics.custom_report.view", "label": "使用自訂報表",
+     "legacy": {"any": [{"module": "quotation"}, {"module": "case_manage"}, {"module": "dev_crm"}]},
+     "risk": "low", "delegable": true,
+     "desc": "可以在自訂報表頁選報價單、案件或商機的欄位與條件來產出報表，並存成自己的報表。",
+     "impact": "只能使用自己本來就有權限的資料來源；報表裡看得到哪些欄位與列，完全依各人原本的權限，沒有金額權限的人看不到金額欄。此項目不會讓任何人多看到資料。",
+     "question": "{who}可以使用自訂報表嗎？"},
+    {"key": "analytics.custom_report.export", "label": "匯出自訂報表",
+     "legacy": {"any": [{"module": "quotation"}, {"module": "case_manage"}, {"module": "dev_crm"}]},
+     "risk": "mid", "delegable": true,
+     "desc": "可以把自訂報表的結果匯出成 Excel（同時附 PDF）；每次匯出都會留下稽核紀錄。",
+     "impact": "匯出檔只含這位使用者看得到的欄位與列。匯出對象另受「自訂報表」設定限制（可限定只有最高管理者，或完全關閉）；已匯出的檔案無法收回。",
+     "question": "{who}可以匯出自訂報表嗎？"}
   ],
   "customization": {
     "schema": 1,

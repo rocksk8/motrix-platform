@@ -644,6 +644,16 @@
    "note": "看實際狀態請到「備份與監控」頁。",
    "order": 235
   },
+  "settings_group:custom_reports": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "決定誰可以匯出自訂報表、是否可分享、刪除方式，以及報價單金額欄的範圍。",
+   "when": "想調整自訂報表的匯出對象、分享方式，或金額欄的顯示範圍時。",
+   "status": "keep",
+   "note": "",
+   "order": 65
+  },
   "settings_group:login_greeting": {
    "category": "advanced",
    "section": "",
