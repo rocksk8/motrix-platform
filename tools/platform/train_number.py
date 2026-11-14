@@ -12,6 +12,7 @@
             `--base` 那一版就有的段落（已在 platform、未出貨）優先保留號碼，分支帶來的段落排到它們上面。
             module.json version ＝ 最上面的版號。
   CORE      同上（兩段版號、`(next)` 預設次版號）；L1 介面相對 `--base` 的快照需要主版號 ⇒ 最下面那個佔位升主版號。
+            要升主版號時，所有 module.json 的 core 範圍必須已接受新主版號，否則 assign／--check 直接失敗（tools/platform/core_major_bump.py）。
             registry.CORE_VERSION、G1 快照的 core_version ＝ 最上面的版號（快照的介面必須已是目前的介面，
             否則拒絕：先 `_l1_interface.py --update --pending`）。
   manifest  `"version": "next"` ⇒ 依 (date, time) 排序，取該日期已用過的最大字母的下一個（z 之後 aa）。
@@ -356,6 +357,22 @@ def _need_major(tree):
     return G.required_bump(a, c, r) == "major", cur
 
 
+def _major_range_errors(tree):
+    """核心這包要升主版號，而模組 `module.json` 的 core 範圍沒一起放寬 ⇒ 明確失敗並指到 core_major_bump.py
+    （不能等到啟動時所有模組都載入失敗、路由 404 才發現）。判斷本體在 core_major_bump.guard_problems。"""
+    import core_major_bump as CMB            # 同目錄（上面已把本檔目錄放進 sys.path）
+    cur = _core_version_of(tree.read(REGISTRY))
+    if cur is None:
+        return []
+    specs = {}
+    for mj in sorted((tree.root / "backend" / "modules").glob("*/module.json")):
+        try:
+            specs[mj.parent.name] = json.loads(mj.read_text(encoding="utf-8-sig")).get("core")
+        except ValueError:
+            specs[mj.parent.name] = None
+    return CMB.guard_problems(cur, specs, True)
+
+
 def plan(tree):
     """⇒ ({相對路徑: 新全文}, [(類別, 對象, 舊, 新, 說明)], [錯誤])。"""
     writes, rows, errors = {}, [], []
@@ -390,6 +407,8 @@ def plan(tree):
         floor = parse_version(shipped, 2) if shipped else None
         has_next = any(classify(s, 2)[0] == "next" for s in split_sections(text)[1])
         need_major, cur_iface = _need_major(tree) if has_next else (False, None)
+        if need_major:
+            errors.extend(_major_range_errors(tree))
         new, top, ch = assign_changelog(text, floor, 2, _heads(tree.show(base_ref, CORE_CHANGELOG)), "minor", need_major)
         for old, nv, why in ch:
             rows.append(("CORE", "core/CHANGELOG", old, nv, why + ("（L1 介面需要主版號）" if need_major and old.startswith("(next") else "")))
