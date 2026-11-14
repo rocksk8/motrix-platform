@@ -98,7 +98,7 @@ def _require_readable(conn, source_type, quote_no, user):
 
 
 class _CaseAttachments:
-    LABEL = "案件"
+    LABEL = "案件管理"
     SOURCE_TYPES = ("quotation_signed", "case_update", "payment_item", "material", "material_invoice",
                     "extra_expense")
 
