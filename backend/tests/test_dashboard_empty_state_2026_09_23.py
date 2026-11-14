@@ -549,6 +549,10 @@ def test_fx33_the_probe_goes_red_on_the_version_before_the_fix():
         f"取不到 `c89e9d9` 的 `index.html`：{old.stderr[-300:]!r}\n"
         "⇒ 這一題量不到東西，**不可以當成通過**。")
     before = old.stdout.decode("utf-8")
+    # 修正前那一版用的是舊文案（目前沒有…）；T86 起現行文案改為「尚無…」，
+    # 探針以現行常數找句子，所以把舊句換成現行寫法，只比較**判斷式**（行為），不比較用字。
+    before = (before.replace("目前沒有待您簽核的項目", TITLE_COPY)
+                    .replace("目前沒有待您簽核的單據", BAND_COPY))
 
     got = _observe(before, None)  # 讀不到資料
     lied = []
