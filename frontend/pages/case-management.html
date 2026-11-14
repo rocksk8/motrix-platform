@@ -1003,8 +1003,8 @@
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--ink-muted);flex-shrink:0;cursor:grab">
                         <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/>
                       </svg>
-                      <input type="checkbox" x-model="st.done"
-                             @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || MotrixDate.today()) : ''})"
+                      <input type="checkbox" x-model="st.done" data-testid="stage-done-box"
+                             @change="onStageTick(st)"
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
                       <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
                              style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
@@ -3807,12 +3807,18 @@
                              x-ref="commentPhotoInput" @change="onCommentPhotosSelected($event)">
                     </label>
                     <span x-show="postingComment" style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">發送中…</span>
-                    <button @click="postComment()" :disabled="(!newComment.trim() && newCommentPhotos.length === 0) || postingComment"
-                            style="padding:5px 16px;font-size:12px;font-weight:600;border-radius:6px;border:none;cursor:pointer;font-family:var(--font-zh);transition:background .12s"
-                            :style="(newComment.trim() || newCommentPhotos.length) && !postingComment ? 'background:var(--accent);color:var(--surface)' : 'background:var(--line);color:var(--ink-muted);cursor:not-allowed'">
+                    <span class="feed-compose__hint" data-testid="cm-feed-send-hint"
+                          x-show="!postingComment && !newComment.trim() && newCommentPhotos.length === 0">請先填寫內容或附加檔案。</span>
+                    <button class="feed-compose__send" @click="postComment()" :disabled="(!newComment.trim() && newCommentPhotos.length === 0) || postingComment"
+                            :title="(!newComment.trim() && newCommentPhotos.length === 0) ? '請先填寫內容或附加檔案。' : ''">
                       發布更新
                     </button>
                   </div>
+                </div>
+                <!-- T86 案件 UX #5：階段勾選自動產生的記錄預設摺疊 -->
+                <div class="feed-autobar" data-testid="cm-feed-autobar" x-show="!updatesLoading && autoFeedCount() > 0">
+                  <span x-text="feedShowAuto ? '目前顯示系統自動記錄（階段勾選完成）共 ' + autoFeedCount() + ' 則。' : '已摺疊系統自動記錄（階段勾選完成）' + autoFeedCount() + ' 則。'"></span>
+                  <button type="button" class="feed-autobar__btn" data-testid="cm-feed-autobar-toggle" @click="feedShowAuto = !feedShowAuto" x-text="feedShowAuto ? '隱藏' : '顯示'"></button>
                 </div>
                 <!-- feed list -->
                 <div class="feed-list">
@@ -3823,7 +3829,7 @@
                     <div class="feed-empty">目前尚無動態，請發布第一則更新。</div>
                   </template>
                   <template x-if="!updatesLoading && caseUpdates.length > 0 && filteredFeedItems().length === 0">
-                    <div class="feed-empty">這天沒有動態紀錄</div>
+                    <div class="feed-empty" x-text="feedCalSelDate ? '這天沒有動態紀錄' : '目前沒有一般動態；系統自動記錄已摺疊，可按上方「顯示」查看。'"></div>
                   </template>
                   <template x-for="item in filteredFeedItems()" :key="item.id">
                     <div class="feed-item">

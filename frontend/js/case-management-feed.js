@@ -108,12 +108,23 @@ window.CM_PARTS.push(() => ({
       }
       return cells
     },
+    // T86 案件 UX #5：階段勾選完成時，系統會自動記一筆「案件管理勾選「X」完成」（backend/modules/case/case_stage_tasks.py，
+    // 內容文字以 AUTO_STAGE_PREFIX 開頭）。這類機械記錄預設摺疊，避免稀釋人寫的動態；可按「顯示」展開。
+    feedShowAuto: false,
+    AUTO_STAGE_PREFIX: '案件管理勾選「',
+    isAutoFeedItem(it) {
+      return it.source === 'daily_task' && String(it.content || '').startsWith(this.AUTO_STAGE_PREFIX)
+    },
+    autoFeedCount() { return this.caseUpdates.filter(it => this.isAutoFeedItem(it)).length },
+    _feedBase() {
+      return this.feedShowAuto ? this.caseUpdates : this.caseUpdates.filter(it => !this.isAutoFeedItem(it))
+    },
     feedCalCount(date) {
-      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
+      return this._feedBase().filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
     },
     filteredFeedItems() {
-      if (!this.feedCalSelDate) return this.caseUpdates
-      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
+      if (!this.feedCalSelDate) return this._feedBase()
+      return this._feedBase().filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
     },
 
     onCommentPhotosSelected(e) {
