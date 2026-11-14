@@ -6,8 +6,8 @@
 |---|---|---|---|
 | `modules/case/api/quotations.py` | 39 → 40 | +1 | `approval_queue_items`（待簽佇列與側欄角標）：200 張待簽、每張 data_json 約 60KB 時，逐筆 `json.loads` 整份 data_json 佔 441／400 ms；改由 SQLite 取 `$.approval`，降到 113／88 ms（W3 approval-freeze，使用者回報簽核卡頓）。 |
 | `modules/case/quotations.py` | 5 → 6 | +1 | `case_summary` 的 deal_tag：欄位空時由 SQLite 取 `$.dealTag`，不再把整份 data_json 撈進 Python（同上，待簽佇列的 `_openable` 每次都會呼叫它）。 |
-| `modules/case/api/quotations.py` | 40 → 41 | +1 | T87 B2 自訂報表（待主持裁示）：`_report_source.register(_CASE_MINE_SQL)` 把清單「我負責的」的同一個常數物件交給報表登錄表，報表與清單才保證同列（h11 M1）。**不新增任何 SQL 字面值**，只是引用既有常數。 |
-| `modules/case/report_source.py` | 新檔 → 2 | +2 | T87 B2（待主持裁示）：報價單來源的「成交標記」「精算狀態」欄位引用 `SQL_DEAL_TAG`／`SQL_SETTLE_STATUS` 同一個常數（各一次），與清單端點同運算式（含舊資料退回 data_json 的語意）；壞 JSON 的風險與清單端點既有的同一條相同（同常數、同資料），報表執行失敗時回明確錯誤、不吞資料。 |
+| `modules/case/api/quotations.py` | 40 → 41 | +1 | T87 B2 自訂報表（PM 2026-11-14 核准，因與清單語意等價〔h11 M1〕）：`_report_source.register(_CASE_MINE_SQL)` 把清單「我負責的」的同一個常數物件交給報表登錄表，報表與清單才保證同列（h11 M1）。**不新增任何 SQL 字面值**，只是引用既有常數。 |
+| `modules/case/report_source.py` | 新檔 → 2 | +2 | T87 B2（PM 2026-11-14 核准，因與清單語意等價〔h11 M1〕）：報價單來源的「成交標記」「精算狀態」欄位引用 `SQL_DEAL_TAG`／`SQL_SETTLE_STATUS` 同一個常數（各一次），與清單端點同運算式（含舊資料退回 data_json 的語意）；壞 JSON 的風險與清單端點既有的同一條相同（同常數、同資料），報表執行失敗時回明確錯誤、不吞資料。 |
 
 ## 為什麼這兩處不會踩到棘輪原本要擋的風險（「壞一筆 JSON 讓整個查詢丟例外、整類資料靜默消失」）
 
