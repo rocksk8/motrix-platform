@@ -3407,7 +3407,7 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln
     if "include_links" in body and not isinstance(body["include_links"], bool):
-        raise HTTPException(400, "include_links 必須是 true／false")      # 不把 "false" 字串當 true
+        raise HTTPException(400, "「LINE 訊息帶連結」的值不正確（必須是開或關）。請重新整理頁面後再操作；若是自己寫程式呼叫，include_links 必須是 true 或 false")      # 不把 "false" 字串當 true
     if "quota_thresholds" in body:
         from helpers import line_quota as _lq
         try:
@@ -3428,13 +3428,13 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
             t = str(tok).strip()          # 空字串＝清除 token
             if t and not _ln.valid_token(t):
                 # 格式不合會讓送出時的例外訊息帶出整串 token（K 審 S2）⇒ 一律在這裡擋下
-                raise HTTPException(400, "channel access token 格式不正確：只能是英數與 + / = . _ -，長度 20～512，請從 LINE Developers 重新複製")
+                raise HTTPException(400, "Channel access token 格式不正確：只能有英文字母、數字與 + / = . _ -，長度 20～512 個字元（中間不能有空白或換行）。請回到 LINE Developers → Messaging API 分頁重新複製整串 token 再貼上")
             data["channel_access_token"] = t
         data["include_links"] = data.get("include_links") is True
         # LINE Login channel（綁定用）：ID 是純數字、secret 是 32 位十六進位；secret 同 token 慣例（遮罩值／未帶＝保留，空字串＝清除）
         lid = str(data.get("login_channel_id") or "").strip()
         if lid and not _ln.valid_login_id(lid):
-            raise HTTPException(400, "LINE Login 的 Channel ID 格式不正確（應為純數字，請從 LINE Developers 的 Basic settings 複製）")
+            raise HTTPException(400, "LINE Login 的 Channel ID 格式不正確：應為 6～20 位數字。請到 LINE Developers → LINE Login channel → Basic settings 最上方複製")
         data["login_channel_id"] = lid
         sec = body.get("login_channel_secret") if "login_channel_secret" in body else None
         if sec is None or sec == _MASKED:
@@ -3442,16 +3442,16 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
         else:
             s = str(sec).strip()
             if s and not _ln.valid_login_secret(s):
-                raise HTTPException(400, "LINE Login 的 Channel secret 格式不正確（應為 32 位英數字，請從 LINE Developers 重新複製）")
+                raise HTTPException(400, "LINE Login 的 Channel secret 格式不正確：必須剛好 32 個英數字（0-9、a-f 或 A-F）。請到 Basic settings 的 Channel secret 重新複製")
             data["login_channel_secret"] = s
         try:
             data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))
         except ValueError as e:
             raise HTTPException(400, str(e))
         if data["enabled"] and not data["channel_access_token"]:
-            raise HTTPException(400, "啟用 LINE 通知前請先填寫 channel access token")
+            raise HTTPException(400, "要啟用 LINE 通知，必須先填寫 Channel access token（token）。請到 LINE Developers → Messaging API 分頁發行並複製 token，貼上並儲存後再啟用")
         if data["include_links"] and not data["public_base_url"]:
-            raise HTTPException(400, "訊息要帶連結，必須先設定對外網址（public_base_url）")
+            raise HTTPException(400, "要讓 LINE 訊息帶連結，必須先設定對外網址。沒有對外網址的話，請關閉「LINE 訊息帶連結」")
         _set_setting("line_notify", data)
     # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身；對外網址與連結開關影響對外曝露面，照實記
     _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",

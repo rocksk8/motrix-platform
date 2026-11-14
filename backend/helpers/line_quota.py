@@ -68,7 +68,7 @@ def month_key(now: datetime = None) -> str:
 
 def normalize_thresholds(v) -> list:
     """驗證並整理門檻：`[int…]`，1～MAX 個，各 1～100，不重複 ⇒ 遞增 list。不合法 ⇒ `ValueError`。布林不算整數。"""
-    bad = ValueError("額度告警門檻必須是 1～%d 個 1～100 的整數百分比（不可重複）" % MAX_THRESHOLDS)
+    bad = ValueError("額度告警門檻不正確：請填 1～%d 個 1～100 的整數百分比，不可重複，例如 80,100" % MAX_THRESHOLDS)
     if not isinstance(v, (list, tuple)) or not (1 <= len(v) <= MAX_THRESHOLDS):
         raise bad
     out = []

@@ -2,6 +2,10 @@
 
 ## (next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）
 - schema：本批只動 crm 模組 migration（`modules/crm/migrations/0005_dev_case_expected.py`，crm 模組 schema 4→5，`module_schema_versions` 記錄）；核心 `db.py` `CURRENT_VERSION`（V9 基準 118）與 module.json 版本不變。驗包若要核對「資料庫版本」，核心數字不會因本批改變；模組版本以 `module_schema_versions` 的 crm＝5 為準。
+- **（併入）(next) — 2026-11-14（feat/t86-usage-h9；T86 使用紀錄優化 U6／U9：LINE 通知設定、自訂模組預覽改成先檢核＋白話原因）**
+- 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。
+- 行為變更（只改訊息與前端）：模組建構器的編號預覽、輸出預覽在規則／欄位未完成時先在畫面說明，不送請求；`numbering/preview`、`output/preview` 的 422 訊息補處理方式（狀態碼與判斷不變）。
+- 測試：`tests/test_line_settings_messages_2026_11_14.py`、`tests/test_custom_module_preview_messages_2026_11_14.py`、`tests/test_e2e_line_settings_precheck_2026_11_14.py`、`tests/test_e2e_builder_preview_precheck_2026_11_14.py`。
 
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。

@@ -513,6 +513,45 @@
         bind: { loaded: false, available: false, open: false, total: 0, linked: 0, unlinked: 0, users: [] }, reminding: false,
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
+        // 送出前先檢核（T86 U6：正式機 30 天內設定存檔 400 ×5、驗證 400 ×2，都是伺服器才擋）。
+        // 規則與伺服器一致（routers/system.py set_line_notify、helpers/line_notify.py）；每則訊息說明「哪裡不對、怎麼處理」。回傳第一個問題，沒有問題回 ''。
+        // 已儲存的 token／secret 會顯示成固定圓點（MASK）：圓點＝沒有修改，不檢查。
+        lineProblem(parts) {
+          const MASK = '••••••••'
+          const c = this.cfg
+          const tok = String(c.channel_access_token || '').trim()
+          if (tok && tok !== MASK) {
+            if (/\s/.test(tok)) return 'Channel access token 中間有空白或換行，通常是複製時多帶了字。請回到 LINE Developers 重新複製整串 token，貼上前先清空這個欄位。'
+            if (/[^A-Za-z0-9+/=._-]/.test(tok)) return 'Channel access token 含有不允許的字元（可能夾帶中文、全形字或引號）。token 只會有英文字母、數字與 + / = . _ - ，請重新複製整串貼上。'
+            if (tok.length < 20) return 'Channel access token 只有 ' + tok.length + ' 個字元，太短，應該是沒有複製完整。請到 LINE Developers → Messaging API 分頁，複製「Channel access token」整串（約 170 個字元）。'
+            if (tok.length > 512) return 'Channel access token 太長（' + tok.length + ' 個字元），可能貼到了多段內容。請清空後只貼 token 本身。'
+          }
+          const base = String(c.public_base_url || '').trim().replace(/\/+$/, '')
+          if (base) {
+            const ex = '例如 https://erp.example.com'
+            if (/^http:\/\//i.test(base)) return '對外網址必須用 https://（目前是 http://）。LINE 只接受 https 的 Callback URL，請改成 https:// 開頭，' + ex + '。'
+            if (!/^https:\/\//i.test(base)) return '對外網址前面要加 https://，' + ex + '。'
+            const rest = base.slice(8)
+            if (/[@]/.test(rest)) return '對外網址不可含帳號密碼（@）。只填網域，' + ex + '。'
+            if (/[\/?#]/.test(rest)) return '對外網址只填網域，後面不要接路徑或查詢（/、?、#）。例如把 https://erp.example.com/pages/x.html 改成 https://erp.example.com'
+            const m = /^([A-Za-z0-9.-]+)(?::(\d+))?$/.exec(rest)
+            if (!m || !m[1].split('.').every(x => /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(x)) || rest.length > 255) return '對外網址的網域看起來不正確（只能有英文字母、數字、連字號與點，且不能有連續的點或空白）。' + ex + '。'
+            if (m[2] && !(+m[2] >= 1 && +m[2] <= 65535)) return '對外網址的埠號必須是 1～65535。若沒有特別指定埠號，請把「:」與數字拿掉。'
+          }
+          if (c.include_links && !base) return '要讓 LINE 訊息帶連結，必須先填上方的「對外網址」。沒有對外網址的話，請取消勾選「LINE 訊息帶連結」。'
+          const lid = String(c.login_channel_id || '').trim()
+          if (lid && !/^[0-9]{6,20}$/.test(lid)) return 'LINE Login 的 Channel ID 只能是 6～20 位數字（不含空白或英文字母）。請到 LINE Developers → LINE Login channel → Basic settings 最上方複製「Channel ID」。'
+          const sec = String(c.login_channel_secret || '').trim()
+          if (sec && sec !== MASK && !/^[0-9a-fA-F]{32}$/.test(sec)) return 'LINE Login 的 Channel secret 必須剛好 32 個英數字（目前 ' + sec.length + ' 個）。請到 Basic settings 的「Channel secret」重新複製，貼上前先清空欄位。'
+          if (c.enabled && (!tok)) return '要啟用 LINE 通知，必須先填上方的 Channel access token。請到 LINE Developers → Messaging API 分頁發行並複製 token，貼上後再勾選「啟用」。'
+          if (!parts.length) return '用量告警門檻不能是空的，請至少填一個 1～100 的整數百分比，例如 80,100。'
+          if (parts.some(p => !/^[0-9]+$/.test(p))) return '用量告警門檻只能填整數百分比，用逗號隔開，例如 80,100（不要加 % 或小數點）。'
+          const nums = parts.map(Number)
+          if (nums.some(n => n < 1 || n > 100)) return '用量告警門檻每一個都要在 1～100 之間（代表用量百分比）。'
+          if (nums.length > 5) return '用量告警門檻最多 5 個，目前填了 ' + nums.length + ' 個，請刪掉幾個。'
+          if (new Set(nums).size !== nums.length) return '用量告警門檻有重複的數字，每個門檻只需填一次，例如 80,100。'
+          return ''
+        },
         // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
         async init() {
           await this.load()
@@ -576,7 +615,8 @@
           this.saving = true
           const { callback_url: _cb, events: _ev, event_groups: _eg, role_choices: _rc, ...payload } = this.cfg
           const parts = String(this.thText || '').split(/[,，\s]+/).filter(Boolean)
-          if (parts.some(p => !/^[0-9]+$/.test(p))) { this.saving = false; this._say('告警門檻只能填整數百分比，例如 80,100', true); return }
+          const problem = this.lineProblem(parts)
+          if (problem) { this.saving = false; this._say(problem + '（尚未儲存）', true, 15000); return }
           payload.quota_thresholds = parts.map(Number)
           const r = await fetch('/api/settings/line-notify', { method: 'PUT', headers: hdr(true), body: JSON.stringify(payload) })
           this.saving = false
@@ -592,6 +632,10 @@
           }
         },
         async verify() {
+          // 驗證用的是「已儲存」的 token（不是欄位裡剛貼的）：沒存過、或剛改還沒存，都先告訴使用者怎麼做，不送注定失敗的請求
+          const tok = String(this.cfg.channel_access_token || '').trim()
+          if (!tok) { this._say('尚未填寫 Channel access token，無法驗證。請先在上方貼上 token，按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
+          if (tok !== '••••••••') { this._say('您貼上的新 token 尚未儲存，驗證用的是已儲存的 token。請先按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
           this.verifying = true
           const r = await fetch('/api/settings/line-notify/verify', { method: 'POST', headers: hdr(false) })
           this.verifying = false
@@ -601,7 +645,7 @@
             const quota = q.ok ? ('；本月已用 ' + q.used + (q.limit == null ? '（無上限）' : ' / ' + q.limit)) : ''
             this._say('token 有效：' + (d.name || '（未取得名稱）') + quota, false, 8000)
           } else {
-            this._say(d.detail || '驗證失敗（請先儲存 token）', true, 8000)
+            this._say(d.detail || '驗證失敗：沒有收到說明。請稍後再按一次驗證；仍失敗請確認 token 是否正確。', true, 12000)
           }
         },
       }

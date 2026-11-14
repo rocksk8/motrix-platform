@@ -1054,12 +1054,12 @@
               <div class="mb-row">
                 <h3 style="margin:0">預覽（樣本資料）</h3>
                 <button class="btn btn-ghost btn-sm" id="mb-preview-btn" @click="previewOutput()" :disabled="previewBusy">重新預覽</button>
-                <span class="mb-hint" id="mb-preview-state" :data-state="previewState" x-text="previewState === 'ok' ? '已更新' : (previewState === 'bad' ? '版型有問題' : '')"></span>
+                <span class="mb-hint" id="mb-preview-state" :data-state="previewState" x-text="previewState === 'ok' ? '已更新' : (previewState === 'bad' ? '暫時無法預覽，原因見下方' : '')"></span>
                 <!-- 缺口 #7：同一份草稿定義要 PDF（output/preview?format=pdf），另開分頁顯示 -->
                 <button class="btn btn-ghost btn-sm" id="mb-preview-pdf" x-show="canPdf()" @click="previewPdf()" :disabled="pdfBusy">PDF 預覽</button>
-                <span class="mb-hint" id="mb-pdf-state" :data-state="pdfState" :data-bytes="pdfBytes" x-text="pdfState === 'pending' ? 'PDF 產生中…' : (pdfState === 'bad' ? 'PDF 產生失敗' : '')"></span>
+                <span class="mb-hint" id="mb-pdf-state" :data-state="pdfState" :data-bytes="pdfBytes" x-text="pdfState === 'pending' ? 'PDF 產生中…' : (pdfState === 'bad' ? 'PDF 產生失敗' : (pdfState === 'blocked' ? '暫時無法預覽，原因見下方' : ''))"></span>
               </div>
-              <template x-for="(p, pi) in previewProblems" :key="pi"><div class="mb-bad" :data-problem-path="p.path" x-text="(p.path || '') + '：' + p.message"></div></template>
+              <template x-for="(p, pi) in previewProblems" :key="pi"><div class="mb-bad" :data-problem-path="p.path" x-text="(p.path ? p.path + '：' : '') + p.message"></div></template>
               <iframe class="mb-frame" id="mb-preview" sandbox="" :srcdoc="previewHtml" title="輸出預覽"></iframe>
             </div>
           </section>
