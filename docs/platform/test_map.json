@@ -10179,15 +10179,18 @@
    "units": [
     "core:db",
     "dir:backend/modules/case/",
-    "dir:frontend/pages/",
     "helper:legal_params",
     "mod:case/api/case_extra_expenses",
     "mod:case/tests/test_purchase_item_lines_2026_10_02",
     "mod:case/tests/test_settlement_actuals_2026_10_03",
-    "page:pages/settlement.html"
+    "page:pages/settlement.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/legal_params.py",
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
@@ -10197,10 +10200,6 @@
      "backend/modules/case/api/case_extra_expenses.py"
     ],
     "page": [
-     "frontend/pages/settlement.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/settlement.html"
     ],
     "module_dir": [
