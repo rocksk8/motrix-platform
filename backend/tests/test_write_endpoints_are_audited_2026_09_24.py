@@ -128,6 +128,12 @@ EXEMPT = {
         "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
     ("duty_roles.py", "POST", "/api/duty-roles/subtracts/remove"):
         "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/matrix/preview"):
+        "純試算：helpers/duty_role_matrix.preview 只算每個角色多／少哪些權限（唯讀），不寫 audit_log／permission_changes／duty_roles；測試 test_duty_role_matrix_2026_11_14.py 驗呼叫前後列數不變",
+    ("duty_roles.py", "POST", "/api/duty-roles/matrix/apply"):
+        "T86：稽核在同一個交易內由 helpers/duty_role_matrix.apply→helpers/duty_roles.update_role(commit=False)→_record→_write_audit 寫入（動作 duty_roles.role_update，逐角色一列、與 permission_changes 同交易），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_duty_role_matrix_2026_11_14.py 驗 audit_log 與 permission_changes 各多一列、中途例外全部不寫",
+    ("duty_roles.py", "POST", "/api/duty-roles/matrix/undo"):
+        "T86：稽核在同一個交易內由 helpers/duty_role_matrix.undo→helpers/duty_roles.update_role(commit=False)→_record→_write_audit 寫入（動作 duty_roles.role_update，逐角色一列），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_duty_role_matrix_2026_11_14.py 驗復原與逐角色 CAS",
     ("duty_roles.py", "POST", "/api/duty-roles/preview"):
         "純試算：生效權限預覽（唯讀、superadmin），不寫任何資料表",
     ("modules/accounting/api/ledger_periods.py", "POST", "/opening/preview"):
