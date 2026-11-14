@@ -165,7 +165,7 @@ def test_fhb6_a_missing_owner_module_is_reported_not_silent(client, world, monke
     real = registry.module_states
     monkeypatch.setattr(registry, "module_states", lambda: [s for s in real() if s["key"] != "supply"])
     body = _search(client, H["ct_admin"], quote_no=Q).json()
-    assert any("採購・庫存・出貨" in u["reason"] and "不是 0 筆" in u["reason"] for u in body["unavailable"]), body["unavailable"]
+    assert any("採購與庫存" in u["reason"] and "不是 0 筆" in u["reason"] for u in body["unavailable"]), body["unavailable"]
 
 
 class _Boom:

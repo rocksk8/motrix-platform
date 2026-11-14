@@ -10,8 +10,23 @@ from helpers import perm_text as T
 from modules.permmatrix import service as S
 
 
-def _cap_row(c):
-    return {"key": c.key, "unit": c.unit, "unitLabel": T.module_label(c.unit), "obj": c.obj, "action": c.action, "actionLabel": T.action_label(c.action),
+def _unit_names():
+    """{單元鍵: 中文名稱}：取自已載入模組宣告檔（module.json）的 `name`。能力的第一段是「單元鍵」（case／crm／payroll…），
+    不是 module_registry 的功能鍵（case_manage…），所以不能用 `T.module_label` 查（會一律變成「（未命名功能）」）。只影響顯示，權限鍵不動。"""
+    try:
+        from core import registry
+        return {lm.key: str((lm.manifest or {}).get("name") or "") for lm in registry.loaded()}
+    except Exception:                                  # noqa: BLE001  —— 查不到名稱只退回備援，不讓檢視頁失敗
+        return {}
+
+
+def _unit_label(unit, names):
+    return names.get(unit) or T.module_label(unit)
+
+
+def _cap_row(c, names=None):
+    names = _unit_names() if names is None else names
+    return {"key": c.key, "unit": c.unit, "unitLabel": _unit_label(c.unit, names), "obj": c.obj, "action": c.action, "actionLabel": T.action_label(c.action),
             "label": c.label, "desc": c.desc, "impact": c.impact, "risk": c.risk, "delegable": c.delegable,
             "wired": not c.reserved}              # 「未接入」＝已登錄但還沒有任何端點使用（頁面不可勾）
 
@@ -23,6 +38,7 @@ def matrix_view(conn):
     eff = S._build_matrix(conn, seed)
     roles = S._roles()
     rows = []
+    names = _unit_names()
     for key in sorted(caps):
         c = caps[key]
         cells = {}
@@ -30,7 +46,7 @@ def matrix_view(conn):
             seeded = key in seed.role_grants.get(r, ())
             granted = key in eff.role_grants.get(r, ())
             cells[r] = {"granted": granted, "seeded": seeded, "changed": granted != seeded}
-        rows.append({**_cap_row(c), "cells": cells})
+        rows.append({**_cap_row(c, names), "cells": cells})
     return {"roles": [{"role": r, "label": T.role_label(r)} for r in roles],
             "actions": [{"action": a, "label": CAP.ACTION_INFO[a][0], "desc": CAP.ACTION_INFO[a][1], "highRisk": a in CAP.HIGH_RISK_ACTIONS} for a in CAP.ACTIONS],
             "caps": rows, "signature": CAP.signature()}
@@ -43,9 +59,10 @@ def user_effective(conn, user_id):
     if u is None:
         raise S.PermError("找不到該使用者或帳號已停用", 404)
     out = []
+    names = _unit_names()
     for key, c in sorted(CAP.all_caps().items()):
         e = P.explain(u, key)
-        out.append({**_cap_row(c), "allowed": bool(e.get("allowed")), "via": e.get("via"), "why": T.explain_text(u, key)})
+        out.append({**_cap_row(c, names), "allowed": bool(e.get("allowed")), "via": e.get("via"), "why": T.explain_text(u, key)})
     return {"user": {"id": u["id"], "name": T.user_label(u), "roleLabel": T.role_label(u["role"])}, "caps": out}
 
 

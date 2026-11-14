@@ -305,7 +305,7 @@ def test_case_action_items_not_readable_by_outsiders(client, make_user):
 
 
 def _case_document_bases():
-    """帶 quote_no 讀案件單據的端點；出貨單在採購・庫存・出貨（M03）、承攬商付款在外包工班（M04），
+    """帶 quote_no 讀案件單據的端點；出貨單在採購與庫存（M03）、承攬商付款在外包工班（M04），
     模組不在時不列（端點本來就不在，PLAYBOOK §B-11）。"""
     from core import source_tree
     bases = ["/api/completion-notes"]
