@@ -405,11 +405,14 @@ def test_excel_is_gated_like_the_data_endpoint(client, world):
     assert client.get(BASE + "/revenue/excel", headers=world["qdev"]).status_code == 403
 
 
-def test_pdf_sibling_is_registered_with_same_gate(client, world):
-    import main
-    paths = {getattr(r, "path", "") for r in main.app.routes}
-    assert "/api/std-reports/{rid}/pdf" in paths
+def test_pdf_sibling_exists_and_has_the_same_gate(client, world):
+    # 不看 main.app.routes（模組路由掛在啟動流程，不一定在頂層清單）：直接打端點
     assert client.get(BASE + "/revenue/pdf", headers=world["nomod"]).status_code == 403
+    assert client.get(BASE + "/revenue/pdf", headers=world["qdev"]).status_code == 403
+    import helpers.xlsx_out as X
+    X._export_times.clear()
+    r = client.get(BASE + "/case-progress/pdf", headers=world["sa"])
+    assert r.status_code != 404, r.text[:200]
 
 
 def test_excel_for_case_progress_has_no_money_headers(client, world):
