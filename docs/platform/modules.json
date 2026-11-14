@@ -968,6 +968,8 @@
    "name": "分析",
    "units": [
     "js:js/reports.js",
+    "js:static/custom-reports.js",
+    "page:pages/custom-reports.html",
     "page:pages/devices.html",
     "page:pages/procurement.html",
     "page:pages/report-templates.html",

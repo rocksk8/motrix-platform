@@ -23,6 +23,8 @@
      "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance", "section": "營運", "desc": "本月損益與各案件獲利狀況；未付款對象、應收帳款帳齡；各業務的成案與目標達成"}},
     {"path": "report-templates.html",
      "menu": {"group": "analysis", "label": "自選條件報表", "order": 15, "perm": ["finance", "reports"], "section": "營運", "desc": "可自訂日期區間、部門與案件狀態，重新產出案件清單、收款明細與業務員績效，並可下載 Excel"}},
+    {"path": "custom-reports.html",
+     "menu": {"group": "analysis", "label": "自訂報表", "order": 16, "perm": ["quotation", "case_manage", "dev_crm"], "section": "營運", "desc": "自己挑選資料來源、欄位、篩選與分組小計，存成我的報表並匯出 Excel；只看得到自己有權限的資料"}},
     {"path": "devices.html",
      "menu": {"group": "supply", "label": "設備登載", "order": 70, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",
