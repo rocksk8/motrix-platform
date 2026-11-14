@@ -61,7 +61,7 @@ window.CM_PARTS.push(() => ({
 
     async loadVendors() {
       try {
-        const r = await fetch('/api/vendor-contractors/selectable', {
+        const r = await (window.motrixBootFetch || fetch)('/api/vendor-contractors/selectable', {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) this.vendors = await r.json()
@@ -71,7 +71,7 @@ window.CM_PARTS.push(() => ({
       const canRoster = (this.session && this.session.role === 'superadmin') || ['procurement', 'case_manage', 'contractor_list', 'payslip', 'finance', 'cashier'].some(k => mods.includes(k))
       if (!canRoster) { this.contractorRoster = []; return }
       try {
-        const r2 = await fetch('/api/contractors/selectable', {
+        const r2 = await (window.motrixBootFetch || fetch)('/api/contractors/selectable', {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r2.ok) this.contractorRoster = await r2.json()

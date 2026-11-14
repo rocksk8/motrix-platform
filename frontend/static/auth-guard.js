@@ -31,6 +31,23 @@
     '/api/notifications/mine': ['notifications', 1], '/api/reads/module-counts': ['moduleCounts', 1],
     '/api/online-users': ['onlineUsers', 1], '/api/auth/totp/status': ['totp', 1]
   };
+  // T86 #10：案件管理頁首屏另外要的 8 支「登入即可讀」小請求（onepipe 旗標、版面與規則設定群組、利潤門檻、可選使用者、公司公開資料、
+  // 清單排序偏好、兩支承攬商下拉）也併進同一支：只有這一頁才多帶 `?page=case`、才登記這些路徑（其他頁網址不在表內 ⇒ 照舊直接 fetch、不多等 bootstrap）。
+  // 路徑要與後端 routers/bootstrap.PAGE_SECTIONS["case"] 逐字相同（守門：tests/test_bootstrap_page_case_2026_11_14.py）。
+  var BOOT_PAGE = /\/case-management\.html$/.test(location.pathname) ? 'case' : '';
+  if (BOOT_PAGE === 'case') {
+    BOOT_SECTIONS['/api/settings-center/public?groups=onepipe'] = ['onepipeFlags', 1];
+    BOOT_SECTIONS['/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates,ui_format'] = ['builderGroups', 1];
+    BOOT_SECTIONS['/api/profit-warning/config'] = ['profitWarning', 1];
+    BOOT_SECTIONS['/api/users/selectable'] = ['usersSelectable', 1];
+    BOOT_SECTIONS['/api/settings/company-profile/public'] = ['companyProfilePublic', 1];
+    BOOT_SECTIONS['/api/list-prefs/case_list'] = ['listPrefCase', 1];
+    BOOT_SECTIONS['/api/vendor-contractors/selectable'] = ['vendorsSelectable', 1];
+    BOOT_SECTIONS['/api/contractors/selectable'] = ['contractorsSelectable', 1];
+    // 這一頁有兩個載入點的全站區段：側欄＋案件頁各一次（模組可用性、承攬商分頁的獎金模組狀態）
+    BOOT_SECTIONS['/api/system/modules/availability'] = ['moduleAvailability', 2];
+    BOOT_SECTIONS['/api/system/bonus-module-status'] = ['bonusModuleStatus', 2];
+  }
   var boot = { data: null, at: 0, token: '', hdr: null, used: {} };
   var bootResolve;
   window.MotrixBoot = new Promise(function (res) { bootResolve = res; });
@@ -247,7 +264,7 @@
 
   // 首繪不可以比改版前慢（B1）：**放行只看快的 `auth/me`**（與改版前逐字相同的路徑），`/api/bootstrap` 同時並行發出、
   // 只負責供應資料——它慢（11 個區段）不會擋住頁面顯示；它失敗（401／403／428／404／5xx／逾時）只是 MotrixBoot＝null、各處退回打原端點。
-  fetch('/api/bootstrap', { headers: authHeaders })
+  fetch(BOOT_PAGE ? '/api/bootstrap?page=' + BOOT_PAGE : '/api/bootstrap', { headers: authHeaders })
     .then(function (r) {
       if (r.status !== 200) { clearTimeout(bootTimer); bootResolve(null); return; }
       return r.json().then(function (d) {
