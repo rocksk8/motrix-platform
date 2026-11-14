@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — T86 案件頁首屏請求併單、業務／工程師不再有 403（train/t86-int；feat/t86-case-ux-h1；版號由列車取）
+- 效能（行為、API 欄位、權限鍵、資料庫值不變）：案件管理頁首次載入由 19 支 API 降為 9 支、開啟案件由 25 支降為 14 支。首屏原本各打一次的 8 支「登入即可讀」小請求（onepipe 旗標、版面與規則設定群組、利潤門檻、可選使用者、公司公開資料、清單排序偏好、兩支承攬商下拉）併進 `GET /api/bootstrap?page=case`（後端 `routers/bootstrap.py` 的頁面區段；規則同全站區段：直接呼叫原端點處理函式、同一份權限檢查、不比原端點多給、本公司資料未設定時不給）。分頁內容本來就是切到才載入，不變。
+- 修正：業務、工程師開財務分頁（或存款項明細、處理承攬商憑證）時，前端對 `/api/quotations/{no}/finance-summary` 發請求而被後端拒絕（403，console 多一筆紅字）。現在 `loadFinanceSummary` 與畫面同一條規則（`canSeeFinancial()`＝最高管理者／財務角色），其他角色不送。
+- 守門：`tests/test_bootstrap_page_case_2026_11_14.py`（逐區段逐角色與原端點比對、閘門、前後端路徑表一致、非財務角色不送請求）；案件頁行為基準 `golden_case_page_*.json` 只有「API 請求」一步改變，畫面逐步相同。
+
 ## 1.0.237 — 2026-11-14（train/t85-text；T85 整合補修；版號由列車取）
 - 畫面（行為不變）：到貨登載的「到貨單照片」選檔欄 `accept` 由 `image/*` 改為明列常見圖片型別（jpeg／png／webp／heic）加 PDF；報價單表單版號 V3.47（文字）；`notify_next`／`po_auto_approve` 補登 modules.json 歸屬。
 
