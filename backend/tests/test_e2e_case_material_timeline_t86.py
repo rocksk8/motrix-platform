@@ -109,9 +109,10 @@ def test_material_flow_page_is_a_summary_that_points_back_into_the_case(live_ser
 
 
 @pytest.mark.e2e
-def test_import_from_quote_dialog_is_centered_with_aligned_rows(live_server, make_user, e2e_browser):
-    """第 12 項：視窗置中；勾選框、品名、數量同一列；數量欄靠右對齊。"""
-    page = _open(live_server, make_user, e2e_browser, "mtl_t86d", 1440)
+@pytest.mark.parametrize("width", [1440, 390])
+def test_import_from_quote_dialog_is_centered_with_aligned_rows(live_server, make_user, e2e_browser, width):
+    """第 12、24 項：視窗置中（手機不超出螢幕）；勾選框、品名、數量同一列；數量欄靠右對齊；主要按鈕用主色。"""
+    page = _open(live_server, make_user, e2e_browser, "mtl_t86d%d" % width, width)
     page.get_by_role("button", name="從報價單匯入").first.click()
     box = page.locator('[data-testid="import-modal"] .imp-box')
     box.wait_for(state="visible", timeout=10000)
@@ -126,7 +127,16 @@ def test_import_from_quote_dialog_is_centered_with_aligned_rows(live_server, mak
     q0, q1 = (r.locator(".imp-qty").bounding_box() for r in rows)
     assert abs((q0["x"] + q0["width"]) - (q1["x"] + q1["width"])) <= 1, "數量欄右緣要對齊"
     assert page.locator('[data-testid="import-confirm"]').is_enabled()
-    _shot(page, "import_dialog_desktop")
+    bb = box.bounding_box()
+    assert bb["x"] >= 0 and bb["x"] + bb["width"] <= width + 1, "視窗不可超出螢幕：%s" % bb
+    paint = page.evaluate("""() => { const p = document.createElement('i'); p.style.background = 'var(--accent)'; document.body.appendChild(p); const a = getComputedStyle(p).backgroundColor; p.remove();
+        return [getComputedStyle(document.querySelector('[data-testid=import-confirm]')).backgroundColor, a] }""")
+    assert paint[0] == paint[1], "確認鈕要用主色：%s" % paint
+    ok = page.locator('[data-testid="import-confirm"]').bounding_box()
+    assert ok["height"] >= (38 if width == 390 else 24), ok
+    over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
+    _shot(page, "item12_24_import_dialog_%d" % width)
     page.locator('[data-testid="import-confirm"]').click()
     page.locator('[data-testid="mtl-row-ma"]').wait_for(state="visible")
     assert page.locator('[data-testid^="mtl-row-"]').count() >= 4, "匯入的品項進入時間軸"
