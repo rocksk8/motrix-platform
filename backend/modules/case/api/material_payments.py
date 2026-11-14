@@ -454,7 +454,7 @@ def detail(conn, doc_no):
     row = dict(r)
     sn = MP.snapshot_of(row)
     fields = [{"label": "單號", "value": row["doc_code"]}, {"label": "案件", "value": row["quote_no"]}, {"label": "品名", "value": sn.get("itemName") or "—"},
-              {"label": "供應商", "value": sn.get("supplierName") or "—"}, {"label": "第幾張申請", "value": str(row["seq"])},
+              {"label": "供應商", "value": sn.get("supplierName") or "—"}, {"label": "申請序號", "value": str(row["seq"])},
               {"label": "材料申請小計", "value": format(float(sn.get("totalPrice") or 0), ",.0f")},
               {"label": "本次申請金額", "value": format(float(row["amount_approved"] or 0), ",.0f")},
               {"label": "收款帳號", "value": _mask(sn.get("bankAccountNumber")) or "—"}]

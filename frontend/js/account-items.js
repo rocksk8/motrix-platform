@@ -177,7 +177,7 @@ function accountItemsPage() {
 
     get matchHint() {
       const n = this.visibleRows.length
-      return n ? ('找到 ' + n + ' 筆') : '沒有符合的科目'
+      return n ? ('找到 ' + n + ' 筆') : '查無符合條件的科目'
     },
 
     // ── `CA1`：延伸建立 ──────────────────────────────────────────

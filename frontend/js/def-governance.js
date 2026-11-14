@@ -105,7 +105,7 @@
   function renderPending() {
     var P = st.pending
     if (!P) return '<div class="dg-dim">讀取中…</div>'
-    if (!P.length) return '<div class="dg-dim">目前沒有待核准的放寬變更。</div>'
+    if (!P.length) return '<div class="dg-dim">尚無待核准的放寬變更。</div>'
     return '<div class="dg-dim">放寬限制的變更要另一位最高管理者核准，並等確認期間過後才能套用；期間內任何最高管理者都能撤銷。</div>' + P.map(function (c) {
       var key = String(c.id)
       var btns = ['approve', 'activate', 'cancel'].map(function (v) {
@@ -144,13 +144,13 @@
   function renderImpact() {
     var I = st.impact
     if (!I) return '<div class="dg-dim">讀取中…</div>'
-    if (!I.hasDraft) return '<div class="dg-dim">目前沒有草稿，沒有要發布的內容。</div>'
+    if (!I.hasDraft) return '<div class="dg-dim">尚無草稿，無可發布的內容。</div>'
     var h = '<div>將從第 ' + esc(I.liveVersion == null ? '—' : I.liveVersion) + ' 版發布為第 ' + esc(I.nextVersion) + ' 版，共 ' + esc(I.changeCount) + ' 處變更。</div>'
     h += I.validation.ok ? '<div class="dg-live">驗證通過</div>' : '<div class="dg-bad">驗證不通過（' + I.validation.problems.length + ' 個問題），發布會被拒絕：' +
       I.validation.problems.map(function (x) { return '<div>' + esc((x.path ? x.path + '：' : '') + x.message) + '</div>' }).join('') + '</div>'
-    h += '<h4>會影響哪裡</h4><div>' + esc(I.declared.screens) + (I.declared.customerVisible ? '（客戶看得到的輸出）' : '') + '</div>'
+    h += '<h4>會影響哪裡</h4><div>' + esc(I.declared.screens) + (I.declared.customerVisible ? '（客戶可檢視的輸出）' : '') + '</div>'
     if (I.otherScopes.length) h += '<div class="dg-dim">同一份定義另有：' + I.otherScopes.map(function (s) { return esc(s.scope) + ' 第 ' + esc(s.latestVersion) + ' 版' }).join('、') +
-      (I.declared.roleOverridesPresent ? '。這些角色若有自己的版本，看到的不一定會跟著改。' : '') + '</div>'
+      (I.declared.roleOverridesPresent ? '。這些角色若有自己的版本，顯示的內容不一定會跟著改。' : '') + '</div>'
     if (I.frozenRecords != null) h += '<div>目前有 <b>' + esc(I.frozenRecords) + '</b> 張單據凍結在生效中的第 ' + esc(I.liveVersion) + ' 版，發布新版後它們仍用舊版。</div>'
     h += '<div class="dg-dim">' + esc(I.note) + '</div>'
     h += '<h4>變更內容</h4>' + (I.changes.length ? I.changes.map(changeLine).join('') : '<div class="dg-dim">沒有差異。</div>')

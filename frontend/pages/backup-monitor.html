@@ -118,7 +118,7 @@
             <template x-for="b in (Array.isArray(s.backups) ? s.backups : [])" :key="b.key">
               <div class="bm-row" :data-testid="'bm-backup-' + b.key" :data-level="b.level">
                 <div class="bm-label"><span x-text="b.label"></span>
-                  <button type="button" class="bm-q" :aria-expanded="isHelp('b-' + b.key)" aria-label="這是什麼" @click="toggleHelp('b-' + b.key)">?</button></div>
+                  <button type="button" class="bm-q" :aria-expanded="isHelp('b-' + b.key)" aria-label="說明" @click="toggleHelp('b-' + b.key)">?</button></div>
                 <div class="bm-time"><span x-text="fmt(b.at)"></span><small x-show="b.at" x-text="ago(b.at)"></small></div>
                 <div><span class="st-chip" :class="chipClass(b.level)" x-text="levelText(b.level, b.result)"></span></div>
                 <div class="bm-note" x-text="b.note"></div>
@@ -130,7 +130,7 @@
           <!-- 雲端 -->
           <section class="bm-card" data-testid="bm-cloud">
             <div class="bm-card-h"><h2 class="sec-t">雲端備份</h2>
-              <button type="button" class="bm-q" :aria-expanded="isHelp('cloud')" aria-label="這是什麼" @click="toggleHelp('cloud')">?</button></div>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('cloud')" aria-label="說明" @click="toggleHelp('cloud')">?</button></div>
             <div class="bm-q-pop" x-show="isHelp('cloud')">備份除保存於本機外，另會複製至雲端（雲端硬碟或 S3），電腦故障或遭竊時方能還原。「鏡像」＝將上傳的檔案、PDF 存檔原樣另存一份至雲端。</div>
             <template x-if="s.cloud && !s.cloud.error">
               <div>
@@ -151,7 +151,7 @@
           <!-- 硬碟 -->
           <section class="bm-card" data-testid="bm-disks">
             <div class="bm-card-h"><h2 class="sec-t">硬碟剩餘空間</h2>
-              <button type="button" class="bm-q" :aria-expanded="isHelp('disk')" aria-label="這是什麼" @click="toggleHelp('disk')">?</button></div>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('disk')" aria-label="說明" @click="toggleHelp('disk')">?</button></div>
             <div class="bm-q-pop" x-show="isHelp('disk')">硬碟空間用盡時，備份與上傳將會失敗。少於下方「通知門檻」會寄信給最高管理者；門檻在設定中心可以調整。</div>
             <template x-if="s.disks && s.disks.error"><div class="bm-bad" x-text="s.disks.error"></div></template>
             <template x-for="d in (Array.isArray(s.disks) ? s.disks : [])" :key="d.label">
@@ -168,7 +168,7 @@
           <!-- 心跳 -->
           <section class="bm-card" data-testid="bm-heartbeat">
             <div class="bm-card-h"><h2 class="sec-t">系統是否在線（心跳監控）</h2>
-              <button type="button" class="bm-q" :aria-expanded="isHelp('hb')" aria-label="這是什麼" @click="toggleHelp('hb')">?</button></div>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('hb')" aria-label="說明" @click="toggleHelp('hb')">?</button></div>
             <div class="bm-q-pop" x-show="isHelp('hb')">這台電腦每 5 分鐘會檢查系統是否仍在運作，並向外部監控服務（例如 healthchecks.io）回報一次。若發生斷電或系統異常，外部服務未收到回報時，會寄送電子郵件通知您——這是系統本身故障時唯一仍會發出的警報。</div>
             <template x-if="s.heartbeat && !s.heartbeat.error">
               <div>
@@ -182,7 +182,7 @@
                   <dd data-testid="bm-hb-host" x-text="s.heartbeat.pingUrlSet ? ('已設定（' + (s.heartbeat.pingHost || '—') + '）') : '尚未設定：目前只檢查本機，沒有通知外部'"></dd>
                 </dl>
                 <label class="bm-label" for="bm-ping" style="display:block;margin-top:6px">監控網址
-                  <button type="button" class="bm-q" :aria-expanded="isHelp('url')" aria-label="這是什麼" @click="toggleHelp('url')">?</button></label>
+                  <button type="button" class="bm-q" :aria-expanded="isHelp('url')" aria-label="說明" @click="toggleHelp('url')">?</button></label>
                 <div class="bm-q-pop" x-show="isHelp('url')">到 healthchecks.io 之類的監控服務建立一個檢查項目，會得到一串「Ping URL」，請整串複製後貼上。這串網址等同密碼，所以儲存後畫面只會顯示主機名，不會再顯示整串。</div>
                 <div class="bm-note">手動儲存：貼好後按「儲存監控網址」才會生效。</div>
                 <div class="bm-line">
@@ -199,7 +199,7 @@
                 </div>
                 <div class="callout callout--warn" x-show="s.heartbeat.disableRequest" data-testid="bm-disable-request" style="margin-top:8px">
                   <strong data-testid="bm-disable-waiting" x-text="waitingTitle()"></strong>
-                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'您的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '把監控換到另一個主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外回報。')"></div>
+                  <div class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-mine-what" x-text="'您的申請：' + (s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '將監控移轉至另一台主機（' + s.heartbeat.disableRequest.newHost + '）。' : '停用對外回報。')"></div>
                   <div class="bm-note">原因：<span x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.reason"></span>（<span x-text="s.heartbeat.disableRequest && fmt(s.heartbeat.disableRequest.at)"></span>）。核准前，維持目前的設定。</div>
                   <div class="bm-line">
                     <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
@@ -220,7 +220,7 @@
           <!-- 告警 -->
           <section class="bm-card" data-testid="bm-alerts">
             <div class="bm-card-h"><h2 class="sec-t">告警紀錄</h2>
-              <button type="button" class="bm-q" :aria-expanded="isHelp('alerts')" aria-label="這是什麼" @click="toggleHelp('alerts')">?</button></div>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('alerts')" aria-label="說明" @click="toggleHelp('alerts')">?</button></div>
             <div class="bm-q-pop" x-show="isHelp('alerts')">備份出問題時系統會留下告警（也會寄信）。問題排除後，告警會自動標示為「已解除」。下面只列最近 30 天。</div>
             <template x-if="s.alerts && !s.alerts.error">
               <div>
@@ -232,7 +232,7 @@
                 <template x-for="a in s.alerts.recent" :key="a.at + a.kind + a.text">
                   <div class="bm-alert"><time x-text="fmt(a.at)"></time>
                     <span class="st-chip" :class="a.kind === 'cleared' ? 'st-chip--approved' : (a.kind === 'alert' ? 'st-chip--pending' : 'st-chip--rejected')"
-                          x-text="a.kind === 'cleared' ? '已解除' : (a.kind === 'alert' ? '告警' : '信寄不出去')"></span>
+                          x-text="a.kind === 'cleared' ? '已解除' : (a.kind === 'alert' ? '告警' : '信無法寄出')"></span>
                     <span x-text="a.text"></span></div>
                 </template>
               </div>
@@ -243,8 +243,8 @@
 
           <!-- 保留與門檻 -->
           <section class="bm-card" data-testid="bm-settings">
-            <div class="bm-card-h"><h2 class="sec-t">保留多久、什麼時候通知</h2>
-              <button type="button" class="bm-q" :aria-expanded="isHelp('th')" aria-label="這是什麼" @click="toggleHelp('th')">?</button></div>
+            <div class="bm-card-h"><h2 class="sec-t">保留期限與通知時機</h2>
+              <button type="button" class="bm-q" :aria-expanded="isHelp('th')" aria-label="說明" @click="toggleHelp('th')">?</button></div>
             <div class="bm-q-pop" x-show="isHelp('th')">這些數字在「設定中心」調整。調整得較寬鬆（保留更短、更晚才通知）需要另一位最高管理者核准，並等確認期間後才生效，避免被誤改或盜用。</div>
             <dl class="bm-kv" x-show="s.retention && !s.retention.error">
               <dt>系統日誌保留</dt><dd data-testid="bm-ret-log" x-text="(s.retention && s.retention.log_keep_days) + ' 天'"></dd>
@@ -258,7 +258,7 @@
             <div class="bm-links">
               <a href="settings-center.html#retention" data-testid="bm-link-retention">調整保留天數</a>
               <a href="settings-center.html#monitoring" data-testid="bm-link-monitoring">調整通知門檻</a>
-              <a href="mail-settings.html" data-testid="bm-link-mail">設定誰收到備份告警信</a>
+              <a href="mail-settings.html" data-testid="bm-link-mail">設定備份告警收件對象</a>
             </div>
           </section>
         </div>
@@ -322,7 +322,7 @@
         waitingTitle() {
           const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
           if (!rq) return ''
-          const what = rq.kind === 'change' ? '把監控換到另一個主機' : '停用對外回報'
+          const what = rq.kind === 'change' ? '將監控移轉至另一台主機' : '停用對外回報'
           if (!rq.mine) return rq.requestedBy + ' 申請' + what + '，等待您或另一位最高管理者核准。'
           const hrs = rq.hoursWaiting > 0 ? rq.hoursWaiting + ' 小時' : '不到 1 小時'
           const who = (rq.waitingFor && rq.waitingFor.length) ? rq.waitingFor.join('、') : '另一位最高管理者'
@@ -385,8 +385,8 @@
           const T = {
             backup: ['立即做一次備份？', '將複製一份資料庫並更新雲端備份；於背景執行，不影響其他使用者作業，通常數分鐘內完成。為避免重複，30 分鐘內僅能執行一次。', '開始備份'],
             url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務回報，無須重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
-            clear: ['停用對外回報？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就沒有人會收到通知。有多位最高管理者時，須另一位核准後才會停用；只有一位時立即停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
-            approve: ['核准停用對外回報？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或系統異常，就沒有人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
+            clear: ['停用對外回報？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或系統異常，就無人會收到通知。有多位最高管理者時，須另一位核准後才會停用；只有一位時立即停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
+            approve: ['核准停用對外回報？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或系統異常，就無人會收到通知。請確認原因合理，且申請人為您認識的人員。', '核准停用'],
             reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請填寫駁回原因（將留存於紀錄）。', '駁回'],
             cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '發送一次心跳回報，確認本機可連線至該服務。每分鐘限測試一次。', '開始測試'],

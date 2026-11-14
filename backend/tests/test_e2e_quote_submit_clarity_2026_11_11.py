@@ -119,7 +119,7 @@ def test_precheck_blocks_then_recheck_passes_after_setup(live_server, make_user,
     assert "尚未歸屬任何部門" in text, text                       # 後端同一句話
     for label in ("建立「處」", "建立「部門」", "歸屬到某個部門", "指定在職主管"):
         assert label in text, (label, text)
-    assert "目前卡在這一步" in text
+    assert "目前處於此步驟" in text
     assert page.evaluate(f"() => {ROOT}.showSubmitModal") is False
     assert not submit_calls, submit_calls                          # 前置檢查階段不送審、不存檔
     assert page.evaluate(f"() => {ROOT}.q.status") in ("草稿", "", None)

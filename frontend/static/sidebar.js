@@ -351,7 +351,7 @@ if (typeof module !== 'undefined' && module.exports) {
         var list = document.getElementById('tb-online-list')
         if (!list) return
         if (!d.users.length) {
-          list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有其他人在線</div>'
+          list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">尚無其他人員在線</div>'
           return
         }
         list.innerHTML = d.users.map(function (u) {
@@ -461,7 +461,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<div x-text="item.message" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
       + '</div>'
       + '</template>'
-      + '<div x-show="items.length===0 && reminders.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
+      + '<div x-show="items.length===0 && reminders.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">尚無通知</div>'
       + '</div>'
       + (ad ? '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>' : '')
       + '</div>'
@@ -507,7 +507,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + buildFontCtrl()
       + buildThemeToggle()
       + buildOnlineWidget()
-      + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
+      + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="本頁使用說明" aria-label="本頁使用說明" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
       + '</div>'
       + buildAcctMenu(cpHref)
       + '</div>'
@@ -1258,7 +1258,7 @@ if (typeof module !== 'undefined' && module.exports) {
         //    不必來問任何人（`BR4` 的核心訴求）。
         var titles = d.behindTitles || []
         bar.title = '這個行程是 ' + started + ' 啟動的。磁碟上 '
-          + (d.disk_commit_short || '?') + ' 之後多了 ' + n
+          + (d.disk_commit_short || '?') + ' 之後新增 ' + n
           + ' 個動到程式碼的異動：\n' + titles.map(function (t) {
               return '• ' + t
             }).join('\n')

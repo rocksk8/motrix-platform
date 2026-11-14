@@ -104,9 +104,9 @@
       <div class="cm-mtools">
         <span class="cm-mtools__lbl">排序</span>
         <button type="button" class="aq-sort" :class="{on: gmSort==='ready'}"  @click="gmSort='ready'">最接近結案</button>
-        <button type="button" class="aq-sort" :class="{on: gmSort==='stuck'}"  @click="gmSort='stuck'">卡最久</button>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='stuck'}"  @click="gmSort='stuck'">逾期最久</button>
         <button type="button" class="aq-sort" x-show="canSeeFinancial()" :class="{on: gmSort==='amount'}" @click="gmSort='amount'">金額</button>
-        <span class="cm-mtools__lbl" style="margin-left:10px">只看</span>
+        <span class="cm-mtools__lbl" style="margin-left:10px">僅顯示</span>
         <button type="button" class="aq-sort" :class="{on: gmFilter==='ready'}"    @click="gmFilter = gmFilter==='ready'?'':'ready'">可結案</button>
         <button type="button" class="aq-sort" :class="{on: gmFilter==='settling'}" @click="gmFilter = gmFilter==='settling'?'':'settling'">待精算</button>
         <button type="button" class="aq-sort" :class="{on: gmFilter==='mine'}"     @click="gmFilter = gmFilter==='mine'?'':'mine'">我負責的</button>
@@ -175,7 +175,7 @@
               </tr>
             </template>
             <tr x-show="gmLoaded && matrixRows.length === 0">
-              <td colspan="11" class="cm-mtx__empty">沒有符合條件的案件</td>
+              <td colspan="11" class="cm-mtx__empty">查無符合條件的案件</td>
             </tr>
             <tr x-show="!gmLoaded">
               <td colspan="11" class="cm-mtx__empty">載入中…</td>
@@ -338,8 +338,8 @@
         <div class="cm-unread-bar" x-show="unreadCount() > 0 || unreadOnly" @click="toggleUnreadOnly()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
           <span x-text="unreadCount() + ' 筆案件有新動態'"></span>
-          <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看有新動態 →'"></span>
-          <button class="btn-add" style="margin-left:auto;padding:2px 10px;font-size:12px;border-style:solid" @click.stop="markAllRead()">一鍵已讀</button>
+          <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '僅顯示有新動態 →'"></span>
+          <button class="btn-add" style="margin-left:auto;padding:2px 10px;font-size:12px;border-style:solid" @click.stop="markAllRead()">全部標示已讀</button>
         </div>
 
         <div class="cm-list__body" x-show="caseViewMode==='list'" x-ref="caseListBody">
@@ -352,8 +352,8 @@
           <template x-if="!loading && filteredCases.length === 0">
             <div class="cm-empty">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
-              <span>沒有符合的案件</span>
-              <span class="cm-empty__sub" x-text="search ? '嘗試調整搜尋關鍵字' : (listTab !== 'all' ? '切換至「全部」查看所有案件' : '')"></span>
+              <span>查無符合條件的案件</span>
+              <span class="cm-empty__sub" x-text="search ? '請調整搜尋關鍵字' : (listTab !== 'all' ? '切換至「全部」查看所有案件' : '')"></span>
             </div>
           </template>
           <template x-for="c in filteredCases" :key="c.quote_no">
@@ -728,7 +728,7 @@
                         <a data-testid="case-link-material-flow" :href="'material-flow.html?q=' + encodeURIComponent(selected.quote_no)">物料流程</a>
                       </template>
                       <template x-if="caseMapUrl()">
-                        <a data-testid="case-link-map" :href="caseMapUrl()">在地圖上看</a>
+                        <a data-testid="case-link-map" :href="caseMapUrl()">在地圖上查看</a>
                       </template>
                       <template x-if="caseLinks.quoteNo === selected?.quote_no && caseLinks.bonusEnabled">
                         <a data-testid="case-link-bonus" :href="'bonus.html?q=' + encodeURIComponent(selected.quote_no)">獎金分配</a>
@@ -1359,7 +1359,7 @@
                     <template x-if="dwHist">
                       <ul style="margin:6px 0 0 16px" data-testid="dw-hist">
                         <template x-for="(e, i) in (dwHist.events || [])" :key="i"><li x-text="MotrixOnepipe.eventLine(e, false)"></li></template>
-                        <li x-show="!(dwHist.events || []).length" style="color:var(--text-dim)">沒有紀錄（開啟入庫紀錄之前的異動查不到）</li>
+                        <li x-show="!(dwHist.events || []).length" style="color:var(--text-dim)">尚無紀錄（開啟入庫紀錄之前的異動查不到）</li>
                       </ul>
                     </template>
                   </div>
@@ -1368,7 +1368,7 @@
                   <span class="cm-section-title" style="margin-bottom:0">設備 SN / MAC 記錄</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span>
                   <template x-if="(cr.caseRecord?.devices||[]).length > 0">
                     <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--tone-info-bg);border:1px solid var(--tone-info-border);border-radius:7px;flex-wrap:wrap">
-                      <span style="font-size:12px;font-weight:600;color:var(--tone-info-fg);font-family:var(--font-zh);white-space:nowrap">一鍵同步保固</span>
+                      <span style="font-size:12px;font-weight:600;color:var(--tone-info-fg);font-family:var(--font-zh);white-space:nowrap">同步保固</span>
                       <input type="date" x-model="_syncWarrantyDate" class="fi fi--sm" style="width:138px;flex-shrink:0">
                       <select data-saved-field x-model.number="_syncWarrantyMonths" class="fi fi--sm" style="width:96px;flex-shrink:0">
                         <option value="3">3 月</option>
@@ -2122,7 +2122,7 @@
                     </div>
                     <div x-show="!payReceivedAtRo(item) && item.received && !item.receivedAt"
                          style="margin-top:6px;padding:5px 9px;border-radius:5px;background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);font-size:12px;color:var(--tone-danger-fg);font-family:var(--font-zh)">
-                      <svg class="pay-warn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.5"/></svg> 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都撈不到它，請補上日期。
+                      <svg class="pay-warn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.5"/></svg> 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都不會統計到它，請補上日期。
                     </div>
 
                     <!-- T86 案件 UX #9：發票資料（號碼／開立日期／未稅／稅額／附件）預設收合；有內容時在標題列摘要，發票未稅與稅額只填一欄或合計不符時自動展開。 -->
@@ -2596,7 +2596,7 @@
                               <span x-show="g.pendingLines > 0 && !mlGroupBlock(g)" style="color:var(--text-dim)" x-text="'另有 ' + g.pendingLines + ' 行採購單簽核中（通過後用變更申請納入）'"></span>
                             </label>
                           </template>
-                          <div x-show="mlGroupChoices().length === 0" style="color:var(--text-dim)">沒有可帶入的採購單明細（只有已核准的採購單能帶入）</div>
+                          <div x-show="mlGroupChoices().length === 0" style="color:var(--text-dim)">尚無可帶入的採購單明細（只有已核准的採購單能帶入）</div>
                         </div>
                       </template>
                       <div x-show="!mlLoadingList" style="margin-top:8px;display:flex;gap:8px">
@@ -3550,7 +3550,7 @@
                       </div>
                       <!-- `MP1`：出貨地址在地圖上的位置（地圖點位的 `?focus=shipping_notes:<id>`）。 -->
                       <a class="mp1-onmap" x-show="n.deliveryAddress" style="font-size:12px"
-                         :href="'map.html?focus=' + encodeURIComponent('shipping_notes:' + n.id)">在地圖上看</a>
+                         :href="'map.html?focus=' + encodeURIComponent('shipping_notes:' + n.id)">在地圖上查看</a>
                       <span :class="'badge ' + _shippingStatusClass(n.status)" x-text="_shippingStatusLabel(n.status)"
                             style="font-size:12px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <span x-show="(n.status==='待審核'||n.status==='簽核中') && (n.approval && n.approval.tiers || []).length>0"
@@ -4565,7 +4565,7 @@
                 <input type="number" min="0" step="any" style="width:80px;text-align:right" x-model.number="msh.qty[x.materialItemId]" :data-testid="'msh-qty-' + x.docCode">
               </label>
             </template>
-            <div x-show="msh.items.length === 0 && !msh.err" style="color:var(--text-dim)">沒有可帶入的材料申請</div>
+            <div x-show="msh.items.length === 0 && !msh.err" style="color:var(--text-dim)">尚無可帶入的材料申請</div>
             <div x-show="msh.err" data-testid="msh-err" style="color:var(--tone-danger-fg)" x-text="msh.err"></div>
             <div style="margin-top:8px;display:flex;gap:8px">
               <button type="button" data-testid="msh-import" @click="mshImport()" style="font-size:12px;padding:3px 12px;border:1px solid var(--line);border-radius:5px;background:var(--accent-hover);color:var(--surface);cursor:pointer">帶入</button>

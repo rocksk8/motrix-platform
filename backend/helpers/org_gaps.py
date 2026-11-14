@@ -115,7 +115,7 @@ def _no_finance(conn):
         return None
     return {
         "key": GAP_NO_FINANCE, "severity": "warn", "count": 1,
-        "title": "目前沒有人擔任「財務」職務",
+        "title": "尚無人擔任「財務」職務",
         "detail": "請款、付款、對帳等財務動作目前只有最高管理者能做。請指定一位同仁擔任財務。",
         "items": [],
         "fix": {"label": "到使用者管理指定財務", "href": "users.html"},

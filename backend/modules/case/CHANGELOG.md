@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-b1-h2；T86 文字：短標籤專業化與看得到／看到用語）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面與提示的短標籤改為正式用語（前往／查看、尚無／查無符合條件的…、僅顯示等），說明中的「看得到／看到」依語境改為「可檢視」或「顯示」。
+
 ## (next) — 2026-11-14（train/t86-int；T86 案件管理 UX 整合：h1／h3／h6／h7／h8（含 h6 材料明細收合、h8 撤回任務活動點）；版號由列車取）
 - 整合者彙整（各項細節見各作者條目與核心 CHANGELOG「T86 案件管理 UX」）：案件清單預設合併「已成案」頁籤（設定 `list_view` 控制，不做 migration，A 案）、標題列／頁籤／精算頁白話與手機卡片（h7）；材料時間軸與手機階段卡／匯入視窗／出貨分頁新增入口（h6）；動態／記錄／財務分頁與無財務權限者只顯示可編輯欄位（h8，只改顯示、不改權限）；請購／採購單頁導覽、前置提示、送審結果（h3）；案件頁首屏請求併單（h1）。
 - 不變：API 欄位名、權限鍵、資料庫值與 migration 一律沒動。
@@ -7,6 +10,8 @@
 - **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9）**
 - 行為變更（資料範圍收窄）：`GET /api/quotations/{no}/privacy-notice`、`GET /api/completion-notes/{no}/privacy-notice`、`GET /api/material-payments/{id}/privacy-notice`，以及非管理員可呼叫的 `POST /api/quotations/{no}/privacy-notice/ack`、`POST /api/material-payments/{id}/privacy-notice/ack`（已記錄過時回傳既有紀錄）：管理員（admin／superadmin）照舊看完整紀錄；其他人只看「已告知＋日期」（`{at}`），不帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）。回應形狀不變（只是少欄位）、沒有新增權限鍵；伺服器端寫入的紀錄與稽核仍完整。（材料申請匯款的財務角色同此規則）
 - 測試：`tests/test_privacy_notice_ack_mask_siblings_2026_11_14.py`、`modules/case/tests/test_material_payment_api_2026_10_02.py::test_payee_privacy_ack_is_masked_for_non_admin_finance`。
+- **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：看得到／看到等權限與顯示用語）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：說明與提示中的「看得到／看不到／看到」依語境改為「可檢視／無法檢視」（權限）或「顯示／所見」（畫面），並補正前一批漏改的空狀態文字。
 
 ## (next) — T86 出貨單頁：連結材料申請的列也能選庫存序號（feat/ship-link-serial-coexist-t86；h11 審查補強；版號由列車取）
 - 畫面（審查補強）：「選料號」鈕提示改成如實說明（序號清單不過濾，是否屬於這筆材料申請由送審時檢查）。
@@ -16,6 +21,8 @@
 - 修正：業務、工程師開財務分頁（或存款項明細、處理承攬商憑證）時，前端對 `/api/quotations/{no}/finance-summary` 發請求而被後端拒絕（403，console 多一筆紅字）。現在 `loadFinanceSummary` 與畫面同一條規則（`canSeeFinancial()`＝最高管理者／財務角色），其他角色不送。
 - 守門：`tests/test_bootstrap_page_case_2026_11_14.py`（逐區段逐角色與原端點比對、閘門、前後端路徑表一致、非財務角色不送請求）；案件頁行為基準 `golden_case_page_*.json` 只有「API 請求」一步改變，畫面逐步相同。
 - **（追加，feat/t86-case-ux-h1b）T86 #10 第二輪＋財務可視跟後端同一套規則**：①財務金額可視（`canSeeFinancial()`，決定財務頁籤、是否送 `finance-summary`）改以後端 `can_see_financial` 的答案為準——`GET /api/bootstrap?page=case` 多一個衍生區段 `financeView`（`{financialView: bool}`，登入即可、不含任何金額資料），旗標 `finance_via_effective` 的 off／shadow／on 三態都與後端一致（含職責角色授予、個人扣項）；答案還沒到時才退回角色規則。`effective_modules`、`auth/me` 欄位不動。②出貨單分頁的排序偏好（`list-prefs/sn:{單號}`）改為切到出貨單分頁才讀，開案件不再多打這一支（開案件 API 14 → 13，清單首次載入維持 9）。③守門：`test_bootstrap_page_case_2026_11_14.py` 新增旗標三態逐人比對、職責角色／個人扣項、前端備援規則；案件頁行為基準只變「API 請求」一步。④（h4 退回：模組邊界）`routers/bootstrap.py` 不再 import `modules.case`／`modules.subcontract`——利潤警示、廠商／承攬商下拉三個區段改由各模組以提供者 `bootstrap.section` 交出（INTEGRATION-POINTS IP-BS1，處理函式仍是原端點本身）；模組不在 ⇒ 該區段不進回應。
+- **（併入）(next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
 
 ## 1.0.237 — 2026-11-14（train/t85-text；T85 整合補修；版號由列車取）
 - 畫面（行為不變）：到貨登載的「到貨單照片」選檔欄 `accept` 由 `image/*` 改為明列常見圖片型別（jpeg／png／webp／heic）加 PDF；報價單表單版號 V3.47（文字）；`notify_next`／`po_auto_approve` 補登 modules.json 歸屬。

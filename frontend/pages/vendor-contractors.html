@@ -161,7 +161,7 @@
       <div class="table-scroll" data-layout-list="vendors" x-show="layoutOn && !loading && ($store.layout.ready || $store.layout.failed)">
       <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
       <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
-      <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+      <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才可檢視。</div>
       <table class="data-table">
         <thead><tr>
           <th style="width:32px"></th>
@@ -273,7 +273,7 @@
           </div>
         </div>
         <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedVendor.address"
-             :href="MotrixRecordLink.mapUrl('vendor_contractors', selectedVendor.id)">在地圖上看</a>
+             :href="MotrixRecordLink.mapUrl('vendor_contractors', selectedVendor.id)">在地圖上查看</a>
         <button class="detail-close" @click="selectedId=null;selectedVendor=null">×</button>
       </div>
       <div class="detail-body">
@@ -352,7 +352,7 @@
         </div>
         <template x-if="(editVisits||[]).length === 0">
           <div style="text-align:center;padding:12px;border:1px dashed var(--border-light);border-radius:8px;font-size:12px;color:var(--text-dim);margin-bottom:8px">
-            尚無往來紀錄 · 點下方新增
+            尚無往來紀錄，請按下方「新增」
           </div>
         </template>
         <template x-for="(vl, vi) in (editVisits || [])" :key="vl.id">

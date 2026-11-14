@@ -148,7 +148,7 @@
       (dir ? '<div class="' + (p.direction === 'loosen' ? 'rb-bad' : 'rb-ok') + '">' + esc(dir) + '</div>' : '') +
       ((p.reasons || []).length ? '<div class="rb-dim">' + p.reasons.map(esc).join('；') + '</div>' : '') +
       (p.degraded && p.degraded.length ? '<div class="rb-warn">有 ' + p.degraded.length + ' 條規則在預覽時故障，已略過。</div>' : '') +
-      (rows ? '<div class="rb-dim" style="margin-top:6px">樣本（您看得到的前 10 筆）</div>' + rows : '') +
+      (rows ? '<div class="rb-dim" style="margin-top:6px">樣本（您可檢視的前 10 筆）</div>' + rows : '') +
       '<div class="rb-dim" style="margin-top:6px">' + esc(p.note || '') + '</div></div>'
   }
   function render() {
@@ -166,7 +166,7 @@
       '<button class="rb-btn" data-rb="close" aria-label="關閉">✕</button></div>' +
       '<div class="rb-body">' +
       (st.msg ? '<div class="' + (st.msgBad ? 'rb-warn rb-bad' : 'rb-warn') + '" data-rb-msg="1">' + esc(st.msg) + '</div>' : '') +
-      '<div class="rb-dim">規則只做標示：不會改資料、不會阻擋儲存。看不到來源欄位的人（例如沒有成本權限者）不會看到由該欄位產生的標示。</div>' +
+      '<div class="rb-dim">規則只做標示：不會改資料、不會阻擋儲存。無法檢視來源欄位的人（例如沒有成本權限者）不會顯示由該欄位產生的標示。</div>' +
       listing + '<div style="margin-top:8px"><button class="rb-btn" data-rb="add">新增規則</button></div>' + editor() + previewBox() + '</div>' +
       '<div class="rb-foot">' + (st.k01 && st.ent.key === 'case' && !st.rules.some(function (r) { return r.id === 'k01_project_margin' }) ? '<button class="rb-btn" data-rb="k01">匯入現有利潤警示</button>' : '') + '<button class="rb-btn" data-rb="save"' + (st.busy || !dirty() ? ' disabled' : '') + '>儲存草稿</button>' +
       '<button class="rb-btn" data-rb="publish"' + (st.busy ? ' disabled' : '') + '>預覽並發布…</button></div>'

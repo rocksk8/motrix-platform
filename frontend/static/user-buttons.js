@@ -114,7 +114,7 @@
 ' <div class="ub-head">' +
 '  <div class="ub-row" style="justify-content:space-between"><strong>自訂按鈕</strong>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-close" @click="close()">關閉</button></div>' +
-'  <div class="ub-sub">按鈕僅作為入口，不會讓任何人看到或匯出其原本無權存取的內容：每個人只看得到自己有權限的按鈕；目標頁面與匯出功能會另行檢查權限。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
+'  <div class="ub-sub">按鈕僅作為入口，不會讓任何人檢視或匯出其原本無權存取的內容：每個人只看得到自己有權限的按鈕；目標頁面與匯出功能會另行檢查權限。第一版只有「開啟頁面」和「執行匯出」，不會寫入任何資料。</div>' +
 '  <div class="ub-banner" data-testid="ub-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span> ' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="ub-ask-yes" @click="answer(true)">確定</button> ' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-ask-no" @click="answer(false)">取消</button></div>' +
@@ -134,7 +134,7 @@
 '      <template x-if="b.type === \'navigate\'"><template x-for="p in catalog.pages" :key="p.page"><option :value="p.page" x-text="p.label" :selected="b.target === p.page"></option></template></template>' +
 '      <template x-if="b.type === \'export\'"><template x-for="e in catalog.exports" :key="e.id"><option :value="e.id" x-text="e.label + \'（\' + e.format + \'）\'" :selected="b.target === e.id"></option></template></template>' +
 '     </select></div>' +
-'    <div class="ub-sub" x-show="b.type === \'export\'">匯出會用「點擊的人自己」的身分執行，無權限者看不到此按鈕，也無法匯出。</div>' +
+'    <div class="ub-sub" x-show="b.type === \'export\'">匯出會用「點擊的人自己」的身分執行，無權限者不會顯示此按鈕，也無法匯出。</div>' +
 '    <div class="ub-prob" x-show="probs[i]" x-text="probs[i]"></div>' +
 '   </div></template>' +
 '  <div class="ub-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" data-testid="ub-add" @click="add()" :disabled="work.length >= max">＋ 新增按鈕</button>' +
@@ -144,8 +144,8 @@
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-preview-btn" @click="previewAs()" :disabled="busy || loading">預覽</button></div>' +
 '  <div data-testid="ub-preview" x-show="previewResult">' +
 '   <div class="ub-sub" x-text="previewResult && (\'以「\' + previewResult.user + \'」（\' + (window.MotrixRole ? MotrixRole.label(previewResult.role) : previewResult.role) + \'）的權限\')"></div>' +
-'   <ul><template x-for="v in (previewResult ? previewResult.visible : [])" :key="v.key"><li x-text="\'看得到：\' + v.label"></li></template>' +
-'    <template x-for="h in (previewResult ? previewResult.hidden : [])" :key="h.key"><li x-text="\'看不到：\' + h.label + \'（\' + h.reason + \'）\'"></li></template></ul></div>' +
+'   <ul><template x-for="v in (previewResult ? previewResult.visible : [])" :key="v.key"><li x-text="\'可檢視：\' + v.label"></li></template>' +
+'    <template x-for="h in (previewResult ? previewResult.hidden : [])" :key="h.key"><li x-text="\'無法檢視：\' + h.label + \'（\' + h.reason + \'）\'"></li></template></ul></div>' +
 '  <div x-show="diffShown" data-testid="ub-diff"><div class="ub-h">與目前發布版的差異</div><div class="ub-sub" x-show="!diffLines.length">沒有差異。</div>' +
 '   <ul><template x-for="d in diffLines"><li x-text="d"></li></template></ul></div>' +
 '  <div data-testid="ub-versions"><div class="ub-h">版本</div><div class="ub-sub" x-show="!published().length">尚未發布過。</div>' +
@@ -354,7 +354,7 @@
           this.busy = false
           return
         }
-        if (!(await this._ask('發布後，所有使用者在此畫面都會看到這些按鈕（每個人只看得到自己有權限的）。確定要發布嗎？'))) { this.busy = false; return }
+        if (!(await this._ask('發布後，所有使用者在此畫面都會顯示這些按鈕（每個人僅可檢視自己有權限的）。確定要發布嗎？'))) { this.busy = false; return }
         // T62：治理旗標開時，看過的影響預覽雜湊 preview_hash 隨發布送出（管理者開啟強制時沒帶會被擋）；旗標關／未載入 ⇒ 請求本體只有 note，與先前相同
         var pubBody = { note: this.note }
         if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('user_buttons')) {

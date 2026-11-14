@@ -152,7 +152,7 @@
               <template x-for="n in result.notes" :key="n"><li x-text="n"></li></template>
             </ul>
             <template x-if="result.rows.length === 0">
-              <div class="rt-empty" data-testid="rt-empty">沒有符合這些條件的資料。放寬條件（例如日期區間或部門）再試一次。</div>
+              <div class="rt-empty" data-testid="rt-empty">查無符合條件的資料。放寬條件（例如日期區間或部門）再試一次。</div>
             </template>
             <template x-if="result.rows.length > 0">
               <div class="rt-wrap panel">

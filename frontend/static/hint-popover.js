@@ -13,7 +13,7 @@
  * 樣式在 css/hint-popover.css。 */
 (function () {
   'use strict'
-  var SECTIONS = [['what', '這是什麼'], ['when', '什麼時候要改'], ['impact', '改了會影響什麼'], ['suggest', '預設值與建議']]
+  var SECTIONS = [['what', '說明'], ['when', '調整時機'], ['impact', '影響範圍'], ['suggest', '預設值與建議']]
   var seq = 0
   var openEl = null
   var closeTimer = null

@@ -355,7 +355,7 @@
       if (OPTION_TYPES[f.type] && !(f.options || []).some(function (o) { return String(o).trim() })) out.push({ path: p + '.options', message: '尚無任何選項。', key: f.key })
       var fo = caps.fixedOptions && caps.fixedOptions[f.key]
       if (fo && OPTION_TYPES[f.type] && JSON.stringify(f.options || []) !== JSON.stringify(fo)) out.push({ path: p + '.options', message: '這個欄位的選項必須固定為：' + fo.join('、') + '。', key: f.key })
-      if (f.type === 'formula' && !String(f.formula || '').trim()) out.push({ path: p + '.formula', message: '尚未選要算什麼。', key: f.key })
+      if (f.type === 'formula' && !String(f.formula || '').trim()) out.push({ path: p + '.formula', message: '尚未選擇計算方式。', key: f.key })
       if (f.locked && fillSelection(f) === '') out.push({ path: p + '.locked', message: '要先選好「自動帶入」才能設「不能改」。', key: f.key })
       if (f.type === 'table') {
         var cols = f.columns || [], ks = cols.map(function (c) { return c.key })

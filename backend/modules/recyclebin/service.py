@@ -353,7 +353,7 @@ def purge(conn, bin_id, by="system", audit=None) -> dict:
         except Exception as e:              # noqa: BLE001
             conn.rollback()
             logger.exception("recyclebin purge #%s audit failed", bin_id)
-            raise RB.BinError("audit_failed: 稽核紀錄寫不進去，未清除：%s" % e.__class__.__name__)
+            raise RB.BinError("audit_failed: 稽核紀錄無法寫入，未清除：%s" % e.__class__.__name__)
     cur = conn.execute("UPDATE recycle_bin SET restore_status=?, snapshot_json='{}', files_manifest_json='[]', bytes=0, file_count=0, purged_at=?, purged_by=?"
                        " WHERE id=? AND restore_status IN (?,?)", (S_PURGED, _now().isoformat(), by, bin_id, S_IN_BIN, S_FAILED))
     if cur.rowcount != 1:

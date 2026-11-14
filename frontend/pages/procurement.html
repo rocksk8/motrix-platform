@@ -157,7 +157,7 @@
             <div class="table-scroll" data-layout-list="materials" x-show="$store.layout.ready || $store.layout.failed">
             <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
             <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
-            <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+            <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才可檢視。</div>
             <table class="data-table">
               <thead><tr>
                 <template x-for="c in $store.layout.cols('materials')" :key="c.field">

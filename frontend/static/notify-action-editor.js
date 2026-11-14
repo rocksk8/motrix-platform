@@ -366,10 +366,10 @@
     var panel = el('div', { 'data-role': 'form', style: 'margin-top:6px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px' })
     panel.appendChild(el('div', { text: f.isNew ? '新增額外通知' : '編輯額外通知', style: 'font-size:13px;font-weight:600' }))
     var evSel = select([{ value: '', label: '請選擇…' }].concat(st.cat.events.map(function (e) { return { value: e.event, label: e.label } })), f.event, setEvent, { 'data-role': 'event' })
-    panel.appendChild(field('什麼事發生時要通知？', evSel, ev ? ev.hint : '只能選系統已經準備好的事件。'))
+    panel.appendChild(field('通知觸發事件', evSel, ev ? ev.hint : '只能選系統已經準備好的事件。'))
     if (!ev) return panel
     panel.appendChild(el('div', { style: 'margin:4px 0' }, [el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'suggest', text: '用建議內容填入（名稱、對象、文字一次帶入）', onclick: applySuggest })]))
-    panel.appendChild(field('這個通知叫什麼名字？（只給管理者看）', el('input', { type: 'text', 'data-path': 'label', value: f.label, maxlength: String(LIMIT.label + 10), style: 'width:100%;font-size:12px', oninput: function (e) { f.label = e.target.value; touch() } })))
+    panel.appendChild(field('通知名稱（僅管理者可見）', el('input', { type: 'text', 'data-path': 'label', value: f.label, maxlength: String(LIMIT.label + 10), style: 'width:100%;font-size:12px', oninput: function (e) { f.label = e.target.value; touch() } })))
     // 條件
     var condHost = el('div', { 'data-role': 'conditions' })
     f.when.forEach(function (c, i) {
@@ -407,9 +407,9 @@
         el('span', { text: whoText(r) }), el('button', { type: 'button', text: '✕', 'aria-label': '移除', style: 'border:none;background:none;cursor:pointer', onclick: function () { f.recipients.splice(i, 1); touch(); render() } })])
     }))
     var addSel = select(recipientOptions(ev), '', function (v) { addRecipient(v) }, { 'data-role': 'add-recipient' })
-    panel.appendChild(field('要通知誰？（最多 8 項）', el('div', {}, [chips, addSel]), '僅能從清單選擇；不接受電子郵件位址。收件人必須有權限看到那張單據才會收到。'))
+    panel.appendChild(field('通知對象（最多 8 項）', el('div', {}, [chips, addSel]), '僅能從清單選擇；不接受電子郵件位址。收件人必須有權限檢視那張單據才會收到。'))
     // 通道
-    panel.appendChild(field('用什麼方式通知？', el('div', {}, [
+    panel.appendChild(field('通知方式', el('div', {}, [
       el('label', { style: 'font-size:12px;margin-right:12px' }, [el('input', { type: 'checkbox', checked: 'checked', disabled: 'disabled' }), el('span', { text: ' 站內通知（一定會有）' })]),
       el('label', { style: 'font-size:12px' }, [el('input', { type: 'checkbox', 'data-role': 'email', checked: f.email ? 'checked' : null, onchange: function (e) { f.email = !!e.target.checked; touch(); render() } }), el('span', { text: ' 同時寄電子郵件' })])]),
       f.email ? '加寄信件屬於放寬；信件主旨前綴固定為【MOTRIX 系統通知】，每個設定每小時最多寄 ' + ((st.cat.caps && st.cat.caps.mailsPerHour) || 200) + ' 封，收件人可在通知偏好自行關閉。' : ''))
@@ -436,7 +436,7 @@
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap' }, [
       el('input', { type: 'text', placeholder: '備註（選填）', value: st.note, style: 'flex:1;min-width:140px;font-size:12px', oninput: function (e) { st.note = e.target.value } }),
       el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'cancel', text: '返回清單', disabled: st.busy ? 'disabled' : null, onclick: function () { st.f = null; st.preview = null; setMsg('', false, 'idle'); render() } }),
-      el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'preview-btn', text: '試跑看看', disabled: st.busy ? 'disabled' : null, onclick: runPreview }),
+      el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'preview-btn', text: '試跑', disabled: st.busy ? 'disabled' : null, onclick: runPreview }),
       el('button', { type: 'button', class: 'btn btn-primary btn-sm', 'data-role': 'publish', text: '檢查並發布', disabled: st.busy ? 'disabled' : null, onclick: doPublish })]))
     panel.appendChild(dim('新增通知、增加收件人、加寄信件、放寬次數都需要第二位最高管理者核准後才生效；停用與縮小範圍立即生效。已經寄出的通知不會改變，也不會影響原本的內建通知。'))
     return panel

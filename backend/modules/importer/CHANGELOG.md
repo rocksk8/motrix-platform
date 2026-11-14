@@ -1,5 +1,8 @@
 # 匯入精靈 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-short-labels-h2；T86 短標籤專業化）
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：按鈕、卡片標題、表頭、空狀態與提示等短標籤改為正式、一致的用語（前往／查看、尚無／查無符合條件的…、僅顯示、無法…等）；前後對照見整合者的 T86 前後對照表。
+
 ## 1.0.4 — 2026-11-14（T84 診斷修正輪；整合者補登）
 - 範本下載（`importer_template`）的 `Content-Disposition` 改走 `helpers.download_name.content_disposition`（下載檔名守門：不再手寫 attachment 標頭；檔名與內容不變）。
 - 精靈頁標題改為「MOTRIX PLATFORM」（畫面不再寫「專案管理系統」；品牌用語守門）。

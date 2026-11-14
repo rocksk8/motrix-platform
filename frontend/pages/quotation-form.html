@@ -919,7 +919,7 @@
             <span :style="st.done ? 'color:#059669' : 'color:#DC2626'" style="width:16px;font-weight:700" x-text="st.done ? '✓' : '✗'"></span>
             <span :style="st.done ? 'color:#6B7280' : 'color:#111827;font-weight:600'" x-text="(i+1) + '. ' + st.label"></span>
             <span x-show="!st.done && (precheck?.steps || []).findIndex(x => !x.done) === i"
-                  style="font-size:10px;background:#FEE2E2;color:#B91C1C;border-radius:3px;padding:1px 6px">目前卡在這一步</span>
+                  style="font-size:10px;background:#FEE2E2;color:#B91C1C;border-radius:3px;padding:1px 6px">目前處於此步驟</span>
           </div>
         </template>
         <div style="margin-top:12px;color:#4B5563">
@@ -2509,7 +2509,7 @@
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
           每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務及備註說明五段文字。
           <b>★ 是新增報價單時自動帶入的那一組。</b><br>
-          ⚠️ 改這裡<b>不會動到任何已經開出去的報價單</b>——報價單存的是當下複製過去的文字，
+          ⚠️ 改這裡<b>不會動到任何已經開立的報價單</b>——報價單存的是當下複製的文字，
           不是指向這裡的連結。
         </div>
 
@@ -2699,7 +2699,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.47'
+  const FORM_VERSION = 'V3.48'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -3627,7 +3627,7 @@
 
       removeTermsPreset(i) {
         const p = this.termsDraft[i]
-        if (!confirm(`確定刪除條款組「${p.name || '（未命名）'}」？\n已經開出去的報價單不受影響。`)) return
+        if (!confirm(`確定刪除條款組「${p.name || '（未命名）'}」？\n已經開立的報價單不受影響。`)) return
         this.termsDraft.splice(i, 1)
         if (this.termsDraftDefault === p.key) this.termsDraftDefault = ''
       },

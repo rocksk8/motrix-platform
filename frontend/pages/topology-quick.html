@@ -388,7 +388,7 @@ function topologyQuick() {
       if (added > 0) this.dirty()
       this.actionResultMsg = added > 0
         ? `已新增 ${added} 筆資料到「${target === 'devices' ? '交換器清單' : '埠位對應'}」`
-        : '沒有偵測到可用的資料列'
+        : '未偵測到可用的資料列'
     },
 
     // ── 依交換器清單自動產生缺少的埠列（同 network-plan-form.html 的邏輯） ──

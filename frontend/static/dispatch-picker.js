@@ -6,11 +6,11 @@
   var LABELS = {
     placeholder: '搜尋派發（派發編號、案件、廠商）',
     showAll: '顯示全部派發',
-    showRoster: '只看這位受領人的派發',
+    showRoster: '僅顯示這位受領人的派發',
     linked: '已關聯',
     linkedHere: '已連到這張勞報單',
     offRoster: '受領人不在此派發名單',
-    empty: '沒有符合的派發',
+    empty: '查無符合條件的派發',
     emptyRoster: '這位受領人目前未被排入派發，可改按「顯示全部派發」搜尋',
     loadMore: '載入更多',
     loading: '搜尋中…',

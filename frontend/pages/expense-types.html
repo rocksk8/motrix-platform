@@ -96,7 +96,7 @@
         <button class="btn btn-sm" type="button" data-testid="et-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
         <button class="btn btn-sm" type="button" data-testid="et-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
         <button class="btn btn-sm btn-primary" type="button" data-testid="et-conflict-force" @click="conflictForce()">用我的覆蓋</button>
-        <button class="btn btn-sm" type="button" data-testid="et-conflict-hold" @click="conflictHold()">先不處理</button>
+        <button class="btn btn-sm" type="button" data-testid="et-conflict-hold" @click="conflictHold()">暫不處理</button>
       </div>
 
       <!-- D14／D15：出貨範本（只改畫面上的草稿；存草稿與發布仍由你按） -->
@@ -286,7 +286,7 @@
             <div class="et-sub">表單分組（沒設＝全部欄位依序一組）與列表欄位。</div>
             <div class="et-actions">
               <button class="btn" data-testid="et-add-group" @click="addGroup()">＋ 分組</button>
-              <button class="btn" data-testid="et-auto-group" @click="autoGroup()">全部放一組</button>
+              <button class="btn" data-testid="et-auto-group" @click="autoGroup()">全部歸為同一組</button>
             </div>
             <template x-for="(g, gi) in groups" :key="gi">
               <div class="et-group" data-testid="et-group">
@@ -318,7 +318,7 @@
               <button class="btn" data-testid="et-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
               <button class="btn" data-testid="et-copy-default" x-show="!isNew && defBody" :disabled="busy" @click="copyDefault()" title="用出貨範本取代目前內容並存成草稿（不自動發布）">複製出貨範本到草稿</button>
               <button class="btn" data-testid="et-changes" x-show="!isNew && meta && meta.latest && hasDraft" @click="showChanges()">與已發布版的差異</button>
-              <button class="btn btn-danger" data-testid="et-discard" x-show="!isNew && hasDraft" @click="discardDraft()">丟棄草稿</button>
+              <button class="btn btn-danger" data-testid="et-discard" x-show="!isNew && hasDraft" @click="discardDraft()">捨棄草稿</button>
             </div>
             <div data-testid="et-problems" x-show="problems.length">
               <ul class="et-prob">

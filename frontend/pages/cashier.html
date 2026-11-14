@@ -414,7 +414,7 @@
             <div x-show="cashierSub==='payable'">
               <div class="alert-bar" x-show="payableNotice" x-text="payableNotice"></div>
               <template x-if="payable.length===0 && !payableNotice">
-                <div class="empty-state">目前沒有待匯款的申請</div>
+                <div class="empty-state">尚無待匯款的申請</div>
               </template>
               <template x-if="payable.length>0">
                 <div class="panel">
@@ -457,7 +457,7 @@
                 <span x-text="payslipQueue.notice"></span>
               </div>
               <template x-if="payslipQueue.available && payslipQueue.items.length===0">
-                <div class="empty-state">目前沒有已簽回待付款的勞報單</div>
+                <div class="empty-state">尚無已簽回待付款的勞報單</div>
               </template>
               <template x-if="payslipQueue.items.length>0">
                 <div class="panel">
@@ -500,7 +500,7 @@
                 <span x-text="bonusQueue.notice"></span>
               </div>
               <template x-if="bonusQueue.available && bonusQueue.items.length===0">
-                <div class="empty-state">目前沒有待發放的獎金分潤</div>
+                <div class="empty-state">尚無待發放的獎金分潤</div>
               </template>
               <template x-if="bonusQueue.items.length>0">
                 <div class="panel">
@@ -538,7 +538,7 @@
               <div class="alert-bar" x-show="payreqNotice" x-text="payreqNotice" data-testid="cashier-payreq-result"></div>
               <div class="alert-bar" x-show="payreqQueue.notice" data-testid="cashier-payreq-notice"><span x-text="payreqQueue.notice"></span></div>
               <template x-if="payreqQueue.available && payreqQueue.items.length===0">
-                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待付款的申請</div>
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">尚無待付款的申請</div>
               </template>
               <template x-if="payreqQueue.items.length>0">
                 <div class="panel">
@@ -660,7 +660,7 @@
               </div>
 
               <template x-if="filteredReceivable.length===0">
-                <div class="empty-state">沒有符合條件的款項</div>
+                <div class="empty-state">查無符合條件的款項</div>
               </template>
               <template x-if="filteredReceivable.length>0">
                 <div class="panel">
@@ -718,7 +718,7 @@
               <div class="alert-bar" x-show="remitReviewNotice" x-text="remitReviewNotice" data-testid="cashier-remit-result"></div>
               <div class="alert-bar" x-show="remitReviews.notice" x-text="remitReviews.notice"></div>
               <template x-if="remitReviews.available && remitReviews.items.length===0">
-                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待簽核的匯款差額</div>
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">尚無待簽核的匯款差額</div>
               </template>
               <template x-if="remitReviews.items.length>0">
                 <div class="panel">
@@ -1080,7 +1080,7 @@
             <!-- 卡片①：銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
             <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">銀行帳戶清單</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款／已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——此處修改後，其他頁面下次開啟標記視窗即可看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款／已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——此處修改後，其他頁面下次開啟標記視窗即可取得最新清單；但不會回頭改到已經標記過的舊交易。</div>
             <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
             <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
             <button type="button" x-show="_role()==='superadmin'"

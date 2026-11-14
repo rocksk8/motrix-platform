@@ -105,7 +105,7 @@ def test_approvals_count_matches_badge_and_submitted_shows_blocker(client, make_
         g = next(g for g in d["groups"] if g["key"] == "approvals")
         assert g["count"] == client.get("/api/approval-queue/count", headers=h).json()["count"]
     sent = next(g for g in client.get("/api/dashboard/mine?fresh=1", headers=_h(client, *b)).json()["groups"] if g["key"] == "submitted")
-    assert "卡在：dm_a" in sent["items"][0]["sub"]
+    assert "待dm_a處理" in sent["items"][0]["sub"]
 
 
 def test_cache_is_per_user_never_shared(client, make_user):
