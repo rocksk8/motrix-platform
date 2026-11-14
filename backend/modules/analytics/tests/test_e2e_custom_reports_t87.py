@@ -185,8 +185,14 @@ def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hid
         assert page.inner_text("[data-testid=cr-sh-cands]").count("林無權") == 0
         page.check("[data-testid=cr-sh-selcands]")
         assert page.is_enabled("[data-testid=cr-sh-add]") and "（3）" in page.inner_text("[data-testid=cr-sh-add]")
+        page.uncheck("[data-testid=cr-sh-selcands]")                                         # 全選可以切換成清除
+        assert page.is_disabled("[data-testid=cr-sh-add]")
+        page.check("[data-testid=cr-sh-selcands]")
         page.click("[data-testid=cr-sh-add]")
         page.wait_for_function("() => document.getElementById('shMsg').textContent.includes('已分享給 3 位')", timeout=20000)
+        # 分享完（沒有勾選了、按鈕變成不能用）：焦點留在對話框內（結果訊息），不掉到 BODY；對話框也沒有被標成忙碌
+        assert page.evaluate("() => document.getElementById('dlgShare').contains(document.activeElement)") is True
+        assert page.evaluate("() => document.getElementById('dlgShare').hasAttribute('aria-busy')") is False
         assert page.locator("#shShared li label.row").count() == 3
         assert page.locator("#shCands li label.row.off").count() == 3                        # 已分享的人在候選名單標示、不能重複勾
         # 被分享者看得到
@@ -202,6 +208,7 @@ def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hid
         page.click("[data-testid=cr-sh-remove]")
         page.click("[data-testid=cr-confirm-yes]")
         page.wait_for_function("() => document.getElementById('shMsg').textContent.includes('已取消分享 2 位')", timeout=20000)
+        assert page.evaluate("() => document.getElementById('dlgShare').contains(document.activeElement)") is True
         assert page.locator("#shShared li label.row").count() == 1
         page.click("[data-testid=cr-sh-close]")
         c = get_db()

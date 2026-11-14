@@ -271,6 +271,8 @@
     <h3 id="shTitle" tabindex="-1">分享報表</h3>
     <p class="cr-lead" id="shLead">對方只能檢視與複製，看不到、也算不出他沒有權限的欄位與資料；不能修改、刪除或再分享。分享的是<strong>已儲存</strong>的版本。</p>
 
+    <p class="cr-note msg" id="shMsg" role="status" tabindex="-1" data-testid="cr-sh-msg"></p>
+
     <h4 id="shMineH">已分享的人</h4>
     <div class="bar">
       <label class="hit"><input type="checkbox" id="shSelShared" data-fk="sh:selshared" data-testid="cr-sh-selshared"> 全選已分享的人</label>
@@ -291,7 +293,6 @@
     </div>
     <ul class="cr-people" id="shCands" aria-labelledby="shAddH" data-testid="cr-sh-cands"></ul>
     <p class="cr-note" id="shCount"></p>
-    <p class="cr-note msg" id="shMsg" role="status" data-testid="cr-sh-msg"></p>
     <div class="acts"><button class="btn" type="button" id="shClose" data-testid="cr-sh-close">完成</button></div>
   </dialog>
 

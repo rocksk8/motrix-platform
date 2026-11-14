@@ -6,8 +6,8 @@
 - `GET  /api/custom-reports`          我的報表（＋分享給我的，設定開啟時）。`POST` 新增（≤30 份、名稱不可重複、定義存檔前完整驗證）。
 - `GET|PUT|DELETE /api/custom-reports/{id}`  讀／改（`If-Match` 帶 etag，不符 409）／刪（設定決定進暫存區或直接刪）。非擁有者（含不存在）一律 404 同一句；被分享者只能讀與複製。
 - `POST /api/custom-reports/{id}/copy`  複製成自己的一份。
-- `GET  /api/custom-reports/share-targets?q=`  「分享給誰」面板的候選同事（只列在職、有使用能力的人；設定 `sharing` 關 ⇒ 404）。
-- `GET|POST /api/custom-reports/{id}/shares`  擁有者看／批次增減分享對象（`{add:[帳號], remove:[帳號]}`；後端逐位再查能力；每位增減各寫一列稽核，只記帳號與報表編號）。
+- `GET  /api/custom-reports/share-targets?q=`  「分享給誰」面板的候選同事（只列在職、有使用能力的人；設定 `sharing` 關 ⇒ 404；每人每分鐘 20 次）。
+- `GET|POST /api/custom-reports/{id}/shares`  擁有者看／批次增減分享對象（`{add:[帳號], remove:[帳號]}`；後端一次查完對象的能力，不合格一律同一句；每位增減各寫一列稽核，只記帳號與報表編號）。這是分享名單唯一的寫入口：`PUT` 帶 `sharedWith` 回 422。
 - `POST /api/custom-reports/{id}/export`（Excel）、`/export-pdf`（PDF 姊妹）  只能匯出已儲存的報表；需 `analytics.custom_report.export` 能力＋設定 `export_scope` 放行；
   匯出時重新編譯定義、以**執行者當下**的權限與列範圍重算（A 存、B 匯出，B 看不到的欄位不出現、列不出現）；檔內只有可見欄位的標籤、條件的白話摘要、隱藏欄位**數量**（不寫名稱與值）。
 
@@ -52,7 +52,9 @@ PREVIEW_PER_MINUTE = 20
 _WINDOW_SECONDS = 60.0
 MAX_CONCURRENT_RUNS = 4                                   # 全程式庫同時執行的預覽／匯出上限（每個最久占一條連線 8 秒）
 _runs = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
+SHARE_TARGETS_PER_MINUTE = 20
 _hits = defaultdict(deque)
+_target_hits = defaultdict(deque)
 _hits_lock = threading.Lock()
 GENERIC_FAIL = "報表產生失敗，請稍後再試；若持續發生請通知管理員。"
 NO_ACCESS_REASON = "您沒有查看這個欄位的權限"
@@ -62,6 +64,7 @@ def reset_rate_limit() -> None:
     """測試用：清空限流計數。"""
     with _hits_lock:
         _hits.clear()
+        _target_hits.clear()
 
 
 def _run_slot():
@@ -70,15 +73,16 @@ def _run_slot():
         raise HTTPException(429, {"message": "目前有很多人同時在產生報表，請等幾秒後再試。", "reason": "busy"})
 
 
-def _check_rate(user_id) -> None:
+def _check_rate(user_id, hits=None, limit=PREVIEW_PER_MINUTE, what="預覽") -> None:
+    hits = _hits if hits is None else hits
     now = time.monotonic()
     with _hits_lock:
-        q = _hits[user_id]
+        q = hits[user_id]
         while q and now - q[0] >= _WINDOW_SECONDS:
             q.popleft()
-        if len(q) >= PREVIEW_PER_MINUTE:
+        if len(q) >= limit:
             wait = int(_WINDOW_SECONDS - (now - q[0])) + 1
-            raise HTTPException(429, {"message": "預覽太頻繁，請 %d 秒後再試" % wait, "reason": "rate_limited"})
+            raise HTTPException(429, {"message": "%s太頻繁，請 %d 秒後再試" % (what, wait), "reason": "rate_limited"})
         q.append(now)
 
 
@@ -221,6 +225,7 @@ def create_report(body: dict = Body(...), authorization: str = Header(None)):
 @router.get("/api/custom-reports/share-targets")
 def share_targets(q: str = Query("", max_length=80), authorization: str = Header(None)):
     user = _gate(authorization)
+    _check_rate(user["id"], _target_hits, SHARE_TARGETS_PER_MINUTE, "查詢同事")        # 每人每分鐘 20 次（行程內滑動視窗；前端防抖動不是伺服器端的保險）
     conn = get_db()
     try:
         try:
@@ -258,10 +263,7 @@ def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(..
         except Exception:                                    # noqa: BLE001
             _log.exception("custom_reports update failed")
             raise HTTPException(500, {"message": "儲存失敗，請稍後再試；若持續發生請通知管理員。"})
-        changes = out.pop("_shareChanges", None)
         _audit_report(authorization, "custom_reports.update", "修改自訂報表", rid, out["sourceId"])
-        if changes:
-            _audit_shares(authorization, rid, *changes)
         return out
     finally:
         conn.close()

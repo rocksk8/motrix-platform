@@ -98,6 +98,27 @@ def test_candidates_search_by_name_account_and_department_and_escapes_wildcards(
     assert _targets(client, a, "查無此人")["people"] == []
 
 
+def test_share_targets_is_rate_limited_per_user_20_per_minute(client, make_user):
+    a = _login(client, make_user, "shs_rl", modules=["quotation"])
+    codes = [client.get(BASE + "/share-targets", headers=a).status_code for _ in range(21)]
+    assert codes[:20] == [200] * 20 and codes[20] == 429
+    other = _login(client, make_user, "shs_rl2", modules=["quotation"])
+    assert client.get(BASE + "/share-targets", headers=other).status_code == 200                      # 另一個人不受影響
+
+
+def test_capability_check_is_one_pass_on_one_connection_not_one_connection_per_person(client, make_user, monkeypatch):
+    """h11 S5：每人各開一條連線（perm.load_user）在 300 位候選時約 1.5 秒；改成批次後不得再呼叫 load_user。"""
+    from helpers import perm
+    a = _login(client, make_user, "shs_bulk", modules=["quotation"])
+    for i in range(5):
+        _login(client, make_user, "shs_bulk_%d" % i, modules=["quotation"])
+    calls = []
+    real = perm.load_user
+    monkeypatch.setattr(perm, "load_user", lambda *x, **k: (calls.append(x), real(*x, **k))[1])
+    t = _targets(client, a, "shs_bulk_")
+    assert len(t["people"]) == 5 and calls == []
+
+
 def test_candidates_closed_when_sharing_off_or_flag_off_or_no_capability(client, make_user):
     a = _login(client, make_user, "shs_c", modules=["quotation"])
     _set(sharing=0)
@@ -136,11 +157,27 @@ def test_backend_rechecks_capability_even_if_the_target_was_in_an_old_candidate_
     rep = _mk(client, a)
     url = "%s/%d/shares" % (BASE, rep["id"])
     r = client.post(url, json={"add": ["shs_nocap_e"]}, headers=a)
-    assert r.status_code == 422 and r.json()["detail"]["reason"] == "no_capability" and "shs_nocap_e" not in r.text
+    assert r.status_code == 422 and r.json()["detail"]["message"] == "無法分享給此同事。" and "shs_nocap_e" not in r.text
     assert client.get(url, headers=a).json()["shared"] == [] and _audits() == []                       # 沒寫入、沒稽核
-    # 舊的 PUT sharedWith 走同一道檢查
-    put = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["shs_nocap_e"]}, headers=dict(a, **{"If-Match": rep["etag"]}))
-    assert put.status_code == 422
+
+
+def test_every_kind_of_ineligible_target_gets_the_very_same_answer(client, make_user):
+    """不存在、離職、沒有能力：回同一句同一個狀態碼，不能用來試探某個帳號的狀態。"""
+    a = _login(client, make_user, "shs_u", modules=["quotation"])
+    _login(client, make_user, "shs_u_nocap", modules=["inventory"])
+    _login(client, make_user, "shs_u_gone", modules=["quotation"])
+    c = get_db()
+    try:
+        c.execute("UPDATE users SET active=0 WHERE username='shs_u_gone'")
+        c.commit()
+    finally:
+        c.close()
+    rep = _mk(client, a)
+    url = "%s/%d/shares" % (BASE, rep["id"])
+    seen = {(r.status_code, json.dumps(r.json(), ensure_ascii=False, sort_keys=True))
+            for r in (client.post(url, json={"add": [n]}, headers=a) for n in ("shs_u_nocap", "shs_u_gone", "no_such_account"))}
+    assert len(seen) == 1 and next(iter(seen))[0] == 422
+    assert "無法分享給此同事" in next(iter(seen))[1]
 
 
 def test_validation_and_limits(client, make_user):
@@ -195,16 +232,6 @@ def test_removal_still_works_when_sharing_is_off_but_adding_does_not(client, mak
     assert ok.status_code == 200 and ok.json()["removed"] == ["shs_h2"]
     _set(sharing=1)
     assert client.get(url, headers=a).json()["shared"] == []
-
-
-def test_put_shared_with_also_writes_per_person_audit(client, make_user):
-    a = _login(client, make_user, "shs_i", modules=["quotation"])
-    _login(client, make_user, "shs_i2", modules=["quotation"])
-    rep = _mk(client, a)
-    r = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["shs_i2"]}, headers=dict(a, **{"If-Match": rep["etag"]}))
-    assert r.status_code == 200 and "_shareChanges" not in r.json() and r.json()["sharedWith"] == ["shs_i2"]
-    rows = _audits()
-    assert [(x["action"], json.loads(x["detail"])["user"]) for x in rows] == [("custom_reports.share_add", "shs_i2")]
 
 
 def test_a_user_who_lost_the_capability_disappears_from_candidates_but_existing_share_stays_visible_to_owner(client, make_user):

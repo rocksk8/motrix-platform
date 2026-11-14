@@ -169,7 +169,7 @@ def test_shared_reader_cannot_export_a_report_whose_filters_use_fields_he_cannot
     owner = _login(client, make_user, "ex_o4", role="superadmin")
     eng = _login(client, make_user, "ex_e4", role="engineer", modules=["quotation"])
     rep = _mk(client, owner, "金額門檻", filters=[{"field": "total", "op": "gte", "value": 5000000}])
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["ex_e4"]}, headers=dict(owner, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": ["ex_e4"]}, headers=owner)
     r = client.post("%s/%d/export" % (BASE, rep["id"]), headers=eng)
     assert r.status_code == 422 and "5000000" not in r.text and str(SENT) not in r.text
     ok = client.post("%s/%d/export" % (BASE, rep["id"]), headers=owner)                  # 正對照：擁有者匯得出來
@@ -182,7 +182,7 @@ def test_shared_reader_exports_with_own_row_scope(client, make_user):
     sal = _login(client, make_user, "ex_s5", role="sales", modules=["quotation", "case_manage"])
     _quote(no="EX-OTHER", customer_name="別人的客戶")
     rep = _mk(client, owner, "全部", columns=["quote_no", "customer_name"])
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["ex_s5"]}, headers=dict(owner, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": ["ex_s5"]}, headers=owner)
     r = client.post("%s/%d/export" % (BASE, rep["id"]), headers=sal)
     assert "別人的客戶" not in _all_text(r.content)
     assert "別人的客戶" in _all_text(client.post("%s/%d/export" % (BASE, rep["id"]), headers=owner).content)
@@ -233,7 +233,7 @@ def test_sharing_turned_off_closes_the_shared_export(client, make_user):
     a = _login(client, make_user, "ex_g5a", role="sales", modules=["quotation", "case_manage"])
     b = _login(client, make_user, "ex_g5b", role="sales", modules=["quotation", "case_manage"])
     rep = _mk(client, a)
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["ex_g5b"]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": ["ex_g5b"]}, headers=a)
     assert client.post("%s/%d/export" % (BASE, rep["id"]), headers=b).status_code == 200
     _set(sharing=0)
     X._export_times.clear()
@@ -301,7 +301,7 @@ def test_export_writes_an_audit_row_without_values_and_stamps_last_exported_for_
     a = _login(client, make_user, "ex_a9", role="superadmin")
     b = _login(client, make_user, "ex_b9", role="superadmin")
     rep = _mk(client, a, "稽核報表", filters=[{"field": "customer_name", "op": "eq", "value": "稽核客戶-5531"}])
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["ex_b9"]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": ["ex_b9"]}, headers=a)
     assert client.post("%s/%d/export" % (BASE, rep["id"]), headers=b).status_code == 200
     assert client.get("%s/%d" % (BASE, rep["id"]), headers=a).json()["lastExportedAt"] is None   # 被分享者匯出不改擁有者的列
     X._export_times.clear()

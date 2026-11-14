@@ -196,10 +196,10 @@ def _pair(client, make_user, tag):
 def test_sharing_off_by_default_nothing_visible_and_shares_refused(client, make_user):
     a, b, bname = _pair(client, make_user, "off")
     rep = _create(client, a).json()
-    r = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    r = client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": [bname]}, headers=a)
     assert r.status_code == 403 and r.json()["detail"]["reason"] == "sharing_off" and _count("custom_report_shares") == 0
-    ok = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": []}, headers=dict(a, **{"If-Match": rep["etag"]}))
-    assert ok.status_code == 200                                                                          # 清空分享在關閉時也允許（不是新的分享）
+    ok = client.post("%s/%d/shares" % (BASE, rep["id"]), json={"remove": [bname]}, headers=a)
+    assert ok.status_code == 200                                                                          # 取消分享在關閉時也允許（不是新的分享）
     assert client.get("%s/%d" % (BASE, rep["id"]), headers=b).status_code == 404
 
 
@@ -207,8 +207,9 @@ def test_sharing_on_recipient_can_read_and_copy_but_not_change(client, make_user
     _set(client, sharing=1)
     a, b, bname = _pair(client, make_user, "on")
     rep = _create(client, a, "共用報表").json()
-    put = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": rep["etag"]}))
-    assert put.status_code == 200 and put.json()["sharedWith"] == [bname]
+    put = client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": [bname]}, headers=a)
+    assert put.status_code == 200 and [p["username"] for p in put.json()["shared"]] == [bname]
+    assert client.get("%s/%d" % (BASE, rep["id"]), headers=a).json()["sharedWith"] == [bname]
     lst = client.get(BASE, headers=b).json()
     assert [x["name"] for x in lst["shared"]] == ["共用報表"] and lst["shared"][0]["ownerName"] and lst["mine"] == [] and lst["sharingEnabled"] is True
     got = client.get("%s/%d" % (BASE, rep["id"]), headers=b).json()
@@ -216,7 +217,7 @@ def test_sharing_on_recipient_can_read_and_copy_but_not_change(client, make_user
     url = "%s/%d" % (BASE, rep["id"])
     assert client.put(url, json={"name": "偷改"}, headers=dict(b, **{"If-Match": got["etag"]})).status_code == 404
     assert client.delete(url, headers=b).status_code == 404
-    assert client.put(url, json={"sharedWith": [bname]}, headers=dict(b, **{"If-Match": got["etag"]})).status_code == 404           # 不能再分享
+    assert client.post(url + "/shares", json={"add": [bname]}, headers=b).status_code == 404                                         # 不能再分享
     cp = client.post(url + "/copy", headers=b)
     assert cp.status_code == 201 and cp.json()["isOwner"] is True and cp.json()["name"] == "共用報表（複本）"
     assert [x["name"] for x in client.get(BASE, headers=b).json()["mine"]] == ["共用報表（複本）"]
@@ -228,7 +229,7 @@ def test_turning_sharing_off_hides_but_keeps_the_rows(client, make_user):
     _set(client, sharing=1)
     a, b, bname = _pair(client, make_user, "tog")
     rep = _create(client, a).json()
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": [bname]}, headers=a)
     _set(client, sharing=0)
     assert client.get("%s/%d" % (BASE, rep["id"]), headers=b).status_code == 404 and client.get(BASE, headers=b).json()["shared"] == []
     assert _count("custom_report_shares") == 1
@@ -240,17 +241,35 @@ def test_share_target_validation(client, make_user):
     _set(client, sharing=1)
     a, b, bname = _pair(client, make_user, "val")
     rep = _create(client, a).json()
-    url, hh = "%s/%d" % (BASE, rep["id"]), dict(a)
-    def put(v):
-        cur = client.get(url, headers=a).json()["etag"]
-        return client.put(url, json={"sharedWith": v}, headers=dict(hh, **{"If-Match": cur}))
-    assert put(["sh_a_val"]).status_code == 422                                  # 自己
-    r = put(["no_such_user"])
+    url = "%s/%d/shares" % (BASE, rep["id"])
+
+    def add(v):
+        return client.post(url, json={"add": v}, headers=a)
+    assert add(["sh_a_val"]).status_code == 422                                  # 自己
+    r = add(["no_such_user"])
     assert r.status_code == 422 and "no_such_user" not in r.text                  # 不回顯輸入
-    assert put("x").status_code == 422 and put([1]).status_code == 422
-    assert put(["u%d" % i for i in range(21)]).status_code == 422
-    assert put([bname, bname]).json()["sharedWith"] == [bname]                   # 去重
-    assert put([]).json()["sharedWith"] == []
+    assert add("x").status_code == 422 and add([1]).status_code == 422
+    assert add(["u%d" % i for i in range(21)]).status_code == 422
+    assert [p["username"] for p in add([bname, bname]).json()["shared"]] == [bname]       # 去重
+    assert client.post(url, json={"remove": [bname]}, headers=a).json()["shared"] == []
+
+
+def test_put_refuses_shared_with_and_a_stale_etag_cannot_revive_a_revoked_share(client, make_user):
+    """h11 S5：分享名單只有 /shares 一個寫入口。舊的「PUT sharedWith＋過期 If-Match」會把已取消的分享復活。"""
+    _set(client, sharing=1)
+    a, b, bname = _pair(client, make_user, "stale")
+    rep = _create(client, a).json()
+    url, sh = "%s/%d" % (BASE, rep["id"]), "%s/%d/shares" % (BASE, rep["id"])
+    assert client.post(sh, json={"add": [bname]}, headers=a).status_code == 200
+    old_etag = client.get(url, headers=a).json()["etag"]
+    assert client.post(sh, json={"remove": [bname]}, headers=a).status_code == 200            # 取消分享不改 etag
+    r = client.put(url, json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": old_etag}))
+    assert r.status_code == 422 and r.json()["detail"]["reason"] == "use_shares" and "分享" in r.json()["detail"]["message"]
+    assert client.get(url, headers=a).json()["sharedWith"] == [] and client.get(url, headers=b).status_code == 404
+    assert _count("custom_report_shares") == 0
+    # 連同定義一起送也不行（整個請求被拒，定義也沒被改）
+    r2 = client.put(url, json={"name": "偷改", "sharedWith": [bname]}, headers=dict(a, **{"If-Match": old_etag}))
+    assert r2.status_code == 422 and client.get(url, headers=a).json()["name"] == "報表A"
 
 
 # ── D5 刪除 ────────────────────────────────────────────────────────────────
@@ -259,7 +278,7 @@ def test_default_delete_removes_the_row_and_its_shares(client, make_user):
     _set(client, sharing=1)
     a, b, bname = _pair(client, make_user, "del")
     rep = _create(client, a).json()
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": [bname]}, headers=a)
     r = client.delete("%s/%d" % (BASE, rep["id"]), headers=a)
     assert r.status_code == 200 and r.json() == {"deleted": True, "recycled": False}
     assert _count() == 0 and _count("custom_report_shares") == 0
@@ -271,7 +290,7 @@ def test_recycle_setting_sends_the_report_to_the_bin_and_restore_brings_it_back(
     a, b, bname = _pair(client, make_user, "rb")
     sa = _login(client, make_user, "st_sa_rb", role="superadmin")
     rep = _create(client, a, "要還原").json()
-    client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": [bname]}, headers=dict(a, **{"If-Match": rep["etag"]}))
+    client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": [bname]}, headers=a)
     r = client.delete("%s/%d" % (BASE, rep["id"]), headers=a)
     assert r.status_code == 200 and r.json()["recycled"] is True and _count() == 0 and _count("custom_report_shares") == 0
     items = client.get("/api/recycle-bin", headers=sa).json()["items"]

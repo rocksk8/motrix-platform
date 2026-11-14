@@ -12,7 +12,9 @@
       有篩選／分組／排序被拿掉的報表不能複製（意義會變）。執行永遠用讀者自己的權限重算。
     ⑤分享對象：存在、在職、不是自己、≤ `MAX_SHARES`、**持有 `analytics.custom_report.view` 能力**（後端每次寫入都查，不信前端的候選名單）；
       分享設定關閉時不接受新的分享（既有列保留但不顯示；取消分享隨時可做）。挑選面板的候選名單（`share_candidates`）只列符合同樣條件的人，
-      並且只回帳號、顯示名稱、部門名稱。增減分享走 `change_shares`（不動 etag，不影響擁有者正在編輯的定義），每位增減各寫一列稽核（只記帳號與報表編號）。
+      並且只回帳號、顯示名稱、部門名稱。分享名單**只有 `change_shares` 一個寫入口**（增減差量；不動 etag，不影響擁有者正在編輯的定義）；
+      `update` 收到 `sharedWith` 一律 422（整批覆寫配上不變的 etag，會讓過期的請求復活已取消的分享）。
+      對象不合格（不存在、離職、沒有能力）一律回同一句 `CANNOT_SHARE`，不讓人用錯誤訊息試探某帳號。每位增減各寫一列稽核（只記帳號與報表編號）。
 [契約題] backend/tests/platform/test_custom_reports_store_t87.py
 """
 import json
@@ -21,6 +23,7 @@ from datetime import datetime
 from core.txn import begin_write
 from helpers import recycle_bin as RB
 from helpers import report_catalog as RC
+from helpers import duty_roles as _dr
 from helpers import perm as _perm
 from helpers import report_policy as RP
 from helpers import report_runner as RR
@@ -33,6 +36,7 @@ CAP_VIEW = "analytics.custom_report.view"
 TARGET_LIST_MAX = 100                                      # 挑選面板一次最多列幾位
 _POOL_MAX = 300                                            # 能力檢查前最多取幾位候選（搜尋條件先縮小範圍）
 NOT_FOUND = "找不到這份報表。"
+CANNOT_SHARE = "無法分享給此同事。"
 
 
 class StoreError(Exception):
@@ -204,22 +208,33 @@ def _check_targets(conn, user, names) -> list:
         raise StoreError(422, "最多只能分享給 %d 位同事。" % MAX_SHARES)
     if user["username"] in uniq:
         raise StoreError(422, "不需要分享給自己。")
-    if uniq:
-        ok = {r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND username IN (%s)" % ",".join("?" * len(uniq)), uniq)}
-        bad = [x for x in uniq if x not in ok]
-        if bad:
-            raise StoreError(422, "找不到下列同事，或已停用：%d 位。請重新選擇。" % len(bad), {"count": len(bad)})
-        no_cap = [x for x in uniq if not _can_view(x)]
-        if no_cap:
-            raise StoreError(422, "下列同事沒有使用自訂報表的權限，無法分享：%d 位。請重新選擇。" % len(no_cap),
-                             {"count": len(no_cap), "reason": "no_capability"})
+    if uniq and not set(uniq) <= _viewers(conn, uniq):                   # 不存在、離職、沒有能力：一律同一句，不讓人用錯誤訊息試探某帳號的狀態
+        raise StoreError(422, CANNOT_SHARE)
     return uniq
 
 
-def _can_view(username) -> bool:
-    """這位同事目前有沒有「使用自訂報表」能力（含代理）；找不到或停用 ⇒ 否。"""
-    u = _perm.load_user(username)
-    return u is not None and _perm.can(u, CAP_VIEW)
+def _viewers(conn, usernames) -> set:
+    """這些帳號裡目前有「使用自訂報表」能力（含代理）的人。一次查完所有人、用同一條連線（不是每人各開一條連線）；
+    使用者 dict 的組法與 `perm.load_user` 相同（職責角色套用後的模組勾選）。找不到或停用的帳號不在結果裡。"""
+    names = sorted(set(usernames))
+    out = set()
+    for i in range(0, len(names), 400):                                   # SQLite 變數上限
+        chunk = names[i:i + 400]
+        rows = conn.execute("SELECT id, username, display_name, role, modules FROM users WHERE active=1 AND username IN (%s)" % ",".join("?" * len(chunk)), chunk).fetchall()
+        for r in rows:
+            u = dict(r)
+            if u["role"] != "superadmin":
+                try:
+                    raw = json.loads(u["modules"] or "[]")
+                except (TypeError, ValueError):
+                    raw = None
+                if isinstance(raw, list):
+                    res = _dr.resolve_raw_modules(conn, u["id"], raw)
+                    if res is not raw:
+                        u["modules"] = json.dumps(res, ensure_ascii=False)
+            if _perm.can(u, CAP_VIEW):
+                out.add(u["username"])
+    return out
 
 
 def _like(q) -> str:
@@ -252,7 +267,8 @@ def share_candidates(conn, user, q="") -> dict:
     sql += " ORDER BY COALESCE(NULLIF(u.display_name,''), u.username), u.username LIMIT %d" % (_POOL_MAX + 1)
     names = [r[0] for r in conn.execute(sql, args)]
     pool_cut = len(names) > _POOL_MAX
-    ok = [n for n in names[:_POOL_MAX] if _can_view(n)]
+    have = _viewers(conn, names[:_POOL_MAX])
+    ok = [n for n in names[:_POOL_MAX] if n in have]
     return {"people": _people(conn, ok[:TARGET_LIST_MAX]), "truncated": pool_cut or len(ok) > TARGET_LIST_MAX}
 
 
@@ -323,8 +339,10 @@ def create(conn, user, name, definition) -> dict:
 
 
 def update(conn, user, rid, etag, body) -> dict:
-    """擁有者改名稱／定義／分享對象（只送要改的鍵）。etag 不符 ⇒ 409。"""
-    if not isinstance(body, dict) or set(body) - {"name", "definition", "sharedWith"} or not body:
+    """擁有者改名稱／定義（只送要改的鍵）。etag 不符 ⇒ 409。分享名單不在這裡改（見 change_shares）。"""
+    if isinstance(body, dict) and "sharedWith" in body:                  # 分享名單只有 change_shares 一個寫入口（舊的整批覆寫配上不變的 etag，會讓過期請求復活已取消的分享）
+        raise StoreError(422, "分享請使用「分享」面板（分享名單不在這裡修改）。", {"reason": "use_shares"})
+    if not isinstance(body, dict) or set(body) - {"name", "definition"} or not body:
         raise StoreError(422, "沒有可以儲存的修改。")
     name = _clean_name(body["name"]) if "name" in body else None
     dumped = source_id = None
@@ -337,21 +355,9 @@ def update(conn, user, rid, etag, body) -> dict:
             raise StoreError(404, NOT_FOUND)
         if (etag or "") != etag_of(r):
             raise StoreError(409, "這份報表已在其他視窗修改，請重新載入。", {"reason": "etag"})
-        shares = None
-        old_shares = set(_shared_with(conn, rid))
-        if "sharedWith" in body:
-            if not RP.sharing_enabled(conn):
-                if body["sharedWith"]:
-                    raise StoreError(403, "公司目前不開放分享報表。", {"reason": "sharing_off"})
-            else:
-                shares = _check_targets(conn, user, body["sharedWith"])
         if name is not None and name != r["name"] and conn.execute(
                 "SELECT 1 FROM custom_reports WHERE username=? AND name=? AND id<>?", (user["username"], name, rid)).fetchone():
             raise StoreError(409, "已有同名的報表，請換一個名稱。", {"reason": "duplicate_name"})
-        if shares is not None:
-            conn.execute("DELETE FROM custom_report_shares WHERE report_id=?", (rid,))
-            now = _now()
-            conn.executemany("INSERT INTO custom_report_shares (report_id, shared_with, created_at) VALUES (?,?,?)", [(rid, s, now) for s in shares])
         conn.execute("UPDATE custom_reports SET name=COALESCE(?, name), definition_json=COALESCE(?, definition_json), source_id=COALESCE(?, source_id), "
                      "updated_at=? WHERE id=?", (name, dumped, source_id, _now(), rid))
         conn.commit()
@@ -359,10 +365,7 @@ def update(conn, user, rid, etag, body) -> dict:
         if began and conn.in_transaction:
             conn.rollback()
         raise
-    out = get_visible(conn, user, rid)
-    if shares is not None and (set(shares) != old_shares):
-        out["_shareChanges"] = (sorted(set(shares) - old_shares), sorted(old_shares - set(shares)))      # 給呼叫端寫稽核；呼叫端要先拿掉再回應
-    return out
+    return get_visible(conn, user, rid)
 
 
 def copy_report(conn, user, rid) -> dict:

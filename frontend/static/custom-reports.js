@@ -737,16 +737,19 @@
   // ───────── 分享給誰（擁有者；設定 sharing 開啟時才有入口）─────────
   // 候選名單與已分享名單都由後端給（只含在職、有使用能力的人）；增減走 POST /{id}/shares，後端逐位再查，這裡不做任何資格判斷。
   var SH = { q: '', cands: [], truncated: false, shared: [], max: 20, pickC: {}, pickS: {}, seq: 0, timer: null, busy: false, loadErr: '' }
-  function shFocus(fn) {                                       // 面板內的焦點保留；元素消失就回面板標題（不掉出對話框）
+  function shFocus(fn, fallback) {                             // 面板內的焦點保留；元素消失或變成不能用（例如分享完沒有勾選了）⇒ 移到結果訊息，不掉出對話框
     var a = document.activeElement, fk = a && a.getAttribute ? a.getAttribute('data-fk') : null
     fn()
     if (fk) {
       var el = null
       try { el = document.querySelector('#dlgShare [data-fk="' + fk.replace(/"/g, '\\"') + '"]') } catch (_e) { el = null }
-      if (el && !el.disabled && !el.hidden && el.offsetParent !== null) el.focus(); else $('shTitle').focus()
+      if (el && !el.disabled && !el.hidden && el.offsetParent !== null) el.focus(); else $(fallback || 'shTitle').focus()
     }
   }
-  function shSay(msg, isErr) { var m = $('shMsg'); m.textContent = msg || ''; m.className = 'cr-note msg' + (isErr ? ' cr-err' : '') }
+  function shSay(msg, isErr) {
+    var m = $('shMsg'); m.textContent = msg || ''; m.className = 'cr-note msg' + (isErr ? ' cr-err' : '')
+    if (msg && m.scrollIntoView) m.scrollIntoView({ block: 'nearest' })      // 手機版對話框會捲動：回饋訊息要在看得到的位置
+  }
   function personRow(p, group, off, offText) {
     var picked = group === 'S' ? SH.pickS : SH.pickC
     var cb = h('input', { type: 'checkbox', 'data-fk': 'sh:' + group + ':' + p.username, 'aria-label': (group === 'S' ? '取消分享對象 ' : '分享給 ') + p.name + (p.department ? '（' + p.department + '）' : ''),
@@ -769,10 +772,11 @@
     var avail = SH.cands.filter(function (p) { return !inS[p.username] })
     var nC = pickedNames(SH.pickC, avail).length, nS = pickedNames(SH.pickS, SH.shared).length
     var room = SH.max - SH.shared.length
-    var a = $('shSelCands'); a.disabled = !avail.length || SH.busy; a.checked = avail.length > 0 && nC === avail.length; a.indeterminate = nC > 0 && nC < avail.length
-    var b = $('shSelShared'); b.disabled = !SH.shared.length || SH.busy; b.checked = SH.shared.length > 0 && nS === SH.shared.length; b.indeterminate = nS > 0 && nS < SH.shared.length
-    $('shAdd').disabled = !nC || SH.busy; $('shAdd').textContent = nC ? '分享給所選（' + nC + '）' : '分享給所選'
-    $('shRemove').disabled = !nS || SH.busy; $('shRemove').textContent = nS ? '取消分享所選（' + nS + '）' : '取消分享所選'
+    var cap = Math.min(avail.length, Math.max(0, room))              // 全選最多能勾的人數（名額不足時小於候選人數）
+    var a = $('shSelCands'); a.disabled = !cap; a.checked = cap > 0 && nC === cap; a.indeterminate = nC > 0 && nC !== cap
+    var b = $('shSelShared'); b.disabled = !SH.shared.length; b.checked = SH.shared.length > 0 && nS === SH.shared.length; b.indeterminate = nS > 0 && nS < SH.shared.length
+    $('shAdd').disabled = !nC; $('shAdd').textContent = nC ? '分享給所選（' + nC + '）' : '分享給所選'
+    $('shRemove').disabled = !nS; $('shRemove').textContent = nS ? '取消分享所選（' + nS + '）' : '取消分享所選'
     $('shCount').textContent = '已分享 ' + SH.shared.length + ' 位，最多 ' + SH.max + ' 位（還能加 ' + Math.max(0, room) + ' 位）。' + (SH.truncated ? '符合的人太多，只列出前 ' + SH.cands.length + ' 位，請用搜尋縮小範圍。' : '')
   }
   function shLoadCands(now) {
@@ -804,16 +808,17 @@
   }
   function shApply(body, doneMsg) {
     var L = S.loaded; if (!L) return
-    SH.busy = true; shSay('處理中…'); shRender()
+    if (SH.busy) return                                                 // 防重入；不把被聚焦的按鈕 disabled（會讓焦點掉到 BODY），改標 aria-busy
+    SH.busy = true; $('dlgShare').setAttribute('aria-busy', 'true'); shSay('處理中…')
     api('POST', API + '/' + L.id + '/shares', body).then(function (r) {
-      SH.busy = false
+      SH.busy = false; $('dlgShare').removeAttribute('aria-busy')
       if (!r.ok) {
         shSay(errMsg(r, '儲存失敗，請稍後再試。'), true)
-        if (detailOf(r).reason === 'no_capability') shLoadCands(true)          // 名單過期（對方權限剛被收回）：重新讀
-        shFocus(shRender); return
+        if (r.status === 422) shLoadCands(true)                                // 名單可能過期（對方權限剛被收回、離職）：重新讀
+        shFocus(shRender, 'shMsg'); return
       }
       SH.shared = r.data.shared || []; SH.pickC = {}; SH.pickS = {}
-      shSay(doneMsg(r.data)); shFocus(shRender); refreshList()
+      shSay(doneMsg(r.data)); shFocus(shRender, 'shMsg'); refreshList()
     })
   }
   function shAddClick() {
@@ -839,7 +844,7 @@
       SH.pickC = {}
       if (e.target.checked) SH.cands.forEach(function (p) { if (!inS[p.username] && n < room) { SH.pickC[p.username] = true; n++ } })
       var avail = SH.cands.filter(function (p) { return !inS[p.username] }).length
-      shSay(e.target.checked && n < avail ? '名額只剩 ' + Math.max(0, room) + ' 位，已先勾選前 ' + n + ' 位。' : '')
+      shSay(e.target.checked && n < avail ? '名額只剩 ' + Math.max(0, room) + ' 位，只勾選了前 ' + n + ' 位（共 ' + avail + ' 位可加）。再按一次「全選目前結果」可清除勾選。' : '')
       shFocus(shRender)
     })
     $('shSelShared').addEventListener('change', function (e) {

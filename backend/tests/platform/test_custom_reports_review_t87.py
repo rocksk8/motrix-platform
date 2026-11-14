@@ -75,7 +75,7 @@ def _shared_pair(client, make_user, tag, definition=None):
     rep = client.post(BASE, json={"name": "共享", "definition": definition or _rich()}, headers=owner)
     assert rep.status_code == 201, rep.text
     rep = rep.json()
-    r = client.put("%s/%d" % (BASE, rep["id"]), json={"sharedWith": ["rv_e_" + tag]}, headers=dict(owner, **{"If-Match": rep["etag"]}))
+    r = client.post("%s/%d/shares" % (BASE, rep["id"]), json={"add": ["rv_e_" + tag]}, headers=owner)
     assert r.status_code == 200, r.text
     return owner, eng, rep["id"]
 
