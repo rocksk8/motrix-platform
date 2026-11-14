@@ -563,6 +563,24 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:approval_flow_copy": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:settings_notify",
+    "helper:tiered_approval",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/approval_flow_copy.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "system_settings"
+   ]
+  },
   "helper:approval_queue": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -1110,6 +1128,7 @@
    "imports": [
     "helper:audit",
     "helper:settings_groups",
+    "helper:settings_groups_external",
     "helper:settings_registry",
     "helper:system_checks",
     "plat:registry"
@@ -1204,6 +1223,24 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
+   "tables_w": []
+  },
+  "helper:duty_role_matrix": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:duty_roles",
+    "helper:settings_notify",
+    "plat:txn"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/duty_role_matrix.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "user_duty_roles",
+    "users"
+   ],
    "tables_w": []
   },
   "helper:duty_roles": {
@@ -1566,6 +1603,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:http_etag": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/http_etag.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:idempotency": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1597,8 +1645,9 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
-    "helper:settings",
+    "core:db",
     "helper:settings_groups",
+    "helper:settings_groups_external",
     "helper:settings_registry"
    ],
    "kind": "helper",
@@ -2455,6 +2504,7 @@
    "imports": [
     "helper:display_labels",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -2491,6 +2541,25 @@
    "tables_named": [],
    "tables_r": [],
    "tables_w": []
+  },
+  "helper:settings_groups_external": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:config_ledger",
+    "helper:legal_params",
+    "helper:settings_registry",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/settings_groups_external.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "system_settings"
+   ]
   },
   "helper:settings_groups_import_wizard": {
    "api_prefixes": [],
@@ -2666,6 +2735,8 @@
    "path": "backend/helpers/settings_pages.py",
    "tables_ddl": [],
    "tables_named": [
+    "account_items",
+    "approval_delegates",
     "recycle_bin"
    ],
    "tables_r": [],
@@ -3511,6 +3582,23 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:js/case-management-mtl.js": {
+   "api_calls": [
+    "/api/quotations/{}/material-flow"
+   ],
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/case-management-mtl.js",
+   "routers_called": [
+    "mod:case/api/material_flow"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:js/case-management-shipping.js": {
    "api_calls": [
     "/api/customers",
@@ -4160,6 +4248,23 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/approval-flow-copy.js": {
+   "api_calls": [
+    "/api/approval/flows/copy"
+   ],
+   "api_prefixes": [
+    "/api/approval"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/approval-flow-copy.js",
+   "routers_called": [
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/approval-return.js": {
    "api_calls": [
     "/api/approval-queue"
@@ -4217,36 +4322,55 @@
     "/api/auth/totp/status",
     "/api/bootstrap",
     "/api/build-info",
+    "/api/contractors/selectable",
+    "/api/list-prefs/case_list",
     "/api/notifications/mine",
     "/api/online-users",
     "/api/platform/menu",
+    "/api/profit-warning/config",
     "/api/reads/module-counts",
+    "/api/settings-center/public",
+    "/api/settings/company-profile/public",
     "/api/system/bonus-module-status",
     "/api/system/branding",
-    "/api/system/modules/availability"
+    "/api/system/modules/availability",
+    "/api/users/selectable",
+    "/api/vendor-contractors/selectable"
    ],
    "api_prefixes": [
     "/api/approval-queue",
     "/api/auth",
     "/api/bootstrap",
     "/api/build-info",
+    "/api/contractors",
+    "/api/list-prefs",
     "/api/notifications",
     "/api/online-users",
     "/api/platform",
+    "/api/profit-warning",
     "/api/reads",
-    "/api/system"
+    "/api/settings",
+    "/api/settings-center",
+    "/api/system",
+    "/api/users",
+    "/api/vendor-contractors"
    ],
    "api_unmatched": [],
    "imports": [],
    "kind": "js",
    "path": "frontend/static/auth-guard.js",
    "routers_called": [
+    "mod:case/api/project_margin",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "router:approval_queue",
     "router:auth",
     "router:bootstrap",
     "router:item_reads",
+    "router:list_prefs",
     "router:my_account",
     "router:platform_menu",
+    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -4356,6 +4480,26 @@
    "kind": "js",
    "path": "frontend/static/download.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/duty-matrix.js": {
+   "api_calls": [
+    "/api/duty-roles",
+    "/api/duty-roles/matrix/apply",
+    "/api/duty-roles/matrix/preview",
+    "/api/duty-roles/matrix/undo"
+   ],
+   "api_prefixes": [
+    "/api/duty-roles"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/duty-matrix.js",
+   "routers_called": [
+    "router:duty_roles"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -4593,6 +4737,28 @@
    "kind": "js",
    "path": "frontend/static/legal-round.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/line-events-matrix.js": {
+   "api_calls": [
+    "/api/settings/line-notify",
+    "/api/settings/line-notify/bindings",
+    "/api/settings/line-notify/events/batch",
+    "/api/settings/line-notify/events/batch-preview",
+    "/api/settings/line-notify/events/batch-undo",
+    "/api/settings/line-notify/quota"
+   ],
+   "api_prefixes": [
+    "/api/settings"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/line-events-matrix.js",
+   "routers_called": [
+    "router:system"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -5016,6 +5182,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/perm-key-picker.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/perm-key-picker.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/privacy-notice.js": {
    "api_calls": [
     "/api/legal-params/privacy-notice",
@@ -5269,6 +5446,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/users-email-prefs.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/users-email-prefs.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/ux-help.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -5383,6 +5571,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -5538,6 +5727,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -5567,7 +5757,10 @@
     "helper:legal_params",
     "helper:part_catalog",
     "helper:settings",
+    "helper:settings_groups_external",
+    "helper:settings_registry",
     "helper:xlsx_out",
+    "plat:definitions",
     "plat:registry"
    ],
    "kind": "mod",
@@ -5578,43 +5771,43 @@
    "routes": [
     {
      "func": "get_t100_export_config",
-     "line": 222,
+     "line": 244,
      "method": "GET",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "set_t100_export_config",
-     "line": 239,
+     "line": 261,
      "method": "PUT",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "t100_export_vouchers",
-     "line": 518,
+     "line": 556,
      "method": "GET",
      "path": "/api/reports/t100-export/vouchers"
     },
     {
      "func": "t100_export_preview",
-     "line": 542,
+     "line": 580,
      "method": "GET",
      "path": "/api/reports/t100-export/preview"
     },
     {
      "func": "t100_export_confirm",
-     "line": 571,
+     "line": 609,
      "method": "POST",
      "path": "/api/reports/t100-export/confirm"
     },
     {
      "func": "t100_export_confirmed_list",
-     "line": 598,
+     "line": 636,
      "method": "GET",
      "path": "/api/reports/t100-export/confirmed"
     },
     {
      "func": "t100_export_unconfirm",
-     "line": 632,
+     "line": 670,
      "method": "POST",
      "path": "/api/reports/t100-export/unconfirm"
     }
@@ -5724,6 +5917,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -5888,6 +6082,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -6067,6 +6262,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -6277,6 +6473,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -6501,6 +6698,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -6734,6 +6932,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -6957,6 +7156,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -7163,6 +7363,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -7343,6 +7544,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -7534,6 +7736,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -7867,6 +8070,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -8810,6 +9014,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -9025,6 +9230,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -9164,6 +9370,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -9330,6 +9537,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -9601,6 +9809,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -9852,6 +10061,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -10097,6 +10307,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -10570,6 +10781,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -10760,6 +10972,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -10941,6 +11154,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -11305,6 +11519,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -11636,6 +11851,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -11786,6 +12002,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -11934,6 +12151,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -12091,6 +12309,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -12297,6 +12516,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -12493,6 +12713,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -12642,6 +12863,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -12833,6 +13055,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -13038,6 +13261,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -13106,61 +13330,61 @@
     },
     {
      "func": "ack_payee_privacy_notice",
-     "line": 140,
+     "line": 141,
      "method": "POST",
      "path": "/api/material-payments/{pid}/privacy-notice/ack"
     },
     {
      "func": "list_payments",
-     "line": 161,
+     "line": 162,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-payments"
     },
     {
      "func": "supplier_picker",
-     "line": 180,
+     "line": 181,
      "method": "GET",
      "path": "/api/material-suppliers"
     },
     {
      "func": "create_payment",
-     "line": 218,
+     "line": 219,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/payments"
     },
     {
      "func": "update_payment",
-     "line": 265,
+     "line": 267,
      "method": "PATCH",
      "path": "/api/material-payments/{pid}"
     },
     {
      "func": "submit_payment",
-     "line": 288,
+     "line": 290,
      "method": "POST",
      "path": "/api/material-payments/{pid}/submit"
     },
     {
      "func": "approve_payment",
-     "line": 331,
+     "line": 333,
      "method": "POST",
      "path": "/api/material-payments/{pid}/approve"
     },
     {
      "func": "reject_payment",
-     "line": 357,
+     "line": 359,
      "method": "POST",
      "path": "/api/material-payments/{pid}/reject"
     },
     {
      "func": "withdraw_payment",
-     "line": 380,
+     "line": 382,
      "method": "POST",
      "path": "/api/material-payments/{pid}/withdraw"
     },
     {
      "func": "void_payment",
-     "line": 400,
+     "line": 402,
      "method": "POST",
      "path": "/api/material-payments/{pid}/void"
     }
@@ -13298,6 +13522,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -13341,7 +13566,7 @@
     "helper:audit",
     "helper:auth",
     "helper:profit_warning",
-    "helper:settings",
+    "helper:settings_groups_external",
     "helper:settings_registry",
     "mod:case/profit_guard",
     "plat:definitions",
@@ -13355,19 +13580,19 @@
    "routes": [
     {
      "func": "get_overhead_settings",
-     "line": 18,
+     "line": 17,
      "method": "GET",
      "path": "/api/overhead/settings"
     },
     {
      "func": "put_quotation_overhead_pct",
-     "line": 35,
+     "line": 25,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/overhead-pct"
     },
     {
      "func": "put_overhead_settings",
-     "line": 58,
+     "line": 48,
      "method": "PUT",
      "path": "/api/overhead/settings"
     }
@@ -13406,9 +13631,7 @@
     "users",
     "vendor_contractors"
    ],
-   "tables_w": [
-    "system_settings"
-   ],
+   "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
     "case_extra_expenses",
@@ -13500,6 +13723,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -13687,6 +13911,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -13982,6 +14207,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -14106,379 +14332,379 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 990,
+     "line": 997,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 1077,
+     "line": 1101,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 1323,
+     "line": 1351,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1428,
+     "line": 1456,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1469,
+     "line": 1497,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "reconfirm_shadow_stats",
-     "line": 1517,
+     "line": 1545,
      "method": "GET",
      "path": "/api/quotations/reconfirm-shadow-stats"
     },
     {
      "func": "gate_matrix",
-     "line": 1537,
+     "line": 1565,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "submit_precheck",
-     "line": 1645,
+     "line": 1673,
      "method": "GET",
      "path": "/api/quotations/submit-precheck"
     },
     {
      "func": "get_quotation",
-     "line": 1678,
+     "line": 1706,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1733,
+     "line": 1761,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1756,
+     "line": 1784,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1892,
+     "line": 1920,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1917,
+     "line": 1945,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1994,
+     "line": 2022,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "historical_config",
-     "line": 2362,
+     "line": 2390,
      "method": "GET",
      "path": "/api/quotations/historical/config"
     },
     {
      "func": "historical_next_no",
-     "line": 2377,
+     "line": 2405,
      "method": "GET",
      "path": "/api/quotations/historical/next-no"
     },
     {
      "func": "create_historical_quotation",
-     "line": 2392,
+     "line": 2420,
      "method": "POST",
      "path": "/api/quotations/historical"
     },
     {
      "func": "update_quotation",
-     "line": 2500,
+     "line": 2528,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 2892,
+     "line": 2920,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2978,
+     "line": 3006,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 3310,
+     "line": 3338,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 3365,
+     "line": 3402,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 3404,
+     "line": 3441,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 3527,
+     "line": 3564,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 3655,
+     "line": 3692,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 3704,
+     "line": 3741,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 3885,
+     "line": 3958,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 4305,
+     "line": 4411,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 4328,
+     "line": 4434,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 4391,
+     "line": 4497,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "record_export",
-     "line": 4613,
+     "line": 4719,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4702,
+     "line": 4817,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4834,
+     "line": 4949,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4875,
+     "line": 4990,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4916,
+     "line": 5031,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4950,
+     "line": 5065,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4976,
+     "line": 5091,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 5015,
+     "line": 5130,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 5041,
+     "line": 5156,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 5073,
+     "line": 5188,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 5102,
+     "line": 5217,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 5146,
+     "line": 5261,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 5636,
+     "line": 5768,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "review_edit_quotation",
-     "line": 5807,
+     "line": 5939,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/review-edit"
     },
     {
      "func": "reject_quotation",
-     "line": 5958,
+     "line": 6090,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 6053,
+     "line": 6185,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 6124,
+     "line": 6256,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 6270,
+     "line": 6402,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "add_case_update_files",
-     "line": 6389,
+     "line": 6521,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files"
     },
     {
      "func": "delete_case_update",
-     "line": 6455,
+     "line": 6587,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 6488,
+     "line": 6620,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 6516,
+     "line": 6648,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 6558,
+     "line": 6690,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 6616,
+     "line": 6748,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 6688,
+     "line": 6820,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 6727,
+     "line": 6859,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 6760,
+     "line": 6892,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 7356,
+     "line": 7488,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 7476,
+     "line": 7608,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 7555,
+     "line": 7687,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 7724,
+     "line": 7856,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 7738,
+     "line": 7870,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 7769,
+     "line": 7901,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -14652,6 +14878,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -14840,6 +15067,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -15687,10 +15915,12 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "core:db",
     "helper:legal_params",
     "helper:profit_rules",
     "helper:profit_warning",
     "helper:settings",
+    "helper:settings_groups_external",
     "helper:settings_registry",
     "helper:tax_calc",
     "mod:case/alt_policy",
@@ -16040,6 +16270,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -16080,157 +16311,163 @@
    "routes": [
     {
      "func": "list_dev_cases",
-     "line": 440,
+     "line": 515,
      "method": "GET",
      "path": "/api/dev-cases"
     },
     {
      "func": "create_dev_case",
-     "line": 471,
+     "line": 547,
      "method": "POST",
      "path": "/api/dev-cases"
     },
     {
+     "func": "dev_cases_expected_summary",
+     "line": 591,
+     "method": "GET",
+     "path": "/api/dev-cases/expected-summary"
+    },
+    {
      "func": "get_dev_case",
-     "line": 511,
+     "line": 625,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "update_dev_case",
-     "line": 526,
+     "line": 640,
      "method": "PUT",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "request_dev_case_delete",
-     "line": 569,
+     "line": 694,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-delete"
     },
     {
      "func": "cancel_dev_case_delete",
-     "line": 604,
+     "line": 729,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-delete"
     },
     {
      "func": "approve_dev_case_delete",
-     "line": 637,
+     "line": 762,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-delete"
     },
     {
      "func": "update_dev_case_status",
-     "line": 685,
+     "line": 810,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/status"
     },
     {
      "func": "assign_dev_case",
-     "line": 716,
+     "line": 841,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/assign"
     },
     {
      "func": "list_dev_case_progress",
-     "line": 826,
+     "line": 951,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/progress"
     },
     {
      "func": "add_dev_case_progress",
-     "line": 844,
+     "line": 969,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/progress"
     },
     {
      "func": "mark_converted",
-     "line": 884,
+     "line": 1009,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/convert"
     },
     {
      "func": "request_dev_case_relink",
-     "line": 924,
+     "line": 1049,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-relink-quote"
     },
     {
      "func": "cancel_dev_case_relink",
-     "line": 969,
+     "line": 1094,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
     },
     {
      "func": "approve_dev_case_relink",
-     "line": 1002,
+     "line": 1127,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-relink-quote"
     },
     {
      "func": "list_pending_logs",
-     "line": 1060,
+     "line": 1185,
      "method": "GET",
      "path": "/api/dev-logs/pending"
     },
     {
      "func": "dev_crm_activity_stats",
-     "line": 1076,
+     "line": 1201,
      "method": "GET",
      "path": "/api/dev-crm/activity-stats"
     },
     {
      "func": "list_dev_logs",
-     "line": 1154,
+     "line": 1279,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "create_dev_log",
-     "line": 1174,
+     "line": 1299,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "update_dev_log",
-     "line": 1272,
+     "line": 1397,
      "method": "PUT",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log",
-     "line": 1304,
+     "line": 1429,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log_file",
-     "line": 1344,
+     "line": 1469,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}/files/{file_id}"
     },
     {
      "func": "approve_dev_log",
-     "line": 1368,
+     "line": 1493,
      "method": "PATCH",
      "path": "/api/dev-logs/{log_id}/approve"
     },
     {
      "func": "list_dev_log_directives",
-     "line": 1502,
+     "line": 1627,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/directives"
     },
     {
      "func": "add_dev_log_directive",
-     "line": 1514,
+     "line": 1639,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/directives"
     },
     {
      "func": "reply_dev_log_directive",
-     "line": 1593,
+     "line": 1718,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/directives/{directive_id}/replies"
     }
@@ -16400,6 +16637,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -16632,6 +16870,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -16787,6 +17026,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -16984,6 +17224,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -17133,6 +17374,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -17425,6 +17667,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -17736,6 +17979,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -17912,6 +18156,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -17949,7 +18194,9 @@
     "helper:download_name",
     "helper:email_notify",
     "helper:settings",
+    "helper:settings_groups_external",
     "helper:settings_notify",
+    "helper:settings_registry",
     "helper:tiered_approval",
     "helper:validation",
     "mod:payroll/bonus",
@@ -17959,6 +18206,7 @@
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
     "mod:payroll/bonus_vouchers",
+    "plat:definitions",
     "plat:registry"
    ],
    "kind": "mod",
@@ -18077,73 +18325,73 @@
     },
     {
      "func": "list_case_bonuses",
-     "line": 1649,
+     "line": 1661,
      "method": "GET",
      "path": "/api/bonus/cases"
     },
     {
      "func": "get_case_bonus",
-     "line": 1700,
+     "line": 1712,
      "method": "GET",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "create_case_bonus",
-     "line": 1765,
+     "line": 1777,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "update_case_bonus",
-     "line": 1804,
+     "line": 1816,
      "method": "PUT",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "preview_case_bonus",
-     "line": 1945,
+     "line": 1957,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/preview"
     },
     {
      "func": "submit_case_bonus",
-     "line": 1981,
+     "line": 1993,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/submit"
     },
     {
      "func": "approve_case_bonus",
-     "line": 2037,
+     "line": 2049,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/approve"
     },
     {
      "func": "reject_case_bonus",
-     "line": 2132,
+     "line": 2144,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/reject"
     },
     {
      "func": "return_case_bonus",
-     "line": 2160,
+     "line": 2172,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/return"
     },
     {
      "func": "mark_case_bonus_paid",
-     "line": 2192,
+     "line": 2204,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/mark-paid"
     },
     {
      "func": "get_insurance_profiles",
-     "line": 2240,
+     "line": 2252,
      "method": "GET",
      "path": "/api/bonus/insurance"
     },
     {
      "func": "put_insurance_profile",
-     "line": 2284,
+     "line": 2296,
      "method": "PUT",
      "path": "/api/bonus/insurance/{username}"
     }
@@ -18283,6 +18531,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -18499,6 +18748,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -18674,6 +18924,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -18867,6 +19118,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -18923,109 +19175,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 189,
+     "line": 207,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 210,
+     "line": 228,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 224,
+     "line": 242,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 295,
+     "line": 313,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 415,
+     "line": 432,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 430,
+     "line": 447,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 515,
+     "line": 531,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 546,
+     "line": 562,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 593,
+     "line": 609,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 653,
+     "line": 669,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 687,
+     "line": 703,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 722,
+     "line": 738,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 771,
+     "line": 787,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 825,
+     "line": 841,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 854,
+     "line": 870,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 887,
+     "line": 903,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 915,
+     "line": 931,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 943,
+     "line": 959,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -19284,6 +19536,8 @@
    "api_prefixes": [],
    "dynamic_sql": true,
    "imports": [
+    "helper:settings_groups_external",
+    "helper:settings_registry",
     "plat:registry"
    ],
    "kind": "mod",
@@ -19293,8 +19547,7 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "bonus_case_award_lines",
-    "system_settings"
+    "bonus_case_award_lines"
    ],
    "tables_w": [
     "bonus_case_awards"
@@ -19515,6 +19768,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -19592,55 +19846,67 @@
     },
     {
      "func": "permmatrix_role_cap_preview",
-     "line": 92,
+     "line": 98,
      "method": "POST",
      "path": "/api/permmatrix/role-cap/preview"
     },
     {
      "func": "permmatrix_role_cap",
-     "line": 98,
+     "line": 104,
      "method": "POST",
      "path": "/api/permmatrix/role-cap"
     },
     {
+     "func": "permmatrix_role_cap_batch_preview",
+     "line": 110,
+     "method": "POST",
+     "path": "/api/permmatrix/role-cap/batch/preview"
+    },
+    {
+     "func": "permmatrix_role_cap_batch",
+     "line": 117,
+     "method": "POST",
+     "path": "/api/permmatrix/role-cap/batch"
+    },
+    {
      "func": "permmatrix_user_override_preview",
-     "line": 104,
+     "line": 124,
      "method": "POST",
      "path": "/api/permmatrix/user-override/preview"
     },
     {
      "func": "permmatrix_user_override",
-     "line": 110,
+     "line": 130,
      "method": "POST",
      "path": "/api/permmatrix/user-override"
     },
     {
      "func": "permmatrix_user_override_clear",
-     "line": 116,
+     "line": 136,
      "method": "DELETE",
      "path": "/api/permmatrix/user-override"
     },
     {
      "func": "permmatrix_pending_cancel",
-     "line": 122,
+     "line": 142,
      "method": "POST",
      "path": "/api/permmatrix/pending/{pid}/cancel"
     },
     {
      "func": "permmatrix_pending_approve",
-     "line": 128,
+     "line": 148,
      "method": "POST",
      "path": "/api/permmatrix/pending/{pid}/approve"
     },
     {
      "func": "permmatrix_version_restore",
-     "line": 134,
+     "line": 154,
      "method": "POST",
      "path": "/api/permmatrix/versions/{version_id}/restore"
     },
     {
      "func": "permmatrix_undo",
-     "line": 140,
+     "line": 160,
      "method": "POST",
      "path": "/api/permmatrix/undo"
     }
@@ -19828,6 +20094,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -20120,6 +20387,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -20435,6 +20703,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -20652,6 +20921,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -20848,6 +21118,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -21005,6 +21276,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -21157,6 +21429,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -21730,6 +22003,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -21975,6 +22249,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -22165,6 +22440,7 @@
     "recycle_bin",
     "sessions",
     "shipping_notes",
+    "stock_batches",
     "stock_items",
     "system_settings",
     "ui_definitions",
@@ -22258,6 +22534,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -22335,7 +22612,7 @@
     },
     {
      "func": "ack_supplier_contact_privacy_notice",
-     "line": 355,
+     "line": 356,
      "method": "POST",
      "path": "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"
     }
@@ -22467,7 +22744,9 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "shipping_notes"
+    "shipping_notes",
+    "stock_batches",
+    "stock_items"
    ],
    "tables_w": []
   },
@@ -22627,6 +22906,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -22898,6 +23178,7 @@
     "/api/auth/logout",
     "/api/customers",
     "/api/dashboard/activity-feed",
+    "/api/dashboard/bundle",
     "/api/dashboard/expenses-monthly{}",
     "/api/dashboard/funnel",
     "/api/dashboard/mine",
@@ -23167,6 +23448,7 @@
    ],
    "api_unmatched": [],
    "imports": [
+    "js:static/approval-flow-copy.js",
     "js:static/auth-guard.js",
     "js:static/motrix-error.js",
     "js:static/notif.js",
@@ -23381,6 +23663,7 @@
     "js:js/case-management-list.js",
     "js:js/case-management-mchange.js",
     "js:js/case-management-mlink.js",
+    "js:js/case-management-mtl.js",
     "js:js/case-management-shipping.js",
     "js:js/case-management-xexp.js",
     "js:js/def-governance.js",
@@ -23991,6 +24274,7 @@
     "/api/customers",
     "/api/dev-cases",
     "/api/dev-cases/",
+    "/api/dev-cases/expected-summary",
     "/api/dev-crm/activity-stats",
     "/api/dev-logs/",
     "/api/dev-logs/pending",
@@ -24102,9 +24386,12 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/duty-matrix.js",
     "js:static/notif.js",
     "js:static/role-label.js",
-    "js:static/sidebar.js"
+    "js:static/settings-matrix.js",
+    "js:static/sidebar.js",
+    "js:static/users-batch.js"
    ],
    "kind": "page",
    "path": "frontend/pages/duty-roles.html",
@@ -24593,21 +24880,15 @@
   },
   "page:pages/line-events.html": {
    "api_calls": [
-    "/api/settings/line-notify",
-    "/api/settings/line-notify/bindings",
-    "/api/settings/line-notify/events/batch",
-    "/api/settings/line-notify/events/batch-preview",
-    "/api/settings/line-notify/events/batch-undo",
-    "/api/settings/line-notify/quota",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
-    "/api/settings",
     "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/line-events-matrix.js",
     "js:static/notif.js",
     "js:static/settings-matrix.js",
     "js:static/sidebar.js"
@@ -25089,7 +25370,6 @@
     "/api/settings/line-notify",
     "/api/settings/line-notify/bindings",
     "/api/settings/line-notify/bindings/remind",
-    "/api/settings/line-notify/events/",
     "/api/settings/line-notify/quota",
     "/api/settings/line-notify/verify",
     "/api/settings/monthly-report-recipients",
@@ -25108,7 +25388,9 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/email-setup.js",
+    "js:static/line-events-matrix.js",
     "js:static/notif.js",
+    "js:static/settings-matrix.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
@@ -25330,6 +25612,7 @@
   },
   "page:pages/payment-request.html": {
    "api_calls": [
+    "/api/auth/profile",
     "/api/expense-categories",
     "/api/expense-types",
     "/api/expense-types/",
@@ -25344,6 +25627,7 @@
     "/api/users/selectable"
    ],
    "api_prefixes": [
+    "/api/auth",
     "/api/expense-categories",
     "/api/expense-types",
     "/api/extra-expenses",
@@ -25388,6 +25672,7 @@
     "mod:netplan/api",
     "router:auth",
     "router:definitions",
+    "router:my_account",
     "router:org_structure",
     "router:system",
     "router:uploads"
@@ -25413,6 +25698,7 @@
     "mod:netplan/api",
     "router:auth",
     "router:definitions",
+    "router:my_account",
     "router:org_structure",
     "router:system",
     "router:uploads"
@@ -25535,8 +25821,8 @@
     "/api/permmatrix/matrix",
     "/api/permmatrix/pending",
     "/api/permmatrix/pending/",
-    "/api/permmatrix/role-cap",
-    "/api/permmatrix/role-cap/preview",
+    "/api/permmatrix/role-cap/batch",
+    "/api/permmatrix/role-cap/batch/preview",
     "/api/permmatrix/undo",
     "/api/permmatrix/user-override",
     "/api/permmatrix/user-override/preview",
@@ -26418,10 +26704,13 @@
     "js:static/auth-guard.js",
     "js:static/notif.js",
     "js:static/org-gaps.js",
+    "js:static/perm-key-picker.js",
     "js:static/privacy-notice.js",
+    "js:static/settings-matrix.js",
     "js:static/sidebar.js",
     "js:static/users-batch.js",
-    "js:static/users-duty.js"
+    "js:static/users-duty.js",
+    "js:static/users-email-prefs.js"
    ],
    "kind": "page",
    "path": "frontend/pages/users.html",
@@ -26959,6 +27248,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -27089,6 +27379,7 @@
     "helper:event_audience",
     "helper:expense_types",
     "helper:formula",
+    "helper:http_etag",
     "helper:image_guard",
     "helper:legal_params",
     "helper:line_catalog",
@@ -27110,6 +27401,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -27136,6 +27428,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:http_etag",
     "helper:tiered_approval",
     "plat:registry",
     "plat:txn"
@@ -27146,25 +27439,25 @@
    "routes": [
     {
      "func": "get_approval_queue",
-     "line": 186,
+     "line": 187,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
-     "func": "get_approval_queue_count",
-     "line": 276,
+     "func": "approval_queue_count_http",
+     "line": 294,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 430,
+     "line": 439,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 483,
+     "line": 492,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
@@ -27272,6 +27565,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -27418,6 +27712,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -27573,6 +27868,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28024,6 +28320,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28205,6 +28502,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28229,10 +28527,13 @@
     "helper:auth",
     "helper:build_info",
     "helper:company_setup",
+    "plat:registry",
     "router:approval_queue",
     "router:auth",
     "router:item_reads",
+    "router:list_prefs",
     "router:platform_menu",
+    "router:settings_center",
     "router:system"
    ],
    "kind": "router",
@@ -28241,7 +28542,7 @@
    "routes": [
     {
      "func": "bootstrap",
-     "line": 143,
+     "line": 203,
      "method": "GET",
      "path": "/api/bootstrap"
     }
@@ -28348,6 +28649,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28493,6 +28795,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28636,6 +28939,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -28953,6 +29257,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29128,6 +29433,7 @@
     "helper:event_audience",
     "helper:expense_types",
     "helper:formula",
+    "helper:http_etag",
     "helper:image_guard",
     "helper:legal_params",
     "helper:line_catalog",
@@ -29149,6 +29455,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29171,6 +29478,7 @@
    "imports": [
     "core:db",
     "helper:auth",
+    "helper:http_etag",
     "plat:registry",
     "router:approval_queue"
    ],
@@ -29180,7 +29488,7 @@
    "routes": [
     {
      "func": "dashboard_mine",
-     "line": 224,
+     "line": 225,
      "method": "GET",
      "path": "/api/dashboard/mine"
     }
@@ -29296,6 +29604,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29337,20 +29646,26 @@
    "registered": true,
    "routes": [
     {
-     "func": "def_ledger",
+     "func": "def_available",
      "line": 225,
+     "method": "GET",
+     "path": "/api/def-governance/{kind}/_available"
+    },
+    {
+     "func": "def_ledger",
+     "line": 241,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 237,
+     "line": 253,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 250,
+     "line": 266,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -29464,6 +29779,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29644,6 +29960,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29881,6 +30198,7 @@
     "helper:doc_render",
     "helper:doc_template",
     "helper:doc_type",
+    "helper:duty_role_matrix",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:event_audience",
@@ -29907,6 +30225,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -29931,6 +30250,7 @@
     "core:db",
     "helper:auth",
     "helper:client_ip",
+    "helper:duty_role_matrix",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:user_perm_batch"
@@ -29941,79 +30261,97 @@
    "routes": [
     {
      "func": "get_roles",
-     "line": 57,
+     "line": 60,
      "method": "GET",
      "path": "/api/duty-roles"
     },
     {
      "func": "create_role",
-     "line": 71,
+     "line": 74,
      "method": "POST",
      "path": "/api/duty-roles"
     },
     {
      "func": "update_role",
-     "line": 79,
+     "line": 82,
      "method": "PUT",
      "path": "/api/duty-roles/{role_id}"
     },
     {
      "func": "get_users",
-     "line": 87,
+     "line": 90,
      "method": "GET",
      "path": "/api/duty-roles/users"
     },
     {
      "func": "preview",
-     "line": 102,
+     "line": 105,
      "method": "POST",
      "path": "/api/duty-roles/preview"
     },
     {
      "func": "bind",
-     "line": 115,
+     "line": 118,
      "method": "POST",
      "path": "/api/duty-roles/bindings"
     },
     {
      "func": "unbind",
-     "line": 123,
+     "line": 126,
      "method": "POST",
      "path": "/api/duty-roles/bindings/remove"
     },
     {
      "func": "subtract",
-     "line": 131,
+     "line": 134,
      "method": "POST",
      "path": "/api/duty-roles/subtracts"
     },
     {
      "func": "unsubtract",
-     "line": 139,
+     "line": 142,
      "method": "POST",
      "path": "/api/duty-roles/subtracts/remove"
     },
     {
      "func": "batch_preview",
-     "line": 147,
+     "line": 150,
      "method": "POST",
      "path": "/api/users/permissions/batch/preview"
     },
     {
      "func": "batch_apply",
-     "line": 155,
+     "line": 158,
      "method": "POST",
      "path": "/api/users/permissions/batch"
     },
     {
      "func": "batch_undo",
-     "line": 163,
+     "line": 166,
      "method": "POST",
      "path": "/api/users/permissions/batch/undo"
     },
     {
+     "func": "matrix_preview",
+     "line": 174,
+     "method": "POST",
+     "path": "/api/duty-roles/matrix/preview"
+    },
+    {
+     "func": "matrix_apply",
+     "line": 182,
+     "method": "POST",
+     "path": "/api/duty-roles/matrix/apply"
+    },
+    {
+     "func": "matrix_undo",
+     "line": 190,
+     "method": "POST",
+     "path": "/api/duty-roles/matrix/undo"
+    },
+    {
      "func": "get_changes",
-     "line": 171,
+     "line": 198,
      "method": "GET",
      "path": "/api/duty-roles/changes"
     }
@@ -30125,6 +30463,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -30284,6 +30623,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -30427,6 +30767,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -30603,6 +30944,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -30628,7 +30970,10 @@
     "helper:company_identity",
     "helper:legal_params",
     "helper:privacy_notice",
-    "helper:settings"
+    "helper:settings",
+    "helper:settings_groups_external",
+    "helper:settings_registry",
+    "plat:definitions"
    ],
    "kind": "router",
    "path": "backend/routers/legal_params.py",
@@ -30766,6 +31111,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -30915,6 +31261,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31062,6 +31409,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31218,6 +31566,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31263,43 +31612,43 @@
     },
     {
      "func": "set_mail_recipients",
-     "line": 288,
+     "line": 289,
      "method": "PUT",
      "path": "/api/mail-types/{key}/recipients"
     },
     {
      "func": "preview_mail_batch",
-     "line": 477,
+     "line": 478,
      "method": "POST",
      "path": "/api/settings/mail/batch-preview"
     },
     {
      "func": "save_mail_batch",
-     "line": 528,
+     "line": 529,
      "method": "POST",
      "path": "/api/settings/mail/batch"
     },
     {
      "func": "undo_mail_batch",
-     "line": 568,
+     "line": 569,
      "method": "POST",
      "path": "/api/settings/mail/batch-undo"
     },
     {
      "func": "list_receivable",
-     "line": 721,
+     "line": 722,
      "method": "GET",
      "path": "/api/mail-types/receivable"
     },
     {
      "func": "my_mail_prefs",
-     "line": 777,
+     "line": 779,
      "method": "GET",
      "path": "/api/mail-types/mine"
     },
     {
      "func": "set_my_mail_prefs",
-     "line": 793,
+     "line": 795,
      "method": "PUT",
      "path": "/api/mail-types/mine"
     }
@@ -31414,6 +31763,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31584,6 +31934,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31733,6 +32084,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -31889,6 +32241,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32025,6 +32378,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32180,6 +32534,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32322,6 +32677,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32469,6 +32825,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32609,6 +32966,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32742,6 +33100,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -32922,6 +33281,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33099,6 +33459,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33244,6 +33605,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33400,6 +33762,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33540,6 +33903,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33706,6 +34070,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -33856,6 +34221,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -34123,6 +34489,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -34206,6 +34573,7 @@
   },
   "router:system": {
    "api_prefixes": [
+    "/api/approval",
     "/api/audit-log",
     "/api/edit-presence",
     "/api/line",
@@ -34219,6 +34587,7 @@
    "dynamic_sql": true,
    "helpers_transitive": [
     "helper:alert_settings",
+    "helper:approval_flow_copy",
     "helper:approval_queue",
     "helper:attachment_search",
     "helper:attachment_slots",
@@ -34281,6 +34650,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -34311,6 +34681,7 @@
     "core:pdf_gen",
     "core:photos",
     "core:trail",
+    "helper:approval_flow_copy",
     "helper:attachment_search",
     "helper:audit",
     "helper:auth",
@@ -34401,608 +34772,620 @@
      "path": "/api/settings/approval-flow/{doc_type}"
     },
     {
+     "func": "preview_copy_approval_flow",
+     "line": 255,
+     "method": "POST",
+     "path": "/api/approval/flows/copy/preview"
+    },
+    {
+     "func": "copy_approval_flow",
+     "line": 263,
+     "method": "POST",
+     "path": "/api/approval/flows/copy"
+    },
+    {
      "func": "get_operating_targets",
-     "line": 243,
+     "line": 282,
      "method": "GET",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "put_operating_targets",
-     "line": 251,
+     "line": 290,
      "method": "PUT",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "get_monthly_report_recipients",
-     "line": 323,
+     "line": 362,
      "method": "GET",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "put_monthly_report_recipients",
-     "line": 329,
+     "line": 368,
      "method": "PUT",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "get_my_notifications",
-     "line": 341,
+     "line": 380,
      "method": "GET",
      "path": "/api/notifications/mine"
     },
     {
      "func": "mark_notification_read",
-     "line": 357,
+     "line": 396,
      "method": "PATCH",
      "path": "/api/notifications/{notif_id}/read"
     },
     {
      "func": "mark_all_notifications_read",
-     "line": 370,
+     "line": 409,
      "method": "PATCH",
      "path": "/api/notifications/read-all"
     },
     {
      "func": "audit_module_counts",
-     "line": 400,
+     "line": 439,
      "method": "POST",
      "path": "/api/audit-log/module-counts"
     },
     {
      "func": "list_audit_log",
-     "line": 510,
+     "line": 549,
      "method": "GET",
      "path": "/api/audit-log"
     },
     {
      "func": "audit_log_tree",
-     "line": 575,
+     "line": 614,
      "method": "GET",
      "path": "/api/audit-log/tree"
     },
     {
      "func": "audit_log_failure_summary",
-     "line": 625,
+     "line": 664,
      "method": "GET",
      "path": "/api/audit-log/failures/summary"
     },
     {
      "func": "list_work_logs",
-     "line": 652,
+     "line": 691,
      "method": "GET",
      "path": "/api/work-logs"
     },
     {
      "func": "work_log_case_options",
-     "line": 711,
+     "line": 750,
      "method": "GET",
      "path": "/api/work-logs/case-options"
     },
     {
      "func": "create_work_log",
-     "line": 768,
+     "line": 807,
      "method": "POST",
      "path": "/api/work-logs"
     },
     {
      "func": "update_work_log",
-     "line": 811,
+     "line": 850,
      "method": "PUT",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "delete_work_log",
-     "line": 851,
+     "line": 890,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "upload_work_log_photos",
-     "line": 878,
+     "line": 917,
      "method": "POST",
      "path": "/api/work-logs/{wid}/photos"
     },
     {
      "func": "delete_work_log_photo",
-     "line": 963,
+     "line": 1002,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}/photos/{photo_id}"
     },
     {
      "func": "get_runtime_switches",
-     "line": 1143,
+     "line": 1182,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 1243,
+     "line": 1284,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 1257,
+     "line": 1298,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1277,
+     "line": 1320,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1289,
+     "line": 1332,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1299,
+     "line": 1342,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile_public",
-     "line": 1783,
+     "line": 1826,
      "method": "GET",
      "path": "/api/settings/company-profile/public"
     },
     {
      "func": "get_company_profile",
-     "line": 1794,
+     "line": 1837,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1910,
+     "line": 1953,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 2067,
+     "line": 2110,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 2118,
+     "line": 2161,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 2125,
+     "line": 2168,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 2186,
+     "line": 2229,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 2197,
+     "line": 2240,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 2213,
+     "line": 2256,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 2221,
+     "line": 2264,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 2305,
+     "line": 2348,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 2321,
+     "line": 2364,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2391,
+     "line": 2434,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2414,
+     "line": 2457,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2476,
+     "line": 2519,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2486,
+     "line": 2529,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2506,
+     "line": 2549,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2539,
+     "line": 2582,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2546,
+     "line": 2589,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2658,
+     "line": 2701,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2677,
+     "line": 2720,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_estimate_terms_presets",
-     "line": 2731,
+     "line": 2774,
      "method": "GET",
      "path": "/api/settings/estimate-terms-presets"
     },
     {
      "func": "set_estimate_terms_presets",
-     "line": 2738,
+     "line": 2781,
      "method": "PUT",
      "path": "/api/settings/estimate-terms-presets"
     },
     {
      "func": "get_estimate_default_payment_terms",
-     "line": 2753,
+     "line": 2796,
      "method": "GET",
      "path": "/api/settings/estimate-payment-terms"
     },
     {
      "func": "set_estimate_default_payment_terms",
-     "line": 2760,
+     "line": 2803,
      "method": "PUT",
      "path": "/api/settings/estimate-payment-terms"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2769,
+     "line": 2812,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2852,
+     "line": 2895,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2859,
+     "line": 2902,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2871,
+     "line": 2914,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2907,
+     "line": 2950,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2923,
+     "line": 2966,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2965,
+     "line": 3008,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 3003,
+     "line": 3046,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 3029,
+     "line": 3072,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "get_line_notify",
-     "line": 3053,
+     "line": 3096,
      "method": "GET",
      "path": "/api/settings/line-notify"
     },
     {
      "func": "set_line_notify_event_audience",
-     "line": 3112,
+     "line": 3155,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}/audience"
     },
     {
      "func": "set_line_notify_event_roles",
-     "line": 3132,
+     "line": 3175,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}/roles"
     },
     {
      "func": "get_line_notify_quota",
-     "line": 3150,
+     "line": 3193,
      "method": "GET",
      "path": "/api/settings/line-notify/quota"
     },
     {
      "func": "set_line_notify_event",
-     "line": 3158,
+     "line": 3201,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}"
     },
     {
      "func": "preview_line_notify_events_batch",
-     "line": 3227,
+     "line": 3270,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch-preview"
     },
     {
      "func": "set_line_notify_events_batch",
-     "line": 3248,
+     "line": 3291,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch"
     },
     {
      "func": "undo_line_notify_events_batch",
-     "line": 3337,
+     "line": 3380,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch-undo"
     },
     {
      "func": "set_line_notify",
-     "line": 3363,
+     "line": 3406,
      "method": "PUT",
      "path": "/api/settings/line-notify"
     },
     {
      "func": "verify_line_notify",
-     "line": 3423,
+     "line": 3466,
      "method": "POST",
      "path": "/api/settings/line-notify/verify"
     },
     {
      "func": "line_login_callback",
-     "line": 3464,
+     "line": 3507,
      "method": "GET",
      "path": "/api/line/callback"
     },
     {
      "func": "get_line_binding",
-     "line": 3474,
+     "line": 3517,
      "method": "GET",
      "path": "/api/line/binding"
     },
     {
      "func": "get_line_prefs",
-     "line": 3485,
+     "line": 3528,
      "method": "GET",
      "path": "/api/line/prefs"
     },
     {
      "func": "set_line_pref",
-     "line": 3493,
+     "line": 3536,
      "method": "PUT",
      "path": "/api/line/prefs/{key}"
     },
     {
      "func": "start_line_binding",
-     "line": 3511,
+     "line": 3554,
      "method": "POST",
      "path": "/api/line/binding/start"
     },
     {
      "func": "unlink_own_line",
-     "line": 3530,
+     "line": 3573,
      "method": "DELETE",
      "path": "/api/line/binding"
     },
     {
      "func": "unlink_line_of",
-     "line": 3540,
+     "line": 3583,
      "method": "DELETE",
      "path": "/api/line/binding/{username}"
     },
     {
      "func": "get_line_bindings",
-     "line": 3551,
+     "line": 3594,
      "method": "GET",
      "path": "/api/settings/line-notify/bindings"
     },
     {
      "func": "remind_line_bindings",
-     "line": 3559,
+     "line": 3602,
      "method": "POST",
      "path": "/api/settings/line-notify/bindings/remind"
     },
     {
      "func": "test_email_notify",
-     "line": 3575,
+     "line": 3618,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "email_notify_providers",
-     "line": 3688,
+     "line": 3731,
      "method": "GET",
      "path": "/api/settings/email-notify/providers"
     },
     {
      "func": "email_notify_wizard_test_me",
-     "line": 3741,
+     "line": 3784,
      "method": "POST",
      "path": "/api/settings/email-notify/wizard/test-me"
     },
     {
      "func": "email_notify_wizard_activate",
-     "line": 3798,
+     "line": 3841,
      "method": "POST",
      "path": "/api/settings/email-notify/wizard/activate"
     },
     {
      "func": "get_custom_roles",
-     "line": 3822,
+     "line": 3865,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 3828,
+     "line": 3871,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 3855,
+     "line": 3898,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 3879,
+     "line": 3922,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_heartbeat_status",
-     "line": 3904,
+     "line": 3947,
      "method": "GET",
      "path": "/api/system/heartbeat"
     },
     {
      "func": "get_schema_status",
-     "line": 3913,
+     "line": 3956,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 3943,
+     "line": 3986,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 3958,
+     "line": 4001,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 3973,
+     "line": 4016,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 4006,
+     "line": 4049,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 4050,
+     "line": 4093,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 4124,
+     "line": 4167,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 4259,
+     "line": 4302,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 4290,
+     "line": 4333,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 4306,
+     "line": 4349,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 4347,
+     "line": 4390,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 4376,
+     "line": 4419,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 4415,
+     "line": 4458,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 4424,
+     "line": 4467,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 4442,
+     "line": 4485,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -35141,6 +35524,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -35284,6 +35668,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -35433,6 +35818,7 @@
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_groups_brand",
+    "helper:settings_groups_external",
     "helper:settings_groups_import_wizard",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
@@ -35585,7 +35971,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "helper:audit"
+    "helper:audit",
+    "helper:settings_pages"
    ],
    "path": "backend/db.py:4422",
    "readers": [
@@ -35611,7 +35998,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "helper:settings_pages"
    ],
    "path": "backend/db.py:2429",
    "readers": [
@@ -38328,7 +38716,8 @@
    "readers": [
     "core:archive",
     "mod:supply/case_summary",
-    "mod:supply/gl_events"
+    "mod:supply/gl_events",
+    "mod:supply/material_link"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -38370,6 +38759,7 @@
     "mod:analytics/api/reports",
     "mod:supply/case_summary",
     "mod:supply/gl_events",
+    "mod:supply/material_link",
     "mod:supply/recycle_adapter",
     "mod:supply/serial_view",
     "mod:supply/stock_events",
@@ -38481,24 +38871,24 @@
     "helper:org_gaps",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
-    "mod:payroll/bonus_vouchers",
     "router:auth"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "core:db",
+    "helper:approval_flow_copy",
     "helper:company_setup",
     "helper:getting_started",
     "helper:module_switches",
     "helper:payable_due_core",
     "helper:privacy_notice",
     "helper:settings",
+    "helper:settings_groups_external",
     "helper:settings_registry",
     "helper:startup",
     "helper:storage_locations",
     "helper:system_checks",
-    "mod:case/api/overhead",
     "mod:case/case_deadlines",
     "mod:tender_radar/source",
     "plat:migrations",
@@ -38678,6 +39068,7 @@
    "readers": [
     "core:archive",
     "helper:auth",
+    "helper:duty_role_matrix",
     "helper:org_gaps"
    ],
    "tables_r": [],
@@ -38834,6 +39225,7 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:custom_def_review",
+    "helper:duty_role_matrix",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:event_audience",
