@@ -102,7 +102,7 @@ window.CM_PARTS.push(() => ({
       if (f && f.ship) {
         const sh = f.ship
         const ship = { key: 'ship', label: '出貨', state: arrived && sh.state === 'done' ? 'done' : 'todo', cap: arrived ? (sh.items && sh.items.length ? sh.items.map(i => i.noteNo).join('、') : '尚無出貨單') : '—', act: null }
-        if (arrived && !(sh.items && sh.items.length)) ship.act = { label: '開出貨單', run: () => { this.activeTab = 'shipping' } }
+        if (arrived && !(sh.items && sh.items.length)) ship.act = { label: this.shipCanCreate() ? '開出貨單' : '前往出貨單', run: () => this.shipOpenFromTimeline() }
         steps.push(ship)
       }
 

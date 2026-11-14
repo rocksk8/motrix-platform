@@ -3475,7 +3475,7 @@
                   </select>
                   <button x-show="snSortPref.sortMode && snSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('sn')"
                           style="font-size:12px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer" x-text="snSortPref.sortDir==='asc'?'↑':'↓'"></button>
-                  <button x-show="['superadmin','admin'].includes(session.role) && !shippingNotesNotice"
+                  <button x-show="shipCanCreate()" data-testid="ship-new"
                           class="btn-add" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                     新增出貨單
@@ -3490,9 +3490,13 @@
                      style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px" x-text="shippingNotesNotice"></div>
 
                 <!-- Empty -->
-                <div x-show="!shippingNotesLoading && !shippingNotesNotice && shippingNotes.length===0"
+                <div x-show="!shippingNotesLoading && !shippingNotesNotice && shippingNotes.length===0" data-testid="ship-empty"
                      style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px">
-                  尚未建立任何出貨單
+                  <div>尚未建立任何出貨單。</div>
+                  <div style="margin-top:10px" x-show="shipCanCreate()">
+                    <button type="button" class="btn-add" data-testid="ship-empty-new" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">新增出貨單</button>
+                  </div>
+                  <div style="margin-top:6px;font-size:12px" x-show="!shipCanCreate()" data-testid="ship-empty-hint">出貨單由管理員建立，請洽管理員。</div>
                 </div>
 
                 <!-- Shipping note list -->

@@ -154,3 +154,26 @@ def test_stage_fields_look_editable_and_ratio_hint_is_one_line(live_server, make
     over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
     _shot(page, "stage_fields_%d" % width)
+
+
+@pytest.mark.e2e
+def test_shipping_tab_has_an_add_entry_and_timeline_leads_to_the_same_place(live_server, make_user, e2e_browser):
+    """T86-25：出貨單分頁空狀態有「新增出貨單」；時間軸的「開出貨單」開同一個新增視窗；不能建的人看到說明並被帶到分頁。"""
+    page = _open(live_server, make_user, e2e_browser, "t86_ship_admin", 1440)
+    page.locator('[data-testid="mtl-act-mb-ship"]').click()
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]')).showShippingModal === true", timeout=10000)
+    assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).activeTab") == "shipping"
+    page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]')); d.showShippingModal = false }")
+    page.locator('[data-testid="ship-empty"]').wait_for(state="visible", timeout=10000)
+    assert page.locator('[data-testid="ship-empty-new"]').is_visible()
+    assert page.locator('[data-testid="ship-new"]').is_visible()
+    assert not page.locator('[data-testid="ship-empty-hint"]').is_visible()
+    page.locator('[data-testid="ship-empty-new"]').click()
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]')).showShippingModal === true", timeout=10000)
+    _shot(page, "item25_ship_empty_desktop")
+    page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]')); d.showShippingModal = false; d.session.role = 'sales' }")
+    assert not page.locator('[data-testid="ship-empty-new"]').is_visible()
+    assert page.locator('[data-testid="ship-empty-hint"]').is_visible()
+    page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).activeTab = 'exec' }")
+    page.locator('[data-testid="mtl-act-mb-ship"]').wait_for(state="visible", timeout=10000)
+    assert page.locator('[data-testid="mtl-act-mb-ship"]').inner_text().strip() == "前往出貨單"
