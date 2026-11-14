@@ -4,10 +4,12 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.analytics import recycle_adapter
+from modules.analytics import recycle_adapter, report_source
 from modules.analytics.api import custom_reports, dashboard, ledger_diff, report_templates, reports, std_reports
 
 _m0001 = importlib.import_module("modules.analytics.migrations.0001_custom_reports")
+
+report_source.register()          # T87 B2 D2：自訂報表的資料來源「應收帳款」（與 B1 應收帳齡同一份資料與閘門）
 
 MODULE = ModuleSpec(
     key="analytics",

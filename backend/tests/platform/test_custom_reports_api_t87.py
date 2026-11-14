@@ -114,11 +114,11 @@ def test_module_access_does_not_replace_the_capability(client, make_user, on, mo
 
 # ── /sources ───────────────────────────────────────────────────────────────
 
-def test_sources_for_superadmin_lists_all_three_with_visible_fields_and_limits(client, make_user, on):
+def test_sources_for_superadmin_lists_all_sources_with_visible_fields_and_limits(client, make_user, on):
     h = _login(client, make_user, "cra_sa2", "superadmin")
     body = client.get(BASE + "/sources", headers=h).json()
     srcs = {s["id"]: s for s in body["sources"]}
-    assert set(srcs) == {"quotation", "case", "dev_case"}
+    assert set(srcs) == {"quotation", "case", "dev_case", "receivable"}          # 應收帳款（D2）：超管過 B1 應收帳齡的閘門
     tot = next(f for f in srcs["quotation"]["fields"] if f["id"] == "total")
     assert tot["visible"] is True and tot["aggregate"] and "gte" in tot["ops"]
     dt = next(f for f in srcs["quotation"]["fields"] if f["id"] == "doc_type")

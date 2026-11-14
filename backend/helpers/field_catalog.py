@@ -96,6 +96,11 @@ FIELDS = (
     # ── 商機（業務開發）預估金額（T87 B2 D1）：api=None ⇒ 不進 financial_mask 的任何鍵名元組（既有遮蔽行為不變）；
     #    可見規則由 CRM 端點自己呼叫 can_see_financial（維持不動），B2 經 field_policy.visible 取得同一答案。──
     _f("dev_case.expected_amount", "商機預估金額", "price", "financial_view"),
+    # ── 應收款項（T87 B2 D2「自訂報表：應收帳款」來源）：與 B1 應收帳齡同一份資料；金額欄的天花板＝financial_view（`can_see_financial`），
+    #    api=None ⇒ 不進 financial_mask 的任何鍵名元組（既有遮蔽行為不變）。──
+    _f("receivable.billed", "請款金額", "price", "financial_view"),
+    _f("receivable.received", "已收金額", "price", "financial_view"),
+    _f("receivable.outstanding", "未收金額", "price", "financial_view"),
     # ── 匯出的含金額工作表 ──
     _sheet("arap:cashier-history", "outgoing", "出納匯出：已匯款明細", "cashier"),
     _sheet("arap:cashier-history", "payreq", "出納匯出：支出申請付款明細", "cashier"),

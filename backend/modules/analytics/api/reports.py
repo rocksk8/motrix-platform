@@ -2717,9 +2717,13 @@ def _compute_ar_aging(sales_id: Optional[int] = None, customer: Optional[str] = 
 
 
 def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_id: Optional[int],
-                   with_owner: bool) -> dict:
+                   with_owner: bool, detail: Optional[list] = None) -> dict:
     """`_compute_ar_aging` 的實作。`with_owner=True` 時每筆多一個 `owner`（業務負責顯示名稱）供 B1 報表用；
-    預設 False，輸出與過去完全相同。"""
+    預設 False，輸出與過去完全相同。
+
+    `detail`（T87 B2 D2「自訂報表：應收帳款」來源）：傳入一個 list 時，**每一個款項項目（含已收）**各 append 一筆明細 dict
+    （帳齡區間／天數只有未收的才有）；回傳值、帳齡與金額的算法**完全不變**——自訂報表與 B1 應收帳齡是同一個迴圈、同一個金額與區間，
+    不另寫第二套口徑。傳 None（預設）⇒ 與過去逐鍵相同。"""
     _cuts = _finance_params.aging_cuts()
     today = date.today()
     conn = get_db()
@@ -2770,11 +2774,23 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
 
         for idx, pi in enumerate(pay):
             if pi.get("received"):
+                if detail is not None:
+                    detail.append({
+                        "quoteNo": row["quote_no"], "customer": row["customer_name"] or "", "project": row["project_name"] or "",
+                        "owner": owner_label, "stage": _stage_name(pi, idx), "pct": pi.get("pct") or 0, "amount": amounts[idx],
+                        "received": True, "quoteDate": (row["quote_date"] or "")[:10], "expectedDate": str(pi.get("expectedReceiptDate") or "")[:10],
+                        "receivedDate": str(pi.get("receivedAt") or "")[:10], "days": None, "band": None})
                 continue
             amt  = amounts[idx]
             days = (today - anchor).days
 
             band = _finance_params.aging_band(days, _cuts)
+            if detail is not None:
+                detail.append({
+                    "quoteNo": row["quote_no"], "customer": row["customer_name"] or "", "project": row["project_name"] or "",
+                    "owner": owner_label, "stage": _stage_name(pi, idx), "pct": pi.get("pct") or 0, "amount": amt,
+                    "received": False, "quoteDate": (row["quote_date"] or "")[:10], "expectedDate": str(pi.get("expectedReceiptDate") or "")[:10],
+                    "receivedDate": "", "days": days, "band": band})
             item = {
                 "quoteNo":     row["quote_no"],
                 "customer":    row["customer_name"] or "",
