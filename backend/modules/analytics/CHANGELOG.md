@@ -1,9 +1,10 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正；版號由列車取）
+## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與匯出；版號由列車取）
 - 新增（旗標 `custom_reports.enabled` 預設關：關＝路由 404、不讀寫表；既有端點與權限語意不變）：`/api/custom-reports/sources`、`/api/custom-reports/preview`（`modules/analytics/api/custom_reports.py`；預覽每人每分鐘 20 次、不留稽核）；新增兩格能力 `analytics.custom_report.view`／`.export`（legacy＝持有 quotation／case_manage／dev_crm 任一模組；能力與模組存取各查各的）。測試：`tests/platform/test_custom_reports_api_t87.py`。
 - 新增（schema +1：analytics 模組 schema 版本 0→1，模組 migration `0001_custom_reports`，只新增 `custom_reports`、`custom_report_shares` 兩張表；冪等、可重跑；回滾說明在檔頭）：「我的報表」儲存與 CRUD（`GET|POST /api/custom-reports`、`GET|PUT|DELETE /api/custom-reports/{id}`、`POST /api/custom-reports/{id}/copy`；每人 30 份、名稱不可重複、`If-Match` etag 409、非擁有者一律 404 同一句；分享依設定 `custom_reports.sharing`、刪除依設定 `custom_reports.recycle_deleted` 進刪除暫存區，adapter `custom_report`）。測試：`tests/platform/test_custom_reports_store_t87.py`。
 - 修正（旗標後；h11 審查）：被分享者讀定義時，沒有權限看的欄位連同篩選門檻、分組、彙總、排序都不回傳（只回 `partiallyHidden`），含這類條件的報表不能複製；預覽與匯出共用全程式庫並行上限 4（滿了回 429 白話說明）；建立／更新／複製遇未預期例外回固定訊息；`/sources` 的選項套列範圍；資源回收筒遮罩報表定義。
+- 新增（旗標後；S3）：`POST /api/custom-reports/{id}/export`（Excel）與 `/export-pdf`（PDF 姊妹）——只能匯出已儲存的報表；需能力 `analytics.custom_report.export` 且設定 `export_scope` 放行；匯出時重新編譯、以執行者當下權限與列範圍重算；檔內只有可見欄位、條件白話摘要與隱藏欄位數量；稽核不含值；Excel 冷卻 5 秒／PDF 30 秒；列數上限 10,000（超過 422，不截斷）；與預覽共用並行名額。
 
 ## 1.0.54 — 2026-11-14（train/t86-int；整合者：#11 商機改稱後的儀表板文字）
 - 文字／內部（行為、API、欄位、設定鍵、錯誤碼不變）：儀表板端點（`dashboard.py`）隨 T86 #11 業務開發「案件→商機」改稱與 U7 首頁六段合一（`/api/dashboard/bundle`、ETag/304）調整顯示文字；此條補寫於 T86 整合最後一次合併之後。
