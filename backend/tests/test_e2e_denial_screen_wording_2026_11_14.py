@@ -24,7 +24,8 @@ def _open(live_server, make_user, new_context, username, role, path, modules=Non
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("path", ["/pages/settings-center.html", "/pages/duty-roles.html"])
+# 前兩個宣告 perm="superadmin"；最後一個（模組 module.json）寫成陣列 ["superadmin"]
+@pytest.mark.parametrize("path", ["/pages/settings-center.html", "/pages/duty-roles.html", "/pages/recycle-bin.html"])
 def test_superadmin_only_pages_say_so(live_server, make_user, new_context, path):
     page = _open(live_server, make_user, new_context, "dn_sa_" + path.split("/")[-1][:5], "sales", path)
     box = page.locator("#no-module-notice")

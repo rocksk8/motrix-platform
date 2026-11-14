@@ -932,6 +932,11 @@ if (typeof module !== 'undefined' && module.exports) {
     return M.groups
   }
 
+  // 宣告成 'superadmin' 或 ['superadmin']（模組 module.json 用陣列寫法）＝僅限最高管理者
+  function _superOnlyPerm(perm) {
+    var a = [].concat(perm == null ? [] : perm)
+    return a.length > 0 && a.every(function (x) { return x === 'superadmin' })
+  }
   function _permOk(perm) {
     if (perm === 'any') return true
     if (perm === 'superadmin') return !!sa
@@ -1140,7 +1145,7 @@ if (typeof module !== 'undefined' && module.exports) {
       g.items.forEach(function (it) {
         if (!_permOk(it.perm)) {
           _deniedPages = _deniedPages.concat(it.active || [])
-          if (it.perm === 'superadmin') _superOnlyPages = _superOnlyPages.concat(it.active || [])
+          if (_superOnlyPerm(it.perm)) _superOnlyPages = _superOnlyPages.concat(it.active || [])
         }
       })
     })
