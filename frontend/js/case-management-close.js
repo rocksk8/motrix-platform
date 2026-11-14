@@ -62,7 +62,17 @@ window.CM_PARTS.push(() => ({
       this.gotoGate(g)
     },
 
+    // T86 案件UX #6：「精算」關的去向。狀態列的「精算 未建」原本跳到「財務」分頁，字樣與去向不符；
+    // 有權限的人改為直接開精算頁（與分頁列的「精算 ▶」同一個目的地）。沒有財務檢視權限的人維持原行為（不能進精算頁）。
+    settleGateLinks(g) {
+      return !!(g && g.key === 'settlement' && this.selected && this.canSeeFinancial())
+    },
+
     gotoGate(g) {
+      if (this.settleGateLinks(g)) {
+        window.location.href = 'settlement.html?no=' + encodeURIComponent(this.selected.quote_no)
+        return
+      }
       const t = this._gateTab(g)
       this.activeTab = t
       if (t === 'exec') this.execSubTab = 'progress'

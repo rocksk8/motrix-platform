@@ -694,7 +694,7 @@
                                 :title="g.reason || ''"
                                 style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border-light);border-radius:6px;background:none;cursor:pointer;font-size:12px;font-family:var(--font-zh)">
                           <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
-                          <span x-text="g.label"></span>
+                          <span x-text="g.label + (settleGateLinks(g) ? ' ▶' : '')"></span>
                           <span style="color:var(--text-secondary)" x-text="g.value"></span>
                         </button>
                       </template>
@@ -4130,7 +4130,7 @@
                  x-text="'待簽核人：' + (g.pendingApprovers || []).map(a => a.displayName).join('、')"></div>
           </div>
           <button type="button" data-testid="gate-goto" x-show="g.state === 'blocked'" @click="closeCheckGoto(g)"
-                  class="btn btn-ghost btn-sm" style="flex-shrink:0">前往</button>
+                  class="btn btn-ghost btn-sm" style="flex-shrink:0" x-text="settleGateLinks(g) ? '前往精算頁' : '前往'">前往</button>
         </div>
       </template>
       <div style="font-size:12px;margin-top:10px"
