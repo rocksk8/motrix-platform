@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""M03 採購・庫存・出貨的附件目錄提供者（`attachments.catalog`，契約 v1，2026-09-30 P2）：出貨單回簽附件。
+"""M03 採購與庫存的附件目錄提供者（`attachments.catalog`，契約 v1，2026-09-30 P2）：出貨單回簽附件。
 權限＝出貨單自己的讀取規則（`case_documents_readable`，同 `shipping_notes._ShippingPathAccess` 與單筆端點 `_readable_note`）。"""
 import json
 from urllib.parse import quote
@@ -10,7 +10,7 @@ from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_
 
 class _SupplyCatalog:
     CATEGORIES = {
-        "shipping_note": {"label": "出貨單回簽", "doc": "出貨單", "module": "採購・庫存・出貨"},
+        "shipping_note": {"label": "出貨單回簽", "doc": "出貨單", "module": "採購與庫存"},
     }
 
     @staticmethod

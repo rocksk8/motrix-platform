@@ -69,7 +69,7 @@ def test_without_m03_case_bundle_says_there_are_no_shipping_notes(client, make_u
     r = client.get("/api/quotations/MQ-SUP-B1/case-bundle", headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["parts"]["shippingNotes"] == {"ok": False, "status": 404, "detail": q.SHIPPING_UNAVAILABLE}
-    assert q.SHIPPING_UNAVAILABLE == "採購・庫存・出貨模組未安裝：沒有出貨單資料"
+    assert q.SHIPPING_UNAVAILABLE == "採購與庫存模組未安裝：沒有出貨單資料"
 
 
 @needs_case('驗 M01 案件設備登載在 M03 不在時的行為')

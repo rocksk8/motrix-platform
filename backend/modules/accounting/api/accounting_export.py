@@ -286,8 +286,8 @@ def set_t100_export_config(body: T100ExportConfigBody, authorization: str = Head
 
 #: IP-14 對方不在時（M04 外包工班）：T100 預覽的說明
 T100_CONTRACTOR_MISSING = "外包工班模組未安裝：本次匯出不含承攬商費用的付款傳票"
-#: IP-20 對方不在時（M03 採購・庫存・出貨）：T100 預覽的說明
-T100_INVENTORY_MISSING = "採購・庫存・出貨模組未安裝：本次匯出不含料件設備進貨的付款傳票"
+#: IP-20 對方不在時（M03 採購與庫存）：T100 預覽的說明
+T100_INVENTORY_MISSING = "採購與庫存模組未安裝：本次匯出不含料件設備進貨的付款傳票"
 
 
 def _t100_notice() -> str:

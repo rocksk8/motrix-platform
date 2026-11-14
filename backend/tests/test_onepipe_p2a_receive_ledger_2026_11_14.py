@@ -8,7 +8,7 @@ import json
 import pytest
 
 from tests._requires import requires_module
-pytestmark = requires_module("supply", "本檔測 M03（採購・庫存・出貨）的入庫底層")
+pytestmark = requires_module("supply", "本檔測 M03（採購與庫存）的入庫底層")
 needs_m01 = requires_module("case", "本題需要 M01（案件）的材料申請與案件頁")
 
 from tests.test_api_integration import _auth, _login, _make_quotation

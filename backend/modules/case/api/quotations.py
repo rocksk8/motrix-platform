@@ -3393,9 +3393,9 @@ VOUCHERS_UNAVAILABLE = "會計傳票模組未安裝：沒有傳票資料"
 #: IP-15 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
 DISPATCHES_UNAVAILABLE = "外包工班模組未安裝：沒有承攬派工資料"
 #: IP-18 對方不在時：案件整包的出貨單段回這一句（前端出貨單分頁顯示它，不顯示「尚未建立」）
-SHIPPING_UNAVAILABLE = "採購・庫存・出貨模組未安裝：沒有出貨單資料"
+SHIPPING_UNAVAILABLE = "採購與庫存模組未安裝：沒有出貨單資料"
 #: IP-19 對方不在時：設備序號沒有同步庫存（存檔照常）
-STOCK_UNAVAILABLE = "設備序號未同步庫存：採購・庫存・出貨模組未安裝"
+STOCK_UNAVAILABLE = "設備序號未同步庫存：採購與庫存模組未安裝"
 
 
 @router.get("/api/quotations/{quote_no}/close-gates")
