@@ -954,7 +954,7 @@ window.CM_PARTS.push(() => ({
       const n = this._BLOCK_NEEDS[tab]
       if (!n || !this.partBlocked[tab] || this.session.role === 'superadmin') return ''
       if (n.mods.some(k => this.hasModule(k))) return ''
-      return `此項需要「${n.label}」模組權限；目前的帳號沒有，需要的話請洽管理員。`
+      return `此項需要「${n.label}」模組權限，您目前沒有；需要的話請洽系統管理員。`
     },
 
     canMarkPayment() {
@@ -1016,6 +1016,7 @@ window.CM_PARTS.push(() => ({
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
     _reset_core(phase, data) {
       if (phase === 'early') {
+        this.partBlocked = {}   // T86 F②：新案件的「被擋說明」在整包判讀完（late）前不沿用上一件的
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
         // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
         // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，

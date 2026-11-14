@@ -160,6 +160,14 @@ def test_f2_a_blocked_tab_says_which_module_is_needed():
     assert all("「案件管理」" in n and "模組權限" in n for n in notes), notes
     # 不洩漏：訊息裡沒有案號、沒有「不存在」
     assert not any(re.search(r"MQ-|不存在|查無", n) for n in notes)
+    # TEXT-STYLE-GUIDE：用「您」、洽「系統管理員」（與其他拒絕訊息同形）
+    assert all("您目前沒有" in n and "系統管理員" in n for n in notes), notes
+
+
+def test_f2_the_note_is_cleared_when_the_next_case_starts_loading():
+    s = CORE.read_text(encoding="utf-8")
+    a = s.index("_reset_core(phase, data) {")
+    assert "this.partBlocked = {}" in s[a:s.index("phase === 'late'", a)]
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
