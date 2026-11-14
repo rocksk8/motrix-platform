@@ -1286,6 +1286,7 @@
    "round_half_up": "def(amount, rate=…)",
    "rules_by_version": "def(versions, version)",
    "rules_for_date": "def(versions, on)",
+   "save_versions": "def(versions)",
    "sort_versions": "def(versions)",
    "tax_basis_error": "def(tax_type, basis)",
    "tax_basis_label": "def(basis)",
