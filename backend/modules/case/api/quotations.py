@@ -6022,7 +6022,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         _fp_new = _CFP.content_fingerprint(q)
         if _fp_new == body.expectedFp:
             conn.close()
-            raise HTTPException(400, "內容沒有任何變動；若要維持原內容請直接核准")
+            raise HTTPException(400, "內容無任何變動；若要維持原內容請直接核准")
         _changes = _summarize_quote_changes(d, q)
         _append_edit_history(q, user, now, "review_edit", _changes)
 
