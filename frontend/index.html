@@ -504,7 +504,7 @@
             <span class="h-kicker" x-text="branding.tagline || 'MOTRIX PLATFORM'">MOTRIX PLATFORM</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
-            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>您尚無待簽核的單據。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
+            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>尚無待您簽核的單據。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
             <!-- 登入問候語（UX P1.5；單一端點 /api/auth/greeting，伺服器判斷情境與風格，前端只顯示；關閉或讀不到 ⇒ 整塊不出現） -->
             <p class="h-hero__greet" data-testid="login-greeting" x-show="greet.line" x-text="greet.line"></p>
             <p class="h-hero__greet h-hero__greet--aux" data-testid="login-greeting-away" x-show="greet.awayLine" x-text="greet.awayLine"></p>
@@ -862,7 +862,7 @@
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往待我簽核'"></td>
             </tr>
             <tr x-show="!loading && mineLoaded && !mineItems.length">
-              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">尚無待簽核的單據</td>
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">尚無待您簽核的單據</td>
             </tr>
             <tr x-show="!loading && !mineLoaded">
               <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">讀不到待簽核清單，這裡的資料暫時不準</td>
