@@ -136,7 +136,7 @@ def _first_tier(breakers, files, repo, real):
         plan = _plan_cached(b, repo, real)
         for tier in ("T0", "T1", "T2", "T3", "T4"):
             t = plan["tiers"][tier]
-            run = t.get("run", t["files"]) if tier == "T4" else t["files"]
+            run = t.get("run", t["files"])                # T2／T3／T4 依預算取樣（有 run），T0／T1 全選
             hit = [f for f in files if f in run]
             if hit:
                 if best is None or tier < best[0]:

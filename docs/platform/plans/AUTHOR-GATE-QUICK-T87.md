@@ -10,20 +10,28 @@
 
 ## 選題的優先層
 
-| 層 | 內容 | 超預算時 |
+| 層 | 內容 | 預算處理（T87 實測後改版） |
 |---|---|---|
-| T0 | 本分支新增／修改的測試檔 | 必跑，只警告 |
-| T1 | 被 diff 觸發的整合守門組（`preflight_guards.json` 的 `watch` 是唯一規則表）＋ quick 專用補充組（`QUICK_EXTRA_GROUPS`） | 必跑，只警告 |
-| T2 | **字面值反查**：diff 刪掉、且沒在新增行重現的字面值，去 grep 測試檔 | 必跑，只警告 |
-| T3 | 檔名樣式守門（`guard_patterns.json`，含新的 `*text_anchor*`） | 必跑，只警告 |
-| T4 | 改動模組自己的測試、頁面／前端 js 關聯測試、**引用改動頁面／js／工具檔名的測試**、**打改動路由的測試**（AST 取被 diff 改到的處理函式的固定路徑前綴）；e2e 一律排最後 | **由後往前砍**（e2e 最先），砍掉的逐檔列為「未跑」 |
+| T0 | 本分支新增／修改的測試檔 | 必選，永不砍（超預算只標 `over_budget`） |
+| T1 | 被 diff 觸發的整合守門組（`preflight_guards.json` 的 `watch` 是唯一規則表）＋ quick 專用補充組（`QUICK_EXTRA_GROUPS`） | 必選，永不砍 |
+| T2 | **字面值反查**：diff 刪掉、且沒在新增行重現的字面值，去 grep 測試檔 | 取預算的 60%（`T2_SHARE`）為上限，依「被幾個字面值同時命中、單檔便宜」排序取樣，其餘列未跑 |
+| T4 | 改動模組自己的測試、頁面／前端 js 關聯測試、**引用改動頁面／js／工具檔名的測試**、**打改動路由的測試**（AST 取被 diff 改到的處理函式的固定路徑） | 預算內填充：一般測試先，**e2e（打到頁面）在後** |
+| T3 | 檔名樣式守門（`guard_patterns.json`）——**最低優先**：quick 內收窄（名稱含 approval／payroll／audit／queue… 等一般業務字而無守門字者不選、e2e 命名者不選），再依單檔秒數**由便宜到貴**在剩餘預算內取樣 | 預算內才跑 |
+
+為什麼改版（2026-11-14 實測，現行版對 3 個 breaker 跑 980／1975／678 s，目標是 300 s）：
+1. 預算只管選題、不管執行：只砍 T4；T0–T3 必跑；**e2e 另成一段、不計入預算**；執行沒有任何逾時。
+2. T3（141 檔，序列約 770 s）是檔名樣式太寬——含 approval／payroll／audit 等一般測試與 40 多個 e2e 檔——離線重播 31 項只抓到 1 項，卻佔了非 e2e 時間的大半。
+3. 修法：e2e 與 T3 都計入預算（e2e 單行程序列計價，每檔 `E2E_FILE_SECONDS`＝9 s，實測 6.0／7.2／7.5 s）；T3 降最低優先並收窄；T2 取樣；**牆鐘上限**——執行分三段（一般測試 → e2e → 樣式守門）共用一個到期時間，
+   每段起跑前先看剩餘時間（不夠就整段列未跑），段內由 `failfast` 外掛的 `MOTRIX_DEADLINE_AT` 到點收工（單行程與 xdist 都停；寫出 `MOTRIX_DEADLINE_SEEN`＝有開跑的檔，沒開跑的逐檔列未跑），
+   外掛來不及停（單題卡住）由硬逾時殺行程樹並明講「紅清單可能不完整」。
+4. 注意：author_gate 的 pytest 原本**沒帶 `-p failfast`**，所以舊的 MOTRIX_FAILFAST 環境變數在作者端從來沒生效；quick 現在帶 `-p failfast`＋PYTHONPATH，並設 `MOTRIX_FAILFAST=0`（要列出全部的紅，時間由牆鐘管）。
 
 - 太大的整合守門組（`static_scans2`、`recent_interplay`、`superadmin_login`）整組列為「未跑（太大）」。
 - **凡是沒選到、或只選了一部分的都進 `skipped`（印「未跑」）**：太通用的字面值（只選最窄子集＝同模組目錄或被 ≥2 個被刪字面值同時命中，其餘列「N 檔未選題」）、被截斷的字面值、
   不可用的反向探針、命中 conftest／輔助檔、被很多測試引用的檔名／路由。
 - 被刪除／改名走的舊路徑（`deleted`）：只用在守門組觸發與「引用舊檔名的測試」，**不會**進 pytest；改名的頁面因此仍會選到引用舊檔名的測試。
-- T0–T3 必跑；若它們自己的預估就超過預算，輸出與結果 JSON 都標 `over_budget`（`quick_over_budget`），5 分鐘是目標不是保證。
-- e2e 檔（T1／T2 選到的也算）走 e2e 那一段，預算估算每檔 20 s。
+- T0–T1 必選；若它們自己的預估就超過預算，輸出與結果 JSON 都標 `over_budget`（`quick_over_budget`），**牆鐘上限仍然生效**（到點中止、沒跑到的列未跑；結果檔 `deadline_hit`）。
+- e2e 檔（T1／T2 選到的也算）走 e2e 那一段，**計入預算**，單行程序列，每檔 9 s。
 - 輸出尾端：`⚠ 未跑 N 項（上面列了；不是通過）`；結果 JSON 的 `quick_skipped` 同步記錄。
 
 ### 字面值反查（T2）為什麼是主力
@@ -111,6 +119,6 @@ python tools/platform/quickgate_replay.py            # 離線：只讀 git，不
 ## 限制與後續
 
 1. 字面值反查抓不到「行為改變、字面值沒變」的過期斷言——這一類靠 T4（模組自己的測試）與階段測試。
-2. 預算估算用 `題數 × 0.75 s`（e2e 每檔 20 s）；`gate_file_seconds.json` 只有 10 個種子檔，實測後應補。
+2. 預算估算用 `題數 × 0.75 s`（e2e 每檔 9 s、序列）；`gate_file_seconds.json` 只有 10 個種子檔，實測後應補。
 3. quick 專用補充組（`q_boundaries`、`q_e2e_lint`、`q_page_paths`）不改整合者的 `preflight_guards.json`；若整合者之後把 watch 補齊，可從 `QUICK_EXTRA_GROUPS` 拿掉。
 4. 整合者一鍵工具（resolve_baselines → train_number → regen → 步驟檔）由 h4 負責，不在本分支。
