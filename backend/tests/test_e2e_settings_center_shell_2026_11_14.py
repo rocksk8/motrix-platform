@@ -286,3 +286,37 @@ def test_names_with_html_never_execute_and_mobile_has_no_horizontal_scroll(live_
         SP.GROUPS.pop("zz_e2e_xss", None)
         R._GROUPS.pop("zz_e2e_xss", None)
         R.invalidate()
+
+
+@pytest.mark.e2e
+def test_builder_page_master_is_a_switch_and_locks_dependent_rows_until_it_is_on(live_server, make_user, e2e_browser):
+    """⑨ 自訂功能的開關：總開關是開關（不是數字框）；有真正相依的子項在上一層關著時先鎖住並說明；治理的強制預覽不跟總開關連動。"""
+    sa = make_user(username="s2_e2e_builder", role="superadmin")
+    page = e2e_browser.new_page(viewport={"width": 1280, "height": 900})
+    inject_login(page, live_server, *sa)
+    _open(page, live_server, "builder_all")
+    master = page.locator(ROW % ("builder_rules", "enabled") + ' [data-mx="switch"]')
+    master.wait_for(timeout=15000)
+    assert master.get_attribute("aria-checked") == "false"
+    assert page.locator(ROW % ("builder_rules", "enabled") + ' input[data-mx="input"]').count() == 0
+    seed = page.locator(ROW % ("builder_rules", "k01_seed") + ' select')
+    assert seed.is_disabled()
+    assert "請先開啟" in (seed.get_attribute("title") or "")
+    # 治理的強制預覽：關閉總開關也不解除，所以不鎖
+    assert not page.locator(ROW % ("builder_governance", "enforce_layout") + ' select').is_disabled()
+    # 暫存把總開關打開 ⇒ 子項解鎖（草稿就算數，不必先儲存）
+    master.click()
+    page.wait_for_function("() => document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"] select') && !document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"] select').disabled", timeout=10000)
+    page.locator('[data-testid="mx-draft-discard"]').click()                 # e2e-lint: ok 放棄草稿後下一行才讀鎖定狀態並有 wait_for_function
+    page.wait_for_function("() => document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"] select').disabled", timeout=10000)
+
+
+@pytest.mark.e2e
+def test_builder_locked_row_shows_its_reason_as_visible_text_on_phone(live_server, make_user, e2e_browser):
+    sa = make_user(username="s2_e2e_builder_m", role="superadmin")
+    page = e2e_browser.new_page(viewport={"width": 390, "height": 844})
+    inject_login(page, live_server, *sa)
+    _open(page, live_server, "builder_all")
+    row = page.locator(ROW % ("builder_rules", "k01_seed"))
+    row.wait_for(state="attached", timeout=15000)
+    page.wait_for_function("() => document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"]').textContent.includes('請先開啟')", timeout=10000)

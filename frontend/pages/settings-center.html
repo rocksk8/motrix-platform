@@ -288,15 +288,31 @@
       return ''
     }
     function numeric(f) { return (f.type === 'int' || f.type === 'float') && !(f.choices && f.choices.length) }
+    // 「自訂功能的開關」頁：每一組的總開關（enabled，存成 0／1）畫成開關；子項維持原本的下拉（選項文字有影響說明）
+    function isMaster(r) { return r.page === 'builder_all' && r.field === 'enabled' && r.f.type === 'int' && r.f.min === 0 && r.f.max === 1 }
+    // 真正有相依的子項（與伺服器端的檢查一致）。「關閉總開關不會解除治理的強制預覽」，所以 builder_governance 不在這裡
+    var BUILDER_DEPS = {
+      builder_custom_fields: { quote_enabled: 'enabled', quote_in_customer_output: 'quote_enabled', quote_on_finance_docs: 'quote_enabled' },
+      builder_rules: { k01_seed: 'enabled' },
+    }
+    // 上層關著（含尚未儲存的草稿）而這一項目前也是關的 ⇒ 先鎖住並說明原因；已經開著的不鎖，才關得掉
+    function lockWhy(r) {
+      var dep = r.page === 'builder_all' && BUILDER_DEPS[r.group] && BUILDER_DEPS[r.group][r.field]
+      if (!dep || !mx || r.value) return ''
+      var up = mx.effective(r.group + '.' + dep)
+      return up && !up.value ? '請先開啟「' + (up.name || '上一層開關') + '」' : ''
+    }
     function coerceChoice(f, v) {
       var hit = (f.choices || []).filter(function (c) { return String(c.value) === String(v) })[0]
       return hit ? hit.value : v
     }
     var RISK_TAG = { money: '牽涉金額', legal: '法規相關', security: '資安相關' }
     var columns = [
-      { id: 'sw', type: 'switch', label: '開／關', show: function (r) { return r.f.type === 'bool' },
-        get: function (r) { return !!r.value }, draft: function (r, v) { return { value: !!v } } },
-      { id: 'sel', type: 'select', label: '選擇', show: function (r) { return r.f.type !== 'bool' && r.f.type !== 'json' && !!(r.f.choices && r.f.choices.length) },
+      { id: 'sw', type: 'switch', label: '開／關', show: function (r) { return r.f.type === 'bool' || isMaster(r) },
+        disabled: function (r) { return r.f.type === 'bool' ? lockWhy(r) : false },
+        get: function (r) { return !!r.value }, draft: function (r, v) { return { value: r.f.type === 'bool' ? !!v : (v ? 1 : 0) } } },
+      { id: 'sel', type: 'select', label: '選擇', show: function (r) { return r.f.type !== 'bool' && r.f.type !== 'json' && !isMaster(r) && !!(r.f.choices && r.f.choices.length) },
+        disabled: function (r) { return lockWhy(r) },
         options: function (r) { return (r.f.choices || []).map(function (c) { return { value: c.value, label: c.label } }) },
         get: function (r) { return r.value }, draft: function (r, v) { return { value: coerceChoice(r.f, v) } } },
       { id: 'num', type: 'number', label: '數值', step: 'any', show: function (r) { return numeric(r.f) },
@@ -465,7 +481,7 @@
         rows: [],
         rowVisible: function (r) { return r.page === ST.page },
         rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.groupPlain },
-        rowSub: function (r) { return rangeText(r.f) || r.f.unit || '' },
+        rowSub: function (r) { return lockWhy(r) || rangeText(r.f) || r.f.unit || '' },        // 鎖住的原因直接寫在名稱下面（手機、鍵盤、讀屏都看得到，不只靠 tooltip）
         rowTags: function (r) {
           var t = []
           if (RISK_TAG[r.f.risk]) t.push({ text: RISK_TAG[r.f.risk], tone: r.f.banner && r.f.banner.level === 'red' ? 'crit' : 'warn' })
