@@ -457,11 +457,23 @@ def _authorizer(allowed):
 
 
 def run_owned(plan, accept) -> dict:
-    """擁有模組的 `execute` 回呼呼叫這裡：斷言計畫型別與來源，再以唯讀連線＋授權器＋時間上限執行。回傳原始結果（尚未組表）。"""
+    """擁有模組的 `execute` 回呼呼叫這裡：斷言計畫型別與來源，再以唯讀連線＋授權器＋時間上限執行。回傳原始結果（尚未組表）。
+
+    連線：預設是正式資料庫；來源的資料不在資料表、而是擁有模組算出來的（例：應收帳款）時，來源規格可帶 `connect()`——回傳擁有模組
+    **自己建的記憶體資料庫**（只含該來源登記的那一張表）。其餘規則（唯讀、授權器只准該來源登記的表與欄位、時間上限、固定錯誤訊息）完全相同；
+    用完這裡會關閉它。公開簽章不變。"""
     if not isinstance(plan, CompiledPlan) or plan.source_id not in tuple(accept):
         raise ReportError(500, "報表暫時無法執行，請聯絡系統管理員。")
-    from db import get_db
-    conn = get_db()
+    spec = RC.get_source(plan.source_id) or {}
+    if callable(spec.get("connect")):
+        try:
+            conn = spec["connect"]()
+        except Exception as e:                                                  # noqa: BLE001 — 擁有模組算資料失敗：固定訊息、不回例外文字
+            logger.error("report_runner：來源 %s 準備資料失敗（%s）：%s", plan.source_id, type(e).__name__, e)
+            raise ReportError(500, "報表暫時無法執行，請稍後再試；若持續發生請聯絡系統管理員。")
+    else:
+        from db import get_db
+        conn = get_db()
     try:
         conn.execute("PRAGMA query_only=ON")
         conn.set_authorizer(_authorizer(plan.allowed))

@@ -197,6 +197,12 @@ def source_problems(source_id, spec) -> list:
     ex = spec.get("execute")
     if ex is not None and not callable(ex):
         out.append("%s：execute 必須是函式（擁有模組自己的執行函式）" % source_id)
+    gt = spec.get("gate")
+    if gt is not None and not callable(gt):
+        out.append("%s：gate 必須是函式 gate(user)->bool（擁有模組自己的進入條件）" % source_id)
+    cn = spec.get("connect")
+    if cn is not None and not callable(cn):
+        out.append("%s：connect 必須是函式 connect()->連線（來源資料由擁有模組算出、放在自己建的記憶體資料庫時才用）" % source_id)
     return out
 
 
@@ -286,6 +292,9 @@ def source_available(source_id, user) -> bool:
             return False
         from core import registry
         if not registry.is_loaded(spec.get("ownerModule") or e["owner"]):
+            return False
+        gate = spec.get("gate")
+        if gate is not None and not gate(user):          # 擁有模組自己的進入條件（例：應收帳款＝B1 應收帳齡的閘門）；與下面的模組存取是「且」，不是「或」
             return False
         role = user.get("role")
         if role == "superadmin":

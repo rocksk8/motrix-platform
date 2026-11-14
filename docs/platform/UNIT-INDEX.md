@@ -22,7 +22,7 @@
 | `plat:mounts` | L0 | 內建頁面開放給自訂模組的「掛載點」（建構器方案 B；設計 docs/platform/plans/BUILDER-B-DESIGN.md）。 | 6 | 3 | `tests/test_builder_b_mounts_2026_10_01.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 32 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 111 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 112 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:safe_ping` | L0 | 對外打卡的安全 GET（2026-11-13；備份與監控頁的對抗式審查 H1／M1／L5）。 | 10 | 2 | `tests/test_backup_monitor_2026_11_13.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 10 | `backend/tests/platform/test_spine_e_b.py` |
@@ -32,7 +32,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 27 | 10 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 187 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 188 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 13 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 17 | — |
@@ -45,7 +45,7 @@
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 15 | 105 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 148 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 149 | — |
 | `helper:auth_alert` | L1 | 登入鎖定告警（2026-11-12「登入失敗告警」票；外網 go-live 補上的門檻）。 | 12 | 2 | `tests/test_auth_lockout_alert_2026_11_12.py` |
 | `helper:backup_monitor` | L1 | 「備份與監控」專頁的資料與動作（2026-11-13；系統選單提案 v2 批次 4a）。 | 21 | 1 | `tests/test_backup_monitor_2026_11_13.py` |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
@@ -75,7 +75,7 @@
 | `helper:doc_render` | L1 | L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。 | 1 | 2 | `tests/platform/test_doc_render_2026_10_01.py` |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 21 | 9 | — |
 | `helper:doc_type` | L1 | 單據類型（報價單 quote／估價單 estimate）與「單號規則」的唯一來源（2026-11-13，估價單）。 | 23 | 16 | `backend/tests/test_estimate_doc_type_2026_11_13.py` |
-| `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 23 | `tests/test_download_name_p1_2026_10_13.py` |
+| `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 24 | `tests/test_download_name_p1_2026_10_13.py` |
 | `helper:duty_role_matrix` | L1 | 職責角色「權限矩陣」的批次授予／取消（T86；SPEC 設定矩陣 §12 的角色端；使用者端是 `helpers/user_perm_batch.py`）。 | 6 | 1 | `tests/test_duty_role_matrix_2026_11_14.py` |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 23 | 7 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py`、`tests/test_user_perm_sensitive_gate_2026_11_13.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 4 | — |
@@ -88,7 +88,7 @@
 | `helper:external_access` | L1 | 外網來源判定＋外網強制兩步驟驗證（TOTP）的規則（2026-11-12「外網登入強化」票）。 | 12 | 1 | `tests/test_external_login_hardening_2026_11_12.py` |
 | `helper:field_catalog` | L1 | 共用欄位目錄（T64 切片 D／F7 的 S0：只登記、不改行為）。 | 12 | 5 | `backend/tests/platform/test_field_catalog_t64.py` |
 | `helper:field_policy` | L1 | 欄位可見求值（T64 F7 S1a：只有『天花板』查表；政策規則是 S2，這裡沒有）。 | 4 | 5 | `backend/tests/platform/test_field_policy_t65.py` |
-| `helper:finance_params` | L1 | 財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。 | 18 | 3 | `backend/tests/test_finance_params_2026_10_14.py`、`backend/tests/test_finance_cashier_gates_2026_10_14.py` |
+| `helper:finance_params` | L1 | 財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。 | 18 | 4 | `backend/tests/test_finance_params_2026_10_14.py`、`backend/tests/test_finance_cashier_gates_2026_10_14.py` |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 16 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 9 | 3 | — |
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 82 | 5 | — |
@@ -145,12 +145,12 @@
 | `helper:quote_output` | L1 | 報價單輸出的設定使用端（T63 Q0）：被管理者隱藏的報價條件欄位，PDF／預覽要不要照印。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:quote_privacy` | L1 | 報價單個人資料欄位的設定使用端（T63 Q0）：客戶電子郵件／傳真能不能被管理者隱藏。 | 1 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
-| `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 4 | 3 | — |
+| `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 4 | 4 | — |
 | `helper:recycle_bin` | L1 | 資源回收筒的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。 | 20 | 25 | `backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`、`backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py`、`backend/tests/platform/test_recyclebin_guards_t53.py` |
-| `helper:report_catalog` | L1 | 自訂報表的「資料來源」登錄表（T87 B2 S0b：只登記與驗證、不執行查詢）。設計：D:\Claude-pm\t87-design\B2-custom-reports.md §3、§4。 | 15 | 5 | `backend/tests/platform/test_report_catalog_t87.py` |
+| `helper:report_catalog` | L1 | 自訂報表的「資料來源」登錄表（T87 B2 S0b：只登記與驗證、不執行查詢）。設計：D:\Claude-pm\t87-design\B2-custom-reports.md §3、§4。 | 15 | 6 | `backend/tests/platform/test_report_catalog_t87.py` |
 | `helper:report_policy` | L1 | 自訂報表的設定讀取（旗標＋四項設定）（T87 B2；後端每次請求都經這裡讀當下值，前端隱藏不是防線）。 | 11 | 4 | `backend/tests/platform/test_custom_reports_settings_t87.py` |
-| `helper:report_runner` | L1 | 自訂報表的編譯與執行（T87 B2 S1：定義 → 驗證 → 套可見性 → 編譯成唯讀查詢 → 由擁有模組執行 → 組表）。設計：D:\Claude-pm\t87-design\B2-custom-reports.md §4.4、§5。 | 13 | 4 | `backend/tests/platform/test_report_runner_t87.py` |
-| `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 15 | — |
+| `helper:report_runner` | L1 | 自訂報表的編譯與執行（T87 B2 S1：定義 → 驗證 → 套可見性 → 編譯成唯讀查詢 → 由擁有模組執行 → 組表）。設計：D:\Claude-pm\t87-design\B2-custom-reports.md §4.4、§5。 | 13 | 5 | `backend/tests/platform/test_report_runner_t87.py` |
+| `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 17 | — |
 | `helper:rule_catalog` | L1 | 規則的欄位目錄轉接層（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §5）。 | 8 | 2 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:rule_engine` | L1 | 規則評估器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §6）。 | 2 | 1 | `backend/tests/test_rule_engine_2026_10_14.py` |
 | `helper:rule_grammar` | L1 | 規則文法與驗證器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §4）。 | 9 | 4 | `backend/tests/test_rule_engine_2026_10_14.py` |
@@ -194,4 +194,4 @@
 | `helper:user_prefs` | L1 | 個人偏好（「我的帳號」票，2026-11-13）：每人每鍵一列，存在伺服器端，換裝置也保留。 | 8 | 2 | `tests/test_my_account_prefs_2026_11_13.py` |
 | `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 26 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_guard` | L1 | 使用者上傳的 .xlsx 的「小檔案展開」守門：預掃（真的 XML 解析，不靠 regex）＋ 子行程隔離解析（硬逾時、記憶體上限）。 | 18 | 5 | `tests/test_xlsx_guard_2026_11_13.py` |
-| `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 20 | 17 | — |
+| `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 20 | 18 | — |

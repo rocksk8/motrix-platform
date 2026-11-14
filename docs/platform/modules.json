@@ -985,6 +985,7 @@
     "mod:analytics/api/custom_reports",
     "mod:analytics/report_store",
     "mod:analytics/recycle_adapter",
+    "mod:analytics/report_source",
     "mod:analytics/api/ledger_diff"
    ],
    "tables": ["custom_reports", "custom_report_shares"],
