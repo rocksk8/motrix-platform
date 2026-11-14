@@ -157,6 +157,39 @@ def test_apply_is_idempotent(tmp_path):
     assert _snapshot_of(root) == after_first
 
 
+def test_dry_run_last_line_does_not_promise_a_next_step_that_would_be_refused(tmp_path):
+    lines = []
+    assert CMB.apply(_tree(tmp_path), dry_run=True, skip_tests=True, out=lines.append) == 3
+    assert "真的執行要加 --force" in lines[-1] and "確認後執行" not in lines[-1]
+    lines2 = []
+    root2 = _tree(tmp_path / "p", core_changelog_head="## (next:major) — 2026-11-14（分支）\n- x\n\n") if (tmp_path / "p").mkdir() is None else None
+    assert CMB.apply(root2, dry_run=True, skip_tests=True, out=lines2.append) == 3
+    assert "確認後執行 `apply`" in lines2[-1]
+
+
+@pytest.mark.parametrize("spec", [">=3.0,<4.0", ">=abc,<2.0"])
+def test_range_that_cannot_be_fixed_by_widening_is_reported_not_silently_ok(tmp_path, spec):
+    """F2：下限高於目標／看不懂的範圍，不可以被當成「已經接受」而印不用改。"""
+    root = _tree(tmp_path, modules={"a": ">=1.0,<2.0", "odd": spec})
+    before = _snapshot_of(root)
+    lines = []
+    assert CMB.apply(root, skip_tests=True, out=lines.append, force=True) == 1
+    assert _snapshot_of(root) == before
+    text = "\n".join(lines)
+    assert "odd" in text and "要人工處理" in text and "不用改" not in text
+
+
+def test_guard_hint_uses_the_platform_venv_interpreter_like_the_doc():
+    hint = "\n".join(CMB.guard_problems("2.0", {"a": ">=1.0,<2.0"}, major_pending=False))
+    assert r"D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/core_major_bump.py apply" in hint
+
+
+def test_status_prints_a_summary_line_when_the_current_core_is_rejected(tmp_path, capsys):
+    root = _tree(tmp_path, core="2.0")
+    assert CMB.main(["status", "--root", str(root)]) == 0
+    assert "✗ 2 個模組不接受目前核心 2.0" in capsys.readouterr().out
+
+
 def test_apply_without_force_refuses_when_no_major_is_pending(tmp_path):
     root = _tree(tmp_path)
     before = _snapshot_of(root)

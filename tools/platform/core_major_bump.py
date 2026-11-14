@@ -41,7 +41,8 @@ MODULES = "backend/modules"
 CORE_CHANGELOG = "backend/core/CHANGELOG.md"
 SNAPSHOT = "backend/tests/platform/l1_interface_snapshot.json"
 TOOL = "tools/platform/core_major_bump.py"
-HINT = "先預演 `python %s apply --dry-run`，確認後 `python %s apply`（會一次放寬所有 module.json 的 core 上限、寫 CHANGELOG）" % (TOOL, TOOL)
+PY = r"D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe"
+HINT = "先預演 `%s %s apply --dry-run`，確認後 `%s %s apply`（會一次放寬所有 module.json 的 core 上限、寫 CHANGELOG）" % (PY, TOOL, PY, TOOL)
 
 _CORE_LINE = re.compile(r'^(?P<indent>[ \t]*)"core"\s*:\s*"(?P<spec>[^"]*)"(?P<tail>\s*,?)\s*$', re.M)
 _UPPER = re.compile(r"^\s*(<=|<)\s*(\d+(?:\.\d+)*)\s*$")
@@ -303,7 +304,7 @@ def l1_compat_problems(root, base=None):
     """⇒ (問題清單, 說明清單)。說明＝這次 L1 相容檢查沒做完整的地方（沒有 base、單位種類不認得）；不是問題但一定要印出來。"""
     d = l1_diff(root, base)
     if d is None:
-        why = ("沒有可比較的基準：找不到 %s，也沒給 --base" % DEFAULT_BASE) if not base else ("讀不到 %s 的 L1 快照" % base)
+        why = ("沒有可比較的基準：找不到 %s，也沒給 --base" % DEFAULT_BASE) if not base else ("讀不到 %s 的 L1 快照、或這棵樹沒有 L1 工具" % base)
         return [], ["L1 相容檢查未做（%s）⇒ 被修改／刪除的 L1 名稱是否還有模組在用，這次沒有驗證" % why]
     a, c, r = d
     breaking = breaking_names(c, r)
@@ -386,10 +387,10 @@ def plan_apply(root, target_major, today):
         if why:
             manual.append((key, why))
             continue
-        if new == spec:
-            continue
         if not compatible(new, "%d.0" % target_major):
-            manual.append((key, "放寬後 %r 仍不接受 %d.0" % (new, target_major)))
+            manual.append((key, "範圍 %r 不接受 %d.0，而且無法只放寬上限（下限高於目標、或看不懂）" % (new, target_major)))
+            continue
+        if new == spec:
             continue
         text, bom = _read(mj)
         writes[str(mj)] = (rewrite_module_json(text, new), bom)
@@ -465,8 +466,9 @@ def apply(root, target_major=None, dry_run=False, skip_tests=False, base=None, t
             out("⇒ 拒絕：模組測試要全部過才放寬範圍；沒有改任何檔。修好該模組後重跑")
             return 1
     if dry_run:
-        out("（預演：有 %d 個模組要改，結束碼 3 是正常的、不是失敗；L1 相容檢查%s，模組測試%s；沒有寫任何檔。確認後執行 `apply`）"
-            % (len(rows), "未做（見上面的 ⚠）" if l1_notes and base is None else "通過", "已跑且全過" if not skip_tests else "未跑（加 --with-tests 才跑）"))
+        nxt = "確認後執行 `apply`" if (rejecting or pend) else "這包不需要升主版號：真的執行要加 --force"
+        out("（預演：有 %d 個模組要改，結束碼 3 是正常的、不是失敗；L1 相容檢查%s，模組測試%s；沒有寫任何檔。%s）"
+            % (len(rows), "未做（見上面的 ⚠）" if l1_notes and base is None else ("通過（有略過項，見上面的 ⚠）" if l1_notes else "通過"), "已跑且全過" if not skip_tests else "未跑（加 --with-tests 才跑）", nxt))
         return 3
     for path, (text, bom) in writes.items():
         _write(path, text, bom)
@@ -486,6 +488,9 @@ def cmd_status(root, base):
     print("  %-14s %-16s %-8s %s" % ("模組", "core 範圍", "目前核心 " + cur, "下一個主版號 " + nxt))
     for key, (_, spec) in specs.items():
         print("  %-14s %-16s %-14s %s" % (key, spec, "相容" if compatible(spec, cur) else "不相容", "相容" if compatible(spec, nxt) else "不相容"))
+    bad_now = sorted(k for k, (_, s) in specs.items() if not compatible(s, cur))
+    if bad_now:
+        print("✗ %d 個模組不接受目前核心 %s（啟動時不會載入）：%s ⇒ 用 apply 補救（見 check 的說明）" % (len(bad_now), cur, "、".join(bad_now)))
     print("說明：「不相容」＝載入器會拒絕載入該模組。核心升到 %s 之前，下一欄要全部是「相容」（用 apply 放寬）。" % nxt)
     return 0
 
