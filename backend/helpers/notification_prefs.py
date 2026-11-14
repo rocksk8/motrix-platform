@@ -81,14 +81,14 @@ EVENT_GROUPS = [
         # 改成掃描 email_notify.py 全部呼叫端，之後再漏就會被測試擋下。
         ("case_project_overdue", "案件專案期間已超期（每日檢查，超期當天寄一次、之後每 7 天一次）"),
         ("warranty_expiry",     "設備保固即將到期"),
-        ("dev_case_stale",      "業務開發案件逾期未跟進"),
-        ("dev_case_assigned",   "業務開發案件指派通知"),
-        ("dev_case_reply_overdue", "業務開發案件回覆期限已過未回報（每個案件、每個期限只寄一次）"),
+        ("dev_case_stale",      "商機逾期未跟進"),
+        ("dev_case_assigned",   "商機指派通知"),
+        ("dev_case_reply_overdue", "商機回覆期限已過未回報（每個商機、每個期限只寄一次）"),
         ("dev_log_directive", "業務開發記錄批示（只寄給被要求回覆的成員）"),
     ]),
     ("業務開發審核", [
-        ("dev_case_delete_request", "業務開發案件刪除申請"),
-        ("dev_case_relink_request", "業務開發案件連結異動申請"),
+        ("dev_case_delete_request", "商機刪除申請"),
+        ("dev_case_relink_request", "商機連結異動申請"),
     ]),
     ("系統與報表", [
         ("settlement_finalized", "成本精算完結通知"),

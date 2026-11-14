@@ -39,5 +39,5 @@ def test_on_merges_same_day(client, make_user, monkeypatch):
     _log(client, h, cid, uid, "報價需求確認")
     assert len(cal.events) == 1, cal.calls
     ev = list(cal.events.values())[0]
-    assert ev["summary"].startswith("乙開發案案件更新")
+    assert ev["summary"].startswith("乙開發案商機更新")
     assert "初次拜訪" in ev["description"] and "報價需求確認" in ev["description"]

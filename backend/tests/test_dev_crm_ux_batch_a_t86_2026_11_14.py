@@ -28,7 +28,7 @@ def test_search_and_bell_jump_with_case_param():
 
 def test_page_reads_case_param_and_tells_when_missing():
     assert "_openFromUrl" in DC and "get('case')" in DC
-    assert "找不到這個案件，或您沒有權限查看。" in DC
+    assert "找不到這個商機，或您沒有權限查看。" in DC
 
 
 def test_sidebar_leaves_dev_crm_to_its_own_gate():
@@ -43,13 +43,13 @@ def test_mobile_funnel_is_one_scrollable_row_and_hides_in_detail():
 
 def test_empty_state_offers_clear_filters_and_funnel_note():
     assert 'data-testid="dc-clear-filters"' in DC and 'data-testid="dc-funnel-note"' in DC
-    assert "找不到符合的案件。" in DC and "上方數字依目前的搜尋／篩選結果計算。" in DC
-    assert "無符合案件" not in DC
+    assert "找不到符合的商機。" in DC and "上方數字依目前的搜尋／篩選結果計算。" in DC
+    assert "無符合商機" not in DC
 
 
 def test_relink_button_has_text_and_sales_get_a_hint():
     assert "修改連結" in DC and 'data-testid="dc-relink-btn"' in DC
-    assert "要修改連結或刪除案件，請洽主管。" in DC
+    assert "要修改連結或刪除商機，請洽主管。" in DC
     assert 'style="width:20px;height:20px;padding:0"' not in DC
 
 
@@ -98,7 +98,7 @@ def test_deep_link_selects_the_case_and_missing_one_says_so(live_server, make_us
         timeout=15000)
     assert page.locator(".dc-detail-title").first.inner_text() == "深連結商機甲"
     page.goto(f"{live_server}/pages/dev-crm.html?case=99999999")
-    page.get_by_text("找不到這個案件，或您沒有權限查看。").wait_for(timeout=10000)
+    page.get_by_text("找不到這個商機，或您沒有權限查看。").wait_for(timeout=10000)
 
 
 @pytest.mark.e2e
@@ -170,7 +170,7 @@ def test_status_change_asks_first_and_never_fails_silently():
     for s in ("未成案", "暫擱置", "洽談中"):
         assert "askStatus('%s')" % s in DC
     assert 'data-testid="dc-status-modal"' in DC and 'data-testid="dc-status-reason"' in DC
-    assert "暫擱置的案件超過 180 天沒有動靜，系統會自動轉為「未成案」。" in DC
+    assert "暫擱置的商機超過 180 天沒有動靜，系統會自動轉為「未成案」。" in DC
     assert "重回洽談中不會動到單據，連結會保留" in DC
     assert "狀態沒有更新：" in DC          # 失敗有提示
     assert "markConverted" not in DC and "convertQuoteNo" not in DC   # 手動輸入單號已拿掉（PM 2026-11-14）
@@ -289,8 +289,8 @@ def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, m
     page = new_page()
     login_as(page, tuple(sup)[:2])
     page.goto(f"{live_server}/pages/dev-crm.html?case={cid}")
-    page.get_by_role("button", name="編輯案件").wait_for(timeout=15000)
-    page.get_by_role("button", name="編輯案件").click()
+    page.get_by_role("button", name="編輯商機").wait_for(timeout=15000)
+    page.get_by_role("button", name="編輯商機").click()
     page.locator('[data-testid="case-expected-amount"]').fill("1500000")
     page.locator('[data-testid="case-expected-date"]').fill("2026-12-31")
     page.locator(".dc-modal-foot .btn-primary").locator("visible=true").first.click()
@@ -304,9 +304,9 @@ def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, m
     p2 = new_page()
     login_as(p2, tuple(sales)[:2])
     p2.goto(f"{live_server}/pages/dev-crm.html?case={sid}")
-    p2.get_by_role("button", name="編輯案件").wait_for(timeout=15000)
+    p2.get_by_role("button", name="編輯商機").wait_for(timeout=15000)
     assert p2.locator('[data-testid="detail-expected-amount"] .dc-info-val').inner_text().strip() == "—"
-    p2.get_by_role("button", name="編輯案件").click()
+    p2.get_by_role("button", name="編輯商機").click()
     assert p2.locator('[data-testid="case-expected-amount"]').locator("visible=true").count() == 0
     assert p2.locator('[data-testid="dc-pipeline-amount"]').locator("visible=true").count() == 0
 
@@ -315,5 +315,5 @@ def test_pipeline_amount_card_does_not_show_zero_as_a_real_total():
     """全部洽談中都沒填金額（或沒有洽談中）時，漏斗金額顯示「—」，不顯示像真實合計的「NT$ 0」。"""
     src = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
     assert "pipelineCount === 0 || pipelineMissing >= pipelineCount ? '—'" in src
-    assert "尚無洽談中案件" in src
+    assert "尚無洽談中商機" in src
     assert "尚未填寫" in src and "件已填，" in src

@@ -3594,7 +3594,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
                 raise HTTPException(409, str(e))
             if res is None:                                  # 資源回收筒模組不在 ⇒ 照舊只刪報價單那一列並明說
                 _ra.legacy_delete_quotation(conn, quote_no)
-            # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
+            # 轉建連結指到這張單的商機解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
             # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
             unlink = _registry.single_provider("crm.quote_deleted")
             orphaned = unlink(conn, quote_no) if unlink else []
@@ -3623,7 +3623,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
 
 
 #: IP-13 對方不在時的說明（測試與畫面共用同一句）
-QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除"
+QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有商機轉建自這張報價單，它們的連結沒有自動解除"
 
 
 def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> tuple:

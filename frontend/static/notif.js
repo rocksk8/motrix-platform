@@ -680,9 +680,9 @@ function notifStore() {
 }
 
 /* ── 全域搜尋（topbar）─────────────────────────────────────────────────────
-   跨客戶/供應商/報價單/業務開發案/料號快速查找；後端 GET /api/search 已依各模組
+   跨客戶/供應商/報價單/商機/料號快速查找；後端 GET /api/search 已依各模組
    既有角色規則過濾，前端不需再判斷可見性。無 ?id= 深連結的清單頁（客戶/供應商/
-   業務開發案/料號）點擊後導向該模組列表頁，只有報價單支援直達單筆。 */
+   商機/料號）點擊後導向該模組列表頁，只有報價單支援直達單筆。 */
 function globalSearchStore() {
   const isPages = window.location.pathname.includes('/pages/')
   const href = (name) => isPages ? name : 'pages/' + name

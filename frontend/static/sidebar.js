@@ -198,7 +198,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + '</div>'
   }
 
-  // ── 全域搜尋（跨客戶/供應商/報價單/業務開發案/料號）──────────────────────────
+  // ── 全域搜尋（跨客戶/供應商/報價單/商機/料號）──────────────────────────
   // 手機（≤767px）：下拉原本固定 340px、靠搜尋框左緣，右緣會超出畫面（390 寬時右緣在 442px）。
   // 改成貼齊視窗左右各 8px 的固定位置，每個結果列至少 44px 高（實際畫面；字級縮放 zoom 會連 px 一起縮，所以除回去）。
   // 限高用視窗高度除以 --fz：根元素 zoom 會連視窗高度單位一起放大（字級「特」1.3 倍時，結果多的下拉底部會掉到螢幕外），與全站其他高度規則同寫法。
@@ -243,7 +243,7 @@ if (typeof module !== 'undefined' && module.exports) {
           </template>
           <template x-if="results.devCases.length">
             <div style="border-bottom:1px solid var(--border-light)">
-              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">業務開發案</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">商機</div>
               <template x-for="item in results.devCases" :key="'dc-'+item.id">
                 <div @click="goDevCase(item.id)" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
