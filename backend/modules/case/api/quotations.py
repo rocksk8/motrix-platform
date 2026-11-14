@@ -4194,6 +4194,12 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
+        if adopted:
+            # 沒有財務檢視權的人：adopted（別人先存了、改用資料庫現值的分段）與 saved 同規則遮蔽——否則試探 defaults 就能讀到款項金額。
+            # 欄位名與形狀不變，只有值被遮（款項期別金額鍵、叫料品項金額；其餘分段原樣）。
+            _fl = _fl or _mask_flags(user, strict=True)
+            if not _fl["money"]:
+                adopted = mask_case_record(copy.deepcopy(adopted), keep_orders=_fl["keep_orders"])
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
         if seg_keys:
             # 伺服器存檔時會改寫卡片（認列的到貨人／時間、過期標記、被拒還原…）⇒ 回傳實際存入的分段，
