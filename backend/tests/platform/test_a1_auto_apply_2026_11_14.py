@@ -22,6 +22,7 @@ import auto_apply as AA  # noqa: E402
 from tests.platform.test_deploy_dashboard_delivery_2026_09_28 import D, dd, env  # noqa: E402,F401  （env 是 fixture）
 
 COMMIT = "c" * 40
+_REAL_VERIFY_SUPERADMIN = dd._verify_superadmin      # env fixture 會換成假的；縱深防禦那題要打真的
 
 
 # ── 假的正式機 ───────────────────────────────────────────────────────────
@@ -1017,7 +1018,7 @@ def test_gate_external_erp_url_is_refused_before_any_request_so_the_password_nev
         assert sent == [], bad
         assert dd._delivery_state["rehearsals"].get(env["name"]), "被拒絕時預演不消耗（還沒開始套用）"
     with pytest.raises(ValueError) as ei:                                   # 縱深防禦：直接呼叫 _verify_superadmin 也不送
-        dd._verify_superadmin("boss", "right")
+        _REAL_VERIFY_SUPERADMIN("boss", "right")
     assert "不是本機" in str(ei.value) and sent == []
 
 

@@ -1280,6 +1280,9 @@ def _delivery_run(name: str, staged: str, verified: dict, root: str, who: str = 
                 _aa.write_summary_next_to(final, rec)
             except (_dl.DeliveryError, OSError) as e:
                 rec["problems"] = rec["problems"] + ["結果寫回交付資料夾失敗：%s" % e]
+    except DeliveryModuleUntrusted as e:                           # 模組被換掉：什麼都還沒做（沒有 apply_start），是被擋下，不是「狀態未知」的中斷
+        rec = {"name": name, "outcome": "failed", "started": False, "problems": [str(e)], "result": None, "by": who,
+               "install_root": str(DELIVERY_INSTALL_ROOT)}
     except Exception as e:                                         # noqa: BLE001 — 不讓背景執行緒默默死掉；有 apply_start 就要補 apply_end（crashed）
         if rec is None:
             rec = {"name": name, "outcome": "failed", "started": False, "problems": [], "result": None, "by": who,
