@@ -43,6 +43,7 @@ def _f(fid, label, typ, **kw):
 
 def register(mine_sql) -> list:
     """由 `modules/case/api/quotations.py` 在 `_CASE_MINE_SQL` 定義之後呼叫（傳入同一個物件）。回傳問題清單（空＝已登記）。"""
+    deal_sql, settle_sql = SQL_DEAL_TAG, SQL_SETTLE_STATUS          # 函式內區域變數：每個含 json_extract 的常數只引用一次（棘輪逐次計數）
     fields = [
         _f("quote_no", "報價單號", "text", filter=True, sort=True),
         _f("customer_name", "客戶", "text", filter=True, group=True, sort=True),
@@ -52,10 +53,10 @@ def register(mine_sql) -> list:
         _f("doc_type", "單據類型", "enum", filter=True, group=True, enum=_doc_type_options),
         _f("quote_date", "報價日", "date", kind="expr", expr=SQL_QUOTE_DATE, reads=("quote_date", "created_at"), column=None,
            filter=True, group=True, sort=True, bucket=("month", "quarter", "year"), sortExpr=SQL_QUOTE_DATE),
-        _f("deal_tag", "成交標記", "enum", kind="expr", expr=SQL_DEAL_TAG, reads=("deal_tag", "data_json"), column=None,
-           filter=True, group=True, enum=_distinct_options(SQL_DEAL_TAG)),
-        _f("settle_status", "精算狀態", "enum", kind="expr", expr=SQL_SETTLE_STATUS, reads=("settle_status", "data_json"), column=None,
-           filter=True, group=True, enum=_distinct_options(SQL_SETTLE_STATUS)),
+        _f("deal_tag", "成交標記", "enum", kind="expr", expr=deal_sql, reads=("deal_tag", "data_json"), column=None,
+           filter=True, group=True, enum=_distinct_options(deal_sql)),
+        _f("settle_status", "精算狀態", "enum", kind="expr", expr=settle_sql, reads=("settle_status", "data_json"), column=None,
+           filter=True, group=True, enum=_distinct_options(settle_sql)),
         _f("total", "含稅總額", "money", catalogId="quotation.total", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
         _f("pretax", "未稅金額", "money", catalogId="quotation.pretax", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
         _f("direct_margin_pct", "直接毛利率", "percent", catalogId="quotation.direct_margin_pct", filter=True, sort=True, aggregate=("count", "avg", "min", "max")),
@@ -64,7 +65,7 @@ def register(mine_sql) -> list:
     spec = {
         "label": "報價單", "table": "quotations", "modules": list(MODULES),
         "rowAccess": {"kind": "case", "scope": "read"},
-        "exprs": (SQL_DEAL_TAG, SQL_SETTLE_STATUS, SQL_QUOTE_DATE, mine_sql),
+        "exprs": (deal_sql, settle_sql, SQL_QUOTE_DATE, mine_sql),
         "mine": {"sql": mine_sql, "params": _MINE_PARAMS},
         "fields": fields,
         "defaults": {"columns": ["quote_no", "customer_name", "project_name", "doc_type", "status", "total"],

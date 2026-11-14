@@ -288,13 +288,12 @@ def sources_for(user) -> list:
 
 def _cid_visible(cid, user, wide, depth=0) -> bool:
     from helpers import field_policy as FP
-    from helpers import financial_mask as FM
     entry = _FC.by_id(cid)
     if entry is None or depth > 4:
         return False
     ok = bool(FP.tier_allowed(entry["ceiling"], user))
     if not ok and wide and entry["ceiling"] == "quote_money":
-        ok = bool(FM.money_visible(user))               # D7：既有報價單內頁的整份短路；只動報價單層級天花板
+        ok = bool(FP.tier_allowed("finance_money", user))   # D7：＝`financial_mask.money_visible`，既有報價單內頁的整份短路；只動報價單層級天花板
     if not ok:
         return False
     return all(_cid_visible(d, user, wide, depth + 1) for d in entry["derivedFrom"])

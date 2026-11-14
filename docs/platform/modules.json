@@ -88,6 +88,7 @@
    "helper:settings_groups_list_view",
    "helper:settings_groups_payslip_picker",
    "helper:settings_groups_recycle_bin",
+   "helper:settings_groups_custom_reports",
    "helper:settings_groups_overhead",
    "helper:settings_groups_lodging_freshness",
    "helper:settings_groups_tender_closing",
@@ -105,6 +106,8 @@
    "helper:export_templates",
    "helper:option_lists",
    "helper:list_catalog",
+   "helper:report_catalog",
+   "helper:report_policy",
    "helper:list_pref_policy",
    "helper:idempotency",
    "helper:user_import",
@@ -548,6 +551,7 @@
     "mod:case/material_shipping_view",
     "mod:case/purchase_items",
     "mod:case/recycle_adapter",
+    "mod:case/report_source",
     "mod:case/settlement_actuals"
    ],
    "tables": [
@@ -590,6 +594,7 @@
     "mod:crm/__init__",
     "mod:crm/api",
     "mod:crm/attachments",
+    "mod:crm/report_source",
     "page:pages/dev-crm.html"
    ],
    "tables": [

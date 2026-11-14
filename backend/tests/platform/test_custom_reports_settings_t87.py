@@ -32,7 +32,7 @@ def _hdr(client, make_user, name, role="superadmin", modules=None):
 
 
 @pytest.fixture()
-def conn():
+def conn(client):
     c = get_db()
     R.invalidate()
     yield c
