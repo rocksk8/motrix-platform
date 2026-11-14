@@ -248,18 +248,18 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <strong style="font-size:13px">本月 LINE 訊息用量</strong>
               <span style="font-size:12px;color:var(--text-dim)">
-                <span x-show="quota && quota.checked_at" x-text="'更新於 ' + (quota.checked_at || '').replace('T', ' ').slice(0, 16)"></span>
+                <span x-show="quota && quota.checked_at" x-text="quota && quota.checked_at ? '更新於 ' + String(quota.checked_at).replace('T', ' ').slice(0, 16) : ''"></span>
                 <button class="btn btn-ghost" style="padding:2px 8px;font-size:12px" @click="loadQuota(true)" :disabled="quotaLoading">重新整理</button>
               </span>
             </div>
             <div x-show="quota && quota.ok && !quota.unlimited">
               <div style="height:10px;background:var(--bg-sub, #e5e7eb);border-radius:5px;margin:8px 0;overflow:hidden">
-                <div data-testid="line-quota-fill" :style="'height:100%;width:' + Math.min(100, quota.percent || 0) + '%;background:' + quotaColor"></div>
+                <div data-testid="line-quota-fill" :style="'height:100%;width:' + Math.min(100, (quota && quota.percent) || 0) + '%;background:' + quotaColor"></div>
               </div>
               <div data-testid="line-quota-text" style="font-size:13px;font-weight:600" x-text="quotaText"></div>
             </div>
-            <div data-testid="line-quota-unlimited" x-show="quota && quota.ok && quota.unlimited" style="font-size:13px;margin-top:6px" x-text="'本月已用 ' + quota.used + ' 則（此方案沒有上限，不會告警）'"></div>
-            <div data-testid="line-quota-error" x-show="!quota || !quota.ok" style="font-size:12px;color:var(--text-dim);margin-top:6px" x-text="quota ? ('目前讀不到用量：' + quota.error) : '讀取中…'"></div>
+            <div data-testid="line-quota-unlimited" x-show="quota && quota.ok && quota.unlimited" style="font-size:13px;margin-top:6px" x-text="quota ? '本月已用 ' + (quota.used == null ? 0 : quota.used) + ' 則（此方案沒有上限，不會告警）' : ''"></div>
+            <div data-testid="line-quota-error" x-show="!quota || !quota.ok" style="font-size:12px;color:var(--text-dim);margin-top:6px" x-text="quota ? ('目前讀不到用量：' + (quota.error || '尚無資料')) : (quotaTried ? '尚無用量資料' : '讀取中…')"></div>
             <div class="ns-field" style="margin-top:10px">
               <label for="line-quota-th">用量告警門檻（%，逗號分隔，最多 5 個）</label>
               <input data-saved-field type="text" id="line-quota-th" x-model="thText" placeholder="80,100" style="max-width:220px">
@@ -509,7 +509,7 @@
       }
       return {
         cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], event_groups: [], role_choices: [], quota_thresholds: [80, 100] },
-        quota: null, quotaLoading: false, thText: '80,100',
+        quota: null, quotaTried: false, quotaLoading: false, thText: '80,100',
         bind: { loaded: false, available: false, open: false, total: 0, linked: 0, unlinked: 0, users: [] }, reminding: false,
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
@@ -579,7 +579,8 @@
           try {
             const r = await fetch('/api/settings/line-notify/quota' + (force ? '?refresh=true' : ''), { headers: hdr(false) })
             if (r.ok) this.quota = await r.json()
-          } finally { this.quotaLoading = false }
+          } catch (e) { /* 讀不到：維持「尚無用量資料」，不丟錯 */ }
+          finally { this.quotaLoading = false; this.quotaTried = true }
         },
         // ── 綁定狀況 ──
         get bindSummary() {
