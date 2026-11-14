@@ -1010,33 +1010,35 @@
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
                       <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})" class="stage-name" :class="{ 'stage-name--done': st.done }"
                              placeholder="階段名稱" aria-label="階段名稱">
-                      <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
-                        <input type="number" min="0" max="100" step="0.01" placeholder="比例"
-                               data-testid="stage-ratio" :value="stageRatioPct(st)"
-                               @change="setStageRatio(st, $event.target.value)"
-                               style="width:64px;font-size:12px;border:1px solid var(--border-light);border-radius:5px;padding:3px 16px 3px 6px;font-family:LINE Seed TW_OTF, sans-serif">
-                        <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--text-dim);pointer-events:none">%</span>
-                      </span>
-                      <template x-if="st.done">
-                        <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
-                               style="font-size:12px;border:1px solid var(--tone-success-border);border-radius:5px;padding:3px 6px;background:var(--tone-success-bg);color:var(--tone-success-fg);font-family:LINE Seed TW_OTF, sans-serif;outline:none">
-                      </template>
-                      <div class="stage-avatars" @click="toggleStageDetail(st.id)" title="點擊查看／編輯負責人">
-                        <template x-if="!(st.assignedTo || []).length">
-                          <span class="stage-avatar-dot stage-avatar-dot--empty">？</span>
+                      <div class="stage-card__meta">
+                        <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
+                          <input type="number" min="0" max="100" step="0.01" placeholder="比例"
+                                 data-testid="stage-ratio" :value="stageRatioPct(st)"
+                                 @change="setStageRatio(st, $event.target.value)"
+                                 style="width:64px;font-size:12px;border:1px solid var(--border-light);border-radius:5px;padding:3px 16px 3px 6px;font-family:LINE Seed TW_OTF, sans-serif">
+                          <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--text-dim);pointer-events:none">%</span>
+                        </span>
+                        <template x-if="st.done">
+                          <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
+                                 style="font-size:12px;border:1px solid var(--tone-success-border);border-radius:5px;padding:3px 6px;background:var(--tone-success-bg);color:var(--tone-success-fg);font-family:LINE Seed TW_OTF, sans-serif;outline:none">
                         </template>
-                        <template x-for="uname in (st.assignedTo || []).slice(0,3)" :key="uname">
-                          <span class="stage-avatar-dot" :style="{background: _avatarColor(uname)}"
-                                :title="_userDisplay(uname)" x-text="_userDisplay(uname)[0] || uname[0]"></span>
-                        </template>
-                        <template x-if="(st.assignedTo || []).length > 3">
-                          <span class="stage-avatar-dot stage-avatar-dot--more" x-text="'+' + ((st.assignedTo||[]).length - 3)"></span>
-                        </template>
+                        <div class="stage-avatars" @click="toggleStageDetail(st.id)" title="點擊查看／編輯負責人">
+                          <template x-if="!(st.assignedTo || []).length">
+                            <span class="stage-avatar-dot stage-avatar-dot--empty">？</span>
+                          </template>
+                          <template x-for="uname in (st.assignedTo || []).slice(0,3)" :key="uname">
+                            <span class="stage-avatar-dot" :style="{background: _avatarColor(uname)}"
+                                  :title="_userDisplay(uname)" x-text="_userDisplay(uname)[0] || uname[0]"></span>
+                          </template>
+                          <template x-if="(st.assignedTo || []).length > 3">
+                            <span class="stage-avatar-dot stage-avatar-dot--more" x-text="'+' + ((st.assignedTo||[]).length - 3)"></span>
+                          </template>
+                        </div>
+                        <span style="font-size:12px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
+                              :style="st.done ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--surface-neutral);color:var(--ink-muted)'"
+                              x-text="st.done ? '完成' : '待辦'"></span>
+                        <span class="stage-overdue-badge" x-show="stageIsOverdue(st)">已逾期</span>
                       </div>
-                      <span style="font-size:12px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
-                            :style="st.done ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--surface-neutral);color:var(--ink-muted)'"
-                            x-text="st.done ? '完成' : '待辦'"></span>
-                      <span class="stage-overdue-badge" x-show="stageIsOverdue(st)">已逾期</span>
                       <button class="stage-toggle-detail" @click="toggleStageDetail(st.id)"
                               :title="_openStageDetail[st.id] ? '收合詳細設定' : '展開日期／負責人／前置階段'"
                               x-text="_openStageDetail[st.id] ? '▾' : '▸'"></button>
@@ -1099,11 +1101,11 @@
 
                       <template x-for="(v, vi) in (st.visits || [])" :key="v.id">
                         <div class="visit-row">
-                          <input type="date" x-model="v.visitDate" @change="updateVisit(st, v)" class="fi fi--sm">
+                          <input type="date" x-model="v.visitDate" @change="updateVisit(st, v)" class="fi fi--sm" aria-label="前往日期">
                           <input type="number" min="1" max="99" x-model.number="v.visitPeople" @change="updateVisit(st, v)"
-                                 placeholder="人" class="fi fi--sm" style="text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
+                                 placeholder="人次" aria-label="人次" class="fi fi--sm" style="text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
                           <textarea x-model="v.note" @change="updateVisit(st, v)"
-                                    placeholder="工作內容、施工項目、備註…" class="fi fi--sm" rows="1"
+                                    placeholder="工作內容、施工項目、備註…" aria-label="工作內容／備註" class="fi fi--sm" rows="1"
                                     style="resize:vertical;line-height:1.5;min-height:30px"></textarea>
                           <button class="btn-del" @click="removeVisit(idx, vi)" style="margin-top:2px">×</button>
                         </div>

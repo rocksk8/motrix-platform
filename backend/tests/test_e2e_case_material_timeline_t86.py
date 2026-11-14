@@ -177,3 +177,38 @@ def test_shipping_tab_has_an_add_entry_and_timeline_leads_to_the_same_place(live
     page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).activeTab = 'exec' }")
     page.locator('[data-testid="mtl-act-mb-ship"]').wait_for(state="visible", timeout=10000)
     assert page.locator('[data-testid="mtl-act-mb-ship"]').inner_text().strip() == "前往出貨單"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width", [1440, 390])
+def test_stage_card_fits_the_screen_in_two_rows_on_phone(live_server, make_user, e2e_browser, width):
+    """T86-17：手機階段卡右側不被切掉——名稱一行、比例／完成日／負責人／狀態一行；前往日期／人次／工作內容欄位有邊框。桌面維持單列。"""
+    u, p = make_user(username="mtl_t86s%d" % width, role="superadmin")
+    _case()
+    page = e2e_browser.new_page(viewport={"width": width, "height": 1000})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    page.wait_for_selector(f"text={NO}", timeout=15000)
+    page.get_by_role("button", name="執行管理").first.click()
+    card = page.locator(".stage-card").first
+    card.wait_for(state="visible", timeout=15000)
+    card.locator("button.btn-add", has_text="新增記錄").click()
+    card.locator(".visit-row input[type=date]").first.wait_for(state="visible", timeout=10000)
+    geo = card.evaluate("""c => {
+      const r = c.getBoundingClientRect(), q = s => c.querySelector(s).getBoundingClientRect()
+      const head = [...c.querySelector('.stage-card__head').querySelectorAll('.stage-name, [data-testid=stage-ratio], .stage-toggle-detail, .btn-del')]
+      return {right: r.right, left: r.left, items: head.map(e => e.getBoundingClientRect().right), nameTop: q('.stage-name').top, ratioTop: q('[data-testid=stage-ratio]').top,
+              scroll: c.querySelector('.stage-card__head').scrollWidth - c.querySelector('.stage-card__head').clientWidth}
+    }""")
+    assert all(x <= geo["right"] + 1 for x in geo["items"]), "階段卡右側被切掉：%s" % geo
+    assert geo["scroll"] <= 1, geo
+    if width == 390:
+        assert geo["ratioTop"] > geo["nameTop"] + 10, "手機應分兩行：%s" % geo
+    else:
+        assert abs(geo["ratioTop"] - geo["nameTop"]) < 20, "桌面維持單列：%s" % geo
+    for sel in ("input[type=date]", "input[type=number]", "textarea"):
+        b = card.locator(".visit-row " + sel).first.evaluate("e => { const s = getComputedStyle(e); return [s.borderTopWidth, s.borderTopStyle] }")
+        assert b[0] != "0px" and b[1] == "solid", (sel, b)
+    over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
+    _shot(page, "item17_stage_card_%d" % width)

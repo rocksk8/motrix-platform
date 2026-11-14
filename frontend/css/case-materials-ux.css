@@ -67,3 +67,13 @@
 .stage-ratio-sum > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .stage-ratio-sum--warn { color: var(--tone-warning-fg); }
 .stage-ratio-sum__ico { flex-shrink: 0; }
+
+/* 手機階段卡（第 17 項）：桌面維持單列（meta 不產生盒子）；手機分兩行——第一行 把手／勾選／名稱／展開／刪除，第二行 比例／完成日／負責人／狀態 */
+.stage-card__meta { display: contents; }
+@media (max-width: 767px) {
+  .stage-card__head { flex-wrap: wrap; row-gap: 8px; }
+  .stage-card__head > .stage-name { flex: 1 1 0; min-width: 0; min-height: 34px; font-size: 14px; }
+  .stage-card__meta { order: 10; flex: 1 0 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-left: 21px; min-width: 0; }
+  .stage-card__body > .visit-row:first-child { display: none; }   /* 手機：欄名列改由各欄的提示字／標籤代替（版面是兩欄，對不齊） */
+  .stage-card__body .visit-row .fi { border-color: var(--border); background: var(--surface); }
+}
