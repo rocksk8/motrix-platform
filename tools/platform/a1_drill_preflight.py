@@ -286,21 +286,49 @@ def static_scan(root, erp_port=ERP_PORT, prod_ip=PROD_IP, extra_patterns=(), das
     return {"files": n, "findings": findings, "allowed_product_files": allowed}
 
 
+# 產品程式碼（.py／.js／.html）裡寫著正式機位址的檔案：**逐一列名、說明為什麼不會連線**；名單外的檔案出現正式機位址 ⇒ 擋下（不是資訊）。
+CODE_PROD_ALLOWED = {
+    r"backend\helpers\email_notify.py": "舊版預設連結位址常數（只組信件連結；演練 Email 全關：.no_email_send／MOTRIX_EMAIL_SEND=off）",
+    r"backend\main.py": "CORS 白名單字串，不是連線",
+    r"backend\routers\system.py": "註解",
+    r"backend\tools\deploy_dashboard.html": "畫面文字，沒有連線",
+    r"tools\platform\a1_drill_preflight.py": "偵測用的位址常數（演練安裝副本裡不會被執行）",
+}
+# 隨 git archive 出貨時被 export-ignore 的正式機遠端腳本：演練安裝與包裡**不可以有**（有就擋）。
+EXPORT_IGNORED_ABSENT = (r"backend\tools\_dashboard_remote.ps1", r"backend\tools\check_prod_drift.ps1")
+_PROD_CODE_RE = re.compile(r"172\.16\.1[01]\.\d{1,3}")
+
+
 def code_prod_literals(root, prod_ip=PROD_IP):
-    """資訊（不影響放行）：產品程式碼（.py／.js）裡寫著正式機位址字面值的檔案。這些是產品本來就有的外送路徑
-    （舊版 Email 連結位址、CORS、儀表板的 PROD_HOST…），演練把 Email／雲端／排程全關、位址只准本機，並由連線監看器兜底。"""
+    """產品程式碼（.py／.js／.html）裡寫著正式機位址（或 172.16.10／11 網段）的檔案（相對路徑，排序）。"""
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d.lower() not in (SKIP_DIRS - {"tests"}) | {"site-packages", "node_modules"}]
         for fn in filenames:
-            if fn.lower().endswith((".py", ".js")):
+            if fn.lower().endswith((".py", ".js", ".html")):
                 p = Path(dirpath) / fn
                 try:
-                    if prod_ip in p.read_text(encoding="utf-8", errors="replace"):
-                        out.append(str(p.relative_to(root)))
+                    text = p.read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    pass
+                    continue
+                if prod_ip in text or _PROD_CODE_RE.search(text):
+                    out.append(str(p.relative_to(root)))
     return sorted(out)
+
+
+def code_literal_findings(root, prod_ip=PROD_IP):
+    """阻擋式：⇒ (findings, allowed)。findings＝名單外出現正式機位址的程式檔，加上不該存在的 export-ignore 腳本；allowed＝[(檔, 理由)]（報告逐一列出）。"""
+    allow = {k.lower(): v for k, v in CODE_PROD_ALLOWED.items()}
+    findings, allowed = [], []
+    for rel in code_prod_literals(root, prod_ip):
+        if rel.lower() in allow:
+            allowed.append((rel, allow[rel.lower()]))
+        else:
+            findings.append((rel, "程式碼裡有正式機位址，且不在已知名單（演練副本必須先改寫成本機死路，或審過後加進名單）"))
+    for rel in EXPORT_IGNORED_ABSENT:
+        if (Path(root) / rel).exists():
+            findings.append((rel, "這支正式機遠端腳本應該被 export-ignore 擋在安裝與包之外，卻存在"))
+    return findings, allowed
 
 
 def _ps1_findings(root, erp_port, expect_root=None):
@@ -364,15 +392,16 @@ $anc = New-Object 'System.Collections.Generic.HashSet[int]'
 $cur = $me; $guard = 0
 while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
 $tree = New-Object 'System.Collections.Generic.HashSet[int]'
+$hits = @()
 foreach ($r in $roots) { if ([int]$r -gt 4) { [void]$tree.Add([int]$r) } }
-if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) { [void]$tree.Add([int]$p.ProcessId) } } }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ((($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) -or (($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)))) { [void]$tree.Add([int]$p.ProcessId); $hits += @{ id = [int]$p.ProcessId; name = [string]$p.Name } } } }
 foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
 $grew = $true
 while ($grew) { $grew = $false; foreach ($p in $all) { if ([int]$p.ParentProcessId -gt 4 -and $tree.Contains([int]$p.ParentProcessId) -and -not $tree.Contains([int]$p.ProcessId)) { [void]$tree.Add([int]$p.ProcessId); $grew = $true } } }
 [void]$tree.Remove([int]$PID)
 foreach ($low in @(0,4)) { [void]$tree.Remove([int]$low) }
 foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
-ConvertTo-Json -Compress @{ tree = @($tree); ancestors = @($anc) }
+ConvertTo-Json -Compress -Depth 4 @{ tree = @($tree); ancestors = @($anc); needle = @($hits) }
 """
 # ── 殺程序的白名單（PM 2026-11-14）：只殺「編排器自己啟動並記錄（pid＋建立時間）的程序」與它們的後代 ──────────────────
 # 上面的 _TREE_PS 只用來「觀察」（連線取樣）；**任何殺程序的動作都只准用這個擁有清單**，不從根程序往下掃、不從埠或命令列撈。
@@ -397,7 +426,10 @@ $cur = $me; $guard = 0
 while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
 $own = New-Object 'System.Collections.Generic.HashSet[int]'
 foreach ($r in $recs) { $pr = $r.Split(':'); $id = [int]$pr[0]; if ($byId.ContainsKey($id) -and (Ticks $byId[$id]) -eq [long]$pr[1]) { [void]$own.Add($id) } }
-if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and (Ticks $p) -ge $start) { [void]$own.Add([int]$p.ProcessId) } } }
+$needleRe = '(?i)' + [regex]::Escape($needle) + '($|[\\\s"''/])'
+function ParentOk($p) { $pp = [int]$p.ParentProcessId; if (-not $byId.ContainsKey($pp)) { return $true }; return ((Ticks $byId[$pp]) -gt (Ticks $p)) }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and [regex]::IsMatch([string]$p.CommandLine, $needleRe) -and (Ticks $p) -ge $start -and (ParentOk $p)) { [void]$own.Add([int]$p.ProcessId) } } }
+foreach ($a in $anc) { [void]$own.Remove([int]$a) }
 $grew = $true
 while ($grew) { $grew = $false; foreach ($p in $all) { $pp = [int]$p.ParentProcessId; if ($pp -ge %(minpid)d -and $own.Contains($pp) -and -not $own.Contains([int]$p.ProcessId) -and (Ticks $p) -ge (Ticks $byId[$pp])) { [void]$own.Add([int]$p.ProcessId); $grew = $true } } }
 $out = @()
@@ -524,6 +556,7 @@ class ConnectionMonitor:
         self.tripped = None
         self.unproven = None                      # 字串：為什麼「沒有證明」
         self.tree_seen = set()
+        self._needle_logged = set()
         self._last_tree = []
         self._ancestors = []
         self._stop = False
@@ -544,7 +577,10 @@ class ConnectionMonitor:
         tree = [int(x) for x in ([doc["tree"]] if isinstance(doc["tree"], int) else (doc["tree"] or []))]
         anc = [int(x) for x in ([doc["ancestors"]] if isinstance(doc["ancestors"], int) else (doc["ancestors"] or []))]
         mine = set(tree)
-        return {"tree": tree, "ancestors": anc, "conns": [c for c in parse_netstat(net.stdout) if c["pid"] in mine]}
+        nd = doc.get("needle") or []
+        nd = [nd] if isinstance(nd, dict) else nd
+        return {"tree": tree, "ancestors": anc, "needle": [{"id": int(x["id"]), "name": str(x["name"])} for x in nd],
+                "conns": [c for c in parse_netstat(net.stdout) if c["pid"] in mine]}
 
     @staticmethod
     def _ps_kill(tree):
@@ -596,6 +632,10 @@ class ConnectionMonitor:
         self._last_tree = list(snap.get("tree") or [])
         self._ancestors = list(snap.get("ancestors") or self._ancestors)
         self.tree_seen |= set(self._last_tree)
+        for nd in snap.get("needle") or []:                                 # 只因命令列含演練目錄而被納入的程序：記名稱與 pid（外部程式剛好開著演練路徑時，誤判才查得出來）
+            if nd["id"] not in self._needle_logged:
+                self._needle_logged.add(nd["id"])
+                self._log({"t": round(self.clock(), 1), "event": "NEEDLE_MATCH", "pid": nd["id"], "name": nd["name"]})
         conns = snap.get("conns") or []
         self.max_conns = max(self.max_conns, len(conns))
         bad = violations(conns, self.prod_ip)
@@ -724,6 +764,10 @@ class DrillGuard:
     def scan(self):
         self._need("scan")
         self.scan_result = require_static_ok(self.root, erp_port=self.erp_port, dash_port=self.dash_port)
+        cf, allowed = code_literal_findings(self.root)
+        if cf:
+            raise DrillAbort("演練目錄程式碼含未列名的正式機位址，不啟動演練：" + chr(10) + chr(10).join("  ✗ %s：%s" % f for f in cf))
+        self.scan_result["code_literals_allowed"] = allowed
         self._fp = self._fingerprint()
         self.done = ["check", "scan"]
         return self.scan_result
@@ -738,7 +782,10 @@ class DrillGuard:
         self._need("start")
         if not self.monitor.control_done:
             raise DrillAbort("監看器沒做過正對照，不啟動")
-        self.records.append((os.getpid(), process_created(os.getpid())))
+        me_created = process_created(os.getpid())
+        if not me_created:
+            raise DrillAbort("查不到編排器自己的建立時間，殺程序白名單會是空的 ⇒ 不啟動監看與演練")
+        self.records.append((os.getpid(), me_created))
         self.monitor.start()
         self.done = list(self.ORDER)
         return self
@@ -769,7 +816,7 @@ class DrillGuard:
         if wait:
             pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw)
             self._children.append(pr)
-            self.records.append((pr.pid, process_created(pr.pid)))
+            self._record(pr)
             try:
                 out, _ = pr.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -779,8 +826,20 @@ class DrillGuard:
             return pr.returncode, (out or b"").decode("utf-8", "replace")
         pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
         self._children.append(pr)
-        self.records.append((pr.pid, process_created(pr.pid)))
+        self._record(pr)
         return pr
+
+    def _record(self, pr):
+        """記下剛啟動的程序（pid＋建立時間）。查不到建立時間 ⇒ 用手上的 Popen 把它殺掉（我們握有 handle，pid 不會錯）並中止：沒記錄就進不了殺程序白名單。"""
+        created = process_created(pr.pid)
+        if not created and pr.poll() is None:
+            try:
+                pr.kill()
+            except OSError:
+                pass
+            raise DrillAbort("查不到剛啟動的程序（pid %d）的建立時間，無法放進殺程序白名單，已終止它並中止" % pr.pid)
+        if created:
+            self.records.append((pr.pid, created))
 
     def owned_pids(self):
         """殺程序的白名單（給監看器 `owned_fn`）：記錄過且建立時間相符的程序＋後代＋命令列含演練目錄的白名單程序；查詢失敗 ⇒ 丟例外。"""

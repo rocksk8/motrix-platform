@@ -223,7 +223,7 @@ def test_harden_tree_rewrites_only_prodroot_and_port_and_writes_loopback_autosta
     inst = tmp_path / "inst"
     before = {n: (tool_tree / "backend" / "tools" / n).read_text(encoding="utf-8-sig").splitlines() for n in ("apply_update.ps1", "rollback_update.ps1")}
     out = AD.harden_tree(tool_tree, inst, 6766, r"C:\py\python.exe")
-    assert set(out) == {"apply_update.ps1", "rollback_update.ps1"}
+    assert set(out) == {"apply_update.ps1", "rollback_update.ps1", "deploy_dashboard.py"}
     for n, lines in before.items():
         after = (tool_tree / "backend" / "tools" / n).read_text(encoding="utf-8-sig").splitlines()
         diff = [i for i, (a, b) in enumerate(zip(lines, after)) if a != b]
@@ -514,6 +514,18 @@ def _py_sleeper(extra_args=(), child=False):
     return subprocess.Popen([_sys.executable, "-c", code, *extra_args], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
+def _orphan_sleeper(arg):
+    """⇒ 一個「父程序已經結束」的睡眠程序（用一支啟動器起它後立刻結束）。回傳有 .pid 的物件。"""
+    import subprocess
+    import sys as _sys
+    import time
+    code = ("import subprocess,sys;D=subprocess.DEVNULL;"
+            "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)',sys.argv[1]],stdin=D,stdout=D,stderr=D);print(p.pid,flush=True)")
+    r = subprocess.run([_sys.executable, "-c", code, arg], capture_output=True, text=True, timeout=60)
+    time.sleep(1.0)
+    return SimpleNamespace(pid=int(r.stdout.strip().splitlines()[-1]))
+
+
 def _alive(pid):
     import subprocess
     r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", "if (Get-Process -Id %d -ErrorAction SilentlyContinue) { 'Y' } else { 'N' }" % pid],
@@ -547,7 +559,9 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
     a = _py_sleeper(child=True)                                   # 記錄＋有子行程 ⇒ 兩個都該被殺
     b = _py_sleeper()                                             # 沒記錄 ⇒ 不動
     c = _py_sleeper()                                             # 記了、但建立時間不符（模擬 pid 被重複使用）⇒ 不動
-    d = _py_sleeper(extra_args=(str(base / "inst" / "autostart.bat"),))     # 孤兒類：命令列含演練目錄、白名單名稱 ⇒ 殺
+    d = _orphan_sleeper(str(base / "inst" / "autostart.bat"))                # 孤兒類（父程序已不在）：命令列含演練目錄、白名單名稱 ⇒ 殺
+    e = _py_sleeper(extra_args=(str(base / "inst" / "autostart.bat"),))      # 命令列含演練目錄、但父程序（本測試）活著且不是我們的 ⇒ 不殺
+    f = _orphan_sleeper(str(base) + "-other" + chr(92) + "x.bat")             # 前綴相同的別個目錄（…-other）⇒ 不殺
     started = PF.now_ticks(60)
     try:
         import time
@@ -557,7 +571,7 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
         owned = PF.owned_processes(rec, base, started)
         ids = {o["id"] for o in owned}
         assert a.pid in ids and d.pid in ids, ids
-        assert b.pid not in ids and c.pid not in ids and os.getpid() not in ids
+        assert b.pid not in ids and c.pid not in ids and e.pid not in ids and f.pid not in ids and os.getpid() not in ids
         assert len(ids) >= 3, "A 的子行程也該在清單裡：%s" % ids
         assert all(i >= PF.MIN_KILL_PID and PF.killable(i, o["name"]) for o in owned for i in [o["id"]])
         logs = []
@@ -565,14 +579,17 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
         assert set(killed) == ids
         time.sleep(1.5)
         assert not _alive(a.pid) and not _alive(d.pid)
-        assert _alive(b.pid) and _alive(c.pid)
+        assert _alive(b.pid) and _alive(c.pid) and _alive(e.pid) and _alive(f.pid)
         assert any("pid=%d" % a.pid in l and "name=python.exe" in l and "created_ticks=" in l for l in logs), logs
     finally:
-        for pr in (a, b, c, d):
+        for pr in (a, b, c, e):
             try:
                 pr.kill()
             except OSError:
                 pass
+        import subprocess
+        for pid in (d.pid, f.pid):
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
 
 
 import os  # noqa: E402
@@ -618,3 +635,286 @@ def test_guard_records_launches_with_creation_time(tmp_path, monkeypatch):
     finally:
         pr.kill()
 
+
+# ── h11 必修：儀表板自己打正式機的路 ＋ 程式碼位址阻擋 ───────────────────────────────
+
+@pytest.fixture
+def archived_tree(tmp_path):
+    """真的 git archive HEAD（＝安裝／包的內容形狀），回傳樹根。"""
+    import subprocess
+    import tarfile as _tf
+    r = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", "HEAD"], capture_output=True, timeout=300)
+    assert r.returncode == 0
+    t = tmp_path / "archived"
+    with _tf.open(fileobj=__import__("io").BytesIO(r.stdout)) as tf:
+        tf.extractall(t, filter="data")
+    return t
+
+
+def test_rewrite_dashboard_prod_makes_a_loopback_dead_end(tool_tree):
+    p = tool_tree / "backend" / "tools" / "deploy_dashboard.py"
+    assert PF.PROD_IP in p.read_text(encoding="utf-8")
+    assert AD.rewrite_dashboard_prod(tool_tree) == 2
+    new = p.read_text(encoding="utf-8")
+    assert PF.PROD_IP not in new and "172.16" not in new
+    assert 'PROD_HOST = "127.0.0.1"' in new and 'PROD_BASE_URL = f"http://{PROD_HOST}:9"' in new
+    ast.parse(new)
+
+
+def test_rewrite_dashboard_prod_refuses_unless_exactly_one_of_each(tmp_path):
+    d = tmp_path / "backend" / "tools"
+    d.mkdir(parents=True)
+    f = d / "deploy_dashboard.py"
+    ok_host = 'PROD_HOST = "172.16.10.177"'
+    ok_url = 'PROD_BASE_URL = f"https://{PROD_HOST}:666"'
+    nl = chr(10)
+    for text in ("x = 1", ok_host + nl, ok_host + nl + ok_url + nl + ok_url + nl, "X" + ok_host + nl + ok_url):
+        f.write_text(text, encoding="utf-8")
+        with pytest.raises(AD.DrillError):
+            AD.rewrite_dashboard_prod(tmp_path)
+
+
+def test_rewrite_dashboard_keeps_crlf(tmp_path):
+    d = tmp_path / "backend" / "tools"
+    d.mkdir(parents=True)
+    f = d / "deploy_dashboard.py"
+    f.write_bytes(b'PROD_HOST = "172.16.10.177"\r\nPROD_BASE_URL = f"https://{PROD_HOST}:666"\r\nx = 1\r\n')
+    AD.rewrite_dashboard_prod(tmp_path)
+    assert f.read_bytes() == b'PROD_HOST = "127.0.0.1"\r\nPROD_BASE_URL = f"http://{PROD_HOST}:9"\r\nx = 1\r\n'
+
+
+def _load_dashboard(path, name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, str(path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_hardened_dashboard_prod_status_without_delivery_root_only_touches_loopback(tool_tree, monkeypatch, tmp_path):
+    """交付資料夾沒設定成功時，儀表板的 _check_prod_status() 只會打到本機死路（沒有任何非本機請求）。"""
+    AD.harden_tree(tool_tree, tmp_path / "inst", 6766, "py")
+    mod = _load_dashboard(tool_tree / "backend" / "tools" / "deploy_dashboard.py", "dd_hardened_under_test")
+    urls = []
+
+    def fake_get(url, *a, **k):
+        urls.append(url)
+        raise OSError("blocked in test")
+    monkeypatch.setattr(mod.requests, "get", fake_get)
+    monkeypatch.setattr(mod, "_delivered_status", lambda: {"configured": False})
+    out = mod._check_prod_status()
+    assert urls, "沒設定交付資料夾時應該走舊路徑（打 PROD_BASE_URL）——測試前提不成立"
+    from urllib.parse import urlparse
+    for u in urls:
+        assert urlparse(u).hostname in ("127.0.0.1", "localhost", "::1"), u
+        assert "172.16." not in u
+    assert out["healthy"] is False
+
+
+def test_unhardened_dashboard_would_have_hit_prod_proving_the_test_has_teeth(monkeypatch):
+    mod = _load_dashboard(REPO / "backend" / "tools" / "deploy_dashboard.py", "dd_unhardened_under_test")
+    urls = []
+
+    def fake_get(url, *a, **k):
+        urls.append(url)
+        raise OSError("blocked in test")
+    monkeypatch.setattr(mod.requests, "get", fake_get)
+    monkeypatch.setattr(mod, "_delivered_status", lambda: {"configured": False})
+    mod._check_prod_status()
+    assert any(PF.PROD_IP in u for u in urls)
+
+
+def test_real_archive_after_hardening_has_no_unlisted_prod_address(archived_tree, tmp_path):
+    AD.harden_tree(archived_tree, tmp_path / "inst", 6766, "py")
+    findings, allowed = PF.code_literal_findings(archived_tree)
+    assert findings == [], findings
+    assert {r.lower() for r, _w in allowed} <= {k.lower() for k in PF.CODE_PROD_ALLOWED}
+    assert (archived_tree / "backend" / "tools" / "_dashboard_remote.ps1").exists() is False        # export-ignore 擋在 archive 外
+    assert (archived_tree / "backend" / "tools" / "check_prod_drift.ps1").exists() is False
+
+
+def test_archive_has_no_dashboard_so_rewrite_is_a_noted_noop(archived_tree):
+    """出貨包把 deploy_dashboard.py export-ignore：演練樹裡沒有這個檔，改寫＝0 行（不是錯誤），報告要看得到。"""
+    assert not (archived_tree / "backend" / "tools" / "deploy_dashboard.py").exists()
+    assert AD.rewrite_dashboard_prod(archived_tree) == 0
+
+
+def test_unhardened_dashboard_in_a_tree_is_blocked_by_code_literal_check_and_hardening_clears_it(tool_tree, tmp_path):
+    findings, _allowed = PF.code_literal_findings(tool_tree)
+    assert any(rel.lower().endswith("deploy_dashboard.py") for rel, _w in findings), findings
+    AD.harden_tree(tool_tree, tmp_path / "inst", 6766, "py")
+    assert not any(rel.lower().endswith("deploy_dashboard.py") for rel, _w in PF.code_literal_findings(tool_tree)[0])
+
+
+def test_code_literal_findings_flags_unknown_file_and_export_ignored_scripts(tmp_path):
+    bs = chr(92)
+    (tmp_path / "backend" / "tools").mkdir(parents=True)
+    (tmp_path / "backend" / "new_module.py").write_text('URL = "https://%s:666"' % PF.PROD_IP, encoding="utf-8")
+    (tmp_path / "backend" / "main.py").write_text('"http://%s:666"' % PF.PROD_IP, encoding="utf-8")
+    (tmp_path / "backend" / "tools" / "_dashboard_remote.ps1").write_text("x", encoding="utf-8")
+    findings, allowed = PF.code_literal_findings(tmp_path)
+    assert {r.lower() for r, _w in findings} == {"backend" + bs + "new_module.py", "backend" + bs + "tools" + bs + "_dashboard_remote.ps1"}
+    assert [r for r, _w in allowed] == ["backend" + bs + "main.py"]
+    (tmp_path / "backend" / "other.js").write_text("fetch('http://172.16.11.5/x')", encoding="utf-8")          # 其他 172.16.10／11 網段也算
+    assert any("other.js" in r for r, _w in PF.code_literal_findings(tmp_path)[0])
+
+
+def test_guard_scan_aborts_on_unlisted_prod_address_in_code(tmp_path, monkeypatch):
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "x.py").write_text('"%s"' % PF.PROD_IP, encoding="utf-8")
+    monkeypatch.setattr(PF, "require_static_ok", lambda root, **kw: {"files": 1, "findings": [], "allowed_product_files": []})
+    g = PF.DrillGuard(tmp_path, FakeMonitor())
+    g.done = ["check"]
+    with pytest.raises(PF.DrillAbort) as ei:
+        g.scan()
+    assert "x.py" in str(ei.value) and "scan" not in g.done
+
+
+def test_guard_scan_records_allowed_literals_for_report(tmp_path, monkeypatch):
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "main.py").write_text('"%s"' % PF.PROD_IP, encoding="utf-8")
+    monkeypatch.setattr(PF, "require_static_ok", lambda root, **kw: {"files": 1, "findings": [], "allowed_product_files": []})
+    g = PF.DrillGuard(tmp_path, FakeMonitor())
+    g.done = ["check"]
+    res = g.scan()
+    assert res["code_literals_allowed"] and res["code_literals_allowed"][0][0].lower().endswith("main.py")
+
+
+# ── B5 回復指令驗證、Playwright 環境、共用 repo 衛生、刪除路徑防呆 ─────────────────────────
+
+def test_parse_rollback_command_accepts_the_real_report_format(tmp_path):
+    import auto_apply as AA
+    inst = tmp_path / "inst"
+    (inst / "backend" / "tools").mkdir(parents=True)
+    cmd = AA.rollback_hint(str(inst), {"timestamp": "20261114_201500"})
+    argv, why = AD.parse_rollback_command(cmd, inst)
+    assert why is None and argv[0] == "powershell.exe" and argv[-1] == "-Yes" and "-IncludeDatabase" not in argv
+    assert argv[argv.index("-File") + 1].lower().endswith("rollback_update.ps1") and argv[argv.index("-SnapshotTimestamp") + 1] == "20261114_201500"
+
+
+@pytest.mark.parametrize("mut", [
+    lambda c: c + "; calc.exe", lambda c: c + " && calc", lambda c: c + " | more", lambda c: c + chr(10) + "calc", lambda c: c + " -IncludeDatabase",
+    lambda c: c.replace("-SnapshotTimestamp 20261114_201500", "-SnapshotTimestamp $(calc)"), lambda c: "cmd /c " + c, lambda c: c.replace("powershell ", "powershell -Command "),
+    lambda c: c + " > x", lambda c: c.replace("rollback_update.ps1", "rollback_update.ps1 -x"),
+])
+def test_parse_rollback_command_refuses_extra_statements(tmp_path, mut):
+    import auto_apply as AA
+    inst = tmp_path / "inst"
+    (inst / "backend" / "tools").mkdir(parents=True)
+    cmd = mut(AA.rollback_hint(str(inst), {"timestamp": "20261114_201500"}))
+    argv, why = AD.parse_rollback_command(cmd, inst)
+    assert argv is None and why
+
+
+def test_parse_rollback_command_refuses_script_outside_install(tmp_path):
+    bs = chr(92)
+    inst = tmp_path / "inst"
+    (inst / "backend" / "tools").mkdir(parents=True)
+    other = tmp_path / "elsewhere" / "backend" / "tools"
+    other.mkdir(parents=True)
+    for bad in (str(other / "rollback_update.ps1"),
+                "C:" + bs + "Users" + bs + "Motrix" + bs + "Desktop" + bs + "V9.0" + bs + "backend" + bs + "tools" + bs + "rollback_update.ps1",
+                bs * 2 + "server" + bs + "share" + bs + "rollback_update.ps1",
+                str(inst / "backend" / "tools" / ".." / ".." / ".." / "elsewhere" / "backend" / "tools" / "rollback_update.ps1")):
+        cmd = 'powershell -ExecutionPolicy Bypass -File "%s" -SnapshotTimestamp 20261114_201500' % bad
+        argv, why = AD.parse_rollback_command(cmd, inst)
+        assert argv is None and why, bad
+    assert AD.parse_rollback_command(None, inst)[0] is None
+
+
+def test_b5_executes_only_the_validated_argv():
+    b5 = SRC[SRC.index("    def scenario_B5"):SRC.index("    def scenario_B6")]
+    assert "parse_rollback_command(cmd, self.inst)" in b5 and '"-Command"' not in b5
+    assert "self.guard.launch(argv," in b5
+
+
+def test_playwright_gets_a_clean_environment_and_the_single_non_guard_spawn_is_documented():
+    assert "env=clean_env" in SRC and "os.environ.clear()" in SRC and "--no-proxy-server" in SRC
+    assert SRC.index("os.environ.update(clean)") < SRC.index("with sync_playwright() as pw")
+    assert "唯一不經 guard.launch 的子行程" in SRC
+
+
+def test_shared_repo_hygiene_flags_present():
+    assert SRC.count("core.hooksPath=NUL") >= 3 and "--no-verify" in SRC
+    assert SRC.count('filter="data"') == 2
+    assert 'self.git("worktree", "prune")' in SRC
+
+
+def test_in_base_refuses_paths_outside_the_drill_dir(tmp_path):
+    args = SimpleNamespace(dry_build=False, only=[], keep=True, interval=2.0)
+    d = AD.Drill(args)
+    base = Path(AD.BASE_ROOT) / "unit_test_stamp_never_created"
+    d.base = base
+    assert d.in_base(base / "inst") == (base / "inst").resolve()
+    assert d.in_base(base) == base.resolve()
+    for bad in (Path(AD.BASE_ROOT), Path(AD.BASE_ROOT) / "other_stamp", tmp_path, base / ".." / "other", Path("C:" + chr(92) + "Users")):
+        with pytest.raises(PF.DrillAbort):
+            d.in_base(bad)
+    d.base = tmp_path / "not_under_base_root"
+    with pytest.raises(PF.DrillAbort):
+        d.in_base(d.base / "inst")
+
+
+def test_robocopy_and_cleanup_guard_their_paths(tmp_path):
+    args = SimpleNamespace(dry_build=False, only=[], keep=True, interval=2.0)
+    d = AD.Drill(args)
+    d.base = Path(AD.BASE_ROOT) / "unit_test_stamp_never_created"
+    ran = []
+    d.guard = SimpleNamespace(run_tool=lambda argv, **k: ran.append(argv) or (0, ""))
+    with pytest.raises(PF.DrillAbort):
+        d.robocopy(tmp_path / "a", d.base / "inst")
+    with pytest.raises(PF.DrillAbort):
+        d.robocopy(d.base / "snap", tmp_path / "b")
+    assert ran == []
+    d.robocopy(d.base / "snap", d.base / "inst")
+    assert ran and ran[0][0] == "robocopy"
+    d.base = tmp_path / "x"
+    with pytest.raises(PF.DrillAbort):
+        d.safe_cleanup()
+
+
+# ── 殺程序白名單補強（h11 should-fix）──────────────────────────────────────────────
+
+def test_start_aborts_when_own_creation_time_unknown(tmp_path, monkeypatch):
+    class Mon(FakeMonitor):
+        control_done = True
+
+        def start(self):
+            raise AssertionError("不該啟動")
+    g = PF.DrillGuard(tmp_path, Mon(), base=tmp_path)
+    g.done = ["check", "scan", "control"]
+    monkeypatch.setattr(PF, "process_created", lambda pid: None)
+    with pytest.raises(PF.DrillAbort):
+        g.start()
+
+
+def test_launch_kills_by_handle_and_aborts_when_creation_time_unknown(tmp_path, monkeypatch):
+    import sys as _sys
+    g = PF.DrillGuard(tmp_path, FakeMonitor(), base=tmp_path)
+    g.done = list(PF.DrillGuard.ORDER)
+    g._fp = g._fingerprint()
+    monkeypatch.setattr(g, "ready", lambda what="": True)
+    monkeypatch.setattr(PF, "process_created", lambda pid: None)
+    with pytest.raises(PF.DrillAbort):
+        g.launch([_sys.executable, "-c", "import time;time.sleep(60)"], tmp_path, "t")
+    import time
+    time.sleep(1)
+    assert g._children and g._children[-1].poll() is not None, "握著 handle 的程序應該已被終止"
+
+
+def test_monitor_logs_needle_only_matches_once(tmp_path):
+    logged = []
+    snaps = [{"tree": [1100], "needle": [{"id": 1100, "name": "notepad.exe"}], "conns": []}] * 2
+    it = iter(snaps)
+    m = PF.ConnectionMonitor(tmp_path / "m.jsonl", lambda: [], sampler=lambda r: next(it), killer=lambda t: None)
+    m._log = logged.append
+    m.tick()
+    m.tick()
+    hits = [x for x in logged if x.get("event") == "NEEDLE_MATCH"]
+    assert len(hits) == 1 and hits[0]["name"] == "notepad.exe" and hits[0]["pid"] == 1100
+
+
+def test_owned_ps_removes_ancestors_before_growth_and_uses_boundary_and_parent_link():
+    ps = PF._OWNED_PS
+    assert ps.index("$anc) { [void]$own.Remove") < ps.index("$grew = $true")
+    assert "ParentOk" in ps and "[regex]::Escape($needle)" in ps

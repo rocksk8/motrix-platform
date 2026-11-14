@@ -12,7 +12,12 @@ B5（事後驗證不過、不自動回滾，並在演練機真的執行回復指
   ① 呼叫順序寫死在 `a1_drill_preflight.DrillGuard`：check → scan → control（監看器正對照）→ start（監看）；任何啟動／驅動演練程序的動作都先 `guard.ready()`。
   ② 本檔**不直接**起任何子行程（測試 grep 釘住）：所有子行程只走 `guard.launch`（演練程序）與 `guard.run_tool`（建置工具），都用乾淨環境（白名單變數、
      MOTRIX_DELIVERY_ERP_URL 只指 127.0.0.1、pip 離線）。有測試 grep 釘住。
+     **唯一例外**：Playwright 的 node driver 只能繼承本行程環境，故驅動前先清空並重設環境（`os.environ.clear()`＋`--no-proxy-server`）；它是本行程的子行程，
+     仍在監看器的樹內（監看器看得到、也只會殺白名單內的程序）。
   ③ 演練期間 `ConnectionMonitor` 每 2 秒查演練程序的 TCP 連線，一有非本機連線就殺程序、中止；取樣連續失敗兩次也中止並標「未證明」。
+     殺程序走嚴格白名單（只殺本編排器自己起的「pid＋建立時間」紀錄與其後代，加窄範圍孤兒；pid<1000、系統／shell 程序名一律不殺；查詢失敗＝不殺）。
+  ④ 儀表板的 PROD_HOST／PROD_BASE_URL 在演練副本改成本機死路（出貨包本就 export-ignore 此檔，則記為「不存在」）；`code_literal_findings` 對任何未列名單的
+     程式碼正式機位址阻擋。
 報告寫明「整段演練對正式機 N 連線」（有證明才印；否則寫「未證明」）。
 
 用法：
@@ -110,7 +115,28 @@ def harden_tree(tree, inst, port, python):
     reg.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (Path(tree) / "backend" / "autostart.bat").write_text(
         AUTOSTART_A1.format(backend=Path(inst) / "backend", python=python, port=port), encoding="utf-8")
+    out["deploy_dashboard.py"] = rewrite_dashboard_prod(tree)
     return out
+
+
+_DASH_HOST_RE = re.compile(r'^PROD_HOST = "172\.16\.10\.177"[ \t]*(?=\r?$)', re.M)
+_DASH_URL_RE = re.compile(r'^PROD_BASE_URL = f"https://\{PROD_HOST\}:666"[ \t]*(?=\r?$)', re.M)
+DEAD_END_HOST, DEAD_END_PORT = "127.0.0.1", 9          # 本機「丟棄」埠：沒人聽，連線立刻被拒；不出本機
+
+
+def rewrite_dashboard_prod(tree):
+    """預防（h11 必修）：儀表板在「交付資料夾沒設定成功」時會自己用 requests 打 PROD_BASE_URL（正式機）。
+    演練副本（安裝與包內容）一律把 PROD_HOST／PROD_BASE_URL 改成本機死路；兩行都要「恰好一處」，否則拒絕演練。⇒ 改寫的行數。"""
+    p = Path(tree) / "backend" / "tools" / "deploy_dashboard.py"
+    if not p.exists():          # 出貨包（git archive）把它 export-ignore：沒有這個檔＝沒有這條路（preflight 的程式碼位址檢查仍會擋別處的正式機位址）
+        return 0
+    text = p.read_bytes().decode("utf-8")
+    if len(_DASH_HOST_RE.findall(text)) != 1 or len(_DASH_URL_RE.findall(text)) != 1:
+        raise DrillError("deploy_dashboard.py 的 PROD_HOST／PROD_BASE_URL 不是各恰好一行 ⇒ 不改寫、不演練（不猜）")
+    text = _DASH_HOST_RE.sub(lambda _m: 'PROD_HOST = "%s"' % DEAD_END_HOST, text)
+    text = _DASH_URL_RE.sub(lambda _m: 'PROD_BASE_URL = f"http://{PROD_HOST}:%d"' % DEAD_END_PORT, text)
+    p.write_bytes(text.encode("utf-8"))
+    return 2
 
 
 def swap_pubkey(tree, pub_pem):
@@ -291,6 +317,28 @@ def blocked_reports(inst):
     return [(f.name, f.read_text(encoding="utf-8")) for f in sorted(d.glob("a1_report_blocked_*.md"))] if d.is_dir() else []
 
 
+_ROLLBACK_RE = re.compile(r'^powershell -ExecutionPolicy Bypass -File "(?P<script>[^"\r\n;|&<>`$%]+?rollback_update\.ps1)" -SnapshotTimestamp (?P<ts>[0-9A-Za-z_\-]+)$')
+
+
+def parse_rollback_command(cmd, inst):
+    """B5 執行前驗證（h11）：報告上的回復指令必須**逐字**符合 auto_apply.rollback_hint 的格式（單一 powershell -File 指令、沒有 ; | & > < ` $ % 或換行），
+    腳本路徑解析後必須就是演練安裝的 backend\\tools\\rollback_update.ps1。⇒ (argv, None) 或 (None, 拒絕原因)。
+    我們自己組 argv（不把報告文字交給 shell）；加 -Yes（人手在提示輸入 Y 的替身；不加會卡在確認）。不帶 -IncludeDatabase。"""
+    if not cmd:
+        return None, "報告裡沒有回復指令"
+    m = _ROLLBACK_RE.match(cmd.strip())
+    if not m:
+        return None, "回復指令格式不是預期的單一 powershell -File 指令，拒絕執行：%r" % cmd[:160]
+    script = Path(m.group("script"))
+    want = (Path(inst) / "backend" / "tools" / "rollback_update.ps1")
+    try:
+        if script.resolve() != want.resolve():
+            return None, "回復指令的腳本路徑不是演練安裝的 rollback_update.ps1，拒絕執行：%s" % script
+    except OSError as e:
+        return None, "回復指令的腳本路徑解析失敗：%s" % e
+    return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(want), "-SnapshotTimestamp", m.group("ts"), "-Yes"], None
+
+
 def extract_rollback_command(report_text):
     """從報告文字找「回復到套用前」的指令行（含 rollback_update.ps1 的那一行，去掉 markdown 的反引號）。找不到 ⇒ None。"""
     for line in report_text.splitlines():
@@ -330,8 +378,15 @@ def render_report(ctx):
     if ctx.get("package_scans"):
         L.append("- 靜態掃描（已發布的假 T87 包內容）：%s" % "；".join("%s：%d 檔 %d 項問題" % (k, v["files"], len(v["findings"])) for k, v in ctx["package_scans"].items()))
     if ctx.get("code_literals") is not None:
-        L.append("- 資訊：產品程式碼含正式機位址字面值的檔案 %d 個（%s）；這些是產品本來就有的外送路徑，演練把 Email／雲端／排程全關、位址只准本機，並由連線監看器兜底。" % (
-            len(ctx["code_literals"]), "、".join(ctx["code_literals"][:6]) + ("…" if len(ctx["code_literals"]) > 6 else "")))
+        L.append("- 程式碼裡的正式機位址（阻擋式；名單外一律不開跑）：已知且逐一說明的 %d 個——" % len(ctx["code_literals"]))
+        for rel, why in ctx["code_literals"]:
+            L.append("  - `%s`：%s" % (rel, why))
+    if ctx.get("dashboard_rewrite") == "absent":
+        L.append("- 儀表板 deploy_dashboard.py：出貨包（git archive）已 export-ignore，演練安裝裡沒有這個檔＝沒有它打正式機的路（改寫 0 行；名單外的正式機位址仍由程式碼位址檢查阻擋）。")
+    elif ctx.get("dashboard_rewrite"):
+        L.append("- 儀表板的 PROD_HOST／PROD_BASE_URL 已在演練副本（安裝與包內容）改寫成本機死路 127.0.0.1:9（預防：交付資料夾沒設定成功時它也只會打到死路）。")
+    if ctx.get("export_ignored_absent"):
+        L.append("- 隨 git archive 被 export-ignore 的正式機遠端腳本（%s）：安裝與包內容裡都不存在（已檢查）。" % "、".join(ctx["export_ignored_absent"]))
     L += ["", "## 與正式機不同的地方（偏離）", ""] + ["- " + d for d in DEVIATIONS]
     L += ["", "## 矩陣結果", "", "| # | 情境 | 預期 | 結果 | 秒 |", "|---|---|---|---|---|"]
     for r in ctx.get("results") or []:
@@ -429,7 +484,7 @@ class Drill:
         if rc != 0:
             raise DrillError("git archive 失敗：%s" % err.decode("utf-8", "replace")[:300])
         with tarfile.open(fileobj=io.BytesIO(data)) as t:
-            t.extractall(self.inst)
+            t.extractall(self.inst, filter="data")
         import product_select as PS
         PS.apply(self.inst, PS.load_product("full"))
         (self.inst / "backend" / ".deployed_commit.json").write_text(
@@ -455,12 +510,12 @@ class Drill:
         """演練 worktree 上的 drill-only commit（不推、不併）。⇒ commit。"""
         if self.fake_wt is None:
             self.fake_wt = self.base / "fake-t87"
-            self.git("worktree", "add", "--detach", str(self.fake_wt), self.commit)
-        self.git("checkout", "-q", "--detach", self.commit, cwd=self.fake_wt)
+            self.git("-c", "core.hooksPath=NUL", "worktree", "add", "--detach", str(self.fake_wt), self.commit)
+        self.git("-c", "core.hooksPath=NUL", "checkout", "-q", "--detach", self.commit, cwd=self.fake_wt)
         self.git("reset", "-q", "--hard", cwd=self.fake_wt)
         apply_fake_t87_edits(self.fake_wt, variant)
         self.git("add", "-A", cwd=self.fake_wt)
-        self.git("-c", "user.name=a1-drill", "-c", "user.email=a1-drill@example.invalid", "commit", "-q", "-m", "A1 drill fake T87 (%s; not pushed)" % variant, cwd=self.fake_wt)
+        self.git("-c", "core.hooksPath=NUL", "-c", "commit.gpgsign=false", "-c", "user.name=a1-drill", "-c", "user.email=a1-drill@example.invalid", "commit", "-q", "--no-verify", "-m", "A1 drill fake T87 (%s; not pushed)" % variant, cwd=self.fake_wt)
         return self.git("rev-parse", "HEAD", cwd=self.fake_wt)
 
     def make_package(self, commit, label, mutate=None):
@@ -471,7 +526,7 @@ class Drill:
         if rc != 0:
             raise DrillError("git archive 失敗：%s" % err.decode("utf-8", "replace")[:300])
         with tarfile.open(fileobj=io.BytesIO(data)) as t:
-            t.extractall(dest)
+            t.extractall(dest, filter="data")
         import product_select as PS
         PS.apply(dest, PS.load_product("full"))
         strip_dev_pubkey(dest)
@@ -491,7 +546,11 @@ class Drill:
 
     def scan_published(self, name):
         payload = self.droot / "packages" / name / "payload"
-        return PF.static_scan(payload, expect_root=self.inst)
+        res = PF.static_scan(payload, expect_root=self.inst)
+        cf, allowed = PF.code_literal_findings(payload)             # 包內容也要過阻擋式程式碼位址檢查（含 PROD_HOST 已改寫成死路）
+        res["findings"] = list(res["findings"]) + cf
+        res["code_literals_allowed"] = allowed
+        return res
 
     # -- 服務 -----------------------------------------------------------------
     def start_erp(self, wait=120):
@@ -517,6 +576,13 @@ class Drill:
             time.sleep(1)
         raise DrillError("演練儀表板 %d 秒內沒起來" % wait)
 
+    def safe_cleanup(self):
+        """刪演練目錄前再確認一次路徑（直接在 BASE_ROOT 底下、含時間戳、不含 V9.0）。"""
+        self.in_base(self.base)
+        if "v9.0" in str(self.base).lower():
+            raise PF.DrillAbort("演練目錄路徑含 V9.0，拒絕刪除：%s" % self.base)
+        return DMA.cleanup(self.base)
+
     def stop_services(self):
         try:
             return PF.stop_drill_processes(self.base, self.guard.records, self.guard.start_ticks, log=self.log)
@@ -524,7 +590,19 @@ class Drill:
             self.log("停服務出錯：%s" % e)
             return []
 
+    def in_base(self, p):
+        """防呆：任何刪除／鏡像（robocopy /MIR）的目標都必須在本次演練目錄底下，而且演練目錄本身直接在 BASE_ROOT 底下。"""
+        base = Path(self.base).resolve()
+        if base.parent != Path(BASE_ROOT).resolve() or base == Path(BASE_ROOT).resolve():
+            raise PF.DrillAbort("演練目錄不在 %s 的直接底下：%s（拒絕刪除／鏡像）" % (BASE_ROOT, self.base))
+        rp = Path(p).resolve()
+        if rp != base and base not in rp.parents:
+            raise PF.DrillAbort("拒絕刪除／鏡像演練目錄以外的路徑：%s" % p)
+        return rp
+
     def robocopy(self, src, dst):
+        self.in_base(src)
+        self.in_base(dst)
         rc, out = self.guard.run_tool(["robocopy", str(src), str(dst), "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:3", "/W:2"], timeout=1800)
         if rc >= 8:
             raise DrillError("robocopy 失敗 rc=%s：%s" % (rc, out[-300:]))
@@ -533,9 +611,10 @@ class Drill:
         self.stop_services()
         time.sleep(3)
         self.robocopy(self.snap, self.inst)
-        for d in (self.staging,):
-            DMA._rmtree(d)
+        self.in_base(self.staging)
+        DMA._rmtree(self.staging)
         for child in list(self.droot.iterdir()) if self.droot.exists() else []:
+            self.in_base(child)
             DMA._rmtree(child) if child.is_dir() else child.unlink()
 
     # -- 管理員、交付資料夾設定 --------------------------------------------------
@@ -614,31 +693,42 @@ class Drill:
             if any(s in wanted for s in {"good": ("G", "B1", "B2a", "B2b", "B3", "B6", "B7"), "b4": ("B4",), "b5": ("B5",)}[v]):
                 commits[v] = self.fake_commit(v)
         self.ctx["fake_commits"] = commits
-        with sync_playwright() as pw:
-            self.guard.ready("開瀏覽器")
-            browser = pw.chromium.launch(headless=True, args=["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
-                                                              "--disable-background-networking", "--disable-component-update", "--disable-sync"])
-            try:
-                for sid in wanted:
-                    self.monitor.check_clean()
-                    self.guard.ready("跑情境 " + sid)
-                    self.log("── 情境 %s ──" % sid)
-                    ctxb = browser.new_context()
-                    page = ctxb.new_page()
-                    try:
-                        rec = getattr(self, "scenario_" + sid)(page, commits)
-                    except PF.DrillAbort:
-                        raise
-                    except Exception as e:                                      # noqa: BLE001 — 一個情境壞了，記下、繼續下一個
-                        rec = {"id": sid, "title": sid, "expected": "（情境例外）", "checks": [], "observed": "", "passed": False,
-                               "error": "%s: %s\n%s" % (type(e).__name__, e, traceback.format_exc()[-600:])}
-                        self.log("情境 %s 例外：%s" % (sid, e))
-                    finally:
-                        ctxb.close()
-                    self.ctx["results"].append(rec)
-                    self.log("情境 %s：%s" % (sid, {True: "符合", False: "不符", None: "未判定"}[rec.get("passed")]))
-            finally:
-                browser.close()
+        self.guard.ready("開瀏覽器")
+        clean = PF.sanitized_env(self.port, self.dash)
+        saved = dict(os.environ)
+        os.environ.clear()                                                  # Playwright 的 node driver 只能繼承本行程環境：這是唯一不經 guard.launch 的子行程，
+        os.environ.update(clean)                                            # 所以先把本行程環境換成乾淨的（監看器把它當編排器的子孫一起看）；結束後還原
+        try:
+            with sync_playwright() as pw:
+                self._drive_browser(pw, wanted, commits, clean)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+
+    def _drive_browser(self, pw, wanted, commits, clean_env):
+        browser = pw.chromium.launch(headless=True, env=clean_env, args=["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
+                                                          "--disable-background-networking", "--disable-component-update", "--disable-sync"])
+        try:
+            for sid in wanted:
+                self.monitor.check_clean()
+                self.guard.ready("跑情境 " + sid)
+                self.log("── 情境 %s ──" % sid)
+                ctxb = browser.new_context()
+                page = ctxb.new_page()
+                try:
+                    rec = getattr(self, "scenario_" + sid)(page, commits)
+                except PF.DrillAbort:
+                    raise
+                except Exception as e:                                      # noqa: BLE001 — 一個情境壞了，記下、繼續下一個
+                    rec = {"id": sid, "title": sid, "expected": "（情境例外）", "checks": [], "observed": "", "passed": False,
+                           "error": "%s: %s\n%s" % (type(e).__name__, e, traceback.format_exc()[-600:])}
+                    self.log("情境 %s 例外：%s" % (sid, e))
+                finally:
+                    ctxb.close()
+                self.ctx["results"].append(rec)
+                self.log("情境 %s：%s" % (sid, {True: "符合", False: "不符", None: "未判定"}[rec.get("passed")]))
+        finally:
+            browser.close()
 
     def _good(self, label, mutate=None, pre=None):
         def build():
@@ -782,10 +872,13 @@ class Drill:
         text = mds[-1].read_text(encoding="utf-8") if mds else ""
         cmd = extract_rollback_command(text)
         chk.ok("報告列出回復到套用前的指令", bool(cmd), (cmd or "（報告裡找不到 rollback_update.ps1）")[:200])
+        argv, why = parse_rollback_command(cmd, self.inst)
         if cmd:
+            chk.ok("回復指令格式與路徑合格（單一指令、腳本在演練安裝內）才執行", argv is not None, why or "合格；自行組 argv 並加 -Yes，不交給 shell")
+        if argv:
             self.stop_services()
             time.sleep(3)
-            rc, out = self.guard.launch(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], self.inst, "執行報告上的回復指令", wait=True, timeout=1500)
+            rc, out = self.guard.launch(argv, self.inst, "執行報告上的回復指令", wait=True, timeout=1500)
             chk.ok("回復指令執行完成", rc == 0, "rc=%s %s" % (rc, out[-200:].replace("\n", " ")))
             time.sleep(5)
             self.guard.ready("回復後檢查")
@@ -850,8 +943,10 @@ class Drill:
             self.ctx["route_note"] = PF.route_note()
             self.log("防線 1（環境檢查）通過")
             self.build_install()
-            self.ctx["code_literals"] = PF.code_prod_literals(self.inst)
-            self.ctx["static_scan"] = self.guard.scan()
+            self.ctx["static_scan"] = self.guard.scan()                  # 內含阻擋式程式碼位址檢查（名單外的正式機位址 ⇒ DrillAbort）
+            self.ctx["code_literals"] = self.ctx["static_scan"].get("code_literals_allowed", [])
+            self.ctx["dashboard_rewrite"] = int((self.ctx.get("ps1_rewrite_lines") or {}).get("deploy_dashboard.py", 0)) or "absent"
+            self.ctx["export_ignored_absent"] = list(PF.EXPORT_IGNORED_ABSENT)
             self.log("防線 2（靜態掃描）通過：%d 個設定檔" % self.ctx["static_scan"]["files"])
             if self.args.dry_build:
                 self.dry_build_extra()
@@ -902,12 +997,13 @@ class Drill:
             if self.fake_wt is not None:
                 try:
                     self.git("worktree", "remove", "--force", str(self.fake_wt))
+                    self.git("worktree", "prune")
                 except Exception as e:                                  # noqa: BLE001
                     self.log("移除 worktree 失敗：%s" % e)
             if self.args.keep:
                 self.ctx["cleanup"] = "--keep：演練目錄保留在 %s" % self.base
             else:
-                self.ctx["cleanup"] = "停掉演練程序 %s；演練目錄 %s" % (killed, DMA.cleanup(self.base))
+                self.ctx["cleanup"] = "停掉演練程序 %s；演練目錄 %s" % (killed, self.safe_cleanup())
             self.ctx["exit_code"] = exit_code(self.ctx)
             (self.reports / "DRILL-REPORT.md").write_text(render_report(self.ctx), encoding="utf-8")
             (self.reports / "drill.json").write_text(json.dumps(self.ctx, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
