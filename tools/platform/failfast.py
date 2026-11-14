@@ -17,6 +17,9 @@
                                耗時來源＝gate_file_seconds.json（種子）被 full_results/file_seconds.json（累積實測）蓋過；
                                MOTRIX_GATE_RECORD=1（預設關；modtest --full 的全閘門會帶）時，controller 在 sessionfinish 把這輪各檔耗時併進累積檔。只改順序，題集合不變。
 
+  MOTRIX_DEADLINE_AT=<epoch 秒>  牆鐘上限（T87 quick）：到點就像 fail-fast 一樣停（同一套 xdist 停止機制），不看有沒有紅；不設＝沒有這條。
+                               MOTRIX_DEADLINE_SEEN=<路徑>：sessionfinish 寫 {"seen": [有開跑的檔], "deadline_hit": bool}——呼叫端用它列出「沒跑到」的檔。
+
 ## 不吞資訊、不放水（反向控制見 backend/tests/platform/test_failfast_2026_10_02.py）
 - 停止時照樣印紅清單、fail_stream 照樣寫 summary（帶 `aborted_by: failfast`，**不是** aborted——紅是真的紅）；
 - **exit code 一律 1（測試失敗）**：xdist 的 shouldstop 預設會變成 INTERRUPTED(2)，那會被 fail_stream／建包當成「外部中斷」；這裡在 sessionfinish 改回 1。
@@ -201,6 +204,8 @@ class FailFast:
         self.quiet = float(os.environ.get(QUIET_ENV, "4") or 0) * 60.0
         self.flakes = registered_flakes() if self.enabled else set()
         self.reds, self.last_red = set(), None
+        self.deadline = float(os.environ.get("MOTRIX_DEADLINE_AT", "0") or 0)
+        self.seen, self.deadline_hit = set(), False
         self.reason = ""
         self.session = None
         self.prio = None
@@ -223,14 +228,14 @@ class FailFast:
     def pytest_sessionstart(self, session):
         self.session = session
 
-    def _stop(self, why):
+    def _stop(self, why, tag="failfast"):
         if self.reason:
             return
         self.reason = why
         self.config._failfast_reason = why
         try:
             tr = self.config.pluginmanager.get_plugin("terminalreporter")
-            line = "FAIL-FAST: %s ⇒ 停止本段（未登記的紅 %d 筆；已跑的紅清單與 summary 照常輸出）" % (why, len(self.reds))
+            line = "%s: %s ⇒ 停止本段（未登記的紅 %d 筆；已跑的紅清單與 summary 照常輸出）" % ("DEADLINE" if tag == "deadline" else "FAIL-FAST", why, len(self.reds))
             (tr.write_line(line) if tr else print(line, flush=True))
         except Exception:                                       # noqa: BLE001
             pass
@@ -240,9 +245,9 @@ class FailFast:
             pass
         ds = self.config.pluginmanager.get_plugin("dsession")
         if ds is not None:
-            ds.shouldstop = "failfast: " + why                   # xdist controller：收尾並關掉 worker
+            ds.shouldstop = tag + ": " + why                     # xdist controller：收尾並關掉 worker
         elif self.session is not None:
-            self.session.shouldfail = "failfast: " + why         # 單程序：pytest 在下一題前停
+            self.session.shouldfail = tag + ": " + why           # 單程序：pytest 在下一題前停
 
     def _check(self):
         if not self.enabled or self.reason or not self.reds:
@@ -253,6 +258,14 @@ class FailFast:
             self._stop("第一個紅之後已 %.1f 分鐘沒有新的紅" % (self.quiet / 60.0))
 
     def pytest_runtest_logreport(self, report):
+        if self.deadline:
+            try:
+                self.seen.add(_norm(report.nodeid.split("::", 1)[0]))
+                if not self.reason and time.time() >= self.deadline:
+                    self.deadline_hit = True
+                    self._stop("牆鐘預算到了", tag="deadline")
+            except Exception:                                   # noqa: BLE001
+                pass
         if not self.enabled:
             return
         try:
@@ -296,6 +309,12 @@ class FailFast:
     @pytest.hookimpl(trylast=True)
     def pytest_sessionfinish(self, session, exitstatus):
         self._save_seconds()
+        sp = os.environ.get("MOTRIX_DEADLINE_SEEN")
+        if sp and self.deadline:
+            try:
+                Path(sp).write_text(json.dumps({"seen": sorted(self.seen), "deadline_hit": self.deadline_hit}, ensure_ascii=False), encoding="utf-8")
+            except OSError:
+                pass
         try:
             os.remove(self.stopfile)
         except OSError:
