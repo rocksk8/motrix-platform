@@ -291,7 +291,7 @@ def test_analytics_copy_and_l1_private_helpers_agree():
         assert T._amount_unknown(pi) == R._amount_unknown(pi), pi
 
 
-def test_l1_public_interface_has_no_new_names():
+def test_public_interface_of_l1_has_no_new_names():
     """新輔助函式不進 L1 公開介面（否則要升核心次版號、重錄快照）。"""
     from helpers import tax_calc as T
     assert not [n for n in dir(T) if n in ("parse_money", "money", "MONEY_BAD", "amount_unknown")]
