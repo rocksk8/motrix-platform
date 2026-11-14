@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1731,
+  "tests": 1732,
   "unmapped": 9,
   "kinds": {
    "api": 957,
-   "e2e": 406,
+   "e2e": 407,
    "audit": 217,
    "unit": 151
   },
@@ -38019,6 +38019,27 @@
     ],
     "page": [
      "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_role_label_and_permmatrix_denial_2026_11_14.py": {
+   "kind": "e2e",
+   "units": [
+    "mod:permmatrix/api",
+    "page:pages/online-stats.html",
+    "page:pages/permission-matrix.html"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "page": [
+     "frontend/pages/online-stats.html",
+     "frontend/pages/permission-matrix.html"
+    ],
+    "path": [
+     "frontend/pages/online-stats.html",
+     "frontend/pages/permission-matrix.html"
     ]
    }
   },

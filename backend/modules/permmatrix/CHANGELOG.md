@@ -1,11 +1,12 @@
 # 權限矩陣 更新紀錄
 
+## (next) — 2026-11-14（train/t86-int；整合者：h3 複測補修併入（非最高管理者的拒絕畫面））
+- 前端（只改顯示；API、權限鍵不變）：`permission-matrix.html` 對非最高管理者改為與其他「僅限最高管理者」頁同一張拒絕畫面（「這一頁僅限最高管理者使用」），不再顯示頁面外框加「僅最高管理者可執行此操作」錯誤，也不再送 `/api/permmatrix/*` 請求。頁面本體包進 `<template x-if="isSuper">`。
+- 測試：`tests/test_e2e_role_label_and_permmatrix_denial_2026_11_14.py`。
+
 ## 1.2.2 — 2026-11-14（feat/t86-permmatrix-unitlabel-h12；T86 F3：角色與功能的群組標題顯示正式名稱）
 - 修正（只改顯示；API 欄位、權限鍵、資料庫值不變）：「角色與功能」的每個群組標題原本都顯示「（未命名功能）」——`unitLabel` 用功能鍵對照表查單元鍵（case／crm／payroll／supply）而查不到。改取各單元宣告檔（module.json）的 `name`（案件、業務開發、薪資獎金、採購・庫存・出貨）；真的沒有宣告名稱時才退回舊的備援。
 - 測試：`tests/test_permmatrix_unit_labels_2026_11_14.py`（真實載入的單元：每個群組標題都不是「未命名」且等於宣告檔名稱；個人有效權限同；查不到名稱的備援不變）。
-- **（併入）(next) — 2026-11-14（fix/role-raw-code-permmatrix-denial-t86-h9；T86 h3 複測：非最高管理者的拒絕畫面）**
-- 前端（只改顯示；API、權限鍵不變）：`permission-matrix.html` 對非最高管理者改為與其他「僅限最高管理者」頁同一張拒絕畫面（「這一頁僅限最高管理者使用」），不再顯示頁面外框加「僅最高管理者可執行此操作」錯誤，也不再送 `/api/permmatrix/*` 請求。頁面本體包進 `<template x-if="isSuper">`。
-- 測試：`tests/test_e2e_role_label_and_permmatrix_denial_2026_11_14.py`。
 
 ## 1.2.1 — 2026-11-14（train/t86-int；整合者：T86 文字最後一輪）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：權限勾選矩陣的顯示文字（復原、原因、無變化等）隨最後一輪用語統一；此條補寫於 T86 整合最後一次合併之後。

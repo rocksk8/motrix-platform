@@ -23454,6 +23454,7 @@
     "js:static/motrix-error.js",
     "js:static/notif.js",
     "js:static/org-gaps.js",
+    "js:static/role-label.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
@@ -25425,6 +25426,7 @@
     "js:static/auth-guard.js",
     "js:static/motrix-error.js",
     "js:static/notif.js",
+    "js:static/role-label.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
