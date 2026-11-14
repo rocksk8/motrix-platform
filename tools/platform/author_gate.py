@@ -8,10 +8,11 @@
   python tools/platform/author_gate.py [--base <ref>] [--head HEAD] [--workers 2] [--budget-min 12] [--json-out <路徑>]
                                        [--dry-run] [--skip-e2e] [--quick] [--known-red <json>]
   --quick：5 分鐘內的快速版（T87 A2；預設預算 5 分鐘，--budget-min 可改）。依優先層選題（tools/platform/quick_select.py）：
-           T0 本分支改動的測試 → T1 被 diff 觸發的整合守門組（preflight_guards.json 的 watch；太大的組列為未跑）→
-           T2 diff 刪掉的字面值反查測試（舊文案／舊結構留在測試裡＝最常見的過期斷言）→ T3 檔名樣式守門（含 text_anchor）→
-           T4 改動模組自己的測試／頁面關聯測試（預算不夠時只砍這層）。不含 A1（整個 tests/platform、工具演練）。
-           砍掉或整組略過的每一項都印成「未跑」並寫進結果檔 quick_skipped——**未跑不是通過**；輸出與結果檔都標 quick，整包由階段測試涵蓋。
+           必跑（選題時不砍）：T0 本分支改動的測試 → T1 被 diff 觸發的整合守門組（太大的組列為未跑）→ T2 diff 刪掉的字面值反查測試。
+           預算內填充：T4 改動模組自己的測試／頁面關聯測試 → T4 的 e2e（打到頁面）→ T3 檔名樣式守門（最低優先；quick 收窄成真正的守門、由便宜到貴取樣）。
+           **e2e 與 T3 都計入預算**（e2e 單行程序列計價）。執行分三段（一般測試 → e2e → 樣式守門）共用一個**牆鐘上限**：每段起跑前先看剩餘時間，
+           段內由 failfast 外掛的 MOTRIX_DEADLINE_AT 到點收工，卡住的題由硬逾時殺行程樹——沒跑到的檔一律印成「未跑」。不含 A1（整個 tests/platform、工具演練）。
+           砍掉、整組略過、到點沒跑的每一項都印成「未跑」並寫進結果檔 quick_skipped——**未跑不是通過**；結果檔另有 deadline_hit。輸出與結果檔都標 quick，整包由階段測試涵蓋。
   python tools/platform/author_gate.py replay [--cases <json>] [--run] [--case <名稱> ...]
 
 選題（去重取聯集）：
@@ -510,10 +511,10 @@ def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2
             continue
         rel = strip_backend(files)
         if st["name"] == "e2e":
-            cmd = [py, "-m", "pytest", *rel, "-q", "-rfE", "--tb=short", "-m", "e2e", "-p", "no:cacheprovider", "--basetemp=%s-e2e" % basetemp]
+            cmd = [py, "-m", "pytest", *rel, "-q", "-rfE", "--tb=short", "-m", "e2e", "-p", "no:cacheprovider", "-p", "failfast", "--basetemp=%s-e2e" % basetemp]
         else:
             nodes = [g for g in guard_nodes if g.split("::", 1)[0] not in set(rel)] if st["name"] == "high" else []
-            cmd = [py, "-m", "pytest", *rel, *nodes, "-q", "-rfE", "--tb=short", "-m", "not e2e", "-p", "no:cacheprovider", "--basetemp=%s-%s" % (basetemp, st["name"])]
+            cmd = [py, "-m", "pytest", *rel, *nodes, "-q", "-rfE", "--tb=short", "-m", "not e2e", "-p", "no:cacheprovider", "-p", "failfast", "--basetemp=%s-%s" % (basetemp, st["name"])]
             if workers > 1:
                 cmd += ["-n", str(workers)]
         seen_path = "%s-%s.seen.json" % (basetemp, st["name"])
@@ -521,7 +522,9 @@ def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2
             os.remove(seen_path)
         except OSError:
             pass
-        e2 = dict(env, MOTRIX_DEADLINE_AT="%.3f" % deadline_at, MOTRIX_DEADLINE_SEEN=seen_path)
+        # -p failfast＝牆鐘上限的外掛（要在 PYTHONPATH 上）；quick 不開「紅了就停」（MOTRIX_FAILFAST=0）：要列出全部的紅，時間由牆鐘管
+        e2 = dict(env, MOTRIX_DEADLINE_AT="%.3f" % deadline_at, MOTRIX_DEADLINE_SEEN=seen_path, MOTRIX_FAILFAST="0", MOTRIX_FAILFIRST="",
+                  PYTHONPATH=os.pathsep.join([str(HERE)] + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else [])))
         print("[pytest %s] %d 檔（剩餘預算 %.0f 秒）" % (st["name"], len(files), remaining))
         t1 = time.time()
         rc, out = run_pytest(cmd, repo / "backend", e2, hard_timeout=remaining + 90)
@@ -566,12 +569,12 @@ def main(argv=None):
     ap.add_argument("--base")
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--workers", type=int, default=2, help="pytest -n（預設 2＝全機測試名額；1＝不用 -n）")
-    ap.add_argument("--budget-min", type=int, default=None, help="預算分鐘（預設：完整版 12、--quick 5）。完整版只警告；--quick 只砍最低優先層 T4，並把被砍的列為「未跑」")
+    ap.add_argument("--budget-min", type=int, default=None, help="預算分鐘（預設：完整版 12、--quick 5）。完整版只警告；--quick 同時是選題預算與牆鐘上限，沒跑到的列為「未跑」")
     ap.add_argument("--json-out")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-e2e", action="store_true")
     ap.add_argument("--full-floor", action="store_true", help="連建包底板的 F0b／F0c／F0d（global_tests、unmapped、掃目錄型）也跑；預設不含")
-    ap.add_argument("--quick", action="store_true", help="快速版（5 分鐘內，T87 A2）：依優先層選題（改動的測試→被觸發的整合守門組→刪掉字面值反查→樣式守門→模組自己的測試），預算只砍最低層，砍掉的列為「未跑」；不含 A1；整包由階段測試涵蓋")
+    ap.add_argument("--quick", action="store_true", help="快速版（5 分鐘內，T87 A2）：依優先層選題（改動的測試→被觸發的整合守門組→刪掉字面值反查→樣式守門→模組自己的測試），預算管選題也管執行（牆鐘上限），沒跑到的列為「未跑」；不含 A1；整包由階段測試涵蓋")
     ap.add_argument("--known-red", help="已登記的既有紅（JSON：{\"nodeids\": [...]}）；只准縮短，列出但不計入")
     ap.add_argument("--repo", default=str(REPO))
     a = ap.parse_args(argv)
@@ -637,7 +640,7 @@ def main(argv=None):
             if budget_min * 60 < 30:
                 print("作者閘門：--budget-min 太小（至少半分鐘）")
                 return 2
-            agg = run_quick_stages(sel, repo, py, dict(env, MOTRIX_FAILFIRST=""), basetemp, workers, t0 + budget_min * 60, a.skip_e2e, parse_failures)
+            agg = run_quick_stages(sel, repo, py, env, basetemp, workers, t0 + budget_min * 60, a.skip_e2e, parse_failures)
             counts, fails, stopped, e2e = agg["counts"], agg["fails"], agg["stopped"], agg["e2e"]
             sel["quick_skipped"] = list(sel.get("quick_skipped") or []) + agg["unrun"]
             sel["deadline_hit"] = agg["deadline_hit"]

@@ -39,6 +39,7 @@ SOURCE_PREFIXES = ("backend/", "frontend/", "tools/", "docs/")
 TEST_PATHSPECS = (":(glob)backend/tests/**/*.py", ":(glob)backend/core/tests/**/*.py", ":(glob)backend/modules/*/tests/**/*.py")
 GENERIC_NAMES = frozenset({"index.html", "__init__.py", "module.json", "main.py", "common.js", "style.css", "conftest.py", "config.py",
                            "db.py", "auth.py", "utils.py", "helpers.py", "api.py", "routes.py", "models.py"})
+T2_SHARE = 0.6                       # 刪掉字面值反查最多佔預算的幾成（其餘留給 T4／T3）
 SECONDS_PER_TEST = 0.75                # 與 author_gate 同
 
 _CJK_RUN = re.compile(r"[㐀-鿿]{2,}")
@@ -524,7 +525,7 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
             skipped.append({"tier": "T2", "item": "字面值 %r" % tok[:30], "reason": "命中 %d 檔、太通用，選了 %d 檔，其餘 %d 檔未選題（未跑）" % (total, n, total - n)})
     lit_hits, helper_skips = split_helper_hits(lit_hits, repo, ref, grep_fn, tree_files)
     skipped += helper_skips
-    t2_files = sorted(lit_hits)
+    t2_files = sorted(lit_hits, key=lambda f: (-len(lit_hits[f]), seconds_fn(f), f))     # 被越多個被刪字面值同時命中的越前面，同分便宜的先（T2 依預算份額取樣）
     t2_why = {f: "刪掉的字面值 " + "、".join(repr(t) for t in lit_hits[f][:2]) for f in t2_files}
 
     # T4：①呼叫端給的（改動模組自己的測試、頁面關聯）②引用改動頁面／js／工具檔名的測試 ③打改動路由的測試；e2e 一律排最後
@@ -567,7 +568,7 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
             seen.add(f)
             keep.append(f)
         tiers[name] = {"files": keep, "why": {f: why.get(f, "") for f in keep}}
-    must = [f for n in ("T0", "T1", "T2") for f in tiers[n]["files"]]
+    must = [f for n in ("T0", "T1") for f in tiers[n]["files"]]
     must_non = [f for f in must if not is_e2e(f)]
     must_e2e = [f for f in must if is_e2e(f)]
 
@@ -589,6 +590,21 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
         skipped.append({"tier": tier, "item": f, "reason": "超過 %.0f 分鐘預算（未跑）" % (budget_s / 60)})
         return False
 
+    # T2（刪掉字面值反查）最有價值但可能很大（一個通用字面值就選 10 檔）：只取預算的 T2_SHARE 份額，依「被幾個字面值命中、便宜」的順序取樣，其餘列未跑
+    t2_run, t2_limit = [], budget_s * T2_SHARE
+    for f in tiers["T2"]["files"]:
+        e2e = is_e2e(f)
+        add = seconds_fn(f) if e2e else estimate_seconds([f], seconds_fn, workers)
+        if spent + add <= max(t2_limit, est_must):
+            (run_e2e if e2e else run_non).append(f)
+            spent += add
+            t2_run.append(f)
+        else:
+            skipped.append({"tier": "T2", "item": f, "reason": "T2 取樣：超過 T2 的預算份額（%.0f%%）（未跑）" % (T2_SHARE * 100)})
+    tiers["T2"]["run"] = t2_run
+    must_non = must_non + [f for f in t2_run if not is_e2e(f)]
+    must_e2e = must_e2e + [f for f in t2_run if is_e2e(f)]
+
     # 預算內的填充順序：T4 的一般測試 → T4 的 e2e（打到頁面）→ T3 樣式守門（最低優先；便宜的先）
     t4_run = [f for f in tiers["T4"]["files"] if not is_e2e(f) and take(f, "T4", "")]
     t4_run += [f for f in tiers["T4"]["files"] if is_e2e(f) and take(f, "T4", "")]
@@ -600,7 +616,7 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
     files = stage_high + stage_e2e + t3_run
     over = est_must > budget_s
     if over:
-        notes.append("T0–T2 必跑部分預估 %.1f 分鐘已超過預算 %.0f 分鐘（必跑層不在選題時砍；改由牆鐘上限到點中止、未跑的列出）" % (est_must / 60, budget_s / 60))
+        notes.append("T0–T1 必跑部分預估 %.1f 分鐘已超過預算 %.0f 分鐘（必跑層不在選題時砍；改由牆鐘上限到點中止、未跑的列出）" % (est_must / 60, budget_s / 60))
     return {"tiers": tiers, "files": files, "nodes": t1_nodes, "skipped": skipped, "notes": notes, "estimate_s": spent, "must_estimate_s": est_must,
             "literals": len(lits), "over_budget": over, "routes": r_paths,
             "stages": [{"name": "high", "files": stage_high}, {"name": "e2e", "files": stage_e2e}, {"name": "guards", "files": t3_run}]}
@@ -613,7 +629,7 @@ def format_plan(plan):
         n_run = len(t.get("run", t["files"]))
         lines.append("  %s %s：%d 檔%s" % (name, TIER_NAMES[name], n_run, "" if n_run == len(t["files"]) else "（選 %d、預算內只跑 %d）" % (len(t["files"]), n_run)))
     if plan.get("over_budget"):
-        lines.append("  ⚠ 超過預算：必跑的 T0–T2 預估 %.1f 分鐘（選題時不砍；由牆鐘上限到點中止，沒跑到的列為未跑）" % (plan["must_estimate_s"] / 60))
+        lines.append("  ⚠ 超過預算：必跑的 T0–T1 預估 %.1f 分鐘（選題時不砍；由牆鐘上限到點中止，沒跑到的列為未跑）" % (plan["must_estimate_s"] / 60))
     if plan["skipped"]:
         lines.append("  ⚠ 未跑（不是通過）%d 項：" % len(plan["skipped"]))
         for s in plan["skipped"][:12]:
