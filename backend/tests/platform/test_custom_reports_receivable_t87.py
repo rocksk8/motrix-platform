@@ -268,6 +268,13 @@ def test_row_scope_is_applied_to_every_query_and_fails_closed_when_unregistered(
     assert row_access.filter_sql("receivable", {"id": 1, "role": "finance", "modules": "[]"}, scope="read")[0] == ""
 
 
+def test_receivable_is_listed_after_the_table_sources_whatever_the_module_load_order(client, make_user, world):
+    """頁面預設選清單第一個：應收帳款不能因為 analytics 比 case 先載入就排到最前面。"""
+    sa = _login(client, make_user, "ar_ord", role="superadmin")
+    ids = [s["id"] for s in client.get(BASE + "/sources", headers=sa).json()["sources"]]
+    assert ids[-1] == "receivable" and ids[0] == "quotation"
+
+
 def test_catalog_registration_is_valid_and_amounts_are_in_the_field_catalog():
     s = RC.get_source("receivable")
     assert s and s["label"] == "應收帳款" and s["table"] == "receivable_items" and callable(s["gate"])

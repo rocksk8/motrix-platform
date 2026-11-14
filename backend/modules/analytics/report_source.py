@@ -117,7 +117,7 @@ def register() -> list:
         _f("band", "帳齡區間", "enum", filter=True, group=True, enum=_band_options),
     ]
     return _RC.register_source(SOURCE_ID, OWNER, {
-        "label": "應收帳款", "table": TABLE, "modules": list(MODULES), "gate": _gate, "connect": _materialize, "execute": _execute,
+        "label": "應收帳款", "table": TABLE, "modules": list(MODULES), "order": 100, "gate": _gate, "connect": _materialize, "execute": _execute,
         "desc": "與營運報表的應收帳齡同一份資料：每一個請款期別一列（含已收）；帳齡以報價日起算，已收的沒有帳齡。",
         "rowAccess": {"kind": "receivable", "scope": "read"}, "exprs": (), "fields": fields,
         "defaultFilters": [{"field": "status", "op": "eq", "value": "未收"}],
