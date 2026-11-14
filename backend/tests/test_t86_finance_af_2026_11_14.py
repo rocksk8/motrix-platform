@@ -187,3 +187,57 @@ def test_f2_each_of_the_four_panes_carries_the_notice_and_the_css_hides_the_rest
     assert ".cm-pane-blocked > :not(.cm-blocked) { display:none !important; }" in css
     core = CORE.read_text(encoding="utf-8")
     assert core.index("this._notePartAccess(parts)") < core.index("this.loadDispatches(quoteNo, parts.dispatches)")
+
+
+# ───────────── e2e ─────────────
+from tests._e2e_login import inject_login  # noqa: E402
+
+
+def _open_home(live_server, e2e_browser, u):
+    page = e2e_browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
+    seen = []
+    page.on("request", lambda r: seen.append(r.url) if "/api/daily-tasks" in r.url else None)
+    inject_login(page, live_server, u[0], u[1])
+    page.goto(f"{live_server}/index.html")
+    page.wait_for_function("() => { try { const d = Alpine.$data(document.body); return d.statsLoaded === true && !d.loading } catch (e) { return false } }", timeout=20000)
+    page.wait_for_timeout(1000)
+    return page, seen
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("mods,n", [(["cashier"], 0), (["cashier", "case_manage"], 1)])
+def test_e2e_f1_home_sends_daily_tasks_request_only_when_the_account_has_the_module(live_server, make_user, e2e_browser, mods, n):
+    u = make_user(username=f"af_e2e_fin{n}", role="finance", modules=mods)
+    _page, seen = _open_home(live_server, e2e_browser, u)
+    assert len(seen) == n, seen
+
+
+@pytest.mark.e2e
+def test_e2e_f2_a_blocked_pane_shows_only_the_plain_notice(live_server, make_user, e2e_browser):
+    """案件頁本身要 case_manage 才進得去，所以這題用「有 case_manage 才能開頁」的帳號開案件，
+    再把這個帳號的模組表改成沒有 case_manage、並餵入被擋的整包段落，驗畫面：白話說明出現、空清單被藏起來。"""
+    u = make_user(username="af_e2e_blk", role="finance", modules=["cashier", "case_manage"])
+    _seed_case(make_user)
+    page = e2e_browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
+    inject_login(page, live_server, u[0], u[1])
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function("() => { try { const d = Alpine.$data(document.body); return d.session && d.session.token && !d.loading && d.caseCounts } catch (e) { return false } }", timeout=20000)
+    page.evaluate("(no) => Alpine.$data(document.body).selectCase(no)", NO)
+    page.wait_for_selector("[data-testid=cm-blocked-feed]", state="attached", timeout=20000)
+    # 有 case_manage（真實情況）：四塊都沒被擋、說明不出現
+    for tab in ("dispatch", "shipping", "completion", "feed"):
+        assert page.locator(f"[data-testid=cm-blocked-{tab}]").is_visible() is False, tab
+    denied = {"ok": False, "status": 404, "detail": "報價單 X 不存在"}
+    page.evaluate("""(d) => { const a = Alpine.$data(document.body)
+        a.session = { ...a.session, modules: ['cashier'] }
+        a._notePartAccess({ dispatches: { ok: false, status: 403, detail: '沒有權限' }, shippingNotes: d, completionNotes: d, updates: d }) }""", denied)
+    for tab in ("dispatch", "shipping", "completion", "feed"):
+        page.evaluate("(t) => { Alpine.$data(document.body).activeTab = t }", tab)
+        page.wait_for_timeout(200)
+        box = page.locator(f"[data-testid=cm-blocked-{tab}]")
+        assert box.is_visible(), tab
+        assert "「案件管理」模組權限" in box.inner_text() and "不存在" not in box.inner_text()
+        # 同一個分頁裡其他子元素都被藏起來（沒有空清單的「尚無…」跟說明並排）
+        visible_siblings = page.evaluate(
+            "(t) => [...document.querySelector('[data-testid=cm-blocked-' + t + ']').parentElement.children].filter(e => !e.classList.contains('cm-blocked') && getComputedStyle(e).display !== 'none').length", tab)
+        assert visible_siblings == 0, (tab, visible_siblings)
