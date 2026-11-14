@@ -375,14 +375,14 @@ def register(S, _register_core):
         legacy_adapter=Adapter(tax_read, tax_write, tax_normalize), cross_check=tax_cross_check, external=True)
 
     _register_core(
-        "t100_export", "T100 傳票匯出科目",
+        "t100_export", "鼎新傳票匯出科目",
         [S("config", "json", copy.deepcopy(T100_DEFAULT_CONFIG), risk="money", loosen="both", summarize=t100_summarize,
-           question="匯出給會計師的傳票，各種金額要對應到哪些會計科目？", label="T100 匯出科目設定",
-           help="銷貨收入、銷項稅額、承攬商費用、手續費、銀行帳戶與料件分類對應的科目代號。實際操作入口仍在 T100 匯出設定頁。",
-           impact="只影響之後匯出的 T100 傳票；已經匯出的檔案不會改。科目代號不存在或已停用時系統會拒絕。",
+           question="匯出給會計師的傳票，各種金額要對應到哪些會計科目？", label="鼎新匯出科目設定",
+           help="銷貨收入、銷項稅額、承攬商費用、手續費、銀行帳戶與料件分類對應的科目代號。實際操作入口仍在 鼎新匯出設定頁。",
+           impact="只影響之後匯出的 鼎新傳票；已經匯出的檔案不會改。科目代號不存在或已停用時系統會拒絕。",
            risk_text="【高影響】科目代號打錯，匯出的傳票要到會計師匯入時才會發現；需第二位最高管理者核准，等待期滿才生效。",
-           impact_scope=_scope(["T100 傳票匯出檔"], "改變之後匯出傳票的科目對應；已匯出的檔案不改。", ["最高管理者", "財務"]))],
-        sensitive=True, risk="money", help="T100 傳票匯出的會計科目對應。實際操作入口仍在 T100 匯出設定頁。",
+           impact_scope=_scope(["鼎新傳票匯出檔"], "改變之後匯出傳票的科目對應；已匯出的檔案不改。", ["最高管理者", "財務"]))],
+        sensitive=True, risk="money", help="鼎新傳票匯出的會計科目對應。實際操作入口仍在 鼎新匯出設定頁。",
         legacy_adapter=Adapter(t100_read, t100_write, t100_normalize), cross_check=t100_cross_check, external=True)
 
     _register_core(

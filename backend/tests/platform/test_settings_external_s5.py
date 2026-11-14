@@ -33,7 +33,7 @@ def _raw(key):
 
 
 # ── 靜態：群組登記、預設值一致、舊鍵寫入者 ────────────────────────────────────────
-def test_four_external_groups_are_registered_external_and_loosen_both():
+def test_four_external_groups_are_registered_external_and_loosen_both(client):          # client：先啟動應用（群組在啟動時登記）
     gs = R.groups()
     for g in EXTERNAL:
         assert g in gs and gs[g]["external"] is True, g
@@ -115,12 +115,18 @@ def test_t100_put_with_unknown_account_code_is_rejected_400(client, make_user):
 
 
 def test_t100_second_pending_for_the_same_group_conflicts_unless_superseded(client, make_user):
+    """json 欄位（整份文件）：別人還沒到期的待生效申請不能被無聲蓋掉 ⇒ 409 pending_exists；`supersede=true` 才取代。同一個人自己再送＝取代自己的。"""
     h = _auth(client, make_user, "s5_sa_t100c")
-    _accounts("1101", "1102")
-    body = {"bankAccounts": [{"name": "A", "acctCode": "1101"}]}
-    assert client.put("/api/settings/t100-export-config", headers=h, json=body).status_code == 200
-    r2 = client.put("/api/settings/t100-export-config", headers=h, json={"bankAccounts": [{"name": "B", "acctCode": "1102"}]})
-    assert r2.status_code == 409, r2.text
+    h2 = _auth(client, make_user, "s5_sa_t100d")
+    _accounts("1101", "1102", "1103")
+    url = "/api/settings/t100-export-config"
+    assert client.put(url, headers=h, json={"bankAccounts": [{"name": "A", "acctCode": "1101"}]}).status_code == 200
+    r2 = client.put(url, headers=h2, json={"bankAccounts": [{"name": "B", "acctCode": "1102"}]})
+    assert r2.status_code == 409 and r2.json()["detail"]["code"] == "pending_exists", r2.text
+    r3 = client.put(url + "?supersede=true", headers=h2, json={"bankAccounts": [{"name": "B", "acctCode": "1102"}]})
+    assert r3.status_code == 200 and r3.json()["pending"], r3.text
+    r4 = client.put(url, headers=h2, json={"bankAccounts": [{"name": "C", "acctCode": "1103"}]})          # 自己再送 ⇒ 取代自己的
+    assert r4.status_code == 200, r4.text
 
 
 def test_t100_unchanged_put_creates_nothing(client, make_user):
@@ -170,7 +176,7 @@ def test_overhead_switch_without_migration_marker_is_refused_409(client, make_us
 # ── bonus_voucher：每格都驗證、只送有變的格 ──────────────────────────────────────────
 def test_bonus_put_validates_every_supplied_slot(client, make_user):
     h = _auth(client, make_user, "s5_sa_bonus")
-    r = client.put("/api/cases/voucher-accounts", headers=h, json={"expense": "9999999"})
+    r = client.put("/api/bonus/cases/voucher-accounts", headers=h, json={"expense": "9999999"})
     assert r.status_code == 400, r.text
     assert not _raw("bonus_case_voucher_expense_code") or _raw("bonus_case_voucher_expense_code") != "9999999"
 
@@ -270,3 +276,40 @@ def test_charity_basis_reads_the_registry_once(client, make_user, monkeypatch):
     monkeypatch.setattr(PG, "_basis", lambda: (calls.append(1), real())[1])
     PG.charity_basis()
     assert len(calls) == 1
+
+
+def test_external_group_puts_write_their_own_audit_row(client, make_user):
+    """稽核守門把這四支 PUT 列為 EXEMPT（稽核由 publish 在同交易寫入）——EXEMPT 只在「呼叫一次→audit_log 真的多一筆」成立時才可信。"""
+    h = _auth(client, make_user, "s5_sa_audit")
+    _accounts("1101")
+
+    def rows():
+        conn = db.get_db()
+        try:
+            return [r["action"] for r in conn.execute("SELECT action FROM audit_log WHERE action LIKE 'settings.%' ORDER BY id").fetchall()]
+        finally:
+            conn.close()
+    b = len(rows())
+    assert client.put("/api/settings/t100-export-config", headers=h, json={"bankAccounts": [{"name": "A", "acctCode": "1101"}]}).status_code == 200
+    got = rows()[b:]
+    assert any(a.startswith("settings.t100_export.") for a in got), got
+    b = len(rows())
+    cur = client.get("/api/legal-params/tax-rules", headers=h).json()["versions"]
+    new = [dict(v) for v in cur]
+    nv = json.loads(json.dumps(cur[-1]))
+    nv["version"], nv["effectiveFrom"] = "2099", "2099-01-01"
+    r = client.put("/api/legal-params/tax-rules", headers=h, json={"versions": new + [nv]})
+    assert r.status_code == 200 and r.json()["pending"], r.text
+    assert any(a.startswith("settings.tax_rules.") for a in rows()[b:])
+    b = len(rows())
+    assert client.put("/api/bonus/cases/voucher-accounts", headers=h, json={"expense": "1101"}).status_code == 200
+    assert any(a.startswith("settings.bonus_voucher.") for a in rows()[b:])
+    conn = db.get_db()
+    try:
+        X.raw_put(conn, "overhead_migration_done", {"doneAt": "2026-10-09T00:00:00", "by": "test"})
+        conn.commit()
+    finally:
+        conn.close()
+    b = len(rows())
+    assert client.put("/api/overhead/settings", headers=h, json={"ruleMode": "v2", "confirm": True}).status_code == 200
+    assert any(a.startswith("settings.overhead_basis.") for a in rows()[b:])
