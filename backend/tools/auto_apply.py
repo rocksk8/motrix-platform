@@ -943,7 +943,7 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
 
     pre = precheck(install_root, db)
     if not is_loopback_url(base_url):
-        pre = list(pre) + ["ERP 位址不是本機（%s）：事後驗證只准打本機" % base_url]
+        pre = list(pre) + ["系統位址不是本機（%s）：事後驗證只准打本機" % base_url]
     if pre:
         return blocked(["套用前預檢未通過，沒有開始套用："] + pre)
     expectations, exp_notes = load_expectations(os.path.join(staged, "payload"))

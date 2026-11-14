@@ -1260,20 +1260,24 @@ def test_rehearse_success_writes_no_blocked_report(env, monkeypatch):
 
 
 def test_apply_gate_refusals_after_the_rehearsal_write_blocked_reports(env, monkeypatch):
-    """預演之後、套用之前被擋（暫存包多檔、包被換過、ERP 位址不是本機）：都留報告與 apply_blocked，不發通知，預演不消耗。"""
+    """預演之後、套用之前被擋（暫存包多檔、包被換過、系統位址不是本機）：都留報告與 apply_blocked，不發通知，預演不消耗。"""
     notified = []
     monkeypatch.setattr(AA, "notify_result", lambda *a, **k: notified.append(1) or {"ok": True})
     _gate_env(env, monkeypatch)
     _fake_rehearse(monkeypatch)
     res = _rehearse_and_wait(env)
     monkeypatch.setenv("MOTRIX_DELIVERY_ERP_URL", "http://10.0.0.5:666")
-    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 409
+    r1 = _apply(env, rehearsalDigest=res["digest"])
+    assert r1.status_code == 409 and r1.json()["report"], "4xx 回應要帶回報告檔名，畫面才能顯示（h5 #2）"
+    assert "ERP" not in r1.json()["detail"].replace("MOTRIX_DELIVERY_ERP_URL", ""), "白話訊息不用系統名 ERP"
     staged = Path(dd._delivery_state["prepared"][env["name"]]["staged"])
     monkeypatch.delenv("MOTRIX_DELIVERY_ERP_URL")
     (staged / "payload" / "stray.db").write_bytes(b"x")
-    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 409
+    r2 = _apply(env, rehearsalDigest=res["digest"])
+    assert r2.status_code == 409 and r2.json()["report"] and r2.json()["report"] != r1.json()["report"]
+    assert (Path(dd.DELIVERY_INSTALL_ROOT) / "backend" / "logs" / r2.json()["report"]).exists()
     steps = [r["step"] for r in _audit_rows(dd.DELIVERY_INSTALL_ROOT) if r["event"] == "apply_blocked"]
-    assert steps == ["套用前檢查（ERP 位址）", "套用前檢查（暫存包完整性）"], steps
+    assert steps == ["套用前檢查（系統位址）", "套用前檢查（暫存包完整性）"], steps
     assert len(_blocked_files(dd.DELIVERY_INSTALL_ROOT)) == 2 and notified == []
 
 

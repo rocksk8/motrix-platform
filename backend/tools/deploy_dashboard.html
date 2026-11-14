@@ -222,7 +222,7 @@ function dlShow(id, text, show) {
   el.classList.toggle('hidden', !show);
 }
 const DL_OUTCOME = { succeeded: '成功', verify_failed: '已套用，事後驗證未通過或沒有完成', crashed: '程序中斷，狀態未知，請人工確認現況', failed: '失敗' };
-const DL_STATUS = { success: '成功', unhealthy_rolled_back: '健康檢查失敗，已回復到套用前', module_unhealthy_rolled_back: '模組載入失敗，已回復到套用前',
+const DL_STATUS = { success: '成功', unhealthy_rolled_back: '健康檢查失敗', module_unhealthy_rolled_back: '模組載入失敗',
                     migration_dryrun_failed: '資料庫遷移預檢失敗，沒有套用' };
 const DL_STATE = { applied: '新版已套用', restored: '已回復到套用前', restored_unhealthy: '已回復到套用前，但回復後服務仍不健康',
                    applied_no_restore: '新版已套用，沒有回復', not_applied: '沒有套用', restoring: '回復到套用前進行中' };
@@ -249,7 +249,7 @@ function dlLockText(lock) {
   if (lock.started_at) bits.push('開始於 ' + lock.started_at);
   if (lock.host) bits.push('主機 ' + lock.host);
   return '目前有套用或回復作業正在執行' + (bits.length ? '（' + bits.join('，') + '）' : '') +
-    '。請等它結束；若確定沒有人在執行，請洽技術人員確認。';
+    '。請待其結束；若確定沒有人在執行，請洽技術人員確認。';
 }
 function dlPackageLabel(p) {
   const m = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_([0-9a-f]+)_/.exec(p.name || '');
@@ -274,6 +274,7 @@ async function dlPollJson(url, isDone) {
     await dlSleep(2000);
     try {
       const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);       // 500／503 的 {detail} 不是狀態：算一次失敗，不當成已結束
       const s = await res.json();
       fails = 0;
       if (isDone(s)) return s;
@@ -366,7 +367,7 @@ async function dlRehearse() {
                                                         body: JSON.stringify({ name }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { out.textContent = '無法預演：' + (d.detail || res.status); return; }
-    const s = await dlPollJson('/api/delivery/rehearse/status?name=' + encodeURIComponent(name), x => !x.rehearsing);
+    const s = await dlPollJson('/api/delivery/rehearse/status?name=' + encodeURIComponent(name), x => x.rehearsing === false);
     if (!s) { out.textContent = '無法取得預演狀態，請重新整理本頁確認結果。'; return; }
     const r = s.result;
     if (!r) { out.textContent = '預演沒有結果，請重新預演。'; return; }
@@ -378,6 +379,7 @@ async function dlRehearse() {
     out.textContent = '預演通過（用時 ' + r.seconds + ' 秒，資料庫 ' + r.db_mb + ' MB）。\n' +
       (r.empty ? '預期資料庫沒有結構變更。' : '預期的資料庫變更：\n' + r.summary.map(x => '・' + x).join('\n')) +
       ((r.notes || []).length ? '\n注意：' + r.notes.join('；') : '');
+    dlResetConsent();               // 預演期間可能已先勾選：結果出來後要重新確認（先讀過預期的資料庫變更）
     dlRh.digest = r.digest;
     document.getElementById('dlApplyBtn').disabled = false;
   } finally { btn.disabled = false; }
@@ -389,7 +391,7 @@ function dlVerifyText(last) {
   return '\n事後驗證：\n' + (v.items || []).map(i => '・[' + (mark[i.severity] || '（未知：' + i.severity + '）') + '] ' + i.title +
     (i.detail ? '：' + i.detail : '')).join('\n') + ((v.warnings || []).length ? '\n警告：' + v.warnings.join('；') : '');
 }
-function dlResult(text, outcome) {
+function dlShowResult(text, outcome) {
   const el = document.getElementById('dlResult');
   el.setAttribute('data-outcome', outcome);
   dlShow('dlResult', text, true);
@@ -406,12 +408,12 @@ async function dlApply() {
     const res = await fetch('/api/delivery/apply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
     dlResetConsent();               // 密碼、驗證碼與勾選都只用一次
     const d = await res.json().catch(() => ({}));
-    if (!res.ok) { dlResult('沒有開始套用：' + (d.detail || res.status), 'failed'); return; }
+    if (!res.ok) { dlShowResult('沒有開始套用：' + (d.detail || res.status) + dlReportLine(d), 'failed'); return; }
     dlRh.digest = null;     // 預演是一次性的：套用一開始就作廢，再套用必須重新預演
     document.getElementById('dlRehearseText').textContent = '這次預演已經使用（一次性）。再套用請重新預演。';
-    dlResult('套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', 'running');
-    const s = await dlPollJson('/api/delivery/status', x => !x.running);
-    if (!s) { dlResult('無法取得套用狀態，請重新整理本頁確認結果。', 'unknown'); return; }
+    dlShowResult('套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', 'running');
+    const s = await dlPollJson('/api/delivery/status', x => x.running === false);
+    if (!s) { dlShowResult('無法取得套用狀態，請重新整理本頁確認結果。', 'unknown'); return; }
     const last = s.last || {};
     const head = last.outcome === 'succeeded' ? '成功：' : (last.outcome === 'verify_failed' ? '已套用，但事後驗證有項目未通過（系統不會自動回復到套用前，請依報告決定）：' : (last.outcome === 'crashed' ? '套用程序中斷，狀態未知，請人工確認現況：' : '失敗：'));
     const txt = head + dlDescribe(last, false) +
@@ -419,7 +421,7 @@ async function dlApply() {
       (last.downtime_seconds !== null && last.downtime_seconds !== undefined ? '\n實際無法連線的時間約 ' + last.downtime_seconds + ' 秒' : '') +
       ((last.problems || []).length ? '\n' + last.problems.join('\n') : '') + dlVerifyText(last) +
       (last.report && last.report.md ? '\n報告：' + last.report.md + '（回復到套用前的指令在報告的「後續處置」）' : '');
-    dlResult(txt, last.outcome || 'failed');
+    dlShowResult(txt, last.outcome || 'failed');
     dlRefresh();
   } finally { btn.disabled = dlRh.require && !dlRh.digest; }
 }

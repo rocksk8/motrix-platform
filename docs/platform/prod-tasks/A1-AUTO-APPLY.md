@@ -40,7 +40,7 @@
 | 已部署 commit | `.deployed_commit.json` 與包的 commit 一致 |
 | 包專屬項目 | 包內選用檔 `backend\a1_expectations.json`（格式見下） |
 
-事後驗證只打本機：ERP 位址（`MOTRIX_DELIVERY_ERP_URL`，預設 `https://127.0.0.1:666`）的主機不是 `127.0.0.1`／`localhost`／`::1` 就拒絕（驗證連線不驗憑證，不能指向別的主機）。**這個檢查在要求最高管理者密碼之前**：位址不是本機時，`/api/delivery/apply` 直接回 409，驗密碼的函式也自己再擋一次，密碼不會送出本機。
+事後驗證只打本機：系統位址（設定 `MOTRIX_DELIVERY_ERP_URL`，預設 `https://127.0.0.1:666`）的主機不是 `127.0.0.1`／`localhost`／`::1` 就拒絕（驗證連線不驗憑證，不能指向別的主機）。**這個檢查在要求最高管理者密碼之前**：位址不是本機時，`/api/delivery/apply` 直接回 409，驗密碼的函式也自己再擋一次，密碼不會送出本機。
 
 ## `a1_expectations.json`（包專屬驗證項，選用）
 
