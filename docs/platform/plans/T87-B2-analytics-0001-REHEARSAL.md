@@ -17,7 +17,7 @@
 ## 步驟與預期
 1. **預演前 `check`**（唯讀）。預期：`integrity_check=ok`；`module_schema_versions` **沒有 analytics 列**（其他模組列記下來，供前後比對）；兩新表**不存在**、新索引無；記下「既有表數」與 `sqlite_master` 物件數。
 2. **`apply`**。預期：印「apply 完成」（本機 dev 庫實測 5 ms；正式機以實際為準）。
-3. **預演後 `check`**。預期：`integrity_check=ok`；`analytics` 列＝`('analytics', 1, …)`；`custom_reports` 9 欄、`custom_report_shares` 5 欄，**皆 0 列**；2 個新索引存在；`sqlite_master` 物件數 **+4**（2 表＋2 索引）；既有表數、其他模組版號、核心 `schema_version` **前後相同**；DB 檔案大小幾乎不變。
+3. **預演後 `check`**。預期：`integrity_check=ok`；`analytics` 列＝`('analytics', 1, …)`；`custom_reports` 9 欄、`custom_report_shares` 5 欄，**皆 0 列**；2 個新索引存在；`sqlite_master` 物件數 **+6**（明細：表 `custom_reports`、`custom_report_shares`；明列索引 `idx_custom_reports_username`、`idx_custom_report_shares_user`；兩個 UNIQUE 約束自動產生的 `sqlite_autoindex_custom_reports_1`、`sqlite_autoindex_custom_report_shares_1`；沒有 trigger、沒有 view）。**例外**：若副本裡本來沒有 `sqlite_sequence` 表（沒有任何 AUTOINCREMENT 表才會發生，正式機有很多，預期已存在），第一次建 AUTOINCREMENT 表會連它一起建 ⇒ +7；`check` 會印出 `sqlite_sequence 存在` 供判讀；既有表數、其他模組版號、核心 `schema_version` **前後相同**；DB 檔案大小幾乎不變。
 4. **冪等**：再跑一次 `apply` → 再 `check`。預期：除 `analytics` 的 `applied_at` 時間更新外，其餘輸出與步驟 3 完全相同（兩表仍 0 列、物件數不變、integrity ok）。
 5. **回滾演練**：`rollback`（DROP 兩表、`analytics` 版號改 0）→ `check`。預期：`integrity_check=ok`；兩表與兩索引消失；`sqlite_master` 物件數回到步驟 1 的數字；其他列不變。
 6. 附註實際數字寫進預演紀錄（前後 `module_schema_versions` 全表、物件數、耗時、DB 大小）。
@@ -28,4 +28,4 @@
 - 若遷移途中失敗：啟動器把 analytics 標為未完成、模組下線、版號不前進，其他模組照常；下次啟動再試。
 
 ## 本機驗證（作者已做，非正式機預演）
-在 dev 庫備份副本上依序跑 check→apply→check→apply→check→rollback→check：全程 `integrity_check=ok`；`analytics` 0→1；新增 2 表 2 索引（物件數 446→452，179 張既有表不變）；第二次 apply 不變；rollback 後回到 446。
+在 dev 庫備份副本上依序跑 check→apply→check→apply→check→rollback→check：全程 `integrity_check=ok`；`analytics` 0→1；新增 2 表＋2 明列索引＋2 自動索引（物件數 446→452＝+6；dev 庫原本就有 `sqlite_sequence`；179 張既有表不變）；第二次 apply 不變；rollback 後回到 446。

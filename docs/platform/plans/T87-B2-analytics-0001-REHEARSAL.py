@@ -36,7 +36,10 @@ def check(db):
             n = c.execute("SELECT COUNT(*) FROM %s" % t).fetchone()[0] if ex else None
             cols = [r[1] for r in c.execute("PRAGMA table_info(%s)" % t)] if ex else []
             print("%-22s 存在=%s 列數=%s 欄=%s" % (t, ex, n, cols))
-        print("新索引：", [n for n in names if n in ("idx_custom_reports_username", "idx_custom_report_shares_user")])
+        want = ("custom_reports", "custom_report_shares", "idx_custom_reports_username", "idx_custom_report_shares_user",
+                "sqlite_autoindex_custom_reports_1", "sqlite_autoindex_custom_report_shares_1")
+        print("本遷移的 6 個物件（表2＋明列索引2＋UNIQUE 自動索引2）：", [n for n in want if n in names])
+        print("sqlite_sequence 存在 =", "sqlite_sequence" in names, "（不存在時，第一次建 AUTOINCREMENT 表會連它一起建 ⇒ 物件數多 1）")
         print("既有表（不含新表）數 =", len([r for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'") if r[0] not in NEW_TABLES]))
     finally:
         c.close()
