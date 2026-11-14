@@ -209,6 +209,7 @@
     .dc-badge--won  { background: #D1FAE5; color: #065F46; }
     .dc-badge--lost { background: #FEE2E2; color: #991B1B; }
     .dc-badge--hold { background: #F3F4F6; color: #374151; }
+    .dc-badge--unlinked { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
 
     /* ── Right panel ── */
     .dc-right {
@@ -576,7 +577,7 @@
     <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
             @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
       <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
-      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單／估價單</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small data-testid="dc-won-sub" x-text="wonUnlinkedCount > 0 ? wonUnlinkedCount + ' 件尚未連結單據' : '都已連結報價單／估價單'"></small></span>
     </button>
     <span class="dc-funnel__arrow" aria-hidden="true">→</span>
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
@@ -734,6 +735,10 @@
               <span class="dc-badge"
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
                 x-text="stLabel(c.status)"></span>
+              <span class="dc-badge dc-badge--unlinked" data-testid="card-unlinked" style="margin-left:4px"
+                    x-show="c.status==='成案' && !c.convertedQuoteNo">尚未連結單據</span>
+              <span class="dc-badge dc-badge--won" data-testid="card-linked-talk" style="margin-left:4px"
+                    x-show="c.status==='洽談中' && c.convertedQuoteNo">已連結報價單（洽談中）</span>
               <template x-if="c.pendingDelete">
                 <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
               </template>
@@ -880,6 +885,12 @@
                   <span class="dc-badge"
                     :class="selectedCase.status==='成案'?'dc-badge--won':selectedCase.status==='未成案'?'dc-badge--lost':selectedCase.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
                     x-text="stLabel(selectedCase.status)"></span>
+                  <span class="dc-badge dc-badge--unlinked" data-testid="detail-unlinked"
+                        x-show="selectedCase.status==='成案' && !selectedCase.convertedQuoteNo"
+                        title="按「轉建報價單／估價單」建立並連結">尚未連結單據</span>
+                  <span class="dc-badge dc-badge--won" data-testid="detail-linked-talk"
+                        x-show="selectedCase.status==='洽談中' && selectedCase.convertedQuoteNo"
+                        title="狀態回到洽談中，但單據連結仍保留；要解除請用「修改連結」">已連結報價單（洽談中）</span>
                   <span x-show="selectedCase.customerName" x-text="selectedCase.customerName"></span>
                   <span x-show="selectedCase.customerName" style="color:var(--border-light)">|</span>
                   <span x-text="'建立：' + (selectedCase.createdAt||'').slice(0,10)"></span>
@@ -912,8 +923,8 @@
               <template x-if="selectedCase.status === '洽談中'">
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-success btn-sm" @click="changeStatus('成案')">設為成案</button>
-                  <button class="btn btn-danger btn-sm"  @click="changeStatus('未成案')">設為未成案</button>
-                  <button class="btn btn-ghost btn-sm"   @click="changeStatus('暫擱置')">暫擱置</button>
+                  <button class="btn btn-danger btn-sm"  @click="askStatus('未成案')">設為未成案</button>
+                  <button class="btn btn-ghost btn-sm"   @click="askStatus('暫擱置')">暫擱置</button>
                 </div>
               </template>
               <template x-if="selectedCase.status === '成案' && !selectedCase.convertedQuoteNo">
@@ -923,7 +934,7 @@
                 </button>
               </template>
               <template x-if="selectedCase.status !== '洽談中'">
-                <button class="btn btn-ghost btn-sm" @click="changeStatus('洽談中')">重回洽談中</button>
+                <button class="btn btn-ghost btn-sm" @click="askStatus('洽談中')">重回洽談中</button>
               </template>
               <!-- 刪除申請流程 -->
               <template x-if="isAdmin && !selectedCase.pendingDelete">
@@ -1418,6 +1429,32 @@
       </div>
     </div>
 
+    <!-- ── Modal：變更狀態確認（未成案／暫擱置要不要留原因；已連結單據的案件重回洽談中要說明連結怎麼處理）── -->
+    <div class="dc-modal-bg" x-show="showStatusModal" x-cloak @click.self="showStatusModal=false" data-testid="dc-status-modal">
+      <div class="dc-modal" style="max-width:420px">
+        <div class="dc-modal-head">
+          <h3 x-text="'設為' + stLabel(statusTarget)"></h3>
+          <button class="btn btn-ghost btn-icon" @click="showStatusModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;font-family:var(--font-zh)"
+             x-text="statusNote()"></p>
+          <template x-if="statusTarget !== '洽談中'">
+            <div>
+              <label style="font-size:12px;color:var(--text-secondary);font-family:var(--font-zh)">原因（選填，會記在開發記錄）</label>
+              <textarea class="dc-textarea" rows="3" data-testid="dc-status-reason" x-model="statusReason"
+                        placeholder="例如：客戶預算不足、改選其他廠商…"></textarea>
+            </div>
+          </template>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showStatusModal=false">取消</button>
+          <button class="btn btn-primary" data-testid="dc-status-confirm" :disabled="statusSaving" @click="confirmStatus()"
+                  x-text="'確定設為' + stLabel(statusTarget)"></button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Modal：轉建報價單／估價單 ── -->
     <div class="dc-modal-bg" x-show="showConvertModal" x-cloak @click.self="showConvertModal=false">
       <div class="dc-modal" style="max-width:420px">
@@ -1427,21 +1464,23 @@
         </div>
         <div class="dc-modal-body">
           <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;font-family:var(--font-zh)">
-            系統將開啟報價單／估價單表單，並預填以下資訊。
+            系統將開啟新的單據表單，並帶入以下資訊；第一次儲存後會自動連結到這個案件。
           </p>
+          <div class="dc-doc-type" role="radiogroup" aria-label="單據類型" style="display:flex;gap:8px;margin-bottom:12px">
+            <label class="dc-user-check" :class="{on: convertDocType==='quote'}" style="margin:0;min-height:36px;display:inline-flex;align-items:center">
+              <input type="radio" name="dc-doc-type" value="quote" x-model="convertDocType" data-testid="dc-doc-quote" style="position:absolute;opacity:0">報價單</label>
+            <label class="dc-user-check" :class="{on: convertDocType==='estimate'}" style="margin:0;min-height:36px;display:inline-flex;align-items:center">
+              <input type="radio" name="dc-doc-type" value="estimate" x-model="convertDocType" data-testid="dc-doc-estimate" style="position:absolute;opacity:0">估價單</label>
+          </div>
           <div style="background:#F8FAFF;border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:14px;font-family:var(--font-zh)">
             <div style="margin-bottom:5px"><b>客戶名稱：</b><span x-text="selectedCase && selectedCase.customerName || '（未填）'"></span></div>
             <div><b>案件名稱：</b><span x-text="selectedCase && selectedCase.caseName"></span></div>
           </div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
-            報價單／估價單建立後，可輸入單號完成連結（選填）：
-          </div>
-          <input class="dc-input" type="text" x-model="convertQuoteNo"
-            placeholder="輸入單號（留空可後續補填）">
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showConvertModal=false">取消</button>
-          <button class="btn btn-primary" @click="doConvert()">開啟報價單／估價單表單</button>
+          <button class="btn btn-primary" data-testid="dc-convert-go" @click="doConvert()"
+                  x-text="'開啟' + (convertDocType === 'estimate' ? '估價單' : '報價單') + '表單'"></button>
         </div>
       </div>
     </div>
@@ -1732,7 +1771,9 @@ function devCrmPage() {
     caseCustomerHistory: [],
 
     showConvertModal: false,
-    convertQuoteNo: '',
+    convertDocType: 'quote',
+    awaitingQuoteFor: null,
+    showStatusModal: false, statusTarget: '', statusReason: '', statusSaving: false,
 
     showRelinkModal: false,
     relinkQuoteNo: '',
@@ -2018,6 +2059,9 @@ function devCrmPage() {
       this._toast('已將目前所有案件標記為已讀')
     },
 
+    get wonUnlinkedCount() {
+      return this.cases.filter(c => c.status === '成案' && !c.convertedQuoteNo).length
+    },
     caseCount(status) {
       if (!status) return this.cases.filter(c => c.status !== '未成案').length
       return this.cases.filter(c => c.status === status).length
@@ -2104,6 +2148,8 @@ function devCrmPage() {
       }
       // UR1：上一頁回來／其他分頁標了已讀 ⇒ 重抓未讀（事件由 notif.js 發出）。
       window.addEventListener('motrix:reads-changed', () => this.loadUnread())
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) this._refreshAfterConvert() })
+      window.addEventListener('focus', () => this._refreshAfterConvert())
       // 跨分頁樂觀已讀：只合併那一筆，不整包重抓；伺服器拒絕時還原。
       window.addEventListener('motrix:item-read', e => {
         if (e.detail.kind !== 'dev_case' || !this.unreadKeys[e.detail.key]) return
@@ -2373,18 +2419,79 @@ function devCrmPage() {
       } finally { this.caseSaving = false }
     },
 
-    async changeStatus(status) {
+    // 未成案／暫擱置、以及「已連結單據的案件重回洽談中」先問一次（原本一按就生效、失敗也沒有任何提示）。
+    askStatus(status) {
       if (!this.selectedCase) return
-      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/status', {
-        method: 'PATCH', headers: this._h(), body: JSON.stringify({ status }),
-      })
-      if (r.ok) {
-        const updated = await r.json()
-        this.selectedCase = updated
-        const idx = this.cases.findIndex(c => c.id === updated.id)
-        if (idx >= 0) this.cases.splice(idx, 1, updated)
-        this._toast('狀態已更新：' + status)
+      const needAsk = status === '未成案' || status === '暫擱置' || (status === '洽談中' && !!this.selectedCase.convertedQuoteNo)
+      if (!needAsk) { this.changeStatus(status); return }
+      this.statusTarget = status
+      this.statusReason = ''
+      this.statusSaving = false
+      this.showStatusModal = true
+    },
+    statusNote() {
+      const c = this.selectedCase || {}
+      if (this.statusTarget === '暫擱置') return '暫擱置的案件超過 180 天沒有動靜，系統會自動轉為「未成案」。'
+      if (this.statusTarget === '未成案') return '未成案代表這個案件已結束。之後仍可改回洽談中。'
+      if (this.statusTarget === '洽談中' && c.convertedQuoteNo) return '這個案件已連結單據 ' + c.convertedQuoteNo + '。重回洽談中不會動到單據，連結會保留；要改連結請用「修改連結」。'
+      return ''
+    },
+    async confirmStatus() {
+      if (this.statusSaving) return
+      this.statusSaving = true
+      try {
+        const ok = await this.changeStatus(this.statusTarget, this.statusReason)
+        if (ok) this.showStatusModal = false
+      } finally { this.statusSaving = false }
+    },
+    async changeStatus(status, reason) {
+      if (!this.selectedCase) return false
+      const id = this.selectedCase.id
+      let r
+      try {
+        r = await fetch('/api/dev-cases/' + id + '/status', {
+          method: 'PATCH', headers: this._h(), body: JSON.stringify({ status }),
+        })
+      } catch (_e) { this._toast('狀態沒有更新：網路連線失敗，請稍後再試。', 5000); return false }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        this._toast('狀態沒有更新：' + (d.detail || ('錯誤 ' + r.status)), 5000)
+        return false
       }
+      const updated = await r.json()
+      this.selectedCase = updated
+      const idx = this.cases.findIndex(c => c.id === updated.id)
+      if (idx >= 0) this.cases.splice(idx, 1, updated)
+      let msg = '狀態已更新：' + this.stLabel(status)
+      if (status === '成案' && !updated.convertedQuoteNo) msg += '。接著請按「轉建報價單／估價單」。'
+      const why = (reason || '').trim()
+      if (why) {
+        const saved = await this._logStatusReason(id, status, why)
+        if (!saved) msg += '（原因沒有存進開發記錄，請到記錄區補寫）'
+      }
+      this._toast(msg, 4500)
+      return true
+    },
+
+    // 狀態變更的原因記成一筆自己的開發記錄（沿用既有記錄端點，不新增欄位；本人填寫不需審核）。
+    async _logStatusReason(caseId, status, why) {
+      try {
+        const d = new Date()
+        const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+        const fd = new FormData()
+        fd.append('log_date', today)
+        fd.append('log_by', String(this.session.userId))
+        fd.append('channel', '')
+        fd.append('content', '狀態變更為「' + this.stLabel(status) + '」：' + why)
+        fd.append('next_action', '')
+        fd.append('status_snapshot', status)
+        const h = this._h(); delete h['Content-Type']
+        const r = await fetch('/api/dev-cases/' + caseId + '/logs', { method: 'POST', headers: h, body: fd })
+        if (!r.ok) return false
+        const saved = await r.json()
+        if (this.selectedCase && this.selectedCase.id === caseId) this.devLogs.unshift(saved)
+        return true
+      } catch (_e) { return false }
     },
 
     async requestDeleteCase() {
@@ -2592,19 +2699,40 @@ function devCrmPage() {
 
     // ── Convert to quote ──
     openConvertModal() {
-      this.convertQuoteNo = ''
+      this.convertDocType = 'quote'
       this.showConvertModal = true
     },
 
+    // 開新表單並帶入客戶／案名／類型／案件編號，表單第一次儲存成功後由報價單頁
+    // 呼叫既有的 PATCH /api/dev-cases/{id}/convert 連回來（不再手動輸入單號）。
+    // 回到這一頁時（分頁重新可見）重抓這個案件，連結成功就提示。
     doConvert() {
       if (!this.selectedCase) return
       const c = this.selectedCase
       const p = new URLSearchParams()
       if (c.customerName) p.set('customer', c.customerName)
       p.set('project', c.caseName)
+      if (this.convertDocType === 'estimate') p.set('type', 'estimate')
+      p.set('devCase', String(c.id))
       window.open('quotation-form.html?' + p.toString(), '_blank')
-      if (this.convertQuoteNo.trim()) this.markConverted(this.convertQuoteNo.trim())
+      this.awaitingQuoteFor = c.id
       this.showConvertModal = false
+    },
+
+    async _refreshAfterConvert() {
+      const id = this.awaitingQuoteFor
+      if (!id || !this.selectedCase || this.selectedCase.id !== id) return
+      try {
+        const r = await fetch('/api/dev-cases/' + id, { headers: this._h() })
+        if (!r.ok) return
+        const updated = await r.json()
+        if (!updated.convertedQuoteNo) return
+        this.awaitingQuoteFor = null
+        this.selectedCase = updated
+        const idx = this.cases.findIndex(c => c.id === updated.id)
+        if (idx >= 0) this.cases.splice(idx, 1, updated)
+        this._toast('已連結至 ' + updated.convertedQuoteNo, 4000)
+      } catch (_e) { /* 下次回到分頁再試 */ }
     },
 
     openRelinkModal() {
@@ -2663,22 +2791,11 @@ function devCrmPage() {
       }
     },
 
-    async markConverted(quoteNo) {
-      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/convert', {
-        method: 'PATCH', headers: this._h(), body: JSON.stringify({ quote_no: quoteNo }),
-      })
-      if (r.ok) {
-        const updated = await r.json()
-        this.selectedCase = updated
-        const idx = this.cases.findIndex(c => c.id === updated.id)
-        if (idx >= 0) this.cases.splice(idx, 1, updated)
-        this._toast('已連結至報價單／估價單 ' + quoteNo)
-      }
-    },
-
+    // 新的提示要取消上一個計時器，否則前一則提示的計時會把新的提示提早清掉。
     _toast(msg, ms = 2800) {
       this.toast = msg
-      setTimeout(() => { this.toast = '' }, ms)
+      clearTimeout(this._toastT)
+      this._toastT = setTimeout(() => { this.toast = '' }, ms)
     },
   }
 }
