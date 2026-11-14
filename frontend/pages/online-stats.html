@@ -297,6 +297,7 @@
 </main>
 
   <script src="../static/notif.js"></script>
+  <script src="../static/role-label.js"></script><!-- 角色代碼 → 中文名稱（含公司自訂名稱；finance 不再顯示原始代碼） -->
   <script>
     function onlineStatsPage() {
       return {
@@ -433,8 +434,7 @@
         },
 
         roleLabel(r) {
-          return { superadmin: '最高管理者', admin: '管理員', sales: '業務',
-                   engineer: '工程師', viewer: '檢視者' }[r] || r
+          return window.MotrixRole ? window.MotrixRole.label(r) : r
         },
 
         fmtHours(sec) {
