@@ -3060,6 +3060,12 @@
   ],
   "s": 200
  },
+ "/api/def-governance/{kind}/_available": {
+  "k": [
+   "available"
+  ],
+  "s": 200
+ },
  "/api/def-governance/{kind}/{key}/diff": {
   "k": [
    "detail"

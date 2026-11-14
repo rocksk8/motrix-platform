@@ -27,7 +27,9 @@ const els = {}
 function mk(tag) { return { tag, id: '', attrs: {}, innerHTML: '', listeners: {}, setAttribute(k, v) { this.attrs[k] = v }, getAttribute(k) { return this.attrs[k] },
   addEventListener(t, f) { this.listeners[t] = f }, remove() { delete els[this.id] }, appendChild(c) { els[c.id] = c } } }
 global.window = {}
-global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
+global.localStorage = { getItem: () => JSON.stringify({ token: 'tok', role: inp.role || 'superadmin', userId: 1 }) }
+const _ss = {}
+global.sessionStorage = { getItem: (k) => (k in _ss ? _ss[k] : null), setItem: (k, v) => { _ss[k] = v } }
 global.document = { createElement: mk, getElementById: (i) => els[i] || null, head: { appendChild(c) { els[c.id] = c } }, body: { appendChild(c) { els[c.id] = c } } }
 const calls = []
 global.fetch = async (url, o) => {
@@ -64,24 +66,41 @@ IMPACT = {"status": 200, "body": {"hasDraft": True, "liveVersion": 3, "nextVersi
 RESTORE_OK = {"status": 200, "body": {"version": 4}}
 
 
-def _panel(steps, routes=None):
+def _panel(steps, routes=None, role=None):
     r = dict(routes or {})                                                      # 較具體的覆寫路由放前面（harness 取第一個符合的）
     for k, v in (("/ledger", LEDGER), ("/diff", DIFF), ("/impact", IMPACT), ("/restore/", RESTORE_OK)):
         r.setdefault(k, v)
-    out = subprocess.run([NODE, "-e", PANEL_HARNESS, "x", json.dumps({"steps": steps, "routes": r}), str(JS / "def-governance.js")],
+    out = subprocess.run([NODE, "-e", PANEL_HARNESS, "x", json.dumps({"steps": steps, "routes": r, "role": role}), str(JS / "def-governance.js")],
                          capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
 @needs_node
-@pytest.mark.parametrize("status,expected", [(404, False), (401, False), (403, False), (400, True), (200, True)])
-def test_available_is_false_when_the_flag_is_off_or_not_allowed(status, expected):
-    """旗標關＝後端 404；未登入／非最高管理者＝401／403 ⇒ 編輯器不顯示入口。開啟後以不存在的 key 探測會得到 400（通過把關）。"""
-    r = _panel([{"do": "available", "kind": "expense_type"}], {"/_probe/": {"status": status, "body": {}}})
+@pytest.mark.parametrize("body,expected", [({"available": False}, False), ({"available": True}, True), ({}, False)])
+def test_available_asks_the_dedicated_endpoint_and_reads_its_answer(body, expected):
+    """旗標關 ⇒ 後端回 200 {available:false}（不再用 404 當訊號）⇒ 編輯器不顯示入口。"""
+    r = _panel([{"do": "available", "kind": "expense_type"}], {"/_available": {"status": 200, "body": body}})
     assert r["available_expense_type"] is expected
-    assert "/api/def-governance/expense_type/_probe/ledger" in r["calls"][0]["url"] and r["calls"][0]["auth"] == "Bearer tok"
+    assert r["calls"][0]["url"] == "/api/def-governance/expense_type/_available" and r["calls"][0]["auth"] == "Bearer tok"
     assert r["calls"][0]["method"] == "GET"                                    # 探測只讀
+
+
+@needs_node
+@pytest.mark.parametrize("status", (401, 403, 404, 500))
+def test_available_is_false_when_the_request_itself_fails(status):
+    r = _panel([{"do": "available", "kind": "expense_type"}], {"/_available": {"status": status, "body": {}}})
+    assert r["available_expense_type"] is False
+
+
+@needs_node
+def test_available_sends_nothing_for_a_non_superadmin_and_asks_once_per_kind():
+    """不是最高管理者 ⇒ 不送請求（後端本來就只給最高管理者）；同一頁同一個 kind 只問一次。"""
+    r = _panel([{"do": "available", "kind": "layout"}], {"/_available": {"status": 200, "body": {"available": True}}}, role="sales")
+    assert r["available_layout"] is False and r["calls"] == []
+    r = _panel([{"do": "available", "kind": "layout"}, {"do": "available", "kind": "layout"}, {"do": "available", "kind": "custom_module"}],
+               {"/_available": {"status": 200, "body": {"available": True}}})
+    assert [c["url"] for c in r["calls"]] == ["/api/def-governance/layout/_available", "/api/def-governance/custom_module/_available"]
 
 
 @needs_node
@@ -209,7 +228,9 @@ const els = {}
 function mk(tag) { return { tag, id: '', attrs: {}, innerHTML: '', listeners: {}, setAttribute(k, v) { this.attrs[k] = v }, getAttribute(k) { return this.attrs[k] },
   addEventListener(t, f) { this.listeners[t] = f }, remove() { delete els[this.id] }, appendChild(c) { els[c.id] = c } } }
 global.window = {}
-global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
+global.localStorage = { getItem: () => JSON.stringify({ token: 'tok', role: inp.role || 'superadmin', userId: 1 }) }
+const _ss = {}
+global.sessionStorage = { getItem: (k) => (k in _ss ? _ss[k] : null), setItem: (k, v) => { _ss[k] = v } }
 global.document = { createElement: mk, getElementById: (i) => els[i] || null, head: { appendChild(c) { els[c.id] = c } }, body: { appendChild(c) { els[c.id] = c } } }
 global.fetch = async (url) => ({ ok: true, status: 200, json: async () => inp.impact })
 ;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
