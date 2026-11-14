@@ -61,6 +61,7 @@
 📌 2026-11-13 18:42：正式機已更新到 f66dfd9ef（第八十二班 T82：首頁「我的工作」儀表板與登入問候、「我的帳號」頁（個人偏好、報價用公司信箱）、估價單（開單可選報價單／估價單）、簽核頁重排與簽核用語統一、報價清單重排、上傳防護（圖片解壓縮炸彈、xlsx 展開）與日誌遮罩補強；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261113-t82-apply.md；套件 20261113_181056_f66dfd9e_full；core 1.162→1.163、15 個模組版號全部上升；3 個新 migration（core v13 `user_prefs`、core v14 `users.quote_email`、case v10 `quotations.doc_type`，皆只新增、冪等），schema 維持 118；正式機 motrix-37 回報 applied_at 2026-11-13 18:38:34、status=success、未回滾；🔴 第一次啟動 core migration 沒跑（case 10 有跑、log 印 accounting 1.1.67），套用後檢查 #12 未過、依步驟 4 停下；使用者指示只重啟服務，18:42:20 重啟後 core 12→14 補上、accounting 1.1.68，步驟 3 全過）⇒ 基準改 f66dfd9ef。
 📌 2026-11-13 23:46：正式機已更新到 b4c542153（第八十三班 T83：授權頁可匯入授權（剩 30／14／7 天提醒）、「備份與監控」專頁（立即備份、心跳網址、停用／換主機需第二位最高管理者核准）、設定中心依 10 個分類分組＋欄位「?」說明、「開始使用」清單與組織設定缺口檢查、寄信帳號精靈（465 埠可寄）、頁面載入合併請求（/api/bootstrap、/api/dashboard/bundle）、公司資料改讀公開子集（完整內容可選只給最高管理者）、展示帳號不再算「另一位最高管理者」、簽核者本人可從待簽報價單「解鎖修改」、估價單 PDF 用語整理；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261113-t83-apply.md；套件 20261113_232746_b4c54215_full；core 1.163→1.165、9 個模組版號上升（accounting 1.1.68→1.1.70）、新增 22 條 API 路由、設定群組 50→51；無 migration、schema 維持 118；正式機 motrix-37 回報 applied_at 2026-11-13 23:45:58、status=success、未回滾、步驟 3 #1～#27 全過、載入版本＝磁碟版本；兩個如實揭露的偏差：①先 stage／verify／自升級再做 0-A（停機由約 13 分鐘縮為約 52 秒）；②步驟 0-A 逐一 taskkill 迴圈時，尚未被殺的多餘迴圈在 port 釋放時立刻拉起一個舊程式的服務（由 apply [2/6] 結束）⇒ 基準改 b4c542153。
 📌 2026-11-14 05:48：正式機已更新到 5f1a4a5d8（第八十四班 T84，最後一班〔併入原 T85〕：員工匯入精靈（新模組 importer，產品 full 15→16 個模組）、使用者批次權限、設定中心批次與變更通知、LINE 事件矩陣與用量、一條龍（onepipe）功能旗標預設開（既有環境一次性遷移）、公司資料完整內容預設只限最高管理者（一次性遷移）、估價單自有條款、簽核內容被改通知等；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261114-t84-apply.md；套件 20261114_052951_5f1a4a5d_full（package.sha256 4589333d…、1544 行）；core 1.165→1.167、8 個模組版號上升＋importer 1.0.4 新增；migration：core 15（line_event_usage_daily）、case 0011（估價單條款複製）、兩個一次性啟動遷移，schema 維持 118（module_schema_versions 只有 core 14→15、case 10→11；sqlite_master 490→492，只新增 line_event_usage_daily 與其自動索引）；設定群組 51→53；正式機 motrix-37 回報 applied_at 2026-11-14 05:48:49、status=success、未回滾、步驟 3 #1～#27 全過、載入版本＝磁碟版本、停機約 52 秒、13c 自停排程、步驟 D 後迴圈恰好 1 組；如實揭露：①第一版包 20261114_050923（內部 050510）因包內含 1 個 __pycache__／.pyc〔副整合離線算 sha 時從包目錄 import 所致〕被正式機擋下、作廢，重建無 pyc 的 20261114_052951；②#18 清單外多 1 個設定鍵 `onepipe.warranty_closed_baseline`〔預期行為，步驟檔漏列：保固通知旗標預設開後，每日檢查第一次靜默建基準〕）⇒ 基準改 5f1a4a5d8。
+📌 2026-11-14 08:54：正式機已更新到 c21e502d6（第八十五班 T85：文字專業化〔全系統畫面／通知／說明文字改寫成一致的專業用語，前後對照表 1989 組見 docs/platform/plans/TEXT-DIFF-TABLE.md；報價單／估價單 PDF、匯出、列印格式不動，只把輸出內系統名稱改為 MOTRIX PLATFORM〕＋一條龍收尾〔到貨入庫底層與精靈、出貨帶入設備保固、買方可見、供應商主檔、需處理時通知下一位、採購單免重簽〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261114-t85-apply.md；套件 20261114_083554_c21e502d_full（package.sha256 20d976ab…、1563 行、0 個 pyc）；core 1.167 不變、schema 118 不變；模組 migration：case 0012（case_material_approvals.received_qty）、supply 0001_receive_ledger（新表 stock_item_events＋3 索引＋stock_batches／stock_items 新欄位；module_schema_versions case 11→12、supply 新增；sqlite_master 492→496）；無新的一次性啟動遷移、設定鍵前後完全相同；正式機 motrix-37 回報 applied_at 2026-11-14 08:54:57、status=success、未回滾、步驟 3 #1～#27 全過、停機約 50 秒、迴圈恰好 1 組、無偏差）⇒ 基準改 c21e502d6。
 """
 import json
 import subprocess
@@ -69,7 +70,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "5f1a4a5d"
+BASELINE = "c21e502d"
 
 
 def baseline_manifest():
