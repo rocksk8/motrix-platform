@@ -989,8 +989,8 @@
 
                 <div x-show="stageView==='list'">
                 <!-- `AC2`：階段收入比例（權責口徑依階段完成月認列）。全部未設＝全部完工月一次認列。 -->
-                <div class="stage-ratio-sum" :class="{ 'stage-ratio-sum--warn': stageRatioSummary().warn }" x-show="(cr.caseRecord?.stages || []).length">
-                  <span class="stage-ratio-sum__ico" aria-hidden="true" x-text="stageRatioSummary().warn ? '⚠' : 'ⓘ'"></span>
+                <div class="stage-ratio-sum" :class="{ 'stage-ratio-sum--warn': stageRatioSummary().warn }" :title="stageRatioSummary().text" x-show="(cr.caseRecord?.stages || []).length">
+                  <svg class="stage-ratio-sum__ico" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>
                   <span data-testid="stage-ratio-summary" x-text="stageRatioSummary().text"></span>
                 </div>
                 <template x-for="(st, idx) in (cr.caseRecord?.stages || [])" :key="st.id">

@@ -199,8 +199,8 @@ def test_shipping_tab_has_an_add_entry_and_timeline_leads_to_the_same_place(live
     page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]')).showShippingModal === true", timeout=10000)
     _shot(page, "item25_ship_empty_desktop")
     page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]')); d.showShippingModal = false; d.session.role = 'sales' }")
-    assert not page.locator('[data-testid="ship-empty-new"]').is_visible()
-    assert page.locator('[data-testid="ship-empty-hint"]').is_visible()
+    page.locator('[data-testid="ship-empty-new"]').wait_for(state="hidden", timeout=5000)      # x-show 隔一個影格才更新
+    page.locator('[data-testid="ship-empty-hint"]').wait_for(state="visible", timeout=5000)
     page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).activeTab = 'exec' }")
     page.locator('[data-testid="mtl-act-mb-ship"]').wait_for(state="visible", timeout=10000)
     assert page.locator('[data-testid="mtl-act-mb-ship"]').inner_text().strip() == "前往出貨單"
@@ -239,3 +239,53 @@ def test_stage_card_fits_the_screen_in_two_rows_on_phone(live_server, make_user,
     over = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert over <= 1, "頁面不可橫向捲動（超出 %s px）" % over
     _shot(page, "item17_stage_card_%d" % width)
+
+
+_D = "Alpine.$data(document.querySelector('[x-data]'))"
+
+
+@pytest.mark.e2e
+def test_review_fixes_batch1_arrival_pending_no_access_and_single_load(live_server, make_user, e2e_browser):
+    """h5／h11 審查回修：①PO 連結的「確認到貨」只標記未存檔⇒顯示待儲存＋提示 ②材料申請讀不到⇒「—／無權限」③?sub=materials 在時間軸旗標開時也落在材料申請，且材料申請清單只讀一次。"""
+    u, p = make_user(username="mtl_t86fix", role="superadmin")
+    _case()
+    page = e2e_browser.new_page(viewport={"width": 1440, "height": 1000})
+    loads = []
+    page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/material-orders" in r.url and "/material-orders-" not in r.url and "approvals" not in r.url and "payments" not in r.url and "suppliers" not in r.url else None)
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}&sub=materials")
+    page.locator('[data-testid="mtl-row-ma"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function("() => !document.querySelector('.mtl').innerText.includes('載入中')", timeout=15000)
+    page.wait_for_timeout(500)
+    assert len(loads) == 1, "材料申請清單只該讀一次：%s" % loads
+    # ① PO 連結、未到貨 → 確認到貨 → 待儲存
+    page.evaluate("() => { const m = %s.cr.caseRecord.materials.find(x => x.id === 'mb'); m.arrived = false; m.ordered = true }" % _D)
+    page.locator('[data-testid="mtl-act-mb-arrive"]').click()
+    assert "待儲存" in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+    page.get_by_text("已標記到貨，請按「儲存」").first.wait_for(state="visible", timeout=5000)
+    # ② 讀不到材料申請（403／404）
+    page.evaluate("() => { %s.materialOrders = []; %s.moNoAccess = true }" % (_D, _D))
+    st = page.locator('[data-testid="mtl-st-ma-req"]')
+    assert "無權限" in st.inner_text()
+    assert page.locator('[data-testid="mtl-act-ma-req"]').count() == 0
+
+
+@pytest.mark.e2e
+def test_ratio_warning_wraps_on_phone_instead_of_truncating(live_server, make_user, e2e_browser):
+    """審查回修：收入比例合計不等於 100% 的警示句在手機要換行顯示完整，不能被截成「…」。"""
+    u, p = make_user(username="mtl_t86warn", role="superadmin")
+    _case()
+    page = e2e_browser.new_page(viewport={"width": 390, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    page.wait_for_selector(f"text={NO}", timeout=15000)
+    page.get_by_role("button", name="執行管理").first.click()
+    page.locator(".stage-card").first.wait_for(state="visible", timeout=15000)
+    page.evaluate("() => { const s = %s.cr.caseRecord.stages; s[0].ratioBp = 6000 }" % _D)
+    hint = page.locator(".stage-ratio-sum--warn")
+    hint.wait_for(state="visible", timeout=5000)
+    txt = page.locator('[data-testid="stage-ratio-summary"]')
+    assert txt.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "警示句被截斷"
+    assert "不等於 100%" in txt.inner_text()
+    assert hint.bounding_box()["height"] > 20, "手機應換成多行"
+    _shot(page, "review_ratio_warn_390")

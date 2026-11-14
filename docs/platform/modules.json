@@ -482,6 +482,7 @@
     "js:js/case-management-xexp.js",
     "js:js/case-management-mchange.js",
     "js:js/case-management-mlink.js",
+    "js:js/case-management-mtl.js",
     "page:pages/approval-history.html",
     "page:pages/case-management.html",
     "page:pages/case-stage-board.html",

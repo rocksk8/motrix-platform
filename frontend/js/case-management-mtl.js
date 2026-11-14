@@ -7,19 +7,26 @@ window.CM_PARTS.push(() => ({
     mtlFlow: null,          // null＝尚未讀；false＝讀不到（旗標關／無權限）；否則 { stock, ship }（各為 cell 或 null）
     _mtlFor: '',            // 已為哪個案件讀過（同一件只讀一次）
     _mtlReq: 0,
+    _mtlPend: {},           // 在時間軸按了「確認到貨」、還沒存檔的材料（顯示「待儲存」）
 
     _reset_mtl(phase) {
       if (phase !== 'early') return
-      this.mtlFlow = null; this._mtlFor = ''; this._mtlReq++
+      this.mtlFlow = null; this._mtlFor = ''; this._mtlReq++; this._mtlPend = {}
     },
 
     // 材料申請分頁顯示時呼叫（x-effect）：補讀材料申請（原本只有財務分頁會讀）與物料流程摘要
-    mtlEnsure() {
+    async mtlEnsure() {
       const no = this.selected && this.selected.quote_no
       if (!no || this._mtlFor === no) return
       this._mtlFor = no
-      if (!(this.materialOrders || []).length && this.loadMaterialOrders) this.loadMaterialOrders(no)
-      this.mtlLoadFlow(no)
+      // 分頁按鈕／?sub=materials 已經讀過（或正在讀）就不再讀一次
+      if (this.loadMaterialOrders && this._moReqFor !== no && !(this.materialOrders || []).length) this.loadMaterialOrders(no)
+      // 入庫／出貨來自物料流程摘要：旗標 onepipe.timeline 關著就不問（避免多一筆 404）
+      let on = false
+      try { on = !!(window.MotrixOnepipe && (await window.MotrixOnepipe.flags()).timeline) } catch (e) { on = false }
+      if (this._mtlFor !== no) return
+      if (on) this.mtlLoadFlow(no)
+      else this.mtlFlow = false
     },
     async mtlLoadFlow(no) {
       const req = ++this._mtlReq
@@ -57,6 +64,7 @@ window.CM_PARTS.push(() => ({
       // 申請
       const req = { key: 'req', label: '申請', state: 'todo', cap: '尚未申請', act: null }
       if (this.moLoading && !(this.materialOrders || []).length) req.cap = '載入中…'
+      else if (this.moNoAccess && !po && !o) req.cap = '—／無權限'
       else if (po && !o) { req.state = 'done'; req.cap = '由採購單認列' }
       else if (!o) {
         const cands = this.mlCandidatesFor ? this.mlCandidatesFor(mat) : []
@@ -81,6 +89,7 @@ window.CM_PARTS.push(() => ({
       const arrived = !!mat.arrived || !!(o && this.moWizFull && this.moWizFull(o))
       const day = (o && a && a.receivedOn) || (mat.poLink && mat.poLink.arrivedOn) || ''
       const arr = { key: 'arrive', label: '到貨', state: arrived ? 'done' : 'todo', cap: arrived ? (day || '已到料') : '—', act: null, late: '' }
+      if (arrived && this.dirty && this._mtlPend[mat.id]) arr.cap = (arr.cap === '—' ? '' : arr.cap + '\n') + '待儲存'
       if (!arrived && mat.ordered && mat.expectedDate) {
         arr.cap = '預計 ' + mat.expectedDate
         if (mat.expectedDate < MotrixDate.today()) arr.late = '已逾期'
@@ -88,7 +97,7 @@ window.CM_PARTS.push(() => ({
       if (!arrived && approved && canEdit) {
         if (o && a && a.status === '已核准' && this.moWizOn && this.moWizOn()) arr.act = { label: '到貨登載', run: () => { this.activeTab = 'fin'; this.$nextTick(() => this.moWizOpen(o, false)) } }
         else if (o && a && a.status === '已核准') arr.act = { label: '確認到貨', run: () => this.moReceive(o) }
-        else if (po) arr.act = { label: '確認到貨', run: () => { mat.arrived = true; this.onMaterialArrived(mat) } }
+        else if (po) arr.act = { label: '確認到貨', run: () => { mat.arrived = true; this.onMaterialArrived(mat); this._mtlPend = Object.assign({}, this._mtlPend, { [mat.id]: true }); MotrixUI.toast('已標記到貨，請按「儲存」') } }
       }
       steps.push(arr)
 
@@ -96,7 +105,7 @@ window.CM_PARTS.push(() => ({
       const f = this.mtlFlow
       if (f && f.stock) {
         const has = arrived && f.stock.state !== 'na'
-        const stock = { key: 'stock', label: '入庫', state: has ? 'done' : 'todo', cap: !arrived ? '—' : (has ? '整案已有入庫紀錄' : '尚無入庫紀錄'), act: null }
+        const stock = { key: 'stock', label: '入庫', state: has ? 'done' : 'todo', cap: !arrived ? '—' : (has ? '整案有入庫紀錄' : '尚無入庫紀錄'), act: null }
         steps.push(stock)
       }
       if (f && f.ship) {

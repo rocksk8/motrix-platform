@@ -190,7 +190,7 @@ window.CM_PARTS.push(() => ({
         }
         if (_found) await this.selectCase(_found.quote_no)
         // 一條龍 P0a（旗標 onepipe.links）：?sub=materials ⇒ 直接落在「執行管理 › 材料申請」（旗標關或沒帶 ⇒ 與今天相同）
-        if (_found && new URLSearchParams(location.search).get('sub') === 'materials' && window.MotrixOnepipe && (await window.MotrixOnepipe.flags()).links) {
+        if (_found && new URLSearchParams(location.search).get('sub') === 'materials' && window.MotrixOnepipe && await (async () => { const fl = await window.MotrixOnepipe.flags(); return fl.links || fl.timeline })()) {
           this.activeTab = 'exec'; this.execSubTab = 'materials'
           this.loadMaterialOrders(_found.quote_no)
         }

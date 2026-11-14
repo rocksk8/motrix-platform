@@ -57,6 +57,7 @@ window.CM_PARTS.push(() => ({
     // 任何「還沒開始載入」的瞬間都會對使用者說「沒有資料」——那是還沒查就先
     // 回答。額外支出的 xe.loading 本來就是 true，這裡跟它對齊。
     moLoading: true,
+    moNoAccess: false,                 // 材料申請清單讀不到（403／404，例如非本案負責人）：時間軸顯示「無權限」而不是「尚未申請」
     moSaving: false,
     moDirty: false,
     moSupplierAlways: true,            // 設定中心『新增材料申請要選供應商』：true＝一律要選（預設）；false＝帶入採購單的新列免選
@@ -87,6 +88,7 @@ window.CM_PARTS.push(() => ({
       // 已經打字之後同步把畫面清掉，連下面的 moDirty 守門都來不及擋
       this._moReqFor = quoteNo
       this.moLoading = true
+      this.moNoAccess = false
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -125,7 +127,7 @@ window.CM_PARTS.push(() => ({
           await this.loadMoPayments(quoteNo)
           if (this.mlLoadStatus) this.mlLoadStatus(quoteNo)     // 32-S4：連結徽章
           if (this.moCanEdit()) await this.moLoadSuppliers()
-        }
+        } else if (r.status === 403 || r.status === 404) this.moNoAccess = true
       } catch {}
       this.moLoading = false
     },
