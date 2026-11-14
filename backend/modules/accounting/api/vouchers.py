@@ -423,7 +423,7 @@ def summary_sources(q: str = "", quote_no: str = "",
         elif not files and hidden:
             note2 = "案件「%s」底下沒有您有權限查看的憑證。" % picked
         elif not files:
-            note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
+            note2 = "案件「%s」底下尚無可帶入的憑證。" % picked
         else:
             note2 = ""
 
@@ -440,7 +440,7 @@ def summary_sources(q: str = "", quote_no: str = "",
                 e["usedBy"] = uses.get((e["kind"], str(e["id"])), [])
         finally:
             conn3.close()
-        note3 = "" if expenses else "案件「%s」底下目前沒有支出項。" % picked
+        note3 = "" if expenses else "案件「%s」底下尚無支出項。" % picked
     # 稽核 X-1：承攬商派工這一類整個缺（IP-15 成本檢視不在）或因權限讀不到 ⇒ 明說，不可以跟「沒有派工」長得一樣
     unavailable = []
     if _registry.single_provider("dispatch.cost_for_case") is None:

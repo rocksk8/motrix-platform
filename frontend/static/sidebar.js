@@ -201,7 +201,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ── 全域搜尋（跨客戶/供應商/報價單/業務開發案/料號）──────────────────────────
   // 手機（≤767px）：下拉原本固定 340px、靠搜尋框左緣，右緣會超出畫面（390 寬時右緣在 442px）。
   // 改成貼齊視窗左右各 8px 的固定位置，每個結果列至少 44px 高（實際畫面；字級縮放 zoom 會連 px 一起縮，所以除回去）。
-  // 限高用 100dvh / --fz：根元素 zoom 會把 vh／dvh 一起放大（字級「特」1.3 倍時，結果多的下拉底部會掉到螢幕外），與全站其他 vh 規則同寫法。
+  // 限高用視窗高度除以 --fz：根元素 zoom 會連視窗高度單位一起放大（字級「特」1.3 倍時，結果多的下拉底部會掉到螢幕外），與全站其他高度規則同寫法。
   // 樣式是行內的，所以用 !important 蓋；桌機（>767px）完全不受影響，維持 340px。
   function ensureGlobalSearchCss() {
     if (document.getElementById('gs-mobile-css')) return
@@ -209,7 +209,7 @@ if (typeof module !== 'undefined' && module.exports) {
     st.id = 'gs-mobile-css'
     st.textContent = '@media (max-width:767px){'
       + '.gs-drop{position:fixed !important;left:8px !important;right:8px !important;width:auto !important;max-width:none !important;'
-      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100vh - var(--topbar-bar-h) - 24px) !important;max-height:calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 24px) !important}'
+      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 24px) !important}'
       + '.gs-item{min-height:calc(44px / var(--fz, 1));display:flex !important;flex-direction:column;justify-content:center}'
       + '}'
     document.head.appendChild(st)

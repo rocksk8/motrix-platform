@@ -315,3 +315,40 @@ def test_material_orders_patch_403_for_non_financial_project_manager(client, mak
     r = client.patch(f"/api/quotations/{NO}/material-orders", headers=_login(client, *u), json={"materialOrders": []})
     assert r.status_code == 403, r.text
     assert _db_data() == before
+
+
+# ── 2026-11-14（T86）：PATCH case-record 回應的 adopted 也要遮 ─────────────────────────
+
+def test_adopted_in_patch_response_is_masked_for_non_financial_member(client, make_user):
+    """defaults 帶了資料庫已有的分段 ⇒ 回應 adopted＝資料庫現值；沒有財務檢視權的人拿到的必須和 saved／GET 同樣被遮（款項金額、叫料金額）。
+    拿掉遮罩這題會紅（過去 adopted 回的是原始現值，試探 defaults 就能讀到金額）。"""
+    u = make_user(username="mk_adopted", role="engineer")
+    _seed(assigned=[u[0]])
+    h = _login(client, *u)
+    r = client.patch(f"/api/quotations/{NO}/case-record", headers=h,
+                     json={"segments": {"materials": [{"id": 11, "name": "料2", "qty": 1}]},
+                           "base": {"materials": [{"id": 11, "name": "料", "qty": 1}]},
+                           "defaults": {"payment": {"items": [{"id": 1, "type": "x"}]},
+                                        "materialOrders": [{"id": 5, "itemName": "y"}]}})
+    assert r.status_code == 200, r.text
+    ad = r.json()["adopted"]
+    assert set(ad) == {"payment", "materialOrders"}, ad                      # 形狀不變：鍵還在
+    for it in ad["payment"]["items"]:
+        for k in ("amount", "actualAmount", "feeAmount", "invoicePretax", "invoiceTax"):
+            assert k not in it, (k, it)
+        assert it.get("type")                                              # 非金額欄位照給
+    assert all("unitPrice" not in o and "totalPrice" not in o and "paidAmount" not in o for o in ad["materialOrders"]), ad
+    blob = json.dumps(r.json(), ensure_ascii=False)
+    assert "3087" not in blob and "7203" not in blob and "1000" not in blob
+
+
+def test_adopted_keeps_amounts_for_financial_user(client, make_user):
+    u = make_user(username="mk_adopted_fin", role="finance")
+    _seed(assigned=[u[0]])
+    h = _login(client, *u)
+    r = client.patch(f"/api/quotations/{NO}/case-record", headers=h,
+                     json={"segments": {"materials": [{"id": 11, "name": "料2", "qty": 1}]},
+                           "base": {"materials": [{"id": 11, "name": "料", "qty": 1}]},
+                           "defaults": {"payment": {"items": [{"id": 1, "type": "x"}]}}})
+    assert r.status_code == 200, r.text
+    assert r.json()["adopted"]["payment"]["items"][0]["amount"] == 3087

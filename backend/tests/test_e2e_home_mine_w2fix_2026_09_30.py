@@ -47,7 +47,7 @@ def test_w2f5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e
     # 2026-11-11 D1：英雄區右側狀態框不再重複「我的待簽核」（同一個數字由統計卡負責）；讀不到時由上一行的統計卡顯示「—」
     assert page.locator(".h-state div:has-text('我的待簽核')").count() == 0
     hero = page.locator(".h-hero__t").inner_text()
-    assert "今天有" not in hero and "目前沒有待您簽核" not in hero, hero
+    assert "今天有" not in hero and "目前沒有待您簽核" not in hero and "尚無待您簽核" not in hero and "您尚無待簽核" not in hero, hero
     assert "無法讀取待簽核清單" in page.locator("[data-testid=band-approvals] .h-band__p").inner_text()
     assert page.locator('[data-testid="home-mine-unknown"]').count() == 1
 

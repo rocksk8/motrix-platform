@@ -479,7 +479,7 @@ def preview_role_caps_batch(conn, changes):
 
 def set_role_caps_batch(conn, actor, changes, reason="", plan_hash=""):
     """整批同一個寫入交易：重算計畫，`planHash` 與預覽不同 ⇒ 409；有放寬高風險格 ⇒ 原因必填（同單格規則）；
-    立即生效的格合併成**一個**版本（`一鍵復原上一次調整`＝整批還原）；每格各一筆稽核（與資料同交易）；等確認期間的格各進待生效。"""
+    立即生效的格合併成**一個**版本（`復原上一次調整`＝整批還原）；每格各一筆稽核（與資料同交易）；等確認期間的格各進待生效。"""
     _need_super(actor)
     if not isinstance(plan_hash, str) or not plan_hash:
         raise PermError("套用要帶預覽的 planHash（請先預覽再套用）")

@@ -384,7 +384,7 @@
       },
       saveDraft() { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次存草稿') },
       publish() { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經發布，請關閉排版器後重新開啟，並查看版本清單確認後再決定') },
-      restore(v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉排版器再打開、看版本清單確認') },
+      restore(v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉排版器再開啟、看版本清單確認') },
       discard() { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉排版器再開啟確認') },
       async _saveDraft() {
         this.busy = true

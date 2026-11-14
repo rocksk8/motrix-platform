@@ -3111,9 +3111,9 @@ function app() {
         if (r.ok) {
           const d = await r.json()
           this.selfCases = d.items || []
-          this.selfCasesNotice = this.selfCases.length ? '' : '您目前沒有可關聯的進行中案件（只列出您負責或被指派協作的已成案案件）；請洽最高管理者建立事項。'
+          this.selfCasesNotice = this.selfCases.length ? '' : '您尚無可關聯的進行中案件（只列出您負責或被指派協作的已成案案件）；請洽最高管理者建立事項。'
         } else if (r.status === 404) {
-          this.selfCasesNotice = '這項功能目前沒有開放，或案件模組未安裝；請洽最高管理者建立事項。'
+          this.selfCasesNotice = '這項功能尚未開放，或案件模組未安裝；請洽最高管理者建立事項。'
         } else if (r.status === 403) {
           this.selfCasesNotice = '您沒有「每日工作事項」的權限，無法新增事項。'
         } else {

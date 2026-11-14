@@ -103,7 +103,7 @@ ONBOARDING_HERO_CTA = "建立第一筆"
 #: 📌 A 的話：**「它們更貼身 —— 一個等著簽的人被告知沒東西要簽。」**
 #: ⚠️ 我上一版把它們寫在「明著留在範圍外、交給 A 判」那一段，
 #:    ⇒ 現在 A 判了要做。**留在範圍外的理由消失了，那一段跟著改掉。**
-TITLE_COPY = "目前沒有待您簽核的項目"
+TITLE_COPY = "您尚無待簽核的單據"   # 標題與副標同用「單據」（T86：同一個空狀態只有一種說法）；兩句字面刻意不互為子字串
 BAND_COPY = "尚無待您簽核的單據"
 
 #: 引導卡片的錨點：那一行註解。用它找卡片，不用行號 ——
@@ -549,6 +549,10 @@ def test_fx33_the_probe_goes_red_on_the_version_before_the_fix():
         f"取不到 `c89e9d9` 的 `index.html`：{old.stderr[-300:]!r}\n"
         "⇒ 這一題量不到東西，**不可以當成通過**。")
     before = old.stdout.decode("utf-8")
+    # 修正前那一版用的是舊文案（目前沒有…）；T86 起現行文案改為「尚無…」，
+    # 探針以現行常數找句子，所以把舊句換成現行寫法，只比較**判斷式**（行為），不比較用字。
+    before = (before.replace("目前沒有待您簽核的項目", TITLE_COPY)
+                    .replace("目前沒有待您簽核的單據", BAND_COPY))
 
     got = _observe(before, None)  # 讀不到資料
     lied = []
