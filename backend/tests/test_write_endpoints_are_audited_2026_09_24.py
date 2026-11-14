@@ -99,6 +99,13 @@ EXEMPT = {
     # ── 權限矩陣（T67 PM-S3）：稽核與資料變更同一交易，由服務層寫入（掃描器只認端點本體的 _audit／_system_audit 呼叫）──
     ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap/preview"):
         "預覽端點只算影響面、不寫任何資料（服務層 preview_role_cap 唯讀），沒有東西可稽核",
+    # ── 設定矩陣 S4c：簽核流程複製／角色格暫存區批次（預覽唯讀；套用的稽核在 commit 之後由路由／同交易由服務層寫入）──
+    ("system.py", "POST", "/api/approval/flows/copy/preview"):
+        "預覽端點只算每個目標會不會變與進行中件數、不寫任何資料（helpers/approval_flow_copy.preview 唯讀），沒有東西可稽核。套用端點 /api/approval/flows/copy 在 commit 之後逐目標呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap/batch/preview"):
+        "預覽端點只算每格的現況與去向、不寫任何資料（服務層 preview_role_caps_batch 唯讀），沒有東西可稽核",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap/batch"):
+        "稽核 permmatrix.role_cap.set（每格一筆、detail.batch=true）在同一個交易內由 service._audit_tx 寫入（寫不進去整批回滾；高風險放寬走待生效時由設定帳本寫 permmatrix.pending.request）；端點本身不再另呼叫 _audit",
     ("modules/permmatrix/api.py", "POST", "/api/permmatrix/user-override/preview"):
         "預覽端點只算影響面、不寫任何資料（服務層 preview_user_override 唯讀），沒有東西可稽核",
     ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap"):

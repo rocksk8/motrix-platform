@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 1000,
-  "endpoints_api": 996,
-  "write_total": 538,
-  "write_api": 538,
+  "endpoints_total": 1004,
+  "endpoints_api": 1000,
+  "write_total": 542,
+  "write_api": 542,
   "get_api": 458,
-  "distinct_paths_api": 849,
-  "write_with_body_api": 403,
+  "distinct_paths_api": 853,
+  "write_with_body_api": 407,
   "write_with_path_param_api": 365
  },
  "select_star": {
@@ -5016,6 +5016,26 @@
   "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
    "w": true,
    "pp": 2,
+   "body": true
+  },
+  "POST /api/approval/flows/copy": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval/flows/copy/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/batch/preview": {
+   "w": true,
+   "pp": 0,
    "body": true
   }
  }

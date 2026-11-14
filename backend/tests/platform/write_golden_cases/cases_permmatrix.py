@@ -6,6 +6,8 @@ _E = (4,)
 CASES = [
     {"key": "POST /api/permmatrix/role-cap", "url": "/api/permmatrix/role-cap", "body": {"role": "sales", "cap": "zz.none.view", "granted": True}, "expect": _E},
     {"key": "POST /api/permmatrix/role-cap/preview", "url": "/api/permmatrix/role-cap/preview", "body": {"role": "sales", "cap": "zz.none.view", "granted": True}, "expect": _E},
+    {"key": "POST /api/permmatrix/role-cap/batch/preview", "url": "/api/permmatrix/role-cap/batch/preview", "body": {"changes": [{"role": "sales", "cap": "zz.none.view", "granted": True}]}, "expect": _E},
+    {"key": "POST /api/permmatrix/role-cap/batch", "url": "/api/permmatrix/role-cap/batch", "body": {"changes": [{"role": "sales", "cap": "zz.none.view", "granted": True}], "planHash": "x"}, "expect": _E},
     {"key": "POST /api/permmatrix/user-override", "url": "/api/permmatrix/user-override", "body": {"user_id": 1, "cap": "zz.none.view", "effect": "deny"}, "expect": _E},
     {"key": "POST /api/permmatrix/user-override/preview", "url": "/api/permmatrix/user-override/preview", "body": {"user_id": 1, "cap": "zz.none.view", "effect": "deny"}, "expect": _E},
     {"key": "DELETE /api/permmatrix/user-override", "url": "/api/permmatrix/user-override?user_id=1&cap=zz.none.view", "expect": _E},

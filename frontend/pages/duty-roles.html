@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>職責角色 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/users-batch.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <link rel="stylesheet" href="../css/settings-matrix.css?v=20261113a">
@@ -137,6 +138,57 @@
 
     <!-- 使用者綁定 -->
     <section x-show="tab === 'users'">
+      <!-- 批次綁定／解除（設定矩陣 S4c；沿用 static/users-batch.js 與 POST /api/users/permissions/batch[/preview|/undo]；每人會變什麼由伺服器預覽回答）：選角色 → 選同仁 → 預覽 → 確認 → 套用 → 復原這一批 -->
+      <div class="dr-card" style="overflow:visible" data-testid="dr-batch-panel">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;flex-wrap:wrap" @click="batchToggleOpen()" @keydown.enter="batchToggleOpen()"
+             @keydown.space.prevent="batchToggleOpen()" role="button" tabindex="0" :aria-expanded="batch.open ? 'true' : 'false'" data-testid="dr-batch-open">
+          <b style="font-size:13px;white-space:nowrap">批次綁定／解除職責角色</b>
+          <span class="dr-sub" style="margin:0">一次讓多位同仁加入或離開同一個職責角色</span>
+          <span class="dr-sub" style="margin:0 0 0 auto" x-text="batchSelectedText()" data-testid="dr-batch-selected"></span>
+        </div>
+        <div x-show="batch.open" style="padding:0 16px 14px;display:grid;gap:12px;border-top:1px solid var(--border-light)">
+          <div x-show="batch.result" class="dr-ok" style="display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap" data-testid="dr-batch-result">
+            <span x-text="'已套用：變更 ' + (batch.result ? batch.result.applied.length : 0) + ' 位。'"></span>
+            <button class="btn btn--sm" :disabled="batch.undoBusy" @click="batchUndo()" data-testid="dr-batch-undo">復原這一批</button>
+            <span class="dr-sub" style="margin:0">被其他人改過的同仁不會被復原。</span>
+          </div>
+          <div class="dr-sub" x-show="batch.undoMsg" x-text="batch.undoMsg" data-testid="dr-batch-undo-msg"></div>
+          <div style="margin-top:10px">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">① 哪個職責角色（含高敏感或影響較大權限的角色，系統會在預覽時列出哪些人被略過）</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px">
+              <select class="dr-sel" x-model="batch.roleId" data-testid="dr-batch-role">
+                <option value="">請選擇</option>
+                <template x-for="r in batch.roles" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+              </select>
+              <label><input type="radio" name="dr-batch-action" value="bind" :checked="batch.action==='bind'" @change="batchSetAction('bind')" data-testid="dr-batch-act-bind"> 綁定</label>
+              <label><input type="radio" name="dr-batch-action" value="unbind" :checked="batch.action==='unbind'" @change="batchSetAction('unbind')" data-testid="dr-batch-act-unbind"> 解除</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">② 選同仁（最高管理者不在批次範圍）</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+              <input class="dr-in" type="text" x-model="batch.q" placeholder="搜尋帳號／顯示名稱" style="max-width:240px" data-testid="dr-batch-q">
+              <button class="btn btn--sm btn--ghost" @click="batchToggleAll(true)">全選目前列出的</button>
+              <button class="btn btn--sm btn--ghost" @click="batchToggleAll(false)">全部取消</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto">
+              <template x-for="u in batchPeople()" :key="u.id">
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;padding:4px 8px;cursor:pointer">
+                  <input type="checkbox" x-model="batch.sel[u.id]" :data-testid="'dr-batch-user-' + u.id">
+                  <span x-text="u.displayName || u.username"></span>
+                  <span class="dr-sub" style="margin:0" x-text="MotrixRole.label(u.role)"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn btn--sm" :disabled="!batchCanPreview()" @click="batchPreview()" data-testid="dr-batch-preview">預覽變更</button>
+            <span class="dr-sub" style="margin:0">預覽不會寫入任何東西；確認後才會套用。</span>
+            <span class="dr-bad" style="margin:0" x-text="batch.error" x-show="batch.error && !batch.showPlan" data-testid="dr-batch-error"></span>
+          </div>
+        </div>
+      </div>
+
       <div class="dr-card">
         <table class="dr-table m-cards dr-t-users">
           <thead><tr><th>使用者</th><th>基礎類別</th><th>職責角色</th><th>個人扣項</th><th>生效權限（預覽）</th><th></th></tr></thead>
@@ -202,6 +254,39 @@
       <p class="dr-sub" style="max-width:1200px">紀錄只增不改不刪（資料庫層強制）；保留 7 年。</p>
     </section>
   </main>
+  <!-- 批次綁定／解除：預覽與確認視窗（逐人列出；需要原因時必填；與使用者管理頁的批次調整同一套） -->
+  <div class="modal-overlay" x-show="batch.showPlan" x-transition style="display:none" data-testid="batch-plan">
+    <div class="modal-box" style="max-width:640px">
+      <div class="modal-head">
+        <span class="modal-head__title">確認批次變更</span>
+        <button class="modal-close" @click="batchClosePlan()">×</button>
+      </div>
+      <div class="modal-body" style="max-height:calc(60vh / var(--fz,1));overflow:auto">
+        <div style="font-size:13px;margin-bottom:8px" x-text="batchSummaryText()"></div>
+        <template x-for="p in ((batch.plan||{}).people||[])" :key="p.userId">
+          <div style="border-top:1px solid var(--border-light);padding:8px 0;font-size:12px">
+            <div style="font-weight:600" x-text="p.name || ('#' + p.userId)"></div>
+            <div x-show="p.status==='skipped'" style="color:var(--text-dim)" x-text="'略過：' + p.note"></div>
+            <div x-show="p.status==='nochange'" style="color:var(--text-dim)">沒有需要變更的項目</div>
+            <div x-show="p.bind.length" x-text="'綁定職責角色：' + batchRoleNames(p.bind)" data-testid="batch-plan-bind"></div>
+            <div x-show="p.unbind.length" x-text="'解除職責角色：' + batchRoleNames(p.unbind)" data-testid="batch-plan-unbind"></div>
+            <div x-show="(p.effectiveAdded||[]).length" style="color:#047857" x-text="'實際生效　多了：' + batchKeysText(p.effectiveAdded)" data-testid="batch-plan-eff-add"></div>
+            <div x-show="(p.effectiveRemoved||[]).length" style="color:#B91C1C" x-text="'實際生效　少了：' + batchKeysText(p.effectiveRemoved)" data-testid="batch-plan-eff-del"></div>
+            <template x-for="s in p.skipped" :key="s.kind + s.key"><div style="color:var(--text-dim)" x-text="'略過 ' + batchSkipText(s)"></div></template>
+          </div>
+        </template>
+        <div x-show="(batch.plan||{}).needsReason" style="margin-top:10px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">變更原因（這次動到高敏感或影響較大的權限，必填；至少 4 個不同的字）</div>
+          <input class="dr-in" style="width:100%;box-sizing:border-box" type="text" maxlength="200" x-model="batch.reason" data-testid="batch-reason">
+        </div>
+        <div x-show="batch.error" class="dr-bad" x-text="batch.error" data-testid="batch-plan-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn--sm btn--ghost" @click="batchClosePlan()" data-testid="batch-plan-cancel">取消</button>
+        <button class="btn btn--sm" :disabled="batch.busy || !(((batch.plan||{}).summary||{}).changed)" @click="batchApply()" data-testid="batch-apply">套用</button>
+      </div>
+    </div>
+  </div>
   <script src="../static/role-label.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -211,6 +296,12 @@
       const KIND = { bind: '綁定角色', unbind: '解除角色', role_def: '角色定義', subtract: '設扣項', unsubtract: '解除扣項', user_modules: '個人勾選（使用者管理）' }
       return {
         tab: 'roles', roles: [], keys: [], highKeys: [], users: [], changes: [], form: null, pending: null, errMsg: '', okMsg: '', _initDone: false,
+        ...(window.usersBatchMixin ? window.usersBatchMixin() : {}),   // 設定矩陣 S4c：批次綁定／解除（static/users-batch.js；下面四個是給它的轉接）
+        systemPresets: [],
+        get allModules() { return this.keys },
+        _headers() { return this._hdr() },
+        toast(m) { this.okMsg = m },
+        async loadUsers() { const m = this.okMsg; await this.load(); this.okMsg = m },
         _hdr() {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
           return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
@@ -219,7 +310,7 @@
         kindLabel(k) { return KIND[k] || k },
         toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
         async init() {
-          if (this._initDone) return; this._initDone = true; await this.load()
+          if (this._initDone) return; this._initDone = true; this.batch.action = 'bind'; await this.load()
           // 權限矩陣（職責×權限）：儲存成功後重讀角色清單，角色管理表的「N 項」跟著更新
           _dm = await DutyMatrix.mount(document.getElementById('dm-box'), { onSaved: () => this.load(), onError: e => { this.errMsg = e.message || '操作失敗' } })
         },

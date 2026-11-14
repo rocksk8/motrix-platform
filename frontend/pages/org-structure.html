@@ -300,6 +300,7 @@
                           </template>
                         </select>
                         <button class="btn btn-ghost btn-sm" @click="addMember(dept.id)">加入部門</button>
+                        <button class="btn btn-ghost btn-sm" @click="openMemberBatch(dept)" :data-testid="'org-batch-open-' + dept.id">一次加入多人</button>
                       </div>
                     </div>
                   </template>
@@ -462,6 +463,47 @@
     </div>
   </div>
 
+  <!-- ══ 一次加入多人：勾選 → 預覽（誰從哪個部門搬來）→ 確認 → 結果可復原這一批 ══ -->
+  <div class="modal-overlay" x-show="mb.open" x-transition style="display:none" @click.self="if (!mb.busy) mb.open=false" data-testid="org-batch-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="'一次加入多人到「' + mb.deptName + '」'"></span>
+        <button class="modal-close" :disabled="mb.busy" @click="mb.open=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div x-show="!mb.result">
+          <input class="form-input" type="text" x-model="mb.q" placeholder="篩選姓名或目前部門" style="font-size:12px;margin-bottom:8px" data-testid="org-batch-q">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:12px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="mbSelectShown(true)" data-testid="org-batch-all">全選目前列出的</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="mbSelectShown(false)" data-testid="org-batch-none">全部取消</button>
+            <span x-text="'已選 ' + mb.picked.length + ' 人'" data-testid="org-batch-count"></span>
+          </div>
+          <div style="max-height:calc(36vh / var(--fz,1));overflow:auto;border:1px solid var(--border-light);border-radius:6px">
+            <template x-for="u in mbShown()" :key="u.id">
+              <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid #F0EEE9;font-size:13px;cursor:pointer" :data-testid="'org-batch-user-' + u.id">
+                <input type="checkbox" :checked="mb.picked.includes(u.id)" @change="mbToggle(u.id)">
+                <span x-text="u.displayName || u.username"></span>
+                <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="u.departmentName ? '目前：' + u.departmentName : '目前沒有部門'"></span>
+              </label>
+            </template>
+            <div x-show="!mbShown().length" style="padding:10px;font-size:12px;color:var(--text-dim)">沒有符合的使用者。</div>
+          </div>
+          <div x-show="mb.picked.length" style="margin-top:8px;font-size:12px;line-height:1.6;background:#F3F4F6;border-radius:6px;padding:8px 10px" data-testid="org-batch-preview">
+            <div x-text="mbPreviewText()"></div>
+          </div>
+        </div>
+        <div x-show="mb.result" style="font-size:13px;line-height:1.7" data-testid="org-batch-result">
+          <div x-text="mb.result"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" x-show="mb.undo.length" @click="mbUndo()" data-testid="org-batch-undo">復原這一批</button>
+        <button class="btn btn-ghost" :disabled="mb.busy" @click="mb.open=false" x-text="mb.result ? '關閉' : '取消'"></button>
+        <button class="btn btn-primary" x-show="!mb.result" :disabled="!mb.picked.length || mb.busy" @click="mbApply()" data-testid="org-batch-apply" x-text="'確定加入 ' + mb.picked.length + ' 人'"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ 組織圖：成員清單 Modal ══ -->
   <div class="modal-overlay" x-show="showChartMembersModal" x-transition style="display:none" @click.self="showChartMembersModal=false">
     <div class="modal-box">
@@ -494,6 +536,7 @@
       divOpenState: {},
       deptMembersOpenState: {},
       addMemberSelection: {},
+      mb: { open: false, deptId: 0, deptName: '', q: '', picked: [], busy: false, result: '', undo: [] },   // 一次加入多人（批次）
       showDivModal: false,
       showDeptModal: false,
       showChartMembersModal: false,
@@ -670,6 +713,73 @@
         this.addMemberSelection[deptId] = 0
         await Promise.all([this.loadUsers(), this.loadOrgTree()])
         this.toast('已加入部門')
+      },
+
+      // ── 一次加入多人：預覽＝畫面上就算得出來的「誰從哪搬到哪」；確定後逐人寫入，失敗的列出來、成功的可整批復原 ──
+      openMemberBatch(dept) {
+        this.mb = { open: true, deptId: dept.id, deptName: dept.name, q: '', picked: [], busy: false, result: '', undo: [] }
+      },
+      mbShown() {
+        const q = (this.mb.q || '').trim().toLowerCase()
+        return this.availableUsersFor(this.mb.deptId).filter(u =>
+          !q || ((u.displayName || u.username || '') + ' ' + (u.departmentName || '')).toLowerCase().includes(q))
+      },
+      mbToggle(id) {
+        const i = this.mb.picked.indexOf(id)
+        this.mb.picked = i >= 0 ? this.mb.picked.filter(x => x !== id) : this.mb.picked.concat([id])
+      },
+      mbSelectShown(on) {
+        const ids = this.mbShown().map(u => u.id), keep = this.mb.picked.filter(x => !ids.includes(x))
+        this.mb.picked = on ? keep.concat(ids) : keep
+      },
+      mbPreviewText() {
+        const by = {}
+        for (const id of this.mb.picked) {
+          const u = this.users.find(x => x.id === id)
+          if (!u) continue
+          const k = u.departmentName || '沒有部門'
+          by[k] = (by[k] || 0) + 1
+        }
+        const parts = Object.keys(by).map(k => k + ' ' + by[k] + ' 人')
+        return '將 ' + this.mb.picked.length + ' 人加入「' + this.mb.deptName + '」（來源：' + parts.join('、') + '）。換部門的人會離開原部門；按「確定」才會儲存。'
+      },
+      async _mbSetDept(uid, deptId) {
+        const r = await fetch('/api/users/' + uid, { method: 'PUT', headers: this._headers(), body: JSON.stringify({ department_id: deptId }) })
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || '寫入失敗')
+      },
+      async mbApply() {
+        if (this.mb.busy || !this.mb.picked.length) return
+        this.mb.busy = true
+        const done = [], failed = []
+        try {
+          for (const id of this.mb.picked) {
+            const u = this.users.find(x => x.id === id)
+            try { await this._mbSetDept(id, this.mb.deptId); done.push({ id, was: (u && u.departmentId) || 0 }) }
+            catch (e) { failed.push(((u && (u.displayName || u.username)) || id) + '：' + (e.message || e)) }
+          }
+        } finally { this.mb.busy = false }
+        await Promise.all([this.loadUsers(), this.loadOrgTree()])
+        this.mb.undo = done
+        this.mb.picked = []
+        this.mb.result = '已加入 ' + done.length + ' 人' + (failed.length ? '；' + failed.length + ' 人未成功（' + failed.join('；') + '）' : '') + '。' + (done.length ? '如需撤回，可按「復原這一批」。' : '')
+      },
+      async mbUndo() {
+        if (this.mb.busy || !this.mb.undo.length) return
+        this.mb.busy = true
+        const target = this.mb.deptId, back = [], skipped = [], failed = []
+        try {
+          await this.loadUsers()                                  // 先讀最新狀態：這批之後被別人改過部門的人不覆蓋
+          for (const x of this.mb.undo) {
+            const u = this.users.find(y => y.id === x.id), name = (u && (u.displayName || u.username)) || String(x.id)
+            if (!u || u.departmentId !== target) { skipped.push(name); continue }
+            try { await this._mbSetDept(x.id, x.was); back.push(name) } catch (e) { failed.push(name + '：' + (e.message || e)) }
+          }
+        } finally { this.mb.busy = false }
+        this.mb.undo = []
+        await Promise.all([this.loadUsers(), this.loadOrgTree()])
+        this.mb.result = '已復原 ' + back.length + ' 人回到原本的部門。'
+          + (skipped.length ? skipped.length + ' 人在這批之後已被改過部門，未覆蓋（' + skipped.join('、') + '）。' : '')
+          + (failed.length ? failed.length + ' 人復原未成功（' + failed.join('；') + '）。' : '')
       },
 
       async removeMember(user) {

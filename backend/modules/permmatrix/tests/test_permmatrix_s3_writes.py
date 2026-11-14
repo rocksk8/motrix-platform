@@ -87,7 +87,9 @@ WRITES = [("post", "/role-cap", {"role": "sales", "cap": "zz.doc.view", "granted
           ("post", "/pending/1/cancel", {"reason": "測試撤銷"}),
           ("post", "/pending/1/approve", {"reason": "測試核准"}),
           ("post", "/versions/1/restore", {"reason": "測試回溯"}),
-          ("post", "/undo", None)]
+          ("post", "/undo", None),
+          ("post", "/role-cap/batch", {"changes": [{"role": "sales", "cap": "zz.doc.view", "granted": False}], "planHash": "x"}),
+          ("post", "/role-cap/batch/preview", {"changes": [{"role": "sales", "cap": "zz.doc.view", "granted": False}]})]
 
 
 @pytest.mark.parametrize("method,path,body", WRITES)
@@ -206,8 +208,84 @@ def test_page_edits_only_through_preview_and_has_init_guard():
     from pathlib import Path
     from core import source_tree
     html = source_tree.page_file("permission-matrix.html").read_text(encoding="utf-8")
-    assert "_initDone" in html and "/role-cap/preview" in html and "/user-override/preview" in html
-    assert html.count("this._open(") >= 6 and "confirmDlg" in html            # 所有寫入都經確認對話框
+    assert "_initDone" in html and "/role-cap/batch/preview" in html and "/user-override/preview" in html
+    assert html.count("this._open(") >= 5 and "confirmDlg" in html and "applyStage" in html            # 所有寫入都經確認對話框；角色格改走暫存區批次（預覽之後才寫）
+    assert "/role-cap'" not in html and "/role-cap/preview" not in html          # 點格子不再直接送單格請求
     assert "!c.wired" in html                                                  # 未接入的格子不可勾
     visible = re.findall(r'x-text="([^"]*)"', html)
     assert not [t for t in visible if "c.key" in t and "testid" not in t and "option" not in t], visible
+
+
+# ── 暫存區批次（設定矩陣 S4c）────────────────────────────────────────────────────────────
+def _batch(client, h, changes, reason="", preview_only=False, plan_hash=None):
+    pv = client.post(B + "/role-cap/batch/preview", headers=h, json={"changes": changes})
+    if preview_only:
+        return pv
+    assert pv.status_code == 200, pv.text
+    return client.post(B + "/role-cap/batch", headers=h, json={"changes": changes, "reason": reason, "planHash": plan_hash or pv.json()["planHash"]})
+
+
+MIX = [{"role": "sales", "cap": "zz.doc.view", "granted": False},      # 低風險：立即
+       {"role": "sales", "cap": "zz.doc.pay", "granted": True},        # 放寬高風險：待生效
+       {"role": "admin", "cap": "zz.doc.view", "granted": True}]       # 已經是這個狀態：不變
+
+
+def test_batch_preview_writes_nothing_and_classifies_every_cell(client, su):
+    before = _count("SELECT COUNT(*) FROM perm_role_caps") + _count("SELECT COUNT(*) FROM perm_versions") + _count("SELECT COUNT(*) FROM config_changes")
+    d = _batch(client, su, MIX, preview_only=True).json()
+    assert {(x["role"], x["cap"]): x["status"] for x in d["cells"]} == {("sales", "zz.doc.view"): "immediate", ("sales", "zz.doc.pay"): "pending", ("admin", "zz.doc.view"): "nochange"}
+    assert d["needsReason"] is True and d["summary"] == {"changed": 2, "immediate": 1, "pending": 1, "unchanged": 1} and d["planHash"]
+    assert before == _count("SELECT COUNT(*) FROM perm_role_caps") + _count("SELECT COUNT(*) FROM perm_versions") + _count("SELECT COUNT(*) FROM config_changes")
+
+
+def test_batch_apply_mixes_immediate_and_pending_with_one_version(client, su):
+    v0 = _count("SELECT COUNT(*) FROM perm_versions")
+    r = _batch(client, su, MIX, reason="業務需要代為登錄付款")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["applied"] == [{"role": "sales", "cap": "zz.doc.view"}] and len(j["pending"]) == 1 and j["version"]
+    assert _cell(client, su, "zz.doc.view", "sales")["granted"] is False
+    assert _cell(client, su, "zz.doc.pay", "sales")["granted"] is False, "高風險放寬要等確認期間，不可立刻生效"
+    assert _count("SELECT COUNT(*) FROM perm_versions") == v0 + 1, "整批立即生效的格合併成一個版本（一鍵復原＝整批還原）"
+    assert _count("SELECT COUNT(*) FROM audit_log WHERE action='permmatrix.role_cap.set'") == 1
+    assert len(client.get(B + "/pending", headers=su).json()["items"]) == 1
+
+
+def test_batch_with_high_risk_loosening_needs_a_reason_and_writes_nothing_without_it(client, su):
+    r = _batch(client, su, MIX, reason="")
+    assert r.status_code == 400 and "原因" in r.json()["detail"]
+    assert _cell(client, su, "zz.doc.view", "sales")["granted"] is True, "沒填原因時，連低風險的那格也不可寫（整批同一交易）"
+    assert client.get(B + "/pending", headers=su).json()["items"] == []
+
+
+def test_batch_without_high_risk_needs_no_reason(client, su):
+    r = _batch(client, su, [{"role": "sales", "cap": "zz.doc.view", "granted": False}])
+    assert r.status_code == 200 and r.json()["needsReason"] is False and len(r.json()["applied"]) == 1
+
+
+def test_batch_stale_preview_is_409_and_writes_nothing(client, su):
+    pv = _batch(client, su, MIX, preview_only=True).json()
+    assert client.post(B + "/role-cap", headers=su, json={"role": "sales", "cap": "zz.doc.view", "granted": False}).status_code == 200       # 預覽之後有人先改了一格
+    r = client.post(B + "/role-cap/batch", headers=su, json={"changes": MIX, "reason": "業務需要代為登錄付款", "planHash": pv["planHash"]})
+    assert r.status_code == 409, r.text
+    assert client.get(B + "/pending", headers=su).json()["items"] == []
+    assert client.post(B + "/role-cap/batch", headers=su, json={"changes": MIX, "reason": "業務需要代為登錄付款"}).status_code == 400    # 沒帶 planHash
+
+
+def test_batch_input_validation(client, su):
+    for bad in ([], [{"role": "sales", "cap": "zz.doc.view", "granted": "yes"}], [{"role": "sales", "cap": "zz.doc.view"}], ["x"],
+                [{"role": "sales", "cap": "zz.doc.view", "granted": False}] * 2,
+                [{"role": "superadmin", "cap": "zz.doc.view", "granted": False}], [{"role": "sales", "cap": "no.such.cap", "granted": True}],
+                [{"role": "sales", "cap": "zz.doc.config", "granted": True}]):
+        r = _batch(client, su, bad, preview_only=True)
+        assert r.status_code in (400, 422), (bad, r.status_code)
+    assert client.post(B + "/role-cap/batch/preview", headers=su, json={"changes": [{"role": "sales", "cap": "zz.doc.view", "granted": False}] * 201}).status_code == 400
+
+
+def test_batch_undo_with_the_existing_one_click_undo_restores_the_whole_batch(client, su):
+    # 注意：復原＝把取消的格子再授予回去；高風險項（如 zz.doc.pay）的再授予依既有規則要等確認期間，不在「立即復原」之列，所以這裡用一般項
+    cells = [{"role": "sales", "cap": "zz.doc.view", "granted": False}, {"role": "admin", "cap": "zz.doc.view", "granted": False}]
+    assert _batch(client, su, cells).status_code == 200
+    assert _cell(client, su, "zz.doc.view", "admin")["granted"] is False
+    assert client.post(B + "/undo", headers=su).status_code == 200
+    assert _cell(client, su, "zz.doc.view", "sales")["granted"] is True and _cell(client, su, "zz.doc.view", "admin")["granted"] is True

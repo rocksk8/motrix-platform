@@ -111,10 +111,28 @@ def _cross(group):
     return check
 
 
+# 設定中心的欄位名稱與「什麼時候用」（S4a；h12/when-texts.csv）：12 個狀態／用語名稱共用同一句 when
+_PLAIN_LABEL = {
+    ("lodging_labels", "per_night"): "住宿計價單位的名稱：「每晚」",
+    ("lodging_labels", "per_person"): "住宿計價單位的名稱：「每人」",
+    ("lodging_labels", "phone"): "住宿詢價管道的名稱：「電話」",
+    ("lodging_labels", "website"): "住宿詢價管道的名稱：「官網」",
+    ("lodging_labels", "onsite"): "住宿詢價管道的名稱：「現場」",
+    ("lodging_labels", "other"): "住宿詢價管道的名稱：「其他」",
+    ("netplan_labels", "planning"): "網路規劃狀態的名稱：「規劃中」",
+    ("netplan_labels", "confirmed"): "網路規劃狀態的名稱：「已確認」",
+    ("netplan_labels", "delivered"): "網路規劃狀態的名稱：「已交付」",
+    ("procurement_labels", "suggested"): "採購建議狀態的名稱：「待下單」",
+    ("procurement_labels", "ordered"): "採購建議狀態的名稱：「已下單」",
+    ("procurement_labels", "received"): "採購建議狀態的名稱：「已到貨」",
+}
+_NAME_WHEN = "公司習慣用別的稱呼時，改這裡就能讓畫面使用貴公司習慣的說法。"
+
+
 def register(S, _register_core):
     def f(group, key, question, label_, where):
         d = DEFAULTS[group][key]
-        return S(key, "str", d, risk="none", recommended=d, question=question, label=label_,
+        return S(key, "str", d, risk="none", recommended=d, question=question, label=_PLAIN_LABEL.get((group, key), label_), when=_NAME_WHEN,
                  help="%s目前的名稱是「%s」（＝畫面原本的字）。" % (where, d),
                  impact="影響範圍：%s只換畫面上看到的名稱，不改任何資料、狀態判斷、順序或權限；已存的資料不變，立即生效，可隨時改回。" % where)
 
