@@ -43,7 +43,7 @@ def test_mobile_funnel_is_one_scrollable_row_and_hides_in_detail():
 
 def test_empty_state_offers_clear_filters_and_funnel_note():
     assert 'data-testid="dc-clear-filters"' in DC and 'data-testid="dc-funnel-note"' in DC
-    assert "找不到符合的商機。" in DC and "上方數字依目前的搜尋／篩選結果計算。" in DC
+    assert "查無符合條件的商機。" in DC and "上方數字依目前的搜尋／篩選結果計算。" in DC
     assert "無符合商機" not in DC
 
 

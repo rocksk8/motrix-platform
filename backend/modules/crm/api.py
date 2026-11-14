@@ -159,7 +159,7 @@ DEV_CASE_ACCESS = row_access.OwnerRule(
     creator_col="created_by",
     id_list_cols=("sales_persons", "planners"),
     lenient_json=True,
-    deny_message="無權限存取此業務開發案",
+    deny_message="無權限存取此商機",
 )
 row_access.register("dev_case", DEV_CASE_ACCESS)
 

@@ -695,7 +695,7 @@
         <div x-show="casesLoading" style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">載入中…</div>
         <div x-show="!casesLoading && filteredCases.length === 0"
              style="text-align:center;padding:30px;font-size:13px;color:var(--text-dim)" data-testid="dc-empty-list">
-          <div x-text="hasActiveFilter ? '找不到符合的商機。' : '還沒有商機。'"></div>
+          <div x-text="hasActiveFilter ? '查無符合條件的商機。' : '尚無商機。'"></div>
           <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm dc-tap" data-testid="dc-clear-filters" x-show="hasActiveFilter" @click="clearFilters()">清除篩選</button>
             <button type="button" class="btn btn-primary btn-sm dc-tap" @click="openNewCase()">新增商機</button>
