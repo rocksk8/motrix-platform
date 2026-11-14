@@ -308,6 +308,7 @@ def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, m
     p2.get_by_role("button", name="編輯商機").wait_for(timeout=15000)
     assert p2.locator('[data-testid="detail-expected-amount"] .dc-info-val').inner_text().strip() == "—"
     p2.get_by_role("button", name="編輯商機").click()
+    p2.locator(".dc-modal-foot .btn-primary").locator("visible=true").first.wait_for(state="visible", timeout=8000)   # 編輯視窗已開（先等它，再斷言「沒有金額欄」，否則是假綠燈）
     assert p2.locator('[data-testid="case-expected-amount"]').locator("visible=true").count() == 0
     assert p2.locator('[data-testid="dc-pipeline-amount"]').locator("visible=true").count() == 0
 
