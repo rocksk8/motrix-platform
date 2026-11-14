@@ -86,6 +86,8 @@ _DYN_SRC_RE = re.compile(r"""\.src\s*=\s*["']([^"']+?\.js)(?:\?[^"']*)?["']""")
 #: ⚠️ 每一筆都要寫**為什麼它沒有寫入動作**，而不是「它就是唯讀」。
 #: ☠️ 這張表是 `AC1` 唯一的逃生門 ⇒ 它變長就是這道守門在失效。
 READ_ONLY_PAGES = {
+    "line-events.html": "T86 LINE 事件矩陣：頁面只掛載 `static/line-events-matrix.js`（LineEventsMatrix.mount）；寫入（PUT／POST 事件設定、批次、復原）全在那支 js 裡。"
+                        "該 js 同時被 notification-settings.html 載入，依本檔規則算「共用檔」而排除掃描，所以這一頁的自身內容看不到寫入呼叫——不是漏做，也不是唯讀。",
     "approval-history.html": "簽核歷程：純查詢，動作在簽核佇列那一頁。",
     "material-flow.html": "一條龍 P1'（旗標 onepipe.timeline）案件物料流程時間軸：只讀 GET /api/quotations/{no}/material-flow，各格以連結導向既有頁（材料申請、採購、入庫、出貨）；寫入動作都在那些頁，這一頁刻意不提供任何修改。",
     "change-password.html": "T82 整合（hichan-1 feat/menu-ux-myaccount）：舊網址轉址頁——內容整個搬到「我的帳號 → 帳號安全」（my-account.html，改密碼／通行金鑰等寫入動作在那一頁），這裡只剩 location.replace 與說明連結；刻意沒有寫入動作。",
@@ -379,7 +381,9 @@ def test_ac1_every_exemption_gives_a_real_reason():
     # 與 approval-settings 的導向頁同一類：刻意沒有寫入動作。登記理由寫在 READ_ONLY_PAGES。
     # 13 → 14（一條龍 P1' 2026-11-13，明著的決定）：material-flow.html 是案件物料流程時間軸，整頁只讀、
     # 動作都在它連過去的既有頁（材料申請／採購／入庫／出貨），刻意沒有寫入動作。登記理由寫在 READ_ONLY_PAGES。
-    assert len(READ_ONLY_PAGES) <= 14, (
+    # 14 → 15（T86 整合 2026-11-14，明著的決定）：line-events.html 只掛載 static/line-events-matrix.js（寫入都在那支 js）；
+    # 該 js 因 notification-settings.html 也載入而被算成共用檔排除掃描，頁面本身因此讀不到寫入呼叫。登記理由寫在 READ_ONLY_PAGES（寫清楚「不是唯讀、是寫入在共用 js」）。
+    assert len(READ_ONLY_PAGES) <= 15, (
         "登記表已經有 %d 筆（2026-09-23 實算是 8）——\n" % len(READ_ONLY_PAGES)
         + "☠️ 它變長就是這道守門在失效。\n"
         + "⚠️ 若真的有那麼多唯讀頁，**退回給我**：那時要改的是這個上限，\n"
