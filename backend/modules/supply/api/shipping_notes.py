@@ -263,7 +263,7 @@ def get_shipping_recipient_privacy_acks(note_no: str, authorization: str = Heade
     conn = get_db()
     _note_for_privacy(conn, note_no, user)
     conn.close()
-    return {"acks": _pn.acks_with_prefix("shipping_recipient", note_no)}
+    return {"acks": _pn.acks_view(user, _pn.acks_with_prefix("shipping_recipient", note_no))}
 
 
 @router.post("/api/shipping-notes/{note_no}/privacy-notice/ack")

@@ -7748,7 +7748,7 @@ def get_quotation_privacy_acks(quote_no: str, role: str = "contact", authorizati
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     require_case(user, row, quote_no, scope="read")
-    return {"acks": _pn.acks_with_prefix(kind, quote_no)}
+    return {"acks": _pn.acks_view(user, _pn.acks_with_prefix(kind, quote_no))}
 
 
 @router.post("/api/quotations/{quote_no}/privacy-notice/ack")
@@ -7776,7 +7776,7 @@ def ack_quotation_privacy_notice(quote_no: str, body: dict = Body(...), authoriz
     if created:
         _audit(_tok(authorization), "quotation.privacy_notice_ack", "quotation", quote_no,
                f"{quote_no}／{subject}", {"noticeHash": rec.get("noticeHash"), "role": body.get("role") or "contact"})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 # ── /api/sales-orders：已成案／已結案案件清單（2026-09-26 自 routers/dashboard.py 移入，M08 搬遷，主持裁示 a）──

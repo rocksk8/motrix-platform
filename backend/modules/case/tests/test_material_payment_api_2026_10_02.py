@@ -367,3 +367,26 @@ def test_fee_over_the_limit_goes_to_review_and_a_fee_above_the_payment_is_refuse
     assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["cash"]).status_code == 403          # 出納自己登錄的、也非 admin：不能審
     assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["adm"]).status_code == 200
     assert _q("SELECT COUNT(*) AS n FROM case_material_payment_lines")[0]["n"] == 1                                # 退回＝刪掉 600 那一筆，剩 500 那筆
+
+
+def test_payee_privacy_ack_is_masked_for_non_admin_finance(client, world, make_user):
+    """T86：收款人「已告知」紀錄的讀取範圍同 `GET /api/suppliers`——superadmin／admin 看完整紀錄，財務角色等其他人只看「已告知＋日期」
+    （GET 與補記 POST 已記錄過時回傳的既有紀錄同一條線）；伺服器端儲存的紀錄與稽核仍完整。"""
+    from helpers import privacy_notice as pn
+    w = world
+    fu, fp = make_user(username="mpa_fin", role="finance")
+    hf = _login(client, fu, fp)
+    pay = _create(client, w, 1000).json()["payment"]
+    full = pn.get_ack("material_payment", pay["docCode"])
+    assert full and full.get("by") and full.get("byUsername") and full.get("noticeHash")
+    url = "/api/material-payments/%d/privacy-notice" % pay["id"]
+    assert client.get(url, headers=w["adm"]).json()["ack"] == full
+    g = client.get(url, headers=hf)
+    assert g.status_code == 200, g.text
+    assert g.json()["ack"] == {"at": full["at"]}
+    p = client.post(url + "/ack", headers=hf)
+    assert p.status_code == 200, p.text
+    assert p.json() == {"ack": {"at": full["at"]}, "created": False}
+    for leaked in (full["by"], full["byUsername"], full["noticeHash"]):
+        assert leaked not in g.text and leaked not in p.text
+    assert pn.get_ack("material_payment", pay["docCode"]) == full, "儲存的紀錄不變"

@@ -133,7 +133,8 @@ def get_payee_privacy_ack(pid: int, authorization: str = Header(None)):
             raise HTTPException(403, "此帳號沒有財務檢視權限")
     finally:
         conn.close()
-    return {"ack": _payee_ack(row["doc_code"])}
+    from helpers import privacy_notice as _pn
+    return {"ack": _pn.ack_view(user, _payee_ack(row["doc_code"]))}
 
 
 @router.post("/api/material-payments/{pid}/privacy-notice/ack")
@@ -152,7 +153,7 @@ def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
     if created:
         _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "材料申請匯款申請 %s 收款人個資告知" % row["doc_code"],
                {"docCode": row["doc_code"], "noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 # ── 讀 ───────────────────────────────────────────────────────────────

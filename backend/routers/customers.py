@@ -514,7 +514,7 @@ def get_customer_contact_privacy_acks(cid: int, authorization: str = Header(None
     conn.close()
     if name is None:
         raise HTTPException(404, "客戶不存在")
-    return {"acks": _pn.acks_with_prefix("customer_contact", cid)}
+    return {"acks": _pn.acks_view(user, _pn.acks_with_prefix("customer_contact", cid))}
 
 
 @router.post("/api/customers/{cid}/contacts/{ctid}/privacy-notice/ack")
@@ -535,4 +535,4 @@ def ack_customer_contact_privacy_notice(cid: int, ctid: str, authorization: str 
     if created:
         _audit(_tok(authorization), 'customer.privacy_notice_ack', 'customer', f"{cid}:{ctid}",
                f"{name}／{ct.get('name') or ''}", {"noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
