@@ -4,20 +4,23 @@
 [單位] tools:audit_scope_scan   [層] 工具   [穩定度] 內部
 [不變式]
   * 只讀不寫；純 AST 掃描。守門測試 `tests/platform/test_audit_reads_scoped_to_own_rows_2026_11_14.py` 與 author_gate --quick 共用這一份。
-  * 掃的是測試檔裡的字串常數（含 f-string 的常數段）：同一個字串含 `FROM <全域表>`，卻沒有任何「自己的範圍」條件 ⇒ 命中。
-      全域表：AUDIT_TABLES（目前 audit_log——失敗列與一般稽核列都在這裡）。
-      自己的範圍：WHERE 內出現 username／user_id／actor／request_id／target／entity／object／quote_no／case_id／doc_no／ref_id 這類欄位，
-                 或 `id >`／`rowid >`／`created_at >`（用查詢前的水位線只看自己這次新增的列）。
+  * 掃的是測試檔裡「SQL 敘述開頭」（SELECT／WITH／DELETE／UPDATE）的字串（含 f-string 的常數段、`"a" + "b"` 拼接）：含 `FROM <全域表>`（AUDIT_TABLES，目前 audit_log）時，
+    **只看第一個 WHERE 之後、ORDER BY／GROUP BY／LIMIT 之前的條件**；沒有 WHERE ⇒ 命中；WHERE 裡沒有「自己的範圍」條件 ⇒ 命中。
+      自己的範圍＝範圍欄位（username／user_id／actor／request_id／target／entity／object_id／quote_no／case_id／doc_no／ref_id…）與值比較（= IN LIKE；`!=`／`<>` 選的是別人的列，不算），
+      或水位線 `id >`／`rowid >`／`created_at >`／`ts >`（**右邊不能是數字常數**：`id > 0` 等於沒篩）。
+      只出現在 SELECT 欄位清單或 ORDER BY 的欄位名不算。
   * 為什麼：`SELECT * FROM audit_log WHERE result='fail'` 讀到的是整個資料庫的失敗列；單獨跑會綠，整包跑時別的測試留下的列讓
     `len(rows) == 1` 變成 `len(rows) == 3`（T86 正式閘門才抓到）。
-  * 逃生口：字串所在的行加真正的註解 `# audit-scope-ok: <理由>`（理由 ≥8 字元且≥2 詞或中文≥4 字；例如這個測試用的是獨立資料庫）；使用數另有棘輪（基線 hatches）。
-  * 棘輪：既有檔的命中數記在 `tests/platform/audit_scope_baseline.json`（只准減少）；新檔與有改動的檔超過基線＝紅。
+  * **沒有逃生口**（T87 決定，h11 F1）：命中就改寫測試（WHERE 加上自己建立的使用者／request_id／target，或先記下 max(id) 再用 `id > ?` 只看新增的列）。
+  * 棘輪：既有檔的命中數記在 `tests/platform/audit_scope_baseline.json`（只准減少；與 ratchet.py 的三道檢查共用）；新檔與有改動的檔超過基線＝紅。
+  * 已知限制：只認 AUDIT_TABLES 的表名與 SQL 敘述開頭的字串；動態拼出表名、ORM 讀取、別的全域表（failure 表）看不到——要擴就在 AUDIT_TABLES 加表名；
+    子查詢裡的 WHERE 會被當成同一個條件區；`WHERE username = ? OR result='fail'`（OR 讓範圍條件失效）與 `username LIKE '%'`（萬用字元）看不出來，靠審查。
 """
 import ast
-import warnings
 import json
 import re
 import sys
+import warnings
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -29,39 +32,69 @@ import text_anchor_scan as TA  # noqa: E402  （棘輪 over_baseline／測試檔
 AUDIT_TABLES = ("audit_log",)
 BASELINE = REPO / "backend" / "tests" / "platform" / "audit_scope_baseline.json"
 _FROM = re.compile(r"\bFROM\s+(%s)\b" % "|".join(AUDIT_TABLES), re.I)
-_SCOPE = re.compile(
-    r"\b(username|user_id|user_name|actor|actor_id|actor_username|request_id|target|target_id|entity|entity_id|object_id|quote_no|case_id|doc_no|ref_id|"
-    r"record_id|session_id)\b|\b(rowid|id|created_at|ts|at)\s*>\s*[?:\w]", re.I)
 _STMT = re.compile(r"\s*(SELECT|WITH|DELETE|UPDATE)\b", re.I)                # 只認 SQL 敘述開頭的字串（說明文字、docstring 提到 FROM audit_log 不算）
-_OK_REASON = re.compile(r"#\s*audit-scope-ok:\s*(.*)$")
+_WHERE = re.compile(r"\bWHERE\b", re.I)
+_WHERE_END = re.compile(r"\b(ORDER\s+BY|GROUP\s+BY|LIMIT|HAVING)\b", re.I)
+_SCOPE_COLS = ("username|user_id|user_name|actor|actor_id|actor_username|request_id|target|target_id|entity|entity_id|object_id|quote_no|case_id|doc_no|ref_id|"
+               "record_id|session_id")
+_SCOPE_EQ = re.compile(r"\b(?:%s)\b\s*(?:=|\bIN\b|\bLIKE\b)\s*(?:\S|$)" % _SCOPE_COLS, re.I)   # `!=`／`<>` 選的是「別人的列」，不算自己的範圍（h11 nit）
+_WATERMARK = re.compile(r"\b(?:rowid|id|created_at|ts)\b\s*>=?\s*(?!['\"]?\d)(?:\S|$)", re.I)
+
+
+def _flatten_add(node):
+    """`"a" + x + "b"` ⇒ 字串（非字串的項以一個空白代替）；項目裡完全沒有字串常數 ⇒ None。"""
+    parts, has_str = [], False
+
+    def walk(n):
+        nonlocal has_str
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+            walk(n.left)
+            walk(n.right)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+            has_str = True
+            parts.append(n.value)
+        elif isinstance(n, ast.JoinedStr):
+            has_str = True
+            parts.append("".join(v.value if isinstance(v, ast.Constant) and isinstance(v.value, str) else " " for v in n.values))
+        else:
+            parts.append(" ")
+    walk(node)
+    return "".join(parts) if has_str else None
 
 
 def _strings(tree):
-    """⇒ [(起始行, 完整字串)]；JoinedStr 取其常數段（變數段留空白）。巢在 JoinedStr 裡的常數不重複計。"""
+    """⇒ [(起始行, 完整字串)]；JoinedStr 取其常數段（變數段留空白）；`"a" + "b"` 拼接成一個字串。巢在別的字串運算式裡的常數不重複計。"""
     out, inside = [], set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.JoinedStr):
-            for v in node.values:
-                inside.add(id(v))
+        if id(node) in inside:
+            continue
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            s = _flatten_add(node)
+            if s is not None:
+                out.append((node.lineno, s))
+                inside.update(id(n) for n in ast.walk(node))
+        elif isinstance(node, ast.JoinedStr):
             out.append((node.lineno, "".join(v.value if isinstance(v, ast.Constant) and isinstance(v.value, str) else " " for v in node.values)))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in inside:
+            inside.update(id(n) for n in ast.walk(node))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             out.append((node.lineno, node.value))
     return out
 
 
-def hatch_lines(src):
-    """⇒ {行號: 理由}：真正的註解 token 裡、理由合格（≥8 字元且≥2 詞或中文≥4 字）的 `# audit-scope-ok: …`。"""
-    out = {}
-    for ln, c in TA.comment_lines(src, "audit-scope-ok").items():
-        m = _OK_REASON.search(c)
-        if m and TA.valid_reason(m.group(1)):
-            out[ln] = m.group(1).strip()
-    return out
+def is_scoped(sql):
+    """這段 SQL 讀 audit_log 時，WHERE 內有沒有自己的範圍條件。"""
+    m = _WHERE.search(sql)
+    if not m:
+        return False
+    where = sql[m.end():]
+    e = _WHERE_END.search(where)
+    if e:
+        where = where[:e.start()]
+    return bool(_SCOPE_EQ.search(where) or _WATERMARK.search(where))
 
 
 def _collect(src):
-    """⇒ [(行號, 片段, 逃生口行號或 None)]。語法錯誤的檔 ⇒ []（別的守門會抓）。"""
+    """⇒ [(行號, 片段)]。語法錯誤的檔 ⇒ []（別的守門會抓）。沒有逃生口。"""
     if not any(t in src for t in AUDIT_TABLES):
         return []
     try:
@@ -70,25 +103,16 @@ def _collect(src):
             tree = ast.parse(src)
     except SyntaxError:
         return []
-    hatches = hatch_lines(src)
     hits = []
     for ln, s in _strings(tree):
-        m = _FROM.search(s)
-        if not m or not _STMT.match(s) or _SCOPE.search(s):
-            continue
-        h = next((n for n in range(ln, ln + s.count(chr(10)) + 1) if n in hatches), None)
-        hits.append((ln, " ".join(s.split())[:60], h))
-    return sorted(set(hits), key=lambda x: (x[0], x[1]))
+        if _FROM.search(s) and _STMT.match(s) and not is_scoped(s):
+            hits.append((ln, " ".join(s.split())[:60]))
+    return sorted(set(hits))
 
 
 def scan_source(src):
-    """⇒ [(行號, 片段)]。有有效逃生口註解者略過。"""
-    return [(ln, sn) for ln, sn, h in _collect(src) if h is None]
-
-
-def hatch_uses(src):
-    hatches = hatch_lines(src)
-    return sorted((h, hatches[h]) for h in {h for _l, _s, h in _collect(src) if h is not None})
+    """⇒ [(行號, 片段)]。"""
+    return _collect(src)
 
 
 def scan_tree(files, read):
@@ -108,16 +132,6 @@ over_baseline = TA.over_baseline
 test_files = TA.test_files
 
 
-def hatches_in_tree(files, read):
-    out = {}
-    for f in files:
-        src = read(f)
-        u = hatch_uses(src) if src is not None else []
-        if u:
-            out[f] = len(u)
-    return out
-
-
 def main(argv=None):
     """python tools/platform/audit_scope_scan.py [--write-baseline] [檔…]：沒給檔 ⇒ 掃整個 repo 的測試檔。"""
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -128,18 +142,17 @@ def main(argv=None):
         out = subprocess.run(["git", "-C", str(REPO), "ls-files", "backend"], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
         paths = test_files(out)
     cur = scan_tree(paths, lambda f: (REPO / f).read_text(encoding="utf-8", errors="replace") if (REPO / f).is_file() else None)
-    hat = hatches_in_tree(paths, lambda f: (REPO / f).read_text(encoding="utf-8", errors="replace") if (REPO / f).is_file() else None)
     if write:
         old = load_baseline()
         if old.get("files") and not any(not a.startswith("--") for a in argv):
-            up = over_baseline(cur, old["files"]) + [(f, n, old.get("hatches", {}).get(f, 0)) for f, n in hat.items() if n > old.get("hatches", {}).get(f, 0)]
+            up = over_baseline(cur, old["files"])
             if up:
                 for f, n, b in up[:10]:
                     print("拒絕：%s 現在 %d、基線 %d——基線只准往下寫" % (f, n, b))
                 return 1
-        BASELINE.write_text(json.dumps({"version": 2, "_doc": "audit_scope_scan 的既有命中（只准減少；新增與修改的測試超過這裡的數字＝紅）。不得為了讓新測試過關而調高。",
-                                        "total": sum(cur.values()), "files": cur, "hatches": hat}, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        print("基線：%d 檔、%d 處；逃生口 %d 處" % (len(cur), sum(cur.values()), sum(hat.values())))
+        BASELINE.write_text(json.dumps({"version": 3, "_doc": "audit_scope_scan 的既有命中（只准減少；新增與修改的測試超過這裡的數字＝紅）。不得為了讓新測試過關而調高；沒有逃生口。",
+                                        "total": sum(cur.values()), "files": cur}, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        print("基線：%d 檔、%d 處" % (len(cur), sum(cur.values())))
         return 0
     base = load_baseline().get("files", {})
     bad = over_baseline(cur, base)

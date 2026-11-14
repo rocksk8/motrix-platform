@@ -407,6 +407,26 @@ def select_for(base, head, repo=REPO, full_floor=False, quick=False, workers=2, 
 E2E_FILE_SECONDS = 20.0                # 預算估算：e2e 檔每檔約 20 s（起伺服器＋瀏覽器；實測 T86 區間中位數附近，只用來排預算）
 
 
+RATCHET_BASELINES = ("backend/tests/platform/text_anchor_baseline.json", "backend/tests/platform/audit_scope_baseline.json")
+
+
+def ratchet_unrun(head, repo):
+    """棘輪「基線 vs 合併基準上的基線」那一道抓不到基準（no_base）時，pytest 只會 skip（看起來像綠）——這裡把它列成「未跑」（h11 S-b）。
+    環境設了 MOTRIX_RATCHET_BASE 時另外印出實際用的基準 sha（整合閘門設了它＝ratchet 直接紅，見 ratchet.check_against_base）。"""
+    import ratchet as RT
+    out = []
+    for rel in RATCHET_BASELINES:
+        cur = RT.git_show_json(rel, head, repo)
+        if cur is None:
+            continue
+        res = RT.check_against_base(rel, cur, repo, env_base=os.environ.get("MOTRIX_RATCHET_BASE"))
+        if res["status"] == "no_base":
+            out.append({"tier": "T1", "item": "ratchet 對照合併基準（%s）" % rel.rsplit("/", 1)[-1], "reason": "未跑——%s" % res["note"]})
+        elif os.environ.get("MOTRIX_RATCHET_BASE"):
+            print("ratchet 基準（MOTRIX_RATCHET_BASE）：%s｜%s" % ((res.get("base") or "-")[:9], res["note"]))
+    return out
+
+
 def apply_quick_plan(sel, base, head, repo, tree, changed, workers, budget_min, times, is_e2e=None):
     """--quick：用 quick_select 的優先層重排 non_e2e（T0 改動測試 → T1 整合守門組 → T2 刪掉的字面值反查 → T3 樣式守門 → T4 其餘選題，T4 依預算砍）。
     被砍／整組略過的每一項都放進 sel["quick_skipped"]（輸出與結果檔必須寫「未跑」）。"""
@@ -422,7 +442,7 @@ def apply_quick_plan(sel, base, head, repo, tree, changed, workers, budget_min, 
                          deleted=deleted, is_e2e=is_e2e)
     sel["quick_plan"] = plan
     sel["quick_over_budget"] = bool(plan.get("over_budget"))
-    sel["quick_skipped"] = plan["skipped"]
+    sel["quick_skipped"] = list(plan["skipped"]) + ratchet_unrun(head, repo)
     planned = sorted(set(plan["files"]))
     sel["E"] = sorted(f for f in planned if is_e2e(f))                                      # e2e 檔（T1／T2 選到的也算）走 e2e 那一段，不混進 not_e2e
     sel["non_e2e"] = [f for f in planned if not is_e2e(f)]

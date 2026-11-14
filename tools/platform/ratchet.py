@@ -3,15 +3,17 @@
 
 [單位] tools:ratchet   [層] 工具   [穩定度] 內部
 [不變式]
-  * 基線 JSON 形狀：{"total": N, "files": {檔: 命中數}, "hatches": {檔: 逃生口數}（可省略）}。
+  * 基線 JSON 形狀：{"total": N, "files": {檔: 命中數}}（沒有逃生口：T87 決定，h11 F1）。
   * 為什麼要三道：只比「現場命中 vs 基線」擋不住 (i) 上限常數不跟著下降、重寫基線偷渡新增；(ii) 這個檔 +3、那個檔 −3，總數不變；
     (iii) 檔案變乾淨後基線還留著空位，之後的修改把空位補滿。
       1. slack：基線的每個數字都必須貼合現場（基線 > 現場＝要重寫基線，而且只准往下寫）。
       2. vs_base：基線本身與合併基準上的基線比，任何一檔變多（新檔、改名後變多都算；改名用 git rename 偵測對回舊名）或總數變多＝紅。
       3. 不另存上限常數：上限就是合併基準上的基線（常數會過期、又是第二個要審的數字）。
+  * `MOTRIX_RATCHET_BASE`（指定基準）只給作者本機演練用：環境裡有 `MOTRIX_TRAIN`（整合閘門）時設了它＝紅（h11 S-b：不能用它挑一個比較寬的基準）；回報一律帶上用到的基準 sha。
   * 抓不到合併基準（沒有 git、沒有 origin 分支）⇒ 回報 status="no_base" 與原因，呼叫端必須把它印成「未跑」，不能當通過。
 """
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -71,6 +73,9 @@ def git_renames(base, repo=REPO, head="HEAD"):
 def check_against_base(rel_baseline, new_baseline, repo=REPO, env_base=None):
     """⇒ {"status": "ok"|"violation"|"no_base", "violations": [...], "note": str, "base": sha}。
     new_baseline＝現場讀到的基線 dict。基準上沒有這份基線檔（第一次建立）⇒ status=ok、note 說明。"""
+    if env_base and os.environ.get("MOTRIX_TRAIN"):
+        return {"status": "violation", "violations": [("<MOTRIX_RATCHET_BASE 在整合閘門（MOTRIX_TRAIN）不可設>", 0, 0)],
+                "note": "整合閘門只准用自動算出的合併基準，不接受指定基準 %s" % env_base, "base": None}
     base, why = merge_base(repo, env_base=env_base)
     if base is None:
         return {"status": "no_base", "violations": [], "note": why, "base": None}
@@ -79,7 +84,6 @@ def check_against_base(rel_baseline, new_baseline, repo=REPO, env_base=None):
         return {"status": "ok", "violations": [], "note": "合併基準 %s 上沒有 %s（第一次建立這份基線）" % (base[:9], rel_baseline), "base": base}
     ren = git_renames(base, repo)
     bad = vs_base(new_baseline.get("files", {}), old.get("files", {}), ren)
-    bad += [("%s [逃生口]" % f, n, o) for f, n, o in vs_base(new_baseline.get("hatches", {}), old.get("hatches", {}), ren)]
     if sum(new_baseline.get("files", {}).values()) > sum(old.get("files", {}).values()):
         bad.append(("<總數>", sum(new_baseline["files"].values()), sum(old["files"].values())))
     return {"status": "violation" if bad else "ok", "violations": bad, "note": "對照合併基準 %s（%s）" % (base[:9], why), "base": base}

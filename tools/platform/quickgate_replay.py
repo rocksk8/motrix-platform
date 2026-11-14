@@ -227,11 +227,73 @@ def summarize(rows):
             "rate_unbounded": unb / n if n else 0.0, "rate_real_budget": real / n if n else 0.0, "rate_t0_t3_only": t03 / n if n else 0.0}
 
 
+def breaker_units(rows):
+    """⇒ [(測試檔, breaker 或 None)]：實測要在 breaker 的樹上跑 quick，看這個測試檔紅不紅。沒有 breaker（未歸因）⇒ None（實測也無從跑，記為未跑／漏抓）。"""
+    out = []
+    for r in rows:
+        if "items" in r:
+            for it in r["items"]:
+                out.append((it["file"], it.get("breaker") or (it["breakers"][0] if it.get("breakers") else None)))
+        else:
+            b = r.get("breaker") or (r.get("breakers") or [None])[0]
+            out += [(f, b) for f in r.get("expect", [])] or [(r["name"], None)]
+    return out
+
+
+def run_measured(units, repo=REPO, workers=2, out_dir=None, python=sys.executable, budget_min=None, only=None):
+    """實測（解除安靜期後；會真的跑 pytest，重）：每個 breaker 一個拋棄式 worktree，用**目前**的 author_gate --quick（--repo 指向它）在 breaker 的樹上跑，
+    結果檔裡 failed_new（含 e2e 段）出現該測試檔＝紅＝抓到。同時記錄實際耗時、over_budget、skipped 數、failfast 是否提前停。⇒ {breaker: {...}}。"""
+    import shutil
+    import tempfile
+    import time
+    out_dir = Path(out_dir or tempfile.gettempdir())
+    res = {}
+    for b in sorted({b for _f, b in units if b and (not only or b in only)}):
+        wt = Path("D:/Claude-pm") / ("h9-qgrun-" + b)          # 暫存一律放 D:\Claude-pm
+        shutil.rmtree(wt, ignore_errors=True)
+        rc, _ = _git("worktree", "add", "--detach", str(wt), b, repo=repo)
+        if rc != 0:
+            res[b] = {"error": "worktree add 失敗"}
+            continue
+        jp = out_dir / ("quickrun-%s.json" % b)
+        t0 = time.time()
+        try:
+            cmd = [python, str(HERE / "author_gate.py"), "--quick", "--base", b + "^", "--head", b, "--repo", str(wt), "--workers", str(workers), "--json-out", str(jp)]
+            if budget_min is not None:
+                cmd += ["--budget-min", str(budget_min)]
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            dur = time.time() - t0
+            try:
+                j = json.loads(jp.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                j = None
+            failed = list((j or {}).get("failed_new", [])) + list(((j or {}).get("e2e") or {}).get("failed", []))
+            res[b] = {"rc": p.returncode, "seconds": round(dur, 1), "failed_files": sorted({n.split("::")[0] for n in failed}), "n_failed": len(failed),
+                      "over_budget": (j or {}).get("quick_over_budget"), "skipped": len((j or {}).get("quick_skipped", [])),
+                      "stopped_by_failfast": (j or {}).get("stopped_by_failfast"), "ran": (j or {}).get("ran"), "tail": p.stdout[-600:] if j is None else ""}
+        finally:
+            _git("worktree", "remove", "--force", str(wt), repo=repo)
+            shutil.rmtree(wt, ignore_errors=True)
+    return res
+
+
+def measured_summary(units, res):
+    def red(f, b):
+        r = res.get(b) or {}
+        return any(n.endswith(f[len("backend/"):] if f.startswith("backend/") else f) for n in r.get("failed_files", []))
+    reds = [(f, b) for f, b in units if b and red(f, b)]
+    return {"total": len(units), "red": len(reds), "rate": len(reds) / len(units) if units else 0.0, "no_breaker": sum(1 for _f, b in units if not b),
+            "red_files": [f for f, _b in reds], "per_breaker": res}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", default=str(DEFAULT_CASES))
     ap.add_argument("--case", action="append", default=[])
     ap.add_argument("--json-out")
+    ap.add_argument("--budget-min", type=float, default=None, help="--run 時傳給 author_gate 的預算（分鐘）；預設用 author_gate 的 quick 預設 5")
+    ap.add_argument("--only", action="append", default=[], help="--run 時只跑這些 breaker（短 sha，可重複）")
+    ap.add_argument("--run", action="store_true", help="實測（重：真的在每個 breaker 的樹跑 author_gate --quick）；只在獨佔窗口／安靜期解除後用")
     a = ap.parse_args(argv)
     spec = json.loads(Path(a.cases).read_text(encoding="utf-8"))
     base = spec.get("base", "558352168")
@@ -255,8 +317,15 @@ def main(argv=None):
           % (sm["caught_real_budget_strict"], sm["approx_attributed"], sm["approx_caught_real_budget"]))
     print("  抓到的分層（不限預算）%s；（真實預算）%s；未歸因 %d；範圍外 %d" % (sm["by_tier"], sm["by_tier_real_budget"], sm["unattributed"], sm["out_of_scope"]))
     print("  離線 T4 只含「引用改動檔名／打改動路由」的選題，不含 author_gate 的改動模組自己的測試與 e2e 選題（實跑只會更多）。實測：尚未執行（安靜期結束後）")
+    measured = None
+    if a.run:
+        units = breaker_units(rows)
+        measured = measured_summary(units, run_measured(units, budget_min=a.budget_min, only=a.only or None))
+        print("實測（在 breaker 的樹真的跑 quick，確認預期測試檔紅）：%d/%d＝%.0f%%；無 breaker（未歸因，無從實跑）%d 個" % (measured["red"], measured["total"], measured["rate"] * 100, measured["no_breaker"]))
+        for b, r in measured["per_breaker"].items():
+            print("  breaker %s：%s 秒；紅 %s 檔；over_budget=%s；未跑 %s 項；failfast 提前停=%s" % (b, r.get("seconds"), len(r.get("failed_files", [])), r.get("over_budget"), r.get("skipped"), r.get("stopped_by_failfast")))
     if a.json_out:
-        Path(a.json_out).write_text(json.dumps({"estimate": sm, "measured": None, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        Path(a.json_out).write_text(json.dumps({"estimate": sm, "measured": measured, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0 if sm["rate_real_budget"] >= TARGET else 1          # 以真實預算＋「全部」分母為準（範圍外與未歸因也算漏）
 
 
