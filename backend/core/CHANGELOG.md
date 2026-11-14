@@ -3,7 +3,7 @@
 ## (next) — 2026-11-14（feat/t86-core-major-h7；T86 核心大版本升級工具與守門；版號由列車取）
 - 新增（工具與守門，執行期行為、API、資料表、L1 介面都不變；這包**不**升核心主版號）：`tools/platform/core_major_bump.py`（`status`／`check`／`apply [--dry-run] [--skip-tests]`）——核心要升主版號（1.x → 2.0）時，先做 L1 相容檢查與各模組測試，全過才一次把所有 `module.json` 的 `core` 上限放寬到下一個主版號（下限與 `version` 不動），並寫各模組與核心的 `## (next)` CHANGELOG 段落；預演不寫檔、重跑不再改。
 - 守門：`train_number.py assign`／`--check` 在「這包要升主版號」而任何模組的 core 範圍還沒接受新主版號時直接失敗並指到該工具（原本要等到啟動時所有模組載入失敗、路由 404 才發現；本批用 stub 繞過的就是這件事）；`train_number.py` 只加了一個檢查函式與一處呼叫，取號邏輯不變。模組更新（`module_update._core_ok`）與載入器（`core_compatible`）本來就用同一套範圍比較，放寬後的範圍新、舊核心都接受（測試釘住）。
-- 文件：`docs/platform/MODULE-GUIDE.md` §2「核心大版本升級」。測試：`tests/platform/test_core_major_bump_2026_11_14.py`（41 條）。
+- 文件：`docs/platform/MODULE-GUIDE.md` §2「核心大版本升級」。測試：`tests/platform/test_core_major_bump_2026_11_14.py`（50 條）；L1 相容檢查的基準預設 origin/platform（找不到就明印「L1 相容檢查未做」，不拿樹內快照當基準）、這包不需要升主版號時 apply 要 --force、核心已升才發現時目標取目前主版號（補救）。
 
 ## 1.169 — 2026-11-14（fix/denied-pages-role-label-t86-h9；T86 複測 F2／F4）
 - 修正（只改畫面）：業務、財務直接開管理員網址（設定中心、職責角色）被 403 擋下後，頁面不再丟未捕捉的錯誤（設定中心找不到區塊時直接以共用拒絕畫面為準；職責矩陣掛載失敗改走 onError、不再 unhandled rejection）；拒絕說明照常顯示。

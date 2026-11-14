@@ -28,6 +28,13 @@ CMB = _load("_core_major_bump", "tools/platform/core_major_bump.py")
 TN = _load("_train_number_for_cmb", "tools/platform/train_number.py")
 
 
+@pytest.fixture(autouse=True)
+def _no_default_base(monkeypatch):
+    """合成樹放在樹內暫存目錄下，會解析到外層 repo 的 origin/platform；預設基準改指向不存在的 ref，讓測試不依賴外層 repo。
+    要測預設基準的測試自己改回 "origin/platform"（在它自己建的 git repo 裡）。"""
+    monkeypatch.setattr(CMB, "DEFAULT_BASE", "refs/none/none")
+
+
 # ── 合成樹 ──────────────────────────────────────────────────────────────
 
 def _tree(tmp_path, core="1.5", modules=None, core_changelog_head="", nl="\n", bom=False):
@@ -61,6 +68,8 @@ def _ok_runner(root, keys):
     (">=1.155,<2.0", 2, ">=1.155,<3.0"),
     (">=1.0,<=1.99", 2, ">=1.0,<3.0"),
     (">=1.0,<3.0", 2, ">=1.0,<3.0"),          # 已經接受 ⇒ 不動
+    (">=1.0,<2.5", 2, ">=1.0,<2.5"),          # 2.0 已在範圍內 ⇒ 不動（不要硬改成 <3.0）
+    (">=1.0,<=2.5", 2, ">=1.0,<=2.5"),
     (">=1.0,<4.0", 2, ">=1.0,<4.0"),
     (">=1.0", 2, ">=1.0"),                    # 沒有上限 ⇒ 本來就接受
     (">=2.0,<3.0", 2, ">=2.0,<3.0"),
@@ -108,7 +117,7 @@ def test_dry_run_writes_nothing_and_exit_is_3(tmp_path):
 def test_apply_rewrites_only_the_core_line_and_keeps_newlines_and_bom(tmp_path, nl, bom):
     root = _tree(tmp_path, nl=nl, bom=bom)
     before = {k: v for k, v in _snapshot_of(root).items() if k.endswith("module.json")}
-    assert CMB.apply(root, skip_tests=False, runner=_ok_runner, today="2026-11-14", out=lambda *_: None) == 0
+    assert CMB.apply(root, skip_tests=False, runner=_ok_runner, today="2026-11-14", out=lambda *_: None, force=True) == 0
     for key, spec in (("a", ">=1.0,<3.0"), ("b", ">=1.2,<3.0")):
         p = root / "backend" / "modules" / key / "module.json"
         raw = p.read_bytes()
@@ -124,7 +133,7 @@ def test_apply_rewrites_only_the_core_line_and_keeps_newlines_and_bom(tmp_path, 
 
 def test_apply_writes_changelog_sections_that_the_train_numbering_understands(tmp_path):
     root = _tree(tmp_path)
-    CMB.apply(root, skip_tests=True, today="2026-11-14", out=lambda *_: None)
+    CMB.apply(root, skip_tests=True, today="2026-11-14", out=lambda *_: None, force=True)
     mod_cl = (root / "backend" / "modules" / "a" / "CHANGELOG.md").read_text(encoding="utf-8")
     assert mod_cl.splitlines()[2].startswith("## (next) — 2026-11-14（core-major-bump")
     assert ">=1.0,<2.0" in mod_cl and ">=1.0,<3.0" in mod_cl and "## 1.0.3 — 2026-10-01" in mod_cl
@@ -138,18 +147,39 @@ def test_apply_writes_changelog_sections_that_the_train_numbering_understands(tm
 
 def test_apply_is_idempotent(tmp_path):
     root = _tree(tmp_path)
-    assert CMB.apply(root, skip_tests=True, out=lambda *_: None) == 0
+    assert CMB.apply(root, skip_tests=True, out=lambda *_: None, force=True) == 0
     after_first = _snapshot_of(root)
     lines = []
-    assert CMB.apply(root, skip_tests=True, out=lines.append) == 0
+    assert CMB.apply(root, skip_tests=True, out=lines.append, force=True) == 0
     assert _snapshot_of(root) == after_first
     assert "不用改" in "\n".join(lines)
+    assert CMB.apply(root, skip_tests=True, out=lambda *_: None) == 0           # 沒 --force 也一樣：已經放寬 ⇒ 不用改（不是拒絕）
+    assert _snapshot_of(root) == after_first
+
+
+def test_apply_without_force_refuses_when_no_major_is_pending(tmp_path):
+    root = _tree(tmp_path)
+    before = _snapshot_of(root)
+    lines = []
+    assert CMB.apply(root, skip_tests=True, out=lines.append) == 1
+    assert _snapshot_of(root) == before
+    assert "--force" in "\n".join(lines)
+
+
+def test_recovery_when_core_is_already_the_new_major(tmp_path):
+    """核心已經是 2.0 才發現範圍沒放寬 ⇒ 預設目標＝目前主版號 2.0（不跳到 3.0），不需要 --force。"""
+    root = _tree(tmp_path, core="2.0")
+    lines = []
+    assert CMB.apply(root, skip_tests=True, out=lines.append, today="2026-11-14") == 0
+    assert "補救" in "\n".join(lines)
+    for key in ("a", "b"):
+        assert json.loads((root / "backend" / "modules" / key / "module.json").read_text(encoding="utf-8"))["core"].endswith("<3.0")
 
 
 def test_only_modules_that_need_it_are_touched(tmp_path):
     root = _tree(tmp_path, modules={"a": ">=1.0,<2.0", "ok": ">=1.0,<3.0"})
     before_ok = {k: v for k, v in _snapshot_of(root).items() if "/ok/" in k}
-    CMB.apply(root, skip_tests=True, out=lambda *_: None)
+    CMB.apply(root, skip_tests=True, out=lambda *_: None, force=True)
     assert {k: v for k, v in _snapshot_of(root).items() if "/ok/" in k} == before_ok
 
 
@@ -159,7 +189,7 @@ def test_failing_module_tests_refuse_and_change_nothing(tmp_path):
     root = _tree(tmp_path)
     before = _snapshot_of(root)
     lines = []
-    assert CMB.apply(root, runner=lambda r, keys: [("b", "1 failed")], out=lines.append) == 1
+    assert CMB.apply(root, runner=lambda r, keys: [("b", "1 failed")], out=lines.append, force=True) == 1
     assert _snapshot_of(root) == before
     assert "模組 b 測試未過" in "\n".join(lines)
 
@@ -168,7 +198,7 @@ def test_unfixable_range_is_reported_and_blocks_everything(tmp_path):
     root = _tree(tmp_path, modules={"a": ">=1.0,<2.0", "pinned": "==1.5"})
     before = _snapshot_of(root)
     lines = []
-    assert CMB.apply(root, skip_tests=True, out=lines.append) == 1
+    assert CMB.apply(root, skip_tests=True, out=lines.append, force=True) == 1
     assert _snapshot_of(root) == before
     assert "pinned" in "\n".join(lines) and "人工" in "\n".join(lines)
 
@@ -185,9 +215,72 @@ def test_l1_names_still_used_by_a_module_block_the_bump(tmp_path, monkeypatch):
     monkeypatch.setattr(CMB, "l1_diff", lambda r, base=None: ([], [], ["helper:legacy::old_fn"]))
     before = _snapshot_of(root)
     lines = []
-    assert CMB.apply(root, skip_tests=True, out=lines.append) == 1
+    assert CMB.apply(root, skip_tests=True, out=lines.append, force=True) == 1
     assert _snapshot_of(root) == before
     assert "modules/a/api.py: helpers.legacy.old_fn" in "\n".join(lines)
+
+
+def test_default_base_is_origin_platform_and_catches_a_removed_name_without_base_arg(tmp_path, monkeypatch):
+    """F1 真實路徑：不給 --base，工具自己用 origin/platform 的快照比；基準快照有 helper:x::old_fn、目前介面沒有、模組還在 import ⇒ 拒絕。
+    （舊作法拿樹內快照當基準，永遠比出空差異，這個檢查形同虛設。）"""
+    import subprocess
+    root = _tree(tmp_path)
+    (root / "backend" / "modules" / "a" / "api.py").write_text("from helpers.x import old_fn\n", encoding="utf-8")
+    snap = root / CMB.SNAPSHOT
+    snap.parent.mkdir(parents=True)
+    snap.write_text(json.dumps({"interface": {"helper:x::old_fn": "def()", "helper:x::kept": "def()"}}), encoding="utf-8")
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True)
+
+    git("init", "-q")
+    git("add", CMB.SNAPSHOT)
+    git("commit", "-q", "-m", "base")
+    git("update-ref", "refs/remotes/origin/platform", "HEAD")
+    snap.write_text(json.dumps({"interface": {"helper:x::kept": "def()"}}), encoding="utf-8")        # 樹內快照＝目前介面（列車規則）
+
+    class FakeL1:
+        @staticmethod
+        def current_interface():
+            return {"helper:x::kept": "def()"}
+
+        @staticmethod
+        def diff(base, cur):
+            return [], [], [k for k in base if k not in cur]
+
+    monkeypatch.setattr(CMB, "_l1_module", lambda r: FakeL1)
+    monkeypatch.setattr(CMB, "DEFAULT_BASE", "origin/platform")
+    lines = []
+    before = _snapshot_of(root)
+    before.pop(".git", None)
+    assert CMB.apply(root, skip_tests=True, out=lines.append) == 1
+    text = "\n".join(lines)
+    assert "modules/a/api.py: helpers.x.old_fn" in text
+    assert "沒給" not in text
+    after = {k: v for k, v in _snapshot_of(root).items() if not k.startswith(".git/")}
+    assert after == {k: v for k, v in before.items() if not k.startswith(".git/")}, "拒絕時一個檔都不改"
+    assert CMB.main(["check", "--root", str(root)]) == 1                               # check 也看得到「這包要升主版號」且範圍沒處理
+
+
+def test_missing_base_says_the_l1_check_was_not_done(tmp_path):
+    """基準找不到時不能默默當成通過：要明印「L1 相容檢查未做」。"""
+    root = _tree(tmp_path, core_changelog_head="## (next:major) — 2026-11-14（分支）\n- x\n\n")
+    lines = []
+    assert CMB.apply(root, skip_tests=True, dry_run=True, out=lines.append) == 3
+    text = "\n".join(lines)
+    assert "L1 相容檢查未做" in text and "結束碼 3 是正常的" in text
+
+
+def test_explicit_base_that_does_not_resolve_is_an_error(tmp_path):
+    root = _tree(tmp_path)
+    lines = []
+    assert CMB.apply(root, skip_tests=True, base="no-such-ref", out=lines.append) == 1
+    assert "找不到 --base no-such-ref" in "\n".join(lines)
+    assert CMB.main(["check", "--root", str(root), "--base", "no-such-ref"]) == 1
+
+
+def test_unknown_unit_kinds_are_reported_not_silently_skipped():
+    assert CMB.unknown_units({"helper:x": {"a"}, "weird:y": {"b"}}) == ["weird:y"]
 
 
 def test_scan_module_uses_finds_imports_and_attributes_but_not_tests_or_other_names(tmp_path):
@@ -202,6 +295,18 @@ def test_scan_module_uses_finds_imports_and_attributes_but_not_tests_or_other_na
     assert hits == ["modules/m/x.py: helpers.legacy.changed", "modules/m/x.py: helpers.legacy.gone"]
 
 
+def test_scan_module_uses_more_import_shapes(tmp_path):
+    (tmp_path / "m").mkdir()
+    (tmp_path / "m" / "star.py").write_text("from helpers.legacy import *\n", encoding="utf-8")
+    (tmp_path / "m" / "bare.py").write_text("import helpers.legacy\n\ndef f():\n    return helpers.legacy.gone()\n", encoding="utf-8")
+    (tmp_path / "m" / "pkg.py").write_text("import helpers\n\ndef f():\n    return helpers.gone\n", encoding="utf-8")
+    (tmp_path / "m" / "reexport.py").write_text("from helpers import gone\n", encoding="utf-8")
+    (tmp_path / "m" / "clean.py").write_text("import helpers\nfrom helpers.legacy import kept\n\ndef f():\n    return helpers.other, kept\n", encoding="utf-8")
+    hits = CMB.scan_module_uses(tmp_path, CMB.breaking_names([], ["helper:legacy::gone"]))
+    assert sorted(hits) == ["modules/m/bare.py: helpers.legacy.gone", "modules/m/pkg.py: helpers.gone",
+                            "modules/m/reexport.py: helpers.gone", "modules/m/star.py: helpers.legacy.*（import *）"]
+
+
 def test_breaking_names_counts_members_as_their_class():
     got = CMB.breaking_names(["helper:h::Klass.method  def(a) → def(a, b)"], ["core:archive::_gone", "helper:h::Klass.other"])
     assert got == {"helper:h": {"Klass"}, "core:archive": {"_gone"}}
@@ -210,10 +315,11 @@ def test_breaking_names_counts_members_as_their_class():
 # ── ④ 守門 ──────────────────────────────────────────────────────────────
 
 def test_guard_fails_when_major_is_pending_and_ranges_are_not_ready():
-    probs = CMB.guard_problems("1.168", {"a": ">=1.0,<2.0", "b": ">=1.0,<3.0"}, major_pending=True)
+    probs = CMB.guard_problems("1.168", {"stale_one": ">=1.0,<2.0", "stale_two": ">=1.0,<2.0", "fresh_one": ">=1.0,<3.0"}, major_pending=True)
     text = "\n".join(probs)
-    assert "模組 a" in text and "模組 b" not in text and "2.0" in text
+    assert "stale_one、stale_two" in text and "fresh_one" not in text and "2.0" in text
     assert "core_major_bump.py apply" in text, "訊息要指到工具，不能只說失敗"
+    assert len(probs) == 2, "同一個範圍的模組併成一行（＋最後一行指到工具），不要一個模組一行"
 
 
 def test_guard_is_quiet_when_ranges_are_ready_or_no_major_is_pending():
@@ -224,7 +330,7 @@ def test_guard_is_quiet_when_ranges_are_ready_or_no_major_is_pending():
 def test_guard_fails_when_current_core_is_outside_a_range():
     """核心已經是 2.0（例如列車取號之後）而範圍沒放寬 ⇒ 不能等到啟動時 404 才發現。"""
     probs = CMB.guard_problems("2.0", {"a": ">=1.0,<2.0"}, major_pending=False)
-    assert probs and "不接受目前核心 2.0" in probs[0] and "core_major_bump.py" in "\n".join(probs)
+    assert probs and "與目前核心 2.0 不相容" in probs[0] and "core_major_bump.py" in "\n".join(probs)
 
 
 def test_check_cli_flags_next_major_placeholder_then_passes_after_apply(tmp_path, capsys):
@@ -235,11 +341,13 @@ def test_check_cli_flags_next_major_placeholder_then_passes_after_apply(tmp_path
     assert CMB.main(["apply", "--root", str(root), "--skip-tests"]) == 0
     capsys.readouterr()
     assert CMB.main(["check", "--root", str(root)]) == 0
+    assert "OK：核心這包要升主版號" in capsys.readouterr().out
 
 
-def test_check_cli_is_quiet_without_a_pending_major(tmp_path):
+def test_check_cli_prints_ok_without_a_pending_major(tmp_path, capsys):
     root = _tree(tmp_path)
     assert CMB.main(["check", "--root", str(root)]) == 0
+    assert "OK：" in capsys.readouterr().out
 
 
 def test_status_cli_lists_every_module(tmp_path, capsys):
@@ -247,6 +355,7 @@ def test_status_cli_lists_every_module(tmp_path, capsys):
     assert CMB.main(["status", "--root", str(root)]) == 0
     out = capsys.readouterr().out
     assert "核心 1.5" in out and "a " in out and "b " in out
+    assert "目前核心 1.5" in out and "下一個主版號 2.0" in out and "不相容" in out, "要有欄名與圖例，不只是一排「相容」"
 
 
 # ── ⑤ 真實的樹 ──────────────────────────────────────────────────────────
@@ -259,7 +368,8 @@ def test_every_real_module_range_accepts_the_current_core_version():
     assert not bad, "這些模組的 core 範圍不接受目前核心 %s：%s ⇒ %s" % (registry.CORE_VERSION, bad, CMB.HINT)
 
 
-def test_real_check_passes_without_a_pending_major():
+def test_real_check_passes_without_a_pending_major(monkeypatch):
+    """（不依賴外層 repo 的 origin/platform：DEFAULT_BASE 已由 autouse 夾具指到不存在的 ref，只看樹內 CHANGELOG 佔位與範圍。）"""
     assert CMB.main(["check", "--root", str(REPO)]) == 0
 
 
@@ -304,7 +414,7 @@ def test_assign_fails_clearly_when_core_goes_major_but_ranges_are_not_relaxed(tr
     before = {p: p.read_bytes() for p in train.rglob("*") if p.is_file() and ".git" not in p.parts}
     assert TT._run(train, "assign") == 1
     out = capsys.readouterr().out
-    assert "core_major_bump.py apply" in out and "模組 m" in out
+    assert "core_major_bump.py apply" in out and "1 個模組的 core 範圍" in out and "：m" in out
     assert before == {p: p.read_bytes() for p in train.rglob("*") if p.is_file() and ".git" not in p.parts}, "失敗時一個檔都不寫"
     assert TT._run(train, "--check") == 1
 

@@ -11,13 +11,16 @@
                                                                        或目前 CORE_VERSION 超出某個模組的範圍，而模組範圍沒一起處理 ⇒ exit 1 並指到本工具
   python tools/platform/core_major_bump.py apply --dry-run             預演：做 L1 相容檢查、印出會怎麼改，不寫任何檔（exit 3＝有要改、0＝不用改）
   python tools/platform/core_major_bump.py apply [--skip-tests]        L1 相容檢查 → 各模組測試 → 全部過了才一次改寫所有 `module.json` 的 core 上限＋寫各模組與核心 CHANGELOG
-  （`--root PATH` 指到別的樹；`--to N` 指定目標主版號，預設＝目前核心主版號＋1）
+                                                                       （這包不需要升主版號時要加 --force 才會真的改）
+  （`--root PATH` 指到別的樹；`--to N` 指定目標主版號，預設＝目前核心主版號＋1；若已有模組不接受目前核心＝補救，目標取目前主版號）
 
 ## 規則
 - 只改 `module.json` 裡頂層的 `"core": "<範圍>"`；**不碰 `"version"`**（版號由列車 train_number 取）。只放寬**上限**到 `<(目標主版號+1).0`，下限不動
   ⇒ 放寬後的模組仍能裝在舊核心上（模組更新 `module_update._core_ok`／載入器 `core_compatible` 同一套比較）。
 - 每個被改的模組 CHANGELOG 最上面加 `## (next)` 段落（版號由列車取）；核心 CHANGELOG 也加一段。
-- **L1 相容檢查**：L1 介面相對快照被「修改或刪除」的名稱，若有模組程式（modules/*，不含 tests）還在 import／使用 ⇒ 拒絕（範圍放寬救不了呼叫端壞掉）。
+- **L1 相容檢查**：L1 介面相對 `--base`（預設 origin/platform 的快照，與 train_number 同一基準）被「修改或刪除」的名稱，若有模組程式（modules/*，不含 tests）還在 import／使用 ⇒ 拒絕
+  （範圍放寬救不了呼叫端壞掉）。找不到基準 ⇒ 明印「L1 相容檢查未做」，不默默當成通過。模組測試跑在**舊**範圍上，所以 L1 掃描才是相容性的證據。
+- 結束碼：0＝完成／不用改／檢查通過；1＝拒絕或守門不過；3＝`apply --dry-run` 有要改（正常，不是失敗）。
 - **模組測試**：依序跑每個有 tests 目錄的模組（`pytest backend/modules/<key>/tests`，serial，暫存放樹內 `.pt-core-major`，用完刪）；任何一個紅 ⇒ 拒絕、不改任何檔。
 - 冪等：所有模組都已接受目標主版號 ⇒ 什麼都不做。
 - 守門測試：backend/tests/platform/test_core_major_bump_2026_11_14.py。規則文件：docs/platform/MODULE-GUIDE.md §2「核心大版本升級」。
@@ -75,6 +78,8 @@ def relax_spec(spec, target_major):
     parts = [p.strip() for p in (spec or "").split(",") if p.strip()]
     if not parts:
         return spec, "範圍是空的"
+    if compatible(spec, "%d.0" % target_major):
+        return spec, None                                            # 本來就接受（例如 <2.5 對目標 2.0）
     new_upper = "<%d.0" % (target_major + 1)
     out, changed = [], False
     for p in parts:
@@ -110,19 +115,27 @@ def module_specs(root):
 
 # ── 守門 ────────────────────────────────────────────────────────────────
 
-def guard_problems(core_ver, specs, major_pending):
-    """純函式。specs＝{key: 範圍}。⇒ 問題清單（空＝可以）。
-    ① 目前 CORE_VERSION 超出某模組範圍 ⇒ 該模組不會載入；② 核心要升主版號但範圍還沒接受下一個主版號。"""
-    problems = []
-    cur_major = major_of(core_ver)
+def _group_by_spec(specs, version):
+    """{範圍: [不接受 version 的模組…]}（同一個範圍的模組併成一行，不要一個模組一行）。"""
+    bad = {}
     for key, spec in sorted(specs.items()):
-        if not compatible(spec, core_ver):
-            problems.append("模組 %s 的 core 範圍 %r 不接受目前核心 %s ⇒ 啟動時這個模組不會載入（路由 404）" % (key, spec, core_ver))
+        if not compatible(spec, version):
+            bad.setdefault(spec, []).append(key)
+    return bad
+
+
+def guard_problems(core_ver, specs, major_pending):
+    """純函式。specs＝{key: 範圍}。⇒ 問題清單（空＝可以；同範圍的模組併成一行，最後一行是怎麼修）。
+    ① 目前 CORE_VERSION 超出某模組範圍 ⇒ 該模組不相容、啟動時不會載入；② 核心要升主版號但範圍還沒接受下一個主版號。"""
+    problems = []
+    for spec, keys in _group_by_spec(specs, core_ver).items():
+        problems.append("%d 個模組的 core 範圍 %r 與目前核心 %s 不相容 ⇒ 啟動時這些模組不會載入（路由 404）：%s"
+                        % (len(keys), spec, core_ver, "、".join(keys)))
     if major_pending:
-        target = "%d.0" % (cur_major + 1)
-        for key, spec in sorted(specs.items()):
-            if not compatible(spec, target):
-                problems.append("核心這包要升主版號（%s）但模組 %s 的 core 範圍 %r 不接受 %s ⇒ 升了之後所有模組都載入失敗" % (target, key, spec, target))
+        target = "%d.0" % (major_of(core_ver) + 1)
+        for spec, keys in _group_by_spec(specs, target).items():
+            problems.append("核心這包要升主版號（%s），但 %d 個模組的 core 範圍 %r 與 %s 不相容 ⇒ 升了之後這些模組全部載入失敗：%s"
+                            % (target, len(keys), spec, target, "、".join(keys)))
     if problems:
         problems.append("⇒ " + HINT)
     return problems
@@ -146,12 +159,26 @@ def _l1_module(root):
     return importlib.import_module("_l1_interface")
 
 
+DEFAULT_BASE = "origin/platform"
+
+
+def resolve_base(root, base=None):
+    """L1 比較基準的 git ref：給了就用給的（解析不到 ⇒ ValueError）；沒給 ⇒ 預設 origin/platform（與 train_number 同一個基準），
+    解析不到就回 None（呼叫端要明說「L1 相容檢查未做」，不可以默默當成通過）。"""
+    if base:
+        if _git(root, "rev-parse", "--verify", "%s^{commit}" % base) is None:
+            raise ValueError("找不到 --base %s" % base)
+        return base
+    return DEFAULT_BASE if _git(root, "rev-parse", "--verify", "%s^{commit}" % DEFAULT_BASE) is not None else None
+
+
 def l1_diff(root, base=None):
-    """⇒ (added, changed, removed) 或 None（沒有 L1 工具／讀不到快照）。base＝git ref：用該版快照當基準；沒給 ⇒ 用樹內目前的快照。"""
+    """⇒ (added, changed, removed) 或 None（沒有 L1 工具、讀不到 base 的快照、或沒有 base）。
+    ⚠ 不用樹內快照當基準：列車規則要求樹內快照永遠已是目前的介面，拿它比只會得到空差異（檢查形同虛設）。"""
     G = _l1_module(root)
-    if G is None:
+    if G is None or not base:
         return None
-    snap_text = _git(root, "show", "%s:%s" % (base, SNAPSHOT)) if base else (Path(root) / SNAPSHOT).read_text(encoding="utf-8") if (Path(root) / SNAPSHOT).is_file() else None
+    snap_text = _git(root, "show", "%s:%s" % (base, SNAPSHOT))
     if snap_text is None:
         return None
     return G.diff(json.loads(snap_text)["interface"], G.current_interface())
@@ -192,8 +219,22 @@ def breaking_names(changed, removed):
     return res
 
 
+def _dotted(node):
+    """Name／Attribute 鏈 ⇒ "a.b.c"；其他 ⇒ None。"""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+    return None
+
+
 def scan_module_uses(modules_dir, breaking):
-    """模組程式（不含 tests）裡還在用的、被修改／刪除的 L1 名稱。⇒ ["modules/<key>/x.py: helpers.foo.bar", …]"""
+    """模組程式（不含 tests）裡還在用的、被修改／刪除的 L1 名稱。⇒ ["modules/<key>/x.py: helpers.foo.bar", …]
+    認得：from X import name（含 `import *`）、import X [as a] 之後的 a.name／X.name、from helpers import 子模組 [as a]、`import helpers` 後的 helpers.name。
+    不認得（模組現況沒有用到）：動態 import／getattr、相對 import。"""
     by_mod = {}
     for unit, names in breaking.items():
         m = _unit_module_names(unit)
@@ -219,7 +260,9 @@ def scan_module_uses(modules_dir, breaking):
             if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 if node.module in by_mod:
                     for a in node.names:
-                        if a.name in by_mod[node.module]:
+                        if a.name == "*":
+                            found.add("%s.*（import *）" % node.module)
+                        elif a.name in by_mod[node.module]:
                             found.add("%s.%s" % (node.module, a.name))
                 elif node.module == "helpers":
                     for a in node.names:
@@ -235,25 +278,42 @@ def scan_module_uses(modules_dir, breaking):
                 for a in node.names:
                     if a.name in by_mod:
                         aliases[a.asname or a.name] = a.name
+                    elif a.name == "helpers" and not a.asname:
+                        aliases["helpers"] = "helpers"
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in aliases:
-                mod = aliases[node.value.id]
-                if node.attr in by_mod[mod]:
+            if isinstance(node, ast.Attribute):
+                d = _dotted(node.value)
+                mod = aliases.get(d) if d else None
+                if mod == "helpers":
+                    if node.attr in helper_all:
+                        found.add("helpers.%s" % node.attr)
+                elif mod and node.attr in by_mod.get(mod, ()):
                     found.add("%s.%s" % (mod, node.attr))
         for h in sorted(found):
             hits.append("modules/%s: %s" % (rel.as_posix(), h))
     return hits
 
 
+def unknown_units(breaking):
+    """快照裡認不得的單位種類（工具不會掃它們的使用處）⇒ 要明說，不可以安靜略過。"""
+    return sorted(u for u in breaking if _unit_module_names(u) is None)
+
+
 def l1_compat_problems(root, base=None):
+    """⇒ (問題清單, 說明清單)。說明＝這次 L1 相容檢查沒做完整的地方（沒有 base、單位種類不認得）；不是問題但一定要印出來。"""
     d = l1_diff(root, base)
     if d is None:
-        return []
+        why = ("沒有可比較的基準：找不到 %s，也沒給 --base" % DEFAULT_BASE) if not base else ("讀不到 %s 的 L1 快照" % base)
+        return [], ["L1 相容檢查未做（%s）⇒ 被修改／刪除的 L1 名稱是否還有模組在用，這次沒有驗證" % why]
     a, c, r = d
     breaking = breaking_names(c, r)
+    notes = []
     if not breaking:
-        return []
-    return ["L1 介面被修改／刪除的名稱，模組程式還在用：" + h for h in scan_module_uses(Path(root) / MODULES, breaking)]
+        return [], notes
+    unk = unknown_units(breaking)
+    if unk:
+        notes.append("L1 相容檢查略過了認不得的單位種類（沒掃它們的使用處）：" + "、".join(unk))
+    return ["L1 介面被修改／刪除的名稱，模組程式還在用：" + h for h in scan_module_uses(Path(root) / MODULES, breaking)], notes
 
 
 # ── 模組測試 ────────────────────────────────────────────────────────────
@@ -350,30 +410,50 @@ def plan_apply(root, target_major, today):
     return writes, rows, manual
 
 
-def apply(root, target_major=None, dry_run=False, skip_tests=False, base=None, today=None, runner=None, out=print):
-    """⇒ exit code：0＝完成／不用改、1＝拒絕（L1 不相容、測試紅、要人工處理）、3＝dry-run 且有要改。"""
+def apply(root, target_major=None, dry_run=False, skip_tests=False, base=None, today=None, runner=None, out=print, force=False):
+    """⇒ exit code：0＝完成／不用改、1＝拒絕（L1 不相容、測試紅、要人工處理、這包不需要升主版號又沒給 --force）、3＝dry-run 且有要改（正常，不是失敗）。
+    目標主版號預設＝目前核心主版號＋1；若已有模組不接受**目前**核心（例如核心已是 2.0 才發現），預設改成目前主版號（直接補救，不要跳過一個主版號）。"""
     root = Path(root)
     cur = core_version(root)
-    target = target_major if target_major is not None else major_of(cur) + 1
-    if target <= major_of(cur):
-        out("目標主版號 %d 不比目前核心 %s 大 ⇒ 不做" % (target, cur))
+    cm = major_of(cur)
+    specs = module_specs(root)
+    rejecting = sorted(k for k, (_, sp) in specs.items() if not compatible(sp, cur))
+    target = target_major if target_major is not None else (cm if rejecting else cm + 1)
+    if target < cm or (target == cm and not rejecting):
+        out("目標主版號 %d.0 不比目前核心 %s 大，而且所有模組的範圍都接受目前核心 ⇒ 不做" % (target, cur))
         return 1
     today = today or date.today().isoformat()
-    specs = module_specs(root)
-    out("核心 %s ⇒ 目標主版號 %d；%d 個模組" % (cur, target, len(specs)))
+    try:
+        base = resolve_base(root, base)
+    except ValueError as e:
+        out(str(e))
+        return 1
+    pend, why = major_pending(root, base)
+    out("核心 %s；這包%s升主版號%s" % (cur, "要" if pend else "不需要", "（%s）" % why if pend else ""))
+    out("目標：模組的 core 範圍接受 %d.0；共 %d 個模組" % (target, len(specs)))
+    if rejecting:
+        out("⚠ 目前核心 %s 已有 %d 個模組不相容（%s）⇒ 目標取目前主版號 %d.0，直接補救" % (cur, len(rejecting), "、".join(rejecting), target))
     writes, rows, manual = plan_apply(root, target, today)
-    for key, why in manual:
-        out("  ✗ %s：%s（要人工處理）" % (key, why))
+    for key, why_ in manual:
+        out("  ✗ %s：%s（要人工處理）" % (key, why_))
     if manual:
         return 1
     if not rows:
         out("所有模組的 core 範圍都已接受 %d.0 ⇒ 不用改" % target)
         return 0
-    l1 = l1_compat_problems(root, base)
+    if not rejecting and not pend:
+        out("⚠ 核心這包目前不需要升主版號（判斷依據：L1 介面相對%s、核心 CHANGELOG 沒有 `(next:major)`）；"
+            "現在放寬只是預備%s" % ("快照 " + base if base else "基準（找不到 %s，也沒給 --base ⇒ 看不出介面差異）" % DEFAULT_BASE,
+                                    "" if dry_run else "，要做請加 --force"))
+        if not dry_run and not force:
+            return 1
+    l1, l1_notes = l1_compat_problems(root, base)
+    for n in l1_notes:
+        out("  ⚠ " + n)
     for p in l1:
         out("  ✗ " + p)
     if l1:
-        out("⇒ 拒絕：先修呼叫端（範圍放寬救不了已被刪除／修改的 L1 名稱）")
+        out("⇒ 拒絕：先修呼叫端（範圍放寬救不了已被刪除／修改的 L1 名稱），修好再重跑 `apply --dry-run`")
         return 1
     for key, old, new in rows:
         out("  %-14s %s  ⇒  %s" % (key, old, new))
@@ -382,10 +462,11 @@ def apply(root, target_major=None, dry_run=False, skip_tests=False, base=None, t
         for key, tail in failures:
             out("  ✗ 模組 %s 測試未過：\n%s" % (key, tail))
         if failures:
-            out("⇒ 拒絕：模組測試要全部過才放寬範圍；沒有改任何檔")
+            out("⇒ 拒絕：模組測試要全部過才放寬範圍；沒有改任何檔。修好該模組後重跑")
             return 1
     if dry_run:
-        out("（預演：L1 相容檢查通過；模組測試%s；沒有寫任何檔）" % ("已跑且全過" if not skip_tests else "未跑（加 --with-tests 才跑）"))
+        out("（預演：有 %d 個模組要改，結束碼 3 是正常的、不是失敗；L1 相容檢查%s，模組測試%s；沒有寫任何檔。確認後執行 `apply`）"
+            % (len(rows), "未做（見上面的 ⚠）" if l1_notes and base is None else "通過", "已跑且全過" if not skip_tests else "未跑（加 --with-tests 才跑）"))
         return 3
     for path, (text, bom) in writes.items():
         _write(path, text, bom)
@@ -396,25 +477,32 @@ def apply(root, target_major=None, dry_run=False, skip_tests=False, base=None, t
 # ── CLI ─────────────────────────────────────────────────────────────────
 
 def cmd_status(root, base):
+    base = resolve_base(root, base)
     cur = core_version(root)
     specs = module_specs(root)
     pend, why = major_pending(root, base)
-    print("核心 %s；下一個主版號 %d.0；核心要升主版號：%s" % (cur, major_of(cur) + 1, ("是（%s）" % why) if pend else "否"))
     nxt = "%d.0" % (major_of(cur) + 1)
+    print("核心 %s；下一個主版號 %s；核心這包%s升主版號" % (cur, nxt, ("要（%s）" % why) if pend else "不需要"))
+    print("  %-14s %-16s %-8s %s" % ("模組", "core 範圍", "目前核心 " + cur, "下一個主版號 " + nxt))
     for key, (_, spec) in specs.items():
-        print("  %-14s %-18s 接受目前 %s  接受 %s" % (key, spec, "✔" if compatible(spec, cur) else "✗", "✔" if compatible(spec, nxt) else "✗"))
+        print("  %-14s %-16s %-14s %s" % (key, spec, "相容" if compatible(spec, cur) else "不相容", "相容" if compatible(spec, nxt) else "不相容"))
+    print("說明：「不相容」＝載入器會拒絕載入該模組。核心升到 %s 之前，下一欄要全部是「相容」（用 apply 放寬）。" % nxt)
     return 0
 
 
 def cmd_check(root, base):
+    base = resolve_base(root, base)
     cur = core_version(root)
     specs = {k: s for k, (_, s) in module_specs(root).items()}
     pend, why = major_pending(root, base)
     problems = guard_problems(cur, specs, pend)
-    if pend and not problems:
-        print("核心要升主版號（%s），所有模組範圍都已接受 %d.0 ⇒ OK" % (why, major_of(cur) + 1))
     for p in problems:
         print(p)
+    if not problems:
+        if pend:
+            print("OK：核心這包要升主版號（%s），所有模組的範圍都已接受 %d.0" % (why, major_of(cur) + 1))
+        else:
+            print("OK：核心 %s，所有模組的範圍都接受目前核心；這包沒有要升主版號" % cur)
     return 1 if problems else 0
 
 
@@ -422,17 +510,22 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="核心大版本升級工具（見檔頭）")
     ap.add_argument("cmd", choices=["status", "check", "apply"])
     ap.add_argument("--root", default=str(REPO))
-    ap.add_argument("--base", default=None, help="L1 快照的比較基準（git ref，例如 origin/platform）；沒給＝樹內目前的快照")
-    ap.add_argument("--to", type=int, default=None, help="目標主版號（預設＝目前核心主版號＋1）")
+    ap.add_argument("--base", default=None, help="L1 快照的比較基準（git ref）；預設 origin/platform（與 train_number 同一個基準；找不到就印「L1 相容檢查未做」）")
+    ap.add_argument("--to", type=int, default=None, help="目標主版號（預設＝目前核心主版號＋1；已有模組不接受目前核心時＝目前主版號）")
+    ap.add_argument("--force", action="store_true", help="核心這包不需要升主版號時，仍要預備性放寬（預設拒絕）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-tests", action="store_true")
     ap.add_argument("--with-tests", action="store_true", help="dry-run 時也跑各模組測試")
     a = ap.parse_args(argv)
-    if a.cmd == "status":
-        return cmd_status(a.root, a.base)
-    if a.cmd == "check":
-        return cmd_check(a.root, a.base)
-    return apply(a.root, a.to, dry_run=a.dry_run, skip_tests=a.skip_tests or (a.dry_run and not a.with_tests), base=a.base)
+    try:
+        if a.cmd == "status":
+            return cmd_status(a.root, a.base)
+        if a.cmd == "check":
+            return cmd_check(a.root, a.base)
+    except ValueError as e:
+        print(e)
+        return 1
+    return apply(a.root, a.to, dry_run=a.dry_run, skip_tests=a.skip_tests or (a.dry_run and not a.with_tests), base=a.base, force=a.force)
 
 
 if __name__ == "__main__":

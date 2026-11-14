@@ -43,14 +43,23 @@
 - **同一主版號內只准新增，不准修改或刪除。** 要改或刪 ⇒ 主版號 +1，並且每個模組的 `module.json` 的 `core` 範圍都要重新確認。
 - 模組以 `"core": ">=1.0,<2.0"` 宣告相容範圍；載入器看不懂範圍或範圍不相容 ⇒ 不載入，並寫明原因，不猜。
 - **核心大版本升級（T86 補）**：L1 介面只要有修改或刪除，列車 `train_number.py assign` 就會把核心升成下一個主版號（例如 1.168 → 2.0）；
-  而每個 `module.json` 的 `core` 都寫 `<2.0`，核心一升上去**所有模組都不相容、全部不載入**（路由 404）。所以升主版號是一個**要一起做的步驟**，不是只改 `CORE_VERSION`：
-  1. 先看狀態：`python tools/platform/core_major_bump.py status`（核心版本、每個模組的範圍是否接受下一個主版號）。
-  2. 預演：`python tools/platform/core_major_bump.py apply --dry-run`（做 L1 相容檢查：被修改／刪除的 L1 名稱若還有模組在用就拒絕；不寫任何檔；加 `--with-tests` 連各模組測試一起預演）。
-  3. 真的做：`python tools/platform/core_major_bump.py apply`——先跑 L1 相容檢查與各模組測試，**全部過了才**一次把所有 `module.json` 的 `core` **上限**放寬到 `<(新主版號+1).0`（下限與 `version` 不動），並在各模組與核心 CHANGELOG 寫 `## (next)` 段落，之後照常 `train_number.py assign`。
-     放寬後的範圍（例如 `>=1.0,<3.0`）新、舊核心都接受——載入器 `core_compatible` 與模組更新 `module_update._core_ok` 用同一套比較，所以舊核心上的模組更新與新核心上的模組載入都不受影響。
-  4. 守門：`train_number.py assign`／`--check` 在「這包要升主版號」（L1 介面需要主版號、或核心 CHANGELOG 有 `(next:major)`）而任何模組範圍還沒接受新主版號時**直接失敗**並指到上面的工具；
-     `core_major_bump.py check` 也可單獨跑（CI 用）；`backend/tests/platform/test_core_major_bump_2026_11_14.py` 另釘住「每個模組的範圍都接受目前 CORE_VERSION」。
-  5. 沒有升主版號的列車（只新增 L1 介面）不受影響；工具不會替你升核心版號，版號仍由列車依介面決定。
+  而每個 `module.json` 的 `core` 都寫 `<2.0`，核心一升上去**所有模組都不相容、全部不載入**（路由 404）。所以升主版號是一個**要一起做的步驟**，不是只改 `CORE_VERSION`。
+  - **誰、何時跑**：整合者（列車整合視窗）在 `train_number.py assign` **之前**跑；一般實作視窗不跑、也不在自己的分支上跑。工具不會替你升核心版號，版號仍由列車依介面決定。
+  - **直譯器**：`D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/core_major_bump.py <子命令>`（在列車樹根目錄；下面簡寫成 `core_major_bump.py`）。
+  - **名詞**：「不相容」＝載入器 `core_compatible` 會拒絕載入該模組；`(next:major)`＝核心 CHANGELOG 最上面的佔位 `## (next:major) — …`，表示人工指定這包要升主版號（沒有它時，以 L1 介面相對基準快照的差異判斷）。
+  1. 看狀態：`core_major_bump.py status`——列出核心版本、下一個主版號、每個模組的範圍對「目前核心／下一個主版號」是否相容（「不相容」那欄要在升版前全部變成相容）。
+  2. 預演：`core_major_bump.py apply --dry-run`——做 L1 相容檢查、印出每個模組的範圍會怎麼改，**不寫任何檔**。結束碼 **3＝有要改（正常，不是失敗）**、0＝不用改、1＝拒絕。預設不跑模組測試，加 `--with-tests` 才一起預演。
+     例：核心 1.x → 2.0，`>=1.0,<2.0` 會變成 `>=1.0,<3.0`（只放寬上限、下限不動）；`>=1.0,<2.5` 這種本來就接受 2.0 的不改；`==1.0` 釘死或沒有 core 範圍的列為「要人工處理」並拒絕。
+  3. 真的做：`core_major_bump.py apply`——L1 相容檢查 → **各模組測試（全部模組逐一、serial 跑，很慢；跑的時候照「閘門／建包期間全窗安靜」的規則，不要同時開別的測試）** → **全部過了才**一次改寫所有 `module.json` 的 `core` 上限（`version` 不動），並在各模組與核心 CHANGELOG 寫 `## (next)` 段落；之後照常 `train_number.py assign`。
+     `--skip-tests` 只給已經另外跑過全套測試的情況。這包不需要升主版號（沒有 `(next:major)`、L1 也沒有修改／刪除）時，真的 `apply` 要加 `--force`（預備性放寬），否則拒絕。
+     放寬後的範圍新、舊核心都接受（載入器 `core_compatible` 與模組更新 `module_update._core_ok` 用同一套比較），所以舊核心上的模組更新與新核心上的模組載入都不受影響。
+  4. **L1 相容檢查與基準**：被「修改或刪除」的 L1 名稱，若有模組程式（`modules/*`，不含 tests）還在 import／使用 ⇒ 拒絕；範圍放寬救不了呼叫端壞掉。基準預設 `--base origin/platform`（與 `train_number.py` 同一個基準）——
+     **不用樹內快照**，因為列車規則要求樹內快照永遠已是目前介面，拿它比只會得到空差異。找不到基準時工具會印「L1 相容檢查未做」，不是默默通過。
+     模組測試跑在**舊**範圍上，所以它證明不了新核心的相容性；相容性的證據是這個 L1 掃描（加上升版後的列車全套測試）。
+  5. **失敗怎麼辦**：L1 檢查不過 ⇒ 先修呼叫端（改用新介面），再重跑 `apply --dry-run`；模組測試紅 ⇒ 修該模組的測試／程式再重跑；範圍要人工處理 ⇒ 手改那份 `module.json` 的 `core` 後重跑。拒絕時工具**一個檔都不改**，可以放心重跑。
+     補救：若核心已經升到 2.0 才發現範圍沒放寬，`apply` 的預設目標會改成「目前主版號」（直接補成 `<3.0`，不會跳過一個主版號），不需要 `--force`。重跑已放寬的樹 ⇒ 「不用改」。
+  6. **守門**：`train_number.py assign`／`--check` 在「這包要升主版號」而任何模組範圍還沒接受新主版號時**直接失敗**並指到上面的工具（同一個範圍的模組併成一行）；`core_major_bump.py check`（CI 用）另外也擋「目前 CORE_VERSION 超出某模組範圍」。
+     `backend/tests/platform/test_core_major_bump_2026_11_14.py` 另釘住「每個模組的範圍都接受目前 CORE_VERSION」。沒有升主版號的列車（只新增 L1 介面）不受影響。
 - 守門：`backend/tests/platform/test_l1_interface_snapshot.py`（G1）——modules.json 的 L1 Python 單位（plat:／core:／helper:）之公開函式／類別／dataclass 欄位簽章與大寫常數名稱（**範圍 2，2026-09-25 稽核 G-1／G-2**：「公開」＝不以底線開頭，或列在**該 L1 檔自己的 `__l1_public__ = ("_名稱", …)`**——例如 `helpers/auth.py` 的 `_require_user`〔2026-09-26 改為顯式宣告（主持裁示）：原本「被 L1 以外 import 就算公開」會讓介面隨裝了哪些模組而改變——拿掉 M04 ⇒ `_generate_contractor_voucher_pdf` 變成「刪除」、要升主版號；首次導入時把當時跨模組在用的 42 個名稱逐檔寫成宣告，介面不增不減、不升版〕；**另一道守門** `test_l2_uses_only_declared_l1_underscore_names`：L1 以外（含經 `helpers/__init__.py` 的 `__all__` 轉出）用到的 L1 底線名稱必須已宣告，否則紅——要用就先宣告（它就成為契約）；描述含 `async` 與僅限位置參數 `/`；**預設值的內容不納入**，預設值語意改變要自己升版並寫 CHANGELOG），與快照 `l1_interface_snapshot.json` 比對；有差異就紅。修法：升 `CORE_VERSION`、寫 `core/CHANGELOG.md`、跑 `_l1_interface.py --update`（版號不足會拒絕重產）〔2026-09-30 起分支不取號：寫 `## (next)` 段落＋`core_bump.py --pending`（快照 `core_version: "next"`），列車 `train_number.py assign` 依介面差異定次／主版號（§6、PLAYBOOK §G6）〕。另驗 CHANGELOG 最上面的版號＝`CORE_VERSION`。快照的判定範圍（`scope_version`）變動時，`--update` 要附 `--reason`，快照記下 `scope_history`（原因、新看得見的名稱），且同一個 commit 必須修改本節或 CORE-SPEC（守門驗 git 歷史）；範圍變大不等於介面新增，不要求升版。
 - ⚠ 未守門：回傳形狀（靜態讀不出來）、L1 router 的 HTTP 端點、L1 資料表欄位（已排入 ROADMAP 階段 G：G1b）
 
