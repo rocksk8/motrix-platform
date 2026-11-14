@@ -235,7 +235,10 @@ function dlDescribe(last, withOutcome) {
   if (!last) return '（沒有紀錄）';
   const r = last.result || last;
   if (!r || !r.status) {
-    return last.outcome ? (dlCode(DL_OUTCOME, last.outcome) + ((last.problems || []).length ? '：' + last.problems.join('；') : '')) : '（沒有紀錄）';
+    if (!last.outcome) return '（沒有紀錄）';
+    // 結果標頭（失敗：／成功：…）與問題清單由呼叫端（套用結果畫面）自己加；這裡再帶一次就會變成「失敗：失敗：…」、問題也重複（2026-11-15 A1 演練）
+    if (!withOutcome) return '';
+    return dlCode(DL_OUTCOME, last.outcome) + ((last.problems || []).length ? '：' + last.problems.join('；') : '');
   }
   const parts = [];
   if (withOutcome && last.outcome) parts.push(dlCode(DL_OUTCOME, last.outcome));

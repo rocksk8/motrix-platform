@@ -62,3 +62,38 @@ def test_server_idle_rehearsing_is_null_so_ui_predicate_must_be_falsy_not_false(
     monkeypatch.setattr(dd, "_delivery_state", {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None, "preparing": False})
     s = json.loads(json.dumps(dd.delivery_rehearse_status(name="x")))   # 走 JSON：Python None → JS null
     assert s["rehearsing"] is None
+
+
+def _node_exe():
+    import shutil
+    n = shutil.which("node")
+    if n:
+        return n
+    cand = Path(sys.prefix) / "Lib" / "site-packages" / "playwright" / "driver" / "node.exe"
+    return str(cand) if cand.is_file() else None
+
+
+def _describe_js(expr):
+    """把畫面上真正的 DL_* 常數與 dlDescribe 抽出來，用 node 跑 expr（回傳 JSON）。"""
+    import subprocess
+    a, b = HTML.index("const DL_OUTCOME"), HTML.index("function dlLockText")
+    code = HTML[a:b] + "\nconsole.log(JSON.stringify(" + expr + "));\n"
+    r = subprocess.run([_node_exe(), "-e", code], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_apply_result_does_not_repeat_the_failure_prefix_or_the_problems():
+    """2026-11-15 A1 演練：套用前預檢被擋時畫面是「失敗：失敗：<問題>」，問題還重複一次（標頭與問題清單由呼叫端加，describe 不能再帶一次）。"""
+    last = {"outcome": "failed", "problems": ["預演之後正式庫結構已變動，沒有開始套用：預演結果不再適用，請重新預演"]}
+    assert "if (!withOutcome) return '';" in HTML                   # 靜態備援（沒有 node 時至少守住這一行）
+    if not _node_exe():
+        import pytest
+        pytest.skip("找不到 node")
+    out = _describe_js("{noOutcome: dlDescribe(%s, false), withOutcome: dlDescribe(%s, true)}" % (json.dumps(last), json.dumps(last)))
+    assert out["noOutcome"] == ""                                    # 套用結果畫面：標頭由呼叫端加，這裡不重複
+    assert out["withOutcome"] == "失敗：" + last["problems"][0]      # 「上一次套用」那一行仍要有結果標籤與原因
+    assert ("失敗：" + out["noOutcome"]).count("失敗") == 1
+    # 腳本有跑過（有 result.status）的路徑不受影響
+    ran = {"outcome": "verify_failed", "result": {"status": "success", "rolled_back": "applied", "service": "up", "finished_at": "t"}}
+    assert "已套用" in _describe_js("dlDescribe(%s, false)" % json.dumps(ran))
