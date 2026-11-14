@@ -58,14 +58,15 @@ window.CM_PARTS.push(() => ({
       this.composeVisitDate = MotrixDate.today()
       this.composeVisitPeople = last ? Number(last.visitPeople) : 1
     },
+    _composePeopleOk() { const n = Number(this.composeVisitPeople); return Number.isInteger(n) && n >= 1 && n <= 99 },
     composeSendDisabled() {
       if (this.postingComment) return true
-      if (this.composeKind() === 'visit') return !this.composeStageId || !(Number(this.composeVisitPeople) >= 1)
+      if (this.composeKind() === 'visit') return !this.composeStageId || !this._composePeopleOk()
       return !this.newComment.trim() && this.newCommentPhotos.length === 0
     },
     composeSendHint() {
       if (this.postingComment) return ''
-      if (this.composeKind() === 'visit') return !this.composeStageId ? '請先選擇階段。' : (!(Number(this.composeVisitPeople) >= 1) ? '人次請填 1 以上的數字。' : '')
+      if (this.composeKind() === 'visit') return !this.composeStageId ? '請先選擇階段。' : (!this._composePeopleOk() ? '人次請填 1 到 99 的整數。' : '')
       return (!this.newComment.trim() && this.newCommentPhotos.length === 0) ? '請先填寫內容或附加檔案。' : ''
     },
     composeSubmit() {
@@ -80,10 +81,15 @@ window.CM_PARTS.push(() => ({
           method: 'POST', headers: this._authHeaders(true),
           body: JSON.stringify({ visitDate: this.composeVisitDate || MotrixDate.today(), visitPeople: Number(this.composeVisitPeople), note: this.newComment.trim() })
         })
-        if (!r.ok) { MotrixUI.toast('新增出勤記錄失敗，請稍後再試。', {kind: 'error'}); return }
+        if (!r.ok) {
+          let why = ''
+          try { const j = await r.json(); why = typeof j.detail === 'string' ? j.detail : '' } catch {}
+          MotrixUI.toast(why ? '新增出勤記錄失敗：' + why : '新增出勤記錄失敗，請稍後再試。', {kind: 'error'}); return
+        }
         Object.assign(st, await r.json())
         this.newComment = ''
-        MotrixUI.toast(`已在「${st.label || '未命名階段'}」新增出勤記錄。`)
+        // 出勤記錄不會出現在動態清單，在階段卡裡看：給一個直接過去的按鈕
+        MotrixUI.toast(`已在「${st.label || '未命名階段'}」新增出勤記錄。`, {ms: 8000, action: { label: '在執行進度查看', onClick: () => { this.activeTab = 'exec'; this.execSubTab = 'progress' } }})
         this._composeVisitDefaults()
       } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
       finally { this.postingComment = false }
@@ -178,6 +184,7 @@ window.CM_PARTS.push(() => ({
     isAutoFeedItem(it) {
       return it.source === 'daily_task' && String(it.content || '').startsWith(this.AUTO_STAGE_PREFIX)
     },
+    feedBadgeCount() { return this._feedBase().length },      // 分頁角標＝目前看得到的則數（摺疊的系統自動記錄不算）
     autoFeedCount() { return this.caseUpdates.filter(it => this.isAutoFeedItem(it)).length },
     _feedBase() {
       return this.feedShowAuto ? this.caseUpdates : this.caseUpdates.filter(it => !this.isAutoFeedItem(it))

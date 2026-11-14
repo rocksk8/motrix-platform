@@ -575,6 +575,7 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   /* T86 案件 UX #9：含稅／未稅／稅額三格。原本把 display:grid 寫在 inline style，被 Alpine x-show 顯示時移除 inline display
      而退回 block，三格直排；改用 class 才不會被 x-show 吃掉。 */
   .pay-amt-grid { flex:1; min-width:0; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
+  .pay-warn-ico { vertical-align:-1px; flex-shrink:0; }
   .pay-ro { font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); min-height:30px; display:flex; align-items:center; }
   /* T86 案件 UX #9：款項卡的「發票資料」收合區 */
   .pay-detail { margin-top:8px; border-top:1px dashed var(--border-light); padding-top:6px; }
@@ -585,7 +586,7 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   .pay-detail__body { padding:8px 0 2px 20px; }
   .feed-autobar { display:flex; align-items:center; gap:10px; padding:6px 20px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); background:var(--surface-muted); border-bottom:1px solid var(--border-light); flex-shrink:0; }
   .feed-autobar__btn { padding:1px 10px; font-size:12px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-strong); cursor:pointer; font-family:var(--font-zh); }
-  .feed-compose__hint { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); }
+  .feed-compose__hint { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); margin-left:12px; }
   .feed-compose__foot { display:flex; align-items:center; justify-content:flex-end; margin-top:6px; gap:8px; }
   /* T86 案件 UX #11／#31：日期、記錄對象、執行時數、聯絡事項。電腦版維持橫排；手機（767px 以下）改單欄堆疊，
      提示字不被截斷、發布鈕獨佔一列。 */
@@ -596,7 +597,7 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   /* 勾選／附檔：用 class 而不是 inline display，才不會被 Alpine x-show 顯示時移除 display 而退回行內排版 */
   .feed-compose__check { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); cursor:pointer; }
   .feed-compose__check--important { margin-right:auto; }
-  .feed-compose__type { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .feed-compose__type { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
   .feed-compose__jump { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); padding:4px 0 8px; }
   .feed-compose__ctl--hours { width:88px; }
   .feed-compose__ctl--custom { width:140px; }
@@ -612,7 +613,7 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
     .feed-compose__check--important { margin-right:0; }
     .feed-compose__check { min-height:32px; }
     .feed-compose__foot .feed-compose__send { width:100%; min-height:40px; font-size:14px; }
-    .feed-compose__hint { text-align:center; }
+    .feed-compose__hint { text-align:center; margin-left:0; }
   }
   .feed-list { flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:14px; }
   .feed-list::-webkit-scrollbar { width:4px; }
@@ -702,7 +703,7 @@ transition:background .1s;
   .cm-tabs-hint { display:none; }
   @media (max-width:767px) {
 .pay-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
-.pay-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
+.pay-grid > :last-child:nth-child(odd), .pay-grid > .pay-note { grid-column:1 / -1; }
 .visit-row { grid-template-columns:minmax(0,1fr) 56px !important; }
 .visit-row > :nth-child(3) { grid-column:1 / 2; }
 .cm-tabs { -webkit-mask-image:linear-gradient(to right, var(--ink-strong) 85%, transparent); mask-image:linear-gradient(to right, var(--ink-strong) 85%, transparent); }

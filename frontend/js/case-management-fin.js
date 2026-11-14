@@ -175,8 +175,11 @@ window.CM_PARTS.push(() => ({
 
     // T86 案件 UX #9：款項卡的「發票資料」收合。payDetailOpen[item.id] 有明確值（使用者按過）就照它；
     // 沒按過時，發票未稅與稅額只填一欄、或合計與該期金額不符 ⇒ 自動展開，不讓需要處理的提示藏起來。
-    // T86 案件 UX #29：沒有財務檢視權的人，已收款的期別除發票資料外不能改（後端 _RECEIVED_ITEM_EDITABLE），畫面同步停用其餘欄位。
-    payFrozen(item) { return !!(this.moneyMasked() && item && item.received) },
+    // T86 案件 UX #29：已收款的期別，非出納者除發票資料外不能改（後端 _RECEIVED_ITEM_EDITABLE），畫面同步停用其餘欄位。
+    // 後端鎖已收款期別的對象是「非出納」（_payment_items_lock_violation），不只是沒有財務檢視權的人 ⇒ 畫面照 canMarkPayment()（同一條規則）
+    payFrozen(item) { return !!(item && item.received && !this.canMarkPayment()) },
+    // 收款日期只給看：沒有財務檢視權的人（不能標已收款）；或已收款而被凍結的期別
+    payReceivedAtRo(item) { return this.moneyMasked() || this.payFrozen(item) },
     payDetailOpen: {},
     payDetailIsOpen(item, idx) {
       const v = this.payDetailOpen[item.id]

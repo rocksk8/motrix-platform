@@ -648,7 +648,7 @@
                    順序跟實際流程一致。切分頁時載入，形狀同出貨單。 -->
               <button class="cm-tab" x-show="tShown('completion')" :style="tOrder('completion')" :class="{active: activeTab==='completion'}"
                       @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)"><span x-text="tLabel('completion', '完工單')">完工單</span><span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
-              <button class="cm-tab" x-show="tShown('feed')" :style="tOrder('feed')" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)"><span x-text="tLabel('feed', '動態')">動態</span><span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
+              <button class="cm-tab" x-show="tShown('feed')" :style="tOrder('feed')" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)"><span x-text="tLabel('feed', '動態')">動態</span><span class="cm-tab__n" x-show="feedBadgeCount() > 0" x-text="feedBadgeCount()"></span></button>
               <!-- 附件目錄 P3：檔案中心（filehub）在才出現；不在就不顯示頁籤（不是空表）。同一支 /api/filehub/search、固定本案件 -->
               <button class="cm-tab" x-show="fileCenterOn && tShown('allfiles')" :style="tOrder('allfiles')" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'"><span x-text="tLabel('allfiles', '全部附件')">全部附件</span><span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
               <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
@@ -2043,7 +2043,7 @@
                         <label class="fi-label" :for="'pay-' + item.id + '-expected'">預計收款日</label>
                         <input class="fi fi--sm" type="date" :id="'pay-' + item.id + '-expected'" x-model="item.expectedReceiptDate" @change="setDirty()" :disabled="payFrozen(item)">
                       </div>
-                      <div x-show="!moneyMasked()">
+                      <div x-show="!payReceivedAtRo(item)">
                         <label class="fi-label" :for="'pay-' + item.id + '-received-at'">收款日期<span class="fi-req" x-show="item.received" title="已收款的期別必填">*</span></label>
                         <input class="fi fi--sm" type="date" :id="'pay-' + item.id + '-received-at'" :data-testid="'pay-received-at-' + idx"
                                :class="{'fi--need': item.received && !item.receivedAt && needReceivedDate[item.id]}"
@@ -2051,15 +2051,17 @@
                                x-model="item.receivedAt" @change="setDirty()">
                       </div>
                       <!-- T86 案件 UX #29：沒有財務檢視權的人不能標記已收款，收款日期只給看（唯讀摘要），不放輸入框 -->
-                      <div x-show="moneyMasked()" data-testid="pay-received-at-ro">
+                      <div x-show="payReceivedAtRo(item)" data-testid="pay-received-at-ro">
                         <span class="fi-label">收款日期</span>
                         <div class="pay-ro" x-text="item.receivedAt || (item.received ? '尚未填寫' : '尚未收款')"></div>
                       </div>
-                      <div>
+                      <div class="pay-note">
                         <label class="fi-label" :for="'pay-' + item.id + '-note'">備註</label>
                         <input class="fi fi--sm" type="text" placeholder="收款備註…" :id="'pay-' + item.id + '-note'" x-model="item.note" @input="setDirty()" :disabled="payFrozen(item)">
                       </div>
                     </div>
+
+                    <div x-show="payFrozen(item)" class="pay-ro" data-testid="pay-frozen-note" style="margin-top:6px;min-height:0">已收款的期別，除發票資料外不能修改。</div>
 
                     <!-- ⚠️ 「錢會從報表上無聲消失」的兩種狀態（2026-09-11）。
                          「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，
@@ -2068,13 +2070,13 @@
                          都不算，而且畫面上原本完全沒有任何提示。這一行就是那個提示。
                          刻意不自動幫使用者勾或填：收到錢沒有是人的判斷，系統替他決定
                          比漏算更嚴重。營運報表另有一張總清單（收款資料異常）。 -->
-                    <div x-show="!moneyMasked() && item.receivedAt && !item.received"
+                    <div x-show="!payReceivedAtRo(item) && item.receivedAt && !item.received"
                          style="margin-top:6px;padding:5px 9px;border-radius:5px;background:var(--tone-warning-bg);border:1px solid var(--tone-warning-border);font-size:12px;color:var(--tone-warning-fg);font-family:var(--font-zh)">
-                      ⚠️ 已填收款日期但沒勾「已收款」——這筆<b>不會計入營運報表的當月收入</b>，也不算在未收款項裡。
+                      <svg class="pay-warn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.5"/></svg> 已填收款日期但沒勾「已收款」——這筆<b>不會計入營運報表的當月收入</b>，也不算在未收款項裡。
                     </div>
-                    <div x-show="!moneyMasked() && item.received && !item.receivedAt"
+                    <div x-show="!payReceivedAtRo(item) && item.received && !item.receivedAt"
                          style="margin-top:6px;padding:5px 9px;border-radius:5px;background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);font-size:12px;color:var(--tone-danger-fg);font-family:var(--font-zh)">
-                      ⚠️ 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都撈不到它，請補上日期。
+                      <svg class="pay-warn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.5"/></svg> 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都撈不到它，請補上日期。
                     </div>
 
                     <!-- T86 案件 UX #9：發票資料（號碼／開立日期／未稅／稅額／附件）預設收合；有內容時在標題列摘要，發票未稅與稅額只填一欄或合計不符時自動展開。 -->

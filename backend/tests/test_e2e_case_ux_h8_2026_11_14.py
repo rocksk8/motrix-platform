@@ -101,8 +101,11 @@ def test_auto_feed_items_are_folded_until_shown(live_server, make_user, e2e_brow
     bar.wait_for(state="visible", timeout=8000)
     assert "已摺疊" in bar.inner_text()
     assert page.locator(".feed-item").count() == 0
+    badge = page.locator(".cm-tab", has_text="動態").first.locator(".cm-tab__n")
+    assert badge.count() == 0 or badge.is_hidden(), "只有被摺疊的自動記錄時，分頁角標不可顯示數字"
     page.locator('[data-testid="cm-feed-autobar-toggle"]').click()
     page.wait_for_function("() => document.querySelectorAll('.feed-item').length === 1", timeout=5000)
+    assert badge.first.inner_text().strip() == "1", "展開後角標與看得到的則數一致"
     assert "案件管理勾選" in page.locator(".feed-item").first.inner_text()
 
 
@@ -315,6 +318,8 @@ def test_compose_type_dropdown_adds_a_stage_visit_from_the_feed_tab(live_server,
     page.locator('[data-testid="cm-compose-people"]').fill("")
     page.wait_for_function("() => document.querySelector('[data-testid=\"cm-compose-send\"]').disabled", timeout=5000)
     assert "人次" in page.locator('[data-testid="cm-feed-send-hint"]').inner_text()
+    page.locator('[data-testid="cm-compose-people"]').fill("100")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"cm-compose-send\"]').disabled", timeout=5000)
     page.locator('[data-testid="cm-compose-people"]').fill("3")
     page.locator(".feed-compose__box").fill("拉線到二樓")
     send.click()
@@ -322,6 +327,9 @@ def test_compose_type_dropdown_adds_a_stage_visit_from_the_feed_tab(live_server,
     visits = _stage_visits(page, 0)
     assert len(visits) == 1 and visits[0]["visitPeople"] == 3 and visits[0]["note"] == "拉線到二樓", visits
     assert page.locator(".feed-compose__box").input_value() == "", "送出後清空內容"
+    # 出勤記錄不在動態清單，提示上給一個直接過去的按鈕
+    page.locator('[data-testid="ui-toast-action"]').click()
+    page.wait_for_function(f"() => {DATA_JS}.activeTab === 'exec' && {DATA_JS}.execSubTab === 'progress'", timeout=5000)
 
 
 @pytest.mark.e2e
@@ -361,3 +369,20 @@ def test_log_entry_links_only_jump_to_the_editor_with_the_type_preselected(live_
         page.wait_for_function("() => document.activeElement && document.activeElement.classList.contains('feed-compose__box')", timeout=5000)
     finally:
         _flag(False)
+
+
+@pytest.mark.e2e
+def test_received_period_is_frozen_for_anyone_who_cannot_mark_payment(live_server, make_user, e2e_browser):
+    """後端鎖已收款期別的對象是「非出納」，畫面照 canMarkPayment()：連有財務檢視權、但不能標已收款的人也要凍結。"""
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_fin29b", role="finance")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    assert page.locator('#pay-1-expected').is_enabled(), "正對照：能標已收款的人不凍結"
+    assert page.locator('#pay-1-received-at').is_visible()
+    page.evaluate(f"() => {{ {DATA_JS}.canMarkPayment = () => false }}")
+    page.wait_for_function("() => document.querySelector('#pay-1-expected').disabled", timeout=5000)
+    assert page.locator('#pay-1-note').is_disabled()
+    assert page.locator('#pay-1-received-at').is_hidden() and page.locator('[data-testid="pay-received-at-ro"]').first.is_visible()
+    assert page.locator('[data-testid="pay-frozen-note"]').first.is_visible()
+    assert page.locator('#pay-2-expected').is_enabled(), "未收款的期別不凍結"
