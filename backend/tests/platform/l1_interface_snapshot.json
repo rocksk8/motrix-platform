@@ -2081,6 +2081,9 @@
   },
   "helper:report_policy": {
    "DEFAULTS": "const",
+   "EXPORT_ADMIN_ONLY": "const",
+   "EXPORT_OFF": "const",
+   "EXPORT_SAME_AS_USE": "const",
    "GROUP": "const",
    "enabled": "def(conn=…)",
    "export_allowed": "def(user, conn=…)",

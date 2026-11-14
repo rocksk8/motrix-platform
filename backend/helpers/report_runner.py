@@ -2,7 +2,7 @@
 """自訂報表的編譯與執行（T87 B2 S1：定義 → 驗證 → 套可見性 → 編譯成唯讀查詢 → 由擁有模組執行 → 組表）。設計：D:\\Claude-pm\\t87-design\\B2-custom-reports.md §4.4、§5。
 
 [單位] helper:report_runner    [層] L1    [穩定度] 實驗（無路由、無資料表；不含任何業務表名字面值——表名／欄位／運算式全部取自 `report_catalog` 登錄表）
-[公開介面] CompiledPlan, MAX_EXPORT_ROWS, PREVIEW_ROWS, ReportError, ReportRefused, SourceUnavailable, assemble, compile, preview, run_owned
+[公開介面] CompiledPlan, MAX_DEFINITION_BYTES, MAX_EXPORT_ROWS, PREVIEW_ROWS, TIME_LIMIT_SECONDS, ReportError, ReportRefused, SourceUnavailable, assemble, compile, preview, run_owned
 [不變式] ①使用者只能提供**欄位代號**與**值**：識別字與運算式只來自登錄表（`expr` 是擁有模組的登錄常數），值一律走參數（LIKE 跳脫）；編譯後再斷言 `data_json` 只出現在登錄常數之內（授權器是欄位層級，分不出登錄運算式內的 `data_json` 與裸讀）。
     ②**不可見欄位**：用在顯示／彙總 ⇒ 拿掉並回報「已隱藏 N 欄」；用在篩選／分組／排序 ⇒ **422 拒絕執行**（不忽略；忽略會變成逐步逼近金額的探針）。可見性每次重算（`report_catalog.visible_fields`），定義裡只存欄位代號。
     ③列範圍＝`row_access.filter_sql(來源登記的 kind／scope)`，**無條件**併入每一支查詢（含計數與彙總）；來源有 `softDelete` 就併入 `<欄位> = 0`；未登錄列規則 ⇒ `AND 0`。

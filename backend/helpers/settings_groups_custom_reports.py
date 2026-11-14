@@ -2,8 +2,9 @@
 """T87 B2 設定群組：自訂報表（custom_reports）。
 
 [單位] helper:settings_groups_custom_reports    [層] L1    [穩定度] 實驗
-[公開介面] （無；讀取請用 helpers.report_policy）
-[不變式] ①四項都是「最高管理者定案」的設定，出廠值＝設計文件的預設；只有能改設定中心的人能改，且 `sensitive=True`（其他角色讀不到這個群組）。
+[公開介面] （無）
+[不變式] ⓪讀取請用 helpers.report_policy。
+    ①四項都是「最高管理者定案」的設定，出廠值＝設計文件的預設；只有能改設定中心的人能改，且 `sensitive=True`（其他角色讀不到這個群組）。
     ②每項設定的**後端**在每次請求時讀當下值（`helpers.report_policy`）；前端隱藏只是方便，不是防線。
     ③`quote_money_scope`（D7）只影響「報價單金額欄」，且只會在『欄位自己的天花板』之外多放行『既有報價單內頁（開啟單筆報價單）本來就放行的人』，絕不放寬到現有畫面看不到的人；
       商機預估金額（`dev_case.expected_amount`）一律只依 `can_see_financial`，不受此項影響。

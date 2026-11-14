@@ -5,10 +5,13 @@
   "core": ">=1.0,<2.0",
   "license_key": "analytics",
   "permissions": ["dashboard", "reports", "finance", "equipment", "procurement"],
-  "tables": [],
-  "tables_note": "本模組不擁有任何表：儀表板與營運報表只讀其他模組的資料（DEPENDENCY-MAP §2 M08）；精算快照過期檢查的「列→金額」經 IP-1 dispatch.row，但**列出有效派工仍直讀 contractor_dispatches、vendor_contractors（M04 的表，唯讀）**——待 M04 公開「有效派工列表」提供者（ROADMAP）",
+  "tables": ["custom_reports", "custom_report_shares"],
+  "tables_note": "自訂報表（T87 B2）新增兩張表 custom_reports（使用者存的報表設定）與 custom_report_shares（分享對象），由 migrations/0001_custom_reports.py 建立；其餘儀表板與營運報表仍只讀其他模組的資料（DEPENDENCY-MAP §2 M08）；精算快照過期檢查的「列→金額」經 IP-1 dispatch.row，但**列出有效派工仍直讀 contractor_dispatches、vendor_contractors（M04 的表，唯讀）**——待 M04 公開「有效派工列表」提供者（ROADMAP）",
   "data": {
-    "tables": [],
+    "tables": [
+      {"name": "custom_reports", "class": "T1"},
+      {"name": "custom_report_shares", "class": "T1"}
+    ],
     "files": []
   },
   "provides": {"api_prefixes": ["/api/custom-reports", "/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports"],

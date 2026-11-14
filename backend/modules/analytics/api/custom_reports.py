@@ -3,6 +3,9 @@
 
 - `GET  /api/custom-reports/sources`  這位使用者可用的資料來源與欄位（不可見的欄位只標「無權限」與通用原因；不含任何資料值）。
 - `POST /api/custom-reports/preview`  本文＝報表定義；回傳最多 50 列＋分組小計／總計。不寫任何東西、不留稽核（預覽不是匯出）。
+- `GET  /api/custom-reports`          我的報表（＋分享給我的，設定開啟時）。`POST` 新增（≤30 份、名稱不可重複、定義存檔前完整驗證）。
+- `GET|PUT|DELETE /api/custom-reports/{id}`  讀／改（`If-Match` 帶 etag，不符 409）／刪（設定決定進暫存區或直接刪）。非擁有者（含不存在）一律 404 同一句；被分享者只能讀與複製。
+- `POST /api/custom-reports/{id}/copy`  複製成自己的一份。
 
 [不變式] ①順序：登入 ⇒ 旗標（`custom_reports.enabled`，關 ⇒ 404、不讀寫表）⇒ 能力 `analytics.custom_report.view`（403）⇒ 來源的模組存取（沒有 ⇒ `/sources` 不列、`/preview` 404）。
     能力不取代模組存取，模組存取也不取代能力：兩者每次請求都查。
@@ -16,14 +19,17 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, Body, Header, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Body, Header, HTTPException, Path
 
 from db import get_db
-from helpers import _require_user
+from helpers import _audit, _require_user, _tok
 from helpers import perm as _perm
 from helpers import report_catalog as RC
 from helpers import report_policy as RP
 from helpers import report_runner as RR
+from modules.analytics import report_store as ST
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
@@ -134,3 +140,110 @@ def preview(definition=Body(...), authorization: str = Header(None)):
     except Exception:                                        # noqa: BLE001 — 不回顯內部訊息（可能含 SQL 片段）
         _log.exception("custom_reports preview failed")
         raise HTTPException(500, {"message": "報表產生失敗，請稍後再試；若持續發生請通知管理員。"})
+
+
+# ── 我的報表（CRUD；只讀寫自己的列，路徑與本文都沒有帳號參數） ─────────────────────────
+
+def _store_http(e: "ST.StoreError"):
+    detail = {"message": e.message}
+    detail.update({k: v for k, v in (e.details or {}).items() if k in ("reason", "count")})
+    return HTTPException(e.status, detail)
+
+
+def _audit_report(authorization, action, label, rid, source_id=None):
+    _audit(_tok(authorization), action, "custom_report", str(rid), label, {"source": source_id} if source_id else {})
+
+
+@router.get("/api/custom-reports")
+def list_reports(authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        return {"mine": ST.list_mine(conn, user), "shared": ST.list_shared(conn, user), "sharingEnabled": RP.sharing_enabled(conn),
+                "recycleDeleted": RP.recycle_deleted(conn), "max": ST.MAX_PER_USER, "nameMax": ST.NAME_MAX}
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom-reports", status_code=201)
+def create_report(body: dict = Body(...), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        if set(body) - {"name", "definition"}:
+            raise HTTPException(422, {"message": "報表內容格式不正確。"})
+        try:
+            out = ST.create(conn, user, body.get("name"), body.get("definition"))
+        except ST.StoreError as e:
+            raise _store_http(e)
+        except RR.ReportError as e:
+            raise _http(e)
+        _audit_report(authorization, "custom_reports.create", "新增自訂報表", out["id"], out["sourceId"])
+        return out
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom-reports/{rid}")
+def get_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            return ST.get_visible(conn, user, rid)
+        except ST.StoreError as e:
+            raise _store_http(e)
+    finally:
+        conn.close()
+
+
+@router.put("/api/custom-reports/{rid}")
+def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(...), if_match: Optional[str] = Header(None), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            out = ST.update(conn, user, rid, if_match, body)
+        except ST.StoreError as e:
+            raise _store_http(e)
+        except RR.ReportError as e:
+            raise _http(e)
+        _audit_report(authorization, "custom_reports.update", "修改自訂報表", rid, out["sourceId"])
+        return out
+    finally:
+        conn.close()
+
+
+@router.delete("/api/custom-reports/{rid}")
+def delete_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            out = ST.delete(conn, user, rid)
+        except ST.StoreError as e:
+            raise _store_http(e)
+        after = out.pop("after_commit", None)
+        _audit_report(authorization, "custom_reports.delete", "刪除自訂報表" + ("（進刪除暫存區）" if out["recycled"] else ""), rid)
+        if after:
+            after()
+        return out
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom-reports/{rid}/copy", status_code=201)
+def copy_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
+    user = _gate(authorization)
+    conn = get_db()
+    try:
+        try:
+            out = ST.copy_report(conn, user, rid)
+        except ST.StoreError as e:
+            raise _store_http(e)
+        except RR.ReportError as e:
+            raise _http(e)
+        _audit_report(authorization, "custom_reports.copy", "複製自訂報表", out["id"], out["sourceId"])
+        return out
+    finally:
+        conn.close()

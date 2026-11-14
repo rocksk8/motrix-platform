@@ -141,6 +141,14 @@
    "count": 3,
    "reason": "exempt: 扣繳明細（由來源重算）"
   },
+  "modules/analytics/report_store.py::custom_report_shares": {
+   "count": 2,
+   "reason": "exempt: 自訂報表的分享列（設定資料）：直接刪除報表時連帶刪、改分享對象時重建；進暫存區時由 adapter 快照／還原"
+  },
+  "modules/analytics/report_store.py::custom_reports": {
+   "count": 1,
+   "reason": "exempt: 自訂報表（使用者存的報表設定，不含單據資料）；設定 custom_reports.recycle_deleted 開啟時走 adapter 進暫存區，關閉時直接刪（D5，由超管決定）"
+  },
   "modules/case/api/case_action_items.py::case_action_items": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
@@ -376,6 +384,7 @@
   "modules/accounting/api/ledger_annotations.py::delete_annotation::DELETE /annotations/{annotation_id}": "p2: 其他業務資料（P2 評估）",
   "modules/accounting/api/ledger_category_map.py::delete_category_map::DELETE /category-map/{category}": "p2: 其他業務資料（P2 評估）",
   "modules/accounting/api/vouchers.py::delete_voucher_attachment::DELETE /{voucher_id}/attachments/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
+  "modules/analytics/api/custom_reports.py::delete_report::DELETE /api/custom-reports/{rid}": "exempt: 是否進刪除暫存區由設定 custom_reports.recycle_deleted 決定（D5，超管選項）；進暫存區的呼叫在 report_store.delete 內",
   "modules/arap/api/invoice_vouchers.py::delete_invoice_voucher_issued_file::DELETE /api/invoice-vouchers/{voucher_no}/issued-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/case_action_items.py::delete_case_action_item::DELETE /api/quotations/{quote_no}/action-items/{item_id}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/case_extra_expenses.py::cancel_change_request::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request": "p2: 其他業務資料（P2 評估）",

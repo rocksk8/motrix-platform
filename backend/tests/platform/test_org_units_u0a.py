@@ -33,7 +33,7 @@ GLOBAL_TABLES = {
     "voucher_template_versions", "voucher_templates", "webauthn_credentials",
 }
 #: 模組自己的 migration 就帶 owner_unit_id 的新表（隨所屬記錄的單位；不屬 core 的 U0A_OWNER_UNIT_TABLES，也不在模組自有「待補欄」清單）
-MODULE_KEYED_TABLES = {"dev_case_progress", "dev_log_directive", "dev_log_directive_target"}
+MODULE_KEYED_TABLES = {"dev_case_progress", "dev_log_directive", "dev_log_directive_target", "custom_reports", "custom_report_shares"}
 #: U0a 新建的表（單位功能自己的表）
 NEW_TABLES = {"org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity"}
 #: 模組自有表（由各模組自己的 migration 在 U1／U3 補欄；覆蓋率棘輪只增不減）。以前綴或精確名稱列出

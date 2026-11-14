@@ -979,9 +979,11 @@
     "mod:analytics/api/reports",
     "mod:analytics/api/report_templates",
     "mod:analytics/api/custom_reports",
+    "mod:analytics/report_store",
+    "mod:analytics/recycle_adapter",
     "mod:analytics/api/ledger_diff"
    ],
-   "tables": [],
+   "tables": ["custom_reports", "custom_report_shares"],
    "api_prefixes": [
     "/api/custom-reports",
     "/api/dashboard",

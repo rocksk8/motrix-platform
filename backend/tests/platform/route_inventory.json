@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 1008,
-  "endpoints_api": 1004,
-  "write_total": 543,
-  "write_api": 543,
-  "get_api": 461,
-  "distinct_paths_api": 857,
-  "write_with_body_api": 408,
-  "write_with_path_param_api": 365
+  "endpoints_total": 1014,
+  "endpoints_api": 1010,
+  "write_total": 547,
+  "write_api": 547,
+  "get_api": 463,
+  "distinct_paths_api": 860,
+  "write_with_body_api": 410,
+  "write_with_path_param_api": 368
  },
  "select_star": {
   "modules": 289,
@@ -59,6 +59,11 @@
    "body": false
   },
   "DELETE /api/contractor-vouchers/{voucher_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/custom-reports/{rid}": {
    "w": true,
    "pp": 1,
    "body": false
@@ -783,9 +788,19 @@
    "pp": 1,
    "body": false
   },
+  "GET /api/custom-reports": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/custom-reports/sources": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-reports/{rid}": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/custom/{key}/meta": {
@@ -3173,10 +3188,20 @@
    "pp": 1,
    "body": true
   },
+  "POST /api/custom-reports": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/custom-reports/preview": {
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "POST /api/custom-reports/{rid}/copy": {
+   "w": true,
+   "pp": 1,
+   "body": false
   },
   "POST /api/custom/{key}/compute": {
    "w": true,
@@ -4401,6 +4426,11 @@
   "PUT /api/custom-modules/definition-review": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "PUT /api/custom-reports/{rid}": {
+   "w": true,
+   "pp": 1,
    "body": true
   },
   "PUT /api/custom/{key}/records/{record_no}": {
