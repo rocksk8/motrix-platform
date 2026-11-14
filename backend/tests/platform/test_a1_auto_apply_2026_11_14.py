@@ -805,6 +805,34 @@ def test_notify_result_never_raises_and_failure_only_adds_a_problem(tmp_path):
         assert rec["outcome"] == "verify_failed", "通知失敗不改變套用結果"
 
 
+def test_notify_failure_is_written_into_the_report_with_the_child_output_tail(tmp_path):
+    """PM：子程序失敗不能擋住套用、也不能吞掉錯誤——要寫進報告（同一份報告檔補一節「通知」）。"""
+    root = make_prod(tmp_path)
+    rec = {"name": "p", "outcome": "succeeded", "started": True, "by": "boss", "problems": [], "notes": [], "install_root": str(root),
+           "result": {"status": "success", "rolled_back": "applied"}, "verify": {"ok": True, "items": [], "warnings": []}}
+    AA.finish(rec, str(root))
+    md = Path(rec["report"]["md"])
+    assert "## 通知" not in md.read_text(encoding="utf-8"), "通知之前報告沒有這一節"
+    AA.notify_result(rec, str(root), run=lambda c, e, p: (1, "Traceback (most recent call last):\nImportError: no module named x"))
+    text = md.read_text(encoding="utf-8")
+    assert "## 通知" in text and "沒有全部完成" in text and "套用結果不受影響" in text and "ImportError: no module named x" in text
+    assert json.loads(Path(rec["report"]["json"]).read_text(encoding="utf-8"))["notified"]["ok"] is False
+    assert rec["outcome"] == "succeeded", "通知失敗不改變套用結果"
+    ok = {"name": "q", "outcome": "succeeded", "started": True, "by": "boss", "problems": [], "notes": [], "install_root": str(root),
+          "result": {"status": "success", "rolled_back": "applied"}, "verify": {"ok": True, "items": [], "warnings": []}}
+    AA.finish(ok, str(root))
+    AA.notify_result(ok, str(root), run=lambda c, e, p: (0, 'A1_NOTIFY_RESULT {"audit_log": true, "in_app": {"recipients": 1}, "mail": {}}'))
+    assert "沒有全部完成" not in Path(ok["report"]["md"]).read_text(encoding="utf-8")
+
+
+def test_audit_row_label_carries_the_operator_so_the_audit_page_shows_and_finds_it():
+    """稽核頁列表顯示 target_label、關鍵字搜尋比對 target_label／username／display_name／target_id，不看 detail。
+    username 欄是空的（_audit 只認 session token）⇒ 套用者放進 target_label。"""
+    n = AA.build_notice(_rec("verify_failed", by="boss"))
+    assert "套用者 boss" in n["audit_label"] and "20261114-pkg" in n["audit_label"]
+    assert "套用者 未記錄" in AA.build_notice(_rec("succeeded", by=""))["audit_label"]
+
+
 def test_finish_crashed_writes_an_apply_end_for_the_open_apply_start(tmp_path):
     """h11 S2：套用中丟例外（例如 apply_staged 找不到腳本）⇒ apply_start 要有對應的 apply_end（crashed）＋報告＋鏈頭。"""
     root = make_prod(tmp_path)

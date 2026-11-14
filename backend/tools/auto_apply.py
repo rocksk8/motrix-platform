@@ -776,9 +776,28 @@ def render_report(rec):
                   "- 系統**不會**自動回滾（套用腳本內建的健康檢查失敗回滾除外，結果見上方 rolled_back）。",
                   "- 需要回滾時由使用者或 PM 明確指示後，人工執行（預設只回程式、資料庫保留）：",
                   "", "    " + rollback_hint(rec.get("install_root") or "", r), ""]
+    nt = rec.get("notified")
+    if nt is not None:
+        lines += ["## 通知", ""]
+        if nt.get("ok"):
+            lines.append("- 站內通知、Email／LINE 與 ERP 稽核列都已交給後端處理（結果見稽核紀錄的 apply_notified）。")
+        else:
+            lines += ["- **沒有全部完成**（套用結果不受影響）：%s" % str(nt.get("detail"))[:300],
+                      "- 請人工通知最高管理者，並到 ERP 稽核頁（動作 system_update.apply）確認該列有沒有寫入。"]
+            if nt.get("tail"):
+                lines += ["- 子程序輸出末段：", "", "    " + str(nt["tail"]).replace("\n", "\n    "), ""]
+        lines.append("")
     if rec.get("notes"):
         lines += ["## 注記", ""] + ["- %s" % n for n in rec["notes"]] + [""]
     return "\n".join(lines)
+
+
+def _write_report_files(md, js, rec):
+    with open(md, "w", encoding="utf-8") as f:
+        f.write(render_report(rec))
+    safe = {k: v for k, v in rec.items() if k not in ("before",)}
+    with open(js, "w", encoding="utf-8") as f:
+        json.dump(safe, f, ensure_ascii=False, indent=1, sort_keys=True, default=str)
 
 
 def write_report(install_root, rec, stamp=None):
@@ -788,14 +807,22 @@ def write_report(install_root, rec, stamp=None):
     try:
         os.makedirs(d, exist_ok=True)
         md, js = os.path.join(d, "a1_report_%s.md" % stamp), os.path.join(d, "a1_report_%s.json" % stamp)
-        with open(md, "w", encoding="utf-8") as f:
-            f.write(render_report(rec))
-        safe = {k: v for k, v in rec.items() if k not in ("before",)}
-        with open(js, "w", encoding="utf-8") as f:
-            json.dump(safe, f, ensure_ascii=False, indent=1, sort_keys=True, default=str)
+        _write_report_files(md, js, rec)
         return md, js
     except OSError:
         return None, None
+
+
+def rewrite_report(rec):
+    """同一份報告檔（路徑不變）用目前的 rec 重寫：通知結果出來之後補上「通知」一節（子程序失敗不可以只留在畫面上）。⇒ True／False。"""
+    rep = rec.get("report") or {}
+    if not rep.get("md") or not rep.get("json"):
+        return False
+    try:
+        _write_report_files(rep["md"], rep["json"], rec)
+        return True
+    except OSError:
+        return False
 
 
 def write_summary_next_to(result_json_path, rec):
@@ -1012,6 +1039,7 @@ def build_notice(rec):
         "ok": ok, "title": "系統更新套用%s" % ("完成" if ok else "沒有成功"), "rows": rows,
         "reason": "更新包 %s：%s。" % (rec.get("name"), outcome_label(rec)),
         "badge_text": "更新完成" if ok else "需要處理", "badge_color": "#16A34A" if ok else "#DC2626",
+        "audit_label": "%s：%s（套用者 %s）" % (rec.get("name"), outcome_label(rec), rec.get("by") or "未記錄"),
         "failed_items": ids, "report_name": report_name, "chain_head": rec.get("chain_head") or "",
         "downtime_seconds": rec.get("downtime_seconds"), "stopped_at": stopped_at(rec),
         "message": "%s：%s%s；報告 %s" % (rec.get("name"), outcome_label(rec), ("；未通過 " + "、".join(ids)) if ids else "", report_name or "（沒有產生）"),
@@ -1039,6 +1067,8 @@ def notify_result(rec, install_root, run=None):
         marker = [ln for ln in text.splitlines() if ln.startswith("A1_NOTIFY_RESULT ")]
         got = json.loads(marker[-1][len("A1_NOTIFY_RESULT "):]) if marker else {}
         result = {"ok": rc == 0 and bool(got), "detail": got if got else "後端沒有回報結果（結束碼 %s）" % rc}
+        if not result["ok"]:
+            result["tail"] = text[-400:]                            # 子程序的錯誤不吞：末段寫進報告
     except Exception as exc:                                        # noqa: BLE001
         result = {"ok": False, "detail": "%s: %s" % (type(exc).__name__, exc)}
     rec["notified"] = result
@@ -1050,4 +1080,8 @@ def notify_result(rec, install_root, run=None):
         pass
     if not result["ok"]:
         rec["problems"] = list(rec.get("problems") or []) + ["通知／ERP 稽核沒有全部完成（報告檔與本畫面是備援）：%s" % str(result["detail"])[:200]]
+    try:
+        rewrite_report(rec)                                         # 成功失敗都補「通知」一節；失敗時錯誤與子程序輸出末段都在報告裡
+    except Exception:                                               # noqa: BLE001
+        pass
     return result

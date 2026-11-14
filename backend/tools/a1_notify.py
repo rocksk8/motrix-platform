@@ -32,7 +32,8 @@ def _erp_audit(n):
     before = _count(where, args)
     detail = {"by": n.get("by"), "outcome": n.get("outcome"), "stopped_at": n.get("stopped_at"), "failed_items": n.get("failed_items"),
               "report": n.get("report_name"), "chain_head": n.get("chain_head"), "downtime_seconds": n.get("downtime_seconds")}
-    _a._audit("", "system_update.apply", "system_update", n["name"][:80], "%s：%s" % (n["name"], n.get("outcome")), detail)
+    # username 欄是空的（_audit 只認 session token）；稽核頁的列表顯示 target_label、關鍵字搜尋也比對它 ⇒ 套用者寫進標籤，看得到也搜得到
+    _a._audit("", "system_update.apply", "system_update", n["name"][:80], n["audit_label"][:200], detail)
     return _count(where, args) > before
 
 
