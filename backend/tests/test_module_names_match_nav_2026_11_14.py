@@ -35,3 +35,22 @@ def test_registry_and_matrix_show_the_same_names(client, make_user):
     titles = {c["unit"]: c["unitLabel"] for c in caps}
     for key, name in EXPECT.items():
         assert titles.get(key) == name, f"權限矩陣群組標題：{key} → {titles.get(key)}"
+
+
+def test_filehub_owner_labels_and_provider_labels_equal_the_declared_module_names(client):
+    """檔案中心的歸屬標籤（EXPECTED_OWNERS、各附件目錄 CATEGORIES 的 module）要跟宣告檔名稱同一個說法；
+    不然同一個模組在檔案中心與模組管理叫兩個名字。標籤只用來顯示與同一份回應內分組，不是篩選條件。"""
+    from core import registry
+    from helpers.uploads import ATTACHMENTS_CATALOG
+    from modules.filehub import api as F
+    names = {s["key"]: s["name"] for s in registry.module_states()}
+    for key, label in F.EXPECTED_OWNERS.items():
+        assert label == names.get(key), f"EXPECTED_OWNERS[{key}]={label} 與模組名稱 {names.get(key)} 不一致"
+    checked = 0
+    for key, prov in registry.providers(ATTACHMENTS_CATALOG).items():
+        if key not in names:
+            continue                                  # 核心提供者（例如工作日誌）沒有對應模組
+        for t, meta in (getattr(prov, "CATEGORIES", None) or {}).items():
+            assert meta["module"] == names[key], f"{key}.{t} 的歸屬標籤 {meta['module']} 與模組名稱 {names[key]} 不一致"
+            checked += 1
+    assert checked >= 7, f"至少要檢查到案件／供應等模組的類別（否則這題沒有東西可驗）：{checked}"

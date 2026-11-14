@@ -1,7 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-14（feat/t86-module-names-h12；T86 F3 追加：模組名稱與導覽用語一致，含缺模組說明字串與歸屬標籤）
+## (next) — 2026-11-14（feat/t86-module-names-h12；T86 F3 追加：模組名稱與導覽用語一致，含缺模組說明字串與歸屬標籤；案件歸屬標籤同步）
 - 文字（模組鍵、權限鍵、API、DB 不變）：宣告檔 `module.json` 的 `name` 由「案件」改為「案件管理」（對應導覽的功能頁名稱「案件管理」；導覽群組標籤另叫「案件」，採購與庫存模組則是跟導覽群組同名，依 PM 裁示：模組名稱對應頁面名稱而非群組名稱，業務開發／薪資獎金維持不改）。顯示處：模組管理／授權頁的模組名稱、模組未啟用提示、平台目錄、權限矩陣群組標題；這些都只讀 `name` 顯示，授權比對與載入判斷一律用模組鍵。
+- 案件附件目錄（`attachments.py` 各類別的 `module` 歸屬標籤）由「案件」改為「案件管理」，與模組名稱一致（檔案中心 `facets.byModule`／`categories[].module` 顯示用，不是篩選條件）。
 - 缺採購與庫存模組時案件頁的說明字串同步改名：`SHIPPING_UNAVAILABLE`「採購與庫存模組未安裝：沒有出貨單資料」、`STOCK_UNAVAILABLE`「設備序號未同步庫存：採購與庫存模組未安裝」。
 - 測試：`tests/test_module_names_match_nav_2026_11_14.py`、`tests/platform/test_supply_connectors.py`。
 
