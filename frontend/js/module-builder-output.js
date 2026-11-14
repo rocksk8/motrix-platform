@@ -117,8 +117,16 @@
           clearTimeout(this._pvTimer)
           this._pvTimer = setTimeout(() => this.previewOutput(), 600)
         },
+        // 沒有任何欄位（或每個欄位都還沒填 key）時伺服器一定回 422、畫不出預覽（T86 U9：custom-modules preview 422 ×6）⇒ 先在前端說明、不送請求。
+        // 其他「欄位填到一半」的情形伺服器會用佔位照畫，不是 422。
+        previewBlocker() {
+          var P = window.MotrixFormPreview            // 規則只維護一份（static/form-preview.js outputBlocker）；元件還沒載入 ⇒ 交給伺服器判斷
+          return (P && P.outputBlocker && this.def) ? P.outputBlocker(this.def) : ''
+        },
         async previewOutput() {
           if (!this.def) return
+          var block = this.previewBlocker()
+          if (block) { this.previewHtml = ''; this.previewProblems = [{ path: '', message: block }]; this.previewState = 'bad'; return }
           this.previewBusy = true; this.previewState = 'pending'
           try {
             var r = await fetch('/api/custom-modules/' + encodeURIComponent(this.key) + '/output/preview',
@@ -135,6 +143,8 @@
 
         async previewPdf() {
           if (!this.def || this.pdfBusy) return
+          var block = this.previewBlocker()
+          if (block) { this.previewProblems = [{ path: '', message: block }]; this.pdfState = 'bad'; return }
           // 先開分頁（在使用者點擊的當下開，才不會被擋），PDF 回來再把網址換過去
           var w = window.open('', '_blank')
           this.pdfBusy = true; this.pdfState = 'pending'; this.pdfBytes = 0

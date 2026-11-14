@@ -337,16 +337,16 @@ def _validate_numbering(n):
         return [_p("numbering", "必須有編號規則（前綴、日期、流水號位數）")]
     out = []
     if not PREFIX_RE.match(str(n.get("prefix") or "")):
-        out.append(_p("numbering.prefix", "前綴只能用大寫英文與數字、英文開頭，最長 6 字"))
+        out.append(_p("numbering.prefix", "前綴只能用大寫英文字母與數字、英文字母開頭，最長 6 字（不能有空白、符號或中文），例如 EL"))
     else:
         from helpers import doc_type as _DT          # 不可與估價單字首（含曾用過的）相同：單號會被誤認成案件單號
         if n["prefix"] in _DT.estimate_prefixes_in_use():
-            out.append(_p("numbering.prefix", "前綴 %s 是估價單單號字首（含曾經用過的），請換一組" % n["prefix"]))
+            out.append(_p("numbering.prefix", "前綴 %s 是估價單單號字首（含曾經用過的），單號會被誤認成案件單號。請換一組，例如在後面加一個字母" % n["prefix"]))
     if n.get("date", "YYYYMMDD") not in DATE_FORMATS:
-        out.append(_p("numbering.date", "日期格式只能是 YYYYMMDD、YYYYMM 或空白"))
+        out.append(_p("numbering.date", "日期格式只能選「年月日」、「年月」或不含日期（YYYYMMDD、YYYYMM 或空白）"))
     d = n.get("digits", 4)
     if not isinstance(d, int) or isinstance(d, bool) or not 3 <= d <= 8:
-        out.append(_p("numbering.digits", "流水號位數必須是 3～8"))
+        out.append(_p("numbering.digits", "流水號位數必須是 3～8 的整數，例如 4 代表 0001"))
     return out
 
 
@@ -975,7 +975,7 @@ def preview_output(body: dict) -> tuple:
     if len(placeholders) == len(shown):
         raise CustomModuleError("尚無可以預覽的欄位" if not shown else "所有欄位都尚未完成",
                                 problems=[{"path": "fields[%d]" % i, "message": msg} for i, _l, msg in placeholders.values()] or
-                                [{"path": "fields", "message": "至少要有一個欄位"}], status=422)
+                                [{"path": "fields", "message": "至少要有一個欄位：請到「欄位」步驟新增，填上顯示名稱與 key"}], status=422)
     wf = body.get("workflow") if isinstance(body.get("workflow"), dict) else {}
     out = body.get("output")
     if out is not None and not isinstance(out, dict):             # 輸出設定壞了 ⇒ 用通用版型照畫、列進清單
