@@ -298,6 +298,15 @@
       .stl-toolbar__right .btn { flex: 1 1 0; min-height: 44px; justify-content: center; white-space: nowrap; }
       .stl-toolbar__right > span { flex: 1 1 100%; max-width: none !important; }
       .stl-main { margin-top: 0; padding: 16px; }
+      /* T86 #28：首屏——「需處理」放最上面（要先動手的事），五張摘要卡收成兩欄小卡（原本一欄 5 張佔 1.6 個螢幕） */
+      .stl-flow { display: flex; flex-direction: column; }
+      .stl-flow > .finalized-banner, .stl-flow > .stale-banner { order: -2; }
+      .stl-flow > [data-testid="stl-exceptions"] { order: -1; }
+      .stl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      .stl-k { padding: 4px 8px; border-left-width: 4px; }
+      .stl-k:last-of-type:nth-of-type(odd) { grid-column: 1 / -1; }
+      .stl-k__v { font-size: 15px; }
+      .stl-strip { padding-top: 12px; }
       /* 卡片標題：標題整列、說明文字換到下一行（原本並排，標題被擠成一字一行） */
       .stl-card__head { flex-wrap: wrap; gap: 4px 12px; padding: 12px 16px; }
       .stl-card__head > :first-child { flex: 1 1 100%; }
@@ -406,7 +415,7 @@
   </div>
 
   <template x-if="!loading">
-    <div>
+    <div class="stl-flow">
 
       <!-- 已完結橫幅 -->
       <template x-if="settlement.status === 'finalized'">
