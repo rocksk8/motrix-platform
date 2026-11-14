@@ -584,6 +584,46 @@
    "note": "",
    "order": 65
   },
+  "settings_group:tax_rules": {
+   "category": "company",
+   "section": "",
+   "tier": 1,
+   "blurb": "扣繳率、起扣標準、補充保費與最低工資的年度版本表。",
+   "when": "每年公告新的最低工資或扣繳標準，需要新增一版時。",
+   "status": "keep",
+   "note": "實際操作入口在法規參數設定頁；設定中心不直接編輯。",
+   "order": 66
+  },
+  "settings_group:overhead_basis": {
+   "category": "company",
+   "section": "",
+   "tier": 2,
+   "blurb": "管銷分攤的算法版本，以及公益基數的算法。",
+   "when": "要切換到新算法或退回舊算法時。",
+   "status": "keep",
+   "note": "實際操作入口在管銷設定；切換前須完成既有報價單的遷移。",
+   "order": 67
+  },
+  "settings_group:t100_export": {
+   "category": "flow",
+   "section": "財務與結案",
+   "tier": 1,
+   "blurb": "匯出給會計師的傳票，各種金額對應的會計科目。",
+   "when": "新增銀行帳戶或會計科目有調整時。",
+   "status": "keep",
+   "note": "實際操作入口在鼎新匯出設定頁；設定中心不直接編輯。",
+   "order": 195
+  },
+  "settings_group:bonus_voucher": {
+   "category": "flow",
+   "section": "財務與結案",
+   "tier": 1,
+   "blurb": "獎金分潤產生傳票時使用的五個會計科目。",
+   "when": "會計科目表調整，或會計師要求改科目時。",
+   "status": "keep",
+   "note": "實際操作入口在獎金頁；設定中心不直接編輯。",
+   "order": 196
+  },
   "settings_group:external_login": {
    "category": "people",
    "section": "登入安全",

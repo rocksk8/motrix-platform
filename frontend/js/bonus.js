@@ -148,7 +148,10 @@ function bonusPage() {
         const r = await fetch('/api/bonus/cases/voucher-accounts', { method: 'PUT', headers: this._jsonAuth(),
           body: JSON.stringify(this.voucherAcctEdit) })
         const d = await r.json().catch(() => ({}))
-        this.msg = r.ok ? '已儲存傳票科目' : ('傳票科目儲存失敗：' + (d.detail || r.status))
+        // S5：科目改走設定中心的待生效機制——有實質變更時回 pending（等待期＋第二位最高管理者核准後才生效），畫面顯示的仍是目前生效值
+        const pend = (d && d.pending) || []
+        this.msg = !r.ok ? ('傳票科目儲存失敗：' + (d.detail || r.status))
+          : (pend.length ? ('已送出變更，' + (pend.some(p => p.approvalsRequired) ? '需第二位最高管理者核准，且' : '') + '等待期滿（' + String(pend[0].effectiveAt || '').slice(0, 10) + '）後才生效；目前生效的仍是原本的科目') : '已儲存傳票科目')
         if (r.ok) await this.loadVoucherAccounts()
       } catch (e) { this.msg = '網路錯誤：' + e.message }
     },

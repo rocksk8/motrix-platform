@@ -1,5 +1,14 @@
 # L0／L1 底層 更新紀錄
 
+- **（併入）(next) — 2026-11-14（feat/settings-s5-external；設定改版 S5：四個外部群組進登錄表）**
+- 行為變更（對外介面，端點與路徑不變）：`PUT /api/settings/t100-export-config`、`PUT /api/cases/voucher-accounts`（獎金傳票科目）、`PUT /api/legal-params/tax-rules`、`PUT /api/overhead/settings`（口徑）不再直接寫舊鍵——改走設定群組 `t100_export`／`bonus_voucher`／`tax_rules`／`overhead_basis` 的 `publish()`：**任何實質變更都是待生效**（確認期間＋第二位最高管理者核准＋稽核；只有一位最高管理者＝等待期＋警告）。回應多 `pending`／`warnings`；沒有實質變更不產生待生效；同群組已有待生效時再送 ⇒ 409（`supersede=true` 才取代）。
+- 行為變更：T100 設定存檔時，科目代號必須存在於科目表（400，列出哪個代號）；獎金傳票科目送出的每一格都驗證。
+- 內部：新增 `helpers/settings_groups_external.py`（四群組轉接器；舊鍵只有它能寫；`external=True`＝設定中心通用路由一律 403、不進清單）；`legal_params.save_versions` 移除；各讀取端（`bonus_vouchers.configured_accounts`、`legal_params.load_versions`、`accounting_export._t100_config`、`profit_guard._basis`）改讀登錄表生效值，讀不到才退回舊儲存（`*_raw` 供轉接器／對帳用）。
+- 風險：離線工具（`tools/charity_migrate.py`、`tools/overhead_migrate.py`）仍直接寫口徑鍵——每日對帳（`check_drift`）會通知最高管理者；遷移標記仍由工具寫、轉接器只在退回舊口徑時刪除。
+- 審查修正（h10）：①法規參數 PUT 先驗結構（非物件項目回 400，不再 500）；②獎金傳票科目／T100／法規參數三處儲存後，有待生效時提示「等待期滿、需第二位最高管理者核准後才生效」，法規參數頁不再蓋掉剛輸入的版本；③兩支遷移工具在登錄表已有 `overhead_basis` 發布版本時，拒絕 `mode --apply`、`recalc --apply --set-*`、`rollback --apply`（舊鍵寫了不生效且會混基），改走 `PUT /api/overhead/settings`；④管銷設定 PUT 的 CAS 期望值取登錄表原始生效值；⑤`profit_guard` 表單存檔與 `charity_basis()` 只讀一次登錄表。
+- 已知限制：`tools/charity_migrate.py` 的前置檢查（`_prereq`）仍讀舊的管銷鍵（`overhead_rule_mode`／`overhead_migration_done`）；目前只因為「有定義時 `--set-total` 一律被拒」才不會出錯——日後若放寬該拒絕，必須先把 `_prereq` 改成讀登錄表生效值。
+- 測試：`tests/platform/test_settings_external_s5.py`；既有 PUT 後立刻讀的測試改為 `tests/_settings_activate.activate_now()`（只給測試用）。
+
 ## 1.167 — 2026-11-14（T84 整合者；L1 單位歸屬補登）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：把 T84 設定改版（S2／S3a）新增、尚未登記到 `docs/platform/modules.json` 的單位補上歸屬——`helper:settings_pages`、`helper:settings_shell`、`js:static/settings-matrix.js`、`js:static/users-batch.js`。程式與行為沒有變動，只是這些單位現在算進 G1 介面快照。
 

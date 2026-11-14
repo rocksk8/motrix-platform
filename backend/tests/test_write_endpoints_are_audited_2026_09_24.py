@@ -157,6 +157,14 @@ EXEMPT = {
         "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（核准票 ledger.role.approve＋套用 ledger.role.put 與 gl_account_roles 變更同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
     ("modules/accounting/api/ledger_reports.py", "POST", "/roles/pending/{pid}/cancel"):
         "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（撤銷與 ledger.role.cancel 同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
+    ("legal_params.py", "PUT", "/api/legal-params/tax-rules"):
+        "S5：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record 寫入（動作 settings.tax_rules.update／.pending），端點本身不再另呼叫 _audit；測試 tests/platform/test_settings_external_s5.py::test_external_group_puts_write_their_own_audit_row 呼叫一次→audit_log 多一筆",
+    ("modules/accounting/api/accounting_export.py", "PUT", "/api/settings/t100-export-config"):
+        "S5：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record 寫入（動作 settings.t100_export.update／.pending），端點本身不再另呼叫 _audit；測試 tests/platform/test_settings_external_s5.py::test_external_group_puts_write_their_own_audit_row 呼叫一次→audit_log 多一筆",
+    ("modules/case/api/overhead.py", "PUT", "/api/overhead/settings"):
+        "S5：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record 寫入（動作 settings.overhead_basis.update／.pending），端點本身不再另呼叫 _audit；測試 tests/platform/test_settings_external_s5.py::test_external_group_puts_write_their_own_audit_row 呼叫一次→audit_log 多一筆",
+    ("modules/payroll/api/bonus.py", "PUT", "/cases/voucher-accounts"):
+        "S5：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record 寫入（動作 settings.bonus_voucher.update／.pending），端點本身不再另呼叫 _audit；測試 tests/platform/test_settings_external_s5.py::test_external_group_puts_write_their_own_audit_row 呼叫一次→audit_log 多一筆",
     ("settings_center.py", "POST", "/api/settings-center/batch"):
         "T84：稽核在同一個交易內由 helpers/settings_registry.publish→helpers/config_ledger.record／audit_event 寫入（save_batch 對每個有變動的群組各呼叫一次 sr.publish，動作 settings.<group>.update／.pending），端點本身不再另呼叫 _audit；失敗整筆回滾；測試 test_audit_guard_exempt_batch_2026_11_14.py 呼叫一次→audit_log 多一筆",
     ("duty_roles.py", "POST", "/api/users/permissions/batch/preview"):

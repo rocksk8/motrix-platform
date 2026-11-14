@@ -125,8 +125,7 @@ class T100ExportConfigBody(BaseModel):
     voucherCategory: str = "轉"
 
 
-def _t100_config() -> dict:
-    cfg = {**_DEFAULT_T100_CONFIG, **(_get_setting("t100_export_config", {}) or {})}
+def _t100_fill(cfg: dict) -> dict:
     # 確保目前所有料件分類（helpers/part_catalog.py::PART_CATEGORIES）都有一個鍵可填，即使
     # 使用者還沒存過任何值；分類名稱之後若新增，重新 GET 一次就會自動補上
     # 空白鍵，不需要額外 migration 或手動同步。
@@ -135,6 +134,29 @@ def _t100_config() -> dict:
         filled.setdefault(name, "")
     cfg["inventoryExpenseAccounts"] = filled
     return cfg
+
+
+def _t100_config_raw(conn) -> dict:
+    """舊儲存裡的設定（補齊預設鍵與分類空白鍵）。**不經登錄表**（轉接器與每日對帳用）。"""
+    from helpers.settings_groups_external import t100_read
+    return _t100_fill({**_DEFAULT_T100_CONFIG, **t100_read(conn)["config"]})
+
+
+def _t100_config() -> dict:
+    """目前生效的 T100 匯出設定：讀設定群組 `t100_export` 的生效值（含已到時的待生效值；忽略 DEFAULTS_ONLY）；
+    登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。寫入只走 `settings_registry.publish("t100_export", …)`。"""
+    conn = get_db()
+    try:
+        try:
+            from helpers import settings_registry as _sr
+            return _t100_fill({**_DEFAULT_T100_CONFIG, **_sr.get_group_effective("t100_export", conn=conn)["config"]})
+        except Exception:                                 # noqa: BLE001
+            try:
+                return _t100_config_raw(conn)
+            except Exception:                             # noqa: BLE001  連設定表都沒有（精簡測試庫）⇒ 程式預設，與舊行為相同
+                return _t100_fill(dict(_DEFAULT_T100_CONFIG))
+    finally:
+        conn.close()
 
 
 def validate_account_code(conn, code):
@@ -236,12 +258,28 @@ def get_t100_export_config(authorization: str = Header(None)):
 
 
 @router.put("/api/settings/t100-export-config")
-def set_t100_export_config(body: T100ExportConfigBody, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
-    _set_setting("t100_export_config", body.model_dump())
-    _audit(_tok(authorization), "settings.t100_export_config.update", "settings",
-           "t100_export_config", "T100 傳票匯出科目代號設定")
-    return {"ok": True}
+def set_t100_export_config(body: T100ExportConfigBody, authorization: str = Header(None), supersede: bool = Query(False)):
+    """S5：不再直接寫舊鍵——改走設定群組 `t100_export` 的 `publish()`（確認期間＋第二位最高管理者核准＋稽核；科目代號必須存在且未停用）。
+    回 `{ok, pending, warnings}`：有實質變更 ⇒ `pending` 不為空（等待期滿且核准後才生效）；沒有實質變更 ⇒ `pending` 空。
+    `supersede=true`＝畫面確認過「要取代別人還沒到期的申請」才帶。"""
+    user = _require_user(authorization, require_superadmin=True)
+    from helpers import settings_registry as _sr
+    from helpers.settings_groups_external import problems_text, t100_normalize
+    from core.definitions import DefinitionConflict
+    cur = _sr.get_group_effective("t100_export")["config"]
+    want = t100_normalize(body.model_dump())
+    if want == t100_normalize(cur):
+        return {"ok": True, "pending": [], "warnings": [], "changed": False}
+    try:
+        res = _sr.publish("t100_export", {"config": want}, user=user["username"], actor=user, reason="T100 匯出科目設定（T100 匯出設定頁）",
+                          expected_values={"config": cur}, supersede=supersede)
+    except _sr.SettingConflict as e:
+        raise HTTPException(409, {"code": e.code, "keys": e.keys, "by": e.by, "at": e.at})
+    except _sr.SettingError as e:
+        raise HTTPException(400, problems_text(e))
+    except DefinitionConflict as e:
+        raise HTTPException(409, str(e))
+    return {"ok": True, "pending": res.get("pending") or [], "warnings": res.get("warnings") or [], "changed": True}
 
 
 # ── 傳票資料組裝 ────────────────────────────────────────────────────────────────

@@ -12,12 +12,13 @@ from helpers.settings_registry import SettingDef as S
 from helpers.settings_registry import register_group as _register_group
 
 
-def _register_core(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None):
+def _register_core(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None,
+                   legacy_adapter=None, external=False):
     """本檔的群組一律屬於 core：本檔可能在某個模組的 import 範圍內被第一次 import（例如模組 import 了本檔），
     不蓋 core 章的話那個模組就成了核心群組的擁有者（它載入失敗時 `unregister_owner` 會把核心群組一併刪掉）。"""
     with _reg.owner_scope("core"):
         return _register_group(group, label, fields, sensitive=sensitive, risk=risk, legacy_key=legacy_key,
-                               cross_check=cross_check, help=help, owner=owner)
+                               cross_check=cross_check, help=help, owner=owner, legacy_adapter=legacy_adapter, external=external)
 
 
 #: 合併安全：其他分支（M3 擇一方案、完工單、材料申請、下載檔名、專案毛利…）會在本檔追加區塊並呼叫 `register_group(`——
@@ -1276,6 +1277,11 @@ register_group(
 from helpers import settings_groups_overhead as _overhead  # noqa: E402
 
 _overhead.register(S, _register_core)
+
+# S5：四個外部群組（獎金傳票科目／法規參數／T100 匯出科目／管銷口徑；拆檔，同屬 core；external＝只能走原頁面的舊端點）
+from helpers import settings_groups_external as _external  # noqa: E402
+
+_external.register(S, _register_core)
 
 # T70：附近旅宿資料新舊提示天數（拆檔，同屬 core）
 from helpers import settings_groups_lodging_freshness as _lodging_freshness  # noqa: E402

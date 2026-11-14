@@ -164,6 +164,10 @@ def main(argv=None):
             print("overhead_rule_mode: %s → %s%s" % (cur, a.value, "" if a.apply else "（dry-run，加 --apply 才寫）"))
             if a.apply:
                 conn.execute("BEGIN IMMEDIATE")
+                if _dbbind.overhead_basis_definition(conn) is not None:      # S5：登錄表已有定義 ⇒ 舊鍵寫了不生效
+                    conn.execute("ROLLBACK")
+                    print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                    return 2
                 if a.value == "v2" and _get(conn, DONE_KEY) is None:
                     conn.execute("ROLLBACK")
                     print("拒絕：還沒有遷移完成標記（%s）。伺服器在標記不存在時一律當 legacy；請用 recalc --apply --set-mode-v2（同交易寫標記與模式）。" % DONE_KEY,
@@ -192,6 +196,9 @@ def main(argv=None):
                 print("（dry-run；加 --apply 才寫）")
                 return 0
             if cnt.get("restore"):
+                if _dbbind.overhead_basis_definition(conn) is not None:      # S5：還原會把舊鍵設回 legacy 並刪標記，但生效口徑以定義為準 ⇒ 混基；先經 API 改回 legacy 再還原
+                    print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                    return 2
                 if not a.no_backup:
                     print("備份：", _backup(a.db, stamp))
                 conn.execute("BEGIN IMMEDIATE")
@@ -217,7 +224,11 @@ def main(argv=None):
             if not a.apply:
                 print("（dry-run；加 --apply --set-mode-v2 才寫）")
                 return 0
-            mode = _get(conn, MODE_KEY, "legacy")
+            defn = _dbbind.overhead_basis_definition(conn)             # S5：有定義 ⇒ 生效口徑以定義為準；工具不可寫舊鍵（--set-mode-v2 拒絕）
+            if defn is not None and a.set_mode_v2:
+                print(_dbbind.REFUSE_REGISTRY_OWNS, file=sys.stderr)
+                return 2
+            mode = defn.get("ruleMode", "legacy") if defn is not None else _get(conn, MODE_KEY, "legacy")
             if mode != "v2" and not a.set_mode_v2:
                 print("拒絕：模式目前是 %s。新口徑遷移後若不是 v2，舊式表單重存會把單悄悄退回 10%% 基準；"
                       "請加 --set-mode-v2（同一交易設定），或先 mode v2 --apply。" % mode, file=sys.stderr)

@@ -21,31 +21,24 @@ from core import registry
 #: M06 不在時對使用者說的話（回傳 notice／畫面顯示用；不可以默默略過）
 ACCOUNTING_MISSING = "未產生傳票：會計模組未安裝"
 
-#: 設定鍵 → (system_settings 的 key, 預設科目, 中文名)
-ACCOUNT_SLOTS = {
-    "expense":     ("bonus_case_voucher_expense_code",     "6111", "費用（薪資支出）"),
-    "payable":     ("bonus_case_voucher_payable_code",     "2191", "應付（應付薪資）"),
-    "withholding": ("bonus_case_voucher_withholding_code", "2252", "代扣稅款"),
-    "nhi":         ("bonus_case_voucher_nhi_code",         "2252", "代收補充保費"),
-    "bank":        ("bonus_case_voucher_bank_code",        "1113", "銀行存款"),
-}
+#: 設定鍵 → (system_settings 的舊鍵, 預設科目, 中文名)。單一來源在 `helpers/settings_groups_external.BONUS_SLOTS`（設定群組 `bonus_voucher`）。
+from helpers.settings_groups_external import BONUS_SLOTS as ACCOUNT_SLOTS  # noqa: E402
+
+
+def configured_accounts_raw(conn):
+    """舊儲存的科目代號（沒設定 ⇒ 預設值）。**不經登錄表**：轉接器 `read` 與每日對帳用。讀同一個連線，不另開。"""
+    from helpers.settings_groups_external import bonus_read
+    return bonus_read(conn)
 
 
 def configured_accounts(conn):
-    """目前設定的科目代號（沒設定 ⇒ 預設值）。讀同一個連線，不另開。"""
-    out = {}
-    for slot, (key, default, _label) in ACCOUNT_SLOTS.items():
-        row = conn.execute("SELECT value_json FROM system_settings WHERE key = ?", (key,)).fetchone()
-        val = default
-        if row is not None:
-            try:
-                v = json.loads(row["value_json"])
-            except (TypeError, ValueError):
-                v = None
-            if isinstance(v, str) and v.strip():
-                val = v.strip()
-        out[slot] = val
-    return out
+    """目前生效的科目代號：讀設定群組 `bonus_voucher` 的生效值（含已到時的待生效值；忽略 DEFAULTS_ONLY）；
+    登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。讀同一個連線，不另開。"""
+    try:
+        from helpers import settings_registry as sr
+        return {k: v for k, v in sr.get_group_effective("bonus_voucher", conn=conn).items() if k in ACCOUNT_SLOTS}
+    except Exception:                               # noqa: BLE001
+        return configured_accounts_raw(conn)
 
 
 def accounting_available():

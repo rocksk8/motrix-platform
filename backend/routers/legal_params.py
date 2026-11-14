@@ -72,16 +72,30 @@ def get_privacy_notice_text(notice_hash: str, authorization: str = Header(None))
 
 
 @router.put("/api/legal-params/tax-rules")
-def put_tax_rule_versions(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+def put_tax_rule_versions(body: dict = Body(...), supersede: bool = False, authorization: str = Header(None)):
+    """整份清單：結構驗證＋守門（門檻＝最低工資）＋已生效版本不可改刪（superadmin）。
+    S5：不再直接寫舊鍵——改走設定群組 `tax_rules` 的 `publish()`（確認期間＋第二位最高管理者核准＋稽核；到期寫入前會再驗一次已生效版本）。
+    回 `{versions, status, pending, warnings}`：`versions` 是**目前生效**的版本（待生效的在 `pending`，等待期滿且核准後才生效）。"""
+    user = _require_user(authorization, require_superadmin=True)
     new = body.get("versions") if isinstance(body, dict) else None
-    errs = lp.validate_versions(new)
-    if not errs:
-        errs = lp.frozen_changes(lp.load_versions(), new, lp.today())
-    if errs:
-        raise HTTPException(400, "；".join(errs))
-    lp.save_versions(new)
+    from helpers import settings_registry as _sr
+    from helpers.settings_groups_external import problems_text
+    from core.definitions import DefinitionConflict
+    cur = lp.load_versions()
+    pending, warnings = [], []
+    try:
+        errs = lp.validate_versions(new)                    # 先驗結構（含「每一版必須是物件」）再比較，非物件項目不會在排序時炸成 500
+        if errs:
+            raise HTTPException(400, "；".join(errs))
+        if lp.sort_versions(new) != lp.sort_versions(cur):
+            res = _sr.publish("tax_rules", {"versions": new}, user=user["username"], actor=user, reason="法規參數調整（法規參數設定頁）",
+                              expected_values={"versions": cur}, supersede=supersede)
+            pending, warnings = res.get("pending") or [], res.get("warnings") or []
+    except _sr.SettingConflict as e:
+        raise HTTPException(409, {"code": e.code, "keys": e.keys, "by": e.by, "at": e.at})
+    except _sr.SettingError as e:
+        raise HTTPException(400, problems_text(e))
+    except DefinitionConflict as e:
+        raise HTTPException(409, str(e))
     saved = lp.load_versions()
-    _audit(_tok(authorization), "settings.tax_rules_versions.update", "settings", lp.VERSIONS_KEY,
-           "法規參數", {"versions": [v["version"] + "@" + v["effectiveFrom"] for v in saved]})
-    return {"versions": saved, "status": lp.year_status(saved, lp.today())}
+    return {"versions": saved, "status": lp.year_status(saved, lp.today()), "pending": pending, "warnings": warnings}
