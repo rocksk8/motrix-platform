@@ -311,8 +311,7 @@ def test_revenue_cash_series_matches_income_items_provider(client, world):
     assert kp["revenue"] == 52500 and kp["contract"] == 105000 + 210000 and kp["caseCount"] == 2
     assert j["params"]["basis"] == "cash"
     from helpers.recognition_basis import BASIS_NOTES
-    assert j["notes"][0] == BASIS_NOTES["cash"].replace("；2026-09-30 使用者裁示", "")
-    assert "使用者裁示" not in j["notes"][0] and j["notes"][0].startswith("現金口徑（預設）")
+    assert j["notes"][0] == BASIS_NOTES["cash"]
     by = {r["owner"]: r for r in j["tables"][0]["rows"]}
     assert sum(r["revenue"] for r in by.values()) == 52500
 

@@ -17,7 +17,6 @@
 """
 import io
 import json
-import re
 from datetime import date, datetime
 from typing import Optional
 
@@ -279,14 +278,6 @@ def _effective_range(p: dict) -> tuple:
     return d_from[:10], d_to[:10]
 
 
-_PROVENANCE = re.compile(r"；\d{4}-\d{2}-\d{2} 使用者裁示")
-
-
-def _basis_note(basis: str) -> str:
-    """口徑說明：沿用 BASIS_NOTES，但拿掉「（預設；日期 使用者裁示）」這類決策出處（畫面上不需要）；共用常數不動。"""
-    return _PROVENANCE.sub("", BASIS_NOTES[basis])
-
-
 def _build_revenue(p: dict, u: dict) -> dict:
     basis = p.get("basis") or DEFAULT_BASIS
     d0, d1 = _effective_range(p)
@@ -298,7 +289,7 @@ def _build_revenue(p: dict, u: dict) -> dict:
     filtered = bool(p.get("sales_id") or p.get("customer"))
     rec = _rp._recognition()
     cash_ok = _rp._registry.single_provider("receivables.income_items") is not None
-    notes = [_basis_note(basis)]
+    notes = [BASIS_NOTES[basis]]
 
     def items_for(which: str):
         """⇒ 逐筆收入（已依條件篩選）或 None（這個口徑沒有資料來源）。案件收入以 `_collect` 的案件母體過濾；
