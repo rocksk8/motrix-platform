@@ -4,6 +4,8 @@
 - 文字（模組鍵、權限鍵、API、DB 不變）：宣告檔 `module.json` 的 `name` 由「案件」改為「案件管理」（對應導覽的功能頁名稱「案件管理」；導覽群組標籤另叫「案件」，採購與庫存模組則是跟導覽群組同名，依 PM 裁示：模組名稱對應頁面名稱而非群組名稱，業務開發／薪資獎金維持不改）。顯示處：模組管理／授權頁的模組名稱、模組未啟用提示、平台目錄、權限矩陣群組標題；這些都只讀 `name` 顯示，授權比對與載入判斷一律用模組鍵。
 - 缺採購與庫存模組時案件頁的說明字串同步改名：`SHIPPING_UNAVAILABLE`「採購與庫存模組未安裝：沒有出貨單資料」、`STOCK_UNAVAILABLE`「設備序號未同步庫存：採購與庫存模組未安裝」。
 - 測試：`tests/test_module_names_match_nav_2026_11_14.py`、`tests/platform/test_supply_connectors.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-formver-h2；報價單表單 FORM_VERSION V3.49→V3.50 補升版；版號由列車取）**
+- 修正（前端，`quotation-form.html` FORM_VERSION V3.49→V3.50；行為、API、欄位、權限鍵不變）：t86-int 合併後表單內容已變（文字殘餘：「內容無任何變動」提示等）而版本號仍為 V3.49，表單版號守門（`test_form_version_bumped_2026_09_24`）轉紅；補升版並把新版本登記進 LEDGER。
 
 ## 1.0.238 — 2026-11-14（train/t86-int；整合者：T86 合併後補記（U4/U5/U7 併入、稽核移到鎖外、文字殘餘））
 - 內部／文字（API 欄位、權限鍵、DB 值不變）：併入 h1 U4/U5/U7/U11 與 h2 最後一輪文字；`update_case_record` 的「更換發票號碼」稽核改在寫鎖放掉（commit／close）之後才寫（approval_no_freeze 掃描）；報價單「內容無任何變動」訊息與前端一致。此條補寫於 T86 整合最後一次合併之後。
