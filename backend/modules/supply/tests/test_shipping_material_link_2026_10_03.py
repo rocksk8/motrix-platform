@@ -2,7 +2,8 @@
 """33-S1：出貨單連動材料申請（契約 docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）。
 - 提供者 `shipping.material_shipped`：reserved（待審核／簽核中）、shipped（已核准）；草稿、已退回不計；`exclude_note_no`
 - 提供者 `material.shippable`（case）：只回已核准且已到貨者；到貨量全數
-- 出貨單送審／核准檢查：超量 `ship_exceeds_arrived`、無效連結 `ship_link_invalid`、序號互斥、M01 不在 `ship_link_module_off`；核准時再檢（競態）
+- 出貨單送審／核准檢查：超量 `ship_exceeds_arrived`、無效連結 `ship_link_invalid`、M01 不在 `ship_link_module_off`；核准時再檢（競態）
+- T86：連結與序號同列並存（原互斥放寬）：序號筆數 ≤ 連結數量 `ship_link_serial_qty`、料號須為該材料申請入庫的料號 `ship_link_serial_part`；只有連結／只有序號的列不變
 - 無 materialLink 的出貨單行為不變；E6 警示端點
 - AST 守門：supply 不 import case
 ⚙️ 突變：拿掉核准時重檢／草稿也計占用／拿掉超量比較 ⇒ 紅。"""
@@ -182,10 +183,91 @@ def test_cancelled_approval_cannot_be_linked(world):
     assert client.post("/api/shipping-notes/%s/submit" % no, headers=h).json()["code"] == "ship_link_invalid"
 
 
-def test_serials_and_link_on_the_same_row_are_refused_at_save(world):
+# ── T86：連結與庫存序號同列並存（原 33-S1 互斥 `ship_link_serial_exclusive` 放寬；改成兩邊都要驗證一致）──────────────
+
+def _stock(part, serials, item=ITEM, mode="stock", quote=Q):
+    """直接寫一批入庫（序號在庫、批次記到這筆材料申請）；`mode='direct'` 只留批次表頭。"""
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR IGNORE INTO parts (part_no, name, active, cost, created_at, updated_at) VALUES (?,?,1,0,?,?)", (part, "料", "2026-01-01", "2026-01-01"))
+        batch = "B-%s-%s-%s" % (part, item, mode)
+        c.execute("INSERT INTO stock_batches (batch_no, part_no, created_by, created_at, updated_at, quote_no, po_doc_code, material_item_id, delivery_mode) VALUES (?,?,?,?,?,?,?,?,?)",
+                  (batch, part, "t", "2026-01-01", "2026-01-01", quote, "", item, mode))
+        for sn in serials:
+            c.execute("INSERT INTO stock_items (part_no, serial_no, status, batch_no, created_by, created_at, updated_at, material_item_id) VALUES (?,?,'in_stock',?,?,?,?,?)",
+                      (part, sn, batch, "t", "2026-01-01", "2026-01-01", item))
+        c.commit()
+    finally:
+        c.close()
+
+
+def _stock_status(part, sn):
+    import db
+    c = db.get_db()
+    try:
+        return c.execute("SELECT status FROM stock_items WHERE part_no=? AND serial_no=?", (part, sn)).fetchone()["status"]
+    finally:
+        c.close()
+
+
+def test_link_and_serials_coexist_when_consistent_and_stock_is_deducted(world):
     client, h = world
-    r = client.post("/api/shipping-notes", headers=h, json={"quote_no": Q, "items": [L(1, part_no="P1", serials=["S1"])]})
-    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_exclusive"
+    _stock("P1", ["S1", "S2", "S3"])
+    no = _note(client, h, [L(2, part_no="P1", serials=["S1", "S2"])])                  # 存檔：只擋序號筆數 ≤ 連結數量
+    r = client.post("/api/shipping-notes/%s/submit" % no, headers=h)
+    assert r.status_code == 200, r.text
+    assert _stock_status("P1", "S1") == "shipped" and _stock_status("P1", "S2") == "shipped" and _stock_status("P1", "S3") == "in_stock"
+    c, shipped, _s = _providers()
+    try:
+        assert shipped(c, Q)[ITEM]["reserved"] + shipped(c, Q)[ITEM]["shipped"] == 2.0   # 連結數量照舊占用材料申請的到料量，序號不另外重複計
+    finally:
+        c.close()
+
+
+def test_coexist_row_with_more_serials_than_link_qty_is_refused_at_save(world):
+    client, h = world
+    r = client.post("/api/shipping-notes", headers=h, json={"quote_no": Q, "items": [L(1, part_no="P1", serials=["S1", "S2"])]})
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_qty"
+    r = client.post("/api/shipping-notes", headers=h, json={"quote_no": Q, "items": [L(1, part_no="P1", serials="S1")]})
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_invalid"
+
+
+def test_coexist_part_must_be_a_part_received_for_that_material_request(world):
+    client, h = world
+    _stock("P1", ["S1"])
+    _stock("PX", ["X1"], item="it2")                                                   # 另一筆材料申請入庫的料號
+    no = _note(client, h, [L(1, part_no="PX", serials=["X1"])])
+    r = client.post("/api/shipping-notes/%s/submit" % no, headers=h)
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_part"
+    assert _status(no) == "草稿" and _stock_status("PX", "X1") == "in_stock"
+    none = _note(client, h, [L(1, part_no="PZ", serials=["Z1"])])                      # 這筆材料申請完全沒有入庫紀錄
+    assert client.post("/api/shipping-notes/%s/submit" % none, headers=h).json()["code"] == "ship_link_serial_part"
+    _stock("PD", ["D1"], mode="direct")                                                # 直送批次沒有序號，不算「入庫過的料號」
+    d = _note(client, h, [L(1, part_no="PD", serials=["D1"])])
+    assert client.post("/api/shipping-notes/%s/submit" % d, headers=h).json()["code"] == "ship_link_serial_part"
+
+
+def test_approve_rechecks_coexist_part(world):
+    client, h = world
+    _stock("P1", ["S1"])
+    no = _note(client, h, [L(1, part_no="P1", serials=["S1"])], status="待審核")
+    import db
+    c = db.get_db()
+    c.execute("DELETE FROM stock_batches WHERE quote_no=? AND material_item_id=?", (Q, ITEM))   # 送審之後入庫紀錄被撤掉
+    c.commit()
+    c.close()
+    r = client.post("/api/shipping-notes/%s/approve" % no, headers=h, json={})
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_part"
+    assert _status(no) == "待審核" and _stock_status("P1", "S1") == "in_stock"
+
+
+def test_rows_with_only_a_link_or_only_serials_behave_as_before(world):
+    client, h = world
+    _stock("P1", ["S1"])
+    no = _note(client, h, [L(2), {"description": "庫存品", "part_no": "P1", "serials": ["S1"], "qty": 1}])   # 兩個不同列：一列只有連結、一列只有序號
+    assert client.post("/api/shipping-notes/%s/submit" % no, headers=h).status_code == 200
+    assert _stock_status("P1", "S1") == "shipped"
 
 
 @pytest.mark.parametrize("bad", [{"materialItemId": "", "docCode": DOC, "qty": 1}, {"materialItemId": ITEM, "docCode": DOC, "qty": 0},

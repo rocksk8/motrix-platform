@@ -1,5 +1,11 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — T86 出貨列「材料申請連結＋庫存序號並存」（feat/ship-link-serial-coexist-t86；版號由列車取）
+- 放寬 33-S1：出貨單同一列可同時帶 `materialLink` 與 `part_no`＋`serials`（原錯誤碼 `ship_link_serial_exclusive` 不再產生）。並存時兩邊都要驗證一致：序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）；列上料號必須是該材料申請入庫（stock 方式批次）過的料號（`ship_link_serial_part`，送審／核准擋，沒有入庫紀錄＝不通過）。
+- 其餘不變：連結數量照舊占用材料申請到料量（序號不重複計）；序號於核准時照一般出貨規則驗在庫並扣庫；只有連結、或只有序號的列行為逐位元相同；沒有旗標（放寬前這種列存不進來，沒有舊資料要相容）。
+- 畫面：出貨單頁已連結材料申請的列也能「選料號」；選完序號後出貨數量不縮水（序號比數量多才補到序號筆數），連結數量同步。料號是否屬於這筆材料申請由後端送審時驗。
+- 契約 `docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md` §3／§6 改寫；`test_shipping_material_link_2026_10_03.py` 互斥題改寫成並存題（不是刪除）。
+
 ## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
 - 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。
 - 新端點 `GET /api/inventory/serial-history?part_no=&serial_no=`（庫存同一組模組權限；旗標關 ⇒ 404）；庫存頁序號列多「歷史」按鈕（旗標開）。
