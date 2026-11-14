@@ -1,11 +1,14 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — T86 出貨列「材料申請連結＋庫存序號並存」（feat/ship-link-serial-coexist-t86；h11 審查補強；版號由列車取）
+## (next) — T86 出貨列「材料申請連結＋庫存序號並存」（feat/ship-link-serial-coexist-t86；h11 審查補強；整合併入供應商 privacy-notice 遮罩 h9；版號由列車取）
 - 放寬 33-S1：出貨單同一列可同時帶 `materialLink` 與 `part_no`＋`serials`（原錯誤碼 `ship_link_serial_exclusive` 不再產生）。並存時兩邊都要驗證一致：序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）；**每個序號**都必須是為這個案件、這筆材料申請入庫的（`stock_items.material_item_id`＋批次案件單號＋料號；別案、一般庫存、另一筆材料申請入庫的同料號序號不行；`ship_link_serial_part`，訊息點名序號，送審／核准都擋，沒有入庫紀錄＝不通過）。
 - 其餘不變：連結數量照舊占用材料申請到料量（序號不重複計）；序號於核准時照一般出貨規則驗在庫並扣庫；只有連結、或只有序號的列行為逐位元相同；沒有旗標（放寬前這種列存不進來，沒有舊資料要相容）。
 - 畫面：出貨單頁已連結材料申請的列也能「選料號」；選完序號後出貨數量不縮水（序號比數量多才補到序號筆數），連結數量同步。序號挑選清單仍列出該料號所有在庫序號，是否屬於這筆材料申請由後端送審時逐個驗。
 - 審查補強（h11）：並存時改成**逐個序號**驗證屬於這筆材料申請（不只比料號）；別案、一般庫存、另一筆材料申請入庫的同料號序號不得掛上，送審與核准都擋。
 - 契約 `docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md` §3／§6 改寫；`test_shipping_material_link_2026_10_03.py` 互斥題改寫成並存題（不是刪除）。
+- **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9；供應商聯絡人「已告知」紀錄對非管理員遮罩）**
+- 行為變更（資料範圍收窄）：`GET /api/suppliers/{id}/privacy-notice`（及 `POST …/contacts/{ctid}/privacy-notice/ack`——已記錄過時回傳的是既有紀錄，同一支 `_ack_view` 遮罩，否則會成為繞過的後門；伺服器端寫入的紀錄與稽核仍是完整的）對非管理員（只有供應商檢視權者，與 `GET /api/suppliers` 同一條線）只回 `{聯絡人id: {at}}`＝已告知與日期，不再帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）；管理員（admin／superadmin）照舊看完整紀錄。回應形狀不變（只是少欄位）、沒有新增權限鍵。
+- 測試：`modules/supply/tests/test_supplier_privacy_notice_mask_2026_11_14.py`（管理員完整、非管理員只有 `at` 且全文不含記錄人／雜湊／聯絡人個資、POST ack 對已告知聯絡人不外洩既有紀錄、首次告知伺服器端仍存完整紀錄、無紀錄回空與 404、無檢視權 403；突變驗證：拿掉遮罩分支 ⇒ 非管理員題紅）。
 
 ## 1.0.44 — T85 一條龍 P3「出貨／設備／保固對齊」（train/t85-p2-h1；旗標 `onepipe.ship_device_warranty`，預設開；版號由列車取）
 - 新提供者 `stock.shipped_serials`（IP-120）、`stock.serial_history`（IP-121）（`modules/supply/serial_view.py`）：唯讀、沒有金額；序號歷史只從 P2a 異動紀錄啟用日起有資料。

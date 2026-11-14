@@ -16,22 +16,28 @@ OPTS = ("cases_personal_default_tab", "cases_personal_page_size", "cases_merge_w
 def test_options_default_off_and_have_consumers():
     f = SR._g("list_view")["fields"]
     for k in OPTS:
-        assert f[k].default == 0 and f[k].type == "int" and f[k].risk == "none" and not f[k].loosen
+        # T86 案件UX #8（使用者裁示 A 案）：合併重複的「已成案」頁籤預設改為 1；個人偏好兩項仍預設關
+        want = 1 if k == "cases_merge_won_tab" else 0
+        assert f[k].default == want and f[k].type == "int" and f[k].risk == "none" and not f[k].loosen
         for txt in (f[k].question, f[k].label, f[k].help, f[k].impact):
             assert "_" not in txt and k not in txt
         assert "lv." + k in LIST.replace(" ", "") or ("lv.%s === 1" % k) in LIST, k
-        assert SR.get("list_view", k) == 0
+        assert SR.get("list_view", k) == want
     assert "案件管理" in f["cases_personal_default_tab"].help and "報價單清單" not in f["cases_personal_default_tab"].help
 
 
 def test_off_state_adds_nothing_and_list_view_is_read_only_after_layout_on():
     assert "list-view-prefs.js" not in PAGE
     assert PAGE.index("this.layoutOn = true") < PAGE.index("await this.initListView(s.token)")
-    assert "read(['list_view'], { token: tk })" in LIST and "builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format']" in PAGE
+    assert "read(['list_view'], { token: tk })" in LIST and "builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format', 'list_view']" in PAGE
     assert "if (!(this.lvAny || this.lvOn.mergeWon)) return" in LIST
 
 
-def test_default_keeps_all_four_tabs_and_the_same_queries():
+def test_default_merges_won_tab_but_keeps_the_markup_and_the_same_queries():
+    # T86 案件UX #8：預設合併（只顯示 進行中／已結案／待精算）；設定中心存 0 的公司仍可分開顯示，所以「已成案」頁籤的標記與查詢都保留
+    assert "lvOn: { tab: false, size: false, mergeWon: true }" in LIST
+    assert "mergeWon: lv.cases_merge_won_tab !== 0" in LIST
+    assert "mergeWon: ((g.list_view || {}).cases_merge_won_tab) !== 0" in PAGE          # 沒開自訂版面時也套用公司層合併設定
     assert "showWonTab() { return !this.lvOn.mergeWon }" in LIST
     for t in ("all", "已成案", "已結案", "待精算"):
         assert "@click=\"setListTab('%s')\"" % t in PAGE, t

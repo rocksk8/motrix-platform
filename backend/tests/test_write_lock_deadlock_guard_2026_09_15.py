@@ -248,7 +248,7 @@ def test_files_txn_block_exit_releases_the_write_lock_but_a_call_inside_it_is_fl
         "    with uploads_mod.files_txn(conn, saved_files):\n"
         "        conn.execute('INSERT INTO dev_logs VALUES (1)')\n"
         "        _audit(authorization, 'a.b', 'dev_log', 'X', 'label')\n"
-    ).replace("uploads_mod.files_txn", "files_txn")
+    )
     assert [n for n, _ in _scan(ast.parse(written_then_inside).body[0])] == ["_audit"]
     no_conn_commit = (                      # 區塊離開放鎖，但之後又寫、又 _audit、沒 commit ⇒ 仍要抓（放鎖不是一勞永逸）
         "def later_write(conn, authorization):\n"

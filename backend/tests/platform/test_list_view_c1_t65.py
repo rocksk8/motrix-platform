@@ -23,11 +23,12 @@ def test_group_defaults_are_off_and_core_owned():
     assert set(g["fields"]) == set(OPTS) | {"cases_personal_default_tab", "cases_personal_page_size", "cases_merge_won_tab"}
     for k in g["fields"]:
         f = g["fields"][k]
-        assert f.default == 0 and f.type == "int" and f.risk == "none" and not f.loosen
+        want = 1 if k == "cases_merge_won_tab" else 0        # T86 案件UX #8：合併重複的「已成案」頁籤預設改 1（使用者裁示 A 案）
+        assert f.default == want and f.type == "int" and f.risk == "none" and not f.loosen
         for txt in (f.question, f.label, f.help, f.impact):
             assert "_" not in txt and k not in txt
         assert "金額" in f.impact or "頁籤" in f.impact or "筆" in f.impact
-        assert SR.get("list_view", k) == 0
+        assert SR.get("list_view", k) == want
     assert SR.groups()["list_view"]["owner"] == "core"
 
 

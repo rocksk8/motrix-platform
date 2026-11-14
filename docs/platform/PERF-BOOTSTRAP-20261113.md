@@ -60,7 +60,7 @@
 放行時間持平（B1 的驗收）；請求數仍大幅減少（22→14、17→9）。頂欄在第二頁慢約 0.1 s 是取捨：想拿回可以把 sidebar 的首次載入改成不等 bootstrap（那就回到各自發請求）。
 
 ## T86 追加：案件管理頁首屏併單（`GET /api/bootstrap?page=case`，2026-11-14）
-- 問題：案件管理頁首次載入 19 支 API，其中 8 支是「登入即可讀」的小請求，各自等一個往返：onepipe 旗標、版面與規則設定群組（`builder_*`、`ui_format`）、利潤門檻、可選使用者、公司公開資料、清單排序偏好（`case_list`）、兩支承攬商下拉。
+- 問題：案件管理頁首次載入 19 支 API，其中 8 支是「登入即可讀」的小請求，各自等一個往返：onepipe 旗標、版面與規則設定群組（`builder_*`、`ui_format`、`list_view`）、利潤門檻、可選使用者、公司公開資料、清單排序偏好（`case_list`）、兩支承攬商下拉。
 - 作法：`routers/bootstrap.py::PAGE_SECTIONS["case"]` 多放這 8 段（`onepipeFlags`、`builderGroups`、`profitWarning`、`usersSelectable`、`companyProfilePublic`、`listPrefCase`、`vendorsSelectable`、`contractorsSelectable`）。鐵則不變：直接呼叫原端點的處理函式（固定的路徑參數／查詢值用 `functools.partial` 先綁）、同一份權限檢查，原端點拒絕（403…）就不給、`errors` 記同一個狀態碼；本公司資料未設定時一個都不給（428）；沒帶或不認得的 `page` ＝與今天逐位元相同。
 - 前端：只有案件管理頁才多帶 `?page=case`、才在 `BOOT_SECTIONS` 登記這些路徑；其他頁的網址不在表內，照舊直接 fetch（不會多等 bootstrap）。案件頁的載入點（`onepipe.js`、`profit-warning.js`、`public-flags.js`、`list-sort.js`、`case-management-core.js`／`-dispatch.js`／`-close.js`）改用 `(window.motrixBootFetch || fetch)`；側欄與案件頁各用一次的 `auth/me`、`modules/availability`、`bonus-module-status` 在這一頁供應兩次。
 - 分頁內容本來就是切到才載入（CM8 `ensureTabData`），本次不動。

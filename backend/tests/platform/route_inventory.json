@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 1004,
-  "endpoints_api": 1000,
+  "endpoints_total": 1005,
+  "endpoints_api": 1001,
   "write_total": 542,
   "write_api": 542,
-  "get_api": 458,
-  "distinct_paths_api": 853,
+  "get_api": 459,
+  "distinct_paths_api": 854,
   "write_with_body_api": 407,
   "write_with_path_param_api": 365
  },
  "select_star": {
-  "modules": 288,
+  "modules": 289,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -5037,6 +5037,11 @@
    "w": true,
    "pp": 0,
    "body": true
+  },
+  "GET /api/dev-cases/expected-summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
   }
  }
 }

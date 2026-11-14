@@ -79,9 +79,15 @@ window.CM_PARTS.push(() => ({
 
     readyText(row) {
       if (!row) return ''
-      if (row.canClose) return row.readyCount + '/5 可結案'
-      if (row.blockedCount === 1) return '差 ' + row.blockedLabels[0]
+      // T86 案件UX #14：原本只有一關沒過時才寫「差 進度」（欄寬不夠被截斷、也不知道差什麼）；
+      // 現在有缺的關卡一律列出「缺：進度、單據」，過了幾關改放在滑過提示
+      if (row.canClose) return '可結案'
+      const miss = (row.blockedLabels || []).filter(Boolean)
+      if (miss.length) return '缺：' + miss.join('、')
       return row.readyCount + '/5'
+    },
+    readyTitle(row) {
+      return row ? '五關已過 ' + row.readyCount + ' 關' : ''
     },
 
     dueText(row) {
@@ -163,7 +169,7 @@ window.CM_PARTS.push(() => ({
     // 「只看有新動態」與「自訂（拖曳）排序」仍只作用在已載入的案件上。
     casePageSize: CM_LIST_PAGE_DEFAULT,
     // T65 C2：案件清單的個人檢視偏好／頁籤組合（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）
-    lvOn: { tab: false, size: false, mergeWon: false },
+    lvOn: { tab: false, size: false, mergeWon: true },      // T86 案件UX #8：預設合併（設定中心 cases_merge_won_tab 預設 1）；公司明確存了 0 才分開
     pv: { hidden: [], order: [], tab: '', size: 0 },
     lvOpen: false,
     get lvAny() { return this.lvOn.tab || this.lvOn.size },
@@ -172,7 +178,7 @@ window.CM_PARTS.push(() => ({
     async initListView(tk) {
       const g = await window.MotrixPublicFlags.read(['list_view'], { token: tk })
       const lv = g.list_view || {}
-      this.lvOn = { tab: lv.cases_personal_default_tab === 1, size: lv.cases_personal_page_size === 1, mergeWon: lv.cases_merge_won_tab === 1 }
+      this.lvOn = { tab: lv.cases_personal_default_tab === 1, size: lv.cases_personal_page_size === 1, mergeWon: lv.cases_merge_won_tab !== 0 }
       if (!(this.lvAny || this.lvOn.mergeWon)) return
       let reload = false
       if (this.lvOn.mergeWon && this.listTab === '已成案') { this.listTab = 'all'; reload = true }
@@ -284,7 +290,28 @@ window.CM_PARTS.push(() => ({
       }
     },
 
-    onCaseSearchInput() {
+    // T86 案件UX #2：把文字依目前搜尋字拆成 [{t, hit}]，讓卡片標出命中處（不用 x-html，免跳脫問題）
+    hlParts(text) {
+      const t = String(text == null ? '' : text)
+      const q = (this.search || '').trim().toLowerCase()
+      if (!q || !t) return [{ t, hit: false }]
+      const low = t.toLowerCase()
+      const out = []
+      let i = 0
+      for (;;) {
+        const j = low.indexOf(q, i)
+        if (j < 0) break
+        if (j > i) out.push({ t: t.slice(i, j), hit: false })
+        out.push({ t: t.slice(j, j + q.length), hit: true })
+        i = j + q.length
+      }
+      if (i < t.length) out.push({ t: t.slice(i), hit: false })
+      return out.length ? out : [{ t, hit: false }]
+    },
+
+    // 注音／拼音輸入法組字中（isComposing）不送搜尋：否則每打一個音就重新查詢、重畫清單，組字會被打斷；選定字（compositionend）才查
+    onCaseSearchInput(ev) {
+      if (ev && ev.isComposing) return
       clearTimeout(this._searchTimer)
       this._searchTimer = setTimeout(() => this.loadCases(), 300)
     },

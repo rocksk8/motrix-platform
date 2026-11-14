@@ -83,3 +83,5 @@
   .stage-card__body > .visit-row:first-child { display: none; }   /* 手機：欄名列改由各欄的提示字／標籤代替（版面是兩欄，對不齊） */
   .stage-card__body .visit-row .fi { border-color: var(--border); background: var(--surface); }
 }
+.op-open-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 10px; }   /* 第 17 項尾巴：貼著子頁籤底線，加上方間距；用 class 才不會被 x-show 洗掉 display */
+.mtl-row > .mat-card { margin: 10px 0 0; }

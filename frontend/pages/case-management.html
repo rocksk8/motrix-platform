@@ -124,7 +124,7 @@
                 <th class="cm-gate-h"><span x-text="g.label" style="font-weight:700;font-size:12px;letter-spacing:.06em;display:block"></span><span x-text="g.hint"></span></th>
               </template>
               <th style="border-left:1px solid var(--border-light)">下一到期</th>
-              <th style="text-align:right">結案</th>
+              <th style="text-align:right;min-width:128px">結案</th>
             </tr>
           </thead>
           <tbody>
@@ -169,6 +169,7 @@
                 <td style="text-align:right">
                   <span class="cm-mtx__ready"
                         :style="row.canClose ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        :title="readyTitle(row)"
                         x-text="readyText(row)"></span>
                 </td>
               </tr>
@@ -213,8 +214,8 @@
           </div>
           <div class="cm-list__search">
             <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input class="cm-list__search-input" type="text" placeholder="搜尋單號或客戶…"
-                   x-model="search" @input="onCaseSearchInput()">
+            <input class="cm-list__search-input" type="text" placeholder="搜尋單號、客戶或專案…"
+                   x-model="search" @input="onCaseSearchInput($event)" @compositionend="onCaseSearchInput()">
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px" x-show="caseViewMode==='list'">
             <select class="cm-list__search-input" style="width:auto;flex:1;padding-left:10px;cursor:pointer"
@@ -257,11 +258,11 @@
               已成案
               <span class="cm-list__tab-badge" x-show="summaryWon()" x-text="summaryWon()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="setListTab('已結案')">
+            <button class="cm-list__tab" :class="{active: listTab==='已結案', 'cm-list__tab--zero': caseCounts && !summaryClosed() && listTab!=='已結案'}" @click="setListTab('已結案')">
               已結案
               <span class="cm-list__tab-badge" x-show="summaryClosed()" x-text="summaryClosed()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='待精算'}" @click="setListTab('待精算')">
+            <button class="cm-list__tab" :class="{active: listTab==='待精算', 'cm-list__tab--zero': caseCounts && !summarySettling() && listTab!=='待精算'}" @click="setListTab('待精算')">
               待精算
               <span class="cm-list__tab-badge orange" x-show="summarySettling()" x-text="summarySettling()"></span>
             </button>
@@ -376,7 +377,9 @@
                 <span class="cm-card__unread-tag" data-testid="case-missing-doc"
                       style="background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)" x-text="t"></span>
               </template>
-              <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')" x-text="c.customer_name || '(未填客戶)'"></div>
+              <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')"><template x-for="(p, i) in hlParts(c.customer_name || '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
+              <!-- T86 案件UX #2：搜尋會比對專案名稱，卡片就要看得到專案名稱（與客戶同名時不重複）；命中字樣標底色 -->
+              <div class="cm-card__project" data-testid="cm-card-project" x-show="lShown('customer') && c.project_name && c.project_name !== c.customer_name" :style="lo('customer')" :title="c.project_name"><template x-for="(p, i) in hlParts(c.project_name || '')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
               <div class="cm-card__sales" x-show="salesOwnerName(c) && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + salesOwnerName(c)"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
@@ -404,15 +407,13 @@
              同一份 .cm-card 樣式，點擊行為跟清單模式完全一致 -->
         <div class="cm-list__body" x-show="caseViewMode==='board'">
           <template x-for="col in boardColumns()" :key="col.key">
-            <div class="cm-board-group">
+            <div class="cm-board-group" :class="{'cm-board-group--empty': col.items.length === 0}">
               <div class="cm-board-group__head">
                 <span class="cm-board-group__dot" :style="'background:' + col.dot"></span>
                 <span class="cm-board-group__title" x-text="col.label"></span>
                 <span class="cm-board-group__count" x-text="col.items.length"></span>
               </div>
-              <template x-if="col.items.length === 0">
-                <div class="cm-board-group__empty">（沒有案件）</div>
-              </template>
+              <!-- T86 案件UX #14：沒有案件的分組只留一行淡色標題與 0，不再佔一列「（沒有案件）」 -->
               <template x-for="c in col.items" :key="c.quote_no">
                 <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
                      :style="isUnread(c) ? 'border-left-color:var(--tone-warning-solid)' : ''"
@@ -427,7 +428,8 @@
                   <template x-if="isUnread(c)">
                     <span class="cm-card__unread-tag">有新動態</span>
                   </template>
-                  <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
+                  <div class="cm-card__customer"><template x-for="(p, i) in hlParts(c.customer_name || '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
+                  <div class="cm-card__project" data-testid="cm-card-project" x-show="c.project_name && c.project_name !== c.customer_name" :title="c.project_name"><template x-for="(p, i) in hlParts(c.project_name || '')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
                   <div class="cm-card__footer">
                     <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
                       <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + MotrixFormat.num((c.total||0))"></span>
@@ -673,7 +675,7 @@
               <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
                    精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
               <a class="cm-tab-link" x-show="canSeeFinancial()" :style="tTail()" data-testid="cm-tab-settlement"
-                 :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
+                 :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'">精算 ▶</a>
             </div>
 
             <!-- Tab content -->
@@ -692,22 +694,30 @@
                                 :title="g.reason || ''"
                                 style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border-light);border-radius:6px;background:none;cursor:pointer;font-size:12px;font-family:var(--font-zh)">
                           <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
-                          <span x-text="g.label"></span>
+                          <span x-text="g.label + (settleGateLinks(g) ? ' ▶' : '')"></span>
                           <span style="color:var(--text-secondary)" x-text="g.value"></span>
                         </button>
+                      </template>
+                      <!-- T86 案件UX #1：結案入口放在五關旁（原本只藏在標頭「更多」選單）；只有最高管理者能結案，其他人看到說明 -->
+                      <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
+                        <button type="button" class="btn-close-case" data-testid="case-close-entry" style="margin-left:auto" @click="closeCaseAction()">結案</button>
+                      </template>
+                      <template x-if="cr.dealTag === '已成案' && session.role !== 'superadmin'">
+                        <span data-testid="case-close-hint" style="margin-left:auto;font-size:12px;color:var(--text-dim);align-self:center">結案由最高管理者執行</span>
                       </template>
                     </div>
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
                     <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
                          x-show="caseMapUrl() || onepipe.timeline || onepipe.entryUnify || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
-                      <!-- 一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
+                      <!-- T86 複測：兩個跳轉改成真正的 <button>（鍵盤 Tab／Enter／空白鍵可操作，自動化也點得到），外觀仍像連結（.cm-link-btn）。
+                           一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
                            只是捷徑：不合併資料表，各類型照原本的畫面與權限寫入 -->
                       <template x-if="onepipe.entryUnify && selected">
                         <span data-testid="case-log-entry" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">
                           <span style="color:var(--text-dim)">登載：</span>
-                          <a href="#" data-testid="case-log-feed" x-show="tShown('feed')" @click.prevent="openLogEntry('feed')">留言／工作日誌</a>
-                          <a href="#" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click.prevent="openLogEntry('visit')">階段出勤</a>
+                          <button type="button" class="cm-link-btn" data-testid="case-log-feed" x-show="tShown('feed')" @click="openLogEntry('feed')">留言／工作日誌</button>
+                          <button type="button" class="cm-link-btn" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click="openLogEntry('visit')">階段出勤</button>
                           <a data-testid="case-log-task" x-show="canLogTask()" :href="'daily-tasks.html?case_no=' + encodeURIComponent(selected.quote_no)">每日工作事項</a>
                         </span>
                       </template>
@@ -1143,7 +1153,7 @@
               <!-- ── 材料申請 ── -->
               <div x-show="execSubTab==='materials'">
                 <!-- 一條龍 P0a（旗標 onepipe.links，預設關＝這一塊不出現）：從案件直接開請購單／採購單，案件已帶好，不必重新搜尋 -->
-                <div x-show="onepipe.links && selected" x-cloak data-testid="op-open-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+                <div x-show="onepipe.links && selected" x-cloak data-testid="op-open-bar" class="op-open-bar">
                   <a data-testid="op-open-pr" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_req'"
                      style="font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;text-decoration:none;font-family:var(--font-zh)">開請購單</a>
                   <a data-testid="op-open-po" :href="'payment-request.html?case=' + encodeURIComponent(selected ? selected.quote_no : '') + '&type=purchase_order'"
@@ -1172,12 +1182,12 @@
                     <span class="cm-section-title" style="margin-bottom:0">物料時間軸</span>
                     <span class="mtl-sum" data-testid="mtl-sum" x-text="'共 ' + mtlSummary().total + ' 項｜已到貨 ' + mtlSummary().arrived + '｜尚無採購單 ' + mtlSummary().noPo + (mtlSummary().late ? '｜逾期 ' + mtlSummary().late : '')"></span>
                   </div>
-                  <template x-for="mat in (cr.caseRecord?.materials || [])" :key="'tl-' + mat.id">
+                  <template x-for="(mat, idx) in (cr.caseRecord?.materials || [])" :key="'tl-' + mat.id">
                     <div class="mtl-row" :data-testid="'mtl-row-' + mat.id">
                       <div class="mtl-row-h">
                         <span class="mtl-name" x-text="mat.name || '（未命名）'"></span>
                         <span class="mtl-model" x-text="[mat.model, mat.qty ? ('× ' + mat.qty + ' ' + (mat.unit || '台')) : ''].filter(Boolean).join(' ')"></span>
-                        <a href="javascript:void(0)" class="mtl-more" @click="mtlGoDetail(mat)">明細</a>
+                        <a href="javascript:void(0)" class="mtl-more" :data-testid="'mtl-more-' + mat.id" :aria-expanded="mtlIsOpen(mat)" @click="mtlToggle(mat)" x-text="mtlIsOpen(mat) ? '收合 ▴' : '明細 ▾'">明細 ▾</a>
                       </div>
                       <div class="mtl-steps">
                         <template x-for="st in mtlSteps(mat)" :key="st.key">
@@ -1192,6 +1202,110 @@
                           </div>
                         </template>
                       </div>
+                          <div class="mat-card" :id="'mat-card-' + mat.id" :data-testid="'mat-card-' + mat.id" x-show="mtlIsOpen(mat)" x-cloak>
+                            <div class="mat-card__head">
+                              <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
+                              <input data-saved-field class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:12px;flex-shrink:0">
+                              <input class="fi" type="number" placeholder="數量" x-model.number="mat.qty" min="1" @input="setDirty()" style="width:52px;flex-shrink:0">
+                              <input class="fi" type="text" placeholder="單位" x-model="mat.unit" @input="setDirty()" style="width:44px;font-size:12px;flex-shrink:0">
+                              <span class="mat-tag" :class="mat.arrived ? 'mat-tag--arrived' : mat.ordered ? 'mat-tag--ordered' : 'mat-tag--pending'"
+                                    x-text="mat.arrived ? '到料' : mat.ordered ? '材料申請中' : '待材料申請'"></span>
+                              <button class="btn-del" @click="removeMaterial(idx)">×</button>
+                            </div>
+                            <div class="mat-card__body">
+                              <!-- 材料申請審核（31-C）：「已申購」「已到料」只能對著一張已核准的材料申請勾 -->
+                              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;font-size:12px;font-family:var(--font-zh)">
+                                <span style="color:var(--text-dim)">對應材料申請</span>
+                                <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="mlOnLinkChange(mat)" data-testid="mat-order-link" x-show="!(mat.poLink && mat.poLink.key)">
+                                  <option value="">（未連結）</option>
+                                  <template x-for="o in materialOrders" :key="o.itemId">
+                                    <option :value="o.itemId" x-text="(moAp(o).docCode || '未送審') + '｜' + (o.itemName || '未命名') + '（' + moApLabel(o) + '）'"></option>
+                                  </template>
+                                  <optgroup label="已核准採購單・尚未申請材料（選取＝帶入草稿並連結）" x-show="mlCandidatesFor(mat).length">
+                                    <template x-for="g in mlCandidatesFor(mat)" :key="g.key">
+                                      <option :value="mlGroupKey(g)" x-text="g.docCodes.join('、') + '｜' + g.name + '（採購單已核准，尚未帶入材料申請）'" data-testid="mat-order-candidate"></option>
+                                    </template>
+                                  </optgroup>
+                                </select>
+                                <button type="button" class="btn btn-ghost btn-sm" x-show="mlCandidatesFor(mat).length === 1" x-cloak data-testid="mat-order-oneclick"
+                                        @click="mlPickCandidate(mat, mlGroupKey(mlCandidatesFor(mat)[0]))">找到採購單 <span x-text="mlCandidatesFor(mat)[0] && mlCandidatesFor(mat)[0].docCodes.join('、')"></span>：帶入並連結</button>
+                                <template x-if="mat.poLink && mat.poLink.key"><span data-testid="mat-po-recognized" style="display:inline-flex;align-items:center;gap:6px;color:var(--tone-success-fg);font-weight:600">
+                                  <span x-text="mlRecognizedText(mat)"></span>
+                                  <label style="font-weight:400;display:inline-flex;align-items:center;gap:4px">到貨日 <input type="date" class="fi fi--sm" x-model="mat.poLink.arrivedOn" data-testid="mat-po-arrived-on" @change="setDirty && setDirty()"></label>
+                                  <button type="button" class="btn btn-ghost btn-sm" @click="mlUnrecognize(mat)" data-testid="mat-po-unrecognize">取消認列</button>
+                                </span></template>
+                              </div>
+                              <div style="display:flex;gap:16px;margin-bottom:6px">
+                                <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                                       :style="matCanTick(mat, 'ordered') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'ordered')">
+                                  <input type="checkbox" x-model="mat.ordered" :disabled="!matCanTick(mat, 'ordered')" @change="setDirty()" data-testid="mat-ordered">已申購
+                                </label>
+                                <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                                       :style="matCanTick(mat, 'arrived') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'arrived')">
+                                  <input type="checkbox" x-model="mat.arrived" :disabled="!matCanTick(mat, 'arrived')" @change="onMaterialArrived(mat)" data-testid="mat-arrived">已到料
+                                </label>
+                                <span x-show="!matCanTick(mat, 'ordered') || !matCanTick(mat, 'arrived')" style="font-size:12px;color:var(--text-dim)"
+                                      x-text="matTickHint(mat, mat.ordered ? 'arrived' : 'ordered')"></span>
+                                <template x-if="mat.arrived">
+                                  <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto" x-text="'共 ' + (mat.qty||1) + ' ' + (mat.unit||'台')"></span>
+                                </template>
+                              </div>
+                              <!-- 廠商交期追蹤（材料申請中且未到料時顯示） -->
+                              <div x-show="mat.ordered && !mat.arrived"
+                                   style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+                                <input class="fi fi--sm" type="text" placeholder="廠商名稱"
+                                       x-model="mat.supplier" @input="setDirty()"
+                                       style="width:100px;font-size:12px">
+                                <input class="fi fi--sm" type="date"
+                                       x-model="mat.expectedDate" @input="setDirty()"
+                                       title="預計到料日" style="flex:1;min-width:120px;font-size:12px">
+                                <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < MotrixDate.today()"
+                                      style="font-size:12px;font-weight:700;color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:4px;padding:2px 6px;white-space:nowrap;flex-shrink:0">交期逾期</span>
+                              </div>
+
+                              <template x-if="mat.arrived">
+                                <div style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:2px">
+                                  <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">設備序號 / MAC</div>
+                                  <template x-for="(md, mi) in (mat.devices || [])" :key="md.id">
+                                    <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;margin-bottom:4px">
+                                      <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;min-width:18px" x-text="'#'+(mi+1)"></span>
+                                      <input class="fi fi--sm fi--mono" type="text" placeholder="SN 序號" x-model="md.sn" @input="autoSyncDevice(mat, mi)">
+                                      <input class="fi fi--sm fi--mono" type="text" placeholder="MAC 位址" x-model="md.mac" @input="autoSyncDevice(mat, mi)">
+                                    </div>
+                                  </template>
+                                </div>
+                              </template>
+                              <input class="fi fi--sm" type="text" placeholder="備註" x-model="mat.note" @input="setDirty()" style="width:100%;margin-top:6px">
+
+                              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+                                <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">附件（到貨憑證/包裝清單…）</span>
+                                <template x-for="f in (mat.files||[])" :key="f.id">
+                                  <span style="display:flex;align-items:center;gap:4px;font-size:12px;background:var(--surface-neutral);border-radius:4px;padding:2px 6px">
+                                    <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                                    <button @click="deleteMaterialFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0 2px">×</button>
+                                  </span>
+                                </template>
+                                <label style="padding:2px 8px;font-size:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
+                                  ＋ 上傳附件
+                                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialFiles(idx, $event)">
+                                </label>
+                              </div>
+
+                              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+                                <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">發票</span>
+                                <template x-for="f in (mat.invoiceFiles||[])" :key="f.id">
+                                  <span style="display:flex;align-items:center;gap:4px;font-size:12px;background:var(--surface-neutral);border-radius:4px;padding:2px 6px">
+                                    <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                                    <button @click="deleteMaterialInvoiceFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0 2px">×</button>
+                                  </span>
+                                </template>
+                                <label style="padding:2px 8px;font-size:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
+                                  ＋ 上傳發票
+                                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialInvoiceFiles(idx, $event)">
+                                </label>
+                              </div>
+                            </div>
+                          </div>
                     </div>
                   </template>
                   <div class="mtl-case" x-show="mtlFlow && (mtlFlow.stock || mtlFlow.ship) && (cr.caseRecord?.materials || []).length" x-cloak data-testid="mtl-case">
@@ -1200,114 +1314,7 @@
                   </div>
                 </div>
 
-                <template x-for="(mat, idx) in (cr.caseRecord?.materials || [])" :key="mat.id">
-                  <div class="mat-card" :id="'mat-card-' + mat.id">
-                    <div class="mat-card__head">
-                      <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
-                      <input data-saved-field class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:12px;flex-shrink:0">
-                      <input class="fi" type="number" placeholder="數量" x-model.number="mat.qty" min="1" @input="setDirty()" style="width:52px;flex-shrink:0">
-                      <input class="fi" type="text" placeholder="單位" x-model="mat.unit" @input="setDirty()" style="width:44px;font-size:12px;flex-shrink:0">
-                      <span class="mat-tag" :class="mat.arrived ? 'mat-tag--arrived' : mat.ordered ? 'mat-tag--ordered' : 'mat-tag--pending'"
-                            x-text="mat.arrived ? '到料' : mat.ordered ? '材料申請中' : '待材料申請'"></span>
-                      <button class="btn-del" @click="removeMaterial(idx)">×</button>
-                    </div>
-                    <div class="mat-card__body">
-                      <!-- 材料申請審核（31-C）：「已申購」「已到料」只能對著一張已核准的材料申請勾 -->
-                      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;font-size:12px;font-family:var(--font-zh)">
-                        <span style="color:var(--text-dim)">對應材料申請</span>
-                        <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="mlOnLinkChange(mat)" data-testid="mat-order-link" x-show="!(mat.poLink && mat.poLink.key)">
-                          <option value="">（未連結）</option>
-                          <template x-for="o in materialOrders" :key="o.itemId">
-                            <option :value="o.itemId" x-text="(moAp(o).docCode || '未送審') + '｜' + (o.itemName || '未命名') + '（' + moApLabel(o) + '）'"></option>
-                          </template>
-                          <optgroup label="已核准採購單・尚未申請材料（選取＝帶入草稿並連結）" x-show="mlCandidatesFor(mat).length">
-                            <template x-for="g in mlCandidatesFor(mat)" :key="g.key">
-                              <option :value="mlGroupKey(g)" x-text="g.docCodes.join('、') + '｜' + g.name + '（採購單已核准，尚未帶入材料申請）'" data-testid="mat-order-candidate"></option>
-                            </template>
-                          </optgroup>
-                        </select>
-                        <button type="button" class="btn btn-ghost btn-sm" x-show="mlCandidatesFor(mat).length === 1" x-cloak data-testid="mat-order-oneclick"
-                                @click="mlPickCandidate(mat, mlGroupKey(mlCandidatesFor(mat)[0]))">找到採購單 <span x-text="mlCandidatesFor(mat)[0] && mlCandidatesFor(mat)[0].docCodes.join('、')"></span>：帶入並連結</button>
-                        <template x-if="mat.poLink && mat.poLink.key"><span data-testid="mat-po-recognized" style="display:inline-flex;align-items:center;gap:6px;color:var(--tone-success-fg);font-weight:600">
-                          <span x-text="mlRecognizedText(mat)"></span>
-                          <label style="font-weight:400;display:inline-flex;align-items:center;gap:4px">到貨日 <input type="date" class="fi fi--sm" x-model="mat.poLink.arrivedOn" data-testid="mat-po-arrived-on" @change="setDirty && setDirty()"></label>
-                          <button type="button" class="btn btn-ghost btn-sm" @click="mlUnrecognize(mat)" data-testid="mat-po-unrecognize">取消認列</button>
-                        </span></template>
-                      </div>
-                      <div style="display:flex;gap:16px;margin-bottom:6px">
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
-                               :style="matCanTick(mat, 'ordered') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'ordered')">
-                          <input type="checkbox" x-model="mat.ordered" :disabled="!matCanTick(mat, 'ordered')" @change="setDirty()" data-testid="mat-ordered">已申購
-                        </label>
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
-                               :style="matCanTick(mat, 'arrived') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'arrived')">
-                          <input type="checkbox" x-model="mat.arrived" :disabled="!matCanTick(mat, 'arrived')" @change="onMaterialArrived(mat)" data-testid="mat-arrived">已到料
-                        </label>
-                        <span x-show="!matCanTick(mat, 'ordered') || !matCanTick(mat, 'arrived')" style="font-size:12px;color:var(--text-dim)"
-                              x-text="matTickHint(mat, mat.ordered ? 'arrived' : 'ordered')"></span>
-                        <template x-if="mat.arrived">
-                          <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto" x-text="'共 ' + (mat.qty||1) + ' ' + (mat.unit||'台')"></span>
-                        </template>
-                      </div>
-                      <!-- 廠商交期追蹤（材料申請中且未到料時顯示） -->
-                      <div x-show="mat.ordered && !mat.arrived"
-                           style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-                        <input class="fi fi--sm" type="text" placeholder="廠商名稱"
-                               x-model="mat.supplier" @input="setDirty()"
-                               style="width:100px;font-size:12px">
-                        <input class="fi fi--sm" type="date"
-                               x-model="mat.expectedDate" @input="setDirty()"
-                               title="預計到料日" style="flex:1;min-width:120px;font-size:12px">
-                        <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < MotrixDate.today()"
-                              style="font-size:12px;font-weight:700;color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:4px;padding:2px 6px;white-space:nowrap;flex-shrink:0">交期逾期</span>
-                      </div>
-
-                      <template x-if="mat.arrived">
-                        <div style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:2px">
-                          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">設備序號 / MAC</div>
-                          <template x-for="(md, mi) in (mat.devices || [])" :key="md.id">
-                            <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;margin-bottom:4px">
-                              <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;min-width:18px" x-text="'#'+(mi+1)"></span>
-                              <input class="fi fi--sm fi--mono" type="text" placeholder="SN 序號" x-model="md.sn" @input="autoSyncDevice(mat, mi)">
-                              <input class="fi fi--sm fi--mono" type="text" placeholder="MAC 位址" x-model="md.mac" @input="autoSyncDevice(mat, mi)">
-                            </div>
-                          </template>
-                        </div>
-                      </template>
-                      <input class="fi fi--sm" type="text" placeholder="備註" x-model="mat.note" @input="setDirty()" style="width:100%;margin-top:6px">
-
-                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-                        <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">附件（到貨憑證/包裝清單…）</span>
-                        <template x-for="f in (mat.files||[])" :key="f.id">
-                          <span style="display:flex;align-items:center;gap:4px;font-size:12px;background:var(--surface-neutral);border-radius:4px;padding:2px 6px">
-                            <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                            <button @click="deleteMaterialFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0 2px">×</button>
-                          </span>
-                        </template>
-                        <label style="padding:2px 8px;font-size:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                          ＋ 上傳附件
-                          <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialFiles(idx, $event)">
-                        </label>
-                      </div>
-
-                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-                        <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">發票</span>
-                        <template x-for="f in (mat.invoiceFiles||[])" :key="f.id">
-                          <span style="display:flex;align-items:center;gap:4px;font-size:12px;background:var(--surface-neutral);border-radius:4px;padding:2px 6px">
-                            <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                            <button @click="deleteMaterialInvoiceFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0 2px">×</button>
-                          </span>
-                        </template>
-                        <label style="padding:2px 8px;font-size:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                          ＋ 上傳發票
-                          <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialInvoiceFiles(idx, $event)">
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-
-                <button class="btn-add" @click="addMaterial()">
+                <button class="btn-add" @click="addMaterial(); mtlOpenLast()">
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                   新增品項
                 </button>
@@ -1963,7 +1970,7 @@
                      跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
                      未稅金額與收款進度條。 -->
                 <!-- CM13（2026-09-24）：沒有財務檢視權的帳號，後端不回金額 ⇒ 金額相關一律不渲染 -->
-                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）。可編輯預計收款日、備註與發票資料；收款日期與收款狀態只供查看。已收款的期別除發票資料外不能修改。</div>
+                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）。可編輯預計收款日、收款日期、備註與發票資料；收款狀態只供查看。已收款的期別除發票資料外不能修改。</div>
                 <div class="pay-strip" x-show="!moneyMasked()">
                   <span class="pay-strip__item">
                     <span class="pay-strip__lbl">未稅金額</span>
@@ -2012,7 +2019,7 @@
 
                 <template x-for="(item, idx) in (cr.caseRecord?.payment?.items || [])" :key="item.id">
                   <div class="pay-item" :class="item.received ? 'pay-item--received' : ''">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                    <div class="pay-item__head" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                       <span style="font-size:12px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
                       <select class="fi" x-model="item.type" @change="setDirty()" :disabled="payFrozen(item)"
                               style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
@@ -2087,7 +2094,7 @@
                                :aria-required="item.received ? 'true' : 'false'"
                                x-model="item.receivedAt" @change="setDirty()">
                       </div>
-                      <!-- T86 案件 UX #29：沒有財務檢視權的人不能標記已收款，收款日期只給看（唯讀摘要），不放輸入框 -->
+                      <!-- T86 案件 UX #29：已收款而被凍結的期別（非出納）收款日期只給看（唯讀摘要）；未收款的期別仍是輸入框 -->
                       <div x-show="payReceivedAtRo(item)" data-testid="pay-received-at-ro">
                         <span class="fi-label">收款日期</span>
                         <div class="pay-ro" x-text="item.receivedAt || (item.received ? '尚未填寫' : '尚未收款')"></div>
@@ -2398,7 +2405,7 @@
                         <span style="font-size:12px;font-weight:600;font-family:var(--font-zh);color:var(--tone-success-fg)">應收</span>
                         <span style="flex:1;height:1px;background:var(--line)"></span>
                       </div>
-                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+                      <div class="fin-kpi4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
                         <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'background:var(--tone-warning-bg);border-color:var(--tone-warning-border)' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().receivableTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowRecvDetail ? '▾ 應收總額' : '▸ 應收總額'"></span>
@@ -2422,7 +2429,7 @@
                         <span style="font-size:12px;font-weight:600;font-family:var(--font-zh);color:var(--tone-warning-fg)">應付（承攬商匯款申請）</span>
                         <span style="flex:1;height:1px;background:var(--line)"></span>
                       </div>
-                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+                      <div class="fin-kpi4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
                         <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'background:var(--tone-danger-bg);border-color:var(--tone-danger-border)' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal + finPayable().approvedPaidTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowPayDetail ? '▾ 應付總額' : '▸ 應付總額'"></span>
@@ -2934,7 +2941,7 @@
                       <span x-show="closingReportDownloading">產生中…</span>
                     </button>
                   </template>
-                  <a :href="'settlement.html?no=' + (selected?.quote_no||'')"
+                  <a :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'"
                      :style="cr.dealTag==='已結案' ? '' : 'margin-left:auto'"
                      style="font-size:12px;padding:5px 12px;background:var(--tone-info-bg);color:var(--tone-info-fg);border:1px solid var(--tone-info-border);border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
                     前往精算頁面 ▶
@@ -4174,6 +4181,12 @@
               style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:12px 18px">
+      <!-- T86 案件UX #1：先把缺漏列在最上面（原因來自下方五關），再逐關看細節與「前往」 -->
+      <div data-testid="close-gaps" x-show="closeGapLines().length"
+           style="border:1px solid var(--tone-warning-border);background:var(--tone-warning-bg);color:var(--tone-warning-fg);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px">
+        <div style="font-weight:700;margin-bottom:2px" x-text="'結案前還缺 ' + closeGapLines().length + ' 項'"></div>
+        <template x-for="ln in closeGapLines()" :key="ln"><div x-text="'・' + ln"></div></template>
+      </div>
       <template x-for="g in closeCheck.gates" :key="g.key">
         <div :data-gate-label="g.label"
              style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-light)">
@@ -4189,7 +4202,7 @@
                  x-text="'待簽核人：' + (g.pendingApprovers || []).map(a => a.displayName).join('、')"></div>
           </div>
           <button type="button" data-testid="gate-goto" x-show="g.state === 'blocked'" @click="closeCheckGoto(g)"
-                  class="btn btn-ghost btn-sm" style="flex-shrink:0">前往</button>
+                  class="btn btn-ghost btn-sm" style="flex-shrink:0" x-text="settleGateLinks(g) ? '前往精算頁' : '前往'">前往</button>
         </div>
       </template>
       <div style="font-size:12px;margin-top:10px"
@@ -5176,7 +5189,7 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
       // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format'], { token: s.token })
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format', 'list_view'], { token: s.token })
       if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
@@ -5196,7 +5209,11 @@ window.CM_PARTS.push(() => ({
       // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
       if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
           && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
-      if (!g.builder_layout || g.builder_layout.case_management !== true) return
+      // T86 案件UX #8：沒開自訂版面時也要套用「合併已成案頁籤」（公司層設定，預設合併）；個人檢視偏好仍要版面開啟才有
+      if (!g.builder_layout || g.builder_layout.case_management !== true) {
+        this.lvOn = { ...this.lvOn, mergeWon: ((g.list_view || {}).cases_merge_won_tab) !== 0 }
+        return
+      }
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
         st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}.cm-biz-lo{display:flex;flex-direction:column}'

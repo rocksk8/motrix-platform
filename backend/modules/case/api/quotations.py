@@ -1454,7 +1454,7 @@ def case_activity(body: dict = Body(...), authorization: str = Header(None)):
                 UNION ALL
                 SELECT dt.case_no as quote_no, dtc.completed_at as ts
                 FROM daily_task_completions dtc JOIN daily_tasks dt ON dt.id = dtc.task_id
-                WHERE dt.case_no IN ({ph}) AND dtc.completed_at != ''
+                WHERE dt.case_no IN ({ph}) AND dt.is_deleted = 0 AND dtc.completed_at != ''   -- 撤回（軟刪）的任務不算動態：撤銷階段勾選後別人不該亮「有新動態」
             )
             GROUP BY quote_no
             """,

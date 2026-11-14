@@ -7,6 +7,7 @@
   "backend/tests/test_page_css_braces_balanced_2026_11_13.py",
   "backend/tests/test_js_asi_hazard_guard_2026_11_13.py",
   "backend/tests/test_settings_center_valueof_2026_11_13.py",
+  "backend/tests/test_e2e_duty_role_matrix_2026_11_14.py",
   "backend/tests/test_static_cache_versioning_2026_11_13.py",
   "backend/tests/test_asset_version_coverage_2026_11_13.py",
   "backend/tests/test_menu_ux_batch0_2026_11_13.py",

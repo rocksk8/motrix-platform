@@ -3150,6 +3150,9 @@
    "[].deleteReason",
    "[].deleteRequestedAt",
    "[].deleteRequestedBy",
+   "[].expectedAmount",
+   "[].expectedAmountVisible",
+   "[].expectedCloseDate",
    "[].id",
    "[].overdueDays",
    "[].pendingDelete",
@@ -3187,6 +3190,9 @@
    "deleteReason",
    "deleteRequestedAt",
    "deleteRequestedBy",
+   "expectedAmount",
+   "expectedAmountVisible",
+   "expectedCloseDate",
    "id",
    "overdueDays",
    "pendingDelete",
@@ -9101,6 +9107,32 @@
    "suppliers[].code",
    "suppliers[].id",
    "suppliers[].name"
+  ],
+  "s": 200
+ },
+ "/api/dev-cases/expected-summary": {
+  "k": [
+   "byStatus",
+   "byStatus.成案",
+   "byStatus.成案.count",
+   "byStatus.成案.missing",
+   "byStatus.成案.total",
+   "byStatus.暫擱置",
+   "byStatus.暫擱置.count",
+   "byStatus.暫擱置.missing",
+   "byStatus.暫擱置.total",
+   "byStatus.未成案",
+   "byStatus.未成案.count",
+   "byStatus.未成案.missing",
+   "byStatus.未成案.total",
+   "byStatus.洽談中",
+   "byStatus.洽談中.count",
+   "byStatus.洽談中.missing",
+   "byStatus.洽談中.total",
+   "count",
+   "missing",
+   "total",
+   "visible"
   ],
   "s": 200
  }

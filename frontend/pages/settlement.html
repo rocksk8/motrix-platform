@@ -298,6 +298,15 @@
       .stl-toolbar__right .btn { flex: 1 1 0; min-height: 44px; justify-content: center; white-space: nowrap; }
       .stl-toolbar__right > span { flex: 1 1 100%; max-width: none !important; }
       .stl-main { margin-top: 0; padding: 16px; }
+      /* T86 #28：首屏——「需處理」放最上面（要先動手的事），五張摘要卡收成兩欄小卡（原本一欄 5 張佔 1.6 個螢幕） */
+      .stl-flow { display: flex; flex-direction: column; }
+      .stl-flow > .finalized-banner, .stl-flow > .stale-banner { order: -2; }
+      .stl-flow > [data-testid="stl-exceptions"] { order: -1; }
+      .stl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      .stl-k { padding: 4px 8px; border-left-width: 4px; }
+      .stl-k:last-of-type:nth-of-type(odd) { grid-column: 1 / -1; }
+      .stl-k__v { font-size: 15px; }
+      .stl-strip { padding-top: 12px; }
       /* 卡片標題：標題整列、說明文字換到下一行（原本並排，標題被擠成一字一行） */
       .stl-card__head { flex-wrap: wrap; gap: 4px 12px; padding: 12px 16px; }
       .stl-card__head > :first-child { flex: 1 1 100%; }
@@ -336,10 +345,11 @@
 <!-- ── 工具列 ── -->
 <div class="stl-toolbar">
   <div class="stl-toolbar__left">
-    <a :href="'quotation-form.html?no=' + quoteNo"
+    <a :href="fromCase ? 'case-management.html?q=' + encodeURIComponent(quoteNo) : 'quotation-form.html?no=' + quoteNo"
+       data-testid="stl-back"
        style="font-size:12px;color:var(--text-secondary);text-decoration:none;display:flex;align-items:center;gap:4px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
-      返回報價單
+      <span x-text="fromCase ? '返回案件' : '返回報價單'">返回報價單</span>
     </a>
     <span style="color:var(--border-light)">|</span>
     <span style="font-size:14px;font-weight:700;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="quoteNo"></span>
@@ -405,7 +415,7 @@
   </div>
 
   <template x-if="!loading">
-    <div>
+    <div class="stl-flow">
 
       <!-- 已完結橫幅 -->
       <template x-if="settlement.status === 'finalized'">
@@ -446,7 +456,7 @@
 
       <!-- ── (b) 需處理：每項可「前往」該列 ── -->
       <div class="stl-card" data-testid="stl-exceptions">
-        <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列；門檻集中在 STL_CONFIG</div></div>
+        <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列</div></div>
         <template x-if="!exceptionsList.length"><div style="padding:12px 20px;background:var(--success-light);color:var(--success);font-weight:700">✔ 沒有需處理的項目</div></template>
         <template x-for="(e, i) in exceptionsList" :key="i">
           <div class="stl-exc__it" :class="'is-' + e.lv" :data-testid="'stl-exc-' + e.key">
@@ -1249,6 +1259,7 @@ function settlementPage() {
   return {
     session: null,
     quoteNo: '',
+    fromCase: false,                      // T86 #27：從案件管理進來 ⇒ 返回連結回到該案件
     customerName: '',
     projectName:  '',
     loading: true,
@@ -1352,6 +1363,7 @@ function settlementPage() {
 
       const params = new URLSearchParams(location.search)
       this.quoteNo = params.get('no') || ''
+      this.fromCase = params.get('from') === 'case'
       try { this._dispatchNoteSeen = localStorage.getItem('stl_dispatch_basis_note_' + this.quoteNo) === '1' } catch (e) { /* 讀不到就當沒看過 */ }
       if (!this.quoteNo) {
         this.toastErr('未指定報價單號'); this.loading = false; return
