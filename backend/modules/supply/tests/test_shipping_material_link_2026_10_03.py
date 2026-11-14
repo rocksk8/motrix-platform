@@ -217,6 +217,8 @@ def test_link_and_serials_coexist_when_consistent_and_stock_is_deducted(world):
     no = _note(client, h, [L(2, part_no="P1", serials=["S1", "S2"])])                  # 存檔：只擋序號筆數 ≤ 連結數量
     r = client.post("/api/shipping-notes/%s/submit" % no, headers=h)
     assert r.status_code == 200, r.text
+    r = client.post("/api/shipping-notes/%s/approve" % no, headers=h, json={})                # 核准才扣庫存（送審只檢查）
+    assert r.status_code == 200, r.text
     assert _stock_status("P1", "S1") == "shipped" and _stock_status("P1", "S2") == "shipped" and _stock_status("P1", "S3") == "in_stock"
     c, shipped, _s = _providers()
     try:
@@ -267,6 +269,7 @@ def test_rows_with_only_a_link_or_only_serials_behave_as_before(world):
     _stock("P1", ["S1"])
     no = _note(client, h, [L(2), {"description": "庫存品", "part_no": "P1", "serials": ["S1"], "qty": 1}])   # 兩個不同列：一列只有連結、一列只有序號
     assert client.post("/api/shipping-notes/%s/submit" % no, headers=h).status_code == 200
+    assert client.post("/api/shipping-notes/%s/approve" % no, headers=h, json={}).status_code == 200
     assert _stock_status("P1", "S1") == "shipped"
 
 

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — T86 出貨單頁：連結材料申請的列也能選庫存序號（feat/ship-link-serial-coexist-t86；版號由列車取）
+- 畫面：出貨單明細列已連結材料申請時，「選料號」鈕不再反灰（原 33-S1 互斥放寬，後端規則見 supply CHANGELOG）；選完序號後出貨數量不縮水（序號比數量多才補到序號筆數），連結數量同步。
+
 ## 1.0.237 — 2026-11-14（train/t85-text；T85 整合補修；版號由列車取）
 - 畫面（行為不變）：到貨登載的「到貨單照片」選檔欄 `accept` 由 `image/*` 改為明列常見圖片型別（jpeg／png／webp／heic）加 PDF；報價單表單版號 V3.47（文字）；`notify_next`／`po_auto_approve` 補登 modules.json 歸屬。
 

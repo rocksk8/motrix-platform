@@ -797,6 +797,7 @@
   "modules/supply/gl_events.py::_stock_out::stock_items": "unscoped",
   "modules/supply/gl_events.py::gl_events::stock_batches": "unscoped",
   "modules/supply/gl_events.py::gl_events::stock_items": "unscoped",
+  "modules/supply/material_link.py::_received_parts::stock_batches": "unscoped",
   "modules/supply/material_link.py::material_shipped::shipping_notes": "unscoped",
   "modules/supply/material_link.py::quote_item_shipped::shipping_notes": "unscoped",
   "modules/supply/receive.py::_direct::suppliers": "unscoped",
