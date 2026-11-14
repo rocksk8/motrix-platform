@@ -100,10 +100,10 @@ def test_verify_without_saved_token_or_with_unsaved_token_is_explained(live_serv
     page, sent = _open(live_server, make_user, new_page, login_as, "e2e_lp_vf")
     panel = page.locator("#line-panel")
     panel.get_by_role("button", name="驗證 token").click()
-    assert "先在上方貼上 token" in _says(page, "還沒有 Channel access token")
+    assert "先在上方貼上 token" in _says(page, "尚未填寫 Channel access token")
     panel.locator("input[type=password]").first.fill("tok-new-ABCDEFGHIJKLMNOPQRSTUV")
     panel.get_by_role("button", name="驗證 token").click()
-    _says(page, "還沒有儲存")
+    _says(page, "尚未儲存")
     assert _writes(sent) == [], "沒存過／剛改還沒存：不送 verify"
     # 合規：存檔成功，再驗證成功
     _save(page)

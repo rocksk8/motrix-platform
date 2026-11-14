@@ -41,6 +41,14 @@ def test_unknown_income_type_is_plain_400(client, make_user):
     assert "所得類別" in r.json()["detail"] and "重新選擇" in r.json()["detail"]
 
 
+@pytest.mark.parametrize("inc", [["50"], {"a": 1}, None])
+def test_non_string_income_type_is_400_not_500(client, make_user, inc):
+    h = _hdr(client, make_user, "ps_msg_inc2%d" % abs(hash(str(inc)) % 997))
+    r = client.post("/api/payslips", headers=h, json={"data": _d(incomeType=inc)})
+    assert r.status_code == 400, r.text
+    assert "所得類別" in r.json()["detail"] and "None" not in r.json()["detail"]
+
+
 def test_update_path_has_the_same_checks(client, make_user):
     h = _hdr(client, make_user, "ps_msg_upd")
     c = client.post("/api/payslips", headers=h, json={"data": _d()})

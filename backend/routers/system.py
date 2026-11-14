@@ -3442,7 +3442,7 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
         else:
             s = str(sec).strip()
             if s and not _ln.valid_login_secret(s):
-                raise HTTPException(400, "LINE Login 的 Channel secret 格式不正確：必須剛好 32 個英數字（0-9、a-f）。請到 Basic settings 的 Channel secret 重新複製")
+                raise HTTPException(400, "LINE Login 的 Channel secret 格式不正確：必須剛好 32 個英數字（0-9、a-f 或 A-F）。請到 Basic settings 的 Channel secret 重新複製")
             data["login_channel_secret"] = s
         try:
             data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))

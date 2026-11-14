@@ -533,7 +533,7 @@
             if (!/^https:\/\//i.test(base)) return '對外網址前面要加 https://，' + ex + '。'
             const rest = base.slice(8)
             if (/[@]/.test(rest)) return '對外網址不可含帳號密碼（@）。只填網域，' + ex + '。'
-            if (/[\/?#]/.test(rest)) return '對外網址只填網域，後面不要接路徑或查詢（/、?、#）。例如把 https://erp.example.com/pages/x.html 改成 https://erp.example.com 。'
+            if (/[\/?#]/.test(rest)) return '對外網址只填網域，後面不要接路徑或查詢（/、?、#）。例如把 https://erp.example.com/pages/x.html 改成 https://erp.example.com'
             const m = /^([A-Za-z0-9.-]+)(?::(\d+))?$/.exec(rest)
             if (!m || !m[1].split('.').every(x => /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(x)) || rest.length > 255) return '對外網址的網域看起來不正確（只能有英文字母、數字、連字號與點，且不能有連續的點或空白）。' + ex + '。'
             if (m[2] && !(+m[2] >= 1 && +m[2] <= 65535)) return '對外網址的埠號必須是 1～65535。若沒有特別指定埠號，請把「:」與數字拿掉。'
@@ -634,8 +634,8 @@
         async verify() {
           // 驗證用的是「已儲存」的 token（不是欄位裡剛貼的）：沒存過、或剛改還沒存，都先告訴使用者怎麼做，不送注定失敗的請求
           const tok = String(this.cfg.channel_access_token || '').trim()
-          if (!tok) { this._say('還沒有 Channel access token 可以驗證。請先在上方貼上 token，按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
-          if (tok !== '••••••••') { this._say('您貼上的新 token 還沒有儲存，驗證用的是已儲存的 token。請先按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
+          if (!tok) { this._say('尚未填寫 Channel access token，無法驗證。請先在上方貼上 token，按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
+          if (tok !== '••••••••') { this._say('您貼上的新 token 尚未儲存，驗證用的是已儲存的 token。請先按「儲存 LINE 設定」，再按驗證。', true, 12000); return }
           this.verifying = true
           const r = await fetch('/api/settings/line-notify/verify', { method: 'POST', headers: hdr(false) })
           this.verifying = false

@@ -144,7 +144,7 @@
         async previewPdf() {
           if (!this.def || this.pdfBusy) return
           var block = this.previewBlocker()
-          if (block) { this.previewProblems = [{ path: '', message: block }]; this.pdfState = 'bad'; return }
+          if (block) { this.previewProblems = [{ path: '', message: block }]; this.pdfState = 'blocked'; return }
           // 先開分頁（在使用者點擊的當下開，才不會被擋），PDF 回來再把網址換過去
           var w = window.open('', '_blank')
           this.pdfBusy = true; this.pdfState = 'pending'; this.pdfBytes = 0

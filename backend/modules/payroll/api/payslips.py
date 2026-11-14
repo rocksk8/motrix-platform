@@ -122,8 +122,10 @@ def _gross_and_income(d: dict, rules: dict):
     income_type = d.get("incomeType", "9A")
     nationality = d.get("contractorNationality", "本國籍")
     table = rules.get("non_resident" if nationality == "外國籍（未滿183天）" else "resident") or {}
-    if income_type not in table or income_type not in (rules.get("nhi", {}).get("thresholds") or {}):
-        raise HTTPException(400, "所得類別「%s」不在目前適用的法規參數內，請在表單重新選擇所得類別" % str(income_type)[:20])
+    if (not isinstance(income_type, str) or income_type not in table
+            or income_type not in (rules.get("nhi", {}).get("thresholds") or {})):
+        shown = "（空白）" if income_type in (None, "") else "「%s」" % str(income_type)[:20]
+        raise HTTPException(400, "所得類別 %s 不在目前適用的法規參數內，請在表單重新選擇所得類別" % shown)
     return gross, income_type
 
 
