@@ -258,11 +258,11 @@
               已成案
               <span class="cm-list__tab-badge" x-show="summaryWon()" x-text="summaryWon()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="setListTab('已結案')">
+            <button class="cm-list__tab" :class="{active: listTab==='已結案', 'cm-list__tab--zero': caseCounts && !summaryClosed() && listTab!=='已結案'}" @click="setListTab('已結案')">
               已結案
               <span class="cm-list__tab-badge" x-show="summaryClosed()" x-text="summaryClosed()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='待精算'}" @click="setListTab('待精算')">
+            <button class="cm-list__tab" :class="{active: listTab==='待精算', 'cm-list__tab--zero': caseCounts && !summarySettling() && listTab!=='待精算'}" @click="setListTab('待精算')">
               待精算
               <span class="cm-list__tab-badge orange" x-show="summarySettling()" x-text="summarySettling()"></span>
             </button>

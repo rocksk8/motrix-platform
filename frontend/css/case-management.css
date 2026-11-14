@@ -29,6 +29,8 @@
 .cm-list__search-input:focus { border-color:var(--accent); background:var(--surface); box-shadow:0 0 0 3px var(--tone-accent-bg); }
 .cm-list__tabs { display:flex; padding:0 2px; overflow-x:auto; scrollbar-width:none; }
 .cm-list__tab { font-size:12px; font-family:var(--font-zh); padding:6px 9px; white-space:nowrap; flex:none; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
+/* T86 案件UX #8：0 件的頁籤淡化（仍可點），別跟有案件的頁籤搶視線 */
+.cm-list__tab--zero { opacity:.5; }
 .cm-list__tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 .cm-list__body { flex:1; overflow-y:auto; padding:4px 0; }
 .cm-list__body::-webkit-scrollbar { width:4px; }
