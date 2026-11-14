@@ -36,6 +36,9 @@ def test_dev_crm_only_account_reaches_standard_reports_but_not_the_hub(live_serv
     assert not [u for u in seen if any(("/api/std-reports/" + k) in u for k in ("revenue", "gross-margin", "ar-aging"))], seen
     # 站在標準報表上，不放「← 報表」回報表中心的連結（這位使用者進不去）
     assert page.locator("[data-testid=hub-crumb]").count() == 0
+    # 頁頭麵包屑的群組名稱（報表）對這位使用者只是文字，不是連到報表中心的連結（他進不去）
+    page.wait_for_selector(".pg__crumb [data-crumb-grp]", timeout=15000)
+    assert page.locator(".pg__crumb a[data-crumb-grp]").count() == 0
 
     # 報表中心：通用的「沒有權限」畫面，不是一片空白
     page.goto(live_server + "/pages/reports-hub.html")

@@ -1016,10 +1016,12 @@ if (typeof module !== 'undefined' && module.exports) {
       })
       if (!hit) return
       nav.querySelectorAll('[data-crumb-grp]').forEach(function (n) { n.remove() })
-      var grp = document.createElement(hit.hub ? 'a' : 'span')
+      // 這位使用者進不去 hub（沒有 hub 的權限）時，群組名稱只當文字，不連到他打不開的頁
+      var hubOk = !!hit.hub && _permOk(hit.hub.perm)
+      var grp = document.createElement(hubOk ? 'a' : 'span')
       grp.setAttribute('data-crumb-grp', '')
       grp.textContent = hit.g.label
-      if (hit.hub) grp.href = _hrefOf(hit.hub.href)
+      if (hubOk) grp.href = _hrefOf(hit.hub.href)
       var sep = document.createElement('i')
       sep.setAttribute('data-crumb-grp', '')
       sep.setAttribute('aria-hidden', 'true')
