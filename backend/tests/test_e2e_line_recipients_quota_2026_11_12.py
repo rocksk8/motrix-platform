@@ -144,6 +144,9 @@ def test_personal_prefs_group_switch_and_reset(live_server, make_user, new_page,
     login_as(page, u)
     page.goto(f"{live_server}/pages/my-account.html?tab=notify")
     page.locator("[data-testid=line-prefs]").wait_for(state="visible", timeout=20000)
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= 390, "手機不橫向捲動"
+    h = page.evaluate("() => Math.min(...[...document.querySelectorAll('[data-testid^=line-pref-group-]')].flatMap(g => [...g.querySelectorAll('button')].map(b => b.getBoundingClientRect().height)))")
+    assert h >= 36, "整組全收／全不收在手機上要夠大：%s" % h
     summary = page.locator("[data-testid=line-pref-summary]")
     reset = page.locator("[data-testid=line-pref-reset]")
     assert reset.is_disabled(), "全收時不需要恢復預設"

@@ -58,6 +58,8 @@
       [data-testid="tab-security"] .btn-mini + .btn-mini{margin-left:10px}
       [data-testid="tab-security"] .form-input[style*="max-width:200px"]{max-width:none !important}
       [data-testid="tab-security"] .totp-qr{margin-left:auto;margin-right:auto}
+      .lp-mini{min-height:36px !important;padding:6px 14px !important}
+      .lp-btns{gap:10px !important}
     }
     @media (min-width:768px) and (max-width:1023px){
       .page-main{padding:22px 20px}
@@ -368,9 +370,9 @@
           <div :data-testid="'line-pref-group-' + g.name" style="margin:8px 0 2px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
               <div style="font-size:12px;font-weight:600;color:var(--text-dim)" x-text="g.name + '（收 ' + g.events.filter(e => e.enabled).length + '／' + g.events.length + '）'"></div>
-              <div style="display:flex;gap:6px;flex:none">
-                <button type="button" class="btn-secondary" style="padding:2px 10px;font-size:12px" :data-testid="'line-pref-group-on-' + g.name" :disabled="prefBusy || g.events.every(e => e.enabled)" @click="setMany(g.events, true, '已全收：' + g.name)">全收</button>
-                <button type="button" class="btn-secondary" style="padding:2px 10px;font-size:12px" :data-testid="'line-pref-group-off-' + g.name" :disabled="prefBusy || g.events.every(e => !e.enabled)" @click="setMany(g.events, false, '已全不收：' + g.name)">全不收</button>
+              <div class="lp-btns" style="display:flex;gap:6px;flex:none">
+                <button type="button" class="btn-secondary lp-mini" style="padding:2px 10px;font-size:12px" :data-testid="'line-pref-group-on-' + g.name" :disabled="prefBusy || g.events.every(e => e.enabled)" @click="setMany(g.events, true, '已全收：' + g.name)">全收</button>
+                <button type="button" class="btn-secondary lp-mini" style="padding:2px 10px;font-size:12px" :data-testid="'line-pref-group-off-' + g.name" :disabled="prefBusy || g.events.every(e => !e.enabled)" @click="setMany(g.events, false, '已全不收：' + g.name)">全不收</button>
               </div>
             </div>
             <template x-for="e in g.events" :key="e.key">
@@ -381,7 +383,7 @@
             </template>
           </div>
         </template>
-        <div class="hint" style="margin-top:6px">勾選或按鈕後立即生效，不需另外儲存。取消勾選的通知不會再推播到您的 LINE，Email 不受影響。預設為全部都收。</div>
+        <div class="hint" style="margin-top:6px">勾選或按一下按鈕後立即生效，不需另外儲存。取消勾選的通知不會再推播到您的 LINE，Email 不受影響。目前列出的通知預設都收。</div>
       </div>
       <div x-show="!linked && prefs.length" class="hint" style="margin-top:12px" data-testid="line-prefs-need-link">綁定 LINE 後，可以在這裡選擇要收哪些通知。</div>
     </div>
