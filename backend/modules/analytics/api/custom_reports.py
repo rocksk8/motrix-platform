@@ -401,7 +401,7 @@ _EXPORT_AREA = "analytics"            # 匯出稽核的區域標籤（不是權�
 
 
 @router.post("/api/custom-reports/{rid}/export")
-@export_logged("xlsx", "analytics", "custom_report")
+@export_logged("xlsx", _EXPORT_AREA, "custom_report")
 def export_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
     user = _require_view(authorization)
     _perm.require(user, CAP_EXPORT)

@@ -37,6 +37,6 @@ CASES = [
     {"key": "DELETE /api/custom-reports/{rid}", "url": "/api/custom-reports/%d" % _IDS["delete"], "body": None, "setup": _setup},
 ]
 WAIVE = {
-    "POST /api/custom-reports/{rid}/export": "回應是 xlsx 檔案（不是 JSON）：沒有鍵集可記；權限、遮罩、稽核與檔案內容由 test_custom_reports_export_t87 斷言",
-    "POST /api/custom-reports/{rid}/export-pdf": "回應是 PDF 檔案（xlsx 的姊妹，同一個處理函式；不是 JSON）：沒有鍵集可記；同上，另受公司資料第二道閘門",
+    "POST /api/custom-reports/{rid}/export": "PM 2026-11-15 核准（WAIVE_CAP 470→472）：回應是 xlsx 檔案（不是 JSON），檔案回應無鍵集可記；權限、遮罩、稽核與檔案內容由 test_custom_reports_export_t87 斷言",
+    "POST /api/custom-reports/{rid}/export-pdf": "PM 2026-11-15 核准（WAIVE_CAP 470→472）：回應是 PDF 檔案（xlsx 的姊妹，同一個處理函式；不是 JSON），檔案回應無鍵集可記；同上，另受公司資料第二道閘門",
 }
