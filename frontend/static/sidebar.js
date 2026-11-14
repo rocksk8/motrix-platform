@@ -228,7 +228,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">業務開發案</div>
               <template x-for="item in results.devCases" :key="'dc-'+item.id">
-                <div @click="goDevCase()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goDevCase(item.id)" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
                 </div>
@@ -1157,7 +1157,9 @@ if (typeof module !== 'undefined' && module.exports) {
     // 只有「儀表板」模組的檢視者會在 index ⇄ case-management 之間無限跳。
     // 只處理側欄真的列過的頁面（`_deniedPages` 來自 ni() 的顯示條件），
     // 沒列過的頁面一律放行：寧可漏擋也不要把人鎖在門外，資料那層 API 會擋。
-    if (_deniedPages.indexOf(file) >= 0) _showNoPermission()
+    // 2026-11-14（業務開發 UX 報告 #9）：`dev-crm.html` 自己有守門（頁面專屬說明＋回首頁；後端 `_require_dev` 對 admin 放行），
+    // 這裡再蓋一張通用鎖頁會造成「同一情況兩套文案」，而且 admin 從通知／搜尋點進來還會被擋。這一頁交給頁面自己判斷。
+    if (_deniedPages.indexOf(file) >= 0 && file !== 'dev-crm.html') _showNoPermission()
 
     // 🔴 `BR1` 第三格：**把「這個行程載入的是哪一版」放到每一頁的頁尾。**
     //

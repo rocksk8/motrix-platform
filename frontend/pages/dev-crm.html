@@ -66,6 +66,12 @@
     .dc-funnel__l small { display: block; font-size: 12px; color: var(--text-dim); }
     .dc-funnel__arrow { display: grid; place-items: center; color: var(--text-dim); font-size: 13px; flex: 0 0 auto; }
     @media (max-width: 767px) { .dc-funnel__arrow { display: none; } }
+    .dc-filter-toggle { display: none; }
+    .dc-funnel-note { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 14px; font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle, #F8FAFC); border-bottom: 1px solid var(--border-light); font-family: var(--font-zh); }
+    .dc-link-btn { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-family: var(--font-zh); font-size: 12px; }
+    .dc-link-note { font-size: 12px; color: var(--text-dim); }
+    .dc-relink-btn { gap: 4px; }
+    .dc-tap { min-height: 32px; }
 
     /* 卡片上的接觸溫度：條越長＝越久沒更新，顏色跟著跨門檻換。
        紅色那一段就是既有的 isStale()（洽談中且逾 30 天）。 */
@@ -206,6 +212,7 @@
 
     /* ── Right panel ── */
     .dc-right {
+      scroll-padding-top: 140px;
       flex: 1; overflow-y: auto;
       display: flex; flex-direction: column; background: #fff;
     }
@@ -442,6 +449,10 @@
       background: #fff; color: var(--text-secondary);
     }
     .dc-user-check.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .dc-hint {
+      font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle, #F8FAFC);
+      padding: 6px 10px; border-radius: 6px; margin-top: 6px; line-height: 1.5;
+    }
     .dc-error {
       font-size: 12px; color: var(--danger); background: var(--danger-light);
       padding: 8px 12px; border-radius: 6px; margin-top: 6px;
@@ -505,11 +516,26 @@
       .dc-list__body { overflow: visible; }
       .dc-right { overflow: visible; }
       .dc-m-back { display: inline-flex; margin-bottom: 8px; min-height: 44px; }
-      .dc-detail-head { padding: 12px 14px 10px; }
+      .dc-detail-head { padding: 12px 14px 10px; position: static; }
       .dc-case-card { padding: 14px; margin-bottom: 8px; }
       .dc-case-card__name { font-size: 15px; }
-      .dc-funnel { padding: 8px 10px; }
-      .dc-funnel__s { flex: 1 1 calc(50% - 6px); min-height: 56px; }
+      /* 2026-11-14：漏斗帶在手機上原本折成兩排、佔掉半個螢幕；改成單列可橫向滑動的 chips，
+         選了案件（詳情畫面）就整條收起來。 */
+      .dc-funnel { padding: 8px 10px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .dc-funnel::-webkit-scrollbar { display: none; }
+      .dc-funnel.dc-has-sel { display: none; }
+      .dc-funnel__s { flex: 0 0 auto; min-width: 84px; min-height: 44px; padding: 5px 10px; }
+      .dc-funnel__s.rate { min-width: 96px; }
+      .dc-funnel__v { font-size: 18px; }
+      .dc-funnel__l small { display: none; }
+      .dc-tap, .dc-relink-btn, .dc-link-btn { min-height: 44px; }
+      .dc-link-btn { padding: 0 8px; font-size: 14px; }
+      .dc-funnel-note { font-size: 13px; }
+      .dc-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; padding: 0 14px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--white); color: var(--text-secondary); font-family: var(--font-zh); font-size: 14px; cursor: pointer; }
+      .dc-filters { display: none; }
+      .dc-filters.open { display: block; }
+      .dc-sortbtn { min-height: 44px; min-width: 96px; font-size: 14px; }
+      .dc-shell .dc-filters .btn-sm { min-height: 44px; }
       .dc-shell input:not([type="checkbox"]):not([type="radio"]), .dc-shell select, .dc-shell textarea { font-size: 16px; }
     }
 
@@ -538,7 +564,7 @@
   <main class="main" style="padding:0;overflow:hidden">
   <div x-data="devCrmPage()" x-init="init()" class="dc-shell">
   <!-- ── 開發漏斗帶（常駐，本身就是篩選器）── -->
-  <div class="dc-funnel">
+  <div class="dc-funnel" :class="{'dc-has-sel': !!selectedCase}">
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='洽談中'}"
             @click="filterStatus = (filterStatus==='洽談中' ? '' : '洽談中')">
       <span class="dc-funnel__v" style="color:var(--warning)" x-text="caseCount('洽談中')"></span>
@@ -569,6 +595,11 @@
     </div>
   </div>
 
+  <div class="dc-funnel-note" data-testid="dc-funnel-note" x-show="hasActiveFilter && !selectedCase" x-cloak>
+    <span>上方數字依目前的搜尋／篩選結果計算。</span>
+    <button type="button" class="dc-link-btn" @click="clearFilters()">清除篩選</button>
+  </div>
+
   <div class="dc-layout">
 
     <!-- ── 左欄：案件列表 ── -->
@@ -586,6 +617,12 @@
         <!-- 2026-09-14：狀態 chips 移除——上方漏斗帶的每一段就是狀態篩選器，
              兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
              比較少。這一排改放使用者真正缺的：人員與排序。 -->
+        <!-- 2026-11-14：手機上這三排會把案件列表擠到第二屏，改成收合在「篩選」按鈕後面；桌機維持展開。 -->
+        <button type="button" class="dc-filter-toggle" @click="filtersOpen = !filtersOpen"
+                :aria-expanded="filtersOpen ? 'true' : 'false'">
+          <span x-text="filtersOpen ? '收起篩選' : (activeFilterCount ? '篩選（' + activeFilterCount + '）' : '篩選')"></span>
+        </button>
+        <div class="dc-filters" :class="{open: filtersOpen}">
         <div style="display:flex;gap:5px;margin-top:8px">
           <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px"
                   x-model="filterPerson" @change="savePersonPref()">
@@ -621,6 +658,7 @@
           </select>
           <button class="btn btn-ghost btn-sm" x-show="filterYear || filterMonth" @click="filterYear='';filterMonth=''">清除</button>
         </div>
+        </div>
       </div>
 
       <!-- 未讀案件提示 -->
@@ -649,7 +687,13 @@
       <div class="dc-list__body">
         <div x-show="casesLoading" style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">載入中…</div>
         <div x-show="!casesLoading && filteredCases.length === 0"
-             style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">無符合案件</div>
+             style="text-align:center;padding:30px;font-size:13px;color:var(--text-dim)" data-testid="dc-empty-list">
+          <div x-text="hasActiveFilter ? '找不到符合的案件。' : '還沒有案件。'"></div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm dc-tap" data-testid="dc-clear-filters" x-show="hasActiveFilter" @click="clearFilters()">清除篩選</button>
+            <button type="button" class="btn btn-primary btn-sm dc-tap" @click="openNewCase()">新增案件</button>
+          </div>
+        </div>
 
         <template x-for="c in filteredCases" :key="c.id">
           <!-- 2026-09-14：左緣改成接觸溫度（三階），不再是「逾期/未讀」二選一的
@@ -846,10 +890,13 @@
                     <span x-text="selectedCase.convertedQuoteNo"></span>
                   </a>
                   <button x-show="selectedCase.convertedQuoteNo && isAdmin && !selectedCase.pendingRelink"
-                          class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
+                          class="btn btn-ghost btn-sm dc-relink-btn" data-testid="dc-relink-btn"
                           @click="openRelinkModal()" title="申請修改／解除報價單／估價單連結">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    修改連結
                   </button>
+                  <span class="dc-link-note" data-testid="dc-link-note"
+                        x-show="selectedCase.convertedQuoteNo && !isAdmin">要修改連結或刪除案件，請洽主管。</span>
                   <template x-if="selectedCase.pendingRelink">
                     <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700"
                           :title="'申請人：' + selectedCase.relinkRequestedBy">待審核連結異動</span>
@@ -1306,24 +1353,26 @@
           <div class="dc-form-group">
             <label>業務開發（可多選）</label>
             <div class="dc-user-list">
-              <template x-for="u in activeUsers" :key="u.id">
+              <template x-for="u in personChoices('sales')" :key="u.id">
                 <span class="dc-user-check"
                   :class="{on: caseForm.sales_persons.includes(u.id)}"
                   @click="togglePerson('sales_persons', u.id)"
                   x-text="u.displayName"></span>
               </template>
             </div>
+            <div class="dc-hint" x-show="!caseForm.sales_persons.length">還沒指定業務開發：之後只有建立者與主管看得到這個案件。</div>
           </div>
           <div class="dc-form-group">
             <label>專案規劃（可多選）</label>
             <div class="dc-user-list">
-              <template x-for="u in activeUsers" :key="u.id">
+              <template x-for="u in personChoices('planner')" :key="u.id">
                 <span class="dc-user-check"
                   :class="{on: caseForm.planners.includes(u.id)}"
                   @click="togglePerson('planners', u.id)"
                   x-text="u.displayName"></span>
               </template>
             </div>
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" x-show="!showAllPeople" @click="showAllPeople = true">顯示全部人員</button>
           </div>
           <div class="dc-error" x-show="caseError" x-text="caseError"></div>
         </div>
@@ -1638,6 +1687,17 @@ function devCrmPage() {
       return d === 0 ? '今日更新' : d + ' 天未更新'
     },
 
+    get hasActiveFilter() {
+      return !!((this.searchQ || '').trim() || this.filterStatus || this.filterPerson || this.filterYear || this.filterMonth || this.unreadOnly || this.staleOnly)
+    },
+    clearFilters() {
+      this.searchQ = ''; this.filterStatus = ''; this.filterPerson = ''; this.filterYear = ''; this.filterMonth = ''
+      this.unreadOnly = false; this.staleOnly = false
+      this.loadCases()
+    },
+    get activeFilterCount() {
+      return (this.filterPerson ? 1 : 0) + (this.filterYear ? 1 : 0) + (this.filterMonth ? 1 : 0)
+    },
     get winRate() {
       const won = this.caseCount('成案')
       const lost = this.caseCount('未成案')
@@ -1684,6 +1744,8 @@ function devCrmPage() {
     showApproveDeleteModal: false,
 
     activeUsers: [],
+    showAllPeople: false,
+    filtersOpen: false,
     customers: [],
     mobileListOpen: false,
     toast: '',
@@ -2061,9 +2123,28 @@ function devCrmPage() {
       })
       this.$watch('selectedCase', c => this._syncDrafts(c, false))
       await this.loadPrefs()
-      await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
+      await this.loadCases()   // 2026-11-14：使用者／客戶清單改到第一次用到（開案件、新增／編輯視窗）才載入
       if (this.isAdmin) this.loadPendingCount()
       this.loadActivityStats()
+      await this._openFromUrl()
+    },
+
+    // 全域搜尋／通知／附件連結帶 ?case=<編號> 進來 ⇒ 直接選到那一件（找不到或沒權限 ⇒ 說清楚，不默默停在清單）。
+    async _openFromUrl() {
+      let id = ''
+      try { id = new URLSearchParams(location.search).get('case') || '' } catch (_e) {}
+      if (!/^\d+$/.test(id)) return
+      let c = this.cases.find(x => String(x.id) === id)
+      if (!c) {
+        try {
+          const r = await fetch('/api/dev-cases/' + id, { headers: this._h() })
+          if (r.ok) c = await r.json()
+        } catch (_e) {}
+      }
+      if (!c) { this._toast('找不到這個案件，或您沒有權限查看。', 5000); return }
+      this.filterStatus = ''; this.filterYear = ''; this.filterMonth = ''; this.searchQ = ''
+      this.filterPerson = ''                                                    // 清單篩選不能把要看的那一件藏起來（不寫回偏好）
+      await this.selectCase(c)
     },
 
     // ── 接洽成效總覽（右欄未選案件時顯示） ──────────────────────────────────
@@ -2126,6 +2207,16 @@ function devCrmPage() {
       }
     },
 
+    // 只載一次；失敗時下次再試。回傳 promise 供需要的地方 await。
+    _ensureUsers() {
+      if (!this._usersP) this._usersP = this.loadUsers().catch(() => { this._usersP = null })
+      return this._usersP
+    },
+    _ensureCustomers() {
+      if (!this._customersP) this._customersP = this.loadCustomers().catch(() => { this._customersP = null })
+      return this._customersP
+    },
+
     async loadUsers() {
       const r = await fetch('/api/users', { headers: this._h() })
       if (r.ok) {
@@ -2133,7 +2224,7 @@ function devCrmPage() {
         const list = d.users || d
         this.activeUsers = list
           .filter(u => u.active)
-          .map(u => ({ id: u.id, displayName: u.displayName || u.display_name || u.username }))
+          .map(u => ({ id: u.id, role: u.role || '', displayName: u.displayName || u.display_name || u.username }))
       }
     },
 
@@ -2154,7 +2245,7 @@ function devCrmPage() {
       this.directives = []
       this.canDirect = false
       this.directiveForm = { logId: null, content: '', targets: [], pick: '' }
-      await Promise.all([this.loadLogs(c.id), this.loadDirectives(c.id)])
+      await Promise.all([this._ensureUsers(), this.loadLogs(c.id), this.loadDirectives(c.id)])
     },
 
     async loadLogs(caseId) {
@@ -2178,9 +2269,20 @@ function devCrmPage() {
     },
 
     // ── Case modal ──
+    // 新增／編輯案件的人員挑選：預設只列「做這件事的角色」（業務開發＝業務＋管理員；專案規劃＝工程＋管理員），
+    // 已經選了的人一律保留（編輯舊案時不會因為角色不同而看不到）；要指定其他人按「顯示全部人員」。
+    personChoices(kind) {
+      const roles = kind === 'sales' ? ['sales', 'admin', 'superadmin'] : ['engineer', 'admin', 'superadmin']
+      const chosen = new Set(kind === 'sales' ? this.caseForm.sales_persons : this.caseForm.planners)
+      if (this.showAllPeople) return this.activeUsers
+      return this.activeUsers.filter(u => roles.includes(u.role) || chosen.has(u.id))
+    },
+
     openNewCase() {
+      this._ensureUsers(); this._ensureCustomers()
+      this.showAllPeople = false
       this.editingCaseId = null
-      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [], referrer: '' }
+      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: (this.session.role === 'sales' && this.session.userId) ? [this.session.userId] : [], planners: [], referrer: '' }
       this.caseError = ''
       this.customerSuggestions = []
       this.showCustomerDrop = false
@@ -2190,6 +2292,8 @@ function devCrmPage() {
 
     openEditCase() {
       if (!this.selectedCase) return
+      this._ensureUsers(); this._ensureCustomers()
+      this.showAllPeople = false
       const c = this.selectedCase
       this.editingCaseId = c.id
       this.caseForm = {
