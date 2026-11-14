@@ -59,11 +59,11 @@ def repo(tmp_path):
 # ── 功能變更判定 ───────────────────────────────────────────────────────────
 
 def test_endgame_functional_files_keeps_product_code_and_drops_bookkeeping(eg):
-    changed = ["backend/modules/alpha/api.py", "frontend/pages/a.html", "backend/modules/alpha/tests/test_a.py",
+    changed = ["backend/modules/alpha/api.py", "frontend/js/a.js", "backend/modules/alpha/tests/test_a.py",
                "backend/tests/test_b.py", "backend/modules/alpha/CHANGELOG.md", "backend/version_manifest.json",
                "backend/modules/alpha/module.json", "backend/tools/delivery.py", "docs/platform/x.md", "tools/platform/a.py",
                "backend/a1_expectations.json", "backend/README.md"]
-    assert eg.functional_files(changed) == ["backend/modules/alpha/api.py", "frontend/pages/a.html"]
+    assert eg.functional_files(changed) == ["backend/modules/alpha/api.py", "frontend/js/a.js"]
 
 
 def test_endgame_functional_files_accepts_windows_separators(eg):
@@ -133,7 +133,7 @@ def test_endgame_run_rejects_a_malformed_escape_hatch_before_doing_anything(eg, 
 def test_endgame_a1_lists_only_new_authenticated_routes(eg, repo):
     inv = {"endpoints": {"GET /api/old": {}, "GET /api/new": {}, "POST /api/new": {}, "GET /api/ping": {}, "DELETE /api/new/{i}": {}, "GET /health": {}}}
     _write(repo, "backend/tests/platform/route_inventory.json", json.dumps(inv))
-    _write(repo, "frontend/pages/a.html", "<html></html>")
+    _write(repo, "backend/modules/alpha/pages/a.html", "<html></html>")
     _write(repo, "backend/modules/alpha/api.py", "x = 4\n")
     _commit(repo, "routes")
     obj, notes = eg.build_a1_expectations(repo, "base")
@@ -156,7 +156,7 @@ def test_endgame_a1_output_passes_the_consumer_format_rules(eg, repo):
     """h7 的格式規則：路徑以單一 / 開頭、不含 scheme／@／反斜線／空白；method 只准四種；files 不得絕對或含 ..。"""
     inv = {"endpoints": {"GET /api/old": {}, "GET /api/x/{id}": {}}}
     _write(repo, "backend/tests/platform/route_inventory.json", json.dumps(inv))
-    _write(repo, "frontend/pages/b.html", "<html></html>")
+    _write(repo, "backend/modules/alpha/pages/b.html", "<html></html>")
     _commit(repo, "x")
     obj, _ = eg.build_a1_expectations(repo, "base")
     paths = list(obj.get("pages", [])) + [x["path"] for x in obj.get("auth_required", [])]
@@ -470,7 +470,7 @@ def test_run_lock_is_exclusive_and_released_after_the_run(eg, trainrepo):
 
 
 def test_version_record_asks_for_a_human_check_when_units_outnumber_new_entries(eg, trainrepo):
-    _write(trainrepo, "frontend/pages/x.html", "<html>1</html>")
+    _write(trainrepo, "frontend/js/x.js", "var x = 1;\n")
     m = json.loads((trainrepo / "backend/version_manifest.json").read_text(encoding="utf-8"))
     m.append({"module": "新/功能", "version": "next", "date": "2026-11-14", "time": "10:00", "content": "y"})
     _write(trainrepo, "backend/version_manifest.json", json.dumps(m, ensure_ascii=False))
@@ -491,7 +491,7 @@ def test_main_defaults_base_to_the_prod_baseline_and_never_to_origin_platform(eg
     monkeypatch.setattr(eg, "REPO", trainrepo)
     rc = eg.main(["plan", "--label", "t", "--only", "pyc"])
     out = capsys.readouterr().out
-    assert "base %s ＝ %s" % (base_sha[:10], base_sha[:12]) in out and "origin/platform" not in out.split("結果")[0]
+    assert "base %s ＝ %s" % (base_sha[:10], base_sha[:12]) in out and "origin/platform" not in out.splitlines()[0]
     assert rc == 0
 
 

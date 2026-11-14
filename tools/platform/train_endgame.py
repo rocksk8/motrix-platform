@@ -55,6 +55,8 @@ TEMPLATE = "docs/platform/prod-tasks/TEMPLATE-apply.md"
 FACTS_BEGIN = "<!-- endgame:facts begin -->"
 FACTS_END = "<!-- endgame:facts end -->"
 ALLOW_RE = re.compile(r"PM 核准（(\d{4}-\d{2}-\d{2})）：(\S[^\r\n]{0,199})", re.ASCII)     # 用 fullmatch；不准有換行；\d 只認 ASCII 數字
+# 頁面檔位置：frontend 的頁面夾或模組自己的頁面夾（階段 C 會把頁面搬進 modules/<key>/）；不寫死單一路徑，served 路徑一律是 /pages/<檔名>
+_PAGE_RE = re.compile(r"^(?:frontend|backend/modules/[A-Za-z0-9_]+)/pages/([A-Za-z0-9_\-]+\.html)$")
 STEP_FILE_RE = re.compile(r"docs/platform/prod-tasks/[A-Za-z0-9._-]+\.md")
 LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,40}")
 PKG_NAME_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{8}_full", re.ASCII)
@@ -360,7 +362,7 @@ def build_a1_expectations(repo, base):
     if (Path(repo) / "frontend" / "index.html").exists():
         pages.append("/")
     for f in changed:
-        m = re.match(r"^frontend/pages/([A-Za-z0-9_\-]+\.html)$", f.replace("\\", "/"))
+        m = _PAGE_RE.match(f.replace("\\", "/"))
         if m and (Path(repo) / f).exists():
             pages.append("/pages/" + m.group(1))
     if pages:

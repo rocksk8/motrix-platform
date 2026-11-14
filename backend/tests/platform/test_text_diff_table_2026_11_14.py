@@ -32,7 +32,7 @@ def test_classify_sections_and_exclusions(tdt):
     c = tdt.classify
     assert c("backend/helpers/a.py") == "後端訊息／通知"
     assert c("backend/modules/x/module.json") == "後端訊息／通知"
-    assert c("frontend/pages/a.html") == "前端畫面" and c("frontend/js/a.js") == "前端畫面"
+    assert c("frontend/index.html") == "前端畫面" and c("frontend/js/a.js") == "前端畫面"
     assert c("docs/platform/guides/G.md") == "說明文件"
     # 不收
     assert c("backend/tests/test_a.py") is None and c("backend/modules/x/tests/a.py") is None
@@ -74,14 +74,14 @@ def test_end_to_end_dedup_sections_and_render(tdt, tmp_path):
     _git(r, "init", "-q", "-b", "main")
     _put(r, "backend/helpers/a.py", 'MSG = "目前沒有資料，請稍後再試"\n')
     _put(r, "backend/helpers/b.py", 'MSG = "目前沒有資料，請稍後再試"\n')
-    _put(r, "frontend/pages/p.html", "<p>目前沒有待您簽核的項目。</p>\n")
+    _put(r, "frontend/js/p.js", "const t = '目前沒有待您簽核的項目。';\n")
     _put(r, "backend/tests/test_a.py", 'X = "目前沒有資料"\n')
     _git(r, "add", "-A")
     _git(r, "commit", "-q", "-m", "base")
     _git(r, "tag", "base")
     _put(r, "backend/helpers/a.py", 'MSG = "尚無資料，請稍後再試"\n')
     _put(r, "backend/helpers/b.py", 'MSG = "尚無資料，請稍後再試"\n')
-    _put(r, "frontend/pages/p.html", "<p>尚無待您簽核的單據。</p>\n")
+    _put(r, "frontend/js/p.js", "const t = '尚無待您簽核的單據。';\n")
     _put(r, "backend/tests/test_a.py", 'X = "尚無資料"\n')
     _git(r, "add", "-A")
     _git(r, "commit", "-q", "-m", "reword")
@@ -91,7 +91,7 @@ def test_end_to_end_dedup_sections_and_render(tdt, tmp_path):
     assert text.startswith("# T9 文字專業化——前後對照表")
     assert "比對區間：`base..HEAD`" in text
     assert "## 後端訊息／通知（1 組）" in text and "a.py 等 2 處" in text        # 相同改前／改後只列一次
-    assert "## 前端畫面（1 組）" in text and "p.html" in text
+    assert "## 前端畫面（1 組）" in text and "p.js" in text
     assert "## 說明文件（0 組）" in text and "本區間無此類改動" in text
     assert "test_a.py" not in text                                               # 測試檔不收
     assert "| 改前 | 改後 | 位置 |" in text
