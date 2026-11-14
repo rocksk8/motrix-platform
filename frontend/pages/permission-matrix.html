@@ -111,6 +111,14 @@
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <aside class="sidebar" id="app-sidebar"></aside>
   <main class="pm-main">
+    <!-- 非最高管理者：與其他「僅限最高管理者」頁同一張拒絕畫面（文字同 sidebar.js _showNoPermission），不載入頁面本體、不打 /api/permmatrix。 -->
+    <template x-if="!isSuper">
+      <div id="no-module-notice" data-testid="pm-denied" style="max-width:520px;margin:64px auto;text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
+        <div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.9">這一頁僅限最高管理者使用。<br>左側選單中的項目才是您目前可以使用的功能。</div>
+      </div>
+    </template>
+    <template x-if="isSuper">
     <div class="pm-wrap">
       <div class="pg">
         <div class="pg__l">
@@ -237,6 +245,7 @@
         </table>
       </section>
     </div>
+    </template>
   </main>
 
   <!-- 暫存區批次：預覽視窗（逐格列出：立即生效／需等待期並需核准／沒有變化；有放寬高風險格時原因必填；預覽之前沒有寫入任何東西） -->
@@ -292,6 +301,7 @@
     function permMatrixPage() {
       return {
         _initDone: false,
+        get isSuper() { try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}').role || '') === 'superadmin' } catch (e) { return false } },
         tab: 'matrix', err: '', msg: '', busy: false, dlg: null, stage: {}, bdlg: null, berr: '', reason: '', ov: { cap: '', effect: 'allow' }, m: null, users: [], uid: '', eff: null, pending: [], versions: [],
         tabs: [{ id: 'matrix', label: '角色與功能' }, { id: 'effective', label: '個人' }, { id: 'pending', label: '待生效' }, { id: 'versions', label: '調整紀錄' }],
         _hdr() {
@@ -308,6 +318,7 @@
         init() {
           if (this._initDone) return
           this._initDone = true
+          if (!this.isSuper) return   // 非最高管理者：不載入、不打 API（說明由 x-if 樣板負責）
           // 暫存區還有沒套用的勾選就離開頁面 ⇒ 瀏覽器先問（不會悄悄遺失）
           window.addEventListener('beforeunload', (e) => { if (this.stageCount()) { e.preventDefault(); e.returnValue = '' } })
           this.go('matrix')

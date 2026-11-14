@@ -1123,7 +1123,7 @@
         },
 
         roleLabel(role) {
-          return { superadmin: '最高管理者', admin: '管理員', sales: '業務', viewer: '檢視者' }[role] || role
+          return window.MotrixRole ? window.MotrixRole.label(role) : role
         },
 
         logout() {
@@ -1196,6 +1196,7 @@
   </div>
 
   <script src="../static/notif.js"></script>
+  <script src="../static/role-label.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>
