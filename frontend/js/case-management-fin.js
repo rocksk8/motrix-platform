@@ -175,6 +175,8 @@ window.CM_PARTS.push(() => ({
 
     // T86 案件 UX #9：款項卡的「發票資料」收合。payDetailOpen[item.id] 有明確值（使用者按過）就照它；
     // 沒按過時，發票未稅與稅額只填一欄、或合計與該期金額不符 ⇒ 自動展開，不讓需要處理的提示藏起來。
+    // T86 案件 UX #29：沒有財務檢視權的人，已收款的期別除發票資料外不能改（後端 _RECEIVED_ITEM_EDITABLE），畫面同步停用其餘欄位。
+    payFrozen(item) { return !!(this.moneyMasked() && item && item.received) },
     payDetailOpen: {},
     payDetailIsOpen(item, idx) {
       const v = this.payDetailOpen[item.id]

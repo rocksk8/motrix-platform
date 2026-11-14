@@ -198,3 +198,86 @@ def test_payment_amount_inputs_show_thousands_separator_and_rounding_note_is_not
     color = note.evaluate("e => getComputedStyle(e).color")
     warn = page.evaluate("() => { const e = document.createElement('i'); e.style.color = 'var(--tone-orange-fg)'; document.body.appendChild(e); const c = getComputedStyle(e).color; e.remove(); return c }")
     assert color != warn, "四捨五入說明仍用警示橘色"
+
+
+# ── #29 沒有財務檢視權的人：款項卡只留後端允許改的欄位，其餘唯讀 ───────────────────────────────
+@pytest.mark.e2e
+def test_masked_user_payment_card_keeps_only_editable_fields(live_server, make_user, e2e_browser):
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_eng29", role="engineer")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
+    # 種子：第 1 期（id 1）已收款 2026-09-01；第 2 期（id 2）未收
+    ro = page.locator('[data-testid="pay-received-at-ro"]')
+    assert ro.nth(0).is_visible() and ro.nth(1).is_visible()
+    assert not page.locator('#pay-1-received-at').is_visible() and not page.locator('#pay-2-received-at').is_visible(), "收款日期只給看，沒有輸入框"
+    assert "2026-09-01" in ro.nth(0).inner_text()
+    assert "尚未收款" in ro.nth(1).inner_text()
+    # 未收款的期別：預計收款日、備註、發票號碼（展開後）都能改
+    assert page.locator('#pay-2-expected').is_enabled() and page.locator('#pay-2-note').is_enabled()
+    page.locator('[data-testid="pay-detail-toggle-1"]').click()
+    page.locator('#pay-2-invno').wait_for(state="visible", timeout=5000)
+    assert page.locator('#pay-2-invno').is_enabled()
+    # 已收款的期別：除發票資料外凍結（後端 _RECEIVED_ITEM_EDITABLE），發票號碼仍可填
+    assert page.locator('#pay-1-expected').is_disabled() and page.locator('#pay-1-note').is_disabled()
+    page.locator('[data-testid="pay-detail-toggle-0"]').click()
+    page.locator('#pay-1-invno').wait_for(state="visible", timeout=5000)
+    assert page.locator('#pay-1-invno').is_enabled()
+    # 無法由他處理的提示（四捨五入說明）不出現
+    assert page.locator('[data-testid="pay-rounding-note"]').count() == 0
+
+
+@pytest.mark.e2e
+def test_finance_user_still_edits_received_date(live_server, make_user, e2e_browser):
+    """正對照：有財務檢視權的人仍看得到收款日期輸入框與四捨五入說明。"""
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed
+    u = make_user(username="uxh8_fin29", role="finance")
+    mseed(assigned=[u[0]])
+    page = _open_fin(live_server, e2e_browser, u)
+    assert page.locator('#pay-1-received-at').is_visible()
+    assert page.locator('[data-testid="pay-received-at-ro"]').first.is_hidden()
+    assert page.locator('[data-testid="pay-rounding-note"]').count() == 1
+
+
+# ── #31 手機動態輸入列：單欄堆疊 ───────────────────────────────────────────────────────
+@pytest.mark.e2e
+def test_feed_compose_stacks_in_one_column_on_phone(live_server, make_user, e2e_browser):
+    from tests._e2e_login import inject_login
+    u = make_user(username="uxh8_e31", role="superadmin")
+    _seed()
+    page = e2e_browser.new_context(viewport={"width": 390, "height": 844}).new_page()
+    inject_login(page, live_server, u[0], u[1])
+    _open(page, live_server, "feed")
+    page.locator(".feed-compose__box").wait_for(state="visible", timeout=10000)
+    boxes = page.evaluate("""() => [...document.querySelectorAll('.feed-compose__field')]
+        .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)] })""")
+    assert len(boxes) == 4
+    assert len({b[0] for b in boxes}) == 1, "四個欄位左緣要對齊（單欄）：%r" % boxes
+    assert all(boxes[i][1] < boxes[i + 1][1] for i in range(3)), "四個欄位要由上而下排列：%r" % boxes
+    # 發布鈕獨佔一列、寬度接近整列；附檔與重要勾選各自一列
+    send = page.locator(".feed-compose__send").bounding_box()
+    box = page.locator(".feed-compose__box").bounding_box()
+    assert send["width"] >= box["width"] - 4, (send, box)
+    attach = page.locator('[data-testid="cm-feed-attach"]').bounding_box()
+    assert attach["y"] + attach["height"] <= send["y"] + 1, "附加檔案與發布鈕不可同列"
+    # 控制項夠寬、不被截斷；整頁不橫向溢位
+    ctl_w = page.evaluate("() => [...document.querySelectorAll('.feed-compose__ctl')].filter(e => e.offsetParent).map(e => Math.round(e.getBoundingClientRect().width))")
+    assert all(w >= 140 for w in ctl_w), ctl_w
+    assert page.evaluate("() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+    # 「標記為重要」說明文字不折成三行（單行高度約一行）
+    imp = page.locator('[data-testid="cm-feed-important"]').bounding_box()
+    assert imp["height"] <= 48, imp
+
+
+@pytest.mark.e2e
+def test_feed_compose_stays_a_row_on_desktop(live_server, make_user, e2e_browser):
+    from tests._e2e_login import inject_login
+    u = make_user(username="uxh8_e31d", role="superadmin")
+    _seed()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
+    inject_login(page, live_server, u[0], u[1])
+    _open(page, live_server, "feed")
+    page.locator(".feed-compose__box").wait_for(state="visible", timeout=10000)
+    tops = page.evaluate("() => [...document.querySelectorAll('.feed-compose__field')].map(e => Math.round(e.getBoundingClientRect().top))")
+    assert len(set(tops)) == 1, "電腦版四個欄位維持同一列：%r" % tops
