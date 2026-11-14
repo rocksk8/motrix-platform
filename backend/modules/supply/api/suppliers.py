@@ -337,9 +337,17 @@ def _privacy_contacts(conn, sid: int):
     return row["name"], (contacts if isinstance(contacts, list) else [])
 
 
+def _ack_view(user, rec):
+    """T86（使用者方針：都處理）：與 GET /api/suppliers 同一條線——管理員看完整「已告知」紀錄；非管理員只看「已告知＋日期」（`{at}`），
+    不帶記錄人（姓名／帳號）與告知文字雜湊。GET 與 POST ack（已記錄過時回傳的是既有紀錄）共用這一支，兩條路徑的範圍才一致。"""
+    if user["role"] in ("superadmin", "admin"):
+        return rec
+    return {"at": (rec.get("at") or "") if isinstance(rec, dict) else ""}
+
+
 @router.get("/api/suppliers/{sid}/privacy-notice")
 def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None)):
-    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。"""
+    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。管理員看完整紀錄；非管理員只看 `{at}`（已告知與日期）。"""
     from helpers import privacy_notice as _pn
     user = _require_user(authorization)
     perm.require(user, "supply.supplier.view")
@@ -348,7 +356,8 @@ def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None
     conn.close()
     if name is None:
         raise HTTPException(404, "供應商不存在")
-    return {"acks": _pn.acks_with_prefix("supplier_contact", sid)}
+    acks = _pn.acks_with_prefix("supplier_contact", sid)
+    return {"acks": {cid: _ack_view(user, rec) for cid, rec in acks.items()}}
 
 
 @router.post("/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack")
@@ -369,4 +378,4 @@ def ack_supplier_contact_privacy_notice(sid: int, ctid: str, authorization: str 
     if created:
         _audit(_tok(authorization), 'supplier.privacy_notice_ack', 'supplier', f"{sid}:{ctid}",
                f"{name}／{ct.get('name') or ''}", {"noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _ack_view(user, rec), "created": created}
