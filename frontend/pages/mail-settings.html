@@ -41,7 +41,7 @@
       行事曆的事件開關與 <a href="google-calendar-settings.html" data-testid="ms-gcal-link">Google 行事曆設定</a> 是同一份資料；連線與總開關在那一頁。</div>
     <div class="ms-legend" aria-label="圖例">
       <span><button type="button" class="mx-rc on a" tabindex="-1" aria-hidden="true">✓</button>綠＝指定收件的角色／同步行事曆</span>
-      <span>整欄開關：點欄頭的方塊，一次設定目前列出的所有列（已鎖定的列會略過）</span>
+      <span>整欄開關：按一下欄頭的方塊，可一次設定目前列出的所有列（已鎖定的列會略過）。</span>
     </div>
     <div id="ms-err" class="ms-warn" hidden data-testid="ms-err"></div>
     <div id="ms-box" data-testid="ms-matrix"></div>
@@ -103,7 +103,7 @@
         key: c.key || ('cal:' + c.code), name: c.name, category: 'calendar', group: CAL_ONLY_GROUP, groupLabel: '—', event: '', impact: '', action: '', description: c.description || '',
         version: c.version, noRecipient: false, managedElsewhere: '', lockReason: '', calOnly: true, risk: 'none',
         mode: 'default', users: [], roles: [], off: false, cal: !!c.enabled, calCode: c.code, calPrimary: true, calNote: c.group || '', calWhy: '',
-        selectable: false, selectableReason: '只有行事曆、沒有收件人設定：請用「行事曆」欄頭整欄勾選，或逐列點選',
+        selectable: false, selectableReason: '此項目只有行事曆、沒有收件人設定，請以「行事曆」欄頭整欄勾選，或逐列選取。',
       }
     }
     async function load() {
@@ -141,7 +141,7 @@
         (cfg.roles || []).map(function (x) { return '<label><input type="checkbox" data-role="' + esc(x) + '"' + (st.roles.indexOf(x) >= 0 ? ' checked' : '') + ' data-testid="ms-pick-role-' + esc(x) + '"> ' + esc(roleName(x)) + '</label>' }).join('') + '</div>' +
         '<div style="margin-top:8px"><b>指定帳號</b></div><div class="ms-people-list">' +
         (users.length ? users.map(function (u) { return '<label><input type="checkbox" data-user="' + esc(u.username) + '"' + (st.users.indexOf(u.username) >= 0 ? ' checked' : '') + ' data-testid="ms-pick-user-' + esc(u.username) + '"> ' + esc(u.displayName || u.display_name || u.username) + '（' + esc(u.username) + '）</label>' }).join('') : '<span class="mx-mute">沒有可指定的帳號</span>') + '</div>' +
-        '<div class="mx-mute">指定的帳號與角色，除了這類信件原本的事件相關人員之外另外寄送；本人自行退訂、沒有 email 的人不會收到。</div>'
+        '<div class="mx-mute">指定的帳號與角色，除了這類信件原本的事件相關人員之外另外寄送；本人已自行退訂或未設定 email 的使用者不會收到。</div>'
       return SettingsMatrix.openDialog({
         title: '「' + r.name + '」誰要收',
         html: html,
@@ -221,7 +221,7 @@
         render: function (r) {
           var us = r.users
           var txt = us.slice(0, 3).map(function (u) { return esc(displayName(u)) }).join('、') + (us.length > 3 ? ' 等 ' + us.length + ' 人' : '')
-          if (!us.length && !r.roles.length) txt = '<span style="color:var(--danger)">沒指定任何人</span>'
+          if (!us.length && !r.roles.length) txt = '<span style="color:var(--danger)">尚未指定任何人</span>'
           else if (!us.length) txt = '<span class="mx-mute">（只有角色）</span>'
           return '<span class="ms-who" data-testid="ms-who-' + esc(r.key) + '">' + txt + '</span> <button type="button" class="mx-btn mx-btn-sm" data-mx="act" data-act="people" data-key="' + esc(r.key) + '" data-testid="ms-people-' + esc(r.key) + '">編輯</button>'
         } },
@@ -253,7 +253,7 @@
     }
     function restore(snap, res) {
       var r = res && res.res
-      if (!r || !r.after) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原'))
+      if (!r || !r.after) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原。'))
       return post('/api/settings/mail/batch-undo', { states: snap, expect: r.after, since_audit: r.audit_mark || 0 }).catch(function (e) { throw conflictError(e, '無法復原這一批：') })
     }
     function applied(res, label) { return { res: res, message: label + '（' + res.changed.length + ' 項有變動' + (res.unchanged && res.unchanged.length ? '、' + res.unchanged.length + ' 項本來就是這樣' : '') + '）' } }
@@ -277,7 +277,7 @@
     function confirmSave(list) {
       return post('/api/settings/mail/batch-preview', { changes: changesOf(list) }).then(function (res) {
         var rows = res.rows.filter(function (r) { return r.changed })
-        if (!rows.length) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        if (!rows.length) throw new Error('這些修改與目前的設定相同，無需儲存。')
         var shown = rows.slice(0, 12).map(function (r) {
           return '<tr><td style="vertical-align:top">' + esc(r.name) + (r.system ? ' <span class="ms-red">系統技術類</span>' : '') + '</td><td style="font-size:12px">' + changeText(r) + '</td></tr>'
         }).join('')
@@ -327,7 +327,7 @@
       { id: 'cal', label: '行事曆已開', test: function (r) { return r.cal === true } },
       { id: 'custom', label: '有指定收件人', test: function (r) { return r.mode === 'custom' } },
       { id: 'sys', label: '系統技術類', test: function (r) { return r.category === 'system' } },
-      { id: 'nobody', label: '沒人會收到', title: '目前沒有任何人會收到這類信（最高管理者都退訂了，或沒有人設定 email）', test: function (r) { return r.noRecipient || nobodyPicked(r) } },
+      { id: 'nobody', label: '無人收件', title: '目前沒有任何人會收到這類信件（最高管理者皆已退訂，或皆未設定 email）。', test: function (r) { return r.noRecipient || nobodyPicked(r) } },
     ]
 
     async function boot() {
@@ -357,7 +357,7 @@
           if (r.category === 'system') t.push({ text: '系統技術類', tone: 'warn' })
           if (r.managedElsewhere) t.push({ text: '在別處設定', tone: 'mute', title: r.managedElsewhere })
           if (r.lockReason) t.push({ text: '不可關閉', tone: 'mute', title: r.lockReason })
-          if (r.noRecipient || nobodyPicked(r)) t.push({ text: '沒人會收到', tone: 'bad' })
+          if (r.noRecipient || nobodyPicked(r)) t.push({ text: '無人收件', tone: 'bad' })
           return t
         },
         searchText: function (r) { return r.name + ' ' + r.key + ' ' + r.group + ' ' + r.calCode },
