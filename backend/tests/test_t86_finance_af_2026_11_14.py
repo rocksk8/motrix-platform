@@ -69,8 +69,16 @@ def test_a_teeth_a_non_reader_with_the_module_is_still_denied(client, make_user)
 
 
 @needs_m01
-def test_a_module_check_is_unchanged_a_cashier_only_account_is_still_refused(client, make_user):
+def test_a_cashier_only_finance_account_reads_it_too(client, make_user):
+    """沙箱實測的真實情境：只靠 cashier 進案件的財務（有效模組含 financial_view）——以前模組放行、逐案 404，現在 200。"""
     u = make_user(username="af_cash", role="finance", modules=["cashier"])
+    _seed_case(make_user)
+    assert client.get(f"/api/quotations/{NO}/item-shipped", headers=_login(client, u)).status_code == 200
+
+
+@needs_m01
+def test_a_module_check_is_unchanged_an_account_without_any_of_the_three_modules_is_refused(client, make_user):
+    u = make_user(username="af_nomod", role="engineer", modules=["customer"])
     _seed_case(make_user)
     assert client.get(f"/api/quotations/{NO}/item-shipped", headers=_login(client, u)).status_code == 403
 
