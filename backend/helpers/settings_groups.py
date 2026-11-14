@@ -384,7 +384,7 @@ register_group(
           impact_scope={"documents": ["勞報單 PDF 的下載檔名"], "roles": ["有勞報單權限的人"], "amounts": "不涉及金額，只改檔名是否寫出承攬人姓名。", "reversible": False, "effective": "pending"},
           choices=[(0, "不寫姓名", "檔名只有案件、文件類型與日期或單號。"), (1, "寫出姓名（與改版前相同）", "檔名裡會有承攬人姓名，與改版前相同。")]),
         S("case_name_max_chars", "int", 20, min=5, max=60, unit="字", risk="none", recommended=20, advanced=True,
-          question="檔名裡的案件名最多保留幾個字？", label="檔名裡案件名最多幾個字", when="檔名太長被截斷，或在手機與雲端硬碟顯示不完整時。", help="太長的案件名會被截短。",
+          question="檔名裡的案件名最多保留幾個字？", label="檔名案件名字數上限", when="檔名太長被截斷，或在手機與雲端硬碟顯示不完整時。", help="太長的案件名會被截短。",
           impact="影響範圍：之後下載的檔名。字數越多越完整，但整體檔名越容易超過系統上限。"),
         S("total_max_chars", "int", 100, min=40, max=150, unit="字", risk="none", recommended=100, advanced=True,
           question="檔名（不含副檔名）最長幾個字？", label="檔名總長度上限", when="存到或同步到有路徑長度限制的地方（雲端硬碟、舊系統）出錯時。", help="另外受系統的 255 位元組上限約束；過長時先縮短案件名，單號與副檔名不會被截掉。",
