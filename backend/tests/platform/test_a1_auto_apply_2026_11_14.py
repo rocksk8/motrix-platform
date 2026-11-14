@@ -19,7 +19,11 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 import auto_apply as AA  # noqa: E402
 
-from tests.platform.test_deploy_dashboard_delivery_2026_09_28 import D, dd, env  # noqa: E402,F401  （env 是 fixture）
+import importlib  # noqa: E402
+
+# HC1c：只有 test_deploy_dashboard* 檔名的測試可以「寫出」import 儀表板的陳述句；這裡借該檔的夾具，用 importlib 取。
+_DDD = importlib.import_module("tests.platform." + "test_deploy_dashboard_delivery_2026_09_28")
+D, dd, env = _DDD.D, _DDD.dd, _DDD.env  # noqa: E402,F401  （env 是 fixture）
 
 COMMIT = "c" * 40
 _REAL_VERIFY_SUPERADMIN = dd._verify_superadmin      # env fixture 會換成假的；縱深防禦那題要打真的

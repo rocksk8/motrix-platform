@@ -460,6 +460,26 @@ def test_main_rejects_unknown_scenario():
         AD.main(["--only", "G,ZZ"])
 
 
+def test_default_ports_avoid_the_ports_other_windows_hold():
+    assert (AD.ERP_PORT, AD.DASH_PORT) == (6866, 8866) and 6766 not in (AD.ERP_PORT, AD.DASH_PORT)
+
+
+@pytest.mark.parametrize("argv", [
+    ["--erp-port", "666"], ["--dash-port", "8765"], ["--erp-port", "80"], ["--dash-port", "70000"],
+    ["--erp-port", "7000", "--dash-port", "7000"],
+])
+def test_main_rejects_unreasonable_ports(argv):
+    with pytest.raises(SystemExit):
+        AD.main(argv)
+
+
+def test_drill_takes_ports_from_args_and_defaults_otherwise():
+    d = AD.Drill(SimpleNamespace(only=["G"], keep=False, interval=2.0, dry_build=True, erp_port=7001, dash_port=7002))
+    assert (d.port, d.dash) == (7001, 7002)
+    d2 = AD.Drill(SimpleNamespace(only=["G"], keep=False, interval=2.0, dry_build=True))
+    assert (d2.port, d2.dash) == (AD.ERP_PORT, AD.DASH_PORT)
+
+
 def test_check_records_pass_fail_and_needs_all():
     c = AD.Check("X", "t", "e")
     c.ok("a", True)
@@ -1125,3 +1145,23 @@ def test_code_literals_also_scan_pyw(tmp_path):
     (tmp_path / "backend").mkdir()
     (tmp_path / "backend" / "x.pyw").write_text('"%s"' % PF.PROD_IP, encoding="utf-8")
     assert any(r.endswith("x.pyw") for r, _w in PF.code_literal_findings(tmp_path)[0])
+
+
+def test_enable_loopback_internal_runs_in_the_drill_install_and_waits_for_the_cache(tmp_path, monkeypatch):
+    d, _ = _dash_drill(tmp_path, monkeypatch)
+    d.log = lambda *a, **k: None
+    seen, slept = [], []
+    d.guard.run_tool = lambda argv, cwd=None, timeout=0, **k: seen.append((argv, Path(cwd))) or (0, "LOOPBACK_INTERNAL 1\n")
+    monkeypatch.setattr(AD.time, "sleep", lambda s: slept.append(s))
+    d.enable_loopback_internal()
+    assert seen[0][1].resolve() == (d.inst / "backend").resolve() and "publish_direct" in seen[0][0][2] and "loopback_is_internal" in seen[0][0][2]
+    assert slept == [AD.SETTINGS_CACHE_WAIT] and AD.SETTINGS_CACHE_WAIT > 15          # settings_registry._TTL
+    d.guard.run_tool = lambda argv, cwd=None, timeout=0, **k: (1, "boom")
+    with pytest.raises(AD.DrillError):
+        d.enable_loopback_internal()
+
+
+def test_admin_login_happens_after_enabling_loopback_internal_and_the_deviation_is_documented():
+    b = SRC[SRC.index("    def setup_admin_and_delivery_root"):SRC.index("    @property")]
+    assert b.index("self.enable_loopback_internal()") < b.index("DMA.setup_company(") < b.index('"/api/auth/login"')
+    assert any("loopback_is_internal" in x for x in AD.DEVIATIONS)

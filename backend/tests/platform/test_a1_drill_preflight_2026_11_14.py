@@ -51,7 +51,7 @@ def test_all_good_passes_and_checks_every_item():
     rows = PF.check(GOOD_ROOT, FakeProbes())
     assert _failed(rows) == []
     labels = " ".join(r[0] for r in rows)
-    for needle in ("排程工作", "演練路徑", "6766", "8766", "666", "本機不是正式機"):
+    for needle in ("排程工作", "演練路徑", "6866", "8866", "666", "本機不是正式機"):
         assert needle in labels, needle
     assert PF.require_ok(GOOD_ROOT, FakeProbes())
 
@@ -65,8 +65,8 @@ def test_check_has_no_ping_or_tcp_to_the_prod_machine():
 
 @pytest.mark.parametrize("probe_kw,expected", [
     ({"task": True}, "排程工作不存在"),
-    ({"listening": (6766,)}, "ERP 埠 6766"),
-    ({"listening": (8766,)}, "儀表板埠 8766"),
+    ({"listening": (6866,)}, "ERP 埠 6866"),
+    ({"listening": (8866,)}, "儀表板埠 8866"),
     ({"listening": (666,)}, "正式 ERP 埠 666"),
     ({"ips": (PROD,)}, "本機不是正式機"),
 ])
@@ -129,7 +129,7 @@ def test_real_is_listening_distinguishes_listening_from_refused():
 
 # ── 第 2 道：靜態掃描 ───────────────────────────────────────────────────
 
-def _drill_dir(tmp_path, ps1_root=None, port=6766, bat_port=6766, bat_host="127.0.0.1", extra=None):
+def _drill_dir(tmp_path, ps1_root=None, port=6866, bat_port=6866, bat_host="127.0.0.1", extra=None):
     root = tmp_path / "a1-drill" / "inst"
     (root / "backend" / "tools").mkdir(parents=True)
     pr = ps1_root if ps1_root is not None else str(root)
@@ -174,7 +174,7 @@ def test_static_scan_finds_prod_references_and_non_local_erp_urls(tmp_path, extr
 
 
 def test_static_scan_allows_loopback_erp_urls(tmp_path):
-    root = _drill_dir(tmp_path, extra={"backend/.env": "MOTRIX_DELIVERY_ERP_URL=https://127.0.0.1:6766\nerp_url=http://localhost:6766\nERP=http://[::1]:6766\n"})
+    root = _drill_dir(tmp_path, extra={"backend/.env": "MOTRIX_DELIVERY_ERP_URL=https://127.0.0.1:6866\nerp_url=http://localhost:6866\nERP=http://[::1]:6866\n"})
     assert PF.static_scan(root)["findings"] == []
 
 
@@ -192,12 +192,12 @@ def test_static_scan_ps1_prodroot_and_port_must_point_at_the_drill(tmp_path):
     root2 = _drill_dir(tmp_path / "b", port=666)
     assert any("$Port 不是演練埠" in w for _r, w in PF.static_scan(root2)["findings"])
     root3 = _drill_dir(tmp_path / "c")
-    (root3 / "backend" / "tools" / "apply_update.ps1").write_text('$ProdRoot = "a"\n$ProdRoot = "b"\n$Port = 6766\n', encoding="utf-8")
+    (root3 / "backend" / "tools" / "apply_update.ps1").write_text('$ProdRoot = "a"\n$ProdRoot = "b"\n$Port = 6866\n', encoding="utf-8")
     assert any("恰好一行" in w for _r, w in PF.static_scan(root3)["findings"]), "不猜：多一行就拒絕"
 
 
 def test_static_scan_autostart_must_bind_loopback_and_drill_port(tmp_path):
-    assert any("--port 6766" in w for _r, w in PF.static_scan(_drill_dir(tmp_path / "a", bat_port=666))["findings"])
+    assert any("--port 6866" in w for _r, w in PF.static_scan(_drill_dir(tmp_path / "a", bat_port=666))["findings"])
     assert any("127.0.0.1" in w for _r, w in PF.static_scan(_drill_dir(tmp_path / "b", bat_host="0.0.0.0"))["findings"])
 
 
@@ -241,7 +241,7 @@ def _c(remote, pid=1, port=443, state="Established"):
 
 
 def test_monitor_clean_run_logs_every_tick_and_states_zero_prod_connections(tmp_path):
-    m = _mon(tmp_path, [{"tree": [100, 101], "conns": [_c("127.0.0.1", port=6766), _c("::1", port=8766)]}] * 3)
+    m = _mon(tmp_path, [{"tree": [100, 101], "conns": [_c("127.0.0.1", port=6866), _c("::1", port=8866)]}] * 3)
     for _ in range(3):
         assert m.tick() == []
     m.check_clean()
@@ -321,10 +321,10 @@ Active Connections
 
   Proto  Local Address          Foreign Address        State           PID
   TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1000
-  TCP    127.0.0.1:6766         127.0.0.1:50000        ESTABLISHED     200
+  TCP    127.0.0.1:6866         127.0.0.1:50000        ESTABLISHED     200
   TCP    192.168.1.5:50001      @@PROD@@:666           ESTABLISHED     201
   TCP    192.168.1.5:50002      142.250.1.1:443        TIME_WAIT       0
-  TCP    [::1]:8766             [::1]:50003            ESTABLISHED     202
+  TCP    [::1]:8866             [::1]:50003            ESTABLISHED     202
   TCP    [fe80::1%12]:50004     [fe80::2%12]:445       ESTABLISHED     203
   UDP    0.0.0.0:5353           *:*                                    300
 """.replace("@@PROD@@", PROD)
@@ -405,11 +405,11 @@ def test_the_unproven_run_still_reports_a_seen_prod_connection(tmp_path):
 
 
 NETSTAT_UDP = """
-  TCP    127.0.0.1:6766         0.0.0.0:0              LISTENING       400
+  TCP    127.0.0.1:6866         0.0.0.0:0              LISTENING       400
   UDP    0.0.0.0:5353           *:*                                    300
-  UDP    127.0.0.1:6766         *:*                                    401
+  UDP    127.0.0.1:6866         *:*                                    401
   UDP    192.168.1.5:50123      @@PROD@@:53          500
-  UDP    [::]:8766              *:*                                    402
+  UDP    [::]:8866              *:*                                    402
 """.replace("@@PROD@@", PROD)
 
 
@@ -423,7 +423,7 @@ def test_udp_rows_are_never_connections_netstat_cannot_show_udp_peers():
 
 
 def test_listening_pids_finds_the_owners_of_the_drill_ports_for_tcp_and_udp():
-    assert PF.listening_pids(NETSTAT_UDP, (6766, 8766)) == {400, 401, 402}
+    assert PF.listening_pids(NETSTAT_UDP, (6866, 8866)) == {400, 401, 402}
     assert PF.listening_pids(NETSTAT_UDP, (9999,)) == set()
 
 
@@ -436,7 +436,7 @@ def test_tree_script_matches_orphans_by_command_line_and_excludes_itself():
 # ── h11 ③：乾淨環境 ──────────────────────────────────────────────────────────
 
 def test_env_problems_flags_proxies_prod_addresses_and_non_local_motrix_urls():
-    assert PF.env_problems({"PATH": "C:\\x", "MOTRIX_TRAIN": "1", "MOTRIX_DELIVERY_ERP_URL": "http://127.0.0.1:6766"}) == []
+    assert PF.env_problems({"PATH": "C:\\x", "MOTRIX_TRAIN": "1", "MOTRIX_DELIVERY_ERP_URL": "http://127.0.0.1:6866"}) == []
     assert PF.env_problems({"HTTPS_PROXY": "http://proxy.corp:3128"})
     assert PF.env_problems({"http_proxy": "http://proxy.corp:3128"}), "小寫也算"
     assert PF.env_problems({"MOTRIX_DELIVERY_ERP_URL": "http://%s:666" % PROD})
@@ -456,7 +456,7 @@ def test_sanitized_env_keeps_only_the_whitelist_and_sets_loopback_urls_and_offli
             "MOTRIX_SECRET": "x", "HTTP_PROXY": "http://p:1", "HTTPS_PROXY": "http://p:1", "ALL_PROXY": "http://p:1", "NO_PROXY": "a",
             "AWS_ACCESS_KEY_ID": "k", "TEMP": "D:\\t"}
     env = PF.sanitized_env(environ=host)
-    assert env["MOTRIX_DELIVERY_ERP_URL"] == "http://127.0.0.1:6766"
+    assert env["MOTRIX_DELIVERY_ERP_URL"] == "http://127.0.0.1:6866"
     assert env["Path"] == "C:\\Windows" and env["SystemRoot"] == "C:\\Windows" and env["TEMP"] == "D:\\t"
     low = {k.upper() for k in env}
     for gone in ("MOTRIX_SECRET", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "AWS_ACCESS_KEY_ID"):
@@ -665,7 +665,7 @@ def test_guard_launch_refuses_before_ready_and_uses_the_clean_environment(tmp_pa
         monkeypatch.setenv("MOTRIX_X", "leak")
         monkeypatch.setenv("HTTPS_PROXY", "http://proxy.corp:3128")
         rc, out = g.launch(prog, tmp_path, "跑測試程式", wait=True, timeout=60)
-        assert rc == 0 and out.split() == ["none", "none", "1", "http://127.0.0.1:6766"], out
+        assert rc == 0 and out.split() == ["none", "none", "1", "http://127.0.0.1:6866"], out
         assert os_pid() in g.pids()
     finally:
         mon.stop()

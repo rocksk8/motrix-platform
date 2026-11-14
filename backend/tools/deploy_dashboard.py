@@ -25,8 +25,10 @@ import time
 import uuid
 from pathlib import Path
 
-import requests
-import urllib3
+import ssl
+import urllib.error
+import urllib.request
+
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -34,10 +36,74 @@ from pydantic import BaseModel
 
 import deploy_insights  # 同目錄；CORE-SPEC §9e D2／D6／D7 的純函式
 
-# 正式機是自簽憑證（見 https_setup.ps1），這裡查狀態用的 verify=False 本來
-# 就是刻意跳過驗證（跟 apply_update.ps1 的 curl.exe -k 是同一件事），關掉
-# urllib3 每次都印的 InsecureRequestWarning，避免洗版這個小工具自己的輸出。
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ── HTTP 用標準庫（T87 A1 M1，PM 裁示 2026-11-14）──────────────────────────────
+# 正式機的 Python312 沒有 requests（只有 urllib3／fastapi／uvicorn／pydantic／websockets），
+# 而且不在正式機另外裝套件。所以這支小工具改用 urllib.request；下面的 `requests` 是
+# 這個檔案自己的小物件（不是第三方套件），保留 .get／.post／RequestException 這幾個名字，
+# 讓呼叫端與既有測試（monkeypatch.setattr(dd.requests, "get", …)）都不用動。
+# 行為同先前：HTTP 4xx/5xx 不丟例外、當成回應回傳；連線／逾時／TLS 失敗丟 RequestException；
+# verify=False 就是不驗憑證（正式機是自簽憑證，跟 apply_update.ps1 的 curl.exe -k 同一件事）。
+class _RequestException(Exception):
+    """連線、逾時、TLS 之類送不出去或收不到的錯誤（HTTP 狀態碼不算）。"""
+
+
+class _Response:
+    def __init__(self, status_code, body, url=""):
+        self.status_code = status_code
+        self.content = body or b""
+        self.url = url
+
+    @property
+    def ok(self):
+        return self.status_code < 400
+
+    @property
+    def text(self):
+        return self.content.decode("utf-8", "replace")
+
+    def json(self):
+        return json.loads(self.content.decode("utf-8"))
+
+
+def _http_request(method, url, json_body=None, headers=None, verify=True, timeout=None):
+    data = None
+    hdrs = dict(headers or {})
+    if json_body is not None:
+        data = json.dumps(json_body).encode("utf-8")
+        hdrs.setdefault("Content-Type", "application/json")
+    handlers = []
+    if str(url).lower().startswith("https"):
+        ctx = ssl.create_default_context()
+        if not verify:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+    opener = urllib.request.build_opener(*handlers)
+    try:
+        req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+        with opener.open(req, timeout=timeout) as resp:
+            return _Response(resp.status, resp.read(), url)
+    except urllib.error.HTTPError as e:                      # 4xx／5xx：當回應回傳，跟 requests 一樣
+        try:
+            body = e.read()
+        except Exception:
+            body = b""
+        return _Response(e.code, body, url)
+    except (urllib.error.URLError, OSError, ValueError) as e:  # 連線／逾時／TLS／網址壞
+        raise _RequestException(str(e)) from e
+
+
+class requests:                                              # noqa: N801 —— 刻意同名，見上方說明
+    RequestException = _RequestException
+
+    @staticmethod
+    def get(url, headers=None, verify=True, timeout=None, **_ignored):
+        return _http_request("GET", url, None, headers, verify, timeout)
+
+    @staticmethod
+    def post(url, json=None, headers=None, verify=True, timeout=None, **_ignored):
+        return _http_request("POST", url, json, headers, verify, timeout)
 
 # 2026-09-11：所有 subprocess 一律帶這個旗標。本檔正常情況下是由 pythonw.exe
 # 啟動的（桌面捷徑／ctl 小程式都是），**主行程本身沒有主控台**，於是每呼叫一次
@@ -944,6 +1010,38 @@ def _delivered_status() -> dict:
                                for k, v in overlays.items()}}
 
 
+def _is_this_machine(host: str) -> bool:
+    """`host` 是不是這台機器自己的位址（含 127.x）。只在本機 bind 一個 UDP socket 試試：位址不屬於本機介面就會失敗；**不送任何封包**。"""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.bind((host, 0))
+        return True
+    except (OSError, ValueError, UnicodeError):
+        return False
+
+
+def _prod_status_base_url():
+    """健康檢查要連的位址。⇒ URL，或 None（不連）。
+
+    兩種執行位置都要對（T87 A1：儀表板第一次裝到正式機上）：
+    - 開發機：`PROD_BASE_URL`（正式機的對外位址）照舊。
+    - 正式機自己：`PROD_HOST` 是這台機器自己的位址 ⇒ **不連自己的對外 IP**，改連本機 ERP（`_erp_base_url()`，預設 127.0.0.1:666）；
+      本機 ERP 位址若不是本機（例如環境變數被設成別台）⇒ None，什麼都不連。
+    - `PROD_BASE_URL` 本身已是本機位址（演練副本把它改成本機死路）⇒ 原樣使用。"""
+    from urllib.parse import urlparse
+    def _loopback(url):
+        try:
+            return (urlparse(url).hostname or "").lower() in ("127.0.0.1", "localhost", "::1")
+        except ValueError:
+            return False
+    host = urlparse(PROD_BASE_URL).hostname or ""
+    if _loopback(PROD_BASE_URL) or not _is_this_machine(host):
+        return PROD_BASE_URL
+    erp = _erp_base_url()
+    return erp if _loopback(erp) else None
+
+
 def _check_prod_status() -> dict:
     """實際打正式機的健康檢查＋版本查詢，REST 端點跟 WebSocket 共用同一份
     邏輯，避免以後改一邊忘了改另一邊（這個專案已經在部署工具腳本本身踩過
@@ -957,24 +1055,28 @@ def _check_prod_status() -> dict:
                      "source": "delivery"} if delivered.get("available") else {})
         return {"healthy": None, "deployed": deployed, "delivered": delivered,
                 "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
+    base = _prod_status_base_url()
     healthy = False
+    deployed = {}
+    system_version = {}
+    if base is None:                                    # 在正式機上跑、而本機 ERP 位址又不是本機 ⇒ 什麼都不連（寧可顯示「沒有檢查」）
+        return {"healthy": None, "deployed": deployed, "systemVersion": system_version, "delivered": delivered,
+                "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:
-        r = requests.get(f"{PROD_BASE_URL}/api/ping", verify=False, timeout=5)
+        r = requests.get(f"{base}/api/ping", verify=False, timeout=5)
         healthy = r.ok
     except Exception:
         pass
 
-    deployed = {}
     try:
-        r2 = requests.get(f"{PROD_BASE_URL}/api/system/deployed-version", verify=False, timeout=5)
+        r2 = requests.get(f"{base}/api/system/deployed-version", verify=False, timeout=5)
         if r2.ok:
             deployed = r2.json()
     except Exception:
         pass
 
-    system_version = {}
     try:
-        r3 = requests.get(f"{PROD_BASE_URL}/api/system/version", verify=False, timeout=5)
+        r3 = requests.get(f"{base}/api/system/version", verify=False, timeout=5)
         if r3.ok:
             system_version = r3.json()
     except Exception:

@@ -2,7 +2,7 @@
 
 三道，全部不主動連線正式機（不 ping、不連 TCP；可達性只看本機路由表，且只當資訊、不當放行條件）：
   1. 演練前（`check`）：排程工作「MOTRIX ERP Server Autostart」不存在；演練路徑不含 V9.0 且在 a1-drill 底下；
-     6766／8766 沒人聽、正式 ERP 埠 666 本機沒人聽；本機沒有正式機的 IP。
+     預設 6866／8866（可設定）沒人聽、正式 ERP 埠 666 本機沒人聽；本機沒有正式機的 IP。
   2. 安裝建好、啟動之前（`static_scan`）：掃演練目錄裡的設定與腳本副本（.ps1 .bat .cmd .env .ini .cfg .toml .yaml .yml .json），
      不得出現正式機位址、V9.0、或任何非本機的 ERP 位址；`apply_update.ps1` 副本的 `$ProdRoot`／`$Port`、`autostart.bat` 的埠與綁定位址必須指向演練。
   3. 演練期間（`ConnectionMonitor`）：每 2 秒用 netstat -ano 查演練程序樹（含子行程；Get-NetTCPConnection 在這台機器上查不到任何東西，會變成假綠燈，所以不用）有沒有連往任何非本機位址；
@@ -11,7 +11,7 @@
 
 用法：
   python tools/platform/a1_drill_preflight.py [--root D:\\Claude-pm\\a1-drill\\<時間戳>]   # 只做第 1 道，結束碼 0＝可以建演練
-  python tools/platform/a1_drill_preflight.py --scan <演練目錄> [--erp-port 6766]            # 第 2 道
+  python tools/platform/a1_drill_preflight.py --scan <演練目錄> [--erp-port 6866]            # 第 2 道
 「無法確認＝不通過」。
 """
 import argparse
@@ -27,8 +27,8 @@ from pathlib import Path
 
 TASK_NAME = "MOTRIX ERP Server Autostart"
 PROD_IP = "172.16.10.177"
-ERP_PORT = 6766
-DASH_PORT = 8766
+ERP_PORT = 6866     # 預設避開其他視窗的閘門／測試（6766 被它們長時間占用）；可用 --erp-port／--dash-port 改
+DASH_PORT = 8866
 PROD_ERP_PORT = 666
 DRILL_BASE = r"D:\Claude-pm\a1-drill"
 

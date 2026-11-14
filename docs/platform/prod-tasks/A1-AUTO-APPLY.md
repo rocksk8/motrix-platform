@@ -20,9 +20,35 @@
 1. 來源＝與 T87 包同一個 commit（`git show <commit>:backend/tools/deploy_dashboard.py`），不是任意一份開發機上的檔；步驟檔列出檔案的 SHA-256，放檔後比對；
 2. **不要**一起放 `_dashboard_remote.ps1`、`check_prod_drift.ps1`（開發機經 WinRM 打正式機用的腳本，正式機自己不需要）；
 3. 放完後確認儀表板能開、「交付」總覽正常。之後（T88 起）若更新動到儀表板本身，同樣要靠步驟檔，因為更新包帶不動它；
-4. 待 hichan-4／PM 確認：**正式機目前實際有沒有儀表板、放在哪、怎麼啟動**（撰寫本文件時沒有證據可查；演練從 commit 取檔放進演練目錄，不代表正式機現況）。
+4. 步驟檔這一步**只複製並核對、不啟動**。
+
+**正式機現況（PM 2026-11-14 唯讀查詢）**：正式機上**完全沒有儀表板**——沒有 `deploy_dashboard.py`／`.html`、沒有相關程序、8765／8766 沒人聽、沒有任何啟動機制（排程只有 Autostart、Daily Backup、Heartbeat）。`_dashboard_remote.ps1`、`check_prod_drift.ps1` 也不存在。所以對正式機而言 A1 是**新增一個元件**。
 
 演練（`tools/platform/a1_drill.py`）照這個模型做：從同一個 commit 以 `git show` 取這兩個檔放進演練安裝、把 `PROD_HOST` 改成本機死路、只從演練安裝目錄啟動。
+
+## 正式機上的使用方式（PM 裁示 2026-11-14）
+
+**平常不執行。** 只在更新的時候，由操作的人用遠端桌面登入正式機後**手動啟動**；只綁 127.0.0.1；套用完成就關掉。**不加排程、不加開機啟動、不開防火牆埠。**
+
+1. **啟動**（在正式機的命令提示字元；Python 與 `autostart.bat` 啟動 ERP 的是同一個 Python312）：
+   ```
+   cd /d C:\Users\Motrix\Desktop\V9.0\backend\tools
+   C:\Users\Motrix\AppData\Local\Programs\Python\Python312\python.exe deploy_dashboard.py
+   ```
+   視窗會印 `MOTRIX 部署儀表板：http://127.0.0.1:8765`，**這個視窗要一直開著**（關掉就是停止）。路徑以正式機實際的 `autostart.bat` 為準。
+2. **開瀏覽器**：在**正式機自己的桌面**（遠端桌面裡）開 `http://127.0.0.1:8765`。從別台電腦連不到（只綁本機，請求層也只收本機）。
+3. **套用**：照上面「操作流程」。
+4. **關閉**：在啟動視窗按 Ctrl+C（或直接關視窗），再用 `netstat -ano | findstr :8765` 確認沒有人在聽。
+5. **沒有開著時**：套用流程照舊用步驟檔（儀表板不是套用的必要條件；M1 只是把驗收做成程式）。
+
+**正式機上的健康檢查位址**：開發機的儀表板從外面讀正式機（`PROD_BASE_URL`＝對外位址）。裝在正式機上時，`PROD_HOST` 是**這台機器自己的位址**，程式（`_prod_status_base_url`）會偵測到並改連**本機 ERP**（`_erp_base_url()`，預設 `127.0.0.1:666`），**絕不連自己的對外 IP**；本機 ERP 位址若被環境變數設成非本機，就什麼都不連（畫面顯示「沒有檢查」）。交付資料夾已設定時本來就不連線。兩種位置都有測試（`test_deploy_dashboard_prod_self_2026_11_14.py`）。
+
+**在正式機上，儀表板連本機 ERP 要輸入 TOTP（正式機設定不准改）**：本機最高管理者帳號從「外部」登入要過 TOTP。正式機的 `external_login.loopback_is_internal` 是**預設值（不算內部）**，所以儀表板（在正式機上）→ 本機 ERP（`127.0.0.1:666`）這條連線**被 ERP 視為外部連線，一定要輸入 TOTP**。儀表板的「套用」區本來就有 TOTP 欄位（`dl-totp`；ERP 回 `totpRequired` 時走 `/api/auth/login/totp`）；操作的人要準備好驗證器。**這個設定不准為了省 TOTP 而改**——改了等於放寬正式機的登入防線。
+（只有**演練**例外：演練是全新的暫存資料庫，沒有 TOTP 裝置，所以 `a1_drill.py` 在演練資料庫裡把 `loopback_is_internal` 設成 1，並寫在演練報告的「與正式機不同之處」；正式機不受影響。）
+
+**Python 套件（PM 2026-11-14 在正式機實測）**：正式機 Python312 **沒有 `requests`**，有 urllib3 2.7.0、fastapi 0.141.1、uvicorn 0.52.0、pydantic 2.13.4、websockets 17.0.1；**不在正式機另外安裝套件**。因此 `deploy_dashboard.py` 的 HTTP 呼叫改用標準庫 `urllib.request`（檔內自帶的小物件，保留 `requests.get／post／RequestException` 名字；行為：HTTP 4xx／5xx 當回應回傳、連線／逾時／TLS 失敗丟 `RequestException`、`verify=False` 不驗自簽憑證、逾時秒數不變）。`auto_apply.py` 本來就只用標準庫。守門測試（`test_deploy_dashboard_stdlib_http_2026_11_14.py`）：這兩個檔的第三方 import 必須在 `backend/requirements.txt` 或上列「正式機實測有」清單內；並在擋掉 `requests`／`urllib3` 的乾淨行程裡實際 import 一次。以後這兩個檔想 import 新的第三方套件，這個測試會擋下，要先由 PM 決定。
+
+**演練埠**：`a1_drill.py` 的 ERP／儀表板預設用 **6866／8866**（避開其他視窗常用的 6766；可用 `--erp-port`／`--dash-port` 改，不可是 666 或 8765，兩者不可相同）；preflight 兩個埠都要沒人聽才會開跑。
 
 ## 操作流程（儀表板「6. 套用更新」）
 

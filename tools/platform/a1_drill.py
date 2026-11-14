@@ -58,6 +58,7 @@ PROBE_TABLE = "a1_drill_probe"
 
 BASE_STATEMENT = ("演練的「T86」基底＝`feat/t87-a1-m1-h7` 頭（＝T86 凍結頭＋A1）。這等於「T87 用步驟檔把 A1 裝上正式機，"
                   "之後 T88 才是第一次 A1 半自動套用」——本演練模擬的就是 T88 那一步（假 T87 包＝T88 的替身）。")
+SETTINGS_CACHE_WAIT = 17                 # settings_registry._TTL＝15 秒；ERP 行程內快取過期後才讀得到新值
 DEVIATIONS = [
     "演練資料庫是**全新資料庫**（基底程式啟動時建立、經正式路徑設定本公司資料），不是正式資料的備份副本：不把任何真實資料放進演練目錄。"
     "代價：預演／遷移的耗時與資料量只當量級，不能當正式機預估。",
@@ -66,6 +67,8 @@ DEVIATIONS = [
     "假 T87 包裡的這三個檔也是同樣的演練副本（否則套用後安裝目錄會變回指向正式機路徑）。",
     "Email／LINE／雲端存檔／排程在演練機全部關閉：只驗站內通知與稽核列；Email 路徑只能驗到「被抑制」。",
     "pip 離線（PIP_NO_INDEX=1）：演練 venv 已滿足 requirements，套用腳本照常執行 pip 步驟。",
+    "演練庫把外網登入防護的「本機直連算內網」（`external_login.loopback_is_internal`）直接寫成 1：全新庫的最高管理者還沒啟用兩步驟驗證，"
+    "而本機直連預設算外網（要先有 TOTP）⇒ 否則連登入都做不到。正式機的最高管理者有 TOTP，所以**演練沒有走到儀表板的 TOTP 輸入**（那一段只有單元測試涵蓋）。",
 ]
 
 AUTOSTART_A1 = r"""@echo off
@@ -485,7 +488,8 @@ class Drill:
         self.staging = self.base / "motrix-staging"
         self.reports = Path(REPORT_ROOT) / self.stamp
         self.python = sys.executable
-        self.port, self.dash = ERP_PORT, DASH_PORT
+        self.port = int(getattr(args, "erp_port", None) or ERP_PORT)
+        self.dash = int(getattr(args, "dash_port", None) or DASH_PORT)
         self.commit = None
         self.monitor = None
         self.guard = None
@@ -679,9 +683,23 @@ class Drill:
             DMA._rmtree(child) if child.is_dir() else child.unlink()
 
     # -- 管理員、交付資料夾設定 --------------------------------------------------
+    def enable_loopback_internal(self):
+        """演練庫專用（見 DEVIATIONS）：用安裝的後端自己的 `core.definitions.publish_direct` 把 `external_login.loopback_is_internal` 寫成 1，
+        再等設定快取（TTL 15 秒）過期。只動演練安裝裡的演練庫；經 guard.run_tool（乾淨環境）。"""
+        code = ("import db;from core import definitions as D;from helpers import settings_registry as SR;"
+                "c=db.get_db();D.publish_direct(c,'setting_group','external_login','company',"
+                "{'group':'external_login','values':{'loopback_is_internal':1}},'a1 drill','a1-drill');c.close();"
+                "print('LOOPBACK_INTERNAL',SR.get('external_login','loopback_is_internal'))")
+        rc, out = self.guard.run_tool([self.python, "-c", code], cwd=self.in_base(self.inst / "backend"), timeout=120)
+        if rc != 0 or "LOOPBACK_INTERNAL 1" not in out:
+            raise DrillError("演練庫設定「本機直連算內網」失敗（rc=%s）：%s" % (rc, out[-400:]))
+        self.log("演練庫：本機直連算內網＝1（等設定快取過期 %d 秒）" % SETTINGS_CACHE_WAIT)
+        time.sleep(SETTINGS_CACHE_WAIT)
+
     def setup_admin_and_delivery_root(self):
         cred = (self.inst / "backend" / ".initial_admin_credentials.txt").read_text(encoding="utf-8")
         user = re.search(r"帳號:\s*(\S+)", cred).group(1)
+        self.enable_loopback_internal()                                 # setup_company 的第一次登入（臨時密碼）就會被當外網擋下，所以要在它之前
         DMA.setup_company(self.inst, self.port)
         pw = "Drill-%d-Pass!9" % self.port
         s, b = DMA._api(self.port, "/api/auth/login", {"username": user, "password": pw})
@@ -1082,10 +1100,17 @@ def main(argv=None):
     ap.add_argument("--only", default=",".join(SCENARIOS), type=lambda s: [x.strip() for x in s.split(",") if x.strip()])
     ap.add_argument("--keep", action="store_true", help="結束後保留演練目錄")
     ap.add_argument("--interval", type=float, default=2.0, help="連線監看取樣間隔（秒）")
+    ap.add_argument("--erp-port", type=int, default=ERP_PORT, help="演練 ERP 埠（預設 %d，避開其他視窗用的 6766）" % ERP_PORT)
+    ap.add_argument("--dash-port", type=int, default=DASH_PORT, help="演練儀表板埠（預設 %d）" % DASH_PORT)
     a = ap.parse_args(argv)
     bad = [x for x in a.only if x not in SCENARIOS]
     if bad:
         ap.error("不認得的情境：%s（可用：%s）" % (bad, ",".join(SCENARIOS)))
+    for name in ("erp_port", "dash_port"):
+        if not 1024 <= getattr(a, name) <= 65535 or getattr(a, name) in (666, 8765):
+            ap.error("--%s 不合理（不可是正式 ERP 的 666 或儀表板預設的 8765）：%s" % (name.replace("_", "-"), getattr(a, name)))
+    if a.erp_port == a.dash_port:
+        ap.error("ERP 埠與儀表板埠不可相同")
     d = Drill(a)
     d.run()
     return d.ctx.get("exit_code", 2)
