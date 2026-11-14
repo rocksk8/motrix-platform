@@ -3,8 +3,8 @@
 
 [單位] tool:auto_apply    [層] 部署工具（正式機本機；由 deploy_dashboard 呼叫，不開網路端點）
 [公開介面] capture_state, diff_state, compare_diffs, integrity_check, precheck, rehearse, consent_digest,
-    verify_after, apply_with_verification, estimate_downtime, render_report, write_report, audit_event, erp_audit,
-    load_expectations, python_exe
+    verify_after, apply_with_verification, estimate_downtime, render_report, write_report, audit_event, audit_chain_problems,
+    structure_hash, finish, finish_crashed, build_notice, notify_result, load_expectations, is_loopback_url, python_exe
 [不變式]
   - **不碰 apply_update.ps1／rollback_update.ps1／delivery.py**：套用本身仍是 delivery.apply_staged（它的備份、
     預演、停服、健檢、**內建自動回滾**都照舊）。本檔只在它前後加「記錄」與「驗收」。
@@ -14,6 +14,9 @@
   - 預期變更＝預演前後的結構差異（sqlite_master／欄位／模組 schema 版本／設定鍵名）；**不比資料列、不存設定值**
     （只存被指定「不得變動」的鍵的雜湊）。
   - 報告與稽核不含密碼、token、設定值、個資；稽核另寫一份雜湊鏈 JSONL。
+  - 預演是一次性（儀表板在套用一開始就作廢它）；套用前再比一次正式庫的結構雜湊；稽核寫不進去就不套用；套用程序丟例外也補 apply_end。
+  - 套用結果（成功、驗證未通過或沒做、失敗、被擋、中斷）一律由 `notify_result` 請安裝目錄裡的後端（`a1_notify.py`）寫 ERP 稽核列、
+    站內通知，並走 `email_notify.send_registered` 發 Email／LINE；本檔不 import ERP 的 helpers。
 [契約題] tests/platform/test_a1_auto_apply_2026_11_14.py
 [文件] docs/platform/prod-tasks/A1-AUTO-APPLY.md（設計全文：D:\\Claude-pm\\t87-design\\A1-auto-apply.md；M2 不在這一版）
 """
@@ -29,6 +32,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -67,8 +71,20 @@ def _rows(conn, sql, args=()):
         raise
 
 
+#: 每個行程一把隨機鹽：受監看設定的值雜湊即使被存下來，也不能拿字典反推低熵的值（同一行程內前後比對不受影響）。
+_SALT = os.urandom(16)
+
+
 def _value_hash(text):
-    return hashlib.sha256(("" if text is None else str(text)).encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(_SALT + ("" if text is None else str(text)).encode("utf-8")).hexdigest()[:16]
+
+
+def structure_hash(state):
+    """資料庫「結構」的雜湊（schema_version、模組版號、物件、欄位）。**不含**設定鍵名與監看值：執行中服務會寫設定，納入會誤擋。
+    預演時記下副本的值；套用時與正式庫目前的值比，不同＝預演之後結構變動過，預演預期已不適用。"""
+    blob = json.dumps({k: state.get(k) for k in ("schema_version", "modules", "objects", "columns")},
+                      sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def capture_state(db_path, watch_keys=()):
@@ -292,15 +308,14 @@ def consent_digest(pkg_digest, expected_diff):
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
-def _pyc_inventory(root):
+def _tree_inventory(root):
+    """root 底下每一個檔與資料夾（含 __pycache__、.pyc、任何預演新產生的東西）。"""
     found = set()
     for dp, dns, fns in os.walk(root):
         for d in dns:
-            if d == "__pycache__":
-                found.add(os.path.join(dp, d))
+            found.add(os.path.join(dp, d))
         for fn in fns:
-            if fn.endswith(".pyc"):
-                found.add(os.path.join(dp, fn))
+            found.add(os.path.join(dp, fn))
     return found
 
 
@@ -330,16 +345,19 @@ def _online_backup(src, dst):
         s.close()
 
 
-def rehearse(staged, install_root, work_root, watch_keys=(), run=None, clock=None):
+def rehearse(staged, install_root, work_root, watch_keys=(), run=None, clock=None, verify_fn=None):
     """在正式庫的線上備份副本上，用**新包**的 migrate_like_startup 跑一遍，取預演前後差異＝預期差異。
 
     ⇒ dict：ok、problems、seconds、db_mb、expected_diff、summary（給人看的行）、pkg_digest、digest（同意綁定值）、
-    at（epoch）、tool_tail（工具輸出末 400 字；遷移錯誤可能回顯資料 ⇒ 只在失敗時帶，且截斷）。
-    副本一律刪除（含 -wal／-shm／modules_disabled.json）；暫存包裡預演新產生的 .pyc 一律清掉並記在 notes。"""
+    before_hash（副本預演前的結構雜湊，套用時與正式庫比對）、at（epoch）、
+    tool_tail（工具輸出末 400 字；遷移錯誤可能回顯資料 ⇒ 只在失敗時帶，且截斷）。
+    副本一律刪除（含 -wal／-shm／modules_disabled.json）；暫存包裡預演新產生的任何檔案或資料夾（.pyc、備援庫、logs…）一律清掉並記在 notes。
+    `verify_fn`（選填）＝回傳 `{ok, problems}` 的檢查（儀表板傳 `delivery.verify_staged`）：預演結束後暫存包與簽章清單不符
+    （被改過的檔、清單外多出的檔）⇒ 預演不通過，在這一步就失敗，而不是等使用者輸入密碼之後的套用才發現。"""
     clock = clock or time.time
     t0 = clock()
     out = {"ok": False, "problems": [], "notes": [], "seconds": 0.0, "db_mb": None, "expected_diff": None,
-           "summary": [], "pkg_digest": None, "digest": None, "at": t0, "tool_tail": ""}
+           "summary": [], "pkg_digest": None, "digest": None, "before_hash": None, "at": t0, "tool_tail": ""}
     payload = os.path.join(staged, "payload")
     db, lic = db_paths(install_root)
     tool = os.path.join(payload, "backend", "tools", "migrate_like_startup.py")
@@ -357,11 +375,12 @@ def rehearse(staged, install_root, work_root, watch_keys=(), run=None, clock=Non
     out["db_mb"] = round(os.path.getsize(db) / 2**20, 1)
     work = os.path.join(work_root, "rehearse_%s" % datetime.now().strftime("%Y%m%d_%H%M%S"))
     copy = os.path.join(work, "motrix_erp.db")
-    before_pyc = _pyc_inventory(payload)
+    before_tree = _tree_inventory(payload)
     try:
         os.makedirs(work, exist_ok=True)
         _online_backup(db, copy)
         before = capture_state(copy, watch_keys)
+        out["before_hash"] = structure_hash(before)
         cmd = [python_exe(), "-B", tool, "--db", copy]
         if os.path.isfile(lic):
             cmd += ["--license", lic]
@@ -393,10 +412,18 @@ def rehearse(staged, install_root, work_root, watch_keys=(), run=None, clock=Non
             except OSError:
                 pass
         shutil.rmtree(work, ignore_errors=True)
-        new_pyc = _pyc_inventory(payload) - before_pyc
-        if new_pyc:
-            out["notes"].append("預演在暫存包留下 %d 個 .pyc／__pycache__，已清除（不應發生；請檢查 -B 是否生效）" % len(new_pyc))
-            _purge(new_pyc)
+        new_entries = _tree_inventory(payload) - before_tree
+        if new_entries:
+            out["notes"].append("預演在暫存包留下 %d 個新檔或資料夾（例如 .pyc、備援資料庫、logs），已清除（不應發生；請檢查 -B 是否生效）" % len(new_entries))
+            _purge(new_entries)
+        if verify_fn is not None:
+            try:
+                v = verify_fn()
+            except Exception as exc:                                # noqa: BLE001 — 驗不到暫存包完整 ≠ 通過
+                v = {"ok": False, "problems": ["無法檢查暫存包完整性：%s: %s" % (type(exc).__name__, exc)]}
+            if not v.get("ok"):
+                out["ok"] = False
+                out["problems"].append("預演之後暫存包與簽章清單不符，預演不通過：" + "；".join(v.get("problems") or ["（沒有說明）"]))
         out["seconds"] = round(clock() - t0, 1)
     return out
 
@@ -415,9 +442,47 @@ def load_expectations(payload):
         d = json.load(open(p, encoding="utf-8-sig"))
         if not isinstance(d, dict):
             raise ValueError("不是物件")
-        return d, []
     except (OSError, ValueError) as exc:
         return {}, ["a1_expectations.json 讀不懂（%s）：已略過" % exc]
+    return _sanitize_expectations(d)
+
+
+_BAD_PATH = re.compile(r"[\s\\@]|://|^//")
+
+
+def _safe_url_path(p):
+    """只准同機的絕對路徑（"/…"）：不准 scheme、"@host"、反斜線、"//host"、空白或控制字元（避免 base_url + 路徑變成打到別的主機）。"""
+    return isinstance(p, str) and p.startswith("/") and not _BAD_PATH.search(p) and len(p) <= 300
+
+
+def _safe_rel_file(p):
+    if not isinstance(p, str) or not p or len(p) > 300 or os.path.isabs(p) or re.match(r"^[A-Za-z]:", p) or p.startswith(("/", "\\")):
+        return False
+    return ".." not in re.split(r"[\\/]+", p)
+
+
+def _sanitize_expectations(d):
+    """預期檔欄位的格式檢查（包有簽章，這是縱深防禦）。不合格的項目丟掉並在注記說明；⇒ (cleaned, notes)。"""
+    notes, out = [], {}
+    pages = [x for x in (d.get("pages") or []) if _safe_url_path(x)]
+    auth = [x for x in (d.get("auth_required") or []) if isinstance(x, dict) and _safe_url_path(x.get("path"))]
+    files = [x for x in (d.get("files") or []) if _safe_rel_file(x)]
+    for key, kept, raw in (("pages", pages, d.get("pages")), ("auth_required", auth, d.get("auth_required")), ("files", files, d.get("files"))):
+        if raw and len(kept) != len(raw):
+            notes.append("a1_expectations.json 的 %s 有 %d 項格式不合格，已略過" % (key, len(raw) - len(kept)))
+    out["pages"], out["auth_required"], out["files"] = pages, auth, files
+    out["log_forbid"] = [x for x in (d.get("log_forbid") or []) if isinstance(x, str)]
+    out["watch_settings"] = [x for x in (d.get("watch_settings") or []) if isinstance(x, str)]
+    return out, notes
+
+
+def is_loopback_url(url):
+    """事後驗證與健康檢查只准打本機（TLS 驗證是關的，打到別的主機沒有保護）。"""
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in ("127.0.0.1", "localhost", "::1")
 
 
 def _parse_stamp(s):
@@ -618,29 +683,33 @@ def audit_event(install_root, event):
     with _audit_lock:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            prev = ""
+            prev, torn = "", False
             if os.path.isfile(path):
-                with open(path, "rb") as f:
-                    f.seek(max(0, os.path.getsize(path) - 4096))
-                    lines = [x for x in f.read().decode("utf-8", errors="replace").splitlines() if x.strip()]
-                if lines:
+                raw = open(path, "rb").read()
+                torn = bool(raw) and not raw.endswith(b"\n")                    # 上次寫到一半：先補換行，免得新的一筆黏在殘行後面
+                for line in reversed(raw.decode("utf-8", errors="replace").splitlines()):
+                    if not line.strip():
+                        continue
                     try:
-                        prev = json.loads(lines[-1]).get("hash", "")
-                    except ValueError:
-                        prev = "unreadable"
+                        prev = str(json.loads(line).get("hash", ""))
+                        break
+                    except (ValueError, AttributeError):
+                        continue                                                # 殘行／壞行跳過，接在最後一筆讀得懂的後面（鏈驗證會把壞行報出來）
             rec = dict(event, at=datetime.now().isoformat(timespec="seconds"), prev=prev)
             body = json.dumps(rec, sort_keys=True, ensure_ascii=False)
             rec["hash"] = hashlib.sha256(body.encode("utf-8")).hexdigest()
             with open(path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec, sort_keys=True, ensure_ascii=False) + "\n")
+                f.write(("\n" if torn else "") + json.dumps(rec, sort_keys=True, ensure_ascii=False) + "\n")
             return rec["hash"]
         except OSError:
             return None
 
 
-def audit_chain_problems(path):
-    """驗證 JSONL 雜湊鏈。⇒ 問題清單（空＝完整）。"""
-    problems, prev = [], ""
+def audit_chain_problems(path, anchors=()):
+    """驗證 JSONL 雜湊鏈。⇒ 問題清單（空＝完整）。
+    第一行的前筆雜湊必須是空（否則開頭被刪或換過）；`anchors`＝另存在別處的鏈頭雜湊（ERP audit_log 的 detail、交付資料夾的 <包名>.a1.json）：
+    每一個都必須出現在鏈裡，否則是尾端被截斷或整條重算過。鏈本身沒有金鑰，防不了有寫入權的人整條重算——靠錨點在別處留底。"""
+    problems, prev, seen = [], "", set()
     try:
         lines = [x for x in open(path, encoding="utf-8").read().splitlines() if x.strip()]
     except OSError as exc:
@@ -655,29 +724,14 @@ def audit_chain_problems(path):
         body = json.dumps(rec, sort_keys=True, ensure_ascii=False)
         if h != hashlib.sha256(body.encode("utf-8")).hexdigest():
             problems.append("第 %d 行雜湊不符（內容被改動）" % i)
-        if i > 1 and rec.get("prev") != prev:
-            problems.append("第 %d 行的前筆雜湊對不上（有行被刪或換）" % i)
+        if rec.get("prev") != prev:
+            problems.append("第 %d 行的前筆雜湊對不上（有行被刪、被換，或開頭被截掉）" % i)
         prev = h
+        seen.add(h)
+    for a in anchors or ():
+        if a and a not in seen:
+            problems.append("錨點雜湊 %s… 不在鏈裡（尾端被截斷，或整條被重算）" % str(a)[:12])
     return problems
-
-
-def erp_audit(db_path, username, action, label, detail):
-    """在 ERP 的 audit_log 補一列（讓畫面內的稽核查得到）。**唯一會寫正式庫的地方**，只 INSERT 一列、失敗就算了（回 False）；
-    寫在事後驗證**之後**，不會污染差異比對。detail 為 dict（不得含密碼／token／設定值）。"""
-    try:
-        conn = sqlite3.connect(db_path, timeout=10)
-        try:
-            conn.execute(
-                "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
-                (datetime.now().isoformat(), None, username or "", username or "", action, "system_update", "",
-                 label[:200], json.dumps(detail, ensure_ascii=False)[:4000]))
-            conn.commit()
-        finally:
-            conn.close()
-        return True
-    except sqlite3.Error:
-        return False
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -697,7 +751,7 @@ def render_report(rec):
     v = rec.get("verify") or {}
     lines = ["# 套用報告：%s" % rec.get("name"),
              "",
-             "- **結果**：%s" % {"succeeded": "成功", "verify_failed": "已套用，但事後驗證有項目未通過", "failed": "失敗"}.get(rec.get("outcome"), rec.get("outcome")),
+             "- **結果**：%s" % {"succeeded": "成功", "verify_failed": "已套用，但事後驗證有項目未通過或沒有完成", "failed": "失敗", "crashed": "程序中斷"}.get(rec.get("outcome"), rec.get("outcome")),
              "- 套用者：%s" % (rec.get("by") or "（未記錄）"),
              "- commit：%s" % (r.get("commit") or "（無）"),
              "- 腳本結果：status=%s，rolled_back=%s，service=%s，exit=%s" % (r.get("status"), r.get("rolled_back"), r.get("service"), r.get("exit")),
@@ -716,7 +770,7 @@ def render_report(rec):
         if v.get("warnings"):
             lines += ["### 警告（不擋，請人工看一眼）", ""] + ["- %s" % w for w in v["warnings"]] + [""]
     elif rec.get("outcome") != "succeeded":
-        lines += ["## 事後驗證", "", "套用沒有成功，未做事後驗證。", ""]
+        lines += ["## 事後驗證", "", "沒有做事後驗證（套用沒有成功，或套用腳本回報的狀態無法確認成功）。", ""]
     if rec.get("outcome") != "succeeded":
         lines += ["## 後續處置（停下，由人決定）", "",
                   "- 系統**不會**自動回滾（套用腳本內建的健康檢查失敗回滾除外，結果見上方 rolled_back）。",
@@ -764,6 +818,7 @@ def summary_for_write_back(rec):
     """寫回交付資料夾 results\\<包名>.a1.json 的白名單欄位（不含路徑、設定、報告全文）。"""
     v = rec.get("verify") or {}
     return {"name": rec.get("name"), "outcome": rec.get("outcome"), "verify_ok": v.get("ok") if v else None,
+            "chain_head": rec.get("chain_head"),
             "failed_items": [i["id"] for i in v.get("items", []) if not i["ok"]] if v else [],
             "warnings": len(v.get("warnings", [])) if v else 0,
             "downtime_seconds": rec.get("downtime_seconds"), "rehearsal_seconds": (rec.get("rehearsal") or {}).get("seconds"),
@@ -820,20 +875,30 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
            "verify": None, "downtime_seconds": None, "report": None, "by": who, "install_root": install_root,
            "rehearsal": {k: rehearsal.get(k) for k in ("seconds", "db_mb", "digest", "summary", "at")} if rehearsal else None,
            "notes": list((rehearsal or {}).get("notes") or [])}
-    pre = precheck(install_root, db)
-    if pre:
-        rec["problems"] = ["套用前預檢未通過，沒有開始套用："] + pre
-        audit_event(install_root, {"event": "apply_blocked", "by": who, "problems": pre})
+    def blocked(problems):
+        rec["problems"] = list(problems)
+        rec["stopped_at"] = "套用前檢查，沒有開始套用"
+        audit_event(install_root, {"event": "apply_blocked", "by": who, "problems": rec["problems"]})
         return rec
+
+    pre = precheck(install_root, db)
+    if not is_loopback_url(base_url):
+        pre = list(pre) + ["ERP 位址不是本機（%s）：事後驗證只准打本機" % base_url]
+    if pre:
+        return blocked(["套用前預檢未通過，沒有開始套用："] + pre)
     expectations, exp_notes = load_expectations(os.path.join(staged, "payload"))
     rec["notes"].extend(exp_notes)
     try:
         before = capture_state(db, expectations.get("watch_settings") or ())
     except Exception as exc:                                        # noqa: BLE001
-        rec["problems"] = ["無法記錄套用前的資料庫狀態，沒有開始套用：%s" % exc]
-        audit_event(install_root, {"event": "apply_blocked", "by": who, "problems": rec["problems"]})
-        return rec
-    audit_event(install_root, {"event": "apply_start", "by": who, "rehearsal_digest": (rehearsal or {}).get("digest")})
+        return blocked(["無法記錄套用前的資料庫狀態，沒有開始套用：%s" % exc])
+    # 預演之後正式庫結構若變動過（模組更新、手動改動）：預演的預期差異已不適用，不等套用完才發現
+    rh_hash = (rehearsal or {}).get("before_hash")
+    if rehearsal is not None and rh_hash and rh_hash != structure_hash(before):
+        return blocked(["預演之後正式庫結構已變動，預演結果不再適用，請重新預演"])
+    # 稽核寫不進去就不套用：這是一次動正式機的操作，沒有紀錄不准做
+    if not audit_event(install_root, {"event": "apply_start", "by": who, "rehearsal_digest": (rehearsal or {}).get("digest")}):
+        return blocked(["稽核紀錄（backend\\logs\\a1_audit.jsonl）寫不進去，沒有開始套用：請先排除磁碟或權限問題"])
     mon = _DowntimeMonitor(lambda: http_status(base_url + "/api/ping") == 200, clock=clock, poll=poll)
     mon.start()
     t_start = clock()
@@ -850,7 +915,9 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
     # 都是失敗路徑。判定為成功（decide_outcome）卻不是 "applied" ⇒ 不猜，不做事後驗證，交給人看。
     script_ok = rec["started"] and rec["outcome"] == "succeeded" and res.get("rolled_back") == SUCCESS_STATE
     if rec["started"] and rec["outcome"] == "succeeded" and not script_ok:
-        rec["notes"].append("套用結果的 rolled_back=%r 不是 %r，略過事後驗證，請人工確認現況" % (res.get("rolled_back"), SUCCESS_STATE))
+        # 沒做驗證就不准記成功：判定成功卻不是 applied ⇒ 記成「未驗證」（verify_failed），寫回開發機時是 failed，報告列出停下來的後續處置
+        rec["outcome"] = "verify_failed"
+        rec["problems"].append("套用腳本回報的 rolled_back=%r 不是 %r，沒有做事後驗證：請人工確認現況" % (res.get("rolled_back"), SUCCESS_STATE))
     if script_ok:
         try:
             v = verify_after(install_root, base_url, before, (rehearsal or {}).get("expected_diff"),
@@ -864,14 +931,123 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
     return rec
 
 
+def failed_item_ids(rec):
+    return [i["id"] for i in (rec.get("verify") or {}).get("items", []) if not i["ok"]]
+
+
+def stopped_at(rec):
+    """「停在哪一步」的一句話（給通知與報告；只放步驟名稱，不放路徑、設定或錯誤全文）。"""
+    if rec.get("stopped_at"):
+        return rec["stopped_at"]
+    out, res = rec.get("outcome"), rec.get("result") or {}
+    if out == "succeeded":
+        return "全部完成（預檢、套用、事後驗證）"
+    if out == "crashed":
+        return "套用程序中途出錯" if rec.get("started") else "套用程序在開始前出錯"
+    if not rec.get("started"):
+        return "套用前檢查，沒有開始套用"
+    if out == "verify_failed":
+        if rec.get("verify"):
+            return "事後驗證（%d 項未通過）" % len(failed_item_ids(rec))
+        return "事後驗證（腳本回報的狀態無法確認成功，沒有驗證）"
+    return "套用腳本（結果：%s）" % (res.get("rolled_back") or res.get("status") or "未取得")
+
+
+_OUTCOME_LABEL = {"succeeded": "成功", "verify_failed": "已套用，事後驗證未通過或沒有完成", "failed": "失敗", "crashed": "程序中斷"}
+
+
+def outcome_label(rec):
+    if rec.get("outcome") == "failed" and not rec.get("started"):
+        return "被擋下（沒有開始套用）"
+    return _OUTCOME_LABEL.get(rec.get("outcome"), str(rec.get("outcome")))
+
+
 def finish(rec, install_root, db_path=None):
-    """報告＋稽核收尾（apply_with_verification 之後呼叫；分開是為了讓儀表板先放 name 再收尾）。⇒ rec（補上 report）。"""
+    """報告＋稽核收尾（apply_with_verification 之後呼叫；分開是為了讓儀表板先放 name 再收尾）。⇒ rec（補上 report、chain_head）。
+    `chain_head`＝apply_end 那一筆稽核的雜湊：隨後寫進 ERP audit_log 與 <包名>.a1.json（交付資料夾＝另一處留底），用來偵測尾端截斷。
+    ERP audit_log／站內通知／Email／LINE 由 `notify_result` 在這之後處理（它們都在新版的後端行程裡做）。"""
     md, js = write_report(install_root, rec)
     rec["report"] = {"md": md, "json": js}
     ev = {"event": "apply_end", "by": rec.get("by"), "name": rec.get("name"), "outcome": rec.get("outcome"),
           "verify_ok": (rec.get("verify") or {}).get("ok"), "downtime_seconds": rec.get("downtime_seconds"),
-          "failed_items": [i["id"] for i in (rec.get("verify") or {}).get("items", []) if not i["ok"]]}
-    audit_event(install_root, ev)
-    erp_audit(db_path or db_paths(install_root)[0], rec.get("by"), "system_update_apply",
-              "%s：%s" % (rec.get("name"), rec.get("outcome")), ev)
+          "failed_items": failed_item_ids(rec)}
+    rec["chain_head"] = audit_event(install_root, ev)
+    if rec["chain_head"] is None:
+        rec["problems"] = list(rec.get("problems") or []) + ["稽核紀錄寫不進去（apply_end）：請查 backend\\logs\\a1_audit.jsonl"]
     return rec
+
+
+def finish_crashed(rec, install_root, exc):
+    """套用程序本身丟出例外（例如 apply_staged 找不到腳本）：補上 apply_end（outcome=crashed）與一份報告，讓 apply_start 有對應的結尾。"""
+    rec["outcome"] = "crashed"
+    rec["problems"] = list(rec.get("problems") or []) + ["套用程序本身出錯：%s: %s" % (type(exc).__name__, exc)]
+    try:
+        return finish(rec, install_root)
+    except Exception:                                               # noqa: BLE001 — 連收尾都失敗：至少留一筆稽核
+        rec["chain_head"] = audit_event(install_root, {"event": "apply_end", "by": rec.get("by"), "name": rec.get("name"), "outcome": "crashed"})
+        return rec
+
+
+# ══════════════════════════════════════════════════════════════════
+# 通知與 ERP 稽核（交給新版後端行程：不把 ERP 的 helpers 載進儀表板）
+# ══════════════════════════════════════════════════════════════════
+
+NOTIFY_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "a1_notify.py")
+NOTIFY_TIMEOUT_SEC = 180
+
+
+def build_notice(rec):
+    """通知與 ERP 稽核的內容（純函式）。只放：包名、結果、停在哪一步、未通過項目 id、報告檔名、套用者、鏈頭雜湊。
+    **不放**回滾指令、路徑（報告只給檔名）、設定值、密碼、錯誤全文。"""
+    md = (rec.get("report") or {}).get("md")
+    report_name = os.path.basename(md) if md else ""
+    ids = failed_item_ids(rec)
+    ok = rec.get("outcome") == "succeeded"
+    rows = [("更新包", str(rec.get("name") or "")), ("結果", outcome_label(rec)), ("停在哪一步", stopped_at(rec))]
+    if ids:
+        rows.append(("未通過項目", "、".join(ids)))
+    rows.append(("報告檔", report_name or "（沒有產生）"))
+    return {
+        "name": str(rec.get("name") or ""), "outcome": rec.get("outcome"), "by": rec.get("by") or "",
+        "ok": ok, "title": "系統更新套用%s" % ("完成" if ok else "沒有成功"), "rows": rows,
+        "reason": "更新包 %s：%s。" % (rec.get("name"), outcome_label(rec)),
+        "badge_text": "更新完成" if ok else "需要處理", "badge_color": "#16A34A" if ok else "#DC2626",
+        "failed_items": ids, "report_name": report_name, "chain_head": rec.get("chain_head") or "",
+        "downtime_seconds": rec.get("downtime_seconds"), "stopped_at": stopped_at(rec),
+        "message": "%s：%s%s；報告 %s" % (rec.get("name"), outcome_label(rec), ("；未通過 " + "、".join(ids)) if ids else "", report_name or "（沒有產生）"),
+    }
+
+
+def notify_result(rec, install_root, run=None):
+    """套用結束後（成功、驗證未通過、失敗、被擋、程序中斷都要）：請**安裝目錄裡的後端**寫 ERP 稽核列、對最高管理者發站內通知、Email、LINE
+    （`backend/tools/a1_notify.py`，沿用登入失敗告警的 `email_notify.send_registered` 機制；收件人與 LINE 勾選照通知收件人設定）。
+    ⇒ dict（各項是否完成）；永不丟例外。失敗只記在 rec["problems"]／稽核，**不影響套用結果**（報告檔與畫面是備援）。
+    `run(cmd, env, payload_json) -> (rc, text)`：測試注入點。"""
+    notice = build_notice(rec)
+    result = {"ok": False, "detail": ""}
+    backend = os.path.join(install_root, "backend")
+    try:
+        cmd = [python_exe(), "-B", NOTIFY_SCRIPT, backend]
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")
+        payload = json.dumps(notice, ensure_ascii=False)
+        if run is not None:
+            rc, text = run(cmd, env, payload)
+        else:
+            r = subprocess.run(cmd, input=payload, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=NOTIFY_TIMEOUT_SEC, env=env, cwd=backend, creationflags=CREATE_NO_WINDOW)
+            rc, text = r.returncode, (r.stdout or "") + (r.stderr or "")
+        marker = [ln for ln in text.splitlines() if ln.startswith("A1_NOTIFY_RESULT ")]
+        got = json.loads(marker[-1][len("A1_NOTIFY_RESULT "):]) if marker else {}
+        result = {"ok": rc == 0 and bool(got), "detail": got if got else "後端沒有回報結果（結束碼 %s）" % rc}
+    except Exception as exc:                                        # noqa: BLE001
+        result = {"ok": False, "detail": "%s: %s" % (type(exc).__name__, exc)}
+    rec["notified"] = result
+    try:
+        d = result["detail"] if isinstance(result["detail"], dict) else {"error": str(result["detail"])[:200]}
+        audit_event(install_root, {"event": "apply_notified", "name": rec.get("name"), "ok": result["ok"],
+                                   "parts": {k: d.get(k) for k in ("audit_log", "in_app", "mail") if k in d}, "error": d.get("error")})
+    except Exception:                                               # noqa: BLE001
+        pass
+    if not result["ok"]:
+        rec["problems"] = list(rec.get("problems") or []) + ["通知／ERP 稽核沒有全部完成（報告檔與本畫面是備援）：%s" % str(result["detail"])[:200]]
+    return result

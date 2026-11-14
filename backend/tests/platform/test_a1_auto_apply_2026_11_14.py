@@ -197,6 +197,65 @@ def test_rehearse_removes_pyc_left_in_the_staged_payload_and_says_so(tmp_path):
     assert not (staged / "payload" / "backend" / "tools" / "__pycache__").exists()
 
 
+def test_rehearse_removes_any_new_file_the_run_leaves_not_only_pyc(tmp_path):
+    """h11 S5：預演可能經由 get_db 備援在 payload 裡新建庫、logs 之類——全部清掉並記注，不等套用才說「staging 被改過」。"""
+    root = make_prod(tmp_path)
+    staged = make_staged(tmp_path)
+
+    def run(cmd, env):
+        migrate(cmd[cmd.index("--db") + 1])
+        (staged / "payload" / "backend" / "motrix_erp.db").write_bytes(b"x")
+        (staged / "payload" / "backend" / "logs").mkdir()
+        (staged / "payload" / "backend" / "logs" / "a.log").write_text("x", encoding="utf-8")
+        return 0, "MIGRATE_LIKE_STARTUP_OK"
+    rh = AA.rehearse(str(staged), str(root), str(tmp_path / "work"), run=run)
+    assert rh["ok"] and any("新檔或資料夾" in n for n in rh["notes"])
+    assert not (staged / "payload" / "backend" / "motrix_erp.db").exists() and not (staged / "payload" / "backend" / "logs").exists()
+
+
+def test_rehearse_fails_when_the_staged_package_no_longer_matches_its_manifest(tmp_path):
+    """預演後用 verify_fn（儀表板傳 delivery.verify_staged）再驗一次：不符 ⇒ 預演不通過（在這一步失敗）；verify_fn 自己丟例外也不算通過。"""
+    root = make_prod(tmp_path)
+    staged = make_staged(tmp_path)
+    rh = AA.rehearse(str(staged), str(root), str(tmp_path / "w1"), run=fake_runner(prod_db(root)),
+                     verify_fn=lambda: {"ok": False, "problems": ["清單外多出的檔 1 個：x"]})
+    assert not rh["ok"] and any("預演之後暫存包與簽章清單不符" in p and "多出的檔" in p for p in rh["problems"])
+    root2 = make_prod(tmp_path / "second")
+
+    def boom():
+        raise RuntimeError("讀不到")
+    rh = AA.rehearse(str(make_staged(tmp_path / "second")), str(root2), str(tmp_path / "w2"), run=fake_runner(prod_db(root2)), verify_fn=boom)
+    assert not rh["ok"] and any("無法檢查暫存包完整性" in p for p in rh["problems"])
+    root3 = make_prod(tmp_path / "third")                   # 正對照：verify_fn 通過 ⇒ 預演通過
+    rh = AA.rehearse(str(make_staged(tmp_path / "third")), str(root3), str(tmp_path / "w3"), run=fake_runner(prod_db(root3)),
+                     verify_fn=lambda: {"ok": True, "problems": []})
+    assert rh["ok"]
+
+
+def test_rehearse_records_the_structure_hash_of_the_copy_before_migration(tmp_path):
+    root = make_prod(tmp_path)
+    staged = make_staged(tmp_path)
+    rh = AA.rehearse(str(staged), str(root), str(tmp_path / "w"), run=fake_runner(prod_db(root)))
+    assert rh["before_hash"] == AA.structure_hash(AA.capture_state(prod_db(root)))
+    migrate(prod_db(root))
+    assert rh["before_hash"] != AA.structure_hash(AA.capture_state(prod_db(root))), "結構變了雜湊就變"
+
+
+def test_structure_hash_ignores_setting_keys_but_not_columns(tmp_path):
+    root = make_prod(tmp_path)
+    h0 = AA.structure_hash(AA.capture_state(prod_db(root)))
+    c = sqlite3.connect(prod_db(root))
+    c.execute("INSERT INTO system_settings VALUES ('runtime_written', '1', 't')")
+    c.commit()
+    c.close()
+    assert AA.structure_hash(AA.capture_state(prod_db(root))) == h0, "執行中服務會寫設定，不能因此擋套用"
+    c = sqlite3.connect(prod_db(root))
+    c.execute("ALTER TABLE cases ADD COLUMN extra TEXT")
+    c.commit()
+    c.close()
+    assert AA.structure_hash(AA.capture_state(prod_db(root))) != h0
+
+
 def test_rehearse_failure_is_not_ok_and_still_cleans_the_copy(tmp_path):
     root = make_prod(tmp_path)
     staged = make_staged(tmp_path)
@@ -333,7 +392,31 @@ def test_load_expectations_missing_and_unreadable_are_noted_not_passed_silently(
     ex, notes = AA.load_expectations(str(tmp_path))
     assert ex == {} and any("讀不懂" in n for n in notes)
     (p / "a1_expectations.json").write_text(json.dumps({"pages": ["/"]}), encoding="utf-8")
-    assert AA.load_expectations(str(tmp_path)) == ({"pages": ["/"]}, [])
+    ex, notes = AA.load_expectations(str(tmp_path))
+    assert ex["pages"] == ["/"] and ex["files"] == [] and notes == []
+
+
+def test_load_expectations_drops_paths_that_could_leave_the_local_host_or_the_install_dir(tmp_path):
+    p = tmp_path / "backend"
+    p.mkdir()
+    (p / "a1_expectations.json").write_text(json.dumps({
+        "pages": ["/ok", "@evil.example/x", "http://evil.example/", "//evil.example/", "/a\\b", "no-slash", "/with space"],
+        "auth_required": [{"method": "POST", "path": "/api/x"}, {"method": "GET", "path": "@evil/x"}, "junk"],
+        "files": ["backend/a.txt", "..\\outside", "../outside", "C:\\Windows\\x", "/abs/x", "backend/../../y"],
+        "log_forbid": ["boom", 5], "watch_settings": ["k", None]}), encoding="utf-8")
+    ex, notes = AA.load_expectations(str(tmp_path))
+    assert ex["pages"] == ["/ok"]
+    assert ex["auth_required"] == [{"method": "POST", "path": "/api/x"}]
+    assert ex["files"] == ["backend/a.txt"]
+    assert ex["log_forbid"] == ["boom"] and ex["watch_settings"] == ["k"]
+    assert sum("格式不合格" in n for n in notes) == 3
+
+
+def test_is_loopback_url_only_accepts_the_local_host():
+    for u in ("https://127.0.0.1:666", "http://localhost:666", "https://[::1]:666/x"):
+        assert AA.is_loopback_url(u), u
+    for u in ("https://erp.example.com", "http://10.0.0.5:666", "https://127.0.0.1.evil.example", "", "x"):
+        assert not AA.is_loopback_url(u), u
 
 
 # ── 事後驗證 ────────────────────────────────────────────────────────────
@@ -453,24 +536,77 @@ def good_apply(root, **rt):
     return apply_fn
 
 
-def test_apply_with_verification_success_path_writes_report_audit_and_erp_audit_row(tmp_path):
+LOCAL = "https://127.0.0.1:666"
+
+
+def run_apply(name, staged, root, fn, rh, **kw):
+    return AA.apply_with_verification(name, str(staged), str(root), fn, rh, "boss", LOCAL, http_status=ok_http(), poll=0.01, **kw)
+
+
+def test_apply_with_verification_success_path_writes_report_and_audit_chain_with_head(tmp_path):
     root, staged, rh = _ctx(tmp_path)
     fn = good_apply(root)
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=ok_http(), poll=0.01)
+    rec = run_apply("pkg1", staged, root, fn, rh)
     assert rec["outcome"] == "succeeded" and rec["verify"]["ok"] and fn.calls == [1]
     AA.finish(rec, str(root))
     assert Path(rec["report"]["md"]).is_file() and Path(rec["report"]["json"]).is_file()
-    assert AA.audit_chain_problems(str(root / "backend" / "logs" / "a1_audit.jsonl")) == []
-    lines = (root / "backend" / "logs" / "a1_audit.jsonl").read_text(encoding="utf-8").splitlines()
+    path = root / "backend" / "logs" / "a1_audit.jsonl"
+    assert AA.audit_chain_problems(str(path)) == []
+    lines = path.read_text(encoding="utf-8").splitlines()
     assert [json.loads(x)["event"] for x in lines] == ["apply_start", "apply_end"]
-    row = sqlite3.connect(prod_db(root)).execute("SELECT username, action, target_type FROM audit_log").fetchall()
-    assert row == [("boss", "system_update_apply", "system_update")]
+    assert rec["chain_head"] == json.loads(lines[-1])["hash"], "鏈頭＝apply_end 那一筆的雜湊"
+    assert AA.summary_for_write_back(rec)["chain_head"] == rec["chain_head"], "鏈頭也寫進 <包名>.a1.json"
+    assert AA.audit_chain_problems(str(path), anchors=[rec["chain_head"]]) == []
+    assert sqlite3.connect(prod_db(root)).execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == 0, "儀表板行程不再直接 INSERT 正式庫（改由後端 _audit）"
+
+
+def test_apply_blocked_when_the_prod_structure_changed_after_the_rehearsal(tmp_path):
+    """h11 S1：預演之後正式庫結構變動（模組更新、手動改）⇒ 預演預期不再適用 ⇒ 套用前擋，不等套用完才 verify_failed。"""
+    root, staged, rh = _ctx(tmp_path)
+    c = sqlite3.connect(prod_db(root))
+    c.execute("ALTER TABLE cases ADD COLUMN drifted TEXT")
+    c.commit()
+    c.close()
+    fn = good_apply(root)
+    rec = run_apply("pkg1", staged, root, fn, rh)
+    assert rec["outcome"] == "failed" and not rec["started"] and fn.calls == []
+    assert any("預演之後正式庫結構已變動" in p and "重新預演" in p for p in rec["problems"])
+    events = [json.loads(x)["event"] for x in (root / "backend" / "logs" / "a1_audit.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert events == ["apply_blocked"]
+
+
+def test_apply_not_blocked_by_settings_written_at_runtime_between_rehearsal_and_apply(tmp_path):
+    root, staged, rh = _ctx(tmp_path)
+    c = sqlite3.connect(prod_db(root))
+    c.execute("INSERT INTO system_settings VALUES ('runtime_written', '1', 't')")
+    c.commit()
+    c.close()
+    fn = good_apply(root)
+    rec = run_apply("pkg1", staged, root, fn, rh)
+    assert rec["started"] and fn.calls == [1]
+
+
+def test_apply_blocked_when_the_audit_log_cannot_be_written(tmp_path):
+    """h11 S2：稽核寫不進去就不准套用（動正式機的操作沒有紀錄不能做）。把稽核檔所在位置佔成資料夾 ⇒ 寫入必失敗。"""
+    root, staged, rh = _ctx(tmp_path)
+    (root / "backend" / "logs" / "a1_audit.jsonl").mkdir()
+    fn = good_apply(root)
+    rec = run_apply("pkg1", staged, root, fn, rh)
+    assert rec["outcome"] == "failed" and not rec["started"] and fn.calls == []
+    assert any("稽核紀錄" in p and "沒有開始套用" in p for p in rec["problems"])
+
+
+def test_apply_blocked_when_the_erp_url_is_not_local(tmp_path):
+    root, staged, rh = _ctx(tmp_path)
+    fn = good_apply(root)
+    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://erp.example.com", http_status=ok_http(), poll=0.01)
+    assert not rec["started"] and fn.calls == [] and any("不是本機" in p for p in rec["problems"])
 
 
 def test_apply_with_verification_verify_failure_stops_and_never_rolls_back(tmp_path):
     root, staged, rh = _ctx(tmp_path)
     fn = good_apply(root, loaded_version="0.0.1")            # 模組載入版號不對 ⇒ 驗證失敗
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=ok_http(), poll=0.01)
+    rec = run_apply("pkg1", staged, root, fn, rh)
     assert rec["outcome"] == "verify_failed" and not rec["verify"]["ok"]
     assert fn.calls == [1], "只套用一次，沒有任何回滾／重試"
     AA.finish(rec, str(root))
@@ -484,7 +620,7 @@ def test_apply_with_verification_precheck_failure_blocks_before_applying(tmp_pat
     root, staged, rh = _ctx(tmp_path)
     Path(prod_db(root)).write_bytes(b"garbage" * 5000)
     fn = good_apply(root)
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=ok_http(), poll=0.01)
+    rec = run_apply("pkg1", staged, root, fn, rh)
     assert rec["outcome"] == "failed" and not rec["started"] and fn.calls == []
     assert any("預檢" in p for p in rec["problems"])
 
@@ -495,18 +631,35 @@ def test_apply_with_verification_script_failure_skips_verification(tmp_path):
     def fn():
         return {"started": True, "outcome": "failed", "problems": ["x"], "lock": None,
                 "result": {"status": "unhealthy_rolled_back", "rolled_back": "restored", "service": "up", "exit": 1}}
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=ok_http(), poll=0.01)
+    rec = run_apply("pkg1", staged, root, fn, rh)
     assert rec["outcome"] == "failed" and rec["verify"] is None
 
 
-def test_apply_with_verification_succeeded_but_unexpected_rolled_back_value_is_not_verified_and_noted(tmp_path):
+def test_apply_with_verification_succeeded_but_unexpected_rolled_back_value_is_never_recorded_as_success(tmp_path):
+    """h11 M2：判定成功、但 rolled_back 不是 applied ⇒ 沒做驗證 ⇒ 不准記成功：outcome＝verify_failed（寫回開發機是 failed、報告有停下來的後續處置、通知是需要處理）。"""
     root, staged, rh = _ctx(tmp_path)
 
     def fn():
         return {"started": True, "outcome": "succeeded", "problems": [], "lock": None,
-                "result": {"status": "success", "rolled_back": "applied_no_restore", "service": "up", "exit": 0}}
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=ok_http(), poll=0.01)
-    assert rec["verify"] is None and any("applied_no_restore" in n for n in rec["notes"])
+                "result": {"status": "success", "rolled_back": "applied_no_restore", "service": "up", "exit": 0, "timestamp": "20261114_120000"}}
+    rec = run_apply("pkg1", staged, root, fn, rh)
+    assert rec["verify"] is None and rec["outcome"] == "verify_failed"
+    assert any("applied_no_restore" in p and "沒有做事後驗證" in p for p in rec["problems"])
+    AA.finish(rec, str(root))
+    md = Path(rec["report"]["md"]).read_text(encoding="utf-8")
+    assert "後續處置" in md and "-SnapshotTimestamp 20261114_120000" in md and "- **結果**：已套用，但事後驗證有項目未通過或沒有完成" in md
+    n = AA.build_notice(rec)
+    assert n["ok"] is False and "沒有驗證" in n["stopped_at"]
+
+
+def test_apply_with_verification_state_applied_is_the_only_success_value(tmp_path):
+    for bad in ("not_applied", "restoring", "restored", "restored_unhealthy", "applied_no_restore", "", None):
+        root, staged, rh = _ctx(tmp_path / ("c%s" % bad))
+
+        def fn(bad=bad):
+            return {"started": True, "outcome": "succeeded", "problems": [], "lock": None,
+                    "result": {"status": "success", "rolled_back": bad, "service": "up", "exit": 0}}
+        assert run_apply("pkg1", staged, root, fn, rh)["outcome"] != "succeeded", bad
 
 
 def test_apply_with_verification_measures_downtime_from_ping(tmp_path):
@@ -524,7 +677,7 @@ def test_apply_with_verification_measures_downtime_from_ping(tmp_path):
         state["down"] = False
         time.sleep(0.1)
         return good_apply(root)()
-    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", "https://x", http_status=http, poll=0.02)
+    rec = AA.apply_with_verification("pkg1", str(staged), str(root), fn, rh, "boss", LOCAL, http_status=http, poll=0.02)
     assert rec["downtime_seconds"] is not None and rec["downtime_seconds"] >= 0 and time.time() - t0 < 30
 
 
@@ -542,8 +695,138 @@ def test_audit_chain_detects_edit_and_deletion(tmp_path):
     assert any("對不上" in p for p in AA.audit_chain_problems(str(path)))
 
 
-def test_erp_audit_failure_is_swallowed(tmp_path):
-    assert AA.erp_audit(str(tmp_path / "missing_dir" / "x.db"), "boss", "a", "l", {}) is False
+def _chain(tmp_path, n=4):
+    for i in range(n):
+        assert AA.audit_event(str(tmp_path), {"event": "e%d" % i, "by": "boss"})
+    path = tmp_path / "backend" / "logs" / "a1_audit.jsonl"
+    return path, path.read_text(encoding="utf-8").splitlines()
+
+
+def test_audit_chain_detects_head_deletion_and_tail_truncation_via_anchor(tmp_path):
+    """h11 S3a／b：第一行必須 prev＝""（開頭被刪或換過可偵測）；尾端截斷靠錨點（鏈頭雜湊另存在 audit_log／<包名>.a1.json）。"""
+    path, lines = _chain(tmp_path)
+    head = json.loads(lines[-1])["hash"]
+    path.write_text("\n".join(lines[1:]) + "\n", encoding="utf-8")
+    assert any("第 1 行" in p and "對不上" in p for p in AA.audit_chain_problems(str(path))), "刪掉第一行"
+    path.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+    assert AA.audit_chain_problems(str(path)) == [], "只看鏈本身：截尾看不出來（這是已知限制）"
+    assert any("錨點" in p for p in AA.audit_chain_problems(str(path), anchors=[head])), "有錨點就看得出來"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert AA.audit_chain_problems(str(path), anchors=[head, ""]) == []
+
+
+def test_audit_event_handles_a_huge_last_record_and_a_torn_last_line(tmp_path):
+    """h11 S3c：最後一筆超過 4096 位元組、或最後一行寫到一半 ⇒ 不再算出 prev＝unreadable 造成永久斷鏈。"""
+    AA.audit_event(str(tmp_path), {"event": "big", "blob": "x" * 20000})
+    AA.audit_event(str(tmp_path), {"event": "after_big"})
+    path = tmp_path / "backend" / "logs" / "a1_audit.jsonl"
+    assert AA.audit_chain_problems(str(path)) == []
+    good = path.read_text(encoding="utf-8")
+    path.write_text(good + '{"event": "torn", "pre', encoding="utf-8")                    # 沒有換行的殘行
+    AA.audit_event(str(tmp_path), {"event": "next"})
+    problems = AA.audit_chain_problems(str(path))
+    assert len(problems) == 1 and "讀不懂" in problems[0], problems                       # 殘行只報它自己，之後的鏈仍接得上
+    AA.audit_event(str(tmp_path), {"event": "next2"})
+    assert len(AA.audit_chain_problems(str(path))) == 1
+
+
+def test_audit_event_returns_none_when_the_file_cannot_be_written(tmp_path):
+    (tmp_path / "backend" / "logs" / "a1_audit.jsonl").mkdir(parents=True)
+    assert AA.audit_event(str(tmp_path), {"event": "x"}) is None
+
+
+def test_value_hash_is_salted_per_process_and_stable_within_it():
+    assert AA._value_hash("v") == AA._value_hash("v") and AA._value_hash("v") != AA._value_hash("w")
+    import hashlib
+    assert AA._value_hash("v") != hashlib.sha256(b"v").hexdigest()[:16], "不是無鹽雜湊（字典可反推）"
+
+
+# ── 通知（最高管理者：Email＋LINE＋站內；成功、驗證未通過、失敗、被擋、中斷都發）─────────────────
+
+def _rec(outcome="succeeded", started=True, **kw):
+    r = {"name": "20261114-pkg", "outcome": outcome, "started": started, "by": "boss", "problems": [], "notes": [],
+         "install_root": "C:\\prod", "report": {"md": "C:\\prod\\backend\\logs\\a1_report_20261114_120000.md", "json": None},
+         "result": {"status": "success", "rolled_back": "applied", "timestamp": "20261114_120000"}, "chain_head": "ab" * 32,
+         "verify": {"ok": outcome == "succeeded", "warnings": [], "items": [
+             {"id": "ping", "ok": True, "severity": "ok", "title": "t", "detail": "d"},
+             {"id": "modules", "ok": outcome == "succeeded", "severity": "ok", "title": "t", "detail": "SECRET-DETAIL"}]}}
+    r.update(kw)
+    return r
+
+
+def test_build_notice_contains_only_result_failed_item_ids_and_report_file_name():
+    n = AA.build_notice(_rec("verify_failed"))
+    flat = json.dumps(n, ensure_ascii=False)
+    assert n["failed_items"] == ["modules"] and n["report_name"] == "a1_report_20261114_120000.md"
+    assert ("未通過項目", "modules") in n["rows"] and ("報告檔", "a1_report_20261114_120000.md") in n["rows"]
+    assert n["ok"] is False and n["stopped_at"].startswith("事後驗證")
+    for forbidden in ("rollback_update", "-SnapshotTimestamp", "C:\\prod", "SECRET-DETAIL", "password", "密碼", "token"):
+        assert forbidden not in flat, forbidden
+    ok = AA.build_notice(_rec("succeeded"))
+    assert ok["ok"] is True and ok["failed_items"] == [] and ok["badge_text"] == "更新完成" and "成功" in ok["reason"]
+
+
+def test_build_notice_covers_all_four_kinds_blocked_failed_crashed_and_unverified():
+    blocked = AA.build_notice(_rec("failed", started=False, verify=None, report=None, stopped_at="套用前檢查，沒有開始套用"))
+    assert "被擋下" in dict(blocked["rows"])["結果"] and blocked["report_name"] == "" and dict(blocked["rows"])["報告檔"] == "（沒有產生）"
+    failed = AA.build_notice(_rec("failed", verify=None, result={"status": "unhealthy_rolled_back", "rolled_back": "restored"}))
+    assert failed["stopped_at"] == "套用腳本（結果：restored）" and failed["ok"] is False
+    crashed = AA.build_notice(_rec("crashed", verify=None))
+    assert "中途出錯" in crashed["stopped_at"] and dict(crashed["rows"])["結果"] == "程序中斷"
+    unverified = AA.build_notice(_rec("verify_failed", verify=None))
+    assert "沒有驗證" in unverified["stopped_at"]
+
+
+def test_notify_result_passes_notice_on_stdin_to_the_installed_backend_and_records_it(tmp_path):
+    root = tmp_path / "prod"
+    (root / "backend" / "logs").mkdir(parents=True)
+    seen = {}
+
+    def run(cmd, env, payload):
+        seen.update(cmd=cmd, env=env, payload=json.loads(payload))
+        return 0, 'noise\nA1_NOTIFY_RESULT {"audit_log": true, "in_app": {"recipients": 1, "written": 1}, "mail": {"queued": true}}\n'
+    rec = _rec("succeeded")
+    out = AA.notify_result(rec, str(root), run=run)
+    assert out["ok"] and rec["notified"] == out and rec["problems"] == []
+    assert seen["cmd"][-1] == str(root / "backend") and seen["cmd"][-2].endswith("a1_notify.py") and "-B" in seen["cmd"]
+    assert seen["env"]["PYTHONDONTWRITEBYTECODE"] == "1" and seen["payload"]["name"] == "20261114-pkg"
+    ev = [json.loads(x) for x in (root / "backend" / "logs" / "a1_audit.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert ev[-1]["event"] == "apply_notified" and ev[-1]["ok"] is True
+
+
+def test_notify_result_never_raises_and_failure_only_adds_a_problem(tmp_path):
+    root = tmp_path / "prod"
+    (root / "backend" / "logs").mkdir(parents=True)
+    for run in (lambda c, e, p: (2, 'A1_NOTIFY_RESULT {"error": "mail：X"}'), lambda c, e, p: (1, "Traceback ..."),
+                lambda c, e, p: (_ for _ in ()).throw(OSError("找不到 python"))):
+        rec = _rec("verify_failed")
+        out = AA.notify_result(rec, str(root), run=run)
+        assert out["ok"] is False and any("通知／ERP 稽核沒有全部完成" in p for p in rec["problems"])
+        assert rec["outcome"] == "verify_failed", "通知失敗不改變套用結果"
+
+
+def test_finish_crashed_writes_an_apply_end_for_the_open_apply_start(tmp_path):
+    """h11 S2：套用中丟例外（例如 apply_staged 找不到腳本）⇒ apply_start 要有對應的 apply_end（crashed）＋報告＋鏈頭。"""
+    root = make_prod(tmp_path)
+    AA.audit_event(str(root), {"event": "apply_start", "by": "boss"})
+    rec = {"name": "p", "outcome": "failed", "started": False, "problems": [], "result": None, "by": "boss", "install_root": str(root)}
+    AA.finish_crashed(rec, str(root), RuntimeError("包裡沒有 backend\\tools"))
+    events = [json.loads(x) for x in (root / "backend" / "logs" / "a1_audit.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["event"] for e in events] == ["apply_start", "apply_end"] and events[-1]["outcome"] == "crashed"
+    assert rec["outcome"] == "crashed" and rec["chain_head"] == events[-1]["hash"] and Path(rec["report"]["md"]).is_file()
+    assert "程序中斷" in Path(rec["report"]["md"]).read_text(encoding="utf-8")
+
+
+def test_notice_event_is_registered_everywhere_the_mail_registry_guard_needs():
+    """a1_notify 寫死的信件類型：登記表、個人通知偏好、LINE 群組都要有（缺哪個，守門或畫面就會出問題）。"""
+    sys.path.insert(0, str(TOOLS))
+    import a1_notify
+    from helpers import line_catalog, mail_types, notification_prefs
+    assert a1_notify.EVENT_KEY == "system_update_result"
+    t = mail_types.get(a1_notify.EVENT_KEY)
+    assert t and t.category == "system" and t.group == "superadmins"
+    assert a1_notify.EVENT_KEY in notification_prefs.EVENT_KEYS
+    assert a1_notify.EVENT_KEY in repr(line_catalog._GROUP_RULES), "LINE 的「系統告警」群組要列出這個事件，否則 LINE 不會發"
 
 
 def test_report_never_contains_secrets_and_shows_verify_table():
@@ -678,6 +961,92 @@ def test_gate_rehearse_requires_a_prepared_package_and_is_single_flight(env, mon
     assert env["c"].post("/api/delivery/rehearse", json={"name": env["name"]}).status_code == 409
     assert env["c"].post("/api/delivery/prepare", json={"name": env["name"]}).status_code == 409, "預演中不可重新暫存"
     dd._delivery_state["rehearsing"] = None
+
+
+def _wait_idle(env):
+    for _ in range(200):
+        if not env["c"].get("/api/delivery/status").json()["running"]:
+            return
+        time.sleep(0.05)
+    raise AssertionError("套用沒有結束")
+
+
+def test_gate_rehearsal_is_one_shot_a_second_apply_with_the_same_digest_is_refused(env, monkeypatch):
+    """h11 M1：套用一開始預演就作廢（成功、失敗、還原都一樣）；再按套用要對現在的正式庫重新預演。"""
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    res = _rehearse_and_wait(env)
+    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 200
+    _wait_idle(env)
+    assert env["c"].get("/api/delivery/rehearse/status", params={"name": env["name"]}).json()["result"] is None, "預演已被消耗"
+    r = _apply(env, rehearsalDigest=res["digest"])
+    assert r.status_code == 409 and "預演" in r.json()["detail"]
+
+
+def test_gate_rehearsal_is_consumed_even_when_the_apply_fails(env, monkeypatch):
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    monkeypatch.setattr(AA, "apply_with_verification", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("套用腳本炸了")))
+    monkeypatch.setattr(AA, "finish_crashed", lambda rec, root, exc: rec.update(outcome="crashed") or rec)
+    res = _rehearse_and_wait(env)
+    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 200
+    _wait_idle(env)
+    assert _apply(env, rehearsalDigest=res["digest"]).status_code == 409
+
+
+def test_gate_extra_file_in_the_staged_package_is_refused_before_asking_for_credentials(env, monkeypatch):
+    """PM：預演之後、要求輸入密碼之前先確認暫存包完整；多出來的任何檔案都擋。"""
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    res = _rehearse_and_wait(env)
+    staged = Path(dd._delivery_state["prepared"][env["name"]]["staged"])
+    (staged / "payload" / "stray.db").write_bytes(b"x")
+    called = []
+    monkeypatch.setattr(dd, "_verify_superadmin", lambda *a, **k: called.append(1) or "boss")
+    r = _apply(env, rehearsalDigest=res["digest"])
+    assert r.status_code == 409 and "多出" in r.json()["detail"] and called == []
+
+
+def test_prepare_is_refused_while_another_prepare_runs_and_rehearse_or_apply_wait_for_it(env, monkeypatch):
+    """h11 N4：stage() 在鎖外跑，另有 preparing 旗標（鎖內設定）：準備進行中，不准第二個準備、預演或套用。"""
+    _gate_env(env, monkeypatch)
+    dd._delivery_state["preparing"] = True
+    assert env["c"].post("/api/delivery/prepare", json={"name": env["name"]}).status_code == 409
+    assert env["c"].post("/api/delivery/rehearse", json={"name": env["name"]}).status_code == 409
+    dd._delivery_state["preparing"] = False
+
+
+def test_prepare_clears_the_preparing_flag_even_when_staging_fails(env, monkeypatch):
+    monkeypatch.setattr(dd._trusted_delivery(), "stage", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("磁碟滿了")))
+    with pytest.raises(RuntimeError):
+        env["c"].post("/api/delivery/prepare", json={"name": env["name"]})
+    assert dd._delivery_state["preparing"] is False and env["name"] not in dd._delivery_state["prepared"]
+
+
+def test_delivery_run_crash_writes_apply_end_and_still_notifies(env, monkeypatch):
+    """h11 S2＋PM：套用程序丟例外 ⇒ 補 apply_end（crashed）、仍然發通知；結果與旗標照常放出。"""
+    calls = []
+    monkeypatch.setattr(AA, "apply_with_verification", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("找不到腳本")))
+    monkeypatch.setattr(AA, "finish_crashed", lambda rec, root, exc: calls.append(("finish_crashed", str(exc))) or rec.update(outcome="crashed") or rec)
+    monkeypatch.setattr(AA, "notify_result", lambda rec, root, run=None: calls.append(("notify", rec["outcome"])) or {"ok": True})
+    dd._delivery_state["running"] = True
+    dd._delivery_run("pkgX", "S", {}, "R", "boss", None)
+    assert [c[0] for c in calls] == ["finish_crashed", "notify"] and calls[1][1] == "crashed" and "找不到腳本" in calls[0][1]
+    assert dd._delivery_state["last"]["outcome"] == "crashed" and dd._delivery_state["running"] is False
+
+
+def test_delivery_run_notifies_after_report_and_writeback_for_every_outcome(env, monkeypatch):
+    """順序：finish（報告＋鏈頭）→ write_back／a1.json → notify；任何結果（成功、驗證未通過、失敗、被擋）都通知。"""
+    for outcome, started in (("succeeded", True), ("verify_failed", True), ("failed", True), ("failed", False)):
+        order = []
+        rec = {"name": "pkgX", "outcome": outcome, "started": started, "problems": [], "result": None, "by": "boss"}
+        monkeypatch.setattr(AA, "apply_with_verification", lambda *a, _r=rec, **k: _r)
+        monkeypatch.setattr(AA, "finish", lambda r, root, db_path=None, _o=order: _o.append("finish") or r)
+        monkeypatch.setattr(AA, "notify_result", lambda r, root, run=None, _o=order: _o.append("notify") or {"ok": True})
+        dd._delivery_state["running"] = True
+        dd._delivery_run("pkgX", "S", {}, "R", "boss", None)
+        assert order == ["finish", "notify"], (outcome, started, order)
+        assert dd._delivery_state["last"] is rec and dd._delivery_state["running"] is False
 
 
 def test_prepare_returns_downtime_estimate_and_require_flag(env, monkeypatch):

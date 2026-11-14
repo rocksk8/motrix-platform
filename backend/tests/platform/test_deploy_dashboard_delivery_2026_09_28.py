@@ -69,7 +69,7 @@ def fake_run(install, status="success", rolled_back="applied", service="up", cod
 
 
 def fresh_state():
-    return {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None}
+    return {"prepared": {}, "running": False, "last": None, "rehearsals": {}, "rehearsing": None, "preparing": False}
 
 
 def patch_auto_apply(monkeypatch):
@@ -81,6 +81,7 @@ def patch_auto_apply(monkeypatch):
                         lambda name, staged, root, apply_fn, rh, who, base, **k: dict(apply_fn(), name=name, by=who, verify=None, notes=[],
                                                                                          install_root=root))
     monkeypatch.setattr(AA, "finish", lambda rec, root, db_path=None: rec)
+    monkeypatch.setattr(AA, "notify_result", lambda rec, root, run=None: {"ok": True, "detail": {}})      # 不起子行程、不寄信
 
 
 @pytest.fixture()
