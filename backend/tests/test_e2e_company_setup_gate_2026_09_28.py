@@ -41,7 +41,7 @@ def test_superadmin_is_sent_to_settings_confirms_and_gets_in(client, live_server
     page.wait_for_url("**/company-setup-wizard.html?setup=1", timeout=20000)
     page.locator("[data-testid=cw-card]").wait_for(state="visible", timeout=10000)
     # 欄位都填好了（電話來自聯絡資訊）⇒ 必填兩步已完成，精靈接在「選填」的第 3 步；略過兩個選填步驟到確認
-    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶要把錢匯到哪裡")
+    assert page.locator("[data-testid=cw-title]").inner_text().startswith("客戶匯款帳戶")
     page.click("[data-testid=cw-skip]")
     page.click("[data-testid=cw-skip]")
     page.locator("[data-testid=cw-summary]").wait_for(state="visible", timeout=10000)

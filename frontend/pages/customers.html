@@ -288,7 +288,7 @@
         <div class="table-scroll" data-layout-list="customers" x-show="$store.layout.ready || $store.layout.failed">
           <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
           <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
-          <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+          <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才可檢視。</div>
           <table class="data-table m-cards">
             <thead><tr>
               <th style="width:32px"></th>
@@ -339,7 +339,7 @@
                   </div>
                   <div x-show="customers.length > 0" data-testid="empty-filtered">
                     <div class="empty-icon">🔍</div>
-                    <div class="ux-empty__title">沒有符合條件的客戶</div>
+                    <div class="ux-empty__title">查無符合條件的客戶</div>
                     <div class="ux-empty__desc">目前的搜尋或篩選條件下找不到資料。</div>
                     <button class="btn" @click="search = ''; filterType = ''; filterIndustry = ''" style="margin-top:4px" data-testid="empty-clear-filters">清除篩選</button>
                   </div>
@@ -433,7 +433,7 @@
               </div>
               <div x-show="customers.length > 0" data-testid="empty-filtered">
                 <div class="empty-icon">🔍</div>
-                <div class="ux-empty__title">沒有符合條件的客戶</div>
+                <div class="ux-empty__title">查無符合條件的客戶</div>
                 <div class="ux-empty__desc">目前的搜尋或篩選條件下找不到資料。</div>
                 <button class="btn" @click="search = ''; filterType = ''; filterIndustry = ''" style="margin-top:4px" data-testid="empty-clear-filters">清除篩選</button>
               </div>
@@ -460,7 +460,7 @@
             </div>
           </div>
           <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedCustomer.deliveryAddress || selectedCustomer.invoiceAddress"
-             :href="MotrixRecordLink.mapUrl('customers', selectedCustomer.id)">在地圖上看</a>
+             :href="MotrixRecordLink.mapUrl('customers', selectedCustomer.id)">在地圖上查看</a>
           <button class="detail-close" @click="selectedId=null">×</button>
         </div>
         <div class="detail-body">
@@ -538,7 +538,7 @@
                style="display:block;text-align:center;padding:16px;border:1px dashed var(--border-light);border-radius:8px;font-size:12px;color:var(--text-dim);text-decoration:none;transition:all .12s"
                @mouseenter="$el.style.borderColor='var(--accent)';$el.style.color='var(--accent)'"
                @mouseleave="$el.style.borderColor='var(--border-light)';$el.style.color='var(--text-dim)'">
-              尚無拜訪紀錄 · 點此開始記錄
+              尚無拜訪紀錄，請按「新增」開始記錄
             </a>
           </template>
           <template x-for="(v, $vi) in (selectedCustomer.visits||[]).slice().sort((a,b)=>(b.date||b.visitDate||'')>(a.date||a.visitDate||'')?1:-1).slice(0,3)" :key="v.id ?? (v.visitDate||v.date||'') + '_' + $vi">

@@ -18,7 +18,7 @@ def test_mine_work_shows_approvals_group_and_empty_state(live_server, make_user,
     # 什麼事都沒有 ⇒ 一句話＋去處，不是一排 0
     empty = page.locator("[data-testid=home-mine-empty]")
     assert empty.is_visible() and "目前沒有需要您處理的事" in empty.inner_text()
-    assert empty.locator("a", has_text="看今日工作事項").is_visible()
+    assert empty.locator("a", has_text="查看今日工作事項").is_visible()
 
 
 @pytest.mark.e2e

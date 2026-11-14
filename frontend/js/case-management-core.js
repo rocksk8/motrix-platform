@@ -53,6 +53,7 @@ window.CM_PARTS.push(() => ({
       } catch (_e) { /* 讀不到就不顯示據點 */ }
     },
     selected: null,
+    devCase: null,          // T86 業務開發 D：目前案件的來源商機 {id, name}（沒有／看不到＝null）；case-bundle 的 parts.devCase
     activeTab: 'biz',
     // 附件目錄 P3「全部附件」頁籤：檔案中心（filehub）在才有；資料依案件單號標記（換案件時舊資料不顯示）
     signedBackBusy: false, signedBackErr: '',
@@ -76,9 +77,11 @@ window.CM_PARTS.push(() => ({
     savedFlash: {},          // CU6：即時儲存成功 ⇒ 區塊標題閃 ✓（鍵：case／stages／dispatch-<id>／xe-<id>／mo-<itemId>）
     _subSortables: {},
 
+    // T86：財務金額可視以後端答案為準（bootstrap 的 financeView 區段＝helpers.auth.can_see_financial，旗標 finance_via_effective 開啟時
+    // 連職責角色與個人扣項都算進去）；還沒拿到（bootstrap 不可用、頁面剛載入）時退回「財務角色／superadmin」——旗標預設關時兩者相同（第42班）。
+    financeViewOk: undefined,
     canSeeFinancial() {
-      const m = this.session.modules || []
-      return this.canFinanceRole()      // 第42班：財務金額可視＝財務角色／superadmin（admin／sales 直通與 financial_view 勾選都拿掉）
+      return this.financeViewOk === undefined ? this.canFinanceRole() : this.financeViewOk
     },
 
     // ── 分頁狀態進 URL（2026-09-14）───────────────────────────────────
@@ -137,6 +140,10 @@ window.CM_PARTS.push(() => ({
         const me = await r.json()
         this.session.displayName = me.displayName
         this.session.id = me.userId
+      } catch {}
+      try {
+        const fv = window.motrixBoot ? await window.motrixBoot('financeView') : undefined
+        if (fv && typeof fv.financialView === 'boolean') this.financeViewOk = fv.financialView
       } catch {}
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，而這一頁的主體（案件矩陣）不應該等它。
       // D3：這兩支要帶 session.token，所以**必須在 session 就緒之後**（以前放在 init() 最前面、`_initDone` 擋之前：
@@ -199,7 +206,7 @@ window.CM_PARTS.push(() => ({
 
     async _findCase(quoteNo) {
       try {
-        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', q: quoteNo, limit: '20' })
+        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', q: quoteNo, limit: '20', with_dev_case: '1' })
         const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return null
         return ((await r.json()).items || []).find(c => c.quote_no === quoteNo) || null
@@ -270,6 +277,7 @@ window.CM_PARTS.push(() => ({
       const loaders = {
         fin: () => { this.loadFinanceSummary(no); this.loadInvoiceVouchers(no); this.loadPaymentRequests(no); this.loadMaterialOrders(no) },
         dispatch: () => { this.loadContractorVouchers(no) },
+        shipping: () => { this._ensureSnPref(no) },
         feed: () => { this._loadCaseTasks(no) },
         allfiles: () => { this.loadCaseFiles(no) },
       }
@@ -390,6 +398,7 @@ window.CM_PARTS.push(() => ({
         const data = bundle.quotation
         const parts = bundle.parts || {}
         this.selected = data
+        this.devCase = (parts.devCase && parts.devCase.ok && parts.devCase.data) || null      // T86 業務開發 D：來源商機（跟 selected 同一刻賋值，切換時不殘留上一件；看不到／沒有＝null）
         // T86 #30：手機上整頁一起捲（清單與明細上下堆疊）。從清單深處點進案件時，頁面還停在
         // 清單的捲動位置，案件標題列就落在頂欄底下被蓋住 ⇒ 開啟案件時回到頁面頂端。
         if (this.isMobileView) window.scrollTo(0, 0)

@@ -136,7 +136,7 @@ def test_review_cancel_pending_and_normal_publish():
         r = _run({"status": _cat(), "review": empty if empty == "" else None, "run": pub})
         assert not any(c.startswith("POST") and c.endswith("/publish") for c in r["calls"]), empty
     # 待核准：如實說，不說已發布
-    r = _run({"status": _cat(), "publish": {"pending": True, "reasons": ["新增自訂用語 mail.badge（收件人看到的字，需核准）"]}, "run": pub})
+    r = _run({"status": _cat(), "publish": {"pending": True, "reasons": ["新增自訂用語 mail.badge（收件人所見的字，需核准）"]}, "run": pub})
     assert r["state"] == "pending" and "待第二位最高管理者核准" in r["msg"] and "已發布。" not in r["msg"]
     # 一般發布：帶預覽雜湊並重讀
     r = _run({"status": _cat(), "publish": {"ok": True}, "run": pub})

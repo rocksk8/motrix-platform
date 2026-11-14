@@ -80,7 +80,7 @@
 
         <!-- 1 選對象 -->
         <section x-show="step === 'choose'" data-testid="iw-choose">
-          <p>要匯入哪一種資料？<b>建議順序：員工 → 客戶 → 料號</b>（客戶的「負責業務」要對得上員工姓名）。</p>
+          <p>選擇匯入資料類型<b>建議順序：員工 → 客戶 → 料號</b>（客戶的「負責業務」要對得上員工姓名）。</p>
           <div class="iw-kinds">
             <button type="button" class="iw-kind" data-testid="iw-kind-users" :disabled="!isSuper" @click="pick('users')">
               <b>員工（可登入的帳號）</b>
@@ -197,7 +197,7 @@
             </div>
             <div class="iw-row">
               <button type="button" class="iw-btn primary" data-testid="iw-commit" :disabled="!canCommit || uncertain" @click="commit()">確認匯入</button>
-              <button type="button" class="iw-btn" @click="reset()">取消，重新來</button>
+              <button type="button" class="iw-btn" @click="reset()">取消並重新開始</button>
               <span x-show="busy" style="color:var(--text-secondary)">處理中…</span>
             </div>
             <div style="color:var(--text-secondary);font-size:12px" x-show="plan && plan.created === 0 && (plan.updated || 0) === 0">沒有可寫入的資料。請修正上面的問題後重新上傳。</div>

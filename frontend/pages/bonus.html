@@ -184,7 +184,7 @@
               </div>
             </div>
             <template x-if="loaded && items.length === 0">
-              <div class="bn-empty" x-text="isSuper ? '沒有符合條件的案件' : '目前沒有您的獎金分潤資料'" data-testid="bn-empty"></div>
+              <div class="bn-empty" x-text="isSuper ? '查無符合條件的案件' : '尚無您的獎金分潤資料'" data-testid="bn-empty"></div>
             </template>
             <template x-for="it in items" :key="it.quote_no">
               <div class="bn-case" :class="{selected: selectedNo === it.quote_no}" :data-quote-no="it.quote_no"

@@ -335,7 +335,7 @@
             </div>
           </div>
           <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedSupplier.address"
-             :href="MotrixRecordLink.mapUrl('suppliers', selectedSupplier.id)">在地圖上看</a>
+             :href="MotrixRecordLink.mapUrl('suppliers', selectedSupplier.id)">在地圖上查看</a>
           <button class="detail-close" @click="selectedId=null">×</button>
         </div>
         <div class="detail-body">
@@ -415,7 +415,7 @@
                style="display:block;text-align:center;padding:16px;border:1px dashed var(--border-light);border-radius:8px;font-size:12px;color:var(--text-dim);text-decoration:none;transition:all .12s"
                @mouseenter="$el.style.borderColor='var(--accent)';$el.style.color='var(--accent)'"
                @mouseleave="$el.style.borderColor='var(--border-light)';$el.style.color='var(--text-dim)'">
-              尚無往來紀錄 · 點此開始記錄
+              尚無往來紀錄，請按「新增」開始記錄
             </a>
           </template>
           <template x-for="(v, $vi) in (selectedSupplier.visits||[]).slice().sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).slice(0,3)" :key="v.id ?? (v.date||'') + '_' + $vi">
@@ -713,7 +713,7 @@
             <div class="form-group">
               <label class="form-label">標準交期（說明）</label>
               <input class="form-input" type="text" x-model="form.leadTime" placeholder="例：30 天、4~6 週">
-              <div style="font-size:12px;color:var(--text-dim);margin-top:3px">純文字備註，系統不拿它算日期</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:3px">純文字備註，系統不據以計算日期</div>
             </div>
             <div class="form-group">
               <label class="form-label">前置時間（天）</label>
@@ -925,7 +925,7 @@
       <div class="table-scroll" data-layout-list="suppliers" x-show="$store.layout.ready || $store.layout.failed">
         <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
         <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
-        <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+        <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才可檢視。</div>
         <table class="data-table">
           <thead><tr>
             <th style="width:32px"></th>

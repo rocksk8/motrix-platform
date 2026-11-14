@@ -27,7 +27,7 @@ EXCLUDED_OWNERS = ("payroll",)
 #: 技術性排除 ⇒ {key: 原因}
 EXCLUDED_KEYS = {
     "system_test_mail": "信件設定測試信；LINE 有自己的「驗證 token」",
-    "line_quota_warning": "LINE 額度告警用 LINE 發會耗額度，額度滿時也發不出去；維持 Email",
+    "line_quota_warning": "LINE 額度告警用 LINE 發會耗額度，額度滿時也無法發送；維持 Email",
 }
 
 #: LINE-only／細項事件 ⇒ {key: {"name", "group", "mail_key", "line_group", "kind"}}

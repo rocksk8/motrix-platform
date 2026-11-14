@@ -244,6 +244,24 @@ def acks_with_prefix(kind: str, key_prefix) -> dict:
     return {k[len(head):]: v for k, v in acks.items() if k.startswith(head) and isinstance(v, dict)}
 
 
+def ack_view(user: dict, rec):
+    """回給前端的「已告知」紀錄；管理員（admin／superadmin）看完整紀錄，其他人只看「已告知＋日期」。
+
+    記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）是稽核資訊，不是
+    「有沒有告知」要看的東西；沒有紀錄（None／不是 dict）原樣回。只遮回應：伺服器端寫入的紀錄與稽核仍是完整的。
+    與 `GET /api/suppliers` 同一條線（role 判斷，不新增權限鍵）。"""
+    if not isinstance(rec, dict):
+        return rec
+    if (user or {}).get("role") in ("superadmin", "admin"):
+        return rec
+    return {"at": rec.get("at") or ""}
+
+
+def acks_view(user: dict, acks: dict) -> dict:
+    """`acks_with_prefix` 的結果逐筆套 `ack_view`。"""
+    return {k: ack_view(user, v) for k, v in (acks or {}).items()}
+
+
 def record_ack(kind: str, key, user: dict) -> tuple:
     """寫入一筆「已告知」；已經有就不動。回傳 (紀錄, 是否新寫入)。"""
     return _record(f"{kind}:{key}", current_notice(), user)

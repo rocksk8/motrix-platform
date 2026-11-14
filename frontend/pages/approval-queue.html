@@ -187,7 +187,7 @@
     }
 
     /* ── 詳情抽屜（原 .aq-right 常駐右欄，2026-09-14 改為覆蓋層）──
-       佇列是空的時候不該有半個畫面在寫「請選取左側項目」。
+       尚無待處理項目時候不該有半個畫面在寫「請選取左側項目」。
        位置在 <body> 直下，理由見上方 .aq-layout 的註解。 */
     .aq-drawer-mask {
       position: fixed; inset: 0;
@@ -452,7 +452,7 @@
                     : (totalPending > 0
                         ? '共 ' + totalPending + ' 件待簽核，依「輪不輪到我」與停留天數排列'
                           + (isAdmin ? '' : '（僅顯示您送審的與需要您簽核的）')
-                        : (isAdmin ? '目前沒有待簽核項目'
+                        : (isAdmin ? '尚無待簽核項目'
                                    : '您送審的單據都簽完了，也沒有需要您簽核的項目'))"></span>
     </div>
 
@@ -464,7 +464,7 @@
            @click="scrollToCol('mine')" @keydown.enter="scrollToCol('mine')" @keydown.space.prevent="scrollToCol('mine')">
         <span class="vm-andon__val" x-text="myPendingCount"></span>
         <span class="vm-andon__lbl">待我簽核
-          <small x-text="myOverdueCount > 0 ? '其中 ' + myOverdueCount + ' 件已逾時' : '沒有逾時項目'"></small>
+          <small x-text="myOverdueCount > 0 ? '其中 ' + myOverdueCount + ' 件已逾時' : '尚無逾時項目'"></small>
         </span>
       </div>
       <div class="vm-andon__seg vm-andon__seg--go" role="button" tabindex="0" data-testid="aq-kpi-flow"
@@ -494,11 +494,11 @@
     </div>
 
     <div class="aq-empty" data-testid="aq-empty" x-show="!loading && !loadError && totalPending === 0" x-cloak>
-      <strong x-text="isAdmin ? '目前沒有待簽核的單' : '您送審的單據都簽完了，也沒有需要您簽核的項目'"></strong>
+      <strong x-text="isAdmin ? '尚無待簽核的單' : '您送審的單據都簽完了，也沒有需要您簽核的項目'"></strong>
       <p>有新的單據送達時，這裡會出現，上方選單的紅點也會亮起。</p>
       <div class="aq-empty__acts">
-        <a href="daily-tasks.html" class="btn btn-ghost btn-sm">看今日工作事項</a>
-        <a href="quotations.html" class="btn btn-ghost btn-sm" x-show="canQuotation">去報價單</a>
+        <a href="daily-tasks.html" class="btn btn-ghost btn-sm">查看今日工作事項</a>
+        <a href="quotations.html" class="btn btn-ghost btn-sm" x-show="canQuotation">前往報價單</a>
         <a href="../index.html" class="btn btn-ghost btn-sm">回首頁</a>
       </div>
     </div>
@@ -520,8 +520,8 @@
         <div x-show="loading" class="aq-blank">載入中…</div>
 
         <div x-show="!loading && myItems.length === 0" class="aq-blank" x-cloak>
-          <strong>沒有輪到您的項目</strong>
-          <span x-text="totalPending > 0 ? '佇列裡的 ' + totalPending + ' 件都在等其他簽核人' : '佇列是空的'"></span>
+          <strong>尚無輪到您的項目</strong>
+          <span x-text="totalPending > 0 ? '佇列裡的 ' + totalPending + ' 件都在等其他簽核人' : '尚無待處理項目'"></span>
         </div>
 
         <template x-for="lane in myLanes" :key="lane.key">
@@ -547,7 +547,7 @@
                   <div class="aq-card__r2" x-text="cardSubtitle(item)"></div>
                   <div class="aq-card__why" data-testid="aq-why" x-show="cardReasons(item).length > 0">
                     <template x-for="(rs, ri) in cardReasons(item).slice(0, 2)" :key="ri"><span class="aq-reason-tag" :title="rs" x-text="rs"></span></template>
-                    <span class="aq-card__why-more" x-show="cardReasons(item).length > 2" x-text="'還有 ' + (cardReasons(item).length - 2) + ' 項，點開看'"></span>
+                    <span class="aq-card__why-more" x-show="cardReasons(item).length > 2" x-text="'還有 ' + (cardReasons(item).length - 2) + ' 項，展開查看'"></span>
                   </div>
                   <div class="aq-card__r3">
                     <span class="aq-card__amt" x-text="amountDisplay(item)"></span>
@@ -569,7 +569,7 @@
                       </template>
                       <template x-if="item.type !== 'custom_record' && item.type !== 'custom_module_def'">
                         <span style="display:contents">
-                          <span class="aq-card__wait" x-show="!canApprove(item)">同一層有人排在您前面，請點開看詳情</span>
+                          <span class="aq-card__wait" x-show="!canApprove(item)">同一層有人排在您前面，請展開查看詳情</span>
                           <button type="button" class="btn btn-primary btn-sm" data-testid="aq-quick-approve" x-show="canApprove(item)"
                                   @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
                           <button type="button" class="btn btn-reject btn-sm" x-show="canApprove(item)"
@@ -1048,7 +1048,7 @@
             簽核確認後無法撤回
           </span>
           <p class="aq-actbar__hint" data-testid="aq-reject-hint">
-            <strong x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'"></strong>：送回申請人修改，改好可以重新送簽。
+            <strong x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'"></strong>：送回申請人修改，修改後可重新送簽。
             <template x-if="!isVoucher(selected)"><span><strong>駁回結案</strong>：這張單不再處理，不會再回到簽核。</span></template>
           </p>
         </div>
@@ -1240,7 +1240,7 @@
         // 流程中的一筆：卡在誰、已經幾天（送審人的第一個問題「我的單卡在誰」；分組標頭已寫人名，這裡每筆再寫一次才不用往上找）
         stuckText(item) {
           const d = this._ageDays(item)
-          return '卡在：' + this.blockerOf(item).display + '，' + (d === 0 ? '今天送達' : '已 ' + d + ' 天')
+          return '待' + this.blockerOf(item).display + '處理，' + (d === 0 ? '今天送達' : '已 ' + d + ' 天')
         },
 
         get myItems()   { return this.flatItems.filter(i => this.isMine(i)) },
@@ -1640,7 +1640,7 @@
 
         async doReassign() {
           this.reassignError = ''
-          if (!this.reassignTo) { this.reassignError = '請選擇要轉給誰'; return }
+          if (!this.reassignTo) { this.reassignError = '請選擇轉交對象'; return }
           if (!this.reassignReason.trim()) { this.reassignError = '請填寫轉簽原因'; return }
           this.actioning = true
           try {
@@ -2113,12 +2113,12 @@
       </div>
       <div style="padding:18px 20px">
         <div style="font-size:12px;color:var(--text-dim);line-height:1.9;margin-bottom:14px">
-          目前卡在
+          目前待
           <b x-text="(selected?.currentApprovers || []).map(a => a.displayName || a.username).join('、') || '（未指定）'"></b>
-          身上。轉簽只會換掉<b>當層尚未簽的那個人</b>，已經簽過的與後面幾層不動。
+          處理。轉簽只會換掉<b>當層尚未簽的那個人</b>，已經簽過的與後面幾層不動。
         </div>
         <div style="margin-bottom:12px">
-          <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">轉給誰 *</label>
+          <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">轉交對象 *</label>
           <select id="aq-reassign-to" class="fi" x-model="reassignTo" style="width:100%">
             <option value="">請選擇</option>
             <template x-for="u in reassignCandidates" :key="u.username">

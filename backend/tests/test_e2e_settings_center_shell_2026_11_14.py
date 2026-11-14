@@ -321,6 +321,7 @@ def test_builder_locked_row_shows_its_reason_as_visible_text_on_phone(live_serve
     row.wait_for(state="attached", timeout=15000)
     page.wait_for_function("() => document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"]').textContent.includes('請先開啟')", timeout=10000)
 
+@pytest.mark.e2e
 def test_search_box_survives_ime_composition_without_redraw(live_server, make_user, e2e_browser):
     """注音輸入法：組字中（compositionstart～compositionend）不重畫搜尋框，組字完成才篩選；焦點與游標留在搜尋框。"""
     sa = make_user(username="s2_e2e_ime", role="superadmin")

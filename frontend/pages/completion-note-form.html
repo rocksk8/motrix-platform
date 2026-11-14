@@ -302,7 +302,7 @@
           <div class="cnf-card">
             <div class="cnf-card-title" x-text="labels.sectionSummary"></div>
             <textarea class="cnf-in" rows="4" x-model="form.work_summary" :disabled="!editable()" @input="dirty=true"
-                      placeholder="這次做了什麼、範圍到哪裡"></textarea>
+                      placeholder="本次作業內容與範圍"></textarea>
             <div class="cnf-hint">留空的話，這一區不會出現在完工單上。</div>
             <div x-show="recordsNote" data-testid="cnf-records-note"
                  style="margin-top:8px;padding:8px 12px;border-radius:6px;background:#EFF6FF;border:1px solid #BFDBFE;font-size:12px;color:#1E40AF;font-family:var(--font-zh)"
@@ -726,7 +726,7 @@
             !confirm('套用這組用語會覆蓋您已經逐欄調整過的標題，確定要套用嗎？')) return
         this.form.labels = Object.assign({}, this._presetData[key] || {})
         this._syncLabels(); this.dirty = true
-        this.msgError = false; this.msg = '已套用，記得按儲存'
+        this.msgError = false; this.msg = '已套用，請記得按「儲存」'
       },
       resetLabels() { this.form.labels = {}; this._syncLabels(); this.dirty = true },
 
@@ -788,7 +788,7 @@
       },
 
       async previewPdf() {
-        if (this.dirty && !confirm('有未儲存的變更，預覽看到的會是已儲存的版本。仍要預覽？')) return
+        if (this.dirty && !confirm('有未儲存的變更，預覽顯示的會是已儲存的版本。仍要預覽？')) return
         this.busy = true
         try {
           const r = await fetch(`/api/completion-notes/${this.noteNo}/pdf-download`, { headers: this._auth() })

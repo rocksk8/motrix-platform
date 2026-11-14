@@ -198,7 +198,7 @@ def apply_layout_ex(groups, ops, builder=False):
             skipped.append({"op": op, "reason": "選單上沒有這一項（模組未載入或使用者沒有權限）"})
             continue
         if builder and op["op"] == "move" and "to" in op and not _group_dest(op["to"], group_by_key):
-            skipped.append({"op": op, "reason": "目的群組不存在，或這位使用者看不到該群組"})
+            skipped.append({"op": op, "reason": "目的群組不存在，或這位使用者無法檢視該群組"})
             continue
         if op["op"] == "hide":
             hidden.add(tgt)

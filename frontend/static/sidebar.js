@@ -199,7 +199,24 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
   // ── 全域搜尋（跨客戶/供應商/報價單/業務開發案/料號）──────────────────────────
+  // 手機（≤767px）：下拉原本固定 340px、靠搜尋框左緣，右緣會超出畫面（390 寬時右緣在 442px）。
+  // 改成貼齊視窗左右各 8px 的固定位置，每個結果列至少 44px 高（實際畫面；字級縮放 zoom 會連 px 一起縮，所以除回去）。
+  // 限高用 100dvh / --fz：根元素 zoom 會把 vh／dvh 一起放大（字級「特」1.3 倍時，結果多的下拉底部會掉到螢幕外），與全站其他 vh 規則同寫法。
+  // 樣式是行內的，所以用 !important 蓋；桌機（>767px）完全不受影響，維持 340px。
+  function ensureGlobalSearchCss() {
+    if (document.getElementById('gs-mobile-css')) return
+    var st = document.createElement('style')
+    st.id = 'gs-mobile-css'
+    st.textContent = '@media (max-width:767px){'
+      + '.gs-drop{position:fixed !important;left:8px !important;right:8px !important;width:auto !important;max-width:none !important;'
+      + 'top:calc(var(--topbar-bar-h) + 6px) !important;max-height:calc(100vh - var(--topbar-bar-h) - 24px) !important;max-height:calc(100dvh / var(--fz, 1) - var(--topbar-bar-h) - 24px) !important}'
+      + '.gs-item{min-height:calc(44px / var(--fz, 1));display:flex !important;flex-direction:column;justify-content:center}'
+      + '}'
+    document.head.appendChild(st)
+  }
+
   function buildGlobalSearch() {
+    ensureGlobalSearchCss()
     return `
       <div x-data="globalSearchStore()" x-init="init()" style="position:relative;flex:1;max-width:320px;margin:0 14px">
         <div style="position:relative">
@@ -208,7 +225,7 @@ if (typeof module !== 'undefined' && module.exports) {
                  placeholder="搜尋客戶／報價單／案件／料號…"
                  style="width:100%;padding:6px 10px 6px 28px;border:1px solid #333;border-radius:5px;background:#1a1a1a;color:#eee;font-size:12px;outline:none;box-sizing:border-box">
         </div>
-        <div x-show="open" @click.outside="close()" x-cloak
+        <div class="gs-drop" data-testid="gsearch-drop" x-show="open" @click.outside="close()" x-cloak
              style="display:none;position:absolute;top:calc(100% + 6px);left:0;width:340px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;max-height:420px;overflow-y:auto">
           <template x-if="!loading && !hasResults">
             <div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">查無符合結果</div>
@@ -217,7 +234,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">報價單</div>
               <template x-for="item in results.quotations" :key="'quote-'+item.quoteNo">
-                <div @click="goQuotation(item.quoteNo)" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goQuotation(item.quoteNo)" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.quoteNo + '　' + (item.customerName || '—')"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.projectName || item.status || ''"></div>
                 </div>
@@ -228,7 +245,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">業務開發案</div>
               <template x-for="item in results.devCases" :key="'dc-'+item.id">
-                <div @click="goDevCase()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goDevCase(item.id)" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
                 </div>
@@ -239,7 +256,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">客戶</div>
               <template x-for="item in results.customers" :key="'c-'+item.id">
-                <div @click="goCustomer()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goCustomer()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
@@ -250,7 +267,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div style="border-bottom:1px solid var(--border-light)">
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">供應商</div>
               <template x-for="item in results.suppliers" :key="'s-'+item.id">
-                <div @click="goSupplier()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goSupplier()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
@@ -261,7 +278,7 @@ if (typeof module !== 'undefined' && module.exports) {
             <div>
               <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">料號</div>
               <template x-for="item in results.parts" :key="'p-'+item.partNo">
-                <div @click="goPart()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                <div @click="goPart()" class="gs-item" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.partNo + '　' + item.name"></div>
                   <div style="font-size:12px;color:var(--text-dim)" x-text="item.brand"></div>
                 </div>
@@ -334,7 +351,7 @@ if (typeof module !== 'undefined' && module.exports) {
         var list = document.getElementById('tb-online-list')
         if (!list) return
         if (!d.users.length) {
-          list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有其他人在線</div>'
+          list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">尚無其他人員在線</div>'
           return
         }
         list.innerHTML = d.users.map(function (u) {
@@ -444,7 +461,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<div x-text="item.message" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
       + '</div>'
       + '</template>'
-      + '<div x-show="items.length===0 && reminders.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
+      + '<div x-show="items.length===0 && reminders.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">尚無通知</div>'
       + '</div>'
       + (ad ? '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>' : '')
       + '</div>'
@@ -490,7 +507,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + buildFontCtrl()
       + buildThemeToggle()
       + buildOnlineWidget()
-      + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
+      + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="本頁使用說明" aria-label="本頁使用說明" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
       + '</div>'
       + buildAcctMenu(cpHref)
       + '</div>'
@@ -1157,7 +1174,9 @@ if (typeof module !== 'undefined' && module.exports) {
     // 只有「儀表板」模組的檢視者會在 index ⇄ case-management 之間無限跳。
     // 只處理側欄真的列過的頁面（`_deniedPages` 來自 ni() 的顯示條件），
     // 沒列過的頁面一律放行：寧可漏擋也不要把人鎖在門外，資料那層 API 會擋。
-    if (_deniedPages.indexOf(file) >= 0) _showNoPermission()
+    // 2026-11-14（業務開發 UX 報告 #9）：`dev-crm.html` 自己有守門（頁面專屬說明＋回首頁；後端 `_require_dev` 對 admin 放行），
+    // 這裡再蓋一張通用鎖頁會造成「同一情況兩套文案」，而且 admin 從通知／搜尋點進來還會被擋。這一頁交給頁面自己判斷。
+    if (_deniedPages.indexOf(file) >= 0 && file !== 'dev-crm.html') _showNoPermission()
 
     // 🔴 `BR1` 第三格：**把「這個行程載入的是哪一版」放到每一頁的頁尾。**
     //
@@ -1239,7 +1258,7 @@ if (typeof module !== 'undefined' && module.exports) {
         //    不必來問任何人（`BR4` 的核心訴求）。
         var titles = d.behindTitles || []
         bar.title = '這個行程是 ' + started + ' 啟動的。磁碟上 '
-          + (d.disk_commit_short || '?') + ' 之後多了 ' + n
+          + (d.disk_commit_short || '?') + ' 之後新增 ' + n
           + ' 個動到程式碼的異動：\n' + titles.map(function (t) {
               return '• ' + t
             }).join('\n')

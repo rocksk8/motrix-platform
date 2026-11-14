@@ -404,7 +404,7 @@
               </template>
             </tbody>
           </table>
-          <div class="empty-state" x-show="purchaseSuggestions.items.length === 0">目前沒有低於水位的料號，暫無採購建議</div>
+          <div class="empty-state" x-show="purchaseSuggestions.items.length === 0">尚無低於水位的料號，暫無採購建議</div>
         </div>
       </div>
     </template>
@@ -778,7 +778,7 @@ function app() {
         if (!r.ok) { alert('序號歷史功能目前未開啟或您沒有權限'); return }
         const d = await r.json()
         const lines = (d.events || []).map(e => MotrixOnepipe.eventLine(e, true))
-        alert(`序號「${it.serial_no}」的歷史（只從入庫紀錄開啟當天起有資料）：\n\n` + (lines.length ? lines.join('\n') : '沒有紀錄'))
+        alert(`序號「${it.serial_no}」的歷史（只從入庫紀錄開啟當天起有資料）：\n\n` + (lines.length ? lines.join('\n') : '尚無紀錄'))
       } catch { alert('網路錯誤') }
     },
 

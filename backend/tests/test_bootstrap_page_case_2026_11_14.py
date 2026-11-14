@@ -45,6 +45,11 @@ def _page_sections():
     return B.PAGE_SECTIONS["case"]
 
 
+def _orig_sections():
+    """有原端點的頁面區段（衍生區段 financeView 沒有原端點，另有專門的測試）。"""
+    return {n: p for n, p in _page_sections().items() if n not in B.DERIVED_SECTIONS}
+
+
 # ── 後端：逐區段、逐角色 ────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("role", ROLES)
@@ -53,7 +58,7 @@ def test_page_sections_equal_the_original_endpoints_or_carry_the_same_refusal(cl
     r = client.get("/api/bootstrap?page=case", headers=h)
     assert r.status_code == 200, r.text
     d = r.json()
-    for name, path in _page_sections().items():
+    for name, path in _orig_sections().items():
         orig = client.get(path, headers=h)
         if orig.status_code == 200:
             assert name in d, (role, name, d["errors"])
@@ -69,6 +74,7 @@ def test_superadmin_gets_every_page_section_with_real_content(client, world):
     assert d["errors"] == {}
     assert set(_page_sections()) <= set(d)
     assert "groups" in d["onepipeFlags"] and "onepipe" in d["onepipeFlags"]["groups"]
+    assert d["financeView"] == {"financialView": True}
     assert set(d["builderGroups"]["groups"]) <= set(B.CASE_BUILDER_GROUPS)
     assert isinstance(d["usersSelectable"], list) and d["usersSelectable"]
 
@@ -102,6 +108,7 @@ def test_page_param_is_not_a_way_to_reach_any_other_handler(client, world):
     assert set(B.PAGE_SECTIONS) == {"case"}
     assert B._page_handlers("nope") == {} and B._page_handlers(None) == {}
     assert set(B._page_handlers("case")) == set(_page_sections())
+    assert B.DERIVED_SECTIONS == {"financeView"} and set(B.DERIVED_SECTIONS) <= set(_page_sections())
 
 
 def test_every_page_handler_takes_only_authorization_after_binding():
@@ -129,7 +136,8 @@ def test_unconfigured_company_gives_no_page_section(client, make_user, role):
     for name, path in _page_sections().items():
         assert name not in d, (role, name)
         assert d["errors"].get(name) == 428, (role, name)
-        assert client.get(path, headers=h).status_code == 428, (role, name)   # 前提：原端點本來就被擋
+        if name not in B.DERIVED_SECTIONS:
+            assert client.get(path, headers=h).status_code == 428, (role, name)   # 前提：原端點本來就被擋
     assert {k for k in d if k not in ("v", "errors")} <= B.SETUP_GATE_OK
 
 
@@ -144,7 +152,7 @@ def _case_block():
 def test_js_case_table_matches_the_backend():
     block = _case_block()
     pairs = dict(re.findall(r"BOOT_SECTIONS\['(/api/[^']+)'\] = \['(\w+)', \d\]", block))
-    want = {path: name for name, path in _page_sections().items()}
+    want = {path: name for name, path in _orig_sections().items()}
     # 全站區段在案件頁有兩個載入點（側欄＋案件頁）：次數放寬成 2，但路徑→區段仍要與後端全站表一致
     for path, name in list(pairs.items()):
         if name in B.ORIGINAL_PATH:
@@ -161,7 +169,7 @@ def test_only_the_case_page_asks_for_page_sections():
 
 
 def test_every_case_call_site_uses_boot_fetch_with_a_registered_url():
-    table = set(_page_sections().values()) | {
+    table = set(_orig_sections().values()) | {
         "/api/auth/me", "/api/system/modules/availability", "/api/system/bonus-module-status"}
     sites = {
         "js/case-management-core.js": ["/api/settings/company-profile/public", "/api/auth/me", "/api/users/selectable", "/api/system/modules/availability"],
@@ -217,17 +225,17 @@ def _run(path, extra, urls):
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
 def test_case_page_is_served_from_the_bundle_and_asks_with_page_case():
-    urls = list(_page_sections().values())
-    extra = {name: {"boot": name} for name in _page_sections()}
+    urls = list(_orig_sections().values())
+    extra = {name: {"boot": name} for name in _orig_sections()}
     out = _run("/pages/case-management.html", extra, urls)
     assert "/api/bootstrap?page=case" in out["calls"] and "/api/bootstrap" not in out["calls"]
     assert out["real"] == []                                   # 8 支都由 bootstrap 供應，沒有真的請求
-    assert [g[1] for g in out["got"]] == [{"boot": n} for n in _page_sections()]
+    assert [g[1] for g in out["got"]] == [{"boot": n} for n in _orig_sections()]
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
 def test_case_page_falls_back_to_the_real_endpoint_for_missing_sections():
-    urls = list(_page_sections().values())
+    urls = list(_orig_sections().values())
     out = _run("/pages/case-management.html", {"usersSelectable": {"boot": "u"}}, urls)
     assert out["got"][urls.index("/api/users/selectable")][1] == {"boot": "u"}
     assert sorted(out["real"]) == sorted(u for u in urls if u != "/api/users/selectable")
@@ -235,8 +243,8 @@ def test_case_page_falls_back_to_the_real_endpoint_for_missing_sections():
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
 def test_other_pages_do_not_register_or_ask_for_case_sections():
-    urls = list(_page_sections().values())
-    extra = {name: {"boot": name} for name in _page_sections()}
+    urls = list(_orig_sections().values())
+    extra = {name: {"boot": name} for name in _orig_sections()}
     out = _run("/pages/quotation-form.html", extra, urls)
     assert "/api/bootstrap" in out["calls"] and "/api/bootstrap?page=case" not in out["calls"]
     assert sorted(out["real"]) == sorted(urls)                 # 一律真的 fetch、不被 bootstrap 內容取代
@@ -289,6 +297,146 @@ def test_frontend_gate_equals_backend_can_see_financial():
     不一致就會回到『畫面不送卻有權限』或『送了卻 403』。"""
     from helpers import auth
     src = CORE_JS.read_text(encoding="utf-8")
-    assert "return ['superadmin', 'finance'].includes(this.session.role)" in src
+    assert "return ['superadmin', 'finance'].includes(this.session.role)" in src    # 伺服器答案還沒到時的備援規則
     for role in ("superadmin", "admin", "finance", "sales", "engineer", "viewer"):
         assert auth.can_see_financial({"role": role, "username": "x", "modules": []}) == (role in ("superadmin", "finance")), role
+
+
+# ── T86：財務金額可視以後端答案為準（financeView 區段；旗標 finance_via_effective 開啟時前端不能只看角色）────────────
+
+def _set_finance_flag(value):
+    import db
+    from helpers import auth as A
+    conn = db.get_db()
+    conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,'2026-11-14') "
+                 "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json", (A.FINANCE_FLAG_KEY, json.dumps(value)))
+    conn.commit()
+    conn.close()
+    A.reset_finance_mode_cache()
+
+
+@pytest.fixture()
+def fin_world(client, make_user):
+    import db
+    from helpers import auth as A
+    hdr = {}
+    for name, role in (("fv_sa", "superadmin"), ("fv_fin", "finance"), ("fv_sales", "sales"), ("fv_eng", "engineer"), ("fv_adm", "admin")):
+        u, pw = make_user(username=name, role=role)
+        hdr[name] = _login(client, u, pw)
+    conn = db.get_db()
+    ids = {r["username"]: r["id"] for r in conn.execute("SELECT id, username FROM users")}
+    roles = {r["key"]: r["id"] for r in conn.execute("SELECT id, key FROM duty_roles")}
+    conn.close()
+    A.reset_finance_mode_cache()
+    yield ids, roles, hdr
+    A.reset_finance_mode_cache()
+
+
+def _fv(client, h):
+    d = client.get("/api/bootstrap?page=case", headers=h).json()
+    assert d["errors"].get("financeView") is None, d["errors"]
+    return d["financeView"]["financialView"]
+
+
+def test_finance_view_follows_the_role_rule_while_the_flag_is_off(client, fin_world):
+    _ids, _roles, hdr = fin_world
+    assert {n: _fv(client, h) for n, h in hdr.items()} == {
+        "fv_sa": True, "fv_fin": True, "fv_sales": False, "fv_eng": False, "fv_adm": False}
+
+
+@pytest.mark.parametrize("flag", ("off", "shadow", "on"))
+def test_finance_view_equals_backend_can_see_financial_for_every_user_and_flag(client, fin_world, flag):
+    """旗標 off／shadow／on 下，bootstrap 給前端的答案 ＝ 後端 can_see_financial 對同一個人的答案（含職責角色與個人扣項）。"""
+    import db
+    from helpers import auth as A
+    from helpers import duty_roles as DR
+    ids, roles, hdr = fin_world
+    sa = {"id": 1, "username": "sa", "display_name": "SA", "role": "superadmin", "modules": "[]"}
+    conn = db.get_db()
+    DR.bind_role(conn, sa, ids["fv_sales"], roles["finance"], reason="測試財務角色綁定")          # 業務被授予財務職責
+    conn.execute("INSERT INTO user_perm_subtracts (user_id, perm_key, set_by, set_at, reason) VALUES (?,?,?,?,?)",
+                 (ids["fv_fin"], "financial_view", 1, "2026-11-14", "測試"))                    # 財務角色被扣掉財務檢視
+    conn.commit()
+    conn.close()
+    _set_finance_flag(flag)
+    users = {}
+    conn = db.get_db()
+    try:
+        for r in conn.execute("SELECT id, username, display_name, role, modules FROM users WHERE username LIKE 'fv_%'"):
+            users[r["username"]] = dict(r)
+    finally:
+        conn.close()
+    got = {n: _fv(client, h) for n, h in hdr.items()}
+    assert got == {n: bool(A.can_see_financial(users[n])) for n in hdr}
+    if flag == "on":
+        assert got["fv_sales"] is True and got["fv_fin"] is False and got["fv_sa"] is True    # 前端只看角色會答錯的兩個人
+    else:
+        assert got["fv_sales"] is False and got["fv_fin"] is True
+
+
+def test_finance_view_section_is_login_gated_and_carries_nothing_else(client, fin_world):
+    _ids, _roles, hdr = fin_world
+    d = client.get("/api/bootstrap?page=case", headers=hdr["fv_eng"]).json()
+    assert d["financeView"] == {"financialView": False}
+    assert client.get("/api/bootstrap?page=case").status_code == 401
+
+
+CAN_SEE_HARNESS = r"""
+const fs = require('fs'); const src = fs.readFileSync(process.argv[1], 'utf8'); const inp = JSON.parse(process.argv[2])
+const grab = n => { const a = src.indexOf(n); return src.slice(a, src.indexOf('\n    },\n', a) + 7) }
+const body = grab('    canSeeFinancial() {') + grab('    canFinanceRole() {')
+const o = new Function('return {' + body.replace(/,\s*$/, '') + '}')()
+o.session = { role: inp.role }
+if (inp.ok !== null) o.financeViewOk = inp.ok
+console.log(JSON.stringify(o.canSeeFinancial()))
+"""
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+@pytest.mark.parametrize("role,ok,want", [("sales", None, False), ("finance", None, True), ("sales", True, True),
+                                          ("finance", False, False), ("superadmin", False, False)])
+def test_frontend_can_see_financial_uses_the_server_answer_then_falls_back_to_role(role, ok, want):
+    out = subprocess.run([NODE, "-e", CAN_SEE_HARNESS, str(CORE_JS), json.dumps({"role": role, "ok": ok})],
+                         capture_output=True, text=True, timeout=60, encoding="utf-8")
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout.strip()) is want
+    src = CORE_JS.read_text(encoding="utf-8")
+    assert "financeViewOk: undefined," in src and "motrixBoot('financeView')" in src
+
+
+# ── 模組區段改走提供者 bootstrap.section（IP-BS1）：L1 不 import L2 ─────────────────────────────────────────────
+
+MODULE_SECTIONS = {"profitWarning", "vendorsSelectable", "contractorsSelectable"}
+
+
+def test_module_owned_sections_are_provided_through_the_registry_not_imported(client):
+    from core import registry
+    got = registry.providers("bootstrap.section")
+    assert MODULE_SECTIONS <= set(got), sorted(got)
+    src = Path(B.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(from|import)\s+modules\b", src, re.M), "routers/bootstrap.py 不可以直接 import 任何 L2 模組"
+    # 提供者就是原端點的處理函式本身（同一份權限檢查）
+    from modules.case.api import project_margin
+    from modules.subcontract.api import contractors, vendor_contractors
+    assert got["profitWarning"] is project_margin.get_profit_warning_config
+    assert got["vendorsSelectable"] is vendor_contractors.list_vendors_selectable
+    assert got["contractorsSelectable"] is contractors.list_contractors_selectable
+
+
+def test_missing_provider_means_the_section_is_absent_and_everything_else_still_works(client, world, monkeypatch):
+    from core import registry
+    real = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap, *a, **k: {} if cap == "bootstrap.section" else real(cap, *a, **k))
+    d = client.get("/api/bootstrap?page=case", headers=world["admin"]).json()
+    for name in MODULE_SECTIONS:
+        assert name not in d and name not in d["errors"], name
+    for name in set(_page_sections()) - MODULE_SECTIONS:
+        assert name in d or name in d["errors"], name
+    assert d["me"]["username"] == "pc_admin"
+
+
+def test_a_provider_cannot_add_a_section_that_is_not_in_the_page_table(client, monkeypatch):
+    from core import registry
+    real = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap, *a, **k: {**real(cap, *a, **k), "evil": (lambda authorization=None: {"x": 1})} if cap == "bootstrap.section" else real(cap, *a, **k))
+    assert "evil" not in B._page_handlers("case")

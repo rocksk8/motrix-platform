@@ -76,7 +76,7 @@ def test_help_button_only_on_rows_with_content_and_sections_in_fixed_order():
     assert 'data-mx="help" data-key="a.three"' not in o["html"] and 'data-mx="help" data-key="a.four"' not in o["html"]   # null／全空 ⇒ 不畫
     assert o["parts"] == ["what", "when", "impact", "recommend"]
     titles = re.findall(r"<h4>([^<]+)</h4>", o["full"])
-    assert titles == ["這是什麼", "什麼時候要改", "改了會影響什麼", "建議值"]
+    assert titles == ["說明", "調整時機", "影響範圍", "建議值"]
     assert o["none"] == "" and o["nul"] == ""
     assert o["partial"].count("<section") == 1 and "<script>" not in o["partial"] and "&lt;script&gt;" in o["partial"] and "<br>" in o["partial"]
 

@@ -38,10 +38,10 @@ _SCOPE_TEXT = {
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
     "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
-    "list_pref_policy": {"screens": "該清單頁面上每個人可以自己調整的欄位、排序與每頁筆數的範圍（只改個人能選的範圍；金額欄位是否看得到仍由欄位可見政策決定）", "customerVisible": False},
+    "list_pref_policy": {"screens": "該清單頁面上每個人可以自己調整的欄位、排序與每頁筆數的範圍（只改個人能選的範圍；金額欄位是否可檢視仍由欄位可見政策決定）", "customerVisible": False},
     "option_list": {"screens": "用到這份清單的下拉選單與篩選（客戶類型、供應商類型、料件分類、料件單位）", "customerVisible": False},
-    "status_display": {"screens": "報價單、案件、出納等畫面上狀態的顯示名稱與顏色（只改看到的字與色，不改任何狀態值或權限）", "customerVisible": False},
-    "notify_template": {"screens": "該簽核事件的站內訊息與通知信的文字（收件人看到的字）", "customerVisible": False},
+    "status_display": {"screens": "報價單、案件、出納等畫面上狀態的顯示名稱與顏色（只改顯示的字與色，不改任何狀態值或權限）", "customerVisible": False},
+    "notify_template": {"screens": "該簽核事件的站內訊息與通知信的文字（收件人所見的字）", "customerVisible": False},
     "notify_action": {"screens": "額外通知：當指定事件發生時，哪些人會在站內（與信件）收到什麼文字——放寬＝更多人收到更多通知，不改原本的內建通知", "customerVisible": False},
     "case_stage_template": {"screens": "套用這個樣板時，新案件預填的執行階段（名稱、日期建議、收入認列比例建議）；已套用的案件不受影響", "customerVisible": False},
 }

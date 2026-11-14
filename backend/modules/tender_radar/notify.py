@@ -20,7 +20,7 @@ _mt.register("tender_source_changed", "標案雷達來源網站格式異動", "s
              "請通知系統維護人員依來源網站的新格式調整解析器。", owner="tender_radar")
 _mt.register("tender_detail_blocked", "標案雷達詳細頁被要求驗證碼", "system", "superadmins", "",
              "來源網站的標案詳細頁改成要先通過驗證碼；標案列表仍可讀取，但履約地點與招標方式暫時無法自動取得（顯示為「未取得」）。",
-             "系統不會嘗試破解驗證碼，已停止抓取詳細頁；請通知系統維護人員評估改用官方開放資料或人工補地點。", owner="tender_radar")
+             "系統不會嘗試破解驗證碼，已停止擷取詳細頁；請通知系統維護人員評估改用官方開放資料或人工補地點。", owner="tender_radar")
 
 
 # ── 標案雷達（2026-09-21，細線 6 第 5 步）────────────────────────────────────
@@ -130,7 +130,7 @@ def notify_tender_found(tenders: list, watch_names: list = None,
     if announce_quiet_period:
         note = (
             "本信為標案雷達的第一封通知。<b>接下來 7 天為純記錄模式，不再寄信</b>："
-            "系統照常每日抓取並記錄。"
+            "系統照常每日擷取並記錄。"
             "請於此期間至畫面確認關鍵字與排除詞的設定，"
             "第 8 天起恢復每日彙總。<br>" + note
         )
@@ -215,7 +215,7 @@ def notify_tender_detail_blocked() -> None:
     rows = [("狀態", "詳細頁要求驗證碼（撲克牌檢核）"), ("影響", "履約地點、招標方式無法自動取得；標案列表不受影響")]
     intro = (
         "標案雷達可以讀取政府電子採購網的標案列表，但標案詳細頁現在要先通過驗證碼。"
-        "系統不會嘗試破解，已停止抓取詳細頁（隔天才會試一次看是否解除）。"
+        "系統不會嘗試破解，已停止擷取詳細頁（隔天才會試一次看是否解除）。"
     )
     html = _en._build_html("tender_detail_blocked", "標案雷達：詳細頁被要求驗證碼", "地點暫時無法取得", "#92400E",
                        rows, "", _en._base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,

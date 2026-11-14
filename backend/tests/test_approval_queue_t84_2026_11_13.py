@@ -97,7 +97,7 @@ def test_empty_state_replaces_the_two_empty_columns(live_server, make_user, new_
     box = page.locator("[data-testid=aq-empty]")
     box.wait_for(state="visible", timeout=20000)
     t = box.inner_text()
-    assert "您送審的單據都簽完了" in t and "看今日工作事項" in t and "去報價單" in t and "回首頁" in t
+    assert "您送審的單據都簽完了" in t and "查看今日工作事項" in t and "前往報價單" in t and "回首頁" in t
     assert not page.locator(".aq-runway").first.is_visible()
 
 

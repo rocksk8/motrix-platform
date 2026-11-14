@@ -325,7 +325,7 @@ def test_preview_role_cap_explains_who_is_affected_when_and_whether_it_can_be_un
     _mk(make_user, "pv_fin2", "finance")
     p = S.preview_role_cap(conn, "finance", "zz.doc.edit", True)
     assert p["sentence"] == "財務可以修改測試單" and p["changed"] and p["users"] >= 2 and "位使用者" in p["usersText"]
-    assert p["effective"] == "儲存後立即生效" and not p["pending"] and p["reversible"] and "一鍵復原" in p["reversibleText"]
+    assert p["effective"] == "儲存後立即生效" and not p["pending"] and p["reversible"] and "復原" in p["reversibleText"]
     assert "不受影響" in p["appliesTo"] and p["risk"] == "" and p["question"] == "財務可以修改測試單嗎？"
     hi = S.preview_role_cap(conn, "finance", "zz.doc.pay", True)
     assert hi["pending"] and "7 天確認期間" in hi["effective"] and "另一位最高管理者核准" in hi["effective"] and "高風險" in hi["risk"]

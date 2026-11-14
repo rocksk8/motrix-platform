@@ -98,7 +98,7 @@
         <div class="rk-panel">
           <h2>款別</h2>
           <div class="rk-sub">
-            <b>名稱</b>：開申請時看到的字，例：「訂金款」。
+            <b>名稱</b>：開申請時顯示的字，例：「訂金款」。
             <b>啟用</b>：停用後不能再開新的申請，舊申請照常顯示，例：不再使用「進度款」就停用它。
             <b>可以開立的派發狀態</b>：派發在勾選的狀態時才能開這個款別，例：「完工款」勾「已驗收」「完工」，派發仍在「已送出」時則無法開立。
             <b>代碼</b>是系統用的名字，建立後不能改，款別也不能刪，只能停用。
@@ -143,7 +143,7 @@
             <button class="btn" data-testid="rk-validate" @click="validate()">驗證</button>
             <button class="btn" data-testid="rk-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
             <button class="btn" data-testid="rk-changes" x-show="hasDraft" @click="showChanges()">與目前使用的版本比較</button>
-            <button class="btn btn-danger" data-testid="rk-discard" x-show="hasDraft" @click="discardDraft()">丟棄草稿</button>
+            <button class="btn btn-danger" data-testid="rk-discard" x-show="hasDraft" @click="discardDraft()">捨棄草稿</button>
           </div>
           <div data-testid="rk-problems" x-show="problems.length">
             <ul class="rk-prob">

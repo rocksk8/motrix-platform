@@ -130,7 +130,7 @@
     <div class="cm-section-title" style="margin-bottom:12px" x-text="isSuperadmin ? '全部代理設定' : '我的代理設定'"></div>
     <div x-show="loading" class="loading-text">載入中…</div>
     <template x-if="!loading && delegates.length === 0">
-      <div class="empty-state">目前沒有代理設定</div>
+      <div class="empty-state">尚無代理設定</div>
     </template>
     <table class="data-table" x-show="!loading && delegates.length > 0">
       <thead><tr>

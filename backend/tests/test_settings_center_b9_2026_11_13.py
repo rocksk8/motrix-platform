@@ -292,7 +292,7 @@ def test_groups_api_carries_category_section_blurb_and_field_texts(client, make_
     by = {g["group"]: g for g in r["groups"]}
     assert by["uploads"]["category"] == "data" and by["uploads"]["blurb"] and by["uploads"]["when"]
     assert by["builder_layout"]["section"] == "開放哪些客製功能"
-    assert any("單檔" in x for x in by["uploads"]["fieldTexts"])
+    assert any("單一檔案" in x for x in by["uploads"]["fieldTexts"])
     assert [c["key"] for c in r["categories"]][:3] == ["company", "people", "flow"]      # 只列有項目的分類（「開始使用」等之後由總覽那一批填入）
     assert all(g.get("category") for g in r["groups"] if g["group"] in set(_real_groups())), "每個群組都有分類"
 

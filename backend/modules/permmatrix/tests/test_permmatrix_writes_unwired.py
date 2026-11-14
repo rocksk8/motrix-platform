@@ -175,6 +175,7 @@ def test_permmatrix_module_declares_exactly_the_reviewed_routes():
         ("GET", "/api/permmatrix/users/{user_id}/effective"), ("GET", "/api/permmatrix/pending"), ("GET", "/api/permmatrix/versions"),
         ("GET", "/api/permmatrix/delegations"),
         ("POST", "/api/permmatrix/role-cap"), ("POST", "/api/permmatrix/role-cap/preview"),
+        ("POST", "/api/permmatrix/role-cap/batch"), ("POST", "/api/permmatrix/role-cap/batch/preview"),      # T86 S4c：角色格暫存區批次
         ("POST", "/api/permmatrix/user-override"), ("POST", "/api/permmatrix/user-override/preview"), ("DELETE", "/api/permmatrix/user-override"),
         ("POST", "/api/permmatrix/pending/{pid}/cancel"), ("POST", "/api/permmatrix/pending/{pid}/approve"),
         ("POST", "/api/permmatrix/versions/{version_id}/restore"), ("POST", "/api/permmatrix/undo")])
@@ -191,7 +192,8 @@ def test_every_write_endpoint_checks_superadmin_first():
         for d in fn.decorator_list:
             if isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in ("post", "put", "patch", "delete"):
                 writes.append(fn)
-    assert len(writes) == 9, [f.name for f in writes]
+    assert len(writes) == 11, [f.name for f in writes]
     for fn in writes:
-        first = ast.unparse(fn.body[0])
+        body = [n for n in fn.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str))]   # 略過 docstring
+        first = ast.unparse(body[0])
         assert "_require_user(authorization, require_superadmin=True)" in first, (fn.name, first)

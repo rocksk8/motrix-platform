@@ -140,13 +140,13 @@
             </div>
           </div>
         </div>
-        <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核皆由此進入；您看得到的項目依權限顯示</div>
+        <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核皆由此進入；您可檢視的項目依權限顯示</div>
 
         <div x-show="error" class="error-bar" x-text="error" role="alert"></div>
 
         <div class="first-hint" x-show="hint && loaded && sections.length" data-testid="hub-first-hint">
           <span>初次使用？請於左側選擇分類，右側將列出該分類下可設定的項目；找不到時，請於上方搜尋框輸入關鍵字。</span>
-          <button type="button" class="hint-x" @click="dismissHint()" aria-label="我知道了，不用再顯示">我知道了</button>
+          <button type="button" class="hint-x" @click="dismissHint()" aria-label="已了解，不再顯示">我知道了</button>
         </div>
 
         <div class="hub" x-show="loaded && sections.length">
@@ -175,7 +175,7 @@
                         <div class="row__desc" x-html="hl(it.desc)"></div>
                         <div class="row__impact" x-text="it.impact"></div>
                         <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
-                        <div class="row__why" x-show="it.planned && !it.denied">這項功能還在開發中，目前還不能開啟。</div>
+                        <div class="row__why" x-show="it.planned && !it.denied">這項功能開發中，目前尚不能開啟。</div>
                         <div class="row__grp" x-text="it._sec"></div>
                       </span>
                       <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
@@ -183,7 +183,7 @@
                     </a>
                   </template>
                 </div>
-                <div class="empty" x-show="!results.length" x-text="'沒有符合「' + q.trim() + '」的項目。試試別的關鍵字，或確認您有該功能的權限。'"></div>
+                <div class="empty" x-show="!results.length" x-text="'查無符合「' + q.trim() + '」的項目。試試別的關鍵字，或確認您有該功能的權限。'"></div>
               </div>
             </template>
             <template x-if="!q.trim() && current">
@@ -199,7 +199,7 @@
                         <div class="row__desc" x-text="it.desc"></div>
                         <div class="row__impact" x-text="it.impact"></div>
                         <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
-                        <div class="row__why" x-show="it.planned && !it.denied">這項功能還在開發中，目前還不能開啟。</div>
+                        <div class="row__why" x-show="it.planned && !it.denied">這項功能開發中，目前尚不能開啟。</div>
                       </span>
                       <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
                       <svg class="row__go" x-show="!it.denied && !it.planned" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>

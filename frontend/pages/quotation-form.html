@@ -919,7 +919,7 @@
             <span :style="st.done ? 'color:#059669' : 'color:#DC2626'" style="width:16px;font-weight:700" x-text="st.done ? '✓' : '✗'"></span>
             <span :style="st.done ? 'color:#6B7280' : 'color:#111827;font-weight:600'" x-text="(i+1) + '. ' + st.label"></span>
             <span x-show="!st.done && (precheck?.steps || []).findIndex(x => !x.done) === i"
-                  style="font-size:10px;background:#FEE2E2;color:#B91C1C;border-radius:3px;padding:1px 6px">目前卡在這一步</span>
+                  style="font-size:10px;background:#FEE2E2;color:#B91C1C;border-radius:3px;padding:1px 6px">目前處於此步驟</span>
           </div>
         </template>
         <div style="margin-top:12px;color:#4B5563">
@@ -1244,6 +1244,16 @@
            style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
         <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請先載入最新版，再重新進行您要修改的部分。</span>
         <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
+      </div>
+
+      <!-- T86 業務開發→報價單：從商機「轉建」帶 ?devCase=<id> 進來時，第一次存檔成功後自動連回該商機（PATCH /api/dev-cases/<id>/convert）。
+           連結失敗不准靜默：持續顯示原因與「重試連結」（報價單本身已存好，不會重複建單）。 -->
+      <div x-show="devCaseBanner.kind" x-cloak>
+      <div data-testid="qf-devcase-banner" role="alert"
+           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
+        <span data-testid="qf-devcase-msg" x-text="devCaseBanner.msg"></span>
+        <button class="btn btn-sm" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
+      </div>
       </div>
 
       <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->
@@ -2509,7 +2519,7 @@
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
           每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務及備註說明五段文字。
           <b>★ 是新增報價單時自動帶入的那一組。</b><br>
-          ⚠️ 改這裡<b>不會動到任何已經開出去的報價單</b>——報價單存的是當下複製過去的文字，
+          ⚠️ 改這裡<b>不會動到任何已經開立的報價單</b>——報價單存的是當下複製的文字，
           不是指向這裡的連結。
         </div>
 
@@ -2699,7 +2709,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.47'
+  const FORM_VERSION = 'V3.48'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2769,6 +2779,10 @@
       reviewEditing: false,
       reviewEditBusy: false,
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
+      devCaseId: null,             // T86：?devCase=<id>（業務開發商機）。只存在這個頁面的狀態裡，不寫進報價單資料
+      devCaseName: '',
+      devCaseBusy: false,
+      devCaseBanner: { kind: '', msg: '' },   // kind：'' 不顯示 | 'info' 帶入提示 | 'ok' 已連結 | 'error' 連結失敗（持續顯示＋重試）
       saveConflictBanner: false,   // 同上但「持續顯示」：自動存檔撞到 409 時使用者看不到 alert，靠這條橫幅告知（重新載入或存檔成功才清）
       _saveError: '',        // apiSave() 收到後端 4xx/5xx 時存後端回的具體原因（detail）；呼叫端直接顯示，不再一律說「後端是否在線」
       _saveNet: false,       // apiSave() 連線本身失敗（fetch 丟例外）才為 true；兩者皆空 ⇒ 是前端自己的檢查擋下（數字欄位等）
@@ -3454,6 +3468,7 @@
               history.replaceState(null, '', '?id=' + d.quote_no)
             }
           }
+          if (isNew && this.devCaseId && d.quote_no) await this.linkDevCase(d.quote_no)   // T86：第一次存檔成功 ⇒ 連回商機（失敗只出橫幅，不影響存檔結果）
           if (this.altGroupNames().length) this.loadPlan(true)      // M3：存檔後更新內部方案比較（沒有成本權限時 loadPlan 直接略過）
           return true
         } catch(e) {
@@ -3461,6 +3476,51 @@
           this._saveNet = true
           return false
         }
+      },
+
+      // T86 業務開發→報價單：把剛存好的單連回商機。沿用既有 PATCH /api/dev-cases/<id>/convert（後端檢核：單號存在、商機未被連結、有權限）。
+      // 成功：清掉 devCaseId（之後的存檔不再打）＋綠色橫幅；失敗：紅色持續橫幅帶後端原因，保留 devCaseId 讓「重試連結」可再打。
+      async linkDevCase(quoteNo) {
+        if (!this.devCaseId || !quoteNo || this.devCaseBusy) return
+        this.devCaseBusy = true
+        const label = (this.q.docType === 'estimate' ? '估價單' : '報價單') + ' ' + quoteNo
+        const name = this.devCaseName ? '「' + this.devCaseName + '」' : '業務開發商機'
+        try {
+          const r = await fetch(`${this.API}/dev-cases/${this.devCaseId}/convert`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ quote_no: quoteNo }),
+          })
+          if (r.ok) {
+            this.devCaseBanner = { kind: 'ok', msg: '已連結：' + label + ' ↔ ' + name + '（商機狀態已設為成案）。' }
+            this.devCaseId = null
+          } else {
+            const why = this._detailFromBody(await r.text(), r.status)
+            this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗：' + why + '。請按「重試連結」，或回到業務開發頁手動連結。' }
+            this.toast('連回業務開發商機失敗：' + why)
+          }
+        } catch (e) {
+          this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗（連不上伺服器）。請按「重試連結」，或回到業務開發頁手動連結。' }
+          this.toast('連回業務開發商機失敗（連不上伺服器）')
+        } finally {
+          this.devCaseBusy = false
+        }
+      },
+
+      // 新增模式讀 ?customer=&project=&devCase=（業務開發「轉建」帶來）：客戶名稱比對得到就走一般選客戶流程（帶地址／聯絡人），比不到只填名稱；
+      // 專案名稱填案件名稱；devCase 只收正整數。type=estimate 由原本的分支處理。
+      async _applyDevCaseParams(params) {
+        const customer = (params.get('customer') || '').trim()
+        const project = (params.get('project') || '').trim()
+        const dc = (params.get('devCase') || '').trim()
+        if (/^[1-9]\d{0,9}$/.test(dc)) { this.devCaseId = parseInt(dc, 10); this.devCaseName = project }
+        if (project) this.q.projectName = project
+        if (customer) {
+          const match = this.customers.find(c => (c.name || '').trim() === customer)
+          if (match) await this.selectCustomer({ ...match, _type: 'customer' })
+          else this.q.customerName = customer
+        }
+        if (this.devCaseId) this.devCaseBanner = { kind: 'info', msg: '由業務開發商機' + (project ? '「' + project + '」' : '') + '轉建：客戶與案件名稱已帶入，第一次存檔後會自動連回該商機。' }
       },
 
       // FastAPI 錯誤本文 → 給人看的一句話：detail 是字串就直接用；422 的 detail 是陣列就把各筆 msg 串起來；解析不了就給狀態碼
@@ -3628,7 +3688,7 @@
 
       removeTermsPreset(i) {
         const p = this.termsDraft[i]
-        if (!confirm(`確定刪除條款組「${p.name || '（未命名）'}」？\n已經開出去的報價單不受影響。`)) return
+        if (!confirm(`確定刪除條款組「${p.name || '（未命名）'}」？\n已經開立的報價單不受影響。`)) return
         this.termsDraft.splice(i, 1)
         if (this.termsDraftDefault === p.key) this.termsDraftDefault = ''
       },
@@ -5345,6 +5405,7 @@
           // ── 新增模式：每次由 API 派發單號 ──
           this._loadBackfillConfig()           // T70-1：最高管理者且補登開關有效時才會出現「補登歷史案件」
           if (params.get('type') === 'estimate') { this.q.docType = 'estimate'; this._applyDocSkin() }   // 估價單：清單頁「新增估價單」帶 ?type=estimate
+          await this._applyDevCaseParams(params)   // T86：業務開發「轉建」帶 ?customer=&project=&devCase=
           await this._peekQuoteNo()
           this.isNewRecord = true
           this.q.validDays = this.pmCfg.defaultValidDays      // T64 A Q7：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝原本的值；取不到＝30）

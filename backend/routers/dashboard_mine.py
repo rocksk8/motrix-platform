@@ -93,10 +93,10 @@ def _item_href(it: dict) -> str:
 
 def _stuck_text(it: dict, now) -> str:
     d = age_days(it.get("requestedAt"), now)
-    return "卡在：%s，%s" % (blocker_display(it), "今天送達" if d == 0 else "已 %d 天" % d)
+    return "待%s處理，%s" % (blocker_display(it), "今天送達" if d == 0 else "已 %d 天" % d)
 
 
-def _group(key, title, items, *, count=None, href="", href_label="看全部", kind="work", order=50, empty=""):
+def _group(key, title, items, *, count=None, href="", href_label="查看全部", kind="work", order=50, empty=""):
     return {"key": key, "title": title, "count": len(items) if count is None else count, "href": href,
             "hrefLabel": href_label, "items": items[:_MAX_ITEMS], "kind": kind, "order": order, "empty": empty}
 
@@ -110,29 +110,29 @@ def _approval_groups(user: dict, now) -> list:
     mine = sorted((i for i in items if i.get("mine")), key=lambda i: str(i.get("requestedAt") or ""))
     out.append(_group(
         "approvals", "待我簽核",
-        [{"title": _item_title(i), "sub": "%s 送來，已 %d 天" % (i.get("requestedByDisplay") or i.get("requestedBy") or "", age_days(i.get("requestedAt"), now)),
+        [{"title": _item_title(i), "sub": "%s 送審，已 %d 天" % (i.get("requestedByDisplay") or i.get("requestedBy") or "", age_days(i.get("requestedAt"), now)),
           "href": _item_href(i), "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in mine],
-        count=len(mine), href="pages/approval-queue.html", href_label="去簽核", order=10,
-        empty="目前沒有等您簽的單"))
+        count=len(mine), href="pages/approval-queue.html", href_label="前往簽核", order=10,
+        empty="尚無待您簽核的單據"))
 
     sent = [i for i in items if i.get("requestedBy") == me and not i.get("mine")]
     sent.sort(key=lambda i: str(i.get("requestedAt") or ""))
     if sent:
         out.append(_group(
-            "submitted", "我送出的單",
+            "submitted", "我送出的單據",
             [{"title": _item_title(i), "sub": _stuck_text(i, now), "href": _item_href(i),
               "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in sent],
-            href="pages/approval-queue.html", href_label="看進度", order=20))
+            href="pages/approval-queue.html", href_label="查看進度", order=20))
 
     if user.get("role") == "superadmin":
         stuck = [i for i in items if not i.get("mine") and age_days(i.get("requestedAt"), now) >= 2]
         stuck.sort(key=lambda i: str(i.get("requestedAt") or ""))
         if stuck:
             out.append(_group(
-                "stuck", "停滯的單（2 天以上）",
+                "stuck", "逾期未處理單據（超過 2 天）",
                 [{"title": _item_title(i), "sub": _stuck_text(i, now), "href": _item_href(i),
                   "tone": age_tone(age_days(i.get("requestedAt"), now))} for i in stuck],
-                href="pages/approval-queue.html", href_label="去催件", order=30))
+                href="pages/approval-queue.html", href_label="催辦", order=30))
     return out
 
 
@@ -167,7 +167,7 @@ def _clean_group(g, order_default=50):
     except (TypeError, ValueError):
         order = order_default
     return {"key": str(g["key"]), "title": str(g["title"]), "count": count, "href": _safe_href(g.get("href")),
-            "hrefLabel": str(g.get("hrefLabel") or "看全部"), "items": items, "kind": kind, "order": order,
+            "hrefLabel": str(g.get("hrefLabel") or "查看全部"), "items": items, "kind": kind, "order": order,
             "empty": str(g.get("empty") or "")}
 
 

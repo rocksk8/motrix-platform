@@ -2479,7 +2479,7 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
         "<br>2. 排程工作「MOTRIX ERP Heartbeat」是否仍存在、最近一次執行結果"
         "<br>3. <code>backend/logs/heartbeat_job.log</code> 最後幾行（判定哪一種協定、哪一步失敗）"
         "<br>4. 伺服器是否改過協定／埠（<code>autostart.bat</code> 依 <code>certs/cert.pem</code> 是否存在決定 https 或 http）"
-        "<br><br>修好並看到下一次回報成功後，請到 healthchecks.io <b>人工確認狀態回到綠燈</b>。"
+        "<br><br>修復並確認下一次回報成功後，請到 healthchecks.io <b>人工確認狀態回到綠燈</b>。"
     )
     html = _build_html("heartbeat_stale", "心跳監控異常", "需要處理", "#DC2626", rows, "", _base_url(),
                        note=note, intro=intro, button_text="前往系統")

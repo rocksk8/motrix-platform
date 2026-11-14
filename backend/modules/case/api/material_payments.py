@@ -133,7 +133,8 @@ def get_payee_privacy_ack(pid: int, authorization: str = Header(None)):
             raise HTTPException(403, "此帳號沒有財務檢視權限")
     finally:
         conn.close()
-    return {"ack": _payee_ack(row["doc_code"])}
+    from helpers import privacy_notice as _pn
+    return {"ack": _pn.ack_view(user, _payee_ack(row["doc_code"]))}
 
 
 @router.post("/api/material-payments/{pid}/privacy-notice/ack")
@@ -152,7 +153,7 @@ def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
     if created:
         _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "材料申請匯款申請 %s 收款人個資告知" % row["doc_code"],
                {"docCode": row["doc_code"], "noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 # ── 讀 ───────────────────────────────────────────────────────────────
@@ -249,7 +250,8 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
             cn.close()
         _audit(_tok(authorization), "material_payment.create_rolled_back", "quotation", quote_no, "材料申請匯款申請 %s 因個資告知紀錄寫入失敗而撤銷" % res["docCode"], {"docCode": res["docCode"]})
         raise HTTPException(503, "收款人個資告知紀錄寫入失敗，這張匯款申請沒有建立，請稍後再試")
-    res["payeeNotice"] = _payee_ack(res["docCode"])
+    from helpers import privacy_notice as _pn
+    res["payeeNotice"] = _pn.ack_view(user, _payee_ack(res["docCode"]))
     return {"ok": True, "payment": res}
 
 
@@ -452,7 +454,7 @@ def detail(conn, doc_no):
     row = dict(r)
     sn = MP.snapshot_of(row)
     fields = [{"label": "單號", "value": row["doc_code"]}, {"label": "案件", "value": row["quote_no"]}, {"label": "品名", "value": sn.get("itemName") or "—"},
-              {"label": "供應商", "value": sn.get("supplierName") or "—"}, {"label": "第幾張申請", "value": str(row["seq"])},
+              {"label": "供應商", "value": sn.get("supplierName") or "—"}, {"label": "申請序號", "value": str(row["seq"])},
               {"label": "材料申請小計", "value": format(float(sn.get("totalPrice") or 0), ",.0f")},
               {"label": "本次申請金額", "value": format(float(row["amount_approved"] or 0), ",.0f")},
               {"label": "收款帳號", "value": _mask(sn.get("bankAccountNumber")) or "—"}]

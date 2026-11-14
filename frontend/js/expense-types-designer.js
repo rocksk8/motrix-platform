@@ -14,7 +14,7 @@
   var PRESETS = [
     ['applicant', '申請人', '填單的人，自動帶入本人', 'user', { label: '申請人', type: 'ref', target: 'users', locked: true, default: { $: 'requester' } }],
     ['dept', '部門', '申請人所屬部門', 'dept', { label: '部門', type: 'ref', target: 'departments' }],
-    ['cost_dept', '費用歸屬部門', '這筆錢算在哪個部門', 'dept', { label: '費用歸屬部門', type: 'ref', target: 'departments' }],
+    ['cost_dept', '費用歸屬部門', '所屬部門', 'dept', { label: '費用歸屬部門', type: 'ref', target: 'departments' }],
     ['req_date', '填表日期', '預設今天', 'cal', { label: '填表日期', type: 'date', default: { $: 'today' } }],
     ['pay_date', '支付日期', '只有出納能填', 'cal', { label: '支付日期', type: 'date', editableBy: 'cashier' }],
     ['urgency', '急迫性', '一般／急件／特急', 'select', { label: '急迫性', type: 'select', options: URGENCY.slice() }],

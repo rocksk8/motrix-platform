@@ -804,7 +804,7 @@ function payslipForm() {
       const remark = '派工單：' + rows.map(d => d.docCode || ('#' + d.id)).join('、') + (rows.some(d => d.caseVisible && d.quoteNo) ? '；案號：' + [...new Set(rows.filter(d => d.caseVisible && d.quoteNo).map(d => d.quoteNo))].join('、') : '')
       put('remarks', '備註', remark)
       if (filled.length) this.dirty()
-      this.personDispatchFillMsg = (filled.length ? '已帶入：' + filled.join('、') : '沒有可帶入的空欄位') + (kept.length ? '（' + kept.join('、') + ' 已有內容，沒覆蓋）' : '')
+      this.personDispatchFillMsg = (filled.length ? '已帶入：' + filled.join('、') : '尚無可帶入的空欄位') + (kept.length ? '（' + kept.join('、') + ' 已有內容，沒覆蓋）' : '')
     },
 
     // 第 51 班：從派發頁「新增勞報單」（?dispatchId=）進來——派發名單剛好只有一位外包名冊人員 ⇒ 直接選他（其餘情況維持手動選人）

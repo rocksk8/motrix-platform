@@ -66,3 +66,10 @@
 - 分頁內容本來就是切到才載入（CM8 `ensureTabData`），本次不動。
 - 實測（本機 Chromium，同一份種子資料，唯一差別是這支分支；括號為額外加 150 ms 單程延遲）：清單首次載入 API **19 → 9**（含靜態檔 71 → 61）；開一個案件（`?q=` 直開）**25 → 14**；清單載入時間 1.7 → 1.4 s（3.31 → 2.71 s）、直開案件 1.4 → 1.3 s（2.40 → 1.95 s）。開案件時剩下的請求都是這個案件自己的資料。
 - 同批修正（#15）：業務、工程師開財務分頁（或存款項、處理承攬商憑證）時，前端會對 `/api/quotations/{no}/finance-summary` 發請求，後端只給財務角色與最高管理者 ⇒ console 一筆 403。現在 `loadFinanceSummary` 與畫面同一條規則（`canSeeFinancial()`），不是財務角色就不送。
+
+### T86 第二輪（#10 複測「70 → 62 降得不夠」；`feat/t86-case-ux-h1b`）
+- 那個「62」是**總請求數**：案件頁 63 個請求 ＝ **9 支 API ＋ 54 個靜態檔**（47 支 js、css、字型等）。靜態檔帶 `?v=` 雜湊，暖啟動（重新整理）全由快取供應，實際走網路的只有 9 支 API；所以能降的是 API。第一輪已把 8 支登入即可讀的小請求併進 bootstrap（19 → 9）；本輪再收：
+  - 出貨單分頁排序偏好 `list-prefs/sn:{單號}`：開案件時就讀，現在切到出貨單分頁才讀（開案件 API 14 → **13**）。
+  - 財務可視：`financeView` 衍生區段（`routers/bootstrap.py::_finance_view`，直接呼叫 `helpers.auth.can_see_financial`）。前端 `canSeeFinancial()` 以它為準，旗標 `finance_via_effective` 開啟時不再只看角色；`effective_modules`／`auth/me` 欄位不動（牽涉面太大）。測試含旗標 off／shadow／on 三態逐人比對。
+- 刻意不併：報價單清單與計數（主資料，不該等 bootstrap 最慢區段，且 1.5 s 退回機制會讓慢的時候更慢）、`daily-tasks`、`POST /api/reads`、`auth/preferences`、logo（各依使用者／案件參數或寫入性質）；47 支 js 不改成延遲載入（Alpine mixin 組合順序風險）。
+- 分頁內容本來就是切到才載入（CM8 `ensureTabData`），本輪只把出貨單的排序偏好也納入。

@@ -38,7 +38,7 @@ def delete_module(conn, key, with_records=False) -> dict:
                                 "若只是測試資料，請確認後選「連同單據一併刪除」" % n_rec, records=n_rec)
     if n_rec:
         if conn.execute("SELECT 1 FROM custom_record_finance_outbox WHERE module_key=? LIMIT 1", (key,)).fetchone():
-            raise ModuleDeleteError("這個模組的單據已產生金流入帳事件，不能刪除；請改為在選單隱藏（誰看得到＝無人）", records=n_rec)
+            raise ModuleDeleteError("這個模組的單據已產生金流入帳事件，不能刪除；請改為在選單隱藏（可檢視對象＝無人）", records=n_rec)
     paths = [r[0] for r in conn.execute("SELECT path FROM custom_record_files WHERE module_key=?", (key,)).fetchall()]
     ids = "SELECT id FROM custom_records WHERE module_key=?"
     conn.execute("DELETE FROM custom_record_log WHERE record_id IN (%s)" % ids, (key,))

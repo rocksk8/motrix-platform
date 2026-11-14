@@ -1034,7 +1034,7 @@ def get_completion_privacy_acks(note_no: str, authorization: str = Header(None))
         _readable_note(conn, note_no, user, cols="note_no, quote_no")
     finally:
         conn.close()
-    return {"acks": _pn.acks_with_prefix("completion_contact", note_no)}
+    return {"acks": _pn.acks_view(user, _pn.acks_with_prefix("completion_contact", note_no))}
 
 
 @router.post("/api/completion-notes/{note_no}/privacy-notice/ack")

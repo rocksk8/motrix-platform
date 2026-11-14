@@ -112,7 +112,7 @@ def test_company_scope_requests_are_unchanged():
     assert "scope" not in r["previewBody"], "公司層預覽請求不帶 scope（與過去逐位元相同）"
     assert "GET /api/definitions/layout/module:ma?scope=company" in r["calls"]
     assert r["writes"] == ["PUT /api/definitions/layout/module:ma/draft?scope=company", "POST /api/definitions/layout/module:ma/publish?scope=company"], "只送有改動的 ma"
-    assert r["msg"].startswith("已發布（1 個模組的版面）。重新整理頁面即可看到新的側欄。"), r["msg"]
+    assert r["msg"].startswith("已發布（1 個模組的版面）。重新整理頁面即可顯示新的側欄。"), r["msg"]
 
 
 def test_role_scope_starts_from_company_layer_and_publishes_only_changed_modules():

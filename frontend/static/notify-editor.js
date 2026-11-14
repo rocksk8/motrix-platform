@@ -198,9 +198,9 @@
     var mailRows = st.cat.mailRows || []
     var box = el('div', { style: 'margin-top:10px;padding:8px;border:1px dashed var(--border,#bbb);border-radius:8px', 'data-role': 'preview' })
     box.appendChild(el('div', { text: '即時預覽（樣本單據：' + (ctx['單號'] || '') + '／' + (ctx['對象'] || '') + '）', style: 'font-size:12px;font-weight:600' }))
-    box.appendChild(el('div', { text: '站內訊息（簽核人看到）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:6px' }))
+    box.appendChild(el('div', { text: '站內訊息（簽核人可見）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:6px' }))
     box.appendChild(el('div', { text: msg, style: 'font-size:13px;padding:4px 6px;background:var(--bg-hover,#f3f4f6);border-radius:6px', 'data-role': 'pv-inapp' }))
-    box.appendChild(el('div', { text: '沒有財務權限的簽核人看到（金額會被遮蔽）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
+    box.appendChild(el('div', { text: '沒有財務權限的簽核人可見（金額會被遮蔽）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     box.appendChild(el('div', { text: masked, style: 'font-size:13px;padding:4px 6px;background:var(--bg-hover,#f3f4f6);border-radius:6px', 'data-role': 'pv-masked' }))
     box.appendChild(el('div', { text: '通知信', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:8px' }))
     var subj = el('div', { style: 'font-size:12px', 'data-role': 'pv-subject' }, [

@@ -75,7 +75,7 @@ def list_problems(list_id, spec) -> list:
         if not isinstance(s, dict) or s.get("col") not in by or not by[s["col"]].get("sortable") or s.get("dir") not in _DIRS:
             out.append("%s：defaults.sort 必須指向可排序欄位、方向 asc／desc" % list_id)
         elif dcols and s["col"] not in dcols:
-            out.append("%s：預設排序欄位 %s 不在預設欄位內（排序欄位必須看得到）" % (list_id, s["col"]))
+            out.append("%s：預設排序欄位 %s 不在預設欄位內（排序欄位必須為顯示中的欄位）" % (list_id, s["col"]))
     ceil_, menu = spec.get("pageSizeCeiling"), spec.get("pageSizeMenu")
     if not isinstance(ceil_, int) or isinstance(ceil_, bool) or not 1 <= ceil_ <= MAX_PAGE_SIZE_CEILING:
         out.append("%s：pageSizeCeiling 必須是 1～%d 的整數" % (list_id, MAX_PAGE_SIZE_CEILING))

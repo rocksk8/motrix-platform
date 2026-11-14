@@ -104,7 +104,7 @@ def test_module_settings_page_discard_and_filter(live_server, make_user, e2e_bro
     assert not page.locator(f"[data-testid='ms-pending-{KEY}']").is_visible(), "放棄不得寫入"
     page.locator("[data-testid='ms-search']").fill("不存在的模組")
     page.locator(f"[data-testid='ms-row-{KEY}']").wait_for(state="detached", timeout=10000)
-    page.locator("[data-testid='ms-table']").get_by_text("沒有符合的模組").wait_for(state="visible", timeout=10000)
+    page.locator("[data-testid='ms-table']").get_by_text("查無符合條件的模組").wait_for(state="visible", timeout=10000)
 
 
 @pytest.mark.e2e
@@ -178,7 +178,7 @@ def test_core_only_page_and_sidebar_still_work(live_server, make_user, e2e_brows
         body = resp.value.json()
         avail = body["moduleAvailability"] if via_bootstrap else body
         assert resp.value.status == 200 and avail == {}                   # 側欄改用 availability（bootstrap 時是它的區段）
-        page.locator("text=這個安裝包裡沒有可選配的模組").wait_for(state="visible", timeout=15000)
+        page.locator("text=此安裝包內尚無可選配的模組").wait_for(state="visible", timeout=15000)
         page.wait_for_load_state("networkidle")
         # 第 54 班（系統中心）：『系統』群組在導覽列收成單一連結（指向系統中心），模組管理不再是獨立導覽項；
         # 「選單照常建出來」改驗：系統中心入口在、本頁被認成系統頁（頂端有『← 系統』連結可回系統中心）。
