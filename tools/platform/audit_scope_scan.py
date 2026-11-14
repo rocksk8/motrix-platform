@@ -6,7 +6,7 @@
   * 只讀不寫；純 AST 掃描。守門測試 `tests/platform/test_audit_reads_scoped_to_own_rows_2026_11_14.py` 與 author_gate --quick 共用這一份。
   * 掃的是測試檔裡「SQL 敘述開頭」（SELECT／WITH／DELETE／UPDATE）的字串（含 f-string 的常數段、`"a" + "b"` 拼接）：含 `FROM <全域表>`（AUDIT_TABLES，目前 audit_log）時，
     **只看第一個 WHERE 之後、ORDER BY／GROUP BY／LIMIT 之前的條件**；沒有 WHERE ⇒ 命中；WHERE 裡沒有「自己的範圍」條件 ⇒ 命中。
-      自己的範圍＝範圍欄位（username／user_id／actor／request_id／target／entity／object_id／quote_no／case_id／doc_no／ref_id…）與值比較（= != <> IN LIKE），
+      自己的範圍＝範圍欄位（username／user_id／actor／request_id／target／entity／object_id／quote_no／case_id／doc_no／ref_id…）與值比較（= IN LIKE；`!=`／`<>` 選的是別人的列，不算），
       或水位線 `id >`／`rowid >`／`created_at >`／`ts >`（**右邊不能是數字常數**：`id > 0` 等於沒篩）。
       只出現在 SELECT 欄位清單或 ORDER BY 的欄位名不算。
   * 為什麼：`SELECT * FROM audit_log WHERE result='fail'` 讀到的是整個資料庫的失敗列；單獨跑會綠，整包跑時別的測試留下的列讓
@@ -14,7 +14,7 @@
   * **沒有逃生口**（T87 決定，h11 F1）：命中就改寫測試（WHERE 加上自己建立的使用者／request_id／target，或先記下 max(id) 再用 `id > ?` 只看新增的列）。
   * 棘輪：既有檔的命中數記在 `tests/platform/audit_scope_baseline.json`（只准減少；與 ratchet.py 的三道檢查共用）；新檔與有改動的檔超過基線＝紅。
   * 已知限制：只認 AUDIT_TABLES 的表名與 SQL 敘述開頭的字串；動態拼出表名、ORM 讀取、別的全域表（failure 表）看不到——要擴就在 AUDIT_TABLES 加表名；
-    子查詢裡的 WHERE 會被當成同一個條件區。
+    子查詢裡的 WHERE 會被當成同一個條件區；`WHERE username = ? OR result='fail'`（OR 讓範圍條件失效）與 `username LIKE '%'`（萬用字元）看不出來，靠審查。
 """
 import ast
 import json
@@ -37,7 +37,7 @@ _WHERE = re.compile(r"\bWHERE\b", re.I)
 _WHERE_END = re.compile(r"\b(ORDER\s+BY|GROUP\s+BY|LIMIT|HAVING)\b", re.I)
 _SCOPE_COLS = ("username|user_id|user_name|actor|actor_id|actor_username|request_id|target|target_id|entity|entity_id|object_id|quote_no|case_id|doc_no|ref_id|"
                "record_id|session_id")
-_SCOPE_EQ = re.compile(r"\b(?:%s)\b\s*(?:=|!=|<>|\bIN\b|\bLIKE\b)\s*(?:\S|$)" % _SCOPE_COLS, re.I)
+_SCOPE_EQ = re.compile(r"\b(?:%s)\b\s*(?:=|\bIN\b|\bLIKE\b)\s*(?:\S|$)" % _SCOPE_COLS, re.I)   # `!=`／`<>` 選的是「別人的列」，不算自己的範圍（h11 nit）
 _WATERMARK = re.compile(r"\b(?:rowid|id|created_at|ts)\b\s*>=?\s*(?!['\"]?\d)(?:\S|$)", re.I)
 
 

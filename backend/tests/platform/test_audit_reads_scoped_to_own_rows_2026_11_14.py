@@ -56,6 +56,8 @@ def _read(f):
     'Q = "SELECT * FROM audit_log WHERE result=1 GROUP BY username"\n',
     'Q = "SELECT target, action FROM audit_log"\n',                                                                     # 沒有 WHERE，欄位清單有範圍欄位
     'Q = "SELECT * FROM audit_log " + "WHERE result = \'fail\'"\n',                                                     # `+` 拼接
+    'Q = "SELECT * FROM audit_log WHERE username != ?"\n',                                                              # 選的是別人的列
+    'Q = "SELECT * FROM audit_log WHERE username <> ?"\n',
 ])
 def test_scanner_flags_global_audit_reads(src):
     assert len(S.scan_source(src)) == 1, S.scan_source(src)
@@ -111,6 +113,8 @@ def test_baseline_hugs_the_tree_exactly_no_stale_slack():
 
 def test_baseline_is_not_higher_than_the_merge_base_baseline():
     res = R.check_against_base(BASELINE_REL, S.load_baseline(), REPO, env_base=os.environ.get("MOTRIX_RATCHET_BASE"))
+    if res["status"] == "no_base" and os.environ.get("MOTRIX_TRAIN"):
+        pytest.fail("整合閘門（MOTRIX_TRAIN）抓不到合併基準（%s）——整合閘門必須有基準，這一題不准 skip" % res["note"])
     if res["status"] == "no_base":
         pytest.skip("未跑：抓不到合併基準（%s）——這一題需要 git 與主線分支；整合者的閘門必須在有基準的環境跑" % res["note"])
     assert not res["violations"], "基線比合併基準高（基線只准減少；改寫測試，不要調基線）：%s %s" % (res["violations"][:8], res["note"])

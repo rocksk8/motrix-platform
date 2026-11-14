@@ -15,7 +15,7 @@
   * **沒有逃生口**（T87 決定，h11 F1）：命中就改寫測試——用 data-testid、結構（AST）、行為比對；真的在數資料列，改成數 DOM／API 回傳的列，不要數文案字串。
     曾經的 `# text-anchor-ok` 註解現在不具任何效力（基線也不再記逃生口）。
   * 棘輪：基線在 `tests/platform/text_anchor_baseline.json`（只准減少；與 ratchet.py 的三道檢查共用：逐檔貼合、對照合併基準、不重複存上限）。
-  * 已知限制：標記經由**輔助函式的參數**傳進去（`def _c(t, m): return t.count(m)`，呼叫端 `_c(t, "尚無資料")`）看不到；同檔「換一個錨點」總數不變看不出來——靠審查。
+  * 已知限制：標記經由**輔助函式的參數**傳進去（`def _c(t, m): return t.count(m)`，呼叫端 `_c(t, "尚無資料")`）看不到；同檔「換一個錨點」總數不變看不出來——靠審查；切出來的結果綁名稱後再**換名字**（`other = parts; len(other)`）與 `len(t) - len(t.replace(標記, ""))` 也看不出來。
   * 掃描範圍：測試根（backend/tests、backend/core/tests、backend/modules/*/tests）底下**所有** .py（含 conftest.py 與非 test_ 開頭的輔助檔）。
 """
 import ast
