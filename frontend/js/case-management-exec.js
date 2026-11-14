@@ -787,12 +787,13 @@ window.CM_PARTS.push(() => ({
         : { warn: true, text: '收入比例合計 ' + pct + '%，不等於 100%：報表照比例認列、不補差，並列入待補登。' }
     },
 
+    // 回傳 true＝已存入；false＝失敗（已提示）。既有呼叫端不看回傳值。
     async updateStage(st, fields) {
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, {
           method: 'PUT', headers: this._authHeaders(true), body: JSON.stringify(fields)
         })
-        if (!r.ok) { MotrixUI.toast('儲存失敗', {kind: 'error'}); return }
+        if (!r.ok) { MotrixUI.toast('儲存失敗', {kind: 'error'}); return false }
         const j = await r.json()
         const notice = j.notice
         delete j.notice
@@ -800,7 +801,27 @@ window.CM_PARTS.push(() => ({
         if (notice) MotrixUI.toast(notice, {kind: 'info', ms: 8000})   // IP-5：每日任務模組不在時明說沒有建立／收回
         this.flashSaved('stages')
         this._checkAllStagesDone()
-      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
+        return true
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}); return false }
+    },
+
+    // T86 案件 UX #5：階段勾選。勾選照舊即時存檔；完成時跳出 5 秒「復原」提示，避免誤勾後找不到退路。
+    // 復原＝取消勾選，走與手動取消勾選相同的路徑（後端同樣收回自動產生的記錄）。
+    // 提示文字不可含「每日任務」：test_e2e_case_stage_daily_task_notice 以該詞過濾每日任務模組的提示。
+    async onStageTick(st) {
+      const done = !!st.done
+      const ok = await this.updateStage(st, {done, doneAt: done ? (st.doneAt || MotrixDate.today()) : ''})
+      if (!ok || !done) return
+      MotrixUI.toast(`已將「${st.label || '未命名階段'}」標為完成，完成日為 ${st.doneAt}（可在該列直接修改）。`, {
+        ms: 5000,
+        action: { label: '復原', onClick: () => this.undoStageDone(st) }
+      })
+    },
+    async undoStageDone(st) {
+      if (!st.done) return          // 這 5 秒內已被改回，不必再做
+      st.done = false
+      if (await this.updateStage(st, {done: false, doneAt: ''})) MotrixUI.toast('已復原，階段恢復為待辦。', {ms: 3000})
+      else st.done = true
     },
 
     async addStageAssignee(st, username) {

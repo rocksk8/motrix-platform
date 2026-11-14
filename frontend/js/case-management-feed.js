@@ -25,6 +25,75 @@ window.CM_PARTS.push(() => ({
     newCommentLogDate: MotrixDate.today(),
     newCommentUserId: '',   // 空字串＝記錄人＝目前登入者，見 postWorkLogEntry()
     postingComment: false,
+
+    // ── T86 案件 UX #4：統一的「新增記錄」編輯器（記錄類型）──
+    // note＝留言／工作日誌（原發文框；填執行時數／聯絡事項才記成工作日誌）；visit＝某階段的出勤記錄（日期、人次、工作內容）；
+    // task＝每日工作事項（另一個頁面，這裡只給前往連結）。三種各自照原本的端點與權限寫入，這裡只是同一個入口。
+    composeType: 'note',
+    composeStageId: '',
+    composeVisitDate: MotrixDate.today(),
+    composeVisitPeople: 1,
+    // 目前實際生效的類型：選過的類型在這個案件／這個人身上不可用時（例如換到沒有階段的案件）退回「留言／工作日誌」
+    composeKind() { return this.composeTypes().some(t => t.key === this.composeType) ? this.composeType : 'note' },
+    composeTypes() {
+      const out = [{ key: 'note', label: '留言／工作日誌' }]
+      if (this.tShown('exec') && this.sShown('progress') && ((this.cr && this.cr.caseRecord && this.cr.caseRecord.stages) || []).length) out.push({ key: 'visit', label: '階段出勤' })
+      if (this.canLogTask()) out.push({ key: 'task', label: '每日工作事項' })
+      return out
+    },
+    setComposeType(kind) {
+      if (!this.composeTypes().some(t => t.key === kind)) kind = 'note'
+      this.composeType = kind
+      if (kind !== 'visit') return
+      const stages = (this.cr && this.cr.caseRecord && this.cr.caseRecord.stages) || []
+      if (!stages.some(st => String(st.id) === String(this.composeStageId))) {
+        const cur = stages.find(st => !st.done) || stages[0]
+        this.composeStageId = cur ? String(cur.id) : ''
+      }
+      this._composeVisitDefaults()
+    },
+    _composeVisitDefaults() {
+      const st = ((this.cr && this.cr.caseRecord && this.cr.caseRecord.stages) || []).find(x => String(x.id) === String(this.composeStageId))
+      const last = ((st && st.visits) || []).filter(v => Number(v.visitPeople) > 0).slice(-1)[0]
+      this.composeVisitDate = MotrixDate.today()
+      this.composeVisitPeople = last ? Number(last.visitPeople) : 1
+    },
+    _composePeopleOk() { const n = Number(this.composeVisitPeople); return Number.isInteger(n) && n >= 1 && n <= 99 },
+    composeSendDisabled() {
+      if (this.postingComment) return true
+      if (this.composeKind() === 'visit') return !this.composeStageId || !this._composePeopleOk()
+      return !this.newComment.trim() && this.newCommentPhotos.length === 0
+    },
+    composeSendHint() {
+      if (this.postingComment) return ''
+      if (this.composeKind() === 'visit') return !this.composeStageId ? '請先選擇階段。' : (!this._composePeopleOk() ? '人次請填 1 到 99 的整數。' : '')
+      return (!this.newComment.trim() && this.newCommentPhotos.length === 0) ? '請先填寫內容或附加檔案。' : ''
+    },
+    composeSubmit() {
+      return this.composeKind() === 'visit' ? this.postVisitFromFeed() : this.postComment()
+    },
+    async postVisitFromFeed() {
+      const st = ((this.cr && this.cr.caseRecord && this.cr.caseRecord.stages) || []).find(x => String(x.id) === String(this.composeStageId))
+      if (!st || this.composeSendDisabled()) return
+      this.postingComment = true
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits`, {
+          method: 'POST', headers: this._authHeaders(true),
+          body: JSON.stringify({ visitDate: this.composeVisitDate || MotrixDate.today(), visitPeople: Number(this.composeVisitPeople), note: this.newComment.trim() })
+        })
+        if (!r.ok) {
+          let why = ''
+          try { const j = await r.json(); why = typeof j.detail === 'string' ? j.detail : '' } catch {}
+          MotrixUI.toast(why ? '新增出勤記錄失敗：' + why : '新增出勤記錄失敗，請稍後再試。', {kind: 'error'}); return
+        }
+        Object.assign(st, await r.json())
+        this.newComment = ''
+        // 出勤記錄不會出現在動態清單，在階段卡裡看：給一個直接過去的按鈕
+        MotrixUI.toast(`已在「${st.label || '未命名階段'}」新增出勤記錄。`, {ms: 8000, action: { label: '在執行進度查看', onClick: () => { this.activeTab = 'exec'; this.execSubTab = 'progress' } }})
+        this._composeVisitDefaults()
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
+      finally { this.postingComment = false }
+    },
     _ptCache: {},
     feedCalMode:    false,
     feedCalYear:    new Date().getFullYear(),
@@ -108,12 +177,24 @@ window.CM_PARTS.push(() => ({
       }
       return cells
     },
+    // T86 案件 UX #5：階段勾選完成時，系統會自動記一筆「案件管理勾選「X」完成」（backend/modules/case/case_stage_tasks.py，
+    // 內容文字以 AUTO_STAGE_PREFIX 開頭）。這類機械記錄預設摺疊，避免稀釋人寫的動態；可按「顯示」展開。
+    feedShowAuto: false,
+    AUTO_STAGE_PREFIX: '案件管理勾選「',
+    isAutoFeedItem(it) {
+      return it.source === 'daily_task' && String(it.content || '').startsWith(this.AUTO_STAGE_PREFIX)
+    },
+    feedBadgeCount() { return this._feedBase().length },      // 分頁角標＝目前看得到的則數（摺疊的系統自動記錄不算）
+    autoFeedCount() { return this.caseUpdates.filter(it => this.isAutoFeedItem(it)).length },
+    _feedBase() {
+      return this.feedShowAuto ? this.caseUpdates : this.caseUpdates.filter(it => !this.isAutoFeedItem(it))
+    },
     feedCalCount(date) {
-      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
+      return this._feedBase().filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
     },
     filteredFeedItems() {
-      if (!this.feedCalSelDate) return this.caseUpdates
-      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
+      if (!this.feedCalSelDate) return this._feedBase()
+      return this._feedBase().filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
     },
 
     onCommentPhotosSelected(e) {

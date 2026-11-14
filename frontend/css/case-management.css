@@ -567,8 +567,54 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   .feed-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; }
   .feed-compose { padding:14px 20px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
   .feed-compose__box { width:100%; padding:9px 11px; font-size:14px; font-family:var(--font-zh); border:1px solid var(--border-light); border-radius:8px; resize:vertical; min-height:60px; outline:none; background:var(--surface-muted); line-height:1.6; transition:border-color .12s; box-sizing:border-box; }
-  .feed-compose__box:focus { border-color:var(--accent); background:var(--surface); }
+  /* T86 案件 UX #11：聚焦外框改中性深灰。原本用品牌紅（--accent），看起來像驗證錯誤。 */
+  .feed-compose__box:focus { border-color:var(--ink-strong); box-shadow:0 0 0 2px var(--line-strong); background:var(--surface); }
+  /* 「發布更新」：可按時用品牌色；停用時用灰底＋深灰字並加邊框，旁邊另有提示文字說明原因 */
+  .feed-compose__send { padding:5px 16px; font-size:12px; font-weight:600; border-radius:6px; border:1px solid transparent; cursor:pointer; font-family:var(--font-zh); transition:background .12s; background:var(--accent); color:var(--surface); }
+  .feed-compose__send:disabled { background:var(--surface-neutral); color:var(--text-secondary); border-color:var(--line-strong); cursor:not-allowed; }
+  /* T86 案件 UX #9：含稅／未稅／稅額三格。原本把 display:grid 寫在 inline style，被 Alpine x-show 顯示時移除 inline display
+     而退回 block，三格直排；改用 class 才不會被 x-show 吃掉。 */
+  .pay-amt-grid { flex:1; min-width:0; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
+  .pay-warn-ico { vertical-align:-1px; flex-shrink:0; }
+  .pay-ro { font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); min-height:30px; display:flex; align-items:center; }
+  /* T86 案件 UX #9：款項卡的「發票資料」收合區 */
+  .pay-detail { margin-top:8px; border-top:1px dashed var(--border-light); padding-top:6px; }
+  .pay-detail__toggle { display:flex; align-items:center; gap:8px; width:100%; padding:3px 0; border:0; background:none; cursor:pointer; text-align:left; font-size:12px; font-weight:600; color:var(--ink-strong); font-family:var(--font-zh); }
+  .pay-detail__toggle:focus-visible { outline:2px solid var(--ink-strong); outline-offset:2px; border-radius:4px; }
+  .pay-detail__caret { width:12px; color:var(--text-secondary); }
+  .pay-detail__sum { font-weight:400; color:var(--text-secondary); }
+  .pay-detail__body { padding:8px 0 2px 20px; }
+  .feed-autobar { display:flex; align-items:center; gap:10px; padding:6px 20px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); background:var(--surface-muted); border-bottom:1px solid var(--border-light); flex-shrink:0; }
+  .feed-autobar__btn { padding:1px 10px; font-size:12px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-strong); cursor:pointer; font-family:var(--font-zh); }
+  .feed-compose__hint { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); margin-left:12px; }
   .feed-compose__foot { display:flex; align-items:center; justify-content:flex-end; margin-top:6px; gap:8px; }
+  /* T86 案件 UX #11／#31：日期、記錄對象、執行時數、聯絡事項。電腦版維持橫排；手機（767px 以下）改單欄堆疊，
+     提示字不被截斷、發布鈕獨佔一列。 */
+  .feed-compose__fields { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .feed-compose__field { display:flex; align-items:center; gap:6px; }
+  .feed-compose__lbl { font-size:12px; color:var(--text-dim); font-family:var(--font-zh); white-space:nowrap; }
+  .feed-compose__ctl { padding:5px 8px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); outline:none; box-sizing:border-box; background:var(--surface); }
+  /* 勾選／附檔：用 class 而不是 inline display，才不會被 Alpine x-show 顯示時移除 display 而退回行內排版 */
+  .feed-compose__check { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); cursor:pointer; }
+  .feed-compose__check--important { margin-right:auto; }
+  .feed-compose__type { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .feed-compose__jump { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); padding:4px 0 8px; }
+  .feed-compose__ctl--hours { width:88px; }
+  .feed-compose__ctl--custom { width:140px; }
+  @media (max-width:767px) {
+    .feed-compose { padding:12px 14px; }
+    .feed-compose__type .feed-compose__ctl { flex:1 1 0; }
+    .feed-compose__fields { flex-direction:column; align-items:stretch; gap:8px; }
+    .feed-compose__field { flex-wrap:wrap; }
+    .feed-compose__lbl { flex:0 0 4.5em; }
+    .feed-compose__ctl { flex:1 1 0; min-width:0; font-size:14px; min-height:36px; }
+    .feed-compose__ctl--hours, .feed-compose__ctl--custom { width:auto; }
+    .feed-compose__foot { flex-direction:column; align-items:stretch; gap:10px; margin-top:10px; }
+    .feed-compose__check--important { margin-right:0; }
+    .feed-compose__check { min-height:32px; }
+    .feed-compose__foot .feed-compose__send { width:100%; min-height:40px; font-size:14px; }
+    .feed-compose__hint { text-align:center; margin-left:0; }
+  }
   .feed-list { flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:14px; }
   .feed-list::-webkit-scrollbar { width:4px; }
   .feed-list::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
@@ -657,7 +703,7 @@ transition:background .1s;
   .cm-tabs-hint { display:none; }
   @media (max-width:767px) {
 .pay-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
-.pay-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
+.pay-grid > :last-child:nth-child(odd), .pay-grid > .pay-note { grid-column:1 / -1; }
 .visit-row { grid-template-columns:minmax(0,1fr) 56px !important; }
 .visit-row > :nth-child(3) { grid-column:1 / 2; }
 .cm-tabs { -webkit-mask-image:linear-gradient(to right, var(--ink-strong) 85%, transparent); mask-image:linear-gradient(to right, var(--ink-strong) 85%, transparent); }

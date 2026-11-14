@@ -138,5 +138,6 @@ def test_wide_screen_keeps_the_original_layout(live_server, make_user, e2e_brows
     page = _open(browser, live_server, u, tab="fin")
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
     cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
-    assert len(cols.split()) == 5, cols
+    # T86 案件 UX #9：款項卡第一列只留 預計收款日／收款日期／備註 三格（發票欄位收進「發票資料」）；寬螢幕不可被窄螢幕的兩欄規則吃掉
+    assert len(cols.split()) == 3, cols
     assert page.locator('[data-testid="cm-tabs-hint"]').is_hidden()

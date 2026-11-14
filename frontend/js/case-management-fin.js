@@ -163,11 +163,43 @@ window.CM_PARTS.push(() => ({
       obj[key] = v
       return true
     },
-    // 聚焦中或標紅時保留使用者打的字，不被數值改寫；失焦（blur=true）才改回數值
+    // 聚焦中或標紅時保留使用者打的字，不被數值改寫；失焦（blur=true）才改回數值。
+    // T86 案件 UX #9：非編輯狀態顯示千分位（與標頭 NT$ 168,000 一致）；parseNumInput 本來就接受千分位，輸入端不受影響。
     numShown(v, el, badKey, blur) {
       if (el && this.badNum[badKey]) return el.value
       if (!blur && el && document.activeElement === el) return el.value
-      return v == null ? '' : v
+      if (v == null || v === '') return ''
+      const n = Number(v)
+      return Number.isFinite(n) ? MotrixFormat.num(n) : v
+    },
+
+    // T86 案件 UX #9：款項卡的「發票資料」收合。payDetailOpen[item.id] 有明確值（使用者按過）就照它；
+    // 沒按過時，發票未稅與稅額只填一欄、或合計與該期金額不符 ⇒ 自動展開，不讓需要處理的提示藏起來。
+    // T86 案件 UX #29：已收款的期別，非出納者除發票資料外不能改（後端 _RECEIVED_ITEM_EDITABLE），畫面同步停用其餘欄位。
+    // 後端鎖已收款期別的對象是「非出納」（_payment_items_lock_violation），不只是沒有財務檢視權的人 ⇒ 畫面照 canMarkPayment()（同一條規則）
+    payFrozen(item) { return !!(item && item.received && !this.canMarkPayment()) },
+    // 收款日期只給看：沒有財務檢視權的人（不能標已收款）；或已收款而被凍結的期別
+    payReceivedAtRo(item) { return this.moneyMasked() || this.payFrozen(item) },
+    payDetailOpen: {},
+    payDetailIsOpen(item, idx) {
+      const v = this.payDetailOpen[item.id]
+      if (v !== undefined) return v
+      return this.invoiceHalfFilled(item) || !!this.invoiceMismatch(item, idx)
+    },
+    togglePayDetail(item, idx) {
+      this.payDetailOpen = { ...this.payDetailOpen, [item.id]: !this.payDetailIsOpen(item, idx) }
+    },
+    // 收合時在標題列顯示已填內容的摘要，使用者不必展開也知道有沒有資料；有待處理提示時加註。
+    payDetailSummary(item, idx) {
+      const parts = []
+      if (item.invoiceNo) parts.push(item.invoiceNo)
+      if (item.invoiceDate) parts.push('開立 ' + item.invoiceDate)
+      if (!this._invoiceEmpty(item.invoicePretax) && !this._invoiceEmpty(item.invoiceTax)) parts.push('已填發票金額')
+      const files = (item.invoiceFiles || []).length
+      if (files) parts.push('附件 ' + files + ' 個')
+      let s = parts.length ? parts.join('・') : '尚未填寫'
+      if (this.invoiceHalfFilled(item) || this.invoiceMismatch(item, idx)) s += '（需確認）'
+      return s
     },
     onAmountTextChange(idx, kind, raw) {
       const item = this.paymentItems()[idx]

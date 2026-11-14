@@ -47,6 +47,8 @@
     '.mui-toast{pointer-events:auto;padding:9px 14px;border-radius:8px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);box-shadow:var(--shadow-popover,0 8px 24px rgba(0,0,0,.22));background:var(--surface,#FFFFFF);color:var(--ink-strong,#1A1D21);border:1px solid var(--line,#E5E7EB);max-width:360px}',
     '.mui-toast--ok{border-color:var(--tone-success-border,#86EFAC);background:var(--tone-success-bg,#F0FDF4);color:var(--tone-success-fg,#15803D)}',
     '.mui-toast--error{border-color:var(--tone-danger-border,#FECACA);background:var(--tone-danger-bg,#FEF2F2);color:var(--tone-danger-fg,#B91C1C)}',
+    '.mui-toast__action{margin-left:10px;padding:2px 10px;border-radius:5px;border:1px solid currentColor;background:transparent;color:inherit;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}',
+    '.mui-toast__action:focus-visible{outline:2px solid var(--ink-strong,#1A1D21);outline-offset:2px}',
     '.mui-banners{position:fixed;left:0;right:0;top:0;z-index:8900;display:flex;flex-direction:column}',
     '.mui-banner{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);border-bottom:1px solid var(--tone-warning-border,#FDE68A);background:var(--tone-warning-bg,#FFFBEB);color:var(--tone-warning-fg,#92400E)}',
     '.mui-banner--error{border-color:var(--tone-danger-border,#FECACA);background:var(--tone-danger-bg,#FEF2F2);color:var(--tone-danger-fg,#B91C1C)}',
@@ -197,6 +199,17 @@
     t.setAttribute('role', opts.kind === 'error' ? 'alert' : 'status')
     t.setAttribute('data-testid', 'ui-toast')
     t.setAttribute('data-kind', opts.kind || 'info')
+    // 選用：opts.action = { label, onClick } ⇒ 提示內加一顆動作鈕（例：「復原」）；按下後執行 onClick 並關閉這則提示。
+    if (opts.action && opts.action.label && typeof opts.action.onClick === 'function') {
+      var act = el('button', 'mui-toast__action', opts.action.label)
+      act.type = 'button'
+      act.setAttribute('data-testid', 'ui-toast-action')
+      act.addEventListener('click', function () {
+        if (t.parentNode) t.parentNode.removeChild(t)
+        opts.action.onClick()
+      })
+      t.appendChild(act)
+    }
     wrap.appendChild(t)
     var ms = opts.ms == null ? (opts.kind === 'error' ? 6000 : 3000) : opts.ms
     if (ms > 0) setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t) }, ms)
