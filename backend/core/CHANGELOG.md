@@ -1,6 +1,7 @@
 # L0／L1 底層 更新紀錄
 
 ## 1.168 — 2026-11-14（feat/t86-usage-h1；T86 正式機用量優化 U4／U5／U7／U11）
+- 前端（行為不變，只補空值防護）：通知設定頁 LINE 用量區塊、版面編輯器（`static/layout-editor.js`）在資料載入前不再讀 null 欄位（Alpine 會評估被 `x-show` 隱藏元素內的運算式 ⇒ 之前在最高管理者畫面出 pageerror）；用量讀取失敗時顯示「尚無用量資料」而非卡在「讀取中…」。（feat h9 `fix/home-widgets-null-t86-h9-r2`）
 - 內部（無欄位／權限語意變更）：
   - **U11 Google 額度頁**：`GET /api/system/google-quota`（慢查詢 8～10 秒）的「地址數」那一半改走行程內快取（TTL 300 秒；過期先回舊值、背景單飛重算；不占用 DB 連線、不擋其他請求）；用量／額度／單價／剩餘照舊即時算。`helpers/geo.quota_calculator(use_cache=False)` 預設行為不變。
   - **U4 不送注定失敗的請求**：定義治理新增 `GET /api/def-governance/{kind}/_available`（最高管理者限定、永遠 200：`{available}`），前端改問它而不是靠 `_probe/ledger` 的 404；新建中、尚未存過的報價單不問 `plan-view`（存檔成功那一刻才問）。
