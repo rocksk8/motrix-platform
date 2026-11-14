@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）
+- 行為變更（預設值）：案件清單預設合併「進行中」與重複的「已成案」頁籤（設定 `list_view.cases_merge_won_tab` 預設 0→1）；可到設定中心改回「兩個都保留」。**不做 migration**：正式機已明確存過 0 的公司不會跟著變（預期行為）。此設定現在不需開啟「自訂畫面版面」也會生效（案件頁多帶一個 `list_view` 群組，同一個設定請求）。
+- 前端（無 API／欄位／權限鍵變更）：清單與看板卡片顯示專案名稱並標出搜尋命中；搜尋框組字中不查詢；矩陣末欄寫「缺：…」；五關旁加「結案」入口並先列缺漏；狀態列「精算」關直接開精算頁；手機案件頁標題區瘦身；精算頁「需處理」去掉內部代號、從案件進來時返回連結回案件、手機首屏需處理置頂。
+- 測試：`tests/platform/test_list_view_c1_t65.py`／`test_list_view_c2_t65.py`／`tests/e2e_on_state/test_list_view_c2_on_state.py` 改預設；案件頁兩份 golden 重錄；`tests/platform/settings_deploy_baseline.json` 的預設同步。
+
 - **（併入）(next) — 2026-11-14（feat/settings-s5-external；設定改版 S5：四個外部群組進登錄表）**
 - 行為變更（對外介面，端點與路徑不變）：`PUT /api/settings/t100-export-config`、`PUT /api/cases/voucher-accounts`（獎金傳票科目）、`PUT /api/legal-params/tax-rules`、`PUT /api/overhead/settings`（口徑）不再直接寫舊鍵——改走設定群組 `t100_export`／`bonus_voucher`／`tax_rules`／`overhead_basis` 的 `publish()`：**任何實質變更都是待生效**（確認期間＋第二位最高管理者核准＋稽核；只有一位最高管理者＝等待期＋警告）。回應多 `pending`／`warnings`；沒有實質變更不產生待生效；同群組已有待生效時再送 ⇒ 409（`supersede=true` 才取代）。
 - 行為變更：T100 設定存檔時，科目代號必須存在於科目表（400，列出哪個代號）；獎金傳票科目送出的每一格都驗證。
