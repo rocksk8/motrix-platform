@@ -311,13 +311,15 @@ async function dlApply() {
     document.getElementById('dlPass').value = '';
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { dlShow('dlResult', '沒有開始套用：' + (d.detail || res.status), true); return; }
+    dlRh.digest = null;     // 預演是一次性的：套用一開始就作廢，再套用必須重新預演
+    document.getElementById('dlRehearseText').textContent = '這次預演已經使用（一次性）。再套用請重新預演。';
     dlShow('dlResult', '套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', true);
     for (;;) {
       await new Promise(r => setTimeout(r, 2000));
       const s = await (await fetch('/api/delivery/status')).json();
       if (s.running) continue;
       const last = s.last || {};
-      const head = last.outcome === 'succeeded' ? '成功：' : (last.outcome === 'verify_failed' ? '已套用，但事後驗證有項目未通過（系統不會自動回滾，請由您決定）：' : '失敗：');
+      const head = last.outcome === 'succeeded' ? '成功：' : (last.outcome === 'verify_failed' ? '已套用，但事後驗證有項目未通過（系統不會自動回滾，請由您決定）：' : (last.outcome === 'crashed' ? '套用程序中斷，狀態未知，請人工確認現況：' : '失敗：'));
       const txt = head + dlDescribe(last) +
         (s.rolledBackText ? '\n正式機現況：' + s.rolledBackText : '') +
         (last.downtime_seconds !== null && last.downtime_seconds !== undefined ? '\n實際無法連線的時間約 ' + last.downtime_seconds + ' 秒' : '') +
@@ -328,7 +330,7 @@ async function dlApply() {
       dlRefresh();
       break;
     }
-  } finally { btn.disabled = false; }
+  } finally { btn.disabled = dlRh.require && !dlRh.digest; }
 }
 
 async function refreshDevStatus() {
