@@ -143,3 +143,14 @@ def test_zero_qty_or_unit_cost_in_saved_items_follow_the_pages_total_only_rule(W
     _put_settlement({"status": "draft", "items": saved})
     d = _assert_parity(c, h, saved)
     assert [i for i in d["items"] if i["itemId"] == "a"][0]["actual"]["amount"] == expect_a
+
+
+def test_settlement_print_layout_keeps_five_kpi_cards_on_one_row():
+    """T86 診斷：#28 手機規則（第五張摘要卡跨整列）在 A4 寬度也會命中；列印區塊必須把它放掉，否則第 5 張掉到第二列。"""
+    import re
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "settlement.html").read_text(encoding="utf-8")
+    pr = html[html.index("@media print"):]
+    pr = pr[:pr.index("* { -webkit-print-color-adjust")]
+    assert "repeat(5, minmax(0, 1fr))" in pr
+    assert re.search(r"\.stl-k \{[^}]*grid-column:\s*auto\s*!important", pr)

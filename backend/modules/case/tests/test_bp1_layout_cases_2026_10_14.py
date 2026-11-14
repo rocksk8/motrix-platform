@@ -87,6 +87,8 @@ def test_flag_default_off_and_page_is_deferred():
     assert part.count("MotrixLayout.start()") == 1
     body = part[part.index("async initLayout()"):]
     assert body.index("case_management !== true) {") < body.index("MotrixLayout.start()")   # T86：旗標關時先套合併頁籤設定再 return（區塊式 early return）
+    # 區塊裡必須真的以 return 收尾（拿掉 return ⇒ 旗標關閉時也會啟動版面）：「{」之後最多 3 行、緊接 return、再收尾「}」
+    assert re.search(r"case_management !== true\) \{\r?\n(?:[^\n]*\n){0,3}?\s*return\r?\n\s*\}", body), "旗標關閉的區塊要以 return 結束"
     assert "/api/layout" not in src
 
 
