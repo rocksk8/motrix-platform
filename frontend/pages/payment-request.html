@@ -47,6 +47,23 @@
     .pr-table th, .pr-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
     .pr-table th { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
     .pr-attach { margin-top: 2px; }
+    #pr-result { scroll-margin-top: 130px; }
+    .pr-back { display: inline-block; font-size: 13px; color: var(--accent); text-decoration: none; margin-bottom: 6px; }
+    .pr-back:hover { text-decoration: underline; }
+    .pr-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white); font-size: 13px; }
+    .pr-chip .no { font-family: var(--font-en, monospace); font-size: 12px; color: var(--text-secondary); }
+    .pr-warn { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: var(--tone-warning-bg, #FFF7E6); border: 1px solid var(--tone-warning-border, #F5D58A);
+      color: var(--tone-warning-fg, #7A4B00); font-size: 13px; line-height: 1.6; }
+    .pr-ok a, .pr-ok button.pr-link { color: inherit; font-weight: 600; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; }
+    .pr-ok .pr-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
+    .pr-pick { margin: 12px 0 14px; border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; background: var(--white); }
+    .pr-pick-title { font-weight: 600; margin-bottom: 4px; }
+    .pr-pick-scroll { overflow-x: auto; }
+    .pr-pick-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .pr-pick-table th, .pr-pick-table td { padding: 6px 10px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-light); }
+    .pr-pick-table th { color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+    .pr-pick-table td.num, .pr-pick-table th.num { text-align: right; white-space: nowrap; }
+    .pr-pick-table td:nth-child(2) { min-width: 120px; }
     .pr-flist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     .pr-flist li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
     .pr-flist img { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-light); }
@@ -62,6 +79,8 @@
       .pr-card input[type=checkbox] { width: 22px; height: 22px; }
       .pr-card .btn, .pr-tabs .btn, #pr-tab-new, #pr-tab-mine { min-height: 44px; }
       .pr-case { min-height: 48px; padding: 10px 12px; font-size: 14px; }
+      .pr-chip .btn { min-height: 44px; }
+      .pr-back { padding: 8px 0; }
       .pr-main { padding-top: 20px; }
     }
     @media (max-width: 767px) {
@@ -86,6 +105,14 @@
       .pr-table td:nth-child(9) .btn, .pr-table td:nth-child(7) .btn { min-height: 44px; }
       .pr-table td:nth-child(7) input[type=date] { flex: 1 1 140px; }
       .pr-table td:empty { display: none; }
+      /* 帶入品項／請購明細的選取表：手機一列變兩行（勾選＋品名，下面是各數量），不橫向捲動 */
+      .pr-pick-table thead { display: none; }
+      .pr-pick-table tr { display: grid; grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr); gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+      .pr-pick-table td { display: block; border: 0; padding: 2px 0; }
+      .pr-pick-table td:nth-child(1) { grid-row: 1 / span 3; align-self: center; }
+      .pr-pick-table td:nth-child(2) { grid-column: 2 / -1; font-weight: 600; min-width: 0; }
+      .pr-pick-table td.num { text-align: left; white-space: normal; }
+      .pr-pick-table td.num::before { content: attr(data-label) "　"; color: var(--text-dim); font-size: 12px; }
     }
   </style>
 </head>
@@ -96,8 +123,9 @@
 
   <main class="pr-main">
     <div class="pr-wrap">
-      <div class="page-header"><h1 class="page-title">支出申請</h1></div>
-      <p class="pr-hint">支出申請就是案件的額外支出：先選擇案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
+      <a class="pr-back" data-testid="pr-back-to-case" x-show="picked" :href="caseHref()" x-text="'← 回到案件 ' + (picked ? picked.quoteNo : '')"></a>
+      <div class="page-header"><h1 class="page-title" data-testid="pr-title" x-text="pageTitle()">支出申請</h1></div>
+      <p class="pr-hint" data-testid="pr-explainer" x-text="explainer()">支出申請就是案件的額外支出：先選擇案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
 
       <div class="pr-tabs">
         <button class="btn btn-sm" :class="tab === 'new' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-new" @click="tab = 'new'">新增申請</button>
@@ -106,6 +134,15 @@
 
       <!-- 新增 -->
       <section x-show="tab === 'new'" id="pr-new" :data-busy="busy ? '1' : '0'">
+        <div class="pr-ok" id="pr-result" x-ref="result" x-show="result" :data-status="result ? result.status : ''">
+          <div data-testid="pr-result-text" x-text="result ? result.text : ''"></div>
+          <div class="pr-links" x-show="result">
+            <button type="button" class="pr-link" data-testid="pr-result-mine" @click="openMine()">到「我的申請」查看這張單</button>
+            <a data-testid="pr-result-case" x-show="result && result.no" :href="result && result.no ? caseHrefOf(result.no) : '#'" x-text="result && result.no ? '回到案件 ' + result.no : ''"></a>
+            <button type="button" class="pr-link" data-testid="pr-result-again" @click="result = null">再開一張</button>
+          </div>
+        </div>
+        <div class="pr-warn" data-testid="pr-prereq" x-show="prereq" x-text="prereq"></div>
         <div class="pr-card" id="pr-type-card" x-show="types.length">
           <h3>申請類型</h3>
           <div class="pr-f">
@@ -115,16 +152,20 @@
               <template x-for="t in types" :key="t.code"><option :value="t.code" x-text="t.name + '（' + t.prefix + '）'"></option></template>
             </select>
           </div>
-          <div class="pr-hint" x-show="typeCode" x-text="typeCode ? '依「' + typeName() + '」的定義填寫；案件為選填，綁案件的支出會算入案件成本。' : ''"></div>
         </div>
 
         <div class="pr-card">
-          <h3 x-text="typeCode ? '案件（選填）' : '① 挑案件'"></h3>
-          <div class="pr-f">
+          <h3 x-text="picked ? '案件' : (typeCode ? '案件（選填）' : '① 挑案件')"></h3>
+          <div class="pr-chip" data-testid="pr-case-chip" x-show="picked">
+            <span class="no" x-text="picked ? picked.quoteNo : ''"></span>
+            <span x-text="picked ? ((picked.customerName || '') + (picked.projectName ? '｜' + picked.projectName : '')) : ''"></span>
+            <button type="button" class="btn btn-secondary btn-sm" data-testid="pr-case-change" @click="unpickCase()">改選案件</button>
+          </div>
+          <div class="pr-f" x-show="!picked">
             <label for="pr-case-q">搜尋案件（單號、客戶或專案）</label>
             <input id="pr-case-q" type="search" x-model="caseQ" @input="queueCaseSearch()" placeholder="例：MQ-2026 或客戶名稱">
           </div>
-          <div class="pr-cases" id="pr-cases" :data-loaded="casesLoaded ? '1' : '0'">
+          <div class="pr-cases" id="pr-cases" x-show="!picked" :data-loaded="casesLoaded ? '1' : '0'">
             <template x-for="c in cases" :key="c.quoteNo">
               <button class="pr-case" :class="{ 'is-on': picked && picked.quoteNo === c.quoteNo }" :data-case-pick="c.quoteNo" @click="pickCase(c)">
                 <span class="no" x-text="c.quoteNo"></span><span x-text="(c.customerName || '') + (c.projectName ? '｜' + c.projectName : '')"></span>
@@ -215,6 +256,59 @@
         </div>
         <div class="pr-card" x-show="typeCode" id="pr-typed-form">
           <h3 x-text="'填寫' + typeName() + (picked ? '　' + picked.quoteNo : '　（不綁案件）')"></h3>
+          <!-- 明細怎麼來：先從案件品項／已核准的請購單帶入（可略過），下方的表單再微調；帶入後會捲到明細並顯示已帶入的筆數 -->
+          <div class="pr-pick" id="pr-item-picker" x-show="prItems.length">
+            <div class="pr-pick-title">從案件品項帶入（可略過）</div>
+            <div class="pr-hint" style="margin-bottom:6px">連到品項的明細，算該品項的<b>實際成本</b>，不是額外支出。已請購、已採購數量依已送審或已核准的單據累計。</div>
+            <div class="pr-pick-scroll">
+              <table class="pr-pick-table">
+                <thead><tr><th></th><th>品項</th><th class="num">計畫量</th><th class="num">已請購</th><th class="num">已採購</th><th class="num">剩餘可採購</th></tr></thead>
+                <tbody>
+                  <template x-for="it in prItems" :key="it.itemId">
+                    <tr :data-pick-item="it.itemId">
+                      <td><input type="checkbox" x-model="prSel[it.itemId]" :aria-label="'選 ' + it.description"></td>
+                      <td x-text="it.description"></td>
+                      <td class="num" data-label="計畫量" x-text="it.planQty + (it.unit || '')"></td>
+                      <td class="num" data-label="已請購" x-text="it.requestedQty"></td>
+                      <td class="num" data-label="已採購" x-text="it.orderedQty"></td>
+                      <td class="num" data-label="剩餘可採購" x-text="it.remainingQty"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="btn btn-secondary" id="pr-item-add" style="margin-top:8px" @click="addSelectedItems()">帶入選取的品項</button>
+          </div>
+          <div class="pr-pick" id="pr-pr-picker" x-show="typeCode === 'purchase_order' && prReqs.length" data-testid="pr-pr-picker">
+            <div class="pr-pick-title">從請購單帶入（可略過）</div>
+            <div class="pr-hint" style="margin-bottom:6px">只列同案件<b>已核准</b>的請購單。可混合多張請購單的明細，數量可僅帶入一部分，累計不超過請購量。價格由請購單帶入，帶入後仍可修改；無法查看財務金額的帳號，不帶入價格。</div>
+            <template x-for="rq in prReqs" :key="rq.docCode">
+              <div style="margin-bottom:8px" :data-pr-doc="rq.docCode">
+                <div style="font-weight:600;font-size:12px" x-text="rq.docCode + (rq.title ? '　' + rq.title : '')"></div>
+                <div class="pr-pick-scroll">
+                  <table class="pr-pick-table">
+                    <thead><tr><th></th><th>品名／摘要</th><th class="num">請購量</th><th class="num">已採購</th><th class="num">剩餘</th><th class="num">本次帶入量</th></tr></thead>
+                    <tbody>
+                      <template x-for="l in rq.lines" :key="rq.docCode + '#' + l.prLine">
+                        <tr :data-pr-line="rq.docCode + '#' + l.prLine">
+                          <td><input type="checkbox" x-model="prrSel[rq.docCode + '#' + l.prLine]" :disabled="l.remaining <= 0" :aria-label="'選 ' + rq.docCode + ' 第 ' + l.prLine + ' 項'"></td>
+                          <td x-text="l.summary"></td>
+                          <td class="num" data-label="請購量" x-text="l.qty"></td>
+                          <td class="num" data-label="已採購" x-text="l.claimed"></td>
+                          <td class="num" data-label="剩餘" x-text="l.remaining"></td>
+                          <td class="num" data-label="本次帶入量"><input type="number" min="0" step="any" style="width:80px" :disabled="l.remaining <= 0" x-model.number="prrQty[rq.docCode + '#' + l.prLine]"
+                                     :data-testid="'pr-pr-qty-' + rq.docCode + '-' + l.prLine"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+            <div class="pr-err" x-show="prrErr" data-testid="pr-pr-err" x-text="prrErr"></div>
+            <button type="button" class="btn btn-secondary" id="pr-pr-add" data-testid="pr-pr-add" style="margin-top:4px" @click="addSelectedPrLines()">帶入選取的請購明細</button>
+          </div>
+          <div class="pr-ok" data-testid="pr-pick-msg" x-show="pickMsg" x-text="pickMsg"></div>
           <div id="pr-df" x-ref="df"></div>
           <div class="pr-f" x-show="typeCode !== 'purchase_req'" style="margin-top:10px">
             <label for="pr-t-planned-pay">預定付款日（選填）</label>
@@ -242,64 +336,18 @@
             </div>
             <div class="pr-hint">帳號只會給出納付款使用；廠商若是自然人，請確認已告知對方資料將用於付款（僅提醒，不強制）。</div>
           </fieldset>
-          <div id="pr-item-picker" x-show="prItems.length" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
-            <div style="font-weight:600;margin-bottom:4px">從案件品項帶入</div>
-            <div class="pr-hint" style="margin-bottom:6px">連到品項的明細，算該品項的<b>實際成本</b>，不是額外支出；已請購／已採購量依已送審或核准的單據累計。</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead><tr style="text-align:left;color:var(--text-dim)"><th></th><th>品項</th><th>計畫量</th><th>已請購</th><th>已採購</th><th>剩餘可採購</th></tr></thead>
-              <tbody>
-                <template x-for="it in prItems" :key="it.itemId">
-                  <tr :data-pick-item="it.itemId">
-                    <td><input type="checkbox" x-model="prSel[it.itemId]" :aria-label="'選 ' + it.description"></td>
-                    <td x-text="it.description"></td>
-                    <td x-text="it.planQty + (it.unit || '')"></td>
-                    <td x-text="it.requestedQty"></td>
-                    <td x-text="it.orderedQty"></td>
-                    <td x-text="it.remainingQty"></td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-            <button type="button" class="btn btn-secondary" id="pr-item-add" style="margin-top:8px" @click="addSelectedItems()">帶入選取的品項</button>
-          </div>
-          <div id="pr-pr-picker" x-show="typeCode === 'purchase_order' && prReqs.length" data-testid="pr-pr-picker" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
-            <div style="font-weight:600;margin-bottom:4px">從請購單帶入</div>
-            <div class="pr-hint" style="margin-bottom:6px">只列同案件<b>已核准</b>的請購單；可混合多張請購單的明細，數量可僅帶入一部分（累計不超過請購量）。價格由請購單帶入，帶入後仍可修改；無法查看財務金額的帳號，不帶入價格。</div>
-            <template x-for="rq in prReqs" :key="rq.docCode">
-              <div style="margin-bottom:8px" :data-pr-doc="rq.docCode">
-                <div style="font-weight:600;font-size:12px" x-text="rq.docCode + (rq.title ? '　' + rq.title : '')"></div>
-                <table style="width:100%;border-collapse:collapse;font-size:12px">
-                  <thead><tr style="text-align:left;color:var(--text-dim)"><th></th><th>品名／摘要</th><th>請購量</th><th>已採購</th><th>剩餘</th><th>本次帶入量</th></tr></thead>
-                  <tbody>
-                    <template x-for="l in rq.lines" :key="rq.docCode + '#' + l.prLine">
-                      <tr :data-pr-line="rq.docCode + '#' + l.prLine">
-                        <td><input type="checkbox" x-model="prrSel[rq.docCode + '#' + l.prLine]" :disabled="l.remaining <= 0" :aria-label="'選 ' + rq.docCode + ' 第 ' + l.prLine + ' 項'"></td>
-                        <td x-text="l.summary"></td>
-                        <td x-text="l.qty"></td>
-                        <td x-text="l.claimed"></td>
-                        <td x-text="l.remaining"></td>
-                        <td><input type="number" min="0" step="any" style="width:80px" :disabled="l.remaining <= 0" x-model.number="prrQty[rq.docCode + '#' + l.prLine]"
-                                   :data-testid="'pr-pr-qty-' + rq.docCode + '-' + l.prLine"></td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-            </template>
-            <div class="pr-err" x-show="prrErr" data-testid="pr-pr-err" x-text="prrErr"></div>
-            <button type="button" class="btn btn-secondary" id="pr-pr-add" data-testid="pr-pr-add" style="margin-top:4px" @click="addSelectedPrLines()">帶入選取的請購明細</button>
-          </div>
           <div id="pr-pr-diff" x-show="priceDiffs().length" data-testid="pr-pr-diff" style="margin-top:8px;color:var(--warn,#b45309);font-size:12px">
             <template x-for="d in priceDiffs()" :key="d.key">
               <div x-text="'⚠ ' + d.text"></div>
             </template>
           </div>
           <div id="pr-item-reasons" x-show="linkedIds.length" style="margin-top:8px">
+            <div class="pr-hint" style="margin-bottom:4px" x-text="typeCode === 'purchase_order' ? '帶入的品項若超出報價計畫量，請在下方填寫原因，送審時會檢查。' : '帶入的品項若超出報價計畫量，系統只提示，可不填原因。'"></div>
             <template x-for="id in linkedIds" :key="id">
               <div class="pr-f" :data-linked-item="id" style="margin-bottom:6px">
                 <label x-text="itemName(id) + (overOf(id) > 0 ? '　⚠ 超出報價計畫量 ' + overOf(id) : '')"></label>
                 <input type="text" :id="'pr-reason-' + id" x-model="prReasons[id]" maxlength="500"
-                       :placeholder="typeCode === 'purchase_order' ? '超出報價計畫量時必填（送審時伺服器會檢查）' : '超出報價計畫量的原因（請購單只提示，可不填）'">
+                       :placeholder="typeCode === 'purchase_order' ? '超出計畫量時必填' : '超出計畫量的原因（選填）'">
               </div>
             </template>
           </div>
@@ -347,7 +395,6 @@
             <button class="btn btn-primary" id="pr-t-submit" :disabled="busy" @click="saveTyped(true)">送審</button>
           </div>
         </div>
-        <div class="pr-ok" id="pr-result" x-show="result" :data-status="result ? result.status : ''" x-text="result ? result.text : ''"></div>
       </section>
 
       <!-- 我的申請 -->
@@ -437,7 +484,7 @@
       function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '', plannedPayDate: '', poBank: '', poBranch: '', poAccount: '', poAccountName: '', supplierId: '' } }
       return {
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
-        tab: 'new', busy: false, err: '', result: null,
+        tab: 'new', busy: false, err: '', result: null, pickMsg: '', prereq: '', myDept: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
         types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
@@ -452,7 +499,7 @@
           if (window.MotrixStatus) window.MotrixStatus.init()      // S-X2：旗標關 ⇒ 什麼都不改
           this.pkOther = AttachPicker.create({ peers: function () { return [self.pkInv] } })
           this.pkInv = AttachPicker.create({ peers: function () { return [self.pkOther] } })
-          this.searchCases(); this.loadTypes()
+          this.searchCases(); this.loadTypes(); this.loadMe()
           try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
           this._openFromCase()
         },
@@ -472,6 +519,56 @@
               if (this.types.some(function (x) { return x.code === ty })) { this.typeCode = ty; await this.selectType() }
             }
           } catch (e) { /* 入口只是方便；失敗就停在原本的畫面 */ }
+        },
+        // ── 頁首與導覽（T86 #18）：標題與說明依單據類型；選了案件就能回到案件 ──
+        pageTitle() { return this.typeCode ? '新增' + this.typeName() : '支出申請' },
+        explainer() {
+          if (this.typeCode === 'purchase_req') return '請購單用來申請採購物料：列出品項與數量，送審核准後才能向廠商下採購單。綁定案件的品項，採購後算該品項的實際成本，不算額外支出。'
+          if (this.typeCode === 'purchase_order') return '採購單用來向廠商下單：可從已核准的請購單帶入明細，送審核准後由出納付款。'
+          if (this.typeCode) return '依「' + this.typeName() + '」的定義填寫，送審核准後由出納付款。案件為選填，綁定案件的支出會算入案件成本。'
+          return '支出申請就是案件的額外支出：先選擇案件，填寫日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。'
+        },
+        caseHrefOf(no) { return 'case-management.html?q=' + encodeURIComponent(no) },
+        caseHref() { return this.picked ? this.caseHrefOf(this.picked.quoteNo) : '#' },
+        openMine() { this.tab = 'mine'; this.loadMine(); try { window.scrollTo(0, 0) } catch (e) {} },
+        async unpickCase() {
+          var hadLinks = !!(this._df && (this._df.getValue().lines || []).some(function (l) { return l.itemId || l.prDocCode }))
+          this.picked = null; this._draft = null; this._simple = null; this.pickMsg = ''
+          this.prItems = []; this.prSel = {}; this.prReqs = []; this.prrSel = {}; this.prrQty = {}
+          if (this.typeCode && hadLinks) await this.selectType()                 // 已帶入的品項屬於原案件：換案件就清掉重填
+          this.searchCases()
+        },
+        // ── 申請人前置資料（T86 #20）：只提示與鎖定，不改任何簽核或權限規則；真正的把關仍在送審端點 ──
+        async loadMe() {
+          try {
+            var h = this._h()
+            var rs = await Promise.all([fetch('/api/auth/profile', { headers: h }), fetch('/api/org/tree', { headers: h })])
+            var pf = rs[0].ok ? await rs[0].json() : null
+            var tree = rs[1].ok ? await rs[1].json() : null
+            this.myDept = this._resolveDept(pf, tree)
+            var d = this.myDept
+            if (d && d.state === 'none') this.prereq = '您尚未歸屬任何部門，系統找不到簽核主管，這張單無法送審；表單的「部門」欄也沒有可選項目。請最高管理者到「使用者管理」將您歸屬到部門後再填寫。'
+            else if (d && d.state === 'nomgr') this.prereq = '您所屬的部門「' + d.name + '」尚未指定主管，送審時系統找不到簽核主管，會擋下這張單。可以先存成草稿，並請最高管理者到「組織架構設定」指定部門主管。'
+            else this.prereq = ''
+          } catch (e) { this.prereq = '' }
+        },
+        _resolveDept(pf, tree) {
+          if (!pf) return null
+          var name = (pf.department || '').trim()
+          if (!name) return { name: '', id: null, state: 'none' }
+          if (!tree) return { name: name, id: null, state: 'unknown' }
+          var hits = []
+          tree.forEach(function (dv) { (dv.departments || []).forEach(function (d) { if (d.name === name) hits.push(d) }) })
+          if (hits.length !== 1) return { name: name, id: null, state: 'unknown' }      // 同名部門無法確定是哪一個 ⇒ 不帶入也不提示
+          return { name: name, id: hits[0].id, state: hits[0].managerUserId ? 'ok' : 'nomgr' }
+        },
+        _showResult() {                                                              // 結果訊息在頁首：送審後把畫面帶到它；顯示切換與版面還沒定時會漏掉一次，所以隔一下再確認
+          var go = () => { var el = this.$refs.result; if (el && el.offsetParent && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' }) }
+          go(); setTimeout(go, 200)
+        },
+        _scrollToLines() {
+          var box = this.$refs.df, t = box && (box.querySelector('[data-table="lines"]') || box.querySelector('[data-table]'))
+          if (t && t.scrollIntoView) t.scrollIntoView({ block: 'center', behavior: 'smooth' })
         },
         _h(json) { var h = { Authorization: 'Bearer ' + (this.session.token || '') }; if (json) h['Content-Type'] = 'application/json'; return h },
         async _json(r) { try { return await r.json() } catch (e) { return {} } },
@@ -537,6 +634,8 @@
           this._df.setValue({ data: v.data, lines: lines })
           this.prrSel = {}
           this._syncLinked()
+          this.pickMsg = '已帶入 ' + added + ' 筆請購明細到明細。'
+          this.$nextTick(() => this._scrollToLines())
         },
         // 價差提示：採購單價格可以改，但與請購單價格不同要在畫面上標出來（只有拿得到請購價的人才比）
         priceDiffs() {
@@ -580,17 +679,23 @@
           var have = {}
           var lines = (v.lines || []).filter(function (l) { return l.itemId || l.summary || l.qty || l.unitCost })      // 拿掉空白列
           lines.forEach(function (l) { if (l.itemId) have[l.itemId] = true })
+          var added = 0, picked = 0
           this.prItems.forEach(function (it) {
-            if (!self.prSel[it.itemId] || have[it.itemId]) return
+            if (!self.prSel[it.itemId]) return
+            picked++
+            if (have[it.itemId]) return
             lines.push({ category: '', summary: it.description, qty: it.remainingQty > 0 ? it.remainingQty : 1,
                          unitCost: it.planUnitCost !== undefined ? it.planUnitCost : '', itemId: it.itemId })
+            added++
           })
           this._df.setValue({ data: v.data, lines: lines })
           this.prSel = {}
           this._syncLinked()
+          this.pickMsg = !picked ? '請先勾選要帶入的品項。' : (added ? '已帶入 ' + added + ' 個品項到明細。' : '所選品項已在明細中。')
+          if (added) this.$nextTick(() => this._scrollToLines())
         },
         async pickCase(c) {
-          this.picked = c; this.err = ''; this.result = null; this._draft = null; this._simple = null
+          this.picked = c; this.err = ''; this.result = null; this._draft = null; this._simple = null; this.pickMsg = ''
           this.loadPrItems()
           this.loadPrReqs()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
@@ -648,7 +753,8 @@
               if (!rs.ok) throw new Error('已存成草稿，但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
               status = ds.status || '待審核'
             }
-            this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的申請」看進度' }
+            this.result = { status: status, id: id, no: no, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '。' }
+            this.$nextTick(() => this._showResult())
             this.form = blank(); this._simple = null; this.pkOther.clear(); this.pkInv.clear()
             ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
           } catch (e) {
@@ -683,9 +789,18 @@
             tree.forEach(function (dv) { (dv.departments || []).forEach(function (d) { depts.push({ id: d.id, name: dv.name + '／' + d.name }) }) })
             this.typeDef = def
             var me = this.session.user || this.session || {}
+            var fdef = def.definition || def
+            var mine = this.myDept && this.myDept.id && depts.some((d) => String(d.id) === String(this.myDept.id)) ? this.myDept : null
+            var hasDept = !!(mine && (fdef.fields || []).some(function (f) { return f.key === 'dept' }))
+            var isAdmin = ['admin', 'superadmin'].indexOf(me.role) >= 0           // 管理者可能替別的部門申請 ⇒ 只帶入預設值、不鎖定
             this._df = window.MotrixDefinitionForm.mount(this.$refs.df, {
-              definition: def.definition || def, viewer: { username: me.username || '', isCashier: false },
-              categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v) })
+              definition: fdef, viewer: { username: me.username || '', isCashier: false },
+              categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v),
+              lockKeys: hasDept && !isAdmin ? ['dept'] : [], lockNote: '依您所屬的部門帶入，無法更改。' })
+            if (hasDept) {
+              var v0 = this._df.getValue()
+              if (!v0.data.dept) { v0.data.dept = String(mine.id); this._df.setValue({ data: v0.data, lines: v0.lines }) }
+            }
             this.linkedIds = []; this.prReasons = {}
             await this.loadPrItems()
             await this.loadPrReqs()
@@ -713,7 +828,15 @@
           this.err = ''; this.result = null
           if (!this._df) { this.err = '請先選擇類型'; return }
           var problems = this._df.validate()
-          if (problems.length) { this.err = problems[0].message + (problems.length > 1 ? '（還有 ' + (problems.length - 1) + ' 項）' : ''); return }
+          if (problems.length) {                                                 // T86 #23：欄位已由表單標紅；這裡列出全部需要修正的項目，並捲到第一個
+            var names = problems.map(function (x) { return x.message })
+            this.err = '尚有 ' + problems.length + ' 項需要修正：' + names.slice(0, 6).join('、') + (names.length > 6 ? '…' : '') + '。欄位已標示紅色。'
+            this.$nextTick(() => {
+              var b = this._df && this._df.firstBad && this._df.firstBad()
+              if (b && b.scrollIntoView) { b.scrollIntoView({ block: 'center', behavior: 'smooth' }); try { if (b.focus) b.focus({ preventScroll: true }) } catch (e) {} }
+            })
+            return
+          }
           var v = this._df.getValue()
           var reasons = this.prReasons
           v.lines = (v.lines || []).map(function (l) {
@@ -757,11 +880,12 @@
               if (!rs.ok) throw new Error('已存成草稿（' + (d.docCode || '') + '），但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
               status = ds.status || '待審核'
             }
-            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的申請」看進度'
+            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '。'
             this.form = blank(); this._draft = null; this.pkOther.clear(); this.pkInv.clear()
             ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
             await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
-            this.result = { status: status, id: id, text: text }
+            this.result = { status: status, id: id, no: this.picked ? no : '', text: text }
+            this.$nextTick(() => this._showResult())
           } catch (e) {
             this.err = e.message + (this._draft && this._draft.no === no && this._draft.kind === this.typeCode ? '（草稿 ' + (this._draft.code || ('#' + this._draft.id)) + ' 已建立；修正後再按一次即可，不會重複建立）' : '')
           }

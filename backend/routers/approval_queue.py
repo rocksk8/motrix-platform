@@ -252,6 +252,8 @@ def _item_type_label(it: dict) -> str:
     t = it.get("type")
     if t == "custom_record":
         return it.get("moduleName") or it.get("moduleKey") or "自訂模組"
+    if t == "extra_expense" and it.get("docKindLabel"):
+        return it["docKindLabel"]               # 費用單據（請購單／採購單…）：摘要上顯示單據類型，不是籠統的「案件支出申請」（T86 #19）；只認案件模組自己的鍵，別的模組不能借 typeLabel 覆寫
     if t in _ITEM_TYPE_LABELS:
         return _ITEM_TYPE_LABELS[t]
     return it.get("typeLabel") or "報價單"      # 模組登記的新單據類型（A2-0 #2）自帶標籤；都沒有才退回舊預設
