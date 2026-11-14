@@ -22,7 +22,7 @@ def _flag(on):
     from helpers import settings_groups, settings_registry as SR       # noqa: F401
     c = db.get_db()
     try:
-        SR.publish("onepipe", {"links": 1 if on else 0}, reason="e2e", user="ope2e", conn=c)
+        SR.publish("onepipe", {"links": 1 if on else 0, **({} if on else {"timeline": 0})}, reason="e2e", user="ope2e", conn=c)      # 關＝入口與時間軸兩個旗標都關（?sub=materials 兩者任一開都會生效）
         c.commit()
     finally:
         c.close()
