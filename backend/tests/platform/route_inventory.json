@@ -418,6 +418,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/auth/greeting": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/auth/login/qr-info": {
    "w": false,
    "pp": 0,
@@ -429,6 +434,16 @@
    "body": false
   },
   "GET /api/auth/me": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/preferences": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/profile": {
    "w": false,
    "pp": 0,
    "body": false
@@ -624,6 +639,11 @@
    "body": false
   },
   "GET /api/completion-notes": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/completion-notes/case-prefill": {
    "w": false,
    "pp": 0,
    "body": false
@@ -838,6 +858,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/daily-tasks/case-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/daily-tasks/{task_id}": {
    "w": false,
    "pp": 1,
@@ -874,6 +899,11 @@
    "body": false
   },
   "GET /api/dashboard/funnel": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/mine": {
    "w": false,
    "pp": 0,
    "body": false
@@ -954,6 +984,11 @@
    "body": false
   },
   "GET /api/dev-cases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dev-cases/expected-summary": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1063,6 +1098,21 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/getting-started": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/importer/templates/{kind}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
   "GET /api/inventory/batches": {
    "w": false,
    "pp": 0,
@@ -1084,6 +1134,16 @@
    "body": false
   },
   "GET /api/inventory/purchase-suggestions": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/reconcile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/serial-history": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1308,6 +1368,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/license/overview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/license/status": {
    "w": false,
    "pp": 0,
@@ -1373,7 +1438,17 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/login-greeting/phrases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/mail-types": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/mail-types/mine": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1414,6 +1489,11 @@
    "body": false
   },
   "GET /api/me/bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/menu/categories": {
    "w": false,
    "pp": 0,
    "body": false
@@ -1496,6 +1576,11 @@
   "GET /api/option-lists/{list_id}/status": {
    "w": false,
    "pp": 1,
+   "body": false
+  },
+  "GET /api/org/gaps": {
+   "w": false,
+   "pp": 0,
    "body": false
   },
   "GET /api/org/tree": {
@@ -1743,6 +1828,16 @@
    "pp": 1,
    "body": false
   },
+  "GET /api/quotations/{quote_no}/device-history": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/device-prefill": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
   "GET /api/quotations/{quote_no}/extra-expenses": {
    "w": false,
    "pp": 1,
@@ -1769,6 +1864,11 @@
    "body": false
   },
   "GET /api/quotations/{quote_no}/material-coverage": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-flow": {
    "w": false,
    "pp": 1,
    "body": false
@@ -2068,6 +2168,16 @@
    "pp": 1,
    "body": false
   },
+  "GET /api/settings-center/index": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/overview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings-center/pending": {
    "w": false,
    "pp": 0,
@@ -2084,6 +2194,11 @@
    "body": false
   },
   "GET /api/settings-center/public": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/recent": {
    "w": false,
    "pp": 0,
    "body": false
@@ -2128,6 +2243,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/settings/company-profile/public": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings/company-setup/status": {
    "w": false,
    "pp": 0,
@@ -2144,6 +2264,21 @@
    "body": false
   },
   "GET /api/settings/email-notify": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/email-notify/providers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-payment-terms": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/estimate-terms-presets": {
    "w": false,
    "pp": 0,
    "body": false
@@ -2304,6 +2439,11 @@
    "body": false
   },
   "GET /api/system-hub": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/backup-monitor": {
    "w": false,
    "pp": 0,
    "body": false
@@ -2519,6 +2659,11 @@
    "body": false
   },
   "GET /api/work-logs": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/work-logs/case-options": {
    "w": false,
    "pp": 0,
    "body": false
@@ -2769,6 +2914,16 @@
    "body": true
   },
   "POST /api/approval-queue/reassign": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval/flows/copy": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval/flows/copy/preview": {
    "w": true,
    "pp": 0,
    "body": true
@@ -3388,6 +3543,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/importer/parse": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/inventory/batches": {
    "w": true,
    "pp": 0,
@@ -3547,6 +3707,11 @@
    "w": true,
    "pp": 1,
    "body": true
+  },
+  "POST /api/license/import": {
+   "w": true,
+   "pp": 0,
+   "body": false
   },
   "POST /api/line/binding/start": {
    "w": true,
@@ -3783,6 +3948,16 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/permmatrix/role-cap/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/batch/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/permmatrix/role-cap/preview": {
    "w": true,
    "pp": 0,
@@ -3998,6 +4173,11 @@
    "pp": 2,
    "body": true
   },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
   "POST /api/quotations/{quote_no}/material-orders/{item_id}/reject": {
    "w": true,
    "pp": 2,
@@ -4138,6 +4318,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/settings-center/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/settings-center/groups/{group}": {
    "w": true,
    "pp": 1,
@@ -4188,6 +4373,16 @@
    "pp": 0,
    "body": false
   },
+  "POST /api/settings/email-notify/wizard/activate": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/email-notify/wizard/test-me": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/settings/google-calendar/test": {
    "w": true,
    "pp": 0,
@@ -4198,10 +4393,40 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/settings/line-notify/events/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/line-notify/events/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/settings/line-notify/verify": {
    "w": true,
    "pp": 0,
    "body": false
+  },
+  "POST /api/settings/mail/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/mail/batch-preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/mail/batch-undo": {
+   "w": true,
+   "pp": 0,
+   "body": true
   },
   "POST /api/settings/storage-locations/create": {
    "w": true,
@@ -4263,6 +4488,36 @@
    "pp": 2,
    "body": false
   },
+  "POST /api/system/backup-monitor/backup-now": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/system/backup-monitor/heartbeat-test": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/tender-radar/scan": {
    "w": true,
    "pp": 0,
@@ -4284,6 +4539,26 @@
    "body": true
   },
   "POST /api/users": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/permissions/batch/undo": {
    "w": true,
    "pp": 0,
    "body": true
@@ -4346,6 +4621,11 @@
   "POST /api/work-logs/{wid}/photos": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "PUT /api/auth/preferences": {
+   "w": true,
+   "pp": 0,
    "body": true
   },
   "PUT /api/bank-accounts/{user_id}": {
@@ -4453,6 +4733,11 @@
    "pp": 0,
    "body": true
   },
+  "PUT /api/getting-started/steps/{step_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
   "PUT /api/inventory/batches/{batch_no}": {
    "w": true,
    "pp": 1,
@@ -4508,12 +4793,32 @@
    "pp": 1,
    "body": true
   },
+  "PUT /api/login-greeting/phrases": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/mail-types/mine": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "PUT /api/mail-types/{key}/recipients": {
    "w": true,
    "pp": 1,
    "body": true
   },
   "PUT /api/me/bank-account": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/categories/override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/menu/settings-help/override": {
    "w": true,
    "pp": 0,
    "body": true
@@ -4633,6 +4938,16 @@
    "pp": 0,
    "body": true
   },
+  "PUT /api/settings/estimate-payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/estimate-terms-presets": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "PUT /api/settings/google-calendar": {
    "w": true,
    "pp": 0,
@@ -4708,6 +5023,11 @@
    "pp": 1,
    "body": true
   },
+  "PUT /api/system/backup-monitor/heartbeat-url": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "PUT /api/system/modules/{key}": {
    "w": true,
    "pp": 1,
@@ -4747,326 +5067,6 @@
    "w": true,
    "pp": 1,
    "body": true
-  },
-  "GET /api/auth/greeting": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/dashboard/mine": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/login-greeting/phrases": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/login-greeting/phrases": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/auth/preferences": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/auth/profile": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/auth/preferences": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/license/overview": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "POST /api/license/import": {
-   "w": true,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/settings/company-profile/public": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/system/backup-monitor": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "POST /api/system/backup-monitor/backup-now": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/system/backup-monitor/heartbeat-disable": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/approve": {
-   "w": true,
-   "pp": 1,
-   "body": true
-  },
-  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel": {
-   "w": true,
-   "pp": 1,
-   "body": true
-  },
-  "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
-   "w": true,
-   "pp": 1,
-   "body": true
-  },
-  "POST /api/system/backup-monitor/heartbeat-test": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "PUT /api/system/backup-monitor/heartbeat-url": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/org/gaps": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/getting-started": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/getting-started/steps/{step_id}": {
-   "w": true,
-   "pp": 1,
-   "body": true
-  },
-  "GET /api/menu/categories": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "PUT /api/menu/categories/override": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "PUT /api/menu/settings-help/override": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/settings/email-notify/providers": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "POST /api/settings/email-notify/wizard/activate": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/email-notify/wizard/test-me": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings-center/batch": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/line-notify/events/batch": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/line-notify/events/batch-preview": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/line-notify/events/batch-undo": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/mail/batch": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/mail/batch-preview": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/settings/mail/batch-undo": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/completion-notes/case-prefill": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/daily-tasks/case-options": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/importer/status": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/importer/templates/{kind}": {
-   "w": false,
-   "pp": 1,
-   "body": false
-  },
-  "GET /api/mail-types/mine": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/quotations/{quote_no}/material-flow": {
-   "w": false,
-   "pp": 1,
-   "body": false
-  },
-  "GET /api/settings-center/index": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/settings-center/overview": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/settings-center/recent": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/settings/estimate-payment-terms": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/settings/estimate-terms-presets": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/work-logs/case-options": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "POST /api/importer/parse": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/users/import-rows": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/users/permissions/batch": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/users/permissions/batch/preview": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/users/permissions/batch/undo": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "PUT /api/mail-types/mine": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "PUT /api/settings/estimate-payment-terms": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "PUT /api/settings/estimate-terms-presets": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/inventory/reconcile": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/inventory/serial-history": {
-   "w": false,
-   "pp": 0,
-   "body": false
-  },
-  "GET /api/quotations/{quote_no}/device-history": {
-   "w": false,
-   "pp": 1,
-   "body": false
-  },
-  "GET /api/quotations/{quote_no}/device-prefill": {
-   "w": false,
-   "pp": 1,
-   "body": false
-  },
-  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive-stock": {
-   "w": true,
-   "pp": 2,
-   "body": true
-  },
-  "POST /api/approval/flows/copy": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/approval/flows/copy/preview": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/permmatrix/role-cap/batch": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "POST /api/permmatrix/role-cap/batch/preview": {
-   "w": true,
-   "pp": 0,
-   "body": true
-  },
-  "GET /api/dev-cases/expected-summary": {
-   "w": false,
-   "pp": 0,
-   "body": false
   }
  }
 }
