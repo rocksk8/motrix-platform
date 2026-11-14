@@ -79,9 +79,15 @@ window.CM_PARTS.push(() => ({
 
     readyText(row) {
       if (!row) return ''
-      if (row.canClose) return row.readyCount + '/5 可結案'
-      if (row.blockedCount === 1) return '差 ' + row.blockedLabels[0]
+      // T86 案件UX #14：原本只有一關沒過時才寫「差 進度」（欄寬不夠被截斷、也不知道差什麼）；
+      // 現在有缺的關卡一律列出「缺：進度、單據」，過了幾關改放在滑過提示
+      if (row.canClose) return '可結案'
+      const miss = (row.blockedLabels || []).filter(Boolean)
+      if (miss.length) return '缺：' + miss.join('、')
       return row.readyCount + '/5'
+    },
+    readyTitle(row) {
+      return row ? '五關已過 ' + row.readyCount + ' 關' : ''
     },
 
     dueText(row) {

@@ -124,7 +124,7 @@
                 <th class="cm-gate-h"><span x-text="g.label" style="font-weight:700;font-size:12px;letter-spacing:.06em;display:block"></span><span x-text="g.hint"></span></th>
               </template>
               <th style="border-left:1px solid var(--border-light)">下一到期</th>
-              <th style="text-align:right">結案</th>
+              <th style="text-align:right;min-width:128px">結案</th>
             </tr>
           </thead>
           <tbody>
@@ -169,6 +169,7 @@
                 <td style="text-align:right">
                   <span class="cm-mtx__ready"
                         :style="row.canClose ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        :title="readyTitle(row)"
                         x-text="readyText(row)"></span>
                 </td>
               </tr>
@@ -406,15 +407,13 @@
              同一份 .cm-card 樣式，點擊行為跟清單模式完全一致 -->
         <div class="cm-list__body" x-show="caseViewMode==='board'">
           <template x-for="col in boardColumns()" :key="col.key">
-            <div class="cm-board-group">
+            <div class="cm-board-group" :class="{'cm-board-group--empty': col.items.length === 0}">
               <div class="cm-board-group__head">
                 <span class="cm-board-group__dot" :style="'background:' + col.dot"></span>
                 <span class="cm-board-group__title" x-text="col.label"></span>
                 <span class="cm-board-group__count" x-text="col.items.length"></span>
               </div>
-              <template x-if="col.items.length === 0">
-                <div class="cm-board-group__empty">（沒有案件）</div>
-              </template>
+              <!-- T86 案件UX #14：沒有案件的分組只留一行淡色標題與 0，不再佔一列「（沒有案件）」 -->
               <template x-for="c in col.items" :key="c.quote_no">
                 <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
                      :style="isUnread(c) ? 'border-left-color:var(--tone-warning-solid)' : ''"
