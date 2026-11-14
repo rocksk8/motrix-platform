@@ -98,7 +98,7 @@ def _require_readable(conn, source_type, quote_no, user):
 
 
 class _CaseAttachments:
-    LABEL = "案件"
+    LABEL = "案件管理"
     SOURCE_TYPES = ("quotation_signed", "case_update", "payment_item", "material", "material_invoice",
                     "extra_expense")
 
@@ -283,13 +283,13 @@ class _CaseCatalog:
     （同 `_CaseAttachments` 的 `_READ_RULE`／完工單清單規則 `case_documents_readable`），不另寫第二份。
     待核准暫存檔（`_pending_case_changes`、額外支出變更申請）不進目錄（設計 Q6：未核准的不是正式檔案）。"""
     CATEGORIES = {
-        "quotation_signed": {"label": "報價單回簽", "doc": "報價單", "module": "案件"},
-        "case_update": {"label": "案件動態附件", "doc": "案件動態", "module": "案件"},
-        "payment_item": {"label": "收付款項目發票", "doc": "案件收付款", "module": "案件"},
-        "material": {"label": "材料附件", "doc": "案件材料", "module": "案件"},
-        "material_invoice": {"label": "材料發票", "doc": "案件材料", "module": "案件"},
-        "extra_expense": {"label": "額外支出／請款附件", "doc": "額外支出", "module": "案件"},
-        "completion_note": {"label": "完工單回簽", "doc": "完工單", "module": "案件"},
+        "quotation_signed": {"label": "報價單回簽", "doc": "報價單", "module": "案件管理"},
+        "case_update": {"label": "案件動態附件", "doc": "案件動態", "module": "案件管理"},
+        "payment_item": {"label": "收付款項目發票", "doc": "案件收付款", "module": "案件管理"},
+        "material": {"label": "材料附件", "doc": "案件材料", "module": "案件管理"},
+        "material_invoice": {"label": "材料發票", "doc": "案件材料", "module": "案件管理"},
+        "extra_expense": {"label": "額外支出／請款附件", "doc": "額外支出", "module": "案件管理"},
+        "completion_note": {"label": "完工單回簽", "doc": "完工單", "module": "案件管理"},
     }
 
     @staticmethod

@@ -26,7 +26,7 @@ router = APIRouter()
 
 MAX_PAGE = 20
 #: 目錄依賴的擁有模組（key ⇒ 顯示名）：不在／沒載入 ⇒ `unavailable` 明說（MODULE-GUIDE：缺席不可以跟「沒有檔案」長一樣）
-EXPECTED_OWNERS = {"case": "案件", "supply": "採購與庫存", "arap": "應收應付", "subcontract": "外包工班",
+EXPECTED_OWNERS = {"case": "案件管理", "supply": "採購與庫存", "arap": "應收應付", "subcontract": "外包工班",
                    "crm": "業務開發", "accounting": "會計", "payroll": "薪資獎金"}
 
 
