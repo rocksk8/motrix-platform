@@ -122,6 +122,25 @@ def test_total_outstanding_equals_b1_ar_aging_total_and_rows_match_item_by_item(
     assert set(labels.values()) >= {v[band] for v in rows}
 
 
+def test_one_dirty_payment_item_does_not_break_the_whole_source(client, make_user, world):
+    """h11：請款比例寫成字串 "30%"（B1 不轉換比例所以照常 200）——自訂報表的預覽與匯出也要 200，髒值當 0。"""
+    _case("AR-DIRTY", "丁公司", [{"type": "尾款", "amount": 12000, "pct": "30%", "received": False}])
+    sa = _login(client, make_user, "ar_sa_dirty", role="superadmin")
+    assert client.get("/api/reports/ar-aging", headers=sa).status_code == 200
+    r = _preview(client, sa, columns=["quote_no", "outstanding"], filters=[{"field": "quote_no", "op": "eq", "value": "AR-DIRTY"}])
+    assert r.status_code == 200, r.text
+    assert _preview(client, sa).status_code == 200
+    rows = [x["v"] for x in r.json()["rows"] if x["k"] == "row"]
+    assert len(rows) == 1
+
+
+def test_num_falls_back_on_non_numbers():
+    from modules.analytics import report_source as S
+    assert S._num("30%") == 0.0 and S._num(None) == 0.0 and S._num(float("nan")) == 0.0 and S._num(float("inf")) == 0.0
+    assert S._num("12.5") == 12.5 and S._num(7) == 7.0
+    assert S._int_or_none(None) is None and S._int_or_none("x") is None and S._int_or_none("5") == 5
+
+
 def test_summary_total_equals_b1_total_and_includes_billed_received_columns(client, make_user, world):
     sa = _login(client, make_user, "ar_sa2", role="superadmin")
     b1 = client.get("/api/reports/ar-aging", headers=sa).json()["total"]["amount"]

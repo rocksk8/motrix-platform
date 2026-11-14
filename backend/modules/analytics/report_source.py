@@ -63,24 +63,48 @@ def _band_options(conn=None):
 _STATUS = (("未收", "未收"), ("已收", "已收"))
 
 
+def _num(x, default=0.0):
+    """髒資料不讓整個來源壞掉：無法轉成有限數字（例如請款比例寫成 "30%"）⇒ 預設值。B1 不轉換比例，所以不受影響；這裡要轉，就要自己防。"""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return default
+    return v if v == v and v not in (float("inf"), float("-inf")) else default
+
+
+def _int_or_none(x):
+    if x is None:
+        return None
+    v = _num(x, None)
+    return None if v is None else int(v)
+
+
 def _materialize():
     """把應收明細（與 B1 同一個計算）放進記憶體資料庫的 `receivable_items`。回傳尚未設唯讀的連線，由 run_owned 負責設唯讀與關閉。"""
     from modules.analytics.api import reports as _rp
     detail = []
     _rp._ar_aging_core(None, None, None, with_owner=True, detail=detail)
     conn = sqlite3.connect(":memory:")
+    try:
+        _fill(conn, detail)
+    except BaseException:
+        conn.close()                                     # 建表／寫入失敗：不留著記憶體連線等 GC
+        raise
+    return conn
+
+
+def _fill(conn, detail):
     conn.execute("CREATE TABLE %s (id INTEGER PRIMARY KEY, %s)" % (TABLE, ", ".join("%s %s" % c for c in _COLUMNS)))   # id＝rowid 別名（編譯的 ORDER BY rowid 與授權器都靠它）
     rows = []
     for d in detail:
-        amt = float(d["amount"] or 0)
+        amt = _num(d["amount"])
         rcv = bool(d["received"])
-        rows.append((d["quoteNo"], d["customer"], d["project"], d["owner"], d["stage"], float(d["pct"] or 0),
+        rows.append((d["quoteNo"], d["customer"], d["project"], d["owner"], d["stage"], _num(d["pct"]),
                      amt, amt if rcv else 0.0, 0.0 if rcv else amt, "已收" if rcv else "未收",
                      d["quoteDate"] or None, d["expectedDate"] or None, d["receivedDate"] or None,
-                     d["days"], (str(d["band"]) if d["band"] is not None else None)))
+                     _int_or_none(d["days"]), (str(d["band"]) if d["band"] is not None else None)))
     conn.executemany("INSERT INTO %s (%s) VALUES (%s)" % (TABLE, ", ".join(c[0] for c in _COLUMNS), ", ".join("?" * len(_COLUMNS))), rows)
     conn.commit()
-    return conn
 
 
 def _execute(plan):
