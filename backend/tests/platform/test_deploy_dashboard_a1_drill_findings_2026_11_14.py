@@ -3,6 +3,7 @@
 2. 預演畫面等 `x.rehearsing === false`，伺服器閒置時回 null ⇒ 永遠等不到，畫面停在「預演中…」。"""
 import importlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -76,7 +77,8 @@ def _node_exe():
 def _describe_js(expr):
     """把畫面上真正的 DL_* 常數與 dlDescribe 抽出來，用 node 跑 expr（回傳 JSON）。"""
     import subprocess
-    a, b = HTML.index("const DL_OUTCOME"), HTML.index("function dlLockText")
+    a = re.search(r"const DL_OUTCOME\b", HTML).start()
+    b = re.search(r"function dlLockText\b", HTML).start()
     code = HTML[a:b] + "\nconsole.log(JSON.stringify(" + expr + "));\n"
     r = subprocess.run([_node_exe(), "-e", code], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert r.returncode == 0, r.stderr
@@ -93,7 +95,7 @@ def test_apply_result_does_not_repeat_the_failure_prefix_or_the_problems():
     out = _describe_js("{noOutcome: dlDescribe(%s, false), withOutcome: dlDescribe(%s, true)}" % (json.dumps(last), json.dumps(last)))
     assert out["noOutcome"] == ""                                    # 套用結果畫面：標頭由呼叫端加，這裡不重複
     assert out["withOutcome"] == "失敗：" + last["problems"][0]      # 「上一次套用」那一行仍要有結果標籤與原因
-    assert ("失敗：" + out["noOutcome"]).count("失敗") == 1
+    assert not ("失敗：" + out["noOutcome"]).startswith("失敗：失敗")      # 呼叫端加的標頭後面不能再接一個結果標籤
     # 腳本有跑過（有 result.status）的路徑不受影響
     ran = {"outcome": "verify_failed", "result": {"status": "success", "rolled_back": "applied", "service": "up", "finished_at": "t"}}
     assert "已套用" in _describe_js("dlDescribe(%s, false)" % json.dumps(ran))

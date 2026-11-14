@@ -54,7 +54,8 @@ class Probes:
 
     def scheduled_task_exists(self, name):
         ps = "if (Get-ScheduledTask -TaskName '%s' -ErrorAction SilentlyContinue) { 'EXISTS' } else { 'ABSENT' }" % name.replace("'", "''")
-        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         out = (r.stdout or "").strip()
         if r.returncode != 0 or out not in ("EXISTS", "ABSENT"):
             raise RuntimeError("PowerShell 查詢排程工作沒有得到明確答案（rc=%s，輸出=%r，錯誤=%r）" % (r.returncode, out[:80], (r.stderr or "")[:120]))
@@ -90,7 +91,8 @@ class Probes:
         """被動：本機路由表怎麼走（Find-NetRoute 只做路由選擇，不送封包）。⇒ 一行文字；查不到回 None。只當資訊。"""
         ps = ("$r = Find-NetRoute -RemoteIPAddress '%s' -ErrorAction SilentlyContinue | Select-Object -First 1; "
               "if ($r) { 'ROUTE interface#' + $r.InterfaceIndex + ' via ' + $r.NextHop } else { 'NOROUTE' }") % ip
-        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         out = (r.stdout or "").strip().splitlines()
         return out[-1] if out and r.returncode == 0 else None
 
