@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）
+## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 - 修正（只影響自訂報表選項，旗標後；h11 審查）：`report_source` 的狀態／成交標記／精算狀態選項改為只列呼叫者看得到的列的值、只讀實體欄位（不碰 `data_json`）、每人快取 60 秒；沒有使用者回空。
 
