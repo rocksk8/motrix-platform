@@ -41,6 +41,12 @@ window.CM_PARTS.push(() => ({
       } catch (e) { if (req === this._mtlReq) this.mtlFlow = false }
     },
 
+    // 存檔後（dirty 變回 false）清掉「待儲存」標記，之後別的編輯再讓 dirty 變 true 時不會誤把已存的列標回待儲存
+    _mtlWatchSave() {
+      if (this._mtlWatching) return
+      this._mtlWatching = true
+      this.$watch('dirty', v => { if (!v) this._mtlPend = {} })
+    },
     mtlOrderOf(mat) { return (this.materialOrders || []).find(o => o.itemId && o.itemId === mat.orderItemId) || null },
     _mtlHasPo(mat, o) { return !!((mat.poLink && mat.poLink.key) || (o && o.poDocCode)) },
     _mtlPoCodes(mat, o) {
@@ -97,7 +103,7 @@ window.CM_PARTS.push(() => ({
       if (!arrived && approved && canEdit) {
         if (o && a && a.status === '已核准' && this.moWizOn && this.moWizOn()) arr.act = { label: '到貨登載', run: () => { this.activeTab = 'fin'; this.$nextTick(() => this.moWizOpen(o, false)) } }
         else if (o && a && a.status === '已核准') arr.act = { label: '確認到貨', run: () => this.moReceive(o) }
-        else if (po) arr.act = { label: '確認到貨', run: () => { mat.arrived = true; this.onMaterialArrived(mat); this._mtlPend = Object.assign({}, this._mtlPend, { [mat.id]: true }); MotrixUI.toast('已標記到貨，請按「儲存」') } }
+        else if (po) arr.act = { label: '確認到貨', run: () => { mat.arrived = true; this.onMaterialArrived(mat); this._mtlPend = Object.assign({}, this._mtlPend, { [mat.id]: true }); MotrixUI.toast('已標記到貨，請按「儲存」'); this._mtlWatchSave() } }
       }
       steps.push(arr)
 

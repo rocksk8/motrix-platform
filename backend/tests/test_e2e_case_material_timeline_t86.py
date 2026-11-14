@@ -289,3 +289,16 @@ def test_ratio_warning_wraps_on_phone_instead_of_truncating(live_server, make_us
     assert "不等於 100%" in txt.inner_text()
     assert hint.bounding_box()["height"] > 20, "手機應換成多行"
     _shot(page, "review_ratio_warn_390")
+
+
+@pytest.mark.e2e
+def test_pending_arrival_mark_is_cleared_after_save(live_server, make_user, e2e_browser):
+    """審查 nit：存檔後「待儲存」標記清掉，之後別的編輯讓 dirty 再變 true 也不會回來。"""
+    page = _open(live_server, make_user, e2e_browser, "t86_pend", 1440)
+    page.evaluate("() => { const m = %s.cr.caseRecord.materials.find(x => x.id === 'mb'); m.arrived = false; m.ordered = true }" % _D)
+    page.locator('[data-testid="mtl-act-mb-arrive"]').click()
+    assert "待儲存" in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+    page.evaluate("() => { const d = %s; d.dirty = false }" % _D)            # 模擬存檔成功
+    page.evaluate("() => { const d = %s; d.dirty = true }" % _D)             # 之後別的編輯
+    page.wait_for_timeout(300)
+    assert "待儲存" not in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
