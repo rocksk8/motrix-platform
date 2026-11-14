@@ -485,6 +485,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
 
     all_items, period_items, outstanding = [], [], []
     cases_all, cases_period = [], []
+    dirty = 0                                   # 金額算不出來而略過的款項筆數（營收／毛利等報表用；乾淨資料不多任何鍵）
     dm: dict = {}   # 依部門彙總（跟下面「依業務員」的 sm 用同樣邏輯，多一層部門分組）
 
     for row in rows:
@@ -493,13 +494,19 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             try: cr = json.loads(row["cr_json"])
             except Exception: pass
 
-        total = row["total"] or 0
         pay   = (cr.get("payment") or {}).get("items", [])
+        has_pay = bool(pay)
+        total, pretax, pay, bad = _clean_pay_items(row["total"], row["pretax"], pay)   # 金額算不出來的款項（含非物件）略過並計數
+        if bad:
+            dirty += len(bad)
+            _log.warning("營運報表：%s 有 %d 筆款項的金額／比例格式異常，未計入", row["quote_no"], len(bad))
         recv_amt = 0
 
         if pay:
-            amounts = payment_item_amounts(total, pay, row["pretax"])
+            amounts = payment_item_amounts(total, pay, pretax)
             for idx, pi in enumerate(pay):
+                if idx in bad:
+                    continue
                 amt  = amounts[idx]
                 rcvd = bool(pi.get("received"))
                 rat  = norm_ymd(pi.get("receivedAt"))
@@ -568,7 +575,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "quoteDate":      qdate,
             "wonMonth":       won_month.get(row["quote_no"]) or qdate[:7],
             "dealTag":        row["deal_tag"]      or "",
-            "hasPaymentItems": bool(pay),
+            "hasPaymentItems": has_pay,
             "roles":          roles,
             "total":          total,
             "pretax":         row["pretax"] or 0,
@@ -707,7 +714,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     _closed  = sum(1 for c in cases_all if c["dealTag"] == "已結案")
     _settled = sum(1 for c in cases_all if c["settleStatus"] == "finalized")
     _act_gp  = sum(c["grossProfit"] for c in cases_all if c["settleStatus"] == "finalized" and c["grossProfit"] is not None)
-    return {
+    result = {
         "summary": {
             "totalReceivable":        tr,
             "totalCollected":         tc,
@@ -744,6 +751,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         "settleOverdue":  settle_overdue,
         "casesWithoutPaymentItems": cases_without_payment_items,
     }
+    if dirty:
+        result["dirtyCount"] = dirty
+    return result
 
 
 # ── Achievement computation ───────────────────────────────────────────────────
