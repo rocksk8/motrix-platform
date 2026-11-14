@@ -11,7 +11,12 @@
 /* ── Left panel ── */
 .cm-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:var(--surface-muted); overflow:hidden; }
 .cm-list__head { padding:14px 14px 0; background:var(--surface); border-bottom:1px solid var(--border-light); }
-.cm-list__title-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+/* T86 案件UX #7：左欄只有 300px，標題＋件數＋逾期徽章＋三段切換擠在一列會逐字折行。
+   標題與徽章不折行；切換鈕獨佔第二列、三顆等寬。 */
+.cm-list__title-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-bottom:10px; }
+.cm-list__title-row .cm-list__title, .cm-list__title-row .cm-list__count { white-space:nowrap; flex:none; }
+.cm-list__title-row .cm-view-toggle { flex:1 0 100%; margin-left:0 !important; }
+.cm-list__title-row .cm-view-toggle button { flex:1; }
 .cm-list__count--danger { background:var(--danger-light); color:var(--danger); }
 /* 2026-09-14：左欄標頭是這頁的實質標題，加上直立紅色標記
    （官網 28×3 的緊湊變體），不動雙欄版面結構。 */
@@ -22,8 +27,8 @@
 .cm-list__search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:var(--text-dim); pointer-events:none; }
 .cm-list__search-input { width:100%; padding:7px 10px 7px 32px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:var(--surface-muted); outline:none; transition:border-color .12s; box-sizing:border-box; }
 .cm-list__search-input:focus { border-color:var(--accent); background:var(--surface); box-shadow:0 0 0 3px var(--tone-accent-bg); }
-.cm-list__tabs { display:flex; padding:0 2px; }
-.cm-list__tab { font-size:12px; font-family:var(--font-zh); padding:6px 12px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
+.cm-list__tabs { display:flex; padding:0 2px; overflow-x:auto; scrollbar-width:none; }
+.cm-list__tab { font-size:12px; font-family:var(--font-zh); padding:6px 9px; white-space:nowrap; flex:none; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
 .cm-list__tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 .cm-list__body { flex:1; overflow-y:auto; padding:4px 0; }
 .cm-list__body::-webkit-scrollbar { width:4px; }
@@ -64,7 +69,7 @@
 
 /* 清單／看板切換 */
 .cm-view-toggle { display:inline-flex; padding:2px; background:var(--surface-sunken); border-radius:7px; gap:2px; margin-bottom:10px; }
-.cm-view-toggle button { border:none; background:transparent; font-family:var(--font-zh); font-size:12px; font-weight:600; padding:5px 11px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
+.cm-view-toggle button { white-space:nowrap; border:none; background:transparent; font-family:var(--font-zh); font-size:12px; font-weight:600; padding:5px 11px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
 .cm-view-toggle button.active { background:var(--surface); color:var(--text-primary); box-shadow:var(--shadow-hairline); }
 /* ── 關卡矩陣（2026-09-14）──────────────────────────────────────────
    系統對「結案」已經定義了五項前置條件（§5.2），但它們散在五個頁籤裡，
