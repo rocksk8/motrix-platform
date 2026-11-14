@@ -210,7 +210,7 @@ def test_invalid_targets_are_rejected_with_their_names(client, world, make_user)
     _login(client, make_user, "dr_gone")                                       # 先有帳號再停用
     gone = _uid("dr_gone")
     _x("UPDATE users SET active=0 WHERE id=?", gone)
-    for uid, hint in ((gone, "已停用"), (world.idout, "沒有業務開發模組權限"), (world.idc, "看不到此案件"), (99999, "不存在")):
+    for uid, hint in ((gone, "已停用"), (world.idout, "沒有業務開發模組權限"), (world.idc, "無法檢視此案件"), (99999, "不存在")):
         r = _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida), _t(uid)])
         assert r.status_code == 400 and hint in r.text, (uid, r.text)
     r = _direct(client, world.admin, world.cid, world.log, targets=[_t(gone), _t(world.idc)])
