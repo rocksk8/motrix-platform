@@ -37,6 +37,8 @@ def tier_allowed(ceiling, user) -> bool:
         return bool(FM.material_money_visible(user))
     if ceiling == "cashier":
         return bool(auth.has_cashier_access(user))
+    if ceiling == "financial_view":                          # T87 B2 D1：同 CRM 頁面的 can_see_financial（不含 cashier 授予）
+        return bool(auth.can_see_financial(user))
     return False
 
 

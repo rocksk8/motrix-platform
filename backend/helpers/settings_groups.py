@@ -1314,3 +1314,8 @@ _onepipe._register(S, _register_core)
 from helpers import settings_groups_import_wizard as _import_wizard  # noqa: E402
 
 _import_wizard._register(S, _register_core)
+
+# T87 B2：自訂報表的四項設定（匯出對象／分享／刪除方式／報價單金額欄範圍；拆檔，同屬 core）
+from helpers import settings_groups_custom_reports as _custom_reports  # noqa: E402
+
+_custom_reports._register(S, _register_core)
