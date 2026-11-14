@@ -288,6 +288,10 @@
           onError: function (e) { if (mx) mx.toast((e && e.message) || '操作失敗', { error: true }); if (opts.onError) opts.onError(e) },     // 核心有 onError 就不再自己吐司：這裡補上，使用者才看得到原因／衝突說明
         })
         return api()
+      }).catch(function (e) {
+        // 沒有權限（403）或讀不到：不再丟出未捕捉的錯誤；說明交給呼叫端（onError），回 null＝矩陣沒有掛上
+        if (opts.onError) opts.onError(e)
+        return null
       })
     }
     function api() { return { reload: reload, destroy: function () { if (mx) mx.destroy() }, mx: function () { return mx }, rows: function () { return rows } } }
