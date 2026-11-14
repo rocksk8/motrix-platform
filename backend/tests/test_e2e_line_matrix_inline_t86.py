@@ -44,6 +44,11 @@ def test_settings_page_shows_matrix_inline_and_old_list_is_gone(live_server, mak
     expect(page.locator("[data-testid=le-matrix] [data-testid='mx-row-approval_request']")).to_be_visible()
     # 批次、篩選與「復原這一批」來自共用矩陣元件
     expect(page.locator("[data-testid=le-matrix] input[data-mx=selall]")).to_have_count(1)
+    # 原本收件人說明、群組計數、標籤都在矩陣裡
+    expect(page.locator("[data-testid='mx-row-dev_case_unassigned']")).to_contain_text("前任負責人")
+    expect(page.locator("[data-testid=le-matrix]")).to_contain_text("已開 ")
+    expect(page.locator("[data-testid=le-matrix]")).to_contain_text("僅 LINE")
+    expect(page.locator("[data-testid=le-matrix]")).to_contain_text("重要")
     # 舊清單（逐項展開＋勾選）與「前往矩陣頁」連結都已移除
     assert page.locator("[data-testid=line-open-matrix]").count() == 0
     assert page.locator("#line-panel input[id^=chk-line-ev-]").count() == 0

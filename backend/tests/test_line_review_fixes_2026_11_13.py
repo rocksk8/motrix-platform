@@ -102,7 +102,8 @@ def test_m3_every_non_mail_event_has_who_text_and_settings_page_shows_it(client,
     assert ev["dev_case_unassigned"]["follows"].startswith("原本收件人：") and "前任負責人" in ev["dev_case_unassigned"]["follows"]
     html = source_tree.page_file("notification-settings.html").read_text(encoding="utf-8")
     js = (source_tree.page_file("line-events.html").parent.parent / "static" / "line-events-matrix.js").read_text(encoding="utf-8")
-    assert "沿用相近的 Email" not in html and "沿用相近的 Email" not in js     # T86：舊清單移除，事件改由內嵌矩陣顯示
+    assert "沿用相近的 Email" not in html and "沿用相近的 Email" not in js
+    assert "r.follows" in js, "T86：舊清單移除後，原本收件人說明改由內嵌矩陣的列說明顯示"
 
 
 # ── L2／L3／L4／L7 ─────────────────────────────────────────────────────────────
