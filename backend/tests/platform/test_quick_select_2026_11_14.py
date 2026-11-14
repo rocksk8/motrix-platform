@@ -146,10 +146,47 @@ def test_budget_cuts_only_t4_and_lists_every_cut_file_as_not_run():
 
 
 def test_must_tiers_are_never_cut_over_budget_only_warned():
+    """T0（改動的測試）永不砍——超預算只標 over_budget；T3 樣式守門不再是必跑，只在預算內填充。"""
     plan = _plan({}, a4=["backend/tests/test_changed.py"], a2=["backend/tests/test_pattern_guard.py"], t4=["backend/tests/test_own.py"], budget_s=5)
-    assert "backend/tests/test_changed.py" in plan["files"] and "backend/tests/test_pattern_guard.py" in plan["files"]
-    assert plan["tiers"]["T4"]["run"] == []
+    assert plan["files"] == ["backend/tests/test_changed.py"] and plan["over_budget"] is True
+    assert plan["tiers"]["T4"]["run"] == [] and plan["tiers"]["T3"]["run"] == []
     assert any("已超過預算" in n for n in plan["notes"]), plan["notes"]
+    cut = {s["item"] for s in plan["skipped"]}
+    assert {"backend/tests/test_own.py", "backend/tests/test_pattern_guard.py"} <= cut, "被砍的每一檔都要寫進未跑"
+
+
+def test_budget_fill_order_is_t4_then_t4_e2e_then_t3_cheapest_first():
+    t4 = ["backend/tests/test_own.py", "backend/tests/test_e2e_page.py"]
+    a2 = ["backend/tests/test_zz_expensive_guard.py", "backend/tests/test_aa_cheap_guard.py", "backend/tests/test_mm_mid_guard.py"]
+    secs = {"backend/tests/test_own.py": 10, "backend/tests/test_e2e_page.py": 10, "backend/tests/test_zz_expensive_guard.py": 50,
+            "backend/tests/test_aa_cheap_guard.py": 1, "backend/tests/test_mm_mid_guard.py": 5, "backend/tests/test_changed.py": 10}
+    plan = _plan({}, a4=["backend/tests/test_changed.py"], a2=a2, t4=t4, budget_s=40, sec=lambda f: secs[f])
+    assert plan["tiers"]["T3"]["files"] == ["backend/tests/test_aa_cheap_guard.py", "backend/tests/test_mm_mid_guard.py", "backend/tests/test_zz_expensive_guard.py"], "T3 由便宜到貴"
+    assert plan["tiers"]["T4"]["run"] == t4 and plan["tiers"]["T3"]["run"] == ["backend/tests/test_aa_cheap_guard.py", "backend/tests/test_mm_mid_guard.py"]
+    assert [x["item"] for x in plan["skipped"] if x["tier"] == "T3"] == ["backend/tests/test_zz_expensive_guard.py"]
+    st = {x["name"]: x["files"] for x in plan["stages"]}
+    assert st["high"] == ["backend/tests/test_changed.py", "backend/tests/test_own.py"] and st["e2e"] == ["backend/tests/test_e2e_page.py"]
+    assert st["guards"] == plan["tiers"]["T3"]["run"], "階段順序＝一般測試 → e2e → 樣式守門（最低優先）"
+
+
+def test_e2e_files_count_against_the_budget_serially():
+    """e2e 段單行程序列跑：兩個 e2e 各 10 s 就是 20 s，不能被 worker 數除掉（T87 實測：e2e 占一半時間卻不計預算）。"""
+    t4 = ["backend/tests/test_e2e_a.py", "backend/tests/test_e2e_b.py", "backend/tests/test_e2e_c.py"]
+    grep = lambda tok: []      # noqa: E731
+    plan = Q.plan_quick(changed=["frontend/views/x.html"], diff_text=DIFF, tree_files=TREE, a2=[], a4=[], extra_t4=t4, repo=".", ref=None,
+                        seconds_fn=lambda f: 10.0, workers=4, budget_s=25, groups=_groups(), grep_fn=grep)
+    assert plan["tiers"]["T4"]["run"] == t4[:2] and [x["item"] for x in plan["skipped"] if x["tier"] == "T4"] == t4[2:]
+
+
+def test_style_guards_are_narrowed_to_real_guards_and_never_pull_in_e2e_files():
+    a2 = ["backend/tests/test_approval_queue_t84.py", "backend/tests/test_payroll_calc.py", "backend/tests/test_system_audit_2026_09_14.py",
+          "backend/tests/test_approval_labels_match.py", "backend/tests/platform/test_no_direct_thing.py", "backend/tests/test_e2e_approval_dot.py"]
+    keep, narrowed, e2e_out = Q.narrow_style_guards(a2, lambda f: "test_e2e_" in f)
+    assert narrowed == a2[:3] and e2e_out == [a2[5]] and keep == [a2[3], a2[4]]
+    plan = _plan({}, a2=a2, budget_s=10_000)
+    assert sorted(plan["tiers"]["T3"]["files"]) == sorted([a2[3], a2[4]])
+    why = " ".join(x["item"] + x["reason"] for x in plan["skipped"] if x["tier"] == "T3")
+    assert "收窄" in why and "e2e" in why and "未跑" in why, "收窄與排除的也要明講（不是通過）"
 
 
 def test_format_plan_says_not_run_when_something_was_cut():

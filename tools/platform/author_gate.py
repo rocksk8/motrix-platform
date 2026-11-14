@@ -339,10 +339,10 @@ def spill_argv(argv, limit=ARGV_LIMIT):
     return list(argv[:i]) + ["@" + path], path
 
 
-def run_pytest(argv, cwd, env, stream=True):
+def run_pytest(argv, cwd, env, stream=True, hard_timeout=None):
     argv, spilled = spill_argv(argv)
     try:
-        return _run_pytest(argv, cwd, env, stream)
+        return _run_pytest(argv, cwd, env, stream, hard_timeout)
     finally:
         if spilled:
             try:
@@ -351,19 +351,51 @@ def run_pytest(argv, cwd, env, stream=True):
                 pass
 
 
-def _run_pytest(argv, cwd, env, stream=True):
+def _kill_tree(pid):
+    """殺掉 pytest 與它的所有子行程（xdist worker、瀏覽器）。Windows 用 taskkill /T；其他平台 kill 主行程。"""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, timeout=30, creationflags=nowindow.CREATE_NO_WINDOW)
+        else:
+            os.kill(pid, 9)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+#: _run_pytest 被 hard_timeout 強制中止時，最後一次的標記（呼叫端用 run_pytest.timed_out 讀；單執行緒使用）
+TIMED_OUT = {"flag": False}
+
+
+def _run_pytest(argv, cwd, env, stream=True, hard_timeout=None):
+    """hard_timeout（秒）：牆鐘上限的最後防線——graceful 的 deadline 外掛只在「有題跑完」時才會檢查，單一題卡住就停不下來；
+    逾時就殺整棵行程樹，TIMED_OUT["flag"]=True，輸出只有已印出的部分（沒有 summary ⇒ 紅清單可能不完整，呼叫端要明講）。"""
+    TIMED_OUT["flag"] = False
     e = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     e.update(env or {})
     flags = (getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | nowindow.CREATE_NO_WINDOW) if os.name == "nt" else 0       # 低優先權、不跳視窗
     proc = subprocess.Popen(argv, cwd=str(cwd), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags)
+    timer = None
+    if hard_timeout is not None:
+        import threading
+
+        def _fire():
+            TIMED_OUT["flag"] = True
+            _kill_tree(proc.pid)
+        timer = threading.Timer(max(1.0, hard_timeout), _fire)
+        timer.daemon = True
+        timer.start()
     lines = []
-    for raw in proc.stdout:
-        line = raw.decode("utf-8", errors="replace")
-        lines.append(line)
-        if stream:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-    return proc.wait(), "".join(lines)
+    try:
+        for raw in proc.stdout:
+            line = raw.decode("utf-8", errors="replace")
+            lines.append(line)
+            if stream:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+        return proc.wait(), "".join(lines)
+    finally:
+        if timer:
+            timer.cancel()
 
 
 def build_cmds(python, backend_rel_files, guard_args, e2e_files, basetemp, workers):
@@ -404,7 +436,7 @@ def select_for(base, head, repo=REPO, full_floor=False, quick=False, workers=2, 
     return sel, plan_n, plan_e
 
 
-E2E_FILE_SECONDS = 20.0                # 預算估算：e2e 檔每檔約 20 s（起伺服器＋瀏覽器；實測 T86 區間中位數附近，只用來排預算）
+E2E_FILE_SECONDS = 9.0                 # 預算估算：e2e 檔每檔（單行程序列）秒數。T87 三個 breaker 實測 6.0／7.2／7.5 s／檔（含起伺服器＋瀏覽器），取 9 留餘裕
 
 
 RATCHET_BASELINES = ("backend/tests/platform/text_anchor_baseline.json", "backend/tests/platform/audit_scope_baseline.json")
@@ -444,12 +476,81 @@ def apply_quick_plan(sel, base, head, repo, tree, changed, workers, budget_min, 
     sel["quick_over_budget"] = bool(plan.get("over_budget"))
     sel["quick_skipped"] = list(plan["skipped"]) + ratchet_unrun(head, repo)
     planned = sorted(set(plan["files"]))
-    sel["E"] = sorted(f for f in planned if is_e2e(f))                                      # e2e 檔（T1／T2 選到的也算）走 e2e 那一段，不混進 not_e2e
+    sel["E"] = [f for f in planned if is_e2e(f)]                                            # e2e 檔（T1／T2 選到的也算）走 e2e 那一段，不混進 not_e2e（保留優先序）
     sel["non_e2e"] = [f for f in planned if not is_e2e(f)]
+    sel["stages"] = plan.get("stages") or []
     sel["guard_args"] = sorted(set(sel["guard_args"]) | set(n[len("backend/"):] for n in plan["nodes"] if n.startswith("backend/")))
     sel["A3"] = sorted(f for f in set(plan["tiers"]["T4"].get("run", [])) if not is_e2e(f))
     sel["budget_min"] = budget_min
     return sel
+
+
+def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2e, parse_failures):
+    """--quick 的執行：依優先序分段（high＝改動測試／觸發的守門組／字面值反查／一般測試 → e2e → guards＝樣式守門），**整體共用一個牆鐘上限**：
+    每段起跑前先看剩餘時間，不夠就整段列為未跑；段內用 failfast 外掛的 MOTRIX_DEADLINE_AT 到點收工（xdist 一併停）；外掛來不及停（單題卡住）就由 hard_timeout 殺行程樹。
+    ⇒ {"counts", "fails", "stopped", "e2e", "unrun": [skipped 項目], "deadline_hit", "killed"}。沒跑到的檔一律進 unrun（輸出與結果檔寫「未跑」）。"""
+    plan = sel.get("quick_plan") or {}
+    tier_of = {f: t for t, v in (plan.get("tiers") or {}).items() for f in v.get("files", [])}
+    guard_nodes = sorted({g for g in sel["guard_args"] if "::" in g})
+    agg = {"counts": {}, "fails": [], "stopped": False, "e2e": None, "unrun": [], "deadline_hit": False, "killed": False}
+    halted = ""
+    for st in sel.get("stages") or []:
+        files = list(st["files"])
+        if not files or (st["name"] == "e2e" and skip_e2e):
+            continue
+        def mark(reason, fs=files):
+            agg["unrun"].extend({"tier": tier_of.get(f, "T?"), "item": f, "reason": "%s（未跑）" % reason} for f in fs)
+        if halted:
+            mark(halted)
+            continue
+        remaining = deadline_at - time.time()
+        if remaining < 15:
+            agg["deadline_hit"] = True
+            mark("牆鐘預算已用完，這一段沒有開跑")
+            continue
+        rel = strip_backend(files)
+        if st["name"] == "e2e":
+            cmd = [py, "-m", "pytest", *rel, "-q", "-rfE", "--tb=short", "-m", "e2e", "-p", "no:cacheprovider", "--basetemp=%s-e2e" % basetemp]
+        else:
+            nodes = [g for g in guard_nodes if g.split("::", 1)[0] not in set(rel)] if st["name"] == "high" else []
+            cmd = [py, "-m", "pytest", *rel, *nodes, "-q", "-rfE", "--tb=short", "-m", "not e2e", "-p", "no:cacheprovider", "--basetemp=%s-%s" % (basetemp, st["name"])]
+            if workers > 1:
+                cmd += ["-n", str(workers)]
+        seen_path = "%s-%s.seen.json" % (basetemp, st["name"])
+        try:
+            os.remove(seen_path)
+        except OSError:
+            pass
+        e2 = dict(env, MOTRIX_DEADLINE_AT="%.3f" % deadline_at, MOTRIX_DEADLINE_SEEN=seen_path)
+        print("[pytest %s] %d 檔（剩餘預算 %.0f 秒）" % (st["name"], len(files), remaining))
+        t1 = time.time()
+        rc, out = run_pytest(cmd, repo / "backend", e2, hard_timeout=remaining + 90)
+        killed = TIMED_OUT["flag"]
+        fs_ = parse_failures(out)
+        counts = parse_counts(out)
+        for k, v in counts.items():
+            agg["counts"][k] = agg["counts"].get(k, 0) + v
+        agg["fails"].extend(fs_)
+        try:
+            seen = json.loads(Path(seen_path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            seen = {}
+        hit = bool(seen.get("deadline_hit")) or "DEADLINE:" in out or killed
+        if hit:
+            agg["deadline_hit"] = True
+            agg["killed"] = agg["killed"] or killed
+            ran = set(seen.get("seen") or [])
+            miss = [f for f in files if strip_backend([f])[0] not in ran]
+            agg["unrun"].extend({"tier": tier_of.get(f, "T?"), "item": f, "reason": "牆鐘預算到點，這個檔沒有開跑（未跑）"} for f in miss)
+            agg["unrun"].append({"tier": "牆鐘", "item": "階段 %s" % st["name"], "reason": "到點中止：%d／%d 檔有開跑，開跑的檔不保證每題都跑完（沒跑完的題不算通過）%s" % (
+                len(files) - len(miss), len(files), "；行程被強制結束，紅清單可能不完整" if killed else "")})
+        if st["name"] == "e2e":
+            agg["e2e"] = {"files": len(files), "ran": counts, "failed": [f["nodeid"] for f in fs_], "seconds": round(time.time() - t1, 1),
+                          "green": (rc == 0 or (hit and not killed)) and not fs_ and not killed}
+        elif fs_ and "failfast:" in out:
+            agg["stopped"] = True
+            halted = "failfast 提前停止，後面的階段沒有開跑"
+    return agg
 
 
 def main(argv=None):
@@ -493,7 +594,7 @@ def main(argv=None):
         print("作者閘門：%s" % e)
         return 2
     a.budget_min = budget_min
-    est = estimate_seconds(sel["non_e2e"], times, workers, repo)
+    est = sel["quick_plan"]["estimate_s"] if (a.quick and sel.get("quick_plan")) else estimate_seconds(sel["non_e2e"], times, workers, repo)
     print("作者閘門 %s → 基準 %s" % (head[:8], base[:8]))
     print("  A1 底板 %d 檔（不含建包才需要的底板 %d 檔，--full-floor 加入）｜A2 樣式守門 %d 檔｜A3 受影響 %d 檔｜A4 改動測試 %d 檔｜不含 e2e 共 %d 檔｜e2e %d 檔（單獨一段）" % (
         len(sel["A1"]), len(sel["A1x"]), len(sel["A2"]), len(sel["A3"]), len(sel["A4"]), len(sel["non_e2e"]), len(sel["E"])))
@@ -532,28 +633,43 @@ def main(argv=None):
             print("作者閘門：讀不到 --known-red（%s）" % e)
             return 2
     try:
-        print("[pytest] " + " ".join(cmd[3:8]) + " … (%d 檔)" % len(sel["non_e2e"]))
-        rc, out = run_pytest(cmd, repo / "backend", env)
-        counts = parse_counts(out)
-        fails = parse_failures(out)
-        stopped = "failfast:" in out
-        e2e = None
-        if cmd_e and rc in (0, 1) and not (fails and stopped):
-            t1 = time.time()
-            print("[pytest e2e] %d 檔" % len(sel["E"]))
-            rc_e, out_e = run_pytest(cmd_e, repo / "backend", env)
-            fe = parse_failures(out_e)
-            e2e = {"files": len(sel["E"]), "ran": parse_counts(out_e), "failed": [f["nodeid"] for f in fe], "seconds": round(time.time() - t1, 1),
-                   "green": rc_e == 0 and not fe}
+        if a.quick and sel.get("stages"):
+            if budget_min * 60 < 30:
+                print("作者閘門：--budget-min 太小（至少半分鐘）")
+                return 2
+            agg = run_quick_stages(sel, repo, py, dict(env, MOTRIX_FAILFIRST=""), basetemp, workers, t0 + budget_min * 60, a.skip_e2e, parse_failures)
+            counts, fails, stopped, e2e = agg["counts"], agg["fails"], agg["stopped"], agg["e2e"]
+            sel["quick_skipped"] = list(sel.get("quick_skipped") or []) + agg["unrun"]
+            sel["deadline_hit"] = agg["deadline_hit"]
+        else:
+            print("[pytest] " + " ".join(cmd[3:8]) + " … (%d 檔)" % len(sel["non_e2e"]))
+            rc, out = run_pytest(cmd, repo / "backend", env)
+            counts = parse_counts(out)
+            fails = parse_failures(out)
+            stopped = "failfast:" in out
+            e2e = None
+            if cmd_e and rc in (0, 1) and not (fails and stopped):
+                t1 = time.time()
+                print("[pytest e2e] %d 檔" % len(sel["E"]))
+                rc_e, out_e = run_pytest(cmd_e, repo / "backend", env)
+                fe = parse_failures(out_e)
+                e2e = {"files": len(sel["E"]), "ran": parse_counts(out_e), "failed": [f["nodeid"] for f in fe], "seconds": round(time.time() - t1, 1),
+                       "green": rc_e == 0 and not fe}
         new, kn = classify_failures(fails, known)
     finally:
-        shutil.rmtree(basetemp, ignore_errors=True)
-        shutil.rmtree(basetemp + "-e2e", ignore_errors=True)
+        for suffix in ("", "-e2e", "-high", "-guards"):
+            shutil.rmtree(basetemp + suffix, ignore_errors=True)
+            try:
+                os.remove("%s%s.seen.json" % (basetemp, suffix))
+            except OSError:
+                pass
     dur = time.time() - t0
     import stage_select as SS
     res = make_result(head=head, base=base, tree_sha=tree_sha_of(head, repo), selector_sha=SS.selector_sha(SS.GitReader(str(repo), head)),
                       groups=sel, counts=counts, failures_new=new, failures_known=kn, duration_s=dur, estimate_s=est, workers=workers,
                       stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick, skipped=sel.get("quick_skipped"), over_budget=sel.get("quick_over_budget"))
+    res["deadline_hit"] = bool(sel.get("deadline_hit"))
+    res["budget_min"] = budget_min
     outp = Path(a.json_out) if a.json_out else RESULT_DIR / (head[:12] + ".json")
     outp.parent.mkdir(parents=True, exist_ok=True)
     outp.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
