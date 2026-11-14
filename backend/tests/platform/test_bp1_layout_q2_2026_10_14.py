@@ -131,7 +131,8 @@ def test_quotations_flag_off_or_unreadable_changes_nothing(flag):
     r = _node(flag)
     assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "label": "金額（含稅）"}
     assert r["calls"]["start"] == 0 and r["calls"]["mount"] == 0 and r["calls"]["slot"] == 0
-    assert r["calls"]["fetch"] == ["/api/settings-center/public?groups=builder_layout"]            # 唯一多出的請求＝共用的設定 GET
+    # 唯一多出的請求＝共用的設定 GET；斷線（暫時性失敗）時同一個 GET 最多再試 2 次（T87），不會逐組補打別的網址
+    assert set(r["calls"]["fetch"]) == {"/api/settings-center/public?groups=builder_layout"} and 1 <= len(r["calls"]["fetch"]) <= 3
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")

@@ -228,10 +228,10 @@
             </select>
             <button class="btn-add" style="padding:0 10px" x-show="caseSortPref.sortMode && caseSortPref.sortMode !== 'custom'"
                     @click="toggleCaseSortDir()" x-text="caseSortPref.sortDir === 'asc' ? '↑' : '↓'"></button>
-            <button class="btn-add" style="padding:0 10px" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂預設頁籤、每次載入筆數（只影響您自己）">檢視設定</button>
+            <button class="btn-add" style="padding:0 10px" x-show="lvAny && lvReady" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂預設頁籤、每次載入筆數（只影響您自己）">檢視設定</button>
           </div>
           <!-- T65 C2：個人檢視設定（設定中心 list_view 開啟才出現；只能在目前顯示的頁籤與固定檔位中選） -->
-          <div x-show="lvAny && lvOpen" x-cloak data-testid="lv-panel" style="padding:8px 10px;margin-bottom:10px;border:1px solid var(--border-light);border-radius:6px;font-size:12px">
+          <div x-show="lvAny && lvReady && lvOpen" x-cloak data-testid="lv-panel" style="padding:8px 10px;margin-bottom:10px;border:1px solid var(--border-light);border-radius:6px;font-size:12px">
             <label x-show="lvOn.tab" style="display:block;margin-bottom:6px">預設頁籤
               <select class="cm-list__search-input" x-model="pv.tab" style="width:auto;padding-left:10px;margin-left:6px;cursor:pointer">
                 <option value="">進行中（預設）</option>
@@ -246,8 +246,8 @@
                 <template x-for="n in [25, 50, 100, 200]" :key="n"><option :value="n" x-text="n + ' 件'"></option></template>
               </select>
             </label>
-            <button type="button" class="aq-sort" data-testid="lv-save" @click="lvSave(false)">儲存</button>
-            <button type="button" class="aq-sort" style="margin-left:4px" @click="lvSave(true)">還原預設</button>
+            <button type="button" class="aq-sort" data-testid="lv-save" :disabled="lvSaving" @click="lvSave(false)">儲存</button>
+            <button type="button" class="aq-sort" style="margin-left:4px" :disabled="lvSaving" @click="lvSave(true)">還原預設</button>
           </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
             <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="setListTab('all')">

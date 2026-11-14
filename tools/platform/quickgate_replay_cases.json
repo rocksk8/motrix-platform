@@ -1,0 +1,111 @@
+{
+ "_doc": "T87 A2：author_gate --quick 的 T86 回放案例。fix＝修掉紅燈的 commit；kind=stale＝過期斷言（breaker 用 pickaxe 歸因，expect＝fix 改的測試檔）；kind=rule＝守門類（breaker／expect 明寫）。scope=out＝quick 設計上不涵蓋（原因寫在 reason；仍列入『全部』分母，另報『範圍內』命中率）。找不到 breaker 或沒有預期檔＝算漏抓，不略過。",
+ "base": "558352168",
+ "cases": [
+  {
+   "name": "stale-c03909aa6-diagnostic-13unit-19e2e",
+   "fix": "c03909aa6",
+   "kind": "stale"
+  },
+  {
+   "name": "rule-page-paths-b01e9ee2b",
+   "fix": "b01e9ee2b",
+   "kind": "rule",
+   "breaker": "91122952e",
+   "expect_files": [
+    "backend/tests/platform/test_page_paths_centralized.py"
+   ],
+   "note": "測試直接寫 frontend/pages 路徑（要走 source_tree.page_file）；測試放在 modules/*/tests 底下，preflight 的 page_paths watch 只看 backend/tests/**"
+  },
+  {
+   "name": "rule-spec-number-b01e9ee2b",
+   "fix": "b01e9ee2b",
+   "kind": "rule",
+   "breaker": "29674b1c2",
+   "expect_files": [
+    "backend/tests/test_spec_coverage_2026_09_21.py"
+   ],
+   "note": "題名規格編號（f1／f2）與別處重複 ⇒ 改前綴 af_"
+  },
+  {
+   "name": "stale-bcb5fc87f-fx33-empty-state-probe",
+   "fix": "bcb5fc87f",
+   "kind": "stale"
+  },
+  {
+   "name": "rule-boundaries-9140ef9a8",
+   "fix": "9140ef9a8",
+   "kind": "rule",
+   "breaker": "807d26cea",
+   "expect_files": [
+    "backend/tests/platform/test_module_boundaries.py"
+   ],
+   "note": "L1 不得 import L2（bootstrap.py 直接 import 模組 api）"
+  },
+  {
+   "name": "rule-route-golden-44ee7cd94",
+   "fix": "44ee7cd94",
+   "kind": "rule",
+   "breaker": "807d26cea",
+   "expect_files": [
+    "backend/modules/case/tests/test_route_table_golden_2026_10_05.py"
+   ],
+   "note": "bootstrap 加 page 參數，route table golden 要補列"
+  },
+  {
+   "name": "rule-raw-vh-dc738d58d",
+   "fix": "dc738d58d",
+   "kind": "rule",
+   "breaker": "a4b2040f1",
+   "expect_files": [
+    "backend/tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py"
+   ],
+   "note": "字級守門：不可有未包 --fz 的 vh"
+  },
+  {
+   "name": "rule-restart-button-9d257a924",
+   "fix": "9d257a924",
+   "kind": "rule",
+   "breaker": "c93d6213c",
+   "expect_files": [
+    "backend/tests/test_e2e_module_settings_2026_09_25.py"
+   ],
+   "note": "模組管理頁不得有含「重啟」的按鈕"
+  },
+  {
+   "name": "rule-e2e-lint-0e5f917f7",
+   "fix": "0e5f917f7",
+   "kind": "rule",
+   "breaker": "14eb792c4",
+   "expect_files": [
+    "backend/tests/platform/test_e2e_lint_2026_11_13.py"
+   ],
+   "note": "e2e-lint：編輯對話框先等再斷言"
+  },
+  {
+   "name": "rule-bottom-layer-registration-2cb59c77c",
+   "fix": "2cb59c77c",
+   "kind": "rule",
+   "breaker": "50e16277e",
+   "scope": "out",
+   "expect_files": [],
+   "reason": "pre_train_check A3（登記檢查）不是 pytest 檔；quick 不重跑建包前檢查工具。改由整合者一鍵（h4）擋"
+  },
+  {
+   "name": "rule-l1-snapshot-bae0c67e0",
+   "fix": "bae0c67e0",
+   "kind": "rule",
+   "scope": "out",
+   "expect_files": [],
+   "reason": "離線無法辨識是哪一個守門紅；解除安靜期後用 author_gate 實跑補歸因"
+  },
+  {
+   "name": "rule-writelock-logsetup-12e5a7ca8",
+   "fix": "12e5a7ca8",
+   "kind": "rule",
+   "scope": "out",
+   "expect_files": [],
+   "reason": "同上（write-lock 稽核 helper／log_setup 巢狀）；未辨識守門名"
+  }
+ ]
+}
