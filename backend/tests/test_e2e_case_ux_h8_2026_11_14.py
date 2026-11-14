@@ -213,11 +213,12 @@ def test_masked_user_payment_card_keeps_only_editable_fields(live_server, make_u
     page = _open_fin(live_server, e2e_browser, u)
     assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
     # 種子：第 1 期（id 1）已收款 2026-09-01；第 2 期（id 2）未收
+    # PM 裁示：未收款的期別收款日期仍是輸入框（後端允許）；已收款而凍結的期別才是唯讀文字
     ro = page.locator('[data-testid="pay-received-at-ro"]')
-    assert ro.nth(0).is_visible() and ro.nth(1).is_visible()
-    assert not page.locator('#pay-1-received-at').is_visible() and not page.locator('#pay-2-received-at').is_visible(), "收款日期只給看，沒有輸入框"
-    assert "2026-09-01" in ro.nth(0).inner_text()
-    assert "尚未收款" in ro.nth(1).inner_text()
+    assert ro.nth(0).is_visible() and "2026-09-01" in ro.nth(0).inner_text()
+    assert not page.locator('#pay-1-received-at').is_visible(), "已收款期別的收款日期唯讀"
+    assert page.locator('#pay-2-received-at').is_visible() and page.locator('#pay-2-received-at').is_enabled(), "未收款期別的收款日期要有輸入框"
+    assert ro.nth(1).is_hidden()
     # 未收款的期別：預計收款日、備註、發票號碼（展開後）都能改
     assert page.locator('#pay-2-expected').is_enabled() and page.locator('#pay-2-note').is_enabled()
     page.locator('[data-testid="pay-detail-toggle-1"]').click()
@@ -389,3 +390,72 @@ def test_received_period_is_frozen_for_anyone_who_cannot_mark_payment(live_serve
     page.locator('[data-testid="pay-received-at-ro"]').first.wait_for(state="visible", timeout=5000)
     page.locator('[data-testid="pay-frozen-note"]').first.wait_for(state="visible", timeout=5000)
     assert page.locator('#pay-2-expected').is_enabled(), "未收款的期別不凍結"
+
+
+@pytest.mark.e2e
+def test_log_entry_buttons_are_real_buttons_operable_by_keyboard(live_server, make_user, e2e_browser):
+    """複測①：「階段出勤」「留言／工作日誌」要是真正的按鈕（輔助技術／自動化點得到），Tab 可聚焦、Enter／空白鍵可觸發。"""
+    from tests._e2e_login import inject_login
+    from tests.test_e2e_onepipe_p4b_2026_11_13 import _flag
+    u = make_user(username="uxh8_c4d", role="superadmin")
+    _seed()
+    _flag(True)
+    try:
+        page = e2e_browser.new_context().new_page()
+        inject_login(page, live_server, u[0], u[1])
+        _open(page, live_server, "biz")
+        page.locator('[data-testid="case-log-entry"]').wait_for(state="visible", timeout=15000)
+        btn = page.get_by_role("button", name="階段出勤")
+        btn.wait_for(state="visible", timeout=5000)
+        assert page.locator('[data-testid="case-log-visit"]').evaluate("e => e.tagName") == "BUTTON"
+        btn.focus()
+        assert page.evaluate("() => document.activeElement && document.activeElement.dataset.testid") == "case-log-visit"
+        page.keyboard.press("Enter")
+        page.locator('[data-testid="cm-compose-stage"]').wait_for(state="visible", timeout=8000)
+        assert page.locator('[data-testid="cm-compose-type"]').input_value() == "visit"
+        page.locator(".cm-tab", has_text="案件資訊").first.click()
+        fb = page.get_by_role("button", name="留言／工作日誌")
+        fb.wait_for(state="visible", timeout=5000)
+        fb.focus()
+        page.keyboard.press("Space")
+        page.locator('[data-testid="cm-compose-stage"]').wait_for(state="hidden", timeout=8000)
+        assert page.locator('[data-testid="cm-compose-type"]').input_value() == "note"
+    finally:
+        _flag(False)
+
+
+# ── 複測②：最高管理者財務分頁在手機 390 寬不可擠成直排 ─────────────────────────────────────
+@pytest.mark.e2e
+def test_finance_tab_on_phone_keeps_headings_and_amounts_readable(live_server, make_user, e2e_browser):
+    from tests.test_e2e_case_concurrent_edit_2026_09_24 import NOTE_INPUT
+    from tests._e2e_login import inject_login
+    from tests.test_case_money_mask_2026_09_24 import _seed as mseed, NO as MNO
+    u = make_user(username="uxh8_fin390", role="superadmin")
+    mseed(assigned=[u[0]])
+    page = e2e_browser.new_context(viewport={"width": 390, "height": 844}).new_page()
+    inject_login(page, live_server, u[0], u[1])
+    page.goto(f"{live_server}/pages/case-management.html?q={MNO}&tab=fin")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{MNO}'", timeout=20000)
+    page.locator('.pay-item').first.wait_for(state="visible", timeout=20000)
+    # 整頁不橫向溢位
+    assert page.evaluate("() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+    # 區段標題不折行（單行高度）、寬度夠一整個詞
+    heads = page.evaluate("""() => [...document.querySelectorAll('.cm-section-title')].filter(e => e.offsetParent)
+        .map(e => { const r = e.getBoundingClientRect(); return [e.textContent.trim(), Math.round(r.width), Math.round(r.height)] })""")
+    assert heads, "財務分頁找不到區段標題"
+    for text, w, h in heads:
+        assert h <= 24, "標題折成多行：%r" % [text, w, h]
+        assert w >= 12 * len(text) - 4, "標題被擠窄：%r" % [text, w, h]
+    # 款項卡：含稅／未稅／稅額三格各自有寬度、彼此不重疊、都在卡片內
+    card = page.locator('.pay-item').first.bounding_box()
+    cells = page.evaluate("""() => [...document.querySelector('.pay-item .pay-amt-grid').children]
+        .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.width)] })""")
+    assert len(cells) == 3
+    assert all(w >= 70 for _, _, w in cells), cells
+    assert all(cells[i][1] <= cells[i + 1][0] for i in range(2)), "三格重疊：%r" % cells
+    assert cells[0][0] >= card["x"] - 1 and cells[2][1] <= card["x"] + card["width"] + 1, (cells, card)
+    # 應收應付 KPI 格：兩欄，每格 ≥ 100px
+    kw = page.evaluate("() => [...document.querySelectorAll('.fin-kpi4')].filter(e => e.offsetParent).map(g => [...g.children].map(c => Math.round(c.getBoundingClientRect().width)))")
+    for row in kw:
+        assert all(w >= 100 for w in row), kw
+

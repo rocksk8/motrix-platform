@@ -265,6 +265,9 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 .cm-meta__val { color:var(--text-secondary); font-weight:500; margin-left:4px; }
 
 /* Log */
+/* 看起來像連結的按鈕（登載列的跳轉）：真正的 button 才有鍵盤與輔助技術語意 */
+.cm-link-btn { background:none; border:0; padding:0; margin:0; font:inherit; color:LinkText; text-decoration:underline; cursor:pointer; }
+.cm-link-btn:focus-visible { outline:2px solid var(--ink-strong); outline-offset:2px; border-radius:2px; }
 .cm-log { border-top:1px solid var(--border-light); background:var(--surface-muted); padding:8px 20px 10px; font-size:12px; font-family:LINE Seed TW_OTF, sans-serif; }
 .cm-log__row { display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid var(--line); }
 .cm-log__row:last-child { border-bottom:none; }
@@ -702,6 +705,13 @@ transition:background .1s;
  ⚠️ 覆寫 inline style 只能用 !important。 */
   .cm-tabs-hint { display:none; }
   @media (max-width:767px) {
+/* T86 案件 UX 複測②：最高管理者財務分頁手機 390 寬擠成直排。
+   標題列（區段標題＋徽章＋按鈕）改可換行、標題不縮成一字一行；款項卡表頭的含稅／未稅／稅額獨占一行；KPI 四格改兩欄。 */
+div:has(> .cm-section-title) { flex-wrap:wrap; row-gap:6px; }
+.cm-section-title { flex-shrink:0; white-space:nowrap; }
+.pay-item__head { flex-wrap:wrap; row-gap:8px; }
+.pay-item__head .pay-amt-grid { flex:1 1 100%; order:20; }
+.fin-kpi4 { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
 .pay-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
 .pay-grid > :last-child:nth-child(odd), .pay-grid > .pay-note { grid-column:1 / -1; }
 .visit-row { grid-template-columns:minmax(0,1fr) 56px !important; }
@@ -800,6 +810,7 @@ transition:background .1s;
   border-color: var(--line-strong);
 }
 :where(:root[data-theme="dark"] body.cm-page) a { color: var(--tone-info-fg); }
+:where(:root[data-theme="dark"] body.cm-page) .cm-link-btn { color: var(--tone-info-fg); }
 /* 切換鈕選中狀態：深色模式不用近白的亮底（會成為全頁最亮的一塊），改中灰底＋深字（對比約 8.8） */
 :root[data-theme="dark"] body.cm-page .aq-sort.on { background: var(--ink-secondary); border-color: var(--ink-secondary); }
 
