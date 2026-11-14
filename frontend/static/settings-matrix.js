@@ -818,11 +818,21 @@
     function onInput(e) {
       if (dead) return
       var t = e.target
-      if (t.getAttribute && t.getAttribute('data-mx') === 'search') { S.q = t.value.trim(); render() }
+      // 注音／拼音等輸入法「組字中」不能重畫：重畫會把搜尋框換掉、組字被打斷（只停在一個注音符號）。組字完成（compositionend）才更新
+      if (t.getAttribute && t.getAttribute('data-mx') === 'search') { if (e.isComposing || composing) return; S.q = t.value.trim(); render() }
+    }
+    var composing = false
+    function onCompStart(e) { if (e.target && e.target.getAttribute && e.target.getAttribute('data-mx') === 'search') composing = true }
+    function onCompEnd(e) {
+      if (dead || !e.target || !e.target.getAttribute || e.target.getAttribute('data-mx') !== 'search') return
+      composing = false
+      if (S.q !== e.target.value.trim()) { S.q = e.target.value.trim(); render() }
     }
     el.addEventListener('click', onClick)
     el.addEventListener('change', onChange)
     el.addEventListener('input', onInput)
+    el.addEventListener('compositionstart', onCompStart)
+    el.addEventListener('compositionend', onCompEnd)
     // 離開警告：有未儲存的草稿時，關閉／重新整理頁面（beforeunload）與點站內連結都要攔
     function onBeforeUnload(e) {
       if (dead || !dirtyCount()) return
@@ -855,6 +865,8 @@
       el.removeEventListener('click', onClick)
       el.removeEventListener('change', onChange)
       el.removeEventListener('input', onInput)
+      el.removeEventListener('compositionstart', onCompStart)
+      el.removeEventListener('compositionend', onCompEnd)
       window.removeEventListener('beforeunload', onBeforeUnload)
       document.removeEventListener('click', onDocClick, true)
       el.innerHTML = ''
