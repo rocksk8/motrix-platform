@@ -85,3 +85,20 @@ def test_line_events_page_url_still_works(live_server, make_user, new_page, logi
     page.goto(f"{live_server}/pages/line-events.html")
     expect(page.locator("[data-testid=le-matrix] [data-testid='mx-row-approval_request']")).to_be_visible(timeout=20000)
     expect(page.locator("[data-testid=le-back-link]")).to_be_visible()
+
+
+@pytest.mark.e2e
+def test_matrix_rows_are_compact_no_event_codes_and_one_shared_recipient_note(live_server, make_user, new_page, login_as, fake):
+    """T86：每列不再重複「原本收件人…」整句、也不顯示內部事件代碼；說明在矩陣上方只寫一次；僅 LINE／細項才標各自的收件人。"""
+    _configure()
+    page = _open_settings(live_server, make_user, new_page, login_as, "e2e_t86_compact")
+    box = page.locator("[data-testid=le-matrix]")
+    expect(page.locator("[data-testid=le-who-note]")).to_contain_text("與同名 Email 通知的收件設定相同")
+    text = box.inner_text()
+    assert "與這則 Email 通知的收件設定相同" not in text, "每列不該再重複整句說明"
+    assert "voucher_submitted" not in text and "ledger_action_approved" not in text, "內部事件代碼不該顯示在畫面上"
+    row_mail = page.locator("[data-testid='mx-row-approval_request']")
+    assert "原本收件人" not in row_mail.inner_text() and "approval_request" not in row_mail.inner_text()
+    expect(page.locator("[data-testid='mx-row-dev_case_unassigned']")).to_contain_text("收件人：被取消指派的前任負責人")
+    # 事件代碼仍可用搜尋框找到（管理者除錯）
+    assert page.locator("[data-testid='mx-row-voucher_submitted']").count() == 1

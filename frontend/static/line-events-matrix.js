@@ -73,7 +73,8 @@
       else if (q && q.used != null) parts.push('本月已用 <b>' + esc(q.used) + '</b> 則')
       if (u) parts.push('近 30 天共推 <b data-testid="le-total30">' + esc(u.total) + '</b> 則' + (u.complete ? '' : '<span class="mx-mute" data-testid="le-accum">（已累積 ' + esc(u.accumulated_days) + ' 天，未滿 30 天）</span>'))
       O.bar.innerHTML = parts.join('<span class="mx-mute">·</span>')
-      O.note.innerHTML = cfg.enabled === false ? (O.inline ? '<div class="le-warn" data-testid="le-master-off">LINE 通知的總開關目前是關閉的：下面的設定會先存起來，但在上方打開「LINE 通知」總開關並儲存之前不會發出任何訊息。</div>' : '<div class="le-warn">LINE 通知的總開關目前是關閉的：下面的設定會先存起來，但在 <a href="notification-settings.html">通知設定</a> 打開之前不會發出任何訊息。</div>') : ''
+      var off = cfg.enabled === false ? (O.inline ? '<div class="le-warn" data-testid="le-master-off">LINE 通知的總開關目前是關閉的：下面的設定會先存起來，但在上方打開「LINE 通知」總開關並儲存之前不會發出任何訊息。</div>' : '<div class="le-warn">LINE 通知的總開關目前是關閉的：下面的設定會先存起來，但在 <a href="notification-settings.html">通知設定</a> 打開之前不會發出任何訊息。</div>') : ''
+      O.note.innerHTML = off + '<p class="mx-mute" data-testid="le-who-note">「照原本收件人」：Email 類型的事件，收件人與同名 Email 通知的收件設定相同（可在「Email 通知」頁調整），LINE 只是多一個管道；「僅 LINE」與「LINE 細項」事件的收件人另行標示於事件名稱下方。</p>'
     }
 
     // ── 事件狀態 ──
@@ -288,6 +289,14 @@
       { id: 'nobody', label: '沒人會收到', title: '已開啟、但「只發給指定」卻沒指定任何人', test: nobody },
     ]
 
+    // 名稱下方只留「與預設不同」的收件來源：Email 類型的事件都跟 Email 通知的收件設定，說明已寫在矩陣上方一次；
+    // 僅 LINE／LINE 細項才標出各自的收件人（取 follows 的第一句）。內部事件代碼不顯示（仍可用搜尋框以代碼搜尋）。
+    function whoShort(r) {
+      if (r.kind !== 'line_only' && r.kind !== 'sub') return ''
+      var t = String(r.follows || '').split('。')[0].replace(/^原本收件人：/, '')
+      return t ? '收件人：' + t : ''
+    }
+
     async function boot() {
       var rows
       try { rows = await load() } catch (e) {
@@ -299,8 +308,8 @@
       mx = SettingsMatrix.mount(O.box, {
         rows: rows, groups: cfg.event_groups || [], eligible: 'line-events',
         draft: { apply: applyPatch, same: sameAsRaw, confirm: confirmSave, save: save },
-        rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.group }, rowSub: function (r) { return r.follows ? r.follows + '　' + r.key : r.key },
-        nameLabel: '通知事件', searchPlaceholder: '搜尋事件名稱或代碼',
+        rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.group }, rowSub: whoShort,
+        nameLabel: '通知事件', searchPlaceholder: '搜尋事件名稱',
         rowTags: function (r) {
           var t = []
           if (r.priority === 'critical') t.push({ text: '重要', tone: 'crit' })
