@@ -5,6 +5,7 @@
 - 以執行者當下權限重算：看不到的欄位不出現、列範圍照舊；被分享者的原始定義若含他看不到的篩選 ⇒ 422（不外帶）。
 - 輸出：哨兵值只出現在有權限者的檔；無權限者整包 xlsx 解壓逐檔掃不到；稽核 detail 不含值；公式注入中和；列數上限；冷卻；並行名額。
 """
+import html as _html
 import io
 import json
 import re
@@ -81,7 +82,19 @@ def _xlsx(resp):
 def _all_text(data: bytes) -> str:
     """整包解壓、逐檔串起來（工作表、共用字串、docProps…）。"""
     z = zipfile.ZipFile(io.BytesIO(data))
-    return "\n".join(z.read(n).decode("utf-8", "ignore") for n in z.namelist())
+    # 先解碼字元參照：lxml 版 openpyxl 會把中文寫成 &#21029; / &#x5225;，不解碼的話中文的「不得出現」斷言永遠通過
+    return _html.unescape("\n".join(z.read(n).decode("utf-8", "ignore") for n in z.namelist()))
+
+
+def test_all_text_decodes_character_references_positive_control():
+    """正向對照：把『隱藏欄名稱』用十進位與十六進位字元參照塞進一個 xlsx 形狀的 zip，`_all_text` 必須看得到它——
+    看不到就代表所有中文的負向斷言（隱藏欄名稱不得出現）在該環境是空的。"""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", "<c><is><t>&#21547;&#31237;&#32317;&#38989;</t></is></c>")     # 含稅總額（十進位）
+        z.writestr("xl/sharedStrings.xml", "<t>&#x5BA2;&#x6236;</t>")                                          # 客戶（十六進位）
+    text = _all_text(buf.getvalue())
+    assert "含稅總額" in text and "客戶" in text
 
 
 def _audits(action):
