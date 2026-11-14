@@ -591,6 +591,11 @@
       <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('暫擱置')"></span>
       <span class="dc-funnel__l"><span x-text="stLabel('暫擱置')">暫擱置</span><small>等條件成熟</small></span>
     </button>
+    <div class="dc-funnel__s rate" data-testid="dc-pipeline-amount" x-show="expSummary && expSummary.visible"
+         title="全部洽談中案件的預估金額合計，不受搜尋與篩選影響">
+      <span class="dc-funnel__v" x-text="pipelineCount === 0 || pipelineMissing >= pipelineCount ? '—' : fmtMoney(pipelineTotal)"></span>
+      <span class="dc-funnel__l">洽談中預估金額<small x-text="pipelineCount === 0 ? '尚無洽談中案件' : (pipelineMissing >= pipelineCount ? '尚未填寫' : (pipelineMissing > 0 ? '（' + (pipelineCount - pipelineMissing) + ' 件已填，' + pipelineMissing + ' 件未填）' : '全部都有填'))"></small></span>
+    </div>
     <div class="dc-funnel__s rate">
       <span class="dc-funnel__v" x-text="winRate"></span>
       <span class="dc-funnel__l">成案率<small>成案 ÷（成案＋未成案）</small></span>
@@ -1003,6 +1008,14 @@
               <span class="dc-info-lbl">介紹人</span>
               <span class="dc-info-val" x-text="selectedCase.referrer"></span>
             </div>
+            <div data-testid="detail-expected-amount">
+              <span class="dc-info-lbl">預估金額</span>
+              <span class="dc-info-val" x-text="!selectedCase.expectedAmountVisible ? '—' : (selectedCase.expectedAmount != null ? fmtMoney(selectedCase.expectedAmount) : '未填')"></span>
+            </div>
+            <div data-testid="detail-expected-date">
+              <span class="dc-info-lbl">預計成交日</span>
+              <span class="dc-info-val" x-text="selectedCase.expectedCloseDate || '未填'"></span>
+            </div>
             <div>
               <span class="dc-info-lbl">最後更新</span>
               <span class="dc-info-val" x-text="selectedCase.updatedAt ? selectedCase.updatedAt.slice(0,16) : '—'"></span>
@@ -1327,6 +1340,17 @@
             <label>介紹人 <span style="color:var(--text-dim);font-weight:400">（選填）</span></label>
             <input class="dc-input" type="text" data-testid="case-referrer" x-model="caseForm.referrer" maxlength="60"
               placeholder="例：客戶或同業介紹">
+          </div>
+          <div class="dc-form-row" data-testid="case-expected-row">
+            <div class="dc-form-group" x-show="amountFieldVisible">
+              <label>預估金額 <span style="color:var(--text-dim);font-weight:400">（選填，新台幣）</span></label>
+              <input class="dc-input" type="number" inputmode="numeric" min="0" max="9999999999" step="1" data-testid="case-expected-amount"
+                     x-model="caseForm.expectedAmount" placeholder="例：1200000">
+            </div>
+            <div class="dc-form-group">
+              <label>預計成交日 <span style="color:var(--text-dim);font-weight:400">（選填）</span></label>
+              <input class="dc-input" type="date" data-testid="case-expected-date" x-model="caseForm.expectedCloseDate">
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="dc-form-group">
@@ -1734,6 +1758,34 @@ function devCrmPage() {
       return d === 0 ? '今日更新' : d + ' 天未更新'
     },
 
+    get pipelineCount() {
+      const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
+      return b ? b.count : 0
+    },
+    get pipelineTotal() {
+      const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
+      return b ? b.total : 0
+    },
+    get pipelineMissing() {
+      const b = this.expSummary && this.expSummary.byStatus && this.expSummary.byStatus['洽談中']
+      return b ? b.missing : 0
+    },
+    // 預估金額欄位：新增看呼叫者有沒有金額可見權限（來自合計端點）；編輯看這件案件回傳的 expectedAmountVisible。
+    get amountFieldVisible() {
+      if (this.editingCaseId && this.selectedCase) return !!this.selectedCase.expectedAmountVisible
+      return !!(this.expSummary && this.expSummary.visible)
+    },
+    fmtMoney(n) {
+      if (n == null || n === '') return '—'
+      const v = Number(n)
+      return isNaN(v) ? '—' : 'NT$ ' + v.toLocaleString('en-US')
+    },
+    async loadExpectedSummary() {
+      try {
+        const r = await fetch('/api/dev-cases/expected-summary', { headers: this._h() })
+        if (r.ok) this.expSummary = await r.json()
+      } catch (_e) { /* 合計載不到就不顯示金額卡，不影響其他功能 */ }
+    },
     // 案件管理入口：超級管理者，或帳號有 case_manage 模組（與側欄同一條規則；沒權限就不顯示連結，只留說明）。
     get canOpenCaseMgmt() {
       const r = (this.session && this.session.role) || ''
@@ -1800,6 +1852,7 @@ function devCrmPage() {
 
     activeUsers: [],
     showAllPeople: false,
+    expSummary: null,
     filtersOpen: false,
     customers: [],
     mobileListOpen: false,
@@ -2186,6 +2239,7 @@ function devCrmPage() {
       await this.loadCases()   // 2026-11-14：使用者／客戶清單改到第一次用到（開案件、新增／編輯視窗）才載入
       if (this.isAdmin) this.loadPendingCount()
       this.loadActivityStats()
+      this.loadExpectedSummary()
       await this._openFromUrl()
     },
 
@@ -2345,7 +2399,7 @@ function devCrmPage() {
       this._ensureUsers(); this._ensureCustomers()
       this.showAllPeople = false
       this.editingCaseId = null
-      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: (this.session.role === 'sales' && this.session.userId) ? [this.session.userId] : [], planners: [], referrer: '' }
+      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: (this.session.role === 'sales' && this.session.userId) ? [this.session.userId] : [], planners: [], referrer: '', expectedAmount: '', expectedCloseDate: '' }
       this.caseError = ''
       this.customerSuggestions = []
       this.showCustomerDrop = false
@@ -2364,6 +2418,8 @@ function devCrmPage() {
         customer_id: c.customerId, status: c.status,
         sales_persons: [...(c.salesPersonIds || [])],
         planners: [...(c.plannerIds || [])],
+        expectedAmount: (c.expectedAmountVisible && c.expectedAmount != null) ? String(c.expectedAmount) : '',
+        expectedCloseDate: c.expectedCloseDate || '',
         expectedUpdatedAt: c.updatedAt,
       }
       this.caseError = ''
@@ -2416,6 +2472,10 @@ function devCrmPage() {
       try {
         const matched = this.customers.find(c => c.name === this.caseForm.customer_name.trim())
         const body = { ...this.caseForm, customer_id: this.caseForm.customer_id ?? (matched ? matched.id : null) }
+        // 預估金額：沒有金額可見權限就不送這個欄位（後端「沒帶＝維持原值」，送非 null 會 403）；空白＝清除；日期空白＝清除
+        if (!this.amountFieldVisible) delete body.expectedAmount
+        else body.expectedAmount = String(body.expectedAmount ?? '').trim() === '' ? null : Math.round(Number(body.expectedAmount))
+        body.expectedCloseDate = body.expectedCloseDate ? body.expectedCloseDate : null
         const url = this.editingCaseId ? '/api/dev-cases/' + this.editingCaseId : '/api/dev-cases'
         const r = await fetch(url, {
           method: this.editingCaseId ? 'PUT' : 'POST',
@@ -2432,6 +2492,7 @@ function devCrmPage() {
           await this.selectCase(saved)
         }
         this.showCaseModal = false
+        this.loadExpectedSummary()
         this._toast('案件已儲存')
       } finally { this.caseSaving = false }
     },
@@ -2479,6 +2540,7 @@ function devCrmPage() {
       this.selectedCase = updated
       const idx = this.cases.findIndex(c => c.id === updated.id)
       if (idx >= 0) this.cases.splice(idx, 1, updated)
+      this.loadExpectedSummary()
       let msg = '狀態已更新：' + this.stLabel(status)
       if (status === '成案' && !updated.convertedQuoteNo) msg += '。接著請按「轉建報價單／估價單」。'
       const why = (reason || '').trim()
