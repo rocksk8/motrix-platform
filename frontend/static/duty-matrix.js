@@ -166,7 +166,7 @@
     var filters = [
       { id: 'high', label: '高敏感', title: '變更時必須填寫原因', test: function (r) { return r.high } },
       { id: 'fin', label: '財務三鍵', test: function (r) { return r.finance } },
-      { id: 'none', label: '沒有任何角色持有', test: function (r) { return !(r.roles || []).length } },
+      { id: 'none', label: '尚無角色持有', test: function (r) { return !(r.roles || []).length } },
       { id: 'all', label: '所有角色都持有', test: function (r) { return state.roles.length > 0 && state.roles.every(function (x) { return (r.roles || []).indexOf(rid(x.id)) >= 0 }) } },
     ]
 
@@ -190,7 +190,7 @@
         html += '<div style="border-top:1px solid var(--border-light,#e5e7eb);padding:8px 0;font-size:13px" data-testid="dm-plan-role-' + esc(p.roleId) + '"><b>' + esc(p.name || ('#' + p.roleId)) + '</b>' +
           (p.status === 'change' ? ' <span class="mx-mute">（' + p.members + ' 位成員' + (p.memberNames.length ? '：' + esc(p.memberNames.join('、')) + (p.members > p.memberNames.length ? ' 等' : '') : '') + '）</span>' : '')
         if (p.status === 'skipped') html += '<div class="mx-mute">略過：' + esc(p.note) + '</div>'
-        if (p.status === 'nochange') html += '<div class="mx-mute">沒有需要變更的項目。</div>'
+        if (p.status === 'nochange') html += '<div class="mx-mute">無需變更的項目。</div>'
         if (p.adds.length) html += '<div style="color:#047857">新增權限：' + labelList(p.adds) + '</div>'
         if (p.removes.length) html += '<div style="color:#B91C1C">移除權限：' + labelList(p.removes) + '</div>'
         p.notes.forEach(function (n) { html += '<div class="mx-mute">' + esc(n) + '</div>' })
