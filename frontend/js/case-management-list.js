@@ -284,6 +284,25 @@ window.CM_PARTS.push(() => ({
       }
     },
 
+    // T86 案件UX #2：把文字依目前搜尋字拆成 [{t, hit}]，讓卡片標出命中處（不用 x-html，免跳脫問題）
+    hlParts(text) {
+      const t = String(text == null ? '' : text)
+      const q = (this.search || '').trim().toLowerCase()
+      if (!q || !t) return [{ t, hit: false }]
+      const low = t.toLowerCase()
+      const out = []
+      let i = 0
+      for (;;) {
+        const j = low.indexOf(q, i)
+        if (j < 0) break
+        if (j > i) out.push({ t: t.slice(i, j), hit: false })
+        out.push({ t: t.slice(j, j + q.length), hit: true })
+        i = j + q.length
+      }
+      if (i < t.length) out.push({ t: t.slice(i), hit: false })
+      return out.length ? out : [{ t, hit: false }]
+    },
+
     onCaseSearchInput() {
       clearTimeout(this._searchTimer)
       this._searchTimer = setTimeout(() => this.loadCases(), 300)

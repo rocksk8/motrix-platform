@@ -42,6 +42,8 @@
 .cm-card__tag--stage  { background:var(--tone-warning-bg); color:var(--tone-warning-fg); }
 .cm-card__tag--closed { background:var(--surface-neutral); color:var(--ink-strong); }
 .cm-card__customer { font-size:13px; color:var(--text-primary); font-family:var(--font-zh); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
+.cm-card__project { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:-2px 0 5px; }
+.cm-hl { background:var(--tone-warning-bg-strong); color:inherit; border-radius:2px; }
 .cm-card__sales { font-size:12px; color:var(--text-dim); font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
 .cm-card__footer { display:flex; align-items:center; justify-content:space-between; }
 /* 視覺化改版（2026-08-23）：金額是次要辨識資訊，日期更次要——放大金額字級並
