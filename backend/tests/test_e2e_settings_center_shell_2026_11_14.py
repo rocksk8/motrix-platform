@@ -320,3 +320,28 @@ def test_builder_locked_row_shows_its_reason_as_visible_text_on_phone(live_serve
     row = page.locator(ROW % ("builder_rules", "k01_seed"))
     row.wait_for(state="attached", timeout=15000)
     page.wait_for_function("() => document.querySelector('[data-testid=\"mx-row-builder_rules.k01_seed\"]').textContent.includes('請先開啟')", timeout=10000)
+
+def test_search_box_survives_ime_composition_without_redraw(live_server, make_user, e2e_browser):
+    """注音輸入法：組字中（compositionstart～compositionend）不重畫搜尋框，組字完成才篩選；焦點與游標留在搜尋框。"""
+    sa = make_user(username="s2_e2e_ime", role="superadmin")
+    page = e2e_browser.new_page(viewport={"width": 390, "height": 844})
+    inject_login(page, live_server, *sa)
+    _open(page, live_server, "uploads")
+    box = page.locator('[data-mx="search"]')
+    box.wait_for(timeout=15000)
+    box.focus()
+    page.evaluate("""() => {
+        const b = document.querySelector('[data-mx="search"]'); b.__imeMark = 'same-node'
+        b.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+        for (const v of ['ㄗ', 'ㄗㄨ', 'ㄗㄨㄥ']) {                 // 組字中：每次 input 都帶 isComposing
+            b.value = v
+            b.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, inputType: 'insertCompositionText', data: v }))
+        }
+    }""")
+    same = page.evaluate("() => { const b = document.querySelector('[data-mx=\"search\"]'); return b.__imeMark === 'same-node' && document.activeElement === b && b.value === 'ㄗㄨㄥ' }")   # e2e-lint: ok 組字期間同步檢查同一個節點，不需等待
+    assert same                                                       # 組字中搜尋框沒被換掉、焦點沒掉、值完整
+    page.evaluate("""() => {
+        const b = document.querySelector('[data-mx="search"]'); b.value = '種'
+        b.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '種' }))
+    }""")
+    page.wait_for_function("() => { const b = document.querySelector('[data-mx=\"search\"]'); return b && b.value === '種' && document.activeElement === b }", timeout=10000)
