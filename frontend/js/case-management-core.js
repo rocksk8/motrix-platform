@@ -190,7 +190,7 @@ window.CM_PARTS.push(() => ({
         }
         if (_found) await this.selectCase(_found.quote_no)
         // 一條龍 P0a（旗標 onepipe.links）：?sub=materials ⇒ 直接落在「執行管理 › 材料申請」（旗標關或沒帶 ⇒ 與今天相同）
-        if (_found && new URLSearchParams(location.search).get('sub') === 'materials' && window.MotrixOnepipe && (await window.MotrixOnepipe.flags()).links) {
+        if (_found && new URLSearchParams(location.search).get('sub') === 'materials' && window.MotrixOnepipe && await (async () => { const fl = await window.MotrixOnepipe.flags(); return fl.links || fl.timeline })()) {
           this.activeTab = 'exec'; this.execSubTab = 'materials'
           this.loadMaterialOrders(_found.quote_no)
         }
@@ -350,7 +350,7 @@ window.CM_PARTS.push(() => ({
     //        'late'＝建立預設階段之後（dirty 等要在 ensureCaseRecord 之後才清）。
     // 新增案件層級的狀態時，把重設寫進自己模組的 _reset_，不要寫回 selectCase。
     _resetCaseScoped(phase, data) {
-      for (const m of ['core', 'list', 'close', 'biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'fin', 'xexp', 'mlink']) {
+      for (const m of ['core', 'list', 'close', 'biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'fin', 'xexp', 'mlink', 'mtl']) {
         const f = this['_reset_' + m]
         if (typeof f === 'function') f.call(this, phase, data)
       }

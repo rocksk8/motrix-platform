@@ -62,7 +62,7 @@ def test_shipping_tab_says_the_module_is_missing(live_server, make_user, e2e_bro
     box.wait_for(state="visible", timeout=8000)
     assert box.inner_text().strip() == q.SHIPPING_UNAVAILABLE
     assert not page.get_by_text("尚未建立任何出貨單").is_visible()
-    assert not page.locator("button.btn-add", has_text="新增出貨單").is_visible()
+    assert page.locator("button.btn-add:visible", has_text="新增出貨單").count() == 0      # 標題列與空狀態各有一顆，都不能看見
 
 
 @pytest.mark.e2e

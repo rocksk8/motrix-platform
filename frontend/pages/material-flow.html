@@ -27,24 +27,47 @@
     .mf-sum { font-size:13px; line-height:1.5 }
     .mf-items { margin:0; padding:0; list-style:none; font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:3px }
     .mf-items b { color:var(--text-main); font-weight:600 }
-    .mf-go { font-size:12px; color:var(--accent); text-decoration:none; margin-top:auto }
+    .mf-open { display:inline-block; padding:5px 12px; border-radius:6px; background:var(--accent); color:#fff; text-decoration:none; font-size:13px }
+    .mf-bar { display:flex; list-style:none; margin:14px 0 4px; padding:0 }
+    .mf-bar__st { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; font-size:12px; color:var(--text-dim) }
+    .mf-bar__st::before { content:''; position:absolute; top:13px; right:50%; width:100%; height:2px; background:var(--border-light) }
+    .mf-bar__st:first-of-type::before { display:none }
+    .mf-bar__st--done::before, .mf-bar__st--inprogress::before { background:var(--success) }
+    .mf-bar__dot { position:relative; z-index:1; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; background:var(--surface); border:2px solid var(--border); color:var(--text-dim) }
+    .mf-bar__st--done .mf-bar__dot { background:var(--success); border-color:var(--success); color:#fff }
+    .mf-bar__st--inprogress .mf-bar__dot { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 3px var(--accent-light) }
+    .mf-bar__st--skipped .mf-bar__dot { border-style:dashed }
+    .mf-bar__lb { font-weight:600; color:var(--text-main); white-space:nowrap }
+    .mf-bar__st--na .mf-bar__lb, .mf-bar__st--skipped .mf-bar__lb { color:var(--text-dim); font-weight:400 }
     .mf-note { font-size:12px; color:var(--text-dim); margin-top:14px }
     .mf-err { margin-top:16px; padding:12px 14px; border:1px solid var(--border-light); border-radius:8px; background:#fff; font-size:13px }
   </style>
 </head>
 <body x-data="materialFlow()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
   <div class="mf-body" data-testid="mf-page">
     <div class="mf-head">
       <span class="mf-title">物料流程</span>
       <span class="mf-sub" x-text="quoteNo"></span>
       <a class="mf-back" data-testid="mf-back" :href="'case-management.html?q=' + encodeURIComponent(quoteNo)">← 回到案件</a>
     </div>
-    <div class="mf-sub">這個案件的材料申請、採購、到貨、出貨、設備與保固目前進度。僅顯示目前可計算的部分；本畫面僅供檢視、不可修改，亦不顯示金額。</div>
+    <div class="mf-sub">這個案件的材料申請、採購、到貨、入庫、出貨、設備與保固進度摘要。逐項操作請至案件內的物料時間軸；本畫面僅供檢視、不可修改，亦不顯示金額。</div>
+    <div style="margin-top:10px"><a class="mf-open" data-testid="mf-open-case" :href="'case-management.html?q=' + encodeURIComponent(quoteNo) + '&tab=exec&sub=materials'">在案件內處理物料</a></div>
 
     <div class="mf-err" x-show="err" data-testid="mf-err" x-text="err"></div>
 
     <template x-if="data">
       <div>
+        <ol class="mf-bar" data-testid="mf-bar" aria-label="物料流程進度">
+          <template x-for="(c, i) in barCells()" :key="c.key">
+            <li class="mf-bar__st" :class="'mf-bar__st--' + c.state" :data-testid="'mf-bar-' + c.key" :data-state="c.state" :title="c.label + '：' + stateLabel(c.state)">
+              <span class="mf-bar__dot" x-text="c.state === 'done' ? '✓' : (i + 1)"></span>
+              <span class="mf-bar__lb" x-text="barLabel(c.key)"></span>
+            </li>
+          </template>
+        </ol>
         <div class="mf-next" data-testid="mf-next" x-show="data.next">
           <span>下一步建議：</span><b x-text="data.next && data.next.label"></b>
           <a :href="data.next && data.next.href" data-testid="mf-next-go">前往</a>
@@ -60,7 +83,6 @@
                   <li x-html="itemLine(c.key, it)"></li>
                 </template>
               </ul>
-              <a class="mf-go" x-show="c.href" :href="c.href" x-text="'到「' + c.label + '」相關頁面'"></a>
             </div>
           </template>
         </div>
@@ -76,6 +98,9 @@
       // Alpine 3 會自己叫一次 init()，body 的 x-init 再叫一次 ⇒ 跑兩遍；守衛擋第二次。
       _initDone: false,
       _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) },
+      // 進度條：申請→採購→到貨→入庫→出貨（沒有倉儲模組時只有前三關）
+      barCells() { const order = ['call', 'purchase', 'arrive', 'stock', 'ship']; return order.map(k => (this.data && this.data.cells || []).find(c => c.key === k)).filter(Boolean) },
+      barLabel(k) { return ({ call: '申請', purchase: '採購', arrive: '到貨', stock: '入庫', ship: '出貨' })[k] || k },
       stateLabel(s) { return ({ inprogress: '進行中', done: '完成', skipped: '略過', na: '尚未開始／尚未提供' })[s] || s },
       itemLine(key, it) {
         const e = (v) => this._esc(v)

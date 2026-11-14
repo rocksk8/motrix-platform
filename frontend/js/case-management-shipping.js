@@ -114,6 +114,17 @@ window.CM_PARTS.push(() => ({
       this.showShippingContactPicker = false
     },
 
+    // 建立出貨單的角色（與後端一致：最高管理者、管理員）；出貨模組不在時不能建
+    shipCanCreate() { return ['superadmin', 'admin'].includes(this.session.role) && !this.shippingNotesNotice },
+    // 物料時間軸的「開出貨單」與出貨單分頁共用：切到出貨單分頁、載入清單，可建立者直接開新增視窗
+    async shipOpenFromTimeline() {
+      const no = this.selected && this.selected.quote_no
+      if (!no) return
+      this.activeTab = 'shipping'
+      await this.loadShippingNotes(no)
+      if (this.shipCanCreate()) this.openNewShippingNote()
+    },
+
     openNewShippingNote() {
       this.editShippingNoteNo = null
       this.shippingForm = this._blankShippingForm()

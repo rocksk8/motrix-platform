@@ -22,6 +22,7 @@
   <script src="../js/case-management-biz.js"></script>
   <script src="../js/case-management-exec.js"></script>
   <script src="../js/case-management-mlink.js"></script>
+  <script src="../js/case-management-mtl.js"></script>
   <script src="../js/case-management-mchange.js"></script>
   <script src="../js/case-management-dispatch.js"></script>
   <script src="../js/case-management-shipping.js"></script>
@@ -50,6 +51,7 @@
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
   <link rel="stylesheet" href="../css/style.css?v=20260924cm12p3">
+  <link rel="stylesheet" href="../css/case-materials-ux.css?v=20261114b">
   <link rel="stylesheet" href="../css/case-management.css">
 </head>
 
@@ -987,10 +989,10 @@
 
                 <div x-show="stageView==='list'">
                 <!-- `AC2`：階段收入比例（權責口徑依階段完成月認列）。全部未設＝全部完工月一次認列。 -->
-                <div data-testid="stage-ratio-summary" x-show="(cr.caseRecord?.stages || []).length"
-                     style="font-size:12px;font-family:var(--font-zh);margin-bottom:8px"
-                     :style="stageRatioSummary().warn ? 'color:var(--tone-warning-fg)' : 'color:var(--text-dim)'"
-                     x-text="stageRatioSummary().text"></div>
+                <div class="stage-ratio-sum" :class="{ 'stage-ratio-sum--warn': stageRatioSummary().warn }" :title="stageRatioSummary().text" x-show="(cr.caseRecord?.stages || []).length">
+                  <svg class="stage-ratio-sum__ico" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>
+                  <span data-testid="stage-ratio-summary" x-text="stageRatioSummary().text"></span>
+                </div>
                 <template x-for="(st, idx) in (cr.caseRecord?.stages || [])" :key="st.id">
                   <div class="stage-card" :class="st.done ? 'stage-card--done' : ''"
                        draggable="true"
@@ -1006,36 +1008,37 @@
                       <input type="checkbox" x-model="st.done"
                              @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || MotrixDate.today()) : ''})"
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
-                      <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
-                             style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
-                             :style="st.done ? 'text-decoration:line-through;color:var(--ink-muted)' : 'color:var(--text-primary)'">
-                      <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
-                        <input type="number" min="0" max="100" step="0.01" placeholder="比例"
-                               data-testid="stage-ratio" :value="stageRatioPct(st)"
-                               @change="setStageRatio(st, $event.target.value)"
-                               style="width:64px;font-size:12px;border:1px solid var(--border-light);border-radius:5px;padding:3px 16px 3px 6px;font-family:LINE Seed TW_OTF, sans-serif">
-                        <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--text-dim);pointer-events:none">%</span>
-                      </span>
-                      <template x-if="st.done">
-                        <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
-                               style="font-size:12px;border:1px solid var(--tone-success-border);border-radius:5px;padding:3px 6px;background:var(--tone-success-bg);color:var(--tone-success-fg);font-family:LINE Seed TW_OTF, sans-serif;outline:none">
-                      </template>
-                      <div class="stage-avatars" @click="toggleStageDetail(st.id)" title="點擊查看／編輯負責人">
-                        <template x-if="!(st.assignedTo || []).length">
-                          <span class="stage-avatar-dot stage-avatar-dot--empty">？</span>
+                      <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})" class="stage-name" :class="{ 'stage-name--done': st.done }"
+                             placeholder="階段名稱" aria-label="階段名稱">
+                      <div class="stage-card__meta">
+                        <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
+                          <input type="number" min="0" max="100" step="0.01" placeholder="比例"
+                                 data-testid="stage-ratio" :value="stageRatioPct(st)"
+                                 @change="setStageRatio(st, $event.target.value)"
+                                 style="width:64px;font-size:12px;border:1px solid var(--border-light);border-radius:5px;padding:3px 16px 3px 6px;font-family:LINE Seed TW_OTF, sans-serif">
+                          <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--text-dim);pointer-events:none">%</span>
+                        </span>
+                        <template x-if="st.done">
+                          <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
+                                 style="font-size:12px;border:1px solid var(--tone-success-border);border-radius:5px;padding:3px 6px;background:var(--tone-success-bg);color:var(--tone-success-fg);font-family:LINE Seed TW_OTF, sans-serif;outline:none">
                         </template>
-                        <template x-for="uname in (st.assignedTo || []).slice(0,3)" :key="uname">
-                          <span class="stage-avatar-dot" :style="{background: _avatarColor(uname)}"
-                                :title="_userDisplay(uname)" x-text="_userDisplay(uname)[0] || uname[0]"></span>
-                        </template>
-                        <template x-if="(st.assignedTo || []).length > 3">
-                          <span class="stage-avatar-dot stage-avatar-dot--more" x-text="'+' + ((st.assignedTo||[]).length - 3)"></span>
-                        </template>
+                        <div class="stage-avatars" @click="toggleStageDetail(st.id)" title="點擊查看／編輯負責人">
+                          <template x-if="!(st.assignedTo || []).length">
+                            <span class="stage-avatar-dot stage-avatar-dot--empty">？</span>
+                          </template>
+                          <template x-for="uname in (st.assignedTo || []).slice(0,3)" :key="uname">
+                            <span class="stage-avatar-dot" :style="{background: _avatarColor(uname)}"
+                                  :title="_userDisplay(uname)" x-text="_userDisplay(uname)[0] || uname[0]"></span>
+                          </template>
+                          <template x-if="(st.assignedTo || []).length > 3">
+                            <span class="stage-avatar-dot stage-avatar-dot--more" x-text="'+' + ((st.assignedTo||[]).length - 3)"></span>
+                          </template>
+                        </div>
+                        <span style="font-size:12px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
+                              :style="st.done ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--surface-neutral);color:var(--ink-muted)'"
+                              x-text="st.done ? '完成' : '待辦'"></span>
+                        <span class="stage-overdue-badge" x-show="stageIsOverdue(st)">已逾期</span>
                       </div>
-                      <span style="font-size:12px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
-                            :style="st.done ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--surface-neutral);color:var(--ink-muted)'"
-                            x-text="st.done ? '完成' : '待辦'"></span>
-                      <span class="stage-overdue-badge" x-show="stageIsOverdue(st)">已逾期</span>
                       <button class="stage-toggle-detail" @click="toggleStageDetail(st.id)"
                               :title="_openStageDetail[st.id] ? '收合詳細設定' : '展開日期／負責人／前置階段'"
                               x-text="_openStageDetail[st.id] ? '▾' : '▸'"></button>
@@ -1098,11 +1101,11 @@
 
                       <template x-for="(v, vi) in (st.visits || [])" :key="v.id">
                         <div class="visit-row">
-                          <input type="date" x-model="v.visitDate" @change="updateVisit(st, v)" class="fi fi--sm">
+                          <input type="date" x-model="v.visitDate" @change="updateVisit(st, v)" class="fi fi--sm" aria-label="前往日期">
                           <input type="number" min="1" max="99" x-model.number="v.visitPeople" @change="updateVisit(st, v)"
-                                 placeholder="人" class="fi fi--sm" style="text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
+                                 placeholder="人次" aria-label="人次" class="fi fi--sm" style="text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
                           <textarea x-model="v.note" @change="updateVisit(st, v)"
-                                    placeholder="工作內容、施工項目、備註…" class="fi fi--sm" rows="1"
+                                    placeholder="工作內容、施工項目、備註…" aria-label="工作內容／備註" class="fi fi--sm" rows="1"
                                     style="resize:vertical;line-height:1.5;min-height:30px"></textarea>
                           <button class="btn-del" @click="removeVisit(idx, vi)" style="margin-top:2px">×</button>
                         </div>
@@ -1163,8 +1166,42 @@
                 </div>
 
 
+                <!-- T86 第 3 項：物料時間軸——每個材料一列，申請→採購→到貨→入庫→出貨；目前這一關的按鈕就地操作（下方是各材料的明細欄位） -->
+                <div class="mtl" data-testid="mtl" x-effect="activeTab === 'exec' && execSubTab === 'materials' && mtlEnsure()">
+                  <div class="mtl-head" x-show="(cr.caseRecord?.materials || []).length">
+                    <span class="cm-section-title" style="margin-bottom:0">物料時間軸</span>
+                    <span class="mtl-sum" data-testid="mtl-sum" x-text="'共 ' + mtlSummary().total + ' 項｜已到貨 ' + mtlSummary().arrived + '｜尚無採購單 ' + mtlSummary().noPo + (mtlSummary().late ? '｜逾期 ' + mtlSummary().late : '')"></span>
+                  </div>
+                  <template x-for="mat in (cr.caseRecord?.materials || [])" :key="'tl-' + mat.id">
+                    <div class="mtl-row" :data-testid="'mtl-row-' + mat.id">
+                      <div class="mtl-row-h">
+                        <span class="mtl-name" x-text="mat.name || '（未命名）'"></span>
+                        <span class="mtl-model" x-text="[mat.model, mat.qty ? ('× ' + mat.qty + ' ' + (mat.unit || '台')) : ''].filter(Boolean).join(' ')"></span>
+                        <a href="javascript:void(0)" class="mtl-more" @click="mtlGoDetail(mat)">明細</a>
+                      </div>
+                      <div class="mtl-steps">
+                        <template x-for="st in mtlSteps(mat)" :key="st.key">
+                          <div class="mtl-st" :class="'mtl-st--' + st.state" :data-testid="'mtl-st-' + mat.id + '-' + st.key" :data-state="st.state">
+                            <div class="mtl-dot" x-text="st.state === 'done' ? '✓' : ''"></div>
+                            <div class="mtl-lb" x-text="st.label"></div>
+                            <div class="mtl-cap"><span x-text="st.cap" style="white-space:pre-line"></span><span class="mtl-late" x-show="st.late" x-text="' ' + st.late"></span></div>
+                            <div class="mtl-act" x-show="st.act">
+                              <template x-if="st.act && st.act.href"><a class="btn btn-sm btn-primary" :href="st.act.href" x-text="st.act.label" :data-testid="'mtl-act-' + mat.id + '-' + st.key"></a></template>
+                              <template x-if="st.act && !st.act.href"><button type="button" class="btn btn-sm btn-primary" @click="st.act.run()" x-text="st.act.label" :data-testid="'mtl-act-' + mat.id + '-' + st.key"></button></template>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <div class="mtl-case" x-show="mtlFlow && (mtlFlow.stock || mtlFlow.ship) && (cr.caseRecord?.materials || []).length" x-cloak data-testid="mtl-case">
+                    <template x-if="mtlFlow && mtlFlow.stock"><span><b>整案入庫</b>：<span x-text="mtlFlow.stock.summary"></span></span></template>
+                    <template x-if="mtlFlow && mtlFlow.ship"><span><b>整案出貨</b>：<span x-text="mtlFlow.ship.summary"></span>　<a href="javascript:void(0)" @click="activeTab = 'shipping'">開啟出貨單</a></span></template>
+                  </div>
+                </div>
+
                 <template x-for="(mat, idx) in (cr.caseRecord?.materials || [])" :key="mat.id">
-                  <div class="mat-card">
+                  <div class="mat-card" :id="'mat-card-' + mat.id">
                     <div class="mat-card__head">
                       <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
                       <input data-saved-field class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:12px;flex-shrink:0">
@@ -3440,7 +3477,7 @@
                   </select>
                   <button x-show="snSortPref.sortMode && snSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('sn')"
                           style="font-size:12px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer" x-text="snSortPref.sortDir==='asc'?'↑':'↓'"></button>
-                  <button x-show="['superadmin','admin'].includes(session.role) && !shippingNotesNotice"
+                  <button x-show="shipCanCreate()" data-testid="ship-new"
                           class="btn-add" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                     新增出貨單
@@ -3455,9 +3492,13 @@
                      style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px" x-text="shippingNotesNotice"></div>
 
                 <!-- Empty -->
-                <div x-show="!shippingNotesLoading && !shippingNotesNotice && shippingNotes.length===0"
+                <div x-show="!shippingNotesLoading && !shippingNotesNotice && shippingNotes.length===0" data-testid="ship-empty"
                      style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px">
-                  尚未建立任何出貨單
+                  <div>尚未建立任何出貨單。</div>
+                  <div style="margin-top:10px" x-show="shipCanCreate()">
+                    <button type="button" class="btn-add" data-testid="ship-empty-new" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">新增出貨單</button>
+                  </div>
+                  <div style="margin-top:6px;font-size:12px" x-show="!shipCanCreate()" data-testid="ship-empty-hint">出貨單由管理員建立，請洽管理員。</div>
                 </div>
 
                 <!-- Shipping note list -->
@@ -4960,53 +5001,38 @@
   </div>
 </div>
 
-<!-- ── 匯入品項選擇 Modal ── -->
-<div x-show="showImportModal" x-cloak
-       style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
+<!-- ── 匯入品項選擇 Modal ──（版面一律用 class：x-show 切換時會移除行內 display，:style 字串會整個蓋掉行內樣式，兩者都會讓置中與同列版面失效） -->
+<div x-show="showImportModal" x-cloak class="imp-back" data-testid="import-modal"
        @click.self="showImportModal=false"
        @keydown.escape.window="showImportModal=false">
-    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:500px;max-height:calc(82vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)">
-      <!-- 標題 -->
-      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+    <div class="imp-box">
+      <div class="imp-head">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink-secondary)" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <span style="font-size:13px;font-weight:600;flex:1;font-family:var(--font-zh)" x-text="importMode==='materials' ? '選取材料申請品項' : '選取設備品項'"></span>
-        <button @click="showImportModal=false" style="width:26px;height:26px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px;line-height:1;color:var(--text-secondary)">×</button>
+        <span class="imp-title" x-text="importMode==='materials' ? '選取材料申請品項' : '選取設備品項'"></span>
+        <button type="button" class="imp-x" @click="showImportModal=false" aria-label="關閉">×</button>
       </div>
-      <!-- 全選工具列 -->
-      <div style="padding:8px 18px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px">
-        <button @click="selectAllImportItems(true)"  style="font-size:12px;padding:3px 10px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">全選</button>
-        <button @click="selectAllImportItems(false)" style="font-size:12px;padding:3px 10px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">清除</button>
-        <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto"
-              x-text="Object.values(importSelectedItems).filter(Boolean).length + ' / ' + quoteItemsForImport().length + ' 項已選'"></span>
+      <div class="imp-tools">
+        <button type="button" class="imp-btn" @click="selectAllImportItems(true)">全選</button>
+        <button type="button" class="imp-btn" @click="selectAllImportItems(false)">清除</button>
+        <span class="imp-count" x-text="Object.values(importSelectedItems).filter(Boolean).length + ' / ' + quoteItemsForImport().length + ' 項已選'"></span>
       </div>
-      <!-- 品項清單 -->
-      <div style="flex:1;overflow-y:auto;padding:8px 14px">
+      <div class="imp-list">
         <template x-if="quoteItemsForImport().length===0">
-          <div style="padding:24px 0;text-align:center;font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">此報價單沒有可匯入的品項</div>
+          <div class="imp-empty">此報價單沒有可匯入的品項</div>
         </template>
+        <div class="imp-cols" x-show="quoteItemsForImport().length"><span></span><span>品名</span><span>廠牌</span><span class="imp-qty">數量</span></div>
         <template x-for="(qi, qi_idx) in quoteItemsForImport()" :key="qi_idx">
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:7px;cursor:pointer;border-bottom:1px solid var(--surface-sunken)"
-                 :style="importSelectedItems[qi_idx] ? 'background:var(--tone-info-bg);border-bottom-color:transparent' : ''">
-            <input type="checkbox" :checked="importSelectedItems[qi_idx]" @change="toggleImportItem(qi_idx)"
-                   style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:var(--accent)">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:500;font-family:var(--font-zh);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" x-text="qi.description || '(無品名)'"></div>
-              <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-top:1px"
-                   x-text="[qi.brand, (qi.qty||1) + ' ' + (qi.unit||'台')].filter(Boolean).join(' · ')"></div>
-            </div>
+          <label class="imp-row" :class="{ 'imp-row--on': importSelectedItems[qi_idx] }" :data-testid="'import-row-' + qi_idx">
+            <input type="checkbox" :checked="importSelectedItems[qi_idx]" @change="toggleImportItem(qi_idx)">
+            <span class="imp-name" x-text="qi.description || '（無品名）'" :title="qi.description"></span>
+            <span class="imp-brand" x-text="qi.brand || ''"></span>
+            <span class="imp-qty" x-text="(qi.qty||1) + ' ' + (qi.unit||'台')"></span>
           </label>
         </template>
       </div>
-      <!-- 底部按鈕 -->
-      <div style="padding:12px 18px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:8px">
-        <button @click="showImportModal=false"
-                style="padding:6px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">取消</button>
-        <button @click="doImport()"
-                :disabled="!Object.values(importSelectedItems).some(Boolean)"
-                style="padding:6px 16px;background:var(--accent);color:var(--surface);border:none;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-zh)"
-                :style="!Object.values(importSelectedItems).some(Boolean) ? 'opacity:.45;cursor:not-allowed' : ''">
-          匯入選取項目
-        </button>
+      <div class="imp-foot">
+        <button type="button" class="imp-btn" @click="showImportModal=false">取消</button>
+        <button type="button" class="imp-btn imp-btn--primary" @click="doImport()" :disabled="!Object.values(importSelectedItems).some(Boolean)" data-testid="import-confirm">匯入選取項目</button>
       </div>
     </div>
   </div>
