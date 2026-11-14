@@ -217,9 +217,13 @@
         return SM.openDialog({
           title: '儲存 ' + plan.summary.changed + ' 個角色的權限調整', html: html,
           buttons: [{ label: '取消', value: null }, { label: '套用', value: 'ok', kind: plan.gatedKeys.length ? 'danger' : 'primary' }],
-          onOpen: function (body) {
+          onOpen: function (body, wrap) {
             var inp = body.querySelector('[data-testid=dm-reason]')
-            if (inp) inp.addEventListener('input', function () { lastReason = inp.value })
+            var ok = wrap && wrap.querySelector('[data-mx-dlg="1"]')
+            // 高敏感變更：原因不足 4 個字時「套用」反灰（在視窗內就擋，不要關掉視窗才由伺服器回 400）
+            function sync() { if (ok && plan.needsReason) ok.disabled = String(lastReason || '').trim().length < 4 }
+            if (inp) inp.addEventListener('input', function () { lastReason = inp.value; sync() })
+            sync()
           },
         }).then(function (v) { return v === 'ok' ? [] : null })
       })

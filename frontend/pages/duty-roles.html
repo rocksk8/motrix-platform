@@ -239,9 +239,10 @@
           if (b) this.users = b.users.map(u => ({ ...u, _sub: '' }))
         },
         async loadChanges() { const j = await this._get('/api/duty-roles/changes'); if (j) this.changes = j.items },
-        newRole() { this.form = { id: 0, key: '', name: '', description: '', permissions: [], active: true, reason: '' } },
-        editRole(r) { this.form = { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], active: r.active, reason: '' } },
-        formSensitive() { return !!this.form && this.form.permissions.some(k => this.highKeys.includes(k)) },
+        newRole() { this.form = { id: 0, key: '', name: '', description: '', permissions: [], active: true, origActive: true, reason: '' } },
+        editRole(r) { this.form = { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], active: r.active, origActive: r.active, reason: '' } },
+        // 只改名稱／說明不需要原因；停用／啟用一個含高敏感權限的角色才需要（與 helpers/duty_roles.update_role 的檢查點一致）
+        formSensitive() { const f = this.form; return !!f && !!f.id && f.active !== f.origActive && f.permissions.some(k => this.highKeys.includes(k)) },
         async saveRole() {
           const f = this.form
           const body = { key: f.key, name: f.name, description: f.description, reason: f.reason, active: f.active }

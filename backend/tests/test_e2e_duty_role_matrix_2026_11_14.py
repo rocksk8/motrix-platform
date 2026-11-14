@@ -92,8 +92,14 @@ def test_high_sensitive_needs_a_reason_and_undo_restores(live_server, make_user,
     page, ids = _open(live_server, make_user, new_page, login_as, "e2e_dm2")
     a = ids["mx_a"]
     _cell(page, "settings", a).click()
-    _save_with_reason(page, None)                                             # 缺原因：伺服器擋，草稿保留，資料庫不動
-    expect(page.locator("[data-testid=mx-toast-text]")).to_contain_text("原因")
+    page.locator("[data-testid=mx-draft-save]").click()                       # 缺原因：視窗內「套用」反灰，不會送出（F：以前關掉視窗才由伺服器回 400）
+    _dlg_btn(page, "套用").wait_for(state="visible", timeout=10000)
+    expect(_dlg_btn(page, "套用")).to_be_disabled()
+    page.fill("[data-testid=dm-reason]", "abc")
+    expect(_dlg_btn(page, "套用")).to_be_disabled()                           # 不足 4 個字仍反灰
+    page.fill("[data-testid=dm-reason]", "原因足夠長")
+    expect(_dlg_btn(page, "套用")).to_be_enabled()
+    page.keyboard.press("Escape")                                             # 取消：草稿保留，資料庫不動
     assert "settings" not in _perms(a)
     expect(page.locator("[data-testid=mx-draftbar]")).to_be_visible()
     _save_with_reason(page, "核定新增系統設定權限")                            # 重新儲存：輸入框預填上次輸入的內容，再確認一次
@@ -110,6 +116,29 @@ def test_high_sensitive_needs_a_reason_and_undo_restores(live_server, make_user,
     assert "settings" not in _perms(a), "復原應成功（沿用套用時的原因）"
     row = _q("SELECT high_sensitivity, reason FROM permission_changes WHERE target_type='role' AND target_id=? ORDER BY id DESC LIMIT 1", (a,))[0]
     assert row["high_sensitivity"] == 1 and row["reason"] == "復原：核定新增系統設定權限"
+
+
+@pytest.mark.e2e
+def test_role_form_reason_asterisk_only_when_active_toggles_on_high_role(live_server, make_user, new_page, login_as):
+    import db
+    from helpers import duty_roles as dr
+    page, ids = _open(live_server, make_user, new_page, login_as, "e2e_dm6")
+    conn = db.get_db()
+    try:
+        actor = dict(conn.execute("SELECT * FROM users WHERE role='superadmin' ORDER BY id LIMIT 1").fetchone())
+        rid = dr.create_role(conn, actor, "mx_hi", "矩陣測試高敏感", "", ["settings"], "測試建立高敏感角色", "")
+    finally:
+        conn.close()
+    page.reload()
+    page.locator("[data-testid='mx-row-quotation']").wait_for(state="attached", timeout=20000)
+    page.locator("table tr").filter(has_text="矩陣測試高敏感").get_by_role("button", name="編輯").click()
+    page.locator("[data-testid=dr-form]").wait_for(state="visible", timeout=10000)
+    star = page.locator("[data-testid=dr-form] span").filter(has_text="高敏感必填")
+    expect(star).to_be_hidden()                                               # 只改名稱：不需要原因
+    page.locator("[data-testid=dr-form] input[type=checkbox]").first.uncheck()
+    expect(star).to_be_visible()                                              # 停用含高敏感權限的角色：需要原因
+    page.locator("[data-testid=dr-form] input[type=checkbox]").first.check()
+    expect(star).to_be_hidden()
 
 
 @pytest.mark.e2e
@@ -170,3 +199,15 @@ def test_batch_pick_roles_and_group_switch_are_drafts(live_server, make_user, ne
     before = (_perms(a), _perms(b))
     page.locator("[data-testid=mx-draft-discard]").click()
     assert (_perms(a), _perms(b)) == before, "群組總開關在儲存前不寫入"
+
+
+@pytest.mark.e2e
+def test_phone_width_matrix_after_visiting_another_tab(live_server, make_user, new_page, login_as):
+    """390 寬：矩陣在隱藏的分頁裡先掛載（等同直接連到非「角色」分頁），切回「角色」後仍是手機卡片、頁面不橫向捲動。"""
+    page, ids = _open(live_server, make_user, new_page, login_as, "e2e_dm7", width=390)
+    page.get_by_role("button", name="使用者綁定").click()
+    page.get_by_role("button", name="角色", exact=True).click()
+    expect(page.locator("[data-testid=dm-box] .mx-chip").first).to_be_visible()      # 手機：卡片裡的 chip，不是表格欄
+    expect(page.locator("[data-testid=dm-box] .mx-table")).to_be_hidden()
+    over = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+    assert over <= 1, "頁面橫向溢出 %spx" % over
