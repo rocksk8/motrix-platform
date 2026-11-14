@@ -278,6 +278,9 @@ def _observe(text, response):
     load = _member(text, "async loadStats()")
     hero = _member(text, "get heroSummary()")
     overdue = _member(text, "get overdueWarranty()")
+    # T86 U7：loadStats 經 _dashFetch 取資料（開頁第一次走 /dashboard/bundle）。真原文抽進來；模擬環境沒有 window.__dashB ⇒ 走原端點（即下面的假 fetch）。
+    # 修正前的舊版（「量尺」那題餵舊版）沒有它 ⇒ 不種。
+    dashfetch = _member(text, "async _dashFetch(section, url)") if "async _dashFetch(section, url)" in text else "_noop() {}"
     # 2026-11-11 A3：引導卡片的 x-show 讀 checklistVisible（上手清單）。修正前的舊版沒有它 ⇒ 不種（「量尺」那題餵舊版）。
     ckvis = _member(text, "get checklistVisible()") if "get checklistVisible()" in text else None
     gate = _card_gate(text)
@@ -287,6 +290,7 @@ def _observe(text, response):
     script = """
 const RESP = __RESP__;
 const API = '';
+globalThis.window = {};      // 沒有 __dashB ⇒ _dashFetch 退回原端點
 globalThis.fetch = async () => (RESP === null
   ? { ok: false, status: 500, json: async () => { throw new Error('no body') } }
   : { ok: true,  status: 200, json: async () => RESP });
@@ -295,6 +299,7 @@ const PROTO = {
   __LOAD__,
   __HERO__,
   __OVERDUE__,
+  __DASHFETCH__,
 };
 
 const raw = Object.create(PROTO);
@@ -304,6 +309,7 @@ Object.assign(raw, {
   __STATS__,
   session: { token: 't', username: 'repro', display_name: 'repro' },
   departmentId: '',
+  _dashTaken: {},
   onboardingDismissed: false,
   followUpQuotes: [],
   analyticsMissing: false,   // index.html 的初始值（M08 首頁在營運分析不在時的明說；第六班列車全量抓到）
@@ -363,6 +369,7 @@ const scoped = (src) => (new Function('with (this) { return (' + src + ') }'));
               .replace("__LOAD__", load)
               .replace("__HERO__", hero)
               .replace("__OVERDUE__", overdue)
+              .replace("__DASHFETCH__", dashfetch)
               .replace("__CKLINE__", "" if ckvis is None else
                        "Object.defineProperties(raw, Object.getOwnPropertyDescriptors({ %s }));" % ckvis)
               .replace("__STATS__", _stats_initial(text))

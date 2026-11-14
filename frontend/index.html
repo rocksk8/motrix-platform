@@ -412,6 +412,8 @@
     .h-mine__empty { background: #fff; border: 1px dashed var(--border-light); border-radius: 10px; padding: 18px 20px; }
     .h-mine__empty p { margin: 0 0 10px; font-size: 14px; }
     .h-mine__acts { display: flex; gap: 10px; flex-wrap: wrap; }
+    .h-mine__acts .h-ghost { color: var(--text-primary); border-color: var(--border-light); }
+    .h-mine__acts .h-ghost:hover { border-color: var(--text-primary); background: rgba(0,0,0,.04); }
     /* 常用捷徑（T86 U12）：依角色排序、依模組權限過濾；沒權限的不出現。只用既有 token */
     .h-short { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
     .h-short__a { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px 14px; background: #fff; border: 1px solid var(--border-light); border-radius: 10px; text-decoration: none; color: inherit; transition: .2s var(--v4-ease); }

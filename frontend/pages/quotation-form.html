@@ -4606,7 +4606,7 @@
         if (this.reviewEditBusy) return
         if (Object.keys(this.badNum).length) { alert('有無法解析的數字欄位，請先修正'); return }
         const data = this._reviewEditPayload()
-        if (!data) { alert('內容沒有任何變動；若要維持原內容，請按「放棄修改」後直接核准'); return }
+        if (!data) { alert('內容無任何變動；若要維持原內容，請按「放棄修改」後直接核准'); return }
         this.reviewEditBusy = true
         try {
           const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/review-edit`, {

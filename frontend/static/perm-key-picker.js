@@ -100,7 +100,7 @@
         diffText() {
           const a = this.added().map(k => this._label(k)), r = this.removed().map(k => this._label(k))
           const cut = l => l.length > 8 ? l.slice(0, 8).join('、') + ' 等 ' + l.length + ' 項' : l.join('、')
-          return '與開啟時相比：' + (a.length ? '新增 ' + a.length + ' 項（' + cut(a) + '）' : '沒有新增') + '、' + (r.length ? '取消 ' + r.length + ' 項（' + cut(r) + '）' : '沒有取消') + '。按「儲存」才會寫入。'
+          return '與開啟時相比：' + (a.length ? '新增 ' + a.length + ' 項（' + cut(a) + '）' : '無新增') + '、' + (r.length ? '取消 ' + r.length + ' 項（' + cut(r) + '）' : '沒有取消') + '。按「儲存」才會寫入。'
         },
       }
     }

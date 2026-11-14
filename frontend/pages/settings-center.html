@@ -398,7 +398,7 @@
           ;(b.plan.warnings || []).forEach(function (w) { warns.push(w) })
           if (items) html += '<div style="margin-top:8px"><b>' + esc(b.plain) + '</b></div><ul style="margin:4px 0 0 18px;padding:0">' + items + '</ul>'
         })
-        if (!n.immediate && !n.pending && !n.pending_approval) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        if (!n.immediate && !n.pending && !n.pending_approval) throw new Error('所做修改與目前設定相同，無需儲存')
         var days = by[0].plan.confirmDays
         var lines = []
         if (n.immediate) lines.push('<b>' + n.immediate + '</b> 項儲存後立即生效')

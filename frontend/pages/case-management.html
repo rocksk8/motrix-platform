@@ -5095,7 +5095,7 @@
       </div>
       <div class="imp-list">
         <template x-if="quoteItemsForImport().length===0">
-          <div class="imp-empty">此報價單沒有可匯入的品項</div>
+          <div class="imp-empty">此報價單尚無可匯入的品項</div>
         </template>
         <div class="imp-cols" x-show="quoteItemsForImport().length"><span></span><span>品名</span><span>廠牌</span><span class="imp-qty">數量</span></div>
         <template x-for="(qi, qi_idx) in quoteItemsForImport()" :key="qi_idx">

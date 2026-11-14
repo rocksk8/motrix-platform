@@ -267,7 +267,7 @@
           <div style="border-top:1px solid var(--border-light);padding:8px 0;font-size:12px">
             <div style="font-weight:600" x-text="p.name || ('#' + p.userId)"></div>
             <div x-show="p.status==='skipped'" style="color:var(--text-dim)" x-text="'略過：' + p.note"></div>
-            <div x-show="p.status==='nochange'" style="color:var(--text-dim)">沒有需要變更的項目</div>
+            <div x-show="p.status==='nochange'" style="color:var(--text-dim)">無需變更的項目</div>
             <div x-show="p.bind.length" x-text="'綁定職責角色：' + batchRoleNames(p.bind)" data-testid="batch-plan-bind"></div>
             <div x-show="p.unbind.length" x-text="'解除職責角色：' + batchRoleNames(p.unbind)" data-testid="batch-plan-unbind"></div>
             <div x-show="(p.effectiveAdded||[]).length" style="color:#047857" x-text="'實際生效　多了：' + batchKeysText(p.effectiveAdded)" data-testid="batch-plan-eff-add"></div>
