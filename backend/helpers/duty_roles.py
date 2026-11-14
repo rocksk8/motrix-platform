@@ -346,7 +346,7 @@ def create_role(conn, actor, key, name, description, permissions, reason, ip="")
     return cur.lastrowid
 
 
-def update_role(conn, actor, role_id, *, name=None, description=None, permissions=None, active=None, reason="", ip=""):
+def update_role(conn, actor, role_id, *, name=None, description=None, permissions=None, active=None, reason="", ip="", commit=True):
     r = _role_row(conn, role_id)
     old = _loads(r["permissions"], [])
     new = _check_perm_keys(permissions) if permissions is not None else old
@@ -364,7 +364,8 @@ def update_role(conn, actor, role_id, *, name=None, description=None, permission
     new_desc = (description if description is not None else r["description"]).strip()
     if (new_name, new_desc, new_active) == (r["name"], r["description"], r["active"]) and not (added or removed):
         _write_audit(conn, actor, ("duty_roles.role_update", "duty_role", role_id, new_name))      # 與舊路由一致：沒有實質變更也留一筆 audit_log（不寫 permission_changes）
-        conn.commit()
+        if commit:
+            conn.commit()
         return r["version"]
     version = r["version"] + (1 if (added or removed or new_active != r["active"]) else 0)
     conn.execute("UPDATE duty_roles SET name=?, description=?, permissions=?, active=?, version=?, updated_at=? WHERE id=?",
@@ -373,7 +374,8 @@ def update_role(conn, actor, role_id, *, name=None, description=None, permission
     _record(conn, actor, "role_def", "role", role_id, new_name, added, removed,
             {"permissions": old, "active": bool(r["active"])}, {"permissions": new, "active": bool(new_active), "members": members},
             sensitive, reason, ip, audit=("duty_roles.role_update", "duty_role", role_id, new_name))
-    conn.commit()
+    if commit:                                          # 批次（helpers/duty_role_matrix.py）自己在最外層 commit，整批同一個交易
+        conn.commit()
     return version
 
 

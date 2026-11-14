@@ -9,6 +9,9 @@
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/settings-matrix.css?v=20261113a">
+  <script src="../static/settings-matrix.js"></script>
+  <script src="../static/duty-matrix.js"></script>
   <style>
     .dr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
       min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
@@ -87,6 +90,10 @@
 
     <!-- 角色 -->
     <section x-show="tab === 'roles'">
+      <!-- 職責 × 權限矩陣（T86；static/duty-matrix.js）：欄＝角色、列＝權限（依群組）；點格子／欄頭／群組列／勾列批次都只是草稿，儲存時先預覽→確認→套用，可復原這一批 -->
+      <div class="dr-sub" style="max-width:1200px;margin-top:14px">權限矩陣：點格子授予或取消；欄頭＝整欄一次勾；群組列＝群組總開關；框起的「高敏感」權限變更要填原因。修改先放進草稿，按頂端「儲存」才會預覽並寫入。</div>
+      <div id="dm-box" style="max-width:1200px;margin-top:8px" data-testid="dm-box"></div>
+      <div class="dr-sub" style="max-width:1200px;margin-top:18px;font-weight:600">角色管理（名稱、說明、啟用／停用）</div>
       <div class="dr-card">
         <table class="dr-table m-cards dr-t-roles">
           <thead><tr><th>角色</th><th>權限</th><th>成員</th><th>狀態</th><th></th></tr></thead>
@@ -95,8 +102,7 @@
               <tr>
                 <td><b x-text="r.name"></b> <span class="dr-sub" x-text="'（' + r.key + (r.isSystem ? '・系統預設' : '') + '）'"></span>
                   <div class="dr-sub" x-text="r.description"></div></td>
-                <td><div class="dr-chips"><template x-for="k in r.permissions" :key="k">
-                  <span class="dr-chip on" :class="{hi: highKeys.includes(k)}" x-text="label(k)"></span></template></div></td>
+                <td><span x-text="r.permissions.length + ' 項'"></span><span class="dr-sub" x-show="r.highSensitive.length" x-text="'（含高敏感 ' + r.highSensitive.length + ' 項）'"></span></td>
                 <td x-text="r.members"></td>
                 <td x-text="r.active ? '啟用' : '已停用'"></td>
                 <td><button class="btn btn--sm" @click="editRole(r)">編輯</button></td>
@@ -116,12 +122,8 @@
               <label x-show="form.id"><input type="checkbox" x-model="form.active"> 啟用</label>
             </div>
             <div style="margin-top:8px"><label>說明 <input class="dr-in" style="width:420px" x-model="form.description"></label></div>
-            <div class="dr-sub" style="margin-top:10px">權限（點選切換；框線＝高敏感，財務三鍵可放進角色但不會讓持有者取得財務／出納能力）</div>
-            <div class="dr-chips">
-              <template x-for="k in keys" :key="k.key">
-                <span class="dr-chip" :class="{on: form.permissions.includes(k.key), hi: k.highSensitive}" @click="toggle(form.permissions, k.key)" x-text="k.label"></span>
-              </template>
-            </div>
+            <div class="dr-sub" style="margin-top:10px" x-show="!form.id">新角色建立後沒有任何權限；請在上方權限矩陣勾選它那一欄，再按「儲存」。</div>
+            <div class="dr-sub" style="margin-top:10px" x-show="form.id">這個角色的權限請在上方權限矩陣調整；這裡只改名稱、說明與啟用狀態。</div>
             <div style="margin-top:10px"><label>變更原因 <span x-show="formSensitive()" style="color:var(--danger)">*（高敏感必填）</span>
               <input class="dr-in" style="width:420px" x-model="form.reason" data-testid="dr-reason"></label></div>
             <div style="margin-top:12px;display:flex;gap:8px">
@@ -205,6 +207,7 @@
   <script src="../static/sidebar.js"></script>
   <script>
     function dutyRolesPage() {
+      let _dm = null          // 權限矩陣控制器（放在 Alpine 資料之外，不讓它被包成響應式代理）
       const KIND = { bind: '綁定角色', unbind: '解除角色', role_def: '角色定義', subtract: '設扣項', unsubtract: '解除扣項', user_modules: '個人勾選（使用者管理）' }
       return {
         tab: 'roles', roles: [], keys: [], highKeys: [], users: [], changes: [], form: null, pending: null, errMsg: '', okMsg: '', _initDone: false,
@@ -215,7 +218,11 @@
         label(k) { const m = this.keys.find(x => x.key === k); return m ? m.label : k },
         kindLabel(k) { return KIND[k] || k },
         toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
-        async init() { if (this._initDone) return; this._initDone = true; await this.load() },
+        async init() {
+          if (this._initDone) return; this._initDone = true; await this.load()
+          // 權限矩陣（職責×權限）：儲存成功後重讀角色清單，角色管理表的「N 項」跟著更新
+          _dm = await DutyMatrix.mount(document.getElementById('dm-box'), { onSaved: () => this.load(), onError: e => { this.errMsg = e.message || '操作失敗' } })
+        },
         // 讀＝_get；寫＝_post／_put（每個寫入都是明寫的 fetch method：頁面真的會送出綁定／扣項／角色的變更，AC1 守門靠這個辨識）
         async _handle(r) {
           const j = await r.json().catch(() => ({}))
@@ -237,9 +244,10 @@
         formSensitive() { return !!this.form && this.form.permissions.some(k => this.highKeys.includes(k)) },
         async saveRole() {
           const f = this.form
-          const body = { key: f.key, name: f.name, description: f.description, permissions: f.permissions, reason: f.reason, active: f.active }
+          const body = { key: f.key, name: f.name, description: f.description, reason: f.reason, active: f.active }
+          if (!f.id) body.permissions = []        // 權限一律在矩陣調整（編輯既有角色時不送，後端沿用原本的權限）
           const j = f.id ? await this._put('/api/duty-roles/' + f.id, body) : await this._post('/api/duty-roles', body)
-          if (j) { this.form = null; this.okMsg = '已儲存'; await this.load() }
+          if (j) { this.form = null; this.okMsg = '已儲存'; await this.load(); if (_dm) await _dm.reload() }
         },
         _ask(title, needReason, run) { this.pending = { title, needReason, reason: '', run } },
         toggleBind(u, r) {
