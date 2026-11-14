@@ -243,7 +243,7 @@
                 <!-- 業務漏斗 -->
                 <template x-if="result.id === 'sales-funnel' && result.funnel">
                   <div class="sr-two" data-testid="sr-funnel">
-                    <div class="sr-card" data-testid="sr-funnel-dev">
+                    <div class="sr-card" data-testid="sr-funnel-dev" x-show="devFunnel.length > 0">
                       <h2 class="sr-card__t">商機漏斗（業務開發）</h2>
                       <div class="sr-fun">
                         <template x-for="d in devFunnel" :key="d.status">
@@ -256,7 +256,7 @@
                       </div>
                       <p class="sr-note">預估金額只加總有填的商機；未填的件數另列，不當作 0 元。</p>
                     </div>
-                    <div class="sr-card" data-testid="sr-funnel-quote">
+                    <div class="sr-card" data-testid="sr-funnel-quote" x-show="quoteFunnel.length > 0">
                       <h2 class="sr-card__t">報價漏斗（報價單）</h2>
                       <div class="sr-fun">
                         <template x-for="d in quoteFunnel" :key="d.label">
