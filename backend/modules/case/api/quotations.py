@@ -3910,6 +3910,42 @@ def _calendar_after_payment_change(quote_no: str, old_items, new_items) -> None:
         spawn_bg_thread(_RC.push_after_commit, args=(quote_no, _RC.snapshot(old_items), _RC.snapshot(new_items)))
 
 
+def _same_json(a, b) -> bool:
+    """嚴格比對（U8）：型別敏感（Python `==` 把 0==False、1==True、1==1.0 視為相同，會把「0→false」誤判成沒變而丟掉）、不管鍵順序。"""
+    return json.dumps(a, sort_keys=True, ensure_ascii=False, default=str) == json.dumps(b, sort_keys=True, ensure_ascii=False, default=str)
+
+
+_DIFF_FIELDS_MAX = 12     # 稽核 detail：每個分段最多列幾個欄位名（超過只記個數）
+
+
+def _case_record_diff(old_cr: dict, new_cr: dict, requested=None) -> dict:
+    """U8（2026-11-14）：這次存檔實際改到哪些分段／欄位（只記名稱，不記值——值可能含金額、電話）。
+    segments＝有變動的分段（caseRecord 頂層鍵，`stages` 由專屬端點維護不算）；
+    fields＝該分段是物件時，有變動的第一層欄位名（列表型分段如 materials 只列分段）。"""
+    old_cr = old_cr if isinstance(old_cr, dict) else {}
+    new_cr = new_cr if isinstance(new_cr, dict) else {}
+    segs, fields = [], {}
+    for k in sorted(set(old_cr) | set(new_cr)):
+        if k == "stages" or old_cr.get(k) == new_cr.get(k):
+            continue
+        segs.append(k)
+        o, n = old_cr.get(k), new_cr.get(k)
+        if isinstance(o, dict) and isinstance(n, dict):
+            ch = sorted(f for f in set(o) | set(n) if o.get(f) != n.get(f))
+            fields[k] = ch[:_DIFF_FIELDS_MAX] + ([f"…共 {len(ch)} 項"] if len(ch) > _DIFF_FIELDS_MAX else [])
+    # requested：這次請求帶的分段（segments）以外的鍵＝頁面替沒有的分段補預設值（defaults），不是使用者的改動 ⇒ 另列 initial
+    if requested is not None:
+        initial = [k for k in segs if k not in requested]
+        segs = [k for k in segs if k in requested]
+        fields = {k: v for k, v in fields.items() if k in segs}
+    out = {"segments": segs}
+    if fields:
+        out["fields"] = fields
+    if requested is not None and initial:
+        out["initial"] = initial
+    return out
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -3990,6 +4026,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
         data = json.loads(row["data_json"] or "{}")
+        data_before = copy.deepcopy(data)             # U8：存檔前快照——最後比對「這次到底有沒有改到東西」
         if isinstance(body.case_record, dict):
             # T61 S5：自訂欄位閘門（旗標 builder_custom_fields.enabled 關閉 ⇒ 不介入：用戶端送來的 customFields 不存、舊值原樣保留）。
             # 沒有送這個鍵（舊的整包格式）＝沒有要改，帶回舊值，不讓整包取代把它洗掉；沒有值就不寫這個鍵。
@@ -4092,10 +4129,20 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         if "materials" in (body.case_record or {}) and MR.changes_recognition((data.get("caseRecord") or {}).get("materials"), (body.case_record or {}).get("materials"))                 and _check_case_gate(conn, quote_no):
             conn.close()                                                                        # 已結案變更申請核准時以系統身分套用，不接受新認列 ⇒ 送出時就說清楚，免得核准了卻沒套上
             raise HTTPException(409, "案件目前處於結案鎖定狀態，認列採購單的變更不能經變更申請套用；請先請最高管理者解除鎖定後再操作。")
-        gated, change_id = _gate_case_edit(
-            conn, quote_no, user, authorization, "case_record_update",
-            f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
-        )
+        # U8：半解鎖的已結案案件，空存檔也不可以排進審核（會建／更新變更申請列、第一筆還寄信給最高管理者）。
+        # 候選內容（stages 一律取資料庫現值，與下面實際寫入的一致）與現值完全相同 ⇒ 不過閘，往下走「沒有變動」那條路。
+        _cand = dict(body.case_record or {})
+        _cand["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+        _before_cr = {**(data_before.get("caseRecord") or {}), "stages": _cand["stages"]}
+        # 只對案件成員跳過閘：非成員的 defaults 沒被清掉（那段在上面 `not semi_unlocked` 才會進），跳過閘＋回應 adopted 會變成讀取通道（F6）。
+        # 附註：沒有變動那條路若仍因 reconcile／叫料閘改了伺服器端衍生內容而寫入，半解鎖案件不排審核——只有系統推導的內容，稽核照記。
+        if semi_unlocked and not invoice_changes and _is_case_member(conn, quote_no, row, user) and _same_json(_cand, _before_cr):
+            gated, change_id = False, None
+        else:
+            gated, change_id = _gate_case_edit(
+                conn, quote_no, user, authorization, "case_record_update",
+                f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
+            )
         if gated:
             conn.close()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
@@ -4125,12 +4172,25 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
             stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
-        now = save_quotation_json(conn, quote_no, data, actor=user)
-        conn.commit()
-        conn.close()
-        spawn_bg_thread(_backup_quotation, args=(quote_no,))
-        _calendar_after_payment_change(quote_no, old_items, ((data.get("caseRecord") or {}).get("payment") or {}).get("items"))
-        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
+        # U8（2026-11-14）：存檔內容與資料庫現值完全相同（空存檔：按了「儲存」但沒改任何東西、或頁面補預設值後內容沒變）
+        # ⇒ 不寫入、不備份、不記稽核、不動 updated_at（正式機 90 天 286 筆「案件更新」有一部分是這種空存檔）。
+        # 回應維持原形狀（updated_at 回目前值），前端照常當成存檔成功。
+        unchanged = _same_json(data, data_before) and not invoice_changes and bool(row["updated_at"])
+        if unchanged and _CFP.reconcile_txn(conn, quote_no, data, source="funnel", actor=user):
+            unchanged = False                   # 簽核複查模式≠off：對帳補了簽核基準（approval 有改）⇒ 要照常寫回，不能因為空存檔而丟掉
+        if unchanged:
+            conn.commit()                       # 不是 rollback：叫料審核閘（MG.enforce）若擋了項目，它的稽核／通知列寫在這個交易裡，要留
+            conn.close()
+            now = row["updated_at"]
+        else:
+            now = save_quotation_json(conn, quote_no, data, actor=user)
+            conn.commit()
+            conn.close()
+            spawn_bg_thread(_backup_quotation, args=(quote_no,))
+            _calendar_after_payment_change(quote_no, old_items, ((data.get("caseRecord") or {}).get("payment") or {}).get("items"))
+            _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label,
+                   _case_record_diff(data_before.get("caseRecord"), data.get("caseRecord"),
+                                     requested=set(seg_keys) if body.segments is not None else None))
         for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")

@@ -485,6 +485,7 @@
             </div>
             <div class="tl-label" x-text="item.target_label || item.target_id || '—'"></div>
             <div class="tl-label" x-show="item.case_no || item.ref_no" x-text="[item.module_label, item.case_no, item.ref_no].filter(Boolean).join(' › ')"></div>
+            <div class="tl-label" x-show="changedText(item)" data-testid="audit-changed" x-text="changedText(item)"></div>
             <div class="tl-meta">
               <span class="tl-user" x-text="item.display_name || item.username || '（系統）'"></span>
               <span class="tl-time" x-text="formatAt(item.at)"></span>
@@ -565,6 +566,20 @@
         if (typeof d === 'string') { try { d = JSON.parse(d) } catch (e) { d = null } }
         const t = d && d.tag
         return t === 'informed' ? '知情核准' : t === 'self_edit_sign' ? '自改自簽' : ''
+      },
+      // U8：案件更新的稽核 detail＝`{segments:[…], fields:{分段:[欄位…]}, initial:[…]}`；畫面只列分段中文名（欄位名是內部鍵，留在 detail 供匯出／查證）。
+      // initial＝頁面替還沒有的分段補預設值（不是使用者的改動）；舊紀錄 detail 為空 ⇒ 不顯示
+      changedText(it) {
+        if (!it || it.action !== 'case.update') return ''
+        let d = it.detail
+        if (typeof d === 'string') { try { d = JSON.parse(d) } catch (e) { d = null } }
+        const segs = d && Array.isArray(d.segments) ? d.segments : []
+        const init = d && Array.isArray(d.initial) ? d.initial : []
+        if (!segs.length && !init.length) return ''
+        const L = { payment: '收款', materials: '材料', devices: '設備', contract: '合約資訊', roles: '角色', projectTimeline: '專案時程',
+                    materialOrders: '材料申請', warrantyNote: '保固備註', notes: '備註', customFields: '自訂欄位' }
+        const names = (arr) => [...new Set(arr.map(k => L[k] || '其他欄位'))].join('、')
+        return segs.length ? '改動：' + names(segs) : '初次建立預設內容'
       },
       moduleLabel(k) { const m = this.moduleOptions.find(x => x.key === k); return m ? m.label : k },
       failTitle(it) { return (it.module_label || '操作') + ' 寫入遭拒絕' + (it.target_label ? '（' + it.target_label + '）' : '') },

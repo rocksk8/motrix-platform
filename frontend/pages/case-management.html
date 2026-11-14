@@ -545,8 +545,9 @@
                   </div>
                 </div>
 
-                <button class="btn-save" @click="manualSave()" :disabled="saving">
-                  <span x-show="!saving">儲存</span>
+                <button class="btn-save" :class="{'is-clean': saveIsClean()}" data-testid="btn-save" @click="manualSave()" :disabled="saving">
+                  <span x-show="!saving && !saveIsClean()">儲存</span>
+                  <span x-show="!saving && saveIsClean()">已是最新</span>
                   <span x-show="saving">儲存中…</span>
                 </button>
               </div><!-- /row1 -->
