@@ -6,6 +6,8 @@
 - 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。
 - 行為變更（只改訊息與前端）：模組建構器的編號預覽、輸出預覽在規則／欄位未完成時先在畫面說明，不送請求；`numbering/preview`、`output/preview` 的 422 訊息補處理方式（狀態碼與判斷不變）。
 - 測試：`tests/test_line_settings_messages_2026_11_14.py`、`tests/test_custom_module_preview_messages_2026_11_14.py`、`tests/test_e2e_line_settings_precheck_2026_11_14.py`、`tests/test_e2e_builder_preview_precheck_2026_11_14.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
 
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
