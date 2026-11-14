@@ -798,10 +798,10 @@ def render_report(rec):
     if nt is not None:
         lines += ["## 通知", ""]
         if nt.get("ok"):
-            lines.append("- 站內通知、Email／LINE 與 ERP 稽核列都已交給後端處理（結果見稽核紀錄的 apply_notified）。")
+            lines.append("- 站內通知、Email／LINE 與系統稽核列都已交給後端處理（結果見稽核紀錄的 apply_notified）。")
         else:
             lines += ["- **沒有全部完成**（套用結果不受影響）：%s" % str(nt.get("detail"))[:300],
-                      "- 請人工通知最高管理者，並到 ERP 稽核頁（動作 system_update.apply）確認該列有沒有寫入。"]
+                      "- 請人工通知最高管理者，並到系統稽核頁（動作 system_update.apply）確認該列有沒有寫入。"]
             if nt.get("tail"):
                 lines += ["- 子程序輸出末段：", "", "    " + str(nt["tail"]).replace("\n", "\n    "), ""]
         lines.append("")
@@ -835,7 +835,12 @@ _NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f\u0085  ]+")
 BLOCKED_DEDUPE_SEC = 60                     # 同一個步驟、包、原因 60 秒內只留一份報告與一筆稽核（準備／預演不需要密碼，不能被連按灌爆）
 BLOCKED_KEEP = 50                           # a1_report_blocked_*.md 只留最新 50 份
+BLOCKED_GLOBAL_MAX = 20                     # 全域上限：BLOCKED_GLOBAL_SEC 內最多寫 20 份（變換包名或原因也灌不爆檔案與稽核）；超過只計數
+BLOCKED_GLOBAL_SEC = 600
 _blocked_recent = {}                        # {摘要: (時間, 報告檔名)}
+_blocked_times = {}                         # {安裝目錄: [最近寫入的時間]}
+_blocked_dropped = {}                       # {安裝目錄: 超過全域上限而沒寫的次數}
+_blocked_last_name = {}                     # {安裝目錄: 最後一份報告檔名}
 _blocked_lock = threading.Lock()
 
 
@@ -879,6 +884,14 @@ def write_blocked_report(install_root, name, step, problems, by=""):
             prev = _blocked_recent.get(key)
             if prev and now - prev[0] < BLOCKED_DEDUPE_SEC and os.path.isfile(os.path.join(d, prev[1])):
                 return prev[1]
+            ir = str(install_root)
+            recent = [t for t in _blocked_times.get(ir, []) if now - t < BLOCKED_GLOBAL_SEC]
+            if len(recent) >= BLOCKED_GLOBAL_MAX:                   # 全域上限：只計數，不寫檔、不寫稽核，回最後一份
+                _blocked_times[ir] = recent
+                _blocked_dropped[ir] = _blocked_dropped.get(ir, 0) + 1
+                return _blocked_last_name.get(ir)
+            recent.append(now)
+            _blocked_times[ir] = recent
             os.makedirs(d, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
             path = os.path.join(d, "a1_report_blocked_%s.md" % stamp)
@@ -887,6 +900,7 @@ def write_blocked_report(install_root, name, step, problems, by=""):
             fname = os.path.basename(path)
             audit_event(install_root, {"event": "apply_blocked", "step": step_s, "name": shown_name, "by": by_s, "problems": short, "report": fname})
             _blocked_recent[key] = (now, fname)
+            _blocked_last_name[ir] = fname
             if len(_blocked_recent) > 500:                          # 記憶體上限：丟掉過期的
                 for k in [k for k, v in _blocked_recent.items() if now - v[0] >= BLOCKED_DEDUPE_SEC]:
                     _blocked_recent.pop(k, None)
@@ -1001,7 +1015,7 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
     def blocked(problems):
         rec["problems"] = list(problems)
         rec["stopped_at"] = "套用前檢查，沒有開始套用"
-        audit_event(install_root, {"event": "apply_blocked", "by": who, "problems": rec["problems"]})
+        audit_event(install_root, {"event": "apply_blocked", "step": "套用前預檢", "by": who, "problems": rec["problems"]})
         return rec
 
     pre = precheck(install_root, db)
@@ -1178,7 +1192,7 @@ def notify_result(rec, install_root, run=None):
     except Exception:                                               # noqa: BLE001
         pass
     if not result["ok"]:
-        rec["problems"] = list(rec.get("problems") or []) + ["通知／ERP 稽核沒有全部完成（報告檔與本畫面是備援）：%s" % str(result["detail"])[:200]]
+        rec["problems"] = list(rec.get("problems") or []) + ["通知／系統稽核沒有全部完成（報告檔與本畫面是備援）：%s" % str(result["detail"])[:200]]
     try:
         rewrite_report(rec)                                         # 成功失敗都補「通知」一節；失敗時錯誤與子程序輸出末段都在報告裡
     except Exception:                                               # noqa: BLE001

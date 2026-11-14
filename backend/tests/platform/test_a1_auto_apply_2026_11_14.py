@@ -824,7 +824,7 @@ def test_notify_result_never_raises_and_failure_only_adds_a_problem(tmp_path):
                 lambda c, e, p: (_ for _ in ()).throw(OSError("找不到 python"))):
         rec = _rec("verify_failed")
         out = AA.notify_result(rec, str(root), run=run)
-        assert out["ok"] is False and any("通知／ERP 稽核沒有全部完成" in p for p in rec["problems"])
+        assert out["ok"] is False and any("通知／系統稽核沒有全部完成" in p for p in rec["problems"])
         assert rec["outcome"] == "verify_failed", "通知失敗不改變套用結果"
 
 
@@ -1337,6 +1337,36 @@ def test_blocked_reports_are_pruned_to_the_newest_keep(tmp_path, monkeypatch):
     names = [AA.write_blocked_report(str(tmp_path), "pkg%d" % i, "準備", ["原因 %d" % i]) for i in range(9)]
     left = sorted(f.name for f in _blocked_files(tmp_path))
     assert left == sorted(names)[-5:], (left, names)
+
+
+def test_blocked_reports_have_a_global_cap_even_when_names_and_problems_vary(tmp_path, monkeypatch):
+    """h11 S2 殘餘：每次換包名或原因就繞得過同組去重 ⇒ 全域上限（10 分鐘 20 份），超過只計數，不寫檔也不寫稽核。"""
+    root = str(tmp_path)
+    names = [AA.write_blocked_report(root, "pkg%d" % i, "準備", ["原因 %d" % i]) for i in range(AA.BLOCKED_GLOBAL_MAX)]
+    assert all(names) and len(_audit_rows(tmp_path)) == AA.BLOCKED_GLOBAL_MAX
+    for i in range(100, 130):
+        assert AA.write_blocked_report(root, "pkg%d" % i, "準備", ["原因 %d" % i]) == names[-1], "超過上限：回最後一份檔名"
+    assert len(_audit_rows(tmp_path)) == AA.BLOCKED_GLOBAL_MAX and len(_blocked_files(tmp_path)) == AA.BLOCKED_GLOBAL_MAX
+    assert AA._blocked_dropped[root] == 30, "超過的只計數"
+    other = tmp_path / "other"
+    assert AA.write_blocked_report(str(other), "pkgZ", "準備", ["x"]) and len(_blocked_files(other)) == 1, "不同安裝目錄各自計"
+
+
+def test_blocked_global_cap_window_expires(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    monkeypatch.setattr(AA, "BLOCKED_GLOBAL_MAX", 2)
+    a = AA.write_blocked_report(root, "p1", "準備", ["a"])
+    b = AA.write_blocked_report(root, "p2", "準備", ["b"])
+    assert AA.write_blocked_report(root, "p3", "準備", ["c"]) == b and len(_blocked_files(tmp_path)) == 2
+    monkeypatch.setattr(AA, "BLOCKED_GLOBAL_SEC", 0)
+    d = AA.write_blocked_report(root, "p4", "準備", ["d"])
+    assert d not in (a, b) and len(_blocked_files(tmp_path)) == 3, "視窗過了就又能寫"
+
+
+def test_apply_precheck_block_row_carries_a_step_label(tmp_path):
+    """h11 nit：套用前預檢被擋的稽核列也有 step。"""
+    src = (Path(__file__).resolve().parents[2] / "tools" / "auto_apply.py").read_text(encoding="utf-8")
+    assert '"event": "apply_blocked", "step": "套用前預檢"' in src
 
 
 def test_audit_append_reads_only_the_tail_of_a_large_log(tmp_path, monkeypatch):

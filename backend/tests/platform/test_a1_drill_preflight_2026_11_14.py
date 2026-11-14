@@ -260,7 +260,7 @@ def test_monitor_prod_connection_kills_the_tree_trips_and_aborts(tmp_path):
     assert m.summary()["prod_connections"] == 1 and m.summary()["tripped"] is True
     with pytest.raises(PF.DrillAbort) as ei:
         m.check_clean()
-    assert "已殺掉程序樹並中止" in str(ei.value)
+    assert "已殺掉程序並中止" in str(ei.value)
     log = (tmp_path / "mon.jsonl").read_text(encoding="utf-8")
     assert "TRIPPED" in log
 
@@ -351,9 +351,135 @@ def test_positive_control_passes_with_a_real_sampler_and_fails_with_a_blind_one(
 
 def test_real_sampler_tree_includes_the_given_pid_and_filters_connections_to_the_tree():
     import os
-    snap = PF.ConnectionMonitor._ps_sample([os.getpid()])
+    snap = PF.ConnectionMonitor("unused.jsonl", lambda: [])._ps_sample([os.getpid()])
     assert os.getpid() in snap["tree"]
     assert all(c["pid"] in set(snap["tree"]) for c in snap["conns"])
+
+
+# ── h11 ②：取樣失敗中止／未證明；孤兒；UDP；TCP 範圍字樣 ─────────────────────────
+
+def test_two_consecutive_sample_failures_abort_kill_and_mark_unproven_never_zero_connections(tmp_path):
+    killed = []
+    m = _mon(tmp_path, [{"tree": [100, 101], "conns": []}, RuntimeError("壞1"), RuntimeError("壞2")], killed=killed)
+    m.tick()
+    m.tick()
+    assert not m.unproven, "只失敗 1 次還不中止"
+    m.tick()
+    assert m.unproven and killed and 101 in killed[0] and 100 in killed[0], "連續 2 次失敗 ⇒ 殺（最後一次成功的程序樹）"
+    with pytest.raises(PF.DrillAbort) as ei:
+        m.check_clean()
+    assert "無法證明" in str(ei.value)
+    s = m.summary()
+    assert s["proven"] is False and s["statement"].startswith("未證明") and "0 連線" not in s["statement"]
+    assert "UNPROVEN" in (tmp_path / "mon.jsonl").read_text(encoding="utf-8")
+
+
+def test_a_success_between_failures_resets_the_consecutive_count_but_the_statement_is_still_not_a_guarantee(tmp_path):
+    m = _mon(tmp_path, [RuntimeError("a"), {"tree": [1], "conns": []}, RuntimeError("b"), {"tree": [1], "conns": []}])
+    for _ in range(4):
+        m.tick()
+    assert not m.unproven and not m.tripped
+    s = m.summary()
+    assert s["sample_errors"] == 2 and s["proven"] is False and "0 連線" not in s["statement"] and s["statement"].startswith("未證明")
+
+
+def test_statement_for_a_clean_run_names_the_scope_tcp_and_udp_limit(tmp_path):
+    m = _mon(tmp_path, [{"tree": [1], "conns": []}] * 2)
+    m.tick()
+    m.tick()
+    s = m.summary()
+    assert s["proven"] is True and "對正式機 0 連線" in s["statement"] and "TCP" in s["statement"] and "UDP" in s["statement"]
+
+
+def test_a_monitor_that_never_sampled_is_not_proven(tmp_path):
+    s = _mon(tmp_path, []).summary()
+    assert s["proven"] is False and "0 連線" not in s["statement"]
+
+
+def test_the_unproven_run_still_reports_a_seen_prod_connection(tmp_path):
+    m = _mon(tmp_path, [{"tree": [1], "conns": [_c(PROD)]}], killed=[])
+    m.tick()
+    m.errors = 1
+    st = m.summary()["statement"]
+    assert "1 次" in st and st.startswith("未證明")
+
+
+NETSTAT_UDP = """
+  TCP    127.0.0.1:6766         0.0.0.0:0              LISTENING       400
+  UDP    0.0.0.0:5353           *:*                                    300
+  UDP    127.0.0.1:6766         *:*                                    401
+  UDP    192.168.1.5:50123      @@PROD@@:53          500
+  UDP    [::]:8766              *:*                                    402
+""".replace("@@PROD@@", PROD)
+
+
+def test_udp_rows_with_a_peer_are_parsed_and_unconnected_ones_are_not_connections():
+    rows = PF.parse_netstat(NETSTAT_UDP)
+    assert [(r["proto"], r["pid"], r["remote"]) for r in rows] == [("UDP", 500, PROD)]
+    assert [b["kind"] for b in PF.violations(rows)] == ["prod"]
+
+
+def test_listening_pids_finds_the_owners_of_the_drill_ports_for_tcp_and_udp():
+    assert PF.listening_pids(NETSTAT_UDP, (6766, 8766)) == {400, 401, 402}
+    assert PF.listening_pids(NETSTAT_UDP, (9999,)) == set()
+
+
+def test_tree_script_matches_orphans_by_command_line_and_excludes_itself():
+    script = PF._TREE_PS % {"pids": "1,2", "needle": "D:\\Claude-pm\\a1-drill\\X"}
+    assert "CommandLine.IndexOf($needle" in script and "ExecutablePath.IndexOf($needle" in script
+    assert "$tree.Remove([int]$PID)" in script and "@(1,2)" in script
+
+
+# ── h11 ③：乾淨環境 ──────────────────────────────────────────────────────────
+
+def test_env_problems_flags_proxies_prod_addresses_and_non_local_motrix_urls():
+    assert PF.env_problems({"PATH": "C:\\x", "MOTRIX_TRAIN": "1", "MOTRIX_DELIVERY_ERP_URL": "http://127.0.0.1:6766"}) == []
+    assert PF.env_problems({"HTTPS_PROXY": "http://proxy.corp:3128"})
+    assert PF.env_problems({"http_proxy": "http://proxy.corp:3128"}), "小寫也算"
+    assert PF.env_problems({"MOTRIX_DELIVERY_ERP_URL": "http://%s:666" % PROD})
+    assert PF.env_problems({"MOTRIX_DELIVERY_ERP_URL": "http://erp.example.com"})
+    assert PF.env_problems({"WHATEVER": "http://172.16.10.5/x"}), "正式機網段"
+    assert PF.env_problems({"NO_PROXY": "localhost"}) == [], "NO_PROXY 單獨存在不危險（演練環境仍會清掉）"
+
+
+def test_check_fails_when_the_current_environment_points_off_machine():
+    rows = PF.check(GOOD_ROOT, FakeProbes(), environ={"MOTRIX_DELIVERY_ERP_URL": "http://%s:666" % PROD})
+    assert _failed(rows) == ["環境變數沒有指向非本機"]
+    assert _failed(PF.check(GOOD_ROOT, FakeProbes(), environ={"PATH": "x"})) == []
+
+
+def test_sanitized_env_keeps_only_the_whitelist_and_sets_loopback_urls_and_offline_pip():
+    host = {"Path": "C:\\Windows", "SystemRoot": "C:\\Windows", "MOTRIX_DELIVERY_ERP_URL": "http://%s:666" % PROD,
+            "MOTRIX_SECRET": "x", "HTTP_PROXY": "http://p:1", "HTTPS_PROXY": "http://p:1", "ALL_PROXY": "http://p:1", "NO_PROXY": "a",
+            "AWS_ACCESS_KEY_ID": "k", "TEMP": "D:\\t"}
+    env = PF.sanitized_env(environ=host)
+    assert env["MOTRIX_DELIVERY_ERP_URL"] == "http://127.0.0.1:6766"
+    assert env["Path"] == "C:\\Windows" and env["SystemRoot"] == "C:\\Windows" and env["TEMP"] == "D:\\t"
+    low = {k.upper() for k in env}
+    for gone in ("MOTRIX_SECRET", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "AWS_ACCESS_KEY_ID"):
+        assert gone not in low, gone
+    assert env["PIP_NO_INDEX"] == "1" and env["PIP_DISABLE_PIP_VERSION_CHECK"] == "1"
+    assert env["MOTRIX_EMAIL_SEND"] == "off" and env["MOTRIX_CLOUD_ARCHIVE"] == "off" and env["MOTRIX_DISABLE_SCHEDULERS"] == "1"
+    assert PF.env_problems(env) == []
+
+
+def test_sanitized_env_refuses_an_extra_that_points_off_machine():
+    with pytest.raises(PF.DrillAbort):
+        PF.sanitized_env(environ={}, extra={"MOTRIX_DELIVERY_ERP_URL": "http://%s:666" % PROD})
+
+
+# ── h11 nit：正式機網段、產品程式碼字面值（資訊）──────────────────────────────
+
+def test_static_scan_flags_the_prod_subnet_not_only_the_one_address(tmp_path):
+    d = _drill_dir(tmp_path, extra={"backend\\conf.json": '{"x": "http://172.16.10.99:1"}'})
+    assert any("172.16.10.x" in f[1] for f in PF.static_scan(d)["findings"])
+
+
+def test_code_prod_literals_lists_py_files_that_mention_the_prod_address_as_information(tmp_path):
+    (tmp_path / "helpers").mkdir()
+    (tmp_path / "helpers" / "email_notify.py").write_text('LEGACY = "http://%s:666"\n' % PROD, encoding="utf-8")
+    (tmp_path / "helpers" / "clean.py").write_text("x = 1\n", encoding="utf-8")
+    assert PF.code_prod_literals(tmp_path) == ["helpers\\email_notify.py"]
 
 
 def test_test_file_never_opens_a_connection_to_a_non_local_address():
@@ -379,3 +505,113 @@ def test_the_files_the_drill_runs_or_rewrites_are_never_on_the_allowlist():
     low = {k.lower() for k in PF.KNOWN_PRODUCT_FILES}
     for must_be_rewritten in (r"backend\tools\apply_update.ps1", r"backend\tools\rollback_update.ps1", r"backend\autostart.bat"):
         assert must_be_rewritten not in low
+
+
+# ── h11 ①：呼叫順序寫死（DrillGuard）──────────────────────────────────────────
+
+def _guard(tmp_path, monkeypatch, sampler=None, **kw):
+    monkeypatch.setattr(PF, "DRILL_BASE", str(tmp_path / "a1-drill"))
+    root = _drill_dir(tmp_path)
+    mon = PF.ConnectionMonitor(tmp_path / "g.jsonl", lambda: [100], interval=0.01,
+                               sampler=sampler or (lambda pids: {"tree": [100], "conns": [_c("127.0.0.1", pid=os_pid())]}), killer=lambda t: None)
+    return root, mon, PF.DrillGuard(root, mon, probes=FakeProbes(), environ={"PATH": "x"}, **kw)
+
+
+def os_pid():
+    import os
+    return os.getpid()
+
+
+def test_guard_ready_refuses_until_every_step_is_done_in_order(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    with pytest.raises(PF.DrillAbort) as ei:
+        g.ready("啟動演練服務")
+    assert "防線步驟沒做完" in str(ei.value)
+    for later in (g.scan, g.control, g.start):                       # 順序錯：沒做 check 就做後面的
+        with pytest.raises(PF.DrillAbort) as ei:
+            later()
+        assert "順序錯誤" in str(ei.value)
+    g.check()
+    for later in (g.control, g.start):
+        with pytest.raises(PF.DrillAbort):
+            later()
+    g.scan()
+    with pytest.raises(PF.DrillAbort):
+        g.start()                                                    # 沒做正對照
+    with pytest.raises(PF.DrillAbort):
+        g.ready()
+    g.control()
+    with pytest.raises(PF.DrillAbort):
+        g.ready()                                                    # 還沒 start
+    g.start()
+    try:
+        assert g.ready("啟動演練服務") is True
+    finally:
+        mon.stop()
+
+
+def test_guard_check_failure_blocks_everything_after_it(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.probes = FakeProbes(task=True)
+    with pytest.raises(PF.DrillAbort):
+        g.check()
+    with pytest.raises(PF.DrillAbort):
+        g.scan()
+    assert g.done == []
+
+
+def test_guard_scan_failure_blocks_control_and_start(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.check()
+    (root / "backend" / "autostart.bat").write_text('@echo off\n"py" -m uvicorn main:app --port 666 --host 0.0.0.0\n', encoding="utf-8")
+    with pytest.raises(PF.DrillAbort):
+        g.scan()
+    with pytest.raises(PF.DrillAbort):
+        g.control()
+
+
+def test_guard_blind_monitor_fails_the_control_step(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch, sampler=lambda pids: {"tree": list(pids), "conns": []})
+    g.check()
+    g.scan()
+    with pytest.raises(PF.DrillAbort) as ei:
+        g.control()
+    assert "瞎的" in str(ei.value)
+    with pytest.raises(PF.DrillAbort):
+        g.start()
+
+
+def test_guard_ready_refuses_after_the_monitor_tripped_or_became_unproven(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.check(); g.scan(); g.control(); g.start()
+    mon.stop()
+    mon.tripped = [{"kind": "prod"}]
+    with pytest.raises(PF.DrillAbort):
+        g.ready()
+    mon.tripped, mon.unproven = None, "連續 2 次取樣失敗"
+    with pytest.raises(PF.DrillAbort) as ei:
+        g.ready()
+    assert "無法證明" in str(ei.value)
+
+
+def test_guard_ready_refuses_when_a_scanned_script_is_edited_after_the_scan(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.check(); g.scan(); g.control(); g.start()
+    try:
+        assert g.ready()
+        ps1 = root / "backend" / "tools" / "rollback_update.ps1"
+        ps1.write_text(ps1.read_text(encoding="utf-8-sig") + "\n# edited\n", encoding="utf-8-sig")
+        with pytest.raises(PF.DrillAbort) as ei:
+            g.ready("跑回復腳本")
+        assert "重新掃描" in str(ei.value)
+    finally:
+        mon.stop()
+
+
+def test_guard_ready_refuses_when_the_monitor_thread_is_not_running(tmp_path, monkeypatch):
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.check(); g.scan(); g.control(); g.start()
+    mon.stop()
+    with pytest.raises(PF.DrillAbort) as ei:
+        g.ready()
+    assert "沒有在跑" in str(ei.value)

@@ -110,7 +110,50 @@ def _path_problem(root):
     return None
 
 
-def check(root, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, prod_ip=PROD_IP):
+PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "FTP_PROXY")
+# 演練程序只帶這些環境變數（其餘一律不繼承：MOTRIX_*、代理、雲端金鑰…）；PATH 是為了找得到 powershell／git／robocopy。
+ENV_WHITELIST = ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "PATH", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+                 "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432", "COMPUTERNAME", "USERNAME", "NUMBER_OF_PROCESSORS",
+                 "PROCESSOR_ARCHITECTURE", "OS", "SYSTEMDRIVE", "HOMEDRIVE", "HOMEPATH")
+_PROD_SUBNET = re.compile(r"\b172\.16\.10\.\d{1,3}\b")
+
+
+def env_problems(environ, prod_ip=PROD_IP):
+    """目前環境變數有沒有指向非本機的值（會被子行程繼承）⇒ [說明]。"""
+    out = []
+    for k, v in sorted((environ or {}).items()):
+        ku, vs = str(k).upper(), str(v)
+        if prod_ip in vs or _PROD_SUBNET.search(vs):
+            out.append("環境變數 %s 含正式機網段位址" % k)
+            continue
+        if ku in PROXY_VARS and ku != "NO_PROXY" and vs.strip():
+            out.append("環境變數 %s 設了代理（%s）：連線可能被繞出去" % (k, vs[:60]))
+            continue
+        if ku.startswith("MOTRIX_"):
+            for m in _URL.finditer(vs):
+                if m.group(2).lower() not in _LOOPBACK_HOSTS or m.group(1):
+                    out.append("環境變數 %s 指向非本機位址：%s" % (k, m.group(0)[:80]))
+    return out
+
+
+def sanitized_env(erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None, extra=None):
+    """演練程序的乾淨環境：只帶白名單變數，再由這裡明確設定 127.0.0.1 的位址與離線 pip；`extra` 最後蓋上（也不得帶非本機位址）。"""
+    src = {str(k).upper(): (str(k), str(v)) for k, v in (os.environ if environ is None else environ).items()}
+    env = {src[w][0]: src[w][1] for w in ENV_WHITELIST if w in src}
+    env.update({
+        "MOTRIX_DELIVERY_ERP_URL": "http://127.0.0.1:%d" % erp_port,
+        "MOTRIX_TRAIN": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
+        "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "MOTRIX_DISABLE_SCHEDULERS": "1", "MOTRIX_CLOUD_ARCHIVE": "off", "MOTRIX_EMAIL_SEND": "off",
+    })
+    env.update(extra or {})
+    bad = env_problems(env)
+    if bad:
+        raise DrillAbort("演練環境變數不乾淨：" + "；".join(bad))
+    return env
+
+
+def check(root, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, prod_ip=PROD_IP, environ=None):
     """⇒ [(項目, 通過 True／False, 說明)]。每一項各自抓例外：查不出來 ＝ 不通過。不連線任何非本機位址。"""
     pr = probes or Probes()
     rows = []
@@ -144,6 +187,11 @@ def check(root, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, prod_ip=PRO
         mine = pr.local_ips()
         return prod_ip not in mine, ("本機不是正式機（沒有正式機的 IP）" if prod_ip not in mine else "本機就是正式機的 IP ⇒ 絕對不能在這台演練")
     run("本機不是正式機", not_prod_host)
+
+    def env_clean():
+        bad = env_problems(os.environ if environ is None else environ, prod_ip)
+        return (not bad), ("目前環境變數沒有指向非本機的值（演練程序另用乾淨環境啟動）" if not bad else "；".join(bad))
+    run("環境變數沒有指向非本機", env_clean)
     return rows
 
 
@@ -186,6 +234,8 @@ def _scan_text(rel, text, prod_ip, extra_patterns):
     low = text.lower()
     if prod_ip in text:
         out.append((rel, "出現正式機位址"))
+    elif _PROD_SUBNET.search(text):
+        out.append((rel, "出現正式機網段位址（172.16.10.x）"))
     if "v9.0" in low:
         out.append((rel, "出現 V9.0（正式機路徑）"))
     for pat in extra_patterns or ():
@@ -231,6 +281,23 @@ def static_scan(root, erp_port=ERP_PORT, prod_ip=PROD_IP, extra_patterns=(), das
     if n == 0:
         findings.append(("", "演練目錄裡沒有任何設定檔可掃，無法確認（目錄是否建好？）"))
     return {"files": n, "findings": findings, "allowed_product_files": allowed}
+
+
+def code_prod_literals(root, prod_ip=PROD_IP):
+    """資訊（不影響放行）：產品程式碼（.py／.js）裡寫著正式機位址字面值的檔案。這些是產品本來就有的外送路徑
+    （舊版 Email 連結位址、CORS、儀表板的 PROD_HOST…），演練把 Email／雲端／排程全關、位址只准本機，並由連線監看器兜底。"""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d.lower() not in (SKIP_DIRS - {"tests"}) | {"site-packages", "node_modules"}]
+        for fn in filenames:
+            if fn.lower().endswith((".py", ".js")):
+                p = Path(dirpath) / fn
+                try:
+                    if prod_ip in p.read_text(encoding="utf-8", errors="replace"):
+                        out.append(str(p.relative_to(root)))
+                except OSError:
+                    pass
+    return sorted(out)
 
 
 def _ps1_findings(root, erp_port):
@@ -282,34 +349,66 @@ def require_static_ok(root, **kw):
 
 # ── 第 3 道：動態監看 ───────────────────────────────────────────────────────
 
+# 程序樹＝根程序（編排器自己、它起的程序、聽著演練埠的程序）＋所有子孫＋「命令列或執行檔路徑含演練目錄」的程序
+# （父程序死了、被重新掛到別處的孤兒子行程也抓得到；`$PID`＝取樣用的這個 powershell 自己，不算）。
 _TREE_PS = r"""
 $roots = @(%(pids)s)
-$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId
+$needle = '%(needle)s'
+$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine, ExecutablePath
 $tree = New-Object 'System.Collections.Generic.HashSet[int]'
 foreach ($r in $roots) { [void]$tree.Add([int]$r) }
+if ($needle.Length -gt 0) { foreach ($p in $all) { if (($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) { [void]$tree.Add([int]$p.ProcessId) } } }
 $grew = $true
 while ($grew) { $grew = $false; foreach ($p in $all) { if ($tree.Contains([int]$p.ParentProcessId) -and -not $tree.Contains([int]$p.ProcessId)) { [void]$tree.Add([int]$p.ProcessId); $grew = $true } } }
+[void]$tree.Remove([int]$PID)
 ConvertTo-Json -Compress @($tree)
 """
 # 連線清單用 `netstat -ano`：這台機器上 Get-NetTCPConnection 什麼都查不到（CIM MSFT_NetTCPConnection 是空的），
 # 用它監看會永遠「0 連線」＝假綠燈；netstat 正常。所以取樣前一定先做正對照（見 positive_control）。
 _NETSTAT_LINE = re.compile(r"^\s*TCP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s*$", re.I)
+_NETSTAT_UDP = re.compile(r"^\s*UDP\s+(\S+)\s+(\S+)\s+(\d+)\s*$", re.I)
+
+
+def _split_hostport(s):
+    host, _sep, port = s.rpartition(":")
+    return host.strip("[]").split("%")[0], (int(port) if port.isdigit() else 0)          # fe80::1%12
 
 
 def parse_netstat(text):
-    """`netstat -ano` 輸出 ⇒ [{"pid", "local", "remote", "port", "state"}]（只含 TCP、不含 LISTENING）。"""
+    """`netstat -ano` 輸出 ⇒ [{"pid", "local", "remote", "port", "state", "proto"}]：TCP（不含 LISTENING）＋
+    已指定對端的 UDP（netstat 只列得出「綁定的位址」與「connect() 過的對端」；沒 connect 就 sendto 的 UDP 封包看不到——限制，報告會寫）。"""
     out = []
     for line in text.splitlines():
         m = _NETSTAT_LINE.match(line)
-        if not m:
+        if m:
+            local, remote, state, pid = m.groups()
+            if state.upper() == "LISTENING":
+                continue
+            host, port = _split_hostport(remote)
+            out.append({"pid": int(pid), "local": local, "remote": host, "port": port, "state": state, "proto": "TCP"})
             continue
-        local, remote, state, pid = m.groups()
-        if state.upper() == "LISTENING":
+        u = _NETSTAT_UDP.match(line)
+        if u:
+            local, remote, pid = u.groups()
+            if remote.strip() in ("*:*", "*"):
+                continue
+            host, port = _split_hostport(remote)
+            out.append({"pid": int(pid), "local": local, "remote": host, "port": port, "state": "UDP", "proto": "UDP"})
+    return out
+
+
+def listening_pids(text, ports):
+    """`netstat -ano` ⇒ 在聽這些埠的程序 pid 集合（TCP LISTENING；UDP 綁定）。演練埠的擁有者一律算演練程序。"""
+    ports = {int(p) for p in ports}
+    out = set()
+    for line in text.splitlines():
+        m = _NETSTAT_LINE.match(line)
+        if m and m.group(3).upper() == "LISTENING" and _split_hostport(m.group(1))[1] in ports:
+            out.add(int(m.group(4)))
             continue
-        host, _sep, port = remote.rpartition(":")
-        host = host.strip("[]")
-        host = host.split("%")[0]                      # fe80::1%12
-        out.append({"pid": int(pid), "local": local, "remote": host, "port": int(port) if port.isdigit() else 0, "state": state})
+        u = _NETSTAT_UDP.match(line)
+        if u and _split_hostport(u.group(1))[1] in ports:
+            out.add(int(u.group(3)))
     return out
 
 
@@ -331,72 +430,93 @@ def violations(conns, prod_ip=PROD_IP):
 
 
 class ConnectionMonitor:
-    """每 `interval` 秒查演練程序樹的 TCP 連線；非本機連線 ⇒ 殺程序樹、記下、`tripped`。紀錄每次取樣都落檔（jsonl）。
-    `sampler(pids)` 預設用 PowerShell 取程序樹＋`netstat -ano`；測試換假的。**開跑前先呼叫 `positive_control()`。**"""
+    """每 `interval` 秒查演練程序的連線（TCP，加上已指定對端的 UDP）；非本機連線 ⇒ 殺程序、記下、`tripped`。紀錄每次取樣都落檔（jsonl）。
 
-    def __init__(self, log_path, roots_fn, interval=2.0, sampler=None, killer=None, prod_ip=PROD_IP, clock=time.time):
+    演練程序＝`roots_fn()` 給的根程序（編排器自己與它起的程序）＋聽著演練埠的程序＋以上所有子孫＋命令列／執行檔路徑含演練目錄的程序（孤兒也抓）。
+    取樣失敗：連續 `MAX_CONSECUTIVE_ERRORS` 次 ⇒ 殺程序、演練中止、報告標「未證明」；只要有失敗過，報告就不會印「N 連線」的保證句。
+    `sampler(roots)` 預設用 PowerShell 取程序集合＋`netstat -ano`；測試換假的。**開跑前先呼叫 `positive_control()`。**"""
+
+    MAX_CONSECUTIVE_ERRORS = 2
+
+    def __init__(self, log_path, roots_fn, interval=2.0, sampler=None, killer=None, prod_ip=PROD_IP, clock=time.time,
+                 drill_root=None, ports=(ERP_PORT, DASH_PORT)):
         self.log_path, self.roots_fn, self.interval = Path(log_path), roots_fn, interval
+        self.drill_root, self.ports = str(drill_root or ""), tuple(ports)
         self.sampler, self.killer, self.prod_ip, self.clock = sampler or self._ps_sample, killer or self._ps_kill, prod_ip, clock
-        self.ticks = self.errors = self.prod_hits = self.other_hits = self.max_conns = 0
+        self.ticks = self.errors = self.consecutive_errors = self.prod_hits = self.other_hits = self.max_conns = 0
         self.tripped = None
+        self.unproven = None                      # 字串：為什麼「沒有證明」
         self.tree_seen = set()
+        self._last_tree = []
         self._stop = False
         self._thread = None
+        self._control_done = False
 
-    @staticmethod
-    def _ps_sample(pids):
-        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in pids) or "0"}
+    def _ps_sample(self, pids):
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        net = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
+        if net.returncode != 0 or "TCP" not in net.stdout:
+            raise RuntimeError("監看取樣（netstat）失敗 rc=%s" % net.returncode)
+        roots = set(int(p) for p in pids) | listening_pids(net.stdout, self.ports)
+        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in sorted(roots)) or "0", "needle": self.drill_root.replace("'", "''")}
         r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
         if r.returncode != 0 or not r.stdout.strip():
             raise RuntimeError("監看取樣（程序樹）失敗 rc=%s %s" % (r.returncode, (r.stderr or "")[:120]))
         tree = json.loads(r.stdout.strip().splitlines()[-1])
         tree = [tree] if isinstance(tree, int) else [int(x) for x in tree]
-        net = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
-        if net.returncode != 0 or "TCP" not in net.stdout:
-            raise RuntimeError("監看取樣（netstat）失敗 rc=%s" % net.returncode)
         mine = set(tree)
         return {"tree": tree, "conns": [c for c in parse_netstat(net.stdout) if c["pid"] in mine]}
 
     @staticmethod
     def _ps_kill(tree):
+        me = os.getpid()
         for pid in sorted(tree, reverse=True):
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if int(pid) != me:                                              # 不殺編排器自己（它要寫報告）
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def _log(self, rec):
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
+    def _kill(self, tree):
+        try:
+            self.killer(tree)
+        except Exception as e:                                              # noqa: BLE001 — 殺不掉也要記
+            self._log({"t": round(self.clock(), 1), "kill_error": str(e)[:200]})
+
     def tick(self):
-        """取樣一次。⇒ 違規清單（空＝乾淨）。取樣失敗算一次錯誤並記下（連續失敗由呼叫端看 errors）。"""
+        """取樣一次。⇒ 違規清單（空＝乾淨）。取樣失敗記下；連續失敗達上限 ⇒ 殺程序並標未證明（`unproven`）。"""
         self.ticks += 1
         roots = list(self.roots_fn())
         try:
             snap = self.sampler(roots)
         except Exception as e:                                              # noqa: BLE001
             self.errors += 1
-            self._log({"t": round(self.clock(), 1), "error": str(e)[:200]})
+            self.consecutive_errors += 1
+            self._log({"t": round(self.clock(), 1), "error": str(e)[:200], "consecutive": self.consecutive_errors})
+            if self.consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS and not (self.unproven or self.tripped):
+                self.unproven = "連續 %d 次取樣失敗（最後一次：%s）⇒ 無法證明沒有連線，已中止演練" % (self.consecutive_errors, str(e)[:120])
+                self._kill(list(set(self._last_tree) | set(int(r) for r in roots)))
+                self._log({"t": round(self.clock(), 1), "event": "UNPROVEN", "reason": self.unproven})
             return []
-        self.tree_seen |= set(snap.get("tree") or [])
+        self.consecutive_errors = 0
+        self._last_tree = list(snap.get("tree") or [])
+        self.tree_seen |= set(self._last_tree)
         conns = snap.get("conns") or []
         self.max_conns = max(self.max_conns, len(conns))
         bad = violations(conns, self.prod_ip)
         self.prod_hits += sum(1 for b in bad if b["kind"] == "prod")
         self.other_hits += sum(1 for b in bad if b["kind"] != "prod")
-        self._log({"t": round(self.clock(), 1), "tree": len(snap.get("tree") or []), "conns": len(conns), "violations": bad})
+        self._log({"t": round(self.clock(), 1), "tree": len(self._last_tree), "conns": len(conns), "violations": bad})
         if bad and not self.tripped:
             self.tripped = bad
-            try:
-                self.killer(snap.get("tree") or roots)
-            except Exception as e:                                          # noqa: BLE001 — 殺不掉也要記
-                self._log({"t": round(self.clock(), 1), "kill_error": str(e)[:200]})
+            self._kill(self._last_tree or roots)
             self._log({"t": round(self.clock(), 1), "event": "TRIPPED", "violations": bad})
         return bad
 
     def positive_control(self):
         """演練開始前必做：本行程自己開一條本機連線，取樣器必須看得到它；看不到＝監看器是瞎的（這台機器的 Get-NetTCPConnection 就是），
         不能拿來證明「0 連線」⇒ DrillAbort。⇒ True。"""
-        import os
         srv = socket.socket()
         srv.bind(("127.0.0.1", 0))
         srv.listen(1)
@@ -410,13 +530,22 @@ class ConnectionMonitor:
             srv.close()
         if not any(is_loopback_addr(c.get("remote")) for c in (snap.get("conns") or [])):
             raise DrillAbort("連線監看器的正對照沒過：看不到本行程剛開的一條本機連線，這個監看器是瞎的，不能用來證明沒有連到正式機")
+        self._control_done = True
         return True
+
+    @property
+    def control_done(self):
+        return self._control_done
+
+    @property
+    def running(self):
+        return bool(self._thread and self._thread.is_alive() and not self._stop)
 
     def start(self):
         import threading
 
         def loop():
-            while not self._stop and not self.tripped:
+            while not self._stop and not self.tripped and not self.unproven:
                 self.tick()
                 end = self.clock() + self.interval
                 while not self._stop and self.clock() < end:
@@ -431,17 +560,100 @@ class ConnectionMonitor:
             self._thread.join(timeout=15)
 
     def check_clean(self):
-        """演練各步驟之間呼叫：被中止就丟 DrillAbort。"""
+        """演練各步驟之間呼叫：被中止（連線違規、或取樣連續失敗＝未證明）就丟 DrillAbort。"""
         if self.tripped:
-            raise DrillAbort("監看器發現演練程序連往非本機位址，已殺掉程序樹並中止：%s" % json.dumps(self.tripped, ensure_ascii=False))
+            raise DrillAbort("監看器發現演練程序連往非本機位址，已殺掉程序並中止：%s" % json.dumps(self.tripped, ensure_ascii=False))
+        if self.unproven:
+            raise DrillAbort("監看器無法證明沒有連到正式機：%s" % self.unproven)
+
+    @property
+    def proven(self):
+        """整段演練「有證明」＝至少取樣過、從沒失敗、沒中止。"""
+        return self.ticks > 0 and self.errors == 0 and not self.tripped and not self.unproven
 
     def summary(self):
         s = {"ticks": self.ticks, "sample_errors": self.errors, "max_connections_seen": self.max_conns,
              "prod_connections": self.prod_hits, "non_loopback_connections": self.other_hits, "processes_seen": len(self.tree_seen),
-             "interval_seconds": self.interval, "tripped": bool(self.tripped), "log": str(self.log_path)}
-        s["statement"] = ("整段演練對正式機 %d 連線；非本機連線 %d 次（共取樣 %d 次，每 %g 秒一次，取樣失敗 %d 次；取樣有間隔，極短暫連線可能漏看，"
-                          "主要保證是靜態掃描與 ERP 位址只准本機）" % (self.prod_hits, self.other_hits, self.ticks, self.interval, self.errors))
+             "interval_seconds": self.interval, "tripped": bool(self.tripped), "proven": self.proven,
+             "unproven_reason": self.unproven, "log": str(self.log_path)}
+        limits = ("範圍：TCP 連線與已指定對端的 UDP；沒 connect 就 sendto 的 UDP 封包、ICMP 看不到。取樣有間隔，極短暫連線可能漏看，"
+                  "主要保證是靜態掃描與位址只准本機。")
+        if self.proven:
+            s["statement"] = "整段演練對正式機 %d 連線（非本機連線 %d 次；共取樣 %d 次，每 %g 秒一次）。%s" % (
+                self.prod_hits, self.other_hits, self.ticks, self.interval, limits)
+        else:
+            why = self.unproven or ("取樣失敗 %d 次" % self.errors if self.errors else "沒有取樣過")
+            seen = ("已取樣到對正式機的連線 %d 次" % self.prod_hits) if self.prod_hits else "已取樣的結果沒看到對正式機的連線"
+            s["statement"] = "未證明：%s（共取樣 %d 次，失敗 %d 次）；%s，但失敗的空檔無法確認。%s" % (why, self.ticks, self.errors, seen, limits)
         return s
+
+
+class DrillGuard:
+    """呼叫順序寫死（PM 2026-11-14）：`check`（require_ok）→ `scan`（require_static_ok）→ `control`（監看器正對照）→ `start`（啟動監看）。
+    之後每次啟動／驅動任何演練程序之前呼叫 `ready(動作)`：少了任一步、監看器沒在跑、已中止、或掃過的三個要執行的腳本之後被改動 ⇒ DrillAbort（不開跑）。"""
+
+    GUARDED = (r"backend\tools\apply_update.ps1", r"backend\tools\rollback_update.ps1", r"backend\autostart.bat")
+    ORDER = ("check", "scan", "control", "start")
+
+    def __init__(self, root, monitor, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None):
+        self.root, self.monitor, self.probes = Path(root), monitor, probes
+        self.erp_port, self.dash_port, self.environ = erp_port, dash_port, environ
+        self.done = []
+        self.rows = []
+        self.scan_result = None
+        self._fp = None
+
+    def _need(self, step):
+        i = self.ORDER.index(step)
+        missing = [s for s in self.ORDER[:i] if s not in self.done]
+        if missing:
+            raise DrillAbort("演練步驟順序錯誤：做「%s」之前必須先完成 %s（沒做就不開跑）" % (step, "、".join(missing)))
+
+    def _fingerprint(self):
+        import hashlib
+        h = hashlib.sha256()
+        for rel in self.GUARDED:
+            p = self.root / rel
+            h.update(rel.encode("utf-8") + b"\0")
+            h.update(p.read_bytes() if p.is_file() else b"<missing>")
+        return h.hexdigest()
+
+    def check(self):
+        self.rows = require_ok(self.root, self.probes, erp_port=self.erp_port, dash_port=self.dash_port, environ=self.environ)
+        self.done = ["check"]
+        return self.rows
+
+    def scan(self):
+        self._need("scan")
+        self.scan_result = require_static_ok(self.root, erp_port=self.erp_port, dash_port=self.dash_port)
+        self._fp = self._fingerprint()
+        self.done = ["check", "scan"]
+        return self.scan_result
+
+    def control(self):
+        self._need("control")
+        self.monitor.positive_control()
+        self.done = ["check", "scan", "control"]
+        return True
+
+    def start(self):
+        self._need("start")
+        if not self.monitor.control_done:
+            raise DrillAbort("監看器沒做過正對照，不啟動")
+        self.monitor.start()
+        self.done = list(self.ORDER)
+        return self
+
+    def ready(self, what="啟動演練程序"):
+        """每個會啟動或驅動演練程序的動作之前呼叫。"""
+        if self.done != list(self.ORDER):
+            raise DrillAbort("不可以%s：防線步驟沒做完（已做：%s；要求順序：%s）" % (what, "、".join(self.done) or "無", "→".join(self.ORDER)))
+        if not self.monitor.running and not (self.monitor.tripped or self.monitor.unproven):
+            raise DrillAbort("不可以%s：連線監看器沒有在跑" % what)
+        self.monitor.check_clean()
+        if self._fingerprint() != self._fp:
+            raise DrillAbort("不可以%s：靜態掃描之後，套用／回復腳本或 autostart.bat 被改動了，必須重新掃描" % what)
+        return True
 
 
 def main(argv=None):
