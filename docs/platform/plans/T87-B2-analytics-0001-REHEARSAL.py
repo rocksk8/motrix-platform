@@ -3,13 +3,17 @@
 
 用法（只對副本；不要指向正式 DB）：
     python -B T87-B2-analytics-0001-REHEARSAL.py <副本.db> <0001_custom_reports.py 路徑> check      # 唯讀：預演前後各跑一次
-    python -B T87-B2-analytics-0001-REHEARSAL.py <副本.db> <0001_custom_reports.py 路徑> apply      # 在副本上執行（含寫版號）
-    python -B T87-B2-analytics-0001-REHEARSAL.py <副本.db> <0001_custom_reports.py 路徑> rollback   # 回滾演練（DROP 兩表＋版號回 0）
+    python -B T87-B2-analytics-0001-REHEARSAL.py <副本.db> <0001_custom_reports.py 路徑> apply --i-am-a-copy      # 在副本上執行（含寫版號）
+    python -B T87-B2-analytics-0001-REHEARSAL.py <副本.db> <0001_custom_reports.py 路徑> rollback --i-am-a-copy   # 回滾演練（DROP 兩表＋版號回 0）
+
+防呆（只有 check 不受限）：apply／rollback 在下列任一情況一律拒絕、印原因、exit 3——
+  ① 沒帶 --i-am-a-copy；② 目標檔名是 motrix_erp.db；③ 目標的絕對路徑（解析後）落在任何名為 backend 的目錄底下。
 
 `apply` 做的事和 core/migrations.py 的 run_all 一樣：SAVEPOINT → up(conn) → RELEASE → 寫 module_schema_versions(analytics,1)。
 `check` 以 mode=ro 開啟，不寫任何東西。
 """
 import importlib.util
+import os
 import sqlite3
 import sys
 import time
@@ -88,17 +92,33 @@ def rollback(db):
         c.close()
 
 
+def refuse_reason(db, flag_given):
+    """apply／rollback 的防呆：回拒絕原因（None＝可以執行）。"""
+    p = os.path.realpath(os.path.abspath(db))
+    if not flag_given:
+        return "沒有帶 --i-am-a-copy：這支腳本的 apply／rollback 只准對備份副本執行。"
+    if os.path.basename(p).lower() == "motrix_erp.db":
+        return "目標檔名是 motrix_erp.db（正式 DB 的檔名）：拒絕。請先複製成別的檔名、放在 backend 目錄之外。"
+    if any(part.lower() == "backend" for part in p.replace("\\", "/").split("/")):
+        return "目標路徑 %s 落在 backend 目錄底下：拒絕。請把副本放在 backend 目錄之外。" % p
+    return None
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
+    args = [a for a in sys.argv[1:] if a != "--i-am-a-copy"]
+    flag = len(args) != len(sys.argv) - 1
+    if len(args) < 3:
         print(__doc__)
         sys.exit(2)
-    db, mig, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+    db, mig, cmd = args[0], args[1], args[2]
     if cmd == "check":
         check(db)
-    elif cmd == "apply":
-        sys.exit(apply(db, mig))
-    elif cmd == "rollback":
-        sys.exit(rollback(db))
+    elif cmd in ("apply", "rollback"):
+        why = refuse_reason(db, flag)
+        if why:
+            print("拒絕執行 %s：%s" % (cmd, why))
+            sys.exit(3)
+        sys.exit(apply(db, mig) if cmd == "apply" else rollback(db))
     else:
         print(__doc__)
         sys.exit(2)
