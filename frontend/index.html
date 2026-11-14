@@ -342,6 +342,7 @@
     .h-sec  { padding-block: clamp(30px, 3.6vw, 52px); position: relative; }
     .h-sec > .h-wrap { z-index: 1; }
     .h-sec--band { background: #F0EEE9; }
+    .h-sec--tight { padding-block: clamp(22px, 2.6vw, 34px); }
 
     /* 2026-09-14：移除官網的 ASML 式直向網格線（原 .h-rails）。
        官網那裡是大片留白的行銷版面，格線用來撐出節奏；「最近的變動」是
@@ -411,6 +412,15 @@
     .h-mine__empty { background: #fff; border: 1px dashed var(--border-light); border-radius: 10px; padding: 18px 20px; }
     .h-mine__empty p { margin: 0 0 10px; font-size: 14px; }
     .h-mine__acts { display: flex; gap: 10px; flex-wrap: wrap; }
+    /* 常用捷徑（T86 U12）：依角色排序、依模組權限過濾；沒權限的不出現。只用既有 token */
+    .h-short { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+    .h-short__a { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 12px 14px; background: #fff; border: 1px solid var(--border-light); border-radius: 10px; text-decoration: none; color: inherit; transition: .2s var(--v4-ease); }
+    .h-short__a:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgba(20,24,30,.07); }
+    .h-short__t { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14.5px; font-weight: 700; color: var(--text-primary); }
+    .h-short__n { font-family: var(--font-en); font-size: 12px; font-weight: 600; min-width: 20px; text-align: center; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; }
+    .h-short__p { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .h-short__a:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (max-width: 640px) { .h-short { grid-template-columns: repeat(2, minmax(0, 1fr)); } .h-short__p { white-space: normal; } }
     .h-band { background: #2A2A2A; color: #F5F4F0; }
     .h-band__g { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
     .h-band__c { display: block; padding: clamp(20px, 2.6vw, 30px) clamp(18px, 2.2vw, 28px); border-left: 1px solid rgba(245,244,240,.14); text-decoration: none; color: inherit; transition: background .22s var(--v4-ease); }
@@ -515,6 +525,27 @@
             <div><span>進行中案件</span><b x-text="stats.activeCases + ' 件'"></b></div>
             <div><span>最後更新</span><b x-text="now"></b></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 常用捷徑（T86 U12，依正式機使用數據）：依角色排序、依模組權限過濾（規則同側欄：最高管理者全開，其餘看模組清單）；
+         一個都沒有 ⇒ 整區不出現。「待我簽核」的件數沿用下方同一份 stats.waitingForMe，讀不到就不顯示數字。 -->
+    <section class="h-sec h-sec--tight" data-testid="home-shortcuts" x-show="shortcuts.length > 0" x-cloak>
+      <div class="h-wrap">
+        <div class="h-head">
+          <div>
+            <h2 class="h-title">常用捷徑</h2>
+            <p class="h-sub">依您的角色與權限列出；未授權的項目不會顯示。</p>
+          </div>
+        </div>
+        <div class="h-short">
+          <template x-for="sc in shortcuts" :key="sc.key">
+            <a class="h-short__a" :href="sc.href" :data-testid="'home-shortcut-' + sc.key">
+              <span class="h-short__t"><span x-text="sc.label"></span><span class="h-short__n" x-show="sc.key === 'approval' && mineLoaded && stats.waitingForMe > 0" x-text="stats.waitingForMe"></span></span>
+              <span class="h-short__p" x-text="sc.hint"></span>
+            </a>
+          </template>
         </div>
       </div>
     </section>
@@ -1002,6 +1033,30 @@ feedCount(key) {
       // 後端的 stats 回應帶 financeVisible：false＝這個帳號不再取得財務卡片（資料被保留，不是沒有）；沒有這個鍵（舊 API）＝維持原本行為
       get financeVisible() { return this.stats.financeVisible !== false },
       get showReceivables() { return this.canFinance && this.financeVisible },
+      //: 常用捷徑（T86 U12）：module = 側欄同一組模組 key（sidebar.js `_FILE_MODULE`）；最高管理者全開、其餘看 session.modules。
+      //  順序依角色（正式機使用數據：業務＝報價單／業務開發／案件；管理者＝簽核／案件／報價；財務＝簽核／報表；工程師＝案件／每日工作），
+      //  沒列到的角色用預設順序。沒權限的整個不出現。
+      _shortcutDefs: [
+        { key: 'approval',  label: '待我簽核',   hint: '等待您簽核的單據',     href: 'pages/approval-queue.html',  module: 'quotation' },
+        { key: 'case',      label: '案件管理',   hint: '進行中的案件與進度',     href: 'pages/case-management.html', module: 'case_manage' },
+        { key: 'quote-new', label: '新增報價單', hint: '建立新的報價單',       href: 'pages/quotation-form.html',  module: 'quotation' },
+        { key: 'quote-list', label: '報價單清單', hint: '查詢與追蹤報價單',      href: 'pages/quotations.html',      module: 'quotation' },
+        { key: 'dev-crm',   label: '業務開發',   hint: '商機與開發記錄',         href: 'pages/dev-crm.html',         module: 'dev_crm' },
+        { key: 'daily',     label: '今日工作事項', hint: '當日工作事項的登錄與查看',         href: 'pages/daily-tasks.html',     module: 'daily_task' },
+        { key: 'reports',   label: '報表',       hint: '營運與財務報表',         href: 'pages/reports-hub.html',     module: 'reports' },
+      ],
+      _shortcutOrder: {
+        sales:    ['quote-new', 'dev-crm', 'case', 'quote-list', 'approval', 'daily'],
+        engineer: ['case', 'daily'],
+        finance:  ['approval', 'reports', 'case', 'quote-list'],
+      },
+      get shortcuts() {
+        const r = this.session.role, m = this.session.modules || []
+        const has = k => r === 'superadmin' || m.includes(k)
+        const order = this._shortcutOrder[r] || ['approval', 'case', 'quote-list', 'quote-new', 'dev-crm', 'daily', 'reports']
+        const rank = k => { const i = order.indexOf(k); return i < 0 ? 99 : i }
+        return this._shortcutDefs.filter(d => has(d.module)).sort((a, b) => rank(a.key) - rank(b.key)).slice(0, 6)
+      },
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('finance')
