@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（fix/denied-pages-role-label-t86-h9；T86 複測 F2／F4）
+- 修正（只改畫面）：業務、財務直接開管理員網址（設定中心、職責角色）被 403 擋下後，頁面不再丟未捕捉的錯誤（設定中心找不到區塊時直接以共用拒絕畫面為準；職責矩陣掛載失敗改走 onError、不再 unhandled rejection）；拒絕說明照常顯示。
+- 修正（只改畫面）：我的帳號頁的角色顯示中文名稱（載入 `static/role-label.js`，與首頁同一來源），不再印 superadmin／sales 這種內部代碼。
+- 測試：新增 `tests/test_e2e_denied_pages_and_role_label_2026_11_14.py`（業務／財務 × 2 頁 0 pageerror 且拒絕說明可見；3 種角色中文名稱）。
+
 ## 1.168 — 2026-11-14（feat/t86-usage-h1；T86 正式機用量優化 U4／U5／U7／U11）
 - 前端（行為不變，只補空值防護）：通知設定頁 LINE 用量區塊、版面編輯器（`static/layout-editor.js`）在資料載入前不再讀 null 欄位（Alpine 會評估被 `x-show` 隱藏元素內的運算式 ⇒ 之前在最高管理者畫面出 pageerror）；用量讀取失敗時顯示「尚無用量資料」而非卡在「讀取中…」。（feat h9 `fix/home-widgets-null-t86-h9-r2`）
 - 內部（無欄位／權限語意變更）：

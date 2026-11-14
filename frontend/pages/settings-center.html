@@ -740,8 +740,10 @@
         return route()
       }).catch(function (e) {
         var msg = e.status === 403 || e.status === 401 ? '只有最高管理者可以使用設定中心。' : '讀取失敗：' + e.message
-        $('sc-v-overview').hidden = false
-        $('sc-v-overview').innerHTML = '<div class="sc-err" data-testid="sc-boot-error">' + esc(msg) + '</div>'
+        var ov = $('sc-v-overview')          // 沒有權限時共用的守門畫面可能已經換掉頁面內容：找不到就由守門畫面的說明為準
+        if (!ov) return
+        ov.hidden = false
+        ov.innerHTML = '<div class="sc-err" data-testid="sc-boot-error">' + esc(msg) + '</div>'
       })
     }
     window.__settingsCenter = { state: function () { return ST }, matrix: function () { return mx } }
