@@ -213,8 +213,8 @@ def test_dev_case_converted_calendar_text_follows_type(client, monkeypatch):
     assert "報價單專案{x}" in est and "客{戶}" in est, "案名／客戶名（含大括號）原樣保留、不被模板處理吃掉"
     _est(est.replace("報價單專案{x}", ""))
     quo = got[1][0] + got[1][1]
-    assert got[1][0] == "業務開發案件轉建報價單 — 報價單專案{x}（客{戶}）"
-    assert got[1][1] == "業務開發案件「報價單專案{x}」已轉建為報價單。\n客戶：客{戶}\n報價單號：" + QUO_NO, "報價單：逐字不變"
+    assert got[1][0] == "商機轉建報價單 — 報價單專案{x}（客{戶}）"
+    assert got[1][1] == "商機「報價單專案{x}」已轉建為報價單。\n客戶：客{戶}\n報價單號：" + QUO_NO, "報價單：逐字不變"
     assert "估價單" not in quo
 
 

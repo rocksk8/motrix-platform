@@ -3,6 +3,7 @@
 伺服器端只多了兩個欄位（`/api/mail-types/receivable` 的 category／lowRisk，與 `/mine` 同一條規則）；其餘是靜態守門：
 鍵值不變（存檔仍送 notification_muted）、矩陣掛得上、mixin 不可用 getter（spread 會當場求值）。"""
 import re
+from core import source_tree
 from pathlib import Path
 
 _MAKE_USER_DEFAULT_ROLE = "superadmin"
@@ -40,7 +41,7 @@ def test_receivable_still_requires_a_superadmin(client, make_user):
 
 
 def _page():
-    return (_FE / "pages" / "users.html").read_text(encoding="utf-8")
+    return source_tree.page_file("users.html").read_text(encoding="utf-8")
 
 
 def _mixin():

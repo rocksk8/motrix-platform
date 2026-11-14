@@ -8,6 +8,20 @@
   - **U7 首頁**：開頁改用既有的 `GET /api/dashboard/bundle` 一趟取回儀表板六段（某段 null／整包失敗 ⇒ 該段退回原端點）；開頁第一趟簽核數吃 bootstrap（`approvalCount` 供應次數 2→3）；`GET /api/approval-queue/count`、`GET /api/dashboard/mine` 加 `ETag`／`304`（`Cache-Control: private, no-cache`，內容逐位相同才 304；`generatedAt` 不算內容）。新增 `helpers/http_etag.json_etag`。
 - 新路由 1 條（`_available`）：`route_inventory.json`／`response_keys_baseline.json` 已補。
 - 測試：`test_usage_u4_no_doomed_requests_*`、`test_usage_u5_case_denials_*`、`test_usage_u7_etag_*`、`test_google_quota_cache_t86_*`（新）；首頁三支 e2e 對齊（開頁走 bundle／bootstrap 後，原本攔單支端點的題目改成先讓 bundle／bootstrap 失敗再攔）；`test_case_module_spec` 補 `bootstrap.section/profitWarning`（h1b 漏補）。
+- **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏、催辦用語中性化、覆核補正、首頁空狀態統一）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
+- **（併入）(next) — 2026-11-14（feat/t86-devcrm-e-h7；T86 業務開發 #17 schema 備註）**
+- schema：本批只動 crm 模組 migration（`modules/crm/migrations/0005_dev_case_expected.py`，crm 模組 schema 4→5，`module_schema_versions` 記錄）；核心 `db.py` `CURRENT_VERSION`（V9 基準 118）與 module.json 版本不變。驗包若要核對「資料庫版本」，核心數字不會因本批改變；模組版本以 `module_schema_versions` 的 crm＝5 為準。
+- **（併入）(next) — 2026-11-14（feat/t86-usage-h9；T86 使用紀錄優化 U6／U9：LINE 通知設定、自訂模組預覽改成先檢核＋白話原因）**
+- 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。
+- 行為變更（只改訊息與前端）：模組建構器的編號預覽、輸出預覽在規則／欄位未完成時先在畫面說明，不送請求；`numbering/preview`、`output/preview` 的 422 訊息補處理方式（狀態碼與判斷不變）。
+- 測試：`tests/test_line_settings_messages_2026_11_14.py`、`tests/test_custom_module_preview_messages_2026_11_14.py`、`tests/test_e2e_line_settings_precheck_2026_11_14.py`、`tests/test_e2e_builder_preview_precheck_2026_11_14.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-request-timing-h7；T86 請求耗時記錄；版號由列車取）**
+- 新增（內部／維運，無 API、資料表、欄位、權限變更；核心 V9 基準 118 不動）：`logs\request_timing.log`——每個 `/api/` 請求一行「時間 方法 路由樣板 狀態碼 耗時ms」，讓正式機能統計最耗時的請求。不含使用者、IP、查詢參數、標頭、實際路徑（只寫路由樣板；沒比對到路由寫 `(unmatched)`）。
+- 機制：純 ASGI 中介層 `helpers.log_setup.RequestTimingMiddleware`（`main.py` 在 InternalColsMiddleware 之前加，仍是第二外層）＋ `QueueHandler`／背景 `QueueListener` 寫檔：請求端只做一次 `put_nowait`，佇列（2 萬筆）滿了丟掉並計數，不等檔案 I/O；打不開檔 ⇒ 不啟用、請求照常；pytest 之下不建檔。輪替（15 MB × 10 份、gzip）與保留天數（`retention.log_keep_days`）沿用 access.log／app.log 同一套，`prune_rotated_logs` 認得 `request_timing.log.N.gz`。
+- 測試：`tests/test_request_timing_log_2026_11_14.py`。
+- **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏）**
+- 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
 
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。

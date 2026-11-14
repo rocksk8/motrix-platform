@@ -78,7 +78,7 @@ SECTIONS = [
     ]),
     ("ipPortGroups", "IP-Port 群組", [
         ("category", "類別"), ("groupName", "群組名稱"), ("members", "成員（IP／網段／Port）"),
-        ("usage", "用途"), ("referencedBy", "引用此項目的規則"), ("status", "狀態"), ("note", "備註"),
+        ("usage", "用途"), ("referencedBy", "被哪些規則引用"), ("status", "狀態"), ("note", "備註"),
     ]),
     ("wifiSsids", "無線 SSID", [
         ("seq", "編號"), ("ssid", "SSID"), ("profile", "Profile 名稱"), ("vlan", "VLAN"),

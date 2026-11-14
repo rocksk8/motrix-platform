@@ -371,7 +371,7 @@ class QuotationAdapter(RB.Adapter):
                 seen.add(p)
                 files.append(p)
         return {"rows": rows, "files": _files(files), "label": "%s %s（%s）" % (_DT.label_of_no(qn), qn, row.get("customer_name") or ""), "parent": None,
-                "meta": {"status": row.get("status") or "", "crm_unlink": "業務開發案件的轉建連結不會自動恢復"}}
+                "meta": {"status": row.get("status") or "", "crm_unlink": "商機的轉建連結不會自動恢復"}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         qn = str(entity_id)
@@ -406,7 +406,7 @@ class QuotationAdapter(RB.Adapter):
             for r in rows.get(table, []):
                 _insert(conn, table, _remap_json_cols(r, ctx, "files_json"), drop_id=_id_taken(conn, table, r))
         return {"entity_id": qn, "renumbered": False,
-                "notes": ["業務開發案件的轉建連結沒有自動恢復（若有，請到業務開發頁重新連結）"]}
+                "notes": ["商機的轉建連結沒有自動恢復（若有，請到業務開發頁重新連結）"]}
 
 
 # ── 材料申請（quotations.data_json 的 materialOrders 一列＋審核疊加列）─────────────────────────

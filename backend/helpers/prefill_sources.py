@@ -161,7 +161,7 @@ _register("requesterDept", "申請人所屬部門", "申請人在人事資料裡
           [("ref", "departments")], _safe(_r_dept))
 _register("requesterManager", "申請人的主管", "申請人在人事資料裡的直屬主管。", "陳經理",
           [("ref", "users")], _safe(_r_manager))
-_register("today", "今天日期", "打開表單的那一天。", "2026/10/01",
+_register("today", "今天日期", "開啟表單的那一天。", "2026/10/01",
           [("date", None)], _safe(_r_today))
 _register("now", "現在的日期與時間", "開啟表單的那一刻（欄位要設成含時間）。", "2026/10/01 14:30",
           [("date", None)], _safe(_r_now), requires_time=True)

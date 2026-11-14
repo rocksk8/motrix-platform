@@ -50,7 +50,7 @@ _UNTOUCHED = (
     ('modules/case/api/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
     ('modules/crm/api.py',
-     '此案件已連結報價單，如需異動或解除請透過「修改連結」送審'),
+     '此商機已連結報價單，如需異動或解除請透過「修改連結」送審'),
     ('modules/supply/api/inventory.py',
      '僅在庫（未出貨／未登載）狀態可直接刪除，其餘狀態請用「退回庫存」調整'),
     ('modules/supply/api/inventory.py',

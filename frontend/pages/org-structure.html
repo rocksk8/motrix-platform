@@ -483,10 +483,10 @@
               <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid #F0EEE9;font-size:13px;cursor:pointer" :data-testid="'org-batch-user-' + u.id">
                 <input type="checkbox" :checked="mb.picked.includes(u.id)" @change="mbToggle(u.id)">
                 <span x-text="u.displayName || u.username"></span>
-                <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="u.departmentName ? '目前：' + u.departmentName : '目前沒有部門'"></span>
+                <span style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="u.departmentName ? '目前：' + u.departmentName : '尚無部門'"></span>
               </label>
             </template>
-            <div x-show="!mbShown().length" style="padding:10px;font-size:12px;color:var(--text-dim)">沒有符合的使用者。</div>
+            <div x-show="!mbShown().length" style="padding:10px;font-size:12px;color:var(--text-dim)">查無符合條件的使用者。</div>
           </div>
           <div x-show="mb.picked.length" style="margin-top:8px;font-size:12px;line-height:1.6;background:#F3F4F6;border-radius:6px;padding:8px 10px" data-testid="org-batch-preview">
             <div x-text="mbPreviewText()"></div>

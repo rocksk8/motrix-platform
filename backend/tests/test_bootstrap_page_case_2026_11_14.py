@@ -10,6 +10,7 @@
     各載入點都用 `(window.motrixBootFetch || fetch)` 且網址在表內；其他頁不受影響（網址不在表內 ⇒ 立刻真的 fetch）。
 """
 import inspect
+from core import source_tree
 import json
 import re
 import shutil
@@ -118,7 +119,7 @@ def test_every_page_handler_takes_only_authorization_after_binding():
 
 
 def test_builder_groups_string_equals_what_the_case_page_asks_for():
-    html = (FRONT / "pages" / "case-management.html").read_text(encoding="utf-8")
+    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     m = re.search(r"MotrixPublicFlags\.read\(\[([^\]]+)\]", html)
     assert m, "找不到案件頁讀版面群組的呼叫"
     groups = re.findall(r"'([a-z_]+)'", m.group(1))

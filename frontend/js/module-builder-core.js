@@ -409,8 +409,28 @@
           clearTimeout(this._numTimer)
           this._numTimer = setTimeout(() => this.previewNumbering(), 250)
         },
+        // 編號規則先在前端檢核（T86 U9：正式機 numbering/preview 回 422 ×6——每次編輯草稿都會重算一次預覽，規則還沒填好就一直被伺服器退回）。
+        // 規則與伺服器一致（helpers/custom_modules.py _validate_numbering）；不合就直接說明哪裡不對、怎麼改，不送請求。估價單字首衝突只有伺服器知道，仍由伺服器回。
+        numberingProblems(n) {
+          var out = [], m = function (path, msg) { out.push({ path: path, message: msg }) }
+          if (!n || typeof n !== 'object') return [{ path: 'numbering', message: '尚未設定編號規則：請填寫前綴、日期格式與流水號位數。' }]
+          var pre = String(n.prefix == null ? '' : n.prefix)
+          if (!pre) m('numbering.prefix', '請填寫編號前綴：1～6 個大寫英文字母或數字，必須英文字母開頭，例如 EL。')
+          else if (!/^[A-Z][A-Z0-9]{0,5}$/.test(pre)) {
+            m('numbering.prefix', /^[^A-Za-z]/.test(pre) ? '前綴必須用英文字母開頭（目前是「' + pre.charAt(0) + '」開頭），例如 EL、E1。'
+              : (pre.length > 6 ? '前綴最多 6 個字（目前 ' + pre.length + ' 個），請縮短，例如 EL。'
+                : '前綴只能用大寫英文字母與數字（不能有空白、符號或中文），例如 EL、E1。'))
+          }
+          if (['YYYYMMDD', 'YYYYMM', ''].indexOf(n.date === undefined ? 'YYYYMMDD' : n.date) < 0) m('numbering.date', '日期格式請從清單選擇：年月日、年月，或不含日期。')
+          var d = n.digits === undefined ? 4 : n.digits
+          if (typeof d !== 'number' || !isFinite(d) || Math.floor(d) !== d) m('numbering.digits', '流水號位數請填整數（3～8），例如 4 代表 0001。')
+          else if (d < 3 || d > 8) m('numbering.digits', '流水號位數必須在 3～8 之間（目前 ' + d + '），例如 4 代表 0001。')
+          return out
+        },
         async previewNumbering() {
           if (!this.def) return
+          var local = this.numberingProblems(this.def.numbering)
+          if (local.length) { this.numExample = ''; this.numProblems = local; return }
           var r = await this.api('POST', '/api/custom-modules/numbering/preview', { numbering: this.def.numbering })
           if (r.ok) { this.numExample = r.data.example; this.numProblems = [] }
           else { this.numExample = ''; this.numProblems = (r.data && r.data.problems) || [{ message: (r.data && r.data.detail) || '預覽失敗' }] }

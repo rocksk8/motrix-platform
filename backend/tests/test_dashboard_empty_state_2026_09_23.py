@@ -103,8 +103,11 @@ ONBOARDING_HERO_CTA = "建立第一筆"
 #: 📌 A 的話：**「它們更貼身 —— 一個等著簽的人被告知沒東西要簽。」**
 #: ⚠️ 我上一版把它們寫在「明著留在範圍外、交給 A 判」那一段，
 #:    ⇒ 現在 A 判了要做。**留在範圍外的理由消失了，那一段跟著改掉。**
-TITLE_COPY = "目前沒有待您簽核的項目"
-BAND_COPY = "尚無待您簽核的單據"
+# 🔑 T86（PM）：測試不決定使用者看到的字。標題、副標、表格三處的空狀態同用一句話，
+#    探針改以**結構**找位置（hero 區塊裡 `waitingForMe === 0` 的 x-if、第一張 band 卡的 x-text），
+#    以**行為**比對（讀不到時副標所說的話 ≠ 真的是 0 時所說的話），不再比對文字子字串。
+ZERO_STATS = {"totalQuotes": 0, "activeCases": 0, "waitingForMe": 0,
+              "customerCount": 0, "closedCases": 0}
 
 #: 引導卡片的錨點：那一行註解。用它找卡片，不用行號 ——
 #: ☠️ 行號會因為 B 在上面插一行就失效，而失效的樣子是「找不到 ⇒ 略過 ⇒ 綠」。
@@ -194,6 +197,29 @@ def _without_comments(text):
 _ATTRS = ("x-if", "x-show", "x-text")
 
 
+def _title_expr(text):
+    """hero 標題裡「待簽為 0」那個 `x-if` 的判斷式（結構錨點：`h-hero__t` 區塊內、條件含 `waitingForMe === 0`）。"""
+    m = re.search(r'<h1 class="h-hero__t">(.*?)</h1>', text, re.S)
+    assert m, "`index.html` 裡找不到 `h-hero__t` 標題區塊 —— 這一題的前提不成立"
+    hits = re.findall(r'<template x-if="([^"]*waitingForMe === 0[^"]*)"', m.group(1))
+    assert len(hits) == 1, f"標題區塊裡「待簽為 0」的 x-if 應恰有 1 個，實際 {len(hits)}：{hits}"
+    return "x-if", hits[0]
+
+
+def _band_expr(text):
+    """第一張 band 卡（待我簽核）副標的 `x-text` 運算式（結構錨點：第一個 `<p class="h-band__p" x-text=`）。"""
+    # 現行頁面有 data-testid="band-approvals"：以它為錨（不怕卡片重排）；修正前的舊版沒有 ⇒ 退回「第一個 h-band__p」。
+    anchor = text.find('data-testid="band-approvals"')
+    m = re.search(r'<p class="h-band__p" x-text="([^"]*)"', text[anchor:] if anchor >= 0 else text)
+    assert m, "`index.html` 裡找不到 band 副標的 x-text —— 這一題的前提不成立"
+    return "x-text", m.group(1)
+
+
+def _zero_band(page):
+    """真的是 0 時，副標說的話（用來和「讀不到」時說的話比對）。"""
+    return _observe(page, ZERO_STATS)["band"]
+
+
 def _expr_behind(text, needle):
     """找出**決定那句文案出不出現**的那個 Alpine 運算式。
 
@@ -255,8 +281,8 @@ def _observe(text, response):
     # 2026-11-11 A3：引導卡片的 x-show 讀 checklistVisible（上手清單）。修正前的舊版沒有它 ⇒ 不種（「量尺」那題餵舊版）。
     ckvis = _member(text, "get checklistVisible()") if "get checklistVisible()" in text else None
     gate = _card_gate(text)
-    title_attr, title_expr = _expr_behind(text, TITLE_COPY)
-    band_attr, band_expr = _expr_behind(text, BAND_COPY)
+    title_attr, title_expr = _title_expr(text)
+    band_attr, band_expr = _band_expr(text)
 
     script = """
 const RESP = __RESP__;
@@ -419,13 +445,13 @@ def test_fx33_a_failed_load_must_not_claim_there_is_no_data(page):
 
     # 🔴 A 2026-09-23 擴進來的兩句 —— **它們更貼身**。
     assert got["title"] is False, (
-        f"讀不到資料，而標題照樣說「{TITLE_COPY}」——\n"
-        f"  那一句的判斷式：{_expr_behind(page, TITLE_COPY)[1]}\n"
+        f"讀不到資料，而標題照樣說「沒有待簽」——\n"
+        f"  那一句的判斷式：{_title_expr(page)[1]}\n"
         "☠️ **一個等著簽的人被告知沒東西要簽，而他會就這樣走開。**\n"
         "🔑 那不是「顯示 0」，那是**對他斷言了一件我們不知道的事**。")
-    assert BAND_COPY not in got["band"], (
+    assert got["band"] != _zero_band(page), (
         f"讀不到資料，而副標那一行是：{got['band']!r}\n"
-        f"  那一行的判斷式：{_expr_behind(page, BAND_COPY)[1]}\n"
+        f"  那一行的判斷式：{_band_expr(page)[1]}\n"
         "☠️ 同一句謊話的同一個成因，只是換了一個位置說。")
 
 
@@ -454,9 +480,14 @@ def test_fx33_a_genuinely_empty_system_still_gets_its_onboarding(page):
     # ☠️ 少了這一段，「永遠不說那兩句」也會讓上一題綠，
     # 🔑 而一個真的沒事要簽的人會看到一個**沒有任何說明的空白**。
     assert got["title"] is True, (
-        f"拿到了、而且真的沒有待簽，標題卻不說「{TITLE_COPY}」：{got['stats']}")
-    assert BAND_COPY in got["band"], (
-        f"拿到了、而且真的沒有待簽，副標那一行卻是：{got['band']!r}")
+        f"拿到了、而且真的沒有待簽，標題卻不說「沒有待簽」：{got['stats']}")
+    # 正向控制：真的是 0 時，副標要說**一句話**（非空、非 undefined、含中文字），
+    # 且與「讀不到」時說的不同（只比不同，空白或 undefined 也會過 ⇒ 先釘住「有說話」）。
+    zero_band = got["band"]
+    assert zero_band.strip() and zero_band != "undefined" and re.search(r"[一-鿿]", zero_band), (
+        f"拿到了、而且真的沒有待簽，副標那一行是空的或不是一句話：{zero_band!r}")
+    assert zero_band != _observe(page, None)["band"], (
+        f"拿到了、而且真的沒有待簽，副標那一行卻與「讀不到」時一樣：{zero_band!r}")
 
 
 def test_fx33_a_system_with_data_shows_neither(page):
@@ -483,7 +514,7 @@ def test_fx33_a_system_with_data_shows_neither(page):
     #    ⚠️ 這一格與上一題一起，把那兩句釘成
     #    **跟著「有沒有拿到」走，不是跟著「有沒有資料」走**。
     assert got["title"] is True, (
-        f"有資料、而待簽真的是 0，標題卻不說「{TITLE_COPY}」：{got['stats']}\n"
+        f"有資料、而待簽真的是 0，標題卻不說「沒有待簽」：{got['stats']}\n"
         "☠️ 修過頭了：那兩句現在連在該說的時候都不說。")
 
 
@@ -519,9 +550,7 @@ def test_fx33_the_probe_reaches_the_two_places_that_say_it(page):
     # 📌 ⇒ 註解先剝掉再數。
     visible = _without_comments(text)
     for needle, where in ((ONBOARDING_HERO_COPY, "heroSummary"),
-                          (ONBOARDING_CARD_COPY, "引導卡片"),
-                          (TITLE_COPY, ":473 標題"),
-                          (BAND_COPY, ":502 副標")):
+                          (ONBOARDING_CARD_COPY, "引導卡片")):
         n = visible.count(needle)
         assert n == 1, (
             f"「{needle}」在 `index.html` 的**非註解**部分出現 {n} 次，"
@@ -558,7 +587,7 @@ def test_fx33_the_probe_goes_red_on_the_version_before_the_fix():
         lied.append("heroSummary")
     if got["title"]:
         lied.append(":473 標題")
-    if BAND_COPY in got["band"]:
+    if got["band"] == _zero_band(before):
         lied.append(":502 副標")
 
     assert len(lied) == 4, (

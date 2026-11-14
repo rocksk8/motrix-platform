@@ -1482,46 +1482,46 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
 
 def notify_dev_case_delete_request(case_id: int, case_name: str,
                                    requester_display: str, reason: str = '') -> None:
-    """業務開發案件刪除申請 → 通知所有最高管理者審核"""
-    _line_event("dev_case_delete_request", to_group=True, title="業務開發案件刪除申請", rows=[("案件名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
+    """商機刪除申請 → 通知所有最高管理者審核"""
+    _line_event("dev_case_delete_request", to_group=True, title="商機刪除申請", rows=[("商機名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
     to = _superadmin_emails("dev_case_delete_request")
     if not to:
         logger.warning("notify_dev_case_delete_request: 無最高管理者 email（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
-    rows = [("案件名稱", case_name), ("申請人", requester_display)]
+    rows = [("商機名稱", case_name), ("申請人", requester_display)]
     if reason and reason.strip():
         rows.append(("刪除原因", reason.strip()))
     html = _build_html("dev_case_delete_request", 
-        "業務開發案件刪除申請", "請盡速簽核", "#DC2626",
+        "商機刪除申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統簽核。",
+        intro=f"{requester_display} 申請刪除商機，請最高管理者登入系統簽核。",
         button_text="前往簽核",
     )
-    _async_send(to, _mt.subject("dev_case_delete_request", f"業務開發案件刪除申請：{case_name}"), html)
+    _async_send(to, _mt.subject("dev_case_delete_request", f"商機刪除申請：{case_name}"), html)
 
 
 def notify_dev_case_relink_request(case_id: int, case_name: str, requester_display: str,
                                    target_quote_no: str = '', reason: str = '') -> None:
-    """業務開發案件報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
-    _line_event("dev_case_relink_request", to_group=True, title="業務開發案件連結異動申請", rows=[("案件名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
+    """商機報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
+    _line_event("dev_case_relink_request", to_group=True, title="商機連結異動申請", rows=[("商機名稱", case_name), ("申請人", requester_display)], reason="請登入系統核准或駁回")
     to = _superadmin_emails("dev_case_relink_request")
     if not to:
         logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
     action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單／估價單號）"
-    rows = [("案件名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
+    rows = [("商機名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
     if reason and reason.strip():
         rows.append(("申請原因", reason.strip()))
     html = _build_html("dev_case_relink_request", 
-        "業務開發案件報價單／估價單連結異動申請", "請盡速簽核", "#DC2626",
+        "商機報價單／估價單連結異動申請", "請盡速簽核", "#DC2626",
         rows, "", crm_page,
-        intro=f"{requester_display} 申請異動業務開發案件的報價單／估價單連結，請最高管理者登入系統簽核。",
+        intro=f"{requester_display} 申請異動商機的報價單／估價單連結，請最高管理者登入系統簽核。",
         button_text="前往簽核",
         doc_label="報價單／估價單",           # 連結的可能是報價單也可能是估價單：登記表的共用名稱維持中性
     )
-    _async_send(to, _mt.subject("dev_case_relink_request", f"業務開發案件連結異動申請：{case_name}"), html)
+    _async_send(to, _mt.subject("dev_case_relink_request", f"商機連結異動申請：{case_name}"), html)
 
 
 def notify_daily_task_completed(task_id: int, title: str, task_date: str,
@@ -1770,70 +1770,70 @@ def notify_case_stage_deadline_manager(
 
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
-    """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
-    _line_event("dev_case_stale", usernames=usernames, title="業務開發案件逾期未跟進", rows=[("案件名稱", case_name), ("客戶", customer_name or "（未指定）"), ("停滯天數", "%s 天" % days_since_update)], reason="請聯繫客戶並登錄開發紀錄", line_key=_line_entity_key("dev_case_stale", case_id))
+    """商機洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
+    _line_event("dev_case_stale", usernames=usernames, title="商機逾期未跟進", rows=[("商機名稱", case_name), ("客戶", customer_name or "（未指定）"), ("停滯天數", "%s 天" % days_since_update)], reason="請聯繫客戶並登錄開發紀錄", line_key=_line_entity_key("dev_case_stale", case_id))
     to = _lookup_emails(usernames, "dev_case_stale")
     if not to:
         logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
     html = _build_html("dev_case_stale", 
-        "業務開發案件逾期未跟進", f"{days_since_update} 天未更新", "#DC2626",
-        [("案件名稱", case_name), ("客戶", customer_name or "（未指定）"),
+        "商機逾期未跟進", f"{days_since_update} 天未更新", "#DC2626",
+        [("商機名稱", case_name), ("客戶", customer_name or "（未指定）"),
          ("狀態", "洽談中"), ("未更新天數", f"{days_since_update} 天")],
         "", crm_page,
-        intro=f"案件「{case_name}」仍在洽談中，已 {days_since_update} 天未新增開發記錄或更新狀態，請確認後續跟進進度。",
+        intro=f"商機「{case_name}」仍在洽談中，已 {days_since_update} 天未新增開發記錄或更新狀態，請確認後續跟進進度。",
         button_text="前往業務開發",
     )
-    _async_send(to, _mt.subject("dev_case_stale", f"業務開發案件逾期提醒：{case_name}"), html)
+    _async_send(to, _mt.subject("dev_case_stale", f"商機逾期提醒：{case_name}"), html)
 
 
 def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
                              assignee_username: str, assignee_display: str,
                              assigned_by_display: str = '') -> None:
-    """業務開發案件指派 → 通知被指派人（含回覆期限）"""
-    _line_event("dev_case_assigned", usernames=[assignee_username], title="業務開發案件指派", rows=[("案件名稱", case_name), ("回覆期限", reply_deadline or "未設定"), ("指派人", assigned_by_display or "管理員")], reason="請於期限內跟進並回報進度")
+    """商機指派 → 通知被指派人（含回覆期限）"""
+    _line_event("dev_case_assigned", usernames=[assignee_username], title="商機指派", rows=[("商機名稱", case_name), ("回覆期限", reply_deadline or "未設定"), ("指派人", assigned_by_display or "管理員")], reason="請於期限內跟進並回報進度")
     to = _lookup_emails([assignee_username], "dev_case_assigned")
     if not to:
         logger.warning("notify_dev_case_assigned: 無有效收件人（case_id=%d, assignee=%s）", case_id, assignee_username)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
-    rows = [("案件名稱", case_name), ("回覆期限", reply_deadline or "未設定")]
+    rows = [("商機名稱", case_name), ("回覆期限", reply_deadline or "未設定")]
     if assigned_by_display:
         rows.append(("指派人", assigned_by_display))
     html = _build_html("dev_case_assigned",
-        "業務開發案件指派通知", "請於期限內回覆進度", "#2F6FD6",
+        "商機指派通知", "請於期限內回覆進度", "#2F6FD6",
         rows, "", crm_page,
-        intro=f"{assigned_by_display or '管理員'} 已將業務開發案件「{case_name}」指派給您，請於期限內跟進並回報進度。",
+        intro=f"{assigned_by_display or '管理員'} 已將商機「{case_name}」指派給您，請於期限內跟進並回報進度。",
         button_text="前往業務開發",
     )
-    _async_send(to, _mt.subject("dev_case_assigned", f"業務開發案件指派通知：{case_name}"), html)
+    _async_send(to, _mt.subject("dev_case_assigned", f"商機指派通知：{case_name}"), html)
 
 
 def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: str,
                                   days_overdue: int, assignee_display: str, usernames: list) -> None:
-    """業務開發案件回覆期限已過、被指派人自指派後沒有任何進度回報 → 通知被指派人與指派人（每案每期限只寄一次，由呼叫端的 guard key 保證）"""
-    _line_event("dev_case_reply_overdue", usernames=usernames, title="業務開發案件回覆期限已過", rows=[("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"), ("回覆期限", reply_deadline), ("逾期天數", "%s 天" % days_overdue)], line_key=_line_entity_key("dev_case_reply_overdue", case_id, reply_deadline))
+    """商機回覆期限已過、被指派人自指派後沒有任何進度回報 → 通知被指派人與指派人（每案每期限只寄一次，由呼叫端的 guard key 保證）"""
+    _line_event("dev_case_reply_overdue", usernames=usernames, title="商機回覆期限已過", rows=[("商機名稱", case_name), ("被指派人", assignee_display or "（未知）"), ("回覆期限", reply_deadline), ("逾期天數", "%s 天" % days_overdue)], line_key=_line_entity_key("dev_case_reply_overdue", case_id, reply_deadline))
     to = _lookup_emails(usernames, "dev_case_reply_overdue")
     if not to:
         logger.warning("notify_dev_case_reply_overdue: 無有效收件人（case_id=%d）", case_id)
         return
     crm_page = f"{_base_url()}/pages/dev-crm.html"
     html = _build_html("dev_case_reply_overdue",
-        "業務開發案件回覆期限已過", f"逾期 {days_overdue} 天未回報", "#DC2626",
-        [("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"),
+        "商機回覆期限已過", f"逾期 {days_overdue} 天未回報", "#DC2626",
+        [("商機名稱", case_name), ("被指派人", assignee_display or "（未知）"),
          ("回覆期限", reply_deadline), ("逾期天數", f"{days_overdue} 天")],
         "", crm_page,
-        intro=f"案件「{case_name}」的回覆期限（{reply_deadline}）已過，被指派人尚未回報進度。請被指派人儘快回報；指派人請確認是否需要改期或重新指派。",
+        intro=f"商機「{case_name}」的回覆期限（{reply_deadline}）已過，被指派人尚未回報進度。請被指派人儘快回報；指派人請確認是否需要改期或重新指派。",
         button_text="前往業務開發",
     )
-    _async_send(to, _mt.subject("dev_case_reply_overdue", f"業務開發案件回覆期限已過：{case_name}"), html)
+    _async_send(to, _mt.subject("dev_case_reply_overdue", f"商機回覆期限已過：{case_name}"), html)
 
 
 def notify_dev_log_directive(case_id: int, case_name: str, usernames: list, directive_by_display: str = '') -> None:
     """開發記錄批示 → 通知「要回覆」的對象。本文**不放批示全文**（批示限作者／對象／管理員可見，信件可能被轉寄；
     全文只在系統裡），只放案名、批示人與請登入查看。只寄 must_reply 的人是呼叫端決定的。"""
-    _line_event("dev_log_directive", usernames=usernames, title="業務開發記錄批示", rows=[("案件名稱", case_name), ("批示人", directive_by_display or "管理員")], reason="請登入系統查看並回覆")
+    _line_event("dev_log_directive", usernames=usernames, title="業務開發記錄批示", rows=[("商機名稱", case_name), ("批示人", directive_by_display or "管理員")], reason="請登入系統查看並回覆")
     to = _lookup_emails(usernames, "dev_log_directive")
     if not to:
         logger.warning("notify_dev_log_directive: 無有效收件人（case_id=%d）", case_id)
@@ -1841,9 +1841,9 @@ def notify_dev_log_directive(case_id: int, case_name: str, usernames: list, dire
     crm_page = f"{_base_url()}/pages/dev-crm.html"
     html = _build_html("dev_log_directive",
         "業務開發記錄批示", "請登入系統查看並回覆", "#2F6FD6",
-        [("案件名稱", case_name), ("批示人", directive_by_display or "管理員")],
+        [("商機名稱", case_name), ("批示人", directive_by_display or "管理員")],
         "", crm_page,
-        intro=f"{directive_by_display or '管理員'} 對業務開發案件「{case_name}」的開發記錄下了批示，並請您回覆。內容請登入系統查看。",
+        intro=f"{directive_by_display or '管理員'} 對商機「{case_name}」的開發記錄下了批示，並請您回覆。內容請登入系統查看。",
         button_text="前往業務開發",
     )
     _async_send(to, _mt.subject("dev_log_directive", f"業務開發記錄批示：{case_name}"), html)
@@ -2261,7 +2261,7 @@ def notify_module_activity(module_label: str, action_label: str,
     ① 呼叫端傳 `line_event`（`line_catalog.LINE_ONLY_EVENTS` 裡 kind="sub" 的細項事件，例如 `crm_case_status`）＋`line_usernames`（事件收件人＝案件相關人）：發該細項事件，
        `line_exclude`＝要排除的帳號（操作者本人）；預設只發給 `line_usernames`（沒人＝不發），最高管理者想收可在設定頁用「另加指定人員」。
     ② 沒傳 `line_event`：發泛用的 `module_activity`（群組收件人，財務類走財務群組）；預設關，由最高管理者決定要不要開。
-    ③ `line_skip=True`：這個操作的 LINE 已由專屬事件負責（例如指派案件＝`dev_case_assigned`），這裡不再發泛用的那一則（避免同一件事推兩次）。
+    ③ `line_skip=True`：這個操作的 LINE 已由專屬事件負責（例如指派商機＝`dev_case_assigned`），這裡不再發泛用的那一則（避免同一件事推兩次）。
     🔴 LINE 只放「模組／動作／項目名稱」，**不放 `detail`**（自由文字：留言、記錄內容、備註）。"""
     _line_rows = [("項目", item_label)]
     _line_reason = f"{actor} 在「{module_label}」執行了「{action_label}」"

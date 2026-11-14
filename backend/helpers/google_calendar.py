@@ -237,9 +237,9 @@ EVENT_TYPES = (
     ("stage_done",         "案件階段完成日",         "案件",     "執行進度階段勾選完成時以完成日建立（取消勾選刪除）", True),
     ("important_comment",  "案件重要留言",           "案件",     "案件留言板標記為重要的留言", True),
     ("case_update",        "案件更新",               "案件",     "案件留言板新增留言（重要留言除外）；同一案件同一天合併為一個「○○案件更新」事件", False),
-    ("dev_case_converted", "業務開發案件轉建報價單／估價單", "業務開發", "業務開發案件轉建為報價單／估價單當天建立", True),
-    ("dev_case_stale",     "業務開發案件停滯提醒",   "業務開發", "洽談中超過 30 天未更新（每個停滯週期只建一次）", True),
-    ("dev_case_update",    "業務開發案件更新",       "業務開發", "新增開發（拜訪）紀錄；同一案件同一天合併為一個「○○案件更新」事件", False),
+    ("dev_case_converted", "商機轉建報價單／估價單", "業務開發", "商機轉建為報價單／估價單當天建立", True),
+    ("dev_case_stale",     "商機停滯提醒",   "業務開發", "洽談中超過 30 天未更新（每個停滯週期只建一次）", True),
+    ("dev_case_update",    "商機更新",       "業務開發", "新增開發（拜訪）紀錄；同一商機同一天合併為一個「○○商機更新」事件", False),
     ("contractor_payout",  "包商撥款",               "付款",     "承攬商匯款申請標記已匯款時，以匯款日期建立", False),
     ("expense_payout",     "支出付款",               "付款",     "出納登錄請款（案件額外支出）付款時，以付款日建立；不含勞報單付款", False),
     ("payable_due",        "付款待辦",               "付款",     "已核准、未付款的請款（案件額外支出、承攬商匯款、材料申請匯款；勞報單不在內）有預定付款日時，在該日建立提醒（改日期同步移動；付款、作廢、清空日期即刪除）；事件不含金額；只對開啟後的變更生效（不回補既有款項）", False),
@@ -602,8 +602,8 @@ def push_event_for_dev_case_converted(case_id: int) -> None:
         from helpers import doc_type as _DT   # 估價單：模板先換字、再填值（案名／客戶名是使用者輸入，不能被換字）
         _dt = _DT.doc_type_of_no(row["converted_quote_no"])
         event_id = _create_event_with_retry(
-            _DT.relabel("業務開發案件轉建報價單 — {case}（{cname}）", _dt).format(case=row["case_name"], cname=cname),
-            _DT.relabel("業務開發案件「{case}」已轉建為報價單。\n客戶：{cname}\n報價單號：{no}", _dt).format(
+            _DT.relabel("商機轉建報價單 — {case}（{cname}）", _dt).format(case=row["case_name"], cname=cname),
+            _DT.relabel("商機「{case}」已轉建為報價單。\n客戶：{cname}\n報價單號：{no}", _dt).format(
                 case=row["case_name"], cname=cname, no=row["converted_quote_no"]),
             date.today(),
         )
@@ -620,8 +620,8 @@ def push_event_for_dev_case_stale(case_id: int, case_name: str, customer_name: s
         return
     try:
         event_id = _create_event_with_retry(
-            f"業務開發案件停滯提醒 — {case_name}（{customer_name}）",
-            f"業務開發案件「{case_name}」洽談中已 {days} 天未更新，請確認跟進進度。\n客戶：{customer_name}",
+            f"商機停滯提醒 — {case_name}（{customer_name}）",
+            f"商機「{case_name}」洽談中已 {days} 天未更新，請確認跟進進度。\n客戶：{customer_name}",
             date.today(),
         )
         logger.info("push_event_for_dev_case_stale: %s -> event %s", case_id, event_id)

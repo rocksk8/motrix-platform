@@ -102,6 +102,13 @@ from pdf_gen import (
 )
 
 router = APIRouter()
+
+
+def _FAIL_HDR(code: str) -> dict:
+    """失敗原因碼（固定詞彙，見 helpers.audit._FAIL_REASON_LABELS）：放在回應標頭 X-Fail-Reason，main.py 的失敗稽核據此記 reason_code，
+    前端也用它顯示「怎麼處理」。不改回應本文、不含個資。"""
+    return {"X-Fail-Reason": code}
+
 from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 from helpers.field_policy import mask_flags as _mask_flags, tier_allowed as _tier_allowed   # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生（出口保留自己的 money 短路）
 from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：案件批次匯出的欄位目錄）
@@ -2523,7 +2530,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if not quote_money_visible(user):
         # CM13 D1（2026-09-24 使用者裁示）：看不到金額就不能編報價——這支整份取代 data_json，
         # 報價品項沒有穩定 id，無法可靠地把被遮蔽的單價與成本補回去。
-        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
+        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單", headers=_FAIL_HDR("finance_view"))
     q   = body.data
     now = datetime.now().isoformat()
 
@@ -2562,7 +2569,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if is_unlock_edit:
         editor = _require_user(authorization)
         if editor["role"] != "superadmin":
-            raise HTTPException(403, "解鎖編輯需要最高管理者權限")
+            raise HTTPException(403, "解鎖編輯需要最高管理者權限", headers=_FAIL_HDR("unlock_superadmin"))
         # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
         try:
             _old_dj = json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}
@@ -2734,10 +2741,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                                                           keep_orders=_fl["keep_orders"])
                 except PaymentStructureChange:
                     conn.close()
-                    raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
+                    raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別", headers=_FAIL_HDR("finance_view"))
         if existing["status"] == "已拒絕":
             conn.close()
-            raise HTTPException(403, "已駁回結案的報價單不可修改")
+            raise HTTPException(403, "已駁回結案的報價單不可修改", headers=_FAIL_HDR("rejected_locked"))
         try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
             _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
@@ -2773,7 +2780,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
         if existing["status"] in _LOCKED and not is_unlock_edit:
             conn.close()
-            raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
+            raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改", headers=_FAIL_HDR("status_locked"))
         # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
         # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
         # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
@@ -3595,7 +3602,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
                 raise HTTPException(409, str(e))
             if res is None:                                  # 資源回收筒模組不在 ⇒ 照舊只刪報價單那一列並明說
                 _ra.legacy_delete_quotation(conn, quote_no)
-            # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
+            # 轉建連結指到這張單的商機解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
             # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
             unlink = _registry.single_provider("crm.quote_deleted")
             orphaned = unlink(conn, quote_no) if unlink else []
@@ -3624,7 +3631,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
 
 
 #: IP-13 對方不在時的說明（測試與畫面共用同一句）
-QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除"
+QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有商機轉建自這張報價單，它們的連結沒有自動解除"
 
 
 def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> tuple:
@@ -3911,6 +3918,42 @@ def _calendar_after_payment_change(quote_no: str, old_items, new_items) -> None:
         spawn_bg_thread(_RC.push_after_commit, args=(quote_no, _RC.snapshot(old_items), _RC.snapshot(new_items)))
 
 
+def _same_json(a, b) -> bool:
+    """嚴格比對（U8）：型別敏感（Python `==` 把 0==False、1==True、1==1.0 視為相同，會把「0→false」誤判成沒變而丟掉）、不管鍵順序。"""
+    return json.dumps(a, sort_keys=True, ensure_ascii=False, default=str) == json.dumps(b, sort_keys=True, ensure_ascii=False, default=str)
+
+
+_DIFF_FIELDS_MAX = 12     # 稽核 detail：每個分段最多列幾個欄位名（超過只記個數）
+
+
+def _case_record_diff(old_cr: dict, new_cr: dict, requested=None) -> dict:
+    """U8（2026-11-14）：這次存檔實際改到哪些分段／欄位（只記名稱，不記值——值可能含金額、電話）。
+    segments＝有變動的分段（caseRecord 頂層鍵，`stages` 由專屬端點維護不算）；
+    fields＝該分段是物件時，有變動的第一層欄位名（列表型分段如 materials 只列分段）。"""
+    old_cr = old_cr if isinstance(old_cr, dict) else {}
+    new_cr = new_cr if isinstance(new_cr, dict) else {}
+    segs, fields = [], {}
+    for k in sorted(set(old_cr) | set(new_cr)):
+        if k == "stages" or old_cr.get(k) == new_cr.get(k):
+            continue
+        segs.append(k)
+        o, n = old_cr.get(k), new_cr.get(k)
+        if isinstance(o, dict) and isinstance(n, dict):
+            ch = sorted(f for f in set(o) | set(n) if o.get(f) != n.get(f))
+            fields[k] = ch[:_DIFF_FIELDS_MAX] + ([f"…共 {len(ch)} 項"] if len(ch) > _DIFF_FIELDS_MAX else [])
+    # requested：這次請求帶的分段（segments）以外的鍵＝頁面替沒有的分段補預設值（defaults），不是使用者的改動 ⇒ 另列 initial
+    if requested is not None:
+        initial = [k for k in segs if k not in requested]
+        segs = [k for k in segs if k in requested]
+        fields = {k: v for k, v in fields.items() if k in segs}
+    out = {"segments": segs}
+    if fields:
+        out["fields"] = fields
+    if requested is not None and initial:
+        out["initial"] = initial
+    return out
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -3991,6 +4034,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
         data = json.loads(row["data_json"] or "{}")
+        data_before = copy.deepcopy(data)             # U8：存檔前快照——最後比對「這次到底有沒有改到東西」
         if isinstance(body.case_record, dict):
             # T61 S5：自訂欄位閘門（旗標 builder_custom_fields.enabled 關閉 ⇒ 不介入：用戶端送來的 customFields 不存、舊值原樣保留）。
             # 沒有送這個鍵（舊的整包格式）＝沒有要改，帶回舊值，不讓整包取代把它洗掉；沒有值就不寫這個鍵。
@@ -4093,10 +4137,20 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         if "materials" in (body.case_record or {}) and MR.changes_recognition((data.get("caseRecord") or {}).get("materials"), (body.case_record or {}).get("materials"))                 and _check_case_gate(conn, quote_no):
             conn.close()                                                                        # 已結案變更申請核准時以系統身分套用，不接受新認列 ⇒ 送出時就說清楚，免得核准了卻沒套上
             raise HTTPException(409, "案件目前處於結案鎖定狀態，認列採購單的變更不能經變更申請套用；請先請最高管理者解除鎖定後再操作。")
-        gated, change_id = _gate_case_edit(
-            conn, quote_no, user, authorization, "case_record_update",
-            f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
-        )
+        # U8：半解鎖的已結案案件，空存檔也不可以排進審核（會建／更新變更申請列、第一筆還寄信給最高管理者）。
+        # 候選內容（stages 一律取資料庫現值，與下面實際寫入的一致）與現值完全相同 ⇒ 不過閘，往下走「沒有變動」那條路。
+        _cand = dict(body.case_record or {})
+        _cand["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+        _before_cr = {**(data_before.get("caseRecord") or {}), "stages": _cand["stages"]}
+        # 只對案件成員跳過閘：非成員的 defaults 沒被清掉（那段在上面 `not semi_unlocked` 才會進），跳過閘＋回應 adopted 會變成讀取通道（F6）。
+        # 附註：沒有變動那條路若仍因 reconcile／叫料閘改了伺服器端衍生內容而寫入，半解鎖案件不排審核——只有系統推導的內容，稽核照記。
+        if semi_unlocked and not invoice_changes and _is_case_member(conn, quote_no, row, user) and _same_json(_cand, _before_cr):
+            gated, change_id = False, None
+        else:
+            gated, change_id = _gate_case_edit(
+                conn, quote_no, user, authorization, "case_record_update",
+                f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
+            )
         if gated:
             conn.close()
             return {"ok": True, "pending": True, "changeRequestId": change_id,
@@ -4126,15 +4180,34 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
             stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
-        now = save_quotation_json(conn, quote_no, data, actor=user)
-        conn.commit()
-        conn.close()
-        spawn_bg_thread(_backup_quotation, args=(quote_no,))
-        _calendar_after_payment_change(quote_no, old_items, ((data.get("caseRecord") or {}).get("payment") or {}).get("items"))
-        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
+        # U8（2026-11-14）：存檔內容與資料庫現值完全相同（空存檔：按了「儲存」但沒改任何東西、或頁面補預設值後內容沒變）
+        # ⇒ 不寫入、不備份、不記稽核、不動 updated_at（正式機 90 天 286 筆「案件更新」有一部分是這種空存檔）。
+        # 回應維持原形狀（updated_at 回目前值），前端照常當成存檔成功。
+        unchanged = _same_json(data, data_before) and not invoice_changes and bool(row["updated_at"])
+        if unchanged and _CFP.reconcile_txn(conn, quote_no, data, source="funnel", actor=user):
+            unchanged = False                   # 簽核複查模式≠off：對帳補了簽核基準（approval 有改）⇒ 要照常寫回，不能因為空存檔而丟掉
+        if unchanged:
+            conn.commit()                       # 不是 rollback：叫料審核閘（MG.enforce）若擋了項目，它的稽核／通知列寫在這個交易裡，要留
+            conn.close()
+            now = row["updated_at"]
+        else:
+            now = save_quotation_json(conn, quote_no, data, actor=user)
+            conn.commit()
+            conn.close()
+            spawn_bg_thread(_backup_quotation, args=(quote_no,))
+            _calendar_after_payment_change(quote_no, old_items, ((data.get("caseRecord") or {}).get("payment") or {}).get("items"))
+            _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label,
+                   _case_record_diff(data_before.get("caseRecord"), data.get("caseRecord"),
+                                     requested=set(seg_keys) if body.segments is not None else None))
         for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
+        if adopted:
+            # 沒有財務檢視權的人：adopted（別人先存了、改用資料庫現值的分段）與 saved 同規則遮蔽——否則試探 defaults 就能讀到款項金額。
+            # 欄位名與形狀不變，只有值被遮（款項期別金額鍵、叫料品項金額；其餘分段原樣）。
+            _fl = _fl or _mask_flags(user, strict=True)
+            if not _fl["money"]:
+                adopted = mask_case_record(copy.deepcopy(adopted), keep_orders=_fl["keep_orders"])
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
         if seg_keys:
             # 伺服器存檔時會改寫卡片（認列的到貨人／時間、過期標記、被拒還原…）⇒ 回傳實際存入的分段，
@@ -4640,7 +4713,10 @@ def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> N
 
 
 @router.post("/api/quotations/{quote_no}/export")
-def record_export(quote_no: str, mode: str = "external", authorization: str = Header(None)):
+def record_export(quote_no: str, mode: str = "external", reused: bool = False, authorization: str = Header(None)):
+    """記錄一次 PDF 匯出。reused=true（T86 U2）＝使用者重新下載「同一版」已產生過的 PDF（前端沿用上次的檔、沒有重新產生）：
+    只寫一筆稽核（detail 帶 reused=true，一次下載一筆），**不**累加 export_count／export_log——
+    export_count＝「PDF 產生次數」（每個版本、每次開啟分頁一次），重複下載看稽核紀錄。"""
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_module="case_manage")
@@ -4648,6 +4724,12 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if reused:
+        conn.close()
+        _audit(_tok(authorization), 'quotation.export_pdf', 'quotation', quote_no,
+               f"{quote_no} PDF 重新下載（{mode}，沿用同版已產生的檔）by {user['username']}",
+               {"reused": True, "mode": mode})
+        return {"export_count": row["export_count"] or 0, "log": json.loads(row["export_log"] or "[]"), "reused": True}
     log   = json.loads(row["export_log"] or "[]")
     count = (row["export_count"] or 0) + 1
     log.append({

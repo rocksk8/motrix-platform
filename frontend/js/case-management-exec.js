@@ -1627,7 +1627,7 @@ window.CM_PARTS.push(() => ({
     },
     warrantyStatusLabel(start, months) {
       const s = this.warrantyStatus(start, months)
-      if (s === 'expired')  return '已過保'
+      if (s === 'expired')  return '保固已到期'
       if (s === 'expiring') return '即將到期'
       return '保固中'
     },

@@ -152,12 +152,12 @@ register("bonus_correction_approved", "獎金更正單核准", _A, "none", "申�
          "請登入系統查看更正單；出納請於出納頁「獎金待發放」處理補發。（信中不含金額）")
 register("bonus_correction_returned", "獎金更正單駁回", _A, "none", "申請人",
          "更正單已駁回，修改並重新送審之前不會生效。", _RETURN_ACT)
-register("approval_reminder", "簽核逾期催辦", _A, "superadmins", "當層簽核人",
+register("approval_reminder", "簽核逾期提醒", _A, "superadmins", "當層簽核人",
          "單據停留在同一層超過規定工作日，後續作業延遲。", _APPROVE_ACT)
-register("dev_case_delete_request", "業務開發案件刪除申請", _A, "superadmins", "",
-         "案件在核准或駁回之前維持待刪除狀態。", "請登入系統，於業務開發頁確認申請理由後核准或駁回。")
-register("dev_case_relink_request", "業務開發案件連結異動申請", _A, "superadmins", "",
-         "案件與報價單／估價單的連結在核准之前維持原狀。", "請登入系統，於業務開發頁確認後核准或駁回。")
+register("dev_case_delete_request", "商機刪除申請", _A, "superadmins", "",
+         "商機在核准或駁回之前維持待刪除狀態。", "請登入系統，於業務開發頁確認申請理由後核准或駁回。")
+register("dev_case_relink_request", "商機連結異動申請", _A, "superadmins", "",
+         "商機與報價單／估價單的連結在核准之前維持原狀。", "請登入系統，於業務開發頁確認後核准或駁回。")
 register("case_close_blocked", "結案被防呆機制擋下", _A, "superadmins", "待處理的承辦人",
          "案件在前置條件完成之前無法結案。", "請依信中列出的未完成項目逐項處理後再結案。")
 register("case_change_requested", "已結案案件變更待簽核", _A, "superadmins", "",
@@ -183,12 +183,12 @@ register("case_project_overdue", "案件專案期間已超期", _B, "admins", ""
          "案件已超過預定的專案期間。", "請確認案件狀態，完成結案或更新專案期間。")
 register("warranty_expiry", "設備保固即將到期", _B, "admins", "業務負責人",
          "設備保固即將到期，到期後維修需另行報價。", "請聯繫客戶確認是否續約或延長保固。")
-register("dev_case_stale", "業務開發案件逾期未跟進", _B, "none", "業務與規劃人員",
-         "業務開發案件已超過規定天數沒有新的開發紀錄。", "請聯繫客戶並登錄開發紀錄。")
-register("dev_case_assigned", "業務開發案件指派", _B, "none", "被指派人",
-         "被指派人尚未留意前，案件可能逾期沒有人跟進。", "請登入系統查看案件內容，於回覆期限前更新進度並回報。")
-register("dev_case_reply_overdue", "業務開發案件回覆期限已過未回報", _B, "none", "被指派人與指派人",
-         "被指派人在回覆期限前沒有回報進度，案件可能無人跟進。", "請被指派人登入系統回報進度；指派人請確認是否需要改期或重新指派。")
+register("dev_case_stale", "商機逾期未跟進", _B, "none", "業務與規劃人員",
+         "商機已超過規定天數沒有新的開發紀錄。", "請聯繫客戶並登錄開發紀錄。")
+register("dev_case_assigned", "商機指派", _B, "none", "被指派人",
+         "被指派人尚未留意前，商機可能逾期沒有人跟進。", "請登入系統查看商機內容，於回覆期限前更新進度並回報。")
+register("dev_case_reply_overdue", "商機回覆期限已過未回報", _B, "none", "被指派人與指派人",
+         "被指派人在回覆期限前沒有回報進度，商機可能無人跟進。", "請被指派人登入系統回報進度；指派人請確認是否需要改期或重新指派。")
 register("dev_log_directive", "業務開發記錄批示", _B, "none", "被要求回覆的成員",
          "管理員已對開發記錄批示並指定您回覆，未及時查看可能延誤回覆。", "請登入系統查看批示內容並回覆。")
 register("settlement_finalized", "成本精算完結", _B, "admins", "",

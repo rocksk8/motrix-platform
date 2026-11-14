@@ -44,4 +44,5 @@ def test_index_counters_do_not_say_zero_when_the_module_is_missing(live_server, 
         text = cell.inner_text()
         assert "營運分析" in text, (tid, text)
         assert cell.locator(".h-band__n").inner_text().strip() == "—", (tid, text)
-        assert "沒有需要追蹤" not in text and "沒有已過保" not in text, (tid, text)
+        for stale in ("沒有需要追蹤", "沒有已過保", "尚無需要追蹤", "尚無保固已到期"):
+            assert stale not in text, (tid, text)

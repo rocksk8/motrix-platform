@@ -78,7 +78,7 @@ MODULE_LABELS = {
     "customers":            "客戶",
     "daily-tasks":          "每日工作事項",
     "dashboard":            "營運儀表板",
-    "dev-cases":            "業務開發案",
+    "dev-cases":            "商機",
     "dev-crm":              "業務開發",
     "dev-logs":             "業務開發紀錄",
     "devices":              "設備",

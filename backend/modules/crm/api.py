@@ -1,4 +1,4 @@
-"""M02 業務開發 CRM — 前期案件追蹤 + 開發記錄 (pre-quotation)。
+"""M02 業務開發 CRM — 前期商機追蹤 + 開發記錄 (pre-quotation)。
 
 2026-09-26 自 `routers/dev_crm.py` 搬入（PLAYBOOK §B）。只 import core／helpers／db（L1）。
 """
@@ -19,7 +19,7 @@ from helpers import perm as _perm
 from helpers import email_notify as _en            # LINE 專屬事件（僅 LINE／細項）走 `_en._line_event`
 import threading
 from helpers import (
-    _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
+    _require_user, _tok, _audit, can_see_financial, notify_module_activity, notify_dev_case_delete_request,
     notify_dev_case_relink_request, notify_dev_case_assigned, notify_dev_case_reply_overdue, notify_dev_log_directive,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
     push_event_for_dev_case_converted, push_event_for_dev_case_stale, push_event_for_module,
@@ -50,6 +50,10 @@ class DevCaseIn(BaseModel):
     planners: Optional[List[int]] = []
     # 介紹人（2026-09-30；自由文字、選填）。型別用 Any 由 `_clean_referrer` 自己驗：型別不對／太長回 400（不是 422）
     referrer: Optional[Any] = ''
+    # 預估金額／預計成交日（2026-11-14，T86 #17；選填、固定欄位）。型別用 Any 由 `_clean_expected_*` 自己驗（400，不是 422）。
+    # 「沒帶」≠「帶 null」：沒帶＝維持原值（舊用戶端不會蓋掉）；帶 null／空字串＝清空（預估金額只有看得到金額的人能帶非空值）。
+    expected_amount: Optional[Any] = Field(None, alias="expectedAmount")
+    expected_close_date: Optional[Any] = Field(None, alias="expectedCloseDate")
     # 樂觀鎖（選填，見 update_dev_case）——比照 customers.py/suppliers.py/
     # vendor_contractors.py 的 expectedUpdatedAt 慣例，camelCase 對外、
     # snake_case 對內
@@ -155,7 +159,7 @@ DEV_CASE_ACCESS = row_access.OwnerRule(
     creator_col="created_by",
     id_list_cols=("sales_persons", "planners"),
     lenient_json=True,
-    deny_message="無權限存取此業務開發案",
+    deny_message="無權限存取此商機",
 )
 row_access.register("dev_case", DEV_CASE_ACCESS)
 
@@ -259,8 +263,8 @@ def _user_map(conn) -> dict:
 
 
 def _case_people_usernames(conn, row) -> list:
-    """案件相關人的帳號（LINE 細項事件的預設收件人）＝業務＋企劃＋被指派人＋建立者（只取啟用中的帳號）。
-    與停滯提醒、`row_access` 的「這個案件誰有權限」同一組人；管理員不在內（要收的話在設定頁「另加指定人員」）。"""
+    """商機相關人的帳號（LINE 細項事件的預設收件人）＝業務＋企劃＋被指派人＋建立者（只取啟用中的帳號）。
+    與停滯提醒、`row_access` 的「這個商機誰有權限」同一組人；管理員不在內（要收的話在設定頁「另加指定人員」）。"""
     ids = []
     for col in ("sales_persons", "planners"):
         try:
@@ -293,11 +297,72 @@ def _clean_referrer(v) -> str:
     return v
 
 
+EXPECTED_AMOUNT_MAX = 9_999_999_999
+
+
+def _clean_expected_amount(v):
+    """預估金額：None／空字串 ⇒ None（沒填）；必須是 0 以上的整數（數字或純數字字串；含小數點、負數、布林、其他型別 ⇒ 400）。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, bool):
+        raise HTTPException(400, "預估金額必須是整數")
+    if isinstance(v, float):
+        if not v.is_integer():
+            raise HTTPException(400, "預估金額必須是整數（不含小數）")
+        v = int(v)
+    elif isinstance(v, str):
+        s = v.strip().replace(",", "")
+        if not re.fullmatch(r"[0-9]{1,15}", s):
+            raise HTTPException(400, "預估金額必須是 0 以上的整數")
+        v = int(s)
+    elif not isinstance(v, int):
+        raise HTTPException(400, "預估金額必須是整數")
+    if v < 0:
+        raise HTTPException(400, "預估金額不可為負數")
+    if v > EXPECTED_AMOUNT_MAX:
+        raise HTTPException(400, "預估金額最多 %s" % format(EXPECTED_AMOUNT_MAX, ","))
+    return v
+
+
+def _clean_expected_close_date(v):
+    """預計成交日：None／空字串 ⇒ None；必須是 YYYY-MM-DD 的真實日期（否則 400）。過去的日期可存（補登已成交的商機）。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if not isinstance(v, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v.strip()):
+        raise HTTPException(400, "預計成交日格式必須是 YYYY-MM-DD")
+    try:
+        date.fromisoformat(v.strip())
+    except ValueError:
+        raise HTTPException(400, "預計成交日不是有效的日期")
+    return v.strip()
+
+
+def _expected_values(body, user, row=None):
+    """依「沒帶＝維持、帶了＝設定」算出要寫的 (amount, close_date, changed_fields)。
+
+    amount 受金額可見性規則限制（`can_see_financial`）：沒有權限的人不能設定非空金額（403），
+    帶 null 也不會清掉原值（他看不到它）。`row`＝更新時的原列（建立時為 None）。"""
+    sent = body.model_fields_set
+    cur_amt = (row["expected_amount"] if row is not None and "expected_amount" in row.keys() else None)
+    cur_dt = (row["expected_close_date"] if row is not None and "expected_close_date" in row.keys() else None)
+    amt, dt = cur_amt, cur_dt
+    if "expected_amount" in sent:
+        new_amt = _clean_expected_amount(body.expected_amount)
+        if not can_see_financial(user):
+            if new_amt is not None:
+                raise HTTPException(403, "無權限填寫預估金額")
+        else:
+            amt = new_amt
+    if "expected_close_date" in sent:
+        dt = _clean_expected_close_date(body.expected_close_date)
+    return amt, dt
+
+
 def _like_esc(s: str) -> str:
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _case_row(row, umap: dict, extras: dict = None) -> dict:
+def _case_row(row, umap: dict, extras: dict = None, show_amount: bool = False) -> dict:
     extras = extras or {}
     try:
         sp = json.loads(row["sales_persons"] or "[]")
@@ -311,6 +376,10 @@ def _case_row(row, umap: dict, extras: dict = None) -> dict:
         "id": row["id"],
         "referrer": (row["referrer"] if "referrer" in row.keys() else "") or "",
         "caseName": row["case_name"],
+        # T86 #17：預估金額只給看得到金額的人（沒有權限 ⇒ null，前端顯示「—」）；預計成交日不是金額，所有看得到商機的人都看得到
+        "expectedAmount": (row["expected_amount"] if ("expected_amount" in row.keys() and show_amount) else None),
+        "expectedAmountVisible": bool(show_amount),
+        "expectedCloseDate": (row["expected_close_date"] if "expected_close_date" in row.keys() else None) or None,
         "customerName": row["customer_name"] or "",
         "customerId": row["customer_id"],
         "status": row["status"],
@@ -362,7 +431,7 @@ def _progress_out(r, umap: dict) -> dict:
 def _progress_extras(conn, rows, umap: dict) -> dict:
     """{case_id: {currentProgress, progressCount, overdueDays}}。一次查完整份清單，不逐案查（列表頁有幾百筆）。
     「目前進度」＝目前被指派人、`created_at >= assigned_at` 的最新一筆（與逾期判斷同一個條件：換人後新負責人沒寫過 ⇒ None）。
-    進度表讀不到（舊庫、migration 未完成）⇒ 回空，案件清單不能因此 500。"""
+    進度表讀不到（舊庫、migration 未完成）⇒ 回空，商機清單不能因此 500。"""
     ids = [r["id"] for r in rows]
     cnt, cur = {}, {}
     try:
@@ -399,10 +468,11 @@ def _progress_extras(conn, rows, umap: dict) -> dict:
     return out
 
 
-def _case_out(conn, row, umap: dict = None) -> dict:
-    """單筆案件回傳（含目前進度與逾期天數）。"""
+def _case_out(conn, row, umap: dict = None, user: dict = None) -> dict:
+    """單筆商機回傳（含目前進度與逾期天數）。`user`＝呼叫者；沒帶 ⇒ 不回預估金額（fail closed）。"""
     umap = umap if umap is not None else _user_map(conn)
-    return _case_row(row, umap, _progress_extras(conn, [row], umap).get(row["id"]))
+    return _case_row(row, umap, _progress_extras(conn, [row], umap).get(row["id"]),
+                     show_amount=bool(user) and can_see_financial(user))
 
 
 def _log_row(row, umap: dict) -> dict:
@@ -467,7 +537,8 @@ def list_dev_cases(
         if not _is_admin(user):
             rows = [r for r in rows if row_access.visible("dev_case", user, r)]
         extras = _progress_extras(conn, rows, umap)
-        return [_case_row(r, umap, extras.get(r["id"])) for r in rows]
+        show_amount = can_see_financial(user)
+        return [_case_row(r, umap, extras.get(r["id"]), show_amount) for r in rows]
     finally:
         conn.close()
 
@@ -476,14 +547,16 @@ def list_dev_cases(
 def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
     user = _require_dev(authorization)
     referrer = _clean_referrer(body.referrer)
+    exp_amount, exp_date = _expected_values(body, user)
     now = _TW_NOW()
     conn = get_db()
     try:
         cur = conn.execute("""
             INSERT INTO dev_cases
               (case_name, customer_name, customer_id, status,
-               sales_persons, planners, converted_quote_no, created_by, created_at, updated_at, referrer)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               sales_persons, planners, converted_quote_no, created_by, created_at, updated_at, referrer,
+               expected_amount, expected_close_date)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             body.case_name.strip(),
             (body.customer_name or "").strip(),
@@ -495,19 +568,55 @@ def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
             user["id"],
             now, now,
             referrer,
+            exp_amount, exp_date,
         ))
         conn.commit()
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (cur.lastrowid,)).fetchone()
         umap = _user_map(conn)
         _audit(_tok(authorization), "dev_case.create", "dev_case",
-               str(cur.lastrowid), body.case_name.strip(), {"referrer": referrer} if referrer else None)
+               str(cur.lastrowid), body.case_name.strip(),
+               {k: v for k, v in (("referrer", referrer), ("expectedAmount", "set" if exp_amount is not None else None), ("expectedCloseDate", exp_date)) if v} or None)
         notify_module_activity(
-            "業務開發", "新增案件",
+            "業務開發", "新增商機",
             user.get("display_name") or user["username"],
             body.case_name.strip(), _case_link(cur.lastrowid),
             line_event="crm_case_created", line_usernames=_case_people_usernames(conn, row), line_exclude=[user["username"]],
         )
-        return _case_out(conn, row, umap)
+        return _case_out(conn, row, umap, user=user)
+    finally:
+        conn.close()
+
+
+@router.get("/dev-cases/expected-summary")
+def dev_cases_expected_summary(authorization: str = Header("")):
+    """漏斗的「預估金額合計」（T86 #17）。只算呼叫者看得到的商機（同清單的列權限）、排除已刪除。
+
+    ⇒ `{visible, total, count, missing, byStatus:{狀態:{count,total,missing}}}`；`count`＝有填預估金額的商機數、`missing`＝沒填的件數。
+    沒有金額可見權限（`can_see_financial`）⇒ `visible:false`，`total`／各狀態 `total` 為 null（不洩漏），件數仍給。"""
+    user = _require_dev(authorization)
+    show = can_see_financial(user)
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT * FROM dev_cases WHERE is_deleted = 0").fetchall()
+        if not _is_admin(user):
+            rows = [r for r in rows if row_access.visible("dev_case", user, r)]
+        by = {s: {"count": 0, "sum": 0, "missing": 0} for s in _STATUS_OPTIONS}
+        for r in rows:
+            amt = r["expected_amount"] if "expected_amount" in r.keys() else None
+            slot = by.setdefault(r["status"] or "", {"count": 0, "sum": 0, "missing": 0})
+            if amt is None:
+                slot["missing"] += 1
+            else:
+                slot["count"] += 1
+                slot["sum"] += int(amt)
+        tot = {"count": sum(v["count"] for v in by.values()), "sum": sum(v["sum"] for v in by.values()),
+               "missing": sum(v["missing"] for v in by.values())}
+        return {
+            "visible": bool(show),
+            "total": tot["sum"] if show else None,
+            "count": tot["count"], "missing": tot["missing"],
+            "byStatus": {s: {"count": v["count"], "total": (v["sum"] if show else None), "missing": v["missing"]} for s, v in by.items()},
+        }
     finally:
         conn.close()
 
@@ -519,10 +628,10 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, row):
-            raise HTTPException(403, "無權限查看此案件")
-        return _case_out(conn, row)
+            raise HTTPException(403, "無權限查看此商機")
+        return _case_out(conn, row, user=user)
     finally:
         conn.close()
 
@@ -536,17 +645,19 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, row):
-            raise HTTPException(403, "無權限修改此案件")
-        # 樂觀鎖：業務開發案件可能有多位業務/企劃同時有編輯權（見 §3.4 sales_persons/
+            raise HTTPException(403, "無權限修改此商機")
+        # 樂觀鎖：商機可能有多位業務/企劃同時有編輯權（見 §3.4 sales_persons/
         # planners），沒有鎖的話兩人同時存檔會後寫覆蓋前寫且完全沒有提示
         if body.expected_updated_at and row["updated_at"] and body.expected_updated_at != row["updated_at"]:
-            raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
+            raise HTTPException(409, "商機資料已被其他人更新，請重新載入後再存")
+        exp_amount, exp_date = _expected_values(body, user, row)
         conn.execute("""
             UPDATE dev_cases
                SET case_name=?, customer_name=?, customer_id=?,
-                   status=?, sales_persons=?, planners=?, updated_at=?, referrer=?
+                   status=?, sales_persons=?, planners=?, updated_at=?, referrer=?,
+                   expected_amount=?, expected_close_date=?
              WHERE id=?
         """, (
             body.case_name.strip(),
@@ -557,15 +668,24 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
             json.dumps(body.planners or []),
             now,
             referrer,
+            exp_amount, exp_date,
             case_id,
         ))
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         old_ref = (row["referrer"] if "referrer" in row.keys() else "") or ""
+        old_dt = (row["expected_close_date"] if "expected_close_date" in row.keys() else None) or None
+        old_amt = row["expected_amount"] if "expected_amount" in row.keys() else None
+        detail = {}
+        if old_ref != referrer:
+            detail["referrer"] = {"from": old_ref, "to": referrer}
+        if old_dt != exp_date:
+            detail["expectedCloseDate"] = {"from": old_dt, "to": exp_date}
+        if old_amt != exp_amount:
+            detail["expectedAmount"] = "changed"            # 稽核紀錄不放金額本身（金額可見性規則只限看得到金額的人）
         _audit(_tok(authorization), "dev_case.update", "dev_case",
-               str(case_id), body.case_name.strip(),
-               {"referrer": {"from": old_ref, "to": referrer}} if old_ref != referrer else None)
-        return _case_out(conn, updated)
+               str(case_id), body.case_name.strip(), detail or None)
+        return _case_out(conn, updated, user=user)
     finally:
         conn.close()
 
@@ -573,10 +693,10 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
 @router.post("/dev-cases/{case_id}/request-delete", status_code=200)
 def request_dev_case_delete(case_id: int, body: DevCaseDeleteRequestIn,
                             authorization: str = Header("")):
-    """Admin+ 申請刪除案件 → 送交最高管理者審核。"""
+    """Admin+ 申請刪除商機 → 送交最高管理者審核。"""
     user = _require_dev(authorization)
     if not _is_admin(user):
-        raise HTTPException(403, "僅管理員可申請刪除案件")
+        raise HTTPException(403, "僅管理員可申請刪除商機")
     now = _TW_NOW()
     conn = get_db()
     try:
@@ -584,9 +704,9 @@ def request_dev_case_delete(case_id: int, body: DevCaseDeleteRequestIn,
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if row["pending_delete"]:
-            raise HTTPException(409, "此案件已有待審核的刪除申請")
+            raise HTTPException(409, "此商機已有待審核的刪除申請")
         requester_display = user.get("display_name") or user["username"]
         conn.execute(
             "UPDATE dev_cases SET pending_delete=1, delete_requested_by=?,"
@@ -617,9 +737,9 @@ def cancel_dev_case_delete(case_id: int, authorization: str = Header("")):
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row["pending_delete"]:
-            raise HTTPException(409, "此案件無待審核的刪除申請")
+            raise HTTPException(409, "此商機無待審核的刪除申請")
         requester_display = user.get("display_name") or user["username"]
         if user["role"] != "superadmin" and row["delete_requested_by"] != requester_display:
             raise HTTPException(403, "只能取消自己發出的刪除申請")
@@ -652,9 +772,9 @@ def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row["pending_delete"]:
-            raise HTTPException(409, "此案件無待審核的刪除申請")
+            raise HTTPException(409, "此商機無待審核的刪除申請")
         if body.approve:
             snapshot = json.dumps(dict(row), ensure_ascii=False)
             approver_display = user.get("display_name") or user["username"]
@@ -698,9 +818,9 @@ def update_dev_case_status(
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, row):
-            raise HTTPException(403, "無權限修改此案件")
+            raise HTTPException(403, "無權限修改此商機")
         conn.execute(
             "UPDATE dev_cases SET status=?, updated_at=? WHERE id=?",
             (body.status, now, case_id),
@@ -712,14 +832,14 @@ def update_dev_case_status(
         notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
                                 row["case_name"], _case_link(case_id),
                                 line_event="crm_case_status", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
-        return _case_out(conn, updated)
+        return _case_out(conn, updated, user=user)
     finally:
         conn.close()
 
 
 @router.patch("/dev-cases/{case_id}/assign")
 def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = Header("")):
-    """管理員指派業務開發案件給成員，並可設定回覆期限（crm v2，2026-11-03）。
+    """管理員指派商機給成員，並可設定回覆期限（crm v2，2026-11-03）。
     被指派人經 DEV_CASE_ACCESS 的 owner_id_col="assigned_to" 取得與業務／企劃同等的完整權限
     （使用者裁示；見本檔 DEV_CASE_ACCESS 旁的說明），不是另一條窄權限路徑。
 
@@ -731,13 +851,13 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
     - 取消指派 ⇒ 回覆期限一併清空。"""
     user = _require_dev(authorization)
     if not _is_admin(user):
-        raise HTTPException(403, "僅管理員可指派業務開發案件")
+        raise HTTPException(403, "僅管理員可指派商機")
     now = _TW_NOW()
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         keys = row.keys()
         old_to = row["assigned_to"] if "assigned_to" in keys else None
         old_dl = (row["reply_deadline"] if "reply_deadline" in keys else None) or None
@@ -746,7 +866,7 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
         if new_to is None:
             new_dl = None                                                 # 取消指派（或本來就沒人）⇒ 期限一併清空：沒有負責人就沒有回覆期限
         if new_to == old_to and new_dl == old_dl:
-            return _case_out(conn, row)                                   # 沒有任何變動
+            return _case_out(conn, row, user=user)                                   # 沒有任何變動
         if new_dl is not None and (new_dl != old_dl or new_to != old_to):      # 期限有改，或換人（含首次指派）沿用過期期限：都不能一指派就逾期
             try:
                 if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_dl):        # fromisoformat 在 3.11+ 也收 20261201：存進去會讓字串比較的逾期判斷錯位
@@ -792,7 +912,7 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
         if assignee_changed and assignee:
             assignee_display = assignee["display_name"] or assignee["username"]
             _notify(assignee["username"], "dev_case_assigned", str(case_id), row["case_name"],
-                    f"{actor_display} 將業務開發案件「{row['case_name']}」指派給您"
+                    f"{actor_display} 將商機「{row['case_name']}」指派給您"
                     + (f"，回覆期限 {new_dl}" if new_dl else "") + "。",
                     link=_case_link(case_id))
             spawn_bg_thread(
@@ -802,24 +922,24 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
             )
         if assignee_changed and old_user:                                 # 前任失去存取卻不知情（T73 稽核 S5）：站內通知，不寄信（LINE：僅 LINE 事件 `dev_case_unassigned`）
             _notify(old_user["username"], "dev_case_unassigned", str(case_id), row["case_name"],
-                    f"{actor_display} 已將業務開發案件「{row['case_name']}」"
-                    + (f"改指派給 {umap.get(new_to, '他人')}" if new_to else "取消指派") + "，您不再負責此案件。",
+                    f"{actor_display} 已將商機「{row['case_name']}」"
+                    + (f"改指派給 {umap.get(new_to, '他人')}" if new_to else "取消指派") + "，您不再負責此商機。",
                     link=_case_link(case_id))
             _en._line_event("dev_case_unassigned", usernames=[old_user["username"]], exclude=[user["username"]],
-                            title="業務開發案件已不由您負責", rows=[("案件名稱", row["case_name"]), ("操作人", actor_display)],
+                            title="商機已不由您負責", rows=[("商機名稱", row["case_name"]), ("操作人", actor_display)],
                             reason=("已改指派給 %s" % umap.get(new_to, "他人")) if new_to else "已取消指派")
         if not assignee_changed and assignee:                             # 只改期限：站內，不寄信（LINE：僅 LINE 事件 `dev_case_deadline_changed`）
             _notify(assignee["username"], "dev_case_deadline_changed", str(case_id), row["case_name"],
-                    f"{actor_display} 將業務開發案件「{row['case_name']}」的回覆期限"
+                    f"{actor_display} 將商機「{row['case_name']}」的回覆期限"
                     + (f"改為 {new_dl}" if new_dl else "清除（目前未設定）") + "。",
                     link=_case_link(case_id))
             _en._line_event("dev_case_deadline_changed", usernames=[assignee["username"]], exclude=[user["username"]],
-                            title="業務開發案件回覆期限已調整", rows=[("案件名稱", row["case_name"]), ("新的回覆期限", new_dl or "已清除"), ("操作人", actor_display)],
+                            title="商機回覆期限已調整", rows=[("商機名稱", row["case_name"]), ("新的回覆期限", new_dl or "已清除"), ("操作人", actor_display)],
                             reason="請依新的期限回覆")
         # 指派／調整期限的 LINE 已由 dev_case_assigned／dev_case_unassigned／dev_case_deadline_changed 負責 ⇒ 泛用的 module_activity 不再重複推（line_skip）
-        notify_module_activity("業務開發", "指派案件" if assignee_changed else "調整回覆期限", actor_display,
+        notify_module_activity("業務開發", "指派商機" if assignee_changed else "調整回覆期限", actor_display,
                                row["case_name"], _case_link(case_id), line_skip=True)
-        return _case_out(conn, updated, umap)
+        return _case_out(conn, updated, umap, user=user)
     finally:
         conn.close()
 
@@ -829,15 +949,15 @@ PROGRESS_MAX = 4000
 
 @router.get("/dev-cases/{case_id}/progress")
 def list_dev_case_progress(case_id: int, authorization: str = Header("")):
-    """進度回報歷史（新到舊）。看得到這個案件的人都看得到（含管理員）；每筆自帶作者與時間，換人後前任寫的也留著。"""
+    """進度回報歷史（新到舊）。看得到這個商機的人都看得到（含管理員）；每筆自帶作者與時間，換人後前任寫的也留著。"""
     user = _require_dev(authorization)
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, row):
-            raise HTTPException(403, "無權限查看此案件")
+            raise HTTPException(403, "無權限查看此商機")
         umap = _user_map(conn)
         rows = conn.execute("SELECT * FROM dev_case_progress WHERE case_id=? ORDER BY id DESC", (case_id,)).fetchall()
         return [_progress_out(r, umap) for r in rows]
@@ -855,7 +975,7 @@ def add_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: 
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         assigned_to = row["assigned_to"] if "assigned_to" in row.keys() else None
         if assigned_to is None or user["id"] != assigned_to:
             raise HTTPException(403, "僅目前被指派人可新增進度回報")
@@ -880,7 +1000,7 @@ def add_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: 
         notify_module_activity("業務開發", "更新進度回報", user.get("display_name") or user["username"],
                                 row["case_name"], _case_link(case_id), detail=content,
                                 line_event="crm_case_progress", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
-        return {"entry": _progress_out(entry, umap), "case": _case_out(conn, updated, umap)}
+        return {"entry": _progress_out(entry, umap), "case": _case_out(conn, updated, umap, user=user)}
     finally:
         conn.close()
 
@@ -895,13 +1015,13 @@ def mark_converted(
     try:
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, row):
-            raise HTTPException(403, "無權限修改此案件")
+            raise HTTPException(403, "無權限修改此商機")
         if row["converted_quote_no"]:
             # 已有連結的報價單號，異動／清空一律走審核流程（見 request-relink-quote），
             # 避免繞過核准直接覆蓋掉已成立的連結。
-            raise HTTPException(409, "此案件已連結報價單，如需異動或解除請透過「修改連結」送審")
+            raise HTTPException(409, "此商機已連結報價單，如需異動或解除請透過「修改連結」送審")
         quote_no = body.quote_no.strip()
         # quotations 跟 dev_cases 之間沒有 FK 約束，寫入前先確認單號真的存在——
         # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
@@ -920,7 +1040,7 @@ def mark_converted(
                                 f"{row['case_name']} → {quote_no}", _case_link(case_id),
                                 line_event="crm_case_converted", line_usernames=_case_people_usernames(conn, updated), line_exclude=[user["username"]])
         spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))
-        return _case_out(conn, updated)
+        return _case_out(conn, updated, user=user)
     finally:
         conn.close()
 
@@ -929,7 +1049,7 @@ def mark_converted(
 def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
                             authorization: str = Header("")):
     """Admin+ 申請異動（或清空）已連結的報價單號 → 送交最高管理者審核。
-    quote_no 留空即申請「解除連結」——業務案件因報價單被取消等原因需要斷開關聯時使用。"""
+    quote_no 留空即申請「解除連結」——商機因報價單被取消等原因需要斷開關聯時使用。"""
     user = _require_dev(authorization)
     if not _is_admin(user):
         raise HTTPException(403, "僅管理員可申請異動報價單連結")
@@ -940,11 +1060,11 @@ def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row["converted_quote_no"]:
-            raise HTTPException(400, "此案件尚未連結報價單，請使用「轉建報價單」建立連結")
+            raise HTTPException(400, "此商機尚未連結報價單，請使用「轉建報價單」建立連結")
         if row["pending_relink"]:
-            raise HTTPException(409, "此案件已有待審核的連結異動申請")
+            raise HTTPException(409, "此商機已有待審核的連結異動申請")
         target = (body.quote_no or '').strip()
         if target == row["converted_quote_no"]:
             raise HTTPException(400, "新單號與目前連結相同")
@@ -982,9 +1102,9 @@ def cancel_dev_case_relink(case_id: int, authorization: str = Header("")):
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row["pending_relink"]:
-            raise HTTPException(409, "此案件無待審核的連結異動申請")
+            raise HTTPException(409, "此商機無待審核的連結異動申請")
         requester_display = user.get("display_name") or user["username"]
         if user["role"] != "superadmin" and row["relink_requested_by"] != requester_display:
             raise HTTPException(403, "只能取消自己發出的連結異動申請")
@@ -1007,8 +1127,8 @@ def cancel_dev_case_relink(case_id: int, authorization: str = Header("")):
 def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
                              authorization: str = Header("")):
     """最高管理者審核連結異動申請 — approve=True 套用新單號（或清空）；False 退回。
-    清空（解除連結）核准後，案件狀態一併退回「洽談中」——報價單已不存在對應關係，
-    「成案」狀態繼續掛著會誤導其他人以為案件仍有成立中的報價單。"""
+    清空（解除連結）核准後，商機狀態一併退回「洽談中」——報價單已不存在對應關係，
+    「成案」狀態繼續掛著會誤導其他人以為商機仍有成立中的報價單。"""
     user = _require_dev(authorization)
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可審核連結異動申請")
@@ -1019,9 +1139,9 @@ def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row["pending_relink"]:
-            raise HTTPException(409, "此案件無待審核的連結異動申請")
+            raise HTTPException(409, "此商機無待審核的連結異動申請")
         if body.approve:
             target = row["relink_target_quote_no"] or ''
             if target and not conn.execute(
@@ -1041,7 +1161,7 @@ def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
                    str(case_id), f"{row['case_name']} → {target or '（解除連結）'}")
             notify_module_activity("業務開發", "核准連結異動", user.get("display_name") or user["username"],
                                     row["case_name"], _case_link(case_id))
-            return _case_out(conn, updated)
+            return _case_out(conn, updated, user=user)
         else:
             conn.execute(
                 "UPDATE dev_cases SET pending_relink=0, relink_requested_by='',"
@@ -1054,7 +1174,7 @@ def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
                    str(case_id), row["case_name"])
             notify_module_activity("業務開發", "退回連結異動申請", user.get("display_name") or user["username"],
                                     row["case_name"], _case_link(case_id))
-            return _case_out(conn, updated)
+            return _case_out(conn, updated, user=user)
     finally:
         conn.close()
 
@@ -1079,9 +1199,9 @@ def list_pending_logs(authorization: str = Header("")):
 
 @router.get("/dev-crm/activity-stats")
 def dev_crm_activity_stats(authorization: str = Header("")):
-    """跨案件每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依廠商／
+    """跨商機每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依廠商／
     通路拆解。僅計入已核准（needs_approval=0）的開發記錄；權限比照 row_access 的 dev_case
-    （非 admin 僅計入自己建立或被列為業務/規劃人員的案件）。"""
+    （非 admin 僅計入自己建立或被列為業務/規劃人員的商機）。"""
     user = _require_dev(authorization)
     conn = get_db()
     try:
@@ -1091,7 +1211,7 @@ def dev_crm_activity_stats(authorization: str = Header("")):
         visible_ids = [r["id"] for r in case_rows if row_access.visible("dev_case", user, r)]
         if not visible_ids:
             return {"daily": [], "weekly": [], "byVendor": [], "byChannel": []}
-        case_label = {r["id"]: (r["customer_name"] or r["case_name"] or "未命名案件") for r in case_rows}
+        case_label = {r["id"]: (r["customer_name"] or r["case_name"] or "未命名商機") for r in case_rows}
 
         today = date.today()
         window_start = today - timedelta(days=59)  # 近 60 天（含今天）
@@ -1136,7 +1256,7 @@ def dev_crm_activity_stats(authorization: str = Header("")):
             d = (r["log_date"] or "")[:10]
             if d < recent_start:
                 continue
-            label = case_label.get(r["case_id"], "未命名案件")
+            label = case_label.get(r["case_id"], "未命名商機")
             vendor_counts[label] = vendor_counts.get(label, 0) + 1
             ch = r["channel"] or "未分類"
             ch_counts[ch] = ch_counts.get(ch, 0) + 1
@@ -1162,9 +1282,9 @@ def list_dev_logs(case_id: int, authorization: str = Header("")):
     try:
         case_row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not case_row:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, case_row):
-            raise HTTPException(403, "無權限查看此案件")
+            raise HTTPException(403, "無權限查看此商機")
         umap = _user_map(conn)
         rows = conn.execute(
             "SELECT * FROM dev_logs WHERE case_id=? ORDER BY log_date DESC, id DESC",
@@ -1205,9 +1325,9 @@ async def create_dev_log(case_id: int,
             "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
         ).fetchone()
         if not case_row_chk:
-            raise HTTPException(404, "案件不存在")
+            raise HTTPException(404, "商機不存在")
         if not row_access.visible("dev_case", user, case_row_chk):
-            raise HTTPException(403, "無權限在此案件新增記錄")
+            raise HTTPException(403, "無權限在此商機新增記錄")
         needs_approval = 1 if body.log_by != user["id"] else 0
         saved_files = []
         if files:
@@ -1218,9 +1338,9 @@ async def create_dev_log(case_id: int,
                 user.get("display_name") or user["username"],
                 watermark_by=user.get("display_name") or user["username"],
             )
-        with files_txn(conn, saved_files):      # T84：寫庫失敗／案件在上傳途中被刪 ⇒ 回收剛存的檔
+        with files_txn(conn, saved_files):      # T84：寫庫失敗／商機在上傳途中被刪 ⇒ 回收剛存的檔
             if not conn.execute("SELECT 1 FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone():
-                raise HTTPException(404, "案件不存在")
+                raise HTTPException(404, "商機不存在")
             cur = conn.execute("""
                 INSERT INTO dev_logs
                   (case_id, log_date, log_by, channel, content, next_action,
@@ -1255,7 +1375,7 @@ async def create_dev_log(case_id: int,
             line_event="crm_visit_logged", line_usernames=_case_people_usernames(conn, case_row_chk), line_exclude=[user["username"]],
         )
         _sync_customer_visit(conn, case_id, cur.lastrowid, "upsert", body.dict())
-        # 行事曆「業務開發案件更新」（2026-09-30，預設關；開關在 L1 判斷）：同一案件同一天合併成一個事件
+        # 行事曆「商機更新」（2026-09-30，預設關；開關在 L1 判斷）：同一商機同一天合併成一個事件
         spawn_bg_thread(push_event_for_module, args=_dev_update_calendar_args(
             case_id, case_name_str, case_row_chk["customer_name"],
             user.get("display_name") or user["username"], body.log_date, _detail_lines, now))
@@ -1265,11 +1385,11 @@ async def create_dev_log(case_id: int,
 
 
 def _dev_update_calendar_args(case_id, case_name, customer_name, author, log_date, detail_lines, at):
-    """行事曆「業務開發案件更新」事件的內容（push_event_for_module 的參數）：標題「○○案件更新」，
-    說明＝這一筆開發紀錄；merge_key＝案件 id ⇒ 同一天的紀錄累加在同一個事件的說明裡。"""
+    """行事曆「商機更新」事件的內容（push_event_for_module 的參數）：標題「○○商機更新」，
+    說明＝這一筆開發紀錄；merge_key＝商機 id ⇒ 同一天的紀錄累加在同一個事件的說明裡。"""
     head = f"[{(at or '')[11:16]}] {author}（紀錄日期 {log_date or ''}）"
     desc = head + ("\n" + "\n".join(detail_lines) if detail_lines else "")
-    title = f"{case_name}案件更新" + (f"（{customer_name}）" if customer_name else "")
+    title = f"{case_name}商機更新" + (f"（{customer_name}）" if customer_name else "")
     return ("dev_case_update", title, desc, (at or "")[:10] or None, f"dev{case_id}")
 
 
@@ -1428,7 +1548,7 @@ def _directive_names(conn, ids) -> dict:
 def _directive_items(conn, user: dict, case_id: int, only_root: Optional[int] = None) -> list:
     """這個人看得到的批示（連同回覆與對象）；前端依 log_id 分組。
     可見度（使用者裁示）：**管理員、批示作者、被列為對象的人**；其他人連「有這筆批示」都看不到（整列不回）。
-    表不存在（舊庫、migration 未完成）⇒ 回空，不能讓案件頁 500。"""
+    表不存在（舊庫、migration 未完成）⇒ 回空，不能讓商機頁 500。"""
     try:
         drows = conn.execute("SELECT * FROM dev_log_directive WHERE case_id=? ORDER BY id", (case_id,)).fetchall()
         trows = conn.execute(
@@ -1483,9 +1603,9 @@ def _directive_items(conn, user: dict, case_id: int, only_root: Optional[int] = 
 def _directive_case(conn, user: dict, case_id: int):
     row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
     if not row:
-        raise HTTPException(404, "案件不存在")
+        raise HTTPException(404, "商機不存在")
     if not row_access.visible("dev_case", user, row):
-        raise HTTPException(403, "無權限查看此案件")
+        raise HTTPException(403, "無權限查看此商機")
     return row
 
 
@@ -1517,8 +1637,8 @@ def list_dev_log_directives(case_id: int = Path(..., ge=1, le=2**31 - 1), author
 
 @router.post("/dev-cases/{case_id}/directives", status_code=201)
 def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header("")):
-    """對某筆開發記錄下批示。閘：業務開發模組 ＋ 能力 `crm.dev_log_directive.comment` ＋ 看得到此案件。
-    對象 1～10 人，不含自己；每人須在職、具業務開發權限（或管理員）、看得到此案件，否則 400 並列出名字。"""
+    """對某筆開發記錄下批示。閘：業務開發模組 ＋ 能力 `crm.dev_log_directive.comment` ＋ 看得到此商機。
+    對象 1～10 人，不含自己；每人須在職、具業務開發權限（或管理員）、看得到此商機，否則 400 並列出名字。"""
     user = _require_dev(authorization)
     _perm.require(user, DIRECTIVE_CAP)
     conn = get_db()
@@ -1526,7 +1646,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
         case_row = _directive_case(conn, user, case_id)
         log = conn.execute("SELECT id, case_id FROM dev_logs WHERE id=?", (body.log_id,)).fetchone()
         if not log or log["case_id"] != case_id:
-            raise HTTPException(400, "開發記錄不存在或不屬於此案件")
+            raise HTTPException(400, "開發記錄不存在或不屬於此商機")
         content = _directive_text(body.content)
         want = {}
         for t in body.targets:                       # 去重；同一人重複出現時，任一筆要回覆就算要回覆
@@ -1553,7 +1673,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
                 bad.append("%s（沒有業務開發模組權限）" % name)
             elif not row_access.visible("dev_case", {"id": u["id"], "role": u["role"], "modules": u["modules"],
                                                      "username": u["username"], "display_name": u["display_name"]}, case_row):
-                bad.append("%s（無法檢視此案件）" % name)
+                bad.append("%s（無法檢視此商機）" % name)
         if bad:
             raise HTTPException(400, "以下對象無法指定：" + "、".join(bad))
         now = _TW_NOW()
@@ -1563,7 +1683,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
             (body.log_id, case_id, user["id"], content, now, body.log_id, case_id))
         if cur.rowcount == 0:
             conn.rollback()
-            raise HTTPException(400, "開發記錄不存在或不屬於此案件")
+            raise HTTPException(400, "開發記錄不存在或不屬於此商機")
         did = cur.lastrowid
         for uid, must in want.items():
             conn.execute("INSERT INTO dev_log_directive_target (directive_id, user_id, must_reply) VALUES (?,?,?)",
@@ -1577,7 +1697,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
         for uid, must in want.items():
             u = urows[uid]
             _notify(u["username"], "dev_log_directive", str(did), case_row["case_name"],
-                    "%s 對業務開發案件「%s」的開發記錄下了批示%s：%s"
+                    "%s 對商機「%s」的開發記錄下了批示%s：%s"
                     % (actor, case_row["case_name"], "，請回覆" if must else "（僅知會）", _snippet(content)),
                     link=_case_link(case_id))
             if must:
@@ -1587,7 +1707,7 @@ def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1
         info_only = [urows[uid]["username"] for uid, must in want.items() if not must]
         if info_only:                                 # LINE 也要通知「僅知會」的人（信件不寄；要回覆的人由 notify_dev_log_directive 內的 LINE 負責）；不放批示全文
             _en._line_event("dev_log_directive", usernames=info_only, title="業務開發記錄批示（僅知會）",
-                            rows=[("案件名稱", case_row["case_name"]), ("批示人", actor)], reason="請登入系統查看")
+                            rows=[("商機名稱", case_row["case_name"]), ("批示人", actor)], reason="請登入系統查看")
         items = _directive_items(conn, user, case_id, only_root=did)
         return items[0]
     finally:
@@ -1641,11 +1761,11 @@ def reply_dev_log_directive(body: DevLogDirectiveReplyIn, case_id: int = Path(..
                               to_ids).fetchall() if to_ids else []
         for u in recips:
             _notify(u["username"], "dev_log_directive_reply", str(directive_id), case_row["case_name"],
-                    "%s 回覆了業務開發案件「%s」的批示：%s" % (actor, case_row["case_name"], _snippet(content)),
+                    "%s 回覆了商機「%s」的批示：%s" % (actor, case_row["case_name"], _snippet(content)),
                     link=_case_link(case_id))
         if recips:                                    # LINE：僅 LINE 事件 `dev_log_directive_reply`（信件沒有）；不放回覆內容
             _en._line_event("dev_log_directive_reply", usernames=[u["username"] for u in recips],
-                            title="業務開發記錄批示有新回覆", rows=[("案件名稱", case_row["case_name"]), ("回覆人", actor)], reason="請登入系統查看回覆內容")
+                            title="業務開發記錄批示有新回覆", rows=[("商機名稱", case_row["case_name"]), ("回覆人", actor)], reason="請登入系統查看回覆內容")
         return _directive_items(conn, user, case_id, only_root=directive_id)[0]
     finally:
         conn.close()
@@ -1659,8 +1779,8 @@ _HOLD_AUTO_CONVERT_DAYS = 180
 
 
 def _check_dev_case_stale() -> None:
-    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員/被指派人 + 所有 admin/superadmin，
-    之後每 14 天重複提醒直到案件狀態改變或有新開發記錄（重置 updated_at）。"""
+    """洽談中商機超過 30 天未更新 → 通知業務/規劃人員/被指派人 + 所有 admin/superadmin，
+    之後每 14 天重複提醒直到商機狀態改變或有新開發記錄（重置 updated_at）。"""
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
     try:
@@ -1685,7 +1805,7 @@ def _check_dev_case_stale() -> None:
             if days < _STALE_DAYS:
                 continue
             bucket = (days - _STALE_DAYS) // _STALE_RENOTIFY_INTERVAL
-            # updated_at 併入 guard key，讓案件重新更新後再次逾期時，
+            # updated_at 併入 guard key，讓商機重新更新後再次逾期時，
             # 能取得全新的 key 空間，不會因 bucket 數字重複而永久漏發通知
             guard_key = f"devcase_stale.{row['id']}.{row['updated_at']}.{bucket}"
             if _get_setting(guard_key):
@@ -1709,7 +1829,7 @@ def _check_dev_case_stale() -> None:
 
             for username in all_usernames:
                 _notify(username, "dev_case_stale", str(row["id"]), row["case_name"],
-                        f"案件「{row['case_name']}」洽談中已 {days} 天未更新，請確認跟進進度")
+                        f"商機「{row['case_name']}」洽談中已 {days} 天未更新，請確認跟進進度")
 
             threading.Thread(
                 target=notify_dev_case_stale,
@@ -1719,7 +1839,7 @@ def _check_dev_case_stale() -> None:
 
             # 行事曆推送用獨立於上面 email 的 guard key（不帶 bucket 編號）：
             # 只在這次停滯週期第一次跨過 30 天時建一次，跟 email 每 14 天重複的
-            # 頻率脫鉤，避免同一案件在行事曆上疊出好幾個重複事件（2026-08-21g，
+            # 頻率脫鉤，避免同一商機在行事曆上疊出好幾個重複事件（2026-08-21g，
             # 使用者明確要求「只建一次」）。
             cal_guard_key = f"devcase_stale_cal.{row['id']}.{row['updated_at']}"
             if not _get_setting(cal_guard_key):
@@ -1735,8 +1855,8 @@ def _check_dev_case_stale() -> None:
 
 
 def _check_dev_case_reply_overdue() -> None:
-    """回覆期限已過、被指派人自指派後一筆進度都沒寫的洽談中案件 ⇒ 提醒一次（站內＋信），不重複催（crm v3，2026-11-04）。
-    防重入 guard key＝案件＋期限＋被指派人：換人或改期限會重新武裝，同一組合只提醒一次。
+    """回覆期限已過、被指派人自指派後一筆進度都沒寫的洽談中商機 ⇒ 提醒一次（站內＋信），不重複催（crm v3，2026-11-04）。
+    防重入 guard key＝商機＋期限＋被指派人：換人或改期限會重新武裝，同一組合只提醒一次。
     收件人＝被指派人＋指派人（assigned_by）；任一方停用或沒有紀錄（舊資料）⇒ 另外加上全體 admin（跟 `_check_dev_case_stale` 的退路一致）。
     期限當天不算逾期（< 今天）。"""
     today_str = date.today().strftime("%Y-%m-%d")
@@ -1775,7 +1895,7 @@ def _check_dev_case_reply_overdue() -> None:
             assignee_display = (a["display_name"] or a["username"]) if a else ""
             for username in names:
                 _notify(username, "dev_case_reply_overdue", str(row["id"]), row["case_name"],
-                        f"案件「{row['case_name']}」的回覆期限（{row['reply_deadline']}）已過 {days} 天，被指派人尚未回報進度",
+                        f"商機「{row['case_name']}」的回覆期限（{row['reply_deadline']}）已過 {days} 天，被指派人尚未回報進度",
                         link=_case_link(row["id"]))
             threading.Thread(
                 target=notify_dev_case_reply_overdue,
@@ -1791,7 +1911,7 @@ def _check_dev_case_reply_overdue() -> None:
 
 
 def _check_dev_case_hold_expiry() -> None:
-    """暫擱置案件超過 180 天未更新 → 自動轉為未成案，避免案件無限期卡在暫擱置、
+    """暫擱置商機超過 180 天未更新 → 自動轉為未成案，避免商機無限期卡在暫擱置、
     篩選與統計持續失真。系統排程動作，不發 email、不站內通知（跟人工手動變更
     狀態不同——這裡沒有一個負責的操作者可歸因，通知也不會有人回應跟進），
     僅寫入 audit_log 供事後追查。"""
@@ -1833,11 +1953,11 @@ def _check_dev_case_hold_expiry() -> None:
 
 
 def unlink_deleted_quote(conn, quote_no: str) -> list:
-    """IP-13 `crm.quote_deleted`（M02 → M01）：報價單被刪除 ⇒ 轉建連結指到它的業務開發案件解除連結、退回「洽談中」。
+    """IP-13 `crm.quote_deleted`（M02 → M01）：報價單被刪除 ⇒ 轉建連結指到它的商機解除連結、退回「洽談中」。
 
     在**呼叫方的交易內**執行、不 commit（與刪報價單同一筆交易：要嘛都成、要嘛都不成）。
     dev_cases 與 quotations 之間沒有 FK，不解除就會留下指向不存在報價單的連結。
-    回傳被解除的案件 `[{"id", "case_name"}]`，稽核紀錄由呼叫方寫（它有操作者的身分）。"""
+    回傳被解除的商機 `[{"id", "case_name"}]`，稽核紀錄由呼叫方寫（它有操作者的身分）。"""
     rows = conn.execute(
         "SELECT id, case_name FROM dev_cases WHERE converted_quote_no=?", (quote_no,)
     ).fetchall()

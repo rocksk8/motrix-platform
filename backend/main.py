@@ -123,6 +123,7 @@ _log_setup.attach_redact_filter()      # 查詢字串遮罩：token 不進任何
 if _log_setup.enabled_by_environment():
     from core import paths as _log_paths
     _LOG_SPLIT = _log_setup.install(_log_paths.LOGS_DIR)
+    _log_setup.install_request_timing(_log_paths.LOGS_DIR)     # logs/request_timing.log：每個 /api/ 請求一行耗時（背景寫入，不拖慢請求）
 else:
     _LOG_SPLIT = None
 
@@ -841,6 +842,9 @@ async def auth_middleware(request: Request, call_next):
             "detail": _company_setup.MSG_REQUIRED, "code": _company_setup.CODE_REQUIRED,
             "canFix": row["role"] == "superadmin", "settingsUrl": _company_setup.SETTINGS_URL})
     response = await call_next(request)
+    _fail_reason = response.headers.get("x-fail-reason")      # T86 U1：端點帶的失敗原因碼（固定詞彙；不認得的碼由 _audit_failure 退回依狀態碼的預設）
+    if _fail_reason:
+        request.state.audit_reason = _fail_reason
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
     await run_in_threadpool(_after_response_records, request, row, now_dt, path, response.status_code)       # 一次 hop：軌跡＋失敗稽核
@@ -943,6 +947,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+app.add_middleware(_log_setup.RequestTimingMiddleware)   # T86：請求耗時（純 ASGI；放在 InternalCols 之前加，仍是第二外層）
 app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不得出現在任何 JSON 回應（最後加＝最外層，看到的是最終本文）
 
 

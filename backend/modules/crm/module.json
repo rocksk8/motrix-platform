@@ -6,7 +6,7 @@
   "license_key": "crm",
   "permissions": ["dev_crm"],
   "tables": ["dev_cases", "dev_logs", "dev_case_progress", "dev_log_directive", "dev_log_directive_target"],
-  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6，db.py v27 起）；dev_cases.referrer（介紹人）由本模組自己的 migration（migrations/0001_dev_cases_referrer.py）新增；dev_cases.assigned_to／reply_deadline／progress_report（指派成員／回覆期限／進度回報）由 migrations/0002_dev_case_assignment.py 新增；dev_case_progress 表與 dev_cases.assigned_at／assigned_by（進度回報歷史、指派時間與指派人）由 migrations/0003_dev_case_progress.py 新增；dev_log_directive／dev_log_directive_target（開發記錄批示與回覆、通知／待回覆對象）由 migrations/0004_dev_log_directive.py 新增",
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6，db.py v27 起）；dev_cases.referrer（介紹人）由本模組自己的 migration（migrations/0001_dev_cases_referrer.py）新增；dev_cases.assigned_to／reply_deadline／progress_report（指派成員／回覆期限／進度回報）由 migrations/0002_dev_case_assignment.py 新增；dev_case_progress 表與 dev_cases.assigned_at／assigned_by（進度回報歷史、指派時間與指派人）由 migrations/0003_dev_case_progress.py 新增；dev_log_directive／dev_log_directive_target（開發記錄批示與回覆、通知／待回覆對象）由 migrations/0004_dev_log_directive.py 新增；dev_cases.expected_amount／expected_close_date（預估金額、預計成交日）由 migrations/0005_dev_case_expected.py 新增",
   "data": {
     "tables": [
       {"name": "dev_cases", "class": "T1"},
@@ -20,8 +20,8 @@
   "capabilities": [
     {"key": "crm.dev_log_directive.comment", "label": "對開發記錄下批示", "legacy": {"role": ["admin"]},
      "risk": "mid", "delegable": true, "recommended": ["admin"],
-     "desc": "可以對業務開發案件裡的某一筆開發記錄下批示（留言指示），通知指定的成員，並可指定誰要回覆。",
-     "impact": "具備此權限者，可對自己有權檢視的案件下批示；批示只有下批示的人、被指定的成員和管理員可檢視。被指定的成員仍須有業務開發模組權限、而且可檢視該案件才能被指定。被指定的成員回覆批示不需要這項。",
+     "desc": "可以對商機裡的某一筆開發記錄下批示（留言指示），通知指定的成員，並可指定誰要回覆。",
+     "impact": "具備此權限者，可對自己有權檢視的商機下批示；批示只有下批示的人、被指定的成員和管理員可檢視。被指定的成員仍須有業務開發模組權限、而且可檢視該商機才能被指定。被指定的成員回覆批示不需要這項。",
      "question": "{who}可以對開發記錄下批示嗎？"}
   ],
   "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},

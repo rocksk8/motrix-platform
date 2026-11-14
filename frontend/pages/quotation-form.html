@@ -713,6 +713,8 @@
       [data-testid="qf-save-conflict"] { top: var(--topbar-h) !important; }
       .form-layout { margin-top: 0; }
     }
+    /* T86：「重試連結」手機點擊目標 ≥44px（倍率補償同其他元件） */
+    @media (max-width: 767px) { .qf-devcase-retry { min-height: calc(44px / var(--fz,1)); } }
     @media (max-width: 767px) {
       .form-layout { padding: 12px 12px 28px; }
       .form-section { padding: 14px; }
@@ -1153,7 +1155,7 @@
           <button class="btn btn-ghost btn-sm" :disabled="reviewEditBusy" @click="cancelReviewEdit()" data-testid="review-edit-cancel">放棄修改</button>
         </span>
       </template>
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on && !reviewEditing && !isApproverLocked()">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="!isStatusLocked() && !hb.on && !reviewEditing && !isApproverLocked()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         <span x-text="unlocked ? '儲存修改' : '儲存草稿'"></span>
       </button>
@@ -1227,7 +1229,14 @@
   <!-- ══ 主體 ══ -->
   <div class="form-layout">
 
-    <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
+    <div class="form-left" :class="{'is-locked': isStatusLocked(), 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
+      <template x-if="statusLockedBanner()">
+        <div data-testid="qf-status-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
+          <strong x-text="statusLockedBanner().title"></strong>
+          <span x-text="statusLockedBanner().how"></span>
+        </div>
+      </template>
+
       <template x-if="pendingReadOnlyBanner()">
         <div data-testid="qf-pending-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
           <strong>此單目前<span x-text="MotrixStatus.label(q.status)"></span>，僅簽核人可編輯。</strong>
@@ -1242,7 +1251,8 @@
            不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
       <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
            style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
-        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請先載入最新版，再重新進行您要修改的部分。</span>
+        <span><b>這份報價單在您載入之後已被更新</b>（可能是其他人，也可能是您在別處的操作）。為避免覆蓋對方的修改，您這次的存檔未生效，自動存檔已暫停。請選擇「載入最新版，保留我的修改」，或「載入最新版」並放棄未存的修改。</span>
+        <button class="btn btn-sm btn-primary" data-testid="qf-save-conflict-keep" @click="reloadKeepMine()">載入最新版，保留我的修改</button>
         <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
       </div>
 
@@ -1250,9 +1260,9 @@
            連結失敗不准靜默：持續顯示原因與「重試連結」（報價單本身已存好，不會重複建單）。 -->
       <div x-show="devCaseBanner.kind" x-cloak>
       <div data-testid="qf-devcase-banner" role="alert"
-           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
+           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin:0 16px 14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
         <span data-testid="qf-devcase-msg" x-text="devCaseBanner.msg"></span>
-        <button class="btn btn-sm" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
+        <button class="btn btn-sm qf-devcase-retry" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
       </div>
       </div>
 
@@ -2709,7 +2719,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.48'
+  const FORM_VERSION = 'V3.49'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -3368,6 +3378,7 @@
       },
 
       setDirty() {
+        if (this.isStatusLocked()) return      // 狀態已鎖定：內容不能存（PUT 必 403），不標未儲存、不啟動自動存檔
         this.isDirty = true
         clearTimeout(this.autoSaveTimer)
         this.autoSaveTimer = setTimeout(() => this.autoSave(), 60000) // 60s auto
@@ -3416,6 +3427,7 @@
       async apiSave(isNew) {
         // 先重設：後面幾個早退 `return false` 不是後端拒絕，不能讓上一次留下的原因／衝突旗標被當成這次的失敗原因
         this._saveError = ''
+        this._saveCode = ''
         this._saveNet = false
         this._saveConflict = false
         if (this.hb.on) return false                        // 補登模式：只能用「補登送出」，不走一般存檔／自動存檔
@@ -3451,11 +3463,13 @@
           if (!res.ok) {
             // 後端有回具體原因（例如「申請人尚未歸屬任何部門」）就留著給呼叫端顯示，不要吞成「後端是否在線」
             this._saveError = this._detailFromBody(await res.text(), res.status)
-            console.warn('API 儲存被後端拒絕', res.status, this._saveError)
+            this._saveCode = res.headers.get('X-Fail-Reason') || ''      // 後端的失敗原因碼（固定詞彙）：用來告訴使用者怎麼處理
+            console.warn('API 儲存被後端拒絕', res.status, this._saveCode, this._saveError)
             return false
           }
           const d = await res.json()
           this._lastUpdatedAt = d.updated_at || d.created_at || this._lastUpdatedAt
+          this._fpSaved = this._fpNow()                  // 這份內容已存：之後沒再改就不必重複存（saveDraft 比對）
           this._saveConflict = false
           this.saveConflictBanner = false
           if (isNew) {
@@ -3494,17 +3508,53 @@
           if (r.ok) {
             this.devCaseBanner = { kind: 'ok', msg: '已連結：' + label + ' ↔ ' + name + '（商機狀態已設為成案）。' }
             this.devCaseId = null
+            this._devCasePending(quoteNo, null)
+            this._syncDevCaseUrl(quoteNo)
           } else {
             const why = this._detailFromBody(await r.text(), r.status)
             this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗：' + why + '。請按「重試連結」，或回到業務開發頁手動連結。' }
             this.toast('連回業務開發商機失敗：' + why)
+            this._devCasePending(quoteNo, this.devCaseId)
+            this._syncDevCaseUrl(quoteNo)
           }
         } catch (e) {
           this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗（連不上伺服器）。請按「重試連結」，或回到業務開發頁手動連結。' }
           this.toast('連回業務開發商機失敗（連不上伺服器）')
+          this._devCasePending(quoteNo, this.devCaseId)
+          this._syncDevCaseUrl(quoteNo)
         } finally {
           this.devCaseBusy = false
         }
+      },
+
+      // 連結還沒成功時把 devCase 留在網址（?id=<單號>&devCase=<商機>）：重新整理後 init 會讀到並自動重試連結；成功後網址回到 ?id=<單號>。
+      _syncDevCaseUrl(quoteNo) {
+        try {
+          const u = '?id=' + encodeURIComponent(quoteNo) + (this.devCaseId ? '&devCase=' + this.devCaseId : '')
+          history.replaceState(null, '', u)
+        } catch (_e) { /* 網址更新失敗不影響存檔 */ }
+      },
+
+      // 「這個瀏覽器的上次存檔連回商機失敗」的紀錄（sessionStorage：qf_devcase_pending:<單號> = 商機 id；成功即清）。
+      // 網址上的 devCase 只是提示——光有網址不夠（轉寄／書籤／貼錯的連結不能在開頁時偷偷改商機狀態）。
+      _devCasePending(quoteNo, id) {
+        try {
+          const k = 'qf_devcase_pending:' + quoteNo
+          if (id) sessionStorage.setItem(k, String(id)); else sessionStorage.removeItem(k)
+        } catch (_e) { /* 無痕或封鎖儲存：就只是沒有自動重試，仍有重試鈕 */ }
+      },
+      _devCasePendingGet(quoteNo) {
+        try { return sessionStorage.getItem('qf_devcase_pending:' + quoteNo) || '' } catch (_e) { return '' }
+      },
+
+      // 既有單載入時（?id=…&devCase=…）：只有「本瀏覽器記錄過這張單連回失敗、且網址的 devCase 與記錄相同」才接著重試（失敗仍顯示橫幅與重試鈕）。
+      async _resumeDevCaseLink(params, editNo) {
+        const dc = (params.get('devCase') || '').trim()
+        if (!editNo || !/^[1-9]\d{0,9}$/.test(dc) || !this.q.quoteNo) return
+        if (this._devCasePendingGet(this.q.quoteNo) !== dc) return
+        this.devCaseId = parseInt(dc, 10)
+        this.devCaseName = this.q.projectName || ''
+        await this.linkDevCase(this.q.quoteNo)
       },
 
       // 新增模式讀 ?customer=&project=&devCase=（業務開發「轉建」帶來）：客戶名稱比對得到就走一般選客戶流程（帶地址／聯絡人），比不到只填名稱；
@@ -3537,8 +3587,18 @@
       },
 
       // 儲存／送審失敗時給使用者看的原因：後端具體原因 ＞ 連不上伺服器 ＞ 前端自己的檢查擋下
+      // 後端失敗原因碼 → 該怎麼處理（只講使用者能做的事）
+      _failHow(code) {
+        return ({
+          status_locked: '這張單目前不是草稿，內容已鎖定。要修改請由最高管理者按「解鎖編輯」（修改後會重新簽核），或先收回草稿／請簽核人退回修改。',
+          rejected_locked: '這張單已駁回結案，不能再修改。需要的話請複製成新的報價單。',
+          finance_view: '您的帳號沒有財務檢視權限，不能編輯報價單。請洽最高管理者調整權限。',
+          unlock_superadmin: '只有最高管理者可以解鎖編輯。',
+        })[code] || ''
+      },
+
       _saveFailReason() {
-        if (this._saveError) return this._saveError
+        if (this._saveError) return this._saveError + (this._failHow(this._saveCode) ? '\n處理方式：' + this._failHow(this._saveCode) : '')
         if (this._saveNet) return '無法連線到伺服器，請確認網路與後端伺服器是否在線'
         return '表單內容有誤（例如數字欄位格式不正確或稅率未選），請修正後再試一次'
       },
@@ -3816,6 +3876,7 @@
       },
 
       autoSave() {
+        if (this.isStatusLocked()) return     // 已送出／已駁回結案：PUT 必 403（T86 U1：正式機 403 的主因之一），不送
         if (this.unlocked) return             // 解鎖編輯一律手動按「儲存修改」（存檔會重跑簽核鏈，不該被計時器碰；自動存檔的 PUT 不帶 _isUnlockEdit，必被 403）
         if (this.isApproverLocked()) return   // 簽核人檢視中不存檔（PUT 在待審核會被擋）；欄位已鎖，這是最後一道防線
         if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
@@ -3837,6 +3898,40 @@
         try { ok = (await this.loadQuote()) === true } catch (_e) { ok = false }
         if (!ok) { this.toast('載入最新版失敗，您的修改仍留在畫面上；請確認連線後再按一次'); return }   // 失敗時不清 isDirty／橫幅：基準沒換，下次存檔仍會 409
         this.isDirty = false              // 橫幅與 _saveConflict 由 loadQuote() 成功時清
+      },
+
+      // 內容指紋（畫面 q＋合計）：saveDraft 用它判斷「跟上次存的一樣」。載入完成與存檔成功時記下
+      _fpNow() {
+        try { return JSON.stringify({ ...this.q, tot: this.tot }) } catch (_e) { return '' }
+      },
+
+      // 衝突時的出路：載入最新版，但把「我改過的頂層欄位」（相對於我載入時的版本）蓋回去；別人改過而我沒動的欄位用最新的。
+      // 兩邊都改過同一欄位 ⇒ 以我的為準，並列出來請我自己看一眼。結果標成未儲存，由使用者確認後再按儲存。
+      async reloadKeepMine() {
+        clearTimeout(this.autoSaveTimer)
+        const SKIP = ['tot', 'approval', 'editHistory', 'exportLog', 'exportCount', 'isSigned', 'signedBy', 'signedAt', 'signedLog', 'signedFiles', 'returnInfo', 'dealTag', 'status', 'quoteNo']
+        // 欄位鍵 → [表單, 預設名稱]：名稱走表單自己的 fLabel（含自訂標籤）；沒登記的鍵一律說「其他欄位」，不把內部欄位鍵露給使用者
+        const LABEL = { customerName: ['qcustomer', '公司名稱'], projectName: ['qproject', '案件名稱'], contactName: ['qcustomer', '聯絡人'],
+          contactPhone: ['qcustomer', '電話 / 分機'], contactEmail: ['qcustomer', 'E-mail'], deliveryAddress: ['qcustomer', '送貨地址 / 發票地址'],
+          deliveryLocation: ['qproject', '交貨地點'], validDays: ['qbasic', '有效天數'], salesPerson: ['qbasic', '報價人'], locationId: ['qbasic', '開立據點'],
+          paymentTerms: ['qterms', '付款條件'], deliveryTerms: ['qterms', '交貨條件'], acceptanceTerms: ['qterms', '驗收標準'],
+          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL] }
+        const mineNow = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
+        const base = this._qBase || {}
+        const changed = Object.keys(mineNow).filter(k => !SKIP.includes(k) && JSON.stringify(mineNow[k]) !== JSON.stringify(base[k]))
+        let ok = false
+        try { ok = (await this.loadQuote()) === true } catch (_e) { ok = false }
+        if (!ok) { this.toast('載入最新版失敗，您的修改仍留在畫面上；請確認連線後再按一次'); return }
+        const theirs = this._qBase || {}
+        const both = changed.filter(k => JSON.stringify(theirs[k]) !== JSON.stringify(base[k]))
+        changed.forEach(k => { this.q[k] = mineNow[k] })
+        this.calcTotals()
+        this.isDirty = changed.length > 0
+        const names = keys => Array.from(new Set(keys.map(k => k === 'items' ? '報價品項' : (LABEL[k] ? this.fLabel(LABEL[k][0], k, LABEL[k][1]) : '其他欄位'))))
+        this.toast(changed.length
+          ? '已載入最新版並保留您修改的欄位（' + names(changed).join('、') + '）'
+            + (both.length ? '；其中「' + names(both).join('、') + '」對方也改過，已用您的內容，請確認後再儲存' : '，確認後請按儲存')
+          : '已載入最新版（您沒有改到任何欄位）')
       },
 
       _allCombined() {
@@ -4054,6 +4149,7 @@
       },
 
       async saveDraft() {
+        if (this.isStatusLocked() && !this.isNewRecord) { const b = this.statusLockedBanner(); this.toast(b ? b.title + b.how : '這張單目前不能存檔'); return }
         if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
         if (this._taxBasisBlocksSubmit(this.unlocked ? '待審核' : this.q.status)) return
         // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
@@ -4069,6 +4165,13 @@
           if (!confirm('管銷分攤比率為 ' + this.ohPct() + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要儲存嗎？')) return
           this._ohConfirmed = this.ohPct()
         }
+        // 內容跟上次存的一模一樣：不再送一次 PUT（每送一次都多一筆稽核、更新時間往前跳，也會讓別人開著的畫面撞版本衝突）。解鎖編輯照存（會重跑簽核）。
+        if (!this.isNewRecord && !this.unlocked && this._fpSaved && this._fpSaved === this._fpNow()) {
+          this.isDirty = false
+          clearTimeout(this.autoSaveTimer)
+          this.toast('內容沒有變更，不需要重複儲存。')
+          return
+        }
         const wasNew = this.isNewRecord
         this.isNewRecord = false
 
@@ -4078,7 +4181,7 @@
         delete this.q._isUnlockEdit
         if (!ok) {
           if (this._saveConflict) {
-            alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。請重新載入頁面後再繼續編輯。')
+            alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。\n請按畫面上方橫幅的「載入最新版，保留我的修改」（只換掉您沒改過的欄位），確認後再儲存。')
           } else {
             alert('儲存失敗：' + this._saveFailReason())
           }
@@ -4167,6 +4270,19 @@
         if (!this.q.quoteNo) { this.toast('請先儲存報價單後再匯出'); return }
         if (this.q.dealTag === '未成案') return
         if (this.exporting) return
+        // 這一版（單號＋最後更新時間）這個頁面已經產生過 PDF：直接再下載同一份，不重新產生、不重複計入匯出次數；
+        // 但「誰在什麼時候又下載了一次」仍留一筆稽核（POST …/export?reused=1：只寫稽核，不加匯出次數）
+        // （T86 U2：正式機同人 10 分鐘內反覆匯出；已送出的單內容不會變，重產只是多等幾秒＋多一筆紀錄）
+        const _pk = this.q.quoteNo + '|external|' + (this._lastUpdatedAt || '')
+        if (this._pdfCache && this._pdfCache.key === _pk) {
+          this._saveBlobAs(this._pdfCache.blob, `${this.q.quoteNo}.pdf`)
+          fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=external&reused=1`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + this.session.token },
+          }).then(r => { if (!r.ok) this.toast('已下載，但這次下載沒有記錄成功。') }).catch(() => this.toast('已下載，但這次下載沒有記錄成功（網路錯誤）。'))
+          this.toast('內容沒有變更，已重新下載剛才產生的 PDF。檔案在瀏覽器的「下載」。')
+          return
+        }
         this.exporting = true
         try {
           // 記錄匯出（fire-and-update，不阻塞 PDF 下載）
@@ -4199,20 +4315,25 @@
             this.toast(msg); return
           }
           const blob = await r.blob()
-          const url  = URL.createObjectURL(blob)
-          const a    = document.createElement('a')
-          a.href     = url
-          a.download = `${this.q.quoteNo}.pdf`
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          setTimeout(() => URL.revokeObjectURL(url), 1000)
-          this.toast('PDF 已下載完成')
+          this._pdfCache = { key: _pk, blob }
+          this._saveBlobAs(blob, `${this.q.quoteNo}.pdf`)
+          this.toast('PDF 已下載完成（檔名 ' + this.q.quoteNo + '.pdf，在瀏覽器的「下載」）')
         } catch {
           this.toast('PDF 下載失敗，請確認後端連線')
         } finally {
           this.exporting = false
         }
+      },
+
+      _saveBlobAs(blob, name) {
+        const url = URL.createObjectURL(blob)
+        const a   = document.createElement('a')
+        a.href = url
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
       },
 
       editTypeLabel(type) {
@@ -4323,6 +4444,17 @@
         // 解鎖編輯（只有最高管理者能解鎖）例外：最高管理者同時是當層簽核人時，解鎖後也要真的可編輯（V3.45）
         return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing
           && (!this.unlocked || (this.isCurrentTierApprover() && this.session.role !== 'superadmin'))
+      },
+      // 後端鎖定（整份存檔必回 403）的狀態：已送出（除非解鎖編輯）、已駁回結案（解鎖也不行）。待審核／簽核中另有 isApproverLocked()／pendingReadOnlyBanner()
+      isStatusLocked() {
+        return (this.q.status === '已送出' && !this.unlocked) || this.q.status === '已拒絕'
+      },
+      statusLockedBanner() {
+        if (!this.isStatusLocked() || this.isNewRecord) return null
+        if (this.q.status === '已拒絕') return { title: '這張報價單已駁回結案，內容不能修改。', how: this._failHow('rejected_locked') }
+        return { title: '這張報價單已送出，內容已鎖定。', how: this.session?.role === 'superadmin'
+          ? '要修改請按上方「解鎖編輯」；修改後已簽的層會重新簽核。'
+          : '要修改請洽最高管理者按「解鎖編輯」（修改後會重新簽核），或複製成新的報價單。' }
       },
       isPendingStatus() { return this.q.status === '待審核' || this.q.status === '簽核中' },
       // 解鎖存檔的後果（後端：已簽的層清除重簽並通知他們；送審人維持原送審人、改內容的人另記 editedBy）。沒有原送審紀錄的舊單：送審人記為改內容的人
@@ -4726,6 +4858,7 @@
 
       // S5：載入完成後的畫面 q 複本（含畫面預設值、補的品項 id、算好的 tot）——複查編輯儲存時拿來判斷「哪些頂層鍵真的被改了」
       _snapshotBase() {
+        this._fpSaved = this._fpNow()
         try { this._qBase = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot })) } catch { this._qBase = null }
       },
 
@@ -5433,6 +5566,7 @@
           }
         }
 
+        if (editNo && !copyMode) await this._resumeDevCaseLink(params, editNo)   // T86：連回商機失敗後重新整理 ⇒ 接著重試
         this.calcTotals()
         this.checkApproval()
         if (this.q.dealTag === '已成案') {

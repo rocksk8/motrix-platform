@@ -55,7 +55,7 @@ def _clip(reason):
     return reason
 
 
-_PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
+_PLANNED_MSG = "這項功能開發中，尚未開放調整。"
 
 
 def _need(group):

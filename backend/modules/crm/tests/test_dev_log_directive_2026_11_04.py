@@ -178,7 +178,7 @@ def test_a_user_who_cannot_see_the_case_cannot_direct_on_it(client, world):
     perm.invalidate()
     try:
         r = _direct(client, world.c, world.cid, world.log, targets=[_t(world.ida)])
-        assert r.status_code == 403 and "案件" in r.text
+        assert r.status_code == 403 and "商機" in r.text
     finally:
         _x("DELETE FROM perm_user_overrides WHERE cap=?", "crm.dev_log_directive.comment")
         perm.invalidate()
@@ -210,7 +210,7 @@ def test_invalid_targets_are_rejected_with_their_names(client, world, make_user)
     _login(client, make_user, "dr_gone")                                       # 先有帳號再停用
     gone = _uid("dr_gone")
     _x("UPDATE users SET active=0 WHERE id=?", gone)
-    for uid, hint in ((gone, "已停用"), (world.idout, "沒有業務開發模組權限"), (world.idc, "看不到此案件"), (99999, "不存在")):
+    for uid, hint in ((gone, "已停用"), (world.idout, "沒有業務開發模組權限"), (world.idc, "無法檢視此商機"), (99999, "不存在")):
         r = _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida), _t(uid)])
         assert r.status_code == 400 and hint in r.text, (uid, r.text)
     r = _direct(client, world.admin, world.cid, world.log, targets=[_t(gone), _t(world.idc)])
@@ -504,8 +504,8 @@ def test_migration_0004_on_a_populated_crm_v3_database_keeps_every_existing_row(
     try:
         ran = mg.run_all(conn)
         conn.commit()
-        assert ran.get("crm") == (3, 4), ran
-        assert mg.current_version(conn, "crm") == 4
+        assert ran.get("crm") == (3, 5), ran                                         # v3 → 0004（本檔主角）→ 0005（T86 預估金額兩欄，冪等：欄位已在）
+        assert mg.current_version(conn, "crm") == 5
         assert mg.run_all(conn).get("crm") is None                                   # 再跑：版號已前進，什麼都不做
     finally:
         conn.close()

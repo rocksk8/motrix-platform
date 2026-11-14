@@ -89,6 +89,10 @@
    "count": 1,
    "reason": "exempt: 登入 session（暫態）"
   },
+  "helpers/settings_groups_external.py::system_settings": {
+   "count": 1,
+   "reason": "exempt: 系統設定鍵值（非單據）"
+  },
   "helpers/system_checks.py::system_settings": {
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
@@ -144,10 +148,6 @@
   "modules/case/api/material_payments.py::case_material_payments": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
-  },
-  "modules/case/api/overhead.py::system_settings": {
-   "count": 1,
-   "reason": "exempt: 系統設定鍵值（非單據）"
   },
   "modules/case/api/quotation_stages.py::case_stage_visits": {
    "count": 1,

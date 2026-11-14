@@ -17,7 +17,7 @@ def test_mine_work_shows_approvals_group_and_empty_state(live_server, make_user,
     assert page.locator("[data-testid=home-mine-receivable_overdue]").count() == 0     # 業務沒有「錢」那一組
     # 什麼事都沒有 ⇒ 一句話＋去處，不是一排 0
     empty = page.locator("[data-testid=home-mine-empty]")
-    assert empty.is_visible() and "目前沒有需要您處理的事" in empty.inner_text()
+    assert empty.is_visible() and "尚無需要您處理的事項" in empty.inner_text()
     assert empty.locator("a", has_text="查看今日工作事項").is_visible()
 
 

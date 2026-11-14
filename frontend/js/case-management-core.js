@@ -710,12 +710,24 @@ window.CM_PARTS.push(() => ({
     async manualSave() {
       clearTimeout(this._autoSaveTimer)
       await this.saveCaseRecord()
-      if (this.saveStatus === 'saved' || (this.saveStatus === 'dirty' && this.saveMsg && !this.dirty)) {
-        this.saveToast = this.saveMsg || '已儲存'
+      let msg = ''
+      if (!this._lastSaveNoop && (this.saveStatus === 'saved' || (this.saveStatus === 'dirty' && this.saveMsg && !this.dirty))) {
+        msg = this.saveMsg || '已儲存'
+      } else if (this._lastSaveNoop && !this.dirty && this.saveStatus !== 'error') {
+        msg = '已是最新，沒有需要儲存的變更'      // U8：沒改任何東西時按「儲存」＝不送出、伺服器也不留空紀錄；說清楚，免得以為沒存到而一直按
+      }
+      if (msg) {
+        this.saveToast = msg
         clearTimeout(this._saveToastTimer)
         this._saveToastTimer = setTimeout(() => { this.saveToast = '' }, 2500)
       }
     },
+    // U8：紅色「儲存」的狀態——畫面與資料庫一致時顯示灰色「已是最新」（仍可按：按下去會比對快照，有差異照樣存）
+    saveIsClean() {
+      // 存檔後帶說明的狀態（已送出待審核、庫存提示…）saveStatus 也是 'dirty'，但那是訊息不是「有未存變更」；setDirty() 設的『未儲存』與『已送出，待審核』（尚未生效）才算
+      return !this.dirty && !this.saving && this.saveStatus !== 'error' && !(this.saveStatus === 'dirty' && (this.saveMsg === '未儲存' || this.saveMsg.startsWith('已送出')))
+    },
+    _lastSaveNoop: false,
 
     // 🔴 存檔一律排隊（2026-09-24，hichan-0a 查到的產品競態）：
     //    自動存檔（1.5 秒防抖）在途時使用者按「儲存」、或切換案件／結案／附件操作前先存 ⇒ 兩次同時在途，
@@ -791,6 +803,14 @@ window.CM_PARTS.push(() => ({
         }
         segments[k] = sent[k] === undefined ? null : JSON.parse(sent[k])
         base[k] = this._segBase[k] === undefined ? null : JSON.parse(this._segBase[k])
+      }
+      this._lastSaveNoop = false
+      if (!Object.keys(segments).length && !Object.keys(defaults).length) {
+        // U8：快照與基準完全相同（沒改任何東西、或改了又改回去）⇒ 不送出（伺服器也不會留一筆空的「案件更新」稽核）
+        this._lastSaveNoop = true
+        this.dirty = false
+        if (this.saveStatus === 'dirty' && this.saveMsg === '未儲存') { this.saveStatus = ''; this.saveMsg = '' }
+        return true
       }
       let ok = false
       this.saving = true

@@ -2,6 +2,7 @@
 預填客戶與案件名稱、選好報價單／估價單，第一次存檔成功後呼叫既有 PATCH /api/dev-cases/<id>/convert；
 連結失敗要有看得見的橫幅（不准靜默失敗），可重試。不改後端、不加端點。"""
 import re
+from core import source_tree
 from pathlib import Path
 
 import pytest
@@ -21,18 +22,18 @@ DATA_JS = "Alpine.$data(document.body)"
 
 # ── 靜態釘：業務開發送出的網址參數，報價單頁都要有讀（避免兩頁各改各的，出現「說預填卻沒預填」） ──────────────
 def test_every_param_dev_crm_sends_is_read_by_the_quotation_form():
-    crm = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
+    crm = source_tree.page_file("dev-crm.html").read_text(encoding="utf-8")
     m = re.search(r"doConvert\(\)\s*\{(.*?)\n    \},", crm, re.S)
     assert m, "dev-crm.html 找不到 doConvert()"
     sent = set(re.findall(r"""\.set\(\s*['"]([A-Za-z]+)['"]""", m.group(1)))
     assert sent, "doConvert() 沒有任何 URLSearchParams.set"
-    qf = (ROOT / "frontend/pages/quotation-form.html").read_text(encoding="utf-8")
+    qf = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     missing = {k for k in sent if not re.search(r"""\.get\(\s*['"]%s['"]\s*\)""" % re.escape(k), qf)}
     assert not missing, "業務開發送了、報價單頁沒讀的網址參數：%s" % sorted(missing)
 
 
 def test_quotation_form_reads_the_agreed_params_and_calls_the_existing_endpoint():
-    qf = (ROOT / "frontend/pages/quotation-form.html").read_text(encoding="utf-8")
+    qf = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     for k in ("customer", "project", "devCase", "type"):
         assert re.search(r"""\.get\(\s*['"]%s['"]\s*\)""" % k, qf), "報價單頁沒讀 ?%s=" % k
     assert "/dev-cases/${this.devCaseId}/convert" in qf, "連結要走既有的 PATCH /api/dev-cases/<id>/convert"
@@ -95,6 +96,7 @@ def test_estimate_prefill_then_first_save_links_back_to_the_dev_case(live_server
     # 橫幅有內距與邊框（Alpine 的 :style 字串會整個取代 inline style，曾經把版面全洗掉）
     box = banner.evaluate("e => { const c = getComputedStyle(e); return [c.paddingLeft, c.borderTopWidth, c.display] }")
     assert box == ["16px", "1px", "flex"], box
+    assert banner.evaluate("e => getComputedStyle(e).marginLeft") == "16px", "橫幅要和「初次使用」提示條同樣內縮（16px）"
     assert page.locator("[data-testid=qf-devcase-retry]").is_hidden()
     # 還沒存檔：商機沒被連結
     assert not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
@@ -166,7 +168,7 @@ def test_missing_dev_case_shows_error_and_bad_param_is_ignored(live_server, make
     _open(page, live_server, "project=%E4%B8%8D%E5%AD%98%E5%9C%A8&devCase=987654")
     _save(page)
     page.wait_for_function("() => /連回.*失敗/.test(document.querySelector('[data-testid=qf-devcase-msg]').innerText)", timeout=20000)
-    assert "案件不存在" in page.locator("[data-testid=qf-devcase-msg]").inner_text()
+    assert "商機不存在" in page.locator("[data-testid=qf-devcase-msg]").inner_text()
     # 非正整數的 devCase 參數：忽略，不顯示橫幅、不打 convert
     page2 = page.context.new_page()
     calls = []
@@ -175,3 +177,55 @@ def test_missing_dev_case_shows_error_and_bad_param_is_ignored(live_server, make
     _save(page2)
     page2.wait_for_function(f"() => !{DATA_JS}.isNewRecord", timeout=20000)
     assert page2.locator("[data-testid=qf-devcase-banner]").is_hidden() and calls == []
+
+
+@pytest.mark.e2e
+def test_failed_link_survives_reload_and_retries_automatically(live_server, make_user, e2e_browser):
+    """連回商機失敗（例如斷線）後重新整理：網址帶著 devCase，載入既有單時自動重試；成功後網址不再帶 devCase。"""
+    page, sess = _login(live_server, make_user, e2e_browser, "dcq_reload")
+    cid = _mk_case(page, live_server, sess, "斷線重試案", "")
+    page.route("**/api/dev-cases/*/convert", lambda route: route.abort())
+    _open(page, live_server, f"project=%E6%96%B7%E7%B7%9A&devCase={cid}")
+    _save(page)
+    page.wait_for_function("() => /連回.*失敗/.test(document.querySelector('[data-testid=qf-devcase-msg]').innerText)", timeout=20000)
+    no = page.evaluate(f"() => {DATA_JS}.q.quoteNo")
+    assert page.evaluate("() => location.search") == f"?id={no}&devCase={cid}"
+    assert not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
+    page.unroute("**/api/dev-cases/*/convert")
+    page.reload()
+    page.wait_for_function("() => /已連結：/.test(document.querySelector('[data-testid=qf-devcase-msg]')?.innerText || '')", timeout=30000)
+    assert _get_case(page, live_server, sess, cid)["convertedQuoteNo"] == no
+    assert page.evaluate("() => location.search") == f"?id={no}"
+
+
+@pytest.mark.e2e
+def test_retry_button_is_a_44px_tap_target_on_phone(live_server, make_user, e2e_browser):
+    u = make_user(username="dcq_tap")
+    page = e2e_browser.new_context(viewport={"width": 390, "height": 844}).new_page()
+    sess = inject_login(page, live_server, *u)
+    _open(page, live_server, "project=x&devCase=987654")
+    _save(page)
+    retry = page.locator("[data-testid=qf-devcase-retry]")
+    retry.wait_for(state="visible", timeout=20000)
+    fz = page.evaluate("() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fz')) || 1")
+    assert retry.bounding_box()["height"] * fz >= 43.5, retry.bounding_box()
+
+
+@pytest.mark.e2e
+def test_url_alone_never_triggers_a_link_on_load(live_server, make_user, e2e_browser):
+    """轉寄／書籤／貼錯的 ?id=<既有單>&devCase=<n> 連結：開頁不可偷偷打 convert（沒有本瀏覽器的失敗紀錄）。"""
+    page, sess = _login(live_server, make_user, e2e_browser, "dcq_nourl")
+    cid = _mk_case(page, live_server, sess, "不該被連結的案", "")
+    # 先存一張單（不帶 devCase），取得既有單號
+    _open(page, live_server, "project=%E4%B8%80%E8%88%AC")
+    _save(page)
+    page.wait_for_function(f"() => !{DATA_JS}.isNewRecord", timeout=20000)
+    no = page.evaluate(f"() => {DATA_JS}.q.quoteNo")
+    page.evaluate("() => sessionStorage.clear()")
+    calls = []
+    page.on("request", lambda r: calls.append(r.url) if "/convert" in r.url else None)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}&devCase={cid}")
+    page.wait_for_function(f"() => {{ const d = {DATA_JS}; return d && d._initSettled && d.q.quoteNo === '{no}' }}", timeout=30000)
+    assert page.locator("[data-testid=qf-devcase-banner]").is_hidden()
+    assert calls == [] and not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
+

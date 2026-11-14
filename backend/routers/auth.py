@@ -2090,7 +2090,7 @@ def delete_user(user_id: int, authorization: str = Header(None)):
         # 正式離職應改用 toggle_user_active() 停用。
         conn.rollback()
         conn.close()
-        raise HTTPException(409, f"「{ulabel}」仍有關聯資料（如業務開發案件、報價單業務歸屬、部門／處主管等），無法刪除，請改用「停用」")
+        raise HTTPException(409, f"「{ulabel}」仍有關聯資料（如商機、報價單業務歸屬、部門／處主管等），無法刪除，請改用「停用」")
     conn.close()
     _audit(_tok(authorization), 'user.delete', 'user', str(user_id), ulabel)
     notify_module_activity("使用者管理", "刪除帳號", actor.get("display_name") or actor["username"],
