@@ -281,7 +281,7 @@
           </div>
 
           <div class="ns-field" style="margin-bottom:12px">
-            <label>對外網址（LINE 綁定回調用；沒有就留空）</label>
+            <label>對外網址（LINE 綁定回調用；無則留空）</label>
             <input data-saved-field type="text" x-model="cfg.public_base_url" placeholder="https://網域（不含路徑）">
             <div x-show="cfg.callback_url" style="font-size:12px;color:var(--text-dim);margin-top:4px">
               LINE Login 的 Callback URL 請填：<code x-text="cfg.callback_url"></code>
@@ -307,7 +307,7 @@
           <!-- LINE 綁定狀況（只有最高管理者看得到；資料來源 GET .../bindings、POST .../bindings/remind、DELETE /api/line/binding/{帳號}） -->
           <div class="ns-field" style="margin:16px 0" data-testid="line-bindings">
             <label>LINE 綁定狀況</label>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁須自行綁定 LINE 才收得到通知。這裡看誰已綁定、誰尚未綁定，並可一鍵以 Email 與系統內通知提醒尚未綁定者（信中附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁須自行綁定 LINE 才收得到通知。這裡看誰已綁定、誰尚未綁定，並可以 Email 與系統內通知提醒尚未綁定者（信中附「修改密碼」頁連結；同一個人 24 小時內只提醒一次）。</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span data-testid="line-bind-summary" style="font-size:13px;font-weight:600" x-text="bindSummary"></span>
               <button type="button" class="btn btn-ghost" data-testid="line-bind-toggle" style="padding:2px 10px;font-size:12px" @click="bind.open = !bind.open" x-text="bind.open ? '收合名單' : '看名單'"></button>
@@ -432,10 +432,10 @@
     </div>
 
 
-    <!-- 簽核提醒寄不出去的單據（T69：唯讀清單，資料來自既有端點 GET /api/settings/reminder-send-failures） -->
+    <!-- 簽核提醒無法寄出的單據（T69：唯讀清單，資料來自既有端點 GET /api/settings/reminder-send-failures） -->
     <div class="ns-card" id="rf-panel" x-show="rfLoaded">
       <div class="ns-card-head">
-        <div class="ns-card-head-title">簽核提醒寄不出去的單據</div>
+        <div class="ns-card-head-title">簽核提醒無法寄出的單據</div>
       </div>
       <div class="ns-card-body">
         <div class="ns-hint" style="margin-top:0">
@@ -443,7 +443,7 @@
         </div>
         <div x-show="rfDenied" style="font-size:13px;color:var(--text-dim);margin-top:12px">這份清單只有最高管理者，或被授予「系統設定」功能的帳號可以查看；您的帳號沒有這個權限。</div>
         <div x-show="rfError" data-testid="rf-error" style="font-size:13px;color:#B45309;margin-top:12px;font-weight:600">暫時無法讀取這份清單（伺服器沒有正常回應），請稍後重新整理頁面；通知設定本身不受影響。</div>
-        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:var(--success);margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
+        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:var(--success);margin-top:12px;font-weight:600">目前無寄送失敗的提醒。</div>
         <table x-show="!rfDenied && !rfError && rfItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
           <thead>
             <tr style="text-align:left;color:var(--text-dim)">
@@ -559,7 +559,7 @@
             const d = await r.json().catch(() => ({}))
             if (r.ok) {
               const parts = ['已提醒 ' + d.notified + ' 人（系統內通知）', 'Email ' + d.emailed + ' 人']
-              if (d.noEmail) parts.push((d.emailOff ? '公司已關閉此類 Email；' : '') + '沒有寄 Email：' + d.noEmail + ' 人')
+              if (d.noEmail) parts.push((d.emailOff ? '公司已關閉此類 Email；' : '') + '未寄 Email：' + d.noEmail + ' 人')
               if (d.skippedRecent && d.skippedRecent.length) parts.push('24 小時內已提醒過、略過 ' + d.skippedRecent.length + ' 人')
               this._say(parts.join('；'), false, 9000)
               await this.loadBindings()
@@ -623,7 +623,7 @@
         rfError: false,
 
         rfReason(r) {
-          if (r === 'permanent_fail') return '收件人沒有 Email，信寄不出去'
+          if (r === 'permanent_fail') return '收件人沒有 Email，信無法寄出'
           if (r === 'unknown') return '無法確認電子郵件是否已寄出，請向收件人確認'
           return '其他原因'
         },

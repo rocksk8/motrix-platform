@@ -423,7 +423,7 @@
       </div>
       <div class="card" style="margin-top:20px">
         <div class="card-title">頭像顏色</div>
-        <div class="card-sub">只改您自己看到的頭像圓圈顏色，不會出現在任何單據上。</div>
+        <div class="card-sub">只改您自己畫面上的頭像圓圈顏色，不會出現在任何單據上。</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px" data-testid="avatar-colors">
           <template x-for="c in colors" :key="c.value">
             <button type="button" class="btn-ghost" :data-testid="'avatar-' + c.value" @click="setColor(c.value)"
@@ -440,7 +440,7 @@
     <div x-show="tab === 'prefs' && !wiz" x-cloak x-data="accountPrefs()" data-testid="tab-prefs">
       <div class="card">
         <div class="card-title">偏好設定</div>
-        <div class="card-sub">只影響您自己看到的畫面，儲存於伺服器，更換電腦或手機登入仍會保留，不會改變報價單或其他單據的內容。</div>
+        <div class="card-sub">只影響您自己的畫面，儲存於伺服器，更換電腦或手機登入仍會保留，不會改變報價單或其他單據的內容。</div>
         <div x-show="err" class="alert alert-err" x-text="err"></div>
         <template x-for="k in keys" :key="k">
           <div class="form-group" style="margin-top:14px">
@@ -602,9 +602,9 @@
         keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, company: {}, err: '', ok: '', _t: null,
         help: {
           font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
-          theme: '僅影響您自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
+          theme: '僅影響您自己的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
           login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格；選擇其他項目則以您的選擇為準。',
-          home_page: '每次登入後第一個看到的頁面（只有您的權限看得到的頁面才會生效）。',
+          home_page: '每次登入後首先顯示的頁面（僅限您的權限可檢視的頁面才會生效）。',
         },
         // 公司設為「關閉」是總開關：個人選什麼都不會讓問候語出現，所以選單停用並說明原因（個人值照舊保留，公司重新開啟後依個人選擇）
         lockedMsg: { login_greeting: '公司已關閉登入問候語' },
