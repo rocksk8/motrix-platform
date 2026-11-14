@@ -72,7 +72,8 @@ def test_case_page_for_case_manage_and_superadmin_still_loads_the_roster(live_se
     for user in (cm, sa):
         page = new_context(viewport={"width": 1440, "height": 1000}).new_page()
         seen, errors = _open_case_page(page, live_server, user)
-        assert [u for u in seen if "/api/contractors/selectable" in u], user[0]
+        # T86 h1：名冊改隨 /api/bootstrap?page=case 一併送達（motrixBootFetch 從併單結果取），不再單獨發 selectable 請求
+        assert [u for u in seen if "/api/contractors/selectable" in u or "/api/bootstrap" in u], user[0]
         assert page.evaluate("() => %s.contractorRoster.map(c => c.name)" % ROOT) == ["名冊甲"], user[0]
         assert not [e for e in errors if "403" in e], errors
 
