@@ -17,6 +17,7 @@
 """
 import io
 import json
+import re
 from datetime import date, datetime
 from typing import Optional
 
@@ -63,6 +64,7 @@ REPORTS = {
 _PARAM_LABEL = {"date_from": "起日", "date_to": "迄日", "sales_id": "業務", "customer": "客戶",
                 "department_id": "部門", "basis": "收入口徑"}
 _STATE_TEXT = {"unfilled": "未填", "unsettled": "未精算"}
+_DEV_COLS = "id, case_name, customer_name, status, expected_amount, expected_close_date, created_at, assigned_to, created_by, sales_persons, planners"
 _DEV_STATUS_ORDER = ("洽談中", "成案", "未成案", "暫擱置")
 
 
@@ -277,6 +279,14 @@ def _effective_range(p: dict) -> tuple:
     return d_from[:10], d_to[:10]
 
 
+_PROVENANCE = re.compile(r"；\d{4}-\d{2}-\d{2} 使用者裁示")
+
+
+def _basis_note(basis: str) -> str:
+    """口徑說明：沿用 BASIS_NOTES，但拿掉「（預設；日期 使用者裁示）」這類決策出處（畫面上不需要）；共用常數不動。"""
+    return _PROVENANCE.sub("", BASIS_NOTES[basis])
+
+
 def _build_revenue(p: dict, u: dict) -> dict:
     basis = p.get("basis") or DEFAULT_BASIS
     d0, d1 = _effective_range(p)
@@ -288,7 +298,7 @@ def _build_revenue(p: dict, u: dict) -> dict:
     filtered = bool(p.get("sales_id") or p.get("customer"))
     rec = _rp._recognition()
     cash_ok = _rp._registry.single_provider("receivables.income_items") is not None
-    notes = [BASIS_NOTES[basis]]
+    notes = [_basis_note(basis)]
 
     def items_for(which: str):
         """⇒ 逐筆收入（已依條件篩選）或 None（這個口徑沒有資料來源）。案件收入以 `_collect` 的案件母體過濾；
@@ -569,7 +579,7 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         dev_rows, quote_rows = [], []
         last_log: dict = {}
         if can_dev:
-            for r in conn.execute("SELECT * FROM dev_cases WHERE is_deleted = 0 ORDER BY id DESC").fetchall():
+            for r in conn.execute("SELECT %s FROM dev_cases WHERE is_deleted = 0 ORDER BY id DESC" % _DEV_COLS).fetchall():
                 if not row_access.visible("dev_case", u, r):
                     continue
                 owners = ([r["assigned_to"]] if r["assigned_to"] else []) + _id_list(r["sales_persons"])
@@ -667,8 +677,6 @@ def _build_sales_funnel(p: dict, u: dict) -> dict:
         notes.append("您的帳號沒有業務開發模組權限，商機部分不顯示。")
     if not can_quote:
         notes.append("您的帳號沒有報價單模組權限，報價部分不顯示。")
-    if can_dev and not money_ok:
-        notes.append("您的帳號沒有金額檢視權限，預估金額不顯示。")
     tables = [_table("openCases", "洽談中商機",
                      [_col("caseName", "商機名稱"), _col("customer", "客戶"), _col("owner", "負責業務"),
                       _col("amount", "預估金額", "money"), _col("expectedCloseDate", "預計成交日", "date"),
@@ -707,7 +715,7 @@ def _sales_options(u: dict) -> list:
         ids |= {r[0] for r in conn.execute(
             "SELECT DISTINCT sales_person_id FROM quotations WHERE sales_person_id IS NOT NULL" + frag, fparams)}
         if _can_dev(u):
-            for r in conn.execute("SELECT * FROM dev_cases WHERE is_deleted = 0").fetchall():
+            for r in conn.execute("SELECT assigned_to, created_by, sales_persons, planners FROM dev_cases WHERE is_deleted = 0").fetchall():
                 if row_access.visible("dev_case", u, r):
                     ids |= {x for x in ([r["assigned_to"]] + _id_list(r["sales_persons"])) if x}
         out = []
