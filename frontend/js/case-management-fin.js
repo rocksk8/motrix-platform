@@ -181,8 +181,9 @@ window.CM_PARTS.push(() => ({
     // T86 案件 UX #29：已收款的期別，非出納者除發票資料外不能改（後端 _RECEIVED_ITEM_EDITABLE），畫面同步停用其餘欄位。
     // 後端鎖已收款期別的對象是「非出納」（_payment_items_lock_violation），不只是沒有財務檢視權的人 ⇒ 畫面照 canMarkPayment()（同一條規則）
     payFrozen(item) { return !!(item && item.received && !this.canMarkPayment()) },
-    // 收款日期只給看：沒有財務檢視權的人（不能標已收款）；或已收款而被凍結的期別
-    payReceivedAtRo(item) { return this.moneyMasked() || this.payFrozen(item) },
+    // 收款日期只給看：已收款而被凍結的期別（非出納）。PM 裁示（2026-11-14）：未收款的期別，收款日期仍是輸入框——
+    // 後端本來就允許，前端不收回能力、不改權限語意（沒有財務檢視權的人也一樣）。
+    payReceivedAtRo(item) { return this.payFrozen(item) },
     payDetailOpen: {},
     payDetailIsOpen(item, idx) {
       const v = this.payDetailOpen[item.id]

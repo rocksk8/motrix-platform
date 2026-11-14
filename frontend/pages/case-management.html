@@ -710,13 +710,14 @@
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
                     <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
                          x-show="caseMapUrl() || onepipe.timeline || onepipe.entryUnify || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
-                      <!-- 一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
+                      <!-- T86 複測：兩個跳轉改成真正的 <button>（鍵盤 Tab／Enter／空白鍵可操作，自動化也點得到），外觀仍像連結（.cm-link-btn）。
+                           一條龍 P4b（旗標 onepipe.entry_unify）：「登載」統一入口——案號與日期自動帶入；每個選項只在這個人真的能做那件事時才出現（可見範圍跟類型走）。
                            只是捷徑：不合併資料表，各類型照原本的畫面與權限寫入 -->
                       <template x-if="onepipe.entryUnify && selected">
                         <span data-testid="case-log-entry" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">
                           <span style="color:var(--text-dim)">登載：</span>
-                          <a href="#" data-testid="case-log-feed" x-show="tShown('feed')" @click.prevent="openLogEntry('feed')">留言／工作日誌</a>
-                          <a href="#" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click.prevent="openLogEntry('visit')">階段出勤</a>
+                          <button type="button" class="cm-link-btn" data-testid="case-log-feed" x-show="tShown('feed')" @click="openLogEntry('feed')">留言／工作日誌</button>
+                          <button type="button" class="cm-link-btn" data-testid="case-log-visit" x-show="tShown('exec') && sShown('progress')" @click="openLogEntry('visit')">階段出勤</button>
                           <a data-testid="case-log-task" x-show="canLogTask()" :href="'daily-tasks.html?case_no=' + encodeURIComponent(selected.quote_no)">每日工作事項</a>
                         </span>
                       </template>
@@ -1969,7 +1970,7 @@
                      跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
                      未稅金額與收款進度條。 -->
                 <!-- CM13（2026-09-24）：沒有財務檢視權的帳號，後端不回金額 ⇒ 金額相關一律不渲染 -->
-                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）。可編輯預計收款日、備註與發票資料；收款日期與收款狀態只供查看。已收款的期別除發票資料外不能修改。</div>
+                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）。可編輯預計收款日、收款日期、備註與發票資料；收款狀態只供查看。已收款的期別除發票資料外不能修改。</div>
                 <div class="pay-strip" x-show="!moneyMasked()">
                   <span class="pay-strip__item">
                     <span class="pay-strip__lbl">未稅金額</span>
@@ -2018,7 +2019,7 @@
 
                 <template x-for="(item, idx) in (cr.caseRecord?.payment?.items || [])" :key="item.id">
                   <div class="pay-item" :class="item.received ? 'pay-item--received' : ''">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                    <div class="pay-item__head" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                       <span style="font-size:12px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
                       <select class="fi" x-model="item.type" @change="setDirty()" :disabled="payFrozen(item)"
                               style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
@@ -2093,7 +2094,7 @@
                                :aria-required="item.received ? 'true' : 'false'"
                                x-model="item.receivedAt" @change="setDirty()">
                       </div>
-                      <!-- T86 案件 UX #29：沒有財務檢視權的人不能標記已收款，收款日期只給看（唯讀摘要），不放輸入框 -->
+                      <!-- T86 案件 UX #29：已收款而被凍結的期別（非出納）收款日期只給看（唯讀摘要）；未收款的期別仍是輸入框 -->
                       <div x-show="payReceivedAtRo(item)" data-testid="pay-received-at-ro">
                         <span class="fi-label">收款日期</span>
                         <div class="pay-ro" x-text="item.receivedAt || (item.received ? '尚未填寫' : '尚未收款')"></div>
@@ -2404,7 +2405,7 @@
                         <span style="font-size:12px;font-weight:600;font-family:var(--font-zh);color:var(--tone-success-fg)">應收</span>
                         <span style="flex:1;height:1px;background:var(--line)"></span>
                       </div>
-                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+                      <div class="fin-kpi4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
                         <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'background:var(--tone-warning-bg);border-color:var(--tone-warning-border)' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().receivableTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowRecvDetail ? '▾ 應收總額' : '▸ 應收總額'"></span>
@@ -2428,7 +2429,7 @@
                         <span style="font-size:12px;font-weight:600;font-family:var(--font-zh);color:var(--tone-warning-fg)">應付（承攬商匯款申請）</span>
                         <span style="flex:1;height:1px;background:var(--line)"></span>
                       </div>
-                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+                      <div class="fin-kpi4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
                         <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'background:var(--tone-danger-bg);border-color:var(--tone-danger-border)' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal + finPayable().approvedPaidTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowPayDetail ? '▾ 應付總額' : '▸ 應付總額'"></span>

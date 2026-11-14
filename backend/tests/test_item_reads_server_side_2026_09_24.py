@@ -239,3 +239,53 @@ def test_legacy_migration_cannot_set_a_time_in_the_future(client, make_user):
         {"kind": "module", "key": "customer", "read_at": future}]}, headers=ha)
     got = client.get("/api/reads?kind=module", headers=ha).json()["items"][0]["read_at"]
     assert datetime.fromisoformat(got) <= datetime.now()
+
+
+# ── 撤回（軟刪）的每日任務不算案件動態（T86：撤銷階段勾選後，別人不該亮「有新動態」）─────────────────
+def _stage_task_completion(case_no, username, completed_at):
+    """階段勾選會建一筆「已完成」的每日任務（含完成紀錄）；撤銷勾選 ⇒ 該任務軟刪（is_deleted=1）。回任務 id。"""
+    import db
+    conn = db.get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO daily_tasks (task_date, title, created_by, created_at, updated_at, is_deleted, case_no) "
+            "VALUES (?,?,?,?,?,0,?)", (completed_at[:10], "階段", username, completed_at, completed_at, case_no))
+        tid = cur.lastrowid
+        conn.execute(
+            "INSERT INTO daily_task_completions (task_id, username, occurrence_date, completed, report, completed_at) "
+            "VALUES (?,?,?,1,?,?)", (tid, username, completed_at[:10], "案件管理勾選「X」完成", completed_at))
+        conn.commit()
+        return tid
+    finally:
+        conn.close()
+
+
+def _withdraw_task(tid):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE daily_tasks SET is_deleted=1 WHERE id=?", (tid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_withdrawn_stage_task_is_not_unread_for_others(client, make_user):
+    ha = _hdr(client, make_user, "alice_w")
+    _hdr(client, make_user, "bob_w")
+    _unread(client, ha, "case", ["MQ-W1"])
+    time.sleep(0.05)
+    tid = _stage_task_completion("MQ-W1", "bob_w", datetime.now().isoformat())
+    assert _unread(client, ha, "case", ["MQ-W1"]) == {"MQ-W1"}, "正對照：別人勾選完成的階段任務在時，案件亮未讀"
+    _withdraw_task(tid)
+    assert _unread(client, ha, "case", ["MQ-W1"]) == set(), "撤銷勾選（任務軟刪）後，不可再亮未讀"
+
+
+def test_case_activity_list_ignores_withdrawn_stage_task(client, make_user):
+    h = _hdr(client, make_user, "carol_w", role="superadmin")
+    tid = _stage_task_completion("MQ-W2", "dave_w", "2026-11-14T10:00:00")
+    r = client.post("/api/quotations/case-activity", json={"quote_nos": ["MQ-W2"]}, headers=h)
+    assert r.status_code == 200 and r.json().get("MQ-W2") == "2026-11-14T10:00:00", r.text
+    _withdraw_task(tid)
+    r = client.post("/api/quotations/case-activity", json={"quote_nos": ["MQ-W2"]}, headers=h)
+    assert r.status_code == 200 and "MQ-W2" not in r.json(), r.text
