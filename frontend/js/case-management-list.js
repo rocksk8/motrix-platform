@@ -172,6 +172,7 @@ window.CM_PARTS.push(() => ({
     lvOn: { tab: false, size: false, mergeWon: true },      // T86 案件UX #8：預設合併（設定中心 cases_merge_won_tab 預設 1）；公司明確存了 0 才分開
     pv: { hidden: [], order: [], tab: '', size: 0 },
     lvOpen: false,
+    lvReady: false,         // 個人偏好讀回來之前不開放面板：否則使用者在讀取中改的值，會被稍後讀回的偏好整個蓋掉（T87 c2 偶發紅燈的根因）
     get lvAny() { return this.lvOn.tab || this.lvOn.size },
     get lvTabs() { return this.lvOn.mergeWon ? ['all', '已結案', '待精算'] : ['all', '已成案', '已結案', '待精算'] },
     showWonTab() { return !this.lvOn.mergeWon },
@@ -186,6 +187,7 @@ window.CM_PARTS.push(() => ({
         await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '../static/list-view-prefs.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc) })
         const LV = window.MotrixListView
         this.pv = LV.sanitize(await LV.load(tk, 'case_list.view'), { tabs: this.lvTabs })
+        this.lvReady = true
         if (this.lvOn.tab && this.pv.tab && this.listTab === 'all' && this.pv.tab !== 'all') { this.listTab = this.pv.tab; reload = true }
         if (this.lvOn.size && this.pv.size && this.pv.size !== this.casePageSize) { this.casePageSize = this.pv.size; reload = true }
       }
@@ -193,11 +195,19 @@ window.CM_PARTS.push(() => ({
     },
     async lvSave(reset) {
       const LV = window.MotrixListView
-      this.pv = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.lvTabs })
+      const prev = this.pv
+      const next = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.lvTabs })
+      const ok = await LV.save(this.session.token, 'case_list.view', next)
+      if (!ok) {
+        // 伺服器沒存成功：畫面不能先變（每頁筆數照改＝畫面與伺服器不一致，重新整理後又跳回去）。留在面板上讓使用者再按一次。
+        this.pv = prev
+        if (window.MotrixUI) window.MotrixUI.toast('儲存失敗，設定沒有改變；請稍後再按一次儲存', { kind: 'error' })
+        return
+      }
+      this.pv = next
       const size = (this.lvOn.size && this.pv.size) ? this.pv.size : CM_LIST_PAGE_DEFAULT
-      const ok = await LV.save(this.session.token, 'case_list.view', this.pv)
       if (size !== this.casePageSize) { this.casePageSize = size; await this.loadCases() }
-      if (window.MotrixUI) window.MotrixUI.toast(ok ? (reset ? '已還原預設檢視' : '已儲存檢視設定') : '儲存失敗，下次開啟會恢復', ok ? {} : { kind: 'error' })
+      if (window.MotrixUI) window.MotrixUI.toast(reset ? '已還原預設檢視' : '已儲存檢視設定')
     },
     // CM7：常用篩選（可疊加，送伺服器）
     caseQuick: { mine: false, stage_overdue: false, recv_overdue: false, missing_docs: false },

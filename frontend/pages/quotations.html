@@ -320,7 +320,7 @@
               @click="toggleSortDir()" title="切換正序/倒序">
         <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
       </button>
-      <button class="action-btn action-btn--ghost" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響您自己）">檢視設定</button>
+      <button class="action-btn action-btn--ghost" x-show="lvAny && lvReady" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響您自己）">檢視設定</button>
       <div class="ql-pair">   <!-- 「欄位」「緊湊」成對：桌機／手機 display:contents（版面不變）；平板 768–1023 併成一列 -->
       <div style="position:relative" x-show="!lvOn.columns" x-cloak @click.outside="colPickOpen = false">
         <button type="button" class="action-btn action-btn--ghost" data-testid="ql-cols-btn" @click="colPickOpen = !colPickOpen" title="選要看的欄位（只影響您自己）">欄位</button>
@@ -352,7 +352,7 @@
     </div>
 
     <!-- T65 C1：個人檢視設定（設定中心 list_view 開啟才出現；只能在公司允許的範圍內調整，金額欄位只能隱藏或調順序） -->
-    <div class="panel" x-show="lvAny && lvOpen" x-cloak data-testid="lv-panel" style="padding:12px 14px;margin-bottom:12px;font-size:12px">
+    <div class="panel" x-show="lvAny && lvReady && lvOpen" x-cloak data-testid="lv-panel" style="padding:12px 14px;margin-bottom:12px;font-size:12px">
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
         <label x-show="lvOn.tab">預設頁籤
           <select class="search-input" x-model="pv.tab" style="max-width:140px;margin-left:6px">
@@ -1241,7 +1241,7 @@
       // ═══ T65 C1：清單檢視的個人偏好（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）═══
       lvOn: { columns: false, tab: false, size: false },
       pv: { hidden: [], order: ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'next', 'date'], tab: '', size: 0 },
-      lvOpen: false, pvPage: 0, _restoredTab: false, _stopOrder: null,
+      lvReady: false, lvOpen: false, pvPage: 0, _restoredTab: false, _stopOrder: null,
       LV_LABELS: { quoteNo: '報價單號', customer: '客戶名稱', project: '案件名稱', amount: '金額（含稅）', margin: '毛利率', validDays: '有效天數', filler: '填單人', status: '狀態', dealTag: '案件進度', next: '下一步', date: '報價日期' },
       get lvAny() { return this.lvOn.columns || this.lvOn.tab || this.lvOn.size },
       get pageSize() { return (this.lvOn.size && this.sortPref.sortMode !== 'custom' && [25, 50, 100, 200].includes(this.pv.size)) ? this.pv.size : 0 },
@@ -1264,10 +1264,13 @@
       },
       async lvSave(reset) {
         const LV = window.MotrixListView
-        this.pv = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.tabs.map(t => t.key) })
+        const prev = this.pv
+        const next = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.tabs.map(t => t.key) })
+        const ok = await LV.save(this.session.token, 'quotations.view', next)
+        if (!ok) { this.pv = prev; this.toast('儲存失敗，設定沒有改變；請稍後再按一次儲存', '#DC2626'); return }       // 伺服器沒存成功就不改畫面（筆數／欄位不能和伺服器不一致）
+        this.pv = next
         this.pvPage = 0
-        const ok = await LV.save(this.session.token, 'quotations.view', this.pv)
-        this.toast(ok ? (reset ? '已還原預設檢視' : '已儲存檢視設定') : '儲存失敗，下次開啟會恢復', ok ? '#15803D' : '#DC2626')
+        this.toast(reset ? '已還原預設檢視' : '已儲存檢視設定', '#15803D')
       },
       async initListView(tk) {
         const g = await window.MotrixPublicFlags.read(['list_view'], { token: tk })
@@ -1277,6 +1280,7 @@
         await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '../static/list-view-prefs.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc) })
         const LV = window.MotrixListView
         this.pv = LV.sanitize(await LV.load(tk, 'quotations.view'), { tabs: this.tabs.map(t => t.key) })
+        this.lvReady = true
         if (this.lvOn.tab && this.pv.tab && this.activeTab === 'all' && !this._restoredTab) this.activeTab = this.pv.tab
         if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter', 'focus', 'onlyMine'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
         if (this.lvOn.columns) {
