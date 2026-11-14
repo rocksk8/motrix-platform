@@ -98,6 +98,14 @@ def _status_text(page):
     return page.locator(f'{PANEL} [data-testid="mo-ap-status"]').first.inner_text()
 
 
+
+def _open_material_detail(page):
+    """T86：材料明細預設收合在時間軸那一列下面；已展開就不再按（按了會收回去）。"""
+    more = page.locator('[data-testid^="mtl-more-"]').first
+    more.wait_for(state="visible", timeout=15000)
+    if more.get_attribute("aria-expanded") != "true":
+        more.click()
+
 @pytest.mark.e2e
 def test_material_order_approval_round_trip_in_the_browser(live_server, make_user, e2e_browser):
     import db
@@ -163,6 +171,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     # 2b 材料申請（核准前）：不自動連結——旗標反灰、顯示「需先申請…」提示（原先在核准後才檢查；t45 自動連結上線後，核准後同名唯一相符會自動帶入）
     page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
     page.click('.cm-tab:has-text("材料申請")')
+    _open_material_detail(page)
     page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
     assert page.locator('[data-testid="mat-order-link"]').first.input_value() == ""                 # 待審核：不自動連結
     assert page.locator('[data-testid="mat-ordered"]').first.is_disabled() and page.locator('[data-testid="mat-arrived"]').first.is_disabled()
@@ -189,6 +198,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     # 4 材料申請：核准後重新載入 ⇒ 同名且恰好一筆已核准、有採購單的申請 ⇒ 自動連結（t45）；「已叫料」可勾、「已到料」仍反灰（尚未確認到貨）
     page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
     page.click('.cm-tab:has-text("材料申請")')
+    _open_material_detail(page)
     page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
     page.wait_for_function("(id) => document.querySelector('[data-testid=mat-order-link]').value === id", arg=item_id, timeout=15000)   # 自動帶入
     assert not page.locator('[data-testid="mat-ordered"]').first.is_disabled()

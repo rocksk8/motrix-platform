@@ -302,3 +302,39 @@ def test_pending_arrival_mark_is_cleared_after_save(live_server, make_user, e2e_
     page.evaluate("() => { const d = %s; d.dirty = true }" % _D)             # 之後別的編輯
     page.wait_for_timeout(300)
     assert "待儲存" not in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+
+
+@pytest.mark.e2e
+def test_material_detail_is_collapsed_by_default_and_expands_in_the_row(live_server, make_user, e2e_browser):
+    """h3 複測尾巴：每個材料的明細欄位預設收合在時間軸那一列下面，按「明細」展開／收合；「新增品項」的新列直接展開。"""
+    page = _open(live_server, make_user, e2e_browser, "t86_collapse", 1440)
+    card = page.locator('[data-testid="mat-card-ma"]')
+    assert not card.is_visible(), "明細預設收合"
+    more = page.locator('[data-testid="mtl-more-ma"]')
+    assert more.inner_text().startswith("明細")
+    more.click()
+    card.wait_for(state="visible", timeout=5000)
+    assert card.locator('input[placeholder="品名"]').input_value() == "壁掛機櫃"
+    assert page.locator('[data-testid="mat-card-mb"]').is_visible() is False, "只展開按的那一列"
+    more.click()
+    card.wait_for(state="hidden", timeout=5000)
+    page.get_by_role("button", name="新增品項").first.click()
+    newc = page.locator('.mat-card:visible')
+    newc.first.wait_for(state="visible", timeout=5000)
+    assert newc.count() == 1 and newc.first.locator('input[placeholder="品名"]').input_value() == ""
+
+
+@pytest.mark.e2e
+def test_open_buttons_do_not_touch_the_subtab_underline_on_phone(live_server, make_user, e2e_browser):
+    """h3 複測尾巴：390 寬時「開請購單／開採購單」按鈕與子頁籤底線之間要有間距。"""
+    u, p = make_user(username="t86_opbar", role="superadmin")
+    _case()
+    page = e2e_browser.new_page(viewport={"width": 390, "height": 900})
+    inject_login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}&sub=materials")
+    bar = page.locator('[data-testid="op-open-bar"]')
+    bar.wait_for(state="visible", timeout=20000)
+    tabs_bottom = page.get_by_role("button", name="材料申請").first.evaluate("e => e.parentElement.getBoundingClientRect().bottom")
+    assert bar.bounding_box()["y"] - tabs_bottom >= 8, "按鈕貼著子頁籤"
+    assert bar.evaluate("e => getComputedStyle(e).display") == "flex"
+    _shot(page, "tail_openbar_390")

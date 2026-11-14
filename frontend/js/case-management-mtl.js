@@ -7,11 +7,12 @@ window.CM_PARTS.push(() => ({
     mtlFlow: null,          // null＝尚未讀；false＝讀不到（旗標關／無權限）；否則 { stock, ship }（各為 cell 或 null）
     _mtlFor: '',            // 已為哪個案件讀過（同一件只讀一次）
     _mtlReq: 0,
+    mtlOpen: {},            // 哪幾個材料的明細展開了（預設全部收合；新增品項會自動展開）
     _mtlPend: {},           // 在時間軸按了「確認到貨」、還沒存檔的材料（顯示「待儲存」）
 
     _reset_mtl(phase) {
       if (phase !== 'early') return
-      this.mtlFlow = null; this._mtlFor = ''; this._mtlReq++; this._mtlPend = {}
+      this.mtlFlow = null; this._mtlFor = ''; this._mtlReq++; this._mtlPend = {}; this.mtlOpen = {}
     },
 
     // 材料申請分頁顯示時呼叫（x-effect）：補讀材料申請（原本只有財務分頁會讀）與物料流程摘要
@@ -141,8 +142,11 @@ window.CM_PARTS.push(() => ({
       })
       return { total: mats.length, arrived, noPo, late }
     },
-    mtlGoDetail(mat) {
-      const el = document.getElementById('mat-card-' + mat.id)
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    mtlIsOpen(mat) { return !!this.mtlOpen[mat.id] },
+    mtlToggle(mat) { this.mtlOpen = Object.assign({}, this.mtlOpen, { [mat.id]: !this.mtlOpen[mat.id] }) },
+    mtlOpenLast() {      // 「新增品項」之後：新那一列直接展開，才能馬上填
+      const ms = (this.cr && this.cr.caseRecord && this.cr.caseRecord.materials) || []
+      const m = ms[ms.length - 1]
+      if (m) this.mtlOpen = Object.assign({}, this.mtlOpen, { [m.id]: true })
     },
 }))
