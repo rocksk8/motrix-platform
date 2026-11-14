@@ -127,6 +127,8 @@ def line_changes(o, n, ctx=12):
     """一對舊行／新行 ⇒ [(改前片段, 改後片段)…]；沒有中文改動 ⇒ []。"""
     if o == n or not (CJK.search(o) or CJK.search(n)):
         return []
+    if "".join(CJK.findall(o)) == "".join(CJK.findall(n)):
+        return []                                     # 去掉中文以外的字元後相同＝只動了標點、括號、程式碼，中文沒變
     sm = difflib.SequenceMatcher(None, o, n, autojunk=False)
     if sm.ratio() < MIN_RATIO:
         return []

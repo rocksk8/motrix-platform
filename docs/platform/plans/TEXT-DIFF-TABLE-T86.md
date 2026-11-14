@@ -2,9 +2,9 @@
 
 範圍：中文顯示字串的修改（畫面文字、通知文字、說明文件；測試檔不收；PDF、匯出、列印相關檔不在範圍）。比對區間：`c21e502d6..1580c8c1b`。
 
-共 1221 組不同的改動（相同的改前／改後只列一次）。
+共 1085 組不同的改動（相同的改前／改後只列一次）。
 
-## 後端訊息／通知（567 組）
+## 後端訊息／通知（499 組）
 
 | 改前 | 改後 | 位置 |
 |---|---|---|
@@ -134,7 +134,6 @@
 | …  "title": "目前沒有人擔任「財務」職務",… | …  "title": "尚無人擔任「財務」職務",… | org_gaps.py |
 | …", "今天日期", "打開表單的那一天。", "2… | …", "今天日期", "開啟表單的那一天。", "2… | prefill_sources.py |
 | …現在的日期與時間", "打開表單的那一刻（欄位要設成… | …現在的日期與時間", "開啟表單的那一刻（欄位要設成… | prefill_sources.py |
-| …現並撤銷的時間會變少。"),… | …現並撤銷的時間會變少。",… | settings_groups.py |
 | …", label="本機備份保留天數", help="本機電… | …", label="本機資料庫備份保留天數", when="這台電腦的硬碟快滿，或想保留更久以前的本機備份時。", help="本機電… | settings_groups.py |
 | …端每日備份保留天數", help="近期誤刪、誤… | …端每日備份保留天數", when="想要能回到更久以前的每日還原點，或雲端空間吃緊時。", help="近期誤刪、誤… | settings_groups.py |
 | …", label="雲端週備份保留天數", he… | …", label="雲端每週備份保留天數", wh… | settings_groups.py |
@@ -158,34 +157,15 @@
 | …的項目；沒有權限的人完全看不到其他項目。"),… | …的項目；沒有權限的人完全不顯示其他項目。"),… | settings_groups.py |
 | …為灰色並說明原因", "沒有權限的人會看到項目名稱與『需要什麼權限… | …為灰色並說明原因", "畫面會列出項目名稱與『需要什麼權限… | settings_groups.py |
 | …稱與『需要什麼權限』，但無法開啟。")]),… | …稱與『需要什麼權限』，但沒有權限的人無法開啟。")]),… | settings_groups.py |
-| …手動新增的仍要選。")]),… | …手動新增的仍要選。")],… | settings_groups.py |
-| …與列印不變。立即生效。"),… | …與列印不變。立即生效。",… | settings_groups.py |
 | …    help="客戶看到的報價單，在尚未選定方案… | …    help="客戶所見的報價單，在尚未選定方案… | settings_groups.py |
 | …字（存檔時會記下）。客戶看得到這段文字。",… | …字（存檔時會記下）。客戶可檢視這段文字。",… | settings_groups.py |
-| …辭不會讓客戶誤解金額。"),… | …辭不會讓客戶誤解金額。",… | settings_groups.py |
 | …價單沿用當時的句子。客戶看得到這句話。",… | …價單沿用當時的句子。客戶可檢視這句話。",… | settings_groups.py |
-| …單上，請確認措辭正確。"),… | …單上，請確認措辭正確。",… | settings_groups.py |
-| …el，不改變任何金額。"),… | …el，不改變任何金額。",… | settings_groups.py |
-| …但改動時需先減少組數。"),… | …但改動時需先減少組數。",… | settings_groups.py |
 | …響內部成本比較畫面（客戶看不到）。超過的組合只顯示總數… | …響內部成本比較畫面（客戶無法檢視）。超過的組合只顯示總數… | settings_groups.py |
 | …影響任何金額、列印或客戶看到的內容。"),… | …影響任何金額、列印或客戶所見的內容。",… | settings_groups.py |
-| …響內部畫面的預設狀態。"),… | …響內部畫面的預設狀態。",… | settings_groups.py |
-| …、擇一設定不能改。")]),… | …、擇一設定不能改。")],… | settings_groups.py |
-| …致』，不連動修改。")]),… | …致』，不連動修改。")],… | settings_groups.py |
-| …定，再進入新狀態。")]),… | …定，再進入新狀態。")],… | settings_groups.py |
-| …游檢查後清除選定。")]),… | …游檢查後清除選定。")],… | settings_groups.py |
-| …後鎖定範圍』限制。")]),… | …後鎖定範圍』限制。")],… | settings_groups.py |
 | …ext="【高影響】選『只看計入金額的品項』時，未被… | …ext="【高影響】選『僅檢查計入金額的品項』時，未被… | settings_groups.py |
 | …       (2, "只看計入金額的品項" + _… | …       (2, "僅檢查計入金額的品項" + _… | settings_groups.py |
 | …不再列入審核原因。")]),… | …不再列入審核原因。")],… | settings_groups.py |
-| …件本身不會被修改。")]),… | …件本身不會被修改。")],… | settings_groups.py |
-| …金額與方案不一致。")]),… | …金額與方案不一致。")],… | settings_groups.py |
-| …簽並重算精算基準。")]),… | …簽並重算精算基準。")],… | settings_groups.py |
 | …）？", label="誰可以認列採購單",… | …）？", label="採購單認列授權對象",… | settings_groups.py |
-| …。其他角色仍不行。")]),… | …。其他角色仍不行。")],… | settings_groups.py |
-| … "只留稽核記錄。")]),… | … "只留稽核記錄。")],… | settings_groups.py |
-| …會讓管理員收到更多信。"),… | …會讓管理員收到更多信。",… | settings_groups.py |
-| …不影響取消與稽核記錄。"),… | …不影響取消與稽核記錄。",… | settings_groups.py |
 | …成？", label="檔名組成",… | …成？", label="下載檔名組成方式", when="同仁反映下載的檔案名稱不易查找，或想把案件編號、客戶放進檔名時。",… | settings_groups.py |
 | …文件類型＋單號", "只看得出是什麼文件與單號，看不出… | …文件類型＋單號", "只可辨識是什麼文件與單號，無從辨… | settings_groups.py |
 | …看得出是什麼文件與單號，看不出屬於哪個案件。"),… | …可辨識是什麼文件與單號，無從辨識屬於哪個案件。"),… | settings_groups.py |
@@ -231,39 +211,13 @@
 | …響存檔、送審與審核；只有看得到成本與毛利的人會看到。立… | …響存檔、送審與審核；只有可檢視成本與毛利的人才會顯示。… | settings_groups.py |
 | …只有看得到成本與毛利的人會看到。立即生效。"),… | …只有可檢視成本與毛利的人才會顯示。立即生效。",… | settings_groups.py |
 | …的人會看到。立即生效。"),… | …人才會顯示。立即生效。",… | settings_groups.py |
-| …規則，也不改任何金額。"),… | …規則，也不改任何金額。",… | settings_groups.py |
-| …列為『有效期限過長』。"),… | …列為『有效期限過長』。",… | settings_groups.py |
-| …之後送審時列出的原因。"),… | …之後送審時列出的原因。",… | settings_groups.py |
-| …簽的層回到待複查。")]),… | …簽的層回到待複查。")],… | settings_groups.py |
 | …；不改任何金額，也不改誰看得到這份報表。立即生效。",… | …；不改任何金額，也不改誰可檢視這份報表。立即生效。",… | settings_groups.py |
-| …採用下面三個天數。")]),… | …採用下面三個天數。")],… | settings_groups.py |
-| …30／60／90 天。"),… | …30／60／90 天。",… | settings_groups.py |
-| …分界、小於第三個分界。"),… | …分界、小於第三個分界。",… | settings_groups.py |
-| …"必須大於第二個分界。"),… | …"必須大於第二個分界。",… | settings_groups.py |
-| …小＝更早（立即生效）。"),… | …小＝更早（立即生效）。",… | settings_groups.py 等 2 處 |
-| …採用下面兩個天數。")]),… | …採用下面兩個天數。")],… | settings_groups.py |
-| …act="只影響顏色。"),… | …act="只影響顏色。",… | settings_groups.py |
-| …日可能多收到一封提醒。"),… | …日可能多收到一封提醒。",… | settings_groups.py |
-| …位會退回內建清單。")]),… | …位會退回內建清單。")],… | settings_groups.py |
-| …="只影響對帳單匯入。"),… | …="只影響對帳單匯入。",… | settings_groups.py 等 3 處 |
-| …選的加嚴項目生效。")]),… | …選的加嚴項目生效。")],… | settings_groups.py |
-| …段的案件不能結案。")]),… | …段的案件不能結案。")],… | settings_groups.py |
-| …細的案件不能結案。")]),… | …細的案件不能結案。")],… | settings_groups.py |
-| …料的案件不能結案。")]),… | …料的案件不能結案。")],… | settings_groups.py |
-| …額外支出也擋結案。")]),… | …額外支出也擋結案。")],… | settings_groups.py |
 | …放自訂狀態名稱與顏色",… | …放自訂狀態名稱與顏色", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
 | …mpact="只改畫面上看到的字與色，不改任何狀態值… | …mpact="只改畫面上顯示的字與色，不改任何狀態值… | settings_groups.py |
 | …放自訂數字與日期顯示",… | …放自訂數字與日期顯示", when="公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。",… | settings_groups.py |
 | …號？", label="千分位",… | …號？", label="數字加千分位逗號", when="公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。",… | settings_groups.py |
 | …數？", label="小數位數",… | …數？", label="金額顯示幾位小數", when="公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。",… | settings_groups.py |
 | …abel="日期寫法",… | …abel="日期寫法", when="公司習慣的數字、日期寫法和預設不同時（例如不要千分位、要顯示小數）。",… | settings_groups.py |
-| …「從報價單帶入」。")]),… | …「從報價單帶入」。")],… | settings_groups.py |
-| …會變動的項目開單。")]),… | …會變動的項目開單。")],… | settings_groups.py |
-| …不扣已完工的數量。")]),… | …不扣已完工的數量。")],… | settings_groups.py |
-| …完成一項再改一項。")]),… | …完成一項再改一項。")],… | settings_groups.py |
-| …只帶有數量的項目。")]),… | …只帶有數量的項目。")],… | settings_groups.py |
-| …, "品牌不帶入。")]),… | …, "品牌不帶入。")],… | settings_groups.py |
-| …調整完工單的數量。")]),… | …調整完工單的數量。")],… | settings_groups.py |
 | …覽？", label="版本帳本與影響預覽",… | …覽？", label="改版前先預覽，並保留歷史版本", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
 | …label="版面發布前強制預覽",… | …label="版面發布前一定要先看預覽", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
 | …bel="自訂欄位發布前強制預覽",… | …bel="自訂欄位發布前一定要先看預覽", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
@@ -296,12 +250,9 @@
 | …ct="只影響每個人自己看到的清單外觀：資料與權限不… | …ct="只影響每個人自己的清單外觀：資料與權限不… | settings_groups.py |
 | …現與統計：天數調短，報表看到的預警會變少（設備與保固… | …現與統計：天數調短，報表顯示的預警會變少（設備與保固… | settings_groups.py |
 | …才生效，調長立即生效。"),… | …才生效，調長立即生效。",… | settings_groups.py |
-| …收到一次新階段的信）。"),… | …收到一次新階段的信）。",… | settings_groups.py |
-| …後生效；調長立即生效。"),… | …後生效；調長立即生效。",… | settings_groups.py 等 2 處 |
 | …", label="密碼最短長度",… | …", label="密碼至少要幾碼", when="公司資安規範要求更長的密碼、或要縮短登入有效期時。",… | settings_groups.py |
 | …法得知現有密碼多長，所以看不到有多少人低於新的長度。調… | …法得知現有密碼多長，所以無法得知有多少人低於新的長度。調… | settings_groups.py |
 | …", label="登入有效天數",… | …", label="登入後多久要重新登入", when="公司資安規範要求更長的密碼、或要縮短登入有效期時。",… | settings_groups.py |
-| …%s" % label,… | …%s" % label, when=_EXT_ROLE_WHEN[role],… | settings_groups.py |
 | …帳號密碼外洩時，外人就能看到客戶、報價與財務資料。"… | …帳號密碼外洩時，外人就能檢視客戶、報價與財務資料。"… | settings_groups.py |
 | …」？", label="外網強制兩步驟驗證（總開關）… | …」？", label="從外網登入時強制兩步驟驗證（總開關）… | settings_groups.py |
 | …兩步驟驗證（總開關）",… | …兩步驟驗證（總開關）", when="想讓外網登入更安全，或發現有人從外面試密碼時，先確認這個總開關是開的。",… | settings_groups.py |
@@ -315,12 +266,8 @@
 | … label="開放自訂通知用語",… | … label="開放自訂簽核通知文字", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
 | … label="開放自訂階段樣板",… | … label="開放自訂案件階段樣板", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
 | …", label="開放建立自訂模組",… | …", label="開放自行建立新表單（自訂模組）", when="公司想自己調整畫面、欄位、通知文字，又不想每次都洽原開發廠商處理；平常不需要，預設全部關閉。",… | settings_groups.py |
-| …份的已成案報價單。")]),… | …份的已成案報價單。")],… | settings_groups.py |
-| …不影響已存在的報價單。"),… | …不影響已存在的報價單。",… | settings_groups.py |
-| …即生效並留下稽核紀錄。"),… | …即生效並留下稽核紀錄。",… | settings_groups.py |
 | …麼？", label="系統標語（1～24 個字）",… | …麼？", label="首頁小標語", when="想讓首頁小標語換成公司自己的系統名稱或口號時。",… | settings_groups_brand.py |
 | …氣。", label="問候語風格",… | …氣。", label="首頁問候語的口氣", when="覺得問候語太吵、或想換成更正式或更輕鬆的口氣時。",… | settings_groups_brand.py |
-| …: "pending"}),… | …: "pending"},… | settings_groups_legal_reminder.py 等 2 處 |
 | …NOTE = "只改自己看到的清單如何排序、顯示哪些… | …NOTE = "只改自己的清單如何排序、顯示哪些… | settings_groups_list_view.py |
 | …ns", "報價單清單：個人可隱藏／調整欄位順序"… | …ns", "報價單清單：每人可隱藏／調整欄位",… | settings_groups_list_view.py |
 | …單：個人可隱藏／調整欄位順序",… | …單：每人可隱藏／調整欄位",… | settings_groups_list_view.py |
@@ -354,19 +301,11 @@
 | …ct="開啟後，採購同仁看得到供應商名單的基本欄位，並… | …ct="開啟後，採購同仁可檢視供應商名單的基本欄位，並… | settings_groups_onepipe.py |
 | …看供應商唯讀名單、對自己看得到的案件開請購單（放寬權限… | …看供應商唯讀名單、對自己可檢視的案件開請購單（放寬權限… | settings_groups_onepipe.py |
 | …庫存與保固日期，也不改誰看得到案件。關閉後畫面與通知方… | …庫存與保固日期，也不改誰可檢視案件。關閉後畫面與通知方… | settings_groups_onepipe.py |
-| …已完結精算不回頭改寫。"),… | …已完結精算不回頭改寫。",… | settings_groups_overhead.py |
 | …清單一次載入幾筆；不改誰看得到哪些派發、搜尋範圍、金額… | …清單一次載入幾筆；不改誰可檢視哪些派發、搜尋範圍、金額… | settings_groups_payslip_picker.py |
 | …清單一次載入幾筆，不改誰看得到哪些派發，也不改任何勞報… | …清單一次載入幾筆，不改誰可檢視哪些派發，也不改任何勞報… | settings_groups_payslip_picker.py |
 | …大可能讓清單載入稍慢。"),… | …大可能讓清單載入稍慢。",… | settings_groups_payslip_picker.py |
-| …、並顯示「低於目標」。"),… | …、並顯示「低於目標」。",… | settings_groups_profit.py |
-| …ra="不可低於紅線。"),… | …ra="不可低於紅線。",… | settings_groups_profit.py 等 3 處 |
-| …低於這個數字顯示紅色。"),… | …低於這個數字顯示紅色。",… | settings_groups_profit.py |
-| …數。", lo=-100),… | …數。", lo=-100,… | settings_groups_profit.py |
-| …示綠色，其餘顯示紅色。"),… | …示綠色，其餘顯示紅色。",… | settings_groups_profit.py |
-| …需要審核，請一併調整。"),… | …需要審核，請一併調整。",… | settings_groups_profit.py |
 | …立的估價單的單號；已經開出去的估價單單號不變、仍可正… | …立的估價單的單號；已經開立的估價單單號不變、仍可正… | settings_groups_profit.py |
 | …價單的單號。立即生效。"),… | …價單的單號。立即生效。",… | settings_groups_profit.py |
-| …存檔公益金不回頭改寫。"),… | …存檔公益金不回頭改寫。",… | settings_groups_profit.py |
 | …報價單 PDF 上，客戶看不到這些條件，之後可能因為條… | …報價單 PDF 上，客戶無法檢視這些條件，之後可能因為條… | settings_groups_q0.py |
 | …bel="資源回收筒保留天數（7～365）",… | …bel="資源回收筒保留幾天", when="誤刪單據後來不及找回，或想縮短回收筒占用空間時。",… | settings_groups_recycle_bin.py |
 | …」？", label="即將截止天數（1～60）",… | …」？", label="標案幾天內截止算「即將截止」", when="想調整地圖上「即將截止」的標案範圍時。",… | settings_groups_tender_closing.py |
@@ -413,11 +352,6 @@
 | … {"label": "第幾張申請", "value": … | … {"label": "申請序號", "value": … | material_payments.py |
 | …{ph}) AND dtc.completed_… | …{ph}) AND dt.is_deleted = 0 AND dtc.completed_… | quotations.py |
 | …ted_at != ''… | …ted_at != ''   -- 撤回（軟刪）的任務不算動態：撤銷階段勾選後別人不該亮「有新動態」… | quotations.py |
-| …視權限，不可編輯報價單")… | …視權限，不可編輯報價單", headers=_FAIL_HDR("finance_view"))… | quotations.py |
-| …編輯需要最高管理者權限")… | …編輯需要最高管理者權限", headers=_FAIL_HDR("unlock_superadmin"))… | quotations.py |
-| …增、刪除或調整款項期別")… | …增、刪除或調整款項期別", headers=_FAIL_HDR("finance_view"))… | quotations.py |
-| …回結案的報價單不可修改")… | …回結案的報價單不可修改", headers=_FAIL_HDR("rejected_locked"))… | quotations.py |
-| …式流程操作或解鎖後修改")… | …式流程操作或解鎖後修改", headers=_FAIL_HDR("status_locked"))… | quotations.py |
 | …ILABLE = "採購・庫存・出貨模組未安裝：沒有出貨單資… | …ILABLE = "採購與庫存模組未安裝：沒有出貨單資… | quotations.py |
 | …設備序號未同步庫存：採購・庫存・出貨模組未安裝"… | …設備序號未同步庫存：採購與庫存模組未安裝"… | quotations.py |
 | …業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的… | …業務開發模組未安裝：若有商機轉建自這張報價單，它們的… | quotations.py |
@@ -436,7 +370,6 @@
 | …入庫", "na", "目前沒有這個案件的入庫紀錄")… | …入庫", "na", "尚無這個案件的入庫紀錄")… | material_flow.py |
 | …入庫", "na", "目前沒有這個案件的序號；已入庫但… | …入庫", "na", "尚無這個案件的序號；已入庫但… | material_flow.py |
 | … "name": "案件",… | … "name": "案件管理",… | module.json |
-| …l，否則 direct。"""… | …l，否則 direct。… | profit_guard.py |
 | …m_unlink": "業務開發案件的轉建連結不會自動恢復"… | …m_unlink": "商機的轉建連結不會自動恢復"… | recycle_adapter.py |
 | … "notes": ["業務開發案件的轉建連結沒有自動恢復（… | … "notes": ["商機的轉建連結沒有自動恢復（… | recycle_adapter.py |
 | …務開發 CRM — 前期案件追蹤 + 開發記錄 (p… | …務開發 CRM — 前期商機追蹤 + 開發記錄 (p… | api.py |
@@ -507,7 +440,6 @@
 | …有業務開發模組權限、而且看得到該案件才能被指定。被指定的成員… | …有業務開發模組權限、而且可檢視該商機才能被指定。被指定的成員… | module.json |
 | …{"case": "案件", "supply":… | …{"case": "案件管理", "supply":… | api.py |
 | …supply": "採購・庫存・出貨", "arap": "… | …supply": "採購與庫存", "arap": "… | api.py |
-| …0，**一個都不寫**。"""… | …0，**一個都不寫**。… | bonus.py |
 | …    """目前設定的科目代號（沒設定 ⇒ 預設值）。讀同一個連線，不另開… | …    登錄表讀不到 ⇒ 退回舊儲存（不用程式預設）。讀同一個連線，不另開… | bonus_vouchers.py |
 | …這個角色（或這個人）可以看到勞報單的內容與金額；原本… | …這個角色（或這個人）可以檢視勞報單的內容與金額；原本… | module.json |
 | …「勞報單」功能勾選的人也會看得到。",… | …「勞報單」功能勾選的人也可檢視。",… | module.json |
@@ -576,7 +508,7 @@
 | …連結，必須先設定對外網址（public_base_url）")… | …連結，必須先設定對外網址。沒有對外網址的話，請關閉「LINE 訊息帶連結」")… | system.py |
 | …           "業務開發案",… | …           "商機",… | trail.py |
 
-## 前端畫面（647 組）
+## 前端畫面（579 組）
 
 | 改前 | 改後 | 位置 |
 |---|---|---|
@@ -608,14 +540,9 @@
 | … this.msg = r.ok ? '已儲存傳票科目' : ('傳票科目儲存失敗：… | … this.msg = !r.ok ? ('傳票科目儲存失敗：… | bonus.js |
 | ….toast('報價單上沒有可帶入的欄位，或案件這邊… | ….toast('報價單上尚無可帶入的欄位，或案件已全… | case-management-biz.js |
 | …沒有可帶入的欄位，或案件這邊都已經有值了。', {kind: '… | …尚無可帶入的欄位，或案件已全部有值。', {kind: '… | case-management-biz.js |
-| … limit: '20' })… | … limit: '20', with_dev_case: '1' })… | case-management-core.js |
-| …        this.saveToast = this.save… | …        msg = this.save… | case-management-core.js |
 | …) return '按下去不會新增任何階段。'… | …) return '按下後不會新增任何階段。'… | case-management-exec.js |
-| …'}); return }… | …'}); return false }… | case-management-exec.js |
-| …d: 'error'}) }… | …d: 'error'}); return false }… | case-management-exec.js |
 | …this.toast('目前沒有可匯出的甘特圖'); r… | …this.toast('尚無可匯出的甘特圖'); r… | case-management-exec.js |
 | …')  return '已過保'… | …')  return '保固已到期'… | case-management-exec.js |
-| …ose) return row.readyCount + '/5 可結案'… | …ose) return '可結案'… | case-management-list.js |
 | …      if (row.blockedCount === 1) return '差 … | …      if (miss.length) return '缺：… | case-management-list.js |
 | … 1) return '差 ' + row.blockedLabels[0]… | …th) return '缺：' + miss.join('、')… | case-management-list.js |
 | …, mergeWon: false },… | …, mergeWon: true },      // T86 案件UX #8：預設合併（設定中心 cases_merge_won_tab 預設 1）；公司明確存了 0 才分開… | case-management-list.js |
@@ -679,7 +606,6 @@
 | …符合條件的案件' : '目前沒有您的獎金分潤資料'" d… | …符合條件的案件' : '尚無您的獎金分潤資料'" d… | bonus.html |
 | …rt='stuck'">卡最久</button>… | …rt='stuck'">逾期最久</button>… | case-management.html |
 | …-left:10px">只看</span>… | …-left:10px">僅顯示</span>… | case-management.html |
-| …-align:right">結案</th>… | …-align:right;min-width:128px">結案</th>… | case-management.html |
 | …mtx__empty">沒有符合條件的案件</td>… | …mtx__empty">查無符合條件的案件</td>… | case-management.html |
 | …holder="搜尋單號或客戶…"… | …holder="搜尋單號、客戶或專案…"… | case-management.html |
 | …tTab==='已結案'}" @click="s… | …tTab==='已結案', 'cm-list__tab--zero': caseCounts && !summaryClosed() && listTab!=='已結案'}" @click="s… | case-management.html |
@@ -688,24 +614,11 @@
 | …kAllRead()">一鍵已讀</button>… | …kAllRead()">全部標示已讀</button>… | case-management.html 等 2 處 |
 | …      <span>沒有符合的案件</span>… | …      <span>查無符合條件的案件</span>… | case-management.html |
 | …="search ? '嘗試調整搜尋關鍵字' : (… | …="search ? '請調整搜尋關鍵字' : (… | case-management.html |
-| …'customer')" x-text="c.customer_n… | …'customer')"><template x-for="(p, i) in hlParts(c.customer_n… | case-management.html |
-| … \|\| '(未填客戶)'"></div>… | … \|\| '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>… | case-management.html 等 2 處 |
-| …d__customer" x-text="c.customer_n… | …d__customer"><template x-for="(p, i) in hlParts(c.customer_n… | case-management.html |
-| …how="!saving">儲存</span>… | …how="!saving && !saveIsClean()">儲存</span>… | case-management.html |
-| …_n" x-show="caseUpdates.length > 0" x-text… | …_n" x-show="feedBadgeCount() > 0" x-text… | case-management.html |
-| … 0" x-text="caseUpdates.length"></span></b… | … 0" x-text="feedBadgeCount()"></span></b… | case-management.html |
-| …uote_no\|\|'')">精算 ▶</a>… | …uote_no\|\|'') + '&from=case'">精算 ▶</a>… | case-management.html |
-| …           <a href="#" data-testi… | …           <button type="button" class="cm-link-btn" data-testi… | case-management.html 等 2 處 |
-| …ed')" @click.prevent="openLogEnt… | …ed')" @click="openLogEnt… | case-management.html |
-| …)">留言／工作日誌</a>… | …)">留言／工作日誌</button>… | case-management.html |
-| …ss')" @click.prevent="openLogEnt… | …ss')" @click="openLogEnt… | case-management.html |
-| …it')">階段出勤</a>… | …it')">階段出勤</button>… | case-management.html |
 | …pUrl()">在地圖上看</a>… | …pUrl()">在地圖上查看</a>… | case-management.html |
 | …            </template>… | …                 placeholder="階段名稱" aria-label="階段名稱">… | case-management.html |
 | …="fi fi--sm">… | …="fi fi--sm" aria-label="前往日期">… | case-management.html |
 | …aceholder="人" class="fi … | …aceholder="人次" aria-label="人次" class="fi … | case-management.html |
 | …容、施工項目、備註…" class="fi fi… | …容、施工項目、備註…" aria-label="工作內容／備註" class="fi fi… | case-management.html |
-| …e-mode="auto" title="修改後… | …e-mode="auto" x-show="!caseReadOnly()" title="修改後… | case-management.html |
 | …aterials')" style="paddi… | …aterials')" :title="caseReadOnly() ? '您不是本案成員，無法匯入品項' : ''" data-testid="mtl-import-quote" style="paddi… | case-management.html |
 | …sToDevices()" style="pad… | …sToDevices()" :title="caseReadOnly() ? '您不是本案成員，無法同步至設備登錄' : ''" data-testid="mtl-sync-devices" style="pad… | case-management.html |
 | …      <span style="color… | …      <span class="cm-section-title" style="margi… | case-management.html |
@@ -744,7 +657,6 @@
 | …—）；可編輯預計收款日、發票與備註。</div>… | …—）。可編輯預計收款日、收款日期、備註與發票資料；收款狀態只供查看。已收款的期別除發票資料外不能修改。</div>… | case-management.html |
 | …           <label class="fi-l… | …           <span class="fi-l… | case-management.html |
 | …s="fi-label" :for="'pay-' + item.id + '-invno'">發票號碼</label>… | …s="fi-label">收款日期</span>… | case-management.html |
-| …"setDirty()">… | …"setDirty()" :disabled="payFrozen(item)">… | case-management.html |
 | …           </span>… | …           <span>發票資料</span>… | case-management.html |
 | …      <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh)">發票附件</span>… | …      <span class="pay-detail__sum" x-text="payDetailSummary(item, idx)"></span>… | case-management.html |
 | …            ＋ 上傳發票… | …              <div>… | case-management.html |
@@ -759,10 +671,6 @@
 | … n.id)">在地圖上看</a>… | … n.id)">在地圖上查看</a>… | case-management.html |
 | …lesErr">這個案件沒有您看得到的上傳檔案。</div>… | …lesErr">這個案件尚無您可檢視的上傳檔案。</div>… | case-management.html |
 | …mpose__box" placeholder="記錄聯繫情況、案件進展、備忘…（填了執行時數/聯絡事項或附上照片即記為工作日誌）" x-model="newComment" rows="2"></textarea>… | …mpose__box" x-show="composeKind()!=='task'"… | case-management.html |
-| …     <label style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">日期</label>… | …     <label class="feed-compose__lbl">日期</label>… | case-management.html |
-| …     <label style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">記錄對象</labe… | …     <label class="feed-compose__lbl">記錄對象</labe… | case-management.html |
-| …     <label style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">執行時數</labe… | …     <label class="feed-compose__lbl">執行時數</labe… | case-management.html |
-| …     <label style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">聯絡事項</labe… | …     <label class="feed-compose__lbl">聯絡事項</labe… | case-management.html |
 | …"feed-empty">這天沒有動態紀錄</div>… | …"feed-empty" x-text="feedCalSelDate ? '這天尚無動態紀錄' : '尚無一般動態；系統自動記錄已摺疊，可按上方「顯示」查看。'"></div>… | case-management.html |
 | …ex-shrink:0">前往</button>… | …ex-shrink:0" x-text="settleGateLinks(g) ? '前往精算頁' : '前往'">前往</button>… | case-management.html |
 | …-text-dim)">沒有可帶入的材料申請</di… | …-text-dim)">尚無可帶入的材料申請</di… | case-management.html |
@@ -771,11 +679,6 @@
 | …+ it.serials.join('、')) … | … (it.serials \|\| []).join('、')) … | case-management.html |
 | …s.join('、')) : '選擇庫存料號/序… | …).join('、')) : (it.materialLink ? '選擇庫存料號/序號（選填；序號必須是這筆材料申請入庫的、筆數不能多於出貨數量，送審時檢查）' : '選擇庫存料號/序… | case-management.html |
 | …派發紀錄，之後在派發清單也看得到；未填則沿用派發原本設定… | …派發紀錄，之後在派發清單中也會顯示；未填則沿用派發原本設定… | case-management.html |
-| …      <span style="font-size:13px;font-weight:600;flex:1;font-family:var(--font-zh)" x-text="im… | …      <span class="imp-title" x-text="im… | case-management.html |
-| …              x-text="Obj… | …        <span class="imp-count" x-text="Obj… | case-management.html |
-| …                   x-text="[qi… | …            <span class="imp-qty" x-text="(qi… | case-management.html |
-| …    x-text="[qi.brand, (qi.qty\|\|1) … | …ty" x-text="(qi.qty\|\|1) … | case-management.html |
-| …i.unit\|\|'台')].filter(Boolean).join(' · ')"></div>… | …i.unit\|\|'台')"></span>… | case-management.html |
 | …     <button @click="sho… | …     <button type="button" class="imp-btn" @click="sho… | case-management.html |
 | …Modal=false"… | …Modal=false">取消</button>… | case-management.html |
 | …                :disabled="… | …        <button type="button" class="imp-btn imp-btn--primary" @click="doImport()" :disabled="… | case-management.html |
@@ -834,9 +737,6 @@
 | …表選取案件，或新增第一筆業務開發案件</p>… | …表選取商機，或新增第一筆商機</p>… | dev-crm.html |
 | …e = null">← 案件列表</button>… | …e = null">← 商機列表</button>… | dev-crm.html |
 | …          編輯案件… | …          編輯商機… | dev-crm.html |
-| …m"  @click="changeStatus('未成案'… | …m"  @click="askStatus('未成案'… | dev-crm.html |
-| …"   @click="changeStatus('暫擱置'… | …"   @click="askStatus('暫擱置'… | dev-crm.html |
-| …sm" @click="changeStatus('洽談中'… | …sm" @click="askStatus('洽談中'… | dev-crm.html |
 | …ss="dc-lbl">案件狀態快照（選填）</sp… | …ss="dc-lbl">商機狀態快照（選填）</sp… | dev-crm.html |
 | …CaseId ? '編輯案件' : '新增業務開發案… | …CaseId ? '編輯商機' : '新增商機'">… | dev-crm.html |
 | …'編輯案件' : '新增業務開發案件'"></h3>… | …'編輯商機' : '新增商機'"></h3>… | dev-crm.html |
@@ -859,8 +759,6 @@
 | …敗不擋主畫面；目前進度在案件資料裡 */ }… | …敗不擋主畫面；目前進度在商機資料裡 */ }… | dev-crm.html |
 | …oast('已將目前所有案件標記為已讀')… | …oast('已將目前所有商機標記為已讀')… | dev-crm.html |
 | …ottom:8px">您目前沒有「業務開發」的使用權限<… | …ottom:8px">您尚無「業務開發」的使用權限<… | dev-crm.html |
-| …es_persons: [], planners… | …es_persons: (this.session.role === 'sales' && this.session.userId) ? [this.session.userId] : [], planners… | dev-crm.html |
-| …referrer: '' }… | …referrer: '', expectedAmount: '', expectedCloseDate: '' }… | dev-crm.html |
 | …Error = '請填寫案件名稱'; return … | …Error = '請填寫商機名稱'; return … | dev-crm.html |
 | …       this._toast('案件已儲存')… | …       this.loadExpectedSummary()… | dev-crm.html |
 | …        this._toast('狀態已更新：' + status)… | …      if (!needAsk) { this.changeStatus(status); ret… | dev-crm.html |
@@ -870,7 +768,6 @@
 | …this._toast('記錄已儲存')… | …this._toast(keepOpen ? '記錄已儲存，可接著寫下一筆。' : '記錄已儲存')… | dev-crm.html |
 | …      <span>沒有符合的設備</span>… | …      <span>查無符合條件的設備</span>… | devices.html |
 | …in-top:10px">權限（點選切換；框線＝高敏感，財務三鍵可放進角色但不會讓持有者取得財務／出納能力）</div>… | …in-top:10px" x-show="!form.id">新角色建立後尚無任何權限。請在上方權限矩陣勾選該角色的欄位，再按「儲存」。</div>… | duty-roles.html |
-| … this.load() }… | … this.load(); if (_dm) await _dm.reload() }… | duty-roles.html |
 | …lictHold()">先不處理</button>… | …lictHold()">暫不處理</button>… | expense-types.html 等 2 處 |
 | …oGroup()">全部放一組</button>… | …oGroup()">全部歸為同一組</button>… | expense-types.html |
 | …ardDraft()">丟棄草稿</button>… | …ardDraft()">捨棄草稿</button>… | expense-types.html 等 2 處 |
@@ -889,14 +786,6 @@
 | …敗，請確認設定與授權狀態'; this.isEr… | …敗，請確認設定與授權狀態。'; this.isEr… | google-calendar-settings.html |
 | …     <b>匯入精靈目前沒有開放。</b><br>請… | …     <b>匯入精靈尚未開放。</b><br>請… | import-wizard.html |
 | …         <p>要匯入哪一種資料？<b>建議順序：員工 →… | …         <p>選擇匯入資料類型<b>建議順序：員工 →… | import-wizard.html |
-| …sed.warnings.length"></s… | …sed.warnings ? parsed.warnings.length : 0"… | import-wizard.html |
-| …nings.length"></span> 個提… | …nings.length : 0"></span> 個提… | import-wizard.html |
-| …show="parsed && parsed.w… | …show="parsed && parsed.warnings && parsed.w… | import-wizard.html |
-| …text="parsed.warnings.le… | …text="parsed ? parsed.warnings.le… | import-wizard.html |
-| ….length - 30"></span> 個<… | ….length - 30 : 0"></span> 個<… | import-wizard.html |
-| …x-show="plan && plan.err… | …x-show="plan && plan.errors && plan.err… | import-wizard.html |
-| …x-text="plan.errors.leng… | …x-text="plan && plan.errors ? plan.errors.leng… | import-wizard.html |
-| …s.length - 50"></span> 個… | …s.length - 50 : 0"></span> 個… | import-wizard.html |
 | …"reset()">取消，重新來</button>… | …"reset()">取消並重新開始</button>… | import-wizard.html |
 | …ngth === 0">目前沒有低於水位的料號，暫無採購… | …ngth === 0">尚無低於水位的料號，暫無採購… | inventory.html |
 | …in('\n') : '沒有紀錄'))… | …in('\n') : '尚無紀錄'))… | inventory.html |
@@ -941,7 +830,6 @@
 | …     <label>誰改得到</label>… | …     <label>可修改對象</label>… | module-builder.html |
 | …== 'bad' ? '版型有問題' : '')"></s… | …== 'bad' ? '暫時無法預覽，原因見下方' : '')"></s… | module-builder.html |
 | …PDF 產生失敗' : '')"></span>… | …PDF 產生失敗' : (pdfState === 'blocked' ? '暫時無法預覽，原因見下方' : ''))"></span>… | module-builder.html |
-| …xt="(p.path \|\| '') + '：' + p.message… | …xt="(p.path ? p.path + '：' : '') + p.message… | module-builder.html |
 | …laceholder="這一版改了什麼">… | …laceholder="本版變更內容">… | module-builder.html |
 | …不同的列會標示「待重啟」。… | …不同的列會標示「待重啟」（即篩選鈕「尚未生效」所列的模組）。… | module-settings.html |
 | …）：所有模組一律可載入，沒有檢查授權金鑰。… | …）：所有模組一律可載入，未檢查授權金鑰。… | module-settings.html |
@@ -970,14 +858,6 @@
 | …        : '沒有偵測到可用的資料列'… | …        : '未偵測到可用的資料列'… | network-plan-form.html 等 2 處 |
 | …            無符合案件，或已成案/已結案案… | …            查無符合條件的案件，或已成案／已結案案… | network-plans.html |
 | …  無符合案件，或已成案/已結案案件皆已建立過規劃… | …符合條件的案件，或已成案／已結案案件皆已建立過規劃… | network-plans.html |
-| …at" x-text="'更新於 ' + (qu… | …at" x-text="quota && quota.checked_at ? '更新於 ' + Str… | notification-settings.html |
-| …t="'更新於 ' + (quota.check… | … ? '更新於 ' + String(quota.check… | notification-settings.html |
-| …a.checked_at \|\| '').replace('T… | …a.checked_at).replace('T… | notification-settings.html |
-| …slice(0, 16)"></span>… | …slice(0, 16) : ''"></span>… | notification-settings.html |
-| …px" x-text="'本月已用 ' + qu… | …px" x-text="quota ? '本月已用 ' + (q… | notification-settings.html |
-| …t="'本月已用 ' + quota.used … | … ? '本月已用 ' + (quota.used == null ? 0 : quota.used)… | notification-settings.html |
-| …+ quota.used + ' 則（此方案沒有… | …: quota.used) + ' 則（此方案沒有… | notification-settings.html |
-| …案沒有上限，不會告警）'"></div>… | …案沒有上限，不會告警）' : ''"></div>… | notification-settings.html |
 | …目前讀不到用量：' + quota.error)… | …目前讀不到用量：' + (quota.error … | notification-settings.html |
 | … quota.error) : '讀取中…'"><… | …(quota.error \|\| '尚無資料')) : (quotaTried ? '尚無用量資料' : '讀取中…')">… | notification-settings.html |
 | …or) : '讀取中…'"></div>… | …資料' : '讀取中…')"></div>… | notification-settings.html |
@@ -1004,8 +884,6 @@
 | …        <th>做了什麼</th>… | …        <th>操作內容</th>… | online-stats.html |
 | …idth:140px">在哪一頁</th>… | …idth:140px">所在頁面</th>… | online-stats.html |
 | … 這份資料只有最高管理者看得到。… | … 這份資料只有最高管理者可檢視。… | online-stats.html |
-| …"page-title">支出申請</h1></… | …"page-title" data-testid="pr-title" x-text="pageTitle()">支出申請</h1></… | payment-request.html |
-| …ass="pr-hint">支出申請就是案件的額… | …ass="pr-hint" data-testid="pr-explainer" x-text="explainer()">支出申請就是案件的額… | payment-request.html |
 | …<h3 x-text="typeCode ? '… | …<h3 x-text="picked ? '案件' : (typeCode ? '… | payment-request.html |
 | …）' : '① 挑案件'"></h3>… | …）' : '① 挑案件')"></h3>… | payment-request.html |
 | ….length">找不到看得到的案件（只列您是業務或被… | ….length">找不到可檢視的案件（只列您是業務或被… | payment-request.html |
@@ -1027,11 +905,9 @@
 | …t-dim)">這位人員目前沒有被排進任何派工。</div>… | …t-dim)">這位人員尚未排入任何派工。</div>… | payslip-form.html |
 | …oin('、') : '沒有可帶入的空欄位') + … | …oin('、') : '尚無可帶入的空欄位') + … | payslip-form.html |
 | …review-note">待簽核：由簽核人簽核；退回後回到草稿，可修改後重新送審</div>… | …review-note"… | payslips.html |
-| …     <button class="btn … | …     <button x-show="session.role === 'superadmin'" class="btn … | payslips.html 等 2 處 |
 | …存；高風險放寬要填原因、等確認期間、需第二位最高管理者核准… | …存；高風險放寬要填原因、走等待期、需第二位最高管理者核准… | permission-matrix.html |
 | …僅最高管理者可查看。勾選前會先說明會發生什麼事，確認後才會… | …僅最高管理者可查看。勾選的格子會先暫存在畫面上（尚未儲存）；勾好一批後按「預覽並套用」，一次看完會發生什麼事，確認後才會… | permission-matrix.html |
 | …，確認後才會儲存，可隨時一鍵復原。</p>… | …，確認後才會儲存，可隨時復原。</p>… | permission-matrix.html |
-| …，暫時不能調整'" @click.prevent="askRole(c, r, !c.cells[r.role].granted)"><span cla… | …，暫時不能調整'" @change="toggleStage(c, r); $el.checked = stagedValue(c, r)"><span cla… | permission-matrix.html |
 | …v class="pm-chg" x-show="c… | …v class="pm-stg" x-show="i… | permission-matrix.html |
 | …hg" x-show="c.cells[r.role].changed">已調整</div>… | …tg" x-show="isStaged(c, r)" :data-testid="'pm-staged-' + c.key + '-' + r.role">待套用</div>… | permission-matrix.html |
 | …不能做</th><th>為什麼</th></tr></… | …不能做</th><th>原因</th></tr></… | permission-matrix.html |
@@ -1056,8 +932,6 @@
 | …生效，自動存檔已暫停。請先載入最新版，再重新進行您要修改的部分。</span>… | …生效，自動存檔已暫停。請選擇「載入最新版，保留我的修改」，或「載入最新版」並放棄未存的修改。</span>… | quotation-form.html |
 | …<b>不會動到任何已經開出去的報價單</b>——報價… | …<b>不會動到任何已經開立的報價單</b>——報價… | quotation-form.html |
 | …——報價單存的是當下複製過去的文字，… | …——報價單存的是當下複製的文字，… | quotation-form.html |
-| …, this._saveError)… | …, this._saveCode, this._saveError)… | quotation-form.html |
-| …is.loadPlan()      // M3… | …is.loadPlan(true)      // M3… | quotation-form.html |
 | …s._saveError… | …s._saveError + (this._failHow(this._saveCode) ? '\n處理方式：' + this._failHow(this._saveCode) : '')… | quotation-form.html |
 | …命名）'}」？\n已經開出去的報價單不受影響。`))… | …命名）'}」？\n已經開立的報價單不受影響。`))… | quotation-form.html |
 | …的修改，這次儲存未生效。請重新載入頁面後再繼續編輯。')… | …的修改，這次儲存未生效。\n請按畫面上方橫幅的「載入最新版，保留我的修改」（只換掉您沒改過的欄位），確認後再儲存。')… | quotation-form.html |
@@ -1087,7 +961,6 @@
 | …b>，上方任何一個期間都看不到它們。… | …b>，上方任何一個期間都不會顯示它們。… | reports.html |
 | …"showAll ? '只看最近 10 筆' : '… | …"showAll ? '僅顯示最近 10 筆' : '… | schema-status.html |
 | …="sc-empty">沒有符合的設定頁。</div>'… | …="sc-empty">查無符合條件的設定頁。</div>'… | settings-center.html |
-| … === 'bool' },… | … === 'bool' \|\| isMaster(r) },… | settings-center.html |
 | …      { id: 'sel', type: 'select', label: '選擇', show: function (… | …        disabled: function (… | settings-center.html |
 | …rn r.f.type !== 'bool' &&… | …rn r.f.type === 'bool' ? … | settings-center.html |
 | … !== 'bool' && r.f.type !== 'json' && !!(r.f.choices && r.f.choices.length) },… | … === 'bool' ? lockWhy(r) : false },… | settings-center.html |
@@ -1111,8 +984,6 @@
 | …    <span>上次抓取 <span x-te… | …    <span>上次擷取 <span x-te… | tender-radar.html |
 | …           ・丟棄 <span x-te… | …           ・捨棄 <span x-te… | tender-radar.html |
 | …地點資訊尚未取得（每日有抓取上限，後續時段會補上）… | …地點資訊尚未取得（每日有擷取上限，後續時段會補上）… | tender-radar.html |
-| …ext="mapInfo.office.addr… | …ext="mapInfo && mapInfo.office ? mapInfo.office.addr… | tender-radar.html |
-| …fice.address"></span>… | …fice.address : ''"></span>… | tender-radar.html |
 | …="fi-label">抓取時段（逗號分隔，0-2… | …="fi-label">擷取時段（逗號分隔，0-2… | tender-radar.html |
 | …          抓取與寄信是<strong… | …          擷取與寄信是<strong… | tender-radar.html |
 | …同一個時段內重複觸發只會抓一次。<br>… | …同一個時段內重複觸發只會擷取一次。<br>… | tender-radar.html |
@@ -1126,9 +997,6 @@
 | … alert('今天已經抓過了。抓取頻率硬上限是每日一次 … | … alert('今天已經擷取過了。擷取頻率硬上限是每日一次 … | tender-radar.html |
 | …          沒有符合搜尋條件的使用者… | …          查無符合條件的使用者… | users.html |
 | …-text-dim)">沒有未對應的案件角色。</d… | …-text-dim)">尚無未對應的案件角色。</d… | users.html |
-| …           :title="finKe… | …           :data-testid="'mod-chip-' + mod.key" :title="pkUse… | users.html |
-| …    :title="finKeyInert(mod.ke… | …ey" :title="pkUser.isInert(mod.ke… | users.html |
-| …，不刪除）' : ''"… | …，不刪除）' : ''">… | users.html |
 | …       <span style="font… | …       <span x-show="pkUser.isHigh(mod.key)" style="font… | users.html |
 | …color:var(--text-dim);font-weight:400"… | …color:var(--danger)" title="高敏感權限">★</span>… | users.html 等 2 處 |
 | …text-dim)">（沒有可扣的角色權限）</sp… | …text-dim)">（尚無可扣的角色權限）</sp… | users.html |
@@ -1177,10 +1045,6 @@
 | … [['what', '這是什麼'], ['when',… | … [['what', '說明'], ['when',… | hint-popover.js |
 | …, ['when', '什麼時候要改'], ['impact… | …, ['when', '調整時機'], ['impact… | hint-popover.js |
 | …['impact', '改了會影響什麼'], ['sugges… | …['impact', '影響範圍'], ['sugges… | hint-popover.js |
-| …b" x-show="!work.outputs… | …b" x-show="!(work && work.outputs && work.outputs… | layout-editor.js |
-| …tputs.length">這個模組沒有登記輸出… | …tputs.length)">這個模組沒有登記輸出… | layout-editor.js |
-| …b" x-show="!work.sidebar… | …b" x-show="!(work && work.sidebar… | layout-editor.js |
-| …work.sidebar">這一頁沒有宣告側欄項… | …work.sidebar)">這一頁沒有宣告側欄項… | layout-editor.js |
 | …，編輯已鎖定；請關閉後再打開'… | …，編輯已鎖定；請關閉後再開啟'… | layout-editor.js |
 | …結果不明：請關閉排版器再打開、看版本清單確認') }… | …結果不明：請關閉排版器再開啟、看版本清單確認') }… | layout-editor.js |
 | …結果不明：請關閉排版器再打開確認') },… | …結果不明：請關閉排版器再開啟確認') },… | layout-editor.js |

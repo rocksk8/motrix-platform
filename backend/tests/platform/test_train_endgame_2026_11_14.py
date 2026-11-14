@@ -482,3 +482,63 @@ def test_version_record_asks_for_a_human_check_when_units_outnumber_new_entries(
 def test_package_check_counts_pyo_too(eg, tmp_path):
     (tmp_path / "m.pyo").write_bytes(b"x")
     assert eg.package_check(tmp_path)["pyc"] == 1
+
+
+def test_main_defaults_base_to_the_prod_baseline_and_never_to_origin_platform(eg, trainrepo, monkeypatch, capsys):
+    base_sha = _git_out(trainrepo, "rev-parse", "base")
+    _write(trainrepo, "backend/tests/_prod_baseline.py", 'BASELINE = "%s"\n' % base_sha[:10])
+    _commit(trainrepo, "baseline")
+    monkeypatch.setattr(eg, "REPO", trainrepo)
+    rc = eg.main(["plan", "--label", "t", "--only", "pyc"])
+    out = capsys.readouterr().out
+    assert "base %s ＝ %s" % (base_sha[:10], base_sha[:12]) in out and "origin/platform" not in out.split("結果")[0]
+    assert rc == 0
+
+
+def test_main_without_a_readable_baseline_asks_for_an_explicit_base(eg, trainrepo, monkeypatch, capsys):
+    monkeypatch.setattr(eg, "REPO", trainrepo)
+    assert eg.main(["plan", "--label", "t"]) == 2
+    assert "BASELINE" in capsys.readouterr().err
+
+
+# ── h11 第二輪：步驟檔路徑限制、先取鎖、ASCII 數字、--base 注入 ──────────────────────────
+
+@pytest.mark.parametrize("bad", ["backend/main.py", "docs/platform/prod-tasks/../../../backend/main.py", "/etc/x.md", "C:/x/y.md",
+                                 "docs/platform/prod-tasks/sub/x.md", "docs/platform/plans/x.md", "docs/platform/prod-tasks/x.txt"])
+def test_step_file_path_is_confined_to_prod_tasks(eg, trainrepo, bad):
+    with pytest.raises(ValueError):
+        eg.check_step_file_path(bad)
+    with pytest.raises(ValueError):
+        eg.run_stages(trainrepo, "base", "t", step_file=bad, dry=True)
+
+
+def test_step_file_path_accepts_a_normal_step_file_and_fill_is_confined_too(eg, tmp_path):
+    assert eg.check_step_file_path("docs/platform/prod-tasks/20261115-t87-apply.md") == "docs/platform/prod-tasks/20261115-t87-apply.md"
+    outside = tmp_path / "s.md"
+    outside.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError):
+        eg.resolve_fill_step_file(outside)
+    assert eg.main(["fill", "--step-file", str(outside)]) == 2          # 不在 repo 內 ⇒ 工具錯誤，什麼都不寫
+
+
+def test_a_run_in_progress_reports_locked_not_a_dirty_tree(eg, trainrepo):
+    p = eg.acquire_lock(trainrepo)
+    try:
+        _write(trainrepo, "in_progress.txt", "first run's file\n")      # 第一個 run 進行中留下的檔
+        res = eg.run_stages(trainrepo, "base", "t", dry=False, only="pyc")
+        assert [r.stage for r in res] == ["lock"] and res[0].status == eg.BLOCK
+    finally:
+        eg.release_lock(p)
+
+
+def test_ascii_digits_only_in_approval_and_package_name(eg):
+    fw = "".join(chr(0xFF10 + int(c)) for c in "2026")                   # 全形數字
+    with pytest.raises(ValueError):
+        eg.parse_allow("PM 核准（%s-11-14）：x" % fw)
+    assert not eg.PKG_NAME_RE.fullmatch("２０２６１１１４_191358_1580c8c1_full")
+
+
+@pytest.mark.parametrize("bad", ["", "--output=/tmp/x", "-p"])
+def test_base_must_not_look_like_a_git_option(eg, trainrepo, bad):
+    with pytest.raises(ValueError):
+        eg.run_stages(trainrepo, bad, "t", dry=True)

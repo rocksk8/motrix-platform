@@ -95,3 +95,10 @@ def test_end_to_end_dedup_sections_and_render(tdt, tmp_path):
     assert "## 說明文件（0 組）" in text and "本區間無此類改動" in text
     assert "test_a.py" not in text                                               # 測試檔不收
     assert "| 改前 | 改後 | 位置 |" in text
+
+
+def test_punctuation_only_changes_are_not_listed(tdt):
+    # 中文沒變、只動標點／括號 ⇒ 不收；中文真的改了 ⇒ 收
+    assert tdt.line_changes('x = ("目前沒有資料")),', 'x = ("目前沒有資料")],') == []
+    assert tdt.line_changes('x = ("目前沒有資料", 1)', 'x = ("目前沒有資料", 2)') == []
+    assert len(tdt.line_changes('x = ("目前沒有資料")', 'x = ("尚無資料")')) == 1

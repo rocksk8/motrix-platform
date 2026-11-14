@@ -26,8 +26,8 @@
   pyc           追蹤中的 .pyc／__pycache__ ＝ 0
 
 用法（列車樹根目錄；Python 用 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe）：
-  python tools/platform/train_endgame.py plan  --base origin/platform --label t87 [--step-file docs/platform/prod-tasks/…-apply.md]
-  python tools/platform/train_endgame.py run   --base origin/platform --label t87 [--only <階段>] [--trailer "Co-Authored-By: …"]
+  python tools/platform/train_endgame.py plan  --label t87 [--base <上一班凍結點，預設＝_prod_baseline.BASELINE>] [--step-file docs/platform/prod-tasks/…-apply.md]
+  python tools/platform/train_endgame.py run   --label t87 [--base …] [--only <階段>] [--trailer "Co-Authored-By: …"]
   python tools/platform/train_endgame.py fill  --step-file <檔> --pkg-name <包名> --pkg-sha <sha> [--freeze <sha>]
   python tools/platform/train_endgame.py pkg-check <包資料夾>         包內 pyc／__pycache__ 數、檔案數、檔案清單 sha256
 退出碼：0 全部完成；1 有階段要人處理（或 plan 發現尚有工作）；2 工具自己出錯。
@@ -54,9 +54,10 @@ A1_FILE = "backend/a1_expectations.json"
 TEMPLATE = "docs/platform/prod-tasks/TEMPLATE-apply.md"
 FACTS_BEGIN = "<!-- endgame:facts begin -->"
 FACTS_END = "<!-- endgame:facts end -->"
-ALLOW_RE = re.compile(r"PM 核准（(\d{4}-\d{2}-\d{2})）：(\S[^\r\n]{0,199})")     # 用 fullmatch；不准有換行
+ALLOW_RE = re.compile(r"PM 核准（(\d{4}-\d{2}-\d{2})）：(\S[^\r\n]{0,199})", re.ASCII)     # 用 fullmatch；不准有換行；\d 只認 ASCII 數字
+STEP_FILE_RE = re.compile(r"docs/platform/prod-tasks/[A-Za-z0-9._-]+\.md")
 LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,40}")
-PKG_NAME_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{8}_full")
+PKG_NAME_RE = re.compile(r"\d{8}_\d{6}_[0-9a-f]{8}_full", re.ASCII)
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 FREEZE_RE = re.compile(r"[0-9a-f]{7,40}")
 OVERRIDE_DIR = "docs/platform/train-overrides"
@@ -167,7 +168,9 @@ def override_rel(label):
 
 
 def load_override(repo, label, base_sha):
-    """⇒ (紀錄 或 None, 說明 或 None)。檔案屬於別班或別的 base ⇒ 不採用，並說明。"""
+    """⇒ (紀錄 或 None, 說明 或 None)。檔案屬於別班或別的 base ⇒ 不採用，並說明。
+    注意：這是「紀錄」不是「驗證」——檔案裡的「PM 核准」文字是自述，會顯示在步驟檔與 commit 上供人看，工具無法驗證真偽；
+    任何併進本班、label 與 base 相符的檔案都會被採用。"""
     p = Path(repo) / override_rel(label)
     if not p.is_file():
         return None, None
@@ -544,7 +547,7 @@ def st_baselines(c):
     sha = commit_tool_changes(c.repo, before, "chore(%s): resolve_baselines" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/resolve_baselines.py", "--check")
     if rc2 != 0:
-        return Result("baselines", BLOCK, ["resolve_baselines 之後仍有要人處理的項目："] + _tail(out2, 15), [sha] if sha else [])
+        return Result("baselines", BLOCK, ["resolve_baselines 之後仍有要人處理的項目："] + _tail(out2, 15) + [_LEFTOVER_HINT], [sha] if sha else [])
     return Result("baselines", DONE, ["已重算基準檔。"], [sha] if sha else [])
 
 
@@ -661,7 +664,7 @@ def st_assign(c):
     before = porcelain_paths(c.repo)
     rc, out = run_py(c.repo, "tools/platform/train_number.py", "assign", "--base", c.base)
     if rc != 0:
-        return Result("assign", BLOCK, _tail(out, 12))
+        return Result("assign", BLOCK, _tail(out, 12) + [_LEFTOVER_HINT])
     sha = commit_tool_changes(c.repo, before, "chore(%s): train_number assign" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/train_number.py", "--check", "--base", c.base)
     return Result("assign", DONE if rc2 == 0 else BLOCK, _tail(out2, 4), [sha] if sha else [])
@@ -676,7 +679,7 @@ def st_regen(c):
     before = porcelain_paths(c.repo)
     rc, out = run_py(c.repo, "tools/platform/regen_all.py")
     if rc != 0:
-        return Result("regen", BLOCK, ["regen_all 失敗："] + _tail(out, 10))
+        return Result("regen", BLOCK, ["regen_all 失敗："] + _tail(out, 10) + [_LEFTOVER_HINT])
     sha = commit_tool_changes(c.repo, before, "chore(%s): regen_all after assign" % c.label, c.trailer)
     rc2, out2 = run_py(c.repo, "tools/platform/regen_all.py", "--check")
     return Result("regen", DONE if rc2 == 0 else BLOCK, _tail(out2, 4), [sha] if sha else [])
@@ -704,6 +707,27 @@ IMPL = {"baselines": st_baselines, "bottom_layer": st_bottom_layer, "version_rec
         "a1_expectations": st_a1, "changelog": st_changelog, "l1_pre": st_l1("l1_pre"), "assign": st_assign,
         "regen": st_regen, "l1_post": st_l1("l1_post"), "step_file": st_step_file, "pyc": st_pyc}
 assert tuple(IMPL) == STAGES
+
+
+def check_step_file_path(path):
+    """步驟檔只能是 docs/platform/prod-tasks/<名>.md：相對路徑、不含 ..、不是絕對路徑（否則 --step-file 可以把事實區塊寫進任何檔並 commit）。"""
+    p = str(path).replace("\\", "/")
+    if p.startswith("/") or re.match(r"[A-Za-z]:", p) or ".." in p.split("/") or not STEP_FILE_RE.fullmatch(p):
+        raise ValueError("--step-file 只能是 docs/platform/prod-tasks/<檔名>.md（相對路徑、不含 ..）：%r" % p[:120])
+    return p
+
+
+def resolve_fill_step_file(path):
+    """fill 的 --step-file：可給絕對路徑，但必須落在本 repo 的 docs/platform/prod-tasks/ 底下。⇒ 絕對路徑字串。"""
+    try:
+        rel = Path(path).resolve().relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        raise ValueError("--step-file 必須在本 repo 的 docs/platform/prod-tasks/ 底下：%r" % str(path)[:120])
+    check_step_file_path(rel)
+    return str(REPO / rel)
+
+
+_LEFTOVER_HINT = "（階段中途失敗可能留下被改過的檔；先看 git status，確認都是工具改的，再 git restore／清掉未追蹤檔後重跑，否則下次會因工作樹不乾淨而停）"
 
 
 def preflight(repo, base, dry):
@@ -739,17 +763,21 @@ def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=Tr
         raise ValueError("--label 只能是英數與 . _ -（1–40 字）：%r" % (label or "")[:60])
     if allow is not None:
         parse_allow(allow)                                                 # 格式／日期不對 ⇒ ValueError
-    pre, base_sha = preflight(repo, base, dry)
-    results = [pre]
-    if pre.status == BLOCK:
-        return results
+    if not base or str(base).startswith("-"):
+        raise ValueError("--base 不能是空的或以 - 開頭：%r" % (base or "")[:60])
+    if step_file is not None:
+        check_step_file_path(step_file)
     lock = None
-    if not dry:
+    if not dry:                                                            # 先取鎖再檢查，別人的 run 進行中時回報「鎖住」而不是「工作樹不乾淨」
         try:
             lock = acquire_lock(repo)
         except ValueError as e:
-            return results + [Result("lock", BLOCK, [str(e)])]
+            return [Result("lock", BLOCK, [str(e)])]
     try:
+        pre, base_sha = preflight(repo, base, dry)
+        results = [pre]
+        if pre.status == BLOCK:
+            return results
         stage_allow, notes, commits = None, [], []
         rec, why = load_override(repo, label, base_sha)
         if why:
@@ -822,7 +850,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     for n in ("plan", "run"):
         sp = sub.add_parser(n)
-        sp.add_argument("--base", default="origin/platform")
+        sp.add_argument("--base", default=None, help="基準＝上一班的凍結點；預設讀 backend/tests/_prod_baseline.py 的 BASELINE（不用 origin/platform，它停在 T78）")
         sp.add_argument("--label", default="train")
         sp.add_argument("--step-file")
         sp.add_argument("--only", choices=STAGES)
@@ -839,6 +867,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         if a.cmd == "fill":
+            a.step_file = resolve_fill_step_file(a.step_file)
             done = fill_step_file(a.step_file, a.pkg_name, a.pkg_sha, a.freeze, a.pkg_dir)
             print("已代入：" + ("、".join(done) or "（沒有可代入的佔位）"))
             left = unfilled_placeholders(a.step_file)
@@ -851,6 +880,9 @@ def main(argv=None):
             print("檔案 %d；pyc %d；__pycache__ %d；檔案清單 sha256＝%s" % (r["files"], r["pyc"], r["pycache"], r["filelist_sha256"]))
             return 0 if r["pyc"] == 0 and r["pycache"] == 0 else 1
         dry = a.cmd == "plan"
+        a.base = a.base or prod_baseline(REPO)
+        if not a.base:
+            raise ValueError("讀不到 backend/tests/_prod_baseline.py 的 BASELINE，請明確給 --base（上一班的凍結點）")
         res = run_stages(REPO, a.base, a.label, a.step_file, a.allow_no_version_record, a.trailer, dry, a.only)
         print(format_report(res, dry, a.base, a.label))
         return 1 if any(r.status in (WILL, BLOCK) for r in res) else 0
