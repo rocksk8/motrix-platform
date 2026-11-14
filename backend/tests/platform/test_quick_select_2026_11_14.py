@@ -103,9 +103,11 @@ def test_diff_literals_prefers_long_and_drops_substrings_of_kept_ones():
     assert lits[0] == "這是一整句很長的舊文案內容" and "舊文案內容" not in lits
 
 
-def test_diff_literals_ignores_docs_and_non_source_paths():
-    d = "diff --git a/docs/x.md b/docs/x.md\n--- a/docs/x.md\n+++ b/docs/x.md\n@@ -1 +1 @@\n-這是文件裡刪掉的舊文案\n+新\n"
-    assert Q.diff_literals(d) == []
+def test_diff_literals_reads_docs_and_markdown_but_ignores_paths_outside_the_source_roots():
+    doc = "diff --git a/docs/x.md b/docs/x.md\n--- a/docs/x.md\n+++ b/docs/x.md\n@@ -1 +1 @@\n-這是文件裡刪掉的舊文案\n+新\n"
+    assert Q.diff_literals(doc) == ["這是文件裡刪掉的舊文案"], "測試會讀 CHANGELOG／MODULE-GUIDE 之類的文件文字（S3）"
+    other = "diff --git a/misc/x.md b/misc/x.md\n--- a/misc/x.md\n+++ b/misc/x.md\n@@ -1 +1 @@\n-這是範圍外檔案的舊文案\n+新\n"
+    assert Q.diff_literals(other) == []
 
 
 def test_literal_hits_become_t2_and_generic_literals_are_noted_not_selected():
@@ -191,3 +193,96 @@ def test_extra_groups_do_not_override_preflight_ids_and_can_be_switched_off():
     ids = [g["id"] for g in Q.load_groups()]
     assert len(ids) == len(set(ids))
     assert not any(g["id"].startswith("q_") for g in Q.load_groups(extra=False))
+
+
+# ── h11 審查（M1／M3／S1／S2／S4）與 PM 補充（路由／頁面→測試、e2e 最後）────────────
+
+def _file_diff(path, removed, added):
+    return "diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n@@ -1 +1 @@\n%s%s" % (
+        path, path, path, path, "".join("-%s\n" % r for r in removed), "".join("+%s\n" % a for a in added))
+
+
+def test_m1_generic_literal_selects_the_narrowest_subset_and_lists_the_rest_as_not_run():
+    same_module = ["backend/modules/case/tests/test_m%d.py" % i for i in range(2)]
+    others = ["backend/tests/test_o%d.py" % i for i in range(Q.LITERAL_MAX_HITS)]
+    diff = _file_diff("backend/modules/case/api/q.py", ["msg = '這是一句舊的提示文字'"], ["msg = '新'"])
+    plan_diff = Q.plan_quick(changed=["backend/modules/case/api/q.py"], diff_text=diff, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=".", ref=None,
+                             seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(),
+                             grep_fn=lambda tok: (same_module + others) if tok == "這是一句舊的提示文字" else [])
+    assert set(plan_diff["tiers"]["T2"]["files"]) == set(same_module), "只選同模組目錄的測試"
+    cut = [s for s in plan_diff["skipped"] if s["tier"] == "T2" and "太通用" in s["reason"]]
+    assert cut and "未跑" in cut[0]["reason"] and "其餘 %d 檔未選題" % len(others) in cut[0]["reason"], plan_diff["skipped"]
+
+
+def test_m1_truncated_literals_and_unavailable_reverse_probe_are_listed_as_not_run(monkeypatch):
+    many = ["    x = '字面值第%03d個舊文案'" % i for i in range(Q.MAX_LITERALS + 5)]
+    diff = _file_diff("frontend/pages/z.html", [m.strip() for m in many], [])
+    plan = Q.plan_quick(changed=["frontend/pages/z.html"], diff_text=diff, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=".", ref=None,
+                        seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(), grep_fn=lambda tok: [])
+    assert any(s["tier"] == "T2" and "截斷" in s["reason"] and "未跑" in s["reason"] for s in plan["skipped"]), plan["skipped"]
+    monkeypatch.setattr(Q, "load_test_tokens", lambda repo, ref=None: None)
+    plan2 = Q.plan_quick(changed=["frontend/pages/x.html"], diff_text=DIFF, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=str(REPO), ref=None,
+                         seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(), grep_fn=None)
+    assert any("反向探針" in s["item"] and "未跑" in s["reason"] for s in plan2["skipped"]), plan2["skipped"]
+
+
+def test_m3_deleted_or_renamed_paths_trigger_groups_and_name_references_but_never_reach_pytest():
+    groups = _groups()
+    plan = Q.plan_quick(changed=[], deleted=["backend/modules/case/CHANGELOG.md", "frontend/pages/old_page.html"], diff_text="", tree_files=TREE, a2=[], a4=[],
+                        extra_t4=[], repo=".", ref=None, seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=groups,
+                        grep_fn=lambda tok: ["backend/tests/test_old_wording.py"] if tok == "old_page.html" else [])
+    assert "backend/tests/platform/test_changelog.py" in plan["tiers"]["T1"]["files"], "刪掉的檔的舊路徑也要觸發守門組"
+    assert "backend/tests/test_old_wording.py" in plan["tiers"]["T4"]["files"], "引用舊檔名的測試要被選到（FileNotFound 型紅燈）"
+    assert not any(f.endswith((".md", ".html")) for f in plan["files"])
+
+
+def test_s1_removed_literal_that_reappears_in_another_file_still_counts_for_the_file_it_left():
+    d = (_file_diff("frontend/pages/a.html", ["<p>這是被搬走的舊文案</p>"], []) +
+         _file_diff("frontend/pages/b.html", [], ["<p>這是被搬走的舊文案</p>"]))
+    assert "這是被搬走的舊文案" in Q.diff_literals(d), "同一個字出現在別的檔的新增行，不代表原本那個檔還有它"
+    same = _file_diff("frontend/pages/a.html", ["<p>這是留在原檔的舊文案</p>"], ["<p>這是留在原檔的舊文案</p>"])
+    assert Q.diff_literals(same) == []
+
+
+def test_s2_hits_in_helpers_and_conftest_are_not_run_as_tests_and_are_listed():
+    hits, skipped = Q.split_helper_hits({"backend/tests/test_a.py": ["x"], "backend/tests/conftest.py": ["y"], "backend/tests/_helper.py": ["z"]},
+                                        ".", None, grep_fn=lambda t: [])
+    assert list(hits) == ["backend/tests/test_a.py"]
+    assert {s["item"] for s in skipped} == {"backend/tests/conftest.py", "backend/tests/_helper.py"} and all("未跑" in s["reason"] for s in skipped)
+
+
+def test_s4_short_labels_attributes_and_camel_identifiers_are_literals():
+    toks = Q.literals_of(['<button id="btn-save" class="btn primary" x-model="loadItems">儲存</button>', "const retryCount = 1; const maxAttempts = 3"])
+    assert {"儲存", "btn-save", "loadItems", "retryCount", "maxAttempts", "primary"} <= toks
+    assert "const" not in toks and "retry" not in toks, "純小寫短字、識別字的片段不當字面值"
+
+
+def test_route_changes_select_the_tests_that_call_those_routes_and_e2e_goes_last(tmp_path):
+    src = ("from fastapi import APIRouter\nrouter = APIRouter(prefix='/api/quotations')\n\n"
+           "@router.put('/{no}')\ndef put_q(no):\n    return 1\n\n@router.get('/summary')\ndef summary():\n    return 2\n")
+    assert Q.routes_in_ranges(src, [(5, 6)]) == ["/api/quotations/"], "只有改到的路由；固定前綴（{no} 之前）"
+    assert Q.routes_in_ranges(src, [(9, 9)]) == ["/api/quotations/summary"]
+    assert Q.routes_in_ranges(src, [(1, 1)]) == []
+    (tmp_path / "backend" / "routers").mkdir(parents=True)
+    (tmp_path / "backend" / "routers" / "q.py").write_text(src, encoding="utf-8")
+    tests = {"/api/quotations/": ["backend/tests/test_e2e_q.py", "backend/tests/test_q_api.py"]}
+    diff = ("diff --git a/backend/routers/q.py b/backend/routers/q.py\n--- a/backend/routers/q.py\n+++ b/backend/routers/q.py\n"
+            "@@ -5,2 +5,2 @@\n-    return 0\n+    return 1\n")
+    plan = Q.plan_quick(changed=["backend/routers/q.py"], diff_text=diff, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=str(tmp_path), ref=None,
+                        seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(), grep_fn=lambda tok: tests.get(tok, []))
+    assert plan["routes"] == ["/api/quotations/"]
+    assert plan["tiers"]["T4"]["files"] == ["backend/tests/test_q_api.py", "backend/tests/test_e2e_q.py"], "打這個路由的測試進 T4，e2e 排最後"
+
+
+def test_t4_orders_e2e_last_so_the_budget_cuts_e2e_first_and_says_so():
+    t4 = ["backend/tests/test_e2e_a.py", "backend/tests/test_b.py", "backend/tests/test_e2e_c.py", "backend/tests/test_d.py"]
+    plan = _plan({}, a4=[], t4=t4, budget_s=2, sec=lambda f: 1.0)
+    assert plan["tiers"]["T4"]["files"] == ["backend/tests/test_b.py", "backend/tests/test_d.py", "backend/tests/test_e2e_a.py", "backend/tests/test_e2e_c.py"]
+    assert plan["tiers"]["T4"]["run"] == ["backend/tests/test_b.py", "backend/tests/test_d.py"]
+    assert {s["item"] for s in plan["skipped"] if s["tier"] == "T4"} == {"backend/tests/test_e2e_a.py", "backend/tests/test_e2e_c.py"}
+
+
+def test_n1_over_budget_is_a_flag_in_the_plan_and_in_the_text():
+    plan = _plan({}, a4=["backend/tests/test_changed.py"], budget_s=5, sec=lambda f: 60.0)
+    assert plan["over_budget"] is True and "超過預算" in Q.format_plan(plan)
+    assert _plan({}, a4=["backend/tests/test_changed.py"], budget_s=10_000)["over_budget"] is False

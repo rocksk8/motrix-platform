@@ -221,7 +221,7 @@ def classify_failures(failures, known_red):
 
 
 def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_new, failures_known, duration_s, estimate_s,
-                workers, stopped_by_failfast, forced_full, started, finished, e2e=None, quick=False, skipped=None):
+                workers, stopped_by_failfast, forced_full, started, finished, e2e=None, quick=False, skipped=None, over_budget=False):
     """結果 JSON（綠＝沒有任何「新的紅」且確實有題被收集；紅了不可能寫 green:true）。"""
     ran_any = counts.get("passed", 0) + counts.get("failed", 0) + counts.get("errors", 0) > 0
     green = bool(ran_any and not failures_new and counts.get("failed", 0) + counts.get("errors", 0) == len(failures_known)
@@ -232,7 +232,7 @@ def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_
             "ran": counts, "failed_new": [f["nodeid"] for f in failures_new], "failed_known": [f["nodeid"] for f in failures_known],
             "green": green, "duration_s": round(duration_s, 1), "estimate_s": round(estimate_s, 1),
             "stopped_by_failfast": bool(stopped_by_failfast), "forced_full_for_build": forced_full, "e2e": e2e,
-            "quick_skipped": list(skipped or []),
+            "quick_skipped": list(skipped or []), "quick_over_budget": bool(over_budget),
             "started": started, "finished": finished}
 
 
@@ -412,12 +412,16 @@ def apply_quick_plan(sel, base, head, repo, tree, changed, workers, budget_min, 
     被砍／整組略過的每一項都放進 sel["quick_skipped"]（輸出與結果檔必須寫「未跑」）。"""
     import quick_select as QS
     rc, diff, _err = _git("diff", "--no-renames", "-U0", base, head, repo=repo)
+    rcd, gone, _e = _git("diff", "--no-renames", "--name-only", "--diff-filter=D", base, head, repo=repo)
+    deleted = [f for f in gone.splitlines() if f] if rcd == 0 else []          # 被刪／改名走的舊路徑：只用在守門觸發與檔名引用，不進 pytest
     is_e2e = is_e2e or (lambda f: "test_e2e_" in f.rsplit("/", 1)[-1])
     secs = lambda f: E2E_FILE_SECONDS if is_e2e(f) else file_seconds(f, times, repo)       # noqa: E731
     e2e_in = sorted(set(sel["E"]))                                                          # 本來就要跑的 e2e（改動的 e2e 測試、改到頁面選到的）
     plan = QS.plan_quick(changed=changed, diff_text=diff if rc == 0 else "", tree_files=tree, a2=sel["A2"], a4=sel["A4"], extra_t4=sel["A3"] + e2e_in,
-                         repo=repo, ref=head, seconds_fn=secs, workers=workers, budget_s=budget_min * 60)
+                         repo=repo, ref=head, seconds_fn=secs, workers=workers, budget_s=budget_min * 60,
+                         deleted=deleted, is_e2e=is_e2e)
     sel["quick_plan"] = plan
+    sel["quick_over_budget"] = bool(plan.get("over_budget"))
     sel["quick_skipped"] = plan["skipped"]
     planned = sorted(set(plan["files"]))
     sel["E"] = sorted(f for f in planned if is_e2e(f))                                      # e2e 檔（T1／T2 選到的也算）走 e2e 那一段，不混進 not_e2e
@@ -529,7 +533,7 @@ def main(argv=None):
     import stage_select as SS
     res = make_result(head=head, base=base, tree_sha=tree_sha_of(head, repo), selector_sha=SS.selector_sha(SS.GitReader(str(repo), head)),
                       groups=sel, counts=counts, failures_new=new, failures_known=kn, duration_s=dur, estimate_s=est, workers=workers,
-                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick, skipped=sel.get("quick_skipped"))
+                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick, skipped=sel.get("quick_skipped"), over_budget=sel.get("quick_over_budget"))
     outp = Path(a.json_out) if a.json_out else RESULT_DIR / (head[:12] + ".json")
     outp.parent.mkdir(parents=True, exist_ok=True)
     outp.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
