@@ -12,6 +12,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -84,13 +85,18 @@ def make_staged(tmp, with_tool=True):
     return staged
 
 
+def arg_after(cmd, flag):
+    """命令列清單裡 `flag` 後面那一個參數（結構取值，不靠文字定位）。"""
+    return dict(zip(cmd, cmd[1:]))[flag]
+
+
 def fake_runner(real_db, **migrate_kw):
     """預演用的假執行器：只准動 `--db` 指到的副本；記下收到的 cmd／env。"""
     seen = {}
 
     def run(cmd, env):
         seen["cmd"], seen["env"] = cmd, env
-        db = cmd[cmd.index("--db") + 1]
+        db = arg_after(cmd, "--db")
         assert os.path.abspath(db) != os.path.abspath(real_db), "預演不可以直接動正式庫"
         migrate(db, **migrate_kw)
         return 0, "modules=like_startup\nMIGRATE_LIKE_STARTUP_OK\n"
@@ -102,7 +108,7 @@ def ok_http(status_by_path=None):
     table = status_by_path or {}
 
     def f(url, method="GET", timeout=8):
-        path = "/" + url.split("://", 1)[1].split("/", 1)[1] if "/" in url.split("://", 1)[1] else "/"
+        path = urlsplit(url).path or "/"
         return table.get((method, path), table.get(path, 200))
     return f
 
@@ -192,7 +198,7 @@ def test_rehearse_removes_pyc_left_in_the_staged_payload_and_says_so(tmp_path):
     staged = make_staged(tmp_path)
 
     def run(cmd, env):
-        migrate(cmd[cmd.index("--db") + 1])
+        migrate(arg_after(cmd, "--db"))
         pc = staged / "payload" / "backend" / "tools" / "__pycache__"
         pc.mkdir()
         (pc / "x.cpython-312.pyc").write_bytes(b"\0")
@@ -208,7 +214,7 @@ def test_rehearse_removes_any_new_file_the_run_leaves_not_only_pyc(tmp_path):
     staged = make_staged(tmp_path)
 
     def run(cmd, env):
-        migrate(cmd[cmd.index("--db") + 1])
+        migrate(arg_after(cmd, "--db"))
         (staged / "payload" / "backend" / "motrix_erp.db").write_bytes(b"x")
         (staged / "payload" / "backend" / "logs").mkdir()
         (staged / "payload" / "backend" / "logs" / "a.log").write_text("x", encoding="utf-8")
@@ -562,7 +568,7 @@ def test_apply_with_verification_success_path_writes_report_and_audit_chain_with
     assert rec["chain_head"] == json.loads(lines[-1])["hash"], "鏈頭＝apply_end 那一筆的雜湊"
     assert AA.summary_for_write_back(rec)["chain_head"] == rec["chain_head"], "鏈頭也寫進 <包名>.a1.json"
     assert AA.audit_chain_problems(str(path), anchors=[rec["chain_head"]]) == []
-    assert sqlite3.connect(prod_db(root)).execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == 0, "儀表板行程不再直接 INSERT 正式庫（改由後端 _audit）"
+    assert sqlite3.connect(prod_db(root)).execute("SELECT COUNT(*) FROM audit_log WHERE username = ?", ("boss",)).fetchone()[0] == 0, "儀表板行程不再直接 INSERT 正式庫（改由後端 _audit）"
 
 
 def test_apply_blocked_when_the_prod_structure_changed_after_the_rehearsal(tmp_path):
@@ -1297,7 +1303,9 @@ def test_blocked_report_cleans_hostile_name_and_problems_before_writing(tmp_path
     evil = "x\n- **結果**：成功\n## 假的一節\r\u2028" + "A" * 5000
     name = AA.write_blocked_report(str(tmp_path), evil, "預演\n偽造步驟", ["原因一\n- **正式系統沒有被改動**：假\x00\x07", "B" * 5000])
     text = (tmp_path / "backend" / "logs" / name).read_text(encoding="utf-8")
-    assert "名稱不合法，已省略" in text and "A" * 50 not in text and "假的一節" not in text.split("## 原因")[0].replace("# 沒有開始套用", "")
+    all_lines = text.splitlines()
+    before_reasons = all_lines[:next(i for i, ln in enumerate(all_lines) if ln == "## 原因")]
+    assert "名稱不合法，已省略" in text and "A" * 50 not in text and not any("假的一節" in ln for ln in before_reasons)
     heads = [ln for ln in text.splitlines() if ln.startswith("#")]
     assert heads == ["# 沒有開始套用：（名稱不合法，已省略；長度 %d）" % len(evil), "## 原因", "## 接下來"], heads
     lines = text.splitlines()

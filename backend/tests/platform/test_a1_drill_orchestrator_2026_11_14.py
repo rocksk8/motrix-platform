@@ -20,6 +20,64 @@ import a1_drill as AD  # noqa: E402
 import a1_drill_preflight as PF  # noqa: E402
 
 SRC = (REPO / "tools" / "platform" / "a1_drill.py").read_text(encoding="utf-8")
+TREE = ast.parse(SRC)
+
+
+# ── 結構定位（AST）：不靠文字子字串當錨點或計數（T87 A2 守門）──────────────────────────────
+
+def _dotted(func):
+    parts = []
+    while isinstance(func, ast.Attribute):
+        parts.append(func.attr)
+        func = func.value
+    if isinstance(func, ast.Name):
+        parts.append(func.id)
+    return ".".join(reversed(parts))
+
+
+def _method(cls, name):
+    c = next(n for n in TREE.body if isinstance(n, ast.ClassDef) and n.name == cls)
+    return next(n for n in c.body if isinstance(n, ast.FunctionDef) and n.name == name)
+
+
+def _calls(node, dotted, arg0=None):
+    """node 底下所有叫 `dotted` 的呼叫（可限定第一個參數的程式碼寫法），依出現位置排序 ⇒ [(行, 欄), …]。"""
+    want = ast.unparse(ast.parse(arg0, mode="eval").body) if arg0 else None
+    out = []
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call) and _dotted(n.func) == dotted and (want is None or (n.args and ast.unparse(n.args[0]) == want)):
+            out.append((n.lineno, n.col_offset))
+    return sorted(out)
+
+
+def _first(node, dotted, arg0=None):
+    pos = _calls(node, dotted, arg0)
+    assert pos, "%s(%s) 不在 %s 裡" % (dotted, arg0 or "", getattr(node, "name", "原始碼"))
+    return pos[0]
+
+
+def _arg_after(argv, flag):
+    return dict(zip(argv, argv[1:]))[flag]
+
+
+def _enclosing_function_names(call_name):
+    """每一個叫 call_name 的呼叫，最內層包住它的函式名稱。"""
+    out = []
+
+    def visit(node, stack):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(ch, stack + [ch.name])
+            else:
+                if isinstance(ch, ast.Call) and _dotted(ch.func) == call_name:
+                    out.append(stack[-1] if stack else None)
+                visit(ch, stack)
+    visit(TREE, [])
+    return out
+
+
+def _str_constants():
+    return [n.value for n in ast.walk(TREE) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
 
 
 # ── 本檔不直接起子行程（h11 round 2）─────────────────────────────────────────────
@@ -62,12 +120,11 @@ def test_every_scenario_has_a_method_and_matrix_is_complete():
 
 def test_all_launches_in_orchestrator_go_through_guard():
     # 所有起服務／開瀏覽器／回復指令前一律 guard.launch 或 guard.ready
-    assert SRC.count("self.guard.launch(") >= 3          # ERP、儀表板、B5 回復指令
-    assert 'self.guard.ready("開瀏覽器")' in SRC
-    for m in re.finditer(r"sync_playwright\(\)", SRC):
-        before = SRC[:m.start()]
-        assert before.rfind("def run_scenarios") >= before.rfind("def "),"sync_playwright 必須在 run_scenarios 內"
-    assert SRC.index('self.guard.ready("開瀏覽器")') < SRC.index("pw.chromium.launch(")
+    assert len(_calls(TREE, "self.guard.launch")) >= 3          # ERP、儀表板、B5 回復指令
+    assert _calls(TREE, "self.guard.ready", '"開瀏覽器"')
+    users = _enclosing_function_names("sync_playwright")
+    assert users and set(users) == {"run_scenarios"}, "sync_playwright 必須在 run_scenarios 內：%s" % users
+    assert _first(TREE, "self.guard.ready", '"開瀏覽器"') < _first(TREE, "pw.chromium.launch")
 
 
 # ── 呼叫順序（PM ①：寫死並用測試釘住）──────────────────────────────────────────────
@@ -199,16 +256,15 @@ def test_dry_build_stops_before_control_and_never_starts_services(tmp_path, monk
 
 
 def test_run_source_pins_the_order_textually():
-    run_src = SRC[SRC.index("    def run(self):"):SRC.index("    def dry_build_extra")]
-    idx = [run_src.index(x) for x in ("self.guard.check()", "self.build_install()", "self.guard.scan()", "self.guard.control()", "self.guard.start()", "self.start_erp()")]
+    run = _method("Drill", "run")
+    idx = [_first(run, x) for x in ("self.guard.check", "self.build_install", "self.guard.scan", "self.guard.control", "self.guard.start", "self.start_erp")]
     assert idx == sorted(idx)
 
 
 def test_orchestrator_scenarios_only_start_things_via_guard(tmp_path):
     # start_erp／start_dashboard 內不得有 ready 以外的啟動路徑
-    for fn in ("def start_erp", "def start_dashboard"):
-        body = SRC[SRC.index(fn):SRC.index("\n    def ", SRC.index(fn) + 10)]
-        assert "self.guard.launch(" in body
+    for fn in ("start_erp", "start_dashboard"):
+        assert _calls(_method("Drill", fn), "self.guard.launch"), fn
 
 
 # ── 安裝／包改寫 ─────────────────────────────────────────────────────────────────
@@ -426,7 +482,7 @@ def test_report_has_required_statements():
     r = AD.render_report(_ctx())
     assert "T88 才是第一次 A1 半自動套用" in r
     assert "整段演練對正式機 0 連線" in r and "有證明：是" in r
-    assert "全新資料庫" in r and "演練金鑰" in r and "UDP" not in r.split("## 與正式機不同")[0] or True
+    assert "全新資料庫" in r and "演練金鑰" in r
     assert "✅ 符合" in r and "e／x" in r
 
 
@@ -814,7 +870,7 @@ def test_parse_rollback_command_accepts_the_real_report_format(tmp_path):
     cmd = AA.rollback_hint(str(inst), {"timestamp": "20261114_201500"})
     argv, why = AD.parse_rollback_command(cmd, inst)
     assert why is None and argv[0] == "powershell.exe" and argv[-1] == "-Yes" and "-IncludeDatabase" not in argv
-    assert argv[argv.index("-File") + 1].lower().endswith("rollback_update.ps1") and argv[argv.index("-SnapshotTimestamp") + 1] == "20261114_201500"
+    assert _arg_after(argv, "-File").lower().endswith("rollback_update.ps1") and _arg_after(argv, "-SnapshotTimestamp") == "20261114_201500"
 
 
 @pytest.mark.parametrize("mut", [
@@ -848,7 +904,7 @@ def test_parse_rollback_command_refuses_script_outside_install(tmp_path):
 
 
 def test_b5_executes_only_the_validated_argv():
-    b5 = SRC[SRC.index("    def scenario_B5"):SRC.index("    def scenario_B6")]
+    b5 = ast.get_source_segment(SRC, _method("Drill", "scenario_B5"))
     assert "parse_rollback_command(cmd, self.inst)" in b5 and '"-Command"' not in b5
     assert "self.guard.launch(argv," in b5
 
@@ -856,14 +912,16 @@ def test_b5_executes_only_the_validated_argv():
 def test_playwright_gets_a_clean_environment_and_the_single_non_guard_spawn_is_documented():
     assert "env=clean_env" in SRC and "--no-proxy-server" in SRC
     assert "os.environ.clear()" not in SRC                                   # 不經過空環境（監看器執行緒的子行程會沒有 SystemRoot）
-    assert SRC.index("_swap_environ(pw_env)") < SRC.index("with sync_playwright() as pw")
+    assert _first(TREE, "_swap_environ", "pw_env") < _first(TREE, "sync_playwright")
     assert "_swap_environ(saved)" in SRC and "PF.env_problems(pw_env)" in SRC
     assert "唯一不經 guard.launch 的子行程" in SRC
 
 
 def test_shared_repo_hygiene_flags_present():
-    assert SRC.count("core.hooksPath=NUL") >= 3 and "--no-verify" in SRC
-    assert SRC.count('filter="data"') == 2
+    assert sum("core.hooksPath=NUL" in c for c in _str_constants()) >= 3 and "--no-verify" in SRC
+    data_filters = [k for n in ast.walk(TREE) if isinstance(n, ast.Call) for k in n.keywords
+                    if k.arg == "filter" and isinstance(k.value, ast.Constant) and k.value.value == "data"]
+    assert len(data_filters) == 2
     assert 'self.git("worktree", "prune")' in SRC
 
 
@@ -943,7 +1001,7 @@ def test_monitor_logs_needle_only_matches_once(tmp_path):
 
 def test_owned_ps_removes_ancestors_before_growth_and_uses_boundary_and_parent_link():
     ps = PF._OWNED_PS
-    assert ps.index("$anc) { [void]$own.Remove") < ps.index("$grew = $true")
+    assert re.search(r"\$anc\)\s*\{\s*\[void\]\$own\.Remove", ps).start() < re.search(r"\$grew\s*=\s*\$true", ps).start()
     assert "ParentOk" in ps and "[regex]::Escape($needle)" in ps
 
 
@@ -1016,7 +1074,7 @@ def test_dashboard_is_started_only_from_the_drill_install_directory_after_the_tr
     assert seen == [d.inst] and len(launched) == 1
     argv, cwd, _what = launched[0]
     tools = (d.inst / "backend" / "tools").resolve()
-    assert cwd == tools and Path(argv[argv.index("--app-dir") + 1]).resolve() == tools
+    assert cwd == tools and Path(_arg_after(argv, "--app-dir")).resolve() == tools
     assert argv[:4] == [d.python, "-m", "uvicorn", "deploy_dashboard:app"] and "127.0.0.1" in argv
     for a in argv:                                                                                                 # 命令列沒有任何 repo／worktree 路徑
         assert str(REPO).lower() not in str(a).lower() or str(d.base).lower() in str(a).lower()
@@ -1030,10 +1088,10 @@ def test_dashboard_is_not_launched_when_the_tree_check_fails(tmp_path, monkeypat
 
 
 def test_build_install_installs_dashboard_before_hardening_and_demands_two_rewritten_lines():
-    b = SRC[SRC.index("    def build_install"):SRC.index("    def fake_commit")]
-    assert b.index("install_dashboard(") < b.index("harden_tree(")
-    assert 'rewritten.get("deploy_dashboard.py") != 2' in b
-    assert SRC.count("deploy_dashboard:app") == 1
+    bi = _method("Drill", "build_install")
+    assert _first(bi, "install_dashboard") < _first(bi, "harden_tree")
+    assert 'rewritten.get("deploy_dashboard.py") != 2' in ast.get_source_segment(SRC, bi)
+    assert sum("deploy_dashboard:app" in c for c in _str_constants()) == 1
 
 
 def test_guard_fingerprint_covers_the_dashboard_so_editing_it_after_the_scan_aborts(tmp_path):
@@ -1093,9 +1151,11 @@ def test_check_dashboard_import_runs_in_the_install_and_verifies_the_loaded_file
 
 
 def test_dashboard_import_check_runs_after_scan_and_before_control_in_run():
-    run_src = SRC[SRC.index("    def run(self):"):SRC.index("    def dry_build_extra")]
-    assert run_src.index("self.guard.scan()") < run_src.index("self.check_dashboard_import()") < run_src.index("self.guard.control()")
-    assert run_src.index("self.check_dashboard_import()") < run_src.index("if self.args.dry_build")
+    run = _method("Drill", "run")
+    imp = _first(run, "self.check_dashboard_import")
+    assert _first(run, "self.guard.scan") < imp < _first(run, "self.guard.control")
+    dry = next(n for n in ast.walk(run) if isinstance(n, ast.If) and ast.unparse(n.test) == "self.args.dry_build")
+    assert imp < (dry.lineno, dry.col_offset)
 
 
 def test_swap_environ_never_passes_through_an_empty_environment(monkeypatch):
@@ -1121,8 +1181,12 @@ def test_swap_environ_never_passes_through_an_empty_environment(monkeypatch):
 
 
 def test_playwright_env_passes_browsers_path_only_for_the_browser_and_still_checks_it():
-    run_src = SRC[SRC.index("pw_env = dict(clean)"):SRC.index("_swap_environ(pw_env)")]
-    assert 'saved.get("PLAYWRIGHT_BROWSERS_PATH")' in run_src and "PF.env_problems(pw_env)" in run_src
+    rs = _method("Drill", "run_scenarios")
+    lo = next((n.lineno, n.col_offset) for n in ast.walk(rs) if isinstance(n, ast.Assign) and ast.unparse(n.value) == "dict(clean)"
+              and any(ast.unparse(t) == "pw_env" for t in n.targets))
+    hi = _first(rs, "_swap_environ", "pw_env")
+    between = lambda dotted, arg0: any(lo < p < hi for p in _calls(rs, dotted, arg0))      # noqa: E731
+    assert between("saved.get", '"PLAYWRIGHT_BROWSERS_PATH"') and between("PF.env_problems", "pw_env")
 
 
 def test_allowed_code_literal_files_are_pinned_by_occurrence_count(tmp_path):
@@ -1166,8 +1230,9 @@ def test_enable_loopback_internal_runs_in_the_drill_install_and_waits_for_the_ca
 
 
 def test_admin_login_happens_after_enabling_loopback_internal_and_the_deviation_is_documented():
-    b = SRC[SRC.index("    def setup_admin_and_delivery_root"):SRC.index("    @property")]
-    assert b.index("self.enable_loopback_internal()") < b.index("DMA.setup_company(") < b.index('"/api/auth/login"')
+    b = _method("Drill", "setup_admin_and_delivery_root")
+    login = next((n.lineno, n.col_offset) for n in ast.walk(b) if isinstance(n, ast.Constant) and n.value == "/api/auth/login")
+    assert _first(b, "self.enable_loopback_internal") < _first(b, "DMA.setup_company") < login
     assert any("loopback_is_internal" in x for x in AD.DEVIATIONS)
 
 
@@ -1197,7 +1262,7 @@ def test_disable_license_gate_flips_exactly_one_line_keeping_line_endings(tmp_pa
     tree, f = _licensing_tree(tmp_path, body)
     assert AD.disable_license_gate(tree) == 1
     after = f.read_bytes()
-    assert after.count(b"LICENSE_GATE_ENABLED = False") == 1 and b"# LICENSE_GATE_ENABLED = True" in after
+    assert sum(ln.strip() == b"LICENSE_GATE_ENABLED = False" for ln in after.splitlines()) == 1 and b"# LICENSE_GATE_ENABLED = True" in after
     assert after == body.replace(b"LICENSE_GATE_ENABLED = True" + eol, b"LICENSE_GATE_ENABLED = False" + eol, 1)
 
 
