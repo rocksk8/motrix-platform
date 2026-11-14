@@ -224,7 +224,7 @@ def _latest_by_others(conn, user, kind, keys) -> dict:
             f"UNION ALL "
             f"SELECT dt.case_no AS k, dtc.completed_at AS ts "
             f"FROM daily_task_completions dtc JOIN daily_tasks dt ON dt.id = dtc.task_id "
-            f"WHERE dt.case_no IN ({ph}) AND dtc.completed_at != '' AND dtc.username != ?",
+            f"WHERE dt.case_no IN ({ph}) AND dt.is_deleted = 0 AND dtc.completed_at != '' AND dtc.username != ?",   # 撤回（軟刪）的任務不算
             keys + [me] + keys + [uid] + keys + [me]).fetchall()
     elif kind == "daily_task":
         rows = conn.execute(
