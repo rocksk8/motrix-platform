@@ -73,7 +73,7 @@ def test_banner_survives_the_previous_successs_clear_timer(live_server, make_use
 
 @pytest.mark.e2e
 def test_banner_survives_typing_after_an_error(live_server, make_user, e2e_browser):
-    u = make_user(username="bnr_e2", role="admin")
+    u = make_user(username="bnr_e2", role="finance")      # 要在「已收款」那一期打字 ⇒ 得是能標已收款的人（財務／superadmin）；admin 的已收款期別在畫面上凍結（T86 #29，後端同規則）
     _seed()
     browser = e2e_browser
     page = _open(browser, live_server, u)
