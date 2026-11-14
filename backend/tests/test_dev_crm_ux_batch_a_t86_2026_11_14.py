@@ -272,3 +272,40 @@ def test_linked_case_points_to_case_management_with_existing_q_deeplink():
     assert "'case-management.html?q=' + encodeURIComponent(selectedCase.convertedQuoteNo" in DC
     assert "報價單成案後才會出現在案件管理。" in DC
     assert "canOpenCaseMgmt" in DC and "case_manage" in DC
+
+
+# ══ #17：預估金額／預計成交日（接 h7 的後端；本分支＝feat/t86-devcrm-h10-e17）═══════════════
+def test_expected_amount_and_date_fields_are_wired():
+    for tid in ("case-expected-amount", "case-expected-date", "detail-expected-amount", "detail-expected-date", "dc-pipeline-amount"):
+        assert 'data-testid="%s"' % tid in DC, tid
+    assert "/api/dev-cases/expected-summary" in DC
+    assert "if (!this.amountFieldVisible) delete body.expectedAmount" in DC     # 沒有金額權限就不送（後端沒帶＝維持原值）
+
+
+@pytest.mark.e2e
+def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, make_user, new_page, login_as, client):
+    sup = make_user(username="e2e_dce_super", role="superadmin")
+    cid = _mk_case(client, _token(client, tuple(sup)[:2]), "預估金額案", sales=[])
+    page = new_page()
+    login_as(page, tuple(sup)[:2])
+    page.goto(f"{live_server}/pages/dev-crm.html?case={cid}")
+    page.get_by_role("button", name="編輯案件").wait_for(timeout=15000)
+    page.get_by_role("button", name="編輯案件").click()
+    page.locator('[data-testid="case-expected-amount"]').fill("1500000")
+    page.locator('[data-testid="case-expected-date"]').fill("2026-12-31")
+    page.locator(".dc-modal-foot .btn-primary").locator("visible=true").first.click()
+    page.get_by_text("NT$ 1,500,000").first.wait_for(timeout=8000)
+    assert "2026-12-31" in page.locator('[data-testid="detail-expected-date"]').inner_text()
+    page.locator('[data-testid="dc-pipeline-amount"]').wait_for(state="visible", timeout=8000)
+    # 業務沒有金額可見權限：詳情顯示「—」、表單沒有金額輸入框、不顯示漏斗金額
+    sales = make_user(username="e2e_dce_sales", role="sales", modules=["dev_crm"])
+    stok = _token(client, tuple(sales)[:2])
+    sid = _mk_case(client, stok, "業務看不到金額", sales=[])
+    p2 = new_page()
+    login_as(p2, tuple(sales)[:2])
+    p2.goto(f"{live_server}/pages/dev-crm.html?case={sid}")
+    p2.get_by_role("button", name="編輯案件").wait_for(timeout=15000)
+    assert p2.locator('[data-testid="detail-expected-amount"] .dc-info-val').inner_text().strip() == "—"
+    p2.get_by_role("button", name="編輯案件").click()
+    assert p2.locator('[data-testid="case-expected-amount"]').locator("visible=true").count() == 0
+    assert p2.locator('[data-testid="dc-pipeline-amount"]').locator("visible=true").count() == 0
