@@ -53,6 +53,7 @@ window.CM_PARTS.push(() => ({
       } catch (_e) { /* 讀不到就不顯示據點 */ }
     },
     selected: null,
+    devCase: null,          // T86 業務開發 D：目前案件的來源商機 {id, name}（沒有／看不到＝null）；case-bundle 的 parts.devCase
     activeTab: 'biz',
     // 附件目錄 P3「全部附件」頁籤：檔案中心（filehub）在才有；資料依案件單號標記（換案件時舊資料不顯示）
     signedBackBusy: false, signedBackErr: '',
@@ -205,7 +206,7 @@ window.CM_PARTS.push(() => ({
 
     async _findCase(quoteNo) {
       try {
-        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', q: quoteNo, limit: '20' })
+        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', q: quoteNo, limit: '20', with_dev_case: '1' })
         const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return null
         return ((await r.json()).items || []).find(c => c.quote_no === quoteNo) || null
@@ -397,6 +398,7 @@ window.CM_PARTS.push(() => ({
         const data = bundle.quotation
         const parts = bundle.parts || {}
         this.selected = data
+        this.devCase = (parts.devCase && parts.devCase.ok && parts.devCase.data) || null      // T86 業務開發 D：來源商機（跟 selected 同一刻賋值，切換時不殘留上一件；看不到／沒有＝null）
         // T86 #30：手機上整頁一起捲（清單與明細上下堆疊）。從清單深處點進案件時，頁面還停在
         // 清單的捲動位置，案件標題列就落在頂欄底下被蓋住 ⇒ 開啟案件時回到頁面頂端。
         if (this.isMobileView) window.scrollTo(0, 0)

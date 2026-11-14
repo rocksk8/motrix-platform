@@ -1073,6 +1073,23 @@ def _waiting_on_names(data_json, display_by_username) -> list:
         return []
 
 
+def _dev_case_map(conn, user, quote_nos):
+    """T86 業務開發 D：{案號: {"id", "name"}}——這些案件是從哪個業務開發商機轉建的（dev_cases.converted_quote_no）。
+    只給有業務開發模組權限（管理員或 dev_crm）、且依業務開發案自己的可見規則（row_access `dev_case`）看得到那件商機的人；
+    看不到就不在結果裡（呼叫端當作沒有），不洩漏商機名稱。一次 IN 批次（每 300 筆一批）。"""
+    out = {}
+    if not quote_nos:
+        return out
+    if user["role"] not in ("superadmin", "admin") and "dev_crm" not in json.loads(user.get("modules") or "[]"):
+        return out
+    for i in range(0, len(quote_nos), 300):
+        chunk = quote_nos[i:i + 300]
+        for d in conn.execute("SELECT id, case_name, converted_quote_no, assigned_to, created_by, sales_persons, planners FROM dev_cases WHERE is_deleted=0 AND converted_quote_no IN (%s) ORDER BY id" % ",".join("?" * len(chunk)), chunk):
+            if d["converted_quote_no"] not in out and row_access.visible("dev_case", user, d):
+                out[d["converted_quote_no"]] = {"id": d["id"], "name": d["case_name"] or ""}
+    return out
+
+
 @router.get("/api/quotations")
 def list_quotations(
     status:   Optional[str] = None,
@@ -1095,6 +1112,7 @@ def list_quotations(
     include_project_margin: int = 0,
     with_sales_owner: int = 0,
     with_waiting_on: int = 0,
+    with_dev_case: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -1104,12 +1122,12 @@ def list_quotations(
         user, status=status, customer=customer, month=month, deal_tag=deal_tag, doc_type=doc_type, limit=limit, offset=offset, q=q,
         settle=settle, sort=sort, dir=dir, counts=counts, mine=mine, stage_overdue=stage_overdue, recv_overdue=recv_overdue,
         missing_docs=missing_docs, unread=unread, include_project_margin=include_project_margin,
-        with_sales_owner=with_sales_owner, with_waiting_on=with_waiting_on)
+        with_sales_owner=with_sales_owner, with_waiting_on=with_waiting_on, with_dev_case=with_dev_case)
 
 
 def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=None, limit=100, offset=0, q=None,
                         settle=None, sort=None, dir=None, counts=0, mine=0, stage_overdue=0, recv_overdue=0,
-                        missing_docs=0, unread=0, include_project_margin=0, with_sales_owner=0, doc_type=None, with_waiting_on=0):
+                        missing_docs=0, unread=0, include_project_margin=0, with_sales_owner=0, doc_type=None, with_waiting_on=0, with_dev_case=0):
     """`list_quotations` 的本體（已驗過身分的使用者字典進來）。首頁「我的工作」的案件分組（dashboard_groups）用它取件數：
     與案件頁清單同一份篩選與權限（row_access），數字才對得起來；端點行為不變。"""
     conn   = get_db()
@@ -1284,10 +1302,13 @@ def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=N
                 _chunk3 = _wnos[_c3:_c3 + 300]
                 for _r4 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk3)), _chunk3):
                     _wait_map[_r4["quote_no"]] = _waiting_on_names(_r4["data_json"], _wdisp)
+    _dev_map = _dev_case_map(conn, user, [r["quote_no"] for r in rows]) if (with_dev_case and rows) else {}   # T86 業務開發 D（選用）
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
+        if with_dev_case:
+            row["dev_case"] = _dev_map.get(row["quote_no"])
         if with_waiting_on:
             row["waiting_on"] = _wait_map.get(row["quote_no"], [])
         if with_sales_owner:
@@ -3328,6 +3349,13 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     _require_user(authorization)          # get_quotation 也會驗；這裡先驗，登入失效時不必進任何一段
     quotation = get_quotation(quote_no, authorization)
 
+    def _dev_case_part():
+        conn = get_db()
+        try:
+            return _dev_case_map(conn, _require_user(authorization), [quote_no]).get(quote_no)
+        finally:
+            conn.close()
+
     def part(fn, *args, **kwargs):
         try:
             return {"ok": True, "data": fn(*args, **kwargs)}
@@ -3347,6 +3375,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
             "completionNotes": part(list_completion_notes, quote_no=quote_no, authorization=authorization),
             "updates":         part(list_case_updates, quote_no, authorization=authorization),
             "extraExpenses":   part(list_extra_expenses, quote_no, authorization=authorization),
+            "devCase":         part(_dev_case_part),                       # T86 業務開發 D：來源商機 {id, name} 或 None（看不到／沒有）
         },
     }
 
