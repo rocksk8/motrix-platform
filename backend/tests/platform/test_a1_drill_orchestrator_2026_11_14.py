@@ -603,6 +603,17 @@ def _orphan_sleeper(arg):
     return SimpleNamespace(pid=int(r.stdout.strip().splitlines()[-1]))
 
 
+def _wait_until(pred, timeout=60.0, step=0.5, what="條件"):
+    """輪詢到條件成立（負載重時行程啟動／結束可能很慢；不用固定睡眠猜時間）。逾時回最後一次的值，由呼叫端的 assert 帶出訊息。"""
+    import time
+    end = time.time() + timeout
+    while True:
+        v = pred()
+        if v or time.time() >= end:
+            return v
+        time.sleep(step)
+
+
 def _alive(pid):
     import subprocess
     r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", "if (Get-Process -Id %d -ErrorAction SilentlyContinue) { 'Y' } else { 'N' }" % pid],
@@ -644,11 +655,14 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
     f = _orphan_sleeper(str(base) + "-other" + chr(92) + "x.bat")             # 前綴相同的別個目錄（…-other）⇒ 不殺
     started = PF.now_ticks(60)
     try:
-        import time
-        time.sleep(2.5)                                           # 讓 A 的子行程起來
         rec = [(a.pid, PF.process_created(a.pid)), (c.pid, PF.process_created(c.pid) - 12345)]
         assert rec[0][1] and rec[1][1]
-        owned = PF.owned_processes(rec, base, started)
+
+        def snapshot():
+            return PF.owned_processes(rec, base, started)
+        # 等到 A、A 的子行程、孤兒 D 都看得到再取清單（原本固定睡 2.5 秒；負載重時子行程還沒起來就取樣，或取樣後才出現而讓「殺掉的 = 清單」對不上）
+        _wait_until(lambda: {a.pid, d.pid} <= {o["id"] for o in snapshot()} and len(snapshot()) >= 3, what="A、A 的子行程、D 都出現")
+        owned = snapshot()
         ids = {o["id"] for o in owned}
         assert a.pid in ids and d.pid in ids, ids
         assert b.pid not in ids and c.pid not in ids and e.pid not in ids and f.pid not in ids and os.getpid() not in ids
@@ -657,8 +671,7 @@ def test_owned_processes_returns_only_recorded_same_process_and_descendants(tmp_
         logs = []
         killed = PF.stop_drill_processes(base, rec, started, log=logs.append)
         assert set(killed) == ids
-        time.sleep(1.5)
-        assert not _alive(a.pid) and not _alive(d.pid)
+        assert _wait_until(lambda: not _alive(a.pid) and not _alive(d.pid), timeout=60, what="A、D 結束"), "殺掉之後 A／D 還活著"
         assert _alive(b.pid) and _alive(c.pid) and _alive(e.pid) and _alive(f.pid)
         assert any("pid=%d" % a.pid in l and "name=python.exe" in l and "created_ticks=" in l for l in logs), logs
     finally:
