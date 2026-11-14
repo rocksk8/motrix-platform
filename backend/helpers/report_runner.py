@@ -232,7 +232,7 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
     except ReportError:
         raise
     except (TypeError, ValueError, KeyError, AttributeError, OverflowError, IndexError):
-        logger.info("report_runner：定義型別不合法", exc_info=True)
+        logger.warning("report_runner：定義型別不合法（若不是使用者輸入錯誤就是程式錯誤）", exc_info=True)
         raise ReportRefused("報表設定格式不正確，請重新建立。", {"reason": "bad_definition"})
 
 

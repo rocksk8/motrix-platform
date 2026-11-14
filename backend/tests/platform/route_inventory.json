@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 1014,
-  "endpoints_api": 1010,
-  "write_total": 547,
-  "write_api": 547,
+  "endpoints_total": 1016,
+  "endpoints_api": 1012,
+  "write_total": 549,
+  "write_api": 549,
   "get_api": 463,
-  "distinct_paths_api": 860,
+  "distinct_paths_api": 862,
   "write_with_body_api": 410,
-  "write_with_path_param_api": 368
+  "write_with_path_param_api": 370
  },
  "select_star": {
   "modules": 289,
@@ -3199,6 +3199,16 @@
    "body": true
   },
   "POST /api/custom-reports/{rid}/copy": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports/{rid}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-reports/{rid}/export-pdf": {
    "w": true,
    "pp": 1,
    "body": false

@@ -6,6 +6,8 @@
 - `GET  /api/custom-reports`          我的報表（＋分享給我的，設定開啟時）。`POST` 新增（≤30 份、名稱不可重複、定義存檔前完整驗證）。
 - `GET|PUT|DELETE /api/custom-reports/{id}`  讀／改（`If-Match` 帶 etag，不符 409）／刪（設定決定進暫存區或直接刪）。非擁有者（含不存在）一律 404 同一句；被分享者只能讀與複製。
 - `POST /api/custom-reports/{id}/copy`  複製成自己的一份。
+- `POST /api/custom-reports/{id}/export`（Excel）、`/export-pdf`（PDF 姊妹）  只能匯出已儲存的報表；需 `analytics.custom_report.export` 能力＋設定 `export_scope` 放行；
+  匯出時重新編譯定義、以**執行者當下**的權限與列範圍重算（A 存、B 匯出，B 看不到的欄位不出現、列不出現）；檔內只有可見欄位的標籤、條件的白話摘要、隱藏欄位**數量**（不寫名稱與值）。
 
 [不變式] ①順序：登入 ⇒ 旗標（`custom_reports.enabled`，關 ⇒ 404、不讀寫表）⇒ 能力 `analytics.custom_report.view`（403）⇒ 來源的模組存取（沒有 ⇒ `/sources` 不列、`/preview` 404）。
     能力不取代模組存取，模組存取也不取代能力：兩者每次請求都查。
@@ -14,17 +16,25 @@
     ④每人每分鐘最多 20 次預覽（行程內滑動視窗；多行程時各自計，只當保險絲）；另有全程式庫同時執行上限 `MAX_CONCURRENT_RUNS`（預覽與匯出共用名額，滿了回 429「請等幾秒後再試」）。
 [契約題] backend/tests/platform/test_custom_reports_api_t87.py
 """
+import io
 import logging
+import re
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 
 from typing import Optional
 
+import openpyxl
 from fastapi import APIRouter, Body, Header, HTTPException, Path
+from fastapi.responses import Response
+from openpyxl.styles import Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 from db import get_db
-from helpers import _audit, _require_user, _tok
+from helpers import _audit, _require_user, _tok, download_name
+from helpers.xlsx_out import XLSX_MEDIA, add_pdf_sibling, check_export_rate, export_logged, xl_safe_xlsx, xl_style
 from helpers import perm as _perm
 from helpers import report_catalog as RC
 from helpers import report_policy as RP
@@ -35,6 +45,7 @@ router = APIRouter()
 _log = logging.getLogger(__name__)
 
 CAP_VIEW = "analytics.custom_report.view"
+CAP_EXPORT = "analytics.custom_report.export"
 PREVIEW_PER_MINUTE = 20
 _WINDOW_SECONDS = 60.0
 MAX_CONCURRENT_RUNS = 4                                   # 全程式庫同時執行的預覽／匯出上限（每個最久占一條連線 8 秒）
@@ -266,3 +277,105 @@ def copy_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = H
         return out
     finally:
         conn.close()
+
+
+
+# ── 匯出 Excel（＋PDF 姊妹） ───────────────────────────────────────────────
+
+_FNAME_BAD = re.compile(r'[\/:*?"<>|\x00-\x1f]')
+
+
+def _build_xlsx(name, source_label, user, res, conds, now) -> bytes:
+    """報表分頁（標題／條件／產製者與時間／表頭／資料／小計總計）＋說明分頁（來源、列數、已隱藏欄位數、資料截至）。
+    輸出文字只來自可見欄位的標籤、條件的白話、報表名稱與數字；文字一律 `xl_safe_xlsx`，不寫任何公式。"""
+    wb = openpyxl.Workbook()
+    f = xl_style(wb)[0]
+    ws = wb.active
+    ws.title = "報表"
+
+    def put(sheet, r, c, v, **kw):
+        cell = sheet.cell(row=r, column=c, value=xl_safe_xlsx(v))
+        cell.font = f(**kw)
+        return cell
+    put(ws, 1, 1, "%s　MOTRIX PLATFORM" % name, bold=True, size=12)
+    put(ws, 2, 1, "條件：" + ("；".join(conds) if conds else "（無）"), size=9)
+    put(ws, 3, 1, "產製者：%s　產製時間：%s" % (user.get("display_name") or user.get("username") or "", now), size=9)
+    cols = res["columns"]
+    head = PatternFill("solid", fgColor="E5E7EB")
+    for ci, c in enumerate(cols, 1):
+        cell = put(ws, 5, ci, c["label"], bold=True, size=10)
+        cell.fill = head
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    band = PatternFill("solid", fgColor="F3F4F6")
+    for ri, row in enumerate(res["rows"], 6):
+        strong = row["k"] != "row"
+        for ci, (c, v) in enumerate(zip(cols, row["v"]), 1):
+            cell = put(ws, ri, ci, v, bold=strong, size=10)
+            if strong:
+                cell.fill = band
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                if c["type"] == "money":
+                    cell.number_format = "#,##0"
+                elif c["type"] == "percent":
+                    cell.number_format = '0.0"%"'
+                cell.alignment = Alignment(horizontal="right")
+    for ci, c in enumerate(cols, 1):
+        ws.column_dimensions[get_column_letter(ci)].width = max(10, min(40, len(c["label"]) * 2 + 4))
+    ws.freeze_panes = "A6"
+    w2 = wb.create_sheet("說明")
+    info = [("資料來源", source_label), ("列數", sum(1 for r in res["rows"] if r["k"] == "row")), ("已隱藏欄位數", res["hiddenCount"]),
+            ("資料截至", now)] + [("說明", n) for n in res["notes"]]
+    for i, (k, v) in enumerate(info, 1):
+        put(w2, i, 1, k, bold=True, size=10)
+        put(w2, i, 2, v, size=10)
+    w2.column_dimensions["A"].width = 16
+    w2.column_dimensions["B"].width = 60
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.post("/api/custom-reports/{rid}/export")
+@export_logged("xlsx", "analytics", "custom_report")
+def export_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header(None)):
+    user = _gate(authorization)
+    _perm.require(user, CAP_EXPORT)
+    conn = get_db()
+    try:
+        if not RP.export_allowed(user, conn):
+            raise HTTPException(403, {"message": "目前設定不開放匯出自訂報表。", "reason": "export_off"})
+        try:
+            rep = ST.get_for_run(conn, user, rid)
+        except ST.StoreError as e:
+            raise _store_http(e)
+        _run_slot()
+        try:
+            plan = RR.compile(rep["definition"], user, "export", conn=conn)       # 匯出時重新驗證；以執行者當下權限重算
+            check_export_rate(user["id"], "excel")
+            spec = RC.get_source(plan.source_id)
+            res = RR.assemble(plan, spec["execute"](plan))
+            conds = RR.describe_filters(rep["definition"])
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            data = _build_xlsx(rep["name"], spec["label"], user, res, conds, now)
+        except RR.ReportError as e:
+            raise _http(e)
+        except HTTPException:
+            raise
+        except Exception:                                    # noqa: BLE001 — 不回顯內部訊息
+            _log.exception("custom_reports export failed")
+            raise HTTPException(500, {"message": "匯出失敗，請稍後再試；若持續發生請通知管理員。"})
+        finally:
+            _runs.release()
+        if rep["isOwner"]:
+            try:
+                ST.mark_exported(conn, user, rid)
+            except Exception:                                # noqa: BLE001 — 記錄匯出時間失敗不影響已產生的檔案
+                _log.warning("custom_reports：記錄 last_exported_at 失敗", exc_info=True)
+    finally:
+        conn.close()
+    fname = "MOTRIX_自訂報表_%s_%s.xlsx" % (_FNAME_BAD.sub("_", rep["name"]), datetime.now().strftime("%Y%m%d"))
+    return Response(content=data, media_type=XLSX_MEDIA, headers={"Content-Disposition": download_name.content_disposition(fname)})
+
+
+add_pdf_sibling(router, "/api/custom-reports/{rid}/export-pdf", export_report, module="analytics", name="custom_report",
+                title="自訂報表", method="POST")

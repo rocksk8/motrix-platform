@@ -2,7 +2,7 @@
 """「我的報表」的儲存（T87 B2-S2）：表 `custom_reports`（＋`custom_report_shares`）的所有讀寫在這裡。
 
 [單位] analytics:report_store    [層] M08    [穩定度] 實驗
-[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, StoreError, copy_report, create, delete, etag_of, get_visible, list_mine, list_shared, redact_for_reader, update
+[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, StoreError, copy_report, create, delete, etag_of, get_for_run, get_visible, list_mine, list_shared, mark_exported, redact_for_reader, update
 [不變式] ①鍵＝擁有者登入帳號：路徑與請求本文都沒有帳號參數，只讀寫呼叫者自己的列；非擁有者（含不存在）一律回**逐字相同**的 404「找不到這份報表。」
     （被分享者例外：只在設定 `custom_reports.sharing` 開啟、且確實被分享時可讀；只能讀與複製，不能改、不能刪、不能再分享）。
     ②儲存的是**設定**，不是結果、不是授權：定義存檔前用 `report_runner.compile`（不執行）完整驗證；執行時一律用執行者當下的權限重新算（A 存、B 跑、降權後都不例外）。
@@ -135,14 +135,39 @@ def redact_for_reader(defn, user):
     return out, removed
 
 
-def get_visible(conn, user, rid) -> dict:
-    """擁有者，或（分享開啟且被分享）的人。其餘一律 404（與不存在逐字相同）。"""
+def _readable_row(conn, user, rid):
+    """擁有者，或（分享開啟且被分享）的人可讀的列；其餘一律 404（與不存在逐字相同）。回 (列, 是否擁有者)。"""
     r = _row(conn, rid)
     if r is None:
         raise StoreError(404, NOT_FOUND)
     mine = r["username"] == user["username"]
     if not mine and not (RP.sharing_enabled(conn) and _is_shared_to(conn, rid, user["username"])):
         raise StoreError(404, NOT_FOUND)
+    return r, mine
+
+
+def get_for_run(conn, user, rid) -> dict:
+    """給匯出用：回 `{"id", "name", "sourceId", "definition"（原始、未去識別）, "isOwner"}`。定義**只能**交給 `report_runner.compile`
+    （它以執行者自己的權限重新驗證與遮罩），不可回給呼叫端或寫進輸出。"""
+    r, mine = _readable_row(conn, user, rid)
+    return {"id": r["id"], "name": r["name"], "sourceId": r["source_id"], "definition": json.loads(r["definition_json"]), "isOwner": mine}
+
+
+def mark_exported(conn, user, rid) -> None:
+    """擁有者匯出成功後記下 `last_exported_at`（被分享者匯出不改擁有者的列）。"""
+    began = begin_write(conn)
+    try:
+        conn.execute("UPDATE custom_reports SET last_exported_at=? WHERE id=? AND username=?", (_now(), rid, user["username"]))
+        conn.commit()
+    except Exception:
+        if began and conn.in_transaction:
+            conn.rollback()
+        raise
+
+
+def get_visible(conn, user, rid) -> dict:
+    """擁有者，或（分享開啟且被分享）的人。其餘一律 404（與不存在逐字相同）。"""
+    r, mine = _readable_row(conn, user, rid)
     defn = json.loads(r["definition_json"])
     hidden_part = False
     if not mine:
