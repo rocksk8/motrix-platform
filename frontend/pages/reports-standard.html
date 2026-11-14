@@ -93,7 +93,6 @@
       .sr-main select { font-size: 16px; min-height: 44px; }
       .sr-main .btn { min-height: 44px; }
     }
-    .sr-swipe { display: none; }
     .sr-det { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
     .sr-det summary { cursor: pointer; padding: 4px 0; }
     @media (max-width: 767px) {
@@ -108,7 +107,6 @@
       .sr-bars__pair { gap: 1px; }
       .sr-bars__b { width: 10px; }
       .sr-bars__x { font-size: 10px; letter-spacing: -0.6px; }
-      .sr-swipe { display: block; }
     }
   </style>
 </head>
@@ -237,14 +235,14 @@
                 <template x-if="result.id === 'revenue' && (result.series || []).length > 0">
                   <div class="sr-card" data-testid="sr-series">
                     <h2 class="sr-card__t">每月營收</h2>
-                    <div class="sr-bars" role="img" :aria-label="seriesSummary">
+                    <div class="sr-bars" role="img" :aria-label="seriesSummary" x-effect="series.length; $nextTick(function () { _measureBars() })">
                       <template x-for="p in series" :key="p.key">
                         <div class="sr-bars__g">
                           <div class="sr-bars__pair">
                             <div class="sr-bars__b" x-effect="$el.style.height = p.h1 + '%'"></div>
                             <div class="sr-bars__b alt" x-show="p.h2 !== null" x-effect="$el.style.height = (p.h2 || 0) + '%'"></div>
                           </div>
-                          <div class="sr-bars__x" x-text="p.label"></div>
+                          <div class="sr-bars__x" x-text="p.showLabel ? p.label : ''"></div>
                         </div>
                       </template>
                     </div>
@@ -252,7 +250,7 @@
                       <span><i></i><span x-text="form.basis === 'accrual' ? '權責營收（本口徑）' : '現金實收（本口徑）'"></span></span>
                       <span x-show="hasOther"><i class="alt"></i><span x-text="form.basis === 'accrual' ? '現金實收（對照）' : '權責營收（對照）'"></span></span>
                     </div>
-                    <p class="sr-note sr-swipe">圖形可左右滑動；各月數字在下方「逐月數字」。</p>
+                    <p class="sr-note" data-testid="sr-swipe" x-show="barsScroll">圖形可左右滑動；各月數字在下方「逐月數字」。</p>
                     <p class="sr-note">兩種口徑金額不同屬正常：權責看階段何時完成，現金看款項何時入帳。</p>
                     <details class="sr-det" data-testid="sr-series-table">
                       <summary>逐月數字（NT$）</summary>
@@ -370,10 +368,12 @@
         reports: [], blocked: [], salesOptions: [], departmentOptions: [], rep: null,
         form: {}, forms: {}, results: {}, shownQs: {},
         result: null, shown: null, stale: false,
-        loaded: false, loading: false, exporting: '', error: '', loadError: '', seq: 0,
+        barsScroll: false, narrow: false, loaded: false, loading: false, exporting: '', error: '', loadError: '', seq: 0,
         init() {
           var self = this
           this.load()
+          this.narrow = window.innerWidth <= 767
+          window.addEventListener('resize', function () { self.narrow = window.innerWidth <= 767; self.$nextTick(function () { self._measureBars() }) })
           // 只改網址的 #id（書籤、頁內連結、上一頁）也要切到對應的報表；pick() 內用 replaceState，不會再觸發這裡
           window.addEventListener('hashchange', function () {
             var id = ''
@@ -523,10 +523,10 @@
           var mx = 0
           s.forEach(function (p) { [p.cash, p.accrual].forEach(function (v) { if (typeof v === 'number' && v > mx) mx = v }) })
           var self = this
-          return s.map(function (p) {
+          return s.map(function (p, idx) {
             var a = p[me], b = p[other]
             return {
-              key: p.key, label: p.label,
+              key: p.key, label: p.label, showLabel: !self.narrow || s.length <= 12 || idx % Math.ceil(s.length / 12) === 0,
               h1: typeof a === 'number' && mx > 0 ? Math.max(a / mx * 100, a > 0 ? 1 : 0) : 0,
               h2: typeof b === 'number' ? (mx > 0 ? Math.max(b / mx * 100, b > 0 ? 1 : 0) : 0) : null,
               raw: typeof a === 'number' ? a : null,
@@ -545,6 +545,10 @@
             if (/^dev|^pipeline/.test(k.key)) return hasDev
             return true
           })
+        },
+        _measureBars() {
+          var b = document.querySelector('.sr-bars')
+          this.barsScroll = !!b && b.scrollWidth > b.clientWidth + 1
         },
         // 圖的文字摘要（給讀屏）：本口徑合計、最高月；逐月數字另有表格
         get seriesSummary() {

@@ -175,8 +175,14 @@ def test_hash_change_switches_the_report():
     assert "addEventListener('hashchange'" in _script()
 
 
-def test_chart_has_a_summary_label_and_a_swipe_hint_on_small_screens():
+def test_chart_has_a_summary_label_and_a_swipe_hint_only_when_it_scrolls():
     js = _script()
     assert "get seriesSummary()" in js
-    assert 'class="sr-note sr-swipe"' in PAGE
-    assert re.search(r"@media \(max-width: 767px\)[^@]*\.sr-swipe \{ display: block; \}", PAGE, flags=re.S)
+    assert re.search(r'data-testid="sr-swipe"[^>]*x-show="barsScroll"', PAGE)
+    assert "scrollWidth > b.clientWidth" in js and "addEventListener('resize'" in js
+
+
+def test_month_labels_are_thinned_on_narrow_screens_when_there_are_many_months():
+    js = _script()
+    assert "showLabel" in js and "Math.ceil(s.length / 12)" in js
+    assert "p.showLabel ? p.label" in PAGE
