@@ -15,6 +15,12 @@ approval-queue/count、notifications/mine、reads/module-counts、system/brandin
 - 原端點丟 HTTPException（401／403／404…）或閘門例外 ⇒ 該區段不給、`errors[區段]` 記狀態碼；不整包失敗。
 - 授權閘門（402）、必須先改密碼（403）：本端點不在豁免／白名單 ⇒ 與其他 `/api` 一樣被擋；前端收到非 200 就退回各自打原端點（舊行為）。
 
+## 頁面專屬區段（T86 #10，`?page=case`）
+案件管理頁首屏本來自己再打 8 支「登入即可讀」的小請求（onepipe 旗標、版面與規則設定群組、利潤門檻、可選使用者、公司公開資料、清單排序偏好、
+兩支承攬商下拉），清單載入共 19 支 API。`GET /api/bootstrap?page=case` 在全站區段之外再多放這 8 段（`PAGE_SECTIONS["case"]`）：
+規矩與上面完全相同——直接呼叫原端點的處理函式（帶固定的路徑參數／查詢值）、同一份權限檢查、失敗只記 `errors`、閘門時一律 428；
+沒帶 `page` 或不認得的值＝與今天逐位元相同（不報錯、不多給）。前端只在案件管理頁才登記這些路徑（static/auth-guard.js），其他頁照舊直接 fetch。
+
 原端點全部保留（相容；也是前端的退路）。守門：tests/test_bootstrap_bundle_2026_11_13.py 逐區段、逐角色比對 bootstrap 與原端點的回應。
 """
 import contextvars
@@ -33,6 +39,8 @@ router = APIRouter()
 #: 區段 → 在「本公司資料未設定」時是否仍可給（＝原端點在 main._COMPANY_SETUP_ALLOWED／_PUBLIC_API_PATHS 內）。
 #: 守門：test_bootstrap_bundle::test_setup_gate_allowed_sections_match_main
 SETUP_GATE_OK = frozenset({"me", "menu", "branding", "totp"})
+#: 案件頁讀「版面/自訂欄位/規則…」那一支的群組清單（＝ case-management.html 傳給 MotrixPublicFlags.read 的順序；守門：test_bootstrap_page_case 比對前端字串）
+CASE_BUILDER_GROUPS = ("builder_layout", "builder_custom_fields", "builder_rules", "builder_slots", "builder_status_display", "builder_stage_templates", "ui_format")
 #: 區段 → 原端點路徑（守門與文件用）
 ORIGINAL_PATH = {
     "me": "/api/auth/me",
@@ -46,6 +54,19 @@ ORIGINAL_PATH = {
     "moduleCounts": "/api/reads/module-counts",
     "onlineUsers": "/api/online-users",
     "totp": "/api/auth/totp/status",
+}
+#: 頁面專屬區段（只在 `?page=<鍵>` 時才放）：頁面鍵 → {區段: 原端點路徑（含固定的查詢值）}。守門：test_bootstrap_page_case_2026_11_14.py
+PAGE_SECTIONS = {
+    "case": {
+        "onepipeFlags": "/api/settings-center/public?groups=onepipe",
+        "builderGroups": "/api/settings-center/public?groups=" + ",".join(CASE_BUILDER_GROUPS),
+        "profitWarning": "/api/profit-warning/config",
+        "usersSelectable": "/api/users/selectable",
+        "companyProfilePublic": "/api/settings/company-profile/public",
+        "listPrefCase": "/api/list-prefs/case_list",
+        "vendorsSelectable": "/api/vendor-contractors/selectable",
+        "contractorsSelectable": "/api/contractors/selectable",
+    },
 }
 _SA_ONLY = frozenset({"onlineUsers"})
 _ADMIN_UP = frozenset({"totp", "moduleCounts"})
@@ -96,8 +117,28 @@ def _handlers():
     }
 
 
-def sections_for(role, setup_blocked):
-    """這個角色在這個閘門狀態下會放進 bootstrap 的區段（有序）。純函式，守門直接用。"""
+def _page_handlers(page):
+    """頁面專屬區段 → 處理函式（路徑參數／固定查詢值用 partial 先綁，呼叫時仍只帶 authorization）。"""
+    from functools import partial
+    from modules.case.api import project_margin
+    from modules.subcontract.api import contractors, vendor_contractors
+    from routers import auth, list_prefs, settings_center, system
+    if page != "case":
+        return {}
+    return {
+        "onepipeFlags": partial(settings_center.public_values, "onepipe"),
+        "builderGroups": partial(settings_center.public_values, ",".join(CASE_BUILDER_GROUPS)),
+        "profitWarning": project_margin.get_profit_warning_config,
+        "usersSelectable": auth.users_selectable,
+        "companyProfilePublic": system.get_company_profile_public,
+        "listPrefCase": partial(list_prefs.get_list_pref, "case_list"),
+        "vendorsSelectable": vendor_contractors.list_vendors_selectable,
+        "contractorsSelectable": contractors.list_contractors_selectable,
+    }
+
+
+def sections_for(role, setup_blocked, page=None):
+    """這個角色在這個閘門狀態下會放進 bootstrap 的區段（有序）。純函式，守門直接用。`page` 不認得 ⇒ 只有全站區段。"""
     out = []
     for name in ORIGINAL_PATH:
         if name in _SA_ONLY and role != "superadmin":
@@ -107,6 +148,8 @@ def sections_for(role, setup_blocked):
         if setup_blocked and name not in SETUP_GATE_OK:
             continue
         out.append(name)
+    if not setup_blocked:                                    # 頁面專屬區段都不在閘門白名單內：閘門時一個都不給
+        out.extend(PAGE_SECTIONS.get(page, {}))
     return out
 
 
@@ -122,12 +165,12 @@ def _setup_blocked():
     return kind == _cs.GATE_REQUIRED
 
 
-def _run_section(name, fn, authorization):
+def _run_section(name, fn, authorization, path=None):
     """在複製的 context 裡跑一個區段（由執行緒池呼叫）。回 `(ok, 值或狀態碼)`。"""
     from db import set_request_ctx
     from helpers import company_setup as _cs
     # B3：診斷用的「是哪支端點」要記原端點的路徑，不是 /api/bootstrap（例如區段內的 403 稽核）
-    set_request_ctx("GET", ORIGINAL_PATH[name])
+    set_request_ctx("GET", (path or ORIGINAL_PATH[name]).split("?")[0])
     try:
         return True, fn(authorization)
     except HTTPException as e:
@@ -140,7 +183,7 @@ def _run_section(name, fn, authorization):
 
 
 @router.get("/api/bootstrap")
-def bootstrap(response: Response, authorization: str = Header(None)):
+def bootstrap(response: Response, page: str = "", authorization: str = Header(None)):
     """登入後的啟動資料（見模組說明）。回 `{"v": 1, "<區段>": <原端點的回應>, …, "errors": {"<區段>": <狀態碼>}}`。"""
     response.headers["Cache-Control"] = "no-store"          # B4：每人不同、最大的 JSON、每頁都打
     user = _require_user(authorization)
@@ -149,9 +192,11 @@ def bootstrap(response: Response, authorization: str = Header(None)):
     except Exception:                                       # noqa: BLE001  閘門判定失敗 ⇒ 當作被擋（只給白名單區段，保守）
         logger.exception("bootstrap: company setup gate failed")
         blocked = True
-    handlers = _handlers()
-    names = sections_for(user.get("role"), blocked)
-    futs = [(n, _POOL.submit(contextvars.copy_context().run, _run_section, n, handlers[n], authorization)) for n in names]
+    page = page if page in PAGE_SECTIONS else None           # 不認得的頁面鍵＝沒帶（不報錯、不多給）
+    handlers = {**_handlers(), **_page_handlers(page)}
+    names = sections_for(user.get("role"), blocked, page)
+    paths = {**ORIGINAL_PATH, **PAGE_SECTIONS.get(page, {})}
+    futs = [(n, _POOL.submit(contextvars.copy_context().run, _run_section, n, handlers[n], authorization, paths[n])) for n in names]
     out = {"v": 1}
     errors = {}
     for name, fut in futs:                                  # 依 sections_for 的順序收（回應的鍵序固定）
@@ -161,7 +206,7 @@ def bootstrap(response: Response, authorization: str = Header(None)):
         else:
             errors[name] = val
     if blocked:                                             # 閘門擋掉的區段：明講是 428（前端不必退回打原端點——原端點也是 428）
-        for name in set(sections_for(user.get("role"), False)) - set(sections_for(user.get("role"), True)):
+        for name in set(sections_for(user.get("role"), False, page)) - set(sections_for(user.get("role"), True, page)):
             errors[name] = 428
     out["errors"] = errors
     return out

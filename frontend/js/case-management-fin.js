@@ -107,6 +107,9 @@ window.CM_PARTS.push(() => ({
     // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
     async loadFinanceSummary(quoteNo) {
       if (!quoteNo) return
+      // T86 #15：後端只給財務角色／superadmin（helpers.auth.can_see_financial），其他人送出去只會在 console 多一筆 403；
+      // 畫面上這塊本來就用 canSeeFinancial() 藏起來，所以這裡同一條規則就不送
+      if (!this.canSeeFinancial()) { this.financeSummary = null; this.financeSummaryLoading = false; return }
       const live = this._selectLive()
       this.financeSummaryLoading = true
       this.financeSummary = null

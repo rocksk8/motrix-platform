@@ -16,7 +16,7 @@
     var ctl = typeof AbortController === 'function' ? new AbortController() : null
     var timer = ctl && timeoutMs ? setTimeout(function () { ctl.abort() }, timeoutMs) : null
     try {
-      var r = await fetch('/api/settings-center/public?groups=' + names.join(','),
+      var r = await (window.motrixBootFetch || fetch)('/api/settings-center/public?groups=' + names.join(','),
         Object.assign({ headers: { Authorization: 'Bearer ' + token } }, ctl ? { signal: ctl.signal } : {}))
       if (!r.ok) return null
       var d = await r.json()

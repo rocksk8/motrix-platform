@@ -45,7 +45,7 @@ window.CM_PARTS.push(() => ({
     //: 讀公司資料裡的據點清單。讀不到就留空 => 那一行不顯示，其餘照常。
     async loadLocations() {
       try {
-        const r = await fetch('/api/settings/company-profile/public', {
+        const r = await (window.motrixBootFetch || fetch)('/api/settings/company-profile/public', {
           headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
         const d = await r.json()
@@ -132,7 +132,7 @@ window.CM_PARTS.push(() => ({
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
       try {
-        const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
+        const r = await (window.motrixBootFetch || fetch)('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json()
         this.session.displayName = me.displayName
@@ -146,7 +146,7 @@ window.CM_PARTS.push(() => ({
       this.loadLocations()
       this.detectFileCenter()
       try {
-        const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
+        const ru = await (window.motrixBootFetch || fetch)('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
       } catch {}
       // UR1：已讀改存伺服器（逐筆、排除本人）。上一頁回來／其他分頁標了已讀 ⇒ 重抓。
@@ -317,7 +317,7 @@ window.CM_PARTS.push(() => ({
 
     async detectFileCenter() {
       try {
-        const r = await fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const r = await (window.motrixBootFetch || fetch)('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
         const d = await r.json()
         this.fileCenterOn = !!(d && d.filehub && d.filehub.state === 'loaded')

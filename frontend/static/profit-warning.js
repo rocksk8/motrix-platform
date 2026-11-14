@@ -18,7 +18,7 @@
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return Object.assign({}, DEF)
-      const r = await fetch('/api/profit-warning/config', { headers: { Authorization: 'Bearer ' + s.token } })
+      const r = await (window.motrixBootFetch || fetch)('/api/profit-warning/config', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return Object.assign({}, DEF)
       return normalise(await r.json())
     } catch (e) { return Object.assign({}, DEF) }

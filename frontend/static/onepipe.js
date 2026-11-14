@@ -14,7 +14,7 @@
       try {
         var token = session().token
         if (!token) return off
-        var r = await fetch('/api/settings-center/public?groups=onepipe', { headers: { Authorization: 'Bearer ' + token } })
+        var r = await (window.motrixBootFetch || fetch)('/api/settings-center/public?groups=onepipe', { headers: { Authorization: 'Bearer ' + token } })
         if (!r.ok) return off
         var g = ((await r.json()).groups || {}).onepipe || {}
         return { links: Number(g.links) === 1, timeline: Number(g.timeline) === 1, entryUnify: Number(g.entry_unify) === 1, receiveWizard: Number(g.receive_wizard) === 1, shipDeviceWarranty: Number(g.ship_device_warranty) === 1 }

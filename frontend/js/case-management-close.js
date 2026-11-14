@@ -142,7 +142,7 @@ window.CM_PARTS.push(() => ({
           .then(r => r.ok ? r.json() : null).then(d => { out.vouchers = (d && d.vouchers) || [] }).catch(() => {}))
       }
       if (this.session.role === 'superadmin') {
-        jobs.push(fetch('/api/system/bonus-module-status', { headers: auth })
+        jobs.push((window.motrixBootFetch || fetch)('/api/system/bonus-module-status', { headers: auth })
           .then(r => r.ok ? r.json() : null).then(d => { out.bonusEnabled = !!(d && d.enabled) }).catch(() => {}))
       }
       await Promise.all(jobs)

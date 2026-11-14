@@ -8,7 +8,7 @@
 
 async function loadListPref(token, listKey) {
   try {
-    const r = await fetch(`/api/list-prefs/${encodeURIComponent(listKey)}`, {
+    const r = await (window.motrixBootFetch || fetch)(`/api/list-prefs/${encodeURIComponent(listKey)}`, {
       headers: { Authorization: 'Bearer ' + token }
     })
     if (r.ok) return await r.json()
