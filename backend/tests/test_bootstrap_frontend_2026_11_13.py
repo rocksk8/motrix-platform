@@ -200,6 +200,27 @@ def test_user_driven_refresh_events_invalidate_the_snapshot(ev):
     assert out["real"] == ["/api/platform/menu", "/api/approval-queue/count"]
 
 
+@pytest.mark.parametrize("status", (403, 404))
+def test_a_section_bootstrap_was_refused_is_answered_with_the_same_status_without_a_request(status):
+    """T86 U5：bootstrap 剛問過原端點、回 403／404 ⇒ 20 秒內再問只會得到同一個答案 ⇒ 不再送請求（只供應一次，之後照舊真的送）。"""
+    out = _run([{"url": "/api/build-info"}, {"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": status}})
+    assert out["results"][0][1] == {"detail": "沒有權限" if status == 403 else "不存在"}
+    assert out["results"][1][1] == {"real": "/api/build-info"} and out["real"] == ["/api/build-info"]
+
+
+@pytest.mark.parametrize("status", (428, 500, 502))
+def test_other_failures_are_still_retried_for_real(status):
+    out = _run([{"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": status}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+
+
+def test_a_refused_section_is_not_replayed_after_20_seconds_or_for_someone_else():
+    out = _run([{"advance": 20001}, {"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": 403}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+    out = _run([{"url": "/api/build-info", "token": "OTHER"}], extra={"buildInfo": None, "errors": {"buildInfo": 403}})
+    assert out["results"][0][1] == {"real": "/api/build-info"}
+
+
 def test_failed_sections_are_not_served_even_if_present_as_null():
     out = _run([{"url": "/api/build-info"}], extra={"buildInfo": None, "errors": {"buildInfo": 500}})
     assert out["results"][0][1] == {"real": "/api/build-info"}
