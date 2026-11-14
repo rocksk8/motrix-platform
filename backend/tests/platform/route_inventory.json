@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 1006,
-  "endpoints_api": 1002,
+  "endpoints_total": 1010,
+  "endpoints_api": 1006,
   "write_total": 542,
   "write_api": 542,
-  "get_api": 460,
-  "distinct_paths_api": 855,
+  "get_api": 464,
+  "distinct_paths_api": 859,
   "write_with_body_api": 407,
   "write_with_path_param_api": 365
  },
@@ -2271,6 +2271,26 @@
   "GET /api/status-display": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/std-reports": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/std-reports/{rid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/std-reports/{rid}/excel": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/std-reports/{rid}/pdf": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/suppliers": {

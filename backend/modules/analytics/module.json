@@ -11,7 +11,7 @@
     "tables": [],
     "files": []
   },
-  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports"],
+  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports", "/api/std-reports"],
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports-hub.html",

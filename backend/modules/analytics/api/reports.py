@@ -2706,13 +2706,25 @@ def _settle_waited(updated_at, days) -> bool:
         return True
 
 
-def _compute_ar_aging() -> dict:
-    """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。"""
+def _compute_ar_aging(sales_id: Optional[int] = None, customer: Optional[str] = None,
+                      department_id: Optional[int] = None) -> dict:
+    """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。
+
+    三個篩選皆可省略；**全省略時輸出與加入篩選之前逐鍵相同**（舊端點、Excel、PDF、資金水位都不受影響）。
+    T87 B1「標準報表」才會帶篩選：業務＝案件管理的「業務負責」歸屬（與營運報表業務員績效同一份，依帳號 id），
+    部門＝跟著該歸屬（`_case_dept`），客戶＝名稱關鍵字（不分大小寫）。"""
+    return _ar_aging_core(sales_id, customer, department_id, with_owner=False)
+
+
+def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_id: Optional[int],
+                   with_owner: bool) -> dict:
+    """`_compute_ar_aging` 的實作。`with_owner=True` 時每筆多一個 `owner`（業務負責顯示名稱）供 B1 報表用；
+    預設 False，輸出與過去完全相同。"""
     _cuts = _finance_params.aging_cuts()
     today = date.today()
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, sales_person,
+        SELECT quote_no, customer_name, project_name, sales_person, sales_person_id,
                total, pretax, quote_date,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                json_extract(data_json,'$.caseRecord') AS cr_json
@@ -2720,17 +2732,29 @@ def _compute_ar_aging() -> dict:
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         ORDER BY quote_date ASC
     """).fetchall()
+    user_by_id, name_index = _load_user_index(conn) if (sales_id or department_id or with_owner) else ({}, {})
     conn.close()
+    cust_kw = (customer or "").strip().casefold()
 
     bands: dict = {k: [] for k in _finance_params.BAND_KEYS}      # 區間鍵是『位置代號』（第 1～4 區），不是天數
 
     for row in rows:
+        if cust_kw and cust_kw not in (row["customer_name"] or "").casefold():
+            continue
         cr = {}
         if row["cr_json"]:
             try:
                 cr = json.loads(row["cr_json"])
             except Exception:
                 pass
+
+        owner_label = ""
+        if sales_id or department_id or with_owner:
+            owner_key, owner_label = _case_sales_owner(cr, row, name_index, user_by_id)
+            if sales_id and not (owner_key[0] == "id" and owner_key[1] == sales_id):
+                continue
+            if department_id and _case_dept(cr, row, name_index, user_by_id)[0] != department_id:
+                continue
 
         total = row["total"] or 0
         pay   = (cr.get("payment") or {}).get("items", [])
@@ -2751,7 +2775,7 @@ def _compute_ar_aging() -> dict:
             days = (today - anchor).days
 
             band = _finance_params.aging_band(days, _cuts)
-            bands[band].append({
+            item = {
                 "quoteNo":     row["quote_no"],
                 "customer":    row["customer_name"] or "",
                 "project":     row["project_name"]  or "",
@@ -2762,7 +2786,10 @@ def _compute_ar_aging() -> dict:
                 "amount":      amt,
                 "quoteDate":   row["quote_date"] or "",
                 "daysElapsed": days,
-            })
+            }
+            if with_owner:
+                item["owner"] = owner_label
+            bands[band].append(item)
 
     result_bands = []
     _labels = _finance_params.aging_labels(_cuts)

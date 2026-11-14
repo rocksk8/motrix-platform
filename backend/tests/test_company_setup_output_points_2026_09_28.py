@@ -69,6 +69,10 @@ NO_COMPANY_DATA = {
     ("modules/arap/api/cashier.py", "export_execution_history"): "出納執行紀錄 XLSX：只有交易明細，不印本公司抬頭（§1.3）",
     ("modules/analytics/api/report_templates.py", "excel_template"):
         "自選條件報表 XLSX：只有案件／款項明細、篩選條件與彙總，不印本公司抬頭或統編；PDF 姊妹（add_pdf_sibling）自己經第二道",
+    ("modules/analytics/api/std_reports.py", "excel_std_report"):
+        "標準報表 XLSX（T87 B1）：只有報表明細、篩選條件與彙總，不印本公司抬頭或統編；PDF 姊妹（add_pdf_sibling）自己經第二道",
+    ("modules/analytics/api/std_reports.py", "_build_xlsx"):
+        "標準報表 XLSX 的產生端（同上）：只有報表明細、篩選條件與彙總，不含本公司資料（§1.3）",
     ("modules/case/api/quotations.py", "download_quotation_version"): "已存檔的歷史版本 PDF 原樣下載（§1.4：產生當時已凍結）",
     ("modules/case/api/quotations.py", "case_batch_export"): "案件批次 XLSX：案件欄位清單，不印本公司抬頭（§1.3）",
     ("modules/daily_tasks/api.py", "export_task_history"): "每日任務 CSV：任務紀錄，不含本公司資料（§1.3）",
