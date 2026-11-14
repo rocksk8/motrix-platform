@@ -4,6 +4,7 @@ import io
 import json
 import re
 import logging
+import math
 import os
 import tempfile
 import threading
@@ -502,8 +503,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
                 amt  = amounts[idx]
                 rcvd = bool(pi.get("received"))
                 rat  = norm_ymd(pi.get("receivedAt"))
-                aa   = pi.get("actualAmount")
-                fee  = pi.get("feeAmount") or 0
+                aa   = _num_or_bad(pi.get("actualAmount"))
+                aa   = None if aa is _BAD else aa
+                fee  = _money(pi.get("feeAmount"))
                 # 2026-09-30：實收＝銀行入帳（已扣客戶內扣手續費）⇒ 淨額＝入帳，不再減手續費（receipt_amounts，L1 單一定義）
                 net  = receipt_amounts(amt, aa, fee)[0] if rcvd else None
 
@@ -2716,6 +2718,55 @@ def _compute_ar_aging(sales_id: Optional[int] = None, customer: Optional[str] = 
     return _ar_aging_core(sales_id, customer, department_id, with_owner=False)
 
 
+from helpers.tax_calc import MONEY_BAD as _BAD, money as _money, parse_money as _num_or_bad     # 髒資料防線共用 L1 的轉換（單一來源）
+
+
+_PAY_NUM_KEYS = ("amount", "pct", "actualAmount", "feeAmount")
+
+
+def _clean_pay_items(total, pretax, pay):
+    """款項明細的髒資料防線（T87 修）：金額／比例／實收／手續費若不是數字（例如 "5x00"），那一筆不能讓整張報表 500。
+    ⇒ `(total, pretax, items, bad)`：`items` 與原清單等長（壞掉的一筆換成金額 0 的替身，讓其餘款項的金額與順序不變），
+    `bad` 是壞筆的位置集合（呼叫端略過它們並計數）。`total`／`pretax` 壞掉 ⇒ 整張報價單的款項都算壞（`bad` 含全部位置）。
+    乾淨的資料原樣回傳（同一個清單物件），不改變既有輸出。"""
+    if not isinstance(pay, list):
+        return total, pretax, [], set()
+    t, pt = _num_or_bad(total), _num_or_bad(pretax)
+    if t is _BAD or pt is _BAD:
+        return 0, None, [{"amount": 0} for _ in pay], set(range(len(pay)))
+    out, bad, changed = [], set(), False
+    for i, pi in enumerate(pay):
+        if not isinstance(pi, dict):
+            out.append({"amount": 0})
+            bad.add(i)
+            changed = True
+            continue
+        fixed, ok = {}, True
+        for k in _PAY_NUM_KEYS:
+            if k not in pi:
+                continue
+            n = _num_or_bad(pi[k])
+            if n is _BAD:
+                ok = False
+                break
+            if n is not pi[k]:
+                fixed[k] = n
+        if not ok:
+            out.append({"amount": 0, "pct": 0, "received": pi.get("received")})
+            bad.add(i)
+            changed = True
+        elif fixed:
+            out.append({**pi, **fixed})
+            changed = True
+        else:
+            out.append(pi)
+    return (t if t is not None else 0), pt, (out if changed else pay), bad
+
+
+def _dirty_note(n: int) -> str:
+    return "有 %d 筆資料格式異常未計入" % n
+
+
 def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_id: Optional[int],
                    with_owner: bool) -> dict:
     """`_compute_ar_aging` 的實作。`with_owner=True` 時每筆多一個 `owner`（業務負責顯示名稱）供 B1 報表用；
@@ -2735,6 +2786,7 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
     user_by_id, name_index = _load_user_index(conn) if (sales_id or department_id or with_owner) else ({}, {})
     conn.close()
     cust_kw = (customer or "").strip().casefold()
+    dirty = 0                                                     # 金額／比例格式異常而略過的款項筆數
 
     bands: dict = {k: [] for k in _finance_params.BAND_KEYS}      # 區間鍵是『位置代號』（第 1～4 區），不是天數
 
@@ -2756,20 +2808,23 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
             if department_id and _case_dept(cr, row, name_index, user_by_id)[0] != department_id:
                 continue
 
-        total = row["total"] or 0
         pay   = (cr.get("payment") or {}).get("items", [])
         if not pay:
             continue
+        total, pretax, pay, bad = _clean_pay_items(row["total"], row["pretax"], pay)   # 金額／比例不是數字的款項略過並計數，不讓整張報表失敗
+        if bad:
+            dirty += len(bad)
+            _log.warning("應收帳齡：%s 有 %d 筆款項的金額／比例格式異常，未計入", row["quote_no"], len(bad))
 
         try:
             anchor = date.fromisoformat((row["quote_date"] or "")[:10])
         except Exception:
             anchor = today
 
-        amounts = payment_item_amounts(total, pay, row["pretax"])
+        amounts = payment_item_amounts(total, pay, pretax)
 
         for idx, pi in enumerate(pay):
-            if pi.get("received"):
+            if idx in bad or pi.get("received"):
                 continue
             amt  = amounts[idx]
             days = (today - anchor).days
@@ -2812,6 +2867,9 @@ def _ar_aging_core(sales_id: Optional[int], customer: Optional[str], department_
             "amount": sum(b["amount"] for b in result_bands),
         },
     }
+    if dirty:                                        # 只有真的有壞資料時才多這兩處（乾淨資料的回應與過去逐鍵相同）
+        out["dirtyCount"] = dirty
+        out["note"] += "；" + _dirty_note(dirty)
     if _cuts != _finance_params.DEFAULT_CUTS:        # 只有自訂切點生效時才多這個鍵（預設時回應與過去逐鍵相同）；畫面用它決定超期上色
         out["cuts"] = list(_cuts)
     return out
@@ -3934,7 +3992,7 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
                                         normalize_basis(basis), quote_money_visible(u))
 
 
-def _collect_receivable_items(department_id: Optional[int] = None) -> list:
+def _collect_receivable_items(department_id: Optional[int] = None, stats: Optional[dict] = None) -> list:
   """輕量應收／已收／未收收集器（2026-09-09）。迭代全部『已成案』『已結案』報價單，
   從 caseRecord.payment.items[] 逐筆列舉，透過既有 quote_won_month_map() 確定
   成案月份（彌補 quote_date 缺漏或明顯未來日期的防呆），最後回傳攤平的逐筆款項 dict
@@ -3977,9 +4035,16 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
       continue
 
     won = won_month.get(row["quote_no"]) or (row["quote_date"] or "")[:7]
-    summary = summarize_payment_items(row["total"] or 0, pay, row["pretax"])
+    total, pretax, pay, bad = _clean_pay_items(row["total"], row["pretax"], pay)   # 金額／比例不是數字的款項略過並計數
+    if bad:
+      if stats is not None:
+        stats["dirty"] = stats.get("dirty", 0) + len(bad)
+      _log.warning("應收明細：%s 有 %d 筆款項的金額／比例格式異常，未計入", row["quote_no"], len(bad))
+    summary = summarize_payment_items(total, pay, pretax)
 
     for item in summary["items"]:
+      if item["idx"] in bad:
+        continue
       flat = {
         "quoteNo": row["quote_no"],
         "customer": row["customer_name"],

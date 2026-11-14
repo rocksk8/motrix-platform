@@ -211,7 +211,8 @@ def _run_case_list(p: dict, u: dict):
 # ── 範本二：收款明細 ─────────────────────────────────────────────────────────
 
 def _run_payments(p: dict, u: dict):
-    items = _rp._collect_receivable_items(p.get("department_id"))
+    stats: dict = {}
+    items = _rp._collect_receivable_items(p.get("department_id"), stats)
     rows, undated = [], 0
     for it in items:
         if p.get("deal_tag") and it["dealTag"] != p["deal_tag"]:
@@ -243,6 +244,8 @@ def _run_payments(p: dict, u: dict):
         {"label": "未收", "value": sum(r["amount"] for r in rows if r["state"] == "未收"), "type": "money"},
     ]
     notes = ["日期條件：已收款項依「實收日」，未收款項依「預計收款日」。"]
+    if stats.get("dirty"):
+        notes.append(_rp._dirty_note(stats["dirty"]) + "（款項的金額或比例不是數字）。")
     if undated:
         notes.append(f"有 {undated} 筆款項未填寫對應日期（已收但未填實收日，或未收且未填預計收款日），因為有日期條件所以未列入；不設日期條件即會列入。")
     return rows, summary, notes
