@@ -386,7 +386,9 @@ def test_ac1_every_exemption_gives_a_real_reason():
     # 動作都在它連過去的既有頁（材料申請／採購／入庫／出貨），刻意沒有寫入動作。登記理由寫在 READ_ONLY_PAGES。
     # 14 → 15（T86 整合 2026-11-14，明著的決定）：line-events.html 只掛載 static/line-events-matrix.js（寫入都在那支 js）；
     # 該 js 因 notification-settings.html 也載入而被算成共用檔排除掃描，頁面本身因此讀不到寫入呼叫。登記理由寫在 READ_ONLY_PAGES（寫清楚「不是唯讀、是寫入在共用 js」）。
-    assert len(READ_ONLY_PAGES) <= 15, (
+    # 15 → 16（T87 B1 標準報表 2026-11-14，明著的決定）：reports-standard.html 是整頁只讀的查詢頁（五張報表只 GET；匯出也是 GET 下載），
+    # 沒有任何寫入動作；登記理由寫在 READ_ONLY_PAGES。其他 T87 分支若也要加唯讀頁，整合時由整合者再明著調上限。
+    assert len(READ_ONLY_PAGES) <= 16, (
         "登記表已經有 %d 筆（2026-09-23 實算是 8）——\n" % len(READ_ONLY_PAGES)
         + "☠️ 它變長就是這道守門在失效。\n"
         + "⚠️ 若真的有那麼多唯讀頁，**退回給我**：那時要改的是這個上限，\n"

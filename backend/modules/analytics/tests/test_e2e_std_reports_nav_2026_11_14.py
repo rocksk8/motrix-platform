@@ -7,7 +7,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-NAV_ITEMS_JS = """() => [...document.querySelectorAll('.mnav__item')].map(a => ({label: a.textContent.trim(), href: a.getAttribute('href')}))"""
+#: 只剩單一可見項目的群組會收成一個一級連結（沒有 .mnav__item），所以頂層連結與下拉項目兩處都要收。
+NAV_ITEMS_JS = """() => [...document.querySelectorAll('.mnav__item, a.mnav__top[href]')].map(a => ({label: a.textContent.trim(), href: a.getAttribute('href')}))"""
 
 
 def _file(href):
