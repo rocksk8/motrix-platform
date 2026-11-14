@@ -61,6 +61,7 @@ BASE_STATEMENT = ("演練的「T86」基底＝`feat/t87-a1-m1-h7` 頭（＝T86 �
                   "之後 T88 才是第一次 A1 半自動套用」——本演練模擬的就是 T88 那一步（假 T87 包＝T88 的替身）。")
 SCENARIO_LIMIT_S = {"B1": 600, "G": 1200}      # 每個情境的硬上限（秒）；超過就中止、記為失敗、往下一個情境走（PM 2026-11-14）
 DEFAULT_SCENARIO_LIMIT_S = 900
+INFO_PREFIX = "（資訊）"                                    # 檢查標籤以此開頭＝只供參考、不計入情境成敗
 CLOSE_TIMEOUT_S = 10                                       # 關瀏覽器最多等幾秒（超時強制結束）
 SILENCE_S = 300                                # 看門狗：連續這麼久沒有輸出 ⇒ 印目前步驟與全部執行緒堆疊
 SETTINGS_CACHE_WAIT = 17                # settings_registry._TTL＝15 秒；ERP 行程內快取過期後才讀得到新值
@@ -328,12 +329,14 @@ _DIGEST_SKIP_DIRS = {"logs", "__pycache__", "uploads", ".git", "node_modules"}
 _DIGEST_SKIP_SUFFIX = (".db", ".db-wal", ".db-shm", ".db-journal", ".pyc", ".log")
 
 
-def tree_digest(root):
-    """安裝目錄「程式碼」的雜湊：略過 logs／__pycache__／資料庫檔／上傳檔（它們本來就會變）。⇒ (sha256, 檔數)。"""
+def tree_digest(root, extra_skip_dirs=()):
+    """安裝目錄「程式碼」的雜湊：略過 logs／__pycache__／資料庫檔／上傳檔（它們本來就會變）。⇒ (sha256, 檔數)。
+    extra_skip_dirs：額外略過的資料夾名（例如回復後比對時略過產品自己的 rollback_snapshots）。"""
     h, n = hashlib.sha256(), 0
     base = Path(root)
+    skip = _DIGEST_SKIP_DIRS | {d.lower() for d in extra_skip_dirs}
     for dirpath, dirnames, filenames in os.walk(base):
-        dirnames[:] = sorted(d for d in dirnames if d.lower() not in _DIGEST_SKIP_DIRS)
+        dirnames[:] = sorted(d for d in dirnames if d.lower() not in skip)
         for fn in sorted(filenames):
             if fn.lower().endswith(_DIGEST_SKIP_SUFFIX) or fn.startswith(".initial_admin"):
                 continue
@@ -553,7 +556,8 @@ class Check:
 
     def done(self, observed):
         self.rec["observed"] = observed
-        self.rec["passed"] = bool(self.rec["checks"]) and all(c[1] for c in self.rec["checks"])
+        gating = [c for c in self.rec["checks"] if not c[0].startswith(INFO_PREFIX)]     # 「（資訊）」開頭的列只供參考，不決定情境過不過
+        self.rec["passed"] = bool(gating) and all(c[1] for c in gating)
         self.rec["seconds"] = round(time.time() - self.t0)
         return self.rec
 
@@ -1128,12 +1132,14 @@ class Drill:
             time.sleep(5)
             self.guard.ready("回復後檢查")
             dep2 = json.loads((self.inst / "backend" / ".deployed_commit.json").read_text(encoding="utf-8-sig"))
-            code1 = tree_digest(self.inst)
-            chk.ok("回復後程式碼雜湊＝套用前", code1 == code0, "%s… / %s…（commit %s）" % (code0[0][:10], code1[0][:10], str(dep2.get("commit"))[:9]))
+            code1 = tree_digest(self.inst, extra_skip_dirs=("rollback_snapshots",))      # 套用時產品自己建的快照資料夾（回復用）不算程式碼
+            chk.ok("回復後程式碼雜湊＝套用前（不含 rollback_snapshots 快照資料夾）", code1 == code0, "%s… / %s…（commit %s）" % (code0[0][:10], code1[0][:10], str(dep2.get("commit"))[:9]))
             self.stop_services()
             time.sleep(3)
             l1 = db_logical_digest(self.db)
-            chk.ok("回復後資料庫邏輯內容＝套用前", l0 == l1, "%s… / %s…" % (l0[:10], l1[:10]))
+            # 使用者裁示 DM1（2026-09-28）：回復預設「只回程式、資料庫保留」（新版 migration 只新增欄位與表，舊版讀得了）⇒ 回復後資料庫**應該還在新版狀態**
+            probe = db_query(self.db, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (PROBE_TABLE,))
+            chk.ok("回復後資料庫保留（預設只回程式；假 T87 的 %s 表仍在）" % PROBE_TABLE, bool(probe), "邏輯雜湊 套用前 %s… → 回復後 %s…" % (l0[:10], l1[:10]))
         return chk.done(rtxt[:160])
 
     def scenario_B6(self, page, commits):
@@ -1150,10 +1156,18 @@ class Drill:
         finally:
             conn.close()
         before = tree_digest(self.inst)
-        nrep = len(blocked_reports(self.inst))
+        logs = self.inst / "backend" / "logs"
+        nreg = len(list(logs.glob("a1_report_2*.md")))                           # 一般報告（a1_report_<時間戳>.md）；「blocked」報告是另一種檔名
         outcome, rtxt = self.ui_apply(page, *self.admin)
         chk.ok("套用被擋（沒有開始套用），原因是正式庫結構變動", outcome == "failed" and "沒有開始套用" in rtxt and "結構" in rtxt, rtxt[:220])
-        self._blocked_has(chk, "套用前檢查", nrep)
+        # 套用階段的「套用前預檢」被擋：產品寫的是一般套用報告（結果＝失敗）＋通知＋ERP 稽核＋a1 稽核 apply_blocked(step=套用前預檢)；a1_report_blocked_* 只用在準備／預演／套用閘門
+        regs = sorted(logs.glob("a1_report_2*.md"))
+        new_reg = regs[nreg:]
+        body = new_reg[-1].read_text(encoding="utf-8") if new_reg else ""
+        chk.ok("留下白話報告 a1_report_<時間戳>.md（結果＝失敗，寫明沒有開始套用）", len(new_reg) == 1 and "沒有開始套用" in body and "預演之後正式庫結構已變動" in body,
+               "新增 %d 份；%s" % (len(new_reg), new_reg[-1].name if new_reg else "無"))
+        rows = [r for r in read_audit_rows(self.inst) if r.get("event") == "apply_blocked" and r.get("step") == "套用前預檢"]
+        chk.ok("稽核有 apply_blocked（step＝套用前預檢）", bool(rows), "%d 筆" % len(rows))
         self._inst_unchanged(chk, before)
         return chk.done(rtxt[:160])
 

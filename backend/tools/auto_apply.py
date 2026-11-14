@@ -1037,9 +1037,9 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
     # 預演之後正式庫結構若變動過（模組更新、手動改動）：預演的預期差異已不適用，不等套用完才發現
     rh_hash = (rehearsal or {}).get("before_hash")
     if rehearsal is not None and not rh_hash:
-        return blocked(["預演結果沒有記錄當時的資料庫結構雜湊，無法確認預演之後正式庫沒有變動，請重新預演"])
+        return blocked(["預演結果沒有記錄當時的資料庫結構雜湊，無法確認預演之後正式庫沒有變動，沒有開始套用：請重新預演"])
     if rehearsal is not None and rh_hash != structure_hash(before):
-        return blocked(["預演之後正式庫結構已變動，預演結果不再適用，請重新預演"])
+        return blocked(["預演之後正式庫結構已變動，沒有開始套用：預演結果不再適用，請重新預演"])
     # 稽核寫不進去就不套用：這是一次動正式機的操作，沒有紀錄不准做
     if not audit_event(install_root, {"event": "apply_start", "by": who, "rehearsal_digest": (rehearsal or {}).get("digest")}):
         return blocked(["稽核紀錄（backend\\logs\\a1_audit.jsonl）寫不進去，沒有開始套用：請先排除磁碟或權限問題"])

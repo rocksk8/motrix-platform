@@ -1421,3 +1421,31 @@ def test_close_browser_normal_close_kills_nothing(tmp_path, monkeypatch):
     d = _mini_drill(tmp_path)
     ok = []
     assert d._close_browser(SimpleNamespace(close=lambda: ok.append(1)), timeout=5) == [] and ok == [1]
+
+
+def test_info_rows_do_not_decide_scenario_outcome():
+    """B4 的「（資訊）正式庫檔案位元組前後相同」是參考列（SQLite 檢查點會改位元組）；它不能讓整個情境判不符。"""
+    c = AD.Check("X", "t", "e")
+    c.ok("實質檢查", True)
+    c.ok("（資訊）位元組相同", False, "不同")
+    assert c.done("o")["passed"] is True
+    c2 = AD.Check("Y", "t", "e")
+    c2.ok("實質檢查", False)
+    c2.ok("（資訊）位元組相同", True)
+    assert c2.done("o")["passed"] is False
+    c3 = AD.Check("Z", "t", "e")
+    c3.ok("（資訊）只有參考列", True)
+    assert c3.done("o")["passed"] is False            # 沒有任何實質檢查 ⇒ 不算過
+
+
+def test_tree_digest_extra_skip_dirs_ignores_only_the_named_folder(tmp_path):
+    """B5：回復後比對程式碼時略過產品自己的 rollback_snapshots；其他資料夾的改動仍要抓得到。"""
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "main.py").write_text("a", encoding="utf-8")
+    d0 = AD.tree_digest(tmp_path)
+    (tmp_path / "backend" / "rollback_snapshots" / "x").mkdir(parents=True)
+    (tmp_path / "backend" / "rollback_snapshots" / "x" / "main.py").write_text("old", encoding="utf-8")
+    assert AD.tree_digest(tmp_path)[0] != d0[0]
+    assert AD.tree_digest(tmp_path, extra_skip_dirs=("rollback_snapshots",)) == d0
+    (tmp_path / "backend" / "extra.py").write_text("x", encoding="utf-8")
+    assert AD.tree_digest(tmp_path, extra_skip_dirs=("rollback_snapshots",))[0] != d0[0]
