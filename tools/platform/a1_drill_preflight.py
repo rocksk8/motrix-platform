@@ -502,6 +502,50 @@ def owned_processes(records, base, start_ticks, me=None):
             if killable(i["id"], i["name"], bool(i.get("verified"))) and int(i["id"]) != (me or os.getpid())]
 
 
+BROWSER_NAMES = ("chrome-headless-shell.exe", "chrome.exe", "headless_shell.exe", "msedge.exe")
+
+
+_BROWSER_PS = r"""
+$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CreationDate
+$byId = @{}; foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
+function Ticks($p) { if ($p.CreationDate) { [long]$p.CreationDate.ToUniversalTime().Ticks } else { [long]0 } }
+$names = @(%(names)s)
+$set = New-Object 'System.Collections.Generic.HashSet[int]'
+[void]$set.Add(%(me)d)
+$grew = $true
+while ($grew) { $grew = $false; foreach ($p in $all) { $par = [int]$p.ParentProcessId; $id = [int]$p.ProcessId; if ($set.Contains($par) -and -not $set.Contains($id) -and $byId.ContainsKey($par) -and (Ticks $p) -ge (Ticks $byId[$par])) { [void]$set.Add($id); $grew = $true } } }
+$out = @()
+foreach ($id in $set) { if ($id -eq %(me)d) { continue }; $n = ([string]$byId[$id].Name).ToLower(); if ($names -contains $n) { $out += @{ id = $id; name = $n; created = (Ticks $byId[$id]) } } }
+ConvertTo-Json -Compress -Depth 4 @{ found = @($out) }
+"""
+
+
+def browser_descendants(me=None, names=BROWSER_NAMES):
+    """本行程的子孫裡名稱在 `names` 的程序（Playwright 開的瀏覽器）。⇒ [{id, name, created}]。查詢失敗丟例外。"""
+    script = _BROWSER_PS % {"names": ",".join("'%s'" % n for n in names), "me": me or os.getpid()}
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=90, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError("查瀏覽器程序失敗（rc=%s）：%s" % (r.returncode, (r.stderr or "")[:120]))
+    items = json.loads(r.stdout.strip().splitlines()[-1]).get("found") or []
+    if isinstance(items, dict):
+        items = [items]
+    return [{"id": int(i["id"]), "name": str(i["name"]), "created": int(i["created"])} for i in items if killable(i["id"], i["name"], True)]
+
+
+def kill_browser_processes(log=None, me=None, names=BROWSER_NAMES, killer=None):
+    """殺本行程名下的瀏覽器程序（逐一記 pid／名稱／建立時間）。只殺 `browser_descendants` 給的；不殺 node driver（它要留著重開瀏覽器）。⇒ 被殺的 pid。"""
+    found = browser_descendants(me, names)
+    for o in sorted(found, key=lambda o: -o["id"]):
+        if log:
+            log("殺瀏覽器程序 pid=%d name=%s created_ticks=%d" % (o["id"], o["name"], o["created"]))
+        if killer:
+            killer(o["id"])
+        else:
+            subprocess.run(["taskkill", "/PID", str(o["id"]), "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return [o["id"] for o in found]
+
+
 # 連線清單用 `netstat -ano`：這台機器上 Get-NetTCPConnection 什麼都查不到（CIM MSFT_NetTCPConnection 是空的），
 # 用它監看會永遠「0 連線」＝假綠燈；netstat 正常。所以取樣前一定先做正對照（見 positive_control）。
 _NETSTAT_LINE = re.compile(r"^\s*TCP\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s*$", re.I)

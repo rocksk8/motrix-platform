@@ -35,6 +35,7 @@ import shutil
 import sqlite3
 import sys
 import tarfile
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta
@@ -58,7 +59,10 @@ PROBE_TABLE = "a1_drill_probe"
 
 BASE_STATEMENT = ("演練的「T86」基底＝`feat/t87-a1-m1-h7` 頭（＝T86 凍結頭＋A1）。這等於「T87 用步驟檔把 A1 裝上正式機，"
                   "之後 T88 才是第一次 A1 半自動套用」——本演練模擬的就是 T88 那一步（假 T87 包＝T88 的替身）。")
-SETTINGS_CACHE_WAIT = 17                 # settings_registry._TTL＝15 秒；ERP 行程內快取過期後才讀得到新值
+SCENARIO_LIMIT_S = {"B1": 600, "G": 1200}      # 每個情境的硬上限（秒）；超過就中止、記為失敗、往下一個情境走（PM 2026-11-14）
+DEFAULT_SCENARIO_LIMIT_S = 900
+SILENCE_S = 300                                # 看門狗：連續這麼久沒有輸出 ⇒ 印目前步驟與全部執行緒堆疊
+SETTINGS_CACHE_WAIT = 17                # settings_registry._TTL＝15 秒；ERP 行程內快取過期後才讀得到新值
 DEVIATIONS = [
     "演練資料庫是**全新資料庫**（基底程式啟動時建立、經正式路徑設定本公司資料），不是正式資料的備份副本：不把任何真實資料放進演練目錄。"
     "代價：預演／遷移的耗時與資料量只當量級，不能當正式機預估。",
@@ -485,6 +489,52 @@ def exit_code(ctx):
     return 0 if results and all(r.get("passed") is True for r in results) else 1
 
 
+class Watchdog:
+    """看門狗（PM 2026-11-14）：① 情境超過硬上限 ⇒ 呼叫 `drill.on_deadline(sid)`（每個情境只一次）；
+    ② 連續 `silence_s` 秒沒有輸出 ⇒ 印目前步驟與全部執行緒的堆疊（之後每個 `silence_s` 秒再印一次）。**不殺任何東西**，除了 ①。"""
+
+    def __init__(self, drill, silence_s=SILENCE_S, poll=2.0, dump=None):
+        self.drill, self.silence_s, self.poll = drill, silence_s, poll
+        self.thread = threading.Thread(target=self._loop, daemon=True, name="a1-drill-watchdog")
+        self.stop_evt = threading.Event()
+        self.fired = set()
+        self.dumps = 0
+        self.dump = dump or self._dump
+
+    def _dump(self):
+        d = self.drill
+        d.log("🐕 看門狗：已 %d 秒沒有輸出。目前步驟：%s（情境 %s）" % (time.time() - d.last_output, d.last_msg, d.deadline_sid))
+        for tid, frame in sys._current_frames().items():
+            th = {t.ident: t.name for t in threading.enumerate()}.get(tid, str(tid))
+            d.log("  ── 執行緒 %s ──\n%s" % (th, "".join(traceback.format_stack(frame)[-12:]).rstrip()))
+
+    def tick(self):
+        d = self.drill
+        if d.deadline is not None and time.monotonic() > d.deadline and d.deadline_sid not in self.fired:
+            self.fired.add(d.deadline_sid)
+            d.on_deadline(d.deadline_sid)
+        if time.time() - d.last_output > self.silence_s:
+            self.dumps += 1
+            self.dump()
+            d.last_output = time.time()                                     # 下一次再印要再等一輪
+
+    def start(self):
+        self.thread.start()
+
+    def _loop(self):
+        while not self.stop_evt.wait(self.poll):
+            try:
+                self.tick()
+            except Exception as e:                                          # noqa: BLE001 — 看門狗自己不能死
+                try:
+                    self.drill.log("看門狗出錯：%s" % e)
+                except Exception:                                           # noqa: BLE001
+                    pass
+
+    def stop(self):
+        self.stop_evt.set()
+
+
 # ── 演練器 ──────────────────────────────────────────────────────────────────────
 
 class Check:
@@ -526,10 +576,19 @@ class Drill:
         self.fake_wt = None
         self.admin = None
         self.t0 = time.time()
+        self.last_output = time.time()          # 看門狗：最後一次輸出的時間
+        self.last_msg = ""
+        self.deadline = None                    # 目前情境的硬上限（time.monotonic()）；None＝沒有
+        self.deadline_sid = None
+        self.timed_out = set()
+        self.limit_scale = float(getattr(args, "limit_scale", None) or 1.0)
+        self.watchdog = None
 
     # -- 小工具 ---------------------------------------------------------------
     def log(self, msg):
         line = "[%s] %s" % (time.strftime("%H:%M:%S"), msg)
+        self.last_output = time.time()
+        self.last_msg = str(msg)[:200]
         print(line, flush=True)
         try:
             with open(self.reports / "drill.log", "a", encoding="utf-8") as f:
@@ -678,9 +737,13 @@ class Drill:
             raise PF.DrillAbort("演練目錄路徑含 V9.0，拒絕刪除：%s" % self.base)
         return DMA.cleanup(self.base)
 
-    def stop_services(self):
+    def stop_services(self, final=False):
+        """停演練服務。情境之間（final=False）**不含編排器自己的子孫**：Playwright 的 node driver 與瀏覽器是編排器的子行程，
+        情境之間停掉它們會讓下一步 `Page.goto` 失敗（2026-11-14 煙霧測試實例）。只有收尾（final=True）才連編排器的子孫一起清。"""
         try:
-            return PF.stop_drill_processes(self.base, self.guard.records, self.guard.start_ticks, log=self.log)
+            me = os.getpid()
+            records = list(self.guard.records) if final else [r for r in self.guard.records if int(r[0]) != me]
+            return PF.stop_drill_processes(self.base, records, self.guard.start_ticks, log=self.log)
         except Exception as e:                                          # noqa: BLE001 — 收尾不可丟例外
             self.log("停服務出錯：%s" % e)
             return []
@@ -813,17 +876,47 @@ class Drill:
         finally:
             _swap_environ(saved)
 
+    def _launch_browser(self, pw, clean_env):
+        return pw.chromium.launch(headless=True, env=clean_env, args=["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
+                                                                    "--disable-background-networking", "--disable-component-update", "--disable-sync"])
+
+    def scenario_limit(self, sid):
+        return SCENARIO_LIMIT_S.get(sid, DEFAULT_SCENARIO_LIMIT_S) * self.limit_scale
+
+    def on_deadline(self, sid):
+        """看門狗執行緒呼叫：情境超過硬上限 ⇒ 記下、殺掉瀏覽器（等待中的 Playwright 呼叫立刻丟例外）並停演練服務（卡在子行程的步驟也會放開）。
+        不丟例外；主執行緒把這個情境記為失敗後往下一個情境走（會重開瀏覽器）。"""
+        self.timed_out.add(sid)
+        self.log("⏱ 情境 %s 超過上限 %d 秒 ⇒ 中止並記為失敗（目前步驟：%s）" % (sid, self.scenario_limit(sid), self.last_msg))
+        try:
+            PF.kill_browser_processes(self.log)
+        except Exception as e:                                              # noqa: BLE001
+            self.log("殺瀏覽器出錯：%s" % e)
+        try:
+            self.stop_services()
+        except Exception as e:                                              # noqa: BLE001
+            self.log("停服務出錯：%s" % e)
+
     def _drive_browser(self, pw, wanted, commits, clean_env):
-        browser = pw.chromium.launch(headless=True, env=clean_env, args=["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
-                                                          "--disable-background-networking", "--disable-component-update", "--disable-sync"])
+        browser = self._launch_browser(pw, clean_env)
+        relaunch = False
         try:
             for sid in wanted:
                 self.monitor.check_clean()
                 self.guard.ready("跑情境 " + sid)
-                self.log("── 情境 %s ──" % sid)
-                ctxb = browser.new_context()
-                page = ctxb.new_page()
+                if relaunch or not browser.is_connected():                    # 上一個情境被中止／瀏覽器沒了 ⇒ 重開（driver 還活著）
+                    relaunch = False
+                    try:
+                        browser.close()
+                    except Exception:                                       # noqa: BLE001
+                        pass
+                    browser = self._launch_browser(pw, clean_env)
+                self.log("── 情境 %s（上限 %d 秒）──" % (sid, self.scenario_limit(sid)))
+                self.deadline_sid, self.deadline = sid, time.monotonic() + self.scenario_limit(sid)
+                ctxb = None
                 try:
+                    ctxb = browser.new_context()
+                    page = ctxb.new_page()
                     rec = getattr(self, "scenario_" + sid)(page, commits)
                 except PF.DrillAbort:
                     raise
@@ -832,11 +925,24 @@ class Drill:
                            "error": "%s: %s\n%s" % (type(e).__name__, e, traceback.format_exc()[-600:])}
                     self.log("情境 %s 例外：%s" % (sid, e))
                 finally:
-                    ctxb.close()
+                    self.deadline = None
+                    if ctxb is not None:
+                        try:
+                            ctxb.close()
+                        except Exception:                                   # noqa: BLE001 — 瀏覽器可能已被殺
+                            pass
+                if sid in self.timed_out:
+                    relaunch = True
+                    rec["passed"] = False
+                    rec["timed_out"] = True
+                    rec["error"] = ("超過硬上限 %d 秒，已中止。" % self.scenario_limit(sid)) + ("\n" + rec["error"] if rec.get("error") else "")
                 self.ctx["results"].append(rec)
                 self.log("情境 %s：%s" % (sid, {True: "符合", False: "不符", None: "未判定"}[rec.get("passed")]))
         finally:
-            browser.close()
+            try:
+                browser.close()
+            except Exception:                                               # noqa: BLE001
+                pass
 
     def _good(self, label, mutate=None, pre=None):
         def build():
@@ -1042,6 +1148,8 @@ class Drill:
     # -- 總流程 ---------------------------------------------------------------
     def run(self):
         self.reports.mkdir(parents=True, exist_ok=True)
+        self.watchdog = Watchdog(self)
+        self.watchdog.start()
         try:
             # ① 順序寫死：check → build → scan → control → start（沒做完就拒絕開跑）
             self._make_guard(self.args.interval)
@@ -1078,7 +1186,10 @@ class Drill:
             self.ctx["abort"] = "%s: %s\n%s" % (type(e).__name__, e, traceback.format_exc()[-800:])
             self.log("演練器例外：%s" % e)
         finally:
-            self.finish()
+            try:
+                self.finish()
+            finally:
+                self.watchdog.stop()
 
     def dry_build_extra(self):
         """--dry-build：再做假 T87 的 good commit、包、發布與包內容掃描，用安裝的 verify_package 驗一次；不起服務。"""
@@ -1101,7 +1212,7 @@ class Drill:
                 if self.guard is not None and "start" in getattr(self.guard, "done", ["start"]):     # 監看器真的啟動過才有摘要；乾跑／防線沒過＝沒有演練程序、不寫摘要
                     self.ctx["monitor"] = self.monitor.summary()
             self.ctx["seconds"] = round(time.time() - self.t0)
-            killed = self.stop_services() if self.guard else []
+            killed = self.stop_services(final=True) if self.guard else []
             time.sleep(3)
             if self.fake_wt is not None:
                 try:
@@ -1127,6 +1238,7 @@ def main(argv=None):
     ap.add_argument("--only", default=",".join(SCENARIOS), type=lambda s: [x.strip() for x in s.split(",") if x.strip()])
     ap.add_argument("--keep", action="store_true", help="結束後保留演練目錄")
     ap.add_argument("--interval", type=float, default=2.0, help="連線監看取樣間隔（秒）")
+    ap.add_argument("--limit-scale", type=float, default=1.0, help="每個情境硬上限的倍率（預設 1；B1 600 秒、G 1200 秒、其他 900 秒）")
     ap.add_argument("--erp-port", type=int, default=ERP_PORT, help="演練 ERP 埠（預設 %d，避開其他視窗用的 6766）" % ERP_PORT)
     ap.add_argument("--dash-port", type=int, default=DASH_PORT, help="演練儀表板埠（預設 %d）" % DASH_PORT)
     a = ap.parse_args(argv)
@@ -1136,6 +1248,8 @@ def main(argv=None):
     for name in ("erp_port", "dash_port"):
         if not 1024 <= getattr(a, name) <= 65535 or getattr(a, name) in (666, 8765):
             ap.error("--%s 不合理（不可是正式 ERP 的 666 或儀表板預設的 8765）：%s" % (name.replace("_", "-"), getattr(a, name)))
+    if a.limit_scale <= 0:
+        ap.error("--limit-scale 必須大於 0")
     if a.erp_port == a.dash_port:
         ap.error("ERP 埠與儀表板埠不可相同")
     d = Drill(a)

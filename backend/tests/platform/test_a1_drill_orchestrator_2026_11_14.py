@@ -141,7 +141,7 @@ def make_drill(tmp_path, monkeypatch, fail_at=None, dry=False):
     monkeypatch.setattr(d, "start_erp", lambda *a, **k: calls.append("start_erp"))
     monkeypatch.setattr(d, "check_dashboard_import", lambda: calls.append("dash_import"))
     monkeypatch.setattr(d, "setup_admin_and_delivery_root", lambda: calls.append("setup_admin"))
-    monkeypatch.setattr(d, "stop_services", lambda: calls.append("stop_services") or [])
+    monkeypatch.setattr(d, "stop_services", lambda final=False: calls.append("stop_services") or [])
     monkeypatch.setattr(d, "robocopy", lambda *a: calls.append("snapshot"))
     monkeypatch.setattr(d, "run_scenarios", lambda: (calls.append("scenarios"),
                                                      d.ctx["results"].append({"id": "G", "title": "t", "expected": "e", "passed": True, "checks": [], "observed": ""})))
@@ -1214,3 +1214,154 @@ def test_disable_license_gate_refuses_when_not_exactly_one_or_missing(tmp_path):
 
 def test_the_license_gate_deviation_is_listed():
     assert any("LICENSE_GATE_ENABLED" in d for d in AD.DEVIATIONS)
+
+
+# ── 2026-11-14 煙霧測試：情境之間的停服務不可殺 Playwright；硬上限；看門狗 ──────────────────
+
+def _mini_drill(tmp_path, **kw):
+    d = AD.Drill(SimpleNamespace(only=["G"], keep=False, interval=2.0, dry_build=True, **kw))
+    d.base = tmp_path
+    d.reports = tmp_path
+    d.logged = []
+    d.log = lambda m: (d.logged.append(str(m)), setattr(d, "last_msg", str(m)), setattr(d, "last_output", __import__("time").time()))
+    return d
+
+
+def test_stop_services_between_scenarios_spares_the_orchestrators_own_descendants(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(AD.PF, "stop_drill_processes", lambda base, records, ticks, log=None: seen.append(list(records)) or [])
+    d = _mini_drill(tmp_path)
+    d.guard = SimpleNamespace(records=[(os.getpid(), 111), (4242, 222)], start_ticks=0)
+    d.stop_services()                                   # 情境之間：不含編排器自己（它的子孫是 Playwright driver 與瀏覽器）
+    d.stop_services(final=True)                         # 收尾：全清
+    assert seen[0] == [(4242, 222)] and seen[1] == [(os.getpid(), 111), (4242, 222)]
+
+
+def test_source_orders_final_cleanup_after_the_scenarios():
+    src = Path(AD.__file__).read_text(encoding="utf-8")
+    assert "self.stop_services(final=True) if self.guard else []" in src
+
+
+def test_scenario_limits_match_the_agreed_values_and_scale(tmp_path):
+    d = _mini_drill(tmp_path)
+    assert (d.scenario_limit("B1"), d.scenario_limit("G"), d.scenario_limit("B4")) == (600, 1200, 900)
+    d2 = _mini_drill(tmp_path, limit_scale=0.5)
+    assert d2.scenario_limit("B1") == 300
+
+
+def test_watchdog_fires_the_deadline_once_and_dumps_after_silence(tmp_path):
+    import time as _t
+    d = _mini_drill(tmp_path)
+    fired, dumped = [], []
+    d.on_deadline = lambda sid: fired.append(sid)
+    w = AD.Watchdog(d, silence_s=0.05, poll=0.01, dump=lambda: dumped.append(1))
+    d.deadline_sid, d.deadline = "B1", _t.monotonic() - 1
+    w.tick(); w.tick()
+    assert fired == ["B1"]                                       # 只一次
+    d.deadline = None
+    d.last_output = _t.time() - 1
+    w.tick()
+    assert dumped == [1] and _t.time() - d.last_output < 0.5     # 印過之後重新計時
+    w.tick()
+    assert dumped == [1]
+
+
+def test_watchdog_default_dump_prints_current_step_and_stacks(tmp_path):
+    import time as _t
+    d = _mini_drill(tmp_path)
+    d.last_msg, d.deadline_sid, d.last_output = "起演練 ERP", "G", _t.time() - 400
+    AD.Watchdog(d)._dump()
+    text = "\n".join(d.logged)
+    assert "起演練 ERP" in text and "看門狗" in text and "執行緒" in text and "test_watchdog_default_dump" in text
+
+
+def test_watchdog_thread_survives_errors_in_the_callback(tmp_path):
+    import time as _t
+    d = _mini_drill(tmp_path)
+
+    def boom(sid):
+        raise RuntimeError("x")
+    d.on_deadline = boom
+    d.deadline_sid, d.deadline = "B1", _t.monotonic() - 1
+    w = AD.Watchdog(d, silence_s=99, poll=0.01)
+    w.start()
+    _t.sleep(0.2)
+    alive = w.thread.is_alive()
+    w.stop(); w.thread.join(2)
+    assert alive and any("看門狗出錯" in m for m in d.logged)
+
+
+def test_browser_descendants_finds_only_my_children_by_name_and_never_self(tmp_path):
+    import subprocess
+    import sys as _s
+    c = subprocess.Popen([_s.executable, "-c", "import time; time.sleep(30)"], creationflags=0x08000000)
+    try:
+        import time as _t
+        _t.sleep(1)
+        found = PF.browser_descendants(names=("python.exe",))
+        assert c.pid in {o["id"] for o in found} and os.getpid() not in {o["id"] for o in found}
+        assert PF.browser_descendants(names=("chrome-headless-shell.exe",)) == [] or all(o["name"] != "python.exe" for o in PF.browser_descendants(names=("chrome-headless-shell.exe",)))
+        killed, logs = [], []
+        got = PF.kill_browser_processes(logs.append, names=("python.exe",), killer=killed.append)
+        assert c.pid in got and c.pid in killed and any("pid=%d" % c.pid in x for x in logs)
+    finally:
+        c.kill()
+
+
+class _FakeBrowser:
+    made = []
+
+    def __init__(self):
+        self.connected = True
+        self.closed = False
+        _FakeBrowser.made.append(self)
+
+    def is_connected(self):
+        return self.connected
+
+    def new_context(self):
+        return SimpleNamespace(new_page=lambda: object(), close=lambda: None)
+
+    def close(self):
+        self.closed = True
+
+
+def test_a_timed_out_scenario_is_failed_and_the_run_continues_with_a_fresh_browser(tmp_path, monkeypatch):
+    _FakeBrowser.made = []
+    d = _mini_drill(tmp_path)
+    d.monitor = SimpleNamespace(check_clean=lambda: None)
+    d.guard = SimpleNamespace(ready=lambda what: None, records=[])
+    d.ctx = {"results": []}
+    pw = SimpleNamespace(chromium=SimpleNamespace(launch=lambda **kw: _FakeBrowser()))
+
+    def s_b1(page, commits):
+        d.timed_out.add("B1")                            # 看門狗在這個情境進行中觸發了
+        raise RuntimeError("Target closed")
+
+    def s_g(page, commits):
+        return {"id": "G", "passed": True, "checks": []}
+    monkeypatch.setattr(d, "scenario_B1", s_b1, raising=False)
+    monkeypatch.setattr(d, "scenario_G", s_g, raising=False)
+    d._drive_browser(pw, ["B1", "G"], {}, {})
+    r = {x["id"]: x for x in d.ctx["results"]}
+    assert r["B1"]["passed"] is False and r["B1"]["timed_out"] and "超過硬上限 600 秒" in r["B1"]["error"]
+    assert r["G"]["passed"] is True and "timed_out" not in r["G"]
+    assert len(_FakeBrowser.made) == 2 and _FakeBrowser.made[0].closed          # B1 逾時後重開了瀏覽器
+    assert d.deadline is None
+
+
+def test_on_deadline_kills_browsers_then_stops_services_and_never_raises(tmp_path, monkeypatch):
+    order = []
+    monkeypatch.setattr(PF, "kill_browser_processes", lambda log=None, **k: order.append("browser") or [])
+    d = _mini_drill(tmp_path)
+    d.stop_services = lambda final=False: order.append(("stop", final)) or []
+    d.on_deadline("B1")
+    assert order == ["browser", ("stop", False)] and "B1" in d.timed_out and any("超過上限" in m for m in d.logged)
+    monkeypatch.setattr(PF, "kill_browser_processes", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ps")))
+    d.on_deadline("G")                                   # 查詢失敗也不丟例外
+    assert "G" in d.timed_out
+
+
+def test_main_rejects_non_positive_limit_scale():
+    with pytest.raises(SystemExit):
+        AD.main(["--limit-scale", "0"])
