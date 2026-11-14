@@ -158,6 +158,31 @@ def test_close_button_shows_the_gates_first_and_goto_switches_tab(live_server, m
 
 
 @pytest.mark.e2e
+def test_close_entry_beside_health_gates_lists_gaps_and_settlement_goto_opens_settlement_page(live_server, make_user, e2e_browser):
+    """T86 案件UX #1／#6：五關旁有「結案」入口（不必進「更多」），對話框最上方列缺漏；「精算」關的前往直接開精算頁。"""
+    u = make_user(username="ck_e5", role="superadmin")
+    make_user(username="ck_boss", role="admin")
+    _seed()
+    page, dialogs = _open(e2e_browser, live_server, u)
+    page.locator("[data-testid=case-close-entry]").click()
+    dlg = page.locator("[data-testid=close-check]")
+    dlg.wait_for(state="visible", timeout=10000)
+    gaps = dlg.locator("[data-testid=close-gaps]").inner_text()
+    assert "未完成階段 1 項：施工" in gaps, gaps
+    assert "未收款 1 期" in gaps, gaps
+    assert "待簽核單據 1 份" in gaps, gaps
+    assert dialogs == [], dialogs
+    # 精算關：有財務檢視權限 ⇒ 狀態列的「精算」直接開精算頁（原本停在「財務」分頁，字樣與去向不符）
+    page.keyboard.press("Escape")
+    dlg.wait_for(state="hidden", timeout=5000)
+    chip = page.locator("[data-testid=case-health] [data-health-gate='精算']")
+    assert "▶" in chip.inner_text(), chip.inner_text()
+    chip.click()
+    page.wait_for_url(f"**/settlement.html?no={NO}", timeout=10000)
+    assert _deal_tag() == "已成案"
+
+
+@pytest.mark.e2e
 def test_close_stops_when_save_fails(live_server, make_user, e2e_browser):
     u = make_user(username="ck_e2", role="superadmin")
     _seed(received=True, stages_done=True, pending_ship=False)
