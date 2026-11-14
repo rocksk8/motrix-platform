@@ -134,6 +134,38 @@ def test_personal_prefs_on_account_security_page(live_server, make_user, new_pag
 
 
 @pytest.mark.e2e
+def test_personal_prefs_group_switch_and_reset(live_server, make_user, new_page, login_as, fake):
+    """T86 ⑧：整組全不收／全收、恢復預設（全收）；只送與目前不同的項目，結果與伺服器一致，重新整理後仍在。"""
+    from helpers import line_notify, line_recipients as lr
+    _configure()
+    u = make_user(username="e2e_lq7", role="sales")
+    line_notify.link_user("e2e_lq7", UID)
+    page = new_page(viewport={"width": 390, "height": 1400})
+    login_as(page, u)
+    page.goto(f"{live_server}/pages/my-account.html?tab=notify")
+    page.locator("[data-testid=line-prefs]").wait_for(state="visible", timeout=20000)
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= 390, "手機不橫向捲動"
+    h = page.evaluate("() => Math.min(...[...document.querySelectorAll('[data-testid^=line-pref-group-]')].flatMap(g => [...g.querySelectorAll('button')].map(b => b.getBoundingClientRect().height)))")
+    assert h >= 36, "整組全收／全不收在手機上要夠大：%s" % h
+    summary = page.locator("[data-testid=line-pref-summary]")
+    reset = page.locator("[data-testid=line-pref-reset]")
+    assert reset.is_disabled(), "全收時不需要恢復預設"
+    off = page.locator("[data-testid^=line-pref-group-off-]").first
+    off.click()
+    page.wait_for_function("() => document.querySelector('#line-bind-card').innerText.includes('已全不收')", timeout=10000)
+    muted = lr.muted_events("e2e_lq7")
+    assert muted and EV in muted, "整組都被退訂"
+    assert "目前收" in summary.inner_text()
+    page.reload()
+    page.locator("[data-testid=line-prefs]").wait_for(state="visible", timeout=20000)
+    page.wait_for_function("() => !document.querySelector('[data-testid=line-pref-%s]').checked" % EV, timeout=10000)
+    page.locator("[data-testid=line-pref-reset]").click()
+    page.wait_for_function("() => document.querySelector('#line-bind-card').innerText.includes('已恢復預設')", timeout=10000)
+    assert lr.muted_events("e2e_lq7") == set()
+    assert page.locator("[data-testid=line-pref-reset]").is_disabled()
+
+
+@pytest.mark.e2e
 def test_unlinked_user_sees_hint_not_checkboxes(live_server, make_user, new_page, login_as, fake):
     _configure()
     u = make_user(username="e2e_lq6", role="sales")
