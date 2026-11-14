@@ -250,7 +250,8 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
             cn.close()
         _audit(_tok(authorization), "material_payment.create_rolled_back", "quotation", quote_no, "材料申請匯款申請 %s 因個資告知紀錄寫入失敗而撤銷" % res["docCode"], {"docCode": res["docCode"]})
         raise HTTPException(503, "收款人個資告知紀錄寫入失敗，這張匯款申請沒有建立，請稍後再試")
-    res["payeeNotice"] = _payee_ack(res["docCode"])
+    from helpers import privacy_notice as _pn
+    res["payeeNotice"] = _pn.ack_view(user, _payee_ack(res["docCode"]))
     return {"ok": True, "payment": res}
 
 

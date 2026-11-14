@@ -373,11 +373,15 @@ def test_payee_privacy_ack_is_masked_for_non_admin_finance(client, world, make_u
     """T86：收款人「已告知」紀錄的讀取範圍同 `GET /api/suppliers`——superadmin／admin 看完整紀錄，財務角色等其他人只看「已告知＋日期」
     （GET 與補記 POST 已記錄過時回傳的既有紀錄同一條線）；伺服器端儲存的紀錄與稽核仍完整。"""
     from helpers import privacy_notice as pn
-    w = world
     fu, fp = make_user(username="mpa_fin", role="finance")
     hf = _login(client, fu, fp)
-    pay = _create(client, w, 1000).json()["payment"]
+    w = dict(world, fin=hf)
+    cr = _create(client, w, 1000, who="fin")
+    assert cr.status_code == 200, cr.text
+    pay = cr.json()["payment"]
     full = pn.get_ack("material_payment", pay["docCode"])
+    assert pay["payeeNotice"] == {"at": full["at"]}, "建立回應的 payeeNotice 也只給 {at}（h11 F1）"
+    assert full["noticeHash"] not in cr.text      # （申請本身的 createdBy 是呼叫者自己，不在此限；只看告知紀錄）
     assert full and full.get("by") and full.get("byUsername") and full.get("noticeHash")
     url = "/api/material-payments/%d/privacy-notice" % pay["id"]
     assert client.get(url, headers=w["adm"]).json()["ack"] == full
