@@ -170,6 +170,10 @@
     /* 矩陣的確認視窗／提示條掛在 <body>，預設層級（100／120）低於本頁彈窗（.modal-overlay 200）⇒ 會被蓋在彈窗後面；在這一頁把它們提到彈窗之上 */
     .mx-modal { z-index: 300; }
     .mx-toast { z-index: 320; }
+    /* 矩陣放在彈窗的捲動區裡：工具列（共用元件預設貼在頁面頂端下方）會浮在列上 ⇒ 這一頁不黏；
+       批次動作列固定在視窗底部，會蓋住彈窗底部的「建立帳號／儲存變更／取消」 ⇒ 手機（彈窗貼底）抬到按鈕列之上 */
+    #up-email-box .mx-sticky { position: static; top: 0; }
+    @media (max-width: 900px) { #up-email-box .mx-batch { bottom: 96px; } }
   </style>
 </head>
 
@@ -789,7 +793,7 @@
           </div>
         </div>
         <div class="form-group" data-testid="user-email-prefs">
-          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:12px">（關閉後不會寄該類信件給此帳號；按下方「儲存變更」後才會寫入。）</span></label>
+          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:12px">（關閉後不會寄該類信件給此帳號；按下方的儲存按鈕後才會寫入。）</span></label>
           <div class="hint" style="margin:4px 0 6px" x-show="emailPrefsStatText()" x-text="emailPrefsStatText()" data-testid="up-email-summary"></div>
           <div id="up-email-box" x-ignore data-testid="up-email-matrix"></div>
         </div>
@@ -1078,7 +1082,7 @@
           } else {
             const r = await fetch('/api/mail-types', { headers: h })
             const d = r.ok ? await r.json() : { items: [] }
-            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, category: t.category, lowRisk: t.category === 'business', receivable: true }))
+            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, category: t.category, lowRisk: t.lowRisk === true, receivable: true }))
           }
         } catch (e) { this.allNotifyTypes = [] }
       },

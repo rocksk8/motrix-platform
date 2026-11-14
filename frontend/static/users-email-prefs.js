@@ -30,7 +30,7 @@
       _emailRows: function () {
         var muted = this.form.notificationMuted || []
         return (this.allNotifyTypes || []).map(function (t) {
-          var low = t.lowRisk === true || t.category === 'business'                    // 兩個欄位都沒有（舊伺服器）⇒ 當非業務類，不開放批次
+          var low = t.lowRisk === true                                                  // 唯一規則在伺服器（category == business）；沒帶 ⇒ 當非業務類，不開放批次
           return {
             key: t.key, name: t.label, group: t.group, category: t.category || '', lowRisk: !!low, receivable: !!t.receivable,
             receive: !!t.receivable && muted.indexOf(t.key) < 0,
@@ -72,7 +72,7 @@
         }
         function done(changed, verb) {
           var n = Object.keys(changed).length
-          return { applied: changed, message: n ? ('已' + verb + ' ' + n + ' 項（按下方「儲存變更」後才會寫入此帳號）。') : '這些項目已是此狀態，無須變動。' }
+          return { applied: changed, message: n ? ('已' + verb + ' ' + n + ' 項（按下方的儲存按鈕後才會寫入此帳號）。') : '這些項目已是此狀態，無須變動。' }
         }
         mx = window.SettingsMatrix.mount(box, {
           rows: rows, groups: cats,

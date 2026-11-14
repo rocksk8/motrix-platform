@@ -83,6 +83,7 @@ def list_mail_types(authorization: str = Header(None)):
     items = sorted((_type_view(t, o, sw) for t in mt.all_types()),
                    key=lambda v: (order.index(v["category"]), v["name"]))
     for v in items:
+        v["lowRisk"] = v["category"] == "business"                  # 與 /receivable、/mine 同一條規則（新增帳號時的矩陣用）
         v["noRecipient"] = _no_recipient(mt.get(v["key"]))
         v["version"] = _version_of(_state_of(v["key"], o, sw))
     for c in cal_only:

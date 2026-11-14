@@ -89,3 +89,25 @@ def test_matrix_layers_sit_above_the_users_modal():
     m3 = re.search(r"\.modal-overlay\s*\{[^}]*?z-index:\s*(\d+)", page, re.S)
     assert m1 and m2 and m3
     assert int(m1.group(1)) > int(m3.group(1)) and int(m2.group(1)) > int(m1.group(1))
+
+
+def test_low_risk_rule_lives_only_on_the_server():
+    """新增帳號走 /api/mail-types、編輯帳號走 /receivable：兩條都由伺服器給 lowRisk；前端不再自己用 category 推一次。"""
+    assert "category === 'business'" not in _page() and "category === 'business'" not in _mixin()
+    assert "t.lowRisk === true" in _mixin()
+
+
+def test_list_mail_types_carries_low_risk(client, make_user):
+    sa = make_user(username="t86_sa_lr", role="superadmin")
+    items = client.get("/api/mail-types", headers=_h(client, sa)).json()["items"]
+    assert items and all(i["lowRisk"] == (i["category"] == "business") for i in items)
+
+
+def test_toolbar_is_not_sticky_and_batch_bar_clears_the_modal_footer_on_this_page():
+    page = _page()
+    assert re.search(r"#up-email-box\s+\.mx-sticky\s*\{\s*position:\s*static", page), "彈窗捲動區裡黏在頁面頂端下方的工具列會浮在列上"
+    assert re.search(r"max-width:\s*900px\)\s*\{\s*#up-email-box\s+\.mx-batch\s*\{\s*bottom:\s*(\d+)px", page)
+
+
+def test_hint_does_not_name_a_button_that_a_new_account_does_not_have():
+    assert "按下方「儲存變更」" not in _page() and "按下方「儲存變更」" not in _mixin()

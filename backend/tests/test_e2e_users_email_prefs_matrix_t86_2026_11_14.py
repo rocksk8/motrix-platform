@@ -93,7 +93,7 @@ def test_batch_off_then_undo_this_batch(live_server, client, make_user, new_page
     assert len(low) == 2
     page = _open(live_server, new_page, login_as, sa, uid)
     for k in low:
-        page.locator("[data-testid='mx-row-%s'] input[type=checkbox]" % k).check()
+        page.locator("input[data-mx=sel][data-key='%s']" % k).locator("visible=true").check()
     page.locator("[data-testid=mx-batch-off]").click()
     expect(page.locator("[data-testid=mx-toast-text]")).to_contain_text("2 項")
     assert sorted(_muted_in_form(page)) == sorted(low)
@@ -110,7 +110,7 @@ def test_undo_is_refused_when_the_batch_was_touched_afterwards(live_server, clie
     low = [i["key"] for i in items if i["receivable"] and i["lowRisk"]][:2]
     page = _open(live_server, new_page, login_as, sa, uid)
     for k in low:
-        page.locator("[data-testid='mx-row-%s'] input[type=checkbox]" % k).check()
+        page.locator("input[data-mx=sel][data-key='%s']" % k).locator("visible=true").check()
     page.locator("[data-testid=mx-batch-off]").click()
     undo = page.locator("[data-testid=mx-undo]")
     undo.wait_for(state="visible", timeout=10000)
@@ -144,3 +144,36 @@ def test_phone_width_has_no_horizontal_scroll(live_server, client, make_user, ne
     uid, _items_ = _items(client, sa, "t86e_u6")
     page = _open(live_server, new_page, login_as, sa, uid, width=375)
     assert page.evaluate("() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+
+
+def _footer_save_is_reachable(page):
+    return page.evaluate("""() => {
+        const b = [...document.querySelectorAll('.modal-foot .btn-primary')].find(x => x.offsetParent);
+        const r = b.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return b === el || b.contains(el);
+    }""")
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width", [390, 1440])
+def test_batch_bar_does_not_cover_the_modal_save_button(live_server, client, make_user, new_page, login_as, width):
+    sa = make_user(username="t86e_sa7_%d" % width, role="superadmin")
+    make_user(username="t86e_u7_%d" % width, role="admin")
+    uid, items = _items(client, sa, "t86e_u7_%d" % width)
+    low = [i["key"] for i in items if i["receivable"] and i["lowRisk"]][:2]
+    page = _open(live_server, new_page, login_as, sa, uid, width=width)
+    for k in low:
+        page.locator("input[data-mx=sel][data-key='%s']" % k).locator("visible=true").check()
+    page.locator("[data-testid=mx-batch-off]").wait_for(state="visible", timeout=10000)
+    page.evaluate("() => document.querySelector('.modal-foot .btn-primary').scrollIntoView({block: 'end'})")
+    assert _footer_save_is_reachable(page), "選了列之後，批次動作列蓋住「儲存變更」"
+
+
+@pytest.mark.e2e
+def test_toolbar_does_not_float_over_rows_in_the_modal(live_server, client, make_user, new_page, login_as):
+    sa = make_user(username="t86e_sa8", role="superadmin")
+    make_user(username="t86e_u8", role="admin")
+    uid, _items_ = _items(client, sa, "t86e_u8")
+    page = _open(live_server, new_page, login_as, sa, uid, width=1440)
+    assert page.evaluate("() => getComputedStyle(document.querySelector('#up-email-box .mx-sticky')).position") == "static"
