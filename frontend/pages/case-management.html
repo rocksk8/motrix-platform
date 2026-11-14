@@ -124,7 +124,7 @@
                 <th class="cm-gate-h"><span x-text="g.label" style="font-weight:700;font-size:12px;letter-spacing:.06em;display:block"></span><span x-text="g.hint"></span></th>
               </template>
               <th style="border-left:1px solid var(--border-light)">下一到期</th>
-              <th style="text-align:right">結案</th>
+              <th style="text-align:right;min-width:128px">結案</th>
             </tr>
           </thead>
           <tbody>
@@ -169,6 +169,7 @@
                 <td style="text-align:right">
                   <span class="cm-mtx__ready"
                         :style="row.canClose ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        :title="readyTitle(row)"
                         x-text="readyText(row)"></span>
                 </td>
               </tr>
@@ -213,8 +214,8 @@
           </div>
           <div class="cm-list__search">
             <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input class="cm-list__search-input" type="text" placeholder="搜尋單號或客戶…"
-                   x-model="search" @input="onCaseSearchInput()">
+            <input class="cm-list__search-input" type="text" placeholder="搜尋單號、客戶或專案…"
+                   x-model="search" @input="onCaseSearchInput($event)" @compositionend="onCaseSearchInput()">
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px" x-show="caseViewMode==='list'">
             <select class="cm-list__search-input" style="width:auto;flex:1;padding-left:10px;cursor:pointer"
@@ -257,11 +258,11 @@
               已成案
               <span class="cm-list__tab-badge" x-show="summaryWon()" x-text="summaryWon()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="setListTab('已結案')">
+            <button class="cm-list__tab" :class="{active: listTab==='已結案', 'cm-list__tab--zero': caseCounts && !summaryClosed() && listTab!=='已結案'}" @click="setListTab('已結案')">
               已結案
               <span class="cm-list__tab-badge" x-show="summaryClosed()" x-text="summaryClosed()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='待精算'}" @click="setListTab('待精算')">
+            <button class="cm-list__tab" :class="{active: listTab==='待精算', 'cm-list__tab--zero': caseCounts && !summarySettling() && listTab!=='待精算'}" @click="setListTab('待精算')">
               待精算
               <span class="cm-list__tab-badge orange" x-show="summarySettling()" x-text="summarySettling()"></span>
             </button>
@@ -376,7 +377,9 @@
                 <span class="cm-card__unread-tag" data-testid="case-missing-doc"
                       style="background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)" x-text="t"></span>
               </template>
-              <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')" x-text="c.customer_name || '(未填客戶)'"></div>
+              <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')"><template x-for="(p, i) in hlParts(c.customer_name || '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
+              <!-- T86 案件UX #2：搜尋會比對專案名稱，卡片就要看得到專案名稱（與客戶同名時不重複）；命中字樣標底色 -->
+              <div class="cm-card__project" data-testid="cm-card-project" x-show="lShown('customer') && c.project_name && c.project_name !== c.customer_name" :style="lo('customer')" :title="c.project_name"><template x-for="(p, i) in hlParts(c.project_name || '')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
               <div class="cm-card__sales" x-show="salesOwnerName(c) && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + salesOwnerName(c)"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
@@ -404,15 +407,13 @@
              同一份 .cm-card 樣式，點擊行為跟清單模式完全一致 -->
         <div class="cm-list__body" x-show="caseViewMode==='board'">
           <template x-for="col in boardColumns()" :key="col.key">
-            <div class="cm-board-group">
+            <div class="cm-board-group" :class="{'cm-board-group--empty': col.items.length === 0}">
               <div class="cm-board-group__head">
                 <span class="cm-board-group__dot" :style="'background:' + col.dot"></span>
                 <span class="cm-board-group__title" x-text="col.label"></span>
                 <span class="cm-board-group__count" x-text="col.items.length"></span>
               </div>
-              <template x-if="col.items.length === 0">
-                <div class="cm-board-group__empty">（沒有案件）</div>
-              </template>
+              <!-- T86 案件UX #14：沒有案件的分組只留一行淡色標題與 0，不再佔一列「（沒有案件）」 -->
               <template x-for="c in col.items" :key="c.quote_no">
                 <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
                      :style="isUnread(c) ? 'border-left-color:var(--tone-warning-solid)' : ''"
@@ -427,7 +428,8 @@
                   <template x-if="isUnread(c)">
                     <span class="cm-card__unread-tag">有新動態</span>
                   </template>
-                  <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
+                  <div class="cm-card__customer"><template x-for="(p, i) in hlParts(c.customer_name || '(未填客戶)')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
+                  <div class="cm-card__project" data-testid="cm-card-project" x-show="c.project_name && c.project_name !== c.customer_name" :title="c.project_name"><template x-for="(p, i) in hlParts(c.project_name || '')" :key="i"><span :class="{'cm-hl': p.hit}" x-text="p.t"></span></template></div>
                   <div class="cm-card__footer">
                     <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
                       <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + MotrixFormat.num((c.total||0))"></span>
@@ -673,7 +675,7 @@
               <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
                    精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
               <a class="cm-tab-link" x-show="canSeeFinancial()" :style="tTail()" data-testid="cm-tab-settlement"
-                 :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
+                 :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'">精算 ▶</a>
             </div>
 
             <!-- Tab content -->
@@ -692,9 +694,16 @@
                                 :title="g.reason || ''"
                                 style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border-light);border-radius:6px;background:none;cursor:pointer;font-size:12px;font-family:var(--font-zh)">
                           <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
-                          <span x-text="g.label"></span>
+                          <span x-text="g.label + (settleGateLinks(g) ? ' ▶' : '')"></span>
                           <span style="color:var(--text-secondary)" x-text="g.value"></span>
                         </button>
+                      </template>
+                      <!-- T86 案件UX #1：結案入口放在五關旁（原本只藏在標頭「更多」選單）；只有最高管理者能結案，其他人看到說明 -->
+                      <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
+                        <button type="button" class="btn-close-case" data-testid="case-close-entry" style="margin-left:auto" @click="closeCaseAction()">結案</button>
+                      </template>
+                      <template x-if="cr.dealTag === '已成案' && session.role !== 'superadmin'">
+                        <span data-testid="case-close-hint" style="margin-left:auto;font-size:12px;color:var(--text-dim);align-self:center">結案由最高管理者執行</span>
                       </template>
                     </div>
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
@@ -2934,7 +2943,7 @@
                       <span x-show="closingReportDownloading">產生中…</span>
                     </button>
                   </template>
-                  <a :href="'settlement.html?no=' + (selected?.quote_no||'')"
+                  <a :href="'settlement.html?no=' + (selected?.quote_no||'') + '&from=case'"
                      :style="cr.dealTag==='已結案' ? '' : 'margin-left:auto'"
                      style="font-size:12px;padding:5px 12px;background:var(--tone-info-bg);color:var(--tone-info-fg);border:1px solid var(--tone-info-border);border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
                     前往精算頁面 ▶
@@ -4174,6 +4183,12 @@
               style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:12px 18px">
+      <!-- T86 案件UX #1：先把缺漏列在最上面（原因來自下方五關），再逐關看細節與「前往」 -->
+      <div data-testid="close-gaps" x-show="closeGapLines().length"
+           style="border:1px solid var(--tone-warning-border);background:var(--tone-warning-bg);color:var(--tone-warning-fg);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px">
+        <div style="font-weight:700;margin-bottom:2px" x-text="'結案前還缺 ' + closeGapLines().length + ' 項'"></div>
+        <template x-for="ln in closeGapLines()" :key="ln"><div x-text="'・' + ln"></div></template>
+      </div>
       <template x-for="g in closeCheck.gates" :key="g.key">
         <div :data-gate-label="g.label"
              style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-light)">
@@ -4189,7 +4204,7 @@
                  x-text="'待簽核人：' + (g.pendingApprovers || []).map(a => a.displayName).join('、')"></div>
           </div>
           <button type="button" data-testid="gate-goto" x-show="g.state === 'blocked'" @click="closeCheckGoto(g)"
-                  class="btn btn-ghost btn-sm" style="flex-shrink:0">前往</button>
+                  class="btn btn-ghost btn-sm" style="flex-shrink:0" x-text="settleGateLinks(g) ? '前往精算頁' : '前往'">前往</button>
         </div>
       </template>
       <div style="font-size:12px;margin-top:10px"
@@ -5176,7 +5191,7 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
       // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format'], { token: s.token })
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format', 'list_view'], { token: s.token })
       if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
@@ -5196,7 +5211,11 @@ window.CM_PARTS.push(() => ({
       // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
       if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
           && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
-      if (!g.builder_layout || g.builder_layout.case_management !== true) return
+      // T86 案件UX #8：沒開自訂版面時也要套用「合併已成案頁籤」（公司層設定，預設合併）；個人檢視偏好仍要版面開啟才有
+      if (!g.builder_layout || g.builder_layout.case_management !== true) {
+        this.lvOn = { ...this.lvOn, mergeWon: ((g.list_view || {}).cases_merge_won_tab) !== 0 }
+        return
+      }
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
         st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}.cm-biz-lo{display:flex;flex-direction:column}'

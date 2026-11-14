@@ -40,7 +40,7 @@ router = APIRouter()
 #: 守門：test_bootstrap_bundle::test_setup_gate_allowed_sections_match_main
 SETUP_GATE_OK = frozenset({"me", "menu", "branding", "totp"})
 #: 案件頁讀「版面/自訂欄位/規則…」那一支的群組清單（＝ case-management.html 傳給 MotrixPublicFlags.read 的順序；守門：test_bootstrap_page_case 比對前端字串）
-CASE_BUILDER_GROUPS = ("builder_layout", "builder_custom_fields", "builder_rules", "builder_slots", "builder_status_display", "builder_stage_templates", "ui_format")
+CASE_BUILDER_GROUPS = ("builder_layout", "builder_custom_fields", "builder_rules", "builder_slots", "builder_status_display", "builder_stage_templates", "ui_format", "list_view")
 #: 區段 → 原端點路徑（守門與文件用）
 ORIGINAL_PATH = {
     "me": "/api/auth/me",

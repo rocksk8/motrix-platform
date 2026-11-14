@@ -9,6 +9,10 @@
 - 已知限制：`tools/charity_migrate.py` 的前置檢查（`_prereq`）仍讀舊的管銷鍵（`overhead_rule_mode`／`overhead_migration_done`）；目前只因為「有定義時 `--set-total` 一律被拒」才不會出錯——日後若放寬該拒絕，必須先把 `_prereq` 改成讀登錄表生效值。
 - 測試：`tests/platform/test_settings_external_s5.py`；既有 PUT 後立刻讀的測試改為 `tests/_settings_activate.activate_now()`（只給測試用）。
 
+## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
+- 行為變更：設定 `list_view.cases_merge_won_tab` 預設 0→1（案件清單預設把「已成案」併進全部；已存過值的公司不受影響，只有從未儲存過這組設定的公司會改變）。L1 介面不變；部署基準（settings_deploy_baseline）與種子 CSV 同步。
+- 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
+
 ## (next) — 2026-11-14（feat/duty-roles-matrix-t86；T86 職責角色權限矩陣）
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.duty_roles.update_role` 新增關鍵字參數 `commit=True`（預設行為不變；批次套用傳 `False`，由呼叫端在同一個交易統一 commit）。
 - L1（新增端點，皆僅最高管理者）：`POST /api/duty-roles/matrix/preview`（唯讀預覽，回每個角色實際多／少哪些權限、影響成員數、是否需原因、`planHash`）、`POST /api/duty-roles/matrix/apply`（必帶 `planHash`；同一個寫入交易、逐角色走 `update_role`，共用高敏感原因檢查點，寫 `permission_changes`＋`audit_log`）、`POST /api/duty-roles/matrix/undo`（復原這一批；逐角色 compare-and-set，被他人改過的角色只拒絕該筆並說明）。邏輯在新檔 `helpers/duty_role_matrix.py`（L1 新增公開介面：`preview`／`apply`／`undo`／`parse_request`、常數 `MAX_ROLES`／`UNDO_DEFAULT_REASON`）。
