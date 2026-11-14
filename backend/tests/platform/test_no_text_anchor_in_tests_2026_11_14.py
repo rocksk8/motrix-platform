@@ -108,7 +108,7 @@ def test_syntax_error_file_is_not_this_guards_business():
 
 def test_scan_scope_includes_conftest_and_non_test_helpers():
     got = T.test_files(["backend/tests/conftest.py", "backend/tests/_helper.py", "backend/modules/case/tests/test_x.py",
-                        "backend/modules/case/api/quotes.py", "backend/helpers/x.py", "frontend/pages/x.html"])
+                        "backend/modules/case/api/quotes.py", "backend/helpers/x.py", "frontend/views/x.html"])
     assert got == ["backend/modules/case/tests/test_x.py", "backend/tests/_helper.py", "backend/tests/conftest.py"]
 
 

@@ -50,6 +50,6 @@ def test_default_merges_won_tab_but_keeps_the_markup_and_the_same_queries():
 
 def test_personal_choices_stay_inside_the_displayed_tabs_and_fixed_sizes():
     assert "get lvTabs() { return this.lvOn.mergeWon ? ['all', '已結案', '待精算'] : ['all', '已成案', '已結案', '待精算'] }" in LIST
-    assert "LV.sanitize(await LV.load(tk, 'case_list.view'), { tabs: this.lvTabs })" in LIST
+    assert "const loaded = await LV.load(tk, 'case_list.view')" in LIST and "LV.sanitize(loaded, { tabs: this.lvTabs })" in LIST
     assert "this.lvOn.mergeWon && this.listTab === '已成案'" in LIST                      # 合併後停在已成案的人退回進行中
     assert "case_list.view" in LIST and "/api/list-prefs" not in LIST

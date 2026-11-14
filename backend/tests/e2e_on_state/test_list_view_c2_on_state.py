@@ -99,7 +99,6 @@ def test_c2_failed_save_does_not_change_the_page_and_says_so(live_server, make_u
 def test_c2_panel_is_not_offered_until_saved_prefs_are_loaded(live_server, make_user, new_context):
     """T87 c2 偶發紅燈的根因：旗標讀到就顯示面板、但個人偏好還在讀 ⇒ 使用者（或測試）在這段空窗改的值，會被稍後讀回的偏好整個蓋掉。
     決定式重現：把偏好的 GET 拖慢 2 秒——這段時間面板入口不可見；讀回之後改的值照樣存得進去。"""
-    import time
     u = make_user(username="on_lc3", role="superadmin")
     ctx = new_context()
     tk = token_of(ctx, live_server, u)
@@ -110,7 +109,7 @@ def test_c2_panel_is_not_offered_until_saved_prefs_are_loaded(live_server, make_
 
     def slow_get(route):
         if route.request.method == "GET":
-            time.sleep(2)
+            page.wait_for_timeout(2000)          # 會讓出事件迴圈（不是 time.sleep：那會卡住整頁其他請求，不只這一個 GET）
         route.continue_()
 
     page.route("**/api/list-prefs/case_list.view", slow_get)
@@ -125,3 +124,39 @@ def test_c2_panel_is_not_offered_until_saved_prefs_are_loaded(live_server, make_
         page.get_by_test_id("lv-save").click()
     assert put.value.ok
     page.wait_for_function("() => %s.casePageSize === 25" % DATA_JS, timeout=15000)
+
+
+def test_c2_prefs_read_failure_never_offers_the_panel_so_no_save_can_wipe_stored_prefs(live_server, make_user, new_context):
+    """h11 F1：偏好 GET 一直失敗（500）時，入口與面板都不能出現、也不會有任何 PUT——否則使用者用預設值當底改一項存檔，
+    會把伺服器上已存的偏好整個蓋成預設。畫面照公司預設顯示，並明講讀取失敗。"""
+    u = make_user(username="on_lc4", role="superadmin")
+    ctx = new_context()
+    tk = token_of(ctx, live_server, u)
+    seed_case("MQ-ONLC-004")
+    set_flag(ctx, live_server, tk, "builder_layout", "case_management", 1)
+    set_flag(ctx, live_server, tk, "list_view", "cases_personal_page_size", 1, as_int=True)
+    page = ctx.new_page()
+    puts = []
+    page.on("request", lambda r: puts.append(r.url) if r.method == "PUT" and "/api/list-prefs/" in r.url else None)
+    page.route("**/api/list-prefs/case_list.view", lambda route: route.fulfill(status=500, body="{}") if route.request.method == "GET" else route.continue_())
+    _open(page, live_server, u)
+    page.get_by_text("個人檢視設定讀取失敗").wait_for(state="visible", timeout=20000)          # 重試 2 次（約 1.2 s）後才提示
+    assert page.evaluate("() => %s.lvReady" % DATA_JS) is False
+    assert not page.get_by_test_id("lv-toggle").is_visible() and not page.get_by_test_id("lv-panel").is_visible()
+    assert page.evaluate("() => %s.casePageSize" % DATA_JS) == 100, "照公司預設顯示"
+    assert puts == [], "沒有讀到偏好就不可能存檔"
+
+
+def test_quotations_page_shows_the_flags_failed_notice_without_ui_js(live_server, make_user, new_context):
+    """h5／PM：報價單清單頁沒載入 ui.js——公開設定讀不到（5xx）時，備援提示節點（role=alert）要看得到；頁面本身照常載入。"""
+    u = make_user(username="on_lc5", role="superadmin")
+    ctx = new_context()
+    token_of(ctx, live_server, u)
+    page = ctx.new_page()
+    page.route("**/api/settings-center/public*", lambda route: route.fulfill(status=503, body="{}"))
+    inject_login(page, live_server, u[0], u[1])
+    page.goto(live_server + "/pages/quotations.html")
+    notice = page.get_by_test_id("flags-failed-notice")
+    notice.wait_for(state="visible", timeout=30000)
+    assert notice.get_attribute("role") == "alert" and "讀取失敗" in notice.inner_text()
+    assert page.get_by_test_id("flags-failed-notice").count() == 1, "只提示一次"

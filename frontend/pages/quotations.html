@@ -379,8 +379,8 @@
         </div>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="action-btn action-btn--primary" data-testid="lv-save" @click="lvSave(false)">儲存</button>
-        <button class="action-btn action-btn--ghost" @click="lvSave(true)">還原預設</button>
+        <button class="action-btn action-btn--primary" data-testid="lv-save" :disabled="lvSaving" @click="lvSave(false)">儲存</button>
+        <button class="action-btn action-btn--ghost" :disabled="lvSaving" @click="lvSave(true)">還原預設</button>
       </div>
     </div>
 
@@ -1241,7 +1241,7 @@
       // ═══ T65 C1：清單檢視的個人偏好（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）═══
       lvOn: { columns: false, tab: false, size: false },
       pv: { hidden: [], order: ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'next', 'date'], tab: '', size: 0 },
-      lvReady: false, lvOpen: false, pvPage: 0, _restoredTab: false, _stopOrder: null,
+      lvReady: false, lvSaving: false, lvOpen: false, pvPage: 0, _restoredTab: false, _stopOrder: null,
       LV_LABELS: { quoteNo: '報價單號', customer: '客戶名稱', project: '案件名稱', amount: '金額（含稅）', margin: '毛利率', validDays: '有效天數', filler: '填單人', status: '狀態', dealTag: '案件進度', next: '下一步', date: '報價日期' },
       get lvAny() { return this.lvOn.columns || this.lvOn.tab || this.lvOn.size },
       get pageSize() { return (this.lvOn.size && this.sortPref.sortMode !== 'custom' && [25, 50, 100, 200].includes(this.pv.size)) ? this.pv.size : 0 },
@@ -1263,11 +1263,15 @@
         this.pv = { ...this.pv, hidden: h }
       },
       async lvSave(reset) {
+        if (this.lvSaving) return                     // 存檔進行中：連按兩次不送兩個 PUT
+        this.lvSaving = true
+        try { await this._lvSave(reset) } finally { this.lvSaving = false }
+      },
+      async _lvSave(reset) {
         const LV = window.MotrixListView
-        const prev = this.pv
         const next = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.tabs.map(t => t.key) })
         const ok = await LV.save(this.session.token, 'quotations.view', next)
-        if (!ok) { this.pv = prev; this.toast('儲存失敗，設定沒有改變；請稍後再按一次儲存', '#DC2626'); return }       // 伺服器沒存成功就不改畫面（筆數／欄位不能和伺服器不一致）
+        if (!ok) { this.toast('儲存失敗，設定沒有改變；請稍後再按一次儲存', '#DC2626'); return }       // 伺服器沒存成功就不改畫面（筆數／欄位不能和伺服器不一致）
         this.pv = next
         this.pvPage = 0
         this.toast(reset ? '已還原預設檢視' : '已儲存檢視設定', '#15803D')
@@ -1279,7 +1283,12 @@
         if (!this.lvAny) return
         await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '../static/list-view-prefs.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc) })
         const LV = window.MotrixListView
-        this.pv = LV.sanitize(await LV.load(tk, 'quotations.view'), { tabs: this.tabs.map(t => t.key) })
+        const loaded = await LV.load(tk, 'quotations.view')
+        if (!loaded) {                                // 讀不到個人偏好（不是「沒有偏好」：沒有列時伺服器回 200＋預設）：不開放編輯，否則存檔會把已存的偏好蓋成預設
+          this.toast('個人檢視設定讀取失敗，先以公司預設顯示；請重新整理頁面', '#DC2626')
+          return
+        }
+        this.pv = LV.sanitize(loaded, { tabs: this.tabs.map(t => t.key) })
         this.lvReady = true
         if (this.lvOn.tab && this.pv.tab && this.activeTab === 'all' && !this._restoredTab) this.activeTab = this.pv.tab
         if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter', 'focus', 'onlyMine'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
@@ -1371,7 +1380,6 @@
   <script src="../static/status-chip.js"></script>
   <script src="../js/status-display-editor.js"></script>
   <script src="../static/sidebar.js"></script>
-  <script src="../static/public-flags.js"></script>
   <script src="../static/custom-layout.js"></script>
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>

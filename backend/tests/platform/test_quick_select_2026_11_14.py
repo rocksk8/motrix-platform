@@ -23,9 +23,9 @@ CFG = [
 TREE = ["backend/tests/platform/test_changelog.py", "backend/tests/test_wide.py", "backend/tests/test_big_1.py", "backend/tests/test_big_2.py",
         "backend/tests/test_old_wording.py", "backend/tests/test_pattern_guard.py", "backend/tests/test_own.py", "backend/tests/test_changed.py"]
 
-DIFF = """diff --git a/frontend/pages/x.html b/frontend/pages/x.html
---- a/frontend/pages/x.html
-+++ b/frontend/pages/x.html
+DIFF = """diff --git a/frontend/views/x.html b/frontend/views/x.html
+--- a/frontend/views/x.html
++++ b/frontend/views/x.html
 @@ -1,2 +1,2 @@
 -<span>您尚無待簽核的單據</span>
 -<span>仍然存在的字面值文字</span>
@@ -46,7 +46,7 @@ def _groups():
 
 def _plan(grep_map, *, changed=None, budget_s=10_000, a2=None, a4=None, t4=None, sec=lambda f: 10.0):
     grep = lambda tok: list(grep_map.get(tok, []))      # noqa: E731
-    return Q.plan_quick(changed=changed or ["frontend/pages/x.html"], diff_text=DIFF, tree_files=TREE, a2=a2 or [], a4=a4 or [],
+    return Q.plan_quick(changed=changed or ["frontend/views/x.html"], diff_text=DIFF, tree_files=TREE, a2=a2 or [], a4=a4 or [],
                         extra_t4=t4 or [], repo=".", ref=None, seconds_fn=sec, workers=1, budget_s=budget_s, groups=_groups(), grep_fn=grep)
 
 
@@ -72,7 +72,7 @@ def test_narrow_watch_matches_sort_before_wide_ones():
 
 
 def test_heavy_groups_are_reported_as_not_run_never_silently_dropped():
-    plan = _plan({}, changed=["frontend/pages/x.html"])
+    plan = _plan({}, changed=["frontend/views/x.html"])
     assert any(s["tier"] == "T1" and "static_scans2" in s["item"] and "太大" in s["reason"] for s in plan["skipped"]), plan["skipped"]
     assert "backend/tests/test_big_1.py" not in plan["files"]
 
@@ -124,7 +124,7 @@ def test_literal_hits_become_t2_and_generic_literals_are_noted_not_selected():
 
 def test_tiers_are_ordered_and_a_file_belongs_to_its_first_tier_only():
     plan = _plan({"您尚無待簽核的單據": ["backend/tests/test_old_wording.py", "backend/tests/test_changed.py"]},
-                 changed=["backend/modules/case/CHANGELOG.md", "frontend/pages/x.html"],
+                 changed=["backend/modules/case/CHANGELOG.md", "frontend/views/x.html"],
                  a2=["backend/tests/test_pattern_guard.py", "backend/tests/test_wide.py"], a4=["backend/tests/test_changed.py"],
                  t4=["backend/tests/test_own.py", "backend/tests/test_old_wording.py"])
     t = plan["tiers"]
@@ -159,7 +159,7 @@ def test_format_plan_says_not_run_when_something_was_cut():
 
 
 def test_reference_keys_use_page_js_and_tool_names_but_skip_generic_ones():
-    keys = Q.reference_keys(["frontend/pages/settlement.html", "frontend/static/sidebar.js", "frontend/index.html", "tools/platform/core_major_bump.py",
+    keys = Q.reference_keys(["frontend/views/settlement.html", "frontend/static/sidebar.js", "frontend/index.html", "tools/platform/core_major_bump.py",
                              "backend/tests/test_x.py", "backend/modules/case/api/quotes.py"])
     assert keys == ["core_major_bump", "settlement.html", "sidebar.js"]
 
@@ -167,7 +167,7 @@ def test_reference_keys_use_page_js_and_tool_names_but_skip_generic_ones():
 # ── 反向探針（測試字面值 ⊂ 被刪文字）與 quick 專用觸發組 ─────────────────────────
 
 def test_test_tokens_catch_a_test_that_asserts_a_substring_of_the_removed_source_text():
-    d = ("diff --git a/frontend/pages/y.html b/frontend/pages/y.html\n--- a/frontend/pages/y.html\n+++ b/frontend/pages/y.html\n@@ -1 +1 @@\n"
+    d = ("diff --git a/frontend/views/y.html b/frontend/views/y.html\n--- a/frontend/views/y.html\n+++ b/frontend/views/y.html\n@@ -1 +1 @@\n"
          "-<p>您沒有任何變動可儲存</p>\n+<p>目前沒有可儲存的內容</p>\n")
     lits = Q.diff_literals(d, {"沒有任何變動", "完全無關的字面值", "目前沒有可儲存的內容"})
     assert "沒有任何變動" in lits, "測試只斷言來源整句的一小段：只拿整句去 grep 會漏（T86 c03909aa6 的主要型態）"
@@ -216,19 +216,19 @@ def test_m1_generic_literal_selects_the_narrowest_subset_and_lists_the_rest_as_n
 
 def test_m1_truncated_literals_and_unavailable_reverse_probe_are_listed_as_not_run(monkeypatch):
     many = ["    x = '字面值第%03d個舊文案'" % i for i in range(Q.MAX_LITERALS + 5)]
-    diff = _file_diff("frontend/pages/z.html", [m.strip() for m in many], [])
-    plan = Q.plan_quick(changed=["frontend/pages/z.html"], diff_text=diff, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=".", ref=None,
+    diff = _file_diff("frontend/views/z.html", [m.strip() for m in many], [])
+    plan = Q.plan_quick(changed=["frontend/views/z.html"], diff_text=diff, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=".", ref=None,
                         seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(), grep_fn=lambda tok: [])
     assert any(s["tier"] == "T2" and "截斷" in s["reason"] and "未跑" in s["reason"] for s in plan["skipped"]), plan["skipped"]
     monkeypatch.setattr(Q, "load_test_tokens", lambda repo, ref=None: None)
-    plan2 = Q.plan_quick(changed=["frontend/pages/x.html"], diff_text=DIFF, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=str(REPO), ref=None,
+    plan2 = Q.plan_quick(changed=["frontend/views/x.html"], diff_text=DIFF, tree_files=TREE, a2=[], a4=[], extra_t4=[], repo=str(REPO), ref=None,
                          seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=_groups(), grep_fn=None)
     assert any("反向探針" in s["item"] and "未跑" in s["reason"] for s in plan2["skipped"]), plan2["skipped"]
 
 
 def test_m3_deleted_or_renamed_paths_trigger_groups_and_name_references_but_never_reach_pytest():
     groups = _groups()
-    plan = Q.plan_quick(changed=[], deleted=["backend/modules/case/CHANGELOG.md", "frontend/pages/old_page.html"], diff_text="", tree_files=TREE, a2=[], a4=[],
+    plan = Q.plan_quick(changed=[], deleted=["backend/modules/case/CHANGELOG.md", "frontend/views/old_page.html"], diff_text="", tree_files=TREE, a2=[], a4=[],
                         extra_t4=[], repo=".", ref=None, seconds_fn=lambda f: 1.0, workers=1, budget_s=10_000, groups=groups,
                         grep_fn=lambda tok: ["backend/tests/test_old_wording.py"] if tok == "old_page.html" else [])
     assert "backend/tests/platform/test_changelog.py" in plan["tiers"]["T1"]["files"], "刪掉的檔的舊路徑也要觸發守門組"
@@ -237,10 +237,10 @@ def test_m3_deleted_or_renamed_paths_trigger_groups_and_name_references_but_neve
 
 
 def test_s1_removed_literal_that_reappears_in_another_file_still_counts_for_the_file_it_left():
-    d = (_file_diff("frontend/pages/a.html", ["<p>這是被搬走的舊文案</p>"], []) +
-         _file_diff("frontend/pages/b.html", [], ["<p>這是被搬走的舊文案</p>"]))
+    d = (_file_diff("frontend/views/a.html", ["<p>這是被搬走的舊文案</p>"], []) +
+         _file_diff("frontend/views/b.html", [], ["<p>這是被搬走的舊文案</p>"]))
     assert "這是被搬走的舊文案" in Q.diff_literals(d), "同一個字出現在別的檔的新增行，不代表原本那個檔還有它"
-    same = _file_diff("frontend/pages/a.html", ["<p>這是留在原檔的舊文案</p>"], ["<p>這是留在原檔的舊文案</p>"])
+    same = _file_diff("frontend/views/a.html", ["<p>這是留在原檔的舊文案</p>"], ["<p>這是留在原檔的舊文案</p>"])
     assert Q.diff_literals(same) == []
 
 

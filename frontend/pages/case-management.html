@@ -246,8 +246,8 @@
                 <template x-for="n in [25, 50, 100, 200]" :key="n"><option :value="n" x-text="n + ' 件'"></option></template>
               </select>
             </label>
-            <button type="button" class="aq-sort" data-testid="lv-save" @click="lvSave(false)">儲存</button>
-            <button type="button" class="aq-sort" style="margin-left:4px" @click="lvSave(true)">還原預設</button>
+            <button type="button" class="aq-sort" data-testid="lv-save" :disabled="lvSaving" @click="lvSave(false)">儲存</button>
+            <button type="button" class="aq-sort" style="margin-left:4px" :disabled="lvSaving" @click="lvSave(true)">還原預設</button>
           </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
             <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="setListTab('all')">

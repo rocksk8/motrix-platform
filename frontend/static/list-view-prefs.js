@@ -39,12 +39,28 @@
     return { sortMode: 'view', sortDir: 'desc', customOrder: ['hide=' + o.hidden.join(','), 'order=' + o.order.join(','), 'tab=' + (o.tab || ''), 'size=' + (o.size || 0)] }
   }
 
+  /** ⇒ 偏好物件；**讀取失敗 ⇒ null**（T87，h11 F1）。伺服器沒有這個人的列時 GET 回 200＋預設值，所以非 2xx／斷線一定是故障、不是「新使用者」：
+   *  呼叫端不可拿預設值當成讀到的偏好開放編輯——使用者改一個欄位按存檔，會把他存過的其他偏好整個蓋成預設。
+   *  暫時性失敗（斷線／逾時／5xx／408／429）最多再試 2 次（0.4 s、0.8 s）；整體期限 10 s。 */
   async function load(token, key) {
-    try {
-      const r = await fetch('/api/list-prefs/' + encodeURIComponent(key), { headers: { Authorization: 'Bearer ' + token } })
-      if (r.ok) return parse(await r.json())
-    } catch (e) { /* 讀不到 ⇒ 預設 */ }
-    return empty()
+    const deadline = Date.now() + 10000
+    for (let i = 0; i <= 2; i++) {
+      let transient = true
+      try {
+        const left = Math.max(500, Math.min(8000, deadline - Date.now()))
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null
+        const timer = ctl ? setTimeout(() => ctl.abort(), left) : null
+        try {
+          const r = await fetch('/api/list-prefs/' + encodeURIComponent(key), Object.assign({ headers: { Authorization: 'Bearer ' + token } }, ctl ? { signal: ctl.signal } : {}))
+          if (r.ok) return parse(await r.json())
+          transient = r.status >= 500 || r.status === 408 || r.status === 429
+        } finally { if (timer) clearTimeout(timer) }
+      } catch (e) { /* 斷線／逾時／回應不是 JSON：當作暫時性 */ }
+      const wait = 400 * (i + 1)
+      if (!transient || i === 2 || Date.now() + wait >= deadline) break
+      await new Promise(res => setTimeout(res, wait))
+    }
+    return null
   }
 
   async function save(token, key, o) {
