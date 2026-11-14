@@ -213,7 +213,7 @@
           </div>
           <div x-show="mapInfo && !mapInfo.officeMissing && mapInfo.office"
                style="color:var(--text-secondary)">
-            辦公室：<span x-text="mapInfo.office.address"></span>
+            辦公室：<span x-text="mapInfo && mapInfo.office ? mapInfo.office.address : ''"></span>
           </div>
           <div x-show="mapInfo && !mapInfo.officeMissing && !mapInfo.office"
                style="color:var(--warning)">

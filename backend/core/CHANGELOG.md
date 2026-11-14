@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（fix/home-widgets-null-t86-h9；T86 空資料頁面不報 pageerror）
+- 修正（只改畫面）：通知設定頁 LINE 用量區塊在資料回來前 `quota` 是 null，開頁丟 3 個 pageerror（checked_at／percent／used）；改成空值安全，讀不到用量時顯示「尚無用量資料」。共用版面編輯器（`static/layout-editor.js`）載入前的 `work` 同型問題一併修。
+- 測試：新增 `tests/test_e2e_home_empty_no_pageerror_2026_11_14.py`（5 頁 0 pageerror＋讀不到用量的中性狀態）；`tests/test_e2e_line_binding_2026_11_11.py` 的 Channel secret 壞格式斷言改為前端先檢核的新訊息（U6 起不送請求）。
+
 ## (next) — 2026-11-14（feat/t86-usage-h1；T86 正式機用量優化 U4／U5／U7／U11）
 - 內部（無欄位／權限語意變更）：
   - **U11 Google 額度頁**：`GET /api/system/google-quota`（慢查詢 8～10 秒）的「地址數」那一半改走行程內快取（TTL 300 秒；過期先回舊值、背景單飛重算；不占用 DB 連線、不擋其他請求）；用量／額度／單價／剩餘照舊即時算。`helpers/geo.quota_calculator(use_cache=False)` 預設行為不變。
