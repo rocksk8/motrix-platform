@@ -227,15 +227,21 @@
     function save(list) {
       if (!lastPlan) return Promise.reject(new Error('請先預覽再儲存。'))
       return call('POST', '/api/duty-roles/matrix/apply', { changes: requestOf(list), reason: lastReason, planHash: lastPlan.planHash }).then(function (res) {
+        var why = lastReason
         lastReason = ''
-        return { res: res, message: '已儲存（' + res.applied.length + ' 個角色有變動）' }
+        return { res: res, reason: why, message: '已儲存（' + res.applied.length + ' 個角色有變動）' }
       })
+    }
+    // 復原動到的若是高敏感權限，伺服器同樣要求原因：沿用套用當時填的原因（記在 done.reason），前面加「復原：」讓變更紀錄看得出是復原。
+    function undoReason(done) {
+      var why = String((done && done.reason) || '').trim()
+      return why ? ('復原：' + why).slice(0, 200) : ''
     }
     function undoLast(done) {
       var r = done && done.res
       if (!r || !r.roles) return Promise.reject(new Error('找不到這一批的套用紀錄，無法復原。'))
       var changes = r.roles.filter(function (p) { return p.status === 'change' }).map(function (p) { return { roleId: p.roleId, adds: p.adds, removes: p.removes } })
-      return call('POST', '/api/duty-roles/matrix/undo', { changes: changes, reason: '' }).then(function (u) {
+      return call('POST', '/api/duty-roles/matrix/undo', { changes: changes, reason: undoReason(done) }).then(function (u) {
         if (u.conflicts && u.conflicts.length) {
           var why = u.conflicts.map(function (c) { return (c.name || ('#' + c.roleId)) + '：' + c.reason }).join('；')
           if (!u.applied.length) throw new Error('無法復原：' + why + '（為避免覆蓋其他使用者的修改，這些角色未做任何變更。）')

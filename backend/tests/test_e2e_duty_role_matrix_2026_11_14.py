@@ -101,10 +101,15 @@ def test_high_sensitive_needs_a_reason_and_undo_restores(live_server, make_user,
     assert "settings" in _perms(a)
     row = _q("SELECT high_sensitivity, reason FROM permission_changes WHERE target_type='role' AND target_id=? ORDER BY id DESC LIMIT 1", (a,))[0]
     assert row["high_sensitivity"] == 1 and row["reason"] == "核定新增系統設定權限"
-    # 復原這一批：還回高敏感鍵的取消也要原因；沒原因 ⇒ 說明並保持原狀
+    # 復原這一批：還回高敏感鍵的取消也要原因 ⇒ 沿用套用當時填的原因，一次就成功（F1：以前送空字串，一律 400）
     page.locator("[data-testid=mx-undo]").click()
-    expect(page.locator("[data-testid=mx-toast-text]")).to_contain_text("原因")
-    assert "settings" in _perms(a)
+    for _ in range(50):                                                       # 復原是非同步請求：輪詢資料庫落地值（最多 10 秒）
+        if "settings" not in _perms(a):
+            break
+        page.wait_for_timeout(200)
+    assert "settings" not in _perms(a), "復原應成功（沿用套用時的原因）"
+    row = _q("SELECT high_sensitivity, reason FROM permission_changes WHERE target_type='role' AND target_id=? ORDER BY id DESC LIMIT 1", (a,))[0]
+    assert row["high_sensitivity"] == 1 and row["reason"] == "復原：核定新增系統設定權限"
 
 
 @pytest.mark.e2e
