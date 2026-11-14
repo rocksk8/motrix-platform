@@ -10,6 +10,20 @@ sys.path.insert(0, str(REPO / "tools" / "platform"))
 import a1_drill_preflight as PF  # noqa: E402
 
 
+def _wait_until(pred, timeout=60.0, step=0.5):
+    import time
+    end = time.time() + timeout
+    while True:
+        v = pred()
+        if v or time.time() >= end:
+            return v
+        time.sleep(step)
+
+
+def _found(pid, base, start_ticks, port):
+    return pid in [o["id"] for o in PF.owned_processes([], base, start_ticks, ports=(port,))]
+
+
 def test_stop_drill_processes_runs_multiple_passes_shells_first(monkeypatch):
     """2026-11-14 演練：autostart 迴圈在被殺的瞬間重生 ERP，單輪收尾漏掉它 ⇒ 檔案被鎖、之後每個情境都還原失敗。
     ⇒ 多輪：每輪殼（cmd）先殺，殺完再查，查不到才停；已殺過的 pid 不重複殺。"""
@@ -46,9 +60,9 @@ def test_owned_processes_port_class_finds_orphan_uvicorn_without_drill_dir_in_cm
     p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "uvicorn", "main:app", "--port", str(port)],
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     try:
-        time.sleep(1.5)
         if p.pid < PF.MIN_KILL_PID:
             pytest.skip("pid 太小（硬性規則不殺）")
+        assert _wait_until(lambda: _found(p.pid, str(tmp_path / "no-such-drill"), 0, port)), "正對照：等了一分鐘還是找不到"
         with_port = [o["id"] for o in PF.owned_processes([], str(tmp_path / "no-such-drill"), 0, ports=(port,))]
         without = [o["id"] for o in PF.owned_processes([], str(tmp_path / "no-such-drill"), 0)]
         other_port = [o["id"] for o in PF.owned_processes([], str(tmp_path / "no-such-drill"), 0, ports=(port + 1,))]
@@ -65,7 +79,6 @@ def _spawn_port_uvicorn(port):
     import time
     p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "uvicorn", "main:app", "--port", str(port)],
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    time.sleep(1.5)
     return p
 
 
@@ -77,7 +90,7 @@ def test_owned_processes_spares_a_process_created_before_the_drill_started(tmp_p
         if p.pid < PF.MIN_KILL_PID:
             pytest.skip("pid 太小")
         base = str(tmp_path / "no-such-drill")
-        assert p.pid in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]          # 正對照：開始時間設得早 ⇒ 找得到
+        assert _wait_until(lambda: _found(p.pid, base, 0, port)), "正對照：開始時間設得早 ⇒ 應該找得到"
         future = PF.now_ticks() + 10 * 60 * 10_000_000                                              # 演練「十分鐘後才開始」
         assert p.pid not in [o["id"] for o in PF.owned_processes([], base, future, ports=(port,))]
     finally:
@@ -91,7 +104,7 @@ def test_owned_processes_spares_a_low_pid_process_that_is_not_in_the_records(tmp
     p = _spawn_port_uvicorn(port)
     try:
         base = str(tmp_path / "no-such-drill")
-        assert p.pid in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]          # 正對照：門檻正常 ⇒ 找得到
+        assert _wait_until(lambda: _found(p.pid, base, 0, port)), "正對照：門檻正常 ⇒ 應該找得到"
         monkeypatch.setattr(PF, "MIN_KILL_PID", p.pid + 1)
         assert p.pid not in [o["id"] for o in PF.owned_processes([], base, 0, ports=(port,))]
     finally:

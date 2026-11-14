@@ -134,6 +134,40 @@ def test_one_dirty_payment_item_does_not_break_the_whole_source(client, make_use
     assert len(rows) == 1
 
 
+def test_same_dirty_data_b1_and_custom_report_agree_on_total_and_row_count(client, make_user, world):
+    """T87 髒款項修：金額算不出來（"5x00"、或第 1 筆餘數被後面的壞筆汙染）的款項，B1 帳齡與自訂報表的應收明細都略過——合計與列數一致。"""
+    _case("AR-D1", "壞金額公司", [{"type": "訂金", "amount": "5x00", "received": False}, {"type": "尾款", "amount": 55000, "received": False}])
+    _case("AR-D2", "餘數公司", [{"type": "訂金", "received": False}, {"type": "尾款", "amount": "5x00", "received": False}], total=100000, pretax=100000)
+    _case("AR-D3", "壞比例公司", [{"type": "訂金", "received": False}, {"type": "二期", "pct": 30, "received": False},
+                                  {"type": "尾款", "pct": "20%", "received": False}], total=100000, pretax=100000)
+    _case("AR-D4", "已收壞金額公司", [{"type": "訂金", "amount": "zz", "received": True, "receivedAt": "2026-10-20"},
+                                      {"type": "尾款", "amount": 700, "received": False}], total=700, pretax=700)
+    sa = _login(client, make_user, "ar_sa_agree", role="superadmin")
+    b1 = client.get("/api/reports/ar-aging", headers=sa)
+    std = client.get("/api/std-reports/ar-aging", headers=sa)
+    assert b1.status_code == 200 and std.status_code == 200
+    b1j, stdj = b1.json(), std.json()
+    # 好的未收：世界裡的 AR-1 尾款＋AR-2；AR-D1 尾款 55000；AR-D3 二期 30000；AR-D4 尾款 700（壞的與被汙染的都不算）
+    expect = SENT + 210000 + 55000 + 30000 + 700
+    assert b1j["total"]["amount"] == expect and b1j["total"]["count"] == 5
+    assert b1j["dirtyCount"] == stdj["dirtyCount"] == 6 and stdj["kpis"][0]["value"] == expect
+    r = _preview(client, sa, layout="detail", columns=["quote_no", "outstanding"], aggregates=[{"field": "outstanding", "fn": "sum"}],
+                 sort=[{"field": "quote_no", "dir": "asc"}])
+    assert r.status_code == 200, r.text
+    j = r.json()
+    rows = [x["v"] for x in j["rows"] if x["k"] == "row"]
+    assert len(rows) == b1j["total"]["count"]                                                # 列數一致
+    total = next(x for x in j["rows"] if x["k"] == "total")
+    assert b1j["total"]["amount"] in total["v"]                                               # 合計一致
+    got = {v[_col_index(j, "案件號")] for v in rows}
+    assert got.isdisjoint({"AR-D2"}) and "AR-D3" in got and "AR-D1" in got and "AR-D4" in got
+    # 已收也一併看：壞金額的已收款項（AR-D4 訂金）同樣不列
+    r2 = _preview(client, sa, layout="detail", columns=["quote_no", "stage"],
+                  filters=[{"field": "quote_no", "op": "eq", "value": "AR-D4"}, {"field": "status", "op": "eq", "value": "已收"}])
+    assert r2.status_code == 200, r2.text
+    assert [x for x in r2.json()["rows"] if x["k"] == "row"] == []
+
+
 def test_finance_role_without_sales_modules_can_reach_the_page_and_the_source(client, make_user, world):
     """h5 實機：財務角色沒有 quotation／case_manage／dev_crm 時原本進不了自訂報表（能力與頁面權限只認那三個模組）——應收帳款的對象到不了來源。"""
     fin = _login(client, make_user, "ar_fin_only", role="finance", modules=["cashier"])
