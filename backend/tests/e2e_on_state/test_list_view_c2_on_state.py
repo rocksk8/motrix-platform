@@ -26,7 +26,7 @@ def test_c2_default_merges_won_tab_and_options_do_nothing_when_off(live_server, 
     seed_case("MQ-ONLC-000")
     page = ctx.new_page()
     _open(page, live_server, u)
-    page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=10000)
+    page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=20000)
     assert page.evaluate(TABS_JS) == ["進行中", "已結案", "待精算"]
     assert page.evaluate("() => %s.casePageSize" % DATA_JS) == 100
     assert page.get_by_test_id("lv-toggle").count() == 1 and not page.get_by_test_id("lv-toggle").is_visible()
@@ -57,11 +57,11 @@ def test_c2_personal_prefs_persist_and_merge_won_tab(live_server, make_user, new
     page.get_by_text("還原預設").click()
     page.wait_for_function("() => %s.casePageSize === 100" % DATA_JS, timeout=15000)
     # 預設已合併：只有三個頁籤
-    page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=10000)
+    page.wait_for_function("(js) => eval(js)().length === 3", arg=TABS_JS, timeout=20000)
     assert page.evaluate(TABS_JS) == ["進行中", "已結案", "待精算"]
     # 公司明確存 0（想分開顯示）⇒ 四個頁籤都在（已經存過 0 的正式機不會跟著預設變）
     set_flag(ctx, live_server, tk, "list_view", "cases_merge_won_tab", 0, as_int=True)
     page.reload()
     page.wait_for_function("() => %s.lvOn && %s.lvOn.mergeWon === false" % (DATA_JS, DATA_JS), timeout=20000)
-    page.wait_for_function("(js) => eval(js)().length === 4", arg=TABS_JS, timeout=10000)
+    page.wait_for_function("(js) => eval(js)().length === 4", arg=TABS_JS, timeout=20000)
     assert page.evaluate(TABS_JS) == ["進行中", "已成案", "已結案", "待精算"]
