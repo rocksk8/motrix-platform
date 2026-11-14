@@ -231,3 +231,30 @@ def test_won_without_link_is_flagged_and_convert_modal_opens_form_with_params(li
         page.locator('[data-testid="dc-convert-go"]').click()
     url = pop.value.url
     assert "type=estimate" in url and f"devCase={cid}" in url and "project=" in url, url
+
+
+# ══ U3：開發記錄連續新增 ═══════════════════════════════════════════════════════
+def test_log_form_has_save_and_next_and_remembers_channel_and_date():
+    assert 'data-testid="log-save-next"' in DC and "儲存並新增下一筆" in DC
+    assert "saveLog(true)" in DC and "_lastLog" in DC
+    assert "dc_last_log_channel" in DC
+
+
+@pytest.mark.e2e
+def test_save_and_next_keeps_form_open_with_channel_and_date(live_server, make_user, new_page, login_as, client):
+    u = make_user(username="e2e_dcu3", role="sales", modules=["dev_crm"])
+    cid = _mk_case(client, _token(client, tuple(u)[:2]), "連續記錄案", sales=[])
+    page = new_page()
+    login_as(page, tuple(u)[:2])
+    page.goto(f"{live_server}/pages/dev-crm.html?case={cid}")
+    page.get_by_role("button", name="新增記錄").wait_for(timeout=15000)
+    page.get_by_role("button", name="新增記錄").click()
+    data = "Alpine.$data(document.querySelector('[x-data=\"devCrmPage()\"]'))"
+    page.evaluate("() => { const d = %s; d.logForm.channel = '電話'; d.logForm.content = '第一筆' }" % data)
+    page.locator('[data-testid="log-save-next"]').click()
+    page.wait_for_function("() => %s.devLogs.length === 1" % data, timeout=8000)
+    assert page.evaluate("() => %s.showLogForm" % data) is True
+    assert page.evaluate("() => [%s.logForm.channel, %s.logForm.content]" % (data, data)) == ["電話", ""]
+    page.evaluate("() => { %s.logForm.content = '第二筆' }" % data)
+    page.locator('[data-testid="log-save"]').click()
+    page.wait_for_function("() => %s.devLogs.length === 2 && !%s.showLogForm" % (data, data), timeout=8000)

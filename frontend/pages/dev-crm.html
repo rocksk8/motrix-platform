@@ -1134,7 +1134,7 @@
               <div class="dc-form-row full">
                 <div>
                   <span class="dc-lbl">記錄內容（洽談重點、客戶需求、決策）<span style="color:var(--danger)">*</span></span>
-                  <textarea class="dc-textarea" rows="4" x-model="logForm.content"
+                  <textarea class="dc-textarea" rows="4" x-ref="logContent" x-model="logForm.content"
                     placeholder="本次洽談主要內容…"></textarea>
                 </div>
               </div>
@@ -1170,7 +1170,9 @@
               </div>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="btn btn-ghost btn-sm" @click="cancelLogForm()">取消</button>
-                <button class="btn btn-primary btn-sm" @click="saveLog()" :disabled="logSaving">
+                <button class="btn btn-ghost btn-sm dc-tap" data-testid="log-save-next" x-show="!editingLogId"
+                        @click="saveLog(true)" :disabled="logSaving">儲存並新增下一筆</button>
+                <button class="btn btn-primary btn-sm dc-tap" data-testid="log-save" @click="saveLog()" :disabled="logSaving">
                   <span x-show="!logSaving">儲存記錄</span>
                   <span x-show="logSaving">儲存中…</span>
                 </button>
@@ -2553,10 +2555,11 @@ function devCrmPage() {
     // ── Log form ──
     openLogForm() {
       this.editingLogId = null
+      // 連續新增很常見：帶入上次選的聯絡管道與日期（日期只記這次開著頁面期間的，不跨日沿用）。
       this.logForm = {
-        log_date: MotrixDate.today(),
+        log_date: this._lastLog.date || MotrixDate.today(),
         log_by: this.session.userId || 0,
-        channel: '', content: '', next_action: '', status_snapshot: '',
+        channel: this._lastLog.channel || '', content: '', next_action: '', status_snapshot: '',
       }
       this.showLogForm = true
     },
@@ -2626,7 +2629,13 @@ function devCrmPage() {
     },
     isLogImage(f) { return /\.(jpe?g|png)$/i.test(f.filename || f.path || '') },
 
-    async saveLog() {
+    _lastLog: (() => {
+      let ch = ''
+      try { ch = localStorage.getItem('dc_last_log_channel') || '' } catch (_e) {}
+      return { date: '', channel: ch }
+    })(),
+
+    async saveLog(andNext) {
       if (!this.logForm.log_date) { this._toast('請填寫記錄日期'); return }
       if (!this.logForm.content.trim() && !this.logFiles.length) {
         this._toast('請填寫記錄內容或上傳附件'); return
@@ -2658,14 +2667,26 @@ function devCrmPage() {
         } else {
           this.devLogs.unshift(saved)
         }
-        this.showLogForm = false
+        if (!this.editingLogId) {
+          this._lastLog = { date: this.logForm.log_date, channel: this.logForm.channel || '' }
+          try { localStorage.setItem('dc_last_log_channel', this._lastLog.channel) } catch (_e) {}
+        }
+        const keepOpen = !!andNext && !this.editingLogId
         this.editingLogId = null
         this.logFiles = []
+        if (this.$refs.logFileInput) this.$refs.logFileInput.value = ''
+        if (keepOpen) {
+          // 留著表單接著寫下一筆：保留日期、記錄人、聯絡管道；內容與下一步清空
+          this.logForm = { ...this.logForm, content: '', next_action: '' }
+          this.$nextTick(() => { try { this.$refs.logContent && this.$refs.logContent.focus() } catch (_e) {} })
+        } else {
+          this.showLogForm = false
+        }
         if (saved.needsApproval) {
           this.pendingCount++
-          this._toast('記錄已建立（代他人填寫，已送主管審核）')
+          this._toast('記錄已建立（代他人填寫，已送主管審核）' + (keepOpen ? '。可接著寫下一筆。' : ''))
         } else {
-          this._toast('記錄已儲存')
+          this._toast(keepOpen ? '記錄已儲存，可接著寫下一筆。' : '記錄已儲存')
         }
       } finally { this.logSaving = false }
     },
