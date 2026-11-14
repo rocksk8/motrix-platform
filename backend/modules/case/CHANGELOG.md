@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-formver-h2；報價單表單 FORM_VERSION V3.49→V3.50 補升版；版號由列車取）
+- 修正（前端，`quotation-form.html` FORM_VERSION V3.49→V3.50；行為、API、欄位、權限鍵不變）：t86-int 合併後表單內容已變（文字殘餘：「內容無任何變動」提示等）而版本號仍為 V3.49，表單版號守門（`test_form_version_bumped_2026_09_24`）轉紅；補升版並把新版本登記進 LEDGER。
+
 ## 1.0.238 — 2026-11-14（train/t86-int；整合者：T86 合併後補記（U4/U5/U7 併入、稽核移到鎖外、文字殘餘））
 - 內部／文字（API 欄位、權限鍵、DB 值不變）：併入 h1 U4/U5/U7/U11 與 h2 最後一輪文字；`update_case_record` 的「更換發票號碼」稽核改在寫鎖放掉（commit／close）之後才寫（approval_no_freeze 掃描）；報價單「內容無任何變動」訊息與前端一致。此條補寫於 T86 整合最後一次合併之後。
 - **（併入）(next) — 2026-11-14（feat/t86-usage-h1；T86 U5 財務開案件頁）**
