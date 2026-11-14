@@ -206,3 +206,26 @@ def test_defaults_fill_is_listed_as_initial_not_as_a_user_change(client, make_us
     assert r.status_code == 200, r.text
     d = json.loads(_rows()[-1]["detail"])
     assert d["segments"] == ["materials"] and d["initial"] == ["warrantyNote"], d
+
+
+def test_non_member_cannot_probe_semi_unlocked_case_via_defaults(client, make_user):
+    """F6（h11）：已結案半解鎖案件，非成員送 defaults 試探——不可以因為「內容沒變」跳過審核閘而拿到 adopted（原始現值）。
+    行為與修正前相同：排進審核（pending），回應沒有 adopted。"""
+    from tests.test_case_semi_unlock import _make_closed_case
+    owner = _login(client, *make_user(username="u8own", role="superadmin"))
+    _make_closed_case(quote_no=NO)
+    assert client.post(f"/api/quotations/{NO}/case-unlock", headers=owner).status_code == 200
+    h = _login(client, *make_user(username="u8out", role="sales"))
+    import db
+    conn = db.get_db()
+    try:
+        cur = json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["caseRecord"]
+    finally:
+        conn.close()
+    r = _patch(client, h, {"segments": {}, "base": {}, "defaults": {"payment": cur["payment"]}})
+    assert "adopted" not in r.json() or not r.json()["adopted"], r.text
+    assert "payment" not in json.dumps(r.json().get("adopted") or {})
+    if r.status_code == 200:
+        assert r.json().get("pending") is True, r.text
+    else:
+        assert r.status_code == 403, r.text

@@ -4105,7 +4105,9 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         _cand = dict(body.case_record or {})
         _cand["stages"] = (data.get("caseRecord") or {}).get("stages") or []
         _before_cr = {**(data_before.get("caseRecord") or {}), "stages": _cand["stages"]}
-        if semi_unlocked and not invoice_changes and _same_json(_cand, _before_cr):
+        # 只對案件成員跳過閘：非成員的 defaults 沒被清掉（那段在上面 `not semi_unlocked` 才會進），跳過閘＋回應 adopted 會變成讀取通道（F6）。
+        # 附註：沒有變動那條路若仍因 reconcile／叫料閘改了伺服器端衍生內容而寫入，半解鎖案件不排審核——只有系統推導的內容，稽核照記。
+        if semi_unlocked and not invoice_changes and _is_case_member(conn, quote_no, row, user) and _same_json(_cand, _before_cr):
             gated, change_id = False, None
         else:
             gated, change_id = _gate_case_edit(
