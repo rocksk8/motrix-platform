@@ -34,9 +34,9 @@ EXCLUDED_KEYS = {
 #:   kind "line_only"＝站內通知有、信件沒有（設定頁標「僅 LINE」）；"sub"＝信件端是泛用類型、LINE 端拆細。
 #:   mail_key＝收件人設定（覆寫）借用的信件類型；line_group＝LINE 的群組收件人（None＝只發給事件收件人；"inherit"＝同 mail_key 的登記群組）。
 LINE_ONLY_EVENTS = {
-    "dev_case_unassigned": {"name": "業務開發案件被取消指派（前任負責人）", "group": "業務開發", "mail_key": "dev_case_assigned",
+    "dev_case_unassigned": {"name": "商機被取消指派（前任負責人）", "group": "業務開發", "mail_key": "dev_case_assigned",
                             "line_group": None, "kind": "line_only"},
-    "dev_case_deadline_changed": {"name": "業務開發案件回覆期限被調整（被指派人）", "group": "業務開發", "mail_key": "dev_case_assigned",
+    "dev_case_deadline_changed": {"name": "商機回覆期限被調整（被指派人）", "group": "業務開發", "mail_key": "dev_case_assigned",
                                   "line_group": None, "kind": "line_only"},
     "dev_log_directive_reply": {"name": "業務開發記錄批示被回覆", "group": "業務開發", "mail_key": "dev_log_directive",
                                 "line_group": None, "kind": "line_only"},
@@ -44,12 +44,12 @@ LINE_ONLY_EVENTS = {
                                      "line_group": None, "kind": "line_only"},
     "settings_changed": {"name": "設定中心：高風險設定被變更／核准／生效／撤銷（只發最高管理者）", "group": "系統告警", "mail_key": "company_setup_alert",
                          "line_group": None, "kind": "line_only"},
-    "crm_case_created": {"name": "業務開發：新增案件", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
-    "crm_case_status": {"name": "業務開發：案件狀態（階段）變更", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
-    "crm_case_progress": {"name": "業務開發：案件進度回報（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
+    "crm_case_created": {"name": "業務開發：新增商機", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
+    "crm_case_status": {"name": "業務開發：商機狀態（階段）變更", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
+    "crm_case_progress": {"name": "業務開發：商機進度回報（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_visit_logged": {"name": "業務開發：新增拜訪記錄（量大）", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
     "crm_log_approved": {"name": "業務開發：開發記錄審核通過", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
-    "crm_case_converted": {"name": "業務開發：案件轉建報價單／估價單", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
+    "crm_case_converted": {"name": "業務開發：商機轉建報價單／估價單", "group": "業務開發", "mail_key": "module_activity", "line_group": None, "kind": "sub"},
 }
 
 #: 分組顯示順序（使用者優先順序：簽核 → 指定人員／業務開發 → 其餘）
@@ -101,7 +101,7 @@ GROUP_MODULES = {
     "其他": ("@admin",),
 }
 #: 這些分組的「業務收件人」（例如案件的業務負責人與主管）本身也要有該分組的模組權限才發 LINE（2026-11-13，PM 裁示；比照「指定的人」的規則）。
-#: 沒有權限的人 LINE 不發（Email 照舊，行為不變）；原因：LINE 內容是業務開發案件摘要，沒有「業務開發」權限的人在系統裡本來就看不到這些案件。
+#: 沒有權限的人 LINE 不發（Email 照舊，行為不變）；原因：LINE 內容是商機摘要，沒有「業務開發」權限的人在系統裡本來就看不到這些商機。
 BUSINESS_PERM_GROUPS = ("業務開發",)
 #: 個別事件覆寫（優先於分組）
 EVENT_MODULES = {
@@ -168,12 +168,12 @@ WHO_OF = {
     "dev_case_deadline_changed": "被指派人",
     "dev_log_directive_reply": "下批示的人",
     "dispatch_file_delete_request": "當層簽核人（沒有簽核層級時為最高管理者）",
-    "crm_case_created": "案件相關人員（業務負責人與主管，不含操作者本人）",
-    "crm_case_status": "案件相關人員（業務負責人與主管，不含操作者本人）",
-    "crm_case_progress": "案件相關人員（業務負責人與主管，不含操作者本人）",
-    "crm_visit_logged": "案件相關人員（業務負責人與主管，不含操作者本人）",
-    "crm_log_approved": "案件相關人員（業務負責人與主管，不含操作者本人）",
-    "crm_case_converted": "案件相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_created": "商機相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_status": "商機相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_progress": "商機相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_visit_logged": "商機相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_log_approved": "商機相關人員（業務負責人與主管，不含操作者本人）",
+    "crm_case_converted": "商機相關人員（業務負責人與主管，不含操作者本人）",
 }
 
 

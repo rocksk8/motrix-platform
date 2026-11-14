@@ -663,7 +663,7 @@ def dashboard_funnel(authorization: str = Header(None)):
 
 @router.get("/api/dashboard/ops-alerts")
 def dashboard_ops_alerts(authorization: str = Header(None)):
-    """業務開發案件停滯（洽談中 30 天無新開發記錄，門檻同 helpers.email_notify.notify_dev_case_stale
+    """商機停滯（洽談中 30 天無新開發記錄，門檻同 helpers.email_notify.notify_dev_case_stale
     的既有定義）+ 出貨單卡簽核（待審核/簽核中超過 5 天未動）提醒。"""
     u = _require_user(authorization)
     role = u["role"]
@@ -814,8 +814,8 @@ _QUOTE_ACTION_LABELS = {
     "quotation.settlement":   "完成成本精算",
 }
 _DEV_CASE_ACTION_LABELS = {
-    "dev_case.create":  "新增業務開發案件",
-    "dev_case.status":  "案件狀態異動",
+    "dev_case.create":  "新增商機",
+    "dev_case.status":  "商機狀態異動",
     "dev_case.convert": "轉換為報價單",
 }
 _SHIPPING_ACTION_LABELS = {

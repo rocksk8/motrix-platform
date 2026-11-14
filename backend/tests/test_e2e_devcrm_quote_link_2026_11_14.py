@@ -168,7 +168,7 @@ def test_missing_dev_case_shows_error_and_bad_param_is_ignored(live_server, make
     _open(page, live_server, "project=%E4%B8%8D%E5%AD%98%E5%9C%A8&devCase=987654")
     _save(page)
     page.wait_for_function("() => /連回.*失敗/.test(document.querySelector('[data-testid=qf-devcase-msg]').innerText)", timeout=20000)
-    assert "案件不存在" in page.locator("[data-testid=qf-devcase-msg]").inner_text()
+    assert "商機不存在" in page.locator("[data-testid=qf-devcase-msg]").inner_text()
     # 非正整數的 devCase 參數：忽略，不顯示橫幅、不打 convert
     page2 = page.context.new_page()
     calls = []

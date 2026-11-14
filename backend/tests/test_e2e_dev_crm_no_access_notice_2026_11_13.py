@@ -22,7 +22,7 @@ def test_sales_without_the_module_gets_an_explanation_not_a_silent_redirect(live
     box = page.locator('[data-testid="dev-crm-no-access"]')
     box.wait_for(state="visible", timeout=10000)
     text = box.inner_text()
-    assert "沒有" in text and "使用者管理" in text and "回首頁" in text, text
+    assert "尚無" in text and "使用者管理" in text and "回首頁" in text, text
 
 
 @pytest.mark.e2e
