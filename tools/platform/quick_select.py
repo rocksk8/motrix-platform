@@ -39,7 +39,8 @@ SOURCE_PREFIXES = ("backend/", "frontend/", "tools/", "docs/")
 TEST_PATHSPECS = (":(glob)backend/tests/**/*.py", ":(glob)backend/core/tests/**/*.py", ":(glob)backend/modules/*/tests/**/*.py")
 GENERIC_NAMES = frozenset({"index.html", "__init__.py", "module.json", "main.py", "common.js", "style.css", "conftest.py", "config.py",
                            "db.py", "auth.py", "utils.py", "helpers.py", "api.py", "routes.py", "models.py"})
-T2_SHARE = 0.6                       # 刪掉字面值反查最多佔預算的幾成（其餘留給 T4／T3）
+T2_FLOOR = 0.2                       # T0／T1 已吃光預算時，T2 在必跑部分之外仍保有的預算份額（保底）
+T2_SHARE = 0.6                      # 刪掉字面值反查最多佔預算的幾成（其餘留給 T4／T3）
 SECONDS_PER_TEST = 0.75                # 與 author_gate 同
 
 _CJK_RUN = re.compile(r"[㐀-鿿]{2,}")
@@ -446,7 +447,7 @@ def estimate_seconds(files, seconds_fn, workers):
     return serial / (1.0 if workers <= 1 else workers * 0.85)
 
 
-T3_BUSINESS_WORDS = ("approval", "payroll", "payslip", "audit", "queue", "archive", "migration", "privacy", "pii")
+T3_BUSINESS_WORDS = ("approval", "payroll", "payslip", "audit", "queue", "archive", "migration")
 T3_GUARD_WORDS = ("guard", "lint", "scan", "centraliz", "follows", "baseline", "ratchet", "decrease", "_no_", "no_", "wording", "labels", "registry",
                   "declared", "consistency", "coverage", "contract", "single_source", "isolation", "ownership", "wiring", "numbering",
                   "fingerprint", "golden", "marking", "zoom", "notice", "rounding", "round_half_up", "unify", "orphan", "scoped", "mask", "malformed")
@@ -454,13 +455,13 @@ T3_GUARD_WORDS = ("guard", "lint", "scan", "centraliz", "follows", "baseline", "
 
 def narrow_style_guards(a2, is_e2e):
     """quick 專用：檔名樣式守門（guard_patterns.json）太寬，含 approval／payroll／audit 這類一般測試。
-    ⇒ (保留, 因業務字被收窄掉, 因 e2e 命名被排除)。名稱同時有守門字（guard／lint／wording／registry…）的保留。"""
+    ⇒ (保留, 因業務字被收窄掉, 因 e2e 命名被排除)。名稱同時有守門字（guard／lint／wording／registry…）、或路徑含 guard 的保留；privacy／pii 這類安全守門的名字不當業務字（h11 覆核）。"""
     keep, narrowed, e2e_out = [], [], []
     for f in a2:
         base = f.rsplit("/", 1)[-1].lower()
         if is_e2e(f):
             e2e_out.append(f)
-        elif any(w in base for w in T3_BUSINESS_WORDS) and not any(w in base for w in T3_GUARD_WORDS):
+        elif ("guard" not in f.lower() and any(w in base for w in T3_BUSINESS_WORDS) and not any(w in base for w in T3_GUARD_WORDS)):
             narrowed.append(f)
         else:
             keep.append(f)
@@ -554,9 +555,9 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
     #  ②e2e 命名的檔不進 T3（e2e 只跑「改動模組／打到改動頁面」命中的）③依單檔秒數由便宜到貴取樣，預算內才跑。
     a2_keep, a2_narrow_out, a2_e2e_out = narrow_style_guards(a2, is_e2e)
     if a2_narrow_out:
-        skipped.append({"tier": "T3", "item": "樣式守門收窄 %d 檔" % len(a2_narrow_out), "reason": "名稱含一般業務字而無守門字（%s…），quick 不選（未跑；整合者的整段閘門照跑）" % "、".join(f.rsplit("/", 1)[-1] for f in a2_narrow_out[:3])})
+        skipped.extend({"tier": "T3", "item": f, "reason": "樣式守門收窄：名稱含一般業務字而無守門字，quick 不選（未跑；整合者的整段閘門照跑）"} for f in a2_narrow_out)
     if a2_e2e_out:
-        skipped.append({"tier": "T3", "item": "樣式守門的 e2e 檔 %d 個" % len(a2_e2e_out), "reason": "quick 的 e2e 只跑改動模組／打到改動頁面命中的（未跑）"})
+        skipped.extend({"tier": "T3", "item": f, "reason": "樣式守門的 e2e 檔：quick 的 e2e 只跑改動模組／打到改動頁面命中的（未跑）"} for f in a2_e2e_out)
     order = [("T0", sorted(a4), {f: "本分支改動" for f in a4}), ("T1", t1_files, t1_why), ("T2", t2_files, t2_why),
              ("T3", sorted(a2_keep, key=lambda f: (seconds_fn(f), f)), {f: "檔名樣式" for f in a2_keep}), ("T4", t4_list, t4_why)]
     seen, tiers = set(), {}
@@ -591,17 +592,21 @@ def plan_quick(*, changed, diff_text, tree_files, a2, a4, extra_t4, repo, ref, s
         return False
 
     # T2（刪掉字面值反查）最有價值但可能很大（一個通用字面值就選 10 檔）：只取預算的 T2_SHARE 份額，依「被幾個字面值命中、便宜」的順序取樣，其餘列未跑
+    # 下限：T0／T1 已吃掉預算時，T2 仍保有預算的 T2_FLOOR 份額（T86 診斷：過時字面值是紅的主要來源，不能被必跑層擠成 0）
     t2_run, t2_limit = [], budget_s * T2_SHARE
     for f in tiers["T2"]["files"]:
         e2e = is_e2e(f)
         add = seconds_fn(f) if e2e else estimate_seconds([f], seconds_fn, workers)
-        if spent + add <= max(t2_limit, est_must):
+        if spent + add <= max(t2_limit, est_must + budget_s * T2_FLOOR):
             (run_e2e if e2e else run_non).append(f)
             spent += add
             t2_run.append(f)
         else:
             skipped.append({"tier": "T2", "item": f, "reason": "T2 取樣：超過 T2 的預算份額（%.0f%%）（未跑）" % (T2_SHARE * 100)})
     tiers["T2"]["run"] = t2_run
+    if tiers["T2"]["files"] and est_must > t2_limit:
+        notes.append("T2 取樣：T0／T1 必跑預估 %.1f 分鐘已超過 T2 份額上限（%.1f 分鐘），T2 只拿到保底 %.0f%% 預算（選 %d／%d 檔）" % (
+            est_must / 60, t2_limit / 60, T2_FLOOR * 100, len(t2_run), len(tiers["T2"]["files"])))
     must_non = must_non + [f for f in t2_run if not is_e2e(f)]
     must_e2e = must_e2e + [f for f in t2_run if is_e2e(f)]
 

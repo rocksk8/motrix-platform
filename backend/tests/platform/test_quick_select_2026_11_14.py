@@ -345,3 +345,31 @@ def test_sd_conftest_hit_selects_the_small_test_directory_and_lists_a_big_one_as
     big = ["backend/m/tests/test_%d.py" % i for i in range(Q.CONFTEST_DIR_MAX + 1)]
     hits, skipped = Q.split_helper_hits({"backend/m/tests/conftest.py": ["y"]}, ".", None, grep_fn=lambda t: [], tree_files=big)
     assert hits == {} and len(skipped) == 1 and "未跑" in skipped[0]["reason"]
+
+
+def test_t3_not_run_items_are_enumerable_one_entry_per_file():
+    """h11：『樣式守門收窄 N 檔』只點名前 3 檔，其餘無法從 quick_skipped 還原——每一檔各自一筆。"""
+    a2 = ["backend/tests/test_approval_%d.py" % i for i in range(6)] + ["backend/tests/test_e2e_approval_%d.py" % i for i in range(5)]
+    plan = _plan({}, a2=a2, budget_s=10_000)
+    items = [x["item"] for x in plan["skipped"] if x["tier"] == "T3"]
+    assert sorted(items) == sorted(a2), "收窄 6 檔＋e2e 5 檔都要逐檔列出"
+    assert all(x["item"].startswith("backend/tests/") for x in plan["skipped"] if x["tier"] == "T3")
+
+
+def test_security_guards_named_privacy_or_pii_are_not_narrowed_out():
+    """h11：privacy／pii 是安全守門常見的名字，不當一般業務字；路徑含 guard 的也不收窄。"""
+    a2 = ["backend/tests/test_privacy_masking.py", "backend/tests/test_pii_export.py", "backend/tests/platform/test_audit_guard_x.py",
+          "backend/tests/test_audit_log_rows.py"]
+    keep, narrowed, _ = Q.narrow_style_guards(a2, lambda f: False)
+    assert keep == a2[:3] and narrowed == [a2[3]]
+
+
+def test_t2_keeps_a_floor_when_t0_t1_already_eat_the_budget():
+    """h11：T0／T1 超過 T2 份額上限時，T2 不能被擠成 0（T86 診斷：過時字面值是紅的主要來源）。"""
+    hits = ["backend/tests/test_old_wording.py", "backend/tests/test_pattern_guard.py", "backend/tests/test_own.py"]
+    sec = lambda f: 100.0 if f.endswith("test_changed.py") else 5.0      # noqa: E731
+    plan = _plan({"您尚無待簽核的單據": hits}, a4=["backend/tests/test_changed.py"], budget_s=50, sec=sec)
+    run = plan["tiers"]["T2"]["run"]
+    assert 0 < len(run) < len(hits), run
+    assert any("T2 取樣" in n and "保底" in n for n in plan["notes"]), plan["notes"]
+    assert any(x["tier"] == "T2" and "未跑" in x["reason"] for x in plan["skipped"])

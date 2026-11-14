@@ -24,6 +24,10 @@
 3. 修法：e2e 與 T3 都計入預算（e2e 單行程序列計價，每檔 `E2E_FILE_SECONDS`＝9 s，實測 6.0／7.2／7.5 s）；T3 降最低優先並收窄；T2 取樣；**牆鐘上限**——執行分三段（一般測試 → e2e → 樣式守門）共用一個到期時間，
    每段起跑前先看剩餘時間（不夠就整段列未跑），段內由 `failfast` 外掛的 `MOTRIX_DEADLINE_AT` 到點收工（單行程與 xdist 都停；寫出 `MOTRIX_DEADLINE_SEEN`＝有開跑的檔，沒開跑的逐檔列未跑），
    外掛來不及停（單題卡住）由硬逾時殺行程樹並明講「紅清單可能不完整」。
+   **牆鐘會超過預算多少**：外掛只在「有題跑完」時才檢查到點，正常情況是到點後再等當下那一題跑完；單題卡住時最壞是硬逾時（剩餘時間＋90 秒）加 `taskkill` 的時間——
+   預算最多超過約 90 秒再加殺行程的幾秒。硬逾時的計時器在行程已結束時不動作（避免 pid 被重用後殺到無關的樹）。
+   e2e 段被到點中止時，結果 JSON 的 `e2e.complete` 為 false（`e2e.green` 只表示「跑到的沒有紅」），沒跑的檔逐檔在 `quick_skipped`；`--skip-e2e` 不跑的 e2e 檔、T3 收窄／e2e 排除的檔也逐檔列為未跑。
+   T0／T1 已吃光預算時，T2 仍保有預算 20%（`T2_FLOOR`）的保底並在 notes 說明。`privacy`／`pii` 不算「一般業務字」（安全守門常用名），路徑含 `guard` 的檔不收窄。
 4. 注意：author_gate 的 pytest 原本**沒帶 `-p failfast`**，所以舊的 MOTRIX_FAILFAST 環境變數在作者端從來沒生效；quick 現在帶 `-p failfast`＋PYTHONPATH，並設 `MOTRIX_FAILFAST=0`（要列出全部的紅，時間由牆鐘管）。
 
 - 太大的整合守門組（`static_scans2`、`recent_interplay`、`superadmin_login`）整組列為「未跑（太大）」。

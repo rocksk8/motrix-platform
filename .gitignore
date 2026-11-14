@@ -6,6 +6,7 @@ backend/.initial_demo_credentials.txt
 
 # pytest --basetemp 誤放進 repo 內時的保險（正常應該用 %TEMP%\motrix-pytest-<識別>-adhoc／-full，不進 repo）
 .pytest-basetemp*/
+.pt-adhoc/
 
 # License：簽發私鑰與客戶金鑰一律不進 git（2026-09-21）
 # 私鑰外洩 = 所有已發出的授權全部形同虛設，而且撤不回來——離線驗證沒有撤銷清單，

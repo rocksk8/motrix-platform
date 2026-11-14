@@ -125,3 +125,37 @@ def test_a_killed_pytest_says_the_red_list_may_be_incomplete(monkeypatch, tmp_pa
     out = [{"rc": 1, "text": "....", "killed": True}, {}, {}]
     agg, _ = _stages(monkeypatch, tmp_path, _sel(), out)
     assert agg["killed"] is True and any("紅清單可能不完整" in u["reason"] for u in agg["unrun"])
+
+
+def test_hard_timeout_timer_never_kills_a_process_that_already_finished(monkeypatch):
+    """h11：計時器剛好在行程結束後才觸發 ⇒ pid 可能已被重用，/T 會殺到無關的樹；已結束就不殺、也不標 TIMED_OUT。"""
+    killed = []
+    monkeypatch.setattr(AG, "_kill_tree", lambda pid: killed.append(pid))
+    rc, out = AG._run_pytest([sys.executable, "-c", "print('x')"], str(Path.cwd()), {}, stream=False, hard_timeout=1.0)
+    time.sleep(1.5)                                              # 計時器此時才觸發（行程早已結束）
+    assert rc == 0 and killed == [] and AG.TIMED_OUT["flag"] is False
+
+
+def test_hard_timeout_still_kills_a_hung_process(monkeypatch):
+    killed = []
+    real = AG._kill_tree
+    monkeypatch.setattr(AG, "_kill_tree", lambda pid: (killed.append(pid), real(pid)))
+    rc, _ = AG._run_pytest([sys.executable, "-c", "import time; time.sleep(60)"], str(Path.cwd()), {}, stream=False, hard_timeout=1.0)
+    assert len(killed) == 1 and AG.TIMED_OUT["flag"] is True and rc != 0
+
+
+def test_skip_e2e_lists_the_planned_e2e_files_as_not_run(monkeypatch, tmp_path):
+    calls = []
+    _fake_run(monkeypatch, [{}, {}], calls)
+    agg = AG.run_quick_stages(_sel(), tmp_path, "python", {}, str(tmp_path / "bt"), 2, time.time() + 600, True, lambda out: [])
+    assert len(calls) == 2 and agg["e2e"] is None
+    assert [u for u in agg["unrun"] if u["item"] == "backend/tests/test_e2e_p.py" and "--skip-e2e" in u["reason"] and "未跑" in u["reason"]]
+
+
+def test_e2e_stage_cut_by_the_deadline_is_not_complete(monkeypatch, tmp_path):
+    out = [{}, {"rc": 1, "text": "DEADLINE: 到點\n= 1 passed =", "seen": {"seen": [], "deadline_hit": True}}, {}]
+    agg, _ = _stages(monkeypatch, tmp_path, _sel(), out)
+    assert agg["e2e"]["complete"] is False and agg["e2e"]["green"] is True, "沒有紅，但計畫內的 e2e 沒跑完——complete 要說實話"
+    assert any(u["item"] == "backend/tests/test_e2e_p.py" for u in agg["unrun"])
+    agg2, _ = _stages(monkeypatch, tmp_path, _sel(), [{}, {}, {}])
+    assert agg2["e2e"]["complete"] is True

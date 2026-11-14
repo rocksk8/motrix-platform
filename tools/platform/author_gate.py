@@ -380,6 +380,8 @@ def _run_pytest(argv, cwd, env, stream=True, hard_timeout=None):
         import threading
 
         def _fire():
+            if proc.poll() is not None:                       # 剛好跑完：pid 可能已被別的行程重用，/T 會殺到無關的樹（h11）
+                return
             TIMED_OUT["flag"] = True
             _kill_tree(proc.pid)
         timer = threading.Timer(max(1.0, hard_timeout), _fire)
@@ -497,10 +499,13 @@ def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2
     halted = ""
     for st in sel.get("stages") or []:
         files = list(st["files"])
-        if not files or (st["name"] == "e2e" and skip_e2e):
+        if not files:
             continue
         def mark(reason, fs=files):
             agg["unrun"].extend({"tier": tier_of.get(f, "T?"), "item": f, "reason": "%s（未跑）" % reason} for f in fs)
+        if st["name"] == "e2e" and skip_e2e:
+            mark("--skip-e2e")                                # 計畫內的 e2e 不跑也要列出（h11）
+            continue
         if halted:
             mark(halted)
             continue
@@ -549,7 +554,8 @@ def run_quick_stages(sel, repo, py, env, basetemp, workers, deadline_at, skip_e2
                 len(files) - len(miss), len(files), "；行程被強制結束，紅清單可能不完整" if killed else "")})
         if st["name"] == "e2e":
             agg["e2e"] = {"files": len(files), "ran": counts, "failed": [f["nodeid"] for f in fs_], "seconds": round(time.time() - t1, 1),
-                          "green": (rc == 0 or (hit and not killed)) and not fs_ and not killed}
+                          "green": (rc == 0 or (hit and not killed)) and not fs_ and not killed,
+                          "complete": not hit}               # green＝跑到的沒有紅；complete＝計畫內的 e2e 都開跑了（到點中止 ⇒ False，未跑清單在 quick_skipped）
         elif fs_ and "failfast:" in out:
             agg["stopped"] = True
             halted = "failfast 提前停止，後面的階段沒有開跑"
