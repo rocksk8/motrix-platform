@@ -464,7 +464,7 @@
   </div>
 
   <!-- ══ 一次加入多人：勾選 → 預覽（誰從哪個部門搬來）→ 確認 → 結果可復原這一批 ══ -->
-  <div class="modal-overlay" x-show="mb.open" x-transition style="display:none" @click.self="mb.open=false" data-testid="org-batch-modal">
+  <div class="modal-overlay" x-show="mb.open" x-transition style="display:none" @click.self="if (!mb.busy) mb.open=false" data-testid="org-batch-modal">
     <div class="modal-box">
       <div class="modal-head">
         <span class="modal-head__title" x-text="'一次加入多人到「' + mb.deptName + '」'"></span>
@@ -761,19 +761,25 @@
         await Promise.all([this.loadUsers(), this.loadOrgTree()])
         this.mb.undo = done
         this.mb.picked = []
-        this.mb.result = '已加入 ' + done.length + ' 人' + (failed.length ? '；' + failed.length + ' 人沒成功（' + failed.join('；') + '）' : '') + '。' + (done.length ? '加錯了可按「復原這一批」。' : '')
+        this.mb.result = '已加入 ' + done.length + ' 人' + (failed.length ? '；' + failed.length + ' 人未成功（' + failed.join('；') + '）' : '') + '。' + (done.length ? '如需撤回，可按「復原這一批」。' : '')
       },
       async mbUndo() {
         if (this.mb.busy || !this.mb.undo.length) return
         this.mb.busy = true
-        let back = 0
+        const target = this.mb.deptId, back = [], skipped = [], failed = []
         try {
-          for (const x of this.mb.undo) { try { await this._mbSetDept(x.id, x.was); back++ } catch (e) {} }
+          await this.loadUsers()                                  // 先讀最新狀態：這批之後被別人改過部門的人不覆蓋
+          for (const x of this.mb.undo) {
+            const u = this.users.find(y => y.id === x.id), name = (u && (u.displayName || u.username)) || String(x.id)
+            if (!u || u.departmentId !== target) { skipped.push(name); continue }
+            try { await this._mbSetDept(x.id, x.was); back.push(name) } catch (e) { failed.push(name + '：' + (e.message || e)) }
+          }
         } finally { this.mb.busy = false }
-        const n = this.mb.undo.length
         this.mb.undo = []
         await Promise.all([this.loadUsers(), this.loadOrgTree()])
-        this.mb.result = '已復原 ' + back + ' / ' + n + ' 人回到原本的部門。'
+        this.mb.result = '已復原 ' + back.length + ' 人回到原本的部門。'
+          + (skipped.length ? skipped.length + ' 人在這批之後已被改過部門，未覆蓋（' + skipped.join('、') + '）。' : '')
+          + (failed.length ? failed.length + ' 人復原未成功（' + failed.join('；') + '）。' : '')
       },
 
       async removeMember(user) {

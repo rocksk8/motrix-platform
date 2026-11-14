@@ -14,7 +14,7 @@
     權限設定（L2 模組 permmatrix；T67 PM-S2 檢視＋PM-S3 編輯）：角色 × 功能 × 動作的矩陣、某人的有效權限與理由、待生效清單、版本紀錄。
     - 只有最高管理者看得到（選單 perm=superadmin；所有 /api/permmatrix 端點也是）。
     - 格子內容全部來自各模組的能力宣告：沒宣告就沒有格子；還沒接上實際端點的格子標「未接入」。畫面不顯示能力代碼，只顯示中文名稱與一句話說明。
-    - 編輯：勾格子 → 先看「一句話影響面板」（會發生什麼、影響幾位、何時生效）→ 確認才存；高風險放寬要填原因、等確認期間、需第二位最高管理者核准。
+    - 編輯：勾格子 → 先看「一句話影響面板」（會發生什麼、影響幾位、何時生效）→ 確認才存；高風險放寬要填原因、走等待期、需第二位最高管理者核准。
     - 只有『已接入』的格子可以勾；『未接入』的格子還沒有實際生效，不開放。
   -->
   <style>
@@ -47,7 +47,7 @@
     .pm-colbtns { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
     .pm-mini { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; font-weight: 400; }
     .pm-mini[disabled] { opacity: .5; cursor: default; }
-    @media (max-width: 767px) { .pm-colbtns { display: none; } .pm-stagebar { top: 0; } }
+    @media (max-width: 767px) { .pm-colbtns { display: none; } }
     select.pm-sel { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: #fff; }
     @media (max-width: 900px) { .pm-main { margin-left: 0; padding: 16px; } .pm-scroll { overflow-x: auto; } }
 
@@ -156,7 +156,7 @@
                     <template x-for="r in m.roles" :key="r.role">
                       <td class="c">
                         <label class="pm-cell"><input type="checkbox" :checked="stagedValue(c, r)" :disabled="!c.wired || busy" :data-testid="'pm-cell-' + c.key + '-' + r.role"
-                               :title="c.wired ? '' : '這個項目尚未接入，暫時不能調整'" @click.prevent="toggleStage(c, r)"><span class="pm-cell-t" x-text="r.label"></span></label>
+                               :title="c.wired ? '' : '這個項目尚未接入，暫時不能調整'" @change="toggleStage(c, r); $el.checked = stagedValue(c, r)"><span class="pm-cell-t" x-text="r.label"></span></label>
                         <div class="pm-stg" x-show="isStaged(c, r)" :data-testid="'pm-staged-' + c.key + '-' + r.role">待套用</div>
                         <div class="pm-chg" x-show="c.cells[r.role].changed && !isStaged(c, r)">已調整</div>
                       </td>
@@ -239,14 +239,14 @@
     </div>
   </main>
 
-  <!-- 暫存區批次：預覽視窗（逐格列出：立即生效／要等確認期間並需核准／沒有變化；有放寬高風險格時原因必填；預覽之前沒有寫入任何東西） -->
+  <!-- 暫存區批次：預覽視窗（逐格列出：立即生效／需等待期並需核准／沒有變化；有放寬高風險格時原因必填；預覽之前沒有寫入任何東西） -->
   <div class="pm-modal" x-show="bdlg" data-testid="pm-batch-dialog" @keydown.escape.window="bdlg = null">
     <div x-show="bdlg">
       <h3>確認這一批權限調整</h3>
       <p data-testid="pm-batch-summary" x-text="batchSummary()"></p>
       <div class="pm-sub" x-text="bdlg && bdlg.usersAffected ? '約影響 ' + bdlg.usersAffected + ' 位使用者' : ''"></div>
       <div class="pm-note" x-show="bdlg && bdlg.summary.pending" data-testid="pm-batch-pending-note"
-           x-text="'其中 ' + (bdlg ? bdlg.summary.pending : 0) + ' 格是放寬高風險項目：要等 ' + (bdlg ? bdlg.confirmDays : '') + ' 天確認期間後才會生效，需要另一位最高管理者核准（只有一位最高管理者時改為填原因並等待）。'"></div>
+           x-text="'其中 ' + (bdlg ? bdlg.summary.pending : 0) + ' 格是放寬高風險項目：要等 ' + (bdlg ? bdlg.confirmDays : '') + ' 天等待期後才會生效，需要另一位最高管理者核准（只有一位最高管理者時改為填原因並等待）。'"></div>
       <div style="max-height:calc(40vh / var(--fz,1));overflow:auto;margin-top:8px">
         <template x-for="x in (bdlg ? bdlg.cells : [])" :key="x.role + x.cap">
           <div style="border-top:1px solid var(--border-light);padding:6px 0;font-size:13px" :data-testid="'pm-batch-line-' + x.cap + '-' + x.role">
@@ -351,7 +351,7 @@
           try {
             const r = await d.run(this.reason.trim())
             this.dlg = null
-            this.msg = r && r.pending ? '已送出：要等確認期間後才會生效' + (r.approvalsRequired ? '，且需要另一位最高管理者核准' : '') + '。'
+            this.msg = r && r.pending ? '已送出：需等待期後才會生效' + (r.approvalsRequired ? '，且需要另一位最高管理者核准' : '') + '。'
               : (r && r.changed === false ? '沒有變更（已經是這個狀態）。' : '已儲存。')
             await this.reloadAll()
           } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
@@ -387,20 +387,20 @@
         },
         batchSummary() {
           const s = this.bdlg && this.bdlg.summary
-          return s ? ('立即生效 ' + s.immediate + ' 格、要等確認期間 ' + s.pending + ' 格、沒有變化 ' + s.unchanged + ' 格') : ''
+          return s ? ('立即生效 ' + s.immediate + ' 格、需等待期 ' + s.pending + ' 格、沒有變化 ' + s.unchanged + ' 格') : ''
         },
         batchStatusText(x) {
-          return x.status === 'pending' ? '要等確認期間並經核准後生效' : (x.status === 'nochange' ? '已經是這個狀態，不變' : '儲存後立即生效')
+          return x.status === 'pending' ? '需等待期並經核准後生效' : (x.status === 'nochange' ? '已經是這個狀態，不變' : '儲存後立即生效')
         },
         async applyStage() {
           const d = this.bdlg
           if (!d || this.busy) return
-          if (d.needsReason && this.reason.trim().length < 2) { this.berr = '請填寫原因'; return }
+          if (d.needsReason && this.reason.trim().length < 2) { this.berr = '請填寫原因（至少 4 個不同的字）'; return }
           this.busy = true; this.berr = ''
           try {
             const r = await this._post('/api/permmatrix/role-cap/batch', Object.assign(this.stageBody(), { reason: this.reason.trim(), planHash: d.planHash }))
             this.bdlg = null; this.stage = {}
-            this.msg = '已儲存：立即生效 ' + r.applied.length + ' 格' + (r.pending.length ? '；' + r.pending.length + ' 格要等確認期間後才會生效，需要另一位最高管理者核准' : '') + '。'
+            this.msg = '已儲存：立即生效 ' + r.applied.length + ' 格' + (r.pending.length ? '；' + r.pending.length + ' 格需等待期後才會生效，需要另一位最高管理者核准' : '') + '。'
             await this.reloadAll()
           } catch (e) { this.berr = String(e.message || e) } finally { this.busy = false }
         },
@@ -419,7 +419,7 @@
         },
         askPending(p, what) {
           const ap = what === 'approve'
-          this._open(ap ? '核准這項變更' : '撤銷這項變更', { sentence: (ap ? '核准後，確認期間一到就會生效。' : '撤銷後這項變更不會生效。') + '（變更 #' + p.id + '）' },
+          this._open(ap ? '核准這項變更' : '撤銷這項變更', { sentence: (ap ? '核准後，等待期一到就會生效。' : '撤銷後這項變更不會生效。') + '（變更 #' + p.id + '）' },
             (reason) => this._post('/api/permmatrix/pending/' + p.id + '/' + what, { reason }), { needReason: !ap, reasonLabel: ap ? '備註（選填）' : '撤銷原因（必填）' })
         },
         askUndo() {
@@ -427,7 +427,7 @@
             () => this._post('/api/permmatrix/undo'))
         },
         askRestore(v) {
-          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走確認期間與核准。', reversibleText: '可隨時一鍵復原' },
+          this._open('回到這一版', { sentence: '把權限設定回到 ' + (v.created_at || '').slice(0, 16).replace('T', ' ') + ' 的狀態；放寬高風險項目仍要走等待期與核准。', reversibleText: '可隨時一鍵復原' },
             (reason) => this._post('/api/permmatrix/versions/' + v.id + '/restore', { reason }), { needReason: true })
         },
         hasOverrides() { return this.users.some(u => u.overrides.length) },
