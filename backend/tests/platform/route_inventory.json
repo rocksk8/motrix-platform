@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 997,
-  "endpoints_api": 993,
-  "write_total": 535,
-  "write_api": 535,
+  "endpoints_total": 1000,
+  "endpoints_api": 996,
+  "write_total": 538,
+  "write_api": 538,
   "get_api": 458,
-  "distinct_paths_api": 846,
-  "write_with_body_api": 400,
+  "distinct_paths_api": 849,
+  "write_with_body_api": 403,
   "write_with_path_param_api": 365
  },
  "select_star": {
@@ -3314,6 +3314,21 @@
    "body": true
   },
   "POST /api/duty-roles/bindings/remove": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/matrix/apply": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/matrix/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/matrix/undo": {
    "w": true,
    "pp": 0,
    "body": true
