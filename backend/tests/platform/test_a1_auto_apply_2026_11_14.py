@@ -1346,8 +1346,11 @@ def test_blocked_reports_have_a_global_cap_even_when_names_and_problems_vary(tmp
     assert all(names) and len(_audit_rows(tmp_path)) == AA.BLOCKED_GLOBAL_MAX
     for i in range(100, 130):
         assert AA.write_blocked_report(root, "pkg%d" % i, "準備", ["原因 %d" % i]) == names[-1], "超過上限：回最後一份檔名"
-    assert len(_audit_rows(tmp_path)) == AA.BLOCKED_GLOBAL_MAX and len(_blocked_files(tmp_path)) == AA.BLOCKED_GLOBAL_MAX
+    assert len(_blocked_files(tmp_path)) == AA.BLOCKED_GLOBAL_MAX
     assert AA._blocked_dropped[root] == 30, "超過的只計數"
+    rows = _audit_rows(tmp_path)
+    assert [r["event"] for r in rows].count("apply_blocked_throttled") == 1, "被壓制時每個視窗只留一筆稽核"
+    assert [r["event"] for r in rows].count("apply_blocked") == AA.BLOCKED_GLOBAL_MAX
     other = tmp_path / "other"
     assert AA.write_blocked_report(str(other), "pkgZ", "準備", ["x"]) and len(_blocked_files(other)) == 1, "不同安裝目錄各自計"
 

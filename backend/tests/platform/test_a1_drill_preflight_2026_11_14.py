@@ -413,10 +413,13 @@ NETSTAT_UDP = """
 """.replace("@@PROD@@", PROD)
 
 
-def test_udp_rows_with_a_peer_are_parsed_and_unconnected_ones_are_not_connections():
-    rows = PF.parse_netstat(NETSTAT_UDP)
-    assert [(r["proto"], r["pid"], r["remote"]) for r in rows] == [("UDP", 500, PROD)]
-    assert [b["kind"] for b in PF.violations(rows)] == ["prod"]
+def test_udp_rows_are_never_connections_netstat_cannot_show_udp_peers():
+    """h11 #1：這台機器的 netstat 對 UDP 永遠只給 `*:*`，宣稱涵蓋「已連線 UDP」是誇大 ⇒ UDP 一律不算連線，報告明講看不到。"""
+    assert PF.parse_netstat(NETSTAT_UDP) == []
+    m = PF.ConnectionMonitor("unused.jsonl", lambda: [])
+    m.ticks = 1
+    st = m.summary()["statement"]
+    assert "只有 TCP" in st and "UDP" in st and "已指定對端" not in st
 
 
 def test_listening_pids_finds_the_owners_of_the_drill_ports_for_tcp_and_udp():
@@ -425,7 +428,7 @@ def test_listening_pids_finds_the_owners_of_the_drill_ports_for_tcp_and_udp():
 
 
 def test_tree_script_matches_orphans_by_command_line_and_excludes_itself():
-    script = PF._TREE_PS % {"pids": "1,2", "needle": "D:\\Claude-pm\\a1-drill\\X"}
+    script = PF._TREE_PS % {"pids": "1,2", "needle": "D:\\Claude-pm\\a1-drill\\X", "me": 7}
     assert "CommandLine.IndexOf($needle" in script and "ExecutablePath.IndexOf($needle" in script
     assert "$tree.Remove([int]$PID)" in script and "@(1,2)" in script
 
@@ -615,3 +618,74 @@ def test_guard_ready_refuses_when_the_monitor_thread_is_not_running(tmp_path, mo
     with pytest.raises(PF.DrillAbort) as ei:
         g.ready()
     assert "沒有在跑" in str(ei.value)
+
+
+# ── h11 #2：殺程序時不殺編排器與祖先 ───────────────────────────────────────────
+
+def test_kill_never_targets_the_orchestrator_or_its_ancestors_and_logs_them(tmp_path):
+    import os
+    killed = []
+    me = os.getpid()
+    snap = {"tree": [100, 50, me, 101], "ancestors": [50, 40], "conns": [_c(PROD, pid=101)]}
+    m = _mon(tmp_path, [snap], killed=killed)
+    m.tick()
+    assert killed == [[100, 101]], "祖先 50 與編排器自己都不殺"
+    log = [json.loads(x) for x in (tmp_path / "mon.jsonl").read_text(encoding="utf-8").splitlines()]
+    nk = [x for x in log if x.get("event") == "NOT_KILLED"]
+    assert nk and set(nk[0]["pids"]) == {50, me}, nk
+    with pytest.raises(PF.DrillAbort):
+        m.check_clean()
+
+
+def test_unproven_kill_also_spares_the_ancestors(tmp_path):
+    killed = []
+    m = _mon(tmp_path, [{"tree": [100, 50], "ancestors": [50], "conns": []}, RuntimeError("a"), RuntimeError("b")], killed=killed)
+    for _ in range(3):
+        m.tick()
+    assert m.unproven and killed and 50 not in killed[0] and 100 in killed[0]
+
+
+def test_real_sampler_reports_the_ancestors_of_this_process_and_keeps_them_out_of_the_tree():
+    import os
+    snap = PF.ConnectionMonitor("unused.jsonl", lambda: [])._ps_sample([os.getpid()])
+    assert snap["ancestors"], "測試行程一定有父行程"
+    assert not set(snap["ancestors"]) & set(snap["tree"]) and os.getpid() in snap["tree"]
+
+
+# ── h11 #3：所有子行程走 guard.launch ────────────────────────────────────────────
+
+def test_guard_launch_refuses_before_ready_and_uses_the_clean_environment(tmp_path, monkeypatch):
+    import sys as _sys
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    prog = [_sys.executable, "-I", "-c", "import os;print(os.environ.get('MOTRIX_X','none'), os.environ.get('HTTPS_PROXY','none'), os.environ.get('PIP_NO_INDEX'), os.environ.get('MOTRIX_DELIVERY_ERP_URL'))"]
+    with pytest.raises(PF.DrillAbort):
+        g.launch(prog, tmp_path, "跑測試程式", wait=True)
+    g.check(); g.scan(); g.control(); g.start()
+    try:
+        monkeypatch.setenv("MOTRIX_X", "leak")
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.corp:3128")
+        rc, out = g.launch(prog, tmp_path, "跑測試程式", wait=True, timeout=60)
+        assert rc == 0 and out.split() == ["none", "none", "1", "http://127.0.0.1:6766"], out
+        assert os_pid() in g.pids()
+    finally:
+        mon.stop()
+
+
+def test_guard_launch_refuses_an_extra_that_points_off_machine_unless_the_host_is_allowed(tmp_path, monkeypatch):
+    import sys as _sys
+    root, mon, g = _guard(tmp_path, monkeypatch)
+    g.check(); g.scan(); g.control(); g.start()
+    try:
+        prog = [_sys.executable, "-I", "-c", "import os;print(os.environ['MOTRIX_DELIVERY_ERP_URL'])"]
+        with pytest.raises(PF.DrillAbort):
+            g.launch(prog, tmp_path, "B7", extra_env={"MOTRIX_DELIVERY_ERP_URL": "https://example.com"}, wait=True)
+        rc, out = g.launch(prog, tmp_path, "B7", extra_env={"MOTRIX_DELIVERY_ERP_URL": "https://example.invalid"},
+                           allow_hosts=("example.invalid",), wait=True, timeout=60)
+        assert rc == 0 and out.strip() == "https://example.invalid"
+    finally:
+        mon.stop()
+
+
+def test_sanitized_env_isolates_user_level_git_and_pip_config():
+    env = PF.sanitized_env(environ={"USERPROFILE": "C:/Users/x"})
+    assert env["GIT_CONFIG_GLOBAL"] == "NUL" and env["GIT_CONFIG_NOSYSTEM"] == "1" and env["PIP_CONFIG_FILE"] == "NUL"

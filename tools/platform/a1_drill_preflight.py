@@ -118,8 +118,9 @@ ENV_WHITELIST = ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "PATH", "TEMP", "
 _PROD_SUBNET = re.compile(r"\b172\.16\.10\.\d{1,3}\b")
 
 
-def env_problems(environ, prod_ip=PROD_IP):
-    """目前環境變數有沒有指向非本機的值（會被子行程繼承）⇒ [說明]。"""
+def env_problems(environ, prod_ip=PROD_IP, allow_hosts=()):
+    """目前環境變數有沒有指向非本機的值（會被子行程繼承）⇒ [說明]。`allow_hosts`＝明確放行的主機名（B7 用保留網域 example.invalid）。"""
+    allow = {h.lower() for h in allow_hosts}
     out = []
     for k, v in sorted((environ or {}).items()):
         ku, vs = str(k).upper(), str(v)
@@ -131,23 +132,24 @@ def env_problems(environ, prod_ip=PROD_IP):
             continue
         if ku.startswith("MOTRIX_"):
             for m in _URL.finditer(vs):
-                if m.group(2).lower() not in _LOOPBACK_HOSTS or m.group(1):
+                if (m.group(2).lower() not in _LOOPBACK_HOSTS and m.group(2).lower() not in allow) or m.group(1):
                     out.append("環境變數 %s 指向非本機位址：%s" % (k, m.group(0)[:80]))
     return out
 
 
-def sanitized_env(erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None, extra=None):
+def sanitized_env(erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None, extra=None, allow_hosts=()):
     """演練程序的乾淨環境：只帶白名單變數，再由這裡明確設定 127.0.0.1 的位址與離線 pip；`extra` 最後蓋上（也不得帶非本機位址）。"""
     src = {str(k).upper(): (str(k), str(v)) for k, v in (os.environ if environ is None else environ).items()}
     env = {src[w][0]: src[w][1] for w in ENV_WHITELIST if w in src}
     env.update({
         "MOTRIX_DELIVERY_ERP_URL": "http://127.0.0.1:%d" % erp_port,
         "MOTRIX_TRAIN": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
-        "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_CONFIG_FILE": "NUL",
+        "GIT_CONFIG_GLOBAL": "NUL", "GIT_CONFIG_NOSYSTEM": "1",          # 使用者層的 .gitconfig／pip.ini（USERPROFILE 在白名單）可能設代理 ⇒ 不讀
         "MOTRIX_DISABLE_SCHEDULERS": "1", "MOTRIX_CLOUD_ARCHIVE": "off", "MOTRIX_EMAIL_SEND": "off",
     })
     env.update(extra or {})
-    bad = env_problems(env)
+    bad = env_problems(env, allow_hosts=allow_hosts)
     if bad:
         raise DrillAbort("演練環境變數不乾淨：" + "；".join(bad))
     return env
@@ -258,7 +260,7 @@ def iter_config_files(root):
                 yield p
 
 
-def static_scan(root, erp_port=ERP_PORT, prod_ip=PROD_IP, extra_patterns=(), dash_port=DASH_PORT):
+def static_scan(root, erp_port=ERP_PORT, prod_ip=PROD_IP, extra_patterns=(), dash_port=DASH_PORT, expect_root=None):
     """掃演練目錄的設定與腳本副本。⇒ {"files", "findings": [(相對路徑, 說明)], "allowed_product_files": [...]}；有任何 finding 就不可以演練。
     不讀程式原始碼（.py／.js）與文件資料夾：那是正式機也有的同一份程式，不是這次演練的設定。"""
     root = Path(root)
@@ -276,7 +278,7 @@ def static_scan(root, erp_port=ERP_PORT, prod_ip=PROD_IP, extra_patterns=(), das
             findings.append((rel, "讀不了，無法確認：%s" % e))
             continue
         findings += _scan_text(rel, text, prod_ip, extra_patterns)
-    findings += _ps1_findings(root, erp_port)
+    findings += _ps1_findings(root, erp_port, expect_root)
     findings += _autostart_findings(root, erp_port)
     if n == 0:
         findings.append(("", "演練目錄裡沒有任何設定檔可掃，無法確認（目錄是否建好？）"))
@@ -300,14 +302,14 @@ def code_prod_literals(root, prod_ip=PROD_IP):
     return sorted(out)
 
 
-def _ps1_findings(root, erp_port):
+def _ps1_findings(root, erp_port, expect_root=None):
     out = []
     for name in ("apply_update.ps1", "rollback_update.ps1"):            # 套用和「回復到套用前」（B5 演練會真的執行）兩支都要是演練副本
-        out += _one_ps1_findings(root, name, erp_port)
+        out += _one_ps1_findings(root, name, erp_port, expect_root)
     return out
 
 
-def _one_ps1_findings(root, name, erp_port):
+def _one_ps1_findings(root, name, erp_port, expect_root=None):
     ps1 = Path(root) / "backend" / "tools" / name
     rel = "backend\\tools\\" + name
     if not ps1.is_file():
@@ -318,7 +320,7 @@ def _one_ps1_findings(root, name, erp_port):
     if len(roots) != 1 or len(ports) != 1:
         return [(rel, "`$ProdRoot`／`$Port` 不是各恰好一行（%d／%d）⇒ 無法確認" % (len(roots), len(ports)))]
     out = []
-    if os.path.normcase(os.path.normpath(roots[0].replace("`$", "$"))) != os.path.normcase(os.path.normpath(str(root))):
+    if os.path.normcase(os.path.normpath(roots[0].replace("`$", "$"))) != os.path.normcase(os.path.normpath(str(expect_root or root))):
         out.append((rel, "$ProdRoot 沒有指向演練目錄：%s" % roots[0]))
     if int(ports[0]) != erp_port:
         out.append((rel, "$Port 不是演練埠 %d：%s" % (erp_port, ports[0])))
@@ -354,14 +356,21 @@ def require_static_ok(root, **kw):
 _TREE_PS = r"""
 $roots = @(%(pids)s)
 $needle = '%(needle)s'
+$me = %(me)d
 $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine, ExecutablePath
+$byId = @{}; foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
+$anc = New-Object 'System.Collections.Generic.HashSet[int]'
+$cur = $me; $guard = 0
+while ($byId.ContainsKey($cur) -and $guard -lt 64) { $guard++; $par = [int]$byId[$cur].ParentProcessId; if ($par -le 0 -or $anc.Contains($par) -or $par -eq $cur) { break }; [void]$anc.Add($par); $cur = $par }
 $tree = New-Object 'System.Collections.Generic.HashSet[int]'
 foreach ($r in $roots) { [void]$tree.Add([int]$r) }
 if ($needle.Length -gt 0) { foreach ($p in $all) { if (($p.CommandLine -and $p.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($p.ExecutablePath -and $p.ExecutablePath.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0)) { [void]$tree.Add([int]$p.ProcessId) } } }
+foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
 $grew = $true
 while ($grew) { $grew = $false; foreach ($p in $all) { if ($tree.Contains([int]$p.ParentProcessId) -and -not $tree.Contains([int]$p.ProcessId)) { [void]$tree.Add([int]$p.ProcessId); $grew = $true } } }
 [void]$tree.Remove([int]$PID)
-ConvertTo-Json -Compress @($tree)
+foreach ($a in $anc) { [void]$tree.Remove([int]$a) }
+ConvertTo-Json -Compress @{ tree = @($tree); ancestors = @($anc) }
 """
 # 連線清單用 `netstat -ano`：這台機器上 Get-NetTCPConnection 什麼都查不到（CIM MSFT_NetTCPConnection 是空的），
 # 用它監看會永遠「0 連線」＝假綠燈；netstat 正常。所以取樣前一定先做正對照（見 positive_control）。
@@ -375,8 +384,9 @@ def _split_hostport(s):
 
 
 def parse_netstat(text):
-    """`netstat -ano` 輸出 ⇒ [{"pid", "local", "remote", "port", "state", "proto"}]：TCP（不含 LISTENING）＋
-    已指定對端的 UDP（netstat 只列得出「綁定的位址」與「connect() 過的對端」；沒 connect 就 sendto 的 UDP 封包看不到——限制，報告會寫）。"""
+    """`netstat -ano` 輸出 ⇒ [{"pid", "local", "remote", "port", "state", "proto"}]：只有 TCP（不含 LISTENING）。
+    **UDP 一律不算連線**：這台機器的 `netstat -ano` 對 UDP 只列綁定位址、外部位址永遠是 `*:*`（看不到對端）⇒ 監看器看不到 UDP／ICMP，
+    報告明講；UDP 行只用在 `listening_pids`（找演練埠的擁有者）。"""
     out = []
     for line in text.splitlines():
         m = _NETSTAT_LINE.match(line)
@@ -386,14 +396,6 @@ def parse_netstat(text):
                 continue
             host, port = _split_hostport(remote)
             out.append({"pid": int(pid), "local": local, "remote": host, "port": port, "state": state, "proto": "TCP"})
-            continue
-        u = _NETSTAT_UDP.match(line)
-        if u:
-            local, remote, pid = u.groups()
-            if remote.strip() in ("*:*", "*"):
-                continue
-            host, port = _split_hostport(remote)
-            out.append({"pid": int(pid), "local": local, "remote": host, "port": port, "state": "UDP", "proto": "UDP"})
     return out
 
 
@@ -430,7 +432,7 @@ def violations(conns, prod_ip=PROD_IP):
 
 
 class ConnectionMonitor:
-    """每 `interval` 秒查演練程序的連線（TCP，加上已指定對端的 UDP）；非本機連線 ⇒ 殺程序、記下、`tripped`。紀錄每次取樣都落檔（jsonl）。
+    """每 `interval` 秒查演練程序的 TCP 連線（UDP／ICMP 看不到，報告明講）；非本機連線 ⇒ 殺程序、記下、`tripped`。紀錄每次取樣都落檔（jsonl）。
 
     演練程序＝`roots_fn()` 給的根程序（編排器自己與它起的程序）＋聽著演練埠的程序＋以上所有子孫＋命令列／執行檔路徑含演練目錄的程序（孤兒也抓）。
     取樣失敗：連續 `MAX_CONSECUTIVE_ERRORS` 次 ⇒ 殺程序、演練中止、報告標「未證明」；只要有失敗過，報告就不會印「N 連線」的保證句。
@@ -448,6 +450,7 @@ class ConnectionMonitor:
         self.unproven = None                      # 字串：為什麼「沒有證明」
         self.tree_seen = set()
         self._last_tree = []
+        self._ancestors = []
         self._stop = False
         self._thread = None
         self._control_done = False
@@ -458,27 +461,33 @@ class ConnectionMonitor:
         if net.returncode != 0 or "TCP" not in net.stdout:
             raise RuntimeError("監看取樣（netstat）失敗 rc=%s" % net.returncode)
         roots = set(int(p) for p in pids) | listening_pids(net.stdout, self.ports)
-        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in sorted(roots)) or "0", "needle": self.drill_root.replace("'", "''")}
+        script = _TREE_PS % {"pids": ",".join(str(int(p)) for p in sorted(roots)) or "0", "needle": self.drill_root.replace("'", "''"), "me": os.getpid()}
         r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
         if r.returncode != 0 or not r.stdout.strip():
             raise RuntimeError("監看取樣（程序樹）失敗 rc=%s %s" % (r.returncode, (r.stderr or "")[:120]))
-        tree = json.loads(r.stdout.strip().splitlines()[-1])
-        tree = [tree] if isinstance(tree, int) else [int(x) for x in tree]
+        doc = json.loads(r.stdout.strip().splitlines()[-1])
+        tree = [int(x) for x in ([doc["tree"]] if isinstance(doc["tree"], int) else (doc["tree"] or []))]
+        anc = [int(x) for x in ([doc["ancestors"]] if isinstance(doc["ancestors"], int) else (doc["ancestors"] or []))]
         mine = set(tree)
-        return {"tree": tree, "conns": [c for c in parse_netstat(net.stdout) if c["pid"] in mine]}
+        return {"tree": tree, "ancestors": anc, "conns": [c for c in parse_netstat(net.stdout) if c["pid"] in mine]}
 
     @staticmethod
     def _ps_kill(tree):
-        me = os.getpid()
-        for pid in sorted(tree, reverse=True):
-            if int(pid) != me:                                              # 不殺編排器自己（它要寫報告）
-                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        for pid in sorted(tree, reverse=True):                              # 呼叫端（_kill）已濾掉編排器與祖先
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def _log(self, rec):
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     def _kill(self, tree):
+        """殺程序。**編排器自己與它所有祖先（外層 shell／包裝腳本，命令列也可能含演練目錄）一律不殺**：
+        `taskkill /T` 殺祖先會連編排器一起殺掉，報告與摘要就寫不出來。被略過的記在紀錄裡。"""
+        protected = {os.getpid()} | set(self._ancestors)
+        skipped = sorted(int(p) for p in tree if int(p) in protected)
+        tree = [int(p) for p in tree if int(p) not in protected]
+        if skipped:
+            self._log({"t": round(self.clock(), 1), "event": "NOT_KILLED", "pids": skipped, "why": "編排器自己或它的祖先"})
         try:
             self.killer(tree)
         except Exception as e:                                              # noqa: BLE001 — 殺不掉也要記
@@ -501,6 +510,7 @@ class ConnectionMonitor:
             return []
         self.consecutive_errors = 0
         self._last_tree = list(snap.get("tree") or [])
+        self._ancestors = list(snap.get("ancestors") or self._ancestors)
         self.tree_seen |= set(self._last_tree)
         conns = snap.get("conns") or []
         self.max_conns = max(self.max_conns, len(conns))
@@ -576,7 +586,7 @@ class ConnectionMonitor:
              "prod_connections": self.prod_hits, "non_loopback_connections": self.other_hits, "processes_seen": len(self.tree_seen),
              "interval_seconds": self.interval, "tripped": bool(self.tripped), "proven": self.proven,
              "unproven_reason": self.unproven, "log": str(self.log_path)}
-        limits = ("範圍：TCP 連線與已指定對端的 UDP；沒 connect 就 sendto 的 UDP 封包、ICMP 看不到。取樣有間隔，極短暫連線可能漏看，"
+        limits = ("範圍：只有 TCP 連線；UDP（這台機器的 netstat 看不到 UDP 對端）與 ICMP 看不到。取樣有間隔，極短暫連線可能漏看，"
                   "主要保證是靜態掃描與位址只准本機。")
         if self.proven:
             s["statement"] = "整段演練對正式機 %d 連線（非本機連線 %d 次；共取樣 %d 次，每 %g 秒一次）。%s" % (
@@ -602,6 +612,7 @@ class DrillGuard:
         self.rows = []
         self.scan_result = None
         self._fp = None
+        self._children = []
 
     def _need(self, step):
         i = self.ORDER.index(step)
@@ -644,6 +655,47 @@ class DrillGuard:
         self.done = list(self.ORDER)
         return self
 
+    # ── 所有子行程都走這裡（a1_drill.py 自己不碰 subprocess；有測試 grep 釘住）─────────────────────
+    def _env(self, extra=None, allow_hosts=()):
+        env = sanitized_env(self.erp_port, self.dash_port, environ=self.environ, extra=extra, allow_hosts=allow_hosts)
+        return env
+
+    def run_tool(self, argv, cwd=None, timeout=600, extra_env=None):
+        """建置階段的工具（git、robocopy、PowerShell 查詢、`--check-audit`）：乾淨環境、等它結束 ⇒ (rc, 輸出)。不啟動演練服務。"""
+        r = subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd else None, env=self._env(extra_env), capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+    def run_tool_bytes(self, argv, cwd=None, timeout=600):
+        r = subprocess.run([str(a) for a in argv], cwd=str(cwd) if cwd else None, env=self._env(), capture_output=True, timeout=timeout,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return r.returncode, r.stdout, r.stderr
+
+    def launch(self, argv, cwd, what, extra_env=None, allow_hosts=(), detached=False, wait=False, timeout=None):
+        """啟動或驅動任何演練程序（ERP、儀表板、套用腳本、瀏覽器）的唯一入口：先 `ready()`（防線全過、監看器在跑、沒中止、腳本沒被改），
+        再用 `sanitized_env()` 乾淨環境起程序。`wait=True` ⇒ (rc, 輸出)；否則回 Popen（pid 記進 `self.pids()`，給監看器當根）。"""
+        self.ready(what)
+        env = self._env(extra_env, allow_hosts)
+        flags = (0x00000008 | 0x00000200) if detached else getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        kw = dict(cwd=str(cwd), env=env, creationflags=flags)
+        if wait:
+            pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw)
+            self._children.append(pr)
+            try:
+                out, _ = pr.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                subprocess.run(["taskkill", "/PID", str(pr.pid), "/T", "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                out, _ = pr.communicate()
+                return -999, (out or b"").decode("utf-8", "replace") + "\n（逾時，已終止）"
+            return pr.returncode, (out or b"").decode("utf-8", "replace")
+        pr = subprocess.Popen([str(a) for a in argv], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
+        self._children.append(pr)
+        return pr
+
+    def pids(self):
+        """監看器的根程序：編排器自己＋啟動過且還活著的子行程。"""
+        return [os.getpid()] + [c.pid for c in self._children if c.poll() is None]
+
     def ready(self, what="啟動演練程序"):
         """每個會啟動或驅動演練程序的動作之前呼叫。"""
         if self.done != list(self.ORDER):
@@ -654,6 +706,25 @@ class DrillGuard:
         if self._fingerprint() != self._fp:
             raise DrillAbort("不可以%s：靜態掃描之後，套用／回復腳本或 autostart.bat 被改動了，必須重新掃描" % what)
         return True
+
+
+def stop_drill_processes(base, ports=(ERP_PORT, DASH_PORT), log=None):
+    """收尾：只殺「命令列／執行檔含演練目錄」與「聽著演練埠」的程序（含子孫）；編排器自己與祖先不殺。⇒ 被殺的 pid。"""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    net = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
+    roots = listening_pids(net.stdout or "", ports)
+    script = _TREE_PS % {"pids": ",".join(str(p) for p in sorted(roots)) or "0", "needle": str(base).replace("'", "''"), "me": os.getpid()}
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, creationflags=flags)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError("收尾找不到演練程序（PowerShell rc=%s）" % r.returncode)
+    doc = json.loads(r.stdout.strip().splitlines()[-1])
+    tree = [doc["tree"]] if isinstance(doc["tree"], int) else list(doc["tree"] or [])
+    kill = [int(x) for x in tree if int(x) != os.getpid() and int(x) != 0]
+    for pid in sorted(kill, reverse=True):
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=flags)
+    if log:
+        log("收尾殺掉演練程序：%s" % kill)
+    return kill
 
 
 def main(argv=None):

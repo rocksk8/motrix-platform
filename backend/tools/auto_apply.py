@@ -840,6 +840,7 @@ BLOCKED_GLOBAL_SEC = 600
 _blocked_recent = {}                        # {摘要: (時間, 報告檔名)}
 _blocked_times = {}                         # {安裝目錄: [最近寫入的時間]}
 _blocked_dropped = {}                       # {安裝目錄: 超過全域上限而沒寫的次數}
+_blocked_throttled_at = {}                   # {安裝目錄: 最近一次寫「被壓制」稽核的時間}
 _blocked_last_name = {}                     # {安裝目錄: 最後一份報告檔名}
 _blocked_lock = threading.Lock()
 
@@ -889,6 +890,10 @@ def write_blocked_report(install_root, name, step, problems, by=""):
             if len(recent) >= BLOCKED_GLOBAL_MAX:                   # 全域上限：只計數，不寫檔、不寫稽核，回最後一份
                 _blocked_times[ir] = recent
                 _blocked_dropped[ir] = _blocked_dropped.get(ir, 0) + 1
+                if now - _blocked_throttled_at.get(ir, -1e18) >= BLOCKED_GLOBAL_SEC:       # 每個視窗只留一筆「有被壓制」的稽核，操作的人看得到
+                    _blocked_throttled_at[ir] = now
+                    audit_event(install_root, {"event": "apply_blocked_throttled", "step": step_s, "limit": BLOCKED_GLOBAL_MAX,
+                                               "window_seconds": BLOCKED_GLOBAL_SEC})
                 return _blocked_last_name.get(ir)
             recent.append(now)
             _blocked_times[ir] = recent
