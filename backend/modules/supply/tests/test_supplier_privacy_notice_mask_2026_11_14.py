@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""T86：`GET /api/suppliers/{sid}/privacy-notice` 的資料範圍與 `GET /api/suppliers` 同一條線。
+"""T86：`GET /api/suppliers/{sid}/privacy-notice` 與 `POST …/contacts/{ctid}/privacy-notice/ack`（已記錄過時回既有紀錄）的資料範圍與 `GET /api/suppliers` 同一條線。
 
 管理員（admin／superadmin）看完整「已告知」紀錄（時間、記錄人姓名／帳號、告知文字雜湊）；
 其他只有供應商檢視權的人只看到「已告知＋日期」（`{at}`），不帶記錄人與雜湊。沒有新增權限鍵。
@@ -59,3 +59,30 @@ def test_without_the_supplier_view_permission_is_still_refused(client, make_user
     hn = _login(client, nu, np_)
     r = client.get(f"/api/suppliers/{sid}/privacy-notice", headers=hn)
     assert r.status_code == 403, r.text
+
+
+def test_non_admin_post_ack_on_an_already_acked_contact_cannot_read_the_record(client, make_user):
+    """h11 F1：POST ack 對已記錄過的聯絡人回傳的是既有紀錄——不能成為繞過 GET 遮罩的後門。"""
+    sid, h, hb, full = _setup(client, make_user)
+    r = client.post(f"/api/suppliers/{sid}/contacts/111/privacy-notice/ack", headers=hb)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ack": {"at": full["at"]}, "created": False}
+    for leaked in (full["by"], full["byUsername"], full["noticeHash"]):
+        assert leaked and leaked not in r.text
+    # 管理員照舊拿到完整紀錄
+    ra = client.post(f"/api/suppliers/{sid}/contacts/111/privacy-notice/ack", headers=h)
+    assert ra.json() == {"ack": full, "created": False}
+
+
+def test_non_admin_first_ack_is_recorded_in_full_but_echoed_masked(client, make_user):
+    su, sp = make_user(username="pm_root3", role="superadmin")
+    h = _login(client, su, sp)
+    sid = client.post("/api/suppliers", json={"name": "首次告知供應商", "data": {"contacts": [{"id": 7, "name": "乙"}]}}, headers=h).json()["id"]
+    bu, bp = make_user(username="pm_buyer3", role="sales", modules=["procurement"])
+    hb = _login(client, bu, bp)
+    r = client.post(f"/api/suppliers/{sid}/contacts/7/privacy-notice/ack", headers=hb)
+    assert r.status_code == 200 and r.json()["created"] is True, r.text
+    assert set(r.json()["ack"]) == {"at"}
+    from helpers import privacy_notice as pn
+    stored = pn.get_ack("supplier_contact", f"{sid}:7")
+    assert stored["byUsername"] == "pm_buyer3" and stored["noticeHash"], "伺服器端的紀錄仍是完整的（稽核用）"
