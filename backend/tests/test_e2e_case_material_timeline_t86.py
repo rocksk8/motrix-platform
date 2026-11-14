@@ -261,7 +261,7 @@ def test_review_fixes_batch1_arrival_pending_no_access_and_single_load(live_serv
     # ① PO 連結、未到貨 → 確認到貨 → 待儲存
     page.evaluate("() => { const m = %s.cr.caseRecord.materials.find(x => x.id === 'mb'); m.arrived = false; m.ordered = true }" % _D)
     page.locator('[data-testid="mtl-act-mb-arrive"]').click()
-    assert "待儲存" in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+    page.locator('[data-testid="mtl-st-mb-arrive"]').filter(has_text="待儲存").wait_for(state="visible", timeout=5000)
     page.get_by_text("已標記到貨，請按「儲存」").first.wait_for(state="visible", timeout=5000)
     # ② 讀不到材料申請（403／404）
     page.evaluate("() => { %s.materialOrders = []; %s.moNoAccess = true }" % (_D, _D))
@@ -297,8 +297,8 @@ def test_pending_arrival_mark_is_cleared_after_save(live_server, make_user, e2e_
     page = _open(live_server, make_user, e2e_browser, "t86_pend", 1440)
     page.evaluate("() => { const m = %s.cr.caseRecord.materials.find(x => x.id === 'mb'); m.arrived = false; m.ordered = true }" % _D)
     page.locator('[data-testid="mtl-act-mb-arrive"]').click()
-    assert "待儲存" in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+    page.locator('[data-testid="mtl-st-mb-arrive"]').filter(has_text="待儲存").wait_for(state="visible", timeout=5000)
     page.evaluate("() => { const d = %s; d.dirty = false }" % _D)            # 模擬存檔成功
     page.evaluate("() => { const d = %s; d.dirty = true }" % _D)             # 之後別的編輯
     page.wait_for_timeout(300)
-    assert "待儲存" not in page.locator('[data-testid="mtl-st-mb-arrive"]').inner_text()
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"mtl-st-mb-arrive\"]').innerText.includes('待儲存')", timeout=5000)

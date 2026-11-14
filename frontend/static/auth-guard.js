@@ -37,7 +37,7 @@
   var BOOT_PAGE = /\/case-management\.html$/.test(location.pathname) ? 'case' : '';
   if (BOOT_PAGE === 'case') {
     BOOT_SECTIONS['/api/settings-center/public?groups=onepipe'] = ['onepipeFlags', 1];
-    BOOT_SECTIONS['/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates,ui_format'] = ['builderGroups', 1];
+    BOOT_SECTIONS['/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates,ui_format,list_view'] = ['builderGroups', 1];
     BOOT_SECTIONS['/api/profit-warning/config'] = ['profitWarning', 1];
     BOOT_SECTIONS['/api/users/selectable'] = ['usersSelectable', 1];
     BOOT_SECTIONS['/api/settings/company-profile/public'] = ['companyProfilePublic', 1];

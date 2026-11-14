@@ -833,6 +833,7 @@
     el.addEventListener('input', onInput)
     el.addEventListener('compositionstart', onCompStart)
     el.addEventListener('compositionend', onCompEnd)
+    el.addEventListener('focusout', function (e) { if (e.target && e.target.getAttribute && e.target.getAttribute('data-mx') === 'search') composing = false })     // 輸入法漏送 compositionend（離開輸入框）時不卡住
     // 離開警告：有未儲存的草稿時，關閉／重新整理頁面（beforeunload）與點站內連結都要攔
     function onBeforeUnload(e) {
       if (dead || !dirtyCount()) return

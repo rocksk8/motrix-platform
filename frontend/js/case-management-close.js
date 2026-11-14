@@ -57,12 +57,43 @@ window.CM_PARTS.push(() => ({
       }
     },
 
+    // T86 案件UX #1：結案前檢查最上方的「缺漏」摘要——把五關的原因翻成人話：哪幾個階段沒完成、幾期款沒收、幾份單據待簽。
+    // 資料來源與五關同一份（closeCheck.gates 是剛從 /close-gates 取回的，案件資料在按結案前已先存檔）。
+    closeGapLines() {
+      const lines = []
+      const gates = this.closeCheck.gates || []
+      const blocked = k => gates.find(g => g.key === k && g.state === 'blocked')
+      if (blocked('progress')) {
+        const open = (this.cr.caseRecord?.stages || []).filter(s => !s.done)
+        if (open.length) lines.push('未完成階段 ' + open.length + ' 項：' + open.slice(0, 3).map(s => s.label || '（未命名）').join('、') + (open.length > 3 ? ' 等' : ''))
+      }
+      if (blocked('payment')) {
+        const unpaid = this.paymentItems().filter(it => !it.received)
+        lines.push(unpaid.length ? '未收款 ' + unpaid.length + ' 期' : '款項尚未收齊')
+      }
+      const doc = blocked('documents')
+      if (doc) lines.push('待簽核單據 ' + ((doc.pendingDocs || []).length || '') + (((doc.pendingDocs || []).length) ? ' 份' : '（見下方）'))
+      if (blocked('settlement')) lines.push('精算尚未完結')
+      if (blocked('extraExpense')) lines.push('有送審中的額外支出')
+      return lines
+    },
+
     closeCheckGoto(g) {
       this.closeCheck.open = false
       this.gotoGate(g)
     },
 
+    // T86 案件UX #6：「精算」關的去向。狀態列的「精算 未建」原本跳到「財務」分頁，字樣與去向不符；
+    // 有權限的人改為直接開精算頁（與分頁列的「精算 ▶」同一個目的地）。沒有財務檢視權限的人維持原行為（不能進精算頁）。
+    settleGateLinks(g) {
+      return !!(g && g.key === 'settlement' && this.selected && this.canSeeFinancial())
+    },
+
     gotoGate(g) {
+      if (this.settleGateLinks(g)) {
+        window.location.href = 'settlement.html?no=' + encodeURIComponent(this.selected.quote_no) + '&from=case'
+        return
+      }
       const t = this._gateTab(g)
       this.activeTab = t
       if (t === 'exec') this.execSubTab = 'progress'
