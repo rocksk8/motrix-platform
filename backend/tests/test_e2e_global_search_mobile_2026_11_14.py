@@ -26,10 +26,13 @@ _RESULT = {
 }
 
 
-def _open_search(browser, live_server, user, width, height):
+def _open_search(browser, live_server, user, width, height, zoom=None, result=None):
     ctx = browser.new_context(viewport={"width": width, "height": height})
     page = ctx.new_page()
-    page.route("**/api/search?*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(_RESULT)))
+    body = json.dumps(result or _RESULT)
+    page.route("**/api/search?*", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    if zoom:
+        page.add_init_script("try { localStorage.setItem('motrix_font_zoom', '%s') } catch (e) {}" % zoom)
     inject_login(page, live_server, user[0], user[1])
     page.goto(f"{live_server}/pages/quotations.html")
     page.wait_for_selector(GLOBAL_SEARCH, timeout=15000)
@@ -59,3 +62,20 @@ def test_desktop_search_dropdown_keeps_340px(live_server, make_user, e2e_browser
     page = _open_search(e2e_browser, live_server, u, 1280, 800)
     width = page.evaluate("() => document.querySelector('[data-testid=\"gsearch-drop\"]').getBoundingClientRect().width")
     assert abs(width - 340) <= 1, f"桌機下拉維持 340px（正對照）：{width}"
+
+
+@pytest.mark.e2e
+def test_mobile_search_dropdown_bottom_stays_on_screen_at_biggest_font_zoom(live_server, make_user, e2e_browser):
+    """字級「特」（1.3 倍）：根元素 zoom 會把 vh 一起放大，限高沒除回去的話，結果多時下拉底部掉到螢幕外。"""
+    u = make_user(username="gsm_e3", role="admin")
+    many = dict(_RESULT, customers=[{"id": i, "name": "測試客戶 %d" % i, "code": "C-%03d" % i} for i in range(1, 31)])
+    page = _open_search(e2e_browser, live_server, u, 390, 844, zoom="1.3", result=many)
+    page.wait_for_function("() => document.querySelectorAll('[data-testid=\"gsearch-drop\"] .gs-item').length >= 30", timeout=10000)
+    page.wait_for_function("() => document.documentElement.style.getPropertyValue('--fz') === '1.3'", timeout=5000)
+    # 不比座標（zoom 後 getBoundingClientRect 的單位因瀏覽器版本而異）：直接問「畫面最底下那一點是不是下拉」。
+    # 限高沒除回去 ⇒ 下拉底部超出螢幕，最底下那一點還是下拉；修好之後下拉在螢幕內結束，最底下那一點是別的東西。
+    hit = page.evaluate("""() => { const d = document.querySelector('[data-testid="gsearch-drop"]');
+                                   const at = (y) => { const e = document.elementFromPoint(195, y); return !!(e && d.contains(e)) };
+                                   return { mid: at(400), bottom: at(window.innerHeight - 3) } }""")
+    assert hit["mid"], "下拉中段應該蓋在畫面上（30 筆結果）"
+    assert not hit["bottom"], "字級特時下拉底部超出螢幕：畫面最底下那一點還是下拉"
