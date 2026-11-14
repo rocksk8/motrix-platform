@@ -507,6 +507,27 @@ def test_toggle_is_pending_until_restart(client, make_user, synthetic_loaded):
     assert ms.configured_disabled() == []
 
 
+def test_protected_module_cannot_be_disabled_but_can_be_enabled(client, make_user, synthetic_loaded, monkeypatch):
+    """核心必須模組：後端擋停用（400，原因說明），不只畫面；已被停用的仍可重新啟用；列帶 protected 旗標。
+    正對照：不在保護清單時同一個 PUT 成功。"""
+    key = synthetic_loaded
+    h = _auth(client, make_user)
+    rows = {m["key"]: m for m in client.get("/api/system/modules", headers=h).json()["modules"]}
+    assert rows[key]["protected"] is False and rows[key]["protectedReason"] == ""
+    monkeypatch.setitem(ms.PROTECTED_MODULES, key, "測試用：這個模組必須保持啟用。")
+    rows = {m["key"]: m for m in client.get("/api/system/modules", headers=h).json()["modules"]}
+    assert rows[key]["protected"] is True and "必須保持啟用" in rows[key]["protectedReason"]
+    r = client.put("/api/system/modules/" + key, headers=h, json={"enabled": False})
+    assert r.status_code == 400 and "必須保持啟用" in r.text, r.text
+    assert ms.configured_disabled() == [], "被擋下就不可以寫入"
+    ms.set_enabled(key, False)                                                       # 已被停用（例如舊資料）
+    assert client.put("/api/system/modules/" + key, headers=h, json={"enabled": True}).status_code == 200
+    assert ms.configured_disabled() == []
+    monkeypatch.delitem(ms.PROTECTED_MODULES, key)
+    assert client.put("/api/system/modules/" + key, headers=h, json={"enabled": False}).status_code == 200
+    ms.set_enabled(key, True)
+
+
 def test_toggle_permissions_and_unknown(client, make_user, synthetic_loaded):
     h = _auth(client, make_user)
     assert client.put("/api/system/modules/no_such_module", headers=h, json={"enabled": False}).status_code == 404

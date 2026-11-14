@@ -7799,6 +7799,8 @@
    "modules[].note",
    "modules[].pages",
    "modules[].pendingRestart",
+   "modules[].protected",
+   "modules[].protectedReason",
    "modules[].reason",
    "modules[].state",
    "modules[].stateLabel",

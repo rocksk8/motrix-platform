@@ -1235,7 +1235,9 @@ def _module_rows():
                      "licenseChanged": license_changed,
                      "licenseNote": ((LICENSE_CHANGED_NOTE + "：" + (lic_now[1] or "目前授權包含此模組"))
                                      if license_changed else ""),
-                     "canToggle": st["state"] in ("loaded", "disabled")})
+                     "canToggle": st["state"] in ("loaded", "disabled"),
+                     "protected": st["key"] in _ms.PROTECTED_MODULES,
+                     "protectedReason": _ms.PROTECTED_MODULES.get(st["key"], "")})
     return rows
 
 
@@ -1266,6 +1268,8 @@ def toggle_system_module(key: str, body: _ModuleToggleIn, authorization: str = H
         raise HTTPException(400, "模組 %s 目前是「%s」：%s——管理者開關無法處理" %
                             (key, rows[key]["stateLabel"], rows[key]["reason"] or ""))
     from helpers import module_switches as _ms
+    if not body.enabled and key in _ms.PROTECTED_MODULES:
+        raise HTTPException(400, "模組 %s 不可停用：%s" % (key, _ms.PROTECTED_MODULES[key]))
     _ms.set_enabled(key, body.enabled)
     _audit(_tok(authorization), "system.module.enable" if body.enabled else "system.module.disable",
            "settings", key, "%s模組 %s（重啟後生效）" % ("啟用" if body.enabled else "停用", key))
