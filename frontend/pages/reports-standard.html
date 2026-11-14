@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>標準報表 — MOTRIX PLATFORM</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-format.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票（見 style.css「DARK MODE」區塊）。 -->
+  <style>
+    .sr-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
+      background: var(--white);
+    }
+    /* 篩選列的輸入框類別名含 filter：sidebar.js 的「未儲存變更」守門把含 filter／search 的輸入框當純篩選條件，
+       不算待存內容；少了它，填條件後下載（blob 連結點擊）會被攔下、跳出「離開此頁面」確認。 */
+    .sr-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 12px; align-items: end;
+                  background: var(--bg); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; }
+    .sr-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+    .sr-field input, .sr-field select {
+      padding: 6px 8px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 13px; background: #fff; color: var(--text-primary); min-height: 34px; width: 100%;
+    }
+    .sr-field [disabled] { background: #EEEDE8; color: var(--text-dim); cursor: not-allowed; }
+    .sr-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sr-hint { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.7; }
+    .sr-quick { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; font-size: 12px; color: var(--text-secondary); }
+    .sr-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 14px 0 16px; flex-wrap: wrap; }
+    .sr-tab {
+      appearance: none; background: none; border: 0; border-bottom: 3px solid transparent;
+      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+      cursor: pointer; margin-bottom: -1px;
+    }
+    .sr-tab:hover { color: var(--text-primary); }
+    .sr-tab.is-on { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .sr-tab:focus-visible { outline: 2px solid var(--info, #1D4ED8); outline-offset: 2px; }
+    .sr-desc { margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+    .sr-err { margin-bottom: 12px; padding: 9px 14px; background: #FEF2F2; border: 1px solid #DC2626; border-radius: 6px; font-size: 12px; color: #991B1B; }
+    .sr-stale { font-size: 12px; color: var(--warning, #92400E); }
+    .sr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .sr-kpi { background: var(--bg); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 12px 16px; }
+    .sr-kpi__l { font-size: 12px; color: var(--text-secondary); }
+    .sr-kpi__v { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .sr-kpi__v.is-soft { font-size: 16px; color: var(--text-secondary); font-weight: 600; }
+    .sr-kpi__s { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .sr-card { background: var(--bg); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; }
+    .sr-card__t { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+    .sr-note { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.7; }
+    [data-testid=sr-masked] { margin: 0 0 12px; }
+    .sr-notes { margin: 0 0 12px; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+    .sr-wrap { overflow-x: auto; }
+    .sr-wrap td.r, .sr-wrap th.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .sr-wrap td, .sr-wrap th { white-space: nowrap; }
+    .sr-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; border: 1px solid var(--border-light); background: #F3F2EE; }
+    .sr-badge.ok { color: var(--success); border-color: #BBE5C8; background: #EAF7EF; }
+    .sr-badge.warn { color: var(--warning); border-color: #EBD7A8; background: #FBF3DD; }
+    .sr-badge.info { color: var(--info); border-color: #C3D0F5; background: #EEF2FF; }
+    .sr-actions { margin-bottom: 12px; }
+    .sr-badge--inline { margin-left: 8px; font-weight: 400; }
+    .sr-soft { color: var(--text-secondary); }
+    .sr-seg { display: inline-flex; border: 1px solid var(--border-light); border-radius: var(--radius); overflow: hidden; margin-bottom: 10px; }
+    .sr-seg button { font: inherit; border: 0; background: #fff; padding: 6px 14px; cursor: pointer; color: var(--text-primary); }
+    .sr-seg button.is-on { background: var(--text-primary); color: #fff; }
+    .sr-bars { display: flex; align-items: flex-end; gap: 14px; height: 160px; padding: 6px 4px 0; border-bottom: 1px solid var(--border-light); overflow-x: auto; }
+    .sr-bars__g { flex: 1; min-width: 44px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+    .sr-bars__pair { display: flex; align-items: flex-end; gap: 4px; height: 130px; }
+    .sr-bars__b { width: 20px; background: var(--text-primary); border-radius: 3px 3px 0 0; min-height: 1px; }
+    .sr-bars__b.alt { background: #9A9890; }
+    .sr-bars__x { font-size: 12px; color: var(--text-secondary); margin-top: 4px; white-space: nowrap; }
+    .sr-legend { font-size: 12px; color: var(--text-secondary); margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .sr-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; background: var(--text-primary); }
+    .sr-legend i.alt { background: #9A9890; }
+    .sr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .sr-fun { display: grid; gap: 8px; }
+    .sr-fun__r { display: grid; grid-template-columns: 90px 1fr 200px; gap: 12px; align-items: center; font-size: 13px; }
+    .sr-fun__bar { height: 22px; background: #E9E7E0; border-radius: 3px; overflow: hidden; }
+    .sr-fun__bar > span { display: block; height: 100%; background: var(--text-primary); }
+    .sr-fun__t { font-variant-numeric: tabular-nums; }
+    .sr-empty { border: 1px dashed var(--border); border-radius: var(--radius); padding: 28px 24px; text-align: center; color: var(--text-secondary); font-size: 13px; line-height: 1.9; }
+    .sr-empty b { display: block; font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
+    @media (max-width: 900px) { .sr-two { grid-template-columns: 1fr; } .sr-fun__r { grid-template-columns: 70px 1fr; } .sr-fun__t { grid-column: 1 / -1; } }
+      /* ── 手機／平板（≤1023px）觸控體驗：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高 ── */
+    @media (max-width: 1023px) {
+      .sr-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .sr-main select { font-size: 16px; min-height: 44px; }
+      .sr-main .btn { min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .sr-main { padding: 20px 16px 60px; }
+    }
+  </style>
+</head>
+<body x-data="reportsStandardPage()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <!-- 側欄必須是 <body> 的直接子元素（深色模式的反轉濾鏡排除清單只認直接子元素）。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="sr-main">
+    <div class="pg">
+      <div class="pg__l">
+        <nav class="pg__crumb" aria-label="目前位置"><span>報表</span> › <span>標準報表</span></nav>
+        <h1 class="pg__t">標準報表</h1>
+        <p class="pg__s">管理用・即時計算（非會計帳）。營收、毛利、應收帳齡、案件進度、業務漏斗共用同一組篩選條件，匯出內容與畫面一致。</p>
+      </div>
+    </div>
+
+    <template x-if="loadError">
+      <div class="sr-err" data-testid="sr-load-error" role="alert" x-text="loadError"></div>
+    </template>
+
+    <template x-if="loaded && reports.length === 0 && !loadError">
+      <div class="sr-empty" data-testid="sr-empty-all">
+        <b>您的帳號尚無可檢視的標準報表</b>
+        報表依權限顯示。需要「營運報表」、財務檢視權限，或「業務開發」「案件」的使用權限，請聯絡管理員開通。
+      </div>
+    </template>
+
+    <template x-if="rep">
+      <div>
+        <section class="sr-filters" data-testid="sr-filters" aria-label="篩選條件">
+          <label class="sr-field"><span>起</span>
+            <input type="date" class="sr-filter" data-testid="sr-param-date_from" x-model="form.date_from" :disabled="!has('date_from')" @input="touch()"></label>
+          <label class="sr-field"><span>迄</span>
+            <input type="date" class="sr-filter" data-testid="sr-param-date_to" x-model="form.date_to" :disabled="!has('date_to')" @input="touch()"></label>
+          <label class="sr-field"><span>業務</span>
+            <select class="sr-filter" data-testid="sr-param-sales_id" x-model="form.sales_id" :disabled="!has('sales_id')" @change="touch()">
+              <option value="">（全部）</option>
+              <template x-for="o in salesOptions" :key="o.id">
+                <option :value="String(o.id)" x-text="o.label + (o.active === false ? '（已停用）' : '')"></option>
+              </template>
+            </select></label>
+          <label class="sr-field"><span>客戶（名稱關鍵字）</span>
+            <input type="text" class="sr-filter" maxlength="40" data-testid="sr-param-customer" x-model="form.customer" :disabled="!has('customer')"
+                   @input="touch()" @keydown.enter="run()"></label>
+          <label class="sr-field"><span>部門</span>
+            <select class="sr-filter" data-testid="sr-param-department_id" x-model="form.department_id" :disabled="!has('department_id')" @change="touch()">
+              <option value="">（全部）</option>
+              <template x-for="o in departmentOptions" :key="o.id">
+                <option :value="String(o.id)" x-text="o.label"></option>
+              </template>
+            </select></label>
+          <div class="sr-btns">
+            <button type="button" class="btn btn-primary" data-testid="sr-run" :disabled="loading || !rep.available" @click="run()" x-text="loading ? '產出中…' : '套用'"></button>
+            <button type="button" class="btn" data-testid="sr-reset" @click="reset()">清除條件</button>
+          </div>
+          <div class="sr-btns">
+            <button type="button" class="btn" data-testid="sr-excel" :disabled="!canExport" @click="download('excel')" x-text="exporting === 'excel' ? '下載中…' : '匯出 Excel'"></button>
+            <button type="button" class="btn" data-testid="sr-pdf" :disabled="!canExport" @click="download('pdf')" x-text="exporting === 'pdf' ? '下載中…' : '匯出 PDF'"></button>
+          </div>
+        </section>
+        <div class="sr-quick" x-show="has('date_from')" data-testid="sr-quick">
+          <span>日期快選：</span>
+          <button type="button" class="btn" data-testid="sr-quick-month" @click="quick('month')">本月</button>
+          <button type="button" class="btn" data-testid="sr-quick-quarter" @click="quick('quarter')">本季</button>
+          <button type="button" class="btn" data-testid="sr-quick-year" @click="quick('year')">今年</button>
+          <button type="button" class="btn" data-testid="sr-quick-last12" @click="quick('last12')">近 12 個月</button>
+          <button type="button" class="btn" data-testid="sr-quick-lastyear" @click="quick('lastyear')">去年</button>
+        </div>
+        <p class="sr-hint" data-testid="sr-filter-hint" x-text="filterHint"></p>
+
+        <div class="sr-tabs" role="tablist" aria-label="報表分類">
+          <template x-for="t in reports" :key="t.id">
+            <button type="button" class="sr-tab" role="tab" :class="{'is-on': t.id === rep.id}"
+                    :aria-selected="t.id === rep.id ? 'true' : 'false'" :data-testid="'sr-tab-' + t.id"
+                    @click="pick(t.id)" x-text="t.title"></button>
+          </template>
+        </div>
+        <p class="sr-desc" x-text="rep.desc"></p>
+
+        <template x-if="!rep.available">
+          <div class="sr-empty" data-testid="sr-unavailable">
+            <b x-text="'您的帳號目前不能檢視「' + rep.title + '」'"></b>
+            <span x-text="rep.reason || '需要對應的權限，請聯絡管理員開通。'"></span>
+          </div>
+        </template>
+
+        <template x-if="rep.available">
+          <div>
+            <div class="sr-actions">
+              <span class="sr-stale" data-testid="sr-stale" x-show="result && stale">條件已變更，下方仍是上一次的結果——請按「套用」。</span>
+            </div>
+            <template x-if="error">
+              <div class="sr-err" data-testid="sr-error" role="alert" x-text="error"></div>
+            </template>
+
+            <template x-if="loading && !result">
+              <div class="sr-empty" data-testid="sr-loading">產出中…</div>
+            </template>
+
+            <template x-if="result">
+              <div data-testid="sr-result">
+                <!-- 營收：口徑切換 -->
+                <template x-if="result.id === 'revenue'">
+                  <div class="sr-seg" role="group" aria-label="營收口徑" data-testid="sr-basis">
+                    <button type="button" :class="{'is-on': form.basis !== 'accrual'}" data-testid="sr-basis-cash" @click="setBasis('cash')">現金口徑（預設；依收款日，含稅）</button>
+                    <button type="button" :class="{'is-on': form.basis === 'accrual'}" data-testid="sr-basis-accrual" @click="setBasis('accrual')">權責口徑（依階段完成月認列，未稅）</button>
+                  </div>
+                </template>
+
+                <ul class="sr-notes" data-testid="sr-notes" x-show="(result.notes || []).length > 0">
+                  <template x-for="(n, i) in (result.notes || [])" :key="i"><li x-text="n"></li></template>
+                </ul>
+                <p class="sr-note" data-testid="sr-masked" x-show="result.moneyMasked">您的帳號沒有金額檢視權限，金額欄位以「—」顯示。</p>
+
+                <div class="sr-kpis" data-testid="sr-kpis" x-show="(result.kpis || []).length > 0">
+                  <template x-for="k in (result.kpis || [])" :key="k.key">
+                    <div class="sr-kpi" :data-testid="'sr-kpi-' + k.key">
+                      <div class="sr-kpi__l" x-text="k.label"></div>
+                      <div class="sr-kpi__v" :class="{'is-soft': isState(k.value)}" x-text="fmt(k.value, k.type, true)"></div>
+                      <div class="sr-kpi__s" x-show="k.note" x-text="k.note"></div>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- 營收：逐月 -->
+                <template x-if="result.id === 'revenue' && (result.series || []).length > 0">
+                  <div class="sr-card" data-testid="sr-series">
+                    <h2 class="sr-card__t">每月營收</h2>
+                    <div class="sr-bars">
+                      <template x-for="p in series" :key="p.key">
+                        <div class="sr-bars__g">
+                          <div class="sr-bars__pair">
+                            <div class="sr-bars__b" x-effect="$el.style.height = p.h1 + '%'" :title="p.t1"></div>
+                            <div class="sr-bars__b alt" x-show="p.h2 !== null" x-effect="$el.style.height = (p.h2 || 0) + '%'" :title="p.t2"></div>
+                          </div>
+                          <div class="sr-bars__x" x-text="p.label"></div>
+                        </div>
+                      </template>
+                    </div>
+                    <div class="sr-legend">
+                      <span><i></i><span x-text="form.basis === 'accrual' ? '權責營收（本口徑）' : '現金實收（本口徑）'"></span></span>
+                      <span x-show="hasOther"><i class="alt"></i><span x-text="form.basis === 'accrual' ? '現金實收（對照）' : '權責營收（對照）'"></span></span>
+                    </div>
+                    <p class="sr-note">兩種口徑金額不同屬正常：權責看階段何時完成，現金看款項何時入帳。</p>
+                  </div>
+                </template>
+
+                <!-- 業務漏斗 -->
+                <template x-if="result.id === 'sales-funnel' && result.funnel">
+                  <div class="sr-two" data-testid="sr-funnel">
+                    <div class="sr-card" data-testid="sr-funnel-dev">
+                      <h2 class="sr-card__t">商機漏斗（業務開發）</h2>
+                      <div class="sr-fun">
+                        <template x-for="d in devFunnel" :key="d.status">
+                          <div class="sr-fun__r" :data-testid="'sr-funnel-dev-' + d.status">
+                            <span x-text="d.status"></span>
+                            <div class="sr-fun__bar"><span x-effect="$el.style.width = d.w + '%'"></span></div>
+                            <span class="sr-fun__t" x-text="d.text"></span>
+                          </div>
+                        </template>
+                      </div>
+                      <p class="sr-note">預估金額只加總有填的商機；未填的件數另列，不當作 0 元。</p>
+                    </div>
+                    <div class="sr-card" data-testid="sr-funnel-quote">
+                      <h2 class="sr-card__t">報價漏斗（報價單）</h2>
+                      <div class="sr-fun">
+                        <template x-for="d in quoteFunnel" :key="d.label">
+                          <div class="sr-fun__r">
+                            <span x-text="d.label"></span>
+                            <div class="sr-fun__bar"><span x-effect="$el.style.width = d.w + '%'"></span></div>
+                            <span class="sr-fun__t" x-text="d.text"></span>
+                          </div>
+                        </template>
+                      </div>
+                      <p class="sr-note">定義與首頁「銷售漏斗」相同（不含草稿）。</p>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- 通用表格 -->
+                <template x-for="t in (result.tables || [])" :key="t.key">
+                  <div class="sr-card" :data-testid="'sr-table-' + t.key">
+                    <h2 class="sr-card__t">
+                      <span x-text="t.title"></span>
+                      <span class="sr-badge info sr-badge--inline" data-testid="sr-ar-basis"
+                            x-show="result.id === 'ar-aging'">帳齡依報價日計算</span>
+                    </h2>
+                    <template x-if="(t.rows || []).length === 0">
+                      <div class="sr-empty" data-testid="sr-empty" x-text="emptyText"></div>
+                    </template>
+                    <template x-if="(t.rows || []).length > 0">
+                      <div class="sr-wrap">
+                        <table class="data-table">
+                          <thead><tr>
+                            <template x-for="c in t.columns" :key="c.key">
+                              <th :class="{r: isNum(c)}" x-text="c.label"></th>
+                            </template>
+                          </tr></thead>
+                          <tbody>
+                            <template x-for="(r, i) in t.rows" :key="i">
+                              <tr data-testid="sr-row">
+                                <template x-for="c in t.columns" :key="c.key">
+                                  <td :class="{r: isNum(c)}">
+                                    <template x-if="isBadge(r[c.key])"><span class="sr-badge" :class="r[c.key].tone" x-text="r[c.key].v"></span></template>
+                                    <template x-if="!isBadge(r[c.key])"><span :class="{'sr-soft': isState(r[c.key])}" x-text="fmt(r[c.key], c.type, false)"></span></template>
+                                  </td>
+                                </template>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </div>
+                    </template>
+                    <p class="sr-note" x-show="t.note" x-text="t.note"></p>
+                  </div>
+                </template>
+
+                <p class="sr-note" x-show="result.generatedAt" x-text="'產出時間：' + result.generatedAt"></p>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    // 標準報表（T87 B1）：報表清單、各報表適用的條件、業務／部門選項全部來自後端（GET /api/std-reports）；
+    // 畫面只負責收集條件、依回應畫出 KPI／表格／圖，不計算任何金額。約定見 D:\Claude-pm\t87-design\B1-api-contract.md。
+    // 值的語意：null＝看不到（「—」）；{state:'unfilled'}＝沒填（「未填」）；{state:'unsettled'}＝未精算；0 就是 0。
+    function reportsStandardPage() {
+      var NUM = { money: 1, pct: 1, count: 1, days: 1 }
+      var STATE_TEXT = { unfilled: '未填', unsettled: '未精算' }
+      var HINTS = {
+        'ar-aging': '帳齡以今日為基準、依報價日計算，期間條件不適用（已停用）；業務、客戶、部門可篩選。',
+        'case-progress': '期間以案件報價日篩選；業務、客戶、部門可篩選。',
+        'sales-funnel': '期間以商機建立日篩選（報價漏斗以報價日）；部門以負責業務所屬部門判斷；客戶為名稱關鍵字。',
+        'revenue': '期間、業務、客戶、部門皆可篩選；現金口徑依收款日，權責口徑依階段完成月。',
+        'gross-margin': '期間（依成案月）、業務、客戶、部門皆可篩選。',
+      }
+      return {
+        reports: [], salesOptions: [], departmentOptions: [], rep: null,
+        form: {}, forms: {}, results: {}, shownQs: {},
+        result: null, shown: null, stale: false,
+        loaded: false, loading: false, exporting: '', error: '', loadError: '', seq: 0,
+        init() { this.load() },
+        _token() {
+          try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (_e) { return '' }
+        },
+        _blank() { return { date_from: '', date_to: '', sales_id: '', customer: '', department_id: '', basis: 'cash' } },
+        async load() {
+          try {
+            var res = await fetch('/api/std-reports', { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (!res.ok) { this.loadError = '載入失敗（' + res.status + '）'; this.loaded = true; return }
+            var j = await res.json()
+            this.reports = j.reports || []
+            this.salesOptions = j.salesOptions || []
+            this.departmentOptions = j.departmentOptions || []
+          } catch (_e) { this.loadError = '載入失敗，請重新整理'; this.loaded = true; return }
+          this.loaded = true
+          var want = ''
+          try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (_e) { want = '' }
+          var first = this.reports.find(function (t) { return t.id === want })
+            || this.reports.find(function (t) { return t.available }) || this.reports[0]
+          if (first) this.pick(first.id, true)
+        },
+        // 換報表：條件整組保留（共用條件），只把這張報表不適用的條件停用；作廢還在路上的產出
+        pick(id, first) {
+          this.rep = this.reports.find(function (t) { return t.id === id }) || null
+          if (!this.rep) return
+          if (!this.form || !('sales_id' in this.form)) this.form = this._blank()
+          this.seq++; this.loading = false; this.exporting = ''
+          this.result = null; this.shown = null; this.error = ''; this.stale = false
+          try { history.replaceState(null, '', '#' + id) } catch (_e) { /* 網址不能改只是不記得頁籤 */ }
+          if (this.rep.available) this.run()
+        },
+        has(key) { return !!this.rep && (this.rep.params || []).indexOf(key) >= 0 },
+        get filterHint() { return this.rep ? ('本報表：' + (HINTS[this.rep.id] || '')) : '' },
+        get canExport() { return !!this.rep && this.rep.available && !!this.result && !this.stale && !this.loading && !this.exporting },
+        get emptyText() { return '查無符合條件的資料。放寬條件（例如期間、業務或部門）再試一次。' },
+        touch() { this.stale = true },
+        _ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') },
+        quick(kind) {
+          var n = new Date(), y = n.getFullYear(), m = n.getMonth(), a, b
+          if (kind === 'month') { a = new Date(y, m, 1); b = new Date(y, m + 1, 0) }
+          else if (kind === 'quarter') { var q = Math.floor(m / 3) * 3; a = new Date(y, q, 1); b = new Date(y, q + 3, 0) }
+          else if (kind === 'last12') { a = new Date(y, m - 11, 1); b = new Date(y, m + 1, 0) }
+          else if (kind === 'lastyear') { a = new Date(y - 1, 0, 1); b = new Date(y - 1, 11, 31) }
+          else { a = new Date(y, 0, 1); b = new Date(y, 11, 31) }
+          this.form.date_from = this._ymd(a); this.form.date_to = this._ymd(b)
+          this.touch()
+        },
+        reset() { var basis = this.form.basis; this.form = this._blank(); this.form.basis = basis; this.touch() },
+        setBasis(b) { if (this.form.basis === b) return; this.form.basis = b; this.run() },
+        // 只送這張報表適用、且有值的條件（不適用的條件後端會 400）
+        _qs() {
+          var f = this.form, p = new URLSearchParams(), self = this
+          Object.keys(f).forEach(function (k) {
+            if (!self.has(k)) return
+            var v = (f[k] == null ? '' : String(f[k])).trim()
+            if (v === '') return
+            p.set(k, v)
+          })
+          return p.toString()
+        },
+        async _fail(res) {
+          var j = await res.json().catch(function () { return {} })
+          var d = j.detail
+          return typeof d === 'string' ? d : ('失敗（' + res.status + '）')
+        },
+        async run() {
+          if (!this.rep || !this.rep.available) return
+          var mine = ++this.seq
+          var rid = this.rep.id          // 這一趟屬於哪張報表、用哪組條件：匯出只認這份快照，不認畫面上當下的表單
+          this.loading = true; this.error = ''
+          try {
+            var qs = this._qs()
+            var res = await fetch('/api/std-reports/' + encodeURIComponent(rid) + (qs ? '?' + qs : ''),
+              { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (mine !== this.seq) return
+            if (!res.ok) { this.result = null; this.shown = null; this.error = await this._fail(res); return }
+            var data = await res.json()
+            if (mine !== this.seq || !this.rep || this.rep.id !== rid || data.id !== rid) return
+            this.result = data
+            this.shown = { id: rid, qs: qs }
+            this.stale = false
+          } catch (_e) {
+            if (mine === this.seq) this.error = '產出失敗，請稍後再試'
+          } finally {
+            if (mine === this.seq) this.loading = false
+          }
+        },
+        async download(kind) {
+          var snap = this.shown
+          if (!this.canExport || !snap || !this.rep || snap.id !== this.rep.id) return
+          this.exporting = kind; this.error = ''
+          var mine = this.seq
+          try {
+            var res = await fetch('/api/std-reports/' + encodeURIComponent(snap.id) + '/' + kind + (snap.qs ? '?' + snap.qs : ''),
+              { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (!res.ok) { if (mine === this.seq) this.error = await this._fail(res); return }
+            var blob = await res.blob()
+            var name = 'MOTRIX_標準報表_' + this.rep.title + (kind === 'pdf' ? '.pdf' : '.xlsx')
+            var m = /filename\*=UTF-8''([^;]+)/i.exec(res.headers.get('Content-Disposition') || '')
+            if (m) { try { name = decodeURIComponent(m[1]) } catch (_e) { /* 用預設檔名 */ } }
+            var url = URL.createObjectURL(blob)
+            var a = document.createElement('a')
+            a.href = url
+            a.download = name
+            document.body.appendChild(a); a.click(); document.body.removeChild(a)
+            // 不能在 click() 之後立刻 revoke：瀏覽器還沒開始讀這個 blob 就被收回，下載會偶發地不出現（沒有任何錯誤）
+            setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+          } catch (_e) {
+            this.error = '下載失敗，請稍後再試'
+          } finally {
+            this.exporting = ''
+          }
+        },
+        isNum(c) { return !!NUM[c.type] },
+        isState(v) { return !!v && typeof v === 'object' && !Array.isArray(v) && 'state' in v },
+        isBadge(v) { return !!v && typeof v === 'object' && 'v' in v },
+        _num(v) { return window.MotrixFormat ? MotrixFormat.num(v) : String(v) },
+        // 看不到＝「—」；沒填／未精算＝文字；0 照樣顯示 0
+        fmt(v, type, kpi) {
+          if (v === null || v === undefined || v === '') return '—'
+          if (this.isState(v)) return v.state === 'unfilled' && kpi ? '尚未填寫' : (STATE_TEXT[v.state] || '—')
+          if (type === 'money') return (kpi ? 'NT$ ' : '') + this._num(v)
+          if (type === 'count') return this._num(v)
+          if (type === 'pct') return v + '%'
+          if (type === 'days') return v + ' 天'
+          return String(v)
+        },
+        // ── 營收逐月圖：高度只依後端給的數字換算比例；對照口徑為 null（例如權責資料來源不在）就不畫那一根 ──
+        get series() {
+          var s = (this.result && this.result.series) || [], me = this.form.basis === 'accrual' ? 'accrual' : 'cash', other = me === 'cash' ? 'accrual' : 'cash'
+          var mx = 0
+          s.forEach(function (p) { [p.cash, p.accrual].forEach(function (v) { if (typeof v === 'number' && v > mx) mx = v }) })
+          var self = this
+          return s.map(function (p) {
+            var a = p[me], b = p[other]
+            return {
+              key: p.key, label: p.label,
+              h1: typeof a === 'number' && mx > 0 ? Math.max(a / mx * 100, a > 0 ? 1 : 0) : 0,
+              h2: typeof b === 'number' ? (mx > 0 ? Math.max(b / mx * 100, b > 0 ? 1 : 0) : 0) : null,
+              t1: p.label + '：' + (typeof a === 'number' ? 'NT$ ' + self._num(a) : '—'),
+              t2: p.label + '：' + (typeof b === 'number' ? 'NT$ ' + self._num(b) : '—'),
+            }
+          })
+        },
+        get hasOther() { return this.series.some(function (p) { return p.h2 !== null }) },
+        // ── 業務漏斗 ──
+        get devFunnel() {
+          var rows = (this.result && this.result.funnel && this.result.funnel.dev) || [], mx = 0, self = this
+          rows.forEach(function (d) { if (d.count > mx) mx = d.count })
+          return rows.map(function (d) {
+            var amt
+            if (d.amount === null || d.amount === undefined) amt = '—'                      // 沒有金額檢視權限
+            else if (d.count - (d.missing || 0) === 0) amt = d.count === 0 ? '—' : '尚未填寫'
+            else amt = 'NT$ ' + self._num(d.amount)
+            var miss = (d.missing && d.count - d.missing > 0 && d.amount !== null && d.amount !== undefined) ? '（' + d.missing + ' 件未填）' : ''
+            return { status: d.status, w: mx > 0 ? d.count / mx * 100 : 0, text: d.count + ' 件・' + amt + miss }
+          })
+        },
+        get quoteFunnel() {
+          var q = (this.result && this.result.funnel && this.result.funnel.quote) || null
+          if (!q) return []
+          var t = q.submitted || 0
+          return [['已送出', q.submitted], ['待回覆', q.pending], ['成案', q.won], ['未成案', q.lost]].map(function (x) {
+            return { label: x[0], w: t > 0 ? (x[1] || 0) / t * 100 : 0, text: (x[1] || 0) + ' 件' }
+          })
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

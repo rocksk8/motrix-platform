@@ -130,6 +130,9 @@ READ_ONLY_PAGES = {
     "report-templates.html":
         "自選條件報表（T79 候選）：只有查詢——GET /api/report-templates 取範本與條件欄位、GET …/run 依條件重新查詢、GET …/excel 下載同一組條件；"
         "沒有任何會改資料的呼叫（匯出稽核由後端寫，不是頁面送出的動作）。條件只存在畫面上，不存檔。",
+    "reports-standard.html":
+        "標準報表（T87 B1）：只有查詢——GET /api/std-reports 取報表清單與業務／部門選項、GET …/{id} 依條件重新查詢、GET …/excel 與 …/pdf 下載同一組條件；"
+        "沒有任何會改資料的呼叫（匯出稽核由後端寫，不是頁面送出的動作）。條件只存在畫面上，不存檔。",
 }
 
 #: ⚠️ 罐頭理由 —— 登記表最容易腐爛的形狀是「理由等於重述結論」。
