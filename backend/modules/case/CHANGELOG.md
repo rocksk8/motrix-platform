@@ -2,8 +2,7 @@
 
 ## (next) — 2026-11-14（train/t86-int；整合者：T86 合併後補記（U4/U5/U7 併入、稽核移到鎖外、文字殘餘））
 - 內部／文字（API 欄位、權限鍵、DB 值不變）：併入 h1 U4/U5/U7/U11 與 h2 最後一輪文字；`update_case_record` 的「更換發票號碼」稽核改在寫鎖放掉（commit／close）之後才寫（approval_no_freeze 掃描）；報價單「內容無任何變動」訊息與前端一致。此條補寫於 T86 整合最後一次合併之後。
-
-## (next) — 2026-11-14（feat/t86-usage-h1；T86 U5 財務開案件頁）
+- **（併入）(next) — 2026-11-14（feat/t86-usage-h1；T86 U5 財務開案件頁）**
 - 內部（無 API／欄位／權限變更）：`GET /api/quotations/{no}/case-bundle` 逐段組合時，各段「無權限」的預期結果不再寫 `case.access_denied` 稽核（`helpers/case_access.quiet_part_denials`；案件本體被拒、單獨呼叫各端點仍照常稽核）。前端：唯讀（`cashierReadOnly`）進案件不再 POST 預設階段。
 - **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
