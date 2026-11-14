@@ -119,10 +119,10 @@
           <div class="iw-card" x-show="parsed">
             <div>檔案共讀到 <b x-text="parsed && parsed.rowCount"></b> 列資料<span x-show="parsed && parsed.skippedExamples">（已略過 <span x-text="parsed && parsed.skippedExamples"></span> 列範例）</span>。</div>
             <div class="iw-warn" data-testid="iw-unused" x-show="parsed && parsed.unusedColumns.length">這些欄位系統不認得，<b>不會匯入</b>：<span x-text="parsed && parsed.unusedColumns.join('、')"></span></div>
-            <div class="iw-warn" x-show="parsed && parsed.warnings.length" data-testid="iw-parse-warnings">
-              <b>檔案裡有 <span x-text="parsed && parsed.warnings.length"></span> 個提醒</b>（不會阻擋匯入，但請留意）：
+            <div class="iw-warn" x-show="parsed && parsed.warnings && parsed.warnings.length" data-testid="iw-parse-warnings">
+              <b>檔案裡有 <span x-text="parsed && parsed.warnings ? parsed.warnings.length : 0"></span> 個提醒</b>（不會阻擋匯入，但請留意）：
               <ul class="iw-list"><template x-for="w in (parsed ? parsed.warnings.slice(0, 30) : [])" :key="w.row + w.field + w.message"><li>第 <span x-text="w.row"></span> 列〔<span x-text="w.field"></span>〕<span x-text="w.message"></span></li></template></ul>
-              <div x-show="parsed && parsed.warnings.length > 30">…還有 <span x-text="parsed.warnings.length - 30"></span> 個</div>
+              <div x-show="parsed && parsed.warnings && parsed.warnings.length > 30">…還有 <span x-text="parsed ? parsed.warnings.length - 30 : 0"></span> 個</div>
             </div>
           </div>
 
@@ -139,7 +139,7 @@
             <div class="iw-err" data-testid="iw-errors" x-show="plan && plan.errors && plan.errors.length">
               <b>這些列有問題，不會匯入：</b>
               <ul class="iw-list"><template x-for="e in (plan ? plan.errors.slice(0, 50) : [])" :key="e"><li x-text="e"></li></template></ul>
-              <div x-show="plan && plan.errors.length > 50">…還有 <span x-text="plan.errors.length - 50"></span> 個。請修正檔案後重新上傳。</div>
+              <div x-show="plan && plan.errors && plan.errors.length > 50">…還有 <span x-text="plan && plan.errors ? plan.errors.length - 50 : 0"></span> 個。請修正檔案後重新上傳。</div>
             </div>
 
             <div class="iw-warn" data-testid="iw-dups" x-show="plan && plan.duplicates && plan.duplicates.length">

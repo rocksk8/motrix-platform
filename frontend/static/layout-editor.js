@@ -98,9 +98,9 @@
 // 按鈕、頁內選單、匯出
 '  <template x-for="g in itemGroups()" :key="g.key"><div class="ml-ed__sec" :data-testid="\'ml-\' + g.key">' +
 '   <div class="ml-ed__h" x-text="g.title"></div>' +
-'   <div class="ml-ed__sub" x-show="!work[g.key].length" x-text="g.empty"></div>' +
+'   <div class="ml-ed__sub" x-show="!(work && work[g.key] && work[g.key].length)" x-text="g.empty"></div>' +
 '   <div class="ml-ed__drop" @dragover.prevent @drop="drop(g.key, work[g.key].length)">' +
-'   <template x-for="(a, i) in work[g.key]" :key="a.id"><div>' +
+'   <template x-for="(a, i) in (work ? work[g.key] : [])" :key="a.id"><div>' +
 '    <div class="ml-ed__item" draggable="true" :data-point-id="a.id" :class="{\'is-hidden\': a.hidden, \'is-bad\': prob(a.id)}"' +
 '         @dragstart="drag(g.key, i)" @dragover.prevent @drop.stop="drop(g.key, i)">' +
 '     <input type="checkbox" title="顯示" :checked="!a.hidden" @change="a.hidden = !$event.target.checked; sync()">' +
@@ -111,13 +111,13 @@
 '    <div class="ml-ed__prob" x-show="prob(a.id)" x-text="prob(a.id)"></div></div></template></div></div></template>' +
 // 輸出版型
 '  <div class="ml-ed__sec" data-testid="ml-outputs"><div class="ml-ed__h">輸出版型</div>' +
-'   <div class="ml-ed__sub" x-show="!work.outputs.length">這個模組沒有登記輸出版型。</div>' +
-'   <template x-for="o in work.outputs" :key="o.id"><div class="ml-ed__item" :data-point-id="o.id" :class="{\'is-bad\': prob(o.id)}"><span style="flex:1" x-text="o.label"></span>' +
+'   <div class="ml-ed__sub" x-show="!(work && work.outputs && work.outputs.length)">這個模組沒有登記輸出版型。</div>' +
+'   <template x-for="o in (work ? work.outputs : [])" :key="o.id"><div class="ml-ed__item" :data-point-id="o.id" :class="{\'is-bad\': prob(o.id)}"><span style="flex:1" x-text="o.label"></span>' +
 '    <select x-model="o.template" @change="sync()"><template x-for="t in o.templates" :key="t"><option :value="t" x-text="t"></option></template></select></div></template></div>' +
 // 側欄
 '  <div class="ml-ed__sec" data-testid="ml-sidebar"><div class="ml-ed__h">側欄項目</div>' +
-'   <div class="ml-ed__sub" x-show="!work.sidebar">這一頁沒有宣告側欄項目。</div>' +
-'   <template x-if="work.sidebar"><div>' +
+'   <div class="ml-ed__sub" x-show="!(work && work.sidebar)">這一頁沒有宣告側欄項目。</div>' +
+'   <template x-if="work && work.sidebar"><div>' +
 '    <div class="ml-ed__item" :data-point-id="work.sidebar.id" :class="{\'is-hidden\': work.sidebar.hidden, \'is-bad\': prob(work.sidebar.id)}">' +
 '     <input type="checkbox" title="顯示" :checked="!work.sidebar.hidden" @change="work.sidebar.hidden = !$event.target.checked; sync()">' +
 '     <span style="flex:1" x-text="work.sidebar.label"></span>' +
