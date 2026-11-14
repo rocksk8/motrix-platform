@@ -63,7 +63,7 @@ def test_batch_add_members_moves_everyone_and_undo_restores_each_original_depart
     for n in ("ob_a", "ob_c"):
         page.locator(f'[data-testid="org-batch-user-{uids[n]}"] input').click()
     assert page.evaluate(f"() => {ROOT}.mb.picked.slice().sort()") == sorted([uids["ob_a"], uids["ob_c"]])
-    assert page.locator('[data-testid="org-batch-preview"]').is_visible()
+    page.locator('[data-testid="org-batch-preview"]').wait_for(state="visible", timeout=5000)
     assert _dept_of("ob_a") == ids["甲一部"], "預覽階段沒有寫入任何東西"
 
     page.locator('[data-testid="org-batch-apply"]').click()

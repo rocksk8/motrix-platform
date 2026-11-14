@@ -77,20 +77,26 @@ def test_filter_and_only_selected_and_clear_all_keep_inert_finance_keys(live_ser
     inject_login(page, live_server, *sa)
     _open(page, live_server, uid)
 
-    total = page.locator('[data-testid^="mod-chip-"]').count()
+    N = "() => document.querySelectorAll('[data-testid^=\"mod-chip-\"]').length"
+    total = page.evaluate(N)    # e2e-lint: ok 開窗後尚未動作
     page.select_option('[data-testid="pk-user-show"]', "on")
-    shown = page.locator('[data-testid^="mod-chip-"]').count()
+    page.wait_for_function(f"() => ({N[6:]}) < {total}", timeout=5000)
+    shown = page.evaluate(N)
     assert 0 < shown < total, "只看已選：只列出已勾的"
     page.select_option('[data-testid="pk-user-show"]', "all")
+    page.wait_for_function(f"() => ({N[6:]}) === {total}", timeout=5000)
     label = page.evaluate(f"() => {DATA}.allModules.find(m => m.key === 'dashboard').label")
     page.fill('[data-testid="pk-user-q"]', label)
-    assert 1 <= page.locator('[data-testid^="mod-chip-"]').count() < total, "篩選名稱會縮小列表"
+    page.wait_for_function(f"() => ({N[6:]}) < {total}", timeout=5000)
+    assert 1 <= page.evaluate(N) < total, "篩選名稱會縮小列表"
 
     # 財務三鍵：不能點、被標成失效；全部取消不動它們
     page.fill('[data-testid="pk-user-q"]', "")
+    page.wait_for_function(f"() => ({N[6:]}) === {total}", timeout=5000)
+    # 勾框的 disabled 由 Alpine 綁定（與 chip 同一輪渲染完成），上面已等到列表還原
     for k in ("cashier", "finance", "financial_view"):
-        if page.locator(f'[data-testid="mod-chip-{k}"]').count():
-            assert page.locator(f'[data-testid="mod-chip-{k}"] input').is_disabled()
+        if page.evaluate(f"() => document.querySelectorAll('[data-testid=\"mod-chip-{k}\"]').length"):
+            assert page.evaluate(f"() => document.querySelector('[data-testid=\"mod-chip-{k}\"] input').disabled"), k
     before_inert = page.evaluate(f"() => {DATA}.form.modules.filter(k => ['cashier','finance','financial_view'].includes(k))")
     page.locator('[data-testid="pk-user-none"]').click()
     after = page.evaluate(f"() => {DATA}.form.modules")
