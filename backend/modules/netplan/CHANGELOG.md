@@ -1,5 +1,9 @@
 # 網路規劃 更新紀錄
 
+## (next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9；T86 告知紀錄遮罩；版號由列車取）
+- 行為變更（資料範圍收窄）：`GET /api/network-plans/{id}/privacy-notice` 與持有 `netplan_edit` 的非管理員呼叫 `POST …/privacy-notice/ack`（已記錄過時回傳既有紀錄）：管理員（admin／superadmin）照舊看完整紀錄；其他人只看「已告知＋日期」（`{at}`），不帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）。回應形狀不變（只是少欄位）、沒有新增權限鍵；伺服器端寫入的紀錄與稽核仍完整。
+- 測試：`tests/test_privacy_notice_ack_mask_siblings_2026_11_14.py`。
+
 ## 1.0.18 — 2026-11-14（train/t85-text；T85 文字專業化；版號由列車取）
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：畫面、通知、錯誤提示與說明文字改為正式、一致的用語（您、尚未／尚無、是否、其他使用者、無法／不可等），標點與中英文間距依 `docs/platform/plans/TEXT-STYLE-GUIDE.md`；同一提交同步更新斷言字串的測試。逐項前後對照見 `docs/platform/plans/TEXT-DIFF-TABLE.md`。
 

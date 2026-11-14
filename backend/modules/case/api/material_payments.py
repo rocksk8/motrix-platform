@@ -133,7 +133,8 @@ def get_payee_privacy_ack(pid: int, authorization: str = Header(None)):
             raise HTTPException(403, "此帳號沒有財務檢視權限")
     finally:
         conn.close()
-    return {"ack": _payee_ack(row["doc_code"])}
+    from helpers import privacy_notice as _pn
+    return {"ack": _pn.ack_view(user, _payee_ack(row["doc_code"]))}
 
 
 @router.post("/api/material-payments/{pid}/privacy-notice/ack")
@@ -152,7 +153,7 @@ def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
     if created:
         _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "材料申請匯款申請 %s 收款人個資告知" % row["doc_code"],
                {"docCode": row["doc_code"], "noticeHash": rec.get("noticeHash")})
-    return {"ack": rec, "created": created}
+    return {"ack": _pn.ack_view(user, rec), "created": created}
 
 
 # ── 讀 ───────────────────────────────────────────────────────────────
@@ -249,7 +250,8 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
             cn.close()
         _audit(_tok(authorization), "material_payment.create_rolled_back", "quotation", quote_no, "材料申請匯款申請 %s 因個資告知紀錄寫入失敗而撤銷" % res["docCode"], {"docCode": res["docCode"]})
         raise HTTPException(503, "收款人個資告知紀錄寫入失敗，這張匯款申請沒有建立，請稍後再試")
-    res["payeeNotice"] = _payee_ack(res["docCode"])
+    from helpers import privacy_notice as _pn
+    res["payeeNotice"] = _pn.ack_view(user, _payee_ack(res["docCode"]))
     return {"ok": True, "payment": res}
 
 

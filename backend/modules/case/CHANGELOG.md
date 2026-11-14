@@ -4,6 +4,9 @@
 - 整合者彙整（各項細節見各作者條目與核心 CHANGELOG「T86 案件管理 UX」）：案件清單預設合併「已成案」頁籤（設定 `list_view` 控制，不做 migration，A 案）、標題列／頁籤／精算頁白話與手機卡片（h7）；材料時間軸與手機階段卡／匯入視窗／出貨分頁新增入口（h6）；動態／記錄／財務分頁與無財務權限者只顯示可編輯欄位（h8，只改顯示、不改權限）；請購／採購單頁導覽、前置提示、送審結果（h3）；案件頁首屏請求併單（h1）。
 - 不變：API 欄位名、權限鍵、資料庫值與 migration 一律沒動。
 - 測試：案件頁兩份 golden（`golden_case_page_2026_09_24.json`、`golden_case_page_onepipe_off_2026_11_14.json`）依上述畫面變更重錄。
+- **（併入）(next) — 2026-11-14（fix/supplier-privacy-notice-mask-t86-h9）**
+- 行為變更（資料範圍收窄）：`GET /api/quotations/{no}/privacy-notice`、`GET /api/completion-notes/{no}/privacy-notice`、`GET /api/material-payments/{id}/privacy-notice`，以及非管理員可呼叫的 `POST /api/quotations/{no}/privacy-notice/ack`、`POST /api/material-payments/{id}/privacy-notice/ack`（已記錄過時回傳既有紀錄）：管理員（admin／superadmin）照舊看完整紀錄；其他人只看「已告知＋日期」（`{at}`），不帶記錄人姓名／帳號（`by`／`byUsername`）與告知文字雜湊（`noticeHash`）。回應形狀不變（只是少欄位）、沒有新增權限鍵；伺服器端寫入的紀錄與稽核仍完整。（材料申請匯款的財務角色同此規則）
+- 測試：`tests/test_privacy_notice_ack_mask_siblings_2026_11_14.py`、`modules/case/tests/test_material_payment_api_2026_10_02.py::test_payee_privacy_ack_is_masked_for_non_admin_finance`。
 
 ## (next) — T86 出貨單頁：連結材料申請的列也能選庫存序號（feat/ship-link-serial-coexist-t86；h11 審查補強；版號由列車取）
 - 畫面（審查補強）：「選料號」鈕提示改成如實說明（序號清單不過濾，是否屬於這筆材料申請由送審時檢查）。
