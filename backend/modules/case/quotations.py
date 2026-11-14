@@ -18,6 +18,8 @@ SQL_DEAL_TAG = "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'
 SQL_SETTLE_STATUS = (
     "COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '')"
 )
+# 報價日（沒填就退回建立時間）：清單排序與自訂報表（T87 B2）引用同一個常數
+SQL_QUOTE_DATE = "COALESCE(NULLIF(quote_date,''), created_at)"
 
 
 # ── 案件存取守門：2026-09-26 下沉 L1 `helpers/case_access.py`（主持裁示）；這裡保留同名匯入 ──

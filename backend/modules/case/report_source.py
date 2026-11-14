@@ -1,0 +1,79 @@
+# -*- coding: utf-8 -*-
+"""案件模組的自訂報表來源登記（T87 B2 S0b）：報價單（quotation）與案件（case，別名）。
+
+[單位] case:report_source    [層] M01    [穩定度] 實驗
+[公開介面] register
+[不變式] ①欄位與清單端點 `GET /api/quotations` 同一份定義：成交標記、精算狀態、報價日的運算式引用 `modules.case.quotations` 的**同一個常數**（不複製字串）；
+    「我」＝清單的「我負責的」（`_CASE_MINE_SQL`，由 api 傳進來，同一個物件），不是名稱相等。
+    ②列範圍＝`row_access` 的 `case`（scope=read，與清單同一條）；`quotations` 資料表沒有軟刪除欄、清單也沒有此條件，所以不登記 softDelete。
+    ③**進入條件比清單窄**：清單端點只要求登入（再由列範圍過濾）；報表另外要求持有 `quotation` 或 `case_manage` 其中一個模組（兩頁面各自的權限鍵）。刻意取窄（fail-closed）：能力不取代模組存取。
+    ④單據類型（報價單／估價單）是可篩選、可分組的欄位，預設不加條件（與清單預設同列）；選項取自 `helpers.doc_type`。
+    ⑤「案件」別名沿用報價單的表、列規則、欄位與執行函式；預設篩選＝成交標記為已成案或已結案（案件頁「案件總覽」的母體），使用者可改，不是強制條件。
+    ⑥金額與毛利率欄位走欄位目錄（`quotation.*`）；不可見者的處理（拿掉顯示欄／422 拒絕篩選與排序）在 report_runner。
+    ⑦`execute`（擁有模組的執行函式）由 report_runner 切片補上；沒有 `execute` 的來源不會列給使用者。
+[契約題] backend/tests/platform/test_report_catalog_t87.py
+"""
+from helpers import doc_type as _DT
+from helpers import report_catalog as _RC
+from modules.case.quotations import SQL_DEAL_TAG, SQL_QUOTE_DATE, SQL_SETTLE_STATUS
+
+OWNER = "case"
+MODULES = ("quotation", "case_manage")
+_MINE_PARAMS = ("id", "display_name", "id", "username", "username", "username")
+
+
+def _doc_type_options(conn=None):
+    return [(k, v) for k, v in _DT.LABELS.items()]
+
+
+def _distinct_options(expr):
+    """列舉值取自資料本身（登記時不寫死白話文字）：回傳 [(值, 白話)]；空字串顯示為「（未填）」。"""
+    def _opts(conn):
+        rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations ORDER BY 1" % expr).fetchall()
+        return [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
+    return _opts
+
+
+def _f(fid, label, typ, **kw):
+    d = {"id": fid, "label": label, "type": typ, "kind": "column", "column": fid, "select": True, "filter": False,
+         "group": False, "aggregate": (), "sort": False}
+    d.update(kw)
+    return d
+
+
+def register(mine_sql) -> list:
+    """由 `modules/case/api/quotations.py` 在 `_CASE_MINE_SQL` 定義之後呼叫（傳入同一個物件）。回傳問題清單（空＝已登記）。"""
+    fields = [
+        _f("quote_no", "報價單號", "text", filter=True, sort=True),
+        _f("customer_name", "客戶", "text", filter=True, group=True, sort=True),
+        _f("project_name", "案件名稱", "text", filter=True),
+        _f("status", "狀態", "enum", filter=True, group=True, enum=_distinct_options("status")),
+        _f("sales_person", "業務", "text", filter=True, group=True, isMe=True),
+        _f("doc_type", "單據類型", "enum", filter=True, group=True, enum=_doc_type_options),
+        _f("quote_date", "報價日", "date", kind="expr", expr=SQL_QUOTE_DATE, reads=("quote_date", "created_at"), column=None,
+           filter=True, group=True, sort=True, bucket=("month", "quarter", "year"), sortExpr=SQL_QUOTE_DATE),
+        _f("deal_tag", "成交標記", "enum", kind="expr", expr=SQL_DEAL_TAG, reads=("deal_tag", "data_json"), column=None,
+           filter=True, group=True, enum=_distinct_options(SQL_DEAL_TAG)),
+        _f("settle_status", "精算狀態", "enum", kind="expr", expr=SQL_SETTLE_STATUS, reads=("settle_status", "data_json"), column=None,
+           filter=True, group=True, enum=_distinct_options(SQL_SETTLE_STATUS)),
+        _f("total", "含稅總額", "money", catalogId="quotation.total", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
+        _f("pretax", "未稅金額", "money", catalogId="quotation.pretax", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
+        _f("direct_margin_pct", "直接毛利率", "percent", catalogId="quotation.direct_margin_pct", filter=True, sort=True, aggregate=("count", "avg", "min", "max")),
+        _f("net_margin_pct", "營業利益率", "percent", catalogId="quotation.net_margin_pct", filter=True, sort=True, aggregate=("count", "avg", "min", "max")),
+    ]
+    spec = {
+        "label": "報價單", "table": "quotations", "modules": list(MODULES),
+        "rowAccess": {"kind": "case", "scope": "read"},
+        "exprs": (SQL_DEAL_TAG, SQL_SETTLE_STATUS, SQL_QUOTE_DATE, mine_sql),
+        "mine": {"sql": mine_sql, "params": _MINE_PARAMS},
+        "fields": fields,
+        "defaults": {"columns": ["quote_no", "customer_name", "project_name", "doc_type", "status", "total"],
+                     "sort": {"field": "quote_date", "dir": "desc"}},
+    }
+    probs = _RC.register_source("quotation", OWNER, spec)
+    if probs:
+        return probs
+    return _RC.register_source("case", OWNER, {
+        "extends": "quotation", "label": "案件",
+        "defaultFilters": [{"field": "deal_tag", "op": "in", "value": ["已成案", "已結案"]}],
+    })

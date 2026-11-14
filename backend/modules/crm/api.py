@@ -162,6 +162,8 @@ DEV_CASE_ACCESS = row_access.OwnerRule(
     deny_message="無權限存取此商機",
 )
 row_access.register("dev_case", DEV_CASE_ACCESS)
+from modules.crm import report_source as _report_source  # noqa: E402  T87 B2：自訂報表來源
+_report_source.register(_STATUS_OPTIONS)
 
 
 class _DevLogPathAccess:

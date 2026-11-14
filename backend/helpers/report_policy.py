@@ -51,5 +51,5 @@ def recycle_deleted(conn=None) -> bool:
 
 
 def quote_money_wide(conn=None) -> bool:
-    """D7：True＝報價單金額欄比照既有報價單清單（持出納模組者整份可見）；False（預設）＝只依欄位自己的天花板。"""
+    """D7：True＝報價單金額欄比照既有報價單內頁（持出納模組者整份可見；報價單清單本身只給業務／管理員／財務）；False（預設）＝只依欄位自己的天花板。"""
     return _get("quote_money_scope", conn) == 1

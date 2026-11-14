@@ -79,7 +79,7 @@ from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選�
 from modules.case import content_fp as _CFP  # 簽核二擇一 S1：內容指紋（核准綁版本、signedFp 蓋章）
 from modules.case import invoice_notify as _INV_NOTIFY  # 發票上傳通知（財務＋最高管理者；寄信只記 log、不擋上傳）
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
-from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
+from modules.case.quotations import SQL_DEAL_TAG, SQL_QUOTE_DATE, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
@@ -1025,6 +1025,8 @@ _CASE_MINE_SQL = (
     " OR json_extract(data_json,'$.caseRecord.roles.sales.username')=?"
     " OR json_extract(data_json,'$.caseRecord.roles.executor.username')=?)"
 )
+from modules.case import report_source as _report_source  # noqa: E402  T87 B2：自訂報表來源（引用同一個 _CASE_MINE_SQL 物件）
+_report_source.register(_CASE_MINE_SQL)
 _CASE_STAGE_OVERDUE_SQL = (
     "EXISTS (SELECT 1 FROM case_stages cs WHERE cs.quote_no=quotations.quote_no"
     " AND cs.done=0 AND cs.due_date != '' AND cs.due_date < ?)"
@@ -1217,7 +1219,7 @@ def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=N
     # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
     masked = not _tier_allowed("quote_money", user)          # 第42班：報價單總額維持業務／管理員可見（精算／款項另由財務角色專屬）
     # CM6：排序白名單；看不到金額的帳號不可依金額排序（順序本身會洩漏金額大小）⇒ 忽略
-    sort_cols = {"quote_date": "COALESCE(NULLIF(quote_date,''), created_at)",
+    sort_cols = {"quote_date": SQL_QUOTE_DATE,
                  "customer_name": "customer_name", "total": "total"}
     order_sql = "id DESC"
     if sort in sort_cols and not (sort == "total" and masked):
