@@ -187,9 +187,9 @@ register_standalone("my_email_prefs", "我要收的 Email 通知（自己的）"
                     keywords=["通知", "信件", "Email", "退訂", "不要收"])
 
 # S4b：七個保留原網址的獨立頁（各自有表格／草稿／發布流程，不硬塞進群組矩陣；白話名＋關鍵字讓全域搜尋找得到）。
-register_standalone("approval_settings", "簽核流程（誰要簽、簽幾層）", "財務", "approval-settings.html",
+register_standalone("approval_settings", "簽核流程（簽核人與層級）", "財務", "approval-settings.html",
                     keywords=["簽核", "核准", "審核", "層級", "簽核人", "單據"])
-register_standalone("approval_delegates", "簽核代理人（休假時誰代簽）", "財務", "approval-delegates.html",
+register_standalone("approval_delegates", "簽核代理人（休假期間代簽）", "財務", "approval-delegates.html",
                     keywords=["代理人", "代簽", "休假", "請假", "簽核"])
 register_standalone("expense_types", "費用類型與填寫欄位", "財務", "expense-types.html",
                     keywords=["費用", "報支", "類型", "欄位", "公式"])
