@@ -552,7 +552,7 @@
           </div>
         </template>
         <div x-show="visibleOrgRows.length === 0" style="padding:24px;text-align:center;font-size:12px;color:var(--text-dim)">
-          沒有符合搜尋條件的使用者
+          查無符合條件的使用者
         </div>
       </div>
     </div>
@@ -565,7 +565,7 @@
         案件的填單人／業務負責／執行負責改為記錄帳號。下列舊資料的名稱查不到帳號或有同名，系統不自動猜測；請到案件管理重新選擇。
       </div>
       <div x-show="rolesUnmappedError" style="font-size:12px;color:var(--danger)" x-text="rolesUnmappedError"></div>
-      <div x-show="!rolesUnmappedError && rolesUnmapped.length === 0" style="font-size:12px;color:var(--text-dim)">沒有未對應的案件角色。</div>
+      <div x-show="!rolesUnmappedError && rolesUnmapped.length === 0" style="font-size:12px;color:var(--text-dim)">尚無未對應的案件角色。</div>
       <table x-show="rolesUnmapped.length > 0" style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="text-align:left;border-bottom:1px solid var(--border-light)">
           <th style="padding:6px">案件</th><th style="padding:6px">角色</th><th style="padding:6px">目前記錄的名稱</th><th style="padding:6px">原因</th>
@@ -730,7 +730,7 @@
                 </div>
               </div>
             </template>
-            <div class="form-hint" x-show="!pkUser.rows().length">沒有符合的權限項目。</div>
+            <div class="form-hint" x-show="!pkUser.rows().length">查無符合條件的權限項目。</div>
             <div class="pk-diff" x-show="pkUser.hasDiff()" x-text="pkUser.diffText()" data-testid="pk-user-diff"></div>
           </div>
         </div>
@@ -773,7 +773,7 @@
                   <span x-show="dutyIsHi(k)" style="font-size:12px;color:var(--danger)">★</span>
                 </label>
               </template>
-              <span x-show="!dutySubCandidates().length" style="font-size:12px;color:var(--text-dim)">（沒有可扣的角色權限）</span>
+              <span x-show="!dutySubCandidates().length" style="font-size:12px;color:var(--text-dim)">（尚無可扣的角色權限）</span>
             </div>
             <div style="margin-top:8px;font-size:12px" data-testid="duty-effective">
               <b>生效權限預覽</b>
@@ -964,7 +964,7 @@
                 </div>
               </div>
             </template>
-            <div class="form-hint" x-show="!pkCr.rows().length">沒有符合的權限項目。</div>
+            <div class="form-hint" x-show="!pkCr.rows().length">查無符合條件的權限項目。</div>
             <div class="pk-diff" x-show="pkCr.hasDiff()" x-text="pkCr.diffText()" data-testid="pk-cr-diff"></div>
           </div>
         </div>

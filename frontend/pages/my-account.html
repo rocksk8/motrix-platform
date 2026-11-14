@@ -390,7 +390,7 @@
 
       <div class="card" style="margin-top:20px" x-show="lineAvail === false" data-testid="notify-empty-hint" x-cloak>
         <div class="card-title">LINE 通知</div>
-        <div class="card-sub">LINE 通知目前沒有開放。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與您想收的 LINE 通知。</div>
+        <div class="card-sub">LINE 通知目前尚未開放。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與您想收的 LINE 通知。</div>
       </div>
     </div>
 
@@ -1152,7 +1152,7 @@
     function confirmSave(list) {
       var body = { changes: changesOf(list), expect: version, preview: true }
       return put(body).then(function (res) {
-        if (!res.changed.length) throw new Error('這些修改和目前的設定一樣，沒有要儲存的')
+        if (!res.changed.length) throw new Error('所做修改與目前設定相同，無需儲存')
         lastRisky = res.risky || []
         return lastRisky.length ? riskDialog(lastRisky) : []
       })
@@ -1170,7 +1170,7 @@
     }
     function mount(rows) {
       if (!rows.length) {
-        document.getElementById('ep-box').innerHTML = '<div class="hint" data-testid="ep-empty" style="margin-top:12px">目前沒有會寄給您的 Email 通知類型。</div>'
+        document.getElementById('ep-box').innerHTML = '<div class="hint" data-testid="ep-empty" style="margin-top:12px">目前尚無會寄給您的 Email 通知類型。</div>'
         return
       }
       var cats = []

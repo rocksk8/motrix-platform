@@ -737,7 +737,7 @@
         for (const id of this.mb.picked) {
           const u = this.users.find(x => x.id === id)
           if (!u) continue
-          const k = u.departmentName || '沒有部門'
+          const k = u.departmentName || '未指定部門'
           by[k] = (by[k] || 0) + 1
         }
         const parts = Object.keys(by).map(k => k + ' ' + by[k] + ' 人')

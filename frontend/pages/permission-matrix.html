@@ -177,7 +177,7 @@
         <div class="pm-card" x-show="eff">
           <b x-text="eff && eff.user.name"></b> <span class="pm-sub" x-text="eff && eff.user.roleLabel"></span>
           <table class="pm-t pm-ct" style="margin-top:8px">
-            <thead><tr><th>項目</th><th>能不能做</th><th>為什麼</th></tr></thead>
+            <thead><tr><th>項目</th><th>能不能做</th><th>原因</th></tr></thead>
             <tbody>
               <template x-for="c in (eff ? eff.caps : [])" :key="c.key">
                 <tr><td x-text="c.label"></td><td x-text="c.allowed ? '可以' : '不行'"></td><td class="pm-sub" x-text="c.why"></td></tr>
@@ -387,7 +387,7 @@
         },
         batchSummary() {
           const s = this.bdlg && this.bdlg.summary
-          return s ? ('立即生效 ' + s.immediate + ' 格、需等待期 ' + s.pending + ' 格、沒有變化 ' + s.unchanged + ' 格') : ''
+          return s ? ('立即生效 ' + s.immediate + ' 格、需等待期 ' + s.pending + ' 格、無變化 ' + s.unchanged + ' 格') : ''
         },
         batchStatusText(x) {
           return x.status === 'pending' ? '需等待期並經核准後生效' : (x.status === 'nochange' ? '已經是這個狀態，不變' : '儲存後立即生效')
