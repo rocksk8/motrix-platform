@@ -48,7 +48,7 @@ def _register(S, _register_core):
         "brand", "系統標語",
         [
             S("tagline", "str", DEFAULT_TAGLINE, risk="none", recommended=DEFAULT_TAGLINE,
-              question="首頁標題上方的小字要寫什麼？", label="系統標語（1～24 個字）",
+              question="首頁標題上方的小字要寫什麼？", label="首頁小標語", when="想讓首頁小標語換成公司自己的系統名稱或口號時。",
               help="顯示在首頁大標題上方。預設是「MOTRIX PLATFORM」；公司可以改成自己的系統名稱或口號。",
               impact="只改畫面上的小字，立即生效；不影響任何單據、權限或信件。可隨時改回建議值。"),
         ],
@@ -61,7 +61,7 @@ def _register(S, _register_core):
         "login_greeting", "登入問候語",
         [
             S("style", "int", 1, min=0, max=2, risk="none", recommended=1,
-              question="首頁大標題下面，是否顯示問候語？若顯示，請選擇語氣。", label="問候語風格",
+              question="首頁大標題下面，是否顯示問候語？若顯示，請選擇語氣。", label="首頁問候語的口氣", when="覺得問候語太吵、或想換成更正式或更輕鬆的口氣時。",
               help="登入後，首頁標題下方會有一句依情境變化的話（節慶、久未登入、星期、時段等）。每個人也可以在自己的帳號裡調整為自己偏好的語氣。",
               impact="只改首頁上的一句話，立即生效；不影響任何單據或權限。選「關閉」＝全公司都不顯示（個人亦無法開啟）。",
               choices=[(0, "關閉", "首頁不顯示問候語，只有原本的標題。"),
