@@ -264,3 +264,29 @@ def test_last_resort_turns_an_unexpected_error_into_422(client, make_user, monke
     logged = "\n".join(rec.getMessage() + (rec.exc_text or "") + str(rec.exc_info or "") for rec in caplog.records)
     assert "RuntimeError" in logged and "boom" in logged, logged
     assert secret not in logged, logged
+
+
+def test_incomplete_field_with_a_one_char_key_keeps_its_key(client, make_user):
+    """T86 診斷（h11 審查）：欄位 key 的規則是 custom_fields.KEY_RE（1～40 字）；以前這裡用了模組 key 的規則（2～40 字），
+    未完成的 1 字元欄位會被改名成 _incomplete_N、清單裡 field 變 None。"""
+    sa = _h(client, make_user, "bo_sa9", role="superadmin")
+    d = _definition()
+    d["fields"].append({"key": "a", "label": "甲", "type": "formula"})       # 合法的 1 字元 key、公式沒填 ⇒ 未完成
+    r = _preview(client, sa, d)
+    assert r.status_code == 200 and "〈甲〉尚未完成" in r.text, r.text[:300]
+    hit = [g for g in _incomplete(r) if g.get("label") == "甲"]
+    assert hit and hit[0]["field"] == "a", _incomplete(r)
+
+
+def test_frontend_output_blocker_key_rule_equals_the_field_key_rule():
+    """T86 診斷：前端 outputBlocker 的欄位 key 規則曾寫成 {1,39}（模組 key 的規則），讓合法的 1 字元欄位 key 被擋預覽。
+    欄位 key 的唯一規則是 helpers.custom_fields.KEY_RE；前端那一份要逐字相同，且 1 字元、40 字元合法、41 字元不合法。"""
+    import re
+    from pathlib import Path
+    from helpers import custom_fields as cf
+    js = (Path(__file__).resolve().parents[2] / "frontend" / "static" / "form-preview.js").read_text(encoding="utf-8")
+    m = re.search(r"function outputBlocker\(def\) \{.*?\n  \}", js, re.S)
+    assert m, "找不到 outputBlocker"
+    lit = re.search(r"some\(function \(f\) \{ return f && /(\^[^/]+\$)/\.test", m.group(0))
+    assert lit and lit.group(1) == cf.KEY_RE.pattern, (lit and lit.group(1), cf.KEY_RE.pattern)
+    assert cf.KEY_RE.match("a") and cf.KEY_RE.match("a" * 40) and not cf.KEY_RE.match("a" * 41)

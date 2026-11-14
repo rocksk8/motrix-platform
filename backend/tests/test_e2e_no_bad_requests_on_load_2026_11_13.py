@@ -11,11 +11,26 @@ pytest.importorskip("playwright.sync_api")
 _MAKE_USER_DEFAULT_ROLE = "superadmin"
 
 
+class _Seen(list):
+    """(狀態碼, 路徑) 清單；`.boot` ＝ 成功的 `/api/bootstrap` 回應內容（dict）。"""
+    def __init__(self):
+        super().__init__()
+        self.boot = []
+
+
 def _load(live_server, make_user, new_page, login_as, role, page_name, settle_ms=2500):
     user = make_user(username="e2e_nobad_%s_%s" % (role, page_name.split(".")[0].replace("-", "_")), role=role)
     page = new_page()
-    seen = []
-    page.on("response", lambda r: seen.append((r.status, r.url.replace(live_server, ""))))
+    seen = _Seen()
+
+    def _on_response(r):
+        seen.append((r.status, r.url.replace(live_server, "")))
+        if r.status == 200 and "/api/bootstrap" in r.url:
+            try:
+                seen.boot.append(r.json())             # 啟動資料合併請求的內容：對照要看「該區段真的有資料」，不是只看 200
+            except Exception:
+                pass
+    page.on("response", _on_response)
     login_as(page, tuple(user)[:2])
     page.goto(f"{live_server}/pages/{page_name}")
     page.wait_for_timeout(settle_ms)
@@ -26,10 +41,12 @@ def _bad(seen):
     return [(st, u) for st, u in seen if st >= 400]
 
 
-def _served(seen, prefix):
-    """對照用：這份資料有被成功取得——直接打原端點（200），或由啟動資料合併請求 `/api/bootstrap?page=case`（T86 #10；案件管理頁首屏的小請求都併在這一支）供應。
-    原端點與合併請求二選一都算；只要兩者都沒有（也沒有任何 4xx）就是頁面根本沒載入資料。"""
-    return any(st == 200 and (u.startswith(prefix) or u.startswith("/api/bootstrap?page=case")) for st, u in seen)
+def _served(seen, prefix, section):
+    """對照用：這份資料有被成功取得——直接打原端點（200），或由啟動資料合併請求 `/api/bootstrap?page=case`（T86 #10；案件管理頁首屏的小請求都併在這一支）供應，
+    且回應裡**該區段有資料**（`section` 非 null；某一段取不到時整支仍是 200、該段是 null，不能只看狀態碼）。"""
+    if any(st == 200 and u.startswith(prefix) for st, u in seen):
+        return True
+    return any(isinstance(b, dict) and b.get(section) is not None for b in seen.boot)
 
 
 @pytest.mark.e2e
@@ -38,7 +55,7 @@ def test_case_management_reads_the_company_profile_from_the_api(live_server, mak
     _page, seen = _load(live_server, make_user, new_page, login_as, role, "case-management.html")
     assert not [x for x in seen if "company-profile" in x[1] and x[0] == 404], _bad(seen)
     assert not [x for x in seen if "undefined" in x[1]], "網址裡有 undefined：%r" % [x for x in seen if "undefined" in x[1]]
-    assert any(u.startswith("/api/settings/company-profile") or u.startswith("/api/bootstrap?page=case") for st, u in seen), "對照：據點清單那支請求要打到正確的網址"
+    assert _served(seen, "/api/settings/company-profile", "companyProfilePublic"), "對照：據點清單那支請求要打到正確的網址（或由啟動資料帶回）"
 
 
 @pytest.mark.e2e
@@ -55,6 +72,6 @@ def test_case_management_has_no_401_on_load(live_server, make_user, new_page, lo
     """401 的原因是 init() 在 session 就緒前就帶著 `Bearer undefined` 打 API，不是權限設計：已登入的人載入頁面不該有任何 401。"""
     _page, seen = _load(live_server, make_user, new_page, login_as, role, "case-management.html")
     assert not [x for x in seen if x[0] == 401], _bad(seen)
-    assert _served(seen, "/api/system/modules/availability"), "對照：模組狀態請求要成功"
-    assert _served(seen, "/api/settings/company-profile"), "對照：據點清單請求要成功"
+    assert _served(seen, "/api/system/modules/availability", "moduleAvailability"), "對照：模組狀態請求要成功（或由啟動資料帶回）"
+    assert _served(seen, "/api/settings/company-profile", "companyProfilePublic"), "對照：據點清單請求要成功（或由啟動資料帶回）"
     assert not _bad(seen), _bad(seen)

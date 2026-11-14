@@ -964,7 +964,7 @@ def preview_output(body: dict) -> tuple:
     for i, f in enumerate(fields):
         label = str((f.get("label") if isinstance(f, dict) else "") or "").strip() or "第 %d 個欄位" % (i + 1)
         k = f.get("key") if isinstance(f, dict) else None
-        ok_key = isinstance(k, str) and KEY_RE.match(k) and k not in used
+        ok_key = isinstance(k, str) and _cf.KEY_RE.match(k) and k not in used      # 欄位 key 的規則（1～40 字）；KEY_RE 是模組 key（2～40 字），1 字元的欄位 key 不能被改名成 _incomplete_N
         if i in by_idx:
             k = k if ok_key else "_incomplete_%d" % (i + 1)
             placeholders[k] = (i, label, by_idx[i])
