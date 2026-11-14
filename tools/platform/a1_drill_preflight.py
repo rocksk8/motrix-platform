@@ -438,6 +438,7 @@ $me = %(me)d
 $start = [long]%(start)d
 $ownNames = @(%(ownnames)s)
 $protNames = @(%(protnames)s)
+$ports = @(%(ports)s)
 $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine, CreationDate
 $byId = @{}; foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
 function Ticks($p) { if ($p.CreationDate) { [long]$p.CreationDate.ToUniversalTime().Ticks } else { [long]0 } }
@@ -450,6 +451,7 @@ foreach ($r in $recs) { $pr = $r.Split(':'); $id = [int]$pr[0]; if ($byId.Contai
 $needleRe = '(?i)' + [regex]::Escape($needle) + '($|[\\\s"''/])'
 function ParentOk($p) { $pp = [int]$p.ParentProcessId; if (-not $byId.ContainsKey($pp)) { return $true }; return ((Ticks $byId[$pp]) -gt (Ticks $p)) }
 if ($needle.Length -gt 0) { foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and [regex]::IsMatch([string]$p.CommandLine, $needleRe) -and (Ticks $p) -ge $start -and (ParentOk $p) -and [int]$p.ProcessId -ge %(minpid)d) { [void]$own.Add([int]$p.ProcessId) } } }
+foreach ($pt in $ports) { $portRe = '(?i)uvicorn(\.exe)?"?\s+main:app\s+--port\s+' + [string][int]$pt + '(\s|$)'; foreach ($p in $all) { if ([int]$p.ProcessId -ne [int]$PID -and ($ownNames -contains ([string]$p.Name).ToLower()) -and $p.CommandLine -and [regex]::IsMatch([string]$p.CommandLine, $portRe) -and (Ticks $p) -ge $start -and [int]$p.ProcessId -ge %(minpid)d) { [void]$own.Add([int]$p.ProcessId) } } }
 foreach ($a in $anc) { [void]$own.Remove([int]$a); [void]$ver.Remove([int]$a) }
 $grew = $true
 while ($grew) { $grew = $false; foreach ($p in $all) { $pp = [int]$p.ProcessId; $par = [int]$p.ParentProcessId; if ($own.Contains($par) -and ($ver.Contains($par) -or $par -ge %(minpid)d) -and -not $own.Contains($pp) -and (Ticks $p) -ge (Ticks $byId[$par])) { [void]$own.Add($pp); if ($ver.Contains($par)) { [void]$ver.Add($pp) }; $grew = $true } } }
@@ -483,13 +485,13 @@ def killable(pid, name="", verified=False):
     return int(pid) >= MIN_KILL_PID or bool(verified)
 
 
-def owned_processes(records, base, start_ticks, me=None):
+def owned_processes(records, base, start_ticks, me=None, ports=()):
     """⇒ [{id, name, created}]：records＝[(pid, 建立時間ticks)]（編排器啟動時記下的）。只含「建立時間相符的記錄程序」＋它們的後代＋命令列含演練目錄的白名單程序；
     再套一次硬性規則（PowerShell 與 Python 兩邊各一次）。**查詢失敗 ⇒ 丟例外（呼叫端什麼都不殺）**。"""
     recs = ",".join("'%d:%d'" % (int(p), int(t)) for p, t in records if t)
     script = _OWNED_PS % {"recs": recs, "needle": str(base).replace("'", "''"), "me": me or os.getpid(), "start": int(start_ticks),
                           "ownnames": ",".join("'%s'" % n for n in OWN_NAMES), "protnames": ",".join("'%s'" % n for n in sorted(PROTECTED_NAMES)),
-                          "minpid": MIN_KILL_PID}
+                          "minpid": MIN_KILL_PID, "ports": ",".join("'%d'" % int(p) for p in ports)}
     r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True, text=True, encoding="utf-8", errors="replace",
                        timeout=90, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if r.returncode != 0 or not r.stdout.strip():
@@ -913,7 +915,7 @@ class DrillGuard:
 
     def owned_pids(self):
         """殺程序的白名單（給監看器 `owned_fn`）：記錄過且建立時間相符的程序＋後代＋命令列含演練目錄的白名單程序；查詢失敗 ⇒ 丟例外。"""
-        return [o["id"] for o in owned_processes(self.records, self.base or self.root, self.start_ticks)]
+        return [o["id"] for o in owned_processes(self.records, self.base or self.root, self.start_ticks, ports=(self.erp_port, self.dash_port))]
 
     def pids(self):
         """監看器的根程序：編排器自己＋啟動過且還活著的子行程。"""
@@ -931,22 +933,36 @@ class DrillGuard:
         return True
 
 
-def stop_drill_processes(base, records, start_ticks, log=None, killer=None):
-    """收尾：只殺 `owned_processes` 給的白名單（編排器啟動並記錄、建立時間相符的程序＋後代＋命令列含本次演練目錄的白名單程序）。
-    殺之前逐一記 pid／名稱／建立時間。查詢失敗 ⇒ 丟例外、不殺任何程序。⇒ 被殺的 pid。"""
-    owned = owned_processes(records, base, start_ticks)
+STOP_MAX_PASSES = 5
+
+
+def stop_drill_processes(base, records, start_ticks, log=None, killer=None, ports=(), sleep=time.sleep):
+    """收尾：只殺 `owned_processes` 給的白名單（編排器啟動並記錄、建立時間相符的程序＋後代＋命令列含本次演練目錄的白名單程序
+    ＋命令列是 `uvicorn main:app --port <演練埠>` 的程序——演練埠在環境檢查時確認過沒人用）。
+    殺之前逐一記 pid／名稱／建立時間。查詢失敗 ⇒ 丟例外、不殺任何程序。⇒ 被殺的 pid。
+    🔴 多輪：自動重啟迴圈（autostart.bat 的 :loop）會在被殺的瞬間重生 ERP；每一輪「殼（cmd／powershell）先殺、其餘由新到舊」，
+       殺完再查，直到查不到為止（最多 STOP_MAX_PASSES 輪；每輪之間等 1 秒）。2026-11-14 演練：單輪漏掉重生的 ERP ⇒ 檔案被鎖、之後每個情境都還原失敗。"""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    kill = sorted((o for o in owned if killable(o["id"], o["name"], o.get("verified"))), key=lambda o: -o["id"])
-    for o in kill:
-        if log:
-            log("收尾殺程序 pid=%d name=%s created_ticks=%d" % (o["id"], o["name"], o["created"]))
-        if killer:
-            killer(o["id"])
-        else:
-            subprocess.run(["taskkill", "/PID", str(o["id"]), "/F"], capture_output=True, creationflags=flags)
-    if log and not kill:
+    shells = ("cmd.exe", "powershell.exe", "pwsh.exe")
+    killed = []
+    for npass in range(STOP_MAX_PASSES):
+        owned = owned_processes(records, base, start_ticks, ports=ports)
+        kill = sorted((o for o in owned if killable(o["id"], o["name"], o.get("verified")) and o["id"] not in killed),
+                      key=lambda o: (0 if o["name"] in shells else 1, -o["id"]))
+        if not kill:
+            break
+        for o in kill:
+            if log:
+                log("收尾殺程序 pid=%d name=%s created_ticks=%d" % (o["id"], o["name"], o["created"]))
+            if killer:
+                killer(o["id"])
+            else:
+                subprocess.run(["taskkill", "/PID", str(o["id"]), "/F"], capture_output=True, creationflags=flags)
+            killed.append(o["id"])
+        sleep(1)
+    if log and not killed:
         log("收尾：沒有需要殺的演練程序")
-    return [o["id"] for o in kill]
+    return killed
 
 
 def main(argv=None):

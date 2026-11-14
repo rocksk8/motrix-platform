@@ -746,7 +746,7 @@ class Drill:
         try:
             me = os.getpid()
             records = list(self.guard.records) if final else [r for r in self.guard.records if int(r[0]) != me]
-            return PF.stop_drill_processes(self.base, records, self.guard.start_ticks, log=self.log)
+            return PF.stop_drill_processes(self.base, records, self.guard.start_ticks, log=self.log, ports=(self.port, self.dash))
         except Exception as e:                                          # noqa: BLE001 — 收尾不可丟例外
             self.log("停服務出錯：%s" % e)
             return []

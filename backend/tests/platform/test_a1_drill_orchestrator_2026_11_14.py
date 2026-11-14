@@ -1229,7 +1229,7 @@ def _mini_drill(tmp_path, **kw):
 
 def test_stop_services_between_scenarios_spares_the_orchestrators_own_descendants(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(AD.PF, "stop_drill_processes", lambda base, records, ticks, log=None: seen.append(list(records)) or [])
+    monkeypatch.setattr(AD.PF, "stop_drill_processes", lambda base, records, ticks, log=None, ports=(): seen.append(list(records)) or [])
     d = _mini_drill(tmp_path)
     d.guard = SimpleNamespace(records=[(os.getpid(), 111), (4242, 222)], start_ticks=0)
     d.stop_services()                                   # 情境之間：不含編排器自己（它的子孫是 Playwright driver 與瀏覽器）
