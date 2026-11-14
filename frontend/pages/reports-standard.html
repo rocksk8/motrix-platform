@@ -80,7 +80,7 @@
     .sr-legend i.alt { background: #9A9890; }
     .sr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .sr-fun { display: grid; gap: 8px; }
-    .sr-fun__r { display: grid; grid-template-columns: 90px 1fr 200px; gap: 12px; align-items: center; font-size: 13px; }
+    .sr-fun__r { display: grid; grid-template-columns: 90px 1fr 250px; gap: 12px; align-items: center; font-size: 13px; }
     .sr-fun__bar { height: 22px; background: #E9E7E0; border-radius: 3px; overflow: hidden; }
     .sr-fun__bar > span { display: block; height: 100%; background: var(--text-primary); }
     .sr-fun__t { font-variant-numeric: tabular-nums; }
@@ -93,6 +93,7 @@
       .sr-main select { font-size: 16px; min-height: 44px; }
       .sr-main .btn { min-height: 44px; }
     }
+    .sr-swipe { display: none; }
     .sr-det { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
     .sr-det summary { cursor: pointer; padding: 4px 0; }
     @media (max-width: 767px) {
@@ -101,6 +102,13 @@
       .sr-filters .sr-btns { grid-column: 1 / -1; }
       .sr-tabs { flex-wrap: nowrap; overflow-x: auto; }
       .sr-tab { flex: none; white-space: nowrap; }
+      /* 手機：12 個月一屏放得下（月份標籤不被切斷）；超過 12 個月才橫向捲動，並顯示可滑動提示 */
+      .sr-bars { gap: 0; padding: 6px 0 0; }
+      .sr-bars__g { min-width: 24px; flex: 1 1 0; }
+      .sr-bars__pair { gap: 1px; }
+      .sr-bars__b { width: 10px; }
+      .sr-bars__x { font-size: 10px; letter-spacing: -0.6px; }
+      .sr-swipe { display: block; }
     }
   </style>
 </head>
@@ -160,7 +168,7 @@
               </template>
             </select></label>
           <div class="sr-btns">
-            <button type="button" class="btn btn-primary" data-testid="sr-run" :disabled="loading" @click="run()" x-text="loading ? '產出中…' : '套用'"></button>
+            <button type="button" class="btn btn-primary" data-testid="sr-run" :aria-busy="loading ? 'true' : 'false'" @click="if (!loading) run()" x-text="loading ? '產出中…' : '套用'"></button>
             <button type="button" class="btn" data-testid="sr-reset" @click="reset()">清除條件</button>
           </div>
           <div class="sr-btns">
@@ -229,7 +237,7 @@
                 <template x-if="result.id === 'revenue' && (result.series || []).length > 0">
                   <div class="sr-card" data-testid="sr-series">
                     <h2 class="sr-card__t">每月營收</h2>
-                    <div class="sr-bars" aria-hidden="true">
+                    <div class="sr-bars" role="img" :aria-label="seriesSummary">
                       <template x-for="p in series" :key="p.key">
                         <div class="sr-bars__g">
                           <div class="sr-bars__pair">
@@ -244,6 +252,7 @@
                       <span><i></i><span x-text="form.basis === 'accrual' ? '權責營收（本口徑）' : '現金實收（本口徑）'"></span></span>
                       <span x-show="hasOther"><i class="alt"></i><span x-text="form.basis === 'accrual' ? '現金實收（對照）' : '權責營收（對照）'"></span></span>
                     </div>
+                    <p class="sr-note sr-swipe">圖形可左右滑動；各月數字在下方「逐月數字」。</p>
                     <p class="sr-note">兩種口徑金額不同屬正常：權責看階段何時完成，現金看款項何時入帳。</p>
                     <details class="sr-det" data-testid="sr-series-table">
                       <summary>逐月數字（NT$）</summary>
@@ -273,7 +282,7 @@
                           <div class="sr-fun__r" :data-testid="'sr-funnel-dev-' + d.status">
                             <span x-text="d.status"></span>
                             <div class="sr-fun__bar"><span x-effect="$el.style.width = d.w + '%'"></span></div>
-                            <span class="sr-fun__t" x-text="d.text"></span>
+                            <span class="sr-fun__t"><span x-text="d.text"></span><span class="sr-nb" x-show="d.miss" x-text="d.miss"></span></span>
                           </div>
                         </template>
                       </div>
@@ -320,7 +329,7 @@
                                 <template x-for="c in t.columns" :key="c.key">
                                   <td :class="{r: isNum(c)}">
                                     <template x-if="isBadge(r[c.key])"><span class="sr-badge" :class="r[c.key].tone" x-text="r[c.key].v"></span></template>
-                                    <template x-if="!isBadge(r[c.key])"><span :class="{'sr-soft': isState(r[c.key])}" x-text="fmt(r[c.key], c.type, false)"></span></template>
+                                    <template x-if="!isBadge(r[c.key])"><span :class="{'sr-soft': isState(r[c.key])}" x-text="cell(r[c.key], c)"></span></template>
                                   </td>
                                 </template>
                               </tr>
@@ -362,7 +371,16 @@
         form: {}, forms: {}, results: {}, shownQs: {},
         result: null, shown: null, stale: false,
         loaded: false, loading: false, exporting: '', error: '', loadError: '', seq: 0,
-        init() { this.load() },
+        init() {
+          var self = this
+          this.load()
+          // 只改網址的 #id（書籤、頁內連結、上一頁）也要切到對應的報表；pick() 內用 replaceState，不會再觸發這裡
+          window.addEventListener('hashchange', function () {
+            var id = ''
+            try { id = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (_e) { id = '' }
+            if (id && self.rep && id !== self.rep.id && self.reports.some(function (t) { return t.id === id })) self.pick(id)
+          })
+        },
         _token() {
           try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (_e) { return '' }
         },
@@ -478,6 +496,11 @@
             this.exporting = ''
           }
         },
+        // 表格儲存格：日期欄空值寫明原因（「—」只留給被遮罩的金額）；跟進日沒有紀錄＝尚無跟進
+        cell(v, c) {
+          if ((v === null || v === undefined || v === '') && c.type === 'date') return c.key === 'lastLogDate' ? '尚無跟進' : '未填'
+          return this.fmt(v, c.type, false)
+        },
         isNum(c) { return !!NUM[c.type] },
         isState(v) { return !!v && typeof v === 'object' && !Array.isArray(v) && 'state' in v },
         isBadge(v) { return !!v && typeof v === 'object' && 'v' in v },
@@ -506,6 +529,7 @@
               key: p.key, label: p.label,
               h1: typeof a === 'number' && mx > 0 ? Math.max(a / mx * 100, a > 0 ? 1 : 0) : 0,
               h2: typeof b === 'number' ? (mx > 0 ? Math.max(b / mx * 100, b > 0 ? 1 : 0) : 0) : null,
+              raw: typeof a === 'number' ? a : null,
               v1: typeof a === 'number' ? self._num(a) : '無資料',
               v2: typeof b === 'number' ? self._num(b) : '無資料',
             }
@@ -522,6 +546,13 @@
             return true
           })
         },
+        // 圖的文字摘要（給讀屏）：本口徑合計、最高月；逐月數字另有表格
+        get seriesSummary() {
+          var s = this.series, self = this, tot = 0, top = null
+          s.forEach(function (p) { if (typeof p.raw === 'number') { tot += p.raw; if (!top || p.raw > top.raw) top = p } })
+          if (!s.length || !top || tot <= 0) return '每月營收長條圖：此期間沒有營收；逐月數字見下方表格'
+          return '每月營收長條圖，共 ' + s.length + ' 個月，合計 NT$ ' + self._num(tot) + '，最高為 ' + top.label + '（NT$ ' + self._num(top.raw) + '）；逐月數字見下方表格'
+        },
         get hasOther() { return this.series.some(function (p) { return p.h2 !== null }) },
         // ── 業務漏斗 ──
         get devFunnel() {
@@ -530,12 +561,12 @@
           return rows.map(function (d) {
             var amt
             // 「—」只代表看不到金額；沒有件數的階段只寫「0 件」，不帶金額（不然分不出「沒權限」與「沒有資料」）
-            if (d.count === 0) return { status: d.status, w: 0, text: '0 件' }
+            if (d.count === 0) return { status: d.status, w: 0, text: '0 件', miss: '' }
             if (d.amount === null || d.amount === undefined) amt = '—'                      // 沒有金額檢視權限
             else if (d.count - (d.missing || 0) === 0) amt = '尚未填寫'
             else amt = 'NT$ ' + self._num(d.amount)
             var miss = (d.missing && d.count - d.missing > 0 && d.amount !== null && d.amount !== undefined) ? '（' + d.missing + ' 件未填）' : ''
-            return { status: d.status, w: mx > 0 ? d.count / mx * 100 : 0, text: d.count + ' 件・' + amt + miss }
+            return { status: d.status, w: mx > 0 ? d.count / mx * 100 : 0, text: d.count + ' 件・' + amt, miss: miss }
           })
         },
         get quoteFunnel() {

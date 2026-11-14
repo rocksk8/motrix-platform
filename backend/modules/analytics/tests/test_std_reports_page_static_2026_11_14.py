@@ -124,7 +124,8 @@ def test_toggle_and_tab_buttons_expose_state_to_assistive_tech():
 
 def test_monthly_chart_has_a_text_alternative():
     """柱狀圖只靠視覺／滑鼠提示不夠（手機沒有 hover、讀屏讀不到）：圖對輔助科技隱藏，旁邊給逐月數字表。"""
-    assert re.search(r'class="sr-bars"[^>]*aria-hidden="true"', PAGE)
+    assert re.search(r'class="sr-bars"[^>]*role="img"[^>]*:aria-label="seriesSummary"', PAGE)
+    assert "aria-hidden" not in PAGE.split('class="sr-bars"')[1].split(">")[0]
     assert 'data-testid="sr-series-table"' in PAGE
     assert ":title=" not in PAGE
 
@@ -148,3 +149,34 @@ def test_kpis_of_a_data_class_the_user_has_no_access_to_are_not_drawn():
 def test_page_uses_the_auto_crumb_and_user_facing_wording():
     assert 'class="pg__crumb" data-crumb-auto' in PAGE
     assert "管理員" not in PAGE and "・即時" not in PAGE
+
+
+# ── h5 實機複審 nit（2026-11-14）─────────────────────────────────────────────
+
+def test_funnel_missing_count_never_wraps_inside_the_parenthesis():
+    assert re.search(r'class="sr-nb"[^>]*x-text="d\.miss"', PAGE)
+
+
+def test_empty_date_cells_say_why_and_dash_stays_for_masked_money():
+    js = _script()
+    cell = js[js.index("cell(v, c)"):]
+    cell = cell[:cell.index("isNum(c)")]
+    assert "c.type === 'date'" in cell and "未填" in cell and "尚無跟進" in cell
+    assert 'x-text="cell(r[c.key], c)"' in PAGE
+
+
+def test_apply_button_stays_enabled_while_loading_and_guards_double_submit():
+    btn = re.search(r'<button[^>]*data-testid="sr-run"[^>]*>', PAGE).group(0)
+    assert ":disabled" not in btn
+    assert ":aria-busy=" in btn and "if (!loading) run()" in btn
+
+
+def test_hash_change_switches_the_report():
+    assert "addEventListener('hashchange'" in _script()
+
+
+def test_chart_has_a_summary_label_and_a_swipe_hint_on_small_screens():
+    js = _script()
+    assert "get seriesSummary()" in js
+    assert 'class="sr-note sr-swipe"' in PAGE
+    assert re.search(r"@media \(max-width: 767px\)[^@]*\.sr-swipe \{ display: block; \}", PAGE, flags=re.S)
