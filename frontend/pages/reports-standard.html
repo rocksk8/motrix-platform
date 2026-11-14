@@ -41,6 +41,7 @@
     .sr-tab:hover { color: var(--text-primary); }
     .sr-tab.is-on { color: var(--text-primary); border-bottom-color: var(--accent); }
     .sr-tab:focus-visible { outline: 2px solid var(--info, #1D4ED8); outline-offset: 2px; }
+    .sr-nb { white-space: nowrap; }
     .sr-desc { margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
     .sr-err { margin-bottom: 12px; padding: 9px 14px; background: #FEF2F2; border: 1px solid #DC2626; border-radius: 6px; font-size: 12px; color: #991B1B; }
     .sr-stale { font-size: 12px; color: var(--warning, #92400E); }
@@ -92,8 +93,14 @@
       .sr-main select { font-size: 16px; min-height: 44px; }
       .sr-main .btn { min-height: 44px; }
     }
+    .sr-det { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+    .sr-det summary { cursor: pointer; padding: 4px 0; }
     @media (max-width: 767px) {
       .sr-main { padding: 20px 16px 60px; }
+      .sr-filters { grid-template-columns: 1fr 1fr; }
+      .sr-filters .sr-btns { grid-column: 1 / -1; }
+      .sr-tabs { flex-wrap: nowrap; overflow-x: auto; }
+      .sr-tab { flex: none; white-space: nowrap; }
     }
   </style>
 </head>
@@ -107,12 +114,13 @@
   <main class="sr-main">
     <div class="pg">
       <div class="pg__l">
-        <nav class="pg__crumb" aria-label="目前位置"><span>報表</span> › <span>標準報表</span></nav>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>標準報表</span></nav>
         <h1 class="pg__t">標準報表</h1>
-        <p class="pg__s">管理用・即時計算（非會計帳）。營收、毛利、應收帳齡、案件進度、業務漏斗共用同一組篩選條件，匯出內容與畫面一致。</p>
+        <p class="pg__s">管理用，即時計算（非會計帳）。<span class="sr-nb">營收</span>、<span class="sr-nb">毛利</span>、<span class="sr-nb">應收帳齡</span>、<span class="sr-nb">案件進度</span>、<span class="sr-nb">業務漏斗</span>共用同一組篩選條件，匯出內容與畫面一致。</p>
       </div>
     </div>
 
+    <p class="sr-empty" data-testid="sr-loading-page" x-show="!loaded && !loadError">載入中…</p>
     <template x-if="loadError">
       <div class="sr-err" data-testid="sr-load-error" role="alert" x-text="loadError"></div>
     </template>
@@ -120,7 +128,7 @@
     <template x-if="loaded && reports.length === 0 && !loadError">
       <div class="sr-empty" data-testid="sr-empty-all">
         <b>您的帳號尚無可檢視的標準報表</b>
-        報表依權限顯示。需要「營運報表」、財務檢視權限，或「業務開發」「案件」的使用權限，請聯絡管理員開通。
+        報表依權限顯示。需要「營運報表」、財務檢視權限，或「業務開發」「案件」的使用權限，請洽管理者開通。
         <ul class="sr-notes sr-blocked" data-testid="sr-blocked" x-show="blocked.length > 0">
           <template x-for="b in blocked" :key="b.id"><li x-text="b.title + '：' + (b.reason || '需要對應的權限')"></li></template>
         </ul>
@@ -130,9 +138,9 @@
     <template x-if="rep">
       <div>
         <section class="sr-filters" data-testid="sr-filters" aria-label="篩選條件">
-          <label class="sr-field"><span>起</span>
+          <label class="sr-field"><span>起始日</span>
             <input type="date" class="sr-filter" data-testid="sr-param-date_from" x-model="form.date_from" :disabled="!has('date_from')" @input="touch()"></label>
-          <label class="sr-field"><span>迄</span>
+          <label class="sr-field"><span>結束日</span>
             <input type="date" class="sr-filter" data-testid="sr-param-date_to" x-model="form.date_to" :disabled="!has('date_to')" @input="touch()"></label>
           <label class="sr-field"><span>業務</span>
             <select class="sr-filter" data-testid="sr-param-sales_id" x-model="form.sales_id" :disabled="!has('sales_id')" @change="touch()">
@@ -170,10 +178,10 @@
         </div>
         <p class="sr-hint" data-testid="sr-filter-hint" x-text="filterHint"></p>
 
-        <div class="sr-tabs" role="tablist" aria-label="報表分類">
+        <div class="sr-tabs" role="group" aria-label="報表分類">
           <template x-for="t in reports" :key="t.id">
-            <button type="button" class="sr-tab" role="tab" :class="{'is-on': t.id === rep.id}"
-                    :aria-selected="t.id === rep.id ? 'true' : 'false'" :data-testid="'sr-tab-' + t.id"
+            <button type="button" class="sr-tab" :class="{'is-on': t.id === rep.id}"
+                    :aria-current="t.id === rep.id ? 'true' : null" :data-testid="'sr-tab-' + t.id"
                     @click="pick(t.id)" x-text="t.title"></button>
           </template>
         </div>
@@ -197,18 +205,18 @@
                 <!-- 營收：口徑切換 -->
                 <template x-if="result.id === 'revenue'">
                   <div class="sr-seg" role="group" aria-label="營收口徑" data-testid="sr-basis">
-                    <button type="button" :class="{'is-on': form.basis !== 'accrual'}" data-testid="sr-basis-cash" @click="setBasis('cash')">現金口徑（預設；依收款日，含稅）</button>
-                    <button type="button" :class="{'is-on': form.basis === 'accrual'}" data-testid="sr-basis-accrual" @click="setBasis('accrual')">權責口徑（依階段完成月認列，未稅）</button>
+                    <button type="button" :class="{'is-on': form.basis !== 'accrual'}" :aria-pressed="form.basis !== 'accrual' ? 'true' : 'false'" data-testid="sr-basis-cash" @click="setBasis('cash')">現金口徑（預設；依收款日，含稅）</button>
+                    <button type="button" :class="{'is-on': form.basis === 'accrual'}" :aria-pressed="form.basis === 'accrual' ? 'true' : 'false'" data-testid="sr-basis-accrual" @click="setBasis('accrual')">權責口徑（依階段完成月認列，未稅）</button>
                   </div>
                 </template>
 
                 <ul class="sr-notes" data-testid="sr-notes" x-show="(result.notes || []).length > 0">
                   <template x-for="(n, i) in (result.notes || [])" :key="i"><li x-text="n"></li></template>
                 </ul>
-                <p class="sr-note" data-testid="sr-masked" x-show="result.moneyMasked">您的帳號沒有金額檢視權限，金額欄位以「—」顯示。</p>
+                <p class="sr-note" data-testid="sr-masked" x-show="result.moneyMasked">您的帳號沒有金額檢視權限，金額以「—」顯示。</p>
 
-                <div class="sr-kpis" data-testid="sr-kpis" x-show="(result.kpis || []).length > 0">
-                  <template x-for="k in (result.kpis || [])" :key="k.key">
+                <div class="sr-kpis" data-testid="sr-kpis" x-show="visibleKpis.length > 0">
+                  <template x-for="k in visibleKpis" :key="k.key">
                     <div class="sr-kpi" :data-testid="'sr-kpi-' + k.key">
                       <div class="sr-kpi__l" x-text="k.label"></div>
                       <div class="sr-kpi__v" :class="{'is-soft': isState(k.value)}" x-text="fmt(k.value, k.type, true)"></div>
@@ -221,12 +229,12 @@
                 <template x-if="result.id === 'revenue' && (result.series || []).length > 0">
                   <div class="sr-card" data-testid="sr-series">
                     <h2 class="sr-card__t">每月營收</h2>
-                    <div class="sr-bars">
+                    <div class="sr-bars" aria-hidden="true">
                       <template x-for="p in series" :key="p.key">
                         <div class="sr-bars__g">
                           <div class="sr-bars__pair">
-                            <div class="sr-bars__b" x-effect="$el.style.height = p.h1 + '%'" :title="p.t1"></div>
-                            <div class="sr-bars__b alt" x-show="p.h2 !== null" x-effect="$el.style.height = (p.h2 || 0) + '%'" :title="p.t2"></div>
+                            <div class="sr-bars__b" x-effect="$el.style.height = p.h1 + '%'"></div>
+                            <div class="sr-bars__b alt" x-show="p.h2 !== null" x-effect="$el.style.height = (p.h2 || 0) + '%'"></div>
                           </div>
                           <div class="sr-bars__x" x-text="p.label"></div>
                         </div>
@@ -237,6 +245,21 @@
                       <span x-show="hasOther"><i class="alt"></i><span x-text="form.basis === 'accrual' ? '現金實收（對照）' : '權責營收（對照）'"></span></span>
                     </div>
                     <p class="sr-note">兩種口徑金額不同屬正常：權責看階段何時完成，現金看款項何時入帳。</p>
+                    <details class="sr-det" data-testid="sr-series-table">
+                      <summary>逐月數字（NT$）</summary>
+                      <div class="sr-wrap">
+                        <table class="data-table">
+                          <thead><tr><th>月份</th>
+                            <th class="r" x-text="form.basis === 'accrual' ? '權責營收' : '現金實收'"></th>
+                            <th class="r" x-show="hasOther" x-text="form.basis === 'accrual' ? '現金實收' : '權責營收'"></th></tr></thead>
+                          <tbody>
+                            <template x-for="p in series" :key="p.key">
+                              <tr><td x-text="p.label"></td><td class="r" x-text="p.v1"></td><td class="r" x-show="hasOther" x-text="p.v2"></td></tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
                   </div>
                 </template>
 
@@ -288,7 +311,7 @@
                         <table class="data-table">
                           <thead><tr>
                             <template x-for="c in t.columns" :key="c.key">
-                              <th :class="{r: isNum(c)}" x-text="c.label"></th>
+                              <th :class="{r: isNum(c)}" x-text="c.label + (c.type === 'money' ? '（NT$）' : '')"></th>
                             </template>
                           </tr></thead>
                           <tbody>
@@ -347,7 +370,7 @@
         async load() {
           try {
             var res = await fetch('/api/std-reports', { headers: { Authorization: 'Bearer ' + this._token() } })
-            if (!res.ok) { this.loadError = '載入失敗（' + res.status + '）'; this.loaded = true; return }
+            if (!res.ok) { this.loadError = '載入失敗（' + res.status + '），請重新整理或洽管理者。'; this.loaded = true; return }
             var j = await res.json()
             // 只畫這位使用者看得到的報表：看不到的不出頁籤、不送請求（原因只在「全部都看不到」時列在空狀態）
             var all = j.reports || []
@@ -355,7 +378,7 @@
             this.blocked = all.filter(function (t) { return t.available === false })
             this.salesOptions = j.salesOptions || []
             this.departmentOptions = j.departmentOptions || []
-          } catch (_e) { this.loadError = '載入失敗，請重新整理'; this.loaded = true; return }
+          } catch (_e) { this.loadError = '載入失敗，請重新整理或洽管理者。'; this.loaded = true; return }
           this.loaded = true
           var want = ''
           try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (_e) { want = '' }
@@ -461,6 +484,8 @@
         _num(v) { return window.MotrixFormat ? MotrixFormat.num(v) : String(v) },
         // 看不到＝「—」；沒填／未精算＝文字；0 照樣顯示 0
         fmt(v, type, kpi) {
+          // 百分比算不出來（沒有分母，或看不到那一類資料）寫明「無法計算」；「—」只留給金額被遮罩
+          if ((v === null || v === undefined || v === '') && type === 'pct') return '無法計算'
           if (v === null || v === undefined || v === '') return '—'
           if (this.isState(v)) return v.state === 'unfilled' && kpi ? '尚未填寫' : (STATE_TEXT[v.state] || '—')
           if (type === 'money') return (kpi ? 'NT$ ' : '') + this._num(v)
@@ -481,9 +506,20 @@
               key: p.key, label: p.label,
               h1: typeof a === 'number' && mx > 0 ? Math.max(a / mx * 100, a > 0 ? 1 : 0) : 0,
               h2: typeof b === 'number' ? (mx > 0 ? Math.max(b / mx * 100, b > 0 ? 1 : 0) : 0) : null,
-              t1: p.label + '：' + (typeof a === 'number' ? 'NT$ ' + self._num(a) : '—'),
-              t2: p.label + '：' + (typeof b === 'number' ? 'NT$ ' + self._num(b) : '—'),
+              v1: typeof a === 'number' ? self._num(a) : '—',
+              v2: typeof b === 'number' ? self._num(b) : '—',
             }
+          })
+        },
+        // 這位使用者沒有那一類資料的權限時，整張 KPI 不畫（不是金額被遮罩，是根本沒有這一類）
+        get visibleKpis() {
+          var r = this.result, ks = (r && r.kpis) || []
+          if (!r || r.id !== 'sales-funnel') return ks
+          var hasQuote = !!(r.funnel && r.funnel.quote), hasDev = this.devFunnel.length > 0
+          return ks.filter(function (k) {
+            if (/^quote/.test(k.key)) return hasQuote
+            if (/^dev|^pipeline/.test(k.key)) return hasDev
+            return true
           })
         },
         get hasOther() { return this.series.some(function (p) { return p.h2 !== null }) },
@@ -493,8 +529,10 @@
           rows.forEach(function (d) { if (d.count > mx) mx = d.count })
           return rows.map(function (d) {
             var amt
+            // 「—」只代表看不到金額；沒有件數的階段只寫「0 件」，不帶金額（不然分不出「沒權限」與「沒有資料」）
+            if (d.count === 0) return { status: d.status, w: 0, text: '0 件' }
             if (d.amount === null || d.amount === undefined) amt = '—'                      // 沒有金額檢視權限
-            else if (d.count - (d.missing || 0) === 0) amt = d.count === 0 ? '—' : '尚未填寫'
+            else if (d.count - (d.missing || 0) === 0) amt = '尚未填寫'
             else amt = 'NT$ ' + self._num(d.amount)
             var miss = (d.missing && d.count - d.missing > 0 && d.amount !== null && d.amount !== undefined) ? '（' + d.missing + ' 件未填）' : ''
             return { status: d.status, w: mx > 0 ? d.count / mx * 100 : 0, text: d.count + ' 件・' + amt + miss }

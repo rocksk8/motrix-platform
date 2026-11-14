@@ -111,3 +111,40 @@ def test_report_ids_are_not_hardcoded_in_the_page():
     assert "j.reports" in js
     assert "/api/std-reports/' + encodeURIComponent" in js
     assert set(re.findall(r"result\.id === '([a-z-]+)'", PAGE)) <= set(REPORT_IDS)
+
+
+# ── h5 複審後補的守門（2026-11-14）──────────────────────────────────────────
+
+def test_toggle_and_tab_buttons_expose_state_to_assistive_tech():
+    """口徑切換要有 aria-pressed；頁籤不宣告 tablist/tab（沒有 tabpanel／方向鍵就不要冒充）。"""
+    assert PAGE.count(":aria-pressed=") >= 2
+    assert 'role="tablist"' not in PAGE and 'role="tab"' not in PAGE
+    assert ":aria-current=" in PAGE
+
+
+def test_monthly_chart_has_a_text_alternative():
+    """柱狀圖只靠視覺／滑鼠提示不夠（手機沒有 hover、讀屏讀不到）：圖對輔助科技隱藏，旁邊給逐月數字表。"""
+    assert re.search(r'class="sr-bars"[^>]*aria-hidden="true"', PAGE)
+    assert 'data-testid="sr-series-table"' in PAGE
+    assert ":title=" not in PAGE
+
+
+def test_dash_is_only_for_masked_money_and_empty_stages_carry_no_amount():
+    """「—」只代表看不到金額：0 件的階段不帶金額；算不出來的百分比寫明原因，不用「—」。"""
+    js = _script()
+    dev = js[js.index("get devFunnel()"):]
+    dev = dev[:dev.index("get quoteFunnel()")]
+    assert "d.count === 0" in dev and "'0 件'" in dev
+    fmt = js[js.index("fmt(v, type, kpi)"):]
+    fmt = fmt[:fmt.index("// ── 營收逐月圖")]
+    assert "type === 'pct'" in fmt and "無法計算" in fmt
+
+
+def test_kpis_of_a_data_class_the_user_has_no_access_to_are_not_drawn():
+    js = _script()
+    assert "get visibleKpis()" in js and 'x-for="k in visibleKpis"' in PAGE
+
+
+def test_page_uses_the_auto_crumb_and_user_facing_wording():
+    assert 'class="pg__crumb" data-crumb-auto' in PAGE
+    assert "管理員" not in PAGE and "・即時" not in PAGE
