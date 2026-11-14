@@ -2,7 +2,7 @@
 """自訂報表的「資料來源」登錄表（T87 B2 S0b：只登記與驗證、不執行查詢）。設計：D:\\Claude-pm\\t87-design\\B2-custom-reports.md §3、§4。
 
 [單位] helper:report_catalog    [層] L1    [穩定度] 實驗（登記資料＋純函式；沒有路由、沒有資料表）
-[公開介面] AGG_BY_TYPE, OPS_BY_TYPE, TYPES, field_of, field_visible, get_source, register_source, restore, snapshot, source_available, source_problems, sources, sources_for, visible_fields
+[公開介面] AGG_BY_TYPE, OPS_BY_TYPE, TYPES, enum_options, field_of, field_visible, get_source, register_source, restore, snapshot, source_available, source_problems, sources, sources_for, visible_fields
 [不變式] ①擁有模組以 `register_source()` 登記資料來源；核心不寫死任何來源或欄位。查詢的識別字與運算式**只取自這份登錄表**，使用者只能挑欄位代號，任何使用者文字都不會進入 SQL 識別字位置。
     ②欄位種類 `column`（識別字符合規則，且在擁有模組登記的表內）或 `expr`；`expr` 的運算式只能是擁有模組登錄於 `spec["exprs"]` 的常數，以 **`is`**（同一個物件）比對，不比字串——
       清單端點與報表引用同一個常數，才不會各寫一份而漂移。`sortExpr` 同規則。`reads` 宣告運算式讀哪些欄位（`data_json` 只允許出現在登錄常數裡，使用者無從指定路徑）。
@@ -15,6 +15,7 @@
 [契約題] backend/tests/platform/test_report_catalog_t87.py
 """
 import copy
+import inspect
 import logging
 import re
 import threading
@@ -238,6 +239,21 @@ def get_source(source_id):
         return None
     full, _ = _resolve(source_id, e["spec"])
     return _copy(full) if full is not None else None
+
+
+def enum_options(f, conn=None, user=None) -> list:
+    """欄位的列舉選項 `[(值, 白話)]`。`enum` 可以是固定清單，或函式 `fn(conn)`／`fn(conn, user)`（有第二個參數的才會收到使用者，
+    讓選項取自**該使用者看得到的列**；來源函式不得列出呼叫者列範圍之外的值）。函式的 `labels_are_values` 屬性為真＝標籤就是值本身（編譯時不必為了標籤去讀資料）。"""
+    en = f.get("enum")
+    if en is None:
+        return []
+    if not callable(en):
+        return list(en)
+    try:
+        two = len(inspect.signature(en).parameters) >= 2
+    except (TypeError, ValueError):
+        two = False
+    return list(en(conn, user) if two else en(conn))
 
 
 def field_of(source_id, field_id):

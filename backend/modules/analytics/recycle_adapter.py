@@ -38,6 +38,17 @@ class CustomReportBinAdapter(RB.Adapter):
             return None
         return conn.execute("SELECT %s FROM custom_reports WHERE id=?" % ",".join(_cols(conn, "custom_reports")), (rid,)).fetchone()
 
+    def mask(self, snap: dict) -> dict:
+        """回收筒清單／詳情給看的人（不一定是擁有者）：不顯示報表定義（篩選門檻值可能是金額）；其餘走預設遮罩。"""
+        out = super().mask(snap)
+        try:
+            for r in out.get("rows", {}).get("custom_reports", []):
+                if "definition_json" in r:
+                    r["definition_json"] = "（報表內容不在回收筒顯示）"
+        except (AttributeError, TypeError):
+            pass
+        return out
+
     def can_delete(self, conn, entity_id, user) -> Tuple[bool, str]:
         r = self._row(conn, entity_id)
         if r is None:

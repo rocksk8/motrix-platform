@@ -2,7 +2,7 @@
 """自訂報表的編譯與執行（T87 B2 S1：定義 → 驗證 → 套可見性 → 編譯成唯讀查詢 → 由擁有模組執行 → 組表）。設計：D:\\Claude-pm\\t87-design\\B2-custom-reports.md §4.4、§5。
 
 [單位] helper:report_runner    [層] L1    [穩定度] 實驗（無路由、無資料表；不含任何業務表名字面值——表名／欄位／運算式全部取自 `report_catalog` 登錄表）
-[公開介面] CompiledPlan, MAX_DEFINITION_BYTES, MAX_EXPORT_ROWS, PREVIEW_ROWS, TIME_LIMIT_SECONDS, ReportError, ReportRefused, SourceUnavailable, assemble, compile, preview, run_owned
+[公開介面] CompiledPlan, MAX_DEFINITION_BYTES, MAX_EXPORT_ROWS, PREVIEW_ROWS, TIME_LIMIT_SECONDS, ReportError, ReportRefused, SourceUnavailable, assemble, compile, describe_filters, preview, run_owned
 [不變式] ①使用者只能提供**欄位代號**與**值**：識別字與運算式只來自登錄表（`expr` 是擁有模組的登錄常數），值一律走參數（LIKE 跳脫）；編譯後再斷言 `data_json` 只出現在登錄常數之內（授權器是欄位層級，分不出登錄運算式內的 `data_json` 與裸讀）。
     ②**不可見欄位**：用在顯示／彙總 ⇒ 拿掉並回報「已隱藏 N 欄」；用在篩選／分組／排序 ⇒ **422 拒絕執行**（不忽略；忽略會變成逐步逼近金額的探針）。可見性每次重算（`report_catalog.visible_fields`），定義裡只存欄位代號。
     ③列範圍＝`row_access.filter_sql(來源登記的 kind／scope)`，**無條件**併入每一支查詢（含計數與彙總）；來源有 `softDelete` 就併入 `<欄位> = 0`；未登錄列規則 ⇒ `AND 0`。
@@ -78,16 +78,11 @@ class CompiledPlan:
 
 # ── 驗證與正規化 ─────────────────────────────────────────────────────────────
 
-def _short(x, n=40):
-    s = str(x)
-    return s if len(s) <= n else s[:n] + "…"
-
-
 def _normalize(defn) -> dict:
     if not isinstance(defn, dict):
         raise ReportRefused("報表設定格式不正確，請重新建立。")
     try:
-        size = len(json.dumps(defn, ensure_ascii=False))
+        size = len(json.dumps(defn, ensure_ascii=False).encode("utf-8"))
     except (TypeError, ValueError):
         raise ReportRefused("報表設定格式不正確，請重新建立。")
     if size > MAX_DEFINITION_BYTES:
@@ -138,8 +133,11 @@ def _period(name, today):
     return s.isoformat(), e.isoformat()
 
 
+_NUM_LIMIT = 2 ** 53                                                           # 條件數字的上限（再大就不是合理金額；也避免 SQLite 64 位元溢位）
+
+
 def _num(v):
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)) or abs(v) > _NUM_LIMIT:
         raise ValueError
     return v
 
@@ -227,7 +225,18 @@ def _label_list(by, ids):
 
 
 def compile(definition, user, mode="preview", today=None, conn=None) -> CompiledPlan:  # noqa: A001 — 與設計文件同名
-    """定義 → CompiledPlan。來源不可用 ⇒ SourceUnavailable(404)；定義或權限問題 ⇒ ReportRefused(422)。"""
+    """定義 → CompiledPlan。來源不可用 ⇒ SourceUnavailable(404)；定義或權限問題 ⇒ ReportRefused(422)。
+    使用者送來的定義型別不對造成的 TypeError／ValueError／KeyError／AttributeError／OverflowError 一律是 422（不准 500）。"""
+    try:
+        return _compile(definition, user, mode, today, conn)
+    except ReportError:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError, OverflowError, IndexError):
+        logger.info("report_runner：定義型別不合法", exc_info=True)
+        raise ReportRefused("報表設定格式不正確，請重新建立。", {"reason": "bad_definition"})
+
+
+def _compile(definition, user, mode, today, conn) -> CompiledPlan:
     from helpers import row_access
     d = _normalize(definition)
     sid = d["source"]
@@ -246,11 +255,11 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
     filters = d["filters"] if d["filters"] is not None else list(spec.get("defaultFilters") or [])
     bad_unknown = [str(x.get("field")) for x in filters if not isinstance(x.get("field"), str) or not _known(x["field"])]
     if bad_unknown:
-        raise ReportRefused("條件使用的欄位「%s」已不存在，請移除該條件。" % _short(bad_unknown[0]), {"reason": "unknown_field", "action": "remove_conditions"})
+        raise ReportRefused("有條件使用的欄位已不存在，請移除該條件。", {"reason": "unknown_field", "action": "remove_conditions"})
     groups_in, sorts_in = d["groupBy"], d["sort"]
     for x in groups_in + sorts_in:
         if not isinstance(x.get("field"), str) or not _known(x["field"]):
-            raise ReportRefused("分組或排序使用的欄位「%s」已不存在，請移除。" % _short(x.get("field")), {"reason": "unknown_field"})
+            raise ReportRefused("分組或排序使用的欄位已不存在，請移除。", {"reason": "unknown_field"})
     denied = []
     for x in filters + groups_in + sorts_in:
         if not vis.get(x["field"]) and x["field"] not in denied:
@@ -306,7 +315,7 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
         for cid in d["columns"]:
             f = by.get(cid)
             if f is None:
-                notices.append("欄位「%s」已不存在，已略過。" % _short(cid))
+                notices.append("有一個顯示欄位已不存在，已略過。")
             elif not f.get("select"):
                 notices.append("欄位「%s」不能顯示，已略過。" % f["label"])
             elif not vis.get(cid):
@@ -319,6 +328,8 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
     aggs = []
     for x in d["aggregates"]:
         fid, fn = x.get("field"), x.get("fn")
+        if not isinstance(fid, str) or not isinstance(fn, str):
+            raise ReportRefused("彙總設定的格式不正確，請重新設定。", {"reason": "bad_definition"})
         if fid == "*":
             if fn != "count":
                 notices.append("「*」只能用於筆數，已略過。")
@@ -327,9 +338,9 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
             continue
         f = by.get(fid) if isinstance(fid, str) else None
         if f is None:
-            notices.append("彙總欄位「%s」已不存在，已略過。" % _short(fid))
+            notices.append("有一個彙總欄位已不存在，已略過。")
         elif fn not in f.get("aggregate", ()):
-            notices.append("欄位「%s」不支援「%s」，已略過。" % (f["label"], _AGG_LABEL.get(fn, _short(fn))))
+            notices.append("欄位「%s」不支援這種彙總方式，已略過。" % f["label"])
         elif not vis.get(fid):
             hidden.append("%s（%s）" % (f["label"], _AGG_LABEL[fn]))
         else:
@@ -411,11 +422,15 @@ def compile(definition, user, mode="preview", today=None, conn=None) -> Compiled
     if rule is not None:
         cols_ok.update(c for c in (rule.owner_id_col, rule.legacy_name_col, rule.creator_col, *rule.id_list_cols) if c)
     enum_labels = {}
+    shown = {c["fieldId"] for c in columns} | {g["fieldId"] for g in groups}
     for f in spec["fields"]:
         if f["type"] == "enum":
+            en = f.get("enum")
+            if f["id"] not in shown or getattr(en, "labels_are_values", False):  # 沒顯示、或選項＝資料本身（不必為了標籤掃表）
+                enum_labels[f["id"]] = {}
+                continue
             try:
-                opts = f["enum"](None) if callable(f["enum"]) else f["enum"]
-                enum_labels[f["id"]] = {v: lab for v, lab in opts}
+                enum_labels[f["id"]] = {v: lab for v, lab in RC.enum_options(f, conn, user)}
             except Exception:                                                  # noqa: BLE001 — 取不到對照 ⇒ 顯示原值
                 enum_labels[f["id"]] = {}
     return CompiledPlan(_TOKEN, source_id=sid, table=spec["table"], layout=layout, mode=mode, columns=columns, groups=groups, aggs=aggs,
@@ -464,6 +479,9 @@ def run_owned(plan, accept) -> dict:
             raise ReportRefused("資料量過大，請縮小篩選範圍後再執行。", {"reason": "timeout"})
         logger.error("report_runner 執行失敗：%s", e)
         raise ReportError(500, "報表暫時無法執行，請稍後再試；若持續發生請聯絡系統管理員。")
+    except (OverflowError, sqlite3.Error, ValueError) as e:                    # 條件值已在編譯時限制範圍；這裡是最後保險，不回 500 內部訊息
+        logger.error("report_runner 執行失敗（%s）：%s", type(e).__name__, e)
+        raise ReportRefused("報表條件的內容無法執行，請檢查條件值後再試。", {"reason": "bad_value"})
     finally:
         try:
             conn.set_authorizer(None)
@@ -555,6 +573,52 @@ def assemble(plan, raw) -> dict:
     n_row = sum(1 for r in out if r["k"] == "row")
     return {"columns": cols, "rows": out, "totalRows": total_rows, "truncated": n_row < total_rows, "hiddenFields": list(plan.hidden),
             "hiddenCount": len(plan.hidden), "notes": notes}
+
+
+_PERIOD_LABEL = {"this_month": "本月", "last_month": "上月", "this_quarter": "本季", "this_year": "今年", "last_year": "去年", "last_30_days": "近 30 天"}
+_OP_LABEL = {"eq": "＝", "neq": "≠", "contains": "包含", "in": "屬於", "gte": "≥", "lte": "≤"}
+
+
+def describe_filters(definition) -> list:
+    """生效的篩選條件（含來源預設條件）寫成白話字串清單，給匯出檔的條件摘要用。只用欄位標籤與使用者自己填的條件值；
+    定義必須已通過 `compile`（欄位都存在且可見）；不認得的欄位或值就略過，不丟例外。"""
+    try:
+        d = _normalize(definition)
+        spec = RC.get_source(d["source"])
+        if spec is None:
+            return []
+        by = {f["id"]: f for f in spec["fields"]}
+        flts = d["filters"] if d["filters"] is not None else list(spec.get("defaultFilters") or [])
+        out = []
+        for x in flts:
+            f = by.get(x.get("field"))
+            if f is None:
+                continue
+            op, v = x.get("op"), x.get("value")
+            opts = dict(o for o in (f.get("options") or ()) if isinstance(o, (list, tuple)) and len(o) == 2) if isinstance(f.get("options"), (list, tuple)) else {}
+
+            def show(z):
+                return str(opts.get(z, z))
+            if op == "is_me":
+                body = "是我"
+            elif op == "empty":
+                body = "未填"
+            elif op == "not_empty":
+                body = "有填"
+            elif op == "between" and isinstance(v, list) and len(v) == 2:
+                body = "介於 %s ～ %s" % (v[0], v[1])
+            elif op == "relative":
+                body = _PERIOD_LABEL.get(v, str(v))
+            elif op == "in" and isinstance(v, list):
+                body = "屬於 " + "、".join(show(z) for z in v)
+            elif op in _OP_LABEL:
+                body = "%s %s" % (_OP_LABEL[op], show(v))
+            else:
+                continue
+            out.append("%s %s" % (f["label"], body) if op in ("is_me", "empty", "not_empty", "relative") else "%s%s" % (f["label"], (" " + body) if not body.startswith("＝") else body))
+        return out
+    except Exception:                                                          # noqa: BLE001 — 摘要只是說明文字
+        return []
 
 
 def preview(definition, user, today=None) -> dict:

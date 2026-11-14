@@ -2067,6 +2067,7 @@
    "AGG_BY_TYPE": "const",
    "OPS_BY_TYPE": "const",
    "TYPES": "const",
+   "enum_options": "def(f, conn=…, user=…)",
    "field_of": "def(source_id, field_id)",
    "field_visible": "def(field, user, wide=…)",
    "get_source": "def(source_id)",
@@ -2107,6 +2108,7 @@
    "TIME_LIMIT_SECONDS": "const",
    "assemble": "def(plan, raw)",
    "compile": "def(definition, user, mode=…, today=…, conn=…)",
+   "describe_filters": "def(definition)",
    "preview": "def(definition, user, today=…)",
    "run_owned": "def(plan, accept)"
   },

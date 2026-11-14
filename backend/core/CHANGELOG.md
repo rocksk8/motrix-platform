@@ -2,6 +2,7 @@
 
 ## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）
 - 新增（L1，加法）：`helpers/report_catalog`（報表資料來源登錄與驗證）、`helpers/report_runner`（定義→編譯→擁有模組執行→組表）、`helpers/report_policy`（自訂報表設定讀取）、`helpers/settings_groups_custom_reports`（設定群組 `custom_reports`：旗標＋匯出對象／分享／刪除方式／報價單金額欄範圍）；`field_catalog` 新增天花板 `financial_view` 與欄位 `dev_case.expected_amount`。既有介面不改。
+- 修正（L1，加法，自訂報表尚在旗標後；h11 審查）：`report_runner` 定義型別錯誤一律 422（不再 500）、條件數字上限 ±2^53、定義大小以位元組計、錯誤訊息不回顯使用者輸入的欄位代號、列舉標籤只為顯示欄計算並帶連線與使用者；新增 `report_catalog.enum_options(f, conn, user)`（選項函式可收使用者）與 `report_runner.describe_filters`（匯出條件摘要）。
 
 ## 1.171 — 2026-11-14（feat/t86-finance-af-h1；T86 財務 F①）
 - 前端（無 API／欄位／權限語意變更）：`static/notif.js` 鈴鐺的每日工作事項角標，非 superadmin 且沒有 `daily_task`／`case_manage` 模組時不再送 `GET /api/daily-tasks`（原本每一頁載入都會打一次、一定 403）；與側邊欄同一份 `session.modules`。

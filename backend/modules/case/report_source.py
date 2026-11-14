@@ -11,8 +11,11 @@
     ⑤「案件」別名沿用報價單的表、列規則、欄位與執行函式；預設篩選＝成交標記為已成案或已結案（案件頁「案件總覽」的母體），使用者可改，不是強制條件。
     ⑥金額與毛利率欄位走欄位目錄（`quotation.*`）；不可見者的處理（拿掉顯示欄／422 拒絕篩選與排序）在 report_runner。
     ⑦`execute`（擁有模組的執行回呼）只轉呼叫 `report_runner.run_owned`，並限定接受自己的來源（quotation／case）。
+    ⑧狀態／成交標記／精算狀態的選項取自**呼叫者看得到的列**（同一套列權限）、只讀實體欄位、每人快取 60 秒；沒有使用者 ⇒ 空。
 [契約題] backend/tests/platform/test_report_catalog_t87.py
 """
+import time
+
 from helpers import doc_type as _DT
 from helpers import report_catalog as _RC
 from modules.case.quotations import SQL_DEAL_TAG, SQL_QUOTE_DATE, SQL_SETTLE_STATUS
@@ -26,11 +29,33 @@ def _doc_type_options(conn=None):
     return [(k, v) for k, v in _DT.LABELS.items()]
 
 
-def _distinct_options(expr):
-    """列舉值取自資料本身（登記時不寫死白話文字）：回傳 [(值, 白話)]；空字串顯示為「（未填）」。"""
-    def _opts(conn):
-        rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations ORDER BY 1" % expr).fetchall()
-        return [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
+_OPT_TTL = 60.0
+_OPT_CACHE = {}                                          # (欄位, 使用者 id) -> (時間, 選項)；每人各一份（列範圍不同）
+
+
+def _distinct_options(column):
+    """列舉值取自**呼叫者看得到的列**（套用與報表同一套列權限）：`SELECT DISTINCT <欄位>`，只讀實體欄位（不碰 `data_json`、不做 JSON 運算），
+    每人快取 60 秒、最多 200 個值。沒有使用者 ⇒ 空（fail closed）。回傳 [(值, 白話)]；空字串顯示為「（未填）」。
+    舊資料若實體欄位是空、值只在 `data_json` 裡，選項看不到（條件仍可手動輸入該值）。"""
+    def _opts(conn, user=None):
+        if not user:
+            return []
+        key = (column, user.get("id"))
+        hit = _OPT_CACHE.get(key)
+        now = time.monotonic()
+        if hit and now - hit[0] < _OPT_TTL:
+            return list(hit[1])
+        from helpers import row_access
+        frag, params = row_access.filter_sql("case", user, scope="read")
+        frag = frag.strip()
+        where = (frag[4:] if frag.upper().startswith("AND ") else frag) if frag else "1=1"
+        rows = conn.execute("SELECT DISTINCT %s AS v FROM quotations WHERE %s ORDER BY 1 LIMIT 200" % (column, where), params).fetchall()
+        out = [((r[0] or ""), (r[0] or "（未填）")) for r in rows]
+        if len(_OPT_CACHE) > 500:
+            _OPT_CACHE.clear()
+        _OPT_CACHE[key] = (now, out)
+        return list(out)
+    _opts.labels_are_values = True
     return _opts
 
 
@@ -60,9 +85,9 @@ def register(mine_sql) -> list:
         _f("quote_date", "報價日", "date", kind="expr", expr=SQL_QUOTE_DATE, reads=("quote_date", "created_at"), column=None,
            filter=True, group=True, sort=True, bucket=("month", "quarter", "year"), sortExpr=SQL_QUOTE_DATE),
         _f("deal_tag", "成交標記", "enum", kind="expr", expr=deal_sql, reads=("deal_tag", "data_json"), column=None,
-           filter=True, group=True, enum=_distinct_options(deal_sql)),
+           filter=True, group=True, enum=_distinct_options("deal_tag")),
         _f("settle_status", "精算狀態", "enum", kind="expr", expr=settle_sql, reads=("settle_status", "data_json"), column=None,
-           filter=True, group=True, enum=_distinct_options(settle_sql)),
+           filter=True, group=True, enum=_distinct_options("settle_status")),
         _f("total", "含稅總額", "money", catalogId="quotation.total", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
         _f("pretax", "未稅金額", "money", catalogId="quotation.pretax", filter=True, sort=True, aggregate=("count", "sum", "avg", "min", "max")),
         _f("direct_margin_pct", "直接毛利率", "percent", catalogId="quotation.direct_margin_pct", filter=True, sort=True, aggregate=("count", "avg", "min", "max")),

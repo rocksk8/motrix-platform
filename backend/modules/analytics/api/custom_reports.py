@@ -11,7 +11,7 @@
     能力不取代模組存取，模組存取也不取代能力：兩者每次請求都查。
     ②所有欄位／列的可見性決定都在 `helpers.report_runner`／`report_catalog`（後端每次請求重算）；本檔只轉換成 HTTP，不做任何權限判斷。
     ③錯誤訊息是固定白話，不回顯使用者輸入的值；未預期的例外只記 log、回固定訊息。
-    ④每人每分鐘最多 20 次預覽（行程內滑動視窗；多行程時各自計，只當保險絲）。
+    ④每人每分鐘最多 20 次預覽（行程內滑動視窗；多行程時各自計，只當保險絲）；另有全程式庫同時執行上限 `MAX_CONCURRENT_RUNS`（預覽與匯出共用名額，滿了回 429「請等幾秒後再試」）。
 [契約題] backend/tests/platform/test_custom_reports_api_t87.py
 """
 import logging
@@ -37,8 +37,11 @@ _log = logging.getLogger(__name__)
 CAP_VIEW = "analytics.custom_report.view"
 PREVIEW_PER_MINUTE = 20
 _WINDOW_SECONDS = 60.0
+MAX_CONCURRENT_RUNS = 4                                   # 全程式庫同時執行的預覽／匯出上限（每個最久占一條連線 8 秒）
+_runs = threading.BoundedSemaphore(MAX_CONCURRENT_RUNS)
 _hits = defaultdict(deque)
 _hits_lock = threading.Lock()
+GENERIC_FAIL = "報表產生失敗，請稍後再試；若持續發生請通知管理員。"
 NO_ACCESS_REASON = "您沒有查看這個欄位的權限"
 
 
@@ -46,6 +49,12 @@ def reset_rate_limit() -> None:
     """測試用：清空限流計數。"""
     with _hits_lock:
         _hits.clear()
+
+
+def _run_slot():
+    """取得一個執行名額（不等待）；滿了就 429 白話說明。呼叫端用 try/finally 歸還。"""
+    if not _runs.acquire(blocking=False):
+        raise HTTPException(429, {"message": "目前有很多人同時在產生報表，請等幾秒後再試。", "reason": "busy"})
 
 
 def _check_rate(user_id) -> None:
@@ -79,19 +88,17 @@ def _http(e: "RR.ReportError"):
     return HTTPException(e.status, detail)
 
 
-def _enum_options(f, conn):
-    en = f.get("enum")
-    if en is None:
+def _enum_options(f, conn, user):
+    if f.get("enum") is None:
         return None
     try:
-        opts = en(conn) if callable(en) else en
-        return [[v, lab] for v, lab in opts]
+        return [[v, lab] for v, lab in RC.enum_options(f, conn, user)]
     except Exception:                                        # noqa: BLE001 — 選項讀不到不影響其他欄位
         _log.warning("custom_reports：欄位 %s 的選項讀取失敗", f.get("id"), exc_info=True)
         return []
 
 
-def _field_json(f, visible, conn):
+def _field_json(f, visible, conn, user):
     d = {"id": f["id"], "label": f["label"], "type": f["type"], "visible": bool(visible)}
     if not visible:
         d["reason"] = NO_ACCESS_REASON                       # 通用原因：不透露是哪一道規則擋的
@@ -100,7 +107,7 @@ def _field_json(f, visible, conn):
               "filter": bool(f.get("filter")), "aggregate": list(f.get("aggregate") or ()),
               "ops": list(RC.OPS_BY_TYPE.get(f["type"], ())) if f.get("filter") else [],
               "bucket": list(f.get("bucket") or ()), "isMe": bool(f.get("isMe"))})
-    opts = _enum_options(f, conn)
+    opts = _enum_options(f, conn, user)
     if opts is not None:
         d["options"] = opts
     return d
@@ -110,7 +117,7 @@ def _source_json(sid, user, conn):
     s = RC.get_source(sid)
     vis = RC.visible_fields(sid, user)
     return {"id": sid, "label": s["label"], "layouts": ["detail", "summary"],
-            "fields": [_field_json(f, vis.get(f["id"], False), conn) for f in s["fields"]],
+            "fields": [_field_json(f, vis.get(f["id"], False), conn, user) for f in s["fields"]],
             "defaults": s.get("defaults") or {}, "defaultFilters": list(s.get("defaultFilters") or ())}
 
 
@@ -131,6 +138,7 @@ def list_sources(authorization: str = Header(None)):
 def preview(definition=Body(...), authorization: str = Header(None)):
     user = _gate(authorization)
     _check_rate(user["id"])
+    _run_slot()
     try:
         return RR.preview(definition, user)
     except RR.ReportError as e:
@@ -139,7 +147,9 @@ def preview(definition=Body(...), authorization: str = Header(None)):
         raise
     except Exception:                                        # noqa: BLE001 — 不回顯內部訊息（可能含 SQL 片段）
         _log.exception("custom_reports preview failed")
-        raise HTTPException(500, {"message": "報表產生失敗，請稍後再試；若持續發生請通知管理員。"})
+        raise HTTPException(500, {"message": GENERIC_FAIL})
+    finally:
+        _runs.release()
 
 
 # ── 我的報表（CRUD；只讀寫自己的列，路徑與本文都沒有帳號參數） ─────────────────────────
@@ -178,6 +188,9 @@ def create_report(body: dict = Body(...), authorization: str = Header(None)):
             raise _store_http(e)
         except RR.ReportError as e:
             raise _http(e)
+        except Exception:                                    # noqa: BLE001 — 不回 500 內部訊息
+            _log.exception("custom_reports create failed")
+            raise HTTPException(500, {"message": "儲存失敗，請稍後再試；若持續發生請通知管理員。"})
         _audit_report(authorization, "custom_reports.create", "新增自訂報表", out["id"], out["sourceId"])
         return out
     finally:
@@ -208,6 +221,9 @@ def update_report(rid: int = Path(..., ge=1, le=2**31 - 1), body: dict = Body(..
             raise _store_http(e)
         except RR.ReportError as e:
             raise _http(e)
+        except Exception:                                    # noqa: BLE001
+            _log.exception("custom_reports update failed")
+            raise HTTPException(500, {"message": "儲存失敗，請稍後再試；若持續發生請通知管理員。"})
         _audit_report(authorization, "custom_reports.update", "修改自訂報表", rid, out["sourceId"])
         return out
     finally:
@@ -243,6 +259,9 @@ def copy_report(rid: int = Path(..., ge=1, le=2**31 - 1), authorization: str = H
             raise _store_http(e)
         except RR.ReportError as e:
             raise _http(e)
+        except Exception:                                    # noqa: BLE001
+            _log.exception("custom_reports copy failed")
+            raise HTTPException(500, {"message": "複製失敗，請稍後再試；若持續發生請通知管理員。"})
         _audit_report(authorization, "custom_reports.copy", "複製自訂報表", out["id"], out["sourceId"])
         return out
     finally:

@@ -2,12 +2,14 @@
 """「我的報表」的儲存（T87 B2-S2）：表 `custom_reports`（＋`custom_report_shares`）的所有讀寫在這裡。
 
 [單位] analytics:report_store    [層] M08    [穩定度] 實驗
-[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, StoreError, copy_report, create, delete, etag_of, get_visible, list_mine, list_shared, update
+[公開介面] MAX_PER_USER, NAME_MAX, MAX_SHARES, StoreError, copy_report, create, delete, etag_of, get_visible, list_mine, list_shared, redact_for_reader, update
 [不變式] ①鍵＝擁有者登入帳號：路徑與請求本文都沒有帳號參數，只讀寫呼叫者自己的列；非擁有者（含不存在）一律回**逐字相同**的 404「找不到這份報表。」
     （被分享者例外：只在設定 `custom_reports.sharing` 開啟、且確實被分享時可讀；只能讀與複製，不能改、不能刪、不能再分享）。
     ②儲存的是**設定**，不是結果、不是授權：定義存檔前用 `report_runner.compile`（不執行）完整驗證；執行時一律用執行者當下的權限重新算（A 存、B 跑、降權後都不例外）。
     ③每人上限 `MAX_PER_USER`；同一人名稱不可重複（修剪空白後比對）；etag＝`updated_at`（含微秒；不符 ⇒ 409）；寫入前先拿寫鎖，上限與 etag 檢查與寫入同一個交易。
     ④刪除：設定 `custom_reports.recycle_deleted` 開且資源回收筒模組在 ⇒ 進刪除暫存區（可還原）；否則直接刪（連同分享列）。每一次都由後端當下讀設定決定。
+    ⑥分享給別人看的定義一律先經 `redact_for_reader`：讀者沒有權限看的欄位，連同它的篩選門檻、分組、排序、彙總都不回傳，只回 `partiallyHidden` 旗標；
+      有篩選／分組／排序被拿掉的報表不能複製（意義會變）。執行永遠用讀者自己的權限重算。
     ⑤分享對象：存在、在職、不是自己、≤ `MAX_SHARES`；分享設定關閉時不接受新的分享（既有列保留但不顯示）。
 [契約題] backend/tests/platform/test_custom_reports_store_t87.py
 """
@@ -16,6 +18,7 @@ from datetime import datetime
 
 from core.txn import begin_write
 from helpers import recycle_bin as RB
+from helpers import report_catalog as RC
 from helpers import report_policy as RP
 from helpers import report_runner as RR
 
@@ -103,6 +106,35 @@ def list_shared(conn, user) -> list:
     return [_summary(r, owner_name=r["owner_name"]) for r in rows]
 
 
+def redact_for_reader(defn, user):
+    """分享給別人看的定義：凡是讀者**沒有權限看**的欄位，相關的顯示欄、篩選（含門檻值）、分組、彙總、排序一律在後端移除，
+    只回傳「有東西因權限不顯示」的旗標。來源讀者用不到（沒有模組存取）⇒ 只留來源代號。回 `(定義, 移除了什麼)`；
+    移除了篩選／分組／排序＝報表意義會改變（`semantic`），顯示欄與彙總欄不影響篩選結果。"""
+    if not isinstance(defn, dict):
+        return {"version": 1}, {"semantic"}
+    sid = defn.get("source")
+    if not isinstance(sid, str) or not RC.source_available(sid, user):
+        return {"version": 1, "source": sid if isinstance(sid, str) else None}, {"semantic", "display"}
+    vis = RC.visible_fields(sid, user)
+    removed = set()
+    out = dict(defn)
+
+    def keep(items, key, kind, special=None):
+        res = []
+        for x in items or []:
+            fid = x if isinstance(x, str) else (x.get("field") if isinstance(x, dict) else None)
+            if special is not None and fid == special or vis.get(fid):
+                res.append(x)
+            else:
+                removed.add(kind)
+        return res
+    for key, kind, special in (("columns", "display", None), ("filters", "semantic", None), ("groupBy", "semantic", None),
+                               ("aggregates", "display", "*"), ("sort", "semantic", None)):
+        if defn.get(key) is not None:                         # 沒有的鍵不憑空加（filters 缺＝用來源預設條件）
+            out[key] = keep(defn.get(key), key, kind, special)
+    return out, removed
+
+
 def get_visible(conn, user, rid) -> dict:
     """擁有者，或（分享開啟且被分享）的人。其餘一律 404（與不存在逐字相同）。"""
     r = _row(conn, rid)
@@ -111,14 +143,26 @@ def get_visible(conn, user, rid) -> dict:
     mine = r["username"] == user["username"]
     if not mine and not (RP.sharing_enabled(conn) and _is_shared_to(conn, rid, user["username"])):
         raise StoreError(404, NOT_FOUND)
-    out = {"id": r["id"], "name": r["name"], "sourceId": r["source_id"], "definition": json.loads(r["definition_json"]),
+    defn = json.loads(r["definition_json"])
+    hidden_part = False
+    if not mine:
+        defn, removed = redact_for_reader(defn, user)
+        hidden_part = bool(removed)
+    out = {"id": r["id"], "name": r["name"], "sourceId": r["source_id"], "definition": defn,
            "etag": etag_of(r), "isOwner": mine, "updatedAt": r["updated_at"], "lastExportedAt": r["last_exported_at"]}
+    if not mine:
+        out["partiallyHidden"] = hidden_part                 # 部分條件或欄位因權限不顯示（讀者自己的權限；執行時照樣用讀者權限重算）
     if mine:
         out["sharedWith"] = _shared_with(conn, rid) if RP.sharing_enabled(conn) else []
     else:
         o = conn.execute("SELECT COALESCE(NULLIF(display_name,''), username) FROM users WHERE username=?", (r["username"],)).fetchone()
         out["ownerName"] = o[0] if o else r["username"]
     return out
+
+
+def _raw_definition(conn, rid):
+    r = _row(conn, rid)
+    return json.loads(r["definition_json"]) if r is not None else {}
 
 
 def _check_targets(conn, user, names) -> list:
@@ -201,6 +245,10 @@ def update(conn, user, rid, etag, body) -> dict:
 def copy_report(conn, user, rid) -> dict:
     """把自己的或分享給我的報表複製成自己的一份（名稱加「（複本）」，過長截斷、重名加序號）。"""
     src = get_visible(conn, user, rid)
+    if src.get("partiallyHidden"):
+        _d, removed = redact_for_reader(_raw_definition(conn, rid), user)
+        if "semantic" in removed:
+            raise StoreError(422, "這份報表有部分條件您沒有權限查看，無法複製。請洽擁有者。", {"reason": "partially_hidden"})
     taken = {r[0] for r in conn.execute("SELECT name FROM custom_reports WHERE username=?", (user["username"],))}
     name = None
     for i in range(1, MAX_PER_USER + 3):
