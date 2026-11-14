@@ -713,6 +713,8 @@
       [data-testid="qf-save-conflict"] { top: var(--topbar-h) !important; }
       .form-layout { margin-top: 0; }
     }
+    /* T86：「重試連結」手機點擊目標 ≥44px（倍率補償同其他元件） */
+    @media (max-width: 767px) { .qf-devcase-retry { min-height: calc(44px / var(--fz,1)); } }
     @media (max-width: 767px) {
       .form-layout { padding: 12px 12px 28px; }
       .form-section { padding: 14px; }
@@ -1250,9 +1252,9 @@
            連結失敗不准靜默：持續顯示原因與「重試連結」（報價單本身已存好，不會重複建單）。 -->
       <div x-show="devCaseBanner.kind" x-cloak>
       <div data-testid="qf-devcase-banner" role="alert"
-           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
+           :style="'display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin:0 16px 14px;border:1px solid;border-radius:8px;font-size:13px;font-family:var(--font-zh);' + (devCaseBanner.kind === 'error' ? 'background:#FEF2F2;border-color:#FCA5A5;color:#991B1B' : (devCaseBanner.kind === 'ok' ? 'background:#F0FDF4;border-color:#86EFAC;color:#166534' : 'background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF'))">
         <span data-testid="qf-devcase-msg" x-text="devCaseBanner.msg"></span>
-        <button class="btn btn-sm" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
+        <button class="btn btn-sm qf-devcase-retry" data-testid="qf-devcase-retry" x-show="devCaseBanner.kind === 'error' && q.quoteNo" @click="linkDevCase(q.quoteNo)" :disabled="devCaseBusy">重試連結</button>
       </div>
       </div>
 
@@ -3493,17 +3495,37 @@
           if (r.ok) {
             this.devCaseBanner = { kind: 'ok', msg: '已連結：' + label + ' ↔ ' + name + '（商機狀態已設為成案）。' }
             this.devCaseId = null
+            this._syncDevCaseUrl(quoteNo)
           } else {
             const why = this._detailFromBody(await r.text(), r.status)
             this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗：' + why + '。請按「重試連結」，或回到業務開發頁手動連結。' }
             this.toast('連回業務開發商機失敗：' + why)
+            this._syncDevCaseUrl(quoteNo)
           }
         } catch (e) {
           this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗（連不上伺服器）。請按「重試連結」，或回到業務開發頁手動連結。' }
           this.toast('連回業務開發商機失敗（連不上伺服器）')
+          this._syncDevCaseUrl(quoteNo)
         } finally {
           this.devCaseBusy = false
         }
+      },
+
+      // 連結還沒成功時把 devCase 留在網址（?id=<單號>&devCase=<商機>）：重新整理後 init 會讀到並自動重試連結；成功後網址回到 ?id=<單號>。
+      _syncDevCaseUrl(quoteNo) {
+        try {
+          const u = '?id=' + encodeURIComponent(quoteNo) + (this.devCaseId ? '&devCase=' + this.devCaseId : '')
+          history.replaceState(null, '', u)
+        } catch (_e) { /* 網址更新失敗不影響存檔 */ }
+      },
+
+      // 既有單載入時（?id=…&devCase=…）：上次存檔後連回商機失敗、使用者重新整理 ⇒ 這裡接著重試（失敗仍顯示橫幅與重試鈕）。
+      async _resumeDevCaseLink(params, editNo) {
+        const dc = (params.get('devCase') || '').trim()
+        if (!editNo || !/^[1-9]\d{0,9}$/.test(dc) || !this.q.quoteNo) return
+        this.devCaseId = parseInt(dc, 10)
+        this.devCaseName = this.q.projectName || ''
+        await this.linkDevCase(this.q.quoteNo)
       },
 
       // 新增模式讀 ?customer=&project=&devCase=（業務開發「轉建」帶來）：客戶名稱比對得到就走一般選客戶流程（帶地址／聯絡人），比不到只填名稱；
@@ -5432,6 +5454,7 @@
           }
         }
 
+        if (editNo && !copyMode) await this._resumeDevCaseLink(params, editNo)   // T86：連回商機失敗後重新整理 ⇒ 接著重試
         this.calcTotals()
         this.checkApproval()
         if (this.q.dealTag === '已成案') {

@@ -95,6 +95,7 @@ def test_estimate_prefill_then_first_save_links_back_to_the_dev_case(live_server
     # 橫幅有內距與邊框（Alpine 的 :style 字串會整個取代 inline style，曾經把版面全洗掉）
     box = banner.evaluate("e => { const c = getComputedStyle(e); return [c.paddingLeft, c.borderTopWidth, c.display] }")
     assert box == ["16px", "1px", "flex"], box
+    assert banner.evaluate("e => getComputedStyle(e).marginLeft") == "16px", "橫幅要和「初次使用」提示條同樣內縮（16px）"
     assert page.locator("[data-testid=qf-devcase-retry]").is_hidden()
     # 還沒存檔：商機沒被連結
     assert not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
@@ -175,3 +176,36 @@ def test_missing_dev_case_shows_error_and_bad_param_is_ignored(live_server, make
     _save(page2)
     page2.wait_for_function(f"() => !{DATA_JS}.isNewRecord", timeout=20000)
     assert page2.locator("[data-testid=qf-devcase-banner]").is_hidden() and calls == []
+
+
+@pytest.mark.e2e
+def test_failed_link_survives_reload_and_retries_automatically(live_server, make_user, e2e_browser):
+    """連回商機失敗（例如斷線）後重新整理：網址帶著 devCase，載入既有單時自動重試；成功後網址不再帶 devCase。"""
+    page, sess = _login(live_server, make_user, e2e_browser, "dcq_reload")
+    cid = _mk_case(page, live_server, sess, "斷線重試案", "")
+    page.route("**/api/dev-cases/*/convert", lambda route: route.abort())
+    _open(page, live_server, f"project=%E6%96%B7%E7%B7%9A&devCase={cid}")
+    _save(page)
+    page.wait_for_function("() => /連回.*失敗/.test(document.querySelector('[data-testid=qf-devcase-msg]').innerText)", timeout=20000)
+    no = page.evaluate(f"() => {DATA_JS}.q.quoteNo")
+    assert page.evaluate("() => location.search") == f"?id={no}&devCase={cid}"
+    assert not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
+    page.unroute("**/api/dev-cases/*/convert")
+    page.reload()
+    page.wait_for_function("() => /已連結：/.test(document.querySelector('[data-testid=qf-devcase-msg]')?.innerText || '')", timeout=30000)
+    assert _get_case(page, live_server, sess, cid)["convertedQuoteNo"] == no
+    assert page.evaluate("() => location.search") == f"?id={no}"
+
+
+@pytest.mark.e2e
+def test_retry_button_is_a_44px_tap_target_on_phone(live_server, make_user, e2e_browser):
+    u = make_user(username="dcq_tap")
+    page = e2e_browser.new_context(viewport={"width": 390, "height": 844}).new_page()
+    sess = inject_login(page, live_server, *u)
+    _open(page, live_server, "project=x&devCase=987654")
+    _save(page)
+    retry = page.locator("[data-testid=qf-devcase-retry]")
+    retry.wait_for(state="visible", timeout=20000)
+    fz = page.evaluate("() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fz')) || 1")
+    assert retry.bounding_box()["height"] * fz >= 43.5, retry.bounding_box()
+
