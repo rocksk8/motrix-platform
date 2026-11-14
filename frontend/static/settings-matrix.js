@@ -872,6 +872,10 @@
       perform: perform,
       stage: function (key, patch) { if (D) { stage(key, patch); render() } },
       draftCount: dirtyCount,
+      effective: function (key) {                                  // 這一列「含草稿」的樣子（外框做「總開關鎖子項」用）；找不到回 null
+        var hit = (S.rows || []).filter(function (x) { return rk(x) === key })[0]
+        return hit ? vr(hit) : null
+      },
       discard: discardDraft,
       save: saveDraft,
       destroy: destroy,
