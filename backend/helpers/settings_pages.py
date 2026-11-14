@@ -185,3 +185,19 @@ def coverage(registry_groups=None):
 # S6：每個人自己的 Email 通知（我的帳號 → 通知分頁）。這不是管理員設定，但使用者會去「設定」找它。
 register_standalone("my_email_prefs", "我要收的 Email 通知（自己的）", "系統", "my-account.html?tab=notify",
                     keywords=["通知", "信件", "Email", "退訂", "不要收"])
+
+# S4b：七個保留原網址的獨立頁（各自有表格／草稿／發布流程，不硬塞進群組矩陣；白話名＋關鍵字讓全域搜尋找得到）。
+register_standalone("approval_settings", "簽核流程（誰要簽、簽幾層）", "財務", "approval-settings.html",
+                    keywords=["簽核", "核准", "審核", "層級", "簽核人", "單據"])
+register_standalone("approval_delegates", "簽核代理人（休假時誰代簽）", "財務", "approval-delegates.html",
+                    keywords=["代理人", "代簽", "休假", "請假", "簽核"])
+register_standalone("expense_types", "費用類型與填寫欄位", "財務", "expense-types.html",
+                    keywords=["費用", "報支", "類型", "欄位", "公式"])
+register_standalone("remit_kinds", "付款款別與各階段簽核", "財務", "remit-kinds-settings.html",
+                    keywords=["付款", "匯款", "款別", "階段", "出納"])
+register_standalone("ledger_settings", "帳務對應與報表科目", "財務", "ledger-settings.html",
+                    keywords=["科目", "帳務", "報表", "分類", "歸屬", "對應"])
+register_standalone("account_items", "會計科目表", "財務", "account-items.html",
+                    keywords=["會計科目", "科目", "停用", "代碼"])
+register_standalone("legal_params", "法規參數（稅率、保費、級距）", "財務", "legal-params.html",
+                    keywords=["稅率", "扣繳", "補充保費", "二代健保", "勞健保", "級距", "生效日", "法規"])
