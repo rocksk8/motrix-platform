@@ -2,12 +2,13 @@
 """業務開發 UX 巡檢（hichan-10，2026-11-14）批次 A：深連結 ?case=、人員挑選、手機漏斗／篩選、admin 不被通用鎖頁擋、
 連結說明、無結果提示、詳情固定列、使用者／客戶延後載入。"""
 import re
+from core import source_tree
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-DC = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
+DC = source_tree.page_file("dev-crm.html").read_text(encoding="utf-8")
 SIDEBAR = (ROOT / "frontend/static/sidebar.js").read_text(encoding="utf-8")
 NOTIF = (ROOT / "frontend/static/notif.js").read_text(encoding="utf-8")
 CRM_API = (ROOT / "backend/modules/crm/api.py").read_text(encoding="utf-8")
@@ -313,7 +314,7 @@ def test_expected_amount_hidden_without_finance_and_saved_with_it(live_server, m
 
 def test_pipeline_amount_card_does_not_show_zero_as_a_real_total():
     """全部洽談中都沒填金額（或沒有洽談中）時，漏斗金額顯示「—」，不顯示像真實合計的「NT$ 0」。"""
-    src = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
+    src = source_tree.page_file("dev-crm.html").read_text(encoding="utf-8")
     assert "pipelineCount === 0 || pipelineMissing >= pipelineCount ? '—'" in src
     assert "尚無洽談中案件" in src
     assert "尚未填寫" in src and "件已填，" in src

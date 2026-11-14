@@ -2,6 +2,7 @@
 預填客戶與案件名稱、選好報價單／估價單，第一次存檔成功後呼叫既有 PATCH /api/dev-cases/<id>/convert；
 連結失敗要有看得見的橫幅（不准靜默失敗），可重試。不改後端、不加端點。"""
 import re
+from core import source_tree
 from pathlib import Path
 
 import pytest
@@ -21,18 +22,18 @@ DATA_JS = "Alpine.$data(document.body)"
 
 # ── 靜態釘：業務開發送出的網址參數，報價單頁都要有讀（避免兩頁各改各的，出現「說預填卻沒預填」） ──────────────
 def test_every_param_dev_crm_sends_is_read_by_the_quotation_form():
-    crm = (ROOT / "frontend/pages/dev-crm.html").read_text(encoding="utf-8")
+    crm = source_tree.page_file("dev-crm.html").read_text(encoding="utf-8")
     m = re.search(r"doConvert\(\)\s*\{(.*?)\n    \},", crm, re.S)
     assert m, "dev-crm.html 找不到 doConvert()"
     sent = set(re.findall(r"""\.set\(\s*['"]([A-Za-z]+)['"]""", m.group(1)))
     assert sent, "doConvert() 沒有任何 URLSearchParams.set"
-    qf = (ROOT / "frontend/pages/quotation-form.html").read_text(encoding="utf-8")
+    qf = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     missing = {k for k in sent if not re.search(r"""\.get\(\s*['"]%s['"]\s*\)""" % re.escape(k), qf)}
     assert not missing, "業務開發送了、報價單頁沒讀的網址參數：%s" % sorted(missing)
 
 
 def test_quotation_form_reads_the_agreed_params_and_calls_the_existing_endpoint():
-    qf = (ROOT / "frontend/pages/quotation-form.html").read_text(encoding="utf-8")
+    qf = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     for k in ("customer", "project", "devCase", "type"):
         assert re.search(r"""\.get\(\s*['"]%s['"]\s*\)""" % k, qf), "報價單頁沒讀 ?%s=" % k
     assert "/dev-cases/${this.devCaseId}/convert" in qf, "連結要走既有的 PATCH /api/dev-cases/<id>/convert"
