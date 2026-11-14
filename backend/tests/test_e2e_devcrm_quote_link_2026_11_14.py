@@ -209,3 +209,22 @@ def test_retry_button_is_a_44px_tap_target_on_phone(live_server, make_user, e2e_
     fz = page.evaluate("() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fz')) || 1")
     assert retry.bounding_box()["height"] * fz >= 43.5, retry.bounding_box()
 
+
+@pytest.mark.e2e
+def test_url_alone_never_triggers_a_link_on_load(live_server, make_user, e2e_browser):
+    """轉寄／書籤／貼錯的 ?id=<既有單>&devCase=<n> 連結：開頁不可偷偷打 convert（沒有本瀏覽器的失敗紀錄）。"""
+    page, sess = _login(live_server, make_user, e2e_browser, "dcq_nourl")
+    cid = _mk_case(page, live_server, sess, "不該被連結的案", "")
+    # 先存一張單（不帶 devCase），取得既有單號
+    _open(page, live_server, "project=%E4%B8%80%E8%88%AC")
+    _save(page)
+    page.wait_for_function(f"() => !{DATA_JS}.isNewRecord", timeout=20000)
+    no = page.evaluate(f"() => {DATA_JS}.q.quoteNo")
+    page.evaluate("() => sessionStorage.clear()")
+    calls = []
+    page.on("request", lambda r: calls.append(r.url) if "/convert" in r.url else None)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}&devCase={cid}")
+    page.wait_for_function(f"() => {{ const d = {DATA_JS}; return d && d._initSettled && d.q.quoteNo === '{no}' }}", timeout=30000)
+    assert page.locator("[data-testid=qf-devcase-banner]").is_hidden()
+    assert calls == [] and not _get_case(page, live_server, sess, cid)["convertedQuoteNo"]
+

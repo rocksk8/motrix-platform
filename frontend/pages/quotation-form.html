@@ -3495,16 +3495,19 @@
           if (r.ok) {
             this.devCaseBanner = { kind: 'ok', msg: '已連結：' + label + ' ↔ ' + name + '（商機狀態已設為成案）。' }
             this.devCaseId = null
+            this._devCasePending(quoteNo, null)
             this._syncDevCaseUrl(quoteNo)
           } else {
             const why = this._detailFromBody(await r.text(), r.status)
             this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗：' + why + '。請按「重試連結」，或回到業務開發頁手動連結。' }
             this.toast('連回業務開發商機失敗：' + why)
+            this._devCasePending(quoteNo, this.devCaseId)
             this._syncDevCaseUrl(quoteNo)
           }
         } catch (e) {
           this.devCaseBanner = { kind: 'error', msg: label + ' 已存檔，但連回' + name + '失敗（連不上伺服器）。請按「重試連結」，或回到業務開發頁手動連結。' }
           this.toast('連回業務開發商機失敗（連不上伺服器）')
+          this._devCasePending(quoteNo, this.devCaseId)
           this._syncDevCaseUrl(quoteNo)
         } finally {
           this.devCaseBusy = false
@@ -3519,10 +3522,23 @@
         } catch (_e) { /* 網址更新失敗不影響存檔 */ }
       },
 
-      // 既有單載入時（?id=…&devCase=…）：上次存檔後連回商機失敗、使用者重新整理 ⇒ 這裡接著重試（失敗仍顯示橫幅與重試鈕）。
+      // 「這個瀏覽器的上次存檔連回商機失敗」的紀錄（sessionStorage：qf_devcase_pending:<單號> = 商機 id；成功即清）。
+      // 網址上的 devCase 只是提示——光有網址不夠（轉寄／書籤／貼錯的連結不能在開頁時偷偷改商機狀態）。
+      _devCasePending(quoteNo, id) {
+        try {
+          const k = 'qf_devcase_pending:' + quoteNo
+          if (id) sessionStorage.setItem(k, String(id)); else sessionStorage.removeItem(k)
+        } catch (_e) { /* 無痕或封鎖儲存：就只是沒有自動重試，仍有重試鈕 */ }
+      },
+      _devCasePendingGet(quoteNo) {
+        try { return sessionStorage.getItem('qf_devcase_pending:' + quoteNo) || '' } catch (_e) { return '' }
+      },
+
+      // 既有單載入時（?id=…&devCase=…）：只有「本瀏覽器記錄過這張單連回失敗、且網址的 devCase 與記錄相同」才接著重試（失敗仍顯示橫幅與重試鈕）。
       async _resumeDevCaseLink(params, editNo) {
         const dc = (params.get('devCase') || '').trim()
         if (!editNo || !/^[1-9]\d{0,9}$/.test(dc) || !this.q.quoteNo) return
+        if (this._devCasePendingGet(this.q.quoteNo) !== dc) return
         this.devCaseId = parseInt(dc, 10)
         this.devCaseName = this.q.projectName || ''
         await this.linkDevCase(this.q.quoteNo)
