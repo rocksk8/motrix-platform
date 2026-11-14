@@ -211,3 +211,22 @@ def test_phone_width_matrix_after_visiting_another_tab(live_server, make_user, n
     expect(page.locator("[data-testid=dm-box] .mx-table")).to_be_hidden()
     over = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
     assert over <= 1, "頁面橫向溢出 %spx" % over
+
+
+@pytest.mark.e2e
+def test_search_box_survives_ime_composition(live_server, make_user, new_page, login_as):
+    """注音／拼音組字中（compositionstart → isComposing 的 input ×N → compositionend）搜尋框不能被重畫換掉：
+    節點、焦點、已輸入的組字都要還在（以前每個 input 都重畫整個矩陣，組字停在第一個注音符號）。用 CDP 的 Input.imeSetComposition 模擬真實輸入法。"""
+    page, ids = _open(live_server, make_user, new_page, login_as, "e2e_dm8")
+    box = page.locator("input.mx-search")
+    box.click()
+    page.evaluate("document.querySelector('input.mx-search').__imeMark = 1")
+    cdp = page.context.new_cdp_session(page)
+    for text in ("ㄅ", "ㄅㄚ", "ㄅㄚˇ"):
+        cdp.send("Input.imeSetComposition", {"text": text, "selectionStart": len(text), "selectionEnd": len(text)})
+        page.wait_for_timeout(200)
+        same = page.evaluate("(() => { const e = document.querySelector('input.mx-search'); return !!e && e.__imeMark === 1 && document.activeElement === e })()")
+        assert same, "組字中搜尋框被重畫或失去焦點（輸入「%s」時）" % text
+    cdp.send("Input.insertText", {"text": "報價"})                              # 組字結束送出文字
+    expect(box).to_have_value("報價")
+    expect(page.locator("[data-testid='mx-row-quotation']")).to_be_visible()      # 組字完成後才依文字篩選（「報價單」命中）
