@@ -481,7 +481,7 @@
         rows: [],
         rowVisible: function (r) { return r.page === ST.page },
         rowKey: function (r) { return r.key }, rowName: function (r) { return r.name }, rowGroup: function (r) { return r.groupPlain },
-        rowSub: function (r) { return rangeText(r.f) || r.f.unit || '' },
+        rowSub: function (r) { return lockWhy(r) || rangeText(r.f) || r.f.unit || '' },        // 鎖住的原因直接寫在名稱下面（手機、鍵盤、讀屏都看得到，不只靠 tooltip）
         rowTags: function (r) {
           var t = []
           if (RISK_TAG[r.f.risk]) t.push({ text: RISK_TAG[r.f.risk], tone: r.f.banner && r.f.banner.level === 'red' ? 'crit' : 'warn' })
