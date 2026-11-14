@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-14（feat/t86-usage-h9；T86 使用紀錄優化 U6／U9：LINE 通知設定、自訂模組預覽改成先檢核＋白話原因）
+- 行為變更（只改訊息與前端）：通知設定頁（LINE）存檔／驗證前先檢查 token、對外網址、Login ID、secret、啟用條件、告知門檻，說明哪裡不對與處理方式，不再送注定被退回的請求；`PUT /api/line/settings`、驗證端點的 400 訊息改白話（狀態碼、規則、欄位名不變）。
+- 行為變更（只改訊息與前端）：模組建構器的編號預覽、輸出預覽在規則／欄位未完成時先在畫面說明，不送請求；`numbering/preview`、`output/preview` 的 422 訊息補處理方式（狀態碼與判斷不變）。
+- 測試：`tests/test_line_settings_messages_2026_11_14.py`、`tests/test_custom_module_preview_messages_2026_11_14.py`、`tests/test_e2e_line_settings_precheck_2026_11_14.py`、`tests/test_e2e_builder_preview_precheck_2026_11_14.py`。
+
 ## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 - **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**

@@ -35,7 +35,7 @@ def test_numbering_preview_explains_bad_rules_without_calling_the_server(live_se
     page, posts = _open(live_server, make_user, new_context)
     page.fill("#mb-prefix", "EL")
     page.select_option("#mb-date", "YYYYMMDD")
-    page.wait_for_function("() => /^EL-\d{8}-\d+$/.test(document.getElementById('mb-num-example').dataset.example || '')", timeout=15000)
+    page.wait_for_function(r"() => /^EL-\d{8}-\d+$/.test(document.getElementById('mb-num-example').dataset.example || '')", timeout=15000)
     base = _count(posts, "numbering/preview")
     assert base >= 1
     bad_cases = [("#mb-prefix", "", "請填寫編號前綴"), ("#mb-prefix", "1A", "英文字母開頭"), ("#mb-prefix", "ABCDEFGH", "最多 6 個字"),
@@ -54,7 +54,7 @@ def test_numbering_preview_explains_bad_rules_without_calling_the_server(live_se
     # 合法值照常送出並出現範例
     page.fill("#mb-prefix", "OK")
     page.fill("#mb-digits", "5")
-    page.wait_for_function("() => /^OK-\d{8}-00001$/.test(document.getElementById('mb-num-example').dataset.example || '')", timeout=15000)
+    page.wait_for_function(r"() => /^OK-\d{8}-00001$/.test(document.getElementById('mb-num-example').dataset.example || '')", timeout=15000)
 
 
 @pytest.mark.e2e

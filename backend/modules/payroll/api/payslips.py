@@ -111,6 +111,22 @@ def _freeze_rules(d: dict, rules: dict) -> None:
     d["taxRulesSnapshot"] = rules
 
 
+def _gross_and_income(d: dict, rules: dict):
+    """T86 U10：給付總額、所得類別在算稅前先檢核——填錯時回白話 400（原本 int()/KeyError 變成 500「伺服器錯誤」）。"""
+    raw = d.get("grossAmount", 0)
+    try:
+        gross = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        shown = "（空白）" if raw in (None, "") else "「%s」" % str(raw)[:20]
+        raise HTTPException(400, "給付總額 %s 不是數字，請只填阿拉伯數字（不要加逗號或文字），例如 30000" % shown)
+    income_type = d.get("incomeType", "9A")
+    nationality = d.get("contractorNationality", "本國籍")
+    table = rules.get("non_resident" if nationality == "外國籍（未滿183天）" else "resident") or {}
+    if income_type not in table or income_type not in (rules.get("nhi", {}).get("thresholds") or {}):
+        raise HTTPException(400, "所得類別「%s」不在目前適用的法規參數內，請在表單重新選擇所得類別" % str(income_type)[:20])
+    return gross, income_type
+
+
 def _calc(gross: int, income_type: str, nationality: str, has_union: bool, rules: dict) -> dict:
     is_resident = nationality != "外國籍（未滿183天）"
     tax_withheld = 0
@@ -348,8 +364,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(400, f"勞報單號碼格式錯誤（須為 PS-YYYYMM-NNN）：{slip_no}")
 
-        gross       = int(d.get("grossAmount", 0))
-        income_type = d.get("incomeType", "9A")
+        gross, income_type = _gross_and_income(d, rules)
         nationality = d.get("contractorNationality", "本國籍")
         has_union   = body_flag(d, "contractorHasUnionInsurance")
         calc        = _calc(gross, income_type, nationality, has_union, rules)
@@ -472,8 +487,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         except ValueError as e:
             raise HTTPException(400, str(e))
 
-        gross       = int(d.get("grossAmount", 0))
-        income_type = d.get("incomeType", "9A")
+        gross, income_type = _gross_and_income(d, rules)
         nationality = d.get("contractorNationality", "本國籍")
         has_union   = body_flag(d, "contractorHasUnionInsurance")
         calc        = _calc(gross, income_type, nationality, has_union, rules)
