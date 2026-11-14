@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-14（fix/denied-pages-role-label-t86-h9；T86 複測 F2／F4）
+## 1.169 — 2026-11-14（fix/denied-pages-role-label-t86-h9；T86 複測 F2／F4）
 - 修正（只改畫面）：業務、財務直接開管理員網址（設定中心、職責角色）被 403 擋下後，頁面不再丟未捕捉的錯誤（設定中心找不到區塊時直接以共用拒絕畫面為準；職責矩陣掛載失敗改走 onError、不再 unhandled rejection）；拒絕說明照常顯示。
 - 修正（只改畫面）：我的帳號頁的角色顯示中文名稱（載入 `static/role-label.js`，與首頁同一來源），不再印 superadmin／sales 這種內部代碼。
 - 測試：新增 `tests/test_e2e_denied_pages_and_role_label_2026_11_14.py`（業務／財務 × 2 頁 0 pageerror 且拒絕說明可見；3 種角色中文名稱）。

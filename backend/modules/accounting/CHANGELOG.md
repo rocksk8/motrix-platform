@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-11-14（feat/t86-module-names-h12；T86 F3 追加：模組名稱與導覽用語一致）
+## 1.1.77 — 2026-11-14（feat/t86-module-names-h12；T86 F3 追加：模組名稱與導覽用語一致）
 - 文字（行為、API、欄位、錯誤碼不變）：缺採購與庫存模組時，T100 匯出預覽的說明（`T100_INVENTORY_MISSING`）由「採購・庫存・出貨模組未安裝：…」改為「採購與庫存模組未安裝：本次匯出不含料件設備進貨的付款傳票」。
 - 測試：`tests/platform/test_receivables_absent.py`（註解同步）。
 
