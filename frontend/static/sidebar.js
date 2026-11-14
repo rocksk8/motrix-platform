@@ -731,6 +731,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // 不顯示某個項目時，順手把它的頁面記下來，渲染完再看使用者現在是不是正站在
   // 其中一頁上。條件只有一份，不可能對不齊。
   var _deniedPages = []
+  var _superOnlyPages = []            // 被擋的頁面裡，宣告為「僅最高管理者」的那幾頁（拒絕說明改講真正的原因）
 
   // ── 2026-09-14：側欄退役，改成上方分組下拉選單 ────────────────────────
   // sec()/ni() 仍然照舊被呼叫（權限旗標、href、active 判定一行都不用改），
@@ -1137,7 +1138,10 @@ if (typeof module !== 'undefined' && module.exports) {
     var decl = _declaredGroups()
     decl.forEach(function (g) {
       g.items.forEach(function (it) {
-        if (!_permOk(it.perm)) _deniedPages = _deniedPages.concat(it.active || [])
+        if (!_permOk(it.perm)) {
+          _deniedPages = _deniedPages.concat(it.active || [])
+          if (it.perm === 'superadmin') _superOnlyPages = _superOnlyPages.concat(it.active || [])
+        }
       })
     })
     var groups = _layoutGroups || decl.map(function (g) {
@@ -1176,7 +1180,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // 沒列過的頁面一律放行：寧可漏擋也不要把人鎖在門外，資料那層 API 會擋。
     // 2026-11-14（業務開發 UX 報告 #9）：`dev-crm.html` 自己有守門（頁面專屬說明＋回首頁；後端 `_require_dev` 對 admin 放行），
     // 這裡再蓋一張通用鎖頁會造成「同一情況兩套文案」，而且 admin 從通知／搜尋點進來還會被擋。這一頁交給頁面自己判斷。
-    if (_deniedPages.indexOf(file) >= 0 && file !== 'dev-crm.html') _showNoPermission()
+    if (_deniedPages.indexOf(file) >= 0 && file !== 'dev-crm.html') _showNoPermission(_superOnlyPages.indexOf(file) >= 0)
 
     // 🔴 `BR1` 第三格：**把「這個行程載入的是哪一版」放到每一頁的頁尾。**
     //
@@ -1276,15 +1280,14 @@ if (typeof module !== 'undefined' && module.exports) {
     }).catch(function () { bar.remove() })
   }
 
-  function _showNoPermission() {
+  function _showNoPermission(superOnly) {
     var main = document.querySelector('main')
     var html =
       '<div id="no-module-notice" style="max-width:520px;margin:64px auto;text-align:center;' +
       'font-family:LINE Seed TW_OTF, sans-serif">' +
-      '<div style="font-size:40px;margin-bottom:12px">🔒</div>' +
       '<div style="font-size:17px;font-weight:600;margin-bottom:8px">您沒有這個頁面的權限</div>' +
       '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">' +
-      '這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。<br>' +
+      (superOnly ? '這一頁僅限最高管理者使用。<br>' : '這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。<br>') +
       '左側選單中的項目才是您目前可以使用的功能。</div></div>'
     if (main) {
       main.innerHTML = html
@@ -1477,6 +1480,7 @@ if (typeof module !== 'undefined' && module.exports) {
     _navGroups = []
     _curGroup = null
     _deniedPages = []
+    _superOnlyPages = []
     buildSidebar()
     Object.keys(kept).forEach(function (id) {
       var el = document.getElementById(id)

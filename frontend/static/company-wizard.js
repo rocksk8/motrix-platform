@@ -538,7 +538,6 @@
     var sub = document.querySelector('[data-testid="cw-subtitle"]')
     if (sub) sub.style.display = 'none'
     var box = el('div', 'cw-card'); box.setAttribute('data-testid', 'cw-denied'); box.style.textAlign = 'center'
-    box.appendChild(el('div', '', '🔒')); box.firstChild.style.fontSize = '40px'
     box.appendChild(el('h2', 'cw-h', '您沒有這個頁面的權限'))
     box.appendChild(el('p', 'cw-why', '本公司資料只有最高管理者可以設定。請最高管理者登入後完成設定，或洽系統管理員。'))
     return box
