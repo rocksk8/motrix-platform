@@ -345,7 +345,7 @@
       <button type="button" class="action-btn action-btn--ghost" style="min-height:32px" data-testid="ql-clear-conditions"
               x-show="hasActiveFilter" @click="clearFilters()">清除條件</button>
       <button type="button" class="ql-cond__toggle" data-testid="ql-mine-toggle" :aria-pressed="(onlyMine && !showAll) ? 'true' : 'false'" @click="toggleMine()"
-              title="開啟＝預設只列您負責的報價單（會記住您的選擇）；關閉＝預設列出您看得到的全部">
+              title="開啟＝預設只列您負責的報價單（會記住您的選擇）；關閉＝預設列出您可檢視的全部">
         <span x-text="(onlyMine && !showAll) ? '✓ 僅顯示我負責的' : '僅顯示我負責的'"></span>
       </button>
       <span class="ql-note" data-testid="ql-mine-note" x-show="mineNote" x-text="mineNote"></span>

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
     資源回收筒（L2 模組 recyclebin；第 53 班 P0）：被刪的單據（含附件）先進這裡，預設 30 天內（天數是設定 recycle_bin.retention_days）可由最高管理者還原；超過天數自動永久清除。
-    - 只有最高管理者看得到（選單 perm=superadmin；所有 /api/recycle-bin 端點也是）。
+    - 只有最高管理者可檢視（選單 perm=superadmin；所有 /api/recycle-bin 端點也是）。
     - 列表與詳情的敏感欄位（帳號、身分證、電話、信箱、地址、影像…）已由伺服器遮罩；還原用的原文不經過畫面。
     - 還原失敗（單號被占用、擁有模組未載入…）＝資料與附件仍在資源回收筒，狀態「還原失敗」並顯示原因。
     - 永久刪除不能復原：要輸入「永久刪除」二次確認。
@@ -87,7 +87,7 @@
         <div class="pg__l">
           <div class="pg__eyebrow">系統</div>
           <h1 class="pg__t">資源回收筒</h1>
-          <p class="pg__s">被刪除的單據（含附件）先放在這裡，<b x-text="((st && st.retentionDays) || 30) + ' 天內'">30 天內</b>可還原；超過天數自動永久清除。只有最高管理者看得到。</p>
+          <p class="pg__s">被刪除的單據（含附件）先放在這裡，<b x-text="((st && st.retentionDays) || 30) + ' 天內'">30 天內</b>可還原；超過天數自動永久清除。只有最高管理者可檢視。</p>
         </div>
       </div>
 

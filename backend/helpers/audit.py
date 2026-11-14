@@ -72,7 +72,7 @@ _DOC_TARGET_TYPES = frozenset({
 })
 #: 失敗列的原因碼（固定詞彙：不放自由文字，PII 安全）⇒ 中文標籤
 _FAIL_REASON_LABELS = {
-    "permission_denied": "沒有權限", "not_found_or_hidden": "找不到或看不到", "conflict": "狀態衝突",
+    "permission_denied": "沒有權限", "not_found_or_hidden": "找不到或無法檢視", "conflict": "狀態衝突",
     "validation": "資料不合格", "gate_blocked": "被閘門擋下", "server_error": "系統錯誤", "login_failed": "登入失敗",
     # 2026-11-12 登入失敗告警票：密碼以外的登入失敗來源（`_audit_login_failed` 的 reason_code；action 一律 auth.login_failed）
     "totp_failed": "驗證碼錯誤（兩步驟）", "qr_failed": "QR 核准失敗", "passkey_failed": "Passkey 驗證失敗",

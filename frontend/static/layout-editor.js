@@ -490,7 +490,7 @@
             (this.scope === 'company' && !/^role:/.test(String(d.source || ''))))
           if (viaDraft) {
             ML().show(L.clone(this.work), 'preview', this.roleLabel(this.previewRole) + '（草稿，尚未發布）')
-            this.msg = '預覽草稿：' + this.roleLabel(this.previewRole) + ' 發布後會看到這個樣子'
+            this.msg = '預覽草稿：' + this.roleLabel(this.previewRole) + ' 發布後會顯示成這個樣子'
           } else {
             ML().show(L.applyOps(d.points, this._page(), d.ops).state, 'preview', this.roleLabel(this.previewRole) + '（' + d.source + '）')
             this.msg = this.previewDraft

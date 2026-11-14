@@ -348,7 +348,7 @@ def _cmp_rule_set(old, new):
 
 
 def _cmp_notify_template(old, new):
-    """通知用語範本：新增或改變任何欄位的文字 ⇒ 放寬（收件人看到的字，需第二位最高管理者核准）；拿掉欄位（回到系統預設字）⇒ 收緊；
+    """通知用語範本：新增或改變任何欄位的文字 ⇒ 放寬（收件人所見的字，需第二位最高管理者核准）；拿掉欄位（回到系統預設字）⇒ 收緊；
     內容相同 ⇒ 中性；未知的頂層設定變動或看不懂的結構 ⇒ 放寬。"""
     def flat(b):
         if not isinstance(b, dict):
@@ -369,9 +369,9 @@ def _cmp_notify_template(old, new):
     loosen, tighten = [], []
     for k, v in n.items():
         if k not in o:
-            loosen.append("新增自訂用語 %s（收件人看到的字，需核准）" % k)
+            loosen.append("新增自訂用語 %s（收件人所見的字，需核准）" % k)
         elif o[k] != v:
-            loosen.append("用語 %s 改變（收件人看到的字，需核准）" % k)
+            loosen.append("用語 %s 改變（收件人所見的字，需核准）" % k)
     for k in o:
         if k not in n:
             tighten.append("移除自訂用語 %s（回到系統預設字）" % k)

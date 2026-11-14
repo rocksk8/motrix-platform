@@ -145,7 +145,7 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
     if getattr(p, "FULL_ACCOUNT_STRICT", False) and out["account"] and not has_cashier_access(user):   # 第42班：完整帳號只給財務角色與 superadmin
         acct = str(out["account"])                                                  # 提供者要求嚴格：一般管理員只看末 4 碼
         out["account"] = "****" + acct[-4:] if len(acct) > 4 else "****"
-        out["notice"] = "完整帳號僅限最高管理者與出納；管理員只看到遮罩"
+        out["notice"] = "完整帳號僅限最高管理者與出納；管理員僅顯示遮罩"
         masked = True
     _label = "出納查看收款人銀行資料（來源：%s%s）" % (out["source"], "；遮罩" if masked else "")
     if getattr(p, "FULL_ACCOUNT_STRICT", False):                       # 第47班稽核 S8：嚴格提供者（勞報單）＝先稽核才給值；稽核寫不進去 ⇒ 500、不回帳號；回應不快取

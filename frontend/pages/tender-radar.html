@@ -110,7 +110,7 @@
     <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
     <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'"
          x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
-    <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+    <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才可檢視。</div>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
       依搜尋條件自動比對政府電子採購網的招標公告，每日一次，符合條件者會寄一封彙總信。
       <!-- ⚠️ 原本這裡寫「**不發送通知**」：一是 HTML 裡的 Markdown 粗體會顯示成

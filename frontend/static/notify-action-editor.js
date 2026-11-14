@@ -407,7 +407,7 @@
         el('span', { text: whoText(r) }), el('button', { type: 'button', text: '✕', 'aria-label': '移除', style: 'border:none;background:none;cursor:pointer', onclick: function () { f.recipients.splice(i, 1); touch(); render() } })])
     }))
     var addSel = select(recipientOptions(ev), '', function (v) { addRecipient(v) }, { 'data-role': 'add-recipient' })
-    panel.appendChild(field('通知對象（最多 8 項）', el('div', {}, [chips, addSel]), '僅能從清單選擇；不接受電子郵件位址。收件人必須有權限看到那張單據才會收到。'))
+    panel.appendChild(field('通知對象（最多 8 項）', el('div', {}, [chips, addSel]), '僅能從清單選擇；不接受電子郵件位址。收件人必須有權限檢視那張單據才會收到。'))
     // 通道
     panel.appendChild(field('通知方式', el('div', {}, [
       el('label', { style: 'font-size:12px;margin-right:12px' }, [el('input', { type: 'checkbox', checked: 'checked', disabled: 'disabled' }), el('span', { text: ' 站內通知（一定會有）' })]),

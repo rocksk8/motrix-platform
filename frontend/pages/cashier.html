@@ -1080,7 +1080,7 @@
             <!-- 卡片①：銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
             <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
             <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">銀行帳戶清單</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款／已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——此處修改後，其他頁面下次開啟標記視窗即可看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款／已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——此處修改後，其他頁面下次開啟標記視窗即可取得最新清單；但不會回頭改到已經標記過的舊交易。</div>
             <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
             <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
             <button type="button" x-show="_role()==='superadmin'"

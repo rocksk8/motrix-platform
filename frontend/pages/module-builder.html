@@ -174,7 +174,7 @@
                   <option value="">（不掛載：只用獨立選單項目）</option>
                   <template x-for="p in mountOptions()" :key="p.id"><option :value="p.id" x-text="p.label + '（' + p.id + '）'" :selected="p.id === mountPointId()"></option></template>
                 </select>
-                <div class="mb-hint">掛載＝這個模組同時成為該頁面裡的一個頁籤（資料仍是同一份、原本的選單項目仍然保留）。看得到頁籤的人＝有這個模組權限、且看得到那一頁的人；<b>隱藏頁籤不是存取控制</b>，各端點仍各自驗權限。每個掛載點最多 <span x-text="mountMax"></span> 個頁籤。</div>
+                <div class="mb-hint">掛載＝這個模組同時成為該頁面裡的一個頁籤（資料仍是同一份、原本的選單項目仍然保留）。可檢視頁籤的人＝有這個模組權限、且可檢視那一頁的人；<b>隱藏頁籤不是存取控制</b>，各端點仍各自驗權限。每個掛載點最多 <span x-text="mountMax"></span> 個頁籤。</div>
                 <div class="mb-bad" id="mb-mount-missing" data-testid="mb-mount-missing" x-show="mountMissing()">這個掛載目標目前不存在，或其所屬模組未載入：頁籤不會顯示（模組與單據資料不受影響，也不會被自動刪除）。</div>
                 <template x-if="mountPointId()">
                   <div style="margin-top:8px">
@@ -211,7 +211,7 @@
               <div class="mb-f" :class="{ 'is-bad': hasProblem('permission') }">
                 <label for="mb-perm">權限 key</label>
                 <input id="mb-perm" x-model.trim="def.permission">
-                <div class="mb-hint">使用者的模組權限裡有這個 key 才看得到；簽核人不需要。預設 custom.&lt;代號&gt;。</div>
+                <div class="mb-hint">使用者的模組權限裡有這個 key 才可檢視；簽核人不需要。預設 custom.&lt;代號&gt;。</div>
               </div>
             </div>
             <h3 style="margin-top:16px">編號規則</h3>
