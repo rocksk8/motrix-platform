@@ -1365,3 +1365,59 @@ def test_on_deadline_kills_browsers_then_stops_services_and_never_raises(tmp_pat
 def test_main_rejects_non_positive_limit_scale():
     with pytest.raises(SystemExit):
         AD.main(["--limit-scale", "0"])
+
+
+def test_drill_autostart_passes_real_verify_package_autostart_gate(tmp_path, monkeypatch):
+    """演練的 autostart.bat 要過產品自己的 verify_package.check_autostart（正式機一樣會擋）。
+    2026-11-14 演練：模板沒有 set MOTRIX_TENDER_RADAR／MOTRIX_GEO ⇒ 所有「好包」在準備就被擋，七個情境全紅。
+    開關值必須是 0（只有 =1 才開；演練不准對外）。"""
+    import verify_package as VP
+    (tmp_path / "backend").mkdir()
+    text = AD.AUTOSTART_A1.format(backend=tmp_path / "backend", python=r"C:\Python312\python.exe", port=6866)
+    (tmp_path / "backend" / "autostart.bat").write_text(text, encoding="utf-8")
+    monkeypatch.setattr(VP, "R", VP.Report())
+    VP.check_autostart(str(tmp_path))
+    assert VP.R.fails == []
+    assert "set MOTRIX_TENDER_RADAR=0" in text and "set MOTRIX_GEO=0" in text
+    assert "=1" not in "\n".join(l for l in text.splitlines() if "TENDER_RADAR" in l or "MOTRIX_GEO" in l)
+    # 正對照：少一個開關就要紅（不是永遠綠的測試）
+    (tmp_path / "backend" / "autostart.bat").write_text(text.replace("set MOTRIX_GEO=0\n", ""), encoding="utf-8")
+    monkeypatch.setattr(VP, "R", VP.Report())
+    VP.check_autostart(str(tmp_path))
+    assert any("MOTRIX_GEO" in d for _g, d in VP.R.fails)
+
+
+def test_close_browser_force_kills_after_timeout_instead_of_hanging(tmp_path, monkeypatch):
+    """PM 2026-11-14：browser.close() 卡住不能等。超時 ⇒ 先殺瀏覽器程序、再殺 node driver，被卡住的 close 因此返回。"""
+    import threading
+    killed = []
+    release = threading.Event()
+
+    def fake_kill(log=None, me=None, names=PF.BROWSER_NAMES, killer=None):
+        killed.append(tuple(names))
+        if "node.exe" in names:
+            release.set()                                    # 殺到 driver 才放開（模擬 close 等 driver）
+        return []
+
+    monkeypatch.setattr(PF, "kill_browser_processes", fake_kill)
+    d = _mini_drill(tmp_path)
+
+    class Stuck:
+        def close(self):
+            if not release.wait(30):
+                raise AssertionError("close 沒被放開（強制結束沒有發生）")
+            raise RuntimeError("Target closed")                # 被殺後 Playwright 的實際行為：丟例外
+
+    import time as _t
+    t0 = _t.monotonic()
+    fired = d._close_browser(Stuck(), timeout=0.2)
+    assert _t.monotonic() - t0 < 5
+    assert killed[0] == PF.BROWSER_NAMES and ("node.exe",) in killed and len(fired) == 2
+    assert any("強制結束" in m for m in d.logged)
+
+
+def test_close_browser_normal_close_kills_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(PF, "kill_browser_processes", lambda *a, **k: (_ for _ in ()).throw(AssertionError("不該殺")))
+    d = _mini_drill(tmp_path)
+    ok = []
+    assert d._close_browser(SimpleNamespace(close=lambda: ok.append(1)), timeout=5) == [] and ok == [1]

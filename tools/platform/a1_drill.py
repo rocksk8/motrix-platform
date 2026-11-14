@@ -61,6 +61,7 @@ BASE_STATEMENT = ("演練的「T86」基底＝`feat/t87-a1-m1-h7` 頭（＝T86 �
                   "之後 T88 才是第一次 A1 半自動套用」——本演練模擬的就是 T88 那一步（假 T87 包＝T88 的替身）。")
 SCENARIO_LIMIT_S = {"B1": 600, "G": 1200}      # 每個情境的硬上限（秒）；超過就中止、記為失敗、往下一個情境走（PM 2026-11-14）
 DEFAULT_SCENARIO_LIMIT_S = 900
+CLOSE_TIMEOUT_S = 10                                       # 關瀏覽器最多等幾秒（超時強制結束）
 SILENCE_S = 300                                # 看門狗：連續這麼久沒有輸出 ⇒ 印目前步驟與全部執行緒堆疊
 SETTINGS_CACHE_WAIT = 17                # settings_registry._TTL＝15 秒；ERP 行程內快取過期後才讀得到新值
 DEVIATIONS = [
@@ -85,6 +86,8 @@ set MOTRIX_DISABLE_SCHEDULERS=1
 set MOTRIX_CLOUD_ARCHIVE=off
 set MOTRIX_EMAIL_SEND=off
 set MOTRIX_CREATE_NEW_DB=1
+set MOTRIX_TENDER_RADAR=0
+set MOTRIX_GEO=0
 cd /d "{backend}"
 if not exist "{backend}\logs" mkdir "{backend}\logs"
 :loop
@@ -819,6 +822,8 @@ class Drill:
         return ok, text
 
     def ui_rehearse(self, page):
+        if not page.is_visible('[data-testid="dl-confirm"]'):      # 準備沒過就沒有確認區：直接講出畫面上的拒絕原因，不空等 30 秒逾時
+            raise DrillError("準備沒有通過、沒有確認區：%s" % ((page.text_content('[data-testid="dl-verify"]') or "")[:600]))
         page.click('[data-testid="dl-rehearse"]')
         page.wait_for_function("() => { const t = document.getElementById('dlRehearseText').textContent; return t.indexOf('預演中') !== 0 && t.indexOf('尚未預演') !== 0; }", timeout=1800000)
         text = page.text_content('[data-testid="dl-rehearse-text"]') or ""
@@ -897,6 +902,33 @@ class Drill:
         except Exception as e:                                              # noqa: BLE001
             self.log("停服務出錯：%s" % e)
 
+    def _close_browser(self, browser, timeout=CLOSE_TIMEOUT_S):
+        """關瀏覽器，但最多等 timeout 秒：超時先殺本行程名下的瀏覽器程序、再等同樣久還沒好就連 node driver 一起殺（PM 2026-11-14：不要等）。
+        Playwright 的 sync 物件不能跨執行緒用，所以由計時器執行緒動手殺程序，讓主執行緒卡住的 close() 丟例外返回。不丟例外。"""
+        fired = []
+
+        def _kill(names, what):
+            fired.append(what)
+            self.log("⏱ 關瀏覽器超過 %d 秒 ⇒ 強制結束%s" % (timeout, what))
+            try:
+                PF.kill_browser_processes(self.log, names=names)
+            except Exception as e:                                          # noqa: BLE001
+                self.log("強制結束出錯：%s" % e)
+
+        t1 = threading.Timer(timeout, _kill, args=(PF.BROWSER_NAMES, "瀏覽器程序"))
+        t2 = threading.Timer(timeout * 2, _kill, args=(("node.exe",), " node driver"))
+        t1.daemon = t2.daemon = True
+        t1.start()
+        t2.start()
+        try:
+            browser.close()
+        except Exception:                                                   # noqa: BLE001 — 被殺掉後 close 丟例外是預期的
+            pass
+        finally:
+            t1.cancel()
+            t2.cancel()
+        return fired
+
     def _drive_browser(self, pw, wanted, commits, clean_env):
         browser = self._launch_browser(pw, clean_env)
         relaunch = False
@@ -906,10 +938,7 @@ class Drill:
                 self.guard.ready("跑情境 " + sid)
                 if relaunch or not browser.is_connected():                    # 上一個情境被中止／瀏覽器沒了 ⇒ 重開（driver 還活著）
                     relaunch = False
-                    try:
-                        browser.close()
-                    except Exception:                                       # noqa: BLE001
-                        pass
+                    self._close_browser(browser)
                     browser = self._launch_browser(pw, clean_env)
                 self.log("── 情境 %s（上限 %d 秒）──" % (sid, self.scenario_limit(sid)))
                 self.deadline_sid, self.deadline = sid, time.monotonic() + self.scenario_limit(sid)
@@ -918,7 +947,8 @@ class Drill:
                     ctxb = browser.new_context()
                     page = ctxb.new_page()
                     rec = getattr(self, "scenario_" + sid)(page, commits)
-                except PF.DrillAbort:
+                except PF.DrillAbort as e:
+                    self.log("情境 %s 被安全防線中止：%s\n%s" % (sid, e, traceback.format_exc()[-900:]))
                     raise
                 except Exception as e:                                      # noqa: BLE001 — 一個情境壞了，記下、繼續下一個
                     rec = {"id": sid, "title": sid, "expected": "（情境例外）", "checks": [], "observed": "", "passed": False,
@@ -940,7 +970,8 @@ class Drill:
                 self.log("情境 %s：%s" % (sid, {True: "符合", False: "不符", None: "未判定"}[rec.get("passed")]))
         finally:
             try:
-                browser.close()
+                if browser.is_connected():                                  # 瀏覽器已經沒了就不呼叫 close（Playwright 的 close 在連線已斷時可能永遠等不到回應）
+                    self._close_browser(browser)
             except Exception:                                               # noqa: BLE001
                 pass
 
