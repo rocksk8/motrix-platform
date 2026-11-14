@@ -27,7 +27,7 @@
 
 用法（列車樹根目錄；Python 用 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe）：
   python tools/platform/train_endgame.py plan  --label t87 [--base <上一班凍結點，預設＝_prod_baseline.BASELINE>] [--step-file docs/platform/prod-tasks/…-apply.md]
-  python tools/platform/train_endgame.py run   --label t87 [--base …] [--only <階段>] [--trailer "Co-Authored-By: …"]
+  python tools/platform/train_endgame.py run   --label t87 [--base …] [--only <階段>] [--skip <階段>] [--trailer "Co-Authored-By: …"]
   python tools/platform/train_endgame.py fill  --step-file <檔> --pkg-name <包名> --pkg-sha <sha> [--freeze <sha>]
   python tools/platform/train_endgame.py pkg-check <包資料夾>         包內 pyc／__pycache__ 數、檔案數、檔案清單 sha256
 退出碼：0 全部完成；1 有階段要人處理（或 plan 發現尚有工作）；2 工具自己出錯。
@@ -758,7 +758,7 @@ def preflight(repo, base, dry):
     return Result("preflight", WARN if dry and dirty else DONE, lines), base_sha
 
 
-def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=True, only=None):
+def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=True, only=None, skip=()):
     """依序跑階段；run 模式遇 BLOCK 就停。plan 模式（dry）每個階段都評估（但取號之後的階段依賴前面，標註）。
     run 模式：工作樹必須乾淨（每個階段開始時也檢查）、持有執行鎖、每個階段只 commit 自己改的檔。"""
     if not LABEL_RE.fullmatch(label or ""):
@@ -801,6 +801,9 @@ def run_stages(repo, base, label, step_file=None, allow=None, trailer="", dry=Tr
         c = Ctx(repo, base, label, step_file, stage_allow, trailer, dry)
         for name in STAGES:
             if only and name != only:
+                continue
+            if name in skip:
+                results.append(Result(name, WARN, ["依 --skip 略過（本班不做這一階段）。"]))
                 continue
             if not dry:
                 dirty = porcelain_paths(repo)
@@ -856,6 +859,7 @@ def main(argv=None):
         sp.add_argument("--label", default="train")
         sp.add_argument("--step-file")
         sp.add_argument("--only", choices=STAGES)
+        sp.add_argument("--skip", action="append", choices=STAGES, default=[], help="略過這個階段（可重複）；例如本班不帶 A1 時 --skip a1_expectations")
         sp.add_argument("--allow-no-version-record")
         sp.add_argument("--trailer", default="")
     sp = sub.add_parser("fill")
@@ -885,7 +889,7 @@ def main(argv=None):
         a.base = a.base or prod_baseline(REPO)
         if not a.base:
             raise ValueError("讀不到 backend/tests/_prod_baseline.py 的 BASELINE，請明確給 --base（上一班的凍結點）")
-        res = run_stages(REPO, a.base, a.label, a.step_file, a.allow_no_version_record, a.trailer, dry, a.only)
+        res = run_stages(REPO, a.base, a.label, a.step_file, a.allow_no_version_record, a.trailer, dry, a.only, tuple(a.skip))
         print(format_report(res, dry, a.base, a.label))
         return 1 if any(r.status in (WILL, BLOCK) for r in res) else 0
     except ValueError as e:

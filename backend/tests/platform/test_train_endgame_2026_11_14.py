@@ -542,3 +542,12 @@ def test_ascii_digits_only_in_approval_and_package_name(eg):
 def test_base_must_not_look_like_a_git_option(eg, trainrepo, bad):
     with pytest.raises(ValueError):
         eg.run_stages(trainrepo, bad, "t", dry=True)
+
+
+def test_skip_leaves_the_named_stage_out_and_says_so(eg, trainrepo):
+    res = eg.run_stages(trainrepo, "base", "t", dry=True, skip=("a1_expectations",))
+    r = _stage(res, "a1_expectations")
+    assert r.status == eg.WARN and "略過" in r.lines[0]
+    assert [x.stage for x in res if x.stage == "pyc"]              # 其他階段照評估
+    other = eg.run_stages(trainrepo, "base", "t", dry=True)
+    assert "略過" not in " ".join(_stage(other, "a1_expectations").lines)
