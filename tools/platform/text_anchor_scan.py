@@ -275,7 +275,7 @@ def main(argv=None):
     paths = [a for a in argv if not a.startswith("--")]
     import subprocess
     if not paths:
-        out = subprocess.run(["git", "-C", str(REPO), "ls-files", "backend"], capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+        out = subprocess.run(["git", "-C", str(REPO), "ls-files", "backend"], capture_output=True, text=True, encoding="utf-8", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.splitlines()
         paths = test_files(out)
     rd = lambda f: (REPO / f).read_text(encoding="utf-8", errors="replace") if (REPO / f).is_file() else None      # noqa: E731
     cur = scan_tree(paths, rd)

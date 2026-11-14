@@ -124,7 +124,6 @@
   "backend/tests/test_quote_backfill_l1_t69.py": 1,
   "backend/tests/test_quote_backfill_t71.py": 1,
   "backend/tests/test_quote_location_rest_2026_09_22.py": 1,
-  "backend/tests/test_quote_put_fail_reason_codes_2026_11_14.py": 1,
   "backend/tests/test_quote_terms_presets_2026_09_14.py": 1,
   "backend/tests/test_r2_step1_2026_10_07.py": 1,
   "backend/tests/test_r2_step2_2026_10_08.py": 5,
@@ -140,6 +139,6 @@
   "backend/tests/test_user_import_t85_2026_11_13.py": 1,
   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py": 1
  },
- "total": 225,
+ "total": 224,
  "version": 3
 }
