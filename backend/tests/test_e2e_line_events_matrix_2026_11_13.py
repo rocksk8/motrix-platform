@@ -256,17 +256,14 @@ def test_shared_core_ineligible_rows_group_switch_and_registered_override(live_s
 
 
 @pytest.mark.e2e
-def test_header_shows_accumulated_days_and_old_page_links_here(live_server, make_user, new_page, login_as, fake):
+def test_header_shows_accumulated_days_and_settings_page_has_inline_matrix(live_server, make_user, new_page, login_as, fake):
     _configure()
     page = _open(live_server, make_user, new_page, login_as, "e2e_mx9")
     expect(page.locator("[data-testid=le-total30]")).to_be_visible()
     expect(page.locator("[data-testid=le-accum]")).to_contain_text("已累積")
-    page.goto(f"{live_server}/pages/notification-settings.html")
-    link = page.locator("[data-testid=line-open-matrix]")
-    link.wait_for(state="visible", timeout=20000)
-    with page.expect_navigation():
-        link.click()
-    expect(page.locator("[data-testid=le-matrix]")).to_be_visible()
+    page.goto(f"{live_server}/pages/notification-settings.html")      # 2026-11-14 T86：通知設定頁直接內嵌矩陣
+    expect(page.locator("[data-testid=le-matrix]")).to_be_visible(timeout=20000)
+    expect(page.locator("[data-testid=le-accum]")).to_contain_text("已累積", timeout=20000)
 
 
 @pytest.mark.e2e

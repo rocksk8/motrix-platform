@@ -101,7 +101,8 @@ def test_m3_every_non_mail_event_has_who_text_and_settings_page_shows_it(client,
     ev = {e["key"]: e for e in client.get("/api/settings/line-notify", headers=_hdr(client, "sa")).json()["events"]}
     assert ev["dev_case_unassigned"]["follows"].startswith("原本收件人：") and "前任負責人" in ev["dev_case_unassigned"]["follows"]
     html = source_tree.page_file("notification-settings.html").read_text(encoding="utf-8")
-    assert 'x-text="e.follows"' in html and "沿用相近的 Email" not in html
+    js = (source_tree.page_file("line-events.html").parent.parent / "static" / "line-events-matrix.js").read_text(encoding="utf-8")
+    assert "沿用相近的 Email" not in html and "沿用相近的 Email" not in js     # T86：舊清單移除，事件改由內嵌矩陣顯示
 
 
 # ── L2／L3／L4／L7 ─────────────────────────────────────────────────────────────

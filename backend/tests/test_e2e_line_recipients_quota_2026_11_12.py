@@ -1,7 +1,7 @@
 """瀏覽器端對端：LINE 收件人粒度（角色＋個人）與額度用量條（2026-11-12）。
 
-- 通知設定頁 LINE 卡：用量條常駐顯示（不必按「驗證 token」）、顏色隨門檻變、門檻欄位儲存（含錯誤輸入被擋）、
-  每個類型的「可收角色」勾選會真的寫入（全勾＝缺省）；
+- 通知設定頁 LINE 卡：用量條常駐顯示（不必按「驗證 token」）、顏色隨門檻變、門檻欄位儲存（含錯誤輸入被擋）；
+  （各事件的收件角色改在內嵌的 LINE 事件矩陣設定，見 test_e2e_line_events_matrix_*）
 - 帳號安全頁：已綁定的同仁看到「我要收的 LINE 通知」，只列公司已開啟且自己角色被允許的類型，取消勾選重新整理後仍然取消；
   角色被拿掉的類型從清單消失；未綁定只顯示提示。
 對外呼叫一律換掉 `line_notify._http`，不連 LINE。
@@ -50,7 +50,7 @@ def _open_settings(live_server, make_user, new_page, login_as, name):
     login_as(page, u)
     page.goto(f"{live_server}/pages/notification-settings.html")
     page.locator("#line-panel").wait_for(state="visible", timeout=20000)
-    page.wait_for_function("() => document.querySelectorAll('#line-panel input[id^=chk-line-ev-]').length >= 2", timeout=20000)
+    page.locator("[data-testid=le-matrix] [data-testid='mx-row-approval_review_edit']").wait_for(state="attached", timeout=20000)
     return page
 
 
@@ -108,33 +108,6 @@ def test_threshold_field_saves_and_rejects_garbage(live_server, make_user, new_p
 
 
 @pytest.mark.e2e
-def test_role_checkboxes_write_through_and_all_checked_means_default(live_server, make_user, new_page, login_as, fake):
-    _configure()
-    page = _open_settings(live_server, make_user, new_page, login_as, "e2e_lq4")
-    from helpers import line_recipients as lr
-    box = lambda role: page.locator("[data-testid=line-role-%s-%s]" % (EV, role))          # noqa: E731
-    page.locator("[data-testid=line-roles-%s]" % EV).wait_for(state="visible", timeout=10000)
-    assert box("sales").is_checked() and box("viewer").is_checked(), "缺省＝所有角色都勾"
-    box("viewer").uncheck()
-    page.locator("[data-testid=line-msg]").filter(has_text="可收的角色").wait_for(state="visible", timeout=10000)
-    assert "viewer" not in (lr.allowed_roles(EV) or []) and lr.allowed_roles(EV) is not None
-    page.reload()
-    page.locator("[data-testid=line-roles-%s]" % EV).wait_for(state="visible", timeout=20000)
-    page.wait_for_function("() => !document.querySelector('[data-testid=line-role-%s-viewer]').checked" % EV, timeout=10000)
-    assert box("sales").is_checked() and not box("viewer").is_checked()
-    page.locator("[data-testid=line-group-head-案件管理]").click()                     # 2026-11-13：事件依模組分組、預設只展開第一組（EV2＝保固到期在「案件管理」）
-    assert page.locator("[data-testid=line-role-%s-viewer]" % EV2).is_checked(), "別的類型不受影響"
-    box("viewer").check()
-    from helpers.settings import _get_setting
-    page.wait_for_function("() => document.querySelector('[data-testid=line-msg]') && document.querySelector('[data-testid=line-role-%s-viewer]').checked" % EV, timeout=10000)
-    deadline = __import__("time").time() + 10
-    while lr.allowed_roles(EV) is not None and __import__("time").time() < deadline:
-        page.wait_for_timeout(200)
-    assert lr.allowed_roles(EV) is None, "全部勾回來＝回到缺省（不留一份等同全選的清單）"
-    assert EV not in (_get_setting("line_notify", {}).get("event_roles") or {})
-
-
-@pytest.mark.e2e
 def test_personal_prefs_on_account_security_page(live_server, make_user, new_page, login_as, fake):
     from helpers import line_notify, line_recipients as lr
     _configure()
@@ -169,19 +142,3 @@ def test_unlinked_user_sees_hint_not_checkboxes(live_server, make_user, new_page
     page.goto(f"{live_server}/pages/my-account.html?tab=notify")
     page.locator("[data-testid=line-prefs-need-link]").wait_for(state="visible", timeout=20000)
     assert page.locator("[data-testid=line-prefs]").is_visible() is False
-
-
-@pytest.mark.e2e
-def test_rapid_role_clicks_do_not_overwrite_each_other(live_server, make_user, new_page, login_as, fake):
-    """K 審 F7：快速連點兩個角色，第二次不能拿舊清單蓋掉第一次（請求期間該列勾選會被鎖住）。"""
-    _configure()
-    page = _open_settings(live_server, make_user, new_page, login_as, "e2e_lq7")
-    from helpers import line_recipients as lr
-    page.locator("[data-testid=line-roles-%s]" % EV).wait_for(state="visible", timeout=10000)
-    page.locator("[data-testid=line-role-%s-viewer]" % EV).click()
-    page.locator("[data-testid=line-role-%s-finance]" % EV).click()          # 不等第一個回應
-    deadline = __import__("time").time() + 10
-    while (lr.allowed_roles(EV) is None or {"viewer", "finance"} & set(lr.allowed_roles(EV))) and __import__("time").time() < deadline:
-        page.wait_for_timeout(200)
-    got = lr.allowed_roles(EV)
-    assert got is not None and "viewer" not in got and "finance" not in got, got
