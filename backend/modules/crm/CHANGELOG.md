@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next) — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）
+## 1.2.11 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `dev_case`（商機；列範圍＝`row_access` dev_case、排除已刪除；預估金額欄依金額檢視權限）。測試：`tests/platform/test_report_runner_t87.py`。
 
 ## 1.2.10 — 2026-11-14（train/t86-int；整合者：篩選欄位標記）

@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-11-15（T87 整合：B1 標準報表後端＋髒款項防護、B2 自訂報表；版號由列車取）
+## 1.0.55 — 2026-11-15（T87 整合：B1 標準報表後端＋髒款項防護、B2 自訂報表；版號由列車取）
 - **（併入）(next) — 2026-11-14（feat/t87-b1-be-h8；T87 B1 標準報表後端）**
 - 新增 5 張標準報表（營收、毛利、應收帳齡、案件進度、業務漏斗）與共用篩選（期間、業務、客戶、部門；營收另有收入口徑）：`GET /api/std-reports`（目錄與可用性）、`GET /api/std-reports/{id}`（資料）、`GET /api/std-reports/{id}/excel`、`/pdf`（匯出，寫稽核、冷卻、PDF 姊妹）。新檔 `api/std_reports.py`；線上格式由前後端約定（設計文件 B1-reports.md、B1-api-contract.md，T87 設計資料夾）。
 - 金額不重算：營收、毛利取 `_collect()`／收入提供者／`case.recognition`；帳齡取 `_compute_ar_aging` 的實作 `_ar_aging_core`（新增可選的業務、客戶、部門篩選，**不帶參數時輸出與過去逐鍵相同**）；報價漏斗分類抽成 `dashboard.classify_quote_funnel`，首頁漏斗與新報表共用。
