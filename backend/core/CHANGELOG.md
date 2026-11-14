@@ -22,8 +22,7 @@
 - 測試：`tests/test_request_timing_log_2026_11_14.py`。
 - **（併入）(next) — 2026-11-14（feat/t86-b1-h2；T86 文字：中性正式用語與覆核修正，含 h5 資料抽查補漏）**
 - 文字（行為、API、欄位、設定鍵、錯誤碼不變）：依「正式＋中性，不用負面或催逼語意」準則調整畫面用語（例：收款追蹤、跟進、待處理、保固已到期），並補正少數「目前沒有」「看得到」「打開」等殘留與測試斷言。
-
-## (next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）
+- **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件清單「已成案」分頁預設合併）**
 - 內部：案件頁首屏請求併單（`GET /api/bootstrap?page=case`）的 builder 群組字串補上 `list_view`（與頁面讀取一致）。
 - **（併入）(next) — 2026-11-14（feat/t86-case-ux-h7；T86 案件管理 UX）**
 - 行為變更（預設值）：案件清單預設合併「進行中」與重複的「已成案」頁籤（設定 `list_view.cases_merge_won_tab` 預設 0→1）；可到設定中心改回「兩個都保留」。**不做 migration**：正式機已明確存過 0 的公司不會跟著變（預期行為）。此設定現在不需開啟「自訂畫面版面」也會生效（案件頁多帶一個 `list_view` 群組，同一個設定請求）。
@@ -42,8 +41,7 @@
 - 審查修正（h10）：①法規參數 PUT 先驗結構（非物件項目回 400，不再 500）；②獎金傳票科目／T100／法規參數三處儲存後，有待生效時提示「等待期滿、需第二位最高管理者核准後才生效」，法規參數頁不再蓋掉剛輸入的版本；③兩支遷移工具在登錄表已有 `overhead_basis` 發布版本時，拒絕 `mode --apply`、`recalc --apply --set-*`、`rollback --apply`（舊鍵寫了不生效且會混基），改走 `PUT /api/overhead/settings`；④管銷設定 PUT 的 CAS 期望值取登錄表原始生效值；⑤`profit_guard` 表單存檔與 `charity_basis()` 只讀一次登錄表。
 - 已知限制：`tools/charity_migrate.py` 的前置檢查（`_prereq`）仍讀舊的管銷鍵（`overhead_rule_mode`／`overhead_migration_done`）；目前只因為「有定義時 `--set-total` 一律被拒」才不會出錯——日後若放寬該拒絕，必須先把 `_prereq` 改成讀登錄表生效值。
 - 測試：`tests/platform/test_settings_external_s5.py`；既有 PUT 後立刻讀的測試改為 `tests/_settings_activate.activate_now()`（只給測試用）。
-
-## (next) — 2026-11-14（feat/duty-roles-matrix-t86；T86 職責角色權限矩陣）
+- **（併入）(next) — 2026-11-14（feat/duty-roles-matrix-t86；T86 職責角色權限矩陣）**
 - L1（新增，只增；快照以 `_l1_interface.py --update --pending` 重產）：`helpers.duty_roles.update_role` 新增關鍵字參數 `commit=True`（預設行為不變；批次套用傳 `False`，由呼叫端在同一個交易統一 commit）。
 - L1（新增端點，皆僅最高管理者）：`POST /api/duty-roles/matrix/preview`（唯讀預覽，回每個角色實際多／少哪些權限、影響成員數、是否需原因、`planHash`）、`POST /api/duty-roles/matrix/apply`（必帶 `planHash`；同一個寫入交易、逐角色走 `update_role`，共用高敏感原因檢查點，寫 `permission_changes`＋`audit_log`）、`POST /api/duty-roles/matrix/undo`（復原這一批；逐角色 compare-and-set，被他人改過的角色只拒絕該筆並說明）。邏輯在新檔 `helpers/duty_role_matrix.py`（L1 新增公開介面：`preview`／`apply`／`undo`／`parse_request`、常數 `MAX_ROLES`／`UNDO_DEFAULT_REASON`）。
 - 前端：`duty-roles.html` 的權限池由 30 顆 chip 改為「職責 × 權限」矩陣（新增 `frontend/static/duty-matrix.js`，建在共用元件 `settings-matrix.js` 的草稿模式上：整欄勾選、群組總開關、批次、篩選、預覽→確認→套用、復原這一批）；鍵值不變，角色表單不再有權限 chip。
