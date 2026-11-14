@@ -443,11 +443,13 @@ def _build_ar_aging(p: dict, u: dict) -> dict:
              f"以今日（{ar['asOf']}）為基準，所以不適用期間條件。",
              "區間切點可在設定中心調整；區間名稱依目前設定顯示。",
              "沒有收款期別的案件不在本表內。"]
+    if ar.get("dirtyCount"):
+        notes.append(_rp._dirty_note(ar["dirtyCount"]) + "（款項的金額或比例不是數字）。")
     tables = [_table("items", "未收款項明細",
                      [_col("quoteNo", "案件號"), _col("customer", "客戶"), _col("owner", "業務"), _col("stage", "期別"),
                       _col("amount", "未收金額", "money"), _col("quoteDate", "報價日", "date"),
                       _col("days", "經過天數", "days"), _col("band", "帳齡區間")], rows)]
-    return _finish("ar-aging", p, kpis, tables, notes)
+    return _finish("ar-aging", p, kpis, tables, notes, **({"dirtyCount": ar["dirtyCount"]} if ar.get("dirtyCount") else {}))
 
 
 # ── 案件進度 ─────────────────────────────────────────────────────────────────
