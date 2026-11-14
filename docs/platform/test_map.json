@@ -42415,6 +42415,9 @@
    "kind": "api",
    "units": [
     "file:backend/core/menu_l1.json",
+    "helper:uploads",
+    "mod:filehub/__init__",
+    "mod:filehub/api",
     "mod:permmatrix/api",
     "plat:__init__",
     "plat:registry"
@@ -42422,7 +42425,10 @@
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/registry.py"
+     "backend/core/registry.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/filehub/__init__.py",
+     "backend/modules/filehub/api.py"
     ],
     "api": [
      "backend/modules/permmatrix/api.py"
