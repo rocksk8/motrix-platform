@@ -209,7 +209,7 @@ def test_share_panel_search_select_all_share_recipient_sees_batch_remove_and_hid
         page.wait_for_selector("[data-testid=cr-dlg-share][open]")
         page.fill("[data-testid=cr-sh-q]", "林")
         page.wait_for_function("() => document.querySelectorAll('#shCands li label.row').length === 3", timeout=20000)     # 沒有權限的「林無權」不在名單
-        assert page.inner_text("[data-testid=cr-sh-cands]").count("林無權") == 0
+        assert "林無權" not in page.inner_text("[data-testid=cr-sh-cands]")
         page.check("[data-testid=cr-sh-selcands]")
         assert page.is_enabled("[data-testid=cr-sh-add]") and "（3）" in page.inner_text("[data-testid=cr-sh-add]")
         page.uncheck("[data-testid=cr-sh-selcands]")                                         # 全選可以切換成清除
