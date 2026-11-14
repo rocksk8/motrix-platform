@@ -54,6 +54,7 @@
     .pr-chip .no { font-family: var(--font-en, monospace); font-size: 12px; color: var(--text-secondary); }
     .pr-warn { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: var(--tone-warning-bg, #FFF7E6); border: 1px solid var(--tone-warning-border, #F5D58A);
       color: var(--tone-warning-fg, #7A4B00); font-size: 13px; line-height: 1.6; }
+    .pr-toast { position: fixed; left: 16px; right: 16px; bottom: 16px; margin: 0 auto; max-width: 420px; z-index: 60; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
     .pr-ok a, .pr-ok button.pr-link { color: inherit; font-weight: 600; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; }
     .pr-ok .pr-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
     .pr-pick { margin: 12px 0 14px; border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; background: var(--white); }
@@ -142,7 +143,6 @@
             <button type="button" class="pr-link" data-testid="pr-result-again" @click="result = null">再開一張</button>
           </div>
         </div>
-        <div class="pr-warn" data-testid="pr-prereq" x-show="prereq" x-text="prereq"></div>
         <div class="pr-card" id="pr-type-card" x-show="types.length">
           <h3>申請類型</h3>
           <div class="pr-f">
@@ -153,6 +153,7 @@
             </select>
           </div>
         </div>
+        <div class="pr-warn" data-testid="pr-prereq" x-show="prereq && prereqOn" x-text="prereq"></div>
 
         <div class="pr-card">
           <h3 x-text="picked ? '案件' : (typeCode ? '案件（選填）' : '① 挑案件')"></h3>
@@ -308,7 +309,7 @@
             <div class="pr-err" x-show="prrErr" data-testid="pr-pr-err" x-text="prrErr"></div>
             <button type="button" class="btn btn-secondary" id="pr-pr-add" data-testid="pr-pr-add" style="margin-top:4px" @click="addSelectedPrLines()">帶入選取的請購明細</button>
           </div>
-          <div class="pr-ok" data-testid="pr-pick-msg" x-show="pickMsg" x-text="pickMsg"></div>
+          <div class="pr-ok pr-toast" data-testid="pr-pick-msg" role="status" x-show="pickMsg" x-text="pickMsg"></div>
           <div id="pr-df" x-ref="df"></div>
           <div class="pr-f" x-show="typeCode !== 'purchase_req'" style="margin-top:10px">
             <label for="pr-t-planned-pay">預定付款日（選填）</label>
@@ -338,14 +339,14 @@
           </fieldset>
           <div id="pr-pr-diff" x-show="priceDiffs().length" data-testid="pr-pr-diff" style="margin-top:8px;color:var(--warn,#b45309);font-size:12px">
             <template x-for="d in priceDiffs()" :key="d.key">
-              <div x-text="'⚠ ' + d.text"></div>
+              <div x-text="'注意：' + d.text"></div>
             </template>
           </div>
           <div id="pr-item-reasons" x-show="linkedIds.length" style="margin-top:8px">
             <div class="pr-hint" style="margin-bottom:4px" x-text="typeCode === 'purchase_order' ? '帶入的品項若超出報價計畫量，請在下方填寫原因，送審時會檢查。' : '帶入的品項若超出報價計畫量，系統只提示，可不填原因。'"></div>
             <template x-for="id in linkedIds" :key="id">
               <div class="pr-f" :data-linked-item="id" style="margin-bottom:6px">
-                <label x-text="itemName(id) + (overOf(id) > 0 ? '　⚠ 超出報價計畫量 ' + overOf(id) : '')"></label>
+                <label x-text="itemName(id) + (overOf(id) > 0 ? '　（超出報價計畫量 ' + overOf(id) + '）' : '')"></label>
                 <input type="text" :id="'pr-reason-' + id" x-model="prReasons[id]" maxlength="500"
                        :placeholder="typeCode === 'purchase_order' ? '超出計畫量時必填' : '超出計畫量的原因（選填）'">
               </div>
@@ -484,7 +485,7 @@
       function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '', plannedPayDate: '', poBank: '', poBranch: '', poAccount: '', poAccountName: '', supplierId: '' } }
       return {
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
-        tab: 'new', busy: false, err: '', result: null, pickMsg: '', prereq: '', myDept: null,
+        tab: 'new', busy: false, err: '', result: null, pickMsg: '', _pickTimer: null, prereq: '', prereqOn: false, myDept: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
         types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
@@ -530,7 +531,8 @@
         },
         caseHrefOf(no) { return 'case-management.html?q=' + encodeURIComponent(no) },
         caseHref() { return this.picked ? this.caseHrefOf(this.picked.quoteNo) : '#' },
-        openMine() { this.tab = 'mine'; this.loadMine(); try { window.scrollTo(0, 0) } catch (e) {} },
+        say(msg) { this.pickMsg = msg; clearTimeout(this._pickTimer); this._pickTimer = setTimeout(() => { this.pickMsg = '' }, 6000) },
+        openMine() { this.result = null; this.tab = 'mine'; this.loadMine(); try { window.scrollTo(0, 0) } catch (e) {} },
         async unpickCase() {
           var hadLinks = !!(this._df && (this._df.getValue().lines || []).some(function (l) { return l.itemId || l.prDocCode }))
           this.picked = null; this._draft = null; this._simple = null; this.pickMsg = ''
@@ -634,7 +636,7 @@
           this._df.setValue({ data: v.data, lines: lines })
           this.prrSel = {}
           this._syncLinked()
-          this.pickMsg = '已帶入 ' + added + ' 筆請購明細到明細。'
+          this.say('已帶入 ' + added + ' 筆請購明細到明細。')
           this.$nextTick(() => this._scrollToLines())
         },
         // 價差提示：採購單價格可以改，但與請購單價格不同要在畫面上標出來（只有拿得到請購價的人才比）
@@ -691,7 +693,7 @@
           this._df.setValue({ data: v.data, lines: lines })
           this.prSel = {}
           this._syncLinked()
-          this.pickMsg = !picked ? '請先勾選要帶入的品項。' : (added ? '已帶入 ' + added + ' 個品項到明細。' : '所選品項已在明細中。')
+          this.say(!picked ? '請先勾選要帶入的品項。' : (added ? '已帶入 ' + added + ' 個品項到明細。' : '所選品項已在明細中。'))
           if (added) this.$nextTick(() => this._scrollToLines())
         },
         async pickCase(c) {
@@ -771,7 +773,7 @@
         async selectType() {
           this.err = ''; this.result = null; this._draft = null
           if (this._df) { this._df.destroy(); this._df = null }
-          this.typeDef = null
+          this.typeDef = null; this.prereqOn = false
           if (!this.typeCode) return
           try {
             var h = this._h()
@@ -793,6 +795,8 @@
             var mine = this.myDept && this.myDept.id && depts.some((d) => String(d.id) === String(this.myDept.id)) ? this.myDept : null
             var hasDept = !!(mine && (fdef.fields || []).some(function (f) { return f.key === 'dept' }))
             var isAdmin = ['admin', 'superadmin'].indexOf(me.role) >= 0           // 管理者可能替別的部門申請 ⇒ 只帶入預設值、不鎖定
+            // 前置提示只給一般申請人，且只在有「部門」欄的類型表單出現；管理者常沒有部門、也能改選別的部門 ⇒ 不提示
+            this.prereqOn = !isAdmin && (fdef.fields || []).some(function (f) { return f.key === 'dept' })
             this._df = window.MotrixDefinitionForm.mount(this.$refs.df, {
               definition: fdef, viewer: { username: me.username || '', isCashier: false },
               categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v),

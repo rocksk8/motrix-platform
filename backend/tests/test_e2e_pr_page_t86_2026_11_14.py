@@ -94,13 +94,21 @@ def test_title_explainer_and_case_chip_with_back_link(live_server, make_user, ne
 def test_prereq_hint_for_no_department_and_no_manager_and_ok(live_server, make_user, new_page, login_as):
     u, page, go = _open(live_server, make_user, new_page, login_as, "t86pr_nodept")
     go()
+    page.wait_for_selector("#pr-type", timeout=20000)
+    page.wait_for_timeout(800)
+    assert not page.locator("[data-testid=pr-prereq]").is_visible(), "還沒選類型（一般支出申請沒有部門欄）：不顯示"
+    page.select_option("#pr-type", "purchase_req")
     hint = page.locator("[data-testid=pr-prereq]")
     hint.wait_for(state="visible", timeout=20000)
     assert "尚未歸屬任何部門" in hint.inner_text() and "使用者管理" in hint.inner_text()
+    page.select_option("#pr-type", "")
+    hint.wait_for(state="hidden", timeout=5000)
 
     u2, page2, go2 = _open(live_server, make_user, new_page, login_as, "t86pr_nomgr")
     _org("t86pr_nomgr", "無主管部")
     go2()
+    page2.wait_for_selector("#pr-type", timeout=20000)
+    page2.select_option("#pr-type", "purchase_req")
     h2 = page2.locator("[data-testid=pr-prereq]")
     h2.wait_for(state="visible", timeout=20000)
     assert "「無主管部」尚未指定主管" in h2.inner_text() and "組織架構設定" in h2.inner_text()
@@ -110,8 +118,19 @@ def test_prereq_hint_for_no_department_and_no_manager_and_ok(live_server, make_u
     _org("t86pr_ok", "有主管部", manager_username="t86pr_boss")
     go3()
     page3.wait_for_selector("#pr-type", timeout=20000)
+    page3.select_option("#pr-type", "purchase_req")
+    page3.wait_for_selector("#df-in-dept", timeout=15000)
     page3.wait_for_timeout(800)
     assert not page3.locator("[data-testid=pr-prereq]").is_visible(), "有部門、部門有主管：不顯示提示"
+
+    # 管理者常沒有部門、也能改選別的部門：不提示
+    u4, page4, go4 = _open(live_server, make_user, new_page, login_as, "t86pr_adm_nodept", role="superadmin")
+    go4()
+    page4.wait_for_selector("#pr-type", timeout=20000)
+    page4.select_option("#pr-type", "purchase_req")
+    page4.wait_for_selector("#df-in-dept", timeout=15000)
+    page4.wait_for_timeout(800)
+    assert not page4.locator("[data-testid=pr-prereq]").is_visible(), "管理者不顯示前置提示"
 
 
 @pytest.mark.e2e
@@ -196,5 +215,5 @@ def test_submit_result_has_links(live_server, make_user, new_page, login_as):
     page.locator("#pr-mine").wait_for(state="visible", timeout=10000)
     page.locator("#pr-mine").get_by_text(text.split("：")[1].rstrip("。")).first.wait_for(state="visible", timeout=10000)
     page.locator("#pr-tab-new").click()
-    page.locator("[data-testid=pr-result-again]").click()
-    res.wait_for(state="hidden", timeout=5000)
+    page.locator("#pr-new").wait_for(state="visible", timeout=5000)
+    assert res.is_hidden(), "看過「我的申請」再回來：舊的送審結果不再掛著"
