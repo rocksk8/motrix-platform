@@ -139,6 +139,7 @@ def make_drill(tmp_path, monkeypatch, fail_at=None, dry=False):
     monkeypatch.setattr(AD.PF, "code_prod_literals", lambda root: [])
     monkeypatch.setattr(AD.PF, "route_note", lambda *a, **k: "route")
     monkeypatch.setattr(d, "start_erp", lambda *a, **k: calls.append("start_erp"))
+    monkeypatch.setattr(d, "check_dashboard_import", lambda: calls.append("dash_import"))
     monkeypatch.setattr(d, "setup_admin_and_delivery_root", lambda: calls.append("setup_admin"))
     monkeypatch.setattr(d, "stop_services", lambda: calls.append("stop_services") or [])
     monkeypatch.setattr(d, "robocopy", lambda *a: calls.append("snapshot"))
@@ -152,7 +153,7 @@ def test_run_order_is_check_build_scan_control_start_then_services(tmp_path, mon
     d, calls = make_drill(tmp_path, monkeypatch)
     d.run()
     steps = [c for c in calls if not c.startswith("ready:") and c not in ("tool", "stop_services")]
-    assert steps == ["check", "build", "scan", "control", "start", "start_erp", "setup_admin", "snapshot", "scenarios"], steps
+    assert steps == ["check", "build", "scan", "dash_import", "control", "start", "start_erp", "setup_admin", "snapshot", "scenarios"], steps
     assert (d.reports / "DRILL-REPORT.md").is_file()
     assert d.ctx["exit_code"] == 0
     rep = (d.reports / "DRILL-REPORT.md").read_text(encoding="utf-8")
@@ -750,7 +751,7 @@ def test_code_literal_findings_flags_unknown_file_and_export_ignored_scripts(tmp
     bs = chr(92)
     (tmp_path / "backend" / "tools").mkdir(parents=True)
     (tmp_path / "backend" / "new_module.py").write_text('URL = "https://%s:666"' % PF.PROD_IP, encoding="utf-8")
-    (tmp_path / "backend" / "main.py").write_text('"http://%s:666"' % PF.PROD_IP, encoding="utf-8")
+    (tmp_path / "backend" / "main.py").write_text('"http://%s:666" "https://%s"' % (PF.PROD_IP, PF.PROD_IP), encoding="utf-8")
     (tmp_path / "backend" / "tools" / "_dashboard_remote.ps1").write_text("x", encoding="utf-8")
     findings, allowed = PF.code_literal_findings(tmp_path)
     assert {r.lower() for r, _w in findings} == {"backend" + bs + "new_module.py", "backend" + bs + "tools" + bs + "_dashboard_remote.ps1"}
@@ -772,7 +773,7 @@ def test_guard_scan_aborts_on_unlisted_prod_address_in_code(tmp_path, monkeypatc
 
 def test_guard_scan_records_allowed_literals_for_report(tmp_path, monkeypatch):
     (tmp_path / "backend").mkdir()
-    (tmp_path / "backend" / "main.py").write_text('"%s"' % PF.PROD_IP, encoding="utf-8")
+    (tmp_path / "backend" / "main.py").write_text('"%s" "%s"' % (PF.PROD_IP, PF.PROD_IP), encoding="utf-8")
     monkeypatch.setattr(PF, "require_static_ok", lambda root, **kw: {"files": 1, "findings": [], "allowed_product_files": []})
     g = PF.DrillGuard(tmp_path, FakeMonitor())
     g.done = ["check"]
@@ -829,8 +830,10 @@ def test_b5_executes_only_the_validated_argv():
 
 
 def test_playwright_gets_a_clean_environment_and_the_single_non_guard_spawn_is_documented():
-    assert "env=clean_env" in SRC and "os.environ.clear()" in SRC and "--no-proxy-server" in SRC
-    assert SRC.index("os.environ.update(clean)") < SRC.index("with sync_playwright() as pw")
+    assert "env=clean_env" in SRC and "--no-proxy-server" in SRC
+    assert "os.environ.clear()" not in SRC                                   # 不經過空環境（監看器執行緒的子行程會沒有 SystemRoot）
+    assert SRC.index("_swap_environ(pw_env)") < SRC.index("with sync_playwright() as pw")
+    assert "_swap_environ(saved)" in SRC and "PF.env_problems(pw_env)" in SRC
     assert "唯一不經 guard.launch 的子行程" in SRC
 
 
@@ -918,3 +921,207 @@ def test_owned_ps_removes_ancestors_before_growth_and_uses_boundary_and_parent_l
     ps = PF._OWNED_PS
     assert ps.index("$anc) { [void]$own.Remove") < ps.index("$grew = $true")
     assert "ParentOk" in ps and "[regex]::Escape($needle)" in ps
+
+
+# ── PM 追問：演練的儀表板從哪裡啟動？（export-ignore 的檔不在安裝裡）────────────────────────
+
+def _real_run_tool_bytes(argv, timeout=60, **k):
+    import subprocess
+    r = subprocess.run(argv, capture_output=True, timeout=timeout)
+    return r.returncode, r.stdout, r.stderr
+
+
+def _head():
+    import subprocess
+    return subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=60).stdout.strip()
+
+
+def test_install_dashboard_puts_the_export_ignored_files_into_the_drill_install_from_the_commit(tmp_path):
+    inst = tmp_path / "inst"
+    got = AD.install_dashboard(_real_run_tool_bytes, REPO, _head(), inst)
+    assert got == list(AD.DASHBOARD_FILES)
+    for n in got:
+        assert (inst / "backend" / "tools" / n).stat().st_size > 1000
+    assert PF.PROD_IP in (inst / "backend" / "tools" / "deploy_dashboard.py").read_text(encoding="utf-8")        # 改寫前還是正式的
+    with pytest.raises(PF.DrillAbort):
+        AD.check_dashboard_tree(inst)                                                                          # 沒改寫就不准啟動
+    assert AD.rewrite_dashboard_prod(inst) == 2
+    assert AD.check_dashboard_tree(inst) is True
+
+
+def test_install_dashboard_refuses_when_the_commit_has_no_such_file(tmp_path):
+    with pytest.raises(AD.DrillError):
+        AD.install_dashboard(lambda argv, **k: (128, b"", b"fatal: path does not exist"), REPO, _head(), tmp_path / "inst")
+    with pytest.raises(AD.DrillError):
+        AD.install_dashboard(lambda argv, **k: (0, b"", b""), REPO, _head(), tmp_path / "inst2")
+
+
+def test_check_dashboard_tree_refuses_missing_unrewritten_or_still_mentioning_prod(tmp_path):
+    inst = tmp_path / "inst"
+    with pytest.raises(PF.DrillAbort):
+        AD.check_dashboard_tree(inst)
+    d = inst / "backend" / "tools"
+    d.mkdir(parents=True)
+    f = d / "deploy_dashboard.py"
+    good = 'PROD_HOST = "127.0.0.1"\nPROD_BASE_URL = f"http://{PROD_HOST}:9"\n'
+    f.write_text(good, encoding="utf-8")
+    assert AD.check_dashboard_tree(inst) is True
+    for bad in (good + '# %s\n' % PF.PROD_IP, good.replace("127.0.0.1", "10.0.0.5"), good.replace(":9", ":666"), good + good, "x = 1\n"):
+        f.write_text(bad, encoding="utf-8")
+        with pytest.raises(PF.DrillAbort):
+            AD.check_dashboard_tree(inst)
+
+
+def _dash_drill(tmp_path, monkeypatch):
+    args = SimpleNamespace(dry_build=False, only=[], keep=True, interval=2.0)
+    d = AD.Drill(args)
+    d.base = Path(AD.BASE_ROOT) / "unit_test_stamp_never_created"
+    d.inst = d.base / "inst"
+    launched = []
+    d.guard = SimpleNamespace(launch=lambda argv, cwd, what, **k: launched.append((list(argv), Path(cwd), what)))
+    d.monitor = SimpleNamespace(check_clean=lambda: None)
+    monkeypatch.setattr(AD.DMA, "_api", lambda *a, **k: (200, {}))
+    return d, launched
+
+
+def test_dashboard_is_started_only_from_the_drill_install_directory_after_the_tree_check(tmp_path, monkeypatch):
+    d, launched = _dash_drill(tmp_path, monkeypatch)
+    seen = []
+    monkeypatch.setattr(AD, "check_dashboard_tree", lambda inst: seen.append(inst) or True)
+    d.start_dashboard()
+    assert seen == [d.inst] and len(launched) == 1
+    argv, cwd, _what = launched[0]
+    tools = (d.inst / "backend" / "tools").resolve()
+    assert cwd == tools and Path(argv[argv.index("--app-dir") + 1]).resolve() == tools
+    assert argv[:4] == [d.python, "-m", "uvicorn", "deploy_dashboard:app"] and "127.0.0.1" in argv
+    for a in argv:                                                                                                 # 命令列沒有任何 repo／worktree 路徑
+        assert str(REPO).lower() not in str(a).lower() or str(d.base).lower() in str(a).lower()
+
+
+def test_dashboard_is_not_launched_when_the_tree_check_fails(tmp_path, monkeypatch):
+    d, launched = _dash_drill(tmp_path, monkeypatch)
+    with pytest.raises(PF.DrillAbort):                     # 這個假的演練目錄裡根本沒有儀表板檔
+        d.start_dashboard()
+    assert launched == []
+
+
+def test_build_install_installs_dashboard_before_hardening_and_demands_two_rewritten_lines():
+    b = SRC[SRC.index("    def build_install"):SRC.index("    def fake_commit")]
+    assert b.index("install_dashboard(") < b.index("harden_tree(")
+    assert 'rewritten.get("deploy_dashboard.py") != 2' in b
+    assert SRC.count("deploy_dashboard:app") == 1
+
+
+def test_guard_fingerprint_covers_the_dashboard_so_editing_it_after_the_scan_aborts(tmp_path):
+    assert any(g.lower().endswith("deploy_dashboard.py") for g in PF.DrillGuard.GUARDED)
+    d = tmp_path / "backend" / "tools"
+    d.mkdir(parents=True)
+    f = d / "deploy_dashboard.py"
+    f.write_text("a", encoding="utf-8")
+    g = PF.DrillGuard(tmp_path, FakeMonitor())
+    fp = g._fingerprint()
+    f.write_text("b", encoding="utf-8")
+    assert g._fingerprint() != fp
+
+
+# ── h11 第二輪：安裝後儀表板真的在、可 import、位址次數釘住、環境替換不經空環境 ────────────────
+
+def test_real_build_install_leaves_a_hardened_dashboard_in_the_install(tmp_path, monkeypatch):
+    args = SimpleNamespace(dry_build=False, only=[], keep=True, interval=2.0)
+    d = AD.Drill(args)
+    d.base = tmp_path / "base"
+    d.inst = d.base / "inst"
+    d.droot = d.base / "droot"
+    d.reports = tmp_path / "rep"
+    d.reports.mkdir()
+    d.commit = _head()
+    d.guard = SimpleNamespace(run_tool_bytes=_real_run_tool_bytes)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    d.build_install()
+    tools = d.inst / "backend" / "tools"
+    text = (tools / "deploy_dashboard.py").read_text(encoding="utf-8")
+    assert 'PROD_HOST = "127.0.0.1"' in text and PF.PROD_IP not in text
+    assert (tools / "deploy_dashboard.html").is_file() and (tools / "deploy_insights.py").is_file()
+    assert not (tools / "_dashboard_remote.ps1").exists() and not (tools / "check_prod_drift.ps1").exists() and not (tools / "deploy_dashboard_ctl.pyw").exists()
+    assert d.ctx["dashboard_files"] == list(AD.DASHBOARD_FILES)
+    assert AD.check_dashboard_tree(d.inst) is True
+    assert PF.code_literal_findings(d.inst)[0] == []
+
+
+def test_check_dashboard_import_runs_in_the_install_and_verifies_the_loaded_file(tmp_path, monkeypatch):
+    d, _ = _dash_drill(tmp_path, monkeypatch)
+    tools = (d.inst / "backend" / "tools").resolve()
+    calls = []
+
+    def run_tool(argv, cwd=None, timeout=0, **k):
+        calls.append((argv, Path(cwd)))
+        return 0, "%s\n127.0.0.1\nhttp://127.0.0.1:9\n" % (tools / "deploy_dashboard.py")
+    d.guard.run_tool = run_tool
+    d.ctx = {}
+    d.check_dashboard_import()
+    assert calls[0][1].resolve() == tools and calls[0][0][1] == "-c" and "import deploy_dashboard" in calls[0][0][2]
+    assert d.ctx["dashboard_import"]["PROD_HOST"] == "127.0.0.1"
+    for bad in ((1, "boom"), (0, "x\n127.0.0.1\nhttp://127.0.0.1:9"), (0, "%s\n172.16.10.177\nhttps://172.16.10.177:666\n" % (tools / "deploy_dashboard.py")),
+                (0, "C:\\elsewhere\\deploy_dashboard.py\n127.0.0.1\nhttp://127.0.0.1:9\n")):
+        d.guard.run_tool = lambda argv, cwd=None, timeout=0, _b=bad, **k: _b
+        with pytest.raises(AD.DrillError):
+            d.check_dashboard_import()
+
+
+def test_dashboard_import_check_runs_after_scan_and_before_control_in_run():
+    run_src = SRC[SRC.index("    def run(self):"):SRC.index("    def dry_build_extra")]
+    assert run_src.index("self.guard.scan()") < run_src.index("self.check_dashboard_import()") < run_src.index("self.guard.control()")
+    assert run_src.index("self.check_dashboard_import()") < run_src.index("if self.args.dry_build")
+
+
+def test_swap_environ_never_passes_through_an_empty_environment(monkeypatch):
+    seen = []
+    real = dict(os.environ)
+    target = {"SYSTEMROOT": real.get("SYSTEMROOT", "C:\\Windows"), "ONLY_IN_TARGET": "1"}
+    monkeypatch.setattr(os, "environ", type(os.environ)(os.environ.encodekey if False else {}, *[]) if False else os.environ)
+    orig_delitem = type(os.environ).__delitem__
+
+    def spy_del(self, k):
+        seen.append(("del", len(self)))
+        return orig_delitem(self, k)
+    monkeypatch.setattr(type(os.environ), "__delitem__", spy_del)
+    try:
+        AD._swap_environ(target)
+        assert dict(os.environ) == target or all(os.environ.get(k) == v for k, v in target.items())
+        assert "ONLY_IN_TARGET" in os.environ and "SYSTEMROOT" in os.environ
+        assert min(n for _k, n in seen) >= len(target)                           # 刪鍵的每一刻，目標鍵都已經在
+    finally:
+        monkeypatch.undo()
+        os.environ.clear()
+        os.environ.update(real)
+
+
+def test_playwright_env_passes_browsers_path_only_for_the_browser_and_still_checks_it():
+    run_src = SRC[SRC.index("pw_env = dict(clean)"):SRC.index("_swap_environ(pw_env)")]
+    assert 'saved.get("PLAYWRIGHT_BROWSERS_PATH")' in run_src and "PF.env_problems(pw_env)" in run_src
+
+
+def test_allowed_code_literal_files_are_pinned_by_occurrence_count(tmp_path):
+    bs = chr(92)
+    (tmp_path / "backend").mkdir()
+    main = tmp_path / "backend" / "main.py"
+    main.write_text('"http://%s:666"\n"https://%s"\n' % (PF.PROD_IP, PF.PROD_IP), encoding="utf-8")
+    findings, allowed = PF.code_literal_findings(tmp_path)
+    assert findings == [] and [r for r, _w in allowed] == ["backend" + bs + "main.py"]
+    main.write_text(main.read_text(encoding="utf-8") + 'requests.get("https://%s/api")\n' % PF.PROD_IP, encoding="utf-8")        # 多一個
+    findings, allowed = PF.code_literal_findings(tmp_path)
+    assert allowed == [] and findings and "3" in findings[0][1]
+    main.write_text('"http://%s:666"\n' % PF.PROD_IP, encoding="utf-8")                                                           # 少一個也要重審（表要跟著改）
+    assert PF.code_literal_findings(tmp_path)[0]
+
+
+def test_real_repo_pinned_counts_match_the_files():
+    for rel, n in PF.CODE_PROD_ALLOWED_COUNT.items():
+        assert PF._literal_count(REPO / rel) == n, rel
+    assert set(PF.CODE_PROD_ALLOWED_COUNT) == set(PF.CODE_PROD_ALLOWED)
+
+
+def test_code_literals_also_scan_pyw(tmp_path):
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "x.pyw").write_text('"%s"' % PF.PROD_IP, encoding="utf-8")
+    assert any(r.endswith("x.pyw") for r, _w in PF.code_literal_findings(tmp_path)[0])

@@ -297,15 +297,30 @@ CODE_PROD_ALLOWED = {
 # 隨 git archive 出貨時被 export-ignore 的正式機遠端腳本：演練安裝與包裡**不可以有**（有就擋）。
 EXPORT_IGNORED_ABSENT = (r"backend\tools\_dashboard_remote.ps1", r"backend\tools\check_prod_drift.ps1")
 _PROD_CODE_RE = re.compile(r"172\.16\.1[01]\.\d{1,3}")
+#: 名單內的檔案也釘「位址出現幾次」：之後多出一個（例如新增一條真的連線）就擋下，必須重審才改這張表。
+CODE_PROD_ALLOWED_COUNT = {
+    r"backend\helpers\email_notify.py": 1,
+    r"backend\main.py": 2,
+    r"backend\routers\system.py": 1,
+    r"backend\tools\deploy_dashboard.html": 2,
+    r"tools\platform\a1_drill_preflight.py": 2,
+}
+
+
+def _literal_count(path):
+    try:
+        return len(_PROD_CODE_RE.findall(Path(path).read_text(encoding="utf-8", errors="replace")))
+    except OSError:
+        return -1
 
 
 def code_prod_literals(root, prod_ip=PROD_IP):
-    """產品程式碼（.py／.js／.html）裡寫著正式機位址（或 172.16.10／11 網段）的檔案（相對路徑，排序）。"""
+    """產品程式碼（.py／.pyw／.js／.html）裡寫著正式機位址（或 172.16.10／11 網段）的檔案（相對路徑，排序）。（.ps1／.bat／.cmd 由 static_scan 的 CONFIG_EXTS 掃。）"""
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d.lower() not in (SKIP_DIRS - {"tests"}) | {"site-packages", "node_modules"}]
         for fn in filenames:
-            if fn.lower().endswith((".py", ".js", ".html")):
+            if fn.lower().endswith((".py", ".pyw", ".js", ".html")):
                 p = Path(dirpath) / fn
                 try:
                     text = p.read_text(encoding="utf-8", errors="replace")
@@ -322,7 +337,12 @@ def code_literal_findings(root, prod_ip=PROD_IP):
     findings, allowed = [], []
     for rel in code_prod_literals(root, prod_ip):
         if rel.lower() in allow:
-            allowed.append((rel, allow[rel.lower()]))
+            pinned = {k.lower(): v for k, v in CODE_PROD_ALLOWED_COUNT.items()}.get(rel.lower())
+            n = _literal_count(Path(root) / rel)
+            if pinned is None or n != pinned:
+                findings.append((rel, "名單內的檔案，但正式機位址出現 %d 次、與已審的 %s 次不符：必須重審才能改名單" % (n, pinned)))
+            else:
+                allowed.append((rel, allow[rel.lower()]))
         else:
             findings.append((rel, "程式碼裡有正式機位址，且不在已知名單（演練副本必須先改寫成本機死路，或審過後加進名單）"))
     for rel in EXPORT_IGNORED_ABSENT:
@@ -724,9 +744,9 @@ class ConnectionMonitor:
 
 class DrillGuard:
     """呼叫順序寫死（PM 2026-11-14）：`check`（require_ok）→ `scan`（require_static_ok）→ `control`（監看器正對照）→ `start`（啟動監看）。
-    之後每次啟動／驅動任何演練程序之前呼叫 `ready(動作)`：少了任一步、監看器沒在跑、已中止、或掃過的三個要執行的腳本之後被改動 ⇒ DrillAbort（不開跑）。"""
+    之後每次啟動／驅動任何演練程序之前呼叫 `ready(動作)`：少了任一步、監看器沒在跑、已中止、或掃過的四個要執行的檔（套用／回復腳本、autostart.bat、儀表板）之後被改動 ⇒ DrillAbort（不開跑）。"""
 
-    GUARDED = (r"backend\tools\apply_update.ps1", r"backend\tools\rollback_update.ps1", r"backend\autostart.bat")
+    GUARDED = (r"backend\tools\apply_update.ps1", r"backend\tools\rollback_update.ps1", r"backend\autostart.bat", r"backend\tools\deploy_dashboard.py")
     ORDER = ("check", "scan", "control", "start")
 
     def __init__(self, root, monitor, probes=None, erp_port=ERP_PORT, dash_port=DASH_PORT, environ=None, base=None):

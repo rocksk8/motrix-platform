@@ -12,11 +12,11 @@ B5（事後驗證不過、不自動回滾，並在演練機真的執行回復指
   ① 呼叫順序寫死在 `a1_drill_preflight.DrillGuard`：check → scan → control（監看器正對照）→ start（監看）；任何啟動／驅動演練程序的動作都先 `guard.ready()`。
   ② 本檔**不直接**起任何子行程（測試 grep 釘住）：所有子行程只走 `guard.launch`（演練程序）與 `guard.run_tool`（建置工具），都用乾淨環境（白名單變數、
      MOTRIX_DELIVERY_ERP_URL 只指 127.0.0.1、pip 離線）。有測試 grep 釘住。
-     **唯一例外**：Playwright 的 node driver 只能繼承本行程環境，故驅動前先清空並重設環境（`os.environ.clear()`＋`--no-proxy-server`）；它是本行程的子行程，
+     **唯一例外**：Playwright 的 node driver 只能繼承本行程環境，故驅動前先把環境換成乾淨的（`_swap_environ`：先寫新值再刪舊鍵、不經空環境；`--no-proxy-server`）；它是本行程的子行程，
      仍在監看器的樹內（監看器看得到、也只會殺白名單內的程序）。
   ③ 演練期間 `ConnectionMonitor` 每 2 秒查演練程序的 TCP 連線，一有非本機連線就殺程序、中止；取樣連續失敗兩次也中止並標「未證明」。
      殺程序走嚴格白名單（只殺本編排器自己起的「pid＋建立時間」紀錄與其後代，加窄範圍孤兒；pid<1000、系統／shell 程序名一律不殺；查詢失敗＝不殺）。
-  ④ 儀表板的 PROD_HOST／PROD_BASE_URL 在演練副本改成本機死路（出貨包本就 export-ignore 此檔，則記為「不存在」）；`code_literal_findings` 對任何未列名單的
+  ④ 儀表板被 export-ignore（出貨包／git archive 沒有）：演練從同一 commit 以 git show 放進演練安裝、PROD_HOST／PROD_BASE_URL 改成本機死路、啟動前再驗、只從演練安裝目錄啟動；`code_literal_findings` 對任何未列名單的
      程式碼正式機位址阻擋。
 報告寫明「整段演練對正式機 N 連線」（有證明才印；否則寫「未證明」）。
 
@@ -88,6 +88,10 @@ goto loop
 
 PUBKEY_RE = re.compile(r"(DELIVERY_PUBKEY_PEM = \()(.*?)(\n\)|\n    \))", re.S)
 
+#: 儀表板被 export-ignore（出貨包與 git archive 都沒有）。演練要靠它按「同意套用」，所以從**同一個 commit** 的已追蹤檔取出、放進演練安裝、
+#: 改寫 PROD_HOST 之後**只從演練安裝目錄**啟動（不從 repo／worktree 啟動）。deploy_insights.py 不在 export-ignore，已在安裝裡。
+DASHBOARD_FILES = ("deploy_dashboard.py", "deploy_dashboard.html")
+
 
 class DrillError(Exception):
     pass
@@ -117,6 +121,40 @@ def harden_tree(tree, inst, port, python):
         AUTOSTART_A1.format(backend=Path(inst) / "backend", python=python, port=port), encoding="utf-8")
     out["deploy_dashboard.py"] = rewrite_dashboard_prod(tree)
     return out
+
+
+def _swap_environ(target):
+    """把本行程環境換成 target，但**不經過空環境**：先寫入新值、再刪掉不在 target 的鍵（監看器執行緒在空窗期起的子行程不會沒有 SystemRoot）。"""
+    os.environ.update(target)
+    for k in [k for k in os.environ if k not in target]:
+        del os.environ[k]
+
+
+def install_dashboard(run_tool_bytes, repo, commit, inst):
+    """把 DASHBOARD_FILES 從 commit（git show，不受 export-ignore 影響）放進演練安裝的 backend/tools。run_tool_bytes＝guard.run_tool_bytes。⇒ 寫入的檔名。"""
+    tools = Path(inst) / "backend" / "tools"
+    tools.mkdir(parents=True, exist_ok=True)
+    out = []
+    for name in DASHBOARD_FILES:
+        rc, data, err = run_tool_bytes(["git", "-C", str(repo), "show", "%s:backend/tools/%s" % (commit, name)], timeout=120)
+        if rc != 0 or not data:
+            raise DrillError("取不到 %s（%s）：%s" % (name, commit[:9], err.decode("utf-8", "replace")[:200]))
+        (tools / name).write_bytes(data)
+        out.append(name)
+    return out
+
+
+def check_dashboard_tree(inst, prod_ip=PF.PROD_IP):
+    """啟動儀表板之前的最後確認（失敗＝DrillAbort，不啟動）：檔案在演練安裝裡、PROD_HOST 已是本機死路、沒有任何正式機位址。"""
+    p = Path(inst) / "backend" / "tools" / "deploy_dashboard.py"
+    if not p.is_file():
+        raise PF.DrillAbort("演練安裝裡沒有 deploy_dashboard.py：不能啟動儀表板（也絕不從 repo／worktree 啟動）：%s" % p)
+    text = p.read_bytes().decode("utf-8", "replace")
+    if prod_ip in text or PF._PROD_CODE_RE.search(text):
+        raise PF.DrillAbort("演練安裝的 deploy_dashboard.py 仍含正式機位址：不啟動儀表板")
+    if len(re.findall(r'^PROD_HOST = "%s"' % re.escape(DEAD_END_HOST), text, re.M)) != 1 or "PROD_BASE_URL = f\"http://{PROD_HOST}:%d\"" % DEAD_END_PORT not in text:
+        raise PF.DrillAbort("演練安裝的 deploy_dashboard.py 的 PROD_HOST／PROD_BASE_URL 不是本機死路：不啟動儀表板")
+    return True
 
 
 _DASH_HOST_RE = re.compile(r'^PROD_HOST = "172\.16\.10\.177"[ \t]*(?=\r?$)', re.M)
@@ -381,10 +419,11 @@ def render_report(ctx):
         L.append("- 程式碼裡的正式機位址（阻擋式；名單外一律不開跑）：已知且逐一說明的 %d 個——" % len(ctx["code_literals"]))
         for rel, why in ctx["code_literals"]:
             L.append("  - `%s`：%s" % (rel, why))
-    if ctx.get("dashboard_rewrite") == "absent":
-        L.append("- 儀表板 deploy_dashboard.py：出貨包（git archive）已 export-ignore，演練安裝裡沒有這個檔＝沒有它打正式機的路（改寫 0 行；名單外的正式機位址仍由程式碼位址檢查阻擋）。")
-    elif ctx.get("dashboard_rewrite"):
-        L.append("- 儀表板的 PROD_HOST／PROD_BASE_URL 已在演練副本（安裝與包內容）改寫成本機死路 127.0.0.1:9（預防：交付資料夾沒設定成功時它也只會打到死路）。")
+    if ctx.get("dashboard_files"):
+        L.append("- 儀表板（%s）被 export-ignore，出貨包與 git archive 都沒有；演練從同一個 commit 以 `git show` 放進**演練安裝**、PROD_HOST／PROD_BASE_URL 改寫成本機死路 127.0.0.1:9"
+                 "（改寫 %s 行），啟動前再驗一次，並**只從演練安裝目錄**啟動（不從 repo／worktree）。假 T87 包內容不含儀表板。"
+                 % ("、".join(ctx["dashboard_files"]), ctx.get("dashboard_rewrite")))
+        L.append("- ⚠️ 含意：正式機的儀表板不會隨更新包到達；T87 步驟檔必須另外把 A1 版 deploy_dashboard.py／.html 裝到正式機（見 A1-AUTO-APPLY.md「儀表板怎麼到正式機」）。")
     if ctx.get("export_ignored_absent"):
         L.append("- 隨 git archive 被 export-ignore 的正式機遠端腳本（%s）：安裝與包內容裡都不存在（已檢查）。" % "、".join(ctx["export_ignored_absent"]))
     L += ["", "## 與正式機不同的地方（偏離）", ""] + ["- " + d for d in DEVIATIONS]
@@ -495,7 +534,10 @@ class Drill:
         AP.write_baseline(str(self.inst), {"commit": self.commit, "package_files": AP.package_files(str(self.inst), u)})
         for marker in (".no_email_send", ".no_cloud_archive"):
             (self.inst / marker).write_text("drill\n", encoding="utf-8")
+        self.ctx["dashboard_files"] = install_dashboard(self.guard.run_tool_bytes, REPO, self.commit, self.inst)
         rewritten = harden_tree(self.inst, self.inst, self.port, self.python)
+        if rewritten.get("deploy_dashboard.py") != 2:
+            raise DrillError("演練安裝的儀表板 PROD_HOST 沒有改寫成功（%r）" % (rewritten.get("deploy_dashboard.py"),))
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         k = Ed25519PrivateKey.generate()
@@ -563,11 +605,28 @@ class Drill:
             time.sleep(2)
         raise DrillError("演練 ERP %d 秒內沒起來（看 %s）" % (wait, self.inst / "backend" / "logs" / "server.log"))
 
+    def check_dashboard_import(self):
+        """不用等實機演練就能發現「儀表板起不來」這一類錯：用乾淨環境在演練安裝的 backend/tools 裡 import deploy_dashboard，
+        確認載入的就是演練安裝裡那份、PROD_HOST 是本機死路。⇒ 輸出。失敗＝DrillError（不往下走）。"""
+        tools = self.in_base(self.inst / "backend" / "tools")
+        code = "import deploy_dashboard as d;print(d.__file__);print(d.PROD_HOST);print(d.PROD_BASE_URL)"
+        rc, out = self.guard.run_tool([self.python, "-c", code], cwd=tools, timeout=180)
+        lines = [x.strip() for x in out.splitlines() if x.strip()]
+        if rc != 0 or len(lines) < 3:
+            raise DrillError("演練安裝的儀表板 import 失敗（rc=%s）：%s" % (rc, out[-400:]))
+        loaded, host, url = lines[-3:]
+        if Path(loaded).resolve() != (tools / "deploy_dashboard.py").resolve() or host != DEAD_END_HOST or not url.startswith("http://%s:" % DEAD_END_HOST):
+            raise DrillError("儀表板載入的不是演練安裝裡改寫過的那份：%s／%s／%s" % (loaded, host, url))
+        self.ctx["dashboard_import"] = {"file": loaded, "PROD_HOST": host, "PROD_BASE_URL": url}
+        return out
+
     def start_dashboard(self, extra_env=None, allow_hosts=(), wait=60):
         env = {"PATH": str(Path(self.python).parent) + os.pathsep + os.environ.get("PATH", "")}       # 套用腳本的 `python` 用演練 venv
         env.update(extra_env or {})
-        self.guard.launch([self.python, "-m", "uvicorn", "deploy_dashboard:app", "--host", "127.0.0.1", "--port", str(self.dash), "--log-level", "warning"],
-                          self.inst / "backend" / "tools", "啟動演練儀表板", extra_env=env, allow_hosts=allow_hosts, detached=True)
+        tools = self.in_base(self.inst / "backend" / "tools")                  # 只從演練安裝目錄啟動；檔案先確認已改寫
+        check_dashboard_tree(self.inst)
+        self.guard.launch([self.python, "-m", "uvicorn", "deploy_dashboard:app", "--app-dir", str(tools), "--host", "127.0.0.1", "--port", str(self.dash), "--log-level", "warning"],
+                          tools, "啟動演練儀表板", extra_env=env, allow_hosts=allow_hosts, detached=True)
         t0 = time.time()
         while time.time() - t0 < wait:
             self.monitor.check_clean()
@@ -696,14 +755,16 @@ class Drill:
         self.guard.ready("開瀏覽器")
         clean = PF.sanitized_env(self.port, self.dash)
         saved = dict(os.environ)
-        os.environ.clear()                                                  # Playwright 的 node driver 只能繼承本行程環境：這是唯一不經 guard.launch 的子行程，
-        os.environ.update(clean)                                            # 所以先把本行程環境換成乾淨的（監看器把它當編排器的子孫一起看）；結束後還原
-        try:
+        pw_env = dict(clean)
+        if saved.get("PLAYWRIGHT_BROWSERS_PATH"):                           # 白名單會丟掉它；只給瀏覽器環境（本機路徑），找不到 chromium 就是這個
+            pw_env["PLAYWRIGHT_BROWSERS_PATH"] = saved["PLAYWRIGHT_BROWSERS_PATH"]
+        PF.env_problems(pw_env)
+        _swap_environ(pw_env)                                               # Playwright 的 node driver 只能繼承本行程環境：這是唯一不經 guard.launch 的子行程，
+        try:                                                                # 所以先把本行程環境換成乾淨的（監看器把它當編排器的子孫一起看）；結束後還原
             with sync_playwright() as pw:
-                self._drive_browser(pw, wanted, commits, clean)
+                self._drive_browser(pw, wanted, commits, pw_env)
         finally:
-            os.environ.clear()
-            os.environ.update(saved)
+            _swap_environ(saved)
 
     def _drive_browser(self, pw, wanted, commits, clean_env):
         browser = pw.chromium.launch(headless=True, env=clean_env, args=["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
@@ -945,9 +1006,10 @@ class Drill:
             self.build_install()
             self.ctx["static_scan"] = self.guard.scan()                  # 內含阻擋式程式碼位址檢查（名單外的正式機位址 ⇒ DrillAbort）
             self.ctx["code_literals"] = self.ctx["static_scan"].get("code_literals_allowed", [])
-            self.ctx["dashboard_rewrite"] = int((self.ctx.get("ps1_rewrite_lines") or {}).get("deploy_dashboard.py", 0)) or "absent"
+            self.ctx["dashboard_rewrite"] = int((self.ctx.get("ps1_rewrite_lines") or {}).get("deploy_dashboard.py", 0))
             self.ctx["export_ignored_absent"] = list(PF.EXPORT_IGNORED_ABSENT)
             self.log("防線 2（靜態掃描）通過：%d 個設定檔" % self.ctx["static_scan"]["files"])
+            self.check_dashboard_import()                                # 掃描之後、監看／啟動之前：儀表板在演練安裝裡真的能 import（沒起服務、不連網）
             if self.args.dry_build:
                 self.dry_build_extra()
                 return
