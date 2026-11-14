@@ -250,7 +250,7 @@ def test_feed_compose_stacks_in_one_column_on_phone(live_server, make_user, e2e_
     inject_login(page, live_server, u[0], u[1])
     _open(page, live_server, "feed")
     page.locator(".feed-compose__box").wait_for(state="visible", timeout=10000)
-    boxes = page.evaluate("""() => [...document.querySelectorAll('.feed-compose__field')]
+    boxes = page.evaluate("""() => [...document.querySelectorAll('[data-testid=cm-feed-fields] .feed-compose__field')]
         .map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)] })""")
     assert len(boxes) == 4
     assert len({b[0] for b in boxes}) == 1, "四個欄位左緣要對齊（單欄）：%r" % boxes
@@ -279,5 +279,85 @@ def test_feed_compose_stays_a_row_on_desktop(live_server, make_user, e2e_browser
     inject_login(page, live_server, u[0], u[1])
     _open(page, live_server, "feed")
     page.locator(".feed-compose__box").wait_for(state="visible", timeout=10000)
-    tops = page.evaluate("() => [...document.querySelectorAll('.feed-compose__field')].map(e => Math.round(e.getBoundingClientRect().top))")
+    tops = page.evaluate("() => [...document.querySelectorAll('[data-testid=cm-feed-fields] .feed-compose__field')].map(e => Math.round(e.getBoundingClientRect().top))")
     assert len(set(tops)) == 1, "電腦版四個欄位維持同一列：%r" % tops
+
+
+# ── #4 統一的「新增記錄」編輯器（動態分頁）：類型下拉＝留言／工作日誌、階段出勤、每日工作事項 ──────────────
+def _stage_visits(page, idx):
+    d = page.evaluate("""async (no) => { const t = JSON.parse(localStorage.getItem('motrix_session')).token;
+        const r = await fetch('/api/quotations/' + no + '/stages', {headers: {Authorization: 'Bearer ' + t}}); return await r.json() }""", NO)
+    rows = d if isinstance(d, list) else d.get("stages") or d.get("items") or []
+    return rows[idx].get("visits") or []
+
+
+@pytest.mark.e2e
+def test_compose_type_dropdown_adds_a_stage_visit_from_the_feed_tab(live_server, make_user, e2e_browser):
+    from tests._e2e_login import inject_login
+    u = make_user(username="uxh8_c4a", role="superadmin")
+    _seed()
+    page = e2e_browser.new_context().new_page()
+    inject_login(page, live_server, u[0], u[1])
+    _open(page, live_server, "feed")
+    sel = page.locator('[data-testid="cm-compose-type"]')
+    sel.wait_for(state="visible", timeout=10000)
+    assert page.eval_on_selector_all('[data-testid="cm-compose-type"] option', "els => els.map(e => e.value)") == ["note", "visit", "task"]
+    # 預設是留言／工作日誌：階段欄位不在畫面上
+    assert page.locator('[data-testid="cm-compose-stage"]').is_hidden()
+    sel.select_option("visit")
+    stage = page.locator('[data-testid="cm-compose-stage"]')
+    stage.wait_for(state="visible", timeout=5000)
+    assert page.locator('[data-testid="cm-feed-fields"]').is_hidden(), "選了階段出勤，留言用的欄位（執行時數等）要收起來"
+    assert stage.input_value() != "", "預設帶入第一個未完成的階段"
+    assert page.locator('[data-testid="cm-compose-people"]').input_value() == "1"
+    send = page.locator('[data-testid="cm-compose-send"]')
+    assert send.inner_text().strip() == "新增出勤記錄" and send.is_enabled()
+    page.locator('[data-testid="cm-compose-people"]').fill("")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"cm-compose-send\"]').disabled", timeout=5000)
+    assert "人次" in page.locator('[data-testid="cm-feed-send-hint"]').inner_text()
+    page.locator('[data-testid="cm-compose-people"]').fill("3")
+    page.locator(".feed-compose__box").fill("拉線到二樓")
+    send.click()
+    page.locator('[data-testid="ui-toast"]', has_text="新增出勤記錄").wait_for(state="visible", timeout=8000)
+    visits = _stage_visits(page, 0)
+    assert len(visits) == 1 and visits[0]["visitPeople"] == 3 and visits[0]["note"] == "拉線到二樓", visits
+    assert page.locator(".feed-compose__box").input_value() == "", "送出後清空內容"
+
+
+@pytest.mark.e2e
+def test_compose_task_type_only_links_to_daily_tasks_with_the_case(live_server, make_user, e2e_browser):
+    from tests._e2e_login import inject_login
+    u = make_user(username="uxh8_c4b", role="superadmin")
+    _seed()
+    page = e2e_browser.new_context().new_page()
+    inject_login(page, live_server, u[0], u[1])
+    _open(page, live_server, "feed")
+    page.locator('[data-testid="cm-compose-type"]').select_option("task")
+    link = page.locator('[data-testid="cm-compose-task-link"]')
+    link.wait_for(state="visible", timeout=5000)
+    assert link.get_attribute("href") == "daily-tasks.html?case_no=" + NO
+    page.locator('[data-testid="cm-compose-send"]').wait_for(state="hidden", timeout=5000)
+
+
+@pytest.mark.e2e
+def test_log_entry_links_only_jump_to_the_editor_with_the_type_preselected(live_server, make_user, e2e_browser):
+    from tests._e2e_login import inject_login
+    from tests.test_e2e_onepipe_p4b_2026_11_13 import _flag
+    u = make_user(username="uxh8_c4c", role="superadmin")
+    _seed()
+    _flag(True)
+    try:
+        page = e2e_browser.new_context().new_page()
+        inject_login(page, live_server, u[0], u[1])
+        _open(page, live_server, "biz")
+        page.locator('[data-testid="case-log-entry"]').wait_for(state="visible", timeout=15000)
+        page.locator('[data-testid="case-log-visit"]').click()
+        page.locator('[data-testid="cm-compose-stage"]').wait_for(state="visible", timeout=8000)
+        assert page.locator('[data-testid="cm-compose-type"]').input_value() == "visit"
+        page.locator(".cm-tab", has_text="案件資訊").first.click()
+        page.locator('[data-testid="case-log-feed"]').click()
+        page.locator('[data-testid="cm-compose-stage"]').wait_for(state="hidden", timeout=8000)
+        assert page.locator('[data-testid="cm-compose-type"]').input_value() == "note"
+        page.wait_for_function("() => document.activeElement && document.activeElement.classList.contains('feed-compose__box')", timeout=5000)
+    finally:
+        _flag(False)

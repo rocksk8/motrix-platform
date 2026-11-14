@@ -873,17 +873,17 @@ window.CM_PARTS.push(() => ({
       return MotrixDate.ymd(d)
     },
 
-    // 一條龍 P4b：「登載」統一入口的捷徑。feed＝切到「動態」分頁並把游標放進發文框（發文框本來就會依填的欄位寫留言或工作日誌）；
-    // visit＝切到「執行管理 › 執行進度」（各階段有「新增記錄」，已預填今天與人次）。權限與資料寫入走原本的畫面。
+    // 一條龍 P4b：「登載」統一入口的捷徑。T86 案件 UX #4：登載列只負責跳轉——一律切到「動態」分頁的「新增記錄」編輯器，
+    // 並選好記錄類型（feed＝留言／工作日誌；visit＝階段出勤）。權限與資料寫入走各類型原本的端點。
     openLogEntry(kind) {
       if (!this.selected) return
-      if (kind === 'feed') {
-        this.activeTab = 'feed'
-        this.loadCaseUpdates(this.selected.quote_no)
-        this.$nextTick(() => { const el = document.querySelector('.feed-compose__box'); if (el) el.focus() })
-      } else if (kind === 'visit') {
-        this.activeTab = 'exec'; this.execSubTab = 'progress'
-      }
+      this.activeTab = 'feed'
+      this.loadCaseUpdates(this.selected.quote_no)
+      this.setComposeType(kind === 'visit' ? 'visit' : 'note')
+      this.$nextTick(() => {
+        const el = document.querySelector(this.composeKind() === 'visit' ? '[data-testid="cm-compose-stage"]' : '.feed-compose__box')
+        if (el) el.focus()
+      })
     },
     // 每日工作事項：最高管理者一律可；現場人員要有「每日工作事項」模組（旗標 entry_unify 由入口本身的 x-if 管）
     canLogTask() {

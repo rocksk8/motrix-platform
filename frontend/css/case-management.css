@@ -596,10 +596,13 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
   /* 勾選／附檔：用 class 而不是 inline display，才不會被 Alpine x-show 顯示時移除 display 而退回行內排版 */
   .feed-compose__check { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); cursor:pointer; }
   .feed-compose__check--important { margin-right:auto; }
+  .feed-compose__type { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .feed-compose__jump { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); padding:4px 0 8px; }
   .feed-compose__ctl--hours { width:88px; }
   .feed-compose__ctl--custom { width:140px; }
   @media (max-width:767px) {
     .feed-compose { padding:12px 14px; }
+    .feed-compose__type .feed-compose__ctl { flex:1 1 0; }
     .feed-compose__fields { flex-direction:column; align-items:stretch; gap:8px; }
     .feed-compose__field { flex-wrap:wrap; }
     .feed-compose__lbl { flex:0 0 4.5em; }
