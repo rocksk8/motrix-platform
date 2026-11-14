@@ -4514,7 +4514,7 @@
               <template x-if="it.type!=='header'">
                 <td style="padding:4px 6px">
                   <button type="button" @click="openSerialPicker(ii)" data-testid="ship-serial-btn"
-                          :title="it.part_no ? (it.part_no + '：' + (it.serials || []).join('、')) : (it.materialLink ? '選擇這筆材料申請入庫的料號/序號（選填；序號筆數不能多於出貨數量）' : '選擇庫存料號/序號（選填）')"
+                          :title="it.part_no ? (it.part_no + '：' + (it.serials || []).join('、')) : (it.materialLink ? '選擇庫存料號/序號（選填；序號必須是這筆材料申請入庫的、筆數不能多於出貨數量，送審時檢查）' : '選擇庫存料號/序號（選填）')"
                           style="width:100%;padding:5px 8px;border:1px dashed var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;background:var(--surface);cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
                           :style="it.part_no ? 'border-style:solid;border-color:var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover)' : ''"
                           x-text="it.part_no ? (it.part_no + ' ×' + (it.serials||[]).length) : '選料號'"></button>

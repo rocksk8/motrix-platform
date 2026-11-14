@@ -8,7 +8,7 @@
 - 檢查（出貨單**送審**與**核准**各一次，後者防競態）：同一筆材料申請所有活的連結數量合計 ≤ `arrivedQty`，否則 `ship_exceeds_arrived`；
   連到不存在／未核准／未到貨／已取消的材料申請 ⇒ `ship_link_invalid`；M01 不在 ⇒ `ship_link_module_off`。
 - **連結與庫存序號可同列並存**（T86；原 33-S1 的 `ship_link_serial_exclusive` 已放寬）：同列帶 `materialLink` 與 `part_no`＋`serials` 時兩邊都要驗證一致——
-  序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）、列上料號必須是這筆材料申請入庫（stock 方式批次）的料號（`ship_link_serial_part`，送審／核准擋）；
+  序號筆數 ≤ 連結數量（`ship_link_serial_qty`，存檔／送審／核准都擋）、**每個序號**都必須是為這個案件、這筆材料申請入庫的（`stock_items.material_item_id`＋批次案件單號＋料號，stock 方式批次；別案、一般庫存、另一筆材料申請入庫的同料號序號不行；`ship_link_serial_part`，送審／核准擋）；
   只有連結、或只有序號的列，行為與放寬前逐位元相同。
 - E6（不擋）：`unlinked_warnings`＝該案件已到料且還有剩餘可出貨量、而這張單沒有連結的品項（送審前顯示警示）。
 全部函式唯讀、不 commit。
@@ -147,27 +147,25 @@ def _fmt(x):
     return ("%g" % x)
 
 
-def _received_parts(conn, quote_no, mid) -> set:
-    """這筆材料申請入庫（stock 方式）過的料號；直送／耗材的批次沒有序號，不算；舊庫沒有這幾欄 ⇒ 空集合。"""
+def _serial_bound(conn, quote_no, mid, part_no, serial_no) -> bool:
+    """這個序號是否是「為這個案件、這筆材料申請」入庫的（stock 方式批次；序號列的 `material_item_id`＋批次的案件單號＋料號都要對上）。
+    別案的、一般庫存（沒有綁材料申請）的、或另一筆材料申請入庫的同料號序號都回 False；舊庫沒有這幾欄 ⇒ False。"""
     try:
-        rows = conn.execute("SELECT DISTINCT part_no FROM stock_batches WHERE quote_no=? AND material_item_id=? AND delivery_mode='stock'", (quote_no, mid)).fetchall()
+        return conn.execute("SELECT 1 FROM stock_items si JOIN stock_batches sb ON sb.batch_no = si.batch_no"
+                            " WHERE si.part_no=? AND si.serial_no=? AND si.material_item_id=? AND sb.quote_no=? AND sb.delivery_mode='stock' LIMIT 1",
+                            (part_no, serial_no, mid, quote_no)).fetchone() is not None
     except Exception:                                                                        # noqa: BLE001
-        return set()
-    return {(r[0] or "").strip() for r in rows if (r[0] or "").strip()}
+        return False
 
 
 def _check_coexist_parts(conn, quote_no, links) -> None:
-    """T86：連結＋序號並存的列，列上料號必須是該材料申請入庫過的料號（序號的料號＝列上料號，核准時另驗序號在庫）。"""
-    cache = {}
+    """T86：連結＋序號並存的列，**逐個序號**都必須是為這筆材料申請入庫的（否則領料與庫存扣帳會對不上：占用 A 的到料量、扣的卻是別處的庫存）。
+    送審與核准都跑（核准時另驗序號在庫）。錯誤碼 `ship_link_serial_part`，訊息點名序號。"""
     for i, it, (mid, doc, _qty) in links:
-        if not coexist_serials(it):
-            continue
-        parts = cache.get(mid)
-        if parts is None:
-            parts = cache[mid] = _received_parts(conn, quote_no, mid)
         pn = (it.get("part_no") or "").strip()
-        if pn not in parts:
-            raise LinkError("ship_link_serial_part", "第 %d 列的料號 %s 不是材料申請 %s 入庫的料號，序號不能掛在這筆材料申請上" % (i + 1, pn, doc))
+        for sn in coexist_serials(it):
+            if not _serial_bound(conn, quote_no, mid, pn, sn):
+                raise LinkError("ship_link_serial_part", "第 %d 列的序號 %s（料號 %s）不是為材料申請 %s 入庫的（別案、一般庫存或另一筆材料申請入庫的序號不能掛在這筆材料申請上）" % (i + 1, sn, pn, doc))
 
 
 def check_note(conn, note_no, quote_no, items_json) -> None:

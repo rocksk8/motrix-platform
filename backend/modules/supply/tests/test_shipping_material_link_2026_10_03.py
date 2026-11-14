@@ -3,7 +3,7 @@
 - 提供者 `shipping.material_shipped`：reserved（待審核／簽核中）、shipped（已核准）；草稿、已退回不計；`exclude_note_no`
 - 提供者 `material.shippable`（case）：只回已核准且已到貨者；到貨量全數
 - 出貨單送審／核准檢查：超量 `ship_exceeds_arrived`、無效連結 `ship_link_invalid`、M01 不在 `ship_link_module_off`；核准時再檢（競態）
-- T86：連結與序號同列並存（原互斥放寬）：序號筆數 ≤ 連結數量 `ship_link_serial_qty`、料號須為該材料申請入庫的料號 `ship_link_serial_part`；只有連結／只有序號的列不變
+- T86：連結與序號同列並存（原互斥放寬）：序號筆數 ≤ 連結數量 `ship_link_serial_qty`、**逐個序號**須為這個案件這筆材料申請入庫的 `ship_link_serial_part`；只有連結／只有序號的列不變
 - 無 materialLink 的出貨單行為不變；E6 警示端點
 - AST 守門：supply 不 import case
 ⚙️ 突變：拿掉核准時重檢／草稿也計占用／拿掉超量比較 ⇒ 紅。"""
@@ -191,7 +191,7 @@ def _stock(part, serials, item=ITEM, mode="stock", quote=Q):
     c = db.get_db()
     try:
         c.execute("INSERT OR IGNORE INTO parts (part_no, name, active, cost, created_at, updated_at) VALUES (?,?,1,0,?,?)", (part, "料", "2026-01-01", "2026-01-01"))
-        batch = "B-%s-%s-%s" % (part, item, mode)
+        batch = "B-%s-%s-%s-%s" % (part, item, mode, quote)
         c.execute("INSERT INTO stock_batches (batch_no, part_no, created_by, created_at, updated_at, quote_no, po_doc_code, material_item_id, delivery_mode) VALUES (?,?,?,?,?,?,?,?,?)",
                   (batch, part, "t", "2026-01-01", "2026-01-01", quote, "", item, mode))
         for sn in serials:
@@ -235,7 +235,7 @@ def test_coexist_row_with_more_serials_than_link_qty_is_refused_at_save(world):
     assert r.status_code == 400 and r.json()["code"] == "ship_link_invalid"
 
 
-def test_coexist_part_must_be_a_part_received_for_that_material_request(world):
+def test_every_serial_must_be_received_for_that_material_request(world):
     client, h = world
     _stock("P1", ["S1"])
     _stock("PX", ["X1"], item="it2")                                                   # 另一筆材料申請入庫的料號
@@ -248,6 +248,25 @@ def test_coexist_part_must_be_a_part_received_for_that_material_request(world):
     _stock("PD", ["D1"], mode="direct")                                                # 直送批次沒有序號，不算「入庫過的料號」
     d = _note(client, h, [L(1, part_no="PD", serials=["D1"])])
     assert client.post("/api/shipping-notes/%s/submit" % d, headers=h).json()["code"] == "ship_link_serial_part"
+
+
+@pytest.mark.parametrize("other_item,other_quote", [("it2", Q), ("", ""), (ITEM, "MQ-OTHER")], ids=["other-material-request", "generic-stock", "other-case"])
+def test_same_part_serial_from_elsewhere_cannot_hang_on_the_link(world, other_item, other_quote):
+    client, h = world
+    _stock("P1", ["S1"])                                                               # 為這筆材料申請入庫的（正確）
+    _stock("P1", ["X1"], item=other_item, quote=other_quote)                           # 同料號、但是另一筆材料申請／一般庫存／別案的
+    bad = _note(client, h, [L(2, part_no="P1", serials=["S1", "X1"])])
+    r = client.post("/api/shipping-notes/%s/submit" % bad, headers=h)
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_part" and "X1" in r.json()["detail"]
+    assert _status(bad) == "草稿" and _stock_status("P1", "S1") == "in_stock" and _stock_status("P1", "X1") == "in_stock"
+    _set(bad, status="待審核")                                                         # 核准時同樣擋
+    r = client.post("/api/shipping-notes/%s/approve" % bad, headers=h, json={})
+    assert r.status_code == 400 and r.json()["code"] == "ship_link_serial_part"
+    assert _status(bad) == "待審核" and _stock_status("P1", "S1") == "in_stock"
+    ok = _note(client, h, [L(1, part_no="P1", serials=["S1"])])                         # 只掛正確的序號 ⇒ 通過並扣庫
+    assert client.post("/api/shipping-notes/%s/submit" % ok, headers=h).status_code == 200
+    assert client.post("/api/shipping-notes/%s/approve" % ok, headers=h, json={}).status_code == 200
+    assert _stock_status("P1", "S1") == "shipped" and _stock_status("P1", "X1") == "in_stock"
 
 
 def test_approve_rechecks_coexist_part(world):
