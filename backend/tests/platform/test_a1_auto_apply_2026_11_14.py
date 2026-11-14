@@ -575,6 +575,26 @@ def test_apply_blocked_when_the_prod_structure_changed_after_the_rehearsal(tmp_p
     assert events == ["apply_blocked"]
 
 
+def test_apply_blocked_when_the_rehearsal_has_no_structure_hash(tmp_path):
+    """h11 nit b：有預演卻沒有 before_hash ⇒ 不能確認預演之後沒變動 ⇒ 擋（不是默默略過）。正對照：同一份預演帶著雜湊就能套。"""
+    root, staged, rh = _ctx(tmp_path)
+    assert rh.get("before_hash")
+    fn = good_apply(root)
+    rec = run_apply("pkg1", staged, root, fn, dict(rh, before_hash=None))
+    assert not rec["started"] and fn.calls == [] and any("結構雜湊" in p and "重新預演" in p for p in rec["problems"])
+    fn2 = good_apply(root)
+    rec2 = run_apply("pkg1", staged, root, fn2, rh)
+    assert rec2["started"] and fn2.calls == [1]
+
+
+def test_expectations_auth_required_method_is_limited_to_safe_verbs():
+    out, notes = AA._sanitize_expectations({"auth_required": [
+        {"method": "GET", "path": "/api/a"}, {"path": "/api/b"}, {"method": "post", "path": "/api/c"},
+        {"method": "DELETE", "path": "/api/d"}, {"method": "FOO BAR", "path": "/api/e"}]})
+    assert [x["path"] for x in out["auth_required"]] == ["/api/a", "/api/b", "/api/c"]
+    assert any("auth_required" in n and "2 項" in n for n in notes)
+
+
 def test_apply_not_blocked_by_settings_written_at_runtime_between_rehearsal_and_apply(tmp_path):
     root, staged, rh = _ctx(tmp_path)
     c = sqlite3.connect(prod_db(root))
@@ -772,7 +792,9 @@ def test_build_notice_covers_all_four_kinds_blocked_failed_crashed_and_unverifie
     failed = AA.build_notice(_rec("failed", verify=None, result={"status": "unhealthy_rolled_back", "rolled_back": "restored"}))
     assert failed["stopped_at"] == "套用腳本（結果：restored）" and failed["ok"] is False
     crashed = AA.build_notice(_rec("crashed", verify=None))
-    assert "中途出錯" in crashed["stopped_at"] and dict(crashed["rows"])["結果"] == "程序中斷"
+    assert "狀態未知" in crashed["stopped_at"] and "人工確認" in crashed["stopped_at"] and dict(crashed["rows"])["結果"] == "程序中斷"
+    early = AA.build_notice(_rec("crashed", started=False, verify=None))      # h11 R2：沒記到 started 也不能斷言「開始前出錯」
+    assert "狀態未知" in early["stopped_at"] and "開始前" not in early["stopped_at"]
     unverified = AA.build_notice(_rec("verify_failed", verify=None))
     assert "沒有驗證" in unverified["stopped_at"]
 
@@ -823,6 +845,45 @@ def test_notify_failure_is_written_into_the_report_with_the_child_output_tail(tm
     AA.finish(ok, str(root))
     AA.notify_result(ok, str(root), run=lambda c, e, p: (0, 'A1_NOTIFY_RESULT {"audit_log": true, "in_app": {"recipients": 1}, "mail": {}}'))
     assert "沒有全部完成" not in Path(ok["report"]["md"]).read_text(encoding="utf-8")
+
+
+def _run_a1_notify(monkeypatch, tmp_path, audit=True, in_app=None, mail=None):
+    sys.path.insert(0, str(TOOLS))
+    import a1_notify
+    monkeypatch.chdir(tmp_path)                                 # main 會 chdir 到 backend；用 monkeypatch 讓測試結束時還原
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(a1_notify, "_erp_audit", lambda n: audit)
+    monkeypatch.setattr(a1_notify, "_in_app", lambda n: in_app if in_app is not None else {"recipients": 1, "written": 1})
+    monkeypatch.setattr(a1_notify, "_mail_and_line", lambda n: mail if mail is not None else {"queued": True, "outcome": "sent"})
+    printed = []
+    monkeypatch.setattr("builtins.print", lambda *a, **k: printed.append(" ".join(str(x) for x in a)))
+    rc = a1_notify.main(["a1_notify.py", str(tmp_path)], json.dumps({"name": "p"}))
+    got = json.loads([x for x in printed if x.startswith("A1_NOTIFY_RESULT ")][-1][len("A1_NOTIFY_RESULT "):])
+    return rc, got
+
+
+def test_check_audit_cli_reports_a_broken_chain_and_a_missing_anchor(tmp_path, capsys):
+    """h11 nit c：稽核鏈有操作入口（--check-audit），不是只有測試能呼叫。"""
+    root = make_prod(tmp_path)
+    head = AA.audit_event(str(root), {"event": "apply_start", "by": "boss"})
+    assert AA._main(["x", "--check-audit", str(root), head]) == 0
+    assert AA._main(["x", "--check-audit", str(root), "0" * 64]) == 1, "錨點不在鏈裡＝尾端被截斷或換過"
+    assert "沒有發現問題" not in capsys.readouterr().out.splitlines()[-1]
+    assert AA._main(["x"]) == 2
+
+
+def test_a1_notify_counts_as_ok_only_when_somebody_was_notified(monkeypatch, tmp_path):
+    """h11 R1：收件人 0 人、站內沒寫進任何一則、信件沒排入佇列，都不能回報 ok。正對照：都有人收到 ⇒ 結束碼 0。"""
+    rc, got = _run_a1_notify(monkeypatch, tmp_path)
+    assert rc == 0 and "error" not in got
+    rc, got = _run_a1_notify(monkeypatch, tmp_path, in_app={"recipients": 0, "written": 0})
+    assert rc == 2 and "沒有任何收件人" in got["error"]
+    rc, got = _run_a1_notify(monkeypatch, tmp_path, in_app={"recipients": 2, "written": 0})
+    assert rc == 2 and "站內通知沒有寫進任何一則" in got["error"]
+    rc, got = _run_a1_notify(monkeypatch, tmp_path, mail={"queued": False, "outcome": "None"})
+    assert rc == 2 and "信件未排入" in got["error"]
+    rc, got = _run_a1_notify(monkeypatch, tmp_path, audit=False)
+    assert rc == 2
 
 
 def test_audit_row_label_carries_the_operator_so_the_audit_page_shows_and_finds_it():
@@ -939,6 +1000,25 @@ def test_gate_full_flow_rehearse_then_apply_with_the_shown_digest(env, monkeypat
         if not env["c"].get("/api/delivery/status").json()["running"]:
             break
         time.sleep(0.05)
+
+
+def test_gate_external_erp_url_is_refused_before_any_request_so_the_password_never_leaves(env, monkeypatch):
+    """h11 R3：MOTRIX_DELIVERY_ERP_URL 指到別的主機 ⇒ 在送出密碼之前就拒絕；requests 一個請求都不能發出。"""
+    _gate_env(env, monkeypatch)
+    _fake_rehearse(monkeypatch)
+    res = _rehearse_and_wait(env)
+    sent = []
+    monkeypatch.setattr(dd.requests, "post", lambda *a, **k: sent.append(a) or (_ for _ in ()).throw(AssertionError("不該發請求")))
+    monkeypatch.setattr(dd.requests, "get", lambda *a, **k: sent.append(a) or (_ for _ in ()).throw(AssertionError("不該發請求")))
+    for bad in ("https://evil.example:666", "https://127.0.0.1@evil.example/", "http://10.0.0.5:666"):
+        monkeypatch.setenv("MOTRIX_DELIVERY_ERP_URL", bad)
+        r = _apply(env, rehearsalDigest=res["digest"])
+        assert r.status_code == 409 and "不是本機" in r.json()["detail"], bad
+        assert sent == [], bad
+        assert dd._delivery_state["rehearsals"].get(env["name"]), "被拒絕時預演不消耗（還沒開始套用）"
+    with pytest.raises(ValueError) as ei:                                   # 縱深防禦：直接呼叫 _verify_superadmin 也不送
+        dd._verify_superadmin("boss", "right")
+    assert "不是本機" in str(ei.value) and sent == []
 
 
 def test_gate_failed_rehearsal_blocks_apply(env, monkeypatch):

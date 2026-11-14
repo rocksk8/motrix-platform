@@ -36,7 +36,7 @@
 | 已部署 commit | `.deployed_commit.json` 與包的 commit 一致 |
 | 包專屬項目 | 包內選用檔 `backend\a1_expectations.json`（格式見下） |
 
-事後驗證只打本機：ERP 位址（`MOTRIX_DELIVERY_ERP_URL`，預設 `https://127.0.0.1:666`）的主機不是 `127.0.0.1`／`localhost`／`::1` 就在套用前擋下（驗證連線不驗憑證，不能指向別的主機）。
+事後驗證只打本機：ERP 位址（`MOTRIX_DELIVERY_ERP_URL`，預設 `https://127.0.0.1:666`）的主機不是 `127.0.0.1`／`localhost`／`::1` 就拒絕（驗證連線不驗憑證，不能指向別的主機）。**這個檢查在要求最高管理者密碼之前**：位址不是本機時，`/api/delivery/apply` 直接回 409，驗密碼的函式也自己再擋一次，密碼不會送出本機。
 
 ## `a1_expectations.json`（包專屬驗證項，選用）
 
@@ -60,7 +60,7 @@
 | `log_forbid` | server.log 最後一次啟動之後不得出現的字串 | 沒有出現 |
 | `watch_settings` | 套用不得改動值的設定鍵 | 前後值雜湊相同（只存雜湊，不存值） |
 
-格式檢查（縱深防禦，包雖有簽章）：`pages`、`auth_required.path` 必須以單一 `/` 開頭，不得含 scheme、`@`、反斜線、`//host`、空白；`files` 不得是絕對路徑或含 `..`。不合格的項目被略過並在報告注記。
+格式檢查（縱深防禦，包雖有簽章）：`pages`、`auth_required.path` 必須以單一 `/` 開頭，不得含 scheme、`@`、反斜線、`//host`、空白；`auth_required.method` 只准 `GET`／`POST`／`HEAD`／`OPTIONS`；`files` 不得是絕對路徑或含 `..`。不合格的項目被略過並在報告注記。
 
 **檔案不存在時的預設行為**：只做上表的通用驗證項（健康、完整性、資料庫變更、模組載入、server.log、已部署 commit），沒有頁面／未登入／檔案／日誌的專屬檢查，並在報告「注記」寫明「這個包沒有附 a1_expectations.json」。不當成失敗，也不假裝有驗過。檔案存在但讀不懂（不是 JSON、不是物件）＝同樣略過並注記。
 
@@ -70,7 +70,8 @@
 - 套用腳本自己的健康檢查／公司資料閘門失敗所觸發的內建自動回滾不受影響，結果照舊在 `rolled_back` 欄。
 - **沒有驗證不准記成功**：套用腳本判定成功，但 `rolled_back` 不是 `applied`（成功出口只有這個值）時，不做事後驗證，結果記為「已套用，事後驗證未通過或沒有完成」（`verify_failed`），寫回開發機是 `failed`，報告有「後續處置」，通知是需要處理。
 - 寫回交付資料夾的 `results\<包名>.result.json`：事後驗證沒過或沒做一律記 `failed`；細節在旁檔 `results\<包名>.a1.json`（白名單欄位：結果、未通過項目 id、鏈頭雜湊…，不含路徑、設定、報告全文）。
-- 套用程序本身丟出例外（例如包裡缺腳本）：補一筆 `apply_end`（`crashed`）與報告，仍發通知。
+- 套用程序本身丟出例外（例如包裡缺腳本）：補一筆 `apply_end`（`crashed`）與報告，仍發通知。例外發生時 `apply_staged` 可能已經複製工具、啟動腳本或停了服務，所以報告與通知一律寫「**狀態未知，請人工確認現況**」，不說有沒有開始套用。
+- 預演結果沒有記錄結構雜湊（`before_hash`）時，視為無法確認預演之後正式庫沒有變動，套用前擋下並要求重新預演（不是默默略過）。
 - 稽核（`a1_audit.jsonl`）寫不進去：**不套用**，報告列出原因。
 
 ## 通知
@@ -85,6 +86,7 @@
 | ERP 稽核 | `audit_log` 一列 `system_update.apply`（經 `helpers.audit._audit`；該函式只認 session token，沒有 token 時 `username` 欄為空，套用者在 `detail.by`） |
 
 這四件事由**安裝目錄裡的後端**執行（`a1_notify.py` 子行程），儀表板不載入 ERP 的 helpers；各自獨立、各自失敗，**不改變套用結果，也不擋套用**（通知在套用結束之後才跑）。
+**沒有人收到就不算通知成功**：收件人 0 人（最高管理者清單是空的）、站內通知沒有寫進任何一則、或信件沒有排入佇列，子行程都以結束碼 2 回報，照下面的方式寫進報告與問題清單。LINE 同一次呼叫內的 `line_key` 以鏈頭雜湊去重；沒有鏈頭時改用「包名＋時間」，所以同一個包名重試不會被當成重複而吃掉。
 子行程失敗**不會被吞掉**：錯誤與子行程輸出末段寫進同一份報告的「通知」一節，也出現在畫面的問題清單與稽核檔的 `apply_notified`；此時請人工通知最高管理者。
 
 **在 ERP 稽核頁查這筆紀錄**：動作是 `system_update.apply`。稽核頁列表顯示的是「操作內容」（`target_label`）與使用者欄；使用者欄因為 `_audit` 沒有 token 會顯示「（系統）」，**套用者寫在操作內容裡**（格式：`<包名>：<結果>（套用者 <帳號>）`），所以：
@@ -97,6 +99,7 @@
 ## 稽核
 
 - `backend\logs\a1_audit.jsonl`：每筆含前一筆雜湊。可偵測：單筆被改、中間被刪、開頭被刪或換（第一行 `prev` 必須為空）。
+- **操作入口**：`python backend\tools\auto_apply.py --check-audit <安裝目錄> [錨點雜湊 …]`（用專案的 Python；錨點取自 `results\<包名>.a1.json` 或 ERP `audit_log` 的 `detail.chain_head`）。有問題逐項印出並回傳結束碼 1。
 - **尾端截斷與整條重算**鏈本身偵測不到（沒有金鑰）：`apply_end` 那一筆的雜湊（`chain_head`）另外寫進 ERP `audit_log` 的 `detail` 與 `results\<包名>.a1.json`（交付資料夾＝另一處留底）；`auto_apply.audit_chain_problems(path, anchors=[…])` 用這些錨點核對，錨點不在鏈裡就是尾端被截斷或換過。
 - 寫入時接在最後一筆「讀得懂」的後面，最後一筆超過 4 KB 或寫到一半都不會造成永久斷鏈（殘行只報它自己）。
 - 報告與稽核不含密碼、token、設定值、資料列內容。受監看設定的值雜湊使用每個行程的隨機鹽。
@@ -108,4 +111,5 @@
 - 預估耗時來自歷次成功的 `apply_update_*.result.json`，含套用前備份與乾跑，並非只有服務停止的時間。
 - `REQUIRE_REHEARSAL` 是程式常數（`deploy_dashboard.py`），不做成設定值；關閉它等於回到沒有預演的舊流程，需要改程式並走審查。
 - 結構雜湊比對的是預演當下與套用當下的**結構**；資料列內容、設定值的變動不在比對範圍（執行中服務本來就會寫）。
-- ERP 稽核列的 `username` 欄為空（`_audit` 只認 session token）；要有帳號需要在 `helpers/audit.py` 加一個以帳號寫入的介面，屬 L1 介面變更，未在 M1 做。
+- ERP 稽核列的 `username` 欄為空（`_audit` 只認 session token）；要有帳號需要在 `helpers/audit.py` 加一個以帳號寫入的介面，屬 L1 介面變更，未在 M1 做。**後續項目（backlog，需另案核准）**：在 `helpers/audit.py` 新增以帳號寫入的函式，之後 `a1_notify._erp_audit` 改用它，`target_label` 裡的套用者可保留或拿掉。
+- **回滾之後的備援**：若套用失敗後又還原成舊版，安裝目錄裡的後端可能沒有 `system_update_result` 信件類型（Email 路徑會回報「沒有登記」；`event_audience` 會退回最高管理者，站內通知仍可寫），甚至連 `a1_notify.py` 都不在了。此時通知可能整個沒發出去，**報告檔（`backend\logs\a1_report_*.md`）與儀表板畫面就是備援**，請人工通知最高管理者。

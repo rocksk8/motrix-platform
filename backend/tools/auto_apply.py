@@ -465,7 +465,8 @@ def _sanitize_expectations(d):
     """預期檔欄位的格式檢查（包有簽章，這是縱深防禦）。不合格的項目丟掉並在注記說明；⇒ (cleaned, notes)。"""
     notes, out = [], {}
     pages = [x for x in (d.get("pages") or []) if _safe_url_path(x)]
-    auth = [x for x in (d.get("auth_required") or []) if isinstance(x, dict) and _safe_url_path(x.get("path"))]
+    auth = [x for x in (d.get("auth_required") or []) if isinstance(x, dict) and _safe_url_path(x.get("path"))
+            and str(x.get("method") or "GET").upper() in ("GET", "POST", "HEAD", "OPTIONS")]
     files = [x for x in (d.get("files") or []) if _safe_rel_file(x)]
     for key, kept, raw in (("pages", pages, d.get("pages")), ("auth_required", auth, d.get("auth_required")), ("files", files, d.get("files"))):
         if raw and len(kept) != len(raw):
@@ -921,7 +922,9 @@ def apply_with_verification(name, staged, install_root, apply_fn, rehearsal, who
         return blocked(["無法記錄套用前的資料庫狀態，沒有開始套用：%s" % exc])
     # 預演之後正式庫結構若變動過（模組更新、手動改動）：預演的預期差異已不適用，不等套用完才發現
     rh_hash = (rehearsal or {}).get("before_hash")
-    if rehearsal is not None and rh_hash and rh_hash != structure_hash(before):
+    if rehearsal is not None and not rh_hash:
+        return blocked(["預演結果沒有記錄當時的資料庫結構雜湊，無法確認預演之後正式庫沒有變動，請重新預演"])
+    if rehearsal is not None and rh_hash != structure_hash(before):
         return blocked(["預演之後正式庫結構已變動，預演結果不再適用，請重新預演"])
     # 稽核寫不進去就不套用：這是一次動正式機的操作，沒有紀錄不准做
     if not audit_event(install_root, {"event": "apply_start", "by": who, "rehearsal_digest": (rehearsal or {}).get("digest")}):
@@ -970,7 +973,8 @@ def stopped_at(rec):
     if out == "succeeded":
         return "全部完成（預檢、套用、事後驗證）"
     if out == "crashed":
-        return "套用程序中途出錯" if rec.get("started") else "套用程序在開始前出錯"
+        # 例外發生時 apply_staged 可能已經複製工具、啟動腳本或停了服務：不斷言有沒有開始
+        return "套用程序出錯，狀態未知，請人工確認現況"
     if not rec.get("started"):
         return "套用前檢查，沒有開始套用"
     if out == "verify_failed":
@@ -1085,3 +1089,21 @@ def notify_result(rec, install_root, run=None):
     except Exception:                                               # noqa: BLE001
         pass
     return result
+
+
+def _main(argv):
+    """命令列：`python auto_apply.py --check-audit <安裝目錄> [錨點雜湊 …]` ⇒ 驗稽核鏈（錨點＝<包名>.a1.json 或 ERP audit_log 裡的 chain_head）。
+    有問題印出來、結束碼 1；沒問題結束碼 0。"""
+    if len(argv) >= 3 and argv[1] == "--check-audit":
+        path = os.path.join(argv[2], "backend", "logs", "a1_audit.jsonl")
+        problems = audit_chain_problems(path, anchors=argv[3:])
+        for p in problems:
+            print(p)
+        print("稽核鏈：%s" % ("有問題（%d 項）" % len(problems) if problems else "沒有發現問題"))
+        return 1 if problems else 0
+    print("用法：python auto_apply.py --check-audit <安裝目錄> [錨點雜湊 …]")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv))

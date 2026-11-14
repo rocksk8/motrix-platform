@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 EVENT_KEY = "system_update_result"
 
@@ -54,7 +55,7 @@ def _mail_and_line(n):
     out = {}
     queued = _en.send_registered("system_update_result", title=n["title"], rows=n["rows"], to_group=True, reason=n["reason"],
                                  badge_text=n["badge_text"], badge_color=n["badge_color"], wait=True, out=out,
-                                 line_key="a1_update:%s" % (n.get("chain_head") or n["name"]))
+                                 line_key="a1_update:%s" % (n.get("chain_head") or "%s@%d" % (n["name"], time.time())))
     for t in list(threading.enumerate()):                       # LINE 在背景執行緒送：行程結束前要等它（daemon 執行緒會被直接砍掉）
         if t is not threading.current_thread() and t.name in ("line-event", "line-push"):
             t.join(timeout=60)
@@ -73,8 +74,15 @@ def main(argv, stdin_text):
         except Exception as exc:                                # noqa: BLE001 — 三件事各自失敗，不互相拖累
             res[key] = None
             errors.append("%s：%s" % (key, type(exc).__name__))
-    ok = res.get("audit_log") is True and bool((res.get("in_app") or {}).get("recipients") is not None) \
-        and isinstance(res.get("mail"), dict) and "error" not in res["mail"] and not errors
+    # 沒有人收到＝沒有通知：收件人 0 人、站內沒有寫進任何一則、信件沒排入佇列都算失敗（結束碼 2，notify_result 會寫進報告與問題清單）
+    in_app, mail = res.get("in_app") or {}, res.get("mail")
+    if res.get("in_app") is not None and not in_app.get("recipients"):
+        errors.append("沒有任何收件人（最高管理者清單是空的）")
+    elif res.get("in_app") is not None and not in_app.get("written"):
+        errors.append("站內通知沒有寫進任何一則")
+    if isinstance(mail, dict) and "error" not in mail and not mail.get("queued"):
+        errors.append("信件未排入")
+    ok = res.get("audit_log") is True and isinstance(mail, dict) and "error" not in mail and not errors
     if errors or not ok:
         res["error"] = "；".join(errors) or "有項目沒有完成"
     print("A1_NOTIFY_RESULT " + json.dumps(res, ensure_ascii=False))

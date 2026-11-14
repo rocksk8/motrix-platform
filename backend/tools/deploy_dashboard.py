@@ -1039,6 +1039,8 @@ def _erp_base_url() -> str:
 def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
     """本機 ERP 驗帳密（U-2）：登入成功、而且角色是 superadmin ⇒ 回使用者名稱；否則 ValueError（原因）。密碼不留。"""
     base = _erp_base_url()
+    if not _trusted_auto_apply().is_loopback_url(base):             # 縱深防禦：就算有人直接呼叫這個函式，密碼也不會出本機
+        raise ValueError("ERP 位址不是本機（%s）：不送出帳密" % base)
     try:
         r = requests.post(base + "/api/auth/login", json={"username": username, "password": password}, verify=False, timeout=15)
     except requests.RequestException as e:
@@ -1336,6 +1338,9 @@ def delivery_apply(body: DeliveryApplyBody):
             same = False
         if not same:
             return JSONResponse(status_code=409, content={"detail": "預演之後暫存的包被換過，預演結果不再適用：請重新預演"})
+    # 密碼只准送到本機：位址不是 localhost／127.0.0.1／[::1] 就在送出之前拒絕（驗證連線不驗憑證，送到別的主機等於洩漏密碼）
+    if not _aa.is_loopback_url(_erp_base_url()):
+        return JSONResponse(status_code=409, content={"detail": "ERP 位址（MOTRIX_DELIVERY_ERP_URL）不是本機：為了保護密碼，已拒絕套用"})
     try:
         who = _verify_superadmin(body.username, body.password, body.totp)
     except ValueError as e:
