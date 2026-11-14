@@ -2718,19 +2718,20 @@ def _compute_ar_aging(sales_id: Optional[int] = None, customer: Optional[str] = 
     return _ar_aging_core(sales_id, customer, department_id, with_owner=False)
 
 
-from helpers.tax_calc import MONEY_BAD as _BAD, money as _money, parse_money as _num_or_bad     # 髒資料防線共用 L1 的轉換（單一來源）
+from helpers.tax_calc import MONEY_BAD as _BAD, amount_unknown as _amount_unknown, money as _money, parse_money as _num_or_bad     # 髒資料防線共用 L1 的轉換（單一來源）
 
 
 _PAY_NUM_KEYS = ("amount", "pct", "actualAmount", "feeAmount")
 
 
 def _clean_pay_items(total, pretax, pay):
-    """款項明細的髒資料防線（T87 修）：金額／比例／實收／手續費若不是數字（例如 "5x00"），那一筆不能讓整張報表 500。
-    ⇒ `(total, pretax, items, bad)`：`items` 與原清單等長（壞掉的一筆換成金額 0 的替身，讓其餘款項的金額與順序不變），
+    """款項明細的髒資料防線（T87 修）：金額不是數字（例如 "5x00"）的款項不能讓整張報表 500。
+    ⇒ `(total, pretax, items, bad)`：`bad`＝金額算不出來的款項（見 `helpers.tax_calc.amount_unknown`）；金額算得出來、只有比例／實收／手續費壞掉的款項照算（壞欄位清成 0／None）。
+    `items` 與原清單等長（壞掉的一筆換成金額 0 的替身，讓其餘款項的金額與順序不變；例外：第 1 筆沒填金額＝餘數、而後面有金額算不出來的款項時，第 1 筆也算壞），
     `bad` 是壞筆的位置集合（呼叫端略過它們並計數）。`total`／`pretax` 壞掉 ⇒ 整張報價單的款項都算壞（`bad` 含全部位置）。
     乾淨的資料原樣回傳（同一個清單物件），不改變既有輸出。"""
     if not isinstance(pay, list):
-        return total, pretax, [], set()
+        return total, pretax, [], ({0} if pay else set())        # 款項明細不是清單（例如字串）⇒ 算 1 筆壞資料，不是靜默忽略
     t, pt = _num_or_bad(total), _num_or_bad(pretax)
     if t is _BAD or pt is _BAD:
         return 0, None, [{"amount": 0} for _ in pay], set(range(len(pay)))
@@ -2741,25 +2742,31 @@ def _clean_pay_items(total, pretax, pay):
             bad.add(i)
             changed = True
             continue
-        fixed, ok = {}, True
+        if _amount_unknown(pi):                                  # 金額算不出來（金額壞掉，或沒填金額又靠壞掉的比例反推）⇒ 壞筆
+            out.append({"amount": 0, "pct": 0, "received": pi.get("received")})
+            bad.add(i)
+            changed = True
+            continue
+        fixed = {}                                               # 金額算得出來：壞掉的比例／實收／手續費只清成 0／None，這筆照算
         for k in _PAY_NUM_KEYS:
             if k not in pi:
                 continue
             n = _num_or_bad(pi[k])
             if n is _BAD:
-                ok = False
-                break
+                n = None if k == "actualAmount" else 0
             if n is not pi[k]:
                 fixed[k] = n
-        if not ok:
-            out.append({"amount": 0, "pct": 0, "received": pi.get("received")})
-            bad.add(i)
-            changed = True
-        elif fixed:
+        if fixed:
             out.append({**pi, **fixed})
             changed = True
         else:
             out.append(pi)
+    # 第 1 筆沒填金額＝總額扣掉其他筆的餘數；後面任何一筆金額算不出來，餘數就不可信（壞的那筆會被併進第 1 筆、帳偏大）
+    # ⇒ 第 1 筆也算壞（算不出來），一樣略過並計數。
+    if len(pay) > 1 and 0 not in bad and _num_or_bad(pay[0].get("amount")) is None and any(_amount_unknown(pi) for pi in pay[1:]):
+        out[0] = {"amount": 0, "pct": 0, "received": pay[0].get("received")}
+        bad.add(0)
+        changed = True
     return (t if t is not None else 0), pt, (out if changed else pay), bad
 
 

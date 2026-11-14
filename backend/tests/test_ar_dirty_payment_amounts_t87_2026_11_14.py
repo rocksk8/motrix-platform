@@ -213,3 +213,62 @@ def test_every_report_endpoint_survives_dirty_payment_items(client, hdr):
         {"type": "尾款", "amount": "1,000", "received": False}])
     after = _sweep(client, h)
     assert after == before == {} or set(after) <= set(before), "髒資料讓這些端點 500：%r" % {k: v for k, v in after.items() if k not in before}
+
+
+# ── 第 1 筆沒填金額＝餘數：後面的壞筆不能被併進第 1 筆（h11 審查必修；應收只能偏小、不能偏大）────────────
+
+def _ar_items(client, h, qno):
+    j = client.get("/api/reports/ar-aging", headers=h).json()
+    return j, {(it["type"]): it["amount"] for b in j["bands"] for it in b["items"] if it["quoteNo"] == qno}
+
+
+def test_clean_control_remainder_first_item(client, hdr):
+    h, i = hdr
+    _case("RM-C", i, "dirty_sa", pretax=100000, total=100000,
+          pay=[{"type": "訂金", "received": False}, {"type": "尾款", "pct": 50, "received": False}])
+    j, got = _ar_items(client, h, "RM-C")
+    assert got == {"訂金": 50000, "尾款": 50000} and "dirtyCount" not in j
+
+
+def test_dirty_amount_after_remainder_item_does_not_inflate_first_item(client, hdr):
+    h, i = hdr
+    _case("RM-A", i, "dirty_sa", pretax=100000, total=100000,
+          pay=[{"type": "訂金", "received": False}, {"type": "尾款", "amount": "5x00", "received": False}])
+    j, got = _ar_items(client, h, "RM-A")
+    assert got == {}                                    # 訂金（餘數）算不出來，也略過；不是 100000
+    assert j["dirtyCount"] == 2 and j["total"]["amount"] == 0
+
+
+def test_dirty_pct_after_remainder_item_does_not_inflate_first_item(client, hdr):
+    h, i = hdr
+    _case("RM-P", i, "dirty_sa", pretax=100000, total=100000,
+          pay=[{"type": "訂金", "received": False}, {"type": "二期", "pct": 30, "received": False},
+               {"type": "尾款", "pct": "20%", "received": False}])
+    j, got = _ar_items(client, h, "RM-P")
+    assert got == {"二期": 30000}                       # 訂金不是 70000；二期照算
+    assert j["dirtyCount"] == 2
+
+
+def test_dirty_fee_or_pct_with_valid_amount_does_not_poison_first_item(client, hdr):
+    h, i = hdr
+    _case("RM-F", i, "dirty_sa", pretax=100000, total=100000,
+          pay=[{"type": "訂金", "received": False}, {"type": "尾款", "amount": 40000, "pct": "x", "feeAmount": "y", "received": False}])
+    j, got = _ar_items(client, h, "RM-F")
+    # 尾款金額有效，不受壞比例／手續費影響：照算，也不算壞資料；第 1 筆餘數＝100000−40000
+    assert got == {"訂金": 60000, "尾款": 40000} and "dirtyCount" not in j
+
+
+def test_pay_items_not_a_list_counts_as_one_bad_item(client, hdr):
+    h, i = hdr
+    _case("RM-L", i, "dirty_sa", pay={"oops": 1})
+    j = client.get("/api/reports/ar-aging", headers=h)
+    assert j.status_code == 200 and j.json().get("dirtyCount") == 1
+
+
+def test_helper_forces_first_item_to_zero_when_remainder_is_undeterminable():
+    from helpers import payment_item_amounts
+    assert payment_item_amounts(100000, [{}, {"amount": "5x00"}]) == [0, 0]
+    assert payment_item_amounts(100000, [{}, {"pct": 30}, {"pct": "20%"}]) == [0, 30000, 0]
+    assert payment_item_amounts(100000, [{}, {"pct": 50}]) == [50000, 50000]                  # 乾淨：不變
+    assert payment_item_amounts(100000, [{"amount": 10}, {"amount": "5x00"}]) == [10, 0]      # 第 1 筆有金額：不動
+    assert payment_item_amounts(100000, [{}, {"amount": 40000, "pct": "x"}]) == [60000, 40000]  # 壞比例但金額有效：不動

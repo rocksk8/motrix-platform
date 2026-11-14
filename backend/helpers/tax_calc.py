@@ -23,7 +23,7 @@ from helpers.legal_params import round_half_up
 
 __all__ = ["TAX_TYPES", "TAX_TYPE_LABELS", "LEGAL_TAX_RATE", "LEGACY_TAX_NOTE",
            "quote_tax_type", "tax_split", "invoice_amounts", "payment_item_amounts",
-           "MONEY_BAD", "parse_money", "money"]
+           "MONEY_BAD", "parse_money", "money", "amount_unknown"]
 
 _log = logging.getLogger(__name__)
 
@@ -50,6 +50,17 @@ def parse_money(v):
             return MONEY_BAD
         return int(f) if f.is_integer() else f
     return MONEY_BAD
+
+
+def amount_unknown(pi) -> bool:
+    """這筆款項的應收金額算不出來？＝不是物件；或金額填了但不是數字；或沒填金額、又用比例反推而比例壞掉。
+    （金額有效時，比例／手續費壞掉不影響金額；`payment_item_amounts` 與報表的略過規則共用這個判斷。）"""
+    if not isinstance(pi, dict):
+        return True
+    a = parse_money(pi.get("amount")) if "amount" in pi else None
+    if a is MONEY_BAD:
+        return True
+    return a is None and "pct" in pi and parse_money(pi.get("pct")) is MONEY_BAD
 
 
 def money(v, default=0):
@@ -258,6 +269,11 @@ def _sanitize_for_amounts(total, pretax, pay_items):
             changed = True
         else:
             fixed_items.append(pi)
+    # 第 1 筆沒填金額＝「總額扣掉其他筆」的餘數；後面有任何一筆金額算不出來，餘數就不可信（壞的那筆會被併進第 1 筆，帳會偏大）
+    # ⇒ 第 1 筆也算不出來，當 0（與報表的「略過並計數」同一條規則：算不出來 ⇒ 0＋warning）。
+    if len(fixed_items) > 1 and isinstance(fixed_items[0], dict) and parse_money(fixed_items[0].get("amount")) is None             and any(amount_unknown(pi) for pi in pay_items[1:]):
+        fixed_items[0] = {**fixed_items[0], "amount": 0}
+        bad, changed = bad + 1, True
     if bad:
         _log.warning("款項金額／比例格式異常 %d 處，已當 0 處理（報表仍可產出，請修正原始資料）", bad)
     if t is None:
