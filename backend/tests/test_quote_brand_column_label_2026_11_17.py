@@ -239,7 +239,7 @@ class TestApi:
                                         approval={"status": "pending", "reasons": ["假的"]}), "待審核")
         rs = _row(no)[0]["approval"]["reasons"]
         assert NOTE_I % "品項" in rs and NOTE_B % "料號" in rs and "假的" not in rs
-        assert rs.index(NOTE_I % "品項") < rs.index(NOTE_B % "料號")
+        assert [r for r in rs if r in (NOTE_I % "品項", NOTE_B % "料號")] == [NOTE_I % "品項", NOTE_B % "料號"], "先品名欄、後廠牌欄"
         assert "標準報價單送出" not in rs, "有特殊條件就不再寫「標準報價單送出」"
 
     def test_submit_with_only_one_column_changed_notes_only_that_one(self, client, hdr):
