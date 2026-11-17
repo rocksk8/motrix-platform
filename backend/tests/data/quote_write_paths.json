@@ -231,6 +231,21 @@
    "class": "not-body",
    "note": "客戶回簽單附件上傳（回簽的產物，P1 明確放行）；T83 起經 L1 helpers.uploads.append_json_list 只寫 signed_files_json（＋updated_at），不碰本文欄位"
   },
+  "modules/case/api/quotation_specs.py::upload_spec_files::helper:spec_files_json[]": {
+   "count": 1,
+   "class": "not-body",
+   "note": "規格 PDF 上傳（備註事項 B）：經 L1 helpers.uploads.append_json_list 只寫 spec_files_json（不動 updated_at、不碰本文欄位）；狀態鎖＝PUT 報價單的編輯鎖，已送出／已成案等鎖定狀態一律 403"
+  },
+  "modules/case/api/quotation_specs.py::delete_spec_file::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": "規格 PDF 刪除：只寫 spec_files_json（與 mergeFiles 的清理同一個 files_txn）；狀態鎖同上"
+  },
+  "modules/case/api/quotation_specs.py::delete_spec_file::save": {
+   "count": 1,
+   "class": "guarded",
+   "note": "規格 PDF 刪除時把該 id 從 data_json.mergeFiles 拿掉（走漏斗、維持 updated_at）；只在 EDIT_LOCKED_STATUSES 以外的可編輯狀態才會執行，已回簽擇一單必為已送出／已成案 ⇒ 403 擋在前面"
+  },
   "modules/case/api/quotations.py::delete_quotation_signed_file::helper:signed_files_json[updated_at]": {
    "count": 1,
    "class": "not-body",

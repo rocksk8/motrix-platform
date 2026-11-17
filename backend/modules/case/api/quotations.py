@@ -94,6 +94,7 @@ from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送�
 from helpers.uploads import _effective_subfolder
 from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
+from modules.case.api.quotation_specs import merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base, build_quote_preview_html,
@@ -1757,6 +1758,7 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
                 result["approveReview"] = _ar
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
+    result["specFiles"] = _public_spec_files(result.pop("spec_files_json", None))     # 規格文件清單（不含路徑；備註事項 B）
     result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
     # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
     # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
@@ -6748,7 +6750,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         _require_money_or_approver(conn, q, user)   # 內部版含成本（CM15）
     # 🔑 QL10：把 `location_id` 一起取出來 —— 列印的稽核要記得下這一次用了哪個據點。
     row  = conn.execute(
-        "SELECT quote_no, location_id FROM quotations WHERE quote_no=?",
+        "SELECT quote_no, location_id, data_json, spec_files_json FROM quotations WHERE quote_no=?",
         (quote_no,)).fetchone()
     conn.close()
     if not row:
@@ -6763,6 +6765,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         tid = trace_id()
         logger.exception("quotation pdf failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
+    pdf_bytes, _merge_skipped = _merge_specs(row, pdf_bytes)      # 備註事項 B：併入使用者選的規格 PDF（沒選＝原樣；本體永遠保留；略過原因只放標頭，不印進 PDF）
     mode_label = "內部版" if internal else "對外版"
     # 🔴🔴 QL10：**讀即時值不做快照**（A 裁定）—— 匯款帳號要回答的是
     #    「**現在**該匯到哪」，舊單據印出舊帳號的話，對方會照著匯到一個
@@ -6786,10 +6789,14 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             # ⚠️ 只記抬頭與帳號**末四碼** —— 完整帳號不進稽核紀錄。
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
-            "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
+            "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None,
+            **({"mergeSkipped": [{"name": str(s.get("name") or "")[:60], "reason": s.get("reason")} for s in _merge_skipped]} if _merge_skipped else {})})
     dn = download_name.build("estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"variant": "internal"} if internal else None)
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
+    _hdrs = dn.headers()
+    if _merge_skipped:
+        _hdrs["X-Pdf-Merge-Skipped"] = _spec_skipped_header(_merge_skipped)      # URL 編碼的 JSON [{id,name,reason}]；沒略過就不設
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=_hdrs)
 
 
 # ── 單據版本與編輯紀錄查詢（2026-09-14）──────────────────────────────────────
