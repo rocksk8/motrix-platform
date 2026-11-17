@@ -8278,6 +8278,12 @@
   ],
   "s": 200
  },
+ "/api/settings/quote-notes-templates": {
+  "k": [
+   "templates"
+  ],
+  "s": 200
+ },
  "/api/settings/quote-terms-defaults": {
   "k": [
    "acceptanceTerms",
