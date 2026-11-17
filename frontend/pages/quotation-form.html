@@ -2174,6 +2174,64 @@
         </div>
       </div>
 
+      <!-- 七、備註事項（2026-11-17）：有填才印在簽章之後的新頁；範本由最高管理者維護，套用＝複製文字（不連動）。
+           鎖定時由 _syncControlLock() 統一把文字區改唯讀、按鈕停用（這裡不需要自己處理）。 -->
+      <div class="form-section" data-testid="qf-notes-section">
+        <div class="section-title"><div class="section-num">七</div>備註事項</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--text-dim)">有填才會印在簽章之後的新頁（沒填就不印、不多一頁）。純文字，換行、空行、「- 」條列照原樣輸出。</span>
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-toggle"
+                    x-show="notesTpls.length" @click="notesTplOpen = !notesTplOpen; notesTplPending = null"
+                    x-text="notesTplOpen ? '收起範本' : '套用範本（' + notesTpls.length + '）'"></button>
+            <button type="button" class="btn btn-ghost btn-sm keep-open" data-testid="qf-notes-tpl-manage"
+                    x-show="session.role === 'superadmin'" @click="openNotesTplManager()">管理範本</button>
+          </span>
+        </div>
+
+        <!-- 範本挑選：超過 10 個才出現分類篩選與搜尋；點範本＝套用（框內已有內容時先問取代或接在後面） -->
+        <div x-show="notesTplOpen" data-testid="qf-notes-tpl-panel"
+             style="border:1px solid var(--border-light);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#FAFAF8">
+          <div x-show="notesTpls.length > 10" data-testid="qf-notes-tpl-filter" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="notesTplCat = ''"
+                    :style="notesTplCat === '' ? 'background:#0A0A0A;color:#F5F4F0' : ''"
+                    x-text="'全部 ' + notesTpls.length"></button>
+            <template x-for="c in notesTplCategories" :key="c.name">
+              <button type="button" class="btn btn-ghost btn-sm" @click="notesTplCat = c.name"
+                      :style="notesTplCat === c.name ? 'background:#0A0A0A;color:#F5F4F0' : ''"
+                      x-text="c.name + ' ' + c.n"></button>
+            </template>
+            <input type="text" class="form-input" style="max-width:200px;margin-left:auto" x-model="notesTplQ"
+                   placeholder="搜尋範本名稱" data-testid="qf-notes-tpl-search">
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <template x-for="t in notesTplFiltered" :key="t.key">
+              <button type="button" data-testid="qf-notes-tpl-item" @click="pickNotesTpl(t)" :title="t.category || ''"
+                      style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;cursor:pointer;background:#fff;color:#4A4744;border:1px solid var(--border-light)">
+                <span x-text="t.name"></span>
+                <span x-show="t.category" style="font-size:10px;opacity:.6" x-text="' · ' + t.category"></span>
+              </button>
+            </template>
+            <span x-show="!notesTplFiltered.length" style="font-size:11px;color:var(--text-dim);padding:6px 0">沒有符合的範本。</span>
+          </div>
+          <div x-show="notesTplPending" data-testid="qf-notes-tpl-ask"
+               style="margin-top:10px;padding:8px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span>備註框內已有內容。套用「<b x-text="notesTplPending && notesTplPending.name"></b>」要：</span>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-replace" @click="applyNotesTpl('replace')">取代目前內容</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-append" @click="applyNotesTpl('append')">接在後面</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="notesTplPending = null">取消</button>
+          </div>
+        </div>
+
+        <textarea class="form-textarea" rows="12" maxlength="20000" data-testid="qf-extra-notes"
+                  x-model="q.extraNotes" @input="setDirty()" style="min-height:250px;white-space:pre-wrap"
+                  placeholder="例如：&#10;備註事項：&#10;一、車體規格&#10;   - 車體尺寸：…&#10;二、其它硬體設備項目&#10;   - …"></textarea>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px;font-size:11px;color:var(--text-dim)">
+          <span>套用範本後可再修改，不會與範本連動；之後改範本也不會動到已開出的單。</span>
+          <span data-testid="qf-extra-notes-count" x-text="(q.extraNotes || '').length + ' / 20000 字'"></span>
+        </div>
+      </div>
+
     </div><!-- /form-left -->
 
     <!-- ══ 右側成本分機面板 ══ -->
@@ -2568,6 +2626,48 @@
     </div>
   </div>
 
+  <!-- ══ 備註事項範本管理 Modal（superadmin，2026-11-17）══ -->
+  <div class="modal-overlay" x-show="notesMgrOpen" x-transition data-testid="qf-notes-mgr"
+       @click.self="notesMgrOpen=false" style="display:none">
+    <div class="modal-box" style="max-width:820px">
+      <div class="modal-head">
+        <span class="modal-head__title">管理備註事項範本</span>
+        <button class="modal-close" @click="notesMgrOpen=false">×</button>
+      </div>
+      <div style="padding:16px 18px;max-height:calc(70vh / var(--fz,1));overflow:auto">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
+          範本是常用的備註事項文字（例如 AGV、監控系統）。報價單與估價單共用同一份，最多 100 個、每個 20,000 字。<br>
+          ⚠️ 改這裡<b>不會動到任何已經開立的單</b>——單據存的是套用當下複製的文字，不是指向這裡的連結。
+        </div>
+        <div x-show="notesTplDraft.length > 10" style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" class="form-input" x-model="notesMgrQ" placeholder="搜尋範本名稱或分類" data-testid="qf-notes-mgr-search">
+        </div>
+        <template x-for="t in notesTplDraftShown" :key="t.key">
+          <div style="border:1px solid var(--border-light);border-radius:6px;padding:12px;margin-bottom:10px" data-testid="qf-notes-mgr-item">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+              <input class="form-input" style="max-width:220px" type="text" maxlength="30" x-model="t.name" placeholder="範本名稱，例如：AGV 報價範本">
+              <input class="form-input" style="max-width:160px" type="text" maxlength="20" x-model="t.category" placeholder="分類（選填）" list="qf-notes-cats">
+              <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;color:#B91C1C" @click="removeNotesTpl(t.key)">刪除</button>
+            </div>
+            <textarea class="form-textarea" rows="6" maxlength="20000" x-model="t.text" style="font-size:12px;white-space:pre-wrap"></textarea>
+            <div style="text-align:right;font-size:10px;color:var(--text-dim)" x-text="(t.text || '').length + ' / 20000 字'"></div>
+          </div>
+        </template>
+        <datalist id="qf-notes-cats">
+          <template x-for="c in notesDraftCategories" :key="c"><option :value="c"></option></template>
+        </datalist>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-mgr-add" @click="addNotesTpl(false)">新增一個範本</button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="addNotesTpl(true)">以目前備註內容新增</button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" data-testid="qf-notes-mgr-save"
+                  @click="saveNotesTpls()" :disabled="notesTplSaving">
+            <span x-text="notesTplSaving ? '儲存中…' : '儲存'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ PDF 預覽 Modal ══ -->
   <div class="modal-overlay" x-show="previewMode" x-transition @click.self="previewMode=null" style="display:none">
     <div class="modal-box">
@@ -2719,7 +2819,7 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.50'
+  const FORM_VERSION = 'V3.51'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2894,6 +2994,7 @@
         acceptanceTerms: DEFAULT_TERMS.acceptanceTerms,
         warrantyTerms: DEFAULT_TERMS.warrantyTerms,
         afterSales: DEFAULT_TERMS.afterSales,
+        extraNotes: '',                      // 備註事項（2026-11-17）：空字串 ⇒ 伺服器不存這個鍵、PDF 不多一頁
 
         indirectLogistics: 0, indirectInstallation: 0,
         indirectTravel: 0,   indirectWarranty: 0, indirectOther: 0,
@@ -2927,6 +3028,11 @@
         { key: 'warrantyTerms',   label: '保固條件' },
         { key: 'afterSales',      label: AFTERSALES_LABEL },
       ],
+      // ── 備註事項範本（2026-11-17）：單據存的是複製過去的文字，範本只是清單 ──
+      notesTpls: [],              // [{key,name,category,text}]（設定 quote_extra_notes_templates；報價單與估價單共用）
+      _notesTplLoadFailed: false,
+      notesTplOpen: false, notesTplQ: '', notesTplCat: '', notesTplPending: null,
+      notesMgrOpen: false, notesTplDraft: [], notesMgrQ: '', notesTplSaving: false,
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
@@ -3813,6 +3919,95 @@
         }
       },
 
+      // ── 備註事項範本（2026-11-17）──────────────────────────────────────
+      async loadNotesTemplates() {
+        try {
+          const r = await fetch(`${this.API}/settings/quote-notes-templates`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          const d = await r.json()
+          this.notesTpls = Array.isArray(d.templates) ? d.templates : []
+          this._notesTplLoadFailed = false
+        } catch {
+          this._notesTplLoadFailed = true      // 讀取失敗：不讓管理視窗拿空清單去覆蓋設定
+        }
+      },
+      get notesTplCategories() {
+        const m = new Map()
+        for (const t of this.notesTpls) { const c = (t.category || '').trim() || '未分類'; m.set(c, (m.get(c) || 0) + 1) }
+        return [...m.entries()].map(([name, n]) => ({ name, n }))
+      },
+      get notesTplFiltered() {
+        const q = (this.notesTplQ || '').trim().toLowerCase()
+        const cat = this.notesTplCat
+        return this.notesTpls.filter(t => {
+          if (cat && ((t.category || '').trim() || '未分類') !== cat) return false
+          return !q || (t.name || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q)
+        })
+      },
+      // 點範本：框內已有內容 ⇒ 先問取代或接在後面；空白 ⇒ 直接套用
+      pickNotesTpl(t) {
+        if ((this.q.extraNotes || '').trim()) { this.notesTplPending = t; return }
+        this.notesTplPending = t
+        this.applyNotesTpl('replace')
+      },
+      applyNotesTpl(mode) {
+        const t = this.notesTplPending
+        if (!t) return
+        const cur = this.q.extraNotes || ''
+        const next = mode === 'append' && cur.trim() ? cur.replace(/\s+$/, '') + '\n\n' + (t.text || '') : (t.text || '')
+        this.q.extraNotes = next.slice(0, 20000)
+        this.notesTplPending = null
+        this.setDirty()
+        this.toast(`已套用「${t.name}」`)
+      },
+      openNotesTplManager() {
+        if (this._notesTplLoadFailed) { this.toast('備註範本載入失敗，請重新整理頁面後再管理（避免用空清單覆蓋設定）'); return }
+        this.notesTplDraft = JSON.parse(JSON.stringify(this.notesTpls))
+        this.notesMgrQ = ''
+        this.notesMgrOpen = true
+      },
+      get notesTplDraftShown() {
+        const q = (this.notesMgrQ || '').trim().toLowerCase()
+        return this.notesTplDraft.filter(t => !q || (t.name || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q))
+      },
+      get notesDraftCategories() {
+        return [...new Set(this.notesTplDraft.map(t => (t.category || '').trim()).filter(Boolean))]
+      },
+      addNotesTpl(fromForm) {
+        this.notesMgrQ = ''
+        this.notesTplDraft.push({ key: 'new_' + Math.random().toString(36).slice(2, 10), name: '', category: '', text: fromForm ? (this.q.extraNotes || '') : '' })
+      },
+      removeNotesTpl(key) {
+        const t = this.notesTplDraft.find(x => x.key === key)
+        if (!t || !confirm(`確定刪除範本「${t.name || '（未命名）'}」？\n已經開立的單不受影響。`)) return
+        this.notesTplDraft = this.notesTplDraft.filter(x => x.key !== key)
+      },
+      async saveNotesTpls() {
+        const bad = this.notesTplDraft.find(t => !(t.name || '').trim() || !(t.text || '').trim())
+        if (bad) { alert('每個範本都要有名稱與內容'); return }
+        this.notesTplSaving = true
+        try {
+          const res = await fetch(`${this.API}/settings/quote-notes-templates`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ templates: this.notesTplDraft.map(t => ({ ...t, key: String(t.key || '').startsWith('new_') ? '' : t.key })) }),
+          })
+          if (!res.ok) {
+            let msg = '儲存失敗'
+            try { const e = await res.json(); msg = e.detail || msg } catch {}
+            alert(msg); return
+          }
+          const d = await res.json()
+          this.notesTpls = d.templates || []
+          this.notesMgrOpen = false
+          this.toast('✓ 備註範本已更新')
+        } catch {
+          alert('儲存失敗，請確認後端伺服器是否在線')
+        } finally {
+          this.notesTplSaving = false
+        }
+      },
+
       // ── 補登歷史案件（T70-1）：判斷全在後端（日期範圍、單號、原因、權限、開關）；這裡只負責呈現與送出 ──
       async _loadBackfillConfig() {
         try {
@@ -3915,7 +4110,7 @@
           contactPhone: ['qcustomer', '電話 / 分機'], contactEmail: ['qcustomer', 'E-mail'], deliveryAddress: ['qcustomer', '送貨地址 / 發票地址'],
           deliveryLocation: ['qproject', '交貨地點'], validDays: ['qbasic', '有效天數'], salesPerson: ['qbasic', '報價人'], locationId: ['qbasic', '開立據點'],
           paymentTerms: ['qterms', '付款條件'], deliveryTerms: ['qterms', '交貨條件'], acceptanceTerms: ['qterms', '驗收標準'],
-          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL] }
+          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL], extraNotes: ['qterms', '備註事項'] }
         const mineNow = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
         const base = this._qBase || {}
         const changed = Object.keys(mineNow).filter(k => !SKIP.includes(k) && JSON.stringify(mineNow[k]) !== JSON.stringify(base[k]))
@@ -5439,6 +5634,7 @@
         // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
         // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
         await this.loadTermsPresets()
+        this.loadNotesTemplates()    // 備註事項範本（2026-11-17；不擋載入）
         this.loadTaxBasisOptions()   // R2：零稅率／免稅依據選項（不擋載入）
 
         // ── 從 URL 讀取報價單號 ──
