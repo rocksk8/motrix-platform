@@ -19,9 +19,14 @@ from modules.case.quotations import save_quotation_json
 router = APIRouter()
 
 
-def _fail(code: str) -> dict:
-    """失敗原因碼放回應標頭 X-Fail-Reason（固定詞彙，見 helpers.audit._FAIL_REASON_LABELS）；main.py 的失敗稽核據此記 reason_code。回應本文與狀態碼不變。"""
-    return {"X-Fail-Reason": code}
+def _fail(code: str, detail: str = "") -> dict:
+    """失敗原因碼放回應標頭 X-Fail-Reason（固定詞彙，見 helpers.audit._FAIL_REASON_LABELS）；main.py 的失敗稽核據此記 reason_code。回應本文與狀態碼不變。
+    detail＝簡短分類文字（只放欄位名稱，**不放金額**），百分比編碼放 X-Fail-Detail（標頭只能 ASCII），稽核列 detail.msg 記它。"""
+    h = {"X-Fail-Reason": code}
+    if detail:
+        from urllib.parse import quote
+        h["X-Fail-Detail"] = quote(detail[:120], safe="")
+    return h
 
 
 # ── Settlement ────────────────────────────────────────────────────────────────
@@ -125,7 +130,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:
                 conn.close()
-                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在您編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs), headers=_fail("finalize_mismatch"))
+                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在您編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs), headers=_fail("finalize_mismatch", "、".join(x.split("：", 1)[0] for x in diffs)))      # 稽核只記哪些欄位不一致，金額留在回應本文
         if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）

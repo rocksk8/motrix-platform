@@ -378,7 +378,7 @@ def _audit(
 
 
 def _audit_failure(user_id, username: str, display_name: str, method: str, route: str, status: int,
-                   reason: str = "", case_no: str = "", ref_no: str = "", now: float = None) -> str:
+                   reason: str = "", case_no: str = "", ref_no: str = "", now: float = None, msg: str = "") -> str:
     """記一筆「被擋下／失敗的寫入」（`result='fail'`）。回傳 `new`／`repeat`／`capped`／`skip`／`error`。
 
     **不記請求內容**：只有方法、路由樣板、單號、狀態碼、原因碼（固定詞彙）。
@@ -390,7 +390,8 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
         if method not in ("POST", "PUT", "PATCH", "DELETE") or int(status) not in _FAIL_STATUSES:
             return "skip"
         reason = reason if reason in _FAIL_REASON_LABELS else _FAIL_STATUS_REASON.get(int(status), "server_error")
-        mono = time.monotonic() if now is None else now
+        msg = (msg or "")[:120]          # 簡短訊息（端點只放欄位名稱之類的分類文字，不放金額／個資），上限 120 字
+        mono =time.monotonic() if now is None else now
         key = (user_id, method, route, int(status))
         seg = (route or "").split("/")
         first = seg[2] if len(seg) > 2 else ""
@@ -427,6 +428,9 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
                         det = {}
                     det["repeat"] = int(det.get("repeat", 0)) + 1
                     det["last_at"] = datetime.now().isoformat(timespec="seconds")
+                    det["last_reason"] = reason          # 節流視窗內併入的那幾次：第一筆的 reason_code 只代表第一次，後續各次的原因記在這裡
+                    if msg:
+                        det["last_msg"] = msg
                     conn.execute("UPDATE audit_log SET detail=? WHERE id=?", (json.dumps(det, ensure_ascii=False), row_id))
                     conn.commit()
                     return "repeat"
@@ -434,7 +438,7 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
                 "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,"
                 "module,case_no,ref_no,result,reason_code,status_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'fail',?,?)",
                 (datetime.now().isoformat(), user_id, username or "", display_name or "", "fail." + method, "request", "",
-                 route, json.dumps({"method": method, "route": route, "repeat": 0}, ensure_ascii=False),
+                 route, json.dumps({"method": method, "route": route, "repeat": 0, **({"msg": msg} if msg else {})}, ensure_ascii=False),
                  module, case_no or "", ref_no or "", reason, int(status)),
             )
             conn.commit()

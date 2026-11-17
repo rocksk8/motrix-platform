@@ -56,6 +56,20 @@ def test_each_settlement_409_carries_its_own_fail_reason_code(case):
     forged = page_payload(c, h, netProfit=888888)
     mism = _put(c, h, forged, ok.json()["updated_at"])
     assert mism.status_code == 409 and mism.headers.get("X-Fail-Reason") == "finalize_mismatch", mism.text[:200]
+    # 稽核列：reason_code 與 detail.msg（只有欄位名稱，沒有金額）
+    cn = db.get_db()
+    try:
+        rows = [(r["reason_code"], json.loads(r["detail"] or "{}")) for r in cn.execute(
+            "SELECT reason_code, detail FROM audit_log WHERE action='fail.PUT' ORDER BY id").fetchall()]
+    finally:
+        cn.close()
+    codes = {code for code, _ in rows}
+    assert "stale_version" in codes, rows
+    # 同一人同路由同狀態 60 秒內只寫一列，第二次併入 repeat；它的原因在 last_reason／last_msg
+    first = rows[0][1]
+    assert first.get("repeat") == 1 and first.get("last_reason") == "finalize_mismatch", first
+    msg = first.get("last_msg", "")
+    assert msg and not any(ch.isdigit() for ch in msg), "訊息只該有欄位名稱、不含金額：" + msg
 
 
 def test_finalize_right_after_draft_save_is_not_a_conflict(case):

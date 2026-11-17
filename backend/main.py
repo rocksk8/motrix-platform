@@ -516,7 +516,8 @@ def _record_failure_audit(request, row, status: int) -> None:
         ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
         _audit_failure(row["id"], row["username"], row["display_name"] or "",
                        request.method, template, status,
-                       reason=getattr(request.state, "audit_reason", ""), case_no=case_no, ref_no=ref_no)
+                       reason=getattr(request.state, "audit_reason", ""), case_no=case_no, ref_no=ref_no,
+                       msg=getattr(request.state, "audit_msg", ""))
     except Exception:                                         # noqa: BLE001 — 鉤子絕不擋回應
         pass
 
@@ -845,6 +846,10 @@ async def auth_middleware(request: Request, call_next):
     _fail_reason = response.headers.get("x-fail-reason")      # T86 U1：端點帶的失敗原因碼（固定詞彙；不認得的碼由 _audit_failure 退回依狀態碼的預設）
     if _fail_reason:
         request.state.audit_reason = _fail_reason
+    _fail_msg = response.headers.get("x-fail-detail")         # 2026-11-17：簡短分類文字（百分比編碼；端點只放欄位名稱，不放金額），記進失敗稽核列的 detail.msg
+    if _fail_msg:
+        from urllib.parse import unquote as _unquote
+        request.state.audit_msg = _unquote(_fail_msg)[:120]
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
     await run_in_threadpool(_after_response_records, request, row, now_dt, path, response.status_code)       # 一次 hop：軌跡＋失敗稽核
