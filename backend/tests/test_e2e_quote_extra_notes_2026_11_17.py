@@ -194,6 +194,9 @@ def _saved_quote_page(client, live_server, make_user, new_page, login_as, userna
     page.goto(live_server + f"/pages/quotation-form.html?id={no}")
     _wait_form(page)
     page.wait_for_function(f"() => {ROOT}.q.quoteNo === '{no}' && !{ROOT}.isNewRecord", timeout=15000)
+    # quoteNo／isNewRecord 在單筆 GET 回來「之前」就設好了；GET 完成才會設 _lastUpdatedAt（同一段會覆寫 specFiles）。
+    # 沒等它，上傳／注入的清單可能被晚到的初次載入清掉（整檔跑時偶發）。
+    page.wait_for_function(f"() => !!{ROOT}._lastUpdatedAt", timeout=15000)
     return page, no
 
 
