@@ -2968,7 +2968,7 @@ def _build_case_closing_html(data: dict) -> str:
     dispatch_section = (
         f'<div class="section-label">{next(_cn_nums)}、承攬商／外包派發明細</div>'
         '<table><thead><tr><th>承攬商／人員</th><th style="width:80px">派發日期</th><th>派發範圍</th>'
-        '<th class="c" style="width:56px">狀態</th><th class="r" style="width:78px">承攬費（未稅）</th>'
+        '<th class="c" style="width:56px">狀態</th><th class="r" style="width:96px">承攬費（未稅）</th>'
         f'<th class="r" style="width:68px">{"稅額（不計入）" if _dp_pretax else "稅額"}</th>'
         '<th class="r" style="width:72px">外包人員</th><th class="r" style="width:84px">計入成本</th></tr></thead>'
         f'<tbody>{dispatch_rows_html}'
