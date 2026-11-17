@@ -2,6 +2,8 @@
 
 ## (next) — 2026-11-17（fix/quote-total-text-500；舊資料報價單金額存成文字）
 - 修正（無 API／欄位／權限變更；乾淨數字資料輸出逐位元不變）：舊資料 `quotations.total`／`pretax` 存成文字（"12,345"）時，案件財務摘要（finance-summary）與權責認列旗標／收入（`recognition.py`）不再 500；文字轉數字、無法解析的當 0。共用輔助放在各模組內（`modules/arap/money_num.py`、`modules/case/money_num.py`；analytics 沿用既有 `reports._money`，pdf_gen 沿用 L1 的 `tax_calc._parse_money`），規則與 T87 `tax_calc._parse_money`／`reports._num_or_bad` 相同；`helpers/` 下每個檔都必須歸屬 L1 或某模組，新增 helper＝改 L1 介面＝升核心版，本批不升。測試：`tests/test_quote_total_text_500_2026_11_17.py`。
+- 修正（h21 審查）：簽核佇列詳情（`detail_quotation`）的「總金額」`format(r["total"] or 0, ",.0f")` 在 total 是文字時會 ValueError ⇒ 簽核頁打不開，改用 `money_num`；權責認列旗標清單（`recognition_flags`）的金額沒有值（NULL／壞值）仍輸出 `null`（用 `money_num(x, None)`），不變成 0。
+- 待辦（下一班統一掃）：同類殘留 `r["total"] or 0` 只做輸出、不會 500 的地方（analytics/api/dashboard.py、arap/api/cashier.py、列表端點）仍會輸出文字金額，之後一併處理。
 - 待辦（下次升核心版時）：把 `tax_calc._parse_money` 公開成 L1 函式，arap／case／analytics 三份收斂到它，刪除 `modules/arap/money_num.py`、`modules/case/money_num.py`。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）

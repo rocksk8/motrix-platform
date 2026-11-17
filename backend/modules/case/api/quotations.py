@@ -7430,7 +7430,7 @@ def detail_quotation(conn, doc_no):
         "fields": [
             {"label": "報價日期", "value": r["quote_date"] or "—"},
             {"label": "業務", "value": r["sales_person"] or "—"},
-            {"label": "總金額", "value": format(r["total"] or 0, ",.0f")},
+            {"label": "總金額", "value": format(money_num(r["total"]), ",.0f")},
             {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
         ],
         "items": d.get("items") or [],

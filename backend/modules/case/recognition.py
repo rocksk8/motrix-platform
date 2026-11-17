@@ -592,7 +592,7 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
         rev = stage_revenue(r["pretax"], stages.get(r["quote_no"], []))
         for kind in ("stage_ratio_unset", "stage_ratio_not_100", "case_incomplete"):
             if kind in rev["flags"]:
-                amt = rev["unrecognized"] if kind == "case_incomplete" else money_num(r["pretax"])
+                amt = rev["unrecognized"] if kind == "case_incomplete" else money_num(r["pretax"], None)    # NULL／壞值＝沒有金額（輸出 null，與改前一致）
                 flags[kind].append(_flag_item(r["quote_no"], r["customer_name"], "案件",
                                               r["project_name"] or "", amt, "", money_ok, kind))
         try:
@@ -601,5 +601,5 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
             data = {}
         if quote_tax_type(data) == "legacy":
             flags["legacy_tax"].append(_flag_item(r["quote_no"], r["customer_name"], "報價單",
-                                                  "稅率 %s%%" % data.get("taxRate"), money_num(r["total"]), "", money_ok, "legacy_tax"))
+                                                  "稅率 %s%%" % data.get("taxRate"), money_num(r["total"], None), "", money_ok, "legacy_tax"))
     return {k: {"label": FLAG_LABELS[k], "count": len(v), "items": v} for k, v in flags.items()}

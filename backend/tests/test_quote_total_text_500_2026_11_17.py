@@ -135,6 +135,47 @@ def test_values_are_converted_not_zeroed(client, world):
     assert r.json()["receivable"]["receivableTotal"] == 12345
 
 
+
+@pytestmark_case
+def test_approval_queue_detail_with_text_total_does_not_500(client, world):
+    """簽核佇列詳情（detail_quotation）的「總金額」用 format(…, ",.0f")：total 是文字會 ValueError ⇒ 簽核頁打不開。"""
+    from db import get_db
+    from modules.case.api.quotations import detail_quotation
+    h, i = world
+    _case("TXT-1", i, "txt_sa", pretax="11,757", total="12,345")
+    _case("TXT-2", i, "txt_sa", pretax="abc", total="oops")
+    _case("TXT-OK", i, "txt_sa")
+    conn = get_db()
+    try:
+        vals = {no: next(f["value"] for f in detail_quotation(conn, no)["fields"] if f["label"] == "總金額") for no in ("TXT-1", "TXT-2", "TXT-OK")}
+    finally:
+        conn.close()
+    assert vals == {"TXT-1": "12,345", "TXT-2": "0", "TXT-OK": "105,000"}, vals
+
+
+@pytestmark_case
+def test_recognition_flags_null_or_unparseable_amount_stays_null_not_zero(client, world):
+    """沒有金額（NULL／壞值）在旗標清單裡輸出 null（改前就是 null）；能解析的文字轉成數字；乾淨數字不變。"""
+    from db import get_db
+    from modules.case.recognition import recognition_flags
+    h, i = world
+    _case("TXT-N", i, "txt_sa", pretax=None, total=None)
+    _case("TXT-B", i, "txt_sa", pretax="abc", total="oops")
+    _case("TXT-T", i, "txt_sa", pretax="11,757", total="12,345")
+    _case("TXT-OK", i, "txt_sa")
+    conn = get_db()
+    try:
+        flags = recognition_flags(conn, 2026)
+    finally:
+        conn.close()
+    amt = {}
+    for k in ("stage_ratio_unset", "stage_ratio_not_100"):                  # case_incomplete 的金額是 stage_revenue 的「未認列」數字，改前 NULL 就是 0，不在這條
+        for it in flags[k]["items"]:
+            amt.setdefault(it["quoteNo"], set()).add(it["amount"])
+    assert {"TXT-N", "TXT-B", "TXT-T", "TXT-OK"} <= set(amt), amt           # 正對照：四張都有進旗標清單
+    assert amt["TXT-N"] == {None} and amt["TXT-B"] == {None}, amt
+    assert amt["TXT-T"] == {11757} and amt["TXT-OK"] == {100000}, amt
+
 @pytestmark_case
 def test_clean_numeric_data_unchanged(client, world):
     h, i = world
