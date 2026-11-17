@@ -668,7 +668,7 @@
       filterMonth: '',
       filterDealTag: '',
       filterDocType: '',          // 單據類型篩選：''＝全部｜quote｜estimate（舊資料一律是報價單）
-      // T84：預設「我負責的、進行中」；每人記住上次選擇（localStorage，讀寫失敗就用預設）
+      // T84：預設「我負責的、進行中」（最高管理者預設看全部，見 _mineKey）；每人記住上次選擇（localStorage，讀寫失敗就用預設）
       onlyMine: true,                // 記住的選擇（只有「僅顯示我負責的」開關會改寫它）
       showAll: false,                // 「清除條件」＝這次暫時看全部（不改寫記住的選擇）
       mineOk: false,                 // 「我負責的」名單讀到了嗎（沒讀到 ⇒ 數字顯示「暫時無法計算」、不限縮）
@@ -821,8 +821,12 @@
       },
       setMine(v) {
         this.onlyMine = v; this.showAll = false; this.focus = ''
-        try { localStorage.setItem('motrix_quote_mine:' + this._uk(), v ? '1' : '0') } catch (e) {}
+        try { localStorage.setItem(this._mineKey(), v ? '1' : '0') } catch (e) {}
       },
+      // 最高管理者要預設看全部（2026-11-17 使用者裁示）。T84 對所有人預設寫入的 'motrix_quote_mine:<人>'='1' 無法分辨「預設」與「自己選的」，
+      // 所以最高管理者改讀新 key（_v2）：舊 key 一律不讀 ⇒ 第一次進來回到全部；之後他自己按「僅顯示我負責的」才寫 _v2 並記住。其他角色沿用舊 key，行為不變。
+      get _isSuper() { return !!(this.session && this.session.role === 'superadmin') },
+      _mineKey() { return (this._isSuper ? 'motrix_quote_mine_v2:' : 'motrix_quote_mine:') + this._uk() },
       get extraFilterCount() { return [this.filterSales, this.filterMonth, this.filterDealTag].filter(Boolean).length },
       _isWaiting(q) { return q.status === '待審核' || q.status === '簽核中' },
       // 要我處理＝我的草稿＋被退回待修＋已核准尚未送客戶（資料狀態值不變，只是這一頁怎麼數）
@@ -879,7 +883,7 @@
       _uk() { return (this.session && (this.session.username || this.session.id)) || 'u' },
       _loadPrefs() {
         try {
-          const m = localStorage.getItem('motrix_quote_mine:' + this._uk())
+          const m = localStorage.getItem(this._mineKey())
           this._mineChoice = m === '0' ? false : m === '1' ? true : null
           const c = JSON.parse(localStorage.getItem('motrix_quote_cols:' + this._uk()) || 'null')
           if (c && Array.isArray(c.hidden)) this.colPrefs = { hidden: c.hidden.filter(k => this.COL_OPTIONAL.includes(k)), compact: c.compact === true }
@@ -1015,7 +1019,7 @@
       // 第一次載入：讀回記住的選擇（沒記過 ⇒ 預設開）；名單空或讀不到時畫面自動顯示全部（見 _mineLimit／mineNote），不改寫記住的選擇
       _applyMineDefault(mineOk) {
         this.mineOk = mineOk
-        if (!this._mineApplied) { this._mineApplied = true; this.onlyMine = this._mineChoice !== false }     // 記住的選擇：只有明確關掉過才是 false；沒記過 ⇒ 開
+        if (!this._mineApplied) { this._mineApplied = true; this.onlyMine = this._mineChoice === null || this._mineChoice === undefined ? !this._isSuper : this._mineChoice }     // 記住的選擇優先；沒記過 ⇒ 一般角色開、最高管理者關（看全部）
       },
 
       // S-X2：狀態顯示名稱與顏色（旗標 builder_status_display 關或沒改過 ⇒ 與下面的 _dealDisplayBase 逐字相同）。邏輯一律用 q.status／q.deal_tag 原值。
